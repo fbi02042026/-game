@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:yousandi.cn,2023:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2, type: 3}
+  m_Name: ally_heal
+  m_EditorClassIdentifier: 
+  id: ally_heal
+  skillName: "\u6CBB\u75C5"
+  desc: "\u6062\u590D\u961F\u53CB\u751F\u547D"
+  skillType: 3
+  attackKit: 3
+  damageMultiplier: 0
+  baseDamage: 0
+  cooldown: 0.1
+  aoeRadius: 6
+  projectileCount: 1
+  projectileSpeed: 12
+  buffAttr: 4
+  buffValue: 0
+  buffIsPercent: 0
+  healBase: 80
+  vfxPrefab: {fileID: 0}

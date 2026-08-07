@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:yousandi.cn,2023:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 67ea543e63e951048a23b7992c58be89, type: 3}
+  m_Name: ice_801
+  m_EditorClassIdentifier: 
+  id: ice_801
+  monsterName: "\u602A\u7269_8_1"
+  minWave: 0
+  isBoss: 0
+  unlockClearCount: 0
+  baseHp: 225
+  baseAttack: 22.5
+  baseAttackSpeed: 1
+  attackRange: 1.5
+  baseMoveSpeed: 0
+  baseGoldDrop: 45
+  expDrop: 26
+  spriteIndex: 1
+  spriteScale: 1

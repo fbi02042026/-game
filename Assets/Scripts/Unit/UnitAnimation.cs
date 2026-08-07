@@ -1,0 +1,438 @@
+using UnityEngine;
+
+/// <summary>
+/// 统一单位动画控制器
+/// 自动桥接三种动画模式：
+///
+/// 1. SPUM模式  → 角色有 SPUM_Prefabs 组件（玩家、佣兵）
+/// 2. Animator模式 → 角色有 Animator 但无SPUM
+/// 3. 程序化模式 → 都没有（怪物），纯代码实现 idle/move/attack/death
+///
+/// 动画状态：
+/// - IDLE  站立（轻微呼吸缩放，底部固定）
+/// - MOVE  移动（上下弹跳+轻微倾斜）
+/// - ATTACK 攻击（X轴拉伸前冲感）
+/// - DEATH  死亡（旋转倒下+Alpha淡出）
+///
+/// SPUM Animator参数对照：
+/// - Bool "1_Move"   → 移动状态
+/// - Bool "isDeath"  → 死亡状态
+/// - Trigger "2_Attack"/"ATTACK" → 攻击触发
+/// </summary>
+public class UnitAnimation : MonoBehaviour
+{
+    private SPUM_Prefabs _spum;
+    private Animator _animator;
+    private SpriteRenderer _sr;
+
+    // 当前状态
+    private bool _isMoving;
+    private bool _isDead;
+    private int _lastFacingDir = 1;
+
+    // 攻击动画锁（防止动画重叠）
+    private float _attackAnimLock = 0f;
+    private float _attackAnimDuration = 0.5f;
+
+    // ===== 程序化动画（怪物用）=====
+    [Header("程序化动画参数（怪物自动启用）")]
+    [Tooltip("站立呼吸速度")]
+    public float procIdleSpeed = 2f;
+    [Tooltip("站立呼吸幅度")]
+    public float procIdleAmount = 0.03f;
+    [Tooltip("移动弹跳速度")]
+    public float procMoveSpeed = 3.5f;
+    [Tooltip("SPUM/Animator 移动动画速度倍率（1=原速）")]
+    public float moveAnimSpeedScale = 0.4853f;
+    [Tooltip("移动弹跳幅度")]
+    public float procMoveAmount = 0.08f;
+    [Tooltip("移动倾斜角度")]
+    public float procMoveTilt = 5f;
+    [Tooltip("攻击拉伸幅度")]
+    public float procAttackStretch = 0.2f;
+    [Tooltip("死亡淡出时间")]
+    public float procDeathDuration = 0.8f;
+
+    private bool _procMode;
+    private Vector3 _procBaseScale;
+    private float _procTime;
+    private float _procDeathTime;
+
+    void Awake()
+    {
+        // 强制用配置值，避免预制体里序列化成 1 导致「看起来没减速」
+        moveAnimSpeedScale = GameConfig.MOVE_ANIM_SPEED_SCALE;
+        procMoveSpeed = 1.75f;
+
+        _spum = GetComponent<SPUM_Prefabs>();
+        _animator = GetComponent<Animator>();
+        _sr = GetComponent<SpriteRenderer>();
+        if (_sr == null)
+            _sr = FindMonsterBodySprite() ?? GetComponentInChildren<SpriteRenderer>();
+
+        // SPUM初始化
+        if (_spum != null && _spum._anim == null)
+        {
+            _spum._anim = _animator;
+        }
+        if (_spum != null && _spum.OverrideController == null && _spum._anim != null)
+        {
+            _spum.OverrideControllerInit();
+        }
+
+        // 程序化模式检测：无SPUM且无Animator且有SpriteRenderer → 怪物
+        if (_spum == null && _animator == null && _sr != null)
+        {
+            _procMode = true;
+            CacheBaseScale();
+        }
+    }
+
+    void OnEnable()
+    {
+        if (_procMode)
+            CacheBaseScale();
+    }
+
+    void CacheBaseScale()
+    {
+        if (_sr != null)
+            _procBaseScale = _sr.transform.localScale;
+    }
+
+    /// <summary>
+    /// 公开方法：精灵加载后缩放已变化，重新缓存基础缩放
+    /// 怪物从对象池取出并调用 LoadSprite 后需要调用此方法
+    /// </summary>
+    public void RecacheBaseScale()
+    {
+        CacheBaseScale();
+    }
+
+    void Update()
+    {
+        // 攻击动画锁递减
+        if (_attackAnimLock > 0)
+            _attackAnimLock -= Time.deltaTime;
+
+        // 程序化动画更新
+        if (_procMode)
+            UpdateProcedural();
+    }
+
+    /// <summary>
+    /// 程序化动画：纯代码实现 idle/move/attack/death
+    /// 只修改 scale 和 rotation，不碰 position（避免与AI移动冲突）
+    /// </summary>
+    void UpdateProcedural()
+    {
+        if (_sr == null) return;
+        _procTime += Time.deltaTime;
+
+        Transform t = _sr.transform;
+
+        if (_isDead)
+        {
+            // 死亡：向后倒（与朝向相反一侧）+ Alpha淡出
+            // 面朝左(dir=-1) → 向右倒(Z=-90)；面朝右 → 向左倒(Z=+90)
+            _procDeathTime += Time.deltaTime;
+            float dt = Mathf.Clamp01(_procDeathTime / procDeathDuration);
+            float targetAngle = 90f * _lastFacingDir;
+            t.localRotation = Quaternion.Lerp(Quaternion.identity, Quaternion.Euler(0, 0, targetAngle), dt);
+            Color c = _sr.color;
+            c.a = 1f - dt;
+            _sr.color = c;
+            return;
+        }
+
+        if (_attackAnimLock > 0)
+        {
+            // 攻击：X轴拉伸（前冲感），持续攻击动画时长
+            float atkProgress = 1f - (_attackAnimLock / _attackAnimDuration);
+            float stretch = Mathf.Sin(atkProgress * Mathf.PI) * procAttackStretch;
+            t.localScale = new Vector3(
+                _procBaseScale.x * (1f + stretch),
+                _procBaseScale.y * (1f - stretch * 0.5f),
+                _procBaseScale.z
+            );
+            t.localRotation = Quaternion.identity;
+        }
+        else if (_isMoving)
+        {
+            // 移动：上下弹跳 + 轻微倾斜（底部固定，靠BottomCenter pivot）
+            float bounce = Mathf.Abs(Mathf.Sin(_procTime * procMoveSpeed)) * procMoveAmount;
+            float tilt = Mathf.Sin(_procTime * procMoveSpeed) * procMoveTilt * _lastFacingDir;
+            t.localScale = new Vector3(
+                _procBaseScale.x * (1f - bounce * 0.4f),
+                _procBaseScale.y * (1f + bounce),
+                _procBaseScale.z
+            );
+            t.localRotation = Quaternion.Euler(0, 0, tilt);
+        }
+        else
+        {
+            // 站立：呼吸（Y轴轻微缩放，底部固定）
+            float breath = Mathf.Sin(_procTime * procIdleSpeed) * procIdleAmount;
+            t.localScale = new Vector3(
+                _procBaseScale.x * (1f + breath * 0.5f),
+                _procBaseScale.y * (1f - breath),
+                _procBaseScale.z
+            );
+            t.localRotation = Quaternion.identity;
+        }
+    }
+
+    /// <summary>
+    /// 设置移动状态（站立/移动切换）
+    /// 注意：朝向翻转由 UnitBase.ApplyFacing() 统一处理，这里不再重复翻转
+    /// </summary>
+    public void SetMove(bool isMoving, int facingDir = 1)
+    {
+        if (_isDead) return;
+
+        _lastFacingDir = facingDir;
+        bool stateChanged = _isMoving != isMoving;
+        _isMoving = isMoving;
+
+        // SPUM模式
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            if (stateChanged)
+            {
+                try
+                {
+                    _spum.PlayAnimation(isMoving ? PlayerState.MOVE : PlayerState.IDLE, 0);
+                }
+                catch { /* SPUM列表为空时静默跳过 */ }
+            }
+            ApplyMoveAnimSpeed(isMoving);
+        }
+        // 原生Animator模式
+        else if (_animator != null)
+        {
+            if (stateChanged)
+            {
+                _animator.SetBool("1_Move", isMoving);
+                _animator.SetBool("IsMoving", isMoving);
+            }
+            ApplyMoveAnimSpeed(isMoving);
+        }
+    }
+
+    void ApplyMoveAnimSpeed(bool isMoving)
+    {
+        float spd = isMoving ? moveAnimSpeedScale : 1f;
+        if (_animator != null) _animator.speed = spd;
+        if (_spum != null && _spum._anim != null && _spum._anim != _animator)
+            _spum._anim.speed = spd;
+    }
+
+    void LateUpdate()
+    {
+        // 每帧锁住移动动画速率（SPUM PlayAnimation 可能把 speed 打回 1）
+        if (_isMoving && !_isDead)
+            ApplyMoveAnimSpeed(true);
+    }
+
+    /// <summary>强制程序化动画（怪物删掉 Animator 后必须调用，否则攻击/移动动画不播）</summary>
+    public void ForceProceduralMode(SpriteRenderer bodySr = null)
+    {
+        if (_animator != null)
+        {
+            Destroy(_animator);
+            _animator = null;
+        }
+        _spum = null;
+        if (bodySr != null)
+            _sr = bodySr;
+        if (_sr == null)
+            _sr = FindMonsterBodySprite() ?? GetComponentInChildren<SpriteRenderer>(true);
+        _procMode = _sr != null;
+        if (_procMode)
+            CacheBaseScale();
+    }
+
+    /// <summary>优先用 Monsters 子节点，避免误绑到 HPBar 导致「怪不动」</summary>
+    SpriteRenderer FindMonsterBodySprite()
+    {
+        Transform body = transform.Find("Monsters");
+        if (body != null)
+        {
+            var s = body.GetComponent<SpriteRenderer>();
+            if (s != null) return s;
+        }
+        var all = GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < all.Length; i++)
+        {
+            if (all[i] == null) continue;
+            Transform p = all[i].transform;
+            bool underHp = false;
+            while (p != null && p != transform)
+            {
+                if (p.name == "HPBar") { underHp = true; break; }
+                p = p.parent;
+            }
+            if (!underHp) return all[i];
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 播放攻击动画
+    /// </summary>
+    public void PlayAttack()
+    {
+        if (_isDead) return;
+        if (_attackAnimLock > 0) return; // 动画锁定中
+        _attackAnimLock = _attackAnimDuration;
+
+        // SPUM模式
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            try
+            {
+                _spum.PlayAnimation(PlayerState.ATTACK, 0);
+            }
+            catch { }
+        }
+        // 原生Animator模式
+        else if (_animator != null)
+        {
+            SetTriggerSafe("2_Attack");
+            SetTriggerSafe("Attack");
+            SetTriggerSafe("attack");
+        }
+        // 程序化模式：Update自动处理攻击拉伸
+    }
+
+    /// <summary>
+    /// 播放死亡动画（facingDir 用于程序化后倒方向）
+    /// </summary>
+    public void PlayDeath(int facingDir = 0)
+    {
+        _isDead = true;
+        _isMoving = false;
+        _procDeathTime = 0f;
+        if (facingDir != 0) _lastFacingDir = facingDir;
+
+        // SPUM模式
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            try
+            {
+                _spum.PlayAnimation(PlayerState.DEATH, 0);
+            }
+            catch { }
+        }
+        // 原生Animator模式
+        else if (_animator != null)
+        {
+            _animator.SetBool("isDeath", true);
+            _animator.SetBool("IsDead", true);
+            SetTriggerSafe("Death");
+            SetTriggerSafe("3_Death");
+        }
+        // 程序化模式：Update自动处理倒下+淡出
+    }
+
+    /// <summary>
+    /// 播放受伤动画
+    /// </summary>
+    public void PlayDamaged()
+    {
+        if (_isDead) return;
+
+        // SPUM模式
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            try
+            {
+                _spum.PlayAnimation(PlayerState.DAMAGED, 0);
+            }
+            catch { }
+        }
+        // 原生Animator模式
+        else if (_animator != null)
+        {
+            SetTriggerSafe("Damaged");
+            SetTriggerSafe("4_Damaged");
+            SetTriggerSafe("Hit");
+        }
+        // 程序化模式：受伤时短暂闪烁
+        if (_procMode && _sr != null)
+        {
+            StartCoroutine(ProcDamagedFlash());
+        }
+    }
+
+    System.Collections.IEnumerator ProcDamagedFlash()
+    {
+        Color origColor = _sr.color;
+        _sr.color = new Color(1f, 0.3f, 0.3f, origColor.a);
+        yield return new WaitForSeconds(0.1f);
+        if (_sr != null && !_isDead)
+            _sr.color = origColor;
+    }
+
+    /// <summary>
+    /// 重置到站立状态（复活/重置时调用）
+    /// </summary>
+    public void ResetToIdle()
+    {
+        _isDead = false;
+        _isMoving = false;
+        _attackAnimLock = 0;
+        _procDeathTime = 0f;
+
+        // 程序化模式：恢复缩放、旋转、颜色
+        if (_procMode && _sr != null)
+        {
+            _sr.transform.localScale = _procBaseScale;
+            _sr.transform.localRotation = Quaternion.identity;
+            _sr.color = Color.white;
+        }
+
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            try
+            {
+                _spum.PlayAnimation(PlayerState.IDLE, 0);
+            }
+            catch { }
+        }
+        else if (_animator != null)
+        {
+            _animator.SetBool("isDeath", false);
+            _animator.SetBool("1_Move", false);
+            _animator.Play("IDLE", 0, 0f);
+        }
+    }
+
+    /// <summary>
+    /// 安全设置Trigger（参数不存在时静默跳过）
+    /// </summary>
+    void SetTriggerSafe(string paramName)
+    {
+        if (_animator == null) return;
+        foreach (var param in _animator.parameters)
+        {
+            if (param.name == paramName && param.type == AnimatorControllerParameterType.Trigger)
+            {
+                _animator.SetTrigger(paramName);
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 设置攻击动画持续时间
+    /// </summary>
+    public void SetAttackDuration(float duration)
+    {
+        _attackAnimDuration = duration;
+    }
+
+    public bool IsDead => _isDead;
+    public bool IsMoving => _isMoving;
+    public bool IsProcMode => _procMode;
+}

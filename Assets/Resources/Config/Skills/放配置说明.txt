@@ -1,0 +1,22 @@
+# 技能配置放置说明
+#
+# 玩家 + 佣兵共用 Ally 技能池（可互相装备同一套技能）
+# 敌人技能放 Monster 子目录
+#
+# 路径：Resources/Config/Skills/Ally/*.asset
+#       Resources/Config/Skills/Monster/*.asset
+#
+# 文件名 = id 字段，与 VFX/Skills 下预制体同名
+#
+# === Ally（我方共用）===
+# ally_heal        治疗
+# ally_atk_speed   加攻速
+# ally_crit_up     加暴击
+# ally_thunder     雷击（玩家默认头像技）
+# ally_shield      护盾
+#
+# === Monster（敌人主动技）===
+# mon_slam_multi   重击多次 — 近战精英 / Boss近战
+# mon_magic_burst  魔法攻击 — 远程精英 / Boss远程
+#
+# 小怪无主动技，普攻走 Shared/Enemy 的 MeleeSlash 或 Orb 套

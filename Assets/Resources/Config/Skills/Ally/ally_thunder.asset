@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:yousandi.cn,2023:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2, type: 3}
+  m_Name: ally_thunder
+  m_EditorClassIdentifier: 
+  id: ally_thunder
+  skillName: "\u96F7\u51FB"
+  desc: "\u5168\u573A\u96F7\u7535\u4F24\u5BB3"
+  skillType: 2
+  attackKit: 4
+  damageMultiplier: 3
+  baseDamage: 0
+  cooldown: 0.1
+  aoeRadius: 8
+  projectileCount: 1
+  projectileSpeed: 12
+  buffAttr: 5
+  buffValue: 0
+  buffIsPercent: 0
+  healBase: 0
+  vfxPrefab: {fileID: 0}

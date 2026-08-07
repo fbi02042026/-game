@@ -1,0 +1,105 @@
+%YAML 1.1
+%TAG !u! tag:yousandi.cn,2023:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3dedb174562eff419a151578bd9ad9b, type: 3}
+  m_Name: CharacterRegistry
+  m_EditorClassIdentifier: 
+  entries:
+  - characterId: dunbing102
+    prefabName: dunbing102
+    iconSprite: {fileID: 21300000, guid: e0285e9571ff62e41a5aad80744404fe, type: 3}
+    jobName: "\u76FE\u5175"
+    isPlayer: 0
+  - characterId: dunbing201
+    prefabName: dunbing201
+    iconSprite: {fileID: 21300000, guid: eee8d1c19a2b2354893f575489ac393e, type: 3}
+    jobName: "\u76FE\u5175"
+    isPlayer: 0
+  - characterId: dunbing202
+    prefabName: dunbing202
+    iconSprite: {fileID: 21300000, guid: fdad2b449f4a6564896bdecd735a601f, type: 3}
+    jobName: "\u76FE\u5175"
+    isPlayer: 0
+  - characterId: gongshou101
+    prefabName: gongshou101
+    iconSprite: {fileID: 21300000, guid: 45b8cdd25cce9bd48a8f20ca0dd6af44, type: 3}
+    jobName: "\u5F13\u624B"
+    isPlayer: 0
+  - characterId: gongshou201
+    prefabName: gongshou201
+    iconSprite: {fileID: 21300000, guid: 95100f9accfe4cd4cb5b7a4d8589883c, type: 3}
+    jobName: "\u5F13\u624B"
+    isPlayer: 0
+  - characterId: kuangzhan101
+    prefabName: kuangzhan101
+    iconSprite: {fileID: 21300000, guid: 11cb2652e1b7bb543ad887d726271b83, type: 3}
+    jobName: "\u72C2\u6218"
+    isPlayer: 0
+  - characterId: kuangzhan102
+    prefabName: kuangzhan102
+    iconSprite: {fileID: 21300000, guid: 361585bd806fc7644a032306fdbf4959, type: 3}
+    jobName: "\u72C2\u6218"
+    isPlayer: 0
+  - characterId: kuangzhan201
+    prefabName: kuangzhan201
+    iconSprite: {fileID: 21300000, guid: aa1f8b49b19a8fc448c5f8ca3c762eda, type: 3}
+    jobName: "\u72C2\u6218"
+    isPlayer: 0
+  - characterId: kuangzhan202
+    prefabName: kuangzhan202
+    iconSprite: {fileID: 21300000, guid: b01ac41b6aefc3f449b07ad9755cc4ff, type: 3}
+    jobName: "\u72C2\u6218"
+    isPlayer: 0
+  - characterId: naima101
+    prefabName: naima101
+    iconSprite: {fileID: 21300000, guid: 9aa090a56ce5f2141b068817a601f77a, type: 3}
+    jobName: "\u5976\u5988"
+    isPlayer: 0
+  - characterId: naima102
+    prefabName: naima102
+    iconSprite: {fileID: 21300000, guid: c99b8b4d2145a3346a7857c644d7ee74, type: 3}
+    jobName: "\u5976\u5988"
+    isPlayer: 0
+  - characterId: naima201
+    prefabName: naima201
+    iconSprite: {fileID: 21300000, guid: b3a8ef7b76bc4d447860e22d84967742, type: 3}
+    jobName: "\u5976\u5988"
+    isPlayer: 0
+  - characterId: naima202
+    prefabName: naima202
+    iconSprite: {fileID: 21300000, guid: 829804482d733ea468723497f8a5bf1c, type: 3}
+    jobName: "\u5976\u5988"
+    isPlayer: 0
+  - characterId: npc_duyan
+    prefabName: npc_duyan
+    iconSprite: {fileID: 21300000, guid: 436ee8033a961e647842c2a040160a3f, type: 3}
+    jobName: npc_duyan
+    isPlayer: 0
+  - characterId: npc_shengdian
+    prefabName: npc_shengdian
+    iconSprite: {fileID: 21300000, guid: 849b74a70c7070f44b64f762efcbe615, type: 3}
+    jobName: npc_shengdian
+    isPlayer: 0
+  - characterId: npc_xiaomei
+    prefabName: npc_xiaomei
+    iconSprite: {fileID: 21300000, guid: 983c5eda73224c3458bfef09281bdaf5, type: 3}
+    jobName: npc_xiaomei
+    isPlayer: 0
+  - characterId: qita101
+    prefabName: qita101
+    iconSprite: {fileID: 21300000, guid: 7f173c7469e5fdf4a9abed3d576b8e94, type: 3}
+    jobName: "\u9A91\u58EB"
+    isPlayer: 0
+  - characterId: wanjia
+    prefabName: wanjia
+    iconSprite: {fileID: 21300000, guid: 5917a878cd696ec499be661829dfab54, type: 3}
+    jobName: "\u73A9\u5BB6"
+    isPlayer: 1

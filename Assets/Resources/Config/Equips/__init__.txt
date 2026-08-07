@@ -1,0 +1,1 @@
+Put your EquipTemplate assets in this folder
