@@ -496,7 +496,7 @@ public class AutoGameInitializer : MonoBehaviour
         if (follow == null)
             follow = cam.gameObject.AddComponent<CameraFollow>();
 
-        follow.offset = new Vector2(0.75f, 0f); // 略超前；过大易把身后佣兵挤出画面
+        follow.offset = new Vector2(GameConfig.CAMERA_FOLLOW_OFFSET_X, 0f);
         follow.smoothTime = 0f; // 硬跟随，避免视差相对速度忽快忽慢
         float spawnX = spawnPoint != null ? spawnPoint.position.x : -7f;
         float endX = endPoint != null ? endPoint.position.x : 13f;
@@ -609,7 +609,11 @@ public class AutoGameInitializer : MonoBehaviour
                 Debug.Log($"[AutoInit] {n}从Canvas中分离到场景根");
             }
             NormalizeToWorldTransform(t.gameObject);
+            // 先记下世界坐标（此时若仍挂在 Ground scale.x=30 下，position 已是正确世界值）
+            Vector3 worldPos = t.position;
             ReparentToWorldRoot(t.gameObject, worldRoot);
+            t.localScale = Vector3.one;
+            GameConfig.SetWorldPosition(t, worldPos);
 
             Vector3 cur = t.position;
             if (IsUnsetWorldAnchor(cur))

@@ -189,8 +189,8 @@ public static class GameConfig
     public const float SPAWN_X_LEFT_BIAS = -0.5f;
     /// <summary>SPUM 移动动画播放速率（再 +20%）</summary>
     public const float MOVE_ANIM_SPEED_SCALE = 0.4853f;
-    /// <summary>镜头相对主角 X 偏移（越大主角越靠画面左侧）</summary>
-    public const float CAMERA_FOLLOW_OFFSET_X = 1.8f;
+    /// <summary>镜头相对主角 X 偏移（过大易把身后佣兵挤出左缘）</summary>
+    public const float CAMERA_FOLLOW_OFFSET_X = 0.85f;
     /// <summary>默认近战攻击距离（单手剑 96px @ PPU100）</summary>
     public const float BASE_ATTACK_RANGE = 0.96f; // 96/100，对齐数值表
     public const float BASE_ATTACK_SPEED = 1.428f; // 单手剑间隔 0.7s → 1/0.7

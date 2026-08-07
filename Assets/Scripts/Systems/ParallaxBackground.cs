@@ -1,9 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// 视差滚动背景（v14）
-/// - 挂在 BattleUI/map 上；只移动 map[/main] 下的 1/2/3 层
-/// - 无缝：复制一层后 scale.x=-1 拼接；主片 +1、衔接片 -1 交替
+/// 视差滚动背景（v15）
+/// - 只复制 map 下的 1/2/3 层，不复制整个 map 节点
+/// - 每层 4 片按 scale.x：+1, -1, -1, +1（正反反正）首尾相接
+/// - 取模周期 = 4×宽度，避免单宽回绕时“从头播放”的卡顿感
 /// </summary>
 public class ParallaxBackground : MonoBehaviour
 {
@@ -15,18 +16,21 @@ public class ParallaxBackground : MonoBehaviour
     [Header("背景注册表")]
     public BattleBackgroundRegistry backgroundRegistry;
 
+    /// <summary>正反反正：+x, -x, -x, +x</summary>
+    static readonly float[] FlipSigns = { 1f, -1f, -1f, 1f };
+    const int TileCount = 4;
+
     [System.Serializable]
     public class ParallaxLayer
     {
         public string name;
         [Range(0f, 1f)] public float parallaxFactor;
         public string autoFindByName;
-        [System.NonSerialized] public RectTransform rt;
-        [System.NonSerialized] public RectTransform mirrorRT;
+        [System.NonSerialized] public RectTransform[] tiles;
         [System.NonSerialized] public float width;
         [System.NonSerialized] public float initialX;
         [System.NonSerialized] public float baseScaleX = 1f;
-        [System.NonSerialized] public UnityEngine.UI.Image layerImage;
+        [System.NonSerialized] public UnityEngine.UI.Image[] images;
     }
 
     private Transform _layerRoot;
@@ -69,7 +73,6 @@ public class ParallaxBackground : MonoBehaviour
     {
         if (_layersInited) return;
 
-        // 固定设计 PPU，避免 Canvas/ortho 波动导致视差突然飙车
         _ppu = GameConfig.PIXEL_PER_UNIT;
         if (_ppu < 1f) _ppu = 100f;
 
@@ -84,16 +87,16 @@ public class ParallaxBackground : MonoBehaviour
         RefreshLayerWidth(ref midLayer);
         RefreshLayerWidth(ref frontLayer);
 
-        Debug.Log($"[Parallax v14] root={LayerSearchRoot.name} ppu={_ppu:F1} flipTile=+1/-1 w={frontLayer.width:F0}");
+        Debug.Log($"[Parallax v15] root={LayerSearchRoot.name} ppu={_ppu:F1} flip=+1/-1/-1/+1 tiles={TileCount} w={frontLayer.width:F0}");
     }
 
-    static void RefreshLayerWidth(ref ParallaxLayer layer)
+    void RefreshLayerWidth(ref ParallaxLayer layer)
     {
-        if (layer.rt == null) return;
-        float w = layer.rt.rect.width;
+        if (layer.tiles == null || layer.tiles.Length == 0 || layer.tiles[0] == null) return;
+        float w = layer.tiles[0].rect.width;
         if (w > 1f) layer.width = w;
         else if (layer.width < 1f) layer.width = 2020f;
-        ApplyTilePair(ref layer, layer.rt.anchoredPosition.x);
+        ApplyTiles(ref layer, layer.tiles[0].anchoredPosition.x);
     }
 
     void ClearOldTiles()
@@ -102,7 +105,10 @@ public class ParallaxBackground : MonoBehaviour
         Transform[] all = root.GetComponentsInChildren<Transform>(true);
         for (int i = 0; i < all.Length; i++)
         {
-            if (all[i] != null && all[i].name.EndsWith("_tile"))
+            if (all[i] == null) continue;
+            string n = all[i].name;
+            // 兼容旧版 "_tile" 与 v15 "_tile1/_tile2/_tile3"
+            if (n.Contains("_tile"))
                 Destroy(all[i].gameObject);
         }
     }
@@ -111,52 +117,48 @@ public class ParallaxBackground : MonoBehaviour
     {
         Transform t = FindDirectOrNested(LayerSearchRoot, layer.autoFindByName);
         if (t == null) return;
-        layer.rt = t as RectTransform;
-        if (layer.rt == null) return;
+        var src = t as RectTransform;
+        if (src == null) return;
 
-        layer.layerImage = layer.rt.GetComponent<UnityEngine.UI.Image>();
-        layer.initialX = layer.rt.anchoredPosition.x;
-        layer.width = layer.rt.rect.width > 1 ? layer.rt.rect.width : 2020f;
-        layer.baseScaleX = Mathf.Abs(layer.rt.localScale.x) < 0.01f ? 1f : Mathf.Abs(layer.rt.localScale.x);
+        layer.initialX = src.anchoredPosition.x;
+        layer.width = src.rect.width > 1f ? src.rect.width : 2020f;
+        layer.baseScaleX = Mathf.Abs(src.localScale.x) < 0.01f ? 1f : Mathf.Abs(src.localScale.x);
 
-        // 主片 +1
-        Vector3 mainScale = layer.rt.localScale;
-        mainScale.x = layer.baseScaleX;
-        layer.rt.localScale = mainScale;
+        layer.tiles = new RectTransform[TileCount];
+        layer.images = new UnityEngine.UI.Image[TileCount];
+        layer.tiles[0] = src;
+        layer.images[0] = src.GetComponent<UnityEngine.UI.Image>();
 
-        // 复制衔接片：x scale = -1，贴右侧
-        GameObject tile = Instantiate(layer.rt.gameObject, layer.rt.parent);
-        tile.name = layer.name + "_tile";
-        var extras = tile.GetComponents<ParallaxBackground>();
-        for (int i = 0; i < extras.Length; i++) Destroy(extras[i]);
+        for (int i = 1; i < TileCount; i++)
+        {
+            GameObject tile = Instantiate(src.gameObject, src.parent);
+            tile.name = layer.name + "_tile" + i;
+            var extras = tile.GetComponents<ParallaxBackground>();
+            for (int e = 0; e < extras.Length; e++) Destroy(extras[e]);
+            layer.tiles[i] = tile.GetComponent<RectTransform>();
+            layer.images[i] = layer.tiles[i].GetComponent<UnityEngine.UI.Image>();
+        }
 
-        layer.mirrorRT = tile.GetComponent<RectTransform>();
-        Vector3 flipScale = layer.mirrorRT.localScale;
-        flipScale.x = -layer.baseScaleX;
-        layer.mirrorRT.localScale = flipScale;
-        layer.mirrorRT.anchoredPosition = new Vector2(layer.initialX + layer.width, layer.rt.anchoredPosition.y);
+        ApplyTiles(ref layer, layer.initialX);
     }
 
-    /// <summary>主片 scale=+1，衔接片 scale=-1，位置差一个宽度</summary>
-    static void ApplyTilePair(ref ParallaxLayer layer, float baseX)
+    /// <summary>四片：位置差一个宽度，scale 正反反正</summary>
+    static void ApplyTiles(ref ParallaxLayer layer, float baseX)
     {
-        if (layer.rt == null) return;
-
-        Vector2 ap = layer.rt.anchoredPosition;
-        ap.x = baseX;
-        layer.rt.anchoredPosition = ap;
-        Vector3 ms = layer.rt.localScale;
-        ms.x = layer.baseScaleX;
-        layer.rt.localScale = ms;
-
-        if (layer.mirrorRT != null)
+        if (layer.tiles == null) return;
+        float w = layer.width;
+        for (int i = 0; i < layer.tiles.Length; i++)
         {
-            ap = layer.mirrorRT.anchoredPosition;
-            ap.x = baseX + layer.width;
-            layer.mirrorRT.anchoredPosition = ap;
-            Vector3 fs = layer.mirrorRT.localScale;
-            fs.x = -layer.baseScaleX;
-            layer.mirrorRT.localScale = fs;
+            var rt = layer.tiles[i];
+            if (rt == null) continue;
+
+            Vector2 ap = rt.anchoredPosition;
+            ap.x = baseX + i * w;
+            rt.anchoredPosition = ap;
+
+            Vector3 s = rt.localScale;
+            s.x = FlipSigns[i] * layer.baseScaleX;
+            rt.localScale = s;
         }
     }
 
@@ -184,7 +186,9 @@ public class ParallaxBackground : MonoBehaviour
     public void SwitchBackground(int chapter)
     {
         EnsureLayers();
-        if (frontLayer.rt == null && midLayer.rt == null && backLayer.rt == null)
+        if ((frontLayer.tiles == null || frontLayer.tiles[0] == null) &&
+            (midLayer.tiles == null || midLayer.tiles[0] == null) &&
+            (backLayer.tiles == null || backLayer.tiles[0] == null))
         {
             _pendingChapter = chapter;
             return;
@@ -212,15 +216,16 @@ public class ParallaxBackground : MonoBehaviour
 
     void SetLayerSprite(ref ParallaxLayer layer, Sprite sprite, string layerName)
     {
-        if (layer.rt == null) return;
-        if (layer.layerImage == null)
-            layer.layerImage = layer.rt.GetComponent<UnityEngine.UI.Image>();
-
-        ApplySprite(layer.layerImage, layer.rt.gameObject, sprite, layerName);
-        if (layer.mirrorRT != null)
+        if (layer.tiles == null) return;
+        for (int i = 0; i < layer.tiles.Length; i++)
         {
-            var img = layer.mirrorRT.GetComponent<UnityEngine.UI.Image>();
-            ApplySprite(img, layer.mirrorRT.gameObject, sprite, layerName + "_tile");
+            if (layer.tiles[i] == null) continue;
+            if (layer.images == null || layer.images[i] == null)
+            {
+                if (layer.images == null) layer.images = new UnityEngine.UI.Image[layer.tiles.Length];
+                layer.images[i] = layer.tiles[i].GetComponent<UnityEngine.UI.Image>();
+            }
+            ApplySprite(layer.images[i], layer.tiles[i].gameObject, sprite, layerName + (i == 0 ? "" : "_tile" + i));
         }
     }
 
@@ -254,14 +259,14 @@ public class ParallaxBackground : MonoBehaviour
 
     void MoveLayer(ref ParallaxLayer layer, float heroDelta)
     {
-        if (layer.rt == null || layer.width <= 0.01f) return;
+        if (layer.tiles == null || layer.tiles[0] == null || layer.width <= 0.01f) return;
 
         float offset = heroDelta * layer.parallaxFactor * _ppu;
-        float w = layer.width;
+        float period = layer.width * TileCount;
         float raw = layer.initialX - offset;
-        // 取模一个宽度：主片(+1) 与 衔接片(-1) 始终首尾相接；再往后循环又是 +1
-        float baseX = layer.initialX - Mathf.Repeat(layer.initialX - raw, w);
-        ApplyTilePair(ref layer, baseX);
+        // 周期 4 宽：正反反正完整循环后再回绕，不会像单宽那样突然“重播”
+        float baseX = layer.initialX - Mathf.Repeat(layer.initialX - raw, period);
+        ApplyTiles(ref layer, baseX);
     }
 
     static Transform FindDirectOrNested(Transform parent, string name)

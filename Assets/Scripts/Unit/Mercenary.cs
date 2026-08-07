@@ -196,7 +196,7 @@ public class Mercenary : UnitBase
             ApplyFacing(facingDir);
             if (h != null && !h.isDead)
             {
-                float desiredX = GetCombatX(h) - 0.85f * (ResolvePartyIndex() + 1);
+                float desiredX = GetCombatX(h) - BattleManager.MERC_BEHIND_SPACING * (ResolvePartyIndex() + 1);
                 float dx = desiredX - GetCombatX(this);
                 float spd = attr.GetAttr(AttrType.MoveSpeed);
                 if (Mathf.Abs(dx) > 0.08f)

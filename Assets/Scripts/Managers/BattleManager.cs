@@ -28,13 +28,13 @@ public class BattleManager : Singleton<BattleManager>
     /// <summary>开战过场结束后才允许单位行动</summary>
     public bool UnitsCanAct { get; private set; } = true;
     /// <summary>佣兵相对主角身后间距（世界单位）</summary>
-    const float MERC_BEHIND_SPACING = 0.85f;
+    public const float MERC_BEHIND_SPACING = 0.42f;
     /// <summary>开场从站位左侧多远走进来</summary>
     const float PARTY_ENTER_FROM = 2.5f;
-    const float MONSTER_ENTER_DIST = 3.5f;
+    const float MONSTER_ENTER_DIST = 2.8f;
     const float MONSTER_ENTER_SPEED = 2.2f;
     /// <summary>刷怪点距镜头右缘多远时触发（快进屏幕）</summary>
-    const float SPAWN_SCREEN_LEAD = 1.2f;
+    const float SPAWN_SCREEN_LEAD = 2.5f;
 
     public int CurrentChapter => ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
 
@@ -431,7 +431,8 @@ public class BattleManager : Singleton<BattleManager>
 
     /// <summary>
     /// 刷怪：不跟 Ground。刷怪点是世界坐标；镜头跟随玩家右移时，
-    /// 当 MonsterSpawn 快进入屏幕右缘时刷怪，怪从点右侧走进来交战。
+    /// 当 MonsterSpawn 快进入屏幕右缘（或已进入主角前方可视带）时刷怪。
+    /// 一次只刷最早未触发的一波，避免多点挤在一起时瞬间全刷。
     /// </summary>
     void TrySpawnWavesApproachingScreen()
     {
@@ -455,9 +456,17 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         Camera cam = Camera.main;
-        if (cam == null || !cam.orthographic) return;
-        float halfW = cam.orthographicSize * cam.aspect;
-        float camRight = cam.transform.position.x + halfW;
+        float halfW = 3f;
+        float camRight = hero.transform.position.x + halfW;
+        if (cam != null && cam.orthographic)
+        {
+            halfW = cam.orthographicSize * Mathf.Max(0.2f, cam.aspect);
+            camRight = cam.transform.position.x + halfW;
+        }
+
+        float heroX = UnitBase.GetCombatX(hero);
+        // 主角前方可视带右缘（不依赖镜头偏移是否异常）
+        float heroViewRight = heroX + halfW + SPAWN_SCREEN_LEAD;
 
         for (int i = 0; i < _waves.Count; i++)
         {
@@ -468,20 +477,24 @@ public class BattleManager : Singleton<BattleManager>
                 ? wave.spawnAnchor.position.x
                 : wave.triggerX;
 
-            // 刷怪点已接近/进入屏幕右缘 → 开刷
-            if (pointX > camRight + SPAWN_SCREEN_LEAD) continue;
+            // 刷怪点已接近/进入屏幕右缘，或已进入主角前方可视带 → 开刷
+            bool nearCam = pointX <= camRight + SPAWN_SCREEN_LEAD;
+            bool nearHero = pointX <= heroViewRight;
+            if (!nearCam && !nearHero) continue;
 
             try
             {
                 SpawnWave(wave, i);
                 wave.spawned = true;
-                Debug.Log($"[BattleManager] 刷怪点入画触发 第{i + 1}波 pointX={pointX:F2} camRight={camRight:F2} monsters={monsters.Count}");
+                Debug.Log($"[BattleManager] 刷怪点入画触发 第{i + 1}波 pointX={pointX:F2} camRight={camRight:F2} heroViewR={heroViewRight:F2} monsters={monsters.Count}");
             }
             catch (System.Exception e)
             {
                 Debug.LogError($"[BattleManager] 第{i + 1}波刷怪异常: {e}");
                 wave.spawned = false;
             }
+            // 每帧最多刷一波，后续点等下一帧再判
+            break;
         }
     }
 
