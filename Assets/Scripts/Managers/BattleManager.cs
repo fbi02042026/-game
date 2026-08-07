@@ -728,6 +728,12 @@ public class BattleManager : Singleton<BattleManager>
 
         int stageIdx = currentStage.stageIndex;
         int chapter = CurrentChapter;
+        if (ConfigManager.Instance == null)
+        {
+            Debug.LogError("[BattleManager] ConfigManager 为空，走兜底刷怪");
+            SpawnFallbackWave(wave, waveIndex);
+            return;
+        }
         var pool = ConfigManager.Instance.GetWaveMonsterPool(chapter, stageIdx);
 
         if (pool == null || pool.Count == 0)
