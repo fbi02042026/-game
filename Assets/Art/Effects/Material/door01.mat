@@ -8,15 +8,15 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: door01
-  m_Shader: {fileID: 4800000, guid: dceb23599a792cc46871440f7b7fa615, type: 3}
+  m_Shader: {fileID: 4800000, guid: 789f1d4c625e74140b6e8df4bde1fc61, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
-  - _SHADERSPACE_UV
   - _TIMESETTINGS_LINEAR_DEFAULT
   m_InvalidKeywords:
   - _CAMOUFLAGEANIMATED_ON
   - _OUTEROUTLINEDISTORTIONTOGGLE_ON
+  - _SHADERSPACE_UV
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
@@ -287,6 +287,7 @@ Material:
     - _TimeScale: 1
     - _TimeSettings: 0
     - _TimeValue: 0
+    - _UVRotateSpeed: 0.6
     - _WorkflowMode: 1
     - _ZWrite: 1
     m_Colors:
@@ -352,6 +353,7 @@ Material:
     - _SplitToningHighlightsColor: {r: 1, g: 0.1, b: 0.1, a: 0}
     - _SplitToningShadowsColor: {r: 0.1, g: 0.4000002, b: 1, a: 0}
     - _StrongTintTint: {r: 1, g: 1, b: 1, a: 1}
+    - _UVRotatePivot: {r: 0.5, g: 0.5, b: 0, a: 0}
   m_BuildTextureStacks: []
 --- !u!114 &6082123789156463568
 MonoBehaviour:

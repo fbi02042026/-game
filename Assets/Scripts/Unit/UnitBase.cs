@@ -281,7 +281,8 @@ public abstract class UnitBase : MonoBehaviour
             unitAnim.SetMove(isMoving, facingDir);
 
         // 仅钳制己方，避免屏外刷怪被拉到右缘导致「够不着/不攻击」
-        if (isAlly)
+        // 通关走向传送门时放宽
+        if (isAlly && (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode))
             ClampToScreen();
     }
 

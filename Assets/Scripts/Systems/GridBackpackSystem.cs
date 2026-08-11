@@ -90,6 +90,22 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         OnBackpackChanged?.Invoke();
     }
 
+    /// <summary>通关奖励：先入包再尝试穿戴（同槽自动替换）</summary>
+    public bool TryEquipFromReward(EquipInstance equip)
+    {
+        if (equip == null) return false;
+        if (!TryAddItem(equip, out BackpackItem item) || item == null)
+        {
+            UIManager.Instance?.ShowToast("背包已满，无法获得装备");
+            return false;
+        }
+        if (EquipItem(item))
+            return true;
+        // 穿戴失败仍留在背包
+        UIManager.Instance?.ShowToast("已放入背包");
+        return true;
+    }
+
     /// <summary>
     /// 穿戴装备（按槽位）
     /// </summary>

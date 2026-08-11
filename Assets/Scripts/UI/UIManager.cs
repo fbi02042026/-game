@@ -124,11 +124,16 @@ public class UIManager : Singleton<UIManager>
         }
     }
 
-    public void ShowStageClearUI(List<EquipInstance> rewards, int bonusGold, Action<EquipInstance> onSelect)
+    public void ShowStageClearUI(List<EquipInstance> rewards, int bonusGold, System.Action<EquipInstance> onSelect)
     {
-        Debug.Log($"关卡通关，奖励装备数：{rewards?.Count ?? 0}，金币：{bonusGold}");
-        EquipInstance pick = (rewards != null && rewards.Count > 0) ? rewards[0] : null;
-        onSelect?.Invoke(pick);
+        // 兼容旧回调：新 UI 走 StageClearEquipUI（装备/丢弃）
+        StageClearEquipUI.Show(rewards, bonusGold, (picked, equipOrReplace) =>
+        {
+            if (equipOrReplace)
+                onSelect?.Invoke(picked);
+            else
+                onSelect?.Invoke(null);
+        });
     }
 
     public void ShowChapterClearChoice(Action onReturnTown, Action onNextChapter)

@@ -1,12 +1,31 @@
 # PixelAdventureTown 版本记录
 
-恢复本版：
+恢复某版：
 
 ```bash
-git checkout v0.3.0
-# 或只查看本版文件而不切换分支：
-git show v0.3.0
+git checkout v0.3.1
+# 或
+git show v0.3.1:VERSION.md
 ```
+
+---
+
+## v0.3.1 — 2026-08-11
+
+里程碑：全量资源入库 + 宝箱通关结算流程。
+
+### 本版提交范围
+- 补交 v0.3.0 漏掉的 Epic Toon FX / Battle 场景 `box`·`chuansongmen` 等项目改动
+- 通关改为：宝箱 open1→open2 → 金币飞入资源条 → 三选一装备 UI → 开 chuansongmen → 走进后弹选关
+
+### 通关结算
+- `StageClearRewardDirector`：驱动 `WorldRoot/box` 与 `chuansongmen`
+- `StageClearEquipUI`：三卡并排；选中后同槽已装备显示在下方；底部「装备/替换」「丢弃」
+- 未选中装备折金：`rarity * 5 * (1+star)`
+- 走进传送门后：`ChapterMapUI.ShowAfterBattle` / 章节二选一
+
+### 恢复提示
+若只要旧「走 EndPoint 自动拿装备」逻辑：`git checkout v0.3.0`
 
 ---
 

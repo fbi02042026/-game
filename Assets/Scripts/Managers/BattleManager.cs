@@ -26,7 +26,9 @@ public class BattleManager : Singleton<BattleManager>
     public bool isAutoBattle = false;
     public List<AttrBonusData> tempBuffs = new List<AttrBonusData>();
     /// <summary>开战过场结束后才允许单位行动</summary>
-    public bool UnitsCanAct { get; private set; } = true;
+    public bool UnitsCanAct { get; set; } = true;
+    /// <summary>正在走向 chuansongmen，放宽屏幕钳制</summary>
+    public bool PortalWalkMode => _portalActive && !_stageCleared;
     /// <summary>佣兵相对主角身后间距（世界单位）</summary>
     public const float MERC_BEHIND_SPACING = 0.42f;
     /// <summary>开场从站位左侧多远走进来</summary>
@@ -79,6 +81,8 @@ public class BattleManager : Singleton<BattleManager>
     // === 传送门 ===
     /// <summary>传送门是否已激活（所有怪清完后激活，玩家进入后通关）</summary>
     private bool _portalActive = false;
+    private bool _rewardSequenceStarted = false;
+    private Transform _chuanSongMen;
     private bool _didUpdateForceSpawn;
 
     /// <summary>
@@ -192,6 +196,8 @@ public class BattleManager : Singleton<BattleManager>
         tempBuffs.Clear();
         _stageCleared = false;
         _portalActive = false;
+        _rewardSequenceStarted = false;
+        _chuanSongMen = null;
         UnitsCanAct = false;
         MonsterAttackStyleTable.Reload();
         playerSkillEnergy = 0f;
@@ -201,6 +207,9 @@ public class BattleManager : Singleton<BattleManager>
         allyUnits.RemoveAll(u => u == null || u is Mercenary);
 
         HidePortal();
+        EnsureRewardDirector();
+        StageClearRewardDirector.Instance?.CacheSceneRefs();
+        StageClearRewardDirector.Instance?.HideClearProps();
         EnsurePortalAnimatorReady(endPoint);
 
         if (hero == null)
@@ -329,6 +338,9 @@ public class BattleManager : Singleton<BattleManager>
         _totalWaves = 0;
         _allWavesSpawned = false;
         _stageCleared = false;
+        _portalActive = false;
+        _rewardSequenceStarted = false;
+        _chuanSongMen = null;
         _totalMonstersSpawnedThisStage = 0;
         _didUpdateForceSpawn = false;
         playerSkillEnergy = 0f;
@@ -1213,26 +1225,27 @@ public class BattleManager : Singleton<BattleManager>
         else allSpawned = false;
         _allWavesSpawned = allSpawned && _waves != null && _waves.Count > 0;
 
-        // 所有波次已刷完且场上无怪 → 传送门
+        // 所有波次已刷完且场上无怪 → 宝箱结算（不再直接开 EndPoint）
         if (_allWavesSpawned && monsters.Count == 0 && _totalMonstersSpawnedThisStage > 0
-            && !_portalActive && !_stageCleared)
+            && !_portalActive && !_stageCleared && !_rewardSequenceStarted)
         {
-            ActivatePortal();
+            StartStageClearRewardSequence();
         }
 
-        // 通关条件：传送门已激活 且 玩家走到传送门位置（EndPoint）
-        if (_portalActive && hero != null && !hero.isDead && !_stageCleared && endPoint != null)
+        // 通关：chuansongmen 已开且玩家走到传送门
+        if (_portalActive && hero != null && !hero.isDead && !_stageCleared && _chuanSongMen != null)
         {
-            if (hero.transform.position.x >= endPoint.position.x - 0.5f)
-                OnStageClear();
+            if (hero.transform.position.x >= _chuanSongMen.position.x - 0.6f)
+                FinishStageAfterPortalReached();
         }
 
-        // 跑图时镜头随英雄缓慢放宽，避免「地图尽头」卡死 / 跑出蓝屏
-        if (hero != null && !_portalActive)
-            ExtendCameraMaxX(UnitBase.GetCombatX(hero) + 12f);
+        // 跑图时镜头随英雄缓慢放宽
+        if (hero != null)
+            ExtendCameraMaxX(UnitBase.GetCombatX(hero) + (_portalActive ? 6f : 12f));
 
-        // 防止玩家跑出当前镜头右侧（传送门激活后仍夹，但镜头已先放宽）
-        ClampHeroInCamera();
+        // 传送门开启后不再把英雄卡在镜头右缘，允许走向 chuansongmen
+        if (!_portalActive)
+            ClampHeroInCamera();
 
         // 更新技能能量（渐变 + 时间累积）
         if (hero != null && !hero.isDead)
@@ -1811,19 +1824,34 @@ public class BattleManager : Singleton<BattleManager>
 
     public void OnStageClear()
     {
-        if (_stageCleared) return; // 防重入（此前 Hero 每帧调用曾刷爆 Console）
-        isInBattle = false;
-        _stageCleared = true;
+        // 兼容旧调用：直接走完整结算选关（无宝箱时）
+        FinishStageAfterPortalReached();
+    }
+
+    void EnsureRewardDirector()
+    {
+        if (StageClearRewardDirector.Instance != null) return;
+        var go = new GameObject("StageClearRewardDirector");
+        DontDestroyOnLoad(go);
+        go.AddComponent<StageClearRewardDirector>();
+    }
+
+    /// <summary>清怪后：宝箱 → 掉落 → 三选一 → chuansongmen</summary>
+    void StartStageClearRewardSequence()
+    {
+        if (_rewardSequenceStarted || _stageCleared) return;
+        _rewardSequenceStarted = true;
+        isInBattle = false; // 停止刷怪/战斗逻辑，但仍可在传送门阶段让单位行走
+        UnitsCanAct = false;
 
         if (currentStage == null)
         {
-            Debug.LogError("[BattleManager] OnStageClear 时 currentStage 为空");
-            UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
+            Debug.LogError("[BattleManager] 结算时 currentStage 为空");
+            FinishStageAfterPortalReached();
             return;
         }
 
         bool isBoss = currentStage.type == StageType.Boss;
-
         if (isBoss)
             BattleUI.Instance?.UpdateStageProgress(currentStage.stageIndex, atEndFlag: true);
         else
@@ -1838,73 +1866,81 @@ public class BattleManager : Singleton<BattleManager>
             bonusStar = 2;
             int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
             bonusGold = 200 * ch;
-            currentGold += bonusGold;
             equipCount += 1;
         }
         else if (currentStage.type == StageType.Elite)
         {
             bonusStar = 1;
             bonusGold = 50;
-            currentGold += bonusGold;
         }
 
+        // 多出的奖励件直接折金，三选一只展示 3 张
         int blacksmithLevel = TownSystem.Instance != null ? TownSystem.Instance.GetBuildingLevel(BuildingType.Blacksmith) : 1;
         List<EquipInstance> rewards = ConfigManager.Instance != null
             ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar)
             : new List<EquipInstance>();
 
-        if (UIManager.Instance == null)
+        if (rewards != null && rewards.Count > 3)
         {
-            Debug.LogError("[BattleManager] UIManager 为空，跳过结算 UI");
-            return;
+            for (int i = 3; i < rewards.Count; i++)
+                bonusGold += (int)rewards[i].rarity * 5 * (1 + rewards[i].star);
+            rewards.RemoveRange(3, rewards.Count - 3);
         }
 
-        UIManager.Instance.ShowStageClearUI(rewards, bonusGold, (selectedEquip) =>
+        EnsureRewardDirector();
+        StageClearRewardDirector.Instance.Begin(rewards, bonusGold);
+        Debug.Log($"[BattleManager] 开始宝箱结算 bonusGold={bonusGold} equips={rewards?.Count ?? 0}");
+    }
+
+    public void NotifyChuanSongMenOpened(Transform portal)
+    {
+        _chuanSongMen = portal;
+        _portalActive = true;
+        if (portal != null)
+            ExtendCameraMaxX(portal.position.x + 3f);
+        // 让英雄/佣兵继续向右走向传送门
+        UnitsCanAct = true;
+        isInBattle = true; // Update 里检测走近传送门需要跑
+    }
+
+    /// <summary>走进 chuansongmen 后：写档并弹选关</summary>
+    public void FinishStageAfterPortalReached()
+    {
+        if (_stageCleared) return;
+        _stageCleared = true;
+        isInBattle = false;
+        UnitsCanAct = false;
+
+        if (hero != null && hero.rb != null) hero.rb.velocity = Vector2.zero;
+
+        PersistBattleGold();
+        ChapterManager.Instance?.OnStageComplete();
+
+        bool isBoss = currentStage != null && currentStage.type == StageType.Boss;
+        if (isBoss)
         {
-            if (selectedEquip != null)
-            {
-                GridBackpackSystem.Instance?.TryAddItem(selectedEquip, out _);
-                AchievementSystem.Instance?.OnObtainEquip(selectedEquip.rarity);
-                if (rewards != null)
+            UIManager.Instance?.ShowChapterClearChoice(
+                onReturnTown: () =>
                 {
-                    foreach (var equip in rewards)
-                    {
-                        if (equip != selectedEquip)
-                            currentGold += (int)equip.rarity * 5 * (1 + equip.star);
-                    }
-                }
-            }
-            else if (rewards != null)
-            {
-                foreach (var equip in rewards)
-                    currentGold += (int)equip.rarity * 5 * (1 + equip.star);
-            }
-
-            PersistBattleGold();
-            ChapterManager.Instance?.OnStageComplete();
-
-            if (isBoss)
-            {
-                UIManager.Instance.ShowChapterClearChoice(
-                    onReturnTown: () =>
-                    {
-                        MercenaryManager.Instance?.ClearAllMercs();
-                        GameSceneManager.Instance?.ReturnToTown();
-                    },
-                    onNextChapter: () =>
-                    {
-                        int next = (ChapterManager.Instance?.currentChapter ?? 1) + 1;
-                        if (next > 8) next = 8;
-                        ChapterManager.Instance?.StartChapter(next);
-                        if (ChapterManager.Instance?.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
-                            ChapterManager.Instance.SelectStage(ChapterManager.Instance.stageMap[0]);
-                    });
-            }
+                    MercenaryManager.Instance?.ClearAllMercs();
+                    GameSceneManager.Instance?.ReturnToTown();
+                },
+                onNextChapter: () =>
+                {
+                    int next = (ChapterManager.Instance?.currentChapter ?? 1) + 1;
+                    if (next > 8) next = 8;
+                    ChapterManager.Instance?.StartChapter(next);
+                    if (ChapterManager.Instance?.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
+                        ChapterManager.Instance.SelectStage(ChapterManager.Instance.stageMap[0]);
+                });
+        }
+        else
+        {
+            if (ChapterMapUI.Instance != null)
+                ChapterMapUI.Instance.ShowAfterBattle();
             else
-            {
-                UIManager.Instance.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
-            }
-        });
+                UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
+        }
     }
 
     void PersistBattleGold()
