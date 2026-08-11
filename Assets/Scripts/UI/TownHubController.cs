@@ -11,6 +11,7 @@ public class TownHubController : MonoBehaviour
     static GameObject _tavernPrefabCache;
 
     TavernUI _tavern;
+    AdventureUI _adventure;
     MainBottomNav _nav;
     bool _wired;
     bool _pagesPreloaded;
@@ -50,6 +51,7 @@ public class TownHubController : MonoBehaviour
         if (_pagesPreloaded) return;
         EnsureNavBound();
         EnsureTavernPreloaded();
+        EnsureAdventurePreloaded();
         _pagesPreloaded = true;
         ShowGuildOnly();
         if (_nav != null)
@@ -74,7 +76,7 @@ public class TownHubController : MonoBehaviour
 
     bool OnTabOverride(MainNavTab tab)
     {
-        if (tab == MainNavTab.Guild || tab == MainNavTab.Tavern)
+        if (tab == MainNavTab.Guild || tab == MainNavTab.Tavern || tab == MainNavTab.Adventure)
         {
             SwitchTab(tab);
             return true;
@@ -82,7 +84,7 @@ public class TownHubController : MonoBehaviour
         if (tab == MainNavTab.Character || tab == MainNavTab.Log)
         {
             UIManager.Instance?.ShowToast(tab == MainNavTab.Character ? "角色（待实现）" : "冒险日志（待实现）");
-            if (_current == MainNavTab.Tavern)
+            if (_current == MainNavTab.Tavern || _current == MainNavTab.Adventure)
                 SwitchTab(MainNavTab.Guild);
             return true;
         }
@@ -100,11 +102,18 @@ public class TownHubController : MonoBehaviour
         _current = tab;
         if (tab == MainNavTab.Tavern)
         {
+            _adventure?.HidePage();
             _tavern?.ShowPage();
+        }
+        else if (tab == MainNavTab.Adventure)
+        {
+            _tavern?.HidePage();
+            _adventure?.ShowPage();
         }
         else
         {
             _tavern?.HidePage();
+            _adventure?.HidePage();
             ShowGuildOnly();
         }
     }
@@ -125,6 +134,18 @@ public class TownHubController : MonoBehaviour
         _nav.OnTabSelected += OnTabSelected;
         _nav.OnTabClickOverride -= OnTabOverride;
         _nav.OnTabClickOverride += OnTabOverride;
+    }
+
+    void EnsureAdventurePreloaded()
+    {
+        if (_adventure != null) return;
+
+        var go = new GameObject("AdventureUI", typeof(RectTransform));
+        go.transform.SetParent(transform, false);
+        Stretch(go);
+        _adventure = go.AddComponent<AdventureUI>();
+        _adventure.PreloadOnce();
+        _adventure.HidePage();
     }
 
     void EnsureTavernPreloaded()

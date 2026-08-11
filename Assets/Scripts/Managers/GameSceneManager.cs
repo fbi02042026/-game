@@ -5,13 +5,15 @@ using UnityEngine;
 /// 场景流程（三场景）：
 /// · Boot — 持久化系统、进 Town
 /// · Town — 公会/酒馆/角色/日志等全部在此，切页不 LoadScene
-/// · Battle — 仅战斗；异步加载 + Loading 遮罩
+/// · Battle — 仅战斗；异步加载 + Loading 遮罩（含进场景后初始化，100% 再关）
 /// </summary>
 public class GameSceneManager : Singleton<GameSceneManager>
 {
     public const string BOOT_SCENE = "Boot";
     public const string TOWN_SCENE = "Town";
     public const string BATTLE_SCENE = "Battle";
+
+    const float PostLoadWaitTimeout = 20f;
 
     bool _loadingBattle;
     bool _loadingTown;
@@ -47,8 +49,13 @@ public class GameSceneManager : Singleton<GameSceneManager>
     {
         _loadingTown = true;
         var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-        if (scene.name != TOWN_SCENE)
-            BattleLoadingOverlay.Show("返回城镇…");
+        bool showOverlay = scene.name != TOWN_SCENE;
+        if (showOverlay)
+        {
+            string tip = scene.name == BOOT_SCENE ? "进入城镇…" : "返回城镇…";
+            SceneLoadingCoordinator.Begin(tip, SceneLoadingCoordinator.LoadTarget.Town);
+            TownSceneBootstrap.ResetForSceneLoad();
+        }
 
         yield return null;
         var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(TOWN_SCENE);
@@ -56,12 +63,24 @@ public class GameSceneManager : Singleton<GameSceneManager>
         {
             UnityEngine.SceneManagement.SceneManager.LoadScene(TOWN_SCENE);
             _loadingTown = false;
-            BattleLoadingOverlay.Hide();
+            if (showOverlay && !TownSceneBootstrap.IsLoadComplete)
+                SceneLoadingCoordinator.Finish();
             yield break;
         }
-        yield return CoTrackLoadProgress(op);
+
+        while (!op.isDone)
+        {
+            if (showOverlay) SceneLoadingCoordinator.ReportSceneAsync(op);
+            yield return null;
+        }
+
+        if (showOverlay)
+        {
+            SceneLoadingCoordinator.ReportSceneLoaded();
+            yield return WaitForTownBootstrapComplete();
+        }
+
         _loadingTown = false;
-        BattleLoadingOverlay.Hide();
     }
 
     /// <summary>仅 Town → Battle 切场景；Town 内底栏切页不走这里</summary>
@@ -76,10 +95,11 @@ public class GameSceneManager : Singleton<GameSceneManager>
         StartCoroutine(LoadBattleAsync());
     }
 
-    System.Collections.IEnumerator LoadBattleAsync()
+    IEnumerator LoadBattleAsync()
     {
         _loadingBattle = true;
-        BattleLoadingOverlay.Show("进入冒险…");
+        AutoGameInitializer.ResetForSceneLoad();
+        SceneLoadingCoordinator.Begin("进入冒险…", SceneLoadingCoordinator.LoadTarget.Battle);
         yield return null;
 
         var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(BATTLE_SCENE);
@@ -87,26 +107,45 @@ public class GameSceneManager : Singleton<GameSceneManager>
         {
             UnityEngine.SceneManagement.SceneManager.LoadScene(BATTLE_SCENE);
             _loadingBattle = false;
-            BattleLoadingOverlay.Hide();
+            yield return WaitForBattleInitComplete();
             yield break;
         }
-        yield return CoTrackLoadProgress(op);
-        _loadingBattle = false;
-        BattleLoadingOverlay.Hide();
-    }
 
-    /// <summary>Unity AsyncOperation 进度常卡在 0.9，映射到 0~100% 显示</summary>
-    static IEnumerator CoTrackLoadProgress(AsyncOperation op)
-    {
-        if (op == null) yield break;
         while (!op.isDone)
         {
-            float p = Mathf.Clamp01(op.progress / 0.9f);
-            BattleLoadingOverlay.SetProgress(p);
+            SceneLoadingCoordinator.ReportSceneAsync(op);
             yield return null;
         }
-        BattleLoadingOverlay.SetProgress(1f);
-        yield return null;
+
+        SceneLoadingCoordinator.ReportSceneLoaded();
+        // 进场景后的初始化由 AutoGameInitializer 上报 45~100% 并 Finish
+        yield return WaitForBattleInitComplete();
+
+        _loadingBattle = false;
+    }
+
+    static IEnumerator WaitForTownBootstrapComplete()
+    {
+        float t = 0f;
+        while (!TownSceneBootstrap.IsLoadComplete && t < PostLoadWaitTimeout)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (!TownSceneBootstrap.IsLoadComplete && SceneLoadingCoordinator.IsActive)
+            SceneLoadingCoordinator.Finish();
+    }
+
+    static IEnumerator WaitForBattleInitComplete()
+    {
+        float t = 0f;
+        while (!AutoGameInitializer.IsBattleLoadComplete && t < PostLoadWaitTimeout)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (!AutoGameInitializer.IsBattleLoadComplete && SceneLoadingCoordinator.IsActive)
+            SceneLoadingCoordinator.Finish();
     }
 
     public void EnterAdventure() => LoadBattleScene();

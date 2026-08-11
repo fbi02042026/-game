@@ -16,6 +16,19 @@ public class AutoGameInitializer : MonoBehaviour
     /// <summary>防重入标志：确保初始化只执行一次</summary>
     private static bool _initialized = false;
 
+    /// <summary>本次进 Battle 场景后初始化是否完成（供 Loading 等待）</summary>
+    public static bool IsBattleLoadComplete { get; private set; }
+
+    public static void ResetForSceneLoad()
+    {
+        IsBattleLoadComplete = false;
+    }
+
+    static void ReportInitStep(int step)
+    {
+        SceneLoadingCoordinator.ReportPostLoadStep(step, 8);
+    }
+
     void Awake()
     {
         if (!GameSceneGate.IsBattle) return;
@@ -44,6 +57,7 @@ public class AutoGameInitializer : MonoBehaviour
             return;
         }
 
+        IsBattleLoadComplete = false;
         _initialized = true;
         GamePerf.ApplyStartup();
 
@@ -52,15 +66,18 @@ public class AutoGameInitializer : MonoBehaviour
         // 确保跨场景持久根节点存在（由BootManager创建，但如果直接Play Battle场景则可能没有）
         EnsurePersistentRoot();
         GamePerf.Log("[AutoInit] 1/8 PersistentRoot就绪");
+        ReportInitStep(1);
 
         // 查找或创建场景基础对象
         Camera cam = EnsureCamera();
         GamePerf.Log("[AutoInit] 2/8 相机就绪");
+        ReportInitStep(2);
 
         // 修复场景中所有RectTransform scale=0的问题
         // BattleUI预制体根节点(Root)的scale可能为0，导致整个UI和子节点不可见
         FixAllScaleZero();
         GamePerf.Log("[AutoInit] 3/8 Scale修复完成");
+        ReportInitStep(3);
 
         // 查找或创建出生点/终点/怪物刷新点（先摆 Spawn，再定 unit 站立线）
         Transform worldRoot = EnsureWorldRoot();
@@ -72,6 +89,7 @@ public class AutoGameInitializer : MonoBehaviour
         // 站立线 = 用户调好的 unit.y（禁止再加偏移）
         UnitBase.GROUND_Y = unitRoot.position.y;
         GamePerf.Log($"[AutoInit] 4/8 站立线Y={UnitBase.GROUND_Y:F2} (=unit.y，无偏移)");
+        ReportInitStep(4);
 
         // Ground 仅保证存在碰撞（可选），不参与站位
         EnsureGround(worldRoot);
@@ -82,6 +100,7 @@ public class AutoGameInitializer : MonoBehaviour
         // 创建GameRoot和所有系统
         GameObject gameRoot = EnsureGameRoot();
         GamePerf.Log("[AutoInit] 5/8 GameRoot就绪");
+        ReportInitStep(5);
 
         // 初始化BattleManager引用（优先用单例，避免拿到将被销毁的重复组件）
         BattleManager bm = BattleManager.Instance != null
@@ -96,6 +115,7 @@ public class AutoGameInitializer : MonoBehaviour
         Hero hero = EnsureHero(unitRoot, bm);
         hero.endPoint = endPoint;
         GamePerf.Log("[AutoInit] 6/8 Hero就绪");
+        ReportInitStep(6);
 
         // 相机只跟 X，不改用户调好的 Y（禁止 AlignCamera 改站位）
         BattleViewportFit.Apply(cam);
@@ -110,6 +130,7 @@ public class AutoGameInitializer : MonoBehaviour
         EnsureMonsterPrefab();
         PoolManager.Instance?.Warm("Monster", 6);
         GamePerf.Log("[AutoInit] 7/8 怪物池预热完成");
+        ReportInitStep(7);
 
         // 加载战斗特效（内部有缓存，不重复 Load）
         if (BattleVFXSystem.Instance != null)
@@ -133,6 +154,7 @@ public class AutoGameInitializer : MonoBehaviour
             Debug.Log($"[AutoInit] Hero parent={hero.transform.parent?.name} pos={hero.transform.position} lossy={hero.transform.lossyScale}");
         }
         GamePerf.Log("[AutoInit] 8/8 StartNewRun完成");
+        ReportInitStep(8);
 
         // 刷新UI角色栏（血条、头像、进度条）— 系统已就绪后再绑一次
         BattleUI.Instance?.RebindAfterSystemsReady();
@@ -141,12 +163,14 @@ public class AutoGameInitializer : MonoBehaviour
         EnsureCharacterBarVisibleRuntime();
 
         GamePerf.Log("[AutoInit] Battle场景初始化完成");
-        BattleLoadingOverlay.Hide();
+        IsBattleLoadComplete = true;
+        SceneLoadingCoordinator.Finish();
     }
 
     /// <summary>二次进战斗：场景锚点/Hero 已随旧场景销毁，必须重绑再 StartNewRun</summary>
     static void RebindSceneAndRestartBattle()
     {
+        IsBattleLoadComplete = false;
         FixAllScaleZero();
         Camera cam = EnsureCamera();
         Transform worldRoot = EnsureWorldRoot();
@@ -155,6 +179,7 @@ public class AutoGameInitializer : MonoBehaviour
         Transform[] monsterSpawnPoints = EnsureMonsterSpawnPoints(worldRoot);
         Transform unitRoot = EnsureUnitRoot(worldRoot);
         UnitBase.GROUND_Y = unitRoot.position.y;
+        ReportInitStep(4);
 
         EnsureGround(worldRoot);
         EnsureEventSystem();
@@ -180,6 +205,7 @@ public class AutoGameInitializer : MonoBehaviour
             bm.hero = null;
         Hero hero = EnsureHero(unitRoot, bm);
         hero.endPoint = endPoint;
+        ReportInitStep(6);
 
         BattleViewportFit.Apply(cam);
         EnsureCameraFollow(cam, hero.transform, spawnPoint, endPoint);
@@ -188,6 +214,7 @@ public class AutoGameInitializer : MonoBehaviour
         EnsureParallaxOnMaproot();
         EnsureMonsterPrefab();
         PoolManager.Instance?.Warm("Monster", 6);
+        ReportInitStep(7);
 
         bm.ClearAllMonsters();
         bm.StartNewRun();
@@ -206,7 +233,9 @@ public class AutoGameInitializer : MonoBehaviour
         BattleSideHud.EnsureOn(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
         EnsureCharacterBarVisibleRuntime();
         GamePerf.Log("[AutoInit] 二次进战斗重绑完成，已 StartNewRun");
-        BattleLoadingOverlay.Hide();
+        ReportInitStep(8);
+        IsBattleLoadComplete = true;
+        SceneLoadingCoordinator.Finish();
     }
 
     // ===== 修复方法 =====
