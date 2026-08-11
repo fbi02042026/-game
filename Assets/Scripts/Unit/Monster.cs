@@ -32,7 +32,7 @@ public class Monster : UnitBase
     {
         // 偏移仅作为兜底（预制体有 beattack/fire 节点时不会用到）
         hitPointOffset = new Vector3(0f, 0.5f, 0f);
-        firePointOffset = new Vector3(-0.3f, 0.4f, 0f);
+        firePointOffset = new Vector3(-0.3f, 0.28f, 0f);
 
         // 怪物使用程序化动画，根节点上的 Animator 没有所需参数会报错，直接移除
         Animator animator = GetComponent<Animator>();
@@ -176,18 +176,12 @@ public class Monster : UnitBase
                 return;
             }
 
-            // 玩家已靠近：取消入场直接开战（避免擦肩而过却一直在走入场）
-            UnitBase foe = FindNearestEnemy();
+            UnitBase foe = FindNearestEnemyInDetectRange();
             if (foe != null)
             {
-                float dist = Mathf.Abs(GetCombatX(this) - GetCombatX(foe));
-                float range = attr != null ? attr.GetAttr(AttrType.AttackRange) : 1.2f;
-                if (dist <= range + 0.4f)
-                {
-                    _isEnteringMap = false;
-                    base.AIUpdate();
-                    return;
-                }
+                _isEnteringMap = false;
+                base.AIUpdate();
+                return;
             }
 
             float dx = _enterTargetPos.x - transform.position.x;
@@ -195,6 +189,7 @@ public class Monster : UnitBase
             {
                 GameConfig.SetWorldPosition(transform, new Vector3(_enterTargetPos.x, UnitBase.GROUND_Y, transform.position.z));
                 _isEnteringMap = false;
+                IdleWaitForPlayer();
                 return;
             }
 
@@ -207,7 +202,22 @@ public class Monster : UnitBase
             return;
         }
 
+        // 无目标：原地朝左待机，等玩家走进索敌范围（禁止向左冲导致擦肩而过）
+        if (FindNearestEnemyInDetectRange() == null)
+        {
+            IdleWaitForPlayer();
+            return;
+        }
+
         base.AIUpdate();
+    }
+
+    void IdleWaitForPlayer()
+    {
+        if (rb != null) rb.velocity = Vector2.zero;
+        facingDir = -1;
+        ApplyFacing(facingDir);
+        if (unitAnim != null) unitAnim.SetMove(false, facingDir);
     }
 
     /// <summary>
@@ -235,11 +245,15 @@ public class Monster : UnitBase
             GameConfig.SetWorldPosition(gameObject, worldPos);
         }
 
-        // 根缩放：WorldRoot 下 2.5~3.0（对应用户说的 250~300 观感），精英×1.3，Boss×1.6
+        // 根缩放：用怪物专用尺度（约 3.75~4.5），勿用 UNIT_SCALE=1 —— 像素怪会小到「像没刷」
         bool eliteWave = scaleMultiplier >= GameConfig.ELITE_SCALE_MULTIPLIER - 0.05f
                          && scaleMultiplier < GameConfig.BOSS_SCALE_MULTIPLIER - 0.05f;
         bool bossUnit = (template != null && template.isBoss) || scaleMultiplier >= GameConfig.BOSS_SCALE_MULTIPLIER - 0.05f;
-        float rootScale = GameConfig.RollMonsterRootScale(eliteWave, bossUnit);
+        float rootScale = GameConfig.MONSTER_BASE_SCALE;
+        if (bossUnit) rootScale = GameConfig.MONSTER_BASE_SCALE * GameConfig.BOSS_SCALE_MULTIPLIER;
+        else if (eliteWave) rootScale = GameConfig.MONSTER_BASE_SCALE * GameConfig.ELITE_SCALE_MULTIPLIER;
+        else if (scaleMultiplier > 1.01f)
+            rootScale = GameConfig.MONSTER_BASE_SCALE * scaleMultiplier;
         GameConfig.AttachToUnitRoot(transform);
         transform.localScale = Vector3.one * rootScale;
 
@@ -300,14 +314,18 @@ public class Monster : UnitBase
             baseHp = GameConfig.MONSTER_ELITE_HP;
             baseAtk = GameConfig.MONSTER_ELITE_ATK;
             baseDef = GameConfig.MONSTER_ELITE_DEF;
+            atkInterval = GameConfig.MONSTER_ELITE_ATK_INTERVAL;
         }
 
         float waveMul = 1f + waveNum * 0.05f;
         attr.SetAttr(AttrType.MaxHp, baseHp * scale * waveMul);
         attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER);
         attr.SetAttr(AttrType.Defense, baseDef * scale);
-        attr.SetAttr(AttrType.AttackSpeed, 1f / Mathf.Max(0.2f, atkInterval));
-        float moveSpd = template != null && template.baseMoveSpeed > 0.01f ? template.baseMoveSpeed : 0.8f;
+        attr.SetAttr(AttrType.AttackSpeed,
+            (1f / Mathf.Max(0.2f, atkInterval)) * GameConfig.MONSTER_ATK_SPEED_MUL);
+        float moveSpd = template != null && template.baseMoveSpeed > 0.01f
+            ? Mathf.Min(template.baseMoveSpeed, GameConfig.MONSTER_DEFAULT_MOVE_SPEED * 1.5f)
+            : GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
         // Boss：近远都能打，用远程射程贴近；小怪严格按表
         float atkRange;
         if (_isBossUnit)
@@ -320,8 +338,8 @@ public class Monster : UnitBase
             if (template != null && template.attackRange > 0.01f)
             {
                 float tpl = GameConfig.NormalizeAttackRange(template.attackRange);
-                if (_attackStyle == MonsterAttackStyle.Ranged)
-                    atkRange = Mathf.Max(tpl, GameConfig.RangeBow);
+                if (MonsterAttackStyleTable.IsRanged(_attackStyle))
+                    atkRange = Mathf.Max(tpl, atkRange);
                 else
                     atkRange = tpl;
             }
@@ -404,27 +422,40 @@ public class Monster : UnitBase
     /// <param name="effectiveSpriteIndex">有效精灵编号（1-12），0表示随机</param>
     private void LoadSprite(MonsterConfig template, int chapter, int effectiveSpriteIndex = 0)
     {
+        if (sr == null)
+        {
+            Transform monstersChild = transform.Find("Monsters");
+            if (monstersChild != null)
+                sr = monstersChild.GetComponent<SpriteRenderer>();
+            if (sr == null)
+                sr = GetComponentInChildren<SpriteRenderer>(true);
+        }
+        if (sr == null)
+        {
+            Debug.LogError($"[Monster] LoadSprite 失败：无 SpriteRenderer id={template?.id}");
+            return;
+        }
+
         int monsterChapter = GameConfig.GetMonsterChapter(chapter);
         Sprite monsterSprite = null;
 
-        if (effectiveSpriteIndex > 0)
-            monsterSprite = MonsterSpriteLoader.Instance.LoadMonsterSprite(monsterChapter, effectiveSpriteIndex - 1);
-        else
-            monsterSprite = MonsterSpriteLoader.Instance.GetRandomMonsterSprite(monsterChapter);
+        var loader = MonsterSpriteLoader.Instance;
+        if (loader != null)
+        {
+            if (effectiveSpriteIndex > 0)
+                monsterSprite = loader.LoadMonsterSprite(monsterChapter, effectiveSpriteIndex - 1);
+            else
+                monsterSprite = loader.GetRandomMonsterSprite(monsterChapter);
+        }
 
         // 注册表没赋值时，直接从 Resources 路径加载 PNG
         if (monsterSprite == null)
             monsterSprite = LoadSpriteFromResources(monsterChapter, effectiveSpriteIndex);
 
         if (monsterSprite != null)
-        {
             sr.sprite = monsterSprite;
-            // 不改变 Monsters 子节点的 scale（保持预制体中的 100），由根节点 scale 控制大小
-        }
         else
-        {
             Debug.LogWarning($"[Monster] 未找到怪物精灵: 章节{monsterChapter}, 索引{effectiveSpriteIndex}，使用预制体默认精灵");
-        }
     }
 
     /// <summary>
@@ -541,7 +572,7 @@ public class Monster : UnitBase
             primaryTarget != null ? primaryTarget.transform : null);
 
         if (unitAnim != null)
-            unitAnim.PlayAttack();
+            unitAnim.PlayAttack(MonsterAttackStyleTable.GetVfxKit(_swingStyle));
 
         var allies = BattleManager.Instance?.allyUnits;
         if (allies != null)
@@ -592,18 +623,29 @@ public class Monster : UnitBase
         return MonsterAttackStyleTable.GetVfxKit(_swingStyle);
     }
 
-    /// <summary>发射点随朝向镜像（预制体 fire 默认在左侧）</summary>
+    /// <summary>远程怪多留一点索敌距离，避免贴脸才开火</summary>
+    public override float GetDetectRange()
+    {
+        float baseRange = base.GetDetectRange();
+        if (MonsterAttackStyleTable.IsRanged(_swingStyle) || MonsterAttackStyleTable.IsRanged(_attackStyle))
+            return baseRange + GameConfig.MONSTER_RANGED_DETECT_BONUS;
+        return baseRange;
+    }
+
+    /// <summary>发射点随朝向镜像（预制体 fire 默认在左侧）；弓箭再略压低</summary>
     public override Vector3 GetFirePosition()
     {
         Transform fire = firePoint != null ? firePoint : transform.Find("fire");
+        float yNudge = MonsterAttackStyleTable.IsRanged(_swingStyle) || MonsterAttackStyleTable.IsRanged(_attackStyle)
+            ? -0.12f : 0f;
         if (fire != null)
         {
             Vector3 local = fire.localPosition;
             float absX = Mathf.Abs(local.x);
             float x = facingDir < 0 ? -absX : absX;
-            return transform.TransformPoint(new Vector3(x, local.y, local.z));
+            return transform.TransformPoint(new Vector3(x, local.y + yNudge, local.z));
         }
-        return transform.position + new Vector3(firePointOffset.x * facingDir, firePointOffset.y, 0f);
+        return transform.position + new Vector3(firePointOffset.x * facingDir, firePointOffset.y + yNudge, 0f);
     }
 
     /// <summary>更新血条填充比例</summary>

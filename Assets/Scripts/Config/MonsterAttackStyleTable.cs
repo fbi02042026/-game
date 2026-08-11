@@ -3,12 +3,13 @@ using UnityEngine;
 
 /// <summary>
 /// 怪物近战/远程表：读 Resources/Config/MonsterAttackStyle.csv
-/// style = Melee | Ranged
+/// style = Melee | Ranged（法球） | Bow（弓箭）
 /// </summary>
 public enum MonsterAttackStyle
 {
     Melee = 0,
-    Ranged = 1
+    Ranged = 1,
+    Bow = 2
 }
 
 public static class MonsterAttackStyleTable
@@ -50,14 +51,28 @@ public static class MonsterAttackStyleTable
             if (!int.TryParse(cols[0].Trim(), out int ch)) continue;
             if (!int.TryParse(cols[1].Trim(), out int idx)) continue;
 
-            string styleStr = cols[2].Trim();
-            MonsterAttackStyle style = styleStr.Equals("Ranged", System.StringComparison.OrdinalIgnoreCase)
-                ? MonsterAttackStyle.Ranged
-                : MonsterAttackStyle.Melee;
-            _map[Key(ch, idx)] = style;
+            _map[Key(ch, idx)] = ParseStyle(cols[2].Trim());
             ok++;
         }
         Debug.Log($"[MonsterAttackStyle] 已加载 {ok} 条");
+    }
+
+    static MonsterAttackStyle ParseStyle(string s)
+    {
+        if (s.Equals("Bow", System.StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Archer", System.StringComparison.OrdinalIgnoreCase))
+            return MonsterAttackStyle.Bow;
+        if (s.Equals("Ranged", System.StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Orb", System.StringComparison.OrdinalIgnoreCase)
+            || s.Equals("Magic", System.StringComparison.OrdinalIgnoreCase))
+            return MonsterAttackStyle.Ranged;
+        return MonsterAttackStyle.Melee;
+    }
+
+    /// <summary>弓箭和法球都算远程，射程与索敌一致</summary>
+    public static bool IsRanged(MonsterAttackStyle style)
+    {
+        return style == MonsterAttackStyle.Ranged || style == MonsterAttackStyle.Bow;
     }
 
     static int Key(int monsterChapter, int spriteIndex) => monsterChapter * 100 + spriteIndex;
@@ -74,12 +89,17 @@ public static class MonsterAttackStyleTable
 
     public static float GetAttackRange(MonsterAttackStyle style)
     {
-        // 数值表无怪物独立射程：近战按单手剑 96px，远程按弓箭 300px
-        return style == MonsterAttackStyle.Ranged ? GameConfig.RangeBow : GameConfig.RangeSword;
+        if (!IsRanged(style)) return GameConfig.RangeSword;
+        return GameConfig.RangeBow * GameConfig.MONSTER_RANGED_RANGE_MUL;
     }
 
     public static AttackVfxKit GetVfxKit(MonsterAttackStyle style)
     {
-        return style == MonsterAttackStyle.Ranged ? AttackVfxKit.Orb : AttackVfxKit.MeleeSlash;
+        switch (style)
+        {
+            case MonsterAttackStyle.Bow: return AttackVfxKit.Bow;
+            case MonsterAttackStyle.Ranged: return AttackVfxKit.Orb;
+            default: return AttackVfxKit.MeleeSlash;
+        }
     }
 }

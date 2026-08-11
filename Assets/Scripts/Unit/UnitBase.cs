@@ -372,13 +372,12 @@ public abstract class UnitBase : MonoBehaviour
     }
 
     /// <summary>
-    /// 索敌范围：数值表无单独「索敌」列，按 GDD「自动攻击」= 攻击范围。
-    /// 进入攻击距离才锁定并出手，不额外发明更大的仇恨圈。
+    /// 索敌范围：比攻击范围略大，避免擦肩而过不打架。
     /// </summary>
-    public float GetDetectRange()
+    public virtual float GetDetectRange()
     {
         float atk = attr != null ? attr.GetAttr(AttrType.AttackRange) : GameConfig.BASE_ATTACK_RANGE;
-        return Mathf.Max(0.1f, GameConfig.NormalizeAttackRange(atk));
+        return GameConfig.GetDetectRangeFromAttackRange(atk);
     }
 
     /// <summary>索敌/攻击距离：以可见 transform.x 为准，并纠正偏离的 Rigidbody2D</summary>
@@ -410,12 +409,13 @@ public abstract class UnitBase : MonoBehaviour
         target.TakeDamage(damage, isCrit);
         OnAttack?.Invoke(target, damage, isCrit);
 
-        // 播放攻击动画
-        if (unitAnim != null)
-            unitAnim.PlayAttack();
-
         // 触发攻击特效：共用套装 + 我方/敌方染色；弓/球必飞行
         AttackVfxKit kit = GetAttackVfxKit();
+
+        // 攻击动画要跟武器套装一致：弓走拉弓动作，法术走施法动作
+        if (unitAnim != null)
+            unitAnim.PlayAttack(kit);
+
         VfxFaction faction = isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
         Vector3 firePos = GetFirePosition();
         Vector3 hitPos = target.GetHitPosition();

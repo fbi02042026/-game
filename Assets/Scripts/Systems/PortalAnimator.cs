@@ -8,40 +8,46 @@ using UnityEngine;
 public class PortalAnimator : MonoBehaviour
 {
     [Header("动画参数")]
-    public float rotateSpeed = 60f;      // 旋转速度（度/秒）
-    public float pulseSpeed = 2f;        // 脉动速度
-    public float pulseScale = 1.2f;      // 脉动最大缩放倍率
+    public float rotateSpeed = 60f;
+    public float pulseSpeed = 2f;
+    public float pulseScale = 1.2f;
 
-    Transform _ring;       // 旋转环（可选）
-    Transform _glow;       // 光晕（可选）
+    Transform _ring;
     Vector3 _baseScale;
     float _time;
+    bool _warmed;
 
     void Awake()
     {
+        Warm();
+    }
+
+    /// <summary>预缓存子节点/缩放，避免首次激活时扫层级</summary>
+    public void Warm()
+    {
+        if (_warmed && _baseScale.sqrMagnitude > 1e-8f) return;
         _baseScale = transform.localScale;
-        // 查找子节点作为旋转环（如果存在）
-        Transform child = transform.childCount > 0 ? transform.GetChild(0) : null;
-        _ring = child;
-        _glow = transform;
+        if (_baseScale.sqrMagnitude < 1e-8f) _baseScale = Vector3.one;
+        _ring = transform.childCount > 0 ? transform.GetChild(0) : null;
+        _warmed = true;
+    }
+
+    void OnEnable()
+    {
+        Warm();
+        _time = 0f;
+        transform.localScale = _baseScale;
     }
 
     void Update()
     {
         _time += Time.deltaTime;
 
-        // 旋转环（如果有子节点则旋转子节点）
         if (_ring != null && _ring != transform)
-        {
             _ring.Rotate(0, 0, rotateSpeed * Time.deltaTime);
-        }
         else
-        {
-            // 没有子环时整体轻微旋转
             transform.Rotate(0, 0, rotateSpeed * 0.3f * Time.deltaTime);
-        }
 
-        // 脉动缩放（整体呼吸效果）
         float pulse = 1f + (Mathf.Sin(_time * pulseSpeed) * 0.5f + 0.5f) * (pulseScale - 1f);
         transform.localScale = _baseScale * pulse;
     }

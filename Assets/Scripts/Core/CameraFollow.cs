@@ -75,13 +75,39 @@ public class CameraFollow : MonoBehaviour
 
         // 目标X位置
         float targetX = target.position.x + offset.x;
+        if (float.IsNaN(targetX) || float.IsInfinity(targetX))
+        {
+            // 目标被物理/缩放算坏了，这一帧不跟随，否则 NaN 会污染相机后再也回不来
+            WarnInvalidOnce($"目标 {target.name} 的 X 为 {target.position.x}");
+            return;
+        }
         targetX = Mathf.Clamp(targetX, minX, maxX);
 
         // 平滑跟随（仅X轴）
         float currentX = transform.position.x;
-        float newX = Mathf.SmoothDamp(currentX, targetX, ref _velocityX, smoothTime);
+        if (float.IsNaN(currentX) || float.IsInfinity(currentX))
+        {
+            currentX = targetX;
+            _velocityX = 0f;
+        }
+
+        float newX = Mathf.SmoothDamp(currentX, targetX, ref _velocityX, Mathf.Max(0.0001f, smoothTime));
+        if (float.IsNaN(newX) || float.IsInfinity(newX))
+        {
+            newX = targetX;
+            _velocityX = 0f;
+        }
 
         transform.position = new Vector3(newX, _camY, _camZ);
+    }
+
+    static bool _warnedInvalid;
+
+    static void WarnInvalidOnce(string detail)
+    {
+        if (_warnedInvalid) return;
+        _warnedInvalid = true;
+        Debug.LogWarning($"[CameraFollow] 跟随目标坐标非法，已跳过跟随：{detail}");
     }
 
     /// <summary>从当前相机位置重新锁定 Y/Z（调整战斗带高度后调用）</summary>

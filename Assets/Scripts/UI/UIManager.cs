@@ -4,12 +4,13 @@ using UnityEngine.UI;
 using System;
 
 /// <summary>
-/// UI管理器：战斗结算 / 章节二选一等（无预制体时运行时生成简易面板）
+/// UI管理器：战斗结算 / 关卡选择 / 章节二选一
 /// </summary>
 public class UIManager : Singleton<UIManager>
 {
     Font _font;
     GameObject _chapterChoicePanel;
+    GameObject _stageSelectPanel;
 
     Font UIFont
     {
@@ -26,25 +27,110 @@ public class UIManager : Singleton<UIManager>
         Debug.Log("[Toast] " + msg);
     }
 
+    /// <summary>传送门后打开关卡选择（简易面板；有 ChapterMapUI 则优先）</summary>
     public void ShowStageSelectUI(List<StageData> stages, Action onClose = null)
     {
         Debug.Log($"显示关卡选择，可选关卡数：{stages?.Count ?? 0}");
-        if (stages != null && stages.Count > 0)
-            ChapterManager.Instance.SelectStage(stages[0]);
-        onClose?.Invoke();
+
+        if (ChapterMapUI.Instance != null)
+        {
+            ChapterMapUI.Instance.ShowAfterBattle();
+            onClose?.Invoke();
+            return;
+        }
+
+        if (stages == null || stages.Count == 0)
+        {
+            onClose?.Invoke();
+            return;
+        }
+
+        if (_stageSelectPanel != null)
+            Destroy(_stageSelectPanel);
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            ChapterManager.Instance?.SelectStage(stages[0]);
+            onClose?.Invoke();
+            return;
+        }
+
+        Time.timeScale = 0f;
+        _stageSelectPanel = new GameObject("StageSelectPanel", typeof(RectTransform));
+        _stageSelectPanel.transform.SetParent(canvas.transform, false);
+        var root = _stageSelectPanel.GetComponent<RectTransform>();
+        StretchFull(root);
+
+        var dim = CreateUiImage(_stageSelectPanel.transform, "Dim", new Color(0f, 0f, 0f, 0.65f));
+        StretchFull(dim.rectTransform);
+
+        var panel = CreateUiImage(_stageSelectPanel.transform, "Panel", new Color(0.12f, 0.1f, 0.08f, 0.96f));
+        var prt = panel.rectTransform;
+        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
+        prt.sizeDelta = new Vector2(560f, 360f);
+
+        var title = CreateUiText(panel.transform, "Title", "选择下一关", 34, TextAnchor.MiddleCenter);
+        var trt = title.rectTransform;
+        trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 1f);
+        trt.anchoredPosition = new Vector2(0f, -40f);
+        trt.sizeDelta = new Vector2(500f, 44f);
+
+        float y = 40f;
+        int show = Mathf.Min(stages.Count, 4);
+        for (int i = 0; i < show; i++)
+        {
+            StageData st = stages[i];
+            string label = $"第{st.stageIndex + 1}关 · {StageTypeLabel(st.type)}";
+            float yy = y - i * 66f;
+            CreateChoiceButton(panel.transform, label, new Vector2(0f, yy), () =>
+            {
+                CloseStageSelect();
+                ChapterManager.Instance?.SelectStage(st);
+                onClose?.Invoke();
+            });
+        }
+
+        CreateChoiceButton(panel.transform, "回城", new Vector2(0f, -130f), () =>
+        {
+            CloseStageSelect();
+            MercenaryManager.Instance?.ClearAllMercs();
+            GameSceneManager.Instance?.ReturnToTown();
+            onClose?.Invoke();
+        });
+    }
+
+    void CloseStageSelect()
+    {
+        Time.timeScale = 1f;
+        if (_stageSelectPanel != null)
+        {
+            Destroy(_stageSelectPanel);
+            _stageSelectPanel = null;
+        }
+    }
+
+    static string StageTypeLabel(StageType t)
+    {
+        switch (t)
+        {
+            case StageType.Elite: return "精英";
+            case StageType.Boss: return "Boss";
+            case StageType.Merchant: return "商人";
+            case StageType.Enchant: return "附魔";
+            case StageType.Curse: return "诅咒";
+            case StageType.Rest: return "休息";
+            default: return "普通";
+        }
     }
 
     public void ShowStageClearUI(List<EquipInstance> rewards, int bonusGold, Action<EquipInstance> onSelect)
     {
         Debug.Log($"关卡通关，奖励装备数：{rewards?.Count ?? 0}，金币：{bonusGold}");
-        // TODO: 正式宝箱/选装 UI；暂自动选第一件后继续流程
         EquipInstance pick = (rewards != null && rewards.Count > 0) ? rewards[0] : null;
         onSelect?.Invoke(pick);
     }
 
-    /// <summary>
-    /// Boss 结算后二选一：回城 / 下一章（新手引导或剧情可另开接口跳过）
-    /// </summary>
     public void ShowChapterClearChoice(Action onReturnTown, Action onNextChapter)
     {
         if (_chapterChoicePanel != null)
@@ -61,10 +147,7 @@ public class UIManager : Singleton<UIManager>
         _chapterChoicePanel = new GameObject("ChapterClearChoice", typeof(RectTransform));
         _chapterChoicePanel.transform.SetParent(canvas.transform, false);
         var root = _chapterChoicePanel.GetComponent<RectTransform>();
-        root.anchorMin = Vector2.zero;
-        root.anchorMax = Vector2.one;
-        root.offsetMin = Vector2.zero;
-        root.offsetMax = Vector2.zero;
+        StretchFull(root);
 
         var dim = CreateUiImage(_chapterChoicePanel.transform, "Dim", new Color(0f, 0f, 0f, 0.65f));
         StretchFull(dim.rectTransform);
@@ -114,7 +197,7 @@ public class UIManager : Singleton<UIManager>
         rt.anchorMin = new Vector2(0.5f, 0.5f);
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.anchoredPosition = pos;
-        rt.sizeDelta = new Vector2(180f, 56f);
+        rt.sizeDelta = new Vector2(220f, 56f);
 
         var btn = img.gameObject.AddComponent<Button>();
         btn.targetGraphic = img;
@@ -124,7 +207,7 @@ public class UIManager : Singleton<UIManager>
             onClick?.Invoke();
         });
 
-        var txt = CreateUiText(img.transform, "Label", label, 28, TextAnchor.MiddleCenter);
+        var txt = CreateUiText(img.transform, "Label", label, 26, TextAnchor.MiddleCenter);
         StretchFull(txt.rectTransform);
     }
 

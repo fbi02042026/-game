@@ -34,3 +34,4 @@ MonoBehaviour:
   weaponAttackType: 0
   armorPrefix: 0
   spumName: weapon_sword
+  attackRange: 96

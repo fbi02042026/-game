@@ -166,11 +166,11 @@ public class AutoConfigEditor : EditorWindow
 
         CreateEquipTemplate(equipDir, "equip_weapon_001", "铁剑", EquipSlotType.MainHand, Rarity.Common,
             new AttrBonusData { attrType = AttrType.Attack, value = 5, isPercent = false }, "weapon_sword",
-            WeaponType.OneHand, WeaponAttackType.Physical);
+            WeaponType.OneHand, WeaponAttackType.Physical, GameConfig.RANGE_PX_SWORD);
 
         CreateEquipTemplate(equipDir, "equip_weapon_002", "法杖", EquipSlotType.MainHand, Rarity.Uncommon,
             new AttrBonusData { attrType = AttrType.MagicPower, value = 0.15f, isPercent = true }, "weapon_staff",
-            WeaponType.TwoHand, WeaponAttackType.Magic);
+            WeaponType.TwoHand, WeaponAttackType.Magic, GameConfig.RANGE_PX_STAFF);
 
         CreateEquipTemplate(equipDir, "equip_shield_001", "木盾", EquipSlotType.OffHand, Rarity.Common,
             new AttrBonusData { attrType = AttrType.Defense, value = 10, isPercent = false }, "weapon_shield",
@@ -181,7 +181,8 @@ public class AutoConfigEditor : EditorWindow
     }
 
     static void CreateEquipTemplate(string dir, string id, string name, EquipSlotType slot, Rarity rarity,
-        AttrBonusData baseAttr, string spumName, WeaponType weaponType = WeaponType.None, WeaponAttackType attackType = WeaponAttackType.Physical)
+        AttrBonusData baseAttr, string spumName, WeaponType weaponType = WeaponType.None,
+        WeaponAttackType attackType = WeaponAttackType.Physical, float attackRangePx = 0f)
     {
         string path = dir + "/" + id + ".asset";
         EquipTemplate tpl = AssetDatabase.LoadAssetAtPath<EquipTemplate>(path);
@@ -198,6 +199,10 @@ public class AutoConfigEditor : EditorWindow
         tpl.spumName = spumName;
         tpl.weaponType = weaponType;
         tpl.weaponAttackType = attackType;
+        if (attackRangePx > 0f)
+            tpl.attackRange = attackRangePx;
+        else if (slot == EquipSlotType.MainHand)
+            tpl.attackRange = GameConfig.ResolveWeaponAttackRange(tpl) * GameConfig.PIXEL_PER_UNIT;
         tpl.gridWidth = 1;
         tpl.gridHeight = 1;
         tpl.minLevel = 1;

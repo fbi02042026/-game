@@ -34,3 +34,4 @@ MonoBehaviour:
   weaponAttackType: 1
   armorPrefix: 0
   spumName: weapon_staff
+  attackRange: 120

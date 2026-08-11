@@ -1,9 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// Boot场景入口：初始化跨场景持久对象，加载存档，自动跳转到Town
-/// 挂在Boot场景唯一的空GameObject上
-/// 注意：项目中存在自定义SceneManager类，必须使用完全限定名避免冲突
+/// Boot 入口：初始化持久对象与存档，再进入主界面（Town / GuildHall）。
+/// 流程：Boot → 主界面 → 点「冒险」进战斗。
 /// </summary>
 public class BootManager : MonoBehaviour
 {
@@ -12,10 +11,11 @@ public class BootManager : MonoBehaviour
 
     void Awake()
     {
+        if (!GameSceneGate.IsBoot) return;
+
         Application.runInBackground = true;
         GamePerf.ApplyStartup();
 
-        // 创建持久根节点（跨场景不销毁）
         GameObject persistentRoot = GameObject.Find("PersistentRoot");
         if (persistentRoot == null)
         {
@@ -32,11 +32,16 @@ public class BootManager : MonoBehaviour
 
     void Start()
     {
-        Invoke(nameof(GotoTown), loadDelay);
+        if (!GameSceneGate.IsBoot) return;
+        Invoke(nameof(GotoMainHub), loadDelay);
     }
 
-    void GotoTown()
+    void GotoMainHub()
     {
-        UnityEngine.SceneManagement.SceneManager.LoadScene("Town");
+        GamePerf.Log("[Boot] 进入主界面 Town");
+        if (GameSceneManager.Instance != null)
+            GameSceneManager.Instance.GoMainHub();
+        else
+            UnityEngine.SceneManagement.SceneManager.LoadScene("Town");
     }
 }

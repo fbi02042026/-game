@@ -24,6 +24,66 @@ public static class GameConfig
         return raw;
     }
 
+    /// <summary>是否远程攻击射程（弓）</summary>
+    public static bool IsRangedAttackRange(float rangeWorld)
+    {
+        return rangeWorld >= RangeBow - 0.15f;
+    }
+
+    /// <summary>
+    /// 由攻击射程推算索敌范围（英雄/怪物/佣兵共用）。
+    /// 远程索敌≥近战；近战额外加缓冲防擦肩而过。
+    /// </summary>
+    public static float GetDetectRangeFromAttackRange(float attackRangeRaw)
+    {
+        float range = Mathf.Max(0.1f, NormalizeAttackRange(attackRangeRaw));
+
+        if (IsRangedAttackRange(range))
+            return range + 0.5f;
+
+        if (range >= RangePolearm - 0.1f)
+            return range + 1.2f;
+
+        if (range >= RangeStaff - 0.05f)
+            return range + 0.8f;
+
+        if (range >= RangeGreatsword - 0.05f)
+            return range + 1.5f;
+
+        // 单手剑等近战
+        return Mathf.Max(range + 2.2f, range * 2.5f);
+    }
+
+    /// <summary>从装备模板解析攻击射程（像素表 + 武器类型兜底）</summary>
+    public static float ResolveWeaponAttackRange(EquipTemplate tpl)
+    {
+        if (tpl == null) return BASE_ATTACK_RANGE;
+
+        float raw = tpl.attackRange;
+        if (raw > 10f)
+            return NormalizeAttackRange(raw);
+
+        if (raw > 0.1f && raw <= 10f && Mathf.Abs(raw - RangeSword) > 0.02f)
+            return raw;
+
+        string hint = ((tpl.spumName ?? "") + " " + (tpl.equipName ?? "")).ToLower();
+        if (hint.Contains("bow") || hint.Contains("arrow") || hint.Contains("弓"))
+            return RangeBow;
+        if (hint.Contains("staff") || hint.Contains("wand") || hint.Contains("杖"))
+            return RangeStaff;
+        if (hint.Contains("spear") || hint.Contains("pole") || hint.Contains("枪") || hint.Contains("halberd"))
+            return RangePolearm;
+        if (hint.Contains("great") || hint.Contains("大剑") || hint.Contains("twohand"))
+            return RangeGreatsword;
+
+        if (tpl.weaponAttackType == WeaponAttackType.Magic)
+            return RangeStaff;
+        if (tpl.weaponType == WeaponType.TwoHand)
+            return RangeGreatsword;
+
+        return RangeSword;
+    }
+
     [Header("武器攻击范围(像素) — 对齐《像素冒险_数值表》武器属性表")]
     public const float RANGE_PX_SWORD = 96f;      // 单手剑
     public const float RANGE_PX_GREATSWORD = 144f; // 大剑
@@ -185,6 +245,20 @@ public static class GameConfig
 
     [Header("基础属性（对齐数值表·玩家 Lv1）")]
     public const float BASE_MOVE_SPEED = 1.2f;
+    /// <summary>进战斗后首波刷怪延迟（秒）</summary>
+    public const float FIRST_WAVE_SPAWN_DELAY = 1.5f;
+    /// <summary>怪刷在英雄前方多远（原地等玩家走过来）</summary>
+    public const float MONSTER_ENGAGE_OFFSET = 4.0f;
+    /// <summary>怪物远程射程倍率（相对数值表弓射程）</summary>
+    public const float MONSTER_RANGED_RANGE_MUL = 1.45f;
+    /// <summary>怪物远程额外索敌缓冲</summary>
+    public const float MONSTER_RANGED_DETECT_BONUS = 1.0f;
+    /// <summary>小怪默认移速（比玩家慢，避免擦肩而过）</summary>
+    public const float MONSTER_DEFAULT_MOVE_SPEED = 0.45f;
+    /// <summary>从右侧缓步入场速度</summary>
+    public const float MONSTER_ENTER_SPEED = 0.55f;
+    /// <summary>入场起点比交战点再远多少（世界单位）</summary>
+    public const float MONSTER_ENTER_DISTANCE = 2.5f;
     /// <summary>玩家出生相对 SpawnPoint 再往左偏（世界单位）</summary>
     public const float SPAWN_X_LEFT_BIAS = -0.5f;
     /// <summary>SPUM 移动动画播放速率（再 +20%）</summary>
@@ -209,14 +283,20 @@ public static class GameConfig
     public const float MONSTER_NORMAL_HP = 60f;
     public const float MONSTER_NORMAL_ATK = 12f;
     public const float MONSTER_NORMAL_DEF = 2f;
-    public const float MONSTER_NORMAL_ATK_INTERVAL = 1f;
+    public const float MONSTER_NORMAL_ATK_INTERVAL = 1.5f;
     public const float MONSTER_ELITE_HP = 180f;
     public const float MONSTER_ELITE_ATK = 24f;
     public const float MONSTER_ELITE_DEF = 6f;
+    public const float MONSTER_ELITE_ATK_INTERVAL = 1.7f;
     public const float MONSTER_BOSS_HP = 3000f;
     public const float MONSTER_BOSS_ATK = 45f;
     public const float MONSTER_BOSS_DEF = 12f;
-    public const float MONSTER_BOSS_ATK_INTERVAL = 1.5f;
+    public const float MONSTER_BOSS_ATK_INTERVAL = 2.2f;
+    /// <summary>
+    /// 怪物攻速总倍率（最终攻速 = 1/间隔 × 本值）。
+    /// 前期先压低；以后难度高了往 1 调（甚至 &gt;1）。
+    /// </summary>
+    public const float MONSTER_ATK_SPEED_MUL = 0.65f;
     /// <summary>章节系数：0.15×(n-1)</summary>
     public const float CHAPTER_SCALE_PER = 0.15f;
     /// <summary>公会等级系数：0.02×公会等级</summary>
@@ -234,6 +314,18 @@ public static class GameConfig
     public const int SPECIAL_STAGES_PER_CHAPTER = 2; // 每章最多2个特殊关卡（商人/附魔/诅咒/休息）
     public const int MAX_OFFLINE_HOURS = 8; // 最多8小时离线收益
     public const int GOLD_PER_TALENT_POINT = 100; // 每100金币给1天赋点
+
+    [Header("资源上限")]
+    /// <summary>通用资源软上限（金币/钻石等）；超出不累加，进邮件</summary>
+    public const long RESOURCE_MAX = ResourceWallet.DEFAULT_MAX;
+    /// <summary>体力特殊上限</summary>
+    public const int STAMINA_MAX = 100;
+    /// <summary>新号初始体力</summary>
+    public const int STAMINA_START = 100;
+    /// <summary>每次点「冒险」消耗体力</summary>
+    public const int STAMINA_ADVENTURE_COST = StaminaSystem.ADVENTURE_COST;
+    /// <summary>回复 1 点体力所需秒数</summary>
+    public const int STAMINA_REGEN_SECONDS = StaminaSystem.REGEN_SECONDS_PER_POINT;
 
     [Header("怪物章节文件夹映射")]
     /// <summary>
@@ -276,6 +368,97 @@ public static class GameConfig
         string[] cn = { "一", "二", "三", "四", "五", "六", "七", "八", "九", "十" };
         int idx = Mathf.Clamp(gameChapter - 1, 0, cn.Length - 1);
         return $"第{cn[idx]}章  {GetChapterMapName(gameChapter)}";
+    }
+
+    [Header("刷怪数量公式（首关10~15，后期随机顶到30~35）")]
+    /// <summary>单波最少怪物数</summary>
+    public const int WAVE_MONSTER_MIN = 2;
+    /// <summary>单波最多怪物数</summary>
+    public const int WAVE_MONSTER_MAX = 4;
+    /// <summary>一关最少波次</summary>
+    public const int STAGE_WAVE_MIN = 3;
+    /// <summary>一关最多波次</summary>
+    public const int STAGE_WAVE_MAX = 9;
+    /// <summary>无刷怪点时，波与波之间的世界距离（兼容旧逻辑）</summary>
+    public const float VIRTUAL_WAVE_SPACING = 4.2f;
+
+    /// <summary>清完一波后，下一波倒计时秒数</summary>
+    public const float WAVE_SPAWN_INTERVAL = 8f;
+    /// <summary>点击加速出兵：剩余每秒兑换金币</summary>
+    public const float WAVE_SKIP_GOLD_PER_SEC = 3f;
+    /// <summary>连杀判定窗口（秒）</summary>
+    public const float COMBO_WINDOW = 2.2f;
+    /// <summary>连杀≥3 时每次额外金币</summary>
+    public const int COMBO_BONUS_GOLD = 1;
+
+    /// <summary>
+    /// 关卡总怪数：前两关固定爽感区间 10~15；
+    /// 之后按进度抬高，并在区间内随机，章末附近可到 30~35。
+    /// </summary>
+    public static int GetStageMonsterTotal(int stageIndex0Based)
+    {
+        int stageNo = Mathf.Max(1, stageIndex0Based + 1);
+        if (stageNo <= 2)
+            return Random.Range(10, 16); // 10~15
+
+        float t = Mathf.Clamp01((stageNo - 1) / 9f);
+        // 中后期：下限/上限都随关卡抬高，并保留随机宽度
+        int lo = Mathf.RoundToInt(Mathf.Lerp(14, 28, t));
+        int hi = Mathf.RoundToInt(Mathf.Lerp(18, 35, t));
+        if (hi < lo) hi = lo;
+        return Mathf.Clamp(Random.Range(lo, hi + 1), 10, 35);
+    }
+
+    /// <summary>普通关总怪数</summary>
+    public static int GetNormalStageMonsterTotal(int stageIndex0Based)
+        => GetStageMonsterTotal(stageIndex0Based);
+
+    /// <summary>精英关总怪数（同随机曲线）</summary>
+    public static int GetEliteStageMonsterTotal(int stageIndex0Based)
+        => GetStageMonsterTotal(stageIndex0Based);
+
+    /// <summary>BOSS 本体数量</summary>
+    public static int GetBossStageMonsterTotal() => 1;
+
+    /// <summary>BOSS 关小怪数 = 同关随机总数 − 1</summary>
+    public static int GetBossStageMinionTotal(int stageIndex0Based)
+        => Mathf.Max(8, GetStageMonsterTotal(stageIndex0Based) - GetBossStageMonsterTotal());
+
+    /// <summary>
+    /// 建议波次数：先按「总数 / 单波上限」估，再受刷怪点数量与 [MIN,MAX] 约束。
+    /// </summary>
+    public static int GetSuggestedWaveCount(int totalMonsters, int spawnPointCount)
+    {
+        int byTotal = Mathf.CeilToInt(totalMonsters / (float)WAVE_MONSTER_MAX);
+        byTotal = Mathf.Clamp(byTotal, STAGE_WAVE_MIN, STAGE_WAVE_MAX);
+        if (spawnPointCount <= 0)
+            return byTotal;
+        int byPoints = Mathf.Clamp(spawnPointCount, STAGE_WAVE_MIN, STAGE_WAVE_MAX);
+        return Mathf.Clamp(Mathf.Min(byPoints, byTotal), STAGE_WAVE_MIN, STAGE_WAVE_MAX);
+    }
+
+    /// <summary>
+    /// 把总怪数尽量均匀分到各波；余数优先给前几波。
+    /// </summary>
+    public static int[] DistributeMonstersToWaves(int totalMonsters, int waveCount)
+    {
+        waveCount = Mathf.Clamp(waveCount, 1, STAGE_WAVE_MAX);
+        int minTotal = waveCount * WAVE_MONSTER_MIN;
+        int maxTotal = waveCount * WAVE_MONSTER_MAX;
+        totalMonsters = Mathf.Clamp(totalMonsters, minTotal, maxTotal);
+
+        int[] counts = new int[waveCount];
+        int remaining = totalMonsters;
+        for (int i = 0; i < waveCount; i++)
+        {
+            int wavesLeft = waveCount - i;
+            int minLeave = (wavesLeft - 1) * WAVE_MONSTER_MIN;
+            int maxGive = Mathf.Min(WAVE_MONSTER_MAX, remaining - minLeave);
+            int want = Mathf.CeilToInt(remaining / (float)wavesLeft);
+            counts[i] = Mathf.Clamp(want, WAVE_MONSTER_MIN, maxGive);
+            remaining -= counts[i];
+        }
+        return counts;
     }
 
     [Header("渐进式怪物解锁")]

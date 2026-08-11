@@ -67,9 +67,12 @@ public class BattleUI : MonoBehaviour
         // 中文 → fusion-pixel；数字 → PixelFont
         GameFonts.ApplyToHierarchy(transform);
 
-        // 后备入口：如果场景中AutoGameInitializer脚本引用断裂（GUID不匹配），
-        // 由BattleUI触发Battle场景初始化
-        AutoGameInitializer.Initialize();
+        // 右侧：连杀 + 下一波倒计时
+        BattleSideHud.EnsureOn(transform);
+
+        // 后备入口：仅 Battle 场景才跑战斗初始化
+        if (GameSceneGate.IsBattle)
+            AutoGameInitializer.Initialize();
 
         // 统一 Canvas：Camera / 720×1280 / Match Height（AutoInit 还会再兜底一次）
         UICanvasSetup.ApplyOn(gameObject, Camera.main);
@@ -293,6 +296,7 @@ public class BattleUI : MonoBehaviour
     /// <summary>GameRoot/佣兵系统就绪后重绑：Fill、点击、进度条、槽位刷新</summary>
     public void RebindAfterSystemsReady()
     {
+        BattleSideHud.EnsureOn(transform);
         BindProgressBar();
         int maxSlots = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
         if (maxSlots > 0) ApplyFillBars(mercSlot1);

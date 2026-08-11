@@ -177,10 +177,14 @@ public class AchievementSystem : Singleton<AchievementSystem>
         data.completedAchievements.Add(achievementId);
         data.totalAchievementPoints += def.reward.achievementPoints;
 
-        // 发放奖励
-        data.totalGold += def.reward.gold;
-        data.diamond += def.reward.diamond;
-        data.talentPoints += def.reward.talentPoints;
+        // 发放奖励（走上限；溢出进邮件）
+        if (def.reward.gold > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, def.reward.gold, save: false, notify: true);
+        if (def.reward.diamond > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, def.reward.diamond, save: false, notify: true);
+        if (def.reward.talentPoints > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, def.reward.talentPoints, save: false, notify: true);
+        SaveSystem.Instance.Save();
 
         OnAchievementCompleted?.Invoke(achievementId, def.reward);
 
@@ -259,9 +263,12 @@ public class AchievementSystem : Singleton<AchievementSystem>
         var data = SaveSystem.Instance.Data;
 
         data.claimedMilestoneIds.Add(milestoneId);
-        data.totalGold += def.reward.gold;
-        data.diamond += def.reward.diamond;
-        data.talentPoints += def.reward.talentPoints;
+        if (def.reward.gold > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, def.reward.gold, save: false, notify: true);
+        if (def.reward.diamond > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, def.reward.diamond, save: false, notify: true);
+        if (def.reward.talentPoints > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, def.reward.talentPoints, save: false, notify: true);
 
         OnMilestoneClaimed?.Invoke(milestoneId);
         SaveSystem.Instance.Save();

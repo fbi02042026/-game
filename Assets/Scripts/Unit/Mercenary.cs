@@ -14,7 +14,7 @@ public class Mercenary : UnitBase
 
     protected override void Awake()
     {
-        firePointOffset = new Vector3(0.3f, 0.45f, 0f);
+        firePointOffset = new Vector3(0.3f, 0.32f, 0f);
         hitPointOffset = new Vector3(0f, 0.55f, 0f);
 
         base.Awake();

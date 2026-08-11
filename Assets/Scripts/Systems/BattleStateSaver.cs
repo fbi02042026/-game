@@ -102,6 +102,15 @@ public class BattleStateSaver : MonoBehaviour
         return PlayerPrefs.HasKey(KEY_BATTLE_STATE);
     }
 
+    /// <summary>清除未完成战斗存档（避免 Restore 不刷怪）</summary>
+    public void ClearBattleState()
+    {
+        PlayerPrefs.DeleteKey(KEY_BATTLE_STATE);
+        PlayerPrefs.DeleteKey(KEY_PAUSE_START_TIME);
+        PlayerPrefs.Save();
+        Debug.Log("[BattleStateSaver] 已清除战斗存档");
+    }
+
     /// <summary>
     /// 恢复战斗状态
     /// 游戏启动时调用，如果有保存的状态则恢复，否则开始新游戏
@@ -229,12 +238,9 @@ public class BattleStateSaver : MonoBehaviour
         int goldPerMinute = 10 + farmLevel * 10;
         long offlineGold = (long)(effectiveMinutes * goldPerMinute);
 
-        // 添加到城镇总金币
-        if (SaveSystem.Instance != null && SaveSystem.Instance.Data != null)
-        {
-            SaveSystem.Instance.Data.totalGold += offlineGold;
-            SaveSystem.Instance.Save();
-        }
+        // 添加到城镇总金币（上限溢出进邮件）
+        if (offlineGold > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, offlineGold, save: true, notify: true);
 
         // 显示离线收益提示
         if (offlineGold > 0)
@@ -250,12 +256,9 @@ public class BattleStateSaver : MonoBehaviour
     /// </summary>
     private void TriggerEvacuation(BattleStateData state)
     {
-        // 保存金币到城镇
-        if (SaveSystem.Instance != null && SaveSystem.Instance.Data != null)
-        {
-            SaveSystem.Instance.Data.totalGold += state.currentGold;
-            SaveSystem.Instance.Save();
-        }
+        // 保存金币到城镇（走上限）
+        if (state != null && state.currentGold > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, state.currentGold, save: true, notify: false);
 
         Debug.Log("[BattleStateSaver] 已触发撤离，金币已保存");
     }

@@ -95,29 +95,17 @@ public class ChapterMapUI : MonoBehaviour
     /// </summary>
     void OnStartBattle()
     {
-        // 先检查是否有保存的战斗状态（上次退出未完成的）
+        // 未完成战斗存档：清掉后重新开战（旧 Restore 不 LoadStage，会导致整关无怪）
         if (BattleStateSaver.Instance != null && BattleStateSaver.Instance.HasSavedBattle())
         {
-            // 有未完成的战斗，询问是否继续
-            // TODO: 弹窗询问 "发现未完成的战斗，是否继续？"
-            bool continueBattle = true; // 简化处理，直接继续
-            if (continueBattle)
-            {
-                BattleStateSaver.Instance.RestoreBattleState();
-                Hide();
-                return;
-            }
+            Debug.LogWarning("[ChapterMapUI] 发现未完成战斗存档 → 清除并重新 StartNewRun（避免无刷怪）");
+            BattleStateSaver.Instance.ClearBattleState();
         }
 
-        // 开始新战斗
         if (ChapterManager.Instance != null)
-        {
             ChapterManager.Instance.SetChapter(selectedChapter);
-        }
         if (BattleManager.Instance != null)
-        {
             BattleManager.Instance.StartNewRun();
-        }
 
         Hide();
         Debug.Log($"[ChapterMapUI] 进入第{selectedChapter}章战斗");

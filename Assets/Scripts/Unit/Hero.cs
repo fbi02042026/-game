@@ -18,7 +18,7 @@ public class Hero : UnitBase
     protected override void Awake()
     {
         // 【关键】必须在base.Awake()之前设置，因为base.Awake()中会调用EnsureHitPoint/EnsureFirePoint
-        firePointOffset = new Vector3(0.3f, 0.45f, 0f);
+        firePointOffset = new Vector3(0.3f, 0.32f, 0f);
         hitPointOffset = new Vector3(0f, 0.55f, 0f);
 
         base.Awake();
@@ -34,7 +34,11 @@ public class Hero : UnitBase
 
     public void InitNewRun()
     {
-        GridBackpackSystem.Instance.InitNewRun();
+        if (GridBackpackSystem.Instance != null)
+            GridBackpackSystem.Instance.InitNewRun();
+        else
+            Debug.LogWarning("[Hero] InitNewRun: GridBackpackSystem 为空，跳过背包重置");
+
         attr.ResetToBase();
         attr.RecalcAllAttr(); // 现在可以安全调用（Awake已完成）
         level = 1;
@@ -111,7 +115,7 @@ public class Hero : UnitBase
         {
             if (item.slotType == EquipSlotType.MainHand && item.template != null)
             {
-                weaponRange = GameConfig.NormalizeAttackRange(item.template.attackRange);
+                weaponRange = GameConfig.ResolveWeaponAttackRange(item.template);
                 break;
             }
         }
@@ -122,10 +126,7 @@ public class Hero : UnitBase
     protected override void Update()
     {
         base.Update();
-        if (!isDead && target == null && transform.position.x >= endPoint.position.x)
-        {
-            BattleManager.Instance.OnStageClear();
-        }
+        // 通关只由 BattleManager 在「传送门已激活」后检测，避免未清怪就结算、每帧刷爆 OnStageClear
     }
 
     /// <summary>

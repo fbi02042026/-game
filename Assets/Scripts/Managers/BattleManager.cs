@@ -31,10 +31,10 @@ public class BattleManager : Singleton<BattleManager>
     public const float MERC_BEHIND_SPACING = 0.42f;
     /// <summary>开场从站位左侧多远走进来</summary>
     const float PARTY_ENTER_FROM = 2.5f;
-    const float MONSTER_ENTER_DIST = 2.8f;
-    const float MONSTER_ENTER_SPEED = 2.2f;
-    /// <summary>刷怪点距镜头右缘多远时触发（快进屏幕）</summary>
-    const float SPAWN_SCREEN_LEAD = 2.5f;
+
+    float _battleStartTime;
+    bool _firstWaveSpawned;
+    Coroutine _firstWaveSpawnCo;
 
     public int CurrentChapter => ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
 
@@ -54,6 +54,14 @@ public class BattleManager : Singleton<BattleManager>
     private bool _allWavesSpawned = false;
     private bool _stageCleared = false;
     private int _totalMonstersSpawnedThisStage = 0;
+    /// <summary>当前进行中的波次下标；-1=尚未开刷</summary>
+    private int _activeWaveIndex = -1;
+    /// <summary>清波后的下一波倒计时是否开启</summary>
+    private bool _waveCountdownActive;
+    private float _nextWaveCountdown;
+    /// <summary>连杀计数</summary>
+    private int _killCombo;
+    private float _lastKillTime;
 
     // === 技能能量 ===
     /// <summary>玩家技能能量 0~1（杀怪累积+时间累积，满了可以释放）</summary>
@@ -71,38 +79,80 @@ public class BattleManager : Singleton<BattleManager>
     // === 传送门 ===
     /// <summary>传送门是否已激活（所有怪清完后激活，玩家进入后通关）</summary>
     private bool _portalActive = false;
+    private bool _didUpdateForceSpawn;
 
     /// <summary>
-    /// 激活传送门：清完所有怪物后调用，EndPoint出现传送门特效
+    /// 激活传送门：清完所有怪物后调用。分帧执行，避免末杀同帧卡顿。
     /// </summary>
     void ActivatePortal()
     {
         if (_portalActive || _stageCleared) return;
         _portalActive = true;
+        StartCoroutine(CoActivatePortal());
+    }
 
-        // 激活EndPoint（传送门）视觉：如果有SpriteRenderer则显示
+    IEnumerator CoActivatePortal()
+    {
+        // 等一帧：让死亡回收/UI 刷新先落地，再开传送门
+        yield return null;
+        if (_stageCleared) yield break;
+
+        float portalX = hero != null ? UnitBase.GetCombatX(hero) + 4.5f : GetStageStartX() + 12f;
         if (endPoint != null)
         {
-            // 让传送门可见/发光
+            EnsurePortalAnimatorReady(endPoint);
+
+            Vector3 ep = endPoint.position;
+            ep.x = portalX;
+            ep.y = UnitBase.GROUND_Y;
+            GameConfig.SetWorldPosition(endPoint.gameObject, ep);
+
             SpriteRenderer portalSr = endPoint.GetComponent<SpriteRenderer>();
             if (portalSr != null)
             {
                 portalSr.enabled = true;
-                portalSr.color = new Color(0.6f, 0.9f, 1f, 1f); // 亮蓝色传送门
+                portalSr.color = new Color(0.6f, 0.9f, 1f, 1f);
             }
-            // 若EndPoint下挂PortalAnimator则激活，否则自动添加（保证传送门有动画）
+
+            yield return null; // 再分一帧再开粒子/动画，减轻尖峰
+
             var portalFx = endPoint.GetComponentInChildren<PortalAnimator>(true);
             if (portalFx != null)
             {
+                portalFx.Warm();
+                portalFx.enabled = true;
                 portalFx.gameObject.SetActive(true);
             }
-            else if (endPoint.GetComponent<PortalAnimator>() == null)
-            {
-                endPoint.gameObject.AddComponent<PortalAnimator>();
-                Debug.Log("[BattleManager] 传送门动画组件已自动添加");
-            }
         }
-        Debug.Log("[BattleManager] 传送门已激活，进入传送门通关");
+
+        ExtendCameraMaxX(portalX + 3f);
+        Debug.Log($"[BattleManager] 传送门已激活 portalX={portalX:F1}");
+    }
+
+    /// <summary>开战时预挂传送门动画，避免清场瞬间 AddComponent</summary>
+    public static void EnsurePortalAnimatorReady(Transform end)
+    {
+        if (end == null) return;
+        var fx = end.GetComponent<PortalAnimator>();
+        if (fx == null) fx = end.GetComponentInChildren<PortalAnimator>(true);
+        if (fx == null)
+            fx = end.gameObject.AddComponent<PortalAnimator>();
+        fx.Warm();
+        // 保持未激活，等真正通关再开
+        if (fx.gameObject != end.gameObject)
+            fx.gameObject.SetActive(false);
+        else
+            fx.enabled = false;
+    }
+
+    void ExtendCameraMaxX(float worldX)
+    {
+        Camera cam = Camera.main;
+        if (cam == null) return;
+        var follow = cam.GetComponent<CameraFollow>();
+        if (follow == null) return;
+        if (worldX > follow.maxX)
+            follow.maxX = worldX;
     }
 
     /// <summary>
@@ -119,7 +169,12 @@ public class BattleManager : Singleton<BattleManager>
                 portalSr.enabled = false;
             }
             var portalFx = endPoint.GetComponentInChildren<PortalAnimator>(true);
-            if (portalFx != null) portalFx.gameObject.SetActive(false);
+            if (portalFx != null)
+            {
+                portalFx.enabled = false;
+                if (portalFx.gameObject != endPoint.gameObject)
+                    portalFx.gameObject.SetActive(false);
+            }
         }
     }
     public const float ENERGY_PER_KILL = 0.2f;     // 每杀一个怪+20%能量
@@ -132,6 +187,7 @@ public class BattleManager : Singleton<BattleManager>
 
     public void StartNewRun()
     {
+        Debug.Log("[BattleManager] ===== StartNewRun 开始 =====");
         currentGold = 0;
         tempBuffs.Clear();
         _stageCleared = false;
@@ -144,26 +200,58 @@ public class BattleManager : Singleton<BattleManager>
         MercenaryManager.Instance?.ClearAllMercs();
         allyUnits.RemoveAll(u => u == null || u is Mercenary);
 
-        // 隐藏传送门（打完怪才出现）
         HidePortal();
+        EnsurePortalAnimatorReady(endPoint);
 
-        if (hero != null && !allyUnits.Contains(hero))
+        if (hero == null)
+            hero = Hero.Instance != null ? Hero.Instance : FindObjectOfType<Hero>();
+        if (hero == null)
+        {
+            Debug.LogError("[BattleManager] StartNewRun 失败：找不到 Hero，无法开战/刷怪");
+            return;
+        }
+
+        if (!allyUnits.Contains(hero))
             allyUnits.Add(hero);
 
-        hero.InitNewRun();
+        try
+        {
+            hero.InitNewRun();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[BattleManager] hero.InitNewRun 异常（继续开战）: {e}");
+        }
 
         EnsureTestMercenaries();
         SpawnMercenaries();
 
-        // 使用 SaveData 中的 maxUnlockedChapter，而非硬编码第1章
         int targetChapter = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
         if (targetChapter < 1) targetChapter = 1;
+
+        if (ChapterManager.Instance == null)
+        {
+            Debug.LogError("[BattleManager] ChapterManager 为空，用临时 Normal 关强行 LoadStage");
+            LoadStage(new StageData { stageIndex = 0, type = StageType.Normal, nextStages = new List<int>() });
+            return;
+        }
+
         ChapterManager.Instance.StartChapter(targetChapter);
 
-        if (ChapterManager.Instance.availableNextStages.Count > 0)
+        StageData first = null;
+        if (ChapterManager.Instance.availableNextStages != null && ChapterManager.Instance.availableNextStages.Count > 0)
+            first = ChapterManager.Instance.availableNextStages[0];
+        else if (ChapterManager.Instance.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
+            first = ChapterManager.Instance.stageMap[0];
+
+        if (first == null)
         {
-            LoadStage(ChapterManager.Instance.availableNextStages[0]);
+            Debug.LogError("[BattleManager] 关卡图为空，创建临时 Normal 关");
+            first = new StageData { stageIndex = 0, type = StageType.Normal, nextStages = new List<int>() };
         }
+
+        Debug.Log($"[BattleManager] StartNewRun → LoadStage type={first.type} idx={first.stageIndex}");
+        LoadStage(first);
     }
 
     void EnsureTestMercenaries()
@@ -242,6 +330,7 @@ public class BattleManager : Singleton<BattleManager>
         _allWavesSpawned = false;
         _stageCleared = false;
         _totalMonstersSpawnedThisStage = 0;
+        _didUpdateForceSpawn = false;
         playerSkillEnergy = 0f;
         mercSkillEnergy[0] = 0f;
         mercSkillEnergy[1] = 0f;
@@ -262,6 +351,7 @@ public class BattleManager : Singleton<BattleManager>
             follow.SetTarget(hero.transform);
         }
         isInBattle = true;
+        Time.timeScale = 1f;
 
         // 触发章节背景切换
         SwitchBattleBackground(CurrentChapter);
@@ -295,6 +385,8 @@ public class BattleManager : Singleton<BattleManager>
                 break;
         }
 
+        ResetWaveProgress();
+
         BattleUI.Instance?.UpdateCharacterSlots();
         BattleUI.Instance?.UpdateSkillEnergy(0, 0f);
         BattleUI.Instance?.RefreshBattleHud();
@@ -308,14 +400,277 @@ public class BattleManager : Singleton<BattleManager>
 
         if (isInBattle)
         {
-            // 走近刷怪，不要一次刷完全部波次
+            PlacePartyAt(startX, z);
+            UnitsCanAct = true;
+            _battleStartTime = Time.unscaledTime;
+            EnsureMonsterPrefabReady();
+
+            Debug.Log($"[BattleManager] LoadStage 战斗关 type={stage.type} waves={_waves?.Count ?? 0} heroX={UnitBase.GetCombatX(hero):F2}");
+
+            if (Instance != this)
+                Debug.LogError("[BattleManager] 当前实例不是单例实例！说明存在重复 BattleManager，Update/协程不会在本实例上运行");
+            if (!gameObject.activeInHierarchy)
+                Debug.LogError($"[BattleManager] 宿主 {gameObject.name} 未激活，协程与 Update 不会执行");
+
             StopCoroutine("BattleStartSequenceCoroutine");
             StartCoroutine("BattleStartSequenceCoroutine");
+            StartCoroutine(CoFirstWaveHardFallback());
         }
         else
         {
             UnitsCanAct = true;
+            Debug.LogWarning($"[BattleManager] 非战斗关 type={stage.type}，不刷怪");
         }
+    }
+
+    /// <summary>无视走路门槛，立刻刷下一波；失败则紧急造怪（不依赖配置/图集）</summary>
+    void ForceSpawnFirstWaveNow()
+    {
+        if (hero == null)
+        {
+            Debug.LogError("[BattleManager] ForceSpawn：hero 为空");
+            return;
+        }
+        if (_waves == null)
+            _waves = new List<WaveData>();
+        if (_waves.Count == 0)
+        {
+            Debug.LogError("[BattleManager] ForceSpawn：波次列表为空，补 1 波");
+            _waves.Add(new WaveData
+            {
+                triggerX = UnitBase.GetCombatX(hero) + GameConfig.MONSTER_ENGAGE_OFFSET,
+                spawnAnchor = null,
+                monsterCount = 2,
+                isBossWave = false,
+                spawned = false,
+                aliveCount = 0
+            });
+            _totalWaves = _waves.Count;
+        }
+
+        EnsureMonsterPrefabReady();
+        _activeWaveIndex = -1;
+
+        int before = CountAliveMonsters();
+        try
+        {
+            SpawnNextPendingWave();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[BattleManager] ForceSpawn TrySpawn 异常: {e}");
+        }
+
+        int after = CountAliveMonsters();
+        Debug.Log($"[BattleManager] ForceSpawn 第1轮 beforeAlive={before} afterAlive={after} totalList={monsters.Count} waves={_waves.Count} prefab={(PoolManager.Instance != null && PoolManager.Instance._monsterPrefab != null)}");
+
+        if (after <= 0)
+        {
+            var w = _waves[0];
+            w.spawned = false;
+            try
+            {
+                SpawnFallbackWave(w, 0);
+                w.spawned = CountAliveMonsters() > 0;
+                _activeWaveIndex = 0;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[BattleManager] ForceSpawn 兜底异常: {e}");
+            }
+        }
+
+        after = CountAliveMonsters();
+        if (after <= 0)
+        {
+            Debug.LogError("[BattleManager] 常规刷怪全失败 → EmergencySpawnVisibleMonsters");
+            EmergencySpawnVisibleMonsters(2);
+            after = CountAliveMonsters();
+        }
+
+        if (_waves.Count > 0 && _waves[0] != null && after > 0)
+        {
+            _waves[0].spawned = true;
+            _activeWaveIndex = 0;
+        }
+
+        StopWaveCountdown();
+        Debug.Log($"[BattleManager] ForceSpawn 最终 alive={after} list={monsters.Count}");
+    }
+
+    /// <summary>
+    /// 最后手段：不走对象池/配置表，当场造 2 只可见怪物。
+    /// 用于证明「刷怪入口已执行」；若连这个都没有，说明根本没进 ForceSpawn。
+    /// </summary>
+    void EmergencySpawnVisibleMonsters(int count)
+    {
+        if (hero == null) return;
+        float hx = UnitBase.GetCombatX(hero);
+        float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
+
+        for (int i = 0; i < count; i++)
+        {
+            float x = GetMonsterEngageBaseX(hx) + i * 0.55f;
+            Vector3 pos = new Vector3(x, UnitBase.GROUND_Y, z);
+
+            GameObject go = null;
+            EnsureMonsterPrefabReady();
+            if (PoolManager.Instance != null)
+            {
+                go = PoolManager.Instance.Get("Monster", pos, Quaternion.identity);
+                if (go == null && PoolManager.Instance._monsterPrefab != null)
+                    go = Object.Instantiate(PoolManager.Instance._monsterPrefab, pos, Quaternion.identity);
+            }
+            if (go == null)
+            {
+                go = new GameObject("EmergencyMonster_" + i);
+                var sr = go.AddComponent<SpriteRenderer>();
+                var tex = Texture2D.whiteTexture;
+                sr.sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 8f);
+                sr.color = Color.red;
+                sr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+                sr.sortingOrder = GameConfig.SORT_UNIT;
+                go.transform.localScale = Vector3.one * 2f;
+            }
+
+            go.SetActive(true);
+            if (unitRoot != null) go.transform.SetParent(unitRoot, true);
+            GameConfig.SetWorldPosition(go, pos);
+
+            Monster monster = go.GetComponent<Monster>();
+            if (monster == null) monster = go.AddComponent<Monster>();
+
+            var cfg = ScriptableObject.CreateInstance<MonsterConfig>();
+            cfg.id = "emergency_" + i;
+            cfg.baseHp = 40f;
+            cfg.baseAttack = 5f;
+            cfg.attackRange = GameConfig.RANGE_PX_SWORD;
+            cfg.baseAttackSpeed = 0.8f;
+            cfg.spriteScale = 1f;
+            cfg.spriteIndex = 1;
+            cfg.baseGoldDrop = 1;
+            cfg.expDrop = 1;
+
+            try
+            {
+                monster.Init(cfg, 0, CurrentChapter, 1f, 1);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[BattleManager] Emergency Init 失败，手工赋值HP: {e.Message}");
+                monster.currentHp = 40f;
+                monster.isAlly = false;
+                GameConfig.ApplyUnitSorting(monster.transform);
+            }
+
+            if (monster.currentHp <= 0f) monster.currentHp = 40f;
+            ForceEnableMonsterRenderers(monster.transform);
+            monster.transform.localScale = Vector3.one * Mathf.Max(monster.transform.localScale.x, GameConfig.MONSTER_BASE_SCALE);
+            monster.OnDead += OnMonsterDead;
+            monsters.Add(monster);
+            _totalMonstersSpawnedThisStage++;
+            Debug.Log($"[BattleManager] Emergency 怪已生成 name={go.name} pos={go.transform.position} hp={monster.currentHp} scale={go.transform.localScale}");
+        }
+    }
+
+    void ResetWaveProgress()
+    {
+        _activeWaveIndex = -1;
+        _waveCountdownActive = false;
+        _nextWaveCountdown = 0f;
+        _allWavesSpawned = false;
+        _killCombo = 0;
+        _lastKillTime = 0f;
+        _firstWaveSpawned = false;
+        _didUpdateForceSpawn = false;
+        _battleStartTime = Time.unscaledTime;
+        BattleSideHud.Instance?.ResetCombo();
+        BattleSideHud.Instance?.SetWaveCountdown(false, 0f, false);
+    }
+
+    /// <summary>波次为空时强制补一波（兜底）</summary>
+    void EnsureAtLeastOneWave()
+    {
+        if (_waves == null) _waves = new List<WaveData>();
+        if (_waves.Count > 0 && FindNextUnspawnedWaveIndex() >= 0) return;
+
+        float heroX = hero != null ? UnitBase.GetCombatX(hero) : GetStageStartX();
+        _waves.Add(new WaveData
+        {
+            triggerX = heroX + GameConfig.MONSTER_ENGAGE_OFFSET,
+            spawnAnchor = null,
+            monsterCount = 3,
+            isBossWave = false,
+            spawned = false,
+            aliveCount = 0
+        });
+        _totalWaves = _waves.Count;
+        Debug.LogWarning("[BattleManager] EnsureAtLeastOneWave 补 1 波 3 只");
+    }
+
+    void ScheduleFirstWaveSpawn()
+    {
+        if (_firstWaveSpawned || _firstWaveSpawnCo != null) return;
+        _firstWaveSpawnCo = StartCoroutine(FirstWaveSpawnAfterDelay());
+    }
+
+    IEnumerator FirstWaveSpawnAfterDelay()
+    {
+        yield return new WaitForSecondsRealtime(GameConfig.FIRST_WAVE_SPAWN_DELAY);
+        _firstWaveSpawnCo = null;
+        TrySpawnFirstWaveOnce();
+    }
+
+    /// <summary>首波刷怪（含兜底）；成功才标记 _firstWaveSpawned</summary>
+    void TrySpawnFirstWaveOnce()
+    {
+        if (!isInBattle || _stageCleared) return;
+        if (CountAliveMonsters() > 0)
+        {
+            _firstWaveSpawned = true;
+            return;
+        }
+
+        ForceSpawnFirstWaveNow();
+        if (CountAliveMonsters() > 0)
+            _firstWaveSpawned = true;
+        else
+        {
+            // 常规全失败 → 紧急造怪，保证玩家一定能看到怪
+            Debug.LogError("[BattleManager] 首波常规刷怪失败 → EmergencySpawnVisibleMonsters");
+            EmergencySpawnVisibleMonsters(Mathf.Min(3, GameConfig.WAVE_MONSTER_MAX));
+            if (CountAliveMonsters() > 0)
+                _firstWaveSpawned = true;
+        }
+    }
+
+    /// <summary>怪物交战 X：在英雄前方，且尽量落在当前镜头内可见</summary>
+    float GetMonsterEngageBaseX(float heroCombatX)
+    {
+        float prefer = heroCombatX + GameConfig.MONSTER_ENGAGE_OFFSET;
+        Camera cam = Camera.main;
+        if (cam == null || !cam.orthographic) return prefer;
+
+        float halfW = cam.orthographicSize * cam.aspect;
+        float camRight = cam.transform.position.x + halfW;
+        // 贴在镜头右缘内侧，避免刷在屏外像「没怪」
+        float visible = camRight - 1.2f;
+        return Mathf.Clamp(prefer, heroCombatX + 2.0f, visible);
+    }
+
+    /// <summary>硬性保险：过场/协程被停也能刷出第一波（独立协程，不被 StopCoroutine(string) 误伤）</summary>
+    IEnumerator CoFirstWaveHardFallback()
+    {
+        yield return new WaitForSecondsRealtime(2.2f);
+        if (!isInBattle || _stageCleared || _firstWaveSpawned) yield break;
+        if (CountAliveMonsters() > 0)
+        {
+            _firstWaveSpawned = true;
+            yield break;
+        }
+
+        Debug.LogError("[BattleManager] 硬性保险触发：2.2s 仍无怪 → EmergencySpawnVisibleMonsters");
+        TrySpawnFirstWaveOnce();
     }
 
     /// <summary>黑屏章节名 → 队伍从屏外走进来（无传送特效）</summary>
@@ -326,9 +681,8 @@ public class BattleManager : Singleton<BattleManager>
         float startX = GetStageStartX();
         float z = hero != null ? hero.transform.position.z
             : (unitRoot != null ? unitRoot.position.z : 0f);
-        // 站在镜头左侧外，过场后靠走路进场
-        float enterX = startX - PARTY_ENTER_FROM;
-        PlacePartyAt(enterX, z);
+        // 直接站到开战位，立刻刷怪到镜头内（不再先躲屏外再等黑屏）
+        PlacePartyAt(startX, z);
 
         var follow = Camera.main != null ? Camera.main.GetComponent<CameraFollow>() : null;
         if (follow != null)
@@ -336,13 +690,16 @@ public class BattleManager : Singleton<BattleManager>
             follow.offset = new Vector2(GameConfig.CAMERA_FOLLOW_OFFSET_X, 0f);
             if (hero != null) follow.SetTarget(hero.transform);
         }
-        // 镜头立刻跟到出生侧，避免还停在场景中间
         if (Camera.main != null && hero != null)
         {
             Vector3 cp = Camera.main.transform.position;
             cp.x = hero.transform.position.x + GameConfig.CAMERA_FOLLOW_OFFSET_X;
             Camera.main.transform.position = cp;
         }
+
+        ExtendCameraMaxX(startX + 80f);
+        UnitsCanAct = true;
+        ScheduleFirstWaveSpawn();
 
         string title = GameConfig.GetChapterTitleText(CurrentChapter);
         var splash = ChapterSplashOverlay.Show(title);
@@ -363,18 +720,28 @@ public class BattleManager : Singleton<BattleManager>
         if (parallax != null) parallax.ResetHeroOrigin();
 
         UnitsCanAct = true;
-        // 若已越过触发线，立刻刷第一波（走近再刷，不会一次全刷）
-        TrySpawnWavesApproachingScreen();
+        ExtendCameraMaxX(GetStageStartX() + 80f);
+
+        if (monsters == null || CountAliveMonsters() == 0)
+            TrySpawnFirstWaveOnce();
+
+        if (CountAliveMonsters() == 0)
+        {
+            Debug.LogError("[BattleManager] 过场后仍无怪 → EmergencySpawnVisibleMonsters");
+            EmergencySpawnVisibleMonsters(Mathf.Min(3, GameConfig.WAVE_MONSTER_MAX));
+            if (CountAliveMonsters() > 0)
+                _firstWaveSpawned = true;
+        }
 
         if (hero != null && monsters.Count > 0)
         {
             var m0 = monsters[0];
             float hx = UnitBase.GetCombatX(hero);
             float mx = UnitBase.GetCombatX(m0);
-            Debug.Log($"[BattleManager] 开战完成 monsters={monsters.Count} heroX={hx:F2} mon0={m0?.name} monX={mx:F2} dist={Mathf.Abs(hx - mx):F2} monHp={m0?.currentHp:F0} monAlly={m0?.isAlly} atkRange={hero.attr.GetAttr(AttrType.AttackRange):F2}");
+            Debug.Log($"[BattleManager] 开战完成 monsters={monsters.Count} heroX={hx:F2} mon0={m0?.name} monX={mx:F2} dist={Mathf.Abs(hx - mx):F2} monHp={m0?.currentHp:F0} scale={m0?.transform.localScale}");
         }
         else
-            Debug.Log($"[BattleManager] 开战完成 monsters={monsters.Count}（等刷怪点靠近屏幕）");
+            Debug.LogError($"[BattleManager] 开战完成仍无怪 monsters={monsters.Count} waves={_waves?.Count ?? 0}");
     }
 
     /// <summary>按间距摆玩家+佣兵（佣兵在身后，不再挤压到重叠）</summary>
@@ -430,72 +797,156 @@ public class BattleManager : Singleton<BattleManager>
     }
 
     /// <summary>
-    /// 刷怪：不跟 Ground。刷怪点是世界坐标；镜头跟随玩家右移时，
-    /// 当 MonsterSpawn 快进入屏幕右缘（或已进入主角前方可视带）时刷怪。
-    /// 一次只刷最早未触发的一波，避免多点挤在一起时瞬间全刷。
+    /// 立即刷下一波未刷出的波次（定时/加速共用）。怪刷在玩家前方并朝玩家移动。
     /// </summary>
-    void TrySpawnWavesApproachingScreen()
+    void SpawnNextPendingWave()
     {
-        if (_waves == null || hero == null) return;
+        if (_waves == null || _waves.Count == 0 || hero == null) return;
+        EnsureMonsterPrefabReady();
 
-        if (PoolManager.Instance != null && PoolManager.Instance._monsterPrefab == null)
+        int waveIdx = FindNextUnspawnedWaveIndex();
+        if (waveIdx < 0)
         {
-            var prefab = Resources.Load<GameObject>("Prefabs/Monster/Monstersmoban")
-                      ?? Resources.Load<GameObject>("Prefabs/Monster/Monster");
-            if (prefab != null)
+            _allWavesSpawned = true;
+            StopWaveCountdown();
+            return;
+        }
+
+        // 场上还有上一波活怪时，不叠刷（等清完再倒计时）
+        if (CountAliveMonsters() > 0 && _activeWaveIndex >= 0)
+            return;
+
+        var wave = _waves[waveIdx];
+        float heroX = UnitBase.GetCombatX(hero);
+        try
+        {
+            int aliveBefore = CountAliveMonsters();
+            SpawnWave(wave, waveIdx);
+            int aliveAfter = CountAliveMonsters();
+            if (aliveAfter > aliveBefore)
             {
-                PoolManager.Instance.Preload("Monster", prefab, 8);
-                PoolManager.Instance._monsterPrefab = prefab;
-                Debug.Log("[BattleManager] 补载怪物预制体: " + prefab.name);
+                wave.spawned = true;
+                _activeWaveIndex = waveIdx;
+                StopWaveCountdown();
+                Debug.Log($"[BattleManager] 刷第{waveIdx + 1}/{_waves.Count}波 OK alive={aliveAfter} heroX={heroX:F2}");
             }
             else
             {
-                Debug.LogError("[BattleManager] 找不到怪物预制体 Prefabs/Monster/Monstersmoban");
-                return;
-            }
-        }
-
-        Camera cam = Camera.main;
-        float halfW = 3f;
-        float camRight = hero.transform.position.x + halfW;
-        if (cam != null && cam.orthographic)
-        {
-            halfW = cam.orthographicSize * Mathf.Max(0.2f, cam.aspect);
-            camRight = cam.transform.position.x + halfW;
-        }
-
-        float heroX = UnitBase.GetCombatX(hero);
-        // 主角前方可视带右缘（不依赖镜头偏移是否异常）
-        float heroViewRight = heroX + halfW + SPAWN_SCREEN_LEAD;
-
-        for (int i = 0; i < _waves.Count; i++)
-        {
-            var wave = _waves[i];
-            if (wave == null || wave.spawned) continue;
-
-            float pointX = wave.spawnAnchor != null
-                ? wave.spawnAnchor.position.x
-                : wave.triggerX;
-
-            // 刷怪点已接近/进入屏幕右缘，或已进入主角前方可视带 → 开刷
-            bool nearCam = pointX <= camRight + SPAWN_SCREEN_LEAD;
-            bool nearHero = pointX <= heroViewRight;
-            if (!nearCam && !nearHero) continue;
-
-            try
-            {
-                SpawnWave(wave, i);
-                wave.spawned = true;
-                Debug.Log($"[BattleManager] 刷怪点入画触发 第{i + 1}波 pointX={pointX:F2} camRight={camRight:F2} heroViewR={heroViewRight:F2} monsters={monsters.Count}");
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[BattleManager] 第{i + 1}波刷怪异常: {e}");
                 wave.spawned = false;
+                Debug.LogError($"[BattleManager] 刷第{waveIdx + 1}波 SpawnWave 返回但场上无新增活怪");
             }
-            // 每帧最多刷一波，后续点等下一帧再判
-            break;
         }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[BattleManager] 第{waveIdx + 1}波刷怪异常: {e}");
+            wave.spawned = false;
+        }
+
+        if (FindNextUnspawnedWaveIndex() < 0)
+            _allWavesSpawned = true;
+    }
+
+    /// <summary>清完当前波后开启下一波倒计时</summary>
+    void BeginNextWaveCountdown()
+    {
+        if (_allWavesSpawned || _portalActive || _stageCleared) return;
+        if (FindNextUnspawnedWaveIndex() < 0)
+        {
+            _allWavesSpawned = true;
+            StopWaveCountdown();
+            return;
+        }
+        if (CountAliveMonsters() > 0) return;
+
+        _waveCountdownActive = true;
+        _nextWaveCountdown = GameConfig.WAVE_SPAWN_INTERVAL;
+        BattleSideHud.Instance?.SetWaveCountdown(true, _nextWaveCountdown, true);
+        Debug.Log($"[BattleManager] 下一波倒计时 {_nextWaveCountdown:F1}s（可点击加速）");
+    }
+
+    void StopWaveCountdown()
+    {
+        _waveCountdownActive = false;
+        _nextWaveCountdown = 0f;
+        BattleSideHud.Instance?.SetWaveCountdown(false, 0f, false);
+    }
+
+    void TickWaveCountdown()
+    {
+        if (!_waveCountdownActive || !UnitsCanAct || _stageCleared || _portalActive)
+            return;
+
+        if (CountAliveMonsters() > 0)
+        {
+            StopWaveCountdown();
+            return;
+        }
+
+        _nextWaveCountdown -= Time.deltaTime;
+        bool canSkip = _nextWaveCountdown > 0.05f;
+        BattleSideHud.Instance?.SetWaveCountdown(true, Mathf.Max(0f, _nextWaveCountdown), canSkip);
+
+        if (_nextWaveCountdown <= 0f)
+        {
+            StopWaveCountdown();
+            SpawnNextPendingWave();
+        }
+    }
+
+    /// <summary>点击倒计时：立刻出兵，剩余时间换金币</summary>
+    public bool TrySkipToNextWave()
+    {
+        if (!isInBattle || _stageCleared || _portalActive) return false;
+        if (!_waveCountdownActive || _nextWaveCountdown <= 0.05f) return false;
+        if (CountAliveMonsters() > 0) return false;
+        if (FindNextUnspawnedWaveIndex() < 0) return false;
+
+        int bonus = Mathf.Max(1, Mathf.CeilToInt(_nextWaveCountdown * GameConfig.WAVE_SKIP_GOLD_PER_SEC));
+        currentGold += bonus;
+        BattleUI.Instance?.UpdateGold(currentGold);
+        UIManager.Instance?.ShowToast($"加速出兵 +{bonus} 金");
+        Debug.Log($"[BattleManager] 加速下一波 leftover={_nextWaveCountdown:F1}s → +{bonus}金");
+
+        StopWaveCountdown();
+        SpawnNextPendingWave();
+        return true;
+    }
+
+    /// <summary>兼容旧调用名</summary>
+    void TrySpawnWaveByProgress() => SpawnNextPendingWave();
+    void TrySpawnWavesApproachingScreen() => SpawnNextPendingWave();
+
+    int FindNextUnspawnedWaveIndex()
+    {
+        if (_waves == null) return -1;
+        for (int i = 0; i < _waves.Count; i++)
+            if (_waves[i] != null && !_waves[i].spawned)
+                return i;
+        return -1;
+    }
+
+    int CountAliveMonsters()
+    {
+        int n = 0;
+        for (int i = 0; i < monsters.Count; i++)
+            if (monsters[i] != null && !monsters[i].isDead) n++;
+        return n;
+    }
+
+    void EnsureMonsterPrefabReady()
+    {
+        if (PoolManager.Instance == null) return;
+        if (PoolManager.Instance._monsterPrefab != null) return;
+        var prefab = Resources.Load<GameObject>("Prefabs/Monster/Monstersmoban")
+                  ?? Resources.Load<GameObject>("Prefabs/Monster/Monster");
+        if (prefab != null)
+        {
+            PoolManager.Instance.Preload("Monster", prefab, 8);
+            PoolManager.Instance._monsterPrefab = prefab;
+            Debug.Log("[BattleManager] 补载怪物预制体: " + prefab.name);
+        }
+        else
+            Debug.LogError("[BattleManager] 找不到怪物预制体 Prefabs/Monster/Monstersmoban");
     }
 
     /// <summary>
@@ -515,12 +966,26 @@ public class BattleManager : Singleton<BattleManager>
         }
     }
 
-    /// <summary>普通关：每个前方刷怪点一波；点快进屏幕时刷</summary>
+    /// <summary>
+    /// 普通关：公式随机总怪数 → 分波 → 怪朝玩家前进。
+    /// </summary>
     void SetupNormalWaves(int stageIdx)
+    {
+        BuildCombatWaves(stageIdx, elite: false);
+    }
+
+    /// <summary>
+    /// 精英关：同随机总量；属性倍率在 SpawnWave 里乘 ELITE_SCALE。
+    /// </summary>
+    void SetupEliteWaves(int stageIdx)
+    {
+        BuildCombatWaves(stageIdx, elite: true);
+    }
+
+    void BuildCombatWaves(int stageIdx, bool elite)
     {
         float startX = GetStageStartX();
         var points = GetSpawnPointsSortedByX();
-        // 只要还在起点右侧（或略左）的点都保留，靠镜头触发，不提前过滤光
         var usable = new List<Transform>();
         for (int i = 0; i < points.Count; i++)
         {
@@ -528,60 +993,42 @@ public class BattleManager : Singleton<BattleManager>
                 usable.Add(points[i]);
         }
 
-        if (usable.Count == 0)
+        int total = elite
+            ? GameConfig.GetEliteStageMonsterTotal(stageIdx)
+            : GameConfig.GetNormalStageMonsterTotal(stageIdx);
+        int waveCount = GameConfig.GetSuggestedWaveCount(total, usable.Count);
+        int[] perWave = GameConfig.DistributeMonstersToWaves(total, waveCount);
+
+        for (int i = 0; i < waveCount; i++)
         {
-            // 无点：在起点前方铺 3 个虚拟触发位
-            for (int i = 0; i < 3; i++)
+            Transform anchor = (usable.Count > 0) ? usable[Mathf.Min(i, usable.Count - 1)] : null;
+            float triggerX;
+            if (anchor != null)
+                triggerX = anchor.position.x;
+            else
+                triggerX = startX + 3.5f + i * GameConfig.VIRTUAL_WAVE_SPACING;
+
+            _waves.Add(new WaveData
             {
-                float x = startX + 5f + i * 6f;
-                _waves.Add(new WaveData
-                {
-                    triggerX = x,
-                    spawnAnchor = null,
-                    monsterCount = 2,
-                    isBossWave = false,
-                    spawned = false,
-                    aliveCount = 0
-                });
-            }
-        }
-        else
-        {
-            int n = Mathf.Min(usable.Count, 6);
-            for (int i = 0; i < n; i++)
-            {
-                _waves.Add(new WaveData
-                {
-                    triggerX = usable[i].position.x,
-                    spawnAnchor = usable[i],
-                    monsterCount = 2,
-                    isBossWave = false,
-                    spawned = false,
-                    aliveCount = 0
-                });
-            }
+                triggerX = triggerX,
+                spawnAnchor = anchor,
+                monsterCount = perWave[i],
+                isBossWave = false,
+                spawned = false,
+                aliveCount = 0
+            });
         }
 
         _totalWaves = _waves.Count;
-        Debug.Log($"[BattleManager] 普通关 {_totalWaves}波, 刷怪点={usable.Count}, 起点={startX:F1}");
+        string tag = elite ? "精英关" : "普通关";
+        Debug.Log($"[BattleManager] {tag} stage={stageIdx + 1} 总怪={total} → {_totalWaves}波 [{string.Join(",", perWave)}] 刷怪点={usable.Count} 起点={startX:F1}");
         for (int i = 0; i < _waves.Count; i++)
         {
             var w = _waves[i];
             string an = w.spawnAnchor != null ? w.spawnAnchor.name : "virtual";
-            Debug.Log($"[BattleManager]   第{i + 1}波 anchor={an} x={w.triggerX:F1} count={w.monsterCount}");
+            float ax = w.spawnAnchor != null ? w.spawnAnchor.position.x : w.triggerX;
+            Debug.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}");
         }
-    }
-
-    /// <summary>精英关：同样按刷怪点入画触发</summary>
-    void SetupEliteWaves(int stageIdx)
-    {
-        SetupNormalWaves(stageIdx);
-        for (int i = 0; i < _waves.Count; i++)
-        {
-            if (_waves[i] != null)
-                _waves[i].monsterCount = 2;
-        }
-        Debug.Log($"[BattleManager] 精英关波次配置: {_totalWaves}波");
     }
 
     List<Transform> GetSpawnPointsSortedByX()
@@ -644,20 +1091,42 @@ public class BattleManager : Singleton<BattleManager>
         return startX - 0.5f + waveIndex * 5f;
     }
 
-    /// <summary>Boss关：1波Boss</summary>
+    /// <summary>Boss关：若干波小怪 + 最后 1 波 Boss</summary>
     void SetupBossWave(int stageIdx)
     {
-        float bossX = endPoint != null ? endPoint.position.x - 2f : GetStageStartX() + 20f;
+        float startX = GetStageStartX();
+        int minions = GameConfig.GetBossStageMinionTotal(stageIdx);
+        int bossCount = GameConfig.GetBossStageMonsterTotal();
+
+        // Boss 关小怪波：按总数抬高波次上限，最多 7 波小怪 + 1 Boss
+        int minionWaves = GameConfig.GetSuggestedWaveCount(minions, 0);
+        minionWaves = Mathf.Clamp(minionWaves, 3, 7);
+        int[] perWave = GameConfig.DistributeMonstersToWaves(minions, minionWaves);
+
+        for (int i = 0; i < minionWaves; i++)
+        {
+            _waves.Add(new WaveData
+            {
+                triggerX = startX + 3.5f + i * GameConfig.VIRTUAL_WAVE_SPACING,
+                spawnAnchor = null,
+                monsterCount = perWave[i],
+                isBossWave = false,
+                spawned = false,
+                aliveCount = 0
+            });
+        }
+
+        float bossX = endPoint != null ? endPoint.position.x - 2f : startX + 3.5f + minionWaves * GameConfig.VIRTUAL_WAVE_SPACING + 2f;
         _waves.Add(new WaveData
         {
-            triggerX = bossX - 2f,
-            monsterCount = 1,
+            triggerX = bossX - 1f,
+            monsterCount = bossCount,
             isBossWave = true,
             spawned = false,
             aliveCount = 0
         });
-        _totalWaves = 1;
-        Debug.Log($"[BattleManager] Boss关，位置X={bossX}");
+        _totalWaves = _waves.Count;
+        Debug.Log($"[BattleManager] Boss关 stage={stageIdx + 1} 小怪={minions}×{minionWaves}波 + Boss={bossCount} X={bossX:F1}");
     }
 
     // ============================================================
@@ -668,30 +1137,83 @@ public class BattleManager : Singleton<BattleManager>
     {
         if (!isInBattle || _stageCleared) return;
 
-        // 清理死怪
+        // 硬性保险：不靠协程，Update 直接轮询
+        if (!_firstWaveSpawned
+            && Time.unscaledTime >= _battleStartTime + GameConfig.FIRST_WAVE_SPAWN_DELAY
+            && CountAliveMonsters() == 0)
+        {
+            if (_waves != null && _waves.Count > 0 && FindNextUnspawnedWaveIndex() >= 0)
+            {
+                Debug.LogError("[BattleManager] Update 硬性刷怪触发");
+                TrySpawnFirstWaveOnce();
+            }
+            else
+            {
+                // 波次为空 / 全部被标 spawned：强制重建并刷
+                Debug.LogError($"[BattleManager] 硬性刷怪兜底: waves={_waves?.Count ?? 0} nextIdx={FindNextUnspawnedWaveIndex()} → 强制补波");
+                EnsureAtLeastOneWave();
+                TrySpawnFirstWaveOnce();
+                if (CountAliveMonsters() == 0)
+                    EmergencySpawnVisibleMonsters(3);
+            }
+        }
+
+        // 清理死怪（不要在刷怪同一帧误清：只移真正死亡的）
         for (int i = monsters.Count - 1; i >= 0; i--)
         {
-            if (monsters[i] == null || monsters[i].isDead)
+            var m = monsters[i];
+            if (m == null)
             {
-                if (monsters[i] != null)
-                    monsters[i].OnDead -= OnMonsterDead;
+                monsters.RemoveAt(i);
+                continue;
+            }
+            if (m.isDead)
+            {
+                m.OnDead -= OnMonsterDead;
                 monsters.RemoveAt(i);
             }
         }
 
-        // 刷怪点快进入屏幕右缘时刷怪（不跟 Ground）
-        if (UnitsCanAct && !_allWavesSpawned && hero != null)
-            TrySpawnWavesApproachingScreen();
+        // 清波后的下一波倒计时（可点击加速）
+        if (UnitsCanAct)
+            TickWaveCountdown();
 
-        if (UnitsCanAct && !_allWavesSpawned)
+        // 连杀超时清零显示
+        if (_killCombo > 0 && Time.time - _lastKillTime > GameConfig.COMBO_WINDOW)
         {
-            _allWavesSpawned = true;
-            foreach (var w in _waves)
-                if (!w.spawned) { _allWavesSpawned = false; break; }
+            _killCombo = 0;
+            BattleSideHud.Instance?.ResetCombo();
         }
 
-        // 检查清怪条件：所有波次已触发 且 所有怪物已清除 → 激活传送门
-        // 必须曾刷出过怪才开门，避免刷怪失败立刻通关
+        // 开战若仍无活怪，补刷（用 unscaledTime，不受 timeScale 影响）
+        if (UnitsCanAct && !_stageCleared && !_portalActive
+            && !_waveCountdownActive
+            && CountAliveMonsters() == 0 && _waves != null && _waves.Count > 0
+            && FindNextUnspawnedWaveIndex() >= 0
+            && Time.unscaledTime >= _battleStartTime + GameConfig.FIRST_WAVE_SPAWN_DELAY + 0.5f)
+        {
+            if (!_didUpdateForceSpawn)
+            {
+                _didUpdateForceSpawn = true;
+                Debug.LogWarning("[BattleManager] Update 检测到无活怪 → 补刷首波");
+                TrySpawnFirstWaveOnce();
+                if (CountAliveMonsters() == 0)
+                    EmergencySpawnVisibleMonsters(Mathf.Min(3, GameConfig.WAVE_MONSTER_MAX));
+            }
+        }
+
+        bool allSpawned = true;
+        if (_waves != null)
+        {
+            for (int i = 0; i < _waves.Count; i++)
+            {
+                if (_waves[i] == null || !_waves[i].spawned) { allSpawned = false; break; }
+            }
+        }
+        else allSpawned = false;
+        _allWavesSpawned = allSpawned && _waves != null && _waves.Count > 0;
+
+        // 所有波次已刷完且场上无怪 → 传送门
         if (_allWavesSpawned && monsters.Count == 0 && _totalMonstersSpawnedThisStage > 0
             && !_portalActive && !_stageCleared)
         {
@@ -699,14 +1221,18 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         // 通关条件：传送门已激活 且 玩家走到传送门位置（EndPoint）
-        if (_portalActive && hero != null && !hero.isDead && !_stageCleared)
+        if (_portalActive && hero != null && !hero.isDead && !_stageCleared && endPoint != null)
         {
             if (hero.transform.position.x >= endPoint.position.x - 0.5f)
-            {
-                _stageCleared = true;
                 OnStageClear();
-            }
         }
+
+        // 跑图时镜头随英雄缓慢放宽，避免「地图尽头」卡死 / 跑出蓝屏
+        if (hero != null && !_portalActive)
+            ExtendCameraMaxX(UnitBase.GetCombatX(hero) + 12f);
+
+        // 防止玩家跑出当前镜头右侧（传送门激活后仍夹，但镜头已先放宽）
+        ClampHeroInCamera();
 
         // 更新技能能量（渐变 + 时间累积）
         if (hero != null && !hero.isDead)
@@ -716,7 +1242,6 @@ public class BattleManager : Singleton<BattleManager>
                 BattleUI.Instance.UpdateSkillEnergy(0, playerSkillEnergy);
         }
 
-        // 佣兵各自攒能量（稍慢于玩家）
         var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
         if (mercs != null)
         {
@@ -729,9 +1254,52 @@ public class BattleManager : Singleton<BattleManager>
         }
     }
 
+    void ClampHeroInCamera()
+    {
+        if (hero == null) return;
+        Camera cam = Camera.main;
+        if (cam == null || !cam.orthographic) return;
+        float halfW = cam.orthographicSize * Mathf.Max(0.2f, cam.aspect);
+        float maxHeroX = cam.transform.position.x + halfW - 0.35f;
+        float hx = hero.transform.position.x;
+        if (hx > maxHeroX)
+        {
+            Vector3 p = hero.transform.position;
+            p.x = maxHeroX;
+            GameConfig.SetWorldPosition(hero.gameObject, p);
+            if (hero.rb != null) hero.rb.velocity = new Vector2(Mathf.Min(hero.rb.velocity.x, 0f), hero.rb.velocity.y);
+        }
+    }
+
     // ============================================================
     // 刷怪
     // ============================================================
+
+    /// <summary>单波内交替近战/远程，同波搭配刷出</summary>
+    int PickWaveSpriteIndex(System.Collections.Generic.List<int> availableSprites, int stageIdx,
+        System.Collections.Generic.List<MonsterConfig> pool, int slotIndex)
+    {
+        if (availableSprites == null || availableSprites.Count == 0) return 1;
+
+        bool wantRanged = slotIndex % 2 == 1;
+        int chapter = CurrentChapter;
+        var filtered = new System.Collections.Generic.List<int>();
+        for (int k = 0; k < availableSprites.Count; k++)
+        {
+            int idx = availableSprites[k];
+            var style = MonsterAttackStyleTable.Get(GameConfig.GetMonsterChapter(chapter), idx);
+            bool isRanged = MonsterAttackStyleTable.IsRanged(style);
+            if (wantRanged == isRanged)
+                filtered.Add(idx);
+        }
+        if (filtered.Count == 0)
+            filtered.AddRange(availableSprites);
+
+        if (slotIndex == 0 && filtered.Contains(1))
+            return 1;
+
+        return ConfigManager.Instance.PickWeightedSpriteIndex(filtered, stageIdx);
+    }
 
     void SpawnWave(WaveData wave, int waveIndex = -1)
     {
@@ -739,7 +1307,7 @@ public class BattleManager : Singleton<BattleManager>
             waveIndex = _waves.IndexOf(wave);
         if (waveIndex < 0) waveIndex = 0;
 
-        int stageIdx = currentStage.stageIndex;
+        int stageIdx = currentStage != null ? currentStage.stageIndex : 0;
         int chapter = CurrentChapter;
         if (ConfigManager.Instance == null)
         {
@@ -756,7 +1324,7 @@ public class BattleManager : Singleton<BattleManager>
             return;
         }
 
-        bool isElite = currentStage.type == StageType.Elite;
+        bool isElite = currentStage != null && currentStage.type == StageType.Elite;
         float waveScaleMultiplier = 1f;
         if (wave.isBossWave)
             waveScaleMultiplier = GameConfig.BOSS_SCALE_MULTIPLIER;
@@ -779,19 +1347,26 @@ public class BattleManager : Singleton<BattleManager>
             availableSprites.Add(1);
 
         float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
-        // 交战点：优先本波绑定的 MonsterSpawn；否则用 triggerX / 镜头右缘外
-        float engageBaseX;
+        // 交战点必须在英雄前方可见距离内：远锚点只作参考，避免怪刷在屏外像「没刷」
+        float heroCombatX = hero != null ? UnitBase.GetCombatX(hero) : GetStageStartX();
+        float preferX = GetMonsterEngageBaseX(heroCombatX);
+        float engageBaseX = preferX;
         if (wave.spawnAnchor != null)
-            engageBaseX = wave.spawnAnchor.position.x;
-        else if (wave.triggerX > -900f)
-            engageBaseX = wave.triggerX;
-        else
         {
-            Camera cam = Camera.main;
-            float halfW = cam != null && cam.orthographic ? cam.orthographicSize * cam.aspect : 3f;
-            float camX = cam != null ? cam.transform.position.x : GetStageStartX();
-            engageBaseX = camX + halfW + 1.5f;
+            float ax = wave.spawnAnchor.position.x;
+            if (ax > heroCombatX + 2f && ax < heroCombatX + 10f)
+                engageBaseX = ax;
+            else
+                engageBaseX = Mathf.Clamp(ax, preferX, GetMonsterEngageBaseX(heroCombatX) + 1.5f);
         }
+        else if (wave.triggerX > -900f)
+        {
+            float tx = wave.triggerX;
+            engageBaseX = (tx > heroCombatX + 2f && tx < heroCombatX + 10f)
+                ? tx
+                : preferX;
+        }
+        ExtendCameraMaxX(engageBaseX + 6f);
 
         for (int i = 0; i < wave.monsterCount; i++)
         {
@@ -805,11 +1380,7 @@ public class BattleManager : Singleton<BattleManager>
             }
             else
             {
-                // 从精灵1开始：首只必出1，其余加权仍偏向低编号
-                if ((waveIndex == 0 && i == 0) || availableSprites.Count == 1)
-                    spriteIndexOverride = availableSprites.Contains(1) ? 1 : availableSprites[0];
-                else
-                    spriteIndexOverride = ConfigManager.Instance.PickWeightedSpriteIndex(availableSprites, stageIdx);
+                spriteIndexOverride = PickWaveSpriteIndex(availableSprites, stageIdx, pool, i);
 
                 template = pool.Find(m => !m.isBoss && m.spriteIndex == spriteIndexOverride);
                 if (template == null)
@@ -829,11 +1400,15 @@ public class BattleManager : Singleton<BattleManager>
                 spawnZ = wave.spawnAnchor.position.z;
 
             Vector3 engagePos = new Vector3(spawnX, spawnY, spawnZ);
-            Vector3 enterFrom = new Vector3(spawnX + MONSTER_ENTER_DIST, spawnY, spawnZ);
+            float enterDist = GameConfig.MONSTER_ENTER_DISTANCE;
+            Vector3 enterFrom = new Vector3(spawnX + enterDist, spawnY, spawnZ);
 
             Monster m = SpawnMonster(template, stageIdx, enterFrom, monsterScale, spriteIndexOverride);
             if (m != null)
-                m.BeginMapEnter(engagePos, MONSTER_ENTER_SPEED);
+            {
+                ForceEnableMonsterRenderers(m.transform);
+                m.BeginMapEnter(engagePos, GameConfig.MONSTER_ENTER_SPEED);
+            }
 
             if (isElite && !wave.isBossWave && m != null)
             {
@@ -847,37 +1422,30 @@ public class BattleManager : Singleton<BattleManager>
         Debug.Log($"[BattleManager] 波次{waveIndex + 1} 刷新{wave.monsterCount}只 @x={engageBaseX:F1} anchor={(wave.spawnAnchor != null ? wave.spawnAnchor.name : "null")}");
     }
 
-    /// <summary>兜底怪物：仍走用户刷怪点；精灵从1起</summary>
+    /// <summary>兜底怪物：刷在英雄前方可见处</summary>
     void SpawnFallbackWave(WaveData wave, int waveIndex = 0)
     {
         float fallbackScale = 1f;
         if (wave.isBossWave)
             fallbackScale = GameConfig.BOSS_SCALE_MULTIPLIER;
-        else if (currentStage.type == StageType.Elite)
+        else if (currentStage != null && currentStage.type == StageType.Elite)
             fallbackScale = GameConfig.ELITE_SCALE_MULTIPLIER;
 
-        int stageIdx = currentStage.stageIndex;
-        var availableSprites = ConfigManager.Instance.GetAvailableSpriteIndices(CurrentChapter, stageIdx, wave.isBossWave);
-        var points = GetSpawnPointsSortedByX();
+        int stageIdx = currentStage != null ? currentStage.stageIndex : 0;
+        var availableSprites = ConfigManager.Instance != null
+            ? ConfigManager.Instance.GetAvailableSpriteIndices(CurrentChapter, stageIdx, wave.isBossWave)
+            : new System.Collections.Generic.List<int> { 1 };
+
+        float heroCombatX = hero != null ? UnitBase.GetCombatX(hero) : GetStageStartX();
+        float engageBaseX = GetMonsterEngageBaseX(heroCombatX);
+        ExtendCameraMaxX(engageBaseX + 6f);
 
         for (int i = 0; i < wave.monsterCount; i++)
         {
             float spawnY = UnitBase.GROUND_Y;
             float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
-            float spawnX;
-            if (points.Count > 0)
-            {
-                int pi = Mathf.Min(waveIndex, points.Count - 1);
-                Transform sp = points[pi];
-                float extra = Mathf.Max(0, waveIndex - (points.Count - 1)) * 1.2f;
-                spawnX = sp.position.x + extra + i * 0.35f;
-                spawnZ = sp.position.z;
-            }
-            else
-            {
-                spawnX = GetStageStartX() + 4f + waveIndex * 2.5f + i * 0.35f;
-            }
-            Vector3 pos = new Vector3(spawnX + MONSTER_ENTER_DIST, spawnY, spawnZ);
+            float spawnX = engageBaseX + i * 0.35f;
+            Vector3 pos = new Vector3(spawnX + GameConfig.MONSTER_ENTER_DISTANCE, spawnY, spawnZ);
             Vector3 engage = new Vector3(spawnX, spawnY, spawnZ);
 
             GameObject go = null;
@@ -922,13 +1490,16 @@ public class BattleManager : Singleton<BattleManager>
             int fallbackSpriteOverride = 1;
             if (availableSprites != null && availableSprites.Count > 0)
             {
-                fallbackSpriteOverride = (waveIndex == 0 && i == 0 && availableSprites.Contains(1))
-                    ? 1
-                    : ConfigManager.Instance.PickWeightedSpriteIndex(availableSprites, stageIdx);
+                if (waveIndex == 0 && i == 0 && availableSprites.Contains(1))
+                    fallbackSpriteOverride = 1;
+                else if (ConfigManager.Instance != null)
+                    fallbackSpriteOverride = ConfigManager.Instance.PickWeightedSpriteIndex(availableSprites, stageIdx);
+                else
+                    fallbackSpriteOverride = availableSprites[0];
             }
 
             monster.Init(fallbackCfg, 0, CurrentChapter, fallbackScale, fallbackSpriteOverride);
-            monster.BeginMapEnter(engage, MONSTER_ENTER_SPEED);
+            monster.BeginMapEnter(engage, GameConfig.MONSTER_ENTER_SPEED);
             monster.OnDead += OnMonsterDead;
             monsters.Add(monster);
             _totalMonstersSpawnedThisStage++;
@@ -972,8 +1543,26 @@ public class BattleManager : Singleton<BattleManager>
         monsters.Add(monster);
         _totalMonstersSpawnedThisStage++;
 
-        Debug.Log($"[BattleManager] 生成怪物: {go.name} parent={go.transform.parent?.name} pos={go.transform.position} hp={monster.currentHp:F0} ally={monster.isAlly}");
+        Debug.Log($"[BattleManager] 生成怪物: {go.name} parent={go.transform.parent?.name} pos={go.transform.position} scale={go.transform.localScale} lossy={go.transform.lossyScale} hp={monster.currentHp:F0}");
         return monster;
+    }
+
+    static void ForceEnableMonsterRenderers(Transform root)
+    {
+        if (root == null) return;
+        var srs = root.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+        {
+            if (srs[i] == null) continue;
+            if (!srs[i].enabled) srs[i].enabled = true;
+            var c = srs[i].color;
+            if (c.a < 0.05f)
+            {
+                c.a = 1f;
+                srs[i].color = c;
+            }
+        }
+        root.gameObject.SetActive(true);
     }
 
     // ============================================================
@@ -986,7 +1575,19 @@ public class BattleManager : Singleton<BattleManager>
         if (m == null) return;
 
         currentGold += (long)m.goldDrop;
-        Hero.Instance.AddExp(m.expDrop);
+
+        // 连杀
+        float now = Time.time;
+        if (now - _lastKillTime <= GameConfig.COMBO_WINDOW)
+            _killCombo++;
+        else
+            _killCombo = 1;
+        _lastKillTime = now;
+        if (_killCombo >= 3)
+            currentGold += GameConfig.COMBO_BONUS_GOLD;
+        BattleSideHud.Instance?.SetCombo(_killCombo);
+
+        Hero.Instance?.AddExp(m.expDrop);
         BattleUI.Instance?.UpdateGold(currentGold);
 
         int goal = 0;
@@ -995,11 +1596,10 @@ public class BattleManager : Singleton<BattleManager>
         int alive = 0;
         for (int i = 0; i < monsters.Count; i++)
             if (monsters[i] != null && !monsters[i].isDead) alive++;
-        // 当前死亡单位仍在列表里，defeated = goal - 仍存活的（含即将死的则再 +0）
-        int defeated = Mathf.Clamp(goal - alive, 0, goal);
+        // 当前死亡单位仍在列表里时 alive 含自己，defeated 用 clamp
+        int defeated = Mathf.Clamp(goal - Mathf.Max(0, alive - 1), 0, goal);
         BattleUI.Instance?.UpdateQuest("击败所有敌人", defeated, goal);
 
-        // 技能能量累积（玩家 + 在场佣兵均分击杀奖励）
         float killGain = (m.config != null && m.config.isBoss) ? 0.5f : ENERGY_PER_KILL;
         playerSkillEnergy = Mathf.Min(MAX_SKILL_ENERGY, playerSkillEnergy + killGain);
         for (int i = 0; i < mercSkillEnergy.Length; i++)
@@ -1010,6 +1610,28 @@ public class BattleManager : Singleton<BattleManager>
         BattleUI.Instance?.UpdateSkillEnergy(0, playerSkillEnergy);
         BattleUI.Instance?.UpdateSkillEnergy(1, mercSkillEnergy[0]);
         BattleUI.Instance?.UpdateSkillEnergy(2, mercSkillEnergy[1]);
+
+        // 本波清完 → 开下一波倒计时
+        if (CountAliveMonsters() <= 1) // 含即将移除的自己，下一帧会清；用 <=1 更稳
+        {
+            // 延迟到本帧列表清理后判断；用协程下一帧
+            if (!_waveCountdownActive && !_allWavesSpawned)
+                StartCoroutine(CoCheckWaveClearNextFrame());
+        }
+    }
+
+    IEnumerator CoCheckWaveClearNextFrame()
+    {
+        yield return null;
+        if (!isInBattle || _stageCleared || _portalActive) yield break;
+        if (CountAliveMonsters() > 0) yield break;
+        if (FindNextUnspawnedWaveIndex() < 0)
+        {
+            _allWavesSpawned = true;
+            StopWaveCountdown();
+            yield break;
+        }
+        BeginNextWaveCountdown();
     }
 
     // ============================================================
@@ -1189,12 +1811,22 @@ public class BattleManager : Singleton<BattleManager>
 
     public void OnStageClear()
     {
+        if (_stageCleared) return; // 防重入（此前 Hero 每帧调用曾刷爆 Console）
         isInBattle = false;
-        bool isBoss = currentStage != null && currentStage.type == StageType.Boss;
+        _stageCleared = true;
+
+        if (currentStage == null)
+        {
+            Debug.LogError("[BattleManager] OnStageClear 时 currentStage 为空");
+            UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
+            return;
+        }
+
+        bool isBoss = currentStage.type == StageType.Boss;
 
         if (isBoss)
             BattleUI.Instance?.UpdateStageProgress(currentStage.stageIndex, atEndFlag: true);
-        else if (currentStage != null)
+        else
             BattleUI.Instance?.UpdateStageProgress(currentStage.stageIndex);
 
         int bonusStar = 0;
@@ -1204,7 +1836,8 @@ public class BattleManager : Singleton<BattleManager>
         if (isBoss)
         {
             bonusStar = 2;
-            bonusGold = 200 * ChapterManager.Instance.currentChapter;
+            int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+            bonusGold = 200 * ch;
             currentGold += bonusGold;
             equipCount += 1;
         }
@@ -1216,28 +1849,39 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         int blacksmithLevel = TownSystem.Instance != null ? TownSystem.Instance.GetBuildingLevel(BuildingType.Blacksmith) : 1;
-        List<EquipInstance> rewards = ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar);
+        List<EquipInstance> rewards = ConfigManager.Instance != null
+            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar)
+            : new List<EquipInstance>();
+
+        if (UIManager.Instance == null)
+        {
+            Debug.LogError("[BattleManager] UIManager 为空，跳过结算 UI");
+            return;
+        }
 
         UIManager.Instance.ShowStageClearUI(rewards, bonusGold, (selectedEquip) =>
         {
             if (selectedEquip != null)
             {
-                GridBackpackSystem.Instance.TryAddItem(selectedEquip, out _);
+                GridBackpackSystem.Instance?.TryAddItem(selectedEquip, out _);
                 AchievementSystem.Instance?.OnObtainEquip(selectedEquip.rarity);
-                foreach (var equip in rewards)
+                if (rewards != null)
                 {
-                    if (equip != selectedEquip)
-                        currentGold += (int)equip.rarity * 5 * (1 + equip.star);
+                    foreach (var equip in rewards)
+                    {
+                        if (equip != selectedEquip)
+                            currentGold += (int)equip.rarity * 5 * (1 + equip.star);
+                    }
                 }
             }
-            else
+            else if (rewards != null)
             {
                 foreach (var equip in rewards)
                     currentGold += (int)equip.rarity * 5 * (1 + equip.star);
             }
 
             PersistBattleGold();
-            ChapterManager.Instance.OnStageComplete();
+            ChapterManager.Instance?.OnStageComplete();
 
             if (isBoss)
             {
@@ -1249,16 +1893,16 @@ public class BattleManager : Singleton<BattleManager>
                     },
                     onNextChapter: () =>
                     {
-                        int next = ChapterManager.Instance.currentChapter + 1;
+                        int next = (ChapterManager.Instance?.currentChapter ?? 1) + 1;
                         if (next > 8) next = 8;
-                        ChapterManager.Instance.StartChapter(next);
-                        if (ChapterManager.Instance.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
+                        ChapterManager.Instance?.StartChapter(next);
+                        if (ChapterManager.Instance?.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
                             ChapterManager.Instance.SelectStage(ChapterManager.Instance.stageMap[0]);
                     });
             }
             else
             {
-                UIManager.Instance.ShowStageSelectUI(ChapterManager.Instance.availableNextStages);
+                UIManager.Instance.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
             }
         });
     }
@@ -1267,8 +1911,15 @@ public class BattleManager : Singleton<BattleManager>
     {
         var save = SaveSystem.Instance?.Data;
         if (save == null) return;
-        save.totalGold = currentGold;
-        SaveSystem.Instance.Save();
+        // 战斗内金币写回城镇：差额走 ResourceWallet，避免突破上限
+        long delta = currentGold - save.totalGold;
+        if (delta > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, delta, save: true, notify: false);
+        else if (delta < 0)
+            ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, -delta, save: true, notify: false);
+        else
+            SaveSystem.Instance.Save();
+        currentGold = save.totalGold;
     }
 
     public void OnHeroDead()
@@ -1313,9 +1964,11 @@ public class BattleManager : Singleton<BattleManager>
                 UIManager.Instance.ShowToast($"获得遗产：{legacyToTake.equipName}");
                 AchievementSystem.Instance?.OnBringLegacy();
             }
-            SaveSystem.Instance.Data.totalGold += currentGold;
+            if (currentGold > 0)
+                ResourceWallet.Add(ResourceWallet.ResourceType.Gold, currentGold, save: false, notify: true);
             int talentGain = (int)(currentGold / GameConfig.GOLD_PER_TALENT_POINT);
-            SaveSystem.Instance.Data.talentPoints += talentGain;
+            if (talentGain > 0)
+                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
             SaveSystem.Instance.Save();
             GameSceneManager.Instance.LoadTownScene();
         });

@@ -18,6 +18,7 @@ public class AutoGameInitializer : MonoBehaviour
 
     void Awake()
     {
+        if (!GameSceneGate.IsBattle) return;
         Initialize();
     }
 
@@ -27,13 +28,22 @@ public class AutoGameInitializer : MonoBehaviour
     /// </summary>
     public static void Initialize()
     {
-        // 双重检查：_initialized标志 + GameRoot实际存在性
-        // 如果_initialized=true但GameRoot不存在（场景重新加载），需要重新初始化
-        if (_initialized && GameObject.Find("GameRoot") != null)
+        if (!GameSceneGate.IsBattle)
         {
-            GamePerf.Log("[AutoInit] 已初始化过且GameRoot存在，跳过");
+            GamePerf.Log($"[AutoInit] 跳过：当前场景「{GameSceneGate.ActiveName}」不是 Battle");
             return;
         }
+        // GameRoot / BattleManager 是 DontDestroyOnLoad：二次进战斗不能整段跳过，否则不刷怪、引用已毁
+        bool systemsReady = _initialized && GameObject.Find("GameRoot") != null
+                            && BattleManager.Instance != null;
+
+        if (systemsReady)
+        {
+            GamePerf.Log("[AutoInit] 系统已存在 → 仅重绑场景引用并重新开战");
+            RebindSceneAndRestartBattle();
+            return;
+        }
+
         _initialized = true;
         GamePerf.ApplyStartup();
 
@@ -73,8 +83,10 @@ public class AutoGameInitializer : MonoBehaviour
         GameObject gameRoot = EnsureGameRoot();
         GamePerf.Log("[AutoInit] 5/8 GameRoot就绪");
 
-        // 初始化BattleManager引用
-        BattleManager bm = gameRoot.GetComponent<BattleManager>();
+        // 初始化BattleManager引用（优先用单例，避免拿到将被销毁的重复组件）
+        BattleManager bm = BattleManager.Instance != null
+            ? BattleManager.Instance
+            : gameRoot.GetComponent<BattleManager>();
         bm.spawnPoint = spawnPoint;
         bm.endPoint = endPoint;
         bm.monsterSpawnPoints = monsterSpawnPoints;
@@ -125,9 +137,76 @@ public class AutoGameInitializer : MonoBehaviour
         // 刷新UI角色栏（血条、头像、进度条）— 系统已就绪后再绑一次
         BattleUI.Instance?.RebindAfterSystemsReady();
         BattleUI.Instance?.UpdateTopBarResources();
+        BattleSideHud.EnsureOn(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
         EnsureCharacterBarVisibleRuntime();
 
         GamePerf.Log("[AutoInit] Battle场景初始化完成");
+        BattleLoadingOverlay.Hide();
+    }
+
+    /// <summary>二次进战斗：场景锚点/Hero 已随旧场景销毁，必须重绑再 StartNewRun</summary>
+    static void RebindSceneAndRestartBattle()
+    {
+        FixAllScaleZero();
+        Camera cam = EnsureCamera();
+        Transform worldRoot = EnsureWorldRoot();
+        Transform spawnPoint = EnsureSpawnPoint(worldRoot);
+        Transform endPoint = EnsureEndPoint(worldRoot);
+        Transform[] monsterSpawnPoints = EnsureMonsterSpawnPoints(worldRoot);
+        Transform unitRoot = EnsureUnitRoot(worldRoot);
+        UnitBase.GROUND_Y = unitRoot.position.y;
+
+        EnsureGround(worldRoot);
+        EnsureEventSystem();
+
+        BattleManager bm = BattleManager.Instance;
+        if (bm == null)
+        {
+            var root = EnsureGameRoot();
+            bm = BattleManager.Instance != null ? BattleManager.Instance : root.GetComponent<BattleManager>();
+        }
+        if (bm != null && !bm.gameObject.activeSelf)
+        {
+            Debug.LogWarning("[AutoInit] BattleManager 宿主未激活 → 强制激活");
+            bm.gameObject.SetActive(true);
+        }
+        bm.spawnPoint = spawnPoint;
+        bm.endPoint = endPoint;
+        bm.monsterSpawnPoints = monsterSpawnPoints;
+        bm.unitRoot = unitRoot;
+
+        // 旧 Hero 已随 Battle 卸载销毁（Unity 假 null）
+        if (!bm.hero)
+            bm.hero = null;
+        Hero hero = EnsureHero(unitRoot, bm);
+        hero.endPoint = endPoint;
+
+        BattleViewportFit.Apply(cam);
+        EnsureCameraFollow(cam, hero.transform, spawnPoint, endPoint);
+        FixBattleUICanvas(cam);
+        EnsureCharacterBarVisibleRuntime();
+        EnsureParallaxOnMaproot();
+        EnsureMonsterPrefab();
+        PoolManager.Instance?.Warm("Monster", 6);
+
+        bm.ClearAllMonsters();
+        bm.StartNewRun();
+
+        GameConfig.AttachToUnitRoot(hero.transform);
+        float z = unitRoot.position.z;
+        GameConfig.SetWorldPosition(hero.gameObject,
+            new Vector3(hero.transform.position.x, UnitBase.GROUND_Y, z));
+        float s = GameConfig.UNIT_SCALE;
+        float sign = hero.transform.localScale.x < 0 ? -1f : 1f;
+        hero.transform.localScale = new Vector3(sign * s, s, s);
+        ForceEnableRenderers(hero.gameObject);
+
+        BattleUI.Instance?.RebindAfterSystemsReady();
+        BattleUI.Instance?.UpdateTopBarResources();
+        BattleSideHud.EnsureOn(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
+        EnsureCharacterBarVisibleRuntime();
+        GamePerf.Log("[AutoInit] 二次进战斗重绑完成，已 StartNewRun");
+        BattleLoadingOverlay.Hide();
     }
 
     // ===== 修复方法 =====
@@ -252,6 +331,7 @@ public class AutoGameInitializer : MonoBehaviour
             EnsureNestedSortOrder(FindDeepChildIgnoreCase(battleUI.transform, hudNames[i]), 100);
 
         EnsureNestedSortOrder(FindDeepChildIgnoreCase(battleUI.transform, "CharacterBar"), 110);
+        BattleSideHud.EnsureOn(battleUI.transform);
 
         if (battleUI.GetComponent<ViewportFitDriver>() == null)
             battleUI.gameObject.AddComponent<ViewportFitDriver>();
@@ -501,7 +581,8 @@ public class AutoGameInitializer : MonoBehaviour
         float spawnX = spawnPoint != null ? spawnPoint.position.x : -7f;
         float endX = endPoint != null ? endPoint.position.x : 13f;
         follow.minX = spawnX - 0.5f;
-        follow.maxX = Mathf.Max(endX + 2f, spawnX + 5f);
+        // 无限跑图：不要用短 EndPoint 锁死镜头，BattleManager 会随进度再 Extend
+        follow.maxX = Mathf.Max(endX + 2f, spawnX + 80f);
 
         // Y 交给 AlignBattleViewport；这里只锁当前 Y/Z 并跟随 X
         follow.LockYZFromCurrent();
@@ -673,30 +754,60 @@ public class AutoGameInitializer : MonoBehaviour
 
     // ===== GameRoot 和系统组件 =====
 
+    /// <summary>
+    /// GameRoot：所有常驻系统的宿主。
+    /// 系统单例可能已被 Singleton getter 提前创建在别的物体上，
+    /// 此时必须复用那个物体，否则重复组件会被销毁、系统引用错乱。
+    /// </summary>
     static GameObject EnsureGameRoot()
     {
-        GameObject root = GameObject.Find("GameRoot");
-        if (root == null)
+        GameObject root = null;
+
+        // 单例可能已被 getter 提前创建，甚至挂在未激活物体上；必须复用它
+        BattleManager existing = BattleManager.Instance;
+        if (existing != null) root = existing.gameObject;
+
+        if (root == null) root = GameObject.Find("GameRoot");
+        if (root == null) root = new GameObject("GameRoot");
+        if (root.name != "GameRoot") root.name = "GameRoot";
+
+        if (!root.activeSelf)
         {
-            root = new GameObject("GameRoot");
-            root.AddComponent<PoolManager>();
-            root.AddComponent<ChapterManager>();
-            root.AddComponent<GridBackpackSystem>();
-            root.AddComponent<UIManager>();
-            root.AddComponent<DamageTextSystem>();
-            root.AddComponent<MonsterSpriteLoader>();
-            root.AddComponent<SkillSystem>();
-            root.AddComponent<SkillRegistry>();
-            root.AddComponent<BattleStateSaver>();
-            root.AddComponent<AchievementSystem>();
-            root.AddComponent<PreLevelSystem>();
-            root.AddComponent<TownSystem>();
-            root.AddComponent<MercenaryManager>();
-            root.AddComponent<BattleManager>();
+            Debug.LogWarning("[AutoInit] GameRoot 处于未激活状态 → 已强制激活");
+            root.SetActive(true);
         }
-        else if (root.GetComponent<SkillRegistry>() == null)
-            root.AddComponent<SkillRegistry>();
+
+        Object.DontDestroyOnLoad(root);
+
+        AddIfMissing<PoolManager>(root);
+        AddIfMissing<ChapterManager>(root);
+        AddIfMissing<GridBackpackSystem>(root);
+        AddIfMissing<UIManager>(root);
+        AddIfMissing<DamageTextSystem>(root);
+        AddIfMissing<MonsterSpriteLoader>(root);
+        AddIfMissing<SkillSystem>(root);
+        AddIfMissing<SkillRegistry>(root);
+        AddIfMissing<BattleStateSaver>(root);
+        AddIfMissing<AchievementSystem>(root);
+        AddIfMissing<PreLevelSystem>(root);
+        AddIfMissing<TownSystem>(root);
+        AddIfMissing<MercenaryManager>(root);
+        AddIfMissing<BattleManager>(root);
+
         return root;
+    }
+
+    /// <summary>场景里已存在该系统时复用，避免重复组件被 Singleton 销毁</summary>
+    static void AddIfMissing<T>(GameObject root) where T : MonoBehaviour
+    {
+        T inScene = Object.FindObjectOfType<T>();
+        if (inScene != null)
+        {
+            // 已在别处：把它并到 GameRoot 下便于统一管理（组件无法搬家，仅保证不再重复添加）
+            return;
+        }
+        if (root.GetComponent<T>() == null)
+            root.AddComponent<T>();
     }
 
     // ===== Hero =====

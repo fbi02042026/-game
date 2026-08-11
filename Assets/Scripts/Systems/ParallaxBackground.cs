@@ -1,10 +1,10 @@
 using UnityEngine;
 
 /// <summary>
-/// 视差滚动背景（v15）
-/// - 只复制 map 下的 1/2/3 层，不复制整个 map 节点
-/// - 每层 4 片按 scale.x：+1, -1, -1, +1（正反反正）首尾相接
-/// - 取模周期 = 4×宽度，避免单宽回绕时“从头播放”的卡顿感
+/// 视差无限地图（v16）
+/// - 只复制 map 下的 1/2/3 层
+/// - 每层 4 片：scale.x 正反反正 +1/-1/-1/+1
+/// - 按镜头/英雄位移取模循环，始终盖住视野，避免尽头蓝屏
 /// </summary>
 public class ParallaxBackground : MonoBehaviour
 {
@@ -16,7 +16,6 @@ public class ParallaxBackground : MonoBehaviour
     [Header("背景注册表")]
     public BattleBackgroundRegistry backgroundRegistry;
 
-    /// <summary>正反反正：+x, -x, -x, +x</summary>
     static readonly float[] FlipSigns = { 1f, -1f, -1f, 1f };
     const int TileCount = 4;
 
@@ -87,7 +86,7 @@ public class ParallaxBackground : MonoBehaviour
         RefreshLayerWidth(ref midLayer);
         RefreshLayerWidth(ref frontLayer);
 
-        Debug.Log($"[Parallax v15] root={LayerSearchRoot.name} ppu={_ppu:F1} flip=+1/-1/-1/+1 tiles={TileCount} w={frontLayer.width:F0}");
+        Debug.Log($"[Parallax v16] root={LayerSearchRoot.name} ppu={_ppu:F1} flip=+1/-1/-1/+1 tiles={TileCount} w={frontLayer.width:F0}");
     }
 
     void RefreshLayerWidth(ref ParallaxLayer layer)
@@ -96,6 +95,8 @@ public class ParallaxBackground : MonoBehaviour
         float w = layer.tiles[0].rect.width;
         if (w > 1f) layer.width = w;
         else if (layer.width < 1f) layer.width = 2020f;
+        // 宽度至少盖住约 1.2 个设计屏宽，避免拼接缝露蓝
+        if (layer.width < 720f) layer.width = 2020f;
         ApplyTiles(ref layer, layer.tiles[0].anchoredPosition.x);
     }
 
@@ -107,7 +108,6 @@ public class ParallaxBackground : MonoBehaviour
         {
             if (all[i] == null) continue;
             string n = all[i].name;
-            // 兼容旧版 "_tile" 与 v15 "_tile1/_tile2/_tile3"
             if (n.Contains("_tile"))
                 Destroy(all[i].gameObject);
         }
@@ -116,7 +116,11 @@ public class ParallaxBackground : MonoBehaviour
     void InitLayer(ref ParallaxLayer layer)
     {
         Transform t = FindDirectOrNested(LayerSearchRoot, layer.autoFindByName);
-        if (t == null) return;
+        if (t == null)
+        {
+            Debug.LogWarning($"[Parallax] 未找到层节点 '{layer.autoFindByName}' under {LayerSearchRoot.name}");
+            return;
+        }
         var src = t as RectTransform;
         if (src == null) return;
 
@@ -137,12 +141,13 @@ public class ParallaxBackground : MonoBehaviour
             for (int e = 0; e < extras.Length; e++) Destroy(extras[e]);
             layer.tiles[i] = tile.GetComponent<RectTransform>();
             layer.images[i] = layer.tiles[i].GetComponent<UnityEngine.UI.Image>();
+            if (layer.tiles[i] != null)
+                layer.tiles[i].gameObject.SetActive(true);
         }
 
         ApplyTiles(ref layer, layer.initialX);
     }
 
-    /// <summary>四片：位置差一个宽度，scale 正反反正</summary>
     static void ApplyTiles(ref ParallaxLayer layer, float baseX)
     {
         if (layer.tiles == null) return;
@@ -159,6 +164,9 @@ public class ParallaxBackground : MonoBehaviour
             Vector3 s = rt.localScale;
             s.x = FlipSigns[i] * layer.baseScaleX;
             rt.localScale = s;
+
+            if (!rt.gameObject.activeSelf)
+                rt.gameObject.SetActive(true);
         }
     }
 
@@ -244,6 +252,7 @@ public class ParallaxBackground : MonoBehaviour
 
     void LateUpdate()
     {
+        if (!_layersInited) EnsureLayers();
         if (!_ready)
         {
             TryBindHeroOrigin();
@@ -263,9 +272,11 @@ public class ParallaxBackground : MonoBehaviour
 
         float offset = heroDelta * layer.parallaxFactor * _ppu;
         float period = layer.width * TileCount;
+        if (period < 1f) period = layer.width;
         float raw = layer.initialX - offset;
-        // 周期 4 宽：正反反正完整循环后再回绕，不会像单宽那样突然“重播”
-        float baseX = layer.initialX - Mathf.Repeat(layer.initialX - raw, period);
+        // 周期内回绕：正反反正完整循环后再接，不会“跳回开头”
+        float wrapped = Mathf.Repeat(layer.initialX - raw, period);
+        float baseX = layer.initialX - wrapped;
         ApplyTiles(ref layer, baseX);
     }
 

@@ -115,6 +115,7 @@ public class GuildHallPrefabGenerator
         hall.navLogButton = CreateNavButton(bottomNav.transform, "NavLog", "冒险日志", false);
 
         string pathPrefab = $"{dir}/GuildHallUI.prefab";
+        GameFonts.ApplyToHierarchy(root.transform);
         PrefabUtility.SaveAsPrefabAsset(root, pathPrefab);
         Object.DestroyImmediate(root);
         AssetDatabase.SaveAssets();
@@ -181,8 +182,16 @@ public class GuildHallPrefabGenerator
         t.text = content;
         t.fontSize = size;
         t.color = color;
-        t.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        t.font = GameFonts.GetChinese();
         t.alignment = TextAnchor.MiddleCenter;
+        return t;
+    }
+
+    /// <summary>数字控件请用此方法，或事后 GameFonts.ApplyToHierarchy。</summary>
+    static Text CreateNumberText(Transform parent, string name, string content, int size, Color color)
+    {
+        var t = CreateText(parent, name, content, size, color);
+        t.font = GameFonts.GetNumber();
         return t;
     }
 

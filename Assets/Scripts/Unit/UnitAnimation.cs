@@ -54,6 +54,7 @@ public class UnitAnimation : MonoBehaviour
     public float procDeathDuration = 0.8f;
 
     private bool _procMode;
+    private AttackVfxKit _procAttackKit = AttackVfxKit.MeleeSlash;
     private Vector3 _procBaseScale;
     private float _procTime;
     private float _procDeathTime;
@@ -147,15 +148,38 @@ public class UnitAnimation : MonoBehaviour
 
         if (_attackAnimLock > 0)
         {
-            // 攻击：X轴拉伸（前冲感），持续攻击动画时长
+            // 攻击动画
             float atkProgress = 1f - (_attackAnimLock / _attackAnimDuration);
-            float stretch = Mathf.Sin(atkProgress * Mathf.PI) * procAttackStretch;
-            t.localScale = new Vector3(
-                _procBaseScale.x * (1f + stretch),
-                _procBaseScale.y * (1f - stretch * 0.5f),
-                _procBaseScale.z
-            );
-            t.localRotation = Quaternion.identity;
+            float wave = Mathf.Sin(atkProgress * Mathf.PI);
+            if (_procAttackKit == AttackVfxKit.Bow)
+            {
+                // 弓箭：后拉再前送
+                float pull = wave * 0.14f;
+                t.localScale = new Vector3(
+                    _procBaseScale.x * (1f - pull * 0.6f),
+                    _procBaseScale.y * (1f + pull * 0.25f),
+                    _procBaseScale.z);
+                float tilt = -wave * 8f * _lastFacingDir;
+                t.localRotation = Quaternion.Euler(0, 0, tilt);
+            }
+            else if (_procAttackKit == AttackVfxKit.Orb)
+            {
+                float pulse = wave * 0.16f;
+                t.localScale = new Vector3(
+                    _procBaseScale.x * (1f + pulse * 0.3f),
+                    _procBaseScale.y * (1f + pulse),
+                    _procBaseScale.z);
+                t.localRotation = Quaternion.identity;
+            }
+            else
+            {
+                float stretch = wave * procAttackStretch;
+                t.localScale = new Vector3(
+                    _procBaseScale.x * (1f + stretch),
+                    _procBaseScale.y * (1f - stretch * 0.5f),
+                    _procBaseScale.z);
+                t.localRotation = Quaternion.identity;
+            }
         }
         else if (_isMoving)
         {
@@ -278,20 +302,21 @@ public class UnitAnimation : MonoBehaviour
     }
 
     /// <summary>
-    /// 播放攻击动画
+    /// 播放攻击动画。传入武器套装可选中 SPUM 里的弓/法术专用挥击。
     /// </summary>
-    public void PlayAttack()
+    public void PlayAttack(AttackVfxKit kit = AttackVfxKit.MeleeSlash)
     {
         if (_isDead) return;
         if (_attackAnimLock > 0) return; // 动画锁定中
         _attackAnimLock = _attackAnimDuration;
+        _procAttackKit = kit;
 
         // SPUM模式
         if (_spum != null && _spum.OverrideController != null)
         {
             try
             {
-                _spum.PlayAnimation(PlayerState.ATTACK, 0);
+                _spum.PlayAnimation(PlayerState.ATTACK, ResolveSpumAttackIndex(kit));
             }
             catch { }
         }
@@ -303,6 +328,60 @@ public class UnitAnimation : MonoBehaviour
             SetTriggerSafe("attack");
         }
         // 程序化模式：Update自动处理攻击拉伸
+    }
+
+    // 套装 → ATTACK_List 下标，首次解析后缓存
+    readonly System.Collections.Generic.Dictionary<AttackVfxKit, int> _spumAttackIndex
+        = new System.Collections.Generic.Dictionary<AttackVfxKit, int>();
+
+    /// <summary>
+    /// 在 SPUM 的 ATTACK 片段里按名字挑对应武器的挥击。
+    /// SPUM 命名形如 0_Attack_Bow / 1_Skill_Bow / 0_Attack_Magic / 0_Attack_Normal。
+    /// </summary>
+    int ResolveSpumAttackIndex(AttackVfxKit kit)
+    {
+        if (_spumAttackIndex.TryGetValue(kit, out int cached)) return cached;
+
+        int index = 0;
+        var list = _spum != null ? _spum.ATTACK_List : null;
+        if (list != null && list.Count > 1)
+        {
+            string[] keys = KeywordsFor(kit);
+            int fallback = -1;
+            for (int i = 0; i < list.Count && index == 0; i++)
+            {
+                if (list[i] == null) continue;
+                string n = list[i].name.ToLowerInvariant();
+                for (int k = 0; k < keys.Length; k++)
+                {
+                    if (n.IndexOf(keys[k], System.StringComparison.Ordinal) < 0) continue;
+                    // 优先普攻片段（Attack_），技能片段（Skill_）只作备选
+                    if (n.IndexOf("skill", System.StringComparison.Ordinal) >= 0)
+                    {
+                        if (fallback < 0) fallback = i;
+                    }
+                    else
+                    {
+                        index = i;
+                    }
+                    break;
+                }
+            }
+            if (index == 0 && fallback >= 0) index = fallback;
+        }
+
+        _spumAttackIndex[kit] = index;
+        return index;
+    }
+
+    static string[] KeywordsFor(AttackVfxKit kit)
+    {
+        switch (kit)
+        {
+            case AttackVfxKit.Bow: return new[] { "bow", "arrow", "range" };
+            case AttackVfxKit.Orb: return new[] { "magic", "staff", "wand" };
+            default: return new[] { "normal", "sword", "melee" };
+        }
     }
 
     /// <summary>

@@ -297,6 +297,7 @@ public class BattlePrefabGenerator : EditorWindow
         battleUI.pauseButton = pauseBtn;
 
         // === 保存为预制体 ===
+        GameFonts.ApplyToHierarchy(rootObj.transform);
         string prefabPath = prefabDir + "/BattleUI.prefab";
         PrefabUtility.SaveAsPrefabAsset(rootObj, prefabPath);
 
@@ -478,8 +479,7 @@ public class BattlePrefabGenerator : EditorWindow
         txt.alignment = TextAnchor.MiddleCenter;
         txt.horizontalOverflow = HorizontalWrapMode.Overflow;
         txt.verticalOverflow = VerticalWrapMode.Overflow;
-        // 尝试使用默认字体
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        txt.font = GameFonts.GetChinese();
         return txt;
     }
 
@@ -503,7 +503,7 @@ public class BattlePrefabGenerator : EditorWindow
         txt.fontSize = 24;
         txt.color = Color.white;
         txt.alignment = TextAnchor.MiddleCenter;
-        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        txt.font = GameFonts.GetChinese();
 
         // 按钮过渡效果
         btn.targetGraphic = img;

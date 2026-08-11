@@ -64,6 +64,14 @@ public class SaveSystem : Singleton<SaveSystem>
             _data.legacyEquipPool ??= new System.Collections.Generic.List<EquipmentData>();
             _data.townLevel ??= new TownLevel();
             _data.permanentMercs ??= new System.Collections.Generic.List<MercenaryData>();
+            _data.mailInbox ??= new System.Collections.Generic.List<MailEntry>();
+            if (_data.stamina <= 0) _data.stamina = GameConfig.STAMINA_START;
+            if (_data.totalGold > ResourceWallet.DEFAULT_MAX) _data.totalGold = ResourceWallet.DEFAULT_MAX;
+            if (_data.diamond > ResourceWallet.DEFAULT_MAX) _data.diamond = (int)ResourceWallet.DEFAULT_MAX;
+            if (_data.stamina > GameConfig.STAMINA_MAX) _data.stamina = GameConfig.STAMINA_MAX;
+            if (_data.lastStaminaUtc <= 0)
+                _data.lastStaminaUtc = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            StaminaSystem.Tick(save: false);
 
             Debug.Log($"[SaveSystem] 存档加载成功，金币：{_data.totalGold}");
         }
@@ -124,8 +132,7 @@ public class SaveSystem : Singleton<SaveSystem>
     public long ClaimOfflineGold()
     {
         long gold = CalcOfflineGold();
-        _data.totalGold += gold;
-        Save();
+        ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: true, notify: gold > 0);
         return gold;
     }
 

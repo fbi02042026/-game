@@ -31,8 +31,7 @@ public static class UICanvasSetup
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
         scaler.referenceResolution = new Vector2(GameConfig.DESIGN_WIDTH, GameConfig.DESIGN_HEIGHT);
-        // Match Width：竖屏宽度铺满，禁止 Expand letterbox
-        scaler.matchWidthOrHeight = 0f;
+        scaler.matchWidthOrHeight = GameConfig.UI_MATCH;
 
         if (canvas.GetComponent<GraphicRaycaster>() == null)
             canvas.gameObject.AddComponent<GraphicRaycaster>();

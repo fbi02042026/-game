@@ -4,12 +4,18 @@ using System.Collections.Generic;
 [Serializable]
 public class SaveData
 {
-    // === 货币 ===
+    // === 货币 / 资源（统一上限见 ResourceWallet，体力有特殊上限）===
     public long totalGold = 0;
     public int talentPoints = 0;
     public int diamond = 0;
     public int enchantStones = 0;   // 附魔石
     public int decomposeMats = 0;   // 分解材料
+    /// <summary>体力（特殊上限 GameConfig.STAMINA_MAX）</summary>
+    public int stamina = 100;
+    /// <summary>体力上次结算 Unix 秒（用于回复）</summary>
+    public long lastStaminaUtc = 0;
+    /// <summary>邮件箱（资源溢出等）</summary>
+    public List<MailEntry> mailInbox = new List<MailEntry>();
 
     // === 天赋 ===
     public Dictionary<string, int> talents = new Dictionary<string, int>();

@@ -72,7 +72,7 @@ public class SkillRegistry : Singleton<SkillRegistry>
     /// <summary>精英/Boss 主动技：近战重击 / 远程魔法；Boss 两种都会用</summary>
     public string GetMonsterSkillId(MonsterConfig template, bool isEliteWave, bool isBossUnit, MonsterAttackStyle primaryStyle)
     {
-        bool ranged = primaryStyle == MonsterAttackStyle.Ranged;
+        bool ranged = MonsterAttackStyleTable.IsRanged(primaryStyle);
         if (isBossUnit || (template != null && template.isBoss))
         {
             // Boss 两种技能轮换偏好：表内主风格决定首发

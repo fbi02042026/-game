@@ -1,9 +1,11 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// 场景管理器：跨场景单例，挂在PersistentRoot上
-/// 负责 Boot → Town → Battle 的场景切换
-/// 注意：项目中存在自定义SceneManager类，必须使用完全限定名避免冲突
+/// 场景流程（三场景）：
+/// · Boot — 持久化系统、进 Town
+/// · Town — 公会/酒馆/角色/日志等全部在此，切页不 LoadScene
+/// · Battle — 仅战斗；异步加载 + Loading 遮罩
 /// </summary>
 public class GameSceneManager : Singleton<GameSceneManager>
 {
@@ -11,41 +13,94 @@ public class GameSceneManager : Singleton<GameSceneManager>
     public const string TOWN_SCENE = "Town";
     public const string BATTLE_SCENE = "Battle";
 
+    bool _loadingBattle;
+    bool _loadingTown;
+
     protected override void Awake()
     {
         base.Awake();
-        // Singleton基类会自动 DontDestroyOnLoad
     }
 
-    /// <summary>
-    /// 加载城镇场景（主菜单）
-    /// </summary>
-    public void LoadTownScene()
-    {
-        UnityEngine.SceneManagement.SceneManager.LoadScene(TOWN_SCENE);
-    }
+    public void LoadTownScene() => LoadTownSceneAsync();
 
-    /// <summary>
-    /// 加载战斗场景
-    /// </summary>
-    public void LoadBattleScene()
-    {
-        UnityEngine.SceneManagement.SceneManager.LoadScene(BATTLE_SCENE);
-    }
+    public void GoMainHub() => LoadTownSceneAsync();
 
-    /// <summary>
-    /// 重新加载当前场景
-    /// </summary>
-    public void ReloadCurrentScene()
-    {
-        UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
-    }
-
-    /// <summary>
-    /// 返回城镇（战斗结束/死亡后调用）
-    /// </summary>
+    /// <summary>Battle → Town，异步避免主线程假死</summary>
     public void ReturnToTown()
     {
-        LoadTownScene();
+        LoadTownSceneAsync();
+    }
+
+    void LoadTownSceneAsync()
+    {
+        if (_loadingTown) return;
+        _loadingBattle = false;
+        if (!isActiveAndEnabled)
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene(TOWN_SCENE);
+            return;
+        }
+        StartCoroutine(LoadTownAsync());
+    }
+
+    IEnumerator LoadTownAsync()
+    {
+        _loadingTown = true;
+        var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+        if (scene.name != TOWN_SCENE)
+            BattleLoadingOverlay.Show("返回城镇…");
+
+        yield return null;
+        var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(TOWN_SCENE);
+        if (op == null)
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene(TOWN_SCENE);
+            _loadingTown = false;
+            BattleLoadingOverlay.Hide();
+            yield break;
+        }
+        while (!op.isDone)
+            yield return null;
+        _loadingTown = false;
+        BattleLoadingOverlay.Hide();
+    }
+
+    /// <summary>仅 Town → Battle 切场景；Town 内底栏切页不走这里</summary>
+    public void LoadBattleScene()
+    {
+        if (_loadingBattle) return;
+        if (!isActiveAndEnabled)
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene(BATTLE_SCENE);
+            return;
+        }
+        StartCoroutine(LoadBattleAsync());
+    }
+
+    System.Collections.IEnumerator LoadBattleAsync()
+    {
+        _loadingBattle = true;
+        BattleLoadingOverlay.Show("进入冒险…");
+        yield return null;
+
+        var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(BATTLE_SCENE);
+        if (op == null)
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene(BATTLE_SCENE);
+            _loadingBattle = false;
+            yield break;
+        }
+        while (!op.isDone)
+            yield return null;
+        _loadingBattle = false;
+        BattleLoadingOverlay.Hide();
+    }
+
+    public void EnterAdventure() => LoadBattleScene();
+
+    public void ReloadCurrentScene()
+    {
+        UnityEngine.SceneManagement.SceneManager.LoadScene(
+            UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
     }
 }

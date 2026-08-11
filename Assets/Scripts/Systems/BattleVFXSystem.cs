@@ -25,9 +25,10 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
     [Header("设置")]
     public float defaultDuration = 2f;
-    public float defaultScale = 0.25f;
-    /// <summary>Resources/VFX/Shared 用户预制体缩放（世界空间）</summary>
-    public float sharedKitScale = 1.225f; // 再缩小约30%
+    /// <summary>已废弃：特效一律用预制体自身缩放，请直接改 prefab</summary>
+    public float defaultScale = 1f;
+    /// <summary>已废弃：特效一律用预制体自身缩放</summary>
+    public float sharedKitScale = 1f;
 
     [Header("阵营染色（暂无独立敌方资源时靠颜色区分谁放的）")]
     public Color allyTint = new Color(1f, 0.95f, 0.75f, 1f);
@@ -35,11 +36,12 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
     [Header("法球/弓箭飞行")]
     public float projectileSpeed = 12f;
-    public float projectileArc = 0.5f;
-    public float bowArc = 0.15f;
-    public float impactScale = 0.25f;
-    public float minFlightTime = 0.08f;
+    /// <summary>飞行贴图默认朝向修正：贴图尖端朝右=0，朝左=180，朝上=-90</summary>
+    public float projectileAngleOffset = 0f;
+    public float minFlightTime = 0.02f;
     public float maxFlightTime = 1.2f;
+    /// <summary>弓箭发射点相对 GetFirePosition 再往下偏（世界单位）</summary>
+    public float bowFireYOffset = -0.15f;
 
     private Dictionary<string, Queue<GameObject>> _pool = new Dictionary<string, Queue<GameObject>>();
     private readonly Dictionary<string, GameObject> _sharedKitCache = new Dictionary<string, GameObject>();
@@ -72,21 +74,23 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
                 {
                     GameObject fly = LoadSharedKit(kit, faction, "fly");
                     GameObject hit = LoadSharedKit(kit, faction, "hit");
-                    if (fly == null || hit == null)
+                    if (fly == null && hit == null)
                     {
-                        Debug.LogWarning($"[VFX] 缺少共享特效: {faction}/{kit} fly={fly != null} hit={hit != null}");
+                        Debug.LogWarning($"[VFX] 缺少共享特效: {faction}/{kit}");
                         return;
                     }
-                    PlayBowProjectile(fromPos, toPos, facingDir, hitTarget, faction, fly, hit);
+                    Vector3 bowFrom = fromPos;
+                    bowFrom.y += bowFireYOffset;
+                    PlayBowProjectile(bowFrom, toPos, facingDir, hitTarget, faction, fly, hit);
                 }
                 break;
             case AttackVfxKit.Orb:
                 {
                     GameObject fly = LoadSharedKit(kit, faction, "fly");
                     GameObject hit = LoadSharedKit(kit, faction, "hit");
-                    if (fly == null || hit == null)
+                    if (fly == null && hit == null)
                     {
-                        Debug.LogWarning($"[VFX] 缺少共享特效: {faction}/{kit} fly={fly != null} hit={hit != null}");
+                        Debug.LogWarning($"[VFX] 缺少共享特效: {faction}/{kit}");
                         return;
                     }
                     PlayOrbProjectile(fromPos, toPos, facingDir, hitTarget, faction, fly, hit);
@@ -127,10 +131,9 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
             Debug.LogWarning("[VFX] vfxSlash 未赋值");
             return;
         }
-        // 刀光打在受击点世界坐标，不挂到攻击者/受击者身上
+        // 刀光打在受击点世界坐标，不挂到攻击者/受击者身上；大小跟预制体
         GameObject go = SpawnVFX(prefab, position, defaultDuration, null);
-        float scaleMul = prefabOverride != null ? sharedKitScale : defaultScale;
-        ApplyVfxScaleAndFacing(go, scaleMul, facingDir);
+        ApplyVfxFacing(go, facingDir);
         ApplyFactionLook(go, faction);
     }
 
@@ -147,7 +150,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         GameObject fly = flyOverride != null ? flyOverride : (vfxFireball != null ? vfxFireball : vfxMagicImpact);
         GameObject impact = impactOverride != null ? impactOverride : (vfxMagicImpact != null ? vfxMagicImpact : vfxFireImpact);
         if (fly == null) return;
-        StartCoroutine(ProjectileFlightCoroutine(fly, impact, fromPos, toPos, facingDir, target, faction, projectileArc));
+        StartCoroutine(ProjectileFlightCoroutine(fly, impact, fromPos, toPos, facingDir, target, faction));
     }
 
     public void PlayBowProjectile(Vector3 fromPos, Vector3 toPos, int facingDir = 1,
@@ -157,7 +160,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         GameObject fly = flyOverride != null ? flyOverride : (vfxFireball != null ? vfxFireball : vfxMagicImpact);
         GameObject impact = impactOverride != null ? impactOverride : (vfxSlash != null ? vfxSlash : vfxMagicImpact);
         if (fly == null) return;
-        StartCoroutine(ProjectileFlightCoroutine(fly, impact, fromPos, toPos, facingDir, target, faction, bowArc));
+        StartCoroutine(ProjectileFlightCoroutine(fly, impact, fromPos, toPos, facingDir, target, faction));
     }
 
     public void PlayProjectile(Vector3 fromPos, Vector3 toPos, int facingDir = 1, Transform target = null)
@@ -166,49 +169,58 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     }
 
     IEnumerator ProjectileFlightCoroutine(GameObject projectilePrefab, GameObject impactPrefab,
-        Vector3 fromPos, Vector3 toPos, int facingDir, Transform target, VfxFaction faction, float arcHeight)
+        Vector3 fromPos, Vector3 toPos, int facingDir, Transform target, VfxFaction faction)
     {
-        float distance = Mathf.Max(0.15f, (toPos - fromPos).magnitude);
-        float flightTime = Mathf.Clamp(distance / Mathf.Max(0.1f, projectileSpeed), minFlightTime, maxFlightTime);
+        // 起飞时锁定终点，全程水平直线；匀速飞行（不再用 minTime 拉长近距，否则近处会变慢）
+        Vector3 end = toPos;
+        end.y = fromPos.y;
+        Vector3 flightDir = end - fromPos;
+        float distance = flightDir.magnitude;
+        if (distance < 0.05f) distance = 0.05f;
+        Vector3 dirN = flightDir.sqrMagnitude > 1e-8f ? flightDir.normalized : Vector3.right * (facingDir >= 0 ? 1f : -1f);
+        float speed = Mathf.Max(0.1f, projectileSpeed);
 
-        GameObject projectile = Instantiate(projectilePrefab, fromPos, projectilePrefab.transform.rotation);
+        GameObject projectile = Instantiate(projectilePrefab, fromPos, Quaternion.identity);
         projectile.transform.SetParent(transform);
-        float scaleMul = projectilePrefab.name.StartsWith("vfx_") ? sharedKitScale : defaultScale;
-        ApplyVfxScaleAndFacing(projectile, scaleMul, facingDir);
+        projectile.transform.localScale = projectilePrefab.transform.localScale;
+
+        ApplyVfxFacing(projectile, 1);
         ApplyFactionLook(projectile, faction);
         SetVFXSortingLayer(projectile.transform);
         PlayAllParticles(projectile);
 
         var sr = projectile.GetComponentInChildren<SpriteRenderer>();
-        if (sr != null) sr.flipX = facingDir < 0;
+        if (sr != null) sr.flipX = false;
 
-        float elapsed = 0f;
-        while (elapsed < flightTime)
+        AlignProjectileToward(projectile.transform, dirN);
+
+        float traveled = 0f;
+        while (traveled < distance)
         {
-            elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / flightTime);
-            Vector3 pos = Vector3.Lerp(fromPos, toPos, t);
-            pos.y += Mathf.Sin(t * Mathf.PI) * arcHeight;
-            projectile.transform.position = pos;
-
-            if (t < 1f)
-            {
-                Vector3 nextPos = Vector3.Lerp(fromPos, toPos, Mathf.Clamp01(t + 0.05f));
-                nextPos.y += Mathf.Sin((t + 0.05f) * Mathf.PI) * arcHeight;
-                Vector3 dir = (nextPos - pos).normalized;
-                if (dir.sqrMagnitude > 0.0001f)
-                    projectile.transform.right = dir * (facingDir >= 0 ? 1f : -1f);
-            }
+            float step = speed * Time.deltaTime;
+            traveled += step;
+            float t = Mathf.Clamp01(traveled / distance);
+            projectile.transform.position = Vector3.Lerp(fromPos, end, t);
             yield return null;
         }
 
+        projectile.transform.position = end;
         Destroy(projectile);
 
         if (impactPrefab == null) yield break;
-        GameObject impact = SpawnVFX(impactPrefab, toPos, defaultDuration, null);
+        Vector3 impactPos = toPos;
+        if (target != null) impactPos = target.position;
+        GameObject impact = SpawnVFX(impactPrefab, impactPos, defaultDuration, null);
         ApplyFactionLook(impact, faction);
-        float impactMul = impactPrefab.name.StartsWith("vfx_") ? sharedKitScale : impactScale;
-        ApplyVfxScaleAndFacing(impact, impactMul, facingDir);
+        ApplyVfxFacing(impact, facingDir);
+    }
+
+    /// <summary>让飞行物尖端冲向飞行方向（贴图默认朝向用 projectileAngleOffset 校正）</summary>
+    void AlignProjectileToward(Transform t, Vector3 dir)
+    {
+        if (t == null || dir.sqrMagnitude < 1e-8f) return;
+        float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg + projectileAngleOffset;
+        t.rotation = Quaternion.Euler(0f, 0f, angle);
     }
 
     #endregion
@@ -237,10 +249,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     {
         if (vfxFireball == null) return;
         GameObject go = SpawnVFX(vfxFireball, position, 3f);
-        go.transform.localScale = new Vector3(
-            go.transform.localScale.x * facingDir * defaultScale,
-            go.transform.localScale.y * defaultScale,
-            go.transform.localScale.z);
+        ApplyVfxFacing(go, facingDir);
         ApplyFactionLook(go, faction);
     }
 
@@ -342,12 +351,14 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     GameObject SpawnVFX(GameObject prefab, Vector3 position, float lifetime, Transform parentTarget = null)
     {
         if (prefab == null) return null;
-        // 保留预制体旋转（粒子常用特殊朝向），只改世界坐标
+        // 保留预制体旋转与缩放，只改世界坐标
         GameObject go = Instantiate(prefab, position, prefab.transform.rotation);
+        Vector3 prefabScale = prefab.transform.localScale;
         if (parentTarget != null)
             go.transform.SetParent(parentTarget, true);
         else
-            go.transform.SetParent(transform);
+            go.transform.SetParent(transform, true);
+        go.transform.localScale = prefabScale;
 
         SetVFXSortingLayer(go.transform);
         PlayAllParticles(go);
@@ -366,12 +377,10 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         }
     }
 
-    /// <summary>统一应用世界缩放；朝向用旋转，禁止负 scale（会弄坏粒子）</summary>
-    static void ApplyVfxScaleAndFacing(GameObject go, float scaleMul, int facingDir)
+    /// <summary>只改朝向，不改缩放——大小一律跟预制体</summary>
+    static void ApplyVfxFacing(GameObject go, int facingDir)
     {
         if (go == null) return;
-        float s = Mathf.Abs(scaleMul);
-        go.transform.localScale = Vector3.one * s;
         if (facingDir < 0)
             go.transform.Rotate(0f, 180f, 0f, Space.Self);
     }
@@ -415,8 +424,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         GameObject allyHeal = LoadSharedKit(AttackVfxKit.Heal, VfxFaction.Ally, "hit");
         // 敌方套装：开战前各加载一次进缓存，避免战斗中首次命中同步 Load
         LoadSharedKit(AttackVfxKit.MeleeSlash, VfxFaction.Enemy, "hit");
-        LoadSharedKit(AttackVfxKit.Bow, VfxFaction.Enemy, "fly");
-        LoadSharedKit(AttackVfxKit.Bow, VfxFaction.Enemy, "hit");
+        GameObject enemyBowFly = LoadSharedKit(AttackVfxKit.Bow, VfxFaction.Enemy, "fly");
+        GameObject enemyBowHit = LoadSharedKit(AttackVfxKit.Bow, VfxFaction.Enemy, "hit");
         LoadSharedKit(AttackVfxKit.Orb, VfxFaction.Enemy, "fly");
         LoadSharedKit(AttackVfxKit.Orb, VfxFaction.Enemy, "hit");
 
@@ -435,7 +444,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         vfxExplosionSmall = null;
         vfxExplosionBig = null;
 
-        GamePerf.Log($"[BattleVFXSystem] VFX就绪 melee={vfxSlash != null} bowFly={allyBowFly != null} bowHit={allyBowHit != null} orb={vfxFireball != null} heal={vfxHeal != null}");
+        GamePerf.Log($"[BattleVFXSystem] VFX就绪 allyBow={allyBowFly != null}/{allyBowHit != null} enemyBow={enemyBowFly != null}/{enemyBowHit != null} orb={vfxFireball != null}");
     }
 
     /// <summary>加载共用普攻套：Resources/VFX/Shared/{Ally|Enemy}/{Kit}/vfx_*</summary>
@@ -453,30 +462,18 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         GameObject prefab = null;
         for (int i = 0; i < fileNames.Length; i++)
         {
-            prefab = Resources.Load<GameObject>($"VFX/Shared/{factionFolder}/{kitFolder}/{fileNames[i]}");
-            if (prefab != null) break;
-        }
-
-        // 敌方缺失时回退我方 + 染色
-        if (prefab == null && faction == VfxFaction.Enemy)
-        {
-            for (int i = 0; i < fileNames.Length; i++)
+            string path = $"VFX/Shared/{factionFolder}/{kitFolder}/{fileNames[i]}";
+            prefab = Resources.Load<GameObject>(path);
+            if (prefab != null)
             {
-                prefab = Resources.Load<GameObject>($"VFX/Shared/Ally/{kitFolder}/{fileNames[i]}");
-                if (prefab != null)
-                {
-                    Debug.LogWarning($"[VFX] 敌方缺失，回退到我方特效: VFX/Shared/Ally/{kitFolder}/{fileNames[i]}");
-                    break;
-                }
+                _sharedKitCache[cacheKey] = prefab;
+                return prefab;
             }
         }
 
-        if (prefab == null)
-            Debug.LogWarning($"[VFX] 加载失败: faction={factionFolder}, kit={kitFolder}, stage={stage}");
-
-        if (prefab != null)
-            _sharedKitCache[cacheKey] = prefab;
-        return prefab;
+        // 敌方缺失：不再静默回退我方，避免「敌方也在用我方箭」
+        Debug.LogWarning($"[VFX] 加载失败: {factionFolder}/{kitFolder}/{stage}（请把预制体放到 Resources/VFX/Shared/{factionFolder}/{kitFolder}/）");
+        return null;
     }
 
     static string GetKitFolderName(AttackVfxKit kit)

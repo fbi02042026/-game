@@ -2,9 +2,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Town场景管理器：城镇主菜单
-/// 自动创建Camera、Canvas、标题、按钮
-/// 挂在Town场景唯一的空GameObject上
+/// Town 场景：加载主界面 GuildHallUI。
+/// 流程入口之一：Boot → Town(主界面) → 冒险 → Battle。
 /// </summary>
 public class TownSceneManager : MonoBehaviour
 {

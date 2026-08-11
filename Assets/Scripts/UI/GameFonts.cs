@@ -82,7 +82,9 @@ public static class GameFonts
         {
             Text t = texts[i];
             if (t == null) continue;
-            t.font = IsNumberText(t) ? num : cn;
+            // 含中文的控件一律 fusion-pixel（即使名字像数值控件）
+            bool useNum = IsNumberText(t) && !HasCjk(t.text);
+            t.font = useNum ? num : cn;
         }
     }
 
@@ -91,13 +93,17 @@ public static class GameFonts
         string n = t.gameObject.name ?? "";
         // 常见数值控件名
         if (ContainsIgnoreCase(n, "Gold")) return true;
+        if (ContainsIgnoreCase(n, "Stamina") || n.Contains("体力")) return true;
+        if (ContainsIgnoreCase(n, "Regen")) return true;
         if (ContainsIgnoreCase(n, "HP") || ContainsIgnoreCase(n, "Hp")) return true;
         if (ContainsIgnoreCase(n, "Lan") || ContainsIgnoreCase(n, "Mana")) return true;
+        if (ContainsIgnoreCase(n, "Energy")) return true;
         if (ContainsIgnoreCase(n, "Cooldown")) return true;
         if (ContainsIgnoreCase(n, "Level") || ContainsIgnoreCase(n, "Lv")) return true;
         if (ContainsIgnoreCase(n, "Damage") || ContainsIgnoreCase(n, "Dmg")) return true;
         if (ContainsIgnoreCase(n, "Count") || ContainsIgnoreCase(n, "Timer")) return true;
         if (ContainsIgnoreCase(n, "Countdown")) return true;
+        if (ContainsIgnoreCase(n, "WaveTimer") || ContainsIgnoreCase(n, "ComboValue")) return true;
         if (ContainsIgnoreCase(n, "Progress") && !ContainsIgnoreCase(n, "Bar")) return true;
         if (ContainsIgnoreCase(n, "Talent") && ContainsIgnoreCase(n, "Text")) return true;
         if (ContainsIgnoreCase(n, "Enchant") && ContainsIgnoreCase(n, "Text")) return true;
@@ -126,5 +132,17 @@ public static class GameFonts
     static bool ContainsIgnoreCase(string hay, string needle)
     {
         return hay.IndexOf(needle, System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    static bool HasCjk(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return false;
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c >= 0x4E00 && c <= 0x9FFF) return true;
+            if (c >= 0x3400 && c <= 0x4DBF) return true;
+        }
+        return false;
     }
 }

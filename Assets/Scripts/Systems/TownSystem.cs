@@ -125,7 +125,8 @@ public class TownSystem : Singleton<TownSystem>
             return false;
         }
 
-        data.totalGold -= cost;
+        if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, cost, save: false, notify: true))
+            return false;
         info.level = nextLevel;
 
         // 同步到存档
