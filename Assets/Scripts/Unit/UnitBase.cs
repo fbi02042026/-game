@@ -242,8 +242,7 @@ public abstract class UnitBase : MonoBehaviour
                 if (attackCd <= 0)
                 {
                     Attack(target);
-                    float atkSpd = Mathf.Max(0.05f, attr.GetAttr(AttrType.AttackSpeed));
-                    attackCd = 1f / atkSpd;
+                    attackCd = GetAttackCooldown();
                 }
             }
             else
@@ -435,6 +434,16 @@ public abstract class UnitBase : MonoBehaviour
         WeaponAttackType atkType = GetAttackType();
         float range = attr != null ? attr.GetAttr(AttrType.AttackRange) : 1.5f;
         return SkillNaming.KitFromAttackType(atkType, range);
+    }
+
+    /// <summary>攻击间隔；弓/法球额外乘 PROJECTILE_ATK_SPEED_MUL（降发射频率）</summary>
+    protected float GetAttackCooldown()
+    {
+        float atkSpd = Mathf.Max(0.05f, attr.GetAttr(AttrType.AttackSpeed));
+        AttackVfxKit kit = GetAttackVfxKit();
+        if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
+            atkSpd *= GameConfig.PROJECTILE_ATK_SPEED_MUL;
+        return 1f / Mathf.Max(0.05f, atkSpd);
     }
 
     /// <summary>

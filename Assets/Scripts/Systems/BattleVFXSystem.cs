@@ -35,13 +35,13 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     public Color enemyTint = new Color(1f, 0.45f, 0.45f, 1f);
 
     [Header("法球/弓箭飞行")]
-    public float projectileSpeed = 12f;
+    public float projectileSpeed = 24f;
     /// <summary>飞行贴图默认朝向修正：贴图尖端朝右=0，朝左=180，朝上=-90</summary>
     public float projectileAngleOffset = 0f;
     public float minFlightTime = 0.02f;
     public float maxFlightTime = 1.2f;
-    /// <summary>弓箭发射点相对 GetFirePosition 再往下偏（世界单位）</summary>
-    public float bowFireYOffset = -0.15f;
+    /// <summary>弓箭发射点相对 GetFirePosition 再往下偏（世界单位）；越大越靠上</summary>
+    public float bowFireYOffset = -0.03f;
 
     private Dictionary<string, Queue<GameObject>> _pool = new Dictionary<string, Queue<GameObject>>();
     private readonly Dictionary<string, GameObject> _sharedKitCache = new Dictionary<string, GameObject>();

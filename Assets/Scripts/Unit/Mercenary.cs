@@ -177,8 +177,7 @@ public class Mercenary : UnitBase
                 if (attackCd <= 0)
                 {
                     Attack(target);
-                    float atkSpd = Mathf.Max(0.05f, attr.GetAttr(AttrType.AttackSpeed));
-                    attackCd = 1f / atkSpd;
+                    attackCd = GetAttackCooldown();
                 }
             }
             else

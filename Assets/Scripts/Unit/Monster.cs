@@ -519,8 +519,7 @@ public class Monster : UnitBase
         if (_canUseActiveSkill && _skillEnergy >= 0.99f && !string.IsNullOrEmpty(_skillId))
         {
             UseActiveSkill(target);
-            float atkSpd = Mathf.Max(0.05f, attr.GetAttr(AttrType.AttackSpeed));
-            attackCd = 1f / atkSpd;
+            attackCd = GetAttackCooldown();
             return;
         }
 

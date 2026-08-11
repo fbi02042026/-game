@@ -59,8 +59,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
             BattleLoadingOverlay.Hide();
             yield break;
         }
-        while (!op.isDone)
-            yield return null;
+        yield return CoTrackLoadProgress(op);
         _loadingTown = false;
         BattleLoadingOverlay.Hide();
     }
@@ -88,12 +87,26 @@ public class GameSceneManager : Singleton<GameSceneManager>
         {
             UnityEngine.SceneManagement.SceneManager.LoadScene(BATTLE_SCENE);
             _loadingBattle = false;
+            BattleLoadingOverlay.Hide();
             yield break;
         }
-        while (!op.isDone)
-            yield return null;
+        yield return CoTrackLoadProgress(op);
         _loadingBattle = false;
         BattleLoadingOverlay.Hide();
+    }
+
+    /// <summary>Unity AsyncOperation 进度常卡在 0.9，映射到 0~100% 显示</summary>
+    static IEnumerator CoTrackLoadProgress(AsyncOperation op)
+    {
+        if (op == null) yield break;
+        while (!op.isDone)
+        {
+            float p = Mathf.Clamp01(op.progress / 0.9f);
+            BattleLoadingOverlay.SetProgress(p);
+            yield return null;
+        }
+        BattleLoadingOverlay.SetProgress(1f);
+        yield return null;
     }
 
     public void EnterAdventure() => LoadBattleScene();

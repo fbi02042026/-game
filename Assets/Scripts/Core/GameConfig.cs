@@ -297,6 +297,8 @@ public static class GameConfig
     /// 前期先压低；以后难度高了往 1 调（甚至 &gt;1）。
     /// </summary>
     public const float MONSTER_ATK_SPEED_MUL = 0.65f;
+    /// <summary>弓/法球等子弹单位攻速倍率（1=不变；0.5=发射频率降 50%）</summary>
+    public const float PROJECTILE_ATK_SPEED_MUL = 0.5f;
     /// <summary>章节系数：0.15×(n-1)</summary>
     public const float CHAPTER_SCALE_PER = 0.15f;
     /// <summary>公会等级系数：0.02×公会等级</summary>
