@@ -19,7 +19,7 @@ public class SkillConfig : ScriptableObject
     public float cooldown = 0.1f;
     public float aoeRadius = 4f;
     public int projectileCount = 1;
-    public float projectileSpeed = 24f;
+    public float projectileSpeed = 48f;
 
     [Header("增益类（Buff/治疗）")]
     public AttrType buffAttr = AttrType.Attack;

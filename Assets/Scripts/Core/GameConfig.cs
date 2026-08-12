@@ -329,6 +329,34 @@ public static class GameConfig
     /// <summary>回复 1 点体力所需秒数</summary>
     public const int STAMINA_REGEN_SECONDS = StaminaSystem.REGEN_SECONDS_PER_POINT;
 
+    [Header("难度 / 金币副本")]
+    /// <summary>通关满 N 章后开启困难</summary>
+    public const int DIFF_HARD_NEED_CLEARS = 3;
+    /// <summary>通关满 N 章后开启噩梦</summary>
+    public const int DIFF_NIGHTMARE_NEED_CLEARS = 6;
+    /// <summary>金币副本通关固定金：基数 × 章节 × 难度倍率</summary>
+    public const int GOLD_DUNGEON_CLEAR_BASE = 300;
+
+    public static float GetDifficultyStatScale(int diff)
+    {
+        if (diff >= 2) return 1.8f;
+        if (diff == 1) return 1.35f;
+        return 1f;
+    }
+
+    public static float GetDifficultyGoldMul(int diff)
+    {
+        if (diff >= 2) return 3f;
+        if (diff == 1) return 1.8f;
+        return 1f;
+    }
+
+    public static int GetGoldDungeonClearGold(int chapter, int diff)
+    {
+        int ch = Mathf.Clamp(chapter, 1, 8);
+        return Mathf.RoundToInt(GOLD_DUNGEON_CLEAR_BASE * ch * GetDifficultyGoldMul(diff));
+    }
+
     [Header("怪物章节文件夹映射")]
     /// <summary>
     /// 章节对应的怪物文件夹名（在 Icons/default size/no shadow/ 下）
@@ -577,4 +605,12 @@ public enum StageType
     Curse, // 诅咒关：三选一buff，每个buff带一个debuff，高风险高收益
     Rest, // 休息关：回血/分解装备得材料
     Boss // BOSS关：每章最后一关，必掉紫/橙装，解锁下一章
+}
+
+/// <summary>通关宝箱品质：木/银/金</summary>
+public enum ClearBoxTier
+{
+    Mu = 0,
+    Yin = 1,
+    Jin = 2
 }

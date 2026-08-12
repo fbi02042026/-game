@@ -1,0 +1,390 @@
+%YAML 1.1
+%TAG !u! tag:yousandi.cn,2023:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: logo01
+  m_Shader: {fileID: 4800000, guid: b082b459c739dbf4180248e7eba83c1b, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _SHADERSPACE_UV
+  - _TIMESETTINGS_LINEAR_DEFAULT
+  m_InvalidKeywords:
+  - _CAMOUFLAGEANIMATED_ON
+  - _OUTEROUTLINEDISTORTIONTOGGLE_ON
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _AddHueShaderMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _AlphaTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BaseMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BumpMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BurnNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _CamouflageNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _CamouflageShaderMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailAlbedoMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _DetailNormalMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _EmissionMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _FrozenNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GlitchDistortionTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GlitchMaskNoise:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GlitchNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _HologramNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _InkSpreadNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _InnerOutlineNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MainTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MetalNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MetalShaderMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MetallicGlossMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OcclusionMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _OuterOutlineNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ParallaxMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _PoisonNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RainbowMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _RainbowNoiseTexture:
+        m_Texture: {fileID: 2800000, guid: cd21d0de17dcd734691f79979be13330, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ShiftHueShaderMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _ShineShaderMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SineGlowShaderMask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SpecGlossMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _texcoord:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_Lightmaps:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_LightmapsInd:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - unity_ShadowMasks:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - PixelSnap: 0
+    - _AddHueBrightness: 1
+    - _AddHueContrast: 1
+    - _AddHueFade: 1
+    - _AddHueSaturation: 1
+    - _AddHueSpeed: 1
+    - _AlphaClip: 0
+    - _AlphaToMask: 0
+    - _Blend: 0
+    - _BlendModePreserveSpecular: 1
+    - _Brightness: 1
+    - _BumpScale: 1
+    - _BurnEdgeNoiseFactor: 0.5
+    - _BurnFade: 1
+    - _BurnInsideContrast: 2
+    - _BurnInsideNoiseFactor: 0.05
+    - _BurnRadius: 5
+    - _BurnSwirlFactor: 1
+    - _BurnWidth: 0.1
+    - _CamouflageAnimated: 1
+    - _CamouflageContrast: 1
+    - _CamouflageDensityA: 0.4
+    - _CamouflageDensityB: 0.4
+    - _CamouflageFade: 1
+    - _CamouflageSmoothnessA: 0.2
+    - _CamouflageSmoothnessB: 0.2
+    - _ClearCoatMask: 0
+    - _ClearCoatSmoothness: 0
+    - _Contrast: 1
+    - _Cull: 2
+    - _Cutoff: 0.5
+    - _DetailAlbedoMapScale: 1
+    - _DetailNormalMapScale: 1
+    - _DstBlend: 0
+    - _DstBlendAlpha: 0
+    - _EnvironmentReflections: 1
+    - _FrozenContrast: 2
+    - _FrozenFade: 1
+    - _FrozenHighlightContrast: 2
+    - _FrozenHighlightDensity: 1
+    - _FrozenSnowContrast: 1
+    - _FrozenSnowDensity: 0.25
+    - _GlitchBrightness: 4
+    - _GlitchFade: 1
+    - _GlitchHueSpeed: 1
+    - _GlitchMaskMin: 0.4
+    - _GlossMapScale: 0
+    - _Glossiness: 0
+    - _GlossyReflections: 0
+    - _HologramContrast: 1
+    - _HologramDistortionDensity: 0.5
+    - _HologramDistortionOffset: 0.5
+    - _HologramDistortionScale: 10
+    - _HologramDistortionSpeed: 2
+    - _HologramFade: 1
+    - _HologramLineFrequency: 500
+    - _HologramLineGap: 3
+    - _HologramLineSpeed: 0.01
+    - _HologramMinAlpha: 0.2
+    - _Hue: 1
+    - _InkSpreadContrast: 3
+    - _InkSpreadDistance: 3
+    - _InkSpreadFade: 1
+    - _InkSpreadNoiseFactor: 0.5
+    - _InkSpreadWidth: 0.2
+    - _InnerOutlineDistortionToggle: 0
+    - _InnerOutlineFade: 0.06
+    - _InnerOutlineWidth: 0.09
+    - _MetalContrast: 2
+    - _MetalFade: 1
+    - _MetalHighlightContrast: 2
+    - _MetalHighlightDensity: 1
+    - _Metallic: 0
+    - _OcclusionStrength: 1
+    - _OuterOutlineDistortionToggle: 1
+    - _OuterOutlineFade: 1
+    - _OuterOutlineWidth: 0.04
+    - _Parallax: 0.005
+    - _PixelsPerUnit: 100
+    - _PoisonDensity: 5
+    - _PoisonFade: 0.5
+    - _PoisonNoiseBrightness: 1
+    - _PoisonRecolorFactor: 0.5
+    - _PoisonShiftSpeed: 0.2
+    - _QueueOffset: 0
+    - _RainbowBrightness: 2
+    - _RainbowContrast: 1
+    - _RainbowDensity: 0.5
+    - _RainbowFade: 1
+    - _RainbowNoiseFactor: 0.2
+    - _RainbowSaturation: 1
+    - _RainbowSpeed: 1
+    - _ReceiveShadows: 1
+    - _RectHeight: 100
+    - _RectWidth: 100
+    - _Saturation: 1
+    - _ScreenWidthUnits: 10
+    - _ShaderSpace: 0
+    - _ShiftHueFade: 1
+    - _ShiftHueSpeed: 0.5
+    - _ShineContrast: 2
+    - _ShineFade: 1
+    - _ShineRotation: 0
+    - _ShineSaturation: 0.5
+    - _ShineScale: 0.05
+    - _ShineSmoothness: 1
+    - _ShineSpeed: 0.1
+    - _ShineWidth: 0.1
+    - _SineGlowContrast: 1
+    - _SineGlowFade: 1
+    - _SineGlowFrequency: 4
+    - _SineGlowMax: 1
+    - _SineGlowMin: 0
+    - _SineMoveFade: 1
+    - _Smoothness: 0.5
+    - _SmoothnessTextureChannel: 0
+    - _SpecularHighlights: 1
+    - _SplitToningBalance: 1
+    - _SplitToningContrast: 1
+    - _SplitToningFade: 1
+    - _SplitToningShift: 0
+    - _SrcBlend: 1
+    - _SrcBlendAlpha: 1
+    - _StrongTintContrast: 0
+    - _StrongTintFade: 1
+    - _Surface: 0
+    - _TimeFPS: 5
+    - _TimeFrequency: 2
+    - _TimeRange: 0.5
+    - _TimeScale: 1
+    - _TimeSettings: 0
+    - _TimeValue: 0
+    - _WorkflowMode: 1
+    - _ZWrite: 1
+    m_Colors:
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _BurnEdgeColor: {r: 11.98431, g: 1.129412, b: 0.1254902, a: 0}
+    - _BurnEdgeNoiseScale: {r: 0.3, g: 0.3, b: 0, a: 0}
+    - _BurnInsideColor: {r: 0.75, g: 0.5625, b: 0.525, a: 0}
+    - _BurnInsideNoiseColor: {r: 3084.047, g: 257.0039, b: 0, a: 0}
+    - _BurnInsideNoiseScale: {r: 0.5, g: 0.5, b: 0, a: 0}
+    - _BurnPosition: {r: 0, g: 5, b: 0, a: 0}
+    - _BurnSwirlNoiseScale: {r: 0.1, g: 0.1, b: 0, a: 0}
+    - _CamouflageAnimationSpeed: {r: 0.1, g: 0.1, b: 0, a: 0}
+    - _CamouflageBaseColor: {r: 0.7450981, g: 0.7254902, b: 0.5686275, a: 0}
+    - _CamouflageColorA: {r: 0.627451, g: 0.5882353, b: 0.4313726, a: 0}
+    - _CamouflageColorB: {r: 0.4705882, g: 0.4313726, b: 0.3137255, a: 0}
+    - _CamouflageDistortionIntensity: {r: 0.1, g: 0.1, b: 0, a: 0}
+    - _CamouflageDistortionScale: {r: 0.5, g: 0.5, b: 0, a: 0}
+    - _CamouflageNoiseScaleA: {r: 0.25, g: 0.25, b: 0, a: 0}
+    - _CamouflageNoiseScaleB: {r: 0.25, g: 0.25, b: 0, a: 0}
+    - _Color: {r: 1, g: 1, b: 1, a: 1}
+    - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _FrozenHighlightColor: {r: 1.797647, g: 4.604501, b: 5.992157, a: 1}
+    - _FrozenHighlightDistortion: {r: 0.5, g: 0.5, b: 0, a: 0}
+    - _FrozenHighlightDistortionScale: {r: 0.2, g: 0.2, b: 0, a: 0}
+    - _FrozenHighlightDistortionSpeed: {r: -0.05, g: -0.05, b: 0, a: 0}
+    - _FrozenHighlightScale: {r: 0.2, g: 0.2, b: 0, a: 0}
+    - _FrozenHighlightSpeed: {r: 0.1, g: 0.1, b: 0, a: 0}
+    - _FrozenSnowColor: {r: 1.123529, g: 1.373203, b: 1.498039, a: 0}
+    - _FrozenSnowScale: {r: 0.1, g: 0.1, b: 0, a: 0}
+    - _FrozenTint: {r: 1.819608, g: 4.611765, b: 5.992157, a: 0}
+    - _GlitchDistortion: {r: 0.1, g: 0, b: 0, a: 0}
+    - _GlitchDistortionScale: {r: 0, g: 3, b: 0, a: 0}
+    - _GlitchDistortionSpeed: {r: 0, g: 1, b: 0, a: 0}
+    - _GlitchMaskScale: {r: 0, g: 0.2, b: 0, a: 0}
+    - _GlitchMaskSpeed: {r: 0, g: 4, b: 0, a: 0}
+    - _GlitchNoiseScale: {r: 0, g: 3, b: 0, a: 0}
+    - _GlitchNoiseSpeed: {r: 0, g: 1, b: 0, a: 0}
+    - _HologramTint: {r: 0.3137255, g: 1.662745, b: 2.996078, a: 1}
+    - _InkSpreadColor: {r: 8.47419, g: 5.013525, b: 0.08873497, a: 0}
+    - _InkSpreadNoiseScale: {r: 0.4, g: 0.4, b: 0, a: 0}
+    - _InkSpreadPosition: {r: 0.5, g: -1, b: 0, a: 0}
+    - _InnerOutlineColor: {r: 12.07547, g: 11.710592, b: 6.4364533, a: 1}
+    - _InnerOutlineDistortionIntensity: {r: 0.01, g: 0.01, b: 0, a: 0}
+    - _InnerOutlineNoiseScale: {r: 4, g: 4, b: 0, a: 0}
+    - _InnerOutlineNoiseSpeed: {r: 0, g: 0.1, b: 0, a: 0}
+    - _MetalColor: {r: 5.992157, g: 3.639216, b: 0.3137255, a: 1}
+    - _MetalHighlightColor: {r: 5.992157, g: 3.796078, b: 0.6588235, a: 1}
+    - _MetalNoiseDistortion: {r: 0.5, g: 0.5, b: 0, a: 0}
+    - _MetalNoiseDistortionScale: {r: 0.2, g: 0.2, b: 0, a: 0}
+    - _MetalNoiseDistortionSpeed: {r: -0.05, g: -0.05, b: 0, a: 0}
+    - _MetalNoiseScale: {r: 0.25, g: 0.25, b: 0, a: 0}
+    - _MetalNoiseSpeed: {r: 0.05, g: 0.05, b: 0, a: 0}
+    - _OuterOutlineColor: {r: 0.9697558, g: 1, b: 0.48584908, a: 1}
+    - _OuterOutlineDistortionIntensity: {r: 0.01, g: 0.01, b: 0, a: 0}
+    - _OuterOutlineNoiseScale: {r: 4, g: 4, b: 0, a: 0}
+    - _OuterOutlineNoiseSpeed: {r: 0, g: 0.1, b: 0, a: 0}
+    - _PoisonColor: {r: 0.3137255, g: 2.996078, b: 0.3137255, a: 0}
+    - _PoisonNoiseScale: {r: 0.2, g: 0.2, b: 0, a: 0}
+    - _PoisonNoiseSpeed: {r: 0, g: -0.2, b: 0, a: 0}
+    - _RainbowCenter: {r: 0, g: 0, b: 0, a: 0}
+    - _RainbowNoiseScale: {r: 0.2, g: 0.2, b: 0, a: 0}
+    - _ShineColor: {r: 11.98431, g: 11.98431, b: 11.98431, a: 0}
+    - _SineGlowColor: {r: 3.504953, g: 3.5849054, b: 1.741723, a: 0}
+    - _SineMoveFrequency: {r: 1, g: 1, b: 0, a: 0}
+    - _SineMoveOffset: {r: 0, g: 0.1, b: 0, a: 0}
+    - _SpecColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
+    - _SplitToningHighlightsColor: {r: 1, g: 0.1, b: 0.1, a: 0}
+    - _SplitToningShadowsColor: {r: 0.1, g: 0.4000002, b: 1, a: 0}
+    - _StrongTintTint: {r: 1, g: 1, b: 1, a: 1}
+  m_BuildTextureStacks: []
+--- !u!114 &6082123789156463568
+MonoBehaviour:
+  m_ObjectHideFlags: 11
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0353a89b1f911e48b9e16bdc9f2e058, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  version: 7

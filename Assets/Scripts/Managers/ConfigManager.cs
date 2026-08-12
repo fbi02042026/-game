@@ -86,6 +86,17 @@ public class ConfigManager : Singleton<ConfigManager>
         return result;
     }
 
+    /// <summary>冒险界面预览：该章全部怪（小怪在前，Boss 在后），不按小波次过滤。</summary>
+    public List<MonsterConfig> GetChapterPreviewMonsters(int gameChapter)
+    {
+        int monsterChapter = GameConfig.GetMonsterChapter(gameChapter);
+        return _allMonsters
+            .Where(m => ExtractChapterFromId(m.id) == monsterChapter)
+            .OrderBy(m => m.isBoss ? 1 : 0)
+            .ThenBy(m => m.spriteIndex)
+            .ToList();
+    }
+
     public List<MonsterConfig> GetWaveMonsterPool(int chapter, int stageInChapter)
     {
         // 获取当前章节对应的怪物章节号

@@ -292,7 +292,7 @@ public class Monster : UnitBase
         int guildLv = SaveSystem.Instance?.Data?.guildLevel ?? 0;
         float chapterScale = 1f + GameConfig.CHAPTER_SCALE_PER * Mathf.Max(0, chapter - 1);
         float guildScale = 1f + GameConfig.GUILD_SCALE_PER * guildLv;
-        float diffScale = 1f; // 困难/地狱由外部难度系统再乘，默认普通
+        float diffScale = BattleManager.Instance != null ? BattleManager.Instance.DifficultyStatScale : 1f;
         float scale = chapterScale * guildScale * diffScale;
 
         float baseHp = template != null && template.baseHp > 0 ? template.baseHp : GameConfig.MONSTER_NORMAL_HP;
@@ -352,7 +352,10 @@ public class Monster : UnitBase
         if (currentHp <= 0f)
             currentHp = Mathf.Max(1f, GameConfig.MONSTER_NORMAL_HP);
         isAlly = false; // 池复用时防止脏状态
-        goldDrop = Mathf.FloorToInt((template != null ? template.baseGoldDrop : 5) * (1 + waveNum * 0.1f) * scale);
+        float goldMul = BattleManager.Instance != null ? BattleManager.Instance.DifficultyGoldMul : 1f;
+        if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
+            goldMul *= 2f;
+        goldDrop = Mathf.FloorToInt((template != null ? template.baseGoldDrop : 5) * (1 + waveNum * 0.1f) * scale * goldMul);
         expDrop = Mathf.FloorToInt((template != null ? template.expDrop : 3) * (1 + waveNum * 0.1f) * scale);
 
         // 怪物初始面向左（朝玩家方向）

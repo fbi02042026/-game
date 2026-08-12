@@ -2,7 +2,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 切 Battle/Town 场景时的 Loading：loading01 全屏背景 + 右下角「加载中」百分比。
+/// 切 Battle/Town 场景时的 Loading：
+/// 全屏背景 + 屏幕中下部剧情提示 + 右下角「加载中」百分比。
 /// </summary>
 public static class BattleLoadingOverlay
 {
@@ -12,6 +13,7 @@ public static class BattleLoadingOverlay
     static GameObject _root;
     static Text _percentText;
     static Text _labelText;
+    static Text _tipText;
 
     public static void Show(string tip = null)
     {
@@ -29,7 +31,7 @@ public static class BattleLoadingOverlay
         scaler.referenceResolution = new Vector2(GameConfig.DESIGN_WIDTH, GameConfig.DESIGN_HEIGHT);
         scaler.matchWidthOrHeight = GameConfig.UI_MATCH;
 
-        // —— 全屏背景 loading01 ——
+        // —— 全屏背景 ——
         var bgGo = new GameObject("Bg", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         bgGo.transform.SetParent(_root.transform, false);
         Stretch(bgGo.GetComponent<RectTransform>());
@@ -41,6 +43,23 @@ public static class BattleLoadingOverlay
             bgImg.sprite = bg;
         else
             bgImg.color = new Color(0.05f, 0.05f, 0.12f, 1f);
+
+        // —— 屏幕中下部：剧情提示 ——
+        string tipMsg = string.IsNullOrEmpty(tip) ? "加载中…" : tip;
+        _tipText = CreateText(_root.transform, "StoryTip", tipMsg, 26, TextAnchor.MiddleCenter,
+            GameFonts.GetChinese());
+        _tipText.color = new Color(1f, 0.96f, 0.88f, 0.95f);
+        var tipRt = _tipText.rectTransform;
+        tipRt.anchorMin = new Vector2(0.5f, 0f);
+        tipRt.anchorMax = new Vector2(0.5f, 0f);
+        tipRt.pivot = new Vector2(0.5f, 0.5f);
+        tipRt.anchoredPosition = new Vector2(0f, 280f);
+        tipRt.sizeDelta = new Vector2(640f, 100f);
+        _tipText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        _tipText.verticalOverflow = VerticalWrapMode.Overflow;
+        var tipOutline = _tipText.gameObject.AddComponent<Outline>();
+        tipOutline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+        tipOutline.effectDistance = new Vector2(1.5f, -1.5f);
 
         // —— 右下角：加载中 + 百分比 ——
         var corner = new GameObject("ProgressCorner", typeof(RectTransform));
@@ -68,20 +87,6 @@ public static class BattleLoadingOverlay
         pctRt.offsetMin = Vector2.zero;
         pctRt.offsetMax = Vector2.zero;
 
-        // 可选：左上小提示（返回城镇 / 进入冒险）
-        if (!string.IsNullOrEmpty(tip))
-        {
-            var tipText = CreateText(_root.transform, "Tip", tip, 20, TextAnchor.UpperLeft,
-                GameFonts.GetChinese());
-            tipText.color = new Color(1f, 1f, 1f, 0.75f);
-            var tipRt = tipText.rectTransform;
-            tipRt.anchorMin = new Vector2(0f, 1f);
-            tipRt.anchorMax = new Vector2(0f, 1f);
-            tipRt.pivot = new Vector2(0f, 1f);
-            tipRt.anchoredPosition = new Vector2(28f, -28f);
-            tipRt.sizeDelta = new Vector2(360f, 36f);
-        }
-
         SetProgress(0f);
         GameFonts.ApplyToHierarchy(_root.transform);
     }
@@ -92,6 +97,12 @@ public static class BattleLoadingOverlay
         float p = Mathf.Clamp01(progress01);
         if (_percentText != null) _percentText.text = Mathf.RoundToInt(p * 100f) + "%";
         if (_labelText != null) _labelText.text = "加载中";
+    }
+
+    public static void SetTip(string tip)
+    {
+        if (_tipText != null && !string.IsNullOrEmpty(tip))
+            _tipText.text = tip;
     }
 
     public static bool IsShowing => _root != null;
@@ -105,6 +116,7 @@ public static class BattleLoadingOverlay
         }
         _percentText = null;
         _labelText = null;
+        _tipText = null;
     }
 
     static Sprite LoadBgSprite()

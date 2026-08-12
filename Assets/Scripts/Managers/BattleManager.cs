@@ -39,6 +39,10 @@ public class BattleManager : Singleton<BattleManager>
     Coroutine _firstWaveSpawnCo;
 
     public int CurrentChapter => ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+    public int BattleDifficulty { get; private set; }
+    public bool IsGoldDungeon { get; private set; }
+    public float DifficultyStatScale => GameConfig.GetDifficultyStatScale(BattleDifficulty);
+    public float DifficultyGoldMul => GameConfig.GetDifficultyGoldMul(BattleDifficulty);
 
     // === 波次系统 ===
     [System.Serializable]
@@ -192,7 +196,7 @@ public class BattleManager : Singleton<BattleManager>
     public void StartNewRun()
     {
         Debug.Log("[BattleManager] ===== StartNewRun 开始 =====");
-        currentGold = 0;
+        currentGold = SaveSystem.Instance?.Data?.totalGold ?? 0;
         tempBuffs.Clear();
         _stageCleared = false;
         _portalActive = false;
@@ -235,8 +239,15 @@ public class BattleManager : Singleton<BattleManager>
         EnsureTestMercenaries();
         SpawnMercenaries();
 
-        int targetChapter = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
+        int targetChapter = AdventureUI.PendingBattleChapter;
+        if (targetChapter < 1)
+            targetChapter = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
         if (targetChapter < 1) targetChapter = 1;
+        BattleDifficulty = Mathf.Clamp(AdventureUI.PendingBattleDifficulty, 0, 2);
+        IsGoldDungeon = AdventureUI.PendingGoldDungeon;
+        AdventureUI.PendingBattleChapter = 0;
+        AdventureUI.PendingBattleDifficulty = 0;
+        AdventureUI.PendingGoldDungeon = false;
 
         if (ChapterManager.Instance == null)
         {
@@ -245,7 +256,10 @@ public class BattleManager : Singleton<BattleManager>
             return;
         }
 
-        ChapterManager.Instance.StartChapter(targetChapter);
+        if (IsGoldDungeon)
+            ChapterManager.Instance.StartGoldDungeon(targetChapter);
+        else
+            ChapterManager.Instance.StartChapter(targetChapter);
 
         StageData first = null;
         if (ChapterManager.Instance.availableNextStages != null && ChapterManager.Instance.availableNextStages.Count > 0)
@@ -271,30 +285,48 @@ public class BattleManager : Singleton<BattleManager>
 
         if (data.permanentMercs.Count == 0)
         {
-            data.permanentMercs.Add(new MercenaryData { mercId = "dunbing101", favorLevel = 1, level = 1 });
             data.permanentMercs.Add(new MercenaryData { mercId = "gongshou101", favorLevel = 1, level = 1 });
-            Debug.Log("[BattleManager] 新存档自动添加测试佣兵(初级): 盾兵101 + 弓手101");
+            Debug.Log("[BattleManager] 新存档自动添加测试佣兵: 弓手101");
         }
         else
         {
-            // 纠正存档里不存在的预制体 ID（如 gongshou102）
-            for (int i = 0; i < data.permanentMercs.Count; i++)
+            // 现阶段只留弓箭手；纠正无效预制体 ID
+            for (int i = data.permanentMercs.Count - 1; i >= 0; i--)
             {
                 string id = data.permanentMercs[i].mercId;
-                if (string.IsNullOrEmpty(id)) continue;
-                if (Resources.Load<GameObject>("Units/" + id) != null) continue;
-                if (id.EndsWith("102")) data.permanentMercs[i].mercId = id.Substring(0, id.Length - 3) + "101";
-                else if (id.EndsWith("2") && id.Length > 1)
-                    data.permanentMercs[i].mercId = id.Substring(0, id.Length - 1) + "1";
+                if (string.IsNullOrEmpty(id))
+                {
+                    data.permanentMercs.RemoveAt(i);
+                    continue;
+                }
+                if (id.StartsWith("gongshou"))
+                {
+                    if (Resources.Load<GameObject>("Units/" + id) == null)
+                        data.permanentMercs[i].mercId = "gongshou101";
+                    continue;
+                }
+                data.permanentMercs.RemoveAt(i);
             }
+            bool hasArcher = false;
+            for (int i = 0; i < data.permanentMercs.Count; i++)
+            {
+                if (data.permanentMercs[i].mercId != null && data.permanentMercs[i].mercId.StartsWith("gongshou"))
+                {
+                    hasArcher = true;
+                    break;
+                }
+            }
+            if (!hasArcher)
+                data.permanentMercs.Insert(0, new MercenaryData { mercId = "gongshou101", favorLevel = 1, level = 1 });
+            while (data.permanentMercs.Count > 1)
+                data.permanentMercs.RemoveAt(data.permanentMercs.Count - 1);
         }
 
-        // tavern=0 会导致 GetMaxMercSlots=0，佣兵完全不刷；有出战名单时至少开对应槽
-        int needSlots = Mathf.Clamp(data.permanentMercs.Count, 0, 2);
-        if (needSlots > 0 && data.townLevel.tavern < needSlots)
+        // 只开 1 个佣兵槽，第二个 UI 显示「未开放」
+        if (data.townLevel.tavern != 1)
         {
-            data.townLevel.tavern = needSlots;
-            Debug.Log($"[BattleManager] 酒馆等级纠正为 {needSlots}（保证佣兵槽可出战）");
+            data.townLevel.tavern = 1;
+            Debug.Log("[BattleManager] 酒馆等级纠正为 1（仅弓箭手出战）");
         }
     }
 
@@ -1860,23 +1892,28 @@ public class BattleManager : Singleton<BattleManager>
         int bonusStar = 0;
         int bonusGold = 0;
         int equipCount = GameConfig.EQUIP_CHOOSE_COUNT;
+        int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
 
-        if (isBoss)
+        if (IsGoldDungeon)
+        {
+            bonusGold = GameConfig.GetGoldDungeonClearGold(ch, BattleDifficulty);
+            equipCount = 0;
+        }
+        else if (isBoss)
         {
             bonusStar = 2;
-            int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
-            bonusGold = 200 * ch;
+            bonusGold = Mathf.RoundToInt(200 * ch * DifficultyGoldMul);
             equipCount += 1;
         }
         else if (currentStage.type == StageType.Elite)
         {
             bonusStar = 1;
-            bonusGold = 50;
+            bonusGold = Mathf.RoundToInt(50 * DifficultyGoldMul);
         }
 
         // 多出的奖励件直接折金，三选一只展示 3 张
         int blacksmithLevel = TownSystem.Instance != null ? TownSystem.Instance.GetBuildingLevel(BuildingType.Blacksmith) : 1;
-        List<EquipInstance> rewards = ConfigManager.Instance != null
+        List<EquipInstance> rewards = (!IsGoldDungeon && ConfigManager.Instance != null)
             ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar)
             : new List<EquipInstance>();
 
@@ -1888,8 +1925,8 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         EnsureRewardDirector();
-        StageClearRewardDirector.Instance.Begin(rewards, bonusGold);
-        Debug.Log($"[BattleManager] 开始宝箱结算 bonusGold={bonusGold} equips={rewards?.Count ?? 0}");
+        StageClearRewardDirector.Instance.Begin(rewards, bonusGold, currentStage.type);
+        Debug.Log($"[BattleManager] 开始宝箱结算 type={currentStage.type} bonusGold={bonusGold} equips={rewards?.Count ?? 0}");
     }
 
     public void NotifyChuanSongMenOpened(Transform portal)
@@ -1915,6 +1952,13 @@ public class BattleManager : Singleton<BattleManager>
 
         PersistBattleGold();
         ChapterManager.Instance?.OnStageComplete();
+
+        if (IsGoldDungeon)
+        {
+            MercenaryManager.Instance?.ClearAllMercs();
+            GameSceneManager.Instance?.ReturnToTown();
+            return;
+        }
 
         bool isBoss = currentStage != null && currentStage.type == StageType.Boss;
         if (isBoss)

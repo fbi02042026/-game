@@ -37,8 +37,16 @@ public static class SceneLoadingCoordinator
         _progress = 0f;
         _active = true;
         _finishRequested = false;
-        BattleLoadingOverlay.Show(tip);
+        // tip 为空则按目标场景抽一条剧情提示
+        string storyTip = string.IsNullOrEmpty(tip) ? LoadingTips.Pick(target) : tip;
+        BattleLoadingOverlay.Show(storyTip);
         BattleLoadingOverlay.SetProgress(0f);
+    }
+
+    /// <summary>按目标场景随机剧情提示开 Loading</summary>
+    public static void Begin(LoadTarget target)
+    {
+        Begin(null, target);
     }
 
     /// <summary>绝对进度 0~1，只增不减</summary>

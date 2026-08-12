@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -20,6 +21,18 @@ public class AdventureUI : MonoBehaviour, ITownPage
 {
     public static AdventureUI Instance { get; private set; }
     public MainNavTab Tab => MainNavTab.Adventure;
+
+    /// <summary>点「开始冒险」后开战用的章节；0 表示用存档最新解锁章</summary>
+    public static int PendingBattleChapter;
+    public static int PendingBattleDifficulty;
+    public static bool PendingGoldDungeon;
+
+    [Header("可替换资源")]
+    public Sprite mapBackgroundSprite;
+    public Sprite[] chapterBackgrounds = new Sprite[8]; // 可选覆盖 MapBg；空则只切换 StageNodes/Node_1..8
+    public Sprite[] modeButtonSpriteIcons = new Sprite[5];
+    public Sprite[] enemySprites = new Sprite[4];
+    public Sprite[] dropSprites = new Sprite[4];
 
     // ── 公开引用（预制体序列化后可在 Inspector 拖资源）──
     [Header("左侧副本类型按钮（顺序：主线/精英/迷宫/每日/活动）")]
@@ -56,7 +69,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
     public Button sweepBtn;
 
     // ── 内部状态 ──
-    static readonly string[] ModeNames  = { "主线冒险", "精英挑战", "迷宫探索", "每日副本", "活动副本" };
+    static readonly string[] ModeNames  = { "主线冒险", "每日副本", "迷宫探索", "BOSS挑战", "活动副本" };
     static readonly string[] DiffNames  = { "普通", "困难", "噩梦", "地狱" };
     static readonly Color    ColNormal  = new Color(0.30f, 0.55f, 0.22f, 1f);
     static readonly Color    ColHard    = new Color(0.28f, 0.42f, 0.65f, 1f);
@@ -65,8 +78,17 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
     int _selectedMode = 0;
     int _selectedDiff = 0;
-    int _selectedStage = 0;      // 关卡节点索引
+    int _selectedChapter = 1;
     List<Button> _stageNodeBtns = new List<Button>();
+    readonly List<MonsterConfig> _previewMonsters = new List<MonsterConfig>();
+    Text _bossTag;
+    GameObject _tipRoot;
+    Text _tipTitle;
+    Text _tipBody;
+    Text _floatToast;
+    RectTransform _floatToastRt;
+    Coroutine _floatToastCo;
+    Sprite _goldDropSprite;
 
     const float TOP_H    = 120f;
     const float BOT_H    = 150f;
@@ -94,15 +116,30 @@ public class AdventureUI : MonoBehaviour, ITownPage
     {
         if (_preloaded) return;
 
-        if (!_built) Build();
+        // 预制体已有完整树时只绑定，不再重建
+        if (transform.Find("LeftSidebar") != null || transform.Find("RightContent") != null)
+        {
+            AutoBindFromHierarchy();
+            _built = true;
+        }
+        else if (!_built)
+            Build();
 
         EnsureVisibleTransform();
-        ConfigCanvas();
+        ConfigureHostCanvasOnce();
         GameFonts.ApplyToHierarchy(transform);
         WireClicks();
 
         _preloaded = true;
         gameObject.SetActive(false);
+    }
+
+    /// <summary>编辑器生成预制体时调用：建树并套字体，不隐藏、不绑点击</summary>
+    public void BuildHierarchyForPrefab()
+    {
+        if (!_built) Build();
+        EnsureVisibleTransform();
+        GameFonts.ApplyToHierarchy(transform);
     }
 
     public void ShowPage()
@@ -111,19 +148,27 @@ public class AdventureUI : MonoBehaviour, ITownPage
         EnsureVisibleTransform();
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
+        TavernUI.SetGuildHallOverlayMode(true);
 
         Transform hall = GuildHallUI.Instance != null
             ? GuildHallUI.Instance.transform
             : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
+        EnsureStandaloneChrome(hall);
 
-        RefreshModeHighlight();
-        RefreshDetailPanel();
+        int max = GetMaxUnlockedChapter();
+        if (_selectedChapter < 1 || _selectedChapter > max)
+            _selectedChapter = max;
+        RefreshAll();
     }
 
     public void HidePage()
     {
+        HideTip();
+        HideFloatToast();
+        if (!gameObject.activeSelf) return;
         gameObject.SetActive(false);
+        TavernUI.SetGuildHallOverlayMode(false);
     }
 
     // ────────────────────────────────────────────────────
@@ -182,6 +227,19 @@ public class AdventureUI : MonoBehaviour, ITownPage
             if (modeButtons.Length > i) modeButtons[i] = btn;
             var label = btn.GetComponentInChildren<Text>();
             if (modeButtonLabels.Length > i) modeButtonLabels[i] = label;
+
+            // 可选：如果你在 Inspector 填了 modeButtonSpriteIcons，则替换 icon 字符为图片
+            if (modeButtonSpriteIcons != null && modeButtonSpriteIcons.Length > i && modeButtonSpriteIcons[i] != null)
+            {
+                var iconImg = btn.transform.Find("Icon")?.GetComponent<Image>();
+                if (iconImg != null)
+                {
+                    iconImg.sprite = modeButtonSpriteIcons[i];
+                    iconImg.color = Color.white;
+                    var iconTxt = btn.transform.Find("IconText")?.GetComponent<Text>();
+                    if (iconTxt != null) iconTxt.gameObject.SetActive(false);
+                }
+            }
         }
     }
 
@@ -201,15 +259,25 @@ public class AdventureUI : MonoBehaviour, ITownPage
         img.color = new Color(0.18f, 0.13f, 0.06f, 1f);
         var btn = go.GetComponent<Button>();
 
-        // icon 占位
-        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Text));
+        // icon 占位（Image + Text 两套：你替换 Sprite 时只保留 Image）
+        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
         iconGo.transform.SetParent(go.transform, false);
         var iconRt = iconGo.GetComponent<RectTransform>();
         iconRt.anchorMin = new Vector2(0.5f, 0.62f);
         iconRt.anchorMax = new Vector2(0.5f, 0.62f);
         iconRt.sizeDelta = new Vector2(52, 52);
         iconRt.anchoredPosition = Vector2.zero;
-        var iconTxt = iconGo.GetComponent<Text>();
+        iconGo.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.15f);
+
+        // 默认 icon 字符（你未填 sprite 时可见）
+        var iconTxtGo = new GameObject("IconText", typeof(RectTransform), typeof(Text));
+        iconTxtGo.transform.SetParent(go.transform, false);
+        var iconTxtRt = iconTxtGo.GetComponent<RectTransform>();
+        iconTxtRt.anchorMin = new Vector2(0.5f, 0.62f);
+        iconTxtRt.anchorMax = new Vector2(0.5f, 0.62f);
+        iconTxtRt.sizeDelta = new Vector2(52, 52);
+        iconTxtRt.anchoredPosition = Vector2.zero;
+        var iconTxt = iconTxtGo.GetComponent<Text>();
         iconTxt.text      = iconChar;
         iconTxt.fontSize  = 28;
         iconTxt.alignment = TextAnchor.MiddleCenter;
@@ -262,6 +330,11 @@ public class AdventureUI : MonoBehaviour, ITownPage
             new Color(0.18f, 0.26f, 0.14f, 1f));
         Stretch(mapBgImg.rectTransform);
         mapBg = mapBgImg;
+        if (mapBackgroundSprite != null)
+        {
+            mapBg.sprite = mapBackgroundSprite;
+            mapBg.color = Color.white;
+        }
 
         // 章节标题栏
         BuildMapTitleBar(mapRoot.transform, mapH);
@@ -373,9 +446,10 @@ public class AdventureUI : MonoBehaviour, ITownPage
             var node = BuildStageNode(container, labels[i], positions[i],
                 stars[i], isBoss[i], i == 2);
             _stageNodeBtns.Add(node);
-            node.onClick.AddListener(() => OnSelectStage(idx));
+            int chapter = Mathf.Clamp(idx + 1, 1, 8);
+            node.onClick.AddListener(() => OnSelectChapter(chapter));
         }
-        _selectedStage = 2; // 默认选 1-3
+        _selectedChapter = 1;
     }
 
     Button BuildStageNode(Transform parent, string label, Vector2 pos,
@@ -534,6 +608,19 @@ public class AdventureUI : MonoBehaviour, ITownPage
         eRt.sizeDelta = new Vector2(220, 48);
         enemyIconContainer = enemyCont.transform;
         for (int i = 0; i < 4; i++) BuildIconSlot(enemyCont.transform, i, 52f);
+        // 可选：用你替换的敌人 Sprite 填充占位格
+        if (enemySprites != null)
+        {
+            for (int i = 0; i < 4 && i < enemySprites.Length; i++)
+            {
+                var slot = enemyCont.transform.Find($"Icon{i}")?.GetComponent<Image>();
+                if (slot != null && enemySprites[i] != null)
+                {
+                    slot.sprite = enemySprites[i];
+                    slot.color = Color.white;
+                }
+            }
+        }
 
         // 可能掉落标题
         var dropTitle = CreateTextGO(panel.transform, "DropTitle",
@@ -552,6 +639,19 @@ public class AdventureUI : MonoBehaviour, ITownPage
         dRt.sizeDelta = new Vector2(220, 48);
         dropIconContainer = dropCont.transform;
         for (int i = 0; i < 4; i++) BuildIconSlot(dropCont.transform, i, 52f);
+        // 可选：用你替换的掉落 Sprite 填充占位格
+        if (dropSprites != null)
+        {
+            for (int i = 0; i < 4 && i < dropSprites.Length; i++)
+            {
+                var slot = dropCont.transform.Find($"Icon{i}")?.GetComponent<Image>();
+                if (slot != null && dropSprites[i] != null)
+                {
+                    slot.sprite = dropSprites[i];
+                    slot.color = Color.white;
+                }
+            }
+        }
 
         // ── 中：体力 / 次数 ──
         float midY = y - 172;
@@ -599,7 +699,8 @@ public class AdventureUI : MonoBehaviour, ITownPage
         rt.pivot     = new Vector2(0, 0.5f);
         rt.anchoredPosition = new Vector2(idx * (size + 6), 0);
         rt.sizeDelta = new Vector2(size, size);
-        go.GetComponent<Image>().color = new Color(0.28f, 0.22f, 0.10f, 1f);
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0.28f, 0.22f, 0.10f, 1f);
     }
 
     Button BuildDiffBtn(Transform parent, string label, Color col, int idx, float y)
@@ -689,8 +790,24 @@ public class AdventureUI : MonoBehaviour, ITownPage
         {
             if (modeButtons[i] == null) continue;
             int idx = i;
+            modeButtons[i].onClick.RemoveAllListeners();
             modeButtons[i].onClick.AddListener(() => OnSelectMode(idx));
         }
+        for (int i = 0; i < difficultyButtons.Length; i++)
+        {
+            if (difficultyButtons[i] == null) continue;
+            int idx = i;
+            difficultyButtons[i].onClick.RemoveAllListeners();
+            difficultyButtons[i].onClick.AddListener(() => OnSelectDiff(idx));
+        }
+        prevChapterBtn?.onClick.RemoveAllListeners();
+        nextChapterBtn?.onClick.RemoveAllListeners();
+        startBtn?.onClick.RemoveAllListeners();
+        sweepBtn?.onClick.RemoveAllListeners();
+        chapterRewardBtn?.onClick.RemoveAllListeners();
+        adventureLogBtn?.onClick.RemoveAllListeners();
+        addChancesBtn?.onClick.RemoveAllListeners();
+
         prevChapterBtn?.onClick.AddListener(OnPrevChapter);
         nextChapterBtn?.onClick.AddListener(OnNextChapter);
         startBtn?.onClick.AddListener(OnStartBattle);
@@ -698,85 +815,837 @@ public class AdventureUI : MonoBehaviour, ITownPage
         chapterRewardBtn?.onClick.AddListener(OnChapterReward);
         adventureLogBtn?.onClick.AddListener(OnAdventureLog);
         addChancesBtn?.onClick.AddListener(OnAddChances);
+
+        BindMapLayers();
+        WireEnemyIconClicks();
+        WireBoxReward();
+    }
+
+    /// <summary>StageNodes 下是整张章节地图（Node_1..8），不是关卡图标。关掉 Button 避免点按变色。</summary>
+    void BindMapLayers()
+    {
+        _stageNodeBtns.Clear();
+        if (stageNodeContainer == null) return;
+        for (int i = 0; i < stageNodeContainer.childCount; i++)
+        {
+            var t = stageNodeContainer.GetChild(i);
+            var btn = t.GetComponent<Button>();
+            if (btn != null)
+            {
+                btn.onClick.RemoveAllListeners();
+                btn.enabled = false;
+                btn.transition = Selectable.Transition.None;
+            }
+            var img = t.GetComponent<Image>();
+            if (img != null) img.raycastTarget = false;
+        }
+    }
+
+    void WireEnemyIconClicks()
+    {
+        if (enemyIconContainer == null) return;
+        for (int i = 0; i < enemyIconContainer.childCount; i++)
+        {
+            var slot = enemyIconContainer.GetChild(i);
+            if (slot.name == "BOSS" || slot.name == "direnxinxi") continue;
+            var btn = slot.GetComponent<Button>();
+            if (btn == null) btn = slot.gameObject.AddComponent<Button>();
+            int idx = ParseIconIndex(slot.name, i);
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(() => OnClickEnemyIcon(idx));
+        }
+    }
+
+    void WireBoxReward()
+    {
+        Transform mapBottom = null;
+        var right = transform.Find("RightContent");
+        var mapRoot = right != null ? right.Find("MapRoot") : null;
+        if (mapRoot != null) mapBottom = mapRoot.Find("MapBottomBar");
+        if (mapBottom == null) return;
+        var box = mapBottom.Find("boxbg") ?? mapBottom.Find("boxbg_kelingqu");
+        if (box == null) return;
+        var btn = box.GetComponent<Button>() ?? box.gameObject.AddComponent<Button>();
+        if (box.GetComponent<Image>() != null) btn.targetGraphic = box.GetComponent<Image>();
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(OnChapterReward);
+    }
+
+    static int ParseIconIndex(string name, int fallback)
+    {
+        if (string.IsNullOrEmpty(name)) return fallback;
+        for (int i = name.Length - 1; i >= 0; i--)
+        {
+            if (char.IsDigit(name[i]))
+            {
+                int end = i;
+                while (i >= 0 && char.IsDigit(name[i])) i--;
+                if (int.TryParse(name.Substring(i + 1, end - i), out int n))
+                    return n;
+                break;
+            }
+        }
+        return fallback;
     }
 
     void OnSelectMode(int idx)
     {
         _selectedMode = idx;
-        RefreshModeHighlight();
-        if (idx != 0)
-            UIManager.Instance?.ShowToast($"{ModeNames[idx]}（即将开放）");
+        if (!IsDiffUnlocked(_selectedDiff))
+            _selectedDiff = 0;
+        HideTip();
+        if (!IsModePlayable(idx))
+            Toast($"{ModeLabel(idx)}即将开放");
+        RefreshAll();
     }
 
-    void OnSelectStage(int idx)
+    void OnSelectChapter(int chapter)
     {
-        _selectedStage = idx;
-        RefreshDetailPanel();
+        int max = GetMaxUnlockedChapter();
+        if (chapter < 1 || chapter > 8) return;
+        if (chapter > max)
+        {
+            Toast("通关上一章后开启");
+            return;
+        }
+        _selectedChapter = chapter;
+        RefreshAll();
     }
 
     void OnSelectDiff(int idx)
     {
+        if (!IsModePlayable(_selectedMode))
+        {
+            Toast($"{ModeLabel(_selectedMode)}即将开放");
+            return;
+        }
+        if (!IsDiffUnlocked(idx))
+        {
+            int need = idx >= 2 ? GameConfig.DIFF_NIGHTMARE_NEED_CLEARS : GameConfig.DIFF_HARD_NEED_CLEARS;
+            Toast($"通关第{need}章后开启{DiffLabel(idx)}");
+            return;
+        }
         _selectedDiff = idx;
         RefreshDiffHighlight();
-        if (idx > 0)
-            UIManager.Instance?.ShowToast($"{DiffNames[idx]}（即将开放）");
+        RefreshDetailPanel();
     }
 
-    void OnPrevChapter() => UIManager.Instance?.ShowToast("已是第一章");
-    void OnNextChapter() => UIManager.Instance?.ShowToast("后续章节开发中");
-    void OnChapterReward() => UIManager.Instance?.ShowToast("章节奖励（即将开放）");
-    void OnAdventureLog()  => UIManager.Instance?.ShowToast("冒险日志（即将开放）");
-    void OnAddChances()    => UIManager.Instance?.ShowToast("购买次数（即将开放）");
+    void OnPrevChapter()
+    {
+        if (_selectedChapter <= 1)
+        {
+            Toast("已是第一章");
+            return;
+        }
+        _selectedChapter--;
+        RefreshAll();
+    }
+
+    void OnNextChapter()
+    {
+        int max = GetMaxUnlockedChapter();
+        if (_selectedChapter >= max)
+        {
+            Toast(_selectedChapter >= 8 ? "已是最后一章" : "通关本章后开启下一章");
+            return;
+        }
+        _selectedChapter++;
+        RefreshAll();
+    }
+
+    void OnChapterReward() => Toast("章节奖励（即将开放）");
+    void OnAdventureLog()  => Toast("冒险日志（即将开放）");
+    void OnAddChances()    => Toast("主线不限次数");
 
     void OnStartBattle()
     {
-        if (GameSceneManager.Instance == null) return;
+        if (!IsModePlayable(_selectedMode))
+        {
+            Toast($"{ModeLabel(_selectedMode)}即将开放");
+            return;
+        }
+        if (!IsDiffUnlocked(_selectedDiff))
+        {
+            int need = _selectedDiff >= 2 ? GameConfig.DIFF_NIGHTMARE_NEED_CLEARS : GameConfig.DIFF_HARD_NEED_CLEARS;
+            Toast($"通关第{need}章后开启{DiffLabel(_selectedDiff)}");
+            return;
+        }
+        if (!StaminaSystem.TrySpendForAdventure())
+        {
+            Toast("体力不足");
+            return;
+        }
+
+        PendingBattleChapter = _selectedChapter;
+        PendingBattleDifficulty = _selectedDiff;
+        PendingGoldDungeon = IsActivityMode(_selectedMode);
+        ChapterManager.Instance?.SetChapter(_selectedChapter);
         HidePage();
-        GameSceneManager.Instance.LoadBattleScene();
+        GameSceneManager.Instance?.LoadBattleScene();
     }
 
-    void OnSweep() => UIManager.Instance?.ShowToast("扫荡（即将开放）");
+    void OnSweep() => Toast("扫荡（即将开放）");
+
+    void OnClickEnemyIcon(int idx)
+    {
+        if (idx < 0 || idx >= _previewMonsters.Count)
+        {
+            HideTip();
+            return;
+        }
+        ShowMonsterTip(_previewMonsters[idx]);
+    }
 
     // ────────────────────────────────────────────────────
-    // 刷新状态
+    // 刷新
     // ────────────────────────────────────────────────────
+
+    void RefreshAll()
+    {
+        HideTip();
+        RefreshModeHighlight();
+        RefreshDiffHighlight();
+        RefreshChapterChrome();
+        RefreshDetailPanel();
+        RefreshContentLock();
+    }
 
     void RefreshModeHighlight()
     {
         for (int i = 0; i < modeButtons.Length; i++)
         {
             if (modeButtons[i] == null) continue;
-            var img = modeButtons[i].GetComponent<Image>();
-            if (img != null)
-                img.color = i == _selectedMode
-                    ? new Color(0.45f, 0.32f, 0.10f, 1f)
-                    : new Color(0.18f, 0.13f, 0.06f, 1f);
+            SetChildSelected(modeButtons[i].transform, i == _selectedMode);
         }
     }
 
     void RefreshDiffHighlight()
     {
-        Color[] cols = { ColNormal, ColHard, ColNight, ColHell };
+        bool playable = IsModePlayable(_selectedMode);
         for (int i = 0; i < difficultyButtons.Length; i++)
         {
             if (difficultyButtons[i] == null) continue;
-            var img = difficultyButtons[i].GetComponent<Image>();
-            if (img == null) continue;
-            Color c = cols[i];
-            img.color = i == _selectedDiff ? c : new Color(c.r * 0.5f, c.g * 0.5f, c.b * 0.5f, 1f);
+            bool show = i < 3; // 只留普通/困难/噩梦
+            difficultyButtons[i].gameObject.SetActive(show);
+            if (!show) continue;
+            bool unlocked = playable && IsDiffUnlocked(i);
+            SetChildSelected(difficultyButtons[i].transform, playable && i == _selectedDiff && unlocked);
+            SetGraphicDim(difficultyButtons[i].transform, !unlocked);
         }
+    }
+
+    static void SetChildSelected(Transform btn, bool on)
+    {
+        var sel = btn.Find("选中");
+        if (sel == null) return;
+        sel.gameObject.SetActive(on);
+    }
+
+    void RefreshChapterChrome()
+    {
+        if (chapterTitle != null)
+            chapterTitle.text = GameConfig.GetChapterTitleText(_selectedChapter);
+
+        if (prevChapterBtn != null)
+            prevChapterBtn.interactable = _selectedChapter > 1;
+        if (nextChapterBtn != null)
+            nextChapterBtn.interactable = _selectedChapter < 8;
+
+        // MapBg 是底框，不换图。章节地图在 StageNodes/Node_1..8，只显示当前章那一张。
+        Sprite overrideBg = GetChapterBackground(_selectedChapter);
+        if (overrideBg != null && mapBg != null)
+            mapBg.sprite = overrideBg;
+
+        RefreshMapLayers();
+    }
+
+    void RefreshMapLayers()
+    {
+        if (stageNodeContainer == null) return;
+        for (int i = 0; i < stageNodeContainer.childCount; i++)
+        {
+            var child = stageNodeContainer.GetChild(i);
+            int ch = ParseNodeChapter(child.name, i + 1);
+            child.gameObject.SetActive(ch == _selectedChapter);
+        }
+    }
+
+    static int ParseNodeChapter(string name, int fallback)
+    {
+        if (string.IsNullOrEmpty(name)) return fallback;
+        int us = name.LastIndexOf('_');
+        if (us >= 0 && us + 1 < name.Length && int.TryParse(name.Substring(us + 1), out int n) && n >= 1 && n <= 8)
+            return n;
+        if (int.TryParse(name, out n) && n >= 1 && n <= 8)
+            return n;
+        return fallback;
+    }
+
+    Sprite GetChapterBackground(int chapter)
+    {
+        int idx = chapter - 1;
+        if (chapterBackgrounds != null && idx >= 0 && idx < chapterBackgrounds.Length && chapterBackgrounds[idx] != null)
+            return chapterBackgrounds[idx];
+        return null;
     }
 
     void RefreshDetailPanel()
     {
-        RefreshDiffHighlight();
-        // TODO：从 ChapterManager/StageData 读真实数据
-        // 当前只做 UI 占位演示
+        bool main = _selectedMode == 0;
+        bool activity = IsActivityMode(_selectedMode);
+        bool playable = main || activity;
+        string title = GameConfig.GetChapterTitleText(_selectedChapter);
+        if (stageNameLabel != null)
+        {
+            if (activity) stageNameLabel.text = "金币副本";
+            else if (main) stageNameLabel.text = title;
+            else stageNameLabel.text = ModeLabel(_selectedMode);
+        }
+        if (stageDescLabel != null)
+        {
+            if (activity)
+            {
+                int gold = GameConfig.GetGoldDungeonClearGold(_selectedChapter, _selectedDiff);
+                stageDescLabel.text = $"怪物只掉金币。通关获得 {gold} 金币。困难需通关第{GameConfig.DIFF_HARD_NEED_CLEARS}章，噩梦需通关第{GameConfig.DIFF_NIGHTMARE_NEED_CLEARS}章。";
+            }
+            else if (main)
+                stageDescLabel.text = GetChapterIntro(_selectedChapter);
+            else
+                stageDescLabel.text = $"{ModeLabel(_selectedMode)}即将开放。";
+        }
+
+        if (staminaCostLabel != null)
+        {
+            string cost = StaminaSystem.ADVENTURE_COST.ToString();
+            string t = staminaCostLabel.text;
+            if (!string.IsNullOrEmpty(t) && t.IndexOf("体力", System.StringComparison.Ordinal) >= 0)
+            {
+                var sb = new System.Text.StringBuilder();
+                bool replaced = false;
+                for (int i = 0; i < t.Length; i++)
+                {
+                    if (char.IsDigit(t[i]))
+                    {
+                        if (!replaced) { sb.Append(cost); replaced = true; }
+                        while (i + 1 < t.Length && char.IsDigit(t[i + 1])) i++;
+                    }
+                    else sb.Append(t[i]);
+                }
+                staminaCostLabel.text = replaced ? sb.ToString() : ("消耗体力  " + cost);
+            }
+            else
+                staminaCostLabel.text = "消耗体力  " + cost;
+        }
+
+        if (remainChancesLabel != null)
+            remainChancesLabel.text = playable ? "—" : "0";
+
+        RefreshEnemyIcons();
+        RefreshDropIcons();
+    }
+
+    void RefreshEnemyIcons()
+    {
+        _previewMonsters.Clear();
+        if (enemyIconContainer == null) return;
+
+        if (_bossTag == null)
+        {
+            var bt = enemyIconContainer.Find("BOSS");
+            if (bt != null) _bossTag = bt.GetComponent<Text>();
+        }
+
+        var slots = new List<Transform>();
+        for (int i = 0; i < enemyIconContainer.childCount; i++)
+        {
+            var c = enemyIconContainer.GetChild(i);
+            if (c.name == "BOSS" || c.GetComponent<Text>() != null && c.name.IndexOf("Icon", System.StringComparison.OrdinalIgnoreCase) < 0)
+                continue;
+            slots.Add(c);
+        }
+
+        List<MonsterConfig> all = null;
+        if (IsModePlayable(_selectedMode) && ConfigManager.Instance != null)
+            all = ConfigManager.Instance.GetChapterPreviewMonsters(_selectedChapter);
+        if (all == null) all = new List<MonsterConfig>();
+
+        int showCount = Mathf.Min(slots.Count, all.Count);
+        for (int i = 0; i < showCount; i++)
+            _previewMonsters.Add(all[i]);
+
+        Transform bossSlot = null;
+        for (int i = 0; i < slots.Count; i++)
+        {
+            bool on = i < _previewMonsters.Count;
+            slots[i].gameObject.SetActive(on);
+            if (!on) continue;
+            var cfg = _previewMonsters[i];
+            var portrait = FindPortraitImage(slots[i]);
+            Sprite sp = LoadMonsterSprite(cfg);
+            if (portrait != null && sp != null)
+            {
+                portrait.sprite = sp;
+                portrait.color = Color.white;
+                portrait.preserveAspect = true;
+            }
+            if (cfg.isBoss) bossSlot = slots[i];
+        }
+
+        if (_bossTag != null)
+        {
+            bool hasBoss = bossSlot != null;
+            _bossTag.gameObject.SetActive(hasBoss);
+            if (hasBoss)
+            {
+                _bossTag.text = "BOSS";
+                _bossTag.transform.SetParent(bossSlot, false);
+                var rt = _bossTag.rectTransform;
+                rt.anchorMin = new Vector2(0f, 0f);
+                rt.anchorMax = new Vector2(1f, 0f);
+                rt.pivot = new Vector2(0.5f, 1f);
+                rt.anchoredPosition = new Vector2(0f, -2f);
+                rt.sizeDelta = new Vector2(0f, 24f);
+            }
+        }
+    }
+
+    static Image FindPortraitImage(Transform slot)
+    {
+        Image[] imgs = slot.GetComponentsInChildren<Image>(true);
+        if (imgs == null || imgs.Length == 0) return null;
+        if (imgs.Length >= 2) return imgs[imgs.Length - 1];
+        return imgs[0];
+    }
+
+    static Sprite LoadMonsterSprite(MonsterConfig cfg)
+    {
+        if (cfg == null) return null;
+        int gameChapter = 1;
+        int idCh = 0;
+        if (!string.IsNullOrEmpty(cfg.id))
+        {
+            int us = cfg.id.IndexOf('_');
+            if (us >= 0 && us + 1 < cfg.id.Length && int.TryParse(cfg.id.Substring(us + 1, 1), out int n))
+                idCh = n;
+        }
+        // 怪物章号 → 游戏章
+        for (int i = 1; i <= 8; i++)
+        {
+            if (GameConfig.GetMonsterChapter(i) == idCh) { gameChapter = i; break; }
+        }
+        int monsterChapter = idCh > 0 ? idCh : GameConfig.GetMonsterChapter(gameChapter);
+        int spriteIndex = cfg.spriteIndex > 0 ? cfg.spriteIndex : 1;
+
+        var loader = MonsterSpriteLoader.Instance;
+        if (loader != null)
+        {
+            var sp = loader.LoadMonsterSprite(monsterChapter, spriteIndex - 1);
+            if (sp != null) return sp;
+        }
+
+        string folder = null, prefix = null;
+        switch (monsterChapter)
+        {
+            case 1: folder = "1 Undead"; prefix = "undead_1"; break;
+            case 2: folder = "2 Jungle"; prefix = "jungle_2"; break;
+            case 3: folder = "3 Sea"; prefix = "sea_3"; break;
+            case 4: folder = "4 Forest"; prefix = "forest_4"; break;
+            case 5: folder = "5 Field"; prefix = "field_5"; break;
+            case 6: folder = "6 Cave"; prefix = "cave_6"; break;
+            case 7: folder = "7 Devil"; prefix = "devil_7"; break;
+            case 8: folder = "8 Ice"; prefix = "ice_8"; break;
+        }
+        if (folder == null) return null;
+        string path = $"Config/MonsterSpriteRegistry/{folder}/{prefix}{spriteIndex:D2}";
+        var sprite = Resources.Load<Sprite>(path);
+        if (sprite != null) return sprite;
+        var tex = Resources.Load<Texture2D>(path);
+        if (tex == null) return null;
+        return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+    }
+
+    void ShowMonsterTip(MonsterConfig cfg)
+    {
+        EnsureTip();
+        if (_tipRoot == null || cfg == null) return;
+        _tipRoot.SetActive(true);
+        if (_tipTitle != null) _tipTitle.text = string.IsNullOrEmpty(cfg.monsterName) ? cfg.id : cfg.monsterName;
+        int mch = GameConfig.GetMonsterChapter(_selectedChapter);
+        var style = MonsterAttackStyleTable.Get(mch, cfg.spriteIndex);
+        string styleName = style == MonsterAttackStyle.Ranged ? "远程" : "近战";
+        if (_tipBody != null)
+        {
+            _tipBody.text = cfg.isBoss
+                ? $"BOSS\n攻击 {cfg.baseAttack:0}\n生命 {cfg.baseHp:0}\n{styleName}"
+                : $"攻击 {cfg.baseAttack:0}\n生命 {cfg.baseHp:0}\n{styleName}";
+        }
+    }
+
+    void HideTip()
+    {
+        if (_tipRoot != null) _tipRoot.SetActive(false);
+    }
+
+    void EnsureTip()
+    {
+        if (_tipRoot != null) return;
+        var host = transform.Find("DetailPanel") ?? transform;
+        var go = new GameObject("MonsterTip", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(host, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.55f);
+        rt.anchorMax = new Vector2(0.5f, 0.55f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(280f, 140f);
+        rt.anchoredPosition = Vector2.zero;
+        go.GetComponent<Image>().color = new Color(0.08f, 0.06f, 0.04f, 0.92f);
+
+        var titleGo = new GameObject("TipTitle", typeof(RectTransform), typeof(Text));
+        titleGo.transform.SetParent(go.transform, false);
+        var tr = titleGo.GetComponent<RectTransform>();
+        tr.anchorMin = new Vector2(0, 1);
+        tr.anchorMax = new Vector2(1, 1);
+        tr.pivot = new Vector2(0.5f, 1);
+        tr.anchoredPosition = new Vector2(0, -8);
+        tr.sizeDelta = new Vector2(-16, 32);
+        _tipTitle = titleGo.GetComponent<Text>();
+        _tipTitle.fontSize = 22;
+        _tipTitle.alignment = TextAnchor.MiddleCenter;
+        _tipTitle.color = new Color(1f, 0.92f, 0.7f);
+        _tipTitle.font = GameFonts.GetChinese();
+
+        var bodyGo = new GameObject("TipBody", typeof(RectTransform), typeof(Text));
+        bodyGo.transform.SetParent(go.transform, false);
+        var br = bodyGo.GetComponent<RectTransform>();
+        br.anchorMin = new Vector2(0, 0);
+        br.anchorMax = new Vector2(1, 1);
+        br.offsetMin = new Vector2(12, 10);
+        br.offsetMax = new Vector2(-12, -42);
+        _tipBody = bodyGo.GetComponent<Text>();
+        _tipBody.fontSize = 18;
+        _tipBody.alignment = TextAnchor.UpperCenter;
+        _tipBody.color = new Color(0.9f, 0.85f, 0.75f);
+        _tipBody.font = GameFonts.GetChinese();
+
+        var closeBtn = go.AddComponent<Button>();
+        closeBtn.targetGraphic = go.GetComponent<Image>();
+        closeBtn.onClick.AddListener(HideTip);
+
+        _tipRoot = go;
+        GameFonts.ApplyToHierarchy(go.transform);
+        go.SetActive(false);
+    }
+
+    static int GetMaxUnlockedChapter()
+    {
+        int max = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
+        if (max < 1) max = 1;
+        if (max > 8) max = 8;
+        return max;
+    }
+
+    string ModeLabel(int i)
+    {
+        if (modeButtonLabels != null && i >= 0 && i < modeButtonLabels.Length && modeButtonLabels[i] != null
+            && !string.IsNullOrEmpty(modeButtonLabels[i].text))
+            return modeButtonLabels[i].text;
+        if (i >= 0 && i < ModeNames.Length) return ModeNames[i];
+        return "副本";
+    }
+
+    string DiffLabel(int i)
+    {
+        if (difficultyLabels != null && i >= 0 && i < difficultyLabels.Length && difficultyLabels[i] != null
+            && !string.IsNullOrEmpty(difficultyLabels[i].text))
+            return difficultyLabels[i].text;
+        if (i >= 0 && i < DiffNames.Length) return DiffNames[i];
+        return "难度";
+    }
+
+    static string GetChapterIntro(int chapter)
+    {
+        switch (chapter)
+        {
+            case 1: return "暮影森林外围，哥布林与野兽出没。击败章末首领即可开启下一章。";
+            case 2: return "幽冥墓园中亡灵苏醒，小心成群的骷髅与法师。";
+            case 3: return "翡翠秘境潮湿闷热，毒虫与密林伏兵环伺。";
+            case 4: return "深蓝遗迹海域，潮水带来陌生的深海生物。";
+            case 5: return "晨曦原野看似开阔，潜伏的猎手并不少。";
+            case 6: return "巨岩深窟黑暗潮湿，洞穴生物成群结队。";
+            case 7: return "赤焰炼狱热浪灼人，魔族精锐在此驻守。";
+            case 8: return "永霜雪境天寒地冻，冰原霸主等待挑战者。";
+            default: return "未知的冒险区域。";
+        }
+    }
+
+    bool IsModePlayable(int mode) => mode == 0 || IsActivityMode(mode);
+
+    bool IsActivityMode(int mode)
+    {
+        string label = ModeLabel(mode);
+        if (!string.IsNullOrEmpty(label) && label.IndexOf("活动", StringComparison.Ordinal) >= 0)
+            return true;
+        return mode == 4;
+    }
+
+    static int GetClearedChapterCount()
+    {
+        return Mathf.Max(0, GetMaxUnlockedChapter() - 1);
+    }
+
+    static bool IsDiffUnlocked(int diff)
+    {
+        if (diff <= 0) return true;
+        int cleared = GetClearedChapterCount();
+        if (diff == 1) return cleared >= GameConfig.DIFF_HARD_NEED_CLEARS;
+        if (diff == 2) return cleared >= GameConfig.DIFF_NIGHTMARE_NEED_CLEARS;
+        return false;
+    }
+
+    void RefreshContentLock()
+    {
+        bool locked = !IsModePlayable(_selectedMode);
+        ApplyCanvasLock(transform.Find("RightContent"), locked);
+        var detail = transform.Find("DetailPanel");
+        if (detail == null)
+        {
+            var right = transform.Find("RightContent");
+            if (right != null) detail = right.Find("DetailPanel");
+        }
+        ApplyCanvasLock(detail, locked);
+    }
+
+    static void ApplyCanvasLock(Transform t, bool locked)
+    {
+        if (t == null) return;
+        var cg = t.GetComponent<CanvasGroup>();
+        if (cg == null) cg = t.gameObject.AddComponent<CanvasGroup>();
+        cg.alpha = locked ? 0.42f : 1f;
+        cg.interactable = !locked;
+        cg.blocksRaycasts = !locked;
+    }
+
+    static void SetGraphicDim(Transform root, bool dim)
+    {
+        if (root == null) return;
+        var images = root.GetComponentsInChildren<Image>(true);
+        for (int i = 0; i < images.Length; i++)
+        {
+            if (images[i] == null) continue;
+            Color c = images[i].color;
+            c.a = dim ? 0.4f : 1f;
+            images[i].color = c;
+        }
+        var texts = root.GetComponentsInChildren<Text>(true);
+        for (int i = 0; i < texts.Length; i++)
+        {
+            if (texts[i] == null) continue;
+            Color c = texts[i].color;
+            c.a = dim ? 0.45f : 1f;
+            texts[i].color = c;
+        }
+    }
+
+    void RefreshDropIcons()
+    {
+        if (dropIconContainer == null) return;
+
+        var slots = new List<DropSlot>();
+        for (int i = 0; i < 4; i++)
+        {
+            var kuang = dropIconContainer.Find($"Iconkuang{i}");
+            var icon = dropIconContainer.Find($"Icon{i}");
+            if (kuang == null && icon == null) continue;
+            slots.Add(new DropSlot { kuang = kuang, icon = icon });
+        }
+
+        bool playable = IsModePlayable(_selectedMode);
+        bool goldOnly = IsActivityMode(_selectedMode);
+        int showCount = 0;
+        if (playable)
+            showCount = goldOnly ? 1 : Mathf.Min(slots.Count, 2);
+
+        Sprite goldSp = LoadGoldDropSprite();
+        for (int i = 0; i < slots.Count; i++)
+        {
+            bool on = i < showCount;
+            if (slots[i].kuang != null) slots[i].kuang.gameObject.SetActive(on);
+            if (slots[i].icon != null) slots[i].icon.gameObject.SetActive(on);
+            if (!on || slots[i].icon == null) continue;
+            var img = slots[i].icon.GetComponent<Image>();
+            if (img == null) continue;
+            if (i == 0 && goldSp != null)
+            {
+                img.sprite = goldSp;
+                img.color = Color.white;
+                img.preserveAspect = true;
+            }
+        }
+    }
+
+    struct DropSlot
+    {
+        public Transform kuang;
+        public Transform icon;
+    }
+
+    Sprite LoadGoldDropSprite()
+    {
+        if (_goldDropSprite != null) return _goldDropSprite;
+        Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : null;
+        if (hall != null)
+        {
+            Transform t = TownSharedChrome.FindDeep(hall, "GoldIcon")
+                          ?? TownSharedChrome.FindDeep(hall, "金币");
+            if (t != null)
+            {
+                var img = t.GetComponent<Image>();
+                if (img != null && img.sprite != null)
+                    _goldDropSprite = img.sprite;
+            }
+        }
+        return _goldDropSprite;
+    }
+
+    void Toast(string msg)
+    {
+        Debug.Log("[AdventureUI] " + msg);
+        ShowFloatToast(msg);
+    }
+
+    void ShowFloatToast(string msg)
+    {
+        EnsureFloatToast();
+        if (_floatToast == null) return;
+        if (_floatToastCo != null) StopCoroutine(_floatToastCo);
+        _floatToastCo = StartCoroutine(CoFloatToast(msg));
+    }
+
+    void HideFloatToast()
+    {
+        if (_floatToastCo != null)
+        {
+            StopCoroutine(_floatToastCo);
+            _floatToastCo = null;
+        }
+        if (_floatToast != null)
+            _floatToast.gameObject.SetActive(false);
+    }
+
+    void EnsureFloatToast()
+    {
+        if (_floatToast != null) return;
+        var go = new GameObject("FloatToast", typeof(RectTransform), typeof(Text));
+        go.transform.SetParent(transform, false);
+        _floatToastRt = go.GetComponent<RectTransform>();
+        _floatToastRt.anchorMin = new Vector2(0.5f, 0.5f);
+        _floatToastRt.anchorMax = new Vector2(0.5f, 0.5f);
+        _floatToastRt.pivot = new Vector2(0.5f, 0.5f);
+        _floatToastRt.sizeDelta = new Vector2(560f, 80f);
+        _floatToastRt.anchoredPosition = Vector2.zero;
+        _floatToast = go.GetComponent<Text>();
+        _floatToast.font = GameFonts.GetChinese();
+        _floatToast.fontSize = 32;
+        _floatToast.alignment = TextAnchor.MiddleCenter;
+        _floatToast.color = new Color(1f, 0.94f, 0.72f, 1f);
+        _floatToast.horizontalOverflow = HorizontalWrapMode.Overflow;
+        _floatToast.raycastTarget = false;
+        var outline = go.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+        outline.effectDistance = new Vector2(1.5f, -1.5f);
+        go.transform.SetAsLastSibling();
+        go.SetActive(false);
+    }
+
+    IEnumerator CoFloatToast(string msg)
+    {
+        _floatToast.text = msg;
+        _floatToast.gameObject.SetActive(true);
+        _floatToast.transform.SetAsLastSibling();
+        Color c = _floatToast.color;
+        c.a = 1f;
+        _floatToast.color = c;
+        _floatToastRt.anchoredPosition = Vector2.zero;
+
+        yield return new WaitForSeconds(2f);
+
+        const float dur = 0.65f;
+        float t = 0f;
+        Vector2 start = Vector2.zero;
+        Vector2 end = new Vector2(0f, 120f);
+        while (t < dur)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / dur);
+            _floatToastRt.anchoredPosition = Vector2.Lerp(start, end, u);
+            c.a = 1f - u;
+            _floatToast.color = c;
+            yield return null;
+        }
+
+        _floatToast.gameObject.SetActive(false);
+        _floatToastCo = null;
     }
 
     // ────────────────────────────────────────────────────
     // 工具方法
     // ────────────────────────────────────────────────────
+
+    /// <summary>从预制体节点回填公开引用（生成后改过树也能尽量绑上）</summary>
+    void AutoBindFromHierarchy()
+    {
+        var left = transform.Find("LeftSidebar");
+        if (left != null)
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                var btnT = left.Find($"ModeBtn_{i}");
+                if (btnT == null) continue;
+                var btn = btnT.GetComponent<Button>();
+                if (modeButtons.Length > i) modeButtons[i] = btn;
+                var label = btnT.Find("Label")?.GetComponent<Text>();
+                if (modeButtonLabels.Length > i) modeButtonLabels[i] = label;
+                var iconImg = btnT.Find("Icon")?.GetComponent<Image>();
+                if (modeButtonIcons.Length > i && iconImg != null) modeButtonIcons[i] = iconImg;
+            }
+        }
+
+        var right = transform.Find("RightContent");
+        var mapRoot = right != null ? right.Find("MapRoot") : transform.Find("MapRoot");
+        if (mapRoot != null)
+        {
+            if (mapBg == null) mapBg = mapRoot.Find("MapBg")?.GetComponent<Image>();
+            if (stageNodeContainer == null) stageNodeContainer = mapRoot.Find("StageNodes");
+            var titleBar = mapRoot.Find("TitleBar");
+            if (titleBar != null)
+            {
+                if (chapterTitle == null) chapterTitle = titleBar.Find("ChapterTitle")?.GetComponent<Text>();
+                if (prevChapterBtn == null) prevChapterBtn = titleBar.Find("PrevBtn")?.GetComponent<Button>();
+                if (nextChapterBtn == null) nextChapterBtn = titleBar.Find("NextBtn")?.GetComponent<Button>();
+            }
+        }
+
+        var detail = transform.Find("DetailPanel");
+        if (detail == null && right != null) detail = right.Find("DetailPanel");
+        if (detail == null) return;
+        stageNameLabel = detail.Find("StageName")?.GetComponent<Text>();
+        stageDescLabel = detail.Find("StageDesc")?.GetComponent<Text>();
+        enemyIconContainer = detail.Find("EnemyIcons");
+        dropIconContainer = detail.Find("DropIcons");
+        staminaCostLabel = detail.Find("StaminaCost")?.GetComponent<Text>();
+        remainChancesLabel = detail.Find("Chances")?.GetComponent<Text>();
+        addChancesBtn = detail.Find("AddChances")?.GetComponent<Button>();
+        startBtn = detail.Find("StartBtn")?.GetComponent<Button>();
+        sweepBtn = detail.Find("SweepBtn")?.GetComponent<Button>();
+        for (int i = 0; i < 4; i++)
+        {
+            string[] names = { "Diff_普通", "Diff_困难", "Diff_噩梦", "Diff_地狱" };
+            var d = detail.Find(names[i]);
+            if (d == null) continue;
+            if (difficultyButtons.Length > i) difficultyButtons[i] = d.GetComponent<Button>();
+            if (difficultyLabels.Length > i) difficultyLabels[i] = d.Find("Lbl")?.GetComponent<Text>();
+        }
+    }
 
     void EnsureVisibleTransform()
     {
@@ -784,11 +1653,44 @@ public class AdventureUI : MonoBehaviour, ITownPage
         if (rt.localScale == Vector3.zero) rt.localScale = Vector3.one;
     }
 
-    void ConfigCanvas()
+    bool _canvasConfigured;
+
+    void ConfigureHostCanvasOnce()
     {
+        if (_canvasConfigured) return;
+        EnsureVisibleTransform();
+        var hall = GetComponentInParent<GuildHallUI>();
+        bool nestedUnderHall = hall != null && hall.gameObject != gameObject;
+
+        if (nestedUnderHall)
+        {
+            // 嵌在大厅下：去掉独立 Canvas，走父 Canvas，才能盖不住共用资源条/底栏
+            var raycaster = GetComponent<GraphicRaycaster>();
+            if (raycaster != null) Destroy(raycaster);
+            var scaler = GetComponent<CanvasScaler>();
+            if (scaler != null) Destroy(scaler);
+            var own = GetComponent<Canvas>();
+            if (own != null) Destroy(own);
+            _canvasConfigured = true;
+            return;
+        }
+
         var canvas = GetComponent<Canvas>();
-        if (canvas == null) return;
+        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
+        canvas.enabled = true;
         UICanvasSetup.Apply(canvas);
+        if (GetComponent<GraphicRaycaster>() == null)
+            gameObject.AddComponent<GraphicRaycaster>();
+        _canvasConfigured = true;
+    }
+
+    /// <summary>未挂在大厅下时，才在本页挂一份资源条+底栏（预制体/独立打开）。</summary>
+    void EnsureStandaloneChrome(Transform hall)
+    {
+        var nested = GetComponentInParent<GuildHallUI>();
+        if (nested != null && nested.gameObject != gameObject) return;
+        TownSharedChrome.EnsureResourceBar(transform, hall);
+        TownSharedChrome.EnsureBottomNav(transform, hall, MainNavTab.Adventure);
     }
 
     static Image CreateImg(Transform parent, string name, Color color)

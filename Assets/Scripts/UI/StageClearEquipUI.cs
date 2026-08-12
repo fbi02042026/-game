@@ -62,7 +62,27 @@ public class StageClearEquipUI : MonoBehaviour
 
         BuildIfNeeded();
         EnsureEventSystem();
-        _root.SetActive(true);
+        if (_root != null)
+        {
+            _root.SetActive(true);
+            // 每次打开强制居中，防止父 Canvas 被改过后跑偏
+            var rt = _root.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                Stretch(rt);
+                rt.anchoredPosition = Vector2.zero;
+                rt.localScale = Vector3.one;
+            }
+            var panel = _root.transform.Find("Panel") as RectTransform;
+            if (panel != null)
+            {
+                panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 0.5f);
+                panel.pivot = new Vector2(0.5f, 0.5f);
+                panel.anchoredPosition = Vector2.zero;
+                panel.localScale = Vector3.one;
+            }
+            _root.transform.SetAsLastSibling();
+        }
         RefreshCards();
         RefreshCompare();
         RefreshEquipButton();
@@ -81,19 +101,25 @@ public class StageClearEquipUI : MonoBehaviour
     {
         if (_root != null) return;
 
-        Canvas canvas = FindObjectOfType<Canvas>();
-        if (canvas == null)
-        {
-            var cgo = new GameObject("StageClearCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            canvas = cgo.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 200;
-        }
+        // 独立 Overlay Canvas，避免挂到战斗 UI Canvas 上导致偏左/缩放错乱
+        var cgo = new GameObject("StageClearCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        DontDestroyOnLoad(cgo);
+        var canvas = cgo.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 220;
+        canvas.pixelPerfect = false;
+        var scaler = cgo.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(720f, 1280f);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 1f;
 
         _root = new GameObject("StageClearPanel", typeof(RectTransform));
-        _root.transform.SetParent(canvas.transform, false);
+        _root.transform.SetParent(cgo.transform, false);
         var rootRt = _root.GetComponent<RectTransform>();
         Stretch(rootRt);
+        rootRt.anchoredPosition = Vector2.zero;
+        rootRt.localScale = Vector3.one;
 
         var dim = CreateImage(_root.transform, "Dim", new Color(0f, 0f, 0f, 0.72f));
         Stretch(dim.rectTransform);
@@ -102,8 +128,10 @@ public class StageClearEquipUI : MonoBehaviour
         var prt = panel.rectTransform;
         prt.anchorMin = new Vector2(0.5f, 0.5f);
         prt.anchorMax = new Vector2(0.5f, 0.5f);
-        prt.sizeDelta = new Vector2(680f, 780f);
+        prt.pivot = new Vector2(0.5f, 0.5f);
         prt.anchoredPosition = Vector2.zero;
+        prt.sizeDelta = new Vector2(680f, 780f);
+        prt.localScale = Vector3.one;
 
         var title = CreateText(panel.transform, "Title", "关卡通关 · 选择一件装备", 30, TextAnchor.MiddleCenter);
         var trt = title.rectTransform;

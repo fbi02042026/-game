@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 场景流程（三场景）：
-/// · Boot — 持久化系统、进 Town
+/// · Boot — 持久化系统、登录界面，登录后进 Town
 /// · Town — 公会/酒馆/角色/日志等全部在此，切页不 LoadScene
 /// · Battle — 仅战斗；异步加载 + Loading 遮罩（含进场景后初始化，100% 再关）
 /// </summary>
@@ -52,8 +52,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
         bool showOverlay = scene.name != TOWN_SCENE;
         if (showOverlay)
         {
-            string tip = scene.name == BOOT_SCENE ? "进入城镇…" : "返回城镇…";
-            SceneLoadingCoordinator.Begin(tip, SceneLoadingCoordinator.LoadTarget.Town);
+            SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Town);
             TownSceneBootstrap.ResetForSceneLoad();
         }
 
@@ -99,7 +98,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
     {
         _loadingBattle = true;
         AutoGameInitializer.ResetForSceneLoad();
-        SceneLoadingCoordinator.Begin("进入冒险…", SceneLoadingCoordinator.LoadTarget.Battle);
+        SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);
         yield return null;
 
         var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(BATTLE_SCENE);

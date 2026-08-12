@@ -825,11 +825,11 @@ public class BattleUI : MonoBehaviour
     {
         if (slot == null) return;
 
-        // 酒馆未解锁的槽：完全保留预制体默认表现，不改头像/血条/不挂额外组件
+        // 酒馆未解锁的槽：显示「未开放」
         bool unlocked = index < maxSlots;
         if (!unlocked)
         {
-            slot.KeepArtistDefault();
+            slot.ShowUnavailable("未开放");
             return;
         }
 
@@ -1224,10 +1224,23 @@ public class CharacterSlotUI
     {
         if (root == null) return;
         root.SetActive(true);
-        // 不改 Layout、不改 Image、不 AddComponent；仅确保可见
-        // lockedOverlay 若美术已放好则显示，否则不动任何子节点
         if (lockedOverlay != null)
             lockedOverlay.SetActive(true);
+    }
+
+    /// <summary>未开放槽：保留节点可见，头像关掉，文案显示「未开放」</summary>
+    public void ShowUnavailable(string label = "未开放")
+    {
+        if (root == null) return;
+        root.SetActive(true);
+        if (lockedOverlay != null) lockedOverlay.SetActive(true);
+        if (portrait != null) portrait.gameObject.SetActive(false);
+        if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
+        if (levelLabel != null) levelLabel.text = label ?? "未开放";
+        if (hpText != null) hpText.text = "";
+        if (hpBarFill != null) hpBarFill.fillAmount = 0f;
+        if (lanBarFill != null) lanBarFill.fillAmount = 0f;
+        if (lanText != null) lanText.text = "";
     }
 }
 

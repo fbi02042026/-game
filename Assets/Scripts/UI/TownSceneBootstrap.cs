@@ -23,9 +23,26 @@ public class TownSceneBootstrap : MonoBehaviour
     {
         if (!GameSceneGate.IsTown) return;
         if (_done) return;
+
         var hall = Object.FindObjectOfType<GuildHallUI>();
-        if (hall != null && hall.GetComponent<TownSceneBootstrap>() == null)
-            hall.gameObject.AddComponent<TownSceneBootstrap>();
+        if (hall != null)
+        {
+            if (hall.GetComponent<TownSceneBootstrap>() == null)
+                hall.gameObject.AddComponent<TownSceneBootstrap>();
+            return;
+        }
+
+        // GuildHallUI 尚未就绪时挂到场景任意存活对象，避免 Loading 卡在 55%
+        Component host = Object.FindObjectOfType<TownSceneManager>();
+        if (host == null) host = Object.FindObjectOfType<TownHubController>();
+        if (host == null)
+        {
+            var go = new GameObject("TownSceneBootstrap");
+            go.AddComponent<TownSceneBootstrap>();
+            return;
+        }
+        if (host.GetComponent<TownSceneBootstrap>() == null)
+            host.gameObject.AddComponent<TownSceneBootstrap>();
     }
 
     void Start()
@@ -41,21 +58,43 @@ public class TownSceneBootstrap : MonoBehaviour
         TownSharedChrome.InvalidateCache();
 
         // 1/3 字体
-        GameFonts.GetChinese();
-        GameFonts.GetNumber();
+        try
+        {
+            GameFonts.GetChinese();
+            GameFonts.GetNumber();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[TownBootstrap] 字体预热异常: " + e.Message);
+        }
         SceneLoadingCoordinator.ReportPostLoadStep(1, 3);
         yield return null;
 
         // 2/3 常用预制体
-        Resources.Load<GameObject>("Prefabs/Town/TavernUI");
+        try
+        {
+            Resources.Load<GameObject>("Prefabs/Town/TavernUI");
+            Resources.Load<GameObject>("Prefabs/Town/AdventureUI");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[TownBootstrap] 预制体预热异常: " + e.Message);
+        }
         SceneLoadingCoordinator.ReportPostLoadStep(2, 3);
         yield return null;
 
         // 3/3 功能页预实例化
-        TownHubController hub = TownHubController.Instance;
-        if (hub == null) hub = FindObjectOfType<TownHubController>();
-        if (hub != null)
-            hub.PreloadAllPages();
+        try
+        {
+            TownHubController hub = TownHubController.Instance;
+            if (hub == null) hub = FindObjectOfType<TownHubController>();
+            if (hub != null)
+                hub.PreloadAllPages();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("[TownBootstrap] 功能页预加载异常: " + e);
+        }
 
         SceneLoadingCoordinator.ReportPostLoadStep(3, 3);
         yield return null;
@@ -63,7 +102,8 @@ public class TownSceneBootstrap : MonoBehaviour
         _done = true;
         IsLoadComplete = true;
         Debug.Log("[TownBootstrap] Town 功能页预加载完成（切页应无 Instantiate 延迟）");
-        SceneLoadingCoordinator.Finish();
+        if (SceneLoadingCoordinator.IsActive)
+            SceneLoadingCoordinator.Finish();
     }
 
     void OnDestroy()

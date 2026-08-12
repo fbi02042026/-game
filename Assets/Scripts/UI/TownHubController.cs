@@ -9,6 +9,7 @@ public class TownHubController : MonoBehaviour
     public static TownHubController Instance { get; private set; }
 
     static GameObject _tavernPrefabCache;
+    static GameObject _adventurePrefabCache;
 
     TavernUI _tavern;
     AdventureUI _adventure;
@@ -140,10 +141,23 @@ public class TownHubController : MonoBehaviour
     {
         if (_adventure != null) return;
 
-        var go = new GameObject("AdventureUI", typeof(RectTransform));
-        go.transform.SetParent(transform, false);
-        Stretch(go);
-        _adventure = go.AddComponent<AdventureUI>();
+        var prefab = Resources.Load<GameObject>("Prefabs/Town/AdventureUI");
+        if (prefab != null)
+        {
+            var go = Instantiate(prefab, transform, false);
+            go.name = "AdventureUI";
+            _adventure = go.GetComponent<AdventureUI>();
+            if (_adventure == null) _adventure = go.AddComponent<AdventureUI>();
+        }
+        else
+        {
+            // 兜底：资源路径断链时仍可用运行时建树
+            var go = new GameObject("AdventureUI", typeof(RectTransform));
+            go.transform.SetParent(transform, false);
+            Stretch(go);
+            _adventure = go.AddComponent<AdventureUI>();
+        }
+
         _adventure.PreloadOnce();
         _adventure.HidePage();
     }

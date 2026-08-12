@@ -6,16 +6,30 @@ using UnityEditor;
 #endif
 
 /// <summary>
-/// 通关宝箱流程：open1→open2 → 掉金币飞入资源条 + 地上装备表现 → 三选一 UI → 开 chuansongmen。
+/// 通关宝箱流程：按关卡换箱皮 → open1→open2 → 金币飞入 → 三选一 → chuansongmen。
+/// 箱皮：普通 mubox（小概率 yinbox）；精英 yinbox（小概率 jinbox）；Boss jinbox。
+/// 尺寸：yin=mu×1.2，jin=yin×1.2；粒子跟缩放变大，动画曲线/本地坐标不变。
 /// </summary>
 public class StageClearRewardDirector : MonoBehaviour
 {
     public static StageClearRewardDirector Instance { get; private set; }
 
+    const float BoxUpgradeChance = 0.12f;
+    const float YinScaleMul = 1.2f;
+    const float JinScaleMul = 1.2f * 1.2f; // 相对木箱
+
     Transform _boxRoot;
-    Transform _boxAnimTarget;
+    Transform _boxAnimHost;
+    Transform _effectRoot;
+    SpriteRenderer _closeSr;
+    SpriteRenderer _openSr;
     Animator _boxAnim;
     Transform _chuansongmen;
+    Vector3 _boxBaseScale = Vector3.one;
+    Vector3 _effectBaseScale = Vector3.one;
+    Vector3 _boxScenePos;
+    bool _boxScenePosCached;
+    bool _baseScaleCached;
     bool _running;
 
     public bool IsRunning => _running;
@@ -35,13 +49,47 @@ public class StageClearRewardDirector : MonoBehaviour
     {
         var wr = GameObject.Find("WorldRoot");
         Transform root = wr != null ? wr.transform : null;
-        _boxRoot = FindChildIgnoreCase(root, "box") ?? FindChildIgnoreCase(null, "box");
+        // 外层 WorldRoot/box（缩放挂这里，不动动画本地曲线）
+        _boxRoot = null;
+        if (root != null)
+        {
+            for (int i = 0; i < root.childCount; i++)
+            {
+                var c = root.GetChild(i);
+                if (string.Equals(c.name, "box", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    _boxRoot = c;
+                    break;
+                }
+            }
+        }
+        if (_boxRoot == null)
+            _boxRoot = FindChildIgnoreCase(null, "box");
+
         _chuansongmen = FindChildIgnoreCase(root, "chuansongmen") ?? FindChildIgnoreCase(null, "chuansongmen");
 
         if (_boxRoot != null)
         {
             _boxAnim = _boxRoot.GetComponentInChildren<Animator>(true);
-            _boxAnimTarget = _boxAnim != null ? _boxAnim.transform : _boxRoot;
+            _boxAnimHost = _boxAnim != null ? _boxAnim.transform : _boxRoot;
+            var closeT = FindChildIgnoreCase(_boxAnimHost, "close");
+            var openT = FindChildIgnoreCase(_boxAnimHost, "open");
+            _closeSr = closeT != null ? closeT.GetComponent<SpriteRenderer>() : null;
+            _openSr = openT != null ? openT.GetComponent<SpriteRenderer>() : null;
+            _effectRoot = FindChildIgnoreCase(_boxAnimHost, "effect");
+            if (!_baseScaleCached)
+            {
+                _boxBaseScale = _boxRoot.localScale;
+                if (_boxBaseScale == Vector3.zero) _boxBaseScale = Vector3.one;
+                _effectBaseScale = _effectRoot != null ? _effectRoot.localScale : Vector3.one;
+                if (_effectBaseScale == Vector3.zero) _effectBaseScale = Vector3.one;
+                _baseScaleCached = true;
+            }
+            if (!_boxScenePosCached)
+            {
+                _boxScenePos = _boxRoot.position;
+                _boxScenePosCached = true;
+            }
             EnsureBoxController();
             _boxRoot.gameObject.SetActive(false);
         }
@@ -62,6 +110,92 @@ public class StageClearRewardDirector : MonoBehaviour
 #endif
     }
 
+    public static ClearBoxTier ResolveBoxTier(StageType stageType)
+    {
+        float roll = Random.value;
+        switch (stageType)
+        {
+            case StageType.Boss:
+                return ClearBoxTier.Jin;
+            case StageType.Elite:
+                return roll < BoxUpgradeChance ? ClearBoxTier.Jin : ClearBoxTier.Yin;
+            default:
+                // 普通及其它功能关：木箱，小概率银箱
+                return roll < BoxUpgradeChance ? ClearBoxTier.Yin : ClearBoxTier.Mu;
+        }
+    }
+
+    static float TierScale(ClearBoxTier tier)
+    {
+        switch (tier)
+        {
+            case ClearBoxTier.Yin: return YinScaleMul;
+            case ClearBoxTier.Jin: return JinScaleMul;
+            default: return 1f;
+        }
+    }
+
+    static string TierPrefix(ClearBoxTier tier)
+    {
+        switch (tier)
+        {
+            case ClearBoxTier.Yin: return "yinbox";
+            case ClearBoxTier.Jin: return "jinbox";
+            default: return "mubox";
+        }
+    }
+
+    void ApplyBoxVisual(ClearBoxTier tier)
+    {
+        if (_boxRoot == null) return;
+
+        float s = TierScale(tier);
+        // 缩放挂在外层 box：动画曲线/close·open 本地坐标不变，粒子跟着变大
+        _boxRoot.localScale = _boxBaseScale * s;
+        if (_effectRoot != null)
+            _effectRoot.localScale = _effectBaseScale;
+
+        Sprite closeSp = LoadBoxSprite(TierPrefix(tier) + "_close");
+        Sprite openSp = LoadBoxSprite(TierPrefix(tier) + "_open");
+        if (_closeSr != null && closeSp != null) _closeSr.sprite = closeSp;
+        if (_openSr != null && openSp != null) _openSr.sprite = openSp;
+        EnsureEffectAlive();
+    }
+
+    void EnsureEffectAlive()
+    {
+        if (_boxRoot == null) return;
+        if (_effectRoot == null)
+            _effectRoot = FindChildIgnoreCase(_boxAnimHost != null ? _boxAnimHost : _boxRoot, "effect");
+        if (_effectRoot == null) return;
+        if (!_effectRoot.gameObject.activeSelf)
+            _effectRoot.gameObject.SetActive(true);
+        var particles = _effectRoot.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < particles.Length; i++)
+        {
+            if (particles[i] == null) continue;
+            if (!particles[i].gameObject.activeSelf)
+                particles[i].gameObject.SetActive(true);
+            particles[i].Play(true);
+        }
+    }
+
+    static Sprite LoadBoxSprite(string fileNameNoExt)
+    {
+        Sprite sp = Resources.Load<Sprite>("UI/box/" + fileNameNoExt);
+        if (sp != null) return sp;
+        Texture2D tex = Resources.Load<Texture2D>("UI/box/" + fileNameNoExt);
+#if UNITY_EDITOR
+        if (sp == null)
+            sp = AssetDatabase.LoadAssetAtPath<Sprite>($"Assets/Art/UI/box/{fileNameNoExt}.png");
+        if (tex == null)
+            tex = AssetDatabase.LoadAssetAtPath<Texture2D>($"Assets/Art/UI/box/{fileNameNoExt}.png");
+        if (sp != null) return sp;
+#endif
+        if (tex == null) return null;
+        return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+    }
+
     public void HideClearProps()
     {
         if (_boxRoot != null) _boxRoot.gameObject.SetActive(false);
@@ -69,35 +203,38 @@ public class StageClearRewardDirector : MonoBehaviour
         _running = false;
     }
 
-    public void Begin(List<EquipInstance> rewards, int bonusGold)
+    public void Begin(List<EquipInstance> rewards, int bonusGold, StageType stageType = StageType.Normal)
     {
         if (_running) return;
         CacheSceneRefs();
-        StartCoroutine(CoReward(rewards, bonusGold));
+        StartCoroutine(CoReward(rewards, bonusGold, stageType));
     }
 
-    IEnumerator CoReward(List<EquipInstance> rewards, int bonusGold)
+    IEnumerator CoReward(List<EquipInstance> rewards, int bonusGold, StageType stageType)
     {
         _running = true;
         var bm = BattleManager.Instance;
         if (bm != null) bm.UnitsCanAct = false;
 
-        // —— 宝箱 ——
-        Vector3 boxPos = bm != null && bm.hero != null
-            ? bm.hero.transform.position + new Vector3(2.2f, 0f, 0f)
-            : Vector3.zero;
-        boxPos.y = UnitBase.GROUND_Y;
+        ClearBoxTier tier = ResolveBoxTier(stageType);
+        ApplyBoxVisual(tier);
+        Debug.Log($"[StageClearReward] 宝箱品质={tier} stage={stageType}");
 
+        // —— 宝箱：用场景里摆好的位置，只整体上移 0.5 ——
         if (_boxRoot != null)
         {
-            _boxRoot.position = new Vector3(boxPos.x, _boxRoot.position.y, _boxRoot.position.z);
+            Vector3 p = _boxScenePos;
+            p.y += 0.5f;
+            _boxRoot.position = p;
             _boxRoot.gameObject.SetActive(true);
+            EnsureEffectAlive();
             EnsureBoxController();
             if (_boxAnim != null)
             {
                 _boxAnim.enabled = true;
                 _boxAnim.Play("open1", 0, 0f);
                 yield return WaitAnimOrSeconds(_boxAnim, "open1", 1.15f);
+                // open2 已在控制器里设为循环；播完 open1 后强制切入并保持循环
                 _boxAnim.Play("open2", 0, 0f);
             }
             else
@@ -113,7 +250,7 @@ public class StageClearRewardDirector : MonoBehaviour
             int coinCount = Mathf.Clamp(goldDrop / 5, 6, 18);
             int goldPerCoin = Mathf.Max(1, goldDrop / coinCount);
             int goldRemain = goldDrop;
-            Vector3 spawnGold = _boxRoot != null ? _boxRoot.position : boxPos;
+            Vector3 spawnGold = _boxRoot != null ? _boxRoot.position : Vector3.zero;
             spawnGold.y = UnitBase.GROUND_Y + 0.3f;
 
             for (int i = 0; i < coinCount; i++)
@@ -127,7 +264,7 @@ public class StageClearRewardDirector : MonoBehaviour
         }
 
         // —— 地上装备表现（不可点，仅视觉）——
-        Vector3 spawn = _boxRoot != null ? _boxRoot.position : boxPos;
+        Vector3 spawn = _boxRoot != null ? _boxRoot.position : Vector3.zero;
         spawn.y = UnitBase.GROUND_Y + 0.3f;
         var show = new List<EquipInstance>();
         if (rewards != null)

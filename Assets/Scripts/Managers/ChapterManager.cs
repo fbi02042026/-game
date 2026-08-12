@@ -68,6 +68,24 @@ public class ChapterManager : Singleton<ChapterManager>
         Debug.Log($"[ChapterManager] 第{chapterNum}章关卡图生成完成，共{stageMap.Count}关");
     }
 
+    /// <summary>金币副本：单场战斗，通关拿固定金，不推进主线章节。</summary>
+    public void StartGoldDungeon(int chapterNum)
+    {
+        currentChapter = Mathf.Clamp(chapterNum, 1, 8);
+        currentStageIndex = 0;
+        stageMap.Clear();
+        availableNextStages.Clear();
+        var stage = new StageData
+        {
+            stageIndex = 0,
+            type = StageType.Elite,
+            nextStages = new List<int>()
+        };
+        stageMap.Add(stage);
+        availableNextStages.Add(stage);
+        Debug.Log($"[ChapterManager] 金币副本 第{currentChapter}章 单场");
+    }
+
     /// <summary>
     /// 分配关卡类型：普通/精英/特殊/BOSS
     /// </summary>
@@ -212,6 +230,9 @@ public class ChapterManager : Singleton<ChapterManager>
     /// </summary>
     public void OnStageComplete()
     {
+        if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
+            return;
+
         if (currentStageIndex >= GameConfig.STAGES_PER_CHAPTER - 1)
         {
             // === 章节通关逻辑 ===
