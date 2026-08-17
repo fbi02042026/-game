@@ -13,6 +13,7 @@ public class TownHubController : MonoBehaviour
 
     TavernUI _tavern;
     AdventureUI _adventure;
+    CharacterUI _character;
     MainBottomNav _nav;
     bool _wired;
     bool _pagesPreloaded;
@@ -53,6 +54,7 @@ public class TownHubController : MonoBehaviour
         EnsureNavBound();
         EnsureTavernPreloaded();
         EnsureAdventurePreloaded();
+        EnsureCharacterPreloaded();
         _pagesPreloaded = true;
         ShowGuildOnly();
         if (_nav != null)
@@ -77,15 +79,15 @@ public class TownHubController : MonoBehaviour
 
     bool OnTabOverride(MainNavTab tab)
     {
-        if (tab == MainNavTab.Guild || tab == MainNavTab.Tavern || tab == MainNavTab.Adventure)
+        if (tab == MainNavTab.Guild || tab == MainNavTab.Tavern || tab == MainNavTab.Adventure || tab == MainNavTab.Character)
         {
             SwitchTab(tab);
             return true;
         }
-        if (tab == MainNavTab.Character || tab == MainNavTab.Log)
+        if (tab == MainNavTab.Log)
         {
-            UIManager.Instance?.ShowToast(tab == MainNavTab.Character ? "角色（待实现）" : "冒险日志（待实现）");
-            if (_current == MainNavTab.Tavern || _current == MainNavTab.Adventure)
+            UIManager.Instance?.ShowToast("冒险日志（待实现）");
+            if (_current == MainNavTab.Tavern || _current == MainNavTab.Adventure || _current == MainNavTab.Character)
                 SwitchTab(MainNavTab.Guild);
             return true;
         }
@@ -104,17 +106,26 @@ public class TownHubController : MonoBehaviour
         if (tab == MainNavTab.Tavern)
         {
             _adventure?.HidePage();
+            _character?.HidePage();
             _tavern?.ShowPage();
         }
         else if (tab == MainNavTab.Adventure)
         {
             _tavern?.HidePage();
+            _character?.HidePage();
             _adventure?.ShowPage();
+        }
+        else if (tab == MainNavTab.Character)
+        {
+            _tavern?.HidePage();
+            _adventure?.HidePage();
+            _character?.ShowPage();
         }
         else
         {
             _tavern?.HidePage();
             _adventure?.HidePage();
+            _character?.HidePage();
             ShowGuildOnly();
         }
     }
@@ -135,6 +146,38 @@ public class TownHubController : MonoBehaviour
         _nav.OnTabSelected += OnTabSelected;
         _nav.OnTabClickOverride -= OnTabOverride;
         _nav.OnTabClickOverride += OnTabOverride;
+    }
+
+    void EnsureCharacterPreloaded()
+    {
+        if (_character != null) return;
+
+        var prefab = Resources.Load<GameObject>("Prefabs/Town/CharacterUI");
+        if (prefab != null)
+        {
+            var go = Instantiate(prefab, transform, false);
+            go.name = "CharacterUI";
+            _character = go.GetComponent<CharacterUI>();
+            if (_character == null) _character = go.AddComponent<CharacterUI>();
+        }
+        else
+        {
+            var go = new GameObject("CharacterUI", typeof(RectTransform));
+            go.transform.SetParent(transform, false);
+            Stretch(go);
+            _character = go.AddComponent<CharacterUI>();
+        }
+
+        _character.PreloadOnce();
+        _character.HidePage();
+    }
+
+    public void OpenCharacter()
+    {
+        EnsureWired();
+        if (!_pagesPreloaded) PreloadAllPages();
+        _nav?.SetSelected(MainNavTab.Character, notify: true);
+        SwitchTab(MainNavTab.Character);
     }
 
     void EnsureAdventurePreloaded()

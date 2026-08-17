@@ -1258,11 +1258,13 @@ public class GridCellUI
     public int gridY;                   // 格子Y坐标
     public EquipInstance equippedItem;  // 当前装备的物品
 
-    /// <summary>底行等：天赋未解锁时显示锁定遮罩</summary>
+    /// <summary>底行等：天赋未解锁时显示锁定遮罩；无独立遮罩时隐藏整格</summary>
     public void SetRowLocked(bool locked)
     {
         if (lockedOverlay != null)
             lockedOverlay.SetActive(locked);
+        else if (root != null)
+            root.SetActive(!locked);
         if (locked)
         {
             equippedItem = null;
@@ -1272,6 +1274,8 @@ public class GridCellUI
                 itemIcon.gameObject.SetActive(false);
             }
         }
+        else if (root != null && !root.activeSelf)
+            root.SetActive(true);
     }
 
     /// <summary>

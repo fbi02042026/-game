@@ -48,7 +48,9 @@ public class LoginUI : MonoBehaviour
     bool _wired;
     bool _agreeSetup;
     bool _presentationApplied;
+    bool _footerLayoutReady;
     System.Action _enterTown;
+    RectTransform _healthNoticeRt;
     Text _toastText;
     RectTransform _toastRt;
     Coroutine _toastCo;
@@ -67,6 +69,8 @@ public class LoginUI : MonoBehaviour
             AutoBindFromHierarchy();
         EnsureAgreeToggle();
         ApplyPresentation();
+        EnsureBottomFooterLayout();
+        EnsureLogoMotion();
         WireClicks();
     }
 
@@ -74,7 +78,14 @@ public class LoginUI : MonoBehaviour
     {
         EnsureAgreeToggle();
         ApplyPresentation();
+        EnsureBottomFooterLayout();
+        EnsureLogoMotion();
         WireClicks();
+    }
+
+    void OnRectTransformDimensionsChange()
+    {
+        ApplyBottomFooterLayout();
     }
 
     /// <summary>
@@ -223,6 +234,94 @@ public class LoginUI : MonoBehaviour
     {
         var t = transform.Find(path);
         if (t != null) t.gameObject.SetActive(active);
+    }
+
+    /// <summary>
+    /// 底部健康忠告与 12+ 适龄图标分栏锚定，避免不同分辨率下重叠。
+    /// </summary>
+    void EnsureBottomFooterLayout()
+    {
+        if (ageRatingImage == null)
+            ageRatingImage = FindImg("AgeRating");
+        if (_healthNoticeRt == null)
+            _healthNoticeRt = FindHealthNoticeRect();
+
+        if (ageRatingImage == null || _healthNoticeRt == null)
+            return;
+
+        if (!_footerLayoutReady)
+        {
+            _footerLayoutReady = true;
+            var ageImg = ageRatingImage;
+            ageImg.preserveAspect = true;
+            var noticeText = _healthNoticeRt.GetComponent<Text>();
+            if (noticeText != null)
+            {
+                noticeText.horizontalOverflow = HorizontalWrapMode.Wrap;
+                noticeText.verticalOverflow = VerticalWrapMode.Overflow;
+                noticeText.alignment = TextAnchor.LowerCenter;
+            }
+        }
+
+        ApplyBottomFooterLayout();
+    }
+
+    void ApplyBottomFooterLayout()
+    {
+        if (ageRatingImage == null || _healthNoticeRt == null)
+            return;
+
+        const float bottomPad = 20f;
+        const float sidePad = 18f;
+        const float gap = 12f;
+        const float ageW = 70f;
+        const float ageH = 89f;
+        const float noticeHeight = 78f;
+        const float maxNoticeWidth = 550f;
+
+        var rootRt = transform as RectTransform;
+        float canvasW = rootRt != null ? rootRt.rect.width : 720f;
+        float textW = Mathf.Min(maxNoticeWidth, canvasW - sidePad * 2f - ageW - gap);
+
+        var ageRt = ageRatingImage.rectTransform;
+        ageRt.anchorMin = new Vector2(1f, 0f);
+        ageRt.anchorMax = new Vector2(1f, 0f);
+        ageRt.pivot = new Vector2(1f, 0f);
+        ageRt.sizeDelta = new Vector2(ageW, ageH);
+        ageRt.anchoredPosition = new Vector2(-sidePad, bottomPad);
+
+        // 文案居中，整体略向左偏半个图标宽，与右侧 12+ 形成视觉平衡且不重叠
+        _healthNoticeRt.anchorMin = new Vector2(0.5f, 0f);
+        _healthNoticeRt.anchorMax = new Vector2(0.5f, 0f);
+        _healthNoticeRt.pivot = new Vector2(0.5f, 0f);
+        _healthNoticeRt.sizeDelta = new Vector2(textW, noticeHeight);
+        _healthNoticeRt.anchoredPosition = new Vector2(-(ageW + gap) * 0.5f, bottomPad);
+    }
+
+    RectTransform FindHealthNoticeRect()
+    {
+        var direct = transform.Find("用户协议");
+        if (direct != null)
+            return direct as RectTransform;
+
+        foreach (var text in GetComponentsInChildren<Text>(true))
+        {
+            if (text == null || string.IsNullOrEmpty(text.text))
+                continue;
+            if (text.text.Contains("抵制不良游戏"))
+                return text.rectTransform;
+        }
+
+        return null;
+    }
+
+    void EnsureLogoMotion()
+    {
+        if (logoImage == null)
+            logoImage = FindImg("Logo");
+        if (logoImage == null) return;
+        if (logoImage.GetComponent<LoginLogoMotion>() == null)
+            logoImage.gameObject.AddComponent<LoginLogoMotion>();
     }
 
     public void WireClicks()

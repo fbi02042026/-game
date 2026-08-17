@@ -165,7 +165,21 @@ public class TownSceneManager : MonoBehaviour
 
     void OnOpenTalent()
     {
-        Debug.Log("[Town] 天赋升级（待实现）");
+        if (TalentUI.Instance != null)
+        {
+            TalentUI.Instance.Show();
+            return;
+        }
+        var prefab = Resources.Load<GameObject>("Prefabs/Talent/TalentUI");
+        if (prefab == null)
+        {
+            Debug.LogWarning("[Town] 缺少 Prefabs/Talent/TalentUI");
+            return;
+        }
+        var go = Instantiate(prefab);
+        go.name = "TalentUI";
+        var ui = go.GetComponent<TalentUI>();
+        if (ui != null) ui.Show();
     }
 
     void OnOpenSettings()

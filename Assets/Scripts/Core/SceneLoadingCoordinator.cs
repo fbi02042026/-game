@@ -1,9 +1,8 @@
-using System;
 using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// 场景 Loading 进度协调：百分比与真实加载阶段对齐，到 100% 并短暂停留后再关闭遮罩。
+/// 场景 Loading 进度协调：真实进度只增不减；显示进度在等待时缓慢爬向 99%，Finish 后再到 100%。
 ///
 /// 各场景加载内容（权重见 Begin）：
 /// · Boot→Town：异步场景 0~55% → 字体/预制体/功能页预热 55~100%
@@ -20,44 +19,44 @@ public static class SceneLoadingCoordinator
 
     const float SceneLoadEndTown = 0.55f;
     const float SceneLoadEndBattle = 0.45f;
+    const float DisplayCap = 0.99f;
     const float HoldAt100Seconds = 0.4f;
+    /// <summary>距 99% 越近爬得越慢，长时间等待也不会一直钉在同一数字</summary>
+    const float CreepFactor = 0.32f;
 
     static LoadTarget _target;
-    static float _progress;
+    static float _realProgress;
+    static float _displayProgress;
     static bool _active;
     static bool _finishRequested;
+    static bool _tickRunning;
     static LoadingProgressRunner _runner;
 
     public static bool IsActive => _active;
-    public static float Progress => _progress;
+    public static float Progress => _displayProgress;
 
     public static void Begin(string tip, LoadTarget target)
     {
         _target = target;
-        _progress = 0f;
+        _realProgress = 0f;
+        _displayProgress = 0f;
         _active = true;
         _finishRequested = false;
-        // tip 为空则按目标场景抽一条剧情提示
         string storyTip = string.IsNullOrEmpty(tip) ? LoadingTips.Pick(target) : tip;
         BattleLoadingOverlay.Show(storyTip);
         BattleLoadingOverlay.SetProgress(0f);
+        StartDisplayTick();
     }
 
-    /// <summary>按目标场景随机剧情提示开 Loading</summary>
-    public static void Begin(LoadTarget target)
-    {
-        Begin(null, target);
-    }
+    public static void Begin(LoadTarget target) => Begin(null, target);
 
-    /// <summary>绝对进度 0~1，只增不减</summary>
+    /// <summary>绝对进度 0~1，只增不减（驱动显示下限）</summary>
     public static void Report(float progress01)
     {
         if (!_active) return;
-        _progress = Mathf.Max(_progress, Mathf.Clamp01(progress01));
-        BattleLoadingOverlay.SetProgress(_progress);
+        _realProgress = Mathf.Max(_realProgress, Mathf.Clamp01(progress01));
     }
 
-    /// <summary>场景 AsyncOperation 进度映射到 [0, sceneEnd]</summary>
     public static void ReportSceneAsync(AsyncOperation op)
     {
         if (!_active || op == null) return;
@@ -66,14 +65,12 @@ public static class SceneLoadingCoordinator
         Report(p);
     }
 
-    /// <summary>场景文件加载完成</summary>
     public static void ReportSceneLoaded()
     {
         if (!_active) return;
         Report(_target == LoadTarget.Town ? SceneLoadEndTown : SceneLoadEndBattle);
     }
 
-    /// <summary>场景加载后的初始化分步（step 从 1 开始）</summary>
     public static void ReportPostLoadStep(int step, int total)
     {
         if (!_active || total <= 0) return;
@@ -87,34 +84,79 @@ public static class SceneLoadingCoordinator
     {
         if (!_active || _finishRequested) return;
         _finishRequested = true;
-        Report(1f);
-        EnsureRunner().StartCoroutine(CoHoldThenHide());
+        _realProgress = 1f;
     }
 
-    static IEnumerator CoHoldThenHide()
+    static void StartDisplayTick()
     {
-        BattleLoadingOverlay.SetProgress(1f);
-        float t = 0f;
-        while (t < HoldAt100Seconds)
+        if (_tickRunning) return;
+        _tickRunning = true;
+        EnsureRunner().StartCoroutine(CoDisplayTick());
+    }
+
+    static IEnumerator CoDisplayTick()
+    {
+        float holdT = 0f;
+        bool holdingAt100 = false;
+
+        while (_active)
         {
-            t += Time.unscaledDeltaTime;
+            float dt = Time.unscaledDeltaTime;
+
+            if (!holdingAt100)
+            {
+                if (!_finishRequested)
+                {
+                    _displayProgress = Mathf.Max(_realProgress, _displayProgress);
+                    if (_displayProgress < DisplayCap)
+                    {
+                        float room = DisplayCap - _displayProgress;
+                        _displayProgress += room * CreepFactor * dt;
+                        _displayProgress = Mathf.Min(DisplayCap, _displayProgress);
+                    }
+                }
+                else
+                {
+                    _displayProgress = Mathf.MoveTowards(_displayProgress, 1f, dt * 1.8f);
+                    if (_displayProgress >= 0.999f)
+                    {
+                        _displayProgress = 1f;
+                        holdingAt100 = true;
+                        holdT = 0f;
+                    }
+                }
+
+                BattleLoadingOverlay.SetProgress(_displayProgress);
+            }
+            else
+            {
+                holdT += dt;
+                if (holdT >= HoldAt100Seconds)
+                {
+                    BattleLoadingOverlay.Hide();
+                    _active = false;
+                    _finishRequested = false;
+                    _realProgress = 0f;
+                    _displayProgress = 0f;
+                    _tickRunning = false;
+                    yield break;
+                }
+            }
+
             yield return null;
         }
-        BattleLoadingOverlay.Hide();
-        _active = false;
-        _finishRequested = false;
-        _progress = 0f;
+
+        _tickRunning = false;
     }
 
     static LoadingProgressRunner EnsureRunner()
     {
         if (_runner != null) return _runner;
         var go = new GameObject("SceneLoadingCoordinator");
-        UnityEngine.Object.DontDestroyOnLoad(go);
+        Object.DontDestroyOnLoad(go);
         _runner = go.AddComponent<LoadingProgressRunner>();
         return _runner;
     }
 
-    /// <summary>供 DontDestroyOnLoad 上跑协程</summary>
     sealed class LoadingProgressRunner : MonoBehaviour { }
 }

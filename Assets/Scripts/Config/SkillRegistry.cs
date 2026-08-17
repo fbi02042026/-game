@@ -56,8 +56,15 @@ public class SkillRegistry : Singleton<SkillRegistry>
         return cfg != null ? cfg.ToActiveSkill() : null;
     }
 
-    /// <summary>玩家/佣兵默认技能（可按存档扩展）</summary>
-    public string GetPlayerSkillId() => DefaultPlayerSkillId;
+    /// <summary>玩家当前携带技能（角色页选择；映射到现有 Ally SkillConfig）</summary>
+    public string GetPlayerSkillId()
+    {
+        string selected = SaveSystem.Instance?.Data?.selectedPlayerSkillId;
+        var def = PlayerSkillDefs.GetById(selected);
+        if (def != null && !string.IsNullOrEmpty(def.allyConfigId))
+            return def.allyConfigId;
+        return DefaultPlayerSkillId;
+    }
 
     public string GetMercDefaultSkillId(string mercId)
     {

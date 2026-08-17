@@ -45,6 +45,8 @@ public class SaveSystem : Singleton<SaveSystem>
                 }
             }
             _data = new SaveData();
+            if (string.IsNullOrEmpty(_data.selectedPlayerSkillId))
+                _data.selectedPlayerSkillId = "heal_spring";
             Save();
             return;
         }
@@ -60,6 +62,8 @@ public class SaveSystem : Singleton<SaveSystem>
 
             // 修复可能为null的字段
             _data.talents ??= new System.Collections.Generic.Dictionary<string, int>();
+            if (string.IsNullOrEmpty(_data.selectedPlayerSkillId))
+                _data.selectedPlayerSkillId = PlayerSkillDefs.All[0].id;
             _data.unlockedLegendaryWeapons ??= new System.Collections.Generic.HashSet<string>();
             _data.legacyEquipPool ??= new System.Collections.Generic.List<EquipmentData>();
             _data.townLevel ??= new TownLevel();
@@ -94,6 +98,8 @@ public class SaveSystem : Singleton<SaveSystem>
                 catch { }
             }
             _data = new SaveData();
+            if (string.IsNullOrEmpty(_data.selectedPlayerSkillId))
+                _data.selectedPlayerSkillId = "heal_spring";
             Save();
         }
     }

@@ -47,6 +47,9 @@ public class SaveData
     public int totalAchievementPoints = 0; // 总成就点数
     public HashSet<int> claimedMilestoneIds = new HashSet<int>(); // 已领取的里程奖励ID
 
+    /// <summary>战前选择的玩家技能 id（PlayerSkillDefs）</summary>
+    public string selectedPlayerSkillId = "heal_spring";
+
     // === 章节进度 ===
     public int maxUnlockedChapter = 1; // 最大解锁章节
     /// <summary>章节通关次数列表（用于渐进式怪物解锁）</summary>

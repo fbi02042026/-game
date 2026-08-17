@@ -146,28 +146,7 @@ MonoBehaviour:
   privacyPolicyButton: {fileID: 2151}
   agreeToggle: {fileID: 0}
   agreeText: {fileID: 2137}
-  onStartAdventure:
-    m_PersistentCalls:
-      m_Calls: []
-  onGuestLogin:
-    m_PersistentCalls:
-      m_Calls: []
-  onNotice:
-    m_PersistentCalls:
-      m_Calls: []
-  onSettings:
-    m_PersistentCalls:
-      m_Calls: []
-  onUserCenter:
-    m_PersistentCalls:
-      m_Calls: []
-  onWechatLogin:
-    m_PersistentCalls:
-      m_Calls: []
-  onQQLogin:
-    m_PersistentCalls:
-      m_Calls: []
-  onAppleLogin:
+  onStartGame:
     m_PersistentCalls:
       m_Calls: []
   onOpenUserAgreement:
@@ -2865,7 +2844,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0}
   m_AnchorMax: {x: 0.5, y: 0}
   m_AnchoredPosition: {x: 29, y: 67}
-  m_SizeDelta: {x: 550, y: 50}
+  m_SizeDelta: {x: 480, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8681087761338395673
 CanvasRenderer:
@@ -2897,19 +2876,18 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 12800000, guid: b7c8d9e0f1a2435566778899aabbcc01, type: 3}
-    m_FontSize: 18
+    m_FontSize: 16
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 1
     m_MaxSize: 40
-    m_Alignment: 3
+    m_Alignment: 4
     m_AlignByGeometry: 0
     m_RichText: 1
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1.5
-  m_Text: "\u62B5\u5236\u4E0D\u826F\u6E38\u620F\uFF0C\u62D2\u7EDD\u76D7\u7248\u6E38\u620F\u3002\u6CE8\u610F\u81EA\u6211\u4FDD\u62A4\uFF0C\u8C28\u9632\u53D7\u9A97\u4E0A\u5F53\u3002 
-    \r\n\u9002\u5EA6\u6E38\u620F\u76CA\u8111\uFF0C\u6C89\u8FF7\u6E38\u620F\u4F24\u8EAB\u3002\u5408\u7406\u5B89\u6392\u65F6\u95F4\uFF0C\u4EAB\u53D7\u5065\u5EB7\u751F\u6D3B\u3002"
+  m_Text: "\u62B5\u5236\u4E0D\u826F\u6E38\u620F\uFF0C\u62D2\u7EDD\u76D7\u7248\u6E38\u620F\u3002\u6CE8\u610F\u81EA\u6211\u4FDD\u62A4\uFF0C\u8C28\u9632\u53D7\u9A97\u4E0A\u5F53\u3002\n\u9002\u5EA6\u6E38\u620F\u76CA\u8111\uFF0C\u6C89\u8FF7\u6E38\u620F\u4F24\u8EAB\u3002\u5408\u7406\u5B89\u6392\u65F6\u95F4\uFF0C\u4EAB\u53D7\u5065\u5EB7\u751F\u6D3B\u3002"
 --- !u!1 &8620101119880265853
 GameObject:
   m_ObjectHideFlags: 0

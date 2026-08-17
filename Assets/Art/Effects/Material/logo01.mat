@@ -12,8 +12,8 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
-  - _SHADERSPACE_UV
-  - _TIMESETTINGS_LINEAR_DEFAULT
+  - _SHADERSPACE_UV_RAW
+  - _TIMESETTINGS_CUSTOM_VALUE
   m_InvalidKeywords:
   - _CAMOUFLAGEANIMATED_ON
   - _OUTEROUTLINEDISTORTIONTOGGLE_ON
@@ -270,7 +270,7 @@ Material:
     - _RectWidth: 100
     - _Saturation: 1
     - _ScreenWidthUnits: 10
-    - _ShaderSpace: 0
+    - _ShaderSpace: 1
     - _ShiftHueFade: 1
     - _ShiftHueSpeed: 0.5
     - _ShineContrast: 2
@@ -302,9 +302,9 @@ Material:
     - _TimeFPS: 5
     - _TimeFrequency: 2
     - _TimeRange: 0.5
-    - _TimeScale: 1
-    - _TimeSettings: 0
-    - _TimeValue: 0
+    - _TimeScale: 0
+    - _TimeSettings: 5
+    - _TimeValue: 0.16
     - _WorkflowMode: 1
     - _ZWrite: 1
     m_Colors:
