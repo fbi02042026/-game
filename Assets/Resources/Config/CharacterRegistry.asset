@@ -13,6 +13,11 @@ MonoBehaviour:
   m_Name: CharacterRegistry
   m_EditorClassIdentifier: 
   entries:
+  - characterId: dunbing101
+    prefabName: dunbing101
+    iconSprite: {fileID: 21300000, guid: e0285e9571ff62e41a5aad80744404fe, type: 3}
+    jobName: "\u76FE\u5175"
+    isPlayer: 0
   - characterId: dunbing102
     prefabName: dunbing102
     iconSprite: {fileID: 21300000, guid: e0285e9571ff62e41a5aad80744404fe, type: 3}

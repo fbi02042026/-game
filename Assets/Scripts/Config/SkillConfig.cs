@@ -25,7 +25,10 @@ public class SkillConfig : ScriptableObject
     public AttrType buffAttr = AttrType.Attack;
     public float buffValue = 0.15f;
     public bool buffIsPercent = true;
+    public float duration = 0f;
     public float healBase = 80f;
+    [Tooltip("按最大生命百分比治疗，>0 时优先于 healBase")]
+    public float healPercentOfMax = 0f;
 
     [Header("特效预制体（可选，不填则按 id 从 Resources/VFX/Skills 加载）")]
     public GameObject vfxPrefab;

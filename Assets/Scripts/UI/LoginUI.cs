@@ -72,6 +72,7 @@ public class LoginUI : MonoBehaviour
         EnsureBottomFooterLayout();
         EnsureLogoMotion();
         WireClicks();
+        EnsureDebugClearSaveButton();
     }
 
     void OnEnable()
@@ -81,6 +82,7 @@ public class LoginUI : MonoBehaviour
         EnsureBottomFooterLayout();
         EnsureLogoMotion();
         WireClicks();
+        EnsureDebugClearSaveButton();
     }
 
     void OnRectTransformDimensionsChange()
@@ -424,6 +426,73 @@ public class LoginUI : MonoBehaviour
         onStartGame?.Invoke();
         Debug.Log("[LoginUI] 开始游戏");
         EnterTown();
+    }
+
+    void EnsureDebugClearSaveButton()
+    {
+        var existing = transform.Find("DebugClearSaveButton");
+        if (existing != null)
+        {
+            existing.SetAsLastSibling();
+            return;
+        }
+
+        var go = new GameObject("DebugClearSaveButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        go.transform.SetParent(transform, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(24f, -24f);
+        rt.sizeDelta = new Vector2(220f, 56f);
+
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0.55f, 0.18f, 0.16f, 0.92f);
+        img.raycastTarget = true;
+
+        var labelGo = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        labelGo.transform.SetParent(go.transform, false);
+        var lrt = labelGo.GetComponent<RectTransform>();
+        lrt.anchorMin = Vector2.zero;
+        lrt.anchorMax = Vector2.one;
+        lrt.offsetMin = Vector2.zero;
+        lrt.offsetMax = Vector2.zero;
+        var txt = labelGo.GetComponent<Text>();
+        txt.text = "清除存档";
+        txt.font = GameFonts.GetChinese();
+        txt.fontSize = 26;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.color = new Color(1f, 0.95f, 0.85f);
+        txt.raycastTarget = false;
+
+        var btn = go.GetComponent<Button>();
+        btn.targetGraphic = img;
+        btn.onClick.AddListener(OnClickClearSave);
+        go.transform.SetAsLastSibling();
+        GameFonts.ApplyToHierarchy(go.transform);
+    }
+
+    void OnClickClearSave()
+    {
+        if (SaveSystem.Instance != null)
+            SaveSystem.Instance.DeleteLocalSaveAndReset();
+        else
+        {
+            string dir = Application.persistentDataPath;
+            try
+            {
+                string a = System.IO.Path.Combine(dir, "save.json");
+                string b = System.IO.Path.Combine(dir, "save_backup.json");
+                if (System.IO.File.Exists(a)) System.IO.File.Delete(a);
+                if (System.IO.File.Exists(b)) System.IO.File.Delete(b);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError("[LoginUI] 清除存档失败：" + e.Message);
+            }
+        }
+        ShowTip("存档已清除，点开始游戏会走新手剧情");
+        Debug.Log("[LoginUI] 已清除存档");
     }
 
     void EnterTown()

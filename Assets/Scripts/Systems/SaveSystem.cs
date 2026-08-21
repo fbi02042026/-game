@@ -69,6 +69,10 @@ public class SaveSystem : Singleton<SaveSystem>
             _data.townLevel ??= new TownLevel();
             _data.permanentMercs ??= new System.Collections.Generic.List<MercenaryData>();
             _data.mailInbox ??= new System.Collections.Generic.List<MailEntry>();
+            _data.npcBonds ??= new System.Collections.Generic.List<NpcBondEntry>();
+            _data.storyChoices ??= new System.Collections.Generic.List<StoryChoiceEntry>();
+            if (_data.maxUnlockedChapter > 1)
+                _data.tutorialDone = true;
             if (_data.stamina <= 0) _data.stamina = GameConfig.STAMINA_START;
             if (_data.totalGold > ResourceWallet.DEFAULT_MAX) _data.totalGold = ResourceWallet.DEFAULT_MAX;
             if (_data.diamond > ResourceWallet.DEFAULT_MAX) _data.diamond = (int)ResourceWallet.DEFAULT_MAX;
@@ -153,5 +157,32 @@ public class SaveSystem : Singleton<SaveSystem>
     {
         // TODO: 微信SDK接入后实现
         onComplete?.Invoke(false);
+    }
+
+    /// <summary>调试用：删除本地存档和备份，内存换成新档。测剧情请清档后再进城镇。</summary>
+    public void DeleteLocalSaveAndReset()
+    {
+        if (string.IsNullOrEmpty(savePath))
+            savePath = Path.Combine(Application.persistentDataPath, "save.json");
+        if (string.IsNullOrEmpty(backupPath))
+            backupPath = Path.Combine(Application.persistentDataPath, "save_backup.json");
+
+        try
+        {
+            if (File.Exists(savePath)) File.Delete(savePath);
+            if (File.Exists(backupPath)) File.Delete(backupPath);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("[SaveSystem] 删除存档失败：" + e.Message);
+        }
+
+        BattleStateSaver.Instance?.ClearSavedState();
+        StoryProgress.ResetRuntimeFlags();
+        _data = new SaveData();
+        if (string.IsNullOrEmpty(_data.selectedPlayerSkillId))
+            _data.selectedPlayerSkillId = "heal_spring";
+        Save();
+        Debug.Log("[SaveSystem] 已清除存档，新档 tutorialDone=" + _data.tutorialDone);
     }
 }

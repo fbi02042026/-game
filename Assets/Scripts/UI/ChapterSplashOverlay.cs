@@ -14,7 +14,7 @@ public class ChapterSplashOverlay : MonoBehaviour
 
     CanvasGroup _group;
 
-    public static ChapterSplashOverlay Show(string title)
+    public static ChapterSplashOverlay Show(string title, string body = null)
     {
         var leftovers = Object.FindObjectsOfType<ChapterSplashOverlay>();
         for (int i = 0; i < leftovers.Length; i++)
@@ -25,12 +25,12 @@ public class ChapterSplashOverlay : MonoBehaviour
 
         GameObject root = new GameObject("ChapterSplash");
         var driver = root.AddComponent<ChapterSplashOverlay>();
-        driver.Build(title);
+        driver.Build(title, body);
         driver.StartCoroutine(driver.RunRoutine());
         return driver;
     }
 
-    void Build(string title)
+    void Build(string title, string body)
     {
         var canvas = gameObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -76,10 +76,30 @@ public class ChapterSplashOverlay : MonoBehaviour
         outline.effectDistance = new Vector2(4f, -4f);
 
         var trt = text.rectTransform;
-        trt.anchorMin = new Vector2(0.05f, 0.35f);
-        trt.anchorMax = new Vector2(0.95f, 0.65f);
+        trt.anchorMin = new Vector2(0.05f, string.IsNullOrEmpty(body) ? 0.35f : 0.48f);
+        trt.anchorMax = new Vector2(0.95f, string.IsNullOrEmpty(body) ? 0.65f : 0.72f);
         trt.offsetMin = Vector2.zero;
         trt.offsetMax = Vector2.zero;
+
+        if (!string.IsNullOrEmpty(body))
+        {
+            var bodyGo = new GameObject("Body");
+            bodyGo.transform.SetParent(transform, false);
+            var bodyText = bodyGo.AddComponent<Text>();
+            bodyText.text = body;
+            bodyText.alignment = TextAnchor.MiddleCenter;
+            bodyText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            bodyText.verticalOverflow = VerticalWrapMode.Overflow;
+            bodyText.fontSize = 28;
+            bodyText.color = new Color(1f, 1f, 1f, 0.92f);
+            bodyText.raycastTarget = false;
+            bodyText.font = GameFonts.GetChinese();
+            var brt = bodyText.rectTransform;
+            brt.anchorMin = new Vector2(0.1f, 0.22f);
+            brt.anchorMax = new Vector2(0.9f, 0.46f);
+            brt.offsetMin = Vector2.zero;
+            brt.offsetMax = Vector2.zero;
+        }
 
         IsFinished = false;
     }
@@ -87,21 +107,33 @@ public class ChapterSplashOverlay : MonoBehaviour
     IEnumerator RunRoutine()
     {
         _group.alpha = 1f;
-        // 完整显示
-        yield return new WaitForSecondsRealtime(HoldSeconds);
+        float hold = 0f;
+        while (hold < HoldSeconds)
+        {
+            hold += Time.unscaledDeltaTime;
+            if (Clicked()) break;
+            yield return null;
+        }
 
-        // 慢慢消失
         float t = 0f;
         while (t < FadeSeconds)
         {
             t += Time.unscaledDeltaTime;
             if (t < 0.0001f) t += 0.016f;
             _group.alpha = 1f - Mathf.Clamp01(t / FadeSeconds);
+            if (Clicked() && t > 0.2f) break;
             yield return null;
         }
         _group.alpha = 0f;
         IsFinished = true;
         Destroy(gameObject);
+    }
+
+    static bool Clicked()
+    {
+        if (Input.GetMouseButtonDown(0)) return true;
+        if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began) return true;
+        return false;
     }
 
     static Sprite CreateSolidSprite()

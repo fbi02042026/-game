@@ -8,6 +8,9 @@ public class TownHubController : MonoBehaviour
 {
     public static TownHubController Instance { get; private set; }
 
+    /// <summary>从战斗撤离等回城后，进 Town 自动打开冒险页。</summary>
+    public static bool PendingOpenAdventure;
+
     static GameObject _tavernPrefabCache;
     static GameObject _adventurePrefabCache;
 
@@ -29,6 +32,29 @@ public class TownHubController : MonoBehaviour
         EnsureWired();
         if (!_pagesPreloaded)
             PreloadAllPages();
+        ConsumePendingAdventure();
+    }
+
+    /// <summary>回城后打开冒险页（撤离等场景用）。可在 Bootstrap 完成后再调一次。</summary>
+    public static void ConsumePendingAdventure()
+    {
+        if (!PendingOpenAdventure) return;
+        PendingOpenAdventure = false;
+        if (Instance == null) return;
+        Instance.OpenAdventure();
+    }
+
+    public void OpenAdventure()
+    {
+        EnsureWired();
+        if (!_pagesPreloaded) PreloadAllPages();
+        // 撤离回城时不要再被教程拦截进战斗
+        _nav?.SetSelected(MainNavTab.Adventure, notify: false);
+        _tavern?.HidePage();
+        _character?.HidePage();
+        _adventure?.ShowPage();
+        _current = MainNavTab.Adventure;
+        GameBgm.Play(GameBgm.Track.Town);
     }
 
     void OnDestroy()
@@ -105,21 +131,29 @@ public class TownHubController : MonoBehaviour
         _current = tab;
         if (tab == MainNavTab.Tavern)
         {
+            TutorialDirector.Instance?.NotifyTownTab(tab);
             _adventure?.HidePage();
             _character?.HidePage();
             _tavern?.ShowPage();
+            GameBgm.Play(GameBgm.Track.Tavern);
         }
         else if (tab == MainNavTab.Adventure)
         {
+            if (TutorialDirector.Instance != null && TutorialDirector.Instance.TryEnterTutorialBattleFromNav())
+                return;
+
             _tavern?.HidePage();
             _character?.HidePage();
             _adventure?.ShowPage();
+            GameBgm.Play(GameBgm.Track.Town);
         }
         else if (tab == MainNavTab.Character)
         {
+            TutorialDirector.Instance?.NotifyTownTab(tab);
             _tavern?.HidePage();
             _adventure?.HidePage();
             _character?.ShowPage();
+            GameBgm.Play(GameBgm.Track.Town);
         }
         else
         {
@@ -127,6 +161,7 @@ public class TownHubController : MonoBehaviour
             _adventure?.HidePage();
             _character?.HidePage();
             ShowGuildOnly();
+            GameBgm.Play(GameBgm.Track.Town);
         }
     }
 

@@ -1,0 +1,571 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using UnityEngine;
+using UnityEngine.UI;
+
+/// <summary>
+/// 新手引导：城镇开场 → 短战斗（诱饵/老盾/强制撤离）→ 回城收尾。
+/// 正式第一章不走这里。
+/// </summary>
+public class TutorialDirector : Singleton<TutorialDirector>
+{
+    const string OpeningIntroRelativePath = "Art/片头/像素冒险：裂缝之刃片头.mp4";
+
+    public bool ShowMercHud { get; private set; }
+    public bool WaitingEvacuate { get; set; }
+    public bool SkillUsedThisStep { get; private set; }
+    /// <summary>引导战斗：仅 heal 步骤允许点头像放技能。</summary>
+    public bool AllowBattleSkillClick { get; private set; }
+
+    bool _townFlowBusy;
+    bool _extraHintShown;
+    Coroutine _flow;
+
+    public static bool IsTutorialBattle =>
+        BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
+
+    public void NotifyTownReady()
+    {
+        if (_townFlowBusy) return;
+        if (StoryDirector.Ensure() != null && StoryDirector.Ensure().IsPlaying) return;
+
+        Debug.Log($"[Tutorial] TownReady tutorialDone={StoryProgress.TutorialDone} intro={StoryProgress.TutorialIntroDone} battle={StoryProgress.TutorialBattleCleared} outro={StoryProgress.TutorialOutroPending}");
+
+        if (!StoryProgress.TutorialDone && StoryProgress.TutorialOutroPending)
+        {
+            _flow = StartCoroutine(TownAfterBattleRoutine());
+            return;
+        }
+
+        if (!StoryProgress.TutorialDone && !StoryProgress.TutorialIntroDone)
+        {
+            _flow = StartCoroutine(TownFirstEntryRoutine());
+            return;
+        }
+
+        if (StoryProgress.ConsumeChapter1TownReturn())
+        {
+            Chapter1Story.PlayReturnTown(null);
+        }
+    }
+
+    public void NotifyTownTab(MainNavTab tab)
+    {
+        if (StoryProgress.TutorialDone || StoryProgress.TutorialBattleCleared) return;
+        if (tab != MainNavTab.Tavern && tab != MainNavTab.Character) return;
+        if (_extraHintShown) return;
+        _extraHintShown = true;
+        var beat = StoryDirector.Solo("咨询台小姐",
+            "等回来再逛这些也来得及。",
+            StoryPortraits.Receptionist)
+            .Bg(StoryBackgrounds.GuildHall);
+        StoryDirector.Ensure().PlayOne(beat, null);
+    }
+
+    public void NotifyAdventureOpened()
+    {
+        // 新手首次点「冒险」直接进战斗，不在冒险页弹技能说明。
+    }
+
+    /// <summary>首次引导：点底栏「冒险」跳过选关页，直接进入教程战斗。</summary>
+    public bool TryEnterTutorialBattleFromNav()
+    {
+        if (StoryProgress.TutorialDone || StoryProgress.TutorialBattleCleared) return false;
+        if (!StoryProgress.TutorialIntroDone) return false;
+
+        TutorialHintUI.Ensure().Hide();
+
+        if (!StaminaSystem.TrySpendForAdventure())
+        {
+            UIManager.Instance?.ShowToast("体力不足");
+            return true;
+        }
+
+        AdventureUI.PendingBattleChapter = 1;
+        AdventureUI.PendingBattleDifficulty = 0;
+        AdventureUI.PendingGoldDungeon = false;
+        ChapterManager.Instance?.SetChapter(1);
+        GameSceneManager.Instance?.LoadBattleScene();
+        return true;
+    }
+
+    public void NotifyBattleSplashFinished()
+    {
+        if (BattleManager.Instance == null || !BattleManager.Instance.IsTutorialRun) return;
+        if (_flow != null) StopCoroutine(_flow);
+        _flow = StartCoroutine(BattleRoutine());
+    }
+
+    public void NotifyPlayerSkillUsed()
+    {
+        SkillUsedThisStep = true;
+    }
+
+    IEnumerator TownFirstEntryRoutine()
+    {
+        _townFlowBusy = true;
+        TownIntroVeil.EnsureShown();
+        GuildHallUI.SetTownChromeVisible(false);
+        yield return null;
+        yield return WaitNotLoading();
+
+        if (!StoryProgress.OpeningIntroPlayed)
+        {
+            yield return PlayOpeningIntroIfNeeded();
+            StoryProgress.MarkOpeningIntroPlayed();
+        }
+
+        yield return PlayTownIntroDialogue();
+        StoryProgress.MarkTutorialIntroDone();
+
+        // 关键顺序：黑幕还盖着的时候就把城镇壳恢复出来。
+        // 之前是先淡出黑幕再开 chrome，中间那几帧露出的就是「一闪的空场景」。
+        GuildHallUI.SetTownChromeVisible(true);
+        yield return null;
+
+        // 底栏是运行时实例化的，绑好之后再淡出，引导手才不会迟到
+        Button adv = null;
+        float bind = 0f;
+        while (bind < 3f)
+        {
+            adv = ResolveAdventureButton();
+            if (adv != null) break;
+            bind += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+            yield return null;
+        }
+
+        yield return TownIntroVeil.FadeOutRoutine(0.45f);
+
+        if (adv == null) adv = ResolveAdventureButton();
+        TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂缝。",
+            adv != null ? adv.GetComponent<RectTransform>() : null);
+        _townFlowBusy = false;
+        _flow = null;
+    }
+
+    IEnumerator PlayTownIntroDialogue()
+    {
+        StoryDirector.Instance?.NotifySceneChanged();
+
+        // 办公室 + 咨询台一次播完。拆成两次 Play 会在中间关掉再重建对话 UI，
+        // 那一两帧就是玩家看到的「闪一下空场景」。
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Solo("会长",
+                "新人，森林层最近有些怪物躁动。去吧，证明你有资格留下。",
+                StoryPortraits.GuildMaster)
+                .Bg(StoryBackgrounds.GuildOffice),
+            StoryDirector.Solo("会长",
+                "你把这个签了后就可以出去了。",
+                StoryPortraits.GuildMaster)
+                .Bg(StoryBackgrounds.GuildOffice),
+            StoryDirector.Narration("桌上那份委托书连名字都没填，就像随手塞给你的一样。")
+                .Prop(StoryProps.QuestPaper),
+            StoryDirector.Solo("咨询台小姐",
+                "第一次下裂缝？三件事：\n1. 你只管走路，打架会自动打。\n2. 进战斗前先选技能，亮起就能放。\n3. 见好就收，活着才有收益。",
+                StoryPortraits.Receptionist)
+                .Bg(StoryBackgrounds.GuildHall)
+        };
+        bool done = false;
+        StoryDirector.Ensure().Play(beats, () => done = true);
+        while (!done) yield return null;
+    }
+
+    IEnumerator PlayOpeningIntroIfNeeded()
+    {
+        string fullPath = Path.Combine(Application.dataPath, OpeningIntroRelativePath);
+        var overlay = OpeningIntroOverlay.Show(fullPath);
+        if (overlay == null) yield break;
+        while (overlay != null && !overlay.IsFinished)
+            yield return null;
+    }
+
+    IEnumerator TownAfterBattleRoutine()
+    {
+        _townFlowBusy = true;
+        yield return null;
+        yield return WaitNotLoading();
+
+        // 收尾对话必须在公会主界面，不要叠在冒险页上
+        TownHubController.PendingOpenAdventure = false;
+        TownHubController.Instance?.OpenGuild();
+
+        TutorialHintUI.Ensure().Show("装备和材料死亡也能带回，但本局金币死了会清零。", null, 6f);
+        yield return new WaitForSecondsRealtime(2.2f);
+
+        bool done = false;
+        StoryDirector.Ensure().Play(new List<StoryBeat>
+        {
+            StoryDirector.Line("你", "老盾",
+                "我先去酒馆躺着了。想找人一起下本，去酒馆找我。",
+                StoryPortraits.Player, StoryPortraits.LaoDun, 1)
+                .Bg(StoryBackgrounds.GuildHall)
+        }, () => done = true);
+        while (!done) yield return null;
+
+        done = false;
+        StoryDirector.Ensure().Play(new List<StoryBeat>
+        {
+            StoryDirector.Solo("咨询台小姐",
+                "回来了？人物界面可以查看属性，酒馆能招募佣兵。\n先熟悉下公会大厅，之后再慢慢变强。",
+                StoryPortraits.Receptionist)
+                .Bg(StoryBackgrounds.GuildHall)
+        }, () => done = true);
+        while (!done) yield return null;
+
+        var nav = MainBottomNav.Instance;
+        RectTransform highlight = null;
+        if (nav != null && nav.characterButton != null)
+            highlight = nav.characterButton.GetComponent<RectTransform>();
+        TutorialHintUI.Ensure().Show("可以先去人物界面看看属性。之后再进第一章，才是正式任务。",
+            highlight, 8f);
+
+        StoryProgress.MarkTutorialDone();
+        _townFlowBusy = false;
+        _flow = null;
+    }
+
+    IEnumerator BattleRoutine()
+    {
+        var bm = BattleManager.Instance;
+        var hint = TutorialHintUI.Ensure();
+        var ui = BattleUI.Instance;
+        SkillUsedThisStep = false;
+        ShowMercHud = false;
+        AllowBattleSkillClick = false;
+        WaitingEvacuate = false;
+
+        hint.Show("靠近怪物会自动攻击。", null, 8f);
+
+        float spawnWait = 0f;
+        while (bm != null && bm.GetAliveMonsterCount() <= 0 && spawnWait < 8f)
+        {
+            spawnWait += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (bm != null && bm.GetAliveMonsterCount() <= 0)
+            bm.QueueTutorialWave(1);
+
+        yield return WaitFieldClear();
+        hint.Show("不错！再清一小波，熟悉下节奏。", null, 3.2f);
+        yield return EnsureTutorialWave(bm, 2);
+        yield return WaitFieldClear();
+
+        hint.Show("地上有装备，捡起来看看。", null, 8f);
+        yield return OfferTutorialEquip();
+        hint.Show("属性更好就装备，旧的会变成强化材料。", null, 5f);
+        yield return new WaitForSecondsRealtime(0.6f);
+
+        hint.Show("小心！有些装备是怪物设下的诱饵。", null, 8f);
+        yield return EnsureTutorialWave(bm, 1);
+        yield return WaitFieldClear();
+
+        // —— 救援戏：老盾先在前方眩晕被围殴，玩家走近后才开口 ——
+        hint.Hide();
+        ShowMercHud = false;
+        ui?.ApplySoloBattleHudPublic();
+        ui?.UpdateCharacterSlots();
+
+        var merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.35f, 8.2f, stunned: true);
+        bm.SpawnTutorialAmbushAround(merc, 3);
+        hint.Show("前方有人被怪物围住了，走近看看。", null, 6f);
+
+        // 等玩家慢慢走近老盾
+        float approach = 0f;
+        while (approach < 45f)
+        {
+            approach += Time.unscaledDeltaTime;
+            if (Hero.Instance != null && merc != null)
+            {
+                float dist = Mathf.Abs(UnitBase.GetCombatX(Hero.Instance) - UnitBase.GetCombatX(merc));
+                if (dist <= 4.2f) break;
+            }
+            yield return null;
+        }
+
+        var headTalk = BattleHeadTalkUI.Ensure();
+        // 说话时定住全场：之前玩家会边说边继续走，气泡跟着人跑
+        yield return TalkHeld(bm, headTalk, Hero.Instance, "那是……有人被围住了？", 1.8f);
+        yield return TalkHeld(bm, headTalk, Hero.Instance, "先把这些怪清掉！", 1.6f);
+
+        // 怪物转过来打玩家
+        bm.RetargetAllMonsters(Hero.Instance);
+        hint.Show("怪物冲过来了，靠近它们会自动攻击。", null, 5f);
+        yield return WaitFieldClear();
+        bm.ClearMonsterForcedTargets();
+
+        // 清完怪再跟老盾对话、入队（同样全程定身）
+        yield return TalkHeld(bm, headTalk, merc, "咳……谢了，我差点交代在这儿。", 2.2f);
+        yield return TalkHeld(bm, headTalk, Hero.Instance, "还能走吗？跟我一起撤。", 1.7f);
+        yield return TalkHeld(bm, headTalk, merc, "我叫老盾。行，我跟你。", 2.0f);
+
+        if (merc != null)
+        {
+            merc.SetTutorialStunned(false);
+            if (Hero.Instance != null)
+            {
+                Vector3 behind = Hero.Instance.transform.position + new Vector3(-1.0f, 0f, 0f);
+                behind.y = UnitBase.GROUND_Y;
+                GameConfig.SetWorldPosition(merc.gameObject, behind);
+            }
+            merc.Face(1);
+        }
+
+        ShowMercHud = true;
+        ui?.ApplySoloBattleHudPublic();
+        ui?.UpdateCharacterSlots();
+        if (ui != null)
+            ui.StartCoroutine(CoRefreshMercHudNextFrame(ui));
+        hint.Show("老盾加入了队伍。", null, 2.2f);
+        yield return new WaitForSecondsRealtime(1.2f);
+
+        // —— 治疗技能引导：硬引导指向玩家头像，必须点了才继续 ——
+        bm.FillPlayerSkillEnergy();
+        SkillUsedThisStep = false;
+        AllowBattleSkillClick = true;
+        // 定住全场，让玩家安心找按钮，不会被怪追着打
+        bm.UnitsCanAct = false;
+
+        RectTransform skillTarget = ResolvePlayerSkillTarget(ui);
+        hint.ShowHard("老盾快没血了。点你的头像放技能，给他回血。", skillTarget);
+
+        float wait = 0f;
+        const float SkillGuideTimeout = 25f;
+        while (!SkillUsedThisStep && wait < SkillGuideTimeout)
+        {
+            wait += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+            // 头像是运行时绑的，目标掉了就重新指一次
+            if (skillTarget == null || !skillTarget.gameObject.activeInHierarchy)
+            {
+                skillTarget = ResolvePlayerSkillTarget(ui);
+                if (skillTarget != null)
+                    hint.ShowHard("老盾快没血了。点你的头像放技能，给他回血。", skillTarget);
+            }
+            yield return null;
+        }
+        if (!SkillUsedThisStep)
+        {
+            // 超时兜底：直接替玩家放一次，绝不能卡在这里（之前就是卡这导致后面永远不刷怪）
+            Debug.LogWarning("[Tutorial] 治疗技能引导超时，自动释放以继续流程");
+            bm.FillPlayerSkillEnergy();
+            bm.TryUsePlayerSkill();
+        }
+        AllowBattleSkillClick = false;
+        hint.Hide();
+        bm.UnitsCanAct = true;
+
+        if (merc != null && !merc.isDead)
+            merc.currentHp = merc.attr.GetAttr(AttrType.MaxHp);
+
+        ui?.UpdateCharacterSlots();
+
+        yield return TalkHeld(bm, headTalk, merc, "舒服多了！前面交给我挡一阵。", 2.0f);
+        yield return TalkHeld(bm, headTalk, Hero.Instance, "一起走。", 1.4f);
+
+        hint.Show("组队后佣兵会自动战斗，和你一起推进。", null, 8f);
+        yield return EnsureTutorialWave(bm, 6);
+        yield return WaitFieldClear();
+
+        hint.Show("状态不错，再清一波我们就撤。", null, 6f);
+        yield return EnsureTutorialWave(bm, 3);
+        yield return WaitFieldClear();
+
+        yield return TalkHeld(bm, headTalk, Hero.Instance, "这波清完了，先撤？", 1.8f);
+        yield return TalkHeld(bm, headTalk, merc, "行，回城我请你喝一杯。", 1.9f);
+        hint.Show("你的队友状态也不好，现在撤出来比较稳。点击右上角设置，选择撤离。", null, 5.2f);
+
+        WaitingEvacuate = true;
+        RectTransform settingsRt = ui != null && ui.settingsButton != null
+            ? ui.settingsButton.GetComponent<RectTransform>() : null;
+        hint.ShowHard("点右上角设置，选择「撤离」回城。", settingsRt);
+
+        while (WaitingEvacuate && BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun)
+            yield return null;
+
+        hint.Hide();
+        _flow = null;
+    }
+
+    /// <summary>放技能的点击目标：优先玩家头像槽，退回技能头像按钮。</summary>
+    static RectTransform ResolvePlayerSkillTarget(BattleUI ui)
+    {
+        if (ui == null) return null;
+        if (ui.playerSlot != null && ui.playerSlot.root != null
+            && ui.playerSlot.root.activeInHierarchy)
+            return ui.playerSlot.root.GetComponent<RectTransform>();
+        if (ui.playerSkillAvatar != null && ui.playerSkillAvatar.root != null
+            && ui.playerSkillAvatar.root.activeInHierarchy)
+            return ui.playerSkillAvatar.root.GetComponent<RectTransform>();
+        return null;
+    }
+
+    /// <summary>
+    /// 头顶气泡说话期间冻结全场单位：说完立刻恢复。
+    /// 说话人不存在就直接跳过，别把流程卡死。
+    /// </summary>
+    static IEnumerator TalkHeld(BattleManager bm, BattleHeadTalkUI talk, UnitBase speaker,
+        string content, float hold)
+    {
+        if (talk == null || speaker == null || speaker.isDead) yield break;
+
+        bool prev = bm != null ? bm.UnitsCanAct : true;
+        if (bm != null) bm.UnitsCanAct = false;
+        yield return talk.PlayLine(speaker, content, hold);
+        if (bm != null) bm.UnitsCanAct = prev;
+    }
+
+    /// <summary>
+    /// 教程刷怪兜底：最多重试 3 次，每次等两帧看有没有真出怪。
+    /// 之前只 yield 一帧就判断，刷怪协程还没跑完就被当成「没刷出来」。
+    /// </summary>
+    static IEnumerator EnsureTutorialWave(BattleManager bm, int count)
+    {
+        if (bm == null) yield break;
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            bm.QueueTutorialWave(count);
+            yield return null;
+            yield return null;
+            if (bm.GetAliveMonsterCount() > 0)
+            {
+                Debug.Log($"[Tutorial] 刷怪成功 attempt={attempt + 1} alive={bm.GetAliveMonsterCount()}");
+                yield break;
+            }
+            Debug.LogWarning($"[Tutorial] 刷怪未出怪 attempt={attempt + 1}，重试");
+            yield return new WaitForSecondsRealtime(0.25f);
+        }
+        Debug.LogError("[Tutorial] 连续 3 次刷怪失败，跳过本波以免卡流程");
+    }
+
+    static IEnumerator CoRefreshMercHudNextFrame(BattleUI ui)
+    {
+        yield return null;
+        ui?.ApplySoloBattleHudPublic();
+        ui?.UpdateCharacterSlots();
+    }
+
+    IEnumerator OfferTutorialEquip()
+    {
+        var equip = CreateTutorialEquipDrop();
+        if (equip == null)
+        {
+            UIManager.Instance?.ShowToast("地上有件装备，已放入背包。");
+            yield break;
+        }
+
+        if (GridBackpackSystem.Instance == null ||
+            !GridBackpackSystem.Instance.TryAddItem(equip, out _))
+        {
+            UIManager.Instance?.ShowToast("背包空间不足，请整理后再试");
+            yield break;
+        }
+        // 先刷一次，保证弹窗还开着的时候背包里就能看到这件装备
+        BattleUI.Instance?.UpdateBackpackGrid();
+
+        bool closed = false;
+        EquipDropPopupUI.ShowSingle(equip, (_, __) => closed = true);
+        while (!closed) yield return null;
+
+        BattleUI.Instance?.UpdateBackpackGrid();
+    }
+
+    static EquipInstance CreateTutorialEquipDrop()
+    {
+        // 优先给一件有图标的武器/防具，避免进包看不见
+        string[] prefer =
+        {
+            "equip_sword_1", "equip_axesmall1", "equip_cloth_1", "equip_armor_1"
+        };
+        for (int i = 0; i < prefer.Length; i++)
+        {
+            EquipTemplate tpl = ConfigManager.Instance != null
+                ? ConfigManager.Instance.GetEquipTemplate(prefer[i])
+                : null;
+            if (tpl == null)
+                tpl = Resources.Load<EquipTemplate>("Config/Equips/" + prefer[i]);
+            if (tpl == null) continue;
+            tpl.ResolveIcon();
+            int lv = Hero.Instance != null ? Hero.Instance.level : 1;
+            var eq = EquipInstance.GenerateFromTemplate(tpl, 0, lv);
+            if (eq != null)
+            {
+                if (eq.icon == null && tpl.icon != null) eq.icon = tpl.icon;
+                if (eq.icon == null) eq.icon = EquipIcons.Get(tpl.iconFileName);
+                // 临时中文名，命名规则后续再定
+                eq.equipName = EquipNameGen.RandomWeaponName(eq.slotType);
+                return eq;
+            }
+        }
+
+        var list = ConfigManager.Instance != null
+            ? ConfigManager.Instance.GetRandomEquipInstances(1, 1)
+            : null;
+        if (list != null && list.Count > 0)
+        {
+            var eq = list[0];
+            eq?.template?.ResolveIcon();
+            if (eq != null && eq.icon == null && eq.template != null)
+                eq.icon = eq.template.icon;
+            if (eq != null && (string.IsNullOrEmpty(eq.equipName) || LooksLikeEnglishFileName(eq.equipName)))
+                eq.equipName = EquipNameGen.RandomWeaponName(eq.slotType);
+            return eq;
+        }
+        return null;
+    }
+
+    static bool LooksLikeEnglishFileName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return true;
+        for (int i = 0; i < name.Length; i++)
+        {
+            char c = name[i];
+            if (c > 127) return false;
+        }
+        return name.IndexOf('_') >= 0 || name.StartsWith("equip", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    IEnumerator WaitFieldClear()
+    {
+        var bm = BattleManager.Instance;
+        float t = 0f;
+        const float timeout = 45f;
+        while (bm != null && bm.GetAliveMonsterCount() > 0 && t < timeout)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        yield return null;
+        t = 0f;
+        while (bm != null && bm.GetAliveMonsterCount() > 0 && t < 8f)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (bm != null && bm.GetAliveMonsterCount() > 0)
+            Debug.LogWarning($"[Tutorial] 清场超时仍有怪 alive={bm.GetAliveMonsterCount()}，继续流程");
+    }
+
+    static Button ResolveAdventureButton()
+    {
+        if (MainBottomNav.Instance != null && MainBottomNav.Instance.adventureButton != null)
+            return MainBottomNav.Instance.adventureButton;
+        var hall = GuildHallUI.Instance;
+        if (hall != null && hall.navAdventureButton != null)
+            return hall.navAdventureButton;
+        if (hall != null && hall.bottomNav != null && hall.bottomNav.adventureButton != null)
+            return hall.bottomNav.adventureButton;
+        return null;
+    }
+
+    IEnumerator WaitNotLoading()
+    {
+        float t = 0f;
+        while (SceneLoadingCoordinator.IsActive && t < 8f)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        yield return null;
+    }
+}

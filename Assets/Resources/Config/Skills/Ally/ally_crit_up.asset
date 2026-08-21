@@ -13,18 +13,20 @@ MonoBehaviour:
   m_Name: ally_crit_up
   m_EditorClassIdentifier: 
   id: ally_crit_up
-  skillName: "\u52A0\u66B4\u51FB"
-  desc: "\u63D0\u5347\u66B4\u51FB\u7387"
+  skillName: "\u81F4\u547D\u4E13\u6CE8"
+  desc: "\u66B4\u51FB\u7387 +25%\uFF0C\u6301\u7EED 8 \u79D2"
   skillType: 3
   attackKit: 4
   damageMultiplier: 0
   baseDamage: 0
-  cooldown: 0.1
+  cooldown: 18
   aoeRadius: 6
   projectileCount: 1
   projectileSpeed: 12
   buffAttr: 7
-  buffValue: 0.15
+  buffValue: 0.25
   buffIsPercent: 1
+  duration: 8
   healBase: 0
+  healPercentOfMax: 0
   vfxPrefab: {fileID: 0}

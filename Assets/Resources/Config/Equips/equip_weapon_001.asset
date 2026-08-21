@@ -14,9 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   templateId: equip_weapon_001
   equipName: "\u94C1\u5251"
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: fea823efdfc2ba5479ab8108634f17a4, type: 3}
+  iconFileName: New_Weapon_01
   gridWidth: 1
-  gridHeight: 1
+  gridHeight: 2
   tags: []
   baseRarity: 1
   minLevel: 1
@@ -32,6 +33,6 @@ MonoBehaviour:
   slotType: 5
   weaponType: 0
   weaponAttackType: 0
+  attackRange: 96
   armorPrefix: 0
   spumName: weapon_sword
-  attackRange: 96

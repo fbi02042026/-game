@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 看板娘对话框：打字机效果、多台词轮换、说完后隐藏。
-/// 气泡约 180×107，文案需短句，超出自动裁切。
+/// 气泡约 180×107，文案需短句；按实际宽度自动换行，最多 maxLines 行。
 /// </summary>
 public class SpeechBubbleTalker : MonoBehaviour
 {
@@ -19,8 +19,22 @@ public class SpeechBubbleTalker : MonoBehaviour
     public float holdAfterFinish = 2.8f;
     public float idleHideDelay = 0.35f;
     public float gapBetweenLines = 1.2f;
-    [Range(4, 28)] public int maxCharsPerLine = 11;
     [Range(1, 4)] public int maxLines = 3;
+
+    TextGenerator _textGen;
+
+    static bool _suppressed;
+
+    public static void SetSuppressed(bool suppressed)
+    {
+        _suppressed = suppressed;
+        if (suppressed)
+        {
+            var talkers = Object.FindObjectsOfType<SpeechBubbleTalker>();
+            for (int i = 0; i < talkers.Length; i++)
+                talkers[i].HideBubble();
+        }
+    }
 
     static readonly string[] DefaultLines =
     {
@@ -87,14 +101,8 @@ public class SpeechBubbleTalker : MonoBehaviour
             bubbleText.horizontalOverflow = HorizontalWrapMode.Wrap;
             bubbleText.verticalOverflow = VerticalWrapMode.Truncate;
             bubbleText.resizeTextForBestFit = false;
-            bubbleText.alignByGeometry = true;
-            var rt = bubbleText.rectTransform;
-            if (rt != null)
-            {
-                // 略缩边距，避免字贴边/溢出气泡
-                rt.offsetMin = new Vector2(10f, 12f);
-                rt.offsetMax = new Vector2(-10f, -8f);
-            }
+            bubbleText.alignByGeometry = false;
+            bubbleText.alignment = TextAnchor.MiddleCenter;
         }
         if (receptionistButton == null)
         {
@@ -113,7 +121,7 @@ public class SpeechBubbleTalker : MonoBehaviour
     /// <summary>咨询台：优先说「今日可做 / 功能介绍」</summary>
     void OnReceptionistClicked()
     {
-        if (_busy) return;
+        if (_busy || _suppressed) return;
         string[] tips =
         {
             "今日可做：点「冒险」消耗体力出发。",
@@ -138,6 +146,12 @@ public class SpeechBubbleTalker : MonoBehaviour
         yield return new WaitForSeconds(1.0f);
         while (enabled)
         {
+            if (_suppressed)
+            {
+                HideBubble();
+                yield return null;
+                continue;
+            }
             if (_lines.Count == 0) yield break;
             string line = _lines[Random.Range(0, _lines.Count)];
             yield return SpeakLine(line);
@@ -171,29 +185,41 @@ public class SpeechBubbleTalker : MonoBehaviour
         if (bubbleRoot != null) bubbleRoot.SetActive(false);
     }
 
-    /// <summary>按气泡宽度粗略断行，避免超出对话框</summary>
+    /// <summary>按气泡实际宽度裁切，只让 Text 自动换行，避免硬插换行导致多出一行。</summary>
     string FitText(string raw)
     {
         if (string.IsNullOrEmpty(raw)) return "";
-        raw = raw.Replace("\r", "").Replace("\n", "");
-        int maxTotal = maxCharsPerLine * maxLines;
-        if (raw.Length > maxTotal)
-            raw = raw.Substring(0, maxTotal - 1) + "…";
+        raw = raw.Replace("\r", "").Replace("\n", "").Trim();
+        if (bubbleText == null) return raw;
 
-        if (raw.Length <= maxCharsPerLine) return raw;
+        string result = raw;
+        while (result.Length > 1 && CountWrappedLines(result) > maxLines)
+            result = result.Substring(0, result.Length - 1);
 
-        var sb = new System.Text.StringBuilder();
-        int i = 0;
-        int lines = 0;
-        while (i < raw.Length && lines < maxLines)
+        if (result.Length < raw.Length)
         {
-            int take = Mathf.Min(maxCharsPerLine, raw.Length - i);
-            if (lines > 0) sb.Append('\n');
-            sb.Append(raw, i, take);
-            i += take;
-            lines++;
+            result = result.TrimEnd('，', '。', '、', ' ', '…');
+            if (string.IsNullOrEmpty(result))
+                result = raw.Substring(0, 1);
+            result += "…";
         }
-        return sb.ToString();
+        return result;
+    }
+
+    int CountWrappedLines(string text)
+    {
+        if (bubbleText == null || string.IsNullOrEmpty(text)) return 0;
+
+        float width = bubbleText.rectTransform.rect.width;
+        if (width <= 1f)
+            width = 148f;
+
+        if (_textGen == null)
+            _textGen = new TextGenerator();
+
+        var settings = bubbleText.GetGenerationSettings(new Vector2(width, 0f));
+        _textGen.Populate(text, settings);
+        return Mathf.Max(1, _textGen.lineCount);
     }
 
     static Transform FindDeep(Transform parent, string name)

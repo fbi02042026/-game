@@ -32,6 +32,12 @@ public class ChapterManager : Singleton<ChapterManager>
     public event Action OnChapterComplete;
     public event Action<List<StageData>> OnBranchReady; // 分支选择就绪
 
+    /// <summary>
+    /// 本章的关卡抽取状态。关卡类型不再开局排死，而是每关打完由 StageRoller 现抽，
+    /// 抽的结果交给 NextStageRouletteUI 滚动展示。
+    /// </summary>
+    public StageRoller.ChapterRollState RollState { get; private set; } = new StageRoller.ChapterRollState();
+
     protected override void Awake()
     {
         base.Awake();
@@ -48,6 +54,7 @@ public class ChapterManager : Singleton<ChapterManager>
         currentStageIndex = 0;
         stageMap.Clear();
         availableNextStages.Clear();
+        RollState.Reset();
 
         // 1. 创建10个节点
         for (int i = 0; i < GameConfig.STAGES_PER_CHAPTER; i++)
@@ -233,7 +240,13 @@ public class ChapterManager : Singleton<ChapterManager>
         if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
             return;
 
-        if (currentStageIndex >= GameConfig.STAGES_PER_CHAPTER - 1)
+        // 先把刚打完的关卡记进抽取状态，下一关的概率要用到
+        StageData cleared = GetCurrentStage();
+        if (cleared != null) RollState.RecordCleared(cleared.type);
+
+        // 首领关可能提前出现在倒数三关里：打完首领这一章就结束
+        bool bossCleared = cleared != null && cleared.type == StageType.Boss;
+        if (bossCleared || currentStageIndex >= GameConfig.STAGES_PER_CHAPTER - 1)
         {
             // === 章节通关逻辑 ===
 
@@ -269,11 +282,38 @@ public class ChapterManager : Singleton<ChapterManager>
             }
         }
 
+        // 现抽下一关的类型（轮盘要展示的就是这个结果）
+        RollNextStageType();
+
         // 触发分支选择事件
         OnBranchReady?.Invoke(availableNextStages);
 
         // 通知成就系统
         AchievementSystem.Instance?.OnReachStage(currentStageIndex);
+    }
+
+    /// <summary>
+    /// 给下一关重新抽一次类型并写回 stageMap。
+    /// 现在关卡类型由轮盘决定，AssignStageTypes 的预排只当兜底。
+    /// </summary>
+    public StageData RollNextStageType()
+    {
+        StageData next = GetNextStage();
+        if (next == null) return null;
+        next.type = StageRoller.Roll(RollState, next.stageIndex, GameConfig.STAGES_PER_CHAPTER);
+        Debug.Log($"[ChapterManager] 抽到下一关 第{next.stageIndex + 1}关 = {next.type}"
+                  + $"（恢复{RollState.restCount}/{StageRoller.MaxRestPerChapter} 工坊{(RollState.craftUsed ? "已用" : RollState.craftKind.ToString())} 战斗{RollState.combatStagesDone}）");
+        return next;
+    }
+
+    /// <summary>轮盘只给一条路：取分支里的第一个作为下一关</summary>
+    public StageData GetNextStage()
+    {
+        if (availableNextStages != null && availableNextStages.Count > 0)
+            return availableNextStages[0];
+        int idx = currentStageIndex + 1;
+        if (idx >= 0 && idx < stageMap.Count) return stageMap[idx];
+        return null;
     }
 
     #endregion

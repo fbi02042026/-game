@@ -13,18 +13,20 @@ MonoBehaviour:
   m_Name: ally_atk_speed
   m_EditorClassIdentifier: 
   id: ally_atk_speed
-  skillName: "\u52A0\u653B\u901F"
-  desc: "\u63D0\u5347\u653B\u901F"
+  skillName: "\u75BE\u98CE\u67B6\u52BF"
+  desc: "\u653B\u901F +35%\uFF0C\u6301\u7EED 6 \u79D2"
   skillType: 3
   attackKit: 4
   damageMultiplier: 0
   baseDamage: 0
-  cooldown: 0.1
+  cooldown: 15
   aoeRadius: 6
   projectileCount: 1
   projectileSpeed: 12
   buffAttr: 6
-  buffValue: 0.25
+  buffValue: 0.35
   buffIsPercent: 1
+  duration: 6
   healBase: 0
+  healPercentOfMax: 0
   vfxPrefab: {fileID: 0}

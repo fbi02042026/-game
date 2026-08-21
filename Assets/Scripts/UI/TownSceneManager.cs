@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -45,12 +46,30 @@ public class TownSceneManager : MonoBehaviour
         {
             GameObject hall = Instantiate(hallPrefab);
             UICanvasSetup.ApplyOn(hall, Camera.main);
+            if (hall.GetComponent<TownSceneBootstrap>() == null)
+                hall.AddComponent<TownSceneBootstrap>();
+            StartCoroutine(CoNotifyStoryReady());
             Debug.Log("[TownScene] 已加载 GuildHallUI 预制体（统一 Canvas 720×1280 Match Height）");
             return;
         }
 
         Debug.LogWarning("[TownScene] 未找到 GuildHallUI，使用简易菜单。请运行 Tools/生成公会大厅预制体");
         CreateTownUI();
+    }
+
+    IEnumerator CoNotifyStoryReady()
+    {
+        yield return null;
+        yield return null;
+        float t = 0f;
+        while (SceneLoadingCoordinator.IsActive && t < 12f)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        yield return null;
+        Debug.Log("[TownScene] 通知剧情：大厅已就绪");
+        TutorialDirector.Instance?.NotifyTownReady();
     }
 
     void CreateTownUI()
@@ -184,6 +203,6 @@ public class TownSceneManager : MonoBehaviour
 
     void OnOpenSettings()
     {
-        Debug.Log("[Town] 设置（待实现）");
+        BattleSettingsPanel.Ensure().Open();
     }
 }

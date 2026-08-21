@@ -33,6 +33,8 @@ public class UnitAnimation : MonoBehaviour
     // 攻击动画锁（防止动画重叠）
     private float _attackAnimLock = 0f;
     private float _attackAnimDuration = 0.5f;
+    /// <summary>普攻动作时长；放技能会临时拉长，普攻时要还原</summary>
+    private float _baseAttackDuration = 0.5f;
 
     // ===== 程序化动画（怪物用）=====
     [Header("程序化动画参数（怪物自动启用）")]
@@ -56,8 +58,13 @@ public class UnitAnimation : MonoBehaviour
     private bool _procMode;
     private AttackVfxKit _procAttackKit = AttackVfxKit.MeleeSlash;
     private Vector3 _procBaseScale;
+    private Vector3 _procBasePos;
     private float _procTime;
     private float _procDeathTime;
+    /// <summary>本次攻击的幅度倍率：普攻 1，放技能时放大。</summary>
+    private float _procAmp = 1f;
+    /// <summary>放技能时向前扑的距离（世界单位，作用在精灵子节点上，不影响 AI 移动）。</summary>
+    private float _procLunge;
 
     void Awake()
     {
@@ -98,7 +105,10 @@ public class UnitAnimation : MonoBehaviour
     void CacheBaseScale()
     {
         if (_sr != null)
+        {
             _procBaseScale = _sr.transform.localScale;
+            _procBasePos = _sr.transform.localPosition;
+        }
     }
 
     /// <summary>
@@ -148,41 +158,55 @@ public class UnitAnimation : MonoBehaviour
 
         if (_attackAnimLock > 0)
         {
-            // 攻击动画
+            // 攻击动画。_procAmp>1 时是在放技能，整体幅度放大
             float atkProgress = 1f - (_attackAnimLock / _attackAnimDuration);
             float wave = Mathf.Sin(atkProgress * Mathf.PI);
+            float amp = Mathf.Max(0.1f, _procAmp);
+
             if (_procAttackKit == AttackVfxKit.Bow)
             {
                 // 弓箭：后拉再前送
-                float pull = wave * 0.14f;
+                float pull = wave * 0.14f * amp;
                 t.localScale = new Vector3(
                     _procBaseScale.x * (1f - pull * 0.6f),
                     _procBaseScale.y * (1f + pull * 0.25f),
                     _procBaseScale.z);
-                float tilt = -wave * 8f * _lastFacingDir;
+                float tilt = -wave * 8f * amp * _lastFacingDir;
                 t.localRotation = Quaternion.Euler(0, 0, tilt);
             }
             else if (_procAttackKit == AttackVfxKit.Orb)
             {
-                float pulse = wave * 0.16f;
+                float pulse = wave * 0.16f * amp;
                 t.localScale = new Vector3(
                     _procBaseScale.x * (1f + pulse * 0.3f),
                     _procBaseScale.y * (1f + pulse),
                     _procBaseScale.z);
-                t.localRotation = Quaternion.identity;
+                // 施法时加一点回摆，别只是干缩放
+                t.localRotation = Quaternion.Euler(0, 0, -wave * 6f * (amp - 1f) * _lastFacingDir);
             }
             else
             {
-                float stretch = wave * procAttackStretch;
+                float stretch = wave * procAttackStretch * amp;
                 t.localScale = new Vector3(
                     _procBaseScale.x * (1f + stretch),
                     _procBaseScale.y * (1f - stretch * 0.5f),
                     _procBaseScale.z);
-                t.localRotation = Quaternion.identity;
+                t.localRotation = Quaternion.Euler(0, 0, -wave * 10f * (amp - 1f) * _lastFacingDir);
             }
+
+            // 前扑：只动精灵子节点，AI 的根节点位移不受影响
+            if (_procLunge > 0.0001f)
+            {
+                float push = wave * _procLunge * _lastFacingDir;
+                t.localPosition = _procBasePos + new Vector3(push, wave * _procLunge * 0.25f, 0f);
+            }
+            else if (t.localPosition != _procBasePos)
+                t.localPosition = _procBasePos;
         }
         else if (_isMoving)
         {
+            // 攻击结束后把前扑位移还回去，否则会永久偏一格
+            if (t.localPosition != _procBasePos) t.localPosition = _procBasePos;
             // 移动：上下弹跳 + 轻微倾斜（底部固定，靠BottomCenter pivot）
             float bounce = Mathf.Abs(Mathf.Sin(_procTime * procMoveSpeed)) * procMoveAmount;
             float tilt = Mathf.Sin(_procTime * procMoveSpeed) * procMoveTilt * _lastFacingDir;
@@ -195,6 +219,7 @@ public class UnitAnimation : MonoBehaviour
         }
         else
         {
+            if (t.localPosition != _procBasePos) t.localPosition = _procBasePos;
             // 站立：呼吸（Y轴轻微缩放，底部固定）
             float breath = Mathf.Sin(_procTime * procIdleSpeed) * procIdleAmount;
             t.localScale = new Vector3(
@@ -308,8 +333,11 @@ public class UnitAnimation : MonoBehaviour
     {
         if (_isDead) return;
         if (_attackAnimLock > 0) return; // 动画锁定中
+        _attackAnimDuration = _baseAttackDuration;
         _attackAnimLock = _attackAnimDuration;
         _procAttackKit = kit;
+        _procAmp = 1f;
+        _procLunge = 0f;
 
         // SPUM模式
         if (_spum != null && _spum.OverrideController != null)
@@ -328,6 +356,43 @@ public class UnitAnimation : MonoBehaviour
             SetTriggerSafe("attack");
         }
         // 程序化模式：Update自动处理攻击拉伸
+    }
+
+    [Header("技能动作（怪物放技能时的夸张程度）")]
+    [Tooltip("放技能时的幅度倍率：1=和普攻一样")]
+    public float procSkillAmp = 2.2f;
+    [Tooltip("放技能时向前扑的距离（世界单位）")]
+    public float procSkillLunge = 0.22f;
+    [Tooltip("放技能的动作时长")]
+    public float procSkillDuration = 0.6f;
+
+    /// <summary>
+    /// 释放技能的动作：比普攻幅度大一截，外加一个向前扑的位移。
+    /// 位移只作用在精灵子节点上，不动根节点，免得和 AI 寻路打架。
+    /// 技能必须能打断普攻动画锁，否则刚普攻完放技能会看不到动作。
+    /// </summary>
+    public void PlaySkillCast(AttackVfxKit kit = AttackVfxKit.MeleeSlash, float ampMul = 1f)
+    {
+        if (_isDead) return;
+
+        _attackAnimDuration = Mathf.Max(0.2f, procSkillDuration);
+        _attackAnimLock = _attackAnimDuration;
+        _procAttackKit = kit;
+        _procAmp = Mathf.Max(1f, procSkillAmp * Mathf.Max(0.1f, ampMul));
+        // 远程施法原地不动更合理，近战才往前扑
+        _procLunge = kit == AttackVfxKit.MeleeSlash ? procSkillLunge : procSkillLunge * 0.35f;
+
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            try { _spum.PlayAnimation(PlayerState.ATTACK, ResolveSpumAttackIndex(kit)); }
+            catch { }
+        }
+        else if (_animator != null)
+        {
+            SetTriggerSafe("3_Skill");
+            SetTriggerSafe("2_Attack");
+            SetTriggerSafe("Attack");
+        }
     }
 
     // 套装 → ATTACK_List 下标，首次解析后缓存
@@ -412,6 +477,41 @@ public class UnitAnimation : MonoBehaviour
             SetTriggerSafe("3_Death");
         }
         // 程序化模式：Update自动处理倒下+淡出
+    }
+
+    /// <summary>
+    /// 播放眩晕/Debuff 动画（SPUM 的 DEBUFF）。
+    /// </summary>
+    public void PlayDebuff()
+    {
+        if (_isDead) return;
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            try
+            {
+                _spum.PlayAnimation(PlayerState.DEBUFF, 0);
+            }
+            catch { }
+            if (_animator != null)
+                _animator.SetBool("5_Debuff", true);
+        }
+        else if (_animator != null)
+        {
+            _animator.SetBool("5_Debuff", true);
+            SetTriggerSafe("Debuff");
+            SetTriggerSafe("5_Debuff");
+        }
+    }
+
+    public void ClearDebuff()
+    {
+        if (_animator != null)
+            _animator.SetBool("5_Debuff", false);
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            try { _spum.PlayAnimation(PlayerState.IDLE, 0); }
+            catch { }
+        }
     }
 
     /// <summary>
@@ -509,6 +609,7 @@ public class UnitAnimation : MonoBehaviour
     public void SetAttackDuration(float duration)
     {
         _attackAnimDuration = duration;
+        _baseAttackDuration = duration;
     }
 
     public bool IsDead => _isDead;

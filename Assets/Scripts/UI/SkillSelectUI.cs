@@ -274,7 +274,7 @@ public class SkillSelectUI : MonoBehaviour
             Set(lab.rectTransform, 0f, 0f, 1f, 0.28f, 0.5f, 0f, 0f, 2f, 0f, 0f);
         }
 
-        var desc = CreateTxt(panel.transform, "DescText", "这里是技能名称和介绍", 24, new Color(1f, 0.95f, 0.85f));
+        var desc = CreateTxt(panel.transform, "DescText", "恢复 30% 最大生命。冷却 12 秒。血量危险时手动点击。", 24, new Color(1f, 0.95f, 0.85f));
         desc.alignment = TextAnchor.UpperLeft;
         Set(desc.rectTransform, 0.5f, 0f, 0.5f, 0f, 0.5f, 0f, 0f, 28f, 540f, 100f);
 

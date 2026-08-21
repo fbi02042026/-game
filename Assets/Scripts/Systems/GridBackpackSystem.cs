@@ -84,9 +84,12 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
     public void DropItem(BackpackItem item)
     {
+        if (item == null) return;
+        if (item.equip != null && IsEquipped(item.equip))
+            UnequipItem(item.equip.slotType);
         OccupyGrid(item.x, item.y, item.width, item.height, false);
         _items.Remove(item);
-        Hero.Instance.RecalcAttr();
+        Hero.Instance?.RecalcAttr();
         OnBackpackChanged?.Invoke();
     }
 
@@ -107,11 +110,12 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     }
 
     /// <summary>
-    /// 穿戴装备（按槽位）
+    /// 穿戴装备：仍留在背包格子里显示，仅标记槽位；已装备的会在 UI 上变暗并标「已装备」。
     /// </summary>
     public bool EquipItem(BackpackItem item)
     {
-        if (item.equip.requireLevel > Hero.Instance.level)
+        if (item == null || item.equip == null) return false;
+        if (Hero.Instance != null && item.equip.requireLevel > Hero.Instance.level)
         {
             UIManager.Instance?.ShowToast($"等级不足，需要{item.equip.requireLevel}级才能装备");
             return false;
@@ -119,92 +123,100 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         EquipSlotType slot = item.equip.slotType;
 
-        // 双手武器检查：占主手+副手
-        if (item.equip.weaponType == WeaponType.TwoHand)
-        {
-            if (_equippedBySlot.ContainsKey(EquipSlotType.MainHand) || _equippedBySlot.ContainsKey(EquipSlotType.OffHand))
-            {
-                UIManager.Instance?.ShowToast("双手武器需要主手和副手都为空");
-                return false;
-            }
-        }
-
-        // 盾牌只能配单手武器
+        // 盾牌 / 副手：主手若是双手武器则冲突
         if (slot == EquipSlotType.OffHand && item.equip.weaponType == WeaponType.None)
         {
-            // 副手装备（如盾牌），检查主手是否有双手武器
-            if (_equippedBySlot.TryGetValue(EquipSlotType.MainHand, out var mainHand))
+            if (_equippedBySlot.TryGetValue(EquipSlotType.MainHand, out var mainHand)
+                && mainHand != null && mainHand.weaponType == WeaponType.TwoHand
+                && mainHand != item.equip)
             {
-                if (mainHand.weaponType == WeaponType.TwoHand)
-                {
-                    UIManager.Instance?.ShowToast("双手武器已占用副手位置");
-                    return false;
-                }
-            }
-        }
-
-        // 同槽位卸下旧装备
-        if (_equippedBySlot.TryGetValue(slot, out var oldEquip))
-        {
-            if (!TryAddItem(oldEquip, out _))
-            {
-                UIManager.Instance?.ShowToast("背包空间不足，无法替换装备");
+                UIManager.Instance?.ShowToast("双手武器已占用副手位置");
                 return false;
             }
         }
 
-        // 双手武器额外占副手槽
+        // 双手武器：先清掉主手/副手旧装备标记（装备本身仍在背包）
         if (item.equip.weaponType == WeaponType.TwoHand)
         {
-            if (_equippedBySlot.TryGetValue(EquipSlotType.OffHand, out var oldOffHand))
+            ClearSlotIfOccupied(EquipSlotType.MainHand, item.equip);
+            ClearSlotIfOccupied(EquipSlotType.OffHand, item.equip);
+            _equippedBySlot[EquipSlotType.MainHand] = item.equip;
+            _equippedBySlot[EquipSlotType.OffHand] = item.equip;
+        }
+        else
+        {
+            ClearSlotIfOccupied(slot, item.equip);
+            // 若新装主手，且副手被旧双手占用，清副手标记
+            if (slot == EquipSlotType.MainHand
+                && _equippedBySlot.TryGetValue(EquipSlotType.OffHand, out var off)
+                && off != null && off.weaponType == WeaponType.TwoHand)
             {
-                if (!TryAddItem(oldOffHand, out _))
-                {
-                    UIManager.Instance?.ShowToast("背包空间不足，无法替换副手装备");
-                    return false;
-                }
+                _equippedBySlot.Remove(EquipSlotType.OffHand);
+                if (_equippedBySlot.TryGetValue(EquipSlotType.MainHand, out var mh) && mh == off)
+                    _equippedBySlot.Remove(EquipSlotType.MainHand);
             }
-            _equippedBySlot[EquipSlotType.OffHand] = item.equip; // 标记副手被双手武器占用
+            _equippedBySlot[slot] = item.equip;
         }
 
-        OccupyGrid(item.x, item.y, item.width, item.height, false);
-        _items.Remove(item);
-        _equippedBySlot[slot] = item.equip;
-        Hero.Instance.RecalcAttr();
+        Hero.Instance?.RecalcAttr();
         OnBackpackChanged?.Invoke();
         OnCostumeChanged?.Invoke();
         return true;
     }
 
+    void ClearSlotIfOccupied(EquipSlotType slot, EquipInstance keep)
+    {
+        if (!_equippedBySlot.TryGetValue(slot, out var old) || old == null || old == keep)
+            return;
+        // 双手武器占两槽：一并清掉
+        if (old.weaponType == WeaponType.TwoHand)
+        {
+            if (_equippedBySlot.TryGetValue(EquipSlotType.MainHand, out var m) && m == old)
+                _equippedBySlot.Remove(EquipSlotType.MainHand);
+            if (_equippedBySlot.TryGetValue(EquipSlotType.OffHand, out var o) && o == old)
+                _equippedBySlot.Remove(EquipSlotType.OffHand);
+        }
+        else
+            _equippedBySlot.Remove(slot);
+    }
+
     /// <summary>
-    /// 卸下装备
+    /// 卸下装备：只清槽位标记，装备继续留在背包格子。
     /// </summary>
     public bool UnequipItem(EquipSlotType slot)
     {
-        if (!_equippedBySlot.TryGetValue(slot, out var equip)) return false;
+        if (!_equippedBySlot.TryGetValue(slot, out var equip) || equip == null) return false;
 
-        // 如果是卸下双手武器，同时清理副手标记
-        if (equip.weaponType == WeaponType.TwoHand && _equippedBySlot.TryGetValue(EquipSlotType.OffHand, out var offHand))
+        if (equip.weaponType == WeaponType.TwoHand)
         {
-            if (offHand == equip)
-            {
+            if (_equippedBySlot.TryGetValue(EquipSlotType.MainHand, out var m) && m == equip)
+                _equippedBySlot.Remove(EquipSlotType.MainHand);
+            if (_equippedBySlot.TryGetValue(EquipSlotType.OffHand, out var o) && o == equip)
                 _equippedBySlot.Remove(EquipSlotType.OffHand);
-            }
         }
-
-        if (TryAddItem(equip, out _))
-        {
+        else
             _equippedBySlot.Remove(slot);
-            Hero.Instance.RecalcAttr();
-            OnBackpackChanged?.Invoke();
-            OnCostumeChanged?.Invoke();
-            return true;
+
+        Hero.Instance?.RecalcAttr();
+        OnBackpackChanged?.Invoke();
+        OnCostumeChanged?.Invoke();
+        return true;
+    }
+
+    public bool IsEquipped(EquipInstance equip)
+    {
+        if (equip == null) return false;
+        foreach (var kv in _equippedBySlot)
+        {
+            if (kv.Value == equip) return true;
         }
         return false;
     }
 
     public void DecomposeItem(BackpackItem item)
     {
+        if (item?.equip != null && IsEquipped(item.equip))
+            UnequipItem(item.equip.slotType);
         int gold = (int)item.equip.rarity * 10 * (1 + item.equip.star);
         BattleManager.Instance.currentGold += gold;
         DropItem(item);

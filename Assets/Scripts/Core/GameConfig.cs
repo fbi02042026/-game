@@ -140,17 +140,21 @@ public static class GameConfig
     /// <summary>攻击特效</summary>
     public const int SORT_VFX = 50;
 
-    /// <summary>默认解锁的背包行数（底行 y=3 需天赋）</summary>
+    /// <summary>默认解锁的背包行数（最下方两行需天赋：R2 扩容 / R7 背包+1）</summary>
     public const int BACKPACK_DEFAULT_ROWS = 3;
-    /// <summary>解锁第 4 行背包的天赋 ID</summary>
+    /// <summary>兼容旧存档：解锁第 4 行背包的天赋 ID</summary>
     public const string TALENT_BACKPACK_ROW4 = "backpack_row4";
 
-    /// <summary>当前存档已解锁的背包行数（1~BACKPACK_HEIGHT）</summary>
+    /// <summary>当前存档已解锁的背包行数（默认 3 行，天赋最多再开 2 行）</summary>
     public static int GetUnlockedBackpackRows(SaveData data)
     {
         int rows = BACKPACK_DEFAULT_ROWS;
-        if (data?.talents != null && data.talents.TryGetValue(TALENT_BACKPACK_ROW4, out int lv) && lv > 0)
-            rows = BACKPACK_HEIGHT;
+        if (data?.talents != null)
+        {
+            rows += TalentDefs.CountBagRowUnlocks(data.talents);
+            if (data.talents.TryGetValue(TALENT_BACKPACK_ROW4, out int lv) && lv > 0)
+                rows = Mathf.Max(rows, BACKPACK_DEFAULT_ROWS + 1);
+        }
         return Mathf.Clamp(rows, 1, BACKPACK_HEIGHT);
     }
 
@@ -247,12 +251,16 @@ public static class GameConfig
     public const float BASE_MOVE_SPEED = 1.2f;
     /// <summary>进战斗后首波刷怪延迟（秒）</summary>
     public const float FIRST_WAVE_SPAWN_DELAY = 1.5f;
+    /// <summary>临时：仅玩家单人战斗（不生成/显示佣兵）。引导关会单独刷老盾。</summary>
+    public const bool SOLO_PLAYER_BATTLE = true;
     /// <summary>怪刷在英雄前方多远（原地等玩家走过来）</summary>
     public const float MONSTER_ENGAGE_OFFSET = 4.0f;
     /// <summary>怪物远程射程倍率（相对数值表弓射程）</summary>
     public const float MONSTER_RANGED_RANGE_MUL = 1.45f;
     /// <summary>怪物远程额外索敌缓冲</summary>
     public const float MONSTER_RANGED_DETECT_BONUS = 1.0f;
+    /// <summary>普通（非精英/非Boss）远程小怪的技能伤害折扣：技能只是为了看得到子弹，不该秒人</summary>
+    public const float MONSTER_NORMAL_SKILL_DAMAGE_MUL = 0.55f;
     /// <summary>小怪默认移速（比玩家慢，避免擦肩而过）</summary>
     public const float MONSTER_DEFAULT_MOVE_SPEED = 0.45f;
     /// <summary>从右侧缓步入场速度</summary>
@@ -310,8 +318,8 @@ public static class GameConfig
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备
     public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手
-    public const int BACKPACK_WIDTH = 7; // 与 BattleUI GridContainer 列数一致（Cell_0~6）
-    public const int BACKPACK_HEIGHT = 4; // 背包高4格；最底行 y=3 默认锁定，天赋解锁
+    public const int BACKPACK_WIDTH = 8; // 与预制体 GridContainer 列数一致（Cell_0~7）
+    public const int BACKPACK_HEIGHT = 5; // 高 5 行；最下方两行默认锁定，天赋解锁
     public const int STAGES_PER_CHAPTER = 10; // 每章10关，最后一关是BOSS
     public const int SPECIAL_STAGES_PER_CHAPTER = 2; // 每章最多2个特殊关卡（商人/附魔/诅咒/休息）
     public const int MAX_OFFLINE_HOURS = 8; // 最多8小时离线收益
@@ -414,6 +422,8 @@ public static class GameConfig
 
     /// <summary>清完一波后，下一波倒计时秒数</summary>
     public const float WAVE_SPAWN_INTERVAL = 8f;
+    /// <summary>第一章第一关：波间隔更长，把战斗节奏拉开</summary>
+    public const float OPENING_WAVE_SPAWN_INTERVAL = 14f;
     /// <summary>点击加速出兵：剩余每秒兑换金币</summary>
     public const float WAVE_SKIP_GOLD_PER_SEC = 3f;
     /// <summary>连杀判定窗口（秒）</summary>
@@ -421,18 +431,40 @@ public static class GameConfig
     /// <summary>连杀≥3 时每次额外金币</summary>
     public const int COMBO_BONUS_GOLD = 1;
 
+    /// <summary>第一章第 1 关（教学节奏：打得慢、打得少）</summary>
+    public static bool IsOpeningStage()
+    {
+        int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        int st = 0;
+        if (BattleManager.Instance != null && BattleManager.Instance.currentStage != null)
+            st = BattleManager.Instance.currentStage.stageIndex;
+        return ch <= 1 && st <= 0;
+    }
+
+    public static float GetWaveSpawnInterval()
+    {
+        return IsOpeningStage() ? OPENING_WAVE_SPAWN_INTERVAL : WAVE_SPAWN_INTERVAL;
+    }
+
+    /// <summary>开局我方普攻最终伤害（2~5，暴击略高）</summary>
+    public static int RollOpeningAllyHitDamage(bool isCrit)
+    {
+        return isCrit ? Random.Range(4, 8) : Random.Range(2, 6);
+    }
+
     /// <summary>
-    /// 关卡总怪数：前两关固定爽感区间 10~15；
+    /// 关卡总怪数：第一章第一关略多、拉长战斗；前两关 10~15；
     /// 之后按进度抬高，并在区间内随机，章末附近可到 30~35。
     /// </summary>
     public static int GetStageMonsterTotal(int stageIndex0Based)
     {
         int stageNo = Mathf.Max(1, stageIndex0Based + 1);
+        if (IsOpeningStage() || (stageNo == 1 && (ChapterManager.Instance == null || ChapterManager.Instance.currentChapter <= 1)))
+            return Random.Range(16, 23);
         if (stageNo <= 2)
-            return Random.Range(10, 16); // 10~15
+            return Random.Range(10, 16);
 
         float t = Mathf.Clamp01((stageNo - 1) / 9f);
-        // 中后期：下限/上限都随关卡抬高，并保留随机宽度
         int lo = Mathf.RoundToInt(Mathf.Lerp(14, 28, t));
         int hi = Mathf.RoundToInt(Mathf.Lerp(18, 35, t));
         if (hi < lo) hi = lo;
@@ -460,7 +492,8 @@ public static class GameConfig
     public static int GetSuggestedWaveCount(int totalMonsters, int spawnPointCount)
     {
         int byTotal = Mathf.CeilToInt(totalMonsters / (float)WAVE_MONSTER_MAX);
-        byTotal = Mathf.Clamp(byTotal, STAGE_WAVE_MIN, STAGE_WAVE_MAX);
+        int waveMin = IsOpeningStage() ? 5 : STAGE_WAVE_MIN;
+        byTotal = Mathf.Clamp(byTotal, waveMin, STAGE_WAVE_MAX);
         if (spawnPointCount <= 0)
             return byTotal;
         int byPoints = Mathf.Clamp(spawnPointCount, STAGE_WAVE_MIN, STAGE_WAVE_MAX);
@@ -603,8 +636,9 @@ public enum StageType
     Merchant, // 商人关：可以用金币买装备/道具/回血
     Enchant, // 附魔关：给已有装备加随机附魔词条
     Curse, // 诅咒关：三选一buff，每个buff带一个debuff，高风险高收益
-    Rest, // 休息关：回血/分解装备得材料
-    Boss // BOSS关：每章最后一关，必掉紫/橙装，解锁下一章
+    Rest, // 恢复关：回血/分解装备得材料，越往后给的强化材料越多
+    Boss, // BOSS关：每章最后一关，必掉紫/橙装，解锁下一章
+    Forge // 锻造关：打造/强化装备；与附魔关每章只会出现一种
 }
 
 /// <summary>通关宝箱品质：木/银/金</summary>

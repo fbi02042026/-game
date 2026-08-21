@@ -19,8 +19,9 @@ public static class TalentUIPrefabGenerator
         {
             if (!EditorUtility.DisplayDialog(
                     "天赋界面预制体",
-                    "已存在 TalentUI.prefab，是否覆盖？\n（你改过的 Sprite 会被盖掉）",
-                    "覆盖", "取消"))
+                    "已存在 TalentUI.prefab，将按 Art/UI/Talent 切片重新生成。\n" +
+                    "结构会覆盖；之后你仍可在 Inspector 替换 Sprite。",
+                    "覆盖生成", "取消"))
                 return;
         }
 
@@ -42,7 +43,7 @@ public static class TalentUIPrefabGenerator
         root.AddComponent<CanvasScaler>();
         root.AddComponent<GraphicRaycaster>();
         UICanvasSetup.Apply(canvas, null);
-        canvas.sortingOrder = 90;
+        canvas.sortingOrder = 200;
 
         var ui = root.AddComponent<TalentUI>();
         ui.BuildHierarchyForPrefab();

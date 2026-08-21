@@ -13,18 +13,20 @@ MonoBehaviour:
   m_Name: ally_shield
   m_EditorClassIdentifier: 
   id: ally_shield
-  skillName: "\u62A4\u76FE"
-  desc: "\u63D0\u5347\u9632\u5FA1"
+  skillName: "\u5723\u76FE\u58C1\u5792"
+  desc: "\u83B7\u5F97 35% \u6700\u5927\u751F\u547D\u62A4\u76FE\uFF0C\u6301\u7EED 5 \u79D2"
   skillType: 3
   attackKit: 4
   damageMultiplier: 0
   baseDamage: 0
-  cooldown: 0.1
+  cooldown: 18
   aoeRadius: 4
   projectileCount: 1
   projectileSpeed: 12
-  buffAttr: 9
+  buffAttr: 10
   buffValue: 0.35
   buffIsPercent: 1
+  duration: 5
   healBase: 0
+  healPercentOfMax: 0
   vfxPrefab: {fileID: 0}

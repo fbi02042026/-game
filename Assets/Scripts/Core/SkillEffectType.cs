@@ -47,7 +47,7 @@ public enum SkillEffectType
 /// <summary>
 /// 技能/特效命名与推断
 /// 技能配置 id：
-///   Ally：ally_heal / ally_atk_speed / ally_crit_up / ally_thunder / ally_shield（玩家+佣兵共用）
+///   Ally：ally_heal / ally_atk_up / ally_atk_speed / ally_crit_up / ally_thunder / ally_shield
 ///   Monster：mon_slam_multi / mon_magic_burst
 /// 特效套装：按 AttackVfxKit，不按职业拆文件夹
 /// </summary>

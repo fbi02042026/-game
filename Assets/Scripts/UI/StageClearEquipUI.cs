@@ -21,8 +21,23 @@ public class StageClearEquipUI : MonoBehaviour
     GameObject _comparePanel;
     Button _equipBtn;
     Text _equipBtnLabel;
+    Button _discardBtn;
+    Text _title;
+    bool _pickup;
 
     public static void Show(List<EquipInstance> rewards, int bonusGold, Action<EquipInstance, bool> onDone)
+    {
+        Ensure().Open(rewards, bonusGold, onDone, pickup: false);
+    }
+
+    /// <summary>拾取模式：只展示一件已入包的装备，标题「捡到一件装备」，单个确定按钮。</summary>
+    public static void ShowPickup(EquipInstance equip, Action onClosed)
+    {
+        Ensure().Open(new List<EquipInstance> { equip }, 0,
+            (_, __) => onClosed?.Invoke(), pickup: true);
+    }
+
+    static StageClearEquipUI Ensure()
     {
         var ui = Instance;
         if (ui == null)
@@ -31,7 +46,7 @@ public class StageClearEquipUI : MonoBehaviour
             ui = go.AddComponent<StageClearEquipUI>();
             DontDestroyOnLoad(go);
         }
-        ui.Open(rewards, bonusGold, onDone);
+        return ui;
     }
 
     void Awake()
@@ -44,8 +59,9 @@ public class StageClearEquipUI : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    void Open(List<EquipInstance> rewards, int bonusGold, Action<EquipInstance, bool> onDone)
+    void Open(List<EquipInstance> rewards, int bonusGold, Action<EquipInstance, bool> onDone, bool pickup)
     {
+        _pickup = pickup;
         _onDone = onDone;
         _rewards = new List<EquipInstance>();
         if (rewards != null)
@@ -83,10 +99,27 @@ public class StageClearEquipUI : MonoBehaviour
             }
             _root.transform.SetAsLastSibling();
         }
+        RefreshTitle();
         RefreshCards();
         RefreshCompare();
         RefreshEquipButton();
         GameFonts.ApplyToHierarchy(_root.transform);
+    }
+
+    void RefreshTitle()
+    {
+        if (_title != null)
+            _title.text = _rewards.Count <= 1 ? "捡到一件装备" : "选择一件装备";
+        if (_discardBtn != null)
+            _discardBtn.gameObject.SetActive(!_pickup);
+        if (_equipBtn != null)
+        {
+            var rt = _equipBtn.GetComponent<RectTransform>();
+            rt.anchoredPosition = new Vector2(_pickup ? 0f : -120f, 48f);
+        }
+        var panel = _root != null ? _root.transform.Find("Panel") as RectTransform : null;
+        if (panel != null)
+            panel.sizeDelta = _pickup ? new Vector2(560f, 620f) : new Vector2(680f, 780f);
     }
 
     static void EnsureEventSystem()
@@ -133,14 +166,13 @@ public class StageClearEquipUI : MonoBehaviour
         prt.sizeDelta = new Vector2(680f, 780f);
         prt.localScale = Vector3.one;
 
-        var title = CreateText(panel.transform, "Title", "关卡通关 · 选择一件装备", 30, TextAnchor.MiddleCenter);
-        var trt = title.rectTransform;
+        _title = CreateText(panel.transform, "Title", "选择一件装备", 30, TextAnchor.MiddleCenter);
+        var trt = _title.rectTransform;
         trt.anchorMin = new Vector2(0.5f, 1f);
         trt.anchorMax = new Vector2(0.5f, 1f);
         trt.anchoredPosition = new Vector2(0f, -36f);
         trt.sizeDelta = new Vector2(620f, 40f);
 
-        float[] xs = { -210f, 0f, 210f };
         _cardBgs.Clear();
         for (int i = 0; i < 3; i++)
         {
@@ -150,22 +182,33 @@ public class StageClearEquipUI : MonoBehaviour
             crt.anchorMin = new Vector2(0.5f, 1f);
             crt.anchorMax = new Vector2(0.5f, 1f);
             crt.pivot = new Vector2(0.5f, 1f);
-            crt.anchoredPosition = new Vector2(xs[i], -90f);
-            crt.sizeDelta = new Vector2(190f, 280f);
+            crt.anchoredPosition = new Vector2(0f, -90f);
+            crt.sizeDelta = new Vector2(190f, 340f);
             _cardBgs.Add(card);
 
             var btn = card.gameObject.AddComponent<Button>();
             btn.targetGraphic = card;
             btn.onClick.AddListener(() => Select(idx));
 
-            CreateText(card.transform, "Name", "—", 20, TextAnchor.UpperCenter).rectTransform.anchoredPosition = new Vector2(0f, -16f);
-            CreateText(card.transform, "Meta", "", 16, TextAnchor.UpperCenter).rectTransform.anchoredPosition = new Vector2(0f, -48f);
+            var icon = CreateImage(card.transform, "Icon", Color.white);
+            var irt = icon.rectTransform;
+            irt.anchorMin = new Vector2(0.5f, 1f);
+            irt.anchorMax = new Vector2(0.5f, 1f);
+            irt.pivot = new Vector2(0.5f, 1f);
+            irt.anchoredPosition = new Vector2(0f, -12f);
+            irt.sizeDelta = new Vector2(96f, 96f);
+            icon.preserveAspect = true;
+            icon.raycastTarget = false;
+
+            AnchorTop(CreateText(card.transform, "Name", "—", 20, TextAnchor.UpperCenter).rectTransform, -116f, 170f, 28f);
+            AnchorTop(CreateText(card.transform, "Meta", "", 16, TextAnchor.UpperCenter).rectTransform, -148f, 170f, 24f);
             var body = CreateText(card.transform, "Body", "", 16, TextAnchor.UpperLeft);
             var brt = body.rectTransform;
-            brt.anchorMin = new Vector2(0.5f, 0.5f);
-            brt.anchorMax = new Vector2(0.5f, 0.5f);
-            brt.anchoredPosition = new Vector2(0f, -20f);
-            brt.sizeDelta = new Vector2(170f, 180f);
+            brt.anchorMin = new Vector2(0.5f, 1f);
+            brt.anchorMax = new Vector2(0.5f, 1f);
+            brt.pivot = new Vector2(0.5f, 1f);
+            brt.anchoredPosition = new Vector2(0f, -180f);
+            brt.sizeDelta = new Vector2(170f, 150f);
         }
 
         _comparePanel = CreateImage(panel.transform, "Compare", new Color(0.14f, 0.18f, 0.22f, 1f)).gameObject;
@@ -185,8 +228,9 @@ public class StageClearEquipUI : MonoBehaviour
         _equipBtn = CreateButton(panel.transform, "EquipBtn", new Vector2(-120f, 48f), new Vector2(220f, 56f),
             new Color(0.25f, 0.55f, 0.35f, 1f), OnEquipOrReplace);
         _equipBtnLabel = _equipBtn.GetComponentInChildren<Text>();
-        CreateButton(panel.transform, "DiscardBtn", new Vector2(120f, 48f), new Vector2(220f, 56f),
-            new Color(0.55f, 0.28f, 0.28f, 1f), OnDiscard).GetComponentInChildren<Text>().text = "丢弃";
+        _discardBtn = CreateButton(panel.transform, "DiscardBtn", new Vector2(120f, 48f), new Vector2(220f, 56f),
+            new Color(0.55f, 0.28f, 0.28f, 1f), OnDiscard);
+        _discardBtn.GetComponentInChildren<Text>().text = "丢弃";
     }
 
     void Select(int idx)
@@ -200,16 +244,27 @@ public class StageClearEquipUI : MonoBehaviour
 
     void RefreshCards()
     {
+        int count = _rewards != null ? _rewards.Count : 0;
         for (int i = 0; i < 3; i++)
         {
             var card = _cardBgs[i];
-            bool active = i < _rewards.Count && _rewards[i] != null;
+            bool active = i < count && _rewards[i] != null;
             card.gameObject.SetActive(active);
             if (!active) continue;
+
+            // 一张卡时居中，两三张时左右铺开
+            float step = 210f;
+            card.rectTransform.anchoredPosition = new Vector2((i - (count - 1) * 0.5f) * step, -90f);
 
             var eq = _rewards[i];
             bool sel = i == _selected;
             card.color = sel ? RarityColor(eq.rarity) : new Color(0.18f, 0.16f, 0.22f, 1f);
+            var icon = card.transform.Find("Icon")?.GetComponent<Image>();
+            if (icon != null)
+            {
+                icon.sprite = eq.icon;
+                icon.enabled = eq.icon != null;
+            }
             var name = card.transform.Find("Name")?.GetComponent<Text>();
             var meta = card.transform.Find("Meta")?.GetComponent<Text>();
             var body = card.transform.Find("Body")?.GetComponent<Text>();
@@ -221,6 +276,11 @@ public class StageClearEquipUI : MonoBehaviour
 
     void RefreshCompare()
     {
+        if (_pickup)
+        {
+            if (_comparePanel != null) _comparePanel.SetActive(false);
+            return;
+        }
         var sel = GetSelected();
         EquipInstance worn = null;
         if (sel != null && GridBackpackSystem.Instance != null)
@@ -236,6 +296,11 @@ public class StageClearEquipUI : MonoBehaviour
 
     void RefreshEquipButton()
     {
+        if (_pickup)
+        {
+            if (_equipBtnLabel != null) _equipBtnLabel.text = "放入背包";
+            return;
+        }
         var sel = GetSelected();
         bool hasWorn = false;
         if (sel != null && GridBackpackSystem.Instance != null)
@@ -301,6 +366,16 @@ public class StageClearEquipUI : MonoBehaviour
             case Rarity.Legendary: return new Color(0.55f, 0.4f, 0.15f, 1f);
             default: return new Color(0.35f, 0.35f, 0.38f, 1f);
         }
+    }
+
+    static void AnchorTop(RectTransform rt, float y, float w, float h)
+    {
+        if (rt == null) return;
+        rt.anchorMin = new Vector2(0.5f, 1f);
+        rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, y);
+        rt.sizeDelta = new Vector2(w, h);
     }
 
     static void Stretch(RectTransform rt)

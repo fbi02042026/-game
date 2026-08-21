@@ -22,6 +22,7 @@ public class BootManager : MonoBehaviour
 
         Application.runInBackground = true;
         GamePerf.ApplyStartup();
+        ShowBootVeil();
 
         GameObject persistentRoot = GameObject.Find("PersistentRoot");
         if (persistentRoot == null)
@@ -35,6 +36,10 @@ public class BootManager : MonoBehaviour
 
             GamePerf.Log("[Boot] PersistentRoot 已创建（跨场景保留）");
         }
+        if (persistentRoot.GetComponent<StoryDirector>() == null)
+            persistentRoot.AddComponent<StoryDirector>();
+        if (persistentRoot.GetComponent<TutorialDirector>() == null)
+            persistentRoot.AddComponent<TutorialDirector>();
 
         EnsureCamera();
         EnsureEventSystem();
@@ -43,7 +48,39 @@ public class BootManager : MonoBehaviour
     void Start()
     {
         if (!GameSceneGate.IsBoot) return;
-        Invoke(nameof(ShowLogin), loadDelay);
+        ShowLogin();
+    }
+
+    static GameObject _bootVeil;
+
+    static void ShowBootVeil()
+    {
+        if (_bootVeil != null) return;
+        _bootVeil = new GameObject("BootVeil");
+        DontDestroyOnLoad(_bootVeil);
+        var canvas = _bootVeil.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 500;
+        var scaler = _bootVeil.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(720f, 1280f);
+        scaler.matchWidthOrHeight = 1f;
+        var imgGo = new GameObject("Black", typeof(RectTransform), typeof(Image));
+        imgGo.transform.SetParent(_bootVeil.transform, false);
+        var rt = imgGo.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+        imgGo.GetComponent<Image>().color = Color.black;
+    }
+
+    static void HideBootVeil()
+    {
+        if (_bootVeil != null)
+        {
+            Destroy(_bootVeil);
+            _bootVeil = null;
+        }
     }
 
     void ShowLogin()
@@ -68,6 +105,7 @@ public class BootManager : MonoBehaviour
 
         _login.BindEnterTown(EnterTown);
         GameFonts.ApplyToHierarchy(go.transform);
+        HideBootVeil();
         GamePerf.Log("[Boot] 已显示登录界面");
     }
 

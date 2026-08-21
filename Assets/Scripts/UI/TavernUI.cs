@@ -133,7 +133,8 @@ public class TavernUI : MonoBehaviour, ITownPage
     {
         "HallScene", "Background", "LeftBar", "RightBar",
         "MailButton", "NoticeButton", "ActivityButton",
-        "RankButton", "ShopButton", "SettingsButton"
+        "RankButton", "ShopButton", "SettingsButton",
+        "TitleBadge"
     };
 
     static Transform[] _guildHideCache;
@@ -157,6 +158,8 @@ public class TavernUI : MonoBehaviour, ITownPage
                     t.gameObject.SetActive(show);
             }
         }
+
+        SetTopBarResourceOnly(!show);
 
         if (_guildHotspotCache != null)
         {
@@ -189,6 +192,26 @@ public class TavernUI : MonoBehaviour, ITownPage
             hall.armoryButton,
             hall.receptionistButton
         };
+    }
+
+    /// <summary>功能页只留金币/体力资源条，隐藏公会名等主界面顶栏装饰。</summary>
+    static void SetTopBarResourceOnly(bool resourceOnly)
+    {
+        var hall = GuildHallUI.Instance;
+        if (hall == null) return;
+        Transform top = TownSharedChrome.FindDeep(hall.transform, "TopBar");
+        if (top == null) return;
+        for (int i = 0; i < top.childCount; i++)
+        {
+            Transform c = top.GetChild(i);
+            if (c == null) continue;
+            if (c.name == "GoldPanel" || c.name == "体力Panel") continue;
+            if (c.name.IndexOf("Stamina", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+            if (c.name == "TopBarBg") continue;
+            bool on = !resourceOnly;
+            if (c.gameObject.activeSelf != on)
+                c.gameObject.SetActive(on);
+        }
     }
 
     public static void ClearGuildHideCache()

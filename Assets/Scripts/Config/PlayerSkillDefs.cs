@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 玩家可携带技能表（与 Docs/像素冒险：裂缝之刃_玩家技能设计.md 一致）。
-/// 每次战斗只能带 1 个；战前在角色页选择。
+/// 每次战斗只能带 1 个；手动点击释放；解锁只跟通关章节，没有玩家等级。
 /// </summary>
 public static class PlayerSkillDefs
 {
@@ -29,9 +29,9 @@ public static class PlayerSkillDefs
         public string numbers;
         public float cooldown;
         public float duration;
-        public string autoCast;
-        public int unlockChapter; // 通过该章后解锁（maxUnlockedChapter > unlockChapter）
-        public string allyConfigId; // 现有 SkillConfig id，战斗释放暂映射
+        public string useHint;
+        public int unlockChapter; // 通关该章后解锁（maxUnlockedChapter > unlockChapter）；0=初始
+        public string allyConfigId;
         public Color tint;
     }
 
@@ -42,11 +42,11 @@ public static class PlayerSkillDefs
             id = "heal_spring",
             displayName = "治愈之泉",
             kind = Kind.Heal,
-            desc = "瞬间恢复自身生命。生命低于 50% 且周围有敌人时自动释放。",
-            numbers = "恢复 30% 最大生命",
+            desc = "给当前生命比例最低的我方单位回血（玩家或佣兵）。",
+            numbers = "恢复目标 30% 最大生命",
             cooldown = 12f,
             duration = 0f,
-            autoCast = "生命低于 50% 且周围有敌人",
+            useHint = "血量危险时手动点击",
             unlockChapter = 0,
             allyConfigId = "ally_heal",
             tint = new Color(0.35f, 0.75f, 0.4f)
@@ -56,11 +56,11 @@ public static class PlayerSkillDefs
             id = "holy_barrier",
             displayName = "圣盾壁垒",
             kind = Kind.Shield,
-            desc = "召唤护盾抵挡伤害，持续期间免疫控制。",
+            desc = "获得护盾，持续期间免疫控制。",
             numbers = "获得 35% 最大生命的护盾，持续 5 秒",
             cooldown = 18f,
             duration = 5f,
-            autoCast = "生命低于 60% 且精英/Boss 或被 3 个以上敌人攻击",
+            useHint = "精英/Boss 放大招前、或被包围时手动点击",
             unlockChapter = 1,
             allyConfigId = "ally_shield",
             tint = new Color(0.35f, 0.55f, 0.9f)
@@ -70,13 +70,13 @@ public static class PlayerSkillDefs
             id = "battle_surge",
             displayName = "战意爆发",
             kind = Kind.AtkBuff,
-            desc = "激发潜能，短时间内攻击更高。",
+            desc = "短时间内大幅提升攻击。",
             numbers = "攻击 +30%，持续 8 秒",
             cooldown = 18f,
             duration = 8f,
-            autoCast = "进入战斗后冷却完毕即释放，优先精英/Boss",
+            useHint = "精英/Boss 战或大量小怪时手动点击",
             unlockChapter = 2,
-            allyConfigId = "ally_atk_speed",
+            allyConfigId = "ally_atk_up",
             tint = new Color(0.9f, 0.45f, 0.25f)
         },
         new Def
@@ -85,10 +85,10 @@ public static class PlayerSkillDefs
             displayName = "疾风架势",
             kind = Kind.AtkSpeedBuff,
             desc = "进入疾风状态，攻速大幅提升。",
-            numbers = "攻击速度 +35%，持续 6 秒",
+            numbers = "攻速 +35%，持续 6 秒",
             cooldown = 15f,
             duration = 6f,
-            autoCast = "进入战斗后冷却完毕即释放",
+            useHint = "输出窗口期手动点击",
             unlockChapter = 3,
             allyConfigId = "ally_atk_speed",
             tint = new Color(0.4f, 0.7f, 0.95f)
@@ -102,7 +102,7 @@ public static class PlayerSkillDefs
             numbers = "暴击率 +25%，持续 8 秒",
             cooldown = 18f,
             duration = 8f,
-            autoCast = "冷却完毕且周围有精英/Boss",
+            useHint = "Boss 战或精英怪出现时手动点击",
             unlockChapter = 4,
             allyConfigId = "ally_crit_up",
             tint = new Color(0.95f, 0.55f, 0.25f)
@@ -116,7 +116,7 @@ public static class PlayerSkillDefs
             numbers = "造成 300% 攻击的范围伤害",
             cooldown = 25f,
             duration = 0f,
-            autoCast = "同时存在 4 个以上敌人，或 Boss 虚弱/召唤阶段",
+            useHint = "怪群聚集或 Boss 虚弱时手动点击",
             unlockChapter = 5,
             allyConfigId = "ally_thunder",
             tint = new Color(0.65f, 0.4f, 0.9f)
@@ -148,6 +148,7 @@ public static class PlayerSkillDefs
     {
         if (def == null) return false;
         if (def.unlockChapter <= 0) return true;
+        if (def.id == "holy_barrier" && data != null && data.chapter1ChoiceDone) return true;
         int chapter = data != null ? data.maxUnlockedChapter : 1;
         return chapter > def.unlockChapter;
     }
@@ -155,14 +156,13 @@ public static class PlayerSkillDefs
     public static string FormatDetail(Def def)
     {
         if (def == null) return "";
-        string dur = def.duration > 0f ? $"持续 {def.duration:0} 秒" : "即时";
-        return $"{def.autoCast}时自动释放，{def.numbers}{ (def.duration > 0f ? "，" + dur : "") }。冷却 {def.cooldown:0} 秒。";
+        return $"{def.numbers}。冷却 {def.cooldown:0} 秒。{def.useHint}。";
     }
 
     public static string FormatUnlockHint(Def def)
     {
         if (def == null) return "未解锁";
         if (def.unlockChapter <= 0) return "未解锁";
-        return $"未解锁：通过第{def.unlockChapter}章后解锁";
+        return $"未解锁：通关第{def.unlockChapter}章后解锁";
     }
 }

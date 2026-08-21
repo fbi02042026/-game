@@ -27,75 +27,32 @@ public class UIManager : Singleton<UIManager>
         Debug.Log("[Toast] " + msg);
     }
 
-    /// <summary>传送门后打开关卡选择（简易面板；有 ChapterMapUI 则优先）</summary>
+    /// <summary>
+    /// 传送门后：石墩关卡图（锁晃动解锁）→ 滚盘 → 旗落到石墩 + btn06 描边 → 点石墩进关。
+    /// </summary>
     public void ShowStageSelectUI(List<StageData> stages, Action onClose = null)
     {
-        Debug.Log($"显示关卡选择，可选关卡数：{stages?.Count ?? 0}");
+        CloseStageSelect();
 
-        if (ChapterMapUI.Instance != null)
+        StageData next = ChapterManager.Instance?.GetNextStage();
+        if (next == null && stages != null && stages.Count > 0)
+            next = stages[0];
+
+        if (next == null)
         {
-            ChapterMapUI.Instance.ShowAfterBattle();
-            onClose?.Invoke();
-            return;
-        }
-
-        if (stages == null || stages.Count == 0)
-        {
-            onClose?.Invoke();
-            return;
-        }
-
-        if (_stageSelectPanel != null)
-            Destroy(_stageSelectPanel);
-
-        Canvas canvas = FindObjectOfType<Canvas>();
-        if (canvas == null)
-        {
-            ChapterManager.Instance?.SelectStage(stages[0]);
-            onClose?.Invoke();
-            return;
-        }
-
-        Time.timeScale = 0f;
-        _stageSelectPanel = new GameObject("StageSelectPanel", typeof(RectTransform));
-        _stageSelectPanel.transform.SetParent(canvas.transform, false);
-        var root = _stageSelectPanel.GetComponent<RectTransform>();
-        StretchFull(root);
-
-        var dim = CreateUiImage(_stageSelectPanel.transform, "Dim", new Color(0f, 0f, 0f, 0.65f));
-        StretchFull(dim.rectTransform);
-
-        var panel = CreateUiImage(_stageSelectPanel.transform, "Panel", new Color(0.12f, 0.1f, 0.08f, 0.96f));
-        var prt = panel.rectTransform;
-        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-        prt.sizeDelta = new Vector2(560f, 360f);
-
-        var title = CreateUiText(panel.transform, "Title", "选择下一关", 34, TextAnchor.MiddleCenter);
-        var trt = title.rectTransform;
-        trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 1f);
-        trt.anchoredPosition = new Vector2(0f, -40f);
-        trt.sizeDelta = new Vector2(500f, 44f);
-
-        float y = 40f;
-        int show = Mathf.Min(stages.Count, 4);
-        for (int i = 0; i < show; i++)
-        {
-            StageData st = stages[i];
-            string label = $"第{st.stageIndex + 1}关 · {StageTypeLabel(st.type)}";
-            float yy = y - i * 66f;
-            CreateChoiceButton(panel.transform, label, new Vector2(0f, yy), () =>
-            {
-                CloseStageSelect();
-                ChapterManager.Instance?.SelectStage(st);
-                onClose?.Invoke();
-            });
-        }
-
-        CreateChoiceButton(panel.transform, "回城", new Vector2(0f, -130f), () =>
-        {
-            CloseStageSelect();
+            Debug.LogWarning("[UIManager] 没有下一关可选，回城");
             MercenaryManager.Instance?.ClearAllMercs();
             GameSceneManager.Instance?.ReturnToTown();
+            onClose?.Invoke();
+            return;
+        }
+
+        Debug.Log($"[UIManager] 关卡图流程 第{next.stageIndex + 1}关 type={next.type}");
+
+        BattleStageMapUI.BeginFlow(next, stage =>
+        {
+            if (stage != null)
+                ChapterManager.Instance?.SelectStage(stage);
             onClose?.Invoke();
         });
     }
@@ -118,8 +75,9 @@ public class UIManager : Singleton<UIManager>
             case StageType.Boss: return "Boss";
             case StageType.Merchant: return "商人";
             case StageType.Enchant: return "附魔";
+            case StageType.Forge: return "锻造";
             case StageType.Curse: return "诅咒";
-            case StageType.Rest: return "休息";
+            case StageType.Rest: return "恢复";
             default: return "普通";
         }
     }
@@ -274,8 +232,8 @@ public class UIManager : Singleton<UIManager>
 
     public void ShowRestUI(Action onHeal, Action onDecompose)
     {
-        Debug.Log("休息关，自动回血");
-        onHeal?.Invoke();
+        // 恢复关：弹「生命恢复」窗，回 50% 血；分解入口暂不开放
+        RestStagePopupUI.Show(() => onHeal?.Invoke());
     }
 
     public void ShowDecomposeUI(Action<GridBackpackSystem.BackpackItem> onSelect)

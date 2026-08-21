@@ -25,6 +25,8 @@ public class ConfigManager : Singleton<ConfigManager>
         _allEquipTemplates = Resources.LoadAll<EquipTemplate>("Config/Equips").ToList();
         foreach (var t in _allEquipTemplates)
         {
+            if (t == null) continue;
+            t.ResolveIcon();
             _equipTemplateDict[t.templateId] = t;
         }
 
@@ -78,10 +80,12 @@ public class ConfigManager : Singleton<ConfigManager>
         Rarity maxRarity = (Rarity)Mathf.Min(blacksmithLevel + 1, (int)Rarity.Legendary);
         List<EquipTemplate> available = _allEquipTemplates.Where(t => t.baseRarity <= maxRarity).ToList();
         List<EquipInstance> result = new List<EquipInstance>();
+        if (available.Count == 0) return result;
+        int lv = Hero.Instance != null ? Hero.Instance.level : 1;
         for (int i = 0; i < count; i++)
         {
             var template = available[Random.Range(0, available.Count)];
-            result.Add(EquipInstance.GenerateFromTemplate(template, bonusStar, Hero.Instance.level));
+            result.Add(EquipInstance.GenerateFromTemplate(template, bonusStar, lv));
         }
         return result;
     }

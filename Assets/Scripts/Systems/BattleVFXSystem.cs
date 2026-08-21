@@ -168,8 +168,40 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         PlayOrbProjectile(fromPos, toPos, facingDir, target, VfxFaction.Ally);
     }
 
+    /// <summary>
+    /// 技能子弹：从施法者飞到目标，飞到了才结算（onImpact）。
+    /// 远程怪放技能必须走这里，否则伤害瞬发、玩家看不到子弹。
+    /// 飞行体缺失时不能把伤害吞掉，直接立刻回调。
+    /// </summary>
+    public void PlaySkillProjectile(VfxFaction faction, Vector3 fromPos, Vector3 toPos,
+        int facingDir, Transform target, AttackVfxKit kit = AttackVfxKit.Orb,
+        GameObject impactOverride = null, float scaleMul = 1f, float speedMul = 1f,
+        System.Action onImpact = null)
+    {
+        if (kit != AttackVfxKit.Bow && kit != AttackVfxKit.Orb)
+            kit = AttackVfxKit.Orb;
+
+        GameObject fly = LoadSharedKit(kit, faction, "fly");
+        GameObject impact = impactOverride != null ? impactOverride : LoadSharedKit(kit, faction, "hit");
+
+        if (fly == null)
+        {
+            Debug.LogWarning($"[VFX] 技能子弹缺少飞行体: {faction}/{kit}/fly，伤害直接结算");
+            onImpact?.Invoke();
+            if (impact != null)
+                ApplyFactionLook(SpawnVFX(impact, toPos, defaultDuration, null), faction);
+            return;
+        }
+
+        Vector3 from = fromPos;
+        if (kit == AttackVfxKit.Bow) from.y += bowFireYOffset;
+        StartCoroutine(ProjectileFlightCoroutine(fly, impact, from, toPos, facingDir, target, faction,
+            scaleMul, speedMul, onImpact));
+    }
+
     IEnumerator ProjectileFlightCoroutine(GameObject projectilePrefab, GameObject impactPrefab,
-        Vector3 fromPos, Vector3 toPos, int facingDir, Transform target, VfxFaction faction)
+        Vector3 fromPos, Vector3 toPos, int facingDir, Transform target, VfxFaction faction,
+        float scaleMul = 1f, float speedMul = 1f, System.Action onImpact = null)
     {
         // 起飞时锁定终点，全程水平直线；匀速飞行（不再用 minTime 拉长近距，否则近处会变慢）
         Vector3 end = toPos;
@@ -178,11 +210,12 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         float distance = flightDir.magnitude;
         if (distance < 0.05f) distance = 0.05f;
         Vector3 dirN = flightDir.sqrMagnitude > 1e-8f ? flightDir.normalized : Vector3.right * (facingDir >= 0 ? 1f : -1f);
-        float speed = Mathf.Max(0.1f, projectileSpeed);
+        float speed = Mathf.Max(0.1f, projectileSpeed * Mathf.Max(0.05f, speedMul));
 
         GameObject projectile = Instantiate(projectilePrefab, fromPos, Quaternion.identity);
         projectile.transform.SetParent(transform);
-        projectile.transform.localScale = projectilePrefab.transform.localScale;
+        projectile.transform.localScale = projectilePrefab.transform.localScale
+            * Mathf.Max(0.05f, scaleMul);
 
         ApplyVfxFacing(projectile, 1);
         ApplyFactionLook(projectile, faction);
@@ -207,12 +240,18 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         projectile.transform.position = end;
         Destroy(projectile);
 
+        // 命中结算放在特效之前：目标已死也要让调用方知道子弹到了
+        onImpact?.Invoke();
+
         if (impactPrefab == null) yield break;
         Vector3 impactPos = toPos;
         if (target != null) impactPos = target.position;
         GameObject impact = SpawnVFX(impactPrefab, impactPos, defaultDuration, null);
+        if (impact == null) yield break;
         ApplyFactionLook(impact, faction);
         ApplyVfxFacing(impact, facingDir);
+        if (scaleMul > 1.01f)
+            impact.transform.localScale *= Mathf.Min(scaleMul, 2f);
     }
 
     /// <summary>让飞行物尖端冲向飞行方向（贴图默认朝向用 projectileAngleOffset 校正）</summary>

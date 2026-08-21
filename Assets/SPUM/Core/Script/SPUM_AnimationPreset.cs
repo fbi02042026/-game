@@ -1,4 +1,3 @@
-#if UNITY_EDITOR
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using UnityEngine;
@@ -85,4 +84,3 @@ public class SPUM_AnimationPreset : MonoBehaviour
         ApplyPreset.onClick.RemoveAllListeners();
     }
 }
-#endif

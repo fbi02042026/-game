@@ -8,7 +8,7 @@ public class SkillRegistry : Singleton<SkillRegistry>
 {
     private Dictionary<string, SkillConfig> _dict = new Dictionary<string, SkillConfig>();
 
-    public const string DefaultPlayerSkillId = "ally_thunder";
+    public const string DefaultPlayerSkillId = "ally_heal";
     public const string DefaultMercMeleeSkillId = "ally_shield";
     public const string DefaultMercRangedSkillId = "ally_thunder";
     public const string DefaultMercHealSkillId = "ally_heal";
@@ -76,7 +76,11 @@ public class SkillRegistry : Singleton<SkillRegistry>
         return DefaultMercMeleeSkillId;
     }
 
-    /// <summary>精英/Boss 主动技：近战重击 / 远程魔法；Boss 两种都会用</summary>
+    /// <summary>
+    /// 怪物主动技：近战重击 / 远程魔法弹；Boss 两种都会用。
+    /// 远程小怪也给远程技（伤害在 Monster 侧按非精英打折），
+    /// 否则远程怪整场只有普攻、玩家看不到技能子弹。
+    /// </summary>
     public string GetMonsterSkillId(MonsterConfig template, bool isEliteWave, bool isBossUnit, MonsterAttackStyle primaryStyle)
     {
         bool ranged = MonsterAttackStyleTable.IsRanged(primaryStyle);
@@ -87,7 +91,18 @@ public class SkillRegistry : Singleton<SkillRegistry>
         }
         if (isEliteWave)
             return ranged ? MonsterEliteRangedSkillId : MonsterEliteMeleeSkillId;
-        return null; // 小怪无主动技，只走普攻套
+        // 近战小怪保持只有普攻，避免开局被贴脸重击
+        return ranged ? MonsterEliteRangedSkillId : null;
+    }
+
+    /// <summary>技能专属特效预制体；给「子弹命中点用技能特效」这类场景取原始 prefab。</summary>
+    public GameObject GetSkillVfxPrefab(string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return null;
+        var cfg = Get(skillId);
+        if (cfg != null && cfg.vfxPrefab != null) return cfg.vfxPrefab;
+        string folder = skillId.StartsWith("mon_") ? "Monster" : "Ally";
+        return Resources.Load<GameObject>($"VFX/Skills/{folder}/{skillId}");
     }
 
     /// <summary>兼容旧调用</summary>

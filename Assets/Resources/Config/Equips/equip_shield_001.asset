@@ -14,9 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   templateId: equip_shield_001
   equipName: "\u6728\u76FE"
-  icon: {fileID: 0}
-  gridWidth: 1
-  gridHeight: 1
+  icon: {fileID: 21300000, guid: 844bd6e292d552444bd413e310014aa5, type: 3}
+  iconFileName: New_Shield_01
+  gridWidth: 2
+  gridHeight: 2
   tags: []
   baseRarity: 1
   minLevel: 1
@@ -32,5 +33,6 @@ MonoBehaviour:
   slotType: 6
   weaponType: 3
   weaponAttackType: 0
+  attackRange: 96
   armorPrefix: 0
   spumName: weapon_shield

@@ -104,6 +104,10 @@ public class TownSceneBootstrap : MonoBehaviour
         Debug.Log("[TownBootstrap] Town 功能页预加载完成（切页应无 Instantiate 延迟）");
         if (SceneLoadingCoordinator.IsActive)
             SceneLoadingCoordinator.Finish();
+        yield return null;
+        yield return null;
+        TownHubController.ConsumePendingAdventure();
+        TutorialDirector.Instance?.NotifyTownReady();
     }
 
     void OnDestroy()

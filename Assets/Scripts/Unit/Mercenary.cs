@@ -11,6 +11,9 @@ public class Mercenary : UnitBase
 
     private UnitBase _lastLoggedTarget = null;
     private int _partyIndex = -1;
+    /// <summary>引导：原地眩晕，不跑 AI，受击不死。</summary>
+    public bool TutorialStunned { get; private set; }
+    float _stunAnimTimer;
 
     protected override void Awake()
     {
@@ -20,6 +23,37 @@ public class Mercenary : UnitBase
         base.Awake();
         isAlly = true;
         spriteDefaultFacesRight = false;
+    }
+
+    public void SetTutorialStunned(bool on)
+    {
+        TutorialStunned = on;
+        if (rb != null) rb.velocity = Vector2.zero;
+        if (unitAnim != null)
+        {
+            unitAnim.SetMove(false, facingDir);
+            if (on) unitAnim.PlayDebuff();
+            else unitAnim.ClearDebuff();
+        }
+        _stunAnimTimer = 0f;
+    }
+
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false)
+    {
+        if (TutorialStunned)
+        {
+            float defense = ignoreDefense ? 0f : attr.GetAttr(AttrType.Defense);
+            float finalDamage = Mathf.Max(1f, damage - defense);
+            currentHp = Mathf.Max(1f, currentHp - finalDamage * 0.35f);
+            DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage * 0.35f), isCrit);
+            if (unitAnim != null)
+            {
+                unitAnim.PlayDamaged();
+                _stunAnimTimer = 0.35f;
+            }
+            return;
+        }
+        base.TakeDamage(damage, isCrit, ignoreDefense);
     }
 
     public void Init(string id, int level = 1)
@@ -141,6 +175,18 @@ public class Mercenary : UnitBase
 
     protected override void AIUpdate()
     {
+        if (TutorialStunned)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            _stunAnimTimer -= Time.deltaTime;
+            if (_stunAnimTimer <= 0f && unitAnim != null)
+            {
+                unitAnim.PlayDebuff();
+                _stunAnimTimer = 1.6f;
+            }
+            return;
+        }
+
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
         {
             if (rb != null) rb.velocity = Vector2.zero;

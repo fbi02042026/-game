@@ -55,6 +55,10 @@ public class GuildHallUI : MonoBehaviour
 
     Coroutine _blinkCo;
     Vector3 _eyesBaseScale = Vector3.one;
+    CanvasGroup _introCover;
+
+    /// <summary>首次引导未完成前隐藏大厅，避免片头/剧情前闪一下主界面。</summary>
+    public static bool ShouldHideTownForIntro => !StoryProgress.TutorialIntroDone;
 
     void Awake()
     {
@@ -69,8 +73,32 @@ public class GuildHallUI : MonoBehaviour
         BindRedDots();
         RedDot.RefreshCommon();
         RefreshAllHud();
+        EnsureIntroCover();
+        if (ShouldHideTownForIntro)
+        {
+            TownIntroVeil.EnsureShown();
+            SetTownChromeVisible(false);
+        }
         StartBlink();
         StartCoroutine(StaminaHudLoop());
+    }
+
+    void EnsureIntroCover()
+    {
+        if (_introCover != null) return;
+        _introCover = GetComponent<CanvasGroup>();
+        if (_introCover == null)
+            _introCover = gameObject.AddComponent<CanvasGroup>();
+    }
+
+    /// <summary>片头与开场剧情期间隐藏/恢复公会大厅 UI。</summary>
+    public static void SetTownChromeVisible(bool visible)
+    {
+        if (Instance == null) return;
+        Instance.EnsureIntroCover();
+        Instance._introCover.alpha = visible ? 1f : 0f;
+        Instance._introCover.interactable = visible;
+        Instance._introCover.blocksRaycasts = visible;
     }
 
     /// <summary>看板娘 SpeechBubble：打字机 + 多台词 + 闲时隐藏</summary>
@@ -233,7 +261,7 @@ public class GuildHallUI : MonoBehaviour
         if (shopButton != null)
             shopButton.onClick.AddListener(() => Debug.Log("[GuildHall] 商城（待实现）"));
         if (settingsButton != null)
-            settingsButton.onClick.AddListener(() => Debug.Log("[GuildHall] 设置（待实现）"));
+            settingsButton.onClick.AddListener(() => BattleSettingsPanel.Ensure().Open());
         if (mailButton != null)
             mailButton.onClick.AddListener(OnMailClicked);
         if (noticeButton != null)

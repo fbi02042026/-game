@@ -150,30 +150,30 @@ public class AutoConfigEditor : EditorWindow
 
         // 创建各槽位的示例装备
         CreateEquipTemplate(equipDir, "equip_head_001", "铁头盔", EquipSlotType.Head, Rarity.Common,
-            new AttrBonusData { attrType = AttrType.Defense, value = 5, isPercent = false }, "head_iron");
+            new AttrBonusData { attrType = AttrType.Defense, value = 5, isPercent = false }, "head_iron", "New_Helmet_01");
 
         CreateEquipTemplate(equipDir, "equip_chest_001", "皮胸甲", EquipSlotType.Chest, Rarity.Common,
-            new AttrBonusData { attrType = AttrType.Defense, value = 8, isPercent = false }, "chest_leather");
+            new AttrBonusData { attrType = AttrType.Defense, value = 8, isPercent = false }, "chest_leather", "New_Armor_01");
 
         CreateEquipTemplate(equipDir, "equip_hands_001", "布衣", EquipSlotType.Hands, Rarity.Common,
-            new AttrBonusData { attrType = AttrType.MaxHp, value = 20, isPercent = false }, "cloth_basic");
+            new AttrBonusData { attrType = AttrType.MaxHp, value = 20, isPercent = false }, "cloth_basic", "New_Cloth_01");
 
         CreateEquipTemplate(equipDir, "equip_feet_001", "皮靴", EquipSlotType.Feet, Rarity.Common,
-            new AttrBonusData { attrType = AttrType.MoveSpeed, value = 0.1f, isPercent = true }, "pant_boots");
+            new AttrBonusData { attrType = AttrType.MoveSpeed, value = 0.1f, isPercent = true }, "pant_boots", "New_Pant_01");
 
-        CreateEquipTemplate(equipDir, "equip_cape_001", "普通披风", EquipSlotType.Cape, Rarity.Uncommon,
-            new AttrBonusData { attrType = AttrType.Vitality, value = 3, isPercent = false }, "back_cape");
+        CreateEquipTemplate(equipDir, "equip_cape_001", "普通披风", EquipSlotType.Cape, Rarity.Common,
+            new AttrBonusData { attrType = AttrType.Vitality, value = 3, isPercent = false }, "back_cape", "Cloth_1");
 
         CreateEquipTemplate(equipDir, "equip_weapon_001", "铁剑", EquipSlotType.MainHand, Rarity.Common,
-            new AttrBonusData { attrType = AttrType.Attack, value = 5, isPercent = false }, "weapon_sword",
+            new AttrBonusData { attrType = AttrType.Attack, value = 5, isPercent = false }, "weapon_sword", "New_Weapon_01",
             WeaponType.OneHand, WeaponAttackType.Physical, GameConfig.RANGE_PX_SWORD);
 
         CreateEquipTemplate(equipDir, "equip_weapon_002", "法杖", EquipSlotType.MainHand, Rarity.Uncommon,
-            new AttrBonusData { attrType = AttrType.MagicPower, value = 0.15f, isPercent = true }, "weapon_staff",
+            new AttrBonusData { attrType = AttrType.MagicPower, value = 0.15f, isPercent = true }, "weapon_staff", "New_Weapon_06",
             WeaponType.TwoHand, WeaponAttackType.Magic, GameConfig.RANGE_PX_STAFF);
 
         CreateEquipTemplate(equipDir, "equip_shield_001", "木盾", EquipSlotType.OffHand, Rarity.Common,
-            new AttrBonusData { attrType = AttrType.Defense, value = 10, isPercent = false }, "weapon_shield",
+            new AttrBonusData { attrType = AttrType.Defense, value = 10, isPercent = false }, "weapon_shield", "New_Shield_01",
             WeaponType.None, WeaponAttackType.Physical);
 
         AssetDatabase.SaveAssets();
@@ -181,7 +181,8 @@ public class AutoConfigEditor : EditorWindow
     }
 
     static void CreateEquipTemplate(string dir, string id, string name, EquipSlotType slot, Rarity rarity,
-        AttrBonusData baseAttr, string spumName, WeaponType weaponType = WeaponType.None,
+        AttrBonusData baseAttr, string spumName, string iconFileName,
+        WeaponType weaponType = WeaponType.None,
         WeaponAttackType attackType = WeaponAttackType.Physical, float attackRangePx = 0f)
     {
         string path = dir + "/" + id + ".asset";
@@ -197,16 +198,17 @@ public class AutoConfigEditor : EditorWindow
         tpl.slotType = slot;
         tpl.baseRarity = rarity;
         tpl.spumName = spumName;
+        tpl.iconFileName = iconFileName;
         tpl.weaponType = weaponType;
         tpl.weaponAttackType = attackType;
         if (attackRangePx > 0f)
             tpl.attackRange = attackRangePx;
         else if (slot == EquipSlotType.MainHand)
             tpl.attackRange = GameConfig.ResolveWeaponAttackRange(tpl) * GameConfig.PIXEL_PER_UNIT;
-        tpl.gridWidth = 1;
-        tpl.gridHeight = 1;
+        tpl.ApplyDefaultGridSize();
         tpl.minLevel = 1;
         tpl.baseAttr = new List<AttrBonusData> { baseAttr };
+        tpl.ResolveIcon();
 
         // 防具随机前缀
         if (slot != EquipSlotType.MainHand && slot != EquipSlotType.OffHand && slot != EquipSlotType.Cape)

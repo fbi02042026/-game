@@ -970,6 +970,18 @@ public class AdventureUI : MonoBehaviour, ITownPage
             Toast($"通关第{need}章后开启{DiffLabel(_selectedDiff)}");
             return;
         }
+
+        if (StoryProgress.TutorialDone && !StoryProgress.Chapter1IntroDone && _selectedChapter <= 1)
+        {
+            Chapter1Story.PlayHallIntro(TryEnterBattle);
+            return;
+        }
+
+        TryEnterBattle();
+    }
+
+    void TryEnterBattle()
+    {
         if (!StaminaSystem.TrySpendForAdventure())
         {
             Toast("体力不足");

@@ -3,8 +3,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 城镇/角色页背包网格：与战斗 <see cref="BattleUI"/> 格子约定一致
-///（Cell_x_y、82×82、7×4、底行天赋锁、Icon/Frame/LockedOverlay）。
+/// 城镇/角色页背包网格：只绑定预制体里已摆好的格子，不改布局。
+/// 逻辑网格与预制体一致（8×5）；默认解锁上 3 行，最下方两行由天赋 R2/R7 扩容解锁。
 /// </summary>
 public class TownBackpackGrid : MonoBehaviour
 {
@@ -24,11 +24,7 @@ public class TownBackpackGrid : MonoBehaviour
         if (grid == null) return;
         gridContainer = grid as RectTransform;
         gridLayout = grid.GetComponent<GridLayoutGroup>();
-        if (gridLayout != null)
-        {
-            gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-            gridLayout.constraintCount = GameConfig.BACKPACK_WIDTH;
-        }
+        // 不改 GridLayout 列数/间距：角色页预制体按手摆布局显示
 
         rowLockOverlay = null;
         cells.Clear();
@@ -56,14 +52,9 @@ public class TownBackpackGrid : MonoBehaviour
                     gy = py;
                 }
             }
-            // 战斗复制过来的网格可能是 8×5，只绑逻辑范围内的格
-            if (gx < 0 || gy < 0 || gx >= GameConfig.BACKPACK_WIDTH || gy >= GameConfig.BACKPACK_HEIGHT)
-            {
-                cell.gameObject.SetActive(false);
-                continue;
-            }
 
-            cells.Add(new GridCellUI
+            cell.gameObject.SetActive(true);
+            var ui = new GridCellUI
             {
                 root = cell.gameObject,
                 itemIcon = FindImgNamedOnly(cell, "ItemIcon", "Icon"),
@@ -72,7 +63,10 @@ public class TownBackpackGrid : MonoBehaviour
                     ?? FindDeep(cell, "Locked")?.gameObject,
                 gridX = gx,
                 gridY = gy
-            });
+            };
+            if (ui.lockedOverlay == null)
+                ui.lockedOverlay = CreateLockOverlay(cell);
+            cells.Add(ui);
         }
     }
 
@@ -180,6 +174,8 @@ public class TownBackpackGrid : MonoBehaviour
             if (!rowLocked) cell.Clear();
         }
 
+        var placements = new List<BackpackGridVisual.ItemPlacement>();
+
         // 优先战斗背包；城镇无战斗背包时展示遗产池（顺序铺格）
         var bag = GridBackpackSystem.Instance;
         if (bag != null)
@@ -190,14 +186,23 @@ public class TownBackpackGrid : MonoBehaviour
                 foreach (var bip in items)
                 {
                     if (bip?.equip == null || bip.y >= unlockedRows) continue;
-                    PlaceAt(bip.x, bip.y, bip.equip);
+                    placements.Add(new BackpackGridVisual.ItemPlacement
+                    {
+                        x = bip.x, y = bip.y, w = bip.width, h = bip.height, equip = bip.equip,
+                        equipped = bag.IsEquipped(bip.equip)
+                    });
                 }
+                BackpackGridVisual.ClearAndPlace(gridContainer, gridLayout, placements, FindCellRect);
                 return;
             }
         }
 
         var data = SaveSystem.Instance?.Data;
-        if (data?.legacyEquipPool == null) return;
+        if (data?.legacyEquipPool == null)
+        {
+            BackpackGridVisual.ClearAndPlace(gridContainer, gridLayout, placements, FindCellRect);
+            return;
+        }
         int slot = 0;
         int cap = unlockedRows * GameConfig.BACKPACK_WIDTH;
         for (int i = 0; i < data.legacyEquipPool.Count && slot < cap; i++)
@@ -207,22 +212,25 @@ public class TownBackpackGrid : MonoBehaviour
             int x = slot % GameConfig.BACKPACK_WIDTH;
             int y = slot / GameConfig.BACKPACK_WIDTH;
             var eq = ToEquipInstance(legacy);
-            if (eq != null) PlaceAt(x, y, eq);
-            slot++;
+            if (eq == null) continue;
+            int w = eq.gridWidth > 0 ? eq.gridWidth : 1;
+            int h = eq.gridHeight > 0 ? eq.gridHeight : 1;
+            if (x + w > GameConfig.BACKPACK_WIDTH || y + h > unlockedRows) continue;
+            placements.Add(new BackpackGridVisual.ItemPlacement { x = x, y = y, w = w, h = h, equip = eq });
+            slot += w * h;
         }
+        BackpackGridVisual.ClearAndPlace(gridContainer, gridLayout, placements, FindCellRect);
     }
 
-    void PlaceAt(int x, int y, EquipInstance equip)
+    RectTransform FindCellRect(int gx, int gy)
     {
         for (int i = 0; i < cells.Count; i++)
         {
             var c = cells[i];
-            if (c != null && c.gridX == x && c.gridY == y)
-            {
-                c.SetItem(equip);
-                return;
-            }
+            if (c != null && c.root != null && c.gridX == gx && c.gridY == gy)
+                return c.root.GetComponent<RectTransform>();
         }
+        return null;
     }
 
     static EquipInstance ToEquipInstance(EquipmentData d)
@@ -240,9 +248,12 @@ public class TownBackpackGrid : MonoBehaviour
             var tpl = ConfigManager.Instance != null ? ConfigManager.Instance.GetEquipTemplate(d.equipId) : null;
             if (tpl != null)
             {
+                tpl.ResolveIcon();
                 eq.icon = tpl.icon;
                 eq.template = tpl;
                 eq.templateId = tpl.templateId;
+                eq.gridWidth = tpl.gridWidth;
+                eq.gridHeight = tpl.gridHeight;
             }
         }
         catch { /* 配置未就绪 */ }
@@ -253,6 +264,19 @@ public class TownBackpackGrid : MonoBehaviour
     {
         int rows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
         return rows * GameConfig.BACKPACK_WIDTH;
+    }
+
+    static GameObject CreateLockOverlay(Transform cell)
+    {
+        var go = new GameObject("LockedOverlay", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(cell, false);
+        var rt = go.GetComponent<RectTransform>();
+        Stretch(rt, 0f);
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0.12f, 0.1f, 0.08f, 0.62f);
+        img.raycastTarget = false;
+        go.SetActive(false);
+        return go;
     }
 
     static Image FindImgNamedOnly(Transform root, params string[] names)

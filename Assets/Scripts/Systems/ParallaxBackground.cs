@@ -1,10 +1,11 @@
 using UnityEngine;
 
 /// <summary>
-/// 视差无限地图（v16）
-/// - 只复制 map 下的 1/2/3 层
-/// - 每层 4 片：scale.x 正反反正 +1/-1/-1/+1
-/// - 按镜头/英雄位移取模循环，始终盖住视野，避免尽头蓝屏
+/// 视差无限地图（v18）
+/// - 前/中/后各自复制多片，奇数片左右镜像，接缝对齐不重复
+/// - 步长 = rect 宽 × localScale.x（漏乘缩放是之前空一段地图的根因）
+/// - 强制 pivot 居中：pivot 居中时负 scale 不改变占位，不会露缝
+/// - 相邻片留 2px 交叠，吃掉亚像素缝
 /// </summary>
 public class ParallaxBackground : MonoBehaviour
 {
@@ -16,8 +17,9 @@ public class ParallaxBackground : MonoBehaviour
     [Header("背景注册表")]
     public BattleBackgroundRegistry backgroundRegistry;
 
-    static readonly float[] FlipSigns = { 1f, -1f, -1f, 1f };
-    const int TileCount = 4;
+    const int TileCount = 6;
+    /// <summary>相邻片交叠像素，避免浮点误差露出竖缝。</summary>
+    const float SeamOverlap = 2f;
 
     [System.Serializable]
     public class ParallaxLayer
@@ -86,18 +88,32 @@ public class ParallaxBackground : MonoBehaviour
         RefreshLayerWidth(ref midLayer);
         RefreshLayerWidth(ref frontLayer);
 
-        Debug.Log($"[Parallax v16] root={LayerSearchRoot.name} ppu={_ppu:F1} flip=+1/-1/-1/+1 tiles={TileCount} w={frontLayer.width:F0}");
+        Debug.Log($"[Parallax v18] root={LayerSearchRoot.name} ppu={_ppu:F1} tiles={TileCount} " +
+                  $"w={frontLayer.width:F0} scale={frontLayer.baseScaleX:F2} step={EffectiveStep(frontLayer):F0}");
     }
 
     void RefreshLayerWidth(ref ParallaxLayer layer)
     {
         if (layer.tiles == null || layer.tiles.Length == 0 || layer.tiles[0] == null) return;
-        float w = layer.tiles[0].rect.width;
-        if (w > 1f) layer.width = w;
-        else if (layer.width < 1f) layer.width = 2020f;
-        // 宽度至少盖住约 1.2 个设计屏宽，避免拼接缝露蓝
-        if (layer.width < 720f) layer.width = 2020f;
-        ApplyTiles(ref layer, layer.tiles[0].anchoredPosition.x);
+        layer.width = MeasureTileWidth(layer.tiles[0], layer.images != null ? layer.images[0] : null);
+        // 只在测量彻底失败时兜底；之前 <720 就强塞 2020，窄图会被撑出一大段空白
+        if (layer.width < 8f) layer.width = 2020f;
+        PlaceLayerTiles(ref layer, 0f);
+    }
+
+    static float MeasureTileWidth(RectTransform rt, UnityEngine.UI.Image img)
+    {
+        if (rt == null) return 2020f;
+        float w = rt.rect.width;
+        if (w < 1f) w = Mathf.Abs(rt.sizeDelta.x);
+        if (img != null && img.sprite != null)
+        {
+            float sw = img.sprite.rect.width;
+            // UI Image 常见：sizeDelta 就是设计宽
+            if (sw > 1f && (w < 1f || w < sw * 0.5f))
+                w = sw;
+        }
+        return w > 1f ? w : 2020f;
     }
 
     void ClearOldTiles()
@@ -109,7 +125,7 @@ public class ParallaxBackground : MonoBehaviour
             if (all[i] == null) continue;
             string n = all[i].name;
             if (n.Contains("_tile"))
-                Destroy(all[i].gameObject);
+                Object.DestroyImmediate(all[i].gameObject);
         }
     }
 
@@ -124,9 +140,26 @@ public class ParallaxBackground : MonoBehaviour
         var src = t as RectTransform;
         if (src == null) return;
 
-        layer.initialX = src.anchoredPosition.x;
-        layer.width = src.rect.width > 1f ? src.rect.width : 2020f;
+        // pivot 必须居中：居中时 ±scale 占位完全一致，镜像才不会错位露缝
         layer.baseScaleX = Mathf.Abs(src.localScale.x) < 0.01f ? 1f : Mathf.Abs(src.localScale.x);
+        src.localScale = new Vector3(layer.baseScaleX, src.localScale.y, src.localScale.z);
+
+        // 改 pivot / 锚点会让图跳位，先记下世界坐标改完再放回去
+        Vector3 worldBefore = src.position;
+        src.pivot = new Vector2(0.5f, src.pivot.y);
+        // 拉伸锚点下 rect.width 由父级决定，测量会漂；锁成中心锚点
+        if (Mathf.Abs(src.anchorMax.x - src.anchorMin.x) > 0.001f)
+        {
+            float mid = (src.anchorMin.x + src.anchorMax.x) * 0.5f;
+            float w = src.rect.width;
+            src.anchorMin = new Vector2(mid, src.anchorMin.y);
+            src.anchorMax = new Vector2(mid, src.anchorMax.y);
+            src.sizeDelta = new Vector2(w, src.sizeDelta.y);
+        }
+        src.position = worldBefore;
+
+        layer.initialX = src.anchoredPosition.x;
+        layer.width = MeasureTileWidth(src, src.GetComponent<UnityEngine.UI.Image>());
 
         layer.tiles = new RectTransform[TileCount];
         layer.images = new UnityEngine.UI.Image[TileCount];
@@ -135,34 +168,64 @@ public class ParallaxBackground : MonoBehaviour
 
         for (int i = 1; i < TileCount; i++)
         {
-            GameObject tile = Instantiate(src.gameObject, src.parent);
+            GameObject tile = Object.Instantiate(src.gameObject, src.parent);
             tile.name = layer.name + "_tile" + i;
             var extras = tile.GetComponents<ParallaxBackground>();
-            for (int e = 0; e < extras.Length; e++) Destroy(extras[e]);
+            for (int e = 0; e < extras.Length; e++) Object.Destroy(extras[e]);
             layer.tiles[i] = tile.GetComponent<RectTransform>();
             layer.images[i] = layer.tiles[i].GetComponent<UnityEngine.UI.Image>();
             if (layer.tiles[i] != null)
+            {
+                layer.tiles[i].pivot = new Vector2(0.5f, layer.tiles[i].pivot.y);
+                layer.tiles[i].anchorMin = src.anchorMin;
+                layer.tiles[i].anchorMax = src.anchorMax;
+                layer.tiles[i].sizeDelta = src.sizeDelta;
+                layer.tiles[i].localScale = new Vector3(layer.baseScaleX,
+                    layer.tiles[i].localScale.y, 1f);
                 layer.tiles[i].gameObject.SetActive(true);
+            }
         }
 
-        ApplyTiles(ref layer, layer.initialX);
+        PlaceLayerTiles(ref layer, 0f);
     }
 
-    static void ApplyTiles(ref ParallaxLayer layer, float baseX)
+    /// <summary>实际占屏宽度：rect 宽必须乘上节点自身缩放，否则步长偏小会重叠、偏大会空一段。</summary>
+    static float EffectiveStep(ParallaxLayer layer)
+    {
+        float scale = Mathf.Abs(layer.baseScaleX) < 0.01f ? 1f : Mathf.Abs(layer.baseScaleX);
+        float step = layer.width * scale - SeamOverlap;
+        return step > 1f ? step : 1f;
+    }
+
+    void PlaceLayerTiles(ref ParallaxLayer layer, float offset)
     {
         if (layer.tiles == null) return;
-        float w = layer.width;
+        if (layer.width < 1f) return;
+
+        float step = EffectiveStep(layer);
+        float period = step * TileCount;
+        float origin = layer.initialX;
+        float windowStart = origin - step * (TileCount / 2);
+
         for (int i = 0; i < layer.tiles.Length; i++)
         {
             var rt = layer.tiles[i];
             if (rt == null) continue;
 
+            float x = origin + i * step - offset;
+            x = Mathf.Repeat(x - windowStart, period) + windowStart;
+
             Vector2 ap = rt.anchoredPosition;
-            ap.x = baseX + i * w;
+            ap.x = x;
             rt.anchoredPosition = ap;
 
+            // 镜像按「世界槽位」奇偶决定，而不是按片索引：
+            // 片会循环搬家，用片索引会导致同一段地图忽然翻面。
+            int slot = Mathf.RoundToInt((x - origin) / step);
+            bool mirror = (((slot % 2) + 2) % 2) == 1;
+
             Vector3 s = rt.localScale;
-            s.x = FlipSigns[i] * layer.baseScaleX;
+            s.x = mirror ? -layer.baseScaleX : layer.baseScaleX;
             rt.localScale = s;
 
             if (!rt.gameObject.activeSelf)
@@ -220,6 +283,9 @@ public class ParallaxBackground : MonoBehaviour
         SetLayerSprite(ref frontLayer, bg.frontSprite, "Front");
         SetLayerSprite(ref midLayer, bg.midSprite, "Mid");
         SetLayerSprite(ref backLayer, bg.backSprite, "Back");
+        RefreshLayerWidth(ref frontLayer);
+        RefreshLayerWidth(ref midLayer);
+        RefreshLayerWidth(ref backLayer);
     }
 
     void SetLayerSprite(ref ParallaxLayer layer, Sprite sprite, string layerName)
@@ -269,15 +335,8 @@ public class ParallaxBackground : MonoBehaviour
     void MoveLayer(ref ParallaxLayer layer, float heroDelta)
     {
         if (layer.tiles == null || layer.tiles[0] == null || layer.width <= 0.01f) return;
-
         float offset = heroDelta * layer.parallaxFactor * _ppu;
-        float period = layer.width * TileCount;
-        if (period < 1f) period = layer.width;
-        float raw = layer.initialX - offset;
-        // 周期内回绕：正反反正完整循环后再接，不会“跳回开头”
-        float wrapped = Mathf.Repeat(layer.initialX - raw, period);
-        float baseX = layer.initialX - wrapped;
-        ApplyTiles(ref layer, baseX);
+        PlaceLayerTiles(ref layer, offset);
     }
 
     static Transform FindDirectOrNested(Transform parent, string name)

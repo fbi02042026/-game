@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using UnityEditor;
-
-
 //using System.IO;
 using UnityEngine;
 using UnityEngine.UI;

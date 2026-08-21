@@ -50,6 +50,16 @@ public class SaveData
     /// <summary>战前选择的玩家技能 id（PlayerSkillDefs）</summary>
     public string selectedPlayerSkillId = "heal_spring";
 
+    public bool openingIntroPlayed;
+    public bool tutorialIntroDone;
+    public bool tutorialBattleCleared;
+    public bool tutorialOutroPending;
+    public bool tutorialDone;
+    public bool chapter1IntroDone;
+    public bool chapter1ChoiceDone;
+    public List<NpcBondEntry> npcBonds = new List<NpcBondEntry>();
+    public List<StoryChoiceEntry> storyChoices = new List<StoryChoiceEntry>();
+
     // === 章节进度 ===
     public int maxUnlockedChapter = 1; // 最大解锁章节
     /// <summary>章节通关次数列表（用于渐进式怪物解锁）</summary>

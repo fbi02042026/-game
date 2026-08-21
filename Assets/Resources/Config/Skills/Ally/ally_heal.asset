@@ -13,18 +13,20 @@ MonoBehaviour:
   m_Name: ally_heal
   m_EditorClassIdentifier: 
   id: ally_heal
-  skillName: "\u6CBB\u75C5"
-  desc: "\u6062\u590D\u961F\u53CB\u751F\u547D"
+  skillName: "\u6CBB\u6108\u4E4B\u6CC9"
+  desc: "\u77AC\u95F4\u6062\u590D 30% \u6700\u5927\u751F\u547D"
   skillType: 3
   attackKit: 3
   damageMultiplier: 0
   baseDamage: 0
-  cooldown: 0.1
+  cooldown: 12
   aoeRadius: 6
   projectileCount: 1
   projectileSpeed: 12
   buffAttr: 4
   buffValue: 0
   buffIsPercent: 0
-  healBase: 80
+  duration: 0
+  healBase: 0
+  healPercentOfMax: 0.3
   vfxPrefab: {fileID: 0}

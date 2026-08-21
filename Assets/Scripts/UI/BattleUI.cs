@@ -74,8 +74,11 @@ public class BattleUI : MonoBehaviour
         if (GameSceneGate.IsBattle)
             AutoGameInitializer.Initialize();
 
-        // 统一 Canvas：Camera / 720×1280 / Match Height（AutoInit 还会再兜底一次）
-        UICanvasSetup.ApplyOn(gameObject, Camera.main);
+        // 战斗场景：Match Width 铺满竖屏，避免 HUD 被裁切
+        if (GameSceneGate.IsBattle)
+            BattleViewportFit.Apply(Camera.main, GetComponent<Canvas>() ?? GetComponentInParent<Canvas>());
+        else
+            UICanvasSetup.ApplyOn(gameObject, Camera.main);
 
         if (autoButton != null) autoButton.onClick.AddListener(ToggleAutoBattle);
         if (pauseButton != null) pauseButton.onClick.AddListener(OnPause);
@@ -104,6 +107,8 @@ public class BattleUI : MonoBehaviour
         RebindAfterSystemsReady();
         RefreshBattleHud();
         GameFonts.ApplyToHierarchy(transform);
+        // Canvas 尺寸这时才是最终值，越界判断必须放在这之后
+        ClampCharacterBarInsideParent();
         Debug.Log($"[BattleUI] HUD已刷新 — playerSlot={playerSlot?.root!=null} merc1={mercSlot1?.root!=null} merc2={mercSlot2?.root!=null} progressNodes={progressNodes?.Count} marker={playerMarker!=null}");
     }
 
@@ -122,6 +127,13 @@ public class BattleUI : MonoBehaviour
             playerSlot.UpdateSlot("玩家", hero.level, hero.currentHp, maxHp);
             float energy = BattleManager.Instance != null ? BattleManager.Instance.playerSkillEnergy : 0f;
             playerSlot.SetEnergy(energy);
+        }
+
+        if (GameConfig.SOLO_PLAYER_BATTLE)
+        {
+            if (TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud)
+                RefreshTutorialMercLiveBar();
+            return;
         }
 
         var mm = MercenaryManager.Instance;
@@ -168,6 +180,7 @@ public class BattleUI : MonoBehaviour
         if (save != null && gold <= 0) gold = save.totalGold;
 
         UpdateStageInfo(chapter, stageIdx, diff, gold);
+        ApplySoloBattleHud();
         UpdateCharacterSlots();
         UpdateSkillAvatars();
         UpdateBackpackGrid();
@@ -291,6 +304,7 @@ public class BattleUI : MonoBehaviour
         FixCharacterBarLayout();
         // MercenaryManager 可能尚未创建，系统就绪后再 Wire / Configure
         WireSlotSkillClicks();
+        ApplySoloBattleHud();
     }
 
     /// <summary>GameRoot/佣兵系统就绪后重绑：Fill、点击、进度条、槽位刷新</summary>
@@ -298,7 +312,9 @@ public class BattleUI : MonoBehaviour
     {
         BattleSideHud.EnsureOn(transform);
         BindProgressBar();
-        int maxSlots = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
+        ApplySoloBattleHud();
+        int maxSlots = GameConfig.SOLO_PLAYER_BATTLE ? 0
+            : MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
         if (maxSlots > 0) ApplyFillBars(mercSlot1);
         if (maxSlots > 1) ApplyFillBars(mercSlot2);
         WireSlotSkillClicks();
@@ -447,9 +463,45 @@ public class BattleUI : MonoBehaviour
         }
     }
 
+    void ApplySoloBattleHud()
+    {
+        // 单人模式也保留三个头像位：未解锁显示「锁定」，不要藏掉第 3 个
+        bool showTutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
+        SetSlotRootActive(playerSlot, true);
+        SetSlotRootActive(mercSlot1, true);
+        SetSlotRootActive(mercSlot2, true);
+
+        if (GameConfig.SOLO_PLAYER_BATTLE && !showTutorialMerc)
+            mercSlot1?.ShowUnavailable("锁定");
+        else
+            mercSlot1?.SetLocked(false);
+
+        // 第 3 槽：单人模式始终锁定占位，不隐藏
+        if (GameConfig.SOLO_PLAYER_BATTLE)
+            mercSlot2?.ShowUnavailable("锁定");
+        else
+            mercSlot2?.SetLocked(false);
+
+        SetAvatarRootActive(merc1SkillAvatar, !GameConfig.SOLO_PLAYER_BATTLE || showTutorialMerc);
+        SetAvatarRootActive(merc2SkillAvatar, !GameConfig.SOLO_PLAYER_BATTLE);
+    }
+
+    public void ApplySoloBattleHudPublic() => ApplySoloBattleHud();
+
+    static void SetSlotRootActive(CharacterSlotUI slot, bool active)
+    {
+        if (slot?.root != null) slot.root.SetActive(active);
+    }
+
+    static void SetAvatarRootActive(SkillAvatarUI avatar, bool active)
+    {
+        if (avatar?.root != null) avatar.root.SetActive(active);
+    }
+
     void WireSlotSkillClicks()
     {
         WireSlotClick(playerSlot, OnPlayerSkillClick);
+        if (GameConfig.SOLO_PLAYER_BATTLE) return;
         int maxSlots = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
         if (maxSlots > 0)
             WireSlotClick(mercSlot1, () => OnMercSkillClick(0));
@@ -668,6 +720,11 @@ public class BattleUI : MonoBehaviour
     /// </summary>
     void OnPlayerSkillClick()
     {
+        if (TutorialDirector.IsTutorialBattle
+            && TutorialDirector.Instance != null
+            && !TutorialDirector.Instance.AllowBattleSkillClick)
+            return;
+
         if (BattleManager.Instance != null)
         {
             bool success = BattleManager.Instance.TryUsePlayerSkill();
@@ -689,12 +746,40 @@ public class BattleUI : MonoBehaviour
     /// </summary>
     public void UpdateStageInfo(int chapter, int stage, string difficulty, long gold)
     {
+        bool hideStageInfo = TutorialDirector.IsTutorialBattle;
         if (stageLabel != null)
-            stageLabel.text = $"第{chapter}章";
+        {
+            // 连底框一起藏：文字挂在 StageIcon 上，只藏文字会留一个空壳
+            SetLabelWithFrameVisible(stageLabel, !hideStageInfo);
+            if (!hideStageInfo)
+                stageLabel.text = $"第{chapter}章";
+        }
         if (difficultyLabel != null)
-            difficultyLabel.text = string.IsNullOrEmpty(difficulty) ? "普通" : difficulty;
+        {
+            SetLabelWithFrameVisible(difficultyLabel, !hideStageInfo);
+            if (!hideStageInfo)
+                difficultyLabel.text = string.IsNullOrEmpty(difficulty) ? "普通" : difficulty;
+        }
         UpdateGold(gold);
         UpdateTopBarResources();
+    }
+
+    /// <summary>
+    /// 章节/难度标签连同它的底框一起显示或隐藏。
+    /// 标签是底框（StageIcon / DifficultyIcon）的子节点，所以往上找一层带 Image 的父节点整块关掉。
+    /// </summary>
+    static void SetLabelWithFrameVisible(Text label, bool visible)
+    {
+        if (label == null) return;
+        Transform parent = label.transform.parent;
+        // 父节点自己有图（就是底框）时关父节点；否则退化成只关文字
+        if (parent != null && parent.GetComponent<Image>() != null
+            && parent.childCount <= 3)
+        {
+            parent.gameObject.SetActive(visible);
+            return;
+        }
+        label.gameObject.SetActive(visible);
     }
 
     /// <summary>
@@ -725,6 +810,8 @@ public class BattleUI : MonoBehaviour
         if (playerSkillAvatar != null)
             playerSkillAvatar.SetAvatar(mm != null ? mm.GetPlayerIcon() : null);
 
+        if (GameConfig.SOLO_PLAYER_BATTLE) return;
+
         var mercIds = mm != null ? mm.GetActiveMercIds() : new List<string>();
         if (merc1SkillAvatar != null)
             merc1SkillAvatar.SetAvatar(mercIds.Count > 0 && mm != null ? mm.GetIcon(mercIds[0]) : null);
@@ -735,7 +822,14 @@ public class BattleUI : MonoBehaviour
     /// <summary>刷新下方网格背包（只锁最底一行 y=3，用你放的锁图案）</summary>
     public void UpdateBackpackGrid()
     {
-        if (gridCells == null || gridCells.Count == 0) return;
+        // 战斗中捡到装备时可能还没绑过格子，先补绑再判空
+        if (gridCells == null || gridCells.Count == 0)
+            EnsureGridCellsBound();
+        if (gridCells == null || gridCells.Count == 0)
+        {
+            Debug.LogWarning("[BattleUI] 背包格子未绑定（缺 GridContainer），装备无法显示");
+            return;
+        }
 
         int unlockedRows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
         bool bottomLocked = unlockedRows < GameConfig.BACKPACK_HEIGHT;
@@ -759,21 +853,35 @@ public class BattleUI : MonoBehaviour
         var items = bag.GetAllBackpackItems();
         if (items == null) return;
 
+        var placements = new List<BackpackGridVisual.ItemPlacement>();
+        Transform grid = FindDeepChildIgnoreCase(transform, "GridContainer");
+        var gridRt = grid as RectTransform;
         foreach (var bip in items)
         {
             if (bip == null || bip.equip == null) continue;
             if (bip.y >= unlockedRows) continue;
-            for (int i = 0; i < gridCells.Count; i++)
+            placements.Add(new BackpackGridVisual.ItemPlacement
             {
-                var cell = gridCells[i];
-                if (cell == null) continue;
-                if (cell.gridX == bip.x && cell.gridY == bip.y)
-                {
-                    cell.SetItem(bip.equip);
-                    break;
-                }
-            }
+                x = bip.x, y = bip.y, w = bip.width, h = bip.height, equip = bip.equip,
+                equipped = bag.IsEquipped(bip.equip)
+            });
         }
+        // 传入真实格子：没有 GridLayoutGroup（格子是美术手摆的）时也能算对位置
+        BackpackGridVisual.ClearAndPlace(gridRt, gridLayout, placements, FindGridCellRect);
+        Debug.Log($"[BattleUI] 背包刷新 items={placements.Count} cells={gridCells.Count} layout={(gridLayout != null)}");
+    }
+
+    /// <summary>按格子坐标取真实格子的 RectTransform，供多格装备量取实际占位。</summary>
+    RectTransform FindGridCellRect(int gx, int gy)
+    {
+        if (gridCells == null) return null;
+        for (int i = 0; i < gridCells.Count; i++)
+        {
+            var c = gridCells[i];
+            if (c != null && c.root != null && c.gridX == gx && c.gridY == gy)
+                return c.root.GetComponent<RectTransform>();
+        }
+        return null;
     }
 
     /// <summary>
@@ -808,6 +916,14 @@ public class BattleUI : MonoBehaviour
             playerSlot.SetPortrait(playerIcon);
         }
 
+        if (GameConfig.SOLO_PLAYER_BATTLE)
+        {
+            ApplySoloBattleHud();
+            if (TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud)
+                RefreshTutorialMercSlot(mm);
+            return;
+        }
+
         // 佣兵槽位（根据酒馆等级解锁 + 存档出战佣兵）
         var mercIds = mm != null ? mm.GetActiveMercIds() : new List<string>();
         var activeMercs = mm != null ? mm.GetActiveMercs() : new List<Mercenary>();
@@ -815,6 +931,34 @@ public class BattleUI : MonoBehaviour
 
         SetupMercSlot(mercSlot1, 0, mercIds, activeMercs, maxSlots, mm);
         SetupMercSlot(mercSlot2, 1, mercIds, activeMercs, maxSlots, mm);
+    }
+
+    void RefreshTutorialMercSlot(MercenaryManager mm)
+    {
+        if (mercSlot1 == null || mm == null) return;
+        var mercs = mm.GetActiveMercs();
+        if (mercs == null || mercs.Count == 0 || mercs[0] == null) return;
+        var m = mercs[0];
+        mercSlot1.SetLocked(false);
+        Sprite mercIcon = mm.GetIcon(m.mercId);
+        mercSlot1.SetPortrait(mercIcon);
+        // 没配头像时也不要露出「头像」占位白框
+        if (mercIcon == null && mercSlot1.portraitPlaceholder != null)
+            mercSlot1.portraitPlaceholder.SetActive(false);
+        float maxHp = m.attr.GetAttr(AttrType.MaxHp);
+        mercSlot1.UpdateSlot("老盾", m.mercLevel, m.currentHp, maxHp);
+    }
+
+    void RefreshTutorialMercLiveBar()
+    {
+        var mm = MercenaryManager.Instance;
+        if (mm == null || mercSlot1 == null) return;
+        var mercs = mm.GetActiveMercs();
+        if (mercs == null || mercs.Count == 0 || mercs[0] == null) return;
+        var m = mercs[0];
+        float maxHp = m.attr.GetAttr(AttrType.MaxHp);
+        mercSlot1.UpdateSlot("老盾", m.mercLevel, m.currentHp, maxHp);
+        mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(0) : 0f);
     }
 
     /// <summary>
@@ -876,6 +1020,50 @@ public class BattleUI : MonoBehaviour
         SoftFixLayoutElement(playerSlot?.root);
         SoftFixLayoutElement(mercSlot1?.root);
         SoftFixLayoutElement(mercSlot2?.root);
+    }
+
+    /// <summary>
+    /// 头像栏保留美术摆的位置，但不许超出父容器：
+    /// 窄屏/高屏下预制体的固定偏移会把整条栏顶到框外，这里只把越界的部分推回来。
+    /// </summary>
+    public void ClampCharacterBarInsideParent()
+    {
+        Transform t = FindDeepChildIgnoreCase(transform, "CharacterBar");
+        var bar = t as RectTransform;
+        if (bar == null) return;
+        var parent = bar.parent as RectTransform;
+        if (parent == null) return;
+
+        // 布局这一帧可能还没算完，先强制刷新再量
+        LayoutRebuilder.ForceRebuildLayoutImmediate(bar);
+
+        Rect pr = parent.rect;
+        // Canvas 还没定尺寸时不要动，否则会把栏推到错的地方
+        if (pr.width <= 1f || pr.height <= 1f) return;
+
+        float halfH = bar.rect.height * 0.5f;
+        float halfW = bar.rect.width * 0.5f;
+        if (halfH <= 0.01f || halfW <= 0.01f) return;
+
+        // bar 在 parent 局部空间里的中心
+        Vector3 center = parent.InverseTransformPoint(bar.TransformPoint(bar.rect.center));
+        const float margin = 6f;
+
+        float minY = pr.yMin + halfH + margin;
+        float maxY = pr.yMax - halfH - margin;
+        float minX = pr.xMin + halfW + margin;
+        float maxX = pr.xMax - halfW - margin;
+
+        float wantY = minY <= maxY ? Mathf.Clamp(center.y, minY, maxY) : (pr.yMin + pr.yMax) * 0.5f;
+        float wantX = minX <= maxX ? Mathf.Clamp(center.x, minX, maxX) : (pr.xMin + pr.xMax) * 0.5f;
+
+        float dx = wantX - center.x;
+        float dy = wantY - center.y;
+        if (Mathf.Abs(dx) < 0.5f && Mathf.Abs(dy) < 0.5f) return;
+
+        bar.anchoredPosition += new Vector2(dx, dy);
+        Debug.Log($"[BattleUI] CharacterBar 越界已推回 dx={dx:F1} dy={dy:F1} " +
+                  $"size={bar.rect.width:F0}x{bar.rect.height:F0} parent={pr.width:F0}x{pr.height:F0}");
     }
 
     static void SoftFixLayoutElement(GameObject root)
@@ -985,15 +1173,23 @@ public class BattleUI : MonoBehaviour
 
     public void OnOpenSettings()
     {
+        // 美术自己挂了 SettingsPanel 就用他的，否则用代码搭的设置弹窗
         if (settingsPanel != null)
         {
             settingsPanel.SetActive(!settingsPanel.activeSelf);
             return;
         }
-        // 面板未挂时至少暂停/恢复，避免按钮无反馈
-        bool paused = Time.timeScale < 0.01f;
-        Time.timeScale = paused ? 1f : 0f;
-        Debug.Log($"[BattleUI] SettingsPanel 未绑定，已切换暂停 timeScale={Time.timeScale}");
+
+        var panel = BattleSettingsPanel.Ensure();
+        panel.Open();
+
+        // 引导阶段：开完设置直接把手指指到撤离按钮上
+        if (TutorialDirector.Instance != null && TutorialDirector.Instance.WaitingEvacuate
+            && panel.EvacuateButton != null)
+        {
+            TutorialHintUI.Ensure().ShowHard("选择撤离，回城结算。",
+                panel.EvacuateButton.GetComponent<RectTransform>());
+        }
     }
 
     /// <summary>
@@ -1004,6 +1200,8 @@ public class BattleUI : MonoBehaviour
         if (characterPanel != null) characterPanel.SetActive(false);
         if (pausePanel != null) pausePanel.SetActive(false);
         if (settingsPanel != null) settingsPanel.SetActive(false);
+        if (BattleSettingsPanel.Instance != null && BattleSettingsPanel.Instance.IsOpen)
+            BattleSettingsPanel.Instance.Close();
     }
 }
 
@@ -1112,7 +1310,7 @@ public class CharacterSlotUI
         }
     }
 
-    /// <summary>设置头像图片（只换图标，不改头像框）</summary>
+    /// <summary>设置头像图片（只换图标，不改头像框；强制保持比例防拉伸）</summary>
     public void SetPortrait(Sprite icon)
     {
         if (portrait != null)
@@ -1122,9 +1320,28 @@ public class CharacterSlotUI
             portrait.sprite = icon;
             portrait.gameObject.SetActive(true);
             portrait.color = Color.white;
+            FitPortraitNoStretch(portrait);
         }
         if (portraitPlaceholder != null && portrait != null && portraitPlaceholder != portrait.gameObject)
             portraitPlaceholder.SetActive(icon == null);
+    }
+
+    static void FitPortraitNoStretch(Image img)
+    {
+        if (img == null) return;
+        var rt = img.rectTransform;
+        // 用 FitInParent 保证正方形/矩形框里不横向拉伸像素图
+        var fitter = img.GetComponent<AspectRatioFitter>();
+        if (fitter == null) fitter = img.gameObject.AddComponent<AspectRatioFitter>();
+        fitter.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+        if (img.sprite != null)
+        {
+            var r = img.sprite.rect;
+            fitter.aspectRatio = Mathf.Max(0.01f, r.width / Mathf.Max(1f, r.height));
+        }
+        else
+            fitter.aspectRatio = 1f;
+        rt.localScale = Vector3.one;
     }
 
     /// <summary>技能能量：底栏 lanBar 显示进度，满时仅显示光边（不改头像框）</summary>
@@ -1186,7 +1403,12 @@ public class CharacterSlotUI
     {
         if (lockedOverlay != null) lockedOverlay.SetActive(locked);
         if (root != null)
-            root.SetActive(!locked);
+            root.SetActive(true);
+        if (locked)
+        {
+            if (portrait != null) portrait.gameObject.SetActive(false);
+            if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
+        }
     }
 
     /// <summary>
@@ -1258,13 +1480,13 @@ public class GridCellUI
     public int gridY;                   // 格子Y坐标
     public EquipInstance equippedItem;  // 当前装备的物品
 
-    /// <summary>底行等：天赋未解锁时显示锁定遮罩；无独立遮罩时隐藏整格</summary>
+    /// <summary>底行等：天赋未解锁时显示锁定遮罩，格子本身保持显示（不关节点，避免 GridLayout 重排）。</summary>
     public void SetRowLocked(bool locked)
     {
+        if (root != null && !root.activeSelf)
+            root.SetActive(true);
         if (lockedOverlay != null)
             lockedOverlay.SetActive(locked);
-        else if (root != null)
-            root.SetActive(!locked);
         if (locked)
         {
             equippedItem = null;
@@ -1274,26 +1496,72 @@ public class GridCellUI
                 itemIcon.gameObject.SetActive(false);
             }
         }
-        else if (root != null && !root.activeSelf)
-            root.SetActive(true);
     }
 
     /// <summary>
-    /// 设置装备
+    /// 设置装备（单格）
     /// </summary>
     public void SetItem(EquipInstance item)
     {
+        SetItemSpan(item, 1, 1, TownBackpackGrid.CellSize, TownBackpackGrid.CellSpacing);
+    }
+
+    /// <summary>
+    /// 多格装备：从本格左上角向右下 spanning。
+    /// </summary>
+    public void SetItemSpan(EquipInstance item, int spanW, int spanH, float cellSize, float spacing)
+    {
         equippedItem = item;
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
+        if (item == null)
+        {
+            Clear();
+            return;
+        }
+
         if (itemIcon != null)
         {
             itemIcon.sprite = item.icon;
+            itemIcon.preserveAspect = true;
             itemIcon.gameObject.SetActive(item.icon != null);
+            var rt = itemIcon.rectTransform;
+            const float pad = 4f;
+            if (spanW <= 1 && spanH <= 1)
+            {
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.offsetMin = new Vector2(pad, pad);
+                rt.offsetMax = new Vector2(-pad, -pad);
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.anchoredPosition = Vector2.zero;
+                rt.sizeDelta = Vector2.zero;
+            }
+            else
+            {
+                float totalW = spanW * cellSize + (spanW - 1) * spacing;
+                float totalH = spanH * cellSize + (spanH - 1) * spacing;
+                rt.anchorMin = new Vector2(0f, 1f);
+                rt.anchorMax = new Vector2(0f, 1f);
+                rt.pivot = new Vector2(0f, 1f);
+                rt.anchoredPosition = new Vector2(pad, -pad);
+                rt.sizeDelta = new Vector2(totalW - pad * 2f, totalH - pad * 2f);
+            }
         }
         if (rarityFrame != null)
         {
             Color rarityColor = GetRarityColor(item.rarity);
             rarityFrame.color = rarityColor;
+        }
+    }
+
+    /// <summary>被相邻多格装备占用的格：不重复画图标。</summary>
+    public void SetOccupiedNeighbor()
+    {
+        equippedItem = null;
+        if (itemIcon != null)
+        {
+            itemIcon.sprite = null;
+            itemIcon.gameObject.SetActive(false);
         }
     }
 

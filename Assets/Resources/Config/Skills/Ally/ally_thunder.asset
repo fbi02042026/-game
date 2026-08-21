@@ -13,18 +13,20 @@ MonoBehaviour:
   m_Name: ally_thunder
   m_EditorClassIdentifier: 
   id: ally_thunder
-  skillName: "\u96F7\u51FB"
-  desc: "\u5168\u573A\u96F7\u7535\u4F24\u5BB3"
+  skillName: "\u5929\u96F7\u88C1\u51B3"
+  desc: "\u9020\u6210 300% \u653B\u51FB\u7684\u8303\u56F4\u4F24\u5BB3"
   skillType: 2
   attackKit: 4
   damageMultiplier: 3
   baseDamage: 0
-  cooldown: 0.1
+  cooldown: 25
   aoeRadius: 8
   projectileCount: 1
   projectileSpeed: 12
   buffAttr: 5
   buffValue: 0
   buffIsPercent: 0
+  duration: 0
   healBase: 0
+  healPercentOfMax: 0
   vfxPrefab: {fileID: 0}

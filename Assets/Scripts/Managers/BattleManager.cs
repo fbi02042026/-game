@@ -27,6 +27,13 @@ public class BattleManager : Singleton<BattleManager>
     public List<AttrBonusData> tempBuffs = new List<AttrBonusData>();
     /// <summary>开战过场结束后才允许单位行动</summary>
     public bool UnitsCanAct { get; set; } = true;
+    public bool IsTutorialRun { get; private set; }
+    public bool SuppressStageClear { get; set; }
+    public bool SkipLegacyOnEvacuate { get; set; }
+    /// <summary>本局金币获得倍率（剧情选择等）</summary>
+    public float runGoldGainMul = 1f;
+    /// <summary>本局怪物攻速倍率（剧情选择等）</summary>
+    public float runMonsterAtkSpeedMul = 1f;
     /// <summary>正在走向 chuansongmen，放宽屏幕钳制</summary>
     public bool PortalWalkMode => _portalActive && !_stageCleared;
     /// <summary>佣兵相对主角身后间距（世界单位）</summary>
@@ -236,8 +243,20 @@ public class BattleManager : Singleton<BattleManager>
             Debug.LogError($"[BattleManager] hero.InitNewRun 异常（继续开战）: {e}");
         }
 
-        EnsureTestMercenaries();
-        SpawnMercenaries();
+        IsTutorialRun = StoryProgress.ShouldStartTutorialBattle();
+        SuppressStageClear = IsTutorialRun;
+        SkipLegacyOnEvacuate = IsTutorialRun;
+        runGoldGainMul = 1f;
+        runMonsterAtkSpeedMul = 1f;
+        ApplyChapter1RunModifiersFromSave();
+        if (IsTutorialRun)
+            Debug.Log("[BattleManager] 新手引导战斗：短关+强制撤离");
+
+        if (!GameConfig.SOLO_PLAYER_BATTLE && !IsTutorialRun)
+        {
+            EnsureTestMercenaries();
+            SpawnMercenaries();
+        }
 
         int targetChapter = AdventureUI.PendingBattleChapter;
         if (targetChapter < 1)
@@ -358,6 +377,279 @@ public class BattleManager : Singleton<BattleManager>
         allyUnits.Remove(merc);
     }
 
+    void ApplyChapter1RunModifiersFromSave()
+    {
+        if (IsTutorialRun) return;
+        string c = StoryProgress.GetChoice(1);
+        if (c == "A") runMonsterAtkSpeedMul = 1.05f;
+        else if (c == "B") runGoldGainMul = 1.1f;
+    }
+
+    public void ApplyChapter1ChoiceModifiers(string choiceId)
+    {
+        if (choiceId == "A") runMonsterAtkSpeedMul = 1.05f;
+        else if (choiceId == "B") runGoldGainMul = 1.1f;
+    }
+
+    public int GetAliveMonsterCount() => CountAliveMonsters();
+
+    public void FillPlayerSkillEnergy()
+    {
+        playerSkillEnergy = MAX_SKILL_ENERGY;
+        BattleUI.Instance?.UpdateSkillEnergy(0, playerSkillEnergy);
+    }
+
+    void PrepareTutorialWaves()
+    {
+        _waves.Clear();
+        _waves.Add(new WaveData
+        {
+            triggerX = GetStageStartX() + GameConfig.MONSTER_ENGAGE_OFFSET,
+            spawnAnchor = null,
+            monsterCount = 2,
+            isBossWave = false,
+            spawned = false,
+            aliveCount = 0
+        });
+        _totalWaves = 1;
+        _allWavesSpawned = false;
+        _activeWaveIndex = -1;
+        _firstWaveSpawned = true; // 教程首波由 TutorialDirector 控，关掉 Update 硬刷
+        SuppressStageClear = true;
+        SkipLegacyOnEvacuate = true;
+        Debug.Log("[BattleManager] 引导关：1 波 2 怪");
+    }
+
+    public void QueueTutorialWave(int count)
+    {
+        // 跳过未刷出的旧波次（PrepareTutorialWaves 遗留），避免卡在 index 0
+        if (_waves != null)
+        {
+            for (int i = 0; i < _waves.Count; i++)
+            {
+                if (_waves[i] != null && !_waves[i].spawned)
+                    _waves[i].spawned = true;
+            }
+        }
+
+        int n = Mathf.Max(1, count);
+        var wave = new WaveData
+        {
+            triggerX = (hero != null ? UnitBase.GetCombatX(hero) : GetStageStartX()) + GameConfig.MONSTER_ENGAGE_OFFSET,
+            spawnAnchor = null,
+            monsterCount = n,
+            isBossWave = false,
+            spawned = false,
+            aliveCount = 0
+        };
+        _waves.Add(wave);
+        _totalWaves = _waves.Count;
+        _allWavesSpawned = false;
+        _activeWaveIndex = -1;
+        _waveCountdownActive = false;
+        _didUpdateForceSpawn = false;
+        SuppressStageClear = true;
+
+        int waveIdx = _waves.Count - 1;
+        int spawnedBefore = wave.aliveCount;
+        int aliveBefore = CountAliveMonsters();
+        TrySpawnTutorialWave(wave, waveIdx, spawnedBefore, aliveBefore);
+
+        if (CountAliveMonsters() == 0)
+        {
+            EmergencySpawnVisibleMonsters(Mathf.Min(n, 6));
+            if (CountAliveMonsters() > 0)
+            {
+                wave.spawned = true;
+                _activeWaveIndex = waveIdx;
+            }
+        }
+    }
+
+    void TrySpawnTutorialWave(WaveData wave, int waveIdx, int spawnedBefore, int aliveBefore)
+    {
+        if (wave == null) return;
+        EnsureMonsterPrefabReady();
+        try
+        {
+            SpawnWave(wave, waveIdx);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[BattleManager] 教程波刷怪异常: {e.Message}");
+        }
+
+        if (wave.aliveCount > spawnedBefore || CountAliveMonsters() > aliveBefore)
+        {
+            wave.spawned = true;
+            _activeWaveIndex = waveIdx;
+            StopWaveCountdown();
+            Debug.Log($"[BattleManager] 教程波 {waveIdx + 1} OK alive={CountAliveMonsters()} spawn={wave.aliveCount}");
+        }
+        else
+        {
+            wave.spawned = false;
+            Debug.LogWarning($"[BattleManager] 教程波 {waveIdx + 1} 常规刷怪未出怪，将走 Emergency");
+        }
+    }
+
+    public Mercenary SpawnTutorialMerc(string mercId, float hpRatio)
+    {
+        return SpawnTutorialMercAt(mercId, hpRatio, 7.5f, stunned: true);
+    }
+
+    /// <summary>
+    /// 引导救援：老盾刷在玩家前方固定距离，原地眩晕；周围刷怪围殴他。
+    /// </summary>
+    public Mercenary SpawnTutorialMercAt(string mercId, float hpRatio, float aheadDist, bool stunned)
+    {
+        var mm = MercenaryManager.Instance;
+        if (mm == null || hero == null) return null;
+
+        float heroX = UnitBase.GetCombatX(hero);
+        float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
+        Vector3 pos = new Vector3(heroX + aheadDist, UnitBase.GROUND_Y, z);
+        var merc = mm.SpawnMercenary(string.IsNullOrEmpty(mercId) ? "dunbing102" : mercId, pos, 1);
+        if (merc == null) return null;
+        if (!allyUnits.Contains(merc))
+            allyUnits.Add(merc);
+        merc.OnDead += OnMercenaryDead;
+        float maxHp = merc.attr != null ? merc.attr.GetAttr(AttrType.MaxHp) : 100f;
+        merc.currentHp = Mathf.Max(1f, maxHp * Mathf.Clamp01(hpRatio));
+        merc.Face(-1);
+        if (stunned)
+            merc.SetTutorialStunned(true);
+        ExtendCameraMaxX(pos.x + 6f);
+        return merc;
+    }
+
+    /// <summary>在受害者周围刷怪并强制锁定打他（引导围殴）。</summary>
+    public void SpawnTutorialAmbushAround(UnitBase victim, int count)
+    {
+        if (victim == null) return;
+        EnsureMonsterPrefabReady();
+        float vx = UnitBase.GetCombatX(victim);
+        float z = unitRoot != null ? unitRoot.position.z : victim.transform.position.z;
+        int n = Mathf.Max(1, count);
+
+        // 记入一波，便于任务计数 / WaitFieldClear
+        var wave = new WaveData
+        {
+            triggerX = vx,
+            spawnAnchor = null,
+            monsterCount = n,
+            isBossWave = false,
+            spawned = true,
+            aliveCount = 0
+        };
+        if (_waves == null) _waves = new List<WaveData>();
+        // 跳过未刷旧波
+        for (int i = 0; i < _waves.Count; i++)
+        {
+            if (_waves[i] != null && !_waves[i].spawned)
+                _waves[i].spawned = true;
+        }
+        _waves.Add(wave);
+        _totalWaves = _waves.Count;
+        _allWavesSpawned = false;
+        _activeWaveIndex = _waves.Count - 1;
+        SuppressStageClear = true;
+
+        float[] offsets = { -1.1f, 1.15f, 0.35f, -0.55f, 1.7f };
+        for (int i = 0; i < n; i++)
+        {
+            float ox = offsets[i % offsets.Length];
+            Vector3 pos = new Vector3(vx + ox, UnitBase.GROUND_Y, z);
+            Monster m = SpawnAmbushMonsterAt(pos);
+            if (m == null) continue;
+            m.SetForcedTarget(victim);
+            wave.aliveCount++;
+        }
+
+        if (wave.aliveCount == 0)
+        {
+            EmergencySpawnVisibleMonsters(n);
+            RetargetAllMonsters(victim);
+        }
+    }
+
+    Monster SpawnAmbushMonsterAt(Vector3 pos)
+    {
+        EnsureMonsterPrefabReady();
+        GameObject go = null;
+        if (PoolManager.Instance != null)
+        {
+            go = PoolManager.Instance.Get("Monster", pos, Quaternion.identity);
+            if (go == null && PoolManager.Instance._monsterPrefab != null)
+                go = Object.Instantiate(PoolManager.Instance._monsterPrefab, pos, Quaternion.identity);
+        }
+        if (go == null) return null;
+
+        go.SetActive(true);
+        if (unitRoot != null) go.transform.SetParent(unitRoot, true);
+        GameConfig.SetWorldPosition(go, pos);
+
+        Monster monster = go.GetComponent<Monster>();
+        if (monster == null) monster = go.AddComponent<Monster>();
+
+        var cfg = ScriptableObject.CreateInstance<MonsterConfig>();
+        cfg.id = "ambush";
+        cfg.baseHp = 40f;
+        cfg.baseAttack = 4f;
+        cfg.attackRange = GameConfig.RANGE_PX_SWORD;
+        cfg.baseAttackSpeed = 0.9f;
+        cfg.spriteScale = 1f;
+        cfg.spriteIndex = 1;
+        cfg.baseGoldDrop = 1;
+        cfg.expDrop = 1;
+        try
+        {
+            monster.Init(cfg, 0, CurrentChapter, 1f, 1);
+        }
+        catch
+        {
+            monster.currentHp = 40f;
+            monster.isAlly = false;
+        }
+        ApplyTutorialMonsterTuning(monster);
+        ForceEnableMonsterRenderers(monster.transform);
+        monster.OnDead += OnMonsterDead;
+        monsters.Add(monster);
+        _totalMonstersSpawnedThisStage++;
+        return monster;
+    }
+
+    public void RetargetAllMonsters(UnitBase target)
+    {
+        if (monsters == null) return;
+        for (int i = 0; i < monsters.Count; i++)
+        {
+            var m = monsters[i] as Monster;
+            if (m == null || m.isDead) continue;
+            m.SetForcedTarget(target);
+        }
+    }
+
+    public void ClearMonsterForcedTargets()
+    {
+        if (monsters == null) return;
+        for (int i = 0; i < monsters.Count; i++)
+        {
+            var m = monsters[i] as Monster;
+            if (m == null) continue;
+            m.SetForcedTarget(null);
+        }
+    }
+
+    void ApplyTutorialMonsterTuning(Monster monster)
+    {
+        if (!IsTutorialRun || monster == null || monster.attr == null) return;
+        // 引导怪总血量 8–12，玩家约 2 点伤害，3–4 下击杀
+        float hp = Random.Range(8, 13);
+        monster.attr.SetAttr(AttrType.MaxHp, hp);
+        monster.currentHp = hp;
+    }
+
     // ============================================================
     // 波次生成
     // ============================================================
@@ -400,6 +692,9 @@ public class BattleManager : Singleton<BattleManager>
         // 触发章节背景切换
         SwitchBattleBackground(CurrentChapter);
 
+        // 按关卡类型切 BGM（Loading 中会记 pending，结束后再播）
+        GameBgm.PlayForStage(stage.type);
+
         switch (stage.type)
         {
             case StageType.Normal:
@@ -427,6 +722,10 @@ public class BattleManager : Singleton<BattleManager>
                 isInBattle = false;
                 LoadRestStage();
                 break;
+            case StageType.Forge:
+                isInBattle = false;
+                LoadForgeStage();
+                break;
         }
 
         ResetWaveProgress();
@@ -444,6 +743,8 @@ public class BattleManager : Singleton<BattleManager>
 
         if (isInBattle)
         {
+            if (IsTutorialRun)
+                PrepareTutorialWaves();
             PlacePartyAt(startX, z);
             UnitsCanAct = true;
             _battleStartTime = Time.unscaledTime;
@@ -608,6 +909,7 @@ public class BattleManager : Singleton<BattleManager>
             }
 
             if (monster.currentHp <= 0f) monster.currentHp = 40f;
+            ApplyTutorialMonsterTuning(monster);
             ForceEnableMonsterRenderers(monster.transform);
             monster.transform.localScale = Vector3.one * Mathf.Max(monster.transform.localScale.x, GameConfig.MONSTER_BASE_SCALE);
             monster.OnDead += OnMonsterDead;
@@ -746,7 +1048,17 @@ public class BattleManager : Singleton<BattleManager>
         ScheduleFirstWaveSpawn();
 
         string title = GameConfig.GetChapterTitleText(CurrentChapter);
-        var splash = ChapterSplashOverlay.Show(title);
+        string body = null;
+        if (IsTutorialRun)
+        {
+            title = "森林区域，第一层";
+            body = "阳光还能照进来，怪物也不算太强。\n正好适合一个新人进去摸摸路。";
+        }
+        else if (CurrentChapter <= 1 && StoryProgress.TutorialDone && !StoryProgress.Chapter1ChoiceDone)
+        {
+            body = "新人任务开始。不要想太多。";
+        }
+        var splash = ChapterSplashOverlay.Show(title, body);
         float need = ChapterSplashOverlay.HoldSeconds + ChapterSplashOverlay.FadeSeconds + 0.5f;
         float guard = 0f;
         while (splash != null && !splash.IsFinished && guard < need)
@@ -786,6 +1098,9 @@ public class BattleManager : Singleton<BattleManager>
         }
         else
             Debug.LogError($"[BattleManager] 开战完成仍无怪 monsters={monsters.Count} waves={_waves?.Count ?? 0}");
+
+        if (IsTutorialRun)
+            TutorialDirector.Instance?.NotifyBattleSplashFinished();
     }
 
     /// <summary>按间距摆玩家+佣兵（佣兵在身后，不再挤压到重叠）</summary>
@@ -856,8 +1171,8 @@ public class BattleManager : Singleton<BattleManager>
             return;
         }
 
-        // 场上还有上一波活怪时，不叠刷（等清完再倒计时）
-        if (CountAliveMonsters() > 0 && _activeWaveIndex >= 0)
+        // 场上还有上一波活怪时，不叠刷（教程关由 QueueTutorialWave 重置 _activeWaveIndex）
+        if (!IsTutorialRun && CountAliveMonsters() > 0 && _activeWaveIndex >= 0)
             return;
 
         var wave = _waves[waveIdx];
@@ -903,7 +1218,7 @@ public class BattleManager : Singleton<BattleManager>
         if (CountAliveMonsters() > 0) return;
 
         _waveCountdownActive = true;
-        _nextWaveCountdown = GameConfig.WAVE_SPAWN_INTERVAL;
+        _nextWaveCountdown = GameConfig.GetWaveSpawnInterval();
         BattleSideHud.Instance?.SetWaveCountdown(true, _nextWaveCountdown, true);
         Debug.Log($"[BattleManager] 下一波倒计时 {_nextWaveCountdown:F1}s（可点击加速）");
     }
@@ -1181,20 +1496,20 @@ public class BattleManager : Singleton<BattleManager>
     {
         if (!isInBattle || _stageCleared) return;
 
-        // 硬性保险：不靠协程，Update 直接轮询
+        // 硬性保险：教程关由 TutorialDirector 控刷，别在这里抢刷/打 Error
         if (!_firstWaveSpawned
+            && !IsTutorialRun
             && Time.unscaledTime >= _battleStartTime + GameConfig.FIRST_WAVE_SPAWN_DELAY
             && CountAliveMonsters() == 0)
         {
             if (_waves != null && _waves.Count > 0 && FindNextUnspawnedWaveIndex() >= 0)
             {
-                Debug.LogError("[BattleManager] Update 硬性刷怪触发");
+                Debug.LogWarning("[BattleManager] Update 硬性刷怪触发");
                 TrySpawnFirstWaveOnce();
             }
             else
             {
-                // 波次为空 / 全部被标 spawned：强制重建并刷
-                Debug.LogError($"[BattleManager] 硬性刷怪兜底: waves={_waves?.Count ?? 0} nextIdx={FindNextUnspawnedWaveIndex()} → 强制补波");
+                Debug.LogWarning($"[BattleManager] 硬性刷怪兜底: waves={_waves?.Count ?? 0} nextIdx={FindNextUnspawnedWaveIndex()} → 强制补波");
                 EnsureAtLeastOneWave();
                 TrySpawnFirstWaveOnce();
                 if (CountAliveMonsters() == 0)
@@ -1259,7 +1574,8 @@ public class BattleManager : Singleton<BattleManager>
 
         // 所有波次已刷完且场上无怪 → 宝箱结算（不再直接开 EndPoint）
         if (_allWavesSpawned && monsters.Count == 0 && _totalMonstersSpawnedThisStage > 0
-            && !_portalActive && !_stageCleared && !_rewardSequenceStarted)
+            && !_portalActive && !_stageCleared && !_rewardSequenceStarted
+            && !SuppressStageClear)
         {
             StartStageClearRewardSequence();
         }
@@ -1287,14 +1603,17 @@ public class BattleManager : Singleton<BattleManager>
                 BattleUI.Instance.UpdateSkillEnergy(0, playerSkillEnergy);
         }
 
-        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-        if (mercs != null)
+        if (!GameConfig.SOLO_PLAYER_BATTLE)
         {
-            for (int i = 0; i < mercSkillEnergy.Length; i++)
+            var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+            if (mercs != null)
             {
-                if (i >= mercs.Count || mercs[i] == null || mercs[i].isDead) continue;
-                mercSkillEnergy[i] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[i] + ENERGY_PER_SECOND * 0.85f * Time.deltaTime);
-                BattleUI.Instance?.UpdateSkillEnergy(i + 1, mercSkillEnergy[i]);
+                for (int i = 0; i < mercSkillEnergy.Length; i++)
+                {
+                    if (i >= mercs.Count || mercs[i] == null || mercs[i].isDead) continue;
+                    mercSkillEnergy[i] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[i] + ENERGY_PER_SECOND * 0.85f * Time.deltaTime);
+                    BattleUI.Instance?.UpdateSkillEnergy(i + 1, mercSkillEnergy[i]);
+                }
             }
         }
     }
@@ -1544,6 +1863,7 @@ public class BattleManager : Singleton<BattleManager>
             }
 
             monster.Init(fallbackCfg, 0, CurrentChapter, fallbackScale, fallbackSpriteOverride);
+            ApplyTutorialMonsterTuning(monster);
             monster.BeginMapEnter(engage, GameConfig.MONSTER_ENTER_SPEED);
             monster.OnDead += OnMonsterDead;
             monsters.Add(monster);
@@ -1582,6 +1902,7 @@ public class BattleManager : Singleton<BattleManager>
             monster = go.AddComponent<Monster>();
 
         monster.Init(template, stageIdx, CurrentChapter, scaleMultiplier, spriteIndexOverride);
+        ApplyTutorialMonsterTuning(monster);
         pos.y = UnitBase.GROUND_Y;
         GameConfig.SetWorldPosition(go, pos);
         monster.OnDead += OnMonsterDead;
@@ -1619,7 +1940,7 @@ public class BattleManager : Singleton<BattleManager>
         Monster m = monster as Monster;
         if (m == null) return;
 
-        currentGold += (long)m.goldDrop;
+        currentGold += (long)(m.goldDrop * runGoldGainMul);
 
         // 连杀
         float now = Time.time;
@@ -1700,6 +2021,7 @@ public class BattleManager : Singleton<BattleManager>
 
         playerSkillEnergy = 0f;
         BattleUI.Instance?.UpdateSkillEnergy(0, 0f);
+        TutorialDirector.Instance?.NotifyPlayerSkillUsed();
         Debug.Log($"[BattleManager] 玩家技能释放: {skill.skillName} ({skill.skillId})");
         return true;
     }
@@ -1767,10 +2089,18 @@ public class BattleManager : Singleton<BattleManager>
         if (skill.skillType == SkillSystem.SkillType.Buff)
         {
             float healBase = cfg != null && cfg.healBase > 0 ? cfg.healBase : skill.baseDamage;
-            if (healBase > 0 || skill.skillId == "ally_heal")
+            float pct = cfg != null ? cfg.healPercentOfMax : 0f;
+            if (pct > 0f || healBase > 0 || skill.skillId == "ally_heal")
             {
-                float heal = healBase + caster.attr.GetAttr(AttrType.Attack) * 0.5f;
-                ApplyHealToTeam(heal);
+                float maxHp = 0f;
+                UnitBase target = FindLowestHpAlly();
+                if (target == null) target = caster;
+                if (target.attr != null)
+                    maxHp = target.attr.GetAttr(AttrType.MaxHp);
+                float heal = pct > 0f ? maxHp * pct : healBase + caster.attr.GetAttr(AttrType.Attack) * 0.5f;
+                if (pct <= 0f && skill.skillId == "ally_heal")
+                    heal = maxHp * 0.3f;
+                ApplyHealToUnit(target, heal);
                 return;
             }
 
@@ -1799,29 +2129,24 @@ public class BattleManager : Singleton<BattleManager>
         }
     }
 
+    void ApplyHealToUnit(UnitBase unit, float heal)
+    {
+        if (unit == null || unit.isDead || unit.attr == null) return;
+        float before = unit.currentHp;
+        float maxHp = unit.attr.GetAttr(AttrType.MaxHp);
+        unit.currentHp = Mathf.Min(maxHp, unit.currentHp + heal);
+        int gained = Mathf.RoundToInt(unit.currentHp - before);
+        if (gained > 0)
+            DamageTextSystem.Instance?.SpawnHealText(unit.GetHitPosition(), gained);
+    }
+
     void ApplyHealToTeam(float heal)
     {
-        if (hero != null && !hero.isDead)
-        {
-            float before = hero.currentHp;
-            hero.currentHp = Mathf.Min(hero.attr.GetAttr(AttrType.MaxHp), hero.currentHp + heal);
-            int gained = Mathf.RoundToInt(hero.currentHp - before);
-            if (gained > 0)
-                DamageTextSystem.Instance?.SpawnHealText(hero.GetHitPosition(), gained);
-        }
+        ApplyHealToUnit(hero, heal);
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
-        if (mercs != null)
-        {
-            foreach (var m in mercs)
-            {
-                if (m == null || m.isDead) continue;
-                float before = m.currentHp;
-                m.currentHp = Mathf.Min(m.attr.GetAttr(AttrType.MaxHp), m.currentHp + heal * 0.8f);
-                int gained = Mathf.RoundToInt(m.currentHp - before);
-                if (gained > 0)
-                    DamageTextSystem.Instance?.SpawnHealText(m.GetHitPosition(), gained);
-            }
-        }
+        if (mercs == null) return;
+        foreach (var m in mercs)
+            ApplyHealToUnit(m, heal * 0.8f);
     }
 
     void ApplyTeamBuff(SkillConfig cfg)
@@ -1835,6 +2160,34 @@ public class BattleManager : Singleton<BattleManager>
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
         if (mercs != null)
             foreach (var m in mercs) Apply(m);
+    }
+
+    UnitBase FindLowestHpAlly()
+    {
+        UnitBase best = null;
+        float worstRatio = 2f;
+
+        void Consider(UnitBase u)
+        {
+            if (u == null || u.isDead || u.attr == null) return;
+            float maxHp = u.attr.GetAttr(AttrType.MaxHp);
+            if (maxHp <= 1f) return;
+            float ratio = u.currentHp / maxHp;
+            if (ratio < worstRatio)
+            {
+                worstRatio = ratio;
+                best = u;
+            }
+        }
+
+        Consider(hero);
+        var mercs = MercenaryManager.Instance?.GetActiveMercs();
+        if (mercs != null)
+        {
+            for (int i = 0; i < mercs.Count; i++)
+                Consider(mercs[i]);
+        }
+        return best;
     }
 
     UnitBase FindNearestMonster()
@@ -1872,8 +2225,37 @@ public class BattleManager : Singleton<BattleManager>
     void StartStageClearRewardSequence()
     {
         if (_rewardSequenceStarted || _stageCleared) return;
+        if (ShouldPlayChapter1Ending())
+        {
+            _rewardSequenceStarted = true;
+            StartCoroutine(CoChapter1EndingThenRewards());
+            return;
+        }
+        BeginRewardSequence();
+    }
+
+    bool ShouldPlayChapter1Ending()
+    {
+        if (IsTutorialRun) return false;
+        if (!StoryProgress.TutorialDone || StoryProgress.Chapter1ChoiceDone) return false;
+        if (CurrentChapter > 1) return false;
+        return currentStage != null && currentStage.type == StageType.Boss;
+    }
+
+    IEnumerator CoChapter1EndingThenRewards()
+    {
+        bool done = false;
+        Chapter1Story.PlayEnding(() => done = true);
+        while (!done) yield return null;
+        _rewardSequenceStarted = false;
+        BeginRewardSequence();
+    }
+
+    void BeginRewardSequence()
+    {
+        if (_rewardSequenceStarted || _stageCleared) return;
         _rewardSequenceStarted = true;
-        isInBattle = false; // 停止刷怪/战斗逻辑，但仍可在传送门阶段让单位行走
+        isInBattle = false;
         UnitsCanAct = false;
 
         if (currentStage == null)
@@ -1980,10 +2362,8 @@ public class BattleManager : Singleton<BattleManager>
         }
         else
         {
-            if (ChapterMapUI.Instance != null)
-                ChapterMapUI.Instance.ShowAfterBattle();
-            else
-                UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
+            // 强制走下一关轮盘：不回章节地图，也没有返回按钮
+            UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
         }
     }
 
@@ -2014,7 +2394,26 @@ public class BattleManager : Singleton<BattleManager>
         isInBattle = false;
         ClearAllMonsters();
         MercenaryManager.Instance?.ClearAllMercs();
+        // 撤离回城后打开冒险页（引导局另有收尾，不抢页签）
+        if (!IsTutorialRun)
+            TownHubController.PendingOpenAdventure = true;
+        if (SkipLegacyOnEvacuate || IsTutorialRun)
+        {
+            FinishTutorialEvacuate();
+            return;
+        }
         TriggerLegacyFlow();
+    }
+
+    void FinishTutorialEvacuate()
+    {
+        if (TutorialDirector.Instance != null)
+            TutorialDirector.Instance.WaitingEvacuate = false;
+        if (currentGold > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, currentGold, save: false, notify: true);
+        StoryProgress.MarkTutorialBattleCleared();
+        SaveSystem.Instance?.Save();
+        GameSceneManager.Instance.LoadTownScene();
     }
 
     void TriggerLegacyFlow()
@@ -2050,6 +2449,7 @@ public class BattleManager : Singleton<BattleManager>
             if (talentGain > 0)
                 ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
             SaveSystem.Instance.Save();
+            TownHubController.PendingOpenAdventure = true;
             GameSceneManager.Instance.LoadTownScene();
         });
     }
@@ -2081,20 +2481,6 @@ public class BattleManager : Singleton<BattleManager>
         });
     }
 
-    void LoadEnchantStage()
-    {
-        UIManager.Instance.ShowEnchantUI((selectedItem, enchant) =>
-        {
-            if (selectedItem != null && enchant != null)
-            {
-                selectedItem.equip.enchants.Add(enchant);
-                Hero.Instance.RecalcAttr();
-            }
-            ChapterManager.Instance.OnStageComplete();
-            UIManager.Instance.ShowStageSelectUI(ChapterManager.Instance.availableNextStages);
-        });
-    }
-
     void LoadCurseStage(StageData stage)
     {
         stage.curseOptions = GenerateCurseOptions();
@@ -2108,22 +2494,35 @@ public class BattleManager : Singleton<BattleManager>
         });
     }
 
+    /// <summary>
+    /// 锻造关：弹锻造窗（发强化材料），关掉后继续推关。
+    /// </summary>
+    void LoadForgeStage()
+    {
+        CraftStagePopupUI.ShowForge(() =>
+        {
+            ChapterManager.Instance?.OnStageComplete();
+            UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
+        });
+    }
+
+    void LoadEnchantStage()
+    {
+        CraftStagePopupUI.ShowEnchant(() =>
+        {
+            ChapterManager.Instance?.OnStageComplete();
+            UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
+        });
+    }
+
     void LoadRestStage()
     {
+        // 弹窗里已经回过 50% 血；关掉后继续推关
         UIManager.Instance.ShowRestUI(() =>
         {
-            hero.currentHp = Mathf.Min(hero.currentHp + hero.attr.GetAttr(AttrType.MaxHp) * 0.3f, hero.attr.GetAttr(AttrType.MaxHp));
             ChapterManager.Instance.OnStageComplete();
             UIManager.Instance.ShowStageSelectUI(ChapterManager.Instance.availableNextStages);
-        }, () =>
-        {
-            UIManager.Instance.ShowDecomposeUI((item) =>
-            {
-                GridBackpackSystem.Instance.DecomposeItem(item);
-                ChapterManager.Instance.OnStageComplete();
-                UIManager.Instance.ShowStageSelectUI(ChapterManager.Instance.availableNextStages);
-            });
-        });
+        }, null);
     }
 
     List<CurseBuff> GenerateCurseOptions()

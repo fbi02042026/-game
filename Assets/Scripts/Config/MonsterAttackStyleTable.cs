@@ -98,7 +98,8 @@ public static class MonsterAttackStyleTable
         switch (style)
         {
             case MonsterAttackStyle.Bow: return AttackVfxKit.Bow;
-            case MonsterAttackStyle.Ranged: return AttackVfxKit.Orb;
+            // 远程小怪技能/普攻统一走弓箭飞矢（vfx_bow_fly），不用法球
+            case MonsterAttackStyle.Ranged: return AttackVfxKit.Bow;
             default: return AttackVfxKit.MeleeSlash;
         }
     }

@@ -117,22 +117,15 @@ public class PausePanel : MonoBehaviour
     }
 
     /// <summary>
-    /// 撤离：结束当前战斗，触发死亡遗产流程
+    /// 撤离：结束当前战斗，回城镇冒险页
     /// </summary>
     void OnEvacuate()
     {
         Hide();
-
-        // 保存当前状态用于遗产选择
         BattleStateSaver.Instance?.SaveBattleState();
-
-        // 触发死亡/撤离流程
-        if (BattleManager.Instance != null)
-        {
-            BattleManager.Instance.TriggerEvacuation();
-        }
-
-        Debug.Log("[PausePanel] 玩家主动撤离");
+        TownHubController.PendingOpenAdventure = true;
+        BattleManager.Instance?.TriggerEvacuation();
+        Debug.Log("[PausePanel] 玩家主动撤离 → 冒险页");
     }
 
     /// <summary>

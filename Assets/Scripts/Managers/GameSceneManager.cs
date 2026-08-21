@@ -48,6 +48,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
     IEnumerator LoadTownAsync()
     {
         _loadingTown = true;
+        StoryDirector.Instance?.NotifySceneChanged();
         var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
         bool showOverlay = scene.name != TOWN_SCENE;
         if (showOverlay)
@@ -79,6 +80,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
             yield return WaitForTownBootstrapComplete();
         }
 
+        TutorialDirector.Instance?.NotifyTownReady();
         _loadingTown = false;
     }
 
@@ -97,6 +99,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
     IEnumerator LoadBattleAsync()
     {
         _loadingBattle = true;
+        StoryDirector.Instance?.NotifySceneChanged();
         AutoGameInitializer.ResetForSceneLoad();
         SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);
         yield return null;

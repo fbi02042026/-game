@@ -145,7 +145,7 @@ public class ChapterMapUI : MonoBehaviour
 
     void OnOpenSettings()
     {
-        // TODO: 打开设置面板
+        BattleSettingsPanel.Ensure().Open();
     }
 
     /// <summary>

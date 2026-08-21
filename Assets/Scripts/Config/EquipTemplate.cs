@@ -35,8 +35,54 @@ public class EquipTemplate : ScriptableObject
     public string templateId;
     public string equipName;
     public Sprite icon; // 图标可以复用
+    [Tooltip("EquipIcons 文件夹内文件名（不含 .png），如 New_Weapon_01")]
+    public string iconFileName;
     public int gridWidth = 1;
     public int gridHeight = 1;
+
+    /// <summary>若 icon 未绑，按 iconFileName 从 EquipIcons 文件夹解析。</summary>
+    public void ResolveIcon()
+    {
+        if (icon != null) return;
+        if (string.IsNullOrEmpty(iconFileName)) return;
+        icon = EquipIcons.Get(iconFileName);
+    }
+
+    /// <summary>按槽位/武器类型给出默认占格（可在 Inspector 再改）。</summary>
+    public void ApplyDefaultGridSize()
+    {
+        if (slotType == EquipSlotType.Chest)
+        {
+            gridWidth = 2;
+            gridHeight = 1;
+            return;
+        }
+
+        if (slotType == EquipSlotType.MainHand)
+        {
+            if (weaponType == WeaponType.TwoHand)
+            {
+                gridWidth = 2;
+                gridHeight = 3;
+            }
+            else
+            {
+                gridWidth = 1;
+                gridHeight = 2;
+            }
+            return;
+        }
+
+        if (slotType == EquipSlotType.OffHand)
+        {
+            gridWidth = 2;
+            gridHeight = 2;
+            return;
+        }
+
+        gridWidth = 1;
+        gridHeight = 1;
+    }
     public List<string> tags = new List<string>();
     public Rarity baseRarity; // 基础品质，星级提升品质上限
     public int minLevel = 1; // 最低等级要求

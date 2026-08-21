@@ -29,7 +29,15 @@ public class MercenaryManager : Singleton<MercenaryManager>
 
     public Sprite GetIcon(string characterId)
     {
-        return registry != null ? registry.GetIcon(characterId) : null;
+        Sprite sp = registry != null ? registry.GetIcon(characterId) : null;
+        if (sp != null) return sp;
+        if (string.IsNullOrEmpty(characterId)) return null;
+        sp = Resources.Load<Sprite>("UI/Heads/icon_" + characterId);
+        if (sp != null) return sp;
+        // 101/102 盾兵共用头像
+        if (characterId.StartsWith("dunbing"))
+            return Resources.Load<Sprite>("UI/Heads/icon_dunbing102");
+        return null;
     }
 
     public string GetJobName(string characterId)

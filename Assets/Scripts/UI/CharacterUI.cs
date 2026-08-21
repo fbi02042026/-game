@@ -5,7 +5,7 @@ using UnityEngine.UI;
 /// 角色页（MainNavTab.Character）。参考 Art/UI/Character/character_reference.png。
 /// - 无左侧装备栏
 /// - 右上：天赋 / 技能；左侧独立按钮也可打开技能选择
-/// - 背包格子与战斗一致（TownBackpackGrid / GameConfig 7×4 + 底行锁）
+/// - 背包格子按角色页预制体显示（8×5）；最下方两行天赋解锁
 /// - 不自建资源条/底栏，Show 时 RaiseSharedChrome，底部预留下方 150
 /// </summary>
 public class CharacterUI : MonoBehaviour, ITownPage
@@ -75,13 +75,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
         if (backpackGrid != null)
         {
             backpackGrid.BindFromHierarchy(transform);
-            // 已从战斗复制格子时不要重建，避免盖掉手做网格
-            if (backpackGrid.cells.Count == 0)
-            {
-                var bag = transform.Find("Content/BackpackPanel")
-                          ?? transform.Find("Content/BagPanel");
-                if (bag != null) backpackGrid.BuildGrid(bag);
-            }
+            // 预制体已有格子则只绑不重建，避免盖掉手摆布局
         }
         GameFonts.ApplyToHierarchy(transform);
         WireClicks();

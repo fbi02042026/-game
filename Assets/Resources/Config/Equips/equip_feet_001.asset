@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   templateId: equip_feet_001
   equipName: "\u76AE\u9774"
-  icon: {fileID: 0}
+  icon: {fileID: 21300000, guid: 287280253a8b9dd49982a999be54504f, type: 3}
+  iconFileName: New_Pant_01
   gridWidth: 1
   gridHeight: 1
   tags: []
@@ -32,5 +33,6 @@ MonoBehaviour:
   slotType: 3
   weaponType: 3
   weaponAttackType: 0
+  attackRange: 96
   armorPrefix: 6
   spumName: pant_boots

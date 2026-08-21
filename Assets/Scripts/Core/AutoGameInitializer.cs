@@ -495,6 +495,10 @@ public class AutoGameInitializer : MonoBehaviour
             root.AddComponent<GameSceneManager>();
             Debug.Log("[AutoInit] PersistentRoot 已创建（直接Play Battle场景时）");
         }
+        if (root.GetComponent<StoryDirector>() == null)
+            root.AddComponent<StoryDirector>();
+        if (root.GetComponent<TutorialDirector>() == null)
+            root.AddComponent<TutorialDirector>();
     }
 
     // ===== 场景基础对象 =====
@@ -822,6 +826,8 @@ public class AutoGameInitializer : MonoBehaviour
         AddIfMissing<TownSystem>(root);
         AddIfMissing<MercenaryManager>(root);
         AddIfMissing<BattleManager>(root);
+        AddIfMissing<StoryDirector>(root);
+        AddIfMissing<TutorialDirector>(root);
 
         return root;
     }

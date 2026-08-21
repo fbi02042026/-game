@@ -28,7 +28,13 @@ public static class RedDot
         get
         {
             if (_sprite != null) return _sprite;
-            _sprite = Resources.Load<Sprite>("UI/RedDot");
+            // 优先用美术「红点」图
+            _sprite = Resources.Load<Sprite>("UI/红点");
+            if (_sprite == null) _sprite = Resources.Load<Sprite>("UI/RedDot");
+#if UNITY_EDITOR
+            if (_sprite == null)
+                _sprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/红点.png");
+#endif
             return _sprite;
         }
     }

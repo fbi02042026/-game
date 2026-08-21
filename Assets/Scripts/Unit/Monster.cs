@@ -150,6 +150,7 @@ public class Monster : UnitBase
     private MonsterAttackStyle _swingStyle = MonsterAttackStyle.Melee;
     private int _spriteIndex;
     private bool _isBossUnit;
+    private bool _eliteWave;
     private int _bossSwingIndex;
     private bool _isEnteringMap;
     private Vector3 _enterTargetPos;
@@ -166,8 +167,27 @@ public class Monster : UnitBase
         if (rb != null) rb.velocity = Vector2.zero;
     }
 
+    UnitBase _forcedTarget;
+
+    /// <summary>引导等：强制锁定某个目标（可为空清除）。</summary>
+    public void SetForcedTarget(UnitBase t) => _forcedTarget = t;
+
     protected override void AIUpdate()
     {
+        if (_forcedTarget != null)
+        {
+            if (_forcedTarget.isDead)
+                _forcedTarget = null;
+            else
+            {
+                if (_isEnteringMap) _isEnteringMap = false;
+                target = _forcedTarget;
+                // 直接走基类战斗逻辑（追击/攻击）
+                RunForcedCombat();
+                return;
+            }
+        }
+
         if (_isEnteringMap)
         {
             if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
@@ -210,6 +230,41 @@ public class Monster : UnitBase
         }
 
         base.AIUpdate();
+    }
+
+    void RunForcedCombat()
+    {
+        if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            return;
+        }
+        if (target == null || target.isDead) return;
+
+        float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
+        float attackRange = attr.GetAttr(AttrType.AttackRange);
+        float dir = GetCombatX(target) > GetCombatX(this) ? 1 : -1;
+        facingDir = (int)dir;
+        ApplyFacing(facingDir);
+
+        bool isMoving = false;
+        if (distance <= attackRange)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (attackCd <= 0)
+            {
+                Attack(target);
+                attackCd = GetAttackCooldown();
+            }
+        }
+        else
+        {
+            float spd = attr.GetAttr(AttrType.MoveSpeed);
+            if (rb != null) rb.velocity = new Vector2(dir * spd, rb.velocity.y);
+            isMoving = true;
+        }
+        if (unitAnim != null) unitAnim.SetMove(isMoving, facingDir);
     }
 
     void IdleWaitForPlayer()
@@ -321,8 +376,11 @@ public class Monster : UnitBase
         attr.SetAttr(AttrType.MaxHp, baseHp * scale * waveMul);
         attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER);
         attr.SetAttr(AttrType.Defense, baseDef * scale);
+        float atkSpeedMul = GameConfig.MONSTER_ATK_SPEED_MUL;
+        if (BattleManager.Instance != null)
+            atkSpeedMul *= BattleManager.Instance.runMonsterAtkSpeedMul;
         attr.SetAttr(AttrType.AttackSpeed,
-            (1f / Mathf.Max(0.2f, atkInterval)) * GameConfig.MONSTER_ATK_SPEED_MUL);
+            (1f / Mathf.Max(0.2f, atkInterval)) * atkSpeedMul);
         float moveSpd = template != null && template.baseMoveSpeed > 0.01f
             ? Mathf.Min(template.baseMoveSpeed, GameConfig.MONSTER_DEFAULT_MOVE_SPEED * 1.5f)
             : GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
@@ -347,6 +405,14 @@ public class Monster : UnitBase
         attr.SetAttr(AttrType.MoveSpeed, moveSpd);
         attr.SetAttr(AttrType.AttackRange, atkRange);
         attr.SetAttr(AttrType.CritRate, 0.05f);
+
+        if (GameConfig.IsOpeningStage() && !bossUnit)
+        {
+            attr.SetAttr(AttrType.MaxHp, attr.GetAttr(AttrType.MaxHp) * 1.25f);
+            attr.SetAttr(AttrType.Attack, attr.GetAttr(AttrType.Attack) * 0.7f);
+            attr.SetAttr(AttrType.AttackSpeed, attr.GetAttr(AttrType.AttackSpeed) * 0.7f);
+            attr.SetAttr(AttrType.MoveSpeed, attr.GetAttr(AttrType.MoveSpeed) * 0.75f);
+        }
 
         currentHp = attr.GetAttr(AttrType.MaxHp);
         if (currentHp <= 0f)
@@ -376,12 +442,15 @@ public class Monster : UnitBase
         // 设置 HPBar 排序层（在怪物之上）
         SetupHPBarSorting();
 
-        _canUseActiveSkill = eliteWave || _isBossUnit;
+        _eliteWave = eliteWave;
         _skillId = SkillRegistry.Instance != null
             ? SkillRegistry.Instance.GetMonsterSkillId(template, eliteWave, _isBossUnit, _attackStyle)
             : null;
-        _skillEnergy = _canUseActiveSkill ? 0.5f : 0f;
-        _skillCooldown = 0f;
+        // 远程小怪也拿到了技能 id，就让它能放：远程怪必须看得到技能子弹
+        _canUseActiveSkill = !string.IsNullOrEmpty(_skillId);
+        bool strong = eliteWave || _isBossUnit;
+        _skillEnergy = _canUseActiveSkill ? (strong ? 0.5f : 0f) : 0f;
+        _skillCooldown = _canUseActiveSkill && !strong ? 3f : 0f;
 
         Debug.Log($"[Monster:{template.id}] Init | sprite={_spriteIndex} style={_attackStyle} boss={_isBossUnit} range={atkRange:F1} skill={_skillId}");
     }
@@ -551,33 +620,66 @@ public class Monster : UnitBase
     void UseActiveSkill(UnitBase primaryTarget)
     {
         _skillEnergy = 0f;
-        _skillCooldown = 2.5f;
+        _skillCooldown = (_isBossUnit || _eliteWave) ? 2.5f : 5f;
         _swingStyle = ResolveSwingStyle(primaryTarget);
 
         var skill = SkillRegistry.Instance?.GetActiveSkill(_skillId);
         float mult = skill != null ? skill.damageMultiplier : 2.2f;
         float extra = skill != null ? skill.baseDamage : 0f;
-        float damage = attr.GetAttr(AttrType.Attack) * mult + extra;
+        // 普通远程小怪也能放技能，但伤害要打折，不然开局会被点爆
+        float tier = (_isBossUnit || _eliteWave) ? 1f : GameConfig.MONSTER_NORMAL_SKILL_DAMAGE_MUL;
+        float damage = (attr.GetAttr(AttrType.Attack) * mult + extra) * tier;
         float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
 
+        AttackVfxKit kit = MonsterAttackStyleTable.GetVfxKit(_swingStyle);
+        // 远程小怪技能统一弓箭飞矢 vfx_bow_fly
+        if (MonsterAttackStyleTable.IsRanged(_swingStyle) || MonsterAttackStyleTable.IsRanged(_attackStyle))
+            kit = AttackVfxKit.Bow;
         Vector3 firePos = GetFirePosition();
         Vector3 hitPos = primaryTarget != null ? primaryTarget.GetHitPosition() : firePos;
 
-        // Boss/精英技能：先走技能预制体，没有则用当前挥击套装
-        SkillRegistry.Instance?.PlaySkillVfx(_skillId, hitPos, false, facingDir, transform);
-        BattleVFXSystem.Instance?.PlayAttackKit(
-            MonsterAttackStyleTable.GetVfxKit(_swingStyle),
-            VfxFaction.Enemy,
-            firePos,
-            hitPos,
-            facingDir,
-            primaryTarget != null ? primaryTarget.transform : null);
-
+        // 技能动作：比普攻夸张一截
         if (unitAnim != null)
-            unitAnim.PlayAttack(MonsterAttackStyleTable.GetVfxKit(_swingStyle));
+            unitAnim.PlaySkillCast(kit, (_isBossUnit || _eliteWave) ? 1.15f : 1f);
+
+        if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
+        {
+            // 远程技：子弹从发射点飞到目标，飞到了才结算 + 才炸技能特效
+            GameObject impact = SkillRegistry.Instance?.GetSkillVfxPrefab(_skillId);
+            Transform targetTf = primaryTarget != null ? primaryTarget.transform : null;
+            BattleVFXSystem.Instance?.PlaySkillProjectile(
+                VfxFaction.Enemy, firePos, hitPos, facingDir, targetTf, kit,
+                impact, SkillProjectileScale, SkillProjectileSpeedMul,
+                () => ApplySkillDamage(damage, radius, primaryTarget));
+
+            if (BattleVFXSystem.Instance == null)
+                ApplySkillDamage(damage, radius, primaryTarget);
+            return;
+        }
+
+        // 近战技：原地砸，伤害瞬发
+        SkillRegistry.Instance?.PlaySkillVfx(_skillId, hitPos, false, facingDir, transform);
+        BattleVFXSystem.Instance?.PlayAttackKit(kit, VfxFaction.Enemy, firePos, hitPos, facingDir,
+            primaryTarget != null ? primaryTarget.transform : null);
+        ApplySkillDamage(damage, radius, primaryTarget);
+    }
+
+    /// <summary>技能子弹放大一点，看得出是「技能」不是普攻</summary>
+    const float SkillProjectileScale = 1.6f;
+    /// <summary>技能子弹比普攻箭慢一点，飞行过程看得清</summary>
+    const float SkillProjectileSpeedMul = 0.7f;
+
+    /// <summary>
+    /// 技能结算：范围内的我方单位一起吃伤害。
+    /// 远程技延迟到子弹命中才调用，这期间自己可能已经死了或者被对象池回收再拿去当别的怪，
+    /// 所以必须重新确认还活着、还在场上，否则会出现「死怪继续打人」。
+    /// </summary>
+    void ApplySkillDamage(float damage, float radius, UnitBase primaryTarget)
+    {
+        if (this == null || isDead || !gameObject.activeInHierarchy) return;
 
         var allies = BattleManager.Instance?.allyUnits;
-        if (allies != null)
+        if (allies != null && allies.Count > 0)
         {
             for (int i = 0; i < allies.Count; i++)
             {
@@ -588,8 +690,9 @@ public class Monster : UnitBase
                 bool crit = Random.value < attr.GetAttr(AttrType.CritRate);
                 u.TakeDamage(crit ? damage * 1.5f : damage, crit);
             }
+            return;
         }
-        else if (primaryTarget != null && !primaryTarget.isDead)
+        if (primaryTarget != null && !primaryTarget.isDead)
             primaryTarget.TakeDamage(damage, false);
     }
 

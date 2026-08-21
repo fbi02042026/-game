@@ -35,6 +35,7 @@ public class EquipInstance
     public static EquipInstance GenerateFromTemplate(EquipTemplate template, int bonusStar = 0, int heroLevel = 1)
     {
         EquipInstance inst = new EquipInstance();
+        template.ResolveIcon();
         inst.template = template;
         inst.templateId = template.templateId;
         inst.icon = template.icon;

@@ -397,6 +397,10 @@ public abstract class UnitBase : MonoBehaviour
         // 数值表：CriticalDamage = Damage × (1.5 + CriticalDamageBonus)
         if (isCrit) damage *= (1.5f + GameConfig.BASE_CRIT_DAMAGE);
 
+        bool openingHit = isAlly && GameConfig.IsOpeningStage();
+        if (openingHit)
+            damage = GameConfig.RollOpeningAllyHitDamage(isCrit);
+
         // 闪避判定
         float dodgeChance = target.attr.GetAttr(AttrType.Dodge);
         if (dodgeChance > 0 && Random.value < dodgeChance)
@@ -406,7 +410,7 @@ public abstract class UnitBase : MonoBehaviour
             return;
         }
 
-        target.TakeDamage(damage, isCrit);
+        target.TakeDamage(damage, isCrit, openingHit);
         OnAttack?.Invoke(target, damage, isCrit);
 
         // 触发攻击特效：共用套装 + 我方/敌方染色；弓/球必飞行
@@ -443,6 +447,8 @@ public abstract class UnitBase : MonoBehaviour
         AttackVfxKit kit = GetAttackVfxKit();
         if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
             atkSpd *= GameConfig.PROJECTILE_ATK_SPEED_MUL;
+        if (isAlly && GameConfig.IsOpeningStage())
+            atkSpd *= 0.55f;
         return 1f / Mathf.Max(0.05f, atkSpd);
     }
 
@@ -454,12 +460,12 @@ public abstract class UnitBase : MonoBehaviour
         return WeaponAttackType.Physical;
     }
 
-    public virtual void TakeDamage(float damage, bool isCrit)
+    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false)
     {
         if (_isDying) return;
 
         // 数值表：Damage = max(1, ATK − DEF)；暴击已在 Attack 侧乘过
-        float defense = attr.GetAttr(AttrType.Defense);
+        float defense = ignoreDefense ? 0f : attr.GetAttr(AttrType.Defense);
         float finalDamage = Mathf.Max(1f, damage - defense);
 
         currentHp -= finalDamage;
