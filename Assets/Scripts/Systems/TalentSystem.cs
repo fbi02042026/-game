@@ -36,9 +36,14 @@ public static class TalentSystem
         var data = SaveSystem.Instance.Data;
         var node = TalentDefs.Left[index1Based - 1];
         int cost = GetLeftGoldCost(node, data.talents);
-        data.totalGold -= cost;
+        if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, cost, save: false, notify: true))
+        {
+            reason = "金币不足";
+            return false;
+        }
         data.talents[node.id] = 1;
         SaveSystem.Instance.Save();
+        GuildHallUI.RefreshAllHudStatic();
         return true;
     }
 

@@ -73,6 +73,7 @@ public class TavernUI : MonoBehaviour, ITownPage
 
         Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
+        TownSaveAlign.AlignAll();
     }
 
     /// <summary>轻量隐藏</summary>
@@ -246,10 +247,15 @@ public class TavernUI : MonoBehaviour, ITownPage
 
     void WireClicks()
     {
-        Wire(recruitButton, "佣兵招募（待实现）");
-        Wire(trustButton, "信任交流（待实现）");
-        Wire(questButton, "酒馆任务（待实现）");
-        Wire(intelButton, "佣兵情报（待实现）");
+        if (recruitButton != null)
+        {
+            recruitButton.onClick.RemoveAllListeners();
+            recruitButton.onClick.AddListener(TavernRosterPanel.Show);
+        }
+        // 信任/任务/情报未做：隐藏，避免空入口
+        if (trustButton != null) trustButton.gameObject.SetActive(false);
+        if (questButton != null) questButton.gameObject.SetActive(false);
+        if (intelButton != null) intelButton.gameObject.SetActive(false);
     }
 
     static void Wire(Button btn, string toast)

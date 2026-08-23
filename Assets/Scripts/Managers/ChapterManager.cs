@@ -94,73 +94,20 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
-    /// 分配关卡类型：普通/精英/特殊/BOSS
+    /// 分配关卡类型占位：第1关普通、末关 Boss；中间类型由 StageRoller 每关现抽覆盖。
+    /// （旧版预排商人/诅咒等已被轮盘规则取代，避免双轨不一致。）
     /// </summary>
     void AssignStageTypes()
     {
-        // 第1关固定普通
-        stageMap[0].type = StageType.Normal;
+        for (int i = 0; i < stageMap.Count; i++)
+            stageMap[i].type = StageType.Normal;
 
-        // 第10关固定BOSS
+        stageMap[0].type = StageType.Normal;
         stageMap[GameConfig.STAGES_PER_CHAPTER - 1].type = StageType.Boss;
 
-        // 可分配特殊关卡的索引池（第2-8关，index 1-7）
-        List<int> specialPool = new List<int>();
-        for (int i = 1; i <= 7; i++) specialPool.Add(i);
-
-        // Fisher-Yates洗牌
-        for (int i = specialPool.Count - 1; i > 0; i--)
-        {
-            int j = UnityEngine.Random.Range(0, i + 1);
-            int temp = specialPool[i];
-            specialPool[i] = specialPool[j];
-            specialPool[j] = temp;
-        }
-
-        // 决定本章有几个特殊关卡（1-2个）
-        int specialCount = UnityEngine.Random.Range(1, GameConfig.SPECIAL_STAGES_PER_CHAPTER + 1);
-
-        // 特殊类型列表（不重复）
-        List<StageType> specialTypes = new List<StageType>
-        {
-            StageType.Merchant,
-            StageType.Enchant,
-            StageType.Curse,
-            StageType.Rest
-        };
-
-        // 随机打乱特殊类型
-        for (int i = specialTypes.Count - 1; i > 0; i--)
-        {
-            int j = UnityEngine.Random.Range(0, i + 1);
-            var temp = specialTypes[i];
-            specialTypes[i] = specialTypes[j];
-            specialTypes[j] = temp;
-        }
-
-        // 分配特殊关卡
-        for (int i = 0; i < specialCount && i < specialPool.Count; i++)
-        {
-            int stageIdx = specialPool[i];
-            stageMap[stageIdx].type = specialTypes[i];
-        }
-
-        // 剩余关卡按概率分配普通/精英
-        for (int i = 1; i < GameConfig.STAGES_PER_CHAPTER - 1; i++)
-        {
-            if (stageMap[i].type != StageType.Normal) continue; // 已分配特殊关卡的跳过
-
-            float roll = UnityEngine.Random.value;
-            float eliteChance = 0.15f + i * 0.03f; // 越后面精英概率越高
-            stageMap[i].type = roll < eliteChance ? StageType.Elite : StageType.Normal;
-        }
-
-        // 打印关卡图
-        string log = "[ChapterManager] 关卡类型: ";
+        string log = "[ChapterManager] 关卡占位: ";
         for (int i = 0; i < stageMap.Count; i++)
-        {
             log += $"{i + 1}:{stageMap[i].type.ToString()[0]} ";
-        }
         Debug.Log(log);
     }
 
@@ -277,10 +224,11 @@ public class ChapterManager : Singleton<ChapterManager>
         foreach (int nextIdx in stageMap[currentStageIndex].nextStages)
         {
             if (nextIdx >= 0 && nextIdx < stageMap.Count)
-            {
                 availableNextStages.Add(stageMap[nextIdx]);
-            }
         }
+        // 兜底：无连线时按顺序进下一关，避免石墩/轮盘无数据
+        if (availableNextStages.Count == 0 && currentStageIndex + 1 < stageMap.Count)
+            availableNextStages.Add(stageMap[currentStageIndex + 1]);
 
         // 现抽下一关的类型（轮盘要展示的就是这个结果）
         RollNextStageType();

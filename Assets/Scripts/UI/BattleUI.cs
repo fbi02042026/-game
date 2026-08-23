@@ -112,9 +112,17 @@ public class BattleUI : MonoBehaviour
         Debug.Log($"[BattleUI] HUD已刷新 — playerSlot={playerSlot?.root!=null} merc1={mercSlot1?.root!=null} merc2={mercSlot2?.root!=null} progressNodes={progressNodes?.Count} marker={playerMarker!=null}");
     }
 
+    float _liveBarTimer;
+    float _lastPlayerHp = -1f, _lastPlayerMaxHp = -1f, _lastPlayerEnergy = -1f;
+    float _lastMerc1Hp = -1f, _lastMerc1Energy = -1f;
+    float _lastMerc2Hp = -1f, _lastMerc2Energy = -1f;
+    const float LiveBarInterval = 0.1f;
+
     void Update()
     {
-        // 实时刷新头像下 HP / 蓝条（技能能量）
+        _liveBarTimer += Time.deltaTime;
+        if (_liveBarTimer < LiveBarInterval) return;
+        _liveBarTimer = 0f;
         RefreshLiveBars();
     }
 
@@ -124,9 +132,17 @@ public class BattleUI : MonoBehaviour
         if (playerSlot != null && hero != null && !hero.isDead)
         {
             float maxHp = hero.attr.GetAttr(AttrType.MaxHp);
-            playerSlot.UpdateSlot("玩家", hero.level, hero.currentHp, maxHp);
             float energy = BattleManager.Instance != null ? BattleManager.Instance.playerSkillEnergy : 0f;
-            playerSlot.SetEnergy(energy);
+            if (!Mathf.Approximately(_lastPlayerHp, hero.currentHp)
+                || !Mathf.Approximately(_lastPlayerMaxHp, maxHp)
+                || !Mathf.Approximately(_lastPlayerEnergy, energy))
+            {
+                _lastPlayerHp = hero.currentHp;
+                _lastPlayerMaxHp = maxHp;
+                _lastPlayerEnergy = energy;
+                playerSlot.UpdateSlot("玩家", hero.level, hero.currentHp, maxHp);
+                playerSlot.SetEnergy(energy);
+            }
         }
 
         if (GameConfig.SOLO_PLAYER_BATTLE)
@@ -146,15 +162,27 @@ public class BattleUI : MonoBehaviour
         {
             var m = mercs[0];
             float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-            mercSlot1.UpdateSlot(mm.GetJobName(m.mercId), m.mercLevel, m.currentHp, maxHp);
-            mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(0) : 0f);
+            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(0) : 0f;
+            if (!Mathf.Approximately(_lastMerc1Hp, m.currentHp) || !Mathf.Approximately(_lastMerc1Energy, energy))
+            {
+                _lastMerc1Hp = m.currentHp;
+                _lastMerc1Energy = energy;
+                mercSlot1.UpdateSlot(mm.GetJobName(m.mercId), m.mercLevel, m.currentHp, maxHp);
+                mercSlot1.SetEnergy(energy);
+            }
         }
         if (maxSlots > 1 && mercSlot2 != null && mercs != null && mercs.Count > 1 && mercs[1] != null)
         {
             var m = mercs[1];
             float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-            mercSlot2.UpdateSlot(mm.GetJobName(m.mercId), m.mercLevel, m.currentHp, maxHp);
-            mercSlot2.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(1) : 0f);
+            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(1) : 0f;
+            if (!Mathf.Approximately(_lastMerc2Hp, m.currentHp) || !Mathf.Approximately(_lastMerc2Energy, energy))
+            {
+                _lastMerc2Hp = m.currentHp;
+                _lastMerc2Energy = energy;
+                mercSlot2.UpdateSlot(mm.GetJobName(m.mercId), m.mercLevel, m.currentHp, maxHp);
+                mercSlot2.SetEnergy(energy);
+            }
         }
     }
 
@@ -162,6 +190,8 @@ public class BattleUI : MonoBehaviour
     {
         if (GridBackpackSystem.Instance != null)
             GridBackpackSystem.Instance.OnBackpackChanged -= UpdateBackpackGrid;
+        if (Instance == this)
+            Instance = null;
     }
 
     /// <summary>战斗 HUD 全量刷新入口（章节/难度/资源/头像/背包）</summary>
@@ -501,7 +531,13 @@ public class BattleUI : MonoBehaviour
     void WireSlotSkillClicks()
     {
         WireSlotClick(playerSlot, OnPlayerSkillClick);
-        if (GameConfig.SOLO_PLAYER_BATTLE) return;
+        bool tutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
+        if (GameConfig.SOLO_PLAYER_BATTLE && !tutorialMerc) return;
+        if (GameConfig.SOLO_PLAYER_BATTLE && tutorialMerc)
+        {
+            WireSlotClick(mercSlot1, () => OnMercSkillClick(0));
+            return;
+        }
         int maxSlots = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
         if (maxSlots > 0)
             WireSlotClick(mercSlot1, () => OnMercSkillClick(0));

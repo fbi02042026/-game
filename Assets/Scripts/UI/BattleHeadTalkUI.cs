@@ -225,12 +225,17 @@ public class BattleHeadTalkUI : MonoBehaviour
                 w = maxW;
                 h = w / _bubbleAspect;
             }
-            // 等比后高度仍装不下文字就整体放大
+            // 等比后高度仍装不下文字就整体放大，但宽度不得超过 maxW
             float needH = prefH + 40f;
             if (h < needH)
             {
                 h = needH;
                 w = h * _bubbleAspect;
+                if (w > maxW)
+                {
+                    w = maxW;
+                    h = w / _bubbleAspect;
+                }
             }
         }
 

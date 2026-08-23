@@ -34,7 +34,8 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     public bool TryAddItem(EquipInstance equip, out BackpackItem item)
     {
         item = null;
-        if (equip.requireLevel > Hero.Instance.level)
+        if (equip == null) return false;
+        if (Hero.Instance != null && equip.requireLevel > Hero.Instance.level)
         {
             UIManager.Instance?.ShowToast($"等级不足！{equip.equipName}需要{equip.requireLevel}级才能装备");
         }

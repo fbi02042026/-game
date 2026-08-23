@@ -39,59 +39,20 @@ public class BattleStateSaver : MonoBehaviour
         Instance = this;
     }
 
+    void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+    }
+
     /// <summary>
-    /// 保存当前战斗状态
-    /// 在玩家退出/切后台/断网时调用
+    /// 保存当前战斗状态（软著版关闭：Restore 未接 LoadStage，写入会造成假续关）
     /// </summary>
     public void SaveBattleState()
     {
-        if (BattleManager.Instance == null || Hero.Instance == null)
-        {
-            PlayerPrefs.DeleteKey(KEY_BATTLE_STATE);
-            return;
-        }
-
-        var bm = BattleManager.Instance;
-        var cm = ChapterManager.Instance;
-
-        BattleStateData state = new BattleStateData
-        {
-            hasActiveBattle = true,
-            chapterId = cm?.currentChapter ?? 1,
-            stageId = bm.currentStage != null ? bm.currentStage.stageIndex : 0,
-            stageType = bm.currentStage != null ? bm.currentStage.type.ToString() : "Normal",
-            heroCurrentHp = Hero.Instance.currentHp,
-            heroLevel = Hero.Instance.level,
-            currentGold = bm.currentGold,
-            currentExp = Hero.Instance.currentExp,
-            exitTime = DateTime.UtcNow.ToString("O")
-        };
-
-        // 保存装备状态
-        if (GridBackpackSystem.Instance != null)
-        {
-            // 身上装备
-            var equipped = GridBackpackSystem.Instance.GetEquippedItems();
-            state.equippedItemIds = new string[equipped.Count];
-            for (int i = 0; i < equipped.Count; i++)
-            {
-                state.equippedItemIds[i] = equipped[i]?.template?.templateId ?? "";
-            }
-
-            // 背包装备（只存templateId，不存随机词条，重新生成）
-            var backpack = GridBackpackSystem.Instance.GetAllBackpackItems();
-            state.backpackItemIds = new string[backpack.Count];
-            for (int i = 0; i < backpack.Count; i++)
-            {
-                state.backpackItemIds[i] = backpack[i]?.equip?.template?.templateId ?? "";
-            }
-        }
-
-        string json = JsonUtility.ToJson(state);
-        PlayerPrefs.SetString(KEY_BATTLE_STATE, json);
-        PlayerPrefs.Save();
-
-        Debug.Log($"[BattleStateSaver] 战斗状态已保存: 章节{state.chapterId}-关卡{state.stageId}, 血量{state.heroCurrentHp}");
+        // 仅清理脏档，不写入可恢复状态
+        if (HasSavedBattle())
+            ClearBattleState();
     }
 
     /// <summary>
@@ -112,46 +73,13 @@ public class BattleStateSaver : MonoBehaviour
     }
 
     /// <summary>
-    /// 恢复战斗状态
-    /// 游戏启动时调用，如果有保存的状态则恢复，否则开始新游戏
-    /// 返回值：true=成功恢复，false=无保存状态或已超时
+    /// 恢复战斗状态（软著版未接入；保留实现供后续续关）
     /// </summary>
     public bool RestoreBattleState()
     {
-        if (!PlayerPrefs.HasKey(KEY_BATTLE_STATE))
-        {
-            Debug.Log("[BattleStateSaver] 无保存的战斗状态，开始新游戏");
-            return false;
-        }
-
-        string json = PlayerPrefs.GetString(KEY_BATTLE_STATE);
-        BattleStateData state = JsonUtility.FromJson<BattleStateData>(json);
-
-        if (state == null || !state.hasActiveBattle)
-        {
-            ClearSavedState();
-            return false;
-        }
-
-        // 检查暂停超时（30分钟）
-        DateTime exitTime = DateTime.Parse(state.exitTime);
-        TimeSpan offlineDuration = DateTime.UtcNow - exitTime;
-        if (offlineDuration.TotalMinutes >= 30)
-        {
-            Debug.Log($"[BattleStateSaver] 暂停超时 {offlineDuration.TotalMinutes:F0} 分钟，触发撤离");
-            TriggerEvacuation(state);
-            ClearSavedState();
-            return false;
-        }
-
-        // 恢复战斗状态
-        RestoreBattle(state);
-
-        // 计算离线收益（农场离线宝箱）
-        CalculateOfflineReward(offlineDuration);
-
-        Debug.Log($"[BattleStateSaver] 战斗状态已恢复: 章节{state.chapterId}-关卡{state.stageId}, 离线{offlineDuration.TotalMinutes:F1}分钟");
-        return true;
+        ClearBattleState();
+        Debug.Log("[BattleStateSaver] 软著版不支持中断续关，已清档");
+        return false;
     }
 
     /// <summary>
@@ -229,24 +157,16 @@ public class BattleStateSaver : MonoBehaviour
     /// </summary>
     private void CalculateOfflineReward(TimeSpan duration)
     {
-        // 限制最大离线时间（农场等级决定）
         int farmLevel = SaveSystem.Instance?.Data?.townLevel?.farm ?? 0;
-        int maxOfflineHours = 8 + farmLevel * 2; // 基础8小时，每级农场+2小时
-        double effectiveMinutes = Math.Min(duration.TotalMinutes, maxOfflineHours * 60);
+        long offlineGold = OfflineGoldCalc.FromDuration(duration, farmLevel);
 
-        // 金币/分钟 = 10 + 农场等级 * 10
-        int goldPerMinute = 10 + farmLevel * 10;
-        long offlineGold = (long)(effectiveMinutes * goldPerMinute);
-
-        // 添加到城镇总金币（上限溢出进邮件）
         if (offlineGold > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.Gold, offlineGold, save: true, notify: true);
 
-        // 显示离线收益提示
         if (offlineGold > 0)
         {
-            Debug.Log($"[BattleStateSaver] 离线收益: {offlineGold} 金币 (离线{effectiveMinutes:F0}分钟)");
-            // TODO: 弹窗显示离线收益
+            Debug.Log($"[BattleStateSaver] 离线收益: {offlineGold} 金币 (离线{duration.TotalMinutes:F0}分钟)");
+            OfflineRewardPopup.Show(offlineGold, Math.Min(duration.TotalMinutes, (8 + farmLevel * 2) * 60.0));
         }
     }
 
@@ -256,11 +176,22 @@ public class BattleStateSaver : MonoBehaviour
     /// </summary>
     private void TriggerEvacuation(BattleStateData state)
     {
-        // 保存金币到城镇（走上限）
-        if (state != null && state.currentGold > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, state.currentGold, save: true, notify: false);
-
-        Debug.Log("[BattleStateSaver] 已触发撤离，金币已保存");
+        // 暂停超时按死亡经济：只保留进局前城镇金，禁止整额 Add
+        var save = SaveSystem.Instance?.Data;
+        if (save != null && state != null)
+        {
+            // state.currentGold 是战斗内钱包快照；用差额同步到城镇
+            long delta = state.currentGold - save.totalGold;
+            // 超时撤离按死亡：丢弃本局增量
+            if (delta > 0)
+            {
+                // 不写入本局增量
+            }
+            else if (delta < 0)
+                ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, -delta, save: true, notify: false);
+        }
+        ClearBattleState();
+        Debug.Log("[BattleStateSaver] 暂停超时撤离：本局金币增量已丢弃，战斗存档已清");
     }
 
     /// <summary>
@@ -269,9 +200,7 @@ public class BattleStateSaver : MonoBehaviour
     /// </summary>
     public void ClearSavedState()
     {
-        PlayerPrefs.DeleteKey(KEY_BATTLE_STATE);
-        PlayerPrefs.Save();
-        Debug.Log("[BattleStateSaver] 战斗状态已清除");
+        ClearBattleState();
     }
 
     /// <summary>

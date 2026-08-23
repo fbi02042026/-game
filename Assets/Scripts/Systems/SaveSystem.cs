@@ -34,6 +34,7 @@ public class SaveSystem : Singleton<SaveSystem>
                     _data = JsonUtility.FromJson<SaveData>(backupJson);
                     if (_data != null)
                     {
+                        FinalizeLoadedData(_data);
                         Debug.Log("[SaveSystem] 从备份恢复存档成功");
                         Save();
                         return;
@@ -44,9 +45,7 @@ public class SaveSystem : Singleton<SaveSystem>
                     Debug.LogWarning("[SaveSystem] 备份恢复失败：" + e.Message);
                 }
             }
-            _data = new SaveData();
-            if (string.IsNullOrEmpty(_data.selectedPlayerSkillId))
-                _data.selectedPlayerSkillId = "heal_spring";
+            _data = CreateFreshSave();
             Save();
             return;
         }
@@ -60,28 +59,8 @@ public class SaveSystem : Singleton<SaveSystem>
                 throw new Exception("反序列化返回null");
             }
 
-            // 修复可能为null的字段
-            _data.talents ??= new System.Collections.Generic.Dictionary<string, int>();
-            if (string.IsNullOrEmpty(_data.selectedPlayerSkillId))
-                _data.selectedPlayerSkillId = PlayerSkillDefs.All[0].id;
-            _data.unlockedLegendaryWeapons ??= new System.Collections.Generic.HashSet<string>();
-            _data.legacyEquipPool ??= new System.Collections.Generic.List<EquipmentData>();
-            _data.townLevel ??= new TownLevel();
-            _data.permanentMercs ??= new System.Collections.Generic.List<MercenaryData>();
-            _data.mailInbox ??= new System.Collections.Generic.List<MailEntry>();
-            _data.npcBonds ??= new System.Collections.Generic.List<NpcBondEntry>();
-            _data.storyChoices ??= new System.Collections.Generic.List<StoryChoiceEntry>();
-            if (_data.maxUnlockedChapter > 1)
-                _data.tutorialDone = true;
-            if (_data.stamina <= 0) _data.stamina = GameConfig.STAMINA_START;
-            if (_data.totalGold > ResourceWallet.DEFAULT_MAX) _data.totalGold = ResourceWallet.DEFAULT_MAX;
-            if (_data.diamond > ResourceWallet.DEFAULT_MAX) _data.diamond = (int)ResourceWallet.DEFAULT_MAX;
-            if (_data.stamina > GameConfig.STAMINA_MAX) _data.stamina = GameConfig.STAMINA_MAX;
-            if (_data.lastStaminaUtc <= 0)
-                _data.lastStaminaUtc = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            StaminaSystem.Tick(save: false);
-
-            Debug.Log($"[SaveSystem] 存档加载成功，金币：{_data.totalGold}");
+            FinalizeLoadedData(_data);
+            Debug.Log($"[SaveSystem] 存档加载成功，金币：{_data.totalGold}，天赋数：{_data.talents.Count}");
         }
         catch (Exception e)
         {
@@ -94,22 +73,27 @@ public class SaveSystem : Singleton<SaveSystem>
                     _data = JsonUtility.FromJson<SaveData>(backupJson);
                     if (_data != null)
                     {
+                        FinalizeLoadedData(_data);
                         Debug.Log("[SaveSystem] 备份恢复成功");
                         Save();
                         return;
                     }
                 }
-                catch { }
+                catch (Exception be)
+                {
+                    Debug.LogWarning("[SaveSystem] 备份恢复异常：" + be.Message);
+                }
             }
-            _data = new SaveData();
-            if (string.IsNullOrEmpty(_data.selectedPlayerSkillId))
-                _data.selectedPlayerSkillId = "heal_spring";
+            _data = CreateFreshSave();
             Save();
         }
     }
 
     public void Save()
     {
+        if (_data == null)
+            _data = CreateFreshSave();
+
         _data.lastSaveTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         try
         {
@@ -119,6 +103,7 @@ public class SaveSystem : Singleton<SaveSystem>
                 File.Copy(savePath, backupPath, true);
             }
 
+            _data.SyncListsFromRuntime();
             string json = JsonUtility.ToJson(_data, true);
             File.WriteAllText(savePath, json);
             Debug.Log("[SaveSystem] 存档保存成功");
@@ -129,34 +114,89 @@ public class SaveSystem : Singleton<SaveSystem>
         }
     }
 
+    static SaveData CreateFreshSave()
+    {
+        var data = new SaveData();
+        data.SyncRuntimeFromLists();
+        if (string.IsNullOrEmpty(data.selectedPlayerSkillId))
+            data.selectedPlayerSkillId = "heal_spring";
+        return data;
+    }
+
+    static void FinalizeLoadedData(SaveData data)
+    {
+        data.SyncRuntimeFromLists();
+        if (string.IsNullOrEmpty(data.selectedPlayerSkillId))
+            data.selectedPlayerSkillId = PlayerSkillDefs.All[0].id;
+        if (data.maxUnlockedChapter > 1)
+            data.tutorialDone = true;
+        // 体力合法可为 0，勿在加载时灌满；仅钳制上限
+        if (data.stamina < 0) data.stamina = 0;
+        if (data.totalGold > ResourceWallet.DEFAULT_MAX) data.totalGold = ResourceWallet.DEFAULT_MAX;
+        if (data.diamond > ResourceWallet.DEFAULT_MAX) data.diamond = (int)ResourceWallet.DEFAULT_MAX;
+        if (data.stamina > GameConfig.STAMINA_MAX) data.stamina = GameConfig.STAMINA_MAX;
+        if (data.lastStaminaUtc <= 0)
+            data.lastStaminaUtc = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        ResourceAdRewards.EnsureDay(data);
+        StaminaSystem.Tick(save: false);
+    }
+
     public long CalcOfflineGold()
     {
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        long offlineSeconds = now - _data.lastSaveTime;
-        float offlineHours = Mathf.Min(offlineSeconds / 3600f, GameConfig.MAX_OFFLINE_HOURS);
-        int goldPerMinute = 10 * _data.townLevel.farm;
-        long gold = (long)(goldPerMinute * offlineHours * 60);
-        return gold;
+        long offlineSeconds = Math.Max(0, now - _data.lastSaveTime);
+        return OfflineGoldCalc.FromSeconds(offlineSeconds, _data.townLevel?.farm ?? 0);
     }
 
     public long ClaimOfflineGold()
     {
         long gold = CalcOfflineGold();
-        ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: true, notify: gold > 0);
+        if (gold > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: true, notify: true);
+        else
+            Save(); // 刷新 lastSaveTime，避免短离线反复 Calc
         return gold;
     }
 
     public void UploadToCloud()
     {
-        // 调用微信云开发/服务器API上传_data的JSON
+        _data.SyncListsFromRuntime();
         string json = JsonUtility.ToJson(_data);
-        // TODO: 微信SDK接入后实现
+        CloudSaveBridge.UploadJson(json, ok =>
+        {
+            if (ok) Debug.Log("[SaveSystem] 云存档上传成功（或本地镜像）");
+            else Debug.LogWarning("[SaveSystem] 云存档上传未完成（等待微信 SDK）");
+        });
     }
 
     public void DownloadFromCloud(Action<bool> onComplete)
     {
-        // TODO: 微信SDK接入后实现
-        onComplete?.Invoke(false);
+        CloudSaveBridge.DownloadJson(json =>
+        {
+            if (string.IsNullOrEmpty(json))
+            {
+                onComplete?.Invoke(false);
+                return;
+            }
+            try
+            {
+                var loaded = JsonUtility.FromJson<SaveData>(json);
+                if (loaded == null)
+                {
+                    onComplete?.Invoke(false);
+                    return;
+                }
+                loaded.SyncRuntimeFromLists();
+                _data = loaded;
+                Save();
+                onComplete?.Invoke(true);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("[SaveSystem] 云存档解析失败: " + e.Message);
+                onComplete?.Invoke(false);
+            }
+        });
     }
 
     /// <summary>调试用：删除本地存档和备份，内存换成新档。测剧情请清档后再进城镇。</summary>
@@ -179,9 +219,7 @@ public class SaveSystem : Singleton<SaveSystem>
 
         BattleStateSaver.Instance?.ClearSavedState();
         StoryProgress.ResetRuntimeFlags();
-        _data = new SaveData();
-        if (string.IsNullOrEmpty(_data.selectedPlayerSkillId))
-            _data.selectedPlayerSkillId = "heal_spring";
+        _data = CreateFreshSave();
         Save();
         Debug.Log("[SaveSystem] 已清除存档，新档 tutorialDone=" + _data.tutorialDone);
     }

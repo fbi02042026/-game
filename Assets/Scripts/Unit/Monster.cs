@@ -36,7 +36,7 @@ public class Monster : UnitBase
 
         // 怪物使用程序化动画，根节点上的 Animator 没有所需参数会报错，直接移除
         Animator animator = GetComponent<Animator>();
-        if (animator != null) DestroyImmediate(animator);
+        if (animator != null) Destroy(animator);
 
         base.Awake();
         if (unitAnim != null)
@@ -200,7 +200,13 @@ public class Monster : UnitBase
             if (foe != null)
             {
                 _isEnteringMap = false;
-                base.AIUpdate();
+                target = foe.isAlly == isAlly ? null : foe;
+                if (target == null)
+                {
+                    IdleWaitForPlayer();
+                    return;
+                }
+                RunForcedCombat();
                 return;
             }
 
@@ -223,13 +229,17 @@ public class Monster : UnitBase
         }
 
         // 无目标：原地朝左待机，等玩家走进索敌范围（禁止向左冲导致擦肩而过）
-        if (FindNearestEnemyInDetectRange() == null)
+        // 只索敌一次，有目标则走 RunForcedCombat，避免再调 base.AIUpdate 重复扫描
+        target = FindNearestEnemyInDetectRange();
+        if (target != null && target.isAlly == isAlly)
+            target = null;
+        if (target == null)
         {
             IdleWaitForPlayer();
             return;
         }
 
-        base.AIUpdate();
+        RunForcedCombat();
     }
 
     void RunForcedCombat()
@@ -373,7 +383,12 @@ public class Monster : UnitBase
         }
 
         float waveMul = 1f + waveNum * 0.05f;
-        attr.SetAttr(AttrType.MaxHp, baseHp * scale * waveMul);
+        float ttkMul = (bossUnit || eliteWave)
+            ? WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit)
+            : (1f + GameConfig.CHAPTER_SCALE_PER * Mathf.Max(0, chapter - 1));
+        // 非精英仍用原 chapterScale；精英/Boss 用 TTK 表（已含章节）
+        float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul);
         attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER);
         attr.SetAttr(AttrType.Defense, baseDef * scale);
         float atkSpeedMul = GameConfig.MONSTER_ATK_SPEED_MUL;
@@ -783,5 +798,6 @@ public class Monster : UnitBase
         _lastAppliedDir = 0;
         _isEnteringMap = false;
         _bossSwingIndex = 0;
+        _forcedTarget = null;
     }
 }

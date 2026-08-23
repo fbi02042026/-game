@@ -143,6 +143,7 @@ public class RestStagePopupUI : MonoBehaviour
         Time.timeScale = 0f;
 
         ApplyHeal();
+        GrantRestMaterials();
         RefreshTexts();
 
         if (closeButton != null)
@@ -177,6 +178,17 @@ public class RestStagePopupUI : MonoBehaviour
                 HealUnit(bm.allyUnits[i]);
         }
         BattleUI.Instance?.UpdateCharacterSlots();
+    }
+
+    void GrantRestMaterials()
+    {
+        var bm = BattleManager.Instance;
+        int stageIdx = bm != null && bm.currentStage != null ? bm.currentStage.stageIndex : 0;
+        int chapter = bm != null ? bm.CurrentChapter : 1;
+        int mats = StageRoller.RestMaterialReward(stageIdx, chapter);
+        if (mats <= 0) return;
+        ResourceWallet.Add(ResourceWallet.ResourceType.DecomposeMat, mats, save: true, notify: true);
+        UIManager.Instance?.ShowToast($"休息补给：强化材料 ×{mats}");
     }
 
     static void HealUnit(UnitBase u)

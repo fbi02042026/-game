@@ -119,7 +119,7 @@ public class CraftStagePopupUI : MonoBehaviour
         if (continueLabel != null)
             continueLabel.text = "继续冒险";
 
-        // 锻造关：发一点强化材料（与原先 LoadForgeStage 一致）
+        // 锻造关：发强化材料 + 尝试升星一件
         if (kind == Kind.Forge)
         {
             var bm = BattleManager.Instance;
@@ -127,6 +127,18 @@ public class CraftStagePopupUI : MonoBehaviour
             int chapter = bm != null ? bm.CurrentChapter : 1;
             int mats = StageRoller.RestMaterialReward(stageIdx, chapter);
             ResourceWallet.Add(ResourceWallet.ResourceType.DecomposeMat, mats, save: true, notify: true);
+            UIManager.Instance?.ShowToast($"获得强化材料 ×{mats}");
+            if (CraftStageApply.TryForgeUpgrade(out string forgeMsg))
+                UIManager.Instance?.ShowToast(forgeMsg);
+            else if (!string.IsNullOrEmpty(forgeMsg))
+                UIManager.Instance?.ShowToast(forgeMsg);
+        }
+        else if (kind == Kind.Enchant)
+        {
+            if (CraftStageApply.TryEnchantRandom(out string enchMsg))
+                UIManager.Instance?.ShowToast(enchMsg);
+            else if (!string.IsNullOrEmpty(enchMsg))
+                UIManager.Instance?.ShowToast(enchMsg);
         }
 
         if (continueButton != null)

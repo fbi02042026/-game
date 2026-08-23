@@ -1,6 +1,28 @@
 using System;
 using System.Collections.Generic;
 
+/// <summary>JsonUtility 可序列化的 string→int 条目。</summary>
+[Serializable]
+public class StringIntEntry
+{
+    public string id;
+    public int value;
+}
+
+/// <summary>JsonUtility 可序列化的 string id 条目。</summary>
+[Serializable]
+public class StringIdEntry
+{
+    public string id;
+}
+
+/// <summary>JsonUtility 可序列化的 int id 条目。</summary>
+[Serializable]
+public class IntIdEntry
+{
+    public int id;
+}
+
 [Serializable]
 public class SaveData
 {
@@ -14,14 +36,22 @@ public class SaveData
     public int stamina = 100;
     /// <summary>体力上次结算 Unix 秒（用于回复）</summary>
     public long lastStaminaUtc = 0;
+    /// <summary>广告奖励日键 yyyyMMdd（UTC）</summary>
+    public string adRewardDayKey = "";
+    /// <summary>当日已领体力广告次数</summary>
+    public int adStaminaClaimCount = 0;
+    /// <summary>当日已领金币广告次数</summary>
+    public int adGoldClaimCount = 0;
     /// <summary>邮件箱（资源溢出等）</summary>
     public List<MailEntry> mailInbox = new List<MailEntry>();
 
-    // === 天赋 ===
-    public Dictionary<string, int> talents = new Dictionary<string, int>();
+    // === 天赋（List 持久化；运行时用 Dictionary）===
+    public List<StringIntEntry> talentEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> talents = new Dictionary<string, int>();
 
     // === 传说武器 ===
-    public HashSet<string> unlockedLegendaryWeapons = new HashSet<string>();
+    public List<StringIdEntry> unlockedLegendaryWeaponEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> unlockedLegendaryWeapons = new HashSet<string>();
 
     // === 遗产装备 ===
     public List<EquipmentData> legacyEquipPool = new List<EquipmentData>();
@@ -42,10 +72,13 @@ public class SaveData
     public int playerVitality = 0;     // 额外体质
 
     // === 成就系统 ===
-    public Dictionary<string, int> achievementProgress = new Dictionary<string, int>(); // 成就ID → 当前进度值
-    public HashSet<string> completedAchievements = new HashSet<string>(); // 已完成的成就ID（用于里程累计）
-    public int totalAchievementPoints = 0; // 总成就点数
-    public HashSet<int> claimedMilestoneIds = new HashSet<int>(); // 已领取的里程奖励ID
+    public List<StringIntEntry> achievementProgressEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> achievementProgress = new Dictionary<string, int>();
+    public List<StringIdEntry> completedAchievementEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> completedAchievements = new HashSet<string>();
+    public int totalAchievementPoints = 0;
+    public List<IntIdEntry> claimedMilestoneEntries = new List<IntIdEntry>();
+    [NonSerialized] public HashSet<int> claimedMilestoneIds = new HashSet<int>();
 
     /// <summary>战前选择的玩家技能 id（PlayerSkillDefs）</summary>
     public string selectedPlayerSkillId = "heal_spring";
@@ -67,6 +100,93 @@ public class SaveData
 
     // === 时间戳 ===
     public long lastSaveTime = 0;
+
+    /// <summary>JsonUtility 反序列化后调用：List → 运行时 Dictionary/HashSet。</summary>
+    public void SyncRuntimeFromLists()
+    {
+        talentEntries ??= new List<StringIntEntry>();
+        unlockedLegendaryWeaponEntries ??= new List<StringIdEntry>();
+        achievementProgressEntries ??= new List<StringIntEntry>();
+        completedAchievementEntries ??= new List<StringIdEntry>();
+        claimedMilestoneEntries ??= new List<IntIdEntry>();
+        mailInbox ??= new List<MailEntry>();
+        legacyEquipPool ??= new List<EquipmentData>();
+        permanentMercs ??= new List<MercenaryData>();
+        npcBonds ??= new List<NpcBondEntry>();
+        storyChoices ??= new List<StoryChoiceEntry>();
+        chapterClearCounts ??= new List<ChapterClearCountEntry>();
+        townLevel ??= new TownLevel();
+
+        talents = new Dictionary<string, int>();
+        for (int i = 0; i < talentEntries.Count; i++)
+        {
+            var e = talentEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            talents[e.id] = e.value;
+        }
+
+        unlockedLegendaryWeapons = new HashSet<string>();
+        for (int i = 0; i < unlockedLegendaryWeaponEntries.Count; i++)
+        {
+            var e = unlockedLegendaryWeaponEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            unlockedLegendaryWeapons.Add(e.id);
+        }
+
+        achievementProgress = new Dictionary<string, int>();
+        for (int i = 0; i < achievementProgressEntries.Count; i++)
+        {
+            var e = achievementProgressEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            achievementProgress[e.id] = e.value;
+        }
+
+        completedAchievements = new HashSet<string>();
+        for (int i = 0; i < completedAchievementEntries.Count; i++)
+        {
+            var e = completedAchievementEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            completedAchievements.Add(e.id);
+        }
+
+        claimedMilestoneIds = new HashSet<int>();
+        for (int i = 0; i < claimedMilestoneEntries.Count; i++)
+        {
+            var e = claimedMilestoneEntries[i];
+            if (e == null) continue;
+            claimedMilestoneIds.Add(e.id);
+        }
+    }
+
+    /// <summary>写入 JSON 前调用：运行时 Dictionary/HashSet → List。</summary>
+    public void SyncListsFromRuntime()
+    {
+        talents ??= new Dictionary<string, int>();
+        unlockedLegendaryWeapons ??= new HashSet<string>();
+        achievementProgress ??= new Dictionary<string, int>();
+        completedAchievements ??= new HashSet<string>();
+        claimedMilestoneIds ??= new HashSet<int>();
+
+        talentEntries = new List<StringIntEntry>(talents.Count);
+        foreach (var kv in talents)
+            talentEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        unlockedLegendaryWeaponEntries = new List<StringIdEntry>(unlockedLegendaryWeapons.Count);
+        foreach (string id in unlockedLegendaryWeapons)
+            unlockedLegendaryWeaponEntries.Add(new StringIdEntry { id = id });
+
+        achievementProgressEntries = new List<StringIntEntry>(achievementProgress.Count);
+        foreach (var kv in achievementProgress)
+            achievementProgressEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        completedAchievementEntries = new List<StringIdEntry>(completedAchievements.Count);
+        foreach (string id in completedAchievements)
+            completedAchievementEntries.Add(new StringIdEntry { id = id });
+
+        claimedMilestoneEntries = new List<IntIdEntry>(claimedMilestoneIds.Count);
+        foreach (int id in claimedMilestoneIds)
+            claimedMilestoneEntries.Add(new IntIdEntry { id = id });
+    }
 }
 
 [Serializable]

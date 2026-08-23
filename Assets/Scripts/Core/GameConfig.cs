@@ -66,22 +66,13 @@ public static class GameConfig
         if (raw > 0.1f && raw <= 10f && Mathf.Abs(raw - RangeSword) > 0.02f)
             return raw;
 
-        string hint = ((tpl.spumName ?? "") + " " + (tpl.equipName ?? "")).ToLower();
-        if (hint.Contains("bow") || hint.Contains("arrow") || hint.Contains("弓"))
-            return RangeBow;
-        if (hint.Contains("staff") || hint.Contains("wand") || hint.Contains("杖"))
-            return RangeStaff;
-        if (hint.Contains("spear") || hint.Contains("pole") || hint.Contains("枪") || hint.Contains("halberd"))
-            return RangePolearm;
-        if (hint.Contains("great") || hint.Contains("大剑") || hint.Contains("twohand"))
-            return RangeGreatsword;
+        return WeaponCombatTable.GetAttackRangeWorld(WeaponCombatTable.ResolveKind(tpl));
+    }
 
-        if (tpl.weaponAttackType == WeaponAttackType.Magic)
-            return RangeStaff;
-        if (tpl.weaponType == WeaponType.TwoHand)
-            return RangeGreatsword;
-
-        return RangeSword;
+    /// <summary>从装备模板解析基础攻速（次/秒）</summary>
+    public static float ResolveWeaponAttackSpeed(EquipTemplate tpl)
+    {
+        return WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.ResolveKind(tpl));
     }
 
     [Header("武器攻击范围(像素) — 对齐《像素冒险_数值表》武器属性表")]
@@ -251,8 +242,10 @@ public static class GameConfig
     public const float BASE_MOVE_SPEED = 1.2f;
     /// <summary>进战斗后首波刷怪延迟（秒）</summary>
     public const float FIRST_WAVE_SPAWN_DELAY = 1.5f;
-    /// <summary>临时：仅玩家单人战斗（不生成/显示佣兵）。引导关会单独刷老盾。</summary>
-    public const bool SOLO_PLAYER_BATTLE = true;
+    /// <summary>
+    /// 仅玩家单人战斗（不生成/显示佣兵）。正式局默认 false；引导关仍单独刷救援佣兵。
+    /// </summary>
+    public static bool SOLO_PLAYER_BATTLE = false;
     /// <summary>怪刷在英雄前方多远（原地等玩家走过来）</summary>
     public const float MONSTER_ENGAGE_OFFSET = 4.0f;
     /// <summary>怪物远程射程倍率（相对数值表弓射程）</summary>
@@ -309,6 +302,10 @@ public static class GameConfig
     public const float PROJECTILE_ATK_SPEED_MUL = 0.5f;
     /// <summary>章节系数：0.15×(n-1)</summary>
     public const float CHAPTER_SCALE_PER = 0.15f;
+    /// <summary>精英额外 TTK 血量倍率（叠在章节系数上）</summary>
+    public const float ELITE_TTK_HP_MUL = 1.15f;
+    /// <summary>Boss 额外 TTK 血量倍率</summary>
+    public const float BOSS_TTK_HP_MUL = 1.35f;
     /// <summary>公会等级系数：0.02×公会等级</summary>
     public const float GUILD_SCALE_PER = 0.02f;
 

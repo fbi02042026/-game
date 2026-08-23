@@ -220,7 +220,7 @@ public class TownSystem : Singleton<TownSystem>
     #region 农场离线收益
 
     /// <summary>
-    /// 计算离线收益
+    /// 计算离线收益（统一走 OfflineGoldCalc；实际领取仅 TownSceneBootstrap）
     /// </summary>
     public long CalculateOfflineReward(DateTime lastOnlineTime)
     {
@@ -230,21 +230,8 @@ public class TownSystem : Singleton<TownSystem>
         var farmLevel = GetBuildingLevel(BuildingType.Farm);
         if (farmLevel <= 0) return 0;
 
-        // 离线时长（分钟）
-        TimeSpan offlineDuration = DateTime.Now - lastOnlineTime;
-        double offlineMinutes = offlineDuration.TotalMinutes;
-
-        // 最大离线时长（小时）
-        int maxHours = 8 + (farmLevel - 1) * 2;
-        double maxMinutes = maxHours * 60;
-
-        // 实际计算时长
-        double calcMinutes = Math.Min(offlineMinutes, maxMinutes);
-
-        // 收益 = 农场等级 * 10金/分钟
-        long reward = (long)(farmLevel * 10 * calcMinutes);
-
-        return reward;
+        long secs = (long)Math.Max(0, (DateTime.Now - lastOnlineTime).TotalSeconds);
+        return OfflineGoldCalc.FromSeconds(secs, farmLevel);
     }
 
     #endregion

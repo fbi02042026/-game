@@ -179,8 +179,8 @@ public static class StageRoller
             case StageType.Forge: return "锻造关卡";
             case StageType.Enchant: return "附魔关卡";
             case StageType.Boss: return "首领关卡";
-            case StageType.Merchant: return "商人关卡";
-            case StageType.Curse: return "诅咒关卡";
+            case StageType.Merchant: return "（未开放）";
+            case StageType.Curse: return "（未开放）";
             default: return "未知关卡";
         }
     }
@@ -195,8 +195,8 @@ public static class StageRoller
             case StageType.Forge: return "打造 / 强化一件装备";
             case StageType.Enchant: return "为装备附加随机词条";
             case StageType.Boss: return "章节首领，必掉高品质装备";
-            case StageType.Merchant: return "花金币购买装备";
-            case StageType.Curse: return "三选一，高风险高收益";
+            case StageType.Merchant:
+            case StageType.Curse: return "本版本未开放";
             default: return string.Empty;
         }
     }
@@ -212,8 +212,8 @@ public static class StageRoller
             case StageType.Forge: return new Color(0.66f, 0.44f, 0.20f);
             case StageType.Enchant: return new Color(0.28f, 0.52f, 0.66f);
             case StageType.Boss: return new Color(0.68f, 0.22f, 0.22f);
-            case StageType.Merchant: return new Color(0.62f, 0.56f, 0.24f);
-            case StageType.Curse: return new Color(0.40f, 0.24f, 0.48f);
+            case StageType.Merchant:
+            case StageType.Curse: return new Color(0.35f, 0.35f, 0.38f);
             default: return new Color(0.35f, 0.35f, 0.35f);
         }
     }
@@ -229,8 +229,8 @@ public static class StageRoller
             case StageType.Forge: return "stage_forge";
             case StageType.Enchant: return "stage_enchant";
             case StageType.Boss: return "stage_boss";
-            case StageType.Merchant: return "stage_merchant";
-            case StageType.Curse: return "stage_curse";
+            case StageType.Merchant:
+            case StageType.Curse: return "stage_normal";
             default: return "stage_normal";
         }
     }

@@ -82,6 +82,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
             return true;
         }
 
+        StoryProgress.QueueTutorialBattle();
         AdventureUI.PendingBattleChapter = 1;
         AdventureUI.PendingBattleDifficulty = 0;
         AdventureUI.PendingGoldDungeon = false;
@@ -407,7 +408,16 @@ public class TutorialDirector : Singleton<TutorialDirector>
     static IEnumerator TalkHeld(BattleManager bm, BattleHeadTalkUI talk, UnitBase speaker,
         string content, float hold)
     {
-        if (talk == null || speaker == null || speaker.isDead) yield break;
+        if (talk == null)
+        {
+            Debug.LogWarning("[Tutorial] TalkHeld: BattleHeadTalkUI 为空，跳过台词");
+            yield break;
+        }
+        if (speaker == null || speaker.isDead)
+        {
+            Debug.LogWarning($"[Tutorial] TalkHeld: 说话人缺失/已死，跳过「{content}」");
+            yield break;
+        }
 
         bool prev = bm != null ? bm.UnitsCanAct : true;
         if (bm != null) bm.UnitsCanAct = false;
@@ -443,6 +453,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return null;
         ui?.ApplySoloBattleHudPublic();
         ui?.UpdateCharacterSlots();
+        // 救援佣兵出现后补绑技能点击（SOLO 下原先会跳过）
+        ui?.RebindAfterSystemsReady();
     }
 
     IEnumerator OfferTutorialEquip()

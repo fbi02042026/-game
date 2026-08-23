@@ -27,7 +27,12 @@ public static class CliAndroidBuild
 
         AppIconSetup.Apply();
 
-        // 仅 ARM64（64 位）
+        // 切到 Android 再设架构，否则 batchmode 下会报 Target architecture not specified
+        if (!EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android))
+            throw new System.Exception("Failed to switch active build target to Android.");
+
+        // ARM64 需要 IL2CPP；仅 ARM64（64 位）
+        PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
         PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
 
         EditorUserBuildSettings.development = development;
@@ -40,6 +45,7 @@ public static class CliAndroidBuild
             scenes = scenes,
             locationPathName = Path.Combine(OutDir, apkName),
             target = BuildTarget.Android,
+            targetGroup = BuildTargetGroup.Android,
             options = development
                 ? BuildOptions.Development | BuildOptions.AllowDebugging
                 : BuildOptions.None

@@ -117,9 +117,18 @@ public class GuildHallUI : MonoBehaviour
     IEnumerator StaminaHudLoop()
     {
         var wait = new WaitForSecondsRealtime(0.5f);
+        float sinceSave = 0f;
         while (true)
         {
+            StaminaSystem.Tick(save: false);
             RefreshStamina();
+            sinceSave += 0.5f;
+            // 约每 30 秒落盘一次体力回复，避免杀进程丢进度
+            if (sinceSave >= 30f)
+            {
+                sinceSave = 0f;
+                SaveSystem.Instance?.Save();
+            }
             yield return wait;
         }
     }
@@ -223,6 +232,8 @@ public class GuildHallUI : MonoBehaviour
             {
                 Transform t = FindDeepChild(goldPanel, "GoldText");
                 if (t != null) goldText = t.GetComponent<Text>();
+                Transform plus = FindDeepChild(goldPanel, "PlusButton");
+                if (plus != null) goldPlusButton = plus.GetComponent<Button>();
             }
         }
     }
@@ -255,32 +266,58 @@ public class GuildHallUI : MonoBehaviour
         staminaRegenText = text;
     }
 
+    void HideUnfinishedHallButtons()
+    {
+        SetBtnHidden(shopButton);
+        SetBtnHidden(noticeButton);
+        SetBtnHidden(rankButton);
+        SetBtnHidden(noticeBoardButton);
+        // 金币/体力加号保留，按存档发放
+    }
+
     void WireHallClicks()
     {
         // 导航改由 MainBottomNav 负责，这里只接大厅自身控件
-        if (shopButton != null)
-            shopButton.onClick.AddListener(() => Debug.Log("[GuildHall] 商城（待实现）"));
+        HideUnfinishedHallButtons();
+
         if (settingsButton != null)
             settingsButton.onClick.AddListener(() => BattleSettingsPanel.Ensure().Open());
         if (mailButton != null)
             mailButton.onClick.AddListener(OnMailClicked);
-        if (noticeButton != null)
-            noticeButton.onClick.AddListener(() => Debug.Log("[GuildHall] 公告（待实现）"));
-        if (activityButton != null)
-            activityButton.onClick.AddListener(() => Debug.Log("[GuildHall] 活动（待实现）"));
-        if (rankButton != null)
-            rankButton.onClick.AddListener(() => Debug.Log("[GuildHall] 排行榜（待实现）"));
-        if (noticeBoardButton != null)
-            noticeBoardButton.onClick.AddListener(() => Debug.Log("[GuildHall] 公告板（待实现）"));
         if (licenseHallButton != null)
-            licenseHallButton.onClick.AddListener(() => Debug.Log("[GuildHall] 执照大厅（待实现）"));
+            licenseHallButton.onClick.AddListener(OnLicenseHall);
         if (armoryButton != null)
-            armoryButton.onClick.AddListener(() => Debug.Log("[GuildHall] 武器库（待实现）"));
-        // receptionist：由 SpeechBubbleTalker 接线
+            armoryButton.onClick.AddListener(LegacyPoolBrowseUI.Show);
+        if (activityButton != null)
+            activityButton.onClick.AddListener(() => AchievementMilestoneUI.Show());
         if (goldPlusButton != null)
-            goldPlusButton.onClick.AddListener(() => Debug.Log("[GuildHall] 金币加号（待实现）"));
+        {
+            goldPlusButton.gameObject.SetActive(true);
+            goldPlusButton.onClick.RemoveAllListeners();
+            goldPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimGold);
+        }
         if (staminaPlusButton != null)
-            staminaPlusButton.onClick.AddListener(() => Debug.Log("[GuildHall] 体力加号（待实现）"));
+        {
+            staminaPlusButton.gameObject.SetActive(true);
+            staminaPlusButton.onClick.RemoveAllListeners();
+            staminaPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimStamina);
+        }
+    }
+
+    static void SetBtnHidden(Button btn)
+    {
+        if (btn != null) btn.gameObject.SetActive(false);
+    }
+
+    void OnLicenseHall()
+    {
+        TownSaveAlign.AlignAll();
+        var data = SaveSystem.Instance?.Data;
+        int guild = data != null ? data.guildLevel : 1;
+        int mercs = TownSaveAlign.DeployMercCount();
+        int legacy = TownSaveAlign.LegacyPoolCount();
+        UIManager.Instance?.ShowToast($"公会 Lv{guild} · 出战佣兵 {mercs} · 遗产 {legacy}");
+        AchievementMilestoneUI.Show();
     }
 
     void OnMailClicked()

@@ -47,6 +47,9 @@ public class StageClearRewardDirector : MonoBehaviour
 
     public void CacheSceneRefs()
     {
+        // 每次进战必须按当前场景重采，避免 DDOL 导演沿用上一局坐标/缩放
+        InvalidateSceneCache();
+
         var wr = GameObject.Find("WorldRoot");
         Transform root = wr != null ? wr.transform : null;
         // 外层 WorldRoot/box（缩放挂这里，不动动画本地曲线）
@@ -77,24 +80,34 @@ public class StageClearRewardDirector : MonoBehaviour
             _closeSr = closeT != null ? closeT.GetComponent<SpriteRenderer>() : null;
             _openSr = openT != null ? openT.GetComponent<SpriteRenderer>() : null;
             _effectRoot = FindChildIgnoreCase(_boxAnimHost, "effect");
-            if (!_baseScaleCached)
-            {
-                _boxBaseScale = _boxRoot.localScale;
-                if (_boxBaseScale == Vector3.zero) _boxBaseScale = Vector3.one;
-                _effectBaseScale = _effectRoot != null ? _effectRoot.localScale : Vector3.one;
-                if (_effectBaseScale == Vector3.zero) _effectBaseScale = Vector3.one;
-                _baseScaleCached = true;
-            }
-            if (!_boxScenePosCached)
-            {
-                _boxScenePos = _boxRoot.position;
-                _boxScenePosCached = true;
-            }
+            _boxBaseScale = _boxRoot.localScale;
+            if (_boxBaseScale == Vector3.zero) _boxBaseScale = Vector3.one;
+            _effectBaseScale = _effectRoot != null ? _effectRoot.localScale : Vector3.one;
+            if (_effectBaseScale == Vector3.zero) _effectBaseScale = Vector3.one;
+            _baseScaleCached = true;
+            _boxScenePos = _boxRoot.position;
+            _boxScenePosCached = true;
             EnsureBoxController();
             _boxRoot.gameObject.SetActive(false);
         }
         if (_chuansongmen != null)
             _chuansongmen.gameObject.SetActive(false);
+    }
+
+    /// <summary>切场景 / 重开战后调用，强制下次 CacheSceneRefs 重新采样。</summary>
+    public void InvalidateSceneCache()
+    {
+        _baseScaleCached = false;
+        _boxScenePosCached = false;
+        _boxRoot = null;
+        _boxAnimHost = null;
+        _effectRoot = null;
+        _closeSr = null;
+        _openSr = null;
+        _boxAnim = null;
+        _chuansongmen = null;
+        StopAllCoroutines();
+        _running = false;
     }
 
     void EnsureBoxController()
@@ -338,29 +351,41 @@ public class StageClearRewardDirector : MonoBehaviour
         if (picked != null && doEquip)
         {
             if (GridBackpackSystem.Instance != null && GridBackpackSystem.Instance.TryEquipFromReward(picked))
+            {
                 AchievementSystem.Instance?.OnObtainEquip(picked.rarity);
+                UIManager.Instance?.ShowToast($"已装备：{picked.equipName ?? picked.templateId}");
+            }
             else
             {
-                // 装备失败则折金
-                bm.currentGold += ScrapGold(picked);
+                int g = ScrapGold(picked);
+                bm.currentGold += g;
                 BattleUI.Instance?.UpdateGold(bm.currentGold);
+                UIManager.Instance?.ShowToast($"穿装失败，折合金币 +{g}");
             }
         }
         else if (picked != null)
         {
-            bm.currentGold += ScrapGold(picked);
+            int g = ScrapGold(picked);
+            bm.currentGold += g;
             BattleUI.Instance?.UpdateGold(bm.currentGold);
+            UIManager.Instance?.ShowToast($"已丢弃，折合金币 +{g}");
         }
 
         if (show != null)
         {
+            int scrapTotal = 0;
             for (int i = 0; i < show.Count; i++)
             {
                 var e = show[i];
                 if (e == null || e == picked) continue;
-                bm.currentGold += ScrapGold(e);
+                scrapTotal += ScrapGold(e);
             }
-            BattleUI.Instance?.UpdateGold(bm.currentGold);
+            if (scrapTotal > 0)
+            {
+                bm.currentGold += scrapTotal;
+                BattleUI.Instance?.UpdateGold(bm.currentGold);
+                UIManager.Instance?.ShowToast($"其余折合金币 +{scrapTotal}");
+            }
         }
     }
 

@@ -68,7 +68,6 @@ public class NextStageRouletteUI : MonoBehaviour
     int _winnerSlot;
     float _offset;
     bool _stopRequested;
-    bool _builtByCode;
 
     /// <summary>打开轮盘。stage.type 必须已由 StageRoller 抽好。</summary>
     public static void Show(int chapter, StageData stage, Action<StageData> onEnter)
@@ -111,7 +110,6 @@ public class NextStageRouletteUI : MonoBehaviour
             go.AddComponent<GraphicRaycaster>();
             ui = go.AddComponent<NextStageRouletteUI>();
             BuildHierarchy(go);
-            ui._builtByCode = true;
         }
 
         EnsureEventSystem();

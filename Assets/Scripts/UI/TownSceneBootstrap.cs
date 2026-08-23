@@ -16,6 +16,7 @@ public class TownSceneBootstrap : MonoBehaviour
     {
         IsLoadComplete = false;
         _done = false;
+        _offlineClaimedThisTownVisit = false;
     }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -107,7 +108,35 @@ public class TownSceneBootstrap : MonoBehaviour
         yield return null;
         yield return null;
         TownHubController.ConsumePendingAdventure();
+        TryClaimTownOfflineReward();
         TutorialDirector.Instance?.NotifyTownReady();
+    }
+
+    static bool _offlineClaimedThisTownVisit;
+
+    /// <summary>进城镇一次最多弹一次离线收益（农场金）。</summary>
+    static void TryClaimTownOfflineReward()
+    {
+        if (_offlineClaimedThisTownVisit) return;
+        var save = SaveSystem.Instance;
+        if (save?.Data == null) return;
+
+        long now = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        long secs = System.Math.Max(0, now - save.Data.lastSaveTime);
+        if (secs < 60) return; // 不足 1 分钟不弹
+
+        int farm = save.Data.townLevel != null ? save.Data.townLevel.farm : 0;
+        long gold = save.CalcOfflineGold();
+        _offlineClaimedThisTownVisit = true;
+        if (gold <= 0)
+        {
+            save.Save();
+            return;
+        }
+
+        ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: true, notify: false);
+        double maxMin = (8 + farm * 2) * 60.0;
+        OfflineRewardPopup.Show(gold, System.Math.Min(secs / 60.0, maxMin));
     }
 
     void OnDestroy()

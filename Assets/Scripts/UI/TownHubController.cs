@@ -14,6 +14,7 @@ public class TownHubController : MonoBehaviour
     static GameObject _tavernPrefabCache;
     static GameObject _adventurePrefabCache;
 
+    AdventureLogUI _log;
     TavernUI _tavern;
     AdventureUI _adventure;
     CharacterUI _character;
@@ -29,6 +30,7 @@ public class TownHubController : MonoBehaviour
 
     void Start()
     {
+        TownSaveAlign.AlignAll();
         EnsureWired();
         if (!_pagesPreloaded)
             PreloadAllPages();
@@ -46,12 +48,14 @@ public class TownHubController : MonoBehaviour
 
     public void OpenAdventure()
     {
+        TownSaveAlign.AlignAll();
         EnsureWired();
         if (!_pagesPreloaded) PreloadAllPages();
         // 撤离回城时不要再被教程拦截进战斗
         _nav?.SetSelected(MainNavTab.Adventure, notify: false);
         _tavern?.HidePage();
         _character?.HidePage();
+        _log?.HidePage();
         _adventure?.ShowPage();
         _current = MainNavTab.Adventure;
         GameBgm.Play(GameBgm.Track.Town);
@@ -81,6 +85,7 @@ public class TownHubController : MonoBehaviour
         EnsureTavernPreloaded();
         EnsureAdventurePreloaded();
         EnsureCharacterPreloaded();
+        EnsureLogPreloaded();
         _pagesPreloaded = true;
         ShowGuildOnly();
         if (_nav != null)
@@ -105,16 +110,10 @@ public class TownHubController : MonoBehaviour
 
     bool OnTabOverride(MainNavTab tab)
     {
-        if (tab == MainNavTab.Guild || tab == MainNavTab.Tavern || tab == MainNavTab.Adventure || tab == MainNavTab.Character)
+        if (tab == MainNavTab.Guild || tab == MainNavTab.Tavern || tab == MainNavTab.Adventure
+            || tab == MainNavTab.Character || tab == MainNavTab.Log)
         {
             SwitchTab(tab);
-            return true;
-        }
-        if (tab == MainNavTab.Log)
-        {
-            UIManager.Instance?.ShowToast("冒险日志（待实现）");
-            if (_current == MainNavTab.Tavern || _current == MainNavTab.Adventure || _current == MainNavTab.Character)
-                SwitchTab(MainNavTab.Guild);
             return true;
         }
         return false;
@@ -134,6 +133,7 @@ public class TownHubController : MonoBehaviour
             TutorialDirector.Instance?.NotifyTownTab(tab);
             _adventure?.HidePage();
             _character?.HidePage();
+            _log?.HidePage();
             _tavern?.ShowPage();
             GameBgm.Play(GameBgm.Track.Tavern);
         }
@@ -144,6 +144,7 @@ public class TownHubController : MonoBehaviour
 
             _tavern?.HidePage();
             _character?.HidePage();
+            _log?.HidePage();
             _adventure?.ShowPage();
             GameBgm.Play(GameBgm.Track.Town);
         }
@@ -152,7 +153,17 @@ public class TownHubController : MonoBehaviour
             TutorialDirector.Instance?.NotifyTownTab(tab);
             _tavern?.HidePage();
             _adventure?.HidePage();
+            _log?.HidePage();
             _character?.ShowPage();
+            GameBgm.Play(GameBgm.Track.Town);
+        }
+        else if (tab == MainNavTab.Log)
+        {
+            _tavern?.HidePage();
+            _adventure?.HidePage();
+            _character?.HidePage();
+            EnsureLogPreloaded();
+            _log?.ShowPage();
             GameBgm.Play(GameBgm.Track.Town);
         }
         else
@@ -160,6 +171,7 @@ public class TownHubController : MonoBehaviour
             _tavern?.HidePage();
             _adventure?.HidePage();
             _character?.HidePage();
+            _log?.HidePage();
             ShowGuildOnly();
             GameBgm.Play(GameBgm.Track.Town);
         }
@@ -207,12 +219,31 @@ public class TownHubController : MonoBehaviour
         _character.HidePage();
     }
 
+    void EnsureLogPreloaded()
+    {
+        if (_log != null) return;
+        var go = new GameObject("AdventureLogUI", typeof(RectTransform));
+        go.transform.SetParent(transform, false);
+        Stretch(go);
+        _log = go.AddComponent<AdventureLogUI>();
+        _log.PreloadOnce();
+        _log.HidePage();
+    }
+
     public void OpenCharacter()
     {
         EnsureWired();
         if (!_pagesPreloaded) PreloadAllPages();
         _nav?.SetSelected(MainNavTab.Character, notify: true);
         SwitchTab(MainNavTab.Character);
+    }
+
+    public void OpenAdventureLog()
+    {
+        EnsureWired();
+        if (!_pagesPreloaded) PreloadAllPages();
+        _nav?.SetSelected(MainNavTab.Log, notify: false);
+        SwitchTab(MainNavTab.Log);
     }
 
     void EnsureAdventurePreloaded()

@@ -159,6 +159,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
         int max = GetMaxUnlockedChapter();
         if (_selectedChapter < 1 || _selectedChapter > max)
             _selectedChapter = max;
+        HideUnfinishedEntries();
         RefreshAll();
     }
 
@@ -811,14 +812,33 @@ public class AdventureUI : MonoBehaviour, ITownPage
         prevChapterBtn?.onClick.AddListener(OnPrevChapter);
         nextChapterBtn?.onClick.AddListener(OnNextChapter);
         startBtn?.onClick.AddListener(OnStartBattle);
-        sweepBtn?.onClick.AddListener(OnSweep);
-        chapterRewardBtn?.onClick.AddListener(OnChapterReward);
+        // 扫荡 / 章节奖励未做：隐藏入口
+        if (sweepBtn != null) sweepBtn.gameObject.SetActive(false);
+        if (chapterRewardBtn != null) chapterRewardBtn.gameObject.SetActive(false);
         adventureLogBtn?.onClick.AddListener(OnAdventureLog);
         addChancesBtn?.onClick.AddListener(OnAddChances);
 
+        HideUnfinishedEntries();
         BindMapLayers();
         WireEnemyIconClicks();
         WireBoxReward();
+    }
+
+    /// <summary>隐藏尚未实现的玩法入口，避免误点「即将开放」。</summary>
+    void HideUnfinishedEntries()
+    {
+        // 模式：仅保留主线(0)与活动副本(4)；每日/迷宫/BOSS挑战隐藏
+        for (int i = 0; i < modeButtons.Length; i++)
+        {
+            if (modeButtons[i] == null) continue;
+            bool keep = i == 0 || IsActivityMode(i);
+            modeButtons[i].gameObject.SetActive(keep);
+        }
+        // 难度：隐藏「地狱」(index 3)
+        if (difficultyButtons != null && difficultyButtons.Length > 3 && difficultyButtons[3] != null)
+            difficultyButtons[3].gameObject.SetActive(false);
+        if (addChancesBtn != null)
+            addChancesBtn.gameObject.SetActive(false);
     }
 
     /// <summary>StageNodes 下是整张章节地图（Node_1..8），不是关卡图标。关掉 Button 避免点按变色。</summary>
@@ -954,7 +974,12 @@ public class AdventureUI : MonoBehaviour, ITownPage
     }
 
     void OnChapterReward() => Toast("章节奖励（即将开放）");
-    void OnAdventureLog()  => Toast("冒险日志（即将开放）");
+    void OnAdventureLog()
+    {
+        var hub = TownHubController.Instance;
+        if (hub != null) hub.OpenAdventureLog();
+        else Toast("请从底栏打开冒险日志");
+    }
     void OnAddChances()    => Toast("主线不限次数");
 
     void OnStartBattle()
@@ -982,6 +1007,10 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
     void TryEnterBattle()
     {
+        // 丢弃半残战斗存档，避免进战无怪 / 脏 Prefs
+        if (BattleStateSaver.Instance != null && BattleStateSaver.Instance.HasSavedBattle())
+            BattleStateSaver.Instance.ClearBattleState();
+
         if (!StaminaSystem.TrySpendForAdventure())
         {
             Toast("体力不足");
@@ -993,6 +1022,11 @@ public class AdventureUI : MonoBehaviour, ITownPage
         PendingGoldDungeon = IsActivityMode(_selectedMode);
         ChapterManager.Instance?.SetChapter(_selectedChapter);
         HidePage();
+        int legacyCount = SaveSystem.Instance?.Data?.legacyEquipPool?.Count ?? 0;
+        if (legacyCount > 0)
+            Toast($"遗产池 {legacyCount} 件 → 开战前三选一");
+        else
+            Toast("无遗产：开战前将提供基础装备三选一");
         GameSceneManager.Instance?.LoadBattleScene();
     }
 

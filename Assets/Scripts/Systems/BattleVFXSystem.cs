@@ -74,9 +74,12 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
                 {
                     GameObject fly = LoadSharedKit(kit, faction, "fly");
                     GameObject hit = LoadSharedKit(kit, faction, "hit");
-                    if (fly == null && hit == null)
+                    if (fly == null)
                     {
-                        Debug.LogWarning($"[VFX] 缺少共享特效: {faction}/{kit}");
+                        // 禁止回退我方箭；无飞行体则只播命中（近距）或告警
+                        Debug.LogWarning($"[VFX] 缺少飞行体: {faction}/{kit}/fly，不回退 Ally");
+                        if (hit != null)
+                            ApplyFactionLook(SpawnVFX(hit, toPos, defaultDuration, null), faction);
                         return;
                     }
                     Vector3 bowFrom = fromPos;
@@ -88,9 +91,11 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
                 {
                     GameObject fly = LoadSharedKit(kit, faction, "fly");
                     GameObject hit = LoadSharedKit(kit, faction, "hit");
-                    if (fly == null && hit == null)
+                    if (fly == null)
                     {
-                        Debug.LogWarning($"[VFX] 缺少共享特效: {faction}/{kit}");
+                        Debug.LogWarning($"[VFX] 缺少飞行体: {faction}/{kit}/fly，不回退 Ally");
+                        if (hit != null)
+                            ApplyFactionLook(SpawnVFX(hit, toPos, defaultDuration, null), faction);
                         return;
                     }
                     PlayOrbProjectile(fromPos, toPos, facingDir, hitTarget, faction, fly, hit);
@@ -147,9 +152,14 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         Transform target = null, VfxFaction faction = VfxFaction.Ally,
         GameObject flyOverride = null, GameObject impactOverride = null)
     {
-        GameObject fly = flyOverride != null ? flyOverride : (vfxFireball != null ? vfxFireball : vfxMagicImpact);
-        GameObject impact = impactOverride != null ? impactOverride : (vfxMagicImpact != null ? vfxMagicImpact : vfxFireImpact);
-        if (fly == null) return;
+        // 仅使用调用方传入的阵营资源；禁止静默回退 Ally 球
+        GameObject fly = flyOverride;
+        GameObject impact = impactOverride;
+        if (fly == null)
+        {
+            Debug.LogWarning($"[VFX] PlayOrbProjectile 无飞行体 faction={faction}");
+            return;
+        }
         StartCoroutine(ProjectileFlightCoroutine(fly, impact, fromPos, toPos, facingDir, target, faction));
     }
 
@@ -157,9 +167,13 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         Transform target = null, VfxFaction faction = VfxFaction.Ally,
         GameObject flyOverride = null, GameObject impactOverride = null)
     {
-        GameObject fly = flyOverride != null ? flyOverride : (vfxFireball != null ? vfxFireball : vfxMagicImpact);
-        GameObject impact = impactOverride != null ? impactOverride : (vfxSlash != null ? vfxSlash : vfxMagicImpact);
-        if (fly == null) return;
+        GameObject fly = flyOverride;
+        GameObject impact = impactOverride;
+        if (fly == null)
+        {
+            Debug.LogWarning($"[VFX] PlayBowProjectile 无飞行体 faction={faction}");
+            return;
+        }
         StartCoroutine(ProjectileFlightCoroutine(fly, impact, fromPos, toPos, facingDir, target, faction));
     }
 
@@ -211,6 +225,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         if (distance < 0.05f) distance = 0.05f;
         Vector3 dirN = flightDir.sqrMagnitude > 1e-8f ? flightDir.normalized : Vector3.right * (facingDir >= 0 ? 1f : -1f);
         float speed = Mathf.Max(0.1f, projectileSpeed * Mathf.Max(0.05f, speedMul));
+        float duration = Mathf.Clamp(distance / speed, minFlightTime, maxFlightTime);
+        speed = distance / Mathf.Max(0.0001f, duration);
 
         GameObject projectile = Instantiate(projectilePrefab, fromPos, Quaternion.identity);
         projectile.transform.SetParent(transform);
@@ -387,22 +403,51 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
     #region 生成与排序
 
+    HashSet<string> _vfxPoolWarmed = new HashSet<string>();
+
     GameObject SpawnVFX(GameObject prefab, Vector3 position, float lifetime, Transform parentTarget = null)
     {
         if (prefab == null) return null;
-        // 保留预制体旋转与缩放，只改世界坐标
-        GameObject go = Instantiate(prefab, position, prefab.transform.rotation);
+        GameObject go = null;
+        if (PoolManager.Instance != null)
+        {
+            string poolKey = "vfx:" + prefab.name;
+            if (!_vfxPoolWarmed.Contains(poolKey))
+            {
+                PoolManager.Instance.Preload(poolKey, prefab, 3);
+                _vfxPoolWarmed.Add(poolKey);
+            }
+            go = PoolManager.Instance.Get(poolKey, position, prefab.transform.rotation);
+        }
+        if (go == null)
+            go = Instantiate(prefab, position, prefab.transform.rotation);
+
         Vector3 prefabScale = prefab.transform.localScale;
         if (parentTarget != null)
             go.transform.SetParent(parentTarget, true);
         else
             go.transform.SetParent(transform, true);
         go.transform.localScale = prefabScale;
+        go.SetActive(true);
 
         SetVFXSortingLayer(go.transform);
         PlayAllParticles(go);
-        Destroy(go, lifetime);
+
+        if (PoolManager.Instance != null && _vfxPoolWarmed.Count > 0)
+            StartCoroutine(CoReleaseVfx(go, lifetime));
+        else
+            Destroy(go, lifetime);
         return go;
+    }
+
+    IEnumerator CoReleaseVfx(GameObject go, float lifetime)
+    {
+        yield return new WaitForSecondsRealtime(Mathf.Max(0.05f, lifetime));
+        if (go == null) yield break;
+        if (PoolManager.Instance != null)
+            PoolManager.Instance.Release(go);
+        else
+            Destroy(go);
     }
 
     static void PlayAllParticles(GameObject go)

@@ -47,6 +47,7 @@ public class BootManager : MonoBehaviour
 
     void Start()
     {
+        WeChatMiniGameConfig.EnsureDesignResolution();
         if (!GameSceneGate.IsBoot) return;
         ShowLogin();
     }
