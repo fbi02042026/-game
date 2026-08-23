@@ -46,7 +46,7 @@ public class BattleStateSaver : MonoBehaviour
     }
 
     /// <summary>
-    /// 保存当前战斗状态（软著版关闭：Restore 未接 LoadStage，写入会造成假续关）
+    /// 保存当前战斗状态（本版关闭：Restore 未接 LoadStage，写入会造成假续关）
     /// </summary>
     public void SaveBattleState()
     {
@@ -73,12 +73,12 @@ public class BattleStateSaver : MonoBehaviour
     }
 
     /// <summary>
-    /// 恢复战斗状态（软著版未接入；保留实现供后续续关）
+    /// 恢复战斗状态（本版未接入；保留实现供后续续关）
     /// </summary>
     public bool RestoreBattleState()
     {
         ClearBattleState();
-        Debug.Log("[BattleStateSaver] 软著版不支持中断续关，已清档");
+        Debug.Log("[BattleStateSaver] 本版不支持中断续关，已清档");
         return false;
     }
 

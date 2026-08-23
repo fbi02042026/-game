@@ -30,13 +30,23 @@ public static class TownSaveAlign
         int slots = Mathf.Clamp(data.townLevel.tavern, 0, 2);
         data.townLevel.tavern = slots;
 
-        // 好兵好感下限，避免 UI 显示异常
+        // 好兵字段下限，避免 UI 显示异常
         for (int i = 0; i < data.permanentMercs.Count; i++)
         {
             var m = data.permanentMercs[i];
             if (m == null) continue;
             if (m.favorLevel < 0) m.favorLevel = 0;
             if (m.level < 1) m.level = 1;
+            if (m.star < 1) m.star = 1;
+            if (m.star > 5) m.star = 5;
+            if (string.IsNullOrEmpty(m.uid))
+                m.uid = System.Guid.NewGuid().ToString("N");
+            if (string.IsNullOrEmpty(m.displayName))
+                m.displayName = m.mercId;
+            if (string.IsNullOrEmpty(m.skillId))
+                m.skillId = SkillRegistry.Instance != null
+                    ? SkillRegistry.Instance.GetMercDefaultSkillId(m.mercId)
+                    : SkillRegistry.DefaultMercMeleeSkillId;
         }
 
         StoryProgress.EnsureLists(data);

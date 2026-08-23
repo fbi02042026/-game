@@ -25,7 +25,7 @@ using UnityEngine.SceneManagement;
 /// </summary>
 public class GameSceneBuilder : EditorWindow
 {
-    [MenuItem("Tools/生成游戏场景")]
+    [MenuItem("Tools/_归档/生成游戏场景")]
     public static void ShowWindow()
     {
         GetWindow<GameSceneBuilder>("场景生成器");

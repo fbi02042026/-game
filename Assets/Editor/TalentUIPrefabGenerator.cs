@@ -11,7 +11,7 @@ public static class TalentUIPrefabGenerator
 {
     const string PrefabPath = "Assets/Resources/Prefabs/Talent/TalentUI.prefab";
 
-    [MenuItem("Tools/UI/生成天赋界面预制体")]
+    [MenuItem("Tools/_归档/UI/生成天赋界面预制体")]
     public static void Generate()
     {
         EnsureFolders();

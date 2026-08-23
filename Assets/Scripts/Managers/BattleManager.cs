@@ -292,7 +292,6 @@ public class BattleManager : Singleton<BattleManager>
         if (data == null) return;
         if (data.townLevel == null) data.townLevel = new TownLevel();
 
-        // 仅空档补一只测试弓手；不删玩家已有佣兵、不强改酒馆等级
         if (data.permanentMercs == null)
             data.permanentMercs = new List<MercenaryData>();
 
@@ -307,15 +306,29 @@ public class BattleManager : Singleton<BattleManager>
             // 无效弓手预制体 id 纠正
             if (m.mercId.StartsWith("gongshou") && Resources.Load<GameObject>("Units/" + m.mercId) == null)
                 m.mercId = "gongshou101";
+            if (m.level < 1) m.level = 1;
+            if (m.star < 1) m.star = 1;
+            if (string.IsNullOrEmpty(m.displayName)) m.displayName = m.mercId;
+            if (string.IsNullOrEmpty(m.uid)) m.uid = System.Guid.NewGuid().ToString("N");
+            if (string.IsNullOrEmpty(m.skillId))
+                m.skillId = SkillRegistry.Instance != null
+                    ? SkillRegistry.Instance.GetMercDefaultSkillId(m.mercId)
+                    : SkillRegistry.DefaultMercMeleeSkillId;
         }
 
-        if (data.permanentMercs.Count == 0)
-        {
-            data.permanentMercs.Add(new MercenaryData { mercId = "gongshou101", favorLevel = 1, level = 1 });
-            Debug.Log("[BattleManager] 空档自动添加测试佣兵: 弓手101");
-        }
+        // 软著版：佣兵由酒馆三选一反复招募，不再空档自动塞弓手。
+        // 旧逻辑保留注释，便于日后调试：
+        // if (data.permanentMercs.Count == 0)
+        // {
+        //     data.permanentMercs.Add(new MercenaryData {
+        //         mercId = "gongshou101", displayName = "测试弓手",
+        //         favorLevel = 1, level = 1, star = 1,
+        //         skillId = SkillRegistry.DefaultMercRangedSkillId,
+        //         uid = System.Guid.NewGuid().ToString("N")
+        //     });
+        // }
 
-        if (data.townLevel.tavern < 1)
+        if (data.townLevel.tavern < 1 && data.permanentMercs.Count > 0)
             data.townLevel.tavern = 1;
     }
 
@@ -324,22 +337,35 @@ public class BattleManager : Singleton<BattleManager>
         var mm = MercenaryManager.Instance;
         if (mm == null) return;
 
-        var ids = mm.GetActiveMercIds();
+        var data = SaveSystem.Instance?.Data;
         Vector3 basePos = spawnPoint != null ? spawnPoint.position : hero.transform.position;
         basePos.y = UnitBase.GROUND_Y;
         basePos.z = 0f;
 
-        for (int i = 0; i < ids.Count; i++)
+        int max = mm.GetMaxMercSlots();
+        int spawned = 0;
+        if (data?.permanentMercs != null)
         {
-            Vector3 pos = basePos + new Vector3(-0.85f * (i + 1), 0, 0);
-            var merc = mm.SpawnMercenary(ids[i], pos, 1);
-            if (merc != null)
+            for (int i = 0; i < data.permanentMercs.Count && spawned < max; i++)
             {
-                allyUnits.Add(merc);
-                merc.OnDead += OnMercenaryDead;
+                var md = data.permanentMercs[i];
+                if (md == null || string.IsNullOrEmpty(md.mercId)) continue;
+                if (!GameConfig.IsMercAvailable(md.mercId, data)) continue;
+
+                Vector3 pos = basePos + new Vector3(-0.85f * (spawned + 1), 0, 0);
+                var merc = mm.SpawnMercenary(md.mercId, pos, Mathf.Max(1, md.level));
+                if (merc != null)
+                {
+                    merc.equippedSkillId = md.skillId;
+                    if (!string.IsNullOrEmpty(md.displayName))
+                        merc.gameObject.name = "Merc_" + md.displayName;
+                    allyUnits.Add(merc);
+                    merc.OnDead += OnMercenaryDead;
+                    spawned++;
+                }
             }
         }
-        Debug.Log($"[BattleManager] 已生成佣兵 {ids.Count} 个 (tavern槽={mm.GetMaxMercSlots()})");
+        Debug.Log($"[BattleManager] 已生成佣兵 {spawned} 个 (tavern槽={max})");
     }
 
     public void OnMercenaryDead(UnitBase merc)
@@ -679,24 +705,14 @@ public class BattleManager : Singleton<BattleManager>
             case StageType.Boss:
                 SetupBossWave(stage.stageIndex);
                 break;
-            case StageType.Merchant:
-            case StageType.Curse:
-                // 软著版：商人/诅咒未开放，回退为普通战斗关，避免空壳 UI 假过关
-                UIManager.Instance?.ShowToast("本版本未开放该关卡类型，已改为普通战斗");
-                stage.type = StageType.Normal;
-                SetupNormalWaves(stage.stageIndex);
-                break;
-            case StageType.Enchant:
-                isInBattle = false;
-                LoadEnchantStage();
-                break;
             case StageType.Rest:
                 isInBattle = false;
                 LoadRestStage();
                 break;
-            case StageType.Forge:
-                isInBattle = false;
-                LoadForgeStage();
+            default:
+                // 商人/诅咒/锻造/附魔等：静默当普通战斗关
+                stage.type = StageType.Normal;
+                SetupNormalWaves(stage.stageIndex);
                 break;
         }
 
@@ -2021,7 +2037,7 @@ public class BattleManager : Singleton<BattleManager>
         Mercenary merc = mercs[mercIndex];
         if (merc == null || merc.isDead) return false;
 
-        var skill = ResolveMercSkill(merc.mercId);
+        var skill = ResolveMercSkill(merc);
         if (skill.skillType == SkillSystem.SkillType.Buff)
             ExecuteAllySkillFallback(merc, skill);
         else if (!(SkillSystem.Instance != null && SkillSystem.Instance.UseSkill(skill, merc)))
@@ -2043,13 +2059,19 @@ public class BattleManager : Singleton<BattleManager>
         return ResolveSkill(id);
     }
 
-    SkillSystem.ActiveSkill ResolveMercSkill(string mercId)
+    SkillSystem.ActiveSkill ResolveMercSkill(Mercenary merc)
     {
         string id = SkillRegistry.Instance != null
-            ? SkillRegistry.Instance.GetMercDefaultSkillId(mercId)
+            ? SkillRegistry.Instance.GetMercSkillId(merc != null ? merc.mercId : null,
+                merc != null ? merc.equippedSkillId : null)
             : SkillRegistry.DefaultMercMeleeSkillId;
         return ResolveSkill(id);
     }
+
+    // 旧签名保留注释，避免外部误调编译失败时再恢复：
+    // SkillSystem.ActiveSkill ResolveMercSkill(string mercId) => ResolveSkill(
+    //     SkillRegistry.Instance != null ? SkillRegistry.Instance.GetMercDefaultSkillId(mercId)
+    //     : SkillRegistry.DefaultMercMeleeSkillId);
 
     SkillSystem.ActiveSkill ResolveSkill(string skillId)
     {
@@ -2483,8 +2505,8 @@ public class BattleManager : Singleton<BattleManager>
     // 特殊关卡
     // ============================================================
 
-    // 商人/诅咒关：软著版已回退为普通战斗，保留方法供后续开放时启用
-    [System.Obsolete("软著版未开放商人关")]
+    // 商人/诅咒/锻造/附魔：本版不进池，保留方法供后续开放
+    [System.Obsolete("本版未开放商人关")]
     void LoadMerchantStage(StageData stage)
     {
         UIManager.Instance?.ShowToast("本版本未开放商人关");
@@ -2492,7 +2514,7 @@ public class BattleManager : Singleton<BattleManager>
         UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
     }
 
-    [System.Obsolete("软著版未开放诅咒关")]
+    [System.Obsolete("本版未开放诅咒关")]
     void LoadCurseStage(StageData stage)
     {
         UIManager.Instance?.ShowToast("本版本未开放诅咒关");

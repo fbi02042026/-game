@@ -46,7 +46,7 @@ public class MonsterPreviewWindow : EditorWindow
     private List<Sprite> _cachedSprites = new List<Sprite>();
     private string _cachedPath = "";
 
-    [MenuItem("Tools/怪物预览调试")]
+    [MenuItem("Tools/_归档/怪物预览调试")]
     public static void ShowWindow()
     {
         var window = GetWindow<MonsterPreviewWindow>("怪物预览调试");

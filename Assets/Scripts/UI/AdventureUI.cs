@@ -827,13 +827,13 @@ public class AdventureUI : MonoBehaviour, ITownPage
     /// <summary>隐藏尚未实现的玩法入口，避免误点「即将开放」。</summary>
     void HideUnfinishedEntries()
     {
-        // 模式：仅保留主线(0)与活动副本(4)；每日/迷宫/BOSS挑战隐藏
+        // 模式：仅保留主线(0)；活动副本及每日/迷宫/BOSS挑战均隐藏
         for (int i = 0; i < modeButtons.Length; i++)
         {
             if (modeButtons[i] == null) continue;
-            bool keep = i == 0 || IsActivityMode(i);
-            modeButtons[i].gameObject.SetActive(keep);
+            modeButtons[i].gameObject.SetActive(i == 0);
         }
+        _selectedMode = 0;
         // 难度：隐藏「地狱」(index 3)
         if (difficultyButtons != null && difficultyButtons.Length > 3 && difficultyButtons[3] != null)
             difficultyButtons[3].gameObject.SetActive(false);
@@ -1424,7 +1424,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
         }
     }
 
-    bool IsModePlayable(int mode) => mode == 0 || IsActivityMode(mode);
+    bool IsModePlayable(int mode) => mode == 0;
 
     bool IsActivityMode(int mode)
     {

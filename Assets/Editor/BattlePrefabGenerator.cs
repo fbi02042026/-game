@@ -28,7 +28,7 @@ public class BattlePrefabGenerator : EditorWindow
     static readonly Color COLOR_PROGRESS_DONE = new Color(0.3f, 0.7f, 0.3f);
     static readonly Color COLOR_PLAYER_MARKER = new Color(0.3f, 0.6f, 1f);
 
-    [MenuItem("Tools/生成战斗预制体")]
+    [MenuItem("Tools/_归档/生成战斗预制体")]
     public static void ShowWindow()
     {
         GenerateBattleUIPrefab();

@@ -250,7 +250,7 @@ public class ChapterManager : Singleton<ChapterManager>
         if (next == null) return null;
         next.type = StageRoller.Roll(RollState, next.stageIndex, GameConfig.STAGES_PER_CHAPTER);
         Debug.Log($"[ChapterManager] 抽到下一关 第{next.stageIndex + 1}关 = {next.type}"
-                  + $"（恢复{RollState.restCount}/{StageRoller.MaxRestPerChapter} 工坊{(RollState.craftUsed ? "已用" : RollState.craftKind.ToString())} 战斗{RollState.combatStagesDone}）");
+                  + $"（恢复{RollState.restCount}/{StageRoller.MaxRestPerChapter} 战斗{RollState.combatStagesDone}）");
         return next;
     }
 

@@ -1,6 +1,1013 @@
 ======== 源程序鉴别材料 · 后30页 · 每页50行 ========
 
 ---------- 第 1 页 ----------
+        try
+        {
+            var hero = Hero.Instance;
+            if (hero != null && hero.attr != null)
+            {
+                hp = hero.attr.GetAttr(AttrType.MaxHp);
+                atk = hero.attr.GetAttr(AttrType.Attack);
+                def = hero.attr.GetAttr(AttrType.Defense);
+                spd = hero.attr.GetAttr(AttrType.AttackSpeed);
+                crit = hero.attr.GetAttr(AttrType.CritRate);
+            }
+            else
+            {
+                // 城镇无 Hero 时用天赋汇总估算展示
+                int leftN = TalentDefs.LeftUnlockedCount(SaveSystem.Instance?.Data?.talents);
+                for (int i = 0; i < leftN; i++)
+                {
+                    var e = TalentDefs.Left[i].effect;
+                    switch (e.kind)
+                    {
+                        case TalentDefs.AttrKind.Attack: atk += e.value; break;
+                        case TalentDefs.AttrKind.Hp: hp += e.value; break;
+                        case TalentDefs.AttrKind.Defense: def += e.value; break;
+                        case TalentDefs.AttrKind.CritRate: crit += e.value; break;
+                        case TalentDefs.AttrKind.AtkSpeed: spd += e.value; break;
+                    }
+                }
+            }
+        }
+        catch { }
+
+        float critDisplay = crit;
+        if (Hero.Instance != null && Hero.Instance.attr != null && critDisplay <= 1.5f)
+            critDisplay *= 100f;
+
+        if (attrHpText != null) attrHpText.text = Mathf.RoundToInt(hp).ToString("N0");
+        if (attrAtkText != null) attrAtkText.text = Mathf.RoundToInt(atk).ToString("N0");
+        if (attrDefText != null) attrDefText.text = Mathf.RoundToInt(def).ToString("N0");
+        if (attrSpdText != null) attrSpdText.text = spd.ToString("0.##");
+        if (attrCritText != null) attrCritText.text = critDisplay.ToString("0.#") + "%";
+        if (attrResistText != null) attrResistText.text = resist.ToString("0.#") + "%";
+    }
+
+    void RefreshBag()
+    {
+        backpackGrid?.Refresh();
+        int unlocked = backpackGrid != null ? backpackGrid.UnlockedSlotCount() : GameConfig.BACKPACK_DEFAULT_ROWS * GameConfig.BACKPACK_WIDTH;
+        int used = 0;
+        if (backpackGrid != null)
+        {
+
+---------- 第 2 页 ----------
+            for (int i = 0; i < backpackGrid.cells.Count; i++)
+                if (backpackGrid.cells[i]?.equippedItem != null) used++;
+        }
+        if (bagCapacityText != null)
+            bagCapacityText.text = used + "/" + unlocked;
+    }
+
+    void WireClicks()
+    {
+        if (_wired) return;
+        _wired = true;
+        if (talentButton != null)
+        {
+            talentButton.onClick.RemoveAllListeners();
+            talentButton.onClick.AddListener(OpenTalent);
+        }
+        if (skillButton != null)
+        {
+            skillButton.onClick.RemoveAllListeners();
+            skillButton.onClick.AddListener(OpenSkillSelect);
+        }
+        if (leftSkillButton != null)
+        {
+            leftSkillButton.onClick.RemoveAllListeners();
+            leftSkillButton.onClick.AddListener(OpenSkillSelect);
+        }
+        if (flipPortraitButton != null)
+        {
+            flipPortraitButton.onClick.RemoveAllListeners();
+            flipPortraitButton.onClick.AddListener(FlipPortrait);
+        }
+        if (bagExpandButton != null)
+        {
+            bagExpandButton.onClick.RemoveAllListeners();
+            bagExpandButton.onClick.AddListener(() =>
+                UIManager.Instance?.ShowToast("扩容请在天赋中解锁背包行"));
+        }
+    }
+
+    public void OpenTalent()
+    {
+        if (TalentUI.Instance != null)
+        {
+            TalentUI.Instance.Show();
+            return;
+        }
+        var prefab = Resources.Load<GameObject>("Prefabs/Talent/TalentUI");
+        if (prefab == null)
+        {
+            UIManager.Instance?.ShowToast("天赋界面未就绪");
+
+---------- 第 3 页 ----------
+            return;
+        }
+        var go = Instantiate(prefab);
+        go.name = "TalentUI";
+        go.GetComponent<TalentUI>()?.Show();
+    }
+
+    public void OpenSkillSelect()
+    {
+        if (skillSelect == null)
+            skillSelect = GetComponentInChildren<SkillSelectUI>(true);
+        if (skillSelect == null)
+        {
+            UIManager.Instance?.ShowToast("技能界面未就绪");
+            return;
+        }
+        skillSelect.Show();
+    }
+
+    void FlipPortrait()
+    {
+        if (portraitImage == null) return;
+        _portraitFlipped = !_portraitFlipped;
+        var s = portraitImage.rectTransform.localScale;
+        float ax = Mathf.Abs(s.x) < 0.01f ? 1f : Mathf.Abs(s.x);
+        s.x = ax * (_portraitFlipped ? -1f : 1f);
+        portraitImage.rectTransform.localScale = s;
+    }
+
+    /// <summary>立绘用自身像素大小，仅翻转</summary>
+    public void SetPortrait(Sprite sprite, bool flip = false)
+    {
+        if (portraitImage == null) return;
+        portraitImage.sprite = sprite;
+        portraitImage.preserveAspect = true;
+        if (sprite != null)
+        {
+            portraitImage.enabled = true;
+            portraitImage.SetNativeSize();
+        }
+        _portraitFlipped = flip;
+        var s = portraitImage.rectTransform.localScale;
+        float ax = Mathf.Abs(s.x) < 0.01f ? 1f : Mathf.Abs(s.x);
+        s.x = ax * (flip ? -1f : 1f);
+        portraitImage.rectTransform.localScale = s;
+    }
+
+    void StripLocalChrome()
+    {
+        DestroyChildNamed(transform, "TopBar");
+
+---------- 第 4 页 ----------
+        DestroyChildNamed(transform, "SharedResourceBar");
+        DestroyChildNamed(transform, "BottomNav");
+        DestroyChildNamed(transform, "MainBottomNav");
+    }
+
+    static void DestroyChildNamed(Transform root, string name)
+    {
+        var t = root.Find(name);
+        if (t != null) Destroy(t.gameObject);
+    }
+
+    void EnsureVisibleTransform()
+    {
+        if (transform.localScale.sqrMagnitude < 0.0001f)
+            transform.localScale = Vector3.one;
+    }
+
+    bool _canvasConfigured;
+    void ConfigureHostCanvasOnce()
+    {
+        if (_canvasConfigured) return;
+        EnsureVisibleTransform();
+        var hall = GetComponentInParent<GuildHallUI>();
+        bool nested = hall != null && hall.gameObject != gameObject;
+        if (nested)
+        {
+            var ray = GetComponent<GraphicRaycaster>();
+            if (ray != null) Destroy(ray);
+            var scaler = GetComponent<CanvasScaler>();
+            if (scaler != null) Destroy(scaler);
+            var own = GetComponent<Canvas>();
+            if (own != null) Destroy(own);
+            _canvasConfigured = true;
+            return;
+        }
+        var canvas = GetComponent<Canvas>();
+        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
+        canvas.enabled = true;
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = 20;
+        UICanvasSetup.Apply(canvas, Camera.main);
+        if (GetComponent<GraphicRaycaster>() == null)
+            gameObject.AddComponent<GraphicRaycaster>();
+        _canvasConfigured = true;
+    }
+
+    static void SetGuildOverlay(bool characterOpen)
+    {
+        TavernUI.SetGuildHallOverlayMode(characterOpen);
+    }
+
+---------- 第 5 页 ----------
+
+    public void AutoBind()
+    {
+        titleText = FindTxt("Content/Header/TitleText");
+        talentButton = transform.Find("Content/Stage/RightButtons/TalentButton")?.GetComponent<Button>();
+        skillButton = transform.Find("Content/Stage/RightButtons/SkillButton")?.GetComponent<Button>();
+        leftSkillButton = transform.Find("Content/Stage/LeftSkillButton")?.GetComponent<Button>();
+        portraitImage = transform.Find("Content/Stage/Portrait")?.GetComponent<Image>();
+        flipPortraitButton = transform.Find("Content/Stage/FlipButton")?.GetComponent<Button>();
+
+        attrHpText = FindTxt("Content/AttrPanel/AttrHpRoot/AttrHp") ?? FindTxt("Content/AttrPanel/AttrHp");
+        attrAtkText = FindTxt("Content/AttrPanel/AttrAtkRoot/AttrAtk") ?? FindTxt("Content/AttrPanel/AttrAtk");
+        attrDefText = FindTxt("Content/AttrPanel/AttrDefRoot/AttrDef") ?? FindTxt("Content/AttrPanel/AttrDef");
+        attrSpdText = FindTxt("Content/AttrPanel/AttrSpdRoot/AttrSpd") ?? FindTxt("Content/AttrPanel/AttrSpd");
+        attrCritText = FindTxt("Content/AttrPanel/AttrCritRoot/AttrCrit") ?? FindTxt("Content/AttrPanel/AttrCrit");
+        attrResistText = FindTxt("Content/AttrPanel/AttrResistRoot/AttrResist") ?? FindTxt("Content/AttrPanel/AttrResist");
+
+        bagCapacityText = FindTxt("Content/BackpackPanel/CapacityText")
+                          ?? FindTxt("Content/BagPanel/CapacityText");
+        bagExpandButton = transform.Find("Content/BackpackPanel/CapacityPlus")?.GetComponent<Button>()
+                          ?? transform.Find("Content/BagPanel/CapacityPlus")?.GetComponent<Button>();
+        backpackGrid = GetComponent<TownBackpackGrid>();
+        if (backpackGrid == null) backpackGrid = gameObject.AddComponent<TownBackpackGrid>();
+        backpackGrid.BindFromHierarchy(transform);
+
+        if (skillSelect == null)
+            skillSelect = GetComponentInChildren<SkillSelectUI>(true);
+    }
+
+    Text FindTxt(string path)
+    {
+        var t = transform.Find(path);
+        return t != null ? t.GetComponent<Text>() : null;
+    }
+
+    /// <summary>编辑器首次建树；已换美术勿覆盖</summary>
+    public void BuildHierarchyForPrefab()
+    {
+        for (int i = transform.childCount - 1; i >= 0; i--)
+            DestroyImmediate(transform.GetChild(i).gameObject);
+
+        var content = CreateRect(transform, "Content");
+        var crt = content.GetComponent<RectTransform>();
+        crt.anchorMin = Vector2.zero;
+        crt.anchorMax = Vector2.one;
+        crt.offsetMin = new Vector2(0f, BottomReserve);
+        crt.offsetMax = new Vector2(0f, -TopReserve);
+
+        // Header
+        var header = CreateImg(content.transform, "Header", new Color(0.28f, 0.18f, 0.1f, 0.9f));
+
+---------- 第 6 页 ----------
+        Set(header.rectTransform, 0f, 1f, 1f, 1f, 0.5f, 1f, 0f, 0f, 0f, 56f);
+        var title = CreateTxt(header.transform, "TitleText", "角色", 32, new Color(1f, 0.9f, 0.55f));
+        Set(title.rectTransform, 0f, 0f, 0.4f, 1f, 0f, 0.5f, 24f, 0f, 0f, 0f);
+        title.alignment = TextAnchor.MiddleLeft;
+
+        // Stage：立绘 + 左技能钮 + 右天赋/技能（无装备栏）
+        var stage = CreateImg(content.transform, "Stage", new Color(0.35f, 0.28f, 0.22f, 1f));
+        var srt = stage.rectTransform;
+        srt.anchorMin = new Vector2(0f, 0.42f);
+        srt.anchorMax = new Vector2(1f, 1f);
+        srt.offsetMin = new Vector2(12f, 0f);
+        srt.offsetMax = new Vector2(-12f, -64f);
+
+        var portrait = CreateImg(stage.transform, "Portrait", new Color(0.45f, 0.5f, 0.55f, 0.85f));
+        portrait.preserveAspect = true;
+        Set(portrait.rectTransform, 0.5f, 0.15f, 0.5f, 0.15f, 0.5f, 0f, 0f, 0f, 160f, 220f);
+
+        var leftBtn = CreateImg(stage.transform, "LeftSkillButton", new Color(0.4f, 0.32f, 0.55f, 1f));
+        Set(leftBtn.rectTransform, 0f, 0.55f, 0f, 0.55f, 0f, 0.5f, 16f, 0f, 100f, 72f);
+        leftBtn.gameObject.AddComponent<Button>().targetGraphic = leftBtn;
+        var leftLab = CreateTxt(leftBtn.transform, "Label", "技能", 24, Color.white);
+        Stretch(leftLab.rectTransform);
+
+        var right = CreateRect(stage.transform, "RightButtons");
+        Set(right.GetComponent<RectTransform>(), 1f, 0.2f, 1f, 0.95f, 1f, 1f, -12f, 0f, 120f, 0f);
+        BuildSideBtn(right.transform, "TalentButton", "天赋", 0f, new Color(0.35f, 0.55f, 0.35f, 1f));
+        BuildSideBtn(right.transform, "SkillButton", "技能", -90f, new Color(0.4f, 0.35f, 0.65f, 1f));
+
+        // Attr panel — 宽度随界面
+        var attrs = CreateImg(content.transform, "AttrPanel", new Color(0.22f, 0.16f, 0.12f, 0.95f));
+        var art = attrs.rectTransform;
+        art.anchorMin = new Vector2(0f, 0.30f);
+        art.anchorMax = new Vector2(1f, 0.42f);
+        art.offsetMin = new Vector2(12f, 4f);
+        art.offsetMax = new Vector2(-12f, -4f);
+        var attrTitle = CreateTxt(attrs.transform, "AttrTitle", "基础属性", 22, new Color(1f, 0.92f, 0.75f));
+        Set(attrTitle.rectTransform, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -4f, 200f, 28f);
+        CreateAttr(attrs.transform, "AttrHp", "生命", "5240", 0f);
+        CreateAttr(attrs.transform, "AttrAtk", "攻击", "1280", 1f);
+        CreateAttr(attrs.transform, "AttrDef", "防御", "860", 2f);
+        CreateAttr(attrs.transform, "AttrSpd", "速度", "105", 3f);
+        CreateAttr(attrs.transform, "AttrCrit", "暴击", "18%", 4f);
+        CreateAttr(attrs.transform, "AttrResist", "抗性", "15%", 5f);
+
+        // Bag — 宽度自适应，格子与战斗一致
+        var bag = CreateImg(content.transform, "BagPanel", new Color(0.4f, 0.28f, 0.16f, 1f));
+        var brt = bag.rectTransform;
+        brt.anchorMin = new Vector2(0f, 0f);
+        brt.anchorMax = new Vector2(1f, 0.30f);
+        brt.offsetMin = new Vector2(12f, 8f);
+
+---------- 第 7 页 ----------
+        brt.offsetMax = new Vector2(-12f, -4f);
+        var bagTitle = CreateTxt(bag.transform, "BagTitle", "背包", 24, new Color(1f, 0.92f, 0.75f));
+        Set(bagTitle.rectTransform, 0f, 1f, 0f, 1f, 0f, 1f, 16f, -8f, 100f, 32f);
+        bagTitle.alignment = TextAnchor.MiddleLeft;
+        var cap = CreateTxt(bag.transform, "CapacityText", "0/21", 22, new Color(1f, 0.95f, 0.8f));
+        Set(cap.rectTransform, 1f, 1f, 1f, 1f, 1f, 1f, -56f, -8f, 100f, 32f);
+        cap.alignment = TextAnchor.MiddleRight;
+        var plus = CreateImg(bag.transform, "CapacityPlus", new Color(0.55f, 0.35f, 0.2f, 1f));
+        Set(plus.rectTransform, 1f, 1f, 1f, 1f, 1f, 1f, -12f, -8f, 32f, 32f);
+        plus.gameObject.AddComponent<Button>().targetGraphic = plus;
+        var plusL = CreateTxt(plus.transform, "Label", "+", 22, Color.white);
+        Stretch(plusL.rectTransform);
+
+        backpackGrid = gameObject.GetComponent<TownBackpackGrid>();
+        if (backpackGrid == null) backpackGrid = gameObject.AddComponent<TownBackpackGrid>();
+        backpackGrid.BuildGrid(bag.transform);
+
+        // 底部五入口占位（不自建按钮，仅留空给 SharedChrome）
+        var reserve = CreateRect(transform, "BottomNavReserve");
+        var rrt = reserve.GetComponent<RectTransform>();
+        rrt.anchorMin = new Vector2(0f, 0f);
+        rrt.anchorMax = new Vector2(1f, 0f);
+        rrt.pivot = new Vector2(0.5f, 0f);
+        rrt.sizeDelta = new Vector2(0f, BottomReserve);
+        rrt.anchoredPosition = Vector2.zero;
+
+        // Skill select popup
+        var skillGo = new GameObject("SkillSelectUI", typeof(RectTransform));
+        skillGo.transform.SetParent(transform, false);
+        Stretch(skillGo.GetComponent<RectTransform>());
+        skillSelect = skillGo.AddComponent<SkillSelectUI>();
+        skillSelect.BuildHierarchyForPrefab();
+
+        AutoBind();
+        GameFonts.ApplyToHierarchy(transform);
+        _built = true;
+    }
+
+    static void BuildSideBtn(Transform parent, string name, string label, float y, Color col)
+    {
+        var img = CreateImg(parent, name, col);
+        Set(img.rectTransform, 1f, 1f, 1f, 1f, 1f, 1f, 0f, y, 110f, 72f);
+        img.gameObject.AddComponent<Button>().targetGraphic = img;
+        var t = CreateTxt(img.transform, "Label", label, 24, Color.white);
+        Stretch(t.rectTransform);
+    }
+
+    static void CreateAttr(Transform parent, string name, string label, string value, float index)
+    {
+        float x0 = index / 6f;
+
+---------- 第 8 页 ----------
+        float x1 = (index + 1f) / 6f;
+        var root = CreateRect(parent, name + "Root");
+        var rt = root.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(x0, 0f);
+        rt.anchorMax = new Vector2(x1, 0.7f);
+        rt.offsetMin = new Vector2(4f, 4f);
+        rt.offsetMax = new Vector2(-4f, -4f);
+        var lab = CreateTxt(root.transform, "Label", label, 16, new Color(0.85f, 0.8f, 0.7f));
+        Set(lab.rectTransform, 0f, 0.55f, 1f, 1f, 0.5f, 0.5f, 0f, 0f, 0f, 0f);
+        // 数值节点名与 AutoBind 一致
+        var val = CreateTxt(root.transform, name, value, 20, new Color(0.7f, 0.95f, 0.7f));
+        Set(val.rectTransform, 0f, 0f, 1f, 0.55f, 0.5f, 0.5f, 0f, 0f, 0f, 0f);
+    }
+
+    static GameObject CreateRect(Transform p, string n)
+    {
+        var go = new GameObject(n, typeof(RectTransform));
+        go.transform.SetParent(p, false);
+        return go;
+    }
+
+    static Image CreateImg(Transform p, string n, Color c)
+    {
+        var go = new GameObject(n, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(p, false);
+        var img = go.GetComponent<Image>();
+        img.color = c;
+        return img;
+    }
+
+    static Text CreateTxt(Transform p, string n, string t, int size, Color c)
+    {
+        var go = new GameObject(n, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(p, false);
+        var tx = go.GetComponent<Text>();
+        tx.text = t;
+        tx.fontSize = size;
+        tx.color = c;
+        tx.alignment = TextAnchor.MiddleCenter;
+        tx.raycastTarget = false;
+        tx.font = GameFonts.GetChinese();
+        return tx;
+    }
+
+    static void Stretch(RectTransform rt)
+    {
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+---------- 第 9 页 ----------
+    }
+
+    static void Set(RectTransform rt, float aminX, float aminY, float amaxX, float amaxY,
+        float px, float py, float x, float y, float w, float h)
+    {
+        rt.anchorMin = new Vector2(aminX, aminY);
+        rt.anchorMax = new Vector2(amaxX, amaxY);
+        rt.pivot = new Vector2(px, py);
+        rt.anchoredPosition = new Vector2(x, y);
+        rt.sizeDelta = new Vector2(w, h);
+    }
+}
+
+// ===== FILE: Assets/Scripts/UI/BattleStageMapUI.cs =====
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+/// <summary>
+/// 战斗内关卡石墩图。
+///
+/// 流程：进图 → 下一关石墩上的锁晃两下再放大消失 → 滚盘选类型
+/// → 类型旗落到当前石墩并挂 btn06 描边 → 玩家点石墩进入。
+///
+/// 石墩三态：
+/// · 当前可打：Banner + Icon + btn06 描边，可点
+/// · 已打过：ClearedMark（变灰旗子），不可点
+/// · 未解锁：只有石墩 + Lock，无旗子
+///
+/// 从下往上打：Pedestal_0 在最下面，默认无锁。
+/// </summary>
+public class BattleStageMapUI : MonoBehaviour
+{
+    public const string PrefabPath = "Prefabs/Battle/BattleStageMap";
+    public const int PedestalCount = 10;
+
+    public static BattleStageMapUI Instance { get; private set; }
+
+    [Header("可绑节点")]
+    public GameObject root;
+    public Image backdrop;
+    public Text titleText;
+    public Transform pedestalRoot;
+    public List<PedestalRefs> pedestals = new List<PedestalRefs>();
+    [Tooltip("当前关描边：拖 btn06。空则试 Resources/Materials/btn06")]
+    public Material currentOutlineMaterial;
+
+    [Serializable]
+
+---------- 第 10 页 ----------
+    public class PedestalRefs
+    {
+        public GameObject root;
+        public Button button;
+        public Image stone;
+        public Image banner;
+        public Image icon;
+        /// <summary>已通关的灰旗（ClearedMark 节点本身就是灰旗图）</summary>
+        public GameObject clearedMark;
+        /// <summary>未解锁锁头；解锁动画播在这个节点上</summary>
+        public GameObject lockIcon;
+        public Image outlineTarget; // 挂 btn06 的 Image，默认用 Banner 或 Stone
+    }
+
+    StageData _next;
+    Action<StageData> _onPick;
+    float _prevTimeScale = 1f;
+    Coroutine _flow;
+    Coroutine _backdropPulse;
+    Color _backdropBase = Color.white;
+    Material _btn06;
+    readonly Dictionary<Image, Material> _savedMats = new Dictionary<Image, Material>();
+
+    /// <summary>进关卡图并跑完整流程（解锁 → 滚盘 → 落旗 → 等点击）。</summary>
+    public static void BeginFlow(StageData next, Action<StageData> onPick)
+    {
+        if (next == null)
+        {
+            onPick?.Invoke(null);
+            return;
+        }
+        Ensure().StartFlow(next, onPick);
+    }
+
+    public static BattleStageMapUI Ensure()
+    {
+        if (Instance != null) return Instance;
+
+        var prefab = Resources.Load<GameObject>(PrefabPath);
+        GameObject go;
+        if (prefab != null)
+        {
+            go = Instantiate(prefab);
+            go.name = "BattleStageMap";
+        }
+        else
+        {
+            Debug.LogWarning($"[BattleStageMap] 未找到预制体 {PrefabPath}，代码搭建临时界面");
+            go = new GameObject("BattleStageMap", typeof(RectTransform));
+            BuildHierarchy(go);
+
+---------- 第 11 页 ----------
+        }
+        DontDestroyOnLoad(go);
+
+        var ui = go.GetComponent<BattleStageMapUI>();
+        if (ui == null) ui = go.AddComponent<BattleStageMapUI>();
+        return ui;
+    }
+
+    void Awake()
+    {
+        Instance = this;
+        BindRefs();
+        if (root != null) root.SetActive(false);
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
+    void StartFlow(StageData next, Action<StageData> onPick)
+    {
+        BindRefs();
+        _next = next;
+        _onPick = onPick;
+
+        EnsureCanvas();
+        _prevTimeScale = Time.timeScale;
+        Time.timeScale = 0f;
+
+        int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        if (titleText != null)
+            titleText.text = GameConfig.GetChapterTitleText(chapter);
+
+        // 滚盘前：当前关只显示锁（第 0 关除外），已通关灰旗，未解锁光墩
+        RefreshPedestals(Phase.BeforeRoll);
+
+        if (root != null) root.SetActive(true);
+        transform.SetAsLastSibling();
+        GameFonts.ApplyToHierarchy(transform);
+
+        StartBackdropPulse();
+        if (_flow != null) StopCoroutine(_flow);
+        _flow = StartCoroutine(CoFlow());
+    }
+
+    enum Phase
+    {
+        BeforeRoll, // 下一关：锁；已通关：灰旗；未来：光墩
+        AfterRoll   // 下一关：彩色旗 + btn06；其余同上
+
+---------- 第 12 页 ----------
+    }
+
+    IEnumerator CoFlow()
+    {
+        int nextIdx = _next != null ? _next.stageIndex : 0;
+
+        // 第 0 关默认没锁，直接进滚盘；其它关先播解锁
+        if (nextIdx > 0)
+            yield return PlayUnlockAnim(nextIdx);
+        else
+            yield return WaitUnscaled(0.25f);
+
+        // 滚盘（类型已抽好，这里只演出）
+        int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        bool rolled = false;
+        StageData picked = _next;
+        NextStageRouletteUI.Show(chapter, _next, p =>
+        {
+            if (p != null) picked = p;
+            rolled = true;
+        });
+        while (!rolled) yield return null;
+
+        _next = picked;
+        // 类型旗落到当前石墩 + btn06 描边
+        RefreshPedestals(Phase.AfterRoll);
+        ApplyCurrentOutline(nextIdx);
+
+        _flow = null;
+        // 之后等玩家点石墩（OnPedestalClicked）
+    }
+
+    IEnumerator PlayUnlockAnim(int index)
+    {
+        if (index < 0 || index >= pedestals.Count) yield break;
+        var p = pedestals[index];
+        if (p == null || p.lockIcon == null)
+        {
+            yield return WaitUnscaled(0.2f);
+            yield break;
+        }
+
+        var lockTf = p.lockIcon.transform;
+        p.lockIcon.SetActive(true);
+        Vector3 baseScale = Vector3.one;
+        Vector3 basePos = lockTf.localPosition;
+        lockTf.localScale = baseScale;
+
+        // 晃两下
+        for (int shake = 0; shake < 2; shake++)
+
+---------- 第 13 页 ----------
+        {
+            float t = 0f;
+            const float dur = 0.22f;
+            while (t < 1f)
+            {
+                t += Time.unscaledDeltaTime / dur;
+                float w = Mathf.Sin(t * Mathf.PI * 4f) * (1f - t) * 12f;
+                lockTf.localPosition = basePos + new Vector3(w, 0f, 0f);
+                lockTf.localRotation = Quaternion.Euler(0f, 0f, w * 0.8f);
+                yield return null;
+            }
+            lockTf.localPosition = basePos;
+            lockTf.localRotation = Quaternion.identity;
+            yield return WaitUnscaled(0.06f);
+        }
+
+        // 放大消失
+        float u = 0f;
+        const float pop = 0.35f;
+        while (u < 1f)
+        {
+            u += Time.unscaledDeltaTime / pop;
+            float e = Mathf.Clamp01(u);
+            lockTf.localScale = baseScale * (1f + e * 1.4f);
+            SetLockAlpha(p.lockIcon, 1f - e);
+            yield return null;
+        }
+
+        p.lockIcon.SetActive(false);
+        lockTf.localScale = baseScale;
+        lockTf.localPosition = basePos;
+        SetLockAlpha(p.lockIcon, 1f);
+    }
+
+    static void SetLockAlpha(GameObject lockGo, float a)
+    {
+        if (lockGo == null) return;
+        var imgs = lockGo.GetComponentsInChildren<Image>(true);
+        for (int i = 0; i < imgs.Length; i++)
+        {
+            var c = imgs[i].color;
+            c.a = a;
+            imgs[i].color = c;
+        }
+    }
+
+    void RefreshPedestals(Phase phase)
+    {
+        var cm = ChapterManager.Instance;
+        int currentDone = cm != null ? cm.currentStageIndex : -1;
+
+---------- 第 14 页 ----------
+        // 刚通关后 currentStageIndex 还是刚打完的那关
+        int nextIdx = _next != null ? _next.stageIndex : currentDone + 1;
+
+        ClearAllOutlines();
+
+        for (int i = 0; i < pedestals.Count; i++)
+        {
+            var p = pedestals[i];
+            if (p == null || p.root == null) continue;
+
+            bool cleared = i <= currentDone;
+            bool isNext = i == nextIdx;
+            bool locked = i > nextIdx;
+
+            // 永远关掉旧的 Highlight（如果预制体里还留着）
+            var hi = p.root.transform.Find("Highlight");
+            if (hi != null) hi.gameObject.SetActive(false);
+
+            if (isNext)
+            {
+                if (phase == Phase.BeforeRoll)
+                {
+                    // 滚盘前：第 0 关无锁直接可点外观；其它关显示锁、暂无旗
+                    bool showLock = nextIdx > 0;
+                    SetFlag(p, false, false);
+                    if (p.clearedMark != null) p.clearedMark.SetActive(false);
+                    if (p.lockIcon != null) p.lockIcon.SetActive(showLock);
+                    if (p.stone != null) p.stone.color = Color.white;
+                    // 解锁动画播完前先不可点；第 0 关可先不可点等滚盘
+                    SetClickable(p, false, i);
+                }
+                else
+                {
+                    // 滚盘后：彩色旗 + 可点
+                    if (p.lockIcon != null) p.lockIcon.SetActive(false);
+                    if (p.clearedMark != null) p.clearedMark.SetActive(false);
+                    SetFlag(p, true, false);
+                    if (_next != null) ApplyTypeIcon(p, _next.type);
+                    if (p.stone != null) p.stone.color = Color.white;
+                    SetClickable(p, true, i);
+                }
+            }
+            else if (cleared)
+            {
+                // 已通关：灰旗（ClearedMark）
+                if (p.lockIcon != null) p.lockIcon.SetActive(false);
+                SetFlag(p, false, false);
+                if (p.clearedMark != null) p.clearedMark.SetActive(true);
+                if (p.stone != null) p.stone.color = new Color(0.85f, 0.85f, 0.85f, 1f);
+                SetClickable(p, false, i);
+
+---------- 第 15 页 ----------
+            }
+            else
+            {
+                // 未解锁：只有石墩 + 锁，无旗
+                SetFlag(p, false, false);
+                if (p.clearedMark != null) p.clearedMark.SetActive(false);
+                if (p.lockIcon != null) p.lockIcon.SetActive(true);
+                if (p.stone != null) p.stone.color = new Color(0.55f, 0.55f, 0.55f, 0.95f);
+                SetClickable(p, false, i);
+            }
+        }
+    }
+
+    void SetFlag(PedestalRefs p, bool showBanner, bool gray)
+    {
+        if (p.banner != null)
+        {
+            p.banner.gameObject.SetActive(showBanner);
+            if (showBanner)
+                p.banner.color = gray ? new Color(0.45f, 0.45f, 0.45f, 1f) : Color.white;
+        }
+        if (p.icon != null)
+            p.icon.gameObject.SetActive(showBanner);
+    }
+
+    void SetClickable(PedestalRefs p, bool on, int index)
+    {
+        if (p.button == null) return;
+        p.button.onClick.RemoveAllListeners();
+        p.button.interactable = on;
+        if (on)
+        {
+            int capture = index;
+            p.button.onClick.AddListener(() => OnPedestalClicked(capture));
+        }
+    }
+
+    void ApplyTypeIcon(PedestalRefs p, StageType type)
+    {
+        Sprite sp = LoadStageIcon(type);
+        if (p.icon != null)
+        {
+            if (sp != null)
+            {
+                p.icon.sprite = sp;
+                p.icon.color = Color.white;
+                p.icon.preserveAspect = true;
+            }
+            else
+                p.icon.color = StageRoller.Tint(type);
+
+---------- 第 16 页 ----------
+        }
+        if (p.banner != null)
+            p.banner.color = Color.white;
+    }
+
+    void ApplyCurrentOutline(int index)
+    {
+        if (index < 0 || index >= pedestals.Count) return;
+        var p = pedestals[index];
+        if (p == null) return;
+
+        Image target = p.outlineTarget;
+        if (target == null) target = p.banner != null ? p.banner : p.stone;
+        if (target == null) return;
+
+        Material mat = ResolveBtn06();
+        if (mat == null)
+        {
+            Debug.LogWarning("[BattleStageMap] 找不到 btn06 材质，请在组件上拖入 currentOutlineMaterial");
+            return;
+        }
+        if (!_savedMats.ContainsKey(target))
+            _savedMats[target] = target.material;
+        target.material = mat;
+    }
+
+    void ClearAllOutlines()
+    {
+        foreach (var kv in _savedMats)
+        {
+            if (kv.Key != null)
+                kv.Key.material = kv.Value;
+        }
+        _savedMats.Clear();
+    }
+
+    Material ResolveBtn06()
+    {
+        if (currentOutlineMaterial != null) return currentOutlineMaterial;
+        if (_btn06 != null) return _btn06;
+        _btn06 = Resources.Load<Material>("Materials/btn06");
+        if (_btn06 == null) _btn06 = Resources.Load<Material>("btn06");
+        return _btn06;
+    }
+
+    void OnPedestalClicked(int index)
+    {
+        if (_next == null || index != _next.stageIndex) return;
+        if (_flow != null) return; // 还在解锁/滚盘中
+
+
+---------- 第 17 页 ----------
+        StopBackdropPulse();
+        ClearAllOutlines();
+        Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
+        if (root != null) root.SetActive(false);
+
+        var stage = _next;
+        var cb = _onPick;
+        _onPick = null;
+        _next = null;
+        cb?.Invoke(stage);
+    }
+
+    public void Hide()
+    {
+        if (_flow != null)
+        {
+            StopCoroutine(_flow);
+            _flow = null;
+        }
+        StopBackdropPulse();
+        ClearAllOutlines();
+        if (root != null) root.SetActive(false);
+        Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
+    }
+
+    // ===== Backdrop 灯光昏暗抖动 =====
+
+    void StartBackdropPulse()
+    {
+        if (backdrop == null) return;
+        _backdropBase = backdrop.color;
+        if (_backdropPulse != null) StopCoroutine(_backdropPulse);
+        _backdropPulse = StartCoroutine(CoBackdropPulse());
+    }
+
+    void StopBackdropPulse()
+    {
+        if (_backdropPulse != null)
+        {
+            StopCoroutine(_backdropPulse);
+            _backdropPulse = null;
+        }
+        if (backdrop != null) backdrop.color = _backdropBase;
+    }
+
+    IEnumerator CoBackdropPulse()
+    {
+        // 颜色略变深再回来，不规则一点像火把抖动
+        while (true)
+        {
+
+---------- 第 18 页 ----------
+            float deep = UnityEngine.Random.Range(0.72f, 0.88f);
+            float toDark = UnityEngine.Random.Range(0.35f, 0.7f);
+            float toLight = UnityEngine.Random.Range(0.4f, 0.9f);
+            yield return LerpBackdrop(_backdropBase, _backdropBase * deep, toDark);
+            yield return LerpBackdrop(_backdropBase * deep, _backdropBase, toLight);
+            // 偶尔多顿一下
+            if (UnityEngine.Random.value < 0.35f)
+            {
+                float flick = UnityEngine.Random.Range(0.65f, 0.8f);
+                yield return LerpBackdrop(_backdropBase, _backdropBase * flick, 0.12f);
+                yield return LerpBackdrop(_backdropBase * flick, _backdropBase, 0.18f);
+            }
+        }
+    }
+
+    IEnumerator LerpBackdrop(Color from, Color to, float seconds)
+    {
+        float t = 0f;
+        seconds = Mathf.Max(0.05f, seconds);
+        while (t < 1f)
+        {
+            t += Time.unscaledDeltaTime / seconds;
+            if (backdrop != null)
+            {
+                Color c = Color.Lerp(from, to, Mathf.Clamp01(t));
+                c.a = _backdropBase.a;
+                backdrop.color = c;
+            }
+            yield return null;
+        }
+    }
+
+    static IEnumerator WaitUnscaled(float seconds)
+    {
+        float t = 0f;
+        while (t < seconds)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+    }
+
+    // ===== 绑定 =====
+
+    void BindRefs()
+    {
+        if (root == null)
+        {
+            var t = transform.Find("Root");
+            root = t != null ? t.gameObject : gameObject;
+
+---------- 第 19 页 ----------
+        }
+        if (backdrop == null)
+        {
+            var t = root.transform.Find("Backdrop");
+            if (t != null) backdrop = t.GetComponent<Image>();
+        }
+        if (titleText == null)
+        {
+            var t = FindDeep(root.transform, "Title");
+            if (t != null) titleText = t.GetComponent<Text>();
+        }
+        if (pedestalRoot == null)
+        {
+            var t = root.transform.Find("Pedestals");
+            if (t != null) pedestalRoot = t;
+        }
+
+        if (pedestals == null) pedestals = new List<PedestalRefs>();
+        if (pedestals.Count < PedestalCount && pedestalRoot != null)
+        {
+            pedestals.Clear();
+            for (int i = 0; i < PedestalCount; i++)
+            {
+                Transform p = pedestalRoot.Find($"Pedestal_{i}")
+                    ?? pedestalRoot.Find($"Stage_{i}")
+                    ?? pedestalRoot.Find($"Node_{i}");
+                if (p == null) continue;
+                pedestals.Add(BindOne(p.gameObject));
+            }
+        }
+        else
+        {
+            for (int i = 0; i < pedestals.Count; i++)
+            {
+                if (pedestals[i] != null && pedestals[i].root != null
+                    && pedestals[i].lockIcon == null)
+                {
+                    // 补绑 Lock
+                    var L = pedestals[i].root.transform.Find("Lock")
+                        ?? pedestals[i].root.transform.Find("LockIcon");
+                    if (L != null) pedestals[i].lockIcon = L.gameObject;
+                }
+            }
+        }
+    }
+
+    static PedestalRefs BindOne(GameObject go)
+    {
+        var r = new PedestalRefs { root = go };
+        r.button = go.GetComponent<Button>() ?? go.GetComponentInChildren<Button>(true);
+
+---------- 第 20 页 ----------
+        r.stone = go.transform.Find("Stone")?.GetComponent<Image>()
+            ?? go.GetComponent<Image>();
+        r.banner = go.transform.Find("Banner")?.GetComponent<Image>();
+        r.icon = go.transform.Find("Icon")?.GetComponent<Image>()
+            ?? go.transform.Find("Banner/Icon")?.GetComponent<Image>();
+        var cleared = go.transform.Find("ClearedMark");
+        if (cleared != null) r.clearedMark = cleared.gameObject;
+        var lockT = go.transform.Find("Lock") ?? go.transform.Find("LockIcon");
+        if (lockT != null) r.lockIcon = lockT.gameObject;
+        r.outlineTarget = r.banner != null ? r.banner : r.stone;
+        // Highlight 不再使用
+        var hi = go.transform.Find("Highlight");
+        if (hi != null) hi.gameObject.SetActive(false);
+        return r;
+    }
+
+    void EnsureCanvas()
+    {
+        var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
         UICanvasSetup.Apply(canvas);
         canvas.sortingOrder = 880;
@@ -32,6 +1039,8 @@
     public static void BuildHierarchy(GameObject host)
     {
         if (host == null) return;
+
+---------- 第 21 页 ----------
         if (host.GetComponent<RectTransform>() == null)
             host.AddComponent<RectTransform>();
 
@@ -51,8 +1060,6 @@
             bg.color = Color.white;
         }
 
-
----------- 第 2 页 ----------
         var title = NewText(rootGo.transform, "Title", "第X章", 36, TextAnchor.MiddleCenter);
         title.color = new Color(0.85f, 0.75f, 1f, 1f);
         var trt = title.rectTransform;
@@ -84,6 +1091,8 @@
             new Vector2(-70f,   10f),
             new Vector2( 50f,  100f),
             new Vector2(-90f,  190f),
+
+---------- 第 22 页 ----------
             new Vector2( 70f,  280f),
             new Vector2(-30f,  380f), // 9 最上
         };
@@ -103,8 +1112,6 @@
     }
 
     static PedestalRefs BuildPedestal(Transform parent, int index, Vector2 anchored)
-
----------- 第 3 页 ----------
     {
         var go = new GameObject($"Pedestal_{index}", typeof(RectTransform), typeof(Image), typeof(Button));
         go.transform.SetParent(parent, false);
@@ -136,6 +1143,8 @@
 
         // ClearedMark = 灰旗（换灰旗图）
         var cleared = NewImage(rt, "ClearedMark", new Color(0.4f, 0.4f, 0.4f, 1f));
+
+---------- 第 23 页 ----------
         var crt = cleared.rectTransform;
         crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 1f);
         crt.pivot = new Vector2(0.5f, 0f);
@@ -155,8 +1164,6 @@
 
         return new PedestalRefs
         {
-
----------- 第 4 页 ----------
             root = go,
             button = btn,
             stone = stone,
@@ -188,6 +1195,8 @@
         rt.offsetMax = Vector2.zero;
     }
 
+
+---------- 第 24 页 ----------
     static Image NewImage(Transform parent, string name, Color color)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
@@ -207,8 +1216,6 @@
         t.text = content;
         t.fontSize = size;
         t.alignment = align;
-
----------- 第 5 页 ----------
         t.color = Color.white;
         t.raycastTarget = false;
         t.horizontalOverflow = HorizontalWrapMode.Overflow;
@@ -240,6 +1247,8 @@ public class OfflineRewardPopup : MonoBehaviour
             onClose?.Invoke();
             return;
         }
+
+---------- 第 25 页 ----------
         Ensure().Open(gold, minutes, onClose);
     }
 
@@ -259,8 +1268,6 @@ public class OfflineRewardPopup : MonoBehaviour
     }
 
     void Open(long gold, double minutes, Action onClose)
-
----------- 第 6 页 ----------
     {
         _onClose = onClose;
         BuildIfNeeded();
@@ -292,6 +1299,8 @@ public class OfflineRewardPopup : MonoBehaviour
 
         var dim = new GameObject("Dim", typeof(RectTransform), typeof(Image));
         dim.transform.SetParent(_root.transform, false);
+
+---------- 第 26 页 ----------
         var drt = dim.GetComponent<RectTransform>();
         drt.anchorMin = Vector2.zero;
         drt.anchorMax = Vector2.one;
@@ -311,8 +1320,6 @@ public class OfflineRewardPopup : MonoBehaviour
         trt.anchorMin = new Vector2(0f, 1f);
         trt.anchorMax = new Vector2(1f, 1f);
         trt.pivot = new Vector2(0.5f, 1f);
-
----------- 第 7 页 ----------
         trt.anchoredPosition = new Vector2(0f, -20f);
         trt.sizeDelta = new Vector2(-40f, 40f);
         var title = titleGo.GetComponent<Text>();
@@ -344,6 +1351,8 @@ public class OfflineRewardPopup : MonoBehaviour
         btn.GetComponent<Image>().color = new Color(0.25f, 0.55f, 0.35f, 1f);
         var btnTxtGo = new GameObject("T", typeof(RectTransform), typeof(Text));
         btnTxtGo.transform.SetParent(btn.transform, false);
+
+---------- 第 27 页 ----------
         var btnTxtRt = btnTxtGo.GetComponent<RectTransform>();
         btnTxtRt.anchorMin = Vector2.zero;
         btnTxtRt.anchorMax = Vector2.one;
@@ -363,1015 +1372,6 @@ public class OfflineRewardPopup : MonoBehaviour
         var cb = _onClose;
         _onClose = null;
         cb?.Invoke();
-
----------- 第 8 页 ----------
-    }
-}
-
-// ===== FILE: Assets/Scripts/UI/LegacyPoolBrowseUI.cs =====
-using System.Collections.Generic;
-using UnityEngine;
-using UnityEngine.UI;
-
-/// <summary>
-/// 城镇武器库：只读浏览遗产池（开战前三选一从中抽取）。
-/// </summary>
-public class LegacyPoolBrowseUI : MonoBehaviour
-{
-    public static LegacyPoolBrowseUI Instance { get; private set; }
-
-    GameObject _root;
-    Text _title;
-    Text _hint;
-    readonly List<Image> _cardBgs = new List<Image>();
-    readonly List<Text> _cardLabels = new List<Text>();
-    List<EquipmentData> _items = new List<EquipmentData>();
-
-    public static void Show()
-    {
-        Ensure().Open();
-    }
-
-    static LegacyPoolBrowseUI Ensure()
-    {
-        if (Instance != null) return Instance;
-        var go = new GameObject("LegacyPoolBrowseUI");
-        DontDestroyOnLoad(go);
-        return go.AddComponent<LegacyPoolBrowseUI>();
-    }
-
-    void Awake() => Instance = this;
-
-    void OnDestroy()
-    {
-        if (Instance == this) Instance = null;
-    }
-
-    void Open()
-    {
-        TownSaveAlign.AlignAll();
-        var pool = SaveSystem.Instance?.Data?.legacyEquipPool;
-        _items = pool != null ? new List<EquipmentData>(pool) : new List<EquipmentData>();
-        BuildIfNeeded();
-        Refresh();
-        if (_root != null)
-
----------- 第 9 页 ----------
-        {
-            _root.SetActive(true);
-            _root.transform.SetAsLastSibling();
-        }
-        EnsureEventSystem();
-        GameFonts.ApplyToHierarchy(transform);
-    }
-
-    void BuildIfNeeded()
-    {
-        if (_root != null) return;
-
-        var canvas = gameObject.GetComponent<Canvas>();
-        if (canvas == null)
-        {
-            canvas = gameObject.AddComponent<Canvas>();
-            gameObject.AddComponent<GraphicRaycaster>();
-        }
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 940;
-
-        _root = new GameObject("Root", typeof(RectTransform));
-        _root.transform.SetParent(transform, false);
-        Stretch(_root.GetComponent<RectTransform>());
-
-        var dim = CreateUi("Dim", _root.transform, typeof(Image));
-        Stretch(dim.GetComponent<RectTransform>());
-        dim.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.65f);
-        dim.GetComponent<Image>().raycastTarget = true;
-
-        var panel = CreateUi("Panel", _root.transform, typeof(Image));
-        var prt = panel.GetComponent<RectTransform>();
-        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-        prt.sizeDelta = new Vector2(660f, 520f);
-        panel.GetComponent<Image>().color = new Color(0.12f, 0.1f, 0.14f, 0.97f);
-
-        _title = CreateText(panel.transform, "Title", "武器库 · 遗产", 30, TextAnchor.MiddleCenter);
-        AnchorTop(_title.rectTransform, -20f, 600f, 40f);
-
-        _hint = CreateText(panel.transform, "Hint", "开战前可从遗产中三选一穿装", 18, TextAnchor.MiddleCenter);
-        _hint.rectTransform.anchoredPosition = new Vector2(0f, 170f);
-
-        for (int i = 0; i < 9; i++)
-        {
-            var card = CreateUi("Card" + i, panel.transform, typeof(Image));
-            var crt = card.GetComponent<RectTransform>();
-            crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
-            crt.sizeDelta = new Vector2(190f, 88f);
-            int row = i / 3;
-            int col = i % 3;
-
----------- 第 10 页 ----------
-            crt.anchoredPosition = new Vector2((col - 1) * 205f, 70f - row * 100f);
-            var img = card.GetComponent<Image>();
-            img.color = new Color(0.28f, 0.28f, 0.32f, 1f);
-            _cardBgs.Add(img);
-            var label = CreateText(card.transform, "L", "", 15, TextAnchor.MiddleCenter);
-            Stretch(label.rectTransform, 6f);
-            _cardLabels.Add(label);
-        }
-
-        var ok = CreateUi("Close", panel.transform, typeof(Image), typeof(Button));
-        var ort = ok.GetComponent<RectTransform>();
-        ort.anchorMin = ort.anchorMax = new Vector2(0.5f, 0f);
-        ort.pivot = new Vector2(0.5f, 0f);
-        ort.anchoredPosition = new Vector2(0f, 22f);
-        ort.sizeDelta = new Vector2(200f, 48f);
-        ok.GetComponent<Image>().color = new Color(0.35f, 0.4f, 0.5f, 1f);
-        CreateText(ok.transform, "T", "关闭", 24, TextAnchor.MiddleCenter);
-        ok.GetComponent<Button>().onClick.AddListener(Close);
-    }
-
-    void Refresh()
-    {
-        int n = _items.Count;
-        if (_title != null)
-            _title.text = n > 0 ? $"武器库 · 遗产（{n}）" : "武器库 · 遗产为空";
-        if (_hint != null)
-            _hint.text = n > 0 ? "开战前可从遗产中三选一穿装" : "死亡/撤离带回的装备会出现在这里";
-
-        for (int i = 0; i < _cardBgs.Count; i++)
-        {
-            bool has = i < _items.Count && _items[i] != null;
-            _cardBgs[i].gameObject.SetActive(has);
-            if (!has) continue;
-            var d = _items[i];
-            _cardLabels[i].text = $"{DisplayName(d)}\n稀有{d.rarity} ★{d.star}";
-        }
-    }
-
-    void Close()
-    {
-        if (_root != null) _root.SetActive(false);
-    }
-
-    static string DisplayName(EquipmentData d)
-    {
-        if (d == null) return "装备";
-        var tpl = ConfigManager.Instance != null ? ConfigManager.Instance.GetEquipTemplate(d.equipId) : null;
-        if (tpl != null && !string.IsNullOrEmpty(tpl.equipName))
-            return tpl.equipName;
-        return string.IsNullOrEmpty(d.equipId) ? "装备" : d.equipId;
-
----------- 第 11 页 ----------
-    }
-
-    static void EnsureEventSystem()
-    {
-        if (UnityEngine.EventSystems.EventSystem.current != null) return;
-        var es = new GameObject("EventSystem");
-        es.AddComponent<UnityEngine.EventSystems.EventSystem>();
-        es.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
-    }
-
-    static GameObject CreateUi(string name, Transform parent, params System.Type[] comps)
-    {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        for (int i = 0; i < comps.Length; i++)
-            go.AddComponent(comps[i]);
-        return go;
-    }
-
-    static Text CreateText(Transform parent, string name, string content, int size, TextAnchor align)
-    {
-        var go = CreateUi(name, parent, typeof(Text));
-        var t = go.GetComponent<Text>();
-        t.text = content;
-        t.fontSize = size;
-        t.alignment = align;
-        t.color = Color.white;
-        t.horizontalOverflow = HorizontalWrapMode.Wrap;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        Stretch(go.GetComponent<RectTransform>());
-        return t;
-    }
-
-    static void Stretch(RectTransform rt, float inset = 0f)
-    {
-        if (rt == null) return;
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(inset, inset);
-        rt.offsetMax = new Vector2(-inset, -inset);
-    }
-
-    static void AnchorTop(RectTransform rt, float y, float w, float h)
-    {
-        if (rt == null) return;
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
-        rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, y);
-        rt.sizeDelta = new Vector2(w, h);
-
----------- 第 12 页 ----------
-    }
-}
-
-// ===== FILE: Assets/Scripts/UI/CraftStagePopupUI.cs =====
-using System;
-using UnityEngine;
-using UnityEngine.UI;
-
-/// <summary>
-/// 锻造 / 附魔关简易弹窗。恢复关用 RestStagePopupUI（回 50% 血）。
-/// 预制体：
-/// · Prefabs/Battle/ForgeStagePopup
-/// · Prefabs/Battle/EnchantStagePopup
-/// 缺失时用代码搭，结构一致方便你换图。
-/// </summary>
-public class CraftStagePopupUI : MonoBehaviour
-{
-    public enum Kind { Forge, Enchant }
-
-    public const string ForgePrefabPath = "Prefabs/Battle/ForgeStagePopup";
-    public const string EnchantPrefabPath = "Prefabs/Battle/EnchantStagePopup";
-
-    public static CraftStagePopupUI Instance { get; private set; }
-
-    public GameObject root;
-    public Text titleText;
-    public Text flavorText;
-    public Button continueButton;
-    public Text continueLabel;
-    public Button closeButton;
-
-    Kind _kind;
-    Action _onContinue;
-    float _prevTimeScale = 1f;
-
-    public static void ShowForge(Action onContinue) => Ensure(Kind.Forge).Open(Kind.Forge, onContinue);
-    public static void ShowEnchant(Action onContinue) => Ensure(Kind.Enchant).Open(Kind.Enchant, onContinue);
-
-    static CraftStagePopupUI Ensure(Kind kind)
-    {
-        // 锻造/附魔各可有独立实例；没有就共用一个临时壳
-        if (Instance != null && Instance.gameObject != null)
-            return Instance;
-
-        string path = kind == Kind.Forge ? ForgePrefabPath : EnchantPrefabPath;
-        var prefab = Resources.Load<GameObject>(path);
-        GameObject go;
-        if (prefab != null)
-        {
-            go = Instantiate(prefab);
-
----------- 第 13 页 ----------
-            go.name = kind == Kind.Forge ? "ForgeStagePopup" : "EnchantStagePopup";
-        }
-        else
-        {
-            go = new GameObject(kind == Kind.Forge ? "ForgeStagePopup" : "EnchantStagePopup",
-                typeof(RectTransform));
-            BuildHierarchy(go, kind);
-        }
-        DontDestroyOnLoad(go);
-        var ui = go.GetComponent<CraftStagePopupUI>();
-        if (ui == null) ui = go.AddComponent<CraftStagePopupUI>();
-        return ui;
-    }
-
-    void Awake()
-    {
-        Instance = this;
-        BindRefs();
-        if (root != null) root.SetActive(false);
-    }
-
-    void OnDestroy()
-    {
-        if (Instance == this) Instance = null;
-    }
-
-    void BindRefs()
-    {
-        if (root == null)
-        {
-            var t = transform.Find("Root");
-            root = t != null ? t.gameObject : gameObject;
-        }
-        if (titleText == null)
-        {
-            var t = root.transform.Find("Panel/Title") ?? FindDeep(root.transform, "Title");
-            if (t != null) titleText = t.GetComponent<Text>();
-        }
-        if (flavorText == null)
-        {
-            var t = FindDeep(root.transform, "FlavorText");
-            if (t != null) flavorText = t.GetComponent<Text>();
-        }
-        if (continueButton == null)
-        {
-            var t = FindDeep(root.transform, "ContinueButton");
-            if (t != null) continueButton = t.GetComponent<Button>();
-        }
-        if (continueLabel == null && continueButton != null)
-            continueLabel = continueButton.GetComponentInChildren<Text>();
-
----------- 第 14 页 ----------
-        if (closeButton == null)
-        {
-            var t = FindDeep(root.transform, "CloseButton");
-            if (t != null) closeButton = t.GetComponent<Button>();
-        }
-    }
-
-    void Open(Kind kind, Action onContinue)
-    {
-        BindRefs();
-        _kind = kind;
-        _onContinue = onContinue;
-        EnsureCanvas();
-        _prevTimeScale = Time.timeScale;
-        Time.timeScale = 0f;
-
-        if (titleText != null)
-            titleText.text = kind == Kind.Forge ? "锻造关卡" : "附魔关卡";
-        if (flavorText != null)
-            flavorText.text = kind == Kind.Forge
-                ? "铁匠铺的炉火正旺，强化材料已备好。"
-                : "附魔台闪着微光，可为装备附加词条。";
-        if (continueLabel != null)
-            continueLabel.text = "继续冒险";
-
-        // 锻造关：发强化材料 + 尝试升星一件
-        if (kind == Kind.Forge)
-        {
-            var bm = BattleManager.Instance;
-            int stageIdx = bm != null && bm.currentStage != null ? bm.currentStage.stageIndex : 0;
-            int chapter = bm != null ? bm.CurrentChapter : 1;
-            int mats = StageRoller.RestMaterialReward(stageIdx, chapter);
-            ResourceWallet.Add(ResourceWallet.ResourceType.DecomposeMat, mats, save: true, notify: true);
-            UIManager.Instance?.ShowToast($"获得强化材料 ×{mats}");
-            if (CraftStageApply.TryForgeUpgrade(out string forgeMsg))
-                UIManager.Instance?.ShowToast(forgeMsg);
-            else if (!string.IsNullOrEmpty(forgeMsg))
-                UIManager.Instance?.ShowToast(forgeMsg);
-        }
-        else if (kind == Kind.Enchant)
-        {
-            if (CraftStageApply.TryEnchantRandom(out string enchMsg))
-                UIManager.Instance?.ShowToast(enchMsg);
-            else if (!string.IsNullOrEmpty(enchMsg))
-                UIManager.Instance?.ShowToast(enchMsg);
-        }
-
-        if (continueButton != null)
-        {
-            continueButton.onClick.RemoveAllListeners();
-
----------- 第 15 页 ----------
-            continueButton.onClick.AddListener(OnContinue);
-        }
-        if (closeButton != null)
-        {
-            closeButton.onClick.RemoveAllListeners();
-            closeButton.onClick.AddListener(OnContinue);
-        }
-
-        if (root != null) root.SetActive(true);
-        transform.SetAsLastSibling();
-        GameFonts.ApplyToHierarchy(transform);
-    }
-
-    void OnContinue()
-    {
-        Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
-        if (root != null) root.SetActive(false);
-        var cb = _onContinue;
-        _onContinue = null;
-        cb?.Invoke();
-    }
-
-    void EnsureCanvas()
-    {
-        var canvas = GetComponent<Canvas>();
-        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 920;
-        if (GetComponent<GraphicRaycaster>() == null)
-            gameObject.AddComponent<GraphicRaycaster>();
-    }
-
-    public static void BuildHierarchy(GameObject host, Kind kind)
-    {
-        if (host.GetComponent<RectTransform>() == null)
-            host.AddComponent<RectTransform>();
-        for (int i = host.transform.childCount - 1; i >= 0; i--)
-            UnityEngine.Object.DestroyImmediate(host.transform.GetChild(i).gameObject);
-
-        var rootGo = new GameObject("Root", typeof(RectTransform));
-        rootGo.transform.SetParent(host.transform, false);
-        Stretch(rootGo.GetComponent<RectTransform>());
-
-        var dim = NewImage(rootGo.transform, "Dim", new Color(0f, 0f, 0f, 0.7f));
-        Stretch(dim.rectTransform);
-        dim.raycastTarget = true;
-
-        Color panelC = kind == Kind.Forge
-            ? new Color(0.22f, 0.16f, 0.1f, 0.98f)
-            : new Color(0.12f, 0.18f, 0.26f, 0.98f);
-
----------- 第 16 页 ----------
-        var panel = NewImage(rootGo.transform, "Panel", panelC);
-        var prt = panel.rectTransform;
-        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-        prt.sizeDelta = new Vector2(560f, 520f);
-
-        var title = NewText(prt, "Title", kind == Kind.Forge ? "锻造关卡" : "附魔关卡",
-            38, TextAnchor.MiddleCenter);
-        var trt = title.rectTransform;
-        trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 1f);
-        trt.pivot = new Vector2(0.5f, 1f);
-        trt.anchoredPosition = new Vector2(0f, -48f);
-        trt.sizeDelta = new Vector2(400f, 50f);
-
-        var illu = NewImage(prt, "Illustration", new Color(0.3f, 0.3f, 0.35f, 0.6f));
-        var irt = illu.rectTransform;
-        irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 1f);
-        irt.pivot = new Vector2(0.5f, 1f);
-        irt.anchoredPosition = new Vector2(0f, -110f);
-        irt.sizeDelta = new Vector2(480f, 220f);
-        illu.preserveAspect = true;
-
-        var flavor = NewText(prt, "FlavorText", "", 24, TextAnchor.MiddleCenter);
-        var frt = flavor.rectTransform;
-        frt.anchorMin = frt.anchorMax = new Vector2(0.5f, 0.5f);
-        frt.anchoredPosition = new Vector2(0f, -40f);
-        frt.sizeDelta = new Vector2(480f, 60f);
-
-        var closeImg = NewImage(prt, "CloseButton", new Color(0.45f, 0.22f, 0.2f, 1f));
-        closeImg.raycastTarget = true;
-        var crt = closeImg.rectTransform;
-        crt.anchorMin = crt.anchorMax = new Vector2(1f, 1f);
-        crt.pivot = new Vector2(1f, 1f);
-        crt.sizeDelta = new Vector2(56f, 56f);
-        crt.anchoredPosition = new Vector2(-10f, -10f);
-        var closeBtn = closeImg.gameObject.AddComponent<Button>();
-        closeBtn.targetGraphic = closeImg;
-        var cx = NewText(crt, "Label", "×", 32, TextAnchor.MiddleCenter);
-        Stretch(cx.rectTransform);
-
-        var contImg = NewImage(prt, "ContinueButton", new Color(0.22f, 0.5f, 0.32f, 1f));
-        contImg.raycastTarget = true;
-        var contRt = contImg.rectTransform;
-        contRt.anchorMin = contRt.anchorMax = new Vector2(0.5f, 0f);
-        contRt.pivot = new Vector2(0.5f, 0f);
-        contRt.sizeDelta = new Vector2(360f, 76f);
-        contRt.anchoredPosition = new Vector2(0f, 40f);
-        var contBtn = contImg.gameObject.AddComponent<Button>();
-        contBtn.targetGraphic = contImg;
-        var cl = NewText(contRt, "Label", "继续冒险", 30, TextAnchor.MiddleCenter);
-        Stretch(cl.rectTransform);
-
----------- 第 17 页 ----------
-
-        var ui = host.GetComponent<CraftStagePopupUI>() ?? host.AddComponent<CraftStagePopupUI>();
-        ui.root = rootGo;
-        ui.titleText = title;
-        ui.flavorText = flavor;
-        ui.continueButton = contBtn;
-        ui.continueLabel = cl;
-        ui.closeButton = closeBtn;
-        GameFonts.ApplyToHierarchy(host.transform);
-    }
-
-    static Transform FindDeep(Transform root, string name)
-    {
-        if (root == null) return null;
-        if (root.name == name) return root;
-        for (int i = 0; i < root.childCount; i++)
-        {
-            var f = FindDeep(root.GetChild(i), name);
-            if (f != null) return f;
-        }
-        return null;
-    }
-
-    static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
-
-    static Image NewImage(Transform parent, string name, Color c)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        go.transform.SetParent(parent, false);
-        var img = go.GetComponent<Image>();
-        img.color = c;
-        img.raycastTarget = false;
-        return img;
-    }
-
-    static Text NewText(Transform parent, string name, string content, int size, TextAnchor align)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        go.transform.SetParent(parent, false);
-        var t = go.GetComponent<Text>();
-        t.font = GameFonts.GetChinese();
-        t.text = content;
-        t.fontSize = size;
-        t.alignment = align;
-
----------- 第 18 页 ----------
-        t.color = Color.white;
-        t.raycastTarget = false;
-        t.horizontalOverflow = HorizontalWrapMode.Overflow;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        return t;
-    }
-}
-
-// ===== FILE: Assets/Scripts/UI/RestStagePopupUI.cs =====
-using System;
-using UnityEngine;
-using UnityEngine.UI;
-
-/// <summary>
-/// 恢复关弹窗：回复生命（不是体力），一次回复最大生命的 50%。
-/// 预制体：Resources/Prefabs/Battle/RestStagePopup
-/// 结构按仙泉图搭好，你只换 Backdrop / Panel / Illustration / 按钮图即可。
-/// </summary>
-public class RestStagePopupUI : MonoBehaviour
-{
-    public const string PrefabPath = "Prefabs/Battle/RestStagePopup";
-    /// <summary>一次回复的生命比例</summary>
-    public const float HealRatio = 0.5f;
-
-    public static RestStagePopupUI Instance { get; private set; }
-
-    [Header("按名字自动绑，也可 Inspector 覆盖")]
-    public GameObject root;
-    public Image panel;
-    public Image illustration;
-    public Text titleText;
-    public Text flavorText;
-    public Text statusText;
-    public Text hpValueText;
-    public Image statusIcon;
-    public Button closeButton;
-    public Button continueButton;
-    public Text continueLabel;
-
-    Action _onContinue;
-    float _prevTimeScale = 1f;
-    bool _healed;
-
-    public static void Show(Action onContinue = null)
-    {
-        Ensure().Open(onContinue);
-    }
-
-    public static RestStagePopupUI Ensure()
-    {
-
----------- 第 19 页 ----------
-        if (Instance != null) return Instance;
-
-        var prefab = Resources.Load<GameObject>(PrefabPath);
-        GameObject go;
-        if (prefab != null)
-        {
-            go = Instantiate(prefab);
-            go.name = "RestStagePopup";
-        }
-        else
-        {
-            Debug.LogWarning($"[RestStagePopup] 未找到预制体 {PrefabPath}，改用代码搭建");
-            go = new GameObject("RestStagePopup", typeof(RectTransform));
-            BuildHierarchy(go);
-        }
-        DontDestroyOnLoad(go);
-
-        var ui = go.GetComponent<RestStagePopupUI>();
-        if (ui == null) ui = go.AddComponent<RestStagePopupUI>();
-        return ui;
-    }
-
-    void Awake()
-    {
-        Instance = this;
-        BindRefs();
-        if (root != null) root.SetActive(false);
-    }
-
-    void OnDestroy()
-    {
-        if (Instance == this) Instance = null;
-    }
-
-    void BindRefs()
-    {
-        if (root == null)
-        {
-            var t = transform.Find("Root");
-            root = t != null ? t.gameObject : gameObject;
-        }
-        if (panel == null)
-        {
-            var t = root.transform.Find("Panel");
-            if (t != null) panel = t.GetComponent<Image>();
-        }
-        if (illustration == null)
-        {
-            var t = FindDeep(root.transform, "Illustration");
-            if (t != null) illustration = t.GetComponent<Image>();
-
----------- 第 20 页 ----------
-        }
-        if (titleText == null)
-        {
-            var t = FindDeep(root.transform, "Title");
-            if (t != null) titleText = t.GetComponent<Text>();
-        }
-        if (flavorText == null)
-        {
-            var t = FindDeep(root.transform, "FlavorText");
-            if (t != null) flavorText = t.GetComponent<Text>();
-        }
-        if (statusText == null)
-        {
-            var t = FindDeep(root.transform, "StatusText");
-            if (t != null) statusText = t.GetComponent<Text>();
-        }
-        if (hpValueText == null)
-        {
-            var t = FindDeep(root.transform, "HpValue");
-            if (t != null) hpValueText = t.GetComponent<Text>();
-        }
-        if (statusIcon == null)
-        {
-            var t = FindDeep(root.transform, "StatusIcon");
-            if (t != null) statusIcon = t.GetComponent<Image>();
-        }
-        if (closeButton == null)
-        {
-            var t = FindDeep(root.transform, "CloseButton");
-            if (t != null) closeButton = t.GetComponent<Button>();
-        }
-        if (continueButton == null)
-        {
-            var t = FindDeep(root.transform, "ContinueButton");
-            if (t != null) continueButton = t.GetComponent<Button>();
-        }
-        if (continueLabel == null && continueButton != null)
-        {
-            var t = continueButton.transform.Find("Label");
-            if (t != null) continueLabel = t.GetComponent<Text>();
-        }
-    }
-
-    void Open(Action onContinue)
-    {
-        BindRefs();
-        _onContinue = onContinue;
-        _healed = false;
-
-        EnsureCanvas();
-
----------- 第 21 页 ----------
-        _prevTimeScale = Time.timeScale;
-        Time.timeScale = 0f;
-
-        ApplyHeal();
-        GrantRestMaterials();
-        RefreshTexts();
-
-        if (closeButton != null)
-        {
-            closeButton.onClick.RemoveAllListeners();
-            closeButton.onClick.AddListener(OnContinue);
-        }
-        if (continueButton != null)
-        {
-            continueButton.onClick.RemoveAllListeners();
-            continueButton.onClick.AddListener(OnContinue);
-        }
-
-        if (root != null) root.SetActive(true);
-        transform.SetAsLastSibling();
-        GameFonts.ApplyToHierarchy(transform);
-    }
-
-    /// <summary>给英雄 + 所有存活佣兵各回 50% 最大生命。</summary>
-    void ApplyHeal()
-    {
-        if (_healed) return;
-        _healed = true;
-
-        var bm = BattleManager.Instance;
-        if (bm == null) return;
-
-        HealUnit(bm.hero);
-        if (bm.allyUnits != null)
-        {
-            for (int i = 0; i < bm.allyUnits.Count; i++)
-                HealUnit(bm.allyUnits[i]);
-        }
-        BattleUI.Instance?.UpdateCharacterSlots();
-    }
-
-    void GrantRestMaterials()
-    {
-        var bm = BattleManager.Instance;
-        int stageIdx = bm != null && bm.currentStage != null ? bm.currentStage.stageIndex : 0;
-        int chapter = bm != null ? bm.CurrentChapter : 1;
-        int mats = StageRoller.RestMaterialReward(stageIdx, chapter);
-        if (mats <= 0) return;
-        ResourceWallet.Add(ResourceWallet.ResourceType.DecomposeMat, mats, save: true, notify: true);
-        UIManager.Instance?.ShowToast($"休息补给：强化材料 ×{mats}");
-
----------- 第 22 页 ----------
-    }
-
-    static void HealUnit(UnitBase u)
-    {
-        if (u == null || u.isDead || u.attr == null) return;
-        float max = u.attr.GetAttr(AttrType.MaxHp);
-        if (max <= 0.01f) return;
-        float add = max * HealRatio;
-        u.currentHp = Mathf.Min(max, u.currentHp + add);
-    }
-
-    void RefreshTexts()
-    {
-        var hero = BattleManager.Instance != null ? BattleManager.Instance.hero : null;
-        float cur = 0f, max = 0f;
-        if (hero != null && hero.attr != null)
-        {
-            max = hero.attr.GetAttr(AttrType.MaxHp);
-            cur = hero.currentHp;
-        }
-
-        if (titleText != null) titleText.text = "生命恢复";
-        if (flavorText != null) flavorText.text = "仙泉的力量恢复了你的生命！";
-        if (statusText != null) statusText.text = "生命已恢复";
-        if (hpValueText != null)
-        {
-            hpValueText.font = GameFonts.GetNumber();
-            hpValueText.text = $"{Mathf.CeilToInt(cur)} / {Mathf.CeilToInt(max)}";
-        }
-        if (continueLabel != null) continueLabel.text = "继续冒险";
-    }
-
-    void OnContinue()
-    {
-        Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
-        if (root != null) root.SetActive(false);
-        var cb = _onContinue;
-        _onContinue = null;
-        cb?.Invoke();
-    }
-
-    void EnsureCanvas()
-    {
-        var canvas = GetComponent<Canvas>();
-        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 920;
-        if (GetComponent<GraphicRaycaster>() == null)
-            gameObject.AddComponent<GraphicRaycaster>();
-        EnsureEventSystem();
-
----------- 第 23 页 ----------
-    }
-
-    static void EnsureEventSystem()
-    {
-        if (UnityEngine.EventSystems.EventSystem.current != null) return;
-        var go = new GameObject("EventSystem",
-            typeof(UnityEngine.EventSystems.EventSystem),
-            typeof(UnityEngine.EventSystems.StandaloneInputModule));
-        go.hideFlags = HideFlags.DontSave;
-    }
-
-    // ===== 预制体结构（Editor / 运行时兜底共用）=====
-
-    /// <summary>
-    /// 节点名固定，方便换美术：
-    /// Root/Dim、Panel、CloseButton、Title、TitleDecorL/R、
-    /// Illustration、FlavorText、StatusRow(StatusIcon/StatusText/HpValue)、ContinueButton
-    /// </summary>
-    public static void BuildHierarchy(GameObject host)
-    {
-        if (host == null) return;
-        var rootRt = host.GetComponent<RectTransform>();
-        if (rootRt == null) rootRt = host.AddComponent<RectTransform>();
-
-        for (int i = host.transform.childCount - 1; i >= 0; i--)
-            UnityEngine.Object.DestroyImmediate(host.transform.GetChild(i).gameObject);
-
-        var rootGo = new GameObject("Root", typeof(RectTransform));
-        rootGo.transform.SetParent(host.transform, false);
-        Stretch(rootGo.GetComponent<RectTransform>());
-
-        var dim = NewImage(rootGo.transform, "Dim", new Color(0f, 0f, 0f, 0.72f));
-        Stretch(dim.rectTransform);
-        dim.raycastTarget = true;
-
-        // 外框：深色木纹占位，你换成带边框的图
-        var panelImg = NewImage(rootGo.transform, "Panel", new Color(0.18f, 0.14f, 0.12f, 0.98f));
-        var prt = panelImg.rectTransform;
-        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-        prt.pivot = new Vector2(0.5f, 0.5f);
-        prt.sizeDelta = new Vector2(620f, 920f);
-        prt.anchoredPosition = Vector2.zero;
-
-        // 内衬
-        var inner = NewImage(prt, "Inner", new Color(0.10f, 0.12f, 0.18f, 1f));
-        Stretch(inner.rectTransform);
-        inner.rectTransform.offsetMin = new Vector2(18f, 18f);
-        inner.rectTransform.offsetMax = new Vector2(-18f, -18f);
-
-        // 关闭
-
----------- 第 24 页 ----------
-        var closeImg = NewImage(prt, "CloseButton", new Color(0.45f, 0.22f, 0.2f, 1f));
-        closeImg.raycastTarget = true;
-        var crt = closeImg.rectTransform;
-        crt.anchorMin = crt.anchorMax = new Vector2(1f, 1f);
-        crt.pivot = new Vector2(1f, 1f);
-        crt.sizeDelta = new Vector2(64f, 64f);
-        crt.anchoredPosition = new Vector2(-12f, -12f);
-        var closeBtn = closeImg.gameObject.AddComponent<Button>();
-        closeBtn.targetGraphic = closeImg;
-        var closeX = NewText(crt, "Label", "×", 36, TextAnchor.MiddleCenter);
-        Stretch(closeX.rectTransform);
-
-        // 标题（生命恢复，不是体力）
-        var title = NewText(prt, "Title", "生命恢复", 40, TextAnchor.MiddleCenter);
-        title.color = new Color(0.45f, 0.75f, 1f, 1f);
-        var trt = title.rectTransform;
-        trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 1f);
-        trt.pivot = new Vector2(0.5f, 1f);
-        trt.anchoredPosition = new Vector2(0f, -48f);
-        trt.sizeDelta = new Vector2(360f, 52f);
-
-        var decorL = NewImage(prt, "TitleDecorL", new Color(0.35f, 0.65f, 0.95f, 0.9f));
-        var dl = decorL.rectTransform;
-        dl.anchorMin = dl.anchorMax = new Vector2(0.5f, 1f);
-        dl.pivot = new Vector2(0.5f, 0.5f);
-        dl.sizeDelta = new Vector2(28f, 28f);
-        dl.anchoredPosition = new Vector2(-150f, -72f);
-
-        var decorR = NewImage(prt, "TitleDecorR", new Color(0.35f, 0.65f, 0.95f, 0.9f));
-        var dr = decorR.rectTransform;
-        dr.anchorMin = dr.anchorMax = new Vector2(0.5f, 1f);
-        dr.pivot = new Vector2(0.5f, 0.5f);
-        dr.sizeDelta = new Vector2(28f, 28f);
-        dr.anchoredPosition = new Vector2(150f, -72f);
-
-        // 插画区：把仙泉图拖到 Illustration 的 Image.sprite
-        var illuBg = NewImage(prt, "IllustrationFrame", new Color(0.08f, 0.1f, 0.14f, 1f));
-        var ifr = illuBg.rectTransform;
-        ifr.anchorMin = ifr.anchorMax = new Vector2(0.5f, 1f);
-        ifr.pivot = new Vector2(0.5f, 1f);
-        ifr.anchoredPosition = new Vector2(0f, -110f);
-        ifr.sizeDelta = new Vector2(540f, 420f);
-
-        var illu = NewImage(ifr, "Illustration", new Color(0.25f, 0.35f, 0.45f, 0.55f));
-        Stretch(illu.rectTransform);
-        illu.rectTransform.offsetMin = new Vector2(8f, 8f);
-        illu.rectTransform.offsetMax = new Vector2(-8f, -8f);
-        illu.preserveAspect = true;
-        // 可选：Resources 里有图就自动挂上
-        var sp = Resources.Load<Sprite>("Art/UI/RestStage/illustration");
-
----------- 第 25 页 ----------
-        if (sp != null)
-        {
-            illu.sprite = sp;
-            illu.color = Color.white;
-        }
-
-        // 文案
-        var flavor = NewText(prt, "FlavorText", "仙泉的力量恢复了你的生命！", 26, TextAnchor.MiddleCenter);
-        flavor.color = new Color(0.95f, 0.95f, 0.95f, 1f);
-        var frt = flavor.rectTransform;
-        frt.anchorMin = frt.anchorMax = new Vector2(0.5f, 0.5f);
-        frt.anchoredPosition = new Vector2(0f, -80f);
-        frt.sizeDelta = new Vector2(520f, 40f);
-
-        var statusRow = new GameObject("StatusRow", typeof(RectTransform));
-        statusRow.transform.SetParent(prt, false);
-        var srt = statusRow.GetComponent<RectTransform>();
-        srt.anchorMin = srt.anchorMax = new Vector2(0.5f, 0.5f);
-        srt.sizeDelta = new Vector2(520f, 48f);
-        srt.anchoredPosition = new Vector2(0f, -140f);
-
-        var icon = NewImage(srt, "StatusIcon", new Color(0.35f, 0.85f, 0.45f, 1f));
-        var irt = icon.rectTransform;
-        irt.anchorMin = irt.anchorMax = new Vector2(0f, 0.5f);
-        irt.pivot = new Vector2(0f, 0.5f);
-        irt.sizeDelta = new Vector2(40f, 40f);
-        irt.anchoredPosition = new Vector2(40f, 0f);
-
-        var status = NewText(srt, "StatusText", "生命已恢复", 26, TextAnchor.MiddleLeft);
-        var stRt = status.rectTransform;
-        stRt.anchorMin = stRt.anchorMax = new Vector2(0f, 0.5f);
-        stRt.pivot = new Vector2(0f, 0.5f);
-        stRt.sizeDelta = new Vector2(220f, 40f);
-        stRt.anchoredPosition = new Vector2(96f, 0f);
-
-        var hp = NewText(srt, "HpValue", "0 / 0", 28, TextAnchor.MiddleRight);
-        hp.font = GameFonts.GetNumber();
-        hp.color = new Color(1f, 0.92f, 0.45f, 1f);
-        var hrt = hp.rectTransform;
-        hrt.anchorMin = hrt.anchorMax = new Vector2(1f, 0.5f);
-        hrt.pivot = new Vector2(1f, 0.5f);
-        hrt.sizeDelta = new Vector2(200f, 40f);
-        hrt.anchoredPosition = new Vector2(-40f, 0f);
-
-        // 继续冒险
-        var contImg = NewImage(prt, "ContinueButton", new Color(0.22f, 0.55f, 0.32f, 1f));
-        contImg.raycastTarget = true;
-        var contRt = contImg.rectTransform;
-        contRt.anchorMin = contRt.anchorMax = new Vector2(0.5f, 0f);
-        contRt.pivot = new Vector2(0.5f, 0f);
-
----------- 第 26 页 ----------
-        contRt.sizeDelta = new Vector2(420f, 84f);
-        contRt.anchoredPosition = new Vector2(0f, 48f);
-        var contBtn = contImg.gameObject.AddComponent<Button>();
-        contBtn.targetGraphic = contImg;
-        var contLabel = NewText(contRt, "Label", "继续冒险", 32, TextAnchor.MiddleCenter);
-        contLabel.color = new Color(1f, 0.95f, 0.75f, 1f);
-        Stretch(contLabel.rectTransform);
-
-        var ui = host.GetComponent<RestStagePopupUI>();
-        if (ui == null) ui = host.AddComponent<RestStagePopupUI>();
-        ui.root = rootGo;
-        ui.panel = panelImg;
-        ui.illustration = illu;
-        ui.titleText = title;
-        ui.flavorText = flavor;
-        ui.statusText = status;
-        ui.hpValueText = hp;
-        ui.statusIcon = icon;
-        ui.closeButton = closeBtn;
-        ui.continueButton = contBtn;
-        ui.continueLabel = contLabel;
-
-        GameFonts.ApplyToHierarchy(host.transform);
-    }
-
-    static Transform FindDeep(Transform root, string name)
-    {
-        if (root == null) return null;
-        if (root.name == name) return root;
-        for (int i = 0; i < root.childCount; i++)
-        {
-            var f = FindDeep(root.GetChild(i), name);
-            if (f != null) return f;
-        }
-        return null;
-    }
-
-    static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
-
-    static Image NewImage(Transform parent, string name, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        go.transform.SetParent(parent, false);
-        var img = go.GetComponent<Image>();
-
----------- 第 27 页 ----------
-        img.color = color;
-        img.raycastTarget = false;
-        return img;
-    }
-
-    static Text NewText(Transform parent, string name, string content, int size, TextAnchor align)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        go.transform.SetParent(parent, false);
-        var t = go.GetComponent<Text>();
-        t.font = GameFonts.GetChinese();
-        t.text = content;
-        t.fontSize = size;
-        t.alignment = align;
-        t.color = Color.white;
-        t.raycastTarget = false;
-        t.horizontalOverflow = HorizontalWrapMode.Overflow;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        return t;
     }
 }
 

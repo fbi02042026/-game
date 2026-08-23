@@ -28,7 +28,7 @@ public static class SortingLayerSetup
         EditorApplication.delayCall += EnsureSortingLayers;
     }
 
-    [MenuItem("Tools/设置排序层")]
+    [MenuItem("Tools/_归档/设置排序层")]
     public static void EnsureSortingLayers()
     {
         var tagManager = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]);

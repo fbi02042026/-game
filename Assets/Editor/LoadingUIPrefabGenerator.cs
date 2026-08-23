@@ -11,7 +11,7 @@ public static class LoadingUIPrefabGenerator
 {
     const string PrefabPath = "Assets/Resources/Prefabs/Loading/LoadingUI.prefab";
 
-    [MenuItem("Tools/UI/生成Loading界面预制体")]
+    [MenuItem("Tools/_归档/UI/生成Loading界面预制体")]
     public static void Generate()
     {
         EnsureFolders();

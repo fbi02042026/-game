@@ -108,23 +108,46 @@ public class HeroCostumeManager : MonoBehaviour
             spriteList = GetComponentInChildren<SPUM_SpriteList>();
     }
 
+    void OnEnable()
+    {
+        EnsureSubscribed();
+    }
+
     void Start()
     {
-        // 启动时扫描一次，建立缓存
         BuildPathCache();
+        EnsureSubscribed();
+        // 进场时按当前穿戴刷一次，避免只改了数值没改外观
+        RefreshCostume();
+    }
 
-        if (GridBackpackSystem.Instance != null)
-        {
-            GridBackpackSystem.Instance.OnCostumeChanged += RefreshCostume;
-        }
+    void OnDisable()
+    {
+        Unsubscribe();
     }
 
     void OnDestroy()
     {
+        Unsubscribe();
+        if (Instance == this) Instance = null;
+    }
+
+    bool _subscribed;
+
+    void EnsureSubscribed()
+    {
+        if (_subscribed) return;
+        if (GridBackpackSystem.Instance == null) return;
+        GridBackpackSystem.Instance.OnCostumeChanged += RefreshCostume;
+        _subscribed = true;
+    }
+
+    void Unsubscribe()
+    {
+        if (!_subscribed) return;
         if (GridBackpackSystem.Instance != null)
-        {
             GridBackpackSystem.Instance.OnCostumeChanged -= RefreshCostume;
-        }
+        _subscribed = false;
     }
 
     /// <summary>
@@ -234,13 +257,17 @@ public class HeroCostumeManager : MonoBehaviour
         // 确保缓存已初始化
         if (!_cacheInitialized) BuildPathCache();
 
-        foreach (var kvp in SlotToPartType)
+        // 固定顺序：先主手后副手，避免字典遍历顺序不确定
+        EquipSlotType[] order =
         {
-            EquipSlotType slot = kvp.Key;
-            string partType = kvp.Value;
+            EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.Hands,
+            EquipSlotType.Feet, EquipSlotType.Cape, EquipSlotType.MainHand, EquipSlotType.OffHand
+        };
 
-            // 副手武器暂跳过（SPUM _weaponList 无法区分主副手，后续扩展）
-            if (slot == EquipSlotType.OffHand) continue;
+        for (int i = 0; i < order.Length; i++)
+        {
+            EquipSlotType slot = order[i];
+            if (!SlotToPartType.TryGetValue(slot, out string partType)) continue;
 
             EquipInstance equip = GridBackpackSystem.Instance.GetEquippedInSlot(slot);
             if (equip != null && equip.template != null && !string.IsNullOrEmpty(equip.template.spumName))

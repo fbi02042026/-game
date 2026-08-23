@@ -71,14 +71,10 @@ public class UIManager : Singleton<UIManager>
 
     static string StageTypeLabel(StageType t)
     {
-        switch (t)
+        switch (StageRoller.NormalizeDisplayType(t))
         {
             case StageType.Elite: return "精英";
             case StageType.Boss: return "Boss";
-            case StageType.Merchant: return "商人";
-            case StageType.Enchant: return "附魔";
-            case StageType.Forge: return "锻造";
-            case StageType.Curse: return "诅咒";
             case StageType.Rest: return "恢复";
             default: return "普通";
         }

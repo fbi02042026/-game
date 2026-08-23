@@ -13,7 +13,7 @@ public static class WeChatShipChecklist
         "5. 性能：GamePerf.VerboseLog=false；VFX 逐步入 PoolManager\n\n" +
         "菜单可再跑 Tools/Build/Android Release APK 做包体对照。";
 
-    [MenuItem("Tools/自检/P5 微信上架清单")]
+    [MenuItem("Tools/_归档/自检/P5 微信上架清单")]
     public static void Show()
     {
         EditorUtility.DisplayDialog("P5 微信上架", Text, "好的");

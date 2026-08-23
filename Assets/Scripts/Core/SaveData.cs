@@ -228,7 +228,16 @@ public class AttrBonusData
 [Serializable]
 public class MercenaryData
 {
+    /// <summary>形象/预制体模板 ID（如 gongshou101），可重复招募同一模板</summary>
     public string mercId;
+    /// <summary>展示姓名（同形象可不同名）</summary>
+    public string displayName;
+    /// <summary>实例唯一 ID，名册可有多条同 mercId</summary>
+    public string uid;
     public int favorLevel;
     public int level;
+    /// <summary>星级 1～5</summary>
+    public int star = 1;
+    /// <summary>佩戴技能（Ally 技能 id，如 ally_heal）</summary>
+    public string skillId;
 }

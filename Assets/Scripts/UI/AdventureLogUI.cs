@@ -339,7 +339,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         {
             var m = list[i];
             if (m == null) continue;
-            sb.AppendLine($"  · {m.mercId}  Lv{m.level} 好感{m.favorLevel}");
+            sb.AppendLine($"  · {(string.IsNullOrEmpty(m.displayName) ? m.mercId : m.displayName)}（{m.mercId}） Lv{m.level} ★{Mathf.Max(1, m.star)} 技能:{m.skillId}");
         }
         int deploy = MercenaryManager.Instance != null
             ? MercenaryManager.Instance.GetActiveMercIds().Count : 0;
@@ -390,7 +390,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     {
         var sb = new StringBuilder();
         sb.AppendLine("【世界设定 · 摘要】");
-        sb.AppendLine("像素冒险小镇：冒险者从公会大厅出发，进入裂缝章节战斗。");
+        sb.AppendLine("像素冒险:裂缝之刃 — 冒险者从公会大厅出发，进入裂缝章节战斗。");
         sb.AppendLine("局内可强化、附魔、休息；撤离或死亡可带回遗产装备。");
         sb.AppendLine("城镇侧养成：酒馆佣兵、角色装备、天赋与成就里程。");
         sb.AppendLine();

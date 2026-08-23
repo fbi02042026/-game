@@ -56,14 +56,8 @@ public static class GameBgm
         switch (type)
         {
             case StageType.Boss: return Track.Boss;
-            case StageType.Rest:
-            case StageType.Forge:
-            case StageType.Enchant:
-            case StageType.Merchant:
-            case StageType.Curse:
-                return Track.Special;
-            default:
-                return Track.Battle;
+            case StageType.Rest: return Track.Special;
+            default: return Track.Battle;
         }
     }
 

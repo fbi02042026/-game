@@ -247,12 +247,13 @@ public class TavernUI : MonoBehaviour, ITownPage
 
     void WireClicks()
     {
+        // 仅开放佣兵招募；信任/任务/情报未做一并隐藏
         if (recruitButton != null)
         {
             recruitButton.onClick.RemoveAllListeners();
-            recruitButton.onClick.AddListener(TavernRosterPanel.Show);
+            recruitButton.gameObject.SetActive(true);
+            recruitButton.onClick.AddListener(() => TavernRosterPanel.Show());
         }
-        // 信任/任务/情报未做：隐藏，避免空入口
         if (trustButton != null) trustButton.gameObject.SetActive(false);
         if (questButton != null) questButton.gameObject.SetActive(false);
         if (intelButton != null) intelButton.gameObject.SetActive(false);

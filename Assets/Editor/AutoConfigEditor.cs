@@ -11,7 +11,7 @@ using System.Collections.Generic;
 /// </summary>
 public class AutoConfigEditor : EditorWindow
 {
-    [MenuItem("Tools/自动配置游戏资源")]
+    [MenuItem("Tools/_归档/自动配置游戏资源")]
     public static void ShowWindow()
     {
         GetWindow<AutoConfigEditor>("自动配置");

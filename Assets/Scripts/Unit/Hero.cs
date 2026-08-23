@@ -138,6 +138,11 @@ public class Hero : UnitBase
         }
         attr.SetAttr(AttrType.AttackRange, weaponRange);
         currentHp = Mathf.Min(currentHp, attr.GetAttr(AttrType.MaxHp));
+
+        // 属性重算后同步外观（通关穿装 / 战前遗产等路径未必都走 EquipItem）
+        if (costumeManager == null)
+            costumeManager = GetComponent<HeroCostumeManager>();
+        costumeManager?.RefreshCostume();
     }
 
     protected override void Update()

@@ -22,7 +22,7 @@ public static class EquipCatalogGenerator
         return fallback;
     }
 
-    [MenuItem("Tools/装备/打开占格对照表")]
+    [MenuItem("Tools/_归档/装备/打开占格对照表")]
     public static void OpenCatalogInProject()
     {
         string path = ResolveCatalogPath();
@@ -41,7 +41,7 @@ public static class EquipCatalogGenerator
         EditorUtility.RevealInFinder(path);
     }
 
-    [MenuItem("Tools/装备/生成占格对照表")]
+    [MenuItem("Tools/_归档/装备/生成占格对照表")]
     public static void GenerateCatalogMarkdown()
     {
         var names = EquipIcons.GetAllFileNames();
@@ -77,7 +77,7 @@ public static class EquipCatalogGenerator
         EditorUtility.DisplayDialog("完成", $"占格对照表已生成：\n{CatalogPathPrimary}\n共 {names.Length} 个图标", "确定");
     }
 
-    [MenuItem("Tools/装备/从对照表生成装备模板")]
+    [MenuItem("Tools/_归档/装备/从对照表生成装备模板")]
     public static void GenerateTemplatesFromCatalog()
     {
         string full = ResolveCatalogPath();
@@ -104,7 +104,7 @@ public static class EquipCatalogGenerator
         EditorUtility.DisplayDialog("完成", $"已更新/创建 {created} 个装备模板\n目录：{EquipDir}", "确定");
     }
 
-    [MenuItem("Tools/装备/按规则批量生成全部装备模板")]
+    [MenuItem("Tools/_归档/装备/按规则批量生成全部装备模板")]
     public static void GenerateAllFromRules()
     {
         EnsureEquipDir();

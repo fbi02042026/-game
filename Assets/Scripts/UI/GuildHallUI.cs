@@ -271,7 +271,9 @@ public class GuildHallUI : MonoBehaviour
         SetBtnHidden(shopButton);
         SetBtnHidden(noticeButton);
         SetBtnHidden(rankButton);
-        SetBtnHidden(noticeBoardButton);
+        SetBtnHidden(noticeBoardButton); // 公告栏
+        SetBtnHidden(armoryButton);      // 武器库（遗产浏览暂隐）
+        SetBtnHidden(licenseHallButton);  // 执照厅
         // 金币/体力加号保留，按存档发放
     }
 

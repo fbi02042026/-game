@@ -8,9 +8,9 @@ public static class CliAndroidBuild
 {
     const string OutDir = "Builds/Android";
 
-    public static void BuildDevApk() => BuildApk("PixelAdventureTown-dev.apk", development: true);
+    public static void BuildDevApk() => BuildApk("PixelAdventure-CrackBlade-dev.apk", development: true);
 
-    public static void BuildReleaseApk() => BuildApk("PixelAdventureTown-release.apk", development: false);
+    public static void BuildReleaseApk() => BuildApk("PixelAdventure-CrackBlade-release.apk", development: false);
 
     static void BuildApk(string apkName, bool development)
     {

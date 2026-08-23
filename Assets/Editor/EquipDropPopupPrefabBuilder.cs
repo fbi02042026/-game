@@ -11,7 +11,7 @@ public static class EquipDropPopupPrefabBuilder
 {
     const string PrefabAssetPath = "Assets/Resources/Prefabs/Battle/EquipDropPopup.prefab";
 
-    [MenuItem("Tools/UI/生成掉落装备弹窗预制体")]
+    [MenuItem("Tools/_归档/UI/生成掉落装备弹窗预制体")]
     public static void Build()
     {
         if (File.Exists(PrefabAssetPath))
@@ -57,7 +57,7 @@ public static class EquipDropPopupPrefabBuilder
         }
     }
 
-    [MenuItem("Tools/UI/检查掉落装备弹窗预制体")]
+    [MenuItem("Tools/_归档/UI/检查掉落装备弹窗预制体")]
     public static void Inspect()
     {
         var go = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabAssetPath);

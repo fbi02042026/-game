@@ -14,7 +14,7 @@ public static class BattleRuntimePrefabTool
     const string TalentScriptPath = "Assets/Scripts/Config/TalentConfig.cs";
     const string TalentAssetPath = "Assets/Resources/Config/Talents/backpack_row4.asset";
 
-    [MenuItem("Tools/战斗/从场景同步 BattleUI 运行时预制体")]
+    [MenuItem("Tools/_归档/战斗/从场景同步 BattleUI 运行时预制体")]
     public static void BakeBattleUIFromScene()
     {
         var battleUI = UnityEngine.Object.FindObjectOfType<BattleUI>();
@@ -64,7 +64,7 @@ public static class BattleRuntimePrefabTool
         }
     }
 
-    [MenuItem("Tools/战斗/修复 TalentConfig GUID（backpack_row4）")]
+    [MenuItem("Tools/_归档/战斗/修复 TalentConfig GUID（backpack_row4）")]
     public static void FixTalentGuid()
     {
         string newGuid = StableHexGuid(TalentScriptPath);
@@ -97,7 +97,7 @@ public static class BattleRuntimePrefabTool
             "OK");
     }
 
-    [MenuItem("Tools/战斗/强制显示 CharacterBar 头像栏")]
+    [MenuItem("Tools/_归档/战斗/强制显示 CharacterBar 头像栏")]
     public static void ForceShowCharacterBar()
     {
         var battleUI = UnityEngine.Object.FindObjectOfType<BattleUI>();

@@ -7,7 +7,7 @@ using UnityEngine;
 /// </summary>
 public static class EquipIconBinder
 {
-    [MenuItem("Tools/装备/绑定 EquipIcons 到装备模板")]
+    [MenuItem("Tools/_归档/装备/绑定 EquipIcons 到装备模板")]
     public static void BindAllTemplates()
     {
         string[] guids = AssetDatabase.FindAssets("t:EquipTemplate", new[] { "Assets/Resources/Config/Equips" });
@@ -40,7 +40,7 @@ public static class EquipIconBinder
             "确定");
     }
 
-    [MenuItem("Tools/装备/列出 EquipIcons 全部文件名")]
+    [MenuItem("Tools/_归档/装备/列出 EquipIcons 全部文件名")]
     public static void ListIconNames()
     {
         var names = EquipIcons.GetAllFileNames();

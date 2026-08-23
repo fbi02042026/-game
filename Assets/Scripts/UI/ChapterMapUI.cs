@@ -192,7 +192,7 @@ public class ChapterMapUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 点击开始战斗（软著版封禁：勿直调 StartNewRun，统一走冒险页入口）
+    /// 点击开始战斗（封禁：勿直调 StartNewRun，统一走冒险页入口）
     /// </summary>
     [System.Obsolete("请从 AdventureUI 进战，勿使用 ChapterMapUI 直开战")]
     void OnStartBattle()

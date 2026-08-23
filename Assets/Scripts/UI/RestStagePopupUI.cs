@@ -37,6 +37,10 @@ public class RestStagePopupUI : MonoBehaviour
         Ensure().Open(onContinue);
     }
 
+    /// <summary>
+    /// 优先加载 Resources/Prefabs/Battle/RestStagePopup（用户手做预制体）。
+    /// 仅缺失时才代码搭壳；绝不写回覆盖磁盘预制体。
+    /// </summary>
     public static RestStagePopupUI Ensure()
     {
         if (Instance != null) return Instance;
@@ -47,10 +51,11 @@ public class RestStagePopupUI : MonoBehaviour
         {
             go = Instantiate(prefab);
             go.name = "RestStagePopup";
+            Debug.Log("[RestStagePopup] 已加载用户预制体: " + PrefabPath);
         }
         else
         {
-            Debug.LogWarning($"[RestStagePopup] 未找到预制体 {PrefabPath}，改用代码搭建");
+            Debug.LogWarning($"[RestStagePopup] 未找到预制体 {PrefabPath}，改用代码搭建（不影响磁盘预制体）");
             go = new GameObject("RestStagePopup", typeof(RectTransform));
             BuildHierarchy(go);
         }
