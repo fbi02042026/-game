@@ -27,13 +27,19 @@ public static class CliAndroidBuild
 
         AppIconSetup.Apply();
 
-        // 仅 ARM64（64 位）
+        // Mono 不支持 ARM64；不设 IL2CPP 时勾选 ARM64 会被清空，报 Target architecture not specified
+        PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
         PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+        if (string.IsNullOrEmpty(PlayerSettings.GetApplicationIdentifier(BuildTargetGroup.Android)))
+            PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.pixeladventure.town");
 
         EditorUserBuildSettings.development = development;
         EditorUserBuildSettings.connectProfiler = false;
         EditorUserBuildSettings.allowDebugging = development;
         EditorUserBuildSettings.buildAppBundle = false;
+        EditorUserBuildSettings.androidBuildSubtarget = MobileTextureSubtarget.ASTC;
+
+        Debug.Log($"[CliAndroidBuild] backend={PlayerSettings.GetScriptingBackend(BuildTargetGroup.Android)} arch={PlayerSettings.Android.targetArchitectures}");
 
         var opts = new BuildPlayerOptions
         {
