@@ -934,9 +934,12 @@ public class TownHeroCostumePreview : MonoBehaviour
             _costume.spumPrefabs = _heroGo.GetComponentInChildren<SPUM_Prefabs>(true);
         if (_costume.spriteList == null)
             _costume.spriteList = _heroGo.GetComponentInChildren<SPUM_SpriteList>(true);
-
+        // 城镇预览不抢占战斗侧 Instance，避免回城/开战互相覆盖
 
 ---------- 第 19 页 ----------
+        if (HeroCostumeManager.Instance == _costume)
+            HeroCostumeManager.Instance = null;
+
         // 分层：预览单位进专属层，相机只看这一层，避免扫到城镇 UI
         int layer = LayerMask.NameToLayer("Default");
         SetLayerRecursive(_heroGo, layer);
@@ -984,11 +987,11 @@ public class HeroCostumeManager : MonoBehaviour
     private const string SPUM_SPRITE_BASE = "Addons/{0}/0_Unit/0_Sprite";
 
     /// <summary>
+
+---------- 第 20 页 ----------
     /// 三个Addon版本（按优先级搜索：Legacy资源最多，优先）
     /// </summary>
     private static readonly string[] AddonVersions = { "Legacy", "Ver121", "Ver300" };
-
----------- 第 20 页 ----------
 
     /// <summary>
     /// 槽位 → SPUM SpriteList属性名（用于GetPartList获取SpriteRenderer列表）
@@ -1037,10 +1040,10 @@ public class HeroCostumeManager : MonoBehaviour
     /// </summary>
     private static readonly string[] MultiSliceNames = { "Body", "Left", "Right" };
 
+---------- 第 21 页 ----------
+
     /// <summary>
     /// 缓存字典：spumName → 完整Resources路径
-
----------- 第 21 页 ----------
     /// 启动时扫描一次，之后换装直接查字典，O(1)复杂度
     /// </summary>
     private Dictionary<string, string> _spumPathCache = new Dictionary<string, string>();
@@ -1088,11 +1091,11 @@ public class HeroCostumeManager : MonoBehaviour
     }
 
     void OnDestroy()
+
+---------- 第 22 页 ----------
     {
         Unsubscribe();
         if (Instance == this) Instance = null;
-
----------- 第 22 页 ----------
     }
 
     bool _subscribed;
@@ -1140,11 +1143,11 @@ public class HeroCostumeManager : MonoBehaviour
                 {
                     if (isWeapon)
                     {
+
+---------- 第 23 页 ----------
                         // 武器：遍历所有子文件夹
                         foreach (string subFolder in AllWeaponSubFolders)
                         {
-
----------- 第 23 页 ----------
                             string path = $"{basePath}/{folder}/{subFolder}";
                             count += ScanAndCacheDirectory(path, subFolder);
                         }
@@ -1192,11 +1195,11 @@ public class HeroCostumeManager : MonoBehaviour
                 if (!_spumPathCache.ContainsKey(fileName))
                 {
                     _spumPathCache[fileName] = fullPath;
+
+---------- 第 24 页 ----------
                     count++;
                 }
             }
-
----------- 第 24 页 ----------
         }
 
         // 缓存该目录的Sprite数组（供后续直接使用）
@@ -1244,11 +1247,11 @@ public class HeroCostumeManager : MonoBehaviour
         }
 
         Debug.Log("[HeroCostumeManager] 换装刷新完成");
+
+---------- 第 25 页 ----------
     }
 
     /// <summary>
-
----------- 第 25 页 ----------
     /// 加载SPUM精灵图并应用到指定部件
     /// 自动处理单切片和多切片（Body/Left/Right）情况
     /// 使用缓存，避免重复 Resources.LoadAll
@@ -1297,10 +1300,10 @@ public class HeroCostumeManager : MonoBehaviour
         // 更新路径字符串，防止ResyncData覆盖
         UpdatePathString(partType, spumName);
 
+---------- 第 26 页 ----------
+
         Debug.Log($"[HeroCostumeManager] 换装成功: {partType} ← {spumName} ({sprites.Length}切片)");
     }
-
----------- 第 26 页 ----------
 
     /// <summary>
     /// 从缓存获取Sprite数组
@@ -1348,11 +1351,11 @@ public class HeroCostumeManager : MonoBehaviour
     /// 单切片：返回文件名相同的Sprite
     /// 多切片：返回 Body/Left/Right 三个切片
     /// </summary>
+
+---------- 第 27 页 ----------
     private Sprite[] FilterSpritesByFile(Sprite[] allSprites, string fileName)
     {
         if (allSprites == null || allSprites.Length == 0) return null;
-
----------- 第 27 页 ----------
 
         // 先找和文件名完全相同的Sprite（单切片情况）
         foreach (Sprite sp in allSprites)
@@ -1400,11 +1403,11 @@ public class HeroCostumeManager : MonoBehaviour
             case "Armor":   return spriteList._armorList;
             case "Pant":    return spriteList._pantList;
             case "Back":    return spriteList._backList;
+
+---------- 第 28 页 ----------
             case "Weapons": return spriteList._weaponList;
             default: return null;
         }
-
----------- 第 28 页 ----------
     }
 
     /// <summary>
@@ -1452,11 +1455,11 @@ public class HeroCostumeManager : MonoBehaviour
     {
         if (list == null) return;
         if (list.Count == 0) list.Add(path);
+
+---------- 第 29 页 ----------
         else list[0] = path;
     }
 }
-
----------- 第 29 页 ----------
 
 // ===== FILE: Assets/Scripts/Systems/MercenaryManager.cs =====
 using UnityEngine;
@@ -1504,11 +1507,11 @@ public class MercenaryManager : Singleton<MercenaryManager>
     public string GetJobName(string characterId)
     {
         return registry != null ? registry.GetJobName(characterId) : characterId;
+
+---------- 第 30 页 ----------
     }
 
     public string GetPrefabName(string characterId)
-
----------- 第 30 页 ----------
     {
         return registry != null ? registry.GetPrefabName(characterId) : characterId;
     }
@@ -1555,8 +1558,4 @@ public class MercenaryManager : Singleton<MercenaryManager>
             : 0;
         return Mathf.Clamp(tavernLevel, 0, 2);
     }
-
-    public List<string> GetActiveMercIds()
-    {
-        var result = new List<string>();
 

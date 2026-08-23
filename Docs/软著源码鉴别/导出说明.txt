@@ -1,9 +1,10 @@
-导出时间: 2026-08-23 18:41:45
+导出时间: 2026-08-23 20:50:48
+登记版本: V0.3.5（最新）
 每页行数: 50
 前后页数: 30
-总拼接行数: 12050
-文件数: 29
-版本: V0.3.4（最新）
-优先收录: SaveData / MercenaryOfferGenerator / TavernRosterPanel / TownHeroCostumePreview / HeroCostumeManager 等
+总拼接行数: 13564
+文件数: 33
+优先收录: SaveData / MercenaryOfferGenerator / GameAudio / GameBgm / TutorialDirector / BattleHeadTalkUI 等
 用法: 将 txt 按页排版为 PDF（≥50 行/页）提交鉴别材料。
 也可在团结编辑器执行 Tools/软著/导出源程序鉴别材料 覆盖本目录。
+提交记录: git commit 含「软著 V0.3.5」时与本版代码一致。

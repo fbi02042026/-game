@@ -1,11 +1,11 @@
 using UnityEditor;
 using UnityEngine;
 
-/// <summary>像素冒险:裂缝之刃 — 主路径手测清单（V0.3.4）。</summary>
+/// <summary>像素冒险:裂缝之刃 — 主路径手测清单（V0.3.5）。</summary>
 public static class MainPathPlaytestChecklist
 {
     const string Checklist =
-        "【像素冒险:裂缝之刃 V0.3.4 主路径验收 — 团结 1.10.0】\n\n" +
+        "【像素冒险:裂缝之刃 V0.3.5 主路径验收 — 团结 1.10.0】\n\n" +
         "资源\n" +
         "1. 大厅顶栏金币/体力与存档一致\n" +
         "2. 金币+ / 体力+ 可见；激励模拟发放并 Toast\n" +
@@ -25,7 +25,7 @@ public static class MainPathPlaytestChecklist
         "14. 佣兵按名册出战（等级/技能来自存档）；无「即将开放」误点\n" +
         "15. 角色页 SPUM 与战斗换装一致；装备均有 spumName\n" +
         "16. 重开客户端：金/体/遗产/佣兵仍在\n\n" +
-        "软著：Docs/软著申请材料_像素冒险裂缝之刃_V0.3.4.md\n" +
+        "软著：Docs/软著申请材料_像素冒险裂缝之刃_V0.3.5.md\n" +
         "源码鉴别：Docs/软著源码鉴别/\n" +
         "功能截图待办：Docs/功能截图待办/README.md\n" +
         "APK：Tools/Build/Android Release APK";
@@ -33,7 +33,7 @@ public static class MainPathPlaytestChecklist
     [MenuItem("Tools/自检/主路径验收清单")]
     public static void Show()
     {
-        EditorUtility.DisplayDialog("主路径验收 V0.3.4", Checklist, "好的");
+        EditorUtility.DisplayDialog("主路径验收 V0.3.5", Checklist, "好的");
         Debug.Log("[Checklist]\n" + Checklist);
     }
 

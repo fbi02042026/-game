@@ -26,6 +26,10 @@ public static class SoftCopyrightSourceExport
         "Assets/Scripts/Systems/StageRoller.cs",
         "Assets/Scripts/UI/RestStagePopupUI.cs",
         "Assets/Scripts/Core/GameConfig.cs",
+        "Assets/Scripts/Core/GameAudio.cs",
+        "Assets/Scripts/Core/GameBgm.cs",
+        "Assets/Scripts/Story/TutorialDirector.cs",
+        "Assets/Scripts/UI/BattleHeadTalkUI.cs",
         "Assets/Scripts/Systems/SaveSystem.cs",
         "Assets/Scripts/Systems/ResourceWallet.cs",
         "Assets/Scripts/Systems/StaminaSystem.cs",
@@ -95,11 +99,14 @@ public static class SoftCopyrightSourceExport
 
         File.WriteAllText(Path.Combine(outDir, "导出说明.txt"),
             "导出时间: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\n" +
+            "登记版本: V0.3.5（最新）\n" +
             "每页行数: " + LinesPerPage + "\n" +
             "前后页数: " + PagesEach + "\n" +
             "总拼接行数: " + allLines.Count + "\n" +
             "文件数: " + used.Count + "\n" +
-            "用法: 将 txt 按页排版为 PDF（≥50 行/页）提交鉴别材料。\n",
+            "优先收录: SaveData / MercenaryOfferGenerator / GameAudio / GameBgm / TutorialDirector / BattleHeadTalkUI 等\n" +
+            "用法: 将 txt 按页排版为 PDF（≥50 行/页）提交鉴别材料。\n" +
+            "也可在团结编辑器执行 Tools/软著/导出源程序鉴别材料 覆盖本目录。\n",
             Encoding.UTF8);
 
         AssetDatabase.Refresh();

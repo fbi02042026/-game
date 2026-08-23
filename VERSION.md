@@ -47,9 +47,18 @@ git show v0.3.3:VERSION.md
 - 小怪技能按 `attackKit` 播弹（魔法不再误用弓箭）
 - 怪物间距加大；受击血条置顶；背包占格底色区分
 
+### 软著（V0.3.5 登记版）
+- 说明书：`Docs/软著申请材料_像素冒险裂缝之刃_V0.3.5.md`（含登录/音频/引导体验说明）
+- 源码鉴别：`Docs/软著源码鉴别/` 已重导（含 `GameAudio`、`GameBgm`、`TutorialDirector`、`BattleHeadTalkUI` 等）
+- 附图清单：`Docs/功能截图待办/README.md`（14 张，对齐 V0.3.5）
+- 导出脚本：`Tools/export-softcopyright-source.ps1`；编辑器 `Tools/软著/导出源程序鉴别材料`
+- Git tag 建议：`v0.3.5-ruanzhu`
+
 ---
 
-里程碑：产品名统一为 **像素冒险:裂缝之刃**；关卡池收敛为普通/精英/Boss/休息；软著文档暂缓。
+## v0.3.3 — 2026-08-23（产品名 + 关卡池收口）
+
+里程碑：产品名统一为 **像素冒险:裂缝之刃**；关卡池收敛为普通/精英/Boss/休息；软著文档暂缓至 V0.3.4。
 
 ### 关卡
 - `StageRoller` 仅抽四类；商人/诅咒/锻造/附魔静默当普通关（无 Toast）
