@@ -13,14 +13,15 @@ MonoBehaviour:
   m_Name: undead_103
   m_EditorClassIdentifier: 
   id: undead_103
-  monsterName: "\u602A\u7269_1_3"
+  monsterName: "怨灵祭司"
   minWave: 1
   isBoss: 0
+  unlockClearCount: 0
   baseHp: 90
   baseAttack: 9
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 16
   expDrop: 9
   spriteIndex: 3

@@ -276,6 +276,8 @@ public class DialogueUI : MonoBehaviour
         _revealing = true;
         _skipReveal = false;
         SetDialogueChromeVisible(false);
+        // 换场景前清掉上一句道具（如委托书），否则会盖住「公会大厅」地点名
+        ClearStoryPropForReveal();
         EnsureLocationCaption();
         EnsureBgDim();
         EnsureRevealBlack();
@@ -292,6 +294,7 @@ public class DialogueUI : MonoBehaviour
                 yield return null;
             }
             SetRevealBlack(1f);
+            RaiseLocationCaption();
             SetLocationCaption(title, 1f);
             yield return WaitUnscaled(LocHoldDur);
             float fadeT = 0f;
@@ -458,7 +461,28 @@ public class DialogueUI : MonoBehaviour
         var c = _locationCaption.color;
         c.a = Mathf.Clamp01(alpha);
         _locationCaption.color = c;
-        _locationCaption.gameObject.SetActive(alpha > 0.02f && !string.IsNullOrEmpty(title));
+        bool show = alpha > 0.02f && !string.IsNullOrEmpty(title);
+        _locationCaption.gameObject.SetActive(show);
+        if (show) RaiseLocationCaption();
+    }
+
+    /// <summary>地点名压在黑幕 / 残留道具之上。</summary>
+    void RaiseLocationCaption()
+    {
+        if (_locationCaption == null) return;
+        if (_revealBlack != null)
+            _locationCaption.transform.SetSiblingIndex(_revealBlack.transform.GetSiblingIndex() + 1);
+        _locationCaption.transform.SetAsLastSibling();
+    }
+
+    void ClearStoryPropForReveal()
+    {
+        if (_propFadeCo != null)
+        {
+            StopCoroutine(_propFadeCo);
+            _propFadeCo = null;
+        }
+        SetStoryPropImmediate(null);
     }
 
     /// <summary>
@@ -1088,10 +1112,13 @@ public class DialogueUI : MonoBehaviour
         SetSceneBackground(null);
         SetRevealBlack(0f);
         SetBgDim(0f);
+        var dim = transform.Find("Dim");
+        if (dim != null) dim.gameObject.SetActive(false);
         gameObject.SetActive(false);
     }
 
-    void SetStoryProp(Sprite sprite)
+    /// <summary>显示或清除剧情道具叠图（null = 立刻隐藏）。</summary>
+    public void SetStoryProp(Sprite sprite)
     {
         EnsureStoryProp();
         if (storyPropImage == null) return;
@@ -1103,14 +1130,8 @@ public class DialogueUI : MonoBehaviour
 
         if (sprite == null)
         {
-            // 立刻关掉，避免下一句仍当成「道具在场」；淡出可并行看完
-            if (storyPropImage.gameObject.activeSelf && storyPropImage.sprite != null)
-            {
-                storyPropImage.gameObject.SetActive(false);
-                storyPropImage.sprite = null;
-            }
-            else
-                SetStoryPropImmediate(null);
+            // 下一句无道具：立刻关掉，避免盖住立绘 / 地点名
+            SetStoryPropImmediate(null);
             return;
         }
 

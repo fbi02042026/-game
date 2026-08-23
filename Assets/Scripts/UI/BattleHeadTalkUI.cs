@@ -24,7 +24,10 @@ public class BattleHeadTalkUI : MonoBehaviour
     UnitBase _follow;
     Coroutine _co;
     Coroutine _animCo;
+    bool _skipRequested;
     const float TypeCharsPerSecond = 28f;
+
+    public bool IsShowing => _root != null && _root.gameObject.activeSelf;
 
     public static BattleHeadTalkUI Ensure()
     {
@@ -106,6 +109,9 @@ public class BattleHeadTalkUI : MonoBehaviour
         tailRt.pivot = new Vector2(0.5f, 1f);
         tailRt.anchoredPosition = new Vector2(0f, -2f);
         tailRt.sizeDelta = new Vector2(20f, 16f);
+        // 底图自带尖角时隐藏额外白方块尾巴，避免像「缺头像」
+        if (_bg != null && _bg.sprite != null)
+            tailGo.SetActive(false);
 
         rootGo.SetActive(false);
     }
@@ -119,18 +125,19 @@ public class BattleHeadTalkUI : MonoBehaviour
         if (_bg == null) return;
         if (_bg.sprite == null)
         {
-            _bg.type = Image.Type.Sliced;
+            // 无底图时用纯色块，可自由随文字改尺寸
+            _bg.type = Image.Type.Simple;
             _bg.preserveAspect = false;
-            _bubbleSliced = true;
+            _bubbleSliced = false;
             _bubbleAspect = 0f;
             return;
         }
-        Vector4 b = _bg.sprite.border;
-        _bubbleSliced = (b.x + b.y + b.z + b.w) > 0.01f;
-        _bg.type = _bubbleSliced ? Image.Type.Sliced : Image.Type.Simple;
-        _bg.preserveAspect = !_bubbleSliced;
+        // 有底图：一律原图比例缩放，禁止九宫格拉扁
         Rect r = _bg.sprite.rect;
-        _bubbleAspect = r.height > 1f ? r.width / r.height : 0f;
+        _bubbleAspect = r.height > 1f ? r.width / r.height : 2.4f;
+        _bubbleSliced = false;
+        _bg.type = Image.Type.Simple;
+        _bg.preserveAspect = true;
     }
 
     bool _bubbleSliced = true;
@@ -149,15 +156,46 @@ public class BattleHeadTalkUI : MonoBehaviour
 
     public Coroutine PlayLine(UnitBase speaker, string content, float hold = 1.8f)
     {
-        if (_co != null) StopCoroutine(_co);
-        _co = StartCoroutine(PlayLineRoutine(speaker, content, hold));
+        if (_co != null)
+        {
+            StopCoroutine(_co);
+            _co = null;
+            HideNow();
+        }
+        _skipRequested = false;
+        _co = StartCoroutine(CoPlayLine(speaker, content, hold));
         return _co;
+    }
+
+    /// <summary>供外部 yield：在 BattleHeadTalkUI 上跑完一整句台词。</summary>
+    public IEnumerator CoPlayLine(UnitBase speaker, string content, float hold = 1.8f)
+    {
+        _skipRequested = false;
+        yield return PlayLineRoutine(speaker, content, hold);
+        _co = null;
+    }
+
+    void Update()
+    {
+        if (!IsShowing) return;
+        if (Clicked())
+            _skipRequested = true;
+    }
+
+    static bool Clicked()
+    {
+        if (Input.GetMouseButtonDown(0)) return true;
+        if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began) return true;
+        return false;
     }
 
     IEnumerator PlayLineRoutine(UnitBase speaker, string content, float hold)
     {
         _follow = speaker;
         string full = content ?? "";
+        float maxDur = hold + full.Length * 0.12f + 4f;
+        float elapsed = 0f;
+
         if (_text != null) _text.text = "";
         if (_root != null)
         {
@@ -169,31 +207,38 @@ public class BattleHeadTalkUI : MonoBehaviour
         PlayPopIn();
         RefreshFollowPosition();
 
-        if (_text != null && full.Length > 0)
+        if (_text != null && full.Length > 0 && !_skipRequested)
         {
             float delay = 1f / Mathf.Max(8f, TypeCharsPerSecond);
-            for (int i = 1; i <= full.Length; i++)
+            for (int i = 1; i <= full.Length && !_skipRequested; i++)
             {
                 _text.text = full.Substring(0, i);
                 FitBubbleSize(full.Substring(0, i));
                 float tType = 0f;
-                while (tType < delay)
+                while (tType < delay && !_skipRequested)
                 {
                     tType += Time.unscaledDeltaTime;
+                    elapsed += Time.unscaledDeltaTime;
                     RefreshFollowPosition();
                     yield return null;
                 }
             }
-            FitBubbleSize(full);
+            if (!_skipRequested)
+            {
+                _text.text = full;
+                FitBubbleSize(full);
+            }
         }
 
         float t = 0f;
-        while (t < hold)
+        while (t < hold && !_skipRequested && elapsed < maxDur)
         {
             t += Time.unscaledDeltaTime;
+            elapsed += Time.unscaledDeltaTime;
             RefreshFollowPosition();
             yield return null;
         }
+
         yield return FadeOutAndHide(0.16f);
     }
 
@@ -206,37 +251,31 @@ public class BattleHeadTalkUI : MonoBehaviour
     {
         if (_root == null || _text == null) return;
         float maxW = 420f;
-        float minW = 180f;
+        float minW = 200f;
         _text.rectTransform.sizeDelta = new Vector2(maxW - 52f, 0f);
         float prefH = Mathf.Max(28f, _text.preferredHeight);
         float prefW = Mathf.Clamp(_text.preferredWidth + 52f, minW, maxW);
-        // 短句别拉成扁长条；高度随字数涨，宽高比别离谱
-        float h = Mathf.Clamp(prefH + 40f, 72f, 220f);
+        float h = Mathf.Clamp(prefH + 40f, 88f, 260f);
         float w = prefW;
 
-        if (!_bubbleSliced && _bubbleAspect > 0.01f)
+        if (_bubbleAspect > 0.01f)
         {
-            // 没有九宫格：必须严格按原图宽高比取尺寸，先按文字需要的高度反推宽度，
-            // 宽度不够放字就反过来加宽再抬高，始终保持等比。
-            w = Mathf.Max(w, h * _bubbleAspect);
-            h = w / _bubbleAspect;
+            // 始终按原图宽高比：以文字需要的高度反推宽度，超宽则整体等比缩小
+            h = Mathf.Max(h, prefH + 40f);
+            w = h * _bubbleAspect;
+            if (w < minW)
+            {
+                w = minW;
+                h = w / _bubbleAspect;
+            }
             if (w > maxW)
             {
                 w = maxW;
                 h = w / _bubbleAspect;
             }
-            // 等比后高度仍装不下文字就整体放大，但宽度不得超过 maxW
-            float needH = prefH + 40f;
-            if (h < needH)
-            {
-                h = needH;
-                w = h * _bubbleAspect;
-                if (w > maxW)
-                {
-                    w = maxW;
-                    h = w / _bubbleAspect;
-                }
-            }
+            // 等比后仍装不下字：允许高度再涨一点，但宽度锁在 maxW（略裁内边距，不压扁图）
+            if (h < prefH + 36f)
+                h = prefH + 36f;
         }
 
         _root.sizeDelta = new Vector2(w, h);
@@ -326,12 +365,19 @@ public class BattleHeadTalkUI : MonoBehaviour
 
     public void HideNow()
     {
+        _skipRequested = false;
+        if (_co != null)
+        {
+            StopCoroutine(_co);
+            _co = null;
+        }
         if (_animCo != null)
         {
             StopCoroutine(_animCo);
             _animCo = null;
         }
         _follow = null;
+        if (_group != null) _group.alpha = 1f;
         if (_root != null) _root.gameObject.SetActive(false);
     }
 }

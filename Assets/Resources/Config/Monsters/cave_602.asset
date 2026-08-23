@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: cave_602
   m_EditorClassIdentifier: 
   id: cave_602
-  monsterName: "\u602A\u7269_6_2"
+  monsterName: "深窟矿奴"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 24.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 38
   expDrop: 22
   spriteIndex: 2

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: sea_302
   m_EditorClassIdentifier: 
   id: sea_302
-  monsterName: "\u602A\u7269_3_2"
+  monsterName: "深渊水母"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 14
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 23
   expDrop: 13
   spriteIndex: 2

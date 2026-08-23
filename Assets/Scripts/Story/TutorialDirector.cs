@@ -19,6 +19,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
     public bool AllowBattleSkillClick { get; private set; }
 
     bool _townFlowBusy;
+    bool _battleTutorialFlowStarted;
     bool _extraHintShown;
     Coroutine _flow;
 
@@ -94,7 +95,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
     public void NotifyBattleSplashFinished()
     {
         if (BattleManager.Instance == null || !BattleManager.Instance.IsTutorialRun) return;
+        // 过场若重复回调，不要把进行中的引导协程掐断（会留下气泡/卡流程）
+        if (_battleTutorialFlowStarted && _flow != null) return;
         if (_flow != null) StopCoroutine(_flow);
+        _battleTutorialFlowStarted = true;
         _flow = StartCoroutine(BattleRoutine());
     }
 
@@ -137,10 +141,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
 
         yield return TownIntroVeil.FadeOutRoutine(0.45f);
+        // 兜底：黑幕残留则强制清掉，并确保大厅可见
+        if (TownIntroVeil.Instance != null)
+            Object.Destroy(TownIntroVeil.Instance.gameObject);
+        GuildHallUI.SetTownChromeVisible(true);
 
         if (adv == null) adv = ResolveAdventureButton();
-        TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂缝。",
-            adv != null ? adv.GetComponent<RectTransform>() : null);
+        // 软引导：只提示+手指，不全屏挖空遮罩（硬遮罩会把大厅盖成「全黑」）
+        TutorialHintUI.Ensure().Show("点下方「冒险」，前往裂缝。",
+            adv != null ? adv.GetComponent<RectTransform>() : null, -1f);
         _townFlowBusy = false;
         _flow = null;
     }
@@ -177,7 +186,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
     {
         string fullPath = Path.Combine(Application.dataPath, OpeningIntroRelativePath);
         var overlay = OpeningIntroOverlay.Show(fullPath);
-        if (overlay == null) yield break;
+        if (overlay == null)
+        {
+            GameBgm.UnmuteAfterCutscene();
+            yield break;
+        }
         while (overlay != null && !overlay.IsFinished)
             yield return null;
     }
@@ -361,11 +374,19 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         ui?.UpdateCharacterSlots();
 
-        yield return TalkHeld(bm, headTalk, merc, "舒服多了！前面交给我挡一阵。", 2.0f);
-        yield return TalkHeld(bm, headTalk, Hero.Instance, "一起走。", 1.4f);
+        yield return TalkHeld(bm, headTalk, merc, "舒服多了！前面交给我挡一阵。", 1.6f);
+        yield return TalkHeld(bm, headTalk, Hero.Instance, "一起走。", 1.0f);
+        headTalk?.HideNow();
+        hint.Hide();
+        if (bm != null) bm.UnitsCanAct = true;
 
         hint.Show("组队后佣兵会自动战斗，和你一起推进。", null, 8f);
         yield return EnsureTutorialWave(bm, 6);
+        if (bm != null && bm.GetAliveMonsterCount() <= 0)
+        {
+            Debug.LogWarning("[Tutorial] 组队后首波未刷出，紧急补怪");
+            bm.QueueTutorialWave(4);
+        }
         yield return WaitFieldClear();
 
         hint.Show("状态不错，再清一波我们就撤。", null, 6f);
@@ -385,6 +406,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return null;
 
         hint.Hide();
+        _battleTutorialFlowStarted = false;
         _flow = null;
     }
 
@@ -416,12 +438,22 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (speaker == null || speaker.isDead)
         {
             Debug.LogWarning($"[Tutorial] TalkHeld: 说话人缺失/已死，跳过「{content}」");
+            talk.HideNow();
             yield break;
         }
 
-        bool prev = bm != null ? bm.UnitsCanAct : true;
+        bool prev = bm != null && bm.UnitsCanAct;
         if (bm != null) bm.UnitsCanAct = false;
-        yield return talk.PlayLine(speaker, content, hold);
+
+        float timeout = hold + (content != null ? content.Length * 0.15f : 0f) + 5f;
+        float elapsed = 0f;
+        yield return talk.StartCoroutine(talk.CoPlayLine(speaker, content, hold));
+        while (talk.IsShowing && elapsed < timeout)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        talk.HideNow();
         if (bm != null) bm.UnitsCanAct = prev;
     }
 

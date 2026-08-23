@@ -77,7 +77,7 @@ public class TutorialHintUI : MonoBehaviour
         string[] names = { "DimTop", "DimBottom", "DimLeft", "DimRight" };
         for (int i = 0; i < 4; i++)
         {
-            var img = CreateImage(transform, names[i], new Color(0f, 0f, 0f, 0.62f));
+            var img = CreateImage(transform, names[i], new Color(0f, 0f, 0f, 0.38f));
             img.raycastTarget = true;
             _dims[i] = img.rectTransform;
             img.gameObject.SetActive(false);

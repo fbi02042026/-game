@@ -1,4 +1,4 @@
-﻿%YAML 1.1
+%YAML 1.1
 %TAG !u! tag:yousandi.cn,2023:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_pant_08
   m_EditorClassIdentifier: 
   templateId: equip_new_pant_08
-  equipName: New_Pant_08
+  equipName: "暗纹胫甲"
   icon: {fileID: 21300000, guid: 70e4920279a88c54dae8b1b42460426e, type: 3}
   iconFileName: New_Pant_08
   gridWidth: 1

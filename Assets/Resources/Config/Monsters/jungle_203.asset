@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: jungle_203
   m_EditorClassIdentifier: 
   id: jungle_203
-  monsterName: "\u602A\u7269_2_3"
+  monsterName: "翡翠蛮兵"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 13.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 21
   expDrop: 12
   spriteIndex: 3

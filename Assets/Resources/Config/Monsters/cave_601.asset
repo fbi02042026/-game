@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: cave_601
   m_EditorClassIdentifier: 
   id: cave_601
-  monsterName: "\u602A\u7269_6_1"
+  monsterName: "岩穴蝙蝠"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 17.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 35
   expDrop: 20
   spriteIndex: 1

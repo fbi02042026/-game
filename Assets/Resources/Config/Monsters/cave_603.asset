@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: cave_603
   m_EditorClassIdentifier: 
   id: cave_603
-  monsterName: "\u602A\u7269_6_3"
+  monsterName: "石甲甲虫"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 31.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 41
   expDrop: 24
   spriteIndex: 3

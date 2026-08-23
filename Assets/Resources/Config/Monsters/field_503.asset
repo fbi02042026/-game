@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: field_503
   m_EditorClassIdentifier: 
   id: field_503
-  monsterName: "\u602A\u7269_5_3"
+  monsterName: "重装巡卫"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 27
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 36
   expDrop: 21
   spriteIndex: 3

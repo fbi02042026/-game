@@ -1,4 +1,4 @@
-﻿%YAML 1.1
+%YAML 1.1
 %TAG !u! tag:yousandi.cn,2023:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_woodshield1
   m_EditorClassIdentifier: 
   templateId: equip_woodshield1
-  equipName: WoodShield1
+  equipName: "木制圆盾"
   icon: {fileID: 21300000, guid: e8ba57a5713da8f4ca25932a0f8da6d5, type: 3}
   iconFileName: WoodShield1
   gridWidth: 2

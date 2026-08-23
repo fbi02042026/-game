@@ -10,7 +10,7 @@ using UnityEngine;
 /// · Audio/BGM/bgm_battle   —— 普通/精英战斗
 /// · Audio/BGM/bgm_boss     —— 首领战
 /// · Audio/BGM/bgm_special  —— 恢复/锻造/附魔关
-/// Loading 期间强制静音；结束后再按当前场景/关卡切回来。
+/// Loading / 片头等演出期间强制静音；结束后再按当前场景/关卡切回来。
 /// </summary>
 public static class GameBgm
 {
@@ -43,12 +43,14 @@ public static class GameBgm
     static Track _current = Track.None;
     static Track _pendingAfterLoading = Track.None;
     static bool _loadingMuted;
+    static bool _cutsceneMuted;
     static Coroutine _fadeCo;
     static BgmRunner _runner;
     static readonly Dictionary<Track, AudioClip> _cache = new Dictionary<Track, AudioClip>();
 
     public static Track Current => _current;
     public static bool IsLoadingMuted => _loadingMuted;
+    public static bool IsCutsceneMuted => _cutsceneMuted;
 
     /// <summary>按关卡类型选曲：战斗/首领/功能关。</summary>
     public static Track TrackForStage(StageType type)
@@ -65,7 +67,7 @@ public static class GameBgm
     public static void Play(Track track, float fadeSeconds = DefaultFade)
     {
         EnsureHost();
-        if (_loadingMuted)
+        if (_loadingMuted || _cutsceneMuted)
         {
             _pendingAfterLoading = track;
             return;
@@ -147,11 +149,52 @@ public static class GameBgm
             return;
         }
 
+        if (ShouldDeferTownBgmForIntro())
+        {
+            _cutsceneMuted = true;
+            _pendingAfterLoading = Track.Town;
+            StopImmediate();
+            return;
+        }
+
         Track want = _pendingAfterLoading;
         if (want == Track.None)
             want = GuessTrackFromScene();
 
         _current = Track.None; // 强制重新淡入
+        if (want != Track.None)
+            Play(want, fadeSeconds);
+    }
+
+    /// <summary>片头 / 剧情演出开始：淡出 BGM，记住待恢复曲目。</summary>
+    public static void MuteForCutscene(float fadeSeconds = 0.25f)
+    {
+        EnsureHost();
+        if (_cutsceneMuted) return;
+        _cutsceneMuted = true;
+        RememberPendingTrack();
+        if (_fadeCo != null) _runner.StopCoroutine(_fadeCo);
+        _fadeCo = _runner.StartCoroutine(FadeOutAll(Mathf.Max(0.05f, fadeSeconds), pauseWhenDone: true));
+    }
+
+    /// <summary>片头 / 剧情演出结束：按 pending 恢复 BGM。</summary>
+    public static void UnmuteAfterCutscene(float fadeSeconds = DefaultFade)
+    {
+        EnsureHost();
+        if (!_cutsceneMuted) return;
+        _cutsceneMuted = false;
+        if (_loadingMuted) return;
+        if (!GameAudio.MusicEnabled)
+        {
+            StopImmediate();
+            return;
+        }
+
+        Track want = _pendingAfterLoading;
+        if (want == Track.None)
+            want = GuessTrackFromScene();
+
+        _current = Track.None;
         if (want != Track.None)
             Play(want, fadeSeconds);
     }
@@ -166,7 +209,7 @@ public static class GameBgm
             if (_b != null) { _b.mute = true; _b.volume = 0f; }
             return;
         }
-        if (_loadingMuted) return;
+        if (_loadingMuted || _cutsceneMuted) return;
         Track want = _pendingAfterLoading != Track.None ? _pendingAfterLoading : _current;
         if (want == Track.None) want = GuessTrackFromScene();
         _current = Track.None;
@@ -176,7 +219,8 @@ public static class GameBgm
     static Track GuessTrackFromScene()
     {
         var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-        if (scene.name == GameSceneManager.TOWN_SCENE) return Track.Town;
+        if (scene.name == GameSceneManager.BOOT_SCENE || scene.name == GameSceneManager.TOWN_SCENE)
+            return Track.Town;
         if (scene.name == GameSceneManager.BATTLE_SCENE)
         {
             var st = BattleManager.Instance?.currentStage;
@@ -184,6 +228,23 @@ public static class GameBgm
             return Track.Battle;
         }
         return Track.None;
+    }
+
+    static void RememberPendingTrack()
+    {
+        if (_pendingAfterLoading != Track.None) return;
+        if (_current != Track.None)
+            _pendingAfterLoading = _current;
+        else
+            _pendingAfterLoading = GuessTrackFromScene();
+    }
+
+    static bool ShouldDeferTownBgmForIntro()
+    {
+        if (StoryProgress.TutorialDone || StoryProgress.TutorialIntroDone) return false;
+        if (StoryProgress.OpeningIntroPlayed) return false;
+        var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+        return scene.name == GameSceneManager.TOWN_SCENE;
     }
 
     static IEnumerator CrossFade(AudioSource from, AudioSource to, float seconds)

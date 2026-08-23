@@ -26,7 +26,9 @@ public class Monster : UnitBase
 
     // 用户预制体中的 SpriteRenderer 血条
     private SpriteRenderer _hpBarFill;
+    private SpriteRenderer _hpBarBg;
     private Transform _hpBarRoot;
+    static int s_hpBarFrontBoost;
 
     protected override void Awake()
     {
@@ -481,11 +483,11 @@ public class Monster : UnitBase
         Transform bg = _hpBarRoot.Find("HPBarBG") ?? _hpBarRoot.Find("HPBarBg");
         if (bg != null)
         {
-            SpriteRenderer bgSr = bg.GetComponent<SpriteRenderer>();
-            if (bgSr != null)
+            _hpBarBg = bg.GetComponent<SpriteRenderer>();
+            if (_hpBarBg != null)
             {
-                bgSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-                bgSr.sortingOrder = GameConfig.SORT_VFX - 2;
+                _hpBarBg.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+                _hpBarBg.sortingOrder = GameConfig.SORT_VFX - 2;
             }
         }
 
@@ -500,6 +502,31 @@ public class Monster : UnitBase
         {
             sr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
             sr.sortingOrder = GameConfig.SORT_UNIT;
+        }
+    }
+
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false)
+    {
+        base.TakeDamage(damage, isCrit, ignoreDefense);
+        if (!isDead)
+            BringHpBarFront();
+    }
+
+    /// <summary>受击时把血条抬到同层最前，重叠时能看清掉血单位。</summary>
+    void BringHpBarFront()
+    {
+        s_hpBarFrontBoost = (s_hpBarFrontBoost + 2) % 40;
+        int bgOrder = GameConfig.SORT_VFX - 2 + s_hpBarFrontBoost;
+        int fillOrder = bgOrder + 1;
+        if (_hpBarBg != null)
+        {
+            _hpBarBg.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            _hpBarBg.sortingOrder = bgOrder;
+        }
+        if (_hpBarFill != null)
+        {
+            _hpBarFill.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            _hpBarFill.sortingOrder = fillOrder;
         }
     }
 
@@ -647,9 +674,12 @@ public class Monster : UnitBase
         float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
 
         AttackVfxKit kit = MonsterAttackStyleTable.GetVfxKit(_swingStyle);
-        // 远程小怪技能统一弓箭飞矢 vfx_bow_fly
-        if (MonsterAttackStyleTable.IsRanged(_swingStyle) || MonsterAttackStyleTable.IsRanged(_attackStyle))
-            kit = AttackVfxKit.Bow;
+        // 优先用技能配置的 attackKit（魔法爆裂=Orb，不要强行改成弓箭）
+        var skillCfg = SkillRegistry.Instance?.Get(_skillId);
+        if (skillCfg != null && skillCfg.attackKit != AttackVfxKit.None)
+            kit = skillCfg.attackKit;
+        else if (MonsterAttackStyleTable.IsRanged(_swingStyle) || MonsterAttackStyleTable.IsRanged(_attackStyle))
+            kit = AttackVfxKit.Orb;
         Vector3 firePos = GetFirePosition();
         Vector3 hitPos = primaryTarget != null ? primaryTarget.GetHitPosition() : firePos;
 

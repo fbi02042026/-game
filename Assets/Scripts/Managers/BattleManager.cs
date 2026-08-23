@@ -1755,7 +1755,7 @@ public class BattleManager : Singleton<BattleManager>
                 monsterScale = GameConfig.BOSS_SCALE_MULTIPLIER;
 
             float spawnY = UnitBase.GROUND_Y;
-            float spawnX = engageBaseX + i * 0.4f;
+            float spawnX = engageBaseX + i * 1.15f;
             if (wave.spawnAnchor != null)
                 spawnZ = wave.spawnAnchor.position.z;
 
@@ -1802,7 +1802,7 @@ public class BattleManager : Singleton<BattleManager>
         {
             float spawnY = UnitBase.GROUND_Y;
             float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
-            float spawnX = engageBaseX + i * 0.35f;
+            float spawnX = engageBaseX + i * 1.05f;
             Vector3 pos = new Vector3(spawnX + GameConfig.MONSTER_ENTER_DISTANCE, spawnY, spawnZ);
             Vector3 engage = new Vector3(spawnX, spawnY, spawnZ);
 

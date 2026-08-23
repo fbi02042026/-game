@@ -13,14 +13,14 @@ MonoBehaviour:
   m_Name: CharacterRegistry
   m_EditorClassIdentifier: 
   entries:
-  - characterId: dunbing101
+    - characterId: dunbing101
     prefabName: dunbing101
-    iconSprite: {fileID: 21300000, guid: e0285e9571ff62e41a5aad80744404fe, type: 3}
+    iconSprite: {fileID: 21300000, guid: c4d5e6f78901234567890123456789ab, type: 3}
     jobName: "\u76FE\u5175"
     isPlayer: 0
   - characterId: dunbing102
     prefabName: dunbing102
-    iconSprite: {fileID: 21300000, guid: e0285e9571ff62e41a5aad80744404fe, type: 3}
+    iconSprite: {fileID: 21300000, guid: c4d5e6f78901234567890123456789ab, type: 3}
     jobName: "\u76FE\u5175"
     isPlayer: 0
   - characterId: dunbing201
@@ -86,17 +86,17 @@ MonoBehaviour:
   - characterId: npc_duyan
     prefabName: npc_duyan
     iconSprite: {fileID: 21300000, guid: 436ee8033a961e647842c2a040160a3f, type: 3}
-    jobName: npc_duyan
+    jobName: "\u72EC\u773C\u5192\u9669\u8005"
     isPlayer: 0
   - characterId: npc_shengdian
     prefabName: npc_shengdian
     iconSprite: {fileID: 21300000, guid: 849b74a70c7070f44b64f762efcbe615, type: 3}
-    jobName: npc_shengdian
+    jobName: "\u5723\u6BBF\u4F7F\u8005"
     isPlayer: 0
   - characterId: npc_xiaomei
     prefabName: npc_xiaomei
     iconSprite: {fileID: 21300000, guid: 983c5eda73224c3458bfef09281bdaf5, type: 3}
-    jobName: npc_xiaomei
+    jobName: "\u5C0F\u6885"
     isPlayer: 0
   - characterId: qita101
     prefabName: qita101

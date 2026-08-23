@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: devil_703
   m_EditorClassIdentifier: 
   id: devil_703
-  monsterName: "\u602A\u7269_7_3"
+  monsterName: "赤焰卫士"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 36
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 46
   expDrop: 27
   spriteIndex: 3

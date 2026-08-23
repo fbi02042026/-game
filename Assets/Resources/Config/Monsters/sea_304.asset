@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: sea_304
   m_EditorClassIdentifier: 
   id: sea_304
-  monsterName: "\u602A\u7269_3_4"
+  monsterName: "深蓝海魔"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 22
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 29
   expDrop: 17
   spriteIndex: 4

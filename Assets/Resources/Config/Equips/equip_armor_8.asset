@@ -1,4 +1,4 @@
-﻿%YAML 1.1
+%YAML 1.1
 %TAG !u! tag:yousandi.cn,2023:
 --- !u!114 &11400000
 MonoBehaviour:
@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_armor_8
   m_EditorClassIdentifier: 
   templateId: equip_armor_8
-  equipName: Armor_8
+  equipName: "暗纹护甲"
   icon: {fileID: 21300000, guid: 2be70c5bbf8b6374c9e5b9407c4e0e89, type: 3}
   iconFileName: Armor_8
   gridWidth: 2

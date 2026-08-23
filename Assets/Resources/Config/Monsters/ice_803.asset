@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ice_803
   m_EditorClassIdentifier: 
   id: ice_803
-  monsterName: "\u602A\u7269_8_3"
+  monsterName: "永霜卫兵"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 40.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 51
   expDrop: 30
   spriteIndex: 3

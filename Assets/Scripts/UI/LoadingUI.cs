@@ -91,12 +91,12 @@ public class LoadingUI : MonoBehaviour
 
         const float sidePad = 40f;
         const float maxWidth = 640f;
-        const float tipHeight = 120f;
-        const float fromBottom = 0.22f;
+        const float tipHeight = 160f;
+        const float fromBottom = 0.36f;
 
         tipText.alignment = TextAnchor.MiddleCenter;
         tipText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        tipText.verticalOverflow = VerticalWrapMode.Overflow;
+        tipText.verticalOverflow = VerticalWrapMode.Truncate;
 
         var tipRt = tipText.rectTransform;
         tipRt.anchorMin = new Vector2(0.5f, fromBottom);
@@ -177,7 +177,7 @@ public class LoadingUI : MonoBehaviour
         corner.anchorMax = new Vector2(1f, 0f);
         corner.pivot = new Vector2(1f, 0f);
         corner.sizeDelta = new Vector2(total, height);
-        corner.anchoredPosition = new Vector2(-36f, 48f);
+        corner.anchoredPosition = new Vector2(-36f, 28f);
 
         var labelRt = labelText.rectTransform;
         labelRt.anchorMin = new Vector2(0f, 0f);
@@ -206,6 +206,7 @@ public class LoadingUI : MonoBehaviour
     {
         if (tipText != null && !string.IsNullOrEmpty(tip))
             tipText.text = tip;
+        ApplyResponsiveLayout();
     }
 
     public void AutoBind()

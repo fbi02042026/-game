@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: jungle_202
   m_EditorClassIdentifier: 
   id: jungle_202
-  monsterName: "\u602A\u7269_2_2"
+  monsterName: "秘境毒蛛"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 10.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 18
   expDrop: 10
   spriteIndex: 2

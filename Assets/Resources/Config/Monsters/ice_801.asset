@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ice_801
   m_EditorClassIdentifier: 
   id: ice_801
-  monsterName: "\u602A\u7269_8_1"
+  monsterName: "霜原狼"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 22.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 45
   expDrop: 26
   spriteIndex: 1

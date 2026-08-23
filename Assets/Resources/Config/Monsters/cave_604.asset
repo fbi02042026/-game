@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: cave_604
   m_EditorClassIdentifier: 
   id: cave_604
-  monsterName: "\u602A\u7269_6_4"
+  monsterName: "岩窟领主"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 38.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 44
   expDrop: 26
   spriteIndex: 4

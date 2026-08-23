@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: field_504
   m_EditorClassIdentifier: 
   id: field_504
-  monsterName: "\u602A\u7269_5_4"
+  monsterName: "原野巨兽"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 33
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 39
   expDrop: 23
   spriteIndex: 4
