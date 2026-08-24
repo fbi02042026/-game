@@ -448,13 +448,13 @@ public class TutorialDirector : Singleton<TutorialDirector>
         hint.ShowHard("点右上角设置，选择「撤离」回城。", settingsRt);
 
         const float autoEvacuateSeconds = 6f;
-        float wait = 0f;
+        float evacWait = 0f;
         while (WaitingEvacuate && BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun)
         {
             HaltUnit(Hero.Instance);
             HaltUnit(merc);
-            wait += Time.unscaledDeltaTime;
-            if (wait >= autoEvacuateSeconds)
+            evacWait += Time.unscaledDeltaTime;
+            if (evacWait >= autoEvacuateSeconds)
             {
                 WaitingEvacuate = false;
                 BattleManager.Instance?.TriggerEvacuation();
