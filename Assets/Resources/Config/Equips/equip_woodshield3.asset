@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_woodshield3
   m_EditorClassIdentifier: 
   templateId: equip_woodshield3
-  equipName: WoodShield3
+  equipName: "卫兵塔盾"
   icon: {fileID: 21300000, guid: 590b53bc5dbcebc40b15ab29436186fc, type: 3}
   iconFileName: WoodShield3
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: WoodShield3

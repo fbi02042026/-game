@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 设置弹窗（战斗内 / 城镇共用）：音乐、音效、右上角关闭。
+/// 设置弹窗（战斗内 / 城镇共用）：声音（音乐+音效）、右上角关闭。
 /// 仅在战斗场景显示「撤离」；撤离后回城镇并打开冒险页。
 /// </summary>
 public class BattleSettingsPanel : MonoBehaviour
@@ -11,10 +11,8 @@ public class BattleSettingsPanel : MonoBehaviour
 
     Canvas _canvas;
     GameObject _root;
-    Button _musicBtn;
-    Text _musicLabel;
-    Button _sfxBtn;
-    Text _sfxLabel;
+    Button _audioBtn;
+    Text _audioLabel;
     Button _evacuateBtn;
     Button _closeBtn;
     Button _resumeBtn;
@@ -147,7 +145,7 @@ public class BattleSettingsPanel : MonoBehaviour
         prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
         prt.pivot = new Vector2(0.5f, 0.5f);
         prt.anchoredPosition = Vector2.zero;
-        prt.sizeDelta = new Vector2(560f, 480f);
+        prt.sizeDelta = new Vector2(560f, 400f);
 
         var title = CreateText(panel.transform, "Title", "设置", 34, TextAnchor.MiddleCenter);
         var trt = title.rectTransform;
@@ -161,8 +159,7 @@ public class BattleSettingsPanel : MonoBehaviour
             new Vector2(1f, 1f), new Vector2(-34f, -34f), new Vector2(56f, 56f),
             new Color(0.42f, 0.22f, 0.22f, 1f), OnClose);
 
-        _musicBtn = CreateRowToggle(panel.transform, "MusicRow", "音乐", -140f, OnToggleMusic, out _musicLabel);
-        _sfxBtn = CreateRowToggle(panel.transform, "SfxRow", "音效", -220f, OnToggleSfx, out _sfxLabel);
+        _audioBtn = CreateRowToggle(panel.transform, "AudioRow", "声音", -140f, OnToggleAudio, out _audioLabel);
 
         _evacuateBtn = CreateButton(panel.transform, "EvacuateButton", "撤离",
             new Vector2(0.5f, 0f), new Vector2(0f, 116f), new Vector2(300f, 68f),
@@ -200,22 +197,15 @@ public class BattleSettingsPanel : MonoBehaviour
         return btn;
     }
 
-    void OnToggleMusic()
+    void OnToggleAudio()
     {
-        GameAudio.MusicEnabled = !GameAudio.MusicEnabled;
-        RefreshToggles();
-    }
-
-    void OnToggleSfx()
-    {
-        GameAudio.SfxEnabled = !GameAudio.SfxEnabled;
+        GameAudio.AudioEnabled = !GameAudio.AudioEnabled;
         RefreshToggles();
     }
 
     void RefreshToggles()
     {
-        ApplyToggleLook(_musicBtn, _musicLabel, GameAudio.MusicEnabled);
-        ApplyToggleLook(_sfxBtn, _sfxLabel, GameAudio.SfxEnabled);
+        ApplyToggleLook(_audioBtn, _audioLabel, GameAudio.AudioEnabled);
     }
 
     static void ApplyToggleLook(Button btn, Text label, bool on)

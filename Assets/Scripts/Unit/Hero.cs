@@ -32,6 +32,12 @@ public class Hero : UnitBase
             costumeManager = GetComponent<HeroCostumeManager>();
     }
 
+    void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+    }
+
     public void InitNewRun()
     {
         if (GridBackpackSystem.Instance != null)
@@ -93,9 +99,19 @@ public class Hero : UnitBase
 
     public void RecalcAttr()
     {
-        List<AttrBonusData> allBonus = GridBackpackSystem.Instance.GetAllEquippedBonus();
-        foreach (var equip in GridBackpackSystem.Instance.GetEquippedItems())
+        var bag = GridBackpackSystem.Instance;
+        if (bag == null)
         {
+            Debug.LogWarning("[Hero] RecalcAttr: GridBackpackSystem 为空，仅重算基础属性");
+            attr.RecalcAllAttr(null);
+            currentHp = Mathf.Min(currentHp, attr.GetAttr(AttrType.MaxHp));
+            return;
+        }
+
+        List<AttrBonusData> allBonus = bag.GetAllEquippedBonus();
+        foreach (var equip in bag.GetEquippedItems())
+        {
+            if (equip?.enchants == null) continue;
             foreach (var enchant in equip.enchants)
             {
                 allBonus.Add(new AttrBonusData
@@ -106,12 +122,13 @@ public class Hero : UnitBase
                 });
             }
         }
-        allBonus.AddRange(BattleManager.Instance.tempBuffs);
+        if (BattleManager.Instance != null && BattleManager.Instance.tempBuffs != null)
+            allBonus.AddRange(BattleManager.Instance.tempBuffs);
         attr.RecalcAllAttr(allBonus);
 
         // 根据装备武器设置攻击范围（数值表：攻击范围(像素) / 100）
         float weaponRange = GameConfig.BASE_ATTACK_RANGE;
-        foreach (var item in GridBackpackSystem.Instance.GetEquippedItems())
+        foreach (var item in bag.GetEquippedItems())
         {
             if (item.slotType == EquipSlotType.MainHand && item.template != null)
             {
@@ -121,6 +138,11 @@ public class Hero : UnitBase
         }
         attr.SetAttr(AttrType.AttackRange, weaponRange);
         currentHp = Mathf.Min(currentHp, attr.GetAttr(AttrType.MaxHp));
+
+        // 属性重算后同步外观（通关穿装 / 战前遗产等路径未必都走 EquipItem）
+        if (costumeManager == null)
+            costumeManager = GetComponent<HeroCostumeManager>();
+        costumeManager?.RefreshCostume();
     }
 
     protected override void Update()
@@ -169,7 +191,10 @@ public class Hero : UnitBase
     protected override void Die()
     {
         base.Die();
-        BattleManager.Instance.OnHeroDead();
+        if (BattleManager.Instance != null)
+            BattleManager.Instance.OnHeroDead();
+        else
+            Debug.LogWarning("[Hero] Die: BattleManager 为空，跳过 OnHeroDead");
     }
 
     /// <summary>

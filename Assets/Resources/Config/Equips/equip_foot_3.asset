@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_foot_3
   m_EditorClassIdentifier: 
   templateId: equip_foot_3
-  equipName: Foot_3
+  equipName: "铁钉战靴"
   icon: {fileID: 21300000, guid: d6689b4c0bc10cf47bdba21c5561a56f, type: 3}
   iconFileName: Foot_3
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Foot_3

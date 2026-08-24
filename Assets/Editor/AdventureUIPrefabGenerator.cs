@@ -11,7 +11,7 @@ public static class AdventureUIPrefabGenerator
 {
     const string PrefabPath = "Assets/Resources/Prefabs/Town/AdventureUI.prefab";
 
-    [MenuItem("Tools/UI/生成冒险界面预制体")]
+    [MenuItem("Tools/_归档/UI/生成冒险界面预制体")]
     public static void Generate()
     {
         GenerateInternal(showDialog: true);

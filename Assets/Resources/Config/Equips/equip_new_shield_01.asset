@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_shield_01
   m_EditorClassIdentifier: 
   templateId: equip_new_shield_01
-  equipName: New_Shield_01
+  equipName: "钢骨盾"
   icon: {fileID: 21300000, guid: 844bd6e292d552444bd413e310014aa5, type: 3}
   iconFileName: New_Shield_01
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Shield_01

@@ -8,9 +8,9 @@ public static class CliAndroidBuild
 {
     const string OutDir = "Builds/Android";
 
-    public static void BuildDevApk() => BuildApk("PixelAdventureTown-dev.apk", development: true);
+    public static void BuildDevApk() => BuildApk("PixelAdventure-CrackBlade-dev.apk", development: true);
 
-    public static void BuildReleaseApk() => BuildApk("PixelAdventureTown-release.apk", development: false);
+    public static void BuildReleaseApk() => BuildApk("PixelAdventure-CrackBlade-release.apk", development: false);
 
     static void BuildApk(string apkName, bool development)
     {
@@ -27,25 +27,25 @@ public static class CliAndroidBuild
 
         AppIconSetup.Apply();
 
-        // Mono 不支持 ARM64；不设 IL2CPP 时勾选 ARM64 会被清空，报 Target architecture not specified
+        // 切到 Android 再设架构，否则 batchmode 下会报 Target architecture not specified
+        if (!EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android))
+            throw new System.Exception("Failed to switch active build target to Android.");
+
+        // ARM64 需要 IL2CPP；仅 ARM64（64 位）
         PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
         PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-        if (string.IsNullOrEmpty(PlayerSettings.GetApplicationIdentifier(BuildTargetGroup.Android)))
-            PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.pixeladventure.town");
 
         EditorUserBuildSettings.development = development;
         EditorUserBuildSettings.connectProfiler = false;
         EditorUserBuildSettings.allowDebugging = development;
         EditorUserBuildSettings.buildAppBundle = false;
-        EditorUserBuildSettings.androidBuildSubtarget = MobileTextureSubtarget.ASTC;
-
-        Debug.Log($"[CliAndroidBuild] backend={PlayerSettings.GetScriptingBackend(BuildTargetGroup.Android)} arch={PlayerSettings.Android.targetArchitectures}");
 
         var opts = new BuildPlayerOptions
         {
             scenes = scenes,
             locationPathName = Path.Combine(OutDir, apkName),
             target = BuildTarget.Android,
+            targetGroup = BuildTargetGroup.Android,
             options = development
                 ? BuildOptions.Development | BuildOptions.AllowDebugging
                 : BuildOptions.None

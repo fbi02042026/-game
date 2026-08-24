@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_15
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_15
-  equipName: New_Weapon_15
+  equipName: "风暴刺剑"
   icon: {fileID: 21300000, guid: 992528b0462b4b54bae9911c196cdfba, type: 3}
   iconFileName: New_Weapon_15
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Weapon_15

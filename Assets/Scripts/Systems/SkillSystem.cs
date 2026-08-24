@@ -37,15 +37,26 @@ public class SkillSystem : Singleton<SkillSystem>
         Chain           // 连锁
     }
 
+    readonly List<string> _cooldownKeyBuffer = new List<string>(8);
+
     void Update()
     {
-        // 更新冷却
-        var keys = new List<string>(_cooldowns.Keys);
-        foreach (var key in keys)
+        if (_cooldowns.Count == 0) return;
+
+        _cooldownKeyBuffer.Clear();
+        foreach (var kv in _cooldowns)
+            _cooldownKeyBuffer.Add(kv.Key);
+
+        float dt = Time.deltaTime;
+        for (int i = 0; i < _cooldownKeyBuffer.Count; i++)
         {
-            _cooldowns[key] -= Time.deltaTime;
-            if (_cooldowns[key] <= 0)
+            string key = _cooldownKeyBuffer[i];
+            if (!_cooldowns.TryGetValue(key, out float cd)) continue;
+            cd -= dt;
+            if (cd <= 0f)
                 _cooldowns.Remove(key);
+            else
+                _cooldowns[key] = cd;
         }
     }
 
@@ -89,25 +100,44 @@ public class SkillSystem : Singleton<SkillSystem>
         UnitBase target = caster.FindNearestEnemy();
         if (target == null) return;
 
-        float damage = CalculateDamage(skill, caster);
-        bool isCrit = Random.value < caster.attr.GetAttr(AttrType.CritRate);
-        if (isCrit) damage *= 2;
+        float damage = DamageFormula.ApplyCrit(CalculateDamage(skill, caster), caster.attr, out bool isCrit);
         target.TakeDamage(damage, isCrit);
     }
 
     private void ExecuteProjectile(ActiveSkill skill, UnitBase caster)
     {
         List<UnitBase> enemies = GetEnemiesInRange(caster, 10f);
-        if (enemies.Count == 0) return;
+        if (enemies.Count == 0 || caster == null) return;
 
         float damage = CalculateDamage(skill, caster);
+        VfxFaction faction = caster.isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
+        Vector3 firePos = caster.GetFirePosition();
 
         for (int i = 0; i < skill.projectileCount && i < enemies.Count; i++)
         {
             UnitBase target = enemies[i];
-            bool isCrit = Random.value < caster.attr.GetAttr(AttrType.CritRate);
-            float finalDamage = isCrit ? damage * 2 : damage;
-            target.TakeDamage(finalDamage, isCrit);
+            if (target == null || target.isDead) continue;
+            float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit);
+            UnitBase locked = target;
+            float dmg = finalDamage;
+            bool crit = isCrit;
+            Vector3 hitPos = target.GetHitPosition();
+
+            if (BattleVFXSystem.Instance != null)
+            {
+                BattleVFXSystem.Instance.PlaySkillProjectile(
+                    faction, firePos, hitPos, caster.facingDir, locked.transform, AttackVfxKit.Orb,
+                    null, 1f, 1f,
+                    () =>
+                    {
+                        if (locked == null || locked.isDead) return;
+                        locked.TakeDamage(dmg, crit);
+                    });
+            }
+            else
+            {
+                target.TakeDamage(finalDamage, isCrit);
+            }
         }
     }
 
@@ -118,8 +148,7 @@ public class SkillSystem : Singleton<SkillSystem>
 
         foreach (var enemy in enemies)
         {
-            bool isCrit = Random.value < caster.attr.GetAttr(AttrType.CritRate);
-            float finalDamage = isCrit ? damage * 2 : damage;
+            float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit);
             enemy.TakeDamage(finalDamage, isCrit);
         }
     }
@@ -145,8 +174,7 @@ public class SkillSystem : Singleton<SkillSystem>
         float chainMultiplier = 1f;
         foreach (var enemy in enemies)
         {
-            bool isCrit = Random.value < caster.attr.GetAttr(AttrType.CritRate);
-            float finalDamage = (isCrit ? damage * 2 : damage) * chainMultiplier;
+            float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit) * chainMultiplier;
             enemy.TakeDamage(finalDamage, isCrit);
             chainMultiplier *= 0.6f; // 每次连锁递减40%
             if (chainMultiplier < 0.2f) break;
@@ -158,11 +186,8 @@ public class SkillSystem : Singleton<SkillSystem>
     /// </summary>
     private float CalculateDamage(ActiveSkill skill, UnitBase caster)
     {
-        float attack = caster.attr.GetAttr(AttrType.Attack);
-        float phyPower = caster.attr.GetAttr(AttrType.PhyPower);
-        float magicPower = caster.attr.GetAttr(AttrType.MagicPower);
-
-        return skill.baseDamage + attack * skill.damageMultiplier * (1 + phyPower + magicPower);
+        if (skill == null || caster == null || caster.attr == null) return DamageFormula.MinDamage;
+        return DamageFormula.BuildSkillBase(skill.baseDamage, skill.damageMultiplier, caster.attr);
     }
 
     /// <summary>

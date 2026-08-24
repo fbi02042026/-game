@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: sea_303
   m_EditorClassIdentifier: 
   id: sea_303
-  monsterName: "\u602A\u7269_3_3"
+  monsterName: "遗迹海卫"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 18
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 26
   expDrop: 15
   spriteIndex: 3

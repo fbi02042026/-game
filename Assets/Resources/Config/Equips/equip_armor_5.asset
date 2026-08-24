@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_armor_5
   m_EditorClassIdentifier: 
   templateId: equip_armor_5
-  equipName: Armor_5
+  equipName: "骑士胸铠"
   icon: {fileID: 21300000, guid: ed05570c38a10704abfb93d693a4b96a, type: 3}
   iconFileName: Armor_5
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Armor_5

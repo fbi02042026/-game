@@ -18,7 +18,7 @@ public static class TavernPrefabGenerator
 
     const string PrefabPath = "Assets/Resources/Prefabs/Town/TavernUI.prefab";
 
-    [MenuItem("Tools/UI/重新生成酒馆骨架（会确认覆盖）")]
+    [MenuItem("Tools/_归档/UI/重新生成酒馆骨架（会确认覆盖）")]
     public static void GenerateMenu()
     {
         if (System.IO.File.Exists(PrefabPath))

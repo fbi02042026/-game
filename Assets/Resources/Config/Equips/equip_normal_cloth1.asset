@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_normal_cloth1
   m_EditorClassIdentifier: 
   templateId: equip_normal_cloth1
-  equipName: Normal_Cloth1
+  equipName: "粗布护手"
   icon: {fileID: 21300000, guid: c48a663862d7a2a47a0eae49ddf3bfe6, type: 3}
   iconFileName: Normal_Cloth1
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Normal_Cloth1

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_helmet_9
   m_EditorClassIdentifier: 
   templateId: equip_helmet_9
-  equipName: Helmet_9
+  equipName: "霜晶盔"
   icon: {fileID: 21300000, guid: 3d67b80b36cd4774d9126dcf6a4ea34d, type: 3}
   iconFileName: Helmet_9
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Helmet_9

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_helmet_04
   m_EditorClassIdentifier: 
   templateId: equip_new_helmet_04
-  equipName: New_Helmet_04
+  equipName: "卫兵钢盔"
   icon: {fileID: 21300000, guid: aa5a6374360f08047be3bd4d0551466e, type: 3}
   iconFileName: New_Helmet_04
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Helmet_04

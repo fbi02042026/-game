@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: undead_104
   m_EditorClassIdentifier: 
   id: undead_104
-  monsterName: "\u602A\u7269_1_4"
+  monsterName: "墓王残骸"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 11
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 19
   expDrop: 11
   spriteIndex: 4

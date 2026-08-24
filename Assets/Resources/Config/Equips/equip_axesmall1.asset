@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_axesmall1
   m_EditorClassIdentifier: 
   templateId: equip_axesmall1
-  equipName: AxeSmall1
+  equipName: "裂岩短斧"
   icon: {fileID: 21300000, guid: 7ff50817f017eb142a0ce27dede8cb71, type: 3}
   iconFileName: AxeSmall1
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: AxeSmall1

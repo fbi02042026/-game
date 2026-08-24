@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ice_804
   m_EditorClassIdentifier: 
   id: ice_804
-  monsterName: "\u602A\u7269_8_4"
+  monsterName: "雪境冰龙"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 49.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 54
   expDrop: 32
   spriteIndex: 4

@@ -75,15 +75,20 @@ public class AttrSystem
             _attr[AttrType.Agility] = Agility + saveSys.Data.playerAgility;
             _attr[AttrType.Vitality] = Vitality + saveSys.Data.playerVitality;
 
-            // 3. 天赋属性加成
+            // 3. 天赋属性加成（TalentDefs 为真源；旧 TalentConfig SO 仅作兼容兜底）
             if (saveSys.Data.talents != null)
             {
+                ApplyTalentDefsBonuses(saveSys.Data.talents);
                 var cfgMgr = ConfigManager.Instance;
                 if (cfgMgr != null)
                 {
                     foreach (var talentPair in saveSys.Data.talents)
                     {
-                        TalentConfig talent = cfgMgr.GetTalent(talentPair.Key);
+                        // L/C/R 已由 TalentDefs 处理，跳过；其余旧 id 仍读 SO
+                        string tid = talentPair.Key;
+                        if (string.IsNullOrEmpty(tid)) continue;
+                        if (tid[0] == 'L' || tid[0] == 'C' || tid[0] == 'R') continue;
+                        TalentConfig talent = cfgMgr.GetTalent(tid);
                         if (talent == null) continue;
                         AddAttr(talent.attrType, talent.valuePerLevel * talentPair.Value, false);
                     }
@@ -179,5 +184,84 @@ public class AttrSystem
     private float GetRawAttr(AttrType type)
     {
         return _attr.ContainsKey(type) ? _attr[type] : 0;
+    }
+
+    /// <summary>按存档天赋键应用 TalentDefs 效果（战斗属性）。</summary>
+    void ApplyTalentDefsBonuses(System.Collections.Generic.Dictionary<string, int> talents)
+    {
+        if (talents == null) return;
+        foreach (var pair in talents)
+        {
+            string key = pair.Key;
+            int val = pair.Value;
+            if (string.IsNullOrEmpty(key) || val <= 0) continue;
+
+            TalentDefs.Effect fx = null;
+            if (key.Length > 1 && key[0] == 'L' && int.TryParse(key.Substring(1), out int li))
+            {
+                var node = TalentDefs.GetLeft(li);
+                if (node != null) fx = node.effect;
+            }
+            else if (key == "C1")
+            {
+                var node = TalentDefs.RightExtra;
+                if (node?.options != null && val >= 1 && val <= node.options.Length)
+                    fx = node.options[val - 1].effect;
+            }
+            else if (key.Length > 1 && key[0] == 'R' && int.TryParse(key.Substring(1), out int ri))
+            {
+                var node = TalentDefs.GetRight(ri);
+                if (node?.options != null && val >= 1 && val <= node.options.Length)
+                    fx = node.options[val - 1].effect;
+            }
+
+            if (fx != null)
+                ApplyTalentEffect(fx);
+        }
+    }
+
+    void ApplyTalentEffect(TalentDefs.Effect fx)
+    {
+        if (fx == null) return;
+        switch (fx.kind)
+        {
+            case TalentDefs.AttrKind.Attack:
+                AddAttr(AttrType.Attack, fx.value, false);
+                break;
+            case TalentDefs.AttrKind.Hp:
+                AddAttr(AttrType.MaxHp, fx.value, false);
+                break;
+            case TalentDefs.AttrKind.Defense:
+                AddAttr(AttrType.Defense, fx.value, false);
+                break;
+            case TalentDefs.AttrKind.CritRate:
+                // TalentDefs 用百分点（0.5 = +0.5%）
+                AddAttr(AttrType.CritRate, fx.value * 0.01f, false);
+                break;
+            case TalentDefs.AttrKind.AtkSpeed:
+                AddAttr(AttrType.AttackSpeed, fx.value * 0.01f, true);
+                break;
+            case TalentDefs.AttrKind.CritDamage:
+            case TalentDefs.AttrKind.PhysDamage:
+            case TalentDefs.AttrKind.WeaponSwordShield:
+            case TalentDefs.AttrKind.WeaponHeavy:
+                AddAttr(AttrType.PhyPower, fx.value * 0.01f, true);
+                break;
+            case TalentDefs.AttrKind.MagicDamage:
+            case TalentDefs.AttrKind.WeaponRangedMagic:
+                AddAttr(AttrType.MagicPower, fx.value * 0.01f, true);
+                break;
+            case TalentDefs.AttrKind.SkillCooldown:
+                AddAttr(AttrType.CooldownReduce, fx.value * 0.01f, false);
+                break;
+            case TalentDefs.AttrKind.SkillDamage:
+                AddAttr(AttrType.Attack, fx.value * 0.01f, true);
+                break;
+            case TalentDefs.AttrKind.GoldDrop:
+                AddAttr(AttrType.GoldBonus, fx.value * 0.01f, true);
+                break;
+            default:
+                break;
+        }
     }
 }

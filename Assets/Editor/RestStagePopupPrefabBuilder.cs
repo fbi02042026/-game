@@ -11,7 +11,7 @@ public static class RestStagePopupPrefabBuilder
 {
     const string PrefabAssetPath = "Assets/Resources/Prefabs/Battle/RestStagePopup.prefab";
 
-    [MenuItem("Tools/UI/生成恢复关弹窗预制体")]
+    [MenuItem("Tools/_归档/UI/生成恢复关弹窗预制体")]
     public static void Build()
     {
         if (File.Exists(PrefabAssetPath))
@@ -69,7 +69,7 @@ public static class RestStagePopupPrefabBuilder
         if (go == null)
         {
             EditorUtility.DisplayDialog("恢复关弹窗",
-                "还没有预制体。\n点「Tools/UI/生成恢复关弹窗预制体」生成后即可换美术。", "好的");
+                "还没有预制体。\n可到 Tools/_归档/UI/生成恢复关弹窗预制体（会确认覆盖）。", "好的");
             return;
         }
         var ui = go.GetComponent<RestStagePopupUI>();

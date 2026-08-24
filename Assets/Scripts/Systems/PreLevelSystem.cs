@@ -47,27 +47,20 @@ public class PreLevelSystem : Singleton<PreLevelSystem>
         hasSelected = false;
         selectedIndex = -1;
         GenerateOptions();
-
-        // TODO: 显示UI界面
-        Debug.Log("[PreLevelSystem] 前置关卡：请从3件遗产中选择1件作为开局装备");
+        GamePerf.Log("[PreLevelSystem] 前置关卡：已生成三选一选项");
     }
 
-    /// <summary>
-    /// 生成3个选项
-    /// </summary>
     void GenerateOptions()
     {
         currentOptions.Clear();
-
-        var legacyPool = SaveSystem.Instance.Data.legacyEquipPool;
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        var legacyPool = data != null ? data.legacyEquipPool : null;
+        if (legacyPool == null) legacyPool = new List<EquipmentData>();
 
         if (legacyPool.Count >= 3)
         {
-            // 从遗产池中随机选3件（不重复）
             List<int> indices = new List<int>();
             for (int i = 0; i < legacyPool.Count; i++) indices.Add(i);
-
-            // Fisher-Yates洗牌
             for (int i = indices.Count - 1; i > 0; i--)
             {
                 int j = UnityEngine.Random.Range(0, i + 1);
@@ -75,31 +68,20 @@ public class PreLevelSystem : Singleton<PreLevelSystem>
                 indices[i] = indices[j];
                 indices[j] = temp;
             }
-
             for (int i = 0; i < 3; i++)
-            {
                 currentOptions.Add(legacyPool[indices[i]]);
-            }
         }
         else if (legacyPool.Count > 0)
         {
-            // 遗产不足3件，全部显示 + 补充基础装备
             for (int i = 0; i < legacyPool.Count; i++)
-            {
                 currentOptions.Add(legacyPool[i]);
-            }
             for (int i = legacyPool.Count; i < 3; i++)
-            {
                 currentOptions.Add(CreateBasicEquip());
-            }
         }
         else
         {
-            // 没有遗产，提供3件白色基础装备
             for (int i = 0; i < 3; i++)
-            {
                 currentOptions.Add(CreateBasicEquip());
-            }
         }
     }
 
@@ -114,19 +96,17 @@ public class PreLevelSystem : Singleton<PreLevelSystem>
             return false;
         }
 
-        // TODO: 接入广告SDK
-        bool adWatched = true; // 模拟广告已看完
-
-        if (adWatched)
+        bool ok = false;
+        RewardedAdBridge.ShowRewarded("prelevel_refresh", success =>
         {
+            if (!success) return;
             hasRefreshedThisRun = true;
             GenerateOptions();
             selectedIndex = -1;
-            Debug.Log("[PreLevelSystem] 已刷新遗产选项");
-            return true;
-        }
-
-        return false;
+            ok = true;
+            GamePerf.Log("[PreLevelSystem] 已刷新遗产选项");
+        });
+        return ok || hasRefreshedThisRun;
     }
 
     /// <summary>
@@ -153,6 +133,9 @@ public class PreLevelSystem : Singleton<PreLevelSystem>
         hasSelected = true;
         var selected = currentOptions[selectedIndex];
 
+        // 遗产池消耗：选中且标记为遗产的条目从池中移除（基础白装不在池里）
+        RemoveFromLegacyPool(selected);
+
         // 将选中的装备穿戴到英雄身上
         EquipToHero(selected);
 
@@ -160,18 +143,106 @@ public class PreLevelSystem : Singleton<PreLevelSystem>
         Debug.Log($"[PreLevelSystem] 确认选择: {selected.equipId}，进入第1关");
     }
 
+    static void RemoveFromLegacyPool(EquipmentData selected)
+    {
+        if (selected == null || !selected.isLegacy) return;
+        var pool = SaveSystem.Instance?.Data?.legacyEquipPool;
+        if (pool == null || pool.Count == 0) return;
+
+        int idx = pool.IndexOf(selected);
+        if (idx < 0)
+        {
+            // 选项可能是池中元素的拷贝感：按 id+稀有度+星级匹配第一件
+            for (int i = 0; i < pool.Count; i++)
+            {
+                var e = pool[i];
+                if (e == null) continue;
+                if (e.equipId == selected.equipId && e.rarity == selected.rarity && e.star == selected.star)
+                {
+                    idx = i;
+                    break;
+                }
+            }
+        }
+        if (idx >= 0)
+        {
+            pool.RemoveAt(idx);
+            SaveSystem.Instance?.Save();
+        }
+    }
+
     /// <summary>
     /// 将遗产装备穿戴到英雄
     /// </summary>
     void EquipToHero(EquipmentData equipData)
     {
-        // TODO: 根据equipData创建EquipInstance并装备到英雄
-        // 这里需要与GridBackpackSystem和HeroCostumeManager配合
-        // 简化处理：直接通知英雄穿上
-        if (Hero.Instance != null)
+        if (equipData == null)
         {
-            // Hero.Instance.EquipFromLegacy(equipData);
+            Debug.LogWarning("[PreLevelSystem] EquipToHero: equipData 为空");
+            return;
         }
+
+        var bag = GridBackpackSystem.Instance;
+        if (bag == null)
+        {
+            Debug.LogWarning("[PreLevelSystem] GridBackpackSystem 为空，无法穿装");
+            return;
+        }
+
+        EquipInstance inst = BuildEquipFromLegacy(equipData);
+        if (inst == null)
+        {
+            Debug.LogWarning($"[PreLevelSystem] 无法构建装备实例: {equipData.equipId}");
+            return;
+        }
+
+        if (!bag.TryEquipFromReward(inst))
+            Debug.LogWarning($"[PreLevelSystem] 穿装失败: {inst.equipName ?? equipData.equipId}");
+        else
+            Debug.Log($"[PreLevelSystem] 已穿装: {inst.equipName ?? equipData.equipId} → {inst.slotType}");
+    }
+
+    static EquipInstance BuildEquipFromLegacy(EquipmentData d)
+    {
+        var cfg = ConfigManager.Instance;
+        if (cfg == null) return null;
+
+        EquipTemplate tpl = cfg.GetEquipTemplate(d.equipId);
+        if (tpl == null)
+            tpl = FindFallbackTemplate(d.equipId);
+        if (tpl == null) return null;
+
+        int heroLv = Hero.Instance != null ? Hero.Instance.level : 1;
+        EquipInstance inst = EquipInstance.GenerateFromTemplate(tpl, 0, heroLv);
+        inst.rarity = (Rarity)Mathf.Clamp(d.rarity, 0, (int)Rarity.Legendary);
+        if (d.star > 0)
+            inst.star = Mathf.Clamp(d.star, 0, (int)inst.rarity);
+        if (d.requireLevel > 0)
+            inst.requireLevel = d.requireLevel;
+        if (d.attrBonus != null && d.attrBonus.Count > 0)
+            inst.attrBonus = new List<AttrBonusData>(d.attrBonus);
+        return inst;
+    }
+
+    static EquipTemplate FindFallbackTemplate(string hintId)
+    {
+        var cfg = ConfigManager.Instance;
+        if (cfg == null) return null;
+
+        // 占位 id（sword_basic 等）按槽位猜一件白色模板
+        EquipSlotType prefer = EquipSlotType.MainHand;
+        string h = hintId != null ? hintId.ToLowerInvariant() : "";
+        if (h.Contains("armor") || h.Contains("chest")) prefer = EquipSlotType.Chest;
+        else if (h.Contains("helmet") || h.Contains("head")) prefer = EquipSlotType.Head;
+
+        var samples = cfg.GetRandomEquipInstances(8, 0, 0);
+        if (samples == null || samples.Count == 0) return null;
+        for (int i = 0; i < samples.Count; i++)
+        {
+            if (samples[i]?.template != null && samples[i].slotType == prefer)
+                return samples[i].template;
+        }
+        return samples[0]?.template;
     }
 
     /// <summary>
@@ -179,14 +250,30 @@ public class PreLevelSystem : Singleton<PreLevelSystem>
     /// </summary>
     EquipmentData CreateBasicEquip()
     {
-        // 随机选择一种基础装备类型
-        string[] basicIds = { "sword_basic", "armor_basic", "helmet_basic" };
-        string id = basicIds[UnityEngine.Random.Range(0, basicIds.Length)];
+        var samples = ConfigManager.Instance != null
+            ? ConfigManager.Instance.GetRandomEquipInstances(1, 0, 0)
+            : null;
+        if (samples != null && samples.Count > 0 && samples[0] != null)
+        {
+            var eq = samples[0];
+            return new EquipmentData
+            {
+                equipId = eq.templateId,
+                rarity = 0,
+                star = 0,
+                requireLevel = 1,
+                attrBonus = eq.attrBonus != null
+                    ? new List<AttrBonusData>(eq.attrBonus)
+                    : new List<AttrBonusData>(),
+                isLegacy = false
+            };
+        }
 
+        Debug.LogWarning("[PreLevelSystem] 无可用装备模板，CreateBasicEquip 回退占位 id");
         return new EquipmentData
         {
-            equipId = id,
-            rarity = 0, // 白色
+            equipId = "sword_basic",
+            rarity = 0,
             star = 0,
             requireLevel = 1,
             isLegacy = false

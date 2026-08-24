@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_normal_helmet2
   m_EditorClassIdentifier: 
   templateId: equip_normal_helmet2
-  equipName: Normal_Helmet2
+  equipName: "皮制护额"
   icon: {fileID: 21300000, guid: a44a3f481f325384bb5f9133dbd9a3a3, type: 3}
   iconFileName: Normal_Helmet2
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Normal_Helmet2

@@ -160,6 +160,8 @@ public class StoryDirector : Singleton<StoryDirector>
 
             if (!string.IsNullOrEmpty(b.backgroundId) && b.backgroundId != _introducedBg)
             {
+                // 换场景前先去掉上一句道具，再播地点揭示（委托书 → 公会大厅）
+                ui.SetStoryProp(null);
                 ui.SetSceneBackground(StoryBackgrounds.Get(b.backgroundId));
                 string loc = StoryBackgrounds.DisplayName(b.backgroundId);
                 if (!string.IsNullOrEmpty(loc))

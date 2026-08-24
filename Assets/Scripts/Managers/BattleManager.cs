@@ -22,6 +22,8 @@ public class BattleManager : Singleton<BattleManager>
     public List<UnitBase> monsters = new List<UnitBase>();
     public StageData currentStage;
     public long currentGold = 0;
+    /// <summary>开战时城镇金币快照；死亡时本局增量清零用</summary>
+    long _goldAtRunStart;
     public bool isInBattle = false;
     public bool isAutoBattle = false;
     public List<AttrBonusData> tempBuffs = new List<AttrBonusData>();
@@ -97,51 +99,17 @@ public class BattleManager : Singleton<BattleManager>
     private bool _didUpdateForceSpawn;
 
     /// <summary>
-    /// 激活传送门：清完所有怪物后调用。分帧执行，避免末杀同帧卡顿。
+    /// 旧 endPoint 传送门路径（已弃用）。正式通关走 chuansongmen：StageClearRewardDirector → NotifyChuanSongMenOpened。
     /// </summary>
+    [System.Obsolete("使用 chuansongmen 通关导演，勿再调用 ActivatePortal")]
     void ActivatePortal()
     {
-        if (_portalActive || _stageCleared) return;
-        _portalActive = true;
-        StartCoroutine(CoActivatePortal());
+        GamePerf.Log("[BattleManager] ActivatePortal 已弃用，忽略（请走 chuansongmen）");
     }
 
     IEnumerator CoActivatePortal()
     {
-        // 等一帧：让死亡回收/UI 刷新先落地，再开传送门
-        yield return null;
-        if (_stageCleared) yield break;
-
-        float portalX = hero != null ? UnitBase.GetCombatX(hero) + 4.5f : GetStageStartX() + 12f;
-        if (endPoint != null)
-        {
-            EnsurePortalAnimatorReady(endPoint);
-
-            Vector3 ep = endPoint.position;
-            ep.x = portalX;
-            ep.y = UnitBase.GROUND_Y;
-            GameConfig.SetWorldPosition(endPoint.gameObject, ep);
-
-            SpriteRenderer portalSr = endPoint.GetComponent<SpriteRenderer>();
-            if (portalSr != null)
-            {
-                portalSr.enabled = true;
-                portalSr.color = new Color(0.6f, 0.9f, 1f, 1f);
-            }
-
-            yield return null; // 再分一帧再开粒子/动画，减轻尖峰
-
-            var portalFx = endPoint.GetComponentInChildren<PortalAnimator>(true);
-            if (portalFx != null)
-            {
-                portalFx.Warm();
-                portalFx.enabled = true;
-                portalFx.gameObject.SetActive(true);
-            }
-        }
-
-        ExtendCameraMaxX(portalX + 3f);
-        Debug.Log($"[BattleManager] 传送门已激活 portalX={portalX:F1}");
+        yield break;
     }
 
     /// <summary>开战时预挂传送门动画，避免清场瞬间 AddComponent</summary>
@@ -203,7 +171,9 @@ public class BattleManager : Singleton<BattleManager>
     public void StartNewRun()
     {
         Debug.Log("[BattleManager] ===== StartNewRun 开始 =====");
+        StopBattleSpawnCoroutines();
         currentGold = SaveSystem.Instance?.Data?.totalGold ?? 0;
+        _goldAtRunStart = currentGold;
         tempBuffs.Clear();
         _stageCleared = false;
         _portalActive = false;
@@ -244,6 +214,8 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         IsTutorialRun = StoryProgress.ShouldStartTutorialBattle();
+        if (IsTutorialRun)
+            StoryProgress.ConsumeTutorialBattleFlag();
         SuppressStageClear = IsTutorialRun;
         SkipLegacyOnEvacuate = IsTutorialRun;
         runGoldGainMul = 1f;
@@ -293,6 +265,24 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         Debug.Log($"[BattleManager] StartNewRun → LoadStage type={first.type} idx={first.stageIndex}");
+        if (!IsTutorialRun)
+        {
+            StartCoroutine(CoPreLevelThenLoad(first));
+            return;
+        }
+        LoadStage(first);
+    }
+
+    IEnumerator CoPreLevelThenLoad(StageData first)
+    {
+        bool done = false;
+        if (PreLevelSystem.Instance != null)
+        {
+            PreLevelSystem.Instance.StartPreLevelSelection();
+            PreLevelEquipUI.Show(PreLevelSystem.Instance, () => done = true);
+            while (!done)
+                yield return null;
+        }
         LoadStage(first);
     }
 
@@ -302,51 +292,44 @@ public class BattleManager : Singleton<BattleManager>
         if (data == null) return;
         if (data.townLevel == null) data.townLevel = new TownLevel();
 
-        if (data.permanentMercs.Count == 0)
+        if (data.permanentMercs == null)
+            data.permanentMercs = new List<MercenaryData>();
+
+        for (int i = data.permanentMercs.Count - 1; i >= 0; i--)
         {
-            data.permanentMercs.Add(new MercenaryData { mercId = "gongshou101", favorLevel = 1, level = 1 });
-            Debug.Log("[BattleManager] 新存档自动添加测试佣兵: 弓手101");
-        }
-        else
-        {
-            // 现阶段只留弓箭手；纠正无效预制体 ID
-            for (int i = data.permanentMercs.Count - 1; i >= 0; i--)
+            var m = data.permanentMercs[i];
+            if (m == null || string.IsNullOrEmpty(m.mercId))
             {
-                string id = data.permanentMercs[i].mercId;
-                if (string.IsNullOrEmpty(id))
-                {
-                    data.permanentMercs.RemoveAt(i);
-                    continue;
-                }
-                if (id.StartsWith("gongshou"))
-                {
-                    if (Resources.Load<GameObject>("Units/" + id) == null)
-                        data.permanentMercs[i].mercId = "gongshou101";
-                    continue;
-                }
                 data.permanentMercs.RemoveAt(i);
+                continue;
             }
-            bool hasArcher = false;
-            for (int i = 0; i < data.permanentMercs.Count; i++)
-            {
-                if (data.permanentMercs[i].mercId != null && data.permanentMercs[i].mercId.StartsWith("gongshou"))
-                {
-                    hasArcher = true;
-                    break;
-                }
-            }
-            if (!hasArcher)
-                data.permanentMercs.Insert(0, new MercenaryData { mercId = "gongshou101", favorLevel = 1, level = 1 });
-            while (data.permanentMercs.Count > 1)
-                data.permanentMercs.RemoveAt(data.permanentMercs.Count - 1);
+            // 无效弓手预制体 id 纠正
+            if (m.mercId.StartsWith("gongshou") && Resources.Load<GameObject>("Units/" + m.mercId) == null)
+                m.mercId = "gongshou101";
+            if (m.level < 1) m.level = 1;
+            if (m.star < 1) m.star = 1;
+            if (string.IsNullOrEmpty(m.displayName)) m.displayName = m.mercId;
+            if (string.IsNullOrEmpty(m.uid)) m.uid = System.Guid.NewGuid().ToString("N");
+            if (string.IsNullOrEmpty(m.skillId))
+                m.skillId = SkillRegistry.Instance != null
+                    ? SkillRegistry.Instance.GetMercDefaultSkillId(m.mercId)
+                    : SkillRegistry.DefaultMercMeleeSkillId;
         }
 
-        // 只开 1 个佣兵槽，第二个 UI 显示「未开放」
-        if (data.townLevel.tavern != 1)
-        {
+        // 软著版：佣兵由酒馆三选一反复招募，不再空档自动塞弓手。
+        // 旧逻辑保留注释，便于日后调试：
+        // if (data.permanentMercs.Count == 0)
+        // {
+        //     data.permanentMercs.Add(new MercenaryData {
+        //         mercId = "gongshou101", displayName = "测试弓手",
+        //         favorLevel = 1, level = 1, star = 1,
+        //         skillId = SkillRegistry.DefaultMercRangedSkillId,
+        //         uid = System.Guid.NewGuid().ToString("N")
+        //     });
+        // }
+
+        if (data.townLevel.tavern < 1 && data.permanentMercs.Count > 0)
             data.townLevel.tavern = 1;
-            Debug.Log("[BattleManager] 酒馆等级纠正为 1（仅弓箭手出战）");
-        }
     }
 
     void SpawnMercenaries()
@@ -354,22 +337,35 @@ public class BattleManager : Singleton<BattleManager>
         var mm = MercenaryManager.Instance;
         if (mm == null) return;
 
-        var ids = mm.GetActiveMercIds();
+        var data = SaveSystem.Instance?.Data;
         Vector3 basePos = spawnPoint != null ? spawnPoint.position : hero.transform.position;
         basePos.y = UnitBase.GROUND_Y;
         basePos.z = 0f;
 
-        for (int i = 0; i < ids.Count; i++)
+        int max = mm.GetMaxMercSlots();
+        int spawned = 0;
+        if (data?.permanentMercs != null)
         {
-            Vector3 pos = basePos + new Vector3(-0.85f * (i + 1), 0, 0);
-            var merc = mm.SpawnMercenary(ids[i], pos, 1);
-            if (merc != null)
+            for (int i = 0; i < data.permanentMercs.Count && spawned < max; i++)
             {
-                allyUnits.Add(merc);
-                merc.OnDead += OnMercenaryDead;
+                var md = data.permanentMercs[i];
+                if (md == null || string.IsNullOrEmpty(md.mercId)) continue;
+                if (!GameConfig.IsMercAvailable(md.mercId, data)) continue;
+
+                Vector3 pos = basePos + new Vector3(-0.85f * (spawned + 1), 0, 0);
+                var merc = mm.SpawnMercenary(md.mercId, pos, Mathf.Max(1, md.level));
+                if (merc != null)
+                {
+                    merc.equippedSkillId = md.skillId;
+                    if (!string.IsNullOrEmpty(md.displayName))
+                        merc.gameObject.name = "Merc_" + md.displayName;
+                    allyUnits.Add(merc);
+                    merc.OnDead += OnMercenaryDead;
+                    spawned++;
+                }
             }
         }
-        Debug.Log($"[BattleManager] 已生成佣兵 {ids.Count} 个 (tavern槽={mm.GetMaxMercSlots()})");
+        Debug.Log($"[BattleManager] 已生成佣兵 {spawned} 个 (tavern槽={max})");
     }
 
     public void OnMercenaryDead(UnitBase merc)
@@ -484,7 +480,7 @@ public class BattleManager : Singleton<BattleManager>
             wave.spawned = true;
             _activeWaveIndex = waveIdx;
             StopWaveCountdown();
-            Debug.Log($"[BattleManager] 教程波 {waveIdx + 1} OK alive={CountAliveMonsters()} spawn={wave.aliveCount}");
+            GamePerf.Log($"[BattleManager] 教程波 {waveIdx + 1} OK alive={CountAliveMonsters()} spawn={wave.aliveCount}");
         }
         else
         {
@@ -581,7 +577,10 @@ public class BattleManager : Singleton<BattleManager>
         {
             go = PoolManager.Instance.Get("Monster", pos, Quaternion.identity);
             if (go == null && PoolManager.Instance._monsterPrefab != null)
+            {
                 go = Object.Instantiate(PoolManager.Instance._monsterPrefab, pos, Quaternion.identity);
+                PoolManager.Instance.RegisterExternal(go, "Monster");
+            }
         }
         if (go == null) return null;
 
@@ -706,25 +705,14 @@ public class BattleManager : Singleton<BattleManager>
             case StageType.Boss:
                 SetupBossWave(stage.stageIndex);
                 break;
-            case StageType.Merchant:
-                isInBattle = false;
-                LoadMerchantStage(stage);
-                break;
-            case StageType.Enchant:
-                isInBattle = false;
-                LoadEnchantStage();
-                break;
-            case StageType.Curse:
-                isInBattle = false;
-                LoadCurseStage(stage);
-                break;
             case StageType.Rest:
                 isInBattle = false;
                 LoadRestStage();
                 break;
-            case StageType.Forge:
-                isInBattle = false;
-                LoadForgeStage();
+            default:
+                // 商人/诅咒/锻造/附魔等：静默当普通战斗关
+                stage.type = StageType.Normal;
+                SetupNormalWaves(stage.stageIndex);
                 break;
         }
 
@@ -757,14 +745,32 @@ public class BattleManager : Singleton<BattleManager>
             if (!gameObject.activeInHierarchy)
                 Debug.LogError($"[BattleManager] 宿主 {gameObject.name} 未激活，协程与 Update 不会执行");
 
-            StopCoroutine("BattleStartSequenceCoroutine");
+            StopBattleSpawnCoroutines();
             StartCoroutine("BattleStartSequenceCoroutine");
-            StartCoroutine(CoFirstWaveHardFallback());
+            _firstWaveHardFallbackCo = StartCoroutine(CoFirstWaveHardFallback());
         }
         else
         {
             UnitsCanAct = true;
             Debug.LogWarning($"[BattleManager] 非战斗关 type={stage.type}，不刷怪");
+        }
+    }
+
+    Coroutine _firstWaveHardFallbackCo;
+
+    /// <summary>停掉开战/硬刷协程，避免连续 LoadStage 叠多个兜底。</summary>
+    public void StopBattleSpawnCoroutines()
+    {
+        StopCoroutine("BattleStartSequenceCoroutine");
+        if (_firstWaveSpawnCo != null)
+        {
+            StopCoroutine(_firstWaveSpawnCo);
+            _firstWaveSpawnCo = null;
+        }
+        if (_firstWaveHardFallbackCo != null)
+        {
+            StopCoroutine(_firstWaveHardFallbackCo);
+            _firstWaveHardFallbackCo = null;
         }
     }
 
@@ -864,7 +870,10 @@ public class BattleManager : Singleton<BattleManager>
             {
                 go = PoolManager.Instance.Get("Monster", pos, Quaternion.identity);
                 if (go == null && PoolManager.Instance._monsterPrefab != null)
+                {
                     go = Object.Instantiate(PoolManager.Instance._monsterPrefab, pos, Quaternion.identity);
+                    PoolManager.Instance.RegisterExternal(go, "Monster");
+                }
             }
             if (go == null)
             {
@@ -1017,6 +1026,10 @@ public class BattleManager : Singleton<BattleManager>
 
         Debug.LogError("[BattleManager] 硬性保险触发：2.2s 仍无怪 → EmergencySpawnVisibleMonsters");
         TrySpawnFirstWaveOnce();
+        if (CountAliveMonsters() == 0)
+            EmergencySpawnVisibleMonsters(Mathf.Min(3, GameConfig.WAVE_MONSTER_MAX));
+        if (CountAliveMonsters() > 0)
+            _firstWaveSpawned = true;
     }
 
     /// <summary>黑屏章节名 → 队伍从屏外走进来（无传送特效）</summary>
@@ -1187,7 +1200,7 @@ public class BattleManager : Singleton<BattleManager>
                 wave.spawned = true;
                 _activeWaveIndex = waveIdx;
                 StopWaveCountdown();
-                Debug.Log($"[BattleManager] 刷第{waveIdx + 1}/{_waves.Count}波 OK alive={aliveAfter} heroX={heroX:F2}");
+                GamePerf.Log($"[BattleManager] 刷第{waveIdx + 1}/{_waves.Count}波 OK alive={aliveAfter} heroX={heroX:F2}");
             }
             else
             {
@@ -1220,7 +1233,7 @@ public class BattleManager : Singleton<BattleManager>
         _waveCountdownActive = true;
         _nextWaveCountdown = GameConfig.GetWaveSpawnInterval();
         BattleSideHud.Instance?.SetWaveCountdown(true, _nextWaveCountdown, true);
-        Debug.Log($"[BattleManager] 下一波倒计时 {_nextWaveCountdown:F1}s（可点击加速）");
+        GamePerf.Log($"[BattleManager] 下一波倒计时 {_nextWaveCountdown:F1}s（可点击加速）");
     }
 
     void StopWaveCountdown()
@@ -1264,7 +1277,7 @@ public class BattleManager : Singleton<BattleManager>
         currentGold += bonus;
         BattleUI.Instance?.UpdateGold(currentGold);
         UIManager.Instance?.ShowToast($"加速出兵 +{bonus} 金");
-        Debug.Log($"[BattleManager] 加速下一波 leftover={_nextWaveCountdown:F1}s → +{bonus}金");
+        GamePerf.Log($"[BattleManager] 加速下一波 leftover={_nextWaveCountdown:F1}s → +{bonus}金");
 
         StopWaveCountdown();
         SpawnNextPendingWave();
@@ -1284,11 +1297,20 @@ public class BattleManager : Singleton<BattleManager>
         return -1;
     }
 
+    int _aliveMonsterCache = -1;
+    int _aliveMonsterCacheFrame = -1;
+
     int CountAliveMonsters()
     {
+        int frame = Time.frameCount;
+        if (_aliveMonsterCacheFrame == frame && _aliveMonsterCache >= 0)
+            return _aliveMonsterCache;
+
         int n = 0;
         for (int i = 0; i < monsters.Count; i++)
             if (monsters[i] != null && !monsters[i].isDead) n++;
+        _aliveMonsterCache = n;
+        _aliveMonsterCacheFrame = frame;
         return n;
     }
 
@@ -1380,13 +1402,13 @@ public class BattleManager : Singleton<BattleManager>
 
         _totalWaves = _waves.Count;
         string tag = elite ? "精英关" : "普通关";
-        Debug.Log($"[BattleManager] {tag} stage={stageIdx + 1} 总怪={total} → {_totalWaves}波 [{string.Join(",", perWave)}] 刷怪点={usable.Count} 起点={startX:F1}");
+        GamePerf.Log($"[BattleManager] {tag} stage={stageIdx + 1} 总怪={total} → {_totalWaves}波 [{string.Join(",", perWave)}] 刷怪点={usable.Count} 起点={startX:F1}");
         for (int i = 0; i < _waves.Count; i++)
         {
             var w = _waves[i];
             string an = w.spawnAnchor != null ? w.spawnAnchor.name : "virtual";
             float ax = w.spawnAnchor != null ? w.spawnAnchor.position.x : w.triggerX;
-            Debug.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}");
+            GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}");
         }
     }
 
@@ -1485,7 +1507,7 @@ public class BattleManager : Singleton<BattleManager>
             aliveCount = 0
         });
         _totalWaves = _waves.Count;
-        Debug.Log($"[BattleManager] Boss关 stage={stageIdx + 1} 小怪={minions}×{minionWaves}波 + Boss={bossCount} X={bossX:F1}");
+        GamePerf.Log($"[BattleManager] Boss关 stage={stageIdx + 1} 小怪={minions}×{minionWaves}波 + Boss={bossCount} X={bossX:F1}");
     }
 
     // ============================================================
@@ -1496,26 +1518,7 @@ public class BattleManager : Singleton<BattleManager>
     {
         if (!isInBattle || _stageCleared) return;
 
-        // 硬性保险：教程关由 TutorialDirector 控刷，别在这里抢刷/打 Error
-        if (!_firstWaveSpawned
-            && !IsTutorialRun
-            && Time.unscaledTime >= _battleStartTime + GameConfig.FIRST_WAVE_SPAWN_DELAY
-            && CountAliveMonsters() == 0)
-        {
-            if (_waves != null && _waves.Count > 0 && FindNextUnspawnedWaveIndex() >= 0)
-            {
-                Debug.LogWarning("[BattleManager] Update 硬性刷怪触发");
-                TrySpawnFirstWaveOnce();
-            }
-            else
-            {
-                Debug.LogWarning($"[BattleManager] 硬性刷怪兜底: waves={_waves?.Count ?? 0} nextIdx={FindNextUnspawnedWaveIndex()} → 强制补波");
-                EnsureAtLeastOneWave();
-                TrySpawnFirstWaveOnce();
-                if (CountAliveMonsters() == 0)
-                    EmergencySpawnVisibleMonsters(3);
-            }
-        }
+        // 首波刷怪：主路径 ScheduleFirstWaveSpawn；兜底仅 CoFirstWaveHardFallback（勿在 Update 叠刷）
 
         // 清理死怪（不要在刷怪同一帧误清：只移真正死亡的）
         for (int i = monsters.Count - 1; i >= 0; i--)
@@ -1544,21 +1547,14 @@ public class BattleManager : Singleton<BattleManager>
             BattleSideHud.Instance?.ResetCombo();
         }
 
-        // 开战若仍无活怪，补刷（用 unscaledTime，不受 timeScale 影响）
+        // 首波已刷完且场上清空：由倒计时推进下一波（不在此 Emergency）
         if (UnitsCanAct && !_stageCleared && !_portalActive
+            && _firstWaveSpawned
             && !_waveCountdownActive
             && CountAliveMonsters() == 0 && _waves != null && _waves.Count > 0
-            && FindNextUnspawnedWaveIndex() >= 0
-            && Time.unscaledTime >= _battleStartTime + GameConfig.FIRST_WAVE_SPAWN_DELAY + 0.5f)
+            && FindNextUnspawnedWaveIndex() >= 0)
         {
-            if (!_didUpdateForceSpawn)
-            {
-                _didUpdateForceSpawn = true;
-                Debug.LogWarning("[BattleManager] Update 检测到无活怪 → 补刷首波");
-                TrySpawnFirstWaveOnce();
-                if (CountAliveMonsters() == 0)
-                    EmergencySpawnVisibleMonsters(Mathf.Min(3, GameConfig.WAVE_MONSTER_MAX));
-            }
+            BeginNextWaveCountdown();
         }
 
         bool allSpawned = true;
@@ -1759,7 +1755,7 @@ public class BattleManager : Singleton<BattleManager>
                 monsterScale = GameConfig.BOSS_SCALE_MULTIPLIER;
 
             float spawnY = UnitBase.GROUND_Y;
-            float spawnX = engageBaseX + i * 0.4f;
+            float spawnX = engageBaseX + i * 1.15f;
             if (wave.spawnAnchor != null)
                 spawnZ = wave.spawnAnchor.position.z;
 
@@ -1772,18 +1768,16 @@ public class BattleManager : Singleton<BattleManager>
             {
                 ForceEnableMonsterRenderers(m.transform);
                 m.BeginMapEnter(engagePos, GameConfig.MONSTER_ENTER_SPEED);
+                if (isElite && !wave.isBossWave)
+                {
+                    m.currentHp *= 1.5f;
+                    m.attr.AddAttr(AttrType.Attack, 0.5f, true);
+                }
+                wave.aliveCount++;
             }
-
-            if (isElite && !wave.isBossWave && m != null)
-            {
-                m.currentHp *= 1.5f;
-                m.attr.AddAttr(AttrType.Attack, 0.5f, true);
-            }
-
-            wave.aliveCount++;
         }
 
-        Debug.Log($"[BattleManager] 波次{waveIndex + 1} 刷新{wave.monsterCount}只 @x={engageBaseX:F1} anchor={(wave.spawnAnchor != null ? wave.spawnAnchor.name : "null")}");
+        GamePerf.Log($"[BattleManager] 波次{waveIndex + 1} 刷新{wave.monsterCount}只 @x={engageBaseX:F1} anchor={(wave.spawnAnchor != null ? wave.spawnAnchor.name : "null")}");
     }
 
     /// <summary>兜底怪物：刷在英雄前方可见处</summary>
@@ -1808,7 +1802,7 @@ public class BattleManager : Singleton<BattleManager>
         {
             float spawnY = UnitBase.GROUND_Y;
             float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
-            float spawnX = engageBaseX + i * 0.35f;
+            float spawnX = engageBaseX + i * 1.05f;
             Vector3 pos = new Vector3(spawnX + GameConfig.MONSTER_ENTER_DISTANCE, spawnY, spawnZ);
             Vector3 engage = new Vector3(spawnX, spawnY, spawnZ);
 
@@ -1816,7 +1810,10 @@ public class BattleManager : Singleton<BattleManager>
             if (PoolManager.Instance != null)
                 go = PoolManager.Instance.Get("Monster", pos, Quaternion.identity);
             if (go == null && PoolManager.Instance != null && PoolManager.Instance._monsterPrefab != null)
+            {
                 go = Object.Instantiate(PoolManager.Instance._monsterPrefab, pos, Quaternion.identity);
+                PoolManager.Instance.RegisterExternal(go, "Monster");
+            }
 
             if (go == null)
             {
@@ -1870,7 +1867,7 @@ public class BattleManager : Singleton<BattleManager>
             _totalMonstersSpawnedThisStage++;
             wave.aliveCount++;
         }
-        Debug.Log($"[BattleManager] 兜底波次{waveIndex + 1}: {wave.monsterCount}只 @刷怪点 spawnedTotal={_totalMonstersSpawnedThisStage}");
+        GamePerf.Log($"[BattleManager] 兜底波次{waveIndex + 1}: {wave.monsterCount}只 @刷怪点 spawnedTotal={_totalMonstersSpawnedThisStage}");
     }
 
     Monster SpawnMonster(MonsterConfig template, int stageIdx, Vector3 pos, float scaleMultiplier = 1f, int spriteIndexOverride = 0)
@@ -1883,7 +1880,10 @@ public class BattleManager : Singleton<BattleManager>
 
         GameObject go = PoolManager.Instance.Get("Monster", pos, Quaternion.identity);
         if (go == null && PoolManager.Instance._monsterPrefab != null)
+        {
             go = Object.Instantiate(PoolManager.Instance._monsterPrefab, pos, Quaternion.identity);
+            PoolManager.Instance.RegisterExternal(go, "Monster");
+        }
 
         if (go == null)
         {
@@ -2037,7 +2037,7 @@ public class BattleManager : Singleton<BattleManager>
         Mercenary merc = mercs[mercIndex];
         if (merc == null || merc.isDead) return false;
 
-        var skill = ResolveMercSkill(merc.mercId);
+        var skill = ResolveMercSkill(merc);
         if (skill.skillType == SkillSystem.SkillType.Buff)
             ExecuteAllySkillFallback(merc, skill);
         else if (!(SkillSystem.Instance != null && SkillSystem.Instance.UseSkill(skill, merc)))
@@ -2059,13 +2059,19 @@ public class BattleManager : Singleton<BattleManager>
         return ResolveSkill(id);
     }
 
-    SkillSystem.ActiveSkill ResolveMercSkill(string mercId)
+    SkillSystem.ActiveSkill ResolveMercSkill(Mercenary merc)
     {
         string id = SkillRegistry.Instance != null
-            ? SkillRegistry.Instance.GetMercDefaultSkillId(mercId)
+            ? SkillRegistry.Instance.GetMercSkillId(merc != null ? merc.mercId : null,
+                merc != null ? merc.equippedSkillId : null)
             : SkillRegistry.DefaultMercMeleeSkillId;
         return ResolveSkill(id);
     }
+
+    // 旧签名保留注释，避免外部误调编译失败时再恢复：
+    // SkillSystem.ActiveSkill ResolveMercSkill(string mercId) => ResolveSkill(
+    //     SkillRegistry.Instance != null ? SkillRegistry.Instance.GetMercDefaultSkillId(mercId)
+    //     : SkillRegistry.DefaultMercMeleeSkillId);
 
     SkillSystem.ActiveSkill ResolveSkill(string skillId)
     {
@@ -2386,7 +2392,13 @@ public class BattleManager : Singleton<BattleManager>
     {
         isInBattle = false;
         MercenaryManager.Instance?.ClearAllMercs();
-        TriggerLegacyFlow();
+        // 引导关死亡：不走遗产，按撤离收尾标记教程进度，避免反复卡在引导战
+        if (IsTutorialRun || SkipLegacyOnEvacuate)
+        {
+            FinishTutorialEvacuate();
+            return;
+        }
+        TriggerLegacyFlow(isDeath: true);
     }
 
     public void TriggerEvacuation()
@@ -2402,96 +2414,112 @@ public class BattleManager : Singleton<BattleManager>
             FinishTutorialEvacuate();
             return;
         }
-        TriggerLegacyFlow();
+        TriggerLegacyFlow(isDeath: false);
     }
 
     void FinishTutorialEvacuate()
     {
         if (TutorialDirector.Instance != null)
             TutorialDirector.Instance.WaitingEvacuate = false;
-        if (currentGold > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, currentGold, save: false, notify: true);
+        // currentGold 含城镇底金，必须走差额写回，禁止整额 Add
+        PersistBattleGold();
         StoryProgress.MarkTutorialBattleCleared();
+        BattleStateSaver.Instance?.ClearBattleState();
         SaveSystem.Instance?.Save();
         GameSceneManager.Instance.LoadTownScene();
     }
 
-    void TriggerLegacyFlow()
+    /// <param name="isDeath">死亡：本局金币清零（保留进局快照）；撤离：保留本局金币。材料/附魔石均已在钱包中保留。</param>
+    void TriggerLegacyFlow(bool isDeath)
     {
-        List<EquipInstance> allEquips = GridBackpackSystem.Instance.GetAllItemsForLegacy();
-        UIManager.Instance.ShowLegacyChooseUI(allEquips, (selectedLegacy) =>
+        if (isDeath)
+            currentGold = _goldAtRunStart;
+
+        List<EquipInstance> allEquips = GridBackpackSystem.Instance != null
+            ? GridBackpackSystem.Instance.GetAllItemsForLegacy()
+            : new List<EquipInstance>();
+
+        void Finish(EquipInstance selectedLegacy)
         {
             EquipInstance legacyToTake = selectedLegacy;
             if (legacyToTake == null && allEquips.Count > 0)
                 legacyToTake = allEquips[0];
 
-            if (legacyToTake != null)
+            if (legacyToTake != null && SaveSystem.Instance?.Data != null)
             {
                 EquipmentData legacy = new EquipmentData
                 {
                     equipId = legacyToTake.templateId,
                     rarity = (int)legacyToTake.rarity,
                     attrBonus = legacyToTake.attrBonus,
-                    tags = legacyToTake.template.tags,
+                    tags = legacyToTake.template != null ? legacyToTake.template.tags : null,
                     isLegacy = true,
                     star = legacyToTake.star,
                     requireLevel = legacyToTake.requireLevel
                 };
                 SaveSystem.Instance.Data.legacyEquipPool.Add(legacy);
-                if (legacyToTake.rarity == Rarity.Legendary && !SaveSystem.Instance.Data.unlockedLegendaryWeapons.Contains(legacyToTake.templateId))
+                if (legacyToTake.rarity == Rarity.Legendary
+                    && !SaveSystem.Instance.Data.unlockedLegendaryWeapons.Contains(legacyToTake.templateId))
                     SaveSystem.Instance.Data.unlockedLegendaryWeapons.Add(legacyToTake.templateId);
-                UIManager.Instance.ShowToast($"获得遗产：{legacyToTake.equipName}");
+                UIManager.Instance?.ShowToast($"获得遗产：{legacyToTake.equipName}");
                 AchievementSystem.Instance?.OnBringLegacy();
             }
-            if (currentGold > 0)
-                ResourceWallet.Add(ResourceWallet.ResourceType.Gold, currentGold, save: false, notify: true);
-            int talentGain = (int)(currentGold / GameConfig.GOLD_PER_TALENT_POINT);
-            if (talentGain > 0)
-                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
-            SaveSystem.Instance.Save();
+
+            // 用差额同步城镇金币（死亡时 currentGold 已回退到开局快照）
+            PersistBattleGold();
+            if (!isDeath)
+            {
+                int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
+                if (talentGain > 0)
+                    ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
+            }
+            SaveSystem.Instance?.Save();
+            BattleStateSaver.Instance?.ClearBattleState();
             TownHubController.PendingOpenAdventure = true;
-            GameSceneManager.Instance.LoadTownScene();
-        });
+            GameSceneManager.Instance?.LoadTownScene();
+        }
+
+        if (UIManager.Instance != null)
+            UIManager.Instance.ShowLegacyChooseUI(allEquips, Finish);
+        else
+            Finish(null);
     }
 
     public void ClearAllMonsters()
     {
-        foreach (var m in monsters)
+        for (int i = 0; i < monsters.Count; i++)
         {
-            if (m != null)
-            {
-                m.OnDead -= OnMonsterDead;
+            var m = monsters[i];
+            if (m == null) continue;
+            m.OnDead -= OnMonsterDead;
+            if (PoolManager.Instance != null)
                 PoolManager.Instance.Release(m.gameObject);
-            }
+            else
+                Destroy(m.gameObject);
         }
         monsters.Clear();
+        _aliveMonsterCache = -1;
     }
 
     // ============================================================
     // 特殊关卡
     // ============================================================
 
+    // 商人/诅咒/锻造/附魔：本版不进池，保留方法供后续开放
+    [System.Obsolete("本版未开放商人关")]
     void LoadMerchantStage(StageData stage)
     {
-        stage.merchantGoodsInst = ConfigManager.Instance.GetRandomEquipInstances(Random.Range(3, 6), SaveSystem.Instance.Data.townLevel.blacksmith + 1);
-        UIManager.Instance.ShowMerchantUI(stage.merchantGoodsInst, () =>
-        {
-            ChapterManager.Instance.OnStageComplete();
-            UIManager.Instance.ShowStageSelectUI(ChapterManager.Instance.availableNextStages);
-        });
+        UIManager.Instance?.ShowToast("本版本未开放商人关");
+        ChapterManager.Instance?.OnStageComplete();
+        UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
     }
 
+    [System.Obsolete("本版未开放诅咒关")]
     void LoadCurseStage(StageData stage)
     {
-        stage.curseOptions = GenerateCurseOptions();
-        UIManager.Instance.ShowCurseUI(stage.curseOptions, (selected) =>
-        {
-            tempBuffs.Add(selected.buff);
-            tempBuffs.Add(selected.debuff);
-            Hero.Instance.RecalcAttr();
-            ChapterManager.Instance.OnStageComplete();
-            UIManager.Instance.ShowStageSelectUI(ChapterManager.Instance.availableNextStages);
-        });
+        UIManager.Instance?.ShowToast("本版本未开放诅咒关");
+        ChapterManager.Instance?.OnStageComplete();
+        UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
     }
 
     /// <summary>

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_armor_09
   m_EditorClassIdentifier: 
   templateId: equip_new_armor_09
-  equipName: New_Armor_09
+  equipName: "霜骨胸甲"
   icon: {fileID: 21300000, guid: 644c897164f2673439e8adbe90a576a2, type: 3}
   iconFileName: New_Armor_09
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Armor_09

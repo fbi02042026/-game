@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_armor_10
   m_EditorClassIdentifier: 
   templateId: equip_new_armor_10
-  equipName: New_Armor_10
+  equipName: "圣辉板甲"
   icon: {fileID: 21300000, guid: 42272c550537d1740b22af979839ccc2, type: 3}
   iconFileName: New_Armor_10
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Armor_10

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_helmet_06
   m_EditorClassIdentifier: 
   templateId: equip_new_helmet_06
-  equipName: New_Helmet_06
+  equipName: "猎人风帽"
   icon: {fileID: 21300000, guid: 6a6d39826002a57419ba96829e226061, type: 3}
   iconFileName: New_Helmet_06
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Helmet_06

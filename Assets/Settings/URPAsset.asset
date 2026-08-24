@@ -53,18 +53,6 @@ MonoBehaviour:
   m_AdditionalLightsShadowResolutionTierMedium: 512
   m_AdditionalLightsShadowResolutionTierHigh: 1024
   m_lightProbeSystem: 1
-  m_VGComputeShaders:
-    gpuCulling: {fileID: 0}
-    gpuCullingDegenerate: {fileID: 0}
-    gpuCullingInit: {fileID: 0}
-    gpuVisibleBucket: {fileID: 0}
-    gpuVisibleBucketIndexed: {fileID: 0}
-    generateMaterialRange: {fileID: 0}
-    scatterCopy: {fileID: 0}
-    downsampleDepth: {fileID: 0}
-    gpuVertexCacheManage: {fileID: 0}
-    gpuDrivenFlattenProbeData: {fileID: 0}
-    transcode: {fileID: 0}
   m_ReflectionProbeBlending: 0
   m_ReflectionProbeBoxProjection: 0
   m_ReflectionProbeAtlasResolution: 134219776
@@ -84,7 +72,6 @@ MonoBehaviour:
   m_AdditionalLightsCookieResolution: 2048
   m_AdditionalLightsCookieFormat: 3
   m_UseSRPBatcher: 1
-  m_UseSRPDynamicBatching: 0
   m_SupportsDynamicBatching: 0
   m_MixedLightingSupported: 1
   m_SupportsLightCookies: 1
@@ -107,7 +94,6 @@ MonoBehaviour:
   m_GRDUseTextureStoreData: 0
   m_GRDEnableGPUOcclusionCulling: 1
   m_BRGShaderVariantStorageStripType: 0
-  m_SmallMeshScreenPercentage: 0
   m_ShadowType: 1
   m_LocalShadowsSupported: 0
   m_LocalShadowsAtlasResolution: 256

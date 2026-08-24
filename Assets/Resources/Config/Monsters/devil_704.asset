@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: devil_704
   m_EditorClassIdentifier: 
   id: devil_704
-  monsterName: "\u602A\u7269_7_4"
+  monsterName: "炼狱魔君"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 44
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 49
   expDrop: 29
   spriteIndex: 4

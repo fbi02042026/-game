@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_armor_6
   m_EditorClassIdentifier: 
   templateId: equip_armor_6
-  equipName: Armor_6
+  equipName: "旅人外套"
   icon: {fileID: 21300000, guid: de492bea9224bbb4385c48f354aaa118, type: 3}
   iconFileName: Armor_6
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Armor_6

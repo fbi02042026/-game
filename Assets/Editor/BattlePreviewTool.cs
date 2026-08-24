@@ -31,7 +31,7 @@ public class BattlePreviewWindow : EditorWindow
 
     private GameObject _previewRoot;
 
-    [MenuItem("Tools/战斗场景预览")]
+    [MenuItem("Tools/_归档/战斗场景预览")]
     public static void ShowWindow()
     {
         GetWindow<BattlePreviewWindow>("战斗场景预览");

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_14
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_14
-  equipName: New_Weapon_14
+  equipName: "岩心重剑"
   icon: {fileID: 21300000, guid: 7c69c819f0908ca45a3248b331837d18, type: 3}
   iconFileName: New_Weapon_14
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Weapon_14

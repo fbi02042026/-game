@@ -300,7 +300,7 @@ public class EquipDropPopupUI : MonoBehaviour
             return;
         }
         BattleUI.Instance?.UpdateBackpackGrid();
-        UIManager.Instance?.ShowToast("已放入背包，点格子可以穿戴");
+        UIManager.Instance?.ShowToast("已放入背包，点格子可装备并实时换装");
         Finish(sel, false);
     }
 

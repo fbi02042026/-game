@@ -122,29 +122,27 @@ public class PausePanel : MonoBehaviour
     void OnEvacuate()
     {
         Hide();
-        BattleStateSaver.Instance?.SaveBattleState();
+        // 撤离走正式遗产流程；清掉半残战斗存档，避免回城后脏状态
+        BattleStateSaver.Instance?.ClearBattleState();
         TownHubController.PendingOpenAdventure = true;
         BattleManager.Instance?.TriggerEvacuation();
         Debug.Log("[PausePanel] 玩家主动撤离 → 冒险页");
     }
 
     /// <summary>
-    /// 返回主菜单
-    /// 保存战斗状态，回到城镇
+    /// 返回城镇：放弃本局进度（清战斗存档），金币按撤离差额写回。
     /// </summary>
     void OnQuitToMenu()
     {
         Hide();
+        BattleStateSaver.Instance?.ClearBattleState();
+        TownHubController.PendingOpenAdventure = true;
+        // 与撤离同经济（保留本局金），但不强制弹遗产时可走 TriggerEvacuation
+        if (BattleManager.Instance != null)
+            BattleManager.Instance.TriggerEvacuation();
+        else
+            GameSceneManager.Instance?.LoadTownScene();
 
-        // 保存战斗状态（下次可以恢复）
-        BattleStateSaver.Instance?.SaveBattleState();
-
-        // 回到城镇场景
-        if (GameSceneManager.Instance != null)
-        {
-            GameSceneManager.Instance.LoadTownScene();
-        }
-
-        Debug.Log("[PausePanel] 返回主菜单，战斗状态已保存");
+        Debug.Log("[PausePanel] 返回城镇，已清战斗存档并结算");
     }
 }

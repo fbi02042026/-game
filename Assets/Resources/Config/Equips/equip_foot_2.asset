@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_foot_2
   m_EditorClassIdentifier: 
   templateId: equip_foot_2
-  equipName: Foot_2
+  equipName: "皮制短靴"
   icon: {fileID: 21300000, guid: 5bcb8775b4ff92048a86eb47ec18384b, type: 3}
   iconFileName: Foot_2
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Foot_2

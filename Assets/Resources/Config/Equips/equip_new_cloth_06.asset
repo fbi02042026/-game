@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_cloth_06
   m_EditorClassIdentifier: 
   templateId: equip_new_cloth_06
-  equipName: New_Cloth_06
+  equipName: "丝纹袖"
   icon: {fileID: 21300000, guid: 2f60633e687699b46a101f800c074d16, type: 3}
   iconFileName: New_Cloth_06
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Cloth_06

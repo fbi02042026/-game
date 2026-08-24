@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_cloth_8
   m_EditorClassIdentifier: 
   templateId: equip_cloth_8
-  equipName: Cloth_8
+  equipName: "守夜披风"
   icon: {fileID: 21300000, guid: f58fe86c6ee1a7140ac73a7eef8d1eda, type: 3}
   iconFileName: Cloth_8
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Cloth_8

@@ -9,7 +9,7 @@ public static class AppIconSetup
 {
     public const string IconPath = "Assets/Art/AppIcon/app_icon.png";
 
-    [MenuItem("Tools/配置游戏 Icon")]
+    [MenuItem("Tools/_归档/配置游戏 Icon")]
     public static void ApplyFromMenu()
     {
         string report;

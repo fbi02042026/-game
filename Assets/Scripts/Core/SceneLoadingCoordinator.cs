@@ -43,8 +43,9 @@ public static class SceneLoadingCoordinator
         _active = true;
         _finishRequested = false;
         string storyTip = string.IsNullOrEmpty(tip) ? LoadingTips.Pick(target) : tip;
-        // Loading 期间关掉 BGM，结束后再按目标场景淡入
+        // Loading 期间关掉 BGM / 音效，切换完成后再淡入 BGM、恢复音效
         GameBgm.MuteForLoading();
+        GameAudio.MuteForLoading();
         GameBgm.SetPending(target == LoadTarget.Town ? GameBgm.Track.Town : GameBgm.Track.Battle);
         BattleLoadingOverlay.Show(storyTip);
         BattleLoadingOverlay.SetProgress(0f);
@@ -137,8 +138,8 @@ public static class SceneLoadingCoordinator
                 if (holdT >= HoldAt100Seconds)
                 {
                     BattleLoadingOverlay.Hide();
-                    // 记住目标场景默认曲，Unmute 时淡入
                     GameBgm.UnmuteAfterLoading();
+                    GameAudio.UnmuteAfterLoading();
                     _active = false;
                     _finishRequested = false;
                     _realProgress = 0f;

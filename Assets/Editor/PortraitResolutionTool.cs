@@ -29,7 +29,7 @@ public static class PortraitResolutionTool
         new Res("安卓常见 1080x2400", 1080, 2400),
     };
 
-    [MenuItem("Tools/分辨率测试/注册全部竖版分辨率")]
+    [MenuItem("Tools/_归档/分辨率测试/注册全部竖版分辨率")]
     public static void RegisterAll()
     {
         int added = 0;
@@ -45,25 +45,25 @@ public static class PortraitResolutionTool
             "OK");
     }
 
-    [MenuItem("Tools/分辨率测试/切换到 720x1280 设计稿")]
+    [MenuItem("Tools/_归档/分辨率测试/切换到 720x1280 设计稿")]
     public static void SwitchDesign() => SwitchTo(720, 1280);
 
-    [MenuItem("Tools/分辨率测试/切换到 750x1334")]
+    [MenuItem("Tools/_归档/分辨率测试/切换到 750x1334")]
     public static void Switch750() => SwitchTo(750, 1334);
 
-    [MenuItem("Tools/分辨率测试/切换到 1080x1920")]
+    [MenuItem("Tools/_归档/分辨率测试/切换到 1080x1920")]
     public static void Switch1080() => SwitchTo(1080, 1920);
 
-    [MenuItem("Tools/分辨率测试/切换到 1080x2340")]
+    [MenuItem("Tools/_归档/分辨率测试/切换到 1080x2340")]
     public static void Switch2340() => SwitchTo(1080, 2340);
 
-    [MenuItem("Tools/分辨率测试/切换到 1170x2532")]
+    [MenuItem("Tools/_归档/分辨率测试/切换到 1170x2532")]
     public static void Switch1170() => SwitchTo(1170, 2532);
 
-    [MenuItem("Tools/分辨率测试/切换到 720x1600")]
+    [MenuItem("Tools/_归档/分辨率测试/切换到 720x1600")]
     public static void Switch720_1600() => SwitchTo(720, 1600);
 
-    [MenuItem("Tools/分辨率测试/切换到 1080x2400")]
+    [MenuItem("Tools/_归档/分辨率测试/切换到 1080x2400")]
     public static void Switch1080_2400() => SwitchTo(1080, 2400);
 
     static void SwitchTo(int w, int h)

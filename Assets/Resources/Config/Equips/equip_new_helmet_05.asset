@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_helmet_05
   m_EditorClassIdentifier: 
   templateId: equip_new_helmet_05
-  equipName: New_Helmet_05
+  equipName: "骑士面甲"
   icon: {fileID: 21300000, guid: 0d038827aa97ac24d8d6b45736ea5fca, type: 3}
   iconFileName: New_Helmet_05
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Helmet_05

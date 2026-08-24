@@ -11,7 +11,7 @@ public static class NextStageRoulettePrefabBuilder
 {
     const string PrefabAssetPath = "Assets/Resources/Prefabs/Battle/NextStageRoulette.prefab";
 
-    [MenuItem("Tools/UI/生成随机滚动关卡弹窗")]
+    [MenuItem("Tools/_归档/UI/生成随机滚动关卡弹窗")]
     public static void Build()
     {
         if (File.Exists(PrefabAssetPath))
@@ -64,7 +64,7 @@ public static class NextStageRoulettePrefabBuilder
         }
     }
 
-    [MenuItem("Tools/UI/检查随机滚动关卡弹窗")]
+    [MenuItem("Tools/_归档/UI/检查随机滚动关卡弹窗")]
     public static void Inspect()
     {
         var go = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabAssetPath);

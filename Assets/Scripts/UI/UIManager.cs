@@ -24,7 +24,9 @@ public class UIManager : Singleton<UIManager>
 
     public void ShowToast(string msg)
     {
+        if (string.IsNullOrEmpty(msg)) return;
         Debug.Log("[Toast] " + msg);
+        GlobalToastUI.Show(msg);
     }
 
     /// <summary>
@@ -69,14 +71,10 @@ public class UIManager : Singleton<UIManager>
 
     static string StageTypeLabel(StageType t)
     {
-        switch (t)
+        switch (StageRoller.NormalizeDisplayType(t))
         {
             case StageType.Elite: return "精英";
             case StageType.Boss: return "Boss";
-            case StageType.Merchant: return "商人";
-            case StageType.Enchant: return "附魔";
-            case StageType.Forge: return "锻造";
-            case StageType.Curse: return "诅咒";
             case StageType.Rest: return "恢复";
             default: return "普通";
         }
@@ -208,26 +206,29 @@ public class UIManager : Singleton<UIManager>
 
     public void ShowLegacyChooseUI(List<EquipInstance> allEquips, Action<EquipInstance> onSelect)
     {
-        Debug.Log("死亡选遗产");
-        onSelect?.Invoke(null);
+        LegacyChooseUI.Show(allEquips, onSelect);
     }
 
     public void ShowMerchantUI(List<EquipInstance> goods, Action onClose)
     {
-        Debug.Log("商人关");
+        ShowToast("本版本未开放商人关");
         onClose?.Invoke();
     }
 
     public void ShowEnchantUI(Action<GridBackpackSystem.BackpackItem, EnchantData> onSelect)
     {
-        Debug.Log("附魔关");
+        // 附魔关由 CraftStagePopupUI + CraftStageApply 处理；兼容旧回调
+        if (CraftStageApply.TryEnchantRandom(out string msg))
+            ShowToast(msg);
+        else if (!string.IsNullOrEmpty(msg))
+            ShowToast(msg);
         onSelect?.Invoke(null, null);
     }
 
     public void ShowCurseUI(List<CurseBuff> options, Action<CurseBuff> onSelect)
     {
-        Debug.Log("诅咒关");
-        onSelect?.Invoke(options != null && options.Count > 0 ? options[0] : null);
+        ShowToast("本版本未开放诅咒关");
+        onSelect?.Invoke(null);
     }
 
     public void ShowRestUI(Action onHeal, Action onDecompose)

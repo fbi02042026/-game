@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: field_502
   m_EditorClassIdentifier: 
   id: field_502
-  monsterName: "\u602A\u7269_5_2"
+  monsterName: "晨曦游隼"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 21
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 33
   expDrop: 19
   spriteIndex: 2

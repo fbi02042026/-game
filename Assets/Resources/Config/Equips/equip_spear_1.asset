@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_spear_1
   m_EditorClassIdentifier: 
   templateId: equip_spear_1
-  equipName: Spear_1
+  equipName: "守关长枪"
   icon: {fileID: 21300000, guid: 4bed5136721eed047ae44b3d47b3d0cb, type: 3}
   iconFileName: Spear_1
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Spear_1

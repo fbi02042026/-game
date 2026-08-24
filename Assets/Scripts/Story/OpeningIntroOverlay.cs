@@ -5,7 +5,7 @@ using UnityEngine.UI;
 using UnityEngine.Video;
 
 /// <summary>
-/// 首次进城镇播放的片头视频遮罩。点击可跳过，播完自毁。
+/// 首次进城镇播放的片头视频遮罩。点击可跳过，播完自毁；视频自带音轨，期间仅关 BGM。
 /// </summary>
 public class OpeningIntroOverlay : MonoBehaviour
 {
@@ -13,10 +13,12 @@ public class OpeningIntroOverlay : MonoBehaviour
 
     CanvasGroup _group;
     VideoPlayer _videoPlayer;
+    AudioSource _videoAudio;
     RawImage _rawImage;
     RenderTexture _renderTexture;
     AspectRatioFitter _aspectFitter;
     bool _skipRequested;
+    bool _bgmMutedForCutscene;
 
     public static OpeningIntroOverlay Show(string videoPath)
     {
@@ -36,8 +38,23 @@ public class OpeningIntroOverlay : MonoBehaviour
         var root = new GameObject("OpeningIntroOverlay");
         var driver = root.AddComponent<OpeningIntroOverlay>();
         driver.Build(videoPath);
+        driver.BeginCutsceneMute();
         driver.StartCoroutine(driver.RunRoutine());
         return driver;
+    }
+
+    void BeginCutsceneMute()
+    {
+        if (_bgmMutedForCutscene) return;
+        _bgmMutedForCutscene = true;
+        GameBgm.MuteForCutscene(0.2f);
+    }
+
+    void ReleaseCutsceneMute()
+    {
+        if (!_bgmMutedForCutscene) return;
+        _bgmMutedForCutscene = false;
+        GameBgm.UnmuteAfterCutscene(0.55f);
     }
 
     void Build(string videoPath)
@@ -81,10 +98,22 @@ public class OpeningIntroOverlay : MonoBehaviour
         _videoPlayer.playOnAwake = false;
         _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
         _videoPlayer.targetTexture = _renderTexture;
-        _videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
         _videoPlayer.source = VideoSource.Url;
         _videoPlayer.url = videoPath;
         _videoPlayer.isLooping = false;
+        _videoPlayer.skipOnDrop = true;
+
+        _videoAudio = gameObject.AddComponent<AudioSource>();
+        _videoAudio.playOnAwake = false;
+        _videoAudio.loop = false;
+        _videoAudio.spatialBlend = 0f;
+        _videoAudio.volume = GameAudio.AudioEnabled ? 1f : 0f;
+        _videoAudio.mute = !GameAudio.AudioEnabled;
+
+        _videoPlayer.controlledAudioTrackCount = 1;
+        _videoPlayer.audioOutputMode = VideoAudioOutputMode.AudioSource;
+        _videoPlayer.SetTargetAudioSource(0, _videoAudio);
+        EnableVideoAudioTrack();
     }
 
     IEnumerator RunRoutine()
@@ -109,6 +138,7 @@ public class OpeningIntroOverlay : MonoBehaviour
         }
 
         ApplyPreparedVideoSize();
+        EnableVideoAudioTrack();
         if (_videoPlayer.texture != null)
             _rawImage.texture = _videoPlayer.texture;
 
@@ -118,6 +148,9 @@ public class OpeningIntroOverlay : MonoBehaviour
             if (Clicked()) _skipRequested = true;
             yield return null;
         }
+
+        if (_skipRequested)
+            StopVideoPlayback();
 
         // 视频淡出，黑底留下交给 TownIntroVeil，避免露出空场景。
         float fade = 0.55f;
@@ -137,10 +170,32 @@ public class OpeningIntroOverlay : MonoBehaviour
 
     void FinishNow()
     {
-        if (_videoPlayer != null && _videoPlayer.isPlaying)
-            _videoPlayer.Stop();
+        StopVideoPlayback();
+        ReleaseCutsceneMute();
         IsFinished = true;
         Destroy(gameObject);
+    }
+
+    void StopVideoPlayback()
+    {
+        if (_videoPlayer == null) return;
+        if (_videoPlayer.isPlaying)
+            _videoPlayer.Stop();
+        if (_videoAudio != null)
+            _videoAudio.Stop();
+    }
+
+    void EnableVideoAudioTrack()
+    {
+        if (_videoPlayer == null) return;
+        if (_videoPlayer.audioTrackCount <= 0) return;
+
+        _videoPlayer.EnableAudioTrack(0, GameAudio.AudioEnabled);
+        if (_videoAudio != null)
+        {
+            _videoAudio.mute = !GameAudio.AudioEnabled;
+            _videoAudio.volume = GameAudio.AudioEnabled ? 1f : 0f;
+        }
     }
 
     void ApplyPreparedVideoSize()
@@ -201,6 +256,7 @@ public class OpeningIntroOverlay : MonoBehaviour
 
     void OnDestroy()
     {
+        ReleaseCutsceneMute();
         if (_videoPlayer != null)
         {
             _videoPlayer.targetTexture = null;

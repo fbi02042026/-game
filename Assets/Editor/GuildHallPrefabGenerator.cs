@@ -17,7 +17,7 @@ public class GuildHallPrefabGenerator
     static readonly Color C_NAV_SEL = new Color(0.25f, 0.45f, 0.75f, 0.9f);
     static readonly Color C_NAV = new Color(0.2f, 0.18f, 0.15f, 0.9f);
 
-    [MenuItem("Tools/生成公会大厅预制体")]
+    [MenuItem("Tools/_归档/生成公会大厅预制体")]
     public static void Generate()
     {
         string dir = "Assets/Resources/Prefabs/Town";

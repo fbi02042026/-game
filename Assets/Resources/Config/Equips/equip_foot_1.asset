@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_foot_1
   m_EditorClassIdentifier: 
   templateId: equip_foot_1
-  equipName: Foot_1
+  equipName: "草编凉鞋"
   icon: {fileID: 21300000, guid: f1e94bd5b68695a4d88a79938231558b, type: 3}
   iconFileName: Foot_1
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Foot_1

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_normal_helmet1
   m_EditorClassIdentifier: 
   templateId: equip_normal_helmet1
-  equipName: Normal_Helmet1
+  equipName: "布制头巾"
   icon: {fileID: 21300000, guid: 7b4d6074817c9834ba77a2d3849b7e7b, type: 3}
   iconFileName: Normal_Helmet1
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Normal_Helmet1

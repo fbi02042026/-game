@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_axe_1
   m_EditorClassIdentifier: 
   templateId: equip_axe_1
-  equipName: Axe_1
+  equipName: "蛮力战斧"
   icon: {fileID: 21300000, guid: 9657cbdde8c49784fa5934f20541e88c, type: 3}
   iconFileName: Axe_1
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Axe_1

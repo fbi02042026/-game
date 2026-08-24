@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_helmet_08
   m_EditorClassIdentifier: 
   templateId: equip_new_helmet_08
-  equipName: New_Helmet_08
+  equipName: "深渊面罩"
   icon: {fileID: 21300000, guid: 0f63b89f9bddb8b439d4e9419aa73a47, type: 3}
   iconFileName: New_Helmet_08
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Helmet_08

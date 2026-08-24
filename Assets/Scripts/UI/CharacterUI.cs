@@ -95,11 +95,13 @@ public class CharacterUI : MonoBehaviour, ITownPage
         TownSharedChrome.RaiseSharedChrome(hall);
 
         RefreshAll();
+        TownHeroCostumePreview.EnsureOn(this)?.Show();
     }
 
     public void HidePage()
     {
         if (skillSelect != null) skillSelect.Hide();
+        TownHeroCostumePreview.EnsureOn(this)?.Hide();
         if (!gameObject.activeSelf) return;
         gameObject.SetActive(false);
         SetGuildOverlay(false);
@@ -112,6 +114,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
     {
         RefreshAttrs();
         RefreshBag();
+        TownHeroCostumePreview.EnsureOn(this)?.RefreshCostume();
     }
 
     void RefreshAttrs()

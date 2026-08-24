@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_pant_11
   m_EditorClassIdentifier: 
   templateId: equip_new_pant_11
-  equipName: New_Pant_11
+  equipName: "岩行靴"
   icon: {fileID: 21300000, guid: 907fb0c9cde24134bb557ce76467f475, type: 3}
   iconFileName: New_Pant_11
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Pant_11

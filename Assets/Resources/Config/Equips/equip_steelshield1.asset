@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_steelshield1
   m_EditorClassIdentifier: 
   templateId: equip_steelshield1
-  equipName: SteelShield1
+  equipName: "木制圆盾"
   icon: {fileID: 21300000, guid: b854a394e3c82354eadea1abcc4d1feb, type: 3}
   iconFileName: SteelShield1
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: SteelShield1

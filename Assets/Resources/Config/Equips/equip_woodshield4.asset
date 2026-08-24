@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_woodshield4
   m_EditorClassIdentifier: 
   templateId: equip_woodshield4
-  equipName: WoodShield4
+  equipName: "符文护盾"
   icon: {fileID: 21300000, guid: 4f1c34e788f8c9d4a94a6414e1fcd577, type: 3}
   iconFileName: WoodShield4
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: WoodShield4

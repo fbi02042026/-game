@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ice_802
   m_EditorClassIdentifier: 
   id: ice_802
-  monsterName: "\u602A\u7269_8_2"
+  monsterName: "冰晶幽灵"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 31.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 48
   expDrop: 28
   spriteIndex: 2

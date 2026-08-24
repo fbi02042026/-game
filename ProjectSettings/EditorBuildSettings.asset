@@ -7,13 +7,13 @@ EditorBuildSettings:
   m_Scenes:
   - enabled: 1
     path: Assets/Scenes/Boot.unity
-    guid: a1b2c3d4e5f678901234567890123456
+    guid: XntNt3muB3/AJKy/IEUT3oqz4Bq+twCE83RZ+OmJbBehwxIM0iJu8/4=
   - enabled: 1
     path: Assets/Scenes/Town.unity
-    guid: b2c3d4e5f678901234567890123456a1
+    guid: XXhMtn6pBn5eQlJ7gVsSAEw7SmToh6Y/n4C8VJsKTfRMLenj3Cer7Qc=
   - enabled: 1
     path: Assets/Scenes/Battle.unity
-    guid: c3d4e5f678901234567890123456a1b2
+    guid: XHlLsX+oBX2bXvXWH93UcmPb2AZqhJLYyE3iIs4k6QtrxZUhWC9wExc=
   m_BuildProfiles: []
   m_configObjects: {}
   m_SlimFeaturesWeixinMiniGame:

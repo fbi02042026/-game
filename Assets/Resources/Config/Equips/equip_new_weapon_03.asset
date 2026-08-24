@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_03
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_03
-  equipName: New_Weapon_03
+  equipName: "青锋直剑"
   icon: {fileID: 21300000, guid: 74de9f73770f5cc42ba86c4fc778356a, type: 3}
   iconFileName: New_Weapon_03
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Weapon_03

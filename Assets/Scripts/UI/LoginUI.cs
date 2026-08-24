@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 登录界面。资源请在预制体里直接替换 Sprite，不要用生成器覆盖。
-/// 当前：仅「开始游戏」；协议默认不勾选；用户中心隐藏；公告/设置暂不接；快捷登录节点保留隐藏，待接微信 SDK。
+/// 当前：仅「开始游戏」；协议默认不勾选；用户中心/公告/设置隐藏；快捷登录节点保留隐藏，待接微信 SDK。
 /// </summary>
 public class LoginUI : MonoBehaviour
 {
@@ -83,6 +83,7 @@ public class LoginUI : MonoBehaviour
         EnsureLogoMotion();
         WireClicks();
         EnsureDebugClearSaveButton();
+        GameBgm.Play(GameBgm.Track.Town);
     }
 
     void OnRectTransformDimensionsChange()
@@ -99,14 +100,17 @@ public class LoginUI : MonoBehaviour
         SetActivePath("ActionPanel/OtherLoginLabel", false);
         SetActivePath("ActionPanel/SocialRow", false);
         SetActivePath("RightMenu/UserCenterButton", false);
+        SetActivePath("RightMenu/NoticeButton", false);
+        SetActivePath("RightMenu/SettingsButton", false);
+        SetActivePath("RightMenu", false);
 
         if (guestButton != null) guestButton.gameObject.SetActive(false);
         if (userCenterButton != null) userCenterButton.gameObject.SetActive(false);
+        if (noticeButton != null) noticeButton.gameObject.SetActive(false);
+        if (settingsButton != null) settingsButton.gameObject.SetActive(false);
         if (wechatButton != null) wechatButton.gameObject.SetActive(false);
         if (qqButton != null) qqButton.gameObject.SetActive(false);
         if (appleButton != null) appleButton.gameObject.SetActive(false);
-
-        // 公告 / 设置：显示且保持可点外观，逻辑暂不接
 
         if (!_presentationApplied)
         {

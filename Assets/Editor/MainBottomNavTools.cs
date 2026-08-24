@@ -12,7 +12,7 @@ public static class MainBottomNavTools
     const string NavPrefabPath = "Assets/Resources/Prefabs/Town/MainBottomNav.prefab";
     const string ResourceBarPrefabPath = "Assets/Resources/Prefabs/Town/ResourceBar.prefab";
 
-    [MenuItem("Tools/UI/一键提取资源条+底栏")]
+    [MenuItem("Tools/_归档/UI/一键提取资源条+底栏")]
     public static void ExtractAllSharedChrome()
     {
         if (!ConfirmOverwriteIfExists(ResourceBarPrefabPath, "ResourceBar") ||

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_10
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_10
-  equipName: New_Weapon_10
+  equipName: "暗潮曲刀"
   icon: {fileID: 21300000, guid: f46efa594cd19a84ebe13b27c1c95b6f, type: 3}
   iconFileName: New_Weapon_10
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Weapon_10

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_cloth_6
   m_EditorClassIdentifier: 
   templateId: equip_cloth_6
-  equipName: Cloth_6
+  equipName: "麻布披风"
   icon: {fileID: 21300000, guid: 178fd5e637b574344a097fd9e5b01007, type: 3}
   iconFileName: Cloth_6
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Cloth_6

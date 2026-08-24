@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "cn.tuanjie.ai.generators": "file:../.codely-cli/extensions/TJGenerators/Packages/cn.tuanjie.ai.generators",
     "cn.tuanjie.codely.bridge": "1.0.73",
     "com.unity.feature.2d": "2.0.1",
     "com.unity.render-pipelines.universal": "14.0.11",

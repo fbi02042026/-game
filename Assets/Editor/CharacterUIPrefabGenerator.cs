@@ -11,7 +11,7 @@ public static class CharacterUIPrefabGenerator
 {
     const string PrefabPath = "Assets/Resources/Prefabs/Town/CharacterUI.prefab";
 
-    [MenuItem("Tools/UI/生成角色界面预制体")]
+    [MenuItem("Tools/_归档/UI/生成角色界面预制体")]
     public static void Generate()
     {
         EnsureFolders();

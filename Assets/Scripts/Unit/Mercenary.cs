@@ -8,6 +8,8 @@ public class Mercenary : UnitBase
 {
     public string mercId;
     public int mercLevel = 1;
+    /// <summary>本局佩戴技能（来自存档；空则按职业默认）</summary>
+    public string equippedSkillId;
 
     private UnitBase _lastLoggedTarget = null;
     private int _partyIndex = -1;

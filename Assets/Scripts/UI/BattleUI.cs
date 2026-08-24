@@ -112,9 +112,17 @@ public class BattleUI : MonoBehaviour
         Debug.Log($"[BattleUI] HUD已刷新 — playerSlot={playerSlot?.root!=null} merc1={mercSlot1?.root!=null} merc2={mercSlot2?.root!=null} progressNodes={progressNodes?.Count} marker={playerMarker!=null}");
     }
 
+    float _liveBarTimer;
+    float _lastPlayerHp = -1f, _lastPlayerMaxHp = -1f, _lastPlayerEnergy = -1f;
+    float _lastMerc1Hp = -1f, _lastMerc1Energy = -1f;
+    float _lastMerc2Hp = -1f, _lastMerc2Energy = -1f;
+    const float LiveBarInterval = 0.1f;
+
     void Update()
     {
-        // 实时刷新头像下 HP / 蓝条（技能能量）
+        _liveBarTimer += Time.deltaTime;
+        if (_liveBarTimer < LiveBarInterval) return;
+        _liveBarTimer = 0f;
         RefreshLiveBars();
     }
 
@@ -124,9 +132,17 @@ public class BattleUI : MonoBehaviour
         if (playerSlot != null && hero != null && !hero.isDead)
         {
             float maxHp = hero.attr.GetAttr(AttrType.MaxHp);
-            playerSlot.UpdateSlot("玩家", hero.level, hero.currentHp, maxHp);
             float energy = BattleManager.Instance != null ? BattleManager.Instance.playerSkillEnergy : 0f;
-            playerSlot.SetEnergy(energy);
+            if (!Mathf.Approximately(_lastPlayerHp, hero.currentHp)
+                || !Mathf.Approximately(_lastPlayerMaxHp, maxHp)
+                || !Mathf.Approximately(_lastPlayerEnergy, energy))
+            {
+                _lastPlayerHp = hero.currentHp;
+                _lastPlayerMaxHp = maxHp;
+                _lastPlayerEnergy = energy;
+                playerSlot.UpdateSlot("玩家", hero.level, hero.currentHp, maxHp);
+                playerSlot.SetEnergy(energy);
+            }
         }
 
         if (GameConfig.SOLO_PLAYER_BATTLE)
@@ -146,15 +162,27 @@ public class BattleUI : MonoBehaviour
         {
             var m = mercs[0];
             float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-            mercSlot1.UpdateSlot(mm.GetJobName(m.mercId), m.mercLevel, m.currentHp, maxHp);
-            mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(0) : 0f);
+            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(0) : 0f;
+            if (!Mathf.Approximately(_lastMerc1Hp, m.currentHp) || !Mathf.Approximately(_lastMerc1Energy, energy))
+            {
+                _lastMerc1Hp = m.currentHp;
+                _lastMerc1Energy = energy;
+                mercSlot1.UpdateSlot(mm.GetJobName(m.mercId), m.mercLevel, m.currentHp, maxHp);
+                mercSlot1.SetEnergy(energy);
+            }
         }
         if (maxSlots > 1 && mercSlot2 != null && mercs != null && mercs.Count > 1 && mercs[1] != null)
         {
             var m = mercs[1];
             float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-            mercSlot2.UpdateSlot(mm.GetJobName(m.mercId), m.mercLevel, m.currentHp, maxHp);
-            mercSlot2.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(1) : 0f);
+            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(1) : 0f;
+            if (!Mathf.Approximately(_lastMerc2Hp, m.currentHp) || !Mathf.Approximately(_lastMerc2Energy, energy))
+            {
+                _lastMerc2Hp = m.currentHp;
+                _lastMerc2Energy = energy;
+                mercSlot2.UpdateSlot(mm.GetJobName(m.mercId), m.mercLevel, m.currentHp, maxHp);
+                mercSlot2.SetEnergy(energy);
+            }
         }
     }
 
@@ -162,6 +190,8 @@ public class BattleUI : MonoBehaviour
     {
         if (GridBackpackSystem.Instance != null)
             GridBackpackSystem.Instance.OnBackpackChanged -= UpdateBackpackGrid;
+        if (Instance == this)
+            Instance = null;
     }
 
     /// <summary>战斗 HUD 全量刷新入口（章节/难度/资源/头像/背包）</summary>
@@ -501,7 +531,13 @@ public class BattleUI : MonoBehaviour
     void WireSlotSkillClicks()
     {
         WireSlotClick(playerSlot, OnPlayerSkillClick);
-        if (GameConfig.SOLO_PLAYER_BATTLE) return;
+        bool tutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
+        if (GameConfig.SOLO_PLAYER_BATTLE && !tutorialMerc) return;
+        if (GameConfig.SOLO_PLAYER_BATTLE && tutorialMerc)
+        {
+            WireSlotClick(mercSlot1, () => OnMercSkillClick(0));
+            return;
+        }
         int maxSlots = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
         if (maxSlots > 0)
             WireSlotClick(mercSlot1, () => OnMercSkillClick(0));
@@ -599,6 +635,8 @@ public class BattleUI : MonoBehaviour
             var ui = new GridCellUI
             {
                 root = cell.gameObject,
+                cellBg = FindImageNamed(cell, "CellBg", "Bg", "Background")
+                    ?? cell.GetComponent<Image>(),
                 itemIcon = FindImageNamed(cell, "Icon", "ItemIcon"),
                 rarityFrame = FindImageNamed(cell, "Frame", "Rarity", "Border"),
                 lockedOverlay = FindDeepChildIgnoreCase(cell, "LockedOverlay")?.gameObject
@@ -810,7 +848,17 @@ public class BattleUI : MonoBehaviour
         if (playerSkillAvatar != null)
             playerSkillAvatar.SetAvatar(mm != null ? mm.GetPlayerIcon() : null);
 
-        if (GameConfig.SOLO_PLAYER_BATTLE) return;
+        bool tutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
+        if (GameConfig.SOLO_PLAYER_BATTLE && !tutorialMerc) return;
+
+        if (tutorialMerc)
+        {
+            var mercs = mm != null ? mm.GetActiveMercs() : null;
+            Sprite icon = (mercs != null && mercs.Count > 0 && mercs[0] != null && mm != null)
+                ? mm.GetIcon(mercs[0].mercId) : null;
+            merc1SkillAvatar?.SetAvatar(icon);
+            return;
+        }
 
         var mercIds = mm != null ? mm.GetActiveMercIds() : new List<string>();
         if (merc1SkillAvatar != null)
@@ -868,7 +916,41 @@ public class BattleUI : MonoBehaviour
         }
         // 传入真实格子：没有 GridLayoutGroup（格子是美术手摆的）时也能算对位置
         BackpackGridVisual.ClearAndPlace(gridRt, gridLayout, placements, FindGridCellRect);
+        ApplyBackpackCellOccupiedColors(placements);
         Debug.Log($"[BattleUI] 背包刷新 items={placements.Count} cells={gridCells.Count} layout={(gridLayout != null)}");
+    }
+
+    void ApplyBackpackCellOccupiedColors(List<BackpackGridVisual.ItemPlacement> placements)
+    {
+        if (gridCells == null) return;
+        foreach (var cell in gridCells)
+        {
+            if (cell == null) continue;
+            cell.SetEmptyVisual();
+        }
+        if (placements == null) return;
+        for (int i = 0; i < placements.Count; i++)
+        {
+            var p = placements[i];
+            for (int dx = 0; dx < p.w; dx++)
+            for (int dy = 0; dy < p.h; dy++)
+            {
+                var cell = FindGridCell(p.x + dx, p.y + dy);
+                cell?.SetOccupiedVisual(p.equipped);
+            }
+        }
+    }
+
+    GridCellUI FindGridCell(int gx, int gy)
+    {
+        if (gridCells == null) return null;
+        for (int i = 0; i < gridCells.Count; i++)
+        {
+            var c = gridCells[i];
+            if (c != null && c.gridX == gx && c.gridY == gy)
+                return c;
+        }
+        return null;
     }
 
     /// <summary>按格子坐标取真实格子的 RectTransform，供多格装备量取实际占位。</summary>
@@ -942,6 +1024,8 @@ public class BattleUI : MonoBehaviour
         mercSlot1.SetLocked(false);
         Sprite mercIcon = mm.GetIcon(m.mercId);
         mercSlot1.SetPortrait(mercIcon);
+        // 教程老盾不在存档出战列表里，技能圆形头像要单独绑
+        merc1SkillAvatar?.SetAvatar(mercIcon);
         // 没配头像时也不要露出「头像」占位白框
         if (mercIcon == null && mercSlot1.portraitPlaceholder != null)
             mercSlot1.portraitPlaceholder.SetActive(false);
@@ -1318,9 +1402,10 @@ public class CharacterSlotUI
             portrait.preserveAspect = true;
             portrait.type = Image.Type.Simple;
             portrait.sprite = icon;
-            portrait.gameObject.SetActive(true);
+            portrait.gameObject.SetActive(icon != null);
             portrait.color = Color.white;
-            FitPortraitNoStretch(portrait);
+            if (icon != null)
+                FitPortraitNoStretch(portrait);
         }
         if (portraitPlaceholder != null && portrait != null && portraitPlaceholder != portrait.gameObject)
             portraitPlaceholder.SetActive(icon == null);
@@ -1473,12 +1558,18 @@ public class CharacterSlotUI
 public class GridCellUI
 {
     public GameObject root;             // 格子根对象
+    public Image cellBg;                // 格子底色（有/无装备区分）
     public Image itemIcon;              // 装备图标
     public Image rarityFrame;           // 品质边框
     public GameObject lockedOverlay;    // 行锁定遮罩（天赋未解锁）
     public int gridX;                   // 格子X坐标
     public int gridY;                   // 格子Y坐标
     public EquipInstance equippedItem;  // 当前装备的物品
+
+    static readonly Color EmptyBg = new Color(0.14f, 0.11f, 0.09f, 0.82f);
+    static readonly Color OccupiedBg = new Color(0.24f, 0.30f, 0.38f, 0.95f);
+    static readonly Color EquippedBg = new Color(0.30f, 0.26f, 0.16f, 0.95f);
+    static readonly Color EmptyFrame = new Color(0.3f, 0.2f, 0.1f, 0.5f);
 
     /// <summary>底行等：天赋未解锁时显示锁定遮罩，格子本身保持显示（不关节点，避免 GridLayout 重排）。</summary>
     public void SetRowLocked(bool locked)
@@ -1565,6 +1656,19 @@ public class GridCellUI
         }
     }
 
+    public void SetEmptyVisual()
+    {
+        if (cellBg != null) cellBg.color = EmptyBg;
+        if (rarityFrame != null && itemIcon != null && !itemIcon.gameObject.activeSelf)
+            rarityFrame.color = EmptyFrame;
+    }
+
+    public void SetOccupiedVisual(bool equipped)
+    {
+        if (cellBg != null)
+            cellBg.color = equipped ? EquippedBg : OccupiedBg;
+    }
+
     /// <summary>
     /// 清空格子
     /// </summary>
@@ -1576,7 +1680,8 @@ public class GridCellUI
             itemIcon.sprite = null;
             itemIcon.gameObject.SetActive(false);
         }
-        if (rarityFrame != null) rarityFrame.color = new Color(0.3f, 0.2f, 0.1f, 0.5f);
+        if (rarityFrame != null) rarityFrame.color = EmptyFrame;
+        SetEmptyVisual();
     }
 
     Color GetRarityColor(Rarity r)

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_shield_1
   m_EditorClassIdentifier: 
   templateId: equip_shield_1
-  equipName: Shield_1
+  equipName: "木制圆盾"
   icon: {fileID: 21300000, guid: c36945e52c52b5849a91fa3304fa16a4, type: 3}
   iconFileName: Shield_1
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Shield_1

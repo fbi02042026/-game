@@ -46,6 +46,19 @@ public class PoolManager : Singleton<PoolManager>
     }
 
     /// <summary>
+    /// 池外 Instantiate 的对象登记到指定池键，保证 Release 时不按改名误入错池。
+    /// </summary>
+    public void RegisterExternal(GameObject go, string poolKey)
+    {
+        if (go == null || string.IsNullOrEmpty(poolKey)) return;
+        _goToPoolKey[go] = poolKey;
+        if (!_pool.ContainsKey(poolKey))
+            _pool[poolKey] = new Queue<GameObject>();
+        if (!_prefabDict.ContainsKey(poolKey) && _monsterPrefab != null && poolKey == "Monster")
+            _prefabDict[poolKey] = _monsterPrefab;
+    }
+
+    /// <summary>
     /// 从池子取对象
     /// </summary>
     public GameObject Get(string poolKey, Vector3 pos = default, Quaternion rot = default)
@@ -78,20 +91,26 @@ public class PoolManager : Singleton<PoolManager>
     /// </summary>
     public void Release(GameObject go)
     {
+        if (go == null) return;
+
+        // 回收前尽量清掉战斗委托，避免下次 Get 叠订阅
+        var unit = go.GetComponent<UnitBase>();
+        if (unit != null)
+            unit.ResetForReuse();
+
         go.SetActive(false);
         go.transform.SetParent(transform);
 
-        // 优先从映射中查找正确的池键（Monster.Init 会改名，导致 go.name 不再是池键）
         string poolKey = null;
-        if (_goToPoolKey.TryGetValue(go, out poolKey))
+        if (!_goToPoolKey.TryGetValue(go, out poolKey) || string.IsNullOrEmpty(poolKey))
         {
-            // 映射命中
-        }
-        else
-        {
-            // 兜底：用旧逻辑从名称推断
-            poolKey = go.name.Replace("(Clone)", "").Trim();
-            Debug.LogWarning($"[PoolManager] 对象映射未命中，使用名称推断池键: go.name={go.name} → poolKey={poolKey}");
+            // 兜底：怪物统一回 Monster 池，禁止用改名后的 go.name 开新池
+            if (go.GetComponent<Monster>() != null)
+                poolKey = "Monster";
+            else
+                poolKey = go.name.Replace("(Clone)", "").Trim();
+            Debug.LogWarning($"[PoolManager] 对象映射未命中，回退池键: go.name={go.name} → poolKey={poolKey}");
+            _goToPoolKey[go] = poolKey;
         }
 
         if (!_pool.ContainsKey(poolKey)) _pool[poolKey] = new Queue<GameObject>();

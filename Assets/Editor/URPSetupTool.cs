@@ -229,7 +229,7 @@ public static class URPSetupTool
         }
     }
 
-    [MenuItem("Tools/配置URP渲染管线")]
+    [MenuItem("Tools/_归档/配置URP渲染管线")]
     public static void SetupURP()
     {
         Type assetType = FindType("UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset");

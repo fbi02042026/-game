@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: jungle_201
   m_EditorClassIdentifier: 
   id: jungle_201
-  monsterName: "\u602A\u7269_2_1"
+  monsterName: "藤蔓狼崽"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 7.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 15
   expDrop: 8
   spriteIndex: 1

@@ -11,7 +11,7 @@ public static class DialogueUIPrefabGenerator
 {
     const string PrefabPath = "Assets/Resources/Prefabs/Dialogue/DialogueUI.prefab";
 
-    [MenuItem("Tools/UI/生成对话界面预制体")]
+    [MenuItem("Tools/_归档/UI/生成对话界面预制体")]
     public static void Generate()
     {
         EnsureFolders();

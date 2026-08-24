@@ -3,7 +3,7 @@ using UnityEngine;
 /// <summary>
 /// 传送门动画组件
 /// 挂在EndPoint（传送门）上，让传送门有旋转/脉动效果
-/// 打完所有怪后由 BattleManager.ActivatePortal() 激活
+/// 正式通关请走 chuansongmen（StageClearRewardDirector）；本组件也可挂在旧 EndPoint 上作视觉。
 /// </summary>
 public class PortalAnimator : MonoBehaviour
 {

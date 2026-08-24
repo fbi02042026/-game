@@ -392,16 +392,47 @@ public abstract class UnitBase : MonoBehaviour
 
     protected virtual void Attack(UnitBase target)
     {
-        float damage = attr.GetAttr(AttrType.Attack);
-        bool isCrit = Random.value < attr.GetAttr(AttrType.CritRate);
-        // 数值表：CriticalDamage = Damage × (1.5 + CriticalDamageBonus)
-        if (isCrit) damage *= (1.5f + GameConfig.BASE_CRIT_DAMAGE);
+        if (target == null || target.attr == null || attr == null)
+            return;
+
+        float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit);
 
         bool openingHit = isAlly && GameConfig.IsOpeningStage();
         if (openingHit)
             damage = GameConfig.RollOpeningAllyHitDamage(isCrit);
 
-        // 闪避判定
+        AttackVfxKit kit = GetAttackVfxKit();
+        if (unitAnim != null)
+            unitAnim.PlayAttack(kit);
+
+        VfxFaction faction = isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
+        Vector3 firePos = GetFirePosition();
+        Vector3 hitPos = target.GetHitPosition();
+        Transform hitTf = target.transform;
+
+        // 弓/法球：飞到再结算，与技能弹道一致，便于后续扩展命中点玩法
+        if ((kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb) && BattleVFXSystem.Instance != null)
+        {
+            UnitBase locked = target;
+            float dmg = damage;
+            bool crit = isCrit;
+            bool opening = openingHit;
+            BattleVFXSystem.Instance.PlaySkillProjectile(
+                faction, firePos, hitPos, facingDir, hitTf, kit,
+                null, 1f, 1f,
+                () => ResolveBasicAttackHit(locked, dmg, crit, opening));
+            return;
+        }
+
+        ResolveBasicAttackHit(target, damage, isCrit, openingHit);
+        if (BattleVFXSystem.Instance != null)
+            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
+    }
+
+    void ResolveBasicAttackHit(UnitBase target, float damage, bool isCrit, bool openingHit)
+    {
+        if (target == null || target.isDead || target.attr == null) return;
+
         float dodgeChance = target.attr.GetAttr(AttrType.Dodge);
         if (dodgeChance > 0 && Random.value < dodgeChance)
         {
@@ -412,22 +443,6 @@ public abstract class UnitBase : MonoBehaviour
 
         target.TakeDamage(damage, isCrit, openingHit);
         OnAttack?.Invoke(target, damage, isCrit);
-
-        // 触发攻击特效：共用套装 + 我方/敌方染色；弓/球必飞行
-        AttackVfxKit kit = GetAttackVfxKit();
-
-        // 攻击动画要跟武器套装一致：弓走拉弓动作，法术走施法动作
-        if (unitAnim != null)
-            unitAnim.PlayAttack(kit);
-
-        VfxFaction faction = isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
-        Vector3 firePos = GetFirePosition();
-        Vector3 hitPos = target.GetHitPosition();
-
-        if (BattleVFXSystem.Instance != null)
-            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, target.transform, isCrit);
-
-        // 高频攻击日志会造成卡顿，默认关闭；排查时再临时打开
     }
 
     /// <summary>
@@ -464,9 +479,7 @@ public abstract class UnitBase : MonoBehaviour
     {
         if (_isDying) return;
 
-        // 数值表：Damage = max(1, ATK − DEF)；暴击已在 Attack 侧乘过
-        float defense = ignoreDefense ? 0f : attr.GetAttr(AttrType.Defense);
-        float finalDamage = Mathf.Max(1f, damage - defense);
+        float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense);
 
         currentHp -= finalDamage;
         DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit);
@@ -523,8 +536,12 @@ public abstract class UnitBase : MonoBehaviour
     {
         _isDying = false;
         attackCd = 0;
+        target = null;
+        OnDead = null;
         if (unitAnim != null)
             unitAnim.ResetToIdle();
+        if (rb != null)
+            rb.velocity = Vector2.zero;
     }
 
     public System.Action<UnitBase, float, bool> OnAttack;

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_12
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_12
-  equipName: New_Weapon_12
+  equipName: "赤焰短刃"
   icon: {fileID: 21300000, guid: ec1cfb1862d5d1c4587d7719c3ed138e, type: 3}
   iconFileName: New_Weapon_12
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Weapon_12

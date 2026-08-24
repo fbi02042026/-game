@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_sword_5
   m_EditorClassIdentifier: 
   templateId: equip_sword_5
-  equipName: Sword_5
+  equipName: "林间长刃"
   icon: {fileID: 21300000, guid: beed5e8673c62d840ad022f86f5a3f98, type: 3}
   iconFileName: Sword_5
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Sword_5

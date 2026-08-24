@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: field_501
   m_EditorClassIdentifier: 
   id: field_501
-  monsterName: "\u602A\u7269_5_1"
+  monsterName: "原野匪徒"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 15
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 30
   expDrop: 17
   spriteIndex: 1

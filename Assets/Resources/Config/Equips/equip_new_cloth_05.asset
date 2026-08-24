@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_cloth_05
   m_EditorClassIdentifier: 
   templateId: equip_new_cloth_05
-  equipName: New_Cloth_05
+  equipName: "猎人护腕"
   icon: {fileID: 21300000, guid: 82d62e9c5e254b04e9a4727b0fe017e6, type: 3}
   iconFileName: New_Cloth_05
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Cloth_05

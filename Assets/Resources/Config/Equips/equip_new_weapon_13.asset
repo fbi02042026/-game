@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_13
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_13
-  equipName: New_Weapon_13
+  equipName: "月影佩刀"
   icon: {fileID: 21300000, guid: 5899429be360e9c40b970388c1332c24, type: 3}
   iconFileName: New_Weapon_13
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Weapon_13

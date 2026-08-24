@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_normal_helmet3
   m_EditorClassIdentifier: 
   templateId: equip_normal_helmet3
-  equipName: Normal_Helmet3
+  equipName: "铁皮头盔"
   icon: {fileID: 21300000, guid: ee6e3bba11ee23847bbee1ae8dfbe6e9, type: 3}
   iconFileName: Normal_Helmet3
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Normal_Helmet3

@@ -11,7 +11,7 @@ public static class BattleStageMapPrefabBuilder
 {
     const string PrefabAssetPath = "Assets/Resources/Prefabs/Battle/BattleStageMap.prefab";
 
-    [MenuItem("Tools/UI/生成战斗关卡石墩界面")]
+    [MenuItem("Tools/_归档/UI/生成战斗关卡石墩界面")]
     public static void Build()
     {
         if (File.Exists(PrefabAssetPath))
@@ -63,7 +63,7 @@ public static class BattleStageMapPrefabBuilder
         }
     }
 
-    [MenuItem("Tools/UI/生成锻造附魔关弹窗")]
+    [MenuItem("Tools/_归档/UI/生成锻造附魔关弹窗")]
     public static void BuildCraftPopups()
     {
         BuildOne("Assets/Resources/Prefabs/Battle/ForgeStagePopup.prefab", CraftStagePopupUI.Kind.Forge);

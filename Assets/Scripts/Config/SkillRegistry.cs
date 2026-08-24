@@ -76,6 +76,21 @@ public class SkillRegistry : Singleton<SkillRegistry>
         return DefaultMercMeleeSkillId;
     }
 
+    /// <summary>优先用存档佣兵佩戴技能；空则回退职业默认。</summary>
+    public string GetMercSkillId(MercenaryData data)
+    {
+        if (data != null && !string.IsNullOrEmpty(data.skillId) && Get(data.skillId) != null)
+            return data.skillId;
+        return GetMercDefaultSkillId(data != null ? data.mercId : null);
+    }
+
+    public string GetMercSkillId(string mercId, string preferredSkillId)
+    {
+        if (!string.IsNullOrEmpty(preferredSkillId) && Get(preferredSkillId) != null)
+            return preferredSkillId;
+        return GetMercDefaultSkillId(mercId);
+    }
+
     /// <summary>
     /// 怪物主动技：近战重击 / 远程魔法弹；Boss 两种都会用。
     /// 远程小怪也给远程技（伤害在 Monster 侧按非精英打折），

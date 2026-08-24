@@ -13,8 +13,12 @@ using UnityEngine.Rendering;
 /// </summary>
 public class AutoGameInitializer : MonoBehaviour
 {
-    /// <summary>防重入标志：确保初始化只执行一次</summary>
+    /// <summary>防重入标志：确保系统组件只装配一次</summary>
     private static bool _initialized = false;
+
+    /// <summary>每次进 Battle 场景递增；同一次加载只允许 StartNewRun 一次，避免双入口叠开战</summary>
+    static int _battleSceneGeneration;
+    static int _startNewRunGeneration = -1;
 
     /// <summary>本次进 Battle 场景后初始化是否完成（供 Loading 等待）</summary>
     public static bool IsBattleLoadComplete { get; private set; }
@@ -22,6 +26,23 @@ public class AutoGameInitializer : MonoBehaviour
     public static void ResetForSceneLoad()
     {
         IsBattleLoadComplete = false;
+        _battleSceneGeneration++;
+    }
+
+    /// <summary>同一次 Battle 加载会话内只开战一次；二次进战靠 ResetForSceneLoad 换代。</summary>
+    static bool TryStartNewRunOnce(BattleManager bm, bool clearMonstersFirst)
+    {
+        if (bm == null) return false;
+        if (_startNewRunGeneration == _battleSceneGeneration)
+        {
+            GamePerf.Log("[AutoInit] 本场 Battle 已 StartNewRun，跳过重复开战（防双入口）");
+            return false;
+        }
+        _startNewRunGeneration = _battleSceneGeneration;
+        if (clearMonstersFirst)
+            bm.ClearAllMonsters();
+        bm.StartNewRun();
+        return true;
     }
 
     static void ReportInitStep(int step)
@@ -53,6 +74,7 @@ public class AutoGameInitializer : MonoBehaviour
         if (systemsReady)
         {
             GamePerf.Log("[AutoInit] 系统已存在 → 仅重绑场景引用并重新开战");
+            WeChatMiniGameConfig.EnsureDesignResolution();
             RebindSceneAndRestartBattle();
             return;
         }
@@ -137,8 +159,8 @@ public class AutoGameInitializer : MonoBehaviour
             BattleVFXSystem.Instance.AutoLoadPrefabs();
         MonsterAttackStyleTable.Reload();
 
-        // 开始新一局
-        bm.StartNewRun();
+        // 开始新一局（同场次只一次）
+        TryStartNewRunOnce(bm, clearMonstersFirst: false);
         if (hero != null)
         {
             GameConfig.AttachToUnitRoot(hero.transform);
@@ -216,8 +238,10 @@ public class AutoGameInitializer : MonoBehaviour
         PoolManager.Instance?.Warm("Monster", 6);
         ReportInitStep(7);
 
-        bm.ClearAllMonsters();
-        bm.StartNewRun();
+        StageClearRewardDirector.Instance?.InvalidateSceneCache();
+        bool started = TryStartNewRunOnce(bm, clearMonstersFirst: true);
+        if (!started)
+            GamePerf.Log("[AutoInit] 重绑完成但跳过重复 StartNewRun");
 
         GameConfig.AttachToUnitRoot(hero.transform);
         float z = unitRoot.position.z;
@@ -232,7 +256,9 @@ public class AutoGameInitializer : MonoBehaviour
         BattleUI.Instance?.UpdateTopBarResources();
         BattleSideHud.EnsureOn(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
         EnsureCharacterBarVisibleRuntime();
-        GamePerf.Log("[AutoInit] 二次进战斗重绑完成，已 StartNewRun");
+        GamePerf.Log(started
+            ? "[AutoInit] 二次进战斗重绑完成，已 StartNewRun"
+            : "[AutoInit] 二次进战斗重绑完成（本场已开战）");
         ReportInitStep(8);
         IsBattleLoadComplete = true;
         SceneLoadingCoordinator.Finish();

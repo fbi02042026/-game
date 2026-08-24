@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_armor_12
   m_EditorClassIdentifier: 
   templateId: equip_new_armor_12
-  equipName: New_Armor_12
+  equipName: "岩壳重甲"
   icon: {fileID: 21300000, guid: 7ba6307e99ba3354781ce6171957ec26, type: 3}
   iconFileName: New_Armor_12
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Armor_12

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: forest_402
   m_EditorClassIdentifier: 
   id: forest_402
-  monsterName: "\u602A\u7269_4_2"
+  monsterName: "森林哥布林"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 17.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 28
   expDrop: 16
   spriteIndex: 2

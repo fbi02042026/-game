@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_09
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_09
-  equipName: New_Weapon_09
+  equipName: "黎明断钢"
   icon: {fileID: 21300000, guid: 9f1d48b3d3e390741a339c0e70ed6010, type: 3}
   iconFileName: New_Weapon_09
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Weapon_09

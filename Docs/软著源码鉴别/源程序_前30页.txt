@@ -1,0 +1,1561 @@
+======== 源程序鉴别材料 · 前30页 · 每页50行 ========
+
+---------- 第 1 页 ----------
+// ===== FILE: Assets/Scripts/Core/SaveData.cs =====
+using System;
+using System.Collections.Generic;
+
+/// <summary>JsonUtility 可序列化的 string→int 条目。</summary>
+[Serializable]
+public class StringIntEntry
+{
+    public string id;
+    public int value;
+}
+
+/// <summary>JsonUtility 可序列化的 string id 条目。</summary>
+[Serializable]
+public class StringIdEntry
+{
+    public string id;
+}
+
+/// <summary>JsonUtility 可序列化的 int id 条目。</summary>
+[Serializable]
+public class IntIdEntry
+{
+    public int id;
+}
+
+[Serializable]
+public class SaveData
+{
+    // === 货币 / 资源（统一上限见 ResourceWallet，体力有特殊上限）===
+    public long totalGold = 0;
+    public int talentPoints = 0;
+    public int diamond = 0;
+    public int enchantStones = 0;   // 附魔石
+    public int decomposeMats = 0;   // 分解材料
+    /// <summary>体力（特殊上限 GameConfig.STAMINA_MAX）</summary>
+    public int stamina = 100;
+    /// <summary>体力上次结算 Unix 秒（用于回复）</summary>
+    public long lastStaminaUtc = 0;
+    /// <summary>广告奖励日键 yyyyMMdd（UTC）</summary>
+    public string adRewardDayKey = "";
+    /// <summary>当日已领体力广告次数</summary>
+    public int adStaminaClaimCount = 0;
+    /// <summary>当日已领金币广告次数</summary>
+    public int adGoldClaimCount = 0;
+    /// <summary>邮件箱（资源溢出等）</summary>
+    public List<MailEntry> mailInbox = new List<MailEntry>();
+
+    // === 天赋（List 持久化；运行时用 Dictionary）===
+    public List<StringIntEntry> talentEntries = new List<StringIntEntry>();
+
+---------- 第 2 页 ----------
+    [NonSerialized] public Dictionary<string, int> talents = new Dictionary<string, int>();
+
+    // === 传说武器 ===
+    public List<StringIdEntry> unlockedLegendaryWeaponEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> unlockedLegendaryWeapons = new HashSet<string>();
+
+    // === 遗产装备 ===
+    public List<EquipmentData> legacyEquipPool = new List<EquipmentData>();
+
+    // === 城镇等级 ===
+    public TownLevel townLevel = new TownLevel();
+
+    /// <summary>公会等级（影响高级佣兵解锁等）</summary>
+    public int guildLevel = 1;
+
+    // === 佣兵 ===
+    public List<MercenaryData> permanentMercs = new List<MercenaryData>();
+
+    // === 玩家基础属性 ===
+    public int playerStrength = 0;     // 额外力量（天赋/遗产加成）
+    public int playerIntelligence = 0; // 额外智力
+    public int playerAgility = 0;      // 额外敏捷
+    public int playerVitality = 0;     // 额外体质
+
+    // === 成就系统 ===
+    public List<StringIntEntry> achievementProgressEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> achievementProgress = new Dictionary<string, int>();
+    public List<StringIdEntry> completedAchievementEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> completedAchievements = new HashSet<string>();
+    public int totalAchievementPoints = 0;
+    public List<IntIdEntry> claimedMilestoneEntries = new List<IntIdEntry>();
+    [NonSerialized] public HashSet<int> claimedMilestoneIds = new HashSet<int>();
+
+    /// <summary>战前选择的玩家技能 id（PlayerSkillDefs）</summary>
+    public string selectedPlayerSkillId = "heal_spring";
+
+    public bool openingIntroPlayed;
+    public bool tutorialIntroDone;
+    public bool tutorialBattleCleared;
+    public bool tutorialOutroPending;
+    public bool tutorialDone;
+    public bool chapter1IntroDone;
+    public bool chapter1ChoiceDone;
+    public List<NpcBondEntry> npcBonds = new List<NpcBondEntry>();
+    public List<StoryChoiceEntry> storyChoices = new List<StoryChoiceEntry>();
+
+    // === 章节进度 ===
+    public int maxUnlockedChapter = 1; // 最大解锁章节
+    /// <summary>章节通关次数列表（用于渐进式怪物解锁）</summary>
+    public List<ChapterClearCountEntry> chapterClearCounts = new List<ChapterClearCountEntry>();
+
+---------- 第 3 页 ----------
+
+    // === 时间戳 ===
+    public long lastSaveTime = 0;
+
+    /// <summary>JsonUtility 反序列化后调用：List → 运行时 Dictionary/HashSet。</summary>
+    public void SyncRuntimeFromLists()
+    {
+        talentEntries ??= new List<StringIntEntry>();
+        unlockedLegendaryWeaponEntries ??= new List<StringIdEntry>();
+        achievementProgressEntries ??= new List<StringIntEntry>();
+        completedAchievementEntries ??= new List<StringIdEntry>();
+        claimedMilestoneEntries ??= new List<IntIdEntry>();
+        mailInbox ??= new List<MailEntry>();
+        legacyEquipPool ??= new List<EquipmentData>();
+        permanentMercs ??= new List<MercenaryData>();
+        npcBonds ??= new List<NpcBondEntry>();
+        storyChoices ??= new List<StoryChoiceEntry>();
+        chapterClearCounts ??= new List<ChapterClearCountEntry>();
+        townLevel ??= new TownLevel();
+
+        talents = new Dictionary<string, int>();
+        for (int i = 0; i < talentEntries.Count; i++)
+        {
+            var e = talentEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            talents[e.id] = e.value;
+        }
+
+        unlockedLegendaryWeapons = new HashSet<string>();
+        for (int i = 0; i < unlockedLegendaryWeaponEntries.Count; i++)
+        {
+            var e = unlockedLegendaryWeaponEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            unlockedLegendaryWeapons.Add(e.id);
+        }
+
+        achievementProgress = new Dictionary<string, int>();
+        for (int i = 0; i < achievementProgressEntries.Count; i++)
+        {
+            var e = achievementProgressEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            achievementProgress[e.id] = e.value;
+        }
+
+        completedAchievements = new HashSet<string>();
+        for (int i = 0; i < completedAchievementEntries.Count; i++)
+        {
+            var e = completedAchievementEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            completedAchievements.Add(e.id);
+
+---------- 第 4 页 ----------
+        }
+
+        claimedMilestoneIds = new HashSet<int>();
+        for (int i = 0; i < claimedMilestoneEntries.Count; i++)
+        {
+            var e = claimedMilestoneEntries[i];
+            if (e == null) continue;
+            claimedMilestoneIds.Add(e.id);
+        }
+    }
+
+    /// <summary>写入 JSON 前调用：运行时 Dictionary/HashSet → List。</summary>
+    public void SyncListsFromRuntime()
+    {
+        talents ??= new Dictionary<string, int>();
+        unlockedLegendaryWeapons ??= new HashSet<string>();
+        achievementProgress ??= new Dictionary<string, int>();
+        completedAchievements ??= new HashSet<string>();
+        claimedMilestoneIds ??= new HashSet<int>();
+
+        talentEntries = new List<StringIntEntry>(talents.Count);
+        foreach (var kv in talents)
+            talentEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        unlockedLegendaryWeaponEntries = new List<StringIdEntry>(unlockedLegendaryWeapons.Count);
+        foreach (string id in unlockedLegendaryWeapons)
+            unlockedLegendaryWeaponEntries.Add(new StringIdEntry { id = id });
+
+        achievementProgressEntries = new List<StringIntEntry>(achievementProgress.Count);
+        foreach (var kv in achievementProgress)
+            achievementProgressEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        completedAchievementEntries = new List<StringIdEntry>(completedAchievements.Count);
+        foreach (string id in completedAchievements)
+            completedAchievementEntries.Add(new StringIdEntry { id = id });
+
+        claimedMilestoneEntries = new List<IntIdEntry>(claimedMilestoneIds.Count);
+        foreach (int id in claimedMilestoneIds)
+            claimedMilestoneEntries.Add(new IntIdEntry { id = id });
+    }
+}
+
+[Serializable]
+public class ChapterClearCountEntry
+{
+    public int chapter;
+    public int clearCount;
+}
+
+[Serializable]
+
+---------- 第 5 页 ----------
+public class TownLevel
+{
+    public int blacksmith = 1;
+    public int tavern = 1;
+    public int altar = 1;
+    public int farm = 1;
+}
+
+[Serializable]
+public class EquipmentData
+{
+    public string equipId;
+    public int rarity;
+    public int star;
+    public int requireLevel;
+    public List<AttrBonusData> attrBonus = new List<AttrBonusData>();
+    public List<string> tags = new List<string>();
+    public bool isLegacy;
+}
+
+[Serializable]
+public class AttrBonusData
+{
+    public AttrType attrType;
+    public float value;
+    public bool isPercent;
+}
+
+[Serializable]
+public class MercenaryData
+{
+    /// <summary>形象/预制体模板 ID（如 gongshou101），可重复招募同一模板</summary>
+    public string mercId;
+    /// <summary>展示姓名（同形象可不同名）</summary>
+    public string displayName;
+    /// <summary>实例唯一 ID，名册可有多条同 mercId</summary>
+    public string uid;
+    public int favorLevel;
+    public int level;
+    /// <summary>星级 1～5</summary>
+    public int star = 1;
+    /// <summary>佩戴技能（Ally 技能 id，如 ally_heal）</summary>
+    public string skillId;
+}
+
+// ===== FILE: Assets/Scripts/Systems/MercenaryOfferGenerator.cs =====
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+
+---------- 第 6 页 ----------
+/// 酒馆招募：从佣兵形象池抽 3 个候选项。
+/// 形象（prefab/mercId）可相同，但姓名、等级、星级、技能必须做出差异。
+/// </summary>
+public static class MercenaryOfferGenerator
+{
+    public const int OfferCount = 3;
+
+    static readonly string[] NamePool =
+    {
+        "阿雷", "薇拉", "石盾", "迅羽", "灰烬", "露娜", "铁腕", "影刺",
+        "凯恩", "茉拉", "雷恩", "希雅", "布鲁", "诺拉", "达克", "艾琳",
+        "霍克", "莉娜", "加仑", "苏尔", "米娅", "托尔", "茜茜", "沃克"
+    };
+
+    static readonly string[] AllySkillPool =
+    {
+        "ally_heal", "ally_shield", "ally_atk_up", "ally_atk_speed", "ally_crit_up", "ally_thunder"
+    };
+
+    static readonly string[] SkillDisplayNames =
+    {
+        "治愈之泉", "圣盾壁垒", "战意爆发", "疾风架势", "致命专注", "天雷裁决"
+    };
+
+    public static string SkillDisplayName(string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return "未知技能";
+        for (int i = 0; i < AllySkillPool.Length; i++)
+        {
+            if (AllySkillPool[i] == skillId)
+                return SkillDisplayNames[i];
+        }
+        var cfg = SkillRegistry.Instance != null ? SkillRegistry.Instance.Get(skillId) : null;
+        if (cfg != null && !string.IsNullOrEmpty(cfg.skillName)) return cfg.skillName;
+        return skillId;
+    }
+
+    /// <summary>生成三选一；池为空时回退初级模板列表。</summary>
+    public static List<MercenaryData> GenerateOffers()
+    {
+        var pool = GetVisualPool();
+        var offers = new List<MercenaryData>(OfferCount);
+        var usedSignatures = new HashSet<string>();
+
+        for (int i = 0; i < OfferCount; i++)
+        {
+            MercenaryData offer = null;
+            for (int attempt = 0; attempt < 24; attempt++)
+            {
+                offer = RollOne(pool);
+
+---------- 第 7 页 ----------
+                string sig = Signature(offer);
+                if (!usedSignatures.Contains(sig))
+                {
+                    usedSignatures.Add(sig);
+                    break;
+                }
+            }
+            if (offer == null) offer = RollOne(pool);
+            // 强制本批姓名互异
+            EnsureUniqueName(offer, offers);
+            offers.Add(offer);
+        }
+        return offers;
+    }
+
+    static void EnsureUniqueName(MercenaryData offer, List<MercenaryData> existing)
+    {
+        if (offer == null) return;
+        bool clash;
+        int guard = 0;
+        do
+        {
+            clash = false;
+            for (int i = 0; i < existing.Count; i++)
+            {
+                if (existing[i] != null && existing[i].displayName == offer.displayName)
+                {
+                    clash = true;
+                    offer.displayName = NamePool[Random.Range(0, NamePool.Length)] + Random.Range(1, 99);
+                    break;
+                }
+            }
+            guard++;
+        } while (clash && guard < 20);
+    }
+
+    static string Signature(MercenaryData m)
+    {
+        if (m == null) return "";
+        return $"{m.mercId}|{m.displayName}|{m.level}|{m.star}|{m.skillId}";
+    }
+
+    static List<string> GetVisualPool()
+    {
+        var result = new List<string>();
+        var mm = MercenaryManager.Instance;
+        if (mm != null)
+        {
+            var hireable = mm.GetHireableMercIds();
+            if (hireable != null)
+
+---------- 第 8 页 ----------
+            {
+                for (int i = 0; i < hireable.Count; i++)
+                {
+                    if (!string.IsNullOrEmpty(hireable[i]))
+                        result.Add(hireable[i]);
+                }
+            }
+        }
+        if (result.Count == 0)
+        {
+            // 回退：初级形象模板（非全弓手）
+            result.AddRange(new[]
+            {
+                "dunbing101", "gongshou101", "kuangzhan101", "naima101", "qita101",
+                "dunbing102", "kuangzhan102", "naima102"
+            });
+        }
+        return result;
+    }
+
+    static MercenaryData RollOne(List<string> pool)
+    {
+        string mercId = pool[Random.Range(0, pool.Count)];
+        int level = Random.Range(1, 11); // 1～10
+        int star = Random.Range(1, 6);   // 1～5
+        string skillId = AllySkillPool[Random.Range(0, AllySkillPool.Length)];
+        string name = NamePool[Random.Range(0, NamePool.Length)];
+        // 同批再抽时略微拉开：星级高的略抬等级
+        if (star >= 4) level = Mathf.Max(level, Random.Range(5, 11));
+
+        return new MercenaryData
+        {
+            mercId = mercId,
+            displayName = name,
+            uid = System.Guid.NewGuid().ToString("N"),
+            favorLevel = 1,
+            level = level,
+            star = star,
+            skillId = skillId
+        };
+    }
+
+    public static string FormatCard(MercenaryData m)
+    {
+        if (m == null) return "空";
+        string job = MercenaryManager.Instance != null
+            ? MercenaryManager.Instance.GetJobName(m.mercId)
+            : m.mercId;
+        string stars = new string('★', Mathf.Clamp(m.star, 1, 5));
+        return $"{m.displayName}\n{job}\nLv{Mathf.Max(1, m.level)}  {stars}\n技能：{SkillDisplayName(m.skillId)}";
+
+---------- 第 9 页 ----------
+    }
+
+    public static string FormatRosterLine(MercenaryData m, bool deploy)
+    {
+        if (m == null) return "";
+        string name = string.IsNullOrEmpty(m.displayName) ? m.mercId : m.displayName;
+        string job = MercenaryManager.Instance != null
+            ? MercenaryManager.Instance.GetJobName(m.mercId)
+            : m.mercId;
+        string stars = new string('★', Mathf.Clamp(m.star < 1 ? 1 : m.star, 1, 5));
+        return $"  {(deploy ? "★出战" : "·待命")} {name}（{job}） Lv{Mathf.Max(1, m.level)} {stars} [{SkillDisplayName(m.skillId)}]";
+    }
+}
+
+// ===== FILE: Assets/Scripts/UI/TavernRosterPanel.cs =====
+using System.Collections.Generic;
+using System.Text;
+using UnityEngine;
+using UnityEngine.UI;
+
+/// <summary>
+/// 酒馆佣兵招募：从形象池三选一。
+/// 同形象可反复招募，但姓名/等级/星级/技能不同。
+/// UI 代码搭建；酒馆场景预制体资源由用户自行替换，本面板不覆盖预制体。
+/// </summary>
+public class TavernRosterPanel : MonoBehaviour
+{
+    static TavernRosterPanel _instance;
+    GameObject _root;
+    Text _body;
+    Text _title;
+    readonly List<Image> _cardBgs = new List<Image>();
+    readonly List<Text> _cardLabels = new List<Text>();
+    readonly List<Image> _cardIcons = new List<Image>();
+    List<MercenaryData> _offers = new List<MercenaryData>();
+    int _selected;
+
+    public static void Show()
+    {
+        Ensure().Open();
+    }
+
+    static TavernRosterPanel Ensure()
+    {
+        if (_instance != null) return _instance;
+        var go = new GameObject("TavernRosterPanel");
+        DontDestroyOnLoad(go);
+        _instance = go.AddComponent<TavernRosterPanel>();
+        return _instance;
+    }
+
+---------- 第 10 页 ----------
+
+    void Awake() => _instance = this;
+
+    void OnDestroy()
+    {
+        if (_instance == this) _instance = null;
+    }
+
+    void Open()
+    {
+        TownSaveAlign.AlignAll();
+        BuildIfNeeded();
+        RerollOffers();
+        Refresh();
+        if (_root != null)
+        {
+            _root.SetActive(true);
+            _root.transform.SetAsLastSibling();
+        }
+        GameFonts.ApplyToHierarchy(transform);
+    }
+
+    void RerollOffers()
+    {
+        _offers = MercenaryOfferGenerator.GenerateOffers();
+        _selected = 0;
+    }
+
+    void Refresh()
+    {
+        var data = SaveSystem.Instance?.Data;
+        var mm = MercenaryManager.Instance;
+        int slots = mm != null
+            ? mm.GetMaxMercSlots()
+            : Mathf.Clamp(data?.townLevel?.tavern ?? 1, 0, 2);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"【佣兵名册】出战槽 {slots}（前 {slots} 名出战）");
+        sb.AppendLine();
+
+        var list = data?.permanentMercs;
+        if (list == null || list.Count == 0)
+            sb.AppendLine("暂无永久佣兵。下方三选一招募。");
+        else
+        {
+            for (int i = 0; i < list.Count; i++)
+                sb.AppendLine(MercenaryOfferGenerator.FormatRosterLine(list[i], i < slots));
+        }
+
+        var active = mm != null ? mm.GetActiveMercIds() : new List<string>();
+
+---------- 第 11 页 ----------
+        sb.AppendLine();
+        sb.AppendLine($"开战将带出模板：{(active.Count > 0 ? string.Join("、", active) : "（无）")}");
+        if (_body != null) _body.text = sb.ToString();
+
+        RefreshCards();
+    }
+
+    void RefreshCards()
+    {
+        for (int i = 0; i < _cardLabels.Count; i++)
+        {
+            MercenaryData offer = (i < _offers.Count) ? _offers[i] : null;
+            if (_cardLabels[i] != null)
+                _cardLabels[i].text = offer != null ? MercenaryOfferGenerator.FormatCard(offer) : "—";
+            if (_cardBgs[i] != null)
+                _cardBgs[i].color = (i == _selected)
+                    ? new Color(0.55f, 0.42f, 0.22f, 1f)
+                    : new Color(0.28f, 0.22f, 0.18f, 1f);
+            if (_cardIcons[i] != null && offer != null && MercenaryManager.Instance != null)
+            {
+                var icon = MercenaryManager.Instance.GetIcon(offer.mercId);
+                _cardIcons[i].sprite = icon;
+                _cardIcons[i].enabled = icon != null;
+                _cardIcons[i].preserveAspect = true;
+            }
+        }
+    }
+
+    void Select(int idx)
+    {
+        if (idx < 0 || idx >= _offers.Count) return;
+        _selected = idx;
+        RefreshCards();
+    }
+
+    void OnConfirmRecruit()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null)
+        {
+            UIManager.Instance?.ShowToast("存档未就绪");
+            return;
+        }
+        if (_offers == null || _selected < 0 || _selected >= _offers.Count || _offers[_selected] == null)
+        {
+            UIManager.Instance?.ShowToast("请先选择一名佣兵");
+            return;
+        }
+
+        if (data.permanentMercs == null)
+
+---------- 第 12 页 ----------
+            data.permanentMercs = new List<MercenaryData>();
+
+        var picked = CloneOffer(_offers[_selected]);
+        if (string.IsNullOrEmpty(picked.uid))
+            picked.uid = System.Guid.NewGuid().ToString("N");
+        if (picked.star < 1) picked.star = 1;
+        if (picked.level < 1) picked.level = 1;
+        if (string.IsNullOrEmpty(picked.skillId))
+            picked.skillId = SkillRegistry.DefaultMercMeleeSkillId;
+
+        data.permanentMercs.Add(picked);
+        if (data.townLevel == null) data.townLevel = new TownLevel();
+        if (data.townLevel.tavern < 1) data.townLevel.tavern = 1;
+        SaveSystem.Instance.Save();
+
+        string name = string.IsNullOrEmpty(picked.displayName) ? picked.mercId : picked.displayName;
+        UIManager.Instance?.ShowToast($"已招募：{name}");
+        RerollOffers();
+        Refresh();
+    }
+
+    static MercenaryData CloneOffer(MercenaryData src)
+    {
+        return new MercenaryData
+        {
+            mercId = src.mercId,
+            displayName = src.displayName,
+            uid = src.uid,
+            favorLevel = src.favorLevel,
+            level = src.level,
+            star = src.star,
+            skillId = src.skillId
+        };
+    }
+
+    void BuildIfNeeded()
+    {
+        if (_root != null) return;
+        var canvas = gameObject.GetComponent<Canvas>() ?? gameObject.AddComponent<Canvas>();
+        if (gameObject.GetComponent<GraphicRaycaster>() == null)
+            gameObject.AddComponent<GraphicRaycaster>();
+        UICanvasSetup.Apply(canvas);
+        canvas.sortingOrder = 900;
+
+        _root = new GameObject("Root", typeof(RectTransform));
+        _root.transform.SetParent(transform, false);
+        Stretch(_root.GetComponent<RectTransform>());
+
+        var dim = new GameObject("Dim", typeof(RectTransform), typeof(Image), typeof(Button));
+        dim.transform.SetParent(_root.transform, false);
+
+---------- 第 13 页 ----------
+        Stretch(dim.GetComponent<RectTransform>());
+        dim.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.55f);
+        dim.GetComponent<Button>().onClick.AddListener(Close);
+
+        var panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
+        panel.transform.SetParent(_root.transform, false);
+        var prt = panel.GetComponent<RectTransform>();
+        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
+        prt.sizeDelta = new Vector2(640f, 620f);
+        panel.GetComponent<Image>().color = new Color(0.14f, 0.1f, 0.08f, 0.97f);
+
+        _title = MakeText(panel.transform, "酒馆 · 佣兵招募（三选一）", 26);
+        var trt = _title.rectTransform;
+        trt.anchorMin = new Vector2(0.05f, 0.91f);
+        trt.anchorMax = new Vector2(0.95f, 0.98f);
+        trt.offsetMin = trt.offsetMax = Vector2.zero;
+
+        _body = MakeText(panel.transform, "", 16);
+        _body.alignment = TextAnchor.UpperLeft;
+        var brt = _body.rectTransform;
+        brt.anchorMin = new Vector2(0.06f, 0.58f);
+        brt.anchorMax = new Vector2(0.94f, 0.9f);
+        brt.offsetMin = brt.offsetMax = Vector2.zero;
+
+        float cardW = 170f;
+        float gap = 18f;
+        float startX = -((cardW + gap));
+        for (int i = 0; i < 3; i++)
+        {
+            var card = new GameObject("Card" + i, typeof(RectTransform), typeof(Image), typeof(Button));
+            card.transform.SetParent(panel.transform, false);
+            var crt = card.GetComponent<RectTransform>();
+            crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
+            crt.sizeDelta = new Vector2(cardW, 210f);
+            crt.anchoredPosition = new Vector2(startX + i * (cardW + gap), -40f);
+            var img = card.GetComponent<Image>();
+            img.color = new Color(0.28f, 0.22f, 0.18f, 1f);
+            _cardBgs.Add(img);
+
+            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+            iconGo.transform.SetParent(card.transform, false);
+            var irt = iconGo.GetComponent<RectTransform>();
+            irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 1f);
+            irt.pivot = new Vector2(0.5f, 1f);
+            irt.anchoredPosition = new Vector2(0f, -8f);
+            irt.sizeDelta = new Vector2(64f, 64f);
+            var iconImg = iconGo.GetComponent<Image>();
+            iconImg.color = Color.white;
+            _cardIcons.Add(iconImg);
+
+
+---------- 第 14 页 ----------
+            var label = MakeText(card.transform, "", 15);
+            label.alignment = TextAnchor.UpperCenter;
+            var lrt = label.rectTransform;
+            lrt.anchorMin = new Vector2(0.06f, 0.04f);
+            lrt.anchorMax = new Vector2(0.94f, 0.62f);
+            lrt.offsetMin = lrt.offsetMax = Vector2.zero;
+            _cardLabels.Add(label);
+
+            int idx = i;
+            card.GetComponent<Button>().onClick.AddListener(() => Select(idx));
+        }
+
+        MakeBtn(panel.transform, "Confirm", "招募选中", new Vector2(-110f, 28f), OnConfirmRecruit);
+        MakeBtn(panel.transform, "Reroll", "换一批", new Vector2(110f, 28f), () =>
+        {
+            RerollOffers();
+            Refresh();
+        });
+        MakeBtn(panel.transform, "Close", "关闭", new Vector2(0f, -28f), Close);
+    }
+
+    void Close()
+    {
+        if (_root != null) _root.SetActive(false);
+    }
+
+    static Text MakeText(Transform parent, string content, int size)
+    {
+        var go = new GameObject("T", typeof(RectTransform), typeof(Text));
+        go.transform.SetParent(parent, false);
+        Stretch(go.GetComponent<RectTransform>());
+        var t = go.GetComponent<Text>();
+        t.text = content;
+        t.fontSize = size;
+        t.alignment = TextAnchor.MiddleCenter;
+        t.color = Color.white;
+        t.horizontalOverflow = HorizontalWrapMode.Wrap;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        t.font = GameFonts.GetChinese();
+        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        return t;
+    }
+
+    static void MakeBtn(Transform parent, string name, string label, Vector2 pos, UnityEngine.Events.UnityAction onClick)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(parent, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+
+---------- 第 15 页 ----------
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = new Vector2(160f, 44f);
+        go.GetComponent<Image>().color = new Color(0.45f, 0.32f, 0.2f, 1f);
+        var t = MakeText(go.transform, label, 20);
+        Stretch(t.rectTransform);
+        go.GetComponent<Button>().onClick.AddListener(onClick);
+    }
+
+    static void Stretch(RectTransform rt)
+    {
+        if (rt == null) return;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+    }
+}
+
+// ===== FILE: Assets/Scripts/UI/TownHeroCostumePreview.cs =====
+using UnityEngine;
+using UnityEngine.UI;
+
+/// <summary>
+/// 城镇角色页：用与战斗相同的 wanjia SPUM + HeroCostumeManager 实时换装预览。
+/// 不覆盖角色页预制体结构；在 Portrait 位挂 RawImage + 独立相机渲染。
+/// </summary>
+public class TownHeroCostumePreview : MonoBehaviour
+{
+    const string PrefabPath = "Units/wanjia";
+    const int RtW = 256;
+    const int RtH = 384;
+
+    public RawImage targetImage;
+    public RectTransform host;
+
+    Camera _cam;
+    RenderTexture _rt;
+    GameObject _heroGo;
+    HeroCostumeManager _costume;
+    bool _built;
+
+    public static TownHeroCostumePreview EnsureOn(CharacterUI ui)
+    {
+        if (ui == null) return null;
+        var existing = ui.GetComponent<TownHeroCostumePreview>();
+        if (existing != null)
+        {
+            existing.BindHost(ui);
+            return existing;
+        }
+        var p = ui.gameObject.AddComponent<TownHeroCostumePreview>();
+
+---------- 第 16 页 ----------
+        p.BindHost(ui);
+        return p;
+    }
+
+    void BindHost(CharacterUI ui)
+    {
+        if (ui.portraitImage != null)
+            host = ui.portraitImage.rectTransform;
+        if (host == null)
+        {
+            var t = ui.transform.Find("Content/Stage/Portrait");
+            if (t != null) host = t as RectTransform;
+        }
+    }
+
+    public void Show()
+    {
+        BuildIfNeeded();
+        if (_heroGo != null) _heroGo.SetActive(true);
+        if (_cam != null) _cam.enabled = true;
+        RefreshCostume();
+        if (targetImage != null) targetImage.enabled = true;
+        if (host != null)
+        {
+            var img = host.GetComponent<Image>();
+            if (img != null) img.enabled = false; // 隐藏静态立绘，显示 SPUM
+        }
+    }
+
+    public void Hide()
+    {
+        if (_cam != null) _cam.enabled = false;
+        if (_heroGo != null) _heroGo.SetActive(false);
+        if (targetImage != null) targetImage.enabled = false;
+        if (host != null)
+        {
+            var img = host.GetComponent<Image>();
+            if (img != null) img.enabled = true;
+        }
+    }
+
+    public void RefreshCostume()
+    {
+        if (_costume != null)
+            _costume.RefreshCostume();
+    }
+
+    void OnEnable()
+    {
+        if (GridBackpackSystem.Instance != null)
+
+---------- 第 17 页 ----------
+            GridBackpackSystem.Instance.OnCostumeChanged += RefreshCostume;
+        if (GridBackpackSystem.Instance != null)
+            GridBackpackSystem.Instance.OnBackpackChanged += RefreshCostume;
+    }
+
+    void OnDisable()
+    {
+        if (GridBackpackSystem.Instance != null)
+        {
+            GridBackpackSystem.Instance.OnCostumeChanged -= RefreshCostume;
+            GridBackpackSystem.Instance.OnBackpackChanged -= RefreshCostume;
+        }
+    }
+
+    void OnDestroy()
+    {
+        if (_rt != null)
+        {
+            if (_cam != null) _cam.targetTexture = null;
+            _rt.Release();
+            Destroy(_rt);
+            _rt = null;
+        }
+        if (_heroGo != null) Destroy(_heroGo);
+        if (_cam != null) Destroy(_cam.gameObject);
+    }
+
+    void BuildIfNeeded()
+    {
+        if (_built) return;
+        if (host == null) return;
+
+        // RawImage 盖在 Portrait 上
+        if (targetImage == null)
+        {
+            var go = new GameObject("SpumPreview", typeof(RectTransform), typeof(RawImage));
+            go.transform.SetParent(host, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            targetImage = go.GetComponent<RawImage>();
+            targetImage.raycastTarget = false;
+            targetImage.color = Color.white;
+        }
+
+        _rt = new RenderTexture(RtW, RtH, 16, RenderTextureFormat.ARGB32);
+        _rt.Create();
+        targetImage.texture = _rt;
+
+
+---------- 第 18 页 ----------
+        var camGo = new GameObject("TownHeroPreviewCam");
+        DontDestroyOnLoad(camGo);
+        _cam = camGo.AddComponent<Camera>();
+        _cam.orthographic = true;
+        _cam.orthographicSize = 1.15f;
+        _cam.clearFlags = CameraClearFlags.SolidColor;
+        _cam.backgroundColor = new Color(0f, 0f, 0f, 0f);
+        _cam.allowHDR = false;
+        _cam.allowMSAA = false;
+        _cam.cullingMask = ~0;
+        _cam.targetTexture = _rt;
+        _cam.nearClipPlane = 0.1f;
+        _cam.farClipPlane = 20f;
+        _cam.depth = -80;
+        _cam.enabled = false;
+        camGo.transform.position = new Vector3(4800f, 4800f, -10f);
+
+        var prefab = Resources.Load<GameObject>(PrefabPath);
+        if (prefab == null)
+        {
+            Debug.LogWarning("[TownHeroCostumePreview] 未找到 Units/wanjia");
+            _built = true;
+            return;
+        }
+
+        _heroGo = Instantiate(prefab);
+        _heroGo.name = "TownHeroPreview";
+        DontDestroyOnLoad(_heroGo);
+        _heroGo.transform.position = camGo.transform.position + new Vector3(0f, -0.2f, 8f);
+        _heroGo.transform.localScale = Vector3.one * 1.2f;
+        _heroGo.transform.rotation = Quaternion.identity;
+
+        // 关掉战斗组件，只留形象
+        foreach (var rb in _heroGo.GetComponentsInChildren<Rigidbody2D>(true))
+        {
+            rb.simulated = false;
+            rb.velocity = Vector2.zero;
+        }
+        var hero = _heroGo.GetComponent<Hero>();
+        if (hero != null) hero.enabled = false;
+        foreach (var ub in _heroGo.GetComponentsInChildren<UnitBase>(true))
+            ub.enabled = false;
+
+        _costume = _heroGo.GetComponent<HeroCostumeManager>();
+        if (_costume == null) _costume = _heroGo.AddComponent<HeroCostumeManager>();
+        if (_costume.spumPrefabs == null)
+            _costume.spumPrefabs = _heroGo.GetComponentInChildren<SPUM_Prefabs>(true);
+        if (_costume.spriteList == null)
+            _costume.spriteList = _heroGo.GetComponentInChildren<SPUM_SpriteList>(true);
+        // 城镇预览不抢占战斗侧 Instance，避免回城/开战互相覆盖
+
+---------- 第 19 页 ----------
+        if (HeroCostumeManager.Instance == _costume)
+            HeroCostumeManager.Instance = null;
+
+        // 分层：预览单位进专属层，相机只看这一层，避免扫到城镇 UI
+        int layer = LayerMask.NameToLayer("Default");
+        SetLayerRecursive(_heroGo, layer);
+
+        _built = true;
+        RefreshCostume();
+    }
+
+    static void SetLayerRecursive(GameObject go, int layer)
+    {
+        if (go == null) return;
+        go.layer = layer;
+        for (int i = 0; i < go.transform.childCount; i++)
+            SetLayerRecursive(go.transform.GetChild(i).gameObject, layer);
+    }
+}
+
+// ===== FILE: Assets/Scripts/Unit/HeroCostumeManager.cs =====
+using UnityEngine;
+using System.Collections.Generic;
+
+/// <summary>
+/// 英雄换装管理器：监听装备变化→自动更新玩家SPUM形象
+///
+/// 核心对应关系（装备槽 → SPUM SpriteList属性 → SPUM资源文件夹）：
+///   头(Head)   → _hairList  → 4_Helmet / 0_Hair / 2_Hair
+///   胸(Chest)  → _armorList → 5_Armor
+///   手(Hands)  → _clothList → 2_Cloth
+///   脚(Feet)   → _pantList  → 3_Pant
+///   披风(Cape) → _backList  → 7_Back / 10_Back
+///   武器(Weapons) → _weaponList → 6_Weapons/{子文件夹}
+///
+/// 效率优化：启动时扫描一次全部SPUM资源，建立 spumName→路径 缓存字典
+/// 之后换装直接查字典，避免每次 Resources.LoadAll 遍历
+/// </summary>
+public class HeroCostumeManager : MonoBehaviour
+{
+    public static HeroCostumeManager Instance;
+
+    [Header("SPUM组件引用")]
+    public SPUM_Prefabs spumPrefabs;
+    public SPUM_SpriteList spriteList;
+
+    // SPUM Resources 基础路径（相对于 Assets/SPUM/Resources/）
+    private const string SPUM_SPRITE_BASE = "Addons/{0}/0_Unit/0_Sprite";
+
+    /// <summary>
+
+---------- 第 20 页 ----------
+    /// 三个Addon版本（按优先级搜索：Legacy资源最多，优先）
+    /// </summary>
+    private static readonly string[] AddonVersions = { "Legacy", "Ver121", "Ver300" };
+
+    /// <summary>
+    /// 槽位 → SPUM SpriteList属性名（用于GetPartList获取SpriteRenderer列表）
+    /// 注意：Head用"Hair"因为SPUM没有_helmetList，头盔通过hairList显示
+    /// </summary>
+    private static readonly Dictionary<EquipSlotType, string> SlotToPartType = new Dictionary<EquipSlotType, string>
+    {
+        { EquipSlotType.Head, "Hair" },
+        { EquipSlotType.Chest, "Armor" },
+        { EquipSlotType.Hands, "Cloth" },
+        { EquipSlotType.Feet, "Pant" },
+        { EquipSlotType.Cape, "Back" },
+        { EquipSlotType.MainHand, "Weapons" },
+        { EquipSlotType.OffHand, "Weapons" }
+    };
+
+    /// <summary>
+    /// 槽位 → 所有可能的SPUM资源文件夹名称（不同版本文件夹名可能不同）
+    /// Head: Legacy/Ver121用4_Helmet和0_Hair，Ver300用2_Hair
+    /// Cape: Legacy用7_Back，Ver300用10_Back
+    /// </summary>
+    private static readonly Dictionary<EquipSlotType, string[]> SlotToAllFolders = new Dictionary<EquipSlotType, string[]>
+    {
+        { EquipSlotType.Head,      new[] { "4_Helmet", "0_Hair", "2_Hair" } },
+        { EquipSlotType.Chest,     new[] { "5_Armor" } },
+        { EquipSlotType.Hands,     new[] { "2_Cloth" } },
+        { EquipSlotType.Feet,      new[] { "3_Pant" } },
+        { EquipSlotType.Cape,      new[] { "7_Back", "10_Back" } },
+        { EquipSlotType.MainHand,  new[] { "6_Weapons" } },
+        { EquipSlotType.OffHand,   new[] { "6_Weapons" } }
+    };
+
+    /// <summary>
+    /// 所有可能的武器子文件夹（Legacy和Ver121的子文件夹不同）
+    /// Legacy: 0_Sword, 1_Axe, 2_Bow, 3_Shield, 4_Spear, 5_Wand, 6_Hammer
+    /// Ver121: 2_Axe, 7_Shield
+    /// </summary>
+    private static readonly string[] AllWeaponSubFolders =
+    {
+        "0_Sword", "1_Axe", "2_Bow", "3_Shield", "4_Spear", "5_Wand", "6_Hammer",
+        "2_Axe", "7_Shield"
+    };
+
+    /// <summary>
+    /// 多切片sprite的子精灵名称（Cloth/Armor可能包含Body/Left/Right三个切片）
+    /// </summary>
+    private static readonly string[] MultiSliceNames = { "Body", "Left", "Right" };
+
+---------- 第 21 页 ----------
+
+    /// <summary>
+    /// 缓存字典：spumName → 完整Resources路径
+    /// 启动时扫描一次，之后换装直接查字典，O(1)复杂度
+    /// </summary>
+    private Dictionary<string, string> _spumPathCache = new Dictionary<string, string>();
+
+    /// <summary>
+    /// 缓存字典：路径 → 已加载的Sprite数组（避免重复Resources.LoadAll）
+    /// </summary>
+    private Dictionary<string, Sprite[]> _spriteCache = new Dictionary<string, Sprite[]>();
+
+    /// <summary>
+    /// 缓存是否已初始化
+    /// </summary>
+    private bool _cacheInitialized = false;
+
+    void Awake()
+    {
+        Instance = this;
+
+        if (spumPrefabs == null)
+            spumPrefabs = GetComponent<SPUM_Prefabs>();
+
+        if (spriteList == null)
+            spriteList = GetComponent<SPUM_SpriteList>();
+
+        if (spriteList == null)
+            spriteList = GetComponentInChildren<SPUM_SpriteList>();
+    }
+
+    void OnEnable()
+    {
+        EnsureSubscribed();
+    }
+
+    void Start()
+    {
+        BuildPathCache();
+        EnsureSubscribed();
+        // 进场时按当前穿戴刷一次，避免只改了数值没改外观
+        RefreshCostume();
+    }
+
+    void OnDisable()
+    {
+        Unsubscribe();
+    }
+
+    void OnDestroy()
+
+---------- 第 22 页 ----------
+    {
+        Unsubscribe();
+        if (Instance == this) Instance = null;
+    }
+
+    bool _subscribed;
+
+    void EnsureSubscribed()
+    {
+        if (_subscribed) return;
+        if (GridBackpackSystem.Instance == null) return;
+        GridBackpackSystem.Instance.OnCostumeChanged += RefreshCostume;
+        _subscribed = true;
+    }
+
+    void Unsubscribe()
+    {
+        if (!_subscribed) return;
+        if (GridBackpackSystem.Instance != null)
+            GridBackpackSystem.Instance.OnCostumeChanged -= RefreshCostume;
+        _subscribed = false;
+    }
+
+    /// <summary>
+    /// 启动时扫描全部SPUM资源，建立 spumName→路径 缓存字典
+    /// 只执行一次，之后所有换装都查字典
+    /// </summary>
+    private void BuildPathCache()
+    {
+        if (_cacheInitialized) return;
+        _cacheInitialized = true;
+
+        Debug.Log("[HeroCostumeManager] 开始扫描SPUM资源，建立路径缓存...");
+
+        int count = 0;
+
+        foreach (string version in AddonVersions)
+        {
+            string basePath = string.Format(SPUM_SPRITE_BASE, version);
+
+            foreach (var kvp in SlotToAllFolders)
+            {
+                EquipSlotType slot = kvp.Key;
+                string[] folders = kvp.Value;
+                bool isWeapon = (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand);
+
+                foreach (string folder in folders)
+                {
+                    if (isWeapon)
+                    {
+
+---------- 第 23 页 ----------
+                        // 武器：遍历所有子文件夹
+                        foreach (string subFolder in AllWeaponSubFolders)
+                        {
+                            string path = $"{basePath}/{folder}/{subFolder}";
+                            count += ScanAndCacheDirectory(path, subFolder);
+                        }
+                    }
+                    else
+                    {
+                        // 非武器：直接扫描文件夹
+                        count += ScanAndCacheDirectory($"{basePath}/{folder}", null);
+                    }
+                }
+            }
+        }
+
+        Debug.Log($"[HeroCostumeManager] 路径缓存建立完成，共缓存 {count} 个SPUM精灵图");
+    }
+
+    /// <summary>
+    /// 扫描单个Resources目录，将文件名→路径存入缓存
+    /// 使用 Resources.LoadAll 加载目录下所有Sprite
+    /// </summary>
+    private int ScanAndCacheDirectory(string resourcePath, string context)
+    {
+        // 加载该目录下所有Sprite
+        Sprite[] sprites = Resources.LoadAll<Sprite>(resourcePath);
+        if (sprites == null || sprites.Length == 0) return 0;
+
+        int count = 0;
+        // 收集该目录下所有不重复的文件名（去掉切片后缀）
+        HashSet<string> fileNames = new HashSet<string>();
+
+        foreach (Sprite sp in sprites)
+        {
+            // sprite.name 可能是 "Helmet_1" 或 "Body"/"Left"/"Right"（多切片）
+            // 多切片的父文件名需要从sprite名推导
+            string fileName = sp.name;
+
+            // 多切片的子精灵（Body/Left/Right）跳过，它们属于父文件
+            if (System.Array.IndexOf(MultiSliceNames, fileName) >= 0) continue;
+
+            if (!fileNames.Contains(fileName))
+            {
+                fileNames.Add(fileName);
+                // 文件名 → 完整Resources路径（不含扩展名）
+                string fullPath = $"{resourcePath}/{fileName}";
+                if (!_spumPathCache.ContainsKey(fileName))
+                {
+                    _spumPathCache[fileName] = fullPath;
+
+---------- 第 24 页 ----------
+                    count++;
+                }
+            }
+        }
+
+        // 缓存该目录的Sprite数组（供后续直接使用）
+        if (!_spriteCache.ContainsKey(resourcePath))
+        {
+            _spriteCache[resourcePath] = sprites;
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// 刷新全部换装：遍历所有装备槽，根据spumName加载SPUM精灵图并替换
+    /// 使用缓存字典，O(1)查找路径，O(1)查找已加载的Sprite
+    /// </summary>
+    public void RefreshCostume()
+    {
+        if (spriteList == null)
+        {
+            Debug.LogWarning("[HeroCostumeManager] spriteList 未赋值，跳过换装");
+            return;
+        }
+        if (GridBackpackSystem.Instance == null) return;
+
+        // 确保缓存已初始化
+        if (!_cacheInitialized) BuildPathCache();
+
+        // 固定顺序：先主手后副手，避免字典遍历顺序不确定
+        EquipSlotType[] order =
+        {
+            EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.Hands,
+            EquipSlotType.Feet, EquipSlotType.Cape, EquipSlotType.MainHand, EquipSlotType.OffHand
+        };
+
+        for (int i = 0; i < order.Length; i++)
+        {
+            EquipSlotType slot = order[i];
+            if (!SlotToPartType.TryGetValue(slot, out string partType)) continue;
+
+            EquipInstance equip = GridBackpackSystem.Instance.GetEquippedInSlot(slot);
+            if (equip != null && equip.template != null && !string.IsNullOrEmpty(equip.template.spumName))
+            {
+                ApplySpriteToPart(partType, slot, equip.template.spumName);
+            }
+        }
+
+        Debug.Log("[HeroCostumeManager] 换装刷新完成");
+
+---------- 第 25 页 ----------
+    }
+
+    /// <summary>
+    /// 加载SPUM精灵图并应用到指定部件
+    /// 自动处理单切片和多切片（Body/Left/Right）情况
+    /// 使用缓存，避免重复 Resources.LoadAll
+    /// </summary>
+    private void ApplySpriteToPart(string partType, EquipSlotType slot, string spumName)
+    {
+        if (string.IsNullOrEmpty(spumName)) return;
+
+        List<SpriteRenderer> targetList = GetPartList(partType);
+        if (targetList == null || targetList.Count == 0)
+        {
+            Debug.LogWarning($"[HeroCostumeManager] {partType} 的 SpriteRenderer 列表为空");
+            return;
+        }
+
+        // 从缓存获取Sprite数组
+        Sprite[] sprites = GetCachedSprites(spumName);
+        if (sprites == null || sprites.Length == 0)
+        {
+            Debug.LogWarning($"[HeroCostumeManager] 未找到精灵: slot={slot}, spumName={spumName}");
+            return;
+        }
+
+        if (sprites.Length == 1)
+        {
+            // 单切片：设置列表中所有SpriteRenderer
+            foreach (var sr in targetList)
+            {
+                if (sr != null) sr.sprite = sprites[0];
+            }
+        }
+        else
+        {
+            // 多切片：按名称匹配 Body/Left/Right → 对应索引 0/1/2
+            for (int i = 0; i < targetList.Count && i < MultiSliceNames.Length; i++)
+            {
+                if (targetList[i] == null) continue;
+                Sprite sub = System.Array.Find(sprites, s => s.name == MultiSliceNames[i]);
+                if (sub != null)
+                {
+                    targetList[i].sprite = sub;
+                }
+            }
+        }
+
+        // 更新路径字符串，防止ResyncData覆盖
+        UpdatePathString(partType, spumName);
+
+---------- 第 26 页 ----------
+
+        Debug.Log($"[HeroCostumeManager] 换装成功: {partType} ← {spumName} ({sprites.Length}切片)");
+    }
+
+    /// <summary>
+    /// 从缓存获取Sprite数组
+    /// 1. 先查 _spumPathCache 获取路径（O(1)）
+    /// 2. 再查 _spriteCache 获取已加载的Sprite（O(1)）
+    /// 3. 若sprite未缓存，按路径加载一次并存入缓存
+    /// </summary>
+    private Sprite[] GetCachedSprites(string spumName)
+    {
+        // 1. 查路径缓存
+        if (!_spumPathCache.TryGetValue(spumName, out string fullPath))
+        {
+            // 缓存未命中：可能扫描时遗漏，尝试直接加载
+            return FallbackLoad(spumName);
+        }
+
+        // 2. 查sprite缓存（按目录路径）
+        // fullPath 格式: "Addons/Legacy/0_Unit/0_Sprite/4_Helmet/Helmet_1"
+        // 目录路径 = 去掉最后的文件名
+        int lastSlash = fullPath.LastIndexOf('/');
+        if (lastSlash <= 0) return FallbackLoad(spumName);
+
+        string dirPath = fullPath.Substring(0, lastSlash);
+
+        // 3. 目录的Sprite数组已缓存就直接用
+        if (_spriteCache.TryGetValue(dirPath, out Sprite[] cached))
+        {
+            // 从目录的所有Sprite中筛选属于该文件的切片
+            return FilterSpritesByFile(cached, spumName);
+        }
+
+        // 4. 目录未缓存：加载一次
+        Sprite[] sprites = Resources.LoadAll<Sprite>(dirPath);
+        if (sprites != null && sprites.Length > 0)
+        {
+            _spriteCache[dirPath] = sprites;
+            return FilterSpritesByFile(sprites, spumName);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 从目录的所有Sprite中筛选属于指定文件的切片
+    /// 单切片：返回文件名相同的Sprite
+    /// 多切片：返回 Body/Left/Right 三个切片
+    /// </summary>
+
+---------- 第 27 页 ----------
+    private Sprite[] FilterSpritesByFile(Sprite[] allSprites, string fileName)
+    {
+        if (allSprites == null || allSprites.Length == 0) return null;
+
+        // 先找和文件名完全相同的Sprite（单切片情况）
+        foreach (Sprite sp in allSprites)
+        {
+            if (sp.name == fileName) return new Sprite[] { sp };
+        }
+
+        // 没找到同名，说明是多切片，收集 Body/Left/Right
+        List<Sprite> result = new List<Sprite>();
+        foreach (string sliceName in MultiSliceNames)
+        {
+            Sprite sub = System.Array.Find(allSprites, s => s.name == sliceName);
+            if (sub != null) result.Add(sub);
+        }
+
+        return result.Count > 0 ? result.ToArray() : null;
+    }
+
+    /// <summary>
+    /// 缓存未命中时的兜底加载
+    /// 直接用spumName作为路径尝试加载
+    /// </summary>
+    private Sprite[] FallbackLoad(string spumName)
+    {
+        Sprite[] sprites = Resources.LoadAll<Sprite>(spumName);
+        if (sprites != null && sprites.Length > 0)
+        {
+            _spumPathCache[spumName] = spumName;
+            return sprites;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 获取部件对应的SpriteRenderer列表
+    /// </summary>
+    private List<SpriteRenderer> GetPartList(string partType)
+    {
+        if (spriteList == null) return null;
+
+        switch (partType)
+        {
+            case "Hair":    return spriteList._hairList;
+            case "Cloth":   return spriteList._clothList;
+            case "Armor":   return spriteList._armorList;
+            case "Pant":    return spriteList._pantList;
+            case "Back":    return spriteList._backList;
+
+---------- 第 28 页 ----------
+            case "Weapons": return spriteList._weaponList;
+            default: return null;
+        }
+    }
+
+    /// <summary>
+    /// 更新路径字符串列表，防止SPUM的ResyncData用旧路径覆盖换装结果
+    /// 直接从缓存字典获取路径
+    /// </summary>
+    private void UpdatePathString(string partType, string spumName)
+    {
+        if (spriteList == null) return;
+
+        // 从缓存获取实际路径
+        string path;
+        if (!_spumPathCache.TryGetValue(spumName, out path))
+        {
+            return; // 缓存中没有，无法更新
+        }
+
+        switch (partType)
+        {
+            case "Hair":
+                SetPathStringList(spriteList._hairListString, path);
+                break;
+            case "Cloth":
+                SetPathStringList(spriteList._clothListString, path);
+                break;
+            case "Armor":
+                SetPathStringList(spriteList._armorListString, path);
+                break;
+            case "Pant":
+                SetPathStringList(spriteList._pantListString, path);
+                break;
+            case "Back":
+                SetPathStringList(spriteList._backListString, path);
+                break;
+            case "Weapons":
+                SetPathStringList(spriteList._weaponListString, path);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 安全设置路径字符串列表的第一个元素
+    /// </summary>
+    private void SetPathStringList(List<string> list, string path)
+    {
+        if (list == null) return;
+        if (list.Count == 0) list.Add(path);
+
+---------- 第 29 页 ----------
+        else list[0] = path;
+    }
+}
+
+// ===== FILE: Assets/Scripts/Systems/MercenaryManager.cs =====
+using UnityEngine;
+using System.Collections.Generic;
+
+/// <summary>
+/// 佣兵管理器：头像查询、预制体加载、出战生成与回收。
+/// 生成方式与 Hero 对齐：挂到 unit → 写世界坐标 → Init 朝向；不改大小/排序。
+/// </summary>
+public class MercenaryManager : Singleton<MercenaryManager>
+{
+    [Header("角色注册表")]
+    public CharacterRegistry registry;
+
+    private List<Mercenary> _activeMercs = new List<Mercenary>();
+
+    public const string PLAYER_ID = "wanjia";
+
+    protected override void Awake()
+    {
+        base.Awake();
+        if (registry == null)
+        {
+            registry = Resources.Load<CharacterRegistry>("Config/CharacterRegistry");
+            if (registry == null)
+                Debug.LogWarning("[MercenaryManager] 未找到CharacterRegistry，请运行 Tools/生成角色注册表 菜单生成");
+        }
+    }
+
+    #region 头像/配置查询
+
+    public Sprite GetIcon(string characterId)
+    {
+        Sprite sp = registry != null ? registry.GetIcon(characterId) : null;
+        if (sp != null) return sp;
+        if (string.IsNullOrEmpty(characterId)) return null;
+        sp = Resources.Load<Sprite>("UI/Heads/icon_" + characterId);
+        if (sp != null) return sp;
+        // 101/102 盾兵共用头像
+        if (characterId.StartsWith("dunbing"))
+            return Resources.Load<Sprite>("UI/Heads/icon_dunbing102");
+        return null;
+    }
+
+    public string GetJobName(string characterId)
+    {
+        return registry != null ? registry.GetJobName(characterId) : characterId;
+
+---------- 第 30 页 ----------
+    }
+
+    public string GetPrefabName(string characterId)
+    {
+        return registry != null ? registry.GetPrefabName(characterId) : characterId;
+    }
+
+    static GameObject LoadUnitPrefab(string prefabName, string mercId)
+    {
+        if (!string.IsNullOrEmpty(prefabName))
+        {
+            var p = Resources.Load<GameObject>("Units/" + prefabName);
+            if (p != null) return p;
+        }
+        if (!string.IsNullOrEmpty(mercId) && mercId != prefabName)
+        {
+            var p = Resources.Load<GameObject>("Units/" + mercId);
+            if (p != null) return p;
+        }
+        if (!string.IsNullOrEmpty(mercId) && mercId.Length >= 3)
+        {
+            char last = mercId[mercId.Length - 1];
+            if (last == '2' || last == '3' || last == '4')
+            {
+                string fallback = mercId.Substring(0, mercId.Length - 1) + "1";
+                var p = Resources.Load<GameObject>("Units/" + fallback);
+                if (p != null)
+                {
+                    Debug.LogWarning($"[MercenaryManager] {mercId} 无预制体，回退 {fallback}");
+                    return p;
+                }
+            }
+        }
+        return null;
+    }
+
+    public Sprite GetPlayerIcon() => GetIcon(PLAYER_ID);
+
+    #endregion
+
+    #region 出战佣兵
+
+    public int GetMaxMercSlots()
+    {
+        int tavernLevel = SaveSystem.Instance != null && SaveSystem.Instance.Data != null
+            ? SaveSystem.Instance.Data.townLevel.tavern
+            : 0;
+        return Mathf.Clamp(tavernLevel, 0, 2);
+    }
+

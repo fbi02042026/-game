@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_armor_8
   m_EditorClassIdentifier: 
   templateId: equip_armor_8
-  equipName: Armor_8
+  equipName: "暗纹护甲"
   icon: {fileID: 21300000, guid: 2be70c5bbf8b6374c9e5b9407c4e0e89, type: 3}
   iconFileName: Armor_8
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Armor_8

@@ -17,7 +17,7 @@ public static class BattleSceneDiagnose
     static string _logPath;
     static StringBuilder _sb;
 
-    [MenuItem("Tools/调试/①打开Battle场景并诊断(截图+层级)")]
+    [MenuItem("Tools/_归档/调试/①打开Battle场景并诊断(截图+层级)")]
     public static void RunDiagnose()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode)

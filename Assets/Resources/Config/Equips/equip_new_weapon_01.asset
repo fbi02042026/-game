@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_01
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_01
-  equipName: New_Weapon_01
+  equipName: "锈迹短剑"
   icon: {fileID: 21300000, guid: fea823efdfc2ba5479ab8108634f17a4, type: 3}
   iconFileName: New_Weapon_01
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Weapon_01

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_pant_05
   m_EditorClassIdentifier: 
   templateId: equip_new_pant_05
-  equipName: New_Pant_05
+  equipName: "骑士胫甲"
   icon: {fileID: 21300000, guid: de1649c33ab694f469e0972d84ec0a23, type: 3}
   iconFileName: New_Pant_05
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Pant_05

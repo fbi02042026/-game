@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: sea_301
   m_EditorClassIdentifier: 
   id: sea_301
-  monsterName: "\u602A\u7269_3_1"
+  monsterName: "潮汐虾兵"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 10
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 20
   expDrop: 11
   spriteIndex: 1

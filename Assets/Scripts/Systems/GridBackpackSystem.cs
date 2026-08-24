@@ -34,7 +34,8 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     public bool TryAddItem(EquipInstance equip, out BackpackItem item)
     {
         item = null;
-        if (equip.requireLevel > Hero.Instance.level)
+        if (equip == null) return false;
+        if (Hero.Instance != null && equip.requireLevel > Hero.Instance.level)
         {
             UIManager.Instance?.ShowToast($"等级不足！{equip.equipName}需要{equip.requireLevel}级才能装备");
         }
@@ -160,7 +161,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         Hero.Instance?.RecalcAttr();
         OnBackpackChanged?.Invoke();
-        OnCostumeChanged?.Invoke();
+        NotifyCostumeChanged();
         return true;
     }
 
@@ -199,8 +200,22 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         Hero.Instance?.RecalcAttr();
         OnBackpackChanged?.Invoke();
-        OnCostumeChanged?.Invoke();
+        NotifyCostumeChanged();
         return true;
+    }
+
+    /// <summary>穿脱后立刻刷新英雄 SPUM 外观（事件 + 直调，避免订阅时机漏掉）。</summary>
+    void NotifyCostumeChanged()
+    {
+        OnCostumeChanged?.Invoke();
+        var hero = Hero.Instance;
+        if (hero != null && hero.costumeManager != null)
+            hero.costumeManager.RefreshCostume();
+        else if (HeroCostumeManager.Instance != null)
+            HeroCostumeManager.Instance.RefreshCostume();
+        // 城镇角色页预览（无战斗 Hero 时）
+        if (CharacterUI.Instance != null)
+            TownHeroCostumePreview.EnsureOn(CharacterUI.Instance)?.RefreshCostume();
     }
 
     public bool IsEquipped(EquipInstance equip)

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_bow_1
   m_EditorClassIdentifier: 
   templateId: equip_bow_1
-  equipName: Bow_1
+  equipName: "猎手长弓"
   icon: {fileID: 21300000, guid: 0f641602d54f84346acd449717e60a7f, type: 3}
   iconFileName: Bow_1
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Bow_1

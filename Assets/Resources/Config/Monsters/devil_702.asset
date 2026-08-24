@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: devil_702
   m_EditorClassIdentifier: 
   id: devil_702
-  monsterName: "\u602A\u7269_7_2"
+  monsterName: "炎魔射手"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 28
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 43
   expDrop: 25
   spriteIndex: 2

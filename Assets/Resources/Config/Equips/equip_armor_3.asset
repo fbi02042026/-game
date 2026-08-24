@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_armor_3
   m_EditorClassIdentifier: 
   templateId: equip_armor_3
-  equipName: Armor_3
+  equipName: "铁片护心"
   icon: {fileID: 21300000, guid: ee0bec9067b8c344cbad630c2ec51e81, type: 3}
   iconFileName: Armor_3
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Armor_3

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_armor_04
   m_EditorClassIdentifier: 
   templateId: equip_new_armor_04
-  equipName: New_Armor_04
+  equipName: "鳞甲背心"
   icon: {fileID: 21300000, guid: c4112ce24f308cf4985a6b2ba35ab9a6, type: 3}
   iconFileName: New_Armor_04
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Armor_04

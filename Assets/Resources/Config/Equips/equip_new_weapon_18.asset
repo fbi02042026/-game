@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_18
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_18
-  equipName: New_Weapon_18
+  equipName: "王庭礼剑"
   icon: {fileID: 21300000, guid: ad3ec18fa196e5c4d888c317ae64cd9b, type: 3}
   iconFileName: New_Weapon_18
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Weapon_18

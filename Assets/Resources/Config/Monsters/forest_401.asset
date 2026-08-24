@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: forest_401
   m_EditorClassIdentifier: 
   id: forest_401
-  monsterName: "\u602A\u7269_4_1"
+  monsterName: "暮影狼"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 12.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 25
   expDrop: 14
   spriteIndex: 1

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: forest_403
   m_EditorClassIdentifier: 
   id: forest_403
-  monsterName: "\u602A\u7269_4_3"
+  monsterName: "树精守卫"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0
@@ -21,7 +21,7 @@ MonoBehaviour:
   baseAttack: 22.5
   baseAttackSpeed: 1
   attackRange: 1.5
-  baseMoveSpeed: 0
+  baseMoveSpeed: 2.2
   baseGoldDrop: 31
   expDrop: 18
   spriteIndex: 3

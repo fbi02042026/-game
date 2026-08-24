@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_armor_2
   m_EditorClassIdentifier: 
   templateId: equip_armor_2
-  equipName: Armor_2
+  equipName: "硬皮胸甲"
   icon: {fileID: 21300000, guid: 171c6afeedd11a642801c204342f3dc7, type: 3}
   iconFileName: Armor_2
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Armor_2

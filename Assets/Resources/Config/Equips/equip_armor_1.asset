@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_armor_1
   m_EditorClassIdentifier: 
   templateId: equip_armor_1
-  equipName: Armor_1
+  equipName: "粗布衣甲"
   icon: {fileID: 21300000, guid: 12ac39a4fd93519408e90b81e048250f, type: 3}
   iconFileName: Armor_1
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Armor_1

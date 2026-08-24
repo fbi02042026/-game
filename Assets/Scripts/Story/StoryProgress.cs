@@ -42,7 +42,12 @@ public static class StoryProgress
     public static bool Chapter1ChoiceDone => Save()?.chapter1ChoiceDone ?? false;
 
     public static bool ShouldStartTutorialBattle()
-        => !TutorialDone && !TutorialBattleCleared;
+    {
+        // QueueTutorialBattle 显式排队优先（城镇引导入口）
+        if (_pendingTutorialBattle)
+            return true;
+        return !TutorialDone && !TutorialBattleCleared;
+    }
 
     static SaveData Save() => SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
 

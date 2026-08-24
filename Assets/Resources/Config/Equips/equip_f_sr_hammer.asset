@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_f_sr_hammer
   m_EditorClassIdentifier: 
   templateId: equip_f_sr_hammer
-  equipName: F_SR_Hammer
+  equipName: "碎岩战锤"
   icon: {fileID: 21300000, guid: 2109ab297907b2b418351e027f5929b6, type: 3}
   iconFileName: F_SR_Hammer
   gridWidth: 2
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: F_SR_Hammer

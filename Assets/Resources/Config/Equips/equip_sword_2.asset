@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_sword_2
   m_EditorClassIdentifier: 
   templateId: equip_sword_2
-  equipName: Sword_2
+  equipName: "旅人佩剑"
   icon: {fileID: 21300000, guid: 3956fe24bce15fb448cf7a12faf017a7, type: 3}
   iconFileName: Sword_2
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: Sword_2

@@ -57,6 +57,8 @@ public class TownBackpackGrid : MonoBehaviour
             var ui = new GridCellUI
             {
                 root = cell.gameObject,
+                cellBg = FindImgNamedOnly(cell, "CellBg", "Bg", "Background")
+                    ?? cell.GetComponent<Image>(),
                 itemIcon = FindImgNamedOnly(cell, "ItemIcon", "Icon"),
                 rarityFrame = FindImgNamedOnly(cell, "Frame", "Rarity", "Border"),
                 lockedOverlay = FindDeep(cell, "LockedOverlay")?.gameObject
@@ -193,6 +195,7 @@ public class TownBackpackGrid : MonoBehaviour
                     });
                 }
                 BackpackGridVisual.ClearAndPlace(gridContainer, gridLayout, placements, FindCellRect);
+                ApplyOccupiedColors(placements);
                 return;
             }
         }
@@ -201,6 +204,7 @@ public class TownBackpackGrid : MonoBehaviour
         if (data?.legacyEquipPool == null)
         {
             BackpackGridVisual.ClearAndPlace(gridContainer, gridLayout, placements, FindCellRect);
+            ApplyOccupiedColors(placements);
             return;
         }
         int slot = 0;
@@ -220,6 +224,38 @@ public class TownBackpackGrid : MonoBehaviour
             slot += w * h;
         }
         BackpackGridVisual.ClearAndPlace(gridContainer, gridLayout, placements, FindCellRect);
+        ApplyOccupiedColors(placements);
+    }
+
+    void ApplyOccupiedColors(List<BackpackGridVisual.ItemPlacement> placements)
+    {
+        foreach (var cell in cells)
+        {
+            if (cell == null) continue;
+            cell.SetEmptyVisual();
+        }
+        if (placements == null) return;
+        for (int i = 0; i < placements.Count; i++)
+        {
+            var p = placements[i];
+            for (int dx = 0; dx < p.w; dx++)
+            for (int dy = 0; dy < p.h; dy++)
+            {
+                var cell = FindCell(p.x + dx, p.y + dy);
+                cell?.SetOccupiedVisual(p.equipped);
+            }
+        }
+    }
+
+    GridCellUI FindCell(int gx, int gy)
+    {
+        for (int i = 0; i < cells.Count; i++)
+        {
+            var c = cells[i];
+            if (c != null && c.gridX == gx && c.gridY == gy)
+                return c;
+        }
+        return null;
     }
 
     RectTransform FindCellRect(int gx, int gy)

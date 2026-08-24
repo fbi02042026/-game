@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_cloth_12
   m_EditorClassIdentifier: 
   templateId: equip_new_cloth_12
-  equipName: New_Cloth_12
+  equipName: "织法护腕"
   icon: {fileID: 21300000, guid: 16f4108545c933145ac9e8c0fc748d32, type: 3}
   iconFileName: New_Cloth_12
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Cloth_12

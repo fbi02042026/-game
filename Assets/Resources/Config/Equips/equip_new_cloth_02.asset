@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_cloth_02
   m_EditorClassIdentifier: 
   templateId: equip_new_cloth_02
-  equipName: New_Cloth_02
+  equipName: "皮制手套"
   icon: {fileID: 21300000, guid: 084ff266fc78fc34989e9c1281eaff5c, type: 3}
   iconFileName: New_Cloth_02
   gridWidth: 1
@@ -35,4 +35,4 @@ MonoBehaviour:
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0
-  spumName: 
+  spumName: New_Cloth_02
