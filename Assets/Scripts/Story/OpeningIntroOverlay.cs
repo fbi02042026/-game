@@ -9,7 +9,12 @@ using UnityEngine.Video;
 /// </summary>
 public class OpeningIntroOverlay : MonoBehaviour
 {
+    public static OpeningIntroOverlay Instance { get; private set; }
+
     public bool IsFinished { get; private set; }
+
+    public static bool IsPlaying =>
+        Instance != null && Instance.gameObject.activeInHierarchy && !Instance.IsFinished;
 
     CanvasGroup _group;
     VideoPlayer _videoPlayer;
@@ -59,6 +64,7 @@ public class OpeningIntroOverlay : MonoBehaviour
 
     void Build(string videoPath)
     {
+        Instance = this;
         var canvas = gameObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 32766;
@@ -256,6 +262,7 @@ public class OpeningIntroOverlay : MonoBehaviour
 
     void OnDestroy()
     {
+        if (Instance == this) Instance = null;
         ReleaseCutsceneMute();
         if (_videoPlayer != null)
         {

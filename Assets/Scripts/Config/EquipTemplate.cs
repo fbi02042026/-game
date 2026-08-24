@@ -44,6 +44,8 @@ public class EquipTemplate : ScriptableObject
     public void ResolveIcon()
     {
         if (icon != null) return;
+        if (string.IsNullOrEmpty(iconFileName))
+            iconFileName = templateId;
         if (string.IsNullOrEmpty(iconFileName)) return;
         icon = EquipIcons.Get(iconFileName);
     }

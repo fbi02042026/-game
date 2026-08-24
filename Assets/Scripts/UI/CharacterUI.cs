@@ -293,27 +293,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
     {
         if (_canvasConfigured) return;
         EnsureVisibleTransform();
-        var hall = GetComponentInParent<GuildHallUI>();
-        bool nested = hall != null && hall.gameObject != gameObject;
-        if (nested)
-        {
-            var ray = GetComponent<GraphicRaycaster>();
-            if (ray != null) Destroy(ray);
-            var scaler = GetComponent<CanvasScaler>();
-            if (scaler != null) Destroy(scaler);
-            var own = GetComponent<Canvas>();
-            if (own != null) Destroy(own);
-            _canvasConfigured = true;
-            return;
-        }
-        var canvas = GetComponent<Canvas>();
-        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        canvas.enabled = true;
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 20;
-        UICanvasSetup.Apply(canvas, Camera.main);
-        if (GetComponent<GraphicRaycaster>() == null)
-            gameObject.AddComponent<GraphicRaycaster>();
+        TownPageCanvas.Configure(gameObject, 20, stripCanvasWhenNested: true);
         _canvasConfigured = true;
     }
 

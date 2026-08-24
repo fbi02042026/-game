@@ -3,29 +3,28 @@ using System.IO;
 using UnityEngine;
 
 /// <summary>
-/// 云存档适配层：本地文件镜像 + 微信云预留接口。
+/// 云存档适配层：只存加密载荷，不落明文 JSON。
 /// </summary>
 public static class CloudSaveBridge
 {
-    const string CloudMirrorKey = "cloud_save_mirror_json";
+    const string CloudMirrorKey = "cloud_save_mirror_v2";
 
     public static bool UseWeChatCloud { get; set; }
 
-    public static void UploadJson(string json, Action<bool> onDone = null)
+    public static void UploadPayload(string payload, Action<bool> onDone = null)
     {
-        if (string.IsNullOrEmpty(json))
+        if (string.IsNullOrEmpty(payload))
         {
             onDone?.Invoke(false);
             return;
         }
 
-        // 本地镜像，便于联调与断网回退
         try
         {
-            PlayerPrefs.SetString(CloudMirrorKey, json);
+            PlayerPrefs.SetString(CloudMirrorKey, payload);
             PlayerPrefs.Save();
-            string path = Path.Combine(Application.persistentDataPath, "cloud_mirror.json");
-            File.WriteAllText(path, json);
+            string path = Path.Combine(Application.persistentDataPath, "cloud_mirror.dat");
+            File.WriteAllText(path, payload);
         }
         catch (Exception e)
         {
@@ -34,35 +33,32 @@ public static class CloudSaveBridge
 
         if (UseWeChatCloud)
         {
-            // TODO: 微信云开发 database / storage 上传
             Debug.Log("[CloudSaveBridge] UseWeChatCloud=true，等待微信 SDK 绑定");
             onDone?.Invoke(false);
             return;
         }
 
-        Debug.Log("[CloudSaveBridge] 已写入本地云镜像（定版前）");
         onDone?.Invoke(true);
     }
 
-    public static void DownloadJson(Action<string> onDone)
+    public static void DownloadPayload(Action<string> onDone)
     {
         if (UseWeChatCloud)
         {
-            // TODO: 微信云下载
             onDone?.Invoke(null);
             return;
         }
 
-        string json = PlayerPrefs.GetString(CloudMirrorKey, null);
-        if (string.IsNullOrEmpty(json))
+        string payload = PlayerPrefs.GetString(CloudMirrorKey, null);
+        if (string.IsNullOrEmpty(payload))
         {
-            string path = Path.Combine(Application.persistentDataPath, "cloud_mirror.json");
+            string path = Path.Combine(Application.persistentDataPath, "cloud_mirror.dat");
             if (File.Exists(path))
             {
-                try { json = File.ReadAllText(path); }
+                try { payload = File.ReadAllText(path); }
                 catch { /* ignore */ }
             }
         }
-        onDone?.Invoke(string.IsNullOrEmpty(json) ? null : json);
+        onDone?.Invoke(string.IsNullOrEmpty(payload) ? null : payload);
     }
 }

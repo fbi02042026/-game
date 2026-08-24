@@ -20,6 +20,7 @@ public static class RedDot
     public const string Character = "nav.character";
     public const string Tavern = "nav.tavern";
     public const string Log = "nav.log";
+    public const string Achievement = "log.achievement";
     public const string Guild = "nav.guild";
     public const string Adventure = "nav.adventure";
 
@@ -28,13 +29,7 @@ public static class RedDot
         get
         {
             if (_sprite != null) return _sprite;
-            // 优先用美术「红点」图
-            _sprite = Resources.Load<Sprite>("UI/红点");
-            if (_sprite == null) _sprite = Resources.Load<Sprite>("UI/RedDot");
-#if UNITY_EDITOR
-            if (_sprite == null)
-                _sprite = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/红点.png");
-#endif
+            _sprite = Resources.Load<Sprite>("UI/RedDot");
             return _sprite;
         }
     }
@@ -110,9 +105,14 @@ public static class RedDot
         return dot;
     }
 
-    /// <summary>根据邮件等刷新常用红点</summary>
+    /// <summary>根据邮件、可领成就里程等刷新常用红点</summary>
     public static void RefreshCommon()
     {
         Set(Mail, MailSystem.UnclaimedCount() > 0);
+        bool reward = AchievementSystem.Instance != null
+                      && AchievementSystem.Instance.HasUnclaimedMilestone();
+        Set(Activity, reward);
+        Set(Log, reward);
+        Set(Achievement, reward);
     }
 }

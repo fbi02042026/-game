@@ -19,7 +19,7 @@ public class MercenaryManager : Singleton<MercenaryManager>
         base.Awake();
         if (registry == null)
         {
-            registry = Resources.Load<CharacterRegistry>("Config/CharacterRegistry");
+            registry = Resources.Load<CharacterRegistry>(ContentPaths.Config.CharacterRegistry);
             if (registry == null)
                 Debug.LogWarning("[MercenaryManager] 未找到CharacterRegistry，请运行 Tools/生成角色注册表 菜单生成");
         }
@@ -34,6 +34,11 @@ public class MercenaryManager : Singleton<MercenaryManager>
         if (string.IsNullOrEmpty(characterId)) return null;
         sp = Resources.Load<Sprite>("UI/Heads/icon_" + characterId);
         if (sp != null) return sp;
+#if UNITY_EDITOR
+        sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
+            "Assets/Art/UI/Icons/Heads/icon_" + characterId + ".png");
+        if (sp != null) return sp;
+#endif
         // 101/102 盾兵共用头像
         if (characterId.StartsWith("dunbing"))
             return Resources.Load<Sprite>("UI/Heads/icon_dunbing102");

@@ -187,6 +187,7 @@ public class AchievementSystem : Singleton<AchievementSystem>
         SaveSystem.Instance.Save();
 
         OnAchievementCompleted?.Invoke(achievementId, def.reward);
+        RedDot.RefreshCommon();
 
         Debug.Log($"[AchievementSystem] 成就完成: {def.name} (+{def.reward.achievementPoints}点)");
     }
@@ -272,9 +273,23 @@ public class AchievementSystem : Singleton<AchievementSystem>
 
         OnMilestoneClaimed?.Invoke(milestoneId);
         SaveSystem.Instance.Save();
+        RedDot.RefreshCommon();
 
         Debug.Log($"[AchievementSystem] 领取里程奖励: {def.name}");
         return true;
+    }
+
+    /// <summary>是否有未领取的成就里程奖励。</summary>
+    public bool HasUnclaimedMilestone()
+    {
+        if (_milestoneDefs == null || SaveSystem.Instance?.Data == null) return false;
+        for (int i = 0; i < _milestoneDefs.Count; i++)
+        {
+            var def = _milestoneDefs[i];
+            if (def != null && CanClaimMilestone(def.id))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

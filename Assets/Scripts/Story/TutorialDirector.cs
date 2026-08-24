@@ -10,7 +10,7 @@ using UnityEngine.UI;
 /// </summary>
 public class TutorialDirector : Singleton<TutorialDirector>
 {
-    const string OpeningIntroRelativePath = "Art/片头/像素冒险：裂缝之刃片头.mp4";
+    const string OpeningIntroRelativePath = "Art/Video/opening_intro.mp4";
 
     public bool ShowMercHud { get; private set; }
     public bool WaitingEvacuate { get; set; }
@@ -31,17 +31,30 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (_townFlowBusy) return;
         if (StoryDirector.Ensure() != null && StoryDirector.Ensure().IsPlaying) return;
 
+        if (!GuildHallUI.ShouldHideTownForIntro)
+            ClearTownBlockers();
+
         Debug.Log($"[Tutorial] TownReady tutorialDone={StoryProgress.TutorialDone} intro={StoryProgress.TutorialIntroDone} battle={StoryProgress.TutorialBattleCleared} outro={StoryProgress.TutorialOutroPending}");
 
         if (!StoryProgress.TutorialDone && StoryProgress.TutorialOutroPending)
         {
+            _townFlowBusy = true;
             _flow = StartCoroutine(TownAfterBattleRoutine());
             return;
         }
 
         if (!StoryProgress.TutorialDone && !StoryProgress.TutorialIntroDone)
         {
+            _townFlowBusy = true;
             _flow = StartCoroutine(TownFirstEntryRoutine());
+            return;
+        }
+
+        // intro 已写入存档但教学战未打（上次半路退出/重复 Notify）：补「点冒险」并清遮挡
+        if (!StoryProgress.TutorialDone && StoryProgress.TutorialIntroDone && !StoryProgress.TutorialBattleCleared)
+        {
+            _townFlowBusy = true;
+            _flow = StartCoroutine(TownResumeAdventureHintRoutine());
             return;
         }
 
@@ -49,6 +62,17 @@ public class TutorialDirector : Singleton<TutorialDirector>
         {
             Chapter1Story.PlayReturnTown(null);
         }
+    }
+
+    /// <summary>撤掉进城镇后可能残留的遮挡（黑幕 / 对话窗 / 引导遮罩）。</summary>
+    public static void ClearTownBlockers()
+    {
+        TownIntroVeil.ForceDestroy();
+        GuildHallUI.SetTownChromeVisible(true);
+        if (StoryDirector.Instance == null || !StoryDirector.Instance.IsPlaying)
+            DialogueUI.Instance?.Hide();
+        TutorialHintUI.Ensure().Hide();
+        OfflineRewardPopup.HideIfOpen();
     }
 
     public void NotifyTownTab(MainNavTab tab)
@@ -109,27 +133,18 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
     IEnumerator TownFirstEntryRoutine()
     {
-        _townFlowBusy = true;
+        yield return WaitNotLoading();
         TownIntroVeil.EnsureShown();
         GuildHallUI.SetTownChromeVisible(false);
-        yield return null;
-        yield return WaitNotLoading();
 
         if (!StoryProgress.OpeningIntroPlayed)
         {
             yield return PlayOpeningIntroIfNeeded();
             StoryProgress.MarkOpeningIntroPlayed();
+            TownIntroVeil.EnsureShown();
+            GuildHallUI.SetTownChromeVisible(false);
         }
 
-        yield return PlayTownIntroDialogue();
-        StoryProgress.MarkTutorialIntroDone();
-
-        // 关键顺序：黑幕还盖着的时候就把城镇壳恢复出来。
-        // 之前是先淡出黑幕再开 chrome，中间那几帧露出的就是「一闪的空场景」。
-        GuildHallUI.SetTownChromeVisible(true);
-        yield return null;
-
-        // 底栏是运行时实例化的，绑好之后再淡出，引导手才不会迟到
         Button adv = null;
         float bind = 0f;
         while (bind < 3f)
@@ -140,16 +155,47 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return null;
         }
 
-        yield return TownIntroVeil.FadeOutRoutine(0.45f);
-        // 兜底：黑幕残留则强制清掉，并确保大厅可见
-        if (TownIntroVeil.Instance != null)
-            Object.Destroy(TownIntroVeil.Instance.gameObject);
+        yield return PlayTownIntroDialogue();
+        StoryProgress.MarkTutorialIntroDone();
         GuildHallUI.SetTownChromeVisible(true);
+        if (adv == null) adv = ResolveAdventureButton();
+        if (adv != null) adv.interactable = true;
+        yield return null;
+        yield return DismissIntroVeil(0.4f);
+        DialogueUI.Instance?.Hide();
+        ClearTownBlockers();
 
         if (adv == null) adv = ResolveAdventureButton();
-        // 软引导：只提示+手指，不全屏挖空遮罩（硬遮罩会把大厅盖成「全黑」）
-        TutorialHintUI.Ensure().Show("点下方「冒险」，前往裂缝。",
-            adv != null ? adv.GetComponent<RectTransform>() : null, -1f);
+        TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂缝。",
+            adv != null ? adv.GetComponent<RectTransform>() : null);
+        _townFlowBusy = false;
+        _flow = null;
+    }
+
+    static IEnumerator DismissIntroVeil(float fadeSeconds)
+    {
+        if (TownIntroVeil.Instance == null) yield break;
+        yield return TownIntroVeil.FadeOutRoutine(fadeSeconds);
+        TownIntroVeil.ForceDestroy();
+    }
+
+    IEnumerator TownResumeAdventureHintRoutine()
+    {
+        yield return WaitNotLoading();
+        ClearTownBlockers();
+
+        Button adv = null;
+        float bind = 0f;
+        while (bind < 3f)
+        {
+            adv = ResolveAdventureButton();
+            if (adv != null) break;
+            bind += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+            yield return null;
+        }
+
+        TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂缝。",
+            adv != null ? adv.GetComponent<RectTransform>() : null);
         _townFlowBusy = false;
         _flow = null;
     }
@@ -158,14 +204,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
     {
         StoryDirector.Instance?.NotifySceneChanged();
 
-        // 办公室 + 咨询台一次播完。拆成两次 Play 会在中间关掉再重建对话 UI，
-        // 那一两帧就是玩家看到的「闪一下空场景」。
+        // 办公室 + 咨询台一次播完。SkipReveal：片头后仍有黑幕，对话层盖在上面，不再走地点名黑场。
         var beats = new List<StoryBeat>
         {
             StoryDirector.Solo("会长",
                 "新人，森林层最近有些怪物躁动。去吧，证明你有资格留下。",
                 StoryPortraits.GuildMaster)
-                .Bg(StoryBackgrounds.GuildOffice),
+                .Bg(StoryBackgrounds.GuildOffice)
+                .SkipReveal(),
             StoryDirector.Solo("会长",
                 "你把这个签了后就可以出去了。",
                 StoryPortraits.GuildMaster)
@@ -176,9 +222,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 "第一次下裂缝？三件事：\n1. 你只管走路，打架会自动打。\n2. 进战斗前先选技能，亮起就能放。\n3. 见好就收，活着才有收益。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)
+                .SkipReveal()
         };
         bool done = false;
-        StoryDirector.Ensure().Play(beats, () => done = true);
+        StoryDirector.Ensure().Play(beats, () => done = true, keepSceneArt: true);
         while (!done) yield return null;
     }
 
@@ -258,14 +305,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
             spawnWait += Time.unscaledDeltaTime;
             yield return null;
         }
-        if (bm != null && bm.GetAliveMonsterCount() <= 0)
-            bm.QueueTutorialWave(1);
 
         yield return WaitFieldClear();
-        hint.Show("不错！再清一小波，熟悉下节奏。", null, 3.2f);
-        yield return EnsureTutorialWave(bm, 2);
-        yield return WaitFieldClear();
-
         hint.Show("地上有装备，捡起来看看。", null, 8f);
         yield return OfferTutorialEquip();
         hint.Show("属性更好就装备，旧的会变成强化材料。", null, 5f);
@@ -381,16 +422,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (bm != null) bm.UnitsCanAct = true;
 
         hint.Show("组队后佣兵会自动战斗，和你一起推进。", null, 8f);
-        yield return EnsureTutorialWave(bm, 6);
+        yield return EnsureTutorialWave(bm, 5);
         if (bm != null && bm.GetAliveMonsterCount() <= 0)
         {
             Debug.LogWarning("[Tutorial] 组队后首波未刷出，紧急补怪");
             bm.QueueTutorialWave(4);
         }
-        yield return WaitFieldClear();
-
-        hint.Show("状态不错，再清一波我们就撤。", null, 6f);
-        yield return EnsureTutorialWave(bm, 3);
         yield return WaitFieldClear();
 
         yield return TalkHeld(bm, headTalk, Hero.Instance, "这波清完了，先撤？", 1.8f);
@@ -527,7 +564,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 ? ConfigManager.Instance.GetEquipTemplate(prefer[i])
                 : null;
             if (tpl == null)
-                tpl = Resources.Load<EquipTemplate>("Config/Equips/" + prefer[i]);
+                tpl = Resources.Load<EquipTemplate>(ContentPaths.Config.Equips + "/" + prefer[i]);
             if (tpl == null) continue;
             tpl.ResolveIcon();
             int lv = Hero.Instance != null ? Hero.Instance.level : 1;

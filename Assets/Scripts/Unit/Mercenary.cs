@@ -237,11 +237,17 @@ public class Mercenary : UnitBase
         }
         else
         {
-            // 无敌人：保持在主角身后固定间距（拉开站位）
+            bool noMonsters = BattleManager.Instance == null
+                || BattleManager.Instance.GetAliveMonsterCount() <= 0;
             Hero h = Hero.Instance;
             facingDir = 1;
             ApplyFacing(facingDir);
-            if (h != null && !h.isDead)
+            if (noMonsters)
+            {
+                if (rb != null) rb.velocity = new Vector2(0f, rb.velocity.y);
+                isMoving = false;
+            }
+            else if (h != null && !h.isDead)
             {
                 float desiredX = GetCombatX(h) - BattleManager.MERC_BEHIND_SPACING * (ResolvePartyIndex() + 1);
                 float dx = desiredX - GetCombatX(this);
@@ -254,15 +260,14 @@ public class Mercenary : UnitBase
                 }
                 else
                 {
-                    // 贴住理想站位，跟英雄同速前进
-                    if (rb != null) rb.velocity = new Vector2(spd, rb.velocity.y);
-                    isMoving = true;
+                    if (rb != null) rb.velocity = new Vector2(0f, rb.velocity.y);
+                    isMoving = false;
                 }
             }
             else if (rb != null)
             {
-                rb.velocity = new Vector2(attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
-                isMoving = true;
+                rb.velocity = new Vector2(0f, rb.velocity.y);
+                isMoving = false;
             }
         }
 

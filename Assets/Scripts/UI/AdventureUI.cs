@@ -1705,28 +1705,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
     {
         if (_canvasConfigured) return;
         EnsureVisibleTransform();
-        var hall = GetComponentInParent<GuildHallUI>();
-        bool nestedUnderHall = hall != null && hall.gameObject != gameObject;
-
-        if (nestedUnderHall)
-        {
-            // 嵌在大厅下：去掉独立 Canvas，走父 Canvas，才能盖不住共用资源条/底栏
-            var raycaster = GetComponent<GraphicRaycaster>();
-            if (raycaster != null) Destroy(raycaster);
-            var scaler = GetComponent<CanvasScaler>();
-            if (scaler != null) Destroy(scaler);
-            var own = GetComponent<Canvas>();
-            if (own != null) Destroy(own);
-            _canvasConfigured = true;
-            return;
-        }
-
-        var canvas = GetComponent<Canvas>();
-        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        canvas.enabled = true;
-        UICanvasSetup.Apply(canvas);
-        if (GetComponent<GraphicRaycaster>() == null)
-            gameObject.AddComponent<GraphicRaycaster>();
+        TownPageCanvas.Configure(gameObject, 5, stripCanvasWhenNested: true);
         _canvasConfigured = true;
     }
 

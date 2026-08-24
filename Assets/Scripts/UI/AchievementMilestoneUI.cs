@@ -81,6 +81,7 @@ public class AchievementMilestoneUI : MonoBehaviour
         UIManager.Instance?.ShowToast(n > 0 ? $"领取 {n} 个里程奖励" : "暂无可领里程");
         RefreshBody();
         SaveSystem.Instance?.Save();
+        RedDot.RefreshCommon();
     }
 
     void BuildIfNeeded()

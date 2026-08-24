@@ -1,10 +1,7 @@
 using System.Collections;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
-
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 
 /// <summary>
 /// 战斗内角色头顶对话气泡（引导专用）。
@@ -12,8 +9,6 @@ using UnityEditor;
 public class BattleHeadTalkUI : MonoBehaviour
 {
     public static BattleHeadTalkUI Instance { get; private set; }
-
-    const string BubbleAssetPath = "Assets/Art/UI/剧情/对话框.png";
 
     Canvas _canvas;
     CanvasGroup _group;
@@ -25,9 +20,11 @@ public class BattleHeadTalkUI : MonoBehaviour
     Coroutine _co;
     Coroutine _animCo;
     bool _skipRequested;
+    bool _storyBgmHeld;
     const float TypeCharsPerSecond = 28f;
 
     public bool IsShowing => _root != null && _root.gameObject.activeSelf;
+    public string CurrentLine => _text != null ? _text.text : "";
 
     public static BattleHeadTalkUI Ensure()
     {
@@ -90,7 +87,7 @@ public class BattleHeadTalkUI : MonoBehaviour
         _text.fontSize = 24;
         _text.color = new Color(0.22f, 0.14f, 0.1f, 1f);
         _text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        _text.verticalOverflow = VerticalWrapMode.Overflow;
+        _text.verticalOverflow = VerticalWrapMode.Truncate;
         _text.raycastTarget = false;
         _text.font = GameFonts.GetChinese();
         var tr = _text.rectTransform;
@@ -98,6 +95,8 @@ public class BattleHeadTalkUI : MonoBehaviour
         tr.anchorMax = Vector2.one;
         tr.offsetMin = new Vector2(26f, 22f);
         tr.offsetMax = new Vector2(-26f, -18f);
+        if (rootGo.GetComponent<RectMask2D>() == null)
+            rootGo.AddComponent<RectMask2D>();
 
         var tailGo = new GameObject("Tail", typeof(RectTransform), typeof(Image));
         tailGo.transform.SetParent(rootGo.transform, false);
@@ -145,13 +144,7 @@ public class BattleHeadTalkUI : MonoBehaviour
 
     Sprite LoadBubbleSprite()
     {
-        var sp = Resources.Load<Sprite>("UI/StoryProps/dialog_bubble");
-        if (sp != null) return sp;
-#if UNITY_EDITOR
-        var ed = AssetDatabase.LoadAssetAtPath<Sprite>(BubbleAssetPath);
-        if (ed != null) return ed;
-#endif
-        return null;
+        return StoryProps.Get(StoryProps.SpeechBubble);
     }
 
     public Coroutine PlayLine(UnitBase speaker, string content, float hold = 1.8f)
@@ -192,7 +185,7 @@ public class BattleHeadTalkUI : MonoBehaviour
     IEnumerator PlayLineRoutine(UnitBase speaker, string content, float hold)
     {
         _follow = speaker;
-        string full = content ?? "";
+        string full = WrapBubbleText(content ?? "");
         float maxDur = hold + full.Length * 0.12f + 4f;
         float elapsed = 0f;
 
@@ -201,11 +194,12 @@ public class BattleHeadTalkUI : MonoBehaviour
         {
             _root.localScale = Vector3.one;
             _root.gameObject.SetActive(true);
-            FitBubbleSize(full);
+            FitBubbleSize();
         }
         if (_group != null) _group.alpha = 1f;
         PlayPopIn();
         RefreshFollowPosition();
+        AcquireStoryBgm();
 
         if (_text != null && full.Length > 0 && !_skipRequested)
         {
@@ -213,7 +207,6 @@ public class BattleHeadTalkUI : MonoBehaviour
             for (int i = 1; i <= full.Length && !_skipRequested; i++)
             {
                 _text.text = full.Substring(0, i);
-                FitBubbleSize(full.Substring(0, i));
                 float tType = 0f;
                 while (tType < delay && !_skipRequested)
                 {
@@ -226,7 +219,6 @@ public class BattleHeadTalkUI : MonoBehaviour
             if (!_skipRequested)
             {
                 _text.text = full;
-                FitBubbleSize(full);
             }
         }
 
@@ -247,38 +239,34 @@ public class BattleHeadTalkUI : MonoBehaviour
         RefreshFollowPosition();
     }
 
-    void FitBubbleSize(string content)
+    const float FixedBubbleW = 360f;
+    const float FixedBubbleH = 120f;
+    const int BubbleCharsPerLine = 11;
+
+    static string WrapBubbleText(string s)
     {
-        if (_root == null || _text == null) return;
-        float maxW = 420f;
-        float minW = 200f;
-        _text.rectTransform.sizeDelta = new Vector2(maxW - 52f, 0f);
-        float prefH = Mathf.Max(28f, _text.preferredHeight);
-        float prefW = Mathf.Clamp(_text.preferredWidth + 52f, minW, maxW);
-        float h = Mathf.Clamp(prefH + 40f, 88f, 260f);
-        float w = prefW;
-
-        if (_bubbleAspect > 0.01f)
+        if (string.IsNullOrEmpty(s)) return "";
+        if (s.IndexOf('\n') >= 0) return s;
+        var sb = new StringBuilder(s.Length + 8);
+        int col = 0;
+        for (int i = 0; i < s.Length; i++)
         {
-            // 始终按原图宽高比：以文字需要的高度反推宽度，超宽则整体等比缩小
-            h = Mathf.Max(h, prefH + 40f);
-            w = h * _bubbleAspect;
-            if (w < minW)
+            sb.Append(s[i]);
+            col++;
+            if (col >= BubbleCharsPerLine && i + 1 < s.Length)
             {
-                w = minW;
-                h = w / _bubbleAspect;
+                sb.Append('\n');
+                col = 0;
             }
-            if (w > maxW)
-            {
-                w = maxW;
-                h = w / _bubbleAspect;
-            }
-            // 等比后仍装不下字：允许高度再涨一点，但宽度锁在 maxW（略裁内边距，不压扁图）
-            if (h < prefH + 36f)
-                h = prefH + 36f;
         }
+        return sb.ToString();
+    }
 
-        _root.sizeDelta = new Vector2(w, h);
+    /// <summary>气泡尺寸固定，长句分行，不随字数拉大。</summary>
+    void FitBubbleSize()
+    {
+        if (_root == null) return;
+        _root.sizeDelta = new Vector2(FixedBubbleW, FixedBubbleH);
         _root.localScale = Vector3.one;
     }
 
@@ -379,5 +367,20 @@ public class BattleHeadTalkUI : MonoBehaviour
         _follow = null;
         if (_group != null) _group.alpha = 1f;
         if (_root != null) _root.gameObject.SetActive(false);
+        ReleaseStoryBgm();
+    }
+
+    void AcquireStoryBgm()
+    {
+        if (_storyBgmHeld) return;
+        _storyBgmHeld = true;
+        GameBgm.BeginBattleStory();
+    }
+
+    void ReleaseStoryBgm()
+    {
+        if (!_storyBgmHeld) return;
+        _storyBgmHeld = false;
+        GameBgm.EndBattleStory();
     }
 }

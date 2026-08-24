@@ -83,6 +83,13 @@ public class GuildHallUI : MonoBehaviour
         StartCoroutine(StaminaHudLoop());
     }
 
+    void Start()
+    {
+        // 首次进城镇要接片头：不要在 Loading 尚未关掉时就把黑幕拆掉、把大厅亮出来。
+        if (ShouldHideTownForIntro) return;
+        TutorialDirector.ClearTownBlockers();
+    }
+
     void EnsureIntroCover()
     {
         if (_introCover != null) return;
@@ -90,6 +97,10 @@ public class GuildHallUI : MonoBehaviour
         if (_introCover == null)
             _introCover = gameObject.AddComponent<CanvasGroup>();
     }
+
+    public static bool IsChromeVisible =>
+        Instance != null
+        && (Instance._introCover == null || Instance._introCover.alpha > 0.5f);
 
     /// <summary>片头与开场剧情期间隐藏/恢复公会大厅 UI。</summary>
     public static void SetTownChromeVisible(bool visible)

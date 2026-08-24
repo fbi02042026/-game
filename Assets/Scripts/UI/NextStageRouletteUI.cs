@@ -69,6 +69,14 @@ public class NextStageRouletteUI : MonoBehaviour
     float _offset;
     bool _stopRequested;
 
+    public bool IsResultReady =>
+        enterButton != null && enterButton.gameObject.activeSelf;
+
+    public string ResultLabel =>
+        resultNameText != null ? resultNameText.text : (_resultName != null ? _resultName.text : "");
+
+    public string SubTitle => subTitleText != null ? subTitleText.text : "";
+
     /// <summary>打开轮盘。stage.type 必须已由 StageRoller 抽好。</summary>
     public static void Show(int chapter, StageData stage, Action<StageData> onEnter)
     {

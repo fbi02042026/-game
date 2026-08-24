@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 离线收益弹窗（农场金币）。
+/// 离线收益弹窗（农场金币）。DontDestroyOnLoad；Canvas 规范与全项目一致（Screen Space - Camera）。
 /// </summary>
 public class OfflineRewardPopup : MonoBehaviour
 {
@@ -12,6 +12,8 @@ public class OfflineRewardPopup : MonoBehaviour
     GameObject _root;
     Text _body;
     Action _onClose;
+
+    public bool IsOpen => _root != null && _root.activeSelf;
 
     public static void Show(long gold, double minutes, Action onClose = null)
     {
@@ -23,15 +25,29 @@ public class OfflineRewardPopup : MonoBehaviour
         Ensure().Open(gold, minutes, onClose);
     }
 
+    public static void HideIfOpen()
+    {
+        if (Instance != null)
+            Instance.Close();
+    }
+
     static OfflineRewardPopup Ensure()
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            Instance.EnsureCanvasShell();
+            return Instance;
+        }
         var go = new GameObject("OfflineRewardPopup");
         DontDestroyOnLoad(go);
         return go.AddComponent<OfflineRewardPopup>();
     }
 
-    void Awake() => Instance = this;
+    void Awake()
+    {
+        Instance = this;
+        EnsureCanvasShell();
+    }
 
     void OnDestroy()
     {
@@ -41,25 +57,36 @@ public class OfflineRewardPopup : MonoBehaviour
     void Open(long gold, double minutes, Action onClose)
     {
         _onClose = onClose;
-        BuildIfNeeded();
+        EnsureCanvasShell();
+        BuildContentIfNeeded();
+        if (_root == null)
+        {
+            Debug.LogWarning("[OfflineRewardPopup] UI 未就绪，跳过离线收益弹窗");
+            _onClose?.Invoke();
+            _onClose = null;
+            return;
+        }
+
         if (_body != null)
             _body.text = $"离线 {minutes:F0} 分钟\n已到账金币 +{gold}";
-        if (_root != null)
-        {
-            _root.SetActive(true);
-            _root.transform.SetAsLastSibling();
-        }
+        _root.SetActive(true);
+        _root.transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
     }
 
-    void BuildIfNeeded()
+    /// <summary>Canvas 必须先于 GraphicRaycaster；切场景后 Open 时刷新 worldCamera。</summary>
+    void EnsureCanvasShell()
+    {
+        var canvas = GetComponent<Canvas>();
+        if (canvas == null)
+            canvas = gameObject.AddComponent<Canvas>();
+        UICanvasSetup.Apply(canvas, Camera.main);
+        canvas.sortingOrder = 980;
+    }
+
+    void BuildContentIfNeeded()
     {
         if (_root != null) return;
-        var canvas = gameObject.GetComponent<Canvas>() ?? gameObject.AddComponent<Canvas>();
-        if (gameObject.GetComponent<GraphicRaycaster>() == null)
-            gameObject.AddComponent<GraphicRaycaster>();
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 980;
 
         _root = new GameObject("Root", typeof(RectTransform));
         _root.transform.SetParent(transform, false);
@@ -96,7 +123,6 @@ public class OfflineRewardPopup : MonoBehaviour
         title.fontSize = 30;
         title.alignment = TextAnchor.MiddleCenter;
         title.color = Color.white;
-        if (title.font == null) title.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
 
         var bodyGo = new GameObject("Body", typeof(RectTransform), typeof(Text));
         bodyGo.transform.SetParent(panel.transform, false);
@@ -108,7 +134,6 @@ public class OfflineRewardPopup : MonoBehaviour
         _body.fontSize = 24;
         _body.alignment = TextAnchor.MiddleCenter;
         _body.color = Color.white;
-        if (_body.font == null) _body.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
 
         var btn = new GameObject("Ok", typeof(RectTransform), typeof(Image), typeof(Button));
         btn.transform.SetParent(panel.transform, false);
@@ -129,8 +154,10 @@ public class OfflineRewardPopup : MonoBehaviour
         btnTxt.fontSize = 24;
         btnTxt.alignment = TextAnchor.MiddleCenter;
         btnTxt.color = Color.white;
-        if (btnTxt.font == null) btnTxt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         btn.GetComponent<Button>().onClick.AddListener(Close);
+
+        _root.SetActive(false);
+        GameFonts.ApplyToHierarchy(transform);
     }
 
     void Close()

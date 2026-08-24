@@ -3,12 +3,12 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// Boot 入口：初始化持久对象与存档，显示登录界面；登录后再进 Town。
-/// 流程：Boot(登录) → Town(主界面) → 冒险 → Battle。
+/// Boot 入口：初始化持久对象与存档，先显示健康游戏忠告，再进入登录界面。
+/// 流程：Boot(健康忠告 → 登录) → Town(主界面) → 冒险 → Battle。
 /// </summary>
 public class BootManager : MonoBehaviour
 {
-    const string LoginPrefabPath = "Prefabs/Login/LoginUI";
+    const string LoginPrefabPath = ContentPaths.Prefab.Login;
 
     [Header("加载延迟")]
     public float loadDelay = 0.3f;
@@ -49,7 +49,8 @@ public class BootManager : MonoBehaviour
     {
         WeChatMiniGameConfig.EnsureDesignResolution();
         if (!GameSceneGate.IsBoot) return;
-        ShowLogin();
+        HideBootVeil();
+        HealthNoticeUI.Present(ShowLogin);
     }
 
     static GameObject _bootVeil;

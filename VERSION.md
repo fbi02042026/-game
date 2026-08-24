@@ -47,12 +47,12 @@ git show v0.3.3:VERSION.md
 - 小怪技能按 `attackKit` 播弹（魔法不再误用弓箭）
 - 怪物间距加大；受击血条置顶；背包占格底色区分
 
-### 软著（V0.3.5 登记版）
-- 说明书：`Docs/软著申请材料_像素冒险裂缝之刃_V0.3.5.md`（含登录/音频/引导体验说明）
-- 源码鉴别：`Docs/软著源码鉴别/` 已重导（含 `GameAudio`、`GameBgm`、`TutorialDirector`、`BattleHeadTalkUI` 等）
-- 附图清单：`Docs/功能截图待办/README.md`（14 张，对齐 V0.3.5）
-- 导出脚本：`Tools/export-softcopyright-source.ps1`；编辑器 `Tools/软著/导出源程序鉴别材料`
-- Git tag 建议：`v0.3.5-ruanzhu`
+### 软著（V0.3.5）
+- 软件名：**像素冒险：裂隙之刃**
+- 功能+截图清单：`Docs/软著申请清单_像素冒险裂隙之刃_V0.3.5.md`
+- 截图待办：`Docs/功能截图待办/README.md`
+- 源码鉴别：`Docs/SoftCopyrightSource/`
+- 导出：编辑器 `Tools/软著/导出源程序鉴别材料`
 
 ---
 

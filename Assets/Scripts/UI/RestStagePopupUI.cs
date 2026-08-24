@@ -32,6 +32,8 @@ public class RestStagePopupUI : MonoBehaviour
     float _prevTimeScale = 1f;
     bool _healed;
 
+    public bool IsOpen => root != null && root.activeSelf;
+
     public static void Show(Action onContinue = null)
     {
         Ensure().Open(onContinue);

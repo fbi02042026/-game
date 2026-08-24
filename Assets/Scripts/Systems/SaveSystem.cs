@@ -3,8 +3,7 @@ using System;
 using System.IO;
 
 /// <summary>
-/// 存档系统：使用JSON存储，兼容云存档和跨平台
-/// 最优方案：JSON明文存储 + 备份 + 加密可选
+/// 存档系统：加密二进制 + 备份；兼容旧 save.json。
 /// </summary>
 public class SaveSystem : Singleton<SaveSystem>
 {
@@ -16,35 +15,36 @@ public class SaveSystem : Singleton<SaveSystem>
     protected override void Awake()
     {
         base.Awake();
-        savePath = Path.Combine(Application.persistentDataPath, "save.json");
-        backupPath = Path.Combine(Application.persistentDataPath, "save_backup.json");
+        savePath = Path.Combine(Application.persistentDataPath, "player.dat");
+        backupPath = Path.Combine(Application.persistentDataPath, "player.bak");
         Load();
+    }
+
+    string ReadSaveJson(string path)
+    {
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+        byte[] blob = File.ReadAllBytes(path);
+        if (SecureCodec.TryReadPayload(blob, out string json))
+            return json;
+        return null;
     }
 
     public void Load()
     {
-        if (!File.Exists(savePath))
+        string json = ReadSaveJson(savePath);
+        if (string.IsNullOrEmpty(json))
+            json = ReadSaveJson(backupPath);
+        if (string.IsNullOrEmpty(json))
         {
-            // 尝试从备份恢复
-            if (File.Exists(backupPath))
-            {
-                try
-                {
-                    string backupJson = File.ReadAllText(backupPath);
-                    _data = JsonUtility.FromJson<SaveData>(backupJson);
-                    if (_data != null)
-                    {
-                        FinalizeLoadedData(_data);
-                        Debug.Log("[SaveSystem] 从备份恢复存档成功");
-                        Save();
-                        return;
-                    }
-                }
-                catch (Exception e)
-                {
-                    Debug.LogWarning("[SaveSystem] 备份恢复失败：" + e.Message);
-                }
-            }
+            string legacy = Path.Combine(Application.persistentDataPath, "save.json");
+            string legacyBak = Path.Combine(Application.persistentDataPath, "save_backup.json");
+            json = ReadSaveJson(legacy);
+            if (string.IsNullOrEmpty(json))
+                json = ReadSaveJson(legacyBak);
+        }
+
+        if (string.IsNullOrEmpty(json))
+        {
             _data = CreateFreshSave();
             Save();
             return;
@@ -52,38 +52,15 @@ public class SaveSystem : Singleton<SaveSystem>
 
         try
         {
-            string json = File.ReadAllText(savePath);
             _data = JsonUtility.FromJson<SaveData>(json);
             if (_data == null)
-            {
                 throw new Exception("反序列化返回null");
-            }
-
             FinalizeLoadedData(_data);
             Debug.Log($"[SaveSystem] 存档加载成功，金币：{_data.totalGold}，天赋数：{_data.talents.Count}");
         }
         catch (Exception e)
         {
-            Debug.LogWarning("[SaveSystem] 存档损坏，尝试从备份恢复：" + e.Message);
-            if (File.Exists(backupPath))
-            {
-                try
-                {
-                    string backupJson = File.ReadAllText(backupPath);
-                    _data = JsonUtility.FromJson<SaveData>(backupJson);
-                    if (_data != null)
-                    {
-                        FinalizeLoadedData(_data);
-                        Debug.Log("[SaveSystem] 备份恢复成功");
-                        Save();
-                        return;
-                    }
-                }
-                catch (Exception be)
-                {
-                    Debug.LogWarning("[SaveSystem] 备份恢复异常：" + be.Message);
-                }
-            }
+            Debug.LogWarning("[SaveSystem] 存档损坏：" + e.Message);
             _data = CreateFreshSave();
             Save();
         }
@@ -97,15 +74,12 @@ public class SaveSystem : Singleton<SaveSystem>
         _data.lastSaveTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         try
         {
-            // 先备份旧存档
-            if (File.Exists(savePath))
-            {
-                File.Copy(savePath, backupPath, true);
-            }
-
             _data.SyncListsFromRuntime();
-            string json = JsonUtility.ToJson(_data, true);
-            File.WriteAllText(savePath, json);
+            string json = JsonUtility.ToJson(_data, false);
+            byte[] blob = SecureCodec.EncryptUtf8(json);
+            if (File.Exists(savePath))
+                File.Copy(savePath, backupPath, true);
+            File.WriteAllBytes(savePath, blob);
             Debug.Log("[SaveSystem] 存档保存成功");
         }
         catch (Exception e)
@@ -162,7 +136,8 @@ public class SaveSystem : Singleton<SaveSystem>
     {
         _data.SyncListsFromRuntime();
         string json = JsonUtility.ToJson(_data);
-        CloudSaveBridge.UploadJson(json, ok =>
+        string payload = Convert.ToBase64String(SecureCodec.EncryptUtf8(json));
+        CloudSaveBridge.UploadPayload(payload, ok =>
         {
             if (ok) Debug.Log("[SaveSystem] 云存档上传成功（或本地镜像）");
             else Debug.LogWarning("[SaveSystem] 云存档上传未完成（等待微信 SDK）");
@@ -171,15 +146,21 @@ public class SaveSystem : Singleton<SaveSystem>
 
     public void DownloadFromCloud(Action<bool> onComplete)
     {
-        CloudSaveBridge.DownloadJson(json =>
+        CloudSaveBridge.DownloadPayload(payload =>
         {
-            if (string.IsNullOrEmpty(json))
+            if (string.IsNullOrEmpty(payload))
             {
                 onComplete?.Invoke(false);
                 return;
             }
             try
             {
+                string json = payload;
+                byte[] raw = null;
+                try { raw = Convert.FromBase64String(payload); }
+                catch { raw = null; }
+                if (raw != null && SecureCodec.TryReadPayload(raw, out string dec))
+                    json = dec;
                 var loaded = JsonUtility.FromJson<SaveData>(json);
                 if (loaded == null)
                 {
@@ -203,14 +184,18 @@ public class SaveSystem : Singleton<SaveSystem>
     public void DeleteLocalSaveAndReset()
     {
         if (string.IsNullOrEmpty(savePath))
-            savePath = Path.Combine(Application.persistentDataPath, "save.json");
+            savePath = Path.Combine(Application.persistentDataPath, "player.dat");
         if (string.IsNullOrEmpty(backupPath))
-            backupPath = Path.Combine(Application.persistentDataPath, "save_backup.json");
+            backupPath = Path.Combine(Application.persistentDataPath, "player.bak");
 
         try
         {
             if (File.Exists(savePath)) File.Delete(savePath);
             if (File.Exists(backupPath)) File.Delete(backupPath);
+            string legacy = Path.Combine(Application.persistentDataPath, "save.json");
+            string legacyBak = Path.Combine(Application.persistentDataPath, "save_backup.json");
+            if (File.Exists(legacy)) File.Delete(legacy);
+            if (File.Exists(legacyBak)) File.Delete(legacyBak);
         }
         catch (Exception e)
         {

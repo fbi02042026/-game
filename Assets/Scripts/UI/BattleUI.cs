@@ -501,19 +501,19 @@ public class BattleUI : MonoBehaviour
         SetSlotRootActive(mercSlot1, true);
         SetSlotRootActive(mercSlot2, true);
 
-        if (GameConfig.SOLO_PLAYER_BATTLE && !showTutorialMerc)
+        bool lockExtraSlots = (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && !showTutorialMerc;
+        if (lockExtraSlots)
             mercSlot1?.ShowUnavailable("锁定");
         else
             mercSlot1?.SetLocked(false);
 
-        // 第 3 槽：单人模式始终锁定占位，不隐藏
-        if (GameConfig.SOLO_PLAYER_BATTLE)
-            mercSlot2?.ShowUnavailable("锁定");
+        if (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle)
+            mercSlot2?.KeepArtistDefault();
         else
             mercSlot2?.SetLocked(false);
 
-        SetAvatarRootActive(merc1SkillAvatar, !GameConfig.SOLO_PLAYER_BATTLE || showTutorialMerc);
-        SetAvatarRootActive(merc2SkillAvatar, !GameConfig.SOLO_PLAYER_BATTLE);
+        SetAvatarRootActive(merc1SkillAvatar, showTutorialMerc || !(GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle));
+        SetAvatarRootActive(merc2SkillAvatar, !(GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle));
     }
 
     public void ApplySoloBattleHudPublic() => ApplySoloBattleHud();
@@ -532,8 +532,8 @@ public class BattleUI : MonoBehaviour
     {
         WireSlotClick(playerSlot, OnPlayerSkillClick);
         bool tutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
-        if (GameConfig.SOLO_PLAYER_BATTLE && !tutorialMerc) return;
-        if (GameConfig.SOLO_PLAYER_BATTLE && tutorialMerc)
+        if ((GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && !tutorialMerc) return;
+        if ((GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && tutorialMerc)
         {
             WireSlotClick(mercSlot1, () => OnMercSkillClick(0));
             return;
@@ -644,6 +644,7 @@ public class BattleUI : MonoBehaviour
                 gridX = gx,
                 gridY = gy
             };
+            ui.CaptureDefaultVisual();
             list.Add(ui);
         }
         gridCells = list;
@@ -960,8 +961,8 @@ public class BattleUI : MonoBehaviour
         for (int i = 0; i < gridCells.Count; i++)
         {
             var c = gridCells[i];
-            if (c != null && c.root != null && c.gridX == gx && c.gridY == gy)
-                return c.root.GetComponent<RectTransform>();
+            if (c != null && c.gridX == gx && c.gridY == gy)
+                return c.VisualRect;
         }
         return null;
     }
@@ -998,7 +999,7 @@ public class BattleUI : MonoBehaviour
             playerSlot.SetPortrait(playerIcon);
         }
 
-        if (GameConfig.SOLO_PLAYER_BATTLE)
+        if (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle)
         {
             ApplySoloBattleHud();
             if (TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud)
@@ -1566,6 +1567,28 @@ public class GridCellUI
     public int gridY;                   // 格子Y坐标
     public EquipInstance equippedItem;  // 当前装备的物品
 
+    Color _artistBg;
+    Color _artistFrame;
+    bool _artistCached;
+
+    public RectTransform VisualRect
+    {
+        get
+        {
+            if (root != null) return root.GetComponent<RectTransform>();
+            if (cellBg != null) return cellBg.rectTransform;
+            return null;
+        }
+    }
+
+    public void CaptureDefaultVisual()
+    {
+        if (_artistCached) return;
+        if (cellBg != null) _artistBg = cellBg.color;
+        if (rarityFrame != null) _artistFrame = rarityFrame.color;
+        _artistCached = true;
+    }
+
     static readonly Color EmptyBg = new Color(0.14f, 0.11f, 0.09f, 0.82f);
     static readonly Color OccupiedBg = new Color(0.24f, 0.30f, 0.38f, 0.95f);
     static readonly Color EquippedBg = new Color(0.30f, 0.26f, 0.16f, 0.95f);
@@ -1658,13 +1681,15 @@ public class GridCellUI
 
     public void SetEmptyVisual()
     {
-        if (cellBg != null) cellBg.color = EmptyBg;
+        CaptureDefaultVisual();
+        if (cellBg != null) cellBg.color = _artistBg;
         if (rarityFrame != null && itemIcon != null && !itemIcon.gameObject.activeSelf)
-            rarityFrame.color = EmptyFrame;
+            rarityFrame.color = _artistFrame;
     }
 
     public void SetOccupiedVisual(bool equipped)
     {
+        CaptureDefaultVisual();
         if (cellBg != null)
             cellBg.color = equipped ? EquippedBg : OccupiedBg;
     }
@@ -1680,7 +1705,7 @@ public class GridCellUI
             itemIcon.sprite = null;
             itemIcon.gameObject.SetActive(false);
         }
-        if (rarityFrame != null) rarityFrame.color = EmptyFrame;
+        if (rarityFrame != null) rarityFrame.color = _artistCached ? _artistFrame : EmptyFrame;
         SetEmptyVisual();
     }
 

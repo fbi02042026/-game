@@ -14,12 +14,14 @@ public class StoryBeat
     /// <summary>-1 左 / 0 旁白 / 1 右</summary>
     public int speaker = 1;
     public string[] choices;
-    /// <summary>Resources/UI/StoryBg 文件名；空则沿用上一句，整段都空则不盖战场。</summary>
+    /// <summary>Resources/Story/Backgrounds 资源 ID；空则沿用上一句。</summary>
     public string backgroundId;
     /// <summary>单人立绘居中（会长/前台小姐等）</summary>
     public bool soloCentered;
-    /// <summary>剧情道具叠图（如委托书）；Resources/UI/StoryProps 文件名。</summary>
+    /// <summary>剧情道具叠图（如委托书）；Resources/Story/Props 资源 ID。</summary>
     public string propId;
+    /// <summary>换背景时跳过「地点揭示」黑场（开场已有黑幕时用，避免再等几秒）。</summary>
+    public bool skipLocationReveal;
 
     public StoryBeat Bg(string id)
     {
@@ -32,6 +34,12 @@ public class StoryBeat
         propId = id;
         return this;
     }
+
+    public StoryBeat SkipReveal()
+    {
+        skipLocationReveal = true;
+        return this;
+    }
 }
 
 /// <summary>播 DialogueUI 台词序列。城镇/战斗共用。</summary>
@@ -42,6 +50,7 @@ public class StoryDirector : Singleton<StoryDirector>
     float _savedTimeScale = 1f;
     bool _pausedTime;
     string _introducedBg;
+    bool _keepSceneArt;
 
     public bool IsPlaying { get; private set; }
 
@@ -120,8 +129,9 @@ public class StoryDirector : Singleton<StoryDirector>
         Debug.Log($"[StoryDirector] DialogueUI 已就绪 overlay sort={canvas.sortingOrder} scale={go.transform.localScale}");
     }
 
-    public void Play(IList<StoryBeat> beats, Action onDone, Action<int> onChoice = null)
+    public void Play(IList<StoryBeat> beats, Action onDone, Action<int> onChoice = null, bool keepSceneArt = false)
     {
+        _keepSceneArt = keepSceneArt;
         if (_play != null) StopCoroutine(_play);
         _play = StartCoroutine(PlayRoutine(beats, onDone, onChoice));
     }
@@ -136,16 +146,24 @@ public class StoryDirector : Singleton<StoryDirector>
         _introducedBg = null;
     }
 
+    static bool IsBattleScene()
+    {
+        return UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == GameSceneManager.BATTLE_SCENE;
+    }
+
     IEnumerator PlayRoutine(IList<StoryBeat> beats, Action onDone, Action<int> onChoice)
     {
         IsPlaying = true;
+        bool battleStoryBgm = IsBattleScene();
+        if (battleStoryBgm)
+            GameBgm.BeginBattleStory();
         SpeechBubbleTalker.SetSuppressed(true);
         PauseGame();
         var ui = EnsureUi();
         if (ui == null || beats == null || beats.Count == 0)
         {
             Debug.LogError("[StoryDirector] 无法播放：DialogueUI 或台词为空");
-            Finish(onDone);
+            Finish(onDone, battleStoryBgm);
             yield break;
         }
         PrepareCanvas(ui);
@@ -163,13 +181,21 @@ public class StoryDirector : Singleton<StoryDirector>
                 // 换场景前先去掉上一句道具，再播地点揭示（委托书 → 公会大厅）
                 ui.SetStoryProp(null);
                 ui.SetSceneBackground(StoryBackgrounds.Get(b.backgroundId));
-                string loc = StoryBackgrounds.DisplayName(b.backgroundId);
-                if (!string.IsNullOrEmpty(loc))
-                    yield return ui.PlayLocationReveal(loc);
+                if (b.skipLocationReveal)
+                {
+                    // 只跳过「地点名黑场」，办公室/大厅插图和立绘仍要留下
+                    ui.SetRevealBlack(0f);
+                    ui.SetBgDim(0.42f);
+                    ui.SetSceneBackgroundAlpha(1f);
+                    ui.SetDialogueChromeVisible(true);
+                }
                 else
                 {
-                    // 无地点名也压暗再出窗
-                    yield return ui.PlayLocationReveal("");
+                    string loc = StoryBackgrounds.DisplayName(b.backgroundId);
+                    if (!string.IsNullOrEmpty(loc))
+                        yield return ui.PlayLocationReveal(loc);
+                    else
+                        yield return ui.PlayLocationReveal("");
                 }
                 _introducedBg = b.backgroundId;
             }
@@ -204,6 +230,8 @@ public class StoryDirector : Singleton<StoryDirector>
                 _play = null;
                 ResumeGame();
                 SpeechBubbleTalker.SetSuppressed(false);
+                if (battleStoryBgm)
+                    GameBgm.EndBattleStory();
                 onChoice?.Invoke(picked);
                 yield break;
             }
@@ -212,8 +240,14 @@ public class StoryDirector : Singleton<StoryDirector>
             if (skipRest) break;
         }
 
-        ui.Hide();
-        Finish(onDone);
+        if (_keepSceneArt)
+        {
+            ui.SetDialogueChromeVisible(false);
+            ui.SetStoryProp(null);
+        }
+        else
+            ui.Hide();
+        Finish(onDone, battleStoryBgm);
     }
 
     void PauseGame()
@@ -232,12 +266,14 @@ public class StoryDirector : Singleton<StoryDirector>
         _pausedTime = false;
     }
 
-    void Finish(Action onDone)
+    void Finish(Action onDone, bool battleStoryBgm = false)
     {
         IsPlaying = false;
         _play = null;
         ResumeGame();
         SpeechBubbleTalker.SetSuppressed(false);
+        if (battleStoryBgm)
+            GameBgm.EndBattleStory();
         onDone?.Invoke();
     }
 

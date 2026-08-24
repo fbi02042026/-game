@@ -54,6 +54,9 @@ public class EquipDropPopupUI : MonoBehaviour
     int _selected;
     Action<EquipInstance, bool> _onDone;
 
+    public bool IsOpen => root != null && root.activeSelf;
+    public EquipDropMode Mode => _mode;
+
     // ===== 对外入口 =====
 
     /// <summary>战斗中掉落一件：自动判断「没装备」还是「要替换」。</summary>
@@ -185,7 +188,13 @@ public class EquipDropPopupUI : MonoBehaviour
                 rt.anchoredPosition = new Vector2((i - (count - 1) * 0.5f) * step, rt.anchoredPosition.y);
 
             var eq = _drops[i];
+            if (eq == null) continue;
             bool sel = i == _selected;
+            eq.template?.ResolveIcon();
+            if (eq.icon == null && eq.template != null)
+                eq.icon = eq.template.icon;
+            if (eq.icon == null && eq.template != null)
+                eq.icon = EquipIcons.Get(eq.template.iconFileName);
             if (c.background != null)
                 c.background.color = sel ? RarityColor(eq.rarity) : new Color(0.18f, 0.16f, 0.22f, 1f);
             if (c.selectedMark != null)

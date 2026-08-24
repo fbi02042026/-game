@@ -94,7 +94,7 @@ public class TownSceneManager : MonoBehaviour
         GameObject titleGo = new GameObject("Title", typeof(Text));
         titleGo.transform.SetParent(canvasGo.transform, false);
         Text titleText = titleGo.GetComponent<Text>();
-        titleText.text = "像素冒险:裂缝之刃";
+        titleText.text = "像素冒险：裂隙之刃";
         titleText.font = _font;
         titleText.fontSize = 72;
         titleText.fontStyle = FontStyle.Bold;

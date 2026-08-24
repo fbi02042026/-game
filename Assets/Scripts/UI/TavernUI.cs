@@ -57,6 +57,7 @@ public class TavernUI : MonoBehaviour, ITownPage
         GameFonts.ApplyToHierarchy(transform);
         EnsurePortraitMotion();
         WireClicks();
+        TavernUI.WarmGuildOverlayCache();
 
         _preloaded = true;
         gameObject.SetActive(false);
@@ -73,7 +74,6 @@ public class TavernUI : MonoBehaviour, ITownPage
 
         Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
-        TownSaveAlign.AlignAll();
     }
 
     /// <summary>轻量隐藏</summary>
@@ -103,36 +103,13 @@ public class TavernUI : MonoBehaviour, ITownPage
     {
         if (_canvasConfigured) return;
         EnsureVisibleTransform();
-        GuildHallUI hall = GetComponentInParent<GuildHallUI>();
-        bool nestedUnderHall = hall != null && hall.gameObject != gameObject;
-
-        if (nestedUnderHall)
-        {
-            var raycaster = GetComponent<GraphicRaycaster>();
-            if (raycaster != null) Destroy(raycaster);
-            var scaler = GetComponent<CanvasScaler>();
-            if (scaler != null) Destroy(scaler);
-            var own = GetComponent<Canvas>();
-            if (own != null) Destroy(own);
-            _canvasConfigured = true;
-            return;
-        }
-
-        Canvas canvas = GetComponent<Canvas>();
-        if (canvas == null)
-            canvas = gameObject.AddComponent<Canvas>();
-        canvas.enabled = true;
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 5;
-        UICanvasSetup.Apply(canvas, Camera.main);
-        if (GetComponent<GraphicRaycaster>() == null)
-            gameObject.AddComponent<GraphicRaycaster>();
+        TownPageCanvas.Configure(gameObject, 5, stripCanvasWhenNested: true);
         _canvasConfigured = true;
     }
 
     static readonly string[] GuildHideWhenTavern =
     {
-        "HallScene", "Background", "LeftBar", "RightBar",
+        "LeftBar", "RightBar",
         "MailButton", "NoticeButton", "ActivityButton",
         "RankButton", "ShopButton", "SettingsButton",
         "TitleBadge"
@@ -140,6 +117,12 @@ public class TavernUI : MonoBehaviour, ITownPage
 
     static Transform[] _guildHideCache;
     static Button[] _guildHotspotCache;
+
+    public static void WarmGuildOverlayCache()
+    {
+        if (GuildHallUI.Instance != null)
+            EnsureGuildHideCache(GuildHallUI.Instance);
+    }
 
     public static void SetGuildHallOverlayMode(bool tavernOpen)
     {

@@ -5,11 +5,13 @@ using UnityEngine;
 /// <summary>
 /// 背景音乐：双声道交叉淡入淡出。
 /// Resources 路径（不带扩展名）：
+/// · Audio/BGM/bgm_login    —— 登录界面
 /// · Audio/BGM/bgm_town     —— 主场景（公会大厅等）
 /// · Audio/BGM/bgm_tavern   —— 酒吧/酒馆
 /// · Audio/BGM/bgm_battle   —— 普通/精英战斗
 /// · Audio/BGM/bgm_boss     —— 首领战
 /// · Audio/BGM/bgm_special  —— 恢复/锻造/附魔关
+/// · Audio/BGM/bgm_story    —— 战斗中剧情对话
 /// Loading / 片头等演出期间强制静音；结束后再按当前场景/关卡切回来。
 /// </summary>
 public static class GameBgm
@@ -17,11 +19,13 @@ public static class GameBgm
     public enum Track
     {
         None = 0,
+        Login,
         Town,
         Tavern,
         Battle,
         Boss,
-        Special
+        Special,
+        Story
     }
 
     const string ResRoot = "Audio/BGM/";
@@ -30,11 +34,13 @@ public static class GameBgm
 
     static readonly Dictionary<Track, string> Paths = new Dictionary<Track, string>
     {
+        { Track.Login, "bgm_login" },
         { Track.Town, "bgm_town" },
         { Track.Tavern, "bgm_tavern" },
         { Track.Battle, "bgm_battle" },
         { Track.Boss, "bgm_boss" },
-        { Track.Special, "bgm_special" }
+        { Track.Special, "bgm_special" },
+        { Track.Story, "bgm_story" }
     };
 
     static AudioSource _a;
@@ -42,6 +48,9 @@ public static class GameBgm
     static AudioSource _active;
     static Track _current = Track.None;
     static Track _pendingAfterLoading = Track.None;
+    static Track _restoreAfterStory = Track.None;
+    static int _storyHold;
+    static Coroutine _endStoryCo;
     static bool _loadingMuted;
     static bool _cutsceneMuted;
     static Coroutine _fadeCo;
@@ -115,6 +124,46 @@ public static class GameBgm
         Play(TrackForStage(type), fadeSeconds);
     }
 
+    /// <summary>战斗剧情对话开始：切到剧情曲；可嵌套，结束时再切回战斗曲。</summary>
+    public static void BeginBattleStory(float fadeSeconds = DefaultFade)
+    {
+        EnsureHost();
+        if (_endStoryCo != null)
+        {
+            _runner.StopCoroutine(_endStoryCo);
+            _endStoryCo = null;
+        }
+        _storyHold++;
+        if (_current != Track.Story && _current != Track.None)
+            _restoreAfterStory = _current;
+        else if (_restoreAfterStory == Track.None)
+            _restoreAfterStory = GuessTrackFromScene();
+        Play(Track.Story, fadeSeconds);
+    }
+
+    /// <summary>战斗剧情对话结束：短延迟后恢复原战斗曲，避免句间来回切。</summary>
+    public static void EndBattleStory(float fadeSeconds = DefaultFade)
+    {
+        EnsureHost();
+        _storyHold = Mathf.Max(0, _storyHold - 1);
+        if (_storyHold > 0) return;
+        if (_endStoryCo != null) _runner.StopCoroutine(_endStoryCo);
+        _endStoryCo = _runner.StartCoroutine(RestoreAfterStoryDelay(fadeSeconds));
+    }
+
+    static IEnumerator RestoreAfterStoryDelay(float fadeSeconds)
+    {
+        yield return new WaitForSecondsRealtime(0.28f);
+        _endStoryCo = null;
+        if (_storyHold > 0 || _loadingMuted) yield break;
+        Track want = _restoreAfterStory;
+        _restoreAfterStory = Track.None;
+        if (want == Track.None || want == Track.Story)
+            want = GuessTrackFromScene();
+        if (want != Track.None)
+            Play(want, fadeSeconds);
+    }
+
     public static void Stop(float fadeSeconds = DefaultFade)
     {
         EnsureHost();
@@ -133,6 +182,13 @@ public static class GameBgm
     public static void MuteForLoading(float fadeSeconds = 0.35f)
     {
         EnsureHost();
+        _storyHold = 0;
+        _restoreAfterStory = Track.None;
+        if (_endStoryCo != null)
+        {
+            _runner.StopCoroutine(_endStoryCo);
+            _endStoryCo = null;
+        }
         _loadingMuted = true;
         if (_fadeCo != null) _runner.StopCoroutine(_fadeCo);
         _fadeCo = _runner.StartCoroutine(FadeOutAll(Mathf.Max(0.05f, fadeSeconds), pauseWhenDone: true));
@@ -219,7 +275,9 @@ public static class GameBgm
     static Track GuessTrackFromScene()
     {
         var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-        if (scene.name == GameSceneManager.BOOT_SCENE || scene.name == GameSceneManager.TOWN_SCENE)
+        if (scene.name == GameSceneManager.BOOT_SCENE)
+            return Track.Login;
+        if (scene.name == GameSceneManager.TOWN_SCENE)
             return Track.Town;
         if (scene.name == GameSceneManager.BATTLE_SCENE)
         {

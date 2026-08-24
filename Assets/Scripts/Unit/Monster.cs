@@ -674,12 +674,15 @@ public class Monster : UnitBase
         float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
 
         AttackVfxKit kit = MonsterAttackStyleTable.GetVfxKit(_swingStyle);
-        // 优先用技能配置的 attackKit（魔法爆裂=Orb，不要强行改成弓箭）
-        var skillCfg = SkillRegistry.Instance?.Get(_skillId);
-        if (skillCfg != null && skillCfg.attackKit != AttackVfxKit.None)
-            kit = skillCfg.attackKit;
-        else if (MonsterAttackStyleTable.IsRanged(_swingStyle) || MonsterAttackStyleTable.IsRanged(_attackStyle))
-            kit = AttackVfxKit.Orb;
+        // 小怪远程强制弓箭（vfx_bow_fly / vfx_bow_hit），不要被技能表 Orb 盖掉
+        if (!_isBossUnit && MonsterAttackStyleTable.IsRanged(_swingStyle))
+            kit = AttackVfxKit.Bow;
+        else
+        {
+            var skillCfg = SkillRegistry.Instance?.Get(_skillId);
+            if (skillCfg != null && skillCfg.attackKit != AttackVfxKit.None)
+                kit = skillCfg.attackKit;
+        }
         Vector3 firePos = GetFirePosition();
         Vector3 hitPos = primaryTarget != null ? primaryTarget.GetHitPosition() : firePos;
 

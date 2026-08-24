@@ -4,58 +4,78 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 冒险日志：怪物/Boss/装备/佣兵/剧情/成就/探索统计。
-/// 走底栏「冒险日志」入口，符合 IA。
+/// 冒险日志：以 Resources/Prefabs/Town/AdventureLogUI 预制体为准。
+/// 只绑定节点、改显隐/文本；不重建层级、不覆盖预制体资源。
 /// </summary>
 public class AdventureLogUI : MonoBehaviour, ITownPage
 {
     public static AdventureLogUI Instance { get; private set; }
-
     public MainNavTab Tab => MainNavTab.Log;
+
+    public bool IsPageVisible =>
+        gameObject.activeInHierarchy && _root != null && _root.activeSelf;
+
+    public string CurrentTabName =>
+        (int)_tab >= 0 && (int)_tab < TabNames.Length ? TabNames[(int)_tab] : "";
+
+    public string BodyText => _probeBody ?? "";
 
     enum LogTab
     {
-        Explore = 0,
-        Monster = 1,
-        Boss = 2,
-        Equip = 3,
-        Merc = 4,
-        Story = 5,
-        Achievement = 6,
-        World = 7
+        MainStory = 0,
+        SideStory = 1,
+        Monster = 2,
+        Merc = 3,
+        Achievement = 4,
+        World = 5
+    }
+
+    struct LogRow
+    {
+        public string Title;
+        public string Progress;
+        public string Detail;
+        public bool Locked;
     }
 
     static readonly string[] TabNames =
     {
-        "探索", "怪物", "Boss", "装备", "佣兵", "剧情", "成就", "世界"
+        "主线", "支线", "怪物", "佣兵", "成就", "世界"
     };
 
     GameObject _root;
-    Text _title;
-    Text _body;
-    readonly List<Button> _tabBtns = new List<Button>();
-    readonly List<Image> _tabBgs = new List<Image>();
-    LogTab _tab = LogTab.Explore;
+    Text _activeTitle;
+    Text _activeDesc;
+    Text _activeObj;
+    Text _activeProg;
+    Transform _listContent;
+    GameObject _claim;
+    GameObject _rowTemplate;
+    string _probeBody;
+    readonly List<GameObject> _tabSelectGems = new List<GameObject>();
+    readonly List<GameObject> _spawnedRows = new List<GameObject>();
+    LogTab _tab = LogTab.MainStory;
     bool _preloaded;
+    bool _bound;
     ScrollRect _scroll;
 
     public void PreloadOnce()
     {
         if (_preloaded) return;
-        BuildIfNeeded();
+        BindPrefab();
         HidePage();
         _preloaded = true;
     }
 
     public void ShowPage()
     {
-        BuildIfNeeded();
+        BindPrefab();
         TownSaveAlign.AlignAll();
         if (_root != null) _root.SetActive(true);
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
+        RedDot.RefreshCommon();
         SelectTab(_tab, force: true);
-        GameFonts.ApplyToHierarchy(transform);
     }
 
     public void HidePage()
@@ -74,119 +94,122 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (Instance == this) Instance = null;
     }
 
-    void BuildIfNeeded()
+    void BindPrefab()
     {
-        if (_root != null) return;
+        if (_bound && _root != null) return;
 
-        var canvas = gameObject.GetComponent<Canvas>();
-        if (canvas == null)
+        _root = transform.Find("Root")?.gameObject;
+        if (_root == null)
         {
-            canvas = gameObject.AddComponent<Canvas>();
-            gameObject.AddComponent<GraphicRaycaster>();
+            Debug.LogError("[AdventureLogUI] 找不到预制体 Root，请使用 Resources/Prefabs/Town/AdventureLogUI");
+            return;
         }
-        UICanvasSetup.Apply(canvas);
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 40;
 
-        _root = new GameObject("Root", typeof(RectTransform));
-        _root.transform.SetParent(transform, false);
-        Stretch(_root.GetComponent<RectTransform>());
+        ConfigureHostCanvasOnce();
 
-        var dim = CreateUi("Dim", _root.transform, typeof(Image));
-        Stretch(dim.GetComponent<RectTransform>());
-        dim.GetComponent<Image>().color = new Color(0.08f, 0.07f, 0.1f, 0.92f);
+        _activeTitle = FindText("ActiveTitle");
+        _activeDesc = FindText("ActiveDesc");
+        var art = FindTransform("Art");
+        _activeObj = art != null
+            ? art.Find("Objective")?.GetComponent<Text>()
+            : FindText("Objective");
+        _activeProg = art != null
+            ? art.Find("Progress")?.GetComponent<Text>()
+            : FindText("Progress");
 
-        var panel = CreateUi("Panel", _root.transform, typeof(Image));
-        var prt = panel.GetComponent<RectTransform>();
-        prt.anchorMin = new Vector2(0.04f, 0.12f);
-        prt.anchorMax = new Vector2(0.96f, 0.9f);
-        prt.offsetMin = prt.offsetMax = Vector2.zero;
-        panel.GetComponent<Image>().color = new Color(0.14f, 0.12f, 0.16f, 0.98f);
+        _scroll = FindTransform("Scroll")?.GetComponent<ScrollRect>();
+        _listContent = transform.Find("Root/Frame/Paper/Scroll/Viewport/Content");
+        if (_listContent == null && _scroll != null)
+            _listContent = _scroll.content;
 
-        _title = CreateText(panel.transform, "Title", "冒险日志", 32, TextAnchor.MiddleLeft);
-        var trt = _title.rectTransform;
-        trt.anchorMin = new Vector2(0.04f, 0.9f);
-        trt.anchorMax = new Vector2(0.7f, 0.98f);
-        trt.offsetMin = trt.offsetMax = Vector2.zero;
+        _claim = FindTransform("ClaimAch")?.gameObject;
+        PrepareDoneTemplate();
+        WireTabs();
+        WireButtons();
+        BindRewardRedDots();
+        RedDot.RefreshCommon();
+        _bound = true;
+    }
 
-        var hint = CreateText(panel.transform, "Hint", "数据来自存档与配置", 16, TextAnchor.MiddleRight);
-        hint.color = new Color(0.7f, 0.65f, 0.55f);
-        var hrt = hint.rectTransform;
-        hrt.anchorMin = new Vector2(0.55f, 0.9f);
-        hrt.anchorMax = new Vector2(0.96f, 0.98f);
-        hrt.offsetMin = hrt.offsetMax = Vector2.zero;
+    void ConfigureHostCanvasOnce()
+    {
+        TownPageCanvas.Configure(gameObject, 40, stripCanvasWhenNested: false);
+    }
 
-        var tabRow = CreateUi("Tabs", panel.transform);
-        var tabRt = tabRow.GetComponent<RectTransform>();
-        tabRt.anchorMin = new Vector2(0.03f, 0.78f);
-        tabRt.anchorMax = new Vector2(0.97f, 0.88f);
-        tabRt.offsetMin = tabRt.offsetMax = Vector2.zero;
+    void PrepareDoneTemplate()
+    {
+        if (_rowTemplate != null) return;
+        var done = FindTransform("已完成");
+        if (done == null) return;
 
-        float w = 1f / TabNames.Length;
+        if (_listContent != null && done.parent != _listContent)
+            done.SetParent(_listContent, false);
+
+        var le = done.GetComponent<LayoutElement>();
+        if (le == null) le = done.gameObject.AddComponent<LayoutElement>();
+        float h = Mathf.Max(72f, ((RectTransform)done).rect.height);
+        if (h < 8f) h = 88f;
+        le.minHeight = h;
+        le.preferredHeight = h;
+        le.flexibleWidth = 1f;
+
+        _rowTemplate = done.gameObject;
+        _rowTemplate.SetActive(false);
+    }
+
+    void WireTabs()
+    {
+        _tabSelectGems.Clear();
+        var tabs = transform.Find("Root/Frame/Sidebar/Tabs");
+        if (tabs == null) return;
+
         for (int i = 0; i < TabNames.Length; i++)
         {
-            var btnGo = CreateUi("Tab" + i, tabRow.transform, typeof(Image), typeof(Button));
-            var brt = btnGo.GetComponent<RectTransform>();
-            brt.anchorMin = new Vector2(i * w, 0f);
-            brt.anchorMax = new Vector2((i + 1) * w, 1f);
-            brt.offsetMin = new Vector2(2f, 2f);
-            brt.offsetMax = new Vector2(-2f, -2f);
-            var img = btnGo.GetComponent<Image>();
-            img.color = new Color(0.25f, 0.22f, 0.28f, 1f);
-            _tabBgs.Add(img);
-            CreateText(btnGo.transform, TabNames[i], 15, TextAnchor.MiddleCenter);
+            var tab = tabs.Find("Tab" + i);
+            if (tab == null) continue;
+            var gem = tab.Find("Gem");
+            _tabSelectGems.Add(gem != null ? gem.gameObject : null);
+            var btn = tab.GetComponent<Button>();
+            if (btn == null) btn = tab.gameObject.AddComponent<Button>();
             int idx = i;
-            btnGo.GetComponent<Button>().onClick.AddListener(() => SelectTab((LogTab)idx));
-            _tabBtns.Add(btnGo.GetComponent<Button>());
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(() => SelectTab((LogTab)idx));
+        }
+    }
+
+    void WireButtons()
+    {
+        var claim = _claim != null ? _claim.GetComponent<Button>() : null;
+        if (claim != null)
+        {
+            claim.onClick.RemoveAllListeners();
+            claim.onClick.AddListener(() =>
+            {
+                AchievementMilestoneUI.Show();
+                RefreshBody();
+                RedDot.RefreshCommon();
+            });
         }
 
-        var scrollGo = CreateUi("Scroll", panel.transform, typeof(Image), typeof(ScrollRect));
-        var srt = scrollGo.GetComponent<RectTransform>();
-        srt.anchorMin = new Vector2(0.04f, 0.05f);
-        srt.anchorMax = new Vector2(0.96f, 0.76f);
-        srt.offsetMin = srt.offsetMax = Vector2.zero;
-        scrollGo.GetComponent<Image>().color = new Color(0.1f, 0.09f, 0.12f, 1f);
-        _scroll = scrollGo.GetComponent<ScrollRect>();
-        _scroll.horizontal = false;
-        _scroll.vertical = true;
-        _scroll.movementType = ScrollRect.MovementType.Clamped;
-
-        var viewport = CreateUi("Viewport", scrollGo.transform, typeof(RectMask2D));
-        Stretch(viewport.GetComponent<RectTransform>());
-        _scroll.viewport = viewport.GetComponent<RectTransform>();
-
-        var content = CreateUi("Content", viewport.transform);
-        var crt = content.GetComponent<RectTransform>();
-        crt.anchorMin = new Vector2(0f, 1f);
-        crt.anchorMax = new Vector2(1f, 1f);
-        crt.pivot = new Vector2(0.5f, 1f);
-        crt.anchoredPosition = Vector2.zero;
-        crt.sizeDelta = new Vector2(0f, 800f);
-        _scroll.content = crt;
-
-        _body = CreateText(content.transform, "", 20, TextAnchor.UpperLeft);
-        _body.horizontalOverflow = HorizontalWrapMode.Wrap;
-        _body.verticalOverflow = VerticalWrapMode.Overflow;
-        var brtBody = _body.rectTransform;
-        brtBody.anchorMin = new Vector2(0f, 1f);
-        brtBody.anchorMax = new Vector2(1f, 1f);
-        brtBody.pivot = new Vector2(0.5f, 1f);
-        brtBody.anchoredPosition = new Vector2(0f, -8f);
-        brtBody.sizeDelta = new Vector2(-24f, 780f);
-
-        var claim = CreateUi("ClaimAch", panel.transform, typeof(Image), typeof(Button));
-        var claimRt = claim.GetComponent<RectTransform>();
-        claimRt.anchorMin = claimRt.anchorMax = new Vector2(0.5f, 0.02f);
-        claimRt.pivot = new Vector2(0.5f, 0f);
-        claimRt.anchoredPosition = new Vector2(0f, 8f);
-        claimRt.sizeDelta = new Vector2(220f, 40f);
-        claim.GetComponent<Image>().color = new Color(0.28f, 0.5f, 0.35f, 1f);
-        CreateText(claim.transform, "领取成就里程", 20, TextAnchor.MiddleCenter);
-        claim.GetComponent<Button>().onClick.AddListener(() =>
+        var close = transform.Find("Root/CloseButton")?.GetComponent<Button>();
+        if (close != null)
         {
-            AchievementMilestoneUI.Show();
-            RefreshBody();
-        });
+            close.onClick.RemoveAllListeners();
+            close.onClick.AddListener(() =>
+            {
+                HidePage();
+                TownHubController.Instance?.OpenGuild();
+            });
+        }
+    }
+
+    void BindRewardRedDots()
+    {
+        var achTab = transform.Find("Root/Frame/Sidebar/Tabs/Tab4");
+        if (achTab != null)
+            RedDot.Bind(achTab, RedDot.Achievement);
+        if (_claim != null)
+            RedDot.Bind(_claim.transform, RedDot.Achievement, new Vector2(-8f, -8f));
     }
 
     void SelectTab(LogTab tab, bool force = false)
@@ -196,252 +219,292 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             RefreshBody();
             return;
         }
+
         _tab = tab;
-        for (int i = 0; i < _tabBgs.Count; i++)
+        for (int i = 0; i < _tabSelectGems.Count; i++)
         {
-            _tabBgs[i].color = i == (int)_tab
-                ? new Color(0.35f, 0.45f, 0.32f, 1f)
-                : new Color(0.25f, 0.22f, 0.28f, 1f);
+            if (_tabSelectGems[i] != null)
+                _tabSelectGems[i].SetActive(i == (int)_tab);
         }
+
+        if (_claim != null)
+            _claim.SetActive(_tab == LogTab.Achievement);
+
         RefreshBody();
     }
 
     void RefreshBody()
     {
-        if (_body == null) return;
-        string text;
+        string title, desc, objective, progress;
+        var rows = new List<LogRow>();
         switch (_tab)
         {
-            case LogTab.Explore: text = BuildExplore(); break;
-            case LogTab.Monster: text = BuildMonsters(false); break;
-            case LogTab.Boss: text = BuildMonsters(true); break;
-            case LogTab.Equip: text = BuildEquip(); break;
-            case LogTab.Merc: text = BuildMerc(); break;
-            case LogTab.Story: text = BuildStory(); break;
-            case LogTab.Achievement: text = BuildAchievement(); break;
-            default: text = BuildWorld(); break;
+            case LogTab.MainStory: FillMain(out title, out desc, out objective, out progress, rows); break;
+            case LogTab.SideStory: FillSide(out title, out desc, out objective, out progress, rows); break;
+            case LogTab.Monster: FillMonsters(out title, out desc, out objective, out progress, rows); break;
+            case LogTab.Merc: FillMerc(out title, out desc, out objective, out progress, rows); break;
+            case LogTab.Achievement: FillAchievement(out title, out desc, out objective, out progress, rows); break;
+            default: FillWorld(out title, out desc, out objective, out progress, rows); break;
         }
-        _body.text = text;
-        float h = Mathf.Max(400f, 28f + text.Length * 0.55f);
-        var brt = _body.rectTransform;
-        brt.sizeDelta = new Vector2(brt.sizeDelta.x, h);
-        if (_scroll != null && _scroll.content != null)
-            _scroll.content.sizeDelta = new Vector2(0f, h + 24f);
+
+        if (_activeTitle != null) _activeTitle.text = title;
+        if (_activeDesc != null) _activeDesc.text = desc;
+        if (_activeObj != null) _activeObj.text = objective;
+        if (_activeProg != null) _activeProg.text = progress;
+
+        RebuildRows(rows);
+
+        var sb = new StringBuilder();
+        sb.AppendLine(title);
+        sb.AppendLine(desc);
+        sb.AppendLine(objective);
+        sb.AppendLine(progress);
+        for (int i = 0; i < rows.Count; i++)
+            sb.AppendLine(rows[i].Title + " " + rows[i].Progress);
+        _probeBody = sb.ToString();
+
         if (_scroll != null)
             _scroll.verticalNormalizedPosition = 1f;
     }
 
-    static string BuildExplore()
+    void FillMain(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
     {
-        var data = SaveSystem.Instance?.Data;
-        var sb = new StringBuilder();
-        int maxCh = data != null ? Mathf.Max(1, data.maxUnlockedChapter) : 1;
-        sb.AppendLine("【探索统计】");
-        sb.AppendLine($"最高解锁章节：第 {maxCh} 章");
-        sb.AppendLine($"公会等级：{(data != null ? data.guildLevel : 1)}");
-        sb.AppendLine($"遗产池：{(data?.legacyEquipPool != null ? data.legacyEquipPool.Count : 0)} 件");
-        sb.AppendLine($"成就点数：{(data != null ? data.totalAchievementPoints : 0)}");
-        sb.AppendLine($"永久佣兵：{(data?.permanentMercs != null ? data.permanentMercs.Count : 0)} 名");
-        sb.AppendLine();
-        sb.AppendLine("章节通关次数：");
-        if (data?.chapterClearCounts != null && data.chapterClearCounts.Count > 0)
+        var list = AdventureLogCatalog.Main;
+        int unlocked = 0;
+        AdventureLogCatalog.StoryEntry current = default;
+        bool hasCurrent = false;
+        for (int i = 0; i < list.Length; i++)
         {
-            for (int i = 0; i < data.chapterClearCounts.Count; i++)
+            var e = list[i];
+            bool on = AdventureLogCatalog.MainUnlocked(e);
+            if (on)
             {
-                var e = data.chapterClearCounts[i];
-                if (e == null) continue;
-                sb.AppendLine($"  · 第{e.chapter}章 ×{e.clearCount}");
+                unlocked++;
+                current = e;
+                hasCurrent = true;
             }
+            string extra = e.Id == "C1" && StoryProgress.Chapter1ChoiceDone
+                ? "石碑选择：" + (StoryProgress.GetChoice(1) ?? "")
+                : e.Extra;
+            AddRow(rows, on ? e.Title : "？？？",
+                on ? "已记录" : e.Unlock,
+                on ? e.Summary + "\n" + extra : "解锁条件：" + e.Unlock,
+                !on);
         }
-        else
-            sb.AppendLine("  （尚无通关记录）");
-        return sb.ToString();
+        title = hasCurrent ? current.Title : "主线故事";
+        desc = hasCurrent ? current.Summary : "完成引导后将在此记录章节摘要。";
+        objective = hasCurrent ? current.Extra : "完成见习委托";
+        progress = unlocked + "/" + list.Length;
     }
 
-    static string BuildMonsters(bool bossOnly)
+    void FillSide(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine(bossOnly ? "【Boss 图鉴】" : "【怪物图鉴】");
-        sb.AppendLine("按章节列出常见敌人（配置名）。");
-        sb.AppendLine();
-        var cfg = ConfigManager.Instance;
-        int shown = 0;
-        if (cfg != null)
+        var list = AdventureLogCatalog.Side;
+        int unlocked = 0;
+        AdventureLogCatalog.StoryEntry current = default;
+        bool hasCurrent = false;
+        for (int i = 0; i < list.Length; i++)
         {
-            for (int ch = 1; ch <= 8 && shown < 40; ch++)
+            var e = list[i];
+            bool on = AdventureLogCatalog.SideUnlocked(e);
+            if (on)
             {
-                var list = cfg.GetChapterPreviewMonsters(ch);
-                if (list == null || list.Count == 0) continue;
-                bool any = false;
-                for (int i = 0; i < list.Count && shown < 40; i++)
-                {
-                    var m = list[i];
-                    if (m == null) continue;
-                    if (bossOnly != m.isBoss) continue;
-                    if (!any)
-                    {
-                        sb.AppendLine($"— 第{ch}章 —");
-                        any = true;
-                    }
-                    string name = !string.IsNullOrEmpty(m.monsterName) ? m.monsterName : m.id;
-                    sb.AppendLine($"  · {name}  HP{m.baseHp:0} ATK{m.baseAttack:0}");
-                    shown++;
-                }
+                unlocked++;
+                current = e;
+                hasCurrent = true;
             }
+            AddRow(rows, on ? e.Title : "？？？",
+                on ? "已完成" : e.Unlock,
+                on ? e.Summary + "\n" + e.Extra : "解锁条件：" + e.Unlock,
+                !on);
         }
-        if (shown == 0)
-            sb.AppendLine("暂无怪物配置可读，通关后会在此归档。");
-        return sb.ToString();
+        title = hasCurrent ? current.Title : "支线故事";
+        desc = hasCurrent ? current.Summary : "支线通过佣兵参战、NPC 对话或关卡掉落触发。";
+        objective = hasCurrent ? current.Extra : "继续冒险以解锁支线";
+        progress = unlocked + "/" + list.Length;
     }
 
-    static string BuildEquip()
+    void FillMonsters(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("【装备 / 传说】");
-        var data = SaveSystem.Instance?.Data;
-        int legend = data?.unlockedLegendaryWeapons != null ? data.unlockedLegendaryWeapons.Count : 0;
-        sb.AppendLine($"已解锁传说武器：{legend}");
-        if (data?.unlockedLegendaryWeapons != null)
+        var list = AdventureLogCatalog.Monsters;
+        int unlocked = 0;
+        AdventureLogCatalog.MonsterEntry current = default;
+        bool hasCurrent = false;
+        for (int i = 0; i < list.Length; i++)
         {
-            foreach (var id in data.unlockedLegendaryWeapons)
-                sb.AppendLine("  · " + id);
-        }
-        sb.AppendLine();
-        sb.AppendLine("遗产池预览：");
-        var pool = data?.legacyEquipPool;
-        if (pool == null || pool.Count == 0)
-            sb.AppendLine("  （空）");
-        else
-        {
-            int n = Mathf.Min(20, pool.Count);
-            for (int i = 0; i < n; i++)
+            var e = list[i];
+            bool on = AdventureLogCatalog.MonsterUnlocked(e);
+            if (on)
             {
-                var e = pool[i];
-                if (e == null) continue;
-                sb.AppendLine($"  · {e.equipId} 品质{e.rarity} ★{e.star}");
+                unlocked++;
+                if (!hasCurrent) { current = e; hasCurrent = true; }
             }
-            if (pool.Count > n) sb.AppendLine($"  …共 {pool.Count} 件");
+            string tag = e.Kind == "首领" ? "【Boss】" : e.Kind;
+            string status = on ? tag : (e.LaterChapter ? "后续层" : e.Unlock);
+            if (e.Kind == "首领" && !on)
+                status = status + " 【Boss】";
+            AddRow(rows, on ? e.Name : "？？？",
+                status,
+                on ? e.Desc + "\n" + e.Lore : (e.LaterChapter ? "在后续裂缝层中可解锁。" : "解锁条件：" + e.Unlock),
+                !on);
         }
-        return sb.ToString();
+        title = hasCurrent ? current.Name : "怪物图鉴";
+        desc = hasCurrent ? current.Desc + "\n" + current.Lore : "本版描述偏趣闻与冒险者口耳相传，不代表公会官方立场。";
+        objective = hasCurrent ? current.Place : "在裂缝中遭遇并记录";
+        progress = unlocked + "/" + list.Length;
     }
 
-    static string BuildMerc()
+    void FillMerc(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("【佣兵档案】");
-        var list = SaveSystem.Instance?.Data?.permanentMercs;
-        if (list == null || list.Count == 0)
+        var list = AdventureLogCatalog.Mercs;
+        int unlocked = 0;
+        AdventureLogCatalog.MercEntry current = default;
+        bool hasCurrent = false;
+        for (int i = 0; i < list.Length; i++)
         {
-            sb.AppendLine("尚未招募永久佣兵。");
-            return sb.ToString();
-        }
-        for (int i = 0; i < list.Count; i++)
-        {
-            var m = list[i];
-            if (m == null) continue;
-            sb.AppendLine($"  · {(string.IsNullOrEmpty(m.displayName) ? m.mercId : m.displayName)}（{m.mercId}） Lv{m.level} ★{Mathf.Max(1, m.star)} 技能:{m.skillId}");
-        }
-        int deploy = MercenaryManager.Instance != null
-            ? MercenaryManager.Instance.GetActiveMercIds().Count : 0;
-        sb.AppendLine();
-        sb.AppendLine($"当前可出战：{deploy} 名（受酒馆等级限制）");
-        return sb.ToString();
-    }
-
-    static string BuildStory()
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("【剧情进度】");
-        sb.AppendLine($"开场演出：{(StoryProgress.OpeningIntroPlayed ? "已看" : "未看")}");
-        sb.AppendLine($"引导介绍：{(StoryProgress.TutorialIntroDone ? "完成" : "进行中")}");
-        sb.AppendLine($"引导战斗：{(StoryProgress.TutorialBattleCleared ? "完成" : "未完成")}");
-        sb.AppendLine($"新手引导：{(StoryProgress.TutorialDone ? "全部完成" : "未完成")}");
-        sb.AppendLine($"第1章厅内剧情：{(StoryProgress.Chapter1IntroDone ? "完成" : "未完成")}");
-        sb.AppendLine($"第1章选择：{(StoryProgress.Chapter1ChoiceDone ? "完成" : "未完成")}");
-        string c1 = StoryProgress.GetChoice(1);
-        if (!string.IsNullOrEmpty(c1))
-            sb.AppendLine($"第1章抉择：{c1}");
-        return sb.ToString();
-    }
-
-    static string BuildAchievement()
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("【成就】");
-        var data = SaveSystem.Instance?.Data;
-        sb.AppendLine($"成就点数：{(data != null ? data.totalAchievementPoints : 0)}");
-        int done = data?.completedAchievements != null ? data.completedAchievements.Count : 0;
-        sb.AppendLine($"已完成成就：{done}");
-        if (data?.completedAchievements != null)
-        {
-            int n = 0;
-            foreach (var id in data.completedAchievements)
+            var e = list[i];
+            bool on = AdventureLogCatalog.MercUnlocked(e);
+            if (on)
             {
-                sb.AppendLine("  · " + id);
-                if (++n >= 25) { sb.AppendLine("  …"); break; }
+                unlocked++;
+                if (!hasCurrent) { current = e; hasCurrent = true; }
             }
+            AddRow(rows, on ? e.Name : "？？？",
+                on ? e.Role : e.Unlock,
+                on ? e.Desc + "\n" + e.Lore : "解锁条件：" + e.Unlock,
+                !on);
         }
-        sb.AppendLine();
-        sb.AppendLine("里程碑：点下方「领取成就里程」打开领取界面。");
-        return sb.ToString();
+        title = hasCurrent ? current.Name : "佣兵与角色";
+        desc = hasCurrent ? current.Desc + "\n" + current.Lore : "剧情角色随主线解锁；酒馆招募后记入图鉴。";
+        objective = hasCurrent ? current.Place : "在酒馆完成招募";
+        progress = unlocked + "/" + list.Length;
     }
 
-    static string BuildWorld()
+    void FillAchievement(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("【世界设定 · 摘要】");
-        sb.AppendLine("像素冒险:裂缝之刃 — 冒险者从公会大厅出发，进入裂缝章节战斗。");
-        sb.AppendLine("局内可强化、附魔、休息；撤离或死亡可带回遗产装备。");
-        sb.AppendLine("城镇侧养成：酒馆佣兵、角色装备、天赋与成就里程。");
-        sb.AppendLine();
-        sb.AppendLine("章节印象：");
-        for (int i = 1; i <= 8; i++)
-            sb.AppendLine($"  {i}. {GameConfig.GetChapterTitleText(i)}");
-        return sb.ToString();
+        var list = AdventureLogCatalog.Achievements;
+        int unlocked = 0;
+        AdventureLogCatalog.AchEntry current = default;
+        bool hasCurrent = false;
+        for (int i = 0; i < list.Length; i++)
+        {
+            var e = list[i];
+            bool on = AdventureLogCatalog.AchUnlocked(e);
+            if (on)
+            {
+                unlocked++;
+                current = e;
+                hasCurrent = true;
+            }
+            AddRow(rows, on ? e.Name : "？？？",
+                on ? e.Reward : e.Unlock,
+                on ? e.Desc : e.Category + "　解锁条件：" + e.Unlock,
+                !on);
+        }
+        title = hasCurrent ? current.Name : "成就";
+        desc = hasCurrent ? current.Desc : "成长、战斗、收集、养成、探索、经济、挑战、社交。";
+        objective = hasCurrent ? current.Reward : "累计成就点数";
+        int pts = SaveSystem.Instance?.Data != null ? SaveSystem.Instance.Data.totalAchievementPoints : 0;
+        progress = unlocked + "/" + list.Length + "  " + pts + "点";
     }
 
-    static GameObject CreateUi(string name, Transform parent, params System.Type[] comps)
+    void FillWorld(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
     {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        for (int i = 0; i < comps.Length; i++)
-            go.AddComponent(comps[i]);
-        return go;
+        var list = AdventureLogCatalog.World;
+        int unlocked = 0;
+        AdventureLogCatalog.WorldEntry current = default;
+        bool hasCurrent = false;
+        for (int i = 0; i < list.Length; i++)
+        {
+            var e = list[i];
+            bool on = AdventureLogCatalog.WorldUnlocked(e);
+            if (on)
+            {
+                unlocked++;
+                if (!hasCurrent) { current = e; hasCurrent = true; }
+            }
+            AddRow(rows, on ? e.Name : "？？？",
+                on ? e.Category : e.Unlock,
+                on ? e.Desc + "\n" + e.Flavor : "解锁条件：" + e.Unlock,
+                !on);
+        }
+        title = hasCurrent ? current.Name : "世界图鉴";
+        desc = hasCurrent ? current.Desc + "\n" + current.Flavor : "世界观、地点、组织、物品与传说。";
+        objective = hasCurrent ? current.Category : "到达对应节点后解锁";
+        progress = unlocked + "/" + list.Length;
     }
 
-    static Text CreateText(Transform parent, string content, int size, TextAnchor align)
+    static void AddRow(List<LogRow> rows, string title, string progress, string detail, bool locked)
     {
-        var go = CreateUi("T", parent, typeof(Text));
-        var t = go.GetComponent<Text>();
-        t.text = content;
-        t.fontSize = size;
-        t.alignment = align;
-        t.color = Color.white;
-        t.horizontalOverflow = HorizontalWrapMode.Wrap;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        Stretch(go.GetComponent<RectTransform>());
-        return t;
+        rows.Add(new LogRow { Title = title, Progress = progress, Detail = detail, Locked = locked });
     }
 
-    static Text CreateText(Transform parent, string name, string content, int size, TextAnchor align)
+    void RebuildRows(List<LogRow> rows)
     {
-        var go = CreateUi(name, parent, typeof(Text));
-        var t = go.GetComponent<Text>();
-        t.text = content;
-        t.fontSize = size;
-        t.alignment = align;
-        t.color = Color.white;
-        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        Stretch(go.GetComponent<RectTransform>());
-        return t;
+        for (int i = 0; i < _spawnedRows.Count; i++)
+        {
+            if (_spawnedRows[i] != null)
+                Destroy(_spawnedRows[i]);
+        }
+        _spawnedRows.Clear();
+
+        if (_rowTemplate == null || _listContent == null) return;
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var go = Instantiate(_rowTemplate, _listContent, false);
+            go.name = "DoneRow" + i;
+            go.SetActive(true);
+            ApplyRow(go.transform, rows[i], showHeader: i == 0);
+            WireRowClick(go, rows[i]);
+            _spawnedRows.Add(go);
+        }
     }
 
-    static void Stretch(RectTransform rt)
+    void WireRowClick(GameObject go, LogRow data)
     {
-        if (rt == null) return;
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = rt.offsetMax = Vector2.zero;
+        var btn = go.GetComponent<Button>();
+        if (btn == null) btn = go.AddComponent<Button>();
+        btn.transition = Selectable.Transition.None;
+        LogRow copy = data;
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(() => ApplyActiveCard(copy.Title, copy.Detail, copy.Progress, copy.Progress));
+    }
+
+    void ApplyActiveCard(string title, string desc, string objective, string progress)
+    {
+        if (_activeTitle != null) _activeTitle.text = title ?? "";
+        if (_activeDesc != null) _activeDesc.text = desc ?? "";
+        if (_activeObj != null) _activeObj.text = objective ?? "";
+        if (_activeProg != null) _activeProg.text = progress ?? "";
+    }
+
+    static void ApplyRow(Transform row, LogRow data, bool showHeader)
+    {
+        var header = row.Find("di");
+        if (header != null) header.gameObject.SetActive(showHeader);
+        var obj = row.Find("Objective")?.GetComponent<Text>();
+        if (obj != null)
+            obj.text = data.Title;
+        var prog = row.Find("Progress")?.GetComponent<Text>();
+        if (prog != null)
+            prog.text = data.Progress ?? "";
+    }
+
+    Transform FindTransform(string name)
+    {
+        if (_root == null) return null;
+        var direct = _root.transform.Find(name);
+        if (direct != null) return direct;
+        var all = _root.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < all.Length; i++)
+            if (all[i] != null && all[i].name == name)
+                return all[i];
+        return null;
+    }
+
+    Text FindText(string name)
+    {
+        return FindTransform(name)?.GetComponent<Text>();
     }
 }

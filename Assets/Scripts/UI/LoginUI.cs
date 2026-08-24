@@ -63,6 +63,9 @@ public class LoginUI : MonoBehaviour
         _enterTown = enterTown;
     }
 
+    public bool IsToastShowing => _toastText != null && _toastText.gameObject.activeSelf;
+    public string ToastMessage => _toastText != null ? _toastText.text : "";
+
     void Awake()
     {
         if (backgroundImage == null || startButton == null)
@@ -83,7 +86,7 @@ public class LoginUI : MonoBehaviour
         EnsureLogoMotion();
         WireClicks();
         EnsureDebugClearSaveButton();
-        GameBgm.Play(GameBgm.Track.Town);
+        GameBgm.Play(GameBgm.Track.Login);
     }
 
     void OnRectTransformDimensionsChange()
@@ -485,10 +488,14 @@ public class LoginUI : MonoBehaviour
             string dir = Application.persistentDataPath;
             try
             {
-                string a = System.IO.Path.Combine(dir, "save.json");
-                string b = System.IO.Path.Combine(dir, "save_backup.json");
+                string a = System.IO.Path.Combine(dir, "player.dat");
+                string b = System.IO.Path.Combine(dir, "player.bak");
+                string c = System.IO.Path.Combine(dir, "save.json");
+                string d = System.IO.Path.Combine(dir, "save_backup.json");
                 if (System.IO.File.Exists(a)) System.IO.File.Delete(a);
                 if (System.IO.File.Exists(b)) System.IO.File.Delete(b);
+                if (System.IO.File.Exists(c)) System.IO.File.Delete(c);
+                if (System.IO.File.Exists(d)) System.IO.File.Delete(d);
             }
             catch (System.Exception e)
             {

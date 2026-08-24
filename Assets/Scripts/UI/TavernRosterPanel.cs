@@ -20,6 +20,9 @@ public class TavernRosterPanel : MonoBehaviour
     List<MercenaryData> _offers = new List<MercenaryData>();
     int _selected;
 
+    public static TavernRosterPanel Instance => _instance;
+    public bool IsOpen => _root != null && _root.activeSelf;
+
     public static void Show()
     {
         Ensure().Open();

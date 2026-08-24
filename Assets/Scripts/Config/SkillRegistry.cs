@@ -25,12 +25,12 @@ public class SkillRegistry : Singleton<SkillRegistry>
     public void LoadAll()
     {
         _dict.Clear();
-        LoadFolder("Config/Skills/Ally");
-        LoadFolder("Config/Skills/Monster");
-        // 兼容旧路径
-        LoadFolder("Config/Skills/Player");
-        LoadFolder("Config/Skills/Merc");
+        LoadFolder(ContentPaths.Config.SkillsAlly);
+        LoadFolder(ContentPaths.Config.SkillsMonster);
+        LoadFolder(ContentPaths.Config.SkillsPlayerLegacy);
+        LoadFolder(ContentPaths.Config.SkillsMercLegacy);
         Debug.Log($"[SkillRegistry] 已加载 {_dict.Count} 个技能配置");
+        GameDataHub.ReportSkills(_dict);
     }
 
     void LoadFolder(string resourcesPath)

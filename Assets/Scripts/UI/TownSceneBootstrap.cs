@@ -118,6 +118,9 @@ public class TownSceneBootstrap : MonoBehaviour
     static void TryClaimTownOfflineReward()
     {
         if (_offlineClaimedThisTownVisit) return;
+        // 新手引导未完成时不弹，避免半透明遮罩挡「点冒险」
+        if (!StoryProgress.TutorialDone) return;
+
         var save = SaveSystem.Instance;
         if (save?.Data == null) return;
 

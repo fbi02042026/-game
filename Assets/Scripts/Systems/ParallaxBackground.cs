@@ -266,7 +266,7 @@ public class ParallaxBackground : MonoBehaviour
         }
 
         if (backgroundRegistry == null)
-            backgroundRegistry = Resources.Load<BattleBackgroundRegistry>("Config/BattleBackgroundRegistry");
+            backgroundRegistry = Resources.Load<BattleBackgroundRegistry>(ContentPaths.Config.BattleBackgrounds);
         if (backgroundRegistry == null)
         {
             Debug.LogWarning("[Parallax] BattleBackgroundRegistry未找到");

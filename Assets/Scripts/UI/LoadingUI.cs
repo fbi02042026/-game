@@ -209,6 +209,8 @@ public class LoadingUI : MonoBehaviour
         ApplyResponsiveLayout();
     }
 
+    public string CurrentTip => tipText != null ? tipText.text : "";
+
     public void AutoBind()
     {
         if (backgroundImage == null)

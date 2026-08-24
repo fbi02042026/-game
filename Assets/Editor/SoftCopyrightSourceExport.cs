@@ -89,30 +89,73 @@ public static class SoftCopyrightSourceExport
             }
         }
 
-        string outDir = Path.Combine(root, "Docs", "软著源码鉴别");
-        Directory.CreateDirectory(outDir);
+        // 同时写英文目录，避免部分环境下中文路径编码错乱导致「Docs 里找不到」
+        string outDirCn = Path.Combine(root, "Docs", "软著源码鉴别");
+        string outDirEn = Path.Combine(root, "Docs", "SoftCopyrightSource");
+        Directory.CreateDirectory(outDirCn);
+        Directory.CreateDirectory(outDirEn);
 
         int need = PagesEach * LinesPerPage;
-        WritePaged(Path.Combine(outDir, "源程序_前30页.txt"), allLines, 0, need, "前");
+        WriteBoth(outDirCn, outDirEn, "源程序_前30页.txt", "source_front_30pages.txt", allLines, 0, need, "前");
         int backStart = Math.Max(0, allLines.Count - need);
-        WritePaged(Path.Combine(outDir, "源程序_后30页.txt"), allLines, backStart, need, "后");
+        WriteBoth(outDirCn, outDirEn, "源程序_后30页.txt", "source_back_30pages.txt", allLines, backStart, need, "后");
 
-        File.WriteAllText(Path.Combine(outDir, "导出说明.txt"),
+        string note =
             "导出时间: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\n" +
             "登记版本: V0.3.5（最新）\n" +
             "每页行数: " + LinesPerPage + "\n" +
             "前后页数: " + PagesEach + "\n" +
             "总拼接行数: " + allLines.Count + "\n" +
             "文件数: " + used.Count + "\n" +
+            "输出目录:\n" +
+            "  Docs/软著源码鉴别/\n" +
+            "  Docs/SoftCopyrightSource/  （英文路径，资源管理器更好找）\n" +
             "优先收录: SaveData / MercenaryOfferGenerator / GameAudio / GameBgm / TutorialDirector / BattleHeadTalkUI 等\n" +
             "用法: 将 txt 按页排版为 PDF（≥50 行/页）提交鉴别材料。\n" +
-            "也可在团结编辑器执行 Tools/软著/导出源程序鉴别材料 覆盖本目录。\n",
-            Encoding.UTF8);
+            "也可在团结编辑器执行 Tools/软著/导出源程序鉴别材料 覆盖本目录。\n";
+        File.WriteAllText(Path.Combine(outDirCn, "导出说明.txt"), note, Encoding.UTF8);
+        File.WriteAllText(Path.Combine(outDirEn, "导出说明.txt"), note, Encoding.UTF8);
+        File.WriteAllText(Path.Combine(outDirEn, "README_export.txt"), note, Encoding.UTF8);
 
         AssetDatabase.Refresh();
         EditorUtility.DisplayDialog("软著导出",
-            "已写入 Docs/软著源码鉴别/\n前30页 + 后30页 + 导出说明", "确定");
-        Debug.Log("[SoftCopyright] 导出完成 → Docs/软著源码鉴别/");
+            "已写入：\nDocs/软著源码鉴别/\nDocs/SoftCopyrightSource/\n\n前30页 + 后30页 + 导出说明", "确定");
+        Debug.Log("[SoftCopyright] 导出完成 → Docs/软著源码鉴别/ 与 Docs/SoftCopyrightSource/");
+    }
+
+    static void WriteBoth(string dirCn, string dirEn, string cnName, string enName,
+        List<string> allLines, int start, int count, string tag)
+    {
+        string text = BuildPagedText(allLines, start, count, tag);
+        File.WriteAllText(Path.Combine(dirCn, cnName), text, Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dirEn, cnName), text, Encoding.UTF8);
+        File.WriteAllText(Path.Combine(dirEn, enName), text, Encoding.UTF8);
+    }
+
+    static string BuildPagedText(List<string> all, int start, int count, string tag)
+    {
+        var sb = new StringBuilder(count * 80);
+        int end = Math.Min(all.Count, start + count);
+        int page = 1;
+        int lineInPage = 0;
+        sb.AppendLine("======== 源程序鉴别材料 · " + tag + "30页 · 每页" + LinesPerPage + "行 ========");
+        sb.AppendLine();
+        for (int i = start; i < end; i++)
+        {
+            if (lineInPage == 0)
+                sb.AppendLine("---------- 第 " + page + " 页 ----------");
+            sb.AppendLine(all[i]);
+            lineInPage++;
+            if (lineInPage >= LinesPerPage)
+            {
+                lineInPage = 0;
+                page++;
+                sb.AppendLine();
+            }
+        }
+        if (lineInPage > 0)
+            sb.AppendLine();
+        return sb.ToString();
     }
 
     static void AppendFile(List<string> all, string rel, string full)
@@ -128,33 +171,5 @@ public static class SoftCopyrightSourceExport
             all.Add("// READ ERROR: " + e.Message);
         }
         all.Add("");
-    }
-
-    static void WritePaged(string path, List<string> all, int start, int count, string tag)
-    {
-        var sb = new StringBuilder(count * 80);
-        int end = Math.Min(all.Count, start + count);
-        int page = 1;
-        int lineInPage = 0;
-        sb.AppendLine("======== 源程序鉴别材料 · " + tag + "30页 · 每页" + LinesPerPage + "行 ========");
-        sb.AppendLine();
-        for (int i = start; i < end; i++)
-        {
-            if (lineInPage == 0)
-            {
-                sb.AppendLine("---------- 第 " + page + " 页 ----------");
-            }
-            sb.AppendLine(all[i]);
-            lineInPage++;
-            if (lineInPage >= LinesPerPage)
-            {
-                lineInPage = 0;
-                page++;
-                sb.AppendLine();
-            }
-        }
-        if (lineInPage > 0)
-            sb.AppendLine();
-        File.WriteAllText(path, sb.ToString(), Encoding.UTF8);
     }
 }

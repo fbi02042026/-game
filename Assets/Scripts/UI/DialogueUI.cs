@@ -16,6 +16,10 @@ public class DialogueUI : MonoBehaviour
 
     public static DialogueUI Instance { get; private set; }
 
+    public bool IsVisible => gameObject.activeSelf;
+    public string CurrentLine => dialogueText != null ? dialogueText.text : "";
+    public bool HasChoicesVisible => _choicesVisible;
+
     [Header("可替换贴图")]
     public Image sceneBackgroundImage;
     public Image dialogueBoxImage;
@@ -401,7 +405,7 @@ public class DialogueUI : MonoBehaviour
         go.transform.SetAsLastSibling();
     }
 
-    void SetRevealBlack(float a)
+    public void SetRevealBlack(float a)
     {
         EnsureRevealBlack();
         if (_revealBlack == null) return;
@@ -409,7 +413,7 @@ public class DialogueUI : MonoBehaviour
         _revealBlack.color = new Color(0f, 0f, 0f, Mathf.Clamp01(a));
     }
 
-    void SetBgDim(float a)
+    public void SetBgDim(float a)
     {
         EnsureBgDim();
         if (_bgDim == null) return;
@@ -417,7 +421,7 @@ public class DialogueUI : MonoBehaviour
         _bgDim.color = new Color(0f, 0f, 0f, Mathf.Clamp01(a));
     }
 
-    void SetSceneBackgroundAlpha(float a)
+    public void SetSceneBackgroundAlpha(float a)
     {
         if (sceneBackgroundImage == null) return;
         var c = sceneBackgroundImage.color;
@@ -510,9 +514,10 @@ public class DialogueUI : MonoBehaviour
 
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
+        Canvas.ForceUpdateCanvases();
         SetDialogueChromeVisible(true);
         ApplyDialogueBoxLift();
-        FitDialogueBoxAspect();
+        FitDialogueBoxAspect(); // 只校正九宫格，不改框尺寸
 
         if (leftNameText != null) leftNameText.text = _initiatorName;
         if (rightNameText != null) rightNameText.text = _otherName;
@@ -541,25 +546,10 @@ public class DialogueUI : MonoBehaviour
             skipButton.gameObject.SetActive(true);
     }
 
-    /// <summary>对话框按屏宽等比定高，避免扁条或裁切；正文再按可视区换行。</summary>
+    /// <summary>只校正九宫格切图；框的宽高始终用预制体，字多用框内滚动。</summary>
     void FitDialogueBoxAspect()
     {
         if (dialogueBoxImage == null) return;
-        var rt = dialogueBoxImage.rectTransform;
-        var canvasRt = transform as RectTransform;
-        if (canvasRt == null) return;
-
-        float parentW = Mathf.Max(200f, canvasRt.rect.width - 40f);
-        float aspect = 2.6f;
-        if (dialogueBoxImage.sprite != null)
-        {
-            var r = dialogueBoxImage.sprite.rect;
-            if (r.height > 1f) aspect = r.width / r.height;
-        }
-        float h = Mathf.Clamp(parentW / aspect, 200f, 380f);
-        // 拉伸锚点：用 sizeDelta.y 控制高度，左右贴边
-        rt.sizeDelta = new Vector2(rt.sizeDelta.x, h);
-
         Vector4 border = dialogueBoxImage.sprite != null ? dialogueBoxImage.sprite.border : Vector4.zero;
         bool sliced = (border.x + border.y + border.z + border.w) > 0.01f;
         dialogueBoxImage.type = sliced ? Image.Type.Sliced : Image.Type.Simple;
@@ -743,15 +733,17 @@ public class DialogueUI : MonoBehaviour
         if (rightPortraitImage != null)
         {
             rightPortraitImage.sprite = sp;
+            rightPortraitImage.enabled = true;
             rightPortraitImage.gameObject.SetActive(sp != null);
             var rt = rightPortraitImage.rectTransform;
+            rt.localScale = Vector3.one;
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
             rt.pivot = new Vector2(0.5f, 0f);
             NormalizePortraitSize(rt, SoloPortraitHeightFrac, SoloPortraitWidthFrac);
-            // 居中立绘抬高，避免压到对话框/底栏
-            float y = ClampPortraitBottomY(rt, 280f + GetMobileLiftY());
+            float y = ClampPortraitBottomY(rt, 220f + GetMobileLiftY());
             rt.anchoredPosition = new Vector2(0f, y);
             rightPortraitImage.color = Color.white;
+            PlacePortraitBehindDialogueBox(rightPortraitImage.transform);
         }
 
         string name = !string.IsNullOrEmpty(_otherName) ? _otherName : _initiatorName;
@@ -945,14 +937,8 @@ public class DialogueUI : MonoBehaviour
         dialogueText.horizontalOverflow = HorizontalWrapMode.Wrap;
         dialogueText.verticalOverflow = VerticalWrapMode.Overflow;
         dialogueText.resizeTextForBestFit = false;
-        if (_textClip != null)
-        {
-            float viewW = Mathf.Max(80f, _textClip.rect.width);
-            // 字号随气泡宽度微调，长句自动多行
-            int baseSize = DialogueBodyFontSize > 0 ? DialogueBodyFontSize : 28;
-            float scale = Mathf.Clamp(viewW / 560f, 0.85f, 1.15f);
-            dialogueText.fontSize = Mathf.RoundToInt(baseSize * scale);
-        }
+        if (DialogueBodyFontSize > 0)
+            dialogueText.fontSize = DialogueBodyFontSize;
         ScrollDialogueText();
     }
 
@@ -1034,12 +1020,24 @@ public class DialogueUI : MonoBehaviour
         rt.localScale = new Vector3(sx, 1f, 1f);
 
         var canvasRt = transform as RectTransform;
-        if (canvasRt == null) return;
-        Vector2 native = rt.sizeDelta;
-        if (native.x < 1f || native.y < 1f) return;
+        float canvasH = canvasRt != null ? canvasRt.rect.height : 0f;
+        float canvasW = canvasRt != null ? canvasRt.rect.width : 0f;
+        if (canvasH < 64f) canvasH = GameConfig.DESIGN_HEIGHT;
+        if (canvasW < 64f) canvasW = GameConfig.DESIGN_WIDTH;
 
-        float maxH = canvasRt.rect.height * heightFrac;
-        float maxW = canvasRt.rect.width * widthFrac;
+        Vector2 native = rt.sizeDelta;
+        if (native.x < 1f || native.y < 1f)
+        {
+            if (img.sprite != null)
+            {
+                native = img.sprite.rect.size;
+                rt.sizeDelta = native;
+            }
+            if (native.x < 1f || native.y < 1f) return;
+        }
+
+        float maxH = canvasH * heightFrac;
+        float maxW = canvasW * widthFrac;
         float aspect = native.x / native.y;
         float h = maxH;
         float w = h * aspect;
@@ -1054,19 +1052,36 @@ public class DialogueUI : MonoBehaviour
     /// <summary>底部对齐的立绘：保证顶部不超出屏幕。</summary>
     float ClampPortraitBottomY(RectTransform rt, float desiredY)
     {
+        if (rt == null) return desiredY;
         var canvasRt = transform as RectTransform;
-        if (canvasRt == null || rt == null) return desiredY;
-        float top = canvasRt.rect.height - 24f;
+        float canvasH = canvasRt != null ? canvasRt.rect.height : 0f;
+        if (canvasH < 64f) canvasH = GameConfig.DESIGN_HEIGHT;
+        float top = canvasH - 24f;
         float maxY = top - rt.sizeDelta.y;
         return Mathf.Clamp(desiredY, 0f, Mathf.Max(0f, maxY));
+    }
+
+    /// <summary>
+    /// 立绘盖在背景上、但必须在对话框下面。
+    /// 注意：若立绘本来就在框下方，再 SetSiblingIndex(框的下标) 会把框挤下去，立绘反而跑到前面。
+    /// </summary>
+    void PlacePortraitBehindDialogueBox(Transform portrait)
+    {
+        if (portrait == null || dialogueBoxImage == null) return;
+        int boxIdx = dialogueBoxImage.transform.GetSiblingIndex();
+        int pIdx = portrait.GetSiblingIndex();
+        // 立绘已在框前（更大 sibling）→ 挪到框当前位置，框会被顶到后面
+        if (pIdx >= boxIdx)
+            portrait.SetSiblingIndex(boxIdx);
+        // 立绘已在框后：不要动，否则会盖住对话框
     }
 
     float GetMobileLiftY()
     {
         var canvasRt = transform as RectTransform;
-        if (canvasRt != null)
-            return canvasRt.rect.height * 0.1f;
-        return 128f;
+        float h = canvasRt != null ? canvasRt.rect.height : 0f;
+        if (h < 64f) h = GameConfig.DESIGN_HEIGHT;
+        return h * 0.08f;
     }
 
     void ApplyDialogueBoxLift()

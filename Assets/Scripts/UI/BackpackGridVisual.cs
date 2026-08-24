@@ -54,9 +54,9 @@ public static class BackpackGridVisual
             go.transform.SetParent(layer, false);
             var rt = go.GetComponent<RectTransform>();
 
-            if (canUseCells && TryPlaceByCells(gridContainer, cellAt, p, rt))
+            if (canUseCells && TryPlaceByCells(rt.parent as RectTransform ?? gridContainer, cellAt, p, rt))
             {
-                // 用真实格子量出来的位置，最准
+                // 用真实格子中心对齐到 Overlay 层，避免角色页/战斗页坐标空间不一致
             }
             else
             {
@@ -72,10 +72,18 @@ public static class BackpackGridVisual
                 rt.sizeDelta = new Vector2(Mathf.Max(0f, totalW - IconPad * 2f), Mathf.Max(0f, totalH - IconPad * 2f));
             }
 
+            if (p.equip.icon == null)
+            {
+                p.equip.template?.ResolveIcon();
+                if (p.equip.icon == null && p.equip.template != null)
+                    p.equip.icon = p.equip.template.icon;
+            }
+
             var img = go.GetComponent<Image>();
             img.sprite = p.equip.icon;
             img.preserveAspect = true;
             img.raycastTarget = false;
+            img.type = Image.Type.Simple;
             bool hasIcon = p.equip.icon != null;
             img.enabled = true;
             // 没图标也留色块，避免「进了背包但看不见」
@@ -92,36 +100,35 @@ public static class BackpackGridVisual
     }
 
     /// <summary>
-    /// 用左上格与右下格的实际角点算出占位矩形，坐标换算到 gridContainer 自身空间。
-    /// 这样美术手摆格子、或 GridLayout 参数和实际不一致时都不会错位。
+    /// 用左上格与右下格的世界角点，换算到图标父节点（Overlay）空间，按格子并集的正中心摆放。
     /// </summary>
-    static bool TryPlaceByCells(RectTransform gridContainer,
+    static bool TryPlaceByCells(RectTransform space,
         Func<int, int, RectTransform> cellAt, ItemPlacement p, RectTransform rt)
     {
         RectTransform first = cellAt(p.x, p.y);
-        if (first == null) return false;
+        if (first == null || space == null) return false;
         RectTransform last = cellAt(p.x + p.w - 1, p.y + p.h - 1) ?? first;
 
         var corners = new Vector3[4];
         float minX = float.MaxValue, minY = float.MaxValue;
         float maxX = float.MinValue, maxY = float.MinValue;
 
-        AccumulateLocalBounds(gridContainer, first, corners, ref minX, ref minY, ref maxX, ref maxY);
+        AccumulateLocalBounds(space, first, corners, ref minX, ref minY, ref maxX, ref maxY);
         if (last != first)
-            AccumulateLocalBounds(gridContainer, last, corners, ref minX, ref minY, ref maxX, ref maxY);
+            AccumulateLocalBounds(space, last, corners, ref minX, ref minY, ref maxX, ref maxY);
 
         if (maxX <= minX || maxY <= minY) return false;
 
-        Rect pr = gridContainer.rect;
         Vector2 center = new Vector2((minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
 
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.zero;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(
             Mathf.Max(0f, (maxX - minX) - IconPad * 2f),
             Mathf.Max(0f, (maxY - minY) - IconPad * 2f));
-        rt.anchoredPosition = center - new Vector2(pr.xMin, pr.yMin);
+        // Overlay 层 pivot 在正中：父空间 (0,0) 就是格子区域中心，图标 pivot 也在正中，直接对上
+        rt.anchoredPosition = center;
         rt.localScale = Vector3.one;
         return true;
     }

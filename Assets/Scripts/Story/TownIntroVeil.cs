@@ -11,6 +11,12 @@ public class TownIntroVeil : MonoBehaviour
 
     CanvasGroup _group;
 
+    public static bool IsBlocking =>
+        Instance != null
+        && Instance.gameObject.activeInHierarchy
+        && Instance._group != null
+        && Instance._group.alpha > 0.05f;
+
     public static void EnsureShown()
     {
         if (Instance != null)
@@ -30,6 +36,13 @@ public class TownIntroVeil : MonoBehaviour
     {
         if (Instance == null) yield break;
         yield return Instance.FadeOut(duration);
+    }
+
+    /// <summary>Loading 结束或引导完成后强制移除，避免中间全黑挡操作。</summary>
+    public static void ForceDestroy()
+    {
+        if (Instance == null) return;
+        Object.Destroy(Instance.gameObject);
     }
 
     void Build()

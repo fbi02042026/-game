@@ -38,6 +38,8 @@ public static class BattleLoadingOverlay
 
     public static bool IsShowing => _ui != null && _ui.gameObject.activeSelf;
 
+    public static string CurrentTip => _ui != null ? _ui.CurrentTip : "";
+
     public static void Hide()
     {
         if (_ui == null) return;

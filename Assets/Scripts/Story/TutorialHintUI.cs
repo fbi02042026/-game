@@ -17,6 +17,7 @@ public class TutorialHintUI : MonoBehaviour
     Image _pointerHand;
     RectTransform _pointerRt;
     RectTransform[] _dims;
+    GraphicRaycaster _raycaster;
     Vector2 _pointerTarget;
     Vector2 _swipeFrom;
     float _swipeT = 1f;
@@ -66,12 +67,14 @@ public class TutorialHintUI : MonoBehaviour
         }
         if (GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
+        _raycaster = GetComponent<GraphicRaycaster>();
 
         _group = gameObject.GetComponent<CanvasGroup>();
         if (_group == null) _group = gameObject.AddComponent<CanvasGroup>();
         _group.blocksRaycasts = false;
         _group.interactable = false;
         _group.alpha = 0f;
+        if (_raycaster != null) _raycaster.enabled = false;
 
         _dims = new RectTransform[4];
         string[] names = { "DimTop", "DimBottom", "DimLeft", "DimRight" };
@@ -163,6 +166,9 @@ public class TutorialHintUI : MonoBehaviour
         Show(text, highlight, autoHideSeconds, hard: false);
     }
 
+    public bool IsVisible => _group != null && _group.alpha > 0.05f && _label != null && !string.IsNullOrEmpty(_label.text);
+    public string CurrentHint => _label != null ? _label.text : "";
+
     public void Show(string text, RectTransform highlight, float autoHideSeconds, bool hard)
     {
         EnsureBuilt();
@@ -175,15 +181,34 @@ public class TutorialHintUI : MonoBehaviour
         _group.alpha = 1f;
         _group.blocksRaycasts = hard;
         _group.interactable = hard;
+        // 软引导绝不能挡点击：关掉 Raycaster，并强制收掉四周遮罩
+        if (_raycaster == null) _raycaster = GetComponent<GraphicRaycaster>();
+        if (_raycaster != null) _raycaster.enabled = hard;
         _hideAt = autoHideSeconds < 0f ? -1f : Time.unscaledTime + autoHideSeconds;
         SetDimsActive(hard);
         if (_holeRt != null)
             _holeRt.gameObject.SetActive(hard && highlight != null);
+        if (!hard)
+            ForceClearBlockers();
         RefreshLayout();
         if (highlight != null && (targetChanged || !_pointerActive))
             BeginSwipeToTarget();
         else if (highlight == null)
             HidePointer();
+    }
+
+    /// <summary>确保软引导/隐藏后不留遮罩挡底栏。</summary>
+    void ForceClearBlockers()
+    {
+        SetDimsActive(false);
+        if (_holeRt != null) _holeRt.gameObject.SetActive(false);
+        if (_group != null)
+        {
+            _group.blocksRaycasts = false;
+            _group.interactable = false;
+        }
+        if (_raycaster == null) _raycaster = GetComponent<GraphicRaycaster>();
+        if (_raycaster != null) _raycaster.enabled = false;
     }
 
     public void Hide()
@@ -197,8 +222,7 @@ public class TutorialHintUI : MonoBehaviour
         }
         _hideAt = -1f;
         _follow = null;
-        SetDimsActive(false);
-        if (_holeRt != null) _holeRt.gameObject.SetActive(false);
+        ForceClearBlockers();
         HidePointer();
     }
 
@@ -219,6 +243,8 @@ public class TutorialHintUI : MonoBehaviour
     void Update()
     {
         if (_group == null || _group.alpha < 0.01f) return;
+        if (!_hard)
+            ForceClearBlockers();
         if (_hideAt > 0f && Time.unscaledTime >= _hideAt)
         {
             Hide();
@@ -272,6 +298,8 @@ public class TutorialHintUI : MonoBehaviour
             PlaceStrip(_dims[3], maxX, right, minY, maxY);
             SetDimsActive(true);
         }
+        else
+            SetDimsActive(false);
 
         if (_hard && _holeRt != null)
         {

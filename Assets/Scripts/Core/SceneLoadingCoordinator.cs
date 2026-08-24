@@ -140,6 +140,9 @@ public static class SceneLoadingCoordinator
                     BattleLoadingOverlay.Hide();
                     GameBgm.UnmuteAfterLoading();
                     GameAudio.UnmuteAfterLoading();
+                    // 片头还没播时留下黑幕，避免 Loading 关掉后先闪一帧公会大厅。
+                    if (_target == LoadTarget.Town && !GuildHallUI.ShouldHideTownForIntro)
+                        TownIntroVeil.ForceDestroy();
                     _active = false;
                     _finishRequested = false;
                     _realProgress = 0f;

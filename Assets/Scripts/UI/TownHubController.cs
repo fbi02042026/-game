@@ -222,10 +222,23 @@ public class TownHubController : MonoBehaviour
     void EnsureLogPreloaded()
     {
         if (_log != null) return;
-        var go = new GameObject("AdventureLogUI", typeof(RectTransform));
-        go.transform.SetParent(transform, false);
-        Stretch(go);
-        _log = go.AddComponent<AdventureLogUI>();
+
+        var prefab = Resources.Load<GameObject>("Prefabs/Town/AdventureLogUI");
+        if (prefab != null)
+        {
+            var go = Instantiate(prefab, transform, false);
+            go.name = "AdventureLogUI";
+            _log = go.GetComponent<AdventureLogUI>();
+            if (_log == null) _log = go.AddComponent<AdventureLogUI>();
+        }
+        else
+        {
+            var go = new GameObject("AdventureLogUI", typeof(RectTransform));
+            go.transform.SetParent(transform, false);
+            Stretch(go);
+            _log = go.AddComponent<AdventureLogUI>();
+        }
+
         _log.PreloadOnce();
         _log.HidePage();
     }

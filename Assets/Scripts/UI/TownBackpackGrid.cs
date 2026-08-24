@@ -66,6 +66,7 @@ public class TownBackpackGrid : MonoBehaviour
                 gridX = gx,
                 gridY = gy
             };
+            ui.CaptureDefaultVisual();
             if (ui.lockedOverlay == null)
                 ui.lockedOverlay = CreateLockOverlay(cell);
             cells.Add(ui);
@@ -263,8 +264,8 @@ public class TownBackpackGrid : MonoBehaviour
         for (int i = 0; i < cells.Count; i++)
         {
             var c = cells[i];
-            if (c != null && c.root != null && c.gridX == gx && c.gridY == gy)
-                return c.root.GetComponent<RectTransform>();
+            if (c != null && c.gridX == gx && c.gridY == gy)
+                return c.VisualRect;
         }
         return null;
     }

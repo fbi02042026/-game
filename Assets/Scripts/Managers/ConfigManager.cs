@@ -22,7 +22,7 @@ public class ConfigManager : Singleton<ConfigManager>
 
     private void LoadAllConfig()
     {
-        _allEquipTemplates = Resources.LoadAll<EquipTemplate>("Config/Equips").ToList();
+        _allEquipTemplates = Resources.LoadAll<EquipTemplate>(ContentPaths.Config.Equips).ToList();
         foreach (var t in _allEquipTemplates)
         {
             if (t == null) continue;
@@ -30,7 +30,7 @@ public class ConfigManager : Singleton<ConfigManager>
             _equipTemplateDict[t.templateId] = t;
         }
 
-        _allMonsters = Resources.LoadAll<MonsterConfig>("Config/Monsters").ToList();
+        _allMonsters = Resources.LoadAll<MonsterConfig>(ContentPaths.Config.Monsters).ToList();
         foreach (var m in _allMonsters)
         {
             _monsterDict[m.id] = m;
@@ -38,7 +38,7 @@ public class ConfigManager : Singleton<ConfigManager>
 
         try
         {
-            var allTalents = Resources.LoadAll<TalentConfig>("Config/Talents");
+            var allTalents = Resources.LoadAll<TalentConfig>(ContentPaths.Config.Talents);
             if (allTalents != null)
             {
                 for (int i = 0; i < allTalents.Length; i++)
@@ -55,6 +55,7 @@ public class ConfigManager : Singleton<ConfigManager>
         }
 
         Debug.Log($"配置加载完成：{_allEquipTemplates.Count}个装备模板，{_allMonsters.Count}种怪物，{_talentDict.Count}个天赋");
+        GameDataHub.ReportConfigs(_allEquipTemplates, _allMonsters, _talentDict);
     }
 
     public EquipTemplate GetEquipTemplate(string id)

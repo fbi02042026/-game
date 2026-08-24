@@ -30,15 +30,14 @@ public static class MonsterAttackStyleTable
         _loaded = true;
         _map = new Dictionary<int, MonsterAttackStyle>();
 
-        // txt 优先（Unity 稳定当 TextAsset）；csv 兼容
-        TextAsset ta = Resources.Load<TextAsset>("Config/MonsterAttackStyle");
-        if (ta == null)
+        string raw = GameTableStore.LoadText(ContentPaths.Data.MonsterAttackStyle);
+        if (string.IsNullOrEmpty(raw))
         {
-            Debug.LogWarning("[MonsterAttackStyle] 未找到 Config/MonsterAttackStyle.txt，默认近战/远程兜底");
+            Debug.LogWarning("[MonsterAttackStyle] 未找到攻击方式表，默认近战/远程兜底");
             return;
         }
 
-        string[] lines = ta.text.Split(new[] { '\r', '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
+        string[] lines = raw.Split(new[] { '\r', '\n' }, System.StringSplitOptions.RemoveEmptyEntries);
         int ok = 0;
         for (int i = 0; i < lines.Length; i++)
         {
