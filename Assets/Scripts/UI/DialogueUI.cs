@@ -780,6 +780,7 @@ public class DialogueUI : MonoBehaviour
             var rt = leftPortraitImage.rectTransform;
             NormalizePortraitSize(rt, DualPortraitHeightFrac, DualPortraitWidthFrac);
             rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, rt.anchoredPosition.y + lift);
+            ClampPortraitInsideCanvas(rt);
         }
         if (rightPortraitImage != null)
         {
@@ -788,6 +789,7 @@ public class DialogueUI : MonoBehaviour
             var rt = rightPortraitImage.rectTransform;
             NormalizePortraitSize(rt, DualPortraitHeightFrac, DualPortraitWidthFrac);
             rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, rt.anchoredPosition.y + lift);
+            ClampPortraitInsideCanvas(rt);
         }
 
         SetNamePlateIconVisible(leftNameIcon, false);
@@ -1001,8 +1003,8 @@ public class DialogueUI : MonoBehaviour
 
     const float SoloPortraitHeightFrac = 0.52f;
     const float SoloPortraitWidthFrac = 0.72f;
-    const float DualPortraitHeightFrac = 0.40f;
-    const float DualPortraitWidthFrac = 0.46f;
+    const float DualPortraitHeightFrac = 0.38f;
+    const float DualPortraitWidthFrac = 0.38f;
 
     /// <summary>
     /// 立绘统一比例：不管原图多少像素，都按屏幕高度的固定比例显示，宽度再兜一层上限。
@@ -1059,6 +1061,42 @@ public class DialogueUI : MonoBehaviour
         float top = canvasH - 24f;
         float maxY = top - rt.sizeDelta.y;
         return Mathf.Clamp(desiredY, 0f, Mathf.Max(0f, maxY));
+    }
+
+    /// <summary>用世界角点把立绘推进画布内，兼容右锚点佣兵立绘。</summary>
+    void ClampPortraitInsideCanvas(RectTransform rt)
+    {
+        if (rt == null) return;
+        var canvasRt = transform as RectTransform;
+        if (canvasRt == null) return;
+        Canvas.ForceUpdateCanvases();
+        var corners = new Vector3[4];
+        var canvasCorners = new Vector3[4];
+        rt.GetWorldCorners(corners);
+        canvasRt.GetWorldCorners(canvasCorners);
+        float pad = 8f;
+        float minCx = canvasCorners[0].x + pad;
+        float maxCx = canvasCorners[2].x - pad;
+        float minCy = canvasCorners[0].y + pad;
+        float maxCy = canvasCorners[2].y - pad;
+
+        float minX = corners[0].x, maxX = corners[0].x;
+        float minY = corners[0].y, maxY = corners[0].y;
+        for (int i = 1; i < 4; i++)
+        {
+            if (corners[i].x < minX) minX = corners[i].x;
+            if (corners[i].x > maxX) maxX = corners[i].x;
+            if (corners[i].y < minY) minY = corners[i].y;
+            if (corners[i].y > maxY) maxY = corners[i].y;
+        }
+
+        Vector3 shift = Vector3.zero;
+        if (minX < minCx) shift.x += minCx - minX;
+        if (maxX > maxCx) shift.x -= maxX - maxCx;
+        if (minY < minCy) shift.y += minCy - minY;
+        if (maxY > maxCy) shift.y -= maxY - maxCy;
+        if (shift.sqrMagnitude < 1e-6f) return;
+        rt.position += shift;
     }
 
     /// <summary>

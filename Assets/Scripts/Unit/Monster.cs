@@ -673,16 +673,22 @@ public class Monster : UnitBase
         float damage = (attr.GetAttr(AttrType.Attack) * mult + extra) * tier;
         float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
 
+        // 远程小怪/精英：一律 Bow → Enemy/Bow/vfx_enemy_bow_fly|hit（勿用 Ally 的 vfx_bow_*）
+        // 不要用技能表 Orb，也不要用 mon_magic_burst 专属命中特效盖掉敌方弓箭命中。
         AttackVfxKit kit = MonsterAttackStyleTable.GetVfxKit(_swingStyle);
-        // 小怪远程强制弓箭（vfx_bow_fly / vfx_bow_hit），不要被技能表 Orb 盖掉
-        if (!_isBossUnit && MonsterAttackStyleTable.IsRanged(_swingStyle))
+        bool forceEnemyBow = MonsterAttackStyleTable.IsRanged(_swingStyle) && !_isBossUnit;
+        if (forceEnemyBow)
             kit = AttackVfxKit.Bow;
-        else
+        else if (_isBossUnit)
         {
             var skillCfg = SkillRegistry.Instance?.Get(_skillId);
-            if (skillCfg != null && skillCfg.attackKit != AttackVfxKit.None)
+            if (skillCfg != null && skillCfg.attackKit != AttackVfxKit.None
+                && skillCfg.attackKit != AttackVfxKit.Orb)
                 kit = skillCfg.attackKit;
+            else if (MonsterAttackStyleTable.IsRanged(_swingStyle))
+                kit = AttackVfxKit.Bow;
         }
+
         Vector3 firePos = GetFirePosition();
         Vector3 hitPos = primaryTarget != null ? primaryTarget.GetHitPosition() : firePos;
 
@@ -692,8 +698,10 @@ public class Monster : UnitBase
 
         if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
         {
-            // 远程技：子弹从发射点飞到目标，飞到了才结算 + 才炸技能特效
-            GameObject impact = SkillRegistry.Instance?.GetSkillVfxPrefab(_skillId);
+            // 远程技：子弹飞到再结算。小怪不传技能专属 impact，命中走 Enemy/vfx_enemy_bow_hit
+            GameObject impact = forceEnemyBow
+                ? null
+                : SkillRegistry.Instance?.GetSkillVfxPrefab(_skillId);
             Transform targetTf = primaryTarget != null ? primaryTarget.transform : null;
             BattleVFXSystem.Instance?.PlaySkillProjectile(
                 VfxFaction.Enemy, firePos, hitPos, facingDir, targetTf, kit,

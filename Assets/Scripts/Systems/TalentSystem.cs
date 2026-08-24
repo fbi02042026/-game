@@ -44,6 +44,7 @@ public static class TalentSystem
         data.talents[node.id] = 1;
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
+        Hero.Instance?.RecalcAttr();
         return true;
     }
 
@@ -84,6 +85,8 @@ public static class TalentSystem
         data.talentPoints -= node.stoneCost;
         data.talents[node.id] = option1Based;
         SaveSystem.Instance.Save();
+        GuildHallUI.RefreshAllHudStatic();
+        Hero.Instance?.RecalcAttr();
         return true;
     }
 

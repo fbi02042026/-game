@@ -1602,14 +1602,50 @@ public class BattleManager : Singleton<BattleManager>
         if (!GameConfig.SOLO_PLAYER_BATTLE)
         {
             var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-            if (mercs != null)
+            int unlocked = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
+            for (int i = 0; i < mercSkillEnergy.Length; i++)
             {
-                for (int i = 0; i < mercSkillEnergy.Length; i++)
+                bool live = mercs != null && i < mercs.Count && mercs[i] != null && !mercs[i].isDead;
+                if (i >= unlocked || !live)
                 {
-                    if (i >= mercs.Count || mercs[i] == null || mercs[i].isDead) continue;
-                    mercSkillEnergy[i] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[i] + ENERGY_PER_SECOND * 0.85f * Time.deltaTime);
-                    BattleUI.Instance?.UpdateSkillEnergy(i + 1, mercSkillEnergy[i]);
+                    if (mercSkillEnergy[i] > 0f)
+                    {
+                        mercSkillEnergy[i] = 0f;
+                        BattleUI.Instance?.UpdateSkillEnergy(i + 1, 0f);
+                    }
+                    continue;
                 }
+                mercSkillEnergy[i] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[i] + ENERGY_PER_SECOND * 0.85f * Time.deltaTime);
+                BattleUI.Instance?.UpdateSkillEnergy(i + 1, mercSkillEnergy[i]);
+            }
+        }
+        else if (TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud)
+        {
+            var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+            if (mercs != null && mercs.Count > 0 && mercs[0] != null && !mercs[0].isDead)
+            {
+                mercSkillEnergy[0] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[0] + ENERGY_PER_SECOND * 0.85f * Time.deltaTime);
+                BattleUI.Instance?.UpdateSkillEnergy(1, mercSkillEnergy[0]);
+            }
+            else if (mercSkillEnergy[0] > 0f)
+            {
+                mercSkillEnergy[0] = 0f;
+                BattleUI.Instance?.UpdateSkillEnergy(1, 0f);
+            }
+            if (mercSkillEnergy[1] > 0f)
+            {
+                mercSkillEnergy[1] = 0f;
+                BattleUI.Instance?.UpdateSkillEnergy(2, 0f);
+            }
+        }
+        else
+        {
+            // 单人/教学锁槽：蓝条强制归零，避免杀怪残留能量把锁头像底下蓝条刷满
+            for (int i = 0; i < mercSkillEnergy.Length; i++)
+            {
+                if (mercSkillEnergy[i] <= 0f) continue;
+                mercSkillEnergy[i] = 0f;
+                BattleUI.Instance?.UpdateSkillEnergy(i + 1, 0f);
             }
         }
     }
@@ -1968,8 +2004,23 @@ public class BattleManager : Singleton<BattleManager>
 
         float killGain = (m.config != null && m.config.isBoss) ? 0.5f : ENERGY_PER_KILL;
         playerSkillEnergy = Mathf.Min(MAX_SKILL_ENERGY, playerSkillEnergy + killGain);
+
+        var killMercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+        int unlockedSlots = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
+        bool solo = GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle;
+        bool tutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
         for (int i = 0; i < mercSkillEnergy.Length; i++)
+        {
+            // 未解锁 / 无在场佣兵：蓝条不涨
+            bool slotLive = killMercs != null && i < killMercs.Count && killMercs[i] != null && !killMercs[i].isDead;
+            bool slotUnlocked = solo ? (tutorialMerc && i == 0) : (i < unlockedSlots);
+            if (!slotUnlocked || !slotLive)
+            {
+                mercSkillEnergy[i] = 0f;
+                continue;
+            }
             mercSkillEnergy[i] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[i] + killGain * 0.75f);
+        }
 
         AchievementSystem.Instance?.OnKillMonster(CurrentChapter, m.config != null && m.config.isBoss);
 

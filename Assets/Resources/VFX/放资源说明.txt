@@ -23,12 +23,18 @@ Resources/VFX/Skills/
 二、共用套文件名
 ================================================================================
 
-  MeleeSlash/vfx_melee_hit.prefab
-  Bow/vfx_bow_fly.prefab + vfx_bow_hit.prefab
-  Orb/vfx_orb_fly.prefab + vfx_orb_hit.prefab
-  Heal/vfx_heal.prefab
+  Ally/
+    MeleeSlash/vfx_melee_hit.prefab
+    Bow/vfx_bow_fly.prefab + vfx_bow_hit.prefab
+    Orb/vfx_orb_fly.prefab + vfx_orb_hit.prefab
+    Heal/vfx_heal.prefab
 
-小怪普攻：近战 MeleeSlash，远程 Orb（法球飞行）
+  Enemy/   ※ 敌方弓箭文件名带 enemy，勿与 Ally 同名再搞混
+    MeleeSlash/vfx_melee_hit.prefab
+    Bow/vfx_enemy_bow_fly.prefab + vfx_enemy_bow_hit.prefab
+    Orb/vfx_orb_fly.prefab + vfx_orb_hit.prefab
+
+小怪远程普攻/技能：Enemy Bow（vfx_enemy_bow_fly / vfx_enemy_bow_hit）
 精英/Boss 主动技见下方技能 id
 
 ================================================================================

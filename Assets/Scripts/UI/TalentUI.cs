@@ -133,6 +133,7 @@ public class TalentUI : MonoBehaviour
         Instance = this;
         if (panelImage == null)
             AutoBindFromHierarchy();
+        EnsureChoicePopupBindings();
         EnsureVisibleTransform();
         WireClicks();
     }
@@ -145,6 +146,9 @@ public class TalentUI : MonoBehaviour
     public void Show()
     {
         EnsureVisibleTransform();
+        EnsureChoicePopupBindings();
+        if (!_wired) WireClicks();
+        else WireChoiceConfirmIfNeeded();
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
         var canvas = UICanvasSetup.ApplyOn(gameObject, Camera.main);
@@ -214,15 +218,6 @@ public class TalentUI : MonoBehaviour
             {
                 var sp = TalentIcons.GetLeftAttr(i % 5);
                 if (sp != null) ApplySprite(v.icon, sp, true);
-                // 运行时纠正裁切：图标居中内缩
-                var irt = v.icon.rectTransform;
-                if (irt != null && irt.anchoredPosition.x < 30f)
-                {
-                    irt.pivot = new Vector2(0.5f, 0.5f);
-                    irt.anchorMin = irt.anchorMax = new Vector2(0f, 0.5f);
-                    irt.anchoredPosition = new Vector2(52f, 0f);
-                    irt.sizeDelta = new Vector2(56f, 56f);
-                }
                 v.icon.preserveAspect = true;
                 v.icon.type = Image.Type.Simple;
                 v.icon.color = locked ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white;
@@ -500,11 +495,7 @@ public class TalentUI : MonoBehaviour
             choiceCancelButton.onClick.RemoveAllListeners();
             choiceCancelButton.onClick.AddListener(CloseChoicePopup);
         }
-        if (choiceConfirmButton != null)
-        {
-            choiceConfirmButton.onClick.RemoveAllListeners();
-            choiceConfirmButton.onClick.AddListener(ConfirmChoicePopup);
-        }
+        WireChoiceConfirmIfNeeded();
         for (int i = 0; i < choiceButtons.Length; i++)
         {
             int opt = i;
@@ -512,6 +503,79 @@ public class TalentUI : MonoBehaviour
             choiceButtons[i].onClick.RemoveAllListeners();
             choiceButtons[i].onClick.AddListener(() => SelectChoicePopupOption(opt));
         }
+    }
+
+    void WireChoiceConfirmIfNeeded()
+    {
+        EnsureChoicePopupBindings();
+        if (choiceConfirmButton == null) return;
+        choiceConfirmButton.onClick.RemoveAllListeners();
+        choiceConfirmButton.onClick.AddListener(ConfirmChoicePopup);
+    }
+
+    /// <summary>
+    /// 预制体里已有「确定」，但序列化未挂 choiceConfirmButton，且 Awake 因 panelImage
+    /// 已绑而跳过 AutoBind，导致多选天赋弹层无法确认解锁。
+    /// </summary>
+    void EnsureChoicePopupBindings()
+    {
+        if (choicePopup == null)
+            choicePopup = transform.Find("ChoicePopup")?.gameObject;
+
+        if (choiceConfirmButton == null && choicePopup != null)
+        {
+            choiceConfirmButton = choicePopup.transform.Find("确定")?.GetComponent<Button>()
+                                  ?? choicePopup.transform.Find("Confirm")?.GetComponent<Button>();
+        }
+
+        if (choiceCancelButton == null && choicePopup != null)
+        {
+            choiceCancelButton = choicePopup.transform.Find("Cancel")?.GetComponent<Button>()
+                                 ?? choicePopup.transform.Find("取消")?.GetComponent<Button>();
+            if (choiceCancelButton != null)
+            {
+                choiceCancelButton.onClick.RemoveAllListeners();
+                choiceCancelButton.onClick.AddListener(CloseChoicePopup);
+            }
+        }
+
+        if (choiceTitleText == null)
+        {
+            choiceTitleText = FindTxt("ChoicePopup/Title")
+                              ?? FindTxt("ChoicePopup/标头/Title");
+        }
+
+        if (choiceDescText == null)
+        {
+            // 勿占用 Choice_0/Label（那是选项名）；优先独立描述节点
+            choiceDescText = FindTxt("ChoicePopup/Desc")
+                             ?? FindTxt("ChoicePopup/Description")
+                             ?? FindTxt("ChoicePopup/EffectText")
+                             ?? FindTxt("ChoicePopup/标头/Desc");
+        }
+
+        if (choiceButtons == null || choiceButtons.Length < 3)
+            choiceButtons = new Button[3];
+        if (choiceLabels == null || choiceLabels.Length < 3)
+            choiceLabels = new Text[3];
+        if (choiceIcons == null || choiceIcons.Length < 3)
+            choiceIcons = new Image[3];
+
+        for (int i = 0; i < 3; i++)
+        {
+            if (choiceButtons[i] != null) continue;
+            var t = transform.Find($"ChoicePopup/Choice_{i}");
+            if (t == null) continue;
+            choiceButtons[i] = t.GetComponent<Button>();
+            if (choiceLabels[i] == null)
+                choiceLabels[i] = choiceButtons[i]?.GetComponentInChildren<Text>(true);
+            var iconT = t.Find("Icon") ?? t.Find("icon");
+            if (choiceIcons[i] == null && iconT != null)
+                choiceIcons[i] = iconT.GetComponent<Image>();
+        }
+
+        if (choiceOptionTemplate == null && choiceButtons[0] != null)
+            choiceOptionTemplate = choiceButtons[0].gameObject;
     }
 
     void OnClickReset()
@@ -574,6 +638,9 @@ public class TalentUI : MonoBehaviour
 
     void OpenChoicePopup(TalentSystem.Branch branch, int rowIndex0, int initialOpt0)
     {
+        EnsureChoicePopupBindings();
+        WireChoiceConfirmIfNeeded();
+
         _pendingBranch = branch;
         _pendingRowIndex = rowIndex0;
         _pendingSelectedOpt = initialOpt0;
@@ -697,6 +764,9 @@ public class TalentUI : MonoBehaviour
         }
         float leftH = TalentDefs.Left.Length * LeftNodeH + 20f;
         leftContent.sizeDelta = new Vector2(0f, leftH);
+        // 打开时滚到底：最先开启的（力量 I）在最下面
+        if (leftScroll != null)
+            leftScroll.verticalNormalizedPosition = 0f;
 
         int visualRow = 0;
         // 右侧顺序：先战斗入门等主列，流派选择放到倒数第二行
@@ -774,8 +844,8 @@ public class TalentUI : MonoBehaviour
             var vp = content.parent as RectTransform;
             if (vp != null) scroll.viewport = vp;
         }
-        // 内容比视口高才能滑
-        scroll.verticalNormalizedPosition = 1f;
+        // 内容比视口高才能滑；自下而上时滚到底，最先解锁的在视野底部
+        scroll.verticalNormalizedPosition = 0f;
     }
 
     LeftNodeView BindLeftNode(GameObject go, int index0)
@@ -783,7 +853,9 @@ public class TalentUI : MonoBehaviour
         var v = new LeftNodeView { index = index0 + 1, root = go };
         v.button = go.GetComponent<Button>() ?? go.GetComponentInChildren<Button>(true);
         v.icon = go.transform.Find("Icon")?.GetComponent<Image>()
-                 ?? go.transform.Find("icon")?.GetComponent<Image>();
+                 ?? go.transform.Find("icon")?.GetComponent<Image>()
+                 ?? FindDeepImage(go.transform, "Icon")
+                 ?? FindDeepImage(go.transform, "icon");
         v.nameText = go.transform.Find("NameText")?.GetComponent<Text>();
         v.effectText = go.transform.Find("EffectText")?.GetComponent<Text>();
         v.check = go.transform.Find("Check")?.GetComponent<Image>();
@@ -803,7 +875,9 @@ public class TalentUI : MonoBehaviour
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = new Vector2(0f, LeftNodeH - 6f);
-            rt.anchoredPosition = new Vector2(0f, -index0 * LeftNodeH - 4f);
+            // 自下而上：index0（力量 I，最先开）在最底
+            int fromTop = TalentDefs.Left.Length - 1 - index0;
+            rt.anchoredPosition = new Vector2(0f, -fromTop * LeftNodeH - 4f);
         }
         return v;
     }
@@ -935,6 +1009,23 @@ public class TalentUI : MonoBehaviour
     {
         var t = transform.Find(path);
         return t != null ? t.GetComponent<Text>() : null;
+    }
+
+    static Image FindDeepImage(Transform root, string name)
+    {
+        if (root == null) return null;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var c = root.GetChild(i);
+            if (c.name == name)
+            {
+                var img = c.GetComponent<Image>();
+                if (img != null) return img;
+            }
+            var nested = FindDeepImage(c, name);
+            if (nested != null) return nested;
+        }
+        return null;
     }
 
     /// <summary>编辑器首次建树；已换美术的预制体勿覆盖</summary>

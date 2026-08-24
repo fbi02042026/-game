@@ -452,7 +452,15 @@ public class StageClearRewardDirector : MonoBehaviour
         var go = new GameObject("EquipDrop");
         go.transform.position = pos;
         var sr = go.AddComponent<SpriteRenderer>();
-        if (eq != null && eq.icon != null) sr.sprite = eq.icon;
+        if (eq != null)
+        {
+            eq.template?.ResolveIcon();
+            if (eq.icon == null && eq.template != null)
+                eq.icon = eq.template.icon;
+            if (eq.icon == null && eq.template != null)
+                eq.icon = EquipIcons.Get(eq.template.iconFileName);
+            if (eq.icon != null) sr.sprite = eq.icon;
+        }
         sr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
         sr.sortingOrder = GameConfig.SORT_VFX;
         go.transform.localScale = Vector3.one * 0.45f;

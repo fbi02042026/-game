@@ -16,7 +16,7 @@ MonoBehaviour:
   skillName: "\u9B54\u6CD5\u653B\u51FB"
   desc: "\u8FDC\u7A0B\u7CBE\u82F1\u9B54\u6CD5\u7206\u53D1"
   skillType: 1
-  attackKit: 2
+  attackKit: 1
   damageMultiplier: 2.5
   baseDamage: 0
   cooldown: 0.1

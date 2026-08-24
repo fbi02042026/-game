@@ -94,12 +94,15 @@ public static class MonsterAttackStyleTable
 
     public static AttackVfxKit GetVfxKit(MonsterAttackStyle style)
     {
+        // 远程（含表里写 Ranged/Magic/Orb）一律 Bow
+        // → Resources/VFX/Shared/Enemy/Bow/vfx_enemy_bow_fly|hit
         switch (style)
         {
-            case MonsterAttackStyle.Bow: return AttackVfxKit.Bow;
-            // 远程小怪技能/普攻统一走弓箭飞矢（vfx_bow_fly），不用法球
-            case MonsterAttackStyle.Ranged: return AttackVfxKit.Bow;
-            default: return AttackVfxKit.MeleeSlash;
+            case MonsterAttackStyle.Bow:
+            case MonsterAttackStyle.Ranged:
+                return AttackVfxKit.Bow;
+            default:
+                return AttackVfxKit.MeleeSlash;
         }
     }
 }

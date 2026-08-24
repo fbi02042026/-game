@@ -542,10 +542,11 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         if (_sharedKitCache.TryGetValue(cacheKey, out GameObject cached) && cached != null)
             return cached;
 
-        string[] fileNames = GetSharedKitFileNames(kit, stage);
+        string[] fileNames = GetSharedKitFileNames(kit, faction, stage);
         GameObject prefab = null;
         for (int i = 0; i < fileNames.Length; i++)
         {
+            // 敌方弓箭写死：VFX/Shared/Enemy/Bow/vfx_enemy_bow_fly|hit
             string path = $"VFX/Shared/{factionFolder}/{kitFolder}/{fileNames[i]}";
             prefab = Resources.Load<GameObject>(path);
             if (prefab != null)
@@ -556,7 +557,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         }
 
         // 敌方缺失：不再静默回退我方，避免「敌方也在用我方箭」
-        Debug.LogWarning($"[VFX] 加载失败: {factionFolder}/{kitFolder}/{stage}（请把预制体放到 Resources/VFX/Shared/{factionFolder}/{kitFolder}/）");
+        Debug.LogWarning($"[VFX] 加载失败: {factionFolder}/{kitFolder}/{stage} paths=[{string.Join(",", fileNames)}]（请放 Resources/VFX/Shared/{factionFolder}/{kitFolder}/）");
         return null;
     }
 
@@ -572,18 +573,37 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         }
     }
 
-    static string[] GetSharedKitFileNames(AttackVfxKit kit, string stage)
+    /// <summary>
+    /// 文件名按阵营区分。敌方弓箭必须用 vfx_enemy_bow_*，勿与 Ally 的 vfx_bow_* 同名。
+    /// </summary>
+    static string[] GetSharedKitFileNames(AttackVfxKit kit, VfxFaction faction, string stage)
     {
+        bool enemy = faction == VfxFaction.Enemy;
         if (stage == "fly")
         {
-            if (kit == AttackVfxKit.Bow) return new[] { "vfx_bow_fly" };
-            if (kit == AttackVfxKit.Orb) return new[] { "vfx_orb_fly" };
+            if (kit == AttackVfxKit.Bow)
+                return enemy
+                    ? new[] { "vfx_enemy_bow_fly", "vfx_bow_fly" }
+                    : new[] { "vfx_bow_fly" };
+            if (kit == AttackVfxKit.Orb)
+                return enemy
+                    ? new[] { "vfx_enemy_orb_fly", "vfx_orb_fly" }
+                    : new[] { "vfx_orb_fly" };
         }
         if (stage == "hit")
         {
-            if (kit == AttackVfxKit.MeleeSlash) return new[] { "vfx_melee_hit" };
-            if (kit == AttackVfxKit.Bow) return new[] { "vfx_bow_hit" };
-            if (kit == AttackVfxKit.Orb) return new[] { "vfx_orb_hit" };
+            if (kit == AttackVfxKit.MeleeSlash)
+                return enemy
+                    ? new[] { "vfx_enemy_melee_hit", "vfx_melee_hit" }
+                    : new[] { "vfx_melee_hit" };
+            if (kit == AttackVfxKit.Bow)
+                return enemy
+                    ? new[] { "vfx_enemy_bow_hit", "vfx_bow_hit" }
+                    : new[] { "vfx_bow_hit" };
+            if (kit == AttackVfxKit.Orb)
+                return enemy
+                    ? new[] { "vfx_enemy_orb_hit", "vfx_orb_hit" }
+                    : new[] { "vfx_orb_hit" };
             if (kit == AttackVfxKit.Heal) return new[] { "vfx_heal" };
         }
         return new string[0];

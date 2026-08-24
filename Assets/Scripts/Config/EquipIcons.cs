@@ -29,12 +29,15 @@ public static class EquipIcons
 
     static Sprite Load(string assetPath)
     {
-#if UNITY_EDITOR
-        return AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
-#else
         string file = System.IO.Path.GetFileNameWithoutExtension(assetPath);
-        return Resources.Load<Sprite>("UI/EquipIcons/" + file);
+        // 优先 Resources（真机）；编辑器再补 AssetDatabase
+        var res = Resources.Load<Sprite>("UI/EquipIcons/" + file);
+        if (res != null) return res;
+#if UNITY_EDITOR
+        var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+        if (ed != null) return ed;
 #endif
+        return null;
     }
 
     public static void ClearCache() => _cache.Clear();

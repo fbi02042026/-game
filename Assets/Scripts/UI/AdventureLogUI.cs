@@ -74,6 +74,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (_root != null) _root.SetActive(true);
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
+        var hall = GetComponentInParent<GuildHallUI>();
+        if (hall != null)
+            TownSharedChrome.RaiseSharedChrome(hall.transform);
         RedDot.RefreshCommon();
         SelectTab(_tab, force: true);
     }
@@ -133,7 +136,45 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
     void ConfigureHostCanvasOnce()
     {
-        TownPageCanvas.Configure(gameObject, 40, stripCanvasWhenNested: false);
+        // 与角色/冒险/酒馆一致：嵌在大厅下走父 Canvas，避免独立 Canvas(sorting40)
+        // 盖住底栏后底部留黑边，看起来整页「偏下」。不是摄像机问题。
+        EnsureHostRect();
+        TownPageCanvas.Configure(gameObject, 5, stripCanvasWhenNested: true);
+        EnsureFrameClearsChrome();
+    }
+
+    /// <summary>预制体根曾存成 scale0 / 锚点 0,0 零尺寸，运行时先拉满父节点。</summary>
+    void EnsureHostRect()
+    {
+        var rt = transform as RectTransform;
+        if (rt == null) return;
+        if (rt.localScale.sqrMagnitude < 0.0001f)
+            rt.localScale = Vector3.one;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+    }
+
+    /// <summary>
+    /// Frame 按顶栏/底栏像素预留上移，与 CharacterUI(120/150) 对齐。
+    /// 不改手做预制体资源，仅运行时纠正。
+    /// </summary>
+    void EnsureFrameClearsChrome()
+    {
+        const float TopReserve = 120f;
+        const float BottomReserve = 150f;
+        const float SidePad = 16f;
+        var frame = transform.Find("Root/Frame") as RectTransform;
+        if (frame == null) return;
+        frame.anchorMin = Vector2.zero;
+        frame.anchorMax = Vector2.one;
+        frame.pivot = new Vector2(0.5f, 0.5f);
+        frame.anchoredPosition = Vector2.zero;
+        frame.sizeDelta = Vector2.zero;
+        frame.offsetMin = new Vector2(SidePad, BottomReserve);
+        frame.offsetMax = new Vector2(-SidePad, -TopReserve);
     }
 
     void PrepareDoneTemplate()

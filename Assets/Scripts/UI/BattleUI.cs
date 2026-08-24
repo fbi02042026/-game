@@ -1023,6 +1023,7 @@ public class BattleUI : MonoBehaviour
         if (mercs == null || mercs.Count == 0 || mercs[0] == null) return;
         var m = mercs[0];
         mercSlot1.SetLocked(false);
+        mercSlot1.SetEnergyEnabled(true);
         Sprite mercIcon = mm.GetIcon(m.mercId);
         mercSlot1.SetPortrait(mercIcon);
         // 教程老盾不在存档出战列表里，技能圆形头像要单独绑
@@ -1065,6 +1066,7 @@ public class BattleUI : MonoBehaviour
         if (index < mercIds.Count)
         {
             slot.SetLocked(false);
+            slot.SetEnergyEnabled(true);
             string id = mercIds[index];
             Sprite icon = mm != null ? mm.GetIcon(id) : null;
             string job = mm != null ? mm.GetJobName(id) : id;
@@ -1078,6 +1080,8 @@ public class BattleUI : MonoBehaviour
             }
             else
             {
+                // 出战名单有占位但单位未生成：也不涨蓝条
+                slot.SetEnergyEnabled(false);
                 slot.UpdateSlot(job, 1, 0, 0);
             }
         }
@@ -1241,10 +1245,12 @@ public class BattleUI : MonoBehaviour
         }
         else if (skillIndex == 1 && mercSlot1 != null)
         {
+            if (!mercSlot1.EnergyEnabled) energyRatio = 0f;
             mercSlot1.SetEnergy(energyRatio);
         }
         else if (skillIndex == 2 && mercSlot2 != null)
         {
+            if (!mercSlot2.EnergyEnabled) energyRatio = 0f;
             mercSlot2.SetEnergy(energyRatio);
         }
     }
@@ -1370,6 +1376,8 @@ public class CharacterSlotUI
     public Image hpBarFill;             // 血条填充 HPBarFill
     public Text hpText;                 // HP数值 "28/28"
     public Image lanBarFill;            // 蓝条/技能能量 lanBarFill
+    /// <summary>未解锁/空槽时为 false，蓝条强制保持 0</summary>
+    public bool EnergyEnabled { get; private set; } = true;
     public Text lanText;                // 蓝条文字
     public GameObject lockedOverlay;    // 锁定遮罩
 
@@ -1433,13 +1441,14 @@ public class CharacterSlotUI
     /// <summary>技能能量：底栏 lanBar 显示进度，满时仅显示光边（不改头像框）</summary>
     public void SetEnergy(float energy)
     {
+        if (!EnergyEnabled) energy = 0f;
         _lastEnergy = energy;
         float e = Mathf.Clamp01(energy);
 
         if (lanBarFill != null)
             lanBarFill.fillAmount = e;
         if (lanText != null)
-            lanText.text = $"{Mathf.RoundToInt(e * 100)}%";
+            lanText.text = e <= 0.001f ? "" : $"{Mathf.RoundToInt(e * 100)}%";
         // 不用头像框/头像当进度条
         if (energyRing != null)
             energyRing.fillAmount = 0f;
@@ -1447,6 +1456,13 @@ public class CharacterSlotUI
         bool isReady = e >= 0.99f;
         if (glowBorder != null)
             glowBorder.gameObject.SetActive(isReady);
+    }
+
+    public void SetEnergyEnabled(bool enabled)
+    {
+        EnergyEnabled = enabled;
+        if (!enabled)
+            SetEnergy(0f);
     }
 
     /// <summary>满能量光边：叠在 Portrait 父节点上，不用头像当进度条</summary>
@@ -1494,6 +1510,11 @@ public class CharacterSlotUI
         {
             if (portrait != null) portrait.gameObject.SetActive(false);
             if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
+            SetEnergyEnabled(false);
+        }
+        else
+        {
+            SetEnergyEnabled(true);
         }
     }
 
@@ -1502,6 +1523,7 @@ public class CharacterSlotUI
     /// </summary>
     public void Clear()
     {
+        SetEnergyEnabled(false);
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
         if (root != null)
         {
@@ -1514,6 +1536,7 @@ public class CharacterSlotUI
     /// <summary>空槽占位显示（已解锁但无佣兵）</summary>
     public void ShowEmpty()
     {
+        SetEnergyEnabled(false);
         if (root != null) root.SetActive(true);
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
         if (portrait != null) portrait.gameObject.SetActive(false);
@@ -1530,6 +1553,7 @@ public class CharacterSlotUI
     /// </summary>
     public void KeepArtistDefault()
     {
+        SetEnergyEnabled(false);
         if (root == null) return;
         root.SetActive(true);
         if (lockedOverlay != null)
@@ -1539,6 +1563,7 @@ public class CharacterSlotUI
     /// <summary>未开放槽：保留节点可见，头像关掉，文案显示「未开放」</summary>
     public void ShowUnavailable(string label = "未开放")
     {
+        SetEnergyEnabled(false);
         if (root == null) return;
         root.SetActive(true);
         if (lockedOverlay != null) lockedOverlay.SetActive(true);

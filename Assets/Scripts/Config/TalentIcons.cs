@@ -54,17 +54,18 @@ public static class TalentIcons
 
     static Sprite Load(string assetPath)
     {
+        string file = System.IO.Path.GetFileNameWithoutExtension(assetPath);
+        string folder = assetPath.Contains("属性") ? "UI/AttrIcons" : "UI/TalentIcons";
+        // 优先 Resources（真机与编辑器一致），避免只靠 AssetDatabase 时图标全是模板默认旋涡
+        var res = Resources.Load<Sprite>($"{folder}/{file}");
+        if (res != null) return res;
+        res = Resources.Load<Sprite>($"UI/AttrIcons/{file}")
+              ?? Resources.Load<Sprite>($"UI/TalentIcons/{file}");
+        if (res != null) return res;
 #if UNITY_EDITOR
         var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
         if (ed != null) return ed;
 #endif
-        // 正式包需将图标放入 Resources；编辑器 Play 模式走 AssetDatabase。
-        string file = System.IO.Path.GetFileNameWithoutExtension(assetPath);
-        string folder = assetPath.Contains("属性") ? "UI/AttrIcons" : "UI/TalentIcons";
-        var res = Resources.Load<Sprite>($"{folder}/{file}");
-        if (res != null) return res;
-        // 兼容未拷贝 Resources 时仍用文件名在 AttrIcons 根下找
-        return Resources.Load<Sprite>($"UI/AttrIcons/{file}")
-               ?? Resources.Load<Sprite>($"UI/TalentIcons/{file}");
+        return null;
     }
 }

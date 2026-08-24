@@ -1,5 +1,4 @@
 using System.Collections;
-using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -87,16 +86,16 @@ public class BattleHeadTalkUI : MonoBehaviour
         _text.fontSize = 24;
         _text.color = new Color(0.22f, 0.14f, 0.1f, 1f);
         _text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        _text.verticalOverflow = VerticalWrapMode.Truncate;
+        _text.verticalOverflow = VerticalWrapMode.Overflow;
+        _text.resizeTextForBestFit = false;
         _text.raycastTarget = false;
         _text.font = GameFonts.GetChinese();
         var tr = _text.rectTransform;
         tr.anchorMin = Vector2.zero;
         tr.anchorMax = Vector2.one;
-        tr.offsetMin = new Vector2(26f, 22f);
-        tr.offsetMax = new Vector2(-26f, -18f);
-        if (rootGo.GetComponent<RectMask2D>() == null)
-            rootGo.AddComponent<RectMask2D>();
+        tr.offsetMin = new Vector2(PadX, PadBottom);
+        tr.offsetMax = new Vector2(-PadX, -PadTop);
+        // 不用 RectMask2D 切字；多行靠加高气泡容纳
 
         var tailGo = new GameObject("Tail", typeof(RectTransform), typeof(Image));
         tailGo.transform.SetParent(rootGo.transform, false);
@@ -185,8 +184,8 @@ public class BattleHeadTalkUI : MonoBehaviour
     IEnumerator PlayLineRoutine(UnitBase speaker, string content, float hold)
     {
         _follow = speaker;
-        string full = WrapBubbleText(content ?? "");
-        float maxDur = hold + full.Length * 0.12f + 4f;
+        string raw = (content ?? "").Replace("\r", "").Trim();
+        float maxDur = hold + raw.Length * 0.12f + 4f;
         float elapsed = 0f;
 
         if (_text != null) _text.text = "";
@@ -194,19 +193,21 @@ public class BattleHeadTalkUI : MonoBehaviour
         {
             _root.localScale = Vector3.one;
             _root.gameObject.SetActive(true);
-            FitBubbleSize();
+            FitBubbleToText(raw);
         }
         if (_group != null) _group.alpha = 1f;
         PlayPopIn();
         RefreshFollowPosition();
         AcquireStoryBgm();
 
+        string full = _text != null ? _text.text : raw;
         if (_text != null && full.Length > 0 && !_skipRequested)
         {
+            // 打字机按无换行原文逐字，再每帧按气泡最宽处重排
             float delay = 1f / Mathf.Max(8f, TypeCharsPerSecond);
-            for (int i = 1; i <= full.Length && !_skipRequested; i++)
+            for (int i = 1; i <= raw.Length && !_skipRequested; i++)
             {
-                _text.text = full.Substring(0, i);
+                FitBubbleToText(raw.Substring(0, i));
                 float tType = 0f;
                 while (tType < delay && !_skipRequested)
                 {
@@ -217,9 +218,7 @@ public class BattleHeadTalkUI : MonoBehaviour
                 }
             }
             if (!_skipRequested)
-            {
-                _text.text = full;
-            }
+                FitBubbleToText(raw);
         }
 
         float t = 0f;
@@ -239,35 +238,84 @@ public class BattleHeadTalkUI : MonoBehaviour
         RefreshFollowPosition();
     }
 
-    const float FixedBubbleW = 360f;
-    const float FixedBubbleH = 120f;
-    const int BubbleCharsPerLine = 11;
+    const float MaxBubbleW = 360f;
+    const float MinBubbleH = 100f;
+    const float PadX = 28f;
+    const float PadTop = 18f;
+    const float PadBottom = 24f;
 
-    static string WrapBubbleText(string s)
+    TextGenerator _textGen;
+
+    /// <summary>
+    /// 按气泡底图「最宽可视宽度」做像素换行，多行只加高不挤扁。
+    /// preserveAspect 时可视宽 = min(MaxBubbleW, H * aspect)。
+    /// </summary>
+    void FitBubbleToText(string raw)
     {
-        if (string.IsNullOrEmpty(s)) return "";
-        if (s.IndexOf('\n') >= 0) return s;
-        var sb = new StringBuilder(s.Length + 8);
-        int col = 0;
-        for (int i = 0; i < s.Length; i++)
+        if (_root == null || _text == null) return;
+        raw = (raw ?? "").Replace("\r", "").Replace("\n", " ").Trim();
+        if (string.IsNullOrEmpty(raw))
         {
-            sb.Append(s[i]);
-            col++;
-            if (col >= BubbleCharsPerLine && i + 1 < s.Length)
-            {
-                sb.Append('\n');
-                col = 0;
-            }
+            _text.text = "";
+            _root.sizeDelta = new Vector2(MaxBubbleW, MinBubbleH);
+            return;
         }
-        return sb.ToString();
-    }
 
-    /// <summary>气泡尺寸固定，长句分行，不随字数拉大。</summary>
-    void FitBubbleSize()
-    {
-        if (_root == null) return;
-        _root.sizeDelta = new Vector2(FixedBubbleW, FixedBubbleH);
+        float aspect = _bubbleAspect > 0.1f ? _bubbleAspect : 2.4f;
+        // 先定宽：不超过 MaxBubbleW，且保持底图比例时的最宽
+        float bubbleW = MaxBubbleW;
+        float visualW = bubbleW;
+        if (!_bubbleSliced && _bg != null && _bg.sprite != null && _bg.preserveAspect)
+        {
+            // 用基准高度估可视宽；短句可再收窄
+            float baseH = MinBubbleH;
+            visualW = Mathf.Min(bubbleW, baseH * aspect);
+        }
+        float wrapW = Mathf.Max(80f, visualW - PadX * 2f);
+
+        if (_textGen == null) _textGen = new TextGenerator();
+        var settings = _text.GetGenerationSettings(new Vector2(wrapW, 0f));
+        settings.horizontalOverflow = HorizontalWrapMode.Wrap;
+        settings.verticalOverflow = VerticalWrapMode.Overflow;
+        settings.generateOutOfBounds = true;
+        settings.resizeTextForBestFit = false;
+        _textGen.Populate(raw, settings);
+        float prefH = _textGen.GetPreferredHeight(raw, settings);
+        float prefW = _textGen.GetPreferredWidth(raw, settings);
+
+        int lines = Mathf.Max(1, _textGen.lineCount);
+        float textH = Mathf.Max(prefH, _text.fontSize * 1.2f * lines);
+        float bubbleH = Mathf.Max(MinBubbleH, textH + PadTop + PadBottom);
+
+        // 有底图等比：高度决定可视宽，再反推根尺寸让可视区吃满
+        if (!_bubbleSliced && _bg != null && _bg.sprite != null && _bg.preserveAspect)
+        {
+            float needVisualW = Mathf.Clamp(prefW + PadX * 2f, 160f, MaxBubbleW);
+            // letterbox：根宽=可视宽，根高=可视高（aspect 固定）
+            bubbleH = Mathf.Max(bubbleH, needVisualW / aspect);
+            bubbleW = bubbleH * aspect;
+            if (bubbleW > MaxBubbleW)
+            {
+                bubbleW = MaxBubbleW;
+                bubbleH = bubbleW / aspect;
+            }
+            // 文字区宽按最终可视宽
+            wrapW = Mathf.Max(80f, bubbleW - PadX * 2f);
+            settings = _text.GetGenerationSettings(new Vector2(wrapW, 0f));
+            settings.horizontalOverflow = HorizontalWrapMode.Wrap;
+            settings.verticalOverflow = VerticalWrapMode.Overflow;
+            settings.resizeTextForBestFit = false;
+            _textGen.Populate(raw, settings);
+        }
+        else
+        {
+            bubbleW = Mathf.Clamp(prefW + PadX * 2f, 160f, MaxBubbleW);
+        }
+
+        _root.sizeDelta = new Vector2(bubbleW, bubbleH);
         _root.localScale = Vector3.one;
+        _text.text = raw;
+        Canvas.ForceUpdateCanvases();
     }
 
     void RefreshFollowPosition()
@@ -279,7 +327,6 @@ public class BattleHeadTalkUI : MonoBehaviour
         Vector3 screen = cam.WorldToScreenPoint(world);
         if (screen.z <= 0f)
         {
-            // 镜头背后时仍贴屏幕上方，避免气泡直接消失
             screen.z = 1f;
             screen.x = Mathf.Clamp(screen.x, Screen.width * 0.2f, Screen.width * 0.8f);
             screen.y = Screen.height * 0.55f;
@@ -288,10 +335,15 @@ public class BattleHeadTalkUI : MonoBehaviour
             transform as RectTransform, screen, null, out var local);
         var hostRt = transform as RectTransform;
         float halfW = _root.rect.width * 0.5f;
+        float h = _root.rect.height;
+        // pivot 在底中：钳 X 与 Y，保证整泡在屏内，仍尽量贴说话人
         float minX = hostRt.rect.xMin + halfW + 8f;
         float maxX = hostRt.rect.xMax - halfW - 8f;
+        float minY = hostRt.rect.yMin + 8f;
+        float maxY = hostRt.rect.yMax - h - 8f;
         float clampedX = Mathf.Clamp(local.x, minX, maxX);
-        _root.anchoredPosition = new Vector2(clampedX, local.y);
+        float clampedY = Mathf.Clamp(local.y, minY, maxY);
+        _root.anchoredPosition = new Vector2(clampedX, clampedY);
         RefreshTail(local.x - clampedX);
     }
 

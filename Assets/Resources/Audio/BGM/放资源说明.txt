@@ -1,8 +1,9 @@
 背景音乐（Resources 路径，不要扩展名）：
 
+bgm_login.mp3    —— 登录界面（晨城号角）
 bgm_town.mp3     —— 主场景（公会大厅 / 冒险 / 角色）
 bgm_tavern.mp3   —— 酒吧（酒馆页）
-bgm_battle.mp3   —— 普通 / 精英战斗
+bgm_battle.mp3   —— 普通 / 精英战斗（燃火前线）
 bgm_boss.mp3     —— 首领战
 bgm_special.mp3  —— 恢复 / 锻造 / 附魔关
 

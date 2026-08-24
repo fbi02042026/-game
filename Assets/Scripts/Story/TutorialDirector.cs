@@ -432,19 +432,46 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         yield return TalkHeld(bm, headTalk, Hero.Instance, "这波清完了，先撤？", 1.8f);
         yield return TalkHeld(bm, headTalk, merc, "行，回城我请你喝一杯。", 1.9f);
-        hint.Show("你的队友状态也不好，现在撤出来比较稳。点击右上角设置，选择撤离。", null, 5.2f);
+        headTalk?.HideNow();
+
+        // 撤离引导：冻住单位，和佣兵原地等玩家点撤离；超时自动撤
+        if (bm != null)
+        {
+            bm.UnitsCanAct = false;
+            HaltUnit(Hero.Instance);
+            HaltUnit(merc);
+        }
 
         WaitingEvacuate = true;
         RectTransform settingsRt = ui != null && ui.settingsButton != null
             ? ui.settingsButton.GetComponent<RectTransform>() : null;
         hint.ShowHard("点右上角设置，选择「撤离」回城。", settingsRt);
 
+        const float autoEvacuateSeconds = 6f;
+        float wait = 0f;
         while (WaitingEvacuate && BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun)
+        {
+            HaltUnit(Hero.Instance);
+            HaltUnit(merc);
+            wait += Time.unscaledDeltaTime;
+            if (wait >= autoEvacuateSeconds)
+            {
+                WaitingEvacuate = false;
+                BattleManager.Instance?.TriggerEvacuation();
+                break;
+            }
             yield return null;
+        }
 
         hint.Hide();
         _battleTutorialFlowStarted = false;
         _flow = null;
+    }
+
+    static void HaltUnit(UnitBase u)
+    {
+        if (u == null || u.rb == null) return;
+        u.rb.velocity = Vector2.zero;
     }
 
     /// <summary>放技能的点击目标：优先玩家头像槽，退回技能头像按钮。</summary>

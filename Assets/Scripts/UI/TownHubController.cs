@@ -228,6 +228,7 @@ public class TownHubController : MonoBehaviour
         {
             var go = Instantiate(prefab, transform, false);
             go.name = "AdventureLogUI";
+            Stretch(go);
             _log = go.GetComponent<AdventureLogUI>();
             if (_log == null) _log = go.AddComponent<AdventureLogUI>();
         }

@@ -95,7 +95,7 @@ public static class BackpackGridVisual
                 AddNameFallback(go.transform, p.equip.equipName ?? "装备");
 
             if (p.equipped)
-                AddEquippedBadge(go.transform);
+                AddEquippedBadge(go.transform, p.h);
         }
     }
 
@@ -168,7 +168,11 @@ public static class BackpackGridVisual
         tr.offsetMax = new Vector2(-4f, -4f);
     }
 
-    static void AddEquippedBadge(Transform parent)
+    /// <summary>
+    /// 「已装备」贴在跨格区域顶部。多格装备（如 1×2 剑）图标因 preserveAspect 落在上格，
+    /// 原先贴底会看起来像空下格上的标签。
+    /// </summary>
+    static void AddEquippedBadge(Transform parent, int gridH = 1)
     {
         var go = new GameObject("EquippedBadge", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         go.transform.SetParent(parent, false);
@@ -176,11 +180,23 @@ public static class BackpackGridVisual
         bg.color = new Color(0f, 0f, 0f, 0.55f);
         bg.raycastTarget = false;
         var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0f, 0f);
-        rt.anchorMax = new Vector2(1f, 0f);
-        rt.pivot = new Vector2(0.5f, 0f);
-        rt.anchoredPosition = Vector2.zero;
-        rt.sizeDelta = new Vector2(0f, 22f);
+        // 多格：贴在上半格底边附近（图标常见位置）；单格：贴底
+        if (gridH > 1)
+        {
+            rt.anchorMin = new Vector2(0.08f, 0.5f);
+            rt.anchorMax = new Vector2(0.92f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(0f, 22f);
+        }
+        else
+        {
+            rt.anchorMin = new Vector2(0f, 0f);
+            rt.anchorMax = new Vector2(1f, 0f);
+            rt.pivot = new Vector2(0.5f, 0f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(0f, 22f);
+        }
 
         var textGo = new GameObject("Label", typeof(RectTransform));
         textGo.transform.SetParent(go.transform, false);
