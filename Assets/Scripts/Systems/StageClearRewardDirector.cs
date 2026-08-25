@@ -251,10 +251,13 @@ public class StageClearRewardDirector : MonoBehaviour
                 _boxAnim.Play("open2", 0, 0f);
             }
             else
-                yield return new WaitForSeconds(0.8f);
+                yield return new WaitForSecondsRealtime(0.8f);
         }
         else
-            yield return new WaitForSeconds(0.5f);
+        {
+            Debug.LogWarning("[StageClearReward] 场景缺少 box 节点，跳过开箱动画");
+            yield return new WaitForSecondsRealtime(0.35f);
+        }
 
         // —— 掉落金币飞入资源条 ——
         int goldDrop = Mathf.Max(0, bonusGold);
@@ -272,7 +275,7 @@ public class StageClearRewardDirector : MonoBehaviour
                 goldRemain -= add;
                 Vector3 land = spawnGold + new Vector3(Random.Range(-0.6f, 0.6f), 0f, 0f);
                 yield return StartCoroutine(CoFlyCoin(land, add));
-                yield return new WaitForSeconds(0.04f);
+                yield return new WaitForSecondsRealtime(0.04f);
             }
         }
 
@@ -292,7 +295,7 @@ public class StageClearRewardDirector : MonoBehaviour
             if (go != null) groundIcons.Add(go);
         }
 
-        yield return new WaitForSeconds(0.35f);
+        yield return new WaitForSecondsRealtime(0.35f);
 
         // —— 三选一 ——
         if (show.Count > 0)
@@ -320,7 +323,7 @@ public class StageClearRewardDirector : MonoBehaviour
                 if (groundIcons[i] != null) Destroy(groundIcons[i]);
         }
 
-        // —— 传送门 ——
+        // —— 传送门 + 传送特效 ——
         if (_chuansongmen != null)
         {
             float portalX = bm != null && bm.hero != null
@@ -331,16 +334,36 @@ public class StageClearRewardDirector : MonoBehaviour
             p.y = UnitBase.GROUND_Y;
             _chuansongmen.position = p;
             _chuansongmen.gameObject.SetActive(true);
+            EnsurePortalFx(_chuansongmen);
+            PlayPortalOpenVfx(_chuansongmen.position);
             bm?.NotifyChuanSongMenOpened(_chuansongmen);
         }
         else
         {
-            // 无传送门节点：直接结算选关
+            Debug.LogWarning("[StageClearReward] 场景缺少 chuansongmen，跳过传送门直接结算");
             bm?.FinishStageAfterPortalReached();
         }
 
         if (bm != null) bm.UnitsCanAct = true;
         _running = false;
+    }
+
+    /// <summary>给 chuansongmen 挂脉动动画（与旧 EndPoint PortalAnimator 同款）。</summary>
+    static void EnsurePortalFx(Transform portal)
+    {
+        if (portal == null) return;
+        var anim = portal.GetComponent<PortalAnimator>();
+        if (anim == null) anim = portal.GetComponentInChildren<PortalAnimator>(true);
+        if (anim == null) anim = portal.gameObject.AddComponent<PortalAnimator>();
+        anim.enabled = true;
+        anim.Warm();
+        // 确保子节点可见
+        for (int i = 0; i < portal.childCount; i++)
+        {
+            var c = portal.GetChild(i);
+            if (c != null && !c.gameObject.activeSelf)
+                c.gameObject.SetActive(true);
+        }
     }
 
     void ApplyEquipChoice(List<EquipInstance> show, EquipInstance picked, bool doEquip)
@@ -472,7 +495,7 @@ public class StageClearRewardDirector : MonoBehaviour
         float t = 0f;
         while (t < fallback)
         {
-            t += Time.deltaTime;
+            t += Time.unscaledDeltaTime;
             if (anim != null)
             {
                 var info = anim.GetCurrentAnimatorStateInfo(0);
@@ -481,6 +504,21 @@ public class StageClearRewardDirector : MonoBehaviour
             }
             yield return null;
         }
+    }
+
+    /// <summary>播放 Resources/VFX/other/world/传送（开启传送门时的出现特效）。</summary>
+    static void PlayPortalOpenVfx(Vector3 worldPos)
+    {
+        var prefab = Resources.Load<GameObject>("VFX/other/world/传送")
+                  ?? Resources.Load<GameObject>("VFX/other/world/portal_open");
+        if (prefab == null)
+        {
+            Debug.LogWarning("[StageClearReward] 未找到特效 Resources/VFX/other/world/传送");
+            return;
+        }
+        var go = Object.Instantiate(prefab, worldPos + new Vector3(0f, 0.6f, 0f), Quaternion.identity);
+        go.name = "PortalOpenVfx";
+        Object.Destroy(go, 4.5f);
     }
 
     static Transform FindChildIgnoreCase(Transform root, string name)

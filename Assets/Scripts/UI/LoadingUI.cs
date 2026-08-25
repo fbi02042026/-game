@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 切场景 Loading（Resources/Prefabs/Loading/LoadingUI）。
-/// 布局与原运行时手搓一致：全屏背景、中下部剧情提示、右下角「加载中」+ 百分比。
+/// 布局以用户预制体为准；运行时只改文案/字体/Canvas，不改节点坐标。
 /// 跨场景时用 Overlay + 高 sortingOrder，避免 Camera 随场景销毁导致黑屏。
 /// </summary>
 public class LoadingUI : MonoBehaviour
@@ -15,11 +15,6 @@ public class LoadingUI : MonoBehaviour
     public Text tipText;
     public Text labelText;
     public Text percentText;
-
-    RectTransform _logoRt;
-    Vector2 _logoDesignSize;
-    bool _logoSizeCaptured;
-    bool _progressLayoutReady;
 
     public void PrepareOverlay()
     {
@@ -55,143 +50,7 @@ public class LoadingUI : MonoBehaviour
         if (tipText != null)
             tipText.font = GameFonts.GetChinese();
 
-        ApplyResponsiveLayout();
-    }
-
-    void OnEnable()
-    {
-        ApplyResponsiveLayout();
-    }
-
-    void OnRectTransformDimensionsChange()
-    {
-        ApplyResponsiveLayout();
-    }
-
-    void ApplyResponsiveLayout()
-    {
-        var rootRt = transform as RectTransform;
-        if (rootRt == null) return;
-        float canvasW = rootRt.rect.width;
-        if (canvasW < 8f) return;
-
-        ApplyTipLayout(canvasW);
-        ApplyLogoLayout(canvasW);
-        ApplyProgressLayout();
-    }
-
-    /// <summary>
-    /// 剧情提示保持屏幕水平居中、中下部相对位置；宽度随画布收窄。
-    /// </summary>
-    void ApplyTipLayout(float canvasW)
-    {
-        if (tipText == null)
-            tipText = transform.Find("StoryTip")?.GetComponent<Text>();
-        if (tipText == null) return;
-
-        const float sidePad = 40f;
-        const float maxWidth = 640f;
-        const float tipHeight = 160f;
-        const float fromBottom = 0.36f;
-
-        tipText.alignment = TextAnchor.MiddleCenter;
-        tipText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        tipText.verticalOverflow = VerticalWrapMode.Truncate;
-
-        var tipRt = tipText.rectTransform;
-        tipRt.anchorMin = new Vector2(0.5f, fromBottom);
-        tipRt.anchorMax = new Vector2(0.5f, fromBottom);
-        tipRt.pivot = new Vector2(0.5f, 0.5f);
-        tipRt.sizeDelta = new Vector2(Mathf.Min(maxWidth, canvasW - sidePad * 2f), tipHeight);
-        tipRt.anchoredPosition = Vector2.zero;
-    }
-
-    /// <summary>
-    /// Logo 按设计尺寸随画布宽度缩放，固定左上角边距。
-    /// </summary>
-    void ApplyLogoLayout(float canvasW)
-    {
-        if (_logoRt == null)
-        {
-            var t = transform.Find("logo");
-            if (t == null) t = transform.Find("Logo");
-            _logoRt = t as RectTransform;
-        }
-        if (_logoRt == null) return;
-
-        if (!_logoSizeCaptured)
-        {
-            _logoSizeCaptured = true;
-            var sc = _logoRt.localScale;
-            _logoDesignSize = new Vector2(
-                Mathf.Abs(_logoRt.sizeDelta.x * sc.x),
-                Mathf.Abs(_logoRt.sizeDelta.y * sc.y));
-            if (_logoDesignSize.x < 8f || _logoDesignSize.y < 8f)
-                _logoDesignSize = new Vector2(128f, 112f);
-        }
-
-        float k = Mathf.Clamp(canvasW / GameConfig.DESIGN_WIDTH, 0.72f, 1.2f);
-        var img = _logoRt.GetComponent<Image>();
-        if (img != null) img.preserveAspect = true;
-
-        _logoRt.localScale = Vector3.one;
-        _logoRt.anchorMin = new Vector2(0f, 1f);
-        _logoRt.anchorMax = new Vector2(0f, 1f);
-        _logoRt.pivot = new Vector2(0f, 1f);
-        _logoRt.sizeDelta = _logoDesignSize * k;
-        _logoRt.anchoredPosition = new Vector2(24f * k, -24f * k);
-    }
-
-    /// <summary>
-    /// 「加载中」与百分比按实际文字宽度紧挨排列，右下角对齐。
-    /// </summary>
-    void ApplyProgressLayout()
-    {
-        if (labelText == null)
-            labelText = transform.Find("ProgressCorner/Label")?.GetComponent<Text>();
-        if (percentText == null)
-            percentText = transform.Find("ProgressCorner/Percent")?.GetComponent<Text>();
-        if (labelText == null || percentText == null) return;
-
-        var corner = labelText.transform.parent as RectTransform;
-        if (corner == null) return;
-
-        if (!_progressLayoutReady)
-        {
-            _progressLayoutReady = true;
-            labelText.alignment = TextAnchor.MiddleRight;
-            labelText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            labelText.verticalOverflow = VerticalWrapMode.Overflow;
-            percentText.alignment = TextAnchor.MiddleLeft;
-            percentText.horizontalOverflow = HorizontalWrapMode.Overflow;
-            percentText.verticalOverflow = VerticalWrapMode.Overflow;
-        }
-
-        const float gap = 8f;
-        const float height = 40f;
-        float labelW = Mathf.Max(8f, labelText.preferredWidth);
-        float pctW = Mathf.Max(8f, percentText.preferredWidth);
-        float total = labelW + gap + pctW;
-
-        corner.anchorMin = new Vector2(1f, 0f);
-        corner.anchorMax = new Vector2(1f, 0f);
-        corner.pivot = new Vector2(1f, 0f);
-        corner.sizeDelta = new Vector2(total, height);
-        corner.anchoredPosition = new Vector2(-36f, 28f);
-
-        var labelRt = labelText.rectTransform;
-        labelRt.anchorMin = new Vector2(0f, 0f);
-        labelRt.anchorMax = new Vector2(0f, 1f);
-        labelRt.pivot = new Vector2(0f, 0.5f);
-        labelRt.sizeDelta = new Vector2(labelW, 0f);
-        labelRt.anchoredPosition = Vector2.zero;
-
-        var pctRt = percentText.rectTransform;
-        pctRt.anchorMin = new Vector2(0f, 0f);
-        pctRt.anchorMax = new Vector2(0f, 1f);
-        pctRt.pivot = new Vector2(0f, 0.5f);
-        pctRt.sizeDelta = new Vector2(pctW, 0f);
-        pctRt.anchoredPosition = new Vector2(labelW + gap, 0f);
+        // 布局以预制体为准，运行时不再改写 StoryTip / Logo / Progress 坐标
     }
 
     public void SetProgress(float progress01)
@@ -199,14 +58,12 @@ public class LoadingUI : MonoBehaviour
         float p = Mathf.Clamp01(progress01);
         if (percentText != null)
             percentText.text = Mathf.RoundToInt(p * 100f) + "%";
-        ApplyProgressLayout();
     }
 
     public void SetTip(string tip)
     {
         if (tipText != null && !string.IsNullOrEmpty(tip))
             tipText.text = tip;
-        ApplyResponsiveLayout();
     }
 
     public string CurrentTip => tipText != null ? tipText.text : "";

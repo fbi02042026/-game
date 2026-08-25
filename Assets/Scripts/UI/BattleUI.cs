@@ -1272,7 +1272,7 @@ public class BattleUI : MonoBehaviour
         }
 
         var panel = BattleSettingsPanel.Ensure();
-        panel.Open();
+        panel.Open(SettingsHost.Battle);
 
         // 引导阶段：开完设置直接把手指指到撤离按钮上
         if (TutorialDirector.Instance != null && TutorialDirector.Instance.WaitingEvacuate

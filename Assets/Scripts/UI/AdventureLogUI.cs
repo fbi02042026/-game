@@ -410,12 +410,22 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 unlocked++;
                 if (!hasCurrent) { current = e; hasCurrent = true; }
             }
-            AddRow(rows, on ? e.Name : "？？？",
+            string label = e.Name;
+            if (!string.IsNullOrEmpty(e.Nickname))
+                label = e.Name + " · " + e.Nickname;
+            AddRow(rows, on ? label : "？？？",
                 on ? e.Role : e.Unlock,
                 on ? e.Desc + "\n" + e.Lore : "解锁条件：" + e.Unlock,
                 !on);
         }
-        title = hasCurrent ? current.Name : "佣兵与角色";
+        string curTitle = "佣兵与角色";
+        if (hasCurrent)
+        {
+            curTitle = current.Name;
+            if (!string.IsNullOrEmpty(current.Nickname))
+                curTitle = current.Name + " · " + current.Nickname;
+        }
+        title = curTitle;
         desc = hasCurrent ? current.Desc + "\n" + current.Lore : "剧情角色随主线解锁；酒馆招募后记入图鉴。";
         objective = hasCurrent ? current.Place : "在酒馆完成招募";
         progress = unlocked + "/" + list.Length;

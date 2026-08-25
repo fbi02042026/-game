@@ -40,6 +40,14 @@ public class Mercenary : UnitBase
         _stunAnimTimer = 0f;
     }
 
+    /// <summary>围殴结束：停眩晕循环动画，但仍可保持 TutorialStunned 定身到对话完。</summary>
+    public void StopTutorialStunAnim()
+    {
+        _stunAnimTimer = 9999f; // 阻止 AIUpdate 里循环 PlayDebuff
+        if (unitAnim != null)
+            unitAnim.ClearDebuff();
+    }
+
     public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false)
     {
         if (TutorialStunned)
@@ -74,11 +82,7 @@ public class Mercenary : UnitBase
         Debug.Log($"[Mercenary:{id}] Init完成 | isAlly={isAlly} | facingDir={facingDir} | pos={transform.position}");
     }
 
-    public void Face(int dir)
-    {
-        facingDir = dir == 0 ? 1 : dir;
-        ApplyFacing(facingDir);
-    }
+    // Face() 已在 UnitBase
 
     void SetupAttributes(string id, int level)
     {
@@ -180,11 +184,15 @@ public class Mercenary : UnitBase
         if (TutorialStunned)
         {
             if (rb != null) rb.velocity = Vector2.zero;
-            _stunAnimTimer -= Time.deltaTime;
-            if (_stunAnimTimer <= 0f && unitAnim != null)
+            // 仅在仍需眩晕表现时循环；StopTutorialStunAnim 会把 timer 拉高关掉
+            if (_stunAnimTimer < 9000f)
             {
-                unitAnim.PlayDebuff();
-                _stunAnimTimer = 1.6f;
+                _stunAnimTimer -= Time.deltaTime;
+                if (_stunAnimTimer <= 0f && unitAnim != null)
+                {
+                    unitAnim.PlayDebuff();
+                    _stunAnimTimer = 1.6f;
+                }
             }
             return;
         }
@@ -227,6 +235,11 @@ public class Mercenary : UnitBase
                     Attack(target);
                     attackCd = GetAttackCooldown();
                 }
+            }
+            else if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+            {
+                if (rb != null) rb.velocity = Vector2.zero;
+                isMoving = false;
             }
             else
             {

@@ -223,6 +223,14 @@ public class Monster : UnitBase
 
             facingDir = -1;
             ApplyFacing(facingDir);
+            float moveDir = Mathf.Sign(_enterTargetPos.x - transform.position.x);
+            if (Mathf.Abs(moveDir) < 0.01f) moveDir = -1f;
+            if (UnitCrowd.IsBlockedByFrontAlly(this, moveDir))
+            {
+                if (rb != null) rb.velocity = Vector2.zero;
+                if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+                return;
+            }
             float step = _enterSpeed * Time.deltaTime;
             float nx = Mathf.MoveTowards(transform.position.x, _enterTargetPos.x, step);
             GameConfig.SetWorldPosition(transform, new Vector3(nx, UnitBase.GROUND_Y, transform.position.z));
@@ -270,6 +278,12 @@ public class Monster : UnitBase
                 attackCd = GetAttackCooldown();
             }
         }
+        else if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+        {
+            // 前面已有同阵营怪挡路：停下；若已进攻击距离上面已处理
+            if (rb != null) rb.velocity = Vector2.zero;
+            isMoving = false;
+        }
         else
         {
             float spd = attr.GetAttr(AttrType.MoveSpeed);
@@ -277,6 +291,7 @@ public class Monster : UnitBase
             isMoving = true;
         }
         if (unitAnim != null) unitAnim.SetMove(isMoving, facingDir);
+        UnitCrowd.ResolveOverlap(this);
     }
 
     void IdleWaitForPlayer()
@@ -285,6 +300,7 @@ public class Monster : UnitBase
         facingDir = -1;
         ApplyFacing(facingDir);
         if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+        UnitCrowd.ResolveOverlap(this);
     }
 
     /// <summary>
@@ -455,6 +471,7 @@ public class Monster : UnitBase
 
         // 设置排序层
         ApplySortingLayer();
+        UnitCrowd.EnsureTriggerCollider(this);
 
         // 设置 HPBar 排序层（在怪物之上）
         SetupHPBarSorting();

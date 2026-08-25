@@ -246,12 +246,14 @@ public static class GameConfig
     /// 仅玩家单人战斗（不生成/显示佣兵）。正式局默认 false；引导关仍单独刷救援佣兵。
     /// </summary>
     public static bool SOLO_PLAYER_BATTLE = false;
-    /// <summary>怪刷在英雄前方多远（原地等玩家走过来）</summary>
-    public const float MONSTER_ENGAGE_OFFSET = 4.0f;
-    /// <summary>怪物远程射程倍率（相对数值表弓射程）</summary>
-    public const float MONSTER_RANGED_RANGE_MUL = 1.45f;
+    /// <summary>怪刷在英雄前方多远（原地等玩家走过来），约 3~4 身位</summary>
+    public const float MONSTER_ENGAGE_OFFSET = 3.2f;
+    /// <summary>同波怪物横向间距（世界单位）；需大于精灵半宽，避免首波叠在同一点</summary>
+    public const float MONSTER_WAVE_SPACING = 1.15f;
+    /// <summary>怪物远程射程倍率（相对数值表弓射程）；约 3~4 身位</summary>
+    public const float MONSTER_RANGED_RANGE_MUL = 1.05f;
     /// <summary>怪物远程额外索敌缓冲</summary>
-    public const float MONSTER_RANGED_DETECT_BONUS = 1.0f;
+    public const float MONSTER_RANGED_DETECT_BONUS = 0.4f;
     /// <summary>普通（非精英/非Boss）远程小怪的技能伤害折扣：技能只是为了看得到子弹，不该秒人</summary>
     public const float MONSTER_NORMAL_SKILL_DAMAGE_MUL = 0.55f;
     /// <summary>小怪默认移速（比玩家慢，避免擦肩而过）</summary>
@@ -315,6 +317,10 @@ public static class GameConfig
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备
     public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手
+    /// <summary>每日酒馆招募次数上限</summary>
+    public const int DAILY_MERC_RECRUIT_MAX = 1;
+    /// <summary>刷新佣兵三选一消耗宝石</summary>
+    public const int MERC_REROLL_GEM_COST = 50;
     public const int BACKPACK_WIDTH = 8; // 与预制体 GridContainer 列数一致（Cell_0~7）
     public const int BACKPACK_HEIGHT = 5; // 高 5 行；最下方两行默认锁定，天赋解锁
     public const int STAGES_PER_CHAPTER = 10; // 每章10关，最后一关是BOSS

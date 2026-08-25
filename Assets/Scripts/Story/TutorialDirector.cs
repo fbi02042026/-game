@@ -204,25 +204,23 @@ public class TutorialDirector : Singleton<TutorialDirector>
     {
         StoryDirector.Instance?.NotifySceneChanged();
 
-        // 办公室 + 咨询台一次播完。SkipReveal：片头后仍有黑幕，对话层盖在上面，不再走地点名黑场。
+        // 办公室 + 咨询台一次播完（换地点时播黑屏地点名）。
         var beats = new List<StoryBeat>
         {
             StoryDirector.Solo("会长",
                 "新人，森林层最近有些怪物躁动。去吧，证明你有资格留下。",
                 StoryPortraits.GuildMaster)
-                .Bg(StoryBackgrounds.GuildOffice)
-                .SkipReveal(),
+                .Bg(StoryBackgrounds.GuildOffice),
             StoryDirector.Solo("会长",
                 "你把这个签了后就可以出去了。",
                 StoryPortraits.GuildMaster)
                 .Bg(StoryBackgrounds.GuildOffice),
-            StoryDirector.Narration("桌上那份委托书连名字都没填，就像随手塞给你的一样。")
+            StoryDirector.Narration("桌上摊着那份委托书还没有署名，会长催促着赶紧签了就可以出去了。")
                 .Prop(StoryProps.QuestPaper),
             StoryDirector.Solo("咨询台小姐",
                 "第一次下裂缝？三件事：\n1. 你只管走路，打架会自动打。\n2. 进战斗前先选技能，亮起就能放。\n3. 见好就收，活着才有收益。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)
-                .SkipReveal()
         };
         bool done = false;
         StoryDirector.Ensure().Play(beats, () => done = true, keepSceneArt: true);
@@ -340,9 +338,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
 
         var headTalk = BattleHeadTalkUI.Ensure();
-        // 说话时定住全场：之前玩家会边说边继续走，气泡跟着人跑
-        yield return TalkHeld(bm, headTalk, Hero.Instance, "那是……有人被围住了？", 1.8f);
-        yield return TalkHeld(bm, headTalk, Hero.Instance, "先把这些怪清掉！", 1.6f);
+        // 一整段只冻一次，说完再解冻；点一下跳字，再点跳句
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(Hero.Instance, "那是……有人被围住了？", 1.2f),
+            new TalkLine(Hero.Instance, "先把这些怪清掉！", 1.0f));
 
         // 怪物转过来打玩家
         bm.RetargetAllMonsters(Hero.Instance);
@@ -350,10 +349,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return WaitFieldClear();
         bm.ClearMonsterForcedTargets();
 
-        // 清完怪再跟老盾对话、入队（同样全程定身）
-        yield return TalkHeld(bm, headTalk, merc, "咳……谢了，我差点交代在这儿。", 2.2f);
-        yield return TalkHeld(bm, headTalk, Hero.Instance, "还能走吗？跟我一起撤。", 1.7f);
-        yield return TalkHeld(bm, headTalk, merc, "我叫老盾。行，我跟你。", 2.0f);
+        // 围殴怪清完：停眩晕动画（仍原地等对话，对话后再入队解控）
+        if (merc != null)
+            merc.StopTutorialStunAnim();
+
+        // 清完怪再跟老盾对话、入队
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(merc, "咳……谢了，我差点交代在这儿。", 1.4f),
+            new TalkLine(Hero.Instance, "还能走吗？跟我一起撤。", 1.1f),
+            new TalkLine(merc, "我叫老盾。行，我跟你。", 1.3f));
 
         if (merc != null)
         {
@@ -372,37 +376,41 @@ public class TutorialDirector : Singleton<TutorialDirector>
         ui?.UpdateCharacterSlots();
         if (ui != null)
             ui.StartCoroutine(CoRefreshMercHudNextFrame(ui));
-        hint.Show("老盾加入了队伍。", null, 2.2f);
-        yield return new WaitForSecondsRealtime(1.2f);
+        hint.Show("老盾加入了队伍。", null, 2.0f);
+        yield return new WaitForSecondsRealtime(0.6f);
 
-        // —— 治疗技能引导：硬引导指向玩家头像，必须点了才继续 ——
+        // —— 治疗技能：软提示 + 短超时，不长期冻死全场 ——
         bm.FillPlayerSkillEnergy();
         SkillUsedThisStep = false;
         AllowBattleSkillClick = true;
-        // 定住全场，让玩家安心找按钮，不会被怪追着打
         bm.UnitsCanAct = false;
 
         RectTransform skillTarget = ResolvePlayerSkillTarget(ui);
-        hint.ShowHard("老盾快没血了。点你的头像放技能，给他回血。", skillTarget);
+        // 有明确目标才硬挖空；没有就软提示，避免全屏黑罩把流程卡死
+        if (skillTarget != null)
+            hint.ShowHard("点你的头像放技能，给老盾回血。", skillTarget);
+        else
+            hint.Show("点左下角你的头像放技能，给老盾回血。", null, -1f);
 
         float wait = 0f;
-        const float SkillGuideTimeout = 25f;
+        const float SkillGuideTimeout = 8f;
         while (!SkillUsedThisStep && wait < SkillGuideTimeout)
         {
-            wait += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
-            // 头像是运行时绑的，目标掉了就重新指一次
+            wait += Mathf.Max(0.008f, Time.unscaledDeltaTime);
             if (skillTarget == null || !skillTarget.gameObject.activeInHierarchy)
             {
                 skillTarget = ResolvePlayerSkillTarget(ui);
-                if (skillTarget != null)
-                    hint.ShowHard("老盾快没血了。点你的头像放技能，给他回血。", skillTarget);
+                if (skillTarget != null && wait < 3f)
+                    hint.ShowHard("点你的头像放技能，给老盾回血。", skillTarget);
             }
+            // 点任意处超过 5 秒仍未放技能 → 直接帮放，别干等
+            if (wait >= 5f && (Input.GetMouseButtonDown(0) ||
+                (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)))
+                break;
             yield return null;
         }
         if (!SkillUsedThisStep)
         {
-            // 超时兜底：直接替玩家放一次，绝不能卡在这里（之前就是卡这导致后面永远不刷怪）
-            Debug.LogWarning("[Tutorial] 治疗技能引导超时，自动释放以继续流程");
             bm.FillPlayerSkillEnergy();
             bm.TryUsePlayerSkill();
         }
@@ -415,8 +423,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         ui?.UpdateCharacterSlots();
 
-        yield return TalkHeld(bm, headTalk, merc, "舒服多了！前面交给我挡一阵。", 1.6f);
-        yield return TalkHeld(bm, headTalk, Hero.Instance, "一起走。", 1.0f);
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(merc, "舒服多了！前面交给我挡一阵。", 1.1f),
+            new TalkLine(Hero.Instance, "一起走。", 0.8f));
         headTalk?.HideNow();
         hint.Hide();
         if (bm != null) bm.UnitsCanAct = true;
@@ -430,8 +439,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
         yield return WaitFieldClear();
 
-        yield return TalkHeld(bm, headTalk, Hero.Instance, "这波清完了，先撤？", 1.8f);
-        yield return TalkHeld(bm, headTalk, merc, "行，回城我请你喝一杯。", 1.9f);
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(Hero.Instance, "这波清完了，先撤？", 1.2f),
+            new TalkLine(merc, "行，回城我请你喝一杯。", 1.2f));
         headTalk?.HideNow();
 
         // 撤离引导：冻住单位，和佣兵原地等玩家点撤离；超时自动撤
@@ -487,38 +497,43 @@ public class TutorialDirector : Singleton<TutorialDirector>
         return null;
     }
 
+    struct TalkLine
+    {
+        public UnitBase speaker;
+        public string text;
+        public float hold;
+        public TalkLine(UnitBase s, string t, float h) { speaker = s; text = t; hold = h; }
+    }
+
     /// <summary>
-    /// 头顶气泡说话期间冻结全场单位：说完立刻恢复。
-    /// 说话人不存在就直接跳过，别把流程卡死。
+    /// 一段对话只冻一次全场；台词直接 yield CoPlayLine，点一下跳字、再点跳句。
+    /// 说话人缺失则跳过该句，不卡流程。
     /// </summary>
+    static IEnumerator TalkBlock(BattleManager bm, BattleHeadTalkUI talk, params TalkLine[] lines)
+    {
+        if (talk == null || lines == null || lines.Length == 0)
+            yield break;
+
+        bool prev = bm == null || bm.UnitsCanAct;
+        if (bm != null) bm.UnitsCanAct = false;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (line.speaker == null || line.speaker.isDead || string.IsNullOrEmpty(line.text))
+                continue;
+            yield return talk.CoPlayLine(line.speaker, line.text, line.hold);
+        }
+
+        talk.HideNow();
+        if (bm != null) bm.UnitsCanAct = prev;
+    }
+
+    /// <summary>单句兼容入口。</summary>
     static IEnumerator TalkHeld(BattleManager bm, BattleHeadTalkUI talk, UnitBase speaker,
         string content, float hold)
     {
-        if (talk == null)
-        {
-            Debug.LogWarning("[Tutorial] TalkHeld: BattleHeadTalkUI 为空，跳过台词");
-            yield break;
-        }
-        if (speaker == null || speaker.isDead)
-        {
-            Debug.LogWarning($"[Tutorial] TalkHeld: 说话人缺失/已死，跳过「{content}」");
-            talk.HideNow();
-            yield break;
-        }
-
-        bool prev = bm != null && bm.UnitsCanAct;
-        if (bm != null) bm.UnitsCanAct = false;
-
-        float timeout = hold + (content != null ? content.Length * 0.15f : 0f) + 5f;
-        float elapsed = 0f;
-        yield return talk.StartCoroutine(talk.CoPlayLine(speaker, content, hold));
-        while (talk.IsShowing && elapsed < timeout)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            yield return null;
-        }
-        talk.HideNow();
-        if (bm != null) bm.UnitsCanAct = prev;
+        yield return TalkBlock(bm, talk, new TalkLine(speaker, content, hold));
     }
 
     /// <summary>

@@ -32,16 +32,59 @@ public class MercenaryManager : Singleton<MercenaryManager>
         Sprite sp = registry != null ? registry.GetIcon(characterId) : null;
         if (sp != null) return sp;
         if (string.IsNullOrEmpty(characterId)) return null;
-        sp = Resources.Load<Sprite>("UI/Heads/icon_" + characterId);
+
+        sp = LoadHeadSprite("icon_" + characterId);
         if (sp != null) return sp;
-#if UNITY_EDITOR
-        sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
-            "Assets/Art/UI/Icons/Heads/icon_" + characterId + ".png");
-        if (sp != null) return sp;
-#endif
+
         // 101/102 盾兵共用头像
         if (characterId.StartsWith("dunbing"))
-            return Resources.Load<Sprite>("UI/Heads/icon_dunbing102");
+        {
+            sp = LoadHeadSprite("icon_dunbing102");
+            if (sp != null) return sp;
+            sp = LoadHeadSprite("icon_dunbing201");
+            if (sp != null) return sp;
+        }
+        return null;
+    }
+
+    static Sprite LoadHeadSprite(string fileNameWithoutExt)
+    {
+        if (string.IsNullOrEmpty(fileNameWithoutExt)) return null;
+
+        var sp = Resources.Load<Sprite>("UI/Heads/" + fileNameWithoutExt);
+        if (sp != null) return sp;
+
+        var all = Resources.LoadAll<Sprite>("UI/Heads/" + fileNameWithoutExt);
+        if (all != null && all.Length > 0) return all[0];
+
+        var tex = Resources.Load<Texture2D>("UI/Heads/" + fileNameWithoutExt);
+        if (tex != null)
+        {
+            var made = Sprite.Create(
+                tex,
+                new Rect(0f, 0f, tex.width, tex.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            made.name = fileNameWithoutExt;
+            return made;
+        }
+
+#if UNITY_EDITOR
+        string artPath = "Assets/Art/UI/Icons/Heads/" + fileNameWithoutExt + ".png";
+        sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(artPath);
+        if (sp != null) return sp;
+        tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(artPath);
+        if (tex != null)
+        {
+            var made = Sprite.Create(
+                tex,
+                new Rect(0f, 0f, tex.width, tex.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            made.name = fileNameWithoutExt;
+            return made;
+        }
+#endif
         return null;
     }
 

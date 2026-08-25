@@ -190,11 +190,9 @@ public class EquipDropPopupUI : MonoBehaviour
             var eq = _drops[i];
             if (eq == null) continue;
             bool sel = i == _selected;
-            eq.template?.ResolveIcon();
-            if (eq.icon == null && eq.template != null)
-                eq.icon = eq.template.icon;
-            if (eq.icon == null && eq.template != null)
-                eq.icon = EquipIcons.Get(eq.template.iconFileName);
+            EnsureEquipIcon(eq);
+            if (c.icon == null && c.root != null)
+                c.icon = FindDeep(c.root.transform, "Icon")?.GetComponent<Image>();
             if (c.background != null)
                 c.background.color = sel ? RarityColor(eq.rarity) : new Color(0.18f, 0.16f, 0.22f, 1f);
             if (c.selectedMark != null)
@@ -202,8 +200,11 @@ public class EquipDropPopupUI : MonoBehaviour
             if (c.icon != null)
             {
                 c.icon.sprite = eq.icon;
+                c.icon.color = Color.white;
                 c.icon.preserveAspect = true;
                 c.icon.enabled = eq.icon != null;
+                if (eq.icon == null)
+                    Debug.LogWarning($"[EquipDropPopup] 卡片{i}无图标 name={eq.equipName} file={eq.template?.iconFileName}");
             }
             if (c.name != null) c.name.text = eq.equipName ?? "装备";
             if (c.meta != null) c.meta.text = $"{EquipUiText.Slot(eq.slotType)}  ★{eq.star}  {EquipUiText.RarityName(eq.rarity)}";
@@ -238,6 +239,18 @@ public class EquipDropPopupUI : MonoBehaviour
         if (secondaryButton != null) secondaryButton.gameObject.SetActive(true);
         if (secondaryLabel != null)
             secondaryLabel.text = _mode == EquipDropMode.ReplaceWorn ? "丢弃" : "放入背包";
+    }
+
+    static void EnsureEquipIcon(EquipInstance eq)
+    {
+        if (eq == null) return;
+        eq.template?.ResolveIcon();
+        if (eq.icon == null && eq.template != null)
+            eq.icon = eq.template.icon;
+        if (eq.icon == null && eq.template != null && !string.IsNullOrEmpty(eq.template.iconFileName))
+            eq.icon = EquipIcons.Get(eq.template.iconFileName);
+        if (eq.icon == null && !string.IsNullOrEmpty(eq.templateId))
+            eq.icon = EquipIcons.Get(eq.templateId);
     }
 
     EquipInstance GetSelected()
@@ -384,6 +397,20 @@ public class EquipDropPopupUI : MonoBehaviour
                     selectedMark = FindDeep(t, "SelectedMark")?.gameObject
                 });
             }
+        }
+        // Inspector 已填 cards 时也要补全缺失的 Icon 引用
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var c = cards[i];
+            if (c == null || c.root == null) continue;
+            if (c.icon == null)
+                c.icon = FindDeep(c.root.transform, "Icon")?.GetComponent<Image>();
+            if (c.name == null)
+                c.name = FindDeep(c.root.transform, "Name")?.GetComponent<Text>();
+            if (c.meta == null)
+                c.meta = FindDeep(c.root.transform, "Meta")?.GetComponent<Text>();
+            if (c.attrs == null)
+                c.attrs = FindDeep(c.root.transform, "Attrs")?.GetComponent<Text>();
         }
         // 点击一律重绑：Inspector 里手填 cards 时也要能选卡
         for (int i = 0; i < cards.Count; i++)

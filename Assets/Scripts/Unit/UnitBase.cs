@@ -154,16 +154,20 @@ public abstract class UnitBase : MonoBehaviour
         yield return null; // 等一帧，确保精灵已加载
         yield return null; // 再等一帧，SPUM可能需要两帧才完全加载
 
-        // 获取所有SpriteRenderer，合并bounds计算视觉中心
         SpriteRenderer[] allSrs = GetComponentsInChildren<SpriteRenderer>(true);
         if (allSrs.Length == 0) yield break;
 
-        // 初始化bounds为第一个有sprite的Renderer
         Bounds combinedBounds = new Bounds();
         bool hasValid = false;
         foreach (var r in allSrs)
         {
-            if (r == null || r.sprite == null) continue;
+            if (r == null || r.sprite == null || !r.enabled) continue;
+            if (IsIgnoredHitPointRenderer(r)) continue;
+
+            // 影子/地面贴图会把中心拉到脚下，只取相对身体偏上的部分
+            Vector3 localCenterOfSprite = transform.InverseTransformPoint(r.bounds.center);
+            if (localCenterOfSprite.y < 0.2f) continue;
+
             if (!hasValid)
             {
                 combinedBounds = r.bounds;
@@ -177,11 +181,36 @@ public abstract class UnitBase : MonoBehaviour
 
         if (hasValid)
         {
-            // 用合并bounds的中心作为受击点（世界坐标转本地坐标）
             Vector3 worldCenter = combinedBounds.center;
             Vector3 localCenter = transform.InverseTransformPoint(worldCenter);
+            // 最低不低于默认受击点高度的一半，避免仍落在脚底
+            localCenter.y = Mathf.Clamp(localCenter.y, hitPointOffset.y * 0.55f, 1.85f);
+            localCenter.x = Mathf.Clamp(localCenter.x, -0.35f, 0.35f);
             hpTransform.localPosition = localCenter;
         }
+        else
+        {
+            hpTransform.localPosition = hitPointOffset;
+        }
+    }
+
+    static bool IsIgnoredHitPointRenderer(SpriteRenderer r)
+    {
+        if (r == null) return true;
+        Transform p = r.transform;
+        while (p != null)
+        {
+            string n = p.name;
+            if (!string.IsNullOrEmpty(n))
+            {
+                string low = n.ToLowerInvariant();
+                if (low.Contains("shadow") || low.Contains("阴影") || low == "hpbar"
+                    || low.Contains("bar_bg") || low.Contains("damage") || low.Contains("vfx"))
+                    return true;
+            }
+            p = p.parent;
+        }
+        return false;
     }
 
     /// <summary>
@@ -245,6 +274,11 @@ public abstract class UnitBase : MonoBehaviour
                     attackCd = GetAttackCooldown();
                 }
             }
+            else if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+            {
+                if (rb != null) rb.velocity = Vector2.zero;
+                isMoving = false;
+            }
             else
             {
                 // 索敌范围内、攻击范围外：靠近目标
@@ -283,6 +317,13 @@ public abstract class UnitBase : MonoBehaviour
         // 通关走向传送门时放宽
         if (isAlly && (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode))
             ClampToScreen();
+    }
+
+    /// <summary>对外改朝向（传送门、入队站位等）</summary>
+    public void Face(int dir)
+    {
+        facingDir = dir == 0 ? 1 : (dir > 0 ? 1 : -1);
+        ApplyFacing(facingDir);
     }
 
     /// <summary>

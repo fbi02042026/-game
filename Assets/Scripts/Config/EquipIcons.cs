@@ -6,37 +6,99 @@ using UnityEditor;
 #endif
 
 /// <summary>
-/// 装备图标：统一从 Art/UI/Icons/EquipIcons 加载。
-/// 装备模板填 iconFileName（不含 .png），或在编辑器运行「Tools/装备/绑定 EquipIcons」写入 icon。
+/// 装备图标：优先 Resources/UI/EquipIcons（真机），编辑器再回退 Art/UI/Icons/EquipIcons。
 /// </summary>
 public static class EquipIcons
 {
     public const string Root = "Assets/Art/UI/Icons/EquipIcons/";
+    public const string ResourcesPath = "UI/EquipIcons/";
 
     static readonly Dictionary<string, Sprite> _cache = new Dictionary<string, Sprite>();
 
     public static Sprite Get(string fileNameWithoutExt)
     {
         if (string.IsNullOrEmpty(fileNameWithoutExt)) return null;
-        if (_cache.TryGetValue(fileNameWithoutExt, out var cached) && cached != null)
-            return cached;
+        if (_cache.TryGetValue(fileNameWithoutExt, out var cached))
+        {
+            if (cached != null) return cached;
+            _cache.Remove(fileNameWithoutExt);
+        }
 
-        string path = Root + fileNameWithoutExt + ".png";
-        Sprite sp = Load(path);
-        _cache[fileNameWithoutExt] = sp;
+        Sprite sp = Load(fileNameWithoutExt);
+        if (sp != null)
+            _cache[fileNameWithoutExt] = sp;
         return sp;
     }
 
-    static Sprite Load(string assetPath)
+    static Sprite Load(string file)
     {
-        string file = System.IO.Path.GetFileNameWithoutExtension(assetPath);
-        // 优先 Resources（真机）；编辑器再补 AssetDatabase
-        var res = Resources.Load<Sprite>("UI/EquipIcons/" + file);
+        // 1) 直接当 Sprite
+        var res = Resources.Load<Sprite>(ResourcesPath + file);
         if (res != null) return res;
+
+        // 2) 图集/多子资源：LoadAll 再按名匹配
+        var all = Resources.LoadAll<Sprite>(ResourcesPath + file);
+        if (all != null && all.Length > 0)
+        {
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null && all[i].name == file)
+                    return all[i];
+            }
+            return all[0];
+        }
+
+        // 3) 仅 Texture2D：运行时补 Sprite
+        var tex = Resources.Load<Texture2D>(ResourcesPath + file);
+        if (tex != null)
+        {
+            var made = Sprite.Create(
+                tex,
+                new Rect(0f, 0f, tex.width, tex.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            made.name = file;
+            return made;
+        }
+
+        // 4) 文件夹整体 LoadAll 再找同名（防路径大小写/后缀差异）
+        var folderSprites = Resources.LoadAll<Sprite>("UI/EquipIcons");
+        if (folderSprites != null)
+        {
+            for (int i = 0; i < folderSprites.Length; i++)
+            {
+                var s = folderSprites[i];
+                if (s == null) continue;
+                if (string.Equals(s.name, file, System.StringComparison.OrdinalIgnoreCase))
+                    return s;
+            }
+        }
+
 #if UNITY_EDITOR
+        string assetPath = Root + file + ".png";
         var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
         if (ed != null) return ed;
+        var edAll = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+        if (edAll != null)
+        {
+            for (int i = 0; i < edAll.Length; i++)
+            {
+                if (edAll[i] is Sprite spEd) return spEd;
+            }
+        }
+        var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+        if (edTex != null)
+        {
+            var made = Sprite.Create(
+                edTex,
+                new Rect(0f, 0f, edTex.width, edTex.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            made.name = file;
+            return made;
+        }
 #endif
+        Debug.LogWarning($"[EquipIcons] 未找到图标: {file}");
         return null;
     }
 

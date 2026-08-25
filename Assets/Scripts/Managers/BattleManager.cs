@@ -97,6 +97,7 @@ public class BattleManager : Singleton<BattleManager>
     private bool _rewardSequenceStarted = false;
     private Transform _chuanSongMen;
     private bool _didUpdateForceSpawn;
+    private bool _portalEnterVfxPlayed;
 
     /// <summary>
     /// 旧 endPoint 传送门路径（已弃用）。正式通关走 chuansongmen：StageClearRewardDirector → NotifyChuanSongMenOpened。
@@ -178,6 +179,7 @@ public class BattleManager : Singleton<BattleManager>
         _stageCleared = false;
         _portalActive = false;
         _rewardSequenceStarted = false;
+        _portalEnterVfxPlayed = false;
         _chuanSongMen = null;
         UnitsCanAct = false;
         MonsterAttackStyleTable.Reload();
@@ -551,7 +553,8 @@ public class BattleManager : Singleton<BattleManager>
         _activeWaveIndex = _waves.Count - 1;
         SuppressStageClear = true;
 
-        float[] offsets = { -1.1f, 1.15f, 0.35f, -0.55f, 1.7f };
+        // 围殴怪拉开，避免叠在老盾同一点（视觉上「一刀打死好几只」）
+        float[] offsets = { -2.2f, 2.15f, -0.85f, 0.95f, -3.1f, 3.0f };
         for (int i = 0; i < n; i++)
         {
             float ox = offsets[i % offsets.Length];
@@ -663,6 +666,7 @@ public class BattleManager : Singleton<BattleManager>
         _stageCleared = false;
         _portalActive = false;
         _rewardSequenceStarted = false;
+        _portalEnterVfxPlayed = false;
         _chuanSongMen = null;
         _totalMonstersSpawnedThisStage = 0;
         _didUpdateForceSpawn = false;
@@ -1568,8 +1572,8 @@ public class BattleManager : Singleton<BattleManager>
         else allSpawned = false;
         _allWavesSpawned = allSpawned && _waves != null && _waves.Count > 0;
 
-        // 所有波次已刷完且场上无怪 → 宝箱结算（不再直接开 EndPoint）
-        if (_allWavesSpawned && monsters.Count == 0 && _totalMonstersSpawnedThisStage > 0
+        // 所有波次已刷完且场上无活怪 → 宝箱结算（用存活数，勿用 list.Count）
+        if (_allWavesSpawned && CountAliveMonsters() == 0 && _totalMonstersSpawnedThisStage > 0
             && !_portalActive && !_stageCleared && !_rewardSequenceStarted
             && !SuppressStageClear)
         {
@@ -1580,7 +1584,10 @@ public class BattleManager : Singleton<BattleManager>
         if (_portalActive && hero != null && !hero.isDead && !_stageCleared && _chuanSongMen != null)
         {
             if (hero.transform.position.x >= _chuanSongMen.position.x - 0.6f)
+            {
+                PlayPortalEnterVfxOnce(_chuanSongMen.position);
                 FinishStageAfterPortalReached();
+            }
         }
 
         // 跑图时镜头随英雄缓慢放宽
@@ -1791,7 +1798,7 @@ public class BattleManager : Singleton<BattleManager>
                 monsterScale = GameConfig.BOSS_SCALE_MULTIPLIER;
 
             float spawnY = UnitBase.GROUND_Y;
-            float spawnX = engageBaseX + i * 1.15f;
+            float spawnX = engageBaseX + i * GameConfig.MONSTER_WAVE_SPACING;
             if (wave.spawnAnchor != null)
                 spawnZ = wave.spawnAnchor.position.z;
 
@@ -1838,7 +1845,7 @@ public class BattleManager : Singleton<BattleManager>
         {
             float spawnY = UnitBase.GROUND_Y;
             float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
-            float spawnX = engageBaseX + i * 1.05f;
+            float spawnX = engageBaseX + i * GameConfig.MONSTER_WAVE_SPACING;
             Vector3 pos = new Vector3(spawnX + GameConfig.MONSTER_ENTER_DISTANCE, spawnY, spawnZ);
             Vector3 engage = new Vector3(spawnX, spawnY, spawnZ);
 
@@ -2046,6 +2053,10 @@ public class BattleManager : Singleton<BattleManager>
         {
             _allWavesSpawned = true;
             StopWaveCountdown();
+            // 正式关：末波清完立刻进宝箱，不空等下一帧 Update
+            if (!SuppressStageClear && !_rewardSequenceStarted && !_stageCleared && !_portalActive
+                && _totalMonstersSpawnedThisStage > 0 && CountAliveMonsters() == 0)
+                StartStageClearRewardSequence();
             yield break;
         }
         BeginNextWaveCountdown();
@@ -2062,18 +2073,31 @@ public class BattleManager : Singleton<BattleManager>
         if (hero == null || hero.isDead) return false;
 
         var skill = ResolvePlayerSkill();
-        bool ok = skill.skillType != SkillSystem.SkillType.Buff
-            && SkillSystem.Instance != null
-            && SkillSystem.Instance.UseSkill(skill, hero);
-        if (!ok)
-            ExecuteAllySkillFallback(hero, skill);
+        UnitBase healTarget = null;
+        bool isHeal = IsHealSkill(skill);
 
-        SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, hero.GetHitPosition(), true, hero.facingDir, hero.transform);
+        if (isHeal)
+        {
+            healTarget = FindPreferredHealTarget();
+            ExecuteAllySkillFallback(hero, skill, healTarget);
+        }
+        else
+        {
+            bool ok = skill.skillType != SkillSystem.SkillType.Buff
+                && SkillSystem.Instance != null
+                && SkillSystem.Instance.UseSkill(skill, hero);
+            if (!ok)
+                ExecuteAllySkillFallback(hero, skill);
+        }
+
+        Vector3 vfxPos = healTarget != null ? healTarget.GetHitPosition() : hero.GetHitPosition();
+        Transform vfxAttach = healTarget != null ? healTarget.transform : hero.transform;
+        SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, hero.facingDir, vfxAttach);
 
         playerSkillEnergy = 0f;
         BattleUI.Instance?.UpdateSkillEnergy(0, 0f);
         TutorialDirector.Instance?.NotifyPlayerSkillUsed();
-        Debug.Log($"[BattleManager] 玩家技能释放: {skill.skillName} ({skill.skillId})");
+        Debug.Log($"[BattleManager] 玩家技能释放: {skill.skillName} ({skill.skillId}) → {(healTarget != null ? healTarget.name : "default")}");
         return true;
     }
 
@@ -2089,12 +2113,20 @@ public class BattleManager : Singleton<BattleManager>
         if (merc == null || merc.isDead) return false;
 
         var skill = ResolveMercSkill(merc);
-        if (skill.skillType == SkillSystem.SkillType.Buff)
+        UnitBase healTarget = null;
+        if (IsHealSkill(skill))
+        {
+            healTarget = FindPreferredHealTarget();
+            ExecuteAllySkillFallback(merc, skill, healTarget);
+        }
+        else if (skill.skillType == SkillSystem.SkillType.Buff)
             ExecuteAllySkillFallback(merc, skill);
         else if (!(SkillSystem.Instance != null && SkillSystem.Instance.UseSkill(skill, merc)))
             ExecuteAllySkillFallback(merc, skill);
 
-        SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, merc.GetHitPosition(), true, merc.facingDir, merc.transform);
+        Vector3 vfxPos = healTarget != null ? healTarget.GetHitPosition() : merc.GetHitPosition();
+        Transform vfxAttach = healTarget != null ? healTarget.transform : merc.transform;
+        SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, merc.facingDir, vfxAttach);
 
         mercSkillEnergy[mercIndex] = 0f;
         BattleUI.Instance?.UpdateSkillEnergy(mercIndex + 1, 0f);
@@ -2139,23 +2171,23 @@ public class BattleManager : Singleton<BattleManager>
         };
     }
 
-    void ExecuteAllySkillFallback(UnitBase caster, SkillSystem.ActiveSkill skill)
+    void ExecuteAllySkillFallback(UnitBase caster, SkillSystem.ActiveSkill skill, UnitBase forcedHealTarget = null)
     {
         var cfg = SkillRegistry.Instance?.Get(skill.skillId);
 
-        if (skill.skillType == SkillSystem.SkillType.Buff)
+        if (skill.skillType == SkillSystem.SkillType.Buff || IsHealSkill(skill))
         {
             float healBase = cfg != null && cfg.healBase > 0 ? cfg.healBase : skill.baseDamage;
             float pct = cfg != null ? cfg.healPercentOfMax : 0f;
-            if (pct > 0f || healBase > 0 || skill.skillId == "ally_heal")
+            if (pct > 0f || healBase > 0 || IsHealSkill(skill))
             {
-                float maxHp = 0f;
-                UnitBase target = FindLowestHpAlly();
+                UnitBase target = forcedHealTarget != null ? forcedHealTarget : FindPreferredHealTarget();
                 if (target == null) target = caster;
+                float maxHp = 0f;
                 if (target.attr != null)
                     maxHp = target.attr.GetAttr(AttrType.MaxHp);
                 float heal = pct > 0f ? maxHp * pct : healBase + caster.attr.GetAttr(AttrType.Attack) * 0.5f;
-                if (pct <= 0f && skill.skillId == "ally_heal")
+                if (pct <= 0f && IsHealSkill(skill))
                     heal = maxHp * 0.3f;
                 ApplyHealToUnit(target, heal);
                 return;
@@ -2219,6 +2251,29 @@ public class BattleManager : Singleton<BattleManager>
             foreach (var m in mercs) Apply(m);
     }
 
+    static bool IsHealSkill(SkillSystem.ActiveSkill skill)
+    {
+        if (skill == null) return false;
+        if (skill.skillId != null && skill.skillId.IndexOf("heal", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+        var cfg = SkillRegistry.Instance?.Get(skill.skillId);
+        return cfg != null && (cfg.healPercentOfMax > 0f || cfg.healBase > 0f);
+    }
+
+    /// <summary>引导中优先救眩晕老盾；否则血量比例最低的队友。</summary>
+    UnitBase FindPreferredHealTarget()
+    {
+        if (allyUnits != null)
+        {
+            for (int i = 0; i < allyUnits.Count; i++)
+            {
+                if (allyUnits[i] is Mercenary merc && merc.TutorialStunned && !merc.isDead)
+                    return merc;
+            }
+        }
+        return FindLowestHpAlly() ?? hero;
+    }
+
     UnitBase FindLowestHpAlly()
     {
         UnitBase best = null;
@@ -2238,6 +2293,11 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         Consider(hero);
+        if (allyUnits != null)
+        {
+            for (int i = 0; i < allyUnits.Count; i++)
+                Consider(allyUnits[i]);
+        }
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
         if (mercs != null)
         {
@@ -2377,6 +2437,23 @@ public class BattleManager : Singleton<BattleManager>
         // 让英雄/佣兵继续向右走向传送门
         UnitsCanAct = true;
         isInBattle = true; // Update 里检测走近传送门需要跑
+        if (hero != null)
+        {
+            hero.Face(1);
+            if (hero.rb != null)
+                hero.rb.velocity = new Vector2(Mathf.Max(0.4f, hero.attr != null ? hero.attr.GetAttr(AttrType.MoveSpeed) : 1.2f), 0f);
+        }
+    }
+
+    void PlayPortalEnterVfxOnce(Vector3 worldPos)
+    {
+        if (_portalEnterVfxPlayed) return;
+        _portalEnterVfxPlayed = true;
+        var prefab = Resources.Load<GameObject>("VFX/other/world/传送");
+        if (prefab == null) return;
+        var go = Instantiate(prefab, worldPos + new Vector3(0f, 0.6f, 0f), Quaternion.identity);
+        go.name = "PortalEnterVfx";
+        Destroy(go, 3.5f);
     }
 
     /// <summary>走进 chuansongmen 后：写档并弹选关</summary>

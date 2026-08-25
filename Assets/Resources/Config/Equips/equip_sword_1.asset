@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   templateId: equip_sword_1
   equipName: "锈迹短剑"
-  icon: {fileID: 21300000, guid: e8e843ac79a676f45bc22295a313169f, type: 3}
+  icon: {fileID: 21300000, guid: fa4d91f01f014619bff94dcccbb37fb4, type: 3}
   iconFileName: Sword_1
   gridWidth: 1
   gridHeight: 2

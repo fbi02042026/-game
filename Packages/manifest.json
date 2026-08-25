@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "cn.tuanjie.codely.bridge": "1.0.73",
     "com.unity.feature.2d": "2.0.1",
     "com.unity.render-pipelines.universal": "14.0.11",
     "com.unity.ugui": "1.0.0",

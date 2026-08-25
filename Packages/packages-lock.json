@@ -1,15 +1,5 @@
 {
   "dependencies": {
-    "cn.tuanjie.codely.bridge": {
-      "version": "1.0.73",
-      "depth": 0,
-      "source": "registry",
-      "dependencies": {
-        "com.unity.ext.nunit": "1.0.6",
-        "com.unity.ugui": "1.0.0"
-      },
-      "url": "https://packages.tuanjie.cn"
-    },
     "com.unity.2d.animation": {
       "version": "9.2.0",
       "depth": 1,
@@ -127,7 +117,7 @@
     },
     "com.unity.ext.nunit": {
       "version": "1.0.6",
-      "depth": 1,
+      "depth": 4,
       "source": "registry",
       "dependencies": {},
       "url": "https://packages.tuanjie.cn"

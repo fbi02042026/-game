@@ -40,14 +40,16 @@ public class EquipTemplate : ScriptableObject
     public int gridWidth = 1;
     public int gridHeight = 1;
 
-    /// <summary>若 icon 未绑，按 iconFileName 从 EquipIcons 文件夹解析。</summary>
+    /// <summary>优先按 iconFileName 从 EquipIcons 加载，覆盖损坏/丢失的序列化引用。</summary>
     public void ResolveIcon()
     {
-        if (icon != null) return;
         if (string.IsNullOrEmpty(iconFileName))
             iconFileName = templateId;
         if (string.IsNullOrEmpty(iconFileName)) return;
-        icon = EquipIcons.Get(iconFileName);
+
+        var loaded = EquipIcons.Get(iconFileName);
+        if (loaded != null)
+            icon = loaded;
     }
 
     /// <summary>按槽位/武器类型给出默认占格（可在 Inspector 再改）。</summary>

@@ -203,6 +203,6 @@ public class TownSceneManager : MonoBehaviour
 
     void OnOpenSettings()
     {
-        BattleSettingsPanel.Ensure().Open();
+        BattleSettingsPanel.Ensure().Open(SettingsHost.Town);
     }
 }

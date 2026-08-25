@@ -303,6 +303,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   loadDelay: 0.5
+  _login: {fileID: 0}
+  _enteringTown: 0
 --- !u!4 &1692638285
 Transform:
   m_ObjectHideFlags: 0

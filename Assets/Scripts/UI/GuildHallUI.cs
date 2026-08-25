@@ -294,7 +294,7 @@ public class GuildHallUI : MonoBehaviour
         HideUnfinishedHallButtons();
 
         if (settingsButton != null)
-            settingsButton.onClick.AddListener(() => BattleSettingsPanel.Ensure().Open());
+            settingsButton.onClick.AddListener(() => BattleSettingsPanel.Ensure().Open(SettingsHost.Town));
         if (mailButton != null)
             mailButton.onClick.AddListener(OnMailClicked);
         if (licenseHallButton != null)

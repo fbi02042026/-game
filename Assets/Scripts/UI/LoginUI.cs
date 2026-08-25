@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 登录界面。资源请在预制体里直接替换 Sprite，不要用生成器覆盖。
-/// 当前：仅「开始游戏」；协议默认不勾选；用户中心/公告/设置隐藏；快捷登录节点保留隐藏，待接微信 SDK。
+/// 当前：开始游戏 + 设置（共用 SettingsPopup）；协议默认不勾选；用户中心/公告/快捷登录仍隐藏。
 /// </summary>
 public class LoginUI : MonoBehaviour
 {
@@ -95,7 +95,7 @@ public class LoginUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 隐藏暂未使用的入口；协议默认不勾选（仅首次）。
+    /// 隐藏暂未使用的入口；协议默认不勾选（仅首次）；设置按钮已开放。
     /// </summary>
     void ApplyPresentation()
     {
@@ -104,13 +104,13 @@ public class LoginUI : MonoBehaviour
         SetActivePath("ActionPanel/SocialRow", false);
         SetActivePath("RightMenu/UserCenterButton", false);
         SetActivePath("RightMenu/NoticeButton", false);
-        SetActivePath("RightMenu/SettingsButton", false);
-        SetActivePath("RightMenu", false);
+        SetActivePath("RightMenu", true);
+        SetActivePath("RightMenu/SettingsButton", true);
 
         if (guestButton != null) guestButton.gameObject.SetActive(false);
         if (userCenterButton != null) userCenterButton.gameObject.SetActive(false);
         if (noticeButton != null) noticeButton.gameObject.SetActive(false);
-        if (settingsButton != null) settingsButton.gameObject.SetActive(false);
+        if (settingsButton != null) settingsButton.gameObject.SetActive(true);
         if (wechatButton != null) wechatButton.gameObject.SetActive(false);
         if (qqButton != null) qqButton.gameObject.SetActive(false);
         if (appleButton != null) appleButton.gameObject.SetActive(false);
@@ -339,8 +339,7 @@ public class LoginUI : MonoBehaviour
         _wired = true;
 
         Bind(startButton, OnClickStart);
-        // 公告 / 设置 / 用户中心：暂不接，日后统一面板
-        // 快捷登录：隐藏，待接微信 SDK
+        Bind(settingsButton, () => SettingsPopupUI.Ensure().Open(SettingsHost.Login));
         Bind(userAgreementButton, () => onOpenUserAgreement?.Invoke());
         Bind(privacyPolicyButton, () => onOpenPrivacyPolicy?.Invoke());
     }

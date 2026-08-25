@@ -64,6 +64,9 @@ public class SaveData
 
     // === 佣兵 ===
     public List<MercenaryData> permanentMercs = new List<MercenaryData>();
+    /// <summary>今日已招募次数（按日刷新键见 dailyMercRecruitDayKey）</summary>
+    public int dailyMercRecruitUsed = 0;
+    public string dailyMercRecruitDayKey = "";
 
     // === 玩家基础属性 ===
     public int playerStrength = 0;     // 额外力量（天赋/遗产加成）

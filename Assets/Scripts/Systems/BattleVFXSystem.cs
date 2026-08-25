@@ -61,7 +61,10 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         {
             case AttackVfxKit.MeleeSlash:
                 {
+                    // 每次从 Shared 取，避免 Inspector 残留旧刀光
                     GameObject hit = LoadSharedKit(kit, faction, "hit");
+                    if (hit == null && faction == VfxFaction.Ally)
+                        hit = vfxSlash;
                     if (hit == null)
                     {
                         Debug.LogWarning($"[VFX] 缺少共享特效: {faction}/{kit}/hit");
@@ -513,12 +516,14 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         LoadSharedKit(AttackVfxKit.Orb, VfxFaction.Enemy, "fly");
         LoadSharedKit(AttackVfxKit.Orb, VfxFaction.Enemy, "hit");
 
+        // 刀光必须用 Ally Shared；禁止留下旧 Pixel Craft / 敌方资源
         if (allyMelee != null) vfxSlash = allyMelee;
+        else Debug.LogWarning("[BattleVFXSystem] Ally MeleeSlash 缺失: Resources/VFX/Shared/Ally/MeleeSlash/vfx_melee_hit");
         if (allyOrbHit != null) vfxMagicImpact = allyOrbHit;
         if (allyHeal != null) vfxHeal = allyHeal;
         if (allyOrbFly != null) vfxFireball = allyOrbFly;
 
-        // 兜底：Shared 没有时再读 Pixel Craft（仅缺省项）
+        // 兜底：Shared 没有时再读 Pixel Craft（仅缺省项；刀光有 Shared 时不走这里）
         if (vfxSlash == null) vfxSlash = LoadVFX("Sword Slash");
         if (vfxMagicImpact == null) vfxMagicImpact = LoadVFX("Magic Impact");
         if (vfxHeal == null) vfxHeal = LoadVFX("Heal");

@@ -235,7 +235,7 @@ public class TavernUI : MonoBehaviour, ITownPage
         {
             recruitButton.onClick.RemoveAllListeners();
             recruitButton.gameObject.SetActive(true);
-            recruitButton.onClick.AddListener(() => TavernRosterPanel.Show());
+            recruitButton.onClick.AddListener(() => MercenaryRecruitPopupUI.Show());
         }
         if (trustButton != null) trustButton.gameObject.SetActive(false);
         if (questButton != null) questButton.gameObject.SetActive(false);
