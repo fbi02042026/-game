@@ -112,3 +112,7 @@ credentials.json
 BattleDiagnose.log
 _excel_dump_lf.txt
 mem-log/
+
+# local video backups
+Tools/backups/
+

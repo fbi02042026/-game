@@ -3,7 +3,7 @@ using System.IO;
 using UnityEngine;
 
 /// <summary>
-/// 云存档适配层：只存加密载荷，不落明文 JSON。
+/// 云存档适配层：存载荷字符串（保护开启时为加密 Base64，关闭时为明文 JSON 的 Base64）。
 /// </summary>
 public static class CloudSaveBridge
 {

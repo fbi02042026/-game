@@ -3,7 +3,7 @@ using System;
 using System.IO;
 
 /// <summary>
-/// 存档系统：加密二进制 + 备份；兼容旧 save.json。
+/// 存档系统：开发期明文 JSON；可读旧加密档。上线前再开 ContentProtection。
 /// </summary>
 public class SaveSystem : Singleton<SaveSystem>
 {
@@ -76,7 +76,9 @@ public class SaveSystem : Singleton<SaveSystem>
         {
             _data.SyncListsFromRuntime();
             string json = JsonUtility.ToJson(_data, false);
-            byte[] blob = SecureCodec.EncryptUtf8(json);
+            byte[] blob = ContentProtection.Enabled
+                ? SecureCodec.EncryptUtf8(json)
+                : System.Text.Encoding.UTF8.GetBytes(json);
             if (File.Exists(savePath))
                 File.Copy(savePath, backupPath, true);
             File.WriteAllBytes(savePath, blob);
@@ -136,7 +138,9 @@ public class SaveSystem : Singleton<SaveSystem>
     {
         _data.SyncListsFromRuntime();
         string json = JsonUtility.ToJson(_data);
-        string payload = Convert.ToBase64String(SecureCodec.EncryptUtf8(json));
+        string payload = ContentProtection.Enabled
+            ? Convert.ToBase64String(SecureCodec.EncryptUtf8(json))
+            : Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
         CloudSaveBridge.UploadPayload(payload, ok =>
         {
             if (ok) Debug.Log("[SaveSystem] 云存档上传成功（或本地镜像）");

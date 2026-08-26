@@ -3108,7 +3108,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 4072534967423110619}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8192c7aaacbe24d469c60dfcdc8eef25, type: 3}
+  m_Script: {fileID: 11500000, guid: 37d8e984b3b84bf597a6c17509166d7e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   goldText: {fileID: 5915907390082980234}
@@ -3292,7 +3292,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 4216351635745547446}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2917b1e4454585445b16fbed87b2901e, type: 3}
+  m_Script: {fileID: 11500000, guid: 407f3ec6bd3a4a10b7901cd10de070a1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   guildButton: {fileID: 0}

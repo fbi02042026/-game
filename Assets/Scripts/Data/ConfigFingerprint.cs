@@ -3,7 +3,7 @@ using System.Text;
 using UnityEngine;
 using System;
 
-/// <summary>配置指纹：进包时写入加密清单，运行时核对，防止直接改 .asset 数值。</summary>
+/// <summary>配置指纹：ContentProtection 开启时才校验。开发期默认跳过。</summary>
 public static class ConfigFingerprint
 {
     const char Sep = '\t';
@@ -72,6 +72,9 @@ public static class ConfigFingerprint
         System.Collections.Generic.IDictionary<string, TalentConfig> talents,
         System.Collections.Generic.IDictionary<string, SkillConfig> skills)
     {
+        if (!ContentProtection.Enabled)
+            return;
+
         string raw = GameTableStore.LoadText(ContentPaths.Data.ConfigFingerprint);
         if (string.IsNullOrEmpty(raw))
         {

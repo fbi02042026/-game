@@ -5,7 +5,10 @@ using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 
-/// <summary>把源表打成加密 bytes，并生成配置指纹。出包前自动跑。</summary>
+/// <summary>
+/// 把源表写入 Resources。开发期明文；ContentProtection.Enabled 时才加密。
+/// 出包前仍可跑，但关闭保护时不会写 PAT1、也不强制指纹校验。
+/// </summary>
 public class GameDataCooker : IPreprocessBuildWithReport
 {
     public int callbackOrder => 10;
@@ -13,15 +16,17 @@ public class GameDataCooker : IPreprocessBuildWithReport
     const string SourceCsv = ContentPaths.Source.Tables + "/monster_attack_style.csv";
     const string OutDir = "Assets/Resources/Data/Tables";
 
-    [MenuItem("Tools/Data/Cook Encrypted Tables")]
+    [MenuItem("Tools/Data/Cook Tables (Plain while protection off)")]
     public static void CookMenu()
     {
         CookAll();
-        EditorUtility.DisplayDialog("Data", "已写入加密表与配置指纹。", "OK");
+        string mode = ContentProtection.Enabled ? "加密" : "明文";
+        EditorUtility.DisplayDialog("Data", "已写入表与指纹（当前模式：" + mode + "）。", "OK");
     }
 
     public void OnPreprocessBuild(BuildReport report)
     {
+        // 开发期也保证 Resources 表存在；不因保护关闭而跳过
         CookAll();
     }
 
@@ -30,9 +35,20 @@ public class GameDataCooker : IPreprocessBuildWithReport
         Directory.CreateDirectory(OutDir);
         Directory.CreateDirectory(ContentPaths.Source.Tables);
         CookMonsterAttackStyle();
-        CookFingerprint();
+        if (ContentProtection.Enabled)
+            CookFingerprint();
+        else
+        {
+            // 去掉旧加密指纹，避免误报
+            string fp = OutDir + "/config_fingerprint.bytes";
+            if (File.Exists(fp))
+                File.Delete(fp);
+            string fpMeta = fp + ".meta";
+            if (File.Exists(fpMeta))
+                File.Delete(fpMeta);
+        }
         AssetDatabase.Refresh();
-        Debug.Log("[Data] Cook Encrypted Tables 完成");
+        Debug.Log("[Data] Cook Tables 完成（ContentProtection=" + ContentProtection.Enabled + ")");
     }
 
     static void CookMonsterAttackStyle()
@@ -53,7 +69,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         if (!File.Exists(SourceCsv))
             File.WriteAllText(SourceCsv, csv, new UTF8Encoding(false));
 
-        WriteEncrypted(OutDir + "/monster_attack_style.bytes", csv);
+        WriteTable(OutDir + "/monster_attack_style.bytes", csv);
     }
 
     static void CookFingerprint()
@@ -97,12 +113,14 @@ public class GameDataCooker : IPreprocessBuildWithReport
                 sb.AppendLine(ConfigFingerprint.Line("S", s.id, ConfigFingerprint.HashSkill(s)));
             }
         }
-        WriteEncrypted(OutDir + "/config_fingerprint.bytes", sb.ToString());
+        WriteTable(OutDir + "/config_fingerprint.bytes", sb.ToString());
     }
 
-    static void WriteEncrypted(string assetPath, string utf8)
+    static void WriteTable(string assetPath, string utf8)
     {
-        byte[] blob = SecureCodec.EncryptUtf8(utf8);
-        File.WriteAllBytes(assetPath, blob);
+        if (ContentProtection.Enabled)
+            File.WriteAllBytes(assetPath, SecureCodec.EncryptUtf8(utf8));
+        else
+            File.WriteAllText(assetPath, utf8 ?? "", new UTF8Encoding(false));
     }
 }
