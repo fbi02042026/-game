@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_f_sr_hammer
   m_EditorClassIdentifier: 
   templateId: equip_f_sr_hammer
   equipName: "碎岩战锤"
-  icon: {fileID: 21300000, guid: 2109ab297907b2b418351e027f5929b6, type: 3}
+  icon: {fileID: 21300000, guid: 24800c2d8c774d32a3a7b2eb17dbc76c, type: 3}
   iconFileName: F_SR_Hammer
   gridWidth: 2
   gridHeight: 3

@@ -9,7 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c3dedb174562eff419a151578bd9ad9b, type: 3}
+  m_Script: {fileID: 11500000, guid: 5581e59b24b746ca937b114a0cd0543c, type: 3}
   m_Name: CharacterRegistry
   m_EditorClassIdentifier: 
   entries:
@@ -102,6 +102,26 @@ MonoBehaviour:
     prefabName: qita101
     iconSprite: {fileID: 21300000, guid: ba74a44c63b441f9aefccf4d12728bc9, type: 3}
     jobName: "\u9A91\u58EB"
+    isPlayer: 0
+  - characterId: fashi101
+    prefabName: fashi101
+    iconSprite: {fileID: 21300000, guid: e7759827401c45b1af0f6ddc2990d95e, type: 3}
+    jobName: "\u6CD5\u5E08"
+    isPlayer: 0
+  - characterId: fashi102
+    prefabName: fashi102
+    iconSprite: {fileID: 21300000, guid: c80c040b0f974dfeb1266062a7851fd6, type: 3}
+    jobName: "\u6CD5\u5E08"
+    isPlayer: 0
+  - characterId: zhongzhan101
+    prefabName: zhongzhan101
+    iconSprite: {fileID: 21300000, guid: 4490bcea8c7147c29c15ea9cbec4a768, type: 3}
+    jobName: "\u91CD\u6B66\u8005"
+    isPlayer: 0
+  - characterId: zhongzhan201
+    prefabName: zhongzhan201
+    iconSprite: {fileID: 21300000, guid: 2cbdd88a989b4408935437a5d74f538c, type: 3}
+    jobName: "\u91CD\u6B66\u8005"
     isPlayer: 0
   - characterId: wanjia
     prefabName: wanjia

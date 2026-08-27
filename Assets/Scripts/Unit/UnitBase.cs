@@ -135,6 +135,8 @@ public abstract class UnitBase : MonoBehaviour
         if (existing != null)
         {
             hitPoint = existing;
+            // 预制体挂点位置不可信（常年贴脚），一律重算到躯干中心
+            StartCoroutine(CalcHitPointCenter(existing));
             return;
         }
 
@@ -149,49 +151,56 @@ public abstract class UnitBase : MonoBehaviour
         hitPoint = hp.transform;
     }
 
-    System.Collections.IEnumerator CalcHitPointCenter(Transform hpTransform)
+    protected System.Collections.IEnumerator CalcHitPointCenter(Transform hpTransform)
     {
         yield return null; // 等一帧，确保精灵已加载
         yield return null; // 再等一帧，SPUM可能需要两帧才完全加载
+        if (hpTransform == null) yield break;
 
+        if (!TryGetBodyBounds(out Bounds body))
+        {
+            hpTransform.localPosition = hitPointOffset;
+            yield break;
+        }
+
+        // 世界空间定位躯干中心。预制体根节点常带缩放（SPUM），
+        // 在局部空间夹取会把挂点压到脚底，这里一律走 world position。
+        hpTransform.position = GetBodyCenterWorld(body);
+        Vector3 lp = hpTransform.localPosition;
+        hpTransform.localPosition = new Vector3(lp.x, lp.y, 0f);
+    }
+
+    /// <summary>躯干中心（世界坐标）：至少落在包围盒下沿往上 45%，不会贴脚。</summary>
+    protected Vector3 GetBodyCenterWorld(Bounds body)
+    {
+        float y = Mathf.Max(body.center.y, body.min.y + body.size.y * 0.45f);
+        return new Vector3(body.center.x, y, transform.position.z);
+    }
+
+    /// <summary>合并本单位躯干精灵的世界包围盒（排除影子/血条/特效）。</summary>
+    protected bool TryGetBodyBounds(out Bounds bounds)
+    {
+        bounds = new Bounds();
         SpriteRenderer[] allSrs = GetComponentsInChildren<SpriteRenderer>(true);
-        if (allSrs.Length == 0) yield break;
+        if (allSrs == null || allSrs.Length == 0) return false;
 
-        Bounds combinedBounds = new Bounds();
         bool hasValid = false;
         foreach (var r in allSrs)
         {
             if (r == null || r.sprite == null || !r.enabled) continue;
             if (IsIgnoredHitPointRenderer(r)) continue;
 
-            // 影子/地面贴图会把中心拉到脚下，只取相对身体偏上的部分
-            Vector3 localCenterOfSprite = transform.InverseTransformPoint(r.bounds.center);
-            if (localCenterOfSprite.y < 0.2f) continue;
-
             if (!hasValid)
             {
-                combinedBounds = r.bounds;
+                bounds = r.bounds;
                 hasValid = true;
             }
             else
             {
-                combinedBounds.Encapsulate(r.bounds);
+                bounds.Encapsulate(r.bounds);
             }
         }
-
-        if (hasValid)
-        {
-            Vector3 worldCenter = combinedBounds.center;
-            Vector3 localCenter = transform.InverseTransformPoint(worldCenter);
-            // 最低不低于默认受击点高度的一半，避免仍落在脚底
-            localCenter.y = Mathf.Clamp(localCenter.y, hitPointOffset.y * 0.55f, 1.85f);
-            localCenter.x = Mathf.Clamp(localCenter.x, -0.35f, 0.35f);
-            hpTransform.localPosition = localCenter;
-        }
-        else
-        {
-            hpTransform.localPosition = hitPointOffset;
-        }
+        return hasValid && bounds.size.y > 0.0001f;
     }
 
     static bool IsIgnoredHitPointRenderer(SpriteRenderer r)
@@ -218,8 +227,17 @@ public abstract class UnitBase : MonoBehaviour
     /// </summary>
     public virtual Vector3 GetFirePosition()
     {
-        if (firePoint != null) return firePoint.position;
-        return transform.position + new Vector3(firePointOffset.x * facingDir, firePointOffset.y, 0);
+        if (firePoint != null)
+        {
+            Vector3 p = firePoint.position;
+            // 出手高度跟躯干中心走，避免弹道从脚下飞出
+            if (hitPoint != null) p.y = hitPoint.position.y;
+            return p;
+        }
+        float y = hitPoint != null
+            ? hitPoint.position.y
+            : transform.position.y + firePointOffset.y;
+        return new Vector3(transform.position.x + firePointOffset.x * facingDir, y, transform.position.z);
     }
 
     /// <summary>

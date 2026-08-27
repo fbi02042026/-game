@@ -92,15 +92,18 @@ public static class MonsterAttackStyleTable
         return GameConfig.RangeBow * GameConfig.MONSTER_RANGED_RANGE_MUL;
     }
 
+    /// <summary>
+    /// 按表里的 style 分弹道：Bow=箭矢，Ranged/Orb/Magic=法球，其余近战刀光。
+    /// → Enemy/Bow/vfx_enemy_bow_fly|hit 或 Enemy/Orb/vfx_orb_fly|hit
+    /// </summary>
     public static AttackVfxKit GetVfxKit(MonsterAttackStyle style)
     {
-        // 远程（含表里写 Ranged/Magic/Orb）一律 Bow
-        // → Resources/VFX/Shared/Enemy/Bow/vfx_enemy_bow_fly|hit
         switch (style)
         {
             case MonsterAttackStyle.Bow:
-            case MonsterAttackStyle.Ranged:
                 return AttackVfxKit.Bow;
+            case MonsterAttackStyle.Ranged:
+                return AttackVfxKit.Orb;
             default:
                 return AttackVfxKit.MeleeSlash;
         }

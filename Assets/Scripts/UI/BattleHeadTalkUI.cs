@@ -22,10 +22,7 @@ public class BattleHeadTalkUI : MonoBehaviour
     const float TypeCharsPerSecond = 36f;
     const float DefaultHold = 1.35f;
 
-    const float BaseBubbleW = 200f;
-    const float MaxBubbleW = 280f;
-    const float MinBubbleH = 107f;
-    const float MaxBubbleH = 220f;
+    static readonly Vector2 BaseBubbleSize = new Vector2(200f, 107f);
     const float PadX = 18f;
     const float PadTop = 14f;
     const float PadBottom = 22f;
@@ -80,7 +77,7 @@ public class BattleHeadTalkUI : MonoBehaviour
         _root = rootGo.GetComponent<RectTransform>();
         _root.anchorMin = _root.anchorMax = new Vector2(0.5f, 0.5f);
         _root.pivot = new Vector2(0.5f, 0f);
-        _root.sizeDelta = new Vector2(BaseBubbleW, MinBubbleH);
+        _root.sizeDelta = BaseBubbleSize;
         _bg = rootGo.GetComponent<Image>();
         _bg.raycastTarget = false;
         _bg.color = Color.white;
@@ -140,19 +137,19 @@ public class BattleHeadTalkUI : MonoBehaviour
             _root.gameObject.SetActive(true);
         }
         if (_group != null) _group.alpha = 1f;
-        FitBubbleSize(raw);
+        string display = SpeechBubbleFit.Apply(_root, _text, raw, BaseBubbleSize);
         if (_text != null) _text.text = "";
         RefreshFollowPosition();
         AcquireStoryBgm();
 
         // 打字机：只改字，不再每字重算布局
-        if (!string.IsNullOrEmpty(raw))
+        if (!string.IsNullOrEmpty(display))
         {
             float delay = 1f / TypeCharsPerSecond;
-            for (int i = 1; i <= raw.Length; i++)
+            for (int i = 1; i <= display.Length; i++)
             {
                 if (_skipTyping || _advance) break;
-                if (_text != null) _text.text = raw.Substring(0, i);
+                if (_text != null) _text.text = display.Substring(0, i);
                 float t = 0f;
                 while (t < delay && !_skipTyping && !_advance)
                 {
@@ -161,7 +158,7 @@ public class BattleHeadTalkUI : MonoBehaviour
                     yield return null;
                 }
             }
-            if (_text != null) _text.text = raw;
+            if (_text != null) _text.text = display;
         }
         _typingDone = true;
 
@@ -197,38 +194,6 @@ public class BattleHeadTalkUI : MonoBehaviour
     }
 
     void LateUpdate() => RefreshFollowPosition();
-
-    TextGenerator _textGen;
-
-    void FitBubbleSize(string raw)
-    {
-        if (_root == null || _text == null) return;
-        if (string.IsNullOrEmpty(raw))
-        {
-            _root.sizeDelta = new Vector2(BaseBubbleW, MinBubbleH);
-            return;
-        }
-
-        float bubbleW = BaseBubbleW;
-        float wrapW = Mathf.Max(60f, bubbleW - PadX * 2f);
-        if (_textGen == null) _textGen = new TextGenerator();
-        var settings = _text.GetGenerationSettings(new Vector2(wrapW, 0f));
-        settings.horizontalOverflow = HorizontalWrapMode.Wrap;
-        settings.verticalOverflow = VerticalWrapMode.Overflow;
-        settings.resizeTextForBestFit = false;
-        _textGen.Populate(raw, settings);
-        float prefW = _textGen.GetPreferredWidth(raw, settings);
-
-        bubbleW = Mathf.Clamp(prefW + PadX * 2f, 160f, MaxBubbleW);
-        wrapW = Mathf.Max(60f, bubbleW - PadX * 2f);
-        settings = _text.GetGenerationSettings(new Vector2(wrapW, 0f));
-        settings.horizontalOverflow = HorizontalWrapMode.Wrap;
-        settings.verticalOverflow = VerticalWrapMode.Overflow;
-        _textGen.Populate(raw, settings);
-        float prefH = _textGen.GetPreferredHeight(raw, settings);
-        float bubbleH = Mathf.Clamp(prefH + PadTop + PadBottom, MinBubbleH, MaxBubbleH);
-        _root.sizeDelta = new Vector2(bubbleW, bubbleH);
-    }
 
     void RefreshFollowPosition()
     {
@@ -269,7 +234,11 @@ public class BattleHeadTalkUI : MonoBehaviour
         }
         _follow = null;
         if (_group != null) _group.alpha = 1f;
-        if (_root != null) _root.gameObject.SetActive(false);
+        if (_root != null)
+        {
+            SpeechBubbleFit.ResetSize(_root, BaseBubbleSize);
+            _root.gameObject.SetActive(false);
+        }
         ReleaseStoryBgm();
     }
 

@@ -87,43 +87,59 @@ public class Mercenary : UnitBase
     void SetupAttributes(string id, int level)
     {
         attr.ResetToBase();
+        level = Mathf.Max(1, level);
+
+        if (MercRosterDefs.TryGetByAssetId(id, out _))
+        {
+            MercRosterDefs.ApplyCombatStats(id, level,
+                out float hp, out float atk, out float def, out float atkSpd, out float move, out float range);
+            attr.SetAttr(AttrType.MaxHp, hp);
+            attr.SetAttr(AttrType.Attack, atk);
+            attr.SetAttr(AttrType.Defense, def);
+            attr.SetAttr(AttrType.AttackSpeed, atkSpd);
+            attr.SetAttr(AttrType.MoveSpeed, move);
+            attr.SetAttr(AttrType.AttackRange, range);
+            attr.SetAttr(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
+            currentHp = attr.GetAttr(AttrType.MaxHp);
+            return;
+        }
 
         bool advanced = GameConfig.GetMercTier(id) == MercTier.Advanced;
         float baseHp, baseAtk, baseDef, atkInterval;
-        // 攻击距离对齐数值表武器「攻击范围(像素)」→ 世界单位
         float atkRange = GameConfig.RangeSword;
 
         if (id.StartsWith("dunbing"))
         {
-            // 刀盾：近战，按单手剑射程
             if (advanced) { baseHp = 550; baseAtk = 18; baseDef = 20; atkInterval = 1.1f; }
             else { baseHp = 300; baseAtk = 10; baseDef = 10; atkInterval = 1.2f; }
             atkRange = GameConfig.RangeSword;
         }
         else if (id.StartsWith("gongshou"))
         {
-            // 弓箭 300px
             if (advanced) { baseHp = 280; baseAtk = 35; baseDef = 5; atkInterval = 0.85f; }
             else { baseHp = 150; baseAtk = 20; baseDef = 3; atkInterval = 0.9f; }
             atkRange = GameConfig.RangeBow;
         }
         else if (id.StartsWith("kuangzhan"))
         {
-            // 双刀/近战输出：单手剑射程；大剑感可用 Greatsword
             if (advanced) { baseHp = 280; baseAtk = 35; baseDef = 5; atkInterval = 0.85f; }
             else { baseHp = 150; baseAtk = 20; baseDef = 3; atkInterval = 0.9f; }
             atkRange = GameConfig.RangeSword;
         }
         else if (id.StartsWith("naima") || id.StartsWith("fashi") || id.StartsWith("mushi"))
         {
-            // 法杖 120px
             if (advanced) { baseHp = 320; baseAtk = 15; baseDef = 8; atkInterval = 1.3f; }
             else { baseHp = 180; baseAtk = 8; baseDef = 4; atkInterval = 1.5f; }
             atkRange = GameConfig.RangeStaff;
         }
+        else if (id.StartsWith("zhongzhan"))
+        {
+            if (advanced) { baseHp = 360; baseAtk = 22; baseDef = 10; atkInterval = 1f; }
+            else { baseHp = 200; baseAtk = 12; baseDef = 5; atkInterval = 1.1f; }
+            atkRange = GameConfig.RangePolearm;
+        }
         else
         {
-            // 长柄/控制 180px
             if (advanced) { baseHp = 360; baseAtk = 22; baseDef = 10; atkInterval = 1f; }
             else { baseHp = 200; baseAtk = 12; baseDef = 5; atkInterval = 1.1f; }
             atkRange = GameConfig.RangePolearm;

@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_new_armor_10
   m_EditorClassIdentifier: 
   templateId: equip_new_armor_10
   equipName: "圣辉板甲"
-  icon: {fileID: 21300000, guid: 42272c550537d1740b22af979839ccc2, type: 3}
+  icon: {fileID: 21300000, guid: f14dc1879a5b47c89b21f9a1a717188b, type: 3}
   iconFileName: New_Armor_10
   gridWidth: 2
   gridHeight: 1

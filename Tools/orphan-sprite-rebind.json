@@ -1,0 +1,186 @@
+{
+  "c729c512ad2ae7f4596abe392c37801a": {
+    "newGuid": "4f0631084fd0459bb644b41fcb0d95d3",
+    "path": "Art/UI/Story/ui_dialogue_panel.png"
+  },
+  "88aaf6c808b271a4baf71f4b829668a8": {
+    "newGuid": "b378f941015945c69226d0b75e168f2f",
+    "path": "Art/UI/Story/ui_choice.png"
+  },
+  "2dae1301b84ae8847b71a9197eca4698": {
+    "newGuid": "54e3f9f797df4d74992138d25408b0a5",
+    "path": "Art/UI/Story/ui_nameplate_npc.png"
+  },
+  "44eacb98a19870645a6b1281661441f1": {
+    "newGuid": "bb90944f31924e09a0fd0b319472d606",
+    "path": "Art/UI/Story/ui_nameplate_player.png"
+  },
+  "7feed38751f0da44798055c2d696935b": {
+    "newGuid": "e1a42f43c84d499f8d2ddf76de441c31",
+    "path": "Art/UI/Story/ui_tap.png"
+  },
+  "82fe7ad93bd69cb4eb6409ac104c9841": {
+    "newGuid": "0f23c96b7e9b48a2ae3452c47a8343be",
+    "path": "Art/UI/Story/portrait_player.png"
+  },
+  "513cb066a1c423c4d8db30080c6bd67e": {
+    "newGuid": "b8d4f02c5e3a49b1c27f6d9e0a1b2c3d",
+    "path": "Art/UI/Story/portrait_guildmaster.png"
+  },
+  "ced71667441293741ba077b5b0151a59": {
+    "newGuid": "26aa65571e494f529b3b9f59dcb4e585",
+    "path": "Art/UI/Main/主界面_0002s_0001_图标底.png"
+  },
+  "53f6bf8dedab59d46811137e62280e57": {
+    "newGuid": "be4a54f2a54c4603a65443da8a6ac075",
+    "path": "Art/UI/冒险日志/选中.png"
+  },
+  "a85b02f5eacd03c42972f92422ccb551": {
+    "newGuid": "26aa65571e494f529b3b9f59dcb4e585",
+    "path": "Art/UI/Main/主界面_0002s_0001_图标底.png"
+  },
+  "8e18353cfa356184bbed1fca0e5c77b3": {
+    "newGuid": "7e407a7d2396404d82ca49371c5f8338",
+    "path": "Art/UI/Main/主界面_0001s_0000_眼睛.png"
+  },
+  "925660d292a51fa4cb596f930802312d": {
+    "newGuid": "e2e82a02690341ba91e653494ec5ae6d",
+    "path": "Art/UI/Main/主界面_0003s_0004_资源条-拷贝.png"
+  },
+  "519027b59930dad45a8ebdf779e7f2eb": {
+    "newGuid": "9ee6195ff40c4af583f9c04a5750b9d6",
+    "path": "Art/UI/Main/主界面_0003s_0002_金币.png"
+  },
+  "e687850dfa4bc7e40a6c02970d4fd442": {
+    "newGuid": "9ee6195ff40c4af583f9c04a5750b9d6",
+    "path": "Art/UI/Main/主界面_0003s_0002_金币.png"
+  },
+  "badc326c890a9124fa733023845385e5": {
+    "newGuid": "69a4b910012e45c1a9109ab96a3d1f17",
+    "path": "Art/UI/Main/主界面_0006_对话框.png"
+  },
+  "ebc8fcf6cfe51b44eb1529043edf7baf": {
+    "newGuid": "be9eb1de584c46f6806ecdee7e6d7b6a",
+    "path": "Art/UI/Main/主界面_0007_长条.png"
+  },
+  "03dd6543535b4554aa87f999f9e3fc70": {
+    "newGuid": "caa40327234d464195a1868da91bf7d7",
+    "path": "Art/UI/Main/主界面_0002s_0003_角色.png"
+  },
+  "b96c6ad947f27b2439e6dd620da5fca3": {
+    "newGuid": "fbb6e4830a304ad480728bee0600f86d",
+    "path": "Art/UI/Main/主界面_0002s_0000_公会.png"
+  },
+  "7a5d4735cc22d8745b6292dec85a7e3d": {
+    "newGuid": "c41929fd42d4480089cfa757059b345d",
+    "path": "Art/UI/Main/主界面_0002s_0005_冒险.png"
+  },
+  "a64f795571204e444b2f271b264e3ee1": {
+    "newGuid": "f16a0b0f1a6147e894294102fd07b693",
+    "path": "Art/UI/Main/主界面_0002s_0007_酒馆.png"
+  },
+  "b39a737bafddb904ebecf653c24210d3": {
+    "newGuid": "4f07d1e6cafb4d819e4b88c50a8b2a3d",
+    "path": "Art/UI/Main/主界面_0002s_0009_冒险日志.png"
+  },
+  "ba5ea2eec1c081b439d114bc22421515": {
+    "newGuid": "98a0a3e1bc2a46b2b130e7fdab01260e",
+    "path": "Art/UI/Main/主界面_0000s_0001_商城.png"
+  },
+  "2d904471893fb694e93e439c28ac2817": {
+    "newGuid": "da17d87b77644a99ae3bb5a2742ab062",
+    "path": "Art/UI/Main/主界面_0000s_0000_排行.png"
+  },
+  "d6f4cf63af4ceca48857c7d5c8e326b7": {
+    "newGuid": "2dc885a350024ce0865fa6ea7bc04bfb",
+    "path": "Art/UI/Main/主界面_0000s_0003_活动.png"
+  },
+  "37516588d163ec04990a9486d4a2a6ea": {
+    "newGuid": "929676d8fe2e48ea985c1e3148501c0b",
+    "path": "Art/UI/Main/主界面_0000s_0002_公告.png"
+  },
+  "fe9da4533ff41694293cfe7641f28365": {
+    "newGuid": "1f3bdec002ea4fa7854a736d3ee94d33",
+    "path": "Art/UI/Main/主界面_0003s_0000_邮件.png"
+  },
+  "ed375a437d882b04b89088b5b6c62da7": {
+    "newGuid": "00084f8854c944ef8716bb2b125f0fb0",
+    "path": "Art/UI/Main/主界面_0003s_0001_设置.png"
+  },
+  "1a7ab9c4de6dd884ea017da1ba0b1f1f": {
+    "newGuid": "e0a249e026004b3d85f765455c79aa70",
+    "path": "Art/UI/Main/主界面_0003s_0006_冒险者旗帜.png"
+  },
+  "52cff23a41e8d26489652584771d269d": {
+    "newGuid": "1ef5aabe81804b11a3acc55cceefb8a7",
+    "path": "Art/UI/Main/主界面_0003s_0007_冒险者名称.png"
+  },
+  "7233c6cdbe2ef4942aed880c22b8a0b5": {
+    "newGuid": "d4294f2681c44b0cbc01e3708074cb1b",
+    "path": "Art/UI/Main/主界面_0008_图层-8.png"
+  },
+  "0cd0131d09632c44897139a40aef2ee2": {
+    "newGuid": "756e27f49fc8456b9a799266b8c1ce3f",
+    "path": "Art/UI/battle/大边框.png"
+  },
+  "f0254556a12917a49b8a8a4c8ac00cf4": {
+    "newGuid": "d0b1d30111df480b98abc9bad69ef80f",
+    "path": "Art/UI/装备格子/frame_common.png"
+  },
+  "8a62894c776594c4a8a6123319cf2538": {
+    "newGuid": "9c7ab5316dba45549365a2efeaffab70",
+    "path": "Art/UI/装备格子/frame_white.png"
+  },
+  "c333d293d7b95104f82ce8c7440f529c": {
+    "newGuid": "2179546094624521af8031ee9ccbab87",
+    "path": "Art/UI/Common/确定按钮.png"
+  },
+  "5ee97af5309766848ac9499681e466bc": {
+    "newGuid": "7a8c3c216d57467b87293e739f3f6de5",
+    "path": "Art/UI/Common/取消按钮.png"
+  },
+  "f625d1754aae7d147a2c3fb9a1a77ae5": {
+    "newGuid": "e7fbd50260594ce78bbb24489f7129f6",
+    "path": "Art/UI/battle/格子锁.png"
+  },
+  "6f017ecd729332d45b4ee2c274cb6bcc": {
+    "newGuid": "c6b9dbf75275493a8641f67a5b7d94f9",
+    "path": "Art/UI/battle/装备格.png"
+  },
+  "d7f7c3f947eb46644b6aa8afcfa1a95f": {
+    "newGuid": "c6b9dbf75275493a8641f67a5b7d94f9",
+    "path": "Art/UI/battle/装备格.png"
+  },
+  "29277b8cd2bac3c4f90c044dd84935fb": {
+    "newGuid": "a152fa2577f0459daabcd580903007b1",
+    "path": "Art/UI/battle/蓝条.png"
+  },
+  "bb6b98a0bdc08b24d95ab1bf089714a3": {
+    "newGuid": "a01c6ffa29fd4451bf0e41558ebb410e",
+    "path": "Art/UI/battle/血条底.png"
+  },
+  "0366cc4d703d53442ae5783bd3615d03": {
+    "newGuid": "e5a59e4f76f940488eecdf430df5e874",
+    "path": "Art/UI/battle/底图.png"
+  },
+  "a1dc8c683aaa7b9418759dbd0ec2d62f": {
+    "newGuid": "3c2b156873bc4806a8394c94fe75fda2",
+    "path": "Art/UI/battle/进度条.png"
+  },
+  "7d8f24e838d890846b2064ac09b2ed39": {
+    "newGuid": "42da37d784724f389218092955b0fba0",
+    "path": "Art/UI/battle/进度.png"
+  },
+  "14f0808845b243c42bd68c264865dc60": {
+    "newGuid": "eeb03bf134944c019cce968e79d4f7d2",
+    "path": "Art/UI/battle/头像框.png"
+  },
+  "fa65fd09d7de81d4a9b7c42dab07188b": {
+    "newGuid": "2945fc7323f8409fb40845e91b2b978d",
+    "path": "Art/UI/battle/任务底框.png"
+  },
+  "628d8a7dc1c877a45ad4407f2662b8ef": {
+    "newGuid": "06a3332e2f384db7a2446bd37d4f0047",
+    "path": "Art/UI/battle/设置.png"
+  }
+}

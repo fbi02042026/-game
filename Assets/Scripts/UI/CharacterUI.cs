@@ -25,6 +25,9 @@ public class CharacterUI : MonoBehaviour, ITownPage
     public Image portraitImage;
     public Button flipPortraitButton;
     public Text titleText;
+    public Text titleSubText;
+    public Image headerAvatar;
+    public Image carriedSkillIcon;
 
     [Header("基础属性")]
     public Text attrHpText;
@@ -46,6 +49,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
     bool _preloaded;
     bool _wired;
     bool _portraitFlipped;
+    bool _bagEventsWired;
 
     void Awake()
     {
@@ -55,6 +59,12 @@ public class CharacterUI : MonoBehaviour, ITownPage
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
+        if (_bagEventsWired && GridBackpackSystem.Instance != null)
+        {
+            GridBackpackSystem.Instance.OnBackpackChanged -= OnBagOrCostumeChanged;
+            GridBackpackSystem.Instance.OnCostumeChanged -= OnBagOrCostumeChanged;
+            _bagEventsWired = false;
+        }
     }
 
     public void PreloadOnce()
@@ -79,6 +89,8 @@ public class CharacterUI : MonoBehaviour, ITownPage
         }
         GameFonts.ApplyToHierarchy(transform);
         WireClicks();
+        WireBagEvents();
+        FixWrongArtBindings();
         _preloaded = true;
         gameObject.SetActive(false);
     }
@@ -94,6 +106,8 @@ public class CharacterUI : MonoBehaviour, ITownPage
         Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
 
+        // 页可能比背包系统更早预载，Show 时再补订一次
+        WireBagEvents();
         RefreshAll();
         TownHeroCostumePreview.EnsureOn(this)?.Show();
     }
@@ -112,9 +126,140 @@ public class CharacterUI : MonoBehaviour, ITownPage
 
     public void RefreshAll()
     {
+        RefreshIdentity();
+        RefreshCarriedSkill();
         RefreshAttrs();
         RefreshBag();
         TownHeroCostumePreview.EnsureOn(this)?.RefreshCostume();
+    }
+
+    void WireBagEvents()
+    {
+        if (_bagEventsWired) return;
+        if (GridBackpackSystem.Instance == null) return;
+        GridBackpackSystem.Instance.OnBackpackChanged += OnBagOrCostumeChanged;
+        GridBackpackSystem.Instance.OnCostumeChanged += OnBagOrCostumeChanged;
+        _bagEventsWired = true;
+    }
+
+    void OnBagOrCostumeChanged()
+    {
+        if (!gameObject.activeInHierarchy) return;
+        RefreshBag();
+        RefreshAttrs();
+        TownHeroCostumePreview.EnsureOn(this)?.RefreshCostume();
+    }
+
+    void RefreshIdentity()
+    {
+        if (titleText != null)
+            titleText.text = PlayerIdentity.DisplayName;
+        if (titleSubText != null)
+            titleSubText.text = PlayerIdentity.Title;
+    }
+
+    void RefreshCarriedSkill()
+    {
+        EnsureCarriedSkillIcon();
+        if (carriedSkillIcon == null) return;
+        string id = SaveSystem.Instance?.Data?.selectedPlayerSkillId;
+        if (string.IsNullOrEmpty(id))
+            id = PlayerSkillDefs.All != null && PlayerSkillDefs.All.Length > 0 ? PlayerSkillDefs.All[0].id : null;
+        Sprite sp = LoadPlayerSkillIcon(id);
+        carriedSkillIcon.sprite = sp;
+        carriedSkillIcon.enabled = sp != null;
+        carriedSkillIcon.preserveAspect = true;
+        carriedSkillIcon.color = Color.white;
+        carriedSkillIcon.gameObject.SetActive(true);
+    }
+
+    static Sprite LoadPlayerSkillIcon(string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return null;
+        var sp = Resources.Load<Sprite>("Icons/SkillIcon/" + skillId);
+        if (sp != null) return sp;
+        var all = Resources.LoadAll<Sprite>("Icons/SkillIcon/" + skillId);
+        if (all != null && all.Length > 0) return all[0];
+        return null;
+    }
+
+    void EnsureCarriedSkillIcon()
+    {
+        if (carriedSkillIcon != null) return;
+        if (leftSkillButton == null) return;
+
+        // 预制体里常有装饰用 Image（头像框），不要拿它当技能图标
+        var iconTf = leftSkillButton.transform.Find("Icon");
+        if (iconTf != null)
+            carriedSkillIcon = iconTf.GetComponent<Image>();
+        if (carriedSkillIcon != null) return;
+
+        var deco = leftSkillButton.transform.Find("Image");
+        if (deco != null)
+            deco.gameObject.SetActive(false);
+
+        var go = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(leftSkillButton.transform, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.38f);
+        rt.anchorMax = new Vector2(0.5f, 0.38f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(72f, 72f);
+        rt.anchoredPosition = Vector2.zero;
+        carriedSkillIcon = go.GetComponent<Image>();
+        carriedSkillIcon.raycastTarget = false;
+        var label = leftSkillButton.transform.Find("Label");
+        if (label != null) label.SetAsLastSibling();
+    }
+
+    /// <summary>
+    /// 纠正手做预制体里明显错绑的图：名字旁用了「切换」、背包用了战斗大边框、
+    /// 右侧天赋半透底用了横板翻转。只换资源/显隐，不改坐标。
+    /// </summary>
+    void FixWrongArtBindings()
+    {
+        // Header/icon：切换箭头 → 玩家头像
+        if (headerAvatar == null)
+            headerAvatar = transform.Find("Content/Header/icon")?.GetComponent<Image>();
+        if (headerAvatar != null)
+        {
+            var avatar = LoadNavArt("角色_0000s_0000_玩家头像");
+            if (avatar != null)
+            {
+                headerAvatar.sprite = avatar;
+                headerAvatar.preserveAspect = true;
+                headerAvatar.color = Color.white;
+            }
+        }
+
+        // 背包底框：战斗「大边框」→ 角色页面板
+        var bagPanel = transform.Find("Content/BackpackPanel")?.GetComponent<Image>();
+        if (bagPanel != null)
+        {
+            var frame = LoadNavArt("角色_0002s_0009_图层-6-拷贝");
+            if (frame != null)
+            {
+                bagPanel.sprite = frame;
+                bagPanel.type = Image.Type.Sliced;
+                bagPanel.color = Color.white;
+            }
+        }
+
+        // 右侧天赋底：错用横板+Y翻转，关掉以免脏半透条；按钮本身已有底图
+        var rightBg = transform.Find("Content/Stage/RightButtons/bg");
+        if (rightBg != null)
+            rightBg.gameObject.SetActive(false);
+    }
+
+    static Sprite LoadNavArt(string fileNameWithoutExt)
+    {
+        if (string.IsNullOrEmpty(fileNameWithoutExt)) return null;
+#if UNITY_EDITOR
+        string path = "Assets/Art/UI/NavCharacter/" + fileNameWithoutExt + ".png";
+        var ed = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        if (ed != null) return ed;
+#endif
+        return Resources.Load<Sprite>("UI/NavCharacter/" + fileNameWithoutExt);
     }
 
     void RefreshAttrs()
@@ -305,11 +450,16 @@ public class CharacterUI : MonoBehaviour, ITownPage
     public void AutoBind()
     {
         titleText = FindTxt("Content/Header/TitleText");
+        titleSubText = FindTxt("Content/Header/称号")
+                       ?? FindTxt("Content/Header/TitleSub")
+                       ?? FindTxt("Content/Header/SubTitle");
+        headerAvatar = transform.Find("Content/Header/icon")?.GetComponent<Image>();
         talentButton = transform.Find("Content/Stage/RightButtons/TalentButton")?.GetComponent<Button>();
         skillButton = transform.Find("Content/Stage/RightButtons/SkillButton")?.GetComponent<Button>();
         leftSkillButton = transform.Find("Content/Stage/LeftSkillButton")?.GetComponent<Button>();
         portraitImage = transform.Find("Content/Stage/Portrait")?.GetComponent<Image>();
         flipPortraitButton = transform.Find("Content/Stage/FlipButton")?.GetComponent<Button>();
+        EnsureCarriedSkillIcon();
 
         attrHpText = FindTxt("Content/AttrPanel/AttrHpRoot/AttrHp") ?? FindTxt("Content/AttrPanel/AttrHp");
         attrAtkText = FindTxt("Content/AttrPanel/AttrAtkRoot/AttrAtk") ?? FindTxt("Content/AttrPanel/AttrAtk");
@@ -328,6 +478,16 @@ public class CharacterUI : MonoBehaviour, ITownPage
 
         if (skillSelect == null)
             skillSelect = GetComponentInChildren<SkillSelectUI>(true);
+        if (skillSelect != null)
+        {
+            skillSelect.onSkillSelected -= OnSkillSelectedFromPanel;
+            skillSelect.onSkillSelected += OnSkillSelectedFromPanel;
+        }
+    }
+
+    void OnSkillSelectedFromPanel(int _)
+    {
+        RefreshCarriedSkill();
     }
 
     Text FindTxt(string path)

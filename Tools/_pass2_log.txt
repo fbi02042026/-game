@@ -1,0 +1,32 @@
+﻿MAP ModeBtn: Art/UI/Adventure/冒险_0000s_0012_未选中.png
+MAP ModeBtn选中: Art/UI/Adventure/冒险_0000s_0011_选中.png
+MAP EnemyIcon: Art/UI/Adventure/冒险_0001s_0001_敌人图标.png
+MAP DropIconKuang: Art/UI/Adventure/敌人图标框.png
+MAP boxbg: Art/UI/Adventure/冒险_0000s_0003_宝箱奖励.png
+MAP Diff普通: Art/UI/Adventure/冒险_0001s_0002_普通.png
+MAP Diff困难: Art/UI/Adventure/冒险_0001s_0003_困难.png
+MAP Diff噩梦: Art/UI/Adventure/冒险_0001s_0004_噩梦.png
+MAP Overlay: Art/UI/Adventure/冒险_0000s_0005_背景-拷贝.png
+MAP ModeIcon0: Art/UI/Adventure/冒险_0000s_0010_主线.png
+MAP MapBg: Art/UI/Adventure/冒险_0000s_0005_背景-拷贝.png
+MAP TitleBar: Art/UI/Adventure/冒险_0000s_0004_章节.png
+MAP PrevBtn: Art/UI/Adventure/冒险_0000s_0001_左箭头.png
+MAP NextBtn: Art/UI/Adventure/冒险_0000s_0000_右箭头.png
+MAP HPBarFill: Art/UI/battle/敌人血条.png
+MAP TopDisplays: Art/UI/battle/资源底框.png
+MAP EnchantIcon: Art/UI/battle/关卡.png
+MAP DecomposeIcon: Art/UI/battle/设置.png
+MAP BackpackPanel: Art/UI/battle/大边框.png
+MAP BattleSettings: Art/UI/battle/设置.png
+MAP QuestPanel: Art/UI/battle/任务底框.png
+MAP DifficultyIcon: Art/UI/battle/难度.png
+MAP map1: Art/UI/battle/关卡.png
+MAP map2: Art/UI/battle/关卡.png
+MAP map3: Art/UI/battle/关卡.png
+map size 25
+wrote Resources\Prefabs\Battle\BattleStageMap.prefab
+wrote Resources\Prefabs\Battle\BattleUI.prefab
+wrote Resources\Prefabs\Town\AdventureUI.prefab
+wrote Resources\Prefabs\Town\AdventureLogUI.prefab
+wrote Resources\Prefabs\background\map.prefab
+DONE files=5 reps=53

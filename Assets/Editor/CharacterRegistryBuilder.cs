@@ -20,10 +20,12 @@ public class CharacterRegistryBuilder : EditorWindow
     private static readonly Dictionary<string, string> JobNameMap = new Dictionary<string, string>
     {
         { "wanjia", "玩家" },
-        { "dunbing", "盾兵" },
-        { "gongshou", "弓手" },
-        { "kuangzhan", "狂战" },
-        { "naima", "奶妈" },
+        { "dunbing", "剑盾卫士" },
+        { "gongshou", "游侠" },
+        { "kuangzhan", "狂战士" },
+        { "naima", "牧师" },
+        { "fashi", "法师" },
+        { "zhongzhan", "重武者" },
         { "qita", "骑士" },
     };
 
@@ -98,6 +100,24 @@ public class CharacterRegistryBuilder : EditorWindow
         {
             EditorUtility.DisplayDialog("生成角色注册表", "未扫描到任何头像图标，请检查目录:\n" + HEADS_DIR, "确定");
             return;
+        }
+
+        // 2b. 补齐仅有预制体、暂无头像的佣兵（法师/重武者等）
+        var known = new HashSet<string>();
+        foreach (var e in entries) known.Add(e.characterId);
+        foreach (string prefabName in prefabNames)
+        {
+            if (known.Contains(prefabName)) continue;
+            if (prefabName.StartsWith("npc_")) continue;
+            entries.Add(new CharacterRegistry.CharacterEntry
+            {
+                characterId = prefabName,
+                prefabName = prefabName,
+                iconSprite = null,
+                jobName = GetJobName(prefabName),
+                isPlayer = prefabName == "wanjia"
+            });
+            known.Add(prefabName);
         }
 
         // 3. 创建或更新 registry.asset

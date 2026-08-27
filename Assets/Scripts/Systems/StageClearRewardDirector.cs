@@ -216,6 +216,83 @@ public class StageClearRewardDirector : MonoBehaviour
         _running = false;
     }
 
+    /// <summary>
+    /// 新手引导：把场景宝箱放到玩家前方，等走近后播放开箱，地上掉一件装备表现，再关箱。
+    /// </summary>
+    public IEnumerator CoTutorialChestDrop(EquipInstance drop, float aheadDist = 6.5f)
+    {
+        CacheSceneRefs();
+        if (_boxRoot == null)
+        {
+            Debug.LogWarning("[StageClearReward] 教程宝箱：场景无 box");
+            yield break;
+        }
+
+        var hero = Hero.Instance;
+        float hx = hero != null ? UnitBase.GetCombatX(hero) : 0f;
+        float z = _boxRoot.position.z;
+        Vector3 boxPos = new Vector3(hx + aheadDist, UnitBase.GROUND_Y + 0.5f, z);
+        _boxRoot.position = boxPos;
+        _boxRoot.gameObject.SetActive(true);
+        ApplyBoxVisual(ClearBoxTier.Mu);
+        EnsureEffectAlive();
+        EnsureBoxController();
+        if (_closeSr != null) _closeSr.enabled = true;
+        if (_openSr != null) _openSr.enabled = false;
+
+        // 等玩家走近宝箱
+        float wait = 0f;
+        while (wait < 60f)
+        {
+            wait += Time.unscaledDeltaTime;
+            if (hero != null)
+            {
+                float dist = Mathf.Abs(UnitBase.GetCombatX(hero) - boxPos.x);
+                if (dist <= 2.8f) break;
+            }
+            yield return null;
+        }
+    }
+
+    /// <summary>引导：开箱动画 + 地上掉落图标，然后隐藏宝箱。返回地面图标（调用方负责销毁）。</summary>
+    public IEnumerator CoTutorialOpenChest(EquipInstance drop, System.Action<GameObject> onGroundIcon)
+    {
+        CacheSceneRefs();
+        if (_boxRoot == null)
+        {
+            onGroundIcon?.Invoke(null);
+            yield break;
+        }
+
+        _boxRoot.gameObject.SetActive(true);
+        EnsureBoxController();
+        if (_boxAnim != null)
+        {
+            _boxAnim.enabled = true;
+            _boxAnim.Play("open1", 0, 0f);
+            yield return WaitAnimOrSeconds(_boxAnim, "open1", 1.0f);
+            _boxAnim.Play("open2", 0, 0f);
+        }
+        else
+            yield return new WaitForSecondsRealtime(0.6f);
+
+        if (_closeSr != null) _closeSr.enabled = false;
+        if (_openSr != null) _openSr.enabled = true;
+
+        GameObject ground = null;
+        if (drop != null)
+        {
+            Vector3 spawn = _boxRoot.position;
+            spawn.y = UnitBase.GROUND_Y + 0.35f;
+            ground = CreateGroundDrop(spawn, drop);
+        }
+        onGroundIcon?.Invoke(ground);
+        yield return new WaitForSecondsRealtime(0.45f);
+
+        if (_boxRoot != null)
+            _boxRoot.gameObject.SetActive(false);
+    }
+
     public void Begin(List<EquipInstance> rewards, int bonusGold, StageType stageType = StageType.Normal)
     {
         if (_running) return;

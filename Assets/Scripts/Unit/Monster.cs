@@ -126,12 +126,35 @@ public class Monster : UnitBase
         }
     }
 
-    /// <summary>预制体锚点按 Canvas 坐标设计，迁到世界 unit 后需同比例缩小</summary>
+    /// <summary>受击/发射点：按精灵躯干中心，禁止压到脚边。</summary>
     void NormalizeMonsterAnchorNodes()
     {
-        float factor = GameConfig.MONSTER_ANCHOR_SCALE_FACTOR;
-        ApplyAnchorPosition(transform.Find("beattack"), 0f, 6.6f * factor);
-        ApplyAnchorPosition(transform.Find("fire"), -6.6f * factor, 6.6f * factor);
+        ApplyAnchorPosition(transform.Find("beattack"), 0f, 0.55f);
+        ApplyAnchorPosition(transform.Find("fire"), -0.35f, 0.55f);
+        Transform be = transform.Find("beattack");
+        if (be != null)
+            StartCoroutine(CalcHitPointCenter(be));
+        Transform fire = transform.Find("fire");
+        if (fire != null)
+            StartCoroutine(CalcFirePointCenter(fire));
+    }
+
+    System.Collections.IEnumerator CalcFirePointCenter(Transform fireTransform)
+    {
+        yield return null;
+        yield return null;
+        if (fireTransform == null) yield break;
+
+        // 与受击点同高、水平挪到躯干边缘。缩放过的预制体不能在局部空间算。
+        if (!TryGetBodyBounds(out Bounds body))
+            yield break;
+
+        Vector3 center = hitPoint != null ? hitPoint.position : GetBodyCenterWorld(body);
+        float side = Mathf.Max(0.12f, body.size.x * 0.35f);
+        bool toLeft = fireTransform.localPosition.x < 0f;
+        fireTransform.position = new Vector3(center.x + (toLeft ? -side : side), center.y, transform.position.z);
+        Vector3 lp = fireTransform.localPosition;
+        fireTransform.localPosition = new Vector3(lp.x, lp.y, 0f);
     }
 
     static void ApplyAnchorPosition(Transform t, float x, float y)
@@ -229,6 +252,7 @@ public class Monster : UnitBase
             {
                 if (rb != null) rb.velocity = Vector2.zero;
                 if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+                // 被挡住时不要每帧挤位，否则后面的怪会来回哆嗦
                 return;
             }
             float step = _enterSpeed * Time.deltaTime;
@@ -280,9 +304,11 @@ public class Monster : UnitBase
         }
         else if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
         {
-            // 前面已有同阵营怪挡路：停下；若已进攻击距离上面已处理
+            // 前面已有同阵营怪挡路：停下；被挡住时不做挤位，避免后排哆嗦
             if (rb != null) rb.velocity = Vector2.zero;
             isMoving = false;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            return;
         }
         else
         {
@@ -291,7 +317,9 @@ public class Monster : UnitBase
             isMoving = true;
         }
         if (unitAnim != null) unitAnim.SetMove(isMoving, facingDir);
-        UnitCrowd.ResolveOverlap(this);
+        // 仅在移动时轻推分位，待机/堵路时别抖
+        if (isMoving)
+            UnitCrowd.ResolveOverlap(this);
     }
 
     void IdleWaitForPlayer()
@@ -300,7 +328,7 @@ public class Monster : UnitBase
         facingDir = -1;
         ApplyFacing(facingDir);
         if (unitAnim != null) unitAnim.SetMove(false, facingDir);
-        UnitCrowd.ResolveOverlap(this);
+        // 待机不每帧挤位，避免叠怪时原地哆嗦
     }
 
     /// <summary>
@@ -414,6 +442,12 @@ public class Monster : UnitBase
             atkSpeedMul *= BattleManager.Instance.runMonsterAtkSpeedMul;
         attr.SetAttr(AttrType.AttackSpeed,
             (1f / Mathf.Max(0.2f, atkInterval)) * atkSpeedMul);
+        // 远程怪攻击间隔再缩 40%（攻速 ÷0.6）
+        if (!_isBossUnit && MonsterAttackStyleTable.IsRanged(_attackStyle))
+        {
+            attr.SetAttr(AttrType.AttackSpeed,
+                attr.GetAttr(AttrType.AttackSpeed) / 0.6f);
+        }
         float moveSpd = template != null && template.baseMoveSpeed > 0.01f
             ? Mathf.Min(template.baseMoveSpeed, GameConfig.MONSTER_DEFAULT_MOVE_SPEED * 1.5f)
             : GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
@@ -690,20 +724,15 @@ public class Monster : UnitBase
         float damage = (attr.GetAttr(AttrType.Attack) * mult + extra) * tier;
         float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
 
-        // 远程小怪/精英：一律 Bow → Enemy/Bow/vfx_enemy_bow_fly|hit（勿用 Ally 的 vfx_bow_*）
-        // 不要用技能表 Orb，也不要用 mon_magic_burst 专属命中特效盖掉敌方弓箭命中。
+        // 弹道按攻击方式表分：Bow 走 Enemy/Bow/vfx_enemy_bow_*，Ranged 走 Enemy/Orb/vfx_orb_*。
+        // 小怪一律以表为准，禁止被技能表的 attackKit 盖掉；Boss 才允许技能自带 kit。
         AttackVfxKit kit = MonsterAttackStyleTable.GetVfxKit(_swingStyle);
-        bool forceEnemyBow = MonsterAttackStyleTable.IsRanged(_swingStyle) && !_isBossUnit;
-        if (forceEnemyBow)
-            kit = AttackVfxKit.Bow;
-        else if (_isBossUnit)
+        bool useTableKit = !_isBossUnit;
+        if (_isBossUnit)
         {
             var skillCfg = SkillRegistry.Instance?.Get(_skillId);
-            if (skillCfg != null && skillCfg.attackKit != AttackVfxKit.None
-                && skillCfg.attackKit != AttackVfxKit.Orb)
+            if (skillCfg != null && skillCfg.attackKit != AttackVfxKit.None)
                 kit = skillCfg.attackKit;
-            else if (MonsterAttackStyleTable.IsRanged(_swingStyle))
-                kit = AttackVfxKit.Bow;
         }
 
         Vector3 firePos = GetFirePosition();
@@ -715,8 +744,8 @@ public class Monster : UnitBase
 
         if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
         {
-            // 远程技：子弹飞到再结算。小怪不传技能专属 impact，命中走 Enemy/vfx_enemy_bow_hit
-            GameObject impact = forceEnemyBow
+            // 远程技：子弹飞到再结算。小怪不传技能专属 impact，命中走敌方套自己的 hit
+            GameObject impact = useTableKit
                 ? null
                 : SkillRegistry.Instance?.GetSkillVfxPrefab(_skillId);
             Transform targetTf = primaryTarget != null ? primaryTarget.transform : null;
@@ -796,6 +825,7 @@ public class Monster : UnitBase
     }
 
     /// <summary>按对照表；Boss 本挥击可能近战或远程</summary>
+    /// <summary>普攻弹道以攻击方式表为准：Bow=箭矢，Ranged=法球。</summary>
     protected override AttackVfxKit GetAttackVfxKit()
     {
         return MonsterAttackStyleTable.GetVfxKit(_swingStyle);
@@ -810,20 +840,23 @@ public class Monster : UnitBase
         return baseRange;
     }
 
-    /// <summary>发射点随朝向镜像（预制体 fire 默认在左侧）；弓箭再略压低</summary>
+    /// <summary>发射点随朝向镜像；高度跟躯干受击点，不再往脚下压。</summary>
     public override Vector3 GetFirePosition()
     {
         Transform fire = firePoint != null ? firePoint : transform.Find("fire");
-        float yNudge = MonsterAttackStyleTable.IsRanged(_swingStyle) || MonsterAttackStyleTable.IsRanged(_attackStyle)
-            ? -0.12f : 0f;
         if (fire != null)
         {
-            Vector3 local = fire.localPosition;
-            float absX = Mathf.Abs(local.x);
-            float x = facingDir < 0 ? -absX : absX;
-            return transform.TransformPoint(new Vector3(x, local.y + yNudge, local.z));
+            // 全程世界坐标：预制体根缩放下，局部偏移会把发射点甩到脚底或体外
+            Vector3 fw = fire.position;
+            float centerX = transform.position.x;
+            float absX = Mathf.Abs(fw.x - centerX);
+            if (absX < 0.05f) absX = 0.35f;
+            float y = hitPoint != null ? hitPoint.position.y : fw.y;
+            return new Vector3(centerX + (facingDir < 0 ? -absX : absX), y, transform.position.z);
         }
-        return transform.position + new Vector3(firePointOffset.x * facingDir, firePointOffset.y + yNudge, 0f);
+        Vector3 off = firePointOffset;
+        float fy = hitPoint != null ? hitPoint.position.y : transform.position.y + off.y;
+        return new Vector3(transform.position.x + off.x * facingDir, fy, transform.position.z);
     }
 
     /// <summary>更新血条填充比例</summary>

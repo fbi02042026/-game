@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_new_helmet_07
   m_EditorClassIdentifier: 
   templateId: equip_new_helmet_07
   equipName: "符文盔"
-  icon: {fileID: 21300000, guid: 3aac015d86f025c4f97d5c2278eb1352, type: 3}
+  icon: {fileID: 21300000, guid: a303b74d29094520a66469b5014b8a62, type: 3}
   iconFileName: New_Helmet_07
   gridWidth: 1
   gridHeight: 1

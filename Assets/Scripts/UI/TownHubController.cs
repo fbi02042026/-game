@@ -22,10 +22,38 @@ public class TownHubController : MonoBehaviour
     bool _wired;
     bool _pagesPreloaded;
     MainNavTab _current = MainNavTab.Guild;
+    bool _wasLandladyBanned;
+    TavernNavBanHud _tavernBanHud;
 
     void Awake()
     {
         Instance = this;
+    }
+
+    // 禁入状态存在 PlayerPrefs 里，倒计时只精确到秒，不必每帧去读
+    const float BanPollInterval = 0.25f;
+    float _banPollTimer;
+
+    void Update()
+    {
+        _banPollTimer -= Time.unscaledDeltaTime;
+        if (_banPollTimer > 0f) return;
+        _banPollTimer = BanPollInterval;
+
+        bool banned = TavernLandladyTease.IsBanned;
+        if (_wasLandladyBanned && !banned && _tavern != null)
+            _tavern.MarkWelcomeBack();
+        _wasLandladyBanned = banned;
+        RefreshTavernNavBannedVisual(banned);
+    }
+
+    void RefreshTavernNavBannedVisual(bool banned)
+    {
+        EnsureNavBound();
+        if (_nav == null || _nav.tavernButton == null) return;
+        if (_tavernBanHud == null)
+            _tavernBanHud = TavernNavBanHud.EnsureOn(_nav.tavernButton);
+        _tavernBanHud?.Refresh(banned, TavernLandladyTease.BanRemainingSeconds);
     }
 
     void Start()
@@ -126,6 +154,17 @@ public class TownHubController : MonoBehaviour
     {
         if (!_pagesPreloaded)
             PreloadAllPages();
+
+        if (tab == MainNavTab.Tavern && TavernLandladyTease.IsBanned)
+        {
+            if (_tavernBanHud == null && _nav != null)
+                _tavernBanHud = TavernNavBanHud.EnsureOn(_nav.tavernButton);
+            _tavernBanHud?.ShowBannedBubble();
+            // 停在当前页，底栏选中也还原
+            if (_nav != null)
+                _nav.SetSelected(_current, notify: false);
+            return;
+        }
 
         _current = tab;
         if (tab == MainNavTab.Tavern)

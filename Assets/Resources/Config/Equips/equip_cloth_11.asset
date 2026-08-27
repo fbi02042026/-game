@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_cloth_11
   m_EditorClassIdentifier: 
   templateId: equip_cloth_11
   equipName: "麻布披风"
-  icon: {fileID: 21300000, guid: 2070c6c15b03fd64bbf7cc6f30b0d6e3, type: 3}
+  icon: {fileID: 21300000, guid: f6c3582256294ae8815ef245b9c13a43, type: 3}
   iconFileName: Cloth_11
   gridWidth: 1
   gridHeight: 1

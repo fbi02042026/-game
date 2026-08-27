@@ -49,6 +49,9 @@ public class EquipDropPopupUI : MonoBehaviour
         public GameObject selectedMark;
     }
 
+    [Tooltip("代码搭建时才由脚本摆卡片位置；用美术预制体时保持关闭，避免覆盖手摆布局")]
+    public bool autoLayoutCards;
+
     EquipDropMode _mode;
     readonly List<EquipInstance> _drops = new List<EquipInstance>();
     int _selected;
@@ -85,6 +88,7 @@ public class EquipDropPopupUI : MonoBehaviour
 
         var prefab = Resources.Load<GameObject>(PrefabPath);
         GameObject go;
+        bool built = false;
         if (prefab != null)
         {
             go = Instantiate(prefab);
@@ -95,11 +99,13 @@ public class EquipDropPopupUI : MonoBehaviour
             Debug.LogWarning($"[EquipDropPopup] 未找到预制体 {PrefabPath}，改用代码搭建");
             go = new GameObject("EquipDropPopup");
             BuildHierarchy(go);
+            built = true;
         }
         DontDestroyOnLoad(go);
 
         var ui = go.GetComponent<EquipDropPopupUI>();
         if (ui == null) ui = go.AddComponent<EquipDropPopupUI>();
+        if (built) ui.autoLayoutCards = true;
         return ui;
     }
 
@@ -137,6 +143,7 @@ public class EquipDropPopupUI : MonoBehaviour
 
         _selected = 0;
         EnsureEventSystem();
+        EnsureCanvas();
         if (root != null)
         {
             root.SetActive(true);
@@ -174,7 +181,8 @@ public class EquipDropPopupUI : MonoBehaviour
     void RefreshCards()
     {
         int count = _drops.Count;
-        const float step = 210f;
+        bool layout = ShouldLayoutCards();
+        float step = CardLayoutStep();
         for (int i = 0; i < cards.Count; i++)
         {
             var c = cards[i];
@@ -183,9 +191,12 @@ public class EquipDropPopupUI : MonoBehaviour
             c.root.SetActive(active);
             if (!active) continue;
 
-            var rt = c.root.GetComponent<RectTransform>();
-            if (rt != null)
-                rt.anchoredPosition = new Vector2((i - (count - 1) * 0.5f) * step, rt.anchoredPosition.y);
+            if (layout)
+            {
+                var rt = c.root.GetComponent<RectTransform>();
+                if (rt != null)
+                    rt.anchoredPosition = new Vector2((i - (count - 1) * 0.5f) * step, rt.anchoredPosition.y);
+            }
 
             var eq = _drops[i];
             if (eq == null) continue;
@@ -199,6 +210,7 @@ public class EquipDropPopupUI : MonoBehaviour
                 c.selectedMark.SetActive(sel && count > 1);
             if (c.icon != null)
             {
+                c.icon.gameObject.SetActive(true);
                 c.icon.sprite = eq.icon;
                 c.icon.color = Color.white;
                 c.icon.preserveAspect = true;
@@ -210,6 +222,60 @@ public class EquipDropPopupUI : MonoBehaviour
             if (c.meta != null) c.meta.text = $"{EquipUiText.Slot(eq.slotType)}  ★{eq.star}  {EquipUiText.RarityName(eq.rarity)}";
             if (c.attrs != null) c.attrs.text = FormatAttrs(eq);
         }
+    }
+
+    /// <summary>
+    /// 预制体里 Canvas 是 Screen Space - Camera 但没存相机（DontDestroyOnLoad 后也拿不到），
+    /// 每次打开重绑一次 Camera.main，避免缩放/层级错位。
+    /// </summary>
+    void EnsureCanvas()
+    {
+        var canvas = GetComponent<Canvas>();
+        if (canvas == null) return;
+        if (canvas.renderMode == RenderMode.ScreenSpaceCamera && canvas.worldCamera == null)
+            UICanvasSetup.Apply(canvas, Camera.main);
+    }
+
+    /// <summary>
+    /// 单件掉落只有一张卡，摆位没意义；美术预制体或带 LayoutGroup 时也不许脚本插手，
+    /// 否则会把手摆的位置顶飞（卡片重叠 / 超出面板）。
+    /// </summary>
+    bool ShouldLayoutCards()
+    {
+        if (_drops.Count <= 1) return false;
+        if (!autoLayoutCards) return false;
+        var parent = cards.Count > 0 && cards[0]?.root != null
+            ? cards[0].root.transform.parent
+            : null;
+        return parent == null || parent.GetComponent<LayoutGroup>() == null;
+    }
+
+    /// <summary>按卡片实际宽度算间距，别再写死 210 导致宽卡重叠。</summary>
+    float CardLayoutStep()
+    {
+        float width = 196f;
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var rt = cards[i]?.root != null ? cards[i].root.GetComponent<RectTransform>() : null;
+            if (rt != null && rt.rect.width > 1f)
+            {
+                width = rt.rect.width;
+                break;
+            }
+        }
+        float gap = 14f;
+        float step = width + gap;
+
+        // 三张卡不能超出面板可用宽度
+        var panel = cards.Count > 0 && cards[0]?.root != null
+            ? cards[0].root.transform.parent as RectTransform
+            : null;
+        if (panel != null && panel.rect.width > 1f && _drops.Count > 1)
+        {
+            float maxStep = (panel.rect.width - 24f - width) / (_drops.Count - 1);
+            if (maxStep > 0f && maxStep < step) step = maxStep;
+        }
+        return step;
     }
 
     void RefreshCompare()
@@ -241,17 +307,7 @@ public class EquipDropPopupUI : MonoBehaviour
             secondaryLabel.text = _mode == EquipDropMode.ReplaceWorn ? "丢弃" : "放入背包";
     }
 
-    static void EnsureEquipIcon(EquipInstance eq)
-    {
-        if (eq == null) return;
-        eq.template?.ResolveIcon();
-        if (eq.icon == null && eq.template != null)
-            eq.icon = eq.template.icon;
-        if (eq.icon == null && eq.template != null && !string.IsNullOrEmpty(eq.template.iconFileName))
-            eq.icon = EquipIcons.Get(eq.template.iconFileName);
-        if (eq.icon == null && !string.IsNullOrEmpty(eq.templateId))
-            eq.icon = EquipIcons.Get(eq.templateId);
-    }
+    static void EnsureEquipIcon(EquipInstance eq) => EquipIcons.Resolve(eq);
 
     EquipInstance GetSelected()
     {

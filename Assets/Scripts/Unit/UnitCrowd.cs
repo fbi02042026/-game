@@ -9,7 +9,7 @@ public static class UnitCrowd
     const float SpriteScale = 0.92f;
     const float DefaultHalfWidth = 0.42f;
     const float OverlapPad = 0.08f;
-    const float MinSeparation = 0.95f;
+    const float MinSeparation = 0.72f;
 
     public static float GetHalfWidth(UnitBase u)
     {

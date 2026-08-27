@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_new_weapon_14
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_14
   equipName: "岩心重剑"
-  icon: {fileID: 21300000, guid: 7c69c819f0908ca45a3248b331837d18, type: 3}
+  icon: {fileID: 21300000, guid: 64087535ea094f5e9957c61c761eced5, type: 3}
   iconFileName: New_Weapon_14
   gridWidth: 1
   gridHeight: 2

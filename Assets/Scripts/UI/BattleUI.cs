@@ -145,7 +145,7 @@ public class BattleUI : MonoBehaviour
             }
         }
 
-        if (GameConfig.SOLO_PLAYER_BATTLE)
+        if (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle)
         {
             if (TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud)
                 RefreshTutorialMercLiveBar();
@@ -501,6 +501,7 @@ public class BattleUI : MonoBehaviour
         SetSlotRootActive(mercSlot1, true);
         SetSlotRootActive(mercSlot2, true);
 
+        // 单人/引导：两格伙伴都按未解锁处理，清掉占位血量数字
         bool lockExtraSlots = (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && !showTutorialMerc;
         if (lockExtraSlots)
             mercSlot1?.ShowUnavailable("锁定");
@@ -508,7 +509,7 @@ public class BattleUI : MonoBehaviour
             mercSlot1?.SetLocked(false);
 
         if (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle)
-            mercSlot2?.KeepArtistDefault();
+            mercSlot2?.ShowUnavailable("锁定");
         else
             mercSlot2?.SetLocked(false);
 
@@ -1394,13 +1395,19 @@ public class CharacterSlotUI
         if (le != null) le.ignoreLayout = false;
 
         if (levelLabel != null) levelLabel.text = $"Lv.{level}";
-        if (hpText != null) hpText.text = $"{Mathf.RoundToInt(currentHp)}";
+        if (hpText != null)
+        {
+            hpText.gameObject.SetActive(true);
+            hpText.text = $"{Mathf.RoundToInt(currentHp)}";
+        }
         if (hpBarFill != null)
         {
             float ratio = maxHp > 0 ? currentHp / maxHp : 0;
-            hpBarFill.fillAmount = Mathf.Clamp01(ratio);
             hpBarFill.enabled = true;
+            hpBarFill.fillAmount = Mathf.Clamp01(ratio);
         }
+        if (lanText != null) lanText.gameObject.SetActive(true);
+        if (lanBarFill != null) lanBarFill.enabled = true;
     }
 
     /// <summary>设置头像图片（只换图标，不改头像框；强制保持比例防拉伸）</summary>
@@ -1542,14 +1549,11 @@ public class CharacterSlotUI
         if (portrait != null) portrait.gameObject.SetActive(false);
         if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
         if (levelLabel != null) levelLabel.text = "";
-        if (hpText != null) hpText.text = "";
-        if (hpBarFill != null) hpBarFill.fillAmount = 0f;
-        if (lanBarFill != null) lanBarFill.fillAmount = 0f;
-        if (lanText != null) lanText.text = "";
+        ClearNumericDisplays();
     }
 
     /// <summary>
-    /// 未解锁槽：完全保留美术预制体默认效果，不改头像/血条、不创建额外节点。
+    /// 未解锁槽：保留锁定遮罩与美术布局，但清掉血量/能量数值（预制体占位数字不要露出来）。
     /// </summary>
     public void KeepArtistDefault()
     {
@@ -1558,6 +1562,7 @@ public class CharacterSlotUI
         root.SetActive(true);
         if (lockedOverlay != null)
             lockedOverlay.SetActive(true);
+        ClearNumericDisplays();
     }
 
     /// <summary>未开放槽：保留节点可见，头像关掉，文案显示「未开放」</summary>
@@ -1569,11 +1574,45 @@ public class CharacterSlotUI
         if (lockedOverlay != null) lockedOverlay.SetActive(true);
         if (portrait != null) portrait.gameObject.SetActive(false);
         if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
-        if (levelLabel != null) levelLabel.text = label ?? "未开放";
-        if (hpText != null) hpText.text = "";
-        if (hpBarFill != null) hpBarFill.fillAmount = 0f;
-        if (lanBarFill != null) lanBarFill.fillAmount = 0f;
-        if (lanText != null) lanText.text = "";
+        // 锁定文案由美术遮罩承担（如「Lv1 酒馆解锁」）；不要用数值级标签盖掉
+        if (levelLabel != null
+            && (levelLabel.transform.parent == null
+                || lockedOverlay == null
+                || !levelLabel.transform.IsChildOf(lockedOverlay.transform)))
+        {
+            // 仅当 levelLabel 不是锁遮罩上的解锁说明时才改
+            string cur = levelLabel.text ?? "";
+            bool looksLikeUnlockHint = cur.IndexOf("解锁", System.StringComparison.Ordinal) >= 0
+                                       || cur.IndexOf("酒馆", System.StringComparison.Ordinal) >= 0;
+            if (!looksLikeUnlockHint)
+                levelLabel.text = label ?? "未开放";
+        }
+        ClearNumericDisplays();
+    }
+
+    /// <summary>清掉血条/蓝条上的数值与填充，避免未解锁槽露出占位数字。</summary>
+    void ClearNumericDisplays()
+    {
+        if (hpText != null)
+        {
+            hpText.text = "";
+            hpText.gameObject.SetActive(false);
+        }
+        if (lanText != null)
+        {
+            lanText.text = "";
+            lanText.gameObject.SetActive(false);
+        }
+        if (hpBarFill != null)
+        {
+            hpBarFill.fillAmount = 0f;
+            hpBarFill.enabled = false;
+        }
+        if (lanBarFill != null)
+        {
+            lanBarFill.fillAmount = 0f;
+            lanBarFill.enabled = false;
+        }
     }
 }
 
@@ -1609,15 +1648,28 @@ public class GridCellUI
     public void CaptureDefaultVisual()
     {
         if (_artistCached) return;
-        if (cellBg != null) _artistBg = cellBg.color;
+        if (cellBg != null)
+        {
+            Color c = cellBg.color;
+            // 勿把程序占用色当成美术默认（重绑/二次 Capture 会把空格锁成深色）
+            if (ApproxColor(c, OccupiedBg) || ApproxColor(c, EquippedBg))
+                c = Color.white;
+            _artistBg = c;
+        }
         if (rarityFrame != null) _artistFrame = rarityFrame.color;
         _artistCached = true;
     }
 
-    static readonly Color EmptyBg = new Color(0.14f, 0.11f, 0.09f, 0.82f);
+    static bool ApproxColor(Color a, Color b)
+    {
+        return Mathf.Abs(a.r - b.r) < 0.04f
+            && Mathf.Abs(a.g - b.g) < 0.04f
+            && Mathf.Abs(a.b - b.b) < 0.04f;
+    }
+
+    // 空格不染色，保留预制体图片本色；仅有装备时才换色
     static readonly Color OccupiedBg = new Color(0.24f, 0.30f, 0.38f, 0.95f);
     static readonly Color EquippedBg = new Color(0.30f, 0.26f, 0.16f, 0.95f);
-    static readonly Color EmptyFrame = new Color(0.3f, 0.2f, 0.1f, 0.5f);
 
     /// <summary>底行等：天赋未解锁时显示锁定遮罩，格子本身保持显示（不关节点，避免 GridLayout 重排）。</summary>
     public void SetRowLocked(bool locked)
@@ -1707,9 +1759,9 @@ public class GridCellUI
     public void SetEmptyVisual()
     {
         CaptureDefaultVisual();
+        // 空格：还原美术默认色，不刷深色底
         if (cellBg != null) cellBg.color = _artistBg;
-        if (rarityFrame != null && itemIcon != null && !itemIcon.gameObject.activeSelf)
-            rarityFrame.color = _artistFrame;
+        if (rarityFrame != null) rarityFrame.color = _artistFrame;
     }
 
     public void SetOccupiedVisual(bool equipped)
@@ -1730,7 +1782,6 @@ public class GridCellUI
             itemIcon.sprite = null;
             itemIcon.gameObject.SetActive(false);
         }
-        if (rarityFrame != null) rarityFrame.color = _artistCached ? _artistFrame : EmptyFrame;
         SetEmptyVisual();
     }
 

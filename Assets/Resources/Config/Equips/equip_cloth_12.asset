@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_cloth_12
   m_EditorClassIdentifier: 
   templateId: equip_cloth_12
   equipName: "旅人斗篷"
-  icon: {fileID: 21300000, guid: 7dca3f5e55ac7d04d8585b593b717c20, type: 3}
+  icon: {fileID: 21300000, guid: 500a731461bf46f385c866815fd0e038, type: 3}
   iconFileName: Cloth_12
   gridWidth: 1
   gridHeight: 1

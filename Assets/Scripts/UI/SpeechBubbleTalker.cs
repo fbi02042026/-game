@@ -5,7 +5,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 看板娘对话框：打字机效果、多台词轮换、说完后隐藏。
-/// 气泡约 180×107，文案需短句；按实际宽度自动换行，最多 maxLines 行。
+/// 气泡默认约 180×107；文案先 Wrap 多行，放不下再等比放大（见 SpeechBubbleFit）。
 /// </summary>
 public class SpeechBubbleTalker : MonoBehaviour
 {
@@ -21,19 +21,41 @@ public class SpeechBubbleTalker : MonoBehaviour
     public float gapBetweenLines = 1.2f;
     [Range(1, 4)] public int maxLines = 3;
 
-    TextGenerator _textGen;
+    Vector2 _baseBubbleSize = new Vector2(180f, 107f);
+    bool _baseSizeCaptured;
 
     static bool _suppressed;
+
+    // Toast 每次弹都要问一遍「有没有气泡」，用登记表代替 FindObjectsOfType 的全场景扫描
+    static readonly List<SpeechBubbleTalker> _alive = new List<SpeechBubbleTalker>();
 
     public static void SetSuppressed(bool suppressed)
     {
         _suppressed = suppressed;
-        if (suppressed)
+        if (!suppressed) return;
+        for (int i = _alive.Count - 1; i >= 0; i--)
         {
-            var talkers = Object.FindObjectsOfType<SpeechBubbleTalker>();
-            for (int i = 0; i < talkers.Length; i++)
-                talkers[i].HideBubble();
+            if (_alive[i] == null) _alive.RemoveAt(i);
+            else _alive[i].HideBubble();
         }
+    }
+
+    /// <summary>任一看板娘气泡正在显示（供 Toast 互斥）。</summary>
+    public static bool AnyBubbleShowing()
+    {
+        if (_suppressed) return false;
+        for (int i = _alive.Count - 1; i >= 0; i--)
+        {
+            var t = _alive[i];
+            if (t == null)
+            {
+                _alive.RemoveAt(i);
+                continue;
+            }
+            if (t._busy) return true;
+            if (t.bubbleRoot != null && t.bubbleRoot.activeSelf) return true;
+        }
+        return false;
     }
 
     static readonly string[] DefaultLines =
@@ -69,12 +91,14 @@ public class SpeechBubbleTalker : MonoBehaviour
 
     void OnEnable()
     {
+        if (!_alive.Contains(this)) _alive.Add(this);
         if (_loop != null) StopCoroutine(_loop);
         _loop = StartCoroutine(TalkLoop());
     }
 
     void OnDisable()
     {
+        _alive.Remove(this);
         if (_loop != null) StopCoroutine(_loop);
         _loop = null;
         HideBubble();
@@ -97,7 +121,7 @@ public class SpeechBubbleTalker : MonoBehaviour
         if (bubbleText != null)
         {
             bubbleText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            bubbleText.verticalOverflow = VerticalWrapMode.Truncate;
+            bubbleText.verticalOverflow = VerticalWrapMode.Overflow;
             bubbleText.resizeTextForBestFit = false;
             bubbleText.alignByGeometry = false;
             bubbleText.alignment = TextAnchor.MiddleCenter;
@@ -113,7 +137,7 @@ public class SpeechBubbleTalker : MonoBehaviour
     {
         _lines.Clear();
         for (int i = 0; i < DefaultLines.Length; i++)
-            _lines.Add(FitText(DefaultLines[i]));
+            _lines.Add(DefaultLines[i]);
     }
 
     /// <summary>咨询台：优先说「今日可做 / 功能介绍」</summary>
@@ -129,7 +153,7 @@ public class SpeechBubbleTalker : MonoBehaviour
             "有问题也可以来找我哦。",
         };
         StopAllCoroutines();
-        _loop = StartCoroutine(SpeakOnceThenResume(FitText(tips[Random.Range(0, tips.Length)])));
+        _loop = StartCoroutine(SpeakOnceThenResume(tips[Random.Range(0, tips.Length)]));
     }
 
     IEnumerator SpeakOnceThenResume(string line)
@@ -160,16 +184,21 @@ public class SpeechBubbleTalker : MonoBehaviour
     IEnumerator SpeakLine(string line)
     {
         _busy = true;
+        CaptureBaseSize();
+        RectTransform bubbleRt = bubbleRoot != null ? bubbleRoot.transform as RectTransform : null;
+        string display = SpeechBubbleFit.Apply(bubbleRt, bubbleText, line, _baseBubbleSize);
         if (bubbleRoot != null) bubbleRoot.SetActive(true);
         if (bubbleText != null) bubbleText.text = "";
 
         float delay = 1f / Mathf.Max(1f, charsPerSecond);
-        for (int i = 1; i <= line.Length; i++)
+        for (int i = 1; i <= display.Length; i++)
         {
             if (bubbleText != null)
-                bubbleText.text = line.Substring(0, i);
+                bubbleText.text = display.Substring(0, i);
             yield return new WaitForSeconds(delay);
         }
+        if (bubbleText != null)
+            bubbleText.text = display;
 
         yield return new WaitForSeconds(holdAfterFinish);
         yield return new WaitForSeconds(idleHideDelay);
@@ -180,44 +209,21 @@ public class SpeechBubbleTalker : MonoBehaviour
     void HideBubble()
     {
         if (bubbleText != null) bubbleText.text = "";
-        if (bubbleRoot != null) bubbleRoot.SetActive(false);
-    }
-
-    /// <summary>按气泡实际宽度裁切，只让 Text 自动换行，避免硬插换行导致多出一行。</summary>
-    string FitText(string raw)
-    {
-        if (string.IsNullOrEmpty(raw)) return "";
-        raw = raw.Replace("\r", "").Replace("\n", "").Trim();
-        if (bubbleText == null) return raw;
-
-        string result = raw;
-        while (result.Length > 1 && CountWrappedLines(result) > maxLines)
-            result = result.Substring(0, result.Length - 1);
-
-        if (result.Length < raw.Length)
+        if (bubbleRoot != null)
         {
-            result = result.TrimEnd('，', '。', '、', ' ', '…');
-            if (string.IsNullOrEmpty(result))
-                result = raw.Substring(0, 1);
-            result += "…";
+            CaptureBaseSize();
+            SpeechBubbleFit.ResetSize(bubbleRoot.transform as RectTransform, _baseBubbleSize);
+            bubbleRoot.SetActive(false);
         }
-        return result;
     }
 
-    int CountWrappedLines(string text)
+    void CaptureBaseSize()
     {
-        if (bubbleText == null || string.IsNullOrEmpty(text)) return 0;
-
-        float width = bubbleText.rectTransform.rect.width;
-        if (width <= 1f)
-            width = 148f;
-
-        if (_textGen == null)
-            _textGen = new TextGenerator();
-
-        var settings = bubbleText.GetGenerationSettings(new Vector2(width, 0f));
-        _textGen.Populate(text, settings);
-        return Mathf.Max(1, _textGen.lineCount);
+        if (_baseSizeCaptured || bubbleRoot == null) return;
+        var rt = bubbleRoot.transform as RectTransform;
+        if (rt != null && rt.sizeDelta.x > 8f && rt.sizeDelta.y > 8f)
+            _baseBubbleSize = rt.sizeDelta;
+        _baseSizeCaptured = true;
     }
 
     static Transform FindDeep(Transform parent, string name)

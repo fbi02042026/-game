@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_feet_001
   m_EditorClassIdentifier: 
   templateId: equip_feet_001
   equipName: "\u76AE\u9774"
-  icon: {fileID: 21300000, guid: 287280253a8b9dd49982a999be54504f, type: 3}
+  icon: {fileID: 21300000, guid: ff0a90995ab2496cb46643e2fe4b4262, type: 3}
   iconFileName: New_Pant_01
   gridWidth: 1
   gridHeight: 1

@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_armor_8
   m_EditorClassIdentifier: 
   templateId: equip_armor_8
   equipName: "暗纹护甲"
-  icon: {fileID: 21300000, guid: 2be70c5bbf8b6374c9e5b9407c4e0e89, type: 3}
+  icon: {fileID: 21300000, guid: a7aeb214862b493691887fcc505648df, type: 3}
   iconFileName: Armor_8
   gridWidth: 2
   gridHeight: 1

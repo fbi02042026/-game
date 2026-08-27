@@ -220,13 +220,14 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         Vector3 fromPos, Vector3 toPos, int facingDir, Transform target, VfxFaction faction,
         float scaleMul = 1f, float speedMul = 1f, System.Action onImpact = null)
     {
-        // 起飞时锁定终点，全程水平直线；匀速飞行（不再用 minTime 拉长近距，否则近处会变慢）
+        // 飞向受击点（躯干中心），不要压成水平贴地
         Vector3 end = toPos;
-        end.y = fromPos.y;
         Vector3 flightDir = end - fromPos;
         float distance = flightDir.magnitude;
         if (distance < 0.05f) distance = 0.05f;
-        Vector3 dirN = flightDir.sqrMagnitude > 1e-8f ? flightDir.normalized : Vector3.right * (facingDir >= 0 ? 1f : -1f);
+        Vector3 dirN = flightDir.sqrMagnitude > 1e-8f
+            ? flightDir.normalized
+            : Vector3.right * (facingDir >= 0 ? 1f : -1f);
         float speed = Mathf.Max(0.1f, projectileSpeed * Mathf.Max(0.05f, speedMul));
         float duration = Mathf.Clamp(distance / speed, minFlightTime, maxFlightTime);
         speed = distance / Mathf.Max(0.0001f, duration);
@@ -263,9 +264,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         onImpact?.Invoke();
 
         if (impactPrefab == null) yield break;
-        Vector3 impactPos = toPos;
-        if (target != null) impactPos = target.position;
-        GameObject impact = SpawnVFX(impactPrefab, impactPos, defaultDuration, null);
+        // 命中点用传入的 toPos（GetHitPosition），禁止改成脚底 transform.position
+        GameObject impact = SpawnVFX(impactPrefab, toPos, defaultDuration, null);
         if (impact == null) yield break;
         ApplyFactionLook(impact, faction);
         ApplyVfxFacing(impact, facingDir);
@@ -407,6 +407,12 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     #region 生成与排序
 
     HashSet<string> _vfxPoolWarmed = new HashSet<string>();
+
+    /// <summary>技能等世界特效：挂本系统根，抬到 SORT_VFX，避免被单位 SortingGroup 挡住。</summary>
+    public GameObject PlayWorldPrefab(GameObject prefab, Vector3 position, float lifetime = 2.5f)
+    {
+        return SpawnVFX(prefab, position, lifetime, null);
+    }
 
     GameObject SpawnVFX(GameObject prefab, Vector3 position, float lifetime, Transform parentTarget = null)
     {

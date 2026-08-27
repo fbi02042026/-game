@@ -1,0 +1,218 @@
+﻿==== Resources/Prefabs/Dialogue/DialogueUI.prefab
+  EMPTY DialogueUI/Dim
+  EMPTY DialogueUI/AdvanceClick
+  EMPTY DialogueUI/DialogueBox/LeftNamePlate/Icon
+  EMPTY DialogueUI/DialogueBox/RightNamePlate/Icon
+  EMPTY DialogueUI/SkipButton
+==== Resources/Prefabs/Town/GuildHallUI.prefab
+  EMPTY GuildHallUI/TopBar/体力Panel/PlusButton
+  EMPTY GuildHallUI/HallScene
+  EMPTY GuildHallUI/TopBar/TopBarBg
+  EMPTY GuildHallUI/TopBar/GoldPanel/PlusButton
+==== Resources/Prefabs/Battle/EquipDropPopup.prefab
+  EMPTY EquipDropPopup/Root/Panel/Card2/SelectedMark
+  EMPTY EquipDropPopup/Root/Panel/Card0/SelectedMark
+  EMPTY EquipDropPopup/Root/Panel/Card2/Icon
+  EMPTY EquipDropPopup/Root/Panel/CloseButton
+  EMPTY EquipDropPopup/Root/Panel/ComparePanel
+  EMPTY EquipDropPopup/Root/Panel/Card1/SelectedMark
+  EMPTY EquipDropPopup/Root/Panel/Card0/Icon
+  EMPTY EquipDropPopup/Root/Panel/Card1/Icon
+  EMPTY EquipDropPopup/Root/Dim
+==== Resources/Prefabs/Battle/BattleUI.prefab
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_4_3/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_7_4/CellBg/ItemIcon
+  EMPTY BattleUI/SkillBar/SkillBtn2
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_5_2/CellBg/ItemIcon
+  EMPTY BattleUI/ProgressBar/Node_8
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_7_3/CellBg/ItemIcon
+  EMPTY BattleUI/SkillBar/AutoButton
+  EMPTY BattleUI/ProgressBar/Node_6
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_7_1/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_7_2/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_2_0/CellBg/ItemIcon
+  BAD   BattleUI/TopBar/DecomposeDisplay/DecomposeIcon
+         guid=357d5a7b7389e924a8b593a0ffc79df2
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_3_1/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_4_0/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_0_4/CellBg/ItemIcon
+  EMPTY BattleUI/ProgressBar/Node_9
+  EMPTY BattleUI/CharacterBar/MercSlot2/Portrait
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_5_4/CellBg/ItemIcon
+  BAD   BattleUI/map/3
+         guid=f8db56b87d4480b4cb3b182f16c24002
+  EMPTY BattleUI/ProgressBar/Node_1
+  BAD   BattleUI/CharacterBar/MercSlot1/HPBarBg/HPBarFill
+         guid=682123ec8e9bf0e4db2c88b7539295a0
+  BAD   BattleUI/CharacterBar/MercSlot2/HPBarBg/HPBarFill
+         guid=682123ec8e9bf0e4db2c88b7539295a0
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_0_3/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_5_1/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_4_2/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_4_1/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_5_0/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_1_4/CellBg/ItemIcon
+  EMPTY BattleUI/CharacterBar/MercSlot1/Portrait
+  BAD   BattleUI/BackpackPanel
+         guid=6d278d7623abd2f4d9538dec94529a9f
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_2_2/CellBg/ItemIcon
+  BAD   BattleUI/TopBar/SettingsButton
+         guid=10c0b7edcdfce5e47a4685baa1b5d3ef
+  EMPTY BattleUI/SkillBar/SkillBtn1
+  EMPTY BattleUI/ProgressBar/Node_7
+  BAD   BattleUI/CharacterBar/PlayerSlot/HPBarBg/HPBarFill
+         guid=682123ec8e9bf0e4db2c88b7539295a0
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_6_1/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_4_4/CellBg/ItemIcon
+  EMPTY BattleUI/TopBar
+  BAD   BattleUI/TopBar/EnchantDisplay/EnchantIcon
+         guid=45b13c3eb4ce8dc4d85f7d106aecb4de
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_1_1/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_1_2/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_3_0/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_7_0/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_2_1/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_6_4/CellBg/ItemIcon
+  EMPTY BattleUI/ProgressBar/EndFlag
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_2_3/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_1_0/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_6_0/CellBg/ItemIcon
+  BAD   BattleUI/QuestPanel
+         guid=74f9d0a064cacf14bbfa38953acc0090
+  EMPTY BattleUI/ProgressBar/Node_5
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_3_2/CellBg/ItemIcon
+  BAD   BattleUI/TopBar/DecomposeDisplay
+         guid=3075800ba2f500247bf43e82cc5b3722
+  BAD   BattleUI/TopBar/GoldDisplay
+         guid=3075800ba2f500247bf43e82cc5b3722
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_2_4/CellBg/ItemIcon
+  BAD   BattleUI/map/2
+         guid=8f110a596fb4da445a14356173e9f8b2
+  EMPTY BattleUI/ProgressBar/Node_4
+  EMPTY BattleUI/ProgressBar/Node_2
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_0_0/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_6_3/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_0_1/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_5_3/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_6_2/CellBg/ItemIcon
+  BAD   BattleUI/TopBar/EnchantDisplay
+         guid=3075800ba2f500247bf43e82cc5b3722
+  BAD   BattleUI/TopBar/DifficultyIcon
+         guid=f3cd7a02c0571c544a32e501c991102a
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_0_2/CellBg/ItemIcon
+  EMPTY BattleUI/ProgressBar/Node_3
+  BAD   BattleUI/map/1
+         guid=3ff8272ae3a954f418b6437e01637bc1
+  EMPTY BattleUI/PauseButton
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_3_4/CellBg/ItemIcon
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_3_3/CellBg/ItemIcon
+  EMPTY BattleUI/ProgressBar/Node_0
+  EMPTY BattleUI/BackpackPanel/GridContainer/Cell_1_3/CellBg/ItemIcon
+==== Resources/Prefabs/Town/AdventureUI.prefab
+  BAD   AdventureUI/Overlay
+         guid=333aba60068579b4ab6d9d116a2816bc
+  EMPTY AdventureUI/LeftSidebar
+  BAD   AdventureUI/LeftSidebar/ModeBtn_0
+         guid=2bacb4f389ec7a240af320a123d09eee
+  BAD   AdventureUI/LeftSidebar/ModeBtn_0/Icon
+         guid=f4c10f8b47e432042a2e20d60eab5f4c
+  BAD   AdventureUI/RightContent/MapRoot/MapBg
+         guid=b957111ea03cc9849b0a1d965bc4f4d2
+  BAD   AdventureUI/RightContent/MapRoot/TitleBar
+         guid=da09a09e1c3066941a22b322d8bb7b8e
+  BAD   AdventureUI/RightContent/MapRoot/TitleBar/PrevBtn
+         guid=e73e474a00db87f40b9029f83711d91e
+  BAD   AdventureUI/RightContent/MapRoot/TitleBar/NextBtn
+         guid=1b32181be1066884e86d40d16a3021a3
+  BAD   AdventureUI/RightContent/MapRoot/StageNodes/Node_1
+         guid=37e227987c2e7cc4789b06ebaa1f6aca
+  BAD   AdventureUI/RightContent/MapRoot/StageNodes/Node_2
+         guid=1a15c20485f2ef947803ea42bd5242c5
+  BAD   AdventureUI/RightContent/MapRoot/StageNodes/Node_3
+         guid=087a545a49e745043b0abe17d908e4a9
+  BAD   AdventureUI/RightContent/MapRoot/StageNodes/Node_4
+         guid=8cbac1b6be16432409cdc6be1e3213f2
+  BAD   AdventureUI/RightContent/MapRoot/StageNodes/Node_5
+         guid=96fff5adabe72744aaab919251daceb7
+  BAD   AdventureUI/RightContent/MapRoot/StageNodes/Node_6
+         guid=29b0c4525da9c9e4daa5f91da58779a3
+  BAD   AdventureUI/RightContent/MapRoot/StageNodes/Node_7
+         guid=e766fef543875c04b884c2c253fa9110
+  BAD   AdventureUI/RightContent/MapRoot/StageNodes/Node_8
+         guid=90cb5ddf9e61f2b448165f30076dcdce
+  EMPTY AdventureUI/RightContent/MapRoot/MapBottomBar
+  BAD   AdventureUI/RightContent/MapRoot/MapBottomBar/boxbg_kelingqu
+         guid=a7f740c34d3affc47ab89c52c3d68e4a
+  BAD   AdventureUI/DetailPanel
+         guid=88025d76ffa4d9c4d859b17544194762
+  BAD   AdventureUI/DetailPanel/EnemyIcons/Icon0
+         guid=05abf95dd13897b4bacd0037a02991f7
+  BAD   AdventureUI/DetailPanel/EnemyIcons/Icon1
+         guid=05abf95dd13897b4bacd0037a02991f7
+  BAD   AdventureUI/DetailPanel/EnemyIcons/Icon2
+         guid=05abf95dd13897b4bacd0037a02991f7
+  BAD   AdventureUI/DetailPanel/EnemyIcons/Icon3
+         guid=05abf95dd13897b4bacd0037a02991f7
+  BAD   AdventureUI/DetailPanel/DropIcons/Icon1
+         guid=45b13c3eb4ce8dc4d85f7d106aecb4de
+  BAD   AdventureUI/DetailPanel/DropIcons/Icon2
+         guid=d24a2d63c74e8614c9317241f4900672
+  BAD   AdventureUI/DetailPanel/DropIcons/Icon3
+         guid=a16588c1964bcf549a707e9b5ca26570
+  BAD   AdventureUI/DetailPanel/AddChances
+         guid=090e1c7b819f3324893f067082340234
+  BAD   AdventureUI/DetailPanel/Diff_普通
+         guid=b3d521f8e1defc846b7f8765c48fd212
+  BAD   AdventureUI/DetailPanel/Diff_困难
+         guid=1c9c8ef2033288c47ac1765134059f10
+  BAD   AdventureUI/DetailPanel/Diff_噩梦
+         guid=d658ea91a3318f84eba163b3d7127eb3
+  BAD   AdventureUI/DetailPanel/StartBtn
+         guid=2dab355472013a84ba7761670484a8e3
+  BAD   AdventureUI/DetailPanel/SweepBtn
+         guid=726ddbf69acf3c54f96b0b8031d24f55
+  BAD   AdventureUI/LeftSidebar/ModeBtn_1/Icon
+         guid=ad73c923cc22a2d4bb632baa09f87c24
+  BAD   AdventureUI/DetailPanel/DropIcons/Iconkuang3
+         guid=9ebe53df5321adb419f038693d56dadf
+  BAD   AdventureUI/LeftSidebar/ModeBtn_0/选中
+         guid=f0f611959f3e14044bc085e2acca0034
+  BAD   AdventureUI/LeftSidebar/ModeBtn_1
+         guid=2bacb4f389ec7a240af320a123d09eee
+  BAD   AdventureUI/RightContent/MapRoot/MapBottomBar/boxbg
+         guid=a7f740c34d3affc47ab89c52c3d68e4a
+  BAD   AdventureUI/LeftSidebar/ModeBtn_2/Icon
+         guid=fd85150c53cae7646920b2495f294591
+  BAD   AdventureUI/LeftSidebar/ModeBtn_1/选中
+         guid=f0f611959f3e14044bc085e2acca0034
+  BAD   AdventureUI/DetailPanel/DropIcons/Iconkuang0
+         guid=9ebe53df5321adb419f038693d56dadf
+  BAD   AdventureUI/DetailPanel/Diff_噩梦/选中
+         guid=d658ea91a3318f84eba163b3d7127eb3
+  BAD   AdventureUI/DetailPanel/DropIcons/Iconkuang1
+         guid=9ebe53df5321adb419f038693d56dadf
+  BAD   AdventureUI/LeftSidebar/ModeBtn_4/Icon
+         guid=70d9751dd91f2ed4f9eabf648fccc672
+  BAD   AdventureUI/LeftSidebar/ModeBtn_3
+         guid=2bacb4f389ec7a240af320a123d09eee
+  BAD   AdventureUI/LeftSidebar/ModeBtn_2/选中
+         guid=f0f611959f3e14044bc085e2acca0034
+  BAD   AdventureUI/Top/bg
+         guid=b9564f032c43e1d428259339d75569fe
+  BAD   AdventureUI/DetailPanel/Diff_普通/选中
+         guid=b3d521f8e1defc846b7f8765c48fd212
+  BAD   AdventureUI/LeftSidebar/ModeBtn_3/Icon
+         guid=647bb7604575af34cbcd1000278c1fb7
+  BAD   AdventureUI/LeftSidebar/ModeBtn_4/选中
+         guid=f0f611959f3e14044bc085e2acca0034
+  BAD   AdventureUI/LeftSidebar/ModeBtn_3/选中
+         guid=f0f611959f3e14044bc085e2acca0034
+  BAD   AdventureUI/DetailPanel/DropIcons/Iconkuang2
+         guid=9ebe53df5321adb419f038693d56dadf
+  BAD   AdventureUI/LeftSidebar/ModeBtn_4
+         guid=2bacb4f389ec7a240af320a123d09eee
+  BAD   AdventureUI/LeftSidebar/ModeBtn_2
+         guid=2bacb4f389ec7a240af320a123d09eee
+  BAD   AdventureUI/DetailPanel/Diff_困难/选中
+         guid=1c9c8ef2033288c47ac1765134059f10
+==== Resources/Prefabs/Town/MainBottomNav.prefab

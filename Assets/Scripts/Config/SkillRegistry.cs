@@ -69,10 +69,14 @@ public class SkillRegistry : Singleton<SkillRegistry>
     public string GetMercDefaultSkillId(string mercId)
     {
         if (string.IsNullOrEmpty(mercId)) return DefaultMercMeleeSkillId;
+        string fromRoster = MercRosterDefs.GetDefaultSkillId(mercId);
+        if (!string.IsNullOrEmpty(fromRoster)) return fromRoster;
         if (mercId.StartsWith("naima")) return DefaultMercHealSkillId;
+        if (mercId.StartsWith("fashi")) return "ally_atk_up";
         if (mercId.StartsWith("gongshou")) return DefaultMercRangedSkillId;
         if (mercId.StartsWith("dunbing")) return DefaultMercMeleeSkillId;
         if (mercId.StartsWith("kuangzhan")) return "ally_atk_speed";
+        if (mercId.StartsWith("zhongzhan")) return DefaultMercMeleeSkillId;
         return DefaultMercMeleeSkillId;
     }
 
@@ -143,9 +147,14 @@ public class SkillRegistry : Singleton<SkillRegistry>
 
         if (prefab != null)
         {
-            GameObject go = Object.Instantiate(prefab, pos, Quaternion.identity);
-            if (attach != null) go.transform.SetParent(attach, true);
-            Object.Destroy(go, 2.5f);
+            // 挂单位身上会被 SortingGroup 盖住；走战斗 VFX 根 + SORT_VFX
+            if (BattleVFXSystem.Instance != null)
+                BattleVFXSystem.Instance.PlayWorldPrefab(prefab, pos, 2.5f);
+            else
+            {
+                GameObject go = Object.Instantiate(prefab, pos, Quaternion.identity);
+                Object.Destroy(go, 2.5f);
+            }
             return;
         }
 

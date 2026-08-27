@@ -1,4 +1,3 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -51,9 +50,6 @@ public class LoginUI : MonoBehaviour
     bool _footerLayoutReady;
     System.Action _enterTown;
     RectTransform _healthNoticeRt;
-    Text _toastText;
-    RectTransform _toastRt;
-    Coroutine _toastCo;
     Graphic _agreeCheckGraphic;
     Transform _agreeCheckTf;
 
@@ -63,8 +59,9 @@ public class LoginUI : MonoBehaviour
         _enterTown = enterTown;
     }
 
-    public bool IsToastShowing => _toastText != null && _toastText.gameObject.activeSelf;
-    public string ToastMessage => _toastText != null ? _toastText.text : "";
+    /// <summary>软著截图等：是否正在显示带底板的全局提示</summary>
+    public bool IsToastShowing => GlobalToastUI.IsShowing;
+    public string ToastMessage => GlobalToastUI.CurrentMessage;
 
     void Awake()
     {
@@ -360,70 +357,8 @@ public class LoginUI : MonoBehaviour
 
     void ShowTip(string msg)
     {
-        EnsureToast();
-        if (_toastText == null) return;
-        if (_toastCo != null) StopCoroutine(_toastCo);
-        _toastCo = StartCoroutine(CoToast(msg));
-    }
-
-    void EnsureToast()
-    {
-        if (_toastText != null) return;
-
-        var go = new GameObject("AgreeTipToast", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text), typeof(Outline));
-        go.transform.SetParent(transform, false);
-        _toastRt = go.GetComponent<RectTransform>();
-        _toastRt.anchorMin = new Vector2(0.5f, 0.5f);
-        _toastRt.anchorMax = new Vector2(0.5f, 0.5f);
-        _toastRt.pivot = new Vector2(0.5f, 0.5f);
-        _toastRt.sizeDelta = new Vector2(620f, 72f);
-        _toastRt.anchoredPosition = new Vector2(0f, 40f);
-
-        _toastText = go.GetComponent<Text>();
-        _toastText.font = GameFonts.GetChinese();
-        _toastText.fontSize = 28;
-        _toastText.alignment = TextAnchor.MiddleCenter;
-        _toastText.color = new Color(1f, 0.95f, 0.75f, 1f);
-        _toastText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        _toastText.verticalOverflow = VerticalWrapMode.Overflow;
-        _toastText.raycastTarget = false;
-
-        var outline = go.GetComponent<Outline>();
-        outline.effectColor = new Color(0f, 0f, 0f, 0.9f);
-        outline.effectDistance = new Vector2(1.5f, -1.5f);
-
-        go.SetActive(false);
-    }
-
-    IEnumerator CoToast(string msg)
-    {
-        _toastText.text = msg;
-        _toastText.gameObject.SetActive(true);
-        _toastText.transform.SetAsLastSibling();
-
-        Color c = _toastText.color;
-        c.a = 1f;
-        _toastText.color = c;
-        _toastRt.anchoredPosition = new Vector2(0f, 40f);
-
-        yield return new WaitForSecondsRealtime(1.6f);
-
-        const float dur = 0.45f;
-        float t = 0f;
-        Vector2 start = new Vector2(0f, 40f);
-        Vector2 end = new Vector2(0f, 100f);
-        while (t < dur)
-        {
-            t += Time.unscaledDeltaTime;
-            float u = Mathf.Clamp01(t / dur);
-            _toastRt.anchoredPosition = Vector2.Lerp(start, end, u);
-            c.a = 1f - u;
-            _toastText.color = c;
-            yield return null;
-        }
-
-        _toastText.gameObject.SetActive(false);
-        _toastCo = null;
+        // 统一：深色半透明底板 + 文案（GlobalToastUI）
+        GlobalToastUI.Show(msg);
     }
 
     void OnClickStart()

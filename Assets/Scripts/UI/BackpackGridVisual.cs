@@ -50,7 +50,7 @@ public static class BackpackGridVisual
             var p = items[i];
             if (p.equip == null || p.w < 1 || p.h < 1) continue;
 
-            var go = new GameObject($"Item_{p.x}_{p.y}", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            var go = new GameObject($"Item_{p.x}_{p.y}", typeof(RectTransform));
             go.transform.SetParent(layer, false);
             var rt = go.GetComponent<RectTransform>();
 
@@ -72,21 +72,19 @@ public static class BackpackGridVisual
                 rt.sizeDelta = new Vector2(Mathf.Max(0f, totalW - IconPad * 2f), Mathf.Max(0f, totalH - IconPad * 2f));
             }
 
-            if (p.equip.icon == null)
-            {
-                p.equip.template?.ResolveIcon();
-                if (p.equip.icon == null && p.equip.template != null)
-                    p.equip.icon = p.equip.template.icon;
-            }
+            EquipIcons.Resolve(p.equip);
 
-            var img = go.GetComponent<Image>();
+            bool hasIcon = p.equip.icon != null;
+            // 图标画在子节点上，宿主只负责跨格占位；多格时子节点按宽等比后垂直居中
+            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            iconGo.transform.SetParent(go.transform, false);
+            var iconRt = iconGo.GetComponent<RectTransform>();
+            var img = iconGo.GetComponent<Image>();
             img.sprite = p.equip.icon;
-            img.preserveAspect = true;
             img.raycastTarget = false;
             img.type = Image.Type.Simple;
-            bool hasIcon = p.equip.icon != null;
             img.enabled = true;
-            // 没图标也留色块，避免「进了背包但看不见」
+            PlaceIconInHost(rt, iconRt, img, p.equip.icon, p.h);
             img.color = !hasIcon
                 ? (p.equipped ? new Color(0.35f, 0.35f, 0.4f, 0.95f) : new Color(0.45f, 0.5f, 0.62f, 0.95f))
                 : (p.equipped ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white);
@@ -145,6 +143,46 @@ public static class BackpackGridVisual
             if (local.y < minY) minY = local.y;
             if (local.y > maxY) maxY = local.y;
         }
+    }
+
+    /// <summary>
+    /// 宿主负责跨格占位；图标子节点在宿主内居中。
+    /// 多格装备按宽度等比缩放，避免 Image.preserveAspect 在高矩形里视觉贴顶。
+    /// </summary>
+    static void PlaceIconInHost(RectTransform host, RectTransform iconRt, Image img, Sprite sprite, int gridH)
+    {
+        if (host == null || iconRt == null || img == null) return;
+
+        if (sprite == null || gridH <= 1)
+        {
+            iconRt.anchorMin = Vector2.zero;
+            iconRt.anchorMax = Vector2.one;
+            iconRt.offsetMin = Vector2.zero;
+            iconRt.offsetMax = Vector2.zero;
+            img.preserveAspect = true;
+            return;
+        }
+
+        float hostW = Mathf.Max(1f, host.rect.width);
+        float hostH = Mathf.Max(1f, host.rect.height);
+        float sprW = Mathf.Max(1f, sprite.rect.width);
+        float sprH = Mathf.Max(1f, sprite.rect.height);
+        float aspect = sprW / sprH;
+
+        float drawW = hostW;
+        float drawH = drawW / aspect;
+        if (drawH > hostH)
+        {
+            drawH = hostH;
+            drawW = drawH * aspect;
+        }
+
+        img.preserveAspect = false;
+        iconRt.anchorMin = new Vector2(0.5f, 0.5f);
+        iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+        iconRt.pivot = new Vector2(0.5f, 0.5f);
+        iconRt.sizeDelta = new Vector2(drawW, drawH);
+        iconRt.anchoredPosition = Vector2.zero;
     }
 
     static void AddNameFallback(Transform parent, string name)

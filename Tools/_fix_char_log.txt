@@ -1,0 +1,59 @@
+﻿MAP AttrHp 角色_0001s_0001_生命.png
+MAP AttrAtk 角色_0001s_0000_攻击.png
+MAP AttrDef 角色_0001s_0002_防御.png
+MAP AttrSpd 角色_0001s_0004_攻速.png
+MAP AttrCrit 角色_0001s_0003_暴击.png
+MAP Header 角色_0002s_0007_标头.png
+MAP Portrait 角色_0000s_0000_玩家头像.png
+MAP SkillSlot 角色_0002s_0006_技能底框.png
+MAP TalentBtn 角色_0005_天赋.png
+MAP SkillBtn 角色_0006_技能.png
+MAP AttrPanel 角色_0001s_0009_图层-6.png
+MAP SkillSelectPanel 角色_0002s_0008_图层-9.png
+MAP Close 天赋_0007_关闭.png
+MAP HeaderIcon 角色_0000_切换.png
+MAP RightBg 角色_0002s_0010_图层-7.png
+MAP CharBg 角色_0008_背景.png
+MAP LeftSkillImg 角色_0000s_0001_头像框.png
+MAP biaotou 角色_0002s_0007_标头.png
+MAP Skill_1 battle_surge.png
+MAP Skill_2 deadly_focus.png
+MAP Skill_3 gale_stance.png
+MAP Skill_4 heal_spring.png
+MAP Skill_5 holy_barrier.png
+MAP TalentPanel 天赋_0020_bg.png
+MAP TalentClose 天赋_0007_关闭.png
+MAP StonePlus 天赋石购买.png
+MAP LeftColumn 天赋_0006_属性底.png
+MAP LeftHeader 天赋_0000s_0002_底条.png
+MAP RightColumn 天赋_0014_右侧天赋底.png
+MAP Reset 天赋_0000s_0001_重置天赋亮.png
+MAP LeftLine 天赋_0010_链接1.png
+MAP Iconbg 天赋_0000_技能底.png
+MAP RightRow 天赋_0014_右侧天赋底.png
+MAP Diamond 天赋_0012_可升级.png
+MAP Lock 锁.png
+MAP Opt0 天赋_0005_基础属性解锁.png
+MAP Opt1 天赋_0004_基础属性未解锁.png
+MAP Opt2 天赋_0018_技能可用.png
+MAP OptIcon 图层 1.png
+MAP 可用标 天赋_0018_技能可用.png
+MAP 箭头 天赋_0015_箭头.png
+MAP RightLine 天赋_0009_链接2.png
+MAP StoneIcon 天赋石.png
+MAP Choice0 天赋_0001_金币升级.png
+MAP ResetGray 重置天赋灰.png
+MAP StageBase? 底座.png
+MAP StageBg? 背景.png
+MAP StageTitle? 层级调整组件_0007_背景.png
+MAP LogBg? 内容底.png
+MAP LogHeader? 标头.png
+MAP LogSel? 选中.png
+wrote NextStageRoulette.prefab
+wrote RestStagePopup.prefab
+wrote BattleStageMap.prefab
+wrote TavernUI.prefab
+wrote CharacterUI.prefab
+wrote AdventureLogUI.prefab
+wrote TalentUI.prefab
+DONE files=7 reps=136 map=51

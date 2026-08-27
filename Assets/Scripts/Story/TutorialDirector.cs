@@ -78,6 +78,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
     public void NotifyTownTab(MainNavTab tab)
     {
         if (StoryProgress.TutorialDone || StoryProgress.TutorialBattleCleared) return;
+        // 点「角色/酒馆」等非冒险入口：立刻收掉指「冒险」的手势，避免残留在角色页上
+        if (tab != MainNavTab.Adventure)
+            TutorialHintUI.Ensure().Hide();
         if (tab != MainNavTab.Tavern && tab != MainNavTab.Character) return;
         if (_extraHintShown) return;
         _extraHintShown = true;
@@ -251,15 +254,24 @@ public class TutorialDirector : Singleton<TutorialDirector>
         TownHubController.Instance?.OpenGuild();
 
         TutorialHintUI.Ensure().Show("装备和材料死亡也能带回，但本局金币死了会清零。", null, 6f);
+
+        // 收尾对话要用的立绘/背景先读进缓存，否则开场会卡一下才出画面
+        StoryAssetLoader.Warmup(StoryAssetLoader.Backgrounds, StoryBackgrounds.GuildHall);
+        yield return null;
+        StoryAssetLoader.Warmup(StoryAssetLoader.Portraits,
+            StoryPortraits.Player, StoryPortraits.LaoDun, StoryPortraits.Receptionist);
+        yield return null;
+
         yield return new WaitForSecondsRealtime(2.2f);
 
         bool done = false;
         StoryDirector.Ensure().Play(new List<StoryBeat>
         {
             StoryDirector.Line("你", "老盾",
-                "我先去酒馆躺着了。想找人一起下本，去酒馆找我。",
+                "大难不死得去酒馆喝一杯才行，需要我的话来酒馆找我吧。",
                 StoryPortraits.Player, StoryPortraits.LaoDun, 1)
                 .Bg(StoryBackgrounds.GuildHall)
+                .SkipReveal()
         }, () => done = true);
         while (!done) yield return null;
 
@@ -270,6 +282,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 "回来了？人物界面可以查看属性，酒馆能招募佣兵。\n先熟悉下公会大厅，之后再慢慢变强。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)
+                .SkipReveal()
         }, () => done = true);
         while (!done) yield return null;
 
@@ -290,31 +303,69 @@ public class TutorialDirector : Singleton<TutorialDirector>
         var bm = BattleManager.Instance;
         var hint = TutorialHintUI.Ensure();
         var ui = BattleUI.Instance;
+        var headTalk = BattleHeadTalkUI.Ensure();
         SkillUsedThisStep = false;
         ShowMercHud = false;
         AllowBattleSkillClick = false;
         WaitingEvacuate = false;
 
+        // —— 1) 两波清怪 ——
         hint.Show("靠近怪物会自动攻击。", null, 8f);
+        yield return EnsureTutorialWave(bm, 2);
+        yield return WaitFieldClear();
 
-        float spawnWait = 0f;
-        while (bm != null && bm.GetAliveMonsterCount() <= 0 && spawnWait < 8f)
+        hint.Show("继续往前走。", null, 4f);
+        yield return EnsureTutorialWave(bm, 3);
+        yield return WaitFieldClear();
+
+        // —— 2) 空路 → 发现宝箱 ——
+        hint.Hide();
+        var chestDir = StageClearRewardDirector.Instance;
+        if (chestDir == null)
         {
-            spawnWait += Time.unscaledDeltaTime;
-            yield return null;
+            var go = new GameObject("StageClearRewardDirector");
+            chestDir = go.AddComponent<StageClearRewardDirector>();
         }
 
-        yield return WaitFieldClear();
-        hint.Show("地上有装备，捡起来看看。", null, 8f);
-        yield return OfferTutorialEquip();
-        hint.Show("属性更好就装备，旧的会变成强化材料。", null, 5f);
-        yield return new WaitForSecondsRealtime(0.6f);
+        var drop = CreateTutorialEquipDrop();
+        yield return chestDir.CoTutorialChestDrop(drop, 6.8f);
 
-        hint.Show("小心！有些装备是怪物设下的诱饵。", null, 8f);
-        yield return EnsureTutorialWave(bm, 1);
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(Hero.Instance, "咦，前面有个宝箱？", 1.2f),
+            new TalkLine(Hero.Instance, "打开看看里面有什么。", 1.0f));
+
+        GameObject groundIcon = null;
+        yield return chestDir.CoTutorialOpenChest(drop, g => groundIcon = g);
+
+        // 装备进包 + 弹窗（用预制体 EquipDropPopup，不手搓）
+        if (drop != null && GridBackpackSystem.Instance != null &&
+            GridBackpackSystem.Instance.TryAddItem(drop, out _))
+        {
+            BattleUI.Instance?.UpdateBackpackGrid();
+            bool closed = false;
+            EquipDropPopupUI.ShowSingle(drop, (_, __) => closed = true);
+            while (!closed) yield return null;
+            BattleUI.Instance?.UpdateBackpackGrid();
+        }
+        if (groundIcon != null)
+            Object.Destroy(groundIcon);
+
+        hint.Show("属性更好就装备，旧的会变成强化材料。", null, 4f);
+        yield return new WaitForSecondsRealtime(0.8f);
+
+        // —— 3) 诱饵提示 → 左右埋伏 ——
+        hint.Show("小心！有些装备是怪物设下的诱饵。", null, 6f);
+        yield return new WaitForSecondsRealtime(0.9f);
+
+        bm.SpawnTutorialFlankAmbush(4);
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(Hero.Instance, "糟了！中埋伏了！", 1.1f),
+            new TalkLine(Hero.Instance, "只有上了！", 0.9f));
+
+        hint.Show("左右都有怪物，靠近会自动攻击。", null, 5f);
         yield return WaitFieldClear();
 
-        // —— 救援戏：老盾先在前方眩晕被围殴，玩家走近后才开口 ——
+        // —— 4) 救援戏：老盾先在前方眩晕被围殴 ——
         hint.Hide();
         ShowMercHud = false;
         ui?.ApplySoloBattleHudPublic();
@@ -337,7 +388,6 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return null;
         }
 
-        var headTalk = BattleHeadTalkUI.Ensure();
         // 一整段只冻一次，说完再解冻；点一下跳字，再点跳句
         yield return TalkBlock(bm, headTalk,
             new TalkLine(Hero.Instance, "那是……有人被围住了？", 1.2f),

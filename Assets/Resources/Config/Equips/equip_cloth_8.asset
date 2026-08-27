@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_cloth_8
   m_EditorClassIdentifier: 
   templateId: equip_cloth_8
   equipName: "守夜披风"
-  icon: {fileID: 21300000, guid: f58fe86c6ee1a7140ac73a7eef8d1eda, type: 3}
+  icon: {fileID: 21300000, guid: 825ab0eca10e41df8d34a5e73d36dd56, type: 3}
   iconFileName: Cloth_8
   gridWidth: 1
   gridHeight: 1

@@ -112,11 +112,12 @@ public static class MercenaryOfferGenerator
         }
         if (result.Count == 0)
         {
-            // 回退：初级形象模板（非全弓手）
+            // 回退：初级形象模板（含法师/重武者）
             result.AddRange(new[]
             {
                 "dunbing101", "gongshou101", "kuangzhan101", "naima101", "qita101",
-                "dunbing102", "kuangzhan102", "naima102"
+                "dunbing102", "kuangzhan102", "naima102",
+                "fashi101", "fashi102", "zhongzhan101", "zhongzhan201"
             });
         }
         return result;
@@ -129,6 +130,14 @@ public static class MercenaryOfferGenerator
         int star = Random.Range(1, 6);   // 1～5
         string skillId = AllySkillPool[Random.Range(0, AllySkillPool.Length)];
         string name = NamePool[Random.Range(0, NamePool.Length)];
+
+        // 独有形象（如 fashi101）用花名册正式名与默认技能；共用形象仍随机名
+        if (TryGetUniqueRosterName(mercId, out string rosterName, out string rosterSkill))
+        {
+            name = rosterName;
+            if (!string.IsNullOrEmpty(rosterSkill)) skillId = rosterSkill;
+        }
+
         // 同批再抽时略微拉开：星级高的略抬等级
         if (star >= 4) level = Mathf.Max(level, Random.Range(5, 11));
 
@@ -142,6 +151,24 @@ public static class MercenaryOfferGenerator
             star = star,
             skillId = skillId
         };
+    }
+
+    static bool TryGetUniqueRosterName(string mercId, out string name, out string skillId)
+    {
+        name = null;
+        skillId = null;
+        if (string.IsNullOrEmpty(mercId) || !MercRosterDefs.TryGetByAssetId(mercId, out var primary))
+            return false;
+        int hits = 0;
+        var all = MercRosterDefs.All;
+        for (int i = 0; i < all.Count; i++)
+        {
+            if (all[i].AssetId == mercId) hits++;
+        }
+        if (hits != 1) return false;
+        name = primary.Name;
+        skillId = primary.DefaultSkillId;
+        return !string.IsNullOrEmpty(name);
     }
 
     public static string FormatCard(MercenaryData m)

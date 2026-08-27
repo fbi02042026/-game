@@ -249,7 +249,7 @@ public static class GameConfig
     /// <summary>怪刷在英雄前方多远（原地等玩家走过来），约 3~4 身位</summary>
     public const float MONSTER_ENGAGE_OFFSET = 3.2f;
     /// <summary>同波怪物横向间距（世界单位）；需大于精灵半宽，避免首波叠在同一点</summary>
-    public const float MONSTER_WAVE_SPACING = 1.15f;
+    public const float MONSTER_WAVE_SPACING = 0.72f;
     /// <summary>怪物远程射程倍率（相对数值表弓射程）；约 3~4 身位</summary>
     public const float MONSTER_RANGED_RANGE_MUL = 1.05f;
     /// <summary>怪物远程额外索敌缓冲</summary>
@@ -259,9 +259,9 @@ public static class GameConfig
     /// <summary>小怪默认移速（比玩家慢，避免擦肩而过）</summary>
     public const float MONSTER_DEFAULT_MOVE_SPEED = 0.45f;
     /// <summary>从右侧缓步入场速度</summary>
-    public const float MONSTER_ENTER_SPEED = 0.55f;
-    /// <summary>入场起点比交战点再远多少（世界单位）</summary>
-    public const float MONSTER_ENTER_DISTANCE = 2.5f;
+    public const float MONSTER_ENTER_SPEED = 0.4f;
+    /// <summary>入场起点比交战点再远多少（世界单位）；过大容易出场「往前窜」</summary>
+    public const float MONSTER_ENTER_DISTANCE = 1.2f;
     /// <summary>玩家出生相对 SpawnPoint 再往左偏（世界单位）</summary>
     public const float SPAWN_X_LEFT_BIAS = -0.5f;
     /// <summary>SPUM 移动动画播放速率（再 +20%）</summary>

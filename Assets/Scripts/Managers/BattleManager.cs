@@ -400,22 +400,13 @@ public class BattleManager : Singleton<BattleManager>
     void PrepareTutorialWaves()
     {
         _waves.Clear();
-        _waves.Add(new WaveData
-        {
-            triggerX = GetStageStartX() + GameConfig.MONSTER_ENGAGE_OFFSET,
-            spawnAnchor = null,
-            monsterCount = 2,
-            isBossWave = false,
-            spawned = false,
-            aliveCount = 0
-        });
-        _totalWaves = 1;
+        _totalWaves = 0;
         _allWavesSpawned = false;
         _activeWaveIndex = -1;
-        _firstWaveSpawned = true; // 教程首波由 TutorialDirector 控，关掉 Update 硬刷
+        _firstWaveSpawned = true; // 关掉 Update/过场后的硬刷；真正刷怪只走 TutorialDirector
         SuppressStageClear = true;
         SkipLegacyOnEvacuate = true;
-        Debug.Log("[BattleManager] 引导关：1 波 2 怪");
+        Debug.Log("[BattleManager] 引导关：波次由 TutorialDirector 分步刷");
     }
 
     public void QueueTutorialWave(int count)
@@ -569,6 +560,49 @@ public class BattleManager : Singleton<BattleManager>
         {
             EmergencySpawnVisibleMonsters(n);
             RetargetAllMonsters(victim);
+        }
+    }
+
+    /// <summary>诱饵埋伏：从玩家左右两侧刷怪，朝玩家冲。</summary>
+    public void SpawnTutorialFlankAmbush(int count)
+    {
+        if (hero == null) return;
+        EnsureMonsterPrefabReady();
+        float hx = UnitBase.GetCombatX(hero);
+        float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
+        int n = Mathf.Max(2, count);
+
+        var wave = new WaveData
+        {
+            triggerX = hx,
+            spawnAnchor = null,
+            monsterCount = n,
+            isBossWave = false,
+            spawned = true,
+            aliveCount = 0
+        };
+        if (_waves == null) _waves = new List<WaveData>();
+        for (int i = 0; i < _waves.Count; i++)
+        {
+            if (_waves[i] != null && !_waves[i].spawned)
+                _waves[i].spawned = true;
+        }
+        _waves.Add(wave);
+        _totalWaves = _waves.Count;
+        _allWavesSpawned = false;
+        _activeWaveIndex = _waves.Count - 1;
+        SuppressStageClear = true;
+
+        // 左右夹击，拉开距离，不穿模
+        float[] offsets = { -3.6f, 3.6f, -4.8f, 4.8f, -2.6f, 2.6f };
+        for (int i = 0; i < n; i++)
+        {
+            float ox = offsets[i % offsets.Length];
+            Vector3 pos = new Vector3(hx + ox, UnitBase.GROUND_Y, z);
+            Monster m = SpawnAmbushMonsterAt(pos);
+            if (m == null) continue;
+            m.SetForcedTarget(hero);
+            wave.aliveCount++;
         }
     }
 
@@ -751,7 +785,9 @@ public class BattleManager : Singleton<BattleManager>
 
             StopBattleSpawnCoroutines();
             StartCoroutine("BattleStartSequenceCoroutine");
-            _firstWaveHardFallbackCo = StartCoroutine(CoFirstWaveHardFallback());
+            // 教程关由 TutorialDirector 控刷怪，禁止硬性首波/紧急刷怪抢跑
+            if (!IsTutorialRun)
+                _firstWaveHardFallbackCo = StartCoroutine(CoFirstWaveHardFallback());
         }
         else
         {
@@ -863,9 +899,11 @@ public class BattleManager : Singleton<BattleManager>
         float hx = UnitBase.GetCombatX(hero);
         float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
 
+        // 至少刷在玩家身前一段距离，避免叠在身上穿模
+        float baseX = Mathf.Max(GetMonsterEngageBaseX(hx), hx + 4.5f);
         for (int i = 0; i < count; i++)
         {
-            float x = GetMonsterEngageBaseX(hx) + i * 0.55f;
+            float x = baseX + i * 1.1f;
             Vector3 pos = new Vector3(x, UnitBase.GROUND_Y, z);
 
             GameObject go = null;
@@ -984,6 +1022,8 @@ public class BattleManager : Singleton<BattleManager>
     void TrySpawnFirstWaveOnce()
     {
         if (!isInBattle || _stageCleared) return;
+        // 教程关禁止自动首波/紧急刷怪（否则会从玩家身上穿出来）
+        if (IsTutorialRun) return;
         if (CountAliveMonsters() > 0)
         {
             _firstWaveSpawned = true;
@@ -1006,7 +1046,11 @@ public class BattleManager : Singleton<BattleManager>
     /// <summary>怪物交战 X：在英雄前方，且尽量落在当前镜头内可见</summary>
     float GetMonsterEngageBaseX(float heroCombatX)
     {
-        float prefer = heroCombatX + GameConfig.MONSTER_ENGAGE_OFFSET;
+        // 引导关拉远一点，避免一刷就叠在玩家身上穿模
+        float minAhead = IsTutorialRun ? 4.5f : 2.0f;
+        float prefer = heroCombatX + (IsTutorialRun
+            ? Mathf.Max(GameConfig.MONSTER_ENGAGE_OFFSET, 4.5f)
+            : GameConfig.MONSTER_ENGAGE_OFFSET);
         Camera cam = Camera.main;
         if (cam == null || !cam.orthographic) return prefer;
 
@@ -1014,7 +1058,8 @@ public class BattleManager : Singleton<BattleManager>
         float camRight = cam.transform.position.x + halfW;
         // 贴在镜头右缘内侧，避免刷在屏外像「没怪」
         float visible = camRight - 1.2f;
-        return Mathf.Clamp(prefer, heroCombatX + 2.0f, visible);
+        float clamped = Mathf.Clamp(prefer, heroCombatX + minAhead, Mathf.Max(visible, heroCombatX + minAhead));
+        return clamped;
     }
 
     /// <summary>硬性保险：过场/协程被停也能刷出第一波（独立协程，不被 StopCoroutine(string) 误伤）</summary>
@@ -1095,15 +1140,18 @@ public class BattleManager : Singleton<BattleManager>
         UnitsCanAct = true;
         ExtendCameraMaxX(GetStageStartX() + 80f);
 
-        if (monsters == null || CountAliveMonsters() == 0)
-            TrySpawnFirstWaveOnce();
-
-        if (CountAliveMonsters() == 0)
+        if (!IsTutorialRun)
         {
-            Debug.LogError("[BattleManager] 过场后仍无怪 → EmergencySpawnVisibleMonsters");
-            EmergencySpawnVisibleMonsters(Mathf.Min(3, GameConfig.WAVE_MONSTER_MAX));
-            if (CountAliveMonsters() > 0)
-                _firstWaveSpawned = true;
+            if (monsters == null || CountAliveMonsters() == 0)
+                TrySpawnFirstWaveOnce();
+
+            if (CountAliveMonsters() == 0)
+            {
+                Debug.LogError("[BattleManager] 过场后仍无怪 → EmergencySpawnVisibleMonsters");
+                EmergencySpawnVisibleMonsters(Mathf.Min(3, GameConfig.WAVE_MONSTER_MAX));
+                if (CountAliveMonsters() > 0)
+                    _firstWaveSpawned = true;
+            }
         }
 
         if (hero != null && monsters.Count > 0)
@@ -1113,8 +1161,10 @@ public class BattleManager : Singleton<BattleManager>
             float mx = UnitBase.GetCombatX(m0);
             Debug.Log($"[BattleManager] 开战完成 monsters={monsters.Count} heroX={hx:F2} mon0={m0?.name} monX={mx:F2} dist={Mathf.Abs(hx - mx):F2} monHp={m0?.currentHp:F0} scale={m0?.transform.localScale}");
         }
-        else
+        else if (!IsTutorialRun)
             Debug.LogError($"[BattleManager] 开战完成仍无怪 monsters={monsters.Count} waves={_waves?.Count ?? 0}");
+        else
+            Debug.Log("[BattleManager] 教程开战完成，等待 TutorialDirector 分步刷怪");
 
         if (IsTutorialRun)
             TutorialDirector.Instance?.NotifyBattleSplashFinished();

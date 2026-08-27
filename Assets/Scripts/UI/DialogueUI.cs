@@ -759,7 +759,8 @@ public class DialogueUI : MonoBehaviour
             leftNameText.text = name ?? "";
             leftNameText.color = new Color(1f, 0.95f, 0.85f);
         }
-        SetNamePlateIconVisible(leftNameIcon, !string.IsNullOrEmpty(name));
+        // 名牌 Sprite 自带头像位，不要再开子节点 Icon（会叠一层/像反了）
+        SetNamePlateIconVisible(leftNameIcon, false);
         SetNamePlateIconVisible(rightNameIcon, false);
     }
 
@@ -804,7 +805,8 @@ public class DialogueUI : MonoBehaviour
         if (leftNamePlateImage != null)
             leftNamePlateImage.gameObject.SetActive(hasName);
         SetPlateActive(leftNamePlateImage, leftNameText, true);
-        SetNamePlateIconVisible(leftNameIcon, hasName);
+        // 名牌图自带头像位，子 Icon 保持关闭
+        SetNamePlateIconVisible(leftNameIcon, false);
         if (rightNamePlateImage != null)
             rightNamePlateImage.gameObject.SetActive(false);
         SetNamePlateIconVisible(rightNameIcon, false);

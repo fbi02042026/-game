@@ -1,0 +1,60 @@
+﻿Building orphan GUID map…
+  MAP c729c512… -> Art/UI/Story/ui_dialogue_panel.png
+  MAP 88aaf6c8… -> Art/UI/Story/ui_choice.png
+  MAP 2dae1301… -> Art/UI/Story/ui_nameplate_npc.png
+  MAP 44eacb98… -> Art/UI/Story/ui_nameplate_player.png
+  MAP 7feed387… -> Art/UI/Story/ui_tap.png
+  MAP 82fe7ad9… -> Art/UI/Story/portrait_player.png
+  MAP 513cb066… -> Art/UI/Story/portrait_guildmaster.png
+  MAP ced71667… -> Art/UI/Main/主界面_0002s_0001_图标底.png
+  MAP 53f6bf8d… -> Art/UI/冒险日志/选中.png
+  MAP a85b02f5… -> Art/UI/Main/主界面_0002s_0001_图标底.png
+  MAP 8e18353c… -> Art/UI/Main/主界面_0001s_0000_眼睛.png
+  MAP 925660d2… -> Art/UI/Main/主界面_0003s_0004_资源条-拷贝.png
+  MAP 519027b5… -> Art/UI/Main/主界面_0003s_0002_金币.png
+  MAP e687850d… -> Art/UI/Main/主界面_0003s_0002_金币.png
+  MAP badc326c… -> Art/UI/Main/主界面_0006_对话框.png
+  MAP ebc8fcf6… -> Art/UI/Main/主界面_0007_长条.png
+  MAP 03dd6543… -> Art/UI/Main/主界面_0002s_0003_角色.png
+  MAP b96c6ad9… -> Art/UI/Main/主界面_0002s_0000_公会.png
+  MAP 7a5d4735… -> Art/UI/Main/主界面_0002s_0005_冒险.png
+  MAP a64f7955… -> Art/UI/Main/主界面_0002s_0007_酒馆.png
+  MAP b39a737b… -> Art/UI/Main/主界面_0002s_0009_冒险日志.png
+  MAP ba5ea2ee… -> Art/UI/Main/主界面_0000s_0001_商城.png
+  MAP 2d904471… -> Art/UI/Main/主界面_0000s_0000_排行.png
+  MAP d6f4cf63… -> Art/UI/Main/主界面_0000s_0003_活动.png
+  MAP 37516588… -> Art/UI/Main/主界面_0000s_0002_公告.png
+  MAP fe9da453… -> Art/UI/Main/主界面_0003s_0000_邮件.png
+  MAP ed375a43… -> Art/UI/Main/主界面_0003s_0001_设置.png
+  MAP 1a7ab9c4… -> Art/UI/Main/主界面_0003s_0006_冒险者旗帜.png
+  MAP 52cff23a… -> Art/UI/Main/主界面_0003s_0007_冒险者名称.png
+  MAP 7233c6cd… -> Art/UI/Main/主界面_0008_图层-8.png
+  MAP 0cd0131d… -> Art/UI/battle/大边框.png
+  MAP f0254556… -> Art/UI/装备格子/frame_common.png
+  MAP 8a62894c… -> Art/UI/装备格子/frame_white.png
+  MAP c333d293… -> Art/UI/Common/确定按钮.png
+  MAP 5ee97af5… -> Art/UI/Common/取消按钮.png
+  MAP f625d175… -> Art/UI/battle/格子锁.png
+  MAP 6f017ecd… -> Art/UI/battle/装备格.png
+  MAP d7f7c3f9… -> Art/UI/battle/装备格.png
+  MAP 29277b8c… -> Art/UI/battle/蓝条.png
+  MAP bb6b98a0… -> Art/UI/battle/血条底.png
+  MAP 0366cc4d… -> Art/UI/battle/底图.png
+  MAP a1dc8c68… -> Art/UI/battle/进度条.png
+  MAP 7d8f24e8… -> Art/UI/battle/进度.png
+  MAP 14f08088… -> Art/UI/battle/头像框.png
+  MAP fa65fd09… -> Art/UI/battle/任务底框.png
+  MAP 628d8a7d… -> Art/UI/battle/设置.png
+orphan map size=46
+  wrote Resources\Prefabs\Battle\EquipDropPopup.prefab
+  wrote Resources\Prefabs\Battle\NextStageRoulette.prefab
+  wrote Resources\Prefabs\Battle\BattleUI.prefab
+  wrote Resources\Prefabs\Monster\Monstersmoban.prefab
+  wrote Resources\Prefabs\Town\ResourceBar.prefab
+  wrote Resources\Prefabs\Town\MainBottomNav.prefab
+  wrote Resources\Prefabs\Town\GuildHallUI.prefab
+  wrote Resources\Prefabs\Town\AdventureUI.prefab
+  wrote Resources\Prefabs\Town\CharacterUI.prefab
+  wrote Resources\Prefabs\Dialogue\DialogueUI.prefab
+  wrote Resources\Prefabs\Talent\TalentUI.prefab
+DONE files=11 replacements=314 map=Y:\PixelAdventureTown\Tools\orphan-sprite-rebind.json

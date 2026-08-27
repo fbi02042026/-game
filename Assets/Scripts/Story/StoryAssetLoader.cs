@@ -17,6 +17,14 @@ public static class StoryAssetLoader
 
     static readonly Dictionary<string, Sprite> Cache = new Dictionary<string, Sprite>();
 
+    /// <summary>提前把立绘/背景读进缓存，避免开场那一下卡顿。</summary>
+    public static void Warmup(string group, params string[] ids)
+    {
+        if (ids == null) return;
+        for (int i = 0; i < ids.Length; i++)
+            Load(group, ids[i]);
+    }
+
     public static Sprite Load(string group, string id)
     {
         if (string.IsNullOrEmpty(id)) return null;

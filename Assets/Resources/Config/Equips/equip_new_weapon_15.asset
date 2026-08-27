@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_new_weapon_15
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_15
   equipName: "风暴刺剑"
-  icon: {fileID: 21300000, guid: 992528b0462b4b54bae9911c196cdfba, type: 3}
+  icon: {fileID: 21300000, guid: bf6ab89ee76b4be19121ac8e857b818c, type: 3}
   iconFileName: New_Weapon_15
   gridWidth: 1
   gridHeight: 2

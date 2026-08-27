@@ -9,47 +9,47 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 403aa86e7216d7f499b5c16bd4f8d663, type: 3}
+  m_Script: {fileID: 11500000, guid: 3e07e9e9a82b42f8b90916d6359b1ad3, type: 3}
   m_Name: BattleBackgroundRegistry
   m_EditorClassIdentifier: 
   backgrounds:
   - chapter: 1
-    folderName: 4 Forest
-    frontSprite: {fileID: 21300000, guid: 3ff8272ae3a954f418b6437e01637bc1, type: 3}
-    midSprite: {fileID: 21300000, guid: 8f110a596fb4da445a14356173e9f8b2, type: 3}
-    backSprite: {fileID: 21300000, guid: f8db56b87d4480b4cb3b182f16c24002, type: 3}
+    folderName: 1 Forest
+    frontSprite: {fileID: 21300000, guid: 4073a96257bb477b84e9a78afb547871, type: 3}
+    midSprite: {fileID: 21300000, guid: dc10955b69b349c6a080ed919eadad69, type: 3}
+    backSprite: {fileID: 21300000, guid: a05d8cbb1dac45078f8faebf6072f40f, type: 3}
   - chapter: 2
-    folderName: 1 Undead
-    frontSprite: {fileID: 21300000, guid: a62de1c7ef05e4b428de97d29696e19b, type: 3}
-    midSprite: {fileID: 21300000, guid: b51004f97860e5245b8fa40c835e6548, type: 3}
-    backSprite: {fileID: 21300000, guid: 150c48e52d9c3d54a8ce71fc8104bf3b, type: 3}
-  - chapter: 3
     folderName: 2 Jungle
-    frontSprite: {fileID: 21300000, guid: 485304948f42f6c47ad2bb6c5c5e0004, type: 3}
-    midSprite: {fileID: 21300000, guid: 67a622b955cff2843a7b7149f13d3f99, type: 3}
-    backSprite: {fileID: 21300000, guid: 47ccedf4ce5c61642b2ae4725e43a311, type: 3}
-  - chapter: 4
+    frontSprite: {fileID: 21300000, guid: a510c2ca625e4bfa84f40809b00c5711, type: 3}
+    midSprite: {fileID: 21300000, guid: 10add18dcabe44b8aed8804f35d70bb2, type: 3}
+    backSprite: {fileID: 21300000, guid: e8708aaa9c134233ab91c16f0f5cfe2c, type: 3}
+  - chapter: 3
     folderName: 3 Sea
-    frontSprite: {fileID: 21300000, guid: 021d385c095be5a46ae40748e60db35f, type: 3}
-    midSprite: {fileID: 21300000, guid: 98783f593b360ad448cc3b9611e5b2f1, type: 3}
-    backSprite: {fileID: 21300000, guid: e9caf40ab3d096644ab760dc9396be2c, type: 3}
+    frontSprite: {fileID: 21300000, guid: d5dda0037aae42c3b22a3daf14f338b1, type: 3}
+    midSprite: {fileID: 21300000, guid: 0936c8dc28134f658e314479345522a8, type: 3}
+    backSprite: {fileID: 21300000, guid: 1026ac3c8dcc4edd964fa65d6d5af6b9, type: 3}
+  - chapter: 4
+    folderName: 4 Undead
+    frontSprite: {fileID: 21300000, guid: 40080c6d450340b692a9d79f65fc44b9, type: 3}
+    midSprite: {fileID: 21300000, guid: 4d2c1a0e1cbb4c78a9a597b07f0a195a, type: 3}
+    backSprite: {fileID: 21300000, guid: 8e7ef734156d41cfa0bb155b0f0b67c1, type: 3}
   - chapter: 5
     folderName: 5 Field
-    frontSprite: {fileID: 21300000, guid: e4e578bfdeeb2274a9f455b3306fd6a8, type: 3}
-    midSprite: {fileID: 21300000, guid: d9e02cf5c6e6a1046a4c8a281d950f8c, type: 3}
-    backSprite: {fileID: 21300000, guid: c6645cf97900be7469c7fafa478c5200, type: 3}
+    frontSprite: {fileID: 21300000, guid: 4b65e3ca7c8441e8a472b27b49e4de9d, type: 3}
+    midSprite: {fileID: 21300000, guid: c22a1a7855d64be18fe699722e62b973, type: 3}
+    backSprite: {fileID: 21300000, guid: b7ba52acc3b642fe82ec2d4d182c8a50, type: 3}
   - chapter: 6
     folderName: 6 Cave
-    frontSprite: {fileID: 21300000, guid: c7e5533e4968afb49a784e543884c4eb, type: 3}
-    midSprite: {fileID: 21300000, guid: d2ce8e041d9f95c4d82c77292b4a71bc, type: 3}
-    backSprite: {fileID: 21300000, guid: f3ccd0edfa9a069469a40ac05a4a946f, type: 3}
+    frontSprite: {fileID: 21300000, guid: d5b15c25d42b478d8041fcc4a5b47500, type: 3}
+    midSprite: {fileID: 21300000, guid: e71f1af806e548578056c7b2dc77df11, type: 3}
+    backSprite: {fileID: 21300000, guid: 53707bddbe0d4fdab1d9f4b67aca298b, type: 3}
   - chapter: 7
     folderName: 7 Devil
-    frontSprite: {fileID: 21300000, guid: ea8703cd512a0784ca80c263419d6a3e, type: 3}
-    midSprite: {fileID: 21300000, guid: c63aa9ac813f2434281449a974efad0f, type: 3}
-    backSprite: {fileID: 21300000, guid: a875cc4021b8a7444810ab0abbe8e6b8, type: 3}
+    frontSprite: {fileID: 21300000, guid: f154a8853da44a9e8d42720ff5955f60, type: 3}
+    midSprite: {fileID: 21300000, guid: 2bfe70ade3d74fc8a1288984f417c3fb, type: 3}
+    backSprite: {fileID: 21300000, guid: d573cffbe76645adaa1be6bcc5d71635, type: 3}
   - chapter: 8
     folderName: 8 Ice
-    frontSprite: {fileID: 21300000, guid: 8a9b35cd8c54cc646946f1cf2fc23fb7, type: 3}
-    midSprite: {fileID: 21300000, guid: 63845e14622ee3d468ab6f45e66cccf3, type: 3}
-    backSprite: {fileID: 21300000, guid: 2fffe54b956f13b43907ce71ab35d4cb, type: 3}
+    frontSprite: {fileID: 21300000, guid: 52ff3e6d5d164284908df13a6658fe19, type: 3}
+    midSprite: {fileID: 21300000, guid: 753653e200c84bb28cd7fe26712cab33, type: 3}
+    backSprite: {fileID: 21300000, guid: 731693c56e6344db8d4bd201703ea5e2, type: 3}

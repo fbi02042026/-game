@@ -27,6 +27,7 @@ public class TavernUI : MonoBehaviour, ITownPage
 
     bool _built;
     bool _preloaded;
+    bool _playWelcomeBack;
 
     void Awake()
     {
@@ -74,7 +75,21 @@ public class TavernUI : MonoBehaviour, ITownPage
 
         Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
+
+        EnsurePortraitMotion();
+        if (_playWelcomeBack)
+        {
+            _playWelcomeBack = false;
+            var tease = portraitRoot != null
+                ? portraitRoot.GetComponent<TavernLandladyTease>()
+                : null;
+            if (tease != null)
+                StartCoroutine(tease.CoWelcomeBackDrunk());
+        }
     }
+
+    /// <summary>解禁后下一次进酒馆播「酒醒欢迎」。</summary>
+    public void MarkWelcomeBack() => _playWelcomeBack = true;
 
     /// <summary>轻量隐藏</summary>
     public void HidePage()
@@ -410,6 +425,7 @@ public class TavernUI : MonoBehaviour, ITownPage
 
         if (target.GetComponent<PortraitIdleMotion>() == null)
             target.gameObject.AddComponent<PortraitIdleMotion>();
+        TavernLandladyTease.EnsureOn(target);
     }
 
     RectTransform ResolvePortraitRoot()

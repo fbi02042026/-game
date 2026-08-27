@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_normal_helmet1
   m_EditorClassIdentifier: 
   templateId: equip_normal_helmet1
   equipName: "布制头巾"
-  icon: {fileID: 21300000, guid: 7b4d6074817c9834ba77a2d3849b7e7b, type: 3}
+  icon: {fileID: 21300000, guid: 24499186c091494ebc60fa8d3feee853, type: 3}
   iconFileName: Normal_Helmet1
   gridWidth: 1
   gridHeight: 1

@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_sword_4
   m_EditorClassIdentifier: 
   templateId: equip_sword_4
   equipName: "守夜钢剑"
-  icon: {fileID: 21300000, guid: 3026be64fe0ecb44ba5aa53f2307188f, type: 3}
+  icon: {fileID: 21300000, guid: 4efee2a85e124ea28f80b9271b4a4ca2, type: 3}
   iconFileName: Sword_4
   gridWidth: 1
   gridHeight: 2

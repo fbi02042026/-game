@@ -1,0 +1,85 @@
+## Assets/Art/UI/Icons/属性图标
+Assets/Art/UI/Icons/属性图标/角色_0001s_0000_攻击.png
+Assets/Art/UI/Icons/属性图标/角色_0001s_0001_生命.png
+Assets/Art/UI/Icons/属性图标/角色_0001s_0002_防御.png
+Assets/Art/UI/Icons/属性图标/角色_0001s_0003_暴击.png
+Assets/Art/UI/Icons/属性图标/角色_0001s_0004_攻速.png
+## Assets/Art/UI/Talent
+Assets/Art/UI/Talent/图层 1.png
+Assets/Art/UI/Talent/图层 11.png
+Assets/Art/UI/Talent/图层 2.png
+Assets/Art/UI/Talent/图层 21.png
+Assets/Art/UI/Talent/图层 3 拷贝.png
+Assets/Art/UI/Talent/图层 3.png
+Assets/Art/UI/Talent/图层1 2.png
+Assets/Art/UI/Talent/天赋_0000_技能底.png
+Assets/Art/UI/Talent/天赋_0000s_0001_重置天赋亮.png
+Assets/Art/UI/Talent/天赋_0000s_0002_底条.png
+Assets/Art/UI/Talent/天赋_0001_金币升级.png
+Assets/Art/UI/Talent/天赋_0002_图层-2.png
+Assets/Art/UI/Talent/天赋_0003_图层-3.png
+Assets/Art/UI/Talent/天赋_0004_基础属性未解锁.png
+Assets/Art/UI/Talent/天赋_0005_基础属性解锁.png
+Assets/Art/UI/Talent/天赋_0006_属性底.png
+Assets/Art/UI/Talent/天赋_0007_关闭.png
+Assets/Art/UI/Talent/天赋_0008_lianjie3.png
+Assets/Art/UI/Talent/天赋_0009_链接2.png
+Assets/Art/UI/Talent/天赋_0010_链接1.png
+Assets/Art/UI/Talent/天赋_0011_不可升级.png
+Assets/Art/UI/Talent/天赋_0012_可升级.png
+Assets/Art/UI/Talent/天赋_0013_天赋石升级.png
+Assets/Art/UI/Talent/天赋_0014_右侧天赋底.png
+Assets/Art/UI/Talent/天赋_0015_箭头.png
+Assets/Art/UI/Talent/天赋_0016_技能可用-拷贝.png
+Assets/Art/UI/Talent/天赋_0017_技能链接-拷贝.png
+Assets/Art/UI/Talent/天赋_0018_技能可用.png
+Assets/Art/UI/Talent/天赋_0019_技能链接.png
+Assets/Art/UI/Talent/天赋_0020_bg.png
+Assets/Art/UI/Talent/天赋石.png
+Assets/Art/UI/Talent/天赋石购买.png
+Assets/Art/UI/Talent/重置天赋灰.png
+Assets/Art/UI/Talent/金币.png
+Assets/Art/UI/Talent/金币购买.png
+## Assets/Art/UI/Character
+Assets/Art/UI/Character/character_reference.png
+Assets/Art/UI/Character/skill_select_reference.png
+## Assets/Art/UI/NavCharacter
+Assets/Art/UI/NavCharacter/图层 8 拷贝 3.png
+Assets/Art/UI/NavCharacter/角色_0000_切换.png
+Assets/Art/UI/NavCharacter/角色_0000s_0000_玩家头像.png
+Assets/Art/UI/NavCharacter/角色_0000s_0001_头像框.png
+Assets/Art/UI/NavCharacter/角色_0001_技能底框.png
+Assets/Art/UI/NavCharacter/角色_0001s_0009_图层-6.png
+Assets/Art/UI/NavCharacter/角色_0002s_0006_技能底框.png
+Assets/Art/UI/NavCharacter/角色_0002s_0007_标头.png
+Assets/Art/UI/NavCharacter/角色_0002s_0008_图层-9.png
+Assets/Art/UI/NavCharacter/角色_0002s_0009_图层-6-拷贝.png
+Assets/Art/UI/NavCharacter/角色_0002s_0010_图层-7.png
+Assets/Art/UI/NavCharacter/角色_0003_图层-2.png
+Assets/Art/UI/NavCharacter/角色_0004_图层-3.png
+Assets/Art/UI/NavCharacter/角色_0005_天赋.png
+Assets/Art/UI/NavCharacter/角色_0006_技能.png
+Assets/Art/UI/NavCharacter/角色_0008_背景.png
+Assets/Art/UI/NavCharacter/角色_0008_背景模糊.png
+## Assets/Art/UI/Tavern
+Assets/Art/UI/Tavern/酒馆_0000_图层-6.png
+Assets/Art/UI/Tavern/酒馆_0001_图层-7.png
+Assets/Art/UI/Tavern/酒馆_0002_图层-8.png
+Assets/Art/UI/Tavern/酒馆_0003_图层-5.png
+Assets/Art/UI/Tavern/酒馆_0004_图层-3.png
+Assets/Art/UI/Tavern/酒馆_0006_图层-1.png
+Assets/Art/UI/Tavern/酒馆_0007_图层-4.png
+## Assets/Art/UI/关卡
+Assets/Art/UI/关卡/stage_boss.png
+Assets/Art/UI/关卡/stage_elite.png
+Assets/Art/UI/关卡/stage_enchant.png
+Assets/Art/UI/关卡/stage_forge.png
+Assets/Art/UI/关卡/stage_normal.png
+Assets/Art/UI/关卡/stage_rest.png
+Assets/Art/UI/关卡/层级调整组件_0007_背景.png
+Assets/Art/UI/关卡/底座.png
+Assets/Art/UI/关卡/恢复体力.png
+Assets/Art/UI/关卡/恢复底框.png
+Assets/Art/UI/关卡/背景.png
+Assets/Art/UI/关卡/锻造.png
+Assets/Art/UI/关卡/附魔.png

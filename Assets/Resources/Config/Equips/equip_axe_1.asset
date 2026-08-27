@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_axe_1
   m_EditorClassIdentifier: 
   templateId: equip_axe_1
   equipName: "蛮力战斧"
-  icon: {fileID: 21300000, guid: 9657cbdde8c49784fa5934f20541e88c, type: 3}
+  icon: {fileID: 21300000, guid: 06e3ed9b401f4257a30af752cddef6d5, type: 3}
   iconFileName: Axe_1
   gridWidth: 1
   gridHeight: 2

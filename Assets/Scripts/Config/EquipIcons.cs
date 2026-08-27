@@ -102,6 +102,33 @@ public static class EquipIcons
         return null;
     }
 
+    /// <summary>
+    /// 装备实例取图标的唯一入口：模板 Resolve → 模板 icon → iconFileName → templateId。
+    /// 各弹窗/格子一律走这里，避免每处兜底层数不一致。
+    /// </summary>
+    public static Sprite Resolve(EquipInstance eq)
+    {
+        if (eq == null) return null;
+        if (eq.icon != null) return eq.icon;
+
+        eq.template?.ResolveIcon();
+        if (eq.template != null)
+        {
+            if (eq.template.icon != null)
+                eq.icon = eq.template.icon;
+            if (eq.icon == null && !string.IsNullOrEmpty(eq.template.iconFileName))
+                eq.icon = Get(eq.template.iconFileName);
+        }
+        if (eq.icon == null && !string.IsNullOrEmpty(eq.templateId))
+        {
+            eq.icon = Get(eq.templateId);
+            // 模板 id 形如 equip_sword_1，图标文件是 Sword_1
+            if (eq.icon == null && eq.templateId.StartsWith("equip_", System.StringComparison.OrdinalIgnoreCase))
+                eq.icon = Get(eq.templateId.Substring(6));
+        }
+        return eq.icon;
+    }
+
     public static void ClearCache() => _cache.Clear();
 
 #if UNITY_EDITOR

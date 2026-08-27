@@ -274,6 +274,11 @@ public class HeroCostumeManager : MonoBehaviour
             {
                 ApplySpriteToPart(partType, slot, equip.template.spumName);
             }
+            else if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
+            {
+                // 卸下武器/副手时清掉对应侧，避免旧武器精灵残留
+                ClearWeaponSide(slot);
+            }
         }
 
         Debug.Log("[HeroCostumeManager] 换装刷新完成");
@@ -303,6 +308,13 @@ public class HeroCostumeManager : MonoBehaviour
             return;
         }
 
+        // 主手/副手共用 _weaponList：只改对应侧，禁止整表覆盖把另一只手冲掉
+        if (partType == "Weapons")
+        {
+            ApplyWeaponSprites(slot, sprites, spumName);
+            return;
+        }
+
         if (sprites.Length == 1)
         {
             // 单切片：设置列表中所有SpriteRenderer
@@ -329,6 +341,64 @@ public class HeroCostumeManager : MonoBehaviour
         UpdatePathString(partType, spumName);
 
         Debug.Log($"[HeroCostumeManager] 换装成功: {partType} ← {spumName} ({sprites.Length}切片)");
+    }
+
+    void ApplyWeaponSprites(EquipSlotType slot, Sprite[] sprites, string spumName)
+    {
+        if (spriteList == null || sprites == null || sprites.Length == 0) return;
+        var list = spriteList._weaponList;
+        if (list == null || list.Count == 0) return;
+
+        Sprite pick = sprites[0];
+        bool wantRight = slot == EquipSlotType.MainHand;
+        int matched = 0;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var sr = list[i];
+            if (sr == null) continue;
+            string n = sr.gameObject != null ? sr.gameObject.name : sr.name;
+            bool isRight = n.IndexOf("Right", System.StringComparison.OrdinalIgnoreCase) >= 0
+                           || n.IndexOf("R_", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isLeft = n.IndexOf("Left", System.StringComparison.OrdinalIgnoreCase) >= 0
+                          || n.IndexOf("L_", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            // 分不出左右时：主手用列表前半，副手用后半
+            if (!isRight && !isLeft)
+            {
+                if (wantRight && i == 0) { sr.sprite = pick; matched++; }
+                if (!wantRight && i == list.Count - 1) { sr.sprite = pick; matched++; }
+                continue;
+            }
+            if (wantRight && isRight) { sr.sprite = pick; matched++; }
+            if (!wantRight && isLeft) { sr.sprite = pick; matched++; }
+        }
+
+        UpdatePathString("Weapons", spumName);
+        Debug.Log($"[HeroCostumeManager] 武器换装: slot={slot} ← {spumName} matched={matched}");
+    }
+
+    void ClearWeaponSide(EquipSlotType slot)
+    {
+        if (spriteList == null || spriteList._weaponList == null) return;
+        bool wantRight = slot == EquipSlotType.MainHand;
+        var list = spriteList._weaponList;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var sr = list[i];
+            if (sr == null) continue;
+            string n = sr.gameObject != null ? sr.gameObject.name : sr.name;
+            bool isRight = n.IndexOf("Right", System.StringComparison.OrdinalIgnoreCase) >= 0
+                           || n.IndexOf("R_", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isLeft = n.IndexOf("Left", System.StringComparison.OrdinalIgnoreCase) >= 0
+                          || n.IndexOf("L_", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!isRight && !isLeft)
+            {
+                if ((wantRight && i == 0) || (!wantRight && i == list.Count - 1))
+                    sr.sprite = null;
+                continue;
+            }
+            if (wantRight && isRight) sr.sprite = null;
+            if (!wantRight && isLeft) sr.sprite = null;
+        }
     }
 
     /// <summary>

@@ -109,6 +109,18 @@ public class SkillSelectUI : MonoBehaviour
             bool unlocked = PlayerSkillDefs.IsUnlocked(def, data);
             if (skillNames[i] != null)
                 skillNames[i].text = def.displayName;
+            if (skillIcons[i] != null)
+            {
+                var sp = Resources.Load<Sprite>("Icons/SkillIcon/" + def.id);
+                if (sp == null)
+                {
+                    var all = Resources.LoadAll<Sprite>("Icons/SkillIcon/" + def.id);
+                    if (all != null && all.Length > 0) sp = all[0];
+                }
+                skillIcons[i].sprite = sp;
+                skillIcons[i].enabled = sp != null;
+                skillIcons[i].preserveAspect = true;
+            }
             ApplySlotTint(i, unlocked);
             if (skillButtons[i] != null)
                 skillButtons[i].interactable = true;

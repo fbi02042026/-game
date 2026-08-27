@@ -1,6 +1,18 @@
-# 全量修复 Assets 下损坏的 .meta GUID，并同步重写所有引用。
-# 损坏形态：guid 不是 32 位 hex（常见为 56 字符 base64，含 /+=）——团结 Codely 等导致。
-# 用法：powershell -ExecutionPolicy Bypass -File Tools/FixAllCorruptedGuids.ps1
+# 【已废弃 · 禁止运行】2026-08-26
+#
+# 本脚本的前提「guid 必须是 32 位 hex」在本工程不成立：
+# 团结编辑器给它导入的新资源分配 base64 形态 guid，这是引擎行为，不是损坏。
+# 本脚本会把 base64 换成【随机新 hex】，编辑器下次导入又写回 base64，
+# 但不会同步改回引用 → 引用悬空 → 预制体白框 / Missing Script（越修越坏）。
+#
+# 保留仅供追溯 Tools/guid-remap-last.json 的历史映射。
+# 真要跑必须显式加 -IKnowThisBreaksReferences，并先备份整个工程。
+param([switch]$IKnowThisBreaksReferences)
+
+if (-not $IKnowThisBreaksReferences) {
+    Write-Host "ABORTED: FixAllCorruptedGuids 已废弃。base64 guid 是团结编辑器的正常行为，不要强改成 hex。" -ForegroundColor Red
+    exit 1
+}
 
 $ErrorActionPreference = "Stop"
 $assetsRoot = "Y:\PixelAdventureTown\Assets"

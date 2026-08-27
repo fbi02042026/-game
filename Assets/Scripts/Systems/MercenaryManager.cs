@@ -44,6 +44,20 @@ public class MercenaryManager : Singleton<MercenaryManager>
             sp = LoadHeadSprite("icon_dunbing201");
             if (sp != null) return sp;
         }
+        if (characterId.StartsWith("fashi"))
+        {
+            sp = LoadHeadSprite("icon_naima202");
+            if (sp != null) return sp;
+            sp = LoadHeadSprite("icon_naima101");
+            if (sp != null) return sp;
+        }
+        if (characterId.StartsWith("zhongzhan"))
+        {
+            sp = LoadHeadSprite("icon_kuangzhan201");
+            if (sp != null) return sp;
+            sp = LoadHeadSprite("icon_dunbing201");
+            if (sp != null) return sp;
+        }
         return null;
     }
 
@@ -90,6 +104,8 @@ public class MercenaryManager : Singleton<MercenaryManager>
 
     public string GetJobName(string characterId)
     {
+        string fromRoster = MercRosterDefs.GetJobName(characterId);
+        if (!string.IsNullOrEmpty(fromRoster)) return fromRoster;
         return registry != null ? registry.GetJobName(characterId) : characterId;
     }
 
@@ -165,14 +181,31 @@ public class MercenaryManager : Singleton<MercenaryManager>
     public List<string> GetHireableMercIds()
     {
         var result = new List<string>();
-        if (registry == null || registry.entries == null) return result;
+        var seen = new HashSet<string>();
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-        foreach (var e in registry.entries)
+
+        void TryAdd(string id)
         {
-            if (e == null || e.isPlayer || string.IsNullOrEmpty(e.characterId)) continue;
-            if (!GameConfig.IsMercAvailable(e.characterId, data)) continue;
-            result.Add(e.characterId);
+            if (string.IsNullOrEmpty(id) || !seen.Add(id)) return;
+            if (!GameConfig.IsMercAvailable(id, data)) return;
+            string prefab = GetPrefabName(id);
+            if (LoadUnitPrefab(prefab, id) == null) return;
+            result.Add(id);
         }
+
+        if (registry != null && registry.entries != null)
+        {
+            foreach (var e in registry.entries)
+            {
+                if (e == null || e.isPlayer) continue;
+                TryAdd(e.characterId);
+            }
+        }
+
+        var roster = MercRosterDefs.GetHireableAssetIds();
+        for (int i = 0; i < roster.Count; i++)
+            TryAdd(roster[i]);
+
         return result;
     }
 

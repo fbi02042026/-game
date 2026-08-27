@@ -353,6 +353,18 @@ public static class AdventureLogCatalog
         Hire("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", "完成新手引导后酒馆可招募", "酒馆",
             "年轻寡言的盾兵，盾牌上贴着一张旧报销单。",
             "他说欠公会钱的人命硬，所以把报销单当护身符。"),
+        Hire("H019", "艾琳", "星火", "fashi101", "法师", "完成新手引导后酒馆可招募", "酒馆",
+            "戴兜帽的初级法师，发色偏紫，手持短杖。看起来只是学徒，但杖尖偶尔溢出的魔力让老盾都往后退。",
+            "她总说自己是'刚入门的法师'。但上次她不小心把营地篝火变成了火球。"),
+        Hire("H020", "凯尔", "谜面", "fashi102", "法师", "累计击败精英怪物 15 次后开放招募", "酒馆",
+            "浑身裹在深蓝兜袍里的神秘法师，从不露脸，声音像从很远的地方传来。",
+            "有人打赌他兜帽下没有脸。老盾说'没脸的人不会点酒'，但他确实每次都点。"),
+        Hire("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", "完成新手引导后酒馆可招募", "酒馆",
+            "戴着露出半张脸头盔的重武者，扛着长柄巨斧，脸上写满了'随便吧'。",
+            "他参战是因为'懒得找工作'。但真打起来，他懒得逃跑，所以总是站到最后。"),
+        Hire("H022", "索尔", "铁面", "zhongzhan201", "重武者", "累计通关裂缝 25 次后开放招募", "酒馆",
+            "头盔遮住整张脸的重武者，手持短柄巨斧，信奉实力代表一切。",
+            "他从不摘盔。酒馆里有人说他其实是女的，有人说他其实是骷髅，没人敢当面问。"),
     };
 
     public static readonly AchEntry[] Achievements =
@@ -616,6 +628,8 @@ public static class AdventureLogCatalog
         }
         if (e.Id == "H001") return StoryProgress.TutorialBattleCleared || StoryProgress.TutorialDone || HasMerc("dunbing101") || HasMerc("dunbing102");
         if (HasMerc(e.AssetId)) return true;
+        if (MercRosterDefs.TryGetByHireId(e.Id, out var roster) && roster.InInitialPool)
+            return StoryProgress.TutorialDone || StoryProgress.TutorialBattleCleared;
         return false;
     }
 

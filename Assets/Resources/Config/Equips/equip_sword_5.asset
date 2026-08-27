@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_sword_5
   m_EditorClassIdentifier: 
   templateId: equip_sword_5
   equipName: "林间长刃"
-  icon: {fileID: 21300000, guid: beed5e8673c62d840ad022f86f5a3f98, type: 3}
+  icon: {fileID: 21300000, guid: 6ec77d819f8b4a2f8c9ce819392103ba, type: 3}
   iconFileName: Sword_5
   gridWidth: 1
   gridHeight: 2

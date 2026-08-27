@@ -9,12 +9,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 24a386315fd17dc4893172aeaa5da90d, type: 3}
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
   m_Name: equip_new_shield_02
   m_EditorClassIdentifier: 
   templateId: equip_new_shield_02
   equipName: "铁皮小盾"
-  icon: {fileID: 21300000, guid: d9ae99a05315b664aaa302a44bb6212c, type: 3}
+  icon: {fileID: 21300000, guid: f71e48e5107845aebfb7e418a3452e11, type: 3}
   iconFileName: New_Shield_02
   gridWidth: 2
   gridHeight: 2

@@ -259,19 +259,17 @@ public class StageClearEquipUI : MonoBehaviour
             var eq = _rewards[i];
             bool sel = i == _selected;
             card.color = sel ? RarityColor(eq.rarity) : new Color(0.18f, 0.16f, 0.22f, 1f);
-            // 与 EquipDropPopupUI 对齐：先 Resolve，再回写 eq.icon
-            eq.template?.ResolveIcon();
-            if (eq.icon == null && eq.template != null)
-                eq.icon = eq.template.icon;
-            if (eq.icon == null && eq.template != null)
-                eq.icon = EquipIcons.Get(eq.template.iconFileName);
+            EquipIcons.Resolve(eq);
             var icon = card.transform.Find("Icon")?.GetComponent<Image>();
             if (icon != null)
             {
+                icon.gameObject.SetActive(true);
                 icon.sprite = eq.icon;
                 icon.enabled = eq.icon != null;
                 icon.preserveAspect = true;
                 icon.color = Color.white;
+                if (eq.icon == null)
+                    Debug.LogWarning($"[StageClearEquip] 卡片{i}无图标 name={eq.equipName} file={eq.template?.iconFileName} id={eq.templateId}");
             }
             var name = card.transform.Find("Name")?.GetComponent<Text>();
             var meta = card.transform.Find("Meta")?.GetComponent<Text>();

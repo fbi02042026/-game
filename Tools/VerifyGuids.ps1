@@ -1,3 +1,6 @@
+# 【已废弃 · 判定前提错误】2026-08-26
+# 「guid 非 32 位 hex 即损坏」在本工程不成立：团结编辑器给新导入资源分配 base64 guid。
+# 这里报出的 BAD 绝大多数是正常资源，不要照着去改 meta。
 $ErrorActionPreference = "Continue"
 $bad = 0
 $ok = 0

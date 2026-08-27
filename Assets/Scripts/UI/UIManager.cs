@@ -25,9 +25,14 @@ public class UIManager : Singleton<UIManager>
     public void ShowToast(string msg)
     {
         if (string.IsNullOrEmpty(msg)) return;
+        if (ShouldSuppressToastForBubble())
+            return;
         Debug.Log("[Toast] " + msg);
         GlobalToastUI.Show(msg);
     }
+
+    /// <summary>有对话/头顶气泡/看板娘气泡时，不叠屏幕 Toast。</summary>
+    static bool ShouldSuppressToastForBubble() => GlobalToastUI.AnyBubbleShowing;
 
     /// <summary>
     /// 传送门后：石墩关卡图（锁晃动解锁）→ 滚盘 → 旗落到石墩 + btn06 描边 → 点石墩进关。

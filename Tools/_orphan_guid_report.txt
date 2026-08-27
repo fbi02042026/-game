@@ -1,0 +1,1029 @@
+ORPHAN 0000000000000000e000000000000000 refs=340
+  Scenes\Battle.unity
+  Scenes\Town.unity
+  Scenes\Boot.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX Thumbnail.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX Vid.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX.unity
+  Art\Effects\Pixel Craft VFX URP\_ Extra\Scenes\Vefects Secret Extra Scene.unity
+  Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_2ddemo.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_combat.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_emojis.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_explosions.unity
+  ... +328 more
+ORPHAN 0000000000000000f000000000000000 refs=274
+  Scenes\Battle.unity
+  Scenes\Town.unity
+  Scenes\Boot.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Materials\M_Sky.mat
+  Art\Effects\Epic Toon FX\Demo\Materials\dev.mat
+  Art\Effects\Epic Toon FX\Demo\Materials\dev2.mat
+  Art\Effects\Epic Toon FX\Demo\Materials\dev_half.mat
+  Art\Effects\Epic Toon FX\Demo\Materials\dev_small.mat
+  Art\Effects\Epic Toon FX\Demo\Materials\devcrate.mat
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_2ddemo.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_missiles.unity
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\CanvasSceneSelect.prefab
+  ... +262 more
+ORPHAN 78b2425a2284af743826c689403a4924 refs=77
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_AddColor.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_AddHue.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_AlphaTint.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_BlackTint.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_Brightness.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_ColorReplace.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_Contrast.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_Hue.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_InkSpread.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_InnerOutline.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_OuterOutline.asset
+  Art\Effects\Sprite Shaders Ultimate\ASE\Color\_Recolor.asset
+  ... +65 more
+ORPHAN fe87c0e1cc204ed48ad3b37840f39efc refs=62
+  Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_missiles.unity
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\CanvasSceneSelect.prefab
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\SceneSelect.prefab
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\Slider.prefab
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\Speed.prefab
+  Art\Effects\Epic Toon FX\Demo\ParticleEffectsShowcase\Prefabs\MainUICanvas.prefab
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+  Art\Effects\UIShaderEffects-EdgeEffects\Demo\Demo.unity
+  Art\Effects\UIShaderEffects-EdgeEffects\Effects\Prefab\EdgeGlow_01.prefab
+  Art\Effects\UIShaderEffects-EdgeEffects\Effects\Prefab\EdgeGlow_02.prefab
+  Art\Effects\UIShaderEffects-EdgeEffects\Effects\Prefab\EdgeGlow_03.prefab
+  ... +50 more
+ORPHAN d0353a89b1f911e48b9e16bdc9f2e058 refs=47
+  Art\Effects\Material\box01.mat
+  Art\Effects\Material\door01.mat
+  Art\Effects\Material\box02.mat
+  Art\Effects\Material\box03.mat
+  Art\Effects\Material\EnemyIcons01.mat
+  Art\Effects\Material\btn01.mat
+  Art\Effects\Material\btn02.mat
+  Art\Effects\Material\logo01.mat
+  Art\Effects\Material\btn04.mat
+  Art\Effects\Material\btn03.mat
+  Art\Effects\Material\btn05.mat
+  Art\Effects\Material\btn06.mat
+  ... +35 more
+ORPHAN 5f7201a12d95ffc409449d95f23cf332 refs=35
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_missiles.unity
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\CanvasSceneSelect.prefab
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\SceneSelect.prefab
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\Speed.prefab
+  Art\Effects\Epic Toon FX\Demo\ParticleEffectsShowcase\Prefabs\MainUICanvas.prefab
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+  Resources\Prefabs\Battle\EquipDropPopup.prefab
+  Resources\Prefabs\Battle\NextStageRoulette.prefab
+  Resources\Prefabs\Battle\RestStagePopup.prefab
+  Resources\Prefabs\Battle\BattleStageMap.prefab
+  Resources\Prefabs\Battle\BattleUI.prefab
+  Resources\Prefabs\Town\ResourceBar.prefab
+  ... +23 more
+ORPHAN 4e29b1a8efbd4b44bb3f3716e73f07ff refs=29
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_missiles.unity
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\CanvasSceneSelect.prefab
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\SceneSelect.prefab
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\Speed.prefab
+  Art\Effects\Epic Toon FX\Demo\ParticleEffectsShowcase\Prefabs\MainUICanvas.prefab
+  Resources\Prefabs\Battle\EquipDropPopup.prefab
+  Resources\Prefabs\Battle\NextStageRoulette.prefab
+  Resources\Prefabs\Battle\RestStagePopup.prefab
+  Resources\Prefabs\Battle\BattleStageMap.prefab
+  Resources\Prefabs\Battle\BattleUI.prefab
+  Resources\Prefabs\Town\ResourceBar.prefab
+  Resources\Prefabs\Town\MainBottomNav.prefab
+  ... +17 more
+ORPHAN dc42784cf147c0c48a680349fa168899 refs=26
+  Scenes\Battle.unity
+  Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_missiles.unity
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\CanvasSceneSelect.prefab
+  Art\Effects\Epic Toon FX\Demo\ParticleEffectsShowcase\Prefabs\MainUICanvas.prefab
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+  Art\Effects\UIShaderEffects-EdgeEffects\Demo\Demo.unity
+  Resources\Prefabs\Battle\EquipDropPopup.prefab
+  Resources\Prefabs\Battle\NextStageRoulette.prefab
+  Resources\Prefabs\Battle\RestStagePopup.prefab
+  Resources\Prefabs\Battle\BattleStageMap.prefab
+  Resources\Prefabs\Battle\BattleUI.prefab
+  ... +14 more
+ORPHAN 0cd44c1031e13a943bb63640046fad76 refs=23
+  Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_missiles.unity
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\CanvasSceneSelect.prefab
+  Art\Effects\Epic Toon FX\Demo\ParticleEffectsShowcase\Prefabs\MainUICanvas.prefab
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+  Art\Effects\UIShaderEffects-EdgeEffects\Demo\Demo.unity
+  Resources\Prefabs\Battle\EquipDropPopup.prefab
+  Resources\Prefabs\Battle\NextStageRoulette.prefab
+  Resources\Prefabs\Battle\RestStagePopup.prefab
+  Resources\Prefabs\Battle\BattleStageMap.prefab
+  Resources\Prefabs\Battle\BattleUI.prefab
+  Resources\Prefabs\Town\GuildHallUI.prefab
+  ... +11 more
+ORPHAN 0000000000000000d000000000000000 refs=14
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_combat.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_emojis.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_explosions.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_explosions2.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_magic.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_swordcombat.unity
+  Art\Effects\Epic Toon FX\Demo\Scenes\Secrets\etfx_library.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo1.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo2.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo3.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo4.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo5.unity
+  ... +2 more
+ORPHAN 0fc17236f67ee6b4b93e09eee791ee4e refs=13
+  Art\Effects\Pixel Craft VFX URP\VFX\Fireball\Particles\Loop\VFX_Fireball_Projectile_01_Horizontal_Random_Flip_Billboard_Color_Loop_Static.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Fireball\Particles\Loop\VFX_Fireball_Projectile_01_Vertical_Random_Flip_Billboard_Color_Loop_Static.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Color.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Color_Dissolve.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Color_Random_Start.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Color_Random_Start_Speed.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Dissolve.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Fake_Outline.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Random_Start.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Vanish\Particles\Loop\VFX_Vanish_01_Mask_Loop_Static.prefab
+  Art\Effects\Pixel Craft VFX URP\VFX\Vapor\Particles\Loop\VFX_Vapor_01_Color_Flip_Loop_Static.prefab
+  ... +1 more
+ORPHAN e19747de3f5aca642ab2be37e372fb86 refs=12
+  Resources\Prefabs\Battle\EquipDropPopup.prefab
+  Resources\Prefabs\Battle\BattleUI.prefab
+  Resources\Prefabs\Town\MainBottomNav.prefab
+  Resources\Prefabs\Town\GuildHallUI.prefab
+  Resources\Prefabs\Town\AdventureUI.prefab
+  Resources\Prefabs\Town\CharacterUI.prefab
+  Resources\Prefabs\Town\AdventureLogUI.prefab
+  Resources\Prefabs\Login\LoginUI.prefab
+  Resources\Prefabs\Dialogue\DialogueUI.prefab
+  Resources\Prefabs\Talent\TalentUI.prefab
+  Resources\Prefabs\Loading\LoadingUI.prefab
+  SPUM\Scene\SPUM_Scene.unity
+ORPHAN cfabb0440166ab443bba8876756fdfa9 refs=10
+  Resources\Prefabs\Battle\EquipDropPopup.prefab
+  Resources\Prefabs\Battle\NextStageRoulette.prefab
+  Resources\Prefabs\Town\AdventureLogUI.prefab
+  Resources\Prefabs\Talent\TalentUI.prefab
+  SPUM\Scene\SPUM_Scene.unity
+  SPUM\Core\Basic_Resources\Prefab\Package.prefab
+  SPUM\Core\Basic_Resources\Prefab\Preset_Item.prefab
+  SPUM\Core\Basic_Resources\Prefab\StateButtonPrefabs.prefab
+  SPUM\Core\Basic_Resources\Prefab\StateElement.prefab
+  SPUM\Sample\Prefabs\AnimationPanel.prefab
+ORPHAN f5f67c52d1564df4a8936ccd202a3bd8 refs=10
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo1.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo2.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo3.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo4.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo5.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo6.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo7.unity
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\GUI\HyperbitBeamCanvas.prefab
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\GUI\HyperbitCanvas.prefab
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\GUI\HyperbitSceneSelect.prefab
+ORPHAN 474bcb49853aa07438625e644c072ee6 refs=9
+  Scenes\Town.unity
+  Scenes\Boot.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX Thumbnail.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX Vid.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX.unity
+  Art\Effects\Pixel Craft VFX URP\_ Extra\Scenes\Vefects Secret Extra Scene.unity
+  Art\Effects\Epic Toon FX\Prefabs\Combat\Nova\NovaBlue.prefab
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Prefabs\Beam\BasicBeam\LaserBeamBlueEnd.prefab
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Prefabs\Beam\BasicBeam\LaserBeamGreenEnd.prefab
+ORPHAN 76c392e42b5098c458856cdf6ecaaaa1 refs=9
+  Scenes\Battle.unity
+  Scenes\Town.unity
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\CanvasSceneSelect.prefab
+  Art\Effects\Epic Toon FX\Demo\ParticleEffectsShowcase\Prefabs\MainUICanvas.prefab
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+  Art\Effects\UIShaderEffects-EdgeEffects\Demo\Demo.unity
+  SPUM\Scene\SPUM_Scene.unity
+  SPUM\Sample\Scene\Sample.unity
+  SPUM\Sprite_SheetExporter(Beta)\Scene\SPUM_SheetExporter.unity
+ORPHAN 30649d3a9faa99c48a7b1166b86bf2a0 refs=8
+  Resources\Prefabs\Battle\BattleUI.prefab
+  Resources\Prefabs\Town\MainBottomNav.prefab
+  Resources\Prefabs\Town\GuildHallUI.prefab
+  SPUM\Scene\SPUM_Scene.unity
+  SPUM\Core\Basic_Resources\Prefab\Package.prefab
+  SPUM\Core\Basic_Resources\Prefab\Preset_Item.prefab
+  SPUM\Core\Basic_Resources\Prefab\StateElement.prefab
+  SPUM\Sample\Scene\Sample.unity
+ORPHAN a79441f348de89743a2939f4d699eac1 refs=8
+  Scenes\Battle.unity
+  Scenes\Town.unity
+  Scenes\Boot.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX Thumbnail.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX Vid.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX.unity
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+  Art\Effects\UIShaderEffects-EdgeEffects\Demo\Demo.unity
+ORPHAN 4f231c4fb786f3946a6b90b886c48677 refs=7
+  Scenes\Battle.unity
+  Scenes\Town.unity
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\CanvasSceneSelect.prefab
+  Art\Effects\Epic Toon FX\Demo\ParticleEffectsShowcase\Prefabs\MainUICanvas.prefab
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+  SPUM\Sample\Scene\Sample.unity
+  SPUM\Sprite_SheetExporter(Beta)\Scene\SPUM_SheetExporter.unity
+ORPHAN 9085046f02f69544eb97fd06b6048fe2 refs=7
+  SPUM\Scene\SPUM_Scene.unity
+  SPUM\Core\Basic_Resources\Prefab\ChracterPivot.prefab
+  SPUM\Core\Basic_Resources\Prefab\Concept_Toggle.prefab
+  SPUM\Core\Basic_Resources\Prefab\Item.prefab
+  SPUM\Core\Basic_Resources\Prefab\Package.prefab
+  SPUM\Core\Basic_Resources\Prefab\PackageToggleButton.prefab
+  SPUM\Core\Basic_Resources\Prefab\StateElement.prefab
+ORPHAN 3245ec927659c4140ac4f8d17403cc18 refs=6
+  Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity
+  Resources\Prefabs\Town\AdventureLogUI.prefab
+  SPUM\Scene\SPUM_Scene.unity
+  SPUM\Core\Basic_Resources\Prefab\Package.prefab
+  SPUM\Core\Basic_Resources\Prefab\StateElement.prefab
+  SPUM\Sample\Prefabs\AnimationPanel.prefab
+ORPHAN 14cbf7cdacd24b8419abd5f05fad3451 refs=5
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\Projectiles\Missiles\LongCube\LongCubeMissileBlueOBJ.prefab
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\Projectiles\Missiles\LongCube\LongCubeMissileGreenOBJ.prefab
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\Projectiles\Missiles\LongCube\LongCubeMissilePurpleOBJ.prefab
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\Projectiles\Missiles\LongCube\LongCubeMissileRedOBJ.prefab
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\Projectiles\Missiles\LongCube\LongCubeMissileYellowOBJ.prefab
+ORPHAN 172515602e62fb746b5d573b38a5fe58 refs=5
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX Thumbnail.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX Vid.unity
+  Art\Effects\Pixel Craft VFX URP\Demo\Scenes\Vefects Pixel Craft VFX.unity
+  Art\Effects\Pixel Craft VFX URP\_ Extra\Scenes\Vefects Secret Extra Scene.unity
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+ORPHAN 204209ec58a7b6241a0b5962eed6a156 refs=5
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Materials\SolidBlue.mat
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Materials\SolidGreen.mat
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Materials\SolidPurple.mat
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Materials\SolidRed.mat
+  Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Materials\SolidYellow.mat
+ORPHAN 306cc8c2b49d7114eaa3623786fc2126 refs=5
+  Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity
+  Resources\Prefabs\Battle\BattleUI.prefab
+  Resources\Prefabs\Town\MainBottomNav.prefab
+  Resources\Prefabs\Town\GuildHallUI.prefab
+  SPUM\Scene\SPUM_Scene.unity
+ORPHAN 31a19414c41e5ae4aae2af33fee712f6 refs=5
+  Art\Effects\UIShaderEffects-EdgeEffects\Demo\Demo.unity
+  Resources\Prefabs\Town\AdventureLogUI.prefab
+  Resources\Prefabs\Talent\TalentUI.prefab
+  SPUM\Scene\SPUM_Scene.unity
+  SPUM\Sample\Prefabs\AnimationPanel.prefab
+ORPHAN 59f8146938fff824cb5fd77236b75775 refs=5
+  Resources\Prefabs\Town\AdventureLogUI.prefab
+  SPUM\Scene\SPUM_Scene.unity
+  SPUM\Core\Basic_Resources\Prefab\Package.prefab
+  SPUM\Core\Basic_Resources\Prefab\StateElement.prefab
+  SPUM\Sample\Prefabs\AnimationPanel.prefab
+ORPHAN 1aa08ab6e0800fa44ae55d278d1423e3 refs=4
+  Resources\Prefabs\Town\AdventureLogUI.prefab
+  Resources\Prefabs\Talent\TalentUI.prefab
+  SPUM\Scene\SPUM_Scene.unity
+  SPUM\Sample\Prefabs\AnimationPanel.prefab
+ORPHAN 67db9e8f0e2ae9c40bc1e2b64352a6b4 refs=4
+  Art\Effects\Epic Toon FX\Demo\Scenes\etfx_missiles.unity
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\Slider.prefab
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+  SPUM\Scene\SPUM_Scene.unity
+ORPHAN 8a8695521f0d02e499659fee002a26c2 refs=4
+  Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity
+  Resources\Prefabs\Battle\BattleUI.prefab
+  Resources\Prefabs\Town\CharacterUI.prefab
+  SPUM\Scene\SPUM_Scene.unity
+ORPHAN d06e0fb5c21f64348bee8578bf96b687 refs=4
+  SPUM\Core\Basic_Resources\Prefab\LoadPrefabs_ChracterPivot.prefab
+  SPUM\Core\Basic_Resources\Prefab\Pivot_Main.prefab
+  SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab
+  SPUM\Core\Basic_Resources\Prefab\SpritePrefab.prefab
+ORPHAN 3312d7739989d2b4e91e6319e9a96d76 refs=3
+  Art\Effects\UIShaderEffects-EdgeEffects\Effects\Prefab\EdgeGlow_14.prefab
+  Resources\Prefabs\Battle\NextStageRoulette.prefab
+  Resources\Prefabs\Town\AdventureLogUI.prefab
+ORPHAN 70a738dfe9e9fc942afcfbb6b2e4c25a refs=3
+  SPUM\Core\Basic_Resources\Prefab\LoadPrefabs_ChracterPivot.prefab
+  SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab
+  SPUM\Core\Basic_Resources\Prefab\SpritePrefab.prefab
+ORPHAN 71c1514a6bd24e1e882cebbe1904ce04 refs=3
+  Art\Effects\2D Pixel RPG Monster Pack\Font\Alata-Regular SDF.asset
+  Art\Effects\2D Pixel RPG Monster Pack\TextMesh Pro\Resources\Fonts & Materials\LiberationSans SDF - Fallback.asset
+  Art\Effects\2D Pixel RPG Monster Pack\TextMesh Pro\Resources\Fonts & Materials\LiberationSans SDF.asset
+ORPHAN 01614664b831546d2ae94a42149d80ac refs=2
+  Art\Effects\UIShaderEffects-EdgeEffects\Demo\Demo.unity
+  SPUM\Scene\SPUM_Scene.unity
+ORPHAN 018567b1bd5489c44bb660e2eac3f0e9 refs=2
+  Resources\Config\Equips\equip_new_cloth_01.asset
+  Resources\Config\Equips\equip_hands_001.asset
+ORPHAN 0b2db86121404754db890f4c8dfe81b2 refs=2
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset
+  Art\Effects\Sprite Shaders Ultimate\Demo\Misc\Volume.asset
+ORPHAN 136c3e524cf0d6b4eb3b2b0cbe5ca2ca refs=2
+  Resources\Config\Equips\equip_cloth_1.asset
+  Resources\Config\Equips\equip_cape_001.asset
+ORPHAN 287280253a8b9dd49982a999be54504f refs=2
+  Resources\Config\Equips\equip_new_pant_01.asset
+  Resources\Config\Equips\equip_feet_001.asset
+ORPHAN 2a4db7a114972834c8e4117be1d82ba3 refs=2
+  SPUM\Scene\SPUM_Scene.unity
+  SPUM\Sample\Prefabs\AnimationPanel.prefab
+ORPHAN 5c4ba14abf6fc444e9469de0a800914f refs=2
+  Resources\Config\Equips\equip_new_weapon_06.asset
+  Resources\Config\Equips\equip_weapon_002.asset
+ORPHAN 794b5fb3fd56e5a409feef1fa1639894 refs=2
+  Art\Effects\Pixel Craft VFX URP\VFX\Fireball\Materials\M_VFX_Fireball_Impact_01_Mask.mat
+  Art\Effects\Pixel Craft VFX URP\VFX\Fireball\Materials\M_VFX_Fireball_Projectile_01_Mask.mat
+ORPHAN 83178fe4858f2104897ad6942951ed19 refs=2
+  Resources\Prefabs\Town\AdventureUI.prefab
+  Resources\Prefabs\Town\CharacterUI.prefab
+ORPHAN 844bd6e292d552444bd413e310014aa5 refs=2
+  Resources\Config\Equips\equip_new_shield_01.asset
+  Resources\Config\Equips\equip_shield_001.asset
+ORPHAN 86d1257a4dda4de4f89455caaf546783 refs=2
+  SPUM\Core\Basic_Resources\Prefab\LoadPrefabs_ChracterPivot.prefab
+  SPUM\Core\Basic_Resources\Prefab\SpritePrefab.prefab
+ORPHAN ca9f5fa95ffab41fb9a615ab714db018 refs=2
+  Art\Effects\UIShaderEffects-EdgeEffects\Demo\Demo.unity
+  SPUM\Scene\SPUM_Scene.unity
+ORPHAN d199490a83bb2b844b9695cbf13b01ef refs=2
+  SPUM\Scene\SPUM_Scene.unity
+  SPUM\Core\Basic_Resources\Prefab\Preset_Item.prefab
+ORPHAN d7fd9488000d3734a9e00ee676215985 refs=2
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset
+  Art\Effects\Sprite Shaders Ultimate\Demo\Misc\Volume.asset
+ORPHAN dcb20f10b571a034baf2ead110eb6f83 refs=2
+  Resources\Config\Equips\equip_new_helmet_01.asset
+  Resources\Config\Equips\equip_head_001.asset
+ORPHAN e3ebd6ed7b834ea41bf619a6b202b84e refs=2
+  Resources\Config\Equips\equip_new_armor_01.asset
+  Resources\Config\Equips\equip_chest_001.asset
+ORPHAN fea823efdfc2ba5479ab8108634f17a4 refs=2
+  Resources\Config\Equips\equip_new_weapon_01.asset
+  Resources\Config\Equips\equip_weapon_001.asset
+ORPHAN 00c0f875eb2da456789c47c5c7660ee8 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 04c410c9937594faa893a11dceb85f7e refs=1
+  Settings\URPRendererData.asset
+ORPHAN 058cba836c1846c3aa1c5fd2e28aea77 refs=1
+  Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity
+ORPHAN 059812cb887ad464096f1addfc84637f refs=1
+  Resources\Config\Equips\equip_helmet_4.asset
+ORPHAN 073797afb82c5a1438f328866b10b3f0 refs=1
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+ORPHAN 084ff266fc78fc34989e9c1281eaff5c refs=1
+  Resources\Config\Equips\equip_new_cloth_02.asset
+ORPHAN 08f08646e3771394b8513e02e66834d5 refs=1
+  Resources\Config\Equips\equip_soon_spear.asset
+ORPHAN 09c68c654dfa2cf4b9a0a493d3042ac3 refs=1
+  Resources\Config\Equips\equip_axelong1.asset
+ORPHAN 0d038827aa97ac24d8d6b45736ea5fca refs=1
+  Resources\Config\Equips\equip_new_helmet_05.asset
+ORPHAN 0d0b652f32a2cc243917e4028fa0f046 refs=1
+  SPUM\Scene\SPUM_Scene.unity
+ORPHAN 0d61c7afe8b10475187889f6056fb20f refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 0d7593b3a9277ac4696b20006c21dde2 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset
+ORPHAN 0e30c5e3829ca4f0a817e85ea9b2ff24 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 0f59e08a1edb1fc4a9c836f8e2d80ba3 refs=1
+  Resources\Prefabs\Login\LoginUI.prefab
+ORPHAN 0f63b89f9bddb8b439d4e9419aa73a47 refs=1
+  Resources\Config\Equips\equip_new_helmet_08.asset
+ORPHAN 0f641602d54f84346acd449717e60a7f refs=1
+  Resources\Config\Equips\equip_bow_1.asset
+ORPHAN 105018b1d54764052a5f57fdff8f67b0 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 11f0c2fe6e5ff49969ea649ddb59327a refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 12ac39a4fd93519408e90b81e048250f refs=1
+  Resources\Config\Equips\equip_armor_1.asset
+ORPHAN 13811ffa089e443e6b4ad80dc4c9e343 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 13e4c2cf53a90455ab8bc39ee317abd6 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 145ce1f80d183484dac3149f571075c4 refs=1
+  Resources\Config\Equips\equip_cloth_10.asset
+ORPHAN 14b90bd967ff142fcbb564afbab4177a refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 16f4108545c933145ac9e8c0fc748d32 refs=1
+  Resources\Config\Equips\equip_new_cloth_12.asset
+ORPHAN 171c6afeedd11a642801c204342f3dc7 refs=1
+  Resources\Config\Equips\equip_armor_2.asset
+ORPHAN 178fd5e637b574344a097fd9e5b01007 refs=1
+  Resources\Config\Equips\equip_cloth_6.asset
+ORPHAN 1af8f64f34af3ae42b1167562e73540a refs=1
+  Resources\Config\Equips\equip_new_cloth_08.asset
+ORPHAN 1c0841568877b4a4a989c5f8a22a8805 refs=1
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+ORPHAN 1d433e41dae2042bbbf40d84c6c87b04 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 1d96da93045aa564196fc6c9f71bad29 refs=1
+  Resources\Config\Equips\equip_new_armor_02.asset
+ORPHAN 1db6def621f09467380ad6183ee1c70f refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 1edf8165cfe2e405cacce4d8caab521d refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 1f494f12e78be4f488c565e27c71b6ea refs=1
+  Resources\Config\Equips\equip_new_weapon_04.asset
+ORPHAN 1fb8cea5a44cfcf458e9a36132b49327 refs=1
+  Resources\Prefabs\Monster\ani\Monster.controller
+ORPHAN 1fd62c5c1b34f8f46881d8d569640265 refs=1
+  Resources\Prefabs\Monster\Monstersmoban.prefab
+ORPHAN 2070c6c15b03fd64bbf7cc6f30b0d6e3 refs=1
+  Resources\Config\Equips\equip_cloth_11.asset
+ORPHAN 20b599c74fe902a44a351f28d71aa0cf refs=1
+  Resources\Config\Equips\equip_new_pant_02.asset
+ORPHAN 2109ab297907b2b418351e027f5929b6 refs=1
+  Resources\Config\Equips\equip_f_sr_hammer.asset
+ORPHAN 223d5d0b5515b4069981296f73b24255 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 22b6311317f124aa2a4b99c0c3b7694e refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 240d5bb3430cb465d8475b27f226d61e refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 24d632ca9d7764c25899b3b271f970a0 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 258b473f4c3bf4b45887188ddaf5d555 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 266ba6d2f64ec4bc7b741c553ce05d43 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 26aca904f397f2847876e2e2555e6304 refs=1
+  Resources\Config\Equips\equip_axenormal1.asset
+ORPHAN 2705215ac5b84b70bacc50632be6e391 refs=1
+  Art\Effects\2D Pixel RPG Monster Pack\TextMesh Pro\Resources\TMP Settings.asset
+ORPHAN 275495285f1314108a0945b77b81c4ec refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 2840957737c44418a846c28ec55c9535 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 288066d5b5d1e4abf96ea6d60606f646 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 29868e73b638e48ca99a19ea58c48d90 refs=1
+  Settings\URPRendererData.asset
+ORPHAN 2b3d624ada80f0343a2337e853d6eec9 refs=1
+  Resources\Config\Equips\equip_new_armor_06.asset
+ORPHAN 2bc58a85e68fd40c192ef55bbaf96e5e refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 2bdc89579d10e4e2a8968a78f81a2d3e refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 2be70c5bbf8b6374c9e5b9407c4e0e89 refs=1
+  Resources\Config\Equips\equip_armor_8.asset
+ORPHAN 2cff9581c09b64061a29f6d4c6639d12 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 2d08ce26990eb1a4a9177b860541e702 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset
+ORPHAN 2d49b7c1bcd2e07499844da127be038d refs=1
+  Art\Effects\Epic Toon FX\Demo\Demo Prefabs\GUI Prefabs\CanvasSceneSelect.prefab
+ORPHAN 2d6f5fe4058355e479c7b88ee3d412d3 refs=1
+  Resources\Prefabs\Town\AdventureUI.prefab
+ORPHAN 2ec995e51a6e251468d2a3fd8a686257 refs=1
+  UniversalRenderPipelineGlobalSettings.asset
+ORPHAN 2f60633e687699b46a101f800c074d16 refs=1
+  Resources\Config\Equips\equip_new_cloth_06.asset
+ORPHAN 2f9ef813e8d8e407aa32158a1f814a69 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 2fafe2cfe61f6974895a912c3755e8f1 refs=1
+  SPUM\Scene\SPUM_Scene.unity
+ORPHAN 3026be64fe0ecb44ba5aa53f2307188f refs=1
+  Resources\Config\Equips\equip_sword_4.asset
+ORPHAN 3107caef73ba0044aaca4103e46ed386 refs=1
+  Resources\Config\Equips\equip_f_sr_pants.asset
+ORPHAN 321ec87c320204f2dae2bf5e4d9debac refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 322b0d3ba65f6447f9d7464be643d353 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 33c7a4fa12ef36943bcbb68a2b92097b refs=1
+  Settings\URPRendererData.asset
+ORPHAN 34d6548cf51ee9e4f8462e38d5bcd535 refs=1
+  Resources\Config\Equips\equip_new_cloth_09.asset
+ORPHAN 353df21997044cf4e99289aa316caf4a refs=1
+  Resources\Config\Equips\equip_new_shield_03.asset
+ORPHAN 35524c24ea76d4325a4c0050cdb7b755 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 3619753c663387743934d88a20720796 refs=1
+  Settings\URPRendererData.asset
+ORPHAN 3647bb21eb75a49df9509cd1f4af247f refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 365f0483083384ea3857e9a6f4660d0d refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 37e02823b2d284c81811a00340ddc098 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 3839f11c6e6fd684a9764c4133e4dbc0 refs=1
+  Resources\Config\Equips\equip_new_helmet_03.asset
+ORPHAN 388680a5b95adc1418f22474c6547513 refs=1
+  Resources\Config\Equips\equip_helmet_3.asset
+ORPHAN 3956fe24bce15fb448cf7a12faf017a7 refs=1
+  Resources\Config\Equips\equip_sword_2.asset
+ORPHAN 3aac015d86f025c4f97d5c2278eb1352 refs=1
+  Resources\Config\Equips\equip_new_helmet_07.asset
+ORPHAN 3ac7eae6015494ea8a2fa57994878a4a refs=1
+  SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab
+ORPHAN 3b1c800c0a3bf4498a4d6a7bec9f935b refs=1
+  SPUM\Sample\Scene\Sample.unity
+ORPHAN 3d67b80b36cd4774d9126dcf6a4ea34d refs=1
+  Resources\Config\Equips\equip_helmet_9.asset
+ORPHAN 3e5c3fc18c79a4519b1997930056e995 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 3e81ef4fdcce2450caf6856af6eb8c32 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 3eb74a61e7c95401493d74181d134c98 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 40d2e3db7f37e504c9844f8a866fa649 refs=1
+  Resources\Config\Equips\equip_helmet_6.asset
+ORPHAN 41cc494fe8a0ab54eb08a402079c159a refs=1
+  Resources\Config\Equips\equip_helmet_5.asset
+ORPHAN 42272c550537d1740b22af979839ccc2 refs=1
+  Resources\Config\Equips\equip_new_armor_10.asset
+ORPHAN 42d2244a689581743a14677c7a8ec813 refs=1
+  Resources\Prefabs\Monster\Monstersmoban.prefab
+ORPHAN 4361274285192ec4e8d9fd73c2aed78a refs=1
+  Settings\URPRendererData.asset
+ORPHAN 4408cbc23fa724f6ebe0dfa8763a4f2e refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 4613d5a574e2d7b4cae59fce6b183c60 refs=1
+  Resources\Config\Equips\equip_cloth_5.asset
+ORPHAN 468c2001efca44c2ca732f5b9a3711ee refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 48a79b01ea5641d4aa6daa2e23605641 refs=1
+  Art\Effects\Sprite Shaders Ultimate\Demo\Misc\PPProfile.asset
+ORPHAN 4a1fe761bf76d47c48467703fbe1e017 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 4a627623622a42d45a1fc6d53570d1f5 refs=1
+  Art\Effects\UIShaderEffects-EdgeEffects\Effects\Material\EdgeGlow_09_2.mat
+ORPHAN 4ab855ed39b8e3e44a79874f2b9df72a refs=1
+  Settings\URPRendererData.asset
+ORPHAN 4bed5136721eed047ae44b3d47b3d0cb refs=1
+  Resources\Config\Equips\equip_spear_1.asset
+ORPHAN 4c0feec3031034e0587630e5e35a1b44 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 4c1742dc13ff4e948946124c31332015 refs=1
+  Resources\Config\Equips\equip_f_sr_cloth.asset
+ORPHAN 4cad10f498f948a4db366954d3d91f01 refs=1
+  Settings\URPRendererData.asset
+ORPHAN 4d2137c088e46445aa3ebce4df199c10 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 4d40ad15f09d31f498b06194570be767 refs=1
+  Settings\URPRendererData.asset
+ORPHAN 4f1502c89b49fa2419daab4477020e86 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Materials\M_Grid.mat
+ORPHAN 4f1c34e788f8c9d4a94a6414e1fcd577 refs=1
+  Resources\Config\Equips\equip_woodshield4.asset
+ORPHAN 51ea312770f08f14888d2e099847bbf4 refs=1
+  Scenes\Battle.unity
+ORPHAN 5499ffd8587247e4c9c7fb335f2183a3 refs=1
+  Resources\Config\Equips\equip_new_weapon_02.asset
+ORPHAN 5561e6583331be94dbc507bfea7153b4 refs=1
+  Resources\Config\Equips\equip_new_helmet_02.asset
+ORPHAN 55c3869c7d5ef427086946a0a8411e84 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 55e4cc73127044a0899256e75b69a843 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 573620ae32aec764abd4d728906d2587 refs=1
+  Settings\URPRendererData.asset
+ORPHAN 573ab9bd91e4414e82f0f6861fd61ebe refs=1
+  Settings\URPRendererData.asset
+ORPHAN 5899429be360e9c40b970388c1332c24 refs=1
+  Resources\Config\Equips\equip_new_weapon_13.asset
+ORPHAN 58c3d6573ac215444b2e8f7e9c3f6be7 refs=1
+  Resources\Config\Equips\equip_sword_6.asset
+ORPHAN 590b53bc5dbcebc40b15ab29436186fc refs=1
+  Resources\Config\Equips\equip_woodshield3.asset
+ORPHAN 59179cf89037bcf42ad1f6ca3cfa4cac refs=1
+  Resources\Config\Equips\equip_new_shield_04.asset
+ORPHAN 5bcb8775b4ff92048a86eb47ec18384b refs=1
+  Resources\Config\Equips\equip_foot_2.asset
+ORPHAN 5bf72de990a4b8e41af4510bcb4e6bc3 refs=1
+  Resources\Config\Equips\equip_f_sr_helmet.asset
+ORPHAN 5fd9a8feb75a4b5894c241777f519d4e refs=1
+  Settings\URPRendererData.asset
+ORPHAN 5fdc3e708a26487c85a8d75ac461b28d refs=1
+  Settings\URPRendererData.asset
+ORPHAN 60e1133243b97e347b653163a8c01b64 refs=1
+  Settings\URPRendererData.asset
+ORPHAN 630c5573c1222d64c843ceb64661820d refs=1
+  Resources\Config\Equips\equip_armor_4.asset
+ORPHAN 644c897164f2673439e8adbe90a576a2 refs=1
+  Resources\Config\Equips\equip_new_armor_09.asset
+ORPHAN 64968a7620fada84b8321913f5b8e0d1 refs=1
+  Resources\VFX\Shared\Ally\Bow\vfx_bow_fly.prefab
+ORPHAN 64eaf890e0a833041a2f06885cc77c01 refs=1
+  Art\Effects\Pixel Craft VFX URP\_ Extra\Materials\M_Vefects_Extra_Billboard_03.mat
+ORPHAN 651fd78f565b3344a8bd49d81f68d4a2 refs=1
+  Resources\Config\Equips\equip_new_pant_07.asset
+ORPHAN 652290340cb0c44c39666c82a87f590f refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 65ed0b48f68c4444cb0ff08b90652851 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 6706b1f94b5904eb69abf09deac9919d refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 67327a3143fbe69459adcea5c106aaff refs=1
+  Resources\Prefabs\Town\AdventureUI.prefab
+ORPHAN 6a336cfccc99a455693757ed93034c4c refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 6a6d39826002a57419ba96829e226061 refs=1
+  Resources\Config\Equips\equip_new_helmet_06.asset
+ORPHAN 6a9fd372646b3374e8147c8801d3a02d refs=1
+  Resources\Config\Equips\equip_new_helmet_09.asset
+ORPHAN 6baabb8604136da4ca6e230cba43ed17 refs=1
+  Resources\Config\Equips\equip_new_armor_05.asset
+ORPHAN 6cda457ac28612740adb23da5d39ea92 refs=1
+  Settings\URPRendererData.asset
+ORPHAN 70e4920279a88c54dae8b1b42460426e refs=1
+  Resources\Config\Equips\equip_new_pant_08.asset
+ORPHAN 717fd546a844442468be40715dfae3bb refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 73a81980c1025514fbabab2a5f9bc8d1 refs=1
+  Resources\Config\Equips\equip_new_armor_03.asset
+ORPHAN 741abdf75261546889aa6e4063a9f646 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 74de9f73770f5cc42ba86c4fc778356a refs=1
+  Resources\Config\Equips\equip_new_weapon_03.asset
+ORPHAN 75b73ed42062340c1a13fdf450695eb1 refs=1
+  Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity
+ORPHAN 764fa179d40ee4b5298edcb6eac56381 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 781e5adeedf0e2744ac6dee572463f67 refs=1
+  Resources\Config\Equips\equip_helmet_1.asset
+ORPHAN 78d02b278f8ea2c41aa79d5eba2ebe72 refs=1
+  Resources\Config\Equips\equip_new_weapon_05.asset
+ORPHAN 7b3ede40266cd49a395def176e1bc486 refs=1
+  Settings\URPRendererData.asset
+ORPHAN 7b4d6074817c9834ba77a2d3849b7e7b refs=1
+  Resources\Config\Equips\equip_normal_helmet1.asset
+ORPHAN 7ba6307e99ba3354781ce6171957ec26 refs=1
+  Resources\Config\Equips\equip_new_armor_12.asset
+ORPHAN 7c69c819f0908ca45a3248b331837d18 refs=1
+  Resources\Config\Equips\equip_new_weapon_14.asset
+ORPHAN 7cf31d20671fa4845b986d22fc4bad46 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 7dca3f5e55ac7d04d8585b593b717c20 refs=1
+  Resources\Config\Equips\equip_cloth_12.asset
+ORPHAN 7e86780f8818d774781e18cdb159f2f7 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Materials\M_Grid.mat
+ORPHAN 7ec4bb69ad75a4722bf4166b16fcb396 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 7f888aff2ac86494babad1c2c5daeee2 refs=1
+  Settings\URPRendererData.asset
+ORPHAN 7fe3c6da9cef9cc41b4aeb8eb3c99459 refs=1
+  Resources\Config\Equips\equip_new_weapon_16.asset
+ORPHAN 7ff50817f017eb142a0ce27dede8cb71 refs=1
+  Resources\Config\Equips\equip_axesmall1.asset
+ORPHAN 81180773991d8724ab7f2d216912b564 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset
+ORPHAN 81df5e090a0d1fc4793360685fa8c59e refs=1
+  Resources\Config\Equips\equip_new_cloth_03.asset
+ORPHAN 82d62e9c5e254b04e9a4727b0fe017e6 refs=1
+  Resources\Config\Equips\equip_new_cloth_05.asset
+ORPHAN 8448878bb4649ac46ad928fd36682ffc refs=1
+  Art\Effects\Ani\box\box.controller
+ORPHAN 84a92b25f83d49b9bc132d206b370281 refs=1
+  Art\Effects\2D Pixel RPG Monster Pack\TextMesh Pro\Resources\Sprite Assets\EmojiOne.asset
+ORPHAN 85fbc23918b820d4b8c6b7c83ca76409 refs=1
+  Resources\Prefabs\Login\LoginUI.prefab
+ORPHAN 86f05965a5a60417a884315c8c1ff009 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 873e9cf6dd19f77419541efd35c2f3f1 refs=1
+  Resources\Config\Equips\equip_new_weapon_08.asset
+ORPHAN 88f524fc82bef814c943179e596c9955 refs=1
+  SPUM\Core\Basic_Resources\Prefab\SpriteEditorPrefab.prefab
+ORPHAN 89209d2c2872ccb44adf7a6e4142fa6b refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Meshes\SM_VFX_Background_Plate_01.prefab
+ORPHAN 897be634e27694353bdc58e6b94278a2 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 899c54efeace73346a0a16faa3afe726 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset
+ORPHAN 8a4d268113afa4f408d2a9be0e18ca18 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 8a7a5a1ee7db842338a34b39a9bb9b5b refs=1
+  SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab
+ORPHAN 8b1df657918f63d41b76a87c9937c16e refs=1
+  Resources\Config\Equips\equip_normal_armor1.asset
+ORPHAN 8b9a305e18de0c04dbd257a21cd47087 refs=1
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+ORPHAN 8ba92e2dd7f884a0f88b98fa2d235fe7 refs=1
+  Art\Effects\Pixel Craft VFX URP\_ Extra\Scenes\Vefects Secret Extra Scene.unity
+ORPHAN 8bdde99fc1352488b99dc3d4e9bd25df refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 8c6e5e4227bd3fb4ea00ba3a6439dace refs=1
+  Art\Effects\Ani\box\box.controller
+ORPHAN 8dd6fbbf59aebb74f9801a17d14b652c refs=1
+  Settings\URPRendererData.asset
+ORPHAN 8df1081dc1ccb714fbe607fd46b488c0 refs=1
+  Resources\Config\Equips\equip_new_cloth_10.asset
+ORPHAN 8e6292b2c06870d4495f009f912b9600 refs=1
+  Art\Effects\Sprite Shaders Ultimate\Demo\Misc\PPProfile.asset
+ORPHAN 8e7a1f97971c848b78e9646934b4bc62 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 9026abe6232e14c149c368d494d5c0f8 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 9041efca923e84832801239eedb2587e refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 907fb0c9cde24134bb557ce76467f475 refs=1
+  Resources\Config\Equips\equip_new_pant_11.asset
+ORPHAN 9086f0003e2d74c618d6d48529643a7f refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 9089132ed86db8641a8501ef00b44b8d refs=1
+  Resources\Config\Equips\equip_cloth_9.asset
+ORPHAN 92775f20c93584ccda70802f3dad4c9d refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 92b6a01b37671a74c90e05d286634131 refs=1
+  Resources\Config\Equips\equip_woodshield2.asset
+ORPHAN 933532a4fcc9baf4fa0491de14d08ed7 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Materials\M_Grid.mat
+ORPHAN 93446b5c5339d4f00b85c159e1159b7c refs=1
+  Settings\URPRendererData.asset
+ORPHAN 94421aa8c700cab41bafa3021ca936aa refs=1
+  Scenes\Battle.unity
+ORPHAN 948f4100a11a5c24981795d21301da5c refs=1
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+ORPHAN 953beb541740ddc499d005ee80c9ff29 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset
+ORPHAN 960c2a2886b1644c8ae0c786d01b58ed refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 962297b8110528b4fbed2eac1cdf169c refs=1
+  Resources\Prefabs\Monster\ani\Monster.controller
+ORPHAN 9657cbdde8c49784fa5934f20541e88c refs=1
+  Resources\Config\Equips\equip_axe_1.asset
+ORPHAN 9700114f3ccb3458e8e151f449085f62 refs=1
+  SPUM\Sprite_Editor(Beta)\SPUM_SpriteEditor.unity
+ORPHAN 9702c11c693ab5d47907ac9b655e8e5e refs=1
+  Resources\Config\Equips\equip_new_weapon_17.asset
+ORPHAN 97c23e3b12dc18c42a140437e53d3951 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset
+ORPHAN 98c1cbd6e05db1441badb45c6217bfef refs=1
+  Resources\Config\Equips\equip_new_cloth_04.asset
+ORPHAN 98cf453d7217146e2897c05463976391 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN 992528b0462b4b54bae9911c196cdfba refs=1
+  Resources\Config\Equips\equip_new_weapon_15.asset
+ORPHAN 9dfc825aed78fcd4ba02077103263b40 refs=1
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+ORPHAN 9f1d48b3d3e390741a339c0e70ed6010 refs=1
+  Resources\Config\Equips\equip_new_weapon_09.asset
+ORPHAN 9fa7c12cb5bb6de478c8c2ba6ea878b7 refs=1
+  Resources\Config\Equips\equip_new_cloth_07.asset
+ORPHAN a1367395cf482f24c9733fa749bae6e8 refs=1
+  Resources\VFX\Shared\Enemy\Bow\vfx_enemy_bow_fly.prefab
+ORPHAN a44a3f481f325384bb5f9133dbd9a3a3 refs=1
+  Resources\Config\Equips\equip_normal_helmet2.asset
+ORPHAN a5d24b244e5eb6442adb74d83b9e63b7 refs=1
+  Resources\Config\Equips\equip_new_weapon_11.asset
+ORPHAN a89bee29cffa951418fc1e2da94d1959 refs=1
+  Settings\URPRendererData.asset
+ORPHAN a9885f8ab5d89434180fb96c90f33fb6 refs=1
+  Scenes\Battle.unity
+ORPHAN aa5a6374360f08047be3bd4d0551466e refs=1
+  Resources\Config\Equips\equip_new_helmet_04.asset
+ORPHAN ab0ca5ccd200f40af984df74ffa59878 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN ab2114bdc8544297b417dfefe9f1e410 refs=1
+  Art\Effects\2D Pixel RPG Monster Pack\TextMesh Pro\Resources\Style Sheets\Default Style Sheet.asset
+ORPHAN abf9d823ce90a494db8a665458c0ae94 refs=1
+  Resources\Config\Equips\equip_armor_7.asset
+ORPHAN ad2e42334bfcb467eab4f19b5017a1ac refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN ad3ec18fa196e5c4d888c317ae64cd9b refs=1
+  Resources\Config\Equips\equip_new_weapon_18.asset
+ORPHAN ad74e0ac14a4141f78af29263f683716 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN b11621b76c3eb034a9f409951e76ab2a refs=1
+  Resources\Config\Equips\equip_new_helmet_10.asset
+ORPHAN b269f0779cfd3e14eaedadbe43aa8795 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Materials\M_VFX_Character_Showoff_01.mat
+ORPHAN b32da79c88f331743841fca7b5d00bda refs=1
+  Scenes\Battle.unity
+ORPHAN b3da520e129e7463086ea1556ad22b5a refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN b43859fd77eee45cebacce0bd6d02b9d refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN b66be5a60b68547a09897e411af3a352 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN b6ed1500be97d4a72bb7359edb5ab3e0 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN b854a394e3c82354eadea1abcc4d1feb refs=1
+  Resources\Config\Equips\equip_steelshield1.asset
+ORPHAN b8df0e7ab68a3fe40920f49f09340467 refs=1
+  Resources\Config\Equips\equip_new_armor_08.asset
+ORPHAN ba247548159ae496994c2a01c3d21cce refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN ba3e39a21456e456eaaa5800ad826164 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN bbe27b0fca5a0402ba52a7b8fc629e3e refs=1
+  Settings\URPRendererData.asset
+ORPHAN bc40766b6dfa57a42afec67bd8c7152e refs=1
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+ORPHAN bc54460ac3fe5478f9cacb9b1cbdcc69 refs=1
+  SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab
+ORPHAN bd5c06ee4c1a83e40a257612281dd21e refs=1
+  Resources\Prefabs\Talent\TalentUI.prefab
+ORPHAN be538ed67d13b1e4a8d26a28702fdf51 refs=1
+  Settings\URPRendererData.asset
+ORPHAN be92b26197cba474788a0d499a9ac116 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN beed5e8673c62d840ad022f86f5a3f98 refs=1
+  Resources\Config\Equips\equip_sword_5.asset
+ORPHAN bf2edee5c58d82540a51f03df9d42094 refs=1
+  Settings\URPAsset.asset
+ORPHAN bf5ad53291516ee4eb89de714e032c32 refs=1
+  Resources\Config\Equips\equip_new_pant_04.asset
+ORPHAN c0c17f941e80943aa8fd75c55d8b9845 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN c0d4fd61fe83b8f4996b8a0be8ab86c7 refs=1
+  Resources\Prefabs\Battle\BattleStageMap.prefab
+ORPHAN c0e9d36e72f4344ad96754666ce3ecef refs=1
+  SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab
+ORPHAN c0ed69429e1c6504db39c98df7c0ceb1 refs=1
+  Resources\Config\Equips\equip_new_weapon_19.asset
+ORPHAN c10c79ddcb5ac3a4592c150f3df0d71b refs=1
+  Scenes\Battle.unity
+ORPHAN c17132b1f77d20942aa75f8429c0f8bc refs=1
+  Settings\URPRendererData.asset
+ORPHAN c1904b8d5e55847098372e0c21eb677a refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN c28d3c1e0de75bb43aaefbb52ab06a07 refs=1
+  Scenes\Battle.unity
+ORPHAN c299a874afe8f4e06b955d55f4724a7f refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN c2fc0aafc4ba14749a6cc196ffeb52b8 refs=1
+  SPUM\Core\Basic_Resources\Prefab\SpriteEditorPrefab.prefab
+ORPHAN c36945e52c52b5849a91fa3304fa16a4 refs=1
+  Resources\Config\Equips\equip_shield_1.asset
+ORPHAN c4112ce24f308cf4985a6b2ba35ab9a6 refs=1
+  Resources\Config\Equips\equip_new_armor_04.asset
+ORPHAN c48a663862d7a2a47a0eae49ddf3bfe6 refs=1
+  Resources\Config\Equips\equip_normal_cloth1.asset
+ORPHAN c56b7e0d4c7cb484e959caeeedae9bbf refs=1
+  Settings\URPRendererData.asset
+ORPHAN c56c065c77f24cb42b9bf039541db072 refs=1
+  Resources\Config\Equips\equip_new_weapon_20.asset
+ORPHAN c57b0e9a158a04adba0086d89b5e1ab7 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN c68396ff90542cc409cc2c2581017bae refs=1
+  Resources\Config\Equips\equip_helmet_2.asset
+ORPHAN c6c3271ba004a4c289980685b6d4e2b7 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN c7c9624ff825da04ab272ebd24d93c1b refs=1
+  Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity
+ORPHAN c834315fbc7836a40bf0fabcbc241bc1 refs=1
+  Settings\URPRendererData.asset
+ORPHAN c839f06ef2e2f344aa21c943365d395c refs=1
+  Resources\Config\Equips\equip_new_pant_10.asset
+ORPHAN c98feaa74aa6be648ac41fe0391d06da refs=1
+  Resources\Config\Equips\equip_new_armor_07.asset
+ORPHAN ca414ac090930420d8c58ff4824c43a9 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN ca501ebc303180945a7059f74eeec520 refs=1
+  Resources\Config\Equips\equip_cloth_2.asset
+ORPHAN cd3fda72164244d4994d641176af7ff8 refs=1
+  Settings\URPRendererData.asset
+ORPHAN cde224a84ad2b0748b2cc1d8d8ceed3d refs=1
+  Resources\Prefabs\Monster\ani\Monster.controller
+ORPHAN cf852408f2e174538bcd9b7fda1c5ae7 refs=1
+  Settings\URPRendererData.asset
+ORPHAN d026e30b589c7454187a83b9cded7e58 refs=1
+  SPUM\Sprite_SheetExporter(Beta)\Scene\SPUM_SheetExporter.unity
+ORPHAN d09d855f5f5ef4fed862392189a4b8a1 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN d104b2fc1ca6445babb8e90b0758136b refs=1
+  Settings\URPRendererData.asset
+ORPHAN d2a8ffa0c1b89457b8f84a8092d54029 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN d2f3d43de50fe422a972f456193af2d1 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN d43d6fdca90b74fd3b6e37ce441aae46 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN d55b26e882bc24ab9a6de39594323bf3 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN d6689b4c0bc10cf47bdba21c5561a56f refs=1
+  Resources\Config\Equips\equip_foot_3.asset
+ORPHAN d6dae50ee9e1bfa4db75f19f99355220 refs=1
+  Settings\URPRendererData.asset
+ORPHAN d877ec3e844f2ca46830012e8e79319b refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset
+ORPHAN d932c376d1c47bd46acb782ac4161de6 refs=1
+  SPUM\Scene\SPUM_Scene.unity
+ORPHAN d9ae99a05315b664aaa302a44bb6212c refs=1
+  Resources\Config\Equips\equip_new_shield_02.asset
+ORPHAN da4fa9429354b4088af8d0b461c491b5 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN da692e001514ec24dbc4cca1949ff7e8 refs=1
+  Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Materials\M_Grid.mat
+ORPHAN db18312bad246e449ad94d60defd79f9 refs=1
+  Resources\Config\Equips\equip_helmet_8.asset
+ORPHAN db741a83a2745af46bca8857adbb9124 refs=1
+  Resources\Config\Equips\equip_new_weapon_07.asset
+ORPHAN dcd29563250454d2d894bd70bbd7f98f refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN de1649c33ab694f469e0972d84ec0a23 refs=1
+  Resources\Config\Equips\equip_new_pant_05.asset
+ORPHAN de492bea9224bbb4385c48f354aaa118 refs=1
+  Resources\Config\Equips\equip_armor_6.asset
+ORPHAN de640fe3d0db1804a85f9fc8f5cadab6 refs=1
+  Settings\URPRendererData.asset
+ORPHAN de762082c58944bed975560c0771a0ed refs=1
+  SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab
+ORPHAN deff391f79f79724e9d928bc6273e5b7 refs=1
+  SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab
+ORPHAN df470c58dc5d9fe42935813a52e80faa refs=1
+  Settings\URPRendererData.asset
+ORPHAN df6918067b3102b47940934720fc30cb refs=1
+  Resources\Config\Equips\equip_new_pant_09.asset
+ORPHAN dff22a01d1b904a1f9c583e670130324 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN e01a68bb7f63e3a4db08f307d6a37823 refs=1
+  Resources\Config\Equips\equip_new_pant_03.asset
+ORPHAN e19c436299e63204aac49d53aa635732 refs=1
+  Art\RPG Props and Items 370+\1\Sword_1.prefab
+ORPHAN e1d9573e5201e444ea891c15d3fb0c9b refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN e3d24661c1e055f45a7560c033dbb837 refs=1
+  Settings\URPAsset.asset
+ORPHAN e507fdfead5ca47e8b9a768b51c291a1 refs=1
+  Settings\URPRendererData.asset
+ORPHAN e6d16fcfffb5f43f0850d2bf1c6c8c7f refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN e6e9a19c3678ded42a3bc431ebef7dbd refs=1
+  Settings\URPRendererData.asset
+ORPHAN e8ba57a5713da8f4ca25932a0f8da6d5 refs=1
+  Resources\Config\Equips\equip_woodshield1.asset
+ORPHAN e911da663cf1ec74eb1c4beaaf795e95 refs=1
+  Resources\Config\Equips\equip_new_cloth_11.asset
+ORPHAN e9155b26e1bc55942a41e518703fe304 refs=1
+  Settings\URPRendererData.asset
+ORPHAN e9a1506b01d34484da41bb2fd06d9f49 refs=1
+  Resources\Config\Equips\equip_cloth_7.asset
+ORPHAN ea7911d9bcd6e81488cb0917f4e0f03a refs=1
+  Resources\Config\Equips\equip_cloth_4.asset
+ORPHAN ec1cfb1862d5d1c4587d7719c3ed138e refs=1
+  Resources\Config\Equips\equip_new_weapon_12.asset
+ORPHAN ec67b4688bcd7401cb686d4701c8529e refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN ec8e2d13fbb34b14b814bf273c194c6e refs=1
+  Resources\Config\Equips\equip_new_pant_12.asset
+ORPHAN ed05570c38a10704abfb93d693a4b96a refs=1
+  Resources\Config\Equips\equip_armor_5.asset
+ORPHAN ee0bec9067b8c344cbad630c2ec51e81 refs=1
+  Resources\Config\Equips\equip_armor_3.asset
+ORPHAN ee6e3bba11ee23847bbee1ae8dfbe6e9 refs=1
+  Resources\Config\Equips\equip_normal_helmet3.asset
+ORPHAN ef6c1e85bfd052445bbbcc6b791592e5 refs=1
+  SPUM\Core\Basic_Resources\Prefab\SPUM_PromptTagManager.prefab
+ORPHAN efc303a2a31a4c24ea1357cc01f3e6ed refs=1
+  Resources\Config\Equips\equip_helmet_7.asset
+ORPHAN f08c2d8cde333482786af48fca62c736 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN f1e94bd5b68695a4d88a79938231558b refs=1
+  Resources\Config\Equips\equip_foot_1.asset
+ORPHAN f34b9751d8317eb4b8bc8c90fe059a92 refs=1
+  Settings\URPRendererData.asset
+ORPHAN f3596f074611f43cca771cefd24963a5 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN f4688fdb7df04437aeb418b961361dc5 refs=1
+  Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity
+ORPHAN f46ad53094c67418bb486497a0dee254 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN f46efa594cd19a84ebe13b27c1c95b6f refs=1
+  Resources\Config\Equips\equip_new_weapon_10.asset
+ORPHAN f4a6573a73531b94ca5e167ea809e82d refs=1
+  Resources\Prefabs\Battle\BattleStageMap.prefab
+ORPHAN f58fe86c6ee1a7140ac73a7eef8d1eda refs=1
+  Resources\Config\Equips\equip_cloth_8.asset
+ORPHAN f5dcd7307e4b1458eb00078629a64534 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN f6783ab646d374f94b199774402a5144 refs=1
+  Settings\URPRendererData.asset
+ORPHAN f6c5f721b85a74b2c8b676ac59ad9ad1 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN f728c8c994be711449fc225e21a796ae refs=1
+  Resources\Prefabs\Monster\ani\Monster.controller
+ORPHAN f86ebbaca37593d4384b87643308b1bd refs=1
+  Resources\Config\Equips\equip_foot_4.asset
+ORPHAN f8b8122dd4c674f5e8e9d71725da7f1e refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN f917eafdbd78b428b9419cd038a344be refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN f980f6ea27e137b40a091a43f1068f5b refs=1
+  Art\Effects\Epic Toon FX\Demo\ParticleEffectsShowcase\Scenes\PEDemoScene.unity
+ORPHAN f9ee4ed84c1d10c49aabb9b210b0fc44 refs=1
+  Settings\URPAsset.asset
+ORPHAN fa9c41b99c4a77146a05002fa84ad172 refs=1
+  Resources\Config\Equips\equip_sword_3.asset
+ORPHAN fb1b28e6b39ef3f41b5b802f5b2b27ff refs=1
+  Resources\Config\Equips\equip_cloth_3.asset
+ORPHAN fba39d8261318b84594b85a23845fd9f refs=1
+  Resources\Config\Equips\equip_new_pant_06.asset
+ORPHAN fd32fca9414158a4ab490aa0fe758739 refs=1
+  Resources\Prefabs\Town\AdventureUI.prefab
+ORPHAN feae90600911a421d9eef9bcd29a3474 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset
+ORPHAN fefbef7113a4d8147b24bc11684a7b6d refs=1
+  Scenes\Battle.unity
+ORPHAN ff1a4edb4796a4c4c861335988c6a364 refs=1
+  Resources\Config\MonsterSpriteRegistry.asset

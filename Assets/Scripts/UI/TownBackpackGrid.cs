@@ -24,7 +24,8 @@ public class TownBackpackGrid : MonoBehaviour
         if (grid == null) return;
         gridContainer = grid as RectTransform;
         gridLayout = grid.GetComponent<GridLayoutGroup>();
-        // 不改 GridLayout 列数/间距：角色页预制体按手摆布局显示
+        // 与战斗背包对齐：cell 82、间距 0、padding 10（只改布局数值，不改格子节点）
+        AlignLayoutWithBattle();
 
         rowLockOverlay = null;
         cells.Clear();
@@ -159,10 +160,37 @@ public class TownBackpackGrid : MonoBehaviour
         locked.SetActive(y >= GameConfig.BACKPACK_DEFAULT_ROWS);
     }
 
+    /// <summary>角色页与战斗页格子规格统一，避免同一套装备两边占位观感不一致。</summary>
+    void AlignLayoutWithBattle()
+    {
+        if (gridLayout == null) return;
+        gridLayout.cellSize = new Vector2(CellSize, CellSize);
+        gridLayout.spacing = new Vector2(CellSpacing, CellSpacing);
+        if (gridLayout.padding == null)
+            gridLayout.padding = new RectOffset(Pad, Pad, Pad, Pad);
+        else
+        {
+            gridLayout.padding.left = Pad;
+            gridLayout.padding.right = Pad;
+            gridLayout.padding.top = Pad;
+            gridLayout.padding.bottom = Pad;
+        }
+        gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        gridLayout.constraintCount = GameConfig.BACKPACK_WIDTH;
+        gridLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
+        gridLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
+        gridLayout.childAlignment = TextAnchor.UpperCenter;
+    }
+
     public void Refresh()
     {
         if (cells.Count == 0) BindFromHierarchy();
         if (cells.Count == 0) return;
+
+        // 先强制布局再量格子世界坐标，否则角色页刚 Show 时 sizeDelta 可能还是 0，图标会落到回退算法上偏上
+        Canvas.ForceUpdateCanvases();
+        if (gridLayout != null)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(gridContainer);
 
         int unlockedRows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
         bool bottomLocked = unlockedRows < GameConfig.BACKPACK_HEIGHT;
