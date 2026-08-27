@@ -147,12 +147,17 @@ public class SkillRegistry : Singleton<SkillRegistry>
 
         if (prefab != null)
         {
-            // 挂单位身上会被 SortingGroup 盖住；走战斗 VFX 根 + SORT_VFX
             if (BattleVFXSystem.Instance != null)
-                BattleVFXSystem.Instance.PlayWorldPrefab(prefab, pos, 2.5f);
+                BattleVFXSystem.Instance.PlayWorldPrefab(prefab, pos, 2.5f, facingDir);
             else
             {
                 GameObject go = Object.Instantiate(prefab, pos, Quaternion.identity);
+                if (facingDir < 0)
+                {
+                    var s = go.transform.localScale;
+                    s.x = -Mathf.Abs(s.x);
+                    go.transform.localScale = s;
+                }
                 Object.Destroy(go, 2.5f);
             }
             return;
@@ -160,11 +165,35 @@ public class SkillRegistry : Singleton<SkillRegistry>
 
         if (BattleVFXSystem.Instance == null) return;
         var faction = isAllyCaster ? VfxFaction.Ally : VfxFaction.Enemy;
-        if (skillId.Contains("heal") || skillId.Contains("shield"))
+        AttackVfxKit kit = cfg != null ? cfg.attackKit : AttackVfxKit.None;
+
+        // 恢复类固定 Heal；玩家（英雄）无专属 prefab 时按主手武器选文件夹
+        bool healSkill = skillId.IndexOf("heal", System.StringComparison.OrdinalIgnoreCase) >= 0
+            || (cfg != null && cfg.attackKit == AttackVfxKit.Heal);
+        if (healSkill)
+            kit = AttackVfxKit.Heal;
+        else if (isAllyCaster && IsHeroCaster(attach))
+            kit = Hero.Instance.GetWeaponVfxKit();
+        else if (kit == AttackVfxKit.None)
+        {
+            if (skillId.Contains("thunder") || skillId.Contains("magic") || skillId.Contains("orb"))
+                kit = AttackVfxKit.Orb;
+            else if (skillId.Contains("bow") || skillId.Contains("arrow"))
+                kit = AttackVfxKit.Bow;
+            else
+                kit = AttackVfxKit.MeleeSlash;
+        }
+
+        if (kit == AttackVfxKit.Heal)
             BattleVFXSystem.Instance.PlayHeal(pos, faction);
-        else if (skillId.Contains("thunder") || skillId.Contains("magic"))
-            BattleVFXSystem.Instance.PlayAttackKit(AttackVfxKit.Orb, faction, pos, pos, 1);
         else
-            BattleVFXSystem.Instance.PlayAttackKit(AttackVfxKit.MeleeSlash, faction, pos, pos, 1);
+            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, pos, pos, facingDir);
+    }
+
+    static bool IsHeroCaster(Transform attach)
+    {
+        if (Hero.Instance == null) return false;
+        if (attach == null) return true; // 历史调用未传挂点，默认当玩家
+        return attach == Hero.Instance.transform || attach.IsChildOf(Hero.Instance.transform);
     }
 }

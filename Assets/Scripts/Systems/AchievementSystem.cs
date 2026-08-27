@@ -186,6 +186,9 @@ public class AchievementSystem : Singleton<AchievementSystem>
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, def.reward.talentPoints, save: false, notify: true);
         SaveSystem.Instance.Save();
 
+        // 折算进日志里程（防重）；战斗成就点数仍保留供旧查询
+        AdventureLogMileage.GrantAchievement(achievementId, def.reward.achievementPoints);
+
         OnAchievementCompleted?.Invoke(achievementId, def.reward);
         RedDot.RefreshCommon();
 
@@ -241,64 +244,22 @@ public class AchievementSystem : Singleton<AchievementSystem>
     /// </summary>
     public List<MilestoneDef> GetAllMilestones() => _milestoneDefs;
 
-    /// <summary>
-    /// 是否可以领取某个里程奖励
-    /// </summary>
-    public bool CanClaimMilestone(int milestoneId)
-    {
-        var data = SaveSystem.Instance.Data;
-        var def = _milestoneDefs.Find(m => m.id == milestoneId);
-        if (def == null) return false;
-        if (data.claimedMilestoneIds.Contains(milestoneId)) return false;
-        return data.totalAchievementPoints >= def.requiredPoints;
-    }
+    /// <summary>是否可领日志里程等级（id 对应 Lv，兼容旧调用）。</summary>
+    public bool CanClaimMilestone(int milestoneId) => AdventureLogMileage.CanClaimLevel(milestoneId);
 
-    /// <summary>
-    /// 领取里程奖励
-    /// </summary>
+    /// <summary>领取日志里程等级奖励。</summary>
     public bool ClaimMilestone(int milestoneId)
     {
-        if (!CanClaimMilestone(milestoneId)) return false;
-
-        var def = _milestoneDefs.Find(m => m.id == milestoneId);
-        var data = SaveSystem.Instance.Data;
-
-        data.claimedMilestoneIds.Add(milestoneId);
-        if (def.reward.gold > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, def.reward.gold, save: false, notify: true);
-        if (def.reward.diamond > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, def.reward.diamond, save: false, notify: true);
-        if (def.reward.talentPoints > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, def.reward.talentPoints, save: false, notify: true);
-
+        if (!AdventureLogMileage.ClaimLevel(milestoneId)) return false;
         OnMilestoneClaimed?.Invoke(milestoneId);
-        SaveSystem.Instance.Save();
-        RedDot.RefreshCommon();
-
-        Debug.Log($"[AchievementSystem] 领取里程奖励: {def.name}");
         return true;
     }
 
-    /// <summary>是否有未领取的成就里程奖励。</summary>
-    public bool HasUnclaimedMilestone()
-    {
-        if (_milestoneDefs == null || SaveSystem.Instance?.Data == null) return false;
-        for (int i = 0; i < _milestoneDefs.Count; i++)
-        {
-            var def = _milestoneDefs[i];
-            if (def != null && CanClaimMilestone(def.id))
-                return true;
-        }
-        return false;
-    }
+    /// <summary>是否有未领取的日志里程等级奖励。</summary>
+    public bool HasUnclaimedMilestone() => AdventureLogMileage.HasUnclaimedLevel();
 
-    /// <summary>
-    /// 是否已领取
-    /// </summary>
-    public bool IsMilestoneClaimed(int milestoneId)
-    {
-        return SaveSystem.Instance.Data.claimedMilestoneIds.Contains(milestoneId);
-    }
+    /// <summary>是否已领取该里程等级。</summary>
+    public bool IsMilestoneClaimed(int milestoneId) => AdventureLogMileage.IsLevelClaimed(milestoneId);
 
     #endregion
 

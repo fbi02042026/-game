@@ -3,11 +3,11 @@
 /// 1) 共用套装 AttackVfxKit —— 普攻怎么播（我方/敌方分观感）
 /// 2) 独立技能 —— 特殊技逻辑 + 可选专属特效
 ///
-/// 共用套：
-///   MeleeSlash  近战刀光
+/// 共用套（玩家按主手武器选 Ally 文件夹）：
+///   MeleeSlash  近战刀光（vfx_melee_hit）
 ///   Bow         弓箭（飞行）
-///   Orb         法球（飞行）
-///   Heal        加血特效（可选）；治疗数字走 DamageTextSystem
+///   Orb         法杖法球（飞行）
+///   Heal        恢复类技能
 ///
 /// 暴击：不用特效套，用飘字（颜色/大小/速度）区分。
 /// </summary>
@@ -53,6 +53,23 @@ public enum SkillEffectType
 /// </summary>
 public static class SkillNaming
 {
+    /// <summary>
+    /// 玩家主手武器 → 共用特效套。近战一律 MeleeSlash，弓 Bow，法杖 Orb。
+    /// </summary>
+    public static AttackVfxKit KitFromWeaponKind(WeaponCombatTable.WeaponKind kind)
+    {
+        switch (kind)
+        {
+            case WeaponCombatTable.WeaponKind.Bow:
+                return AttackVfxKit.Bow;
+            case WeaponCombatTable.WeaponKind.Staff:
+                return AttackVfxKit.Orb;
+            default:
+                // Sword / Greatsword / Polearm / Shield → 刀光
+                return AttackVfxKit.MeleeSlash;
+        }
+    }
+
     public static AttackVfxKit KitFromAttackType(WeaponAttackType attackType, float attackRange = 1.5f)
     {
         if (attackType == WeaponAttackType.Magic)

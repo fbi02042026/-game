@@ -101,6 +101,8 @@ public class EquipTemplate : ScriptableObject
     public WeaponType weaponType = WeaponType.None; // 武器类型（非武器为None）
     public WeaponAttackType weaponAttackType = WeaponAttackType.Physical; // 攻击属性
     public float attackRange = 96f; // 数值表「攻击范围(像素)」；运行时用 GameConfig.NormalizeAttackRange
+    [Tooltip("-1=按名字/类型推断；0~5 对应 WeaponCombatTable.WeaponKind（Sword…Shield）")]
+    public int weaponKindOverride = -1;
 
     [Header("防具专属")]
     public ArmorPrefix armorPrefix = ArmorPrefix.None; // 防具前缀

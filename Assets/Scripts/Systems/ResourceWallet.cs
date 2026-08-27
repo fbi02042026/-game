@@ -35,7 +35,9 @@ public static class ResourceWallet
         switch (type)
         {
             case ResourceType.Stamina:
-                return GameConfig.STAMINA_MAX;
+                long baseMax = GameConfig.STAMINA_MAX;
+                int bonus = SaveSystem.Instance?.Data?.staminaBonusMax ?? 0;
+                return baseMax + Mathf.Max(0, bonus);
             default:
                 return DEFAULT_MAX;
         }
@@ -77,7 +79,7 @@ public static class ResourceWallet
             case ResourceType.Diamond: return "钻石";
             case ResourceType.Stamina: return "体力";
             case ResourceType.EnchantStone: return "附魔石";
-            case ResourceType.DecomposeMat: return "分解材料";
+            case ResourceType.DecomposeMat: return "强化石";
             case ResourceType.TalentPoint: return "天赋点";
             default: return "资源";
         }

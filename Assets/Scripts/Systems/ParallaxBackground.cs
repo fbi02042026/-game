@@ -219,13 +219,13 @@ public class ParallaxBackground : MonoBehaviour
             ap.x = x;
             rt.anchoredPosition = ap;
 
-            // 镜像按「世界槽位」奇偶决定，而不是按片索引：
-            // 片会循环搬家，用片索引会导致同一段地图忽然翻面。
-            int slot = Mathf.RoundToInt((x - origin) / step);
-            bool mirror = (((slot % 2) + 2) % 2) == 1;
+            // 镜像按世界槽位奇偶；用 Floor 避免 Round 在接缝处抖动成同向
+            int slot = Mathf.FloorToInt((x - origin) / step + 0.0001f);
+            bool mirror = (slot & 1) == 1;
 
             Vector3 s = rt.localScale;
-            s.x = mirror ? -layer.baseScaleX : layer.baseScaleX;
+            float sx = Mathf.Abs(layer.baseScaleX) < 0.01f ? 1f : Mathf.Abs(layer.baseScaleX);
+            s.x = mirror ? -sx : sx;
             rt.localScale = s;
 
             if (!rt.gameObject.activeSelf)

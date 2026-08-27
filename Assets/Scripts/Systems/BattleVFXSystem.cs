@@ -411,7 +411,15 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     /// <summary>技能等世界特效：挂本系统根，抬到 SORT_VFX，避免被单位 SortingGroup 挡住。</summary>
     public GameObject PlayWorldPrefab(GameObject prefab, Vector3 position, float lifetime = 2.5f)
     {
-        return SpawnVFX(prefab, position, lifetime, null);
+        return PlayWorldPrefab(prefab, position, lifetime, 1);
+    }
+
+    public GameObject PlayWorldPrefab(GameObject prefab, Vector3 position, float lifetime, int facingDir)
+    {
+        var go = SpawnVFX(prefab, position, lifetime, null);
+        if (go != null)
+            ApplyVfxFacing(go, facingDir);
+        return go;
     }
 
     GameObject SpawnVFX(GameObject prefab, Vector3 position, float lifetime, Transform parentTarget = null)

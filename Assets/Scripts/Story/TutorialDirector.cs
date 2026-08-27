@@ -309,13 +309,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         AllowBattleSkillClick = false;
         WaitingEvacuate = false;
 
-        // —— 1) 两波清怪 ——
+        // —— 1) 一小波清怪（缩短到老盾前的路程）——
         hint.Show("靠近怪物会自动攻击。", null, 8f);
         yield return EnsureTutorialWave(bm, 2);
-        yield return WaitFieldClear();
-
-        hint.Show("继续往前走。", null, 4f);
-        yield return EnsureTutorialWave(bm, 3);
         yield return WaitFieldClear();
 
         // —— 2) 空路 → 发现宝箱 ——
@@ -328,7 +324,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
 
         var drop = CreateTutorialEquipDrop();
-        yield return chestDir.CoTutorialChestDrop(drop, 6.8f);
+        yield return chestDir.CoTutorialChestDrop(drop, 4.5f);
 
         yield return TalkBlock(bm, headTalk,
             new TalkLine(Hero.Instance, "咦，前面有个宝箱？", 1.2f),
@@ -337,14 +333,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
         GameObject groundIcon = null;
         yield return chestDir.CoTutorialOpenChest(drop, g => groundIcon = g);
 
-        // 装备进包 + 弹窗（用预制体 EquipDropPopup，不手搓）
-        if (drop != null && GridBackpackSystem.Instance != null &&
-            GridBackpackSystem.Instance.TryAddItem(drop, out _))
+        // 弹窗前不入包：等玩家点「装备/放入背包」再由 EquipDropPopupUI 入包
+        if (drop != null)
         {
-            BattleUI.Instance?.UpdateBackpackGrid();
             bool closed = false;
+            if (bm != null) bm.UnitsCanAct = false;
             EquipDropPopupUI.ShowSingle(drop, (_, __) => closed = true);
             while (!closed) yield return null;
+            if (bm != null) bm.UnitsCanAct = true;
             BattleUI.Instance?.UpdateBackpackGrid();
         }
         if (groundIcon != null)
@@ -358,6 +354,18 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return new WaitForSecondsRealtime(0.9f);
 
         bm.SpawnTutorialFlankAmbush(4);
+        // 埋伏必须真出怪，否则 WaitFieldClear 会瞬间通过，后面老盾戏对不上
+        {
+            int guard = 0;
+            while (bm.GetAliveMonsterCount() <= 0 && guard < 8)
+            {
+                guard++;
+                yield return null;
+                yield return null;
+                if (bm.GetAliveMonsterCount() <= 0)
+                    bm.SpawnTutorialFlankAmbush(4);
+            }
+        }
         yield return TalkBlock(bm, headTalk,
             new TalkLine(Hero.Instance, "糟了！中埋伏了！", 1.1f),
             new TalkLine(Hero.Instance, "只有上了！", 0.9f));
@@ -371,40 +379,62 @@ public class TutorialDirector : Singleton<TutorialDirector>
         ui?.ApplySoloBattleHudPublic();
         ui?.UpdateCharacterSlots();
 
-        var merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.35f, 8.2f, stunned: true);
+        var merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.35f, 3.8f, stunned: true);
         bm.SpawnTutorialAmbushAround(merc, 3);
         hint.Show("前方有人被怪物围住了，走近看看。", null, 6f);
 
-        // 等玩家慢慢走近老盾
+        // 走近老盾时冻住自动走，避免空跑很久/错过对话
+        if (bm != null) bm.UnitsCanAct = false;
         float approach = 0f;
-        while (approach < 45f)
+        while (approach < 12f)
         {
             approach += Time.unscaledDeltaTime;
             if (Hero.Instance != null && merc != null)
             {
                 float dist = Mathf.Abs(UnitBase.GetCombatX(Hero.Instance) - UnitBase.GetCombatX(merc));
-                if (dist <= 4.2f) break;
+                if (dist <= 3.6f) break;
+                if (dist > 3.6f && approach > 0.2f)
+                {
+                    float hx = UnitBase.GetCombatX(Hero.Instance);
+                    float mx = UnitBase.GetCombatX(merc);
+                    float step = Mathf.Sign(mx - hx) * Mathf.Min(10f * Time.unscaledDeltaTime, Mathf.Abs(mx - hx) - 3.4f);
+                    if (Mathf.Abs(step) > 0.001f)
+                    {
+                        var p = Hero.Instance.transform.position;
+                        p.x += step;
+                        GameConfig.SetWorldPosition(Hero.Instance.gameObject, p);
+                    }
+                }
             }
             yield return null;
         }
 
         // 一整段只冻一次，说完再解冻；点一下跳字，再点跳句
-        yield return TalkBlock(bm, headTalk,
+        yield return TalkBlock(bm, headTalk, restoreAct: false,
             new TalkLine(Hero.Instance, "那是……有人被围住了？", 1.2f),
             new TalkLine(Hero.Instance, "先把这些怪清掉！", 1.0f));
 
-        // 怪物转过来打玩家
+        // 解冻开打；清完立刻再冻，防止自动往前跑错过入队
+        if (bm != null) bm.UnitsCanAct = true;
         bm.RetargetAllMonsters(Hero.Instance);
         hint.Show("怪物冲过来了，靠近它们会自动攻击。", null, 5f);
         yield return WaitFieldClear();
         bm.ClearMonsterForcedTargets();
+        if (bm != null) bm.UnitsCanAct = false;
+        HaltUnit(Hero.Instance);
+        HaltUnit(merc);
 
         // 围殴怪清完：停眩晕动画（仍原地等对话，对话后再入队解控）
         if (merc != null)
             merc.StopTutorialStunAnim();
 
         // 清完怪再跟老盾对话、入队
-        yield return TalkBlock(bm, headTalk,
+        if (merc == null || merc.isDead)
+        {
+            // 围殴中被清掉时补一只，避免入队戏跳过
+            merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.6f, 2.0f, stunned: false);
+        }
+        yield return TalkBlock(bm, headTalk, restoreAct: false,
             new TalkLine(merc, "咳……谢了，我差点交代在这儿。", 1.4f),
             new TalkLine(Hero.Instance, "还能走吗？跟我一起撤。", 1.1f),
             new TalkLine(merc, "我叫老盾。行，我跟你。", 1.3f));
@@ -419,7 +449,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 GameConfig.SetWorldPosition(merc.gameObject, behind);
             }
             merc.Face(1);
+            EnsureTutorialMercPermanent(StoryProgress.TutorialMercId, "老盾");
+            Debug.Log("[Tutorial] 老盾入队完成");
         }
+        else
+            Debug.LogError("[Tutorial] 老盾入队失败：merc 为空");
 
         ShowMercHud = true;
         ui?.ApplySoloBattleHudPublic();
@@ -558,8 +592,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
     /// <summary>
     /// 一段对话只冻一次全场；台词直接 yield CoPlayLine，点一下跳字、再点跳句。
     /// 说话人缺失则跳过该句，不卡流程。
+    /// restoreAct=false 时对话结束后保持冻结（入队等关键段用）。
     /// </summary>
     static IEnumerator TalkBlock(BattleManager bm, BattleHeadTalkUI talk, params TalkLine[] lines)
+    {
+        yield return TalkBlock(bm, talk, true, lines);
+    }
+
+    static IEnumerator TalkBlock(BattleManager bm, BattleHeadTalkUI talk, bool restoreAct, params TalkLine[] lines)
     {
         if (talk == null || lines == null || lines.Length == 0)
             yield break;
@@ -576,7 +616,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
 
         talk.HideNow();
-        if (bm != null) bm.UnitsCanAct = prev;
+        if (bm == null) yield break;
+        bm.UnitsCanAct = restoreAct && prev;
     }
 
     /// <summary>单句兼容入口。</summary>
@@ -584,6 +625,37 @@ public class TutorialDirector : Singleton<TutorialDirector>
         string content, float hold)
     {
         yield return TalkBlock(bm, talk, new TalkLine(speaker, content, hold));
+    }
+
+    /// <summary>教程入队写入永久花名册，回城酒馆也能看见。</summary>
+    static void EnsureTutorialMercPermanent(string mercId, string displayName)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || string.IsNullOrEmpty(mercId)) return;
+        if (data.permanentMercs == null)
+            data.permanentMercs = new System.Collections.Generic.List<MercenaryData>();
+        for (int i = 0; i < data.permanentMercs.Count; i++)
+        {
+            if (data.permanentMercs[i] != null && data.permanentMercs[i].mercId == mercId)
+                return;
+        }
+        string skill = MercRosterDefs.GetDefaultSkillId(mercId) ?? "ally_shield";
+        data.permanentMercs.Add(new MercenaryData
+        {
+            mercId = mercId,
+            displayName = string.IsNullOrEmpty(displayName) ? "老盾" : displayName,
+            uid = "tutorial_" + mercId,
+            favorLevel = 1,
+            level = 1,
+            star = 1,
+            skillId = skill
+        });
+        SaveSystem.Instance.Save();
+        Debug.Log($"[Tutorial] 老盾已写入 permanentMercs id={mercId}");
+        AdventureCodex.MarkMercSeen(
+            AdventureLogCatalog.Mercs.Length > 0 ? "H001" : mercId);
+        // 同时按 assetId 记
+        AdventureCodex.MarkMercSeen(mercId);
     }
 
     /// <summary>
@@ -623,19 +695,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         var equip = CreateTutorialEquipDrop();
         if (equip == null)
         {
-            UIManager.Instance?.ShowToast("地上有件装备，已放入背包。");
+            UIManager.Instance?.ShowToast("地上有件装备。");
             yield break;
         }
 
-        if (GridBackpackSystem.Instance == null ||
-            !GridBackpackSystem.Instance.TryAddItem(equip, out _))
-        {
-            UIManager.Instance?.ShowToast("背包空间不足，请整理后再试");
-            yield break;
-        }
-        // 先刷一次，保证弹窗还开着的时候背包里就能看到这件装备
-        BattleUI.Instance?.UpdateBackpackGrid();
-
+        // 弹窗前不入包：等玩家点按钮再由 EquipDropPopupUI 入包
         bool closed = false;
         EquipDropPopupUI.ShowSingle(equip, (_, __) => closed = true);
         while (!closed) yield return null;

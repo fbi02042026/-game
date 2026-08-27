@@ -50,6 +50,8 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
             OccupyGrid(x, y, equip.gridWidth, equip.gridHeight, true);
             _items.Add(item);
             OnBackpackChanged?.Invoke();
+            AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
+            AdventureLogAchievements.OnEquipPicked();
             return true;
         }
         UIManager.Instance?.ShowToast($"背包空间不足！{equip.equipName}需要{equip.gridWidth}x{equip.gridHeight}格空间");
@@ -332,9 +334,31 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         List<AttrBonusData> allBonus = new List<AttrBonusData>();
         foreach (var equip in GetEquippedItems())
         {
-            allBonus.AddRange(equip.attrBonus);
-            foreach (var enchant in equip.enchants)
-                allBonus.Add(new AttrBonusData { attrType = enchant.attrType, value = enchant.value, isPercent = enchant.isPercent });
+            if (equip?.attrBonus == null) continue;
+            float enhanceMul = EquipEnhanceSystem.GetMultiplier(equip);
+            int baseCount = Mathf.Clamp(equip.baseAttrCount, 0, equip.attrBonus.Count);
+            for (int i = 0; i < equip.attrBonus.Count; i++)
+            {
+                var b = equip.attrBonus[i];
+                if (b == null) continue;
+                float v = b.value;
+                if (i < baseCount && enhanceMul > 1.001f)
+                    v *= enhanceMul;
+                allBonus.Add(new AttrBonusData
+                {
+                    attrType = b.attrType,
+                    value = v,
+                    isPercent = b.isPercent
+                });
+            }
+            if (equip.enchants != null)
+            {
+                foreach (var enchant in equip.enchants)
+                {
+                    if (enchant == null) continue;
+                    allBonus.Add(new AttrBonusData { attrType = enchant.attrType, value = enchant.value, isPercent = enchant.isPercent });
+                }
+            }
         }
         return allBonus;
     }

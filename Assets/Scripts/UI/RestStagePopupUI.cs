@@ -151,6 +151,7 @@ public class RestStagePopupUI : MonoBehaviour
 
         ApplyHeal();
         GrantRestMaterials();
+        AdventureCodex.UnlockWorld("W005");
         RefreshTexts();
 
         if (closeButton != null)

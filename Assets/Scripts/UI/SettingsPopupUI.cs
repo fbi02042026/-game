@@ -219,6 +219,11 @@ public class SettingsPopupUI : MonoBehaviour
 
     void OnEvacuate()
     {
+        DoEvacuate();
+    }
+
+    void DoEvacuate()
+    {
         Time.timeScale = 1f;
         if (root != null) root.SetActive(false);
         var tutorial = TutorialDirector.Instance;

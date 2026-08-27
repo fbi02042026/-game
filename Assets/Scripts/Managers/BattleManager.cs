@@ -24,6 +24,9 @@ public class BattleManager : Singleton<BattleManager>
     public long currentGold = 0;
     /// <summary>开战时城镇金币快照；死亡时本局增量清零用</summary>
     long _goldAtRunStart;
+    int _enchantAtRunStart;
+    int _matsAtRunStart;
+    public BattleRunStats RunStats { get; private set; } = new BattleRunStats();
     public bool isInBattle = false;
     public bool isAutoBattle = false;
     public List<AttrBonusData> tempBuffs = new List<AttrBonusData>();
@@ -175,6 +178,11 @@ public class BattleManager : Singleton<BattleManager>
         StopBattleSpawnCoroutines();
         currentGold = SaveSystem.Instance?.Data?.totalGold ?? 0;
         _goldAtRunStart = currentGold;
+        var data = SaveSystem.Instance?.Data;
+        _enchantAtRunStart = data != null ? data.enchantStones : 0;
+        _matsAtRunStart = data != null ? data.decomposeMats : 0;
+        RunStats.Reset();
+        RunStats.Chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         tempBuffs.Clear();
         _stageCleared = false;
         _portalActive = false;
@@ -268,6 +276,8 @@ public class BattleManager : Singleton<BattleManager>
 
         Debug.Log($"[BattleManager] StartNewRun → LoadStage type={first.type} idx={first.stageIndex}");
         if (!IsTutorialRun)
+            AdventureLogAchievements.OnRiftEntered();
+        if (!IsTutorialRun)
         {
             StartCoroutine(CoPreLevelThenLoad(first));
             return;
@@ -346,6 +356,7 @@ public class BattleManager : Singleton<BattleManager>
 
         int max = mm.GetMaxMercSlots();
         int spawned = 0;
+        bool countedLaodun = false;
         if (data?.permanentMercs != null)
         {
             for (int i = 0; i < data.permanentMercs.Count && spawned < max; i++)
@@ -364,6 +375,11 @@ public class BattleManager : Singleton<BattleManager>
                     allyUnits.Add(merc);
                     merc.OnDead += OnMercenaryDead;
                     spawned++;
+                    if (!IsTutorialRun && !countedLaodun && md.mercId.StartsWith("dunbing"))
+                    {
+                        AdventureLogAchievements.OnLaodunBattled();
+                        countedLaodun = true;
+                    }
                 }
             }
         }
@@ -603,6 +619,13 @@ public class BattleManager : Singleton<BattleManager>
             if (m == null) continue;
             m.SetForcedTarget(hero);
             wave.aliveCount++;
+        }
+        if (wave.aliveCount <= 0)
+        {
+            Debug.LogWarning("[BattleManager] 诱饵埋伏刷怪失败，走 EmergencySpawn");
+            EmergencySpawnVisibleMonsters(n);
+            RetargetAllMonsters(hero);
+            wave.aliveCount = GetAliveMonsterCount();
         }
     }
 
@@ -1572,6 +1595,9 @@ public class BattleManager : Singleton<BattleManager>
     {
         if (!isInBattle || _stageCleared) return;
 
+        if (UnitsCanAct)
+            RunStats.BattleTimeSec += Time.deltaTime;
+
         // 首波刷怪：主路径 ScheduleFirstWaveSpawn；兜底仅 CoFirstWaveHardFallback（勿在 Update 叠刷）
 
         // 清理死怪（不要在刷怪同一帧误清：只移真正死亡的）
@@ -2033,6 +2059,11 @@ public class BattleManager : Singleton<BattleManager>
         Monster m = monster as Monster;
         if (m == null) return;
 
+        RunStats.KillCount++;
+        if (m.IsEliteWave) RunStats.EliteKillCount++;
+        if (m.IsBossUnit) RunStats.BossKillCount++;
+        AdventureLogAchievements.OnMonsterKilled(m, CurrentChapter);
+
         currentGold += (long)(m.goldDrop * runGoldGainMul);
 
         // 连杀
@@ -2080,6 +2111,12 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         AchievementSystem.Instance?.OnKillMonster(CurrentChapter, m.config != null && m.config.isBoss);
+
+        // 图鉴：击败解锁完整描述；未见过则顺带记遭遇并发里程
+        if (m.config != null)
+            AdventureCodex.MarkMonsterDefeated(m.config.id);
+
+        SpecialWeapons.TryFlavorToastOnKill();
 
         BattleUI.Instance?.UpdateSkillEnergy(0, playerSkillEnergy);
         BattleUI.Instance?.UpdateSkillEnergy(1, mercSkillEnergy[0]);
@@ -2463,7 +2500,7 @@ public class BattleManager : Singleton<BattleManager>
         // 多出的奖励件直接折金，三选一只展示 3 张
         int blacksmithLevel = TownSystem.Instance != null ? TownSystem.Instance.GetBuildingLevel(BuildingType.Blacksmith) : 1;
         List<EquipInstance> rewards = (!IsGoldDungeon && ConfigManager.Instance != null)
-            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar)
+            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar, currentStage.type)
             : new List<EquipInstance>();
 
         if (rewards != null && rewards.Count > 3)
@@ -2519,6 +2556,10 @@ public class BattleManager : Singleton<BattleManager>
         PersistBattleGold();
         ChapterManager.Instance?.OnStageComplete();
 
+        int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : CurrentChapter;
+        bool bossStage = currentStage != null && currentStage.type == StageType.Boss;
+        AdventureLogFragments.TryDropOnStageClear(ch, bossStage);
+
         if (IsGoldDungeon)
         {
             MercenaryManager.Instance?.ClearAllMercs();
@@ -2570,6 +2611,7 @@ public class BattleManager : Singleton<BattleManager>
     {
         isInBattle = false;
         MercenaryManager.Instance?.ClearAllMercs();
+        AdventureLogAchievements.OnDied();
         // 引导关死亡：不走遗产，按撤离收尾标记教程进度，避免反复卡在引导战
         if (IsTutorialRun || SkipLegacyOnEvacuate)
         {
@@ -2584,6 +2626,7 @@ public class BattleManager : Singleton<BattleManager>
         isInBattle = false;
         ClearAllMonsters();
         MercenaryManager.Instance?.ClearAllMercs();
+        AdventureLogAchievements.OnEvacuated(IsTutorialRun);
         // 撤离回城后打开冒险页（引导局另有收尾，不抢页签）
         if (!IsTutorialRun)
             TownHubController.PendingOpenAdventure = true;
@@ -2645,22 +2688,65 @@ public class BattleManager : Singleton<BattleManager>
 
             // 用差额同步城镇金币（死亡时 currentGold 已回退到开局快照）
             PersistBattleGold();
+            int talentGain = 0;
             if (!isDeath)
             {
-                int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
+                talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
                 if (talentGain > 0)
                     ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
             }
             SaveSystem.Instance?.Save();
             BattleStateSaver.Instance?.ClearBattleState();
+
+            FillSettlementSnapshot(isDeath, talentGain);
+            if (!isDeath)
+                AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
             TownHubController.PendingOpenAdventure = true;
-            GameSceneManager.Instance?.LoadTownScene();
+            BattleSettlementUI.Show(RunStats, () =>
+            {
+                GameSceneManager.Instance?.LoadTownScene();
+            });
         }
 
         if (UIManager.Instance != null)
             UIManager.Instance.ShowLegacyChooseUI(allEquips, Finish);
         else
             Finish(null);
+    }
+
+    void FillSettlementSnapshot(bool isDeath, int talentGain)
+    {
+        RunStats.IsDeath = isDeath;
+        RunStats.GoldGained = isDeath ? 0 : Mathf.Max(0, (int)(currentGold - _goldAtRunStart));
+        RunStats.TalentGained = talentGain;
+        RunStats.EquipCount = GridBackpackSystem.Instance != null
+            ? GridBackpackSystem.Instance.GetAllItemsForLegacy().Count
+            : 0;
+        var data = SaveSystem.Instance?.Data;
+        if (data != null)
+        {
+            RunStats.EnchantStoneDelta = Mathf.Max(0, data.enchantStones - _enchantAtRunStart);
+            RunStats.DecomposeMatDelta = Mathf.Max(0, data.decomposeMats - _matsAtRunStart);
+        }
+        if (currentStage != null)
+            RunStats.StageTitle = ChapterManager.Instance != null
+                ? ChapterManager.Instance.GetCurrentStageDisplayName()
+                : $"第{RunStats.Chapter}章";
+        else
+            RunStats.StageTitle = $"第{RunStats.Chapter}章";
+    }
+
+    public void RecordDamageDealt(float amount, bool toBoss)
+    {
+        if (amount <= 0f) return;
+        RunStats.DamageDealt += amount;
+        if (toBoss) RunStats.BossDamageDealt += amount;
+    }
+
+    public void RecordDamageTaken(float amount)
+    {
+        if (amount <= 0f) return;
+        RunStats.DamageTaken += amount;
     }
 
     public void ClearAllMonsters()

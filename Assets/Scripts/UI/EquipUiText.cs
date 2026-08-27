@@ -57,4 +57,14 @@ public static class EquipUiText
             default: return t.ToString();
         }
     }
+
+    /// <summary>装备标题：名称 + 强化等级。</summary>
+    public static string EquipTitle(EquipInstance eq)
+    {
+        if (eq == null) return "装备";
+        string name = !string.IsNullOrEmpty(eq.equipName) ? eq.equipName : (eq.templateId ?? "装备");
+        if (eq.enhanceLevel > 0)
+            return $"{name} +{eq.enhanceLevel}";
+        return name;
+    }
 }

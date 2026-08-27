@@ -21,6 +21,8 @@ public static class RedDot
     public const string Tavern = "nav.tavern";
     public const string Log = "nav.log";
     public const string Achievement = "log.achievement";
+    public const string LogMonster = "log.monster";
+    public const string LogMerc = "log.merc";
     public const string Guild = "nav.guild";
     public const string Adventure = "nav.adventure";
 
@@ -105,14 +107,15 @@ public static class RedDot
         return dot;
     }
 
-    /// <summary>根据邮件、可领成就里程等刷新常用红点</summary>
+    /// <summary>根据邮件、可领成就里程、图鉴未读等刷新常用红点</summary>
     public static void RefreshCommon()
     {
         Set(Mail, MailSystem.UnclaimedCount() > 0);
-        bool reward = AchievementSystem.Instance != null
-                      && AchievementSystem.Instance.HasUnclaimedMilestone();
+        bool reward = AdventureLogMileage.HasUnclaimedLevel()
+                      || AdventureLogAchievements.HasUnclaimed()
+                      || AdventureLogFragments.HasAnyCraftable();
         Set(Activity, reward);
-        Set(Log, reward);
         Set(Achievement, reward);
+        AdventureCodex.RefreshRedDots();
     }
 }

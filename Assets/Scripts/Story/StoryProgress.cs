@@ -116,6 +116,12 @@ public static class StoryProgress
         data.tutorialBattleCleared = true;
         data.tutorialOutroPending = false;
         SaveSystem.Instance.Save();
+        AdventureCodex.CompleteMain("P0");
+        AdventureCodex.UnlockWorld("W006");
+        AdventureCodex.UnlockWorld("W007");
+        AdventureCodex.UnlockWorld("W003");
+        AdventureLogAchievements.OnTutorialDone();
+        SpecialWeapons.TryGrantTwilightStaff(showToast: true);
     }
 
     public static void MarkChapter1IntroDone()

@@ -16,6 +16,21 @@ public static class CraftStageApply
             return false;
         }
 
+        // 优先走设计文档强化 +1～+10（有强化石时）
+        EquipInstance enhanceTarget = PickEnhanceTarget(bag);
+        if (enhanceTarget != null)
+        {
+            int next = enhanceTarget.enhanceLevel + 1;
+            int matsNeed = EquipEnhanceSystem.MatCost(next);
+            int goldNeed = EquipEnhanceSystem.GoldCost(next);
+            var data = SaveSystem.Instance?.Data;
+            bool canAfford = data != null
+                && ResourceWallet.Get(data, ResourceWallet.ResourceType.DecomposeMat) >= matsNeed
+                && (goldNeed <= 0 || ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold) >= goldNeed);
+            if (canAfford)
+                return EquipEnhanceSystem.TryEnhance(enhanceTarget, out msg);
+        }
+
         EquipInstance best = null;
         var all = bag.GetAllItemsForLegacy();
         if (all != null)
@@ -33,12 +48,12 @@ public static class CraftStageApply
 
         if (best == null)
         {
-            msg = "没有可升星的装备（已达品质星上限）";
+            if (string.IsNullOrEmpty(msg))
+                msg = "没有可强化的装备";
             return false;
         }
 
         best.star = Mathf.Min((int)best.rarity, best.star + 1);
-        // 轻微加一点攻击/生命作为升星反馈
         if (best.attrBonus == null) best.attrBonus = new List<AttrBonusData>();
         best.attrBonus.Add(new AttrBonusData
         {
@@ -47,8 +62,26 @@ public static class CraftStageApply
             isPercent = true
         });
         Hero.Instance?.RecalcAttr();
-        msg = $"强化成功：{DisplayName(best)} → ★{best.star}";
+        AdventureLogAchievements.OnEnhanced();
+        msg = $"升星成功：{DisplayName(best)} → ★{best.star}";
         return true;
+    }
+
+    static EquipInstance PickEnhanceTarget(GridBackpackSystem bag)
+    {
+        EquipInstance best = null;
+        var all = bag.GetAllItemsForLegacy();
+        if (all == null) return null;
+        for (int i = 0; i < all.Count; i++)
+        {
+            var e = all[i];
+            if (e == null || e.enhanceLevel >= EquipEnhanceSystem.MaxLevel) continue;
+            if (best == null
+                || e.rarity > best.rarity
+                || (e.rarity == best.rarity && e.enhanceLevel < best.enhanceLevel))
+                best = e;
+        }
+        return best;
     }
 
     public static bool TryEnchantRandom(out string msg)

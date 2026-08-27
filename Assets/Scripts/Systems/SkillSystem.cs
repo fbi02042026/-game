@@ -101,6 +101,7 @@ public class SkillSystem : Singleton<SkillSystem>
         if (target == null) return;
 
         float damage = DamageFormula.ApplyCrit(CalculateDamage(skill, caster), caster.attr, out bool isCrit);
+        damage = DamageFormula.ApplyAttackerSpecials(damage, caster, target);
         target.TakeDamage(damage, isCrit);
     }
 
@@ -118,6 +119,7 @@ public class SkillSystem : Singleton<SkillSystem>
             UnitBase target = enemies[i];
             if (target == null || target.isDead) continue;
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit);
+            finalDamage = DamageFormula.ApplyAttackerSpecials(finalDamage, caster, target);
             UnitBase locked = target;
             float dmg = finalDamage;
             bool crit = isCrit;
@@ -149,6 +151,7 @@ public class SkillSystem : Singleton<SkillSystem>
         foreach (var enemy in enemies)
         {
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit);
+            finalDamage = DamageFormula.ApplyAttackerSpecials(finalDamage, caster, enemy);
             enemy.TakeDamage(finalDamage, isCrit);
         }
     }
@@ -175,6 +178,7 @@ public class SkillSystem : Singleton<SkillSystem>
         foreach (var enemy in enemies)
         {
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit) * chainMultiplier;
+            finalDamage = DamageFormula.ApplyAttackerSpecials(finalDamage, caster, enemy);
             enemy.TakeDamage(finalDamage, isCrit);
             chainMultiplier *= 0.6f; // 每次连锁递减40%
             if (chainMultiplier < 0.2f) break;

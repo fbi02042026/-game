@@ -55,8 +55,7 @@ public static class DamageFormula
         return Mathf.Max(MinDamage, baseDamage * CritMultiplier());
     }
 
-    /// <summary>
-    /// 最终扣血量：raw 已含暴击；再减 DEF。
+    /// <summary>最终扣血量：raw 已含暴击；再减 DEF。
     /// ignoreDefense：引导等特殊命中。
     /// </summary>
     public static float FinalHit(float rawDamage, AttrSystem defender, bool ignoreDefense = false)
@@ -68,5 +67,13 @@ public static class DamageFormula
             dmg = Mathf.Max(MinDamage, dmg - def);
         }
         return Mathf.Max(MinDamage, dmg);
+    }
+
+    /// <summary>主角特殊武器对目标的倍率（暮火之杖等）。</summary>
+    public static float ApplyAttackerSpecials(float damage, UnitBase caster, UnitBase target)
+    {
+        if (caster is Hero)
+            return Mathf.Max(MinDamage, damage * SpecialWeapons.GetDamageMultiplier(target));
+        return damage;
     }
 }

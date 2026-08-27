@@ -611,10 +611,10 @@ public static class AdventureLogCatalog
 
     public static bool MonsterUnlocked(MonsterEntry e)
     {
-        if (e.LaterChapter) return false;
-        if (e.Kind == "首领") return ChapterCleared(1) || AchDone("kill_ch1_boss_1") || AchDone("clear_ch1");
-        if (e.Kind == "精英") return ChapterCleared(1) || StoryProgress.TutorialBattleCleared;
-        return StoryProgress.TutorialBattleCleared || StoryProgress.TutorialDone || ChapterCleared(1);
+        // 章未开：整章不可见（图鉴分页侧处理）；条目「亮图」看遭遇存档
+        int ch = AdventureCodex.MonsterChapter(e);
+        if (!AdventureCodex.ChapterUnlocked(ch)) return false;
+        return AdventureCodex.IsSeenMonster(e.Id);
     }
 
     public static bool MercUnlocked(MercEntry e)
@@ -635,29 +635,14 @@ public static class AdventureLogCatalog
 
     public static bool AchUnlocked(AchEntry e)
     {
-        switch (e.Id)
-        {
-            case "A001": return StoryProgress.TutorialDone;
-            case "A002": return StoryProgress.TutorialDone;
-            case "A003": return false;
-            case "A004": return AchProgress("kill_total_100") >= 100 || AchDone("kill_total_100");
-            case "A005": return ChapterCleared(1);
-            case "A006": return AchDone("kill_ch1_boss_1") || AchDone("clear_ch1") || ChapterCleared(1);
-            case "A007": return AchDone("equip_collect_50") || AchProgress("equip_collect_50") >= 50;
-            case "A008": return false;
-            case "A009": return HasMerc("dunbing101") || HasMerc("dunbing102") || HasMerc("gongshou101") || HasMerc("kuangzhan101") || HasMerc("naima101");
-            case "A010": return ChapterCleared(1);
-            case "A011": return (SaveSystem.Instance?.Data?.totalGold ?? 0) >= 10000;
-            case "A012": return false;
-            case "A013": return false;
-            case "A014": return false;
-            case "A015": return false;
-            default: return false;
-        }
+        if (AdventureLogAchievements.IsCompleted(e.Id) || AdventureLogAchievements.IsClaimed(e.Id))
+            return true;
+        return AdventureLogAchievements.CheckCondition(e.Id);
     }
 
     public static bool WorldUnlocked(WorldEntry e)
     {
+        if (AdventureCodex.IsWorldUnlockedFlag(e.Id)) return true;
         switch (e.Id)
         {
             case "W001": return true;
@@ -675,11 +660,24 @@ public static class AdventureLogCatalog
 
     public static bool MainUnlocked(StoryEntry e)
     {
+        if (AdventureCodex.IsMainCompleted(e.Id)) return true;
         if (e.Id == "P0") return StoryProgress.TutorialDone || StoryProgress.TutorialIntroDone;
-        if (e.Id == "C1A" || e.Id == "C1B")
+        if (e.Id == "C1A")
             return StoryProgress.TutorialBattleCleared || StoryProgress.TutorialDone || ChapterCleared(1);
+        if (e.Id == "C1B")
+            return ChapterCleared(1) || (ChapterManager.Instance != null && ChapterManager.Instance.currentStageIndex >= 2);
+        if (e.Id == "C1C")
+            return AdventureLogAchievements.GetProgress("elite_kill") > 0 || ChapterCleared(1);
+        if (e.Id == "C1D")
+            return ChapterCleared(1) || (ChapterManager.Instance != null && ChapterManager.Instance.currentStageIndex >= 4);
+        if (e.Id == "C1E")
+            return AdventureLogAchievements.GetProgress("elite_kill") > 0 || ChapterCleared(1);
         if (e.Id == "C1F")
             return StoryProgress.Chapter1ChoiceDone || ChapterCleared(1);
+        if (e.Id == "C1G")
+            return AdventureLogAchievements.GetProgress("boss_ch1") > 0 || ChapterCleared(1);
+        if (e.Id == "C1Z")
+            return ChapterCleared(1);
         if (e.Id != null && e.Id.StartsWith("C1"))
             return ChapterCleared(1);
         return false;
@@ -687,9 +685,28 @@ public static class AdventureLogCatalog
 
     public static bool SideUnlocked(StoryEntry e)
     {
-        if (e.Id == "S001") return StoryProgress.TutorialDone && HasMerc("dunbing101");
-        if (e.Id == "S002" || e.Id == "S003" || e.Id == "S004") return ChapterCleared(1);
-        return false;
+        var sides = SaveSystem.Instance?.Data?.completedSideIds;
+        if (sides != null && sides.Contains(e.Id)) return true;
+
+        switch (e.Id)
+        {
+            case "S001":
+                return AdventureLogAchievements.GetProgress(AdventureLogAchievements.ProgressLaodunBattles) >= 10;
+            case "S002":
+            case "S003":
+            case "S004":
+                return ChapterCleared(1);
+            case "S011":
+                return AdventureLogAchievements.GetProgress(AdventureLogAchievements.ProgressForestKills) >= 20;
+            case "S012":
+                return AdventureLogAchievements.GetProgress("elite_kill") >= 3;
+            case "S013":
+                return (SaveSystem.Instance?.Data?.ch1BestClearDifficulty ?? -1) >= 1;
+            case "S016":
+                return (SaveSystem.Instance?.Data?.ch1BestClearDifficulty ?? -1) >= 2;
+            default:
+                return false;
+        }
     }
 
     static MonsterEntry M(string id, string name, string asset, string kind, string place, string unlock, string desc, string lore)

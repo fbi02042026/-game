@@ -32,9 +32,10 @@ public class Monster : UnitBase
 
     protected override void Awake()
     {
-        // 偏移仅作为兜底（预制体有 beattack/fire 节点时不会用到）
-        hitPointOffset = new Vector3(0f, 0.5f, 0f);
-        firePointOffset = new Vector3(-0.3f, 0.28f, 0f);
+        // 偏移仅作兜底；怪物根节点常 ×4+，本地 0.5 会变成世界两米多，按世界高度反推本地
+        float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
+        hitPointOffset = new Vector3(0f, 0.55f / rootAbs, 0f);
+        firePointOffset = new Vector3(-0.08f / rootAbs, 0.55f / rootAbs, 0f);
 
         // 怪物使用程序化动画，根节点上的 Animator 没有所需参数会报错，直接移除
         Animator animator = GetComponent<Animator>();
@@ -126,17 +127,26 @@ public class Monster : UnitBase
         }
     }
 
-    /// <summary>受击/发射点：按精灵躯干中心，禁止压到脚边。</summary>
+    /// <summary>受击/发射点：按精灵躯干中心。须在 LoadSprite 之后调用。</summary>
     void NormalizeMonsterAnchorNodes()
     {
-        ApplyAnchorPosition(transform.Find("beattack"), 0f, 0.55f);
-        ApplyAnchorPosition(transform.Find("fire"), -0.35f, 0.55f);
+        float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
+        float localY = 0.55f / rootAbs;
+        float localFireX = -0.12f / rootAbs;
+        ApplyAnchorPosition(transform.Find("beattack"), 0f, localY);
+        ApplyAnchorPosition(transform.Find("fire"), localFireX, localY);
         Transform be = transform.Find("beattack");
         if (be != null)
+        {
+            hitPoint = be;
             StartCoroutine(CalcHitPointCenter(be));
+        }
         Transform fire = transform.Find("fire");
         if (fire != null)
+        {
+            firePoint = fire;
             StartCoroutine(CalcFirePointCenter(fire));
+        }
     }
 
     System.Collections.IEnumerator CalcFirePointCenter(Transform fireTransform)
@@ -378,12 +388,23 @@ public class Monster : UnitBase
             monstersChild.localScale = Vector3.one * GameConfig.MONSTER_CHILD_REF_SCALE;
         }
 
-        NormalizeMonsterAnchorNodes();
-
-        // 加载怪物精灵（使用override或配置中的spriteIndex）
+        // 先换精灵，再算受击/发射点（否则两帧内还是空图，会落到被放大的本地 offset）
         int effectiveSpriteIndex = spriteIndexOverride > 0 ? spriteIndexOverride : template.spriteIndex;
         _spriteIndex = effectiveSpriteIndex;
         LoadSprite(template, chapter, effectiveSpriteIndex);
+        NormalizeMonsterAnchorNodes();
+
+        // 冒险日志图鉴：首次出场即记遭遇（黑影→亮图）
+        if (template != null)
+        {
+            if (!string.IsNullOrEmpty(template.id))
+                AdventureCodex.MarkMonsterSeen(template.id);
+            // 渐进精灵编号 → forest_4xx 形式
+            int mc = GameConfig.GetMonsterChapter(chapter);
+            string guess = AdventureCodex.GuessAssetIdFromSprite(mc, effectiveSpriteIndex);
+            if (!string.IsNullOrEmpty(guess))
+                AdventureCodex.MarkMonsterSeen(guess);
+        }
 
         // 精灵加载后强制程序化动画 + 重缓存缩放（绑定 Monsters 本体，勿绑血条）
         if (unitAnim != null)
@@ -555,6 +576,9 @@ public class Monster : UnitBase
             sr.sortingOrder = GameConfig.SORT_UNIT;
         }
     }
+
+    public bool IsBossUnit => _isBossUnit;
+    public bool IsEliteWave => _eliteWave;
 
     public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false)
     {

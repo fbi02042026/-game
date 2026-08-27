@@ -190,6 +190,29 @@ public class StageClearRewardDirector : MonoBehaviour
             if (!particles[i].gameObject.activeSelf)
                 particles[i].gameObject.SetActive(true);
             particles[i].Play(true);
+            var pr = particles[i].GetComponent<ParticleSystemRenderer>();
+            if (pr != null)
+            {
+                pr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+                pr.sortingOrder = GameConfig.SORT_VFX;
+            }
+        }
+        var srs = _effectRoot.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+        {
+            if (srs[i] == null) continue;
+            srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            srs[i].sortingOrder = GameConfig.SORT_VFX;
+        }
+        if (_closeSr != null)
+        {
+            _closeSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            _closeSr.sortingOrder = GameConfig.SORT_UNIT;
+        }
+        if (_openSr != null)
+        {
+            _openSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            _openSr.sortingOrder = GameConfig.SORT_UNIT;
         }
     }
 
@@ -231,7 +254,7 @@ public class StageClearRewardDirector : MonoBehaviour
         var hero = Hero.Instance;
         float hx = hero != null ? UnitBase.GetCombatX(hero) : 0f;
         float z = _boxRoot.position.z;
-        Vector3 boxPos = new Vector3(hx + aheadDist, UnitBase.GROUND_Y + 0.5f, z);
+        Vector3 boxPos = new Vector3(hx + aheadDist, UnitBase.GROUND_Y, z);
         _boxRoot.position = boxPos;
         _boxRoot.gameObject.SetActive(true);
         ApplyBoxVisual(ClearBoxTier.Mu);
@@ -283,8 +306,20 @@ public class StageClearRewardDirector : MonoBehaviour
         if (drop != null)
         {
             Vector3 spawn = _boxRoot.position;
-            spawn.y = UnitBase.GROUND_Y + 0.35f;
+            spawn.y = UnitBase.GROUND_Y;
             ground = CreateGroundDrop(spawn, drop);
+            // 图标中心 pivot：落地后按半高抬到脚面以上
+            if (ground != null)
+            {
+                var sr = ground.GetComponent<SpriteRenderer>();
+                if (sr != null && sr.sprite != null)
+                {
+                    float half = sr.bounds.extents.y;
+                    var p = ground.transform.position;
+                    p.y = UnitBase.GROUND_Y + half;
+                    ground.transform.position = p;
+                }
+            }
         }
         onGroundIcon?.Invoke(ground);
         yield return new WaitForSecondsRealtime(0.45f);
@@ -310,11 +345,11 @@ public class StageClearRewardDirector : MonoBehaviour
         ApplyBoxVisual(tier);
         Debug.Log($"[StageClearReward] 宝箱品质={tier} stage={stageType}");
 
-        // —— 宝箱：用场景里摆好的位置，只整体上移 0.5 ——
+        // —— 宝箱：用场景脚底高度，不再额外抬高 ——
         if (_boxRoot != null)
         {
             Vector3 p = _boxScenePos;
-            p.y += 0.5f;
+            p.y = UnitBase.GROUND_Y;
             _boxRoot.position = p;
             _boxRoot.gameObject.SetActive(true);
             EnsureEffectAlive();
@@ -344,7 +379,7 @@ public class StageClearRewardDirector : MonoBehaviour
             int goldPerCoin = Mathf.Max(1, goldDrop / coinCount);
             int goldRemain = goldDrop;
             Vector3 spawnGold = _boxRoot != null ? _boxRoot.position : Vector3.zero;
-            spawnGold.y = UnitBase.GROUND_Y + 0.3f;
+            spawnGold.y = UnitBase.GROUND_Y;
 
             for (int i = 0; i < coinCount; i++)
             {
@@ -358,7 +393,7 @@ public class StageClearRewardDirector : MonoBehaviour
 
         // —— 地上装备表现（不可点，仅视觉）——
         Vector3 spawn = _boxRoot != null ? _boxRoot.position : Vector3.zero;
-        spawn.y = UnitBase.GROUND_Y + 0.3f;
+        spawn.y = UnitBase.GROUND_Y;
         var show = new List<EquipInstance>();
         if (rewards != null)
         {
@@ -368,8 +403,19 @@ public class StageClearRewardDirector : MonoBehaviour
         var groundIcons = new List<GameObject>();
         for (int i = 0; i < show.Count; i++)
         {
-            var go = CreateGroundDrop(spawn + new Vector3(-0.7f + i * 0.7f, 0.15f, 0f), show[i]);
-            if (go != null) groundIcons.Add(go);
+            float ox = (i - (show.Count - 1) * 0.5f) * 0.85f;
+            var icon = CreateGroundDrop(spawn + new Vector3(ox, 0f, 0f), show[i]);
+            if (icon != null)
+            {
+                var sr = icon.GetComponent<SpriteRenderer>();
+                if (sr != null && sr.sprite != null)
+                {
+                    var p = icon.transform.position;
+                    p.y = UnitBase.GROUND_Y + sr.bounds.extents.y;
+                    icon.transform.position = p;
+                }
+                groundIcons.Add(icon);
+            }
         }
 
         yield return new WaitForSecondsRealtime(0.35f);
@@ -453,6 +499,7 @@ public class StageClearRewardDirector : MonoBehaviour
             if (GridBackpackSystem.Instance != null && GridBackpackSystem.Instance.TryEquipFromReward(picked))
             {
                 AchievementSystem.Instance?.OnObtainEquip(picked.rarity);
+                AdventureLogAchievements.OnEquipPicked();
                 UIManager.Instance?.ShowToast($"已装备：{picked.equipName ?? picked.templateId}");
             }
             else
@@ -593,8 +640,23 @@ public class StageClearRewardDirector : MonoBehaviour
             Debug.LogWarning("[StageClearReward] 未找到特效 Resources/VFX/other/world/传送");
             return;
         }
-        var go = Object.Instantiate(prefab, worldPos + new Vector3(0f, 0.6f, 0f), Quaternion.identity);
+        var go = Object.Instantiate(prefab, worldPos + new Vector3(0f, 0.15f, 0f), Quaternion.identity);
         go.name = "PortalOpenVfx";
+        // 抬到战斗 VFX 层，避免被地图/单位挡住
+        var srs = go.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+        {
+            if (srs[i] == null) continue;
+            srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            srs[i].sortingOrder = GameConfig.SORT_VFX;
+        }
+        var prs = go.GetComponentsInChildren<ParticleSystemRenderer>(true);
+        for (int i = 0; i < prs.Length; i++)
+        {
+            if (prs[i] == null) continue;
+            prs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            prs[i].sortingOrder = GameConfig.SORT_VFX;
+        }
         Object.Destroy(go, 4.5f);
     }
 

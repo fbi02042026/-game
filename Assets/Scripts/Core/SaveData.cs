@@ -101,6 +101,70 @@ public class SaveData
     /// <summary>章节通关次数列表（用于渐进式怪物解锁）</summary>
     public List<ChapterClearCountEntry> chapterClearCounts = new List<ChapterClearCountEntry>();
 
+    // === 冒险日志图鉴 ===
+    public List<StringIdEntry> seenMonsterEntries = new List<StringIdEntry>();
+    public List<StringIdEntry> viewedMonsterEntries = new List<StringIdEntry>();
+    public List<StringIdEntry> seenMercEntries = new List<StringIdEntry>();
+    public List<StringIdEntry> viewedMercEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> seenMonsterIds = new HashSet<string>();
+    [NonSerialized] public HashSet<string> viewedMonsterIds = new HashSet<string>();
+    [NonSerialized] public HashSet<string> seenMercIds = new HashSet<string>();
+    [NonSerialized] public HashSet<string> viewedMercIds = new HashSet<string>();
+    public List<StringIdEntry> claimedCodexRewardEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> claimedCodexRewardIds = new HashSet<string>();
+
+    /// <summary>已击败过的怪物图鉴 id（完整描述档）</summary>
+    public List<StringIdEntry> defeatedMonsterEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> defeatedMonsterIds = new HashSet<string>();
+
+    // === 冒险日志里程（收集驱动，与战斗成就点数分离）===
+    public int logMileagePoints = 0;
+    public List<IntIdEntry> claimedLogMileageLevelEntries = new List<IntIdEntry>();
+    [NonSerialized] public HashSet<int> claimedLogMileageLevels = new HashSet<int>();
+    public List<StringIdEntry> logMileageGrantEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> logMileageGrantedKeys = new HashSet<string>();
+    /// <summary>里程称号等占位（Lv6）</summary>
+    public string logMileageTitleId = "";
+
+    public List<StringIdEntry> unlockedWorldEntries = new List<StringIdEntry>();
+    public List<StringIdEntry> completedMainEntries = new List<StringIdEntry>();
+    public List<StringIdEntry> completedSideEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> unlockedWorldIds = new HashSet<string>();
+    [NonSerialized] public HashSet<string> completedMainIds = new HashSet<string>();
+    [NonSerialized] public HashSet<string> completedSideIds = new HashSet<string>();
+
+    /// <summary>日志碎片数量（二期合成）</summary>
+    public List<StringIntEntry> logFragmentEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> logFragments = new Dictionary<string, int>();
+
+    // === 日志成就 A001–A015 ===
+    public List<StringIdEntry> completedLogAchEntries = new List<StringIdEntry>();
+    public List<StringIdEntry> claimedLogAchEntries = new List<StringIdEntry>();
+    public List<StringIntEntry> logAchProgressEntries = new List<StringIntEntry>();
+    [NonSerialized] public HashSet<string> completedLogAchIds = new HashSet<string>();
+    [NonSerialized] public HashSet<string> claimedLogAchIds = new HashSet<string>();
+    [NonSerialized] public Dictionary<string, int> logAchProgress = new Dictionary<string, int>();
+    public List<StringIdEntry> unlockedTitleEntries = new List<StringIdEntry>();
+    public List<StringIdEntry> unlockedFrameEntries = new List<StringIdEntry>();
+    public List<StringIdEntry> unlockedSkinEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> unlockedTitleIds = new HashSet<string>();
+    [NonSerialized] public HashSet<string> unlockedFrameIds = new HashSet<string>();
+    [NonSerialized] public HashSet<string> unlockedSkinIds = new HashSet<string>();
+    public int backpackExtraSlots = 0;
+    public int staminaBonusMax = 0;
+    /// <summary>第一章已通关最高难度：-1 未通关，0 普通，1 困难，2 噩梦</summary>
+    public int ch1BestClearDifficulty = -1;
+
+    // === 日志碎片合成 / 里程商店（三期）===
+    public List<StringIdEntry> craftedFragmentRecipeEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> craftedFragmentRecipes = new HashSet<string>();
+    public string mileageShopWeekKey = "";
+    public List<StringIntEntry> mileageShopBuyEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> mileageShopBought = new Dictionary<string, int>();
+    public int mercScrollCommon = 0;
+    public int mercScrollRare = 0;
+    public int mercScrollLegendary = 0;
+
     // === 时间戳 ===
     public long lastSaveTime = 0;
 
@@ -118,6 +182,26 @@ public class SaveData
         npcBonds ??= new List<NpcBondEntry>();
         storyChoices ??= new List<StoryChoiceEntry>();
         chapterClearCounts ??= new List<ChapterClearCountEntry>();
+        seenMonsterEntries ??= new List<StringIdEntry>();
+        viewedMonsterEntries ??= new List<StringIdEntry>();
+        seenMercEntries ??= new List<StringIdEntry>();
+        viewedMercEntries ??= new List<StringIdEntry>();
+        claimedCodexRewardEntries ??= new List<StringIdEntry>();
+        defeatedMonsterEntries ??= new List<StringIdEntry>();
+        claimedLogMileageLevelEntries ??= new List<IntIdEntry>();
+        logMileageGrantEntries ??= new List<StringIdEntry>();
+        unlockedWorldEntries ??= new List<StringIdEntry>();
+        completedMainEntries ??= new List<StringIdEntry>();
+        completedSideEntries ??= new List<StringIdEntry>();
+        logFragmentEntries ??= new List<StringIntEntry>();
+        completedLogAchEntries ??= new List<StringIdEntry>();
+        claimedLogAchEntries ??= new List<StringIdEntry>();
+        logAchProgressEntries ??= new List<StringIntEntry>();
+        unlockedTitleEntries ??= new List<StringIdEntry>();
+        unlockedFrameEntries ??= new List<StringIdEntry>();
+        unlockedSkinEntries ??= new List<StringIdEntry>();
+        craftedFragmentRecipeEntries ??= new List<StringIdEntry>();
+        mileageShopBuyEntries ??= new List<StringIntEntry>();
         townLevel ??= new TownLevel();
 
         talents = new Dictionary<string, int>();
@@ -159,6 +243,67 @@ public class SaveData
             if (e == null) continue;
             claimedMilestoneIds.Add(e.id);
         }
+
+        seenMonsterIds = ToIdSet(seenMonsterEntries);
+        viewedMonsterIds = ToIdSet(viewedMonsterEntries);
+        seenMercIds = ToIdSet(seenMercEntries);
+        viewedMercIds = ToIdSet(viewedMercEntries);
+        claimedCodexRewardIds = ToIdSet(claimedCodexRewardEntries);
+        defeatedMonsterIds = ToIdSet(defeatedMonsterEntries);
+        unlockedWorldIds = ToIdSet(unlockedWorldEntries);
+        completedMainIds = ToIdSet(completedMainEntries);
+        completedSideIds = ToIdSet(completedSideEntries);
+
+        claimedLogMileageLevels = new HashSet<int>();
+        for (int i = 0; i < claimedLogMileageLevelEntries.Count; i++)
+        {
+            var e = claimedLogMileageLevelEntries[i];
+            if (e == null) continue;
+            claimedLogMileageLevels.Add(e.id);
+        }
+        logMileageGrantedKeys = ToIdSet(logMileageGrantEntries);
+
+        logFragments = new Dictionary<string, int>();
+        for (int i = 0; i < logFragmentEntries.Count; i++)
+        {
+            var e = logFragmentEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            logFragments[e.id] = e.value;
+        }
+
+        completedLogAchIds = ToIdSet(completedLogAchEntries);
+        claimedLogAchIds = ToIdSet(claimedLogAchEntries);
+        unlockedTitleIds = ToIdSet(unlockedTitleEntries);
+        unlockedFrameIds = ToIdSet(unlockedFrameEntries);
+        unlockedSkinIds = ToIdSet(unlockedSkinEntries);
+        craftedFragmentRecipes = ToIdSet(craftedFragmentRecipeEntries);
+        mileageShopBought = new Dictionary<string, int>();
+        for (int i = 0; i < mileageShopBuyEntries.Count; i++)
+        {
+            var e = mileageShopBuyEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            mileageShopBought[e.id] = e.value;
+        }
+        logAchProgress = new Dictionary<string, int>();
+        for (int i = 0; i < logAchProgressEntries.Count; i++)
+        {
+            var e = logAchProgressEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            logAchProgress[e.id] = e.value;
+        }
+    }
+
+    static HashSet<string> ToIdSet(List<StringIdEntry> list)
+    {
+        var set = new HashSet<string>();
+        if (list == null) return set;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var e = list[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            set.Add(e.id);
+        }
+        return set;
     }
 
     /// <summary>写入 JSON 前调用：运行时 Dictionary/HashSet → List。</summary>
@@ -169,6 +314,26 @@ public class SaveData
         achievementProgress ??= new Dictionary<string, int>();
         completedAchievements ??= new HashSet<string>();
         claimedMilestoneIds ??= new HashSet<int>();
+        seenMonsterIds ??= new HashSet<string>();
+        viewedMonsterIds ??= new HashSet<string>();
+        seenMercIds ??= new HashSet<string>();
+        viewedMercIds ??= new HashSet<string>();
+        claimedCodexRewardIds ??= new HashSet<string>();
+        defeatedMonsterIds ??= new HashSet<string>();
+        claimedLogMileageLevels ??= new HashSet<int>();
+        logMileageGrantedKeys ??= new HashSet<string>();
+        unlockedWorldIds ??= new HashSet<string>();
+        completedMainIds ??= new HashSet<string>();
+        completedSideIds ??= new HashSet<string>();
+        logFragments ??= new Dictionary<string, int>();
+        completedLogAchIds ??= new HashSet<string>();
+        claimedLogAchIds ??= new HashSet<string>();
+        logAchProgress ??= new Dictionary<string, int>();
+        unlockedTitleIds ??= new HashSet<string>();
+        unlockedFrameIds ??= new HashSet<string>();
+        unlockedSkinIds ??= new HashSet<string>();
+        craftedFragmentRecipes ??= new HashSet<string>();
+        mileageShopBought ??= new Dictionary<string, int>();
 
         talentEntries = new List<StringIntEntry>(talents.Count);
         foreach (var kv in talents)
@@ -189,6 +354,47 @@ public class SaveData
         claimedMilestoneEntries = new List<IntIdEntry>(claimedMilestoneIds.Count);
         foreach (int id in claimedMilestoneIds)
             claimedMilestoneEntries.Add(new IntIdEntry { id = id });
+
+        seenMonsterEntries = FromIdSet(seenMonsterIds);
+        viewedMonsterEntries = FromIdSet(viewedMonsterIds);
+        seenMercEntries = FromIdSet(seenMercIds);
+        viewedMercEntries = FromIdSet(viewedMercIds);
+        claimedCodexRewardEntries = FromIdSet(claimedCodexRewardIds);
+        defeatedMonsterEntries = FromIdSet(defeatedMonsterIds);
+        unlockedWorldEntries = FromIdSet(unlockedWorldIds);
+        completedMainEntries = FromIdSet(completedMainIds);
+        completedSideEntries = FromIdSet(completedSideIds);
+        logMileageGrantEntries = FromIdSet(logMileageGrantedKeys);
+
+        claimedLogMileageLevelEntries = new List<IntIdEntry>(claimedLogMileageLevels.Count);
+        foreach (int id in claimedLogMileageLevels)
+            claimedLogMileageLevelEntries.Add(new IntIdEntry { id = id });
+
+        logFragmentEntries = new List<StringIntEntry>(logFragments.Count);
+        foreach (var kv in logFragments)
+            logFragmentEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        completedLogAchEntries = FromIdSet(completedLogAchIds);
+        claimedLogAchEntries = FromIdSet(claimedLogAchIds);
+        unlockedTitleEntries = FromIdSet(unlockedTitleIds);
+        unlockedFrameEntries = FromIdSet(unlockedFrameIds);
+        unlockedSkinEntries = FromIdSet(unlockedSkinIds);
+        craftedFragmentRecipeEntries = FromIdSet(craftedFragmentRecipes);
+        mileageShopBuyEntries = new List<StringIntEntry>(mileageShopBought.Count);
+        foreach (var kv in mileageShopBought)
+            mileageShopBuyEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+        logAchProgressEntries = new List<StringIntEntry>(logAchProgress.Count);
+        foreach (var kv in logAchProgress)
+            logAchProgressEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+    }
+
+    static List<StringIdEntry> FromIdSet(HashSet<string> set)
+    {
+        var list = new List<StringIdEntry>(set != null ? set.Count : 0);
+        if (set == null) return list;
+        foreach (string id in set)
+            list.Add(new StringIdEntry { id = id });
+        return list;
     }
 }
 

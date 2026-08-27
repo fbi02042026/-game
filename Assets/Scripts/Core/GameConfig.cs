@@ -54,19 +54,22 @@ public static class GameConfig
         return Mathf.Max(range + 2.2f, range * 2.5f);
     }
 
-    /// <summary>从装备模板解析攻击射程（像素表 + 武器类型兜底）</summary>
+    /// <summary>
+    /// 主手/副手武器射程：一律以 WeaponKind 表为准。
+    /// 历史模板大量写死 96 像素，若优先读模板会把弓也锁成近战距。
+    /// </summary>
     public static float ResolveWeaponAttackRange(EquipTemplate tpl)
     {
         if (tpl == null) return BASE_ATTACK_RANGE;
+        if (tpl.slotType == EquipSlotType.MainHand || tpl.slotType == EquipSlotType.OffHand)
+            return WeaponCombatTable.GetAttackRangeWorld(WeaponCombatTable.ResolveKind(tpl));
 
         float raw = tpl.attackRange;
         if (raw > 10f)
             return NormalizeAttackRange(raw);
-
-        if (raw > 0.1f && raw <= 10f && Mathf.Abs(raw - RangeSword) > 0.02f)
+        if (raw > 0.1f)
             return raw;
-
-        return WeaponCombatTable.GetAttackRangeWorld(WeaponCombatTable.ResolveKind(tpl));
+        return BASE_ATTACK_RANGE;
     }
 
     /// <summary>从装备模板解析基础攻速（次/秒）</summary>

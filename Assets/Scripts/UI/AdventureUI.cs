@@ -1127,13 +1127,15 @@ public class AdventureUI : MonoBehaviour, ITownPage
         return fallback;
     }
 
-    Sprite GetChapterBackground(int chapter)
-    {
-        int idx = chapter - 1;
-        if (chapterBackgrounds != null && idx >= 0 && idx < chapterBackgrounds.Length && chapterBackgrounds[idx] != null)
-            return chapterBackgrounds[idx];
-        return null;
-    }
+        Sprite GetChapterBackground(int chapter)
+        {
+            int idx = chapter - 1;
+            if (chapterBackgrounds != null && idx >= 0 && idx < chapterBackgrounds.Length && chapterBackgrounds[idx] != null)
+                return chapterBackgrounds[idx];
+            // 统一从 Resources/UI/Adventure 尝试加载 chapter_1 … chapter_8
+            return UiKeyedBackgrounds.Load(UiKeyedBackgrounds.AdventurePages, "chapter_" + chapter)
+                   ?? UiKeyedBackgrounds.Load(UiKeyedBackgrounds.AdventurePages, GameConfig.GetChapterMapName(chapter));
+        }
 
     void RefreshDetailPanel()
     {

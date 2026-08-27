@@ -14,6 +14,10 @@ public class EquipInstance
 
     public Rarity rarity;
     public int star;
+    /// <summary>强化等级 +0～+10（与星级独立；影响基础属性乘区）。</summary>
+    public int enhanceLevel;
+    /// <summary>attrBonus 中前 N 条为基础属性（可吃强化/稀有度系数），其后为随机词条。</summary>
+    public int baseAttrCount;
     public int requireLevel;
     public List<AttrBonusData> attrBonus = new List<AttrBonusData>();
     public List<EnchantData> enchants = new List<EnchantData>();
@@ -29,10 +33,8 @@ public class EquipInstance
     public WeaponAttackType weaponAttackType;
     public ArmorPrefix armorPrefix;
 
-    /// <summary>
-    /// 从模板生成装备实例
-    /// </summary>
-    public static EquipInstance GenerateFromTemplate(EquipTemplate template, int bonusStar = 0, int heroLevel = 1)
+    /// <param name="overrideRarity">true 时用 forcedRarity 覆盖模板品质。</param>
+    public static EquipInstance GenerateFromTemplate(EquipTemplate template, int bonusStar = 0, int heroLevel = 1, bool overrideRarity = false, Rarity forcedRarity = Rarity.Common)
     {
         EquipInstance inst = new EquipInstance();
         template.ResolveIcon();
@@ -43,6 +45,7 @@ public class EquipInstance
         inst.gridHeight = template.gridHeight;
         inst.equipName = template.equipName;
         inst.globalBonus = template.globalBonus;
+        inst.enhanceLevel = 0;
 
         // 槽位信息
         inst.slotType = template.slotType;
@@ -51,53 +54,47 @@ public class EquipInstance
         inst.armorPrefix = template.armorPrefix;
 
         // 品质和星级
-        inst.rarity = template.baseRarity;
+        inst.rarity = overrideRarity ? forcedRarity : template.baseRarity;
         int maxStar = (int)inst.rarity;
         inst.star = UnityEngine.Random.Range(0, Mathf.Min(3, maxStar)) + bonusStar;
         inst.star = Mathf.Clamp(inst.star, 0, maxStar);
 
         inst.requireLevel = Mathf.Max(1, heroLevel + UnityEngine.Random.Range(-3, 2));
 
-        // 基础属性（按星级加成）
+        // 基础属性（星级 × 稀有度系数）
         float starMultiplier = 1 + inst.star * 0.1f;
+        float rarityMul = EquipDropRules.RarityBaseMul(inst.rarity);
         foreach (var baseAttr in template.baseAttr)
         {
             inst.attrBonus.Add(new AttrBonusData
             {
                 attrType = baseAttr.attrType,
-                value = baseAttr.value * starMultiplier,
+                value = baseAttr.value * starMultiplier * rarityMul,
                 isPercent = baseAttr.isPercent
             });
         }
+        inst.baseAttrCount = inst.attrBonus.Count;
 
-        // 防具前缀生成双属性
+        // 武器：按 Kind 词条池 + 稀有度词条数 + 前缀命名
+        if (inst.slotType == EquipSlotType.MainHand || inst.slotType == EquipSlotType.OffHand)
+        {
+            WeaponAffixSystem.ApplyWeaponRoll(inst);
+            return inst;
+        }
+
+        // 旧版装甲前缀（双属性）仍保留
         if (IsArmorSlot(inst.slotType) && inst.armorPrefix != ArmorPrefix.None)
         {
             GeneratePrefixAttr(inst);
         }
 
-        // 披风独立生成属性
         if (inst.slotType == EquipSlotType.Cape)
         {
             GenerateCapeAttr(inst);
         }
 
-        // 额外随机属性（高星级）
-        int extraAttrCount = inst.star >= 5 ? 2 : inst.star >= 3 ? 1 : 0;
-        List<AttrType> possibleAttrs = GetRollableAttrs(inst.slotType);
-        for (int i = 0; i < extraAttrCount && possibleAttrs.Count > 0; i++)
-        {
-            int idx = UnityEngine.Random.Range(0, possibleAttrs.Count);
-            AttrType randomAttr = possibleAttrs[idx];
-            possibleAttrs.RemoveAt(idx);
-            float value = RandomAttrValue(randomAttr, inst.rarity);
-            inst.attrBonus.Add(new AttrBonusData
-            {
-                attrType = randomAttr,
-                value = value,
-                isPercent = value < 1
-            });
-        }
+        // 设计文档：防具按稀有度滚词条 + 前缀命名（覆盖旧的高星随机）
+        ArmorAffixSystem.ApplyArmorRoll(inst);
         return inst;
     }
 

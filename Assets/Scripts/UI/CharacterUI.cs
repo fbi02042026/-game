@@ -254,12 +254,15 @@ public class CharacterUI : MonoBehaviour, ITownPage
     static Sprite LoadNavArt(string fileNameWithoutExt)
     {
         if (string.IsNullOrEmpty(fileNameWithoutExt)) return null;
+        // 统一走 Resources，避免 Art / Resources 双份
+        var sp = Resources.Load<Sprite>("UI/NavCharacter/" + fileNameWithoutExt);
+        if (sp != null) return sp;
 #if UNITY_EDITOR
         string path = "Assets/Art/UI/NavCharacter/" + fileNameWithoutExt + ".png";
         var ed = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
         if (ed != null) return ed;
 #endif
-        return Resources.Load<Sprite>("UI/NavCharacter/" + fileNameWithoutExt);
+        return null;
     }
 
     void RefreshAttrs()

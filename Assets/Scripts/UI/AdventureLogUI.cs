@@ -36,6 +36,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         public string Progress;
         public string Detail;
         public bool Locked;
+        public string AchId;
     }
 
     static readonly string[] TabNames =
@@ -58,6 +59,11 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     bool _preloaded;
     bool _bound;
     ScrollRect _scroll;
+    Image _tabIllustration;
+    GameObject _paper;
+    GameObject _activeCard;
+    AdventureLogCodexPanel _codex;
+    AdventureLogPhase3Panel _phase3;
 
     public void PreloadOnce()
     {
@@ -71,14 +77,25 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     {
         BindPrefab();
         TownSaveAlign.AlignAll();
+        AdventureLogAchievements.EvaluateAll();
+        AdventureLogMileageShop.EnsureWeek();
         if (_root != null) _root.SetActive(true);
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
         var hall = GetComponentInParent<GuildHallUI>();
         if (hall != null)
             TownSharedChrome.RaiseSharedChrome(hall.transform);
+        _phase3 = AdventureLogPhase3Panel.Ensure(this);
         RedDot.RefreshCommon();
         SelectTab(_tab, force: true);
+    }
+
+    /// <summary>碎片/商店操作后刷新列表（不关弹层）。</summary>
+    public void RefreshAfterPhase3()
+    {
+        if (!IsCodexTab(_tab))
+            RefreshBody();
+        RedDot.RefreshCommon();
     }
 
     public void HidePage()
@@ -126,12 +143,71 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             _listContent = _scroll.content;
 
         _claim = FindTransform("ClaimAch")?.gameObject;
+        _paper = transform.Find("Root/Frame/Paper")?.gameObject;
+        _activeCard = FindTransform("ActiveCard")?.gameObject;
+        var frame = transform.Find("Root/Frame");
+        if (frame != null)
+            _codex = new AdventureLogCodexPanel(frame);
         PrepareDoneTemplate();
         WireTabs();
         WireButtons();
         BindRewardRedDots();
+        BindTabIllustration();
         RedDot.RefreshCommon();
         _bound = true;
+    }
+
+    /// <summary>
+    /// 右上插图：ActiveCard/mask/Image。统一走 UiKeyedBackgrounds。
+    /// </summary>
+    void BindTabIllustration()
+    {
+        var t = transform.Find("Root/Frame/Paper/ActiveCard/mask/Image");
+        if (t == null) t = FindTransform("mask")?.Find("Image");
+        _tabIllustration = t != null ? t.GetComponent<Image>() : null;
+    }
+
+    void ApplyTabIllustration()
+    {
+        if (_tabIllustration == null) return;
+        string key = CurrentTabName;
+        if (string.IsNullOrEmpty(key)) return;
+        if (!UiKeyedBackgrounds.ApplyLogTabIllust(_tabIllustration, key))
+            Debug.LogWarning($"[AdventureLogUI] 缺少标签插图 {key}");
+    }
+
+    bool IsCodexTab(LogTab tab) => tab == LogTab.Monster || tab == LogTab.Merc;
+
+    void ApplyModeVisibility()
+    {
+        bool codex = IsCodexTab(_tab);
+        if (_paper != null)
+        {
+            // 任务形态：Paper 列表；图鉴形态：隐藏列表区，保留 Paper 也可整隐
+            var scroll = _paper.transform.Find("Scroll");
+            var ongoing = _paper.transform.Find("OngoingHeader");
+            if (scroll != null) scroll.gameObject.SetActive(!codex);
+            if (ongoing != null) ongoing.gameObject.SetActive(!codex);
+            if (_activeCard != null) _activeCard.SetActive(!codex);
+        }
+        if (codex)
+        {
+            _codex?.Ensure();
+            if (_tab == LogTab.Monster)
+                _codex?.ShowMonsters();
+            else
+                _codex?.ShowMercs();
+        }
+        else
+        {
+            _codex?.Hide();
+            if (_paper != null) _paper.SetActive(true);
+        }
+    }
+
+    void OnCodexSelect(string id, string title, string detail)
+    {
+        _probeBody = title + "\n" + detail;
     }
 
     void ConfigureHostCanvasOnce()
@@ -226,10 +302,19 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             claim.onClick.RemoveAllListeners();
             claim.onClick.AddListener(() =>
             {
-                AchievementMilestoneUI.Show();
+                int n = AdventureLogAchievements.ClaimAll();
+                if (n > 0)
+                    UIManager.Instance?.ShowToast($"领取 {n} 个成就奖励");
+                else if (AdventureLogMileage.HasUnclaimedLevel())
+                    AchievementMilestoneUI.Show();
+                else
+                    UIManager.Instance?.ShowToast("暂无可领成就奖励");
                 RefreshBody();
                 RedDot.RefreshCommon();
             });
+            var claimLabel = _claim.GetComponentInChildren<Text>(true);
+            if (claimLabel != null)
+                claimLabel.text = "领取成就奖励";
         }
 
         var close = transform.Find("Root/CloseButton")?.GetComponent<Button>();
@@ -249,6 +334,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var achTab = transform.Find("Root/Frame/Sidebar/Tabs/Tab4");
         if (achTab != null)
             RedDot.Bind(achTab, RedDot.Achievement);
+        var monTab = transform.Find("Root/Frame/Sidebar/Tabs/Tab2");
+        if (monTab != null)
+            RedDot.Bind(monTab, RedDot.LogMonster);
+        var mercTab = transform.Find("Root/Frame/Sidebar/Tabs/Tab3");
+        if (mercTab != null)
+            RedDot.Bind(mercTab, RedDot.LogMerc);
         if (_claim != null)
             RedDot.Bind(_claim.transform, RedDot.Achievement, new Vector2(-8f, -8f));
     }
@@ -257,7 +348,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     {
         if (!force && _tab == tab)
         {
-            RefreshBody();
+            if (IsCodexTab(_tab)) ApplyModeVisibility();
+            else RefreshBody();
             return;
         }
 
@@ -271,7 +363,14 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (_claim != null)
             _claim.SetActive(_tab == LogTab.Achievement);
 
-        RefreshBody();
+        ApplyTabIllustration();
+        ApplyModeVisibility();
+        _phase3 = AdventureLogPhase3Panel.Ensure(this);
+        _phase3?.SetVisibleForTab(_tab == LogTab.World || _tab == LogTab.Achievement);
+        if (!IsCodexTab(_tab))
+            RefreshBody();
+        else
+            _probeBody = CurrentTabName;
     }
 
     void RefreshBody()
@@ -433,30 +532,41 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
     void FillAchievement(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
     {
+        AdventureLogAchievements.EvaluateAll();
         var list = AdventureLogCatalog.Achievements;
         int unlocked = 0;
+        int claimable = 0;
         AdventureLogCatalog.AchEntry current = default;
         bool hasCurrent = false;
         for (int i = 0; i < list.Length; i++)
         {
             var e = list[i];
-            bool on = AdventureLogCatalog.AchUnlocked(e);
-            if (on)
-            {
-                unlocked++;
-                current = e;
-                hasCurrent = true;
-            }
-            AddRow(rows, on ? e.Name : "？？？",
-                on ? e.Reward : e.Unlock,
-                on ? e.Desc : e.Category + "　解锁条件：" + e.Unlock,
-                !on);
+            bool done = AdventureLogAchievements.IsCompleted(e.Id) || AdventureLogCatalog.AchUnlocked(e);
+            bool claimed = AdventureLogAchievements.IsClaimed(e.Id);
+            bool canClaim = AdventureLogAchievements.CanClaim(e.Id);
+            if (done) unlocked++;
+            if (canClaim) claimable++;
+            if (done && !claimed) { current = e; hasCurrent = true; }
+            else if (done && !hasCurrent) { current = e; hasCurrent = true; }
+
+            string prog;
+            if (claimed) prog = "已领取";
+            else if (canClaim) prog = "可领取";
+            else if (done) prog = "已完成";
+            else prog = AdventureLogAchievements.FormatProgress(e.Id);
+
+            string detail = done
+                ? e.Desc + "\n奖励：" + AdventureLogAchievements.GetReward(e.Id).Label
+                : e.Category + "　解锁条件：" + e.Unlock;
+            AddRow(rows, done ? e.Name : "？？？", prog, detail, !done, e.Id);
         }
         title = hasCurrent ? current.Name : "成就";
-        desc = hasCurrent ? current.Desc : "成长、战斗、收集、养成、探索、经济、挑战、社交。";
-        objective = hasCurrent ? current.Reward : "累计成就点数";
-        int pts = SaveSystem.Instance?.Data != null ? SaveSystem.Instance.Data.totalAchievementPoints : 0;
-        progress = unlocked + "/" + list.Length + "  " + pts + "点";
+        desc = hasCurrent
+            ? current.Desc
+            : "成长、战斗、收集、养成、探索。达成后请在此领取奖励。";
+        objective = AdventureLogMileage.FormatStatusLine();
+        progress = unlocked + "/" + list.Length
+                   + (claimable > 0 ? $"  可领×{claimable}" : "");
     }
 
     void FillWorld(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
@@ -482,12 +592,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         title = hasCurrent ? current.Name : "世界图鉴";
         desc = hasCurrent ? current.Desc + "\n" + current.Flavor : "世界观、地点、组织、物品与传说。";
         objective = hasCurrent ? current.Category : "到达对应节点后解锁";
-        progress = unlocked + "/" + list.Length;
+        progress = unlocked + "/" + list.Length + "\n" + AdventureLogFragments.FormatInventory();
     }
 
-    static void AddRow(List<LogRow> rows, string title, string progress, string detail, bool locked)
+    static void AddRow(List<LogRow> rows, string title, string progress, string detail, bool locked, string achId = null)
     {
-        rows.Add(new LogRow { Title = title, Progress = progress, Detail = detail, Locked = locked });
+        rows.Add(new LogRow { Title = title, Progress = progress, Detail = detail, Locked = locked, AchId = achId });
     }
 
     void RebuildRows(List<LogRow> rows)
@@ -519,7 +629,15 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         btn.transition = Selectable.Transition.None;
         LogRow copy = data;
         btn.onClick.RemoveAllListeners();
-        btn.onClick.AddListener(() => ApplyActiveCard(copy.Title, copy.Detail, copy.Progress, copy.Progress));
+        btn.onClick.AddListener(() =>
+        {
+            ApplyActiveCard(copy.Title, copy.Detail, copy.Progress, copy.Progress);
+            if (!string.IsNullOrEmpty(copy.AchId) && AdventureLogAchievements.CanClaim(copy.AchId))
+            {
+                if (AdventureLogAchievements.Claim(copy.AchId))
+                    RefreshBody();
+            }
+        });
     }
 
     void ApplyActiveCard(string title, string desc, string objective, string progress)

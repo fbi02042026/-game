@@ -56,10 +56,23 @@ public class ConfigManager : Singleton<ConfigManager>
 
         Debug.Log($"配置加载完成：{_allEquipTemplates.Count}个装备模板，{_allMonsters.Count}种怪物，{_talentDict.Count}个天赋");
         GameDataHub.ReportConfigs(_allEquipTemplates, _allMonsters, _talentDict);
+        SpecialWeapons.EnsureTwilightTemplate();
+    }
+
+    /// <summary>运行时注册（如暮火之杖兜底实例）。</summary>
+    public void RegisterRuntimeEquip(EquipTemplate tpl)
+    {
+        if (tpl == null || string.IsNullOrEmpty(tpl.templateId)) return;
+        _equipTemplateDict[tpl.templateId] = tpl;
+        if (!_allEquipTemplates.Contains(tpl))
+            _allEquipTemplates.Add(tpl);
     }
 
     public EquipTemplate GetEquipTemplate(string id)
     {
+        if (string.IsNullOrEmpty(id)) return null;
+        if (id == SpecialWeapons.TwilightStaffId)
+            SpecialWeapons.EnsureTwilightTemplate();
         return _equipTemplateDict.ContainsKey(id) ? _equipTemplateDict[id] : null;
     }
 
@@ -78,15 +91,29 @@ public class ConfigManager : Singleton<ConfigManager>
     /// </summary>
     public List<EquipInstance> GetRandomEquipInstances(int count, int blacksmithLevel, int bonusStar = 0)
     {
+        return GetRandomEquipInstances(count, blacksmithLevel, bonusStar, StageType.Normal);
+    }
+
+    public List<EquipInstance> GetRandomEquipInstances(int count, int blacksmithLevel, int bonusStar, StageType stageType)
+    {
         Rarity maxRarity = (Rarity)Mathf.Min(blacksmithLevel + 1, (int)Rarity.Legendary);
-        List<EquipTemplate> available = _allEquipTemplates.Where(t => t.baseRarity <= maxRarity).ToList();
+        List<EquipTemplate> available = _allEquipTemplates.Where(t => t != null).ToList();
+        List<EquipTemplate> weapons = available
+            .Where(t => t.slotType == EquipSlotType.MainHand || t.slotType == EquipSlotType.OffHand)
+            .ToList();
         List<EquipInstance> result = new List<EquipInstance>();
         if (available.Count == 0) return result;
         int lv = Hero.Instance != null ? Hero.Instance.level : 1;
         for (int i = 0; i < count; i++)
         {
-            var template = available[Random.Range(0, available.Count)];
-            result.Add(EquipInstance.GenerateFromTemplate(template, bonusStar, lv));
+            EquipTemplate template;
+            if (weapons.Count > 0 && Random.value < 0.45f)
+                template = weapons[Random.Range(0, weapons.Count)];
+            else
+                template = available[Random.Range(0, available.Count)];
+
+            Rarity rolled = EquipDropRules.RollRarity(stageType, maxRarity);
+            result.Add(EquipInstance.GenerateFromTemplate(template, bonusStar, lv, true, rolled));
         }
         return result;
     }

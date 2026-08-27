@@ -45,17 +45,23 @@ public static class WeaponCombatTable
     public static WeaponKind ResolveKind(EquipTemplate tpl)
     {
         if (tpl == null) return WeaponKind.Sword;
-        string hint = ((tpl.spumName ?? "") + " " + (tpl.equipName ?? "") + " " + (tpl.name ?? "")).ToLowerInvariant();
-        if (hint.Contains("bow") || hint.Contains("arrow") || hint.Contains("弓"))
+        if (tpl.weaponKindOverride >= 0 && tpl.weaponKindOverride <= (int)WeaponKind.Shield)
+            return (WeaponKind)tpl.weaponKindOverride;
+
+        string hint = ((tpl.spumName ?? "") + " " + (tpl.equipName ?? "") + " " + (tpl.name ?? "") + " " + (tpl.templateId ?? "")).ToLowerInvariant();
+        if (hint.Contains("bow") || hint.Contains("arrow") || hint.Contains("弓") || hint.Contains("弩"))
             return WeaponKind.Bow;
-        if (hint.Contains("staff") || hint.Contains("wand") || hint.Contains("杖"))
+        if (hint.Contains("staff") || hint.Contains("wand") || hint.Contains("杖") || hint.Contains("魔杖") || hint.Contains("权杖"))
             return WeaponKind.Staff;
-        if (hint.Contains("spear") || hint.Contains("pole") || hint.Contains("枪") || hint.Contains("halberd") || hint.Contains("戟"))
+        if (hint.Contains("spear") || hint.Contains("pole") || hint.Contains("枪") || hint.Contains("矛") || hint.Contains("halberd") || hint.Contains("戟") || hint.Contains("lance"))
             return WeaponKind.Polearm;
-        if (hint.Contains("great") || hint.Contains("大剑") || hint.Contains("twohand") || hint.Contains("双手"))
-            return WeaponKind.Greatsword;
         if (hint.Contains("shield") || hint.Contains("盾"))
             return WeaponKind.Shield;
+        // 斧/锤：双手倾向大剑档位（慢、远一点），单手归剑
+        if (hint.Contains("axe") || hint.Contains("斧") || hint.Contains("hammer") || hint.Contains("锤") || hint.Contains("槌"))
+            return tpl.weaponType == WeaponType.TwoHand ? WeaponKind.Greatsword : WeaponKind.Sword;
+        if (hint.Contains("great") || hint.Contains("大剑") || hint.Contains("twohand") || hint.Contains("双手"))
+            return WeaponKind.Greatsword;
         if (tpl.weaponAttackType == WeaponAttackType.Magic)
             return WeaponKind.Staff;
         if (tpl.weaponType == WeaponType.TwoHand)

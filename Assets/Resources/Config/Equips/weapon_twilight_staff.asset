@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:yousandi.cn,2023:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
+  m_Name: weapon_twilight_staff
+  m_EditorClassIdentifier: 
+  templateId: weapon_twilight_staff
+  equipName: "\u66AE\u706B\u4E4B\u6756"
+  icon: {fileID: 21300000, guid: 399523ebacf24d44bc1a07c090932d7d, type: 3}
+  iconFileName: New_Weapon_06
+  gridWidth: 1
+  gridHeight: 2
+  tags: []
+  baseRarity: 3
+  minLevel: 1
+  baseAttr:
+  - attrType: 5
+    value: 21
+    isPercent: 0
+  - attrType: 18
+    value: 0.12
+    isPercent: 1
+  - attrType: 13
+    value: 8
+    isPercent: 0
+  - attrType: 6
+    value: 0.2
+    isPercent: 1
+  globalBonus:
+    attrType: 0
+    value: 0
+    isPercent: 0
+  isLegendary: 0
+  slotType: 5
+  weaponType: 0
+  weaponAttackType: 1
+  attackRange: 120
+  weaponKindOverride: 3
+  armorPrefix: 0
+  spumName: New_Weapon_06

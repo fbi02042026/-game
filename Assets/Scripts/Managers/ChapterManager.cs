@@ -216,6 +216,16 @@ public class ChapterManager : Singleton<ChapterManager>
             // 3. 触发事件
             OnChapterComplete?.Invoke();
             AchievementSystem.Instance?.OnChapterClear(currentChapter);
+            if (currentChapter >= 1)
+            {
+                AdventureCodex.CompleteMain("C1F");
+                AdventureCodex.UnlockWorld("W004");
+                AdventureCodex.UnlockWorld("W002");
+            }
+            int diff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0;
+            bool perfect = BattleManager.Instance == null
+                           || BattleManager.Instance.RunStats.DamageTaken <= 0.5f;
+            AdventureLogAchievements.OnChapterCleared(currentChapter, diff, perfect);
             return;
         }
 

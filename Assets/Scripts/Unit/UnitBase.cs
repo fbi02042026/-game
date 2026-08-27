@@ -170,10 +170,10 @@ public abstract class UnitBase : MonoBehaviour
         hpTransform.localPosition = new Vector3(lp.x, lp.y, 0f);
     }
 
-    /// <summary>躯干中心（世界坐标）：至少落在包围盒下沿往上 45%，不会贴脚。</summary>
+    /// <summary>躯干中心（世界坐标）：包围盒中线偏下一点，避免武器/头顶透明把点抬高。</summary>
     protected Vector3 GetBodyCenterWorld(Bounds body)
     {
-        float y = Mathf.Max(body.center.y, body.min.y + body.size.y * 0.45f);
+        float y = body.min.y + body.size.y * 0.42f;
         return new Vector3(body.center.x, y, transform.position.z);
     }
 
@@ -214,7 +214,9 @@ public abstract class UnitBase : MonoBehaviour
             {
                 string low = n.ToLowerInvariant();
                 if (low.Contains("shadow") || low.Contains("阴影") || low == "hpbar"
-                    || low.Contains("bar_bg") || low.Contains("damage") || low.Contains("vfx"))
+                    || low.Contains("bar_bg") || low.Contains("damage") || low.Contains("vfx")
+                    || low.Contains("weapon") || low.Contains("武器") || low.Contains("bow")
+                    || low.Contains("fire") || low.Contains("beattack") || low.Contains("hitpoint"))
                     return true;
             }
             p = p.parent;
@@ -500,6 +502,14 @@ public abstract class UnitBase : MonoBehaviour
             return;
         }
 
+        if (this is Hero)
+        {
+            damage *= SpecialWeapons.GetDamageMultiplier(target);
+            float fire = SpecialWeapons.GetFlatFireBonus();
+            if (fire > 0f && !target.isDead)
+                target.TakeDamage(fire, false, openingHit);
+        }
+
         target.TakeDamage(damage, isCrit, openingHit);
         OnAttack?.Invoke(target, damage, isCrit);
     }
@@ -542,6 +552,15 @@ public abstract class UnitBase : MonoBehaviour
 
         currentHp -= finalDamage;
         DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit);
+
+        var bm = BattleManager.Instance;
+        if (bm != null && finalDamage > 0f)
+        {
+            if (this is Monster mon)
+                bm.RecordDamageDealt(finalDamage, mon.IsBossUnit);
+            else
+                bm.RecordDamageTaken(finalDamage);
+        }
 
         if (unitAnim != null)
             unitAnim.PlayDamaged();

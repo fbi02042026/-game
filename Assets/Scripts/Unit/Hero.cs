@@ -126,17 +126,26 @@ public class Hero : UnitBase
             allBonus.AddRange(BattleManager.Instance.tempBuffs);
         attr.RecalcAllAttr(allBonus);
 
-        // 根据装备武器设置攻击范围（数值表：攻击范围(像素) / 100）
+        // 主手：射程走 Kind 表；攻速按 Kind 相对单手剑比例缩放（剑=基准）
         float weaponRange = GameConfig.BASE_ATTACK_RANGE;
+        EquipTemplate mainTpl = null;
         foreach (var item in bag.GetEquippedItems())
         {
             if (item.slotType == EquipSlotType.MainHand && item.template != null)
             {
-                weaponRange = GameConfig.ResolveWeaponAttackRange(item.template);
+                mainTpl = item.template;
+                weaponRange = GameConfig.ResolveWeaponAttackRange(mainTpl);
                 break;
             }
         }
         attr.SetAttr(AttrType.AttackRange, weaponRange);
+        if (mainTpl != null)
+        {
+            float swordSpd = WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.WeaponKind.Sword);
+            float kindSpd = WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.ResolveKind(mainTpl));
+            float mul = swordSpd > 0.01f ? kindSpd / swordSpd : 1f;
+            attr.SetAttr(AttrType.AttackSpeed, Mathf.Max(0.2f, attr.GetAttr(AttrType.AttackSpeed) * mul));
+        }
         currentHp = Mathf.Min(currentHp, attr.GetAttr(AttrType.MaxHp));
 
         // 属性重算后同步外观（通关穿装 / 战前遗产等路径未必都走 EquipItem）
@@ -167,26 +176,22 @@ public class Hero : UnitBase
 
     protected override AttackVfxKit GetAttackVfxKit()
     {
-        WeaponAttackType t = GetAttackType();
-        if (t == WeaponAttackType.Magic) return AttackVfxKit.Orb;
-
+        // 按主手武器种类选 Ally 特效文件夹：近战 MeleeSlash / 弓 Bow / 杖 Orb
+        EquipTemplate tpl = null;
         if (GridBackpackSystem.Instance != null)
         {
             foreach (var item in GridBackpackSystem.Instance.GetEquippedItems())
             {
                 if (item.slotType != EquipSlotType.MainHand) continue;
-                string n = item.equipName ?? "";
-                if (item.template != null && !string.IsNullOrEmpty(item.template.spumName))
-                    n += item.template.spumName;
-                n = n.ToLower();
-                if (n.Contains("bow") || n.Contains("arrow") || n.Contains("弓"))
-                    return AttackVfxKit.Bow;
+                tpl = item.template;
+                break;
             }
         }
-        float range = attr != null ? attr.GetAttr(AttrType.AttackRange) : 1.5f;
-        if (range >= GameConfig.RangeBow - 0.05f) return AttackVfxKit.Bow;
-        return AttackVfxKit.MeleeSlash;
+        return SkillNaming.KitFromWeaponKind(WeaponCombatTable.ResolveKind(tpl));
     }
+
+    /// <summary>对外：当前主手武器对应的攻击特效套（技能回退也用）。</summary>
+    public AttackVfxKit GetWeaponVfxKit() => GetAttackVfxKit();
 
     protected override void Die()
     {

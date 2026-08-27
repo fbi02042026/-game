@@ -56,6 +56,7 @@ public class EquipDropPopupUI : MonoBehaviour
     readonly List<EquipInstance> _drops = new List<EquipInstance>();
     int _selected;
     Action<EquipInstance, bool> _onDone;
+    Vector2[] _cardHomePos;
 
     public bool IsOpen => root != null && root.activeSelf;
     public EquipDropMode Mode => _mode;
@@ -180,22 +181,36 @@ public class EquipDropPopupUI : MonoBehaviour
 
     void RefreshCards()
     {
+        CacheCardHomePositions();
         int count = _drops.Count;
-        bool layout = ShouldLayoutCards();
+        // 单件：关掉另外两张，把留下的那张摆到三卡布局的水平中心（不写回预制体）
+        bool centerSingle = count == 1;
+        bool layoutMulti = !centerSingle && ShouldLayoutCards();
         float step = CardLayoutStep();
+        Vector2 singleCenter = ComputeCardsCenter();
+
         for (int i = 0; i < cards.Count; i++)
         {
             var c = cards[i];
             if (c == null || c.root == null) continue;
             bool active = i < count;
             c.root.SetActive(active);
-            if (!active) continue;
-
-            if (layout)
+            if (!active)
             {
-                var rt = c.root.GetComponent<RectTransform>();
-                if (rt != null)
-                    rt.anchoredPosition = new Vector2((i - (count - 1) * 0.5f) * step, rt.anchoredPosition.y);
+                // 还原闲置卡的家位置，下次三选一不歪
+                RestoreCardHome(i);
+                continue;
+            }
+
+            var rt = c.root.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                if (centerSingle)
+                    rt.anchoredPosition = new Vector2(singleCenter.x, HomeY(i));
+                else if (layoutMulti)
+                    rt.anchoredPosition = new Vector2((i - (count - 1) * 0.5f) * step, HomeY(i));
+                else
+                    RestoreCardHome(i);
             }
 
             var eq = _drops[i];
@@ -224,6 +239,45 @@ public class EquipDropPopupUI : MonoBehaviour
         }
     }
 
+    void CacheCardHomePositions()
+    {
+        if (cards == null || cards.Count == 0) return;
+        if (_cardHomePos != null && _cardHomePos.Length == cards.Count) return;
+        _cardHomePos = new Vector2[cards.Count];
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var rt = cards[i]?.root != null ? cards[i].root.GetComponent<RectTransform>() : null;
+            _cardHomePos[i] = rt != null ? rt.anchoredPosition : Vector2.zero;
+        }
+    }
+
+    Vector2 ComputeCardsCenter()
+    {
+        if (_cardHomePos == null || _cardHomePos.Length == 0) return Vector2.zero;
+        Vector2 sum = Vector2.zero;
+        int n = 0;
+        for (int i = 0; i < _cardHomePos.Length; i++)
+        {
+            sum += _cardHomePos[i];
+            n++;
+        }
+        return n > 0 ? sum / n : Vector2.zero;
+    }
+
+    float HomeY(int i)
+    {
+        if (_cardHomePos != null && i >= 0 && i < _cardHomePos.Length)
+            return _cardHomePos[i].y;
+        return 0f;
+    }
+
+    void RestoreCardHome(int i)
+    {
+        if (_cardHomePos == null || i < 0 || i >= _cardHomePos.Length) return;
+        var rt = cards[i]?.root != null ? cards[i].root.GetComponent<RectTransform>() : null;
+        if (rt != null) rt.anchoredPosition = _cardHomePos[i];
+    }
+
     /// <summary>
     /// 预制体里 Canvas 是 Screen Space - Camera 但没存相机（DontDestroyOnLoad 后也拿不到），
     /// 每次打开重绑一次 Camera.main，避免缩放/层级错位。
@@ -237,8 +291,8 @@ public class EquipDropPopupUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 单件掉落只有一张卡，摆位没意义；美术预制体或带 LayoutGroup 时也不许脚本插手，
-    /// 否则会把手摆的位置顶飞（卡片重叠 / 超出面板）。
+    /// 多件且允许自动摆位时才动坐标。单件由 RefreshCards 单独居中。
+    /// 美术预制体三选一保持手摆位置（autoLayoutCards=false）。
     /// </summary>
     bool ShouldLayoutCards()
     {
@@ -281,16 +335,30 @@ public class EquipDropPopupUI : MonoBehaviour
     void RefreshCompare()
     {
         var sel = GetSelected();
+        if (sel == null)
+        {
+            if (comparePanel != null) comparePanel.SetActive(false);
+            return;
+        }
+
         EquipInstance worn = null;
-        if (sel != null && GridBackpackSystem.Instance != null)
+        if (GridBackpackSystem.Instance != null)
             worn = GridBackpackSystem.Instance.GetEquippedInSlot(sel.slotType);
 
-        bool show = worn != null;
-        if (comparePanel != null) comparePanel.SetActive(show);
-        if (!show) return;
-        if (compareTitle != null) compareTitle.text = $"当前已装备（{EquipUiText.Slot(worn.slotType)}）";
-        if (compareBody != null)
-            compareBody.text = $"{worn.equipName}  ★{worn.star}  {EquipUiText.RarityName(worn.rarity)}\n{FormatAttrs(worn)}";
+        // 下部对比区始终显示：有则属性，无则「当前部位无装备」
+        if (comparePanel != null) comparePanel.SetActive(true);
+        string slotName = EquipUiText.Slot(sel.slotType);
+        if (worn != null)
+        {
+            if (compareTitle != null) compareTitle.text = $"当前已装备（{slotName}）";
+            if (compareBody != null)
+                compareBody.text = $"{worn.equipName}  ★{worn.star}  {EquipUiText.RarityName(worn.rarity)}\n{FormatAttrs(worn)}";
+        }
+        else
+        {
+            if (compareTitle != null) compareTitle.text = $"当前部位（{slotName}）";
+            if (compareBody != null) compareBody.text = "当前部位无装备";
+        }
     }
 
     void RefreshButtons()
