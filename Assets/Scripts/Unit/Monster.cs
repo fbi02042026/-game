@@ -233,14 +233,14 @@ public class Monster : UnitBase
                 return;
             }
 
-            UnitBase foe = FindNearestEnemyInDetectRange();
+            UnitBase foe = FindNearestEnemyOnField();
             if (foe != null)
             {
                 _isEnteringMap = false;
                 target = foe.isAlly == isAlly ? null : foe;
                 if (target == null)
                 {
-                    IdleWaitForPlayer();
+                    AdvanceTowardEnemies();
                     return;
                 }
                 RunForcedCombat();
@@ -252,7 +252,7 @@ public class Monster : UnitBase
             {
                 GameConfig.SetWorldPosition(transform, new Vector3(_enterTargetPos.x, UnitBase.GROUND_Y, transform.position.z));
                 _isEnteringMap = false;
-                IdleWaitForPlayer();
+                AdvanceTowardEnemies();
                 return;
             }
 
@@ -274,18 +274,40 @@ public class Monster : UnitBase
             return;
         }
 
-        // 无目标：原地朝左待机，等玩家走进索敌范围（禁止向左冲导致擦肩而过）
-        // 只索敌一次，有目标则走 RunForcedCombat，避免再调 base.AIUpdate 重复扫描
-        target = FindNearestEnemyInDetectRange();
+        // 全图索敌；无目标时仍朝玩家方向推进（不原地待机）
+        target = FindNearestEnemyOnField();
         if (target != null && target.isAlly == isAlly)
             target = null;
         if (target == null)
         {
-            IdleWaitForPlayer();
+            AdvanceTowardEnemies();
             return;
         }
 
         RunForcedCombat();
+    }
+
+    /// <summary>怪物全图找最近己方目标（不限索敌圈，避免远程半路停住）。</summary>
+    UnitBase FindNearestEnemyOnField()
+    {
+        if (BattleManager.Instance == null) return null;
+        UnitBase nearest = null;
+        float minDist = float.MaxValue;
+        float myX = GetCombatX(this);
+        var allies = BattleManager.Instance.allyUnits;
+        if (allies == null) return null;
+        for (int i = 0; i < allies.Count; i++)
+        {
+            var enemy = allies[i];
+            if (enemy == null || enemy.isDead) continue;
+            float dist = Mathf.Abs(myX - GetCombatX(enemy));
+            if (dist < minDist)
+            {
+                minDist = dist;
+                nearest = enemy;
+            }
+        }
+        return nearest;
     }
 
     void RunForcedCombat()
@@ -305,42 +327,65 @@ public class Monster : UnitBase
         ApplyFacing(facingDir);
 
         bool isMoving = false;
-        if (distance <= attackRange)
+        bool inRange = distance <= attackRange;
+        if (inRange && attackCd <= 0)
         {
-            if (rb != null) rb.velocity = Vector2.zero;
-            if (attackCd <= 0)
-            {
-                Attack(target);
-                attackCd = GetAttackCooldown();
-            }
+            Attack(target);
+            attackCd = GetAttackCooldown();
         }
-        else if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+
+        // 攻击时不原地站定：持续朝目标推进，进射程后边走边打
+        if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
         {
-            // 前面已有同阵营怪挡路：停下；被挡住时不做挤位，避免后排哆嗦
             if (rb != null) rb.velocity = Vector2.zero;
             isMoving = false;
-            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
-            return;
         }
         else
         {
             float spd = attr.GetAttr(AttrType.MoveSpeed);
             if (rb != null) rb.velocity = new Vector2(dir * spd, rb.velocity.y);
             isMoving = true;
-        }
-        if (unitAnim != null) unitAnim.SetMove(isMoving, facingDir);
-        // 仅在移动时轻推分位，待机/堵路时别抖
-        if (isMoving)
             UnitCrowd.ResolveOverlap(this);
+        }
+
+        if (unitAnim != null) unitAnim.SetMove(isMoving, facingDir);
     }
 
-    void IdleWaitForPlayer()
+    void AdvanceTowardEnemies()
     {
-        if (rb != null) rb.velocity = Vector2.zero;
-        facingDir = -1;
+        if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            return;
+        }
+
+        UnitBase foe = FindNearestEnemyOnField();
+        float dir;
+        if (foe != null)
+        {
+            target = foe;
+            dir = GetCombatX(foe) > GetCombatX(this) ? 1f : -1f;
+        }
+        else
+        {
+            dir = -1f;
+        }
+
+        facingDir = (int)dir;
         ApplyFacing(facingDir);
-        if (unitAnim != null) unitAnim.SetMove(false, facingDir);
-        // 待机不每帧挤位，避免叠怪时原地哆嗦
+
+        if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            return;
+        }
+
+        float spd = attr.GetAttr(AttrType.MoveSpeed);
+        if (rb != null) rb.velocity = new Vector2(dir * spd, rb.velocity.y);
+        if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+        UnitCrowd.ResolveOverlap(this);
     }
 
     /// <summary>
