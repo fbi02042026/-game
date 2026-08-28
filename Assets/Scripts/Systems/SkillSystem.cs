@@ -127,9 +127,14 @@ public class SkillSystem : Singleton<SkillSystem>
 
             if (BattleVFXSystem.Instance != null)
             {
+                var cfg = SkillRegistry.Instance != null
+                    ? SkillRegistry.Instance.Get(skill.skillId) : null;
+                AttackVfxKit kit = SkillNaming.ResolveProjectileKit(cfg, skill.skillId);
+                GameObject impactOverride = SkillRegistry.Instance != null
+                    ? SkillRegistry.Instance.GetSkillVfxPrefab(skill.skillId) : null;
                 BattleVFXSystem.Instance.PlaySkillProjectile(
-                    faction, firePos, hitPos, caster.facingDir, locked.transform, AttackVfxKit.Orb,
-                    null, 1f, 1f,
+                    faction, firePos, hitPos, caster.facingDir, locked.transform, kit,
+                    impactOverride, 1f, 1f,
                     () =>
                     {
                         if (locked == null || locked.isDead) return;

@@ -8,7 +8,17 @@ public static class ContentPaths
     {
         public const string TablesRoot = "Data/Tables";
         public const string MonsterAttackStyle = "Data/Tables/monster_attack_style";
+        public const string MercSkills = "Data/Tables/merc_skills";
+        public const string MercSkillMap = "Data/Tables/merc_skill_map";
+        public const string MonsterSpriteOpaque = "Data/Tables/monster_sprite_opaque";
+        public const string EquipAnchors = "Data/Tables/equip_anchors";
         public const string ConfigFingerprint = "Data/Tables/config_fingerprint";
+    }
+
+    public static class Icons
+    {
+        public const string MercSkill = "Icons/MercSkill";
+        public const string PlayerSkill = "Icons/SkillIcon";
     }
 
     public static class Config
@@ -38,6 +48,7 @@ public static class ContentPaths
         public const string GuildHall = "Prefabs/Town/GuildHallUI";
         public const string Dialogue = "Prefabs/Dialogue/DialogueUI";
         public const string Login = "Prefabs/Login/LoginUI";
+        public const string HealthNotice = "Prefabs/Boot/HealthNoticeUI";
     }
 
     public static class Source

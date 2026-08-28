@@ -29,35 +29,38 @@ public static class MercRosterDefs
         public float BaseDef;
         public float AtkSpeed;
         public float MoveSpeed;
-        public string DefaultSkillId;
+        public string ActiveSkillId;
+        public string PassiveSkillId;
+        /// <summary>兼容旧调用：返回主动技，无则被动。</summary>
+        public string DefaultSkillId => !string.IsNullOrEmpty(ActiveSkillId) ? ActiveSkillId : PassiveSkillId;
         public int RecruitGold;
         public bool InInitialPool;
     }
 
     static readonly Def[] Table =
     {
-        D("H001", "马库斯", "老盾", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 220, 18, 30, 0.90f, 3.2f, "ally_shield", 0, true),
-        D("H002", "洛恩", "铁皮", "dunbing102", "剑盾卫士", MercRarity.Rare, 1.15f, 240, 22, 35, 0.95f, 3.3f, "ally_shield", 1500, true),
-        D("H003", "塔克", "重盾", "dunbing201", "剑盾卫士", MercRarity.Rare, 1.15f, 280, 20, 40, 0.80f, 2.8f, "ally_shield", 1800, false),
-        D("H004", "维克", "钢盾", "dunbing202", "剑盾卫士", MercRarity.Legendary, 1.30f, 300, 28, 48, 1.00f, 3.2f, "ally_shield", 5000, false),
-        D("H005", "米娅", "小红", "gongshou101", "游侠", MercRarity.Common, 1.00f, 120, 32, 12, 1.50f, 4.2f, "ally_thunder", 500, true),
-        D("H006", "希尔", "鹰眼", "gongshou201", "游侠", MercRarity.Rare, 1.15f, 135, 38, 14, 1.40f, 4.0f, "ally_thunder", 2000, false),
-        D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 180, 35, 18, 1.00f, 3.5f, "ally_atk_speed", 600, true),
-        D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 200, 42, 20, 0.95f, 3.4f, "ally_atk_speed", 1600, true),
-        D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 220, 40, 24, 1.00f, 3.3f, "ally_atk_speed", 1900, false),
-        D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 250, 50, 22, 1.10f, 3.8f, "ally_atk_speed", 6000, false),
-        D("H011", "索菲", "小白", "naima101", "牧师", MercRarity.Common, 1.00f, 100, 15, 10, 1.20f, 3.6f, "ally_heal", 500, true),
-        D("H012", "塞拉", "小蓝", "naima102", "水系法师", MercRarity.Rare, 1.15f, 110, 28, 20, 1.00f, 3.3f, "ally_heal", 1700, false),
-        D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 120, 30, 24, 1.00f, 3.2f, "ally_thunder", 2000, false),
-        D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 125, 48, 12, 1.20f, 3.6f, "ally_atk_up", 8000, false),
-        D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 115, 30, 10, 1.60f, 4.3f, "ally_thunder", 500, true),
-        D("H016", "杜根", "怒角", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 175, 33, 16, 1.05f, 3.6f, "ally_atk_speed", 600, true),
-        D("H017", "莉娜", "圣光", "naima101", "牧师", MercRarity.Common, 1.00f, 95, 14, 9, 1.25f, 3.5f, "ally_heal", 500, true),
-        D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 210, 17, 28, 0.85f, 3.0f, "ally_shield", 700, true),
-        D("H019", "艾琳", "星火", "fashi101", "法师", MercRarity.Common, 1.00f, 105, 34, 8, 1.35f, 3.6f, "ally_atk_up", 600, true),
-        D("H020", "凯尔", "谜面", "fashi102", "法师", MercRarity.Rare, 1.15f, 115, 42, 10, 1.30f, 3.5f, "ally_thunder", 1800, false),
-        D("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", MercRarity.Common, 1.00f, 230, 20, 26, 0.80f, 2.9f, "ally_shield", 800, true),
-        D("H022", "索尔", "铁面", "zhongzhan201", "重武者", MercRarity.Rare, 1.15f, 260, 26, 32, 0.85f, 2.8f, "ally_atk_up", 2200, false),
+        D("H001", "马库斯", "老盾", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 220, 18, 30, 0.90f, 3.2f, null, "SK006", 0, true),
+        D("H002", "洛恩", "铁皮", "dunbing102", "剑盾卫士", MercRarity.Rare, 1.15f, 240, 22, 35, 0.95f, 3.3f, "SK007", null, 1500, true),
+        D("H003", "塔克", "重盾", "dunbing201", "剑盾卫士", MercRarity.Rare, 1.15f, 280, 20, 40, 0.80f, 2.8f, "SK008", null, 1800, false),
+        D("H004", "维克", "钢盾", "dunbing202", "剑盾卫士", MercRarity.Legendary, 1.30f, 300, 28, 48, 1.00f, 3.2f, "SK010", "SK009", 5000, false),
+        D("H005", "米娅", "小红", "gongshou101", "游侠", MercRarity.Common, 1.00f, 120, 32, 12, 1.50f, 4.2f, null, "SK002", 500, true),
+        D("H006", "希尔", "鹰眼", "gongshou201", "游侠", MercRarity.Rare, 1.15f, 135, 38, 14, 1.40f, 4.0f, "SK001", null, 2000, false),
+        D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 180, 35, 18, 1.00f, 3.5f, null, "SK002", 600, true),
+        D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 200, 42, 20, 0.95f, 3.4f, "SK003", null, 1600, true),
+        D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 220, 40, 24, 1.00f, 3.3f, "SK001", null, 1900, false),
+        D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 250, 50, 22, 1.10f, 3.8f, "SK005", "SK004", 6000, false),
+        D("H011", "索菲", "小白", "naima101", "牧师", MercRarity.Common, 1.00f, 100, 15, 10, 1.20f, 3.6f, null, "SK012", 500, true),
+        D("H012", "塞拉", "小蓝", "naima102", "水系法师", MercRarity.Rare, 1.15f, 110, 28, 20, 1.00f, 3.3f, "SK011", null, 1700, false),
+        D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 120, 30, 24, 1.00f, 3.2f, "SK013", null, 2000, false),
+        D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 125, 48, 12, 1.20f, 3.6f, "SK020", "SK019", 8000, false),
+        D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 115, 30, 10, 1.60f, 4.3f, null, "SK002", 500, true),
+        D("H016", "杜根", "怒角", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 175, 33, 16, 1.05f, 3.6f, null, "SK002", 600, true),
+        D("H017", "莉娜", "圣光", "naima101", "牧师", MercRarity.Common, 1.00f, 95, 14, 9, 1.25f, 3.5f, null, "SK012", 500, true),
+        D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 210, 17, 28, 0.85f, 3.0f, null, "SK006", 700, true),
+        D("H019", "艾琳", "星火", "fashi101", "法师", MercRarity.Common, 1.00f, 105, 34, 8, 1.35f, 3.6f, null, "SK017", 600, true),
+        D("H020", "凯尔", "谜面", "fashi102", "法师", MercRarity.Rare, 1.15f, 115, 42, 10, 1.30f, 3.5f, "SK018", null, 1800, false),
+        D("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", MercRarity.Common, 1.00f, 230, 20, 26, 0.80f, 2.9f, null, "SK002", 800, true),
+        D("H022", "索尔", "铁面", "zhongzhan201", "重武者", MercRarity.Rare, 1.15f, 260, 26, 32, 0.85f, 2.8f, "SK003", null, 2200, false),
     };
 
     static Dictionary<string, Def> _byHire;
@@ -66,7 +69,7 @@ public static class MercRosterDefs
     static Def D(
         string hireId, string name, string nick, string asset, string job,
         MercRarity rarity, float growth, float hp, float atk, float def,
-        float atkSpd, float move, string skill, int gold, bool initial)
+        float atkSpd, float move, string activeSkill, string passiveSkill, int gold, bool initial)
     {
         return new Def
         {
@@ -82,7 +85,8 @@ public static class MercRosterDefs
             BaseDef = def,
             AtkSpeed = atkSpd,
             MoveSpeed = move,
-            DefaultSkillId = skill,
+            ActiveSkillId = activeSkill,
+            PassiveSkillId = passiveSkill,
             RecruitGold = gold,
             InInitialPool = initial
         };
@@ -128,6 +132,16 @@ public static class MercRosterDefs
     public static string GetDefaultSkillId(string assetId)
     {
         return TryGetByAssetId(assetId, out var d) ? d.DefaultSkillId : null;
+    }
+
+    public static void GetSkillIds(string assetId, out string activeId, out string passiveId)
+    {
+        activeId = passiveId = null;
+        if (TryGetByAssetId(assetId, out var d))
+        {
+            activeId = d.ActiveSkillId;
+            passiveId = d.PassiveSkillId;
+        }
     }
 
     /// <summary>可出现在酒馆形象池的 AssetId（去重）。</summary>

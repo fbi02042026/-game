@@ -2,12 +2,19 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 /// <summary>
 /// 红点键：谁需要提醒就 Set(key, true)。
 /// 图标上挂 UIRedDot 并填 key，或运行时 RedDot.Bind(icon, key)。
 /// </summary>
 public static class RedDot
 {
+    const string ArtPath = "Assets/Art/UI/Common/红点.png";
+    const string ResourcesPath = "UI/Common/红点";
+
     static readonly Dictionary<string, bool> _flags = new Dictionary<string, bool>();
     static readonly Dictionary<string, List<UIRedDot>> _views = new Dictionary<string, List<UIRedDot>>();
     static Sprite _sprite;
@@ -31,9 +38,37 @@ public static class RedDot
         get
         {
             if (_sprite != null) return _sprite;
-            _sprite = Resources.Load<Sprite>("UI/RedDot");
+            _sprite = LoadSprite();
             return _sprite;
         }
+    }
+
+    static Sprite LoadSprite()
+    {
+        var sp = Resources.Load<Sprite>(ResourcesPath);
+        if (sp != null) return sp;
+
+        var tex = Resources.Load<Texture2D>(ResourcesPath);
+        if (tex != null)
+        {
+            sp = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+            sp.name = "红点";
+            return sp;
+        }
+
+#if UNITY_EDITOR
+        sp = AssetDatabase.LoadAssetAtPath<Sprite>(ArtPath);
+        if (sp != null) return sp;
+        var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(ArtPath);
+        if (edTex != null)
+        {
+            sp = Sprite.Create(edTex, new Rect(0f, 0f, edTex.width, edTex.height), new Vector2(0.5f, 0.5f), 100f);
+            sp.name = "红点";
+            return sp;
+        }
+#endif
+        Debug.LogWarning("[RedDot] 未找到红点图: " + ArtPath);
+        return null;
     }
 
     public static void Set(string key, bool on)

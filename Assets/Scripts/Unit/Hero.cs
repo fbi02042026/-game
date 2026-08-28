@@ -108,41 +108,21 @@ public class Hero : UnitBase
             return;
         }
 
-        List<AttrBonusData> allBonus = bag.GetAllEquippedBonus();
-        foreach (var equip in bag.GetEquippedItems())
-        {
-            if (equip?.enchants == null) continue;
-            foreach (var enchant in equip.enchants)
-            {
-                allBonus.Add(new AttrBonusData
-                {
-                    attrType = enchant.attrType,
-                    value = enchant.value,
-                    isPercent = enchant.isPercent
-                });
-            }
-        }
+        List<AttrBonusData> allBonus = EquipStatRollup.BuildBonusList(bag);
         if (BattleManager.Instance != null && BattleManager.Instance.tempBuffs != null)
             allBonus.AddRange(BattleManager.Instance.tempBuffs);
         attr.RecalcAllAttr(allBonus);
 
-        // 主手：射程走 Kind 表；攻速按 Kind 相对单手剑比例缩放（剑=基准）
+        // 主手优先，无主手则读副手（教程默认左手剑）
         float weaponRange = GameConfig.BASE_ATTACK_RANGE;
-        EquipTemplate mainTpl = null;
-        foreach (var item in bag.GetEquippedItems())
-        {
-            if (item.slotType == EquipSlotType.MainHand && item.template != null)
-            {
-                mainTpl = item.template;
-                weaponRange = GameConfig.ResolveWeaponAttackRange(mainTpl);
-                break;
-            }
-        }
+        EquipTemplate weaponTpl = TryGetEquippedWeaponTemplate(bag);
+        if (weaponTpl != null)
+            weaponRange = GameConfig.ResolveWeaponAttackRange(weaponTpl);
         attr.SetAttr(AttrType.AttackRange, weaponRange);
-        if (mainTpl != null)
+        if (weaponTpl != null)
         {
             float swordSpd = WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.WeaponKind.Sword);
-            float kindSpd = WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.ResolveKind(mainTpl));
+            float kindSpd = WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.ResolveKind(weaponTpl));
             float mul = swordSpd > 0.01f ? kindSpd / swordSpd : 1f;
             attr.SetAttr(AttrType.AttackSpeed, Mathf.Max(0.2f, attr.GetAttr(AttrType.AttackSpeed) * mul));
         }
@@ -166,28 +146,33 @@ public class Hero : UnitBase
     protected override WeaponAttackType GetAttackType()
     {
         if (GridBackpackSystem.Instance == null) return WeaponAttackType.Physical;
-        foreach (var item in GridBackpackSystem.Instance.GetEquippedItems())
+        var tpl = TryGetEquippedWeaponTemplate(GridBackpackSystem.Instance);
+        if (tpl != null)
         {
-            if (item.slotType == EquipSlotType.MainHand)
-                return item.weaponAttackType;
+            foreach (var item in GridBackpackSystem.Instance.GetEquippedItems())
+            {
+                if (item.template == tpl) return item.weaponAttackType;
+            }
         }
         return WeaponAttackType.Physical;
     }
 
     protected override AttackVfxKit GetAttackVfxKit()
     {
-        // 按主手武器种类选 Ally 特效文件夹：近战 MeleeSlash / 弓 Bow / 杖 Orb
-        EquipTemplate tpl = null;
-        if (GridBackpackSystem.Instance != null)
-        {
-            foreach (var item in GridBackpackSystem.Instance.GetEquippedItems())
-            {
-                if (item.slotType != EquipSlotType.MainHand) continue;
-                tpl = item.template;
-                break;
-            }
-        }
+        var tpl = GridBackpackSystem.Instance != null
+            ? TryGetEquippedWeaponTemplate(GridBackpackSystem.Instance)
+            : null;
         return SkillNaming.KitFromWeaponKind(WeaponCombatTable.ResolveKind(tpl));
+    }
+
+    /// <summary>攻击特效以逻辑主手武器为准；无主手则不看副手剑。</summary>
+    static EquipTemplate TryGetEquippedWeaponTemplate(GridBackpackSystem bag)
+    {
+        if (bag == null) return null;
+        var main = bag.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
+        if (main?.template != null && main.weaponType != WeaponType.None)
+            return main.template;
+        return null;
     }
 
     /// <summary>对外：当前主手武器对应的攻击特效套（技能回退也用）。</summary>

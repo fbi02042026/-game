@@ -11,10 +11,14 @@ public class ChapterSplashOverlay : MonoBehaviour
 
     public const float HoldSeconds = 2.5f;
     public const float FadeSeconds = 1.5f;
+    /// <summary>新手教学关：标题多留一会儿让玩家读完。</summary>
+    public const float TutorialHoldSeconds = 3.6f;
+    public const float TutorialFadeSeconds = 1.6f;
 
     CanvasGroup _group;
+    bool _isTutorial;
 
-    public static ChapterSplashOverlay Show(string title, string body = null)
+    public static ChapterSplashOverlay Show(string title, string body = null, bool isTutorial = false)
     {
         var leftovers = Object.FindObjectsOfType<ChapterSplashOverlay>();
         for (int i = 0; i < leftovers.Length; i++)
@@ -25,6 +29,7 @@ public class ChapterSplashOverlay : MonoBehaviour
 
         GameObject root = new GameObject("ChapterSplash");
         var driver = root.AddComponent<ChapterSplashOverlay>();
+        driver._isTutorial = isTutorial;
         driver.Build(title, body);
         driver.StartCoroutine(driver.RunRoutine());
         return driver;
@@ -107,8 +112,10 @@ public class ChapterSplashOverlay : MonoBehaviour
     IEnumerator RunRoutine()
     {
         _group.alpha = 1f;
+        float holdSec = _isTutorial ? TutorialHoldSeconds : HoldSeconds;
+        float fadeSec = _isTutorial ? TutorialFadeSeconds : FadeSeconds;
         float hold = 0f;
-        while (hold < HoldSeconds)
+        while (hold < holdSec)
         {
             hold += Time.unscaledDeltaTime;
             if (Clicked()) break;
@@ -116,11 +123,11 @@ public class ChapterSplashOverlay : MonoBehaviour
         }
 
         float t = 0f;
-        while (t < FadeSeconds)
+        while (t < fadeSec)
         {
             t += Time.unscaledDeltaTime;
             if (t < 0.0001f) t += 0.016f;
-            _group.alpha = 1f - Mathf.Clamp01(t / FadeSeconds);
+            _group.alpha = 1f - Mathf.Clamp01(t / fadeSec);
             if (Clicked() && t > 0.2f) break;
             yield return null;
         }

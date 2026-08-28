@@ -61,13 +61,12 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         {
             case AttackVfxKit.MeleeSlash:
                 {
-                    // 每次从 Shared 取，避免 Inspector 残留旧刀光
                     GameObject hit = LoadSharedKit(kit, faction, "hit");
                     if (hit == null && faction == VfxFaction.Ally)
                         hit = vfxSlash;
                     if (hit == null)
                     {
-                        Debug.LogWarning($"[VFX] 缺少共享特效: {faction}/{kit}/hit");
+                        Debug.LogWarning($"[VFX] 缺少刀光: {faction}/{kit}/hit → 请放 Resources/VFX/Shared/Ally/MeleeSlash/vfx_melee_hit");
                         return;
                     }
                     PlaySlash(toPos, facingDir, faction, hit);
@@ -133,16 +132,137 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
     public void PlaySlash(Vector3 position, int facingDir = 1, VfxFaction faction = VfxFaction.Ally, GameObject prefabOverride = null)
     {
-        GameObject prefab = prefabOverride != null ? prefabOverride : vfxSlash;
+        if (!_prefabsLoaded) AutoLoadPrefabs();
+
+        GameObject prefab = prefabOverride;
+        if (prefab == null)
+            prefab = LoadSharedKit(AttackVfxKit.MeleeSlash, faction, "hit");
+        if (prefab == null)
+            prefab = vfxSlash;
         if (prefab == null)
         {
-            Debug.LogWarning("[VFX] vfxSlash 未赋值");
+            Debug.LogWarning($"[VFX] PlaySlash 无预制体 faction={faction}，期望 Resources/VFX/Shared/Ally/MeleeSlash/vfx_melee_hit");
             return;
         }
-        // 刀光打在受击点世界坐标，不挂到攻击者/受击者身上；大小跟预制体
-        GameObject go = SpawnVFX(prefab, position, defaultDuration, null);
-        ApplyVfxFacing(go, facingDir);
+
+        GameObject go = AcquireVfxInstance(prefab, position);
+        if (go == null) return;
+
+        float slashScale = faction == VfxFaction.Ally ? 2.5f : 2.0f;
+        Vector3 baseScale = prefab.transform.localScale;
+        go.transform.localScale = new Vector3(
+            Mathf.Abs(baseScale.x) * slashScale * (facingDir < 0 ? -1f : 1f),
+            baseScale.y * slashScale,
+            baseScale.z * slashScale);
+
+        PrepareSlashParticles(go);
+        StretchSlashLifetime(go, 0.5f);
+        ResetTintableColors(go);
         ApplyFactionLook(go, faction);
+        PlayAllParticles(go);
+        ScheduleRelease(go, defaultDuration);
+    }
+
+    /// <summary>从池取出实例并摆到世界坐标，不提前 Play（刀光须先改缩放/材质）。</summary>
+    GameObject AcquireVfxInstance(GameObject prefab, Vector3 position)
+    {
+        if (prefab == null) return null;
+        GameObject go = null;
+        if (PoolManager.Instance != null)
+        {
+            string poolKey = "vfx:" + prefab.name;
+            if (!_vfxPoolWarmed.Contains(poolKey))
+            {
+                PoolManager.Instance.Preload(poolKey, prefab, 3);
+                _vfxPoolWarmed.Add(poolKey);
+            }
+            go = PoolManager.Instance.Get(poolKey, position, prefab.transform.rotation);
+        }
+        if (go == null)
+            go = Instantiate(prefab, position, prefab.transform.rotation);
+
+        float z = position.z;
+        if (BattleManager.Instance != null && BattleManager.Instance.unitRoot != null)
+            z = BattleManager.Instance.unitRoot.position.z - 0.15f;
+        GameConfig.SetWorldPosition(go, new Vector3(position.x, position.y, z));
+        go.transform.SetParent(transform, true);
+        go.SetActive(true);
+        SetVFXSortingLayer(go.transform);
+        ResetTintableColors(go);
+        StopAllParticles(go);
+        return go;
+    }
+
+    void ScheduleRelease(GameObject go, float lifetime)
+    {
+        if (go == null) return;
+        if (PoolManager.Instance != null && _vfxPoolWarmed.Count > 0)
+            StartCoroutine(CoReleaseVfx(go, lifetime));
+        else
+            Destroy(go, lifetime);
+    }
+
+    static void StopAllParticles(GameObject go)
+    {
+        if (go == null) return;
+        var pss = go.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < pss.Length; i++)
+            pss[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+    }
+
+    static void PrepareSlashParticles(GameObject go)
+    {
+        if (go == null) return;
+        Material sharedMat = null;
+        var renderers = go.GetComponentsInChildren<ParticleSystemRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] != null && renderers[i].sharedMaterial != null)
+            {
+                sharedMat = renderers[i].sharedMaterial;
+                break;
+            }
+        }
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            var r = renderers[i];
+            if (r == null) continue;
+            if (r.sharedMaterial == null && sharedMat != null)
+                r.sharedMaterial = sharedMat;
+            if (r.renderMode == ParticleSystemRenderMode.None && r.sharedMaterial != null)
+                r.renderMode = ParticleSystemRenderMode.Billboard;
+            if (r.maxParticleSize < 2f)
+                r.maxParticleSize = 100f;
+            r.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            r.sortingOrder = GameConfig.SORT_VFX + 5;
+            r.enabled = true;
+        }
+
+        var pss = go.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < pss.Length; i++)
+        {
+            var ps = pss[i];
+            if (ps == null) continue;
+            var main = ps.main;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            var pr = ps.GetComponent<ParticleSystemRenderer>();
+            if (pr != null && pr.renderMode == ParticleSystemRenderMode.None && pr.sharedMaterial == null)
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+    }
+
+    static void StretchSlashLifetime(GameObject go, float minLife)
+    {
+        if (go == null) return;
+        var pss = go.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < pss.Length; i++)
+        {
+            var main = pss[i].main;
+            if (main.startLifetime.mode == ParticleSystemCurveMode.Constant
+                && main.startLifetime.constant < minLife)
+                main.startLifetime = minLife;
+        }
     }
 
     public void PlayMagicImpact(Vector3 position, Transform target = null, VfxFaction faction = VfxFaction.Ally)
@@ -334,9 +454,11 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
     public void PlayHeal(Vector3 position, VfxFaction faction = VfxFaction.Ally, GameObject prefabOverride = null)
     {
-        GameObject prefab = prefabOverride != null ? prefabOverride : vfxHeal;
+        if (!_prefabsLoaded) AutoLoadPrefabs();
+        GameObject prefab = prefabOverride != null ? prefabOverride : (vfxHeal != null ? vfxHeal : LoadSharedKit(AttackVfxKit.Heal, faction, "hit"));
         if (prefab == null) return;
-        ApplyFactionLook(SpawnVFX(prefab, position, 1.5f, null), faction);
+        GameObject go = PlayPreparedVfx(prefab, position, 1, 1.5f, 1f, prepareParticles: true);
+        ApplyFactionLook(go, faction);
     }
 
     public void PlayShield(Vector3 position, VfxFaction faction = VfxFaction.Ally)
@@ -396,7 +518,49 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         for (int i = 0; i < pss.Length; i++)
         {
             var main = pss[i].main;
+            // 池化复用前须 ResetTintableColors；这里只乘一次阵营色，禁止反复累乘变透明
             main.startColor = Mul(main.startColor.color, tint);
+        }
+    }
+
+    static void ResetTintableColors(GameObject go)
+    {
+        if (go == null) return;
+        var srs = go.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+            srs[i].color = Color.white;
+
+        var imgs = go.GetComponentsInChildren<UnityEngine.UI.Image>(true);
+        for (int i = 0; i < imgs.Length; i++)
+            imgs[i].color = Color.white;
+
+        var pss = go.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < pss.Length; i++)
+        {
+            var main = pss[i].main;
+            main.startColor = Color.white;
+        }
+    }
+
+    /// <summary>
+    /// Ally 刀光根 PS 常为 RenderMode=None（只给子 Slash 当容器）；
+    /// 有材质却被设成 None / MaxParticleSize 过小的子项，强制 Billboard 并放开尺寸上限。
+    /// </summary>
+    static void EnsureSlashParticleVisible(GameObject go)
+    {
+        if (go == null) return;
+        var renderers = go.GetComponentsInChildren<ParticleSystemRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            var r = renderers[i];
+            if (r == null) continue;
+            bool hasMat = r.sharedMaterial != null;
+            if (hasMat && r.renderMode == ParticleSystemRenderMode.None)
+                r.renderMode = ParticleSystemRenderMode.Billboard;
+            if (r.maxParticleSize < 2f)
+                r.maxParticleSize = 100f;
+            r.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            r.sortingOrder = GameConfig.SORT_VFX;
         }
     }
 
@@ -408,7 +572,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
     HashSet<string> _vfxPoolWarmed = new HashSet<string>();
 
-    /// <summary>技能等世界特效：挂本系统根，抬到 SORT_VFX，避免被单位 SortingGroup 挡住。</summary>
+    /// <summary>技能等世界特效：统一安全播放（先摆位/朝向/修粒子，再 Play）。</summary>
     public GameObject PlayWorldPrefab(GameObject prefab, Vector3 position, float lifetime = 2.5f)
     {
         return PlayWorldPrefab(prefab, position, lifetime, 1);
@@ -416,44 +580,44 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
     public GameObject PlayWorldPrefab(GameObject prefab, Vector3 position, float lifetime, int facingDir)
     {
-        var go = SpawnVFX(prefab, position, lifetime, null);
-        if (go != null)
-            ApplyVfxFacing(go, facingDir);
+        return PlayPreparedVfx(prefab, position, facingDir, lifetime, 1f, prepareParticles: true);
+    }
+
+    /// <summary>
+    /// 所有世界特效唯一生成入口：取池 → 世界坐标 → 2D 朝向 →（可选）修粒子 → 染色复位 → Play → 回收。
+    /// 禁止在调用方再手搓 Instantiate + Rotate Y。
+    /// </summary>
+    public GameObject PlayPreparedVfx(GameObject prefab, Vector3 position, int facingDir, float lifetime,
+        float scaleMul = 1f, bool prepareParticles = true)
+    {
+        if (!_prefabsLoaded) AutoLoadPrefabs();
+        GameObject go = AcquireVfxInstance(prefab, position);
+        if (go == null) return null;
+
+        Vector3 baseScale = prefab.transform.localScale;
+        float mul = Mathf.Max(0.01f, scaleMul);
+        go.transform.localScale = new Vector3(
+            Mathf.Abs(baseScale.x) * mul * (facingDir < 0 ? -1f : 1f),
+            baseScale.y * mul,
+            baseScale.z * mul);
+
+        if (prepareParticles)
+            PrepareSlashParticles(go);
+        else
+            SetVFXSortingLayer(go.transform);
+
+        ResetTintableColors(go);
+        PlayAllParticles(go);
+        ScheduleRelease(go, lifetime);
         return go;
     }
 
     GameObject SpawnVFX(GameObject prefab, Vector3 position, float lifetime, Transform parentTarget = null)
     {
-        if (prefab == null) return null;
-        GameObject go = null;
-        if (PoolManager.Instance != null)
-        {
-            string poolKey = "vfx:" + prefab.name;
-            if (!_vfxPoolWarmed.Contains(poolKey))
-            {
-                PoolManager.Instance.Preload(poolKey, prefab, 3);
-                _vfxPoolWarmed.Add(poolKey);
-            }
-            go = PoolManager.Instance.Get(poolKey, position, prefab.transform.rotation);
-        }
-        if (go == null)
-            go = Instantiate(prefab, position, prefab.transform.rotation);
-
-        Vector3 prefabScale = prefab.transform.localScale;
-        if (parentTarget != null)
+        // 兼容旧调用：统一走安全播放；parentTarget 仅在非空时重挂
+        GameObject go = PlayPreparedVfx(prefab, position, 1, lifetime, 1f, prepareParticles: true);
+        if (go != null && parentTarget != null)
             go.transform.SetParent(parentTarget, true);
-        else
-            go.transform.SetParent(transform, true);
-        go.transform.localScale = prefabScale;
-        go.SetActive(true);
-
-        SetVFXSortingLayer(go.transform);
-        PlayAllParticles(go);
-
-        if (PoolManager.Instance != null && _vfxPoolWarmed.Count > 0)
-            StartCoroutine(CoReleaseVfx(go, lifetime));
-        else
-            Destroy(go, lifetime);
         return go;
     }
 
@@ -478,12 +642,14 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         }
     }
 
-    /// <summary>只改朝向，不改缩放——大小一律跟预制体</summary>
+    /// <summary>2D 侧视：用 scale.x 翻转，禁止 Rotate Y（会把 Billboard 侧对镜头）。</summary>
     static void ApplyVfxFacing(GameObject go, int facingDir)
     {
         if (go == null) return;
-        if (facingDir < 0)
-            go.transform.Rotate(0f, 180f, 0f, Space.Self);
+        Vector3 ls = go.transform.localScale;
+        float absX = Mathf.Abs(ls.x);
+        ls.x = absX * (facingDir < 0 ? -1f : 1f);
+        go.transform.localScale = ls;
     }
 
     void SetVFXSortingLayer(Transform t)
@@ -532,22 +698,50 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
         // 刀光必须用 Ally Shared；禁止留下旧 Pixel Craft / 敌方资源
         if (allyMelee != null) vfxSlash = allyMelee;
-        else Debug.LogWarning("[BattleVFXSystem] Ally MeleeSlash 缺失: Resources/VFX/Shared/Ally/MeleeSlash/vfx_melee_hit");
+        else Debug.LogError("[BattleVFXSystem] Ally MeleeSlash 缺失: Resources/VFX/Shared/Ally/MeleeSlash/vfx_melee_hit");
         if (allyOrbHit != null) vfxMagicImpact = allyOrbHit;
         if (allyHeal != null) vfxHeal = allyHeal;
         if (allyOrbFly != null) vfxFireball = allyOrbFly;
 
-        // 兜底：Shared 没有时再读 Pixel Craft（仅缺省项；刀光有 Shared 时不走这里）
-        if (vfxSlash == null) vfxSlash = LoadVFX("Sword Slash");
+        // Shared 缺失时再读 Pixel Craft，并打 Error（避免静默用错刀光）
+        if (vfxSlash == null)
+        {
+            vfxSlash = LoadVFX("Sword Slash");
+            if (vfxSlash != null)
+                Debug.LogError("[BattleVFXSystem] 刀光回退到 Pixel Craft「Sword Slash」——请补 Shared/Ally/MeleeSlash/vfx_melee_hit");
+        }
         if (vfxMagicImpact == null) vfxMagicImpact = LoadVFX("Magic Impact");
         if (vfxHeal == null) vfxHeal = LoadVFX("Heal");
         if (vfxFireball == null) vfxFireball = LoadVFX("Fireball");
+
+        ValidateSharedKitPresence();
 
         // 低频特效按需加载，启动时不批量 Resources.Load
         vfxExplosionSmall = null;
         vfxExplosionBig = null;
 
         GamePerf.Log($"[BattleVFXSystem] VFX就绪 allyBow={allyBowFly != null}/{allyBowHit != null} enemyBow={enemyBowFly != null}/{enemyBowHit != null} orb={vfxFireball != null}");
+    }
+
+    /// <summary>开战自检：缺共用套立刻报错，避免战斗中才发现。</summary>
+    void ValidateSharedKitPresence()
+    {
+        void Need(AttackVfxKit kit, VfxFaction faction, string stage)
+        {
+            if (LoadSharedKit(kit, faction, stage) != null) return;
+            Debug.LogError($"[BattleVFXSystem] 缺共用特效: {SkillNaming.SharedKitResourceHint(kit, faction)} ({stage})");
+        }
+        Need(AttackVfxKit.MeleeSlash, VfxFaction.Ally, "hit");
+        Need(AttackVfxKit.Bow, VfxFaction.Ally, "fly");
+        Need(AttackVfxKit.Bow, VfxFaction.Ally, "hit");
+        Need(AttackVfxKit.Orb, VfxFaction.Ally, "fly");
+        Need(AttackVfxKit.Orb, VfxFaction.Ally, "hit");
+        Need(AttackVfxKit.Heal, VfxFaction.Ally, "hit");
+        Need(AttackVfxKit.Bow, VfxFaction.Enemy, "fly");
+        Need(AttackVfxKit.Bow, VfxFaction.Enemy, "hit");
+        Need(AttackVfxKit.Orb, VfxFaction.Enemy, "fly");
+        Need(AttackVfxKit.Orb, VfxFaction.Enemy, "hit");
+        Need(AttackVfxKit.MeleeSlash, VfxFaction.Enemy, "hit");
     }
 
     /// <summary>加载共用普攻套：Resources/VFX/Shared/{Ally|Enemy}/{Kit}/vfx_*</summary>

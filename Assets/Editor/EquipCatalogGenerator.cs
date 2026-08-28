@@ -52,8 +52,8 @@ public static class EquipCatalogGenerator
         sb.AppendLine();
         sb.AppendLine("**用法**：在「确认宽」「确认高」列填入最终占格（留空=用建议值）。修改后运行 **Tools/装备/从对照表生成装备模板**。");
         sb.AppendLine();
-        sb.AppendLine("| 图标文件名 | 模板ID | 槽位 | 建议宽 | 建议高 | **确认宽** | **确认高** | 武器类型 | 备注 |");
-        sb.AppendLine("|-----------|--------|------|--------|--------|-----------|-----------|----------|------|");
+        sb.AppendLine("| 图标文件名 | 模板ID | 槽位 | 建议宽 | 建议高 | **确认宽** | **确认高** | 武器类型 | weaponHand | 备注 |");
+        sb.AppendLine("|-----------|--------|------|--------|--------|-----------|-----------|----------|------------|------|");
 
         for (int i = 0; i < names.Length; i++)
         {
@@ -61,9 +61,10 @@ public static class EquipCatalogGenerator
             var spec = EquipGridRules.Infer(name);
             string tid = EquipGridRules.MakeTemplateId(name);
             string wt = spec.weaponType.ToString();
+            string hand = spec.weaponHand != WeaponHandSlot.None ? spec.weaponHand.ToString() : "";
             string note = spec.slot == EquipSlotType.MainHand && spec.weaponType == WeaponType.OneHand
                 ? "短武器默认1×2" : "";
-            sb.AppendLine($"| {name} | {tid} | {spec.slot} | {spec.width} | {spec.height} |  |  | {wt} | {note} |");
+            sb.AppendLine($"| {name} | {tid} | {spec.slot} | {spec.width} | {spec.height} |  |  | {wt} | {hand} | {note} |");
         }
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(CatalogPathPrimary)) ?? ".");
@@ -147,6 +148,7 @@ public static class EquipCatalogGenerator
         public int width;
         public int height;
         public string weaponType;
+        public string weaponHand;
     }
 
     static List<CatalogRow> ParseCatalog(string[] lines)
@@ -173,7 +175,8 @@ public static class EquipCatalogGenerator
                 slot = parts[3].Trim(),
                 width = w,
                 height = h,
-                weaponType = parts.Length > 8 ? parts[8].Trim() : "None"
+                weaponType = parts.Length > 8 ? parts[8].Trim() : "None",
+                weaponHand = parts.Length > 9 ? parts[9].Trim() : ""
             });
         }
         return list;
@@ -204,6 +207,13 @@ public static class EquipCatalogGenerator
             tpl.slotType = slot;
         if (System.Enum.TryParse(row.weaponType, out WeaponType wt))
             tpl.weaponType = wt;
+
+        var inferred = EquipGridRules.Infer(row.iconFileName);
+        tpl.weaponHand = inferred.weaponHand;
+        if (!string.IsNullOrEmpty(row.weaponHand) && System.Enum.TryParse(row.weaponHand, out WeaponHandSlot parsedHand))
+            tpl.weaponHand = parsedHand;
+        if (tpl.weaponHand == WeaponHandSlot.None && tpl.weaponType != WeaponType.None)
+            tpl.weaponHand = WeaponLoadoutRules.InferHandFromIcon(row.iconFileName, tpl.weaponType);
 
         if (tpl.slotType == EquipSlotType.MainHand)
             tpl.attackRange = GameConfig.ResolveWeaponAttackRange(tpl) * GameConfig.PIXEL_PER_UNIT;

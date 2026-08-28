@@ -8,8 +8,13 @@ public class Mercenary : UnitBase
 {
     public string mercId;
     public int mercLevel = 1;
-    /// <summary>本局佩戴技能（来自存档；空则按职业默认）</summary>
+    /// <summary>本局佩戴主动技能（来自存档；空则无主动技）</summary>
     public string equippedSkillId;
+    /// <summary>本局佩戴被动技能</summary>
+    public string equippedPassiveSkillId;
+
+    public MercSkillCaster SkillCaster { get; private set; }
+    public MercPassiveRunner PassiveRunner { get; private set; }
 
     private UnitBase _lastLoggedTarget = null;
     private int _partyIndex = -1;
@@ -48,6 +53,18 @@ public class Mercenary : UnitBase
             unitAnim.ClearDebuff();
     }
 
+    public void SetupBattleSkills(string activeId, string passiveId)
+    {
+        equippedSkillId = activeId;
+        equippedPassiveSkillId = passiveId;
+        if (SkillCaster == null) SkillCaster = gameObject.GetComponent<MercSkillCaster>();
+        if (SkillCaster == null) SkillCaster = gameObject.AddComponent<MercSkillCaster>();
+        if (PassiveRunner == null) PassiveRunner = gameObject.GetComponent<MercPassiveRunner>();
+        if (PassiveRunner == null) PassiveRunner = gameObject.AddComponent<MercPassiveRunner>();
+        SkillCaster.Bind(this, activeId);
+        PassiveRunner.Bind(this, passiveId);
+    }
+
     public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false)
     {
         if (TutorialStunned)
@@ -63,7 +80,21 @@ public class Mercenary : UnitBase
             }
             return;
         }
+
+        if (PassiveRunner != null)
+            damage = PassiveRunner.ModifyIncomingDamage(damage);
+
+        float before = currentHp;
         base.TakeDamage(damage, isCrit, ignoreDefense);
+        if (PassiveRunner != null && !Mathf.Approximately(before, currentHp))
+            PassiveRunner.OnHpChanged();
+    }
+
+    protected override void Attack(UnitBase target)
+    {
+        base.Attack(target);
+        if (PassiveRunner != null && target != null && !target.isDead)
+            PassiveRunner.OnBasicAttackHit(target, attr != null ? attr.GetAttr(AttrType.Attack) : 0f);
     }
 
     public void Init(string id, int level = 1)
@@ -195,6 +226,17 @@ public class Mercenary : UnitBase
         return 0;
     }
 
+    public void SetPartyIndex(int index) => _partyIndex = index;
+
+    public override float GetDetectRange()
+    {
+        float baseRange = base.GetDetectRange();
+        // 佣兵缩在玩家身后时，默认索敌距离不够；场上有怪则扩大
+        if (BattleManager.Instance != null && BattleManager.Instance.GetAliveMonsterCount() > 0)
+            return Mathf.Max(baseRange, 10f);
+        return baseRange;
+    }
+
     protected override void AIUpdate()
     {
         if (TutorialStunned)
@@ -276,8 +318,39 @@ public class Mercenary : UnitBase
                 if (rb != null) rb.velocity = new Vector2(0f, rb.velocity.y);
                 isMoving = false;
             }
-            else if (h != null && !h.isDead)
+            else
             {
+                // 有怪但索敌没锁到：主动前压接战，不要只跟在身后
+                UnitBase foe = FindNearestEnemyInDetectRange();
+                if (foe != null)
+                {
+                    float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(foe));
+                    float attackRange = attr.GetAttr(AttrType.AttackRange);
+                    float dir = GetCombatX(foe) > GetCombatX(this) ? 1 : -1;
+                    facingDir = (int)dir;
+                    ApplyFacing(facingDir);
+                    if (distance <= attackRange)
+                    {
+                        if (rb != null) rb.velocity = Vector2.zero;
+                        if (attackCd <= 0)
+                        {
+                            Attack(foe);
+                            attackCd = GetAttackCooldown();
+                        }
+                    }
+                    else if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+                    {
+                        if (rb != null) rb.velocity = Vector2.zero;
+                    }
+                    else
+                    {
+                        if (rb != null)
+                            rb.velocity = new Vector2(dir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
+                        isMoving = true;
+                    }
+                }
+                else if (h != null && !h.isDead)
+                {
                 float desiredX = GetCombatX(h) - BattleManager.MERC_BEHIND_SPACING * (ResolvePartyIndex() + 1);
                 float dx = desiredX - GetCombatX(this);
                 float spd = attr.GetAttr(AttrType.MoveSpeed);
@@ -292,11 +365,12 @@ public class Mercenary : UnitBase
                     if (rb != null) rb.velocity = new Vector2(0f, rb.velocity.y);
                     isMoving = false;
                 }
-            }
-            else if (rb != null)
-            {
-                rb.velocity = new Vector2(0f, rb.velocity.y);
-                isMoving = false;
+                }
+                else if (rb != null)
+                {
+                    rb.velocity = new Vector2(0f, rb.velocity.y);
+                    isMoving = false;
+                }
             }
         }
 

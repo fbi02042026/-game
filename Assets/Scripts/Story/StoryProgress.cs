@@ -82,6 +82,14 @@ public static class StoryProgress
         return v;
     }
 
+    /// <summary>引导未完成时清空战斗背包，避免中断后再进战斗带着上次掉落。</summary>
+    public static void ResetTutorialRunInventoryIfNeeded()
+    {
+        if (TutorialDone || TutorialBattleCleared) return;
+        if (GridBackpackSystem.Instance != null)
+            GridBackpackSystem.Instance.InitNewRun();
+    }
+
     public static void MarkTutorialIntroDone()
     {
         var data = Save();

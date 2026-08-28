@@ -49,7 +49,6 @@ public class BootManager : MonoBehaviour
     {
         WeChatMiniGameConfig.EnsureDesignResolution();
         if (!GameSceneGate.IsBoot) return;
-        HideBootVeil();
         HealthNoticeUI.Present(ShowLogin);
     }
 
@@ -84,6 +83,9 @@ public class BootManager : MonoBehaviour
             _bootVeil = null;
         }
     }
+
+    /// <summary>忠告 UI 就绪后撤掉启动黑幕（避免 Start 里过早销毁造成闪屏）。</summary>
+    public static void ReleaseBootVeil() => HideBootVeil();
 
     void ShowLogin()
     {

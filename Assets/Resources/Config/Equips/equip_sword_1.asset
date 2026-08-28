@@ -32,6 +32,10 @@ MonoBehaviour:
   isLegendary: 0
   slotType: 5
   weaponType: 0
+  weaponHand: 1
+  isAnchor: 1
+  grantSkillId: 
+  skillPassives: []
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0

@@ -14,8 +14,13 @@ Resources/VFX/Shared/             共用普攻套（我方/敌方分文件夹）
   Enemy/   MeleeSlash / Bow / Orb / Heal
 
 Resources/VFX/Skills/
-  Ally/                           玩家+佣兵技能特效（与 Config 同名 id）
+  Ally/                           玩家技能特效（文件名 = 技能 id）
   Monster/                        敌人技能特效
+  Merc/                           佣兵技能特效（SK001~SK020）
+  _Deps/                          技能特效依赖（材质/贴图/模型/音效，勿手改 guid）
+
+※ 技能 prefab 命名 = Config 技能 id（如 ally_heal、mon_slam_multi、SK001）
+※ 共用普攻套仍用 vfx_* 前缀，见下方 Shared
 
 ※ 暴击不用特效套，用飘字区分
 
@@ -41,8 +46,9 @@ Resources/VFX/Skills/
 三、技能 id（文件名 = prefab名 = .asset名）
 ================================================================================
 
-【Ally 我方共用池】
+【Ally 我方】
   ally_heal        加血
+  ally_atk_up      加攻击
   ally_atk_speed   加攻速
   ally_crit_up     加暴击
   ally_thunder     雷击（玩家默认头像技）
@@ -51,6 +57,10 @@ Resources/VFX/Skills/
 【Monster 敌人】
   mon_slam_multi   重击多次 — 近战精英、Boss近战
   mon_magic_burst  魔法攻击 — 远程精英、Boss远程
+
+【Merc 佣兵 SK001~SK020】
+  主动技 + 被动触发特效，文件名与 merc_skills 表 id 一致（SK001…SK020）
+  来源对照：Resources/VFX/Skills/etfx_skill_vfx_map.csv
 
 Boss 可配精英技或小怪普攻套；小怪不配主动技。
 

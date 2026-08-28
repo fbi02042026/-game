@@ -7,6 +7,7 @@ using UnityEngine;
 public class SkillRegistry : Singleton<SkillRegistry>
 {
     private Dictionary<string, SkillConfig> _dict = new Dictionary<string, SkillConfig>();
+    private Dictionary<string, SkillConfig> _runtimeMerc = new Dictionary<string, SkillConfig>();
 
     public const string DefaultPlayerSkillId = "ally_heal";
     public const string DefaultMercMeleeSkillId = "ally_shield";
@@ -25,6 +26,7 @@ public class SkillRegistry : Singleton<SkillRegistry>
     public void LoadAll()
     {
         _dict.Clear();
+        _runtimeMerc.Clear();
         LoadFolder(ContentPaths.Config.SkillsAlly);
         LoadFolder(ContentPaths.Config.SkillsMonster);
         LoadFolder(ContentPaths.Config.SkillsPlayerLegacy);
@@ -47,7 +49,15 @@ public class SkillRegistry : Singleton<SkillRegistry>
     public SkillConfig Get(string id)
     {
         if (string.IsNullOrEmpty(id)) return null;
-        return _dict.TryGetValue(id, out var c) ? c : null;
+        if (_dict.TryGetValue(id, out var c)) return c;
+        if (_runtimeMerc.TryGetValue(id, out c)) return c;
+        if (MercSkillTable.IsMercSkillId(id))
+        {
+            c = MercSkillTable.BuildRuntimeConfig(id);
+            if (c != null) _runtimeMerc[id] = c;
+            return c;
+        }
+        return null;
     }
 
     public SkillSystem.ActiveSkill GetActiveSkill(string id)
@@ -59,6 +69,10 @@ public class SkillRegistry : Singleton<SkillRegistry>
     /// <summary>玩家当前携带技能（角色页选择；映射到现有 Ally SkillConfig）</summary>
     public string GetPlayerSkillId()
     {
+        string fromEquip = EquipStatRollup.GetEquippedGrantSkillId(GridBackpackSystem.Instance);
+        if (!string.IsNullOrEmpty(fromEquip) && Get(fromEquip) != null)
+            return fromEquip;
+
         string selected = SaveSystem.Instance?.Data?.selectedPlayerSkillId;
         var def = PlayerSkillDefs.GetById(selected);
         if (def != null && !string.IsNullOrEmpty(def.allyConfigId))
@@ -68,24 +82,45 @@ public class SkillRegistry : Singleton<SkillRegistry>
 
     public string GetMercDefaultSkillId(string mercId)
     {
-        if (string.IsNullOrEmpty(mercId)) return DefaultMercMeleeSkillId;
-        string fromRoster = MercRosterDefs.GetDefaultSkillId(mercId);
-        if (!string.IsNullOrEmpty(fromRoster)) return fromRoster;
-        if (mercId.StartsWith("naima")) return DefaultMercHealSkillId;
-        if (mercId.StartsWith("fashi")) return "ally_atk_up";
-        if (mercId.StartsWith("gongshou")) return DefaultMercRangedSkillId;
-        if (mercId.StartsWith("dunbing")) return DefaultMercMeleeSkillId;
-        if (mercId.StartsWith("kuangzhan")) return "ally_atk_speed";
-        if (mercId.StartsWith("zhongzhan")) return DefaultMercMeleeSkillId;
-        return DefaultMercMeleeSkillId;
+        if (string.IsNullOrEmpty(mercId)) return null;
+        MercRosterDefs.GetSkillIds(mercId, out string active, out _);
+        if (!string.IsNullOrEmpty(active)) return active;
+        MercSkillMapping.GetDefaultSkills(mercId, out active, out _);
+        return active;
+    }
+
+    public string GetMercPassiveSkillId(MercenaryData data)
+    {
+        if (data != null && !string.IsNullOrEmpty(data.passiveSkillId) && Get(data.passiveSkillId) != null)
+            return data.passiveSkillId;
+        if (data != null)
+        {
+            MercRosterDefs.GetSkillIds(data.mercId, out _, out string passive);
+            if (!string.IsNullOrEmpty(passive)) return passive;
+        }
+        return null;
+    }
+
+    public string GetMercPassiveSkillId(string mercId)
+    {
+        MercRosterDefs.GetSkillIds(mercId, out _, out string passive);
+        if (!string.IsNullOrEmpty(passive)) return passive;
+        MercSkillMapping.GetDefaultSkills(mercId, out _, out passive);
+        return passive;
     }
 
     /// <summary>优先用存档佣兵佩戴技能；空则回退职业默认。</summary>
     public string GetMercSkillId(MercenaryData data)
     {
-        if (data != null && !string.IsNullOrEmpty(data.skillId) && Get(data.skillId) != null)
+        if (data != null && !string.IsNullOrEmpty(data.skillId) && Get(data.skillId) != null && !MercSkillTable.IsPassive(data.skillId))
             return data.skillId;
         return GetMercDefaultSkillId(data != null ? data.mercId : null);
+    }
+
+    public bool MercHasActiveSkill(MercenaryData data)
+    {
+        string id = GetMercSkillId(data);
+        return !string.IsNullOrEmpty(id) && MercSkillTable.IsMercSkillId(id) && !MercSkillTable.IsPassive(id);
     }
 
     public string GetMercSkillId(string mercId, string preferredSkillId)
@@ -114,14 +149,41 @@ public class SkillRegistry : Singleton<SkillRegistry>
         return ranged ? MonsterEliteRangedSkillId : null;
     }
 
+    /// <summary>
+    /// Resources/VFX/Skills 子目录：mon_*→Monster，SK*→Merc，其余→Ally。
+    /// 找不到时再扫 Ally/Merc/Monster，避免历史放错目录静默丢特效。
+    /// </summary>
+    public static string ResolveSkillVfxFolder(string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return "Ally";
+        if (skillId.StartsWith("mon_", System.StringComparison.OrdinalIgnoreCase)) return "Monster";
+        if (skillId.Length >= 2
+            && (skillId[0] == 'S' || skillId[0] == 's')
+            && (skillId[1] == 'K' || skillId[1] == 'k'))
+            return "Merc";
+        return "Ally";
+    }
+
     /// <summary>技能专属特效预制体；给「子弹命中点用技能特效」这类场景取原始 prefab。</summary>
     public GameObject GetSkillVfxPrefab(string skillId)
     {
         if (string.IsNullOrEmpty(skillId)) return null;
         var cfg = Get(skillId);
         if (cfg != null && cfg.vfxPrefab != null) return cfg.vfxPrefab;
-        string folder = skillId.StartsWith("mon_") ? "Monster" : "Ally";
-        return Resources.Load<GameObject>($"VFX/Skills/{folder}/{skillId}");
+
+        string primary = ResolveSkillVfxFolder(skillId);
+        var go = Resources.Load<GameObject>($"VFX/Skills/{primary}/{skillId}");
+        if (go != null) return go;
+
+        // 兜底：目录放错时仍能找到（开发期补洞）
+        string[] folders = { "Ally", "Merc", "Monster" };
+        for (int i = 0; i < folders.Length; i++)
+        {
+            if (folders[i] == primary) continue;
+            go = Resources.Load<GameObject>($"VFX/Skills/{folders[i]}/{skillId}");
+            if (go != null) return go;
+        }
+        return null;
     }
 
     /// <summary>兼容旧调用</summary>
@@ -132,19 +194,19 @@ public class SkillRegistry : Singleton<SkillRegistry>
         return GetMonsterSkillId(template, isEliteWave, boss, style);
     }
 
-    /// <summary>播放技能专属特效（预制体放在 VFX/Skills/Ally 或 Monster，文件名=id）</summary>
+    /// <summary>
+    /// 播放技能特效（唯一对外入口）。规则固定：
+    /// 1) 专属 prefab（配置拖入 或 VFX/Skills/.../{id}）
+    /// 2) 否则 SkillNaming.ResolveSkillVfxKit → 共用套
+    /// 不会再用玩家武器套盖掉技能。
+    /// </summary>
     public void PlaySkillVfx(string skillId, Vector3 pos, bool isAllyCaster, int facingDir = 1, Transform attach = null)
     {
         if (string.IsNullOrEmpty(skillId)) return;
         var cfg = Get(skillId);
-        GameObject prefab = cfg != null ? cfg.vfxPrefab : null;
+        VfxFaction faction = isAllyCaster ? VfxFaction.Ally : VfxFaction.Enemy;
 
-        if (prefab == null)
-        {
-            string folder = skillId.StartsWith("mon_") ? "Monster" : "Ally";
-            prefab = Resources.Load<GameObject>($"VFX/Skills/{folder}/{skillId}");
-        }
-
+        GameObject prefab = GetSkillVfxPrefab(skillId);
         if (prefab != null)
         {
             if (BattleVFXSystem.Instance != null)
@@ -163,37 +225,24 @@ public class SkillRegistry : Singleton<SkillRegistry>
             return;
         }
 
-        if (BattleVFXSystem.Instance == null) return;
-        var faction = isAllyCaster ? VfxFaction.Ally : VfxFaction.Enemy;
-        AttackVfxKit kit = cfg != null ? cfg.attackKit : AttackVfxKit.None;
-
-        // 恢复类固定 Heal；玩家（英雄）无专属 prefab 时按主手武器选文件夹
-        bool healSkill = skillId.IndexOf("heal", System.StringComparison.OrdinalIgnoreCase) >= 0
-            || (cfg != null && cfg.attackKit == AttackVfxKit.Heal);
-        if (healSkill)
-            kit = AttackVfxKit.Heal;
-        else if (isAllyCaster && IsHeroCaster(attach))
-            kit = Hero.Instance.GetWeaponVfxKit();
-        else if (kit == AttackVfxKit.None)
+        if (BattleVFXSystem.Instance == null)
         {
-            if (skillId.Contains("thunder") || skillId.Contains("magic") || skillId.Contains("orb"))
-                kit = AttackVfxKit.Orb;
-            else if (skillId.Contains("bow") || skillId.Contains("arrow"))
-                kit = AttackVfxKit.Bow;
-            else
-                kit = AttackVfxKit.MeleeSlash;
+            Debug.LogError($"[SkillRegistry] 无 BattleVFXSystem，技能特效跳过: {skillId}");
+            return;
         }
 
+        if (cfg != null && cfg.attackKit == AttackVfxKit.None && cfg.vfxPrefab == null)
+        {
+            Debug.LogError(
+                $"[SkillRegistry] 技能「{skillId}」无专属 VFX，且 attackKit=None。" +
+                "请拖 vfxPrefab / 放 Resources/VFX/Skills/.../{id}.prefab，或设 attackKit。" +
+                "本次用 ResolveSkillVfxKit 兜底，可能不是预期效果。");
+        }
+
+        AttackVfxKit kit = SkillNaming.ResolveSkillVfxKit(cfg, skillId);
         if (kit == AttackVfxKit.Heal)
             BattleVFXSystem.Instance.PlayHeal(pos, faction);
         else
             BattleVFXSystem.Instance.PlayAttackKit(kit, faction, pos, pos, facingDir);
-    }
-
-    static bool IsHeroCaster(Transform attach)
-    {
-        if (Hero.Instance == null) return false;
-        if (attach == null) return true; // 历史调用未传挂点，默认当玩家
-        return attach == Hero.Instance.transform || attach.IsChildOf(Hero.Instance.transform);
     }
 }

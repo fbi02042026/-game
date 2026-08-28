@@ -2,8 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 酒馆招募：从佣兵形象池抽 3 个候选项。
-/// 形象（prefab/mercId）可相同，但姓名、等级、星级、技能必须做出差异。
+/// 酒馆招募：从佣兵形象池抽 3 个候选项；技能按 H 表与稀有度绑定。
 /// </summary>
 public static class MercenaryOfferGenerator
 {
@@ -16,33 +15,18 @@ public static class MercenaryOfferGenerator
         "霍克", "莉娜", "加仑", "苏尔", "米娅", "托尔", "茜茜", "沃克"
     };
 
-    static readonly string[] AllySkillPool =
-    {
-        "ally_heal", "ally_shield", "ally_atk_up", "ally_atk_speed", "ally_crit_up", "ally_thunder"
-    };
-
-    static readonly string[] SkillDisplayNames =
-    {
-        "治愈之泉", "圣盾壁垒", "战意爆发", "疾风架势", "致命专注", "天雷裁决"
-    };
-
     public static string SkillDisplayName(string skillId)
     {
-        if (string.IsNullOrEmpty(skillId)) return "未知技能";
-        for (int i = 0; i < AllySkillPool.Length; i++)
-        {
-            if (AllySkillPool[i] == skillId)
-                return SkillDisplayNames[i];
-        }
+        if (string.IsNullOrEmpty(skillId)) return "—";
+        if (MercSkillTable.TryGet(skillId, out var row))
+            return row.DisplayName;
         var cfg = SkillRegistry.Instance != null ? SkillRegistry.Instance.Get(skillId) : null;
         if (cfg != null && !string.IsNullOrEmpty(cfg.skillName)) return cfg.skillName;
         return skillId;
     }
 
-    /// <summary>生成三选一；池为空时回退初级模板列表。</summary>
     public static List<MercenaryData> GenerateOffers()
     {
-        var pool = GetVisualPool();
         var offers = new List<MercenaryData>(OfferCount);
         var usedSignatures = new HashSet<string>();
 
@@ -51,7 +35,7 @@ public static class MercenaryOfferGenerator
             MercenaryData offer = null;
             for (int attempt = 0; attempt < 24; attempt++)
             {
-                offer = RollOne(pool);
+                offer = RollOne();
                 string sig = Signature(offer);
                 if (!usedSignatures.Contains(sig))
                 {
@@ -59,8 +43,7 @@ public static class MercenaryOfferGenerator
                     break;
                 }
             }
-            if (offer == null) offer = RollOne(pool);
-            // 强制本批姓名互异
+            if (offer == null) offer = RollOne();
             EnsureUniqueName(offer, offers);
             offers.Add(offer);
         }
@@ -91,7 +74,69 @@ public static class MercenaryOfferGenerator
     static string Signature(MercenaryData m)
     {
         if (m == null) return "";
-        return $"{m.mercId}|{m.displayName}|{m.level}|{m.star}|{m.skillId}";
+        return $"{m.mercId}|{m.displayName}|{m.level}|{m.star}|{m.skillId}|{m.passiveSkillId}";
+    }
+
+    static MercenaryData RollOne()
+    {
+        int star = Random.Range(1, 6);
+        var rarity = MercSkillMapping.StarToRarity(star);
+        if (!MercSkillMapping.TryPickHireId(rarity, out var mapRow))
+            return RollFallback(star);
+
+        if (!MercRosterDefs.TryGetByHireId(mapRow.HireId, out var def))
+            return RollFallback(star);
+
+        if (star >= 4) star = Mathf.Max(star, rarity == MercRosterDefs.MercRarity.Legendary ? 5 : 4);
+        int level = Random.Range(1, 11);
+        if (star >= 4) level = Mathf.Max(level, Random.Range(5, 11));
+
+        string name = def.Name;
+        if (CountAssetUsers(def.AssetId) > 1)
+            name = NamePool[Random.Range(0, NamePool.Length)];
+
+        return new MercenaryData
+        {
+            mercId = def.AssetId,
+            displayName = name,
+            nickname = def.Nickname,
+            hireId = mapRow.HireId,
+            uid = System.Guid.NewGuid().ToString("N"),
+            favorLevel = 1,
+            level = level,
+            star = star,
+            skillId = mapRow.ActiveSkillId,
+            passiveSkillId = mapRow.PassiveSkillId
+        };
+    }
+
+    static int CountAssetUsers(string assetId)
+    {
+        int hits = 0;
+        var all = MercRosterDefs.All;
+        for (int i = 0; i < all.Count; i++)
+        {
+            if (all[i].AssetId == assetId) hits++;
+        }
+        return hits;
+    }
+
+    static MercenaryData RollFallback(int star)
+    {
+        var pool = GetVisualPool();
+        string mercId = pool[Random.Range(0, pool.Count)];
+        MercSkillMapping.GetDefaultSkills(mercId, out string active, out string passive);
+        return new MercenaryData
+        {
+            mercId = mercId,
+            displayName = NamePool[Random.Range(0, NamePool.Length)],
+            uid = System.Guid.NewGuid().ToString("N"),
+            favorLevel = 1,
+            level = Random.Range(1, 11),
+            star = star,
+            skillId = active,
+            passiveSkillId = passive
+        };
     }
 
     static List<string> GetVisualPool()
@@ -112,63 +157,13 @@ public static class MercenaryOfferGenerator
         }
         if (result.Count == 0)
         {
-            // 回退：初级形象模板（含法师/重武者）
             result.AddRange(new[]
             {
-                "dunbing101", "gongshou101", "kuangzhan101", "naima101", "qita101",
-                "dunbing102", "kuangzhan102", "naima102",
-                "fashi101", "fashi102", "zhongzhan101", "zhongzhan201"
+                "dunbing101", "gongshou101", "kuangzhan101", "naima101", "fashi101",
+                "dunbing102", "kuangzhan102", "naima102", "zhongzhan101", "zhongzhan201"
             });
         }
         return result;
-    }
-
-    static MercenaryData RollOne(List<string> pool)
-    {
-        string mercId = pool[Random.Range(0, pool.Count)];
-        int level = Random.Range(1, 11); // 1～10
-        int star = Random.Range(1, 6);   // 1～5
-        string skillId = AllySkillPool[Random.Range(0, AllySkillPool.Length)];
-        string name = NamePool[Random.Range(0, NamePool.Length)];
-
-        // 独有形象（如 fashi101）用花名册正式名与默认技能；共用形象仍随机名
-        if (TryGetUniqueRosterName(mercId, out string rosterName, out string rosterSkill))
-        {
-            name = rosterName;
-            if (!string.IsNullOrEmpty(rosterSkill)) skillId = rosterSkill;
-        }
-
-        // 同批再抽时略微拉开：星级高的略抬等级
-        if (star >= 4) level = Mathf.Max(level, Random.Range(5, 11));
-
-        return new MercenaryData
-        {
-            mercId = mercId,
-            displayName = name,
-            uid = System.Guid.NewGuid().ToString("N"),
-            favorLevel = 1,
-            level = level,
-            star = star,
-            skillId = skillId
-        };
-    }
-
-    static bool TryGetUniqueRosterName(string mercId, out string name, out string skillId)
-    {
-        name = null;
-        skillId = null;
-        if (string.IsNullOrEmpty(mercId) || !MercRosterDefs.TryGetByAssetId(mercId, out var primary))
-            return false;
-        int hits = 0;
-        var all = MercRosterDefs.All;
-        for (int i = 0; i < all.Count; i++)
-        {
-            if (all[i].AssetId == mercId) hits++;
-        }
-        if (hits != 1) return false;
-        name = primary.Name;
-        skillId = primary.DefaultSkillId;
-        return !string.IsNullOrEmpty(name);
     }
 
     public static string FormatCard(MercenaryData m)
@@ -178,7 +173,9 @@ public static class MercenaryOfferGenerator
             ? MercenaryManager.Instance.GetJobName(m.mercId)
             : m.mercId;
         string stars = new string('★', Mathf.Clamp(m.star, 1, 5));
-        return $"{m.displayName}\n{job}\nLv{Mathf.Max(1, m.level)}  {stars}\n技能：{SkillDisplayName(m.skillId)}";
+        string active = SkillDisplayName(m.skillId);
+        string passive = SkillDisplayName(m.passiveSkillId);
+        return $"{m.displayName}\n{job}\nLv{Mathf.Max(1, m.level)}  {stars}\n主动：{active}\n被动：{passive}";
     }
 
     public static string FormatRosterLine(MercenaryData m, bool deploy)
@@ -189,6 +186,8 @@ public static class MercenaryOfferGenerator
             ? MercenaryManager.Instance.GetJobName(m.mercId)
             : m.mercId;
         string stars = new string('★', Mathf.Clamp(m.star < 1 ? 1 : m.star, 1, 5));
-        return $"  {(deploy ? "★出战" : "·待命")} {name}（{job}） Lv{Mathf.Max(1, m.level)} {stars} [{SkillDisplayName(m.skillId)}]";
+        string active = SkillDisplayName(m.skillId);
+        string passive = SkillDisplayName(m.passiveSkillId);
+        return $"  {(deploy ? "★出战" : "·待命")} {name}（{job}） Lv{Mathf.Max(1, m.level)} {stars} [主:{active} 被:{passive}]";
     }
 }

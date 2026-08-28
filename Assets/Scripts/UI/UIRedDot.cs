@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 挂在图标下（或由 RedDot.Bind 自动创建）。显示 主界面_0001_红点。
+/// 挂在图标下（或由 RedDot.Bind 自动创建）。显示 Art/UI/Common/红点。
 /// 推荐：不在每个图标手摆图，统一用 RedDot.Bind / 本组件 + key。
 /// </summary>
 [DisallowMultipleComponent]

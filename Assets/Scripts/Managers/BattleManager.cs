@@ -225,7 +225,17 @@ public class BattleManager : Singleton<BattleManager>
 
         IsTutorialRun = StoryProgress.ShouldStartTutorialBattle();
         if (IsTutorialRun)
+        {
+            StoryProgress.ResetTutorialRunInventoryIfNeeded();
+            TutorialDirector.Instance?.ResetBattleTutorialRuntime();
+        }
+        if (IsTutorialRun)
             StoryProgress.ConsumeTutorialBattleFlag();
+        if (IsTutorialRun && GridBackpackSystem.Instance != null)
+        {
+            if (GridBackpackSystem.Instance.EnsureStarterWeapon())
+                hero.RecalcAttr();
+        }
         SuppressStageClear = IsTutorialRun;
         SkipLegacyOnEvacuate = IsTutorialRun;
         runGoldGainMul = 1f;
@@ -322,10 +332,7 @@ public class BattleManager : Singleton<BattleManager>
             if (m.star < 1) m.star = 1;
             if (string.IsNullOrEmpty(m.displayName)) m.displayName = m.mercId;
             if (string.IsNullOrEmpty(m.uid)) m.uid = System.Guid.NewGuid().ToString("N");
-            if (string.IsNullOrEmpty(m.skillId))
-                m.skillId = SkillRegistry.Instance != null
-                    ? SkillRegistry.Instance.GetMercDefaultSkillId(m.mercId)
-                    : SkillRegistry.DefaultMercMeleeSkillId;
+            MercSkillMigrate.AlignMercenary(m);
         }
 
         // 软著版：佣兵由酒馆三选一反复招募，不再空档自动塞弓手。
@@ -357,29 +364,34 @@ public class BattleManager : Singleton<BattleManager>
         int max = mm.GetMaxMercSlots();
         int spawned = 0;
         bool countedLaodun = false;
-        if (data?.permanentMercs != null)
+        var party = mm.GetActiveMercData();
+        for (int i = 0; i < party.Count && spawned < max; i++)
         {
-            for (int i = 0; i < data.permanentMercs.Count && spawned < max; i++)
-            {
-                var md = data.permanentMercs[i];
-                if (md == null || string.IsNullOrEmpty(md.mercId)) continue;
-                if (!GameConfig.IsMercAvailable(md.mercId, data)) continue;
+            var md = party[i];
+            if (md == null || string.IsNullOrEmpty(md.mercId)) continue;
+            if (!GameConfig.IsMercAvailable(md.mercId, data)) continue;
 
-                Vector3 pos = basePos + new Vector3(-0.85f * (spawned + 1), 0, 0);
-                var merc = mm.SpawnMercenary(md.mercId, pos, Mathf.Max(1, md.level));
-                if (merc != null)
+            Vector3 pos = basePos + new Vector3(-0.85f * (spawned + 1), 0, 0);
+            var merc = mm.SpawnMercenary(md.mercId, pos, Mathf.Max(1, md.level));
+            if (merc != null)
+            {
+                MercSkillMigrate.AlignMercenary(md);
+                string active = SkillRegistry.Instance != null
+                    ? SkillRegistry.Instance.GetMercSkillId(md)
+                    : md.skillId;
+                string passive = SkillRegistry.Instance != null
+                    ? SkillRegistry.Instance.GetMercPassiveSkillId(md)
+                    : md.passiveSkillId;
+                merc.SetupBattleSkills(active, passive);
+                if (!string.IsNullOrEmpty(md.displayName))
+                    merc.gameObject.name = "Merc_" + md.displayName;
+                allyUnits.Add(merc);
+                merc.OnDead += OnMercenaryDead;
+                spawned++;
+                if (!IsTutorialRun && !countedLaodun && md.mercId.StartsWith("dunbing"))
                 {
-                    merc.equippedSkillId = md.skillId;
-                    if (!string.IsNullOrEmpty(md.displayName))
-                        merc.gameObject.name = "Merc_" + md.displayName;
-                    allyUnits.Add(merc);
-                    merc.OnDead += OnMercenaryDead;
-                    spawned++;
-                    if (!IsTutorialRun && !countedLaodun && md.mercId.StartsWith("dunbing"))
-                    {
-                        AdventureLogAchievements.OnLaodunBattled();
-                        countedLaodun = true;
-                    }
+                    AdventureLogAchievements.OnLaodunBattled();
+                    countedLaodun = true;
                 }
             }
         }
@@ -516,6 +528,9 @@ public class BattleManager : Singleton<BattleManager>
         Vector3 pos = new Vector3(heroX + aheadDist, UnitBase.GROUND_Y, z);
         var merc = mm.SpawnMercenary(string.IsNullOrEmpty(mercId) ? "dunbing102" : mercId, pos, 1);
         if (merc == null) return null;
+        string useId = string.IsNullOrEmpty(mercId) ? "dunbing102" : mercId;
+        MercRosterDefs.GetSkillIds(useId, out string active, out string passive);
+        merc.SetupBattleSkills(active, passive);
         if (!allyUnits.Contains(merc))
             allyUnits.Add(merc);
         merc.OnDead += OnMercenaryDead;
@@ -1138,13 +1153,17 @@ public class BattleManager : Singleton<BattleManager>
         {
             title = "森林区域，第一层";
             body = "阳光还能照进来，怪物也不算太强。\n正好适合一个新人进去摸摸路。";
+            // 过场文字期间就开始刷第一波，不必等黑幕结束
+            TutorialDirector.Instance?.NotifyBattleSplashFinished();
         }
         else if (CurrentChapter <= 1 && StoryProgress.TutorialDone && !StoryProgress.Chapter1ChoiceDone)
         {
             body = "新人任务开始。不要想太多。";
         }
-        var splash = ChapterSplashOverlay.Show(title, body);
-        float need = ChapterSplashOverlay.HoldSeconds + ChapterSplashOverlay.FadeSeconds + 0.5f;
+        var splash = ChapterSplashOverlay.Show(title, body, IsTutorialRun);
+        float need = (IsTutorialRun
+            ? ChapterSplashOverlay.TutorialHoldSeconds + ChapterSplashOverlay.TutorialFadeSeconds
+            : ChapterSplashOverlay.HoldSeconds + ChapterSplashOverlay.FadeSeconds) + 0.5f;
         float guard = 0f;
         while (splash != null && !splash.IsFinished && guard < need)
         {
@@ -1187,10 +1206,7 @@ public class BattleManager : Singleton<BattleManager>
         else if (!IsTutorialRun)
             Debug.LogError($"[BattleManager] 开战完成仍无怪 monsters={monsters.Count} waves={_waves?.Count ?? 0}");
         else
-            Debug.Log("[BattleManager] 教程开战完成，等待 TutorialDirector 分步刷怪");
-
-        if (IsTutorialRun)
-            TutorialDirector.Instance?.NotifyBattleSplashFinished();
+            Debug.Log("[BattleManager] 教程开战完成，引导已在过场开始时启动");
     }
 
     /// <summary>按间距摆玩家+佣兵（佣兵在身后，不再挤压到重叠）</summary>
@@ -1689,7 +1705,9 @@ public class BattleManager : Singleton<BattleManager>
             for (int i = 0; i < mercSkillEnergy.Length; i++)
             {
                 bool live = mercs != null && i < mercs.Count && mercs[i] != null && !mercs[i].isDead;
-                if (i >= unlocked || !live)
+                bool hasActive = live && mercs[i].SkillCaster != null && mercs[i].SkillCaster.HasActiveSkill;
+                bool manual = !MercSkillMigrate.IsMercSkillAutoCast();
+                if (i >= unlocked || !live || !hasActive || !manual)
                 {
                     if (mercSkillEnergy[i] > 0f)
                     {
@@ -2188,9 +2206,10 @@ public class BattleManager : Singleton<BattleManager>
         return true;
     }
 
-    /// <summary>释放佣兵技能（槽位 index 0/1）— 玩家/佣兵共用 Ally 技能池</summary>
+    /// <summary>释放佣兵技能（槽位 index 0/1）— 手动模式</summary>
     public bool TryUseMercSkill(int mercIndex)
     {
+        if (MercSkillMigrate.IsMercSkillAutoCast()) return false;
         if (mercIndex < 0 || mercIndex >= mercSkillEnergy.Length) return false;
         if (mercSkillEnergy[mercIndex] < 0.99f) return false;
 
@@ -2198,13 +2217,59 @@ public class BattleManager : Singleton<BattleManager>
         if (mercs == null || mercIndex >= mercs.Count) return false;
         Mercenary merc = mercs[mercIndex];
         if (merc == null || merc.isDead) return false;
+        if (merc.SkillCaster == null || !merc.SkillCaster.HasActiveSkill) return false;
 
-        var skill = ResolveMercSkill(merc);
+        bool ok = merc.SkillCaster.TryCast(manual: true);
+        if (!ok) return false;
+
+        mercSkillEnergy[mercIndex] = 0f;
+        BattleUI.Instance?.UpdateSkillEnergy(mercIndex + 1, 0f);
+        return true;
+    }
+
+    /// <summary>佣兵主动技施放入口（自动/手动共用）</summary>
+    public bool TryCastMercActiveSkill(Mercenary merc, string skillId, bool manual)
+    {
+        if (merc == null || merc.isDead || string.IsNullOrEmpty(skillId)) return false;
+        if (MercSkillTable.IsPassive(skillId)) return false;
+
+        var skill = ResolveSkill(skillId);
+        if (skill == null) return false;
+
         UnitBase healTarget = null;
-        if (IsHealSkill(skill))
+        if (IsHealSkill(skill) || skillId == "SK011" || skillId == "SK013" || skillId == "SK015")
         {
             healTarget = FindPreferredHealTarget();
-            ExecuteAllySkillFallback(merc, skill, healTarget);
+            float atk = merc.attr != null ? merc.attr.GetAttr(AttrType.Attack) : 0f;
+            var cfg = SkillRegistry.Instance?.Get(skillId);
+            float mul = cfg != null && cfg.damageMultiplier > 0f ? cfg.damageMultiplier : 1.3f;
+            if (skillId == "SK015")
+                ApplyHealToTeam(atk * mul);
+            else
+                ApplyHealToUnit(healTarget ?? merc, atk * mul);
+            if (merc.PassiveRunner != null)
+                merc.PassiveRunner.OnOwnerHealed(atk * mul);
+        }
+        else if (skillId == "SK007")
+        {
+            if (merc.PassiveRunner != null)
+                merc.PassiveRunner.ApplySelfDefBuff(5f);
+        }
+        else if (skillId == "SK008")
+        {
+            ApplyTeamShieldBuff(0.10f, 6f);
+        }
+        else if (skillId == "SK010")
+        {
+            float atk = merc.attr != null ? merc.attr.GetAttr(AttrType.Attack) : 0f;
+            ApplyHealToTeam(atk * 0.5f);
+        }
+        else if (skillId == "SK018")
+        {
+            UnitBase t = merc.FindNearestEnemy();
+            if (t != null && merc.PassiveRunner != null)
+                merc.PassiveRunner.ApplyFearDebuff(t, 8f);
+            ExecuteAllySkillFallback(merc, skill);
         }
         else if (skill.skillType == SkillSystem.SkillType.Buff)
             ExecuteAllySkillFallback(merc, skill);
@@ -2215,10 +2280,21 @@ public class BattleManager : Singleton<BattleManager>
         Transform vfxAttach = healTarget != null ? healTarget.transform : merc.transform;
         SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, merc.facingDir, vfxAttach);
 
-        mercSkillEnergy[mercIndex] = 0f;
-        BattleUI.Instance?.UpdateSkillEnergy(mercIndex + 1, 0f);
-        Debug.Log($"[BattleManager] 佣兵技能释放: {merc.mercId} → {skill.skillName} ({skill.skillId})");
+        Debug.Log($"[BattleManager] 佣兵技能释放: {merc.mercId} → {skill.skillName} ({skill.skillId}) manual={manual}");
         return true;
+    }
+
+    void ApplyTeamShieldBuff(float ratio, float duration)
+    {
+        var mercs = MercenaryManager.Instance?.GetActiveMercs();
+        if (mercs != null)
+        {
+            for (int i = 0; i < mercs.Count; i++)
+            {
+                if (mercs[i]?.PassiveRunner != null)
+                    mercs[i].PassiveRunner.ApplyTeamShieldFromActive(ratio, duration);
+            }
+        }
     }
 
     SkillSystem.ActiveSkill ResolvePlayerSkill()
@@ -2342,6 +2418,8 @@ public class BattleManager : Singleton<BattleManager>
     {
         if (skill == null) return false;
         if (skill.skillId != null && skill.skillId.IndexOf("heal", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+        if (skill.skillId == "SK011" || skill.skillId == "SK013" || skill.skillId == "SK015")
             return true;
         var cfg = SkillRegistry.Instance?.Get(skill.skillId);
         return cfg != null && (cfg.healPercentOfMax > 0f || cfg.healBase > 0f);
@@ -2563,6 +2641,7 @@ public class BattleManager : Singleton<BattleManager>
         if (IsGoldDungeon)
         {
             MercenaryManager.Instance?.ClearAllMercs();
+            MercHireSession.ClearHired();
             GameSceneManager.Instance?.ReturnToTown();
             return;
         }
@@ -2574,6 +2653,7 @@ public class BattleManager : Singleton<BattleManager>
                 onReturnTown: () =>
                 {
                     MercenaryManager.Instance?.ClearAllMercs();
+                    MercHireSession.ClearHired();
                     GameSceneManager.Instance?.ReturnToTown();
                 },
                 onNextChapter: () =>
@@ -2626,6 +2706,8 @@ public class BattleManager : Singleton<BattleManager>
         isInBattle = false;
         ClearAllMonsters();
         MercenaryManager.Instance?.ClearAllMercs();
+        if (!IsTutorialRun)
+            MercHireSession.ClearHired();
         AdventureLogAchievements.OnEvacuated(IsTutorialRun);
         // 撤离回城后打开冒险页（引导局另有收尾，不抢页签）
         if (!IsTutorialRun)
@@ -2704,6 +2786,7 @@ public class BattleManager : Singleton<BattleManager>
             TownHubController.PendingOpenAdventure = true;
             BattleSettlementUI.Show(RunStats, () =>
             {
+                MercHireSession.ClearHired();
                 GameSceneManager.Instance?.LoadTownScene();
             });
         }

@@ -115,7 +115,7 @@ public static class ArmorAffixSystem
             inst.attrBonus.Add(new AttrBonusData
             {
                 attrType = attr,
-                value = value,
+                value = EquipRollCeiling.ClampAffixValue(inst, attr, value, IsPercent(attr)),
                 isPercent = IsPercent(attr)
             });
         }

@@ -152,8 +152,6 @@ public static class WeaponAffixSystem
         if (inst == null || inst.template == null) return;
         if (inst.slotType != EquipSlotType.MainHand && inst.slotType != EquipSlotType.OffHand)
             return;
-
-        // 特殊武器固定名与属性，不随机
         if (SpecialWeapons.IsTwilightStaff(inst))
         {
             inst.equipName = SpecialWeapons.DisplayName;
@@ -172,11 +170,11 @@ public static class WeaponAffixSystem
             AttrType attr = pool[idx];
             pool.RemoveAt(idx);
             if (i == 0) primary = attr;
-            float value = RollAttrValue(attr, mul);
+            float value = RollAttrValue(attr, mul, inst);
             inst.attrBonus.Add(new AttrBonusData
             {
                 attrType = attr,
-                value = value,
+                value = EquipRollCeiling.ClampAffixValue(inst, attr, value, IsPercentAttr(attr)),
                 isPercent = IsPercentAttr(attr)
             });
         }
@@ -204,24 +202,29 @@ public static class WeaponAffixSystem
         }
     }
 
-    static float RollAttrValue(AttrType attr, float mul)
+    static float RollAttrValue(AttrType attr, float mul, EquipInstance inst = null)
     {
+        float v;
         switch (attr)
         {
-            case AttrType.Attack: return (2f + Random.Range(1f, 5f)) * mul;
-            case AttrType.AttackSpeed: return (0.04f + Random.Range(0.02f, 0.08f)) * mul;
-            case AttrType.CritRate: return (0.02f + Random.Range(0.01f, 0.04f)) * mul;
-            case AttrType.PhyPower: return (0.05f + Random.Range(0.02f, 0.08f)) * mul;
-            case AttrType.MagicPower: return (0.05f + Random.Range(0.02f, 0.08f)) * mul;
+            case AttrType.Attack: v = (2f + Random.Range(1f, 5f)) * mul; break;
+            case AttrType.AttackSpeed: v = (0.04f + Random.Range(0.02f, 0.08f)) * mul; break;
+            case AttrType.CritRate: v = (0.02f + Random.Range(0.01f, 0.04f)) * mul; break;
+            case AttrType.PhyPower: v = (0.05f + Random.Range(0.02f, 0.08f)) * mul; break;
+            case AttrType.MagicPower: v = (0.05f + Random.Range(0.02f, 0.08f)) * mul; break;
             case AttrType.FireDamage:
-            case AttrType.IceDamage: return (3f + Random.Range(1f, 6f)) * mul;
-            case AttrType.LifeSteal: return (0.02f + Random.Range(0.01f, 0.03f)) * mul;
-            case AttrType.Defense: return (2f + Random.Range(1f, 4f)) * mul;
-            case AttrType.MaxHp: return (10f + Random.Range(5f, 20f)) * mul;
-            case AttrType.AttackRange: return (0.1f + Random.Range(0.05f, 0.2f)) * mul;
-            case AttrType.CooldownReduce: return (0.03f + Random.Range(0.01f, 0.05f)) * mul;
-            case AttrType.Dodge: return (0.02f + Random.Range(0.01f, 0.03f)) * mul;
-            default: return 1f * mul;
+            case AttrType.IceDamage: v = (3f + Random.Range(1f, 6f)) * mul; break;
+            case AttrType.LifeSteal: v = (0.02f + Random.Range(0.01f, 0.03f)) * mul; break;
+            case AttrType.Defense: v = (2f + Random.Range(1f, 4f)) * mul; break;
+            case AttrType.MaxHp: v = (10f + Random.Range(5f, 20f)) * mul; break;
+            case AttrType.AttackRange: v = (0.1f + Random.Range(0.05f, 0.2f)) * mul; break;
+            case AttrType.CooldownReduce: v = (0.03f + Random.Range(0.01f, 0.05f)) * mul; break;
+            case AttrType.Dodge: v = (0.02f + Random.Range(0.01f, 0.03f)) * mul; break;
+            default: v = 1f * mul; break;
         }
+
+        if (inst != null && inst.weaponHand == WeaponHandSlot.OffHand && attr == AttrType.Attack)
+            v *= 0.65f;
+        return v;
     }
 }

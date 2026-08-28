@@ -9,6 +9,7 @@ public static class EquipGridRules
     {
         public EquipSlotType slot;
         public WeaponType weaponType;
+        public WeaponHandSlot weaponHand;
         public WeaponAttackType attackType;
         public int width;
         public int height;
@@ -21,6 +22,7 @@ public static class EquipGridRules
         {
             slot = EquipSlotType.Hands,
             weaponType = WeaponType.None,
+            weaponHand = WeaponHandSlot.None,
             attackType = WeaponAttackType.Physical,
             width = 1,
             height = 1,
@@ -88,6 +90,7 @@ public static class EquipGridRules
         if (IsShield(n, lower))
         {
             spec.slot = EquipSlotType.OffHand;
+            spec.weaponHand = WeaponHandSlot.OffHand;
             spec.width = 2;
             spec.height = 2;
             spec.displayName = TrimPrefix(n, "New_Shield_", "Shield_", "WoodShield", "SteelShield");
@@ -97,6 +100,7 @@ public static class EquipGridRules
         if (IsBow(n, lower))
         {
             spec.slot = EquipSlotType.MainHand;
+            spec.weaponHand = WeaponHandSlot.MainHand;
             spec.weaponType = WeaponType.TwoHand;
             spec.width = 2;
             spec.height = 2;
@@ -107,6 +111,7 @@ public static class EquipGridRules
         if (IsTwoHandWeapon(n, lower))
         {
             spec.slot = EquipSlotType.MainHand;
+            spec.weaponHand = WeaponHandSlot.MainHand;
             spec.weaponType = WeaponType.TwoHand;
             spec.attackType = lower.Contains("spear") ? WeaponAttackType.Physical : spec.attackType;
             if (lower.Contains("staff") || lower.Contains("spear") || lower.Contains("hammer"))
@@ -119,8 +124,11 @@ public static class EquipGridRules
 
         if (IsOneHandWeapon(n, lower))
         {
-            spec.slot = EquipSlotType.MainHand;
             spec.weaponType = WeaponType.OneHand;
+            spec.weaponHand = WeaponLoadoutRules.InferHandFromIcon(n, spec.weaponType);
+            spec.slot = spec.weaponHand == WeaponHandSlot.OffHand
+                ? EquipSlotType.OffHand
+                : EquipSlotType.MainHand;
             if (lower.Contains("staff") || lower.Contains("wand"))
                 spec.attackType = WeaponAttackType.Magic;
             spec.width = 1;

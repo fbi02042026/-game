@@ -17,6 +17,8 @@ public static class ToolsMenuGuide
             "· UI/检查恢复关弹窗预制体\n" +
             "· UI/生成图鉴信息弹窗预制体\n" +
             "· UI/生成招募佣兵弹窗预制体\n" +
+            "· Data/生成佣兵技能 SkillConfig\n" +
+            "· Data/Cook Tables (Plain while protection off)\n" +
             "· UI/生成战斗结算界面预制体\n" +
             "· 生成角色注册表 / 检查游戏 Icon\n\n" +
             "【其他】已挪到 Tools/_归档（脚本未删，需要时仍可点）。\n" +

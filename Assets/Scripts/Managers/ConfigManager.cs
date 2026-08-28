@@ -98,8 +98,20 @@ public class ConfigManager : Singleton<ConfigManager>
     {
         Rarity maxRarity = (Rarity)Mathf.Min(blacksmithLevel + 1, (int)Rarity.Legendary);
         List<EquipTemplate> available = _allEquipTemplates.Where(t => t != null).ToList();
-        List<EquipTemplate> weapons = available
-            .Where(t => t.slotType == EquipSlotType.MainHand || t.slotType == EquipSlotType.OffHand)
+        List<EquipTemplate> mainHandWeapons = available
+            .Where(IsMainHandWeaponTemplate)
+            .ToList();
+        List<EquipTemplate> offHandWeapons = available
+            .Where(IsOffHandWeaponTemplate)
+            .ToList();
+        List<EquipTemplate> twoHandWeapons = available
+            .Where(t => t.weaponType == WeaponType.TwoHand)
+            .ToList();
+        List<EquipTemplate> shields = available
+            .Where(IsShieldTemplate)
+            .ToList();
+        List<EquipTemplate> nonWeapons = available
+            .Where(t => t.slotType != EquipSlotType.MainHand && t.slotType != EquipSlotType.OffHand)
             .ToList();
         List<EquipInstance> result = new List<EquipInstance>();
         if (available.Count == 0) return result;
@@ -107,8 +119,14 @@ public class ConfigManager : Singleton<ConfigManager>
         for (int i = 0; i < count; i++)
         {
             EquipTemplate template;
-            if (weapons.Count > 0 && Random.value < 0.45f)
-                template = weapons[Random.Range(0, weapons.Count)];
+            if (Random.value < 0.45f)
+            {
+                template = PickRandomWeaponTemplate(mainHandWeapons, offHandWeapons, twoHandWeapons, shields);
+                if (template == null)
+                    template = available[Random.Range(0, available.Count)];
+            }
+            else if (nonWeapons.Count > 0)
+                template = nonWeapons[Random.Range(0, nonWeapons.Count)];
             else
                 template = available[Random.Range(0, available.Count)];
 
@@ -116,6 +134,54 @@ public class ConfigManager : Singleton<ConfigManager>
             result.Add(EquipInstance.GenerateFromTemplate(template, bonusStar, lv, true, rolled));
         }
         return result;
+    }
+
+    static bool IsMainHandWeaponTemplate(EquipTemplate t)
+    {
+        if (t == null || t.weaponType == WeaponType.None || t.weaponType == WeaponType.TwoHand) return false;
+        return t.weaponHand == WeaponHandSlot.MainHand || t.weaponHand == WeaponHandSlot.None;
+    }
+
+    static bool IsOffHandWeaponTemplate(EquipTemplate t)
+        => t != null && t.weaponType != WeaponType.None && t.weaponType != WeaponType.TwoHand
+           && t.weaponHand == WeaponHandSlot.OffHand;
+
+    static bool IsShieldTemplate(EquipTemplate t)
+    {
+        if (t == null) return false;
+        if (t.slotType != EquipSlotType.OffHand) return false;
+        if (t.weaponType != WeaponType.None) return false;
+        string n = (t.spumName ?? t.iconFileName ?? "").ToLowerInvariant();
+        return n.Contains("shield");
+    }
+
+    static EquipTemplate PickRandomWeaponTemplate(
+        List<EquipTemplate> mainHand,
+        List<EquipTemplate> offHand,
+        List<EquipTemplate> twoHand,
+        List<EquipTemplate> shields)
+    {
+        var pools = new List<(List<EquipTemplate> list, float weight)>();
+        if (mainHand.Count > 0) pools.Add((mainHand, 0.45f));
+        if (offHand.Count > 0) pools.Add((offHand, 0.2f));
+        if (shields.Count > 0) pools.Add((shields, 0.2f));
+        if (twoHand.Count > 0) pools.Add((twoHand, 0.15f));
+        if (pools.Count == 0) return null;
+
+        float total = 0f;
+        for (int i = 0; i < pools.Count; i++) total += pools[i].weight;
+        float roll = Random.value * total;
+        for (int i = 0; i < pools.Count; i++)
+        {
+            roll -= pools[i].weight;
+            if (roll <= 0f)
+            {
+                var list = pools[i].list;
+                return list[Random.Range(0, list.Count)];
+            }
+        }
+        var fallback = pools[pools.Count - 1].list;
+        return fallback[Random.Range(0, fallback.Count)];
     }
 
     /// <summary>冒险界面预览：该章全部怪（小怪在前，Boss 在后），不按小波次过滤。</summary>

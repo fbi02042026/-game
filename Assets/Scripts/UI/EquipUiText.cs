@@ -18,6 +18,30 @@ public static class EquipUiText
         }
     }
 
+    public static string WeaponHand(WeaponHandSlot hand, WeaponType weaponType)
+    {
+        if (weaponType == WeaponType.TwoHand) return "双手";
+        switch (hand)
+        {
+            case WeaponHandSlot.MainHand: return "主手";
+            case WeaponHandSlot.OffHand: return "副手";
+            default: return "武器";
+        }
+    }
+
+    public static string WeaponHandBadge(EquipInstance eq)
+    {
+        if (eq == null || !WeaponLoadoutRules.IsLoadoutItem(eq)) return null;
+        return "\u3010" + WeaponHand(eq.weaponHand, eq.weaponType) + "\u3011";
+    }
+
+    public static string EquipTitleWithHand(EquipInstance eq)
+    {
+        string badge = WeaponHandBadge(eq);
+        string title = EquipTitle(eq);
+        return string.IsNullOrEmpty(badge) ? title : badge + title;
+    }
+
     public static string RarityName(Rarity r)
     {
         switch (r)

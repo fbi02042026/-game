@@ -585,7 +585,17 @@ public static class AdventureLogCatalog
     public static bool HasMerc(string assetId)
     {
         if (string.IsNullOrEmpty(assetId)) return false;
-        var list = SaveSystem.Instance?.Data?.permanentMercs;
+        if (AdventureCodex.IsSeenMerc(assetId)) return true;
+        var data = SaveSystem.Instance?.Data;
+        if (data?.hiredMercs != null)
+        {
+            for (int i = 0; i < data.hiredMercs.Count; i++)
+            {
+                var m = data.hiredMercs[i];
+                if (m != null && m.mercId == assetId) return true;
+            }
+        }
+        var list = data?.permanentMercs;
         if (list == null) return false;
         for (int i = 0; i < list.Count; i++)
         {

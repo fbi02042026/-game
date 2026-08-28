@@ -63,10 +63,19 @@ public class SaveData
     public int guildLevel = 1;
 
     // === 佣兵 ===
+    /// <summary>历史兼容 / 教程写入；出战以 hiredMercs 为准。图鉴走 seenMerc。</summary>
     public List<MercenaryData> permanentMercs = new List<MercenaryData>();
+    /// <summary>本局临时雇佣（下本结束清空）</summary>
+    public List<MercenaryData> hiredMercs = new List<MercenaryData>();
     /// <summary>今日已招募次数（按日刷新键见 dailyMercRecruitDayKey）</summary>
     public int dailyMercRecruitUsed = 0;
     public string dailyMercRecruitDayKey = "";
+    /// <summary>酒馆三选一候选日键（本地日历日，0 点刷新）</summary>
+    public string mercOfferDayKey = "";
+    /// <summary>上次手动/自动刷新 Unix 秒（UTC）</summary>
+    public long mercOfferRefreshUtc = 0;
+    /// <summary>日切后需重抽候选</summary>
+    public bool mercOfferDirty = true;
 
     // === 玩家基础属性 ===
     public int playerStrength = 0;     // 额外力量（天赋/遗产加成）
@@ -85,6 +94,9 @@ public class SaveData
 
     /// <summary>战前选择的玩家技能 id（PlayerSkillDefs）</summary>
     public string selectedPlayerSkillId = "heal_spring";
+
+    /// <summary>佣兵主动技释放：0=手动（默认），1=自动</summary>
+    public int mercSkillCastMode = 0;
 
     public bool openingIntroPlayed;
     public bool tutorialIntroDone;
@@ -179,6 +191,7 @@ public class SaveData
         mailInbox ??= new List<MailEntry>();
         legacyEquipPool ??= new List<EquipmentData>();
         permanentMercs ??= new List<MercenaryData>();
+        hiredMercs ??= new List<MercenaryData>();
         npcBonds ??= new List<NpcBondEntry>();
         storyChoices ??= new List<StoryChoiceEntry>();
         chapterClearCounts ??= new List<ChapterClearCountEntry>();
@@ -441,12 +454,18 @@ public class MercenaryData
     public string mercId;
     /// <summary>展示姓名（同形象可不同名）</summary>
     public string displayName;
+    /// <summary>外号 / 称号</summary>
+    public string nickname;
+    /// <summary>花名册 HireId（H001…）</summary>
+    public string hireId;
     /// <summary>实例唯一 ID，名册可有多条同 mercId</summary>
     public string uid;
     public int favorLevel;
     public int level;
     /// <summary>星级 1～5</summary>
     public int star = 1;
-    /// <summary>佩戴技能（Ally 技能 id，如 ally_heal）</summary>
+    /// <summary>佩戴主动技能（SK 系列；普通佣兵可为空）</summary>
     public string skillId;
+    /// <summary>佩戴被动技能（SK 系列；稀有佣兵可为空）</summary>
+    public string passiveSkillId;
 }

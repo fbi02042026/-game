@@ -13,7 +13,9 @@ public class GameDataCooker : IPreprocessBuildWithReport
 {
     public int callbackOrder => 10;
 
-    const string SourceCsv = ContentPaths.Source.Tables + "/monster_attack_style.csv";
+    const string SourceMonsterCsv = ContentPaths.Source.Tables + "/monster_attack_style.csv";
+    const string SourceMercSkillsCsv = ContentPaths.Source.Tables + "/merc_skills.csv";
+    const string SourceMercSkillMapCsv = ContentPaths.Source.Tables + "/merc_skill_map.csv";
     const string OutDir = "Assets/Resources/Data/Tables";
 
     [MenuItem("Tools/Data/Cook Tables (Plain while protection off)")]
@@ -35,6 +37,10 @@ public class GameDataCooker : IPreprocessBuildWithReport
         Directory.CreateDirectory(OutDir);
         Directory.CreateDirectory(ContentPaths.Source.Tables);
         CookMonsterAttackStyle();
+        CookMercSkills();
+        CookMercSkillMap();
+        CookMonsterSpriteOpaque();
+        CookEquipAnchors();
         if (ContentProtection.Enabled)
             CookFingerprint();
         else
@@ -53,23 +59,48 @@ public class GameDataCooker : IPreprocessBuildWithReport
 
     static void CookMonsterAttackStyle()
     {
+        CookTableFromSource(SourceMonsterCsv, "Config/MonsterAttackStyle", "monster_attack_style");
+    }
+
+    static void CookMercSkills()
+    {
+        CookTableFromSource(SourceMercSkillsCsv, null, "merc_skills");
+    }
+
+    static void CookMercSkillMap()
+    {
+        CookTableFromSource(SourceMercSkillMapCsv, null, "merc_skill_map");
+    }
+
+    static void CookEquipAnchors()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/equip_anchors.csv", null, "equip_anchors");
+    }
+
+    static void CookMonsterSpriteOpaque()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/monster_sprite_opaque.csv", null, "monster_sprite_opaque");
+    }
+
+    static void CookTableFromSource(string sourceCsv, string legacyResourcesPath, string outName)
+    {
         string csv = null;
-        if (File.Exists(SourceCsv))
-            csv = File.ReadAllText(SourceCsv, Encoding.UTF8);
-        else
+        if (File.Exists(sourceCsv))
+            csv = File.ReadAllText(sourceCsv, Encoding.UTF8);
+        else if (!string.IsNullOrEmpty(legacyResourcesPath))
         {
-            var ta = Resources.Load<TextAsset>("Config/MonsterAttackStyle");
+            var ta = Resources.Load<TextAsset>(legacyResourcesPath);
             if (ta != null) csv = ta.text;
         }
         if (string.IsNullOrEmpty(csv))
         {
-            Debug.LogWarning("[Data] 没有 monster_attack_style 源表");
+            Debug.LogWarning("[Data] 没有 " + outName + " 源表");
             return;
         }
-        if (!File.Exists(SourceCsv))
-            File.WriteAllText(SourceCsv, csv, new UTF8Encoding(false));
+        if (!File.Exists(sourceCsv))
+            File.WriteAllText(sourceCsv, csv, new UTF8Encoding(false));
 
-        WriteTable(OutDir + "/monster_attack_style.bytes", csv);
+        WriteTable(OutDir + "/" + outName + ".bytes", csv);
     }
 
     static void CookFingerprint()

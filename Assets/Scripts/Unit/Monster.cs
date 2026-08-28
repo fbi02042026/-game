@@ -127,7 +127,7 @@ public class Monster : UnitBase
         }
     }
 
-    /// <summary>受击/发射点：按精灵躯干中心。须在 LoadSprite 之后调用。</summary>
+    /// <summary>受击/发射点：按精灵不透明像素中心。须在 LoadSprite 之后调用。</summary>
     void NormalizeMonsterAnchorNodes()
     {
         float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
@@ -139,6 +139,8 @@ public class Monster : UnitBase
         if (be != null)
         {
             hitPoint = be;
+            // 精灵已加载：先同步摆一次不透明中心，再协程两帧后确认
+            TryPlaceHitPointByOpaqueSprite(be);
             StartCoroutine(CalcHitPointCenter(be));
         }
         Transform fire = transform.Find("fire");

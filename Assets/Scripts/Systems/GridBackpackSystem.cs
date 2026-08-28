@@ -31,6 +31,41 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         OnBackpackChanged?.Invoke();
     }
 
+    /// <summary>
+    /// 教程/开局：把默认武器装到普攻手（自动检测 Left/Right）。
+    /// </summary>
+    public bool EnsureStarterWeapon()
+    {
+        if (GetEquippedInLogicalSlot(EquipSlotType.MainHand) != null) return false;
+
+        EquipTemplate tpl = ConfigManager.Instance != null
+            ? ConfigManager.Instance.GetEquipTemplate("equip_training_sword")
+            : null;
+        if (tpl == null)
+            tpl = Resources.Load<EquipTemplate>(ContentPaths.Config.Equips + "/equip_training_sword");
+        if (tpl == null)
+        {
+            Debug.LogWarning("[GridBackpack] 缺少 equip_training_sword，跳过默认武器");
+            return false;
+        }
+
+        tpl.ResolveIcon();
+        int lv = Hero.Instance != null ? Hero.Instance.level : 1;
+        var eq = EquipInstance.GenerateFromTemplate(tpl, 0, lv, true, Rarity.Common);
+        eq.equipName = tpl.equipName;
+        if (eq.icon == null) eq.icon = tpl.icon ?? EquipIcons.Get(tpl.iconFileName);
+
+        if (!TryAcquireLoadoutItem(eq, out BackpackItem item) || item == null)
+            return false;
+
+        Hero.Instance?.costumeManager?.RefreshCostume();
+        Debug.Log($"[GridBackpack] 已装备默认武器到普攻手: {eq.equipName} hand={eq.weaponHand}");
+        return true;
+    }
+
+    [System.Obsolete("Use EnsureStarterWeapon")]
+    public bool EnsureStarterOffHandWeapon() => EnsureStarterWeapon();
+
     public bool TryAddItem(EquipInstance equip, out BackpackItem item)
     {
         item = null;
@@ -38,17 +73,15 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         if (Hero.Instance != null && equip.requireLevel > Hero.Instance.level)
         {
             UIManager.Instance?.ShowToast($"等级不足！{equip.equipName}需要{equip.requireLevel}级才能装备");
+            return false;
         }
+
+        if (WeaponLoadoutRules.IsLoadoutItem(equip))
+            return TryAcquireLoadoutItem(equip, out item);
+
         if (FindEmptyPosition(equip.gridWidth, equip.gridHeight, out int x, out int y))
         {
-            item = new BackpackItem
-            {
-                equip = equip,
-                x = x, y = y,
-                width = equip.gridWidth, height = equip.gridHeight
-            };
-            OccupyGrid(x, y, equip.gridWidth, equip.gridHeight, true);
-            _items.Add(item);
+            item = PlaceItemInGrid(equip, x, y);
             OnBackpackChanged?.Invoke();
             AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
             AdventureLogAchievements.OnEquipPicked();
@@ -56,6 +89,120 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         }
         UIManager.Instance?.ShowToast($"背包空间不足！{equip.equipName}需要{equip.gridWidth}x{equip.gridHeight}格空间");
         return false;
+    }
+
+    /// <summary>
+    /// 武器组入包：按 weaponHand 替换对应部位；双手清空主+副；旧件直接变强化石。入包即装备。
+    /// </summary>
+    public bool TryAcquireLoadoutItem(EquipInstance equip, out BackpackItem item)
+    {
+        item = null;
+        if (equip == null) return false;
+
+        WeaponLoadoutRules.GetSlotsToReplace(equip, out bool clearMain, out bool clearOff);
+        var rig = GetHeroHandRig();
+
+        if (clearMain)
+            ConsumeLoadoutInLogicalSlot(EquipSlotType.MainHand, rig);
+        if (clearOff)
+            ConsumeLoadoutInLogicalSlot(EquipSlotType.OffHand, rig);
+
+        equip.slotType = WeaponLoadoutRules.ResolveLogicalSlot(equip);
+        if (!FindEmptyPosition(equip.gridWidth, equip.gridHeight, out int x, out int y))
+        {
+            UIManager.Instance?.ShowToast($"背包空间不足！{equip.equipName}需要{equip.gridWidth}x{equip.gridHeight}格空间");
+            return false;
+        }
+
+        item = PlaceItemInGrid(equip, x, y);
+        EquipItem(item);
+        OnBackpackChanged?.Invoke();
+        AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
+        AdventureLogAchievements.OnEquipPicked();
+        return true;
+    }
+
+    BackpackItem PlaceItemInGrid(EquipInstance equip, int x, int y)
+    {
+        var item = new BackpackItem
+        {
+            equip = equip,
+            x = x, y = y,
+            width = equip.gridWidth, height = equip.gridHeight
+        };
+        OccupyGrid(x, y, equip.gridWidth, equip.gridHeight, true);
+        _items.Add(item);
+        return item;
+    }
+
+    void ConsumeLoadoutInLogicalSlot(EquipSlotType logicalSlot, HeroWeaponRig.HandRig rig)
+    {
+        EquipSlotType wearSlot = logicalSlot;
+        if (rig.IsValid)
+        {
+            wearSlot = logicalSlot == EquipSlotType.OffHand ? rig.SecondarySlot : rig.AttackSlot;
+        }
+
+        if (!_equippedBySlot.TryGetValue(wearSlot, out var old) || old == null)
+        {
+            // 兜底：双手武器可能只记在攻击槽
+            if (logicalSlot == EquipSlotType.OffHand) return;
+            wearSlot = logicalSlot;
+            if (!_equippedBySlot.TryGetValue(wearSlot, out old) || old == null)
+                return;
+        }
+
+        ConsumeLoadoutEquip(old, wearSlot);
+    }
+
+    void ConsumeLoadoutEquip(EquipInstance equip, EquipSlotType wearSlot)
+    {
+        if (equip == null) return;
+
+        var bi = FindBackpackItemByEquip(equip);
+        if (bi != null)
+        {
+            OccupyGrid(bi.x, bi.y, bi.width, bi.height, false);
+            _items.Remove(bi);
+        }
+
+        if (equip.weaponType == WeaponType.TwoHand)
+        {
+            var rig = GetHeroHandRig();
+            if (rig.IsValid)
+            {
+                if (_equippedBySlot.TryGetValue(rig.AttackSlot, out var a) && a == equip)
+                    _equippedBySlot.Remove(rig.AttackSlot);
+                if (_equippedBySlot.TryGetValue(rig.SecondarySlot, out var s) && s == equip)
+                    _equippedBySlot.Remove(rig.SecondarySlot);
+            }
+            else
+            {
+                if (_equippedBySlot.TryGetValue(EquipSlotType.MainHand, out var m) && m == equip)
+                    _equippedBySlot.Remove(EquipSlotType.MainHand);
+                if (_equippedBySlot.TryGetValue(EquipSlotType.OffHand, out var o) && o == equip)
+                    _equippedBySlot.Remove(EquipSlotType.OffHand);
+            }
+        }
+        else
+        {
+            _equippedBySlot.Remove(wearSlot);
+        }
+
+        int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
+        WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
+        UIManager.Instance?.ShowToast($"{equip.equipName} 已变为强化石 ×{mats}");
+        Hero.Instance?.RecalcAttr();
+    }
+
+    BackpackItem FindBackpackItemByEquip(EquipInstance equip)
+    {
+        if (equip == null) return null;
+        for (int i = 0; i < _items.Count; i++)
+        {
+            if (_items[i]?.equip == equip) return _items[i];
+        }
+        return null;
     }
 
     private bool FindEmptyPosition(int w, int h, out int outX, out int outY)
@@ -96,10 +243,16 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         OnBackpackChanged?.Invoke();
     }
 
-    /// <summary>通关奖励：先入包再尝试穿戴（同槽自动替换）</summary>
+    /// <summary>通关奖励：武器组走替换链，护甲正常入包。</summary>
     public bool TryEquipFromReward(EquipInstance equip)
     {
         if (equip == null) return false;
+        if (WeaponLoadoutRules.IsLoadoutItem(equip))
+        {
+            if (!TryAcquireLoadoutItem(equip, out _))
+                return false;
+            return true;
+        }
         if (!TryAddItem(equip, out BackpackItem item) || item == null)
         {
             UIManager.Instance?.ShowToast("背包已满，无法获得装备");
@@ -107,13 +260,22 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         }
         if (EquipItem(item))
             return true;
-        // 穿戴失败仍留在背包
         UIManager.Instance?.ShowToast("已放入背包");
         return true;
     }
 
+    HeroWeaponRig.HandRig GetHeroHandRig()
+    {
+        if (Hero.Instance != null && Hero.Instance.costumeManager != null)
+            return Hero.Instance.costumeManager.HandRig;
+        if (HeroCostumeManager.Instance != null)
+            return HeroCostumeManager.Instance.HandRig;
+        return default;
+    }
+
     /// <summary>
     /// 穿戴装备：仍留在背包格子里显示，仅标记槽位；已装备的会在 UI 上变暗并标「已装备」。
+    /// 武器槽按 HeroWeaponRig 解析：攻击武器→攻击手，盾→另一只手。
     /// </summary>
     public bool EquipItem(BackpackItem item)
     {
@@ -124,41 +286,30 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
             return false;
         }
 
-        EquipSlotType slot = item.equip.slotType;
+        var rig = GetHeroHandRig();
+        EquipSlotType slot = rig.IsValid
+            ? WeaponLoadoutRules.ResolveWearSlot(item.equip, rig)
+            : WeaponLoadoutRules.ResolveLogicalSlot(item.equip);
+        item.equip.slotType = slot;
 
-        // 盾牌 / 副手：主手若是双手武器则冲突
-        if (slot == EquipSlotType.OffHand && item.equip.weaponType == WeaponType.None)
+        if (WeaponLoadoutRules.IsLoadoutItem(item.equip))
         {
-            if (_equippedBySlot.TryGetValue(EquipSlotType.MainHand, out var mainHand)
-                && mainHand != null && mainHand.weaponType == WeaponType.TwoHand
-                && mainHand != item.equip)
+            if (item.equip.weaponType == WeaponType.TwoHand)
             {
-                UIManager.Instance?.ShowToast("双手武器已占用副手位置");
-                return false;
+                if (rig.IsValid)
+                    _equippedBySlot[rig.AttackSlot] = item.equip;
+                else
+                    _equippedBySlot[EquipSlotType.MainHand] = item.equip;
             }
-        }
-
-        // 双手武器：先清掉主手/副手旧装备标记（装备本身仍在背包）
-        if (item.equip.weaponType == WeaponType.TwoHand)
-        {
-            ClearSlotIfOccupied(EquipSlotType.MainHand, item.equip);
-            ClearSlotIfOccupied(EquipSlotType.OffHand, item.equip);
-            _equippedBySlot[EquipSlotType.MainHand] = item.equip;
-            _equippedBySlot[EquipSlotType.OffHand] = item.equip;
+            else
+            {
+                _equippedBySlot[slot] = item.equip;
+            }
         }
         else
         {
-            ClearSlotIfOccupied(slot, item.equip);
-            // 若新装主手，且副手被旧双手占用，清副手标记
-            if (slot == EquipSlotType.MainHand
-                && _equippedBySlot.TryGetValue(EquipSlotType.OffHand, out var off)
-                && off != null && off.weaponType == WeaponType.TwoHand)
-            {
-                _equippedBySlot.Remove(EquipSlotType.OffHand);
-                if (_equippedBySlot.TryGetValue(EquipSlotType.MainHand, out var mh) && mh == off)
-                    _equippedBySlot.Remove(EquipSlotType.MainHand);
-            }
-            _equippedBySlot[slot] = item.equip;
+            ClearSlotIfOccupied(item.equip.slotType, item.equip);
+            _equippedBySlot[item.equip.slotType] = item.equip;
         }
 
         Hero.Instance?.RecalcAttr();
@@ -192,10 +343,14 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         if (equip.weaponType == WeaponType.TwoHand)
         {
-            if (_equippedBySlot.TryGetValue(EquipSlotType.MainHand, out var m) && m == equip)
+            var rig = GetHeroHandRig();
+            if (rig.IsValid)
+            {
+                if (_equippedBySlot.TryGetValue(rig.AttackSlot, out var m) && m == equip)
+                    _equippedBySlot.Remove(rig.AttackSlot);
+            }
+            else if (_equippedBySlot.TryGetValue(EquipSlotType.MainHand, out var m) && m == equip)
                 _equippedBySlot.Remove(EquipSlotType.MainHand);
-            if (_equippedBySlot.TryGetValue(EquipSlotType.OffHand, out var o) && o == equip)
-                _equippedBySlot.Remove(EquipSlotType.OffHand);
         }
         else
             _equippedBySlot.Remove(slot);
@@ -324,6 +479,16 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     {
         _equippedBySlot.TryGetValue(slot, out var equip);
         return equip;
+    }
+
+    /// <summary>按逻辑主手/副手查当前武器组（映射到 HandRig 实际穿戴槽）。</summary>
+    public EquipInstance GetEquippedInLogicalSlot(EquipSlotType logicalSlot)
+    {
+        var rig = GetHeroHandRig();
+        EquipSlotType wearSlot = logicalSlot;
+        if (rig.IsValid)
+            wearSlot = logicalSlot == EquipSlotType.OffHand ? rig.SecondarySlot : rig.AttackSlot;
+        return GetEquippedInSlot(wearSlot);
     }
 
     /// <summary>

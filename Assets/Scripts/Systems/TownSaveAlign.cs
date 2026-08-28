@@ -43,10 +43,19 @@ public static class TownSaveAlign
                 m.uid = System.Guid.NewGuid().ToString("N");
             if (string.IsNullOrEmpty(m.displayName))
                 m.displayName = m.mercId;
-            if (string.IsNullOrEmpty(m.skillId))
-                m.skillId = SkillRegistry.Instance != null
-                    ? SkillRegistry.Instance.GetMercDefaultSkillId(m.mercId)
-                    : SkillRegistry.DefaultMercMeleeSkillId;
+            MercSkillMigrate.AlignMercenary(m);
+        }
+        if (data.hiredMercs == null)
+            data.hiredMercs = new System.Collections.Generic.List<MercenaryData>();
+        for (int i = 0; i < data.hiredMercs.Count; i++)
+        {
+            var m = data.hiredMercs[i];
+            if (m == null) continue;
+            if (m.level < 1) m.level = 1;
+            if (m.star < 1) m.star = 1;
+            if (string.IsNullOrEmpty(m.uid))
+                m.uid = System.Guid.NewGuid().ToString("N");
+            MercSkillMigrate.AlignMercenary(m);
         }
 
         StoryProgress.EnsureLists(data);

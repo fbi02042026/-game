@@ -30,6 +30,8 @@ public class BattleUI : MonoBehaviour
     public Text questTitle;             // "任务"
     public Text questDesc;              // "击败所有敌人"
     public Text questProgress;          // "(0/3)"
+    public Image questRewardIcon;       // jianglitubiao
+    public Text questRewardAmount;      // jianglishuzi
 
     [Header("=== 角色栏 ===")]
     public CharacterSlotUI playerSlot;      // 玩家槽位
@@ -213,6 +215,7 @@ public class BattleUI : MonoBehaviour
         ApplySoloBattleHud();
         UpdateCharacterSlots();
         UpdateSkillAvatars();
+        UpdateSkillAvatars();
         UpdateBackpackGrid();
         UpdateStageProgress(stageIdx);
 
@@ -221,6 +224,39 @@ public class BattleUI : MonoBehaviour
             questPanel.SetActive(true);
         if (questDesc != null && string.IsNullOrEmpty(questDesc.text))
             UpdateQuest("击败所有敌人", 0, 3);
+        RefreshQuestReward();
+    }
+
+    static Sprite _questGoldSprite;
+
+    /// <summary>任务奖励区：金币图标 + 数量（预制体默认是宝箱图）。</summary>
+    public void RefreshQuestReward(int goldAmount = 100)
+    {
+        if (questRewardIcon != null)
+        {
+            Sprite sp = LoadQuestGoldSprite();
+            if (sp != null)
+            {
+                questRewardIcon.sprite = sp;
+                questRewardIcon.preserveAspect = true;
+            }
+        }
+        if (questRewardAmount != null)
+            questRewardAmount.text = $"×{goldAmount}";
+    }
+
+    static Sprite LoadQuestGoldSprite()
+    {
+        if (_questGoldSprite != null) return _questGoldSprite;
+        if (Instance == null) return null;
+        Transform goldIcon = FindDeepChildIgnoreCase(Instance.transform, "GoldIcon");
+        if (goldIcon != null)
+        {
+            var img = goldIcon.GetComponent<Image>();
+            if (img != null && img.sprite != null)
+                _questGoldSprite = img.sprite;
+        }
+        return _questGoldSprite;
     }
 
     static string StageTypeToDifficulty(StageType t)
@@ -310,6 +346,16 @@ public class BattleUI : MonoBehaviour
         if (questDesc == null) questDesc = FindUIText("QuestDesc");
         if (questProgress == null) questProgress = FindUIText("QuestProgress");
         if (questTitle == null) questTitle = FindUIText("QuestTitle");
+        if (questRewardIcon == null)
+        {
+            Transform rt = FindDeepChildIgnoreCase(transform, "jianglitubiao");
+            if (rt != null) questRewardIcon = rt.GetComponent<Image>();
+        }
+        if (questRewardAmount == null)
+        {
+            Transform rt = FindDeepChildIgnoreCase(transform, "jianglishuzi");
+            if (rt != null) questRewardAmount = rt.GetComponent<Text>();
+        }
         if (questPanel == null)
         {
             Transform qt = FindDeepChildIgnoreCase(transform, "QuestPanel")
@@ -349,6 +395,7 @@ public class BattleUI : MonoBehaviour
         if (maxSlots > 1) ApplyFillBars(mercSlot2);
         WireSlotSkillClicks();
         UpdateCharacterSlots();
+        UpdateSkillAvatars();
         int stageIdx = BattleManager.Instance != null && BattleManager.Instance.currentStage != null
             ? BattleManager.Instance.currentStage.stageIndex : 0;
         UpdateStageProgress(stageIdx);
@@ -856,17 +903,38 @@ public class BattleUI : MonoBehaviour
         if (tutorialMerc)
         {
             var mercs = mm != null ? mm.GetActiveMercs() : null;
-            Sprite icon = (mercs != null && mercs.Count > 0 && mercs[0] != null && mm != null)
-                ? mm.GetIcon(mercs[0].mercId) : null;
+            Mercenary m0 = (mercs != null && mercs.Count > 0) ? mercs[0] : null;
+            Sprite icon = GetMercSkillIcon(m0) ?? (m0 != null && mm != null ? mm.GetIcon(m0.mercId) : null);
             merc1SkillAvatar?.SetAvatar(icon);
+            if (mercSlot1 != null && m0 != null)
+                mercSlot1.SetEnergyEnabled(m0.SkillCaster != null && m0.SkillCaster.HasActiveSkill && !MercSkillMigrate.IsMercSkillAutoCast());
             return;
         }
 
         var mercIds = mm != null ? mm.GetActiveMercIds() : new List<string>();
+        var mercsList = mm != null ? mm.GetActiveMercs() : null;
         if (merc1SkillAvatar != null)
-            merc1SkillAvatar.SetAvatar(mercIds.Count > 0 && mm != null ? mm.GetIcon(mercIds[0]) : null);
+            merc1SkillAvatar.SetAvatar(GetMercSkillIconAt(mercsList, 0) ?? GetMercPortraitAt(mm, mercIds, 0));
         if (merc2SkillAvatar != null)
-            merc2SkillAvatar.SetAvatar(mercIds.Count > 1 && mm != null ? mm.GetIcon(mercIds[1]) : null);
+            merc2SkillAvatar.SetAvatar(GetMercSkillIconAt(mercsList, 1) ?? GetMercPortraitAt(mm, mercIds, 1));
+    }
+
+    static Sprite GetMercSkillIcon(Mercenary m)
+    {
+        if (m?.SkillCaster == null || !m.SkillCaster.HasActiveSkill) return null;
+        return MercSkillTable.LoadIcon(m.SkillCaster.ActiveSkillId);
+    }
+
+    static Sprite GetMercSkillIconAt(List<Mercenary> mercs, int index)
+    {
+        if (mercs == null || index < 0 || index >= mercs.Count) return null;
+        return GetMercSkillIcon(mercs[index]);
+    }
+
+    static Sprite GetMercPortraitAt(MercenaryManager mm, List<string> mercIds, int index)
+    {
+        if (mm == null || mercIds == null || index < 0 || index >= mercIds.Count) return null;
+        return mm.GetIcon(mercIds[index]);
     }
 
     /// <summary>刷新下方网格背包（只锁最底一行 y=3，用你放的锁图案）</summary>
@@ -975,6 +1043,7 @@ public class BattleUI : MonoBehaviour
     {
         if (questDesc != null) questDesc.text = desc;
         if (questProgress != null) questProgress.text = $"({current}/{total})";
+        RefreshQuestReward();
     }
 
     /// <summary>
@@ -1024,7 +1093,8 @@ public class BattleUI : MonoBehaviour
         if (mercs == null || mercs.Count == 0 || mercs[0] == null) return;
         var m = mercs[0];
         mercSlot1.SetLocked(false);
-        mercSlot1.SetEnergyEnabled(true);
+        bool tutHasActive = m.SkillCaster != null && m.SkillCaster.HasActiveSkill;
+        mercSlot1.SetEnergyEnabled(tutHasActive && !MercSkillMigrate.IsMercSkillAutoCast());
         Sprite mercIcon = mm.GetIcon(m.mercId);
         mercSlot1.SetPortrait(mercIcon);
         // 教程老盾不在存档出战列表里，技能圆形头像要单独绑
@@ -1067,7 +1137,11 @@ public class BattleUI : MonoBehaviour
         if (index < mercIds.Count)
         {
             slot.SetLocked(false);
-            slot.SetEnergyEnabled(true);
+            bool hasActive = index < activeMercs.Count
+                && activeMercs[index] != null
+                && activeMercs[index].SkillCaster != null
+                && activeMercs[index].SkillCaster.HasActiveSkill;
+            slot.SetEnergyEnabled(hasActive && !MercSkillMigrate.IsMercSkillAutoCast());
             string id = mercIds[index];
             Sprite icon = mm != null ? mm.GetIcon(id) : null;
             string job = mm != null ? mm.GetJobName(id) : id;

@@ -90,7 +90,10 @@ public static class BackpackGridVisual
                 : (p.equipped ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white);
 
             if (!hasIcon)
-                AddNameFallback(go.transform, p.equip.equipName ?? "装备");
+                AddNameFallback(go.transform, EquipUiText.EquipTitleWithHand(p.equip) ?? "装备");
+
+            if (WeaponLoadoutRules.IsLoadoutItem(p.equip))
+                AddHandBadge(go.transform, p.equip);
 
             if (p.equipped)
                 AddEquippedBadge(go.transform, p.h);
@@ -204,6 +207,40 @@ public static class BackpackGridVisual
         tr.anchorMax = Vector2.one;
         tr.offsetMin = new Vector2(4f, 4f);
         tr.offsetMax = new Vector2(-4f, -4f);
+    }
+
+    static void AddHandBadge(Transform parent, EquipInstance equip)
+    {
+        string badge = EquipUiText.WeaponHandBadge(equip);
+        if (string.IsNullOrEmpty(badge)) return;
+
+        var go = new GameObject("HandBadge", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(parent, false);
+        var bg = go.GetComponent<Image>();
+        bg.color = new Color(0.1f, 0.12f, 0.2f, 0.75f);
+        bg.raycastTarget = false;
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(2f, -2f);
+        rt.sizeDelta = new Vector2(52f, 20f);
+
+        var textGo = new GameObject("Label", typeof(RectTransform));
+        textGo.transform.SetParent(go.transform, false);
+        var t = textGo.AddComponent<Text>();
+        t.text = badge;
+        t.alignment = TextAnchor.MiddleCenter;
+        t.fontSize = 12;
+        t.color = new Color(0.85f, 0.95f, 1f, 1f);
+        t.raycastTarget = false;
+        t.font = GameFonts.GetChinese();
+        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        var tr = t.rectTransform;
+        tr.anchorMin = Vector2.zero;
+        tr.anchorMax = Vector2.one;
+        tr.offsetMin = Vector2.zero;
+        tr.offsetMax = Vector2.zero;
     }
 
     /// <summary>

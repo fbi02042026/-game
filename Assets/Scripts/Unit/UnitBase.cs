@@ -157,6 +157,10 @@ public abstract class UnitBase : MonoBehaviour
         yield return null; // 再等一帧，SPUM可能需要两帧才完全加载
         if (hpTransform == null) yield break;
 
+        // 怪物图多为 32×32 透明填充：优先用不透明像素包围盒中心，避免整图画布中心
+        if (TryPlaceHitPointByOpaqueSprite(hpTransform))
+            yield break;
+
         if (!TryGetBodyBounds(out Bounds body))
         {
             hpTransform.localPosition = hitPointOffset;
@@ -168,6 +172,42 @@ public abstract class UnitBase : MonoBehaviour
         hpTransform.position = GetBodyCenterWorld(body);
         Vector3 lp = hpTransform.localPosition;
         hpTransform.localPosition = new Vector3(lp.x, lp.y, 0f);
+    }
+
+    /// <summary>按贴图不透明像素中心摆受击点（怪物表）；成功返回 true。</summary>
+    protected virtual bool TryPlaceHitPointByOpaqueSprite(Transform hpTransform)
+    {
+        if (hpTransform == null) return false;
+        if (!TryGetPrimaryBodySprite(out SpriteRenderer bodySr)) return false;
+        if (!MonsterSpriteOpaqueTable.TryGetOpaqueCenterWorld(bodySr, out Vector3 world))
+            return false;
+        hpTransform.position = world;
+        Vector3 lp = hpTransform.localPosition;
+        hpTransform.localPosition = new Vector3(lp.x, lp.y, 0f);
+        return true;
+    }
+
+    /// <summary>躯干主精灵（怪物优先 Monsters 子节点）。</summary>
+    protected virtual bool TryGetPrimaryBodySprite(out SpriteRenderer bodySr)
+    {
+        bodySr = null;
+        Transform monsters = transform.Find("Monsters");
+        if (monsters != null)
+        {
+            bodySr = monsters.GetComponent<SpriteRenderer>();
+            if (bodySr != null && bodySr.sprite != null) return true;
+        }
+        SpriteRenderer[] all = GetComponentsInChildren<SpriteRenderer>(true);
+        if (all == null) return false;
+        for (int i = 0; i < all.Length; i++)
+        {
+            var r = all[i];
+            if (r == null || r.sprite == null || !r.enabled) continue;
+            if (IsIgnoredHitPointRenderer(r)) continue;
+            bodySr = r;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>躯干中心（世界坐标）：包围盒中线偏下一点，避免武器/头顶透明把点抬高。</summary>

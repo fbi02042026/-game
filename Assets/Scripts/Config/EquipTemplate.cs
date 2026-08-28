@@ -99,6 +99,14 @@ public class EquipTemplate : ScriptableObject
 
     [Header("武器专属")]
     public WeaponType weaponType = WeaponType.None; // 武器类型（非武器为None）
+    [Tooltip("主手=攻击手武器；副手=盾或副手剑（狂战）。双手武器固定主手语义，替换时清空整套。")]
+    public WeaponHandSlot weaponHand = WeaponHandSlot.None;
+    [Tooltip("锚点模板：掉落命中时不随机覆盖基础属性/词条结构")]
+    public bool isAnchor;
+    [Tooltip("装备授予的技能 id（玩家技能表 / SkillConfig）")]
+    public string grantSkillId;
+    [Tooltip("装备技能被动属性（冷却、技能伤害等）")]
+    public List<AttrBonusData> skillPassives = new List<AttrBonusData>();
     public WeaponAttackType weaponAttackType = WeaponAttackType.Physical; // 攻击属性
     public float attackRange = 96f; // 数值表「攻击范围(像素)」；运行时用 GameConfig.NormalizeAttackRange
     [Tooltip("-1=按名字/类型推断；0~5 对应 WeaponCombatTable.WeaponKind（Sword…Shield）")]

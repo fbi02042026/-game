@@ -24,6 +24,7 @@ public enum SettingsToggleId
     Music = 1,
     Sfx = 2,
     WeatherFx = 3,
+    MercSkillAuto = 4,
 }
 
 /// <summary>
@@ -213,6 +214,7 @@ public class SettingsPopupUI : MonoBehaviour
             case SettingsToggleId.Music: return false;
             case SettingsToggleId.Sfx: return false;
             case SettingsToggleId.WeatherFx: return false;
+            case SettingsToggleId.MercSkillAuto: return true;
             default: return false;
         }
     }
@@ -241,6 +243,21 @@ public class SettingsPopupUI : MonoBehaviour
         RefreshToggles();
     }
 
+    void OnToggleExtra(SettingsToggleId id)
+    {
+        switch (id)
+        {
+            case SettingsToggleId.MercSkillAuto:
+                MercSkillMigrate.SetMercSkillAutoCast(!MercSkillMigrate.IsMercSkillAutoCast());
+                break;
+            case SettingsToggleId.WeatherFx:
+                PlayerPrefs.SetInt("fx.weather.on", PlayerPrefs.GetInt("fx.weather.on", 1) != 0 ? 0 : 1);
+                PlayerPrefs.Save();
+                break;
+        }
+        RefreshToggles();
+    }
+
     void RefreshToggles()
     {
         ApplyToggleLook(audioToggleButton, audioToggleLabel, GameAudio.AudioEnabled);
@@ -262,6 +279,7 @@ public class SettingsPopupUI : MonoBehaviour
             case SettingsToggleId.Music: return GameAudio.MusicEnabled;
             case SettingsToggleId.Sfx: return GameAudio.SfxEnabled;
             case SettingsToggleId.WeatherFx: return PlayerPrefs.GetInt("fx.weather.on", 1) != 0;
+            case SettingsToggleId.MercSkillAuto: return MercSkillMigrate.IsMercSkillAutoCast();
             default: return true;
         }
     }
@@ -348,6 +366,7 @@ public class SettingsPopupUI : MonoBehaviour
         if (n.Contains("music")) return SettingsToggleId.Music;
         if (n.Contains("sfx") || n.Contains("sound")) return SettingsToggleId.Sfx;
         if (n.Contains("weather")) return SettingsToggleId.WeatherFx;
+        if (n.Contains("merc") || n.Contains("佣兵")) return SettingsToggleId.MercSkillAuto;
         return SettingsToggleId.MasterAudio;
     }
 
@@ -359,6 +378,20 @@ public class SettingsPopupUI : MonoBehaviour
         WireOnce(primaryButton, Close);
         WireOnce(audioToggleButton, OnToggleAudio);
         WireOnce(evacuateButton, OnEvacuate);
+        WireExtraToggles();
+    }
+
+    void WireExtraToggles()
+    {
+        if (extraToggleRows == null) return;
+        for (int i = 0; i < extraToggleRows.Count; i++)
+        {
+            var row = extraToggleRows[i];
+            if (row == null || row.toggleButton == null) continue;
+            var id = row.id;
+            row.toggleButton.onClick.RemoveAllListeners();
+            row.toggleButton.onClick.AddListener(() => OnToggleExtra(id));
+        }
     }
 
     static void WireOnce(Button btn, UnityEngine.Events.UnityAction action)
@@ -447,6 +480,7 @@ public class SettingsPopupUI : MonoBehaviour
         CreateReservedToggle(toggleList, "MusicRow", "音乐", SettingsToggleId.Music, -76f);
         CreateReservedToggle(toggleList, "SfxRow", "音效", SettingsToggleId.Sfx, -152f);
         CreateReservedToggle(toggleList, "WeatherRow", "天气特效", SettingsToggleId.WeatherFx, -228f);
+        CreateReservedToggle(toggleList, "MercSkillAutoRow", "佣兵技能自动", SettingsToggleId.MercSkillAuto, -304f);
 
         evacuateButton = CreateButton(panel.transform, "EvacuateButton", "撤离",
             new Vector2(0.5f, 0f), new Vector2(0f, 116f), new Vector2(300f, 68f),

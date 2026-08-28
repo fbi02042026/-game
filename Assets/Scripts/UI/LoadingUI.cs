@@ -3,12 +3,17 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 切场景 Loading（Resources/Prefabs/Loading/LoadingUI）。
-/// 布局以用户预制体为准；运行时只改文案/字体/Canvas，不改节点坐标。
+/// 布局以用户预制体为准；运行时只微调 StoryTip 纵向位置，不改 prefab。
 /// 跨场景时用 Overlay + 高 sortingOrder，避免 Camera 随场景销毁导致黑屏。
 /// </summary>
 public class LoadingUI : MonoBehaviour
 {
     public const string ResourcePath = "Prefabs/Loading/LoadingUI";
+
+    bool _storyTipOffsetApplied;
+
+    /// <summary>相对预制体 StoryTip 再下移（不写回 prefab）。</summary>
+    const float StoryTipDownOffset = -32f;
 
     [Header("绑定")]
     public Image backgroundImage;
@@ -50,7 +55,16 @@ public class LoadingUI : MonoBehaviour
         if (tipText != null)
             tipText.font = GameFonts.GetChinese();
 
-        // 布局以预制体为准，运行时不再改写 StoryTip / Logo / Progress 坐标
+        ApplyStoryTipOffset();
+    }
+
+    void ApplyStoryTipOffset()
+    {
+        if (_storyTipOffsetApplied || tipText == null) return;
+        var rt = tipText.rectTransform;
+        if (rt == null) return;
+        rt.anchoredPosition += new Vector2(0f, StoryTipDownOffset);
+        _storyTipOffsetApplied = true;
     }
 
     public void SetProgress(float progress01)
@@ -98,8 +112,8 @@ public class LoadingUI : MonoBehaviour
         tip.horizontalOverflow = HorizontalWrapMode.Wrap;
         tip.verticalOverflow = VerticalWrapMode.Overflow;
         var tipRt = tip.rectTransform;
-        tipRt.anchorMin = new Vector2(0.5f, 0.22f);
-        tipRt.anchorMax = new Vector2(0.5f, 0.22f);
+        tipRt.anchorMin = new Vector2(0.5f, 0.19f);
+        tipRt.anchorMax = new Vector2(0.5f, 0.19f);
         tipRt.pivot = new Vector2(0.5f, 0.5f);
         tipRt.anchoredPosition = Vector2.zero;
         tipRt.sizeDelta = new Vector2(640f, 120f);

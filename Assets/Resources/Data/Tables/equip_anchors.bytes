@@ -1,0 +1,15 @@
+category,anchorTemplateId,rarity,attrType,value,isPercent,isAnchor
+MainHandWeapon,equip_sword_1,Common,Attack,5,0,1
+MainHandWeapon,equip_sword_1,Rare,Attack,8,0,1
+MainHandWeapon,equip_training_sword,Common,Attack,3,0,1
+OffHandWeapon,equip_offhand_sword_1,Common,Attack,3,0,1
+OffHandWeapon,equip_offhand_sword_1,Rare,Attack,5,0,1
+OffHandWeapon,equip_offhand_axe_1,Common,Attack,3,0,1
+Shield,equip_woodshield1,Common,Defense,4,0,1
+Shield,equip_woodshield1,Rare,Defense,6,0,1
+TwoHandBow,equip_bow_1,Rare,Attack,7,0,1
+Head,equip_helmet_1,Common,Defense,2,0,1
+Chest,equip_armor_1,Common,Defense,3,0,1
+Hands,equip_hands_001,Common,MaxHp,8,0,1
+Feet,equip_feet_001,Common,MoveSpeed,0.05,1,1
+Cape,equip_cape_001,Common,MaxHp,10,0,1

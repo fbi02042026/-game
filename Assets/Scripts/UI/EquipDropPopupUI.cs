@@ -72,7 +72,10 @@ public class EquipDropPopupUI : MonoBehaviour
             return;
         }
         bool hasWorn = GridBackpackSystem.Instance != null
-            && GridBackpackSystem.Instance.GetEquippedInSlot(equip.slotType) != null;
+            && GridBackpackSystem.Instance.GetEquippedInLogicalSlot(
+                WeaponLoadoutRules.IsLoadoutItem(equip)
+                    ? WeaponLoadoutRules.ResolveLogicalSlot(equip)
+                    : equip.slotType) != null;
         Ensure().Open(hasWorn ? EquipDropMode.ReplaceWorn : EquipDropMode.EmptySlot,
             new List<EquipInstance> { equip }, onDone);
     }
@@ -233,8 +236,14 @@ public class EquipDropPopupUI : MonoBehaviour
                 if (eq.icon == null)
                     Debug.LogWarning($"[EquipDropPopup] 卡片{i}无图标 name={eq.equipName} file={eq.template?.iconFileName}");
             }
-            if (c.name != null) c.name.text = eq.equipName ?? "装备";
-            if (c.meta != null) c.meta.text = $"{EquipUiText.Slot(eq.slotType)}  ★{eq.star}  {EquipUiText.RarityName(eq.rarity)}";
+            if (c.name != null) c.name.text = EquipUiText.EquipTitleWithHand(eq);
+            if (c.meta != null)
+            {
+                string handLabel = WeaponLoadoutRules.IsLoadoutItem(eq)
+                    ? EquipUiText.WeaponHand(eq.weaponHand, eq.weaponType)
+                    : EquipUiText.Slot(eq.slotType);
+                c.meta.text = $"{handLabel}  ★{eq.star}  {EquipUiText.RarityName(eq.rarity)}";
+            }
             if (c.attrs != null) c.attrs.text = FormatAttrs(eq);
         }
     }
@@ -343,11 +352,18 @@ public class EquipDropPopupUI : MonoBehaviour
 
         EquipInstance worn = null;
         if (GridBackpackSystem.Instance != null)
-            worn = GridBackpackSystem.Instance.GetEquippedInSlot(sel.slotType);
+        {
+            EquipSlotType compareSlot = WeaponLoadoutRules.IsLoadoutItem(sel)
+                ? WeaponLoadoutRules.ResolveLogicalSlot(sel)
+                : sel.slotType;
+            worn = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(compareSlot);
+        }
 
         // 下部对比区始终显示：有则属性，无则「当前部位无装备」
         if (comparePanel != null) comparePanel.SetActive(true);
-        string slotName = EquipUiText.Slot(sel.slotType);
+        string slotName = WeaponLoadoutRules.IsLoadoutItem(sel)
+            ? EquipUiText.WeaponHand(sel.weaponHand, sel.weaponType)
+            : EquipUiText.Slot(sel.slotType);
         if (worn != null)
         {
             if (compareTitle != null) compareTitle.text = $"当前已装备（{slotName}）";
@@ -365,7 +381,10 @@ public class EquipDropPopupUI : MonoBehaviour
     {
         var sel = GetSelected();
         bool hasWorn = sel != null && GridBackpackSystem.Instance != null
-            && GridBackpackSystem.Instance.GetEquippedInSlot(sel.slotType) != null;
+            && GridBackpackSystem.Instance.GetEquippedInLogicalSlot(
+                WeaponLoadoutRules.IsLoadoutItem(sel)
+                    ? WeaponLoadoutRules.ResolveLogicalSlot(sel)
+                    : sel.slotType) != null;
 
         if (primaryLabel != null)
             primaryLabel.text = hasWorn ? "替换" : "装备";
@@ -409,6 +428,19 @@ public class EquipDropPopupUI : MonoBehaviour
             Finish(sel, true);
             return;
         }
+
+        if (WeaponLoadoutRules.IsLoadoutItem(sel))
+        {
+            if (!bag.TryAcquireLoadoutItem(sel, out _))
+            {
+                UIManager.Instance?.ShowToast("无法装备该武器");
+                return;
+            }
+            BattleUI.Instance?.UpdateBackpackGrid();
+            Finish(sel, true);
+            return;
+        }
+
         var item = FindBackpackItem(bag, sel);
         if (item == null && !bag.TryAddItem(sel, out item))
         {

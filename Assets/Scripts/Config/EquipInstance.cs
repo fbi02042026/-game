@@ -30,6 +30,9 @@ public class EquipInstance
     // === 槽位信息 ===
     public EquipSlotType slotType;
     public WeaponType weaponType;
+    public WeaponHandSlot weaponHand;
+    public string grantSkillId;
+    public List<AttrBonusData> skillPassives = new List<AttrBonusData>();
     public WeaponAttackType weaponAttackType;
     public ArmorPrefix armorPrefix;
 
@@ -50,7 +53,12 @@ public class EquipInstance
         // 槽位信息
         inst.slotType = template.slotType;
         inst.weaponType = template.weaponType;
+        inst.weaponHand = template.weaponHand;
+        inst.grantSkillId = template.grantSkillId;
+        inst.skillPassives = CopySkillPassives(template.skillPassives);
         inst.weaponAttackType = template.weaponAttackType;
+        if (WeaponLoadoutRules.IsLoadoutItem(inst))
+            inst.slotType = WeaponLoadoutRules.ResolveLogicalSlot(inst);
         inst.armorPrefix = template.armorPrefix;
 
         // 品质和星级
@@ -78,7 +86,11 @@ public class EquipInstance
         // 武器：按 Kind 词条池 + 稀有度词条数 + 前缀命名
         if (inst.slotType == EquipSlotType.MainHand || inst.slotType == EquipSlotType.OffHand)
         {
-            WeaponAffixSystem.ApplyWeaponRoll(inst);
+            EquipRollCeiling.ClampInstanceBaseAttrs(inst);
+            if (!template.isAnchor)
+                WeaponAffixSystem.ApplyWeaponRoll(inst);
+            else
+                inst.equipName = EquipNameGen.DisplayName(template);
             return inst;
         }
 
@@ -93,9 +105,32 @@ public class EquipInstance
             GenerateCapeAttr(inst);
         }
 
+        EquipRollCeiling.ClampInstanceBaseAttrs(inst);
+
         // 设计文档：防具按稀有度滚词条 + 前缀命名（覆盖旧的高星随机）
-        ArmorAffixSystem.ApplyArmorRoll(inst);
+        if (!template.isAnchor)
+            ArmorAffixSystem.ApplyArmorRoll(inst);
+        else
+            inst.equipName = EquipNameGen.DisplayName(template);
         return inst;
+    }
+
+    static List<AttrBonusData> CopySkillPassives(List<AttrBonusData> src)
+    {
+        var dst = new List<AttrBonusData>();
+        if (src == null) return dst;
+        for (int i = 0; i < src.Count; i++)
+        {
+            var b = src[i];
+            if (b == null) continue;
+            dst.Add(new AttrBonusData
+            {
+                attrType = b.attrType,
+                value = b.value,
+                isPercent = b.isPercent
+            });
+        }
+        return dst;
     }
 
     /// <summary>

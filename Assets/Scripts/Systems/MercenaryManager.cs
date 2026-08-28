@@ -157,24 +157,32 @@ public class MercenaryManager : Singleton<MercenaryManager>
         return Mathf.Clamp(tavernLevel, 0, 2);
     }
 
+    public List<MercenaryData> GetActiveMercData()
+    {
+        var result = new List<MercenaryData>();
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null) return result;
+        var source = data.hiredMercs;
+        if (source == null || source.Count == 0)
+            source = data.permanentMercs;
+        if (source == null) return result;
+        int max = GetMaxMercSlots();
+        for (int i = 0; i < source.Count && result.Count < max; i++)
+        {
+            var m = source[i];
+            if (m == null || string.IsNullOrEmpty(m.mercId)) continue;
+            if (!GameConfig.IsMercAvailable(m.mercId, data)) continue;
+            result.Add(m);
+        }
+        return result;
+    }
+
     public List<string> GetActiveMercIds()
     {
         var result = new List<string>();
-        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-        if (data == null || data.permanentMercs == null) return result;
-
-        int max = GetMaxMercSlots();
-        for (int i = 0; i < data.permanentMercs.Count && result.Count < max; i++)
-        {
-            string id = data.permanentMercs[i].mercId;
-            if (string.IsNullOrEmpty(id)) continue;
-            if (!GameConfig.IsMercAvailable(id, data))
-            {
-                Debug.Log($"[MercenaryManager] 跳过不可用佣兵: {id} tier={GameConfig.GetMercTier(id)} guild={data.guildLevel}");
-                continue;
-            }
-            result.Add(id);
-        }
+        var list = GetActiveMercData();
+        for (int i = 0; i < list.Count; i++)
+            result.Add(list[i].mercId);
         return result;
     }
 

@@ -81,6 +81,8 @@ public class GameSceneManager : Singleton<GameSceneManager>
         }
 
         TutorialDirector.Instance?.NotifyTownReady();
+        if (!StoryProgress.TutorialBattleCleared && !StoryProgress.TutorialDone)
+            StoryProgress.ResetTutorialRunInventoryIfNeeded();
         _loadingTown = false;
     }
 
@@ -99,6 +101,8 @@ public class GameSceneManager : Singleton<GameSceneManager>
     IEnumerator LoadBattleAsync()
     {
         _loadingBattle = true;
+        if (!StoryProgress.TutorialDone && !StoryProgress.TutorialBattleCleared)
+            StoryProgress.ResetTutorialRunInventoryIfNeeded();
         StoryDirector.Instance?.NotifySceneChanged();
         AutoGameInitializer.ResetForSceneLoad();
         SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);

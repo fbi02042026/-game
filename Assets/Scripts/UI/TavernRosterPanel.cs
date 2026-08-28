@@ -73,12 +73,12 @@ public class TavernRosterPanel : MonoBehaviour
             : Mathf.Clamp(data?.townLevel?.tavern ?? 1, 0, 2);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"【佣兵名册】出战槽 {slots}（前 {slots} 名出战）");
+        sb.AppendLine($"【本局雇佣】出战槽 {slots}（下本结束离队）");
         sb.AppendLine();
 
-        var list = data?.permanentMercs;
+        var list = data?.hiredMercs;
         if (list == null || list.Count == 0)
-            sb.AppendLine("暂无永久佣兵。下方三选一招募。");
+            sb.AppendLine("暂无雇佣。请点「招募佣兵」打开招募界面。");
         else
         {
             for (int i = 0; i < list.Count; i++)
@@ -123,38 +123,8 @@ public class TavernRosterPanel : MonoBehaviour
 
     void OnConfirmRecruit()
     {
-        var data = SaveSystem.Instance?.Data;
-        if (data == null)
-        {
-            UIManager.Instance?.ShowToast("存档未就绪");
-            return;
-        }
-        if (_offers == null || _selected < 0 || _selected >= _offers.Count || _offers[_selected] == null)
-        {
-            UIManager.Instance?.ShowToast("请先选择一名佣兵");
-            return;
-        }
-
-        if (data.permanentMercs == null)
-            data.permanentMercs = new List<MercenaryData>();
-
-        var picked = CloneOffer(_offers[_selected]);
-        if (string.IsNullOrEmpty(picked.uid))
-            picked.uid = System.Guid.NewGuid().ToString("N");
-        if (picked.star < 1) picked.star = 1;
-        if (picked.level < 1) picked.level = 1;
-        if (string.IsNullOrEmpty(picked.skillId))
-            picked.skillId = SkillRegistry.DefaultMercMeleeSkillId;
-
-        data.permanentMercs.Add(picked);
-        if (data.townLevel == null) data.townLevel = new TownLevel();
-        if (data.townLevel.tavern < 1) data.townLevel.tavern = 1;
-        SaveSystem.Instance.Save();
-
-        string name = string.IsNullOrEmpty(picked.displayName) ? picked.mercId : picked.displayName;
-        UIManager.Instance?.ShowToast($"已招募：{name}");
-        RerollOffers();
-        Refresh();
+        MercenaryRecruitPopupUI.Show();
+        if (_root != null) _root.SetActive(false);
     }
 
     static MercenaryData CloneOffer(MercenaryData src)

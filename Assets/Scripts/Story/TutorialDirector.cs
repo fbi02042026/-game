@@ -96,6 +96,21 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 新手首次点「冒险」直接进战斗，不在冒险页弹技能说明。
     }
 
+    /// <summary>引导战重进时重置运行时状态（背包另由 StoryProgress 清）。</summary>
+    public void ResetBattleTutorialRuntime()
+    {
+        if (_flow != null)
+        {
+            StopCoroutine(_flow);
+            _flow = null;
+        }
+        _battleTutorialFlowStarted = false;
+        ShowMercHud = false;
+        WaitingEvacuate = false;
+        SkillUsedThisStep = false;
+        AllowBattleSkillClick = false;
+    }
+
     /// <summary>首次引导：点底栏「冒险」跳过选关页，直接进入教程战斗。</summary>
     public bool TryEnterTutorialBattleFromNav()
     {
@@ -111,6 +126,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
 
         StoryProgress.QueueTutorialBattle();
+        StoryProgress.ResetTutorialRunInventoryIfNeeded();
         AdventureUI.PendingBattleChapter = 1;
         AdventureUI.PendingBattleDifficulty = 0;
         AdventureUI.PendingGoldDungeon = false;
@@ -309,9 +325,13 @@ public class TutorialDirector : Singleton<TutorialDirector>
         AllowBattleSkillClick = false;
         WaitingEvacuate = false;
 
-        // —— 1) 一小波清怪（缩短到老盾前的路程）——
+        // —— 1) 首波 → 预告下一波 → 约 2 秒后第二小波 ——
         hint.Show("靠近怪物会自动攻击。", null, 8f);
         yield return EnsureTutorialWave(bm, 2);
+        yield return CoWarnIncomingDuringFight(bm, hint);
+        yield return WaitFieldClear();
+
+        yield return CoTutorialNextWave(bm, hint, 2f, 3);
         yield return WaitFieldClear();
 
         // —— 2) 空路 → 发现宝箱 ——
@@ -379,25 +399,26 @@ public class TutorialDirector : Singleton<TutorialDirector>
         ui?.ApplySoloBattleHudPublic();
         ui?.UpdateCharacterSlots();
 
-        var merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.35f, 3.8f, stunned: true);
+        var merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.35f, 5.5f, stunned: true);
         bm.SpawnTutorialAmbushAround(merc, 3);
-        hint.Show("前方有人被怪物围住了，走近看看。", null, 6f);
+        hint.Show("前方有人被怪物围住了，上前帮忙。", null, 6f);
 
-        // 走近老盾时冻住自动走，避免空跑很久/错过对话
-        if (bm != null) bm.UnitsCanAct = false;
+        // 不冻结战斗：玩家可随时上前清怪，避免「打了怪却不进剧情」
+        if (bm != null) bm.UnitsCanAct = true;
         float approach = 0f;
-        while (approach < 12f)
+        while (approach < 10f)
         {
             approach += Time.unscaledDeltaTime;
             if (Hero.Instance != null && merc != null)
             {
                 float dist = Mathf.Abs(UnitBase.GetCombatX(Hero.Instance) - UnitBase.GetCombatX(merc));
-                if (dist <= 3.6f) break;
-                if (dist > 3.6f && approach > 0.2f)
+                if (dist <= 4.2f) break;
+                // 靠近时轻推玩家，减少空跑
+                if (dist > 4.2f && approach > 0.15f)
                 {
                     float hx = UnitBase.GetCombatX(Hero.Instance);
                     float mx = UnitBase.GetCombatX(merc);
-                    float step = Mathf.Sign(mx - hx) * Mathf.Min(10f * Time.unscaledDeltaTime, Mathf.Abs(mx - hx) - 3.4f);
+                    float step = Mathf.Sign(mx - hx) * Mathf.Min(12f * Time.unscaledDeltaTime, Mathf.Abs(mx - hx) - 3.8f);
                     if (Mathf.Abs(step) > 0.001f)
                     {
                         var p = Hero.Instance.transform.position;
@@ -420,25 +441,22 @@ public class TutorialDirector : Singleton<TutorialDirector>
         hint.Show("怪物冲过来了，靠近它们会自动攻击。", null, 5f);
         yield return WaitFieldClear();
         bm.ClearMonsterForcedTargets();
-        if (bm != null) bm.UnitsCanAct = false;
-        HaltUnit(Hero.Instance);
-        HaltUnit(merc);
 
-        // 围殴怪清完：停眩晕动画（仍原地等对话，对话后再入队解控）
+        // 围殴怪已清：若玩家提前打完，也要进对话
+        if (merc == null || merc.isDead)
+            merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.6f, 2.0f, stunned: false);
         if (merc != null)
             merc.StopTutorialStunAnim();
 
-        // 清完怪再跟老盾对话、入队
-        if (merc == null || merc.isDead)
-        {
-            // 围殴中被清掉时补一只，避免入队戏跳过
-            merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.6f, 2.0f, stunned: false);
-        }
+        if (bm != null) bm.UnitsCanAct = false;
+        HaltUnit(Hero.Instance);
+        if (merc != null) HaltUnit(merc);
         yield return TalkBlock(bm, headTalk, restoreAct: false,
             new TalkLine(merc, "咳……谢了，我差点交代在这儿。", 1.4f),
             new TalkLine(Hero.Instance, "还能走吗？跟我一起撤。", 1.1f),
             new TalkLine(merc, "我叫老盾。行，我跟你。", 1.3f));
 
+        string joinName = "老盾";
         if (merc != null)
         {
             merc.SetTutorialStunned(false);
@@ -449,6 +467,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 GameConfig.SetWorldPosition(merc.gameObject, behind);
             }
             merc.Face(1);
+            merc.SetPartyIndex(0);
             EnsureTutorialMercPermanent(StoryProgress.TutorialMercId, "老盾");
             Debug.Log("[Tutorial] 老盾入队完成");
         }
@@ -460,7 +479,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         ui?.UpdateCharacterSlots();
         if (ui != null)
             ui.StartCoroutine(CoRefreshMercHudNextFrame(ui));
-        hint.Show("老盾加入了队伍。", null, 2.0f);
+        hint.Show($"{joinName}加入了队伍。", null, 2.0f);
+        UIManager.Instance?.ShowToast($"{joinName}加入队伍！");
         yield return new WaitForSecondsRealtime(0.6f);
 
         // —— 治疗技能：软提示 + 短超时，不长期冻死全场 ——
@@ -639,23 +659,58 @@ public class TutorialDirector : Singleton<TutorialDirector>
             if (data.permanentMercs[i] != null && data.permanentMercs[i].mercId == mercId)
                 return;
         }
-        string skill = MercRosterDefs.GetDefaultSkillId(mercId) ?? "ally_shield";
-        data.permanentMercs.Add(new MercenaryData
+        MercRosterDefs.GetSkillIds(mercId, out string active, out string passive);
+        var entry = new MercenaryData
         {
             mercId = mercId,
             displayName = string.IsNullOrEmpty(displayName) ? "老盾" : displayName,
+            nickname = "老盾",
+            hireId = "H001",
             uid = "tutorial_" + mercId,
             favorLevel = 1,
             level = 1,
             star = 1,
-            skillId = skill
-        });
+            skillId = active,
+            passiveSkillId = passive
+        };
+        // 教程：写入临时雇佣；图鉴仍 MarkMercSeen
+        data.hiredMercs ??= new System.Collections.Generic.List<MercenaryData>();
+        data.hiredMercs.Add(entry);
+        // 兼容旧逻辑：也记一条 permanent（不用于出战优先）
+        data.permanentMercs.Add(entry);
         SaveSystem.Instance.Save();
         Debug.Log($"[Tutorial] 老盾已写入 permanentMercs id={mercId}");
         AdventureCodex.MarkMercSeen(
             AdventureLogCatalog.Mercs.Length > 0 ? "H001" : mercId);
         // 同时按 assetId 记
         AdventureCodex.MarkMercSeen(mercId);
+    }
+
+    /// <summary>首波剩最后一只时闪屏预告下一波。</summary>
+    static IEnumerator CoWarnIncomingDuringFight(BattleManager bm, TutorialHintUI hint)
+    {
+        if (bm == null) yield break;
+        bool warned = false;
+        while (bm.GetAliveMonsterCount() > 0)
+        {
+            if (!warned && bm.GetAliveMonsterCount() <= 1)
+            {
+                warned = true;
+                hint.Show("下一波来袭！", null, 2.5f);
+                yield return BattleScreenFlash.Play(new Color(1f, 0.4f, 0.3f, 0.45f), 0.18f, 0.3f);
+            }
+            yield return null;
+        }
+    }
+
+    /// <summary>清场后等待若干秒再刷下一波，并闪屏提示。</summary>
+    static IEnumerator CoTutorialNextWave(BattleManager bm, TutorialHintUI hint, float delaySec, int count)
+    {
+        hint.Show("下一波来袭！", null, 2.5f);
+        yield return BattleScreenFlash.Play(new Color(1f, 0.92f, 0.75f, 0.38f), 0.15f, 0.28f);
+        yield return new WaitForSecondsRealtime(Mathf.Max(0.5f, delaySec));
+        hint.Hide();
+        yield return EnsureTutorialWave(bm, count);
     }
 
     /// <summary>

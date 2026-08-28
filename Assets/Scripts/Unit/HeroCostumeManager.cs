@@ -93,6 +93,29 @@ public class HeroCostumeManager : MonoBehaviour
     /// 缓存是否已初始化
     /// </summary>
     private bool _cacheInitialized = false;
+    private bool _rigReady;
+    private SPUM_Prefabs _spum;
+    private SPUM_MatchingList[] _matchingLists;
+    private HeroWeaponRig.HandRig _handRig;
+
+    /// <summary>普攻武器应装备的槽位（由 SPUM 预制体攻击手检测）。</summary>
+    public EquipSlotType AttackWeaponSlot
+    {
+        get
+        {
+            EnsureRig();
+            return _handRig.AttackSlot;
+        }
+    }
+
+    public HeroWeaponRig.HandRig HandRig
+    {
+        get
+        {
+            EnsureRig();
+            return _handRig;
+        }
+    }
 
     void Awake()
     {
@@ -134,12 +157,43 @@ public class HeroCostumeManager : MonoBehaviour
 
     bool _subscribed;
 
+    void EnsureRig()
+    {
+        if (_rigReady) return;
+        if (spumPrefabs == null)
+            spumPrefabs = GetComponent<SPUM_Prefabs>();
+        if (spumPrefabs == null)
+            spumPrefabs = GetComponentInChildren<SPUM_Prefabs>(true);
+        _spum = spumPrefabs;
+
+        if (spriteList == null)
+            spriteList = GetComponent<SPUM_SpriteList>();
+        if (spriteList == null)
+            spriteList = GetComponentInChildren<SPUM_SpriteList>(true);
+
+        _matchingLists = GetComponentsInChildren<SPUM_MatchingList>(true);
+        _handRig = HeroWeaponRig.Build(_spum, _matchingLists);
+        _rigReady = true;
+        Debug.Log($"[HeroCostumeManager] Rig就绪 attack={_handRig.AttackDir}/{_handRig.AttackSlot} secondary={_handRig.SecondaryDir}/{_handRig.SecondarySlot} matchingLists={_matchingLists?.Length ?? 0}");
+    }
+
     void EnsureSubscribed()
     {
         if (_subscribed) return;
         if (GridBackpackSystem.Instance == null) return;
         GridBackpackSystem.Instance.OnCostumeChanged += RefreshCostume;
         _subscribed = true;
+    }
+
+    /// <summary>把 spumName 解析成 Resources 相对路径（无扩展名）。</summary>
+    public bool TryResolveSpumPath(string spumName, out string resourcePath)
+    {
+        resourcePath = null;
+        if (string.IsNullOrEmpty(spumName)) return false;
+        if (!_cacheInitialized) BuildPathCache();
+        if (_spumPathCache.TryGetValue(spumName, out resourcePath))
+            return true;
+        return false;
     }
 
     void Unsubscribe()
@@ -241,47 +295,209 @@ public class HeroCostumeManager : MonoBehaviour
         return count;
     }
 
-    /// <summary>
-    /// 刷新全部换装：遍历所有装备槽，根据spumName加载SPUM精灵图并替换
-    /// 使用缓存字典，O(1)查找路径，O(1)查找已加载的Sprite
-    /// </summary>
     public void RefreshCostume()
     {
-        if (spriteList == null)
-        {
-            Debug.LogWarning("[HeroCostumeManager] spriteList 未赋值，跳过换装");
-            return;
-        }
+        EnsureRig();
         if (GridBackpackSystem.Instance == null) return;
-
-        // 确保缓存已初始化
         if (!_cacheInitialized) BuildPathCache();
 
-        // 固定顺序：先主手后副手，避免字典遍历顺序不确定
+        bool useMatching = _matchingLists != null && _matchingLists.Length > 0;
+        if (!useMatching && spriteList == null)
+        {
+            Debug.LogWarning("[HeroCostumeManager] 无 SPUM_MatchingList / SpriteList，跳过换装");
+            return;
+        }
+
         EquipSlotType[] order =
         {
             EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.Hands,
             EquipSlotType.Feet, EquipSlotType.Cape, EquipSlotType.MainHand, EquipSlotType.OffHand
         };
 
+        EquipInstance attackEquip = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
+        bool twoHandEquipped = attackEquip != null && attackEquip.weaponType == WeaponType.TwoHand;
+
         for (int i = 0; i < order.Length; i++)
         {
             EquipSlotType slot = order[i];
-            if (!SlotToPartType.TryGetValue(slot, out string partType)) continue;
+            EquipInstance equip = null;
+            string spumName = null;
 
-            EquipInstance equip = GridBackpackSystem.Instance.GetEquippedInSlot(slot);
-            if (equip != null && equip.template != null && !string.IsNullOrEmpty(equip.template.spumName))
+            if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
             {
-                ApplySpriteToPart(partType, slot, equip.template.spumName);
+                if (twoHandEquipped && slot == EquipSlotType.OffHand)
+                {
+                    if (useMatching)
+                        ClearMatchingWeaponDir(_handRig.SecondaryDir);
+                    else
+                        ClearWeaponSide(slot);
+                    continue;
+                }
+
+                equip = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(slot);
+                spumName = equip?.template != null ? equip.template.spumName : null;
+
+                if (useMatching)
+                    ApplyWeaponViaMatching(slot, spumName);
+                else
+                    ApplyWeaponViaSpriteList(slot, spumName);
             }
-            else if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
+            else
             {
-                // 卸下武器/副手时清掉对应侧，避免旧武器精灵残留
-                ClearWeaponSide(slot);
+                equip = GridBackpackSystem.Instance.GetEquippedInSlot(slot);
+                spumName = equip?.template != null ? equip.template.spumName : null;
+            }
+
+            if (slot != EquipSlotType.MainHand && slot != EquipSlotType.OffHand && !string.IsNullOrEmpty(spumName))
+            {
+                if (useMatching)
+                    ApplyArmorViaMatching(slot, spumName);
+                else if (SlotToPartType.TryGetValue(slot, out string partType))
+                    ApplySpriteToPart(partType, slot, spumName);
             }
         }
 
         Debug.Log("[HeroCostumeManager] 换装刷新完成");
+    }
+
+    void ApplyWeaponViaMatching(EquipSlotType slot, string spumName)
+    {
+        string dir = HeroWeaponRig.DirForSlot(slot, _handRig);
+        SyncImageElementWeapon(dir, spumName);
+        if (string.IsNullOrEmpty(spumName))
+        {
+            ClearMatchingWeaponDir(dir);
+            return;
+        }
+
+        if (!TryResolveSpumPath(spumName, out string path))
+        {
+            Debug.LogWarning($"[HeroCostumeManager] 武器路径未缓存: {spumName}");
+            return;
+        }
+
+        Sprite sprite = LoadSpriteFromResourcePath(path, spumName);
+        ApplyMatchingWeaponDir(dir, path, sprite);
+        Debug.Log($"[HeroCostumeManager] Matching武器 slot={slot} dir={dir} ← {spumName}");
+    }
+
+    void ApplyArmorViaMatching(EquipSlotType slot, string spumName)
+    {
+        if (!SlotToPartType.TryGetValue(slot, out string partType)) return;
+        if (!TryResolveSpumPath(spumName, out string path)) return;
+        Sprite sprite = LoadSpriteFromResourcePath(path, spumName);
+        if (sprite == null) return;
+
+        if (_spum != null && _spum.ImageElement != null)
+        {
+            for (int i = 0; i < _spum.ImageElement.Count; i++)
+            {
+                var ie = _spum.ImageElement[i];
+                if (ie == null || ie.PartType != partType) continue;
+                ie.ItemPath = path;
+            }
+        }
+
+        if (_matchingLists == null) return;
+        for (int m = 0; m < _matchingLists.Length; m++)
+        {
+            var tables = _matchingLists[m]?.matchingTables;
+            if (tables == null) continue;
+            for (int t = 0; t < tables.Count; t++)
+            {
+                var me = tables[t];
+                if (me == null || me.PartType != partType) continue;
+                me.ItemPath = path;
+                if (me.renderer != null)
+                    me.renderer.sprite = PickSlice(sprite, me.Structure);
+            }
+        }
+    }
+
+    void SyncImageElementWeapon(string dir, string spumName)
+    {
+        if (_spum == null || _spum.ImageElement == null) return;
+        string path = null;
+        if (!string.IsNullOrEmpty(spumName))
+            TryResolveSpumPath(spumName, out path);
+
+        for (int i = 0; i < _spum.ImageElement.Count; i++)
+        {
+            var ie = _spum.ImageElement[i];
+            if (ie == null || ie.PartType != "Weapons" || ie.Dir != dir) continue;
+            ie.ItemPath = path ?? "";
+        }
+    }
+
+    void ApplyMatchingWeaponDir(string dir, string path, Sprite sprite)
+    {
+        if (_matchingLists == null) return;
+        for (int m = 0; m < _matchingLists.Length; m++)
+        {
+            var tables = _matchingLists[m]?.matchingTables;
+            if (tables == null) continue;
+            for (int t = 0; t < tables.Count; t++)
+            {
+                var me = tables[t];
+                if (me == null || me.PartType != "Weapons" || me.Dir != dir) continue;
+                me.ItemPath = path;
+                if (me.renderer != null)
+                {
+                    me.renderer.sprite = sprite;
+                    HeroWeaponRig.ApplyWeaponPresentation(me.renderer, dir, _handRig);
+                }
+            }
+        }
+    }
+
+    void ClearMatchingWeaponDir(string dir)
+    {
+        SyncImageElementWeapon(dir, null);
+        if (_matchingLists == null) return;
+        for (int m = 0; m < _matchingLists.Length; m++)
+        {
+            var tables = _matchingLists[m]?.matchingTables;
+            if (tables == null) continue;
+            for (int t = 0; t < tables.Count; t++)
+            {
+                var me = tables[t];
+                if (me == null || me.PartType != "Weapons" || me.Dir != dir) continue;
+                me.ItemPath = "";
+                if (me.renderer != null)
+                {
+                    me.renderer.sprite = null;
+                    HeroWeaponRig.ApplyWeaponPresentation(me.renderer, dir, _handRig);
+                }
+            }
+        }
+    }
+
+    void ApplyWeaponViaSpriteList(EquipSlotType slot, string spumName)
+    {
+        if (spriteList == null) return;
+        if (string.IsNullOrEmpty(spumName))
+        {
+            ClearWeaponSide(slot);
+            return;
+        }
+        ApplySpriteToPart("Weapons", slot, spumName);
+    }
+
+    static Sprite LoadSpriteFromResourcePath(string resourcePath, string spumName)
+    {
+        if (string.IsNullOrEmpty(resourcePath)) return null;
+        Sprite[] sprites = Resources.LoadAll<Sprite>(resourcePath);
+        if (sprites == null || sprites.Length == 0) return null;
+        Sprite found = System.Array.Find(sprites, s => s.name == spumName);
+        return found != null ? found : sprites[0];
+    }
+
+    static Sprite PickSlice(Sprite primary, string structure)
+    {
+        if (primary == null) return null;
+        if (string.IsNullOrEmpty(structure)) return primary;
+        // 多切片由 LoadSpriteFromResourcePath 已返回单张时直接用
+        return primary;
     }
 
     /// <summary>
@@ -350,7 +566,8 @@ public class HeroCostumeManager : MonoBehaviour
         if (list == null || list.Count == 0) return;
 
         Sprite pick = sprites[0];
-        bool wantRight = slot == EquipSlotType.MainHand;
+        string spumDir = HeroWeaponRig.DirForSlot(slot, _handRig);
+        bool wantRight = spumDir == HeroWeaponRig.DirRight;
         int matched = 0;
         for (int i = 0; i < list.Count; i++)
         {
@@ -368,8 +585,8 @@ public class HeroCostumeManager : MonoBehaviour
                 if (!wantRight && i == list.Count - 1) { sr.sprite = pick; matched++; }
                 continue;
             }
-            if (wantRight && isRight) { sr.sprite = pick; matched++; }
-            if (!wantRight && isLeft) { sr.sprite = pick; matched++; }
+            if (wantRight && isRight) { sr.sprite = pick; matched++; HeroWeaponRig.ApplyWeaponPresentation(sr, spumDir, _handRig); }
+            if (!wantRight && isLeft) { sr.sprite = pick; matched++; HeroWeaponRig.ApplyWeaponPresentation(sr, spumDir, _handRig); }
         }
 
         UpdatePathString("Weapons", spumName);
@@ -379,7 +596,8 @@ public class HeroCostumeManager : MonoBehaviour
     void ClearWeaponSide(EquipSlotType slot)
     {
         if (spriteList == null || spriteList._weaponList == null) return;
-        bool wantRight = slot == EquipSlotType.MainHand;
+        string spumDir = HeroWeaponRig.DirForSlot(slot, _handRig);
+        bool wantRight = spumDir == HeroWeaponRig.DirRight;
         var list = spriteList._weaponList;
         for (int i = 0; i < list.Count; i++)
         {
