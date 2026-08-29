@@ -551,12 +551,12 @@ public class BattleUI : MonoBehaviour
         // 单人/引导：两格伙伴都按未解锁处理，清掉占位血量数字
         bool lockExtraSlots = (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && !showTutorialMerc;
         if (lockExtraSlots)
-            mercSlot1?.ShowUnavailable("锁定");
+            mercSlot1?.ShowUnavailable("未解锁");
         else
             mercSlot1?.SetLocked(false);
 
         if (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle)
-            mercSlot2?.ShowUnavailable("锁定");
+            mercSlot2?.ShowUnavailable("未解锁");
         else
             mercSlot2?.SetLocked(false);
 
@@ -1126,11 +1126,11 @@ public class BattleUI : MonoBehaviour
     {
         if (slot == null) return;
 
-        // 酒馆未解锁的槽：显示「未开放」
+        // 酒馆未解锁的槽：显示「未解锁」
         bool unlocked = index < maxSlots;
         if (!unlocked)
         {
-            slot.ShowUnavailable("未开放");
+            slot.ShowUnavailable("未解锁");
             return;
         }
 
@@ -1639,8 +1639,10 @@ public class CharacterSlotUI
         ClearNumericDisplays();
     }
 
-    /// <summary>未开放槽：保留节点可见，头像关掉，文案显示「未开放」</summary>
-    public void ShowUnavailable(string label = "未开放")
+    bool _lockedLabelSized;
+
+    /// <summary>未开放槽：保留节点可见，头像关掉，文案显示「未解锁」</summary>
+    public void ShowUnavailable(string label = "未解锁")
     {
         SetEnergyEnabled(false);
         if (root == null) return;
@@ -1648,20 +1650,25 @@ public class CharacterSlotUI
         if (lockedOverlay != null) lockedOverlay.SetActive(true);
         if (portrait != null) portrait.gameObject.SetActive(false);
         if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
-        // 锁定文案由美术遮罩承担（如「Lv1 酒馆解锁」）；不要用数值级标签盖掉
-        if (levelLabel != null
-            && (levelLabel.transform.parent == null
-                || lockedOverlay == null
-                || !levelLabel.transform.IsChildOf(lockedOverlay.transform)))
-        {
-            // 仅当 levelLabel 不是锁遮罩上的解锁说明时才改
-            string cur = levelLabel.text ?? "";
-            bool looksLikeUnlockHint = cur.IndexOf("解锁", System.StringComparison.Ordinal) >= 0
-                                       || cur.IndexOf("酒馆", System.StringComparison.Ordinal) >= 0;
-            if (!looksLikeUnlockHint)
-                levelLabel.text = label ?? "未开放";
-        }
+        ApplyLockedOverlayText(label ?? "未解锁");
+        if (levelLabel != null)
+            levelLabel.text = "";
         ClearNumericDisplays();
+    }
+
+    void ApplyLockedOverlayText(string text)
+    {
+        if (lockedOverlay == null) return;
+        var texts = lockedOverlay.GetComponentsInChildren<Text>(true);
+        for (int i = 0; i < texts.Length; i++)
+        {
+            var t = texts[i];
+            if (t == null) continue;
+            t.text = text;
+            if (!_lockedLabelSized)
+                t.fontSize += 2;
+        }
+        _lockedLabelSized = true;
     }
 
     /// <summary>清掉血条/蓝条上的数值与填充，避免未解锁槽露出占位数字。</summary>

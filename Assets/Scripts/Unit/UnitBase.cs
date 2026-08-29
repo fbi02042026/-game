@@ -320,13 +320,11 @@ public abstract class UnitBase : MonoBehaviour
         {
             float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
             float attackRange = attr.GetAttr(AttrType.AttackRange);
-            float dir = GetCombatX(target) > GetCombatX(this) ? 1 : -1;
-            facingDir = (int)dir;
-            ApplyFacing(facingDir);
+            FaceToward(target);
 
             if (distance <= attackRange)
             {
-                // 攻击范围内：停步攻击
+                // 攻击范围内停步输出，避免贴到目标中心导致双方朝向来回抖
                 if (rb != null) rb.velocity = Vector2.zero;
                 if (attackCd <= 0)
                 {
@@ -334,16 +332,15 @@ public abstract class UnitBase : MonoBehaviour
                     attackCd = GetAttackCooldown();
                 }
             }
-            else if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+            else if (UnitCrowd.IsBlockedByFrontAlly(this, facingDir))
             {
                 if (rb != null) rb.velocity = Vector2.zero;
                 isMoving = false;
             }
             else
             {
-                // 索敌范围内、攻击范围外：靠近目标
                 if (rb != null)
-                    rb.velocity = new Vector2(dir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
+                    rb.velocity = new Vector2(facingDir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
                 isMoving = true;
             }
         }
@@ -469,7 +466,30 @@ public abstract class UnitBase : MonoBehaviour
                 nearest = enemy;
             }
         }
+
+        // 目标粘滞：新目标需明显更近才切换，避免贴身时左右抖
+        if (target != null && !target.isDead && nearest != null && nearest != target)
+        {
+            float curDist = Mathf.Abs(myX - GetCombatX(target));
+            float newDist = Mathf.Abs(myX - GetCombatX(nearest));
+            const float switchMargin = 0.45f;
+            if (curDist <= detectRange && newDist > curDist - switchMargin)
+                nearest = target;
+        }
         return nearest;
+    }
+
+    /// <summary>朝目标转身；贴身时保持当前朝向，避免左右来回闪。</summary>
+    protected void FaceToward(UnitBase other)
+    {
+        if (other == null) return;
+        float dx = GetCombatX(other) - GetCombatX(this);
+        const float deadZone = 0.22f;
+        if (Mathf.Abs(dx) < deadZone) return;
+        int dir = dx > 0f ? 1 : -1;
+        if (dir == facingDir) return;
+        facingDir = dir;
+        ApplyFacing(facingDir);
     }
 
     /// <summary>

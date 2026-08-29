@@ -282,9 +282,7 @@ public class Mercenary : UnitBase
         {
             float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
             float attackRange = attr.GetAttr(AttrType.AttackRange);
-            float dir = GetCombatX(target) > GetCombatX(this) ? 1 : -1;
-            facingDir = (int)dir;
-            ApplyFacing(facingDir);
+            FaceToward(target);
             if (distance <= attackRange)
             {
                 if (rb != null) rb.velocity = Vector2.zero;
@@ -294,7 +292,7 @@ public class Mercenary : UnitBase
                     attackCd = GetAttackCooldown();
                 }
             }
-            else if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+            else if (UnitCrowd.IsBlockedByFrontAlly(this, facingDir))
             {
                 if (rb != null) rb.velocity = Vector2.zero;
                 isMoving = false;
@@ -302,7 +300,7 @@ public class Mercenary : UnitBase
             else
             {
                 if (rb != null)
-                    rb.velocity = new Vector2(dir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
+                    rb.velocity = new Vector2(facingDir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
                 isMoving = true;
             }
         }
@@ -326,9 +324,7 @@ public class Mercenary : UnitBase
                 {
                     float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(foe));
                     float attackRange = attr.GetAttr(AttrType.AttackRange);
-                    float dir = GetCombatX(foe) > GetCombatX(this) ? 1 : -1;
-                    facingDir = (int)dir;
-                    ApplyFacing(facingDir);
+                    FaceToward(foe);
                     if (distance <= attackRange)
                     {
                         if (rb != null) rb.velocity = Vector2.zero;
@@ -338,14 +334,14 @@ public class Mercenary : UnitBase
                             attackCd = GetAttackCooldown();
                         }
                     }
-                    else if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+                    else if (UnitCrowd.IsBlockedByFrontAlly(this, facingDir))
                     {
                         if (rb != null) rb.velocity = Vector2.zero;
                     }
                     else
                     {
                         if (rb != null)
-                            rb.velocity = new Vector2(dir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
+                            rb.velocity = new Vector2(facingDir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
                         isMoving = true;
                     }
                 }

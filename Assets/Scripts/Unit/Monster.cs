@@ -322,28 +322,27 @@ public class Monster : UnitBase
 
         float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
         float attackRange = attr.GetAttr(AttrType.AttackRange);
-        float dir = GetCombatX(target) > GetCombatX(this) ? 1 : -1;
-        facingDir = (int)dir;
-        ApplyFacing(facingDir);
+        FaceToward(target);
 
         bool isMoving = false;
         bool inRange = distance <= attackRange;
-        if (inRange && attackCd <= 0)
-        {
-            Attack(target);
-            attackCd = GetAttackCooldown();
-        }
-
-        // 攻击时不原地站定：持续朝目标推进，进射程后边走边打
-        if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+        if (inRange)
         {
             if (rb != null) rb.velocity = Vector2.zero;
-            isMoving = false;
+            if (attackCd <= 0)
+            {
+                Attack(target);
+                attackCd = GetAttackCooldown();
+            }
+        }
+        else if (UnitCrowd.IsBlockedByFrontAlly(this, facingDir))
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
         }
         else
         {
             float spd = attr.GetAttr(AttrType.MoveSpeed);
-            if (rb != null) rb.velocity = new Vector2(dir * spd, rb.velocity.y);
+            if (rb != null) rb.velocity = new Vector2(facingDir * spd, rb.velocity.y);
             isMoving = true;
             UnitCrowd.ResolveOverlap(this);
         }
@@ -365,6 +364,13 @@ public class Monster : UnitBase
         if (foe != null)
         {
             target = foe;
+            float dist = Mathf.Abs(GetCombatX(foe) - GetCombatX(this));
+            float attackRange = attr.GetAttr(AttrType.AttackRange);
+            if (dist <= attackRange)
+            {
+                RunForcedCombat();
+                return;
+            }
             dir = GetCombatX(foe) > GetCombatX(this) ? 1f : -1f;
         }
         else
