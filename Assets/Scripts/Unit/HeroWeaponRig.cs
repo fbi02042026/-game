@@ -97,6 +97,48 @@ public static class HeroWeaponRig
         renderer.flipX = DefaultFlipXForDir(rig, spumDir);
     }
 
+    public static bool IsPrimaryWeaponRenderer(SpriteRenderer renderer)
+    {
+        if (renderer == null || renderer.gameObject == null) return false;
+        string n = renderer.gameObject.name;
+        return n.IndexOf("L_Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0
+               || n.IndexOf("R_Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    public static bool IsShieldRenderer(SpriteRenderer renderer)
+    {
+        if (renderer == null || renderer.gameObject == null) return false;
+        string n = renderer.gameObject.name;
+        return n.IndexOf("Shield", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    public static bool IsShieldSpumName(string spumName)
+    {
+        if (string.IsNullOrEmpty(spumName)) return false;
+        return spumName.ToLowerInvariant().Contains("shield");
+    }
+
+    public static bool TryGetPrimaryWeaponRenderer(SPUM_MatchingList[] lists, string spumDir, out SpriteRenderer renderer)
+    {
+        renderer = null;
+        if (lists == null) return false;
+        string want = spumDir == DirRight ? "R_Weapon" : "L_Weapon";
+        for (int i = 0; i < lists.Length; i++)
+        {
+            var tables = lists[i]?.matchingTables;
+            if (tables == null) continue;
+            for (int t = 0; t < tables.Count; t++)
+            {
+                var me = tables[t];
+                if (me?.renderer == null || me.PartType != "Weapons" || me.Dir != spumDir) continue;
+                if (!IsPrimaryWeaponRenderer(me.renderer)) continue;
+                renderer = me.renderer;
+                return true;
+            }
+        }
+        return false;
+    }
+
     static string DetectAttackSpumDir(SPUM_Prefabs spum, SPUM_MatchingList[] lists)
     {
         string leftAttack = null, rightAttack = null;

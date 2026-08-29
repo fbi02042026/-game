@@ -267,10 +267,56 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     HeroWeaponRig.HandRig GetHeroHandRig()
     {
         if (Hero.Instance != null && Hero.Instance.costumeManager != null)
+        {
+            Hero.Instance.costumeManager.EnsureRigReady();
             return Hero.Instance.costumeManager.HandRig;
+        }
         if (HeroCostumeManager.Instance != null)
+        {
+            HeroCostumeManager.Instance.EnsureRigReady();
             return HeroCostumeManager.Instance.HandRig;
+        }
         return default;
+    }
+
+    /// <summary>
+    /// HandRig 就绪后把误挂在逻辑槽位的武器挪到攻击手/副手实际槽，修复「主手空、副手双剑」。
+    /// </summary>
+    public void RemapWeaponWearSlots(in HeroWeaponRig.HandRig rig)
+    {
+        if (!rig.IsValid || _equippedBySlot.Count == 0) return;
+
+        var moves = new List<(EquipInstance eq, EquipSlotType from, EquipSlotType to)>();
+        foreach (var kv in _equippedBySlot)
+        {
+            EquipInstance eq = kv.Value;
+            if (!WeaponLoadoutRules.IsLoadoutItem(eq)) continue;
+
+            EquipSlotType target = WeaponLoadoutRules.ResolveWearSlot(eq, rig);
+            if (eq.weaponType == WeaponType.TwoHand)
+                target = rig.AttackSlot;
+            if (kv.Key == target) continue;
+            moves.Add((eq, kv.Key, target));
+        }
+
+        if (moves.Count == 0) return;
+
+        for (int i = 0; i < moves.Count; i++)
+        {
+            var move = moves[i];
+            if (!_equippedBySlot.TryGetValue(move.from, out var current) || current != move.eq)
+                continue;
+            _equippedBySlot.Remove(move.from);
+        }
+
+        for (int i = 0; i < moves.Count; i++)
+        {
+            var move = moves[i];
+            _equippedBySlot[move.to] = move.eq;
+            move.eq.slotType = move.to;
+        }
+
+        Debug.Log($"[GridBackpack] 武器穿戴槽已按 HandRig 重映射 {moves.Count} 件");
     }
 
     /// <summary>
@@ -488,7 +534,16 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         EquipSlotType wearSlot = logicalSlot;
         if (rig.IsValid)
             wearSlot = logicalSlot == EquipSlotType.OffHand ? rig.SecondarySlot : rig.AttackSlot;
-        return GetEquippedInSlot(wearSlot);
+
+        if (_equippedBySlot.TryGetValue(wearSlot, out var mapped) && mapped != null)
+            return mapped;
+
+        // HandRig 未就绪时可能仍按逻辑槽存着，避免主手武器被当成副手显示
+        if (rig.IsValid && _equippedBySlot.TryGetValue(logicalSlot, out var legacy) && legacy != null
+            && WeaponLoadoutRules.IsLoadoutItem(legacy))
+            return legacy;
+
+        return null;
     }
 
     /// <summary>
