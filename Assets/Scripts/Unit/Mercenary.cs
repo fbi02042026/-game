@@ -341,7 +341,7 @@ public class Mercenary : UnitBase
                     else
                     {
                         if (rb != null)
-                            rb.velocity = new Vector2(dir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
+                            rb.velocity = new Vector2(facingDir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
                         isMoving = true;
                     }
                 }
