@@ -249,6 +249,16 @@ public static class AdventureCodex
 
     public static void RefreshRedDots()
     {
+        // 新账号 / 引导未完成：冒险日志不亮红点
+        if (!StoryProgress.TutorialDone)
+        {
+            RedDot.Set(RedDot.Achievement, false);
+            RedDot.Set(RedDot.LogMonster, false);
+            RedDot.Set(RedDot.LogMerc, false);
+            RedDot.Set(RedDot.Log, false);
+            return;
+        }
+
         bool reward = AdventureLogMileage.HasUnclaimedLevel()
                       || AdventureLogAchievements.HasUnclaimed()
                       || AdventureLogFragments.HasAnyCraftable();

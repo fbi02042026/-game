@@ -293,11 +293,16 @@ public class MercenaryManager : Singleton<MercenaryManager>
     public void ResetMercenaries(Vector3 basePosition)
     {
         var mercs = GetActiveMercs();
+        Hero hero = Hero.Instance;
         for (int i = 0; i < mercs.Count; i++)
         {
             if (mercs[i] == null) continue;
             GameConfig.AttachToUnitRoot(mercs[i].transform);
-            GameConfig.SetWorldPosition(mercs[i].gameObject, basePosition + new Vector3(-0.85f * (i + 1), 0, 0));
+            float x = hero != null
+                ? UnitCrowd.GetMercDesiredCombatX(hero, mercs[i], i)
+                : basePosition.x + 0.85f * (i + 1);
+            GameConfig.SetWorldPosition(mercs[i].gameObject, new Vector3(x, UnitBase.GROUND_Y, basePosition.z));
+            mercs[i].SetPartyIndex(i);
             mercs[i].currentHp = mercs[i].attr.GetAttr(AttrType.MaxHp);
             mercs[i].gameObject.SetActive(true);
             mercs[i].ResetForReuse();

@@ -78,7 +78,10 @@ public class BattleUI : MonoBehaviour
 
         // 战斗场景：Match Width 铺满竖屏，避免 HUD 被裁切
         if (GameSceneGate.IsBattle)
+        {
             BattleViewportFit.Apply(Camera.main, GetComponent<Canvas>() ?? GetComponentInParent<Canvas>());
+            UiPrefabRectGuard.Attach(transform, "Background");
+        }
         else
             UICanvasSetup.ApplyOn(gameObject, Camera.main);
 

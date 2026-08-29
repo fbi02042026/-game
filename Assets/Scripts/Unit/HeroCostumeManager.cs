@@ -97,6 +97,11 @@ public class HeroCostumeManager : MonoBehaviour
     private SPUM_Prefabs _spum;
     private SPUM_MatchingList[] _matchingLists;
     private HeroWeaponRig.HandRig _handRig;
+    SpriteRenderer _attackWeaponSr;
+    SpriteRenderer _secondaryWeaponSr;
+    Sprite _expectedAttackSprite;
+    Sprite _expectedSecondarySprite;
+    readonly List<SpriteRenderer> _embeddedWeaponSrs = new List<SpriteRenderer>(4);
 
     /// <summary>普攻武器应装备的槽位（由 SPUM 预制体攻击手检测）。</summary>
     public EquipSlotType AttackWeaponSlot
@@ -134,13 +139,20 @@ public class HeroCostumeManager : MonoBehaviour
     void OnEnable()
     {
         EnsureSubscribed();
+        if (_rigReady)
+        {
+            StripPrefabDefaultWeaponVisuals();
+            RefreshWeaponLoadout(_matchingLists != null && _matchingLists.Length > 0);
+        }
     }
 
     void Start()
     {
         BuildPathCache();
         EnsureSubscribed();
-        // 进场时按当前穿戴刷一次，避免只改了数值没改外观
+        EnsureRig();
+        StripPrefabDefaultWeaponVisuals();
+        ClearAllWeaponVisuals();
         RefreshCostume();
     }
 
@@ -179,6 +191,9 @@ public class HeroCostumeManager : MonoBehaviour
 
         _matchingLists = GetComponentsInChildren<SPUM_MatchingList>(true);
         _handRig = HeroWeaponRig.Build(_spum, _matchingLists);
+        CacheWeaponRenderers();
+        CacheEmbeddedWeaponRenderers();
+        StripPrefabDefaultWeaponVisuals();
         _rigReady = true;
         GridBackpackSystem.Instance?.RemapWeaponWearSlots(_handRig);
         Debug.Log($"[HeroCostumeManager] Rig就绪 attack={_handRig.AttackDir}/{_handRig.AttackSlot} secondary={_handRig.SecondaryDir}/{_handRig.SecondarySlot} matchingLists={_matchingLists?.Length ?? 0}");
@@ -341,9 +356,105 @@ public class HeroCostumeManager : MonoBehaviour
         Debug.Log("[HeroCostumeManager] 换装刷新完成");
     }
 
+    /// <summary>攻击动画后 SPUM 可能短暂恢复默认武器：只比对缓存挂点，不做全量换装。</summary>
+    public void ReapplyWeaponVisuals()
+    {
+        if (!_rigReady) return;
+        FixWeaponRendererIfStale(_attackWeaponSr, _expectedAttackSprite, _handRig.AttackDir);
+        FixWeaponRendererIfStale(_secondaryWeaponSr, _expectedSecondarySprite, _handRig.SecondaryDir);
+    }
+
+    void CacheWeaponRenderers()
+    {
+        _attackWeaponSr = null;
+        _secondaryWeaponSr = null;
+        if (_matchingLists == null) return;
+        HeroWeaponRig.TryGetPrimaryWeaponRenderer(_matchingLists, _handRig.AttackDir, out _attackWeaponSr);
+        HeroWeaponRig.TryGetPrimaryWeaponRenderer(_matchingLists, _handRig.SecondaryDir, out _secondaryWeaponSr);
+    }
+
+    void CacheEmbeddedWeaponRenderers()
+    {
+        _embeddedWeaponSrs.Clear();
+        var srs = GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+        {
+            var sr = srs[i];
+            if (sr == null || sr.gameObject == null) continue;
+            string n = sr.gameObject.name;
+            if (n.IndexOf("Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || n.IndexOf("Shield", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                _embeddedWeaponSrs.Add(sr);
+        }
+    }
+
+    void RecordExpectedWeaponSprites()
+    {
+        _expectedAttackSprite = _attackWeaponSr != null ? _attackWeaponSr.sprite : null;
+        _expectedSecondarySprite = _secondaryWeaponSr != null ? _secondaryWeaponSr.sprite : null;
+    }
+
+    static void FixWeaponRendererIfStale(SpriteRenderer sr, Sprite expected, string dir, in HeroWeaponRig.HandRig rig)
+    {
+        if (sr == null) return;
+        if (sr.sprite == expected) return;
+        sr.sprite = expected;
+        if (expected != null)
+            HeroWeaponRig.ApplyWeaponPresentation(sr, dir, rig);
+    }
+
+    void FixWeaponRendererIfStale(SpriteRenderer sr, Sprite expected, string dir)
+        => FixWeaponRendererIfStale(sr, expected, dir, _handRig);
+
     /// <summary>
     /// 武器按 HandRig 攻击手/副手刷新：先清掉预制体默认武器，再只挂当前装备（避免同手叠两把剑）。
     /// </summary>
+    /// <summary>清掉 wanjia 预制体 ImageElement / Matching 里残留的默认武器路径与贴图（编辑器去手武器后仍可能留 ItemPath）。</summary>
+    void StripPrefabDefaultWeaponVisuals()
+    {
+        if (_spum?.ImageElement != null)
+        {
+            for (int i = 0; i < _spum.ImageElement.Count; i++)
+            {
+                var ie = _spum.ImageElement[i];
+                if (ie == null || ie.PartType != "Weapons") continue;
+                ie.ItemPath = "";
+            }
+        }
+
+        if (_matchingLists != null)
+        {
+            for (int m = 0; m < _matchingLists.Length; m++)
+            {
+                var tables = _matchingLists[m]?.matchingTables;
+                if (tables == null) continue;
+                for (int t = 0; t < tables.Count; t++)
+                {
+                    var me = tables[t];
+                    if (me == null || me.PartType != "Weapons") continue;
+                    me.ItemPath = "";
+                    if (me.renderer != null)
+                    {
+                        me.renderer.sprite = null;
+                        HeroWeaponRig.ApplyWeaponPresentation(me.renderer, me.Dir, _handRig);
+                    }
+                }
+            }
+        }
+
+        StripEmbeddedWeaponSprites();
+    }
+
+    /// <summary>清掉预制体上 L_Weapon / R_Weapon / Shield 节点残留的默认贴图（Matching 表外也可能有）。</summary>
+    void StripEmbeddedWeaponSprites()
+    {
+        for (int i = 0; i < _embeddedWeaponSrs.Count; i++)
+        {
+            var sr = _embeddedWeaponSrs[i];
+            if (sr != null) sr.sprite = null;
+        }
+    }
+
     void RefreshWeaponLoadout(bool useMatching)
     {
         EquipInstance attackEquip = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
@@ -357,22 +468,22 @@ public class HeroCostumeManager : MonoBehaviour
 
         if (useMatching)
         {
-            ClearMatchingWeaponDir(_handRig.AttackDir);
-            ClearMatchingWeaponDir(_handRig.SecondaryDir);
+            ClearAllWeaponVisuals();
             ApplyWeaponToMatchingDir(_handRig.AttackDir, attackSpum);
             ApplyWeaponToMatchingDir(_handRig.SecondaryDir, secondarySpum);
         }
         else
         {
-            ClearWeaponDir(_handRig.AttackDir);
-            ClearWeaponDir(_handRig.SecondaryDir);
+            ClearAllWeaponVisuals();
             ApplyWeaponSpritesToDir(_handRig.AttackDir, attackSpum);
             ApplyWeaponSpritesToDir(_handRig.SecondaryDir, secondarySpum);
         }
+        RecordExpectedWeaponSprites();
     }
 
     void ApplyWeaponToMatchingDir(string dir, string spumName)
     {
+        ClearWeaponItemPathsForDir(dir);
         SyncImageElementWeapon(dir, spumName);
         if (string.IsNullOrEmpty(spumName)) return;
 
@@ -470,8 +581,35 @@ public class HeroCostumeManager : MonoBehaviour
             TryApplyPrimaryWeaponRenderer(dir, sprite);
     }
 
+    void ClearWeaponItemPathsForDir(string dir)
+    {
+        if (_spum?.ImageElement != null)
+        {
+            for (int i = 0; i < _spum.ImageElement.Count; i++)
+            {
+                var ie = _spum.ImageElement[i];
+                if (ie == null || ie.PartType != "Weapons" || ie.Dir != dir) continue;
+                ie.ItemPath = "";
+            }
+        }
+
+        if (_matchingLists == null) return;
+        for (int m = 0; m < _matchingLists.Length; m++)
+        {
+            var tables = _matchingLists[m]?.matchingTables;
+            if (tables == null) continue;
+            for (int t = 0; t < tables.Count; t++)
+            {
+                var me = tables[t];
+                if (me == null || me.PartType != "Weapons" || me.Dir != dir) continue;
+                me.ItemPath = "";
+            }
+        }
+    }
+
     void ClearMatchingWeaponDir(string dir)
     {
+        ClearWeaponItemPathsForDir(dir);
         SyncImageElementWeapon(dir, null);
         if (_matchingLists == null) return;
         for (int m = 0; m < _matchingLists.Length; m++)
@@ -484,14 +622,25 @@ public class HeroCostumeManager : MonoBehaviour
                 if (me == null || me.PartType != "Weapons" || me.Dir != dir) continue;
                 me.ItemPath = "";
                 if (me.renderer == null) continue;
-                if (!HeroWeaponRig.IsPrimaryWeaponRenderer(me.renderer)
-                    && !HeroWeaponRig.IsShieldRenderer(me.renderer))
-                    continue;
                 me.renderer.sprite = null;
                 HeroWeaponRig.ApplyWeaponPresentation(me.renderer, dir, _handRig);
             }
         }
         TryApplyPrimaryWeaponRenderer(dir, null);
+    }
+
+    void ClearAllWeaponVisuals()
+    {
+        if (!_rigReady) EnsureRig();
+        ClearMatchingWeaponDir(_handRig.AttackDir);
+        ClearMatchingWeaponDir(_handRig.SecondaryDir);
+        StripEmbeddedWeaponSprites();
+        if (spriteList?._weaponList == null) return;
+        for (int i = 0; i < spriteList._weaponList.Count; i++)
+        {
+            var sr = spriteList._weaponList[i];
+            if (sr != null) sr.sprite = null;
+        }
     }
 
     static bool ShouldTouchWeaponMatchingEntry(MatchingElement me, string partSubType, bool isShield)

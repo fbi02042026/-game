@@ -1,19 +1,27 @@
 using UnityEngine;
 
 /// <summary>
-/// 同阵营单位挤位：后面的单位撞到前面的就停，避免叠成一坨继续往前拱。
-/// 碰撞半径按精灵可视宽度估算（不依赖物理碰撞体）。
+/// 同阵营挤位：佣兵/英雄仍软挡路；怪物允许重叠，头顶显示 ×N。
+/// 怪物占位宽度按 opaque 像素表，不用整图 bounds。
 /// </summary>
 public static class UnitCrowd
 {
     const float SpriteScale = 0.92f;
     const float DefaultHalfWidth = 0.42f;
+    public const float MonsterFallbackHalfWidth = 0.22f;
     const float OverlapPad = 0.08f;
     const float MinSeparation = 0.72f;
+    /// <summary>玩家与佣兵之间额外留出的「半个身位」（按较宽一侧半宽估算）。</summary>
+    const float HeroMercHalfBodyGapMul = 0.5f;
+    const float MonsterStackRadius = 0.38f;
+    const float FootprintOverlapShrink = 0.92f;
+    static float _nextStackRefresh;
 
     public static float GetHalfWidth(UnitBase u)
     {
         if (u == null) return DefaultHalfWidth;
+        if (u is Monster mon)
+            return mon.GetOpaqueFootprintHalfWidth();
         float w = EstimateSpriteWidth(u);
         return Mathf.Max(DefaultHalfWidth, w * 0.5f * SpriteScale);
     }
@@ -48,10 +56,26 @@ public static class UnitCrowd
         return false;
     }
 
-    /// <summary>同阵营重叠时沿 X 轻推分开（进战/围殴叠怪用）。</summary>
+    /// <summary>
+    /// 敌方怪物前进时：仅英雄/玩家挡路才停；不因前排其它怪物挡路而原地等（未进射程仍继续靠近目标）。
+    /// </summary>
+    public static bool IsBlockedByFrontHero(UnitBase self, float moveDir)
+    {
+        if (self == null || self.isDead || self.isAlly) return false;
+        if (Mathf.Abs(moveDir) < 0.01f) return false;
+        var bm = BattleManager.Instance;
+        if (bm?.hero == null || bm.hero.isDead) return false;
+
+        float myX = UnitBase.GetCombatX(self);
+        float myHalf = GetHalfWidth(self);
+        float dir = Mathf.Sign(moveDir);
+        return Blocks(self, bm.hero, myX, myHalf, dir);
+    }
+
+    /// <summary>怪物允许重叠，不再沿 X 推开。</summary>
     public static void ResolveOverlap(UnitBase self)
     {
-        if (self == null || self.isDead) return;
+        if (self == null || self.isDead || self is Monster) return;
         var bm = BattleManager.Instance;
         if (bm == null) return;
 
@@ -118,8 +142,32 @@ public static class UnitCrowd
         if (ahead < -0.02f) return false;
 
         float otherHalf = GetHalfWidth(other);
-        float stopDist = Mathf.Max(MinSeparation, myHalf + otherHalf + OverlapPad);
+        float gap = OverlapPad + HeroMercExtraGap(self, other);
+        float stopDist = Mathf.Max(MinSeparation, myHalf + otherHalf + gap);
         return ahead <= stopDist;
+    }
+
+    static float HeroMercExtraGap(UnitBase self, UnitBase other)
+    {
+        bool heroMerc = (self is Hero && other is Mercenary) || (self is Mercenary && other is Hero);
+        if (!heroMerc) return 0f;
+        return Mathf.Max(GetHalfWidth(self), GetHalfWidth(other)) * HeroMercHalfBodyGapMul * 2f;
+    }
+
+    /// <summary>佣兵站位：在玩家前方（靠怪一侧），与玩家/其他佣兵之间留半个身位。</summary>
+    public static float GetMercDesiredCombatX(Hero hero, Mercenary merc, int partyIndex)
+    {
+        if (hero == null) return 0f;
+        partyIndex = Mathf.Max(0, partyIndex);
+        float heroX = UnitBase.GetCombatX(hero);
+        float heroHalf = GetHalfWidth(hero);
+        float mercHalf = merc != null ? GetHalfWidth(merc) : heroHalf;
+        float gap = heroHalf * HeroMercHalfBodyGapMul * 2f;
+
+        float offset = heroHalf + gap + mercHalf;
+        if (partyIndex > 0)
+            offset += partyIndex * (gap + mercHalf + mercHalf);
+        return heroX + offset;
     }
 
     static float EstimateSpriteWidth(UnitBase u)
@@ -144,13 +192,104 @@ public static class UnitCrowd
         if (string.IsNullOrEmpty(name)) return false;
         string n = name.ToLowerInvariant();
         return n.Contains("shadow") || n.Contains("阴影") || n.Contains("hpbar")
-            || n.Contains("bar_bg") || n.Contains("damage");
+            || n.Contains("bar_bg") || n.Contains("damage") || n.Contains("stackcount")
+            || n.Contains("mercname");
     }
 
-    /// <summary>可选：给单位挂上按精灵缩放的 BoxCollider2D（触发器用，AI 仍走软挡路）。</summary>
+    /// <summary>统计真正重叠的怪物簇，仅在 N≥2 时显示 ×N。</summary>
+    public static void TickMonsterOverlapStacks()
+    {
+        if (Time.time < _nextStackRefresh) return;
+        _nextStackRefresh = Time.time + 0.12f;
+
+        var bm = BattleManager.Instance;
+        if (bm == null || bm.monsters == null) return;
+
+        var alive = new System.Collections.Generic.List<Monster>(bm.monsters.Count);
+        for (int i = 0; i < bm.monsters.Count; i++)
+        {
+            if (bm.monsters[i] is Monster m && m != null && !m.isDead)
+                alive.Add(m);
+        }
+
+        int n = alive.Count;
+        if (n == 0) return;
+
+        var parent = new int[n];
+        for (int i = 0; i < n; i++) parent[i] = i;
+
+        int Find(int x)
+        {
+            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+            return x;
+        }
+
+        void Union(int a, int b)
+        {
+            a = Find(a); b = Find(b);
+            if (a != b) parent[b] = a;
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = i + 1; j < n; j++)
+            {
+                if (MonsterFootprintsOverlap(alive[i], alive[j]))
+                    Union(i, j);
+            }
+        }
+
+        var clusterSize = new System.Collections.Generic.Dictionary<int, int>();
+        for (int i = 0; i < n; i++)
+        {
+            int r = Find(i);
+            clusterSize.TryGetValue(r, out int c);
+            clusterSize[r] = c + 1;
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            int size = clusterSize[Find(i)];
+            alive[i].SetOverlapStackCount(size);
+        }
+    }
+
+    static bool MonsterFootprintsOverlap(Monster a, Monster b)
+    {
+        if (a == null || b == null || a == b) return false;
+
+        float ax = UnitBase.GetCombatX(a);
+        float bx = UnitBase.GetCombatX(b);
+        float dx = Mathf.Abs(ax - bx);
+        if (Mathf.Abs(a.transform.position.y - b.transform.position.y) > 0.65f)
+            return false;
+
+        float aHalf = GetStackOverlapHalfWidth(a);
+        float bHalf = GetStackOverlapHalfWidth(b);
+        float xThreshold = (aHalf + bHalf) * FootprintOverlapShrink;
+        if (dx < xThreshold) return true;
+
+        // 兜底：侧视叠怪主要看 X，允许完全重叠或近距堆叠
+        return dx < MonsterStackRadius * 2.2f;
+    }
+
+    static float GetStackOverlapHalfWidth(Monster m)
+    {
+        if (m == null) return MonsterFallbackHalfWidth;
+        float opaque = m.GetOpaqueFootprintHalfWidth();
+        var sr = m.sr;
+        if (sr != null && sr.sprite != null)
+        {
+            float visualHalf = sr.bounds.size.x * 0.5f;
+            return Mathf.Max(opaque, visualHalf * 0.42f, MonsterFallbackHalfWidth);
+        }
+        return Mathf.Max(opaque, MonsterFallbackHalfWidth);
+    }
+
+    /// <summary>怪物不再挂按整图缩放的碰撞体（允许重叠）。</summary>
     public static void EnsureTriggerCollider(UnitBase u)
     {
-        if (u == null) return;
+        if (u == null || u is Monster) return;
         var box = u.GetComponent<BoxCollider2D>();
         if (box == null) box = u.gameObject.AddComponent<BoxCollider2D>();
         box.isTrigger = true;

@@ -11,6 +11,7 @@ public class LoginUI : MonoBehaviour
     const string AgreeTip = "请先阅读并同意用户协议与隐私政策";
 
     [Header("可替换贴图（预制体里拖）")]
+    [Tooltip("全屏底图：预制体根节点命名为 BgStretch")]
     public Image backgroundImage;
     public Image ageRatingImage;
     public Image logoImage;
@@ -67,6 +68,8 @@ public class LoginUI : MonoBehaviour
     {
         if (backgroundImage == null || startButton == null)
             AutoBindFromHierarchy();
+        if (backgroundImage != null)
+            UiLayoutStretch.ApplyBgStretch(backgroundImage.rectTransform, backgroundImage);
         EnsureAgreeToggle();
         ApplyPresentation();
         EnsureBottomFooterLayout();
@@ -89,6 +92,8 @@ public class LoginUI : MonoBehaviour
     void OnRectTransformDimensionsChange()
     {
         ApplyBottomFooterLayout();
+        if (backgroundImage != null)
+            UiLayoutStretch.ApplyBgStretch(backgroundImage.rectTransform, backgroundImage);
     }
 
     /// <summary>
@@ -124,7 +129,7 @@ public class LoginUI : MonoBehaviour
             legal.SetAsLastSibling();
     }
 
-    /// <summary>补齐 Toggle / 点击热区，勾选图用显隐同步（预制体原先只有框图没有 Toggle）</summary>
+    /// <summary>补齐 Toggle；尺寸以预制体为准，不改 AgreeToggle / Background rect。</summary>
     void EnsureAgreeToggle()
     {
         var t = transform.Find("LegalBar/AgreeToggle");
@@ -135,26 +140,16 @@ public class LoginUI : MonoBehaviour
         }
 
         var bg = t.Find("Background")?.GetComponent<Image>();
+        if (bg != null)
+            UiPrefabRectGuard.Attach(bg.rectTransform);
+
         _agreeCheckTf = t.Find("Checkmark");
         _agreeCheckGraphic = _agreeCheckTf != null ? _agreeCheckTf.GetComponent<Graphic>() : null;
+        if (_agreeCheckTf is RectTransform checkRt)
+            UiPrefabRectGuard.Attach(checkRt);
 
-        // 根节点加透明热区（无 Image 才加，避免和已有组件冲突）
-        var hit = t.GetComponent<Image>();
-        if (hit == null)
-            hit = t.gameObject.AddComponent<Image>();
-        if (hit != null)
-        {
-            hit.color = new Color(1f, 1f, 1f, 0.01f);
-            hit.raycastTarget = true;
-            if (bg != null && bg.sprite != null && hit.sprite == null)
-                hit.sprite = bg.sprite;
-        }
-
-        var rt = t as RectTransform;
-        if (rt != null && rt.sizeDelta.x < 48f)
-            rt.sizeDelta = new Vector2(48f, 48f);
-
-        if (bg != null) bg.raycastTarget = true;
+        if (bg != null)
+            bg.raycastTarget = true;
         if (_agreeCheckGraphic != null)
             _agreeCheckGraphic.raycastTarget = false;
 
@@ -168,12 +163,10 @@ public class LoginUI : MonoBehaviour
             return;
         }
 
-        if (hit != null)
-            agreeToggle.targetGraphic = hit;
-        else if (bg != null)
+        if (bg != null)
             agreeToggle.targetGraphic = bg;
 
-        agreeToggle.graphic = null; // 自己管勾选显隐
+        agreeToggle.graphic = null;
         agreeToggle.toggleTransition = Toggle.ToggleTransition.None;
         agreeToggle.transition = Selectable.Transition.None;
 
@@ -455,7 +448,7 @@ public class LoginUI : MonoBehaviour
 
     public void AutoBindFromHierarchy()
     {
-        backgroundImage = FindImg("Background");
+        backgroundImage = FindImg("BgStretch");
         ageRatingImage = FindImg("AgeRating");
         logoImage = FindImg("Logo");
         startButtonImage = FindImg("ActionPanel/StartButton");

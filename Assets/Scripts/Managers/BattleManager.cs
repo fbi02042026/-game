@@ -42,7 +42,9 @@ public class BattleManager : Singleton<BattleManager>
     /// <summary>正在走向 chuansongmen，放宽屏幕钳制</summary>
     public bool PortalWalkMode => _portalActive && !_stageCleared;
     /// <summary>佣兵相对主角身后间距（世界单位）</summary>
-    public const float MERC_BEHIND_SPACING = 0.42f;
+    public const float MERC_FRONT_SPACING = 0.42f;
+    [System.Obsolete("Use MERC_FRONT_SPACING / UnitCrowd.GetMercDesiredCombatX")]
+    public const float MERC_BEHIND_SPACING = MERC_FRONT_SPACING;
     /// <summary>开场从站位左侧多远走进来</summary>
     const float PARTY_ENTER_FROM = 2.5f;
 
@@ -77,6 +79,7 @@ public class BattleManager : Singleton<BattleManager>
     /// <summary>清波后的下一波倒计时是否开启</summary>
     private bool _waveCountdownActive;
     private float _nextWaveCountdown;
+    private bool _waveAnnounceRunning;
     /// <summary>连杀计数</summary>
     private int _killCombo;
     private float _lastKillTime;
@@ -231,7 +234,8 @@ public class BattleManager : Singleton<BattleManager>
         }
         if (IsTutorialRun)
             StoryProgress.ConsumeTutorialBattleFlag();
-        if (IsTutorialRun && GridBackpackSystem.Instance != null)
+        // 教程剑从宝箱剧情获得，开局不自动装武器（避免双手空挥时仍显示剑）
+        if (!IsTutorialRun && GridBackpackSystem.Instance != null)
         {
             if (GridBackpackSystem.Instance.EnsureStarterWeapon())
                 hero.RecalcAttr();
@@ -371,7 +375,12 @@ public class BattleManager : Singleton<BattleManager>
             if (md == null || string.IsNullOrEmpty(md.mercId)) continue;
             if (!GameConfig.IsMercAvailable(md.mercId, data)) continue;
 
-            Vector3 pos = basePos + new Vector3(-0.85f * (spawned + 1), 0, 0);
+            Vector3 pos = basePos;
+            if (hero != null)
+                pos.x = UnitCrowd.GetMercDesiredCombatX(hero, null, spawned);
+            else
+                pos.x = basePos.x + MERC_FRONT_SPACING * (spawned + 1);
+
             var merc = mm.SpawnMercenary(md.mercId, pos, Mathf.Max(1, md.level));
             if (merc != null)
             {
@@ -383,6 +392,8 @@ public class BattleManager : Singleton<BattleManager>
                     ? SkillRegistry.Instance.GetMercPassiveSkillId(md)
                     : md.passiveSkillId;
                 merc.SetupBattleSkills(active, passive);
+                merc.SetPartyIndex(spawned);
+                merc.SetDisplayName(md.displayName, md.nickname);
                 if (!string.IsNullOrEmpty(md.displayName))
                     merc.gameObject.name = "Merc_" + md.displayName;
                 allyUnits.Add(merc);
@@ -531,6 +542,7 @@ public class BattleManager : Singleton<BattleManager>
         string useId = string.IsNullOrEmpty(mercId) ? "dunbing102" : mercId;
         MercRosterDefs.GetSkillIds(useId, out string active, out string passive);
         merc.SetupBattleSkills(active, passive);
+        merc.SetDisplayName("老盾", "老盾");
         if (!allyUnits.Contains(merc))
             allyUnits.Add(merc);
         merc.OnDead += OnMercenaryDead;
@@ -624,8 +636,8 @@ public class BattleManager : Singleton<BattleManager>
         _activeWaveIndex = _waves.Count - 1;
         SuppressStageClear = true;
 
-        // 左右夹击，拉开距离，不穿模
-        float[] offsets = { -3.6f, 3.6f, -4.8f, 4.8f, -2.6f, 2.6f };
+        // 左右夹击，拉开距离，不穿模（负=左、正=右）
+        float[] offsets = { -5.2f, 5.2f, -6.4f, 6.4f, -4.4f, 4.4f, -7.2f, 7.2f };
         for (int i = 0; i < n; i++)
         {
             float ox = offsets[i % offsets.Length];
@@ -671,7 +683,7 @@ public class BattleManager : Singleton<BattleManager>
         cfg.baseHp = 40f;
         cfg.baseAttack = 4f;
         cfg.attackRange = GameConfig.RANGE_PX_SWORD;
-        cfg.baseAttackSpeed = 0.9f;
+        cfg.baseAttackSpeed = 1.35f;
         cfg.spriteScale = 1f;
         cfg.spriteIndex = 1;
         cfg.baseGoldDrop = 1;
@@ -979,7 +991,7 @@ public class BattleManager : Singleton<BattleManager>
             cfg.baseHp = 40f;
             cfg.baseAttack = 5f;
             cfg.attackRange = GameConfig.RANGE_PX_SWORD;
-            cfg.baseAttackSpeed = 0.8f;
+            cfg.baseAttackSpeed = 1.2f;
             cfg.spriteScale = 1f;
             cfg.spriteIndex = 1;
             cfg.baseGoldDrop = 1;
@@ -1230,8 +1242,11 @@ public class BattleManager : Singleton<BattleManager>
             if (m == null) continue;
             if (m.rb != null) m.rb.velocity = Vector2.zero;
             GameConfig.AttachToUnitRoot(m.transform);
-            float mx = heroX - MERC_BEHIND_SPACING * (i + 1);
+            float mx = hero != null
+                ? UnitCrowd.GetMercDesiredCombatX(hero, m, i)
+                : heroX + MERC_FRONT_SPACING * (i + 1);
             GameConfig.SetWorldPosition(m.gameObject, new Vector3(mx, UnitBase.GROUND_Y, z));
+            m.SetPartyIndex(i);
             m.Face(1);
             EnsureSpritesEnabled(m.transform);
         }
@@ -1314,6 +1329,7 @@ public class BattleManager : Singleton<BattleManager>
     /// <summary>清完当前波后开启下一波倒计时</summary>
     void BeginNextWaveCountdown()
     {
+        if (IsTutorialRun) return;
         if (_allWavesSpawned || _portalActive || _stageCleared) return;
         if (FindNextUnspawnedWaveIndex() < 0)
         {
@@ -1354,8 +1370,26 @@ public class BattleManager : Singleton<BattleManager>
         if (_nextWaveCountdown <= 0f)
         {
             StopWaveCountdown();
-            SpawnNextPendingWave();
+            if (!_waveAnnounceRunning)
+                StartCoroutine(CoAnnounceAndSpawnNextWave());
         }
+    }
+
+    IEnumerator CoAnnounceAndSpawnNextWave()
+    {
+        if (_waveAnnounceRunning || _stageCleared || _portalActive) yield break;
+        if (FindNextUnspawnedWaveIndex() < 0) yield break;
+        if (CountAliveMonsters() > 0) yield break;
+
+        _waveAnnounceRunning = true;
+        int nextIdx = FindNextUnspawnedWaveIndex();
+        bool boss = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
+                    && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
+        var kind = boss ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
+        yield return BattleWaveAnnounceUI.CoPlay(kind);
+        if (!_stageCleared && !_portalActive && CountAliveMonsters() <= 0)
+            SpawnNextPendingWave();
+        _waveAnnounceRunning = false;
     }
 
     /// <summary>点击倒计时：立刻出兵，剩余时间换金币</summary>
@@ -1373,7 +1407,8 @@ public class BattleManager : Singleton<BattleManager>
         GamePerf.Log($"[BattleManager] 加速下一波 leftover={_nextWaveCountdown:F1}s → +{bonus}金");
 
         StopWaveCountdown();
-        SpawnNextPendingWave();
+        if (!_waveAnnounceRunning)
+            StartCoroutine(CoAnnounceAndSpawnNextWave());
         return true;
     }
 
@@ -1636,6 +1671,8 @@ public class BattleManager : Singleton<BattleManager>
         if (UnitsCanAct)
             TickWaveCountdown();
 
+        UnitCrowd.TickMonsterOverlapStacks();
+
         // 连杀超时清零显示
         if (_killCombo > 0 && Time.time - _lastKillTime > GameConfig.COMBO_WINDOW)
         {
@@ -1644,7 +1681,8 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         // 首波已刷完且场上清空：由倒计时推进下一波（不在此 Emergency）
-        if (UnitsCanAct && !_stageCleared && !_portalActive
+        if (!IsTutorialRun
+            && UnitsCanAct && !_stageCleared && !_portalActive
             && _firstWaveSpawned
             && !_waveCountdownActive
             && CountAliveMonsters() == 0 && _waves != null && _waves.Count > 0
@@ -1980,7 +2018,7 @@ public class BattleManager : Singleton<BattleManager>
             fallbackCfg.baseHp = 30f;
             fallbackCfg.baseAttack = 5f;
             fallbackCfg.attackRange = GameConfig.RANGE_PX_SWORD; // 像素，Init 里 Normalize
-            fallbackCfg.baseAttackSpeed = 0.8f;
+            fallbackCfg.baseAttackSpeed = 1.2f;
             fallbackCfg.isBoss = wave.isBossWave;
             fallbackCfg.spriteScale = 1f;
             fallbackCfg.spriteIndex = 1;
@@ -2144,7 +2182,7 @@ public class BattleManager : Singleton<BattleManager>
         if (CountAliveMonsters() <= 1) // 含即将移除的自己，下一帧会清；用 <=1 更稳
         {
             // 延迟到本帧列表清理后判断；用协程下一帧
-            if (!_waveCountdownActive && !_allWavesSpawned)
+            if (!IsTutorialRun && !_waveCountdownActive && !_allWavesSpawned)
                 StartCoroutine(CoCheckWaveClearNextFrame());
         }
     }

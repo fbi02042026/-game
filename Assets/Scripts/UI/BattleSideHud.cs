@@ -77,34 +77,32 @@ public class BattleSideHud : MonoBehaviour
         _comboValue.color = new Color(1f, 0.85f, 0.25f, 1f);
         _comboValue.fontStyle = FontStyle.Bold;
 
-        // —— 下一波（连杀下方）——
+        // —— 下一波倒计时（无黑底，大字）——
         var waveGo = CreatePanel("WavePanel", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f), new Vector2(0f, -98f), new Vector2(180f, 132f));
+            new Vector2(0.5f, 1f), new Vector2(0f, -96f), new Vector2(200f, 72f), transparent: true);
         _waveGroup = waveGo.AddComponent<CanvasGroup>();
         _waveGroup.alpha = 0f;
         _waveGroup.blocksRaycasts = false;
 
         _waveBtn = waveGo.AddComponent<Button>();
         var colors = _waveBtn.colors;
-        colors.normalColor = new Color(0.15f, 0.18f, 0.28f, 0.85f);
-        colors.highlightedColor = new Color(0.25f, 0.45f, 0.75f, 0.95f);
-        colors.pressedColor = new Color(0.35f, 0.6f, 0.95f, 1f);
-        colors.disabledColor = new Color(0.2f, 0.2f, 0.22f, 0.55f);
+        colors.normalColor = Color.clear;
+        colors.highlightedColor = new Color(1f, 1f, 1f, 0.08f);
+        colors.pressedColor = new Color(1f, 1f, 1f, 0.14f);
+        colors.disabledColor = Color.clear;
         _waveBtn.colors = colors;
         var img = waveGo.GetComponent<Image>();
-        img.color = colors.normalColor;
+        img.color = Color.clear;
+        img.raycastTarget = true;
         _waveBtn.targetGraphic = img;
         _waveBtn.onClick.AddListener(OnWaveClicked);
 
-        _waveTitle = CreateText(waveGo.transform, "WaveTitle", "下一波", 22, TextAnchor.MiddleCenter,
-            new Vector2(0f, 48f), new Vector2(160f, 28f));
-        _waveTimer = CreateText(waveGo.transform, "WaveTimer", "8.0", 40, TextAnchor.MiddleCenter,
-            new Vector2(0f, 4f), new Vector2(160f, 52f));
-        _waveTimer.color = new Color(0.45f, 0.95f, 1f, 1f);
-        _waveTimer.fontStyle = FontStyle.Bold;
-        _waveHint = CreateText(waveGo.transform, "WaveHint", "点击加速·换金币", 16, TextAnchor.MiddleCenter,
-            new Vector2(0f, -46f), new Vector2(172f, 24f));
-        _waveHint.color = new Color(1f, 1f, 1f, 0.75f);
+        _waveTitle = CreateText(waveGo.transform, "WaveLine", "下一波 8.0", 36, TextAnchor.MiddleCenter,
+            Vector2.zero, new Vector2(196f, 64f));
+        _waveTitle.color = new Color(1f, 0.28f, 0.22f, 0.98f);
+        _waveTitle.fontStyle = FontStyle.Bold;
+        _waveTimer = null;
+        _waveHint = null;
 
         EnsureSortCanvas();
         GameFonts.ApplyToHierarchy(transform);
@@ -129,7 +127,7 @@ public class BattleSideHud : MonoBehaviour
     }
 
     static GameObject CreatePanel(string name, RectTransform parent, Vector2 amin, Vector2 amax,
-        Vector2 pivot, Vector2 pos, Vector2 size)
+        Vector2 pivot, Vector2 pos, Vector2 size, bool transparent = false)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(Image));
         go.transform.SetParent(parent, false);
@@ -140,8 +138,8 @@ public class BattleSideHud : MonoBehaviour
         rt.anchoredPosition = pos;
         rt.sizeDelta = size;
         var img = go.GetComponent<Image>();
-        img.color = new Color(0.08f, 0.1f, 0.16f, 0.72f);
-        img.raycastTarget = true;
+        img.color = transparent ? Color.clear : new Color(0.08f, 0.1f, 0.16f, 0.72f);
+        img.raycastTarget = !transparent;
         return go;
     }
 
@@ -220,7 +218,9 @@ public class BattleSideHud : MonoBehaviour
 
         if (!visible) return;
 
-        if (_waveTimer != null)
+        if (_waveTitle != null)
+            _waveTitle.text = "下一波 " + secondsLeft.ToString("0.0");
+        else if (_waveTimer != null)
             _waveTimer.text = secondsLeft.ToString("0.0");
         if (_waveHint != null)
         {

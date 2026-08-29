@@ -24,6 +24,7 @@ public class UnitAnimation : MonoBehaviour
     private SPUM_Prefabs _spum;
     private Animator _animator;
     private SpriteRenderer _sr;
+    private HeroCostumeManager _costume;
 
     // 当前状态
     private bool _isMoving;
@@ -74,6 +75,7 @@ public class UnitAnimation : MonoBehaviour
 
         _spum = GetComponent<SPUM_Prefabs>();
         _animator = GetComponent<Animator>();
+        _costume = GetComponent<HeroCostumeManager>();
         _sr = GetComponent<SpriteRenderer>();
         if (_sr == null)
             _sr = FindMonsterBodySprite() ?? GetComponentInChildren<SpriteRenderer>();
@@ -283,6 +285,14 @@ public class UnitAnimation : MonoBehaviour
             ApplyMoveAnimSpeed(true);
     }
 
+    System.Collections.IEnumerator CoResyncWeaponDuringAttack()
+    {
+        _costume.ReapplyWeaponVisuals();
+        yield return null;
+        if (_attackAnimLock > 0f)
+            _costume.ReapplyWeaponVisuals();
+    }
+
     /// <summary>强制程序化动画（怪物删掉 Animator 后必须调用，否则攻击/移动动画不播）</summary>
     public void ForceProceduralMode(SpriteRenderer bodySr = null)
     {
@@ -347,6 +357,8 @@ public class UnitAnimation : MonoBehaviour
                 _spum.PlayAnimation(PlayerState.ATTACK, ResolveSpumAttackIndex(kit));
             }
             catch { }
+            if (_costume != null)
+                StartCoroutine(CoResyncWeaponDuringAttack());
         }
         // 原生Animator模式
         else if (_animator != null)
@@ -386,6 +398,8 @@ public class UnitAnimation : MonoBehaviour
         {
             try { _spum.PlayAnimation(PlayerState.ATTACK, ResolveSpumAttackIndex(kit)); }
             catch { }
+            if (_costume != null)
+                StartCoroutine(CoResyncWeaponDuringAttack());
         }
         else if (_animator != null)
         {

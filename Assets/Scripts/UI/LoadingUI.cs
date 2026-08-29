@@ -26,6 +26,9 @@ public class LoadingUI : MonoBehaviour
         if (backgroundImage == null || tipText == null)
             AutoBind();
 
+        if (backgroundImage != null)
+            UiLayoutStretch.ApplyBgStretch(backgroundImage.rectTransform, backgroundImage);
+
         var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
         canvas.enabled = true;
@@ -177,11 +180,5 @@ public class LoadingUI : MonoBehaviour
         return tx;
     }
 
-    static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
+    static void Stretch(RectTransform rt) => UiLayoutStretch.ApplyFillScreen(rt);
 }

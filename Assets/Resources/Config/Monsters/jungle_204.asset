@@ -13,13 +13,13 @@ MonoBehaviour:
   m_Name: jungle_204
   m_EditorClassIdentifier: 
   id: jungle_204
-  monsterName: "密林古树妖"
+  monsterName: "密林古树�?
   minWave: 9
   isBoss: 1
   unlockClearCount: 0
   baseHp: 165
   baseAttack: 16.5
-  baseAttackSpeed: 1
+  baseAttackSpeed: 1.5
   attackRange: 1.5
   baseMoveSpeed: 2.2
   baseGoldDrop: 24

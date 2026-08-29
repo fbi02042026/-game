@@ -1,12 +1,13 @@
-背景音乐（Resources 路径，不要扩展名）：
-
-bgm_login.mp3    —— 登录界面（晨城号角）
-bgm_town.mp3     —— 主场景（公会大厅 / 冒险 / 角色）
-bgm_tavern.mp3   —— 酒吧（酒馆页）
-bgm_battle.mp3   —— 普通 / 精英战斗（燃火前线）
-bgm_boss.mp3     —— 首领战（决战来临）
-bgm_story.mp3    —— 战斗内剧情对话 / 引导剧情（用户曲：引导剧情.mp3，覆盖本文件即可）
-bgm_special.mp3  —— 恢复 / 锻造 / 附魔关
-
-切换时自动淡入淡出；Loading 界面期间强制静音。
-音乐总开关在战斗/城镇设置面板，关掉后 BGM 与音效都不播。
+背景音乐（Resources 路径，不要扩展名）：
+
+bgm_login.mp3    —— 登录界面（晨城号角）
+bgm_town.mp3     —— 主场景（公会大厅 / 冒险 / 角色）
+bgm_tavern.mp3   —— 酒吧（酒馆页）
+bgm_battle.mp3   —— 普通 / 精英战斗（燃火前线）
+bgm_boss.mp3     —— 首领战（决战来临）
+bgm_intro.mp3    —— 开头引导剧情（城镇开场；用户曲：引导剧情.mp3，覆盖本文件即可）
+bgm_story.mp3    —— 战斗内剧情对话（与 bgm_intro 不要混用）
+bgm_special.mp3  —— 恢复 / 锻造 / 附魔关
+
+切换时自动淡入淡出；Loading 界面期间强制静音。
+音乐总开关在战斗/城镇设置面板，关掉后 BGM 与音效都不播。

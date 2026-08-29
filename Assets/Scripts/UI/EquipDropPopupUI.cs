@@ -57,6 +57,7 @@ public class EquipDropPopupUI : MonoBehaviour
     int _selected;
     Action<EquipInstance, bool> _onDone;
     Vector2[] _cardHomePos;
+    bool _fontSizeAdjusted;
 
     public bool IsOpen => root != null && root.activeSelf;
     public EquipDropMode Mode => _mode;
@@ -154,7 +155,37 @@ public class EquipDropPopupUI : MonoBehaviour
             root.transform.SetAsLastSibling();
         }
         RefreshAll();
+        if (!_fontSizeAdjusted)
+        {
+            BumpPopupFontSize(+2);
+            _fontSizeAdjusted = true;
+        }
         GameFonts.ApplyToHierarchy(transform);
+    }
+
+    void BumpPopupFontSize(int delta)
+    {
+        if (delta == 0) return;
+        BumpTextFont(titleText, delta);
+        BumpTextFont(compareTitle, delta);
+        BumpTextFont(compareBody, delta);
+        BumpTextFont(primaryLabel, delta);
+        BumpTextFont(secondaryLabel, delta);
+        if (cards == null) return;
+        for (int i = 0; i < cards.Count; i++)
+        {
+            var c = cards[i];
+            if (c == null) continue;
+            BumpTextFont(c.name, delta);
+            BumpTextFont(c.meta, delta);
+            BumpTextFont(c.attrs, delta);
+        }
+    }
+
+    static void BumpTextFont(Text t, int delta)
+    {
+        if (t == null || delta == 0) return;
+        t.fontSize = Mathf.Max(12, t.fontSize + delta);
     }
 
     void RefreshAll()
@@ -239,10 +270,8 @@ public class EquipDropPopupUI : MonoBehaviour
             if (c.name != null) c.name.text = EquipUiText.EquipTitleWithHand(eq);
             if (c.meta != null)
             {
-                string handLabel = WeaponLoadoutRules.IsLoadoutItem(eq)
-                    ? EquipUiText.WeaponHand(eq.weaponHand, eq.weaponType)
-                    : EquipUiText.Slot(eq.slotType);
-                c.meta.text = $"{handLabel}  ★{eq.star}  {EquipUiText.RarityName(eq.rarity)}";
+                c.meta.text = EquipUiText.RarityName(eq.rarity);
+                c.meta.color = EquipUiText.RarityTextColor(eq.rarity);
             }
             if (c.attrs != null) c.attrs.text = FormatAttrs(eq);
         }
@@ -368,7 +397,7 @@ public class EquipDropPopupUI : MonoBehaviour
         {
             if (compareTitle != null) compareTitle.text = $"当前已装备（{slotName}）";
             if (compareBody != null)
-                compareBody.text = $"{worn.equipName}  ★{worn.star}  {EquipUiText.RarityName(worn.rarity)}\n{FormatAttrs(worn)}";
+                compareBody.text = FormatAttrs(worn);
         }
         else
         {
@@ -756,9 +785,9 @@ public class EquipDropPopupUI : MonoBehaviour
         icon.preserveAspect = true;
         icon.raycastTarget = false;
 
-        AnchorTop(CreateText(card.transform, "Name", "—", 20, TextAnchor.UpperCenter).rectTransform, -122f, 176f, 30f);
-        AnchorTop(CreateText(card.transform, "Meta", "", 16, TextAnchor.UpperCenter).rectTransform, -156f, 176f, 26f);
-        AnchorTop(CreateText(card.transform, "Attrs", "", 16, TextAnchor.UpperLeft).rectTransform, -188f, 176f, 150f);
+        AnchorTop(CreateText(card.transform, "Name", "—", 22, TextAnchor.UpperCenter).rectTransform, -122f, 176f, 30f);
+        AnchorTop(CreateText(card.transform, "Meta", "", 18, TextAnchor.UpperCenter).rectTransform, -156f, 176f, 26f);
+        AnchorTop(CreateText(card.transform, "Attrs", "", 18, TextAnchor.UpperLeft).rectTransform, -188f, 176f, 150f);
     }
 
     static void AnchorTop(RectTransform rt, float y, float w, float h)

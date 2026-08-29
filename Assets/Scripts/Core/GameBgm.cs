@@ -11,7 +11,8 @@ using UnityEngine;
 /// · Audio/BGM/bgm_battle   —— 普通/精英战斗
 /// · Audio/BGM/bgm_boss     —— 首领战
 /// · Audio/BGM/bgm_special  —— 恢复/锻造/附魔关
-/// · Audio/BGM/bgm_story    —— 战斗中剧情对话
+/// · Audio/BGM/bgm_intro    —— 开头引导剧情（城镇开场，与战斗内剧情曲分开）
+/// · Audio/BGM/bgm_story    —— 战斗内剧情对话
 /// Loading / 片头等演出期间强制静音；结束后再按当前场景/关卡切回来。
 /// </summary>
 public static class GameBgm
@@ -25,7 +26,8 @@ public static class GameBgm
         Battle,
         Boss,
         Special,
-        Story
+        Story,
+        Intro
     }
 
     const string ResRoot = "Audio/BGM/";
@@ -40,7 +42,8 @@ public static class GameBgm
         { Track.Battle, "bgm_battle" },
         { Track.Boss, "bgm_boss" },
         { Track.Special, "bgm_special" },
-        { Track.Story, "bgm_story" }
+        { Track.Story, "bgm_story" },
+        { Track.Intro, "bgm_intro" }
     };
 
     static AudioSource _a;

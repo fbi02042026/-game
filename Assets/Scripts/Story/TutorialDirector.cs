@@ -175,6 +175,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
 
         yield return PlayTownIntroDialogue();
+        GameBgm.Play(GameBgm.Track.Town);
         StoryProgress.MarkTutorialIntroDone();
         GuildHallUI.SetTownChromeVisible(true);
         if (adv == null) adv = ResolveAdventureButton();
@@ -222,6 +223,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
     IEnumerator PlayTownIntroDialogue()
     {
         StoryDirector.Instance?.NotifySceneChanged();
+        GameBgm.Play(GameBgm.Track.Intro);
 
         // 办公室 + 咨询台一次播完（换地点时播黑屏地点名）。
         var beats = new List<StoryBeat>
@@ -328,13 +330,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // —— 1) 首波 → 预告下一波 → 约 2 秒后第二小波 ——
         hint.Show("靠近怪物会自动攻击。", null, 8f);
         yield return EnsureTutorialWave(bm, 2);
-        yield return CoWarnIncomingDuringFight(bm, hint);
         yield return WaitFieldClear();
 
-        yield return CoTutorialNextWave(bm, hint, 2f, 3);
+        yield return CoTutorialNextWave(bm, hint, GameConfig.GetWaveSpawnInterval(), 3);
         yield return WaitFieldClear();
 
-        // —— 2) 空路 → 发现宝箱 ——
+        // —— 2) 宝箱陷阱：发现 → 左右埋伏 → 清场 → 开箱拿剑 ——
         hint.Hide();
         var chestDir = StageClearRewardDirector.Instance;
         if (chestDir == null)
@@ -342,39 +343,17 @@ public class TutorialDirector : Singleton<TutorialDirector>
             var go = new GameObject("StageClearRewardDirector");
             chestDir = go.AddComponent<StageClearRewardDirector>();
         }
+        chestDir.CacheSceneRefs();
 
         var drop = CreateTutorialEquipDrop();
-        yield return chestDir.CoTutorialChestDrop(drop, 4.5f);
+        if (bm != null) bm.UnitsCanAct = true;
+        hint.Show("前面有个宝箱，靠近看看。", null, 4f);
+        yield return chestDir.CoTutorialPlaceChest(4f);
 
-        yield return TalkBlock(bm, headTalk,
-            new TalkLine(Hero.Instance, "咦，前面有个宝箱？", 1.2f),
-            new TalkLine(Hero.Instance, "打开看看里面有什么。", 1.0f));
+        yield return TalkBlock(bm, headTalk, restoreAct: false,
+            new TalkLine(Hero.Instance, "有个宝箱，真是好运！", 0.85f));
 
-        GameObject groundIcon = null;
-        yield return chestDir.CoTutorialOpenChest(drop, g => groundIcon = g);
-
-        // 弹窗前不入包：等玩家点「装备/放入背包」再由 EquipDropPopupUI 入包
-        if (drop != null)
-        {
-            bool closed = false;
-            if (bm != null) bm.UnitsCanAct = false;
-            EquipDropPopupUI.ShowSingle(drop, (_, __) => closed = true);
-            while (!closed) yield return null;
-            if (bm != null) bm.UnitsCanAct = true;
-            BattleUI.Instance?.UpdateBackpackGrid();
-        }
-        if (groundIcon != null)
-            Object.Destroy(groundIcon);
-
-        hint.Show("属性更好就装备，旧的会变成强化材料。", null, 4f);
-        yield return new WaitForSecondsRealtime(0.8f);
-
-        // —— 3) 诱饵提示 → 左右埋伏 ——
-        hint.Show("小心！有些装备是怪物设下的诱饵。", null, 6f);
-        yield return new WaitForSecondsRealtime(0.9f);
-
-        bm.SpawnTutorialFlankAmbush(4);
-        // 埋伏必须真出怪，否则 WaitFieldClear 会瞬间通过，后面老盾戏对不上
+        bm.SpawnTutorialFlankAmbush(6);
         {
             int guard = 0;
             while (bm.GetAliveMonsterCount() <= 0 && guard < 8)
@@ -383,15 +362,42 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 yield return null;
                 yield return null;
                 if (bm.GetAliveMonsterCount() <= 0)
-                    bm.SpawnTutorialFlankAmbush(4);
+                    bm.SpawnTutorialFlankAmbush(6);
             }
         }
-        yield return TalkBlock(bm, headTalk,
-            new TalkLine(Hero.Instance, "糟了！中埋伏了！", 1.1f),
-            new TalkLine(Hero.Instance, "只有上了！", 0.9f));
+        yield return new WaitForSecondsRealtime(0.35f);
 
-        hint.Show("左右都有怪物，靠近会自动攻击。", null, 5f);
+        yield return TalkBlock(bm, headTalk, restoreAct: false,
+            new TalkLine(Hero.Instance, "！", 0.55f));
+
+        if (bm != null) bm.UnitsCanAct = true;
+        hint.Show("左右都有怪物，靠近会自动攻击。", null, 3.5f);
         yield return WaitFieldClear();
+
+        hint.Show("清完再开宝箱。", null, 1.5f);
+        yield return new WaitForSecondsRealtime(0.15f);
+
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(Hero.Instance, "打开看看里面有什么。", 0.7f));
+
+        if (bm != null) bm.UnitsCanAct = false;
+        GameObject groundIcon = null;
+        yield return chestDir.CoTutorialOpenChestAndDropEquip(drop, g => groundIcon = g);
+
+        if (drop != null)
+        {
+            bool closed = false;
+            EquipDropPopupUI.ShowSingle(drop, (_, __) => closed = true);
+            while (!closed) yield return null;
+            if (bm != null) bm.UnitsCanAct = true;
+            BattleUI.Instance?.UpdateBackpackGrid();
+            Hero.Instance?.costumeManager?.RefreshCostume();
+        }
+        if (groundIcon != null)
+            Object.Destroy(groundIcon);
+
+        hint.Show("属性更好就装备，旧的会变成强化材料。", null, 1.8f);
+        yield return new WaitForSecondsRealtime(0.2f);
 
         // —— 4) 救援戏：老盾先在前方眩晕被围殴 ——
         hint.Hide();
@@ -401,24 +407,24 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         var merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.35f, 5.5f, stunned: true);
         bm.SpawnTutorialAmbushAround(merc, 3);
-        hint.Show("前方有人被怪物围住了，上前帮忙。", null, 6f);
+        hint.Show("前方有人被怪物围住了，上前帮忙。", null, 4f);
 
-        // 不冻结战斗：玩家可随时上前清怪，避免「打了怪却不进剧情」
+        // 不冻结战斗：玩家可随时上前清怪
         if (bm != null) bm.UnitsCanAct = true;
         float approach = 0f;
-        while (approach < 10f)
+        const float approachTimeout = 4f;
+        while (approach < approachTimeout)
         {
             approach += Time.unscaledDeltaTime;
             if (Hero.Instance != null && merc != null)
             {
                 float dist = Mathf.Abs(UnitBase.GetCombatX(Hero.Instance) - UnitBase.GetCombatX(merc));
                 if (dist <= 4.2f) break;
-                // 靠近时轻推玩家，减少空跑
-                if (dist > 4.2f && approach > 0.15f)
+                if (approach > 0.08f)
                 {
                     float hx = UnitBase.GetCombatX(Hero.Instance);
                     float mx = UnitBase.GetCombatX(merc);
-                    float step = Mathf.Sign(mx - hx) * Mathf.Min(12f * Time.unscaledDeltaTime, Mathf.Abs(mx - hx) - 3.8f);
+                    float step = Mathf.Sign(mx - hx) * Mathf.Min(18f * Time.unscaledDeltaTime, Mathf.Max(0f, dist - 3.6f));
                     if (Mathf.Abs(step) > 0.001f)
                     {
                         var p = Hero.Instance.transform.position;
@@ -430,10 +436,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return null;
         }
 
-        // 一整段只冻一次，说完再解冻；点一下跳字，再点跳句
         yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "那是……有人被围住了？", 1.2f),
-            new TalkLine(Hero.Instance, "先把这些怪清掉！", 1.0f));
+            new TalkLine(Hero.Instance, "先把围殴他的怪清掉！", 0.75f));
 
         // 解冻开打；清完立刻再冻，防止自动往前跑错过入队
         if (bm != null) bm.UnitsCanAct = true;
@@ -462,9 +466,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
             merc.SetTutorialStunned(false);
             if (Hero.Instance != null)
             {
-                Vector3 behind = Hero.Instance.transform.position + new Vector3(-1.0f, 0f, 0f);
-                behind.y = UnitBase.GROUND_Y;
-                GameConfig.SetWorldPosition(merc.gameObject, behind);
+                float frontX = UnitCrowd.GetMercDesiredCombatX(Hero.Instance, merc, 0);
+                Vector3 front = new Vector3(frontX, UnitBase.GROUND_Y, Hero.Instance.transform.position.z);
+                GameConfig.SetWorldPosition(merc.gameObject, front);
             }
             merc.Face(1);
             merc.SetPartyIndex(0);
@@ -497,20 +501,17 @@ public class TutorialDirector : Singleton<TutorialDirector>
             hint.Show("点左下角你的头像放技能，给老盾回血。", null, -1f);
 
         float wait = 0f;
-        const float SkillGuideTimeout = 8f;
+        const float SkillGuideTimeout = 4f;
         while (!SkillUsedThisStep && wait < SkillGuideTimeout)
         {
             wait += Mathf.Max(0.008f, Time.unscaledDeltaTime);
             if (skillTarget == null || !skillTarget.gameObject.activeInHierarchy)
             {
                 skillTarget = ResolvePlayerSkillTarget(ui);
-                if (skillTarget != null && wait < 3f)
+                if (skillTarget != null && wait < 2f)
                     hint.ShowHard("点你的头像放技能，给老盾回血。", skillTarget);
             }
-            // 点任意处超过 5 秒仍未放技能 → 直接帮放，别干等
-            if (wait >= 5f && (Input.GetMouseButtonDown(0) ||
-                (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)))
-                break;
+            if (wait >= 2.5f) break;
             yield return null;
         }
         if (!SkillUsedThisStep)
@@ -528,13 +529,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         ui?.UpdateCharacterSlots();
 
         yield return TalkBlock(bm, headTalk,
-            new TalkLine(merc, "舒服多了！前面交给我挡一阵。", 1.1f),
-            new TalkLine(Hero.Instance, "一起走。", 0.8f));
+            new TalkLine(merc, "舒服多了，前面我来挡。", 0.75f));
         headTalk?.HideNow();
         hint.Hide();
         if (bm != null) bm.UnitsCanAct = true;
 
-        hint.Show("组队后佣兵会自动战斗，和你一起推进。", null, 8f);
+        hint.Show("组队后佣兵会自动战斗。", null, 3f);
         yield return EnsureTutorialWave(bm, 5);
         if (bm != null && bm.GetAliveMonsterCount() <= 0)
         {
@@ -686,30 +686,20 @@ public class TutorialDirector : Singleton<TutorialDirector>
         AdventureCodex.MarkMercSeen(mercId);
     }
 
-    /// <summary>首波剩最后一只时闪屏预告下一波。</summary>
-    static IEnumerator CoWarnIncomingDuringFight(BattleManager bm, TutorialHintUI hint)
-    {
-        if (bm == null) yield break;
-        bool warned = false;
-        while (bm.GetAliveMonsterCount() > 0)
-        {
-            if (!warned && bm.GetAliveMonsterCount() <= 1)
-            {
-                warned = true;
-                hint.Show("下一波来袭！", null, 2.5f);
-                yield return BattleScreenFlash.Play(new Color(1f, 0.4f, 0.3f, 0.45f), 0.18f, 0.3f);
-            }
-            yield return null;
-        }
-    }
-
-    /// <summary>清场后等待若干秒再刷下一波，并闪屏提示。</summary>
+    /// <summary>清场后：右侧红字倒计时 → 中央预告图（只播一次）→ 立即刷怪。</summary>
     static IEnumerator CoTutorialNextWave(BattleManager bm, TutorialHintUI hint, float delaySec, int count)
     {
-        hint.Show("下一波来袭！", null, 2.5f);
-        yield return BattleScreenFlash.Play(new Color(1f, 0.92f, 0.75f, 0.38f), 0.15f, 0.28f);
-        yield return new WaitForSecondsRealtime(Mathf.Max(0.5f, delaySec));
         hint.Hide();
+        float t = Mathf.Max(0.5f, delaySec);
+        var hud = BattleSideHud.Instance;
+        while (t > 0f)
+        {
+            hud?.SetWaveCountdown(true, t, false);
+            t -= Time.unscaledDeltaTime;
+            yield return null;
+        }
+        hud?.SetWaveCountdown(false, 0f, false);
+        yield return BattleWaveAnnounceUI.CoPlay(BattleWaveAnnounceUI.Kind.NextWave);
         yield return EnsureTutorialWave(bm, count);
     }
 
@@ -767,7 +757,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 优先给一件有图标的武器/防具，避免进包看不见
         string[] prefer =
         {
-            "equip_sword_1", "equip_axesmall1", "equip_cloth_1", "equip_armor_1"
+            "equip_training_sword", "equip_sword_1", "equip_axesmall1", "equip_cloth_1", "equip_armor_1"
         };
         for (int i = 0; i < prefer.Length; i++)
         {

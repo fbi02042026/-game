@@ -8,6 +8,7 @@ public class Mercenary : UnitBase
 {
     public string mercId;
     public int mercLevel = 1;
+    public string DisplayName { get; private set; }
     /// <summary>本局佩戴主动技能（来自存档；空则无主动技）</summary>
     public string equippedSkillId;
     /// <summary>本局佩戴被动技能</summary>
@@ -21,6 +22,9 @@ public class Mercenary : UnitBase
     /// <summary>引导：原地眩晕，不跑 AI，受击不死。</summary>
     public bool TutorialStunned { get; private set; }
     float _stunAnimTimer;
+    Transform _nameLabelRoot;
+    TextMesh _nameLabel;
+    MeshRenderer _nameLabelRenderer;
 
     protected override void Awake()
     {
@@ -113,6 +117,105 @@ public class Mercenary : UnitBase
         Debug.Log($"[Mercenary:{id}] Init完成 | isAlly={isAlly} | facingDir={facingDir} | pos={transform.position}");
     }
 
+    public void SetDisplayName(string displayName, string nickname = null)
+    {
+        if (!string.IsNullOrEmpty(nickname))
+            DisplayName = nickname;
+        else if (!string.IsNullOrEmpty(displayName))
+            DisplayName = displayName;
+        else
+        {
+            string job = MercenaryManager.Instance != null
+                ? MercenaryManager.Instance.GetJobName(mercId)
+                : null;
+            DisplayName = string.IsNullOrEmpty(job) ? mercId : job;
+        }
+        RefreshNameLabel();
+    }
+
+    void RefreshNameLabel()
+    {
+        if (string.IsNullOrEmpty(DisplayName))
+        {
+            HideNameLabel();
+            return;
+        }
+        EnsureNameLabel();
+        _nameLabelRoot.gameObject.SetActive(true);
+        _nameLabel.text = DisplayName;
+        ApplyNameLabelFont();
+        RefreshNameLabelLayout();
+    }
+
+    void ApplyNameLabelFont()
+    {
+        if (_nameLabel == null) return;
+        var font = GameFonts.GetChinese();
+        _nameLabel.font = font;
+        if (font != null)
+        {
+            font.RequestCharactersInTexture(DisplayName, _nameLabel.fontSize, _nameLabel.fontStyle);
+            if (_nameLabelRenderer != null && font.material != null)
+                _nameLabelRenderer.sharedMaterial = font.material;
+        }
+    }
+
+    void RefreshNameLabelLayout()
+    {
+        if (_nameLabelRoot == null || _nameLabel == null) return;
+        float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
+        _nameLabelRoot.localPosition = new Vector3(0f, 0.82f / rootAbs, 0f);
+        _nameLabel.characterSize = 0.14f / rootAbs;
+        if (_nameLabelRenderer != null)
+            _nameLabelRenderer.sortingOrder = GameConfig.SORT_VFX + 24;
+    }
+
+    void EnsureNameLabel()
+    {
+        if (_nameLabel != null) return;
+
+        _nameLabelRoot = new GameObject("MercName").transform;
+        _nameLabelRoot.SetParent(transform, false);
+
+        _nameLabel = _nameLabelRoot.gameObject.AddComponent<TextMesh>();
+        _nameLabel.text = DisplayName ?? "";
+        _nameLabel.fontSize = 56;
+        _nameLabel.anchor = TextAnchor.MiddleCenter;
+        _nameLabel.alignment = TextAlignment.Center;
+        _nameLabel.fontStyle = FontStyle.Bold;
+        _nameLabel.color = new Color(0.2f, 1f, 1f, 1f);
+
+        _nameLabelRenderer = _nameLabelRoot.GetComponent<MeshRenderer>();
+        if (_nameLabelRenderer != null)
+            _nameLabelRenderer.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+
+        ApplyNameLabelFont();
+        RefreshNameLabelLayout();
+    }
+
+    void HideNameLabel()
+    {
+        if (_nameLabelRoot != null) _nameLabelRoot.gameObject.SetActive(false);
+    }
+
+    static bool IsMeleeMercId(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return true;
+        if (id.StartsWith("gongshou")) return false;
+        if (id.StartsWith("naima") || id.StartsWith("fashi") || id.StartsWith("mushi")) return false;
+        return true;
+    }
+
+    void ApplyMeleeRangeVsPlayer()
+    {
+        if (!IsMeleeMercId(mercId)) return;
+        float playerRange = GameConfig.RangeSword;
+        if (Hero.Instance?.attr != null)
+            playerRange = Hero.Instance.attr.GetAttr(AttrType.AttackRange);
+        if (GameConfig.IsRangedAttackRange(playerRange)) return;
+        attr.SetAttr(AttrType.AttackRange, playerRange * 0.8f);
+    }
+
     // Face() 已在 UnitBase
 
     void SetupAttributes(string id, int level)
@@ -132,6 +235,7 @@ public class Mercenary : UnitBase
             attr.SetAttr(AttrType.AttackRange, range);
             attr.SetAttr(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
             currentHp = attr.GetAttr(AttrType.MaxHp);
+            ApplyMeleeRangeVsPlayer();
             return;
         }
 
@@ -187,6 +291,7 @@ public class Mercenary : UnitBase
         attr.SetAttr(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
 
         currentHp = attr.GetAttr(AttrType.MaxHp);
+        ApplyMeleeRangeVsPlayer();
     }
 
     protected override WeaponAttackType GetAttackType()
@@ -208,8 +313,36 @@ public class Mercenary : UnitBase
         return AttackVfxKit.MeleeSlash;
     }
 
+    float GetFrontAnchorX()
+    {
+        Hero h = Hero.Instance;
+        if (h == null) return GetCombatX(this);
+        return UnitCrowd.GetMercDesiredCombatX(h, this, ResolvePartyIndex());
+    }
+
+    /// <summary>近战射程更短 + 站位：保持在玩家前方半个身位，不缩到玩家后面。</summary>
+    void EnforceFrontSlot(ref bool isMoving)
+    {
+        if (TutorialStunned) return;
+        Hero h = Hero.Instance;
+        if (h == null || h.isDead) return;
+
+        float anchorX = GetFrontAnchorX();
+        float myX = GetCombatX(this);
+        if (myX >= anchorX - 0.06f) return;
+
+        float dx = anchorX - myX;
+        float spd = attr.GetAttr(AttrType.MoveSpeed);
+        float vx = Mathf.Min(spd * 1.35f, Mathf.Max(0.5f, dx * 10f));
+        if (rb != null) rb.velocity = new Vector2(vx, rb.velocity.y);
+        facingDir = 1;
+        ApplyFacing(facingDir);
+        isMoving = true;
+    }
+
     protected override void OnDeathRelease()
     {
+        HideNameLabel();
         Destroy(gameObject);
     }
 
@@ -318,7 +451,7 @@ public class Mercenary : UnitBase
             }
             else
             {
-                // 有怪但索敌没锁到：主动前压接战，不要只跟在身后
+                // 有怪但索敌没锁到：先站到玩家前方，再前压接战
                 UnitBase foe = FindNearestEnemyInDetectRange();
                 if (foe != null)
                 {
@@ -347,7 +480,7 @@ public class Mercenary : UnitBase
                 }
                 else if (h != null && !h.isDead)
                 {
-                float desiredX = GetCombatX(h) - BattleManager.MERC_BEHIND_SPACING * (ResolvePartyIndex() + 1);
+                float desiredX = UnitCrowd.GetMercDesiredCombatX(h, this, ResolvePartyIndex());
                 float dx = desiredX - GetCombatX(this);
                 float spd = attr.GetAttr(AttrType.MoveSpeed);
                 if (Mathf.Abs(dx) > 0.08f)
@@ -369,6 +502,8 @@ public class Mercenary : UnitBase
                 }
             }
         }
+
+        EnforceFrontSlot(ref isMoving);
 
         if (unitAnim != null)
             unitAnim.SetMove(isMoving, facingDir);

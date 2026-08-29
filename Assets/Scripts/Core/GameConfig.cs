@@ -299,7 +299,7 @@ public static class GameConfig
     public const float MONSTER_BOSS_DEF = 12f;
     public const float MONSTER_BOSS_ATK_INTERVAL = 2.2f;
     /// <summary>
-    /// 怪物攻速总倍率（最终攻速 = 1/间隔 × 本值）。
+    /// 怪物攻速总倍率（最终攻速 = 1/间隔 × 本值 × MonsterConfig.baseAttackSpeed）。
     /// 前期先压低；以后难度高了往 1 调（甚至 &gt;1）。
     /// </summary>
     public const float MONSTER_ATK_SPEED_MUL = 0.65f;

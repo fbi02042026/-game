@@ -64,6 +64,7 @@ public class GuildHallUI : MonoBehaviour
     {
         Instance = this;
         UICanvasSetup.ApplyOn(gameObject, Camera.main);
+        UiPrefabRectGuard.Attach(transform, "Background");
         GameFonts.ApplyToHierarchy(transform);
         AutoBindMissingRefs();
         EnsureBottomNav();

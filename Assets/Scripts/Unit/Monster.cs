@@ -28,6 +28,9 @@ public class Monster : UnitBase
     private SpriteRenderer _hpBarFill;
     private SpriteRenderer _hpBarBg;
     private Transform _hpBarRoot;
+    private Transform _stackLabelRoot;
+    private TextMesh _stackLabel;
+    private MeshRenderer _stackLabelRenderer;
     static int s_hpBarFrontBoost;
 
     protected override void Awake()
@@ -260,11 +263,10 @@ public class Monster : UnitBase
             ApplyFacing(facingDir);
             float moveDir = Mathf.Sign(_enterTargetPos.x - transform.position.x);
             if (Mathf.Abs(moveDir) < 0.01f) moveDir = -1f;
-            if (UnitCrowd.IsBlockedByFrontAlly(this, moveDir))
+            if (UnitCrowd.IsBlockedByFrontHero(this, moveDir))
             {
                 if (rb != null) rb.velocity = Vector2.zero;
                 if (unitAnim != null) unitAnim.SetMove(false, facingDir);
-                // 被挡住时不要每帧挤位，否则后面的怪会来回哆嗦
                 return;
             }
             float step = _enterSpeed * Time.deltaTime;
@@ -335,7 +337,7 @@ public class Monster : UnitBase
                 attackCd = GetAttackCooldown();
             }
         }
-        else if (UnitCrowd.IsBlockedByFrontAlly(this, facingDir))
+        else if (UnitCrowd.IsBlockedByFrontHero(this, facingDir))
         {
             if (rb != null) rb.velocity = Vector2.zero;
         }
@@ -344,7 +346,6 @@ public class Monster : UnitBase
             float spd = attr.GetAttr(AttrType.MoveSpeed);
             if (rb != null) rb.velocity = new Vector2(facingDir * spd, rb.velocity.y);
             isMoving = true;
-            UnitCrowd.ResolveOverlap(this);
         }
 
         if (unitAnim != null) unitAnim.SetMove(isMoving, facingDir);
@@ -381,7 +382,7 @@ public class Monster : UnitBase
         facingDir = (int)dir;
         ApplyFacing(facingDir);
 
-        if (UnitCrowd.IsBlockedByFrontAlly(this, dir))
+        if (UnitCrowd.IsBlockedByFrontHero(this, dir))
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
@@ -391,7 +392,6 @@ public class Monster : UnitBase
         float spd = attr.GetAttr(AttrType.MoveSpeed);
         if (rb != null) rb.velocity = new Vector2(dir * spd, rb.velocity.y);
         if (unitAnim != null) unitAnim.SetMove(true, facingDir);
-        UnitCrowd.ResolveOverlap(this);
     }
 
     /// <summary>
@@ -514,6 +514,8 @@ public class Monster : UnitBase
         float atkSpeedMul = GameConfig.MONSTER_ATK_SPEED_MUL;
         if (BattleManager.Instance != null)
             atkSpeedMul *= BattleManager.Instance.runMonsterAtkSpeedMul;
+        if (template != null && template.baseAttackSpeed > 0.01f)
+            atkSpeedMul *= template.baseAttackSpeed;
         attr.SetAttr(AttrType.AttackSpeed,
             (1f / Mathf.Max(0.2f, atkInterval)) * atkSpeedMul);
         // 远程怪攻击间隔再缩 40%（攻速 ÷0.6）
@@ -579,7 +581,7 @@ public class Monster : UnitBase
 
         // 设置排序层
         ApplySortingLayer();
-        UnitCrowd.EnsureTriggerCollider(this);
+        RemovePhysicsCollider();
 
         // 设置 HPBar 排序层（在怪物之上）
         SetupHPBarSorting();
@@ -591,10 +593,102 @@ public class Monster : UnitBase
         // 远程小怪也拿到了技能 id，就让它能放：远程怪必须看得到技能子弹
         _canUseActiveSkill = !string.IsNullOrEmpty(_skillId);
         bool strong = eliteWave || _isBossUnit;
-        _skillEnergy = _canUseActiveSkill ? (strong ? 0.5f : 0f) : 0f;
-        _skillCooldown = _canUseActiveSkill && !strong ? 3f : 0f;
+        bool rangedSkill = _canUseActiveSkill && MonsterAttackStyleTable.IsRanged(_attackStyle);
+        _skillEnergy = _canUseActiveSkill
+            ? (strong ? 0.5f : (rangedSkill ? 0.88f : 0f))
+            : 0f;
+        _skillCooldown = _canUseActiveSkill && !strong ? (rangedSkill ? 0f : 3f) : 0f;
 
         Debug.Log($"[Monster:{template.id}] Init | sprite={_spriteIndex} style={_attackStyle} boss={_isBossUnit} range={atkRange:F1} skill={_skillId}");
+    }
+
+    /// <summary>获取不透明像素 footprint（世界坐标 AABB），用于判定是否真重叠。</summary>
+    public void GetFootprintBounds(out float minX, out float maxX, out float minY, out float maxY)
+    {
+        float halfW = GetOpaqueFootprintHalfWidth();
+        float cx = UnitBase.GetCombatX(this);
+        float footY = transform.position.y;
+        float height = halfW * 2.2f;
+        if (sr != null && sr.sprite != null
+            && MonsterSpriteOpaqueTable.TryGet(sr.sprite.name, out MonsterSpriteOpaqueTable.Entry e))
+        {
+            height = Mathf.Max(0.35f, sr.bounds.size.y * Mathf.Clamp(e.BoxNH, 0.2f, 1f));
+        }
+        minX = cx - halfW;
+        maxX = cx + halfW;
+        minY = footY;
+        maxY = footY + height;
+    }
+
+    /// <summary>不透明像素包围盒估算战斗占位半宽（非整图 bounds）。</summary>
+    public float GetOpaqueFootprintHalfWidth()
+    {
+        if (sr == null || sr.sprite == null) return UnitCrowd.MonsterFallbackHalfWidth;
+        if (MonsterSpriteOpaqueTable.TryGet(sr.sprite.name, out MonsterSpriteOpaqueTable.Entry e))
+        {
+            float boxW = Mathf.Clamp(e.BoxNW, 0.12f, 1f);
+            float worldW = sr.bounds.size.x * boxW;
+            return Mathf.Max(UnitCrowd.MonsterFallbackHalfWidth, worldW * 0.5f);
+        }
+        return UnitCrowd.MonsterFallbackHalfWidth;
+    }
+
+    void RemovePhysicsCollider()
+    {
+        var box = GetComponent<BoxCollider2D>();
+        if (box != null) Destroy(box);
+    }
+
+    public void SetOverlapStackCount(int count)
+    {
+        if (count <= 1)
+        {
+            if (_stackLabelRoot != null) _stackLabelRoot.gameObject.SetActive(false);
+            return;
+        }
+
+        EnsureStackLabel();
+        RefreshStackLabelLayout();
+        _stackLabelRoot.gameObject.SetActive(true);
+        _stackLabel.text = "x" + count;
+    }
+
+    void RefreshStackLabelLayout()
+    {
+        if (_stackLabelRoot == null || _stackLabel == null) return;
+        float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
+        _stackLabelRoot.localPosition = new Vector3(0f, 0.72f / rootAbs, 0f);
+        _stackLabel.characterSize = 0.12f / rootAbs;
+        if (_stackLabelRenderer != null)
+        {
+            _stackLabelRenderer.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            _stackLabelRenderer.sortingOrder = GameConfig.SORT_VFX + 24;
+        }
+    }
+
+    void EnsureStackLabel()
+    {
+        if (_stackLabel != null) return;
+
+        _stackLabelRoot = new GameObject("StackCount").transform;
+        _stackLabelRoot.SetParent(transform, false);
+
+        _stackLabel = _stackLabelRoot.gameObject.AddComponent<TextMesh>();
+        _stackLabel.text = "x2";
+        _stackLabel.fontSize = 52;
+        _stackLabel.anchor = TextAnchor.MiddleCenter;
+        _stackLabel.alignment = TextAlignment.Center;
+        _stackLabel.color = new Color(1f, 0.92f, 0.35f, 1f);
+        _stackLabel.font = GameFonts.GetNumber();
+        _stackLabel.richText = false;
+
+        _stackLabelRenderer = _stackLabelRoot.GetComponent<MeshRenderer>();
+        RefreshStackLabelLayout();
+    }
+
+    void HideStackLabel()
+    {
+        if (_stackLabelRoot != null) _stackLabelRoot.gameObject.SetActive(false);
     }
 
     /// <summary>
@@ -801,10 +895,9 @@ public class Monster : UnitBase
         float damage = (attr.GetAttr(AttrType.Attack) * mult + extra) * tier;
         float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
 
-        // 弹道按攻击方式表分：Bow 走 Enemy/Bow/vfx_enemy_bow_*，Ranged 走 Enemy/Orb/vfx_orb_*。
-        // 小怪一律以表为准，禁止被技能表的 attackKit 盖掉；Boss 才允许技能自带 kit。
-        AttackVfxKit kit = MonsterAttackStyleTable.GetVfxKit(_swingStyle);
-        bool useTableKit = !_isBossUnit;
+        // 小怪技能弹道严格按攻击方式表；Boss 才看技能表 attackKit
+        AttackVfxKit kit = MonsterAttackStyleTable.GetVfxKit(_isBossUnit ? _swingStyle : _attackStyle);
+
         if (_isBossUnit)
         {
             var skillCfg = SkillRegistry.Instance?.Get(_skillId);
@@ -821,10 +914,9 @@ public class Monster : UnitBase
 
         if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
         {
-            // 远程技：子弹飞到再结算。小怪不传技能专属 impact，命中走敌方套自己的 hit
-            GameObject impact = useTableKit
-                ? null
-                : SkillRegistry.Instance?.GetSkillVfxPrefab(_skillId);
+            GameObject impact = _isBossUnit
+                ? SkillRegistry.Instance?.GetSkillVfxPrefab(_skillId)
+                : null;
             Transform targetTf = primaryTarget != null ? primaryTarget.transform : null;
             BattleVFXSystem.Instance?.PlaySkillProjectile(
                 VfxFaction.Enemy, firePos, hitPos, facingDir, targetTf, kit,
@@ -957,6 +1049,7 @@ public class Monster : UnitBase
         if (_hpBarRoot != null)
             _hpBarRoot.gameObject.SetActive(false);
 
+        HideStackLabel();
         base.Die();
     }
 
@@ -967,5 +1060,6 @@ public class Monster : UnitBase
         _isEnteringMap = false;
         _bossSwingIndex = 0;
         _forcedTarget = null;
+        HideStackLabel();
     }
 }

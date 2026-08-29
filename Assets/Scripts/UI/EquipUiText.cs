@@ -1,3 +1,5 @@
+using UnityEngine;
+
 /// <summary>
 /// 装备弹窗/对比用中文显示（槽位、稀有度、属性名）。
 /// </summary>
@@ -49,8 +51,22 @@ public static class EquipUiText
             case global::Rarity.Uncommon: return "优秀";
             case global::Rarity.Rare: return "稀有";
             case global::Rarity.Epic: return "史诗";
-            case global::Rarity.Legendary: return "传说";
+            case global::Rarity.Legendary: return "传奇";
             default: return "普通";
+        }
+    }
+
+    /// <summary>装备弹窗稀有度字色：普通白、稀有蓝、传奇金。</summary>
+    public static Color RarityTextColor(Rarity r)
+    {
+        switch (r)
+        {
+            case global::Rarity.Rare:
+                return new Color(0.35f, 0.62f, 1f, 1f);
+            case global::Rarity.Legendary:
+                return new Color(1f, 0.82f, 0.28f, 1f);
+            default:
+                return Color.white;
         }
     }
 

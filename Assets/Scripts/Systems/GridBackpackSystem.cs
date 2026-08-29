@@ -538,8 +538,8 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         if (_equippedBySlot.TryGetValue(wearSlot, out var mapped) && mapped != null)
             return mapped;
 
-        // HandRig 未就绪时可能仍按逻辑槽存着，避免主手武器被当成副手显示
-        if (rig.IsValid && _equippedBySlot.TryGetValue(logicalSlot, out var legacy) && legacy != null
+        // HandRig 未就绪时可能仍按逻辑槽存着；就绪后只认 wearSlot，避免左手攻击 rig 下 OffHand 穿戴槽被误当成「副手装备」
+        if (!rig.IsValid && _equippedBySlot.TryGetValue(logicalSlot, out var legacy) && legacy != null
             && WeaponLoadoutRules.IsLoadoutItem(legacy))
             return legacy;
 

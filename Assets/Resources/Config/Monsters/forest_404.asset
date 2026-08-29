@@ -19,7 +19,7 @@ MonoBehaviour:
   unlockClearCount: 0
   baseHp: 275
   baseAttack: 27.5
-  baseAttackSpeed: 1
+  baseAttackSpeed: 1.5
   attackRange: 1.5
   baseMoveSpeed: 2.2
   baseGoldDrop: 34

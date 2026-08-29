@@ -160,6 +160,7 @@ public class AutoGameInitializer : MonoBehaviour
         MonsterAttackStyleTable.Reload();
 
         // 开始新一局（同场次只一次）
+        EnsureStageClearRewardDirector();
         TryStartNewRunOnce(bm, clearMonstersFirst: false);
         if (hero != null)
         {
@@ -173,6 +174,8 @@ public class AutoGameInitializer : MonoBehaviour
             hero.transform.localScale = new Vector3(sign * s, s, s);
             // 不改 SPUM Sorting
             ForceEnableRenderers(hero.gameObject);
+            hero.costumeManager?.EnsureRigReady();
+            hero.costumeManager?.RefreshCostume();
             Debug.Log($"[AutoInit] Hero parent={hero.transform.parent?.name} pos={hero.transform.position} lossy={hero.transform.lossyScale}");
         }
         GamePerf.Log("[AutoInit] 8/8 StartNewRun完成");
@@ -239,6 +242,7 @@ public class AutoGameInitializer : MonoBehaviour
         ReportInitStep(7);
 
         StageClearRewardDirector.Instance?.InvalidateSceneCache();
+        EnsureStageClearRewardDirector();
         bool started = TryStartNewRunOnce(bm, clearMonstersFirst: true);
         if (!started)
             GamePerf.Log("[AutoInit] 重绑完成但跳过重复 StartNewRun");
@@ -251,6 +255,8 @@ public class AutoGameInitializer : MonoBehaviour
         float sign = hero.transform.localScale.x < 0 ? -1f : 1f;
         hero.transform.localScale = new Vector3(sign * s, s, s);
         ForceEnableRenderers(hero.gameObject);
+        hero.costumeManager?.EnsureRigReady();
+        hero.costumeManager?.RefreshCostume();
 
         BattleUI.Instance?.RebindAfterSystemsReady();
         BattleUI.Instance?.UpdateTopBarResources();
@@ -873,15 +879,29 @@ public class AutoGameInitializer : MonoBehaviour
 
     // ===== Hero =====
 
+    static void EnsureStageClearRewardDirector()
+    {
+        var dir = StageClearRewardDirector.Instance;
+        if (dir == null)
+        {
+            var go = new GameObject("StageClearRewardDirector");
+            dir = go.AddComponent<StageClearRewardDirector>();
+        }
+        dir.CacheSceneRefs();
+    }
+
     static Hero EnsureHero(Transform parent, BattleManager bm)
     {
         Hero hero = Object.FindObjectOfType<Hero>();
         if (hero != null)
         {
             GameConfig.AttachToUnitRoot(hero.transform);
+            if (hero.transform.parent != parent)
+                hero.transform.SetParent(parent, false);
             float s = GameConfig.UNIT_SCALE;
             float sign = hero.transform.localScale.x < 0 ? -1f : 1f;
             hero.transform.localScale = new Vector3(sign * s, s, s);
+            hero.costumeManager?.EnsureRigReady();
             bm.hero = hero;
             return hero;
         }

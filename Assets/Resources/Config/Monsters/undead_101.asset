@@ -13,13 +13,13 @@ MonoBehaviour:
   m_Name: undead_101
   m_EditorClassIdentifier: 
   id: undead_101
-  monsterName: "墓园骷髅兵"
+  monsterName: "墓园骷髅�?
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
   baseHp: 50
   baseAttack: 5
-  baseAttackSpeed: 1
+  baseAttackSpeed: 1.5
   attackRange: 1.5
   baseMoveSpeed: 2.2
   baseGoldDrop: 10

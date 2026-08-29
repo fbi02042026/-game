@@ -148,12 +148,14 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         GameObject go = AcquireVfxInstance(prefab, position);
         if (go == null) return;
 
-        float slashScale = faction == VfxFaction.Ally ? 2.5f : 2.0f;
+        // 大小跟预制体；玩家刀光额外 +30%（仅 Ally）
         Vector3 baseScale = prefab.transform.localScale;
+        float mul = Mathf.Max(0.01f, sharedKitScale);
+        if (faction == VfxFaction.Ally) mul *= 1.3f;
         go.transform.localScale = new Vector3(
-            Mathf.Abs(baseScale.x) * slashScale * (facingDir < 0 ? -1f : 1f),
-            baseScale.y * slashScale,
-            baseScale.z * slashScale);
+            Mathf.Abs(baseScale.x) * mul * (facingDir < 0 ? -1f : 1f),
+            baseScale.y * mul,
+            baseScale.z * mul);
 
         PrepareSlashParticles(go);
         StretchSlashLifetime(go, 0.5f);
@@ -353,8 +355,9 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         speed = distance / Mathf.Max(0.0001f, duration);
 
         GameObject projectile = Instantiate(projectilePrefab, fromPos, Quaternion.identity);
-        projectile.transform.SetParent(transform);
-        projectile.transform.localScale = projectilePrefab.transform.localScale
+        projectile.transform.SetParent(null, true);
+        projectile.transform.position = fromPos;
+        projectile.transform.localScale = projectilePrefab.transform.lossyScale
             * Mathf.Max(0.05f, scaleMul);
 
         ApplyVfxFacing(projectile, 1);

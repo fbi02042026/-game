@@ -172,10 +172,25 @@ public class StageClearRewardDirector : MonoBehaviour
         Sprite openSp = LoadBoxSprite(TierPrefix(tier) + "_open");
         if (_closeSr != null && closeSp != null) _closeSr.sprite = closeSp;
         if (_openSr != null && openSp != null) _openSr.sprite = openSp;
-        EnsureEffectAlive();
+        StopBoxEffect();
     }
 
-    void EnsureEffectAlive()
+    /// <summary>关箱/待机：不播烟花。</summary>
+    void StopBoxEffect()
+    {
+        if (_effectRoot == null)
+            _effectRoot = FindChildIgnoreCase(_boxAnimHost != null ? _boxAnimHost : _boxRoot, "effect");
+        if (_effectRoot == null) return;
+        var particles = _effectRoot.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < particles.Length; i++)
+        {
+            if (particles[i] == null) continue;
+            particles[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+    }
+
+    /// <summary>开箱瞬间：撒烟花/粒子（仅 open 时调用）。</summary>
+    void PlayBoxOpenEffect()
     {
         if (_boxRoot == null) return;
         if (_effectRoot == null)
@@ -189,6 +204,7 @@ public class StageClearRewardDirector : MonoBehaviour
             if (particles[i] == null) continue;
             if (!particles[i].gameObject.activeSelf)
                 particles[i].gameObject.SetActive(true);
+            particles[i].Clear(true);
             particles[i].Play(true);
             var pr = particles[i].GetComponent<ParticleSystemRenderer>();
             if (pr != null)
@@ -240,14 +256,14 @@ public class StageClearRewardDirector : MonoBehaviour
     }
 
     /// <summary>
-    /// 新手引导：把场景宝箱放到玩家前方，等走近后播放开箱，地上掉一件装备表现，再关箱。
+    /// 引导：在玩家前方放置并显示宝箱，等走近（超时则轻推）。
     /// </summary>
-    public IEnumerator CoTutorialChestDrop(EquipInstance drop, float aheadDist = 6.5f)
+    public IEnumerator CoTutorialPlaceChest(float aheadDist = 4f)
     {
         CacheSceneRefs();
         if (_boxRoot == null)
         {
-            Debug.LogWarning("[StageClearReward] 教程宝箱：场景无 box");
+            Debug.LogWarning("[StageClearReward] 教程宝箱：场景无 box 节点");
             yield break;
         }
 
@@ -258,27 +274,47 @@ public class StageClearRewardDirector : MonoBehaviour
         _boxRoot.position = boxPos;
         _boxRoot.gameObject.SetActive(true);
         ApplyBoxVisual(ClearBoxTier.Mu);
-        EnsureEffectAlive();
+        StopBoxEffect();
         EnsureBoxController();
-        if (_closeSr != null) _closeSr.enabled = true;
-        if (_openSr != null) _openSr.enabled = false;
+        if (_closeSr != null) { _closeSr.enabled = true; _closeSr.gameObject.SetActive(true); }
+        if (_openSr != null) { _openSr.enabled = false; _openSr.gameObject.SetActive(true); }
+        if (_boxAnim != null)
+        {
+            _boxAnim.enabled = true;
+            _boxAnim.Rebind();
+            _boxAnim.Update(0f);
+        }
 
-        // 等玩家走近宝箱
         float wait = 0f;
-        while (wait < 60f)
+        const float maxWalkWait = 5f;
+        while (wait < maxWalkWait)
         {
             wait += Time.unscaledDeltaTime;
             if (hero != null)
             {
                 float dist = Mathf.Abs(UnitBase.GetCombatX(hero) - boxPos.x);
-                if (dist <= 2.8f) break;
+                if (dist <= 2.6f) break;
+                if (wait > 0.8f && dist > 3f)
+                {
+                    float step = Mathf.Sign(boxPos.x - UnitBase.GetCombatX(hero))
+                        * Mathf.Min(14f * Time.unscaledDeltaTime, dist - 2.2f);
+                    if (Mathf.Abs(step) > 0.001f)
+                    {
+                        var p = hero.transform.position;
+                        p.x += step;
+                        GameConfig.SetWorldPosition(hero.gameObject, p);
+                    }
+                }
+                if (wait >= maxWalkWait - 0.05f) break;
             }
             yield return null;
         }
     }
 
-    /// <summary>引导：开箱动画 + 地上掉落图标，然后隐藏宝箱。返回地面图标（调用方负责销毁）。</summary>
-    public IEnumerator CoTutorialOpenChest(EquipInstance drop, System.Action<GameObject> onGroundIcon)
+    /// <summary>
+    /// 引导：开箱 → 武器从小变大弹出 → 落地并上下晃动 → 返回地面图标（弹窗在此之前不要开）。
+    /// </summary>
+    public IEnumerator CoTutorialOpenChestAndDropEquip(EquipInstance drop, System.Action<GameObject> onGroundIcon)
     {
         CacheSceneRefs();
         if (_boxRoot == null)
@@ -292,12 +328,12 @@ public class StageClearRewardDirector : MonoBehaviour
         if (_boxAnim != null)
         {
             _boxAnim.enabled = true;
+            PlayBoxOpenEffect();
             _boxAnim.Play("open1", 0, 0f);
-            yield return WaitAnimOrSeconds(_boxAnim, "open1", 1.0f);
-            _boxAnim.Play("open2", 0, 0f);
+            yield return WaitAnimOrSeconds(_boxAnim, "open1", 0.9f);
         }
         else
-            yield return new WaitForSecondsRealtime(0.6f);
+            yield return new WaitForSecondsRealtime(0.4f);
 
         if (_closeSr != null) _closeSr.enabled = false;
         if (_openSr != null) _openSr.enabled = true;
@@ -305,27 +341,79 @@ public class StageClearRewardDirector : MonoBehaviour
         GameObject ground = null;
         if (drop != null)
         {
-            Vector3 spawn = _boxRoot.position;
-            spawn.y = UnitBase.GROUND_Y;
-            ground = CreateGroundDrop(spawn, drop);
-            // 图标中心 pivot：落地后按半高抬到脚面以上
+            Vector3 popStart = _boxRoot.position + new Vector3(0.25f, 1.05f, 0f);
+            popStart.y = UnitBase.GROUND_Y + 1.05f;
+            ground = CreateGroundDrop(popStart, drop);
             if (ground != null)
             {
+                Vector3 land = _boxRoot.position + new Vector3(0.85f, 0f, 0f);
+                land.y = UnitBase.GROUND_Y;
                 var sr = ground.GetComponent<SpriteRenderer>();
                 if (sr != null && sr.sprite != null)
-                {
-                    float half = sr.bounds.extents.y;
-                    var p = ground.transform.position;
-                    p.y = UnitBase.GROUND_Y + half;
-                    ground.transform.position = p;
-                }
+                    land.y += sr.bounds.extents.y;
+                yield return CoTutorialEquipPopAndBounce(ground.transform, popStart, land);
             }
         }
-        onGroundIcon?.Invoke(ground);
-        yield return new WaitForSecondsRealtime(0.45f);
 
-        if (_boxRoot != null)
-            _boxRoot.gameObject.SetActive(false);
+        onGroundIcon?.Invoke(ground);
+        yield return new WaitForSecondsRealtime(0.25f);
+        if (_boxAnim != null) _boxAnim.Play("open2", 0, 0f);
+    }
+
+    static IEnumerator CoTutorialEquipPopAndBounce(Transform icon, Vector3 start, Vector3 land)
+    {
+        if (icon == null) yield break;
+
+        const float popDur = 0.38f;
+        const float dropDur = 0.34f;
+        const float bounceDur = 1.05f;
+        Vector3 mid = start + new Vector3(0.15f, 0.45f, 0f);
+
+        float t = 0f;
+        while (t < popDur)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / popDur));
+            icon.position = Vector3.Lerp(start, mid, u);
+            float s = Mathf.Lerp(0.08f, 0.52f, u);
+            icon.localScale = Vector3.one * s;
+            yield return null;
+        }
+
+        t = 0f;
+        while (t < dropDur)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / dropDur);
+            float arc = Mathf.Sin(u * Mathf.PI) * 0.35f;
+            icon.position = Vector3.Lerp(mid, land, u) + new Vector3(0f, arc, 0f);
+            yield return null;
+        }
+
+        t = 0f;
+        float baseY = land.y;
+        while (t < bounceDur)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = t / bounceDur;
+            float amp = 0.18f * (1f - u);
+            icon.position = new Vector3(land.x, baseY + Mathf.Abs(Mathf.Sin(u * Mathf.PI * 5f)) * amp, land.z);
+            yield return null;
+        }
+        icon.position = land;
+        icon.localScale = Vector3.one * 0.48f;
+    }
+
+    [System.Obsolete("Use CoTutorialPlaceChest + CoTutorialOpenChestAndDropEquip")]
+    public IEnumerator CoTutorialChestDrop(EquipInstance drop, float aheadDist = 6.5f)
+    {
+        yield return CoTutorialPlaceChest(aheadDist);
+    }
+
+    [System.Obsolete("Use CoTutorialOpenChestAndDropEquip")]
+    public IEnumerator CoTutorialOpenChest(EquipInstance drop, System.Action<GameObject> onGroundIcon)
+    {
+        yield return CoTutorialOpenChestAndDropEquip(drop, onGroundIcon);
     }
 
     public void Begin(List<EquipInstance> rewards, int bonusGold, StageType stageType = StageType.Normal)
@@ -352,11 +440,11 @@ public class StageClearRewardDirector : MonoBehaviour
             p.y = UnitBase.GROUND_Y;
             _boxRoot.position = p;
             _boxRoot.gameObject.SetActive(true);
-            EnsureEffectAlive();
             EnsureBoxController();
             if (_boxAnim != null)
             {
                 _boxAnim.enabled = true;
+                PlayBoxOpenEffect();
                 _boxAnim.Play("open1", 0, 0f);
                 yield return WaitAnimOrSeconds(_boxAnim, "open1", 1.15f);
                 // open2 已在控制器里设为循环；播完 open1 后强制切入并保持循环
