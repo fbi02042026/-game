@@ -30,6 +30,10 @@ public class CameraFollow : MonoBehaviour
     private float _camY;
     private float _camZ;
     private bool _yzInitialized = false;
+    /// <summary> false 时 LateUpdate 不跟 X（开战走进场等固定镜头过场） </summary>
+    bool _followXEnabled = true;
+
+    public bool FollowXEnabled => _followXEnabled;
 
     void Awake()
     {
@@ -64,8 +68,53 @@ public class CameraFollow : MonoBehaviour
         }
     }
 
+    Vector2 _shakeOffset;
+    float _shakeTimeLeft;
+    float _shakeAmp;
+    Vector2 _lastShakeOffset;
+
+    void UpdateShake()
+    {
+        if (_shakeTimeLeft <= 0f)
+        {
+            _shakeOffset = Vector2.zero;
+            _shakeAmp = 0f;
+            return;
+        }
+
+        _shakeTimeLeft -= Time.unscaledDeltaTime;
+        float decay = Mathf.Clamp01(_shakeTimeLeft / 0.15f);
+        _shakeOffset = Random.insideUnitCircle * (_shakeAmp * decay);
+        if (_shakeTimeLeft <= 0f)
+        {
+            _shakeOffset = Vector2.zero;
+            _shakeAmp = 0f;
+        }
+    }
+
+    /// <summary>世界单位 XY 微震，unscaled 衰减。</summary>
+    public void AddShake(float amplitude, float duration)
+    {
+        if (amplitude <= 0f || duration <= 0f) return;
+        _shakeAmp = Mathf.Max(_shakeAmp, amplitude);
+        _shakeTimeLeft = Mathf.Max(_shakeTimeLeft, duration);
+    }
+
     void LateUpdate()
     {
+        UpdateShake();
+
+        Vector3 pos = transform.position;
+        pos.x -= _lastShakeOffset.x;
+        pos.y -= _lastShakeOffset.y;
+
+        if (!_followXEnabled)
+        {
+            transform.position = new Vector3(pos.x + _shakeOffset.x, pos.y + _shakeOffset.y, pos.z);
+            _lastShakeOffset = _shakeOffset;
+            return;
+        }
+
         if (target == null)
         {
             if (Hero.Instance != null)
@@ -73,18 +122,15 @@ public class CameraFollow : MonoBehaviour
             if (target == null) return;
         }
 
-        // 目标X位置
         float targetX = target.position.x + offset.x;
         if (float.IsNaN(targetX) || float.IsInfinity(targetX))
         {
-            // 目标被物理/缩放算坏了，这一帧不跟随，否则 NaN 会污染相机后再也回不来
             WarnInvalidOnce($"目标 {target.name} 的 X 为 {target.position.x}");
             return;
         }
         targetX = Mathf.Clamp(targetX, minX, maxX);
 
-        // 平滑跟随（仅X轴）
-        float currentX = transform.position.x;
+        float currentX = pos.x;
         if (float.IsNaN(currentX) || float.IsInfinity(currentX))
         {
             currentX = targetX;
@@ -98,7 +144,8 @@ public class CameraFollow : MonoBehaviour
             _velocityX = 0f;
         }
 
-        transform.position = new Vector3(newX, _camY, _camZ);
+        transform.position = new Vector3(newX + _shakeOffset.x, _camY + _shakeOffset.y, _camZ);
+        _lastShakeOffset = _shakeOffset;
     }
 
     static bool _warnedInvalid;
@@ -116,6 +163,35 @@ public class CameraFollow : MonoBehaviour
         _camY = transform.position.y;
         _camZ = transform.position.z;
         _yzInitialized = true;
+    }
+
+    /// <summary>走进场等：固定镜头，避免与 SnapCamera 抢 X</summary>
+    public void PauseFollowX()
+    {
+        _followXEnabled = false;
+        _velocityX = 0f;
+    }
+
+    /// <summary>过场结束：对齐当前目标并恢复跟随</summary>
+    public void ResumeFollowX(Transform t = null)
+    {
+        if (t != null) target = t;
+
+        if (!_yzInitialized)
+        {
+            _camY = transform.position.y;
+            _camZ = transform.position.z;
+            _yzInitialized = true;
+        }
+
+        _velocityX = 0f;
+        _followXEnabled = true;
+
+        if (target != null)
+        {
+            float startX = Mathf.Clamp(target.position.x + offset.x, minX, maxX);
+            transform.position = new Vector3(startX, _camY, _camZ);
+        }
     }
 
     /// <summary>设置跟随目标</summary>

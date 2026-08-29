@@ -101,7 +101,18 @@ public class HeroCostumeManager : MonoBehaviour
     SpriteRenderer _secondaryWeaponSr;
     Sprite _expectedAttackSprite;
     Sprite _expectedSecondarySprite;
+    string _equippedAttackSpum;
+    string _equippedSecondarySpum;
     readonly List<SpriteRenderer> _embeddedWeaponSrs = new List<SpriteRenderer>(4);
+
+    struct WeaponSpriteBinding
+    {
+        public SpriteRenderer Renderer;
+        public Sprite Expected;
+        public string Dir;
+    }
+
+    readonly List<WeaponSpriteBinding> _weaponSpriteBindings = new List<WeaponSpriteBinding>(12);
 
     /// <summary>普攻武器应装备的槽位（由 SPUM 预制体攻击手检测）。</summary>
     public EquipSlotType AttackWeaponSlot
@@ -356,12 +367,142 @@ public class HeroCostumeManager : MonoBehaviour
         Debug.Log("[HeroCostumeManager] 换装刷新完成");
     }
 
-    /// <summary>攻击动画后 SPUM 可能短暂恢复默认武器：只比对缓存挂点，不做全量换装。</summary>
+    /// <summary>攻击动画期间 SPUM 可能改 ItemPath/贴图：只比对缓存挂点，不做全量换装。</summary>
     public void ReapplyWeaponVisuals()
     {
         if (!_rigReady) return;
-        FixWeaponRendererIfStale(_attackWeaponSr, _expectedAttackSprite, _handRig.AttackDir);
-        FixWeaponRendererIfStale(_secondaryWeaponSr, _expectedSecondarySprite, _handRig.SecondaryDir);
+        RestoreEquippedWeaponItemPaths();
+        for (int i = 0; i < _weaponSpriteBindings.Count; i++)
+        {
+            var b = _weaponSpriteBindings[i];
+            FixWeaponRendererIfStale(b.Renderer, b.Expected, b.Dir);
+        }
+    }
+
+    void RestoreEquippedWeaponItemPaths()
+    {
+        RestoreWeaponItemPathForDir(_handRig.AttackDir, _equippedAttackSpum);
+        RestoreWeaponItemPathForDir(_handRig.SecondaryDir, _equippedSecondarySpum);
+    }
+
+    void RestoreWeaponItemPathForDir(string dir, string spumName)
+    {
+        if (string.IsNullOrEmpty(spumName))
+        {
+            ClearWeaponItemPathsForDir(dir);
+            SyncImageElementWeapon(dir, null);
+            return;
+        }
+
+        if (!TryResolveSpumPath(spumName, out string path)) return;
+        SyncImageElementWeapon(dir, spumName);
+        SetPrimaryMatchingItemPath(dir, path);
+    }
+
+    void SetPrimaryMatchingItemPath(string dir, string path)
+    {
+        if (_matchingLists == null) return;
+        for (int m = 0; m < _matchingLists.Length; m++)
+        {
+            var tables = _matchingLists[m]?.matchingTables;
+            if (tables == null) continue;
+            for (int t = 0; t < tables.Count; t++)
+            {
+                var me = tables[t];
+                if (me == null || me.PartType != "Weapons" || me.Dir != dir) continue;
+                if (!HeroWeaponRig.IsPrimaryWeaponRenderer(me.renderer)) continue;
+                me.ItemPath = path;
+            }
+        }
+    }
+
+    void BuildWeaponSpriteBindings()
+    {
+        _weaponSpriteBindings.Clear();
+        AddWeaponSpriteBinding(_attackWeaponSr, _handRig.AttackDir, _expectedAttackSprite);
+        AddWeaponSpriteBinding(_secondaryWeaponSr, _handRig.SecondaryDir, _expectedSecondarySprite);
+
+        for (int i = 0; i < _embeddedWeaponSrs.Count; i++)
+        {
+            var sr = _embeddedWeaponSrs[i];
+            if (sr == null || sr.gameObject == null) continue;
+            string dir = ResolveWeaponSpumDir(sr);
+            if (string.IsNullOrEmpty(dir)) continue;
+            Sprite expected = dir == _handRig.AttackDir ? _expectedAttackSprite : _expectedSecondarySprite;
+            AddWeaponSpriteBinding(sr, dir, expected);
+        }
+
+        if (spriteList?._weaponList != null)
+        {
+            var list = spriteList._weaponList;
+            for (int i = 0; i < list.Count; i++)
+            {
+                var sr = list[i];
+                if (sr == null) continue;
+                string dir = ResolveWeaponSpumDir(sr);
+                if (string.IsNullOrEmpty(dir)) continue;
+                Sprite expected = dir == _handRig.AttackDir ? _expectedAttackSprite : _expectedSecondarySprite;
+                AddWeaponSpriteBinding(sr, dir, expected);
+            }
+        }
+
+        if (_matchingLists != null)
+        {
+            for (int m = 0; m < _matchingLists.Length; m++)
+            {
+                var tables = _matchingLists[m]?.matchingTables;
+                if (tables == null) continue;
+                for (int t = 0; t < tables.Count; t++)
+                {
+                    var me = tables[t];
+                    if (me?.renderer == null || me.PartType != "Weapons") continue;
+                    if (me.Dir != _handRig.AttackDir && me.Dir != _handRig.SecondaryDir) continue;
+                    if (!HeroWeaponRig.IsPrimaryWeaponRenderer(me.renderer)
+                        && !HeroWeaponRig.IsShieldRenderer(me.renderer))
+                        continue;
+                    Sprite expected = me.Dir == _handRig.AttackDir ? _expectedAttackSprite : _expectedSecondarySprite;
+                    AddWeaponSpriteBinding(me.renderer, me.Dir, expected);
+                }
+            }
+        }
+    }
+
+    void AddWeaponSpriteBinding(SpriteRenderer sr, string dir, Sprite expected)
+    {
+        if (sr == null) return;
+        for (int i = 0; i < _weaponSpriteBindings.Count; i++)
+        {
+            if (_weaponSpriteBindings[i].Renderer == sr)
+                return;
+        }
+        _weaponSpriteBindings.Add(new WeaponSpriteBinding
+        {
+            Renderer = sr,
+            Expected = expected,
+            Dir = dir
+        });
+    }
+
+    string ResolveWeaponSpumDir(SpriteRenderer sr)
+    {
+        if (sr == null || sr.gameObject == null) return null;
+        Transform t = sr.transform;
+        while (t != null)
+        {
+            string n = t.name;
+            if (n.IndexOf("Shield", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return _handRig.SecondaryDir;
+            if (n.IndexOf("R_Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || (n.IndexOf("Right", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    && n.IndexOf("Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0))
+                return HeroWeaponRig.DirRight;
+            if (n.IndexOf("L_Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || (n.IndexOf("Left", System.StringComparison.OrdinalIgnoreCase) >= 0
+                    && n.IndexOf("Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0))
+                return HeroWeaponRig.DirLeft;
+            t = t.parent;
+        }
+        return null;
     }
 
     void CacheWeaponRenderers()
@@ -397,10 +538,14 @@ public class HeroCostumeManager : MonoBehaviour
     static void FixWeaponRendererIfStale(SpriteRenderer sr, Sprite expected, string dir, in HeroWeaponRig.HandRig rig)
     {
         if (sr == null) return;
+        if (expected == null)
+        {
+            if (sr.sprite != null) sr.sprite = null;
+            return;
+        }
         if (sr.sprite == expected) return;
         sr.sprite = expected;
-        if (expected != null)
-            HeroWeaponRig.ApplyWeaponPresentation(sr, dir, rig);
+        HeroWeaponRig.ApplyWeaponPresentation(sr, dir, rig);
     }
 
     void FixWeaponRendererIfStale(SpriteRenderer sr, Sprite expected, string dir)
@@ -465,6 +610,8 @@ public class HeroCostumeManager : MonoBehaviour
         string secondarySpum = twoHandEquipped || secondaryEquip?.template == null
             ? null
             : secondaryEquip.template.spumName;
+        _equippedAttackSpum = attackSpum;
+        _equippedSecondarySpum = secondarySpum;
 
         if (useMatching)
         {
@@ -479,6 +626,7 @@ public class HeroCostumeManager : MonoBehaviour
             ApplyWeaponSpritesToDir(_handRig.SecondaryDir, secondarySpum);
         }
         RecordExpectedWeaponSprites();
+        BuildWeaponSpriteBindings();
     }
 
     void ApplyWeaponToMatchingDir(string dir, string spumName)

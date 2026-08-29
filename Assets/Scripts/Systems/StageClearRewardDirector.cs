@@ -35,6 +35,31 @@ public class StageClearRewardDirector : MonoBehaviour
     public bool IsRunning => _running;
     public Transform ChuanSongMen => _chuansongmen;
 
+    /// <summary>教程宝箱世界 X（未放置时退回玩家前方）。</summary>
+    public float ChestWorldX
+    {
+        get
+        {
+            if (_boxRoot != null && _boxRoot.gameObject.activeInHierarchy)
+                return _boxRoot.position.x;
+            var hero = Hero.Instance;
+            return hero != null ? UnitBase.GetCombatX(hero) + 4f : 0f;
+        }
+    }
+
+    /// <summary>清场后把玩家拉回宝箱前，面向宝箱。</summary>
+    public void SnapHeroBeforeChest(float standOffset = 2.35f)
+    {
+        var hero = Hero.Instance;
+        if (hero == null || _boxRoot == null) return;
+        float boxX = _boxRoot.position.x;
+        var p = hero.transform.position;
+        p.x = boxX - standOffset;
+        GameConfig.SetWorldPosition(hero.gameObject, p);
+        hero.Face(1);
+        if (hero.rb != null) hero.rb.velocity = Vector2.zero;
+    }
+
     void Awake()
     {
         Instance = this;
@@ -175,6 +200,64 @@ public class StageClearRewardDirector : MonoBehaviour
         StopBoxEffect();
     }
 
+    /// <summary>关箱待机姿态，便于按 close 贴图底边算地面。</summary>
+    void PrepareBoxClosedPose()
+    {
+        if (_boxAnim != null)
+        {
+            _boxAnim.Rebind();
+            _boxAnim.Update(0f);
+        }
+        if (_closeSr != null)
+        {
+            _closeSr.gameObject.SetActive(true);
+            _closeSr.enabled = true;
+        }
+        if (_openSr != null)
+            _openSr.enabled = false;
+    }
+
+    SpriteRenderer GetBoxGroundSprite()
+    {
+        if (_closeSr != null && _closeSr.sprite != null) return _closeSr;
+        if (_openSr != null && _openSr.sprite != null) return _openSr;
+        return null;
+    }
+
+    /// <summary>按 close/open 精灵底边贴 GROUND_Y，避免根节点 y=GROUND_Y 导致悬空。</summary>
+    void SnapBoxRootToGround()
+    {
+        if (_boxRoot == null) return;
+        PrepareBoxClosedPose();
+        var sr = GetBoxGroundSprite();
+        if (sr == null)
+        {
+            if (_boxScenePosCached)
+            {
+                var fallback = _boxRoot.position;
+                fallback.y = _boxScenePos.y;
+                _boxRoot.position = fallback;
+            }
+            return;
+        }
+
+        float dy = UnitBase.GROUND_Y - sr.bounds.min.y;
+        if (Mathf.Abs(dy) < 0.0005f) return;
+        var p = _boxRoot.position;
+        p.y += dy;
+        _boxRoot.position = p;
+    }
+
+    void PlaceBoxAt(float worldX, float worldZ)
+    {
+        if (_boxRoot == null) return;
+        var p = _boxRoot.position;
+        p.x = worldX;
+        p.z = worldZ;
+        _boxRoot.position = p;
+        SnapBoxRootToGround();
+    }
+
     /// <summary>关箱/待机：不播烟花。</summary>
     void StopBoxEffect()
     {
@@ -270,10 +353,10 @@ public class StageClearRewardDirector : MonoBehaviour
         var hero = Hero.Instance;
         float hx = hero != null ? UnitBase.GetCombatX(hero) : 0f;
         float z = _boxRoot.position.z;
-        Vector3 boxPos = new Vector3(hx + aheadDist, UnitBase.GROUND_Y, z);
-        _boxRoot.position = boxPos;
+        float boxX = hx + aheadDist;
         _boxRoot.gameObject.SetActive(true);
         ApplyBoxVisual(ClearBoxTier.Mu);
+        PlaceBoxAt(boxX, z);
         StopBoxEffect();
         EnsureBoxController();
         if (_closeSr != null) { _closeSr.enabled = true; _closeSr.gameObject.SetActive(true); }
@@ -292,11 +375,11 @@ public class StageClearRewardDirector : MonoBehaviour
             wait += Time.unscaledDeltaTime;
             if (hero != null)
             {
-                float dist = Mathf.Abs(UnitBase.GetCombatX(hero) - boxPos.x);
+                float dist = Mathf.Abs(UnitBase.GetCombatX(hero) - boxX);
                 if (dist <= 2.6f) break;
                 if (wait > 0.8f && dist > 3f)
                 {
-                    float step = Mathf.Sign(boxPos.x - UnitBase.GetCombatX(hero))
+                    float step = Mathf.Sign(boxX - UnitBase.GetCombatX(hero))
                         * Mathf.Min(14f * Time.unscaledDeltaTime, dist - 2.2f);
                     if (Mathf.Abs(step) > 0.001f)
                     {
@@ -436,10 +519,10 @@ public class StageClearRewardDirector : MonoBehaviour
         // —— 宝箱：用场景脚底高度，不再额外抬高 ——
         if (_boxRoot != null)
         {
-            Vector3 p = _boxScenePos;
-            p.y = UnitBase.GROUND_Y;
-            _boxRoot.position = p;
             _boxRoot.gameObject.SetActive(true);
+            var p = _boxScenePos;
+            _boxRoot.position = p;
+            SnapBoxRootToGround();
             EnsureBoxController();
             if (_boxAnim != null)
             {

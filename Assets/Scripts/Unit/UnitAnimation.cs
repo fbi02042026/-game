@@ -19,6 +19,7 @@ using UnityEngine;
 /// - Bool "isDeath"  → 死亡状态
 /// - Trigger "2_Attack"/"ATTACK" → 攻击触发
 /// </summary>
+[DefaultExecutionOrder(1000)]
 public class UnitAnimation : MonoBehaviour
 {
     private SPUM_Prefabs _spum;
@@ -57,6 +58,12 @@ public class UnitAnimation : MonoBehaviour
     public float procDeathDuration = 0.8f;
 
     private bool _procMode;
+    private bool _monsterClipMode;
+    static RuntimeAnimatorController _monsterClipController;
+    static RuntimeAnimatorController _sanitizedMonsterClipController;
+    const int MonsterSanitizeVersion = 3;
+    static int _monsterSanitizeVersionApplied;
+    Transform _monsterBody;
     private AttackVfxKit _procAttackKit = AttackVfxKit.MeleeSlash;
     private Vector3 _procBaseScale;
     private Vector3 _procBasePos;
@@ -76,6 +83,8 @@ public class UnitAnimation : MonoBehaviour
         _spum = GetComponent<SPUM_Prefabs>();
         _animator = GetComponent<Animator>();
         _costume = GetComponent<HeroCostumeManager>();
+        if (_costume == null)
+            _costume = GetComponentInChildren<HeroCostumeManager>(true);
         _sr = GetComponent<SpriteRenderer>();
         if (_sr == null)
             _sr = FindMonsterBodySprite() ?? GetComponentInChildren<SpriteRenderer>();
@@ -96,6 +105,171 @@ public class UnitAnimation : MonoBehaviour
             _procMode = true;
             CacheBaseScale();
         }
+        else if (_spum == null && _animator != null && IsMonsterClipController(_animator.runtimeAnimatorController))
+        {
+            _monsterClipMode = true;
+            _procMode = false;
+            ConfigureMonsterClipAnimator(_animator);
+        }
+    }
+
+    static bool IsMonsterClipController(RuntimeAnimatorController ctrl)
+    {
+        if (ctrl == null) return false;
+        if (ctrl.name == "Monster") return true;
+        if (ctrl is AnimatorOverrideController over)
+        {
+            var baseCtrl = over.runtimeAnimatorController;
+            return baseCtrl != null && baseCtrl.name == "Monster";
+        }
+        return false;
+    }
+
+    static RuntimeAnimatorController LoadMonsterClipController()
+    {
+        if (_monsterClipController == null)
+            _monsterClipController = Resources.Load<RuntimeAnimatorController>("Prefabs/Monster/ani/Monster");
+        return _monsterClipController;
+    }
+
+    /// <summary>拷贝 ani 片段并去掉空事件；仅钉 z=0（scale/xy 以用户录制的 scale=1 为准）。</summary>
+    static RuntimeAnimatorController LoadSanitizedMonsterClipController()
+    {
+        if (_sanitizedMonsterClipController != null && _monsterSanitizeVersionApplied == MonsterSanitizeVersion)
+            return _sanitizedMonsterClipController;
+
+        _sanitizedMonsterClipController = null;
+        var baseCtrl = LoadMonsterClipController();
+        if (baseCtrl == null) return null;
+
+        var over = new AnimatorOverrideController(baseCtrl);
+        var clips = over.animationClips;
+        for (int i = 0; i < clips.Length; i++)
+        {
+            var src = clips[i];
+            if (src == null) continue;
+            over[src.name] = SanitizeMonsterTransformClip(src);
+        }
+        _sanitizedMonsterClipController = over;
+        _monsterSanitizeVersionApplied = MonsterSanitizeVersion;
+        return _sanitizedMonsterClipController;
+    }
+
+    static AnimationClip SanitizeMonsterTransformClip(AnimationClip source)
+    {
+        if (source == null) return null;
+
+        var clip = Object.Instantiate(source);
+        clip.name = source.name;
+        float len = Mathf.Max(0.05f, clip.length);
+        const string path = "Monsters";
+        clip.SetCurve(path, typeof(Transform), "localPosition.z", AnimationCurve.Constant(0f, len, 0f));
+        StripEmptyAnimationEvents(clip);
+        return clip;
+    }
+
+    void ConfigureMonsterClipAnimator(Animator animator)
+    {
+        if (animator == null) return;
+        animator.applyRootMotion = false;
+        animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+        var ctrl = LoadSanitizedMonsterClipController();
+        if (ctrl != null)
+            animator.runtimeAnimatorController = ctrl;
+        SanitizeMonsterClipEvents(animator.runtimeAnimatorController);
+        PlayMonsterClip("idle");
+        StabilizeMonsterBodyTransform();
+    }
+
+    /// <summary>ani 片段里若留了空 AnimationEvent，Unity 会刷报错。</summary>
+    static void SanitizeMonsterClipEvents(RuntimeAnimatorController ctrl)
+    {
+        if (ctrl == null) return;
+        var clips = ctrl.animationClips;
+        if (clips == null) return;
+        for (int i = 0; i < clips.Length; i++)
+            StripEmptyAnimationEvents(clips[i]);
+    }
+
+    static void StripEmptyAnimationEvents(AnimationClip clip)
+    {
+        if (clip == null) return;
+        var evts = clip.events;
+        if (evts == null || evts.Length == 0) return;
+        int keep = 0;
+        for (int i = 0; i < evts.Length; i++)
+        {
+            if (!string.IsNullOrEmpty(evts[i].functionName))
+                keep++;
+        }
+        if (keep == evts.Length) return;
+        if (keep == 0)
+        {
+            clip.events = System.Array.Empty<AnimationEvent>();
+            return;
+        }
+        var filtered = new AnimationEvent[keep];
+        int w = 0;
+        for (int i = 0; i < evts.Length; i++)
+        {
+            if (!string.IsNullOrEmpty(evts[i].functionName))
+                filtered[w++] = evts[i];
+        }
+        clip.events = filtered;
+    }
+
+    Transform GetMonsterBodyTransform()
+    {
+        if (_monsterBody != null) return _monsterBody;
+        if (_sr != null)
+        {
+            _monsterBody = _sr.transform;
+            return _monsterBody;
+        }
+        _monsterBody = transform.Find("Monsters");
+        return _monsterBody;
+    }
+
+    /// <summary>
+    /// ani 片段已按 scale=1 录制；仅修正 Visual 内 Monsters 贴图节点 z=0。
+    /// 战斗位移在 MonsterBody 父级，互不干扰。
+    /// </summary>
+    public void StabilizeMonsterBodyTransform()
+    {
+        if (!_monsterClipMode) return;
+        Transform body = GetMonsterBodyTransform();
+        if (body == null) return;
+
+        // 只钉 z，不覆盖 Animator 驱动的 scale/xy/rotation
+        Vector3 lp = body.localPosition;
+        if (Mathf.Abs(lp.z) > 0.0001f)
+            body.localPosition = new Vector3(lp.x, lp.y, 0f);
+    }
+
+    void PlayMonsterClip(string stateName)
+    {
+        if (!_monsterClipMode || _animator == null || string.IsNullOrEmpty(stateName)) return;
+        _animator.Play(stateName, 0, 0f);
+    }
+
+    float GetMonsterClipLength(string stateName, float fallback)
+    {
+        if (_animator == null || _animator.runtimeAnimatorController == null) return fallback;
+        var clips = _animator.runtimeAnimatorController.animationClips;
+        if (clips == null) return fallback;
+        for (int i = 0; i < clips.Length; i++)
+        {
+            var c = clips[i];
+            if (c != null && c.name == stateName)
+                return Mathf.Max(0.05f, c.length);
+        }
+        return fallback;
+    }
+
+    void RestoreMonsterLocomotionClip()
+    {
+        if (!_monsterClipMode || _isDead || _attackAnimLock > 0f) return;
+        PlayMonsterClip(_isMoving ? "run" : "idle");
     }
 
     void OnEnable()
@@ -126,11 +300,19 @@ public class UnitAnimation : MonoBehaviour
     {
         // 攻击动画锁递减
         if (_attackAnimLock > 0)
+        {
+            float prev = _attackAnimLock;
             _attackAnimLock -= Time.deltaTime;
+            if (_monsterClipMode && prev > 0f && _attackAnimLock <= 0f)
+                RestoreMonsterLocomotionClip();
+        }
 
         // 程序化动画更新
         if (_procMode)
             UpdateProcedural();
+
+        if (_monsterClipMode)
+            StabilizeMonsterBodyTransform();
     }
 
     /// <summary>
@@ -261,7 +443,12 @@ public class UnitAnimation : MonoBehaviour
         // 原生Animator模式
         else if (_animator != null)
         {
-            if (stateChanged)
+            if (_monsterClipMode)
+            {
+                if (stateChanged && _attackAnimLock <= 0f)
+                    PlayMonsterClip(isMoving ? "run" : "idle");
+            }
+            else if (stateChanged)
             {
                 _animator.SetBool("1_Move", isMoving);
                 _animator.SetBool("IsMoving", isMoving);
@@ -280,22 +467,71 @@ public class UnitAnimation : MonoBehaviour
 
     void LateUpdate()
     {
+        if (_monsterClipMode)
+            StabilizeMonsterBodyTransform();
+
         // 每帧锁住移动动画速率（SPUM PlayAnimation 可能把 speed 打回 1）
         if (_isMoving && !_isDead)
             ApplyMoveAnimSpeed(true);
-    }
 
-    System.Collections.IEnumerator CoResyncWeaponDuringAttack()
-    {
-        _costume.ReapplyWeaponVisuals();
-        yield return null;
+        // 攻击全程 SPUM 会改武器贴图/ItemPath，LateUpdate 脏检查回填（比协程只补 2 帧更稳）
         if (_attackAnimLock > 0f)
-            _costume.ReapplyWeaponVisuals();
+        {
+            var costume = GetCostumeManager();
+            if (costume != null)
+                costume.ReapplyWeaponVisuals();
+        }
     }
 
-    /// <summary>强制程序化动画（怪物删掉 Animator 后必须调用，否则攻击/移动动画不播）</summary>
+    HeroCostumeManager GetCostumeManager()
+    {
+        if (_costume == null)
+            _costume = HeroCostumeManager.Instance;
+        return _costume;
+    }
+
+    void ResyncWeaponBeforeSpumAttack()
+    {
+        var costume = GetCostumeManager();
+        if (costume != null)
+            costume.ReapplyWeaponVisuals();
+    }
+
+    /// <summary>绑定 Prefabs/Monster/ani 下的 idle/run/attack/dead 片段动画。</summary>
+    public void EnableMonsterClipAnimator(SpriteRenderer bodySr = null)
+    {
+        _procMode = false;
+        _monsterClipMode = true;
+        _monsterBody = null;
+        if (bodySr != null)
+            _sr = bodySr;
+        if (_sr == null)
+            _sr = FindMonsterBodySprite() ?? GetComponentInChildren<SpriteRenderer>(true);
+
+        if (_animator == null)
+            _animator = GetComponent<Animator>();
+        if (_animator == null)
+            _animator = gameObject.AddComponent<Animator>();
+
+        _animator.enabled = true;
+        var ctrl = LoadSanitizedMonsterClipController();
+        if (ctrl != null)
+            _animator.runtimeAnimatorController = ctrl;
+
+        if (!IsMonsterClipController(_animator.runtimeAnimatorController))
+        {
+            _monsterClipMode = false;
+            ForceProceduralMode(_sr);
+            return;
+        }
+
+        ConfigureMonsterClipAnimator(_animator);
+    }
+
+    /// <summary>强制程序化动画（无 Monster 控制器时的兜底）</summary>
     public void ForceProceduralMode(SpriteRenderer bodySr = null)
     {
+        _monsterClipMode = false;
         if (_animator != null)
         {
             Destroy(_animator);
@@ -352,20 +588,29 @@ public class UnitAnimation : MonoBehaviour
         // SPUM模式
         if (_spum != null && _spum.OverrideController != null)
         {
+            ResyncWeaponBeforeSpumAttack();
             try
             {
                 _spum.PlayAnimation(PlayerState.ATTACK, ResolveSpumAttackIndex(kit));
             }
             catch { }
-            if (_costume != null)
-                StartCoroutine(CoResyncWeaponDuringAttack());
+            ResyncWeaponBeforeSpumAttack();
         }
         // 原生Animator模式
         else if (_animator != null)
         {
-            SetTriggerSafe("2_Attack");
-            SetTriggerSafe("Attack");
-            SetTriggerSafe("attack");
+            if (_monsterClipMode)
+            {
+                PlayMonsterClip("attack");
+                _attackAnimDuration = GetMonsterClipLength("attack", _baseAttackDuration);
+                _attackAnimLock = _attackAnimDuration;
+            }
+            else
+            {
+                SetTriggerSafe("2_Attack");
+                SetTriggerSafe("Attack");
+                SetTriggerSafe("attack");
+            }
         }
         // 程序化模式：Update自动处理攻击拉伸
     }
@@ -396,16 +641,25 @@ public class UnitAnimation : MonoBehaviour
 
         if (_spum != null && _spum.OverrideController != null)
         {
+            ResyncWeaponBeforeSpumAttack();
             try { _spum.PlayAnimation(PlayerState.ATTACK, ResolveSpumAttackIndex(kit)); }
             catch { }
-            if (_costume != null)
-                StartCoroutine(CoResyncWeaponDuringAttack());
+            ResyncWeaponBeforeSpumAttack();
         }
         else if (_animator != null)
         {
-            SetTriggerSafe("3_Skill");
-            SetTriggerSafe("2_Attack");
-            SetTriggerSafe("Attack");
+            if (_monsterClipMode)
+            {
+                PlayMonsterClip("attack");
+                _attackAnimDuration = GetMonsterClipLength("attack", procSkillDuration);
+                _attackAnimLock = _attackAnimDuration;
+            }
+            else
+            {
+                SetTriggerSafe("3_Skill");
+                SetTriggerSafe("2_Attack");
+                SetTriggerSafe("Attack");
+            }
         }
     }
 
@@ -485,10 +739,15 @@ public class UnitAnimation : MonoBehaviour
         // 原生Animator模式
         else if (_animator != null)
         {
-            _animator.SetBool("isDeath", true);
-            _animator.SetBool("IsDead", true);
-            SetTriggerSafe("Death");
-            SetTriggerSafe("3_Death");
+            if (_monsterClipMode)
+                PlayMonsterClip("dead");
+            else
+            {
+                _animator.SetBool("isDeath", true);
+                _animator.SetBool("IsDead", true);
+                SetTriggerSafe("Death");
+                SetTriggerSafe("3_Death");
+            }
         }
         // 程序化模式：Update自动处理倒下+淡出
     }
@@ -556,6 +815,37 @@ public class UnitAnimation : MonoBehaviour
         {
             StartCoroutine(ProcDamagedFlash());
         }
+        // SPUM/Hero：身体贴图白闪
+        else if (_spum != null)
+        {
+            StartCoroutine(SpumDamagedFlash());
+        }
+    }
+
+    System.Collections.IEnumerator SpumDamagedFlash()
+    {
+        var srs = GetComponentsInChildren<SpriteRenderer>(true);
+        if (srs == null || srs.Length == 0) yield break;
+
+        var colors = new Color[srs.Length];
+        for (int i = 0; i < srs.Length; i++)
+        {
+            if (srs[i] == null) continue;
+            colors[i] = srs[i].color;
+            var c = colors[i];
+            c.r = Mathf.Min(1f, c.r + 0.55f);
+            c.g = Mathf.Min(1f, c.g + 0.55f);
+            c.b = Mathf.Min(1f, c.b + 0.55f);
+            srs[i].color = c;
+        }
+
+        yield return new WaitForSeconds(0.1f);
+
+        for (int i = 0; i < srs.Length; i++)
+        {
+            if (srs[i] != null && !_isDead)
+                srs[i].color = colors[i];
+        }
     }
 
     System.Collections.IEnumerator ProcDamagedFlash()
@@ -595,9 +885,16 @@ public class UnitAnimation : MonoBehaviour
         }
         else if (_animator != null)
         {
-            _animator.SetBool("isDeath", false);
-            _animator.SetBool("1_Move", false);
-            _animator.Play("IDLE", 0, 0f);
+            if (_monsterClipMode)
+            {
+                _animator.speed = 1f;
+                PlayMonsterClip("idle");
+            }
+            else
+            {
+                _animator.SetBool("isDeath", false);
+                _animator.SetBool("1_Move", false);
+            }
         }
     }
 
@@ -628,5 +925,5 @@ public class UnitAnimation : MonoBehaviour
 
     public bool IsDead => _isDead;
     public bool IsMoving => _isMoving;
-    public bool IsProcMode => _procMode;
+    public bool IsProcMode => _procMode || _monsterClipMode;
 }

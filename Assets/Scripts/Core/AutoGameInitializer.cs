@@ -849,6 +849,8 @@ public class AutoGameInitializer : MonoBehaviour
         AddIfMissing<GridBackpackSystem>(root);
         AddIfMissing<UIManager>(root);
         AddIfMissing<DamageTextSystem>(root);
+        AddIfMissing<BattleVFXSystem>(root);
+        AddIfMissing<CombatJuice>(root);
         AddIfMissing<MonsterSpriteLoader>(root);
         AddIfMissing<SkillSystem>(root);
         AddIfMissing<SkillRegistry>(root);

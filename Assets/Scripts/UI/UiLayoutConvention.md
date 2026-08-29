@@ -16,6 +16,7 @@
 | **`map` / `MapRoot`** | 战斗条带 | ✅ 仅横向 `ApplyStretchHorizontal` |
 | **Toggle/Slider 内 `Background`、`Checkmark`、`Handle`** | Unity 标准控件零件 | ❌ **永远 Fixed**，禁止 Stretch |
 | **按钮 Icon、Logo、立绘、装备格、波次图** | 手调美术 | ❌ 只换 Sprite/显隐，不改 rect |
+| **Resources UI 切图（`wave_next_incoming` 等）** | 原图比例 | ✅ `SetNativeSize` 终态 100%；入场 **`UiBannerPopAnim`**：300%→100% / 0.3s / 停1s / 淡出 |
 | **`TopBar` / `BottomNav`** | 顶栏/底栏 | 以预制体锚点为准，代码不批量 Stretch |
 
 ### 关键歧义
@@ -61,5 +62,6 @@
 
 - [UiLayoutStretch.cs](UiLayoutStretch.cs) — 唯一入口：`ApplyBgStretch` / `ApplyFillScreen` / `ApplyStretchHorizontal`；`IsWidgetPart` 跳过 Toggle 等控件
 - [UiPrefabRectGuard.cs](UiPrefabRectGuard.cs) — 仅挂 Fixed 节点（GuildHall/Battle Background、Toggle 框图等）
+- [UiBannerPopAnim.cs](UiBannerPopAnim.cs) — Resources Banner 标准动效：300%→100%（0.3s）→ 停 1s → 淡出；今后同类切图复用
 
 Cursor 规则：`.cursor/rules/prefab-scale-no-touch.mdc`

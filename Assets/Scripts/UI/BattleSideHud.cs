@@ -218,14 +218,14 @@ public class BattleSideHud : MonoBehaviour
 
         if (!visible) return;
 
+        int sec = Mathf.Max(0, Mathf.CeilToInt(secondsLeft));
         if (_waveTitle != null)
-            _waveTitle.text = "下一波 " + secondsLeft.ToString("0.0");
+            _waveTitle.text = "下一波 " + sec;
         else if (_waveTimer != null)
             _waveTimer.text = secondsLeft.ToString("0.0");
         if (_waveHint != null)
         {
-            int gold = Mathf.CeilToInt(Mathf.Max(0f, secondsLeft) * GameConfig.WAVE_SKIP_GOLD_PER_SEC);
-            _waveHint.text = canSkip ? $"点击加速 +{gold}金" : "即将出兵…";
+            _waveHint.text = canSkip ? "点击加速出兵" : "即将出兵…";
         }
     }
 

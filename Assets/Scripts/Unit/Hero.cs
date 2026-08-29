@@ -172,6 +172,9 @@ public class Hero : UnitBase
         var main = bag.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
         if (main?.template != null && main.weaponType != WeaponType.None)
             return main.template;
+        var off = bag.GetEquippedInLogicalSlot(EquipSlotType.OffHand);
+        if (off?.template != null && off.weaponType != WeaponType.None)
+            return off.template;
         return null;
     }
 

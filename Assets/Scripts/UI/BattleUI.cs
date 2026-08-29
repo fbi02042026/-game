@@ -232,9 +232,15 @@ public class BattleUI : MonoBehaviour
 
     static Sprite _questGoldSprite;
 
+    int _questRewardGold = 100;
+
     /// <summary>任务奖励区：金币图标 + 数量（预制体默认是宝箱图）。</summary>
-    public void RefreshQuestReward(int goldAmount = 100)
+    public void RefreshQuestReward(int goldAmount = -1)
     {
+        if (goldAmount >= 0) _questRewardGold = goldAmount;
+        else if (BattleManager.Instance != null && BattleManager.Instance.StageQuestClearGold > 0)
+            _questRewardGold = BattleManager.Instance.StageQuestClearGold;
+
         if (questRewardIcon != null)
         {
             Sprite sp = LoadQuestGoldSprite();
@@ -245,7 +251,7 @@ public class BattleUI : MonoBehaviour
             }
         }
         if (questRewardAmount != null)
-            questRewardAmount.text = $"×{goldAmount}";
+            questRewardAmount.text = $"×{_questRewardGold}";
     }
 
     static Sprite LoadQuestGoldSprite()
@@ -1042,11 +1048,11 @@ public class BattleUI : MonoBehaviour
     /// <summary>
     /// 更新任务信息
     /// </summary>
-    public void UpdateQuest(string desc, int current, int total)
+    public void UpdateQuest(string desc, int current, int total, int rewardGold = -1)
     {
         if (questDesc != null) questDesc.text = desc;
         if (questProgress != null) questProgress.text = $"({current}/{total})";
-        RefreshQuestReward();
+        RefreshQuestReward(rewardGold);
     }
 
     /// <summary>

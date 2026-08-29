@@ -31,27 +31,30 @@ public static class GameConfig
     }
 
     /// <summary>
-    /// 由攻击射程推算索敌范围（英雄/怪物/佣兵共用）。
-    /// 远程索敌≥近战；近战额外加缓冲防擦肩而过。
+    /// 战斗索敌范围（世界单位）：与攻击射程无关，略大于当前屏幕可见宽度。
     /// </summary>
-    public static float GetDetectRangeFromAttackRange(float attackRangeRaw)
+    public const float COMBAT_DETECT_SCREEN_PAD = 2f;
+    public const float COMBAT_DETECT_FALLBACK = 14f;
+
+    static float _combatDetectCached = -1f;
+    static int _combatDetectCachedFrame = -1;
+
+    public static float GetCombatDetectRange()
     {
-        float range = Mathf.Max(0.1f, NormalizeAttackRange(attackRangeRaw));
+        if (_combatDetectCachedFrame == Time.frameCount && _combatDetectCached > 0f)
+            return _combatDetectCached;
 
-        if (IsRangedAttackRange(range))
-            return range + 0.5f;
+        float range = COMBAT_DETECT_FALLBACK;
+        var cam = Camera.main;
+        if (cam != null && cam.orthographic)
+        {
+            float screenW = cam.orthographicSize * cam.aspect * 2f;
+            range = screenW + COMBAT_DETECT_SCREEN_PAD;
+        }
 
-        if (range >= RangePolearm - 0.1f)
-            return range + 1.2f;
-
-        if (range >= RangeStaff - 0.05f)
-            return range + 0.8f;
-
-        if (range >= RangeGreatsword - 0.05f)
-            return range + 1.5f;
-
-        // 单手剑等近战
-        return Mathf.Max(range + 2.2f, range * 2.5f);
+        _combatDetectCached = range;
+        _combatDetectCachedFrame = Time.frameCount;
+        return range;
     }
 
     /// <summary>
@@ -105,17 +108,16 @@ public static class GameConfig
     public const float MONSTER_SCALE_MIN = 3.75f;
     public const float MONSTER_SCALE_MAX = 4.5f;
     public const float MONSTER_CHILD_REF_SCALE = 1f;
-    /// <summary>Monstersmoban 预制体 Monsters 子节点默认 scale（归一前）</summary>
-    public const float MONSTER_PREFAB_MONSTERS_SCALE = 100f;
-    /// <summary>锚点坐标从预制体 Canvas 空间换算到世界 unit 的系数（100→1）</summary>
-    public const float MONSTER_ANCHOR_SCALE_FACTOR = MONSTER_CHILD_REF_SCALE / MONSTER_PREFAB_MONSTERS_SCALE;
+    /// <summary>Monstersmoban / ani 片段已按 scale=1 录制，不再做 Canvas→战斗缩放</summary>
+    public const float MONSTER_PREFAB_MONSTERS_SCALE = 1f;
+    public const float MONSTER_ANCHOR_SCALE_FACTOR = 1f;
     public const float ELITE_SCALE_MULTIPLIER = 1.3f;
     public const float BOSS_SCALE_MULTIPLIER = 1.6f;
     public const float ELITE_UNIT_SCALE = MONSTER_SCALE_MIN * ELITE_SCALE_MULTIPLIER;
     public const float BOSS_UNIT_SCALE = MONSTER_SCALE_MIN * BOSS_SCALE_MULTIPLIER;
     public const float MONSTER_BASE_SCALE = 4.125f;
-    /// <summary>怪物血条脚下 Y（预制体 -2.2 按锚点系数换算后的世界 unit 本地坐标）</summary>
-    public const float MONSTER_HP_BAR_FOOT_LOCAL_Y = -2.2f * MONSTER_ANCHOR_SCALE_FACTOR;
+    /// <summary>怪物血条脚下 Y（与预制体 Monstersmoban 本地坐标一致）</summary>
+    public const float MONSTER_HP_BAR_FOOT_LOCAL_Y = -2.2f;
     /// <summary>站立线 = unit 节点 Y，不再额外抬高</summary>
     public const float UNIT_STAND_Y_OFFSET = 0f;
     public const float CAMERA_ORTHO_SIZE = 5.4f;
@@ -255,8 +257,6 @@ public static class GameConfig
     public const float MONSTER_WAVE_SPACING = 0.72f;
     /// <summary>怪物远程射程倍率（相对数值表弓射程）；约 3~4 身位</summary>
     public const float MONSTER_RANGED_RANGE_MUL = 1.05f;
-    /// <summary>怪物远程额外索敌缓冲</summary>
-    public const float MONSTER_RANGED_DETECT_BONUS = 0.4f;
     /// <summary>普通（非精英/非Boss）远程小怪的技能伤害折扣：技能只是为了看得到子弹，不该秒人</summary>
     public const float MONSTER_NORMAL_SKILL_DAMAGE_MUL = 0.55f;
     /// <summary>小怪默认移速（比玩家慢，避免擦肩而过）</summary>
@@ -427,15 +427,29 @@ public static class GameConfig
     public const float VIRTUAL_WAVE_SPACING = 4.2f;
 
     /// <summary>清完一波后，下一波倒计时秒数</summary>
-    public const float WAVE_SPAWN_INTERVAL = 8f;
-    /// <summary>第一章第一关：波间隔更长，把战斗节奏拉开</summary>
-    public const float OPENING_WAVE_SPAWN_INTERVAL = 14f;
+    public const float WAVE_SPAWN_INTERVAL = 4f;
+    /// <summary>第一章第一关：波间隔（已减半）</summary>
+    public const float OPENING_WAVE_SPAWN_INTERVAL = 7f;
     /// <summary>点击加速出兵：剩余每秒兑换金币</summary>
     public const float WAVE_SKIP_GOLD_PER_SEC = 3f;
     /// <summary>连杀判定窗口（秒）</summary>
     public const float COMBO_WINDOW = 2.2f;
     /// <summary>连杀≥3 时每次额外金币</summary>
     public const int COMBO_BONUS_GOLD = 1;
+
+    // —— 战斗打击感分步开关（不满意可单独 false 回滚）——
+    public static bool COMBAT_JUICE_HIT_STOP = true;
+    public static bool COMBAT_JUICE_CAMERA_SHAKE = true;
+    public static bool COMBAT_JUICE_SFX = true;
+    public static bool COMBAT_JUICE_DAMAGE_TEXT_BOOST = true;
+    public static bool COMBAT_JUICE_KNOCKBACK = true;
+    public static bool COMBAT_JUICE_COMBO = true;
+
+    /// <summary>顿帧时长（秒，unscaled）</summary>
+    public const float HIT_STOP_NORMAL = 0.035f;
+    public const float HIT_STOP_CRIT = 0.055f;
+    public const float HIT_STOP_BOSS = 0.08f;
+    public const float HIT_STOP_COMBO_ANNOUNCE = 0.04f;
 
     /// <summary>第一章第 1 关（教学节奏：打得慢、打得少）</summary>
     public static bool IsOpeningStage()

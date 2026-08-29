@@ -126,6 +126,19 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
             PlayMagicImpact(position, target, VfxFaction.Ally);
     }
 
+    /// <summary>受击方身上播命中特效：我方挨打用 Enemy 套，敌方挨打用 Ally 套。</summary>
+    public void PlayVictimHit(Vector3 position, bool victimIsAlly, int facingDir = 1)
+    {
+        VfxFaction faction = victimIsAlly ? VfxFaction.Enemy : VfxFaction.Ally;
+        GameObject hit = LoadSharedKit(AttackVfxKit.MeleeSlash, faction, "hit");
+        if (hit == null)
+        {
+            Debug.LogWarning($"[VFX] 缺少受击特效: {faction}/MeleeSlash/hit");
+            return;
+        }
+        PlaySlash(position, facingDir, faction, hit);
+    }
+
     #endregion
 
     #region 普攻套装
@@ -327,8 +340,6 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         {
             Debug.LogWarning($"[VFX] 技能子弹缺少飞行体: {faction}/{kit}/fly，伤害直接结算");
             onImpact?.Invoke();
-            if (impact != null)
-                ApplyFactionLook(SpawnVFX(impact, toPos, defaultDuration, null), faction);
             return;
         }
 
@@ -383,17 +394,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         projectile.transform.position = end;
         Destroy(projectile);
 
-        // 命中结算放在特效之前：目标已死也要让调用方知道子弹到了
+        // 命中结算；受击特效由 TakeDamage → PlayVictimHit 统一播放
         onImpact?.Invoke();
-
-        if (impactPrefab == null) yield break;
-        // 命中点用传入的 toPos（GetHitPosition），禁止改成脚底 transform.position
-        GameObject impact = SpawnVFX(impactPrefab, toPos, defaultDuration, null);
-        if (impact == null) yield break;
-        ApplyFactionLook(impact, faction);
-        ApplyVfxFacing(impact, facingDir);
-        if (scaleMul > 1.01f)
-            impact.transform.localScale *= Mathf.Min(scaleMul, 2f);
     }
 
     /// <summary>让飞行物尖端冲向飞行方向（贴图默认朝向用 projectileAngleOffset 校正）</summary>

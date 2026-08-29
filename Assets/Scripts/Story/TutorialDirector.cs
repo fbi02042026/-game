@@ -346,14 +346,17 @@ public class TutorialDirector : Singleton<TutorialDirector>
         chestDir.CacheSceneRefs();
 
         var drop = CreateTutorialEquipDrop();
-        if (bm != null) bm.UnitsCanAct = true;
+        if (bm != null) bm.UnitsCanAct = false;
         hint.Show("前面有个宝箱，靠近看看。", null, 4f);
         yield return chestDir.CoTutorialPlaceChest(4f);
+        chestDir.SnapHeroBeforeChest();
 
         yield return TalkBlock(bm, headTalk, restoreAct: false,
             new TalkLine(Hero.Instance, "有个宝箱，真是好运！", 0.85f));
 
-        bm.SpawnTutorialFlankAmbush(6);
+        float chestX = chestDir.ChestWorldX;
+        chestDir.SnapHeroBeforeChest();
+        bm.SpawnTutorialFlankAmbush(6, chestX);
         {
             int guard = 0;
             while (bm.GetAliveMonsterCount() <= 0 && guard < 8)
@@ -362,7 +365,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 yield return null;
                 yield return null;
                 if (bm.GetAliveMonsterCount() <= 0)
-                    bm.SpawnTutorialFlankAmbush(6);
+                    bm.SpawnTutorialFlankAmbush(6, chestX);
             }
         }
         yield return new WaitForSecondsRealtime(0.35f);
@@ -372,15 +375,20 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         if (bm != null) bm.UnitsCanAct = true;
         hint.Show("左右都有怪物，靠近会自动攻击。", null, 3.5f);
-        yield return WaitFieldClear();
+        yield return WaitFieldClear(strict: true);
+
+        if (bm != null)
+        {
+            bm.UnitsCanAct = false;
+            HaltUnit(Hero.Instance);
+        }
+        chestDir.SnapHeroBeforeChest();
 
         hint.Show("清完再开宝箱。", null, 1.5f);
         yield return new WaitForSecondsRealtime(0.15f);
 
-        yield return TalkBlock(bm, headTalk,
+        yield return TalkBlock(bm, headTalk, restoreAct: false,
             new TalkLine(Hero.Instance, "打开看看里面有什么。", 0.7f));
-
-        if (bm != null) bm.UnitsCanAct = false;
         GameObject groundIcon = null;
         yield return chestDir.CoTutorialOpenChestAndDropEquip(drop, g => groundIcon = g);
 
@@ -539,9 +547,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (bm != null && bm.GetAliveMonsterCount() <= 0)
         {
             Debug.LogWarning("[Tutorial] 组队后首波未刷出，紧急补怪");
-            bm.QueueTutorialWave(4);
+            bm.SpawnTutorialFlankAmbush(4);
         }
-        yield return WaitFieldClear();
+        yield return WaitFieldClear(strict: true);
 
         yield return TalkBlock(bm, headTalk,
             new TalkLine(Hero.Instance, "这波清完了，先撤？", 1.2f),
@@ -686,20 +694,16 @@ public class TutorialDirector : Singleton<TutorialDirector>
         AdventureCodex.MarkMercSeen(mercId);
     }
 
-    /// <summary>清场后：右侧红字倒计时 → 中央预告图（只播一次）→ 立即刷怪。</summary>
+    /// <summary>清场后：预告播完再刷怪。</summary>
     static IEnumerator CoTutorialNextWave(BattleManager bm, TutorialHintUI hint, float delaySec, int count)
     {
         hint.Hide();
-        float t = Mathf.Max(0.5f, delaySec);
         var hud = BattleSideHud.Instance;
-        while (t > 0f)
-        {
-            hud?.SetWaveCountdown(true, t, false);
-            t -= Time.unscaledDeltaTime;
-            yield return null;
-        }
-        hud?.SetWaveCountdown(false, 0f, false);
+        float announceSec = BattleWaveAnnounceUI.GetPlayDuration(BattleWaveAnnounceUI.Kind.NextWave);
+        float t = announceSec;
+        hud?.SetWaveCountdown(true, t, false);
         yield return BattleWaveAnnounceUI.CoPlay(BattleWaveAnnounceUI.Kind.NextWave);
+        hud?.SetWaveCountdown(false, 0f, false);
         yield return EnsureTutorialWave(bm, count);
     }
 
@@ -754,10 +758,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
     static EquipInstance CreateTutorialEquipDrop()
     {
-        // 优先给一件有图标的武器/防具，避免进包看不见
+        // 宝箱只掉武器，避免误给防具
         string[] prefer =
         {
-            "equip_training_sword", "equip_sword_1", "equip_axesmall1", "equip_cloth_1", "equip_armor_1"
+            "equip_training_sword", "equip_sword_1", "equip_axesmall1"
         };
         for (int i = 0; i < prefer.Length; i++)
         {
@@ -774,7 +778,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
             {
                 if (eq.icon == null && tpl.icon != null) eq.icon = tpl.icon;
                 if (eq.icon == null) eq.icon = EquipIcons.Get(tpl.iconFileName);
-                // 临时中文名，命名规则后续再定
+                AlignWeaponToHeroAttackHand(eq);
                 eq.equipName = EquipNameGen.RandomWeaponName(eq.slotType);
                 return eq;
             }
@@ -789,11 +793,28 @@ public class TutorialDirector : Singleton<TutorialDirector>
             eq?.template?.ResolveIcon();
             if (eq != null && eq.icon == null && eq.template != null)
                 eq.icon = eq.template.icon;
+            if (eq != null && WeaponLoadoutRules.IsLoadoutItem(eq))
+                AlignWeaponToHeroAttackHand(eq);
             if (eq != null && (string.IsNullOrEmpty(eq.equipName) || LooksLikeEnglishFileName(eq.equipName)))
                 eq.equipName = EquipNameGen.RandomWeaponName(eq.slotType);
             return eq;
         }
         return null;
+    }
+
+    /// <summary>教程武器对齐到玩家普攻手（左手 SPUM 等）。</summary>
+    static void AlignWeaponToHeroAttackHand(EquipInstance eq)
+    {
+        if (eq == null || !WeaponLoadoutRules.IsLoadoutItem(eq)) return;
+        var cm = Hero.Instance != null ? Hero.Instance.costumeManager : HeroCostumeManager.Instance;
+        if (cm != null) cm.EnsureRigReady();
+        var rig = cm != null ? cm.HandRig : default;
+        if (!rig.IsValid) return;
+
+        eq.slotType = rig.AttackSlot;
+        eq.weaponHand = rig.AttackSlot == EquipSlotType.OffHand
+            ? WeaponHandSlot.OffHand
+            : WeaponHandSlot.MainHand;
     }
 
     static bool LooksLikeEnglishFileName(string name)
@@ -807,25 +828,29 @@ public class TutorialDirector : Singleton<TutorialDirector>
         return name.IndexOf('_') >= 0 || name.StartsWith("equip", System.StringComparison.OrdinalIgnoreCase);
     }
 
-    IEnumerator WaitFieldClear()
+    IEnumerator WaitFieldClear(bool strict = false)
     {
         var bm = BattleManager.Instance;
         float t = 0f;
-        const float timeout = 45f;
+        const float timeout = 60f;
         while (bm != null && bm.GetAliveMonsterCount() > 0 && t < timeout)
         {
             t += Time.unscaledDeltaTime;
             yield return null;
         }
-        yield return null;
-        t = 0f;
-        while (bm != null && bm.GetAliveMonsterCount() > 0 && t < 8f)
+
+        if (!strict)
         {
-            t += Time.unscaledDeltaTime;
-            yield return null;
+            t = 0f;
+            while (bm != null && bm.GetAliveMonsterCount() > 0 && t < 2f)
+            {
+                t += Time.unscaledDeltaTime;
+                yield return null;
+            }
         }
+
         if (bm != null && bm.GetAliveMonsterCount() > 0)
-            Debug.LogWarning($"[Tutorial] 清场超时仍有怪 alive={bm.GetAliveMonsterCount()}，继续流程");
+            Debug.LogWarning($"[Tutorial] 清场超时仍有怪 alive={bm.GetAliveMonsterCount()} strict={strict}，继续流程");
     }
 
     static Button ResolveAdventureButton()

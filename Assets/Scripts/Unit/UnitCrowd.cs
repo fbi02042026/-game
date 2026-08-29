@@ -13,8 +13,8 @@ public static class UnitCrowd
     const float MinSeparation = 0.72f;
     /// <summary>玩家与佣兵之间额外留出的「半个身位」（按较宽一侧半宽估算）。</summary>
     const float HeroMercHalfBodyGapMul = 0.5f;
-    const float MonsterStackRadius = 0.38f;
-    const float FootprintOverlapShrink = 0.92f;
+    /// <summary>两怪 footprint 重叠达较小者宽度的该比例才显示 ×N</summary>
+    const float StackOverlapRatio = 0.8f;
     static float _nextStackRefresh;
 
     public static float GetHalfWidth(UnitBase u)
@@ -27,7 +27,7 @@ public static class UnitCrowd
     }
 
     /// <summary>
-    /// 沿 moveDir（-1/1）前进时，前方是否已有同阵营存活单位挡住。
+    /// 沿 moveDir 检测前方同阵营单位（仅用于挤位/诊断；战斗移动不再因此停步）。
     /// </summary>
     public static bool IsBlockedByFrontAlly(UnitBase self, float moveDir)
     {
@@ -240,17 +240,27 @@ public static class UnitCrowd
         }
 
         var clusterSize = new System.Collections.Generic.Dictionary<int, int>();
+        var clusterLeader = new System.Collections.Generic.Dictionary<int, int>();
         for (int i = 0; i < n; i++)
         {
             int r = Find(i);
             clusterSize.TryGetValue(r, out int c);
             clusterSize[r] = c + 1;
+
+            if (!clusterLeader.TryGetValue(r, out int leaderIdx))
+                clusterLeader[r] = i;
+            else if (UnitBase.GetCombatX(alive[i]) < UnitBase.GetCombatX(alive[leaderIdx]))
+                clusterLeader[r] = i;
         }
 
         for (int i = 0; i < n; i++)
         {
-            int size = clusterSize[Find(i)];
-            alive[i].SetOverlapStackCount(size);
+            int r = Find(i);
+            int size = clusterSize[r];
+            if (size >= 2 && clusterLeader[r] == i)
+                alive[i].SetOverlapStackCount(size);
+            else
+                alive[i].SetOverlapStackCount(1);
         }
     }
 
@@ -261,16 +271,14 @@ public static class UnitCrowd
         float ax = UnitBase.GetCombatX(a);
         float bx = UnitBase.GetCombatX(b);
         float dx = Mathf.Abs(ax - bx);
-        if (Mathf.Abs(a.transform.position.y - b.transform.position.y) > 0.65f)
-            return false;
 
         float aHalf = GetStackOverlapHalfWidth(a);
         float bHalf = GetStackOverlapHalfWidth(b);
-        float xThreshold = (aHalf + bHalf) * FootprintOverlapShrink;
-        if (dx < xThreshold) return true;
+        float overlapLen = Mathf.Max(0f, aHalf + bHalf - dx);
+        if (overlapLen <= 0f) return false;
 
-        // 兜底：侧视叠怪主要看 X，允许完全重叠或近距堆叠
-        return dx < MonsterStackRadius * 2.2f;
+        float minWidth = Mathf.Min(aHalf + aHalf, bHalf + bHalf);
+        return overlapLen >= minWidth * StackOverlapRatio;
     }
 
     static float GetStackOverlapHalfWidth(Monster m)

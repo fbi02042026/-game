@@ -2,117 +2,185 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// 伤害飘字：用数字表现区分普通伤害 / 暴击 / 治疗（不再用暴击特效）。
-/// 颜色、字号、浮速、弹出动画均分开。
+/// 战斗飘字（世界空间 TextMesh）：
+/// · 我方受击：前缀「-」+ 白字，瞬间闪大 → 往左滑 → 停 1s → 上飘消失
+/// · 敌方受击：红字，往右滑；暴击后缀「!」、亮紫
+/// · 闪避：前缀 dodgePrefix +「闪避」
 /// </summary>
 public class DamageTextSystem : Singleton<DamageTextSystem>
 {
     public enum TextKind
     {
-        NormalDamage,
-        CritDamage,
+        OutNormal,
+        OutCrit,
+        InNormal,
+        InCrit,
         Heal,
         Dodge,
         Gold
     }
 
-    [Header("普通伤害")]
-    public Color normalColor = new Color(1f, 1f, 1f, 1f);
-    public int normalFontSize = 32;
-    public float normalScale = 1f;
-    public float normalFloatSpeed = 1.2f;
-    public float normalDuration = 0.7f;
-    public float normalPopScale = 1.15f;   // 出现瞬间略放大
+    enum MotionPhase { Pop, Slide, Hold, Rise }
 
-    [Header("暴击伤害")]
-    public Color critColor = new Color(1f, 0.35f, 0.15f, 1f); // 橙红
-    public int critFontSize = 48;
-    public float critScale = 1.55f;
-    public float critFloatSpeed = 1.85f;  // 更快冲上去
-    public float critDuration = 1.0f;
-    public float critPopScale = 1.9f;     // 更夸张弹出
-    public string critPrefix = "";       // 可改成 "暴击 " 或 "CRIT "
+    [Header("敌方普伤 — 打在敌人身上（比己方略小 10%）")]
+    public Color outNormalColor = new Color(1f, 0.22f, 0.22f, 1f);
+    public int outNormalFontSize = 36;
+    public float outNormalScale = 1.01f;
 
-    [Header("治疗")]
-    public Color healColor = new Color(0.35f, 1f, 0.45f, 1f);
+    [Header("我方普伤 — 打在我方身上")]
+    public Color inNormalColor = new Color(1f, 1f, 1f, 1f);
+    public int inNormalFontSize = 38;
+    public float inNormalScale = 1.06f;
+
+    [Header("暴击 — 亮紫（敌方暴击另 ×0.9）")]
+    public Color critColor = new Color(0.78f, 0.36f, 1f, 1f);
+    public int critFontSize = 58;
+    public float critScale = 1.3f;
+    const float EnemyTextMul = 0.9f;
+
+    [Header("前缀 / 后缀")]
+    public string incomingPrefix = "-";
+    public string critSuffix = "!";
+    public string dodgePrefix = "·";
+
+    [Header("闪避")]
+    public Color dodgeColor = new Color(0.62f, 0.72f, 0.86f, 1f);
+
+    [Header("治疗 / 金币")]
+    public Color healColor = new Color(0.35f, 1f, 0.59f, 1f);
     public int healFontSize = 34;
-    public float healScale = 1.1f;
-    public float healFloatSpeed = 0.75f;  // 更慢、更柔
-    public float healDuration = 1.1f;
-    public float healPopScale = 1.25f;
+    public float healScale = 1.05f;
+    public Color goldColor = new Color(1f, 0.85f, 0.29f, 1f);
 
-    [Header("闪避 / 金币")]
-    public Color dodgeColor = new Color(0.7f, 0.7f, 0.75f, 1f);
-    public Color goldColor = new Color(1f, 0.85f, 0.3f, 1f);
+    [Header("动画 — 闪出 / 滑出 / 停 / 上飘")]
+    public float popDuration = 0.05f;
+    public float popOvershootNormal = 1.42f;
+    public float popOvershootCrit = 1.68f;
+    public float popFlashStrength = 0.55f;
+    public float slideDuration = 0.11f;
+    public float holdDuration = 1f;
+    public float riseDuration = 0.42f;
+    public float riseSpeed = 1.65f;
+    public float slideDistanceNormal = 0.72f;
+    public float slideDistanceCrit = 1.02f;
+    public float slideDistanceDodge = 0.42f;
+
+    [Header("散开范围（多段伤害）")]
+    public float spreadRadiusX = 0.44f;
+    public float spreadRadiusY = 0.3f;
+    public float worldTextScale = 1.32f;
 
     [Header("通用")]
     public GameObject damageTextPrefab;
-    public float randomOffsetX = 0.35f;
-    public float randomOffsetY = 0.2f;
-    /// <summary>世界空间飘字基准字号缩放</summary>
-    public float worldTextScale = 1.1f;
 
-    private Queue<DamageTextInstance> _pool = new Queue<DamageTextInstance>();
-    private List<DamageTextInstance> _active = new List<DamageTextInstance>();
+    Queue<DamageTextInstance> _pool = new Queue<DamageTextInstance>();
+    List<DamageTextInstance> _active = new List<DamageTextInstance>();
+    static float _nextTextScaleMul = 1f;
 
-    private class DamageTextInstance
+    /// <summary>连杀等临时放大下一跳飘字（用后自动复位 1）。</summary>
+    public static void SetNextTextScaleMul(float mul)
+    {
+        _nextTextScaleMul = Mathf.Max(1f, mul);
+    }
+
+    class DamageTextInstance
     {
         public GameObject go;
         public TextMesh textMesh;
         public MeshRenderer meshRenderer;
-        public float timer;
-        public float duration;
-        public Vector3 velocity;
-        public float baseScale;
-        public float popScale;
-        public Color baseColor;
         public TextKind kind;
+        public MotionPhase phase;
+        public float phaseTime;
+        public float baseScale;
+        public float popFromScale;
+        public float slideDistance;
+        public float slideDir;
+        public Vector3 origin;
+        public Vector3 anchor;
+        public Color baseColor;
+        public Color flashColor;
+        public float totalDuration;
+        public float timer;
     }
 
-    public void SpawnDamageText(Vector3 pos, int damage, bool isCrit)
+    public void SpawnDamageText(Vector3 pos, int damage, bool isCrit, bool victimIsAlly)
     {
-        if (isCrit)
-        {
-            string t = string.IsNullOrEmpty(critPrefix) ? damage.ToString() : critPrefix + damage;
-            SpawnText(pos, t, TextKind.CritDamage);
-        }
-        else
-        {
-            SpawnText(pos, damage.ToString(), TextKind.NormalDamage);
-        }
+        TextKind kind = isCrit
+            ? (victimIsAlly ? TextKind.InCrit : TextKind.OutCrit)
+            : (victimIsAlly ? TextKind.InNormal : TextKind.OutNormal);
+        string text = FormatDamageText(damage, kind);
+        SpawnDirectional(pos, text, kind, victimIsAlly);
+    }
+
+    string FormatDamageText(int damage, TextKind kind)
+    {
+        string num = damage.ToString();
+        bool incoming = kind == TextKind.InNormal || kind == TextKind.InCrit;
+        bool crit = kind == TextKind.OutCrit || kind == TextKind.InCrit;
+        if (incoming && !string.IsNullOrEmpty(incomingPrefix))
+            num = incomingPrefix + num;
+        if (crit && !string.IsNullOrEmpty(critSuffix))
+            num = num + critSuffix;
+        return num;
     }
 
     public void SpawnHealText(Vector3 pos, int amount)
     {
-        SpawnText(pos, $"+{amount}", TextKind.Heal);
+        SpawnDirectional(pos, $"+{amount}", TextKind.Heal, victimIsAlly: true, forceUp: true);
     }
 
-    public void SpawnDodgeText(Vector3 pos)
+    public void SpawnDodgeText(Vector3 pos, bool victimIsAlly)
     {
-        SpawnText(pos, "闪避", TextKind.Dodge);
+        string prefix = string.IsNullOrEmpty(dodgePrefix) ? "" : dodgePrefix;
+        SpawnDirectional(pos, prefix + "闪避", TextKind.Dodge, victimIsAlly);
     }
 
     public void SpawnGoldText(Vector3 pos, int amount)
     {
-        SpawnText(pos, $"+{amount}金", TextKind.Gold);
+        SpawnDirectional(pos, $"+{amount}金", TextKind.Gold, victimIsAlly: false, forceUp: true);
     }
 
-    void SpawnText(Vector3 pos, string text, TextKind kind)
+    static bool IsCritDamage(TextKind kind) => kind == TextKind.OutCrit || kind == TextKind.InCrit;
+
+    float ResolvePopOvershootNormal() =>
+        GameConfig.COMBAT_JUICE_DAMAGE_TEXT_BOOST ? 1.55f : popOvershootNormal;
+
+    float ResolvePopOvershootCrit() =>
+        GameConfig.COMBAT_JUICE_DAMAGE_TEXT_BOOST ? 1.82f : popOvershootCrit;
+
+    float ResolveSlideDistanceNormal() =>
+        GameConfig.COMBAT_JUICE_DAMAGE_TEXT_BOOST ? 0.85f : slideDistanceNormal;
+
+    float ResolveSlideDistanceCrit() =>
+        GameConfig.COMBAT_JUICE_DAMAGE_TEXT_BOOST ? 1.15f : slideDistanceCrit;
+
+    float ResolvePopFlashStrength() =>
+        GameConfig.COMBAT_JUICE_DAMAGE_TEXT_BOOST ? 0.72f : popFlashStrength;
+
+    void SpawnDirectional(Vector3 pos, string text, TextKind kind, bool victimIsAlly, bool forceUp = false)
     {
-        GetStyle(kind, out Color color, out int fontSize, out float scale,
-            out float floatSpd, out float duration, out float pop);
+        GetStyle(kind, out Color color, out int fontSize, out float scale);
 
         DamageTextInstance inst = GetOrCreateInstance();
-        float ox = Random.Range(-randomOffsetX, randomOffsetX);
-        float oy = Random.Range(0f, randomOffsetY);
-        // 暴击左右散开更大；治疗更贴身偏上
-        if (kind == TextKind.CritDamage) ox *= 1.4f;
-        if (kind == TextKind.Heal) { ox *= 0.5f; oy += 0.25f; }
+        float ox = Random.Range(-spreadRadiusX, spreadRadiusX);
+        float oy = Random.Range(0f, spreadRadiusY);
+        if (IsCritDamage(kind))
+        {
+            ox *= 1.25f;
+            oy *= 1.15f;
+        }
+        else if (kind == TextKind.Dodge)
+        {
+            ox *= 0.55f;
+            oy *= 0.65f;
+        }
 
-        inst.go.transform.position = pos + new Vector3(ox, oy, 0f);
+        inst.origin = pos + new Vector3(ox, oy, 0f);
+        inst.anchor = inst.origin;
+        inst.go.transform.position = inst.origin;
         inst.textMesh.text = text;
-        // 数字飘字用 PixelFont；含中文的（闪避 / 金）用 fusion-pixel
-        Font font = (kind == TextKind.Dodge || kind == TextKind.Gold)
+
+        Font font = (kind == TextKind.Dodge || kind == TextKind.Gold || kind == TextKind.InNormal || kind == TextKind.InCrit)
             ? GameFonts.GetChinese()
             : GameFonts.GetNumber();
         if (font != null)
@@ -121,35 +189,35 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
             if (inst.meshRenderer != null && font.material != null)
                 inst.meshRenderer.sharedMaterial = font.material;
         }
+
         inst.textMesh.fontSize = fontSize;
         inst.textMesh.color = color;
         inst.baseColor = color;
-        inst.baseScale = scale * worldTextScale;
-        inst.popScale = pop;
-        inst.duration = duration;
-        inst.timer = duration;
+        inst.flashColor = kind == TextKind.InNormal || kind == TextKind.InCrit
+            ? Color.Lerp(color, Color.white, ResolvePopFlashStrength())
+            : Color.Lerp(color, Color.white, ResolvePopFlashStrength() * 0.85f);
+        inst.baseScale = scale * worldTextScale * _nextTextScaleMul;
+        _nextTextScaleMul = 1f;
+        float popMul = IsCritDamage(kind) ? ResolvePopOvershootCrit() : ResolvePopOvershootNormal();
+        inst.popFromScale = inst.baseScale * popMul;
         inst.kind = kind;
+        inst.phase = MotionPhase.Pop;
+        inst.phaseTime = 0f;
 
-        // 初始：弹出放大，再收回
-        inst.go.transform.localScale = Vector3.one * (scale * pop);
+        if (forceUp)
+            inst.slideDir = 0f;
+        else
+            inst.slideDir = victimIsAlly ? -1f : 1f;
 
-        // 速度：暴击冲得快且略抖；治疗稳；普伤中等
-        float vx;
-        float vy = floatSpd;
-        switch (kind)
-        {
-            case TextKind.CritDamage:
-                vx = Random.Range(-0.55f, 0.55f);
-                vy += Random.Range(0.2f, 0.5f);
-                break;
-            case TextKind.Heal:
-                vx = Random.Range(-0.12f, 0.12f);
-                break;
-            default:
-                vx = Random.Range(-0.25f, 0.25f);
-                break;
-        }
-        inst.velocity = new Vector3(vx, vy, 0f);
+        inst.slideDistance = IsCritDamage(kind) ? ResolveSlideDistanceCrit()
+            : kind == TextKind.Dodge ? slideDistanceDodge
+            : ResolveSlideDistanceNormal();
+
+        inst.totalDuration = popDuration + slideDuration + holdDuration + riseDuration;
+        inst.timer = inst.totalDuration;
+
+        inst.go.transform.localScale = Vector3.one * inst.popFromScale;
+        inst.textMesh.color = inst.flashColor;
 
         if (inst.meshRenderer != null)
         {
@@ -161,30 +229,32 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
         _active.Add(inst);
     }
 
-    void GetStyle(TextKind kind, out Color color, out int fontSize, out float scale,
-        out float floatSpd, out float duration, out float pop)
+    void GetStyle(TextKind kind, out Color color, out int fontSize, out float scale)
     {
         switch (kind)
         {
-            case TextKind.CritDamage:
+            case TextKind.OutCrit:
+                color = critColor;
+                fontSize = Mathf.RoundToInt(critFontSize * EnemyTextMul);
+                scale = critScale * EnemyTextMul;
+                break;
+            case TextKind.InCrit:
                 color = critColor; fontSize = critFontSize; scale = critScale;
-                floatSpd = critFloatSpeed; duration = critDuration; pop = critPopScale;
+                break;
+            case TextKind.InNormal:
+                color = inNormalColor; fontSize = inNormalFontSize; scale = inNormalScale;
                 break;
             case TextKind.Heal:
                 color = healColor; fontSize = healFontSize; scale = healScale;
-                floatSpd = healFloatSpeed; duration = healDuration; pop = healPopScale;
                 break;
             case TextKind.Dodge:
-                color = dodgeColor; fontSize = 28; scale = 0.9f;
-                floatSpd = 1.0f; duration = 0.65f; pop = 1.1f;
+                color = dodgeColor; fontSize = 28; scale = 0.88f;
                 break;
             case TextKind.Gold:
-                color = goldColor; fontSize = 30; scale = 0.95f;
-                floatSpd = 1.1f; duration = 0.85f; pop = 1.2f;
+                color = goldColor; fontSize = 30; scale = 0.98f;
                 break;
             default:
-                color = normalColor; fontSize = normalFontSize; scale = normalScale;
-                floatSpd = normalFloatSpeed; duration = normalDuration; pop = normalPopScale;
+                color = outNormalColor; fontSize = outNormalFontSize; scale = outNormalScale;
                 break;
         }
     }
@@ -233,36 +303,64 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
         {
             DamageTextInstance inst = _active[i];
             inst.timer -= dt;
-            float life = 1f - Mathf.Clamp01(inst.timer / Mathf.Max(0.01f, inst.duration));
+            inst.phaseTime += dt;
 
-            // 位移：暴击后期减速更明显；治疗匀速上浮
-            float speedMul = 1f;
-            if (inst.kind == TextKind.CritDamage)
-                speedMul = Mathf.Lerp(1.25f, 0.55f, life);
-            else if (inst.kind == TextKind.Heal)
-                speedMul = Mathf.Lerp(0.85f, 1.05f, life);
+            Vector3 pos = inst.anchor;
+            float alpha = 1f;
+            float scale = inst.baseScale;
 
-            inst.go.transform.position += inst.velocity * (dt * speedMul);
-
-            // 缩放动画：前 20% 从 pop 收到 base，之后保持；暴击再轻微脉动
-            float scale;
-            if (life < 0.2f)
+            switch (inst.phase)
             {
-                float t = life / 0.2f;
-                scale = Mathf.Lerp(inst.baseScale * inst.popScale, inst.baseScale, t);
+                case MotionPhase.Pop:
+                {
+                    float u = popDuration <= 0.0001f ? 1f : Mathf.Clamp01(inst.phaseTime / popDuration);
+                    float ease = 1f - (1f - u) * (1f - u);
+                    scale = Mathf.Lerp(inst.popFromScale, inst.baseScale, ease);
+                    inst.textMesh.color = Color.Lerp(inst.flashColor, inst.baseColor, ease);
+                    if (inst.phaseTime >= popDuration)
+                    {
+                        inst.phase = MotionPhase.Slide;
+                        inst.phaseTime = 0f;
+                    }
+                    break;
+                }
+                case MotionPhase.Slide:
+                {
+                    float u = slideDuration <= 0.0001f ? 1f : Mathf.Clamp01(inst.phaseTime / slideDuration);
+                    float ease = 1f - (1f - u) * (1f - u);
+                    if (inst.slideDir == 0f)
+                        pos = inst.origin + Vector3.up * (inst.slideDistance * 0.35f * ease);
+                    else
+                        pos = inst.origin + Vector3.right * (inst.slideDir * inst.slideDistance * ease);
+                    if (inst.phaseTime >= slideDuration)
+                    {
+                        inst.anchor = pos;
+                        inst.phase = MotionPhase.Hold;
+                        inst.phaseTime = 0f;
+                    }
+                    break;
+                }
+                case MotionPhase.Hold:
+                    pos = inst.anchor;
+                    if (inst.phaseTime >= holdDuration)
+                    {
+                        inst.phase = MotionPhase.Rise;
+                        inst.phaseTime = 0f;
+                    }
+                    break;
+                case MotionPhase.Rise:
+                {
+                    float u = riseDuration <= 0.0001f ? 1f : Mathf.Clamp01(inst.phaseTime / riseDuration);
+                    pos = inst.anchor + Vector3.up * (riseSpeed * inst.phaseTime);
+                    alpha = 1f - u;
+                    break;
+                }
             }
-            else
-            {
-                scale = inst.baseScale;
-                if (inst.kind == TextKind.CritDamage)
-                    scale *= 1f + 0.06f * Mathf.Sin(life * 28f);
-            }
+
+            inst.go.transform.position = pos;
             inst.go.transform.localScale = Vector3.one * scale;
 
-            // 渐隐：治疗更晚淡；暴击末段快淡
-            float fadeStart = inst.kind == TextKind.Heal ? 0.45f : (inst.kind == TextKind.CritDamage ? 0.55f : 0.5f);
-            float alpha = life < fadeStart ? 1f : 1f - (life - fadeStart) / (1f - fadeStart);
-            Color c = inst.baseColor;
+            Color c = inst.textMesh.color;
             c.a = Mathf.Clamp01(alpha) * inst.baseColor.a;
             inst.textMesh.color = c;
 

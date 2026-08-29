@@ -1,8 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 佣兵类：使用SPUM预设角色形象，作为己方战斗单位
-/// 索敌范围锁定 → 攻击范围内出手；无目标时保持在主角身后间距
+/// 佣兵：与玩家同一套战斗 AI（索敌 → 攻击/前压 → 无目标则右推）。
 /// </summary>
 public class Mercenary : UnitBase
 {
@@ -17,7 +16,6 @@ public class Mercenary : UnitBase
     public MercSkillCaster SkillCaster { get; private set; }
     public MercPassiveRunner PassiveRunner { get; private set; }
 
-    private UnitBase _lastLoggedTarget = null;
     private int _partyIndex = -1;
     /// <summary>引导：原地眩晕，不跑 AI，受击不死。</summary>
     public bool TutorialStunned { get; private set; }
@@ -25,6 +23,7 @@ public class Mercenary : UnitBase
     Transform _nameLabelRoot;
     TextMesh _nameLabel;
     MeshRenderer _nameLabelRenderer;
+    const float NameScaleMul = 0.4f;
 
     protected override void Awake()
     {
@@ -69,14 +68,14 @@ public class Mercenary : UnitBase
         PassiveRunner.Bind(this, passiveId);
     }
 
-    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false)
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true)
     {
         if (TutorialStunned)
         {
             float defense = ignoreDefense ? 0f : attr.GetAttr(AttrType.Defense);
             float finalDamage = Mathf.Max(1f, damage - defense);
             currentHp = Mathf.Max(1f, currentHp - finalDamage * 0.35f);
-            DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage * 0.35f), isCrit);
+            DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage * 0.35f), isCrit, true);
             if (unitAnim != null)
             {
                 unitAnim.PlayDamaged();
@@ -89,7 +88,7 @@ public class Mercenary : UnitBase
             damage = PassiveRunner.ModifyIncomingDamage(damage);
 
         float before = currentHp;
-        base.TakeDamage(damage, isCrit, ignoreDefense);
+        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx);
         if (PassiveRunner != null && !Mathf.Approximately(before, currentHp))
             PassiveRunner.OnHpChanged();
     }
@@ -165,7 +164,8 @@ public class Mercenary : UnitBase
         if (_nameLabelRoot == null || _nameLabel == null) return;
         float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
         _nameLabelRoot.localPosition = new Vector3(0f, 0.82f / rootAbs, 0f);
-        _nameLabel.characterSize = 0.14f / rootAbs;
+        _nameLabel.characterSize = 0.056f / rootAbs;
+        UpdateNameLabelFacing();
         if (_nameLabelRenderer != null)
             _nameLabelRenderer.sortingOrder = GameConfig.SORT_VFX + 24;
     }
@@ -179,7 +179,7 @@ public class Mercenary : UnitBase
 
         _nameLabel = _nameLabelRoot.gameObject.AddComponent<TextMesh>();
         _nameLabel.text = DisplayName ?? "";
-        _nameLabel.fontSize = 56;
+        _nameLabel.fontSize = 22;
         _nameLabel.anchor = TextAnchor.MiddleCenter;
         _nameLabel.alignment = TextAlignment.Center;
         _nameLabel.fontStyle = FontStyle.Bold;
@@ -313,33 +313,6 @@ public class Mercenary : UnitBase
         return AttackVfxKit.MeleeSlash;
     }
 
-    float GetFrontAnchorX()
-    {
-        Hero h = Hero.Instance;
-        if (h == null) return GetCombatX(this);
-        return UnitCrowd.GetMercDesiredCombatX(h, this, ResolvePartyIndex());
-    }
-
-    /// <summary>近战射程更短 + 站位：保持在玩家前方半个身位，不缩到玩家后面。</summary>
-    void EnforceFrontSlot(ref bool isMoving)
-    {
-        if (TutorialStunned) return;
-        Hero h = Hero.Instance;
-        if (h == null || h.isDead) return;
-
-        float anchorX = GetFrontAnchorX();
-        float myX = GetCombatX(this);
-        if (myX >= anchorX - 0.06f) return;
-
-        float dx = anchorX - myX;
-        float spd = attr.GetAttr(AttrType.MoveSpeed);
-        float vx = Mathf.Min(spd * 1.35f, Mathf.Max(0.5f, dx * 10f));
-        if (rb != null) rb.velocity = new Vector2(vx, rb.velocity.y);
-        facingDir = 1;
-        ApplyFacing(facingDir);
-        isMoving = true;
-    }
-
     protected override void OnDeathRelease()
     {
         HideNameLabel();
@@ -361,13 +334,17 @@ public class Mercenary : UnitBase
 
     public void SetPartyIndex(int index) => _partyIndex = index;
 
-    public override float GetDetectRange()
+    protected override void ApplyFacing(int dir)
     {
-        float baseRange = base.GetDetectRange();
-        // 佣兵缩在玩家身后时，默认索敌距离不够；场上有怪则扩大
-        if (BattleManager.Instance != null && BattleManager.Instance.GetAliveMonsterCount() > 0)
-            return Mathf.Max(baseRange, 10f);
-        return baseRange;
+        base.ApplyFacing(dir);
+        UpdateNameLabelFacing();
+    }
+
+    void UpdateNameLabelFacing()
+    {
+        if (_nameLabelRoot == null) return;
+        float parentSign = transform.localScale.x >= 0f ? 1f : -1f;
+        _nameLabelRoot.localScale = new Vector3(-parentSign * NameScaleMul, NameScaleMul, NameScaleMul);
     }
 
     protected override void AIUpdate()
@@ -375,7 +352,6 @@ public class Mercenary : UnitBase
         if (TutorialStunned)
         {
             if (rb != null) rb.velocity = Vector2.zero;
-            // 仅在仍需眩晕表现时循环；StopTutorialStunAnim 会把 timer 拉高关掉
             if (_stunAnimTimer < 9000f)
             {
                 _stunAnimTimer -= Time.deltaTime;
@@ -391,122 +367,20 @@ public class Mercenary : UnitBase
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
         {
             if (rb != null) rb.velocity = Vector2.zero;
-            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            if (BattleManager.Instance.PartyIntroWalking)
+            {
+                facingDir = 1;
+                ApplyFacing(facingDir);
+                if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+            }
+            else if (unitAnim != null)
+            {
+                unitAnim.SetMove(false, facingDir);
+            }
             return;
         }
 
-        // 索敌范围内才锁定
-        target = FindNearestEnemyInDetectRange();
-
-        if (target != _lastLoggedTarget)
-        {
-            if (target != null)
-                Debug.Log($"[Mercenary:{mercId}] 索敌锁定: {target.name} dist={Mathf.Abs(GetCombatX(this) - GetCombatX(target)):F1}");
-            _lastLoggedTarget = target;
-        }
-
-        if (target != null && target.isAlly) target = null;
-        if (target != null && BattleManager.Instance != null && BattleManager.Instance.allyUnits.Contains(target))
-            target = null;
-
-        bool isMoving = false;
-
-        if (target != null)
-        {
-            float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
-            float attackRange = attr.GetAttr(AttrType.AttackRange);
-            FaceToward(target);
-            if (distance <= attackRange)
-            {
-                if (rb != null) rb.velocity = Vector2.zero;
-                if (attackCd <= 0)
-                {
-                    Attack(target);
-                    attackCd = GetAttackCooldown();
-                }
-            }
-            else if (UnitCrowd.IsBlockedByFrontAlly(this, facingDir))
-            {
-                if (rb != null) rb.velocity = Vector2.zero;
-                isMoving = false;
-            }
-            else
-            {
-                if (rb != null)
-                    rb.velocity = new Vector2(facingDir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
-                isMoving = true;
-            }
-        }
-        else
-        {
-            bool noMonsters = BattleManager.Instance == null
-                || BattleManager.Instance.GetAliveMonsterCount() <= 0;
-            Hero h = Hero.Instance;
-            facingDir = 1;
-            ApplyFacing(facingDir);
-            if (noMonsters)
-            {
-                if (rb != null) rb.velocity = new Vector2(0f, rb.velocity.y);
-                isMoving = false;
-            }
-            else
-            {
-                // 有怪但索敌没锁到：先站到玩家前方，再前压接战
-                UnitBase foe = FindNearestEnemyInDetectRange();
-                if (foe != null)
-                {
-                    float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(foe));
-                    float attackRange = attr.GetAttr(AttrType.AttackRange);
-                    FaceToward(foe);
-                    if (distance <= attackRange)
-                    {
-                        if (rb != null) rb.velocity = Vector2.zero;
-                        if (attackCd <= 0)
-                        {
-                            Attack(foe);
-                            attackCd = GetAttackCooldown();
-                        }
-                    }
-                    else if (UnitCrowd.IsBlockedByFrontAlly(this, facingDir))
-                    {
-                        if (rb != null) rb.velocity = Vector2.zero;
-                    }
-                    else
-                    {
-                        if (rb != null)
-                            rb.velocity = new Vector2(facingDir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
-                        isMoving = true;
-                    }
-                }
-                else if (h != null && !h.isDead)
-                {
-                float desiredX = UnitCrowd.GetMercDesiredCombatX(h, this, ResolvePartyIndex());
-                float dx = desiredX - GetCombatX(this);
-                float spd = attr.GetAttr(AttrType.MoveSpeed);
-                if (Mathf.Abs(dx) > 0.08f)
-                {
-                    float vx = Mathf.Sign(dx) * Mathf.Min(spd * 1.25f, Mathf.Abs(dx) * 8f);
-                    if (rb != null) rb.velocity = new Vector2(vx, rb.velocity.y);
-                    isMoving = true;
-                }
-                else
-                {
-                    if (rb != null) rb.velocity = new Vector2(0f, rb.velocity.y);
-                    isMoving = false;
-                }
-                }
-                else if (rb != null)
-                {
-                    rb.velocity = new Vector2(0f, rb.velocity.y);
-                    isMoving = false;
-                }
-            }
-        }
-
-        EnforceFrontSlot(ref isMoving);
-
-        if (unitAnim != null)
-            unitAnim.SetMove(isMoving, facingDir);
-        // 不用 ClampToScreen，避免把佣兵挤到玩家身上
+        // 与玩家同一套：索敌 → 进射程攻击 / 否则前压；无目标则向右推进
+        base.AIUpdate();
     }
 }

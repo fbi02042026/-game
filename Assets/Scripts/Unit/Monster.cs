@@ -2,20 +2,10 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// 怪物类：使用用户制作的 Monstersmoban 预制体
-/// 预制体结构：
-///   Monstersmoban (RectTransform + Animator)
-///   ├── Monsters (SpriteRenderer, scale=100) — 怪物图片
-///   ├── HPBar (scale=15, y=-2.2) — 血条根
-///   │   ├── HPBarBG (SpriteRenderer) — 血条背景
-///   │   └── HPBarFill (SpriteRenderer) — 血条填充
-///   ├── beattack (空节点, y=6.6) — 受击点
-///   └── fire (空节点, x=-6.6, y=6.6) — 发射点
-///
-/// 缩放：根节点scale控制整体大小
-///   普通 = MONSTER_BASE_SCALE × spriteScale × 1.0
-///   精英 = MONSTER_BASE_SCALE × spriteScale × 1.5
-///   Boss  = MONSTER_BASE_SCALE × spriteScale × 2.0
+/// ????Monstersmoban ???????? + ??????????MonsterBody ??????????
+/// ????
+///   MonsterBody????Rigidbody2D??????
+///   ??? Visual / Monstersmoban?Animator?HPBar?Monsters ???beattack/fire??
 /// </summary>
 public class Monster : UnitBase
 {
@@ -24,34 +14,46 @@ public class Monster : UnitBase
     public MonsterConfig config;
     private int _chapter;
 
-    // 用户预制体中的 SpriteRenderer 血条
+    Transform _bodyRoot;
+    Transform _visualRoot;
+
+    /// <summary>???????? Body????Body ?????????/summary>
+    public Transform GetBodyTransform() => _bodyRoot != null ? _bodyRoot : transform;
+    Transform MoveRoot => GetBodyTransform();
+
+    // ????????SpriteRenderer ???
     private SpriteRenderer _hpBarFill;
     private SpriteRenderer _hpBarBg;
     private Transform _hpBarRoot;
     private Transform _stackLabelRoot;
     private TextMesh _stackLabel;
     private MeshRenderer _stackLabelRenderer;
+    private TextMesh[] _stackOutlineLabels;
+    private MeshRenderer[] _stackOutlineRenderers;
+
+    const float StackLabelCharSizeBase = 0.28f;
+    /// <summary>???????? 70%????30%???/summary>
+    const float StackLabelSizeScale = 0.3f;
+    static readonly Vector2[] StackOutlineDirs =
+    {
+        new Vector2(-1f, 0f), new Vector2(1f, 0f),
+        new Vector2(0f, -1f), new Vector2(0f, 1f)
+    };
     static int s_hpBarFrontBoost;
 
     protected override void Awake()
     {
-        // 偏移仅作兜底；怪物根节点常 ×4+，本地 0.5 会变成世界两米多，按世界高度反推本地
+        // ????????????? ?4+????0.5 ??????????????????
         float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
         hitPointOffset = new Vector3(0f, 0.55f / rootAbs, 0f);
         firePointOffset = new Vector3(-0.08f / rootAbs, 0.55f / rootAbs, 0f);
 
-        // 怪物使用程序化动画，根节点上的 Animator 没有所需参数会报错，直接移除
-        Animator animator = GetComponent<Animator>();
-        if (animator != null) Destroy(animator);
-
         base.Awake();
-        if (unitAnim != null)
-            unitAnim.ForceProceduralMode(sr);
         isAlly = false;
-        // 2D Pixel RPG Monster Pack 精灵默认朝左
+        // 2D Pixel RPG Monster Pack ??????
         spriteDefaultFacesRight = false;
 
-        // 用户预制体没有 Rigidbody2D，需要添加
+        // ????????Rigidbody2D??????
         if (rb == null)
         {
             rb = gameObject.AddComponent<Rigidbody2D>();
@@ -59,7 +61,7 @@ public class Monster : UnitBase
             rb.freezeRotation = true;
         }
 
-        // SpriteRenderer 在 "Monsters" 子节点上
+        // SpriteRenderer ??"Monsters" ????
         if (sr == null)
         {
             Transform monstersChild = transform.Find("Monsters");
@@ -67,11 +69,11 @@ public class Monster : UnitBase
                 sr = monstersChild.GetComponent<SpriteRenderer>();
         }
 
-        // 查找用户预制体中的 SpriteRenderer 血条
+        // ??????????SpriteRenderer ???
         FindHPBar();
     }
 
-    /// <summary>查找预制体中的 HPBar 节点（Init 时也会再查一次）</summary>
+    /// <summary>????????HPBar ???Init ????????</summary>
     void FindHPBar()
     {
         _hpBarRoot = transform.Find("HPBar");
@@ -108,7 +110,7 @@ public class Monster : UnitBase
         if (sr != null && sr.sprite != null)
             spriteWidth = sr.sprite.bounds.size.x;
 
-        // 血条世界宽度 ≈ 怪物体宽 85%，再换算到根节点本地 scale
+        // ????????????? 85%?????????? scale
         float monsterWorldWidth = spriteWidth * monsterRootScale;
         float barSpriteWidth = 1.01f;
         if (_hpBarFill != null && _hpBarFill.sprite != null)
@@ -130,10 +132,26 @@ public class Monster : UnitBase
         }
     }
 
-    /// <summary>受击/发射点：按精灵不透明像素中心。须在 LoadSprite 之后调用。</summary>
+    void ApplyMonsterVisualScaleRules()
+    {
+        Transform visual = _visualRoot != null ? _visualRoot : transform;
+        visual.localScale = Vector3.one;
+
+        Transform monstersChild = transform.Find("Monsters");
+        if (monstersChild != null)
+        {
+            var mp = monstersChild.localPosition;
+            mp.z = 0f;
+            monstersChild.localPosition = mp;
+            // Monsters ?? scale ? ani ????? 1
+            monstersChild.localScale = Vector3.one * GameConfig.MONSTER_CHILD_REF_SCALE;
+        }
+    }
+
+    /// <summary>??/??????????????????LoadSprite ??????/summary>
     void NormalizeMonsterAnchorNodes()
     {
-        float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
+        float rootAbs = Mathf.Max(0.01f, Mathf.Abs(MoveRoot.lossyScale.y));
         float localY = 0.55f / rootAbs;
         float localFireX = -0.12f / rootAbs;
         ApplyAnchorPosition(transform.Find("beattack"), 0f, localY);
@@ -142,7 +160,7 @@ public class Monster : UnitBase
         if (be != null)
         {
             hitPoint = be;
-            // 精灵已加载：先同步摆一次不透明中心，再协程两帧后确认
+            // ???????????????????????????
             TryPlaceHitPointByOpaqueSprite(be);
             StartCoroutine(CalcHitPointCenter(be));
         }
@@ -160,7 +178,7 @@ public class Monster : UnitBase
         yield return null;
         if (fireTransform == null) yield break;
 
-        // 与受击点同高、水平挪到躯干边缘。缩放过的预制体不能在局部空间算。
+        // ?????????????????????????????????
         if (!TryGetBodyBounds(out Bounds body))
             yield break;
 
@@ -196,7 +214,7 @@ public class Monster : UnitBase
     private Vector3 _enterTargetPos;
     private float _enterSpeed = 1.6f;
 
-    /// <summary>从屏外缓入到交战点，进场期间不攻击</summary>
+    /// <summary>??????????????????/summary>
     public void BeginMapEnter(Vector3 engagePos, float speed)
     {
         _enterTargetPos = engagePos;
@@ -209,7 +227,7 @@ public class Monster : UnitBase
 
     UnitBase _forcedTarget;
 
-    /// <summary>引导等：强制锁定某个目标（可为空清除）。</summary>
+    /// <summary>?????????????????????/summary>
     public void SetForcedTarget(UnitBase t) => _forcedTarget = t;
 
     protected override void AIUpdate()
@@ -222,7 +240,7 @@ public class Monster : UnitBase
             {
                 if (_isEnteringMap) _isEnteringMap = false;
                 target = _forcedTarget;
-                // 直接走基类战斗逻辑（追击/攻击）
+                // ?????????????????
                 RunForcedCombat();
                 return;
             }
@@ -250,10 +268,10 @@ public class Monster : UnitBase
                 return;
             }
 
-            float dx = _enterTargetPos.x - transform.position.x;
+            float dx = _enterTargetPos.x - MoveRoot.position.x;
             if (Mathf.Abs(dx) <= 0.08f)
             {
-                GameConfig.SetWorldPosition(transform, new Vector3(_enterTargetPos.x, UnitBase.GROUND_Y, transform.position.z));
+                GameConfig.SetWorldPosition(MoveRoot, new Vector3(_enterTargetPos.x, UnitBase.GROUND_Y, MoveRoot.position.z));
                 _isEnteringMap = false;
                 AdvanceTowardEnemies();
                 return;
@@ -261,22 +279,14 @@ public class Monster : UnitBase
 
             facingDir = -1;
             ApplyFacing(facingDir);
-            float moveDir = Mathf.Sign(_enterTargetPos.x - transform.position.x);
-            if (Mathf.Abs(moveDir) < 0.01f) moveDir = -1f;
-            if (UnitCrowd.IsBlockedByFrontHero(this, moveDir))
-            {
-                if (rb != null) rb.velocity = Vector2.zero;
-                if (unitAnim != null) unitAnim.SetMove(false, facingDir);
-                return;
-            }
             float step = _enterSpeed * Time.deltaTime;
-            float nx = Mathf.MoveTowards(transform.position.x, _enterTargetPos.x, step);
-            GameConfig.SetWorldPosition(transform, new Vector3(nx, UnitBase.GROUND_Y, transform.position.z));
+            float nx = Mathf.MoveTowards(MoveRoot.position.x, _enterTargetPos.x, step);
+            GameConfig.SetWorldPosition(MoveRoot, new Vector3(nx, UnitBase.GROUND_Y, MoveRoot.position.z));
             if (unitAnim != null) unitAnim.SetMove(true, facingDir);
             return;
         }
 
-        // 全图索敌；无目标时仍朝玩家方向推进（不原地待机）
+        // ????????????????????????
         target = FindNearestEnemyOnField();
         if (target != null && target.isAlly == isAlly)
             target = null;
@@ -289,7 +299,7 @@ public class Monster : UnitBase
         RunForcedCombat();
     }
 
-    /// <summary>怪物全图找最近己方目标（不限索敌圈，避免远程半路停住）。</summary>
+    /// <summary>?????????????????????????????/summary>
     UnitBase FindNearestEnemyOnField()
     {
         if (BattleManager.Instance == null) return null;
@@ -337,10 +347,6 @@ public class Monster : UnitBase
                 attackCd = GetAttackCooldown();
             }
         }
-        else if (UnitCrowd.IsBlockedByFrontHero(this, facingDir))
-        {
-            if (rb != null) rb.velocity = Vector2.zero;
-        }
         else
         {
             float spd = attr.GetAttr(AttrType.MoveSpeed);
@@ -382,88 +388,71 @@ public class Monster : UnitBase
         facingDir = (int)dir;
         ApplyFacing(facingDir);
 
-        if (UnitCrowd.IsBlockedByFrontHero(this, dir))
-        {
-            if (rb != null) rb.velocity = Vector2.zero;
-            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
-            return;
-        }
-
         float spd = attr.GetAttr(AttrType.MoveSpeed);
         if (rb != null) rb.velocity = new Vector2(dir * spd, rb.velocity.y);
         if (unitAnim != null) unitAnim.SetMove(true, facingDir);
     }
 
     /// <summary>
-    /// 初始化怪物
+    /// ?????
     /// </summary>
-    /// <param name="scaleMultiplier">缩放倍率：普通1.0 / 精英1.5 / Boss2.0</param>
-    /// <param name="spriteIndexOverride">动态精灵编号（1-12），用于渐进式解锁系统覆盖配置中的spriteIndex</param>
+    /// <param name="scaleMultiplier">????????.0 / ??1.5 / Boss2.0</param>
+    /// <param name="spriteIndexOverride">???????1-12?????????????????spriteIndex</param>
     public void Init(MonsterConfig template, int waveNum, int chapter = 1, float scaleMultiplier = 1f, int spriteIndexOverride = 0)
     {
         _chapter = chapter;
         config = template;
-        gameObject.name = template.id;
+        gameObject.name = "Visual";
 
         ResetForReuse();
+        EnsureBodyRoot();
+        MoveRoot.name = template.id;
 
-        // 处理 RectTransform 根节点（用户预制体根是 RectTransform）
-        // 关键：修改 anchor/pivot 前保存世界位置，修改后恢复，避免被重置到 (0,0)
+        // ?? RectTransform?Visual ??????
         RectTransform rootRT = GetComponent<RectTransform>();
         if (rootRT != null)
         {
-            Vector3 worldPos = transform.position;
+            Vector3 worldPos = MoveRoot.position;
             rootRT.anchorMin = new Vector2(0.5f, 0.5f);
             rootRT.anchorMax = new Vector2(0.5f, 0.5f);
             rootRT.pivot = new Vector2(0.5f, 0.5f);
-            GameConfig.SetWorldPosition(gameObject, worldPos);
+            GameConfig.SetWorldPosition(MoveRoot, worldPos);
+            transform.localPosition = Vector3.zero;
         }
 
-        // 根缩放：用怪物专用尺度（约 3.75~4.5），勿用 UNIT_SCALE=1 —— 像素怪会小到「像没刷」
+        // ?????? Body?Visual ?? 1??????????????
         bool eliteWave = scaleMultiplier >= GameConfig.ELITE_SCALE_MULTIPLIER - 0.05f
                          && scaleMultiplier < GameConfig.BOSS_SCALE_MULTIPLIER - 0.05f;
         bool bossUnit = (template != null && template.isBoss) || scaleMultiplier >= GameConfig.BOSS_SCALE_MULTIPLIER - 0.05f;
-        float rootScale = GameConfig.MONSTER_BASE_SCALE;
-        if (bossUnit) rootScale = GameConfig.MONSTER_BASE_SCALE * GameConfig.BOSS_SCALE_MULTIPLIER;
-        else if (eliteWave) rootScale = GameConfig.MONSTER_BASE_SCALE * GameConfig.ELITE_SCALE_MULTIPLIER;
-        else if (scaleMultiplier > 1.01f)
-            rootScale = GameConfig.MONSTER_BASE_SCALE * scaleMultiplier;
-        GameConfig.AttachToUnitRoot(transform);
-        transform.localScale = Vector3.one * rootScale;
-
-        // 预制体 Monsters 子节点常为 100；归一为 1，并把锚点从 Canvas 坐标换算到世界 unit
-        Transform monstersChild = transform.Find("Monsters");
-        if (monstersChild != null)
-        {
-            Vector3 monstersPos = monstersChild.localPosition;
-            monstersPos.z = 0;
-            monstersChild.localPosition = monstersPos;
-            monstersChild.localScale = Vector3.one * GameConfig.MONSTER_CHILD_REF_SCALE;
-        }
-
-        // 先换精灵，再算受击/发射点（否则两帧内还是空图，会落到被放大的本地 offset）
+        float rootScale = GameConfig.RollMonsterRootScale(eliteWave, bossUnit);
+        GameConfig.AttachToUnitRoot(MoveRoot);
+        MoveRoot.localScale = Vector3.one * rootScale;
+        ApplyMonsterVisualScaleRules();
+        // ??????????????????????????????????offset??
         int effectiveSpriteIndex = spriteIndexOverride > 0 ? spriteIndexOverride : template.spriteIndex;
         _spriteIndex = effectiveSpriteIndex;
         LoadSprite(template, chapter, effectiveSpriteIndex);
         NormalizeMonsterAnchorNodes();
 
-        // 冒险日志图鉴：首次出场即记遭遇（黑影→亮图）
+        // ??????????????????????
         if (template != null)
         {
             if (!string.IsNullOrEmpty(template.id))
                 AdventureCodex.MarkMonsterSeen(template.id);
-            // 渐进精灵编号 → forest_4xx 形式
+            // ?????? ??forest_4xx ??
             int mc = GameConfig.GetMonsterChapter(chapter);
             string guess = AdventureCodex.GuessAssetIdFromSprite(mc, effectiveSpriteIndex);
             if (!string.IsNullOrEmpty(guess))
                 AdventureCodex.MarkMonsterSeen(guess);
         }
 
-        // 精灵加载后强制程序化动画 + 重缓存缩放（绑定 Monsters 本体，勿绑血条）
+        // ????????Monsters/ani ?????attack/run/idle/dead??
         if (unitAnim != null)
         {
-            unitAnim.ForceProceduralMode(sr);
+            unitAnim.EnableMonsterClipAnimator(sr);
             unitAnim.RecacheBaseScale();
+            ApplyMonsterVisualScaleRules();
+            unitAnim.StabilizeMonsterBodyTransform();
         }
 
         int monsterChapter = GameConfig.GetMonsterChapter(chapter);
@@ -472,7 +461,7 @@ public class Monster : UnitBase
         _swingStyle = _attackStyle;
         _bossSwingIndex = 0;
 
-        // 属性：优先数值表基准，再乘章节/公会/难度系数
+        // ??????????????????/????
         attr.ResetToBase();
         int guildLv = SaveSystem.Instance?.Data?.guildLevel ?? 0;
         float chapterScale = 1f + GameConfig.CHAPTER_SCALE_PER * Mathf.Max(0, chapter - 1);
@@ -506,7 +495,7 @@ public class Monster : UnitBase
         float ttkMul = (bossUnit || eliteWave)
             ? WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit)
             : (1f + GameConfig.CHAPTER_SCALE_PER * Mathf.Max(0, chapter - 1));
-        // 非精英仍用原 chapterScale；精英/Boss 用 TTK 表（已含章节）
+        // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul);
         attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER);
@@ -518,7 +507,7 @@ public class Monster : UnitBase
             atkSpeedMul *= template.baseAttackSpeed;
         attr.SetAttr(AttrType.AttackSpeed,
             (1f / Mathf.Max(0.2f, atkInterval)) * atkSpeedMul);
-        // 远程怪攻击间隔再缩 40%（攻速 ÷0.6）
+        // ??????????40%?????0.6??
         if (!_isBossUnit && MonsterAttackStyleTable.IsRanged(_attackStyle))
         {
             attr.SetAttr(AttrType.AttackSpeed,
@@ -527,7 +516,7 @@ public class Monster : UnitBase
         float moveSpd = template != null && template.baseMoveSpeed > 0.01f
             ? Mathf.Min(template.baseMoveSpeed, GameConfig.MONSTER_DEFAULT_MOVE_SPEED * 1.5f)
             : GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
-        // Boss：近远都能打，用远程射程贴近；小怪严格按表
+        // Boss??????????????????????
         float atkRange;
         if (_isBossUnit)
         {
@@ -560,18 +549,18 @@ public class Monster : UnitBase
         currentHp = attr.GetAttr(AttrType.MaxHp);
         if (currentHp <= 0f)
             currentHp = Mathf.Max(1f, GameConfig.MONSTER_NORMAL_HP);
-        isAlly = false; // 池复用时防止脏状态
+        isAlly = false; // ??????????
         float goldMul = BattleManager.Instance != null ? BattleManager.Instance.DifficultyGoldMul : 1f;
         if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
             goldMul *= 2f;
         goldDrop = Mathf.FloorToInt((template != null ? template.baseGoldDrop : 5) * (1 + waveNum * 0.1f) * scale * goldMul);
         expDrop = Mathf.FloorToInt((template != null ? template.expDrop : 3) * (1 + waveNum * 0.1f) * scale);
 
-        // 怪物初始面向左（朝玩家方向）
+        // ??????????????
         facingDir = -1;
         ApplyFacing(-1);
 
-        // 重置血条
+        // ?????
         FindHPBar();
         NormalizeHPBarLayout(rootScale);
         if (_hpBarRoot != null)
@@ -579,18 +568,18 @@ public class Monster : UnitBase
             _hpBarRoot.gameObject.SetActive(true);
         }
 
-        // 设置排序层
+        // ??????
         ApplySortingLayer();
         RemovePhysicsCollider();
 
-        // 设置 HPBar 排序层（在怪物之上）
+        // ?? HPBar ???????????
         SetupHPBarSorting();
 
         _eliteWave = eliteWave;
         _skillId = SkillRegistry.Instance != null
             ? SkillRegistry.Instance.GetMonsterSkillId(template, eliteWave, _isBossUnit, _attackStyle)
             : null;
-        // 远程小怪也拿到了技能 id，就让它能放：远程怪必须看得到技能子弹
+        // ???????????id????????????????????
         _canUseActiveSkill = !string.IsNullOrEmpty(_skillId);
         bool strong = eliteWave || _isBossUnit;
         bool rangedSkill = _canUseActiveSkill && MonsterAttackStyleTable.IsRanged(_attackStyle);
@@ -602,12 +591,12 @@ public class Monster : UnitBase
         Debug.Log($"[Monster:{template.id}] Init | sprite={_spriteIndex} style={_attackStyle} boss={_isBossUnit} range={atkRange:F1} skill={_skillId}");
     }
 
-    /// <summary>获取不透明像素 footprint（世界坐标 AABB），用于判定是否真重叠。</summary>
+    /// <summary>??????? footprint??????AABB?????????????/summary>
     public void GetFootprintBounds(out float minX, out float maxX, out float minY, out float maxY)
     {
         float halfW = GetOpaqueFootprintHalfWidth();
         float cx = UnitBase.GetCombatX(this);
-        float footY = transform.position.y;
+        float footY = MoveRoot.position.y;
         float height = halfW * 2.2f;
         if (sr != null && sr.sprite != null
             && MonsterSpriteOpaqueTable.TryGet(sr.sprite.name, out MonsterSpriteOpaqueTable.Entry e))
@@ -620,7 +609,7 @@ public class Monster : UnitBase
         maxY = footY + height;
     }
 
-    /// <summary>不透明像素包围盒估算战斗占位半宽（非整图 bounds）。</summary>
+    /// <summary>?????????????????????bounds???/summary>
     public float GetOpaqueFootprintHalfWidth()
     {
         if (sr == null || sr.sprite == null) return UnitCrowd.MonsterFallbackHalfWidth;
@@ -648,41 +637,133 @@ public class Monster : UnitBase
         }
 
         EnsureStackLabel();
+        ApplyStackLabelFont();
         RefreshStackLabelLayout();
         _stackLabelRoot.gameObject.SetActive(true);
-        _stackLabel.text = "x" + count;
+        string label = "x" + count;
+        _stackLabel.text = label;
+        SyncStackOutlineText(label);
+    }
+
+    void SyncStackOutlineText(string label)
+    {
+        if (_stackOutlineLabels == null) return;
+        for (int i = 0; i < _stackOutlineLabels.Length; i++)
+        {
+            if (_stackOutlineLabels[i] != null)
+                _stackOutlineLabels[i].text = label;
+        }
+    }
+
+    void ApplyStackLabelFont()
+    {
+        if (_stackLabel == null) return;
+        var font = GameFonts.GetNumber();
+        if (font == null) return;
+        font.RequestCharactersInTexture("x0123456789", _stackLabel.fontSize, FontStyle.Normal);
+
+        _stackLabel.font = font;
+        if (_stackLabelRenderer != null && font.material != null)
+            _stackLabelRenderer.sharedMaterial = font.material;
+
+        if (_stackOutlineLabels == null) return;
+        for (int i = 0; i < _stackOutlineLabels.Length; i++)
+        {
+            var o = _stackOutlineLabels[i];
+            if (o == null) continue;
+            o.font = font;
+            if (_stackOutlineRenderers != null && i < _stackOutlineRenderers.Length
+                && _stackOutlineRenderers[i] != null && font.material != null)
+                _stackOutlineRenderers[i].sharedMaterial = font.material;
+        }
     }
 
     void RefreshStackLabelLayout()
     {
         if (_stackLabelRoot == null || _stackLabel == null) return;
+
+        float labelY = 0.85f;
+        if (sr != null && sr.sprite != null)
+        {
+            var topLocal = transform.InverseTransformPoint(sr.bounds.max);
+            labelY = Mathf.Max(labelY, topLocal.y + 0.12f);
+        }
+        else if (_hpBarRoot != null)
+        {
+            labelY = _hpBarRoot.localPosition.y + 0.35f;
+        }
+
         float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
-        _stackLabelRoot.localPosition = new Vector3(0f, 0.72f / rootAbs, 0f);
-        _stackLabel.characterSize = 0.12f / rootAbs;
+        _stackLabelRoot.localPosition = new Vector3(0f, labelY / rootAbs, 0f);
+        float charSize = StackLabelCharSizeBase * StackLabelSizeScale / rootAbs;
+        _stackLabel.characterSize = charSize;
+
         if (_stackLabelRenderer != null)
         {
             _stackLabelRenderer.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _stackLabelRenderer.sortingOrder = GameConfig.SORT_VFX + 24;
+            _stackLabelRenderer.sortingOrder = GameConfig.SORT_VFX + 30;
+        }
+
+        float outlineStep = charSize * 0.2f;
+        if (_stackOutlineLabels == null) return;
+        for (int i = 0; i < _stackOutlineLabels.Length; i++)
+        {
+            var o = _stackOutlineLabels[i];
+            if (o == null) continue;
+            o.characterSize = charSize;
+            var dir = StackOutlineDirs[i];
+            o.transform.localPosition = new Vector3(dir.x * outlineStep, dir.y * outlineStep, 0.002f);
+            if (_stackOutlineRenderers != null && i < _stackOutlineRenderers.Length && _stackOutlineRenderers[i] != null)
+            {
+                _stackOutlineRenderers[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+                _stackOutlineRenderers[i].sortingOrder = GameConfig.SORT_VFX + 29;
+            }
         }
     }
 
     void EnsureStackLabel()
     {
-        if (_stackLabel != null) return;
+        if (_stackLabel != null && _stackOutlineLabels != null && _stackOutlineLabels.Length > 0)
+            return;
+        if (_stackLabelRoot != null)
+            Destroy(_stackLabelRoot.gameObject);
+        _stackLabel = null;
+        _stackLabelRenderer = null;
+        _stackOutlineLabels = null;
+        _stackOutlineRenderers = null;
 
         _stackLabelRoot = new GameObject("StackCount").transform;
         _stackLabelRoot.SetParent(transform, false);
 
-        _stackLabel = _stackLabelRoot.gameObject.AddComponent<TextMesh>();
+        _stackOutlineLabels = new TextMesh[StackOutlineDirs.Length];
+        _stackOutlineRenderers = new MeshRenderer[StackOutlineDirs.Length];
+        for (int i = 0; i < StackOutlineDirs.Length; i++)
+        {
+            var oGo = new GameObject("Outline" + i, typeof(TextMesh));
+            oGo.transform.SetParent(_stackLabelRoot, false);
+            var o = oGo.GetComponent<TextMesh>();
+            o.text = "x2";
+            o.fontSize = 64;
+            o.anchor = TextAnchor.MiddleCenter;
+            o.alignment = TextAlignment.Center;
+            o.color = new Color(0.08f, 0.05f, 0.02f, 0.95f);
+            o.richText = false;
+            _stackOutlineLabels[i] = o;
+            _stackOutlineRenderers[i] = oGo.GetComponent<MeshRenderer>();
+        }
+
+        var fillGo = new GameObject("Fill", typeof(TextMesh));
+        fillGo.transform.SetParent(_stackLabelRoot, false);
+        _stackLabel = fillGo.GetComponent<TextMesh>();
         _stackLabel.text = "x2";
-        _stackLabel.fontSize = 52;
+        _stackLabel.fontSize = 64;
         _stackLabel.anchor = TextAnchor.MiddleCenter;
         _stackLabel.alignment = TextAlignment.Center;
         _stackLabel.color = new Color(1f, 0.92f, 0.35f, 1f);
-        _stackLabel.font = GameFonts.GetNumber();
         _stackLabel.richText = false;
 
-        _stackLabelRenderer = _stackLabelRoot.GetComponent<MeshRenderer>();
+        _stackLabelRenderer = fillGo.GetComponent<MeshRenderer>();
+        ApplyStackLabelFont();
         RefreshStackLabelLayout();
     }
 
@@ -692,8 +773,8 @@ public class Monster : UnitBase
     }
 
     /// <summary>
-    /// 设置 HPBar 各 SpriteRenderer 的排序层
-    /// 尊重预制体原有层级，只有未设置（Default）时才使用 Effects 默认值
+    /// ?? HPBar ??SpriteRenderer ????
+    /// ????????????????Default??????Effects ????
     /// </summary>
     void SetupHPBarSorting()
     {
@@ -716,7 +797,7 @@ public class Monster : UnitBase
             _hpBarFill.sortingOrder = GameConfig.SORT_VFX - 1;
         }
 
-        // 怪物本体压在血条下方
+        // ???????????
         if (sr != null)
         {
             sr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
@@ -727,14 +808,14 @@ public class Monster : UnitBase
     public bool IsBossUnit => _isBossUnit;
     public bool IsEliteWave => _eliteWave;
 
-    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false)
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true)
     {
-        base.TakeDamage(damage, isCrit, ignoreDefense);
+        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx);
         if (!isDead)
             BringHpBarFront();
     }
 
-    /// <summary>受击时把血条抬到同层最前，重叠时能看清掉血单位。</summary>
+    /// <summary>?????????????????????????/summary>
     void BringHpBarFront()
     {
         s_hpBarFrontBoost = (s_hpBarFrontBoost + 2) % 40;
@@ -753,9 +834,9 @@ public class Monster : UnitBase
     }
 
     /// <summary>
-    /// 加载怪物精灵（替换 Monsters 子节点上的 sprite，不改变子节点 scale）
+    /// ??????????Monsters ??????sprite????????scale??
     /// </summary>
-    /// <param name="effectiveSpriteIndex">有效精灵编号（1-12），0表示随机</param>
+    /// <param name="effectiveSpriteIndex">????????-12??0????</param>
     private void LoadSprite(MonsterConfig template, int chapter, int effectiveSpriteIndex = 0)
     {
         if (sr == null)
@@ -768,7 +849,7 @@ public class Monster : UnitBase
         }
         if (sr == null)
         {
-            Debug.LogError($"[Monster] LoadSprite 失败：无 SpriteRenderer id={template?.id}");
+            Debug.LogError($"[Monster] LoadSprite ???? SpriteRenderer id={template?.id}");
             return;
         }
 
@@ -784,18 +865,24 @@ public class Monster : UnitBase
                 monsterSprite = loader.GetRandomMonsterSprite(monsterChapter);
         }
 
-        // 注册表没赋值时，直接从 Resources 路径加载 PNG
+        // ??????????? Resources ???? PNG
         if (monsterSprite == null)
             monsterSprite = LoadSpriteFromResources(monsterChapter, effectiveSpriteIndex);
 
         if (monsterSprite != null)
+        {
             sr.sprite = monsterSprite;
+            sr.enabled = true;
+            var c = sr.color;
+            c.a = 1f;
+            sr.color = c;
+        }
         else
-            Debug.LogWarning($"[Monster] 未找到怪物精灵: 章节{monsterChapter}, 索引{effectiveSpriteIndex}，使用预制体默认精灵");
+            Debug.LogWarning($"[Monster] ???????: ??{monsterChapter}, ??{effectiveSpriteIndex}??????????");
     }
 
     /// <summary>
-    /// 直接从 Resources 路径加载怪物精灵 PNG（注册表未赋值时的兜底）
+    /// ????Resources ???????? PNG????????????
     /// </summary>
     Sprite LoadSpriteFromResources(int monsterChapter, int spriteIndex)
     {
@@ -833,7 +920,7 @@ public class Monster : UnitBase
         }
 
         if (sprite != null)
-            Debug.Log($"[Monster] 从Resources加载精灵: {path}");
+            Debug.Log($"[Monster] ?Resources????: {path}");
         return sprite;
     }
 
@@ -869,7 +956,7 @@ public class Monster : UnitBase
         if (!_isBossUnit)
             return _attackStyle;
 
-        // Boss：近身刀光，远距法球；并轮换保证两种都会用到
+        // Boss??????????????????????
         float dist = target != null
             ? Mathf.Abs(transform.position.x - target.transform.position.x)
             : 99f;
@@ -890,12 +977,12 @@ public class Monster : UnitBase
         var skill = SkillRegistry.Instance?.GetActiveSkill(_skillId);
         float mult = skill != null ? skill.damageMultiplier : 2.2f;
         float extra = skill != null ? skill.baseDamage : 0f;
-        // 普通远程小怪也能放技能，但伤害要打折，不然开局会被点爆
+        // ???????????????????????????
         float tier = (_isBossUnit || _eliteWave) ? 1f : GameConfig.MONSTER_NORMAL_SKILL_DAMAGE_MUL;
         float damage = (attr.GetAttr(AttrType.Attack) * mult + extra) * tier;
         float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
 
-        // 小怪技能弹道严格按攻击方式表；Boss 才看技能表 attackKit
+        // ???????????????Boss ????? attackKit
         AttackVfxKit kit = MonsterAttackStyleTable.GetVfxKit(_isBossUnit ? _swingStyle : _attackStyle);
 
         if (_isBossUnit)
@@ -908,7 +995,7 @@ public class Monster : UnitBase
         Vector3 firePos = GetFirePosition();
         Vector3 hitPos = primaryTarget != null ? primaryTarget.GetHitPosition() : firePos;
 
-        // 技能动作：比普攻夸张一截
+        // ?????????????
         if (unitAnim != null)
             unitAnim.PlaySkillCast(kit, (_isBossUnit || _eliteWave) ? 1.15f : 1f);
 
@@ -928,22 +1015,19 @@ public class Monster : UnitBase
             return;
         }
 
-        // 近战技：原地砸，伤害瞬发
         SkillRegistry.Instance?.PlaySkillVfx(_skillId, hitPos, false, facingDir, transform);
-        BattleVFXSystem.Instance?.PlayAttackKit(kit, VfxFaction.Enemy, firePos, hitPos, facingDir,
-            primaryTarget != null ? primaryTarget.transform : null);
         ApplySkillDamage(damage, radius, primaryTarget);
     }
 
-    /// <summary>技能子弹放大一点，看得出是「技能」不是普攻</summary>
+    /// <summary>??????????????????????/summary>
     const float SkillProjectileScale = 1.6f;
-    /// <summary>技能子弹比普攻箭慢一点，飞行过程看得清</summary>
+    /// <summary>????????????????????/summary>
     const float SkillProjectileSpeedMul = 0.7f;
 
     /// <summary>
-    /// 技能结算：范围内的我方单位一起吃伤害。
-    /// 远程技延迟到子弹命中才调用，这期间自己可能已经死了或者被对象池回收再拿去当别的怪，
-    /// 所以必须重新确认还活着、还在场上，否则会出现「死怪继续打人」。
+    /// ????????????????????
+    /// ?????????????????????????????????????????
+    /// ????????????????????????????????
     /// </summary>
     void ApplySkillDamage(float damage, float radius, UnitBase primaryTarget)
     {
@@ -968,15 +1052,15 @@ public class Monster : UnitBase
     }
 
     /// <summary>
-    /// 重写朝向翻转：怪物只翻转SpriteRenderer.flipX，不翻转整个transform
-    /// 因为 Monstersmoban 预制体根节点下有 HPBar/beattack/fire 等子节点，
-    /// 翻转整个transform会导致血条和受击点位置错乱
+    /// ????????????SpriteRenderer.flipX??????transform
+    /// ?? Monstersmoban ???????? HPBar/beattack/fire ??????
+    /// ????transform??????????????
     /// 
-    /// 精灵默认朝左（spriteDefaultFacesRight=false）：
-    ///   面朝左(dir=-1) → 不翻转(flipX=false) → 显示原始左朝向 ✓
-    ///   面朝右(dir=+1) → 翻转(flipX=true)   → 显示右朝向 ✓
+    /// ???????spriteDefaultFacesRight=false??
+    ///   ????dir=-1) ??????flipX=false) ????????????
+    ///   ????dir=+1) ????(flipX=true)   ??????????
     /// </summary>
-    private int _lastAppliedDir = 0; // 记录上次朝向，避免每帧重复日志
+    private int _lastAppliedDir = 0; // ????????????????
 
     protected override void ApplyFacing(int dir)
     {
@@ -988,34 +1072,25 @@ public class Monster : UnitBase
             if (dir != _lastAppliedDir)
             {
                 _lastAppliedDir = dir;
-                // 朝向日志关闭：高频会卡
+                // ????????????
             }
         }
     }
 
-    /// <summary>按对照表；Boss 本挥击可能近战或远程</summary>
-    /// <summary>普攻弹道以攻击方式表为准：Bow=箭矢，Ranged=法球。</summary>
+    /// <summary>?????Boss ??????????</summary>
+    /// <summary>?????????????Bow=???Ranged=????/summary>
     protected override AttackVfxKit GetAttackVfxKit()
     {
         return MonsterAttackStyleTable.GetVfxKit(_swingStyle);
     }
 
-    /// <summary>远程怪多留一点索敌距离，避免贴脸才开火</summary>
-    public override float GetDetectRange()
-    {
-        float baseRange = base.GetDetectRange();
-        if (MonsterAttackStyleTable.IsRanged(_swingStyle) || MonsterAttackStyleTable.IsRanged(_attackStyle))
-            return baseRange + GameConfig.MONSTER_RANGED_DETECT_BONUS;
-        return baseRange;
-    }
-
-    /// <summary>发射点随朝向镜像；高度跟躯干受击点，不再往脚下压。</summary>
+    /// <summary>???????</summary>
     public override Vector3 GetFirePosition()
     {
         Transform fire = firePoint != null ? firePoint : transform.Find("fire");
         if (fire != null)
         {
-            // 全程世界坐标：预制体根缩放下，局部偏移会把发射点甩到脚底或体外
+            // ????????????????????????????????
             Vector3 fw = fire.position;
             float centerX = transform.position.x;
             float absX = Mathf.Abs(fw.x - centerX);
@@ -1028,7 +1103,7 @@ public class Monster : UnitBase
         return new Vector3(transform.position.x + off.x * facingDir, fy, transform.position.z);
     }
 
-    /// <summary>更新血条填充比例</summary>
+    /// <summary>?????????/summary>
     protected void LateUpdate()
     {
         if (_hpBarFill != null && _hpBarRoot != null && _hpBarRoot.gameObject.activeSelf)
@@ -1039,7 +1114,7 @@ public class Monster : UnitBase
             var fillT = _hpBarFill.transform;
             float w = Mathf.Max(0.01f, _hpBarFillBaseWidth);
             fillT.localScale = new Vector3(clamped, 1f, 1f);
-            // 左对齐缩放，避免从中心缩短
+            // ??????????????
             fillT.localPosition = new Vector3(-w * 0.5f * (1f - clamped), 0f, 0f);
         }
     }
@@ -1055,11 +1130,73 @@ public class Monster : UnitBase
 
     public override void ResetForReuse()
     {
+        CollapseBodyRootForPool();
         base.ResetForReuse();
         _lastAppliedDir = 0;
         _isEnteringMap = false;
         _bossSwingIndex = 0;
         _forcedTarget = null;
         HideStackLabel();
+    }
+
+    /// <summary>??MonsterBody ??????RB ??Body???? Visual ?????????/summary>
+    void EnsureBodyRoot()
+    {
+        if (_bodyRoot != null) return;
+
+        var parentBody = transform.parent != null ? transform.parent.GetComponent<MonsterBodyRoot>() : null;
+        if (parentBody != null)
+        {
+            _bodyRoot = parentBody.transform;
+            _visualRoot = transform;
+            rb = _bodyRoot.GetComponent<Rigidbody2D>();
+            if (rb == null)
+            {
+                rb = _bodyRoot.gameObject.AddComponent<Rigidbody2D>();
+                rb.gravityScale = 0;
+                rb.freezeRotation = true;
+            }
+            return;
+        }
+
+        _visualRoot = transform;
+        Transform sceneParent = transform.parent;
+        Vector3 worldPos = transform.position;
+
+        var bodyGo = new GameObject("MonsterBody");
+        bodyGo.transform.SetParent(sceneParent, false);
+        bodyGo.transform.position = worldPos;
+        bodyGo.transform.rotation = transform.rotation;
+        bodyGo.transform.localScale = Vector3.one;
+        bodyGo.AddComponent<MonsterBodyRoot>();
+
+        var bodyRb = bodyGo.AddComponent<Rigidbody2D>();
+        bodyRb.gravityScale = 0;
+        bodyRb.freezeRotation = true;
+        if (rb != null)
+        {
+            bodyRb.velocity = rb.velocity;
+            Destroy(rb);
+        }
+        rb = bodyRb;
+
+        transform.SetParent(bodyGo.transform, true);
+        transform.localPosition = Vector3.zero;
+        transform.localRotation = Quaternion.identity;
+        transform.localScale = Vector3.one;
+        ApplyMonsterVisualScaleRules();
+
+        _bodyRoot = bodyGo.transform;
+    }
+
+    void CollapseBodyRootForPool()
+    {
+        if (_bodyRoot == null) return;
+        Transform poolParent = PoolManager.Instance != null ? PoolManager.Instance.transform : null;
+        transform.SetParent(poolParent, false);
+        if (_bodyRoot != null)
+            Destroy(_bodyRoot.gameObject);
+        _bodyRoot = null;
+        _visualRoot = null;
     }
 }

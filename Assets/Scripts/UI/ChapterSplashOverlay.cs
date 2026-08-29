@@ -12,13 +12,15 @@ public class ChapterSplashOverlay : MonoBehaviour
     public const float HoldSeconds = 2.5f;
     public const float FadeSeconds = 1.5f;
     /// <summary>新手教学关：标题多留一会儿让玩家读完。</summary>
-    public const float TutorialHoldSeconds = 3.6f;
-    public const float TutorialFadeSeconds = 1.6f;
+    public const float TutorialHoldSeconds = 2.88f;
+    public const float TutorialFadeSeconds = 1.28f;
 
     CanvasGroup _group;
     bool _isTutorial;
+    bool _waitLoadingBeforeHold;
 
-    public static ChapterSplashOverlay Show(string title, string body = null, bool isTutorial = false)
+    public static ChapterSplashOverlay Show(string title, string body = null, bool isTutorial = false,
+        bool waitLoadingBeforeHold = false)
     {
         var leftovers = Object.FindObjectsOfType<ChapterSplashOverlay>();
         for (int i = 0; i < leftovers.Length; i++)
@@ -28,8 +30,10 @@ public class ChapterSplashOverlay : MonoBehaviour
         }
 
         GameObject root = new GameObject("ChapterSplash");
+        DontDestroyOnLoad(root);
         var driver = root.AddComponent<ChapterSplashOverlay>();
         driver._isTutorial = isTutorial;
+        driver._waitLoadingBeforeHold = waitLoadingBeforeHold;
         driver.Build(title, body);
         driver.StartCoroutine(driver.RunRoutine());
         return driver;
@@ -112,6 +116,19 @@ public class ChapterSplashOverlay : MonoBehaviour
     IEnumerator RunRoutine()
     {
         _group.alpha = 1f;
+
+        if (_waitLoadingBeforeHold)
+        {
+            const float maxWait = 15f;
+            float guard = 0f;
+            while ((SceneLoadingCoordinator.IsActive || BattleLoadingOverlay.IsShowing) && guard < maxWait)
+            {
+                guard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+                yield return null;
+            }
+            yield return null;
+        }
+
         float holdSec = _isTutorial ? TutorialHoldSeconds : HoldSeconds;
         float fadeSec = _isTutorial ? TutorialFadeSeconds : FadeSeconds;
         float hold = 0f;

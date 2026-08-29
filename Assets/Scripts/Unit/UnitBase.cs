@@ -300,11 +300,20 @@ public abstract class UnitBase : MonoBehaviour
 
     protected virtual void AIUpdate()
     {
-        // 开战传送演出期间冻结
+        // 开战传送演出 / 左屏外走进场：冻结 AI，走进场时仍播走路
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
         {
             if (rb != null) rb.velocity = Vector2.zero;
-            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            if (BattleManager.Instance.PartyIntroWalking && isAlly)
+            {
+                facingDir = 1;
+                ApplyFacing(facingDir);
+                if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+            }
+            else if (unitAnim != null)
+            {
+                unitAnim.SetMove(false, facingDir);
+            }
             return;
         }
 
@@ -332,13 +341,9 @@ public abstract class UnitBase : MonoBehaviour
                     attackCd = GetAttackCooldown();
                 }
             }
-            else if (UnitCrowd.IsBlockedByFrontAlly(this, facingDir))
-            {
-                if (rb != null) rb.velocity = Vector2.zero;
-                isMoving = false;
-            }
             else
             {
+                // 有索敌目标但未进射程：持续前压（不因前方友军挡路而停步）
                 if (rb != null)
                     rb.velocity = new Vector2(facingDir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
                 isMoving = true;
@@ -444,7 +449,7 @@ public abstract class UnitBase : MonoBehaviour
         return FindNearestEnemyInDetectRange();
     }
 
-    /// <summary>只在索敌范围内找最近敌人；超出索敌范围不锁定（避免全图追杀）</summary>
+    /// <summary>在索敌范围内找最近敌人（索敌范围=屏幕宽+缓冲，与攻击射程无关）</summary>
     public virtual UnitBase FindNearestEnemyInDetectRange()
     {
         if (BattleManager.Instance == null) return null;
@@ -492,22 +497,19 @@ public abstract class UnitBase : MonoBehaviour
         ApplyFacing(facingDir);
     }
 
-    /// <summary>
-    /// 索敌范围：比攻击范围略大，避免擦肩而过不打架。
-    /// </summary>
-    public virtual float GetDetectRange()
-    {
-        float atk = attr != null ? attr.GetAttr(AttrType.AttackRange) : GameConfig.BASE_ATTACK_RANGE;
-        return GameConfig.GetDetectRangeFromAttackRange(atk);
-    }
+    /// <summary>索敌范围：与攻击射程无关，见 GameConfig.GetCombatDetectRange。</summary>
+    public virtual float GetDetectRange() => GameConfig.GetCombatDetectRange();
 
     /// <summary>索敌/攻击距离：以可见 transform.x 为准，并纠正偏离的 Rigidbody2D</summary>
     public static float GetCombatX(UnitBase u)
     {
         if (u == null) return 0f;
-        float x = u.transform.position.x;
+        Transform moveTf = u.transform;
+        if (u is Monster m)
+            moveTf = m.GetBodyTransform();
+        float x = moveTf.position.x;
         if (u.rb != null && Mathf.Abs(u.rb.position.x - x) > 0.05f)
-            u.rb.position = new Vector2(x, u.transform.position.y);
+            u.rb.position = new Vector2(x, moveTf.position.y);
         return x;
     }
 
@@ -545,9 +547,10 @@ public abstract class UnitBase : MonoBehaviour
             return;
         }
 
+        // 命中特效在 target.TakeDamage 里统一播，避免攻击方路径漏播（尤其敌方打玩家）
         ResolveBasicAttackHit(target, damage, isCrit, openingHit);
-        if (BattleVFXSystem.Instance != null)
-            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
+        if (kit == AttackVfxKit.MeleeSlash)
+            CombatJuice.Instance?.OnMeleeAttackLunge(this);
     }
 
     void ResolveBasicAttackHit(UnitBase target, float damage, bool isCrit, bool openingHit)
@@ -557,7 +560,8 @@ public abstract class UnitBase : MonoBehaviour
         float dodgeChance = target.attr.GetAttr(AttrType.Dodge);
         if (dodgeChance > 0 && Random.value < dodgeChance)
         {
-            DamageTextSystem.Instance?.SpawnDodgeText(target.GetHitPosition());
+            DamageTextSystem.Instance?.SpawnDodgeText(target.GetHitPosition(), target.isAlly);
+            CombatJuice.Instance?.OnDodge(target.isAlly);
             OnAttack?.Invoke(target, 0, false);
             return;
         }
@@ -604,14 +608,73 @@ public abstract class UnitBase : MonoBehaviour
         return WeaponAttackType.Physical;
     }
 
-    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false)
+    float _lastHitVfxTime = -999f;
+    const float HitVfxCooldown = 0.08f;
+    float _lastKnockbackTime = -999f;
+    Coroutine _knockbackCo;
+
+    protected virtual Transform GetKnockbackRoot()
+    {
+        if (this is Monster m) return m.GetBodyTransform();
+        return transform;
+    }
+
+    /// <summary>受击/出手短位移（不改 prefab scale，100ms 内节流）。</summary>
+    public void ApplyKnockback(float dx, float duration = 0.08f)
+    {
+        if (!GameConfig.COMBAT_JUICE_KNOCKBACK || _isDying || isDead) return;
+        if (Mathf.Abs(dx) < 0.001f) return;
+        if (Time.time - _lastKnockbackTime < 0.1f) return;
+        _lastKnockbackTime = Time.time;
+
+        Transform root = GetKnockbackRoot();
+        if (root == null) return;
+        if (_knockbackCo != null)
+            StopCoroutine(_knockbackCo);
+        _knockbackCo = StartCoroutine(CoKnockback(root, dx, duration));
+    }
+
+    System.Collections.IEnumerator CoKnockback(Transform root, float dx, float duration)
+    {
+        Vector3 start = root.position;
+        Vector3 peak = start + Vector3.right * dx;
+        float half = duration * 0.45f;
+        float t = 0f;
+        while (t < half)
+        {
+            t += Time.deltaTime;
+            root.position = Vector3.Lerp(start, peak, half > 0.0001f ? t / half : 1f);
+            yield return null;
+        }
+        float back = duration - half;
+        t = 0f;
+        while (t < back)
+        {
+            t += Time.deltaTime;
+            root.position = Vector3.Lerp(peak, start, back > 0.0001f ? t / back : 1f);
+            yield return null;
+        }
+        root.position = start;
+        _knockbackCo = null;
+    }
+
+    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true)
     {
         if (_isDying) return;
 
         float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense);
 
         currentHp -= finalDamage;
-        DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit);
+        DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit, isAlly);
+
+        if (showHitVfx && finalDamage > 0f && BattleVFXSystem.Instance != null
+            && Time.time - _lastHitVfxTime >= HitVfxCooldown)
+        {
+            _lastHitVfxTime = Time.time;
+            BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), isAlly, -facingDir);
+        }
+
+        CombatJuice.Instance?.OnHit(this, finalDamage, isCrit, showHitVfx);
 
         var bm = BattleManager.Instance;
         if (bm != null && finalDamage > 0f)

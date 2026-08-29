@@ -11,6 +11,7 @@ public class LoadingUI : MonoBehaviour
     public const string ResourcePath = "Prefabs/Loading/LoadingUI";
 
     bool _storyTipOffsetApplied;
+    bool _progressCornerAdjusted;
 
     /// <summary>相对预制体 StoryTip 再下移（不写回 prefab）。</summary>
     const float StoryTipDownOffset = -32f;
@@ -59,6 +60,29 @@ public class LoadingUI : MonoBehaviour
             tipText.font = GameFonts.GetChinese();
 
         ApplyStoryTipOffset();
+        ApplyProgressCornerLayout();
+    }
+
+    /// <summary>「加载中」与百分比间距（不改 prefab）。</summary>
+    void ApplyProgressCornerLayout()
+    {
+        if (_progressCornerAdjusted) return;
+        if (labelText == null || percentText == null) return;
+        var labelRt = labelText.rectTransform;
+        var pctRt = percentText.rectTransform;
+        if (labelRt == null || pctRt == null) return;
+
+        labelRt.anchorMin = new Vector2(0f, 0f);
+        labelRt.anchorMax = new Vector2(0f, 1f);
+        labelRt.pivot = new Vector2(0f, 0.5f);
+        labelRt.anchoredPosition = Vector2.zero;
+
+        pctRt.anchorMin = new Vector2(0f, 0f);
+        pctRt.anchorMax = new Vector2(0f, 1f);
+        pctRt.pivot = new Vector2(0f, 0.5f);
+        pctRt.anchoredPosition = new Vector2(labelRt.sizeDelta.x + 4f, 0f);
+
+        _progressCornerAdjusted = true;
     }
 
     void ApplyStoryTipOffset()
