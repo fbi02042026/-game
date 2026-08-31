@@ -66,14 +66,14 @@ public class OpeningIntroOverlay : MonoBehaviour
     {
         Instance = this;
         var canvas = gameObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 32766;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.FullscreenFx);
 
-        var scaler = gameObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(720, 1280);
-        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.matchWidthOrHeight = 1f;
+        var scaler = gameObject.GetComponent<CanvasScaler>();
+        if (scaler != null)
+        {
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 1f;
+        }
         gameObject.AddComponent<GraphicRaycaster>();
 
         _group = gameObject.AddComponent<CanvasGroup>();

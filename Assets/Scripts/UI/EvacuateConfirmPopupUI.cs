@@ -148,8 +148,7 @@ public class EvacuateConfirmPopupUI : MonoBehaviour
     public static void BuildHierarchy(GameObject host)
     {
         var canvas = host.GetComponent<Canvas>() ?? host.AddComponent<Canvas>();
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 980;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleEvacuate);
         if (host.GetComponent<GraphicRaycaster>() == null)
             host.AddComponent<GraphicRaycaster>();
         if (host.GetComponent<EvacuateConfirmPopupUI>() == null)

@@ -225,7 +225,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         StoryDirector.Instance?.NotifySceneChanged();
         GameBgm.Play(GameBgm.Track.Intro);
 
-        // 办公室 + 咨询台一次播完（换地点时播黑屏地点名）。
+        // 办公室：会长对话 → 签名起名 → 咨询台
         var beats = new List<StoryBeat>
         {
             StoryDirector.Solo("会长",
@@ -238,13 +238,27 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 .Bg(StoryBackgrounds.GuildOffice),
             StoryDirector.Narration("桌上摊着那份委托书还没有署名，会长催促着赶紧签了就可以出去了。")
                 .Prop(StoryProps.QuestPaper),
+        };
+        bool done = false;
+        StoryDirector.Ensure().Play(beats, () => done = true, keepSceneArt: true);
+        while (!done) yield return null;
+
+        if (!StoryProgress.HasPlayerName())
+        {
+            bool named = false;
+            PlayerNamingUI.Show(() => named = true);
+            while (!named) yield return null;
+        }
+
+        var afterNaming = new List<StoryBeat>
+        {
             StoryDirector.Solo("咨询台小姐",
                 "第一次下裂缝？三件事：\n1. 你只管走路，打架会自动打。\n2. 进战斗前先选技能，亮起就能放。\n3. 见好就收，活着才有收益。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)
         };
-        bool done = false;
-        StoryDirector.Ensure().Play(beats, () => done = true, keepSceneArt: true);
+        done = false;
+        StoryDirector.Ensure().Play(afterNaming, () => done = true, keepSceneArt: true);
         while (!done) yield return null;
     }
 

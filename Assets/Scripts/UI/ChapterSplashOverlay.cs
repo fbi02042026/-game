@@ -42,13 +42,10 @@ public class ChapterSplashOverlay : MonoBehaviour
     void Build(string title, string body)
     {
         var canvas = gameObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 32767;
-        var scaler = gameObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(720, 1280);
-        scaler.matchWidthOrHeight = 0f;
-        gameObject.AddComponent<GraphicRaycaster>();
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.FullscreenFx);
+        var scaler = gameObject.GetComponent<CanvasScaler>();
+        if (scaler != null)
+            scaler.matchWidthOrHeight = 0f;
 
         _group = gameObject.AddComponent<CanvasGroup>();
         _group.alpha = 1f;

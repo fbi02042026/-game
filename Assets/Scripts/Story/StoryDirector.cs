@@ -85,48 +85,20 @@ public class StoryDirector : Singleton<StoryDirector>
         return _ui;
     }
 
-    /// <summary>
-    /// 剧情窗必须盖住大厅：改 Overlay，不绑相机。预制体 Camera 模式 + scale=0 会完全看不见。
-    /// </summary>
     static void PrepareCanvas(DialogueUI ui)
     {
         if (ui == null) return;
         var go = ui.gameObject;
         go.SetActive(true);
 
-        var rt = go.transform as RectTransform;
-        if (rt != null)
-        {
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-            rt.localScale = Vector3.one;
-            rt.localPosition = Vector3.zero;
-        }
-        else
-            go.transform.localScale = Vector3.one;
-
         var canvas = go.GetComponent<Canvas>();
         if (canvas == null) canvas = go.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 500;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue);
         canvas.pixelPerfect = false;
         canvas.enabled = true;
 
-        var scaler = go.GetComponent<CanvasScaler>();
-        if (scaler == null) scaler = go.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(GameConfig.DESIGN_WIDTH, GameConfig.DESIGN_HEIGHT);
-        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.matchWidthOrHeight = GameConfig.UI_MATCH;
-
-        if (go.GetComponent<UnityEngine.UI.GraphicRaycaster>() == null)
-            go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
-
         GameFonts.ApplyToHierarchy(go.transform);
-        Debug.Log($"[StoryDirector] DialogueUI 已就绪 overlay sort={canvas.sortingOrder} scale={go.transform.localScale}");
+        Debug.Log($"[StoryDirector] DialogueUI 已就绪 camera sort={canvas.sortingOrder} scale={go.transform.localScale}");
     }
 
     public void Play(IList<StoryBeat> beats, Action onDone, Action<int> onChoice = null, bool keepSceneArt = false)

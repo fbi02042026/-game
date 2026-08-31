@@ -335,10 +335,15 @@ public static class AdventureCodex
 
     public static Sprite LoadMercSprite(AdventureLogCatalog.MercEntry e)
     {
+        if (!string.IsNullOrEmpty(e.Id))
+        {
+            var sp = MercPortraitSprites.GetStand(e.Id);
+            if (sp != null) return sp;
+        }
         if (string.IsNullOrEmpty(e.AssetId)) return null;
         if (MercenaryManager.Instance != null)
             return MercenaryManager.Instance.GetIcon(e.AssetId);
-        return null;
+        return MercPortraitSprites.GetHead(e.AssetId);
     }
 
     public static bool UnlockWorld(string worldId)

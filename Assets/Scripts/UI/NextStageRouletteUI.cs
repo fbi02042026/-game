@@ -101,11 +101,10 @@ public class NextStageRouletteUI : MonoBehaviour
             if (go.GetComponent<Canvas>() == null)
             {
                 var canvas = go.AddComponent<Canvas>();
-                UICanvasSetup.Apply(canvas);
+                UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
             }
             else
-                UICanvasSetup.Apply(go.GetComponent<Canvas>());
-            go.GetComponent<Canvas>().sortingOrder = 900;
+                UICanvasSetup.ApplyPopup(go.GetComponent<Canvas>(), GameConfig.UiSort.TownPopup);
             if (go.GetComponent<GraphicRaycaster>() == null)
                 go.AddComponent<GraphicRaycaster>();
         }
@@ -113,8 +112,7 @@ public class NextStageRouletteUI : MonoBehaviour
         {
             var go = new GameObject("NextStageRoulette", typeof(RectTransform));
             var canvas = go.AddComponent<Canvas>();
-            UICanvasSetup.Apply(canvas);
-            canvas.sortingOrder = 900;
+            UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
             go.AddComponent<GraphicRaycaster>();
             ui = go.AddComponent<NextStageRouletteUI>();
             BuildHierarchy(go);

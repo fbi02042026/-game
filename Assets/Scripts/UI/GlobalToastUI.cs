@@ -78,9 +78,7 @@ public class GlobalToastUI : MonoBehaviour
     void Build()
     {
         var canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.Apply(canvas);
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 32000;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.Toast);
         gameObject.AddComponent<GraphicRaycaster>().enabled = false;
 
         _root = new GameObject("Root", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));

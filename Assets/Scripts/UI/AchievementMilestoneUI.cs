@@ -83,8 +83,7 @@ public class AchievementMilestoneUI : MonoBehaviour
         var canvas = gameObject.GetComponent<Canvas>() ?? gameObject.AddComponent<Canvas>();
         if (gameObject.GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 970;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleMilestone);
 
         _root = new GameObject("Root", typeof(RectTransform));
         _root.transform.SetParent(transform, false);

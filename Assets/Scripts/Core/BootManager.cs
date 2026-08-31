@@ -22,6 +22,8 @@ public class BootManager : MonoBehaviour
 
         Application.runInBackground = true;
         GamePerf.ApplyStartup();
+        PersistentUiCamera.Ensure();
+        EnsureCamera();
         ShowBootVeil();
 
         GameObject persistentRoot = GameObject.Find("PersistentRoot");
@@ -41,7 +43,6 @@ public class BootManager : MonoBehaviour
         if (persistentRoot.GetComponent<TutorialDirector>() == null)
             persistentRoot.AddComponent<TutorialDirector>();
 
-        EnsureCamera();
         EnsureEventSystem();
     }
 
@@ -60,12 +61,7 @@ public class BootManager : MonoBehaviour
         _bootVeil = new GameObject("BootVeil");
         DontDestroyOnLoad(_bootVeil);
         var canvas = _bootVeil.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 500;
-        var scaler = _bootVeil.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(720f, 1280f);
-        scaler.matchWidthOrHeight = 1f;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue);
         var imgGo = new GameObject("Black", typeof(RectTransform), typeof(Image));
         imgGo.transform.SetParent(_bootVeil.transform, false);
         var rt = imgGo.GetComponent<RectTransform>();

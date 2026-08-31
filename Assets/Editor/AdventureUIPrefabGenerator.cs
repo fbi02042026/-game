@@ -38,10 +38,7 @@ public static class AdventureUIPrefabGenerator
 
         var root = new GameObject("AdventureUI", typeof(RectTransform));
         var canvas = root.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        root.AddComponent<CanvasScaler>();
-        root.AddComponent<GraphicRaycaster>();
-        UICanvasSetup.Apply(canvas, null);
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPage);
 
         var ui = root.AddComponent<AdventureUI>();
         ui.BuildHierarchyForPrefab();

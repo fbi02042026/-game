@@ -27,8 +27,8 @@ public static class StoryProgress
     public const string NpcEileen = "eileen";
     public const string NpcMaster = "master";
 
-    // CharacterRegistry 里只有 dunbing102 配了头像，用 101 佣兵槽会显示占位白框
-    public const string TutorialMercId = "dunbing102";
+    // 老盾（H001）对应 dunbing101；教程战与花名册一致
+    public const string TutorialMercId = "dunbing101";
 
     static bool _pendingTutorialBattle;
     static bool _pendingChapter1TownReturn;
@@ -40,6 +40,31 @@ public static class StoryProgress
     public static bool TutorialOutroPending => Save()?.tutorialOutroPending ?? false;
     public static bool Chapter1IntroDone => Save()?.chapter1IntroDone ?? false;
     public static bool Chapter1ChoiceDone => Save()?.chapter1ChoiceDone ?? false;
+
+    public static bool HasPlayerName()
+    {
+        var data = Save();
+        return data != null && data.playerNameChosen && !string.IsNullOrEmpty(data.playerDisplayName);
+    }
+
+    public static string GetPlayerName()
+    {
+        var data = Save();
+        if (data != null && !string.IsNullOrEmpty(data.playerDisplayName))
+            return data.playerDisplayName;
+        return PlayerIdentity.DefaultName;
+    }
+
+    public static void SetPlayerName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return;
+        var data = Save();
+        if (data == null) return;
+        data.playerDisplayName = name;
+        data.playerNameChosen = true;
+        SaveSystem.Instance?.Save();
+        Debug.Log($"[Story] \u73a9\u5bb6\u59d3\u540d\u5df2\u8bbe\u7f6e: {name}");
+    }
 
     public static bool ShouldStartTutorialBattle()
     {

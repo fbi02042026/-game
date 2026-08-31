@@ -70,8 +70,7 @@ public class LegacyChooseUI : MonoBehaviour
             canvas = gameObject.AddComponent<Canvas>();
             gameObject.AddComponent<GraphicRaycaster>();
         }
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 960;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleLegacyChoose);
 
         _root = new GameObject("Root", typeof(RectTransform));
         _root.transform.SetParent(transform, false);

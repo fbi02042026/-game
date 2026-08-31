@@ -153,10 +153,7 @@ public class TalentUI : MonoBehaviour
         transform.SetAsLastSibling();
         var canvas = UICanvasSetup.ApplyOn(gameObject, Camera.main);
         if (canvas != null)
-        {
-            canvas.overrideSorting = true;
-            canvas.sortingOrder = 200;
-        }
+            UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownVeil, Camera.main);
         EnsureLists();
         RefreshAll();
     }

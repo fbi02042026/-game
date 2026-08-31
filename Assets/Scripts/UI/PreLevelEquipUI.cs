@@ -73,8 +73,7 @@ public class PreLevelEquipUI : MonoBehaviour
             canvas = gameObject.AddComponent<Canvas>();
             gameObject.AddComponent<GraphicRaycaster>();
         }
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 950;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleHud);
 
         _root = new GameObject("Root", typeof(RectTransform));
         _root.transform.SetParent(transform, false);

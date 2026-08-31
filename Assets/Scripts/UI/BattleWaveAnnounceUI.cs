@@ -42,13 +42,11 @@ public class BattleWaveAnnounceUI : MonoBehaviour
     void Build()
     {
         var canvas = gameObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 32750;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.FullscreenFx);
 
-        var scaler = gameObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(720, 1280);
-        scaler.matchWidthOrHeight = 0.5f;
+        var scaler = gameObject.GetComponent<CanvasScaler>();
+        if (scaler != null)
+            scaler.matchWidthOrHeight = 0.5f;
 
         _group = gameObject.AddComponent<CanvasGroup>();
         _group.alpha = 0f;

@@ -189,9 +189,9 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
         if (c.portrait != null)
         {
-            var sp = MercenaryManager.Instance != null
-                ? MercenaryManager.Instance.GetIcon(offer.mercId)
-                : null;
+            string portraitKey = !string.IsNullOrEmpty(offer.hireId) ? offer.hireId : offer.mercId;
+            var sp = MercPortraitSprites.GetStand(portraitKey)
+                ?? (MercenaryManager.Instance != null ? MercenaryManager.Instance.GetIcon(offer.mercId) : null);
             c.portrait.sprite = sp;
             c.portrait.enabled = true;
             c.portrait.color = sp != null ? Color.white : new Color(0.35f, 0.32f, 0.38f, 1f);
@@ -483,18 +483,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     {
         var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 920;
-        if (GetComponent<CanvasScaler>() == null)
-        {
-            var scaler = gameObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(720f, 1280f);
-            scaler.matchWidthOrHeight = 1f;
-        }
-        if (GetComponent<GraphicRaycaster>() == null)
-            gameObject.AddComponent<GraphicRaycaster>();
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
     }
 
     void AutoBind()

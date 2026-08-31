@@ -18,6 +18,8 @@ public static class ContentPaths
     public static class Icons
     {
         public const string MercSkill = "Icons/MercSkill";
+        public const string MercHead = "Icons/MercHead";
+        public const string MercStand = "Icons/MercStand";
         public const string PlayerSkill = "Icons/SkillIcon";
     }
 
@@ -46,9 +48,15 @@ public static class ContentPaths
     public static class Prefab
     {
         public const string GuildHall = "Prefabs/Town/GuildHallUI";
+        public const string PlayerNaming = "Prefabs/Town/PlayerNamingUI";
         public const string Dialogue = "Prefabs/Dialogue/DialogueUI";
         public const string Login = "Prefabs/Login/LoginUI";
         public const string HealthNotice = "Prefabs/Boot/HealthNoticeUI";
+    }
+
+    public static class Ui
+    {
+        public const string PlayerNaming = "UI/PlayerNaming";
     }
 
     public static class Source

@@ -21,7 +21,7 @@ public static class BattleLoadingOverlay
         if (_ui == null) return;
         _ui.gameObject.SetActive(true);
         _ui.transform.SetAsLastSibling();
-        _ui.PrepareOverlay();
+        _ui.PrepareCanvas();
         _ui.SetTip(string.IsNullOrEmpty(tip) ? "加载中…" : tip);
         _ui.SetProgress(0f);
     }

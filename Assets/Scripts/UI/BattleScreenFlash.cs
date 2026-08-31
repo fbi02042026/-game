@@ -9,7 +9,7 @@ public static class BattleScreenFlash
 
     public static IEnumerator Play(Color color, float holdSeconds = 0.22f, float fadeSeconds = 0.35f)
     {
-        EnsureOverlay();
+        EnsureFlashCanvas();
         if (_group == null) yield break;
 
         var img = _group.GetComponent<Image>();
@@ -38,20 +38,18 @@ public static class BattleScreenFlash
         _group.gameObject.SetActive(false);
     }
 
-    static void EnsureOverlay()
+    static void EnsureFlashCanvas()
     {
         if (_group != null) return;
 
         var go = new GameObject("BattleScreenFlash");
         Object.DontDestroyOnLoad(go);
         var canvas = go.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 32760;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.FullscreenFx);
 
-        var scaler = go.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(720, 1280);
-        scaler.matchWidthOrHeight = 0f;
+        var scaler = go.GetComponent<CanvasScaler>();
+        if (scaler != null)
+            scaler.matchWidthOrHeight = 0f;
 
         _group = go.AddComponent<CanvasGroup>();
         _group.alpha = 0f;

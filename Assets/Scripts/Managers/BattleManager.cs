@@ -401,6 +401,14 @@ public class BattleManager : Singleton<BattleManager>
                 merc.SetupBattleSkills(active, passive);
                 merc.SetPartyIndex(spawned);
                 merc.SetDisplayName(md.displayName, md.nickname);
+                if (!string.IsNullOrEmpty(md.hireId))
+                    merc.SetHireId(md.hireId);
+                else
+                {
+                    string resolved = MercPortraitSprites.ResolveHireId(md.mercId);
+                    if (!string.IsNullOrEmpty(resolved))
+                        merc.SetHireId(resolved);
+                }
                 if (!string.IsNullOrEmpty(md.displayName))
                     merc.gameObject.name = "Merc_" + md.displayName;
                 allyUnits.Add(merc);
@@ -544,12 +552,13 @@ public class BattleManager : Singleton<BattleManager>
         float heroX = UnitBase.GetCombatX(hero);
         float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
         Vector3 pos = new Vector3(heroX + aheadDist, UnitBase.GROUND_Y, z);
-        var merc = mm.SpawnMercenary(string.IsNullOrEmpty(mercId) ? "dunbing102" : mercId, pos, 1);
+        var merc = mm.SpawnMercenary(string.IsNullOrEmpty(mercId) ? "dunbing101" : mercId, pos, 1);
         if (merc == null) return null;
-        string useId = string.IsNullOrEmpty(mercId) ? "dunbing102" : mercId;
+        string useId = string.IsNullOrEmpty(mercId) ? "dunbing101" : mercId;
         MercRosterDefs.GetSkillIds(useId, out string active, out string passive);
         merc.SetupBattleSkills(active, passive);
         merc.SetDisplayName("老盾", "老盾");
+        merc.SetHireId("H001");
         if (!allyUnits.Contains(merc))
             allyUnits.Add(merc);
         merc.OnDead += OnMercenaryDead;

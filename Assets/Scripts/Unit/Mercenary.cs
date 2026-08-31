@@ -6,6 +6,7 @@ using UnityEngine;
 public class Mercenary : UnitBase
 {
     public string mercId;
+    public string hireId;
     public int mercLevel = 1;
     public string DisplayName { get; private set; }
     /// <summary>本局佩戴主动技能（来自存档；空则无主动技）</summary>
@@ -114,6 +115,11 @@ public class Mercenary : UnitBase
         Face(1);
 
         Debug.Log($"[Mercenary:{id}] Init完成 | isAlly={isAlly} | facingDir={facingDir} | pos={transform.position}");
+    }
+
+    public void SetHireId(string id)
+    {
+        hireId = id;
     }
 
     public void SetDisplayName(string displayName, string nickname = null)

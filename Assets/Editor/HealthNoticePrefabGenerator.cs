@@ -88,15 +88,7 @@ public static class HealthNoticePrefabGenerator
         var root = new GameObject("HealthNoticeUI", typeof(RectTransform));
 
         var canvas = root.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 520;
-
-        var scaler = root.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(720f, 1280f);
-        scaler.matchWidthOrHeight = 1f;
-        root.AddComponent<GraphicRaycaster>();
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue);
 
         var ui = root.AddComponent<HealthNoticeUI>();
 

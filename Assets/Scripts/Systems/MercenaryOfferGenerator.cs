@@ -126,9 +126,11 @@ public static class MercenaryOfferGenerator
         var pool = GetVisualPool();
         string mercId = pool[Random.Range(0, pool.Count)];
         MercSkillMapping.GetDefaultSkills(mercId, out string active, out string passive);
+        string hireId = MercPortraitSprites.ResolveHireId(mercId);
         return new MercenaryData
         {
             mercId = mercId,
+            hireId = hireId,
             displayName = NamePool[Random.Range(0, NamePool.Length)],
             uid = System.Guid.NewGuid().ToString("N"),
             favorLevel = 1,

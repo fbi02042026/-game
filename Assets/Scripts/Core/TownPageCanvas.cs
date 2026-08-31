@@ -8,7 +8,7 @@ using UnityEngine.UI;
 /// </summary>
 public static class TownPageCanvas
 {
-    public static void Configure(GameObject page, int sortingOrder = 5, bool stripCanvasWhenNested = true)
+    public static void Configure(GameObject page, int sortingOrder = GameConfig.UiSort.TownPage, bool stripCanvasWhenNested = true)
     {
         if (page == null) return;
 
@@ -31,9 +31,7 @@ public static class TownPageCanvas
         if (canvas == null)
             canvas = page.AddComponent<Canvas>();
         canvas.enabled = true;
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = sortingOrder;
-        UICanvasSetup.Apply(canvas, Camera.main);
+        UICanvasSetup.ApplyPopup(canvas, sortingOrder, Camera.main);
         if (page.GetComponent<GraphicRaycaster>() == null)
             page.AddComponent<GraphicRaycaster>();
     }

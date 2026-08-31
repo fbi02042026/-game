@@ -55,16 +55,7 @@ public class TutorialHintUI : MonoBehaviour
     {
         var canvas = gameObject.GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 600;
-        if (GetComponent<CanvasScaler>() == null)
-        {
-            var scaler = gameObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(720f, 1280f);
-            scaler.matchWidthOrHeight = 1f;
-        }
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TutorialHint);
         if (GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
         _raycaster = GetComponent<GraphicRaycaster>();
@@ -416,9 +407,10 @@ public class TutorialHintUI : MonoBehaviour
         if (root == null || _follow == null) return false;
 
         var followCanvas = _follow.GetComponentInParent<Canvas>();
-        Camera followCam = null;
-        if (followCanvas != null && followCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
-            followCam = followCanvas.worldCamera;
+        var hintCanvas = GetComponent<Canvas>();
+        Camera hintCam = hintCanvas != null ? hintCanvas.worldCamera : UICanvasSetup.ResolveUiCamera();
+        Camera followCam = followCanvas != null ? followCanvas.worldCamera : hintCam;
+        if (followCam == null) followCam = hintCam;
 
         var corners = new Vector3[4];
         _follow.GetWorldCorners(corners);
@@ -427,7 +419,7 @@ public class TutorialHintUI : MonoBehaviour
         for (int i = 0; i < 4; i++)
         {
             Vector2 screen = RectTransformUtility.WorldToScreenPoint(followCam, corners[i]);
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screen, null, out var local);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screen, hintCam, out var local);
             minX = Mathf.Min(minX, local.x);
             maxX = Mathf.Max(maxX, local.x);
             minY = Mathf.Min(minY, local.y);

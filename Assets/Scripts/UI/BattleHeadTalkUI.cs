@@ -53,14 +53,7 @@ public class BattleHeadTalkUI : MonoBehaviour
     {
         var canvas = gameObject.GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 560;
-
-        var scaler = gameObject.GetComponent<CanvasScaler>();
-        if (scaler == null) scaler = gameObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(720f, 1280f);
-        scaler.matchWidthOrHeight = 1f;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue);
 
         // 不要 GraphicRaycaster：否则会吞点击，引导气泡点不掉
         var oldRay = GetComponent<GraphicRaycaster>();

@@ -323,9 +323,8 @@ public class EquipDropPopupUI : MonoBehaviour
     void EnsureCanvas()
     {
         var canvas = GetComponent<Canvas>();
-        if (canvas == null) return;
-        if (canvas.renderMode == RenderMode.ScreenSpaceCamera && canvas.worldCamera == null)
-            UICanvasSetup.Apply(canvas, Camera.main);
+        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattlePopup);
     }
 
     /// <summary>
@@ -610,12 +609,6 @@ public class EquipDropPopupUI : MonoBehaviour
             btn.onClick.AddListener(() => SelectCard(idx));
         }
 
-        var canvas = GetComponent<Canvas>();
-        if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay)
-        {
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 520;
-        }
         if (root != null && root != gameObject) root.SetActive(false);
     }
 
@@ -686,14 +679,7 @@ public class EquipDropPopupUI : MonoBehaviour
 
         var canvas = host.GetComponent<Canvas>();
         if (canvas == null) canvas = host.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 520;
-
-        var scaler = host.GetComponent<CanvasScaler>();
-        if (scaler == null) scaler = host.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(720f, 1280f);
-        scaler.matchWidthOrHeight = 1f;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattlePopup);
 
         if (host.GetComponent<GraphicRaycaster>() == null)
             host.AddComponent<GraphicRaycaster>();

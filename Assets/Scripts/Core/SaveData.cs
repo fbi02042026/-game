@@ -78,6 +78,9 @@ public class SaveData
     public bool mercOfferDirty = true;
 
     // === 玩家基础属性 ===
+    /// <summary>玩家冒险者显示名（引导签名后设定）</summary>
+    public string playerDisplayName = "";
+    public bool playerNameChosen;
     public int playerStrength = 0;     // 额外力量（天赋/遗产加成）
     public int playerIntelligence = 0; // 额外智力
     public int playerAgility = 0;      // 额外敏捷

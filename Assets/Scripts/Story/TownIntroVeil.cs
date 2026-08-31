@@ -49,12 +49,7 @@ public class TownIntroVeil : MonoBehaviour
     {
         Instance = this;
         var canvas = gameObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 260;
-        var scaler = gameObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(720f, 1280f);
-        scaler.matchWidthOrHeight = 1f;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownVeil);
 
         _group = gameObject.AddComponent<CanvasGroup>();
         _group.alpha = 1f;

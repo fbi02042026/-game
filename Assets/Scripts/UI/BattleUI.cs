@@ -913,7 +913,8 @@ public class BattleUI : MonoBehaviour
         {
             var mercs = mm != null ? mm.GetActiveMercs() : null;
             Mercenary m0 = (mercs != null && mercs.Count > 0) ? mercs[0] : null;
-            Sprite icon = GetMercSkillIcon(m0) ?? (m0 != null && mm != null ? mm.GetIcon(m0.mercId) : null);
+            Sprite icon = GetMercSkillIcon(m0) ?? (m0 != null ? MercPortraitSprites.GetHead(!string.IsNullOrEmpty(m0.hireId) ? m0.hireId : m0.mercId) : null)
+                ?? (m0 != null && mm != null ? mm.GetIcon(m0.mercId) : null);
             merc1SkillAvatar?.SetAvatar(icon);
             if (mercSlot1 != null && m0 != null)
                 mercSlot1.SetEnergyEnabled(m0.SkillCaster != null && m0.SkillCaster.HasActiveSkill && !MercSkillMigrate.IsMercSkillAutoCast());
@@ -943,6 +944,12 @@ public class BattleUI : MonoBehaviour
     static Sprite GetMercPortraitAt(MercenaryManager mm, List<string> mercIds, int index)
     {
         if (mm == null || mercIds == null || index < 0 || index >= mercIds.Count) return null;
+        var mercs = mm.GetActiveMercs();
+        if (mercs != null && index < mercs.Count && mercs[index] != null && !string.IsNullOrEmpty(mercs[index].hireId))
+            return MercPortraitSprites.GetHead(mercs[index].hireId) ?? mm.GetIcon(mercs[index].mercId);
+        var hireIds = mm.GetActiveMercHireIds();
+        if (hireIds != null && index < hireIds.Count && !string.IsNullOrEmpty(hireIds[index]))
+            return MercPortraitSprites.GetHead(hireIds[index]) ?? mm.GetIcon(mercIds[index]);
         return mm.GetIcon(mercIds[index]);
     }
 
@@ -1088,11 +1095,12 @@ public class BattleUI : MonoBehaviour
 
         // 佣兵槽位（根据酒馆等级解锁 + 存档出战佣兵）
         var mercIds = mm != null ? mm.GetActiveMercIds() : new List<string>();
+        var mercHireIds = mm != null ? mm.GetActiveMercHireIds() : new List<string>();
         var activeMercs = mm != null ? mm.GetActiveMercs() : new List<Mercenary>();
         int maxSlots = mm != null ? mm.GetMaxMercSlots() : 0;
 
-        SetupMercSlot(mercSlot1, 0, mercIds, activeMercs, maxSlots, mm);
-        SetupMercSlot(mercSlot2, 1, mercIds, activeMercs, maxSlots, mm);
+        SetupMercSlot(mercSlot1, 0, mercIds, mercHireIds, activeMercs, maxSlots, mm);
+        SetupMercSlot(mercSlot2, 1, mercIds, mercHireIds, activeMercs, maxSlots, mm);
     }
 
     void RefreshTutorialMercSlot(MercenaryManager mm)
@@ -1104,7 +1112,8 @@ public class BattleUI : MonoBehaviour
         mercSlot1.SetLocked(false);
         bool tutHasActive = m.SkillCaster != null && m.SkillCaster.HasActiveSkill;
         mercSlot1.SetEnergyEnabled(tutHasActive && !MercSkillMigrate.IsMercSkillAutoCast());
-        Sprite mercIcon = mm.GetIcon(m.mercId);
+        Sprite mercIcon = MercPortraitSprites.GetHead(!string.IsNullOrEmpty(m.hireId) ? m.hireId : "H001")
+            ?? mm.GetIcon(m.mercId);
         mercSlot1.SetPortrait(mercIcon);
         // 教程老盾不在存档出战列表里，技能圆形头像要单独绑
         merc1SkillAvatar?.SetAvatar(mercIcon);
@@ -1131,7 +1140,7 @@ public class BattleUI : MonoBehaviour
     /// 设置单个佣兵槽位显示
     /// </summary>
     void SetupMercSlot(CharacterSlotUI slot, int index,
-        List<string> mercIds, List<Mercenary> activeMercs, int maxSlots, MercenaryManager mm)
+        List<string> mercIds, List<string> mercHireIds, List<Mercenary> activeMercs, int maxSlots, MercenaryManager mm)
     {
         if (slot == null) return;
 
@@ -1152,7 +1161,10 @@ public class BattleUI : MonoBehaviour
                 && activeMercs[index].SkillCaster.HasActiveSkill;
             slot.SetEnergyEnabled(hasActive && !MercSkillMigrate.IsMercSkillAutoCast());
             string id = mercIds[index];
-            Sprite icon = mm != null ? mm.GetIcon(id) : null;
+            string hireId = index < mercHireIds.Count ? mercHireIds[index] : null;
+            if (index < activeMercs.Count && activeMercs[index] != null && !string.IsNullOrEmpty(activeMercs[index].hireId))
+                hireId = activeMercs[index].hireId;
+            Sprite icon = MercPortraitSprites.GetHead(hireId) ?? MercPortraitSprites.GetHead(id) ?? (mm != null ? mm.GetIcon(id) : null);
             string job = mm != null ? mm.GetJobName(id) : id;
             slot.SetPortrait(icon);
 

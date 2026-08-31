@@ -98,6 +98,29 @@ public static class GameConfig
     /// <summary>Screen Space Camera 的 planeDistance</summary>
     public const float UI_PLANE_DISTANCE = 100f;
 
+    /// <summary>UI Canvas sortingOrder 分层（Screen Space - Camera 统一用此表）。</summary>
+    public static class UiSort
+    {
+        public const int TownPage = 5;
+        public const int TownBootstrap = 100;
+        public const int TownVeil = 200;
+        public const int StoryDialogue = 500;
+        public const int StoryNaming = 560;
+        public const int TutorialHint = 600;
+        public const int TownPopup = 900;
+        public const int BattleStageMap = 880;
+        public const int BattlePopup = 920;
+        public const int BattleLegacyPool = 940;
+        public const int BattleHud = 950;
+        public const int BattleLegacyChoose = 960;
+        public const int BattleMilestone = 970;
+        public const int BattleEvacuate = 980;
+        public const int BattleSettlement = 990;
+        public const int Loading = 10000;
+        public const int Toast = 11000;
+        public const int FullscreenFx = 12000;
+    }
+
     [Header("场景缩放")]
     /// <summary>玩家与佣兵本地缩放。unit 在 BattleUI 下时由 Compensate 保证 lossy≈1，故此处用 1</summary>
     public const float UNIT_SCALE = 1f;

@@ -104,9 +104,12 @@ public class TavernRosterPanel : MonoBehaviour
                 _cardBgs[i].color = (i == _selected)
                     ? new Color(0.55f, 0.42f, 0.22f, 1f)
                     : new Color(0.28f, 0.22f, 0.18f, 1f);
-            if (_cardIcons[i] != null && offer != null && MercenaryManager.Instance != null)
+            if (_cardIcons[i] != null && offer != null)
             {
-                var icon = MercenaryManager.Instance.GetIcon(offer.mercId);
+                string key = !string.IsNullOrEmpty(offer.hireId) ? offer.hireId : offer.mercId;
+                var icon = MercPortraitSprites.GetStand(key);
+                if (icon == null && MercenaryManager.Instance != null)
+                    icon = MercenaryManager.Instance.GetIcon(offer.mercId);
                 _cardIcons[i].sprite = icon;
                 _cardIcons[i].enabled = icon != null;
                 _cardIcons[i].preserveAspect = true;
@@ -147,8 +150,7 @@ public class TavernRosterPanel : MonoBehaviour
         var canvas = gameObject.GetComponent<Canvas>() ?? gameObject.AddComponent<Canvas>();
         if (gameObject.GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 900;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
 
         _root = new GameObject("Root", typeof(RectTransform));
         _root.transform.SetParent(transform, false);

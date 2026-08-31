@@ -170,8 +170,7 @@ public class CraftStagePopupUI : MonoBehaviour
     {
         var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 920;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattlePopup);
         if (GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
     }

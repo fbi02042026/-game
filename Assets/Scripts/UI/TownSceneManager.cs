@@ -77,8 +77,7 @@ public class TownSceneManager : MonoBehaviour
         // Canvas（统一规范：Camera / 720×1280 / Match Height）
         GameObject canvasGo = new GameObject("TownCanvas");
         Canvas canvas = canvasGo.AddComponent<Canvas>();
-        UICanvasSetup.Apply(canvas, Camera.main);
-        canvas.sortingOrder = 100;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownBootstrap);
 
         // 背景图（半透明黑色遮罩）
         GameObject bg = new GameObject("Background", typeof(Image));

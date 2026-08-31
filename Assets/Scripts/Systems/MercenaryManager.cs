@@ -29,16 +29,21 @@ public class MercenaryManager : Singleton<MercenaryManager>
 
     public Sprite GetIcon(string characterId)
     {
-        Sprite sp = registry != null ? registry.GetIcon(characterId) : null;
+        var sp = MercPortraitSprites.GetHead(characterId);
+        if (sp != null) return sp;
+
+        sp = registry != null ? registry.GetIcon(characterId) : null;
         if (sp != null) return sp;
         if (string.IsNullOrEmpty(characterId)) return null;
 
         sp = LoadHeadSprite("icon_" + characterId);
         if (sp != null) return sp;
 
-        // 101/102 盾兵共用头像
+        // 101/102 盾兵共用头像（老盾=101）
         if (characterId.StartsWith("dunbing"))
         {
+            sp = LoadHeadSprite("icon_dunbing101");
+            if (sp != null) return sp;
             sp = LoadHeadSprite("icon_dunbing102");
             if (sp != null) return sp;
             sp = LoadHeadSprite("icon_dunbing201");
@@ -143,7 +148,17 @@ public class MercenaryManager : Singleton<MercenaryManager>
         return null;
     }
 
-    public Sprite GetPlayerIcon() => GetIcon(PLAYER_ID);
+    public Sprite GetStandPortrait(string hireIdOrAssetId)
+        => MercPortraitSprites.GetStand(hireIdOrAssetId);
+
+    public Sprite GetHeadPortrait(string hireIdOrAssetId)
+        => MercPortraitSprites.GetHead(hireIdOrAssetId);
+
+    public Sprite GetPlayerIcon()
+    {
+        var sp = MercPortraitSprites.GetHead("player");
+        return sp != null ? sp : GetIcon(PLAYER_ID);
+    }
 
     #endregion
 
@@ -183,6 +198,15 @@ public class MercenaryManager : Singleton<MercenaryManager>
         var list = GetActiveMercData();
         for (int i = 0; i < list.Count; i++)
             result.Add(list[i].mercId);
+        return result;
+    }
+
+    public List<string> GetActiveMercHireIds()
+    {
+        var result = new List<string>();
+        var list = GetActiveMercData();
+        for (int i = 0; i < list.Count; i++)
+            result.Add(list[i].hireId);
         return result;
     }
 

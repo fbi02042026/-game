@@ -38,17 +38,7 @@ public static class LoadingUIPrefabGenerator
     {
         var root = new GameObject("LoadingUI", typeof(RectTransform));
         var canvas = root.AddComponent<Canvas>();
-        root.AddComponent<CanvasScaler>();
-        root.AddComponent<GraphicRaycaster>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 9999;
-
-        var scaler = root.GetComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.referenceResolution = new Vector2(GameConfig.DESIGN_WIDTH, GameConfig.DESIGN_HEIGHT);
-        scaler.matchWidthOrHeight = GameConfig.UI_MATCH;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.Loading);
 
         var ui = root.AddComponent<LoadingUI>();
         ui.BuildHierarchyForPrefab();
@@ -66,7 +56,7 @@ public static class LoadingUIPrefabGenerator
                 "全屏背景 UI/loading/loading01\n" +
                 "中下部剧情提示（中文 fusion-pixel）\n" +
                 "右下角「加载中」+ 百分比（数字 PixelFont）\n" +
-                "跨场景用 Overlay sortingOrder 9999",
+                "跨场景 Screen Space - Camera，sortOrder=" + GameConfig.UiSort.Loading,
                 "OK");
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
             if (prefab != null) Selection.activeObject = prefab;

@@ -134,18 +134,12 @@ public class StageClearEquipUI : MonoBehaviour
     {
         if (_root != null) return;
 
-        // 独立 Overlay Canvas，避免挂到战斗 UI Canvas 上导致偏左/缩放错乱
+        // 独立 Camera Canvas，避免挂到战斗 UI Canvas 上导致偏左/缩放错乱
         var cgo = new GameObject("StageClearCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         DontDestroyOnLoad(cgo);
         var canvas = cgo.GetComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 220;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleHud);
         canvas.pixelPerfect = false;
-        var scaler = cgo.GetComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(720f, 1280f);
-        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.matchWidthOrHeight = 1f;
 
         _root = new GameObject("StageClearPanel", typeof(RectTransform));
         _root.transform.SetParent(cgo.transform, false);

@@ -62,8 +62,7 @@ public class LegacyPoolBrowseUI : MonoBehaviour
             canvas = gameObject.AddComponent<Canvas>();
             gameObject.AddComponent<GraphicRaycaster>();
         }
-        UICanvasSetup.Apply(canvas);
-        canvas.sortingOrder = 940;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleLegacyPool);
 
         _root = new GameObject("Root", typeof(RectTransform));
         _root.transform.SetParent(transform, false);

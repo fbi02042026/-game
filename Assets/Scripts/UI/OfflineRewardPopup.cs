@@ -80,8 +80,7 @@ public class OfflineRewardPopup : MonoBehaviour
         var canvas = GetComponent<Canvas>();
         if (canvas == null)
             canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.Apply(canvas, Camera.main);
-        canvas.sortingOrder = 980;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
     }
 
     void BuildContentIfNeeded()

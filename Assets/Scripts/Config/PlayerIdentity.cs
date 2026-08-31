@@ -1,11 +1,13 @@
 using UnityEngine;
 
 /// <summary>
-/// 主角身份文案（与剧情「见习冒险者」对齐）。GDD 未给定名，暂用「莱恩」。
+/// 主角身份文案。显示名优先读存档（引导签名），否则用默认「莱恩」。
 /// </summary>
 public static class PlayerIdentity
 {
-    public const string DisplayName = "莱恩";
-    public const string Title = "见习";
-    public const string FullTitle = "见习冒险者";
+    public const string DefaultName = "\u83b1\u6069";
+    public const string Title = "\u89c1\u4e60";
+    public const string FullTitle = "\u89c1\u4e60\u5192\u9669\u8005";
+
+    public static string DisplayName => StoryProgress.GetPlayerName();
 }
