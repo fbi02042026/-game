@@ -224,14 +224,14 @@ public static class BackpackGridVisual
         rt.anchorMax = new Vector2(0f, 1f);
         rt.pivot = new Vector2(0f, 1f);
         rt.anchoredPosition = new Vector2(2f, -2f);
-        rt.sizeDelta = new Vector2(52f, 20f);
+        rt.sizeDelta = new Vector2(68f, 24f);
 
         var textGo = new GameObject("Label", typeof(RectTransform));
         textGo.transform.SetParent(go.transform, false);
         var t = textGo.AddComponent<Text>();
         t.text = badge;
         t.alignment = TextAnchor.MiddleCenter;
-        t.fontSize = 12;
+        t.fontSize = 18;
         t.color = new Color(0.85f, 0.95f, 1f, 1f);
         t.raycastTarget = false;
         t.font = GameFonts.GetChinese();

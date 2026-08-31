@@ -497,7 +497,7 @@ public class Monster : UnitBase
             : (1f + GameConfig.CHAPTER_SCALE_PER * Mathf.Max(0, chapter - 1));
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul);
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * 0.8f);
         attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER);
         attr.SetAttr(AttrType.Defense, baseDef * scale);
         float atkSpeedMul = GameConfig.MONSTER_ATK_SPEED_MUL;
@@ -563,9 +563,17 @@ public class Monster : UnitBase
         // ?????
         FindHPBar();
         NormalizeHPBarLayout(rootScale);
+        // #region agent log
+        DebugAgentLog.Log("H12", "Monster.InitFromTemplate", "hpbar_state",
+            $"{{\"hasHpBar\":{(_hpBarRoot != null ? "true" : "false")},\"name\":\"{name}\",\"hpBarActive\":{(_hpBarRoot != null && _hpBarRoot.gameObject.activeSelf ? "true" : "false")}}}");
+        // #endregion
         if (_hpBarRoot != null)
         {
             _hpBarRoot.gameObject.SetActive(true);
+        }
+        else
+        {
+            MonsterHealthBar.Create(this);
         }
 
         // ??????

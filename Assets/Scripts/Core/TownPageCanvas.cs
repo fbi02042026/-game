@@ -23,7 +23,7 @@ public static class TownPageCanvas
             if (scaler != null) Object.Destroy(scaler);
             var own = page.GetComponent<Canvas>();
             if (own != null) Object.Destroy(own);
-            UICanvasSetup.ApplyOn(hall.gameObject, Camera.main);
+            UICanvasSetup.ApplyOn(hall.gameObject, UICanvasSetup.ResolveUiCamera());
             return;
         }
 
@@ -31,7 +31,7 @@ public static class TownPageCanvas
         if (canvas == null)
             canvas = page.AddComponent<Canvas>();
         canvas.enabled = true;
-        UICanvasSetup.ApplyPopup(canvas, sortingOrder, Camera.main);
+        UICanvasSetup.ApplyPopup(canvas, sortingOrder, UICanvasSetup.ResolveUiCamera());
         if (page.GetComponent<GraphicRaycaster>() == null)
             page.AddComponent<GraphicRaycaster>();
     }

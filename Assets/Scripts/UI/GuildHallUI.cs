@@ -63,7 +63,7 @@ public class GuildHallUI : MonoBehaviour
     void Awake()
     {
         Instance = this;
-        UICanvasSetup.ApplyOn(gameObject, Camera.main);
+        UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
         UiPrefabRectGuard.Attach(transform, "Background");
         GameFonts.ApplyToHierarchy(transform);
         AutoBindMissingRefs();

@@ -24,7 +24,7 @@ public class LoadingUI : MonoBehaviour
         var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
         canvas.enabled = true;
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.Loading);
+        UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.Loading);
 
         if (transform.localScale.sqrMagnitude < 0.0001f)
             transform.localScale = Vector3.one;

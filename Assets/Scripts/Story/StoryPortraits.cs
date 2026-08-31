@@ -19,8 +19,11 @@ public static class StoryPortraits
     public static Sprite Get(string id)
     {
         if (string.IsNullOrEmpty(id)) return null;
+        // 剧情立绘优先走 Story/Portraits，保证尺寸一致（Merc 立绘比例不同）
+        var story = StoryAssetLoader.Load(StoryAssetLoader.Portraits, id);
+        if (story != null) return story;
         var stand = MercPortraitSprites.GetStand(id);
         if (stand != null) return stand;
-        return StoryAssetLoader.Load(StoryAssetLoader.Portraits, id);
+        return null;
     }
 }

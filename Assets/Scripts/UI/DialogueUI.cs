@@ -123,6 +123,18 @@ public class DialogueUI : MonoBehaviour
         rt.anchoredPosition = _arrowBasePos + new Vector2(0f, y);
     }
 
+    /// <summary>长段剧情开始前：刷新 Canvas/相机，避免回城后立绘不显示。</summary>
+    public void PrepareForStoryBeat()
+    {
+        gameObject.SetActive(true);
+        transform.SetAsLastSibling();
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.StoryDialogue);
+        _layoutCached = false;
+        CacheLayoutsIfNeeded();
+    }
+
     /// <summary>保留兼容；不再改对话框、正文区、名牌——这些以预制体为准。</summary>
     public void EnsureAdaptiveLayout()
     {
@@ -515,6 +527,9 @@ public class DialogueUI : MonoBehaviour
 
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.StoryDialogue);
         Canvas.ForceUpdateCanvases();
         SetDialogueChromeVisible(true);
         ApplyDialogueBoxLift();
@@ -533,6 +548,16 @@ public class DialogueUI : MonoBehaviour
             ApplySoloPortrait(initiatorPortrait, otherPortrait);
         else if (newPortraits)
             ApplyDualPortraits(initiatorPortrait, otherPortrait);
+
+        // #region agent log
+        if (newPortraits)
+        {
+            float lH = leftPortraitImage != null ? leftPortraitImage.rectTransform.sizeDelta.y : 0f;
+            float rH = rightPortraitImage != null ? rightPortraitImage.rectTransform.sizeDelta.y : 0f;
+            DebugAgentLog.Log("H14", "DialogueUI.ShowLine", "portrait_layout",
+                $"{{\"solo\":{(soloCentered ? "true" : "false")},\"leftH\":{lH:F1},\"rightH\":{rH:F1},\"leftActive\":{(leftPortraitImage != null && leftPortraitImage.gameObject.activeSelf ? "true" : "false")},\"rightActive\":{(rightPortraitImage != null && rightPortraitImage.gameObject.activeSelf ? "true" : "false")},\"profileH\":{_portraitProfile.screenHeightFrac:F3}}}");
+        }
+        // #endregion
 
         if (_soloMode)
             ApplySoloHighlight();
@@ -726,6 +751,26 @@ public class DialogueUI : MonoBehaviour
         img.gameObject.SetActive(true);
     }
 
+    /// <summary>单人居中会在 PortraitClip 下改 host 位置；切回双人前先拆掉 clip 并还原预制体锚点。</summary>
+    void ResetPortraitHost(Image img, RtLayout lay)
+    {
+        if (img == null) return;
+        var rt = img.rectTransform;
+        if (rt.parent != null && rt.parent.name == "PortraitClip")
+        {
+            var clip = rt.parent;
+            var originalParent = clip.parent as RectTransform;
+            int sib = clip.GetSiblingIndex();
+            rt.SetParent(originalParent, false);
+            rt.SetSiblingIndex(sib);
+            if (Application.isPlaying)
+                Destroy(clip.gameObject);
+            else
+                DestroyImmediate(clip.gameObject);
+        }
+        RestoreLayout(img, lay);
+    }
+
     static RectTransform GetPortraitHostRt(Image portrait)
     {
         if (portrait == null) return null;
@@ -739,6 +784,8 @@ public class DialogueUI : MonoBehaviour
     {
         CacheLayoutsIfNeeded();
         _soloMode = true;
+        ResetPortraitHost(leftPortraitImage, _leftPortraitLayout);
+        ResetPortraitHost(rightPortraitImage, _rightPortraitLayout);
         Sprite sp = otherPortrait != null ? otherPortrait : initiatorPortrait;
         if (leftPortraitImage != null)
             leftPortraitImage.gameObject.SetActive(false);
@@ -760,7 +807,7 @@ public class DialogueUI : MonoBehaviour
             hostRt.localScale = Vector3.one;
             hostRt.anchorMin = hostRt.anchorMax = new Vector2(0.5f, 0f);
             hostRt.pivot = new Vector2(0.5f, 0f);
-            float y = ResolveSoloPortraitBottomY(hostRt);
+            float y = ResolvePortraitBottomY(hostRt);
             hostRt.anchoredPosition = new Vector2(0f, y);
             rightPortraitImage.color = Color.white;
             PlacePortraitBehindDialogueBox(hostRt);
@@ -788,8 +835,8 @@ public class DialogueUI : MonoBehaviour
     {
         CacheLayoutsIfNeeded();
         _soloMode = false;
-        RestoreLayout(leftPortraitImage, _leftPortraitLayout);
-        RestoreLayout(rightPortraitImage, _rightPortraitLayout);
+        ResetPortraitHost(leftPortraitImage, _leftPortraitLayout);
+        ResetPortraitHost(rightPortraitImage, _rightPortraitLayout);
         RestoreLayout(leftNamePlateImage, _leftPlateLayout);
         RestoreLayout(rightNamePlateImage, _rightPlateLayout);
 
@@ -802,7 +849,7 @@ public class DialogueUI : MonoBehaviour
             NormalizePortraitSize(portraitRt, _portraitProfile);
             EnsurePortraitClipMask(leftPortraitImage, _portraitProfile.clipHeightFrac);
             var hostRt = GetPortraitHostRt(leftPortraitImage);
-            hostRt.anchoredPosition = new Vector2(hostRt.anchoredPosition.x, hostRt.anchoredPosition.y + lift);
+            ApplyPortraitBottomY(hostRt, lift);
             ClampPortraitInsideCanvas(hostRt);
         }
         if (rightPortraitImage != null)
@@ -813,7 +860,7 @@ public class DialogueUI : MonoBehaviour
             NormalizePortraitSize(portraitRt, _portraitProfile);
             EnsurePortraitClipMask(rightPortraitImage, _portraitProfile.clipHeightFrac);
             var hostRt = GetPortraitHostRt(rightPortraitImage);
-            hostRt.anchoredPosition = new Vector2(hostRt.anchoredPosition.x, hostRt.anchoredPosition.y + lift);
+            ApplyPortraitBottomY(hostRt, lift);
             ClampPortraitInsideCanvas(hostRt);
         }
 
@@ -1126,24 +1173,38 @@ public class DialogueUI : MonoBehaviour
         return Mathf.Clamp(desiredY, 0f, Mathf.Max(0f, maxY));
     }
 
-    /// <summary>单人立绘底边贴在对话框上沿，避免半身沉进框里。</summary>
-    float ResolveSoloPortraitBottomY(RectTransform hostRt)
+    /// <summary>单人立绘底边 Y：配置优先，否则贴在对话框上沿。</summary>
+    float ResolvePortraitBottomY(RectTransform hostRt)
     {
         var canvasRt = transform as RectTransform;
         float canvasH = canvasRt != null ? canvasRt.rect.height : 0f;
         if (canvasH < 64f) canvasH = GameConfig.DESIGN_HEIGHT;
 
-        float desired = canvasH * 0.32f + GetMobileLiftY();
+        float desired;
+        if (_portraitProfile.bottomScreenFrac > 0f)
+            desired = canvasH * _portraitProfile.bottomScreenFrac + GetMobileLiftY();
+        else
+            desired = canvasH * 0.32f + GetMobileLiftY();
+
         if (dialogueBoxImage != null)
         {
             var boxRt = dialogueBoxImage.rectTransform;
             Canvas.ForceUpdateCanvases();
-            // 与 DialogueBox 同为底对齐时：顶边 = anchoredPosition.y + height
             float boxTop = boxRt.anchoredPosition.y + boxRt.rect.height;
             desired = Mathf.Max(desired, boxTop + 16f);
         }
 
+        desired += _portraitProfile.bottomOffsetPx;
         return ClampPortraitBottomY(hostRt, desired);
+    }
+
+    void ApplyPortraitBottomY(RectTransform hostRt, float lift)
+    {
+        if (hostRt == null) return;
+        float y = _portraitProfile.bottomScreenFrac > 0f
+            ? ResolvePortraitBottomY(hostRt)
+            : hostRt.anchoredPosition.y + lift + _portraitProfile.bottomOffsetPx;
+        hostRt.anchoredPosition = new Vector2(hostRt.anchoredPosition.x, y);
     }
 
     /// <summary>用世界角点把立绘推进画布内，兼容右锚点佣兵立绘。</summary>

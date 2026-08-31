@@ -29,7 +29,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
     public void NotifyTownReady()
     {
         if (_townFlowBusy) return;
-        if (StoryDirector.Ensure() != null && StoryDirector.Ensure().IsPlaying) return;
+        if (StoryProgress.TutorialOutroPending && StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)
+            StoryDirector.Instance.StopPlaying();
+        else if (StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)
+            return;
 
         if (!GuildHallUI.ShouldHideTownForIntro)
             ClearTownBlockers();
@@ -281,6 +284,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return null;
         yield return WaitNotLoading();
 
+        ClearTownBlockers();
+        GuildHallUI.SetTownChromeVisible(true);
+
         // 收尾对话必须在公会主界面，不要叠在冒险页上
         TownHubController.PendingOpenAdventure = false;
         TownHubController.Instance?.OpenGuild();
@@ -297,6 +303,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return new WaitForSecondsRealtime(2.2f);
 
         bool done = false;
+        DialogueUI.Instance?.PrepareForStoryBeat();
         StoryDirector.Ensure().Play(new List<StoryBeat>
         {
             StoryDirector.Line("你", "老盾",
@@ -346,7 +353,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return EnsureTutorialWave(bm, 2);
         yield return WaitFieldClear();
 
-        yield return CoTutorialNextWave(bm, hint, GameConfig.GetWaveSpawnInterval(), 3);
+        yield return CoTutorialNextWave(bm, hint, GameConfig.GetWaveSpawnInterval(), 2);
         yield return WaitFieldClear();
 
         // —— 2) 宝箱陷阱：发现 → 左右埋伏 → 清场 → 开箱拿剑 ——
@@ -369,8 +376,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
             new TalkLine(Hero.Instance, "有个宝箱，真是好运！", 0.85f));
 
         float chestX = chestDir.ChestWorldX;
-        chestDir.SnapHeroBeforeChest();
-        bm.SpawnTutorialFlankAmbush(6, chestX);
+        bm.SpawnTutorialFlankAmbush(5, chestX);
         {
             int guard = 0;
             while (bm.GetAliveMonsterCount() <= 0 && guard < 8)
@@ -379,7 +385,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 yield return null;
                 yield return null;
                 if (bm.GetAliveMonsterCount() <= 0)
-                    bm.SpawnTutorialFlankAmbush(6, chestX);
+                    bm.SpawnTutorialFlankAmbush(5, chestX);
             }
         }
         yield return new WaitForSecondsRealtime(0.35f);
@@ -396,7 +402,6 @@ public class TutorialDirector : Singleton<TutorialDirector>
             bm.UnitsCanAct = false;
             HaltUnit(Hero.Instance);
         }
-        chestDir.SnapHeroBeforeChest();
 
         hint.Show("清完再开宝箱。", null, 1.5f);
         yield return new WaitForSecondsRealtime(0.15f);
@@ -557,11 +562,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (bm != null) bm.UnitsCanAct = true;
 
         hint.Show("组队后佣兵会自动战斗。", null, 3f);
-        yield return EnsureTutorialWave(bm, 5);
+        yield return EnsureTutorialWave(bm, 4);
         if (bm != null && bm.GetAliveMonsterCount() <= 0)
         {
             Debug.LogWarning("[Tutorial] 组队后首波未刷出，紧急补怪");
-            bm.SpawnTutorialFlankAmbush(4);
+            bm.SpawnTutorialFlankAmbush(3);
         }
         yield return WaitFieldClear(strict: true);
 
@@ -581,21 +586,21 @@ public class TutorialDirector : Singleton<TutorialDirector>
         WaitingEvacuate = true;
         RectTransform settingsRt = ui != null && ui.settingsButton != null
             ? ui.settingsButton.GetComponent<RectTransform>() : null;
-        hint.ShowHard("点右上角设置，选择「撤离」回城。", settingsRt);
+        // 软引导：硬遮罩挖空容易对不齐设置钮，导致点不到、设置弹窗出不来
+        hint.Show("点「撤离」回城；若未看到设置，稍等会自动打开。", settingsRt, -1f);
+        yield return null;
+        ui?.OnOpenSettings();
+        if (TutorialHintUI.Instance != null && TutorialHintUI.Instance.IsVisible
+            && SettingsPopupUI.Instance != null && SettingsPopupUI.Instance.EvacuateButton != null)
+        {
+            hint.ShowHard("选择「撤离」，回城结算。",
+                SettingsPopupUI.Instance.EvacuateButton.GetComponent<RectTransform>());
+        }
 
-        const float autoEvacuateSeconds = 6f;
-        float evacWait = 0f;
         while (WaitingEvacuate && BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun)
         {
             HaltUnit(Hero.Instance);
             HaltUnit(merc);
-            evacWait += Time.unscaledDeltaTime;
-            if (evacWait >= autoEvacuateSeconds)
-            {
-                WaitingEvacuate = false;
-                BattleManager.Instance?.TriggerEvacuation();
-                break;
-            }
             yield return null;
         }
 
@@ -816,19 +821,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         return null;
     }
 
-    /// <summary>教程武器对齐到玩家普攻手（左手 SPUM 等）。</summary>
+    /// <summary>教程武器固定逻辑主手；实际挂点仍由 HandRig 解析到普攻手。</summary>
     static void AlignWeaponToHeroAttackHand(EquipInstance eq)
     {
         if (eq == null || !WeaponLoadoutRules.IsLoadoutItem(eq)) return;
-        var cm = Hero.Instance != null ? Hero.Instance.costumeManager : HeroCostumeManager.Instance;
-        if (cm != null) cm.EnsureRigReady();
-        var rig = cm != null ? cm.HandRig : default;
-        if (!rig.IsValid) return;
-
-        eq.slotType = rig.AttackSlot;
-        eq.weaponHand = rig.AttackSlot == EquipSlotType.OffHand
-            ? WeaponHandSlot.OffHand
-            : WeaponHandSlot.MainHand;
+        eq.slotType = EquipSlotType.MainHand;
+        eq.weaponHand = WeaponHandSlot.MainHand;
     }
 
     static bool LooksLikeEnglishFileName(string name)

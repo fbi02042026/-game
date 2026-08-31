@@ -52,7 +52,7 @@ public class HealthNoticeUI : MonoBehaviour
             ui = go.AddComponent<HealthNoticeUI>();
         var canvas = go.GetComponent<Canvas>();
         if (canvas != null)
-            UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue);
+            UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue, UICanvasSetup.ResolveUiCamera());
         ui._onFinished = onFinished;
         ui.BindReferences();
         ui.StartCoroutine(ui.PresentRoutine());
@@ -66,7 +66,7 @@ public class HealthNoticeUI : MonoBehaviour
 
         var root = new GameObject("HealthNoticeUI", typeof(RectTransform));
         var canvas = root.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue);
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue, UICanvasSetup.ResolveUiCamera());
 
         var ui = root.AddComponent<HealthNoticeUI>();
 

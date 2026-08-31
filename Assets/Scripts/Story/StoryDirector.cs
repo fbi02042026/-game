@@ -56,7 +56,22 @@ public class StoryDirector : Singleton<StoryDirector>
 
     public static StoryDirector Ensure()
     {
+        _ = Instance;
         return Instance;
+    }
+
+    /// <summary>异常残留播放态时强制结束，便于回城收尾剧情再次触发。</summary>
+    public void StopPlaying()
+    {
+        if (_play != null)
+        {
+            StopCoroutine(_play);
+            _play = null;
+        }
+        IsPlaying = false;
+        ResumeGame();
+        SpeechBubbleTalker.SetSuppressed(false);
+        GameBgm.EndBattleStory();
     }
 
     DialogueUI EnsureUi()
@@ -93,7 +108,7 @@ public class StoryDirector : Singleton<StoryDirector>
 
         var canvas = go.GetComponent<Canvas>();
         if (canvas == null) canvas = go.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue);
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue, UICanvasSetup.ResolveUiCamera());
         canvas.pixelPerfect = false;
         canvas.enabled = true;
 

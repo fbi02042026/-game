@@ -43,7 +43,8 @@ public class PersistentUiCamera : MonoBehaviour
             _cam = gameObject.AddComponent<Camera>();
         _cam.orthographic = true;
         _cam.orthographicSize = GameConfig.CAMERA_ORTHO_SIZE;
-        _cam.clearFlags = CameraClearFlags.SolidColor;
+        // 仅兜底渲染绑定到本相机的 UI，不能 SolidColor 清屏（会把 Main 上的登录/忠告盖成黑屏）
+        _cam.clearFlags = CameraClearFlags.Depth;
         _cam.backgroundColor = Color.black;
         _cam.cullingMask = 0;
         _cam.depth = CameraDepth;
@@ -52,6 +53,26 @@ public class PersistentUiCamera : MonoBehaviour
         _cam.useOcclusionCulling = false;
         _cam.allowHDR = false;
         _cam.allowMSAA = false;
+        SyncEnabledState();
+    }
+
+    void LateUpdate()
+    {
+        SyncEnabledState();
+    }
+
+    /// <summary>有 Main 相机时关闭兜底相机，避免多余 Pass 或盖住场景 UI。</summary>
+    void SyncEnabledState()
+    {
+        if (_cam == null) return;
+        var main = Camera.main;
+        bool needFallback = main == null || !main.isActiveAndEnabled;
+        if (_cam.enabled != needFallback)
+        {
+            _cam.enabled = needFallback;
+            if (needFallback)
+                UICanvasSetup.RefreshDdolCanvases();
+        }
     }
 
     void OnDestroy()

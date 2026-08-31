@@ -151,9 +151,9 @@ public class TalentUI : MonoBehaviour
         else WireChoiceConfirmIfNeeded();
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
-        var canvas = UICanvasSetup.ApplyOn(gameObject, Camera.main);
+        var canvas = UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
         if (canvas != null)
-            UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownVeil, Camera.main);
+            UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownVeil, UICanvasSetup.ResolveUiCamera());
         EnsureLists();
         RefreshAll();
     }

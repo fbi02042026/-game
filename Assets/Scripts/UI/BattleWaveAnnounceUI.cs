@@ -107,6 +107,10 @@ public class BattleWaveAnnounceUI : MonoBehaviour
 
     IEnumerator CoPlayInternal(Kind kind)
     {
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.FullscreenFx);
+
         Sprite sp = LoadSprite(kind);
         if (sp == null || _image == null || _group == null)
         {

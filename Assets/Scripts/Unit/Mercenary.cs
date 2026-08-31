@@ -24,7 +24,7 @@ public class Mercenary : UnitBase
     Transform _nameLabelRoot;
     TextMesh _nameLabel;
     MeshRenderer _nameLabelRenderer;
-    const float NameScaleMul = 0.4f;
+    const float NameScaleMul = 1.2f;
 
     protected override void Awake()
     {

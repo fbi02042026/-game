@@ -364,6 +364,9 @@ public class HeroCostumeManager : MonoBehaviour
 
         RefreshWeaponLoadout(useMatching);
 
+        var ua = GetComponent<UnitAnimation>() ?? GetComponentInParent<UnitAnimation>();
+        ua?.RestoreSpumFlashColors();
+
         Debug.Log("[HeroCostumeManager] 换装刷新完成");
     }
 
@@ -605,11 +608,15 @@ public class HeroCostumeManager : MonoBehaviour
         EquipInstance attackEquip = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
         EquipInstance secondaryEquip = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.OffHand);
         bool twoHandEquipped = attackEquip != null && attackEquip.weaponType == WeaponType.TwoHand;
+        if (twoHandEquipped)
+            secondaryEquip = null;
 
         string attackSpum = attackEquip?.template != null ? attackEquip.template.spumName : null;
-        string secondarySpum = twoHandEquipped || secondaryEquip?.template == null
+        string secondarySpum = secondaryEquip?.template == null
             ? null
             : secondaryEquip.template.spumName;
+        if (!string.IsNullOrEmpty(attackSpum) && attackSpum == secondarySpum)
+            secondarySpum = null;
         _equippedAttackSpum = attackSpum;
         _equippedSecondarySpum = secondarySpum;
 

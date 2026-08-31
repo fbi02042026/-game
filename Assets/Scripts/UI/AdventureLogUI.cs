@@ -169,10 +169,21 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
     void ApplyTabIllustration()
     {
+        if (_tabIllustration == null)
+            BindTabIllustration();
         if (_tabIllustration == null) return;
+        if (!IsCodexTab(_tab) && _activeCard != null && !_activeCard.activeSelf)
+            _activeCard.SetActive(true);
         string key = CurrentTabName;
         if (string.IsNullOrEmpty(key)) return;
-        if (!UiKeyedBackgrounds.ApplyLogTabIllust(_tabIllustration, key))
+        if (UiKeyedBackgrounds.ApplyLogTabIllust(_tabIllustration, key))
+        {
+            _tabIllustration.enabled = true;
+            _tabIllustration.color = Color.white;
+            _tabIllustration.preserveAspect = true;
+            _tabIllustration.SetNativeSize();
+        }
+        else
             Debug.LogWarning($"[AdventureLogUI] 缺少标签插图 {key}");
     }
 

@@ -79,11 +79,11 @@ public class BattleUI : MonoBehaviour
         // 战斗场景：Match Width 铺满竖屏，避免 HUD 被裁切
         if (GameSceneGate.IsBattle)
         {
-            BattleViewportFit.Apply(Camera.main, GetComponent<Canvas>() ?? GetComponentInParent<Canvas>());
+            BattleViewportFit.Apply(UICanvasSetup.ResolveUiCamera(), GetComponent<Canvas>() ?? GetComponentInParent<Canvas>());
             UiPrefabRectGuard.Attach(transform, "Background");
         }
         else
-            UICanvasSetup.ApplyOn(gameObject, Camera.main);
+            UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
 
         if (autoButton != null) autoButton.onClick.AddListener(ToggleAutoBattle);
         if (pauseButton != null) pauseButton.onClick.AddListener(OnPause);
@@ -125,6 +125,11 @@ public class BattleUI : MonoBehaviour
 
     void Update()
     {
+        if (playerSlot != null && playerSlot.glowBorder != null && playerSlot.glowBorder.gameObject.activeSelf)
+            playerSlot.TickSkillReadyPulse();
+        if (playerSkillAvatar != null && playerSkillAvatar.IsReadyPulse)
+            playerSkillAvatar.TickReadyPulse();
+
         _liveBarTimer += Time.deltaTime;
         if (_liveBarTimer < LiveBarInterval) return;
         _liveBarTimer = 0f;
@@ -1360,21 +1365,14 @@ public class BattleUI : MonoBehaviour
 
     public void OnOpenSettings()
     {
-        // 美术自己挂了 SettingsPanel 就用他的，否则用代码搭的设置弹窗
-        if (settingsPanel != null)
-        {
-            settingsPanel.SetActive(!settingsPanel.activeSelf);
-            return;
-        }
-
-        var panel = BattleSettingsPanel.Ensure();
+        TutorialHintUI.Instance?.SetHardBlocking(false);
+        var panel = SettingsPopupUI.Ensure();
         panel.Open(SettingsHost.Battle);
 
-        // 引导阶段：开完设置直接把手指指到撤离按钮上
         if (TutorialDirector.Instance != null && TutorialDirector.Instance.WaitingEvacuate
             && panel.EvacuateButton != null)
         {
-            TutorialHintUI.Ensure().ShowHard("选择撤离，回城结算。",
+            TutorialHintUI.Ensure().ShowHard("选择「撤离」，回城结算。",
                 panel.EvacuateButton.GetComponent<RectTransform>());
         }
     }
@@ -1387,8 +1385,8 @@ public class BattleUI : MonoBehaviour
         if (characterPanel != null) characterPanel.SetActive(false);
         if (pausePanel != null) pausePanel.SetActive(false);
         if (settingsPanel != null) settingsPanel.SetActive(false);
-        if (BattleSettingsPanel.Instance != null && BattleSettingsPanel.Instance.IsOpen)
-            BattleSettingsPanel.Instance.Close();
+        if (SettingsPopupUI.Instance != null && SettingsPopupUI.Instance.IsOpen)
+            SettingsPopupUI.Instance.Close();
     }
 }
 
@@ -1409,6 +1407,8 @@ public class SkillAvatarUI
 
     private bool _isReady = false;
 
+    public bool IsReadyPulse => _isReady;
+
     /// <summary>
     /// 设置能量比例 0~1
     /// </summary>
@@ -1426,8 +1426,22 @@ public class SkillAvatarUI
             if (glowBorder != null)
             {
                 glowBorder.gameObject.SetActive(ready);
+                if (ready)
+                    glowBorder.color = new Color(1f, 0.85f, 0.15f, 0.85f);
             }
         }
+    }
+
+    public void TickReadyPulse()
+    {
+        if (!_isReady || glowBorder == null || !glowBorder.gameObject.activeSelf) return;
+        float a = 0.35f + 0.65f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7f));
+        var c = glowBorder.color;
+        c.r = 1f;
+        c.g = 0.85f;
+        c.b = 0.15f;
+        c.a = a;
+        glowBorder.color = c;
     }
 
     /// <summary>
@@ -1557,7 +1571,25 @@ public class CharacterSlotUI
 
         bool isReady = e >= 0.99f;
         if (glowBorder != null)
+        {
             glowBorder.gameObject.SetActive(isReady);
+            if (isReady)
+            {
+                glowBorder.color = new Color(1f, 0.85f, 0.15f, 0.85f);
+            }
+        }
+    }
+
+    public void TickSkillReadyPulse()
+    {
+        if (glowBorder == null || !glowBorder.gameObject.activeSelf) return;
+        float a = 0.35f + 0.65f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7f));
+        var c = glowBorder.color;
+        c.r = 1f;
+        c.g = 0.85f;
+        c.b = 0.15f;
+        c.a = a;
+        glowBorder.color = c;
     }
 
     public void SetEnergyEnabled(bool enabled)

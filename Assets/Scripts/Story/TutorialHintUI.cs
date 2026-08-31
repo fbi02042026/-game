@@ -217,6 +217,24 @@ public class TutorialHintUI : MonoBehaviour
         HidePointer();
     }
 
+    /// <summary>设置弹窗等更高层 UI 打开时，暂时关掉硬遮罩挡点击。</summary>
+    public void SetHardBlocking(bool on)
+    {
+        _hard = on && _follow != null;
+        if (_group != null)
+        {
+            _group.blocksRaycasts = _hard;
+            _group.interactable = _hard;
+        }
+        if (_raycaster == null) _raycaster = GetComponent<GraphicRaycaster>();
+        if (_raycaster != null) _raycaster.enabled = _hard;
+        SetDimsActive(_hard);
+        if (_holeRt != null)
+            _holeRt.gameObject.SetActive(_hard && _follow != null);
+        if (!_hard)
+            ForceClearBlockers();
+    }
+
     void OnHoleClicked()
     {
         if (!_hard || _follow == null) return;

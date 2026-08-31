@@ -28,7 +28,7 @@ public static class BattleViewportFit
         }
         if (rootCanvas == null) return;
 
-        if (cam == null) cam = Camera.main;
+        if (cam == null) cam = UICanvasSetup.ResolveUiCamera();
         rootCanvas.renderMode = RenderMode.ScreenSpaceCamera;
         rootCanvas.worldCamera = cam;
         rootCanvas.planeDistance = GameConfig.UI_PLANE_DISTANCE;

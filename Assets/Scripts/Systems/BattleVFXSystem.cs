@@ -170,6 +170,11 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
             baseScale.y * mul,
             baseScale.z * mul);
 
+        // #region agent log
+        DebugAgentLog.Log("H4", "BattleVFXSystem.PlaySlash", "slash_facing",
+            $"{{\"facingDir\":{facingDir},\"scaleX\":{go.transform.localScale.x:F3},\"faction\":\"{faction}\",\"posX\":{position.x:F2}}}");
+        // #endregion
+
         PrepareSlashParticles(go);
         StretchSlashLifetime(go, 0.5f);
         ResetTintableColors(go);

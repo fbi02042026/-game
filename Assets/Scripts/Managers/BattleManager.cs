@@ -41,6 +41,7 @@ public class BattleManager : Singleton<BattleManager>
     public float runGoldGainMul = 1f;
     /// <summary>当前关任务清关金币（HUD 预览 + 开箱发放）</summary>
     public int StageQuestClearGold { get; private set; }
+    bool _stageQuestGoldGranted;
     string _stageQuestObjective = "击败所有敌人";
     /// <summary>本局怪物攻速倍率（剧情选择等）</summary>
     public float runMonsterAtkSpeedMul = 1f;
@@ -191,6 +192,7 @@ public class BattleManager : Singleton<BattleManager>
         var data = SaveSystem.Instance?.Data;
         _enchantAtRunStart = data != null ? data.enchantStones : 0;
         _matsAtRunStart = data != null ? data.decomposeMats : 0;
+        _stageQuestGoldGranted = false;
         RunStats.Reset();
         RunStats.Chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         tempBuffs.Clear();
@@ -654,11 +656,12 @@ public class BattleManager : Singleton<BattleManager>
 
         // 左右夹击，拉开距离，不穿模（负=左、正=右）
         float[] offsets = { -5.2f, 5.2f, -6.4f, 6.4f, -4.4f, 4.4f, -7.2f, 7.2f };
+        var usedSprites = new System.Collections.Generic.HashSet<int>();
         for (int i = 0; i < n; i++)
         {
             float ox = offsets[i % offsets.Length];
             Vector3 pos = new Vector3(hx + ox, UnitBase.GROUND_Y, z);
-            Monster m = SpawnAmbushMonsterAt(pos);
+            Monster m = SpawnAmbushMonsterAt(pos, usedSprites);
             if (m == null) continue;
             m.SetForcedTarget(hero);
             wave.aliveCount++;
@@ -695,7 +698,7 @@ public class BattleManager : Singleton<BattleManager>
         }
     }
 
-    Monster SpawnAmbushMonsterAt(Vector3 pos)
+    Monster SpawnAmbushMonsterAt(Vector3 pos, System.Collections.Generic.HashSet<int> usedSprites = null)
     {
         EnsureMonsterPrefabReady();
         GameObject go = null;
@@ -717,7 +720,7 @@ public class BattleManager : Singleton<BattleManager>
         if (monster == null) monster = go.AddComponent<Monster>();
 
         int stageIdx = currentStage != null ? currentStage.stageIndex : 0;
-        if (!TryPickWaveMonster(stageIdx, monsters.Count, false, null, out MonsterConfig cfg, out int spriteIdx))
+        if (!TryPickWaveMonster(stageIdx, usedSprites != null ? usedSprites.Count : monsters.Count, false, usedSprites, out MonsterConfig cfg, out int spriteIdx))
         {
             Object.Destroy(go);
             return null;
@@ -2428,7 +2431,12 @@ public class BattleManager : Singleton<BattleManager>
 
         Vector3 vfxPos = healTarget != null ? healTarget.GetHitPosition() : hero.GetHitPosition();
         Transform vfxAttach = healTarget != null ? healTarget.transform : hero.transform;
-        SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, hero.facingDir, vfxAttach);
+        SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, hero.GetVfxFacingDir(), vfxAttach);
+
+        // #region agent log
+        DebugAgentLog.Log("H5", "BattleManager.TryUsePlayerSkill", "skill_vfx_facing",
+            $"{{\"facingDir\":{hero.facingDir},\"vfxDir\":{hero.GetVfxFacingDir()},\"scaleX\":{hero.transform.localScale.x:F3},\"skill\":\"{skill.skillId}\"}}");
+        // #endregion
 
         playerSkillEnergy = 0f;
         BattleUI.Instance?.UpdateSkillEnergy(0, 0f);
@@ -2509,7 +2517,7 @@ public class BattleManager : Singleton<BattleManager>
 
         Vector3 vfxPos = healTarget != null ? healTarget.GetHitPosition() : merc.GetHitPosition();
         Transform vfxAttach = healTarget != null ? healTarget.transform : merc.transform;
-        SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, merc.facingDir, vfxAttach);
+        SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, merc.GetVfxFacingDir(), vfxAttach);
 
         Debug.Log($"[BattleManager] 佣兵技能释放: {merc.mercId} → {skill.skillName} ({skill.skillId}) manual={manual}");
         return true;
@@ -2734,10 +2742,37 @@ public class BattleManager : Singleton<BattleManager>
         go.AddComponent<StageClearRewardDirector>();
     }
 
+    void TryGrantStageQuestGoldIfQuestComplete()
+    {
+        if (_stageQuestGoldGranted || StageQuestClearGold <= 0) return;
+        int goal = 0;
+        foreach (var w in _waves) goal += w.monsterCount;
+        if (goal < 1) goal = 1;
+        int alive = CountAliveMonsters();
+        int defeated = Mathf.Clamp(goal - alive, 0, goal);
+        if (defeated >= goal)
+            TryGrantStageQuestGold();
+    }
+
+    void TryGrantStageQuestGold()
+    {
+        if (_stageQuestGoldGranted || StageQuestClearGold <= 0) return;
+        int grant = Mathf.RoundToInt(StageQuestClearGold * runGoldGainMul);
+        if (grant <= 0) return;
+        _stageQuestGoldGranted = true;
+        currentGold += grant;
+        BattleUI.Instance?.UpdateGold(currentGold);
+        // #region agent log
+        DebugAgentLog.Log("H9", "BattleManager.TryGrantStageQuestGold", "quest_gold_granted",
+            $"{{\"grant\":{grant},\"currentGold\":{currentGold}}}");
+        // #endregion
+    }
+
     /// <summary>清怪后：宝箱 → 掉落 → 三选一 → chuansongmen</summary>
     void StartStageClearRewardSequence()
     {
         if (_rewardSequenceStarted || _stageCleared) return;
+        TryGrantStageQuestGold();
         if (ShouldPlayChapter1Ending())
         {
             _rewardSequenceStarted = true;
@@ -2787,10 +2822,14 @@ public class BattleManager : Singleton<BattleManager>
         int bonusStar = 0;
         int equipCount = GameConfig.EQUIP_CHOOSE_COUNT;
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
-        int bonusGold = StageQuestClearGold > 0
-            ? StageQuestClearGold
-            : BattleQuestConfig.GetClearGold(ch, currentStage.type, BattleDifficulty);
-        bonusGold = Mathf.RoundToInt(bonusGold * runGoldGainMul);
+        int bonusGold = 0;
+        if (!_stageQuestGoldGranted)
+        {
+            bonusGold = StageQuestClearGold > 0
+                ? StageQuestClearGold
+                : BattleQuestConfig.GetClearGold(ch, currentStage.type, BattleDifficulty);
+            bonusGold = Mathf.RoundToInt(bonusGold * runGoldGainMul);
+        }
 
         if (IsGoldDungeon)
             equipCount = 0;
@@ -2930,6 +2969,7 @@ public class BattleManager : Singleton<BattleManager>
 
     public void TriggerEvacuation()
     {
+        TryGrantStageQuestGoldIfQuestComplete();
         isInBattle = false;
         ClearAllMonsters();
         MercenaryManager.Instance?.ClearAllMercs();

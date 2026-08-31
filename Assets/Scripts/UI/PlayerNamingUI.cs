@@ -103,6 +103,7 @@ public class PlayerNamingUI : MonoBehaviour
 
         DialogueUI.Instance?.Hide();
         _input.text = PlayerNameGen.Roll();
+        ClearInputSelection();
         contentRoot.SetActive(true);
         EnsureCanvasShell();
         transform.SetAsLastSibling();
@@ -293,7 +294,16 @@ public class PlayerNamingUI : MonoBehaviour
     {
         if (_input == null) return;
         _input.text = PlayerNameGen.Roll();
-        _input.ActivateInputField();
+        ClearInputSelection();
+    }
+
+    /// <summary>填入随机名后取消全选，避免 InputField 白底高亮。</summary>
+    void ClearInputSelection()
+    {
+        int len = string.IsNullOrEmpty(_input.text) ? 0 : _input.text.Length;
+        _input.caretPosition = len;
+        _input.selectionAnchorPosition = len;
+        _input.selectionFocusPosition = len;
     }
 
     void OnConfirm()

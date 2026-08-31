@@ -338,6 +338,14 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
             : WeaponLoadoutRules.ResolveLogicalSlot(item.equip);
         item.equip.slotType = slot;
 
+        // #region agent log
+        if (WeaponLoadoutRules.IsLoadoutItem(item.equip))
+        {
+            DebugAgentLog.Log("H8", "GridBackpackSystem.EquipItem", "weapon_equip",
+                $"{{\"wearSlot\":\"{slot}\",\"weaponHand\":\"{item.equip.weaponHand}\",\"rigAttack\":\"{(rig.IsValid ? rig.AttackSlot.ToString() : "invalid")}\",\"rigSecondary\":\"{(rig.IsValid ? rig.SecondarySlot.ToString() : "invalid")}\",\"tpl\":\"{item.equip.templateId}\"}}");
+        }
+        // #endregion
+
         if (WeaponLoadoutRules.IsLoadoutItem(item.equip))
         {
             if (item.equip.weaponType == WeaponType.TwoHand)
@@ -351,6 +359,9 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
             {
                 _equippedBySlot[slot] = item.equip;
             }
+            PurgeStaleWeaponSlotKeys(item.equip, slot, rig);
+            if (rig.IsValid)
+                RemapWeaponWearSlots(rig);
         }
         else
         {
@@ -378,6 +389,19 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         }
         else
             _equippedBySlot.Remove(slot);
+    }
+
+    void PurgeStaleWeaponSlotKeys(EquipInstance equip, EquipSlotType wearSlot, HeroWeaponRig.HandRig rig)
+    {
+        if (equip == null) return;
+        var keys = new List<EquipSlotType>(_equippedBySlot.Keys);
+        for (int i = 0; i < keys.Count; i++)
+        {
+            EquipSlotType key = keys[i];
+            if (key == wearSlot) continue;
+            if (_equippedBySlot.TryGetValue(key, out var cur) && cur == equip)
+                _equippedBySlot.Remove(key);
+        }
     }
 
     /// <summary>

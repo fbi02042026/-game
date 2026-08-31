@@ -425,6 +425,22 @@ public abstract class UnitBase : MonoBehaviour
         transform.localScale = scale;
     }
 
+    /// <summary>特效朝向：SPUM 用 scale.x 判断视觉朝向，避免 facingDir 字段与镜像不一致。</summary>
+    public int GetVfxFacingDir()
+    {
+        bool proc = unitAnim != null && unitAnim.IsProcMode;
+        if (!proc)
+        {
+            float sx = transform.localScale.x;
+            if (Mathf.Abs(sx) > 0.001f)
+            {
+                bool visualRight = spriteDefaultFacesRight ? sx >= 0f : sx < 0f;
+                return visualRight ? 1 : -1;
+            }
+        }
+        return facingDir >= 0 ? 1 : -1;
+    }
+
     /// <summary>限制单位不超出屏幕可见范围（放宽边距，减少贴边卡顿）</summary>
     protected void ClampToScreen()
     {
@@ -541,7 +557,7 @@ public abstract class UnitBase : MonoBehaviour
             bool crit = isCrit;
             bool opening = openingHit;
             BattleVFXSystem.Instance.PlaySkillProjectile(
-                faction, firePos, hitPos, facingDir, hitTf, kit,
+                faction, firePos, hitPos, GetVfxFacingDir(), hitTf, kit,
                 null, 1f, 1f,
                 () => ResolveBasicAttackHit(locked, dmg, crit, opening));
             return;
@@ -671,7 +687,7 @@ public abstract class UnitBase : MonoBehaviour
             && Time.time - _lastHitVfxTime >= HitVfxCooldown)
         {
             _lastHitVfxTime = Time.time;
-            BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), isAlly, -facingDir);
+            BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), isAlly, -GetVfxFacingDir());
         }
 
         CombatJuice.Instance?.OnHit(this, finalDamage, isCrit, showHitVfx);

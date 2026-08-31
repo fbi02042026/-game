@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /// <summary>
@@ -74,6 +75,10 @@ public class UnitAnimation : MonoBehaviour
     /// <summary>放技能时向前扑的距离（世界单位，作用在精灵子节点上，不影响 AI 移动）。</summary>
     private float _procLunge;
 
+    SpriteRenderer[] _spumFlashSrs;
+    Color[] _spumFlashBaseline;
+    int _spumFlashGen;
+
     void Awake()
     {
         // 强制用配置值，避免预制体里序列化成 1 导致「看起来没减速」
@@ -110,6 +115,32 @@ public class UnitAnimation : MonoBehaviour
             _monsterClipMode = true;
             _procMode = false;
             ConfigureMonsterClipAnimator(_animator);
+        }
+
+        if (_spum != null)
+            CacheSpumFlashRenderers();
+    }
+
+    void CacheSpumFlashRenderers()
+    {
+        if (_spum == null) return;
+        _spumFlashSrs = GetComponentsInChildren<SpriteRenderer>(true);
+        _spumFlashBaseline = new Color[_spumFlashSrs.Length];
+        for (int i = 0; i < _spumFlashSrs.Length; i++)
+        {
+            if (_spumFlashSrs[i] != null && !IsShadowRenderer(_spumFlashSrs[i]))
+                _spumFlashBaseline[i] = _spumFlashSrs[i].color;
+        }
+    }
+
+    void RestoreSpumFlashFromBaseline()
+    {
+        var srs = _spumFlashSrs;
+        if (srs == null || _spumFlashBaseline == null) return;
+        for (int i = 0; i < srs.Length; i++)
+        {
+            if (srs[i] == null || IsShadowRenderer(srs[i])) continue;
+            srs[i].color = _spumFlashBaseline[i];
         }
     }
 
@@ -159,7 +190,7 @@ public class UnitAnimation : MonoBehaviour
     {
         if (source == null) return null;
 
-        var clip = Object.Instantiate(source);
+        var clip = UnityEngine.Object.Instantiate(source);
         clip.name = source.name;
         float len = Mathf.Max(0.05f, clip.length);
         const string path = "Monsters";
@@ -822,30 +853,66 @@ public class UnitAnimation : MonoBehaviour
         }
     }
 
+    public void RestoreSpumFlashColors()
+    {
+        if (_spum == null) return;
+        CacheSpumFlashRenderers();
+        RestoreSpumFlashFromBaseline();
+    }
+
     System.Collections.IEnumerator SpumDamagedFlash()
     {
-        var srs = GetComponentsInChildren<SpriteRenderer>(true);
-        if (srs == null || srs.Length == 0) yield break;
+        CacheSpumFlashRenderers();
+        var srs = _spumFlashSrs;
+        if (srs == null || srs.Length == 0 || _spumFlashBaseline == null) yield break;
 
-        var colors = new Color[srs.Length];
+        int gen = ++_spumFlashGen;
+        RestoreSpumFlashFromBaseline();
+
+        int shadowCount = 0;
+        int flashed = 0;
         for (int i = 0; i < srs.Length; i++)
         {
             if (srs[i] == null) continue;
-            colors[i] = srs[i].color;
-            var c = colors[i];
+            if (IsShadowRenderer(srs[i]))
+            {
+                shadowCount++;
+                continue;
+            }
+            var c = _spumFlashBaseline[i];
             c.r = Mathf.Min(1f, c.r + 0.55f);
             c.g = Mathf.Min(1f, c.g + 0.55f);
             c.b = Mathf.Min(1f, c.b + 0.55f);
             srs[i].color = c;
+            flashed++;
         }
+        // #region agent log
+        DebugAgentLog.Log("H1", "UnitAnimation.SpumDamagedFlash", "flash_start",
+            $"{{\"gen\":{gen},\"flashed\":{flashed},\"shadowSr\":{shadowCount},\"unit\":\"{EscapeJson(gameObject.name)}\"}}");
+        // #endregion
 
         yield return new WaitForSeconds(0.1f);
 
-        for (int i = 0; i < srs.Length; i++)
-        {
-            if (srs[i] != null && !_isDead)
-                srs[i].color = colors[i];
-        }
+        if (gen != _spumFlashGen || _isDead) yield break;
+        RestoreSpumFlashFromBaseline();
+        // #region agent log
+        DebugAgentLog.Log("H1", "UnitAnimation.SpumDamagedFlash", "flash_restore_baseline",
+            $"{{\"gen\":{gen},\"latestGen\":{_spumFlashGen}}}");
+        // #endregion
+    }
+
+    static bool IsShadowRenderer(SpriteRenderer sr)
+    {
+        if (sr == null || sr.gameObject == null) return false;
+        if (HeroWeaponRig.IsShieldRenderer(sr)) return false;
+        string n = sr.gameObject.name;
+        return n.IndexOf("shadow", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    static string EscapeJson(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
     }
 
     System.Collections.IEnumerator ProcDamagedFlash()

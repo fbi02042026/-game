@@ -54,6 +54,12 @@ public static class UICanvasSetup
         canvas.sortingOrder = sortOrder;
     }
 
+    /// <summary>DDOL 弹窗每次 Show/Open 时调用：重绑相机 + 根铺满（无全场景扫描）。</summary>
+    public static void RefreshPopup(Canvas canvas, int sortOrder)
+    {
+        ApplyPopup(canvas, sortOrder, ResolveUiCamera());
+    }
+
     /// <summary>
     /// 城镇/战斗 UI 摄像机：优先场景 Main，其次大厅 Canvas，最后持久 UI 相机。
     /// </summary>

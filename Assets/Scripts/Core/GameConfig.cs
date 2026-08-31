@@ -503,15 +503,15 @@ public static class GameConfig
     {
         int stageNo = Mathf.Max(1, stageIndex0Based + 1);
         if (IsOpeningStage() || (stageNo == 1 && (ChapterManager.Instance == null || ChapterManager.Instance.currentChapter <= 1)))
-            return Random.Range(16, 23);
+            return Mathf.Max(1, Mathf.RoundToInt(Random.Range(16, 23) * 0.8f));
         if (stageNo <= 2)
-            return Random.Range(10, 16);
+            return Mathf.Max(1, Mathf.RoundToInt(Random.Range(10, 16) * 0.8f));
 
         float t = Mathf.Clamp01((stageNo - 1) / 9f);
         int lo = Mathf.RoundToInt(Mathf.Lerp(14, 28, t));
         int hi = Mathf.RoundToInt(Mathf.Lerp(18, 35, t));
         if (hi < lo) hi = lo;
-        return Mathf.Clamp(Random.Range(lo, hi + 1), 10, 35);
+        return Mathf.Max(1, Mathf.RoundToInt(Random.Range(lo, hi + 1) * 0.8f));
     }
 
     /// <summary>普通关总怪数</summary>

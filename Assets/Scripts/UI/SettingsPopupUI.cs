@@ -71,7 +71,11 @@ public class SettingsPopupUI : MonoBehaviour
 
     public static SettingsPopupUI Ensure()
     {
-        if (Instance != null) return Instance;
+        if (Instance != null)
+        {
+            Instance.PrepareVisible();
+            return Instance;
+        }
 
         var prefab = Resources.Load<GameObject>(PrefabPath);
         GameObject go;
@@ -93,15 +97,27 @@ public class SettingsPopupUI : MonoBehaviour
         DontDestroyOnLoad(go);
         var panel = go.GetComponent<SettingsPopupUI>();
         if (panel == null) panel = go.AddComponent<SettingsPopupUI>();
+        panel.PrepareVisible();
         return panel;
     }
 
     void Awake()
     {
         Instance = this;
-        Bind();
+        PrepareVisible();
         Wire();
         if (root != null) root.SetActive(false);
+    }
+
+    /// <summary>预制体根 scale 可能为 0，不修复则弹窗永远不可见。</summary>
+    public void PrepareVisible()
+    {
+        if (transform.localScale == Vector3.zero)
+            transform.localScale = Vector3.one;
+        Bind();
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, ResolvePopupSort(CurrentHost));
     }
 
     void OnDestroy()
@@ -118,7 +134,7 @@ public class SettingsPopupUI : MonoBehaviour
 
     public void Open(SettingsHost host = SettingsHost.Auto)
     {
-        Bind();
+        PrepareVisible();
         Wire();
         _host = host;
         _prevTimeScale = Time.timeScale;
@@ -126,6 +142,9 @@ public class SettingsPopupUI : MonoBehaviour
         if (battle) Time.timeScale = 0f;
 
         if (root == null) BuildFallbackHierarchy();
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, ResolvePopupSort(CurrentHost));
         root.SetActive(true);
         root.transform.SetAsLastSibling();
         transform.SetAsLastSibling();
@@ -133,6 +152,18 @@ public class SettingsPopupUI : MonoBehaviour
         RefreshToggles();
         RefreshHostChrome();
         GameFonts.ApplyToHierarchy(transform);
+
+        // #region agent log
+        DebugAgentLog.Log("H11", "SettingsPopupUI.Open", "settings_open",
+            $"{{\"host\":\"{CurrentHost}\",\"sort\":{ResolvePopupSort(CurrentHost)},\"rootActive\":{(root != null && root.activeSelf ? "true" : "false")}}}");
+        // #endregion
+    }
+
+    static int ResolvePopupSort(SettingsHost host)
+    {
+        return ResolveHost(host) == SettingsHost.Battle
+            ? GameConfig.UiSort.BattleEvacuate
+            : GameConfig.UiSort.TownPopup;
     }
 
     public void Close()
@@ -221,11 +252,28 @@ public class SettingsPopupUI : MonoBehaviour
 
     void OnEvacuate()
     {
+        Time.timeScale = 1f;
+        if (root != null) root.SetActive(false);
+        EvacuateConfirmPopupUI.Show(ConfirmEvacuate, OnEvacuateCancelled);
+    }
+
+    void OnEvacuateCancelled()
+    {
+        Time.timeScale = 1f;
+        if (root != null) root.SetActive(true);
+    }
+
+    void ConfirmEvacuate()
+    {
         DoEvacuate();
     }
 
     void DoEvacuate()
     {
+        // #region agent log
+        DebugAgentLog.Log("H11", "SettingsPopupUI.DoEvacuate", "evacuate_clicked",
+            $"{{\"tutorialRun\":{(BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun ? "true" : "false")},\"waitingEvac\":{(TutorialDirector.Instance != null && TutorialDirector.Instance.WaitingEvacuate ? "true" : "false")}}}");
+        // #endregion
         Time.timeScale = 1f;
         if (root != null) root.SetActive(false);
         var tutorial = TutorialDirector.Instance;
@@ -322,7 +370,7 @@ public class SettingsPopupUI : MonoBehaviour
 
         var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
+        UICanvasSetup.ApplyPopup(canvas, ResolvePopupSort(CurrentHost));
 
         if (GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
@@ -421,7 +469,7 @@ public class SettingsPopupUI : MonoBehaviour
     {
         var canvas = gameObject.GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
+        UICanvasSetup.ApplyPopup(canvas, ResolvePopupSort(SettingsHost.Auto));
 
         if (gameObject.GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();

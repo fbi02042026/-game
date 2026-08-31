@@ -121,6 +121,9 @@ public class GlobalToastUI : MonoBehaviour
     void Play(string msg)
     {
         if (_label == null || _root == null) Build();
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.Toast);
         if (_co != null) StopCoroutine(_co);
         _co = StartCoroutine(CoPlay(msg));
     }

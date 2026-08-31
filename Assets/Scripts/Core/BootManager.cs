@@ -61,7 +61,7 @@ public class BootManager : MonoBehaviour
         _bootVeil = new GameObject("BootVeil");
         DontDestroyOnLoad(_bootVeil);
         var canvas = _bootVeil.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue);
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue, UICanvasSetup.ResolveUiCamera());
         var imgGo = new GameObject("Black", typeof(RectTransform), typeof(Image));
         imgGo.transform.SetParent(_bootVeil.transform, false);
         var rt = imgGo.GetComponent<RectTransform>();
@@ -97,7 +97,7 @@ public class BootManager : MonoBehaviour
 
         GameObject go = Instantiate(prefab);
         go.name = "LoginUI";
-        UICanvasSetup.ApplyOn(go, Camera.main);
+        UICanvasSetup.ApplyOn(go, UICanvasSetup.ResolveUiCamera());
 
         _login = go.GetComponent<LoginUI>();
         if (_login == null)

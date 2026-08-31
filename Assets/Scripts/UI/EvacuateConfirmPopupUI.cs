@@ -116,6 +116,9 @@ public class EvacuateConfirmPopupUI : MonoBehaviour
         if (root != null)
         {
             root.SetActive(true);
+            var canvas = GetComponent<Canvas>();
+            if (canvas != null)
+                UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.BattleEvacuate);
             transform.SetAsLastSibling();
         }
         GameFonts.ApplyToHierarchy(transform);

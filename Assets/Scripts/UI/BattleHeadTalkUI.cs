@@ -107,6 +107,9 @@ public class BattleHeadTalkUI : MonoBehaviour
             StopCoroutine(_co);
             _co = null;
         }
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.StoryDialogue);
         _co = StartCoroutine(CoPlayLine(speaker, content, hold));
         return _co;
     }
@@ -188,13 +191,21 @@ public class BattleHeadTalkUI : MonoBehaviour
 
     void LateUpdate() => RefreshFollowPosition();
 
+    Camera ResolveUiCamera()
+    {
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay && canvas.worldCamera != null)
+            return canvas.worldCamera;
+        return UICanvasSetup.ResolveUiCamera();
+    }
+
     void RefreshFollowPosition()
     {
         if (_root == null || !_root.gameObject.activeSelf || _follow == null) return;
-        var cam = Camera.main;
-        if (cam == null) return;
+        var uiCam = ResolveUiCamera();
+        if (uiCam == null) return;
         Vector3 world = _follow.transform.position + new Vector3(0f, 1.55f, 0f);
-        Vector3 screen = cam.WorldToScreenPoint(world);
+        Vector3 screen = uiCam.WorldToScreenPoint(world);
         if (screen.z <= 0f)
         {
             screen.z = 1f;
@@ -202,7 +213,7 @@ public class BattleHeadTalkUI : MonoBehaviour
             screen.y = Screen.height * 0.55f;
         }
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            transform as RectTransform, screen, null, out var local);
+            transform as RectTransform, screen, uiCam, out var local);
         var hostRt = transform as RectTransform;
         float halfW = _root.rect.width * 0.5f;
         float h = _root.rect.height;

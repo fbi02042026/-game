@@ -45,7 +45,7 @@ public class TownSceneManager : MonoBehaviour
         if (hallPrefab != null)
         {
             GameObject hall = Instantiate(hallPrefab);
-            UICanvasSetup.ApplyOn(hall, Camera.main);
+            UICanvasSetup.ApplyOn(hall, UICanvasSetup.ResolveUiCamera());
             if (hall.GetComponent<TownSceneBootstrap>() == null)
                 hall.AddComponent<TownSceneBootstrap>();
             StartCoroutine(CoNotifyStoryReady());

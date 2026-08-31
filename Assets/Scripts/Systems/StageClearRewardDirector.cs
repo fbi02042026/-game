@@ -53,11 +53,22 @@ public class StageClearRewardDirector : MonoBehaviour
         var hero = Hero.Instance;
         if (hero == null || _boxRoot == null) return;
         float boxX = _boxRoot.position.x;
-        var p = hero.transform.position;
-        p.x = boxX - standOffset;
-        GameConfig.SetWorldPosition(hero.gameObject, p);
+        float targetX = boxX - standOffset;
+        float hx = UnitBase.GetCombatX(hero);
+        if (Mathf.Abs(hx - targetX) > 1.5f)
+        {
+            var p = hero.transform.position;
+            p.x = targetX;
+            GameConfig.SetWorldPosition(hero.gameObject, p);
+        }
         hero.Face(1);
         if (hero.rb != null) hero.rb.velocity = Vector2.zero;
+    }
+
+    public void HideBoxVisual()
+    {
+        StopBoxEffect();
+        if (_boxRoot != null) _boxRoot.gameObject.SetActive(false);
     }
 
     void Awake()
@@ -135,8 +146,42 @@ public class StageClearRewardDirector : MonoBehaviour
         _running = false;
     }
 
+    /// <summary>宝箱在角色/怪后面（map 与 unit 之间）</summary>
+    const int BoxSortOrder = GameConfig.SORT_MAPROOT - 1;
+
+    void EnsureBoxPhysicsDisabled()
+    {
+        if (_boxRoot == null) return;
+        var cols = _boxRoot.GetComponentsInChildren<Collider>(true);
+        for (int i = 0; i < cols.Length; i++)
+            if (cols[i] != null) cols[i].enabled = false;
+        var rbs = _boxRoot.GetComponentsInChildren<Rigidbody>(true);
+        for (int i = 0; i < rbs.Length; i++)
+        {
+            if (rbs[i] == null) continue;
+            rbs[i].isKinematic = true;
+            rbs[i].velocity = Vector3.zero;
+        }
+    }
+
+    void ApplyBoxSorting()
+    {
+        if (_closeSr != null)
+        {
+            _closeSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            _closeSr.sortingOrder = BoxSortOrder;
+        }
+        if (_openSr != null)
+        {
+            _openSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            _openSr.sortingOrder = BoxSortOrder;
+        }
+    }
+
     void EnsureBoxController()
     {
+        EnsureBoxPhysicsDisabled();
+        ApplyBoxSorting();
         if (_boxAnim == null) return;
 #if UNITY_EDITOR
         if (_boxAnim.runtimeAnimatorController == null)
@@ -224,11 +269,27 @@ public class StageClearRewardDirector : MonoBehaviour
         return null;
     }
 
-    /// <summary>按 close/open 精灵底边贴 GROUND_Y，避免根节点 y=GROUND_Y 导致悬空。</summary>
-    void SnapBoxRootToGround()
+    /// <summary>按 close/open 精灵底边贴 GROUND_Y，避免根节点 y=GROUND_Y 导致悬空或沉入地下。</summary>
+    void SnapBoxRootToGround(bool useOpenVisual = false)
     {
         if (_boxRoot == null) return;
-        PrepareBoxClosedPose();
+        if (useOpenVisual)
+        {
+            if (_openSr != null)
+            {
+                _openSr.gameObject.SetActive(true);
+                _openSr.enabled = true;
+            }
+            if (_closeSr != null)
+                _closeSr.enabled = false;
+            if (_boxAnim != null)
+                _boxAnim.Update(0f);
+        }
+        else
+        {
+            PrepareBoxClosedPose();
+        }
+
         var sr = GetBoxGroundSprite();
         if (sr == null)
         {
@@ -242,10 +303,17 @@ public class StageClearRewardDirector : MonoBehaviour
         }
 
         float dy = UnitBase.GROUND_Y - sr.bounds.min.y;
+        if (useOpenVisual)
+            dy += 0.12f;
         if (Mathf.Abs(dy) < 0.0005f) return;
         var p = _boxRoot.position;
+        float beforeY = p.y;
         p.y += dy;
         _boxRoot.position = p;
+        // #region agent log
+        DebugAgentLog.Log("H6", "StageClearRewardDirector.SnapBoxRootToGround", "box_snap",
+            $"{{\"useOpen\":{(useOpenVisual ? "true" : "false")},\"beforeY\":{beforeY:F3},\"afterY\":{p.y:F3},\"groundY\":{UnitBase.GROUND_Y:F3},\"boundsMinY\":{sr.bounds.min.y:F3}}}");
+        // #endregion
     }
 
     void PlaceBoxAt(float worldX, float worldZ)
@@ -306,12 +374,12 @@ public class StageClearRewardDirector : MonoBehaviour
         if (_closeSr != null)
         {
             _closeSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _closeSr.sortingOrder = GameConfig.SORT_UNIT;
+            _closeSr.sortingOrder = BoxSortOrder;
         }
         if (_openSr != null)
         {
             _openSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _openSr.sortingOrder = GameConfig.SORT_UNIT;
+            _openSr.sortingOrder = BoxSortOrder;
         }
     }
 
@@ -420,6 +488,7 @@ public class StageClearRewardDirector : MonoBehaviour
 
         if (_closeSr != null) _closeSr.enabled = false;
         if (_openSr != null) _openSr.enabled = true;
+        SnapBoxRootToGround(useOpenVisual: true);
 
         GameObject ground = null;
         if (drop != null)
@@ -441,6 +510,8 @@ public class StageClearRewardDirector : MonoBehaviour
         onGroundIcon?.Invoke(ground);
         yield return new WaitForSecondsRealtime(0.25f);
         if (_boxAnim != null) _boxAnim.Play("open2", 0, 0f);
+        SnapBoxRootToGround(useOpenVisual: true);
+        HideBoxVisual();
     }
 
     static IEnumerator CoTutorialEquipPopAndBounce(Transform icon, Vector3 start, Vector3 land)
@@ -530,8 +601,20 @@ public class StageClearRewardDirector : MonoBehaviour
                 PlayBoxOpenEffect();
                 _boxAnim.Play("open1", 0, 0f);
                 yield return WaitAnimOrSeconds(_boxAnim, "open1", 1.15f);
+                if (_closeSr != null) _closeSr.enabled = false;
+                if (_openSr != null) _openSr.enabled = true;
+                SnapBoxRootToGround(useOpenVisual: true);
                 // open2 已在控制器里设为循环；播完 open1 后强制切入并保持循环
                 _boxAnim.Play("open2", 0, 0f);
+                SnapBoxRootToGround(useOpenVisual: true);
+                float open2Snap = 0f;
+                while (open2Snap < 2.5f)
+                {
+                    SnapBoxRootToGround(useOpenVisual: true);
+                    open2Snap += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+                HideBoxVisual();
             }
             else
                 yield return new WaitForSecondsRealtime(0.8f);
