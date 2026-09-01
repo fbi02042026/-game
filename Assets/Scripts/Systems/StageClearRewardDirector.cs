@@ -324,6 +324,28 @@ public class StageClearRewardDirector : MonoBehaviour
         p.z = worldZ;
         _boxRoot.position = p;
         SnapBoxRootToGround();
+        ForceBoxRenderersVisible();
+    }
+
+    void ForceBoxRenderersVisible()
+    {
+        if (_boxRoot == null) return;
+        _boxRoot.gameObject.SetActive(true);
+        var srs = _boxRoot.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+        {
+            if (srs[i] == null) continue;
+            srs[i].gameObject.SetActive(true);
+            srs[i].enabled = true;
+            srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            if (srs[i].sortingOrder < GameConfig.SORT_VFX)
+                srs[i].sortingOrder = GameConfig.SORT_VFX + 2;
+        }
+        if (_closeSr != null)
+        {
+            _closeSr.enabled = true;
+            _closeSr.gameObject.SetActive(true);
+        }
     }
 
     /// <summary>关箱/待机：不播烟花。</summary>
@@ -421,10 +443,12 @@ public class StageClearRewardDirector : MonoBehaviour
         var hero = Hero.Instance;
         float hx = hero != null ? UnitBase.GetCombatX(hero) : 0f;
         float z = _boxRoot.position.z;
-        float boxX = hx + aheadDist;
+        BattleManager.GetBattleVisibleX(out float visMin, out float visMax);
+        float boxX = Mathf.Clamp(hx + aheadDist, visMin + 0.8f, visMax - 0.35f);
         _boxRoot.gameObject.SetActive(true);
         ApplyBoxVisual(ClearBoxTier.Mu);
         PlaceBoxAt(boxX, z);
+        ForceBoxRenderersVisible();
         StopBoxEffect();
         EnsureBoxController();
         if (_closeSr != null) { _closeSr.enabled = true; _closeSr.gameObject.SetActive(true); }

@@ -54,7 +54,7 @@ public class GuildHallPrefabGenerator
         GameObject titleBadge = CreateRect(topBar.transform, "TitleBadge");
         SetAnchored(titleBadge, new Vector2(0, 0.5f), new Vector2(0, 0.5f), new Vector2(120, 0), new Vector2(220, 70));
         CreateImage(titleBadge.transform, "BadgeBg", C_PANEL);
-        Text title = CreateText(titleBadge.transform, "TitleText", "冒险者公会", 28, C_GOLD);
+        Text title = CreateText(titleBadge.transform, "TitleText", "皇家冒险者公会", 28, C_GOLD);
         Stretch(title.rectTransform);
 
         GameObject goldPanel = CreateRect(topBar.transform, "GoldPanel");
@@ -95,7 +95,7 @@ public class GuildHallPrefabGenerator
         GameObject bubble = CreateRect(scene, "SpeechBubble");
         SetAnchored(bubble, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0, 90), new Vector2(280, 70));
         CreateImage(bubble.transform, "BubbleBg", new Color(1f, 0.97f, 0.88f, 0.95f));
-        Text bubbleTxt = CreateText(bubble.transform, "BubbleText", "欢迎来到冒险者公会!", 20, new Color(0.35f, 0.25f, 0.15f));
+        Text bubbleTxt = CreateText(bubble.transform, "BubbleText", "欢迎来到皇家冒险者公会!", 20, new Color(0.35f, 0.25f, 0.15f));
         Stretch(bubbleTxt.rectTransform);
 
         // === 底部导航 ===

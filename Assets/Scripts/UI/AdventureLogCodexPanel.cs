@@ -15,6 +15,8 @@ public class AdventureLogCodexPanel
     const float CellGapY = 14f;
     const float HeaderH = 36f;
     const float PagePad = 8f;
+    const float SectionGap = 16f;      // 章与章（区与区）之间的间距
+    const float BottomBarReserve = 64f; // 底部翻页条留白，避免最后一行被箭头挡住
 
     readonly Transform _frame;
     GameObject _root;
@@ -25,6 +27,7 @@ public class AdventureLogCodexPanel
     Text _pageTitle;
     Button _prevBtn;
     Button _nextBtn;
+    Text _pageLabel;
 
     // 详情弹层（复用 Paper1/ActiveCard）
     GameObject _detailRoot;
@@ -99,32 +102,99 @@ public class AdventureLogCodexPanel
         if (_content == null)
             Debug.LogError("[AdventureLogCodex] 找不到 Paper1/Scroll/.../Content");
 
+        LayoutPageButtons(paper1);
         HideDetail();
+        PrepareCodexScrollArea();
         _root.SetActive(false);
+    }
+
+    void PrepareCodexScrollArea()
+    {
+        if (_scroll == null) return;
+        _scroll.gameObject.SetActive(true);
+        _scroll.enabled = true;
+        _scroll.horizontal = false;
+        _scroll.vertical = true;
+
+        var scrollRt = _scroll.transform as RectTransform;
+        if (scrollRt != null)
+        {
+            scrollRt.anchorMin = new Vector2(0.04f, 0.12f);
+            scrollRt.anchorMax = new Vector2(0.96f, 0.86f);
+            scrollRt.offsetMin = Vector2.zero;
+            scrollRt.offsetMax = Vector2.zero;
+            scrollRt.anchoredPosition = Vector2.zero;
+        }
+
+        if (_scroll.viewport != null)
+        {
+            var vp = _scroll.viewport;
+            vp.anchorMin = Vector2.zero;
+            vp.anchorMax = Vector2.one;
+            vp.offsetMin = Vector2.zero;
+            vp.offsetMax = Vector2.zero;
+        }
+
+        if (_content != null)
+        {
+            var vlg = _content.GetComponent<VerticalLayoutGroup>();
+            if (vlg != null) vlg.enabled = false;
+            var csf = _content.GetComponent<ContentSizeFitter>();
+            if (csf != null) csf.enabled = false;
+            _content.anchorMin = new Vector2(0f, 1f);
+            _content.anchorMax = new Vector2(1f, 1f);
+            _content.pivot = new Vector2(0.5f, 1f);
+            _content.anchoredPosition = Vector2.zero;
+        }
     }
 
     void EnsurePageButtons(Transform paper1)
     {
         var prev = FindChildByNames(paper1, "PrevPage", "上一页");
         var next = FindChildByNames(paper1, "NextPage", "下一页");
-        if (prev == null || next == null)
+
+        // 翻页条统一挂到 Paper1 根下，确保能锚定到页面最下方并浮在 Scroll 之上
+        var bar = paper1.Find("PageBar") ?? FindDeep(paper1, "PageBar");
+        if (bar == null)
         {
-            var bar = paper1.Find("PageBar");
-            if (bar == null)
-            {
-                var go = new GameObject("PageBar", typeof(RectTransform));
-                go.transform.SetParent(paper1, false);
-                var rt = (RectTransform)go.transform;
-                rt.anchorMin = new Vector2(0.5f, 1f);
-                rt.anchorMax = new Vector2(0.5f, 1f);
-                rt.pivot = new Vector2(0.5f, 1f);
-                rt.anchoredPosition = new Vector2(0f, -8f);
-                rt.sizeDelta = new Vector2(260f, 36f);
-                bar = go.transform;
-            }
-            if (prev == null) prev = CreateTinyBtn(bar, "PrevPage", "<", new Vector2(-100f, 0f));
-            if (next == null) next = CreateTinyBtn(bar, "NextPage", ">", new Vector2(100f, 0f));
+            var go = new GameObject("PageBar", typeof(RectTransform));
+            go.transform.SetParent(paper1, false);
+            bar = go.transform;
         }
+        else if (bar.parent != paper1)
+        {
+            bar.SetParent(paper1, false);
+        }
+        bar.SetAsLastSibling();
+
+        if (prev == null) prev = CreateTinyBtn(bar, "PrevPage", "<", new Vector2(-90f, 0f));
+        else if (prev.parent != bar) prev.SetParent(bar, false);
+        if (next == null) next = CreateTinyBtn(bar, "NextPage", ">", new Vector2(90f, 0f));
+        else if (next.parent != bar) next.SetParent(bar, false);
+
+        // 中间页码
+        var labelTr = bar.Find("PageLabel");
+        if (labelTr == null)
+        {
+            var lgo = new GameObject("PageLabel", typeof(RectTransform));
+            lgo.transform.SetParent(bar, false);
+            var lrt = (RectTransform)lgo.transform;
+            lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f);
+            lrt.pivot = new Vector2(0.5f, 0.5f);
+            lrt.anchoredPosition = Vector2.zero;
+            lrt.sizeDelta = new Vector2(90f, 32f);
+            var lt = lgo.AddComponent<Text>();
+            lt.font = GameFonts.GetChinese();
+            lt.fontSize = 20;
+            lt.alignment = TextAnchor.MiddleCenter;
+            lt.color = new Color(0.28f, 0.18f, 0.1f, 1f);
+            _pageLabel = lt;
+        }
+        else
+        {
+            _pageLabel = labelTr.GetComponent<Text>();
+        }
+
         _prevBtn = prev.GetComponent<Button>() ?? prev.gameObject.AddComponent<Button>();
         _nextBtn = next.GetComponent<Button>() ?? next.gameObject.AddComponent<Button>();
         _prevBtn.transition = Selectable.Transition.None;
@@ -133,6 +203,28 @@ public class AdventureLogCodexPanel
         _nextBtn.onClick.RemoveAllListeners();
         _prevBtn.onClick.AddListener(() => ShiftPage(-1));
         _nextBtn.onClick.AddListener(() => ShiftPage(1));
+
+        LayoutPageButtons(paper1);
+    }
+
+    void LayoutPageButtons(Transform paper1)
+    {
+        if (paper1 == null) return;
+        var bar = paper1.Find("PageBar") as RectTransform;
+        if (bar == null) return;
+
+        // 页面最下方居中
+        bar.anchorMin = new Vector2(0.5f, 0f);
+        bar.anchorMax = new Vector2(0.5f, 0f);
+        bar.pivot = new Vector2(0.5f, 0f);
+        bar.anchoredPosition = new Vector2(0f, 28f);
+        bar.sizeDelta = new Vector2(260f, 44f);
+        bar.SetAsLastSibling();
+
+        var prev = bar.Find("PrevPage") as RectTransform;
+        var next = bar.Find("NextPage") as RectTransform;
+        if (prev != null) prev.anchoredPosition = new Vector2(-90f, 0f);
+        if (next != null) next.anchoredPosition = new Vector2(90f, 0f);
     }
 
     void BindDetail(Transform paper1)
@@ -165,9 +257,10 @@ public class AdventureLogCodexPanel
     {
         Ensure();
         _mercMode = false;
-        _page = Mathf.Clamp(_page, 1, Mathf.Max(1, AdventureCodex.MaxMonsterChapter()));
+        _page = Mathf.Clamp(_page, 1, MonsterSpreadCount());
         if (_paperTask != null) _paperTask.SetActive(false);
         if (_root != null) _root.SetActive(true);
+        PrepareCodexScrollArea();
         HideDetail();
         Rebuild();
     }
@@ -176,10 +269,9 @@ public class AdventureLogCodexPanel
     {
         Ensure();
         _mercMode = true;
-        _page = Mathf.Clamp(_page, 0, 2);
         if (_paperTask != null) _paperTask.SetActive(false);
         if (_root != null) _root.SetActive(true);
-        HideDetail();
+        PrepareCodexScrollArea();
         Rebuild();
     }
 
@@ -188,21 +280,29 @@ public class AdventureLogCodexPanel
         ClearSpawned();
         HideDetail();
         CodexInfoPopupUI.HideActive();
-        if (_root != null) _root.SetActive(false);
-        if (_paperTask != null) _paperTask.SetActive(true);
+        var paper1 = ResolvePaper1();
+        if (paper1 != null)
+            paper1.gameObject.SetActive(false);
+        if (_paperTask != null)
+            _paperTask.SetActive(true);
+    }
+
+    Transform ResolvePaper1()
+    {
+        if (_root != null) return _root.transform;
+        return _frame != null ? _frame.Find("Paper1") : null;
+    }
+
+    // 一页放两章 → 页数 = ceil(章数 / 2)
+    static int MonsterSpreadCount()
+    {
+        return Mathf.Max(1, Mathf.CeilToInt(AdventureCodex.MaxMonsterChapter() / 2f));
     }
 
     void ShiftPage(int delta)
     {
-        if (_mercMode)
-        {
-            _page = Mathf.Clamp(_page + delta, 0, 2);
-        }
-        else
-        {
-            int max = AdventureCodex.MaxMonsterChapter();
-            _page = Mathf.Clamp(_page + delta, 1, max);
-        }
+        if (_mercMode) return; // 佣兵单页展示三区域，不翻页
+        _page = Mathf.Clamp(_page + delta, 1, MonsterSpreadCount());
         HideDetail();
         Rebuild();
     }
@@ -211,6 +311,11 @@ public class AdventureLogCodexPanel
     {
         ClearSpawned();
         if (_content == null || _cellTemplate == null) return;
+
+        // 佣兵单页三区域 → 隐藏翻页箭头/页码；怪物 → 显示
+        if (_prevBtn != null) _prevBtn.gameObject.SetActive(!_mercMode);
+        if (_nextBtn != null) _nextBtn.gameObject.SetActive(!_mercMode);
+        if (_pageLabel != null) _pageLabel.gameObject.SetActive(!_mercMode);
 
         if (_mercMode) RebuildMerc();
         else RebuildMonster();
@@ -221,16 +326,30 @@ public class AdventureLogCodexPanel
 
     void RebuildMonster()
     {
-        bool unlocked = AdventureCodex.ChapterUnlocked(_page);
-        string title = GameConfig.GetChapterMapName(_page);
-        SetPageTitle(unlocked
-            ? $"{title}  {_page}/{AdventureCodex.MaxMonsterChapter()}"
-            : $"{title}（未解锁）");
+        int spreads = MonsterSpreadCount();
+        int spread = Mathf.Clamp(_page, 1, spreads);
+        _page = spread;
+        int totalCh = AdventureCodex.MaxMonsterChapter();
+        int c1 = spread * 2 - 1;
+        int c2 = c1 + 1;
+
+        SetPageTitle("怪物图鉴");
+        SetPageLabel($"{spread}/{spreads}");
 
         float y = -PagePad;
-        y = SpawnSectionBanner(title, y);
+        y = SpawnChapterSection(c1, y);
+        if (c2 <= totalCh) y = SpawnChapterSection(c2, y);
+        y -= BottomBarReserve;
+        SetContentHeight(-y + PagePad);
+    }
 
-        var list = AdventureCodex.MonstersForChapter(_page);
+    float SpawnChapterSection(int chapter, float y)
+    {
+        bool unlocked = AdventureCodex.ChapterUnlocked(chapter);
+        string title = GameConfig.GetChapterMapName(chapter);
+        y = SpawnSectionBanner(unlocked ? title : $"{title}（未解锁）", y);
+
+        var list = AdventureCodex.MonstersForChapter(chapter);
         float cellW, cellH;
         GetCellSize(out cellW, out cellH);
         int col = 0;
@@ -251,16 +370,24 @@ public class AdventureLogCodexPanel
             }
         }
         if (col != 0) y -= cellH + CellGapY;
-        SetContentHeight(-y + PagePad);
+        return y - SectionGap;
     }
 
     void RebuildMerc()
     {
-        var rarity = (MercRosterDefs.MercRarity)_page;
-        SetPageTitle($"{MercPageNames[_page]}  {_page + 1}/3");
+        SetPageTitle("佣兵图鉴");
+        SetPageLabel("");
 
         float y = -PagePad;
-        y = SpawnSectionBanner(MercPageNames[_page], y);
+        for (int r = 0; r < MercPageNames.Length; r++)
+            y = SpawnMercSection((MercRosterDefs.MercRarity)r, MercPageNames[r], y);
+        y -= BottomBarReserve;
+        SetContentHeight(-y + PagePad);
+    }
+
+    float SpawnMercSection(MercRosterDefs.MercRarity rarity, string title, float y)
+    {
+        y = SpawnSectionBanner(title, y);
 
         float cellW, cellH;
         GetCellSize(out cellW, out cellH);
@@ -285,7 +412,7 @@ public class AdventureLogCodexPanel
             }
         }
         if (col != 0) y -= cellH + CellGapY;
-        SetContentHeight(-y + PagePad);
+        return y - SectionGap;
     }
 
     void GetCellSize(out float w, out float h)
@@ -312,12 +439,18 @@ public class AdventureLogCodexPanel
         if (_content == null) return;
         var sd = _content.sizeDelta;
         sd.y = Mathf.Max(180f, h);
+        sd.x = 0f;
         _content.sizeDelta = sd;
     }
 
     void SetPageTitle(string text)
     {
         if (_pageTitle != null) _pageTitle.text = text ?? "";
+    }
+
+    void SetPageLabel(string text)
+    {
+        if (_pageLabel != null) _pageLabel.text = text ?? "";
     }
 
     float SpawnSectionBanner(string text, float y)

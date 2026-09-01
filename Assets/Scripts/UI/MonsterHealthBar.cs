@@ -14,11 +14,11 @@ public class MonsterHealthBar : MonoBehaviour
 {
     [Header("血条样式")]
     [Tooltip("血条宽度（世界单位）")]
-    public float barWidth = 0.3f;
+    public float barWidth = 0.55f;
     [Tooltip("血条高度（世界单位）")]
-    public float barHeight = 0.03f;
-    [Tooltip("血条距离脚底的Y偏移（负值=脚下），修改预制体中的Y位置即可")]
-    public float yOffset = -0.5f;
+    public float barHeight = 0.06f;
+    [Tooltip("血条距离脚底的Y偏移（正值=略高于脚面）")]
+    public float yOffset = 0.22f;
     [Tooltip("血条背景色")]
     public Color bgColor = new Color(0.15f, 0f, 0f, 0.8f);
     [Tooltip("血条填充色（红色）")]
@@ -88,6 +88,7 @@ public class MonsterHealthBar : MonoBehaviour
             if (bar != null)
             {
                 bar._unit = unit;
+                bar.yOffset = ResolveFootYOffset(unit);
                 bar.ResetBar();
                 bar.ApplyCompensatedScale();
                 bar.ApplyCompensatedPosition();
@@ -128,6 +129,13 @@ public class MonsterHealthBar : MonoBehaviour
         Vector3 parentLossy = transform.parent != null ? transform.parent.lossyScale : Vector3.one;
         if (Mathf.Abs(parentLossy.y) < 0.01f) parentLossy.y = 1f;
         transform.localPosition = new Vector3(0, yOffset / parentLossy.y, 0);
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+        {
+            canvas.overrideSorting = true;
+            canvas.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            canvas.sortingOrder = GameConfig.SORT_VFX + 8;
+        }
     }
 
     /// <summary>重置血条状态（怪物从对象池复用时调用）</summary>
@@ -159,6 +167,12 @@ public class MonsterHealthBar : MonoBehaviour
         return _cachedPrefab;
     }
 
+    static float ResolveFootYOffset(UnitBase unit)
+    {
+        if (unit == null) return 0.22f;
+        return unit.GetHpBarWorldYOffset();
+    }
+
     /// <summary>
     /// 兜底动态创建血条（无预制体时使用）
     /// </summary>
@@ -169,11 +183,14 @@ public class MonsterHealthBar : MonoBehaviour
 
         MonsterHealthBar bar = canvasGo.AddComponent<MonsterHealthBar>();
         bar._unit = unit;
+        bar.barWidth = 0.55f;
+        bar.barHeight = 0.06f;
+        bar.yOffset = ResolveFootYOffset(unit);
 
         Canvas canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         canvas.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        canvas.sortingOrder = GameConfig.SORT_UNIT;
+        canvas.sortingOrder = GameConfig.SORT_VFX + 8;
 
         RectTransform canvasRect = canvasGo.GetComponent<RectTransform>();
         canvasRect.sizeDelta = new Vector2(bar.barWidth, bar.barHeight);
@@ -232,6 +249,9 @@ public class MonsterHealthBar : MonoBehaviour
                 _barRect.gameObject.SetActive(false);
             return;
         }
+
+        yOffset = ResolveFootYOffset(_unit);
+        ApplyCompensatedPosition();
 
         float maxHp = _unit.attr.GetAttr(AttrType.MaxHp);
         float ratio = maxHp > 0 ? _unit.currentHp / maxHp : 0;

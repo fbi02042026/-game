@@ -43,6 +43,8 @@ public class BattleManager : Singleton<BattleManager>
     public int StageQuestClearGold { get; private set; }
     bool _stageQuestGoldGranted;
     string _stageQuestObjective = "击败所有敌人";
+    int _tutorialSpriteMelee = 2;
+    int _tutorialSpriteRanged = 1;
     /// <summary>本局怪物攻速倍率（剧情选择等）</summary>
     public float runMonsterAtkSpeedMul = 1f;
     /// <summary>正在走向 chuansongmen，放宽屏幕钳制</summary>
@@ -530,6 +532,7 @@ public class BattleManager : Singleton<BattleManager>
             _activeWaveIndex = waveIdx;
             StopWaveCountdown();
             GamePerf.Log($"[BattleManager] 教程波 {waveIdx + 1} OK alive={CountAliveMonsters()} spawn={wave.aliveCount}");
+            RefreshStageQuestProgress();
         }
         else
         {
@@ -622,6 +625,7 @@ public class BattleManager : Singleton<BattleManager>
             EmergencySpawnVisibleMonsters(n);
             RetargetAllMonsters(victim);
         }
+        RefreshStageQuestProgress();
     }
 
     /// <summary>诱饵埋伏：从锚点左右两侧刷怪，朝玩家冲。</summary>
@@ -654,15 +658,19 @@ public class BattleManager : Singleton<BattleManager>
         _activeWaveIndex = _waves.Count - 1;
         SuppressStageClear = true;
 
-        // 左右夹击，拉开距离，不穿模（负=左、正=右）
-        float[] offsets = { -5.2f, 5.2f, -6.4f, 6.4f, -4.4f, 4.4f, -7.2f, 7.2f };
+        // 左右夹击：刷在当前镜头内，避免只出现在屏幕外一侧
+        GetBattleVisibleX(out float visMin, out float visMax);
+        float[] xs = { visMin + 0.1f, visMax - 0.1f, visMin + 0.55f, visMax - 0.55f, visMin + 0.95f, visMax - 0.95f };
+        float[] lanes = { -0.42f, 0.42f, 0.18f, -0.18f, -0.58f, 0.58f };
         var usedSprites = new System.Collections.Generic.HashSet<int>();
         for (int i = 0; i < n; i++)
         {
-            float ox = offsets[i % offsets.Length];
-            Vector3 pos = new Vector3(hx + ox, UnitBase.GROUND_Y, z);
+            float ox = xs[i % xs.Length];
+            float lane = lanes[i % lanes.Length];
+            Vector3 pos = new Vector3(ox, UnitBase.GROUND_Y + lane, z);
             Monster m = SpawnAmbushMonsterAt(pos, usedSprites);
             if (m == null) continue;
+            m.SetLaneY(lane);
             m.SetForcedTarget(hero);
             wave.aliveCount++;
         }
@@ -673,6 +681,7 @@ public class BattleManager : Singleton<BattleManager>
             RetargetAllMonsters(hero);
             wave.aliveCount = GetAliveMonsterCount();
         }
+        RefreshStageQuestProgress();
     }
 
     /// <summary>兜底：在锚点左右对称刷怪（避免只刷右侧）。</summary>
@@ -680,18 +689,22 @@ public class BattleManager : Singleton<BattleManager>
     {
         if (hero == null) return;
         float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
-        float[] offsets = { -5.2f, 5.2f, -6.4f, 6.4f, -4.4f, 4.4f, -7.2f, 7.2f };
+        GetBattleVisibleX(out float visMin, out float visMax);
+        float[] xs = { visMin + 0.1f, visMax - 0.1f, visMin + 0.55f, visMax - 0.55f, visMin + 0.95f, visMax - 0.95f };
+        float[] lanes = { -0.42f, 0.42f, 0.18f, -0.18f, -0.58f, 0.58f };
         int n = Mathf.Max(2, count);
         int stageIdx = currentStage != null ? currentStage.stageIndex : 0;
         var usedSprites = new System.Collections.Generic.HashSet<int>();
         for (int i = 0; i < n; i++)
         {
-            float ox = offsets[i % offsets.Length];
-            Vector3 pos = new Vector3(anchorX + ox, UnitBase.GROUND_Y, z);
+            float ox = xs[i % xs.Length];
+            float lane = lanes[i % lanes.Length];
+            Vector3 pos = new Vector3(ox, UnitBase.GROUND_Y + lane, z);
             if (!TryPickWaveMonster(stageIdx, monsters.Count + i, false, usedSprites, out MonsterConfig cfg, out int spriteIdx))
                 continue;
             Monster monster = SpawnMonster(cfg, stageIdx, pos, 1f, spriteIdx);
             if (monster == null) continue;
+            monster.SetLaneY(lane);
             monster.SetForcedTarget(hero);
             ApplyTutorialMonsterTuning(monster);
             ForceEnableMonsterRenderers(monster.transform);
@@ -771,7 +784,7 @@ public class BattleManager : Singleton<BattleManager>
     {
         if (!IsTutorialRun || monster == null || monster.attr == null) return;
         // 引导怪总血量 8–12，玩家约 2 点伤害，3–4 下击杀
-        float hp = Random.Range(8, 13);
+        float hp = Random.Range(8, 13) * GameConfig.MONSTER_HP_GLOBAL_MUL;
         monster.attr.SetAttr(AttrType.MaxHp, hp);
         monster.currentHp = hp;
     }
@@ -782,6 +795,14 @@ public class BattleManager : Singleton<BattleManager>
 
     public void LoadStage(StageData stage)
     {
+        MonsterStatsTable.Reload();
+        StageSpawnTable.Reload();
+        TutorialBattleTable.Reload();
+        MonsterAttackStyleTable.Reload();
+        BattleQuestTable.Reload();
+        SpritePickWeightTable.Reload();
+        WaveSlotTable.Reload();
+
         currentStage = stage;
         ClearAllMonsters();
         _waves.Clear();
@@ -852,9 +873,7 @@ public class BattleManager : Singleton<BattleManager>
         // 进关立刻把进度条 Marker 挂到当前 Node
         if (currentStage != null)
             BattleUI.Instance?.UpdateStageProgress(currentStage.stageIndex);
-        int monsterGoal = 0;
-        foreach (var w in _waves) monsterGoal += w.monsterCount;
-        if (monsterGoal <= 0) monsterGoal = 3;
+        int monsterGoal = GetStageMonsterGoal();
         var stageQuest = BattleQuestConfig.GetStageQuest(CurrentChapter, stage.type, IsGoldDungeon, BattleDifficulty);
         StageQuestClearGold = stageQuest.clearGold;
         _stageQuestObjective = stageQuest.objective;
@@ -1588,6 +1607,49 @@ public class BattleManager : Singleton<BattleManager>
         return n;
     }
 
+    int GetStageMonsterGoal()
+    {
+        int goal = 0;
+        if (_waves != null)
+        {
+            for (int i = 0; i < _waves.Count; i++)
+            {
+                var w = _waves[i];
+                if (w == null) continue;
+                if (IsTutorialRun && !w.spawned) continue;
+                goal += w.monsterCount;
+            }
+        }
+        return Mathf.Max(1, goal);
+    }
+
+    public void RefreshStageQuestProgress()
+    {
+        int goal = GetStageMonsterGoal();
+        int defeated = Mathf.Clamp(goal - CountAliveMonsters(), 0, goal);
+        BattleUI.Instance?.UpdateQuest(_stageQuestObjective, defeated, goal, StageQuestClearGold);
+    }
+
+    public static void GetBattleVisibleX(out float minX, out float maxX, float pad = 0.7f)
+    {
+        var cam = Camera.main;
+        if (cam == null || !cam.orthographic)
+        {
+            minX = -6f;
+            maxX = 6f;
+            return;
+        }
+        float halfW = cam.orthographicSize * cam.aspect;
+        float cx = cam.transform.position.x;
+        minX = cx - halfW + pad;
+        maxX = cx + halfW - pad;
+        if (maxX - minX < 1.5f)
+        {
+            minX = cx - 2f;
+            maxX = cx + 2f;
+        }
+    }
+
     void EnsureMonsterPrefabReady()
     {
         if (PoolManager.Instance == null) return;
@@ -1651,7 +1713,19 @@ public class BattleManager : Singleton<BattleManager>
         int total = elite
             ? GameConfig.GetEliteStageMonsterTotal(stageIdx)
             : GameConfig.GetNormalStageMonsterTotal(stageIdx);
+        int waveCountMin = GameConfig.STAGE_WAVE_MIN;
+        int waveCountMax = GameConfig.STAGE_WAVE_MAX;
+        StageType spawnType = elite ? StageType.Elite : StageType.Normal;
+        if (StageSpawnTable.TryResolve(CurrentChapter, stageIdx, spawnType, out var spawnRule))
+        {
+            if (!spawnRule.useFormulaForTotal && spawnRule.monsterTotal > 0)
+                total = spawnRule.monsterTotal;
+            waveCountMin = Mathf.Max(1, spawnRule.waveCountMin);
+            waveCountMax = Mathf.Max(waveCountMin, spawnRule.waveCountMax);
+        }
+
         int waveCount = GameConfig.GetSuggestedWaveCount(total, usable.Count);
+        waveCount = Mathf.Clamp(waveCount, waveCountMin, waveCountMax);
         int[] perWave = GameConfig.DistributeMonstersToWaves(total, waveCount);
 
         for (int i = 0; i < waveCount; i++)
@@ -1956,15 +2030,90 @@ public class BattleManager : Singleton<BattleManager>
     // 刷怪
     // ============================================================
 
-    /// <summary>单波内交替近战/远程；同波尽量不重复精灵（走配置表，不用预制体占位图）</summary>
-    int PickWaveSpriteIndex(System.Collections.Generic.List<int> availableSprites, int stageIdx,
-        System.Collections.Generic.List<MonsterConfig> pool, int slotIndex,
-        System.Collections.Generic.HashSet<int> usedThisWave = null)
+    /// <summary>引导关刷怪前：从 tutorial_battle 表读取近战/远程精灵编号。</summary>
+    public void ApplyTutorialBattleStep(int order)
+    {
+        var step = TutorialBattleTable.GetStepOrDefault(order);
+        _tutorialSpriteMelee = step.spriteMelee > 0 ? step.spriteMelee : 2;
+        _tutorialSpriteRanged = step.spriteRanged > 0 ? step.spriteRanged : 1;
+    }
+
+    /// <summary>单波内交替近战/远程；引导关强制混刷弓/法球与近战。</summary>
+    int PickTutorialSpriteIndex(System.Collections.Generic.List<int> availableSprites, int slotIndex)
     {
         if (availableSprites == null || availableSprites.Count == 0) return 1;
 
         bool wantRanged = slotIndex % 2 == 1;
+        int monsterChapter = GameConfig.GetMonsterChapter(CurrentChapter);
+        int fallbackMelee = _tutorialSpriteMelee > 0 ? _tutorialSpriteMelee : 2;
+        int fallbackRanged = _tutorialSpriteRanged > 0 ? _tutorialSpriteRanged : 1;
+
+        for (int i = 0; i < availableSprites.Count; i++)
+        {
+            int idx = availableSprites[i];
+            var style = MonsterAttackStyleTable.Get(monsterChapter, idx);
+            if (MonsterAttackStyleTable.IsRanged(style))
+                fallbackRanged = idx;
+            else
+                fallbackMelee = idx;
+        }
+
+        var matched = new System.Collections.Generic.List<int>();
+        for (int i = 0; i < availableSprites.Count; i++)
+        {
+            int idx = availableSprites[i];
+            var style = MonsterAttackStyleTable.Get(monsterChapter, idx);
+            bool isRanged = MonsterAttackStyleTable.IsRanged(style);
+            if (wantRanged == isRanged)
+                matched.Add(idx);
+        }
+        if (matched.Count == 0)
+            return wantRanged ? fallbackRanged : fallbackMelee;
+
+        if (wantRanged)
+        {
+            for (int i = 0; i < matched.Count; i++)
+            {
+                var s = MonsterAttackStyleTable.Get(monsterChapter, matched[i]);
+                if (s == MonsterAttackStyle.Bow) return matched[i];
+            }
+        }
+        return matched[slotIndex % matched.Count];
+    }
+
+    /// <summary>单波内交替近战/远程；同波尽量不重复精灵（走配置表，不用预制体占位图）</summary>
+    int PickWaveSpriteIndex(System.Collections.Generic.List<int> availableSprites, int stageIdx,
+        System.Collections.Generic.List<MonsterConfig> pool, int slotIndex,
+        System.Collections.Generic.HashSet<int> usedThisWave = null,
+        int waveIndex = 0, StageType stageType = StageType.Normal)
+    {
+        if (availableSprites == null || availableSprites.Count == 0) return 1;
+
+        if (IsTutorialRun)
+            return PickTutorialSpriteIndex(availableSprites, slotIndex);
+
         int chapter = CurrentChapter;
+        WaveSlotTable.EnsureLoaded();
+        if (WaveSlotTable.TryGetSlot(chapter, stageIdx, stageType, waveIndex, slotIndex, out var slotRule))
+        {
+            if (slotRule.spriteIndex > 0 && availableSprites.Contains(slotRule.spriteIndex))
+                return slotRule.spriteIndex;
+
+            var styleFiltered = FilterSpritesByStyle(availableSprites, chapter, slotRule.styleFilter);
+            if (styleFiltered.Count > 0)
+            {
+                if (!slotRule.allowDuplicate && usedThisWave != null && usedThisWave.Count > 0)
+                {
+                    var unused = styleFiltered.Where(idx => !usedThisWave.Contains(idx)).ToList();
+                    if (unused.Count > 0) styleFiltered = unused;
+                }
+                if (ConfigManager.Instance != null)
+                    return ConfigManager.Instance.PickWeightedSpriteIndex(styleFiltered, stageIdx);
+                return styleFiltered[slotIndex % styleFiltered.Count];
+            }
+        }
+
+        bool wantRanged = slotIndex % 2 == 1;
         var filtered = new System.Collections.Generic.List<int>();
         for (int k = 0; k < availableSprites.Count; k++)
         {
@@ -1990,9 +2139,34 @@ public class BattleManager : Singleton<BattleManager>
         return ConfigManager.Instance.PickWeightedSpriteIndex(filtered, stageIdx);
     }
 
+    static System.Collections.Generic.List<int> FilterSpritesByStyle(
+        System.Collections.Generic.List<int> availableSprites, int chapter, string styleFilter)
+    {
+        var result = new System.Collections.Generic.List<int>();
+        if (availableSprites == null || availableSprites.Count == 0) return result;
+        int monsterChapter = GameConfig.GetMonsterChapter(chapter);
+        string filter = string.IsNullOrEmpty(styleFilter) ? "Any" : styleFilter.Trim();
+
+        for (int i = 0; i < availableSprites.Count; i++)
+        {
+            int idx = availableSprites[i];
+            var style = MonsterAttackStyleTable.Get(monsterChapter, idx);
+            if (filter.Equals("Any", System.StringComparison.OrdinalIgnoreCase))
+                result.Add(idx);
+            else if (filter.Equals("Bow", System.StringComparison.OrdinalIgnoreCase) && style == MonsterAttackStyle.Bow)
+                result.Add(idx);
+            else if (filter.Equals("Ranged", System.StringComparison.OrdinalIgnoreCase) && MonsterAttackStyleTable.IsRanged(style))
+                result.Add(idx);
+            else if (filter.Equals("Melee", System.StringComparison.OrdinalIgnoreCase) && !MonsterAttackStyleTable.IsRanged(style))
+                result.Add(idx);
+        }
+        return result;
+    }
+
     bool TryPickWaveMonster(int stageIdx, int slotIndex, bool isBossWave,
         System.Collections.Generic.HashSet<int> usedSprites,
-        out MonsterConfig template, out int spriteIndexOverride)
+        out MonsterConfig template, out int spriteIndexOverride,
+        int waveIndex = 0, StageType stageType = StageType.Normal)
     {
         template = null;
         spriteIndexOverride = 1;
@@ -2023,7 +2197,8 @@ public class BattleManager : Singleton<BattleManager>
         }
         else
         {
-            spriteIndexOverride = PickWaveSpriteIndex(availableSprites, stageIdx, pool, slotIndex, usedSprites);
+            spriteIndexOverride = PickWaveSpriteIndex(availableSprites, stageIdx, pool, slotIndex, usedSprites,
+                waveIndex, stageType);
             int pickedSprite = spriteIndexOverride;
             template = pool.Find(m => !m.isBoss && m.spriteIndex == pickedSprite);
             if (template == null)
@@ -2052,6 +2227,7 @@ public class BattleManager : Singleton<BattleManager>
         if (waveIndex < 0) waveIndex = 0;
 
         int stageIdx = currentStage != null ? currentStage.stageIndex : 0;
+        StageType stageType = currentStage != null ? currentStage.type : StageType.Normal;
         int chapter = CurrentChapter;
         if (ConfigManager.Instance == null)
         {
@@ -2118,7 +2294,7 @@ public class BattleManager : Singleton<BattleManager>
         for (int i = 0; i < wave.monsterCount; i++)
         {
             if (!TryPickWaveMonster(stageIdx, i, wave.isBossWave, usedSpritesThisWave,
-                    out MonsterConfig template, out int spriteIndexOverride))
+                    out MonsterConfig template, out int spriteIndexOverride, waveIndex, stageType))
             {
                 Debug.LogWarning($"[BattleManager] 波内第{i + 1}只取配置失败，跳过");
                 continue;
@@ -2128,18 +2304,26 @@ public class BattleManager : Singleton<BattleManager>
             if (template.isBoss && !wave.isBossWave)
                 monsterScale = GameConfig.BOSS_SCALE_MULTIPLIER;
 
-            float spawnY = UnitBase.GROUND_Y;
-            float spawnX = engageBaseX + i * waveSpacing;
+            float lane = ((i % 3) - 1) * (GameConfig.BATTLE_LANE_HALF * 0.62f);
+            float spawnY = UnitBase.GROUND_Y + lane;
+            bool fromLeft = (i % 2) == 1;
+            GetBattleVisibleX(out float visMin, out float visMax);
+            float spawnX = fromLeft
+                ? Mathf.Lerp(visMin, heroCombatX, 0.28f)
+                : engageBaseX + i * waveSpacing;
+            spawnX = Mathf.Clamp(spawnX, visMin + 0.2f, visMax - 0.2f);
             if (wave.spawnAnchor != null)
                 spawnZ = wave.spawnAnchor.position.z;
 
             Vector3 engagePos = new Vector3(spawnX, spawnY, spawnZ);
-            float enterDist = GameConfig.MONSTER_ENTER_DISTANCE;
-            Vector3 enterFrom = new Vector3(spawnX + enterDist, spawnY, spawnZ);
+            float enterSign = fromLeft ? -1f : 1f;
+            float enterX = fromLeft ? visMin : visMax;
+            Vector3 enterFrom = new Vector3(enterX, spawnY, spawnZ);
 
             Monster m = SpawnMonster(template, stageIdx, enterFrom, monsterScale, spriteIndexOverride);
             if (m != null)
             {
+                m.SetLaneY(lane);
                 ForceEnableMonsterRenderers(m.transform);
                 m.BeginMapEnter(engagePos, GameConfig.MONSTER_ENTER_SPEED);
                 if (isElite && !wave.isBossWave)
@@ -2176,10 +2360,17 @@ public class BattleManager : Singleton<BattleManager>
 
         for (int i = 0; i < wave.monsterCount; i++)
         {
-            float spawnY = UnitBase.GROUND_Y;
+            float lane = ((i % 3) - 1) * (GameConfig.BATTLE_LANE_HALF * 0.62f);
+            float spawnY = UnitBase.GROUND_Y + lane;
             float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
-            float spawnX = engageBaseX + i * waveSpacing;
-            Vector3 pos = new Vector3(spawnX + GameConfig.MONSTER_ENTER_DISTANCE, spawnY, spawnZ);
+            GetBattleVisibleX(out float visMin, out float visMax);
+            bool fromLeft = (i % 2) == 1;
+            float spawnX = fromLeft
+                ? Mathf.Lerp(visMin, heroCombatX, 0.28f)
+                : engageBaseX + i * waveSpacing;
+            spawnX = Mathf.Clamp(spawnX, visMin + 0.2f, visMax - 0.2f);
+            float enterX = fromLeft ? visMin : visMax;
+            Vector3 pos = new Vector3(enterX, spawnY, spawnZ);
             Vector3 engage = new Vector3(spawnX, spawnY, spawnZ);
 
             GameObject go = null;
@@ -2235,6 +2426,7 @@ public class BattleManager : Singleton<BattleManager>
 
             monster.Init(fallbackCfg, 0, CurrentChapter, fallbackScale, fallbackSpriteOverride);
             ApplyTutorialMonsterTuning(monster);
+            monster.SetLaneY(lane);
             monster.BeginMapEnter(engage, GameConfig.MONSTER_ENTER_SPEED);
             monster.OnDead += OnMonsterDead;
             monsters.Add(monster);
@@ -2311,6 +2503,7 @@ public class BattleManager : Singleton<BattleManager>
 
     void OnMonsterDead(UnitBase monster)
     {
+        _aliveMonsterCacheFrame = -1;
         Monster m = monster as Monster;
         if (m == null) return;
 
@@ -2332,14 +2525,9 @@ public class BattleManager : Singleton<BattleManager>
 
         Hero.Instance?.AddExp(m.expDrop);
 
-        int goal = 0;
-        foreach (var w in _waves) goal += w.monsterCount;
-        if (goal < 1) goal = 1;
-        int alive = 0;
-        for (int i = 0; i < monsters.Count; i++)
-            if (monsters[i] != null && !monsters[i].isDead) alive++;
-        // 当前死亡单位仍在列表里时 alive 含自己，defeated 用 clamp
-        int defeated = Mathf.Clamp(goal - Mathf.Max(0, alive - 1), 0, goal);
+        int goal = GetStageMonsterGoal();
+        int alive = CountAliveMonsters();
+        int defeated = Mathf.Clamp(goal - alive, 0, goal);
         BattleUI.Instance?.UpdateQuest(_stageQuestObjective, defeated, goal, StageQuestClearGold);
 
         float killGain = (m.config != null && m.config.isBoss) ? 0.5f : ENERGY_PER_KILL;
@@ -2603,10 +2791,11 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         float damage = caster.attr.GetAttr(AttrType.Attack) * Mathf.Max(1f, skill.damageMultiplier);
+        int vfxDir = caster.GetVfxFacingDir();
         if (skill.skillType == SkillSystem.SkillType.SingleTarget)
         {
             UnitBase t = caster is Mercenary m ? m.FindNearestEnemy() : FindNearestMonster();
-            if (t != null) t.TakeDamage(damage, false);
+            if (t != null) t.TakeDamage(damage, false, false, true, vfxDir);
         }
         else
         {
@@ -2615,7 +2804,7 @@ public class BattleManager : Singleton<BattleManager>
                 if (monsters[i] == null || monsters[i].isDead) continue;
                 float dist = Mathf.Abs(monsters[i].transform.position.x - caster.transform.position.x);
                 if (skill.aoeRadius > 0 && dist > skill.aoeRadius) continue;
-                monsters[i].TakeDamage(damage, false);
+                monsters[i].TakeDamage(damage, false, false, true, vfxDir);
             }
         }
     }
@@ -2762,6 +2951,7 @@ public class BattleManager : Singleton<BattleManager>
         _stageQuestGoldGranted = true;
         currentGold += grant;
         BattleUI.Instance?.UpdateGold(currentGold);
+        GlobalToastUI.Show($"获得任务金币 +{grant}");
         // #region agent log
         DebugAgentLog.Log("H9", "BattleManager.TryGrantStageQuestGold", "quest_gold_granted",
             $"{{\"grant\":{grant},\"currentGold\":{currentGold}}}");
@@ -2772,6 +2962,7 @@ public class BattleManager : Singleton<BattleManager>
     void StartStageClearRewardSequence()
     {
         if (_rewardSequenceStarted || _stageCleared) return;
+        if (CountAliveMonsters() > 0) return;
         TryGrantStageQuestGold();
         if (ShouldPlayChapter1Ending())
         {
@@ -2991,6 +3182,8 @@ public class BattleManager : Singleton<BattleManager>
     {
         if (TutorialDirector.Instance != null)
             TutorialDirector.Instance.WaitingEvacuate = false;
+        if (!_stageQuestGoldGranted && StageQuestClearGold > 0)
+            TryGrantStageQuestGold();
         // currentGold 含城镇底金，必须走差额写回，禁止整额 Add
         PersistBattleGold();
         StoryProgress.MarkTutorialBattleCleared();

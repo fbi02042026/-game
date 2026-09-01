@@ -113,6 +113,13 @@ public class TavernRosterPanel : MonoBehaviour
                 _cardIcons[i].sprite = icon;
                 _cardIcons[i].enabled = icon != null;
                 _cardIcons[i].preserveAspect = true;
+                if (icon != null)
+                    PortraitIdleMotion.EnsureOn(_cardIcons[i].rectTransform, i * 0.27f);
+                else
+                {
+                    var idle = _cardIcons[i].GetComponent<PortraitIdleMotion>();
+                    if (idle != null) idle.enabled = false;
+                }
             }
         }
     }

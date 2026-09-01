@@ -13,6 +13,17 @@ public static class ContentPaths
         public const string MonsterSpriteOpaque = "Data/Tables/monster_sprite_opaque";
         public const string EquipAnchors = "Data/Tables/equip_anchors";
         public const string ConfigFingerprint = "Data/Tables/config_fingerprint";
+        public const string MonsterStats = "Data/Tables/monster_stats";
+        public const string ChapterThemeMap = "Data/Tables/chapter_theme_map";
+        public const string MonsterUnlockTier = "Data/Tables/monster_unlock_tier";
+        public const string StageSpawn = "Data/Tables/stage_spawn";
+        public const string TutorialBattle = "Data/Tables/tutorial_battle";
+        public const string BattleQuest = "Data/Tables/battle_quest";
+        public const string StageRollerWeights = "Data/Tables/stage_roller_weights";
+        public const string SpritePickWeight = "Data/Tables/sprite_pick_weight";
+        public const string WaveSlot = "Data/Tables/wave_slot";
+        public const string ChapterBranch = "Data/Tables/chapter_branch";
+        public const string ChapterBranchRules = "Data/Tables/chapter_branch_rules";
     }
 
     public static class Icons

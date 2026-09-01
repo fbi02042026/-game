@@ -24,13 +24,13 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
 
     [Header("敌方普伤 — 打在敌人身上（比己方略小 10%）")]
     public Color outNormalColor = new Color(1f, 0.22f, 0.22f, 1f);
-    public int outNormalFontSize = 36;
-    public float outNormalScale = 1.01f;
+    public int outNormalFontSize = 44;
+    public float outNormalScale = 1.08f;
 
     [Header("我方普伤 — 打在我方身上")]
     public Color inNormalColor = new Color(1f, 1f, 1f, 1f);
-    public int inNormalFontSize = 38;
-    public float inNormalScale = 1.06f;
+    public int inNormalFontSize = 46;
+    public float inNormalScale = 1.12f;
 
     [Header("暴击 — 亮紫（敌方暴击另 ×0.9）")]
     public Color critColor = new Color(0.78f, 0.36f, 1f, 1f);
@@ -101,6 +101,7 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
         public Color flashColor;
         public float totalDuration;
         public float timer;
+        public TextMesh outlineMesh;
     }
 
     public void SpawnDamageText(Vector3 pos, int damage, bool isCrit, bool victimIsAlly)
@@ -191,7 +192,9 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
         }
 
         inst.textMesh.fontSize = fontSize;
+        inst.textMesh.fontStyle = FontStyle.Bold;
         inst.textMesh.color = color;
+        EnsureDamageChrome(inst, text, fontSize);
         inst.baseColor = color;
         inst.flashColor = kind == TextKind.InNormal || kind == TextKind.InCrit
             ? Color.Lerp(color, Color.white, ResolvePopFlashStrength())
@@ -227,6 +230,38 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
 
         inst.go.SetActive(true);
         _active.Add(inst);
+    }
+
+    void EnsureDamageChrome(DamageTextInstance inst, string text, int fontSize)
+    {
+        if (inst == null || inst.go == null || inst.textMesh == null) return;
+        inst.textMesh.fontStyle = FontStyle.Bold;
+
+        if (inst.outlineMesh == null)
+        {
+            var og = new GameObject("Outline");
+            og.transform.SetParent(inst.go.transform, false);
+            og.transform.localPosition = new Vector3(0.04f, -0.04f, 0.02f);
+            var tm = og.AddComponent<TextMesh>();
+            tm.anchor = TextAnchor.MiddleCenter;
+            tm.alignment = TextAlignment.Center;
+            tm.characterSize = inst.textMesh.characterSize;
+            var mr = og.GetComponent<MeshRenderer>();
+            if (mr != null)
+            {
+                mr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+                mr.sortingOrder = GameConfig.SORT_VFX + 4;
+            }
+            inst.outlineMesh = tm;
+        }
+        inst.outlineMesh.font = inst.textMesh.font;
+        inst.outlineMesh.fontSize = fontSize;
+        inst.outlineMesh.fontStyle = FontStyle.Bold;
+        inst.outlineMesh.text = text;
+        inst.outlineMesh.color = new Color(0f, 0f, 0f, 1f);
+        if (inst.outlineMesh.font != null && inst.outlineMesh.GetComponent<MeshRenderer>() != null
+            && inst.outlineMesh.font.material != null)
+            inst.outlineMesh.GetComponent<MeshRenderer>().sharedMaterial = inst.outlineMesh.font.material;
     }
 
     void GetStyle(TextKind kind, out Color color, out int fontSize, out float scale)
@@ -282,8 +317,9 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
         fallbackTm.anchor = TextAnchor.MiddleCenter;
         fallbackTm.alignment = TextAlignment.Center;
         fallbackTm.font = GameFonts.GetNumber();
-        fallbackTm.fontSize = 36;
-        fallbackTm.characterSize = 0.075f;
+        fallbackTm.fontSize = 42;
+        fallbackTm.fontStyle = FontStyle.Bold;
+        fallbackTm.characterSize = 0.08f;
         fallbackTm.color = Color.white;
         MeshRenderer mr = fallbackGo.GetComponent<MeshRenderer>();
         if (mr != null)
@@ -363,6 +399,12 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
             Color c = inst.textMesh.color;
             c.a = Mathf.Clamp01(alpha) * inst.baseColor.a;
             inst.textMesh.color = c;
+            if (inst.outlineMesh != null)
+            {
+                var oc = inst.outlineMesh.color;
+                oc.a = c.a;
+                inst.outlineMesh.color = oc;
+            }
 
             if (inst.timer <= 0f)
             {

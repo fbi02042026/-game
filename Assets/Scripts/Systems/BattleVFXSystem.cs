@@ -165,17 +165,19 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         Vector3 baseScale = prefab.transform.localScale;
         float mul = Mathf.Max(0.01f, sharedKitScale);
         if (faction == VfxFaction.Ally) mul *= 1.3f;
-        go.transform.localScale = new Vector3(
-            Mathf.Abs(baseScale.x) * mul * (facingDir < 0 ? -1f : 1f),
-            baseScale.y * mul,
-            baseScale.z * mul);
+        // 刀光原图凹面朝右；禁止负 scale.x（Hierarchy 粒子会消失）。镜像用 Z 轴 180°。
+        float absX = Mathf.Abs(baseScale.x) * mul;
+        go.transform.localScale = new Vector3(absX, baseScale.y * mul, baseScale.z * mul);
+        go.transform.localRotation = Quaternion.Euler(0f, 0f, facingDir < 0 ? 180f : 0f);
+
+        PrepareSlashParticles(go);
+        ApplySlashLocalFacing(go);
 
         // #region agent log
         DebugAgentLog.Log("H4", "BattleVFXSystem.PlaySlash", "slash_facing",
             $"{{\"facingDir\":{facingDir},\"scaleX\":{go.transform.localScale.x:F3},\"faction\":\"{faction}\",\"posX\":{position.x:F2}}}");
         // #endregion
 
-        PrepareSlashParticles(go);
         StretchSlashLifetime(go, 0.5f);
         ResetTintableColors(go);
         ApplyFactionLook(go, faction);
@@ -265,10 +267,24 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
             var ps = pss[i];
             if (ps == null) continue;
             var main = ps.main;
-            main.simulationSpace = ParticleSystemSimulationSpace.World;
             var pr = ps.GetComponent<ParticleSystemRenderer>();
             if (pr != null && pr.renderMode == ParticleSystemRenderMode.None && pr.sharedMaterial == null)
                 ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+    }
+
+    /// <summary>刀光跟角色左右翻：必须用本地模拟 + Hierarchy 缩放，世界空间会无视父节点 scale.x。</summary>
+    static void ApplySlashLocalFacing(GameObject go)
+    {
+        if (go == null) return;
+        var pss = go.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < pss.Length; i++)
+        {
+            var ps = pss[i];
+            if (ps == null) continue;
+            var main = ps.main;
+            main.simulationSpace = ParticleSystemSimulationSpace.Local;
+            main.scalingMode = ParticleSystemScalingMode.Hierarchy;
         }
     }
 
@@ -343,7 +359,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
         if (fly == null)
         {
-            Debug.LogWarning($"[VFX] 技能子弹缺少飞行体: {faction}/{kit}/fly，伤害直接结算");
+            Debug.LogError($"[VFX] 技能子弹缺少飞行体: {faction}/{kit}/fly，伤害直接结算");
             onImpact?.Invoke();
             return;
         }
@@ -360,6 +376,11 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     {
         // 飞向受击点（躯干中心），不要压成水平贴地
         Vector3 end = toPos;
+        float battleZ = fromPos.z;
+        if (BattleManager.Instance != null && BattleManager.Instance.unitRoot != null)
+            battleZ = BattleManager.Instance.unitRoot.position.z - 0.15f;
+        fromPos.z = battleZ;
+        end.z = battleZ;
         Vector3 flightDir = end - fromPos;
         float distance = flightDir.magnitude;
         if (distance < 0.05f) distance = 0.05f;
@@ -612,7 +633,10 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
             baseScale.z * mul);
 
         if (prepareParticles)
+        {
             PrepareSlashParticles(go);
+            ApplySlashLocalFacing(go);
+        }
         else
             SetVFXSortingLayer(go.transform);
 

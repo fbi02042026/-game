@@ -1,0 +1,11 @@
+# gameChapter=* 通配；edgeKind=main|skip
+gameChapter,fromIndex,toIndex,edgeKind,priority,note
+*,0,1,main,0,
+*,1,2,main,0,
+*,2,3,main,0,
+*,3,4,main,0,
+*,4,5,main,0,
+*,5,6,main,0,
+*,6,7,main,0,
+*,7,8,main,0,
+*,8,9,main,0,

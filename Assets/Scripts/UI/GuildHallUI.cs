@@ -67,6 +67,7 @@ public class GuildHallUI : MonoBehaviour
         UiPrefabRectGuard.Attach(transform, "Background");
         GameFonts.ApplyToHierarchy(transform);
         AutoBindMissingRefs();
+        ApplyGuildNameTexts();
         EnsureBottomNav();
         TownHubController.EnsureOn(gameObject);
         WireHallClicks();
@@ -276,6 +277,22 @@ public class GuildHallUI : MonoBehaviour
         text.raycastTarget = false;
         text.text = "";
         staminaRegenText = text;
+    }
+
+    /// <summary>预制体上的「冒险者公会」统一改成皇家冒险者公会，不写回 prefab。</summary>
+    void ApplyGuildNameTexts()
+    {
+        var texts = GetComponentsInChildren<Text>(true);
+        if (texts == null) return;
+        string full = GameConfig.GUILD_NAME;
+        for (int i = 0; i < texts.Length; i++)
+        {
+            var t = texts[i];
+            if (t == null || string.IsNullOrEmpty(t.text)) continue;
+            if (t.text.Contains(full)) continue;
+            if (t.text.Contains("冒险者公会"))
+                t.text = t.text.Replace("冒险者公会", full);
+        }
     }
 
     void HideUnfinishedHallButtons()

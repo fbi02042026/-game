@@ -119,7 +119,7 @@ public static class UnitCrowd
         if (Mathf.Abs(push) < 0.01f) return;
         push = Mathf.Clamp(push, -0.35f, 0.35f);
         Vector3 p = self.transform.position;
-        GameConfig.SetWorldPosition(self.transform, new Vector3(p.x + push, UnitBase.GROUND_Y, p.z));
+        GameConfig.SetWorldPosition(self.transform, new Vector3(p.x + push, self.FootY, p.z));
     }
 
     static bool CheckList(System.Collections.Generic.List<UnitBase> list, UnitBase self,

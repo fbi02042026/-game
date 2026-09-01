@@ -1,18 +1,16 @@
 using UnityEngine;
 
 /// <summary>
-/// 战斗任务与清关金币：数据来自《剧情文案与任务设计》与《完整策划案》。
+/// 战斗任务与清关金币：优先读 battle_quest 表，缺行回退内置常量。
 /// 金币仅在完成任务（清关开箱）、金币副本通关等条件下发放，击杀不掉落。
 /// </summary>
 public static class BattleQuestConfig
 {
-    /// <summary>各章 Boss 通关赏金（策划：章节任务奖励金币）</summary>
     static readonly int[] ChapterBossGold =
     {
         200, 300, 400, 500, 600, 700, 800, 2000
     };
 
-    /// <summary>Boss 关任务文案（表面目标第三步）</summary>
     static readonly string[] ChapterBossObjective =
     {
         "击败 Boss 森之守护者",
@@ -31,10 +29,33 @@ public static class BattleQuestConfig
         public int clearGold;
     }
 
-    /// <summary>进关时 HUD 任务区展示</summary>
     public static StageQuest GetStageQuest(int chapter, StageType stageType, bool isGoldDungeon, int difficulty)
     {
         int ch = Mathf.Clamp(chapter, 1, 8);
+        BattleQuestTable.EnsureLoaded();
+
+        if (BattleQuestTable.TryResolve(ch, stageType, isGoldDungeon, out var row))
+        {
+            if (isGoldDungeon)
+            {
+                return new StageQuest
+                {
+                    objective = string.IsNullOrEmpty(row.objective) ? "清剿金币副本敌人" : row.objective,
+                    clearGold = GameConfig.GetGoldDungeonClearGold(ch, difficulty)
+                };
+            }
+
+            string obj = row.objective;
+            if (string.IsNullOrEmpty(obj))
+                obj = stageType == StageType.Boss ? GetBossObjective(ch) : "击败所有敌人";
+
+            return new StageQuest
+            {
+                objective = obj,
+                clearGold = ResolveClearGold(ch, stageType, difficulty, row)
+            };
+        }
+
         if (isGoldDungeon)
         {
             return new StageQuest
@@ -44,28 +65,54 @@ public static class BattleQuestConfig
             };
         }
 
-        string objective = stageType == StageType.Boss
-            ? GetBossObjective(ch)
-            : "击败所有敌人";
-
         return new StageQuest
         {
-            objective = objective,
+            objective = stageType == StageType.Boss ? GetBossObjective(ch) : "击败所有敌人",
             clearGold = GetClearGold(ch, stageType, difficulty)
         };
     }
 
+    static int ResolveClearGold(int ch, StageType stageType, int difficulty, BattleQuestTable.Row row)
+    {
+        float diffMul = GameConfig.GetDifficultyGoldMul(difficulty);
+        if (row.clearGold > 0)
+            return Mathf.RoundToInt(row.clearGold * diffMul);
+
+        if (row.useFormula)
+        {
+            int normal = Mathf.RoundToInt((row.normalBase + ch * row.normalChapterAdd) * diffMul);
+            if (stageType == StageType.Elite)
+                return Mathf.RoundToInt(normal * row.eliteGoldMul);
+            return normal;
+        }
+
+        return GetClearGold(ch, stageType, difficulty);
+    }
+
     public static string GetBossObjective(int chapter)
     {
-        int idx = Mathf.Clamp(chapter - 1, 0, ChapterBossObjective.Length - 1);
+        int ch = Mathf.Clamp(chapter, 1, 8);
+        BattleQuestTable.EnsureLoaded();
+        if (BattleQuestTable.TryResolve(ch, StageType.Boss, false, out var row)
+            && !string.IsNullOrEmpty(row.objective))
+            return row.objective;
+
+        int idx = Mathf.Clamp(ch - 1, 0, ChapterBossObjective.Length - 1);
         return ChapterBossObjective[idx];
     }
 
-    /// <summary>清关开箱发放的金币（不含三选一折金）</summary>
     public static int GetClearGold(int chapter, StageType stageType, int difficulty)
     {
         int ch = Mathf.Clamp(chapter, 1, 8);
         float diffMul = GameConfig.GetDifficultyGoldMul(difficulty);
+
+        BattleQuestTable.EnsureLoaded();
+        if (BattleQuestTable.TryResolve(ch, stageType, false, out var row))
+        {
+            int fromTable = ResolveClearGold(ch, stageType, difficulty, row);
+            if (row.clearGold > 0 || row.useFormula)
+                return fromTable;
+        }
 
         if (stageType == StageType.Boss)
         {
@@ -75,12 +122,11 @@ public static class BattleQuestConfig
 
         int normal = GetNormalClearGold(ch, diffMul);
         if (stageType == StageType.Elite)
-            return Mathf.RoundToInt(normal * 1.5f); // 策划：精英关金币 +50%
+            return Mathf.RoundToInt(normal * 1.5f);
 
         return normal;
     }
 
-    /// <summary>普通关「基础金币」：随章节略涨</summary>
     static int GetNormalClearGold(int chapter, float diffMul)
     {
         int baseGold = 25 + chapter * 10;

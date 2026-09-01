@@ -17,6 +17,12 @@ public class AchievementMilestoneUI : MonoBehaviour
         Ensure().Open();
     }
 
+    public static void Hide()
+    {
+        if (Instance != null)
+            Instance.Close();
+    }
+
     static AchievementMilestoneUI Ensure()
     {
         if (Instance != null) return Instance;
@@ -70,6 +76,8 @@ public class AchievementMilestoneUI : MonoBehaviour
         UIManager.Instance?.ShowToast(n > 0 ? $"领取 {n} 个日志里程奖励" : "暂无可领里程");
         RefreshBody();
         RedDot.RefreshCommon();
+        if (n == 0 || !AdventureLogMileage.HasUnclaimedLevel())
+            Close();
     }
 
     void Close()
@@ -112,6 +120,20 @@ public class AchievementMilestoneUI : MonoBehaviour
         trt.pivot = new Vector2(0.5f, 1f);
         trt.anchoredPosition = new Vector2(0f, -16f);
         trt.sizeDelta = new Vector2(-24f, 36f);
+
+        var closeBtn = new GameObject("Close", typeof(RectTransform), typeof(Image), typeof(Button));
+        closeBtn.transform.SetParent(panel.transform, false);
+        var closeRt = closeBtn.GetComponent<RectTransform>();
+        closeRt.anchorMin = new Vector2(1f, 1f);
+        closeRt.anchorMax = new Vector2(1f, 1f);
+        closeRt.pivot = new Vector2(1f, 1f);
+        closeRt.anchoredPosition = new Vector2(-12f, -12f);
+        closeRt.sizeDelta = new Vector2(40f, 40f);
+        closeBtn.GetComponent<Image>().color = new Color(0.35f, 0.25f, 0.18f, 1f);
+        closeBtn.GetComponent<Button>().onClick.AddListener(Close);
+        var closeTx = CreateText(closeBtn.transform, "×", 28);
+        Stretch(closeTx.rectTransform);
+        closeTx.alignment = TextAnchor.MiddleCenter;
 
         _body = CreateText(panel.transform, "", 18);
         _body.alignment = TextAnchor.UpperLeft;

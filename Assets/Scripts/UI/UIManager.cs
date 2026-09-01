@@ -41,11 +41,10 @@ public class UIManager : Singleton<UIManager>
     {
         CloseStageSelect();
 
-        StageData next = ChapterManager.Instance?.GetNextStage();
-        if (next == null && stages != null && stages.Count > 0)
-            next = stages[0];
+        if (stages == null || stages.Count == 0)
+            stages = ChapterManager.Instance?.availableNextStages;
 
-        if (next == null)
+        if (stages == null || stages.Count == 0)
         {
             Debug.LogWarning("[UIManager] 没有下一关可选，回城");
             MercenaryManager.Instance?.ClearAllMercs();
@@ -54,9 +53,9 @@ public class UIManager : Singleton<UIManager>
             return;
         }
 
-        Debug.Log($"[UIManager] 关卡图流程 第{next.stageIndex + 1}关 type={next.type}");
+        Debug.Log($"[UIManager] 关卡图流程 候选{stages.Count}条");
 
-        BattleStageMapUI.BeginFlow(next, stage =>
+        BattleStageMapUI.BeginFlow(stages, stage =>
         {
             if (stage != null)
                 ChapterManager.Instance?.SelectStage(stage);

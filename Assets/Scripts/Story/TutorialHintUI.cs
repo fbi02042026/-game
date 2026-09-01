@@ -162,6 +162,9 @@ public class TutorialHintUI : MonoBehaviour
 
     public void Show(string text, RectTransform highlight, float autoHideSeconds, bool hard)
     {
+        if (BattleHeadTalkUI.Instance != null && BattleHeadTalkUI.Instance.IsShowing)
+            return;
+
         EnsureBuilt();
         bool targetChanged = highlight != _follow;
         if (_label != null) _label.text = text ?? "";

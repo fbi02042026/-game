@@ -196,6 +196,13 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
             c.portrait.enabled = true;
             c.portrait.color = sp != null ? Color.white : new Color(0.35f, 0.32f, 0.38f, 1f);
             c.portrait.preserveAspect = true;
+            if (sp != null)
+                PortraitIdleMotion.EnsureOn(c.portrait.rectTransform, i * 0.31f);
+            else
+            {
+                var idle = c.portrait.GetComponent<PortraitIdleMotion>();
+                if (idle != null) idle.enabled = false;
+            }
         }
 
         if (c.background != null)

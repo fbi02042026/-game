@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: undead_101
   m_EditorClassIdentifier: 
   id: undead_101
-  monsterName: "墓园骷髅�?
+  monsterName: ???
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

@@ -110,6 +110,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
         WireBagEvents();
         RefreshAll();
         TownHeroCostumePreview.EnsureOn(this)?.Show();
+        TutorialHintUI.Ensure().Hide();
     }
 
     public void HidePage()
@@ -188,11 +189,14 @@ public class CharacterUI : MonoBehaviour, ITownPage
         if (carriedSkillIcon != null) return;
         if (leftSkillButton == null) return;
 
-        // 预制体里常有装饰用 Image（头像框），不要拿它当技能图标
-        var iconTf = leftSkillButton.transform.Find("Icon");
-        if (iconTf != null)
+        string[] names = { "Icon", "SkillIcon" };
+        for (int i = 0; i < names.Length; i++)
+        {
+            var iconTf = leftSkillButton.transform.Find(names[i]);
+            if (iconTf == null) continue;
             carriedSkillIcon = iconTf.GetComponent<Image>();
-        if (carriedSkillIcon != null) return;
+            if (carriedSkillIcon != null) return;
+        }
 
         var deco = leftSkillButton.transform.Find("Image");
         if (deco != null)
@@ -201,11 +205,10 @@ public class CharacterUI : MonoBehaviour, ITownPage
         var go = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         go.transform.SetParent(leftSkillButton.transform, false);
         var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.38f);
-        rt.anchorMax = new Vector2(0.5f, 0.38f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(72f, 72f);
-        rt.anchoredPosition = Vector2.zero;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = new Vector2(10f, 22f);
+        rt.offsetMax = new Vector2(-10f, -30f);
         carriedSkillIcon = go.GetComponent<Image>();
         carriedSkillIcon.raycastTarget = false;
         var label = leftSkillButton.transform.Find("Label");
@@ -396,6 +399,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
         float ax = Mathf.Abs(s.x) < 0.01f ? 1f : Mathf.Abs(s.x);
         s.x = ax * (_portraitFlipped ? -1f : 1f);
         portraitImage.rectTransform.localScale = s;
+        portraitImage.GetComponent<PortraitIdleMotion>()?.RefreshBase();
     }
 
     /// <summary>立绘用自身像素大小，仅翻转</summary>
@@ -414,6 +418,13 @@ public class CharacterUI : MonoBehaviour, ITownPage
         float ax = Mathf.Abs(s.x) < 0.01f ? 1f : Mathf.Abs(s.x);
         s.x = ax * (flip ? -1f : 1f);
         portraitImage.rectTransform.localScale = s;
+        if (sprite != null)
+            PortraitIdleMotion.EnsureOn(portraitImage.rectTransform, 0.42f);
+        else
+        {
+            var idle = portraitImage.GetComponent<PortraitIdleMotion>();
+            if (idle != null) idle.enabled = false;
+        }
     }
 
     void StripLocalChrome()

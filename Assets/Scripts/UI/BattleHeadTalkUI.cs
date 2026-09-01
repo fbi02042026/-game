@@ -133,6 +133,8 @@ public class BattleHeadTalkUI : MonoBehaviour
             _root.gameObject.SetActive(true);
         }
         if (_group != null) _group.alpha = 1f;
+        GlobalToastUI.PushBubble();
+        TutorialHintUI.Instance?.Hide();
         string display = SpeechBubbleFit.Apply(_root, _text, raw, BaseBubbleSize);
         if (_text != null) _text.text = "";
         RefreshFollowPosition();
@@ -243,6 +245,7 @@ public class BattleHeadTalkUI : MonoBehaviour
             SpeechBubbleFit.ResetSize(_root, BaseBubbleSize);
             _root.gameObject.SetActive(false);
         }
+        GlobalToastUI.PopBubble();
         ReleaseStoryBgm();
     }
 

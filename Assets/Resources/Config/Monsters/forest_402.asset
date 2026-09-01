@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: forest_402
   m_EditorClassIdentifier: 
   id: forest_402
-  monsterName: "森林哥布�?
+  monsterName: 毒伞菇
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

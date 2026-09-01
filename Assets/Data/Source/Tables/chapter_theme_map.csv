@@ -1,0 +1,10 @@
+# gameChapter=游戏章；monsterChapter=素材章
+gameChapter,monsterChapter,folderName,mapName,bgFolder
+1,4,4 Forest,暮影森林,4 Forest
+2,1,1 Undead,幽冥墓园,1 Undead
+3,2,2 Jungle,翡翠秘境,2 Jungle
+4,3,3 Sea,深蓝遗迹海域,3 Sea
+5,5,5 Field,晨曦原野,5 Field
+6,6,6 Cave,巨岩深窟,6 Cave
+7,7,7 Devil,赤焰炼狱,7 Devil
+8,8,8 Ice,永霜雪境,8 Ice

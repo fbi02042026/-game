@@ -12,6 +12,13 @@ public static class GameConfig
     public const float UI_MATCH = 1f;
     public const float PIXEL_PER_UNIT = 100f; // 数值表：100像素=1世界单位
 
+    /// <summary>组织全称。主界面标题、图鉴条目等统一用这个，不要再写「冒险者公会」。</summary>
+    public const string GUILD_NAME = "皇家冒险者公会";
+
+    /// <summary>战斗地面加宽后，单位可在站立线上下偏移的半高（世界单位）。</summary>
+    public const float BATTLE_LANE_HALF = 0.72f;
+    public const float BATTLE_LANE_MOVE_SPEED = 1.35f;
+
     /// <summary>像素 → 世界单位（对齐数值表「攻击范围(像素)」）</summary>
     public static float PixelsToUnits(float pixels) => pixels / PIXEL_PER_UNIT;
 
@@ -310,6 +317,8 @@ public static class GameConfig
 
     [Header("怪物基础（对齐数值表·未缩放）")]
     public const float MONSTER_NORMAL_HP = 60f;
+    /// <summary>全局怪物 HP 倍率（0.8 = 减 20%）。</summary>
+    public const float MONSTER_HP_GLOBAL_MUL = 0.8f;
     public const float MONSTER_NORMAL_ATK = 12f;
     public const float MONSTER_NORMAL_DEF = 2f;
     public const float MONSTER_NORMAL_ATK_INTERVAL = 1.5f;
@@ -426,6 +435,8 @@ public static class GameConfig
 
     public static string GetChapterMapName(int gameChapter)
     {
+        if (ChapterThemeMapTable.HasData)
+            return ChapterThemeMapTable.GetMapName(gameChapter);
         int idx = Mathf.Clamp(gameChapter - 1, 0, ChapterMapNames.Length - 1);
         return ChapterMapNames[idx];
     }
@@ -588,8 +599,10 @@ public static class GameConfig
     /// </summary>
     public static string GetMonsterSpritePath(int chapter)
     {
-        int idx = Mathf.Clamp(chapter - 1, 0, ChapterMonsterFolders.Length - 1);
-        return "2D Pixel RPG Monster Pack/Icons/default size/no shadow/" + ChapterMonsterFolders[idx] + "/";
+        string folder = ChapterThemeMapTable.HasData
+            ? ChapterThemeMapTable.GetFolderName(chapter)
+            : ChapterMonsterFolders[Mathf.Clamp(chapter - 1, 0, ChapterMonsterFolders.Length - 1)];
+        return "2D Pixel RPG Monster Pack/Icons/default size/no shadow/" + folder + "/";
     }
 
     /// <summary>
@@ -599,6 +612,9 @@ public static class GameConfig
     /// </summary>
     public static int GetMonsterChapter(int gameChapter)
     {
+        if (ChapterThemeMapTable.HasData)
+            return ChapterThemeMapTable.GetMonsterChapter(gameChapter);
+
         // 从 ChapterMonsterFolders 提取章节号
         // "4 Forest" → 4, "1 Undead" → 1, "2 Jungle" → 2, etc.
         int idx = Mathf.Clamp(gameChapter - 1, 0, ChapterMonsterFolders.Length - 1);

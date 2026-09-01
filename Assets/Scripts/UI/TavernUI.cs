@@ -423,8 +423,7 @@ public class TavernUI : MonoBehaviour, ITownPage
         if (portraitRoot == null)
             portraitRoot = target;
 
-        if (target.GetComponent<PortraitIdleMotion>() == null)
-            target.gameObject.AddComponent<PortraitIdleMotion>();
+        PortraitIdleMotion.EnsureOn(target, 0f, tavernSway: true);
         TavernLandladyTease.EnsureOn(target);
     }
 

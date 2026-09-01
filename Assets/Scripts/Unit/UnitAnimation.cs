@@ -140,7 +140,10 @@ public class UnitAnimation : MonoBehaviour
         for (int i = 0; i < srs.Length; i++)
         {
             if (srs[i] == null || IsShadowRenderer(srs[i])) continue;
-            srs[i].color = _spumFlashBaseline[i];
+            if (i < _spumFlashBaseline.Length)
+                srs[i].color = _spumFlashBaseline[i];
+            else
+                srs[i].color = Color.white;
         }
     }
 
@@ -862,11 +865,13 @@ public class UnitAnimation : MonoBehaviour
 
     System.Collections.IEnumerator SpumDamagedFlash()
     {
-        CacheSpumFlashRenderers();
+        int gen = ++_spumFlashGen;
+        // 闪白期间禁止把白闪采成基准，否则还原会永远停在白色
+        if (_spumFlashBaseline == null || _spumFlashSrs == null || _spumFlashSrs.Length == 0)
+            CacheSpumFlashRenderers();
         var srs = _spumFlashSrs;
         if (srs == null || srs.Length == 0 || _spumFlashBaseline == null) yield break;
 
-        int gen = ++_spumFlashGen;
         RestoreSpumFlashFromBaseline();
 
         int shadowCount = 0;
@@ -891,7 +896,7 @@ public class UnitAnimation : MonoBehaviour
             $"{{\"gen\":{gen},\"flashed\":{flashed},\"shadowSr\":{shadowCount},\"unit\":\"{EscapeJson(gameObject.name)}\"}}");
         // #endregion
 
-        yield return new WaitForSeconds(0.1f);
+        yield return new WaitForSecondsRealtime(0.12f);
 
         if (gen != _spumFlashGen || _isDead) yield break;
         RestoreSpumFlashFromBaseline();
@@ -919,7 +924,7 @@ public class UnitAnimation : MonoBehaviour
     {
         Color origColor = _sr.color;
         _sr.color = new Color(1f, 0.3f, 0.3f, origColor.a);
-        yield return new WaitForSeconds(0.1f);
+        yield return new WaitForSecondsRealtime(0.12f);
         if (_sr != null && !_isDead)
             _sr.color = origColor;
     }

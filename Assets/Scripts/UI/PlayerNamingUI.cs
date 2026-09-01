@@ -75,6 +75,7 @@ public class PlayerNamingUI : MonoBehaviour
         WireButtons();
         if (contentRoot != null)
             contentRoot.SetActive(false);
+        DisableDialogueRaycasts();
     }
     void OnDestroy()
     {
@@ -102,6 +103,7 @@ public class PlayerNamingUI : MonoBehaviour
         }
 
         DialogueUI.Instance?.Hide();
+        DisableDialogueRaycasts();
         _input.text = PlayerNameGen.Roll();
         ClearInputSelection();
         contentRoot.SetActive(true);
@@ -109,6 +111,29 @@ public class PlayerNamingUI : MonoBehaviour
         transform.SetAsLastSibling();
         Canvas.ForceUpdateCanvases();
         GameFonts.ApplyToHierarchy(transform);
+        if (UnityEngine.EventSystems.EventSystem.current != null)
+            UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
+    }
+
+    static void DisableDialogueRaycasts()
+    {
+        var dlg = DialogueUI.Instance;
+        if (dlg == null) return;
+        dlg.Hide();
+        var canvas = dlg.GetComponent<Canvas>();
+        if (canvas != null) canvas.enabled = false;
+        var raycaster = dlg.GetComponent<UnityEngine.UI.GraphicRaycaster>();
+        if (raycaster != null) raycaster.enabled = false;
+    }
+
+    static void RestoreDialogueCanvas()
+    {
+        var dlg = DialogueUI.Instance;
+        if (dlg == null) return;
+        var canvas = dlg.GetComponent<Canvas>();
+        if (canvas != null) canvas.enabled = true;
+        var raycaster = dlg.GetComponent<UnityEngine.UI.GraphicRaycaster>();
+        if (raycaster != null) raycaster.enabled = true;
     }
 
     void EnsureCanvasShell()
@@ -134,13 +159,32 @@ public class PlayerNamingUI : MonoBehaviour
     {
         if (contentRoot == null)
             contentRoot = transform.Find("Root")?.gameObject;
-        if (nameInput == null && contentRoot != null)
-            nameInput = contentRoot.transform.Find("Panel/InputBar/Input")?.GetComponent<InputField>();
-        if (diceButton == null && contentRoot != null)
-            diceButton = contentRoot.transform.Find("Panel/InputBar/DiceBtn")?.GetComponent<Button>();
-        if (confirmButton == null && contentRoot != null)
-            confirmButton = contentRoot.transform.Find("Panel/ConfirmBtn")?.GetComponent<Button>();
+        if (nameInput == null)
+            nameInput = FindDeep(transform, "Input")?.GetComponent<InputField>();
+        if (diceButton == null)
+            diceButton = FindDeep(transform, "DiceBtn")?.GetComponent<Button>()
+                ?? FindDeep(transform, "Dice")?.GetComponent<Button>();
+        if (confirmButton == null)
+        {
+            var t = FindDeep(transform, "ConfirmBtn")
+                ?? FindDeep(transform, "Confirm")
+                ?? FindDeep(transform, "确定");
+            if (t != null)
+                confirmButton = t.GetComponent<Button>() ?? t.gameObject.AddComponent<Button>();
+        }
         _input = nameInput;
+    }
+
+    static Transform FindDeep(Transform parent, string name)
+    {
+        if (parent == null) return null;
+        if (parent.name == name) return parent;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var r = FindDeep(parent.GetChild(i), name);
+            if (r != null) return r;
+        }
+        return null;
     }
 
     void WireButtons()
@@ -316,12 +360,14 @@ public class PlayerNamingUI : MonoBehaviour
         }
 
         StoryProgress.SetPlayerName(cleaned);
+        CharacterUI.Instance?.RefreshAll();
         Finish();
     }
 
     void Finish()
     {
         if (contentRoot != null) contentRoot.SetActive(false);
+        RestoreDialogueCanvas();
         var cb = _onDone;
         _onDone = null;
         cb?.Invoke();

@@ -20,6 +20,7 @@ public class Monster : UnitBase
     /// <summary>???????? Body????Body ?????????/summary>
     public Transform GetBodyTransform() => _bodyRoot != null ? _bodyRoot : transform;
     Transform MoveRoot => GetBodyTransform();
+    protected override Transform LaneMoveTransform => GetBodyTransform();
 
     // ????????SpriteRenderer ???
     private SpriteRenderer _hpBarFill;
@@ -115,11 +116,11 @@ public class Monster : UnitBase
         float barSpriteWidth = 1.01f;
         if (_hpBarFill != null && _hpBarFill.sprite != null)
             barSpriteWidth = Mathf.Max(0.01f, _hpBarFill.sprite.bounds.size.x);
-        float barLocalScale = (monsterWorldWidth * 0.85f) / (barSpriteWidth * Mathf.Max(0.5f, monsterRootScale));
-        barLocalScale = Mathf.Clamp(barLocalScale, 0.08f, 2f);
+        float barLocalScale = (monsterWorldWidth * 0.65f) / (barSpriteWidth * Mathf.Max(0.5f, monsterRootScale));
+        barLocalScale = Mathf.Clamp(barLocalScale, 0.22f, 2f);
         _hpBarRoot.localScale = Vector3.one * barLocalScale;
 
-        ApplyAnchorPosition(_hpBarRoot, 0f, GameConfig.MONSTER_HP_BAR_FOOT_LOCAL_Y);
+        ApplyAnchorPosition(_hpBarRoot, 0f, ResolveHpBarFootLocalY());
 
         if (_hpBarFill != null)
         {
@@ -129,6 +130,28 @@ public class Monster : UnitBase
             var fillT = _hpBarFill.transform;
             fillT.localScale = Vector3.one;
             fillT.localPosition = Vector3.zero;
+        }
+    }
+
+    float ResolveHpBarFootLocalY()
+    {
+        float footY = GameConfig.MONSTER_HP_BAR_FOOT_LOCAL_Y;
+        if (sr != null && sr.sprite != null)
+            footY = Mathf.Min(footY, sr.sprite.bounds.min.y + 0.02f);
+        // 锚在脚面略上，禁止被旧 clamp 抬到头部
+        return Mathf.Clamp(footY + 0.04f, -3.5f, 0.06f);
+    }
+
+    System.Collections.IEnumerator RefreshHpBarLayoutAfterSpriteReady(float rootScale)
+    {
+        yield return null;
+        yield return null;
+        NormalizeHPBarLayout(rootScale);
+        var uiBar = GetComponentInChildren<MonsterHealthBar>(true);
+        if (uiBar != null)
+        {
+            uiBar.ApplyCompensatedScale();
+            uiBar.ApplyCompensatedPosition();
         }
     }
 
@@ -271,7 +294,7 @@ public class Monster : UnitBase
             float dx = _enterTargetPos.x - MoveRoot.position.x;
             if (Mathf.Abs(dx) <= 0.08f)
             {
-                GameConfig.SetWorldPosition(MoveRoot, new Vector3(_enterTargetPos.x, UnitBase.GROUND_Y, MoveRoot.position.z));
+                GameConfig.SetWorldPosition(MoveRoot, new Vector3(_enterTargetPos.x, FootY, MoveRoot.position.z));
                 _isEnteringMap = false;
                 AdvanceTowardEnemies();
                 return;
@@ -281,7 +304,7 @@ public class Monster : UnitBase
             ApplyFacing(facingDir);
             float step = _enterSpeed * Time.deltaTime;
             float nx = Mathf.MoveTowards(MoveRoot.position.x, _enterTargetPos.x, step);
-            GameConfig.SetWorldPosition(MoveRoot, new Vector3(nx, UnitBase.GROUND_Y, MoveRoot.position.z));
+            GameConfig.SetWorldPosition(MoveRoot, new Vector3(nx, FootY, MoveRoot.position.z));
             if (unitAnim != null) unitAnim.SetMove(true, facingDir);
             return;
         }
@@ -497,7 +520,7 @@ public class Monster : UnitBase
             : (1f + GameConfig.CHAPTER_SCALE_PER * Mathf.Max(0, chapter - 1));
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * 0.8f);
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * GameConfig.MONSTER_HP_GLOBAL_MUL);
         attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER);
         attr.SetAttr(AttrType.Defense, baseDef * scale);
         float atkSpeedMul = GameConfig.MONSTER_ATK_SPEED_MUL;
@@ -563,13 +586,16 @@ public class Monster : UnitBase
         // ?????
         FindHPBar();
         NormalizeHPBarLayout(rootScale);
+        StartCoroutine(RefreshHpBarLayoutAfterSpriteReady(rootScale));
         // #region agent log
         DebugAgentLog.Log("H12", "Monster.InitFromTemplate", "hpbar_state",
             $"{{\"hasHpBar\":{(_hpBarRoot != null ? "true" : "false")},\"name\":\"{name}\",\"hpBarActive\":{(_hpBarRoot != null && _hpBarRoot.gameObject.activeSelf ? "true" : "false")}}}");
         // #endregion
-        if (_hpBarRoot != null)
+        if (_hpBarRoot != null && _hpBarFill != null)
         {
             _hpBarRoot.gameObject.SetActive(true);
+            var uiBar = GetComponentInChildren<MonsterHealthBar>(true);
+            if (uiBar != null) uiBar.gameObject.SetActive(false);
         }
         else
         {
@@ -816,9 +842,9 @@ public class Monster : UnitBase
     public bool IsBossUnit => _isBossUnit;
     public bool IsEliteWave => _eliteWave;
 
-    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true)
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0)
     {
-        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx);
+        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing);
         if (!isDead)
             BringHpBarFront();
     }
@@ -1014,7 +1040,7 @@ public class Monster : UnitBase
                 : null;
             Transform targetTf = primaryTarget != null ? primaryTarget.transform : null;
             BattleVFXSystem.Instance?.PlaySkillProjectile(
-                VfxFaction.Enemy, firePos, hitPos, facingDir, targetTf, kit,
+                VfxFaction.Enemy, firePos, hitPos, GetVfxFacingDir(), targetTf, kit,
                 impact, SkillProjectileScale, SkillProjectileSpeedMul,
                 () => ApplySkillDamage(damage, radius, primaryTarget));
 
@@ -1023,7 +1049,7 @@ public class Monster : UnitBase
             return;
         }
 
-        SkillRegistry.Instance?.PlaySkillVfx(_skillId, hitPos, false, facingDir, transform);
+        SkillRegistry.Instance?.PlaySkillVfx(_skillId, hitPos, false, GetVfxFacingDir(), transform);
         ApplySkillDamage(damage, radius, primaryTarget);
     }
 
@@ -1041,6 +1067,7 @@ public class Monster : UnitBase
     {
         if (this == null || isDead || !gameObject.activeInHierarchy) return;
 
+        int vfxDir = GetVfxFacingDir();
         var allies = BattleManager.Instance?.allyUnits;
         if (allies != null && allies.Count > 0)
         {
@@ -1051,12 +1078,12 @@ public class Monster : UnitBase
                 float dist = Mathf.Abs(u.transform.position.x - transform.position.x);
                 if (dist > radius) continue;
                 bool crit = Random.value < attr.GetAttr(AttrType.CritRate);
-                u.TakeDamage(crit ? damage * 1.5f : damage, crit);
+                u.TakeDamage(crit ? damage * 1.5f : damage, crit, false, true, vfxDir);
             }
             return;
         }
         if (primaryTarget != null && !primaryTarget.isDead)
-            primaryTarget.TakeDamage(damage, false);
+            primaryTarget.TakeDamage(damage, false, false, true, vfxDir);
     }
 
     /// <summary>

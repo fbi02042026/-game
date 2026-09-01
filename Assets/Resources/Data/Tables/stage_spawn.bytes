@@ -1,0 +1,6 @@
+# monsterTotal=0 表示走 GameConfig 公式；* 为通配
+gameChapter,stageIndex,stageType,monsterTotal,waveCountMin,waveCountMax,eliteScaleMul,note
+1,0,Normal,18,4,6,1.0,第一章首关
+*,*,Normal,0,3,6,1.0,默认普通关公式
+*,*,Elite,0,3,6,1.5,精英关公式
+*,*,Boss,0,3,7,1.0,Boss小怪公式

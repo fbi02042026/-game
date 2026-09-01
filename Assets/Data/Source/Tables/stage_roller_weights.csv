@@ -1,0 +1,13 @@
+# key-value 全局参数
+key,value,note
+bossWindow,3,首领最早倒数第几关
+maxRestPerChapter,2,
+bossWeightBase,0.22,
+bossWeightStep,0.24,
+restWeightBase,0.10,
+restWeightPerStageIndex,0.035,
+restFirstChapterMultiplier,1.6,
+eliteWeightBase,0.15,
+eliteWeightPerStageIndex,0.05,
+normalWeightFloor,0.2,
+normalWeightComplement,1.0,

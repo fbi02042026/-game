@@ -97,6 +97,7 @@ public class TalentUI : MonoBehaviour
     int _pendingSelectedOpt = -1;
     bool _wired;
     bool _listsBuilt;
+    bool _scrollSyncing;
 
     class LeftNodeView
     {
@@ -131,6 +132,7 @@ public class TalentUI : MonoBehaviour
     void Awake()
     {
         Instance = this;
+        LoadArtSprites();
         if (panelImage == null)
             AutoBindFromHierarchy();
         EnsureChoicePopupBindings();
@@ -140,6 +142,10 @@ public class TalentUI : MonoBehaviour
 
     void OnDestroy()
     {
+        if (leftScroll != null)
+            leftScroll.onValueChanged.RemoveListener(OnLeftScroll);
+        if (rightScroll != null)
+            rightScroll.onValueChanged.RemoveListener(OnRightScroll);
         if (Instance == this) Instance = null;
     }
 
@@ -147,6 +153,7 @@ public class TalentUI : MonoBehaviour
     {
         EnsureVisibleTransform();
         EnsureChoicePopupBindings();
+        LoadArtSprites();
         if (!_wired) WireClicks();
         else WireChoiceConfirmIfNeeded();
         gameObject.SetActive(true);
@@ -229,7 +236,8 @@ public class TalentUI : MonoBehaviour
             SetRowRedDot(v.root, ref v.redDot, can);
             if (v.line != null)
             {
-                bool showLine = i < _leftViews.Count - 1;
+                // 最底 L1（index 0）不画向下连接线
+                bool showLine = i > 0;
                 v.line.gameObject.SetActive(showLine);
                 if (showLine) ApplySprite(v.line, on ? sprLeftLinkOn : sprLeftLinkOff, false);
             }
@@ -280,16 +288,17 @@ public class TalentUI : MonoBehaviour
         }
         if (v.diamond != null)
             ApplySprite(v.diamond, picked || canPick ? sprDiamondOn : sprDiamondOff, true);
-            if (v.line != null)
-            {
-                // 第一行不画竖线，从第二行开始有
-                bool showLine = v.visualIndex >= 1 && v.visualIndex < _rightViews.Count - 1;
-                v.line.gameObject.SetActive(showLine);
-                if (showLine)
-                    ApplySprite(v.line, picked || canPick ? sprRightLinkOn : sprRightLinkOff, false);
-            }
+        if (v.line != null)
+        {
+            bool showLine = v.visualIndex >= 1 && v.visualIndex < _rightViews.Count - 1;
+            v.line.gameObject.SetActive(showLine);
+            if (showLine)
+                ApplySprite(v.line, picked || canPick ? sprRightLinkOn : sprRightLinkOff, false);
+        }
 
-        SetRowGray(v.root, locked);
+        if (v.root != null) v.root.SetActive(true);
+        bool milestoneLocked = leftUnlocked < def.requireLeftIndex;
+        SetRowGray(v.root, locked || milestoneLocked);
         SetRowRedDot(v.root, ref v.redDot, canAfford);
 
         int selectedOpt = picked ? selLv : 0;
@@ -761,36 +770,17 @@ public class TalentUI : MonoBehaviour
         }
         float leftH = TalentDefs.Left.Length * LeftNodeH + 20f;
         leftContent.sizeDelta = new Vector2(0f, leftH);
-        // 打开时滚到底：最先开启的（力量 I）在最下面
-        if (leftScroll != null)
-            leftScroll.verticalNormalizedPosition = 0f;
+        var leftPad = leftContent.offsetMin;
+        leftContent.offsetMin = new Vector2(8f, leftPad.y);
 
+        var rightRowStacks = new Dictionary<int, int>();
         int visualRow = 0;
-        // 右侧顺序：先战斗入门等主列，流派选择放到倒数第二行
         for (int i = 0; i < TalentDefs.Right.Length; i++)
         {
-            // 在倒数第二行插入流派选择
-            if (TalentDefs.RightExtra != null && i == Mathf.Max(0, TalentDefs.Right.Length - 1))
-            {
-                var extraTpl = rightExtraRowTemplate != null ? rightExtraRowTemplate : rightRowTemplate;
-                var extraGo = Instantiate(extraTpl, rightContent);
-                extraGo.name = "RightExtraRow";
-                extraGo.SetActive(true);
-                var extraView = BindChoiceRow(extraGo, visualRow, TalentSystem.Branch.RightExtra, 1);
-                _rightViews.Add(extraView);
-                for (int o = 0; o < extraView.optionButtons.Count; o++)
-                {
-                    int oi = o;
-                    extraView.optionButtons[o]?.onClick.AddListener(() =>
-                        OnClickChoiceOption(TalentSystem.Branch.RightExtra, 0, oi));
-                }
-                visualRow++;
-            }
-
             var go = Instantiate(rightRowTemplate, rightContent);
             go.name = "RightRow_" + (i + 1);
             go.SetActive(true);
-            var view = BindChoiceRow(go, visualRow, TalentSystem.Branch.Right, i + 1);
+            var view = BindChoiceRow(go, visualRow, TalentSystem.Branch.Right, i + 1, rightRowStacks);
             _rightViews.Add(view);
             int ri = i;
             for (int o = 0; o < view.optionButtons.Count; o++)
@@ -801,14 +791,13 @@ public class TalentUI : MonoBehaviour
             }
             visualRow++;
         }
-        // 若主列为空仍要显示流派
-        if (TalentDefs.RightExtra != null && TalentDefs.Right.Length == 0)
+        if (TalentDefs.RightExtra != null)
         {
             var extraTpl = rightExtraRowTemplate != null ? rightExtraRowTemplate : rightRowTemplate;
             var extraGo = Instantiate(extraTpl, rightContent);
             extraGo.name = "RightExtraRow";
             extraGo.SetActive(true);
-            var extraView = BindChoiceRow(extraGo, visualRow, TalentSystem.Branch.RightExtra, 1);
+            var extraView = BindChoiceRow(extraGo, visualRow, TalentSystem.Branch.RightExtra, 1, rightRowStacks);
             _rightViews.Add(extraView);
             for (int o = 0; o < extraView.optionButtons.Count; o++)
             {
@@ -818,11 +807,11 @@ public class TalentUI : MonoBehaviour
             }
             visualRow++;
         }
-        float rightH = visualRow * RightRowH + 20f;
-        rightContent.sizeDelta = new Vector2(0f, rightH);
+        rightContent.sizeDelta = new Vector2(0f, leftH);
 
         WireScroll(leftScroll, leftContent);
         WireScroll(rightScroll, rightContent);
+        WireScrollSync();
 
         _listsBuilt = true;
         WireClicks();
@@ -843,6 +832,67 @@ public class TalentUI : MonoBehaviour
         }
         // 内容比视口高才能滑；自下而上时滚到底，最先解锁的在视野底部
         scroll.verticalNormalizedPosition = 0f;
+    }
+
+    void WireScrollSync()
+    {
+        if (leftScroll == null || rightScroll == null) return;
+        leftScroll.onValueChanged.RemoveListener(OnLeftScroll);
+        rightScroll.onValueChanged.RemoveListener(OnRightScroll);
+        leftScroll.onValueChanged.AddListener(OnLeftScroll);
+        rightScroll.onValueChanged.AddListener(OnRightScroll);
+        leftScroll.verticalNormalizedPosition = 0f;
+        rightScroll.verticalNormalizedPosition = 0f;
+    }
+
+    void OnLeftScroll(Vector2 _)
+    {
+        if (_scrollSyncing || rightScroll == null || leftScroll == null) return;
+        _scrollSyncing = true;
+        rightScroll.verticalNormalizedPosition = leftScroll.verticalNormalizedPosition;
+        _scrollSyncing = false;
+    }
+
+    void OnRightScroll(Vector2 _)
+    {
+        if (_scrollSyncing || rightScroll == null || leftScroll == null) return;
+        _scrollSyncing = true;
+        leftScroll.verticalNormalizedPosition = rightScroll.verticalNormalizedPosition;
+        _scrollSyncing = false;
+    }
+
+    static float GetLeftNodeY(int leftIndex1Based)
+    {
+        int index0 = leftIndex1Based - 1;
+        int fromTop = TalentDefs.Left.Length - 1 - index0;
+        return -fromTop * LeftNodeH - 4f;
+    }
+
+    static float AllocateRightRowY(int requireLeftIndex, Dictionary<int, int> stackCounts)
+    {
+        float baseY = GetLeftNodeY(requireLeftIndex);
+        if (!stackCounts.TryGetValue(requireLeftIndex, out int count))
+            count = 0;
+        stackCounts[requireLeftIndex] = count + 1;
+        return baseY - count * RightRowH;
+    }
+
+    static void NudgeLeftNodeChrome(Transform root)
+    {
+        var iconbg = root.Find("Iconbg") ?? root.Find("iconbg");
+        if (iconbg is RectTransform iconRt)
+        {
+            var p = iconRt.anchoredPosition;
+            if (p.x < 0f)
+                iconRt.anchoredPosition = new Vector2(14f, p.y);
+        }
+        var line = root.Find("Line");
+        if (line is RectTransform lineRt)
+        {
+            var lp = lineRt.anchoredPosition;
+            if (lp.x < 20f)
+                lineRt.anchoredPosition = new Vector2(lp.x + 24f, lp.y);
+        }
     }
 
     LeftNodeView BindLeftNode(GameObject go, int index0)
@@ -876,10 +926,12 @@ public class TalentUI : MonoBehaviour
             int fromTop = TalentDefs.Left.Length - 1 - index0;
             rt.anchoredPosition = new Vector2(0f, -fromTop * LeftNodeH - 4f);
         }
+        NudgeLeftNodeChrome(go.transform);
         return v;
     }
 
-    ChoiceRowView BindChoiceRow(GameObject go, int visualIndex0, TalentSystem.Branch branch, int dataIndex1Based)
+    ChoiceRowView BindChoiceRow(GameObject go, int visualIndex0, TalentSystem.Branch branch, int dataIndex1Based,
+        Dictionary<int, int> stackCounts)
     {
         var def = branch == TalentSystem.Branch.RightExtra
             ? TalentDefs.RightExtra
@@ -928,7 +980,8 @@ public class TalentUI : MonoBehaviour
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 1f);
             rt.sizeDelta = new Vector2(0f, RightRowH - 8f);
-            rt.anchoredPosition = new Vector2(0f, -visualIndex0 * RightRowH - 4f);
+            int milestone = Mathf.Max(1, def.requireLeftIndex);
+            rt.anchoredPosition = new Vector2(0f, AllocateRightRowY(milestone, stackCounts));
         }
         return v;
     }
@@ -1361,38 +1414,40 @@ public class TalentUI : MonoBehaviour
 
     void LoadArtSprites()
     {
-#if UNITY_EDITOR
-        if (sprPanelBg == null) sprPanelBg = Ed("天赋_0020_bg.png");
-        if (sprClose == null) sprClose = Ed("天赋_0007_关闭.png");
-        if (sprLeftCard == null) sprLeftCard = Ed("天赋_0006_属性底.png");
-        if (sprRightCard == null) sprRightCard = Ed("天赋_0000_技能底.png");
-        if (sprFooter == null) sprFooter = Ed("天赋_0000s_0002_底条.png");
-        if (sprReset == null) sprReset = Ed("天赋_0000s_0001_重置天赋亮.png");
-        if (sprGoldBar == null) sprGoldBar = Ed("天赋_0001_金币升级.png");
-        if (sprStoneBar == null) sprStoneBar = Ed("天赋_0013_天赋石升级.png");
-        if (sprLeftHexOff == null) sprLeftHexOff = Ed("天赋_0004_基础属性未解锁.png");
-        if (sprLeftHexOn == null) sprLeftHexOn = Ed("天赋_0005_基础属性解锁.png");
-        if (sprCheckOff == null) sprCheckOff = Ed("天赋_0011_不可升级.png");
-        if (sprCheckOn == null) sprCheckOn = Ed("天赋_0012_可升级.png");
-        if (sprLeftLinkOff == null) sprLeftLinkOff = Ed("天赋_0009_链接2.png");
-        if (sprLeftLinkOn == null) sprLeftLinkOn = Ed("天赋_0008_lianjie3.png");
-        if (sprRightHex == null) sprRightHex = Ed("天赋_0002_图层-2.png");
-        if (sprRightHexAlt == null) sprRightHexAlt = Ed("天赋_0003_图层-3.png");
-        if (sprDiamondOff == null) sprDiamondOff = Ed("天赋_0016_技能可用-拷贝.png");
-        if (sprDiamondOn == null) sprDiamondOn = Ed("天赋_0018_技能可用.png");
-        if (sprRightLinkOff == null) sprRightLinkOff = Ed("天赋_0017_技能链接-拷贝.png");
-        if (sprRightLinkOn == null) sprRightLinkOn = Ed("天赋_0019_技能链接.png");
-        if (sprLock == null) sprLock = Ed("图层 4.png");
-        if (sprArrow == null) sprArrow = Ed("天赋_0015_箭头.png");
-#endif
+        EnsureSprite(ref sprPanelBg, "天赋_0020_bg");
+        EnsureSprite(ref sprClose, "天赋_0007_关闭");
+        EnsureSprite(ref sprLeftCard, "天赋_0006_属性底");
+        EnsureSprite(ref sprRightCard, "天赋_0000_技能底");
+        EnsureSprite(ref sprFooter, "天赋_0000s_0002_底条");
+        EnsureSprite(ref sprReset, "重置天赋亮");
+        EnsureSprite(ref sprGoldBar, "天赋_0001_金币升级");
+        EnsureSprite(ref sprStoneBar, "天赋_0013_天赋石升级");
+        EnsureSprite(ref sprLeftHexOff, "天赋_0004_基础属性未解锁");
+        EnsureSprite(ref sprLeftHexOn, "天赋_0005_基础属性解锁");
+        EnsureSprite(ref sprCheckOff, "天赋_0011_不可升级");
+        EnsureSprite(ref sprCheckOn, "天赋_0012_可升级");
+        EnsureSprite(ref sprLeftLinkOff, "天赋_0009_链接2");
+        EnsureSprite(ref sprLeftLinkOn, "天赋_0008_lianjie3");
+        EnsureSprite(ref sprRightHex, "天赋_0002_图层-2");
+        EnsureSprite(ref sprRightHexAlt, "天赋_0003_图层-3");
+        EnsureSprite(ref sprDiamondOff, "天赋_0016_技能可用-拷贝");
+        EnsureSprite(ref sprDiamondOn, "天赋_0018_技能可用");
+        EnsureSprite(ref sprRightLinkOff, "天赋_0017_技能链接-拷贝");
+        EnsureSprite(ref sprRightLinkOn, "天赋_0019_技能链接");
+        EnsureSprite(ref sprLock, "图层 3");
+        EnsureSprite(ref sprArrow, "天赋_0015_箭头");
     }
 
-#if UNITY_EDITOR
-    static Sprite Ed(string fileName)
+    static void EnsureSprite(ref Sprite field, string fileStem)
     {
-        return UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Talent/" + fileName);
-    }
+        if (field != null) return;
+        field = Resources.Load<Sprite>("UI/Talent/" + fileStem);
+#if UNITY_EDITOR
+        if (field == null)
+            field = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
+                "Assets/Art/UI/Talent/" + fileStem + ".png");
 #endif
+    }
 
     static Text CreateText(Transform parent, string name, string content, int size, Color color)
     {

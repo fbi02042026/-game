@@ -36,6 +36,8 @@ public class ConfigManager : Singleton<ConfigManager>
             _monsterDict[m.id] = m;
         }
 
+        MergeMonsterStatsFromTable();
+
         try
         {
             var allTalents = Resources.LoadAll<TalentConfig>(ContentPaths.Config.Talents);
@@ -53,6 +55,9 @@ public class ConfigManager : Singleton<ConfigManager>
         {
             Debug.LogWarning("[ConfigManager] 天赋配置加载失败（可忽略，不影响战斗）: " + e.Message);
         }
+
+        ChapterThemeMapTable.EnsureLoaded();
+        MonsterUnlockTierTable.EnsureLoaded();
 
         Debug.Log($"配置加载完成：{_allEquipTemplates.Count}个装备模板，{_allMonsters.Count}种怪物，{_talentDict.Count}个天赋");
         GameDataHub.ReportConfigs(_allEquipTemplates, _allMonsters, _talentDict);
@@ -76,9 +81,50 @@ public class ConfigManager : Singleton<ConfigManager>
         return _equipTemplateDict.ContainsKey(id) ? _equipTemplateDict[id] : null;
     }
 
+    void MergeMonsterStatsFromTable()
+    {
+        MonsterStatsTable.EnsureLoaded();
+        if (!MonsterStatsTable.HasData) return;
+
+        int added = 0;
+        var tableAll = MonsterStatsTable.GetAll();
+        for (int i = 0; i < tableAll.Count; i++)
+        {
+            var e = tableAll[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            var cfg = e.ToRuntimeConfig();
+            bool existed = _monsterDict.ContainsKey(e.id);
+            _monsterDict[e.id] = cfg;
+            if (!existed)
+            {
+                _allMonsters.Add(cfg);
+                added++;
+            }
+            else
+            {
+                for (int j = 0; j < _allMonsters.Count; j++)
+                {
+                    if (_allMonsters[j] != null && _allMonsters[j].id == e.id)
+                    {
+                        _allMonsters[j] = cfg;
+                        break;
+                    }
+                }
+            }
+        }
+        Debug.Log($"[ConfigManager] monster_stats 表合并：{tableAll.Count} 条，新增 {added}，表优先覆盖同 id SO");
+    }
+
     public MonsterConfig GetMonster(string id)
     {
-        return _monsterDict.ContainsKey(id) ? _monsterDict[id] : null;
+        if (string.IsNullOrEmpty(id)) return null;
+        if (_monsterDict.TryGetValue(id, out var cfg)) return cfg;
+        var entry = MonsterStatsTable.GetById(id);
+        if (entry == null) return null;
+        cfg = entry.ToRuntimeConfig();
+        _monsterDict[id] = cfg;
+        _allMonsters.Add(cfg);
+        return cfg;
     }
 
     public TalentConfig GetTalent(string id)
@@ -248,17 +294,11 @@ public class ConfigManager : Singleton<ConfigManager>
             : 0;
 
         // 1. 根据通关次数确定最大可用编号
-        int tierMax;
-        if (clearCount >= GameConfig.TIER2_UNLOCK_CLEARS)
-            tierMax = GameConfig.TIER2_MAX_SPRITE;
-        else if (clearCount >= GameConfig.TIER1_UNLOCK_CLEARS)
-            tierMax = GameConfig.TIER1_MAX_SPRITE;
-        else
-            tierMax = GameConfig.TIER0_MAX_SPRITE;
+        int tierMax = MonsterUnlockTierTable.GetSpriteIndexMax(clearCount);
 
         // 2. 根据关卡索引确定本关可用编号上限
-        // 第1关(index=0): 1-2, 第2关(index=1): 1-3, 第3关(index=2): 1-4...
-        int stageMax = Mathf.Min(2 + stageIndex, tierMax);
+        int stageBonus = MonsterUnlockTierTable.GetStageIndexBonus();
+        int stageMax = Mathf.Min(stageBonus + stageIndex, tierMax);
 
         // 3. BOSS波次返回BOSS编号
         if (isBossWave)
@@ -287,17 +327,20 @@ public class ConfigManager : Singleton<ConfigManager>
 
         var sorted = availableIndices.OrderBy(x => x).ToList();
         var weights = new List<float>();
+        SpritePickWeightTable.EnsureLoaded();
+        bool useTable = SpritePickWeightTable.HasData;
+
         for (int i = 0; i < sorted.Count; i++)
         {
             int idx = sorted[i];
-            // 早期关：强烈偏向 1；后期：编号越大权重略增，但 1 仍保留保底权重
             float w;
-            if (stageIndex <= 0)
-                w = idx == 1 ? 5f : 1f;
-            else if (stageIndex <= 2)
-                w = idx == 1 ? 3f : (idx == 2 ? 2f : 1f);
+            if (useTable)
+            {
+                w = SpritePickWeightTable.GetWeight(stageIndex, idx);
+                if (w < 0f) w = FallbackWeight(stageIndex, idx);
+            }
             else
-                w = Mathf.Max(1f, idx * 0.5f);
+                w = FallbackWeight(stageIndex, idx);
             weights.Add(w);
         }
 
@@ -312,6 +355,15 @@ public class ConfigManager : Singleton<ConfigManager>
                 return sorted[i];
         }
         return sorted[0];
+    }
+
+    static float FallbackWeight(int stageIndex, int idx)
+    {
+        if (stageIndex <= 0)
+            return idx == 1 ? 5f : 1f;
+        if (stageIndex <= 2)
+            return idx == 1 ? 3f : (idx == 2 ? 2f : 1f);
+        return Mathf.Max(1f, idx * 0.5f);
     }
 
     /// <summary>从怪物ID中提取章节号: "forest_401" → 4, "undead_101" → 1</summary>

@@ -35,6 +35,27 @@ public abstract class UnitBase : MonoBehaviour
 
     /// <summary>所有单位固定的地面Y坐标（由AutoGameInitializer从SpawnPoint读取）</summary>
     public static float GROUND_Y = -3.5f;
+    /// <summary>相对站立线的上下偏移，用于加宽地面后的前后排站位。</summary>
+    public float LaneY { get; private set; }
+    public float FootY => GROUND_Y + LaneY;
+
+    public void SetLaneY(float offset)
+    {
+        LaneY = Mathf.Clamp(offset, -GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+    }
+
+    protected virtual Transform LaneMoveTransform => transform;
+
+    protected void ApplyLaneY(float dt)
+    {
+        var t = LaneMoveTransform;
+        if (t == null) return;
+        var p = t.position;
+        float target = FootY;
+        if (Mathf.Abs(p.y - target) < 0.002f) return;
+        p.y = Mathf.MoveTowards(p.y, target, GameConfig.BATTLE_LANE_MOVE_SPEED * dt);
+        GameConfig.SetWorldPosition(t, p);
+    }
 
     public AttrSystem attr = new AttrSystem();
     public float currentHp;
@@ -243,6 +264,12 @@ public abstract class UnitBase : MonoBehaviour
         return hasValid && bounds.size.y > 0.0001f;
     }
 
+    /// <summary>世界空间：脚底到血条锚点的 Y 偏移（略高于脚面）。</summary>
+    public float GetHpBarWorldYOffset()
+    {
+        return Mathf.Clamp(0.22f, 0.15f, 0.35f);
+    }
+
     static bool IsIgnoredHitPointRenderer(SpriteRenderer r)
     {
         if (r == null) return true;
@@ -379,6 +406,7 @@ public abstract class UnitBase : MonoBehaviour
         // 通关走向传送门时放宽
         if (isAlly && (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode))
             ClampToScreen();
+        ApplyLaneY(Time.deltaTime);
     }
 
     /// <summary>对外改朝向（传送门、入队站位等）</summary>
@@ -582,15 +610,16 @@ public abstract class UnitBase : MonoBehaviour
             return;
         }
 
+        int vfxDir = GetVfxFacingDir();
         if (this is Hero)
         {
             damage *= SpecialWeapons.GetDamageMultiplier(target);
             float fire = SpecialWeapons.GetFlatFireBonus();
             if (fire > 0f && !target.isDead)
-                target.TakeDamage(fire, false, openingHit);
+                target.TakeDamage(fire, false, openingHit, false, vfxDir);
         }
 
-        target.TakeDamage(damage, isCrit, openingHit);
+        target.TakeDamage(damage, isCrit, openingHit, true, vfxDir);
         OnAttack?.Invoke(target, damage, isCrit);
     }
 
@@ -674,7 +703,7 @@ public abstract class UnitBase : MonoBehaviour
         _knockbackCo = null;
     }
 
-    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true)
+    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0)
     {
         if (_isDying) return;
 
@@ -687,7 +716,8 @@ public abstract class UnitBase : MonoBehaviour
             && Time.time - _lastHitVfxTime >= HitVfxCooldown)
         {
             _lastHitVfxTime = Time.time;
-            BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), isAlly, -GetVfxFacingDir());
+            int dir = hitVfxFacing != 0 ? hitVfxFacing : -GetVfxFacingDir();
+            BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), isAlly, dir);
         }
 
         CombatJuice.Instance?.OnHit(this, finalDamage, isCrit, showHitVfx);

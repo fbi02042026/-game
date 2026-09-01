@@ -22,6 +22,19 @@ public class GlobalToastUI : MonoBehaviour
     public static string CurrentMessage =>
         _instance != null && _instance._label != null ? _instance._label.text : "";
 
+    public static void Hide()
+    {
+        if (_instance == null) return;
+        if (_instance._co != null)
+        {
+            _instance.StopCoroutine(_instance._co);
+            _instance._co = null;
+        }
+        if (_instance._cg != null) _instance._cg.alpha = 0f;
+        if (_instance._root != null) _instance._root.SetActive(false);
+        if (_instance._rootRt != null) _instance._rootRt.anchoredPosition = _instance._basePos;
+    }
+
     public static void Show(string msg)
     {
         if (string.IsNullOrEmpty(msg)) return;

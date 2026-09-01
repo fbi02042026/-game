@@ -85,6 +85,7 @@ public static class BackpackGridVisual
             img.type = Image.Type.Simple;
             img.enabled = true;
             PlaceIconInHost(rt, iconRt, img, p.equip.icon, p.h);
+            EquipRarityMaterials.Apply(img, p.equip.rarity);
             img.color = !hasIcon
                 ? (p.equipped ? new Color(0.35f, 0.35f, 0.4f, 0.95f) : new Color(0.45f, 0.5f, 0.62f, 0.95f))
                 : (p.equipped ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white);

@@ -56,19 +56,17 @@ public class ChapterManager : Singleton<ChapterManager>
         availableNextStages.Clear();
         RollState.Reset();
 
-        // 1. 创建10个节点
+        ChapterBranchTable.Reload();
+        StageRollerWeightsTable.Reload();
+
         for (int i = 0; i < GameConfig.STAGES_PER_CHAPTER; i++)
         {
             stageMap.Add(new StageData { stageIndex = i, nextStages = new List<int>() });
         }
 
-        // 2. 分配关卡类型
         AssignStageTypes();
-
-        // 3. 生成分支连接
         GenerateBranches();
 
-        // 4. 初始可选第一关
         availableNextStages.Clear();
         availableNextStages.Add(stageMap[0]);
 
@@ -116,18 +114,63 @@ public class ChapterManager : Singleton<ChapterManager>
     /// </summary>
     void GenerateBranches()
     {
-        // 基础连接：每个节点至少连到下一个
-        for (int i = 0; i < GameConfig.STAGES_PER_CHAPTER - 1; i++)
+        for (int i = 0; i < stageMap.Count; i++)
+            stageMap[i].nextStages.Clear();
+
+        ChapterBranchTable.EnsureLoaded();
+        var mainEdges = ChapterBranchTable.GetMainEdges(currentChapter);
+        if (mainEdges.Count > 0)
         {
-            stageMap[i].nextStages.Add(i + 1);
+            for (int i = 0; i < mainEdges.Count; i++)
+            {
+                var e = mainEdges[i];
+                if (e.fromIndex >= 0 && e.fromIndex < stageMap.Count
+                    && e.toIndex >= 0 && e.toIndex < stageMap.Count
+                    && !stageMap[e.fromIndex].nextStages.Contains(e.toIndex))
+                    stageMap[e.fromIndex].nextStages.Add(e.toIndex);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < GameConfig.STAGES_PER_CHAPTER - 1; i++)
+                stageMap[i].nextStages.Add(i + 1);
         }
 
-        // 选1-2个分支点（index 1-5，确保分支后不会跳过BOSS）
-        int branchCount = UnityEngine.Random.Range(1, 3);
-        List<int> branchNodes = new List<int>();
+        var fixedSkips = ChapterBranchTable.GetFixedSkipEdges(currentChapter);
+        for (int i = 0; i < fixedSkips.Count; i++)
+        {
+            var e = fixedSkips[i];
+            if (e.fromIndex >= 0 && e.fromIndex < stageMap.Count
+                && e.toIndex >= 0 && e.toIndex < stageMap.Count
+                && !stageMap[e.fromIndex].nextStages.Contains(e.toIndex))
+                stageMap[e.fromIndex].nextStages.Add(e.toIndex);
+        }
 
-        List<int> branchPool = new List<int>();
-        for (int i = 1; i <= 5; i++) branchPool.Add(i);
+        ApplyRandomSkipBranches();
+
+        LogBranchInfo();
+    }
+
+    void ApplyRandomSkipBranches()
+    {
+        int branchCountMin = 1;
+        int branchCountMax = 2;
+        int poolFrom = 1;
+        int poolTo = 5;
+        int skipDistance = 2;
+
+        if (ChapterBranchTable.TryGetRules(currentChapter, out var rules))
+        {
+            branchCountMin = rules.branchCountMin;
+            branchCountMax = rules.branchCountMax;
+            poolFrom = rules.branchPoolFrom;
+            poolTo = rules.branchPoolTo;
+            skipDistance = rules.skipDistance;
+        }
+
+        int branchCount = UnityEngine.Random.Range(branchCountMin, branchCountMax + 1);
+        var branchPool = new List<int>();
+        for (int i = poolFrom; i <= poolTo; i++) branchPool.Add(i);
 
         for (int i = branchPool.Count - 1; i > 0; i--)
         {
@@ -140,29 +183,30 @@ public class ChapterManager : Singleton<ChapterManager>
         for (int i = 0; i < branchCount && i < branchPool.Count; i++)
         {
             int nodeIdx = branchPool[i];
-            int skipTarget = nodeIdx + 2;
-
-            // 确保不会连到BOSS之后，也不会跳过BOSS
-            if (skipTarget <= GameConfig.STAGES_PER_CHAPTER - 2)
-            {
-                if (!stageMap[nodeIdx].nextStages.Contains(skipTarget))
-                {
-                    stageMap[nodeIdx].nextStages.Add(skipTarget);
-                    branchNodes.Add(nodeIdx);
-                }
-            }
+            int skipTarget = nodeIdx + skipDistance;
+            if (skipTarget <= GameConfig.STAGES_PER_CHAPTER - 2
+                && nodeIdx >= 0 && nodeIdx < stageMap.Count
+                && !stageMap[nodeIdx].nextStages.Contains(skipTarget))
+                stageMap[nodeIdx].nextStages.Add(skipTarget);
         }
+    }
 
-        // 打印分支信息
-        if (branchNodes.Count > 0)
+    void LogBranchInfo()
+    {
+        var branchNodes = new List<int>();
+        for (int n = 0; n < stageMap.Count; n++)
         {
-            string log = "[ChapterManager] 分支点: ";
-            foreach (var n in branchNodes)
-            {
-                log += $"第{n + 1}关→[{string.Join(",", stageMap[n].nextStages.Select(x => (x + 1).ToString()))}] ";
-            }
-            Debug.Log(log);
+            if (stageMap[n].nextStages.Count > 1)
+                branchNodes.Add(n);
         }
+        if (branchNodes.Count == 0) return;
+
+        string log = "[ChapterManager] 分支点: ";
+        foreach (var n in branchNodes)
+        {
+            log += $"第{n + 1}关→[{string.Join(",", stageMap[n].nextStages.Select(x => (x + 1).ToString()))}] ";
+        }
+        Debug.Log(log);
     }
 
     #endregion
@@ -240,10 +284,9 @@ public class ChapterManager : Singleton<ChapterManager>
         if (availableNextStages.Count == 0 && currentStageIndex + 1 < stageMap.Count)
             availableNextStages.Add(stageMap[currentStageIndex + 1]);
 
-        // 现抽下一关的类型（轮盘要展示的就是这个结果）
-        RollNextStageType();
+        if (availableNextStages.Count == 1)
+            RollNextStageType(availableNextStages[0]);
 
-        // 触发分支选择事件
         OnBranchReady?.Invoke(availableNextStages);
 
         // 通知成就系统
@@ -254,14 +297,21 @@ public class ChapterManager : Singleton<ChapterManager>
     /// 给下一关重新抽一次类型并写回 stageMap。
     /// 现在关卡类型由轮盘决定，AssignStageTypes 的预排只当兜底。
     /// </summary>
-    public StageData RollNextStageType()
+    public StageData RollNextStageType(StageData target = null)
     {
-        StageData next = GetNextStage();
+        StageData next = target ?? GetNextStage();
         if (next == null) return null;
         next.type = StageRoller.Roll(RollState, next.stageIndex, GameConfig.STAGES_PER_CHAPTER);
         Debug.Log($"[ChapterManager] 抽到下一关 第{next.stageIndex + 1}关 = {next.type}"
                   + $"（恢复{RollState.restCount}/{StageRoller.MaxRestPerChapter} 战斗{RollState.combatStagesDone}）");
         return next;
+    }
+
+    /// <summary>玩家选定分支路线后，对该关抽类型。</summary>
+    public StageData SelectBranchAndRoll(StageData stage)
+    {
+        if (stage == null) return null;
+        return RollNextStageType(stage);
     }
 
     /// <summary>轮盘只给一条路：取分支里的第一个作为下一关</summary>

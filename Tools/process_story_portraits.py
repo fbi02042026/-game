@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Story portrait: black background -> transparent, trim padding, sync to Resources."""
+"""Sync story portraits from 佣兵立绘 -> Art/UI/Story + Resources/Story/Portraits.
+
+IMPORTANT: Do NOT run black-key transparency here. The old process_rgba(threshold=30)
+punched holes in dark shadows (arms/body gaps). Always copy source PNG bytes as-is.
+"""
 import os
 import shutil
 
@@ -9,63 +13,47 @@ RES = os.path.join(ROOT, "Assets", "Resources", "Story", "Portraits")
 MERC_ART = os.path.join(ROOT, "Assets", "Art", "UI", "Icons", "\u4f63\u5175\u7acb\u7ed8")
 MERC_RES = os.path.join(ROOT, "Assets", "Resources", "Icons", "MercStand")
 
-try:
-    from PIL import Image
-except ImportError:
-    raise SystemExit("pip install pillow")
+# merc filename -> story portrait key (Resources/Story/Portraits/{key}.png)
+MERC_TO_STORY = [
+    ("\u4f1a\u957f\u2014\u2014\u5927\u4f17.png", "guildmaster"),
+    ("\u4f1a\u957f\u2014\u2014\u9634\u6697.png", "guildmaster_hidden"),
+    ("\u524d\u53f0\u5c0f\u59d0.png", "receptionist"),
+    ("\u4f63\u5175\u7acb\u7ed8_\u73a9\u5bb6.png", "player"),
+    ("\u4f63\u5175\u7acb\u7ed8_H001.png", "laodun"),
+    ("\u4f63\u5175\u7acb\u7ed8_C001.png", "xiaomei"),
+    ("\u4f63\u5175\u7acb\u7ed8_C002.png", "altor"),
+    ("\u4f63\u5175\u7acb\u7ed8_C003.png", "hunter"),
+]
 
 
-def process_rgba(src_path, dest_path, threshold=30):
-    im = Image.open(src_path).convert("RGBA")
-    px = im.load()
-    w, h = im.size
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = px[x, y]
-            if r <= threshold and g <= threshold and b <= threshold:
-                px[x, y] = (0, 0, 0, 0)
-    bbox = im.getbbox()
-    if bbox:
-        im = im.crop(bbox)
+def copy_png(src_path, dest_path):
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-    im.save(dest_path, "PNG")
-    return im.size
-
-
-def copy_meta(src, dest):
-    meta_src = src + ".meta"
-    meta_dest = dest + ".meta"
-    if os.path.isfile(meta_src) and os.path.isfile(meta_dest):
-        return
-    if os.path.isfile(meta_src):
-        shutil.copy2(meta_src, meta_dest)
+    shutil.copy2(src_path, dest_path)
 
 
 def main():
-    if not os.path.isdir(ART):
-        print("missing", ART)
+    if not os.path.isdir(MERC_ART):
+        print("missing", MERC_ART)
         return 1
+    os.makedirs(ART, exist_ok=True)
     os.makedirs(RES, exist_ok=True)
     n = 0
-    for name in sorted(os.listdir(ART)):
-        if not name.startswith("portrait_") or not name.endswith(".png"):
+    for merc_name, key in MERC_TO_STORY:
+        src = os.path.join(MERC_ART, merc_name)
+        if not os.path.isfile(src):
+            print("skip missing", merc_name)
             continue
-        key = name[len("portrait_") : -4]
-        src = os.path.join(ART, name)
-        dest_art = src
+        dest_art = os.path.join(ART, "portrait_" + key + ".png")
         dest_res = os.path.join(RES, key + ".png")
-        size = process_rgba(src, dest_art)
-        process_rgba(src, dest_res)
-        copy_meta(dest_art, dest_res)
-        print("%s -> %s" % (key, size))
+        copy_png(src, dest_art)
+        copy_png(src, dest_res)
+        print("%s -> portrait_%s (%s)" % (merc_name, key, os.path.getsize(src)))
         n += 1
         if key == "player":
-            player_art = os.path.join(MERC_ART, "\u4f63\u5175\u7acb\u7ed8_\u73a9\u5bb6.png")
-            player_res = os.path.join(MERC_RES, "player.png")
-            process_rgba(src, player_art)
-            process_rgba(src, player_res)
+            player_merc = os.path.join(MERC_RES, "player.png")
+            copy_png(src, player_merc)
             print("player merc stand synced")
-    print("done %d portraits" % n)
+    print("done %d portraits (raw copy, no alpha key)" % n)
     return 0
 
 

@@ -102,7 +102,7 @@ public class SkillSystem : Singleton<SkillSystem>
 
         float damage = DamageFormula.ApplyCrit(CalculateDamage(skill, caster), caster.attr, out bool isCrit);
         damage = DamageFormula.ApplyAttackerSpecials(damage, caster, target);
-        target.TakeDamage(damage, isCrit);
+        target.TakeDamage(damage, isCrit, false, true, caster.GetVfxFacingDir());
     }
 
     private void ExecuteProjectile(ActiveSkill skill, UnitBase caster)
@@ -114,6 +114,7 @@ public class SkillSystem : Singleton<SkillSystem>
         VfxFaction faction = caster.isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
         Vector3 firePos = caster.GetFirePosition();
 
+        int vfxDir = caster.GetVfxFacingDir();
         for (int i = 0; i < skill.projectileCount && i < enemies.Count; i++)
         {
             UnitBase target = enemies[i];
@@ -133,17 +134,17 @@ public class SkillSystem : Singleton<SkillSystem>
                 GameObject impactOverride = SkillRegistry.Instance != null
                     ? SkillRegistry.Instance.GetSkillVfxPrefab(skill.skillId) : null;
                 BattleVFXSystem.Instance.PlaySkillProjectile(
-                    faction, firePos, hitPos, caster.facingDir, locked.transform, kit,
+                    faction, firePos, hitPos, vfxDir, locked.transform, kit,
                     impactOverride, 1f, 1f,
                     () =>
                     {
                         if (locked == null || locked.isDead) return;
-                        locked.TakeDamage(dmg, crit);
+                        locked.TakeDamage(dmg, crit, false, true, vfxDir);
                     });
             }
             else
             {
-                target.TakeDamage(finalDamage, isCrit);
+                target.TakeDamage(finalDamage, isCrit, false, true, vfxDir);
             }
         }
     }
@@ -153,11 +154,12 @@ public class SkillSystem : Singleton<SkillSystem>
         float damage = CalculateDamage(skill, caster);
         List<UnitBase> enemies = GetEnemiesInRange(caster, skill.aoeRadius);
 
+        int vfxDir = caster.GetVfxFacingDir();
         foreach (var enemy in enemies)
         {
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit);
             finalDamage = DamageFormula.ApplyAttackerSpecials(finalDamage, caster, enemy);
-            enemy.TakeDamage(finalDamage, isCrit);
+            enemy.TakeDamage(finalDamage, isCrit, false, true, vfxDir);
         }
     }
 
@@ -180,11 +182,12 @@ public class SkillSystem : Singleton<SkillSystem>
 
         // 连锁伤害递减
         float chainMultiplier = 1f;
+        int vfxDir = caster.GetVfxFacingDir();
         foreach (var enemy in enemies)
         {
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit) * chainMultiplier;
             finalDamage = DamageFormula.ApplyAttackerSpecials(finalDamage, caster, enemy);
-            enemy.TakeDamage(finalDamage, isCrit);
+            enemy.TakeDamage(finalDamage, isCrit, false, true, vfxDir);
             chainMultiplier *= 0.6f; // 每次连锁递减40%
             if (chainMultiplier < 0.2f) break;
         }

@@ -80,10 +80,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
     public void NotifyTownTab(MainNavTab tab)
     {
-        if (StoryProgress.TutorialDone || StoryProgress.TutorialBattleCleared) return;
-        // 点「角色/酒馆」等非冒险入口：立刻收掉指「冒险」的手势，避免残留在角色页上
+        // 任意非冒险 Tab：先收引导（战后 MarkTutorialDone 后 guard 会挡住下面的 Hide）
         if (tab != MainNavTab.Adventure)
             TutorialHintUI.Ensure().Hide();
+
+        if (StoryProgress.TutorialDone || StoryProgress.TutorialBattleCleared) return;
         if (tab != MainNavTab.Tavern && tab != MainNavTab.Character) return;
         if (_extraHintShown) return;
         _extraHintShown = true;
@@ -228,6 +229,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         StoryDirector.Instance?.NotifySceneChanged();
         GameBgm.Play(GameBgm.Track.Intro);
 
+        StoryAssetLoader.Warmup(StoryAssetLoader.Props, StoryProps.QuestPaper);
+
         // 办公室：会长对话 → 签名起名 → 咨询台
         var beats = new List<StoryBeat>
         {
@@ -350,11 +353,20 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         // —— 1) 首波 → 预告下一波 → 约 2 秒后第二小波 ——
         hint.Show("靠近怪物会自动攻击。", null, 8f);
-        yield return EnsureTutorialWave(bm, 2);
+        TutorialBattleTable.EnsureLoaded();
+        bm?.ApplyTutorialBattleStep(1);
+        yield return EnsureTutorialWave(bm, TutorialStepCount(1));
         yield return WaitFieldClear();
 
         yield return CoTutorialNextWave(bm, hint, GameConfig.GetWaveSpawnInterval(), 2);
         yield return WaitFieldClear();
+
+        yield return WaitFieldClear(strict: true);
+        if (bm != null && bm.GetAliveMonsterCount() > 0)
+        {
+            hint.Show("先把剩下的怪清掉。", null, 3f);
+            yield return WaitFieldClear(strict: true);
+        }
 
         // —— 2) 宝箱陷阱：发现 → 左右埋伏 → 清场 → 开箱拿剑 ——
         hint.Hide();
@@ -368,7 +380,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         var drop = CreateTutorialEquipDrop();
         if (bm != null) bm.UnitsCanAct = false;
-        hint.Show("前面有个宝箱，靠近看看。", null, 4f);
+        hint.Hide();
         yield return chestDir.CoTutorialPlaceChest(4f);
         chestDir.SnapHeroBeforeChest();
 
@@ -376,7 +388,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
             new TalkLine(Hero.Instance, "有个宝箱，真是好运！", 0.85f));
 
         float chestX = chestDir.ChestWorldX;
-        bm.SpawnTutorialFlankAmbush(5, chestX);
+        var flankStep = TutorialBattleTable.GetStepOrDefault(3);
+        bm.ApplyTutorialBattleStep(3);
+        bm.SpawnTutorialFlankAmbush(flankStep.count, chestX);
         {
             int guard = 0;
             while (bm.GetAliveMonsterCount() <= 0 && guard < 8)
@@ -385,7 +399,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 yield return null;
                 yield return null;
                 if (bm.GetAliveMonsterCount() <= 0)
-                    bm.SpawnTutorialFlankAmbush(5, chestX);
+                    bm.SpawnTutorialFlankAmbush(flankStep.count, chestX);
             }
         }
         yield return new WaitForSecondsRealtime(0.35f);
@@ -394,7 +408,6 @@ public class TutorialDirector : Singleton<TutorialDirector>
             new TalkLine(Hero.Instance, "！", 0.55f));
 
         if (bm != null) bm.UnitsCanAct = true;
-        hint.Show("左右都有怪物，靠近会自动攻击。", null, 3.5f);
         yield return WaitFieldClear(strict: true);
 
         if (bm != null)
@@ -403,9 +416,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
             HaltUnit(Hero.Instance);
         }
 
-        hint.Show("清完再开宝箱。", null, 1.5f);
-        yield return new WaitForSecondsRealtime(0.15f);
-
+        hint.Hide();
         yield return TalkBlock(bm, headTalk, restoreAct: false,
             new TalkLine(Hero.Instance, "打开看看里面有什么。", 0.7f));
         GameObject groundIcon = null;
@@ -432,8 +443,16 @@ public class TutorialDirector : Singleton<TutorialDirector>
         ui?.ApplySoloBattleHudPublic();
         ui?.UpdateCharacterSlots();
 
-        var merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.35f, 5.5f, stunned: true);
-        bm.SpawnTutorialAmbushAround(merc, 3);
+        var rescueStep = TutorialBattleTable.GetStepOrDefault(4);
+        bm.ApplyTutorialBattleStep(4);
+        string rescueMercId = string.IsNullOrEmpty(rescueStep.mercId)
+            ? StoryProgress.TutorialMercId
+            : rescueStep.mercId;
+        float rescueHpRatio = rescueStep.mercHpRatio > 0f ? rescueStep.mercHpRatio : 0.35f;
+        float rescueAhead = rescueStep.aheadDist > 0f ? rescueStep.aheadDist : 5.5f;
+        var merc = bm.SpawnTutorialMercAt(rescueMercId, rescueHpRatio, rescueAhead, stunned: rescueStep.stunned);
+        int ambushCount = rescueStep.count > 0 ? rescueStep.count : 3;
+        bm.SpawnTutorialAmbushAround(merc, ambushCount);
         hint.Show("前方有人被怪物围住了，上前帮忙。", null, 4f);
 
         // 不冻结战斗：玩家可随时上前清怪
@@ -562,11 +581,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (bm != null) bm.UnitsCanAct = true;
 
         hint.Show("组队后佣兵会自动战斗。", null, 3f);
-        yield return EnsureTutorialWave(bm, 4);
+        bm.ApplyTutorialBattleStep(5);
+        yield return EnsureTutorialWave(bm, TutorialStepCount(5));
         if (bm != null && bm.GetAliveMonsterCount() <= 0)
         {
             Debug.LogWarning("[Tutorial] 组队后首波未刷出，紧急补怪");
-            bm.SpawnTutorialFlankAmbush(3);
+            var emergencyStep = TutorialBattleTable.GetStepOrDefault(6);
+            bm.ApplyTutorialBattleStep(6);
+            bm.SpawnTutorialFlankAmbush(emergencyStep.count);
         }
         yield return WaitFieldClear(strict: true);
 
@@ -651,20 +673,26 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (talk == null || lines == null || lines.Length == 0)
             yield break;
 
+        TutorialHintUI.Instance?.Hide();
+
         bool prev = bm == null || bm.UnitsCanAct;
         if (bm != null) bm.UnitsCanAct = false;
 
-        for (int i = 0; i < lines.Length; i++)
+        try
         {
-            var line = lines[i];
-            if (line.speaker == null || line.speaker.isDead || string.IsNullOrEmpty(line.text))
-                continue;
-            yield return talk.CoPlayLine(line.speaker, line.text, line.hold);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.speaker == null || line.speaker.isDead || string.IsNullOrEmpty(line.text))
+                    continue;
+                yield return talk.CoPlayLine(line.speaker, line.text, line.hold);
+            }
         }
-
-        talk.HideNow();
-        if (bm == null) yield break;
-        bm.UnitsCanAct = restoreAct && prev;
+        finally
+        {
+            talk.HideNow();
+            if (bm != null) bm.UnitsCanAct = restoreAct && prev;
+        }
     }
 
     /// <summary>单句兼容入口。</summary>
@@ -713,8 +741,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         AdventureCodex.MarkMercSeen(mercId);
     }
 
+    static int TutorialStepCount(int order) => TutorialBattleTable.GetStepOrDefault(order).count;
+
     /// <summary>清场后：预告播完再刷怪。</summary>
-    static IEnumerator CoTutorialNextWave(BattleManager bm, TutorialHintUI hint, float delaySec, int count)
+    static IEnumerator CoTutorialNextWave(BattleManager bm, TutorialHintUI hint, float delaySec, int order)
     {
         hint.Hide();
         var hud = BattleSideHud.Instance;
@@ -723,7 +753,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         hud?.SetWaveCountdown(true, t, false);
         yield return BattleWaveAnnounceUI.CoPlay(BattleWaveAnnounceUI.Kind.NextWave);
         hud?.SetWaveCountdown(false, 0f, false);
-        yield return EnsureTutorialWave(bm, count);
+        bm?.ApplyTutorialBattleStep(order);
+        yield return EnsureTutorialWave(bm, TutorialStepCount(order));
     }
 
     /// <summary>
@@ -795,6 +826,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
             var eq = EquipInstance.GenerateFromTemplate(tpl, 0, lv);
             if (eq != null)
             {
+                eq.requireLevel = 1;
                 if (eq.icon == null && tpl.icon != null) eq.icon = tpl.icon;
                 if (eq.icon == null) eq.icon = EquipIcons.Get(tpl.iconFileName);
                 AlignWeaponToHeroAttackHand(eq);
@@ -809,6 +841,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (list != null && list.Count > 0)
         {
             var eq = list[0];
+            if (eq != null) eq.requireLevel = 1;
             eq?.template?.ResolveIcon();
             if (eq != null && eq.icon == null && eq.template != null)
                 eq.icon = eq.template.icon;
@@ -844,25 +877,28 @@ public class TutorialDirector : Singleton<TutorialDirector>
     {
         var bm = BattleManager.Instance;
         float t = 0f;
-        const float timeout = 60f;
-        while (bm != null && bm.GetAliveMonsterCount() > 0 && t < timeout)
+        const float timeout = 90f;
+        float zeroHold = 0f;
+        while (bm != null && t < timeout)
         {
+            int alive = bm.GetAliveMonsterCount();
+            if (alive > 0)
+                zeroHold = 0f;
+            else
+            {
+                zeroHold += Time.unscaledDeltaTime;
+                if (zeroHold >= (strict ? 0.45f : 0.35f))
+                    yield break;
+            }
             t += Time.unscaledDeltaTime;
             yield return null;
         }
 
-        if (!strict)
-        {
-            t = 0f;
-            while (bm != null && bm.GetAliveMonsterCount() > 0 && t < 2f)
-            {
-                t += Time.unscaledDeltaTime;
-                yield return null;
-            }
-        }
-
         if (bm != null && bm.GetAliveMonsterCount() > 0)
             Debug.LogWarning($"[Tutorial] 清场超时仍有怪 alive={bm.GetAliveMonsterCount()} strict={strict}，继续流程");
+
+        if (bm != null && strict)
+            bm.UnitsCanAct = true;
     }
 
     static Button ResolveAdventureButton()

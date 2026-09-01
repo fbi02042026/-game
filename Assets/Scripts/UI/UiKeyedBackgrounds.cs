@@ -12,6 +12,7 @@ using UnityEngine.UI;
 public static class UiKeyedBackgrounds
 {
     public const string AdventureLogIllust = "UI/AdventureLog/插图";
+    public const string AdventureLogTabIcons = "UI/AdventureLog/TabIcons";
     public const string AdventureLogFrames = "UI/AdventureLog/Frames";
     public const string AdventurePages = "UI/Adventure";
 
@@ -39,6 +40,10 @@ public static class UiKeyedBackgrounds
 
     public static Sprite LogTabIllust(string tabName) =>
         Load(AdventureLogIllust, tabName);
+
+    /// <summary>侧栏 Tab 小图标（怪物-1 / 佣兵-1 规格）。</summary>
+    public static Sprite LogTabSidebarIcon(string tabName) =>
+        Load(AdventureLogTabIcons, tabName);
 
     public static Sprite LogFrame(string fileNameNoExt) =>
         Load(AdventureLogFrames, fileNameNoExt);

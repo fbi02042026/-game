@@ -20,6 +20,17 @@ public class TownHeroCostumePreview : MonoBehaviour
     HeroCostumeManager _costume;
     bool _built;
 
+    /// <summary>城镇角色页预览的 CostumeManager（战斗 Hero 不存在时给背包 HandRig 用）。</summary>
+    public static HeroCostumeManager ActiveCostumeManager
+    {
+        get
+        {
+            if (CharacterUI.Instance == null) return null;
+            var p = CharacterUI.Instance.GetComponent<TownHeroCostumePreview>();
+            return p != null ? p._costume : null;
+        }
+    }
+
     public static TownHeroCostumePreview EnsureOn(CharacterUI ui)
     {
         if (ui == null) return null;

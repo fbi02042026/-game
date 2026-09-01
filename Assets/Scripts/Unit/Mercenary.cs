@@ -69,7 +69,7 @@ public class Mercenary : UnitBase
         PassiveRunner.Bind(this, passiveId);
     }
 
-    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true)
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0)
     {
         if (TutorialStunned)
         {
@@ -89,7 +89,7 @@ public class Mercenary : UnitBase
             damage = PassiveRunner.ModifyIncomingDamage(damage);
 
         float before = currentHp;
-        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx);
+        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing);
         if (PassiveRunner != null && !Mathf.Approximately(before, currentHp))
             PassiveRunner.OnHpChanged();
     }
@@ -170,7 +170,7 @@ public class Mercenary : UnitBase
         if (_nameLabelRoot == null || _nameLabel == null) return;
         float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
         _nameLabelRoot.localPosition = new Vector3(0f, 0.82f / rootAbs, 0f);
-        _nameLabel.characterSize = 0.056f / rootAbs;
+        _nameLabel.characterSize = 0.112f / rootAbs;
         UpdateNameLabelFacing();
         if (_nameLabelRenderer != null)
             _nameLabelRenderer.sortingOrder = GameConfig.SORT_VFX + 24;
@@ -349,8 +349,9 @@ public class Mercenary : UnitBase
     void UpdateNameLabelFacing()
     {
         if (_nameLabelRoot == null) return;
-        float parentSign = transform.localScale.x >= 0f ? 1f : -1f;
-        _nameLabelRoot.localScale = new Vector3(-parentSign * NameScaleMul, NameScaleMul, NameScaleMul);
+        int vfxDir = GetVfxFacingDir();
+        float sx = (vfxDir >= 0 ? 1f : -1f) * NameScaleMul;
+        _nameLabelRoot.localScale = new Vector3(sx, NameScaleMul, NameScaleMul);
     }
 
     protected override void AIUpdate()

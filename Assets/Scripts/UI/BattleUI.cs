@@ -150,7 +150,7 @@ public class BattleUI : MonoBehaviour
                 _lastPlayerHp = hero.currentHp;
                 _lastPlayerMaxHp = maxHp;
                 _lastPlayerEnergy = energy;
-                playerSlot.UpdateSlot("玩家", hero.level, hero.currentHp, maxHp);
+                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp);
                 playerSlot.SetEnergy(energy);
             }
         }
@@ -491,6 +491,8 @@ public class BattleUI : MonoBehaviour
 
         if (slot.levelLabel == null)
             slot.levelLabel = FindTextNamed(root, "LevelLabel", "Level", "Lv");
+        if (slot.nameText == null)
+            slot.nameText = FindTextNamed(root, "Name", "NameText", "PlayerName");
 
         // HP：优先 HPBarBg/HPBarFill，避免误绑到底板
         if (slot.hpBarFill == null)
@@ -1083,7 +1085,7 @@ public class BattleUI : MonoBehaviour
             if (hero != null)
             {
                 float maxHp = hero.attr.GetAttr(AttrType.MaxHp);
-                playerSlot.UpdateSlot("玩家", hero.level, hero.currentHp, maxHp);
+                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp);
             }
             // 玩家头像对接
             Sprite playerIcon = mm != null ? mm.GetPlayerIcon() : null;
@@ -1483,6 +1485,7 @@ public class CharacterSlotUI
     public Image energyRing;            // 圆形能量环（可选）
     public Image glowBorder;            // 金色描边（能量满时显示）
     public Text levelLabel;             // 等级标签 "Lv.4"
+    public Text nameText;               // 角色名（签名后延用）
     public Image hpBarFill;             // 血条填充 HPBarFill
     public Text hpText;                 // HP数值 "28/28"
     public Image lanBarFill;            // 蓝条/技能能量 lanBarFill
@@ -1503,6 +1506,8 @@ public class CharacterSlotUI
         var le = root.GetComponent<UnityEngine.UI.LayoutElement>();
         if (le != null) le.ignoreLayout = false;
 
+        if (nameText != null && !string.IsNullOrEmpty(name))
+            nameText.text = name;
         if (levelLabel != null) levelLabel.text = $"Lv.{level}";
         if (hpText != null)
         {

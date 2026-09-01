@@ -60,7 +60,7 @@ public class SpeechBubbleTalker : MonoBehaviour
 
     static readonly string[] DefaultLines =
     {
-        "欢迎回来，冒险者！",
+        "欢迎来到" + GameConfig.GUILD_NAME + "！",
         "今日体力记得留着打冒险哦。",
         "点下方「冒险」就能出发。",
         "邮件满了会进邮箱，别忘领。",

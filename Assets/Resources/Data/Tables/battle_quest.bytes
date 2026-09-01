@@ -1,0 +1,13 @@
+# gameChapter/stageType/isGoldDungeon: * 为通配；clearGold=0 走公式
+gameChapter,stageType,isGoldDungeon,objective,clearGold,normalBase,normalChapterAdd,eliteGoldMul,note
+1,Boss,0,击败 Boss 森之守护者,200,,,,第1章Boss
+2,Boss,0,击败 Boss 墓园守卫,300,,,,第2章Boss
+3,Boss,0,击败 Boss 雨林巨蛛,400,,,,第3章Boss
+4,Boss,0,击败 Boss 海妖蟹,500,,,,第4章Boss
+5,Boss,0,击败 Boss 时之风车精灵,600,,,,第5章Boss
+6,Boss,0,击败 Boss 晶石巨像,700,,,,第6章Boss
+7,Boss,0,击败 Boss 裂隙化身 · 小美,800,,,,第7章Boss
+8,Boss,0,击败 Boss 裂缝意志,2000,,,,第8章Boss
+*,Normal,0,击败所有敌人,0,25,10,,普通关公式
+*,Elite,0,击败所有敌人,0,25,10,1.5,精英+50%
+*,*,1,清剿金币副本敌人,0,,,,金数走GameConfig

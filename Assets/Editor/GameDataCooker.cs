@@ -41,6 +41,17 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookMercSkillMap();
         CookMonsterSpriteOpaque();
         CookEquipAnchors();
+        CookMonsterStats();
+        CookChapterThemeMap();
+        CookMonsterUnlockTier();
+        CookStageSpawn();
+        CookTutorialBattle();
+        CookBattleQuest();
+        CookStageRollerWeights();
+        CookSpritePickWeight();
+        CookWaveSlot();
+        CookChapterBranch();
+        CookChapterBranchRules();
         if (ContentProtection.Enabled)
             CookFingerprint();
         else
@@ -80,6 +91,61 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookMonsterSpriteOpaque()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/monster_sprite_opaque.csv", null, "monster_sprite_opaque");
+    }
+
+    static void CookMonsterStats()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/monster_stats.csv", null, "monster_stats");
+    }
+
+    static void CookChapterThemeMap()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/chapter_theme_map.csv", null, "chapter_theme_map");
+    }
+
+    static void CookMonsterUnlockTier()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/monster_unlock_tier.csv", null, "monster_unlock_tier");
+    }
+
+    static void CookStageSpawn()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/stage_spawn.csv", null, "stage_spawn");
+    }
+
+    static void CookTutorialBattle()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/tutorial_battle.csv", null, "tutorial_battle");
+    }
+
+    static void CookBattleQuest()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/battle_quest.csv", null, "battle_quest");
+    }
+
+    static void CookStageRollerWeights()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/stage_roller_weights.csv", null, "stage_roller_weights");
+    }
+
+    static void CookSpritePickWeight()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/sprite_pick_weight.csv", null, "sprite_pick_weight");
+    }
+
+    static void CookWaveSlot()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/wave_slot.csv", null, "wave_slot");
+    }
+
+    static void CookChapterBranch()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/chapter_branch.csv", null, "chapter_branch");
+    }
+
+    static void CookChapterBranchRules()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/chapter_branch_rules.csv", null, "chapter_branch_rules");
     }
 
     static void CookTableFromSource(string sourceCsv, string legacyResourcesPath, string outName)

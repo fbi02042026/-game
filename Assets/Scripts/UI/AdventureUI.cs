@@ -89,6 +89,23 @@ public class AdventureUI : MonoBehaviour, ITownPage
     RectTransform _floatToastRt;
     Coroutine _floatToastCo;
     Sprite _goldDropSprite;
+    Sprite _talentDropSprite;
+    Sprite _scrollCommonSprite;
+    Sprite _scrollRareSprite;
+    Sprite _scrollLegendarySprite;
+    Sprite _staminaIconSprite;
+    Image _staminaCostIcon;
+
+    enum PreviewDropKind
+    {
+        Gold,
+        TalentStone,
+        ScrollCommon,
+        ScrollRare,
+        ScrollLegendary
+    }
+
+    readonly List<PreviewDropKind> _previewDrops = new List<PreviewDropKind>(4);
 
     const float TOP_H    = 120f;
     const float BOT_H    = 150f;
@@ -1186,10 +1203,36 @@ public class AdventureUI : MonoBehaviour, ITownPage
         }
 
         if (remainChancesLabel != null)
-            remainChancesLabel.text = playable ? "—" : "0";
+            remainChancesLabel.text = FormatRemainChances(playable, main, activity);
 
+        EnsureStaminaCostIcon();
         RefreshEnemyIcons();
         RefreshDropIcons();
+    }
+
+    static string FormatRemainChances(bool playable, bool main, bool activity)
+    {
+        if (!playable) return "0";
+        if (main) return "不限";
+        // 活动/金币副本每日次数：暂无存档字段与配置表，预制体 3/3 仅为示意
+        if (activity) return "3/3";
+        return "0";
+    }
+
+    void EnsureStaminaCostIcon()
+    {
+        if (_staminaCostIcon == null && staminaCostLabel != null)
+        {
+            _staminaCostIcon = staminaCostLabel.transform.Find("tiliicon")?.GetComponent<Image>();
+            if (_staminaCostIcon == null)
+                _staminaCostIcon = staminaCostLabel.GetComponentInChildren<Image>(true);
+        }
+        if (_staminaCostIcon == null) return;
+        var sp = LoadStaminaIconSprite();
+        if (sp == null) return;
+        _staminaCostIcon.sprite = sp;
+        _staminaCostIcon.preserveAspect = true;
+        _staminaCostIcon.color = Color.white;
     }
 
     void RefreshEnemyIcons()
@@ -1231,11 +1274,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
             var portrait = FindPortraitImage(slots[i]);
             Sprite sp = LoadMonsterSprite(cfg);
             if (portrait != null && sp != null)
-            {
-                portrait.sprite = sp;
-                portrait.color = Color.white;
-                portrait.preserveAspect = true;
-            }
+                LayoutEnemyPortrait(portrait, sp);
             if (cfg.isBoss) bossSlot = slots[i];
         }
 
@@ -1263,6 +1302,20 @@ public class AdventureUI : MonoBehaviour, ITownPage
         if (imgs == null || imgs.Length == 0) return null;
         if (imgs.Length >= 2) return imgs[imgs.Length - 1];
         return imgs[0];
+    }
+
+    static void LayoutEnemyPortrait(Image portrait, Sprite sp, float scale = 1.35f)
+    {
+        portrait.sprite = sp;
+        portrait.color = Color.white;
+        portrait.preserveAspect = true;
+        var prt = portrait.rectTransform;
+        if (prt == null) return;
+        prt.anchorMin = new Vector2(0.5f, 0f);
+        prt.anchorMax = new Vector2(0.5f, 0f);
+        prt.pivot = new Vector2(0.5f, 0f);
+        prt.anchoredPosition = Vector2.zero;
+        prt.localScale = new Vector3(scale, scale, 1f);
     }
 
     static Sprite LoadMonsterSprite(MonsterConfig cfg)
@@ -1507,13 +1560,8 @@ public class AdventureUI : MonoBehaviour, ITownPage
             slots.Add(new DropSlot { kuang = kuang, icon = icon });
         }
 
-        bool playable = IsModePlayable(_selectedMode);
-        bool goldOnly = IsActivityMode(_selectedMode);
-        int showCount = 0;
-        if (playable)
-            showCount = goldOnly ? 1 : Mathf.Min(slots.Count, 2);
-
-        Sprite goldSp = LoadGoldDropSprite();
+        CollectPreviewDrops(_previewDrops);
+        int showCount = Mathf.Min(slots.Count, _previewDrops.Count);
         for (int i = 0; i < slots.Count; i++)
         {
             bool on = i < showCount;
@@ -1522,12 +1570,49 @@ public class AdventureUI : MonoBehaviour, ITownPage
             if (!on || slots[i].icon == null) continue;
             var img = slots[i].icon.GetComponent<Image>();
             if (img == null) continue;
-            if (i == 0 && goldSp != null)
-            {
-                img.sprite = goldSp;
-                img.color = Color.white;
-                img.preserveAspect = true;
-            }
+            var sp = LoadPreviewDropSprite(_previewDrops[i]);
+            if (sp == null) continue;
+            img.sprite = sp;
+            img.color = Color.white;
+            img.preserveAspect = true;
+        }
+    }
+
+    /// <summary>
+    /// 关卡预览掉落（临时按章节规则）。待 <c>stage_preview_drop</c> 表接入后改读表。
+    /// </summary>
+    void CollectPreviewDrops(List<PreviewDropKind> outList)
+    {
+        outList.Clear();
+        if (!IsModePlayable(_selectedMode)) return;
+        if (IsActivityMode(_selectedMode))
+        {
+            outList.Add(PreviewDropKind.Gold);
+            return;
+        }
+        outList.Add(PreviewDropKind.Gold);
+        outList.Add(PreviewDropKind.TalentStone);
+        if (_selectedChapter >= 3) outList.Add(PreviewDropKind.ScrollCommon);
+        if (_selectedChapter >= 5) outList.Add(PreviewDropKind.ScrollRare);
+        if (_selectedChapter >= 7) outList.Add(PreviewDropKind.ScrollLegendary);
+    }
+
+    Sprite LoadPreviewDropSprite(PreviewDropKind kind)
+    {
+        switch (kind)
+        {
+            case PreviewDropKind.Gold:
+                return LoadGoldDropSprite();
+            case PreviewDropKind.TalentStone:
+                return LoadTalentDropSprite();
+            case PreviewDropKind.ScrollCommon:
+                return LoadScrollDropSprite(MercRosterDefs.MercRarity.Common);
+            case PreviewDropKind.ScrollRare:
+                return LoadScrollDropSprite(MercRosterDefs.MercRarity.Rare);
+            case PreviewDropKind.ScrollLegendary:
+                return LoadScrollDropSprite(MercRosterDefs.MercRarity.Legendary);
+            default:
+                return null;
         }
     }
 
@@ -1552,7 +1637,60 @@ public class AdventureUI : MonoBehaviour, ITownPage
                     _goldDropSprite = img.sprite;
             }
         }
+        if (_goldDropSprite == null)
+            _goldDropSprite = Resources.Load<Sprite>("UI/Talent/金币");
         return _goldDropSprite;
+    }
+
+    Sprite LoadTalentDropSprite()
+    {
+        if (_talentDropSprite != null) return _talentDropSprite;
+        _talentDropSprite = Resources.Load<Sprite>("UI/Talent/天赋_0013_天赋石升级");
+        return _talentDropSprite;
+    }
+
+    Sprite LoadScrollDropSprite(MercRosterDefs.MercRarity rarity)
+    {
+        if (rarity == MercRosterDefs.MercRarity.Legendary)
+        {
+            if (_scrollLegendarySprite != null) return _scrollLegendarySprite;
+            _scrollLegendarySprite = Resources.Load<Sprite>("UI/Icons/MercScrollLegendary");
+            if (_scrollLegendarySprite != null) return _scrollLegendarySprite;
+            return MercHireSession.LoadRarityFrame(rarity);
+        }
+        if (rarity == MercRosterDefs.MercRarity.Rare)
+        {
+            if (_scrollRareSprite != null) return _scrollRareSprite;
+            _scrollRareSprite = Resources.Load<Sprite>("UI/Icons/MercScrollRare");
+            if (_scrollRareSprite != null) return _scrollRareSprite;
+            return MercHireSession.LoadRarityFrame(rarity);
+        }
+        if (_scrollCommonSprite != null) return _scrollCommonSprite;
+        _scrollCommonSprite = Resources.Load<Sprite>("UI/Icons/MercScrollCommon");
+        if (_scrollCommonSprite != null) return _scrollCommonSprite;
+        return MercHireSession.LoadRarityFrame(rarity);
+    }
+
+    Sprite LoadStaminaIconSprite()
+    {
+        if (_staminaIconSprite != null) return _staminaIconSprite;
+        Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : null;
+        if (hall != null)
+        {
+            Transform staminaPanel = TownSharedChrome.FindDeep(hall, "体力Panel");
+            if (staminaPanel != null)
+            {
+                Transform coin = staminaPanel.Find("CoinIcon");
+                if (coin != null)
+                {
+                    var img = coin.GetComponent<Image>();
+                    if (img != null && img.sprite != null)
+                        return _staminaIconSprite = img.sprite;
+                }
+            }
+        }
+        _staminaIconSprite = Resources.Load<Sprite>("UI/Icons/Stamina");
+        return _staminaIconSprite;
     }
 
     void Toast(string msg)

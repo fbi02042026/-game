@@ -64,6 +64,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     GameObject _activeCard;
     AdventureLogCodexPanel _codex;
     AdventureLogPhase3Panel _phase3;
+    bool _logChromeOpen;
+
+    const float FrameTopReserveWithBar = 120f;
+    const float FrameTopReserveLogOpen = 8f;
+    const float FrameBottomReserve = 150f;
+    const float FrameSidePad = 16f;
 
     public void PreloadOnce()
     {
@@ -85,9 +91,15 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var hall = GetComponentInParent<GuildHallUI>();
         if (hall != null)
             TownSharedChrome.RaiseSharedChrome(hall.transform);
+        SetLogChrome(true);
+        MainBottomNav.InvalidateNavBgCache();
+        MainBottomNav.Instance?.SetSelected(MainNavTab.Log, notify: false);
+        EnsureFrameClearsChrome();
+        EnsureCloseButtonPosition();
         _phase3 = AdventureLogPhase3Panel.Ensure(this);
         RedDot.RefreshCommon();
-        SelectTab(_tab, force: true);
+        BindSidebarTabIcons();
+        SelectTab(LogTab.MainStory, force: true);
     }
 
     /// <summary>碎片/商店操作后刷新列表（不关弹层）。</summary>
@@ -100,8 +112,27 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
     public void HidePage()
     {
+        AchievementMilestoneUI.Hide();
         if (_root != null) _root.SetActive(false);
         gameObject.SetActive(false);
+        SetLogChrome(false);
+        EnsureFrameClearsChrome();
+        EnsureCloseButtonPosition();
+    }
+
+    void SetLogChrome(bool logOpen)
+    {
+        if (_logChromeOpen == logOpen) return;
+        _logChromeOpen = logOpen;
+
+        var hall = GuildHallUI.Instance;
+        if (hall == null) return;
+
+        TavernUI.SetGuildHallOverlayMode(logOpen);
+
+        Transform top = TownSharedChrome.FindDeep(hall.transform, "TopBar");
+        if (top != null && top.gameObject.activeSelf != !logOpen)
+            top.gameObject.SetActive(!logOpen);
     }
 
     void Awake()
@@ -148,8 +179,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var frame = transform.Find("Root/Frame");
         if (frame != null)
             _codex = new AdventureLogCodexPanel(frame);
+        HidePaper1Template();
         PrepareDoneTemplate();
         WireTabs();
+        BindSidebarTabIcons();
         WireButtons();
         BindRewardRedDots();
         BindTabIllustration();
@@ -212,8 +245,22 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         else
         {
             _codex?.Hide();
+            HidePaper1Template();
             if (_paper != null) _paper.SetActive(true);
         }
+    }
+
+    /// <summary>预制体 Paper1/怪物模板默认激活，非图鉴 Tab 必须整页关掉。</summary>
+    void HidePaper1Template()
+    {
+        var paper1 = transform.Find("Root/Frame/Paper1");
+        if (paper1 != null)
+            paper1.gameObject.SetActive(false);
+        var cell = paper1 != null
+            ? paper1.Find("怪物") ?? paper1.Find("MonsterCell")
+            : null;
+        if (cell != null)
+            cell.gameObject.SetActive(false);
     }
 
     void OnCodexSelect(string id, string title, string detail)
@@ -250,9 +297,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     /// </summary>
     void EnsureFrameClearsChrome()
     {
-        const float TopReserve = 120f;
-        const float BottomReserve = 150f;
-        const float SidePad = 16f;
+        float topReserve = _logChromeOpen ? FrameTopReserveLogOpen : FrameTopReserveWithBar;
         var frame = transform.Find("Root/Frame") as RectTransform;
         if (frame == null) return;
         frame.anchorMin = Vector2.zero;
@@ -260,8 +305,23 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         frame.pivot = new Vector2(0.5f, 0.5f);
         frame.anchoredPosition = Vector2.zero;
         frame.sizeDelta = Vector2.zero;
-        frame.offsetMin = new Vector2(SidePad, BottomReserve);
-        frame.offsetMax = new Vector2(-SidePad, -TopReserve);
+        frame.offsetMin = new Vector2(FrameSidePad, FrameBottomReserve);
+        frame.offsetMax = new Vector2(-FrameSidePad, -topReserve);
+    }
+
+    /// <summary>
+    /// 关闭钮在预制体里按顶栏留 120px 定位；日志全屏打开时顶距改为 8px，需把钮拉回外框右上角。
+    /// </summary>
+    void EnsureCloseButtonPosition()
+    {
+        var close = transform.Find("Root/CloseButton") as RectTransform;
+        if (close == null) return;
+        close.anchorMin = new Vector2(1f, 1f);
+        close.anchorMax = new Vector2(1f, 1f);
+        close.pivot = new Vector2(1f, 1f);
+        float topInset = _logChromeOpen ? FrameTopReserveLogOpen + 10f : 81f;
+        close.anchoredPosition = new Vector2(-14f, -topInset);
+        close.SetAsLastSibling();
     }
 
     void PrepareDoneTemplate()
@@ -305,6 +365,44 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         }
     }
 
+    void BindSidebarTabIcons()
+    {
+        ApplySidebarTabIcon(2, "怪物");
+        ApplySidebarTabIcon(3, "佣兵");
+    }
+
+    void ApplySidebarTabIcon(int tabIndex, string tabKey)
+    {
+        var tab = transform.Find($"Root/Frame/Sidebar/Tabs/Tab{tabIndex}");
+        if (tab == null) return;
+        var icon = tab.Find("icon")?.GetComponent<Image>()
+                   ?? tab.Find("Icon")?.GetComponent<Image>();
+        if (icon == null)
+        {
+            for (int i = 0; i < tab.childCount; i++)
+            {
+                var img = tab.GetChild(i).GetComponent<Image>();
+                if (img != null && img.gameObject.name.IndexOf("icon", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    icon = img;
+                    break;
+                }
+            }
+        }
+        if (icon == null) return;
+        var sp = UiKeyedBackgrounds.LogTabSidebarIcon(tabKey);
+        if (sp == null)
+            sp = UiKeyedBackgrounds.LogTabIllust(tabKey);
+        if (sp == null) return;
+        icon.sprite = sp;
+        icon.enabled = true;
+        icon.color = Color.white;
+        icon.preserveAspect = true;
+        var rt = icon.rectTransform;
+        if (rt != null)
+            rt.sizeDelta = new Vector2(44f, 45f);
+    }
+
     void WireButtons()
     {
         var claim = _claim != null ? _claim.GetComponent<Button>() : null;
@@ -317,7 +415,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 if (n > 0)
                     UIManager.Instance?.ShowToast($"领取 {n} 个成就奖励");
                 else if (AdventureLogMileage.HasUnclaimedLevel())
-                    AchievementMilestoneUI.Show();
+                    UIManager.Instance?.ShowToast("成就已领完，日志里程奖励请在世界/成就页查看");
                 else
                     UIManager.Instance?.ShowToast("暂无可领成就奖励");
                 RefreshBody();

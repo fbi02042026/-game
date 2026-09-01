@@ -3,23 +3,41 @@ using UnityEngine;
 
 /// <summary>
 /// 下一关抽取规则（本版：普通 / 精英 / 恢复 / 首领）。
-/// 每打完一关现抽，结果交给 NextStageRouletteUI 滚动展示。
+/// 权重系数优先读 stage_roller_weights 表。
 /// </summary>
 public static class StageRoller
 {
-    /// <summary>首领关最早可能出现的位置：倒数第 3 关</summary>
-    public const int BossWindow = 3;
-    /// <summary>恢复关每章上限</summary>
-    public const int MaxRestPerChapter = 2;
+    public const int BossWindowFallback = 3;
+    public const int MaxRestPerChapterFallback = 2;
 
-    /// <summary>一章之内的抽取状态：随章节重置</summary>
+    public static int BossWindow
+    {
+        get
+        {
+            StageRollerWeightsTable.EnsureLoaded();
+            return StageRollerWeightsTable.HasData
+                ? StageRollerWeightsTable.GetInt("bosswindow", BossWindowFallback)
+                : BossWindowFallback;
+        }
+    }
+
+    public static int MaxRestPerChapter
+    {
+        get
+        {
+            StageRollerWeightsTable.EnsureLoaded();
+            return StageRollerWeightsTable.HasData
+                ? StageRollerWeightsTable.GetInt("maxrestperchapter", MaxRestPerChapterFallback)
+                : MaxRestPerChapterFallback;
+        }
+    }
+
     public class ChapterRollState
     {
         public int restCount;
         public int combatStagesDone;
         public bool bossPlaced;
 
-        // 保留字段供旧存档/日志兼容，本版不参与抽选
         public StageType craftKind = StageType.Forge;
         public bool craftUsed;
 
@@ -45,7 +63,6 @@ public static class StageRoller
         }
     }
 
-    /// <summary>轮盘/石墩只展示四类；其余枚举映射为普通。</summary>
     public static StageType NormalizeDisplayType(StageType t)
     {
         switch (t)
@@ -59,10 +76,15 @@ public static class StageRoller
         }
     }
 
+    static float W(string key, float fallback) =>
+        StageRollerWeightsTable.GetFloat(key, fallback);
+
     public static StageType Roll(ChapterRollState state, int stageIndex, int totalStages)
     {
         if (state == null) return StageType.Normal;
 
+        int bossWindow = BossWindow;
+        int maxRest = MaxRestPerChapter;
         int last = Mathf.Max(0, totalStages - 1);
         int remainingAfter = last - stageIndex;
 
@@ -70,24 +92,33 @@ public static class StageRoller
 
         var weights = new List<KeyValuePair<StageType, float>>(4);
 
-        if (!state.bossPlaced && stageIndex >= last - (BossWindow - 1))
+        float bossBase = W("bossweightbase", 0.22f);
+        float bossStep = W("bossweightstep", 0.24f);
+        if (!state.bossPlaced && stageIndex >= last - (bossWindow - 1))
         {
-            int stepsIntoWindow = stageIndex - (last - (BossWindow - 1));
-            weights.Add(new KeyValuePair<StageType, float>(StageType.Boss, 0.22f + stepsIntoWindow * 0.24f));
+            int stepsIntoWindow = stageIndex - (last - (bossWindow - 1));
+            weights.Add(new KeyValuePair<StageType, float>(StageType.Boss, bossBase + stepsIntoWindow * bossStep));
         }
 
-        if (state.restCount < MaxRestPerChapter)
+        if (state.restCount < maxRest)
         {
-            bool mustRest = state.restCount == 0 && remainingAfter <= BossWindow;
+            bool mustRest = state.restCount == 0 && remainingAfter <= bossWindow;
             if (mustRest) return StageType.Rest;
-            float w = 0.10f + stageIndex * 0.035f;
-            if (state.restCount == 0) w *= 1.6f;
+            float restBase = W("restweightbase", 0.10f);
+            float restPerIdx = W("restweightperstageindex", 0.035f);
+            float restFirstMul = W("restfirstchaptermultiplier", 1.6f);
+            float w = restBase + stageIndex * restPerIdx;
+            if (state.restCount == 0) w *= restFirstMul;
             weights.Add(new KeyValuePair<StageType, float>(StageType.Rest, w));
         }
 
-        float eliteW = 0.15f + stageIndex * 0.05f;
+        float eliteBase = W("eliteweightbase", 0.15f);
+        float elitePerIdx = W("eliteweightperstageindex", 0.05f);
+        float normalFloor = W("normalweightfloor", 0.2f);
+        float normalComplement = W("normalweightcomplement", 1f);
+        float eliteW = eliteBase + stageIndex * elitePerIdx;
         weights.Add(new KeyValuePair<StageType, float>(StageType.Elite, eliteW));
-        weights.Add(new KeyValuePair<StageType, float>(StageType.Normal, Mathf.Max(0.2f, 1f - eliteW)));
+        weights.Add(new KeyValuePair<StageType, float>(StageType.Normal, Mathf.Max(normalFloor, normalComplement - eliteW)));
 
         return WeightedPick(weights);
     }
@@ -130,9 +161,11 @@ public static class StageRoller
         var pool = new List<StageType> { StageType.Normal, StageType.Elite };
         if (state == null) return pool;
 
+        int bossWindow = BossWindow;
+        int maxRest = MaxRestPerChapter;
         int last = Mathf.Max(0, totalStages - 1);
-        if (state.restCount < MaxRestPerChapter) pool.Add(StageType.Rest);
-        if (!state.bossPlaced && stageIndex >= last - (BossWindow - 1)) pool.Add(StageType.Boss);
+        if (state.restCount < maxRest) pool.Add(StageType.Rest);
+        if (!state.bossPlaced && stageIndex >= last - (bossWindow - 1)) pool.Add(StageType.Boss);
         return pool;
     }
 

@@ -92,6 +92,7 @@ public class DialogueUI : MonoBehaviour
     }
 
     const int DialogueBodyFontSize = 28;
+    const int DialogueNameFontSizeBoost = 2;
     const float LocBlackInDur = 0.55f;
     const float LocHoldDur = 2.0f;
     const float LocTextFadeDur = 1.1f;
@@ -370,6 +371,13 @@ public class DialogueUI : MonoBehaviour
         if (rightNamePlateImage != null) rightNamePlateImage.gameObject.SetActive(on && !string.IsNullOrEmpty(_otherName));
         if (skipButton != null) skipButton.gameObject.SetActive(on);
         if (nextArrowImage != null) nextArrowImage.gameObject.SetActive(on);
+        if (advanceButton != null)
+        {
+            advanceButton.gameObject.SetActive(on);
+            advanceButton.interactable = on;
+            var img = advanceButton.targetGraphic as Image;
+            if (img != null) img.raycastTarget = on;
+        }
         var choice = transform.Find("ChoicePanel");
         if (choice != null && !on) choice.gameObject.SetActive(false);
         if (!on) SetLocationCaption("", 0f);
@@ -537,11 +545,17 @@ public class DialogueUI : MonoBehaviour
 
         if (leftNameText != null) leftNameText.text = _initiatorName;
         if (rightNameText != null) rightNameText.text = _otherName;
+        ApplyNameTypography(leftNameText);
+        ApplyNameTypography(rightNameText);
         BeginTyping(content ?? "");
         SetStoryProp(propSprite);
+        if (propSprite != null)
+        {
+            HidePortraitsForStoryProp();
+            RaiseStoryPropAboveDialogue();
+        }
 
-        _portraitProfile = StoryPortraitLayout.GetProfile(
-            StoryPortraitLayout.ModeFromSoloFlag(soloCentered));
+        _portraitProfile = StoryPortraitLayout.Standard;
 
         bool newPortraits = initiatorPortrait != null || otherPortrait != null;
         if (soloCentered && newPortraits)
@@ -568,6 +582,7 @@ public class DialogueUI : MonoBehaviour
             ForceRightPortraitFaceInward();
             SetSpeakerHighlight(speakerIsInitiator ? -1 : 1);
         }
+        SyncStoryPortraitIdleMotion();
         FitDialogueBodyToBox();
         HideChoices();
         SetAdvanceInteractable(true);
@@ -825,6 +840,7 @@ public class DialogueUI : MonoBehaviour
         {
             leftNameText.text = name ?? "";
             leftNameText.color = new Color(1f, 0.95f, 0.85f);
+            ApplyNameTypography(leftNameText);
         }
         // 名牌 Sprite 自带头像位，不要再开子节点 Icon（会叠一层/像反了）
         SetNamePlateIconVisible(leftNameIcon, false);
@@ -850,7 +866,7 @@ public class DialogueUI : MonoBehaviour
             EnsurePortraitClipMask(leftPortraitImage, _portraitProfile.clipHeightFrac);
             var hostRt = GetPortraitHostRt(leftPortraitImage);
             ApplyPortraitBottomY(hostRt, lift);
-            ClampPortraitInsideCanvas(hostRt);
+            ClampPortraitInsideCanvas(hostRt, verticalOnly: true);
         }
         if (rightPortraitImage != null)
         {
@@ -861,7 +877,7 @@ public class DialogueUI : MonoBehaviour
             EnsurePortraitClipMask(rightPortraitImage, _portraitProfile.clipHeightFrac);
             var hostRt = GetPortraitHostRt(rightPortraitImage);
             ApplyPortraitBottomY(hostRt, lift);
-            ClampPortraitInsideCanvas(hostRt);
+            ClampPortraitInsideCanvas(hostRt, verticalOnly: true);
         }
 
         SetNamePlateIconVisible(leftNameIcon, false);
@@ -1051,6 +1067,36 @@ public class DialogueUI : MonoBehaviour
             SetPortraitDim(rightPortraitImage, false);
             FaceEachOther();
         }
+        SyncStoryPortraitIdleMotion();
+    }
+
+    /// <summary>剧情立绘待机：呼吸 + 浮动 + 微倾（与酒馆老板娘同款）。</summary>
+    void SyncStoryPortraitIdleMotion()
+    {
+        SyncOnePortraitIdleMotion(leftPortraitImage, 0f);
+        SyncOnePortraitIdleMotion(rightPortraitImage, 0.5f);
+    }
+
+    static void SyncOnePortraitIdleMotion(Image img, float phaseSeed)
+    {
+        if (img == null) return;
+        var host = GetPortraitHostRt(img);
+        if (!img.gameObject.activeSelf || img.sprite == null)
+        {
+            if (host != null)
+            {
+                var idleHost = host.GetComponent<PortraitIdleMotion>();
+                if (idleHost != null) idleHost.enabled = false;
+            }
+            var idleImg = img.GetComponent<PortraitIdleMotion>();
+            if (idleImg != null) idleImg.enabled = false;
+            return;
+        }
+        var onImg = img.GetComponent<PortraitIdleMotion>();
+        if (onImg != null) onImg.enabled = false;
+        if (host == null) return;
+        host.pivot = new Vector2(0.5f, 0f);
+        PortraitIdleMotion.EnsureOn(host, phaseSeed, breathAmount: 0.006f);
     }
 
     static void SetPortraitDim(Image img, bool dim)
@@ -1064,7 +1110,19 @@ public class DialogueUI : MonoBehaviour
         if (plate != null)
             plate.color = active ? Color.white : new Color(1f, 1f, 1f, 0.55f);
         if (name != null)
+        {
             name.color = active ? new Color(1f, 0.95f, 0.85f) : new Color(0.7f, 0.65f, 0.55f, 0.7f);
+            ApplyNameTypography(name);
+        }
+    }
+
+    static void ApplyNameTypography(Text name)
+    {
+        if (name == null) return;
+        if (name.font == null) name.font = GameFonts.GetChinese();
+        int baseSize = name.fontSize > 0 ? name.fontSize : DialogueBodyFontSize;
+        name.fontSize = baseSize + DialogueNameFontSizeBoost;
+        name.fontStyle = FontStyle.Bold;
     }
 
     static void SetNamePlateIconVisible(Image icon, bool visible)
@@ -1103,6 +1161,9 @@ public class DialogueUI : MonoBehaviour
             rt.pivot = new Vector2(0.5f, 1f);
             rt.anchoredPosition = Vector2.zero;
         }
+
+        // 呼吸缩放挂在 PortraitClip 上，轴心在裁切框底边（等价于立绘脚底）
+        clipRt.pivot = new Vector2(0.5f, 0f);
 
         float h = rt.sizeDelta.y;
         float w = rt.sizeDelta.x;
@@ -1191,7 +1252,7 @@ public class DialogueUI : MonoBehaviour
             var boxRt = dialogueBoxImage.rectTransform;
             Canvas.ForceUpdateCanvases();
             float boxTop = boxRt.anchoredPosition.y + boxRt.rect.height;
-            desired = Mathf.Max(desired, boxTop + 16f);
+            desired = Mathf.Max(desired, boxTop + _portraitProfile.dialogueTopGapPx);
         }
 
         desired += _portraitProfile.bottomOffsetPx;
@@ -1208,7 +1269,7 @@ public class DialogueUI : MonoBehaviour
     }
 
     /// <summary>用世界角点把立绘推进画布内，兼容右锚点佣兵立绘。</summary>
-    void ClampPortraitInsideCanvas(RectTransform rt)
+    void ClampPortraitInsideCanvas(RectTransform rt, bool verticalOnly = false)
     {
         if (rt == null) return;
         var canvasRt = transform as RectTransform;
@@ -1240,7 +1301,10 @@ public class DialogueUI : MonoBehaviour
         if (minY < minCy) shift.y += minCy - minY;
         if (maxY > maxCy) shift.y -= maxY - maxCy;
         if (shift.sqrMagnitude < 1e-6f) return;
-        rt.position += shift;
+        if (verticalOnly)
+            rt.position += new Vector3(0f, shift.y, 0f);
+        else
+            rt.position += shift;
     }
 
     /// <summary>
@@ -1338,9 +1402,19 @@ public class DialogueUI : MonoBehaviour
         storyPropImage.type = Image.Type.Simple;
         storyPropImage.gameObject.SetActive(true);
         ClampStoryPropSize();
-        storyPropImage.transform.SetSiblingIndex(Mathf.Max(4, storyPropImage.transform.GetSiblingIndex()));
-        RaiseStoryProp();
+        RaiseStoryPropAboveDialogue();
         HidePortraitsForStoryProp();
+    }
+
+    /// <summary>道具图必须在对话框之上，否则委托书等会被 DialogueBox 挡住。</summary>
+    void RaiseStoryPropAboveDialogue()
+    {
+        if (storyPropImage == null) return;
+        var skip = skipButton != null ? skipButton.transform : null;
+        if (skip != null)
+            storyPropImage.transform.SetSiblingIndex(skip.GetSiblingIndex());
+        else
+            storyPropImage.transform.SetAsLastSibling();
     }
 
     void SetStoryPropImmediate(Sprite sprite)
@@ -1359,23 +1433,45 @@ public class DialogueUI : MonoBehaviour
         storyPropImage.type = Image.Type.Simple;
         storyPropImage.gameObject.SetActive(true);
         ClampStoryPropSize();
-        RaiseStoryProp();
+        RaiseStoryPropAboveDialogue();
         HidePortraitsForStoryProp();
     }
 
     void ClampStoryPropSize()
     {
         if (storyPropImage == null || storyPropImage.sprite == null) return;
+        Canvas.ForceUpdateCanvases();
+
+        var sprite = storyPropImage.sprite;
         storyPropImage.SetNativeSize();
         var rt = storyPropImage.rectTransform;
-        var canvasRt = transform as RectTransform;
-        if (canvasRt == null) return;
-        float maxW = canvasRt.rect.width * 0.72f;
-        float maxH = canvasRt.rect.height * 0.55f;
+
         Vector2 n = rt.sizeDelta;
-        if (n.x < 1f || n.y < 1f) return;
+        if (n.x < 1f || n.y < 1f)
+        {
+            float ppu = sprite.pixelsPerUnit > 0.01f ? sprite.pixelsPerUnit : 100f;
+            n = new Vector2(sprite.rect.width / ppu, sprite.rect.height / ppu);
+            rt.sizeDelta = n;
+            if (n.x < 1f || n.y < 1f) return;
+        }
+
+        var canvasRt = transform as RectTransform;
+        float canvasW = canvasRt != null ? canvasRt.rect.width : 0f;
+        float canvasH = canvasRt != null ? canvasRt.rect.height : 0f;
+        if (canvasW < 64f) canvasW = GameConfig.DESIGN_WIDTH;
+        if (canvasH < 64f) canvasH = GameConfig.DESIGN_HEIGHT;
+
+        float maxW = canvasW * 0.72f;
+        float maxH = canvasH * 0.55f;
+        if (maxW < 1f || maxH < 1f)
+        {
+            rt.localScale = Vector3.one;
+            return;
+        }
+
         float k = Mathf.Min(1f, maxW / n.x, maxH / n.y);
-        rt.sizeDelta = n * k;
+        if (k < 1f)
+            rt.sizeDelta = n * k;
         rt.localScale = Vector3.one;
     }
 
@@ -1397,17 +1493,6 @@ public class DialogueUI : MonoBehaviour
         img.gameObject.SetActive(false);
         img.color = Color.white;
         _propFadeCo = null;
-    }
-
-    void RaiseStoryProp()
-    {
-        if (storyPropImage == null) return;
-        int afterPortraits = 4;
-        if (rightPortraitImage != null)
-            afterPortraits = rightPortraitImage.transform.GetSiblingIndex() + 1;
-        else if (leftPortraitImage != null)
-            afterPortraits = leftPortraitImage.transform.GetSiblingIndex() + 1;
-        storyPropImage.transform.SetSiblingIndex(afterPortraits);
     }
 
     public void AutoBindFromHierarchy()

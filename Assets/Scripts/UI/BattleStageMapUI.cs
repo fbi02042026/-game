@@ -50,6 +50,9 @@ public class BattleStageMapUI : MonoBehaviour
 
     StageData _next;
     Action<StageData> _onPick;
+    readonly List<StageData> _candidates = new List<StageData>();
+    readonly HashSet<int> _candidateIndices = new HashSet<int>();
+    bool _branchSelectMode;
     float _prevTimeScale = 1f;
     Coroutine _flow;
     Coroutine _backdropPulse;
@@ -65,7 +68,22 @@ public class BattleStageMapUI : MonoBehaviour
             onPick?.Invoke(null);
             return;
         }
-        Ensure().StartFlow(next, onPick);
+        var list = new List<StageData> { next };
+        BeginFlow(list, onPick);
+    }
+
+    /// <summary>多候选路线：分支时让玩家选石墩，再滚盘。</summary>
+    public static void BeginFlow(List<StageData> candidates, Action<StageData> onPick)
+    {
+        if (candidates == null || candidates.Count == 0)
+        {
+            onPick?.Invoke(null);
+            return;
+        }
+        if (candidates.Count == 1)
+            Ensure().StartFlow(candidates[0], onPick);
+        else
+            Ensure().StartBranchFlow(candidates, onPick);
     }
 
     public static BattleStageMapUI Ensure()
@@ -107,6 +125,10 @@ public class BattleStageMapUI : MonoBehaviour
     void StartFlow(StageData next, Action<StageData> onPick)
     {
         BindRefs();
+        _branchSelectMode = false;
+        _candidates.Clear();
+        _candidateIndices.Clear();
+        _candidateIndices.Add(next.stageIndex);
         _next = next;
         _onPick = onPick;
 
@@ -118,7 +140,6 @@ public class BattleStageMapUI : MonoBehaviour
         if (titleText != null)
             titleText.text = GameConfig.GetChapterTitleText(chapter);
 
-        // 滚盘前：当前关只显示锁（第 0 关除外），已通关灰旗，未解锁光墩
         RefreshPedestals(Phase.BeforeRoll);
 
         if (root != null) root.SetActive(true);
@@ -130,23 +151,75 @@ public class BattleStageMapUI : MonoBehaviour
         _flow = StartCoroutine(CoFlow());
     }
 
+    void StartBranchFlow(List<StageData> candidates, Action<StageData> onPick)
+    {
+        BindRefs();
+        _branchSelectMode = true;
+        _candidates.Clear();
+        _candidateIndices.Clear();
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            if (candidates[i] == null) continue;
+            _candidates.Add(candidates[i]);
+            _candidateIndices.Add(candidates[i].stageIndex);
+        }
+        _next = null;
+        _onPick = onPick;
+
+        EnsureCanvas();
+        _prevTimeScale = Time.timeScale;
+        Time.timeScale = 0f;
+
+        int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        if (titleText != null)
+            titleText.text = GameConfig.GetChapterTitleText(chapter);
+
+        RefreshPedestals(Phase.BranchSelect);
+
+        if (root != null) root.SetActive(true);
+        transform.SetAsLastSibling();
+        GameFonts.ApplyToHierarchy(transform);
+
+        StartBackdropPulse();
+        if (_flow != null) StopCoroutine(_flow);
+        _flow = StartCoroutine(CoBranchSelectFlow());
+
+        GlobalToastUI.Show("选择下一关路线");
+    }
+
     enum Phase
     {
-        BeforeRoll, // 下一关：锁；已通关：灰旗；未来：光墩
-        AfterRoll   // 下一关：彩色旗 + btn06；其余同上
+        BeforeRoll,
+        AfterRoll,
+        BranchSelect
+    }
+
+    IEnumerator CoBranchSelectFlow()
+    {
+        foreach (int idx in _candidateIndices)
+        {
+            if (idx > 0)
+                yield return PlayUnlockAnim(idx);
+        }
+        yield return WaitUnscaled(0.2f);
+        RefreshPedestals(Phase.BranchSelect);
+        _flow = null;
     }
 
     IEnumerator CoFlow()
     {
         int nextIdx = _next != null ? _next.stageIndex : 0;
 
-        // 第 0 关默认没锁，直接进滚盘；其它关先播解锁
         if (nextIdx > 0)
             yield return PlayUnlockAnim(nextIdx);
         else
             yield return WaitUnscaled(0.25f);
 
-        // 滚盘（类型已抽好，这里只演出）
+        yield return CoRouletteAndFinalize(nextIdx);
+    }
+
+    IEnumerator CoRouletteAndFinalize(int nextIdx)
+    {
         int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         bool rolled = false;
         StageData picked = _next;
@@ -158,12 +231,9 @@ public class BattleStageMapUI : MonoBehaviour
         while (!rolled) yield return null;
 
         _next = picked;
-        // 类型旗落到当前石墩 + btn06 描边
         RefreshPedestals(Phase.AfterRoll);
         ApplyCurrentOutline(nextIdx);
-
         _flow = null;
-        // 之后等玩家点石墩（OnPedestalClicked）
     }
 
     IEnumerator PlayUnlockAnim(int index)
@@ -234,7 +304,6 @@ public class BattleStageMapUI : MonoBehaviour
     {
         var cm = ChapterManager.Instance;
         int currentDone = cm != null ? cm.currentStageIndex : -1;
-        // 刚通关后 currentStageIndex 还是刚打完的那关
         int nextIdx = _next != null ? _next.stageIndex : currentDone + 1;
 
         ClearAllOutlines();
@@ -245,29 +314,55 @@ public class BattleStageMapUI : MonoBehaviour
             if (p == null || p.root == null) continue;
 
             bool cleared = i <= currentDone;
-            bool isNext = i == nextIdx;
-            bool locked = i > nextIdx;
+            bool isCandidate = _candidateIndices.Contains(i);
 
-            // 永远关掉旧的 Highlight（如果预制体里还留着）
             var hi = p.root.transform.Find("Highlight");
             if (hi != null) hi.gameObject.SetActive(false);
+
+            if (phase == Phase.BranchSelect)
+            {
+                if (cleared)
+                {
+                    if (p.lockIcon != null) p.lockIcon.SetActive(false);
+                    SetFlag(p, false, false);
+                    if (p.clearedMark != null) p.clearedMark.SetActive(true);
+                    if (p.stone != null) p.stone.color = new Color(0.85f, 0.85f, 0.85f, 1f);
+                    SetClickable(p, false, i);
+                }
+                else if (isCandidate)
+                {
+                    if (p.lockIcon != null) p.lockIcon.SetActive(false);
+                    if (p.clearedMark != null) p.clearedMark.SetActive(false);
+                    SetFlag(p, false, false);
+                    if (p.stone != null) p.stone.color = Color.white;
+                    SetClickable(p, true, i);
+                }
+                else
+                {
+                    SetFlag(p, false, false);
+                    if (p.clearedMark != null) p.clearedMark.SetActive(false);
+                    if (p.lockIcon != null) p.lockIcon.SetActive(true);
+                    if (p.stone != null) p.stone.color = new Color(0.55f, 0.55f, 0.55f, 0.95f);
+                    SetClickable(p, false, i);
+                }
+                continue;
+            }
+
+            bool isNext = _next != null ? i == _next.stageIndex : i == nextIdx;
 
             if (isNext)
             {
                 if (phase == Phase.BeforeRoll)
                 {
-                    // 滚盘前：第 0 关无锁直接可点外观；其它关显示锁、暂无旗
                     bool showLock = nextIdx > 0;
                     SetFlag(p, false, false);
                     if (p.clearedMark != null) p.clearedMark.SetActive(false);
                     if (p.lockIcon != null) p.lockIcon.SetActive(showLock);
                     if (p.stone != null) p.stone.color = Color.white;
-                    // 解锁动画播完前先不可点；第 0 关可先不可点等滚盘
                     SetClickable(p, false, i);
                 }
                 else
                 {
-                    // 滚盘后：彩色旗 + 可点
                     if (p.lockIcon != null) p.lockIcon.SetActive(false);
                     if (p.clearedMark != null) p.clearedMark.SetActive(false);
                     SetFlag(p, true, false);
@@ -278,7 +373,6 @@ public class BattleStageMapUI : MonoBehaviour
             }
             else if (cleared)
             {
-                // 已通关：灰旗（ClearedMark）
                 if (p.lockIcon != null) p.lockIcon.SetActive(false);
                 SetFlag(p, false, false);
                 if (p.clearedMark != null) p.clearedMark.SetActive(true);
@@ -287,7 +381,6 @@ public class BattleStageMapUI : MonoBehaviour
             }
             else
             {
-                // 未解锁：只有石墩 + 锁，无旗
                 SetFlag(p, false, false);
                 if (p.clearedMark != null) p.clearedMark.SetActive(false);
                 if (p.lockIcon != null) p.lockIcon.SetActive(true);
@@ -381,8 +474,35 @@ public class BattleStageMapUI : MonoBehaviour
 
     void OnPedestalClicked(int index)
     {
+        if (_flow != null) return;
+
+        if (_branchSelectMode && _next == null)
+        {
+            if (!_candidateIndices.Contains(index)) return;
+
+            StageData picked = null;
+            for (int i = 0; i < _candidates.Count; i++)
+            {
+                if (_candidates[i] != null && _candidates[i].stageIndex == index)
+                {
+                    picked = _candidates[i];
+                    break;
+                }
+            }
+            if (picked == null) return;
+
+            ChapterManager.Instance?.SelectBranchAndRoll(picked);
+            _next = picked;
+            _branchSelectMode = false;
+            _candidateIndices.Clear();
+            _candidateIndices.Add(index);
+
+            if (_flow != null) StopCoroutine(_flow);
+            _flow = StartCoroutine(CoRouletteAndFinalize(index));
+            return;
+        }
+
         if (_next == null || index != _next.stageIndex) return;
-        if (_flow != null) return; // 还在解锁/滚盘中
 
         StopBackdropPulse();
         ClearAllOutlines();
@@ -393,6 +513,9 @@ public class BattleStageMapUI : MonoBehaviour
         var cb = _onPick;
         _onPick = null;
         _next = null;
+        _branchSelectMode = false;
+        _candidates.Clear();
+        _candidateIndices.Clear();
         cb?.Invoke(stage);
     }
 

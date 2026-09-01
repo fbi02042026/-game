@@ -4,12 +4,11 @@ using UnityEngine;
 /// <summary>
 /// 英雄 SPUM 武器挂点规则（冻结约定，新增武器类型都走这里）：
 ///
-/// 1. 每个 SPUM 预制体在编辑时决定「攻击手」是 Left 还是 Right（wanjia = Left / L_Weapon）。
-/// 2. 运行时 Build() 扫描预制体默认武器，得到 HandRig：
-///    - AttackSlot / AttackDir   → 普攻动画那只手（剑/弓/杖/双手武器）
-///    - SecondarySlot / SecondaryDir → 另一只手（盾、副手非攻击物）
-/// 3. 穿戴槽位与 SPUM Dir 解耦：不再写死 MainHand=Right。
-///    ResolveWearSlot() 按武器职责（攻击 / 副手 / 双手）映射到 AttackSlot 或 SecondarySlot。
+/// 1. wanjia 冻结：ArmR = 攻击手/主手（R_Weapon）；ArmL = 副手（L_Weapon）。盾仅副手（L_Shield）。
+/// 2. 运行时 Build() 得到 HandRig：
+///    - AttackSlot / AttackDir   → 普攻那只手（剑/弓/杖/双手武器）
+///    - SecondarySlot / SecondaryDir → 另一只手（盾、副手剑/斧等）
+/// 3. 穿戴槽位与 SPUM Dir 解耦：ResolveWearSlot() 按武器职责映射到 Attack/Secondary 槽。
 /// 4. 正反：SPUM 武器精灵按挂点手型绘制，放对手会「拿反」——保证 Dir 正确即可；
 ///    换装后恢复该挂点预制体默认 flipX，避免运行时污染。
 /// </summary>
@@ -141,6 +140,10 @@ public static class HeroWeaponRig
 
     static string DetectAttackSpumDir(SPUM_Prefabs spum, SPUM_MatchingList[] lists)
     {
+        // 冻结：ArmR=主手/攻击(Right)，ArmL=副手(Left)；盾只挂副手
+        if (HasNamedNode(spum, lists, "ArmR")) return DirRight;
+        if (HasNamedNode(spum, lists, "ArmL") && !HasNamedNode(spum, lists, "ArmR")) return DirLeft;
+
         string leftAttack = null, rightAttack = null;
 
         void Consider(string dir, string path)
@@ -176,14 +179,41 @@ public static class HeroWeaponRig
             }
         }
 
-        if (!string.IsNullOrEmpty(leftAttack) && string.IsNullOrEmpty(rightAttack)) return DirLeft;
         if (!string.IsNullOrEmpty(rightAttack) && string.IsNullOrEmpty(leftAttack)) return DirRight;
-        if (!string.IsNullOrEmpty(leftAttack)) return DirLeft;
+        if (!string.IsNullOrEmpty(leftAttack) && string.IsNullOrEmpty(rightAttack)) return DirLeft;
+        if (!string.IsNullOrEmpty(rightAttack)) return DirRight;
 
-        // Legacy wanjia：L_Weapon 挥砍，无默认武器时仍落左手
-        if (HasWeaponRendererNamed(lists, "L_Weapon")) return DirLeft;
         if (HasWeaponRendererNamed(lists, "R_Weapon")) return DirRight;
-        return DirLeft;
+        if (HasWeaponRendererNamed(lists, "L_Weapon")) return DirLeft;
+        return DirRight;
+    }
+
+    static bool HasNamedNode(SPUM_Prefabs spum, SPUM_MatchingList[] lists, string nodeName)
+    {
+        if (string.IsNullOrEmpty(nodeName)) return false;
+        if (spum != null)
+        {
+            var trs = spum.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < trs.Length; i++)
+            {
+                if (trs[i] != null && trs[i].name.Equals(nodeName, System.StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        if (lists != null)
+        {
+            for (int i = 0; i < lists.Length; i++)
+            {
+                if (lists[i] == null) continue;
+                var trs = lists[i].GetComponentsInChildren<Transform>(true);
+                for (int t = 0; t < trs.Length; t++)
+                {
+                    if (trs[t] != null && trs[t].name.Equals(nodeName, System.StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+        }
+        return false;
     }
 
     static void CaptureHandFlipDefaults(SPUM_MatchingList[] lists, string attackDir, string secondaryDir,

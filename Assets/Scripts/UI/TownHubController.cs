@@ -167,6 +167,7 @@ public class TownHubController : MonoBehaviour
         }
 
         _current = tab;
+        _nav?.SetSelected(tab, notify: false);
         if (tab == MainNavTab.Tavern)
         {
             TutorialDirector.Instance?.NotifyTownTab(tab);

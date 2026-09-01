@@ -115,7 +115,8 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         }
 
         item = PlaceItemInGrid(equip, x, y);
-        EquipItem(item);
+        if (!EquipItem(item))
+            return false;
         OnBackpackChanged?.Invoke();
         AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
         AdventureLogAchievements.OnEquipPicked();
@@ -275,6 +276,12 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         {
             HeroCostumeManager.Instance.EnsureRigReady();
             return HeroCostumeManager.Instance.HandRig;
+        }
+        var townPreview = TownHeroCostumePreview.ActiveCostumeManager;
+        if (townPreview != null)
+        {
+            townPreview.EnsureRigReady();
+            return townPreview.HandRig;
         }
         return default;
     }
@@ -559,15 +566,26 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         if (rig.IsValid)
             wearSlot = logicalSlot == EquipSlotType.OffHand ? rig.SecondarySlot : rig.AttackSlot;
 
-        if (_equippedBySlot.TryGetValue(wearSlot, out var mapped) && mapped != null)
+        if (_equippedBySlot.TryGetValue(wearSlot, out var mapped) && mapped != null
+            && MatchesLogicalWeaponSlot(mapped, logicalSlot))
             return mapped;
 
-        // HandRig 未就绪时可能仍按逻辑槽存着；就绪后只认 wearSlot，避免左手攻击 rig 下 OffHand 穿戴槽被误当成「副手装备」
-        if (!rig.IsValid && _equippedBySlot.TryGetValue(logicalSlot, out var legacy) && legacy != null
-            && WeaponLoadoutRules.IsLoadoutItem(legacy))
+        // 可能仍按逻辑槽存着（HandRig 未就绪时入包）。必须按职责过滤，
+        // 否则左手攻击角色会把误存在 MainHand 的剑当成副手画到右手。
+        if (_equippedBySlot.TryGetValue(logicalSlot, out var legacy) && legacy != null
+            && WeaponLoadoutRules.IsLoadoutItem(legacy)
+            && MatchesLogicalWeaponSlot(legacy, logicalSlot))
             return legacy;
 
         return null;
+    }
+
+    static bool MatchesLogicalWeaponSlot(EquipInstance eq, EquipSlotType logicalSlot)
+    {
+        if (eq == null || !WeaponLoadoutRules.IsLoadoutItem(eq)) return false;
+        bool offHandRole = WeaponLoadoutRules.IsShield(eq) || WeaponLoadoutRules.IsOffHandWeapon(eq);
+        if (logicalSlot == EquipSlotType.OffHand) return offHandRole;
+        return !offHandRole;
     }
 
     /// <summary>

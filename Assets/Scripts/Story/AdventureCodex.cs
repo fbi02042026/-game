@@ -330,7 +330,23 @@ public static class AdventureCodex
             sp = loader.LoadMonsterSprite(packCh, idx);
             if (sp != null) return sp;
         }
-        return null;
+        // 兜底：城镇/日志场景没有 MonsterSpriteLoader 单例时，直接按素材路径读图
+        return LoadMonsterSpriteFromResources(e.AssetId);
+    }
+
+    static readonly Dictionary<string, string> MonsterFolderByPrefix = new Dictionary<string, string>
+    {
+        { "undead", "1 Undead" }, { "jungle", "2 Jungle" }, { "sea", "3 Sea" }, { "forest", "4 Forest" },
+        { "field", "5 Field" }, { "cave", "6 Cave" }, { "devil", "7 Devil" }, { "ice", "8 Ice" },
+    };
+
+    static Sprite LoadMonsterSpriteFromResources(string assetId)
+    {
+        if (string.IsNullOrEmpty(assetId)) return null;
+        int us = assetId.IndexOf('_');
+        string prefix = us > 0 ? assetId.Substring(0, us) : assetId;
+        if (!MonsterFolderByPrefix.TryGetValue(prefix, out string folder)) return null;
+        return Resources.Load<Sprite>($"Config/MonsterSpriteRegistry/{folder}/{assetId}");
     }
 
     public static Sprite LoadMercSprite(AdventureLogCatalog.MercEntry e)

@@ -119,6 +119,13 @@ public class CodexInfoPopupUI : MonoBehaviour
             portrait.sprite = portraitSprite;
             portrait.preserveAspect = true;
             portrait.color = portraitSprite != null ? Color.white : new Color(1f, 1f, 1f, 0.15f);
+            if (portraitSprite != null)
+                PortraitIdleMotion.EnsureOn(portrait.rectTransform, 0.18f);
+            else
+            {
+                var idle = portrait.GetComponent<PortraitIdleMotion>();
+                if (idle != null) idle.enabled = false;
+            }
         }
         if (root != null)
         {

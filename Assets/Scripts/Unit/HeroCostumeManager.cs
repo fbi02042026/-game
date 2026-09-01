@@ -11,6 +11,7 @@ using System.Collections.Generic;
 ///   脚(Feet)   → _pantList  → 3_Pant
 ///   披风(Cape) → _backList  → 7_Back / 10_Back
 ///   武器(Weapons) → _weaponList → 6_Weapons/{子文件夹}
+///   wanjia：ArmR=主手/攻击(R_Weapon)，ArmL=副手(L_Weapon)，盾仅 L_Shield
 ///
 /// 效率优化：启动时扫描一次全部SPUM资源，建立 spumName→路径 缓存字典
 /// 之后换装直接查字典，避免每次 Resources.LoadAll 遍历
@@ -99,8 +100,6 @@ public class HeroCostumeManager : MonoBehaviour
     private HeroWeaponRig.HandRig _handRig;
     SpriteRenderer _attackWeaponSr;
     SpriteRenderer _secondaryWeaponSr;
-    Sprite _expectedAttackSprite;
-    Sprite _expectedSecondarySprite;
     string _equippedAttackSpum;
     string _equippedSecondarySpum;
     readonly List<SpriteRenderer> _embeddedWeaponSrs = new List<SpriteRenderer>(4);
@@ -341,6 +340,8 @@ public class HeroCostumeManager : MonoBehaviour
             return;
         }
 
+        GridBackpackSystem.Instance.RemapWeaponWearSlots(_handRig);
+
         EquipSlotType[] order =
         {
             EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.Hands,
@@ -353,13 +354,17 @@ public class HeroCostumeManager : MonoBehaviour
             EquipInstance equip = GridBackpackSystem.Instance.GetEquippedInSlot(slot);
             string spumName = equip?.template != null ? equip.template.spumName : null;
 
-            if (!string.IsNullOrEmpty(spumName))
+            if (string.IsNullOrEmpty(spumName))
             {
-                if (useMatching)
-                    ApplyArmorViaMatching(slot, spumName);
-                else if (SlotToPartType.TryGetValue(slot, out string partType))
-                    ApplySpriteToPart(partType, slot, spumName);
+                if (useMatching) ClearEmptyArmorSlot(slot);
+                continue;
             }
+
+            Rarity rarity = equip != null ? equip.rarity : Rarity.Common;
+            if (useMatching)
+                ApplyArmorViaMatching(slot, spumName, rarity);
+            else if (SlotToPartType.TryGetValue(slot, out string partType))
+                ApplySpriteToPart(partType, slot, spumName, rarity);
         }
 
         RefreshWeaponLoadout(useMatching);
@@ -422,52 +427,32 @@ public class HeroCostumeManager : MonoBehaviour
     void BuildWeaponSpriteBindings()
     {
         _weaponSpriteBindings.Clear();
-        AddWeaponSpriteBinding(_attackWeaponSr, _handRig.AttackDir, _expectedAttackSprite);
-        AddWeaponSpriteBinding(_secondaryWeaponSr, _handRig.SecondaryDir, _expectedSecondarySprite);
+        AddWeaponSpriteBinding(_attackWeaponSr, _handRig.AttackDir, _attackWeaponSr != null ? _attackWeaponSr.sprite : null);
+        AddWeaponSpriteBinding(_secondaryWeaponSr, _handRig.SecondaryDir, _secondaryWeaponSr != null ? _secondaryWeaponSr.sprite : null);
+        if (TryGetShieldRenderer(_handRig.AttackDir, out var attackShield))
+            AddWeaponSpriteBinding(attackShield, _handRig.AttackDir, attackShield.sprite);
+        if (TryGetShieldRenderer(_handRig.SecondaryDir, out var secondaryShield))
+            AddWeaponSpriteBinding(secondaryShield, _handRig.SecondaryDir, secondaryShield.sprite);
+    }
 
-        for (int i = 0; i < _embeddedWeaponSrs.Count; i++)
+    bool TryGetShieldRenderer(string dir, out SpriteRenderer renderer)
+    {
+        renderer = null;
+        if (_matchingLists == null) return false;
+        for (int m = 0; m < _matchingLists.Length; m++)
         {
-            var sr = _embeddedWeaponSrs[i];
-            if (sr == null || sr.gameObject == null) continue;
-            string dir = ResolveWeaponSpumDir(sr);
-            if (string.IsNullOrEmpty(dir)) continue;
-            Sprite expected = dir == _handRig.AttackDir ? _expectedAttackSprite : _expectedSecondarySprite;
-            AddWeaponSpriteBinding(sr, dir, expected);
-        }
-
-        if (spriteList?._weaponList != null)
-        {
-            var list = spriteList._weaponList;
-            for (int i = 0; i < list.Count; i++)
+            var tables = _matchingLists[m]?.matchingTables;
+            if (tables == null) continue;
+            for (int t = 0; t < tables.Count; t++)
             {
-                var sr = list[i];
-                if (sr == null) continue;
-                string dir = ResolveWeaponSpumDir(sr);
-                if (string.IsNullOrEmpty(dir)) continue;
-                Sprite expected = dir == _handRig.AttackDir ? _expectedAttackSprite : _expectedSecondarySprite;
-                AddWeaponSpriteBinding(sr, dir, expected);
+                var me = tables[t];
+                if (me?.renderer == null || me.PartType != "Weapons" || me.Dir != dir) continue;
+                if (!HeroWeaponRig.IsShieldRenderer(me.renderer)) continue;
+                renderer = me.renderer;
+                return true;
             }
         }
-
-        if (_matchingLists != null)
-        {
-            for (int m = 0; m < _matchingLists.Length; m++)
-            {
-                var tables = _matchingLists[m]?.matchingTables;
-                if (tables == null) continue;
-                for (int t = 0; t < tables.Count; t++)
-                {
-                    var me = tables[t];
-                    if (me?.renderer == null || me.PartType != "Weapons") continue;
-                    if (me.Dir != _handRig.AttackDir && me.Dir != _handRig.SecondaryDir) continue;
-                    if (!HeroWeaponRig.IsPrimaryWeaponRenderer(me.renderer)
-                        && !HeroWeaponRig.IsShieldRenderer(me.renderer))
-                        continue;
-                    Sprite expected = me.Dir == _handRig.AttackDir ? _expectedAttackSprite : _expectedSecondarySprite;
-                    AddWeaponSpriteBinding(me.renderer, me.Dir, expected);
-                }
-            }
-        }
+        return false;
     }
 
     void AddWeaponSpriteBinding(SpriteRenderer sr, string dir, Sprite expected)
@@ -484,28 +469,6 @@ public class HeroCostumeManager : MonoBehaviour
             Expected = expected,
             Dir = dir
         });
-    }
-
-    string ResolveWeaponSpumDir(SpriteRenderer sr)
-    {
-        if (sr == null || sr.gameObject == null) return null;
-        Transform t = sr.transform;
-        while (t != null)
-        {
-            string n = t.name;
-            if (n.IndexOf("Shield", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                return _handRig.SecondaryDir;
-            if (n.IndexOf("R_Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || (n.IndexOf("Right", System.StringComparison.OrdinalIgnoreCase) >= 0
-                    && n.IndexOf("Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0))
-                return HeroWeaponRig.DirRight;
-            if (n.IndexOf("L_Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || (n.IndexOf("Left", System.StringComparison.OrdinalIgnoreCase) >= 0
-                    && n.IndexOf("Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0))
-                return HeroWeaponRig.DirLeft;
-            t = t.parent;
-        }
-        return null;
     }
 
     void CacheWeaponRenderers()
@@ -530,12 +493,6 @@ public class HeroCostumeManager : MonoBehaviour
                 || n.IndexOf("Shield", System.StringComparison.OrdinalIgnoreCase) >= 0)
                 _embeddedWeaponSrs.Add(sr);
         }
-    }
-
-    void RecordExpectedWeaponSprites()
-    {
-        _expectedAttackSprite = _attackWeaponSr != null ? _attackWeaponSr.sprite : null;
-        _expectedSecondarySprite = _secondaryWeaponSr != null ? _secondaryWeaponSr.sprite : null;
     }
 
     static void FixWeaponRendererIfStale(SpriteRenderer sr, Sprite expected, string dir, in HeroWeaponRig.HandRig rig)
@@ -605,8 +562,14 @@ public class HeroCostumeManager : MonoBehaviour
 
     void RefreshWeaponLoadout(bool useMatching)
     {
-        EquipInstance attackEquip = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
-        EquipInstance secondaryEquip = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.OffHand);
+        GridBackpackSystem.Instance.RemapWeaponWearSlots(_handRig);
+
+        EquipInstance attackEquip = _handRig.IsValid
+            ? GridBackpackSystem.Instance.GetEquippedInSlot(_handRig.AttackSlot)
+            : GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
+        EquipInstance secondaryEquip = _handRig.IsValid
+            ? GridBackpackSystem.Instance.GetEquippedInSlot(_handRig.SecondarySlot)
+            : GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.OffHand);
         bool twoHandEquipped = attackEquip != null && attackEquip.weaponType == WeaponType.TwoHand;
         if (twoHandEquipped)
             secondaryEquip = null;
@@ -620,23 +583,26 @@ public class HeroCostumeManager : MonoBehaviour
         _equippedAttackSpum = attackSpum;
         _equippedSecondarySpum = secondarySpum;
 
+        Rarity attackRarity = attackEquip != null ? attackEquip.rarity : Rarity.Common;
+        Rarity secondaryRarity = secondaryEquip != null ? secondaryEquip.rarity : Rarity.Common;
+
+        ClearAllWeaponVisuals();
         if (useMatching)
         {
-            ClearAllWeaponVisuals();
-            ApplyWeaponToMatchingDir(_handRig.AttackDir, attackSpum);
-            ApplyWeaponToMatchingDir(_handRig.SecondaryDir, secondarySpum);
+            ApplyWeaponToMatchingDir(_handRig.AttackDir, attackSpum, attackRarity);
+            ApplyWeaponToMatchingDir(_handRig.SecondaryDir, secondarySpum, secondaryRarity);
         }
         else
         {
-            ClearAllWeaponVisuals();
-            ApplyWeaponSpritesToDir(_handRig.AttackDir, attackSpum);
-            ApplyWeaponSpritesToDir(_handRig.SecondaryDir, secondarySpum);
+            ApplyWeaponSpritesToDir(_handRig.AttackDir, attackSpum, attackRarity);
+            ApplyWeaponSpritesToDir(_handRig.SecondaryDir, secondarySpum, secondaryRarity);
         }
-        RecordExpectedWeaponSprites();
+
+        CacheWeaponRenderers();
         BuildWeaponSpriteBindings();
     }
 
-    void ApplyWeaponToMatchingDir(string dir, string spumName)
+    void ApplyWeaponToMatchingDir(string dir, string spumName, Rarity rarity)
     {
         ClearWeaponItemPathsForDir(dir);
         SyncImageElementWeapon(dir, spumName);
@@ -651,16 +617,17 @@ public class HeroCostumeManager : MonoBehaviour
         Sprite sprite = LoadSpriteFromResourcePath(path, spumName);
         bool isShield = HeroWeaponRig.IsShieldSpumName(spumName);
         string partSubType = ResolveWeaponPartSubType(spumName, isShield);
-        ApplyMatchingWeaponDir(dir, path, sprite, partSubType, isShield);
+        ApplyMatchingWeaponDir(dir, path, sprite, partSubType, isShield, rarity);
         Debug.Log($"[HeroCostumeManager] Matching武器 dir={dir} sub={partSubType} ← {spumName}");
     }
 
-    void ApplyArmorViaMatching(EquipSlotType slot, string spumName)
+    void ApplyArmorViaMatching(EquipSlotType slot, string spumName, Rarity rarity)
     {
-        if (!SlotToPartType.TryGetValue(slot, out string partType)) return;
+        string partType = ResolveMatchingPartType(slot, spumName);
+        if (string.IsNullOrEmpty(partType)) return;
         if (!TryResolveSpumPath(spumName, out string path)) return;
-        Sprite sprite = LoadSpriteFromResourcePath(path, spumName);
-        if (sprite == null) return;
+        Sprite[] slices = Resources.LoadAll<Sprite>(path);
+        if (slices == null || slices.Length == 0) return;
 
         if (_spum != null && _spum.ImageElement != null)
         {
@@ -680,12 +647,57 @@ public class HeroCostumeManager : MonoBehaviour
             for (int t = 0; t < tables.Count; t++)
             {
                 var me = tables[t];
-                if (me == null || me.PartType != partType) continue;
+                if (me == null || me.PartType != partType || me.renderer == null) continue;
+                Sprite slice = PickSlice(slices, spumName, partType, me.Structure, me.Dir);
+                if (slice == null) continue;
                 me.ItemPath = path;
-                if (me.renderer != null)
-                    me.renderer.sprite = PickSlice(sprite, me.Structure);
+                me.renderer.sprite = slice;
+                EquipRarityMaterials.Apply(me.renderer, rarity);
             }
         }
+    }
+
+    void ClearEmptyArmorSlot(EquipSlotType slot)
+    {
+        // 只清预制体默认就是空的部位，避免把默认头发/衣服清成裸模
+        if (slot == EquipSlotType.Chest) ClearMatchingPartSprites("Armor");
+        else if (slot == EquipSlotType.Cape) ClearMatchingPartSprites("Back");
+        else if (slot == EquipSlotType.Head) ClearMatchingPartSprites("Helmet");
+    }
+
+    void ClearMatchingPartSprites(string partType)
+    {
+        if (_matchingLists == null || string.IsNullOrEmpty(partType)) return;
+        for (int m = 0; m < _matchingLists.Length; m++)
+        {
+            var tables = _matchingLists[m]?.matchingTables;
+            if (tables == null) continue;
+            for (int t = 0; t < tables.Count; t++)
+            {
+                var me = tables[t];
+                if (me == null || me.PartType != partType) continue;
+                me.ItemPath = "";
+                if (me.renderer == null) continue;
+                me.renderer.sprite = null;
+                EquipRarityMaterials.Apply(me.renderer, Rarity.Common);
+            }
+        }
+    }
+
+    string ResolveMatchingPartType(EquipSlotType slot, string spumName)
+    {
+        if (slot == EquipSlotType.Head)
+            return IsHelmetAsset(spumName) ? "Helmet" : "Hair";
+        return SlotToPartType.TryGetValue(slot, out string partType) ? partType : null;
+    }
+
+    bool IsHelmetAsset(string spumName)
+    {
+        if (TryResolveSpumPath(spumName, out string path) && path != null
+            && path.IndexOf("4_Helmet", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+        if (string.IsNullOrEmpty(spumName)) return false;
+        return spumName.IndexOf("Helmet", System.StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     void SyncImageElementWeapon(string dir, string spumName)
@@ -703,10 +715,10 @@ public class HeroCostumeManager : MonoBehaviour
         }
     }
 
-    void ApplyMatchingWeaponDir(string dir, string path, Sprite sprite, string partSubType, bool isShield)
+    void ApplyMatchingWeaponDir(string dir, string path, Sprite sprite, string partSubType, bool isShield, Rarity rarity)
     {
         if (_matchingLists == null) return;
-        SpriteRenderer primary = null;
+        SpriteRenderer target = null;
         for (int m = 0; m < _matchingLists.Length; m++)
         {
             var tables = _matchingLists[m]?.matchingTables;
@@ -715,25 +727,27 @@ public class HeroCostumeManager : MonoBehaviour
             {
                 var me = tables[t];
                 if (me == null || me.PartType != "Weapons" || me.Dir != dir) continue;
-                if (!ShouldTouchWeaponMatchingEntry(me, partSubType, isShield)) continue;
+                if (!ShouldTouchWeaponMatchingEntry(me, isShield)) continue;
 
-                bool isPrimary = HeroWeaponRig.IsPrimaryWeaponRenderer(me.renderer);
-                if (isPrimary)
-                    me.ItemPath = path;
-                else if (!string.IsNullOrEmpty(partSubType) && me.PartSubType == partSubType)
-                    me.ItemPath = path;
-
-                if (me.renderer != null && isPrimary)
+                me.ItemPath = path;
+                if (me.renderer == null) continue;
+                if (target == null)
                 {
                     me.renderer.sprite = sprite;
                     HeroWeaponRig.ApplyWeaponPresentation(me.renderer, dir, _handRig);
-                    primary = me.renderer;
+                    EquipRarityMaterials.Apply(me.renderer, rarity);
+                    target = me.renderer;
+                }
+                else if (me.renderer != target)
+                {
+                    me.renderer.sprite = null;
+                    EquipRarityMaterials.Apply(me.renderer, Rarity.Common);
                 }
             }
         }
 
-        if (primary == null)
-            TryApplyPrimaryWeaponRenderer(dir, sprite);
+        if (target == null)
+            TryApplyPrimaryWeaponRenderer(dir, sprite, rarity);
     }
 
     void ClearWeaponItemPathsForDir(string dir)
@@ -779,9 +793,10 @@ public class HeroCostumeManager : MonoBehaviour
                 if (me.renderer == null) continue;
                 me.renderer.sprite = null;
                 HeroWeaponRig.ApplyWeaponPresentation(me.renderer, dir, _handRig);
+                EquipRarityMaterials.Apply(me.renderer, Rarity.Common);
             }
         }
-        TryApplyPrimaryWeaponRenderer(dir, null);
+        TryApplyPrimaryWeaponRenderer(dir, null, Rarity.Common);
     }
 
     void ClearAllWeaponVisuals()
@@ -798,22 +813,21 @@ public class HeroCostumeManager : MonoBehaviour
         }
     }
 
-    static bool ShouldTouchWeaponMatchingEntry(MatchingElement me, string partSubType, bool isShield)
+    static bool ShouldTouchWeaponMatchingEntry(MatchingElement me, bool isShield)
     {
         if (me == null) return false;
-        if (HeroWeaponRig.IsShieldRenderer(me.renderer))
-            return isShield;
-        if (isShield) return false;
-        if (HeroWeaponRig.IsPrimaryWeaponRenderer(me.renderer)) return true;
-        return !string.IsNullOrEmpty(partSubType) && me.PartSubType == partSubType;
+        if (isShield) return HeroWeaponRig.IsShieldRenderer(me.renderer);
+        if (HeroWeaponRig.IsShieldRenderer(me.renderer)) return false;
+        return HeroWeaponRig.IsPrimaryWeaponRenderer(me.renderer);
     }
 
-    void TryApplyPrimaryWeaponRenderer(string dir, Sprite sprite)
+    void TryApplyPrimaryWeaponRenderer(string dir, Sprite sprite, Rarity rarity)
     {
         if (!HeroWeaponRig.TryGetPrimaryWeaponRenderer(_matchingLists, dir, out var sr) || sr == null)
             return;
         sr.sprite = sprite;
         HeroWeaponRig.ApplyWeaponPresentation(sr, dir, _handRig);
+        EquipRarityMaterials.Apply(sr, rarity);
     }
 
     static string ResolveWeaponPartSubType(string spumName, bool isShield)
@@ -839,12 +853,56 @@ public class HeroCostumeManager : MonoBehaviour
         return found != null ? found : sprites[0];
     }
 
-    static Sprite PickSlice(Sprite primary, string structure)
+    static Sprite PickSlice(Sprite[] all, string fileName, string partType, string structure, string dir)
     {
-        if (primary == null) return null;
-        if (string.IsNullOrEmpty(structure)) return primary;
-        // 多切片由 LoadSpriteFromResourcePath 已返回单张时直接用
-        return primary;
+        if (all == null || all.Length == 0) return null;
+
+        bool hasBody = ContainsSlice(all, "Body");
+        bool hasLeft = ContainsSlice(all, "Left");
+        bool hasRight = ContainsSlice(all, "Right");
+        bool hasSlices = hasBody || hasLeft || hasRight;
+
+        if (hasSlices)
+        {
+            if (string.Equals(structure, "Body", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(structure, "Left", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(structure, "Right", System.StringComparison.OrdinalIgnoreCase))
+                return FindSlice(all, structure);
+            return FindSlice(all, fileName) ?? all[0];
+        }
+
+        Sprite single = FindSlice(all, fileName) ?? all[0];
+        if (string.Equals(partType, "Helmet", System.StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(dir, "Back", System.StringComparison.OrdinalIgnoreCase))
+                return FindSlice(all, "Back");
+            return single;
+        }
+
+        if (string.Equals(structure, "Left", System.StringComparison.OrdinalIgnoreCase)
+            || string.Equals(structure, "Right", System.StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(partType, "Pant", System.StringComparison.OrdinalIgnoreCase))
+                return single;
+            return null;
+        }
+
+        return single;
+    }
+
+    static bool ContainsSlice(Sprite[] all, string name)
+    {
+        return FindSlice(all, name) != null;
+    }
+
+    static Sprite FindSlice(Sprite[] all, string name)
+    {
+        if (all == null || string.IsNullOrEmpty(name)) return null;
+        for (int i = 0; i < all.Length; i++)
+        {
+            if (all[i] != null && all[i].name == name) return all[i];
+        }
+        return null;
     }
 
     /// <summary>
@@ -852,7 +910,7 @@ public class HeroCostumeManager : MonoBehaviour
     /// 自动处理单切片和多切片（Body/Left/Right）情况
     /// 使用缓存，避免重复 Resources.LoadAll
     /// </summary>
-    private void ApplySpriteToPart(string partType, EquipSlotType slot, string spumName)
+    private void ApplySpriteToPart(string partType, EquipSlotType slot, string spumName, Rarity rarity)
     {
         if (string.IsNullOrEmpty(spumName)) return;
 
@@ -874,7 +932,7 @@ public class HeroCostumeManager : MonoBehaviour
         // 主手/副手共用 _weaponList：只改对应侧，禁止整表覆盖把另一只手冲掉
         if (partType == "Weapons")
         {
-            ApplyWeaponSprites(slot, sprites, spumName);
+            ApplyWeaponSprites(slot, sprites, spumName, rarity);
             return;
         }
 
@@ -883,7 +941,11 @@ public class HeroCostumeManager : MonoBehaviour
             // 单切片：设置列表中所有SpriteRenderer
             foreach (var sr in targetList)
             {
-                if (sr != null) sr.sprite = sprites[0];
+                if (sr != null)
+                {
+                    sr.sprite = sprites[0];
+                    EquipRarityMaterials.Apply(sr, rarity);
+                }
             }
         }
         else
@@ -896,6 +958,7 @@ public class HeroCostumeManager : MonoBehaviour
                 if (sub != null)
                 {
                     targetList[i].sprite = sub;
+                    EquipRarityMaterials.Apply(targetList[i], rarity);
                 }
             }
         }
@@ -906,20 +969,20 @@ public class HeroCostumeManager : MonoBehaviour
         Debug.Log($"[HeroCostumeManager] 换装成功: {partType} ← {spumName} ({sprites.Length}切片)");
     }
 
-    void ApplyWeaponSprites(EquipSlotType slot, Sprite[] sprites, string spumName)
+    void ApplyWeaponSprites(EquipSlotType slot, Sprite[] sprites, string spumName, Rarity rarity)
     {
-        ApplyWeaponSpritesToDir(HeroWeaponRig.DirForSlot(slot, _handRig), sprites, spumName);
+        ApplyWeaponSpritesToDir(HeroWeaponRig.DirForSlot(slot, _handRig), sprites, spumName, rarity);
     }
 
-    void ApplyWeaponSpritesToDir(string spumDir, string spumName)
+    void ApplyWeaponSpritesToDir(string spumDir, string spumName, Rarity rarity)
     {
         if (string.IsNullOrEmpty(spumName)) return;
         Sprite[] sprites = GetCachedSprites(spumName);
         if (sprites == null || sprites.Length == 0) return;
-        ApplyWeaponSpritesToDir(spumDir, sprites, spumName);
+        ApplyWeaponSpritesToDir(spumDir, sprites, spumName, rarity);
     }
 
-    void ApplyWeaponSpritesToDir(string spumDir, Sprite[] sprites, string spumName)
+    void ApplyWeaponSpritesToDir(string spumDir, Sprite[] sprites, string spumName, Rarity rarity)
     {
         if (spriteList == null || sprites == null || sprites.Length == 0) return;
         var list = spriteList._weaponList;
@@ -927,29 +990,30 @@ public class HeroCostumeManager : MonoBehaviour
 
         Sprite pick = sprites[0];
         bool wantRight = spumDir == HeroWeaponRig.DirRight;
-        int matched = 0;
+        bool applied = false;
         for (int i = 0; i < list.Count; i++)
         {
             var sr = list[i];
-            if (sr == null) continue;
-            string n = sr.gameObject != null ? sr.gameObject.name : sr.name;
-            bool isRight = n.IndexOf("Right", System.StringComparison.OrdinalIgnoreCase) >= 0
-                           || n.IndexOf("R_", System.StringComparison.OrdinalIgnoreCase) >= 0;
-            bool isLeft = n.IndexOf("Left", System.StringComparison.OrdinalIgnoreCase) >= 0
-                          || n.IndexOf("L_", System.StringComparison.OrdinalIgnoreCase) >= 0;
-            // 分不出左右时：主手用列表前半，副手用后半
-            if (!isRight && !isLeft)
+            if (sr == null || sr.gameObject == null) continue;
+            string n = sr.gameObject.name;
+            bool isPrimary = wantRight
+                ? n.IndexOf("R_Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0
+                : n.IndexOf("L_Weapon", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!isPrimary) continue;
+            if (applied)
             {
-                if (wantRight && i == 0) { sr.sprite = pick; matched++; }
-                if (!wantRight && i == list.Count - 1) { sr.sprite = pick; matched++; }
+                sr.sprite = null;
+                EquipRarityMaterials.Apply(sr, Rarity.Common);
                 continue;
             }
-            if (wantRight && isRight) { sr.sprite = pick; matched++; HeroWeaponRig.ApplyWeaponPresentation(sr, spumDir, _handRig); }
-            if (!wantRight && isLeft) { sr.sprite = pick; matched++; HeroWeaponRig.ApplyWeaponPresentation(sr, spumDir, _handRig); }
+            sr.sprite = pick;
+            EquipRarityMaterials.Apply(sr, rarity);
+            HeroWeaponRig.ApplyWeaponPresentation(sr, spumDir, _handRig);
+            applied = true;
         }
 
         UpdatePathString("Weapons", spumName);
-        Debug.Log($"[HeroCostumeManager] 武器换装: dir={spumDir} ← {spumName} matched={matched}");
+        Debug.Log($"[HeroCostumeManager] 武器换装: dir={spumDir} ← {spumName} applied={applied}");
     }
 
     void ClearWeaponDir(string spumDir)
@@ -969,11 +1033,14 @@ public class HeroCostumeManager : MonoBehaviour
             if (!isRight && !isLeft)
             {
                 if ((wantRight && i == 0) || (!wantRight && i == list.Count - 1))
+                {
                     sr.sprite = null;
+                    EquipRarityMaterials.Apply(sr, Rarity.Common);
+                }
                 continue;
             }
-            if (wantRight && isRight) { sr.sprite = null; HeroWeaponRig.ApplyWeaponPresentation(sr, spumDir, _handRig); }
-            if (!wantRight && isLeft) { sr.sprite = null; HeroWeaponRig.ApplyWeaponPresentation(sr, spumDir, _handRig); }
+            if (wantRight && isRight) { sr.sprite = null; EquipRarityMaterials.Apply(sr, Rarity.Common); HeroWeaponRig.ApplyWeaponPresentation(sr, spumDir, _handRig); }
+            if (!wantRight && isLeft) { sr.sprite = null; EquipRarityMaterials.Apply(sr, Rarity.Common); HeroWeaponRig.ApplyWeaponPresentation(sr, spumDir, _handRig); }
         }
     }
 

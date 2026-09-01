@@ -357,6 +357,7 @@ public class LoginUI : MonoBehaviour
     void OnClickStart()
     {
         if (!EnsureAgreed()) return;
+        GlobalToastUI.Hide();
         onStartGame?.Invoke();
         Debug.Log("[LoginUI] 开始游戏");
         EnterTown();

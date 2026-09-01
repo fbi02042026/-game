@@ -225,22 +225,28 @@ public class TavernLandladyTease : MonoBehaviour
 
             Vector2 basePos = _rt != null ? _rt.anchoredPosition : Vector2.zero;
             Vector3 baseEuler = transform.localEulerAngles;
-            float dur = 0.38f;
-            float t = 0f;
-            while (t < dur)
+            float dodgeAmp = 6f;
+            float dodgeDur = 0.12f;
+            int dodges = 2;
+            for (int d = 0; d < dodges; d++)
             {
-                t += Time.unscaledDeltaTime;
-                float u = 1f - t / dur;
-                float amp = 10f * u * u;
-                float ox = (Mathf.PerlinNoise(Time.unscaledTime * 28f, 0.3f) - 0.5f) * 2f * amp;
-                float oy = (Mathf.PerlinNoise(0.7f, Time.unscaledTime * 31f) - 0.5f) * 2f * amp * 0.55f;
-                float rot = (Mathf.PerlinNoise(Time.unscaledTime * 19f, 1.2f) - 0.5f) * 6f * u;
-                if (_rt != null)
-                    _rt.anchoredPosition = basePos + new Vector2(ox, oy);
-                transform.localEulerAngles = baseEuler + new Vector3(0f, 0f, rot);
-                yield return null;
+                float side = (d % 2 == 0) ? -1f : 1f;
+                float t = 0f;
+                while (t < dodgeDur)
+                {
+                    t += Time.unscaledDeltaTime;
+                    float u = t / dodgeDur;
+                    float ease = Mathf.Sin(u * Mathf.PI);
+                    if (_rt != null)
+                        _rt.anchoredPosition = basePos + new Vector2(side * dodgeAmp * ease, 0f);
+                    yield return null;
+                }
+                if (_rt != null) _rt.anchoredPosition = basePos;
+                if (d < dodges - 1)
+                    yield return new WaitForSecondsRealtime(0.08f);
             }
 
+            yield return new WaitForSecondsRealtime(0.1f);
             if (_rt != null) _rt.anchoredPosition = basePos;
             transform.localEulerAngles = baseEuler;
             if (_idle != null) _idle.enabled = true;

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ice_801
   m_EditorClassIdentifier: 
   id: ice_801
-  monsterName: "霜原�?
+  monsterName: 雪球怪
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

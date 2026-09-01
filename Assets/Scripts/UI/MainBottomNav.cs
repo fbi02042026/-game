@@ -4,10 +4,13 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 主界面底部导航（公会/角色/冒险/酒馆/日志）。
-/// 选中态切换只改 Image.enabled，避免 SetActive 触发大 Canvas 重建卡顿。
+/// 选中态：NavBg 换紫色底图；默认态：NavBg 换深色底图。「选中」子节点保持隐藏，避免叠两层同色框。
 /// </summary>
 public class MainBottomNav : MonoBehaviour
 {
+    const string NavBgDefaultPath = "UI/Town/Nav/nav_bg_default";
+    const string NavBgSelectedPath = "UI/Town/Nav/nav_bg_selected";
+
     public static MainBottomNav Instance { get; private set; }
 
     [Header("按钮（可空，Awake 按节点名自动找）")]
@@ -34,6 +37,9 @@ public class MainBottomNav : MonoBehaviour
     MainNavTab _current = MainNavTab.Guild;
     GameObject[] _selected;
     Image[] _selectedImages;
+    Image[] _navBgImages;
+    static Sprite _navBgDefault;
+    static Sprite _navBgSelected;
     bool _wired;
     bool _loadingBattle;
 
@@ -49,6 +55,11 @@ public class MainBottomNav : MonoBehaviour
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
+    }
+
+    void OnEnable()
+    {
+        SetSelected(_current, notify: false);
     }
 
     void Start()
@@ -81,26 +92,72 @@ public class MainBottomNav : MonoBehaviour
 
     void ApplySelectedVisual(int index, bool on)
     {
+        EnsureNavBgSprites();
+
+        if (_navBgImages != null && index >= 0 && index < _navBgImages.Length)
+        {
+            Image bg = _navBgImages[index];
+            if (bg != null)
+            {
+                Sprite sp = on ? _navBgSelected : _navBgDefault;
+                if (sp == null && !on)
+                {
+                    EnsureNavBgSprites();
+                    sp = _navBgDefault;
+                }
+                if (sp != null)
+                {
+                    bg.sprite = sp;
+                    bg.color = Color.white;
+                    bg.enabled = true;
+                }
+            }
+        }
+
         if (_selected == null || index < 0 || index >= _selected.Length) return;
         var go = _selected[index];
         if (go == null) return;
 
-        // 优先只开关 Image，避免 SetActive 造成整页卡顿
-        Image img = null;
+        // 预制体里的「选中」层与 NavBg 选中图重复，统一隐藏，只靠 NavBg 换图区分状态
+        Image overlay = null;
         if (_selectedImages != null && index < _selectedImages.Length)
-            img = _selectedImages[index];
-        if (img == null)
-            img = go.GetComponent<Image>();
+            overlay = _selectedImages[index];
+        if (overlay == null)
+            overlay = go.GetComponent<Image>();
 
-        if (img != null)
+        if (overlay != null)
         {
-            if (!go.activeSelf) go.SetActive(true);
-            img.enabled = on;
+            overlay.enabled = false;
             return;
         }
 
-        if (go.activeSelf != on)
-            go.SetActive(on);
+        if (go.activeSelf)
+            go.SetActive(false);
+    }
+
+    static void EnsureNavBgSprites()
+    {
+        if (_navBgDefault == null)
+            _navBgDefault = LoadNavSprite(NavBgDefaultPath);
+        if (_navBgSelected == null)
+            _navBgSelected = LoadNavSprite(NavBgSelectedPath);
+    }
+
+    static Sprite LoadNavSprite(string path)
+    {
+        var sp = Resources.Load<Sprite>(path);
+        if (sp != null) return sp;
+        var tex = Resources.Load<Texture2D>(path);
+        if (tex == null) return null;
+        return Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height),
+            new Vector2(0.5f, 0.5f), 100f);
+    }
+
+    /// <summary>资源导入变更后强制重载 Nav 底图。</summary>
+    public static void InvalidateNavBgCache()
+    {
+        _navBgDefault = null;
+        _navBgSelected = null;
     }
 
     void WireClicks()
@@ -206,8 +263,34 @@ public class MainBottomNav : MonoBehaviour
 
         _selected = new[] { guildSelected, characterSelected, adventureSelected, tavernSelected, logSelected };
         _selectedImages = new Image[_selected.Length];
+        _navBgImages = new Image[_selected.Length];
+        Button[] buttons = { guildButton, characterButton, adventureButton, tavernButton, logButton };
         for (int i = 0; i < _selected.Length; i++)
+        {
             _selectedImages[i] = _selected[i] != null ? _selected[i].GetComponent<Image>() : null;
+            _navBgImages[i] = FindNavBg(buttons[i]);
+        }
+
+        EnsureNavBgSprites();
+        if (_navBgSelected == null && _navBgImages.Length > 0 && _navBgImages[0] != null)
+            _navBgSelected = _navBgImages[0].sprite;
+        if (_navBgDefault == null)
+        {
+            for (int i = 0; i < _navBgImages.Length; i++)
+            {
+                if (_navBgImages[i] == null || _navBgImages[i].sprite == null) continue;
+                if (_navBgSelected != null && _navBgImages[i].sprite == _navBgSelected) continue;
+                _navBgDefault = _navBgImages[i].sprite;
+                break;
+            }
+        }
+    }
+
+    static Image FindNavBg(Button btn)
+    {
+        if (btn == null) return null;
+        Transform bg = FindDeepChild(btn.transform, "NavBg");
+        return bg != null ? bg.GetComponent<Image>() : null;
     }
 
     static Button FindButton(Transform root, string name)
@@ -219,7 +302,9 @@ public class MainBottomNav : MonoBehaviour
     static GameObject FindSelected(Button btn)
     {
         if (btn == null) return null;
-        Transform sel = FindDeepChild(btn.transform, "选中");
+        Transform sel = FindDeepChild(btn.transform, "选中")
+                        ?? FindDeepChild(btn.transform, "Selected")
+                        ?? FindDeepChild(btn.transform, "Select");
         return sel != null ? sel.gameObject : null;
     }
 

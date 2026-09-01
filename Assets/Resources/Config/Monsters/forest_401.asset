@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: forest_401
   m_EditorClassIdentifier: 
   id: forest_401
-  monsterName: "暮影�?
+  monsterName: 走路菇
   minWave: 0
   isBoss: 0
   unlockClearCount: 0
