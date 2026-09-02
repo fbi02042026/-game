@@ -594,12 +594,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 status = status + " 【Boss】";
             AddRow(rows, on ? e.Name : "？？？",
                 status,
-                on ? e.Desc + "\n" + e.Lore : (e.LaterChapter ? "在后续裂缝层中可解锁。" : "解锁条件：" + e.Unlock),
+                on ? e.Desc + "\n" + e.Lore : (e.LaterChapter ? "在后续裂隙层中可解锁。" : "解锁条件：" + e.Unlock),
                 !on);
         }
         title = hasCurrent ? current.Name : "怪物图鉴";
         desc = hasCurrent ? current.Desc + "\n" + current.Lore : "本版描述偏趣闻与冒险者口耳相传，不代表公会官方立场。";
-        objective = hasCurrent ? current.Place : "在裂缝中遭遇并记录";
+        objective = hasCurrent ? current.Place : "在裂隙中遭遇并记录";
         progress = unlocked + "/" + list.Length;
     }
 

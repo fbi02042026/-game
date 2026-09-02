@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 战斗中央波次预告图：下一波来袭 / Boss来袭（Resources/UI/Battle/）。
-/// 动效见 <see cref="UiBannerPopAnim"/>（300%→100% / 0.3s / 停1s / 淡出）。
+/// 动效见 <see cref="UiBannerPopAnim.CoPlayWaveIncoming"/>（大幅砸入 / 落地颤 / 渐隐）。
 /// </summary>
 public class BattleWaveAnnounceUI : MonoBehaviour
 {
@@ -15,14 +15,14 @@ public class BattleWaveAnnounceUI : MonoBehaviour
     const string PathNext = "UI/Battle/wave_next_incoming";
     const string PathBoss = "UI/Battle/wave_boss_incoming";
 
-    public static float SlamDuration => UiBannerPopAnim.ShrinkDuration;
-    public static float HoldDuration => UiBannerPopAnim.HoldDuration;
-    public static float FadeOutDuration => UiBannerPopAnim.FadeOutDuration;
+    public static float SlamDuration => UiBannerPopAnim.WaveSlamDuration;
+    public static float HoldDuration => UiBannerPopAnim.WaveHoldDuration;
+    public static float FadeOutDuration => UiBannerPopAnim.WaveFadeOutDuration;
 
     static Sprite _sprNext;
     static Sprite _sprBoss;
 
-    public static float GetPlayDuration(Kind kind) => UiBannerPopAnim.TotalDuration;
+    public static float GetPlayDuration(Kind kind) => UiBannerPopAnim.WaveIncomingTotalDuration;
 
     CanvasGroup _group;
     Image _image;
@@ -120,7 +120,7 @@ public class BattleWaveAnnounceUI : MonoBehaviour
 
         _image.sprite = sp;
         _image.enabled = true;
-        yield return UiBannerPopAnim.CoPlay(_image, _group);
+        yield return UiBannerPopAnim.CoPlayWaveIncoming(_image, _group);
 
         _image.enabled = false;
         _playCo = null;

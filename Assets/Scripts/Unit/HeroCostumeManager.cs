@@ -379,6 +379,8 @@ public class HeroCostumeManager : MonoBehaviour
     public void ReapplyWeaponVisuals()
     {
         if (!_rigReady) return;
+        if (string.IsNullOrEmpty(_equippedSecondarySpum))
+            ClearMatchingWeaponDir(_handRig.SecondaryDir);
         RestoreEquippedWeaponItemPaths();
         for (int i = 0; i < _weaponSpriteBindings.Count; i++)
         {
@@ -774,6 +776,13 @@ public class HeroCostumeManager : MonoBehaviour
                 me.ItemPath = "";
             }
         }
+    }
+
+    /// <summary>攻击动画每帧压制 SPUM 在空副手挂出的默认武器。</summary>
+    public void SuppressUnequippedSecondaryHand()
+    {
+        if (!_rigReady || !string.IsNullOrEmpty(_equippedSecondarySpum)) return;
+        ClearMatchingWeaponDir(_handRig.SecondaryDir);
     }
 
     void ClearMatchingWeaponDir(string dir)

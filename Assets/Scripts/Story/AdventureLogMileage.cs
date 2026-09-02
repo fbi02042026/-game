@@ -28,7 +28,7 @@ public static class AdventureLogMileage
         new LevelReward { Label = "见习记载", Gold = 0 },
         new LevelReward { Label = "森林行者", Gold = 500, Diamond = 1 },
         new LevelReward { Label = "探索者", Gold = 1000, EnchantStone = 3 },
-        new LevelReward { Label = "裂缝行者", Gold = 2000, Diamond = 3 },
+        new LevelReward { Label = "裂隙行者", Gold = 2000, Diamond = 3 },
         new LevelReward { Label = "日志学者", Gold = 3000, TalentPoint = 2 },
         new LevelReward { Label = "传说记录者", Gold = 5000, Diamond = 5, TalentPoint = 3, TitleId = "log_chronicler" }
     };

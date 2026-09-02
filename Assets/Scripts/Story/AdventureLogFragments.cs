@@ -21,7 +21,7 @@ public static class AdventureLogFragments
     {
         new Recipe { FragmentId = "frag_forest", Cost = 3, UnlockSideId = "S014", Label = "森林残页 → 隐藏支线「小美的信物」" },
         new Recipe { FragmentId = "frag_guild", Cost = 5, UnlockWorldId = "W008", Label = "公会密函 → 世界「空洞之喉」" },
-        new Recipe { FragmentId = "frag_rift", Cost = 4, UnlockSideId = "S016", Label = "裂缝碎片 → 支线「最初的裂缝」" },
+        new Recipe { FragmentId = "frag_rift", Cost = 4, UnlockSideId = "S016", Label = "裂隙碎片 → 支线「最初的裂隙」" },
     };
 
     public static string DisplayName(string fragmentId)
@@ -30,7 +30,7 @@ public static class AdventureLogFragments
         {
             case "frag_forest": return "森林残页";
             case "frag_guild": return "公会密函";
-            case "frag_rift": return "裂缝碎片";
+            case "frag_rift": return "裂隙碎片";
             default: return fragmentId ?? "碎片";
         }
     }

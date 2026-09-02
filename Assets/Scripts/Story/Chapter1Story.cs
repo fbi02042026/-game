@@ -111,7 +111,7 @@ public static class Chapter1Story
         var beats = new List<StoryBeat>
         {
             StoryDirector.Solo("咨询台小姐",
-                "裂缝内偶尔会出现其他小队的痕迹，不要过度调查。那是其他部门的工作。",
+                "裂隙内偶尔会出现其他小队的痕迹，不要过度调查。那是其他部门的工作。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall),
             StoryDirector.Narration("你没有接话。那个名字在喉咙里滚了一圈，又被你咽了回去。")

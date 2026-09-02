@@ -41,6 +41,8 @@ public class ParallaxBackground : MonoBehaviour
     private bool _ready;
     private int _pendingChapter = -1;
     private bool _layersInited;
+    Vector3 _layerRootBaseScale = Vector3.one;
+    float _killCamZoomMul = 1f;
 
     public void SetLayerRoot(Transform root)
     {
@@ -359,5 +361,28 @@ public class ParallaxBackground : MonoBehaviour
             if (r != null) return r;
         }
         return null;
+    }
+
+    /// <summary>击杀镜头：放大 map 视差以匹配世界 ortho zoom。</summary>
+    public void ApplyKillCamZoomMul(float zoomMul)
+    {
+        if (_layerRoot == null)
+            EnsureLayers();
+        if (_layerRoot == null) return;
+        if (_killCamZoomMul >= 0.999f)
+            _layerRootBaseScale = _layerRoot.localScale;
+        _killCamZoomMul = Mathf.Clamp(zoomMul, 0.55f, 1f);
+        float inv = 1f / _killCamZoomMul;
+        _layerRoot.localScale = new Vector3(
+            _layerRootBaseScale.x * inv,
+            _layerRootBaseScale.y * inv,
+            _layerRootBaseScale.z);
+    }
+
+    public void ResetKillCamZoom()
+    {
+        if (_layerRoot == null) return;
+        _killCamZoomMul = 1f;
+        _layerRoot.localScale = _layerRootBaseScale;
     }
 }

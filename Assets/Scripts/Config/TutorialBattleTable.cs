@@ -15,6 +15,7 @@ public static class TutorialBattleTable
         public float mercHpRatio;
         public float aheadDist;
         public bool stunned;
+        public int eliteCount;
         public string note;
     }
 
@@ -57,7 +58,8 @@ public static class TutorialBattleTable
                 mercHpRatio = c.Length > 7 && GameTableCsv.TryFloat(c[7], out float hp) ? hp : 0f,
                 aheadDist = c.Length > 8 && GameTableCsv.TryFloat(c[8], out float ad) ? ad : 0f,
                 stunned = c.Length > 9 && GameTableCsv.TryBool(c[9], out bool st) && st,
-                note = c.Length > 10 ? c[10] : ""
+                eliteCount = c.Length > 10 && GameTableCsv.TryInt(c[10], out int ec) ? ec : 0,
+                note = c.Length > 11 ? c[11] : ""
             });
         }
         _steps.Sort((a, b) => a.order.CompareTo(b.order));

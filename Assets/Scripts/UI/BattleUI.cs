@@ -150,7 +150,7 @@ public class BattleUI : MonoBehaviour
                 _lastPlayerHp = hero.currentHp;
                 _lastPlayerMaxHp = maxHp;
                 _lastPlayerEnergy = energy;
-                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp);
+                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: false);
                 playerSlot.SetEnergy(energy);
             }
         }
@@ -1085,7 +1085,7 @@ public class BattleUI : MonoBehaviour
             if (hero != null)
             {
                 float maxHp = hero.attr.GetAttr(AttrType.MaxHp);
-                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp);
+                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: false);
             }
             // 玩家头像对接
             Sprite playerIcon = mm != null ? mm.GetPlayerIcon() : null;
@@ -1379,6 +1379,56 @@ public class BattleUI : MonoBehaviour
         }
     }
 
+    static readonly System.Collections.Generic.Dictionary<Transform, Vector3> _killCamHudBaseScales =
+        new System.Collections.Generic.Dictionary<Transform, Vector3>();
+
+    static readonly string[] KillCamHudNodeNames =
+    {
+        "TopBar", "TopStatus", "ProgressBar",
+        "QuestText", "QuestPanel", "BackpackPanel",
+        "BottomBar", "SkillBar", "PausePanel", "SettingsPanel",
+        "CharacterBar"
+    };
+
+    /// <summary>击杀镜头：HUD 反缩放，避免 ortho zoom 把界面一起放大。</summary>
+    public static void ApplyKillCamHudCompensation(float zoomMul)
+    {
+        if (Instance == null || zoomMul <= 0.01f) return;
+        float inv = 1f / zoomMul;
+        for (int i = 0; i < KillCamHudNodeNames.Length; i++)
+        {
+            Transform t = FindChildIgnoreCase(Instance.transform, KillCamHudNodeNames[i]);
+            if (t == null) continue;
+            if (!_killCamHudBaseScales.ContainsKey(t))
+                _killCamHudBaseScales[t] = t.localScale;
+            Vector3 b = _killCamHudBaseScales[t];
+            t.localScale = new Vector3(b.x * inv, b.y * inv, b.z * inv);
+        }
+    }
+
+    public static void ResetKillCamHudCompensation()
+    {
+        foreach (var kv in _killCamHudBaseScales)
+        {
+            if (kv.Key != null)
+                kv.Key.localScale = kv.Value;
+        }
+        _killCamHudBaseScales.Clear();
+    }
+
+    static Transform FindChildIgnoreCase(Transform root, string name)
+    {
+        if (root == null) return null;
+        if (string.Equals(root.name, name, System.StringComparison.OrdinalIgnoreCase))
+            return root;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var found = FindChildIgnoreCase(root.GetChild(i), name);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
     /// <summary>
     /// 关闭所有面板
     /// </summary>
@@ -1499,7 +1549,7 @@ public class CharacterSlotUI
     /// <summary>
     /// 更新槽位显示
     /// </summary>
-    public void UpdateSlot(string name, int level, float currentHp, float maxHp)
+    public void UpdateSlot(string name, int level, float currentHp, float maxHp, bool showLevel = true)
     {
         if (root == null) return;
         root.SetActive(true);
@@ -1508,7 +1558,12 @@ public class CharacterSlotUI
 
         if (nameText != null && !string.IsNullOrEmpty(name))
             nameText.text = name;
-        if (levelLabel != null) levelLabel.text = $"Lv.{level}";
+        if (levelLabel != null)
+        {
+            levelLabel.gameObject.SetActive(showLevel);
+            if (showLevel)
+                levelLabel.text = $"Lv.{level}";
+        }
         if (hpText != null)
         {
             hpText.gameObject.SetActive(true);

@@ -16,7 +16,7 @@ public static class GameConfig
     public const string GUILD_NAME = "皇家冒险者公会";
 
     /// <summary>战斗地面加宽后，单位可在站立线上下偏移的半高（世界单位）。</summary>
-    public const float BATTLE_LANE_HALF = 0.72f;
+    public const float BATTLE_LANE_HALF = 0.95f;
     public const float BATTLE_LANE_MOVE_SPEED = 1.35f;
 
     /// <summary>像素 → 世界单位（对齐数值表「攻击范围(像素)」）</summary>
@@ -289,6 +289,17 @@ public static class GameConfig
     public const float MONSTER_RANGED_RANGE_MUL = 1.05f;
     /// <summary>普通（非精英/非Boss）远程小怪的技能伤害折扣：技能只是为了看得到子弹，不该秒人</summary>
     public const float MONSTER_NORMAL_SKILL_DAMAGE_MUL = 0.55f;
+    /// <summary>怪物普攻弹道速度倍率（勿随意改快）</summary>
+    public const float MONSTER_BASIC_PROJECTILE_SPEED_MUL = 0.196f;
+    /// <summary>怪物技能弹道速度倍率（勿随意改快）</summary>
+    public const float MONSTER_SKILL_PROJECTILE_SPEED_MUL = 0.138f;
+
+    /// <summary>怪物血条宽度 = 精灵宽 × 此系数</summary>
+    public const float MONSTER_HP_BAR_WIDTH_MUL = 0.72f;
+    /// <summary>怪物血条高度（世界单位）</summary>
+    public const float MONSTER_HP_BAR_HEIGHT = 0.09f;
+    /// <summary>怪物血条相对脚底下沉（世界单位，负=更低）</summary>
+    public const float MONSTER_HP_BAR_FOOT_DROP = -0.05f;
     /// <summary>小怪默认移速（比玩家慢，避免擦肩而过）</summary>
     public const float MONSTER_DEFAULT_MOVE_SPEED = 0.45f;
     /// <summary>从右侧缓步入场速度</summary>
@@ -473,7 +484,7 @@ public static class GameConfig
 
     // —— 战斗打击感分步开关（不满意可单独 false 回滚）——
     public static bool COMBAT_JUICE_HIT_STOP = true;
-    public static bool COMBAT_JUICE_CAMERA_SHAKE = true;
+    public static bool COMBAT_JUICE_CAMERA_SHAKE = false;
     public static bool COMBAT_JUICE_SFX = true;
     public static bool COMBAT_JUICE_DAMAGE_TEXT_BOOST = true;
     public static bool COMBAT_JUICE_KNOCKBACK = true;
@@ -484,6 +495,39 @@ public static class GameConfig
     public const float HIT_STOP_CRIT = 0.055f;
     public const float HIT_STOP_BOSS = 0.08f;
     public const float HIT_STOP_COMBO_ANNOUNCE = 0.04f;
+    /// <summary>暴击落下瞬间顿帧（略高于 HIT_STOP_CRIT）</summary>
+    public const float CRIT_STRIKE_HIT_STOP = 0.07f;
+
+    /// <summary>我方近战命中时机：相对攻击动画时长比例（0.5=下劈中点）</summary>
+    public const float ALLY_MELEE_HIT_NORM = 0.5f;
+    /// <summary>我方近战暴击动画幅度倍率（仅视觉子节点）</summary>
+    public const float ALLY_MELEE_CRIT_AMP = 1.6f;
+
+    /// <summary>受击击退距离（世界单位）</summary>
+    public const float COMBAT_KNOCKBACK_NORMAL = 0.06f;
+    public const float COMBAT_KNOCKBACK_CRIT = 0.12f;
+    public const float COMBAT_KNOCKBACK_CRIT_KILL = 0.17f;
+
+    /// <summary>暴击前摇慢放：timeScale 与真实等待秒数（暴击 / Boss·精英致死前摇）</summary>
+    public const float CRIT_WINDUP_TIME_SCALE = 0.1f;
+    public const float CRIT_WINDUP_UNSCALED = 0.5f;
+    /// <summary>暴击击杀死亡后倒视觉滑动（世界单位，仅程序化死亡 tween）</summary>
+    public const float CRIT_KILL_DEATH_SLIDE = 0.15f;
+
+    /// <summary>击杀镜头拉近（orthoSize 倍率，&lt;1 拉近）；独立开关 COMBAT_JUICE_KILL_CAM</summary>
+    public const float KILL_CAM_ZOOM_MUL = 0.82f;
+    public const float KILL_CAM_ZOOM_IN = 0.5f;
+    public const float KILL_CAM_ZOOM_OUT = 0.07f;
+    /// <summary>远程（弓/法球）击杀短前摇真实秒数</summary>
+    public const float KILL_CAM_RANGED_WINDUP = 0.14f;
+    public static bool COMBAT_JUICE_KILL_CAM = true;
+
+    /// <summary>击杀收刀顿帧/微震（独立于 COMBAT_JUICE_CAMERA_SHAKE 全局开关）</summary>
+    public const float KILL_FINISHER_HIT_STOP = 0.04f;
+    public const float KILL_FINISHER_HIT_STOP_BOSS_EXTRA = 0.02f;
+    public const float KILL_FINISHER_SHAKE_AMP = 0.04f;
+    public const float KILL_FINISHER_SHAKE_DUR = 0.1f;
+    public static bool COMBAT_JUICE_KILL_FINISHER_SHAKE = true;
 
     /// <summary>第一章第 1 关（教学节奏：打得慢、打得少）</summary>
     public static bool IsOpeningStage()

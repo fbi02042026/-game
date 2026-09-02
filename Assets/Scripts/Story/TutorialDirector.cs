@@ -190,7 +190,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         ClearTownBlockers();
 
         if (adv == null) adv = ResolveAdventureButton();
-        TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂缝。",
+        TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂隙。",
             adv != null ? adv.GetComponent<RectTransform>() : null);
         _townFlowBusy = false;
         _flow = null;
@@ -218,7 +218,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return null;
         }
 
-        TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂缝。",
+        TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂隙。",
             adv != null ? adv.GetComponent<RectTransform>() : null);
         _townFlowBusy = false;
         _flow = null;
@@ -230,6 +230,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         GameBgm.Play(GameBgm.Track.Intro);
 
         StoryAssetLoader.Warmup(StoryAssetLoader.Props, StoryProps.QuestPaper);
+        StoryAssetLoader.Warmup(StoryAssetLoader.Portraits,
+            StoryPortraits.GuildMaster, StoryPortraits.Receptionist, StoryPortraits.Player);
 
         // 办公室：会长对话 → 签名起名 → 咨询台
         var beats = new List<StoryBeat>
@@ -259,7 +261,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         var afterNaming = new List<StoryBeat>
         {
             StoryDirector.Solo("咨询台小姐",
-                "第一次下裂缝？三件事：\n1. 你只管走路，打架会自动打。\n2. 进战斗前先选技能，亮起就能放。\n3. 见好就收，活着才有收益。",
+                "第一次下裂隙？三件事：\n1. 你只管走路，打架会自动打。\n2. 进战斗前先选技能，亮起就能放。\n3. 见好就收，活着才有收益。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)
         };
@@ -357,8 +359,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         bm?.ApplyTutorialBattleStep(1);
         yield return EnsureTutorialWave(bm, TutorialStepCount(1));
         yield return WaitFieldClear();
-
-        yield return CoTutorialNextWave(bm, hint, GameConfig.GetWaveSpawnInterval(), 2);
+        yield return CoTutorialNextWave(bm, hint, 0f, 2);
         yield return WaitFieldClear();
 
         yield return WaitFieldClear(strict: true);
@@ -381,11 +382,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
         var drop = CreateTutorialEquipDrop();
         if (bm != null) bm.UnitsCanAct = false;
         hint.Hide();
-        yield return chestDir.CoTutorialPlaceChest(4f);
+        yield return chestDir.CoTutorialPlaceChest(4f, waitForHeroApproach: false);
         chestDir.SnapHeroBeforeChest();
 
         yield return TalkBlock(bm, headTalk, restoreAct: false,
             new TalkLine(Hero.Instance, "有个宝箱，真是好运！", 0.85f));
+
+        yield return TalkBlock(bm, headTalk, restoreAct: false,
+            new TalkLine(Hero.Instance, "！", 0.55f));
 
         float chestX = chestDir.ChestWorldX;
         var flankStep = TutorialBattleTable.GetStepOrDefault(3);
@@ -402,10 +406,6 @@ public class TutorialDirector : Singleton<TutorialDirector>
                     bm.SpawnTutorialFlankAmbush(flankStep.count, chestX);
             }
         }
-        yield return new WaitForSecondsRealtime(0.35f);
-
-        yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "！", 0.55f));
 
         if (bm != null) bm.UnitsCanAct = true;
         yield return WaitFieldClear(strict: true);
@@ -452,6 +452,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         float rescueAhead = rescueStep.aheadDist > 0f ? rescueStep.aheadDist : 5.5f;
         var merc = bm.SpawnTutorialMercAt(rescueMercId, rescueHpRatio, rescueAhead, stunned: rescueStep.stunned);
         int ambushCount = rescueStep.count > 0 ? rescueStep.count : 3;
+        if (rescueStep.eliteCount > 0)
+        {
+            yield return TalkBlock(bm, headTalk, restoreAct: false,
+                new TalkLine(Hero.Instance, "有个块头更大的！", 0.75f));
+        }
         bm.SpawnTutorialAmbushAround(merc, ambushCount);
         hint.Show("前方有人被怪物围住了，上前帮忙。", null, 4f);
 
@@ -743,16 +748,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
     static int TutorialStepCount(int order) => TutorialBattleTable.GetStepOrDefault(order).count;
 
-    /// <summary>清场后：预告播完再刷怪。</summary>
+    /// <summary>清场后：教程内直接刷下一波，不播正式关的波次预告（避免剩最后一只怪时卡住感）。</summary>
     static IEnumerator CoTutorialNextWave(BattleManager bm, TutorialHintUI hint, float delaySec, int order)
     {
         hint.Hide();
-        var hud = BattleSideHud.Instance;
-        float announceSec = BattleWaveAnnounceUI.GetPlayDuration(BattleWaveAnnounceUI.Kind.NextWave);
-        float t = announceSec;
-        hud?.SetWaveCountdown(true, t, false);
-        yield return BattleWaveAnnounceUI.CoPlay(BattleWaveAnnounceUI.Kind.NextWave);
-        hud?.SetWaveCountdown(false, 0f, false);
         bm?.ApplyTutorialBattleStep(order);
         yield return EnsureTutorialWave(bm, TutorialStepCount(order));
     }

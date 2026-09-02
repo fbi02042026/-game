@@ -47,6 +47,10 @@ public class StageClearRewardDirector : MonoBehaviour
         }
     }
 
+    public bool IsBoxVisible =>
+        _boxRoot != null && _boxRoot.gameObject.activeInHierarchy
+        && _closeSr != null && _closeSr.enabled;
+
     /// <summary>清场后把玩家拉回宝箱前，面向宝箱。</summary>
     public void SnapHeroBeforeChest(float standOffset = 2.35f)
     {
@@ -146,8 +150,8 @@ public class StageClearRewardDirector : MonoBehaviour
         _running = false;
     }
 
-    /// <summary>宝箱在角色/怪后面（map 与 unit 之间）</summary>
-    const int BoxSortOrder = GameConfig.SORT_MAPROOT - 1;
+    /// <summary>宝箱在 map 之上、与角色同层，避免被背景挡住。</summary>
+    const int BoxSortOrder = GameConfig.SORT_UNIT;
 
     void EnsureBoxPhysicsDisabled()
     {
@@ -245,21 +249,33 @@ public class StageClearRewardDirector : MonoBehaviour
         StopBoxEffect();
     }
 
-    /// <summary>关箱待机姿态，便于按 close 贴图底边算地面。</summary>
-    void PrepareBoxClosedPose()
+    /// <summary>关箱待机：禁用 Animator（open1 第 0 帧会把 close 透明），手动复位 close。</summary>
+    void HoldBoxClosedPose()
     {
+        StopBoxEffect();
         if (_boxAnim != null)
-        {
-            _boxAnim.Rebind();
-            _boxAnim.Update(0f);
-        }
+            _boxAnim.enabled = false;
         if (_closeSr != null)
         {
             _closeSr.gameObject.SetActive(true);
             _closeSr.enabled = true;
+            var c = _closeSr.color;
+            c.a = 1f;
+            _closeSr.color = c;
+            _closeSr.transform.localPosition = new Vector3(0f, 1f, 0f);
         }
         if (_openSr != null)
+        {
             _openSr.enabled = false;
+            _openSr.gameObject.SetActive(true);
+        }
+        ApplyBoxSorting();
+    }
+
+    /// <summary>关箱待机姿态，便于按 close 贴图底边算地面。</summary>
+    void PrepareBoxClosedPose()
+    {
+        HoldBoxClosedPose();
     }
 
     SpriteRenderer GetBoxGroundSprite()
@@ -338,8 +354,8 @@ public class StageClearRewardDirector : MonoBehaviour
             srs[i].gameObject.SetActive(true);
             srs[i].enabled = true;
             srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            if (srs[i].sortingOrder < GameConfig.SORT_VFX)
-                srs[i].sortingOrder = GameConfig.SORT_VFX + 2;
+            if (srs[i].sortingOrder < BoxSortOrder)
+                srs[i].sortingOrder = BoxSortOrder;
         }
         if (_closeSr != null)
         {
@@ -431,7 +447,7 @@ public class StageClearRewardDirector : MonoBehaviour
     /// <summary>
     /// 引导：在玩家前方放置并显示宝箱，等走近（超时则轻推）。
     /// </summary>
-    public IEnumerator CoTutorialPlaceChest(float aheadDist = 4f)
+    public IEnumerator CoTutorialPlaceChest(float aheadDist = 4f, bool waitForHeroApproach = true)
     {
         CacheSceneRefs();
         if (_boxRoot == null)
@@ -449,19 +465,19 @@ public class StageClearRewardDirector : MonoBehaviour
         ApplyBoxVisual(ClearBoxTier.Mu);
         PlaceBoxAt(boxX, z);
         ForceBoxRenderersVisible();
+        // #region agent log
+        DebugAgentLog.Log("H10", "StageClearReward.CoTutorialPlaceChest", "box placed",
+            $"{{\"boxX\":{boxX:F2},\"boxActive\":{IsBoxVisible.ToString().ToLower()},\"closeSr\":{(_closeSr != null).ToString().ToLower()}}}");
+        // #endregion
         StopBoxEffect();
         EnsureBoxController();
+        HoldBoxClosedPose();
         if (_closeSr != null) { _closeSr.enabled = true; _closeSr.gameObject.SetActive(true); }
         if (_openSr != null) { _openSr.enabled = false; _openSr.gameObject.SetActive(true); }
-        if (_boxAnim != null)
-        {
-            _boxAnim.enabled = true;
-            _boxAnim.Rebind();
-            _boxAnim.Update(0f);
-        }
 
         float wait = 0f;
         const float maxWalkWait = 5f;
+        if (waitForHeroApproach)
         while (wait < maxWalkWait)
         {
             wait += Time.unscaledDeltaTime;
@@ -503,6 +519,8 @@ public class StageClearRewardDirector : MonoBehaviour
         if (_boxAnim != null)
         {
             _boxAnim.enabled = true;
+            _boxAnim.Rebind();
+            _boxAnim.Update(0f);
             PlayBoxOpenEffect();
             _boxAnim.Play("open1", 0, 0f);
             yield return WaitAnimOrSeconds(_boxAnim, "open1", 0.9f);

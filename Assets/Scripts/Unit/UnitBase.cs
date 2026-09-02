@@ -264,10 +264,16 @@ public abstract class UnitBase : MonoBehaviour
         return hasValid && bounds.size.y > 0.0001f;
     }
 
-    /// <summary>世界空间：脚底到血条锚点的 Y 偏移（略高于脚面）。</summary>
-    public float GetHpBarWorldYOffset()
+    /// <summary>世界空间：血条宽度（默认；怪物按精灵 bounds 覆盖）。</summary>
+    public virtual float GetHpBarWorldWidth()
     {
-        return Mathf.Clamp(0.22f, 0.15f, 0.35f);
+        return 0.55f;
+    }
+
+    /// <summary>世界空间：脚底到血条锚点 Y 偏移；挂 Body 原点时用 0。</summary>
+    public virtual float GetHpBarWorldYOffset()
+    {
+        return 0f;
     }
 
     static bool IsIgnoredHitPointRenderer(SpriteRenderer r)
@@ -357,12 +363,13 @@ public abstract class UnitBase : MonoBehaviour
             float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
             float attackRange = attr.GetAttr(AttrType.AttackRange);
             FaceToward(target);
+            AdjustLaneTowardTarget(target, Time.deltaTime);
 
             if (distance <= attackRange)
             {
                 // 攻击范围内停步输出，避免贴到目标中心导致双方朝向来回抖
                 if (rb != null) rb.velocity = Vector2.zero;
-                if (attackCd <= 0)
+                if (attackCd <= 0 && (unitAnim == null || !unitAnim.InDamagedRecovery()))
                 {
                     Attack(target);
                     attackCd = GetAttackCooldown();
@@ -383,6 +390,7 @@ public abstract class UnitBase : MonoBehaviour
                 // 索敌范围内无敌人：向右推进
                 facingDir = 1;
                 ApplyFacing(facingDir);
+                AdjustFormationLane(Time.deltaTime);
                 if (rb != null)
                     rb.velocity = new Vector2(attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
                 isMoving = true;
@@ -453,10 +461,15 @@ public abstract class UnitBase : MonoBehaviour
         transform.localScale = scale;
     }
 
-    /// <summary>特效朝向：SPUM 用 scale.x 判断视觉朝向，避免 facingDir 字段与镜像不一致。</summary>
-    public int GetVfxFacingDir()
+    /// <summary>特效朝向：SPUM 用 scale.x；怪物 clip/flipX 用 flipX 判断。</summary>
+    public virtual int GetVfxFacingDir()
     {
-        bool proc = unitAnim != null && unitAnim.IsProcMode;
+        if (unitAnim != null && unitAnim.UsesFlipXFacing && sr != null)
+        {
+            bool visualRight = spriteDefaultFacesRight ? !sr.flipX : sr.flipX;
+            return visualRight ? 1 : -1;
+        }
+        bool proc = unitAnim != null && unitAnim.IsProceduralAnim;
         if (!proc)
         {
             float sx = transform.localScale.x;
@@ -557,6 +570,22 @@ public abstract class UnitBase : MonoBehaviour
         return x;
     }
 
+    protected virtual float GetFormationLaneOffset() => 0f;
+
+    protected void AdjustLaneTowardTarget(UnitBase chaseTarget, float dt)
+    {
+        if (chaseTarget == null || attr == null) return;
+        float laneSpeed = Mathf.Max(0.55f, attr.GetAttr(AttrType.MoveSpeed) * 0.85f);
+        SetLaneY(Mathf.MoveTowards(LaneY, chaseTarget.LaneY, laneSpeed * dt));
+    }
+
+    protected void AdjustFormationLane(float dt)
+    {
+        float targetLane = GetFormationLaneOffset();
+        if (Mathf.Abs(LaneY - targetLane) < 0.015f) return;
+        SetLaneY(Mathf.MoveTowards(LaneY, targetLane, GameConfig.BATTLE_LANE_MOVE_SPEED * dt));
+    }
+
     protected virtual void Attack(UnitBase target)
     {
         if (target == null || target.attr == null || attr == null)
@@ -569,32 +598,120 @@ public abstract class UnitBase : MonoBehaviour
             damage = GameConfig.RollOpeningAllyHitDamage(isCrit);
 
         AttackVfxKit kit = GetAttackVfxKit();
+        bool allyMelee = isAlly && kit == AttackVfxKit.MeleeSlash;
+        bool allyRanged = isAlly && (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb);
+        bool killWindup = isAlly && ShouldUseKillWindup(target, damage, isCrit, openingHit);
         if (unitAnim != null)
-            unitAnim.PlayAttack(kit);
+            unitAnim.PlayAttack(kit, allyMelee && (isCrit || killWindup));
 
         VfxFaction faction = isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
         Vector3 firePos = GetFirePosition();
         Vector3 hitPos = target.GetHitPosition();
         Transform hitTf = target.transform;
+        int facingDir = GetVfxFacingDir();
 
-        // 弓/法球：飞到再结算，与技能弹道一致，便于后续扩展命中点玩法
-        if ((kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb) && BattleVFXSystem.Instance != null)
+        // 普攻：近战即时结算；敌方弓/法球飞到再结算；我方近战下落时再结算
+        if (!isAlly && (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb) && BattleVFXSystem.Instance != null)
         {
-            UnitBase locked = target;
-            float dmg = damage;
-            bool crit = isCrit;
-            bool opening = openingHit;
+            float pendingDamage = damage;
+            bool pendingCrit = isCrit;
+            bool pendingOpening = openingHit;
             BattleVFXSystem.Instance.PlaySkillProjectile(
-                faction, firePos, hitPos, GetVfxFacingDir(), hitTf, kit,
-                null, 1f, 1f,
-                () => ResolveBasicAttackHit(locked, dmg, crit, opening));
+                faction, firePos, hitPos, facingDir, hitTf, kit, null, 1.2f,
+                GameConfig.MONSTER_BASIC_PROJECTILE_SPEED_MUL,
+                () => ResolveBasicAttackHit(target, pendingDamage, pendingCrit, pendingOpening));
             return;
         }
 
-        // 命中特效在 target.TakeDamage 里统一播，避免攻击方路径漏播（尤其敌方打玩家）
+        if (allyMelee)
+        {
+            StartCoroutine(CoAllyMeleeAttack(
+                target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf, killWindup));
+            return;
+        }
+
+        if (allyRanged && killWindup)
+        {
+            StartCoroutine(CoAllyRangedKillWindup(
+                target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf));
+            return;
+        }
+
         ResolveBasicAttackHit(target, damage, isCrit, openingHit);
         if (kit == AttackVfxKit.MeleeSlash)
             CombatJuice.Instance?.OnMeleeAttackLunge(this);
+        if (BattleVFXSystem.Instance != null)
+            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
+    }
+
+    bool ShouldUseKillWindup(UnitBase target, float damage, bool isCrit, bool openingHit)
+    {
+        if (target == null || target.isDead || target.attr == null) return false;
+        if (isCrit) return true;
+        if (target is Monster m && (m.IsBossUnit || m.IsEliteWave))
+            return target.currentHp <= PredictBasicAttackDamage(target, damage, openingHit);
+        return false;
+    }
+
+    float PredictBasicAttackDamage(UnitBase target, float damage, bool openingHit)
+    {
+        float d = damage;
+        if (this is Hero)
+        {
+            d *= SpecialWeapons.GetDamageMultiplier(target);
+            float fire = SpecialWeapons.GetFlatFireBonus();
+            if (fire > 0f && target != null && !target.isDead)
+                d += DamageFormula.FinalHit(fire, target.attr, false);
+        }
+        return DamageFormula.FinalHit(d, target.attr, false);
+    }
+
+    IEnumerator CoAllyMeleeAttack(
+        UnitBase target, float damage, bool isCrit, bool openingHit,
+        AttackVfxKit kit, VfxFaction faction,
+        Vector3 firePos, Vector3 hitPos, int facingDir, Transform hitTf, bool killWindup)
+    {
+        float delay;
+        if (killWindup)
+        {
+            CombatJuice.Instance?.BeginKillWindupJuice(true);
+            delay = GameConfig.CRIT_WINDUP_UNSCALED;
+        }
+        else
+        {
+            delay = unitAnim != null
+                ? unitAnim.GetAllyMeleeHitDelay()
+                : GameConfig.ALLY_MELEE_HIT_NORM * 0.5f;
+        }
+
+        yield return new WaitForSecondsRealtime(delay);
+
+        if (killWindup)
+            CombatJuice.Instance?.EndKillWindupJuice();
+
+        if (this == null || isDead || target == null || target.isDead)
+            yield break;
+
+        ResolveBasicAttackHit(target, damage, isCrit, openingHit);
+        if (BattleVFXSystem.Instance != null)
+            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
+    }
+
+    IEnumerator CoAllyRangedKillWindup(
+        UnitBase target, float damage, bool isCrit, bool openingHit,
+        AttackVfxKit kit, VfxFaction faction,
+        Vector3 firePos, Vector3 hitPos, int facingDir, Transform hitTf)
+    {
+        CombatJuice.Instance?.BeginKillWindupJuice(false);
+        yield return new WaitForSecondsRealtime(GameConfig.KILL_CAM_RANGED_WINDUP);
+        CombatJuice.Instance?.EndKillWindupJuice();
+
+        if (this == null || isDead || target == null || target.isDead)
+            yield break;
+
+        ResolveBasicAttackHit(target, damage, isCrit, openingHit);
+        if (BattleVFXSystem.Instance != null)
+            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
     }
 
     void ResolveBasicAttackHit(UnitBase target, float damage, bool isCrit, bool openingHit)
@@ -664,10 +781,10 @@ public abstract class UnitBase : MonoBehaviour
         return transform;
     }
 
-    /// <summary>受击/出手短位移（不改 prefab scale，100ms 内节流）。</summary>
+    /// <summary>受击/出手短位移（不改 prefab scale，100ms 内节流）。我方根节点禁止位移。</summary>
     public void ApplyKnockback(float dx, float duration = 0.08f)
     {
-        if (!GameConfig.COMBAT_JUICE_KNOCKBACK || _isDying || isDead) return;
+        if (!GameConfig.COMBAT_JUICE_KNOCKBACK || _isDying || isDead || isAlly) return;
         if (Mathf.Abs(dx) < 0.001f) return;
         if (Time.time - _lastKnockbackTime < 0.1f) return;
         _lastKnockbackTime = Time.time;
@@ -689,6 +806,7 @@ public abstract class UnitBase : MonoBehaviour
         {
             t += Time.deltaTime;
             root.position = Vector3.Lerp(start, peak, half > 0.0001f ? t / half : 1f);
+            SyncKnockbackRigidbody(root);
             yield return null;
         }
         float back = duration - half;
@@ -697,10 +815,21 @@ public abstract class UnitBase : MonoBehaviour
         {
             t += Time.deltaTime;
             root.position = Vector3.Lerp(peak, start, back > 0.0001f ? t / back : 1f);
+            SyncKnockbackRigidbody(root);
             yield return null;
         }
         root.position = start;
+        SyncKnockbackRigidbody(root);
         _knockbackCo = null;
+    }
+
+    static void SyncKnockbackRigidbody(Transform root)
+    {
+        if (root == null) return;
+        var body = root.GetComponent<Rigidbody2D>();
+        if (body == null) return;
+        body.position = new Vector2(root.position.x, body.position.y);
+        body.velocity = Vector2.zero;
     }
 
     public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0)
@@ -710,7 +839,9 @@ public abstract class UnitBase : MonoBehaviour
         float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense);
 
         currentHp -= finalDamage;
-        DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit, isAlly);
+        // 怪物受击飘字：传受害者面向，由 DamageTextSystem 固定往其后方滑
+        int textFacing = isAlly ? hitVfxFacing : GetVfxFacingDir();
+        DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit, isAlly, textFacing);
 
         if (showHitVfx && finalDamage > 0f && BattleVFXSystem.Instance != null
             && Time.time - _lastHitVfxTime >= HitVfxCooldown)
@@ -735,10 +866,10 @@ public abstract class UnitBase : MonoBehaviour
             unitAnim.PlayDamaged();
 
         if (currentHp <= 0)
-            Die();
+            Die(isCrit && finalDamage > 0f);
     }
 
-    protected virtual void Die()
+    protected virtual void Die(bool isCritKill = false)
     {
         if (_isDying) return;
         _isDying = true;
@@ -751,7 +882,7 @@ public abstract class UnitBase : MonoBehaviour
 
         // 播放死亡动画
         if (unitAnim != null)
-            unitAnim.PlayDeath(facingDir);
+            unitAnim.PlayDeath(GetVfxFacingDir(), isCritKill);
 
         // 延迟回收（等死亡动画播完）
         StartCoroutine(DeathReleaseCoroutine());

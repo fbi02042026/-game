@@ -111,7 +111,7 @@ public class EvacuateConfirmPopupUI : MonoBehaviour
 
         if (titleText != null) titleText.text = "确认撤离？";
         if (bodyText != null)
-            bodyText.text = "撤离将结束本次裂缝探索。\n本局金币会保留；若有装备可再选一件作为遗产带回。";
+            bodyText.text = "撤离将结束本次裂隙探索。\n本局金币会保留；若有装备可再选一件作为遗产带回。";
 
         if (root != null)
         {
@@ -171,7 +171,7 @@ public class EvacuateConfirmPopupUI : MonoBehaviour
         panel.gameObject.AddComponent<Image>().color = new Color(0.14f, 0.11f, 0.16f, 0.98f);
 
         Label(panel, "Title", "确认撤离？", 30, new Vector2(0f, -36f), new Vector2(460f, 44f));
-        Label(panel, "Body", "撤离将结束本次裂缝探索。", 22, new Vector2(0f, -130f), new Vector2(460f, 120f), TextAnchor.UpperCenter);
+        Label(panel, "Body", "撤离将结束本次裂隙探索。", 22, new Vector2(0f, -130f), new Vector2(460f, 120f), TextAnchor.UpperCenter);
 
         var evac = Mk(panel, "EvacuateButton");
         evac.anchorMin = evac.anchorMax = new Vector2(0.28f, 0f);

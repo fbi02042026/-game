@@ -2,10 +2,10 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// 战斗飘字（世界空间 TextMesh）：
-/// · 我方受击：前缀「-」+ 白字，瞬间闪大 → 往左滑 → 停 1s → 上飘消失
-/// · 敌方受击：红字，往右滑；暴击后缀「!」、亮紫
-/// · 闪避：前缀 dodgePrefix +「闪避」
+/// 战斗飘字（世界空间 TextMesh）— 方向规则定死：
+/// · 我方受击：前缀「-」+ 白字 → 往左滑（或按 hitVfxFacing 修正侧向攻击）
+/// · 敌方受击：红字 → 始终往受害者后方（与怪物 GetVfxFacingDir 相反）
+/// · 暴击：前缀「暴击」、亮紫
 /// </summary>
 public class DamageTextSystem : Singleton<DamageTextSystem>
 {
@@ -29,18 +29,19 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
 
     [Header("我方普伤 — 打在我方身上")]
     public Color inNormalColor = new Color(1f, 1f, 1f, 1f);
-    public int inNormalFontSize = 46;
-    public float inNormalScale = 1.12f;
+    public int inNormalFontSize = 37;
+    public float inNormalScale = 0.90f;
 
     [Header("暴击 — 亮紫（敌方暴击另 ×0.9）")]
     public Color critColor = new Color(0.78f, 0.36f, 1f, 1f);
     public int critFontSize = 58;
     public float critScale = 1.3f;
     const float EnemyTextMul = 0.9f;
+    const float GlobalSizeMul = 0.9f;
 
     [Header("前缀 / 后缀")]
     public string incomingPrefix = "-";
-    public string critSuffix = "!";
+    public string critPrefix = "暴击";
     public string dodgePrefix = "·";
 
     [Header("闪避")]
@@ -66,9 +67,9 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
     public float slideDistanceDodge = 0.42f;
 
     [Header("散开范围（多段伤害）")]
-    public float spreadRadiusX = 0.44f;
-    public float spreadRadiusY = 0.3f;
-    public float worldTextScale = 1.32f;
+    public float spreadRadiusX = 0.22f;
+    public float spreadRadiusY = 0.15f;
+    public float worldTextScale = 1.188f;
 
     [Header("通用")]
     public GameObject damageTextPrefab;
@@ -104,13 +105,13 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
         public TextMesh outlineMesh;
     }
 
-    public void SpawnDamageText(Vector3 pos, int damage, bool isCrit, bool victimIsAlly)
+    public void SpawnDamageText(Vector3 pos, int damage, bool isCrit, bool victimIsAlly, int hitVfxFacing = 0)
     {
         TextKind kind = isCrit
             ? (victimIsAlly ? TextKind.InCrit : TextKind.OutCrit)
             : (victimIsAlly ? TextKind.InNormal : TextKind.OutNormal);
         string text = FormatDamageText(damage, kind);
-        SpawnDirectional(pos, text, kind, victimIsAlly);
+        SpawnDirectional(pos, text, kind, victimIsAlly, hitVfxFacing: hitVfxFacing);
     }
 
     string FormatDamageText(int damage, TextKind kind)
@@ -120,8 +121,8 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
         bool crit = kind == TextKind.OutCrit || kind == TextKind.InCrit;
         if (incoming && !string.IsNullOrEmpty(incomingPrefix))
             num = incomingPrefix + num;
-        if (crit && !string.IsNullOrEmpty(critSuffix))
-            num = num + critSuffix;
+        if (crit && !string.IsNullOrEmpty(critPrefix))
+            num = critPrefix + num;
         return num;
     }
 
@@ -143,6 +144,20 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
 
     static bool IsCritDamage(TextKind kind) => kind == TextKind.OutCrit || kind == TextKind.InCrit;
 
+    /// <summary>飘字滑出方向（定死）：己方略左；敌方始终往受害者后方。</summary>
+    static float ResolveDamageSlideDir(bool victimIsAlly, int victimFacingDir)
+    {
+        if (victimIsAlly)
+        {
+            if (victimFacingDir != 0)
+                return victimFacingDir > 0 ? 1f : -1f;
+            return -1f;
+        }
+
+        int face = victimFacingDir != 0 ? victimFacingDir : 1;
+        return face > 0 ? -1f : 1f;
+    }
+
     float ResolvePopOvershootNormal() =>
         GameConfig.COMBAT_JUICE_DAMAGE_TEXT_BOOST ? 1.55f : popOvershootNormal;
 
@@ -158,7 +173,7 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
     float ResolvePopFlashStrength() =>
         GameConfig.COMBAT_JUICE_DAMAGE_TEXT_BOOST ? 0.72f : popFlashStrength;
 
-    void SpawnDirectional(Vector3 pos, string text, TextKind kind, bool victimIsAlly, bool forceUp = false)
+    void SpawnDirectional(Vector3 pos, string text, TextKind kind, bool victimIsAlly, bool forceUp = false, int hitVfxFacing = 0)
     {
         GetStyle(kind, out Color color, out int fontSize, out float scale);
 
@@ -181,7 +196,8 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
         inst.go.transform.position = inst.origin;
         inst.textMesh.text = text;
 
-        Font font = (kind == TextKind.Dodge || kind == TextKind.Gold || kind == TextKind.InNormal || kind == TextKind.InCrit)
+        Font font = (kind == TextKind.Dodge || kind == TextKind.Gold || kind == TextKind.InNormal || kind == TextKind.InCrit
+            || kind == TextKind.OutCrit)
             ? GameFonts.GetChinese()
             : GameFonts.GetNumber();
         if (font != null)
@@ -210,7 +226,7 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
         if (forceUp)
             inst.slideDir = 0f;
         else
-            inst.slideDir = victimIsAlly ? -1f : 1f;
+            inst.slideDir = ResolveDamageSlideDir(victimIsAlly, hitVfxFacing);
 
         inst.slideDistance = IsCritDamage(kind) ? ResolveSlideDistanceCrit()
             : kind == TextKind.Dodge ? slideDistanceDodge
@@ -270,26 +286,38 @@ public class DamageTextSystem : Singleton<DamageTextSystem>
         {
             case TextKind.OutCrit:
                 color = critColor;
-                fontSize = Mathf.RoundToInt(critFontSize * EnemyTextMul);
-                scale = critScale * EnemyTextMul;
+                fontSize = Mathf.RoundToInt(critFontSize * EnemyTextMul * GlobalSizeMul);
+                scale = critScale * EnemyTextMul * GlobalSizeMul;
                 break;
             case TextKind.InCrit:
-                color = critColor; fontSize = critFontSize; scale = critScale;
+                color = critColor;
+                fontSize = Mathf.RoundToInt(critFontSize * 0.8f * GlobalSizeMul);
+                scale = critScale * 0.8f * GlobalSizeMul;
                 break;
             case TextKind.InNormal:
-                color = inNormalColor; fontSize = inNormalFontSize; scale = inNormalScale;
+                color = inNormalColor;
+                fontSize = Mathf.RoundToInt(inNormalFontSize * GlobalSizeMul);
+                scale = inNormalScale * GlobalSizeMul;
                 break;
             case TextKind.Heal:
-                color = healColor; fontSize = healFontSize; scale = healScale;
+                color = healColor;
+                fontSize = Mathf.RoundToInt(healFontSize * GlobalSizeMul);
+                scale = healScale * GlobalSizeMul;
                 break;
             case TextKind.Dodge:
-                color = dodgeColor; fontSize = 28; scale = 0.88f;
+                color = dodgeColor;
+                fontSize = Mathf.RoundToInt(28 * GlobalSizeMul);
+                scale = 0.88f * GlobalSizeMul;
                 break;
             case TextKind.Gold:
-                color = goldColor; fontSize = 30; scale = 0.98f;
+                color = goldColor;
+                fontSize = Mathf.RoundToInt(30 * GlobalSizeMul);
+                scale = 0.98f * GlobalSizeMul;
                 break;
             default:
-                color = outNormalColor; fontSize = outNormalFontSize; scale = outNormalScale;
+                color = outNormalColor;
+                fontSize = Mathf.RoundToInt(outNormalFontSize * GlobalSizeMul);
+                scale = outNormalScale * GlobalSizeMul;
                 break;
         }
     }

@@ -131,9 +131,8 @@ public class SkillRegistry : Singleton<SkillRegistry>
     }
 
     /// <summary>
-    /// 怪物主动技：近战重击 / 远程魔法弹；Boss 两种都会用。
-    /// 远程小怪也给远程技（伤害在 Monster 侧按非精英打折），
-    /// 否则远程怪整场只有普攻、玩家看不到技能子弹。
+    /// 怪物主动技：仅精英/Boss 使用（近战重击 / 远程魔法弹）。
+    /// 普通/初级小怪无主动技能、只有普攻。
     /// </summary>
     public string GetMonsterSkillId(MonsterConfig template, bool isEliteWave, bool isBossUnit, MonsterAttackStyle primaryStyle)
     {
@@ -145,8 +144,8 @@ public class SkillRegistry : Singleton<SkillRegistry>
         }
         if (isEliteWave)
             return ranged ? MonsterEliteRangedSkillId : MonsterEliteMeleeSkillId;
-        // 近战小怪保持只有普攻，避免开局被贴脸重击
-        return ranged ? MonsterEliteRangedSkillId : null;
+        // 普通/初级小怪无主动技能，只有普攻
+        return null;
     }
 
     /// <summary>

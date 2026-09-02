@@ -21,6 +21,5 @@ public static class LevelSystem
         hero.attr.AddAttr(AttrType.MaxHp, 15, false);
 
         hero.currentHp = hero.attr.GetAttr(AttrType.MaxHp);
-        UIManager.Instance?.ShowToast($"升级！当前等级{hero.level}");
     }
 }

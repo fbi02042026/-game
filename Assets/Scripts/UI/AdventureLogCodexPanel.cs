@@ -609,18 +609,7 @@ public class AdventureLogCodexPanel
         }
     }
 
-    static Color MercRarityColor(MercRosterDefs.MercRarity rarity)
-    {
-        switch (rarity)
-        {
-            case MercRosterDefs.MercRarity.Rare:
-                return new Color(0.55f, 0.78f, 1f, 1f);
-            case MercRosterDefs.MercRarity.Legendary:
-                return new Color(1f, 0.82f, 0.28f, 1f);
-            default:
-                return Color.white;
-        }
-    }
+    static Color MercRarityColor(MercRosterDefs.MercRarity rarity) => MercRarityColors.Get(rarity);
 
     void ApplyPortrait(Transform cell, Sprite sp, bool lit)
     {

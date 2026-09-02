@@ -60,6 +60,7 @@ public class UnitAnimation : MonoBehaviour
 
     private bool _procMode;
     private bool _monsterClipMode;
+    private bool _flipXFacing;
     static RuntimeAnimatorController _monsterClipController;
     static RuntimeAnimatorController _sanitizedMonsterClipController;
     const int MonsterSanitizeVersion = 3;
@@ -70,6 +71,7 @@ public class UnitAnimation : MonoBehaviour
     private Vector3 _procBasePos;
     private float _procTime;
     private float _procDeathTime;
+    private bool _procDeathCritKill;
     /// <summary>本次攻击的幅度倍率：普攻 1，放技能时放大。</summary>
     private float _procAmp = 1f;
     /// <summary>放技能时向前扑的距离（世界单位，作用在精灵子节点上，不影响 AI 移动）。</summary>
@@ -78,6 +80,8 @@ public class UnitAnimation : MonoBehaviour
     SpriteRenderer[] _spumFlashSrs;
     Color[] _spumFlashBaseline;
     int _spumFlashGen;
+    float _damagedRecoveryUntil;
+    const float DamagedRecoverySeconds = 0.18f;
 
     void Awake()
     {
@@ -362,12 +366,15 @@ public class UnitAnimation : MonoBehaviour
 
         if (_isDead)
         {
-            // 死亡：向后倒（与朝向相反一侧）+ Alpha淡出
-            // 面朝左(dir=-1) → 向右倒(Z=-90)；面朝右 → 向左倒(Z=+90)
             _procDeathTime += Time.deltaTime;
             float dt = Mathf.Clamp01(_procDeathTime / procDeathDuration);
-            float targetAngle = 90f * _lastFacingDir;
+            float targetAngle = _flipXFacing ? (-90f * _lastFacingDir) : (90f * _lastFacingDir);
             t.localRotation = Quaternion.Lerp(Quaternion.identity, Quaternion.Euler(0, 0, targetAngle), dt);
+            if (_procDeathCritKill)
+            {
+                float slide = GameConfig.CRIT_KILL_DEATH_SLIDE * (1f - dt) * -_lastFacingDir;
+                t.localPosition = _procBasePos + new Vector3(slide, 0f, 0f);
+            }
             Color c = _sr.color;
             c.a = 1f - dt;
             _sr.color = c;
@@ -513,7 +520,10 @@ public class UnitAnimation : MonoBehaviour
         {
             var costume = GetCostumeManager();
             if (costume != null)
+            {
                 costume.ReapplyWeaponVisuals();
+                costume.SuppressUnequippedSecondaryHand();
+            }
         }
     }
 
@@ -606,17 +616,34 @@ public class UnitAnimation : MonoBehaviour
         return null;
     }
 
+    /// <summary>我方近战命中延迟（unscaled 秒）。</summary>
+    public float GetAllyMeleeHitDelay()
+    {
+        return _baseAttackDuration * GameConfig.ALLY_MELEE_HIT_NORM;
+    }
+
+    public bool InDamagedRecovery() => Time.unscaledTime < _damagedRecoveryUntil;
+
+    /// <summary>攻击出手时打断受击白闪与 recovery。</summary>
+    public void InterruptDamaged()
+    {
+        _damagedRecoveryUntil = 0f;
+        _spumFlashGen++;
+        RestoreSpumFlashColors();
+    }
+
     /// <summary>
     /// 播放攻击动画。传入武器套装可选中 SPUM 里的弓/法术专用挥击。
     /// </summary>
-    public void PlayAttack(AttackVfxKit kit = AttackVfxKit.MeleeSlash)
+    public void PlayAttack(AttackVfxKit kit = AttackVfxKit.MeleeSlash, bool isCritAmp = false)
     {
         if (_isDead) return;
+        InterruptDamaged();
         if (_attackAnimLock > 0) return; // 动画锁定中
         _attackAnimDuration = _baseAttackDuration;
         _attackAnimLock = _attackAnimDuration;
         _procAttackKit = kit;
-        _procAmp = 1f;
+        _procAmp = isCritAmp ? GameConfig.ALLY_MELEE_CRIT_AMP : 1f;
         _procLunge = 0f;
 
         // SPUM模式
@@ -754,14 +781,14 @@ public class UnitAnimation : MonoBehaviour
     /// <summary>
     /// 播放死亡动画（facingDir 用于程序化后倒方向）
     /// </summary>
-    public void PlayDeath(int facingDir = 0)
+    public void PlayDeath(int facingDir = 0, bool isCritKill = false)
     {
         _isDead = true;
         _isMoving = false;
         _procDeathTime = 0f;
+        _procDeathCritKill = isCritKill;
         if (facingDir != 0) _lastFacingDir = facingDir;
 
-        // SPUM模式
         if (_spum != null && _spum.OverrideController != null)
         {
             try
@@ -770,11 +797,13 @@ public class UnitAnimation : MonoBehaviour
             }
             catch { }
         }
-        // 原生Animator模式
         else if (_animator != null)
         {
             if (_monsterClipMode)
+            {
+                PrepareMonsterClipDeathFacing(facingDir);
                 PlayMonsterClip("dead");
+            }
             else
             {
                 _animator.SetBool("isDeath", true);
@@ -783,8 +812,20 @@ public class UnitAnimation : MonoBehaviour
                 SetTriggerSafe("3_Death");
             }
         }
-        // 程序化模式：Update自动处理倒下+淡出
     }
+
+    void PrepareMonsterClipDeathFacing(int facingDir)
+    {
+        if (_sr == null) return;
+        _sr.flipX = false;
+        Transform body = GetMonsterBodyTransform();
+        if (body == null) return;
+        // 朝向已在 Monster Visual 根节点镜像，此处保持 Monsters 子节点 scale 为正，避免死亡动画双重翻转
+        float absX = Mathf.Max(0.001f, Mathf.Abs(body.localScale.x));
+        body.localScale = new Vector3(absX, body.localScale.y, body.localScale.z);
+    }
+
+    public void SetFlipXFacing(bool on) => _flipXFacing = on;
 
     /// <summary>
     /// 播放眩晕/Debuff 动画（SPUM 的 DEBUFF）。
@@ -827,6 +868,7 @@ public class UnitAnimation : MonoBehaviour
     public void PlayDamaged()
     {
         if (_isDead) return;
+        _damagedRecoveryUntil = Time.unscaledTime + DamagedRecoverySeconds;
 
         // SPUM模式
         if (_spum != null && _spum.OverrideController != null)
@@ -885,10 +927,7 @@ public class UnitAnimation : MonoBehaviour
                 continue;
             }
             var c = _spumFlashBaseline[i];
-            c.r = Mathf.Min(1f, c.r + 0.55f);
-            c.g = Mathf.Min(1f, c.g + 0.55f);
-            c.b = Mathf.Min(1f, c.b + 0.55f);
-            srs[i].color = c;
+            srs[i].color = new Color(1f, 1f, 1f, c.a);
             flashed++;
         }
         // #region agent log
@@ -938,6 +977,7 @@ public class UnitAnimation : MonoBehaviour
         _isMoving = false;
         _attackAnimLock = 0;
         _procDeathTime = 0f;
+        _procDeathCritKill = false;
 
         // 程序化模式：恢复缩放、旋转、颜色
         if (_procMode && _sr != null)
@@ -998,4 +1038,6 @@ public class UnitAnimation : MonoBehaviour
     public bool IsDead => _isDead;
     public bool IsMoving => _isMoving;
     public bool IsProcMode => _procMode || _monsterClipMode;
+    public bool IsProceduralAnim => _procMode;
+    public bool UsesFlipXFacing => _flipXFacing;
 }

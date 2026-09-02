@@ -237,7 +237,7 @@ public static class TalentDefs
                 Opt("B", "天赋共鸣", AttrKind.TalentStoneDrop, 1, "天赋石掉落 +1")),
             MakeRight(6, "资源利用", 40, 24,
                 Opt("A", "慧眼识材", AttrKind.MatDrop, 1, "装备分解获得强化石 +1"),
-                Opt("B", "裂缝亲和", AttrKind.KeepGoldOnExtract, 5, "撤离时保留金币比例 +5%")),
+                Opt("B", "裂隙亲和", AttrKind.KeepGoldOnExtract, 5, "撤离时保留金币比例 +5%")),
             MakeRight(7, "战前准备", 55, 28,
                 Opt("A", "背包 +1", AttrKind.BagSlots, 1, "战斗背包上限 +1 格"),
                 Opt("B", "体能训练", AttrKind.StaminaRegen, 1, "每次进入副本体力消耗 -1")),

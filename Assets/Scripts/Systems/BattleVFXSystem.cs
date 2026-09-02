@@ -35,10 +35,10 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     public Color enemyTint = new Color(1f, 0.45f, 0.45f, 1f);
 
     [Header("法球/弓箭飞行")]
-    public float projectileSpeed = 48f;
+    public float projectileSpeed = 24f;
     /// <summary>飞行贴图默认朝向修正：贴图尖端朝右=0，朝左=180，朝上=-90</summary>
     public float projectileAngleOffset = 0f;
-    public float minFlightTime = 0.02f;
+    public float minFlightTime = 0.1f;
     public float maxFlightTime = 1.2f;
     /// <summary>弓箭发射点相对 GetFirePosition 的 Y 偏移（世界单位，正值向上）</summary>
     public float bowFireYOffset = 0.07f;
@@ -172,11 +172,6 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
         PrepareSlashParticles(go);
         ApplySlashLocalFacing(go);
-
-        // #region agent log
-        DebugAgentLog.Log("H4", "BattleVFXSystem.PlaySlash", "slash_facing",
-            $"{{\"facingDir\":{facingDir},\"scaleX\":{go.transform.localScale.x:F3},\"faction\":\"{faction}\",\"posX\":{position.x:F2}}}");
-        // #endregion
 
         StretchSlashLifetime(go, 0.5f);
         ResetTintableColors(go);
@@ -378,7 +373,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         Vector3 end = toPos;
         float battleZ = fromPos.z;
         if (BattleManager.Instance != null && BattleManager.Instance.unitRoot != null)
-            battleZ = BattleManager.Instance.unitRoot.position.z - 0.15f;
+            battleZ = BattleManager.Instance.unitRoot.position.z + 0.02f;
         fromPos.z = battleZ;
         end.z = battleZ;
         Vector3 flightDir = end - fromPos;
@@ -397,9 +392,13 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         projectile.transform.localScale = projectilePrefab.transform.lossyScale
             * Mathf.Max(0.05f, scaleMul);
 
-        ApplyVfxFacing(projectile, 1);
-        ApplyFactionLook(projectile, faction);
+        ResetTintableColors(projectile);
+        PrepareSlashParticles(projectile);
+        ApplySlashLocalFacing(projectile);
+        ApplyVfxFacing(projectile, facingDir);
         SetVFXSortingLayer(projectile.transform);
+        EnsureSlashParticleVisible(projectile);
+        EnsureProjectileSpriteVisible(projectile);
         PlayAllParticles(projectile);
 
         var sr = projectile.GetComponentInChildren<SpriteRenderer>();
@@ -418,6 +417,12 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         }
 
         projectile.transform.position = end;
+        if (impactPrefab != null)
+        {
+            GameObject hitFx = PlayPreparedVfx(impactPrefab, end, facingDir, defaultDuration, 1f, prepareParticles: true);
+            if (hitFx != null)
+                ApplyFactionLook(hitFx, faction);
+        }
         Destroy(projectile);
 
         // 命中结算；受击特效由 TakeDamage → PlayVictimHit 统一播放
@@ -591,7 +596,22 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
             if (r.maxParticleSize < 2f)
                 r.maxParticleSize = 100f;
             r.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            r.sortingOrder = GameConfig.SORT_VFX;
+            r.sortingOrder = GameConfig.SORT_VFX + 12;
+            r.enabled = true;
+        }
+    }
+
+    static void EnsureProjectileSpriteVisible(GameObject go)
+    {
+        if (go == null) return;
+        var srs = go.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+        {
+            var sr = srs[i];
+            if (sr == null) continue;
+            sr.enabled = true;
+            sr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            sr.sortingOrder = GameConfig.SORT_VFX + 12;
         }
     }
 

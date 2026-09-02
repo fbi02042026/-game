@@ -43,6 +43,14 @@ public class GlobalToastUI : MonoBehaviour
         Ensure().Play(msg);
     }
 
+    /// <summary>从左淡入到中央 → 慢右移 1.5s → 快速右出（精英击破等战斗播报）。</summary>
+    public static void ShowFlythrough(string msg)
+    {
+        if (string.IsNullOrEmpty(msg)) return;
+        if (AnyBubbleShowing) return;
+        Ensure().PlayFlythrough(msg);
+    }
+
     static int _bubbleHolders;
 
     /// <summary>非 Talker 类气泡（如酒馆图标气泡）显示期间登记，屏蔽屏幕浮字。</summary>
@@ -141,6 +149,16 @@ public class GlobalToastUI : MonoBehaviour
         _co = StartCoroutine(CoPlay(msg));
     }
 
+    void PlayFlythrough(string msg)
+    {
+        if (_label == null || _root == null) Build();
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.Toast);
+        if (_co != null) StopCoroutine(_co);
+        _co = StartCoroutine(CoFlythrough(msg));
+    }
+
     IEnumerator CoPlay(string msg)
     {
         _label.text = msg;
@@ -181,6 +199,80 @@ public class GlobalToastUI : MonoBehaviour
 
         _cg.alpha = 0f;
         if (_rootRt != null) _rootRt.anchoredPosition = _basePos;
+        _root.SetActive(false);
+        _co = null;
+    }
+
+    IEnumerator CoFlythrough(string msg)
+    {
+        _label.text = msg;
+        var plate = _root.GetComponent<Image>();
+        const int normalFontSize = 28;
+        var normalTextColor = new Color(1f, 0.94f, 0.72f, 1f);
+        var normalPlateColor = new Color(0.08f, 0.07f, 0.1f, 0.6f);
+
+        _label.fontSize = 34;
+        _label.color = new Color(1f, 0.88f, 0.38f, 1f);
+        if (plate != null)
+            plate.color = new Color(0.06f, 0.05f, 0.08f, 0.42f);
+
+        _root.SetActive(true);
+        _root.transform.SetAsLastSibling();
+
+        const float inDur = 0.22f;
+        const float driftDur = 1.5f;
+        const float outDur = 0.22f;
+        const float startX = -520f;
+        const float centerX = 0f;
+        const float driftEndX = 180f;
+        const float exitX = 620f;
+
+        // 1) 左侧快速淡入到中央
+        float t = 0f;
+        while (t < inDur)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / inDur);
+            float ease = 1f - (1f - u) * (1f - u);
+            if (_rootRt != null)
+                _rootRt.anchoredPosition = _basePos + new Vector2(Mathf.Lerp(startX, centerX, ease), 0f);
+            _cg.alpha = ease;
+            yield return null;
+        }
+        if (_rootRt != null)
+            _rootRt.anchoredPosition = _basePos + new Vector2(centerX, 0f);
+        _cg.alpha = 1f;
+
+        // 2) 中央慢向右漂
+        t = 0f;
+        while (t < driftDur)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / driftDur);
+            if (_rootRt != null)
+                _rootRt.anchoredPosition = _basePos + new Vector2(Mathf.Lerp(centerX, driftEndX, u), 0f);
+            yield return null;
+        }
+
+        // 3) 快速向右淡出
+        t = 0f;
+        float outStartX = driftEndX;
+        while (t < outDur)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / outDur);
+            float ease = u * u;
+            if (_rootRt != null)
+                _rootRt.anchoredPosition = _basePos + new Vector2(Mathf.Lerp(outStartX, exitX, ease), 0f);
+            _cg.alpha = 1f - u;
+            yield return null;
+        }
+
+        _cg.alpha = 0f;
+        if (_rootRt != null) _rootRt.anchoredPosition = _basePos;
+        _label.fontSize = normalFontSize;
+        _label.color = normalTextColor;
+        if (plate != null) plate.color = normalPlateColor;
         _root.SetActive(false);
         _co = null;
     }

@@ -24,7 +24,15 @@ public class Mercenary : UnitBase
     Transform _nameLabelRoot;
     TextMesh _nameLabel;
     MeshRenderer _nameLabelRenderer;
+    TextMesh[] _nameOutlineLabels;
+    MeshRenderer[] _nameOutlineRenderers;
     const float NameScaleMul = 1.2f;
+    const float NameCharSizeBase = 0.1008f;
+    static readonly Vector2[] NameOutlineDirs =
+    {
+        new Vector2(-1f, 0f), new Vector2(1f, 0f),
+        new Vector2(0f, -1f), new Vector2(0f, 1f)
+    };
 
     protected override void Awake()
     {
@@ -67,6 +75,7 @@ public class Mercenary : UnitBase
         if (PassiveRunner == null) PassiveRunner = gameObject.AddComponent<MercPassiveRunner>();
         SkillCaster.Bind(this, activeId);
         PassiveRunner.Bind(this, passiveId);
+        WirePassiveOnAttack();
     }
 
     public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0)
@@ -76,7 +85,7 @@ public class Mercenary : UnitBase
             float defense = ignoreDefense ? 0f : attr.GetAttr(AttrType.Defense);
             float finalDamage = Mathf.Max(1f, damage - defense);
             currentHp = Mathf.Max(1f, currentHp - finalDamage * 0.35f);
-            DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage * 0.35f), isCrit, true);
+            DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage * 0.35f), isCrit, true, hitVfxFacing);
             if (unitAnim != null)
             {
                 unitAnim.PlayDamaged();
@@ -94,10 +103,15 @@ public class Mercenary : UnitBase
             PassiveRunner.OnHpChanged();
     }
 
-    protected override void Attack(UnitBase target)
+    void WirePassiveOnAttack()
     {
-        base.Attack(target);
-        if (PassiveRunner != null && target != null && !target.isDead)
+        OnAttack -= OnPassiveBasicAttackHit;
+        OnAttack += OnPassiveBasicAttackHit;
+    }
+
+    void OnPassiveBasicAttackHit(UnitBase target, float damage, bool isCrit)
+    {
+        if (PassiveRunner != null && target != null && !target.isDead && damage > 0f)
             PassiveRunner.OnBasicAttackHit(target, attr != null ? attr.GetAttr(AttrType.Attack) : 0f);
     }
 
@@ -113,6 +127,7 @@ public class Mercenary : UnitBase
 
         SetupAttributes(id, level);
         Face(1);
+        WirePassiveOnAttack();
 
         Debug.Log($"[Mercenary:{id}] Init完成 | isAlly={isAlly} | facingDir={facingDir} | pos={transform.position}");
     }
@@ -149,6 +164,14 @@ public class Mercenary : UnitBase
         _nameLabelRoot.gameObject.SetActive(true);
         _nameLabel.text = DisplayName;
         ApplyNameLabelFont();
+        if (_nameOutlineLabels != null)
+        {
+            for (int i = 0; i < _nameOutlineLabels.Length; i++)
+            {
+                if (_nameOutlineLabels[i] != null)
+                    _nameOutlineLabels[i].text = DisplayName;
+            }
+        }
         RefreshNameLabelLayout();
     }
 
@@ -162,6 +185,32 @@ public class Mercenary : UnitBase
             font.RequestCharactersInTexture(DisplayName, _nameLabel.fontSize, _nameLabel.fontStyle);
             if (_nameLabelRenderer != null && font.material != null)
                 _nameLabelRenderer.sharedMaterial = font.material;
+            if (_nameOutlineLabels != null)
+            {
+                for (int i = 0; i < _nameOutlineLabels.Length; i++)
+                {
+                    if (_nameOutlineLabels[i] == null) continue;
+                    _nameOutlineLabels[i].font = font;
+                    if (_nameOutlineRenderers != null && i < _nameOutlineRenderers.Length
+                        && _nameOutlineRenderers[i] != null && font.material != null)
+                        _nameOutlineRenderers[i].sharedMaterial = font.material;
+                }
+            }
+        }
+        ApplyNameLabelColor();
+    }
+
+    void ApplyNameLabelColor()
+    {
+        if (_nameLabel == null) return;
+        var rarity = MercRarityColors.ResolveMercRarity(mercId);
+        _nameLabel.color = MercRarityColors.Get(rarity);
+        if (_nameOutlineLabels == null) return;
+        var outline = MercRarityColors.GetOutline();
+        for (int i = 0; i < _nameOutlineLabels.Length; i++)
+        {
+            if (_nameOutlineLabels[i] != null)
+                _nameOutlineLabels[i].color = outline;
         }
     }
 
@@ -169,29 +218,98 @@ public class Mercenary : UnitBase
     {
         if (_nameLabelRoot == null || _nameLabel == null) return;
         float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
-        _nameLabelRoot.localPosition = new Vector3(0f, 0.82f / rootAbs, 0f);
-        _nameLabel.characterSize = 0.112f / rootAbs;
-        UpdateNameLabelFacing();
+        float charSize = NameCharSizeBase / rootAbs;
+        _nameLabel.characterSize = charSize;
         if (_nameLabelRenderer != null)
+        {
+            _nameLabelRenderer.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
             _nameLabelRenderer.sortingOrder = GameConfig.SORT_VFX + 24;
+        }
+        float outlineStep = charSize * 0.22f;
+        if (_nameOutlineLabels != null)
+        {
+            for (int i = 0; i < _nameOutlineLabels.Length; i++)
+            {
+                var o = _nameOutlineLabels[i];
+                if (o == null) continue;
+                o.characterSize = charSize;
+                o.text = _nameLabel.text;
+                var dir = NameOutlineDirs[i];
+                o.transform.localPosition = new Vector3(dir.x * outlineStep, dir.y * outlineStep, 0.002f);
+                if (_nameOutlineRenderers != null && i < _nameOutlineRenderers.Length && _nameOutlineRenderers[i] != null)
+                {
+                    _nameOutlineRenderers[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+                    _nameOutlineRenderers[i].sortingOrder = GameConfig.SORT_VFX + 23;
+                }
+            }
+        }
+    }
+
+    static Transform GetUnitLabelsRoot()
+    {
+        var bm = BattleManager.Instance;
+        if (bm == null || bm.unitRoot == null) return null;
+        Transform labels = bm.unitRoot.Find("UnitLabels");
+        if (labels != null) return labels;
+        var go = new GameObject("UnitLabels");
+        labels = go.transform;
+        labels.SetParent(bm.unitRoot, false);
+        return labels;
+    }
+
+    Vector3 GetNameLabelWorldPos()
+    {
+        float yOff = 0.94f;
+        return transform.position + new Vector3(0f, yOff, transform.position.z);
+    }
+
+    void LateUpdate()
+    {
+        SyncNameLabelTransform();
+    }
+
+    void SyncNameLabelTransform()
+    {
+        if (_nameLabelRoot == null || !_nameLabelRoot.gameObject.activeSelf) return;
+        _nameLabelRoot.position = GetNameLabelWorldPos();
+        _nameLabelRoot.localScale = new Vector3(NameScaleMul, NameScaleMul, NameScaleMul);
     }
 
     void EnsureNameLabel()
     {
         if (_nameLabel != null) return;
 
+        Transform parent = GetUnitLabelsRoot() ?? transform;
         _nameLabelRoot = new GameObject("MercName").transform;
-        _nameLabelRoot.SetParent(transform, false);
+        _nameLabelRoot.SetParent(parent, false);
 
-        _nameLabel = _nameLabelRoot.gameObject.AddComponent<TextMesh>();
+        _nameOutlineLabels = new TextMesh[NameOutlineDirs.Length];
+        _nameOutlineRenderers = new MeshRenderer[NameOutlineDirs.Length];
+        for (int i = 0; i < NameOutlineDirs.Length; i++)
+        {
+            var oGo = new GameObject("Outline" + i, typeof(TextMesh));
+            oGo.transform.SetParent(_nameLabelRoot, false);
+            var o = oGo.GetComponent<TextMesh>();
+            o.text = DisplayName ?? "";
+            o.fontSize = 22;
+            o.anchor = TextAnchor.MiddleCenter;
+            o.alignment = TextAlignment.Center;
+            o.fontStyle = FontStyle.Bold;
+            o.color = MercRarityColors.GetOutline();
+            _nameOutlineLabels[i] = o;
+            _nameOutlineRenderers[i] = oGo.GetComponent<MeshRenderer>();
+        }
+
+        var fillGo = new GameObject("Fill", typeof(TextMesh));
+        fillGo.transform.SetParent(_nameLabelRoot, false);
+        _nameLabel = fillGo.GetComponent<TextMesh>();
         _nameLabel.text = DisplayName ?? "";
         _nameLabel.fontSize = 22;
         _nameLabel.anchor = TextAnchor.MiddleCenter;
         _nameLabel.alignment = TextAlignment.Center;
         _nameLabel.fontStyle = FontStyle.Bold;
-        _nameLabel.color = new Color(0.2f, 1f, 1f, 1f);
 
-        _nameLabelRenderer = _nameLabelRoot.GetComponent<MeshRenderer>();
+        _nameLabelRenderer = fillGo.GetComponent<MeshRenderer>();
         if (_nameLabelRenderer != null)
             _nameLabelRenderer.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
 
@@ -201,7 +319,13 @@ public class Mercenary : UnitBase
 
     void HideNameLabel()
     {
-        if (_nameLabelRoot != null) _nameLabelRoot.gameObject.SetActive(false);
+        if (_nameLabelRoot != null)
+            Destroy(_nameLabelRoot.gameObject);
+        _nameLabelRoot = null;
+        _nameLabel = null;
+        _nameLabelRenderer = null;
+        _nameOutlineLabels = null;
+        _nameOutlineRenderers = null;
     }
 
     static bool IsMeleeMercId(string id)
@@ -319,6 +443,13 @@ public class Mercenary : UnitBase
         return AttackVfxKit.MeleeSlash;
     }
 
+    protected override float GetFormationLaneOffset()
+    {
+        if (_partyIndex == 0) return -0.35f;
+        if (_partyIndex == 1) return 0.35f;
+        return 0f;
+    }
+
     protected override void OnDeathRelease()
     {
         HideNameLabel();
@@ -339,20 +470,6 @@ public class Mercenary : UnitBase
     }
 
     public void SetPartyIndex(int index) => _partyIndex = index;
-
-    protected override void ApplyFacing(int dir)
-    {
-        base.ApplyFacing(dir);
-        UpdateNameLabelFacing();
-    }
-
-    void UpdateNameLabelFacing()
-    {
-        if (_nameLabelRoot == null) return;
-        int vfxDir = GetVfxFacingDir();
-        float sx = (vfxDir >= 0 ? 1f : -1f) * NameScaleMul;
-        _nameLabelRoot.localScale = new Vector3(sx, NameScaleMul, NameScaleMul);
-    }
 
     protected override void AIUpdate()
     {

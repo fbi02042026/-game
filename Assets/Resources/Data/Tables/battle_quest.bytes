@@ -7,7 +7,7 @@ gameChapter,stageType,isGoldDungeon,objective,clearGold,normalBase,normalChapter
 5,Boss,0,击败 Boss 时之风车精灵,600,,,,第5章Boss
 6,Boss,0,击败 Boss 晶石巨像,700,,,,第6章Boss
 7,Boss,0,击败 Boss 裂隙化身 · 小美,800,,,,第7章Boss
-8,Boss,0,击败 Boss 裂缝意志,2000,,,,第8章Boss
+8,Boss,0,击败 Boss 裂隙意志,2000,,,,第8章Boss
 *,Normal,0,击败所有敌人,0,25,10,,普通关公式
 *,Elite,0,击败所有敌人,0,25,10,1.5,精英+50%
 *,*,1,清剿金币副本敌人,0,,,,金数走GameConfig

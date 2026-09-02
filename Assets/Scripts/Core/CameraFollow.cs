@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
@@ -26,6 +27,9 @@ public class CameraFollow : MonoBehaviour
     public float maxX = 999f;
 
     private Camera _cam;
+    private float _baseOrthoSize;
+    private float _zoomMul = 1f;
+    Coroutine _zoomCo;
     private float _velocityX = 0f;
     private float _camY;
     private float _camZ;
@@ -38,6 +42,8 @@ public class CameraFollow : MonoBehaviour
     void Awake()
     {
         _cam = GetComponent<Camera>();
+        if (_cam != null)
+            _baseOrthoSize = _cam.orthographicSize;
         // 在Awake中读取Y和Z，确保SetTarget在Start之前调用时也能正确工作
         _camY = transform.position.y;
         _camZ = transform.position.z;
@@ -98,6 +104,74 @@ public class CameraFollow : MonoBehaviour
         if (amplitude <= 0f || duration <= 0f) return;
         _shakeAmp = Mathf.Max(_shakeAmp, amplitude);
         _shakeTimeLeft = Mathf.Max(_shakeTimeLeft, duration);
+    }
+
+    void ApplyOrthoZoom()
+    {
+        if (_cam == null) return;
+        if (_baseOrthoSize < 0.01f)
+            _baseOrthoSize = _cam.orthographicSize;
+        _cam.orthographicSize = _baseOrthoSize * _zoomMul;
+    }
+
+    /// <summary>击杀前摇：ortho 拉近（targetMul &lt; 1），unscaled 时长。</summary>
+    public void BeginKillCamZoom(float targetMul, float inDurationUnscaled)
+    {
+        if (_cam == null) return;
+        if (_baseOrthoSize < 0.01f)
+            _baseOrthoSize = _cam.orthographicSize;
+        if (_zoomCo != null)
+            StopCoroutine(_zoomCo);
+        _zoomCo = StartCoroutine(CoZoomTo(targetMul, inDurationUnscaled));
+    }
+
+    /// <summary>下劈/命中瞬间：快速还原 ortho。</summary>
+    public void EndKillCamZoom(float outDurationUnscaled)
+    {
+        if (_cam == null) return;
+        if (_zoomCo != null)
+            StopCoroutine(_zoomCo);
+        _zoomCo = StartCoroutine(CoZoomTo(1f, outDurationUnscaled));
+    }
+
+    /// <summary>战斗结束或异常：立即还原 zoom。</summary>
+    public void ForceResetKillCamZoom()
+    {
+        if (_zoomCo != null)
+        {
+            StopCoroutine(_zoomCo);
+            _zoomCo = null;
+        }
+        _zoomMul = 1f;
+        ApplyOrthoZoom();
+        Object.FindObjectOfType<ParallaxBackground>()?.ResetKillCamZoom();
+        BattleUI.ResetKillCamHudCompensation();
+    }
+
+    IEnumerator CoZoomTo(float targetMul, float durationUnscaled)
+    {
+        float start = _zoomMul;
+        if (durationUnscaled <= 0.0001f)
+        {
+            _zoomMul = targetMul;
+            ApplyOrthoZoom();
+            _zoomCo = null;
+            yield break;
+        }
+
+        float t = 0f;
+        while (t < durationUnscaled)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / durationUnscaled);
+            _zoomMul = Mathf.Lerp(start, targetMul, u);
+            ApplyOrthoZoom();
+            yield return null;
+        }
+
+        _zoomMul = targetMul;
+        ApplyOrthoZoom();
+        _zoomCo = null;
     }
 
     void LateUpdate()

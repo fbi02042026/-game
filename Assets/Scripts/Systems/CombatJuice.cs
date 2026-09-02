@@ -15,6 +15,9 @@ public class CombatJuice : Singleton<CombatJuice>
     Coroutine _hitStopCo;
     float _hitStopSavedScale = 1f;
 
+    float _critWindupSavedScale = 1f;
+    bool _critWindupActive;
+
     float _lastSfxTime = -999f;
     string _lastSfxKey;
 
@@ -73,22 +76,84 @@ public class CombatJuice : Singleton<CombatJuice>
 
         // 我方单位不做受击击退，避免「往后顿」手感发飘
         if (GameConfig.COMBAT_JUICE_KNOCKBACK && !victim.isAlly)
-            victim.ApplyKnockback(-victim.facingDir * (isCrit ? 0.12f : 0.06f));
+        {
+            float kb = GameConfig.COMBAT_KNOCKBACK_NORMAL;
+            if (isCrit)
+                kb = victim.currentHp <= 0
+                    ? GameConfig.COMBAT_KNOCKBACK_CRIT_KILL
+                    : GameConfig.COMBAT_KNOCKBACK_CRIT;
+            victim.ApplyKnockback(-victim.facingDir * kb);
+        }
     }
 
-    /// <summary>击杀最后一击：加强振屏（BattleManager.OnMonsterDead 调用）。</summary>
-    public void OnKillFinisher()
+    /// <summary>击杀前摇：慢放 + 镜头拉近（近战 fullWindup=true；远程短版 false）。</summary>
+    public void BeginKillWindupJuice(bool fullWindup = true)
     {
+        BeginCritWindupSlowMo();
+        if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
+        float inDur = fullWindup ? GameConfig.KILL_CAM_ZOOM_IN : GameConfig.KILL_CAM_RANGED_WINDUP;
+        float mul = GameConfig.KILL_CAM_ZOOM_MUL;
+        GetCameraFollow()?.BeginKillCamZoom(mul, inDur);
+        Object.FindObjectOfType<ParallaxBackground>()?.ApplyKillCamZoomMul(mul);
+        BattleUI.ApplyKillCamHudCompensation(mul);
+    }
+
+    /// <summary>下劈/命中瞬间：还原 timeScale + 镜头快弹回。</summary>
+    public void EndKillWindupJuice()
+    {
+        EndCritWindupSlowMo();
+        if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
+        GetCameraFollow()?.EndKillCamZoom(GameConfig.KILL_CAM_ZOOM_OUT);
+        ResetKillCamScene();
+    }
+
+    void ResetKillCamScene()
+    {
+        Object.FindObjectOfType<ParallaxBackground>()?.ResetKillCamZoom();
+        BattleUI.ResetKillCamHudCompensation();
+    }
+
+    /// <summary>暴击前摇全屏慢放（BeginKillWindupJuice 内部调用）。</summary>
+    public void BeginCritWindupSlowMo()
+    {
+        if (Time.timeScale <= 0.01f) return;
+        if (_critWindupActive) return;
+        _critWindupSavedScale = Time.timeScale;
+        if (_critWindupSavedScale < 0.01f) _critWindupSavedScale = 1f;
+        Time.timeScale = GameConfig.CRIT_WINDUP_TIME_SCALE;
+        _critWindupActive = true;
+        if (GameConfig.COMBAT_JUICE_SFX)
+            TryPlaySfx(_sfxCrit, "crit_windup", 0.35f);
+    }
+
+    public void EndCritWindupSlowMo()
+    {
+        if (!_critWindupActive) return;
+        Time.timeScale = _critWindupSavedScale > 0.01f ? _critWindupSavedScale : 1f;
+        _critWindupActive = false;
+    }
+
+    /// <summary>击杀收刀：Boss 略长顿帧 + 击杀帧轻震（不依赖全局 shake 开关）。</summary>
+    public void OnKillFinisher(Monster victim = null)
+    {
+        float hitStop = GameConfig.KILL_FINISHER_HIT_STOP;
+        if (victim != null && victim.IsBossUnit)
+            hitStop += GameConfig.KILL_FINISHER_HIT_STOP_BOSS_EXTRA;
+
+        if (GameConfig.COMBAT_JUICE_HIT_STOP)
+            RequestHitStop(hitStop);
+
+        if (GameConfig.COMBAT_JUICE_KILL_FINISHER_SHAKE)
+            GetCameraFollow()?.AddShake(GameConfig.KILL_FINISHER_SHAKE_AMP, GameConfig.KILL_FINISHER_SHAKE_DUR);
+
         if (GameConfig.COMBAT_JUICE_CAMERA_SHAKE)
             GetCameraFollow()?.AddShake(0.12f, 0.18f);
-        if (GameConfig.COMBAT_JUICE_HIT_STOP)
-            RequestHitStop(0.04f);
     }
 
-    /// <summary>近战出手方前冲（Attack 里调用）。</summary>
+    /// <summary>近战出手方前冲（Attack 里调用；仅敌方，我方根节点不位移防滑步）。</summary>
     public void OnMeleeAttackLunge(UnitBase attacker)
     {
-        if (attacker == null || !GameConfig.COMBAT_JUICE_KNOCKBACK) return;
+        if (attacker == null || !GameConfig.COMBAT_JUICE_KNOCKBACK || attacker.isAlly) return;
         attacker.ApplyKnockback(attacker.facingDir * 0.1f);
     }
 
@@ -141,7 +206,7 @@ public class CombatJuice : Singleton<CombatJuice>
         if (victim is Monster mon && mon.IsBossUnit)
             return GameConfig.HIT_STOP_BOSS;
         if (isCrit)
-            return GameConfig.HIT_STOP_CRIT;
+            return GameConfig.CRIT_STRIKE_HIT_STOP;
         return GameConfig.HIT_STOP_NORMAL;
     }
 

@@ -20,7 +20,7 @@ public static class BattleQuestConfig
         "击败 Boss 时之风车精灵",
         "击败 Boss 晶石巨像",
         "击败 Boss 裂隙化身 · 小美",
-        "击败 Boss 裂缝意志"
+        "击败 Boss 裂隙意志"
     };
 
     public struct StageQuest

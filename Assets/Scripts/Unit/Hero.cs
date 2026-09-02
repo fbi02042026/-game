@@ -181,9 +181,9 @@ public class Hero : UnitBase
     /// <summary>对外：当前主手武器对应的攻击特效套（技能回退也用）。</summary>
     public AttackVfxKit GetWeaponVfxKit() => GetAttackVfxKit();
 
-    protected override void Die()
+    protected override void Die(bool isCritKill = false)
     {
-        base.Die();
+        base.Die(isCritKill);
         if (BattleManager.Instance != null)
             BattleManager.Instance.OnHeroDead();
         else

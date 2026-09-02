@@ -3,14 +3,17 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 
-/// <summary>Debug 模式会话日志（NDJSON → debug-6414f3.log）</summary>
+/// <summary>Debug 模式会话日志（NDJSON → debug-36365b.log）</summary>
 public static class DebugAgentLog
 {
-    const string SessionId = "6414f3";
-    static string LogPath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug-6414f3.log"));
+    const string SessionId = "36365b";
+    /// <summary>默认关闭：同步写盘会在战斗热路径（受击闪白等）造成卡顿。</summary>
+    const bool Enabled = false;
+    static string LogPath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug-36365b.log"));
 
     public static void Log(string hypothesisId, string location, string message, string dataJson = "{}")
     {
+        if (!Enabled) return;
         try
         {
             var sb = new StringBuilder(256);

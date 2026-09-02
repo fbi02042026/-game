@@ -16,9 +16,9 @@ public class MonsterHealthBar : MonoBehaviour
     [Tooltip("血条宽度（世界单位）")]
     public float barWidth = 0.55f;
     [Tooltip("血条高度（世界单位）")]
-    public float barHeight = 0.06f;
-    [Tooltip("血条距离脚底的Y偏移（正值=略高于脚面）")]
-    public float yOffset = 0.22f;
+    public float barHeight = GameConfig.MONSTER_HP_BAR_HEIGHT;
+    [Tooltip("相对 Body 脚底再下沉（世界单位，负值=更低）")]
+    public float footDropWorld = GameConfig.MONSTER_HP_BAR_FOOT_DROP;
     [Tooltip("血条背景色")]
     public Color bgColor = new Color(0.15f, 0f, 0f, 0.8f);
     [Tooltip("血条填充色（红色）")]
@@ -48,32 +48,31 @@ public class MonsterHealthBar : MonoBehaviour
         {
             Transform fill = transform.Find("HPBg/HPFill");
             if (fill != null)
-            {
                 _fillImage = fill.GetComponent<Image>();
-                if (_fillImage != null)
-                    _fillImage.type = Image.Type.Filled;
-            }
         }
         if (_barRect == null)
             _barRect = GetComponent<RectTransform>();
+        EnsureFillImage();
     }
 
     /// <summary>
     /// 为指定单位创建血条（静态工厂方法）
-    /// 优先从预制体加载，找不到时动态创建
+    /// 优先从预制体加载，找不到时动态创建。
+    /// 怪物血条挂在 MonsterBody（与 Visual 平级），避免 Visual 镜像时血条一起翻转。
     /// </summary>
     public static MonsterHealthBar Create(UnitBase unit)
     {
         if (unit == null) return null;
 
-        // 检查单位下是否已有血条（预制体中可能已放置）
-        MonsterHealthBar existing = unit.GetComponentInChildren<MonsterHealthBar>();
-        if (existing != null)
+        Transform barParent = ResolveBarParent(unit);
+
+        MonsterHealthBar existing = barParent.GetComponentInChildren<MonsterHealthBar>(true);
+        if (existing != null && existing.transform.parent == barParent)
         {
             existing._unit = unit;
             existing.gameObject.SetActive(true);
             existing.ResetBar();
-            existing.ApplyCompensatedPosition();
+            existing.ApplyBarMetricsFromUnit();
             return existing;
         }
 
@@ -81,23 +80,37 @@ public class MonsterHealthBar : MonoBehaviour
         GameObject prefab = GetHealthBarPrefab();
         if (prefab != null)
         {
-            GameObject go = Instantiate(prefab, unit.transform, false);
+            GameObject go = Instantiate(prefab, barParent, false);
             go.name = "MonsterHPBar";
 
             MonsterHealthBar bar = go.GetComponent<MonsterHealthBar>();
             if (bar != null)
             {
                 bar._unit = unit;
-                bar.yOffset = ResolveFootYOffset(unit);
                 bar.ResetBar();
-                bar.ApplyCompensatedScale();
-                bar.ApplyCompensatedPosition();
+                bar.ApplyBarMetricsFromUnit();
                 return bar;
             }
         }
 
         // 兜底：动态创建
-        return CreateDynamic(unit);
+        return CreateDynamic(unit, barParent);
+    }
+
+    static Transform ResolveBarParent(UnitBase unit)
+    {
+        if (unit is Monster m)
+            return m.GetBodyTransform();
+        return unit.transform;
+    }
+
+    public void BringToFront(int boost)
+    {
+        var canvas = GetComponent<Canvas>();
+        if (canvas == null) return;
+        canvas.overrideSorting = true;
+        canvas.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        canvas.sortingOrder = GameConfig.SORT_VFX + 8 + boost;
     }
 
     /// <summary>
@@ -112,23 +125,40 @@ public class MonsterHealthBar : MonoBehaviour
         if (Mathf.Abs(parentLossy.y) < 0.01f) parentLossy.y = 1f;
         if (Mathf.Abs(parentLossy.z) < 0.01f) parentLossy.z = 1f;
 
-        // 始终设为1/父级缩放（血条Canvas的sizeDelta控制实际大小，localScale只需保证世界缩放为1）
         transform.localScale = new Vector3(
-            1f / parentLossy.x,
-            1f / parentLossy.y,
-            1f / parentLossy.z
+            1f / Mathf.Abs(parentLossy.x),
+            1f / Mathf.Abs(parentLossy.y),
+            1f / Mathf.Abs(parentLossy.z)
         );
     }
 
-    /// <summary>
-    /// 补偿父级缩放后的位置：使血条在世界空间出现在正确的Y偏移
-    /// yOffset是世界单位，需除以父级缩放转为本地单位
-    /// </summary>
-    public void ApplyCompensatedPosition()
+    /// <summary>脚底对齐 + 宽度跟精灵；挂 MonsterBody 本地 (0,0,0)。</summary>
+    public void ApplyBarMetricsFromUnit()
     {
+        if (_unit != null)
+            barWidth = _unit.GetHpBarWorldWidth();
+
+        if (_barRect == null)
+            _barRect = GetComponent<RectTransform>();
+
+        if (_barRect != null)
+        {
+            SetFeetAnchor(_barRect);
+            _barRect.sizeDelta = new Vector2(barWidth, barHeight);
+        }
+
+        Transform bg = transform.Find("HPBg");
+        if (bg is RectTransform bgRt)
+        {
+            SetFeetAnchor(bgRt);
+            bgRt.sizeDelta = new Vector2(barWidth, barHeight);
+        }
+
+        ApplyCompensatedScale();
         Vector3 parentLossy = transform.parent != null ? transform.parent.lossyScale : Vector3.one;
         if (Mathf.Abs(parentLossy.y) < 0.01f) parentLossy.y = 1f;
-        transform.localPosition = new Vector3(0, yOffset / parentLossy.y, 0);
+        transform.localPosition = new Vector3(0f, footDropWorld / parentLossy.y, 0f);
+
         var canvas = GetComponent<Canvas>();
         if (canvas != null)
         {
@@ -138,16 +168,75 @@ public class MonsterHealthBar : MonoBehaviour
         }
     }
 
+    static void SetFeetAnchor(RectTransform rt)
+    {
+        if (rt == null) return;
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = Vector2.zero;
+    }
+
+    /// <summary>
+    /// 补偿父级缩放后的位置（仅排序；位置见 ApplyBarMetricsFromUnit）。
+    /// </summary>
+    public void ApplyCompensatedPosition()
+    {
+        ApplyBarMetricsFromUnit();
+    }
+
+    void EnsureFillImage()
+    {
+        if (_fillImage != null) return;
+        Transform fill = transform.Find("HPBg/HPFill");
+        if (fill == null) return;
+        _fillImage = fill.GetComponent<Image>();
+        if (_fillImage == null) return;
+        _fillImage.type = Image.Type.Simple;
+        _fillImage.raycastTarget = false;
+        var rt = _fillImage.rectTransform;
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+    }
+
+    void ApplyFillRatio(float ratio)
+    {
+        EnsureFillImage();
+        if (_fillImage == null) return;
+        ratio = Mathf.Clamp01(ratio);
+        var rt = _fillImage.rectTransform;
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(ratio, 1f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+    }
+
+    /// <summary>同步血量显示；受伤时 flash 闪一下。</summary>
+    public void SyncHpVisual(bool flash = false)
+    {
+        if (_unit == null || _unit.attr == null) return;
+        EnsureFillImage();
+        float maxHp = _unit.attr.GetAttr(AttrType.MaxHp);
+        float ratio = maxHp > 0f ? _unit.currentHp / maxHp : 0f;
+        ApplyFillRatio(ratio);
+        if (flash && ratio < _lastRatio - 0.001f)
+            _flashTimer = 0.2f;
+        _lastRatio = ratio;
+        if (_flashTimer <= 0f && _fillImage != null)
+            _fillImage.color = fillColor;
+    }
+
     /// <summary>重置血条状态（怪物从对象池复用时调用）</summary>
     public void ResetBar()
     {
         _lastRatio = 1f;
         _flashTimer = 0f;
+        ApplyFillRatio(1f);
         if (_fillImage != null)
-        {
-            _fillImage.fillAmount = 1f;
             _fillImage.color = fillColor;
-        }
     }
 
     /// <summary>
@@ -167,25 +256,24 @@ public class MonsterHealthBar : MonoBehaviour
         return _cachedPrefab;
     }
 
-    static float ResolveFootYOffset(UnitBase unit)
+    static float ResolveBarWidth(UnitBase unit)
     {
-        if (unit == null) return 0.22f;
-        return unit.GetHpBarWorldYOffset();
+        if (unit == null) return 0.55f;
+        return unit.GetHpBarWorldWidth();
     }
 
     /// <summary>
     /// 兜底动态创建血条（无预制体时使用）
     /// </summary>
-    static MonsterHealthBar CreateDynamic(UnitBase unit)
+    static MonsterHealthBar CreateDynamic(UnitBase unit, Transform barParent)
     {
         GameObject canvasGo = new GameObject("MonsterHPBar");
-        canvasGo.transform.SetParent(unit.transform, false);
+        canvasGo.transform.SetParent(barParent, false);
 
         MonsterHealthBar bar = canvasGo.AddComponent<MonsterHealthBar>();
         bar._unit = unit;
-        bar.barWidth = 0.55f;
-        bar.barHeight = 0.06f;
-        bar.yOffset = ResolveFootYOffset(unit);
+        bar.barWidth = ResolveBarWidth(unit);
+        bar.barHeight = GameConfig.MONSTER_HP_BAR_HEIGHT;
 
         Canvas canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
@@ -193,12 +281,9 @@ public class MonsterHealthBar : MonoBehaviour
         canvas.sortingOrder = GameConfig.SORT_VFX + 8;
 
         RectTransform canvasRect = canvasGo.GetComponent<RectTransform>();
+        SetFeetAnchor(canvasRect);
         canvasRect.sizeDelta = new Vector2(bar.barWidth, bar.barHeight);
         canvasRect.localScale = Vector3.one;
-
-        // Canvas设置完成后再补偿父级缩放（否则会被canvasRect.localScale=one覆盖）
-        bar.ApplyCompensatedScale();
-        bar.ApplyCompensatedPosition();
 
         bar._barRect = canvasRect;
 
@@ -209,9 +294,9 @@ public class MonsterHealthBar : MonoBehaviour
         GameObject bgGo = new GameObject("HPBg");
         bgGo.transform.SetParent(canvasGo.transform, false);
         RectTransform bgRect = bgGo.AddComponent<RectTransform>();
-        bgRect.anchorMin = new Vector2(0.5f, 0.5f);
-        bgRect.anchorMax = new Vector2(0.5f, 0.5f);
-        bgRect.pivot = new Vector2(0.5f, 0.5f);
+        bgRect.anchorMin = new Vector2(0.5f, 0f);
+        bgRect.anchorMax = new Vector2(0.5f, 0f);
+        bgRect.pivot = new Vector2(0.5f, 0f);
         bgRect.sizeDelta = new Vector2(pixelWidth, pixelHeight);
         bgRect.anchoredPosition = Vector2.zero;
         Image bgImg = bgGo.AddComponent<Image>();
@@ -230,11 +315,11 @@ public class MonsterHealthBar : MonoBehaviour
         Image fillImg = fillGo.AddComponent<Image>();
         fillImg.color = bar.fillColor;
         fillImg.raycastTarget = false;
-        fillImg.type = Image.Type.Filled;
-        fillImg.fillMethod = Image.FillMethod.Horizontal;
-        fillImg.fillAmount = 1f;
+        fillImg.type = Image.Type.Simple;
 
         bar._fillImage = fillImg;
+
+        bar.ApplyBarMetricsFromUnit();
 
         Debug.Log($"[MonsterHealthBar] 动态创建血条（无预制体），请在Unity中运行 Tools → 生成怪物血条预制体");
 
@@ -250,29 +335,12 @@ public class MonsterHealthBar : MonoBehaviour
             return;
         }
 
-        yOffset = ResolveFootYOffset(_unit);
-        ApplyCompensatedPosition();
+        SyncHpVisual(flash: false);
 
-        float maxHp = _unit.attr.GetAttr(AttrType.MaxHp);
-        float ratio = maxHp > 0 ? _unit.currentHp / maxHp : 0;
-
-        if (_fillImage != null)
+        if (_fillImage != null && _flashTimer > 0f)
         {
-            _fillImage.fillAmount = Mathf.Clamp01(ratio);
-
-            if (ratio < _lastRatio - 0.01f)
-                _flashTimer = 0.2f;
-            _lastRatio = ratio;
-
-            if (_flashTimer > 0)
-            {
-                _flashTimer -= Time.deltaTime;
-                _fillImage.color = Color.Lerp(damageFlashColor, fillColor, 1f - (_flashTimer / 0.2f));
-            }
-            else
-            {
-                _fillImage.color = fillColor;
-            }
+            _flashTimer -= Time.deltaTime;
+            _fillImage.color = Color.Lerp(damageFlashColor, fillColor, 1f - (_flashTimer / 0.2f));
         }
     }
 

@@ -38,7 +38,7 @@ public class MonsterHealthBarGenerator : EditorWindow
         MonsterHealthBar healthBar = barRoot.AddComponent<MonsterHealthBar>();
         healthBar.barWidth = 0.3f;
         healthBar.barHeight = 0.03f;
-        healthBar.yOffset = -0.5f;
+        healthBar.footDropWorld = -0.05f;
 
         // ---- 背景 Image ----
         GameObject bgGo = new GameObject("HPBg");
