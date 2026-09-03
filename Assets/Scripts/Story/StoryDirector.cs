@@ -112,6 +112,7 @@ public class StoryDirector : Singleton<StoryDirector>
         canvas.pixelPerfect = false;
         canvas.enabled = true;
 
+        ui.PrepareForStoryBeat();
         GameFonts.ApplyToHierarchy(go.transform);
         Debug.Log($"[StoryDirector] DialogueUI 已就绪 camera sort={canvas.sortingOrder} scale={go.transform.localScale}");
     }

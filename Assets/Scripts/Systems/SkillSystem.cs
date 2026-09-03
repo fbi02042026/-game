@@ -102,7 +102,7 @@ public class SkillSystem : Singleton<SkillSystem>
 
         float damage = DamageFormula.ApplyCrit(CalculateDamage(skill, caster), caster.attr, out bool isCrit);
         damage = DamageFormula.ApplyAttackerSpecials(damage, caster, target);
-        target.TakeDamage(damage, isCrit, false, true, caster.GetVfxFacingDir());
+        target.TakeDamage(damage, isCrit, false, true, caster.GetVfxFacingDir(), caster);
     }
 
     private void ExecuteProjectile(ActiveSkill skill, UnitBase caster)
@@ -122,6 +122,7 @@ public class SkillSystem : Singleton<SkillSystem>
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit);
             finalDamage = DamageFormula.ApplyAttackerSpecials(finalDamage, caster, target);
             UnitBase locked = target;
+            UnitBase src = caster;
             float dmg = finalDamage;
             bool crit = isCrit;
             Vector3 hitPos = target.GetHitPosition();
@@ -139,12 +140,12 @@ public class SkillSystem : Singleton<SkillSystem>
                     () =>
                     {
                         if (locked == null || locked.isDead) return;
-                        locked.TakeDamage(dmg, crit, false, true, vfxDir);
+                        locked.TakeDamage(dmg, crit, false, true, vfxDir, src);
                     });
             }
             else
             {
-                target.TakeDamage(finalDamage, isCrit, false, true, vfxDir);
+                target.TakeDamage(finalDamage, isCrit, false, true, vfxDir, caster);
             }
         }
     }
@@ -159,7 +160,7 @@ public class SkillSystem : Singleton<SkillSystem>
         {
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit);
             finalDamage = DamageFormula.ApplyAttackerSpecials(finalDamage, caster, enemy);
-            enemy.TakeDamage(finalDamage, isCrit, false, true, vfxDir);
+            enemy.TakeDamage(finalDamage, isCrit, false, true, vfxDir, caster);
         }
     }
 
@@ -187,7 +188,7 @@ public class SkillSystem : Singleton<SkillSystem>
         {
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit) * chainMultiplier;
             finalDamage = DamageFormula.ApplyAttackerSpecials(finalDamage, caster, enemy);
-            enemy.TakeDamage(finalDamage, isCrit, false, true, vfxDir);
+            enemy.TakeDamage(finalDamage, isCrit, false, true, vfxDir, caster);
             chainMultiplier *= 0.6f; // 每次连锁递减40%
             if (chainMultiplier < 0.2f) break;
         }

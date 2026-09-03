@@ -196,6 +196,12 @@ public class BattleManager : Singleton<BattleManager>
         _stageQuestGoldGranted = false;
         RunStats.Reset();
         RunStats.Chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        {
+            var save = SaveSystem.Instance?.Data;
+            string pn = save != null && !string.IsNullOrEmpty(save.playerDisplayName)
+                ? save.playerDisplayName : "冒险者";
+            RunStats.EnsureAlly(BattleRunStats.PlayerMvpKey, pn);
+        }
         tempBuffs.Clear();
         _stageCleared = false;
         _portalActive = false;
@@ -301,25 +307,14 @@ public class BattleManager : Singleton<BattleManager>
         Debug.Log($"[BattleManager] StartNewRun → LoadStage type={first.type} idx={first.stageIndex}");
         if (!IsTutorialRun)
             AdventureLogAchievements.OnRiftEntered();
-        if (!IsTutorialRun)
-        {
-            StartCoroutine(CoPreLevelThenLoad(first));
-            return;
-        }
         LoadStage(first);
     }
 
     IEnumerator CoPreLevelThenLoad(StageData first)
     {
-        bool done = false;
-        if (PreLevelSystem.Instance != null)
-        {
-            PreLevelSystem.Instance.StartPreLevelSelection();
-            PreLevelEquipUI.Show(PreLevelSystem.Instance, () => done = true);
-            while (!done)
-                yield return null;
-        }
+        // 遗产战前三选一已取消；保留方法避免外部误调编译失败
         LoadStage(first);
+        yield break;
     }
 
     void EnsureTestMercenaries()
@@ -416,6 +411,7 @@ public class BattleManager : Singleton<BattleManager>
                     merc.gameObject.name = "Merc_" + md.displayName;
                 allyUnits.Add(merc);
                 merc.OnDead += OnMercenaryDead;
+                RunStats.EnsureAlly(GetAllyMvpKey(merc), GetAllyMvpDisplayName(merc));
                 spawned++;
                 if (!IsTutorialRun && !countedLaodun && md.mercId.StartsWith("dunbing"))
                 {
@@ -565,6 +561,7 @@ public class BattleManager : Singleton<BattleManager>
         if (!allyUnits.Contains(merc))
             allyUnits.Add(merc);
         merc.OnDead += OnMercenaryDead;
+        RunStats.EnsureAlly(GetAllyMvpKey(merc), GetAllyMvpDisplayName(merc));
         float maxHp = merc.attr != null ? merc.attr.GetAttr(AttrType.MaxHp) : 100f;
         merc.currentHp = Mathf.Max(1f, maxHp * Mathf.Clamp01(hpRatio));
         merc.Face(-1);
@@ -2460,8 +2457,9 @@ public class BattleManager : Singleton<BattleManager>
 
         monster.Init(template, stageIdx, CurrentChapter, scaleMultiplier, spriteIndexOverride);
         ApplyTutorialMonsterTuning(monster);
-        pos.y = UnitBase.GROUND_Y;
+        // 保留调用方传入的车道 Y（GROUND_Y + LaneY），禁止钉死站立线导致 Lane 与脚底脱节
         GameConfig.SetWorldPosition(monster.GetBodyTransform(), pos);
+        monster.SyncLaneYFromWorld();
         monster.OnDead += OnMonsterDead;
         monsters.Add(monster);
         _totalMonstersSpawnedThisStage++;
@@ -2509,6 +2507,8 @@ public class BattleManager : Singleton<BattleManager>
             }
         }
         if (m.IsBossUnit) RunStats.BossKillCount++;
+        if (m.LastDamageSource != null && m.LastDamageSource.isAlly)
+            RecordAllyKill(m.LastDamageSource);
         AdventureLogAchievements.OnMonsterKilled(m, CurrentChapter);
 
         // 连杀（仅展示，击杀不掉金币）
@@ -2518,6 +2518,8 @@ public class BattleManager : Singleton<BattleManager>
         else
             _killCombo = 1;
         _lastKillTime = now;
+        if (_killCombo > RunStats.MaxKillCombo)
+            RunStats.MaxKillCombo = _killCombo;
         BattleSideHud.Instance?.SetCombo(_killCombo);
         CombatJuice.Instance?.OnKillCombo(_killCombo);
         CombatJuice.Instance?.OnKillFinisher(m);
@@ -2669,9 +2671,9 @@ public class BattleManager : Singleton<BattleManager>
             var cfg = SkillRegistry.Instance?.Get(skillId);
             float mul = cfg != null && cfg.damageMultiplier > 0f ? cfg.damageMultiplier : 1.3f;
             if (skillId == "SK015")
-                ApplyHealToTeam(atk * mul);
+                ApplyHealToTeam(atk * mul, merc);
             else
-                ApplyHealToUnit(healTarget ?? merc, atk * mul);
+                ApplyHealToUnit(healTarget ?? merc, atk * mul, merc);
             if (merc.PassiveRunner != null)
                 merc.PassiveRunner.OnOwnerHealed(atk * mul);
         }
@@ -2687,7 +2689,7 @@ public class BattleManager : Singleton<BattleManager>
         else if (skillId == "SK010")
         {
             float atk = merc.attr != null ? merc.attr.GetAttr(AttrType.Attack) : 0f;
-            ApplyHealToTeam(atk * 0.5f);
+            ApplyHealToTeam(atk * 0.5f, merc);
         }
         else if (skillId == "SK018")
         {
@@ -2777,7 +2779,7 @@ public class BattleManager : Singleton<BattleManager>
                 float heal = pct > 0f ? maxHp * pct : healBase + caster.attr.GetAttr(AttrType.Attack) * 0.5f;
                 if (pct <= 0f && IsHealSkill(skill))
                     heal = maxHp * 0.3f;
-                ApplyHealToUnit(target, heal);
+                ApplyHealToUnit(target, heal, caster);
                 return;
             }
 
@@ -2793,7 +2795,7 @@ public class BattleManager : Singleton<BattleManager>
         if (skill.skillType == SkillSystem.SkillType.SingleTarget)
         {
             UnitBase t = caster is Mercenary m ? m.FindNearestEnemy() : FindNearestMonster();
-            if (t != null) t.TakeDamage(damage, false, false, true, vfxDir);
+            if (t != null) t.TakeDamage(damage, false, false, true, vfxDir, caster);
         }
         else
         {
@@ -2802,12 +2804,12 @@ public class BattleManager : Singleton<BattleManager>
                 if (monsters[i] == null || monsters[i].isDead) continue;
                 float dist = Mathf.Abs(monsters[i].transform.position.x - caster.transform.position.x);
                 if (skill.aoeRadius > 0 && dist > skill.aoeRadius) continue;
-                monsters[i].TakeDamage(damage, false, false, true, vfxDir);
+                monsters[i].TakeDamage(damage, false, false, true, vfxDir, caster);
             }
         }
     }
 
-    void ApplyHealToUnit(UnitBase unit, float heal)
+    void ApplyHealToUnit(UnitBase unit, float heal, UnitBase healer = null)
     {
         if (unit == null || unit.isDead || unit.attr == null) return;
         float before = unit.currentHp;
@@ -2815,16 +2817,21 @@ public class BattleManager : Singleton<BattleManager>
         unit.currentHp = Mathf.Min(maxHp, unit.currentHp + heal);
         int gained = Mathf.RoundToInt(unit.currentHp - before);
         if (gained > 0)
+        {
+            RunStats.HealingReceived += gained;
+            if (healer != null)
+                RecordAllyHeal(healer, gained);
             DamageTextSystem.Instance?.SpawnHealText(unit.GetHitPosition(), gained);
+        }
     }
 
-    void ApplyHealToTeam(float heal)
+    void ApplyHealToTeam(float heal, UnitBase healer = null)
     {
-        ApplyHealToUnit(hero, heal);
+        ApplyHealToUnit(hero, heal, healer);
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
         if (mercs == null) return;
         foreach (var m in mercs)
-            ApplyHealToUnit(m, heal * 0.8f);
+            ApplyHealToUnit(m, heal * 0.8f, healer);
     }
 
     void ApplyTeamBuff(SkillConfig cfg)
@@ -3076,7 +3083,7 @@ public class BattleManager : Singleton<BattleManager>
         Destroy(go, 3.5f);
     }
 
-    /// <summary>走进 chuansongmen 后：写档并弹选关</summary>
+    /// <summary>走进 chuansongmen 后：写档 → 结算 → 选关/回城</summary>
     public void FinishStageAfterPortalReached()
     {
         if (_stageCleared) return;
@@ -3095,35 +3102,43 @@ public class BattleManager : Singleton<BattleManager>
 
         if (IsGoldDungeon)
         {
-            MercenaryManager.Instance?.ClearAllMercs();
-            MercHireSession.ClearHired();
-            GameSceneManager.Instance?.ReturnToTown();
+            ShowVictorySettlementThen(() =>
+            {
+                MercenaryManager.Instance?.ClearAllMercs();
+                MercHireSession.ClearHired();
+                GameSceneManager.Instance?.ReturnToTown();
+            });
             return;
         }
 
         bool isBoss = currentStage != null && currentStage.type == StageType.Boss;
         if (isBoss)
         {
-            UIManager.Instance?.ShowChapterClearChoice(
-                onReturnTown: () =>
-                {
-                    MercenaryManager.Instance?.ClearAllMercs();
-                    MercHireSession.ClearHired();
-                    GameSceneManager.Instance?.ReturnToTown();
-                },
-                onNextChapter: () =>
-                {
-                    int next = (ChapterManager.Instance?.currentChapter ?? 1) + 1;
-                    if (next > 8) next = 8;
-                    ChapterManager.Instance?.StartChapter(next);
-                    if (ChapterManager.Instance?.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
-                        ChapterManager.Instance.SelectStage(ChapterManager.Instance.stageMap[0]);
-                });
+            ShowVictorySettlementThen(() =>
+            {
+                UIManager.Instance?.ShowChapterClearChoice(
+                    onReturnTown: () =>
+                    {
+                        MercenaryManager.Instance?.ClearAllMercs();
+                        MercHireSession.ClearHired();
+                        GameSceneManager.Instance?.ReturnToTown();
+                    },
+                    onNextChapter: () =>
+                    {
+                        int next = (ChapterManager.Instance?.currentChapter ?? 1) + 1;
+                        if (next > 8) next = 8;
+                        ChapterManager.Instance?.StartChapter(next);
+                        if (ChapterManager.Instance?.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
+                            ChapterManager.Instance.SelectStage(ChapterManager.Instance.stageMap[0]);
+                    });
+            });
         }
         else
         {
-            // 强制走下一关轮盘：不回章节地图，也没有返回按钮
-            UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
+            ShowVictorySettlementThen(() =>
+            {
+                UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
+            });
         }
     }
 
@@ -3196,68 +3211,33 @@ public class BattleManager : Singleton<BattleManager>
         if (isDeath)
             currentGold = _goldAtRunStart;
 
-        List<EquipInstance> allEquips = GridBackpackSystem.Instance != null
-            ? GridBackpackSystem.Instance.GetAllItemsForLegacy()
-            : new List<EquipInstance>();
-
-        void Finish(EquipInstance selectedLegacy)
+        // 遗产三选一已取消：背包装备全部带回，不写入 legacyEquipPool
+        PersistBattleGold();
+        int talentGain = 0;
+        if (!isDeath)
         {
-            EquipInstance legacyToTake = selectedLegacy;
-            if (legacyToTake == null && allEquips.Count > 0)
-                legacyToTake = allEquips[0];
-
-            if (legacyToTake != null && SaveSystem.Instance?.Data != null)
-            {
-                EquipmentData legacy = new EquipmentData
-                {
-                    equipId = legacyToTake.templateId,
-                    rarity = (int)legacyToTake.rarity,
-                    attrBonus = legacyToTake.attrBonus,
-                    tags = legacyToTake.template != null ? legacyToTake.template.tags : null,
-                    isLegacy = true,
-                    star = legacyToTake.star,
-                    requireLevel = legacyToTake.requireLevel
-                };
-                SaveSystem.Instance.Data.legacyEquipPool.Add(legacy);
-                if (legacyToTake.rarity == Rarity.Legendary
-                    && !SaveSystem.Instance.Data.unlockedLegendaryWeapons.Contains(legacyToTake.templateId))
-                    SaveSystem.Instance.Data.unlockedLegendaryWeapons.Add(legacyToTake.templateId);
-                UIManager.Instance?.ShowToast($"获得遗产：{legacyToTake.equipName}");
-                AchievementSystem.Instance?.OnBringLegacy();
-            }
-
-            // 用差额同步城镇金币（死亡时 currentGold 已回退到开局快照）
-            PersistBattleGold();
-            int talentGain = 0;
-            if (!isDeath)
-            {
-                talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
-                if (talentGain > 0)
-                    ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
-            }
-            SaveSystem.Instance?.Save();
-            BattleStateSaver.Instance?.ClearBattleState();
-
-            FillSettlementSnapshot(isDeath, talentGain);
-            if (!isDeath)
-                AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
-            TownHubController.PendingOpenAdventure = true;
-            BattleSettlementUI.Show(RunStats, () =>
-            {
-                MercHireSession.ClearHired();
-                GameSceneManager.Instance?.LoadTownScene();
-            });
+            talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
+            if (talentGain > 0)
+                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
         }
+        SaveSystem.Instance?.Save();
+        BattleStateSaver.Instance?.ClearBattleState();
 
-        if (UIManager.Instance != null)
-            UIManager.Instance.ShowLegacyChooseUI(allEquips, Finish);
-        else
-            Finish(null);
+        FillSettlementSnapshot(isDeath, talentGain);
+        if (!isDeath)
+            AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
+        TownHubController.PendingOpenAdventure = true;
+        BattleSettlementUI.Show(RunStats, () =>
+        {
+            MercHireSession.ClearHired();
+            GameSceneManager.Instance?.LoadTownScene();
+        });
     }
 
-    void FillSettlementSnapshot(bool isDeath, int talentGain)
+    void FillSettlementSnapshot(bool isDeath, int talentGain, bool isVictory = false)
     {
         RunStats.IsDeath = isDeath;
+        RunStats.IsVictory = isVictory && !isDeath;
         RunStats.GoldGained = isDeath ? 0 : Mathf.Max(0, (int)(currentGold - _goldAtRunStart));
         RunStats.TalentGained = talentGain;
         RunStats.EquipCount = GridBackpackSystem.Instance != null
@@ -3268,6 +3248,9 @@ public class BattleManager : Singleton<BattleManager>
         {
             RunStats.EnchantStoneDelta = Mathf.Max(0, data.enchantStones - _enchantAtRunStart);
             RunStats.DecomposeMatDelta = Mathf.Max(0, data.decomposeMats - _matsAtRunStart);
+            RunStats.Chapter = ChapterManager.Instance != null
+                ? ChapterManager.Instance.currentChapter
+                : CurrentChapter;
         }
         if (currentStage != null)
             RunStats.StageTitle = ChapterManager.Instance != null
@@ -3275,6 +3258,16 @@ public class BattleManager : Singleton<BattleManager>
                 : $"第{RunStats.Chapter}章";
         else
             RunStats.StageTitle = $"第{RunStats.Chapter}章";
+        RunStats.ResolveMvp();
+    }
+
+    /// <summary>通关后弹结算，再执行后续选关/回城。</summary>
+    public void ShowVictorySettlementThen(System.Action afterConfirm)
+    {
+        int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
+        FillSettlementSnapshot(isDeath: false, talentGain, isVictory: true);
+        AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
+        BattleSettlementUI.Show(RunStats, afterConfirm);
     }
 
     public void RecordDamageDealt(float amount, bool toBoss)
@@ -3288,6 +3281,59 @@ public class BattleManager : Singleton<BattleManager>
     {
         if (amount <= 0f) return;
         RunStats.DamageTaken += amount;
+    }
+
+    public void RecordCrit()
+    {
+        RunStats.CritCount++;
+    }
+
+    public static string GetAllyMvpKey(UnitBase u)
+    {
+        if (u == null) return BattleRunStats.PlayerMvpKey;
+        if (u is Mercenary merc)
+        {
+            if (!string.IsNullOrEmpty(merc.hireId)) return merc.hireId;
+            if (!string.IsNullOrEmpty(merc.mercId)) return merc.mercId;
+            return "merc";
+        }
+        return BattleRunStats.PlayerMvpKey;
+    }
+
+    public static string GetAllyMvpDisplayName(UnitBase u)
+    {
+        if (u is Mercenary merc)
+        {
+            if (!string.IsNullOrEmpty(merc.DisplayName)) return merc.DisplayName;
+            if (!string.IsNullOrEmpty(merc.hireId) && MercRosterDefs.TryGetByHireId(merc.hireId, out var def)
+                && !string.IsNullOrEmpty(def.Nickname))
+                return def.Nickname;
+            return !string.IsNullOrEmpty(merc.mercId) ? merc.mercId : "佣兵";
+        }
+        var save = SaveSystem.Instance?.Data;
+        return save != null && !string.IsNullOrEmpty(save.playerDisplayName)
+            ? save.playerDisplayName : "冒险者";
+    }
+
+    public void RecordAllyDamage(UnitBase source, float amount)
+    {
+        if (source == null || !source.isAlly || amount <= 0f) return;
+        var c = RunStats.EnsureAlly(GetAllyMvpKey(source), GetAllyMvpDisplayName(source));
+        c.damage += amount;
+    }
+
+    public void RecordAllyKill(UnitBase source)
+    {
+        if (source == null || !source.isAlly) return;
+        var c = RunStats.EnsureAlly(GetAllyMvpKey(source), GetAllyMvpDisplayName(source));
+        c.kills++;
+    }
+
+    public void RecordAllyHeal(UnitBase healer, float amount)
+    {
+        if (healer == null || !healer.isAlly || amount <= 0f) return;
+        var c = RunStats.EnsureAlly(GetAllyMvpKey(healer), GetAllyMvpDisplayName(healer));
+        c.healingDone += amount;
     }
 
     public void ClearAllMonsters()

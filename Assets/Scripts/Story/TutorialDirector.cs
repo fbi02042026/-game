@@ -232,6 +232,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         StoryAssetLoader.Warmup(StoryAssetLoader.Props, StoryProps.QuestPaper);
         StoryAssetLoader.Warmup(StoryAssetLoader.Portraits,
             StoryPortraits.GuildMaster, StoryPortraits.Receptionist, StoryPortraits.Player);
+        StoryAssetLoader.Warmup(StoryAssetLoader.Backgrounds,
+            StoryBackgrounds.GuildOffice, StoryBackgrounds.GuildHall);
+        DialogueUI.Instance?.PrepareForStoryBeat();
 
         // 办公室：会长对话 → 签名起名 → 咨询台
         var beats = new List<StoryBeat>

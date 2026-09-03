@@ -30,7 +30,7 @@ public enum SettingsToggleId
 /// <summary>
 /// 登录 / 城镇 / 战斗共用设置弹窗。
 /// 预制体：Resources/Prefabs/UI/SettingsPopup；缺失时运行时搭一份同结构。
-/// 策划口径（软著 V1.0）：声音总开关；战斗多「撤离 / 继续战斗」；城镇与登录为「关闭」。
+/// 策划口径：音乐/音效/自动技能分控且全局持久；战斗显「撤离 / 取消」；登录与城镇显「确定」。
 /// GDD 远期：音乐/音效分控、天气特效开关 —— 用 ToggleList 扩展，勿再各场景各搓一套。
 /// </summary>
 public class SettingsPopupUI : MonoBehaviour
@@ -46,6 +46,7 @@ public class SettingsPopupUI : MonoBehaviour
     public Text audioToggleLabel;
     public Button evacuateButton;
     public Button primaryButton;
+    public Button confirmButton;
     public Text primaryLabel;
     public Transform toggleList;
 
@@ -190,60 +191,101 @@ public class SettingsPopupUI : MonoBehaviour
         var host = CurrentHost;
         bool battle = host == SettingsHost.Battle;
 
-        if (evacuateButton != null)
-            evacuateButton.gameObject.SetActive(battle);
-
         if (!battle)
             Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
 
-        if (primaryLabel == null && primaryButton != null)
-            primaryLabel = primaryButton.GetComponentInChildren<Text>(true);
-        if (primaryLabel != null)
-        {
-            switch (host)
-            {
-                case SettingsHost.Battle:
-                    primaryLabel.text = "继续战斗";
-                    break;
-                case SettingsHost.Login:
-                    primaryLabel.text = "关闭";
-                    break;
-                default:
-                    primaryLabel.text = "关闭";
-                    break;
-            }
-        }
-
+        if (confirmButton != null)
+            confirmButton.gameObject.SetActive(!battle);
+        if (evacuateButton != null)
+            evacuateButton.gameObject.SetActive(battle);
         if (primaryButton != null)
-        {
-            var rt = primaryButton.GetComponent<RectTransform>();
-            if (rt != null)
-                rt.anchoredPosition = new Vector2(0f, battle ? 34f : 80f);
-        }
+            primaryButton.gameObject.SetActive(battle);
 
-        // 扩展行：仅显示当前版本启用的
+        ApplyPanelAndButtonLayout();
         ApplyExtraToggleVisibility();
+    }
+
+    const float PanelWidth = 560f;
+    const float PanelHeight = 720f;
+    const float ButtonLiftY = 80f;
+
+    void ApplyPanelAndButtonLayout()
+    {
+        var panel = FindDeep(transform, "Panel") as RectTransform;
+        if (panel != null)
+            panel.sizeDelta = new Vector2(PanelWidth, PanelHeight);
+
+        LiftButton(confirmButton, 172f + ButtonLiftY);
+        LiftButton(evacuateButton, 223f + ButtonLiftY);
+        LiftButton(primaryButton, 115f + ButtonLiftY);
+    }
+
+    static void LiftButton(Button btn, float y)
+    {
+        if (btn == null) return;
+        var rt = btn.GetComponent<RectTransform>();
+        if (rt == null) return;
+        var p = rt.anchoredPosition;
+        rt.anchoredPosition = new Vector2(p.x, y);
     }
 
     void ApplyExtraToggleVisibility()
     {
-        if (extraToggleRows == null) return;
-        for (int i = 0; i < extraToggleRows.Count; i++)
+        bool battle = CurrentHost == SettingsHost.Battle;
+        if (extraToggleRows != null)
         {
-            var row = extraToggleRows[i];
-            if (row == null || row.root == null) continue;
-            row.root.SetActive(IsToggleEnabledInBuild(row.id));
+            for (int i = 0; i < extraToggleRows.Count; i++)
+            {
+                var row = extraToggleRows[i];
+                if (row == null || row.root == null) continue;
+                bool on = IsToggleEnabledInBuild(row.id);
+                if (row.id == SettingsToggleId.MercSkillAuto)
+                    on = on && battle;
+                row.root.SetActive(on);
+            }
+        }
+
+        SetNamedActive("CombatSectionHeader", battle);
+        SetNamedActive("CombatDivider", battle);
+        SetNamedActive("OtherSectionHeader", battle);
+        SetNamedActive("OtherDivider", battle);
+        SetSectionHeaderActiveByText("战斗设置", battle);
+        SetSectionHeaderActiveByText("其他设置", battle);
+    }
+
+    void SetNamedActive(string name, bool on)
+    {
+        var t = FindDeep(transform, name);
+        if (t != null) t.gameObject.SetActive(on);
+    }
+
+    void SetSectionHeaderActiveByText(string label, bool on)
+    {
+        if (toggleList == null) return;
+        for (int i = 0; i < toggleList.childCount; i++)
+        {
+            var child = toggleList.GetChild(i);
+            if (child == null) continue;
+            var texts = child.GetComponentsInChildren<Text>(true);
+            for (int t = 0; t < texts.Length; t++)
+            {
+                if (texts[t] != null && texts[t].text == label)
+                {
+                    child.gameObject.SetActive(on);
+                    break;
+                }
+            }
         }
     }
 
-    /// <summary>V1.0 只开总声音；GDD/天气文档里的分项先关着，改这里即可上线。</summary>
+    /// <summary>V1.0：音乐/音效/佣兵自动技能；总声音行已废弃。</summary>
     public static bool IsToggleEnabledInBuild(SettingsToggleId id)
     {
         switch (id)
         {
-            case SettingsToggleId.MasterAudio: return true;
-            case SettingsToggleId.Music: return false;
-            case SettingsToggleId.Sfx: return false;
+            case SettingsToggleId.MasterAudio: return false;
+            case SettingsToggleId.Music: return true;
+            case SettingsToggleId.Sfx: return true;
             case SettingsToggleId.WeatherFx: return false;
             case SettingsToggleId.MercSkillAuto: return true;
             default: return false;
@@ -295,6 +337,12 @@ public class SettingsPopupUI : MonoBehaviour
     {
         switch (id)
         {
+            case SettingsToggleId.Music:
+                GameAudio.MusicEnabled = !GameAudio.MusicEnabled;
+                break;
+            case SettingsToggleId.Sfx:
+                GameAudio.SfxEnabled = !GameAudio.SfxEnabled;
+                break;
             case SettingsToggleId.MercSkillAuto:
                 MercSkillMigrate.SetMercSkillAutoCast(!MercSkillMigrate.IsMercSkillAutoCast());
                 break;
@@ -308,7 +356,6 @@ public class SettingsPopupUI : MonoBehaviour
 
     void RefreshToggles()
     {
-        ApplyToggleLook(audioToggleButton, audioToggleLabel, GameAudio.AudioEnabled);
         if (extraToggleRows == null) return;
         for (int i = 0; i < extraToggleRows.Count; i++)
         {
@@ -334,10 +381,80 @@ public class SettingsPopupUI : MonoBehaviour
 
     static void ApplyToggleLook(Button btn, Text label, bool on)
     {
-        if (label != null) label.text = on ? "开启" : "关闭";
-        var img = btn != null ? btn.targetGraphic as Image : null;
-        if (img != null)
-            img.color = on ? new Color(0.25f, 0.45f, 0.32f, 1f) : new Color(0.4f, 0.26f, 0.26f, 1f);
+        if (label != null) label.text = on ? "开" : "关";
+        if (btn == null) return;
+
+        var knob = FindDeep(btn.transform, "Knob");
+        if (knob != null)
+        {
+            var krt = knob as RectTransform;
+            if (krt != null)
+            {
+                krt.anchorMin = krt.anchorMax = new Vector2(on ? 1f : 0f, 0.5f);
+                krt.pivot = new Vector2(on ? 1f : 0f, 0.5f);
+                krt.anchoredPosition = new Vector2(on ? -4f : 4f, 0f);
+            }
+            var knobImg = knob.GetComponent<Image>();
+            if (knobImg != null)
+            {
+                var knSp = LoadSettingsSprite(on ? "开" : "关");
+                if (knSp != null)
+                {
+                    knobImg.sprite = knSp;
+                    knobImg.color = Color.white;
+                    knobImg.preserveAspect = true;
+                }
+            }
+            return;
+        }
+
+        var img = btn.targetGraphic as Image;
+        if (img == null) return;
+        var sp = LoadSettingsSprite(on ? "开" : "关");
+        if (sp != null)
+        {
+            img.sprite = sp;
+            img.color = Color.white;
+            img.preserveAspect = true;
+            img.type = Image.Type.Simple;
+            return;
+        }
+        img.color = on ? new Color(0.45f, 0.32f, 0.62f, 1f) : new Color(0.28f, 0.22f, 0.32f, 1f);
+    }
+
+    const string SettingsArtRoot = "Assets/Art/UI/设置/";
+
+    static Sprite _cachedOn;
+    static Sprite _cachedOff;
+    static bool _spriteCacheTried;
+
+    static Sprite LoadSettingsSprite(string fileName)
+    {
+        var fromRes = Resources.Load<Sprite>("UI/Settings/" + fileName);
+        if (fromRes != null) return fromRes;
+#if UNITY_EDITOR
+        var ed = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(SettingsArtRoot + fileName + ".png");
+        if (ed != null) return ed;
+#endif
+        EnsureToggleSpriteCache();
+        if (fileName == "开") return _cachedOn;
+        if (fileName == "关") return _cachedOff;
+        return null;
+    }
+
+    static void EnsureToggleSpriteCache()
+    {
+        if (_spriteCacheTried) return;
+        _spriteCacheTried = true;
+        if (Instance == null) return;
+        var knobs = Instance.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < knobs.Length; i++)
+        {
+            if (knobs[i] == null || knobs[i].name != "Knob") continue;
+            var img = knobs[i].GetComponent<Image>();
+            if (img == null || img.sprite == null) continue;
+            if (_cachedOn == null) _cachedOn = img.sprite;
+        }
     }
 
     void Bind()
@@ -346,8 +463,9 @@ public class SettingsPopupUI : MonoBehaviour
             root = FindDeep(transform, "Root")?.gameObject ?? gameObject;
 
         if (closeButton == null) closeButton = FindButton("CloseButton");
-        if (evacuateButton == null) evacuateButton = FindButton("EvacuateButton");
-        if (primaryButton == null) primaryButton = FindButton("PrimaryButton") ?? FindButton("ResumeButton");
+        confirmButton = FindButton("ConfirmButton") ?? FindButton("确定Button") ?? confirmButton;
+        evacuateButton = FindButton("EvacuateButton") ?? evacuateButton;
+        primaryButton = FindButton("PrimaryButton") ?? FindButton("ResumeButton") ?? primaryButton;
         if (primaryLabel == null && primaryButton != null)
             primaryLabel = primaryButton.GetComponentInChildren<Text>(true);
 
@@ -380,24 +498,38 @@ public class SettingsPopupUI : MonoBehaviour
     void CollectExtraRows()
     {
         if (extraToggleRows == null) extraToggleRows = new List<SettingsToggleRow>();
-        if (extraToggleRows.Count > 0) return;
         if (toggleList == null) return;
 
+        // 每次按 ToggleList 子节点重建，避免预制体序列化空/旧引用导致开关接不上
+        extraToggleRows.Clear();
         for (int i = 0; i < toggleList.childCount; i++)
         {
             var child = toggleList.GetChild(i);
-            if (child == null || child.name == "AudioRow") continue;
+            if (child == null) continue;
             var id = ParseToggleIdFromName(child.name);
             if (id == SettingsToggleId.MasterAudio) continue;
+            if (!IsToggleRowName(child.name)) continue;
+
             var btn = FindDeep(child, "Toggle")?.GetComponent<Button>();
+            Text state = FindDeep(child, "StateLabel")?.GetComponent<Text>();
+            if (state == null && btn != null)
+                state = btn.GetComponentInChildren<Text>(true);
+
             extraToggleRows.Add(new SettingsToggleRow
             {
                 id = id,
                 root = child.gameObject,
                 toggleButton = btn,
-                stateLabel = btn != null ? btn.GetComponentInChildren<Text>(true) : null
+                stateLabel = state
             });
         }
+    }
+
+    static bool IsToggleRowName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        string n = name.ToLowerInvariant();
+        return n.Contains("row");
     }
 
     static SettingsToggleId ParseToggleIdFromName(string name)
@@ -407,18 +539,19 @@ public class SettingsPopupUI : MonoBehaviour
         if (n.Contains("music")) return SettingsToggleId.Music;
         if (n.Contains("sfx") || n.Contains("sound")) return SettingsToggleId.Sfx;
         if (n.Contains("weather")) return SettingsToggleId.WeatherFx;
-        if (n.Contains("merc") || n.Contains("佣兵")) return SettingsToggleId.MercSkillAuto;
+        if (n.Contains("merc") || n.Contains("skillauto") || n.Contains("佣兵") || n.Contains("自动"))
+            return SettingsToggleId.MercSkillAuto;
         return SettingsToggleId.MasterAudio;
     }
 
     void Wire()
     {
-        if (_wired) return;
-        _wired = true;
         WireOnce(closeButton, Close);
+        WireOnce(confirmButton, Close);
         WireOnce(primaryButton, Close);
         WireOnce(audioToggleButton, OnToggleAudio);
         WireOnce(evacuateButton, OnEvacuate);
+        _wired = true;
         WireExtraToggles();
     }
 
@@ -478,96 +611,237 @@ public class SettingsPopupUI : MonoBehaviour
         root.transform.SetParent(transform, false);
         Stretch(root.GetComponent<RectTransform>());
 
-        var dim = CreateImage(root.transform, "Dim", new Color(0f, 0f, 0f, 0.7f));
+        var dim = CreateImage(root.transform, "Dim", new Color(0f, 0f, 0f, 0.72f));
         Stretch(dim.rectTransform);
         dim.raycastTarget = true;
 
-        var panel = CreateImage(root.transform, "Panel", new Color(0.11f, 0.1f, 0.15f, 0.98f));
+        var panel = CreateImage(root.transform, "Panel", new Color(0.08f, 0.06f, 0.1f, 0.98f));
+        ApplySprite(panel, null);
         var prt = panel.rectTransform;
         prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
         prt.pivot = new Vector2(0.5f, 0.5f);
-        prt.sizeDelta = new Vector2(560f, 440f);
+        prt.sizeDelta = new Vector2(620f, 900f);
 
-        var title = CreateText(panel.transform, "Title", "设置", 34, TextAnchor.MiddleCenter);
-        var trt = title.rectTransform;
-        trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 1f);
-        trt.pivot = new Vector2(0.5f, 1f);
-        trt.anchoredPosition = new Vector2(0f, -32f);
-        trt.sizeDelta = new Vector2(400f, 48f);
+        var titlePlate = CreateImage(panel.transform, "TitlePlate", new Color(0.2f, 0.12f, 0.28f, 0.95f));
+        var tprt = titlePlate.rectTransform;
+        tprt.anchorMin = tprt.anchorMax = new Vector2(0.5f, 1f);
+        tprt.pivot = new Vector2(0.5f, 1f);
+        tprt.anchoredPosition = new Vector2(0f, -8f);
+        tprt.sizeDelta = new Vector2(420f, 88f);
 
-        closeButton = CreateButton(panel.transform, "CloseButton", "×",
-            new Vector2(1f, 1f), new Vector2(-34f, -34f), new Vector2(56f, 56f),
-            new Color(0.42f, 0.22f, 0.22f, 1f));
+        var title = CreateText(titlePlate.transform, "Title", "设置", 36, TextAnchor.MiddleCenter);
+        title.color = new Color(0.95f, 0.82f, 0.45f, 1f);
+        Stretch(title.rectTransform);
+
+        var content = new GameObject("Content", typeof(RectTransform));
+        content.transform.SetParent(panel.transform, false);
+        var crt = content.GetComponent<RectTransform>();
+        crt.anchorMin = new Vector2(0.5f, 1f);
+        crt.anchorMax = new Vector2(0.5f, 1f);
+        crt.pivot = new Vector2(0.5f, 1f);
+        crt.anchoredPosition = new Vector2(0f, -108f);
+        crt.sizeDelta = new Vector2(540f, 520f);
 
         var listGo = new GameObject("ToggleList", typeof(RectTransform));
-        listGo.transform.SetParent(panel.transform, false);
+        listGo.transform.SetParent(content.transform, false);
         toggleList = listGo.transform;
         var listRt = listGo.GetComponent<RectTransform>();
         listRt.anchorMin = new Vector2(0.5f, 1f);
         listRt.anchorMax = new Vector2(0.5f, 1f);
         listRt.pivot = new Vector2(0.5f, 1f);
-        listRt.anchoredPosition = new Vector2(0f, -100f);
-        listRt.sizeDelta = new Vector2(480f, 200f);
+        listRt.anchoredPosition = Vector2.zero;
+        listRt.sizeDelta = new Vector2(540f, 520f);
 
-        audioToggleButton = CreateRowToggle(toggleList, "AudioRow", "声音", 0f, out audioToggleLabel);
+        float y = 0f;
+        CreateSectionHeader(toggleList, "SoundSectionHeader", "声音设置", ref y);
+        CreateDivider(toggleList, "SoundDivider", ref y);
+        CreateSettingsRow(toggleList, "MusicRow", "音乐", "音乐", SettingsToggleId.Music, ref y);
+        CreateSettingsRow(toggleList, "SfxRow", "音效", "音效", SettingsToggleId.Sfx, ref y);
 
-        // 预留行（默认隐藏，IsToggleEnabledInBuild 打开后即显示）
-        CreateReservedToggle(toggleList, "MusicRow", "音乐", SettingsToggleId.Music, -76f);
-        CreateReservedToggle(toggleList, "SfxRow", "音效", SettingsToggleId.Sfx, -152f);
-        CreateReservedToggle(toggleList, "WeatherRow", "天气特效", SettingsToggleId.WeatherFx, -228f);
-        CreateReservedToggle(toggleList, "MercSkillAutoRow", "佣兵技能自动", SettingsToggleId.MercSkillAuto, -304f);
+        CreateSectionHeader(toggleList, "CombatSectionHeader", "战斗设置", ref y);
+        CreateDivider(toggleList, "CombatDivider", ref y);
+        CreateSettingsRow(toggleList, "MercSkillAutoRow", "自动释放技能", "技能释放", SettingsToggleId.MercSkillAuto, ref y);
 
-        evacuateButton = CreateButton(panel.transform, "EvacuateButton", "撤离",
-            new Vector2(0.5f, 0f), new Vector2(0f, 116f), new Vector2(300f, 68f),
-            new Color(0.55f, 0.3f, 0.22f, 1f));
+        CreateSectionHeader(toggleList, "OtherSectionHeader", "其他设置", ref y);
+        CreateDivider(toggleList, "OtherDivider", ref y);
 
-        primaryButton = CreateButton(panel.transform, "PrimaryButton", "关闭",
-            new Vector2(0.5f, 0f), new Vector2(0f, 34f), new Vector2(300f, 64f),
-            new Color(0.24f, 0.4f, 0.3f, 1f));
+        CreateReservedToggle(toggleList, "WeatherRow", "天气特效", SettingsToggleId.WeatherFx, -900f);
+
+        evacuateButton = CreateActionButton(panel.transform, "EvacuateButton", "撤离", "撤离",
+            new Vector2(0.5f, 0f), new Vector2(0f, 224f), new Vector2(500f, 80f),
+            new Color(0.55f, 0.18f, 0.16f, 1f));
+
+        primaryButton = CreateActionButton(panel.transform, "PrimaryButton", "取消", "取消",
+            new Vector2(0.5f, 0f), new Vector2(0f, 120f), new Vector2(500f, 80f),
+            new Color(0.28f, 0.16f, 0.38f, 1f));
         primaryLabel = primaryButton.GetComponentInChildren<Text>(true);
+
+        confirmButton = CreateActionButton(panel.transform, "ConfirmButton", "确定", "取消",
+            new Vector2(0.5f, 0f), new Vector2(0f, 120f), new Vector2(500f, 80f),
+            new Color(0.28f, 0.16f, 0.38f, 1f));
+
+        closeButton = null;
+        audioToggleButton = null;
+        audioToggleLabel = null;
 
         GameFonts.ApplyToHierarchy(transform);
         root.SetActive(false);
+        extraToggleRows.Clear();
         _wired = false;
         Bind();
         Wire();
     }
 
-    void CreateReservedToggle(Transform parent, string rowName, string label, SettingsToggleId id, float y)
+    void CreateSectionHeader(Transform parent, string name, string label, ref float y)
     {
-        var btn = CreateRowToggle(parent, rowName, label, y, out var state);
+        var header = CreateText(parent, name, label, 26, TextAnchor.MiddleLeft);
+        header.color = new Color(0.92f, 0.78f, 0.42f, 1f);
+        var rt = header.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(-20f, y);
+        rt.sizeDelta = new Vector2(480f, 40f);
+        y -= 48f;
+    }
+
+    void CreateDivider(Transform parent, string name, ref float y)
+    {
+        var div = CreateImage(parent, name, new Color(0.55f, 0.42f, 0.22f, 0.85f));
+        ApplySprite(div, LoadSettingsSprite("条"));
+        var rt = div.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, y);
+        rt.sizeDelta = new Vector2(500f, 12f);
+        y -= 28f;
+    }
+
+    void CreateSettingsRow(Transform parent, string rowName, string label, string iconFile,
+        SettingsToggleId id, ref float y)
+    {
+        var row = new GameObject(rowName, typeof(RectTransform));
+        row.transform.SetParent(parent, false);
+        var rt = row.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, y);
+        rt.sizeDelta = new Vector2(500f, 64f);
+
+        var icon = CreateImage(row.transform, "Icon", Color.white);
+        ApplySprite(icon, LoadSettingsSprite(iconFile));
+        var irt = icon.rectTransform;
+        irt.anchorMin = irt.anchorMax = new Vector2(0f, 0.5f);
+        irt.pivot = new Vector2(0f, 0.5f);
+        irt.anchoredPosition = new Vector2(8f, 0f);
+        irt.sizeDelta = new Vector2(44f, 44f);
+        icon.preserveAspect = true;
+
+        var nameText = CreateText(row.transform, "Name", label, 28, TextAnchor.MiddleLeft);
+        nameText.color = new Color(0.92f, 0.78f, 0.42f, 1f);
+        var nrt = nameText.rectTransform;
+        nrt.anchorMin = nrt.anchorMax = new Vector2(0f, 0.5f);
+        nrt.pivot = new Vector2(0f, 0.5f);
+        nrt.anchoredPosition = new Vector2(64f, 0f);
+        nrt.sizeDelta = new Vector2(240f, 48f);
+
+        var btn = CreateToggleButton(row.transform, "Toggle", out var stateLabel);
+        var brt = btn.GetComponent<RectTransform>();
+        brt.anchorMin = brt.anchorMax = new Vector2(1f, 0.5f);
+        brt.pivot = new Vector2(1f, 0.5f);
+        brt.anchoredPosition = new Vector2(-12f, 0f);
+        brt.sizeDelta = new Vector2(120f, 48f);
+
         if (extraToggleRows == null) extraToggleRows = new List<SettingsToggleRow>();
         extraToggleRows.Add(new SettingsToggleRow
         {
             id = id,
-            root = btn.transform.parent.gameObject,
+            root = row,
             toggleButton = btn,
-            stateLabel = state
+            stateLabel = stateLabel
         });
-        btn.transform.parent.gameObject.SetActive(false);
+
+        row.SetActive(IsToggleEnabledInBuild(id));
+        y -= 72f;
     }
 
-    Button CreateRowToggle(Transform parent, string name, string label, float y, out Text stateLabel)
+    Button CreateToggleButton(Transform parent, string name, out Text stateLabel)
     {
-        var row = CreateImage(parent, name, new Color(0.17f, 0.16f, 0.22f, 1f));
-        var rt = row.rectTransform;
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
-        rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, y);
-        rt.sizeDelta = new Vector2(460f, 68f);
+        var track = CreateImage(parent, name, new Color(0.35f, 0.22f, 0.48f, 1f));
+        ApplySprite(track, LoadSettingsSprite("条"));
+        var rt = track.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = new Vector2(100f, 40f);
 
-        var name0 = CreateText(row.transform, "Name", label, 28, TextAnchor.MiddleLeft);
-        var nrt = name0.rectTransform;
-        nrt.anchorMin = nrt.anchorMax = new Vector2(0f, 0.5f);
-        nrt.pivot = new Vector2(0f, 0.5f);
-        nrt.anchoredPosition = new Vector2(26f, 0f);
-        nrt.sizeDelta = new Vector2(220f, 48f);
+        var btn = track.gameObject.AddComponent<Button>();
+        btn.targetGraphic = track;
+        btn.transition = Selectable.Transition.None;
 
-        var btn = CreateButton(row.transform, "Toggle", "开启",
-            new Vector2(1f, 0.5f), new Vector2(-90f, 0f), new Vector2(150f, 52f),
-            new Color(0.25f, 0.45f, 0.32f, 1f));
-        stateLabel = btn.GetComponentInChildren<Text>();
+        var knob = CreateImage(track.transform, "Knob", Color.white);
+        ApplySprite(knob, LoadSettingsSprite("开"));
+        var krt = knob.rectTransform;
+        krt.anchorMin = krt.anchorMax = new Vector2(1f, 0.5f);
+        krt.pivot = new Vector2(1f, 0.5f);
+        krt.anchoredPosition = new Vector2(-4f, 0f);
+        krt.sizeDelta = new Vector2(36f, 36f);
+        knob.preserveAspect = true;
+        knob.raycastTarget = false;
+
+        stateLabel = CreateText(track.transform, "StateLabel", "开", 22, TextAnchor.MiddleLeft);
+        stateLabel.color = new Color(0.92f, 0.78f, 0.42f, 1f);
+        var lrt = stateLabel.rectTransform;
+        lrt.anchorMin = lrt.anchorMax = new Vector2(0f, 0.5f);
+        lrt.pivot = new Vector2(0f, 0.5f);
+        lrt.anchoredPosition = new Vector2(8f, 0f);
+        lrt.sizeDelta = new Vector2(40f, 36f);
+
         return btn;
+    }
+
+    Button CreateActionButton(Transform parent, string name, string label, string spriteFile,
+        Vector2 anchor, Vector2 pos, Vector2 size, Color fallbackColor)
+    {
+        var img = CreateImage(parent, name, fallbackColor);
+        ApplySprite(img, LoadSettingsSprite(spriteFile));
+        var rt = img.rectTransform;
+        rt.anchorMin = rt.anchorMax = anchor;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = pos;
+        rt.sizeDelta = size;
+        img.preserveAspect = false;
+        img.type = Image.Type.Sliced;
+
+        var btn = img.gameObject.AddComponent<Button>();
+        btn.targetGraphic = img;
+        btn.transition = Selectable.Transition.ColorTint;
+
+        var text = CreateText(img.transform, "Label", label, 28, TextAnchor.MiddleCenter);
+        text.color = new Color(0.95f, 0.82f, 0.45f, 1f);
+        var trt = text.rectTransform;
+        trt.anchorMin = new Vector2(0f, 0f);
+        trt.anchorMax = new Vector2(1f, 1f);
+        trt.offsetMin = new Vector2(72f, 0f);
+        trt.offsetMax = new Vector2(-16f, 0f);
+        return btn;
+    }
+
+    static void ApplySprite(Image img, Sprite sp)
+    {
+        if (img == null || sp == null) return;
+        img.sprite = sp;
+        img.color = Color.white;
+        img.type = Image.Type.Simple;
+        img.preserveAspect = true;
+    }
+
+    void CreateReservedToggle(Transform parent, string rowName, string label, SettingsToggleId id, float y)
+    {
+        float rowY = y;
+        CreateSettingsRow(parent, rowName, label, "条", id, ref rowY);
+        var last = extraToggleRows[extraToggleRows.Count - 1];
+        if (last.root != null)
+            last.root.SetActive(false);
     }
 
     static void Stretch(RectTransform rt)

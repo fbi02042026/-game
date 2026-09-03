@@ -46,6 +46,7 @@ public class SaveSystem : Singleton<SaveSystem>
         if (string.IsNullOrEmpty(json))
         {
             _data = CreateFreshSave();
+            MercSkillMigrate.ApplyAutoCastPrefsToSave();
             Save();
             return;
         }
@@ -62,6 +63,7 @@ public class SaveSystem : Singleton<SaveSystem>
         {
             Debug.LogWarning("[SaveSystem] 存档损坏：" + e.Message);
             _data = CreateFreshSave();
+            MercSkillMigrate.ApplyAutoCastPrefsToSave();
             Save();
         }
     }
@@ -115,6 +117,7 @@ public class SaveSystem : Singleton<SaveSystem>
             data.lastStaminaUtc = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         ResourceAdRewards.EnsureDay(data);
         StaminaSystem.Tick(save: false);
+        MercSkillMigrate.SyncAutoCastPrefsFromSave();
     }
 
     public long CalcOfflineGold()

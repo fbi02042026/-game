@@ -92,7 +92,7 @@ public class DialogueUI : MonoBehaviour
     }
 
     const int DialogueBodyFontSize = 28;
-    const int DialogueNameFontSize = 16;
+    const int DialogueNameFontSize = 18;
     const float LocBlackInDur = 0.55f;
     const float LocHoldDur = 2.0f;
     const float LocTextFadeDur = 1.1f;
@@ -128,12 +128,20 @@ public class DialogueUI : MonoBehaviour
     public void PrepareForStoryBeat()
     {
         gameObject.SetActive(true);
+        if (transform.localScale == Vector3.zero)
+            transform.localScale = Vector3.one;
         transform.SetAsLastSibling();
         var canvas = GetComponent<Canvas>();
         if (canvas != null)
             UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.StoryDialogue);
-        _layoutCached = false;
-        CacheLayoutsIfNeeded();
+        Canvas.ForceUpdateCanvases();
+        if (_layoutCached)
+        {
+            StoryPortraitPresenter.ResetHost(leftPortraitImage, _leftPortraitLayout);
+            StoryPortraitPresenter.ResetHost(rightPortraitImage, _rightPortraitLayout);
+        }
+        else
+            CacheLayoutsIfNeeded();
     }
 
     /// <summary>保留兼容；不再改对话框、正文区、名牌——这些以预制体为准。</summary>
@@ -1079,12 +1087,11 @@ public class DialogueUI : MonoBehaviour
     void PlacePortraitBehindDialogueBox(Transform portrait)
     {
         if (portrait == null || dialogueBoxImage == null) return;
+        if (portrait.parent != dialogueBoxImage.transform.parent) return;
         int boxIdx = dialogueBoxImage.transform.GetSiblingIndex();
         int pIdx = portrait.GetSiblingIndex();
-        // 立绘已在框前（更大 sibling）→ 挪到框当前位置，框会被顶到后面
         if (pIdx >= boxIdx)
             portrait.SetSiblingIndex(boxIdx);
-        // 立绘已在框后：不要动，否则会盖住对话框
     }
 
     float GetMobileLiftY()

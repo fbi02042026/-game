@@ -212,7 +212,7 @@ public class MercPassiveRunner : MonoBehaviour
             }
             var st = _bleeds[target];
             st.Timer -= dt;
-            target.TakeDamage(st.Dps * dt, false, true, showHitVfx: false);
+            target.TakeDamage(st.Dps * dt, false, true, showHitVfx: false, source: _merc);
             if (st.Timer <= 0f) _bleeds.Remove(target);
             else _bleeds[target] = st;
         }

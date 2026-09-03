@@ -78,7 +78,7 @@ public class Mercenary : UnitBase
         WirePassiveOnAttack();
     }
 
-    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0)
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null)
     {
         if (TutorialStunned)
         {
@@ -98,7 +98,7 @@ public class Mercenary : UnitBase
             damage = PassiveRunner.ModifyIncomingDamage(damage);
 
         float before = currentHp;
-        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing);
+        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source);
         if (PassiveRunner != null && !Mathf.Approximately(before, currentHp))
             PassiveRunner.OnHpChanged();
     }

@@ -47,6 +47,8 @@ public static class TownSaveAlign
         }
         if (data.hiredMercs == null)
             data.hiredMercs = new System.Collections.Generic.List<MercenaryData>();
+        if (data.lastRunMercHireIds == null)
+            data.lastRunMercHireIds = new System.Collections.Generic.List<string>();
         for (int i = 0; i < data.hiredMercs.Count; i++)
         {
             var m = data.hiredMercs[i];

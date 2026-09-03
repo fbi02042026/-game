@@ -49,14 +49,53 @@ public static class MercHireSession
         SaveSystem.Instance.Save();
     }
 
-    /// <summary>下本结束回城：清空临时雇佣。</summary>
+    /// <summary>下本结束回城：记下上局出战 hireId 后清空临时雇佣。</summary>
     public static void ClearHired(bool save = true)
     {
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
-        if (data.hiredMercs == null || data.hiredMercs.Count == 0) return;
-        data.hiredMercs.Clear();
+        data.lastRunMercHireIds ??= new List<string>();
+        data.lastRunMercHireIds.Clear();
+        if (data.hiredMercs != null)
+        {
+            for (int i = 0; i < data.hiredMercs.Count; i++)
+            {
+                var m = data.hiredMercs[i];
+                if (m == null) continue;
+                string id = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+                if (string.IsNullOrEmpty(id)) continue;
+                if (!data.lastRunMercHireIds.Contains(id))
+                    data.lastRunMercHireIds.Add(id);
+            }
+            data.hiredMercs.Clear();
+        }
         if (save) SaveSystem.Instance.Save();
+    }
+
+    public static bool WasInLastRun(string hireIdOrMercId)
+    {
+        if (string.IsNullOrEmpty(hireIdOrMercId)) return false;
+        var data = SaveSystem.Instance?.Data;
+        var list = data?.lastRunMercHireIds;
+        if (list == null) return false;
+        return list.Contains(hireIdOrMercId);
+    }
+
+    public static bool IsAlreadyHired(MercenaryData offer)
+    {
+        if (offer == null) return false;
+        var list = GetHired();
+        for (int i = 0; i < list.Count; i++)
+        {
+            var m = list[i];
+            if (m == null) continue;
+            if (!string.IsNullOrEmpty(offer.hireId) && m.hireId == offer.hireId)
+                return true;
+            if (!string.IsNullOrEmpty(offer.mercId) && m.mercId == offer.mercId
+                && (string.IsNullOrEmpty(offer.hireId) || string.IsNullOrEmpty(m.hireId)))
+                return true;
+        }
+        return false;
     }
 
     public static int GoldCost(MercenaryData offer)

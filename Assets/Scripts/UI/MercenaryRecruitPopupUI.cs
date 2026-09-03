@@ -57,6 +57,8 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
     List<MercenaryData> _offers = new List<MercenaryData>();
     bool _wired;
+    string _lastBanterKey;
+    float _nextIdleBanterUnscaled;
 
     public static void Show()
     {
@@ -123,6 +125,8 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         if (root != null) root.SetActive(true);
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
+        MaybeToastAppearBanter(force: false, avoidLast: false);
+        ScheduleNextIdleBanter();
     }
 
     void RerollOffers()
@@ -164,7 +168,11 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         var offer = i < _offers.Count ? _offers[i] : null;
         bool on = offer != null;
         c.root.SetActive(on);
-        if (!on) return;
+        if (!on)
+        {
+            ApplyHiredVisual(c, false);
+            return;
+        }
 
         var rarity = MercHireSession.OfferRarity(offer);
         string job = MercenaryManager.Instance != null
@@ -217,6 +225,9 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
         BindSkillTexts(c, offer);
 
+        bool alreadyHired = MercHireSession.IsAlreadyHired(offer);
+        ApplyHiredVisual(c, alreadyHired);
+
         int gold = MercHireSession.GoldCost(offer);
         bool canHireMore = MercHireSession.CanHireMore();
         bool hasGold = ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.Gold) >= gold;
@@ -227,7 +238,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         if (c.goldButton != null)
         {
             c.goldButton.gameObject.SetActive(true);
-            bool goldOk = canHireMore && hasGold;
+            bool goldOk = !alreadyHired && canHireMore && hasGold;
             c.goldButton.interactable = goldOk;
             SetButtonGray(c.goldButton, !goldOk);
         }
@@ -254,7 +265,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
                 {
                     if (c.scrollLabel1 != null)
                         c.scrollLabel1.text = rarity == MercRosterDefs.MercRarity.Legendary ? "传奇卷×1" : "稀有卷×1";
-                    bool scrollOk = canHireMore;
+                    bool scrollOk = !alreadyHired && canHireMore;
                     c.scrollButton.interactable = scrollOk;
                     SetButtonGray(c.scrollButton, !scrollOk);
                 }
@@ -263,7 +274,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
                     // 无卷：按钮位改显示金币价，可点则扣金币
                     if (c.scrollLabel1 != null)
                         c.scrollLabel1.text = gold.ToString();
-                    bool goldOk = canHireMore && hasGold;
+                    bool goldOk = !alreadyHired && canHireMore && hasGold;
                     c.scrollButton.interactable = goldOk;
                     SetButtonGray(c.scrollButton, !goldOk);
                     if (c.scrollButtonImage != null)
@@ -330,6 +341,102 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
             img.color = gray ? new Color(0.4f, 0.4f, 0.4f, 1f) : Color.white;
     }
 
+    const float AppearBanterChance = 0.6f;
+    const float IdleBanterMinSec = 8f;
+    const float IdleBanterMaxSec = 14f;
+
+    void Update()
+    {
+        if (root == null || !root.activeInHierarchy) return;
+        if (_infoRoot != null && _infoRoot.activeSelf) return;
+        if (Time.unscaledTime < _nextIdleBanterUnscaled) return;
+        MaybeToastAppearBanter(force: true, avoidLast: true);
+        ScheduleNextIdleBanter();
+    }
+
+    void ScheduleNextIdleBanter()
+    {
+        _nextIdleBanterUnscaled = Time.unscaledTime + UnityEngine.Random.Range(IdleBanterMinSec, IdleBanterMaxSec);
+    }
+
+    bool MaybeToastAppearBanter(bool force, bool avoidLast)
+    {
+        if (_offers == null || _offers.Count == 0) return false;
+        if (!force && UnityEngine.Random.value >= AppearBanterChance) return false;
+
+        var pool = new List<MercenaryData>();
+        for (int i = 0; i < _offers.Count; i++)
+        {
+            if (_offers[i] == null) continue;
+            if (MercHireSession.IsAlreadyHired(_offers[i])) continue;
+            pool.Add(_offers[i]);
+        }
+        if (pool.Count == 0) return false;
+
+        if (avoidLast && !string.IsNullOrEmpty(_lastBanterKey) && pool.Count > 1)
+        {
+            var others = new List<MercenaryData>();
+            for (int i = 0; i < pool.Count; i++)
+            {
+                string k = OfferBanterKey(pool[i]);
+                if (k != _lastBanterKey) others.Add(pool[i]);
+            }
+            if (others.Count > 0) pool = others;
+        }
+
+        var offer = pool[UnityEngine.Random.Range(0, pool.Count)];
+        string key = OfferBanterKey(offer);
+        bool last = MercHireSession.WasInLastRun(key)
+            || (!string.IsNullOrEmpty(offer.mercId) && MercHireSession.WasInLastRun(offer.mercId));
+        string line = MercRosterDefs.PickTavernAppearLine(key, last);
+        if (string.IsNullOrEmpty(line)) return false;
+
+        string name = !string.IsNullOrEmpty(offer.nickname) ? offer.nickname
+            : (!string.IsNullOrEmpty(offer.displayName) ? offer.displayName : "佣兵");
+        UIManager.Instance?.ShowToast($"{name}：「{line}」");
+        _lastBanterKey = key;
+        return true;
+    }
+
+    static string OfferBanterKey(MercenaryData offer)
+    {
+        if (offer == null) return "";
+        return !string.IsNullOrEmpty(offer.hireId) ? offer.hireId : (offer.mercId ?? "");
+    }
+
+    static void ApplyHiredVisual(CardView c, bool hired)
+    {
+        if (c == null || c.root == null) return;
+        var cg = c.root.GetComponent<CanvasGroup>();
+        if (cg == null) cg = c.root.AddComponent<CanvasGroup>();
+        cg.alpha = hired ? 0.45f : 1f;
+        cg.blocksRaycasts = true;
+        cg.interactable = true;
+
+        var badge = EnsureHiredBadge(c.root.transform);
+        if (badge != null)
+            badge.gameObject.SetActive(hired);
+    }
+
+    static Text EnsureHiredBadge(Transform cardRoot)
+    {
+        if (cardRoot == null) return null;
+        var existing = cardRoot.Find("HiredBadge");
+        Text t = existing != null ? existing.GetComponent<Text>() : null;
+        if (t != null) return t;
+
+        t = CreateTxt(cardRoot, "HiredBadge", "佣兵已雇佣", 22, TextAnchor.MiddleCenter);
+        t.color = new Color(1f, 0.86f, 0.42f, 1f);
+        var rt = t.rectTransform;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(0f, -40f);
+        rt.sizeDelta = new Vector2(280f, 40f);
+        t.gameObject.SetActive(false);
+        return t;
+    }
+
     void WireOnce()
     {
         if (_wired) return;
@@ -366,7 +473,9 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         RerollOffers();
         MercHireSession.MarkRefreshed();
         RefreshAll();
-        UIManager.Instance?.ShowToast("已刷新候选佣兵");
+        if (!MaybeToastAppearBanter(force: false, avoidLast: true))
+            UIManager.Instance?.ShowToast("已刷新候选佣兵");
+        ScheduleNextIdleBanter();
     }
 
     void OnHire(int index, bool preferScroll)
@@ -376,19 +485,23 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
             UIManager.Instance?.ShowToast("无效的佣兵");
             return;
         }
+        var offer = _offers[index];
+        if (MercHireSession.IsAlreadyHired(offer))
+        {
+            UIManager.Instance?.ShowToast("佣兵已雇佣");
+            return;
+        }
         if (!MercHireSession.CanHireMore())
         {
             UIManager.Instance?.ShowToast("本局雇佣已满，下本结束会离队");
             return;
         }
 
-        var offer = _offers[index];
         var rarity = MercHireSession.OfferRarity(offer);
         int gold = MercHireSession.GoldCost(offer);
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
         bool hasScroll = !isCommon && MercHireSession.HasScrollFor(rarity);
 
-        bool usedScroll = false;
         if (preferScroll && hasScroll)
         {
             if (!MercHireSession.TrySpendScroll(rarity))
@@ -396,7 +509,6 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
                 UIManager.Instance?.ShowToast("招募卷不足");
                 return;
             }
-            usedScroll = true;
         }
         else
         {
@@ -410,11 +522,11 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
         var picked = CloneOffer(offer);
         MercHireSession.AddHired(picked);
-        string pay = usedScroll
-            ? (rarity == MercRosterDefs.MercRarity.Legendary ? "传奇招募卷" : "稀有招募卷")
-            : $"{gold} 金币";
-        UIManager.Instance?.ShowToast($"已雇佣 {picked.displayName}（{pay}）· 下本结束离队");
+        string name = !string.IsNullOrEmpty(picked.displayName) ? picked.displayName
+            : (!string.IsNullOrEmpty(picked.nickname) ? picked.nickname : "佣兵");
+        UIManager.Instance?.ShowToast($"{name}加入队伍！");
         RefreshAll();
+        ScheduleNextIdleBanter();
     }
 
     static MercenaryData CloneOffer(MercenaryData src)

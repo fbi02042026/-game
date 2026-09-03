@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// 生成战斗结算（撤离/死亡统计）预制体：Resources/Prefabs/Battle/BattleSettlement.prefab
+/// 生成战斗结算预制体：Resources/Prefabs/Battle/BattleSettlement.prefab
 /// </summary>
 public static class BattleSettlementPrefabBuilder
 {
@@ -27,11 +27,13 @@ public static class BattleSettlementPrefabBuilder
         EditorGUIUtility.PingObject(saved);
         EditorUtility.DisplayDialog("战斗结算界面",
             "已生成：\n" + PrefabAssetPath +
-            "\n\n对齐 GDD §11.3：击杀/伤害/时间 + 金币天赋装备等。\n" +
-            "换图：Panel / ConfirmButton；文案：Title / Subtitle / Stats / Rewards",
+            "\n\n节点：PortraitHost / StatRow_* / RewardsGrid / ConfirmButton\n" +
+            "美术：Assets/Art/UI/战斗结算（Texture Type=Sprite 后重跑可自动挂图标）\n" +
+            "通关/撤离/阵亡都会弹出；无战斗时长、无经验格。",
             "好的");
     }
 
+    /// <summary>批处理：-executeMethod BattleSettlementPrefabBuilder.BuildBatch</summary>
     public static void BuildBatch()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(PrefabAssetPath));
@@ -41,6 +43,8 @@ public static class BattleSettlementPrefabBuilder
             BattleSettlementUI.BuildHierarchy(host);
             PrefabUtility.SaveAsPrefabAsset(host, PrefabAssetPath);
             AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("[BattleSettlement] 已生成：" + PrefabAssetPath);
         }
         finally
         {

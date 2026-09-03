@@ -328,8 +328,8 @@ public static class GameConfig
 
     [Header("怪物基础（对齐数值表·未缩放）")]
     public const float MONSTER_NORMAL_HP = 60f;
-    /// <summary>全局怪物 HP 倍率（0.8 = 减 20%）。</summary>
-    public const float MONSTER_HP_GLOBAL_MUL = 0.8f;
+    /// <summary>全局怪物 HP 倍率（0.6 = 减 40%）。</summary>
+    public const float MONSTER_HP_GLOBAL_MUL = 0.6f;
     public const float MONSTER_NORMAL_ATK = 12f;
     public const float MONSTER_NORMAL_DEF = 2f;
     public const float MONSTER_NORMAL_ATK_INTERVAL = 1.5f;

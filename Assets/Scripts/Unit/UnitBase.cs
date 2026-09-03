@@ -44,6 +44,24 @@ public abstract class UnitBase : MonoBehaviour
         LaneY = Mathf.Clamp(offset, -GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
     }
 
+    /// <summary>把 LaneY 同步成当前脚底相对站立线的偏移（入场中断 / 刷怪纠偏）。</summary>
+    public void SyncLaneYFromWorld()
+    {
+        var t = LaneMoveTransform;
+        if (t == null) t = transform;
+        SetLaneY(t.position.y - GROUND_Y);
+    }
+
+    /// <summary>目标实际站位车道（优先世界 Y，避免 LaneY 与脚底脱节）。</summary>
+    public float GetWorldLaneOffset()
+    {
+        Transform moveTf = transform;
+        if (this is Monster mon)
+            moveTf = mon.GetBodyTransform();
+        if (moveTf == null) moveTf = transform;
+        return Mathf.Clamp(moveTf.position.y - GROUND_Y, -GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+    }
+
     protected virtual Transform LaneMoveTransform => transform;
 
     protected void ApplyLaneY(float dt)
@@ -56,6 +74,9 @@ public abstract class UnitBase : MonoBehaviour
         p.y = Mathf.MoveTowards(p.y, target, GameConfig.BATTLE_LANE_MOVE_SPEED * dt);
         GameConfig.SetWorldPosition(t, p);
     }
+
+    /// <summary>最近一次造成伤害的来源（结算 MVP 击杀归属）。</summary>
+    public UnitBase LastDamageSource { get; private set; }
 
     public AttrSystem attr = new AttrSystem();
     public float currentHp;
@@ -576,7 +597,8 @@ public abstract class UnitBase : MonoBehaviour
     {
         if (chaseTarget == null || attr == null) return;
         float laneSpeed = Mathf.Max(0.55f, attr.GetAttr(AttrType.MoveSpeed) * 0.85f);
-        SetLaneY(Mathf.MoveTowards(LaneY, chaseTarget.LaneY, laneSpeed * dt));
+        float targetLane = chaseTarget.GetWorldLaneOffset();
+        SetLaneY(Mathf.MoveTowards(LaneY, targetLane, laneSpeed * dt));
     }
 
     protected void AdjustFormationLane(float dt)
@@ -733,10 +755,10 @@ public abstract class UnitBase : MonoBehaviour
             damage *= SpecialWeapons.GetDamageMultiplier(target);
             float fire = SpecialWeapons.GetFlatFireBonus();
             if (fire > 0f && !target.isDead)
-                target.TakeDamage(fire, false, openingHit, false, vfxDir);
+                target.TakeDamage(fire, false, openingHit, false, vfxDir, this);
         }
 
-        target.TakeDamage(damage, isCrit, openingHit, true, vfxDir);
+        target.TakeDamage(damage, isCrit, openingHit, true, vfxDir, this);
         OnAttack?.Invoke(target, damage, isCrit);
     }
 
@@ -832,11 +854,14 @@ public abstract class UnitBase : MonoBehaviour
         body.velocity = Vector2.zero;
     }
 
-    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0)
+    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null)
     {
         if (_isDying) return;
 
         float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense);
+
+        if (source != null && finalDamage > 0f)
+            LastDamageSource = source;
 
         currentHp -= finalDamage;
         // 怪物受击飘字：传受害者面向，由 DamageTextSystem 固定往其后方滑
@@ -857,7 +882,12 @@ public abstract class UnitBase : MonoBehaviour
         if (bm != null && finalDamage > 0f)
         {
             if (this is Monster mon)
+            {
                 bm.RecordDamageDealt(finalDamage, mon.IsBossUnit);
+                if (isCrit) bm.RecordCrit();
+                if (source != null && source.isAlly)
+                    bm.RecordAllyDamage(source, finalDamage);
+            }
             else
                 bm.RecordDamageTaken(finalDamage);
         }

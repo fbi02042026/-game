@@ -78,6 +78,10 @@ public static class StoryPortraitPresenter
 
         lay.scale = rt.localScale;
 
+        if (lay.scale.sqrMagnitude < 1e-6f)
+
+            lay.scale = Vector3.one;
+
         return lay;
 
     }
@@ -100,7 +104,7 @@ public static class StoryPortraitPresenter
 
         rt.anchoredPosition = lay.pos;
 
-        rt.localScale = lay.scale;
+        rt.localScale = lay.scale.sqrMagnitude < 1e-6f ? Vector3.one : lay.scale;
 
         img.gameObject.SetActive(true);
 
@@ -200,6 +204,22 @@ public static class StoryPortraitPresenter
 
 
 
+    static void ResolveCanvasSize(RectTransform canvasRt, out float canvasW, out float canvasH)
+
+    {
+
+        canvasW = canvasRt != null ? canvasRt.rect.width : GameConfig.DESIGN_WIDTH;
+
+        canvasH = canvasRt != null ? canvasRt.rect.height : GameConfig.DESIGN_HEIGHT;
+
+        if (canvasW < 64f) canvasW = GameConfig.DESIGN_WIDTH;
+
+        if (canvasH < 64f) canvasH = GameConfig.DESIGN_HEIGHT;
+
+    }
+
+
+
     static void ApplySlot(Image img, Sprite sp, Slot slot, StoryPortraitLayout.Profile profile, Context ctx)
 
     {
@@ -242,11 +262,13 @@ public static class StoryPortraitPresenter
 
 
 
+        ResolveCanvasSize(ctx.CanvasRt, out float canvasW, out _);
+
         float clipW = slot == Slot.Center
 
-            ? ctx.CanvasRt.rect.width * profile.centerClipWidthFrac
+            ? canvasW * profile.centerClipWidthFrac
 
-            : ctx.CanvasRt.rect.width * profile.slotClipWidthFrac;
+            : canvasW * profile.slotClipWidthFrac;
 
         EnsureClipMask(img, profile.clipHeightFrac, clipW, h);
 
@@ -278,13 +300,7 @@ public static class StoryPortraitPresenter
 
         DialogueUI.ApplyPortraitNativeSize(img);
 
-        float canvasH = canvasRt != null ? canvasRt.rect.height : GameConfig.DESIGN_HEIGHT;
-
-        float canvasW = canvasRt != null ? canvasRt.rect.width : GameConfig.DESIGN_WIDTH;
-
-        if (canvasH < 64f) canvasH = GameConfig.DESIGN_HEIGHT;
-
-        if (canvasW < 64f) canvasW = GameConfig.DESIGN_WIDTH;
+        ResolveCanvasSize(canvasRt, out float canvasW, out float canvasH);
 
 
 
@@ -365,145 +381,67 @@ public static class StoryPortraitPresenter
 
 
     static void EnsureClipMask(Image portrait, float clipHeightFrac, float clipWidth, float displayHeight)
-
     {
-
         if (portrait == null || portrait.sprite == null) return;
 
         var rt = portrait.rectTransform;
-
         RectTransform clipRt;
-
         if (rt.parent != null && rt.parent.name == "PortraitClip")
-
         {
-
             clipRt = rt.parent as RectTransform;
-
         }
-
         else
-
         {
-
             var originalParent = rt.parent as RectTransform;
-
             var clipGo = new GameObject("PortraitClip", typeof(RectTransform), typeof(RectMask2D));
-
             clipRt = clipGo.GetComponent<RectTransform>();
-
             clipRt.SetParent(originalParent, false);
-
             clipRt.anchorMin = rt.anchorMin;
-
             clipRt.anchorMax = rt.anchorMax;
-
             clipRt.pivot = rt.pivot;
-
             clipRt.anchoredPosition = rt.anchoredPosition;
-
             clipRt.sizeDelta = rt.sizeDelta;
-
             clipRt.localScale = Vector3.one;
-
             int sib = rt.GetSiblingIndex();
-
             rt.SetParent(clipRt, false);
-
             rt.SetSiblingIndex(0);
-
             clipRt.SetSiblingIndex(sib);
-
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
-
             rt.pivot = new Vector2(0.5f, 1f);
-
             rt.anchoredPosition = Vector2.zero;
-
         }
-
-
 
         clipRt.pivot = new Vector2(0.5f, 0f);
-
         float h = displayHeight > 1f ? displayHeight : rt.sizeDelta.y;
-
-        float w = portrait.sprite.rect.width;
-
         if (h < 1f) h = portrait.sprite.rect.height;
-
-        if (w < 1f) w = portrait.sprite.rect.width;
-
         clipRt.sizeDelta = new Vector2(Mathf.Max(1f, clipWidth), h * Mathf.Clamp01(clipHeightFrac));
-
     }
-
-
 
     static void ClampInsideCanvas(RectTransform rt, RectTransform canvasRt)
-
     {
-
         if (rt == null || canvasRt == null) return;
-
         Canvas.ForceUpdateCanvases();
-
         var corners = new Vector3[4];
-
         var canvasCorners = new Vector3[4];
-
         rt.GetWorldCorners(corners);
-
         canvasRt.GetWorldCorners(canvasCorners);
-
         float pad = 8f;
-
         float minCx = canvasCorners[0].x + pad;
-
         float maxCx = canvasCorners[2].x - pad;
 
-        float minCy = canvasCorners[0].y + pad;
-
-        float maxCy = canvasCorners[2].y - pad;
-
-
-
         float minX = corners[0].x, maxX = corners[0].x;
-
-        float minY = corners[0].y, maxY = corners[0].y;
-
         for (int i = 1; i < 4; i++)
-
         {
-
             if (corners[i].x < minX) minX = corners[i].x;
-
             if (corners[i].x > maxX) maxX = corners[i].x;
-
-            if (corners[i].y < minY) minY = corners[i].y;
-
-            if (corners[i].y > maxY) maxY = corners[i].y;
-
         }
 
-
-
         Vector3 shift = Vector3.zero;
-
         if (minX < minCx) shift.x += minCx - minX;
-
         if (maxX > maxCx) shift.x -= maxX - maxCx;
-
-        if (minY < minCy) shift.y += minCy - minY;
-
-        if (maxY > maxCy) shift.y -= maxY - maxCy;
-
         if (shift.sqrMagnitude > 1e-6f)
-
             rt.position += shift;
-
     }
-
 }
 
 

@@ -307,6 +307,7 @@ public class Monster : UnitBase
             if (foe != null)
             {
                 _isEnteringMap = false;
+                SyncLaneYFromWorld();
                 target = foe.isAlly == isAlly ? null : foe;
                 if (target == null)
                 {
@@ -322,6 +323,7 @@ public class Monster : UnitBase
             {
                 GameConfig.SetWorldPosition(MoveRoot, new Vector3(_enterTargetPos.x, FootY, MoveRoot.position.z));
                 _isEnteringMap = false;
+                SyncLaneYFromWorld();
                 AdvanceTowardEnemies();
                 return;
             }
@@ -855,9 +857,9 @@ public class Monster : UnitBase
     public bool IsBossUnit => _isBossUnit;
     public bool IsEliteWave => _eliteWave;
 
-    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0)
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null)
     {
-        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing);
+        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source);
         if (!isDead)
         {
             _worldHpBar?.SyncHpVisual(flash: true);

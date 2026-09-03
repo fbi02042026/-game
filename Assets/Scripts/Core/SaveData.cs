@@ -67,6 +67,8 @@ public class SaveData
     public List<MercenaryData> permanentMercs = new List<MercenaryData>();
     /// <summary>本局临时雇佣（下本结束清空）</summary>
     public List<MercenaryData> hiredMercs = new List<MercenaryData>();
+    /// <summary>上一趟出战佣兵 hireId（酒馆刷出互动句）。</summary>
+    public List<string> lastRunMercHireIds = new List<string>();
     /// <summary>今日已招募次数（按日刷新键见 dailyMercRecruitDayKey）</summary>
     public int dailyMercRecruitUsed = 0;
     public string dailyMercRecruitDayKey = "";
@@ -195,6 +197,7 @@ public class SaveData
         legacyEquipPool ??= new List<EquipmentData>();
         permanentMercs ??= new List<MercenaryData>();
         hiredMercs ??= new List<MercenaryData>();
+        lastRunMercHireIds ??= new List<string>();
         npcBonds ??= new List<NpcBondEntry>();
         storyChoices ??= new List<StoryChoiceEntry>();
         chapterClearCounts ??= new List<ChapterClearCountEntry>();

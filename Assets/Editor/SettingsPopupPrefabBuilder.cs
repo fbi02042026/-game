@@ -1,10 +1,12 @@
 #if UNITY_EDITOR
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 
 /// <summary>
 /// 生成全局设置弹窗预制体（登录 / 城镇 / 战斗共用）。
 /// 菜单：Tools/UI/生成设置弹窗预制体。已存在会询问是否覆盖。
+/// 批处理：-executeMethod SettingsPopupPrefabBuilder.BuildBatch
 /// </summary>
 public static class SettingsPopupPrefabBuilder
 {
@@ -22,30 +24,46 @@ public static class SettingsPopupPrefabBuilder
                 return;
         }
 
-        var root = new GameObject("SettingsPopup", typeof(RectTransform));
-        var ui = root.AddComponent<SettingsPopupUI>();
-        ui.BuildFallbackHierarchy();
+        SavePrefab();
+    }
 
+    /// <summary>批处理：-executeMethod SettingsPopupPrefabBuilder.BuildBatch</summary>
+    public static void BuildBatch()
+    {
+        SavePrefab();
+    }
+
+    static void SavePrefab()
+    {
         EnsureFolders();
-        var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
-        Object.DestroyImmediate(root);
-        AssetDatabase.SaveAssets();
-        AssetDatabase.Refresh();
-
-        if (prefab != null)
+        var root = new GameObject("SettingsPopup", typeof(RectTransform));
+        try
         {
+            var ui = root.AddComponent<SettingsPopupUI>();
+            ui.BuildFallbackHierarchy();
+
+            var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath, out bool success);
+            if (!success || prefab == null)
+            {
+                Debug.LogError("[SettingsPopup] 保存预制体失败");
+                return;
+            }
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
             Selection.activeObject = prefab;
             EditorGUIUtility.PingObject(prefab);
-            EditorUtility.DisplayDialog("完成",
-                "已生成：\n" + PrefabPath + "\n\n" +
-                "登录 / 城镇 / 战斗共用；运行时按场景显隐「撤离」。\n" +
-                "可在 Inspector 换美术；预留 Music/Sfx/Weather 行默认隐藏。",
-                "好");
+            Debug.Log("[SettingsPopup] 已生成：" + PrefabPath);
+        }
+        finally
+        {
+            Object.DestroyImmediate(root);
         }
     }
 
     static void EnsureFolders()
     {
+        Directory.CreateDirectory(Path.GetDirectoryName(PrefabPath));
         if (!AssetDatabase.IsValidFolder("Assets/Resources"))
             AssetDatabase.CreateFolder("Assets", "Resources");
         if (!AssetDatabase.IsValidFolder("Assets/Resources/Prefabs"))

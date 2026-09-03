@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 声音总开关（音乐 + 音效一起开/关）。存 PlayerPrefs，切场景后仍生效。
+/// 音乐 / 音效分开关。存 PlayerPrefs，切场景后仍生效。
 /// 项目里还没有统一的 AudioManager，所以这里按 AudioSource 的特征分类：
 /// loop 或名字带 bgm/music 的算音乐，其余算音效。
 /// </summary>
@@ -12,58 +12,82 @@ public static class GameAudio
     const string SfxKey = "audio.sfx.on";
 
     static bool _loaded;
-    static bool _enabled = true;
+    static bool _musicEnabled = true;
+    static bool _sfxEnabled = true;
     static bool _loadingMuted;
     static AudioSource _sfxPlayer;
 
     public static bool IsLoadingMuted => _loadingMuted;
 
-    /// <summary>音乐 + 音效统一开关。</summary>
+    /// <summary>音乐 + 音效任一开启即为开（兼容旧调用）。</summary>
     public static bool AudioEnabled
     {
-        get { Load(); return _enabled; }
-        set { SetEnabled(value); }
+        get { Load(); return _musicEnabled || _sfxEnabled; }
+        set
+        {
+            MusicEnabled = value;
+            SfxEnabled = value;
+        }
     }
 
     public static bool MusicEnabled
     {
-        get => AudioEnabled;
-        set => AudioEnabled = value;
+        get { Load(); return _musicEnabled; }
+        set { SetMusic(value); }
     }
 
     public static bool SfxEnabled
     {
-        get => AudioEnabled;
-        set => AudioEnabled = value;
+        get { Load(); return _sfxEnabled; }
+        set { SetSfx(value); }
     }
 
-    static void SetEnabled(bool value)
+    static void SetMusic(bool value)
     {
         Load();
-        if (_enabled == value) return;
-        _enabled = value;
-        PlayerPrefs.SetInt(AudioKey, value ? 1 : 0);
+        if (_musicEnabled == value) return;
+        _musicEnabled = value;
         PlayerPrefs.SetInt(MusicKey, value ? 1 : 0);
-        PlayerPrefs.SetInt(SfxKey, value ? 1 : 0);
+        SyncMasterPref();
         PlayerPrefs.Save();
         Apply();
         GameBgm.OnMusicToggleChanged();
+    }
+
+    static void SetSfx(bool value)
+    {
+        Load();
+        if (_sfxEnabled == value) return;
+        _sfxEnabled = value;
+        PlayerPrefs.SetInt(SfxKey, value ? 1 : 0);
+        SyncMasterPref();
+        PlayerPrefs.Save();
+        Apply();
+    }
+
+    static void SyncMasterPref()
+    {
+        PlayerPrefs.SetInt(AudioKey, (_musicEnabled || _sfxEnabled) ? 1 : 0);
     }
 
     static void Load()
     {
         if (_loaded) return;
         _loaded = true;
-        if (PlayerPrefs.HasKey(AudioKey))
+        if (PlayerPrefs.HasKey(MusicKey) || PlayerPrefs.HasKey(SfxKey))
         {
-            _enabled = PlayerPrefs.GetInt(AudioKey, 1) != 0;
+            _musicEnabled = PlayerPrefs.GetInt(MusicKey, 1) != 0;
+            _sfxEnabled = PlayerPrefs.GetInt(SfxKey, 1) != 0;
             return;
         }
 
-        // 旧存档：音乐/音效曾分开存，任一关则整体关
-        bool music = PlayerPrefs.GetInt(MusicKey, 1) != 0;
-        bool sfx = PlayerPrefs.GetInt(SfxKey, 1) != 0;
-        _enabled = music && sfx;
+        // 旧存档：只有总开关
+        if (PlayerPrefs.HasKey(AudioKey))
+        {
+            bool on = PlayerPrefs.GetInt(AudioKey, 1) != 0;
+            _musicEnabled = on;
+            _sfxEnabled = on;
+        }
     }
 
     /// <summary>每次进场景后把存档里的开关重新刷一遍。</summary>
@@ -103,7 +127,7 @@ public static class GameAudio
             if (src.gameObject.name == "GameBgm") continue;
 
             bool isMusic = IsMusicSource(src);
-            bool on = _enabled;
+            bool on = isMusic ? _musicEnabled : _sfxEnabled;
             if (!isMusic && _loadingMuted) on = false;
             src.mute = !on;
             if (isMusic && !on && src.isPlaying)
@@ -155,7 +179,7 @@ public static class GameAudio
     public static void PlaySfx(AudioClip clip, float volume = 1f)
     {
         Load();
-        if (_loadingMuted || !_enabled || clip == null) return;
+        if (_loadingMuted || !_sfxEnabled || clip == null) return;
         if (_sfxPlayer == null)
         {
             var go = new GameObject("GameAudioSfx");
