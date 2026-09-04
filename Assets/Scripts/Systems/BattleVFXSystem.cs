@@ -488,6 +488,22 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         ApplyFactionLook(SpawnVFX(vfxLightning, position, defaultDuration), faction);
     }
 
+    /// <summary>玩家雷击奥义：受击点播 Skills/Player/leiji。</summary>
+    public void PlayLeiji(Vector3 hitPos)
+    {
+        if (_vfxLeiji == null)
+            _vfxLeiji = Resources.Load<GameObject>("VFX/Skills/Player/leiji");
+        if (_vfxLeiji == null)
+        {
+            Debug.LogWarning("[VFX] 缺少 leiji：Resources/VFX/Skills/Player/leiji");
+            PlayLightning(hitPos, VfxFaction.Ally);
+            return;
+        }
+        SpawnVFX(_vfxLeiji, hitPos, defaultDuration);
+    }
+
+    GameObject _vfxLeiji;
+
     public void PlayHeal(Vector3 position, VfxFaction faction = VfxFaction.Ally, GameObject prefabOverride = null)
     {
         if (!_prefabsLoaded) AutoLoadPrefabs();

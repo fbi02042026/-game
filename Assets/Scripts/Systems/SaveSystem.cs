@@ -139,6 +139,12 @@ public class SaveSystem : Singleton<SaveSystem>
 
     public void UploadToCloud()
     {
+        if (SpotlightBuild.Enabled)
+        {
+            Debug.LogWarning("[SaveSystem] Spotlight：禁止云上传");
+            UIManager.Instance?.ShowToast(SpotlightBuild.OfflineToast);
+            return;
+        }
         _data.SyncListsFromRuntime();
         string json = JsonUtility.ToJson(_data);
         string payload = ContentProtection.Enabled
@@ -153,6 +159,13 @@ public class SaveSystem : Singleton<SaveSystem>
 
     public void DownloadFromCloud(Action<bool> onComplete)
     {
+        if (SpotlightBuild.Enabled)
+        {
+            Debug.LogWarning("[SaveSystem] Spotlight：禁止云下载");
+            UIManager.Instance?.ShowToast(SpotlightBuild.OfflineToast);
+            onComplete?.Invoke(false);
+            return;
+        }
         CloudSaveBridge.DownloadPayload(payload =>
         {
             if (string.IsNullOrEmpty(payload))

@@ -430,7 +430,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
             bool closed = false;
             EquipDropPopupUI.ShowSingle(drop, (_, __) => closed = true);
             while (!closed) yield return null;
-            if (bm != null) bm.UnitsCanAct = true;
+            if (bm != null)
+            {
+                bm.UnitsCanAct = true;
+                bm.BeginTutorialPowerFantasy();
+            }
             BattleUI.Instance?.UpdateBackpackGrid();
             Hero.Instance?.costumeManager?.RefreshCostume();
         }

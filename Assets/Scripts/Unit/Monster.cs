@@ -170,8 +170,9 @@ public class Monster : UnitBase
 
     void EnsureWorldHealthBar()
     {
+        // 仅 Boss/精英用屏幕 BossBar；小怪不再创建头顶世界血条
         DisableEmbeddedHpBar();
-        _worldHpBar = MonsterHealthBar.Create(this);
+        _worldHpBar = null;
     }
 
     public override float GetHpBarWorldWidth()
@@ -289,7 +290,8 @@ public class Monster : UnitBase
             {
                 if (_isEnteringMap) _isEnteringMap = false;
                 target = _forcedTarget;
-                // ?????????????????
+                if (TryHoldDuringAttack())
+                    return;
                 RunForcedCombat();
                 return;
             }
@@ -314,6 +316,8 @@ public class Monster : UnitBase
                     AdvanceTowardEnemies();
                     return;
                 }
+                if (TryHoldDuringAttack())
+                    return;
                 RunForcedCombat();
                 return;
             }
@@ -338,7 +342,11 @@ public class Monster : UnitBase
             return;
         }
 
-        // ????????????????????????
+        // 攻击中不换目标、不滑步
+        if (TryHoldDuringAttack())
+            return;
+
+        // 场上最近友军（交战寻敌）
         target = FindNearestEnemyOnField();
         if (target != null && target.isAlly == isAlly)
             target = null;
@@ -351,8 +359,8 @@ public class Monster : UnitBase
         RunForcedCombat();
     }
 
-    /// <summary>?????????????????????????????/summary>
-    UnitBase FindNearestEnemyOnField()
+    /// <summary>场上最近友军（交战寻敌）。</summary>
+    public override UnitBase FindNearestEnemyOnField()
     {
         if (BattleManager.Instance == null) return null;
         UnitBase nearest = null;
@@ -374,6 +382,11 @@ public class Monster : UnitBase
         return nearest;
     }
 
+    protected override bool UsesMeleeBasicAttack()
+    {
+        return !MonsterAttackStyleTable.IsRanged(_attackStyle);
+    }
+
     void RunForcedCombat()
     {
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
@@ -384,20 +397,32 @@ public class Monster : UnitBase
         }
         if (target == null || target.isDead) return;
 
+        if (TryHoldDuringAttack())
+            return;
+
         float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
-        float attackRange = attr.GetAttr(AttrType.AttackRange);
+        float attackRange = GetEffectiveAttackRange();
+        bool melee = UsesMeleeBasicAttack();
         FaceToward(target);
+        // 近战并到目标水平对面再砍，避免上下错位刀光发飘
+        if (melee)
+            AdjustLaneTowardTarget(target, Time.deltaTime);
 
         bool isMoving = false;
-        bool inRange = distance <= attackRange;
-        if (inRange)
+        if (IsInBasicAttackRange(target))
         {
             if (rb != null) rb.velocity = Vector2.zero;
-            if (attackCd <= 0)
+            if (attackCd <= 0 && (unitAnim == null || !unitAnim.InAttackLock))
             {
                 Attack(target);
                 attackCd = GetAttackCooldown();
             }
+        }
+        else if (melee && distance <= attackRange)
+        {
+            // X 齐、车道未齐：停 X 只并道
+            if (rb != null) rb.velocity = Vector2.zero;
+            isMoving = true;
         }
         else
         {
@@ -424,7 +449,7 @@ public class Monster : UnitBase
         {
             target = foe;
             float dist = Mathf.Abs(GetCombatX(foe) - GetCombatX(this));
-            float attackRange = attr.GetAttr(AttrType.AttackRange);
+            float attackRange = GetEffectiveAttackRange();
             if (dist <= attackRange)
             {
                 RunForcedCombat();
@@ -586,6 +611,9 @@ public class Monster : UnitBase
                 else
                     atkRange = tpl;
             }
+            // 近战钳制：禁止表配过大导致站远处开砍
+            if (!MonsterAttackStyleTable.IsRanged(_attackStyle))
+                atkRange = Mathf.Min(atkRange, GameConfig.RangePolearm);
         }
         attr.SetAttr(AttrType.MoveSpeed, moveSpd);
         attr.SetAttr(AttrType.AttackRange, atkRange);
@@ -638,6 +666,7 @@ public class Monster : UnitBase
         _skillCooldown = _canUseActiveSkill && !strong ? (rangedSkill ? 0f : 3f) : 0f;
 
         Debug.Log($"[Monster:{template.id}] Init | mCh={monsterChapter} sprite={_spriteIndex} style={_attackStyle} kit={MonsterAttackStyleTable.GetVfxKit(_attackStyle)} boss={_isBossUnit} range={atkRange:F1} skill={_skillId} vfxSys={(BattleVFXSystem.Instance != null)}");
+        BattleBossHpBar.RefreshFromField();
     }
 
     /// <summary>??????? footprint??????AABB?????????????/summary>
@@ -861,10 +890,7 @@ public class Monster : UnitBase
     {
         base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source);
         if (!isDead)
-        {
-            _worldHpBar?.SyncHpVisual(flash: true);
-            BringHpBarFront();
-        }
+            BattleBossHpBar.RefreshFromField();
     }
 
     /// <summary>?????????????????????????/summary>
@@ -1191,6 +1217,7 @@ public class Monster : UnitBase
 
         HideStackLabel();
         base.Die(isCritKill);
+        BattleBossHpBar.RefreshFromField();
     }
 
     public override void ResetForReuse()

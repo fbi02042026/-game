@@ -70,9 +70,9 @@ public class ChapterMapUI : MonoBehaviour
             _prevMaxUnlocked = maxUnlockedChapter;
         }
 
-        // 绑定按钮
+        // 绑定按钮（旧开战入口已封禁，仅提示走冒险页）
         if (startBattleButton != null)
-            startBattleButton.onClick.AddListener(OnStartBattle);
+            startBattleButton.onClick.AddListener(OnStartBattleBlocked);
         if (backToTownButton != null)
             backToTownButton.onClick.AddListener(OnBackToTown);
         if (settingsButton != null)
@@ -191,11 +191,8 @@ public class ChapterMapUI : MonoBehaviour
         RefreshChapterMap();
     }
 
-    /// <summary>
-    /// 点击开始战斗（封禁：勿直调 StartNewRun，统一走冒险页入口）
-    /// </summary>
-    [System.Obsolete("请从 AdventureUI 进战，勿使用 ChapterMapUI 直开战")]
-    void OnStartBattle()
+    /// <summary>点击开始战斗（封禁：勿直调 StartNewRun，统一走冒险页入口）</summary>
+    void OnStartBattleBlocked()
     {
         UIManager.Instance?.ShowToast("请从冒险页选择章节开战");
         Debug.LogWarning("[ChapterMapUI] OnStartBattle 已封禁，避免绕过 TryStartNewRunOnce");

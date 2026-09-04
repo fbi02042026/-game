@@ -29,7 +29,6 @@ public class StageClearRewardDirector : MonoBehaviour
     Vector3 _effectBaseScale = Vector3.one;
     Vector3 _boxScenePos;
     bool _boxScenePosCached;
-    bool _baseScaleCached;
     bool _running;
 
     public bool IsRunning => _running;
@@ -124,7 +123,6 @@ public class StageClearRewardDirector : MonoBehaviour
             if (_boxBaseScale == Vector3.zero) _boxBaseScale = Vector3.one;
             _effectBaseScale = _effectRoot != null ? _effectRoot.localScale : Vector3.one;
             if (_effectBaseScale == Vector3.zero) _effectBaseScale = Vector3.one;
-            _baseScaleCached = true;
             _boxScenePos = _boxRoot.position;
             _boxScenePosCached = true;
             EnsureBoxController();
@@ -137,7 +135,6 @@ public class StageClearRewardDirector : MonoBehaviour
     /// <summary>切场景 / 重开战后调用，强制下次 CacheSceneRefs 重新采样。</summary>
     public void InvalidateSceneCache()
     {
-        _baseScaleCached = false;
         _boxScenePosCached = false;
         _boxRoot = null;
         _boxAnimHost = null;

@@ -55,7 +55,6 @@ public class SettingsPopupUI : MonoBehaviour
 
     SettingsHost _host = SettingsHost.Auto;
     float _prevTimeScale = 1f;
-    bool _wired;
 
     public bool IsOpen => root != null && root.activeSelf;
     public Button EvacuateButton => evacuateButton;
@@ -551,7 +550,6 @@ public class SettingsPopupUI : MonoBehaviour
         WireOnce(primaryButton, Close);
         WireOnce(audioToggleButton, OnToggleAudio);
         WireOnce(evacuateButton, OnEvacuate);
-        _wired = true;
         WireExtraToggles();
     }
 
@@ -687,7 +685,6 @@ public class SettingsPopupUI : MonoBehaviour
         GameFonts.ApplyToHierarchy(transform);
         root.SetActive(false);
         extraToggleRows.Clear();
-        _wired = false;
         Bind();
         Wire();
     }

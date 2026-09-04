@@ -10,6 +10,9 @@ public static class ContentPaths
         public const string MonsterAttackStyle = "Data/Tables/monster_attack_style";
         public const string MercSkills = "Data/Tables/merc_skills";
         public const string MercSkillMap = "Data/Tables/merc_skill_map";
+        public const string MercLines = "Data/Tables/merc_lines";
+        public const string IntelQuiz = "Data/Tables/intel_quiz";
+        public const string IntelDaily = "Data/Tables/intel_daily";
         public const string MonsterSpriteOpaque = "Data/Tables/monster_sprite_opaque";
         public const string EquipAnchors = "Data/Tables/equip_anchors";
         public const string ConfigFingerprint = "Data/Tables/config_fingerprint";
@@ -68,6 +71,8 @@ public static class ContentPaths
     public static class Ui
     {
         public const string PlayerNaming = "UI/PlayerNaming";
+        /// <summary>开机工作室 Logo（Resources，无扩展名）。</summary>
+        public const string StudioLogo = "UI/Boot/studio_logo";
     }
 
     public static class Source

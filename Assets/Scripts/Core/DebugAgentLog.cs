@@ -8,7 +8,7 @@ public static class DebugAgentLog
 {
     const string SessionId = "36365b";
     /// <summary>默认关闭：同步写盘会在战斗热路径（受击闪白等）造成卡顿。</summary>
-    const bool Enabled = false;
+    static readonly bool Enabled = false;
     static string LogPath => Path.GetFullPath(Path.Combine(Application.dataPath, "..", "debug-36365b.log"));
 
     public static void Log(string hypothesisId, string location, string message, string dataJson = "{}")

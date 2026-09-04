@@ -14,6 +14,13 @@ public static class RewardedAdBridge
     /// </summary>
     public static void ShowRewarded(string placement, Action<bool> onComplete)
     {
+        if (SpotlightBuild.Enabled)
+        {
+            Debug.Log($"[RewardedAdBridge] Spotlight：拒绝广告 placement={placement}");
+            onComplete?.Invoke(false);
+            return;
+        }
+
         if (HasRealSdk)
         {
             // TODO: 微信 wx.createRewardedVideoAd(placement)

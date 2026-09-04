@@ -162,7 +162,9 @@ public class PreLevelEquipUI : MonoBehaviour
                 : new Color(0.28f, 0.28f, 0.32f, 1f);
         }
         if (_hint != null && _sys != null)
-            _hint.text = _sys.hasRefreshedThisRun ? "本局已刷新过" : "可看广告刷新一次";
+            _hint.text = _sys.hasRefreshedThisRun
+                ? "本局已刷新过"
+                : (SpotlightBuild.Enabled ? "可免费刷新一次" : "可看广告刷新一次");
     }
 
     static string DisplayName(EquipmentData d)

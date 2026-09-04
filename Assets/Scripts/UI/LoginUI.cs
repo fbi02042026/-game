@@ -117,6 +117,20 @@ public class LoginUI : MonoBehaviour
         if (qqButton != null) qqButton.gameObject.SetActive(false);
         if (appleButton != null) appleButton.gameObject.SetActive(false);
 
+        // 聚光灯：再次强制关掉第三方登录壳（含误绑引用）
+        if (SpotlightBuild.Enabled)
+        {
+            SetActivePath("ActionPanel/GuestButton", false);
+            SetActivePath("ActionPanel/SocialRow", false);
+            SetActivePath("ActionPanel/OtherLoginLabel", false);
+            SetActivePath("RightMenu/UserCenterButton", false);
+            if (guestButton != null) guestButton.gameObject.SetActive(false);
+            if (wechatButton != null) wechatButton.gameObject.SetActive(false);
+            if (qqButton != null) qqButton.gameObject.SetActive(false);
+            if (appleButton != null) appleButton.gameObject.SetActive(false);
+            if (userCenterButton != null) userCenterButton.gameObject.SetActive(false);
+        }
+
         if (!_presentationApplied)
         {
             _presentationApplied = true;

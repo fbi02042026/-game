@@ -15,9 +15,11 @@ public static class GameConfig
     /// <summary>组织全称。主界面标题、图鉴条目等统一用这个，不要再写「冒险者公会」。</summary>
     public const string GUILD_NAME = "皇家冒险者公会";
 
-    /// <summary>战斗地面加宽后，单位可在站立线上下偏移的半高（世界单位）。</summary>
+    /// <summary>战斗地面加宽后，单位可在站立线上下偏移的半高（无 BattleLaneArea 时的回退）。</summary>
     public const float BATTLE_LANE_HALF = 0.95f;
     public const float BATTLE_LANE_MOVE_SPEED = 1.35f;
+    /// <summary>近战出手允许的车道 Y 误差：走到目标水平对面，上下可略偏，避免错位砍刀光发飘。</summary>
+    public const float MELEE_LANE_ALIGN_TOL = 0.22f;
 
     /// <summary>像素 → 世界单位（对齐数值表「攻击范围(像素)」）</summary>
     public static float PixelsToUnits(float pixels) => pixels / PIXEL_PER_UNIT;
@@ -310,6 +312,8 @@ public static class GameConfig
     public const float SPAWN_X_LEFT_BIAS = -0.5f;
     /// <summary>SPUM 移动动画播放速率（再 +20%）</summary>
     public const float MOVE_ANIM_SPEED_SCALE = 0.4853f;
+    /// <summary>受击动画播放速率（相对 1.0 快 20%）</summary>
+    public const float DAMAGED_ANIM_SPEED = 1.2f;
     /// <summary>镜头相对主角 X 偏移（过大易把身后佣兵挤出左缘）</summary>
     public const float CAMERA_FOLLOW_OFFSET_X = 0.85f;
     /// <summary>默认近战攻击距离（单手剑 96px @ PPU100）</summary>
@@ -509,10 +513,15 @@ public static class GameConfig
     public const float COMBAT_KNOCKBACK_CRIT_KILL = 0.17f;
 
     /// <summary>暴击前摇慢放：timeScale 与真实等待秒数（暴击 / Boss·精英致死前摇）</summary>
-    public const float CRIT_WINDUP_TIME_SCALE = 0.1f;
+    public const float CRIT_WINDUP_TIME_SCALE = 0.05f;
     public const float CRIT_WINDUP_UNSCALED = 0.5f;
     /// <summary>暴击击杀死亡后倒视觉滑动（世界单位，仅程序化死亡 tween）</summary>
     public const float CRIT_KILL_DEATH_SLIDE = 0.15f;
+    /// <summary>普通击杀死亡后倒滑动（短于暴击）</summary>
+    public const float DEATH_SLIDE_NORMAL = 0.06f;
+    /// <summary>精英/Boss 击杀全屏压暗时长（unscaled）</summary>
+    public const float KILL_FINISHER_DIM_DUR = 0.25f;
+    public const float KILL_FINISHER_DIM_ALPHA = 0.55f;
 
     /// <summary>击杀镜头拉近（orthoSize 倍率，&lt;1 拉近）；独立开关 COMBAT_JUICE_KILL_CAM</summary>
     public const float KILL_CAM_ZOOM_MUL = 0.82f;
@@ -529,6 +538,57 @@ public static class GameConfig
     public const float KILL_FINISHER_SHAKE_DUR = 0.1f;
     public static bool COMBAT_JUICE_KILL_FINISHER_SHAKE = true;
 
+    /// <summary>雷击奥义：伤害倍率、镜头、压暗</summary>
+    public const float THUNDER_ULT_DAMAGE_MUL = 2.2f;
+    public const float THUNDER_ULT_ZOOM_MUL = 0.78f;
+    public const float THUNDER_ULT_ZOOM_IN = 0.45f;
+    public const float THUNDER_ULT_ZOOM_OUT = 0.12f;
+    public const float THUNDER_ULT_DIM = 0.35f;
+    public const int THUNDER_ULT_NEED_MIN = 10;
+    public const int THUNDER_ULT_NEED_MAX = 36;
+
+    /// <summary>连杀加速：每多一连 +5%，封顶 +50%（连杀 11）。</summary>
+    public const float KILL_COMBO_HASTE_STEP = 0.05f;
+    public const float KILL_COMBO_HASTE_MAX = 0.5f;
+
+    /// <summary>雷击奥义所需击杀点数：前期约 10 小怪，后期抬高。</summary>
+    public static int GetThunderUltNeedPoints(int chapter, int stageIndex0Based)
+    {
+        int ch = Mathf.Max(1, chapter);
+        int st = Mathf.Max(0, stageIndex0Based);
+        return Mathf.Clamp(10 + (ch - 1) * 4 + st * 2, THUNDER_ULT_NEED_MIN, THUNDER_ULT_NEED_MAX);
+    }
+
+    /// <summary>
+    /// 雷击伤害倍率：引导/第1章前几关 2.8；之后随进度压到约 0.7（后期靠装备）。
+    /// </summary>
+    public static float GetThunderUltDamageMul(int chapter, int stageIndex0Based, bool tutorial)
+    {
+        if (tutorial) return 2.8f;
+        int ch = Mathf.Max(1, chapter);
+        int st = Mathf.Max(0, stageIndex0Based);
+        if (ch <= 1 && st <= 2) return 2.8f;
+        float t = Mathf.Clamp01((ch - 1) * 0.12f + st * 0.06f);
+        return Mathf.Lerp(2.0f, 0.7f, t);
+    }
+
+    /// <summary>连杀加速倍率：1 + min(0.5, (combo-1)*0.05)。</summary>
+    public static float GetKillComboSpeedMul(int killCombo)
+    {
+        if (killCombo <= 1) return 1f;
+        float bonus = Mathf.Min(KILL_COMBO_HASTE_MAX, (killCombo - 1) * KILL_COMBO_HASTE_STEP);
+        return 1f + bonus;
+    }
+
+    /// <summary>连杀加速幻影：倍率超过此值才刷残影。</summary>
+    public const float COMBO_AFTERIMAGE_MUL_MIN = 1.02f;
+    public const float COMBO_AFTERIMAGE_INTERVAL_SLOW = 0.12f;
+    public const float COMBO_AFTERIMAGE_INTERVAL_FAST = 0.05f;
+    public const float COMBO_AFTERIMAGE_LIFE = 0.24f;
+    public const float COMBO_AFTERIMAGE_ALPHA = 0.45f;
+    public const int COMBO_AFTERIMAGE_MAX_PER_UNIT = 10;
+    public const float COMBO_AFTERIMAGE_MOVE_EPS = 0.08f;
+
     /// <summary>第一章第 1 关（教学节奏：打得慢、打得少）</summary>
     public static bool IsOpeningStage()
     {
@@ -544,9 +604,11 @@ public static class GameConfig
         return IsOpeningStage() ? OPENING_WAVE_SPAWN_INTERVAL : WAVE_SPAWN_INTERVAL;
     }
 
-    /// <summary>开局我方普攻最终伤害（2~5，暴击略高）</summary>
+    /// <summary>开局我方普攻最终伤害（2~5，暴击略高）；拿剑爽点后一刀一个。</summary>
     public static int RollOpeningAllyHitDamage(bool isCrit)
     {
+        if (BattleManager.Instance != null && BattleManager.Instance.TutorialPowerFantasy)
+            return isCrit ? Random.Range(35, 46) : Random.Range(25, 41);
         return isCrit ? Random.Range(4, 8) : Random.Range(2, 6);
     }
 

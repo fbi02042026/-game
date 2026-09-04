@@ -96,15 +96,24 @@ public class CombatJuice : Singleton<CombatJuice>
         GetCameraFollow()?.BeginKillCamZoom(mul, inDur);
         Object.FindObjectOfType<ParallaxBackground>()?.ApplyKillCamZoomMul(mul);
         BattleUI.ApplyKillCamHudCompensation(mul);
+        MonsterHealthBar.SetKillCamHidden(true);
+        BattleBossHpBar.SetKillCamHidden(true);
     }
 
-    /// <summary>下劈/命中瞬间：还原 timeScale + 镜头快弹回。</summary>
+    /// <summary>下劈/命中瞬间：还原 timeScale + 镜头瞬间弹回。</summary>
     public void EndKillWindupJuice()
     {
         EndCritWindupSlowMo();
-        if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
-        GetCameraFollow()?.EndKillCamZoom(GameConfig.KILL_CAM_ZOOM_OUT);
+        if (!GameConfig.COMBAT_JUICE_KILL_CAM)
+        {
+            MonsterHealthBar.SetKillCamHidden(false);
+            BattleBossHpBar.SetKillCamHidden(false);
+            return;
+        }
+        GetCameraFollow()?.ForceResetKillCamZoom();
         ResetKillCamScene();
+        MonsterHealthBar.SetKillCamHidden(false);
+        BattleBossHpBar.SetKillCamHidden(false);
     }
 
     void ResetKillCamScene()
@@ -148,6 +157,17 @@ public class CombatJuice : Singleton<CombatJuice>
 
         if (GameConfig.COMBAT_JUICE_CAMERA_SHAKE)
             GetCameraFollow()?.AddShake(0.12f, 0.18f);
+
+        // 精英/Boss 处决一瞬压暗
+        if (victim != null && (victim.IsBossUnit || victim.IsEliteWave))
+            PlayFinisherDim();
+    }
+
+    /// <summary>近战/远程出手破空音（命中音仍走 OnHit）。</summary>
+    public void PlaySwingSfx()
+    {
+        if (!GameConfig.COMBAT_JUICE_SFX) return;
+        TryPlaySfx(_sfxHitOut, "swing", 0.55f);
     }
 
     /// <summary>近战出手方前冲（Attack 里调用；仅敌方，我方根节点不位移防滑步）。</summary>
@@ -169,6 +189,61 @@ public class CombatJuice : Singleton<CombatJuice>
         }
     }
 
+    void PlayFinisherDim()
+    {
+        if (_finisherDimCo != null)
+            StopCoroutine(_finisherDimCo);
+        _finisherDimCo = StartCoroutine(CoFinisherDim());
+    }
+
+    Coroutine _finisherDimCo;
+    static CanvasGroup _finisherDimCg;
+
+    IEnumerator CoFinisherDim()
+    {
+        var cg = EnsureFinisherDim();
+        if (cg == null) yield break;
+        cg.gameObject.SetActive(true);
+        cg.alpha = GameConfig.KILL_FINISHER_DIM_ALPHA;
+        float t = 0f;
+        float dur = Mathf.Max(0.05f, GameConfig.KILL_FINISHER_DIM_DUR);
+        while (t < dur)
+        {
+            t += Time.unscaledDeltaTime;
+            cg.alpha = Mathf.Lerp(GameConfig.KILL_FINISHER_DIM_ALPHA, 0f, Mathf.Clamp01(t / dur));
+            yield return null;
+        }
+        cg.alpha = 0f;
+        cg.gameObject.SetActive(false);
+        _finisherDimCo = null;
+    }
+
+    static CanvasGroup EnsureFinisherDim()
+    {
+        if (_finisherDimCg != null) return _finisherDimCg;
+        var go = new GameObject("KillFinisherDim");
+        Object.DontDestroyOnLoad(go);
+        var canvas = go.AddComponent<Canvas>();
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.FullscreenFx);
+        go.AddComponent<UnityEngine.UI.GraphicRaycaster>().enabled = false;
+        var imgGo = new GameObject("Dim", typeof(RectTransform));
+        imgGo.transform.SetParent(go.transform, false);
+        var rt = imgGo.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var img = imgGo.AddComponent<UnityEngine.UI.Image>();
+        img.color = Color.black;
+        img.raycastTarget = false;
+        _finisherDimCg = go.AddComponent<CanvasGroup>();
+        _finisherDimCg.alpha = 0f;
+        _finisherDimCg.blocksRaycasts = false;
+        _finisherDimCg.interactable = false;
+        go.SetActive(false);
+        return _finisherDimCg;
+    }
+
     public void OnKillCombo(int combo)
     {
         if (!GameConfig.COMBAT_JUICE_COMBO || combo < 3) return;
@@ -185,12 +260,19 @@ public class CombatJuice : Singleton<CombatJuice>
             if (GameConfig.COMBAT_JUICE_SFX)
                 TryPlaySfx(_sfxCrit, "combo5", 0.75f);
             GetCameraFollow()?.AddShake(0.07f, 0.14f);
+            if (!_comboToastShown.Contains("5"))
+            {
+                _comboToastShown.Add("5");
+                GlobalToastUI.ShowFlythrough("连杀 x5");
+                if (GameConfig.COMBAT_JUICE_HIT_STOP)
+                    RequestHitStop(GameConfig.HIT_STOP_COMBO_ANNOUNCE);
+            }
         }
 
         if (combo >= 10 && !_comboToastShown.Contains("10"))
         {
             _comboToastShown.Add("10");
-            UIManager.Instance?.ShowToast("连击！");
+            GlobalToastUI.ShowFlythrough("连杀 x10");
             if (GameConfig.COMBAT_JUICE_HIT_STOP)
                 RequestHitStop(GameConfig.HIT_STOP_COMBO_ANNOUNCE);
         }

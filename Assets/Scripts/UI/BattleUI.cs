@@ -72,6 +72,9 @@ public class BattleUI : MonoBehaviour
         // 右侧：连杀 + 下一波倒计时
         BattleSideHud.EnsureOn(transform);
 
+        // Boss 屏幕血条（场景节点 BossBar）
+        BattleBossHpBar.Ensure(transform);
+
         // 后备入口：仅 Battle 场景才跑战斗初始化
         if (GameSceneGate.IsBattle)
             AutoGameInitializer.Initialize();
@@ -114,6 +117,7 @@ public class BattleUI : MonoBehaviour
         GameFonts.ApplyToHierarchy(transform);
         // Canvas 尺寸这时才是最终值，越界判断必须放在这之后
         ClampCharacterBarInsideParent();
+        HeroThunderUltimate.Instance?.EnsureBattleUi();
         Debug.Log($"[BattleUI] HUD已刷新 — playerSlot={playerSlot?.root!=null} merc1={mercSlot1?.root!=null} merc2={mercSlot2?.root!=null} progressNodes={progressNodes?.Count} marker={playerMarker!=null}");
     }
 

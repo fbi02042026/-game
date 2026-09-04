@@ -297,13 +297,16 @@ public class GuildHallUI : MonoBehaviour
 
     void HideUnfinishedHallButtons()
     {
+        // 未接通或半成品：运行时隐藏，不改预制体；清单见 Docs/软著后开发备忘.md「主界面暂隐入口」
         SetBtnHidden(shopButton);
         SetBtnHidden(noticeButton);
         SetBtnHidden(rankButton);
+        SetBtnHidden(mailButton);        // 无收件箱 UI，仅一键领完
+        SetBtnHidden(activityButton);    // 名义活动，实际开里程页，易误导
         SetBtnHidden(noticeBoardButton); // 公告栏
-        SetBtnHidden(armoryButton);      // 武器库（遗产浏览暂隐）
-        SetBtnHidden(licenseHallButton);  // 执照厅
-        // 金币/体力加号保留，按存档发放
+        SetBtnHidden(armoryButton);      // 武器库（遗产浏览）
+        SetBtnHidden(licenseHallButton); // 执照厅
+        // 保留：底栏五入口、设置、咨询台、金币/体力加号
     }
 
     void WireHallClicks()
@@ -313,25 +316,22 @@ public class GuildHallUI : MonoBehaviour
 
         if (settingsButton != null)
             settingsButton.onClick.AddListener(() => BattleSettingsPanel.Ensure().Open(SettingsHost.Town));
-        if (mailButton != null)
-            mailButton.onClick.AddListener(OnMailClicked);
-        if (licenseHallButton != null)
-            licenseHallButton.onClick.AddListener(OnLicenseHall);
-        if (armoryButton != null)
-            armoryButton.onClick.AddListener(LegacyPoolBrowseUI.Show);
-        if (activityButton != null)
-            activityButton.onClick.AddListener(() => AchievementMilestoneUI.Show());
+        // mail / activity / license / armory：已隐藏，待后期再接线
         if (goldPlusButton != null)
         {
-            goldPlusButton.gameObject.SetActive(true);
+            bool showAd = !SpotlightBuild.Enabled;
+            goldPlusButton.gameObject.SetActive(showAd);
             goldPlusButton.onClick.RemoveAllListeners();
-            goldPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimGold);
+            if (showAd)
+                goldPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimGold);
         }
         if (staminaPlusButton != null)
         {
-            staminaPlusButton.gameObject.SetActive(true);
+            bool showAd = !SpotlightBuild.Enabled;
+            staminaPlusButton.gameObject.SetActive(showAd);
             staminaPlusButton.onClick.RemoveAllListeners();
-            staminaPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimStamina);
+            if (showAd)
+                staminaPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimStamina);
         }
     }
 

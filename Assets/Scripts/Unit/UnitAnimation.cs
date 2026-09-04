@@ -370,9 +370,12 @@ public class UnitAnimation : MonoBehaviour
             float dt = Mathf.Clamp01(_procDeathTime / procDeathDuration);
             float targetAngle = _flipXFacing ? (-90f * _lastFacingDir) : (90f * _lastFacingDir);
             t.localRotation = Quaternion.Lerp(Quaternion.identity, Quaternion.Euler(0, 0, targetAngle), dt);
-            if (_procDeathCritKill)
+            float slideAmt = _procDeathCritKill
+                ? GameConfig.CRIT_KILL_DEATH_SLIDE
+                : GameConfig.DEATH_SLIDE_NORMAL;
+            if (slideAmt > 0.001f)
             {
-                float slide = GameConfig.CRIT_KILL_DEATH_SLIDE * (1f - dt) * -_lastFacingDir;
+                float slide = slideAmt * (1f - dt) * -_lastFacingDir;
                 t.localPosition = _procBasePos + new Vector3(slide, 0f, 0f);
             }
             Color c = _sr.color;
@@ -500,7 +503,18 @@ public class UnitAnimation : MonoBehaviour
 
     void ApplyMoveAnimSpeed(bool isMoving)
     {
+        // 受击 recovery 期间保持 DAMAGED 专用速率，不被移动倍率压慢
+        if (InDamagedRecovery())
+        {
+            ApplyAnimatorSpeed(GameConfig.DAMAGED_ANIM_SPEED);
+            return;
+        }
         float spd = isMoving ? moveAnimSpeedScale : 1f;
+        ApplyAnimatorSpeed(spd);
+    }
+
+    void ApplyAnimatorSpeed(float spd)
+    {
         if (_animator != null) _animator.speed = spd;
         if (_spum != null && _spum._anim != null && _spum._anim != _animator)
             _spum._anim.speed = spd;
@@ -511,8 +525,10 @@ public class UnitAnimation : MonoBehaviour
         if (_monsterClipMode)
             StabilizeMonsterBodyTransform();
 
-        // 每帧锁住移动动画速率（SPUM PlayAnimation 可能把 speed 打回 1）
-        if (_isMoving && !_isDead)
+        // 受击中每帧锁住 DAMAGED 速率；移动中锁移动倍率（SPUM PlayAnimation 可能把 speed 打回 1）
+        if (!_isDead && InDamagedRecovery())
+            ApplyAnimatorSpeed(GameConfig.DAMAGED_ANIM_SPEED);
+        else if (_isMoving && !_isDead)
             ApplyMoveAnimSpeed(true);
 
         // 攻击全程 SPUM 会改武器贴图/ItemPath，LateUpdate 脏检查回填（比协程只补 2 帧更稳）
@@ -623,6 +639,8 @@ public class UnitAnimation : MonoBehaviour
     }
 
     public bool InDamagedRecovery() => Time.unscaledTime < _damagedRecoveryUntil;
+    /// <summary>攻击动画锁定中（出手未结束，AI 不得换目标/滑步）。</summary>
+    public bool InAttackLock => _attackAnimLock > 0f;
 
     /// <summary>攻击出手时打断受击白闪与 recovery。</summary>
     public void InterruptDamaged()
@@ -630,6 +648,8 @@ public class UnitAnimation : MonoBehaviour
         _damagedRecoveryUntil = 0f;
         _spumFlashGen++;
         RestoreSpumFlashColors();
+        if (!_isMoving)
+            ApplyAnimatorSpeed(1f);
     }
 
     /// <summary>
@@ -868,7 +888,8 @@ public class UnitAnimation : MonoBehaviour
     public void PlayDamaged()
     {
         if (_isDead) return;
-        _damagedRecoveryUntil = Time.unscaledTime + DamagedRecoverySeconds;
+        float recovery = DamagedRecoverySeconds / Mathf.Max(0.01f, GameConfig.DAMAGED_ANIM_SPEED);
+        _damagedRecoveryUntil = Time.unscaledTime + recovery;
 
         // SPUM模式
         if (_spum != null && _spum.OverrideController != null)
@@ -886,6 +907,7 @@ public class UnitAnimation : MonoBehaviour
             SetTriggerSafe("4_Damaged");
             SetTriggerSafe("Hit");
         }
+        ApplyAnimatorSpeed(GameConfig.DAMAGED_ANIM_SPEED);
         // 程序化模式：受伤时短暂闪烁
         if (_procMode && _sr != null)
         {

@@ -386,9 +386,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
         var offer = pool[UnityEngine.Random.Range(0, pool.Count)];
         string key = OfferBanterKey(offer);
-        bool last = MercHireSession.WasInLastRun(key)
-            || (!string.IsNullOrEmpty(offer.mercId) && MercHireSession.WasInLastRun(offer.mercId));
-        string line = MercRosterDefs.PickTavernAppearLine(key, last);
+        string line = MercLineTable.Pick(key, MercLineTable.Scene.TavernRefresh);
         if (string.IsNullOrEmpty(line)) return false;
 
         string name = !string.IsNullOrEmpty(offer.nickname) ? offer.nickname
@@ -524,7 +522,12 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         MercHireSession.AddHired(picked);
         string name = !string.IsNullOrEmpty(picked.displayName) ? picked.displayName
             : (!string.IsNullOrEmpty(picked.nickname) ? picked.nickname : "佣兵");
-        UIManager.Instance?.ShowToast($"{name}加入队伍！");
+        string hireKey = !string.IsNullOrEmpty(picked.hireId) ? picked.hireId : OfferBanterKey(picked);
+        string hireLine = MercLineTable.Pick(hireKey, MercLineTable.Scene.HireSuccess);
+        if (!string.IsNullOrEmpty(hireLine))
+            UIManager.Instance?.ShowToast($"{name}加入队伍！「{hireLine}」");
+        else
+            UIManager.Instance?.ShowToast($"{name}加入队伍！");
         RefreshAll();
         ScheduleNextIdleBanter();
     }

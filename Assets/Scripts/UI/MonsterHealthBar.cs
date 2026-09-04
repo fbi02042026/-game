@@ -40,6 +40,45 @@ public class MonsterHealthBar : MonoBehaviour
     // 缓存的预制体引用
     private static GameObject _cachedPrefab;
     private static bool _prefabChecked = false;
+    /// <summary>击杀拉镜期间隐藏全部世界血条（ortho 拉近会一起放大）。</summary>
+    static bool _killCamHidden;
+    static readonly System.Collections.Generic.List<MonsterHealthBar> _live = new System.Collections.Generic.List<MonsterHealthBar>(32);
+
+    public static void SetKillCamHidden(bool hidden)
+    {
+        _killCamHidden = hidden;
+        for (int i = _live.Count - 1; i >= 0; i--)
+        {
+            var b = _live[i];
+            if (b == null)
+            {
+                _live.RemoveAt(i);
+                continue;
+            }
+            b.ApplyKillCamVisibility();
+        }
+    }
+
+    void OnEnable()
+    {
+        if (!_live.Contains(this))
+            _live.Add(this);
+        ApplyKillCamVisibility();
+    }
+
+    void OnDestroy()
+    {
+        _live.Remove(this);
+    }
+
+    void ApplyKillCamVisibility()
+    {
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            canvas.enabled = !_killCamHidden;
+        else if (_barRect != null)
+            _barRect.localScale = _killCamHidden ? Vector3.zero : Vector3.one;
+    }
 
     void Awake()
     {
@@ -73,6 +112,7 @@ public class MonsterHealthBar : MonoBehaviour
             existing.gameObject.SetActive(true);
             existing.ResetBar();
             existing.ApplyBarMetricsFromUnit();
+            existing.ApplyKillCamVisibility();
             return existing;
         }
 
@@ -334,6 +374,9 @@ public class MonsterHealthBar : MonoBehaviour
                 _barRect.gameObject.SetActive(false);
             return;
         }
+
+        if (_killCamHidden)
+            return;
 
         SyncHpVisual(flash: false);
 

@@ -35,6 +35,8 @@ public class BattleManager : Singleton<BattleManager>
     /// <summary>黑幕结束后队伍从左走进场（此期间播走路动画，但不战斗）</summary>
     public bool PartyIntroWalking { get; private set; }
     public bool IsTutorialRun { get; private set; }
+    /// <summary>引导拿剑后：强伤一刀一个怪的爽点阶段。</summary>
+    public bool TutorialPowerFantasy { get; private set; }
     public bool SuppressStageClear { get; set; }
     public bool SkipLegacyOnEvacuate { get; set; }
     /// <summary>本局金币获得倍率（剧情选择等）</summary>
@@ -92,6 +94,13 @@ public class BattleManager : Singleton<BattleManager>
     /// <summary>连杀计数</summary>
     private int _killCombo;
     private float _lastKillTime;
+    /// <summary>友军连杀加速倍率（1~1.5）。</summary>
+    public float KillComboSpeedMul { get; private set; } = 1f;
+
+    void SyncKillComboHaste()
+    {
+        KillComboSpeedMul = GameConfig.GetKillComboSpeedMul(_killCombo);
+    }
 
     // === 技能能量 ===
     /// <summary>玩家技能能量 0~1（杀怪累积+时间累积，满了可以释放）</summary>
@@ -111,7 +120,6 @@ public class BattleManager : Singleton<BattleManager>
     private bool _portalActive = false;
     private bool _rewardSequenceStarted = false;
     private Transform _chuanSongMen;
-    private bool _didUpdateForceSpawn;
     private bool _portalEnterVfxPlayed;
 
     /// <summary>
@@ -243,6 +251,7 @@ public class BattleManager : Singleton<BattleManager>
         }
 
         IsTutorialRun = StoryProgress.ShouldStartTutorialBattle();
+        TutorialPowerFantasy = false;
         if (IsTutorialRun)
         {
             StoryProgress.ResetTutorialRunInventoryIfNeeded();
@@ -426,6 +435,28 @@ public class BattleManager : Singleton<BattleManager>
     public void OnMercenaryDead(UnitBase merc)
     {
         allyUnits.Remove(merc);
+        TryPlayMercDeathLine(merc);
+    }
+
+    void TryPlayMercDeathLine(UnitBase unit)
+    {
+        if (IsTutorialRun) return;
+        if (!(unit is Mercenary m) || m == null) return;
+        string key = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+        string line = MercLineTable.Pick(key, MercLineTable.Scene.Death);
+        if (string.IsNullOrEmpty(line)) return;
+
+        // 死亡动画期间单位仍在：优先头顶气泡；否则 Toast
+        if (unit != null && unit.gameObject != null && unit.gameObject.activeInHierarchy
+            && (BattleHeadTalkUI.Instance == null || !BattleHeadTalkUI.Instance.IsShowing))
+        {
+            BattleHeadTalkUI.Ensure().PlayLine(unit, line, 1.25f);
+            return;
+        }
+        if (UIManager.Instance != null)
+            UIManager.Instance.ShowToast(line);
+        else
+            GlobalToastUI.Show(line);
     }
 
     void ApplyChapter1RunModifiersFromSave()
@@ -448,6 +479,14 @@ public class BattleManager : Singleton<BattleManager>
     {
         playerSkillEnergy = MAX_SKILL_ENERGY;
         BattleUI.Instance?.UpdateSkillEnergy(0, playerSkillEnergy);
+    }
+
+    /// <summary>引导开箱拿剑后进入强伤+多怪爽点。</summary>
+    public void BeginTutorialPowerFantasy()
+    {
+        if (!IsTutorialRun) return;
+        TutorialPowerFantasy = true;
+        Debug.Log("[BattleManager] 引导拿剑爽点：一刀一个 + 后续加怪");
     }
 
     void PrepareTutorialWaves()
@@ -488,7 +527,6 @@ public class BattleManager : Singleton<BattleManager>
         _totalWaves = _waves.Count;
         _allWavesSpawned = false;
         _activeWaveIndex = -1;
-        _didUpdateForceSpawn = false;
         SuppressStageClear = true;
 
         int waveIdx = _waves.Count - 1;
@@ -615,7 +653,7 @@ public class BattleManager : Singleton<BattleManager>
         for (int i = 0; i < n; i++)
         {
             float ox = offsets[i % offsets.Length] + Random.Range(-0.45f, 0.45f);
-            float lane = Random.Range(-GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+            float lane = BattleLaneBounds.RandomLaneOffset();
             Vector3 engagePos = new Vector3(vx + ox, UnitBase.GROUND_Y + lane, z);
             bool isElite = i >= n - eliteCount;
             float scale = isElite ? GameConfig.ELITE_SCALE_MULTIPLIER : 1f;
@@ -671,7 +709,7 @@ public class BattleManager : Singleton<BattleManager>
         {
             float side = (i % 2 == 0) ? -1f : 1f;
             float ox = engageCenter + side * Random.Range(1.2f, 3.2f) + Random.Range(-0.5f, 0.5f);
-            float lane = Random.Range(-GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+            float lane = BattleLaneBounds.RandomLaneOffset();
             Vector3 engagePos = new Vector3(ox, UnitBase.GROUND_Y + lane, z);
             Monster m = SpawnAmbushMonsterAt(engagePos, lane, 1f, usedSprites);
             if (m == null) continue;
@@ -702,7 +740,7 @@ public class BattleManager : Singleton<BattleManager>
         {
             float side = (i % 2 == 0) ? -1f : 1f;
             float ox = engageCenter + side * Random.Range(1.0f, 2.8f) + Random.Range(-0.4f, 0.4f);
-            float lane = Random.Range(-GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+            float lane = BattleLaneBounds.RandomLaneOffset();
             Vector3 engagePos = new Vector3(ox, UnitBase.GROUND_Y + lane, z);
             if (!TryPickWaveMonster(stageIdx, monsters.Count + i, false, usedSprites, out MonsterConfig cfg, out int spriteIdx))
                 continue;
@@ -732,15 +770,18 @@ public class BattleManager : Singleton<BattleManager>
         return monster;
     }
 
+    int _offscreenEnterSideToggle;
+
     Monster SpawnMonsterOffscreenEnter(
         Vector3 engagePos, float laneY, float scaleMultiplier,
-        MonsterConfig cfg, int stageIdx, int spriteIdx, UnitBase forcedTarget = null)
+        MonsterConfig cfg, int stageIdx, int spriteIdx, UnitBase forcedTarget = null,
+        bool? fromLeftOverride = null)
     {
         if (cfg == null) return null;
         float z = unitRoot != null ? unitRoot.position.z : engagePos.z;
         GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
-        float heroX = hero != null ? UnitBase.GetCombatX(hero) : engagePos.x;
-        bool fromLeft = engagePos.x < heroX;
+        // 相对镜头左右交替进场（可覆盖）
+        bool fromLeft = fromLeftOverride ?? ((_offscreenEnterSideToggle++ & 1) == 0);
         const float offscreenMargin = 1.35f;
         float enterX = fromLeft ? visMin - offscreenMargin : visMax + offscreenMargin;
         engagePos.y = UnitBase.GROUND_Y + laneY;
@@ -818,11 +859,11 @@ public class BattleManager : Singleton<BattleManager>
         _portalEnterVfxPlayed = false;
         _chuanSongMen = null;
         _totalMonstersSpawnedThisStage = 0;
-        _didUpdateForceSpawn = false;
         _eliteToastShownThisStage = false;
         playerSkillEnergy = 0f;
         mercSkillEnergy[0] = 0f;
         mercSkillEnergy[1] = 0f;
+        HeroThunderUltimate.Instance?.ResetForBattle();
 
         float startX = GetStageStartX();
         float z = unitRoot != null ? unitRoot.position.z : 0f;
@@ -903,6 +944,7 @@ public class BattleManager : Singleton<BattleManager>
 
             StopBattleSpawnCoroutines();
             StartCoroutine("BattleStartSequenceCoroutine");
+            MercBattleBanter.EnsureOn(this);
             // 教程关由 TutorialDirector 控刷怪，禁止硬性首波/紧急刷怪抢跑
             if (!IsTutorialRun)
                 _firstWaveHardFallbackCo = StartCoroutine(CoFirstWaveHardFallback());
@@ -1025,7 +1067,7 @@ public class BattleManager : Singleton<BattleManager>
         for (int i = 0; i < count; i++)
         {
             float x = baseX + i * GetMonsterWaveSpacing() + Random.Range(-0.6f, 0.6f);
-            float lane = Random.Range(-GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+            float lane = BattleLaneBounds.RandomLaneOffset();
             Vector3 engagePos = new Vector3(x, UnitBase.GROUND_Y + lane, z);
 
             if (!TryPickWaveMonster(stageIdx, i, false, usedSprites, out MonsterConfig cfg, out int spriteIdx))
@@ -1049,10 +1091,10 @@ public class BattleManager : Singleton<BattleManager>
         _allWavesSpawned = false;
         _killCombo = 0;
         _lastKillTime = 0f;
+        SyncKillComboHaste();
         CombatJuice.ResetComboToast();
         _firstWaveSpawned = false;
         _battleIntroFinished = false;
-        _didUpdateForceSpawn = false;
         _battleStartTime = Time.unscaledTime;
         BattleSideHud.Instance?.ResetCombo();
         BattleSideHud.Instance?.SetWaveCountdown(false, 0f, false);
@@ -1306,6 +1348,7 @@ public class BattleManager : Singleton<BattleManager>
         PartyIntroWalking = false;
         _battleIntroFinished = true;
         UnitsCanAct = true;
+        MercBattleBanter.EnsureOn(this);
     }
 
     float GetPartyEnterX(float battleStartX)
@@ -1887,6 +1930,7 @@ public class BattleManager : Singleton<BattleManager>
         if (_killCombo > 0 && Time.time - _lastKillTime > GameConfig.COMBO_WINDOW)
         {
             _killCombo = 0;
+            SyncKillComboHaste();
             BattleSideHud.Instance?.ResetCombo();
         }
 
@@ -2295,7 +2339,7 @@ public class BattleManager : Singleton<BattleManager>
             if (template.isBoss && !wave.isBossWave)
                 monsterScale = GameConfig.BOSS_SCALE_MULTIPLIER;
 
-            float lane = Random.Range(-GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+            float lane = BattleLaneBounds.RandomLaneOffset();
             float spawnY = UnitBase.GROUND_Y + lane;
             bool fromLeft = Random.value > 0.5f;
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
@@ -2349,7 +2393,7 @@ public class BattleManager : Singleton<BattleManager>
 
         for (int i = 0; i < wave.monsterCount; i++)
         {
-            float lane = Random.Range(-GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+            float lane = BattleLaneBounds.RandomLaneOffset();
             float spawnY = UnitBase.GROUND_Y + lane;
             float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
@@ -2518,11 +2562,13 @@ public class BattleManager : Singleton<BattleManager>
         else
             _killCombo = 1;
         _lastKillTime = now;
+        SyncKillComboHaste();
         if (_killCombo > RunStats.MaxKillCombo)
             RunStats.MaxKillCombo = _killCombo;
         BattleSideHud.Instance?.SetCombo(_killCombo);
         CombatJuice.Instance?.OnKillCombo(_killCombo);
         CombatJuice.Instance?.OnKillFinisher(m);
+        HeroThunderUltimate.Instance?.OnMonsterKilled(m);
 
 
         int goal = GetStageMonsterGoal();

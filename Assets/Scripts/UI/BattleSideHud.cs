@@ -12,6 +12,8 @@ public class BattleSideHud : MonoBehaviour
     Text _comboTitle;
     Text _comboValue;
     CanvasGroup _comboGroup;
+    Image _comboRing;
+    float _comboRingExpireAt;
 
     Button _waveBtn;
     Text _waveTitle;
@@ -70,6 +72,27 @@ public class BattleSideHud : MonoBehaviour
             new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(180f, 88f));
         _comboGroup = comboGo.AddComponent<CanvasGroup>();
         _comboGroup.alpha = 0f;
+
+        // 连杀窗口倒计时环（每杀重置）
+        var ringGo = new GameObject("ComboRing", typeof(RectTransform));
+        ringGo.transform.SetParent(comboGo.transform, false);
+        var ringRt = ringGo.GetComponent<RectTransform>();
+        ringRt.anchorMin = new Vector2(0.5f, 0.5f);
+        ringRt.anchorMax = new Vector2(0.5f, 0.5f);
+        ringRt.pivot = new Vector2(0.5f, 0.5f);
+        ringRt.sizeDelta = new Vector2(96f, 96f);
+        ringRt.anchoredPosition = new Vector2(0f, -8f);
+        _comboRing = ringGo.AddComponent<Image>();
+        _comboRing.color = new Color(1f, 0.75f, 0.2f, 0.85f);
+        _comboRing.raycastTarget = false;
+        _comboRing.type = Image.Type.Filled;
+        _comboRing.fillMethod = Image.FillMethod.Radial360;
+        _comboRing.fillOrigin = (int)Image.Origin360.Top;
+        _comboRing.fillClockwise = false;
+        _comboRing.fillAmount = 1f;
+        // 无专用 sprite 时用默认白图即可出径向填充
+        _comboRing.sprite = CreateRingSprite();
+
         _comboTitle = CreateText(comboGo.transform, "ComboTitle", "连杀", 22, TextAnchor.MiddleCenter,
             new Vector2(0f, 22f), new Vector2(160f, 28f));
         _comboValue = CreateText(comboGo.transform, "ComboValue", "x0", 46, TextAnchor.MiddleCenter,
@@ -179,6 +202,13 @@ public class BattleSideHud : MonoBehaviour
             if (_comboValue != null)
                 _comboValue.rectTransform.localScale = Vector3.one * s;
         }
+
+        if (_comboRing != null && _comboGroup != null && _comboGroup.alpha > 0.01f)
+        {
+            float remain = _comboRingExpireAt - Time.time;
+            float win = Mathf.Max(0.05f, GameConfig.COMBO_WINDOW);
+            _comboRing.fillAmount = Mathf.Clamp01(remain / win);
+        }
     }
 
     public void SetCombo(int combo)
@@ -189,16 +219,45 @@ public class BattleSideHud : MonoBehaviour
         {
             _comboGroup.alpha = 0f;
             if (_comboValue != null) _comboValue.text = "";
+            if (_comboRing != null) _comboRing.fillAmount = 0f;
             return;
         }
 
         _comboGroup.alpha = 1f;
+        _comboRingExpireAt = Time.time + GameConfig.COMBO_WINDOW;
+        if (_comboRing != null) _comboRing.fillAmount = 1f;
         if (_comboValue == null) return;
         _comboValue.text = "x" + combo;
         _comboValue.color = combo >= 3
             ? new Color(1f, 0.55f, 0.2f, 1f)
             : new Color(1f, 0.85f, 0.25f, 1f);
         _comboPunch = 0.25f;
+    }
+
+    static Sprite _ringSprite;
+    static Sprite CreateRingSprite()
+    {
+        if (_ringSprite != null) return _ringSprite;
+        const int size = 64;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        float cx = (size - 1) * 0.5f;
+        float outer = size * 0.48f;
+        float inner = size * 0.34f;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = x - cx;
+                float dy = y - cx;
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                float a = (d <= outer && d >= inner) ? 1f : 0f;
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        }
+        tex.Apply(false, true);
+        _ringSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
+        return _ringSprite;
     }
 
     public void ResetCombo()

@@ -30,6 +30,7 @@ public class Hero : UnitBase
 
         if (costumeManager == null)
             costumeManager = GetComponent<HeroCostumeManager>();
+        KillComboAfterimage.Ensure(this);
     }
 
     void OnDestroy()

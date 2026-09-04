@@ -41,7 +41,7 @@ public abstract class UnitBase : MonoBehaviour
 
     public void SetLaneY(float offset)
     {
-        LaneY = Mathf.Clamp(offset, -GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+        LaneY = BattleLaneBounds.ClampLaneOffset(offset);
     }
 
     /// <summary>把 LaneY 同步成当前脚底相对站立线的偏移（入场中断 / 刷怪纠偏）。</summary>
@@ -59,7 +59,7 @@ public abstract class UnitBase : MonoBehaviour
         if (this is Monster mon)
             moveTf = mon.GetBodyTransform();
         if (moveTf == null) moveTf = transform;
-        return Mathf.Clamp(moveTf.position.y - GROUND_Y, -GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+        return BattleLaneBounds.ClampLaneOffset(moveTf.position.y - GROUND_Y);
     }
 
     protected virtual Transform LaneMoveTransform => transform;
@@ -371,7 +371,18 @@ public abstract class UnitBase : MonoBehaviour
             return;
         }
 
-        target = FindNearestEnemyInDetectRange();
+        // 攻击动画中：锁目标、停步、不转身并道，避免中途换目标/滑步
+        if (TryHoldDuringAttack())
+            return;
+
+        // 受击 recovery：停步，避免前压 + DAMAGED 造成滑步
+        if (TryHoldDuringDamaged())
+            return;
+
+        bool alliesEngaged = isAlly && HasAliveEnemyOnField();
+        target = alliesEngaged
+            ? FindNearestEnemyOnField()
+            : FindNearestEnemyInDetectRange();
         // 安全检查：绝不对同阵营单位出手
         if (target != null && target.isAlly == isAlly)
         {
@@ -382,25 +393,35 @@ public abstract class UnitBase : MonoBehaviour
         if (target != null)
         {
             float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
-            float attackRange = attr.GetAttr(AttrType.AttackRange);
+            float attackRange = GetEffectiveAttackRange();
+            bool melee = UsesMeleeBasicAttack();
             FaceToward(target);
-            AdjustLaneTowardTarget(target, Time.deltaTime);
+            // 近战始终并道到目标水平对面；远程交战锁 Y 不追道
+            if (melee || !alliesEngaged)
+                AdjustLaneTowardTarget(target, Time.deltaTime);
 
-            if (distance <= attackRange)
+            if (IsInBasicAttackRange(target))
             {
                 // 攻击范围内停步输出，避免贴到目标中心导致双方朝向来回抖
                 if (rb != null) rb.velocity = Vector2.zero;
-                if (attackCd <= 0 && (unitAnim == null || !unitAnim.InDamagedRecovery()))
+                if (attackCd <= 0 && (unitAnim == null || !unitAnim.InDamagedRecovery())
+                    && (unitAnim == null || !unitAnim.InAttackLock))
                 {
                     Attack(target);
                     attackCd = GetAttackCooldown();
                 }
             }
+            else if (melee && distance <= attackRange)
+            {
+                // X 已进距、车道未齐：停 X 只并道，不开砍
+                if (rb != null) rb.velocity = Vector2.zero;
+                isMoving = true;
+            }
             else
             {
-                // 有索敌目标但未进射程：持续前压（不因前方友军挡路而停步）
+                // 有索敌目标但未进射程：持续前压走近再打
                 if (rb != null)
-                    rb.velocity = new Vector2(facingDir * attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
+                    rb.velocity = new Vector2(facingDir * GetCombatMoveSpeed(), rb.velocity.y);
                 isMoving = true;
             }
         }
@@ -408,13 +429,24 @@ public abstract class UnitBase : MonoBehaviour
         {
             if (isAlly)
             {
-                // 索敌范围内无敌人：向右推进
-                facingDir = 1;
-                ApplyFacing(facingDir);
-                AdjustFormationLane(Time.deltaTime);
-                if (rb != null)
-                    rb.velocity = new Vector2(attr.GetAttr(AttrType.MoveSpeed), rb.velocity.y);
-                isMoving = true;
+                if (alliesEngaged)
+                {
+                    // 有怪但索敌范围内无目标：停推图
+                    facingDir = 1;
+                    ApplyFacing(facingDir);
+                    if (rb != null) rb.velocity = Vector2.zero;
+                    isMoving = false;
+                }
+                else
+                {
+                    // 无怪：向右推图
+                    facingDir = 1;
+                    ApplyFacing(facingDir);
+                    AdjustFormationLane(Time.deltaTime);
+                    if (rb != null)
+                        rb.velocity = new Vector2(GetCombatMoveSpeed(), rb.velocity.y);
+                    isMoving = true;
+                }
             }
             else
             {
@@ -436,6 +468,42 @@ public abstract class UnitBase : MonoBehaviour
         if (isAlly && (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode))
             ClampToScreen();
         ApplyLaneY(Time.deltaTime);
+    }
+
+    /// <summary>
+    /// 攻击动画锁定：保留当前目标，停步且不转身/并道。
+    /// 目标已死则不锁定，允许立刻重索敌。
+    /// </summary>
+    protected bool TryHoldDuringAttack()
+    {
+        if (unitAnim == null || !unitAnim.InAttackLock) return false;
+        if (target == null || target.isDead || target.isAlly == isAlly) return false;
+
+        if (rb != null) rb.velocity = Vector2.zero;
+        if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+        if (isAlly && (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode))
+            ClampToScreen();
+        ApplyLaneY(Time.deltaTime);
+        return true;
+    }
+
+    /// <summary>受击硬直：清零速度并停移动动画，避免前进滑步。</summary>
+    protected bool TryHoldDuringDamaged()
+    {
+        if (unitAnim == null || !unitAnim.InDamagedRecovery()) return false;
+
+        if (rb != null) rb.velocity = Vector2.zero;
+        unitAnim.SetMove(false, facingDir);
+        if (isAlly && (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode))
+            ClampToScreen();
+        ApplyLaneY(Time.deltaTime);
+        return true;
+    }
+
+    static bool HasAliveEnemyOnField()
+    {
+        var bm = BattleManager.Instance;
+        return bm != null && bm.GetAliveMonsterCount() > 0;
     }
 
     /// <summary>对外改朝向（传送门、入队站位等）</summary>
@@ -575,6 +643,67 @@ public abstract class UnitBase : MonoBehaviour
         ApplyFacing(facingDir);
     }
 
+    /// <summary>场上最近敌（交战时寻敌进距用，不限屏幕索敌圈）。</summary>
+    public virtual UnitBase FindNearestEnemyOnField()
+    {
+        if (BattleManager.Instance == null) return null;
+        UnitBase nearest = null;
+        float minDist = float.MaxValue;
+        float myX = GetCombatX(this);
+        IEnumerable<UnitBase> enemyList = isAlly ? BattleManager.Instance.monsters : BattleManager.Instance.allyUnits;
+        if (enemyList == null) return null;
+        foreach (var enemy in enemyList)
+        {
+            if (enemy == null || enemy.isDead) continue;
+            if (isAlly && enemy.isAlly) continue;
+            if (!isAlly && !enemy.isAlly) continue;
+            float dist = Mathf.Abs(myX - GetCombatX(enemy));
+            if (dist < minDist)
+            {
+                minDist = dist;
+                nearest = enemy;
+            }
+        }
+        return nearest;
+    }
+
+    /// <summary>普攻有效射程；近战钳到不超过长柄，避免表配过大导致半屏开砍。</summary>
+    public float GetEffectiveAttackRange()
+    {
+        float r = attr != null ? attr.GetAttr(AttrType.AttackRange) : GameConfig.RangeSword;
+        if (UsesMeleeBasicAttack())
+            r = Mathf.Min(r, GameConfig.RangePolearm);
+        return Mathf.Max(0.2f, r);
+    }
+
+    /// <summary>普攻是否近战刀光（弓/法球除外）。</summary>
+    protected virtual bool UsesMeleeBasicAttack()
+    {
+        return GetAttackVfxKit() == AttackVfxKit.MeleeSlash;
+    }
+
+    const float BasicAttackRangeSlack = 0.12f;
+
+    /// <summary>近战是否与目标差不多同一车道（水平对面，允许小误差）。</summary>
+    public bool IsMeleeLaneAligned(UnitBase other)
+    {
+        if (other == null) return false;
+        float dy = Mathf.Abs(GetWorldLaneOffset() - other.GetWorldLaneOffset());
+        return dy <= GameConfig.MELEE_LANE_ALIGN_TOL;
+    }
+
+    public bool IsInBasicAttackRange(UnitBase other)
+    {
+        if (other == null) return false;
+        float d = Mathf.Abs(GetCombatX(this) - GetCombatX(other));
+        if (d > GetEffectiveAttackRange() + BasicAttackRangeSlack)
+            return false;
+        // 近战必须并到水平对面再砍；远程只看 X
+        if (UsesMeleeBasicAttack() && !IsMeleeLaneAligned(other))
+            return false;
+        return true;
+    }
+
     /// <summary>索敌范围：与攻击射程无关，见 GameConfig.GetCombatDetectRange。</summary>
     public virtual float GetDetectRange() => GameConfig.GetCombatDetectRange();
 
@@ -589,6 +718,13 @@ public abstract class UnitBase : MonoBehaviour
         if (u.rb != null && Mathf.Abs(u.rb.position.x - x) > 0.05f)
             u.rb.position = new Vector2(x, moveTf.position.y);
         return x;
+    }
+
+    /// <summary>仅播攻击动画（奥义演出用，不带弹道/刀光）。</summary>
+    public void PlayAttackAnimOnly(AttackVfxKit kit, bool critAmp = false)
+    {
+        if (unitAnim != null)
+            unitAnim.PlayAttack(kit, critAmp);
     }
 
     protected virtual float GetFormationLaneOffset() => 0f;
@@ -612,6 +748,9 @@ public abstract class UnitBase : MonoBehaviour
     {
         if (target == null || target.attr == null || attr == null)
             return;
+        // 进距才打：防配置过大射程 / AI 漏判导致半屏开砍
+        if (!IsInBasicAttackRange(target))
+            return;
 
         float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit);
 
@@ -625,6 +764,7 @@ public abstract class UnitBase : MonoBehaviour
         bool killWindup = isAlly && ShouldUseKillWindup(target, damage, isCrit, openingHit);
         if (unitAnim != null)
             unitAnim.PlayAttack(kit, allyMelee && (isCrit || killWindup));
+        CombatJuice.Instance?.PlaySwingSfx();
 
         VfxFaction faction = isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
         Vector3 firePos = GetFirePosition();
@@ -632,7 +772,7 @@ public abstract class UnitBase : MonoBehaviour
         Transform hitTf = target.transform;
         int facingDir = GetVfxFacingDir();
 
-        // 普攻：近战即时结算；敌方弓/法球飞到再结算；我方近战下落时再结算
+        // 普攻：近战即时/下落时结算；弓/法球（敌我）FirePoint→HitPoint 飞到再结算
         if (!isAlly && (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb) && BattleVFXSystem.Instance != null)
         {
             float pendingDamage = damage;
@@ -659,11 +799,37 @@ public abstract class UnitBase : MonoBehaviour
             return;
         }
 
+        if (allyRanged)
+        {
+            FireAllyRangedBasicProjectile(
+                target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf);
+            return;
+        }
+
         ResolveBasicAttackHit(target, damage, isCrit, openingHit);
         if (kit == AttackVfxKit.MeleeSlash)
             CombatJuice.Instance?.OnMeleeAttackLunge(this);
         if (BattleVFXSystem.Instance != null)
             BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
+    }
+
+    /// <summary>我方弓/法球普攻：点到点飞行，落地再结算（与敌方远程一致）。</summary>
+    void FireAllyRangedBasicProjectile(
+        UnitBase target, float damage, bool isCrit, bool openingHit,
+        AttackVfxKit kit, VfxFaction faction,
+        Vector3 firePos, Vector3 hitPos, int facingDir, Transform hitTf)
+    {
+        if (BattleVFXSystem.Instance != null)
+        {
+            float pendingDamage = damage;
+            bool pendingCrit = isCrit;
+            bool pendingOpening = openingHit;
+            BattleVFXSystem.Instance.PlaySkillProjectile(
+                faction, firePos, hitPos, facingDir, hitTf, kit, null, 1f, 1f,
+                () => ResolveBasicAttackHit(target, pendingDamage, pendingCrit, pendingOpening));
+        }
+        else
+            ResolveBasicAttackHit(target, damage, isCrit, openingHit);
     }
 
     bool ShouldUseKillWindup(UnitBase target, float damage, bool isCrit, bool openingHit)
@@ -731,9 +897,9 @@ public abstract class UnitBase : MonoBehaviour
         if (this == null || isDead || target == null || target.isDead)
             yield break;
 
-        ResolveBasicAttackHit(target, damage, isCrit, openingHit);
-        if (BattleVFXSystem.Instance != null)
-            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
+        // 前摇结束后再发射；伤害仍等弹道飞到受击点
+        FireAllyRangedBasicProjectile(
+            target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf);
     }
 
     void ResolveBasicAttackHit(UnitBase target, float damage, bool isCrit, bool openingHit)
@@ -781,7 +947,18 @@ public abstract class UnitBase : MonoBehaviour
             atkSpd *= GameConfig.PROJECTILE_ATK_SPEED_MUL;
         if (isAlly && GameConfig.IsOpeningStage())
             atkSpd *= 0.55f;
+        if (isAlly && BattleManager.Instance != null)
+            atkSpd *= BattleManager.Instance.KillComboSpeedMul;
         return 1f / Mathf.Max(0.05f, atkSpd);
+    }
+
+    /// <summary>友军连杀加速后的移速。</summary>
+    protected float GetCombatMoveSpeed()
+    {
+        float spd = attr != null ? attr.GetAttr(AttrType.MoveSpeed) : 1f;
+        if (isAlly && BattleManager.Instance != null)
+            spd *= BattleManager.Instance.KillComboSpeedMul;
+        return spd;
     }
 
     /// <summary>

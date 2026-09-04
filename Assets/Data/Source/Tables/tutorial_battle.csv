@@ -3,6 +3,6 @@ order,action,count,spriteMelee,spriteRanged,ambush,mercId,mercHpRatio,aheadDist,
 1,normal,2,2,1,0,,,,,,首波
 2,normal,2,2,1,0,,,,,,第二小波
 3,flank,5,2,1,1,,,,,,宝箱埋伏
-4,around,3,2,1,0,dunbing101,0.35,5.5,1,1,围殴老盾含1精英
-5,normal,4,2,1,0,,,,,,组队后
-6,flank,3,2,1,1,,,,,,清场后侧翼
+4,around,6,2,1,0,dunbing101,0.35,5.5,1,1,围殴老盾含1精英（拿剑后爽点）
+5,normal,8,2,1,0,,,,,,组队后
+6,flank,6,2,1,1,,,,,,清场后侧翼

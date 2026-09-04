@@ -19,6 +19,8 @@ public class DialogueUI : MonoBehaviour
     public bool IsVisible => gameObject.activeSelf;
     public string CurrentLine => dialogueText != null ? dialogueText.text : "";
     public bool HasChoicesVisible => _choicesVisible;
+    /// <summary>打字机是否已播完当前句（情报问答等要等结束后再出选项）。</summary>
+    public bool IsTypeComplete => _typeComplete;
 
     [Header("可替换贴图")]
     public Image sceneBackgroundImage;
@@ -882,7 +884,11 @@ public class DialogueUI : MonoBehaviour
             nextArrowImage.gameObject.SetActive(false);
 
         var panel = transform.Find("ChoicePanel");
-        if (panel != null) panel.gameObject.SetActive(true);
+        if (panel != null)
+        {
+            panel.gameObject.SetActive(true);
+            EnsureChoiceDim(panel);
+        }
 
         for (int i = 0; i < MaxChoices; i++)
         {
@@ -892,6 +898,31 @@ public class DialogueUI : MonoBehaviour
             if (on && choiceTexts != null && i < choiceTexts.Length && choiceTexts[i] != null)
                 choiceTexts[i].text = labels[i];
         }
+    }
+
+    /// <summary>选项区背后半透明黑底（运行时加，不写回 prefab）。</summary>
+    void EnsureChoiceDim(Transform choicePanel)
+    {
+        if (choicePanel == null) return;
+        Transform existing = choicePanel.Find("ChoiceDim");
+        if (existing != null)
+        {
+            existing.SetAsFirstSibling();
+            existing.gameObject.SetActive(true);
+            return;
+        }
+
+        var go = new GameObject("ChoiceDim", typeof(RectTransform));
+        go.transform.SetParent(choicePanel, false);
+        go.transform.SetAsFirstSibling();
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = new Vector2(-24f, -16f);
+        rt.offsetMax = new Vector2(24f, 16f);
+        var img = go.AddComponent<Image>();
+        img.color = new Color(0f, 0f, 0f, 0.45f);
+        img.raycastTarget = false;
     }
 
     public void HideChoices()

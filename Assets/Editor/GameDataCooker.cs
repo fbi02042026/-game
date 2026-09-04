@@ -16,6 +16,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
     const string SourceMonsterCsv = ContentPaths.Source.Tables + "/monster_attack_style.csv";
     const string SourceMercSkillsCsv = ContentPaths.Source.Tables + "/merc_skills.csv";
     const string SourceMercSkillMapCsv = ContentPaths.Source.Tables + "/merc_skill_map.csv";
+    const string SourceMercLinesCsv = ContentPaths.Source.Tables + "/merc_lines.csv";
     const string OutDir = "Assets/Resources/Data/Tables";
 
     [MenuItem("Tools/Data/Cook Tables (Plain while protection off)")]
@@ -39,6 +40,9 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookMonsterAttackStyle();
         CookMercSkills();
         CookMercSkillMap();
+        CookMercLines();
+        CookIntelQuiz();
+        CookIntelDaily();
         CookMonsterSpriteOpaque();
         CookEquipAnchors();
         CookMonsterStats();
@@ -81,6 +85,21 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookMercSkillMap()
     {
         CookTableFromSource(SourceMercSkillMapCsv, null, "merc_skill_map");
+    }
+
+    static void CookMercLines()
+    {
+        CookTableFromSource(SourceMercLinesCsv, null, "merc_lines");
+    }
+
+    static void CookIntelQuiz()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/intel_quiz.csv", null, "intel_quiz");
+    }
+
+    static void CookIntelDaily()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/intel_daily.csv", null, "intel_daily");
     }
 
     static void CookEquipAnchors()

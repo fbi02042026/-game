@@ -13,6 +13,13 @@ public static class CloudSaveBridge
 
     public static void UploadPayload(string payload, Action<bool> onDone = null)
     {
+        if (SpotlightBuild.Enabled)
+        {
+            Debug.Log("[CloudSaveBridge] Spotlight：跳过云上传");
+            onDone?.Invoke(false);
+            return;
+        }
+
         if (string.IsNullOrEmpty(payload))
         {
             onDone?.Invoke(false);
@@ -43,6 +50,13 @@ public static class CloudSaveBridge
 
     public static void DownloadPayload(Action<string> onDone)
     {
+        if (SpotlightBuild.Enabled)
+        {
+            Debug.Log("[CloudSaveBridge] Spotlight：跳过云下载");
+            onDone?.Invoke(null);
+            return;
+        }
+
         if (UseWeChatCloud)
         {
             onDone?.Invoke(null);

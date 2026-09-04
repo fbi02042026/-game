@@ -8,7 +8,6 @@ public static class GameDataHub
     static System.Collections.Generic.Dictionary<string, TalentConfig> _talents;
     static System.Collections.Generic.Dictionary<string, SkillConfig> _skills;
     static bool _equipsReady;
-    static bool _skillsReady;
 
     public static void ReportConfigs(
         System.Collections.Generic.List<EquipTemplate> equips,
@@ -25,7 +24,6 @@ public static class GameDataHub
     public static void ReportSkills(System.Collections.Generic.Dictionary<string, SkillConfig> skills)
     {
         _skills = skills;
-        _skillsReady = true;
         TryVerify();
     }
 

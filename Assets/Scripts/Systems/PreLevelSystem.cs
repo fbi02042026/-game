@@ -96,6 +96,16 @@ public class PreLevelSystem : Singleton<PreLevelSystem>
             return false;
         }
 
+        // 聚光灯禁广告：免费刷新一次
+        if (SpotlightBuild.Enabled)
+        {
+            hasRefreshedThisRun = true;
+            GenerateOptions();
+            selectedIndex = -1;
+            GamePerf.Log("[PreLevelSystem] Spotlight：免费刷新遗产选项");
+            return true;
+        }
+
         bool ok = false;
         RewardedAdBridge.ShowRewarded("prelevel_refresh", success =>
         {

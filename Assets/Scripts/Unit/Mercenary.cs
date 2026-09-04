@@ -42,6 +42,7 @@ public class Mercenary : UnitBase
         base.Awake();
         isAlly = true;
         spriteDefaultFacesRight = false;
+        KillComboAfterimage.Ensure(this);
     }
 
     public void SetTutorialStunned(bool on)

@@ -3,8 +3,8 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// Boot 入口：初始化持久对象与存档，先显示健康游戏忠告，再进入登录界面。
-/// 流程：Boot(健康忠告 → 登录) → Town(主界面) → 冒险 → Battle。
+/// Boot 入口：初始化持久对象与存档，先工作室 Logo，再健康游戏忠告，再进入登录界面。
+/// 流程：Boot(工作室Logo → 健康忠告 → 登录) → Town(主界面) → 冒险 → Battle。
 /// </summary>
 public class BootManager : MonoBehaviour
 {
@@ -44,13 +44,14 @@ public class BootManager : MonoBehaviour
             persistentRoot.AddComponent<TutorialDirector>();
 
         EnsureEventSystem();
+        SpotlightBuild.ApplyRuntimeGuards();
     }
 
     void Start()
     {
         WeChatMiniGameConfig.EnsureDesignResolution();
         if (!GameSceneGate.IsBoot) return;
-        HealthNoticeUI.Present(ShowLogin);
+        StudioLogoSplash.Present(() => HealthNoticeUI.Present(ShowLogin));
     }
 
     static GameObject _bootVeil;

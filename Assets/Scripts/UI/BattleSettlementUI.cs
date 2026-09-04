@@ -250,7 +250,7 @@ public class BattleSettlementUI : MonoBehaviour
             line = PlayerMvpLines[idx];
         }
         else
-            line = MercRosterDefs.GetMvpLine(mvpKey);
+            line = MercLineTable.Pick(mvpKey, MercLineTable.Scene.Mvp);
 
         if (string.IsNullOrEmpty(line)) return;
         if (UIManager.Instance != null)

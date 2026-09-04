@@ -110,6 +110,7 @@ public class AutoGameInitializer : MonoBehaviour
 
         // 站立线 = 用户调好的 unit.y（禁止再加偏移）
         UnitBase.GROUND_Y = unitRoot.position.y;
+        BattleLaneBounds.EnsureInScene(unitRoot, hideVisualInPlay: true);
         GamePerf.Log($"[AutoInit] 4/8 站立线Y={UnitBase.GROUND_Y:F2} (=unit.y，无偏移)");
         ReportInitStep(4);
 
@@ -649,12 +650,12 @@ public class AutoGameInitializer : MonoBehaviour
         // 无限跑图：不要用短 EndPoint 锁死镜头，BattleManager 会随进度再 Extend
         follow.maxX = Mathf.Max(endX + 2f, spawnX + 80f);
 
-        // Y 交给 AlignBattleViewport；这里只锁当前 Y/Z 并跟随 X
+        // 只跟 X：开战锁当前相机 Y/Z，战斗中不按玩家 LaneY 重锁
         follow.LockYZFromCurrent();
         if (heroTransform != null)
             follow.SetTarget(heroTransform);
 
-        Debug.Log($"[AutoInit] CameraFollow X跟随就绪 minX={follow.minX:F1} maxX={follow.maxX:F1}");
+        Debug.Log($"[AutoInit] CameraFollow 仅X跟随就绪 minX={follow.minX:F1} maxX={follow.maxX:F1} camY={cam.transform.position.y:F2}");
     }
 
     static Transform EnsureSpawnPoint(Transform worldRoot)
@@ -851,6 +852,7 @@ public class AutoGameInitializer : MonoBehaviour
         AddIfMissing<DamageTextSystem>(root);
         AddIfMissing<BattleVFXSystem>(root);
         AddIfMissing<CombatJuice>(root);
+        AddIfMissing<HeroThunderUltimate>(root);
         AddIfMissing<MonsterSpriteLoader>(root);
         AddIfMissing<SkillSystem>(root);
         AddIfMissing<SkillRegistry>(root);
