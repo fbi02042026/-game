@@ -11,7 +11,7 @@ public static class StoryPortraitCheckTool
         var ids = StoryPortraitLayout.TutorialCastIds;
         int missing = 0;
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("剧情立绘检查 (Resources/Story/Portraits):");
+        sb.AppendLine("剧情立绘检查 (佣兵立绘 / MercStand):");
         for (int i = 0; i < ids.Length; i++)
         {
             string id = ids[i];
@@ -22,7 +22,7 @@ public static class StoryPortraitCheckTool
                 sb.AppendLine("  MISSING: " + id);
             }
             else
-                sb.AppendLine("  OK: " + id);
+                sb.AppendLine("  OK: " + id + " (" + sp.name + ")");
         }
         Debug.Log(sb.ToString());
         EditorUtility.DisplayDialog("剧情立绘",

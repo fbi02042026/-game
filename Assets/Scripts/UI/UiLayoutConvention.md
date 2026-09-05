@@ -15,7 +15,7 @@
 | **`Background` / `BgArt`** | 手调尺寸场景美术（GuildHall、Battle） | ❌ **Fixed** + `UiPrefabRectGuard` |
 | **`map` / `MapRoot`** | 战斗条带 | ✅ 仅横向 `ApplyStretchHorizontal` |
 | **Toggle/Slider 内 `Background`、`Checkmark`、`Handle`** | Unity 标准控件零件 | ❌ **永远 Fixed**，禁止 Stretch |
-| **按钮 Icon、Logo、立绘、装备格、波次图** | 手调美术 | ❌ 只换 Sprite/显隐，不改 rect |
+| **按钮 Icon、Logo、立绘、装备格、波次图** | 手调美术 / 原尺寸 | ❌ 只换 Sprite/显隐；立绘用 native + 裁切，禁止拉伸（见 `no-image-stretch` 规则） |
 | **Resources UI 切图（`wave_next_incoming` 等）** | 原图比例 | ✅ `SetNativeSize` 终态 100%；入场 **`UiBannerPopAnim`**：300%→100% / 0.3s / 停1s / 淡出 |
 | **`TopBar` / `BottomNav`** | 顶栏/底栏 | 以预制体锚点为准，代码不批量 Stretch |
 

@@ -9,7 +9,7 @@ using UnityEngine.UI;
 /// </summary>
 public class HealthNoticeUI : MonoBehaviour
 {
-    public const float DisplaySeconds = 3f;
+    public const float DisplaySeconds = 2f;
     const string PrefabPath = ContentPaths.Prefab.HealthNotice;
     const string FontResourcesPath = "Fonts/fusion-pixel";
 

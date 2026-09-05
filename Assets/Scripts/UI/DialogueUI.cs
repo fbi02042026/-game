@@ -94,7 +94,6 @@ public class DialogueUI : MonoBehaviour
     }
 
     const int DialogueBodyFontSize = 28;
-    const int DialogueNameFontSize = 18;
     const float LocBlackInDur = 0.55f;
     const float LocHoldDur = 2.0f;
     const float LocTextFadeDur = 1.1f;
@@ -783,6 +782,10 @@ public class DialogueUI : MonoBehaviour
         {
             leftNamePlateImage.gameObject.SetActive(hasPortrait && !string.IsNullOrEmpty(name));
             leftNamePlateImage.color = Color.white;
+            // 单人：只用左名牌，X 归零；Y / 字号 / 对齐沿用预制体
+            var rt = leftNamePlateImage.rectTransform;
+            var p = rt.anchoredPosition;
+            rt.anchoredPosition = new Vector2(0f, p.y);
         }
         if (rightNamePlateImage != null)
             rightNamePlateImage.gameObject.SetActive(false);
@@ -983,19 +986,25 @@ public class DialogueUI : MonoBehaviour
         rightPortraitImage.rectTransform.localScale = s;
     }
 
-    /// <summary>立绘用 Sprite 原始像素尺寸，不统一成固定框</summary>
+    /// <summary>立绘用 Sprite 原始像素尺寸，禁止拉伸进固定框。</summary>
     public static void ApplyPortraitNativeSize(Image img)
     {
         if (img == null) return;
         img.preserveAspect = true;
         img.type = Image.Type.Simple;
+        img.pixelsPerUnitMultiplier = 1f;
         if (img.sprite == null)
         {
             img.enabled = false;
             return;
         }
         img.enabled = true;
-        img.SetNativeSize();
+        var sp = img.sprite;
+        float w = sp.rect.width;
+        float h = sp.rect.height;
+        if (w < 1f && sp.texture != null) w = sp.texture.width;
+        if (h < 1f && sp.texture != null) h = sp.texture.height;
+        img.rectTransform.sizeDelta = new Vector2(w, h);
     }
 
     /// <summary>正文按对话框可视区域自动换行，避免挤成一行或溢出。</summary>
@@ -1098,10 +1107,8 @@ public class DialogueUI : MonoBehaviour
     static void ApplyNameTypography(Text name)
     {
         if (name == null) return;
+        // 字号 / 对齐 / 样式以预制体为准，仅补缺省中文字体
         if (name.font == null) name.font = GameFonts.GetChinese();
-        int size = name.fontSize > 0 ? name.fontSize : DialogueNameFontSize;
-        name.fontSize = Mathf.Max(DialogueNameFontSize, size);
-        name.fontStyle = FontStyle.Bold;
     }
 
     static void SetNamePlateIconVisible(Image icon, bool visible)
@@ -1483,8 +1490,8 @@ public class DialogueUI : MonoBehaviour
         else
             SetAnchored(icon.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
                 new Vector2(-10f, 0f), new Vector2(32f, 32f));
-        var nm = CreateText(plate.transform, "NameText", defaultName, 12, new Color(1f, 0.95f, 0.85f));
-        nm.alignment = iconOnLeft ? TextAnchor.MiddleLeft : TextAnchor.MiddleRight;
+        var nm = CreateText(plate.transform, "NameText", defaultName, 18, new Color(1f, 0.95f, 0.85f));
+        nm.alignment = TextAnchor.MiddleCenter;
         if (iconOnLeft)
             SetAnchored(nm.rectTransform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f),
                 new Vector2(50f, 0f), new Vector2(-60f, 40f));

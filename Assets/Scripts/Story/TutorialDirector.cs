@@ -230,7 +230,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         GameBgm.Play(GameBgm.Track.Intro);
 
         StoryAssetLoader.Warmup(StoryAssetLoader.Props, StoryProps.QuestPaper);
-        StoryAssetLoader.Warmup(StoryAssetLoader.Portraits,
+        StoryPortraits.Warmup(
             StoryPortraits.GuildMaster, StoryPortraits.Receptionist, StoryPortraits.Player);
         StoryAssetLoader.Warmup(StoryAssetLoader.Backgrounds,
             StoryBackgrounds.GuildOffice, StoryBackgrounds.GuildHall);
@@ -264,7 +264,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         var afterNaming = new List<StoryBeat>
         {
             StoryDirector.Solo("咨询台小姐",
-                "第一次下裂隙？三件事：\n1. 你只管走路，打架会自动打。\n2. 进战斗前先选技能，亮起就能放。\n3. 见好就收，活着才有收益。",
+                "第一次下裂隙？三件事：\n1. 你只管走路，打架会自动打。\n2. 裂隙很危险，尽量组队进入。\n3. 见好就收，活着才有收益。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)
         };
@@ -304,7 +304,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 收尾对话要用的立绘/背景先读进缓存，否则开场会卡一下才出画面
         StoryAssetLoader.Warmup(StoryAssetLoader.Backgrounds, StoryBackgrounds.GuildHall);
         yield return null;
-        StoryAssetLoader.Warmup(StoryAssetLoader.Portraits,
+        StoryPortraits.Warmup(
             StoryPortraits.Player, StoryPortraits.LaoDun, StoryPortraits.Receptionist);
         yield return null;
 

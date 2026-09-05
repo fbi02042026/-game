@@ -1,8 +1,8 @@
 using UnityEngine;
 
 /// <summary>
-/// 剧情立绘 ID。优先佣兵立绘 H/C 编号，回退 Resources/Story/Portraits。
-/// 引导三人（会长 / 咨询台 / 玩家）为统一尺寸全身图；布局见 <see cref="StoryPortraitLayout"/>。
+/// 剧情立绘 ID。全部走佣兵立绘（<see cref="MercPortraitSprites.GetStand"/>），
+/// 不再读 Resources/Story/Portraits。
 /// </summary>
 public static class StoryPortraits
 {
@@ -19,9 +19,17 @@ public static class StoryPortraits
     public static Sprite Get(string id)
     {
         if (string.IsNullOrEmpty(id)) return null;
-        var story = StoryAssetLoader.Load(StoryAssetLoader.Portraits, id);
-        if (story != null) return story;
-        Debug.LogWarning("[StoryPortraits] missing Resources/Story/Portraits/" + id);
+        var sp = MercPortraitSprites.GetStand(id);
+        if (sp != null) return sp;
+        Debug.LogWarning("[StoryPortraits] missing MercStand for id=" + id);
         return null;
+    }
+
+    /// <summary>预热立绘缓存，避免开场卡顿。</summary>
+    public static void Warmup(params string[] ids)
+    {
+        if (ids == null) return;
+        for (int i = 0; i < ids.Length; i++)
+            Get(ids[i]);
     }
 }

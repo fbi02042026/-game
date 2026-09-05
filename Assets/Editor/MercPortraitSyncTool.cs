@@ -1,4 +1,5 @@
 #if UNITY_EDITOR
+using System;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
@@ -29,6 +30,37 @@ public static class MercPortraitSyncTool
         Debug.Log($"[MercPortraitSyncTool] head={headCount} stand={standCount}");
     }
 
+    [MenuItem("Tools/UI/修复佣兵立绘导入(防拉伸)")]
+    public static void FixImportSettings()
+    {
+        int n = 0;
+        n += FixImportsInFolder(ResStandDir);
+        n += FixImportsInFolder(ResHeadDir);
+        AssetDatabase.Refresh();
+        EditorUtility.DisplayDialog("佣兵立绘导入",
+            $"已检查并修复 {n} 张（Sprite + nPOT=None，禁止拉伸）。\n请等 Unity 重新导入后再进游戏。",
+            "OK");
+        Debug.Log($"[MercPortraitSyncTool] fixed imports={n}");
+    }
+
+    static int FixImportsInFolder(string dir)
+    {
+        if (!Directory.Exists(dir)) return 0;
+        int n = 0;
+        string root = Directory.GetCurrentDirectory().Replace('\\', '/');
+        foreach (string file in Directory.GetFiles(dir, "*.png"))
+        {
+            string assetPath = file.Replace('\\', '/');
+            if (assetPath.StartsWith(root + "/", StringComparison.OrdinalIgnoreCase))
+                assetPath = assetPath.Substring(root.Length + 1);
+            int idx = assetPath.IndexOf("Assets/", StringComparison.OrdinalIgnoreCase);
+            if (idx > 0) assetPath = assetPath.Substring(idx);
+            EnsureSpriteImport(assetPath);
+            n++;
+        }
+        return n;
+    }
+
     static int SyncHeads()
     {
         if (!Directory.Exists(ArtHeadDir)) return 0;
@@ -43,6 +75,13 @@ public static class MercPortraitSyncTool
         return n;
     }
 
+    static readonly (string ArtName, string DestId)[] StoryStandExtras =
+    {
+        ("前台小姐", "receptionist"),
+        ("会长——大众", "guildmaster"),
+        ("会长——阴暗", "guildmaster_hidden"),
+    };
+
     static int SyncStands()
     {
         if (!Directory.Exists(ArtStandDir)) return 0;
@@ -54,6 +93,13 @@ public static class MercPortraitSyncTool
             string destId = fileName.Substring("佣兵立绘_".Length);
             if (destId == "玩家") destId = "player";
             if (CopySprite(file, ResStandDir + "/" + destId + ".png"))
+                n++;
+        }
+        for (int i = 0; i < StoryStandExtras.Length; i++)
+        {
+            string src = ArtStandDir + "/" + StoryStandExtras[i].ArtName + ".png";
+            string dest = ResStandDir + "/" + StoryStandExtras[i].DestId + ".png";
+            if (CopySprite(src, dest))
                 n++;
         }
         return n;
@@ -91,6 +137,30 @@ public static class MercPortraitSyncTool
         if (importer.spriteImportMode != SpriteImportMode.Single)
         {
             importer.spriteImportMode = SpriteImportMode.Single;
+            dirty = true;
+        }
+        // NPOT→二次幂会把立绘非等比拉伸；导入必须 Sprite + nPOT=None
+        if (importer.npotScale != TextureImporterNPOTScale.None)
+        {
+            importer.npotScale = TextureImporterNPOTScale.None;
+            dirty = true;
+        }
+        if (importer.mipmapEnabled)
+        {
+            importer.mipmapEnabled = false;
+            dirty = true;
+        }
+        if (!importer.alphaIsTransparency)
+        {
+            importer.alphaIsTransparency = true;
+            dirty = true;
+        }
+        var settings = new TextureImporterSettings();
+        importer.ReadTextureSettings(settings);
+        if (settings.spriteMeshType != SpriteMeshType.FullRect)
+        {
+            settings.spriteMeshType = SpriteMeshType.FullRect;
+            importer.SetTextureSettings(settings);
             dirty = true;
         }
         if (dirty)

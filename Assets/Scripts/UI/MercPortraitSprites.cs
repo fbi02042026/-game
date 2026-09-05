@@ -6,7 +6,7 @@ using UnityEditor;
 #endif
 
 /// <summary>
-/// 佣兵头像/立绘统一加载：H001~H022、C001~C003、player。
+/// 佣兵头像/立绘统一加载：H001~H022、C001~C004、player，以及剧情 NPC（前台/会长）。
 /// 优先 Resources/Icons/MercHead|MercStand；Editor 可直读 Art 目录。
 /// </summary>
 public static class MercPortraitSprites
@@ -22,6 +22,16 @@ public static class MercPortraitSprites
         { "xiaomei", "C001" },
         { "altor", "C002" },
         { "grey", "C003" },
+        // 剧情 NPC → 佣兵立绘目录中的稳定英文 ID（见 Sync / LoadEditorStand）
+        { "receptionist", "receptionist" },
+        { "guildmaster", "guildmaster" },
+        { "guildmaster_hidden", "guildmaster_hidden" },
+        { "hunter", "C004" },
+        { "duyan", "C004" },
+        { "npc_duyan", "C004" },
+        // 酒馆老板娘暂无独立佣兵立绘，沿用前台
+        { "landlady", "receptionist" },
+        { "boss_niang", "receptionist" },
     };
 
     public static string NormalizeHireId(string hireIdOrAlias)
@@ -126,6 +136,12 @@ public static class MercPortraitSprites
     {
         if (hireId == "player")
             return LoadEditorSprite(ArtStandDir + "/佣兵立绘_玩家.png");
+        if (hireId == "receptionist")
+            return LoadEditorSprite(ArtStandDir + "/前台小姐.png");
+        if (hireId == "guildmaster")
+            return LoadEditorSprite(ArtStandDir + "/会长——大众.png");
+        if (hireId == "guildmaster_hidden")
+            return LoadEditorSprite(ArtStandDir + "/会长——阴暗.png");
         return LoadEditorSprite(ArtStandDir + "/佣兵立绘_" + hireId + ".png");
     }
 
