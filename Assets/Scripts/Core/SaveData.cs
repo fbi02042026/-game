@@ -100,8 +100,16 @@ public class SaveData
     /// <summary>战前选择的玩家技能 id（PlayerSkillDefs）</summary>
     public string selectedPlayerSkillId = "heal_spring";
 
-    /// <summary>佣兵主动技释放：0=手动（默认），1=自动</summary>
-    public int mercSkillCastMode = 0;
+    /// <summary>进战所选玩家职业（PlayerJobId）</summary>
+    public int selectedPlayerJobId = 0;
+
+    /// <summary>隐藏经验等级（不对玩家展示；驱动掉落权重）</summary>
+    public int hiddenLevel = 1;
+    /// <summary>当前隐藏等级内已积累经验</summary>
+    public int hiddenExp = 0;
+
+    /// <summary>佣兵主动技释放：0=手动，1=自动（强制自动，UI 已隐藏）</summary>
+    public int mercSkillCastMode = 1;
 
     public bool openingIntroPlayed;
     public bool tutorialIntroDone;
@@ -222,6 +230,8 @@ public class SaveData
         craftedFragmentRecipeEntries ??= new List<StringIdEntry>();
         mileageShopBuyEntries ??= new List<StringIntEntry>();
         townLevel ??= new TownLevel();
+        if (hiddenLevel <= 0) hiddenLevel = 1;
+        if (hiddenExp < 0) hiddenExp = 0;
 
         talents = new Dictionary<string, int>();
         for (int i = 0; i < talentEntries.Count; i++)

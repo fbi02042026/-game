@@ -30,11 +30,11 @@ public class BattleBackgroundRegistrySetup : EditorWindow
         // 游戏章节 → 怪物文件夹名
         var chapterFolders = new Dictionary<int, string>
         {
-            { 1, "4 Forest" },
-            { 2, "1 Undead" },
-            { 3, "2 Jungle" },
-            { 4, "3 Sea" },
-            { 5, "5 Field" },
+            { 1, "1 Forest" },
+            { 2, "2 Undead" },
+            { 3, "3 Jungle" },
+            { 4, "4 Field" },
+            { 5, "5 Sea" },
             { 6, "6 Cave" },
             { 7, "7 Devil" },
             { 8, "8 Ice" }

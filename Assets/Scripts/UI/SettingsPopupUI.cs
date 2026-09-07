@@ -30,8 +30,9 @@ public enum SettingsToggleId
 /// <summary>
 /// 登录 / 城镇 / 战斗共用设置弹窗。
 /// 预制体：Resources/Prefabs/UI/SettingsPopup；缺失时运行时搭一份同结构。
-/// 策划口径：音乐/音效/自动技能分控且全局持久；战斗显「撤离 / 取消」；登录与城镇显「确定」。
-/// GDD 远期：音乐/音效分控、天气特效开关 —— 用 ToggleList 扩展，勿再各场景各搓一套。
+/// 策划口径：音乐/音效分控且全局持久；战斗显「撤离 / 取消」；登录与城镇显「确定」。
+/// 佣兵技能强制自动释放，不再提供设置开关。
+/// GDD 远期：天气特效开关 —— 用 ToggleList 扩展，勿再各场景各搓一套。
 /// </summary>
 public class SettingsPopupUI : MonoBehaviour
 {
@@ -238,17 +239,16 @@ public class SettingsPopupUI : MonoBehaviour
                 var row = extraToggleRows[i];
                 if (row == null || row.root == null) continue;
                 bool on = IsToggleEnabledInBuild(row.id);
-                if (row.id == SettingsToggleId.MercSkillAuto)
-                    on = on && battle;
                 row.root.SetActive(on);
             }
         }
 
-        SetNamedActive("CombatSectionHeader", battle);
-        SetNamedActive("CombatDivider", battle);
+        SetNamedActive("CombatSectionHeader", false);
+        SetNamedActive("CombatDivider", false);
+        SetNamedActive("MercSkillAutoRow", false);
         SetNamedActive("OtherSectionHeader", battle);
         SetNamedActive("OtherDivider", battle);
-        SetSectionHeaderActiveByText("战斗设置", battle);
+        SetSectionHeaderActiveByText("战斗设置", false);
         SetSectionHeaderActiveByText("其他设置", battle);
     }
 
@@ -277,7 +277,7 @@ public class SettingsPopupUI : MonoBehaviour
         }
     }
 
-    /// <summary>V1.0：音乐/音效/佣兵自动技能；总声音行已废弃。</summary>
+    /// <summary>V1.0：音乐/音效；佣兵自动技能已强制开启并隐藏设置项。</summary>
     public static bool IsToggleEnabledInBuild(SettingsToggleId id)
     {
         switch (id)
@@ -286,7 +286,7 @@ public class SettingsPopupUI : MonoBehaviour
             case SettingsToggleId.Music: return true;
             case SettingsToggleId.Sfx: return true;
             case SettingsToggleId.WeatherFx: return false;
-            case SettingsToggleId.MercSkillAuto: return true;
+            case SettingsToggleId.MercSkillAuto: return false; // 佣兵技能强制自动，不再出设置项
             default: return false;
         }
     }
@@ -342,9 +342,6 @@ public class SettingsPopupUI : MonoBehaviour
             case SettingsToggleId.Sfx:
                 GameAudio.SfxEnabled = !GameAudio.SfxEnabled;
                 break;
-            case SettingsToggleId.MercSkillAuto:
-                MercSkillMigrate.SetMercSkillAutoCast(!MercSkillMigrate.IsMercSkillAutoCast());
-                break;
             case SettingsToggleId.WeatherFx:
                 PlayerPrefs.SetInt("fx.weather.on", PlayerPrefs.GetInt("fx.weather.on", 1) != 0 ? 0 : 1);
                 PlayerPrefs.Save();
@@ -373,7 +370,7 @@ public class SettingsPopupUI : MonoBehaviour
             case SettingsToggleId.Music: return GameAudio.MusicEnabled;
             case SettingsToggleId.Sfx: return GameAudio.SfxEnabled;
             case SettingsToggleId.WeatherFx: return PlayerPrefs.GetInt("fx.weather.on", 1) != 0;
-            case SettingsToggleId.MercSkillAuto: return MercSkillMigrate.IsMercSkillAutoCast();
+            case SettingsToggleId.MercSkillAuto: return true;
             default: return true;
         }
     }
@@ -656,10 +653,7 @@ public class SettingsPopupUI : MonoBehaviour
         CreateSettingsRow(toggleList, "MusicRow", "音乐", "音乐", SettingsToggleId.Music, ref y);
         CreateSettingsRow(toggleList, "SfxRow", "音效", "音效", SettingsToggleId.Sfx, ref y);
 
-        CreateSectionHeader(toggleList, "CombatSectionHeader", "战斗设置", ref y);
-        CreateDivider(toggleList, "CombatDivider", ref y);
-        CreateSettingsRow(toggleList, "MercSkillAutoRow", "自动释放技能", "技能释放", SettingsToggleId.MercSkillAuto, ref y);
-
+        // 佣兵技能强制自动，不再创建「自动释放技能」开关
         CreateSectionHeader(toggleList, "OtherSectionHeader", "其他设置", ref y);
         CreateDivider(toggleList, "OtherDivider", ref y);
 

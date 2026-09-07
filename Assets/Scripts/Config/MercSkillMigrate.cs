@@ -75,43 +75,40 @@ public static class MercSkillMigrate
 
     const string MercAutoPrefsKey = "settings.merc_skill_auto";
 
-    public static bool IsMercSkillAutoCast()
-    {
-        var data = SaveSystem.Instance?.Data;
-        if (data != null)
-            return data.mercSkillCastMode == 1;
-        return PlayerPrefs.GetInt(MercAutoPrefsKey, 0) != 0;
-    }
+    /// <summary>佣兵主动技始终自动释放（设置项已移除）。</summary>
+    public static bool IsMercSkillAutoCast() => true;
 
     public static void SetMercSkillAutoCast(bool auto)
     {
-        PlayerPrefs.SetInt(MercAutoPrefsKey, auto ? 1 : 0);
+        // 保留 API 兼容；强制自动，忽略手动请求
+        PlayerPrefs.SetInt(MercAutoPrefsKey, 1);
         PlayerPrefs.Save();
-
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
-        data.mercSkillCastMode = auto ? 1 : 0;
-        SaveSystem.Instance?.Save();
+        if (data.mercSkillCastMode != 1)
+        {
+            data.mercSkillCastMode = 1;
+            SaveSystem.Instance?.Save();
+        }
     }
 
-    /// <summary>读档后把存档里的自动释放同步到 Prefs，保证登录/切场景一致。</summary>
+    /// <summary>读档后强制自动释放。</summary>
     public static void SyncAutoCastPrefsFromSave()
     {
+        PlayerPrefs.SetInt(MercAutoPrefsKey, 1);
+        PlayerPrefs.Save();
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
-        PlayerPrefs.SetInt(MercAutoPrefsKey, data.mercSkillCastMode == 1 ? 1 : 0);
-        PlayerPrefs.Save();
+        if (data.mercSkillCastMode != 1)
+        {
+            data.mercSkillCastMode = 1;
+            SaveSystem.Instance?.Save();
+        }
     }
 
-    /// <summary>若存档尚未写过模式，用 Prefs 回填（登录先改过设置再进游戏）。</summary>
+    /// <summary>存档同步：强制自动。</summary>
     public static void ApplyAutoCastPrefsToSave()
     {
-        var data = SaveSystem.Instance?.Data;
-        if (data == null) return;
-        if (!PlayerPrefs.HasKey(MercAutoPrefsKey)) return;
-        int pref = PlayerPrefs.GetInt(MercAutoPrefsKey, 0) != 0 ? 1 : 0;
-        if (data.mercSkillCastMode == pref) return;
-        data.mercSkillCastMode = pref;
-        SaveSystem.Instance?.Save();
+        SyncAutoCastPrefsFromSave();
     }
 }

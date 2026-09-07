@@ -155,6 +155,7 @@ public class CameraFollow : MonoBehaviour
         {
             _zoomMul = targetMul;
             ApplyOrthoZoom();
+            BattleUI.ApplyKillCamHudCompensation(_zoomMul);
             _zoomCo = null;
             yield break;
         }
@@ -166,11 +167,14 @@ public class CameraFollow : MonoBehaviour
             float u = Mathf.Clamp01(t / durationUnscaled);
             _zoomMul = Mathf.Lerp(start, targetMul, u);
             ApplyOrthoZoom();
+            // HUD 随当前 ortho 倍率同步反缩放，避免世界渐变、UI 瞬跳
+            BattleUI.ApplyKillCamHudCompensation(_zoomMul);
             yield return null;
         }
 
         _zoomMul = targetMul;
         ApplyOrthoZoom();
+        BattleUI.ApplyKillCamHudCompensation(_zoomMul);
         _zoomCo = null;
     }
 

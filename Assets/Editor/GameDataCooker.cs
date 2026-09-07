@@ -56,6 +56,15 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookWaveSlot();
         CookChapterBranch();
         CookChapterBranchRules();
+        CookEquipSlotPools();
+        CookEquipRarityRules();
+        CookEquipAttrRanges();
+        CookRiftEquipGenSteps();
+        CookPlayerJobBaseStats();
+        CookJobWeapons();
+        CookPlayerPassives();
+        CookHiddenLevelRules();
+        CookEquipAppearanceMap();
         if (ContentProtection.Enabled)
             CookFingerprint();
         else
@@ -165,6 +174,51 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookChapterBranchRules()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/chapter_branch_rules.csv", null, "chapter_branch_rules");
+    }
+
+    static void CookEquipSlotPools()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/equip_slot_pools.csv", null, "equip_slot_pools");
+    }
+
+    static void CookEquipRarityRules()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/equip_rarity_rules.csv", null, "equip_rarity_rules");
+    }
+
+    static void CookEquipAttrRanges()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/equip_attr_ranges.csv", null, "equip_attr_ranges");
+    }
+
+    static void CookRiftEquipGenSteps()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/rift_equip_gen_steps.csv", null, "rift_equip_gen_steps");
+    }
+
+    static void CookPlayerJobBaseStats()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/player_job_base_stats.csv", null, "player_job_base_stats");
+    }
+
+    static void CookJobWeapons()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/job_weapons.csv", null, "job_weapons");
+    }
+
+    static void CookPlayerPassives()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/player_passives.csv", null, "player_passives");
+    }
+
+    static void CookHiddenLevelRules()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/hidden_level_rules.csv", null, "hidden_level_rules");
+    }
+
+    static void CookEquipAppearanceMap()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/equip_appearance_map.csv", null, "equip_appearance_map");
     }
 
     static void CookTableFromSource(string sourceCsv, string legacyResourcesPath, string outName)

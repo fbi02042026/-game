@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -259,6 +260,9 @@ public class Monster : UnitBase
     private int _spriteIndex;
     private bool _isBossUnit;
     private bool _eliteWave;
+    bool _eliteGlass;
+    bool _bossPhase2Started;
+    bool _bossPhaseShiftBusy;
     private int _bossSwingIndex;
     private bool _isEnteringMap;
     private Vector3 _enterTargetPos;
@@ -282,43 +286,12 @@ public class Monster : UnitBase
 
     protected override void AIUpdate()
     {
-        if (_forcedTarget != null)
-        {
-            if (_forcedTarget.isDead)
-                _forcedTarget = null;
-            else
-            {
-                if (_isEnteringMap) _isEnteringMap = false;
-                target = _forcedTarget;
-                if (TryHoldDuringAttack())
-                    return;
-                RunForcedCombat();
-                return;
-            }
-        }
-
+        // 入场期间只走到交战点，禁止屏外开战（避免未见怪先挨子弹）
         if (_isEnteringMap)
         {
             if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
             {
                 if (rb != null) rb.velocity = Vector2.zero;
-                return;
-            }
-
-            UnitBase foe = FindNearestEnemyOnField();
-            if (foe != null)
-            {
-                _isEnteringMap = false;
-                SyncLaneYFromWorld();
-                target = foe.isAlly == isAlly ? null : foe;
-                if (target == null)
-                {
-                    AdvanceTowardEnemies();
-                    return;
-                }
-                if (TryHoldDuringAttack())
-                    return;
-                RunForcedCombat();
                 return;
             }
 
@@ -328,18 +301,40 @@ public class Monster : UnitBase
                 GameConfig.SetWorldPosition(MoveRoot, new Vector3(_enterTargetPos.x, FootY, MoveRoot.position.z));
                 _isEnteringMap = false;
                 SyncLaneYFromWorld();
-                AdvanceTowardEnemies();
+                // 到达后再接强制目标 / 正常 AI
+            }
+            else
+            {
+                int enterFace = _enterTargetPos.x >= MoveRoot.position.x ? 1 : -1;
+                facingDir = enterFace;
+                ApplyFacing(facingDir);
+                float step = _enterSpeed * Time.deltaTime;
+                float nx = Mathf.MoveTowards(MoveRoot.position.x, _enterTargetPos.x, step);
+                GameConfig.SetWorldPosition(MoveRoot, new Vector3(nx, FootY, MoveRoot.position.z));
+                if (unitAnim != null) unitAnim.SetMove(true, facingDir);
                 return;
             }
+        }
 
-            int enterFace = _enterTargetPos.x >= MoveRoot.position.x ? 1 : -1;
-            facingDir = enterFace;
-            ApplyFacing(facingDir);
-            float step = _enterSpeed * Time.deltaTime;
-            float nx = Mathf.MoveTowards(MoveRoot.position.x, _enterTargetPos.x, step);
-            GameConfig.SetWorldPosition(MoveRoot, new Vector3(nx, FootY, MoveRoot.position.z));
-            if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+        if (_skillTelegraphing || _bossPhaseShiftBusy)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
             return;
+        }
+
+        if (_forcedTarget != null)
+        {
+            if (_forcedTarget.isDead)
+                _forcedTarget = null;
+            else
+            {
+                target = _forcedTarget;
+                if (TryHoldDuringAttack())
+                    return;
+                RunForcedCombat();
+                return;
+            }
         }
 
         // 攻击中不换目标、不滑步
@@ -389,6 +384,13 @@ public class Monster : UnitBase
 
     void RunForcedCombat()
     {
+        if (_isEnteringMap) return;
+        if (_skillTelegraphing)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            return;
+        }
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
         {
             if (rb != null) rb.velocity = Vector2.zero;
@@ -542,7 +544,7 @@ public class Monster : UnitBase
         // ??????????????????/????
         attr.ResetToBase();
         int guildLv = SaveSystem.Instance?.Data?.guildLevel ?? 0;
-        float chapterScale = 1f + GameConfig.CHAPTER_SCALE_PER * Mathf.Max(0, chapter - 1);
+        float chapterScale = GameConfig.GetChapterStatScale(chapter);
         float guildScale = 1f + GameConfig.GUILD_SCALE_PER * guildLv;
         float diffScale = BattleManager.Instance != null ? BattleManager.Instance.DifficultyStatScale : 1f;
         float scale = chapterScale * guildScale * diffScale;
@@ -567,12 +569,24 @@ public class Monster : UnitBase
             baseAtk = GameConfig.MONSTER_ELITE_ATK;
             baseDef = GameConfig.MONSTER_ELITE_DEF;
             atkInterval = GameConfig.MONSTER_ELITE_ATK_INTERVAL;
+            // 分档：关卡波次奇偶 → 血厚 / 血薄
+            _eliteGlass = ((waveNum + monsterChapter) & 1) == 1;
+            if (_eliteGlass)
+            {
+                baseHp *= GameConfig.ELITE_GLASS_HP_MUL;
+                baseAtk *= GameConfig.ELITE_GLASS_ATK_MUL;
+            }
+            else
+            {
+                baseHp *= GameConfig.ELITE_TANK_HP_MUL;
+                baseAtk *= GameConfig.ELITE_TANK_ATK_MUL;
+            }
         }
 
         float waveMul = 1f + waveNum * 0.05f;
         float ttkMul = (bossUnit || eliteWave)
             ? WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit)
-            : (1f + GameConfig.CHAPTER_SCALE_PER * Mathf.Max(0, chapter - 1));
+            : GameConfig.GetChapterStatScale(chapter);
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * GameConfig.MONSTER_HP_GLOBAL_MUL);
@@ -591,10 +605,14 @@ public class Monster : UnitBase
             attr.SetAttr(AttrType.AttackSpeed,
                 attr.GetAttr(AttrType.AttackSpeed) / 0.6f);
         }
-        float moveSpd = template != null && template.baseMoveSpeed > 0.01f
-            ? Mathf.Min(template.baseMoveSpeed, GameConfig.MONSTER_DEFAULT_MOVE_SPEED * 1.5f)
-            : GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
-        // Boss??????????????????????
+        // 非 Boss：固定玩家移速×0.9；Boss 仍走表移速 + DEFAULT×1.5 上限
+        float moveSpd = GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
+        if (_isBossUnit)
+        {
+            moveSpd = template != null && template.baseMoveSpeed > 0.01f
+                ? Mathf.Min(template.baseMoveSpeed, GameConfig.MONSTER_DEFAULT_MOVE_SPEED * 1.5f)
+                : GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
+        }
         float atkRange;
         if (_isBossUnit)
         {
@@ -624,7 +642,6 @@ public class Monster : UnitBase
             attr.SetAttr(AttrType.MaxHp, attr.GetAttr(AttrType.MaxHp) * 1.25f);
             attr.SetAttr(AttrType.Attack, attr.GetAttr(AttrType.Attack) * 0.7f);
             attr.SetAttr(AttrType.AttackSpeed, attr.GetAttr(AttrType.AttackSpeed) * 0.7f);
-            attr.SetAttr(AttrType.MoveSpeed, attr.GetAttr(AttrType.MoveSpeed) * 0.75f);
         }
 
         currentHp = attr.GetAttr(AttrType.MaxHp);
@@ -653,6 +670,9 @@ public class Monster : UnitBase
         SetupHPBarSorting();
 
         _eliteWave = eliteWave;
+        if (!eliteWave) _eliteGlass = false;
+        _bossPhase2Started = false;
+        _bossPhaseShiftBusy = false;
         _skillId = SkillRegistry.Instance != null
             ? SkillRegistry.Instance.GetMonsterSkillId(template, eliteWave, _isBossUnit, _attackStyle)
             : null;
@@ -885,12 +905,51 @@ public class Monster : UnitBase
 
     public bool IsBossUnit => _isBossUnit;
     public bool IsEliteWave => _eliteWave;
+    public bool IsEliteGlass => _eliteGlass;
+
+    public int GetBossPhase()
+    {
+        if (!_isBossUnit || attr == null) return 0;
+        float maxHp = attr.GetAttr(AttrType.MaxHp);
+        if (maxHp < 1f) return 1;
+        return (currentHp / maxHp) <= GameConfig.BOSS_PHASE2_HP_RATIO ? 2 : 1;
+    }
 
     public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null)
     {
         base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source);
         if (!isDead)
             BattleBossHpBar.RefreshFromField();
+        TryBeginBossPhase2();
+    }
+
+    void TryBeginBossPhase2()
+    {
+        if (!_isBossUnit || _bossPhase2Started || isDead) return;
+        if (GetBossPhase() < 2) return;
+        _bossPhase2Started = true;
+        if (!_skillTelegraphing && !_bossPhaseShiftBusy)
+            StartCoroutine(CoBossPhaseShift());
+    }
+
+    IEnumerator CoBossPhaseShift()
+    {
+        _bossPhaseShiftBusy = true;
+        if (rb != null) rb.velocity = Vector2.zero;
+        UIManager.Instance?.ShowToast("Boss 进入狂暴阶段！");
+        Vector3 center = new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
+        GameObject disc = CreateTelegraphDisc(center, 4.5f);
+        float t = 0f;
+        while (t < GameConfig.BOSS_PHASE_SHIFT_TELEGRAPH)
+        {
+            if (isDead) break;
+            t += Time.deltaTime;
+            yield return null;
+        }
+        if (disc != null) Destroy(disc);
+        if (!isDead)
+            ApplySkillDamage(attr.GetAttr(AttrType.Attack) * 0.85f, 4.5f, null);
+        _bossPhaseShiftBusy = false;
     }
 
     /// <summary>?????????????????????????/summary>
@@ -975,11 +1034,11 @@ public class Monster : UnitBase
 
         switch (monsterChapter)
         {
-            case 1: folderName = "1 Undead"; prefix = "undead_1"; break;
-            case 2: folderName = "2 Jungle"; prefix = "jungle_2"; break;
-            case 3: folderName = "3 Sea"; prefix = "sea_3"; break;
-            case 4: folderName = "4 Forest"; prefix = "forest_4"; break;
-            case 5: folderName = "5 Field"; prefix = "field_5"; break;
+            case 1: folderName = "1 Forest"; prefix = "forest_1"; break;
+            case 2: folderName = "2 Undead"; prefix = "undead_2"; break;
+            case 3: folderName = "3 Jungle"; prefix = "jungle_3"; break;
+            case 4: folderName = "4 Field"; prefix = "field_4"; break;
+            case 5: folderName = "5 Sea"; prefix = "sea_5"; break;
             case 6: folderName = "6 Cave"; prefix = "cave_6"; break;
             case 7: folderName = "7 Devil"; prefix = "devil_7"; break;
             case 8: folderName = "8 Ice"; prefix = "ice_8"; break;
@@ -1021,6 +1080,7 @@ public class Monster : UnitBase
 
     protected override void Attack(UnitBase target)
     {
+        if (_skillTelegraphing) return;
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
             return;
 
@@ -1028,13 +1088,15 @@ public class Monster : UnitBase
 
         if (_canUseActiveSkill && _skillEnergy >= 0.99f && !string.IsNullOrEmpty(_skillId))
         {
+            if (_skillTelegraphing) return;
             UseActiveSkill(target);
             attackCd = GetAttackCooldown();
             return;
         }
 
         base.Attack(target);
-        if (_canUseActiveSkill)
+        // 技能冷却中不靠普攻充能，避免刚放完技能立刻叠满
+        if (_canUseActiveSkill && _skillCooldown <= 0f)
             _skillEnergy = Mathf.Min(1f, _skillEnergy + 0.15f);
     }
 
@@ -1055,21 +1117,36 @@ public class Monster : UnitBase
         return byDist;
     }
 
+    bool _skillTelegraphing;
+
     void UseActiveSkill(UnitBase primaryTarget)
     {
         _skillEnergy = 0f;
-        _skillCooldown = (_isBossUnit || _eliteWave) ? 2.5f : 5f;
-        _swingStyle = ResolveSwingStyle(primaryTarget);
+        _skillCooldown = (_isBossUnit || _eliteWave) ? 2.5f + 3f : 5f;
+        // Attack() 已 ResolveSwingStyle；此处复用，避免 _bossSwingIndex 双跳
 
         var skill = SkillRegistry.Instance?.GetActiveSkill(_skillId);
         float mult = skill != null ? skill.damageMultiplier : 2.2f;
         float extra = skill != null ? skill.baseDamage : 0f;
-        // ???????????????????????????
         float tier = (_isBossUnit || _eliteWave) ? 1f : GameConfig.MONSTER_NORMAL_SKILL_DAMAGE_MUL;
         float damage = (attr.GetAttr(AttrType.Attack) * mult + extra) * tier;
         float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
+        float telegraph = GameConfig.BOSS_PHASE1_TELEGRAPH;
 
-        // ???????????????Boss ????? attackKit
+        if (_isBossUnit && GetBossPhase() >= 2)
+        {
+            damage *= GameConfig.BOSS_PHASE2_DAMAGE_MUL;
+            radius *= GameConfig.BOSS_PHASE2_RADIUS_MUL;
+            telegraph = GameConfig.BOSS_PHASE2_TELEGRAPH;
+            // 阶段 2：更偏向近身砸击节奏
+            if (!MonsterAttackStyleTable.IsRanged(_attackStyle))
+                _swingStyle = MonsterAttackStyle.Melee;
+        }
+        else if (_eliteWave)
+        {
+            telegraph = _eliteGlass ? GameConfig.ELITE_GLASS_TELEGRAPH : GameConfig.ELITE_TANK_TELEGRAPH;
+        }
+
         AttackVfxKit kit = MonsterAttackStyleTable.GetVfxKit(_isBossUnit ? _swingStyle : _attackStyle);
 
         if (_isBossUnit)
@@ -1079,10 +1156,93 @@ public class Monster : UnitBase
                 kit = skillCfg.attackKit;
         }
 
+        // 精英 / Boss：地面红色警示后再结算
+        if (_isBossUnit || _eliteWave)
+        {
+            StartCoroutine(CoSkillTelegraphThenCast(primaryTarget, damage, radius, kit, telegraph));
+            return;
+        }
+
+        ExecuteActiveSkillNow(primaryTarget, damage, radius, kit);
+    }
+
+    IEnumerator CoSkillTelegraphThenCast(UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit, float telegraphSec)
+    {
+        _skillTelegraphing = true;
+        Vector3 center = primaryTarget != null
+            ? new Vector3(primaryTarget.transform.position.x, GROUND_Y + 0.02f, primaryTarget.transform.position.z)
+            : new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
+
+        GameObject disc = CreateTelegraphDisc(center, radius);
+        float t = 0f;
+        float warn = Mathf.Max(0.5f, telegraphSec);
+        while (t < warn)
+        {
+            if (isDead || this == null)
+            {
+                if (disc != null) Destroy(disc);
+                _skillTelegraphing = false;
+                yield break;
+            }
+            t += Time.deltaTime;
+            yield return null;
+        }
+        if (disc != null) Destroy(disc);
+
+        if (!isDead && gameObject.activeInHierarchy)
+        {
+            ExecuteActiveSkillNow(primaryTarget, damage, radius, kit);
+            // Boss 阶段 2：连砸第二下
+            if (_isBossUnit && GetBossPhase() >= 2 && !MonsterAttackStyleTable.IsRanged(_swingStyle))
+            {
+                yield return new WaitForSeconds(0.35f);
+                if (!isDead)
+                    ExecuteActiveSkillNow(primaryTarget, damage * 0.75f, radius * 0.85f, kit);
+            }
+        }
+        _skillTelegraphing = false;
+    }
+
+    static GameObject CreateTelegraphDisc(Vector3 center, float radius)
+    {
+        var go = new GameObject("SkillTelegraph");
+        go.transform.position = center;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = MakeCircleSprite();
+        sr.color = new Color(0.95f, 0.12f, 0.1f, 0.42f);
+        sr.sortingOrder = GameConfig.SORT_UNIT - 2;
+        float dia = Mathf.Max(1.2f, radius * 2f);
+        go.transform.localScale = new Vector3(dia, dia * 0.35f, 1f);
+        return go;
+    }
+
+    static Sprite _circleSprite;
+    static Sprite MakeCircleSprite()
+    {
+        if (_circleSprite != null) return _circleSprite;
+        const int s = 64;
+        var tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        float c = (s - 1) * 0.5f;
+        for (int y = 0; y < s; y++)
+        for (int x = 0; x < s; x++)
+        {
+            float dx = (x - c) / c;
+            float dy = (y - c) / c;
+            float d = Mathf.Sqrt(dx * dx + dy * dy);
+            float a = d <= 1f ? Mathf.Clamp01(1.15f - d) : 0f;
+            tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+        }
+        tex.Apply();
+        _circleSprite = Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), s);
+        return _circleSprite;
+    }
+
+    void ExecuteActiveSkillNow(UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit)
+    {
         Vector3 firePos = GetFirePosition();
         Vector3 hitPos = primaryTarget != null ? primaryTarget.GetHitPosition() : firePos;
 
-        // ?????????????
         if (unitAnim != null)
             unitAnim.PlaySkillCast(kit, (_isBossUnit || _eliteWave) ? 1.15f : 1f);
 
@@ -1116,6 +1276,11 @@ public class Monster : UnitBase
     {
         if (this == null || isDead || !gameObject.activeInHierarchy) return;
 
+        // 圆心与预警圈 / 弹道落点一致：主目标世界 X，无目标则退回施法者
+        float centerX = primaryTarget != null
+            ? primaryTarget.transform.position.x
+            : transform.position.x;
+
         int vfxDir = GetVfxFacingDir();
         var allies = BattleManager.Instance?.allyUnits;
         if (allies != null && allies.Count > 0)
@@ -1124,7 +1289,7 @@ public class Monster : UnitBase
             {
                 var u = allies[i];
                 if (u == null || u.isDead) continue;
-                float dist = Mathf.Abs(u.transform.position.x - transform.position.x);
+                float dist = Mathf.Abs(u.transform.position.x - centerX);
                 if (dist > radius) continue;
                 bool crit = Random.value < attr.GetAttr(AttrType.CritRate);
                 u.TakeDamage(crit ? damage * 1.5f : damage, crit, false, true, vfxDir);

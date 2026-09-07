@@ -459,9 +459,9 @@ public class EquipDropPopupUI : MonoBehaviour
 
         if (WeaponLoadoutRules.IsLoadoutItem(sel))
         {
-            if (!bag.TryAcquireLoadoutItem(sel, out _))
+            if (!bag.TryAddUniqueBySlot(sel, out _))
             {
-                UIManager.Instance?.ShowToast("无法装备该武器");
+                UIManager.Instance?.ShowToast("无法放入背包");
                 return;
             }
             BattleUI.Instance?.UpdateBackpackGrid();
@@ -469,13 +469,11 @@ public class EquipDropPopupUI : MonoBehaviour
             return;
         }
 
-        var item = FindBackpackItem(bag, sel);
-        if (item == null && !bag.TryAddItem(sel, out item))
+        if (!bag.TryAddUniqueBySlot(sel, out _))
         {
             UIManager.Instance?.ShowToast("背包空间不足，先整理一下");
             return;
         }
-        bag.EquipItem(item);
         BattleUI.Instance?.UpdateBackpackGrid();
         Finish(sel, true);
     }
@@ -498,15 +496,15 @@ public class EquipDropPopupUI : MonoBehaviour
             return;
         }
 
-        // 放入背包（不穿戴）
+        // 放入背包（同部位唯一，不穿槽）
         if (bag != null && sel != null && FindBackpackItem(bag, sel) == null
-            && !bag.TryAddItem(sel, out _))
+            && !bag.TryAddUniqueBySlot(sel, out _))
         {
             UIManager.Instance?.ShowToast("背包空间不足，先整理一下");
             return;
         }
         BattleUI.Instance?.UpdateBackpackGrid();
-        UIManager.Instance?.ShowToast("已放入背包，点格子可装备并实时换装");
+        UIManager.Instance?.ShowToast("已放入背包");
         Finish(sel, false);
     }
 

@@ -9,8 +9,8 @@ TABLES = os.path.join(ROOT, "Assets", "Data", "Source", "Tables")
 MONSTERS_DIR = os.path.join(ROOT, "Assets", "Resources", "Config", "Monsters")
 
 THEMES = {
-    1: "undead", 2: "jungle", 3: "sea", 4: "forest",
-    5: "field", 6: "cave", 7: "devil", 8: "ice",
+    1: "forest", 2: "undead", 3: "jungle", 4: "field",
+    5: "sea", 6: "cave", 7: "devil", 8: "ice",
 }
 
 ATTACK_NOTES = {}
@@ -160,13 +160,13 @@ def write_monster_stats():
 
 def write_chapter_theme_map():
     rows = [
-        "# gameChapter=游戏章；monsterChapter=素材章",
+        "# gameChapter=\u6e38\u620f\u7ae0\uff1bmonsterChapter=\u7d20\u6750\u7ae0\uff08\u6052\u7b49\uff09",
         "gameChapter,monsterChapter,folderName,mapName,bgFolder",
-        "1,4,4 Forest,\u66ae\u5f71\u68ee\u6797,4 Forest",
-        "2,1,1 Undead,\u5e7d\u51a5\u5893\u56ed,1 Undead",
-        "3,2,2 Jungle,\u7fe0\u73b9\u79d8\u5883,2 Jungle",
-        "4,3,3 Sea,\u6df1\u84dd\u9057\u8ff9\u6d77\u57df,3 Sea",
-        "5,5,5 Field,\u6668\u66e6\u539f\u91ce,5 Field",
+        "1,1,1 Forest,\u66ae\u5f71\u68ee\u6797,1 Forest",
+        "2,2,2 Undead,\u5e7d\u51a5\u5893\u56ed,2 Undead",
+        "3,3,3 Jungle,\u7fe0\u73b9\u79d8\u5883,3 Jungle",
+        "4,4,4 Field,\u6668\u66e6\u8349\u539f,4 Field",
+        "5,5,5 Sea,\u6d77\u5c9b\u9057\u8ff9,5 Sea",
         "6,6,6 Cave,\u5de8\u5ca9\u6df1\u7a9f,6 Cave",
         "7,7,7 Devil,\u8d64\u7130\u70bc\u72f1,7 Devil",
         "8,8,8 Ice,\u6c38\u971c\u96ea\u5883,8 Ice",

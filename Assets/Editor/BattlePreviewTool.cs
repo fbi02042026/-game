@@ -25,8 +25,8 @@ public class BattlePreviewWindow : EditorWindow
         "7 - Devil (恶魔)", "8 - Ice (冰霜)"
     };
     private static readonly string[] CHAPTER_FOLDERS = {
-        "1 Undead", "2 Jungle", "3 Sea", "4 Forest",
-        "5 Field", "6 Cave", "7 Devil", "8 Ice"
+        "1 Forest", "2 Undead", "3 Jungle", "4 Field",
+        "5 Sea", "6 Cave", "7 Devil", "8 Ice"
     };
 
     private GameObject _previewRoot;

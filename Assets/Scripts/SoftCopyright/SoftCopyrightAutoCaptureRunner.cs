@@ -134,8 +134,8 @@ public class SoftCopyrightAutoCaptureRunner : MonoBehaviour
             return e != null && e.IsOpen && e.Mode == EquipDropMode.ReplaceWorn;
         }, 0.55f);
 
-        Add(26, "26_教学_老盾入队", "老盾入队", () =>
-            SoftCopyrightUiProbe.HintContains("老盾加入了队伍"), 0.55f);
+        Add(26, "26_教学_牧师入队", "牧师入队", () =>
+            SoftCopyrightUiProbe.HintContains("小白加入了队伍"), 0.55f);
 
         Add(27, "27_教学_技能引导", "技能释放引导", () =>
             SoftCopyrightUiProbe.HintContains("点你的头像放技能"), 0.55f);

@@ -472,6 +472,34 @@ public class Mercenary : UnitBase
 
     public void SetPartyIndex(int index) => _partyIndex = index;
 
+    public int GetPartyIndexOrZero() => ResolvePartyIndex();
+
+    MercAiPolicy.Policy _aiPolicy;
+    string _cachedJobKey;
+    bool _aiPolicyReady;
+
+    void EnsureAiPolicy()
+    {
+        string job = null;
+        MercRosterDefs.MercRarity rarity = MercRosterDefs.MercRarity.Common;
+        if (!string.IsNullOrEmpty(hireId) && MercRosterDefs.TryGetByHireId(hireId, out var byHire))
+        {
+            job = byHire.JobName;
+            rarity = byHire.Rarity;
+        }
+        else if (MercRosterDefs.TryGetByAssetId(mercId, out var byAsset))
+        {
+            job = byAsset.JobName;
+            rarity = byAsset.Rarity;
+        }
+
+        string key = (job ?? "") + "|" + (int)rarity;
+        if (_aiPolicyReady && _cachedJobKey == key) return;
+        _cachedJobKey = key;
+        _aiPolicy = MercAiPolicy.Get(job, rarity);
+        _aiPolicyReady = true;
+    }
+
     protected override void AIUpdate()
     {
         if (TutorialStunned)
@@ -505,7 +533,114 @@ public class Mercenary : UnitBase
             return;
         }
 
-        // 与玩家同一套：索敌 → 进射程攻击 / 否则前压；无目标则向右推进
-        base.AIUpdate();
+        if (TryHoldDuringAttack())
+            return;
+        if (TryHoldDuringDamaged())
+            return;
+
+        EnsureAiPolicy();
+        bool alliesEngaged = HasAliveEnemyOnField();
+        target = alliesEngaged
+            ? MercAiPolicy.PickTarget(this, _aiPolicy, target)
+            : FindNearestEnemyInDetectRange();
+        if (target != null && target.isAlly == isAlly)
+            target = null;
+
+        bool isMoving = false;
+        float myX = GetCombatX(this);
+
+        // 站位意图：先挪到期望 X，再进入攻击逻辑
+        if (MercAiPolicy.TryGetDesiredX(this, _aiPolicy, target, out float desiredX))
+        {
+            float dx = desiredX - myX;
+            if (Mathf.Abs(dx) > 0.2f
+                && !(target != null && IsInBasicAttackRange(target)
+                     && _aiPolicy.Stance != MercAiPolicy.Stance.KeepMidRange
+                     && _aiPolicy.Stance != MercAiPolicy.Stance.KeepFar
+                     && _aiPolicy.Stance != MercAiPolicy.Stance.Backline))
+            {
+                int dir = dx > 0f ? 1 : -1;
+                facingDir = dir;
+                ApplyFacing(facingDir);
+                if (rb != null)
+                    rb.velocity = new Vector2(dir * GetCombatMoveSpeed(), rb.velocity.y);
+                isMoving = true;
+
+                // 远程/后排：边走边打若已进距
+                if (target != null && IsInBasicAttackRange(target)
+                    && attackCd <= 0f
+                    && (unitAnim == null || !unitAnim.InDamagedRecovery())
+                    && (unitAnim == null || !unitAnim.InAttackLock))
+                {
+                    FaceToward(target);
+                    Attack(target);
+                    attackCd = GetAttackCooldown();
+                }
+
+                if (unitAnim != null)
+                    unitAnim.SetMove(isMoving, facingDir);
+                if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
+                    ClampToScreen();
+                ApplyLaneY(Time.deltaTime);
+                return;
+            }
+        }
+
+        if (target != null)
+        {
+            float distance = Mathf.Abs(myX - GetCombatX(target));
+            float attackRange = GetEffectiveAttackRange();
+            bool melee = UsesMeleeBasicAttack();
+            FaceToward(target);
+            if (melee || !alliesEngaged)
+                AdjustLaneTowardTarget(target, Time.deltaTime);
+
+            if (IsInBasicAttackRange(target))
+            {
+                if (rb != null) rb.velocity = Vector2.zero;
+                if (attackCd <= 0 && (unitAnim == null || !unitAnim.InDamagedRecovery())
+                    && (unitAnim == null || !unitAnim.InAttackLock))
+                {
+                    Attack(target);
+                    attackCd = GetAttackCooldown();
+                }
+            }
+            else if (melee && distance <= attackRange)
+            {
+                if (rb != null) rb.velocity = Vector2.zero;
+                isMoving = true;
+            }
+            else
+            {
+                if (rb != null)
+                    rb.velocity = new Vector2(facingDir * GetCombatMoveSpeed(), rb.velocity.y);
+                isMoving = true;
+            }
+        }
+        else
+        {
+            if (alliesEngaged)
+            {
+                facingDir = 1;
+                ApplyFacing(facingDir);
+                if (rb != null) rb.velocity = Vector2.zero;
+                isMoving = false;
+            }
+            else
+            {
+                facingDir = 1;
+                ApplyFacing(facingDir);
+                AdjustFormationLane(Time.deltaTime);
+                if (rb != null)
+                    rb.velocity = new Vector2(GetCombatMoveSpeed(), rb.velocity.y);
+                isMoving = true;
+            }
+        }
+
+        if (unitAnim != null)
+            unitAnim.SetMove(isMoving, facingDir);
+        if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
+            ClampToScreen();
+        ApplyLaneY(Time.deltaTime);
     }
 }

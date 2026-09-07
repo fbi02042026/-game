@@ -24,7 +24,8 @@ public static class BackpackGridVisual
         RectTransform gridContainer,
         GridLayoutGroup layout,
         IList<ItemPlacement> items,
-        Func<int, int, RectTransform> cellAt = null)
+        Func<int, int, RectTransform> cellAt = null,
+        bool enableDrag = false)
     {
         if (gridContainer == null) return;
         var layer = EnsureLayer(gridContainer);
@@ -98,6 +99,26 @@ public static class BackpackGridVisual
 
             if (p.equipped)
                 AddEquippedBadge(go.transform, p.h);
+
+            // 开箱整理：可拖可点
+            if (enableDrag)
+            {
+                img.raycastTarget = true;
+                var hostImg = go.GetComponent<Image>();
+                if (hostImg == null)
+                {
+                    hostImg = go.AddComponent<Image>();
+                    hostImg.color = new Color(1f, 1f, 1f, 0.01f);
+                }
+                hostImg.raycastTarget = true;
+                var drag = go.GetComponent<BattleBackpackItemDrag>();
+                if (drag == null) drag = go.AddComponent<BattleBackpackItemDrag>();
+                drag.Equip = p.equip;
+                drag.GridX = p.x;
+                drag.GridY = p.y;
+                drag.Width = p.w;
+                drag.Height = p.h;
+            }
         }
     }
 

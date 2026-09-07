@@ -93,25 +93,25 @@ public class CombatJuice : Singleton<CombatJuice>
         if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
         float inDur = fullWindup ? GameConfig.KILL_CAM_ZOOM_IN : GameConfig.KILL_CAM_RANGED_WINDUP;
         float mul = GameConfig.KILL_CAM_ZOOM_MUL;
+        // 只缩 ortho：场景/单位同一相机一起拉近；勿再缩放视差层（会与 ortho 不同步）
         GetCameraFollow()?.BeginKillCamZoom(mul, inDur);
-        Object.FindObjectOfType<ParallaxBackground>()?.ApplyKillCamZoomMul(mul);
         BattleUI.ApplyKillCamHudCompensation(mul);
         MonsterHealthBar.SetKillCamHidden(true);
         BattleBossHpBar.SetKillCamHidden(true);
     }
 
-    /// <summary>下劈/命中瞬间：还原 timeScale + 镜头瞬间弹回。</summary>
+    /// <summary>下劈/命中瞬间：还原 timeScale + 镜头瞬间弹回。血条等命中后再解藏。</summary>
     public void EndKillWindupJuice()
     {
         EndCritWindupSlowMo();
-        if (!GameConfig.COMBAT_JUICE_KILL_CAM)
-        {
-            MonsterHealthBar.SetKillCamHidden(false);
-            BattleBossHpBar.SetKillCamHidden(false);
-            return;
-        }
+        if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
         GetCameraFollow()?.ForceResetKillCamZoom();
         ResetKillCamScene();
+    }
+
+    /// <summary>击杀镜头结束后再显示血条，避免解藏当帧又闪一下。</summary>
+    public void RevealKillCamBars()
+    {
         MonsterHealthBar.SetKillCamHidden(false);
         BattleBossHpBar.SetKillCamHidden(false);
     }

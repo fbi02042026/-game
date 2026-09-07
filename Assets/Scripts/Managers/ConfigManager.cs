@@ -142,22 +142,44 @@ public class ConfigManager : Singleton<ConfigManager>
 
     public List<EquipInstance> GetRandomEquipInstances(int count, int blacksmithLevel, int bonusStar, StageType stageType)
     {
+        // 裂缝程序化掉落（部位/品质/属性范围表）；失败时回退旧 SO 模板逻辑
+        try
+        {
+            RiftEquipTables.EnsureLoaded();
+            if (RiftEquipTables.Slots != null && RiftEquipTables.Slots.Count > 0)
+                return RiftEquipGenerator.Generate(count, stageType, blacksmithLevel);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[ConfigManager] RiftEquipGenerator 失败，回退模板掉落: " + e.Message);
+        }
+
         Rarity maxRarity = (Rarity)Mathf.Min(blacksmithLevel + 1, (int)Rarity.Legendary);
+        PlayerJobId job = PlayerJobDefs.GetSelected();
         List<EquipTemplate> available = _allEquipTemplates.Where(t => t != null).ToList();
         List<EquipTemplate> mainHandWeapons = available
-            .Where(IsMainHandWeaponTemplate)
+            .Where(t => IsMainHandWeaponTemplate(t) && PlayerJobDefs.TemplateMatchesJob(t, job))
             .ToList();
         List<EquipTemplate> offHandWeapons = available
-            .Where(IsOffHandWeaponTemplate)
+            .Where(t => IsOffHandWeaponTemplate(t) && PlayerJobDefs.TemplateMatchesJob(t, job))
             .ToList();
         List<EquipTemplate> twoHandWeapons = available
-            .Where(t => t.weaponType == WeaponType.TwoHand)
+            .Where(t => t.weaponType == WeaponType.TwoHand && PlayerJobDefs.TemplateMatchesJob(t, job))
             .ToList();
         List<EquipTemplate> shields = available
-            .Where(IsShieldTemplate)
+            .Where(t => IsShieldTemplate(t) && PlayerJobDefs.TemplateMatchesJob(t, job))
             .ToList();
+        // 武器池空时回退未过滤
+        if (mainHandWeapons.Count + offHandWeapons.Count + twoHandWeapons.Count + shields.Count == 0)
+        {
+            mainHandWeapons = available.Where(IsMainHandWeaponTemplate).ToList();
+            offHandWeapons = available.Where(IsOffHandWeaponTemplate).ToList();
+            twoHandWeapons = available.Where(t => t.weaponType == WeaponType.TwoHand).ToList();
+            shields = available.Where(IsShieldTemplate).ToList();
+        }
         List<EquipTemplate> nonWeapons = available
-            .Where(t => t.slotType != EquipSlotType.MainHand && t.slotType != EquipSlotType.OffHand)
+            .Where(t => t.slotType != EquipSlotType.MainHand && t.slotType != EquipSlotType.OffHand
+                        && t.slotType != EquipSlotType.Cape)
             .ToList();
         List<EquipInstance> result = new List<EquipInstance>();
         if (available.Count == 0) return result;
@@ -180,6 +202,36 @@ public class ConfigManager : Singleton<ConfigManager>
             result.Add(EquipInstance.GenerateFromTemplate(template, bonusStar, lv, true, rolled));
         }
         return result;
+    }
+
+    public EquipTemplate FindWeaponTemplateByKind(WeaponCombatTable.WeaponKind kind)
+    {
+        if (_allEquipTemplates == null) return null;
+        EquipTemplate best = null;
+        for (int i = 0; i < _allEquipTemplates.Count; i++)
+        {
+            var t = _allEquipTemplates[i];
+            if (t == null || t.weaponType == WeaponType.None) continue;
+            if (WeaponCombatTable.ResolveKind(t) == kind)
+            {
+                best = t;
+                break;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>基础盾模板（剑盾职业副手），不发护甲。</summary>
+    public EquipTemplate FindBasicShieldTemplate()
+    {
+        if (_allEquipTemplates == null) return null;
+        for (int i = 0; i < _allEquipTemplates.Count; i++)
+        {
+            var t = _allEquipTemplates[i];
+            if (IsShieldTemplate(t))
+                return t;
+        }
+        return null;
     }
 
     static bool IsMainHandWeaponTemplate(EquipTemplate t)
@@ -366,7 +418,7 @@ public class ConfigManager : Singleton<ConfigManager>
         return Mathf.Max(1f, idx * 0.5f);
     }
 
-    /// <summary>从怪物ID中提取章节号: "forest_401" → 4, "undead_101" → 1</summary>
+    /// <summary>从怪物ID中提取章节号: "forest_101" → 1, "undead_201" → 2</summary>
     private static int ExtractChapterFromId(string id)
     {
         int underscoreIdx = id.IndexOf('_');

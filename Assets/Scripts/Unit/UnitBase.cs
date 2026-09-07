@@ -349,7 +349,29 @@ public abstract class UnitBase : MonoBehaviour
     {
         if (isDead) return;
         attackCd -= Time.deltaTime;
+        if (IsStunned)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            return;
+        }
         AIUpdate();
+    }
+
+    float _stunUntil;
+    /// <summary>眩晕（控制）：期间停 AI。</summary>
+    public bool IsStunned => Time.time < _stunUntil;
+
+    public void ApplyStun(float seconds)
+    {
+        if (seconds <= 0f || isDead || isAlly) return; // 本玩法只眩晕敌人
+        _stunUntil = Mathf.Max(_stunUntil, Time.time + seconds);
+        if (rb != null) rb.velocity = Vector2.zero;
+        if (unitAnim != null)
+        {
+            unitAnim.SetMove(false, facingDir);
+            unitAnim.PlayDebuff();
+        }
     }
 
     protected virtual void AIUpdate()
@@ -500,7 +522,7 @@ public abstract class UnitBase : MonoBehaviour
         return true;
     }
 
-    static bool HasAliveEnemyOnField()
+    protected static bool HasAliveEnemyOnField()
     {
         var bm = BattleManager.Instance;
         return bm != null && bm.GetAliveMonsterCount() > 0;
@@ -673,6 +695,9 @@ public abstract class UnitBase : MonoBehaviour
         float r = attr != null ? attr.GetAttr(AttrType.AttackRange) : GameConfig.RangeSword;
         if (UsesMeleeBasicAttack())
             r = Mathf.Min(r, GameConfig.RangePolearm);
+        // 我方近战再缩 10%，贴身手感
+        if (isAlly && UsesMeleeBasicAttack())
+            r *= 0.9f;
         return Mathf.Max(0.2f, r);
     }
 
@@ -878,11 +903,17 @@ public abstract class UnitBase : MonoBehaviour
             CombatJuice.Instance?.EndKillWindupJuice();
 
         if (this == null || isDead || target == null || target.isDead)
+        {
+            if (killWindup)
+                CombatJuice.Instance?.RevealKillCamBars();
             yield break;
+        }
 
         ResolveBasicAttackHit(target, damage, isCrit, openingHit);
         if (BattleVFXSystem.Instance != null)
             BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
+        if (killWindup)
+            CombatJuice.Instance?.RevealKillCamBars();
     }
 
     IEnumerator CoAllyRangedKillWindup(
@@ -895,11 +926,15 @@ public abstract class UnitBase : MonoBehaviour
         CombatJuice.Instance?.EndKillWindupJuice();
 
         if (this == null || isDead || target == null || target.isDead)
+        {
+            CombatJuice.Instance?.RevealKillCamBars();
             yield break;
+        }
 
         // 前摇结束后再发射；伤害仍等弹道飞到受击点
         FireAllyRangedBasicProjectile(
             target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf);
+        CombatJuice.Instance?.RevealKillCamBars();
     }
 
     void ResolveBasicAttackHit(UnitBase target, float damage, bool isCrit, bool openingHit)
@@ -949,6 +984,8 @@ public abstract class UnitBase : MonoBehaviour
             atkSpd *= 0.55f;
         if (isAlly && BattleManager.Instance != null)
             atkSpd *= BattleManager.Instance.KillComboSpeedMul;
+        if (this is Hero && PlayerPassiveCombat.Instance != null)
+            atkSpd *= PlayerPassiveCombat.Instance.GetAttackSpeedMul();
         return 1f / Mathf.Max(0.05f, atkSpd);
     }
 
@@ -1036,6 +1073,8 @@ public abstract class UnitBase : MonoBehaviour
         if (_isDying) return;
 
         float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense);
+        if (isAlly && PlayerPassiveCombat.Instance != null)
+            finalDamage *= PlayerPassiveCombat.Instance.GetAllyIncomingDamageMul(this);
 
         if (source != null && finalDamage > 0f)
             LastDamageSource = source;
@@ -1054,6 +1093,9 @@ public abstract class UnitBase : MonoBehaviour
         }
 
         CombatJuice.Instance?.OnHit(this, finalDamage, isCrit, showHitVfx);
+
+        if (isCrit && source is Hero && !isAlly)
+            PlayerPassiveCombat.Instance?.OnHeroCritHit(this);
 
         var bm = BattleManager.Instance;
         if (bm != null && finalDamage > 0f)

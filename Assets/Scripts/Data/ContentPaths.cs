@@ -27,6 +27,15 @@ public static class ContentPaths
         public const string WaveSlot = "Data/Tables/wave_slot";
         public const string ChapterBranch = "Data/Tables/chapter_branch";
         public const string ChapterBranchRules = "Data/Tables/chapter_branch_rules";
+        public const string EquipSlotPools = "Data/Tables/equip_slot_pools";
+        public const string EquipRarityRules = "Data/Tables/equip_rarity_rules";
+        public const string EquipAttrRanges = "Data/Tables/equip_attr_ranges";
+        public const string RiftEquipGenSteps = "Data/Tables/rift_equip_gen_steps";
+        public const string PlayerJobBaseStats = "Data/Tables/player_job_base_stats";
+        public const string JobWeapons = "Data/Tables/job_weapons";
+        public const string PlayerPassives = "Data/Tables/player_passives";
+        public const string HiddenLevelRules = "Data/Tables/hidden_level_rules";
+        public const string EquipAppearanceMap = "Data/Tables/equip_appearance_map";
     }
 
     public static class Icons

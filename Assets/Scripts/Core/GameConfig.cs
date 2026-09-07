@@ -276,7 +276,7 @@ public static class GameConfig
     }
 
     [Header("基础属性（对齐数值表·玩家 Lv1）")]
-    public const float BASE_MOVE_SPEED = 1.2f;
+    public const float BASE_MOVE_SPEED = 0.96f;
     /// <summary>进战斗后首波刷怪延迟（秒）</summary>
     public const float FIRST_WAVE_SPAWN_DELAY = 1.5f;
     /// <summary>
@@ -303,7 +303,7 @@ public static class GameConfig
     /// <summary>怪物血条相对脚底下沉（世界单位，负=更低）</summary>
     public const float MONSTER_HP_BAR_FOOT_DROP = -0.05f;
     /// <summary>小怪默认移速（比玩家慢，避免擦肩而过）</summary>
-    public const float MONSTER_DEFAULT_MOVE_SPEED = 0.45f;
+    public const float MONSTER_DEFAULT_MOVE_SPEED = 0.864f;
     /// <summary>从右侧缓步入场速度</summary>
     public const float MONSTER_ENTER_SPEED = 0.4f;
     /// <summary>入场起点比交战点再远多少（世界单位）；过大容易出场「往前窜」</summary>
@@ -317,7 +317,7 @@ public static class GameConfig
     /// <summary>镜头相对主角 X 偏移（过大易把身后佣兵挤出左缘）</summary>
     public const float CAMERA_FOLLOW_OFFSET_X = 0.85f;
     /// <summary>默认近战攻击距离（单手剑 96px @ PPU100）</summary>
-    public const float BASE_ATTACK_RANGE = 0.96f; // 96/100，对齐数值表
+    public const float BASE_ATTACK_RANGE = 0.864f; // 剑基准再缩 10%（原 0.96）
     public const float BASE_ATTACK_SPEED = 1.428f; // 单手剑间隔 0.7s → 1/0.7
     public const int BASE_ATTACK = 30;
     public const int BASE_HP = 200;
@@ -352,12 +352,43 @@ public static class GameConfig
     public const float MONSTER_ATK_SPEED_MUL = 0.65f;
     /// <summary>弓/法球等子弹单位攻速倍率（1=不变；0.5=发射频率降 50%）</summary>
     public const float PROJECTILE_ATK_SPEED_MUL = 0.5f;
-    /// <summary>章节系数：0.15×(n-1)</summary>
+    /// <summary>旧线性章节系数（仅兼容/兜底；属性缩放请用 GetChapterStatScale）</summary>
     public const float CHAPTER_SCALE_PER = 0.15f;
+    /// <summary>
+    /// 相对第 1 章的属性倍率（游戏章 1..8）：
+    /// 森林1.0 / 墓园1.3 / 雨林1.6 / 草原1.7 / 海岛1.4 / 洞穴2.0 / 熔岩2.4 / 冰川2.8
+    /// </summary>
+    public static readonly float[] CHAPTER_STAT_SCALE =
+    {
+        1.0f, 1.3f, 1.6f, 1.7f, 1.4f, 2.0f, 2.4f, 2.8f
+    };
+
+    /// <summary>按游戏章取属性倍率（恒等章节序）。</summary>
+    public static float GetChapterStatScale(int gameChapter)
+    {
+        int idx = Mathf.Clamp(gameChapter, 1, CHAPTER_STAT_SCALE.Length) - 1;
+        return CHAPTER_STAT_SCALE[idx];
+    }
     /// <summary>精英额外 TTK 血量倍率（叠在章节系数上）</summary>
     public const float ELITE_TTK_HP_MUL = 1.15f;
     /// <summary>Boss 额外 TTK 血量倍率</summary>
     public const float BOSS_TTK_HP_MUL = 1.35f;
+    /// <summary>Boss 进入阶段 2 的血量比例（≤ 则换招）</summary>
+    public const float BOSS_PHASE2_HP_RATIO = 0.7f;
+    public const float BOSS_PHASE2_DAMAGE_MUL = 1.18f;
+    public const float BOSS_PHASE2_RADIUS_MUL = 1.35f;
+    public const float BOSS_PHASE2_TELEGRAPH = 2.2f;
+    public const float BOSS_PHASE1_TELEGRAPH = 3f;
+    public const float BOSS_PHASE_SHIFT_TELEGRAPH = 2.5f;
+
+    /// <summary>精英血厚档</summary>
+    public const float ELITE_TANK_HP_MUL = 1.4f;
+    public const float ELITE_TANK_ATK_MUL = 0.92f;
+    public const float ELITE_TANK_TELEGRAPH = 3.2f;
+    /// <summary>精英血薄档</summary>
+    public const float ELITE_GLASS_HP_MUL = 0.7f;
+    public const float ELITE_GLASS_ATK_MUL = 1.35f;
+    public const float ELITE_GLASS_TELEGRAPH = 2.0f;
     /// <summary>公会等级系数：0.02×公会等级</summary>
     public const float GUILD_SCALE_PER = 0.02f;
 
@@ -366,7 +397,15 @@ public static class GameConfig
     public const float MONSTER_DAMAGE_MULTIPLIER = 1f;
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备
-    public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手
+    public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手（已改为包内同部位唯一，无穿戴槽）
+
+    [Header("隐藏经验等级")]
+    public const int HIDDEN_LEVEL_MAX = 60;
+    public const int HIDDEN_EXP_KILL_NORMAL = 8;
+    public const int HIDDEN_EXP_KILL_ELITE = 20;
+    public const int HIDDEN_EXP_KILL_BOSS = 50;
+    public const int HIDDEN_EXP_STAGE_CLEAR = 35;
+    public const int HIDDEN_EXP_STAGE_CLEAR_PER_CHAPTER = 5;
     /// <summary>每日酒馆招募次数上限</summary>
     public const int DAILY_MERC_RECRUIT_MAX = 1;
     /// <summary>刷新佣兵三选一消耗宝石</summary>
@@ -425,27 +464,27 @@ public static class GameConfig
     /// </summary>
     public static readonly string[] ChapterMonsterFolders = new string[]
     {
-        "4 Forest",   // 第1章
-        "1 Undead",   // 第2章
-        "2 Jungle",   // 第3章
-        "3 Sea",      // 第4章
-        "5 Field",    // 第5章
-        "6 Cave",     // 第6章
-        "7 Devil",    // 第7章
-        "8 Ice"       // 第8章
+        "1 Forest",   // 第1章 森林
+        "2 Undead",   // 第2章 墓园
+        "3 Jungle",   // 第3章 雨林
+        "4 Field",    // 第4章 草原
+        "5 Sea",      // 第5章 海岛
+        "6 Cave",     // 第6章 洞穴
+        "7 Devil",    // 第7章 熔岩
+        "8 Ice"       // 第8章 冰川
     };
 
     /// <summary>与 ChapterMonsterFolders 一一对应的地图显示名</summary>
     public static readonly string[] ChapterMapNames = new string[]
     {
-        "暮影森林",     // Forest
-        "幽冥墓园",     // Undead
-        "翡翠秘境",     // Jungle
-        "深蓝遗迹海域", // Sea
-        "晨曦原野",     // Field
-        "巨岩深窟",     // Cave
-        "赤焰炼狱",     // Devil
-        "永霜雪境"      // Ice
+        "暮影森林", // Forest
+        "幽冥墓园", // Undead
+        "翡翠秘境", // Jungle
+        "晨曦草原", // Field
+        "海岛遗迹", // Sea
+        "巨岩深窟", // Cave
+        "赤焰炼狱", // Devil
+        "永霜雪境"  // Ice
     };
 
     public static string GetChapterMapName(int gameChapter)
@@ -482,7 +521,7 @@ public static class GameConfig
     /// <summary>点击加速出兵：剩余每秒兑换金币</summary>
     public const float WAVE_SKIP_GOLD_PER_SEC = 3f;
     /// <summary>连杀判定窗口（秒）</summary>
-    public const float COMBO_WINDOW = 2.2f;
+    public const float COMBO_WINDOW = 3.2f;
     /// <summary>连杀≥3 时每次额外金币</summary>
     public const int COMBO_BONUS_GOLD = 1;
 
@@ -514,7 +553,7 @@ public static class GameConfig
 
     /// <summary>暴击前摇慢放：timeScale 与真实等待秒数（暴击 / Boss·精英致死前摇）</summary>
     public const float CRIT_WINDUP_TIME_SCALE = 0.05f;
-    public const float CRIT_WINDUP_UNSCALED = 0.5f;
+    public const float CRIT_WINDUP_UNSCALED = 2.0f;
     /// <summary>暴击击杀死亡后倒视觉滑动（世界单位，仅程序化死亡 tween）</summary>
     public const float CRIT_KILL_DEATH_SLIDE = 0.15f;
     /// <summary>普通击杀死亡后倒滑动（短于暴击）</summary>
@@ -525,7 +564,7 @@ public static class GameConfig
 
     /// <summary>击杀镜头拉近（orthoSize 倍率，&lt;1 拉近）；独立开关 COMBAT_JUICE_KILL_CAM</summary>
     public const float KILL_CAM_ZOOM_MUL = 0.82f;
-    public const float KILL_CAM_ZOOM_IN = 0.5f;
+    public const float KILL_CAM_ZOOM_IN = 2.0f;
     public const float KILL_CAM_ZOOM_OUT = 0.07f;
     /// <summary>远程（弓/法球）击杀短前摇真实秒数</summary>
     public const float KILL_CAM_RANGED_WINDUP = 0.14f;
@@ -712,24 +751,19 @@ public static class GameConfig
     }
 
     /// <summary>
-    /// 游戏章节 → 怪物章节号映射
-    /// 因为 ChapterMonsterFolders 可以重排，需要映射回怪物ID中的章节号
-    /// 例如: 游戏第1章用"4 Forest" → 怪物章节号=4
+    /// 游戏章节 → 怪物素材章节号（恒等映射：游戏章 = 素材章 = 文件夹序号）。
     /// </summary>
     public static int GetMonsterChapter(int gameChapter)
     {
         if (ChapterThemeMapTable.HasData)
             return ChapterThemeMapTable.GetMonsterChapter(gameChapter);
 
-        // 从 ChapterMonsterFolders 提取章节号
-        // "4 Forest" → 4, "1 Undead" → 1, "2 Jungle" → 2, etc.
         int idx = Mathf.Clamp(gameChapter - 1, 0, ChapterMonsterFolders.Length - 1);
         string folder = ChapterMonsterFolders[idx];
-        // 提取开头的数字
         int spaceIdx = folder.IndexOf(' ');
         if (spaceIdx > 0 && int.TryParse(folder.Substring(0, spaceIdx), out int ch))
             return ch;
-        return gameChapter; // 兜底
+        return gameChapter;
     }
 
     /// <summary>

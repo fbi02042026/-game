@@ -72,7 +72,7 @@ public static class WeaponCombatTable
     /// <summary>精英/Boss 期望 TTK 缩放：章节越高血量系数越高，便于调表。</summary>
     public static float EliteBossHpMul(int chapter, bool isBoss)
     {
-        float ch = 1f + GameConfig.CHAPTER_SCALE_PER * Mathf.Max(0, chapter - 1);
+        float ch = GameConfig.GetChapterStatScale(chapter);
         // Boss 额外抬高，目标 TTK 更长
         float role = isBoss ? GameConfig.BOSS_TTK_HP_MUL : GameConfig.ELITE_TTK_HP_MUL;
         return ch * role;

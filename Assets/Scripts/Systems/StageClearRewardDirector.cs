@@ -739,6 +739,14 @@ public class StageClearRewardDirector : MonoBehaviour
                 if (groundIcons[i] != null) Destroy(groundIcons[i]);
         }
 
+        // —— 开箱整理：确定后再出传送门 / 摇杆 ——
+        {
+            bool lootDone = false;
+            BattleLootMode.Enter(() => lootDone = true);
+            UIManager.Instance?.ShowToast("整理装备后点「确定」");
+            while (!lootDone) yield return null;
+        }
+
         // —— 传送门 + 传送特效 ——
         if (_chuansongmen != null)
         {

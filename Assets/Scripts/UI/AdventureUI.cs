@@ -1022,29 +1022,69 @@ public class AdventureUI : MonoBehaviour, ITownPage
         TryEnterBattle();
     }
 
+    public void ForceSelectChapterForTutorial(int chapter, int diff)
+    {
+        _selectedChapter = Mathf.Max(1, chapter);
+        _selectedDiff = Mathf.Clamp(diff, 0, 2);
+        _selectedMode = 0;
+        RefreshAll();
+    }
+
     void TryEnterBattle()
     {
         // 丢弃半残战斗存档，避免进战无怪 / 脏 Prefs
         if (BattleStateSaver.Instance != null && BattleStateSaver.Instance.HasSavedBattle())
             BattleStateSaver.Instance.ClearBattleState();
 
-        if (!StaminaSystem.TrySpendForAdventure())
+        if (StaminaSystem.Current < StaminaSystem.ADVENTURE_COST)
         {
             Toast("体力不足");
             return;
         }
 
-        PendingBattleChapter = _selectedChapter;
-        PendingBattleDifficulty = _selectedDiff;
-        PendingGoldDungeon = IsActivityMode(_selectedMode);
-        ChapterManager.Instance?.SetChapter(_selectedChapter);
-        HidePage();
-        int legacyCount = SaveSystem.Instance?.Data?.legacyEquipPool?.Count ?? 0;
-        if (legacyCount > 0)
-            Toast($"遗产池 {legacyCount} 件 → 开战前三选一");
-        else
-            Toast("无遗产：开战前将提供基础装备三选一");
-        GameSceneManager.Instance?.LoadBattleScene();
+        bool tutorialRun = !StoryProgress.TutorialDone
+            && !StoryProgress.TutorialBattleCleared
+            && StoryProgress.TutorialIntroDone;
+
+        TutorialHintUI.Ensure().Hide();
+
+        var opts = tutorialRun
+            ? new PlayerJobSelectUI.Options
+            {
+                TutorialForceSwordFirst = true,
+                RequireSwordShield = true,
+                HintOverride = "请选择剑盾卫士，再点「进入裂隙」"
+            }
+            : default;
+
+        // 先选职业，确认「进入裂隙」再扣体力进场景（引导也只在此弹一次）
+        PlayerJobSelectUI.Show(() =>
+        {
+            if (!StaminaSystem.TrySpendForAdventure())
+            {
+                Toast("体力不足");
+                return;
+            }
+
+            if (tutorialRun)
+            {
+                StoryProgress.QueueTutorialBattle();
+                StoryProgress.ResetTutorialRunInventoryIfNeeded();
+                PendingBattleChapter = 1;
+                PendingBattleDifficulty = 0;
+                PendingGoldDungeon = false;
+                ChapterManager.Instance?.SetChapter(1);
+            }
+            else
+            {
+                PendingBattleChapter = _selectedChapter;
+                PendingBattleDifficulty = _selectedDiff;
+                PendingGoldDungeon = IsActivityMode(_selectedMode);
+                ChapterManager.Instance?.SetChapter(_selectedChapter);
+            }
+            HidePage();
+            GameSceneManager.Instance?.LoadBattleScene();
+        }, opts);
     }
 
     void OnSweep() => Toast("扫荡（即将开放）");
@@ -1347,11 +1387,11 @@ public class AdventureUI : MonoBehaviour, ITownPage
         string folder = null, prefix = null;
         switch (monsterChapter)
         {
-            case 1: folder = "1 Undead"; prefix = "undead_1"; break;
-            case 2: folder = "2 Jungle"; prefix = "jungle_2"; break;
-            case 3: folder = "3 Sea"; prefix = "sea_3"; break;
-            case 4: folder = "4 Forest"; prefix = "forest_4"; break;
-            case 5: folder = "5 Field"; prefix = "field_5"; break;
+            case 1: folder = "1 Forest"; prefix = "forest_1"; break;
+            case 2: folder = "2 Undead"; prefix = "undead_2"; break;
+            case 3: folder = "3 Jungle"; prefix = "jungle_3"; break;
+            case 4: folder = "4 Field"; prefix = "field_4"; break;
+            case 5: folder = "5 Sea"; prefix = "sea_5"; break;
             case 6: folder = "6 Cave"; prefix = "cave_6"; break;
             case 7: folder = "7 Devil"; prefix = "devil_7"; break;
             case 8: folder = "8 Ice"; prefix = "ice_8"; break;
@@ -1470,8 +1510,8 @@ public class AdventureUI : MonoBehaviour, ITownPage
             case 1: return "暮影森林外围，哥布林与野兽出没。击败章末首领即可开启下一章。";
             case 2: return "幽冥墓园中亡灵苏醒，小心成群的骷髅与法师。";
             case 3: return "翡翠秘境潮湿闷热，毒虫与密林伏兵环伺。";
-            case 4: return "深蓝遗迹海域，潮水带来陌生的深海生物。";
-            case 5: return "晨曦原野看似开阔，潜伏的猎手并不少。";
+            case 4: return "晨曦草原看似开阔，潜伏的猎手并不少。";
+            case 5: return "海岛遗迹潮水起伏，带来陌生的深海生物。";
             case 6: return "巨岩深窟黑暗潮湿，洞穴生物成群结队。";
             case 7: return "赤焰炼狱热浪灼人，魔族精锐在此驻守。";
             case 8: return "永霜雪境天寒地冻，冰原霸主等待挑战者。";

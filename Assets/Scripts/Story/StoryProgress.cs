@@ -27,8 +27,11 @@ public static class StoryProgress
     public const string NpcEileen = "eileen";
     public const string NpcMaster = "master";
 
-    // 老盾（H001）对应 dunbing101；教程战与花名册一致
-    public const string TutorialMercId = "dunbing101";
+    // 引导救援牧师（H011）对应 naima101
+    public const string TutorialMercId = "naima101";
+    public const string TutorialMercHireId = "H011";
+    public const string TutorialMercDisplayName = "索菲";
+    public const string TutorialMercNickname = "小白";
 
     static bool _pendingTutorialBattle;
     static bool _pendingChapter1TownReturn;

@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:yousandi.cn,2023:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a87b7dc70b449438e98603cd5e2bccf, type: 3}
+  m_Name: forest_101
+  m_EditorClassIdentifier: 
+  id: forest_101
+  monsterName: 走路菇
+  minWave: 0
+  isBoss: 0
+  unlockClearCount: 0
+  baseHp: 125
+  baseAttack: 12.5
+  baseAttackSpeed: 1.5
+  attackRange: 1.5
+  baseMoveSpeed: 2.2
+  baseGoldDrop: 25
+  expDrop: 14
+  spriteIndex: 1
+  spriteScale: 1

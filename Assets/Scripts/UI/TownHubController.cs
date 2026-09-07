@@ -179,13 +179,11 @@ public class TownHubController : MonoBehaviour
         }
         else if (tab == MainNavTab.Adventure)
         {
-            if (TutorialDirector.Instance != null && TutorialDirector.Instance.TryEnterTutorialBattleFromNav())
-                return;
-
             _tavern?.HidePage();
             _character?.HidePage();
             _log?.HidePage();
             _adventure?.ShowPage();
+            TutorialDirector.Instance?.NotifyAdventureOpened();
             GameBgm.Play(GameBgm.Track.Town);
         }
         else if (tab == MainNavTab.Character)

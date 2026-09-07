@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 新手引导：城镇开场 → 短战斗（诱饵/老盾/强制撤离）→ 回城收尾。
+/// 新手引导：城镇开场 → 短战斗（选职/牧师救援/强制撤离）→ 回城收尾。
 /// 正式第一章不走这里。
 /// </summary>
 public class TutorialDirector : Singleton<TutorialDirector>
@@ -97,7 +97,19 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
     public void NotifyAdventureOpened()
     {
-        // 新手首次点「冒险」直接进战斗，不在冒险页弹技能说明。
+        if (StoryProgress.TutorialDone || StoryProgress.TutorialBattleCleared) return;
+        if (!StoryProgress.TutorialIntroDone) return;
+
+        var adv = AdventureUI.Instance;
+        if (adv == null) return;
+
+        // 引导：锁定第一章普通难度，提示点开战
+        adv.ForceSelectChapterForTutorial(1, 0);
+
+        RectTransform highlight = null;
+        if (adv.startBtn != null)
+            highlight = adv.startBtn.GetComponent<RectTransform>();
+        TutorialHintUI.Ensure().ShowHard("点下方「开始冒险」，选择职业后进入裂隙。", highlight);
     }
 
     /// <summary>引导战重进时重置运行时状态（背包另由 StoryProgress 清）。</summary>
@@ -115,29 +127,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         AllowBattleSkillClick = false;
     }
 
-    /// <summary>首次引导：点底栏「冒险」跳过选关页，直接进入教程战斗。</summary>
-    public bool TryEnterTutorialBattleFromNav()
-    {
-        if (StoryProgress.TutorialDone || StoryProgress.TutorialBattleCleared) return false;
-        if (!StoryProgress.TutorialIntroDone) return false;
-
-        TutorialHintUI.Ensure().Hide();
-
-        if (!StaminaSystem.TrySpendForAdventure())
-        {
-            UIManager.Instance?.ShowToast("体力不足");
-            return true;
-        }
-
-        StoryProgress.QueueTutorialBattle();
-        StoryProgress.ResetTutorialRunInventoryIfNeeded();
-        AdventureUI.PendingBattleChapter = 1;
-        AdventureUI.PendingBattleDifficulty = 0;
-        AdventureUI.PendingGoldDungeon = false;
-        ChapterManager.Instance?.SetChapter(1);
-        GameSceneManager.Instance?.LoadBattleScene();
-        return true;
-    }
+    /// <summary>已废弃：引导改为打开冒险页再开战，不再从底栏直进战斗。</summary>
+    public bool TryEnterTutorialBattleFromNav() => false;
 
     public void NotifyBattleSplashFinished()
     {
@@ -314,8 +305,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         DialogueUI.Instance?.PrepareForStoryBeat();
         StoryDirector.Ensure().Play(new List<StoryBeat>
         {
-            StoryDirector.Line("你", "老盾",
-                "大难不死得去酒馆喝一杯才行，需要我的话来酒馆找我吧。",
+            StoryDirector.Line("你", "小白",
+                "大难不死……回城歇歇吧。需要治疗的话，来酒馆找我。",
                 StoryPortraits.Player, StoryPortraits.LaoDun, 1)
                 .Bg(StoryBackgrounds.GuildHall)
                 .SkipReveal()
@@ -356,8 +347,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
         AllowBattleSkillClick = false;
         WaitingEvacuate = false;
 
+        // —— 0) 教摇杆 + 自动技能（选职已在冒险页完成）——
+        if (bm != null) bm.UnitsCanAct = false;
+        HaltUnit(Hero.Instance);
+        yield return CoTeachControls(bm, hint, ui);
+
         // —— 1) 首波 → 预告下一波 → 约 2 秒后第二小波 ——
         hint.Show("靠近怪物会自动攻击。", null, 8f);
+        if (bm != null) bm.UnitsCanAct = true;
         TutorialBattleTable.EnsureLoaded();
         bm?.ApplyTutorialBattleStep(1);
         yield return EnsureTutorialWave(bm, TutorialStepCount(1));
@@ -428,8 +425,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (drop != null)
         {
             bool closed = false;
+            bool lootDone = false;
+            BattleLootMode.Enter(() => lootDone = true);
             EquipDropPopupUI.ShowSingle(drop, (_, __) => closed = true);
             while (!closed) yield return null;
+            UIManager.Instance?.ShowToast("整理装备后点「确定」");
+            while (!lootDone) yield return null;
             if (bm != null)
             {
                 bm.UnitsCanAct = true;
@@ -444,7 +445,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         hint.Show("属性更好就装备，旧的会变成强化材料。", null, 1.8f);
         yield return new WaitForSecondsRealtime(0.2f);
 
-        // —— 4) 救援戏：老盾先在前方眩晕被围殴 ——
+        // —— 4) 救援戏：牧师先在前方眩晕被围殴 ——
         hint.Hide();
         ShowMercHud = false;
         ui?.ApplySoloBattleHudPublic();
@@ -495,7 +496,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
 
         yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "先把围殴他的怪清掉！", 0.75f));
+            new TalkLine(Hero.Instance, "先把围殴她的怪清掉！", 0.75f));
 
         // 解冻开打；清完立刻再冻，防止自动往前跑错过入队
         if (bm != null) bm.UnitsCanAct = true;
@@ -516,9 +517,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return TalkBlock(bm, headTalk, restoreAct: false,
             new TalkLine(merc, "咳……谢了，我差点交代在这儿。", 1.4f),
             new TalkLine(Hero.Instance, "还能走吗？跟我一起撤。", 1.1f),
-            new TalkLine(merc, "我叫老盾。行，我跟你。", 1.3f));
+            new TalkLine(merc, "我叫小白，是个牧师。行，我跟你。", 1.3f));
 
-        string joinName = "老盾";
+        string joinName = StoryProgress.TutorialMercNickname;
         if (merc != null)
         {
             merc.SetTutorialStunned(false);
@@ -530,11 +531,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
             }
             merc.Face(1);
             merc.SetPartyIndex(0);
-            EnsureTutorialMercPermanent(StoryProgress.TutorialMercId, "老盾");
-            Debug.Log("[Tutorial] 老盾入队完成");
+            EnsureTutorialMercPermanent(StoryProgress.TutorialMercId, StoryProgress.TutorialMercDisplayName);
+            Debug.Log("[Tutorial] 牧师入队完成");
         }
         else
-            Debug.LogError("[Tutorial] 老盾入队失败：merc 为空");
+            Debug.LogError("[Tutorial] 牧师入队失败：merc 为空");
 
         ShowMercHud = true;
         ui?.ApplySoloBattleHudPublic();
@@ -543,51 +544,27 @@ public class TutorialDirector : Singleton<TutorialDirector>
             ui.StartCoroutine(CoRefreshMercHudNextFrame(ui));
         hint.Show($"{joinName}加入了队伍。", null, 2.0f);
         UIManager.Instance?.ShowToast($"{joinName}加入队伍！");
+
+        // 牧师入队：为玩家疗伤
+        if (Hero.Instance != null && Hero.Instance.attr != null)
+        {
+            float maxHp = Hero.Instance.attr.GetAttr(AttrType.MaxHp);
+            Hero.Instance.currentHp = maxHp;
+            UIManager.Instance?.ShowToast("牧师为你疗伤");
+            ui?.UpdateCharacterSlots();
+        }
+
         yield return new WaitForSecondsRealtime(0.6f);
-
-        // —— 治疗技能：软提示 + 短超时，不长期冻死全场 ——
-        bm.FillPlayerSkillEnergy();
-        SkillUsedThisStep = false;
-        AllowBattleSkillClick = true;
-        bm.UnitsCanAct = false;
-
-        RectTransform skillTarget = ResolvePlayerSkillTarget(ui);
-        // 有明确目标才硬挖空；没有就软提示，避免全屏黑罩把流程卡死
-        if (skillTarget != null)
-            hint.ShowHard("点你的头像放技能，给老盾回血。", skillTarget);
-        else
-            hint.Show("点左下角你的头像放技能，给老盾回血。", null, -1f);
-
-        float wait = 0f;
-        const float SkillGuideTimeout = 4f;
-        while (!SkillUsedThisStep && wait < SkillGuideTimeout)
-        {
-            wait += Mathf.Max(0.008f, Time.unscaledDeltaTime);
-            if (skillTarget == null || !skillTarget.gameObject.activeInHierarchy)
-            {
-                skillTarget = ResolvePlayerSkillTarget(ui);
-                if (skillTarget != null && wait < 2f)
-                    hint.ShowHard("点你的头像放技能，给老盾回血。", skillTarget);
-            }
-            if (wait >= 2.5f) break;
-            yield return null;
-        }
-        if (!SkillUsedThisStep)
-        {
-            bm.FillPlayerSkillEnergy();
-            bm.TryUsePlayerSkill();
-        }
-        AllowBattleSkillClick = false;
-        hint.Hide();
-        bm.UnitsCanAct = true;
 
         if (merc != null && !merc.isDead)
             merc.currentHp = merc.attr.GetAttr(AttrType.MaxHp);
 
         ui?.UpdateCharacterSlots();
+        AllowBattleSkillClick = false;
+        if (bm != null) bm.UnitsCanAct = true;
 
         yield return TalkBlock(bm, headTalk,
-            new TalkLine(merc, "舒服多了，前面我来挡。", 0.75f));
+            new TalkLine(merc, "我在后面托着，一起上。", 0.75f));
         headTalk?.HideNow();
         hint.Hide();
         if (bm != null) bm.UnitsCanAct = true;
@@ -595,18 +572,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         hint.Show("组队后佣兵会自动战斗。", null, 3f);
         bm.ApplyTutorialBattleStep(5);
         yield return EnsureTutorialWave(bm, TutorialStepCount(5));
-        if (bm != null && bm.GetAliveMonsterCount() <= 0)
-        {
-            Debug.LogWarning("[Tutorial] 组队后首波未刷出，紧急补怪");
-            var emergencyStep = TutorialBattleTable.GetStepOrDefault(6);
-            bm.ApplyTutorialBattleStep(6);
-            bm.SpawnTutorialFlankAmbush(emergencyStep.count);
-        }
         yield return WaitFieldClear(strict: true);
 
         yield return TalkBlock(bm, headTalk,
             new TalkLine(Hero.Instance, "这波清完了，先撤？", 1.2f),
-            new TalkLine(merc, "行，回城我请你喝一杯。", 1.2f));
+            new TalkLine(merc, "嗯，回城我给你疗个痛快。", 1.2f));
         headTalk?.HideNow();
 
         // 撤离引导：冻住单位，和佣兵原地等玩家点撤离；超时自动撤
@@ -727,12 +697,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 return;
         }
         MercRosterDefs.GetSkillIds(mercId, out string active, out string passive);
+        string nick = StoryProgress.TutorialMercNickname;
+        string shown = string.IsNullOrEmpty(displayName) ? StoryProgress.TutorialMercDisplayName : displayName;
         var entry = new MercenaryData
         {
             mercId = mercId,
-            displayName = string.IsNullOrEmpty(displayName) ? "老盾" : displayName,
-            nickname = "老盾",
-            hireId = "H001",
+            displayName = shown,
+            nickname = nick,
+            hireId = StoryProgress.TutorialMercHireId,
             uid = "tutorial_" + mercId,
             favorLevel = 1,
             level = 1,
@@ -746,14 +718,33 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 兼容旧逻辑：也记一条 permanent（不用于出战优先）
         data.permanentMercs.Add(entry);
         SaveSystem.Instance.Save();
-        Debug.Log($"[Tutorial] 老盾已写入 permanentMercs id={mercId}");
-        AdventureCodex.MarkMercSeen(
-            AdventureLogCatalog.Mercs.Length > 0 ? "H001" : mercId);
-        // 同时按 assetId 记
+        Debug.Log($"[Tutorial] 牧师已写入 permanentMercs id={mercId}");
+        AdventureCodex.MarkMercSeen(StoryProgress.TutorialMercHireId);
         AdventureCodex.MarkMercSeen(mercId);
     }
 
     static int TutorialStepCount(int order) => TutorialBattleTable.GetStepOrDefault(order).count;
+
+    /// <summary>进战后先教摇杆与自动技能。</summary>
+    static IEnumerator CoTeachControls(BattleManager bm, TutorialHintUI hint, BattleUI ui)
+    {
+        if (bm != null) bm.UnitsCanAct = true;
+        BattleJoystick.EnsureOn(ui != null ? ui.transform : null);
+        RectTransform stickRt = BattleJoystick.Instance != null
+            ? BattleJoystick.Instance.StickHighlight
+            : null;
+
+        hint.Show("在屏幕下方滑动即可出现摇杆移动；松手后自动锁定敌人。", stickRt, 4f);
+        yield return new WaitForSecondsRealtime(3.5f);
+
+        hint.Show("技能能量满会自动释放，无需点击。", null, 3.5f);
+        yield return new WaitForSecondsRealtime(3.2f);
+        hint.Hide();
+        BattleJoystick.Instance?.ResetStickIdle();
+
+        if (bm != null) bm.UnitsCanAct = false;
+        HaltUnit(Hero.Instance);
+    }
 
     /// <summary>清场后：教程内直接刷下一波，不播正式关的波次预告（避免剩最后一只怪时卡住感）。</summary>
     static IEnumerator CoTutorialNextWave(BattleManager bm, TutorialHintUI hint, float delaySec, int order)

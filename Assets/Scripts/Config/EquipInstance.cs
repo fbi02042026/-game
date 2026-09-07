@@ -35,6 +35,20 @@ public class EquipInstance
     public List<AttrBonusData> skillPassives = new List<AttrBonusData>();
     public WeaponAttackType weaponAttackType;
     public ArmorPrefix armorPrefix;
+    /// <summary>外观资源映射表 ID（IMG_*）</summary>
+    public string appearanceId;
+    /// <summary>解析后的 SPUM 名；优先于 template.spumName</summary>
+    public string spumNameOverride;
+
+    public string ResolveSpumName()
+    {
+        if (!string.IsNullOrEmpty(spumNameOverride))
+            return spumNameOverride;
+        string fromMap = EquipAppearanceTables.ResolveSpumName(appearanceId, null);
+        if (!string.IsNullOrEmpty(fromMap))
+            return fromMap;
+        return template != null ? template.spumName : null;
+    }
 
     /// <param name="overrideRarity">true 时用 forcedRarity 覆盖模板品质。</param>
     public static EquipInstance GenerateFromTemplate(EquipTemplate template, int bonusStar = 0, int heroLevel = 1, bool overrideRarity = false, Rarity forcedRarity = Rarity.Common)

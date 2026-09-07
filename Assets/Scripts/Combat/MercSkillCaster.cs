@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 佣兵主动技冷却与自动/手动释放调度。
+/// 佣兵主动技冷却与自动释放调度（始终自动，无手动开关）。
 /// </summary>
 public class MercSkillCaster : MonoBehaviour
 {
@@ -27,7 +27,6 @@ public class MercSkillCaster : MonoBehaviour
     {
         if (_cooldownRemain > 0f)
             _cooldownRemain -= Time.deltaTime;
-        if (!MercSkillMigrate.IsMercSkillAutoCast()) return;
         if (_merc == null || _merc.isDead || string.IsNullOrEmpty(_activeSkillId)) return;
         if (_cooldownRemain > 0f) return;
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct) return;
@@ -39,7 +38,7 @@ public class MercSkillCaster : MonoBehaviour
         if (_merc == null || _merc.isDead || string.IsNullOrEmpty(_activeSkillId)) return false;
         if (_cooldownRemain > 0f) return false;
         if (BattleManager.Instance == null) return false;
-        bool ok = BattleManager.Instance.TryCastMercActiveSkill(_merc, _activeSkillId, manual);
+        bool ok = BattleManager.Instance.TryCastMercActiveSkill(_merc, _activeSkillId, manual: false);
         if (ok)
             _cooldownRemain = CooldownTotal;
         return ok;

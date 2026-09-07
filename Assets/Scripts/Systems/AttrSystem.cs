@@ -66,6 +66,9 @@ public class AttrSystem
         foreach (var pair in _baseAttr)
             _attr[pair.Key] = pair.Value;
 
+        // 1b. 裂缝混合口径：职业固定基础属性覆盖 GameConfig 基底（无账号等级成长）
+        ApplyPlayerJobBaseIfAny();
+
         // 2. 四大基础属性加成（来自天赋和遗产）— 仅玩家相关，SaveSystem可能未初始化
         var saveSys = SaveSystem.Instance;
         if (saveSys != null && saveSys.Data != null)
@@ -161,6 +164,22 @@ public class AttrSystem
         // 体质→生命+防御
         AddAttr(AttrType.MaxHp, vit * 10f, false);
         AddAttr(AttrType.Defense, vit * 1f, false);
+    }
+
+    void ApplyPlayerJobBaseIfAny()
+    {
+        if (!PlayerJobBaseStats.TryGet(PlayerJobDefs.GetSelected(), out var row))
+            return;
+        if (row.BaseHp > 0f) _attr[AttrType.MaxHp] = row.BaseHp;
+        if (row.BaseAtk > 0f) _attr[AttrType.Attack] = row.BaseAtk;
+        if (row.BaseDef > 0f) _attr[AttrType.Defense] = row.BaseDef;
+        if (row.BaseMoveSpeed > 0f)
+            _attr[AttrType.MoveSpeed] = GameConfig.BASE_MOVE_SPEED * (row.BaseMoveSpeed / 100f);
+        if (row.CritRate > 0f) _attr[AttrType.CritRate] = row.CritRate;
+        if (row.AttackInterval > 0.05f)
+            _attr[AttrType.AttackSpeed] = 1f / row.AttackInterval;
+        if (row.AttackRangePx > 0f)
+            _attr[AttrType.AttackRange] = GameConfig.NormalizeAttackRange(row.AttackRangePx);
     }
 
     public void AddAttr(AttrType type, float value, bool isPercent)

@@ -19,25 +19,25 @@ MonoBehaviour:
     midSprite: {fileID: 21300000, guid: dc10955b69b349c6a080ed919eadad69, type: 3}
     backSprite: {fileID: 21300000, guid: a05d8cbb1dac45078f8faebf6072f40f, type: 3}
   - chapter: 2
-    folderName: 2 Jungle
-    frontSprite: {fileID: 21300000, guid: a510c2ca625e4bfa84f40809b00c5711, type: 3}
-    midSprite: {fileID: 21300000, guid: 10add18dcabe44b8aed8804f35d70bb2, type: 3}
-    backSprite: {fileID: 21300000, guid: e8708aaa9c134233ab91c16f0f5cfe2c, type: 3}
-  - chapter: 3
-    folderName: 3 Sea
-    frontSprite: {fileID: 21300000, guid: d5dda0037aae42c3b22a3daf14f338b1, type: 3}
-    midSprite: {fileID: 21300000, guid: 0936c8dc28134f658e314479345522a8, type: 3}
-    backSprite: {fileID: 21300000, guid: 1026ac3c8dcc4edd964fa65d6d5af6b9, type: 3}
-  - chapter: 4
-    folderName: 4 Undead
+    folderName: 2 Undead
     frontSprite: {fileID: 21300000, guid: 40080c6d450340b692a9d79f65fc44b9, type: 3}
     midSprite: {fileID: 21300000, guid: 4d2c1a0e1cbb4c78a9a597b07f0a195a, type: 3}
     backSprite: {fileID: 21300000, guid: 8e7ef734156d41cfa0bb155b0f0b67c1, type: 3}
-  - chapter: 5
-    folderName: 5 Field
+  - chapter: 3
+    folderName: 3 Jungle
+    frontSprite: {fileID: 21300000, guid: a510c2ca625e4bfa84f40809b00c5711, type: 3}
+    midSprite: {fileID: 21300000, guid: 10add18dcabe44b8aed8804f35d70bb2, type: 3}
+    backSprite: {fileID: 21300000, guid: e8708aaa9c134233ab91c16f0f5cfe2c, type: 3}
+  - chapter: 4
+    folderName: 4 Field
     frontSprite: {fileID: 21300000, guid: 4b65e3ca7c8441e8a472b27b49e4de9d, type: 3}
     midSprite: {fileID: 21300000, guid: c22a1a7855d64be18fe699722e62b973, type: 3}
     backSprite: {fileID: 21300000, guid: b7ba52acc3b642fe82ec2d4d182c8a50, type: 3}
+  - chapter: 5
+    folderName: 5 Sea
+    frontSprite: {fileID: 21300000, guid: d5dda0037aae42c3b22a3daf14f338b1, type: 3}
+    midSprite: {fileID: 21300000, guid: 0936c8dc28134f658e314479345522a8, type: 3}
+    backSprite: {fileID: 21300000, guid: 1026ac3c8dcc4edd964fa65d6d5af6b9, type: 3}
   - chapter: 6
     folderName: 6 Cave
     frontSprite: {fileID: 21300000, guid: d5b15c25d42b478d8041fcc4a5b47500, type: 3}

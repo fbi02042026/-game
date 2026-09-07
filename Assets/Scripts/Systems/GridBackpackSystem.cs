@@ -23,6 +23,12 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         public int height;
     }
 
+    /// <summary>撤离/死亡回城：清空局内背包与已装备（裂缝装备不带出）。</summary>
+    public void ClearRunEquipment()
+    {
+        InitNewRun();
+    }
+
     public void InitNewRun()
     {
         _grid = new bool[GameConfig.BACKPACK_WIDTH, GameConfig.BACKPACK_HEIGHT];
@@ -79,20 +85,12 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         if (WeaponLoadoutRules.IsLoadoutItem(equip))
             return TryAcquireLoadoutItem(equip, out item);
 
-        if (FindEmptyPosition(equip.gridWidth, equip.gridHeight, out int x, out int y))
-        {
-            item = PlaceItemInGrid(equip, x, y);
-            OnBackpackChanged?.Invoke();
-            AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
-            AdventureLogAchievements.OnEquipPicked();
-            return true;
-        }
-        UIManager.Instance?.ShowToast($"背包空间不足！{equip.equipName}需要{equip.gridWidth}x{equip.gridHeight}格空间");
-        return false;
+        // 防具：同部位唯一
+        return TryAddUniqueBySlot(equip, out item);
     }
 
     /// <summary>
-    /// 武器组入包：按 weaponHand 替换对应部位；双手清空主+副；旧件直接变强化石。入包即装备。
+    /// 武器组入包：按 weaponHand 替换对应部位；双手清空主+副；旧件直接变强化石。只入包不穿槽。
     /// </summary>
     public bool TryAcquireLoadoutItem(EquipInstance equip, out BackpackItem item)
     {
@@ -100,12 +98,11 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         if (equip == null) return false;
 
         WeaponLoadoutRules.GetSlotsToReplace(equip, out bool clearMain, out bool clearOff);
-        var rig = GetHeroHandRig();
 
         if (clearMain)
-            ConsumeLoadoutInLogicalSlot(EquipSlotType.MainHand, rig);
+            ConsumeBagLogicalWeapon(EquipSlotType.MainHand);
         if (clearOff)
-            ConsumeLoadoutInLogicalSlot(EquipSlotType.OffHand, rig);
+            ConsumeBagLogicalWeapon(EquipSlotType.OffHand);
 
         equip.slotType = WeaponLoadoutRules.ResolveLogicalSlot(equip);
         if (!FindEmptyPosition(equip.gridWidth, equip.gridHeight, out int x, out int y))
@@ -115,12 +112,102 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         }
 
         item = PlaceItemInGrid(equip, x, y);
-        if (!EquipItem(item))
-            return false;
+        Hero.Instance?.RecalcAttr();
         OnBackpackChanged?.Invoke();
+        NotifyCostumeChanged();
         AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
         AdventureLogAchievements.OnEquipPicked();
         return true;
+    }
+
+    /// <summary>掉落/通关选中：同部位最多 1 件，只进背包（无穿戴槽）。</summary>
+    public bool TryAddUniqueBySlot(EquipInstance equip, out BackpackItem item)
+    {
+        item = null;
+        if (equip == null) return false;
+        if (WeaponLoadoutRules.IsLoadoutItem(equip))
+            return TryAcquireLoadoutItem(equip, out item);
+
+        // 同部位防具：旧件折强化石
+        var old = FindBagEquipByArmorSlot(equip.slotType);
+        if (old != null && old != equip)
+            ScrapBagEquip(old);
+
+        if (FindEmptyPosition(equip.gridWidth, equip.gridHeight, out int x, out int y))
+        {
+            item = PlaceItemInGrid(equip, x, y);
+            Hero.Instance?.RecalcAttr();
+            OnBackpackChanged?.Invoke();
+            NotifyCostumeChanged();
+            AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
+            AdventureLogAchievements.OnEquipPicked();
+            return true;
+        }
+        UIManager.Instance?.ShowToast($"背包空间不足！{equip.equipName}需要{equip.gridWidth}x{equip.gridHeight}格空间");
+        return false;
+    }
+
+    void ConsumeBagLogicalWeapon(EquipSlotType logicalSlot)
+    {
+        var old = GetEquippedInLogicalSlot(logicalSlot);
+        if (old != null)
+            ScrapBagEquip(old);
+    }
+
+    void ScrapBagEquip(EquipInstance equip)
+    {
+        if (equip == null) return;
+        var bi = FindBackpackItemByEquip(equip);
+        if (bi != null)
+        {
+            OccupyGrid(bi.x, bi.y, bi.width, bi.height, false);
+            _items.Remove(bi);
+        }
+        // 清旧槽位标记（兼容残留）
+        var keys = new List<EquipSlotType>(_equippedBySlot.Keys);
+        for (int i = 0; i < keys.Count; i++)
+        {
+            if (_equippedBySlot.TryGetValue(keys[i], out var cur) && cur == equip)
+                _equippedBySlot.Remove(keys[i]);
+        }
+        int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
+        WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
+        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats));
+    }
+
+    /// <summary>同部位替换折强化石：按当前职业给一点口吻。</summary>
+    static string BuildScrapToast(EquipInstance equip, int mats)
+    {
+        string name = equip != null && !string.IsNullOrEmpty(equip.equipName) ? equip.equipName : "旧装备";
+        string matsTxt = mats > 0 ? $" ×{mats}" : "";
+        switch (PlayerJobDefs.GetSelected())
+        {
+            case PlayerJobId.SwordShield:
+                return $"盾墙换防！{name} 拆成强化石{matsTxt}";
+            case PlayerJobId.Heavy:
+                return $"沉甸甸的不要了——{name} 砸成强化石{matsTxt}";
+            case PlayerJobId.Berserker:
+                return $"旧货碍手！{name} 撕成强化石{matsTxt}";
+            case PlayerJobId.Ranger:
+                return $"换新的更好射——{name} 拆成强化石{matsTxt}";
+            case PlayerJobId.Mage:
+                return $"魔力重组：{name} → 强化石{matsTxt}";
+            case PlayerJobId.Priest:
+                return $"旧物归尘，化为强化石{matsTxt}（原：{name}）";
+            default:
+                return $"{name} 已变为强化石{matsTxt}";
+        }
+    }
+
+    EquipInstance FindBagEquipByArmorSlot(EquipSlotType slot)
+    {
+        for (int i = 0; i < _items.Count; i++)
+        {
+            var e = _items[i]?.equip;
+            if (e == null || WeaponLoadoutRules.IsLoadoutItem(e)) continue;
+            if (e.slotType == slot) return e;
+        }
+        return null;
     }
 
     BackpackItem PlaceItemInGrid(EquipInstance equip, int x, int y)
@@ -192,11 +279,11 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
         WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
-        UIManager.Instance?.ShowToast($"{equip.equipName} 已变为强化石 ×{mats}");
+        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats));
         Hero.Instance?.RecalcAttr();
     }
 
-    BackpackItem FindBackpackItemByEquip(EquipInstance equip)
+    public BackpackItem FindItem(EquipInstance equip)
     {
         if (equip == null) return null;
         for (int i = 0; i < _items.Count; i++)
@@ -205,6 +292,8 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         }
         return null;
     }
+
+    BackpackItem FindBackpackItemByEquip(EquipInstance equip) => FindItem(equip);
 
     private bool FindEmptyPosition(int w, int h, out int outX, out int outY)
     {
@@ -244,23 +333,15 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         OnBackpackChanged?.Invoke();
     }
 
-    /// <summary>通关奖励：武器组走替换链，护甲正常入包。</summary>
+    /// <summary>通关奖励：只入包（同部位唯一），不穿槽。</summary>
     public bool TryEquipFromReward(EquipInstance equip)
     {
         if (equip == null) return false;
-        if (WeaponLoadoutRules.IsLoadoutItem(equip))
-        {
-            if (!TryAcquireLoadoutItem(equip, out _))
-                return false;
-            return true;
-        }
-        if (!TryAddItem(equip, out BackpackItem item) || item == null)
+        if (!TryAddUniqueBySlot(equip, out _))
         {
             UIManager.Instance?.ShowToast("背包已满，无法获得装备");
             return false;
         }
-        if (EquipItem(item))
-            return true;
         UIManager.Instance?.ShowToast("已放入背包");
         return true;
     }
@@ -454,12 +535,60 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
     public bool IsEquipped(EquipInstance equip)
     {
-        if (equip == null) return false;
-        foreach (var kv in _equippedBySlot)
-        {
-            if (kv.Value == equip) return true;
-        }
+        // 无穿戴槽：包内件均生效，UI 不再标「已装备」变暗
         return false;
+    }
+
+    /// <summary>
+    /// 获取所有生效装备（包内全部；同部位唯一约束下即当前套）。
+    /// </summary>
+    public List<EquipInstance> GetEquippedItems()
+    {
+        var list = new List<EquipInstance>();
+        var seen = new HashSet<EquipInstance>();
+        for (int i = 0; i < _items.Count; i++)
+        {
+            var e = _items[i]?.equip;
+            if (e == null || !seen.Add(e)) continue;
+            list.Add(e);
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// 获取指定槽位的装备（读背包，无穿戴字典）。
+    /// </summary>
+    public EquipInstance GetEquippedInSlot(EquipSlotType slot)
+    {
+        var rig = GetHeroHandRig();
+        if (rig.IsValid)
+        {
+            if (slot == rig.AttackSlot)
+                return GetEquippedInLogicalSlot(EquipSlotType.MainHand);
+            if (slot == rig.SecondarySlot)
+                return GetEquippedInLogicalSlot(EquipSlotType.OffHand);
+        }
+
+        for (int i = 0; i < _items.Count; i++)
+        {
+            var e = _items[i]?.equip;
+            if (e == null) continue;
+            if (e.slotType == slot) return e;
+        }
+        return null;
+    }
+
+    /// <summary>按逻辑主手/副手查包内武器。</summary>
+    public EquipInstance GetEquippedInLogicalSlot(EquipSlotType logicalSlot)
+    {
+        for (int i = 0; i < _items.Count; i++)
+        {
+            var e = _items[i]?.equip;
+            if (e == null || !WeaponLoadoutRules.IsLoadoutItem(e)) continue;
+            if (MatchesLogicalWeaponSlot(e, logicalSlot))
+                return e;
+        }
+        return null;
     }
 
     public void DecomposeItem(BackpackItem item)
@@ -473,6 +602,28 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     }
 
     public List<BackpackItem> GetAllBackpackItems() => _items;
+
+    /// <summary>开箱整理：把物品挪到新格子（不重叠）。</summary>
+    public bool TryMoveItem(BackpackItem item, int newX, int newY)
+    {
+        if (item == null || item.equip == null) return false;
+        int unlockedRows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
+        int maxY = Mathf.Min(GameConfig.BACKPACK_HEIGHT, unlockedRows);
+        if (newX < 0 || newY < 0 || newX + item.width > GameConfig.BACKPACK_WIDTH || newY + item.height > maxY)
+            return false;
+
+        OccupyGrid(item.x, item.y, item.width, item.height, false);
+        if (!IsAreaEmpty(newX, newY, item.width, item.height))
+        {
+            OccupyGrid(item.x, item.y, item.width, item.height, true);
+            return false;
+        }
+        item.x = newX;
+        item.y = newY;
+        OccupyGrid(newX, newY, item.width, item.height, true);
+        OnBackpackChanged?.Invoke();
+        return true;
+    }
 
     /// <summary>
     /// 整理背包：大件靠左、小件靠右，均从上往下排，尽量腾出右侧空地。
@@ -541,45 +692,6 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         UIManager.Instance?.ShowToast("背包已整理");
     }
 
-    /// <summary>
-    /// 获取所有已装备的装备列表
-    /// </summary>
-    public List<EquipInstance> GetEquippedItems()
-    {
-        return _equippedBySlot.Values.Distinct().ToList();
-    }
-
-    /// <summary>
-    /// 获取指定槽位的装备
-    /// </summary>
-    public EquipInstance GetEquippedInSlot(EquipSlotType slot)
-    {
-        _equippedBySlot.TryGetValue(slot, out var equip);
-        return equip;
-    }
-
-    /// <summary>按逻辑主手/副手查当前武器组（映射到 HandRig 实际穿戴槽）。</summary>
-    public EquipInstance GetEquippedInLogicalSlot(EquipSlotType logicalSlot)
-    {
-        var rig = GetHeroHandRig();
-        EquipSlotType wearSlot = logicalSlot;
-        if (rig.IsValid)
-            wearSlot = logicalSlot == EquipSlotType.OffHand ? rig.SecondarySlot : rig.AttackSlot;
-
-        if (_equippedBySlot.TryGetValue(wearSlot, out var mapped) && mapped != null
-            && MatchesLogicalWeaponSlot(mapped, logicalSlot))
-            return mapped;
-
-        // 可能仍按逻辑槽存着（HandRig 未就绪时入包）。必须按职责过滤，
-        // 否则左手攻击角色会把误存在 MainHand 的剑当成副手画到右手。
-        if (_equippedBySlot.TryGetValue(logicalSlot, out var legacy) && legacy != null
-            && WeaponLoadoutRules.IsLoadoutItem(legacy)
-            && MatchesLogicalWeaponSlot(legacy, logicalSlot))
-            return legacy;
-
-        return null;
-    }
-
     static bool MatchesLogicalWeaponSlot(EquipInstance eq, EquipSlotType logicalSlot)
     {
         if (eq == null || !WeaponLoadoutRules.IsLoadoutItem(eq)) return false;
@@ -627,8 +739,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
     public List<EquipInstance> GetAllItemsForLegacy()
     {
-        List<EquipInstance> all = _items.Select(i => i.equip).ToList();
-        all.AddRange(GetEquippedItems());
+        List<EquipInstance> all = _items.Select(i => i.equip).Where(e => e != null).Distinct().ToList();
         all = all.OrderByDescending(e => e.GetSortWeight()).ToList();
         return all;
     }

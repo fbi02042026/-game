@@ -93,8 +93,8 @@ public class AutoConfigEditor : EditorWindow
 
         // 8个章节文件夹
         string[] chapterFolders = {
-            "1 Undead", "2 Jungle", "3 Sea", "4 Forest",
-            "5 Field", "6 Cave", "7 Devil", "8 Ice"
+            "1 Forest", "2 Undead", "3 Jungle", "4 Field",
+            "5 Sea", "6 Cave", "7 Devil", "8 Ice"
         };
 
         for (int ch = 0; ch < chapterFolders.Length; ch++)
@@ -235,11 +235,11 @@ public class AutoConfigEditor : EditorWindow
 
         // 为8个章节各创建几种怪物
         string[][] chapterMonsters = {
-            new[] { "undead_101", "undead_102", "undead_103", "undead_104" },  // 第1章
-            new[] { "jungle_201", "jungle_202", "jungle_203", "jungle_204" },  // 第2章
-            new[] { "sea_301", "sea_302", "sea_303", "sea_304" },              // 第3章
-            new[] { "forest_401", "forest_402", "forest_403", "forest_404" },  // 第4章
-            new[] { "field_501", "field_502", "field_503", "field_504" },      // 第5章
+            new[] { "forest_101", "forest_102", "forest_103", "forest_104" },  // 第1章
+            new[] { "undead_201", "undead_202", "undead_203", "undead_204" },  // 第2章
+            new[] { "jungle_301", "jungle_302", "jungle_303", "jungle_304" },  // 第3章
+            new[] { "field_401", "field_402", "field_403", "field_404" },      // 第4章
+            new[] { "sea_501", "sea_502", "sea_503", "sea_504" },              // 第5章
             new[] { "cave_601", "cave_602", "cave_603", "cave_604" },          // 第6章
             new[] { "devil_701", "devil_702", "devil_703", "devil_704" },      // 第7章
             new[] { "ice_801", "ice_802", "ice_803", "ice_804" }               // 第8章

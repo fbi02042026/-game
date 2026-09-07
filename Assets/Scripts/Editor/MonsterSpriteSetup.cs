@@ -28,11 +28,11 @@ public class MonsterSpriteSetup : EditorWindow
         // 章节文件夹映射
         var chapterFolders = new Dictionary<int, string>
         {
-            { 1, "1 Undead" },
-            { 2, "2 Jungle" },
-            { 3, "3 Sea" },
-            { 4, "4 Forest" },
-            { 5, "5 Field" },
+            { 1, "1 Forest" },
+            { 2, "2 Undead" },
+            { 3, "3 Jungle" },
+            { 4, "4 Field" },
+            { 5, "5 Sea" },
             { 6, "6 Cave" },
             { 7, "7 Devil" },
             { 8, "8 Ice" }
@@ -118,7 +118,7 @@ public class MonsterSpriteSetup : EditorWindow
                 }
             }
 
-            // 按名称排序（forest_401, forest_402, ...）
+            // 按名称排序（forest_101, forest_102, ...）
             sprites.Sort((a, b) => string.Compare(a.name, b.name, System.StringComparison.Ordinal));
 
             // 赋值到注册表对应章节

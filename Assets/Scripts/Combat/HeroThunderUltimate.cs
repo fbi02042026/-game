@@ -137,7 +137,6 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
             ApplyDimKeepHero(hero);
             var cam = Object.FindObjectOfType<CameraFollow>();
             cam?.BeginKillCamZoom(GameConfig.THUNDER_ULT_ZOOM_MUL, GameConfig.THUNDER_ULT_ZOOM_IN);
-            Object.FindObjectOfType<ParallaxBackground>()?.ApplyKillCamZoomMul(GameConfig.THUNDER_ULT_ZOOM_MUL);
             BattleUI.ApplyKillCamHudCompensation(GameConfig.THUNDER_ULT_ZOOM_MUL);
             MonsterHealthBar.SetKillCamHidden(true);
             BattleBossHpBar.SetKillCamHidden(true);
@@ -149,7 +148,6 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
             yield return new WaitForSecondsRealtime(GameConfig.THUNDER_ULT_ZOOM_IN + 0.15f);
 
             cam?.ForceResetKillCamZoom();
-            Object.FindObjectOfType<ParallaxBackground>()?.ResetKillCamZoom();
             BattleUI.ResetKillCamHudCompensation();
             MonsterHealthBar.SetKillCamHidden(false);
             BattleBossHpBar.SetKillCamHidden(false);

@@ -75,6 +75,8 @@ public class BattleUI : MonoBehaviour
         // Boss 屏幕血条（场景节点 BossBar）
         BattleBossHpBar.Ensure(transform);
 
+        EnsureBattleControls();
+
         // 后备入口：仅 Battle 场景才跑战斗初始化
         if (GameSceneGate.IsBattle)
             AutoGameInitializer.Initialize();
@@ -823,10 +825,13 @@ public class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 玩家技能释放（点击头像）
+    /// 玩家技能释放（点击头像）— 已改为被动，默认不可手动。
     /// </summary>
     void OnPlayerSkillClick()
     {
+        if (!PlayerSkillPassive.AllowManualCast)
+            return;
+
         if (TutorialDirector.IsTutorialBattle
             && TutorialDirector.Instance != null
             && !TutorialDirector.Instance.AllowBattleSkillClick)
@@ -1012,9 +1017,53 @@ public class BattleUI : MonoBehaviour
             });
         }
         // 传入真实格子：没有 GridLayoutGroup（格子是美术手摆的）时也能算对位置
-        BackpackGridVisual.ClearAndPlace(gridRt, gridLayout, placements, FindGridCellRect);
+        BackpackGridVisual.ClearAndPlace(gridRt, gridLayout, placements, FindGridCellRect, BattleLootMode.Active);
         ApplyBackpackCellOccupiedColors(placements);
         Debug.Log($"[BattleUI] 背包刷新 items={placements.Count} cells={gridCells.Count} layout={(gridLayout != null)}");
+    }
+
+    public bool TryScreenToBackpackCell(Vector2 screenPos, Camera eventCam, out int cellX, out int cellY)
+    {
+        cellX = 0;
+        cellY = 0;
+        if (gridCells == null) return false;
+        for (int i = 0; i < gridCells.Count; i++)
+        {
+            var c = gridCells[i];
+            if (c == null) continue;
+            var rt = c.VisualRect;
+            if (rt == null) continue;
+            if (RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, eventCam))
+            {
+                cellX = c.gridX;
+                cellY = c.gridY;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void RefreshLootModeChrome()
+    {
+        if (organizeButton != null)
+        {
+            var txt = organizeButton.GetComponentInChildren<Text>(true);
+            if (txt != null)
+                txt.text = BattleLootMode.Active ? "确定" : "整理";
+            organizeButton.gameObject.SetActive(true);
+        }
+        UpdateBackpackGrid();
+        BattleJoystick.Instance?.SetVisible(!BattleLootMode.Active
+            && BattleManager.Instance != null
+            && BattleManager.Instance.isInBattle
+            && BattleManager.Instance.UnitsCanAct);
+    }
+
+    public void EnsureBattleControls()
+    {
+        FocusMarkSystem.Ensure();
+        BattleJoystick.EnsureOn(transform);
+        RefreshLootModeChrome();
     }
 
     void ApplyBackpackCellOccupiedColors(List<BackpackGridVisual.ItemPlacement> placements)
@@ -1123,16 +1172,17 @@ public class BattleUI : MonoBehaviour
         mercSlot1.SetLocked(false);
         bool tutHasActive = m.SkillCaster != null && m.SkillCaster.HasActiveSkill;
         mercSlot1.SetEnergyEnabled(tutHasActive && !MercSkillMigrate.IsMercSkillAutoCast());
-        Sprite mercIcon = MercPortraitSprites.GetHead(!string.IsNullOrEmpty(m.hireId) ? m.hireId : "H001")
+        Sprite mercIcon = MercPortraitSprites.GetHead(!string.IsNullOrEmpty(m.hireId) ? m.hireId : StoryProgress.TutorialMercHireId)
             ?? mm.GetIcon(m.mercId);
         mercSlot1.SetPortrait(mercIcon);
-        // 教程老盾不在存档出战列表里，技能圆形头像要单独绑
+        // 教程救援佣兵不在存档出战列表里，技能圆形头像要单独绑
         merc1SkillAvatar?.SetAvatar(mercIcon);
         // 没配头像时也不要露出「头像」占位白框
         if (mercIcon == null && mercSlot1.portraitPlaceholder != null)
             mercSlot1.portraitPlaceholder.SetActive(false);
         float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-        mercSlot1.UpdateSlot("老盾", m.mercLevel, m.currentHp, maxHp);
+        string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercNickname;
+        mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
     }
 
     void RefreshTutorialMercLiveBar()
@@ -1143,7 +1193,8 @@ public class BattleUI : MonoBehaviour
         if (mercs == null || mercs.Count == 0 || mercs[0] == null) return;
         var m = mercs[0];
         float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-        mercSlot1.UpdateSlot("老盾", m.mercLevel, m.currentHp, maxHp);
+        string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercNickname;
+        mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
         mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(0) : 0f);
     }
 
@@ -1338,6 +1389,11 @@ public class BattleUI : MonoBehaviour
 
     void OnOrganizeBackpack()
     {
+        if (BattleLootMode.Active)
+        {
+            BattleLootMode.Confirm();
+            return;
+        }
         GridBackpackSystem.Instance?.OrganizeBackpack();
     }
 

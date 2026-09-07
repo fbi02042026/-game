@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 战斗右侧 HUD：连杀 + 下一波倒计时（可点击加速出兵换金币）。
+/// 战斗右侧 HUD：击破反馈 + 下一波倒计时（可点击加速出兵换金币）。
 /// 运行时挂到 BattleUI 下，不依赖预制体手工摆点。
 /// </summary>
 public class BattleSideHud : MonoBehaviour
@@ -12,8 +12,7 @@ public class BattleSideHud : MonoBehaviour
     Text _comboTitle;
     Text _comboValue;
     CanvasGroup _comboGroup;
-    Image _comboRing;
-    float _comboRingExpireAt;
+    RectTransform _comboScaleRoot;
 
     Button _waveBtn;
     Text _waveTitle;
@@ -21,7 +20,18 @@ public class BattleSideHud : MonoBehaviour
     Text _waveHint;
     CanvasGroup _waveGroup;
 
-    float _comboPunch;
+    // 击破缩放：1 → 弹到 1.5 → 慢收到 0.8 → 再隐藏（不边缩边淡）
+    const float ComboScalePop = 1.5f;
+    const float ComboScaleEnd = 0.8f;
+    const float ComboPopDur = 0.08f;
+    const float ComboShrinkDur = 3f;
+    const float ComboHideAfterShrink = 0.12f;
+
+    enum ComboAnimPhase { Hidden, Pop, Shrink, Hold, Gone }
+    ComboAnimPhase _comboPhase = ComboAnimPhase.Hidden;
+    float _comboAnimT;
+    float _comboScale = 1f;
+    int _comboShown;
 
     public static BattleSideHud EnsureOn(Transform battleUiRoot)
     {
@@ -31,7 +41,6 @@ public class BattleSideHud : MonoBehaviour
         if (existing != null)
         {
             Instance = existing;
-            // 预制体里带的空壳没跑过 Build，补建一次，否则连杀/倒计时永远不显示
             if (existing._comboGroup == null || existing._waveGroup == null)
                 existing.Build();
             return existing;
@@ -60,43 +69,27 @@ public class BattleSideHud : MonoBehaviour
         ClearChildrenImmediate();
 
         var root = GetComponent<RectTransform>();
-        // 右上角锚定，避免居中+偏移在不同 Canvas 缩放下飞出屏外
         root.anchorMin = new Vector2(1f, 1f);
         root.anchorMax = new Vector2(1f, 1f);
         root.pivot = new Vector2(1f, 1f);
         root.sizeDelta = new Vector2(200f, 250f);
         root.anchoredPosition = new Vector2(-12f, -200f);
 
-        // —— 连杀 ——
+        // —— 击破（无圆环倒计时）——
         var comboGo = CreatePanel("ComboPanel", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(180f, 88f));
+            new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(180f, 88f), transparent: true);
         _comboGroup = comboGo.AddComponent<CanvasGroup>();
         _comboGroup.alpha = 0f;
+        _comboScaleRoot = comboGo.GetComponent<RectTransform>();
+        _comboScaleRoot.localScale = Vector3.one;
 
-        // 连杀窗口倒计时环（每杀重置）
-        var ringGo = new GameObject("ComboRing", typeof(RectTransform));
-        ringGo.transform.SetParent(comboGo.transform, false);
-        var ringRt = ringGo.GetComponent<RectTransform>();
-        ringRt.anchorMin = new Vector2(0.5f, 0.5f);
-        ringRt.anchorMax = new Vector2(0.5f, 0.5f);
-        ringRt.pivot = new Vector2(0.5f, 0.5f);
-        ringRt.sizeDelta = new Vector2(96f, 96f);
-        ringRt.anchoredPosition = new Vector2(0f, -8f);
-        _comboRing = ringGo.AddComponent<Image>();
-        _comboRing.color = new Color(1f, 0.75f, 0.2f, 0.85f);
-        _comboRing.raycastTarget = false;
-        _comboRing.type = Image.Type.Filled;
-        _comboRing.fillMethod = Image.FillMethod.Radial360;
-        _comboRing.fillOrigin = (int)Image.Origin360.Top;
-        _comboRing.fillClockwise = false;
-        _comboRing.fillAmount = 1f;
-        // 无专用 sprite 时用默认白图即可出径向填充
-        _comboRing.sprite = CreateRingSprite();
+        _comboTitle = CreateText(comboGo.transform, "ComboTitle", "击破", 28, TextAnchor.MiddleCenter,
+            new Vector2(0f, 18f), new Vector2(160f, 32f));
+        _comboTitle.color = new Color(1f, 0.9f, 0.35f, 1f);
+        _comboTitle.fontStyle = FontStyle.Bold;
 
-        _comboTitle = CreateText(comboGo.transform, "ComboTitle", "连杀", 22, TextAnchor.MiddleCenter,
-            new Vector2(0f, 22f), new Vector2(160f, 28f));
-        _comboValue = CreateText(comboGo.transform, "ComboValue", "x0", 46, TextAnchor.MiddleCenter,
-            new Vector2(0f, -18f), new Vector2(160f, 52f));
+        _comboValue = CreateText(comboGo.transform, "ComboValue", "x1", 42, TextAnchor.MiddleCenter,
+            new Vector2(0f, -18f), new Vector2(160f, 48f));
         _comboValue.color = new Color(1f, 0.85f, 0.25f, 1f);
         _comboValue.fontStyle = FontStyle.Bold;
 
@@ -137,7 +130,6 @@ public class BattleSideHud : MonoBehaviour
             DestroyImmediate(transform.GetChild(i).gameObject);
     }
 
-    /// <summary>保证在 map 等嵌套 Canvas 之上绘制</summary>
     void EnsureSortCanvas()
     {
         var c = GetComponent<Canvas>();
@@ -185,7 +177,6 @@ public class BattleSideHud : MonoBehaviour
         t.horizontalOverflow = HorizontalWrapMode.Overflow;
         t.verticalOverflow = VerticalWrapMode.Overflow;
         t.raycastTarget = false;
-        // 数字控件用 PixelFont，其余 fusion-pixel
         bool isNum = name.IndexOf("Value", System.StringComparison.OrdinalIgnoreCase) >= 0
                      || name.IndexOf("Timer", System.StringComparison.OrdinalIgnoreCase) >= 0
                      || name.IndexOf("Count", System.StringComparison.OrdinalIgnoreCase) >= 0;
@@ -195,20 +186,50 @@ public class BattleSideHud : MonoBehaviour
 
     void Update()
     {
-        if (_comboPunch > 0f)
+        if (_comboScaleRoot == null || _comboGroup == null) return;
+        if (_comboPhase == ComboAnimPhase.Hidden || _comboPhase == ComboAnimPhase.Gone)
+            return;
+
+        float dt = Time.unscaledDeltaTime;
+        _comboAnimT += dt;
+
+        if (_comboPhase == ComboAnimPhase.Pop)
         {
-            _comboPunch -= Time.unscaledDeltaTime;
-            float s = _comboPunch > 0f ? 1f + Mathf.Clamp01(_comboPunch) * 0.35f : 1f;
-            if (_comboValue != null)
-                _comboValue.rectTransform.localScale = Vector3.one * s;
+            float u = Mathf.Clamp01(_comboAnimT / ComboPopDur);
+            _comboScale = Mathf.Lerp(1f, ComboScalePop, u);
+            if (u >= 1f)
+            {
+                _comboPhase = ComboAnimPhase.Shrink;
+                _comboAnimT = 0f;
+                _comboScale = ComboScalePop;
+            }
+        }
+        else if (_comboPhase == ComboAnimPhase.Shrink)
+        {
+            float u = Mathf.Clamp01(_comboAnimT / ComboShrinkDur);
+            _comboScale = Mathf.Lerp(ComboScalePop, ComboScaleEnd, u);
+            // 全程不淡出
+            _comboGroup.alpha = 1f;
+            if (u >= 1f)
+            {
+                _comboPhase = ComboAnimPhase.Hold;
+                _comboAnimT = 0f;
+                _comboScale = ComboScaleEnd;
+            }
+        }
+        else if (_comboPhase == ComboAnimPhase.Hold)
+        {
+            _comboScale = ComboScaleEnd;
+            _comboGroup.alpha = 1f;
+            if (_comboAnimT >= ComboHideAfterShrink)
+            {
+                _comboGroup.alpha = 0f;
+                _comboPhase = ComboAnimPhase.Gone;
+                _comboScale = 1f;
+            }
         }
 
-        if (_comboRing != null && _comboGroup != null && _comboGroup.alpha > 0.01f)
-        {
-            float remain = _comboRingExpireAt - Time.time;
-            float win = Mathf.Max(0.05f, GameConfig.COMBO_WINDOW);
-            _comboRing.fillAmount = Mathf.Clamp01(remain / win);
-        }
+        _comboScaleRoot.localScale = Vector3.one * _comboScale;
     }
 
     public void SetCombo(int combo)
@@ -218,46 +239,31 @@ public class BattleSideHud : MonoBehaviour
         if (combo <= 0)
         {
             _comboGroup.alpha = 0f;
+            _comboPhase = ComboAnimPhase.Hidden;
+            _comboShown = 0;
             if (_comboValue != null) _comboValue.text = "";
-            if (_comboRing != null) _comboRing.fillAmount = 0f;
+            if (_comboScaleRoot != null) _comboScaleRoot.localScale = Vector3.one;
+            _comboScale = 1f;
             return;
         }
 
+        _comboShown = combo;
         _comboGroup.alpha = 1f;
-        _comboRingExpireAt = Time.time + GameConfig.COMBO_WINDOW;
-        if (_comboRing != null) _comboRing.fillAmount = 1f;
-        if (_comboValue == null) return;
-        _comboValue.text = "x" + combo;
-        _comboValue.color = combo >= 3
-            ? new Color(1f, 0.55f, 0.2f, 1f)
-            : new Color(1f, 0.85f, 0.25f, 1f);
-        _comboPunch = 0.25f;
-    }
-
-    static Sprite _ringSprite;
-    static Sprite CreateRingSprite()
-    {
-        if (_ringSprite != null) return _ringSprite;
-        const int size = 64;
-        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        tex.filterMode = FilterMode.Bilinear;
-        float cx = (size - 1) * 0.5f;
-        float outer = size * 0.48f;
-        float inner = size * 0.34f;
-        for (int y = 0; y < size; y++)
+        if (_comboTitle != null) _comboTitle.text = "击破";
+        if (_comboValue != null)
         {
-            for (int x = 0; x < size; x++)
-            {
-                float dx = x - cx;
-                float dy = y - cx;
-                float d = Mathf.Sqrt(dx * dx + dy * dy);
-                float a = (d <= outer && d >= inner) ? 1f : 0f;
-                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
-            }
+            _comboValue.text = "x" + combo;
+            _comboValue.color = combo >= 3
+                ? new Color(1f, 0.55f, 0.2f, 1f)
+                : new Color(1f, 0.85f, 0.25f, 1f);
         }
-        tex.Apply(false, true);
-        _ringSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
-        return _ringSprite;
+
+        // 再杀：立刻弹回 1.5 重播（消失前可继续计数）
+        _comboPhase = ComboAnimPhase.Pop;
+        _comboAnimT = 0f;
+        _comboScale = 1f;
+        if (_comboScaleRoot != null)
+            _comboScaleRoot.localScale = Vector3.one;
     }
 
     public void ResetCombo()
@@ -265,9 +271,6 @@ public class BattleSideHud : MonoBehaviour
         SetCombo(0);
     }
 
-    /// <param name="visible">是否显示倒计时面板</param>
-    /// <param name="secondsLeft">剩余秒</param>
-    /// <param name="canSkip">是否可点击加速</param>
     public void SetWaveCountdown(bool visible, float secondsLeft, bool canSkip)
     {
         if (_waveGroup == null) return;
@@ -283,9 +286,7 @@ public class BattleSideHud : MonoBehaviour
         else if (_waveTimer != null)
             _waveTimer.text = secondsLeft.ToString("0.0");
         if (_waveHint != null)
-        {
             _waveHint.text = canSkip ? "点击加速出兵" : "即将出兵…";
-        }
     }
 
     void OnWaveClicked()

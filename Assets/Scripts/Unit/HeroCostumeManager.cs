@@ -352,7 +352,7 @@ public class HeroCostumeManager : MonoBehaviour
         {
             EquipSlotType slot = order[i];
             EquipInstance equip = GridBackpackSystem.Instance.GetEquippedInSlot(slot);
-            string spumName = equip?.template != null ? equip.template.spumName : null;
+            string spumName = equip != null ? equip.ResolveSpumName() : null;
 
             if (string.IsNullOrEmpty(spumName))
             {
@@ -576,10 +576,8 @@ public class HeroCostumeManager : MonoBehaviour
         if (twoHandEquipped)
             secondaryEquip = null;
 
-        string attackSpum = attackEquip?.template != null ? attackEquip.template.spumName : null;
-        string secondarySpum = secondaryEquip?.template == null
-            ? null
-            : secondaryEquip.template.spumName;
+        string attackSpum = attackEquip != null ? attackEquip.ResolveSpumName() : null;
+        string secondarySpum = secondaryEquip != null ? secondaryEquip.ResolveSpumName() : null;
         if (!string.IsNullOrEmpty(attackSpum) && attackSpum == secondarySpum)
             secondarySpum = null;
         _equippedAttackSpum = attackSpum;

@@ -45,6 +45,8 @@ public class BattleManager : Singleton<BattleManager>
     public int StageQuestClearGold { get; private set; }
     bool _stageQuestGoldGranted;
     string _stageQuestObjective = "击败所有敌人";
+    /// <summary>本关已击杀数（进度条口径；勿用 goal-alive，未刷波次会假满）</summary>
+    int _defeatedMonsterKills;
     int _tutorialSpriteMelee = 2;
     int _tutorialSpriteRanged = 1;
     int _tutorialEliteCount;
@@ -194,6 +196,11 @@ public class BattleManager : Singleton<BattleManager>
 
     public void StartNewRun()
     {
+        StartNewRunInternal();
+    }
+
+    void StartNewRunInternal()
+    {
         Debug.Log("[BattleManager] ===== StartNewRun 开始 =====");
         StopBattleSpawnCoroutines();
         currentGold = SaveSystem.Instance?.Data?.totalGold ?? 0;
@@ -202,6 +209,7 @@ public class BattleManager : Singleton<BattleManager>
         _enchantAtRunStart = data != null ? data.enchantStones : 0;
         _matsAtRunStart = data != null ? data.decomposeMats : 0;
         _stageQuestGoldGranted = false;
+        _defeatedMonsterKills = 0;
         RunStats.Reset();
         RunStats.Chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         {
@@ -264,6 +272,7 @@ public class BattleManager : Singleton<BattleManager>
         {
             if (GridBackpackSystem.Instance.EnsureStarterWeapon())
                 hero.RecalcAttr();
+            PlayerJobDefs.ApplyForBattle();
         }
         SuppressStageClear = IsTutorialRun;
         SkipLegacyOnEvacuate = IsTutorialRun;
@@ -503,6 +512,7 @@ public class BattleManager : Singleton<BattleManager>
 
     public void QueueTutorialWave(int count)
     {
+        if (BattleLootMode.Active) return;
         // 跳过未刷出的旧波次（PrepareTutorialWaves 遗留），避免卡在 index 0
         if (_waves != null)
         {
@@ -579,7 +589,7 @@ public class BattleManager : Singleton<BattleManager>
     }
 
     /// <summary>
-    /// 引导救援：老盾刷在玩家前方固定距离，原地眩晕；周围刷怪围殴他。
+    /// 引导救援：牧师刷在玩家前方固定距离，原地眩晕；周围刷怪围殴她。
     /// </summary>
     public Mercenary SpawnTutorialMercAt(string mercId, float hpRatio, float aheadDist, bool stunned)
     {
@@ -589,13 +599,13 @@ public class BattleManager : Singleton<BattleManager>
         float heroX = UnitBase.GetCombatX(hero);
         float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
         Vector3 pos = new Vector3(heroX + aheadDist, UnitBase.GROUND_Y, z);
-        var merc = mm.SpawnMercenary(string.IsNullOrEmpty(mercId) ? "dunbing101" : mercId, pos, 1);
+        string useId = string.IsNullOrEmpty(mercId) ? StoryProgress.TutorialMercId : mercId;
+        var merc = mm.SpawnMercenary(useId, pos, 1);
         if (merc == null) return null;
-        string useId = string.IsNullOrEmpty(mercId) ? "dunbing101" : mercId;
         MercRosterDefs.GetSkillIds(useId, out string active, out string passive);
         merc.SetupBattleSkills(active, passive);
-        merc.SetDisplayName("老盾", "老盾");
-        merc.SetHireId("H001");
+        merc.SetDisplayName(StoryProgress.TutorialMercDisplayName, StoryProgress.TutorialMercNickname);
+        merc.SetHireId(StoryProgress.TutorialMercHireId);
         if (!allyUnits.Contains(merc))
             allyUnits.Add(merc);
         merc.OnDead += OnMercenaryDead;
@@ -641,7 +651,7 @@ public class BattleManager : Singleton<BattleManager>
         _activeWaveIndex = _waves.Count - 1;
         SuppressStageClear = true;
 
-        // 围殴怪拉开，避免叠在老盾同一点（视觉上「一刀打死好几只」）
+        // 围殴怪拉开，避免叠在牧师同一点（视觉上「一刀打死好几只」）
         float[] offsets = { -2.2f, 2.15f, -0.85f, 0.95f, -3.1f, 3.0f };
         int eliteCount = _tutorialEliteCount;
         if (eliteCount <= 0)
@@ -674,6 +684,7 @@ public class BattleManager : Singleton<BattleManager>
     /// <summary>诱饵埋伏：从锚点左右两侧刷怪，朝玩家冲。</summary>
     public void SpawnTutorialFlankAmbush(int count, float? anchorX = null)
     {
+        if (BattleLootMode.Active) return;
         if (hero == null) return;
         EnsureMonsterPrefabReady();
         float hx = anchorX ?? UnitBase.GetCombatX(hero);
@@ -882,6 +893,9 @@ public class BattleManager : Singleton<BattleManager>
         }
         isInBattle = true;
         Time.timeScale = 1f;
+        FocusMarkSystem.Ensure()?.ResetForBattle();
+        BattleUI.Instance?.EnsureBattleControls();
+        BattleJoystick.Instance?.SetVisible(true);
 
         // 触发章节背景切换
         SwitchBattleBackground(CurrentChapter);
@@ -1138,6 +1152,7 @@ public class BattleManager : Singleton<BattleManager>
     /// <summary>首波刷怪（含兜底）；成功才标记 _firstWaveSpawned</summary>
     void TrySpawnFirstWaveOnce()
     {
+        if (BattleLootMode.Active) return;
         if (!isInBattle || _stageCleared) return;
         if (!IsTutorialRun && !_battleIntroFinished) return;
         // 教程关禁止自动首波/紧急刷怪（否则会从玩家身上穿出来）
@@ -1659,7 +1674,7 @@ public class BattleManager : Singleton<BattleManager>
     public void RefreshStageQuestProgress()
     {
         int goal = GetStageMonsterGoal();
-        int defeated = Mathf.Clamp(goal - CountAliveMonsters(), 0, goal);
+        int defeated = Mathf.Clamp(_defeatedMonsterKills, 0, goal);
         BattleUI.Instance?.UpdateQuest(_stageQuestObjective, defeated, goal, StageQuestClearGold);
     }
 
@@ -1897,10 +1912,13 @@ public class BattleManager : Singleton<BattleManager>
 
     void Update()
     {
+        if (BattleLootMode.Active) return;
         if (!isInBattle || _stageCleared) return;
 
         if (UnitsCanAct)
             RunStats.BattleTimeSec += Time.deltaTime;
+
+        PlayerSkillPassive.TickAutoCast();
 
         // 首波刷怪：主路径 ScheduleFirstWaveSpawn；兜底仅 CoFirstWaveHardFallback（勿在 Update 叠刷）
 
@@ -2227,8 +2245,16 @@ public class BattleManager : Singleton<BattleManager>
 
         if (isBossWave)
         {
-            template = pool.Find(m => m.isBoss) ?? pool[0];
-            spriteIndexOverride = availableSprites.Count > 0 ? availableSprites[0] : GameConfig.BOSS_SPRITE_START;
+            // 优先真 Boss 行（sprite 11/12）；避免高阶小怪 isBoss 误抢模板
+            var trueBosses = pool.Where(m => m.isBoss && m.spriteIndex >= GameConfig.BOSS_SPRITE_START).ToList();
+            if (trueBosses.Count > 0)
+                template = trueBosses[Random.Range(0, trueBosses.Count)];
+            else
+                template = pool.Find(m => m.isBoss) ?? pool[0];
+            if (template != null && template.spriteIndex >= GameConfig.BOSS_SPRITE_START)
+                spriteIndexOverride = template.spriteIndex;
+            else
+                spriteIndexOverride = availableSprites.Count > 0 ? availableSprites[0] : GameConfig.BOSS_SPRITE_START;
         }
         else
         {
@@ -2257,6 +2283,7 @@ public class BattleManager : Singleton<BattleManager>
 
     void SpawnWave(WaveData wave, int waveIndex = -1)
     {
+        if (BattleLootMode.Active) return;
         if (waveIndex < 0 && _waves != null)
             waveIndex = _waves.IndexOf(wave);
         if (waveIndex < 0) waveIndex = 0;
@@ -2338,6 +2365,11 @@ public class BattleManager : Singleton<BattleManager>
             float monsterScale = waveScaleMultiplier;
             if (template.isBoss && !wave.isBossWave)
                 monsterScale = GameConfig.BOSS_SCALE_MULTIPLIER;
+            // 教程表 eliteCount：本波末尾若干只按精英缩放
+            bool tutorialEliteSlot = IsTutorialRun && _tutorialEliteCount > 0
+                && i >= wave.monsterCount - _tutorialEliteCount;
+            if (tutorialEliteSlot)
+                monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;
 
             float lane = BattleLaneBounds.RandomLaneOffset();
             float spawnY = UnitBase.GROUND_Y + lane;
@@ -2359,11 +2391,7 @@ public class BattleManager : Singleton<BattleManager>
                 m.SetLaneY(lane);
                 ForceEnableMonsterRenderers(m.transform);
                 m.BeginMapEnter(engagePos, GameConfig.MONSTER_ENTER_SPEED, fromLeft ? 1 : -1);
-                if (isElite && !wave.isBossWave)
-                {
-                    m.currentHp *= 1.5f;
-                    m.attr.AddAttr(AttrType.Attack, 0.5f, true);
-                }
+                // 精英属性倍率只在 Init(scaleMultiplier=ELITE) 一处；禁止再叠 *1.5 导致 currentHp>MaxHp
                 wave.aliveCount++;
             }
         }
@@ -2554,6 +2582,7 @@ public class BattleManager : Singleton<BattleManager>
         if (m.LastDamageSource != null && m.LastDamageSource.isAlly)
             RecordAllyKill(m.LastDamageSource);
         AdventureLogAchievements.OnMonsterKilled(m, CurrentChapter);
+        HiddenLevelSystem.AddKillExp(m);
 
         // 连杀（仅展示，击杀不掉金币）
         float now = Time.time;
@@ -2571,9 +2600,9 @@ public class BattleManager : Singleton<BattleManager>
         HeroThunderUltimate.Instance?.OnMonsterKilled(m);
 
 
+        _defeatedMonsterKills++;
         int goal = GetStageMonsterGoal();
-        int alive = CountAliveMonsters();
-        int defeated = Mathf.Clamp(goal - alive, 0, goal);
+        int defeated = Mathf.Clamp(_defeatedMonsterKills, 0, goal);
         BattleUI.Instance?.UpdateQuest(_stageQuestObjective, defeated, goal, StageQuestClearGold);
 
         float killGain = (m.config != null && m.config.isBoss) ? 0.5f : ENERGY_PER_KILL;
@@ -2904,7 +2933,7 @@ public class BattleManager : Singleton<BattleManager>
         return cfg != null && (cfg.healPercentOfMax > 0f || cfg.healBase > 0f);
     }
 
-    /// <summary>引导中优先救眩晕老盾；否则血量比例最低的队友。</summary>
+    /// <summary>引导中优先救眩晕牧师；否则血量比例最低的队友。</summary>
     UnitBase FindPreferredHealTarget()
     {
         if (allyUnits != null)
@@ -2985,11 +3014,8 @@ public class BattleManager : Singleton<BattleManager>
     void TryGrantStageQuestGoldIfQuestComplete()
     {
         if (_stageQuestGoldGranted || StageQuestClearGold <= 0) return;
-        int goal = 0;
-        foreach (var w in _waves) goal += w.monsterCount;
-        if (goal < 1) goal = 1;
-        int alive = CountAliveMonsters();
-        int defeated = Mathf.Clamp(goal - alive, 0, goal);
+        int goal = GetStageMonsterGoal();
+        int defeated = Mathf.Clamp(_defeatedMonsterKills, 0, goal);
         if (defeated >= goal)
             TryGrantStageQuestGold();
     }
@@ -3048,6 +3074,10 @@ public class BattleManager : Singleton<BattleManager>
         isInBattle = false;
         UnitsCanAct = false;
 
+        FocusMarkSystem.Ensure()?.ResetForBattle();
+        BattleUI.Instance?.EnsureBattleControls();
+        BattleJoystick.Instance?.SetVisible(false);
+
         if (currentStage == null)
         {
             Debug.LogError("[BattleManager] 结算时 currentStage 为空");
@@ -3064,6 +3094,7 @@ public class BattleManager : Singleton<BattleManager>
         int bonusStar = 0;
         int equipCount = GameConfig.EQUIP_CHOOSE_COUNT;
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        HiddenLevelSystem.AddStageClearExp(ch);
         int bonusGold = 0;
         if (!_stageQuestGoldGranted)
         {
@@ -3110,6 +3141,7 @@ public class BattleManager : Singleton<BattleManager>
         // 让英雄/佣兵继续向右走向传送门
         UnitsCanAct = true;
         isInBattle = true; // Update 里检测走近传送门需要跑
+        BattleJoystick.Instance?.SetVisible(true);
         if (hero != null)
         {
             hero.Face(1);
@@ -3150,6 +3182,7 @@ public class BattleManager : Singleton<BattleManager>
         {
             ShowVictorySettlementThen(() =>
             {
+                GridBackpackSystem.Instance?.ClearRunEquipment();
                 MercenaryManager.Instance?.ClearAllMercs();
                 MercHireSession.ClearHired();
                 GameSceneManager.Instance?.ReturnToTown();
@@ -3165,6 +3198,7 @@ public class BattleManager : Singleton<BattleManager>
                 UIManager.Instance?.ShowChapterClearChoice(
                     onReturnTown: () =>
                     {
+                        GridBackpackSystem.Instance?.ClearRunEquipment();
                         MercenaryManager.Instance?.ClearAllMercs();
                         MercHireSession.ClearHired();
                         GameSceneManager.Instance?.ReturnToTown();
@@ -3243,6 +3277,7 @@ public class BattleManager : Singleton<BattleManager>
             TutorialDirector.Instance.WaitingEvacuate = false;
         if (!_stageQuestGoldGranted && StageQuestClearGold > 0)
             TryGrantStageQuestGold();
+        GridBackpackSystem.Instance?.ClearRunEquipment();
         // currentGold 含城镇底金，必须走差额写回，禁止整额 Add
         PersistBattleGold();
         StoryProgress.MarkTutorialBattleCleared();
@@ -3257,7 +3292,9 @@ public class BattleManager : Singleton<BattleManager>
         if (isDeath)
             currentGold = _goldAtRunStart;
 
-        // 遗产三选一已取消：背包装备全部带回，不写入 legacyEquipPool
+        // 裂缝口径：局内装备/武器退出清空，不带出城镇
+        GridBackpackSystem.Instance?.ClearRunEquipment();
+
         PersistBattleGold();
         int talentGain = 0;
         if (!isDeath)

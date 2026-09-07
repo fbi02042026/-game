@@ -296,11 +296,11 @@ public static class AdventureCodex
         string prefix = null;
         switch (monsterChapter)
         {
-            case 1: prefix = "undead_1"; break;
-            case 2: prefix = "jungle_2"; break;
-            case 3: prefix = "sea_3"; break;
-            case 4: prefix = "forest_4"; break;
-            case 5: prefix = "field_5"; break;
+            case 1: prefix = "forest_1"; break;
+            case 2: prefix = "undead_2"; break;
+            case 3: prefix = "jungle_3"; break;
+            case 4: prefix = "field_4"; break;
+            case 5: prefix = "sea_5"; break;
             case 6: prefix = "cave_6"; break;
             case 7: prefix = "devil_7"; break;
             case 8: prefix = "ice_8"; break;
@@ -336,8 +336,8 @@ public static class AdventureCodex
 
     static readonly Dictionary<string, string> MonsterFolderByPrefix = new Dictionary<string, string>
     {
-        { "undead", "1 Undead" }, { "jungle", "2 Jungle" }, { "sea", "3 Sea" }, { "forest", "4 Forest" },
-        { "field", "5 Field" }, { "cave", "6 Cave" }, { "devil", "7 Devil" }, { "ice", "8 Ice" },
+        { "forest", "1 Forest" }, { "undead", "2 Undead" }, { "jungle", "3 Jungle" }, { "field", "4 Field" },
+        { "sea", "5 Sea" }, { "cave", "6 Cave" }, { "devil", "7 Devil" }, { "ice", "8 Ice" },
     };
 
     static Sprite LoadMonsterSpriteFromResources(string assetId)
