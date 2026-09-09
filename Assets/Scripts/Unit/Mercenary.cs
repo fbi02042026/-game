@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 佣兵：与玩家同一套战斗 AI（索敌 → 攻击/前压 → 无目标则右推）。
+/// 佣兵 AI：索敌距内锁定最近怪 → 打到死/出距；无目标则跟玩家站位或推图。
 /// </summary>
 public class Mercenary : UnitBase
 {
@@ -18,6 +18,8 @@ public class Mercenary : UnitBase
     public MercPassiveRunner PassiveRunner { get; private set; }
 
     private int _partyIndex = -1;
+    /// <summary>索敌距内粘滞目标：进距先锁谁打谁，死/出距才换。</summary>
+    UnitBase _acquireLock;
     /// <summary>引导：原地眩晕，不跑 AI，受击不死。</summary>
     public bool TutorialStunned { get; private set; }
     float _stunAnimTimer;
@@ -79,6 +81,35 @@ public class Mercenary : UnitBase
         WirePassiveOnAttack();
     }
 
+    /// <summary>队友（含自己）血量低于约 92% 时需要治疗。</summary>
+    bool AllyNeedsHeal()
+    {
+        if (attr != null)
+        {
+            float max = attr.GetAttr(AttrType.MaxHp);
+            if (max > 0.01f && currentHp / max < 0.92f)
+                return true;
+        }
+        var bm = BattleManager.Instance;
+        if (bm?.hero != null && !bm.hero.isDead && bm.hero.attr != null)
+        {
+            float max = bm.hero.attr.GetAttr(AttrType.MaxHp);
+            if (max > 0.01f && bm.hero.currentHp / max < 0.92f)
+                return true;
+        }
+        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+        if (mercs == null) return false;
+        for (int i = 0; i < mercs.Count; i++)
+        {
+            var m = mercs[i];
+            if (m == null || m.isDead || m.attr == null) continue;
+            float max = m.attr.GetAttr(AttrType.MaxHp);
+            if (max > 0.01f && m.currentHp / max < 0.92f)
+                return true;
+        }
+        return false;
+    }
+
     public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null)
     {
         if (TutorialStunned)
@@ -138,6 +169,12 @@ public class Mercenary : UnitBase
         WirePassiveOnAttack();
 
         Debug.Log($"[Mercenary:{id}] Init完成 | isAlly={isAlly} | facingDir={facingDir} | pos={transform.position}");
+    }
+
+    public override void ResetForReuse()
+    {
+        base.ResetForReuse();
+        _acquireLock = null;
     }
 
     public void SetHireId(string id)
@@ -346,13 +383,28 @@ public class Mercenary : UnitBase
         _nameOutlineRenderers = null;
     }
 
-    static bool IsMeleeMercId(string id)
+    /// <summary>近战前排角色（剑盾/狂战/重武等）；弓手法师牧师为远程后排。</summary>
+    public static bool IsMeleeRoleId(string id)
     {
         if (string.IsNullOrEmpty(id)) return true;
-        if (id.StartsWith("gongshou")) return false;
-        if (id.StartsWith("naima") || id.StartsWith("fashi") || id.StartsWith("mushi")) return false;
+        string asset = id;
+        if (MercRosterDefs.TryGetByHireId(id, out var byHire))
+            asset = byHire.AssetId;
+        else if (MercRosterDefs.TryGetByAssetId(id, out var byAsset))
+            asset = byAsset.AssetId;
+
+        if (asset.StartsWith("gongshou")) return false;
+        if (asset.StartsWith("naima") || asset.StartsWith("fashi") || asset.StartsWith("mushi")) return false;
+
+        string job = MercRosterDefs.GetJobName(asset) ?? MercRosterDefs.GetJobName(id);
+        if (!string.IsNullOrEmpty(job))
+        {
+            if (job.Contains("游侠") || job.Contains("法师") || job.Contains("牧师")) return false;
+        }
         return true;
     }
+
+    static bool IsMeleeMercId(string id) => IsMeleeRoleId(id);
 
     void ApplyMeleeRangeVsPlayer()
     {
@@ -444,21 +496,36 @@ public class Mercenary : UnitBase
 
     protected override WeaponAttackType GetAttackType()
     {
-        if (mercId == null) return WeaponAttackType.Physical;
-        if (mercId.StartsWith("gongshou"))
-            return WeaponAttackType.Physical;
-        if (mercId.StartsWith("naima") || mercId.StartsWith("fashi") || mercId.StartsWith("mushi"))
+        if (!IsMeleeRoleId(mercId))
+        {
+            string asset = ResolveAssetId(mercId);
+            if (asset.StartsWith("gongshou"))
+                return WeaponAttackType.Physical;
             return WeaponAttackType.Magic;
+        }
         return WeaponAttackType.Physical;
     }
 
     protected override AttackVfxKit GetAttackVfxKit()
     {
-        if (mercId != null && mercId.StartsWith("gongshou"))
-            return AttackVfxKit.Bow;
-        if (mercId != null && (mercId.StartsWith("naima") || mercId.StartsWith("fashi") || mercId.StartsWith("mushi")))
+        if (!IsMeleeRoleId(mercId))
+        {
+            string asset = ResolveAssetId(mercId);
+            if (asset.StartsWith("gongshou"))
+                return AttackVfxKit.Bow;
             return AttackVfxKit.Orb;
+        }
         return AttackVfxKit.MeleeSlash;
+    }
+
+    static string ResolveAssetId(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return "";
+        if (MercRosterDefs.TryGetByHireId(id, out var byHire))
+            return byHire.AssetId ?? id;
+        if (MercRosterDefs.TryGetByAssetId(id, out var byAsset))
+            return byAsset.AssetId ?? id;
+        return id;
     }
 
     protected override float GetFormationLaneOffset()
@@ -540,7 +607,6 @@ public class Mercenary : UnitBase
             if (BattleManager.Instance.PartyIntroWalking)
             {
                 facingDir = 1;
-                ApplyFacing(facingDir);
                 if (unitAnim != null) unitAnim.SetMove(true, facingDir);
             }
             else if (unitAnim != null)
@@ -556,66 +622,34 @@ public class Mercenary : UnitBase
             return;
 
         EnsureAiPolicy();
-        bool alliesEngaged = HasAliveEnemyOnField();
-        target = alliesEngaged
-            ? MercAiPolicy.PickTarget(this, _aiPolicy, target)
-            : FindNearestEnemyInDetectRange();
-        if (target != null && target.isAlly == isAlly)
-            target = null;
 
-        bool isMoving = false;
-        float myX = GetCombatX(this);
-
-        // 站位意图：先挪到期望 X，再进入攻击逻辑
-        if (MercAiPolicy.TryGetDesiredX(this, _aiPolicy, target, out float desiredX))
+        // 牧师：有伤员且治疗技可放时，站住等自动奶
+        if (SkillCaster != null && SkillCaster.HasActiveSkill && SkillCaster.CooldownRemain <= 0f
+            && AllyNeedsHeal())
         {
-            float dx = desiredX - myX;
-            if (Mathf.Abs(dx) > 0.2f
-                && !(target != null && IsInBasicAttackRange(target)
-                     && _aiPolicy.Stance != MercAiPolicy.Stance.KeepMidRange
-                     && _aiPolicy.Stance != MercAiPolicy.Stance.KeepFar
-                     && _aiPolicy.Stance != MercAiPolicy.Stance.Backline))
-            {
-                int dir = dx > 0f ? 1 : -1;
-                facingDir = dir;
-                ApplyFacing(facingDir);
-                if (rb != null)
-                    rb.velocity = new Vector2(dir * GetCombatMoveSpeed(), rb.velocity.y);
-                isMoving = true;
-
-                // 远程/后排：边走边打若已进距
-                if (target != null && IsInBasicAttackRange(target)
-                    && attackCd <= 0f
-                    && (unitAnim == null || !unitAnim.InDamagedRecovery())
-                    && (unitAnim == null || !unitAnim.InAttackLock))
-                {
-                    FaceToward(target);
-                    Attack(target);
-                    attackCd = GetAttackCooldown();
-                }
-
-                if (unitAnim != null)
-                    unitAnim.SetMove(isMoving, facingDir);
-                if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
-                    ClampToScreen();
-                ApplyLaneY(Time.deltaTime);
-                return;
-            }
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            ApplyLaneY(Time.deltaTime);
+            return;
         }
 
+        RefreshAcquireTarget();
+
+        bool isMoving = false;
         if (target != null)
         {
-            float distance = Mathf.Abs(myX - GetCombatX(target));
+            float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
             float attackRange = GetEffectiveAttackRange();
             bool melee = UsesMeleeBasicAttack();
             FaceToward(target);
-            if (melee || !alliesEngaged)
+            if (melee)
                 AdjustLaneTowardTarget(target, Time.deltaTime);
 
             if (IsInBasicAttackRange(target))
             {
                 if (rb != null) rb.velocity = Vector2.zero;
-                if (attackCd <= 0 && (unitAnim == null || !unitAnim.InDamagedRecovery())
+                if (attackCd <= 0f
+                    && (unitAnim == null || !unitAnim.InDamagedRecovery())
                     && (unitAnim == null || !unitAnim.InAttackLock))
                 {
                     Attack(target);
@@ -629,6 +663,7 @@ public class Mercenary : UnitBase
             }
             else
             {
+                // 已锁目标但未进攻击距：朝目标走，朝向只看怪（不用走位方向翻身）
                 if (rb != null)
                     rb.velocity = new Vector2(facingDir * GetCombatMoveSpeed(), rb.velocity.y);
                 isMoving = true;
@@ -636,22 +671,8 @@ public class Mercenary : UnitBase
         }
         else
         {
-            if (alliesEngaged)
-            {
-                facingDir = 1;
-                ApplyFacing(facingDir);
-                if (rb != null) rb.velocity = Vector2.zero;
-                isMoving = false;
-            }
-            else
-            {
-                facingDir = 1;
-                ApplyFacing(facingDir);
-                AdjustFormationLane(Time.deltaTime);
-                if (rb != null)
-                    rb.velocity = new Vector2(GetCombatMoveSpeed(), rb.velocity.y);
-                isMoving = true;
-            }
+            // 索敌距内无怪：跟玩家站位 / 推图，朝右，不左右找怪
+            FollowHeroOrIdle(ref isMoving);
         }
 
         if (unitAnim != null)
@@ -659,5 +680,70 @@ public class Mercenary : UnitBase
         if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
             ClampToScreen();
         ApplyLaneY(Time.deltaTime);
+    }
+
+    /// <summary>只认索敌距离：进距最近者锁定，直至死亡或出距。</summary>
+    void RefreshAcquireTarget()
+    {
+        float detect = GetDetectRange();
+        float myX = GetCombatX(this);
+        const float leaveSlack = 0.75f;
+
+        if (_acquireLock != null)
+        {
+            if (_acquireLock.isDead || _acquireLock.isAlly == isAlly)
+                _acquireLock = null;
+            else if (Mathf.Abs(myX - GetCombatX(_acquireLock)) > detect + leaveSlack)
+                _acquireLock = null;
+        }
+
+        if (_acquireLock == null)
+            _acquireLock = FindNearestEnemyInDetectRange();
+
+        target = _acquireLock;
+        if (target != null && target.isAlly == isAlly)
+        {
+            target = null;
+            _acquireLock = null;
+        }
+    }
+
+    /// <summary>无锁定目标：贴玩家编队站位；玩家在推图则跟着走。</summary>
+    void FollowHeroOrIdle(ref bool isMoving)
+    {
+        facingDir = 1;
+        ApplyFacing(facingDir);
+        AdjustFormationLane(Time.deltaTime);
+
+        var hero = Hero.Instance;
+        if (hero == null || hero.isDead)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            isMoving = false;
+            return;
+        }
+
+        float desiredX = UnitCrowd.GetMercDesiredCombatX(hero, this, ResolvePartyIndex());
+        float dx = desiredX - GetCombatX(this);
+        if (Mathf.Abs(dx) > 0.22f)
+        {
+            int moveDir = dx > 0f ? 1 : -1;
+            if (rb != null)
+                rb.velocity = new Vector2(moveDir * GetCombatMoveSpeed(), rb.velocity.y);
+            isMoving = true;
+        }
+        else if (!HasAliveEnemyOnField())
+        {
+            // 场上无怪：与玩家一起右推
+            if (rb != null)
+                rb.velocity = new Vector2(GetCombatMoveSpeed(), rb.velocity.y);
+            isMoving = true;
+        }
+        else
+        {
+            // 场上有怪但不在自己索敌距：站住跟队，等怪进距再锁
+            if (rb != null) rb.velocity = Vector2.zero;
+            isMoving = false;
+        }
     }
 }

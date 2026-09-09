@@ -50,7 +50,7 @@ public static class MercRosterDefs
         D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 200, 42, 20, 0.95f, 3.4f, "SK003", null, 1600, true),
         D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 220, 40, 24, 1.00f, 3.3f, "SK001", null, 1900, false),
         D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 250, 50, 22, 1.10f, 3.8f, "SK005", "SK004", 6000, false),
-        D("H011", "索菲", "小白", "naima101", "牧师", MercRarity.Common, 1.00f, 100, 15, 10, 1.20f, 3.6f, null, "SK012", 500, true),
+        D("H011", "索菲", "小白", "naima101", "牧师", MercRarity.Common, 1.00f, 100, 15, 10, 1.20f, 3.6f, "SK011", "SK012", 500, true),
         D("H012", "塞拉", "小蓝", "naima102", "水系法师", MercRarity.Rare, 1.15f, 110, 28, 20, 1.00f, 3.3f, "SK011", null, 1700, false),
         D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 120, 30, 24, 1.00f, 3.2f, "SK013", null, 2000, false),
         D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 125, 48, 12, 1.20f, 3.6f, "SK020", "SK019", 8000, false),

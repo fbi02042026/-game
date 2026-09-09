@@ -110,6 +110,8 @@ public class TalentUI : MonoBehaviour
         public Image check;
         public Image line;
         public GameObject redDot;
+        public GameObject upgradeButton;
+        public Text upgradeCostText;
     }
 
     class ChoiceRowView
@@ -135,7 +137,9 @@ public class TalentUI : MonoBehaviour
         LoadArtSprites();
         if (panelImage == null)
             AutoBindFromHierarchy();
+        EnsureCurrencyBindings();
         EnsureChoicePopupBindings();
+        CloseChoicePopup();
         EnsureVisibleTransform();
         WireClicks();
     }
@@ -152,7 +156,9 @@ public class TalentUI : MonoBehaviour
     public void Show()
     {
         EnsureVisibleTransform();
+        EnsureCurrencyBindings();
         EnsureChoicePopupBindings();
+        CloseChoicePopup(); // 预制体 ChoicePopup 默认可能为 active，打开时强制关
         LoadArtSprites();
         if (!_wired) WireClicks();
         else WireChoiceConfirmIfNeeded();
@@ -228,15 +234,24 @@ public class TalentUI : MonoBehaviour
             }
             if (v.check != null)
             {
-                v.check.gameObject.SetActive(true);
-                ApplySprite(v.check, on ? sprCheckOn : (can ? sprCheckOn : sprCheckOff), true);
+                // Check 仅作可升级提示；已解锁/锁定时隐藏
+                v.check.gameObject.SetActive(can);
+                if (can) ApplySprite(v.check, sprCheckOn, true);
+            }
+            if (v.upgradeButton != null)
+            {
+                v.upgradeButton.SetActive(can);
+                if (can && v.upgradeCostText != null && nextCost > 0 && i == unlocked)
+                    v.upgradeCostText.text = nextCost.ToString();
             }
             if (v.button != null) v.button.interactable = can;
+            // 节点始终显示；仅灰态表示锁定
+            if (v.root != null) v.root.SetActive(true);
             SetRowGray(v.root, locked);
             SetRowRedDot(v.root, ref v.redDot, can);
             if (v.line != null)
             {
-                // 最底 L1（index 0）不画向下连接线
+                // 最底 L1（index 0）不画向下连接线；其余连线
                 bool showLine = i > 0;
                 v.line.gameObject.SetActive(showLine);
                 if (showLine) ApplySprite(v.line, on ? sprLeftLinkOn : sprLeftLinkOff, false);
@@ -247,6 +262,11 @@ public class TalentUI : MonoBehaviour
             leftCostText.text = nextCost > 0 ? nextCost.ToString() : "0";
         if (leftTipText != null)
             leftTipText.text = "消耗金币解锁属性天赋";
+
+        // GoldPanel 的 Plus：仅当前有可升级左天赋时显示
+        var goldPlus = transform.Find("Panel/ResourceRow/GoldPanel/PlusButton");
+        if (goldPlus != null)
+            goldPlus.gameObject.SetActive(nextCost > 0 && TalentSystem.IsLeftUpgradeable(unlocked, talents));
     }
 
     void RefreshRight()
@@ -281,16 +301,33 @@ public class TalentUI : MonoBehaviour
 
         if (v.titleText != null) v.titleText.text = def.groupName;
         if (v.costText != null) v.costText.text = def.stoneCost.ToString();
+        EnsureRightLock(v);
         if (v.lockIcon != null)
         {
+            // 未解锁：右下角锁；已解锁/可选：隐藏。保留预制体锁图，勿用错资源覆盖
             v.lockIcon.gameObject.SetActive(locked);
-            ApplySprite(v.lockIcon, sprLock, true);
+            if (locked)
+            {
+                if (v.lockIcon.sprite == null)
+                {
+                    var lockSp = sprLock ?? Resources.Load<Sprite>("UI/Common/锁");
+#if UNITY_EDITOR
+                    if (lockSp == null)
+                        lockSp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
+#endif
+                    if (lockSp != null)
+                        ApplySprite(v.lockIcon, lockSp, true);
+                }
+                v.lockIcon.enabled = true;
+                v.lockIcon.color = Color.white;
+                v.lockIcon.transform.SetAsLastSibling();
+            }
         }
         if (v.diamond != null)
             ApplySprite(v.diamond, picked || canPick ? sprDiamondOn : sprDiamondOff, true);
         if (v.line != null)
         {
-            bool showLine = v.visualIndex >= 1 && v.visualIndex < _rightViews.Count - 1;
+            bool showLine = v.visualIndex < _rightViews.Count - 1;
             v.line.gameObject.SetActive(showLine);
             if (showLine)
                 ApplySprite(v.line, picked || canPick ? sprRightLinkOn : sprRightLinkOff, false);
@@ -298,7 +335,8 @@ public class TalentUI : MonoBehaviour
 
         if (v.root != null) v.root.SetActive(true);
         bool milestoneLocked = leftUnlocked < def.requireLeftIndex;
-        SetRowGray(v.root, locked || milestoneLocked);
+        // 未解锁略压暗但仍能看清右下角锁；勿用过低 alpha 把锁「隐掉」
+        SetRowGray(v.root, (locked || milestoneLocked) ? 0.72f : 1f);
         SetRowRedDot(v.root, ref v.redDot, canAfford);
 
         int selectedOpt = picked ? selLv : 0;
@@ -309,6 +347,7 @@ public class TalentUI : MonoBehaviour
             if (!has) { if (btnGo != null) btnGo.SetActive(false); continue; }
 
             bool isSelected = picked && selectedOpt == o + 1;
+            // 未点选时选项全显；已点选只留选中项
             bool showOpt = !picked || isSelected;
             if (btnGo != null) btnGo.SetActive(showOpt);
 
@@ -449,7 +488,12 @@ public class TalentUI : MonoBehaviour
 
     static void SetRowGray(GameObject root, bool gray)
     {
-        SetGraphicAlpha(root, gray ? 0.38f : 1f);
+        SetGraphicAlpha(root, gray ? 0.72f : 1f);
+    }
+
+    static void SetRowGray(GameObject root, float alpha)
+    {
+        SetGraphicAlpha(root, Mathf.Clamp01(alpha));
     }
 
     static void SetRowRedDot(GameObject rowRoot, ref GameObject dot, bool show)
@@ -758,29 +802,29 @@ public class TalentUI : MonoBehaviour
         rightRowTemplate.SetActive(false);
         if (rightExtraRowTemplate != null) rightExtraRowTemplate.SetActive(false);
 
+        // 列表只用 LayoutGroup 排，禁止手写改每个框的坐标/宽高
+        EnsureScrollContentLayout(leftContent);
+        EnsureScrollContentLayout(rightContent);
+
         for (int i = 0; i < TalentDefs.Left.Length; i++)
         {
             var go = Instantiate(leftNodeTemplate, leftContent);
             go.name = "LeftNode_" + (i + 1);
             go.SetActive(true);
+            PrepareListItemUnderContent(go.transform as RectTransform, leftContent);
             var view = BindLeftNode(go, i);
             _leftViews.Add(view);
             int idx = i;
             view.button?.onClick.AddListener(() => OnClickLeft(idx));
         }
-        float leftH = TalentDefs.Left.Length * LeftNodeH + 20f;
-        leftContent.sizeDelta = new Vector2(0f, leftH);
-        var leftPad = leftContent.offsetMin;
-        leftContent.offsetMin = new Vector2(8f, leftPad.y);
 
-        var rightRowStacks = new Dictionary<int, int>();
-        int visualRow = 0;
         for (int i = 0; i < TalentDefs.Right.Length; i++)
         {
             var go = Instantiate(rightRowTemplate, rightContent);
             go.name = "RightRow_" + (i + 1);
             go.SetActive(true);
-            var view = BindChoiceRow(go, visualRow, TalentSystem.Branch.Right, i + 1, rightRowStacks);
+            PrepareListItemUnderContent(go.transform as RectTransform, rightContent);
+            var view = BindChoiceRow(go, i, TalentSystem.Branch.Right, i + 1);
             _rightViews.Add(view);
             int ri = i;
             for (int o = 0; o < view.optionButtons.Count; o++)
@@ -789,7 +833,6 @@ public class TalentUI : MonoBehaviour
                 view.optionButtons[o]?.onClick.AddListener(() =>
                     OnClickChoiceOption(TalentSystem.Branch.Right, ri, oi));
             }
-            visualRow++;
         }
         if (TalentDefs.RightExtra != null)
         {
@@ -797,7 +840,9 @@ public class TalentUI : MonoBehaviour
             var extraGo = Instantiate(extraTpl, rightContent);
             extraGo.name = "RightExtraRow";
             extraGo.SetActive(true);
-            var extraView = BindChoiceRow(extraGo, visualRow, TalentSystem.Branch.RightExtra, 1, rightRowStacks);
+            PrepareListItemUnderContent(extraGo.transform as RectTransform, rightContent);
+            int visualRow = _rightViews.Count;
+            var extraView = BindChoiceRow(extraGo, visualRow, TalentSystem.Branch.RightExtra, 1);
             _rightViews.Add(extraView);
             for (int o = 0; o < extraView.optionButtons.Count; o++)
             {
@@ -805,9 +850,11 @@ public class TalentUI : MonoBehaviour
                 extraView.optionButtons[o]?.onClick.AddListener(() =>
                     OnClickChoiceOption(TalentSystem.Branch.RightExtra, 0, oi));
             }
-            visualRow++;
         }
-        rightContent.sizeDelta = new Vector2(0f, leftH);
+
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(leftContent);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(rightContent);
 
         WireScroll(leftScroll, leftContent);
         WireScroll(rightScroll, rightContent);
@@ -815,7 +862,46 @@ public class TalentUI : MonoBehaviour
 
         _listsBuilt = true;
         WireClicks();
-        GameFonts.ApplyToHierarchy(transform);
+    }
+
+    /// <summary>Content 用 VerticalLayoutGroup 排布；不拉伸子项宽高。</summary>
+    static void EnsureScrollContentLayout(RectTransform content)
+    {
+        if (content == null) return;
+        var vlg = content.GetComponent<VerticalLayoutGroup>();
+        if (vlg == null) vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
+        vlg.padding = new RectOffset(0, 0, 4, 4);
+        vlg.spacing = 8f;
+        vlg.childAlignment = TextAnchor.UpperCenter;
+        vlg.childControlWidth = false;
+        vlg.childControlHeight = false;
+        vlg.childForceExpandWidth = false;
+        vlg.childForceExpandHeight = false;
+        vlg.reverseArrangement = true; // 与原先「底端先解锁」一致：L1 在视觉底部
+
+        var fitter = content.GetComponent<ContentSizeFitter>();
+        if (fitter == null) fitter = content.gameObject.AddComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+    }
+
+    /// <summary>
+    /// 模板原挂在根下（大负边距 stretch）。进 Content 后只烘焙为固定高宽，
+    /// 不改子节点；宽取列宽，高取模板高度。
+    /// </summary>
+    static void PrepareListItemUnderContent(RectTransform item, RectTransform content)
+    {
+        if (item == null) return;
+        float h = Mathf.Abs(item.sizeDelta.y);
+        if (h < 8f) h = Mathf.Max(80f, item.rect.height);
+        float w = content != null && content.rect.width > 8f
+            ? content.rect.width
+            : Mathf.Max(200f, item.rect.width);
+        item.anchorMin = item.anchorMax = new Vector2(0.5f, 1f);
+        item.pivot = new Vector2(0.5f, 1f);
+        item.sizeDelta = new Vector2(w, h);
+        item.anchoredPosition = Vector2.zero;
+        item.localScale = Vector3.one;
     }
 
     static void WireScroll(ScrollRect scroll, RectTransform content)
@@ -861,38 +947,37 @@ public class TalentUI : MonoBehaviour
         _scrollSyncing = false;
     }
 
-    static float GetLeftNodeY(int leftIndex1Based)
+    /// <summary>右列缺 Lock 时按手做模板补一个右下角锁（不改已有坐标）。</summary>
+    void EnsureRightLock(ChoiceRowView v)
     {
-        int index0 = leftIndex1Based - 1;
-        int fromTop = TalentDefs.Left.Length - 1 - index0;
-        return -fromTop * LeftNodeH - 4f;
-    }
-
-    static float AllocateRightRowY(int requireLeftIndex, Dictionary<int, int> stackCounts)
-    {
-        float baseY = GetLeftNodeY(requireLeftIndex);
-        if (!stackCounts.TryGetValue(requireLeftIndex, out int count))
-            count = 0;
-        stackCounts[requireLeftIndex] = count + 1;
-        return baseY - count * RightRowH;
-    }
-
-    static void NudgeLeftNodeChrome(Transform root)
-    {
-        var iconbg = root.Find("Iconbg") ?? root.Find("iconbg");
-        if (iconbg is RectTransform iconRt)
+        if (v == null || v.root == null) return;
+        if (v.lockIcon != null) return;
+        var existing = v.root.transform.Find("Lock");
+        if (existing != null)
         {
-            var p = iconRt.anchoredPosition;
-            if (p.x < 0f)
-                iconRt.anchoredPosition = new Vector2(14f, p.y);
+            v.lockIcon = existing.GetComponent<Image>();
+            if (v.lockIcon != null) return;
         }
-        var line = root.Find("Line");
-        if (line is RectTransform lineRt)
-        {
-            var lp = lineRt.anchoredPosition;
-            if (lp.x < 20f)
-                lineRt.anchoredPosition = new Vector2(lp.x + 24f, lp.y);
-        }
+
+        var go = new GameObject("Lock", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(v.root.transform, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(1f, 0f);
+        rt.anchoredPosition = new Vector2(4.4f, -14.2f);
+        rt.sizeDelta = new Vector2(36f, 55f);
+        rt.localScale = new Vector3(0.7f, 0.7f, 0.7f);
+        v.lockIcon = go.GetComponent<Image>();
+        v.lockIcon.raycastTarget = false;
+        v.lockIcon.preserveAspect = true;
+        var lockSp = sprLock ?? Resources.Load<Sprite>("UI/Common/锁");
+#if UNITY_EDITOR
+        if (lockSp == null)
+            lockSp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
+#endif
+        if (lockSp != null)
+            v.lockIcon.sprite = lockSp;
+        go.SetActive(false);
     }
 
     LeftNodeView BindLeftNode(GameObject go, int index0)
@@ -907,6 +992,16 @@ public class TalentUI : MonoBehaviour
         v.effectText = go.transform.Find("EffectText")?.GetComponent<Text>();
         v.check = go.transform.Find("Check")?.GetComponent<Image>();
         v.line = go.transform.Find("Line")?.GetComponent<Image>();
+        var upgradeTf = go.transform.Find("升级") ?? go.transform.Find("Upgrade");
+        if (upgradeTf != null)
+        {
+            v.upgradeButton = upgradeTf.gameObject;
+            v.upgradeCostText = upgradeTf.GetComponentInChildren<Text>(true);
+            var upBtn = upgradeTf.GetComponent<Button>() ?? upgradeTf.gameObject.AddComponent<Button>();
+            upBtn.onClick.RemoveAllListeners();
+            int upIdx = index0;
+            upBtn.onClick.AddListener(() => OnClickLeft(upIdx));
+        }
         var def = TalentDefs.Left[index0];
         if (v.nameText != null) v.nameText.text = def.name;
         if (v.effectText != null) v.effectText.text = def.effect.display;
@@ -915,23 +1010,11 @@ public class TalentUI : MonoBehaviour
             var sp = TalentIcons.GetLeftAttr(index0 % 5);
             if (sp != null) ApplySprite(v.icon, sp, true);
         }
-        var rt = go.GetComponent<RectTransform>();
-        if (rt != null)
-        {
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.sizeDelta = new Vector2(0f, LeftNodeH - 6f);
-            // 自下而上：index0（力量 I，最先开）在最底
-            int fromTop = TalentDefs.Left.Length - 1 - index0;
-            rt.anchoredPosition = new Vector2(0f, -fromTop * LeftNodeH - 4f);
-        }
-        NudgeLeftNodeChrome(go.transform);
+        // 布局交给 Content 的 VerticalLayoutGroup；禁止再改本节点/子节点坐标
         return v;
     }
 
-    ChoiceRowView BindChoiceRow(GameObject go, int visualIndex0, TalentSystem.Branch branch, int dataIndex1Based,
-        Dictionary<int, int> stackCounts)
+    ChoiceRowView BindChoiceRow(GameObject go, int visualIndex0, TalentSystem.Branch branch, int dataIndex1Based)
     {
         var def = branch == TalentSystem.Branch.RightExtra
             ? TalentDefs.RightExtra
@@ -948,6 +1031,7 @@ public class TalentUI : MonoBehaviour
         v.lockIcon = go.transform.Find("Lock")?.GetComponent<Image>();
         v.diamond = go.transform.Find("Diamond")?.GetComponent<Image>();
         v.line = go.transform.Find("Line")?.GetComponent<Image>();
+        EnsureRightLock(v);
         if (def == null) return v;
         if (v.titleText != null) v.titleText.text = def.groupName;
         if (v.costText != null) v.costText.text = def.stoneCost.ToString();
@@ -972,17 +1056,6 @@ public class TalentUI : MonoBehaviour
                 if (sp != null) ApplySprite(icon, sp, true);
             }
         }
-
-        var rt = go.GetComponent<RectTransform>();
-        if (rt != null)
-        {
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(1f, 1f);
-            rt.pivot = new Vector2(0.5f, 1f);
-            rt.sizeDelta = new Vector2(0f, RightRowH - 8f);
-            int milestone = Mathf.Max(1, def.requireLeftIndex);
-            rt.anchoredPosition = new Vector2(0f, AllocateRightRowY(milestone, stackCounts));
-        }
         return v;
     }
 
@@ -998,15 +1071,13 @@ public class TalentUI : MonoBehaviour
         closeButton = transform.Find("Panel/TitleBar/CloseButton")?.GetComponent<Button>()
                       ?? transform.Find("Panel/CloseButton")?.GetComponent<Button>();
         titleText = FindTxt("Panel/TitleBar/TitleText");
-        goldText = FindTxt("Panel/ResourceRow/GoldText");
-        stoneText = FindTxt("Panel/ResourceRow/StoneText");
-        stonePlusButton = transform.Find("Panel/ResourceRow/StonePlus")?.GetComponent<Button>();
+        BindCurrencyTexts();
+        stonePlusButton = transform.Find("Panel/ResourceRow/StonePlus")?.GetComponent<Button>()
+                          ?? transform.Find("Panel/ResourceRow/GoldPanel/PlusButton")?.GetComponent<Button>();
 
         leftScroll = transform.Find("Panel/Columns/LeftColumn/LeftScroll")?.GetComponent<ScrollRect>();
         leftContent = transform.Find("Panel/Columns/LeftColumn/LeftScroll/Viewport/Content") as RectTransform;
         leftTipText = FindTxt("Panel/Columns/LeftColumn/LeftTip");
-        leftCostText = FindTxt("Panel/Columns/LeftColumn/LeftCostText")
-                       ?? FindTxt("Panel/Columns/LeftColumn/GoldBar/LeftCostText");
         leftNodeTemplate = transform.Find("LeftNodeTemplate")?.gameObject;
 
         rightScroll = transform.Find("Panel/Columns/RightColumn/RightScroll")?.GetComponent<ScrollRect>();
@@ -1049,6 +1120,57 @@ public class TalentUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// panelImage 已序列化时 Awake 会跳过 AutoBind，导致手做 GoldPanel 文案未挂上。
+    /// </summary>
+    void EnsureCurrencyBindings()
+    {
+        BindCurrencyTexts();
+        WireGoldPlusIfNeeded();
+    }
+
+    void BindCurrencyTexts()
+    {
+        // 手做：ResourceRow/GoldText 常为隐藏白模；真金显示在 GoldPanel/GoldText
+        if (goldText == null || !goldText.gameObject.activeInHierarchy)
+        {
+            goldText = FindTxt("Panel/ResourceRow/GoldPanel/GoldText")
+                       ?? FindTxt("Panel/ResourceRow/GoldText")
+                       ?? goldText;
+        }
+        if (stoneText == null || !stoneText.gameObject.activeInHierarchy)
+        {
+            stoneText = FindDeepTextByParentName("天赋石Panel", "GoldText")
+                        ?? FindTxt("Panel/ResourceRow/StoneText")
+                        ?? stoneText;
+        }
+        if (leftCostText == null)
+        {
+            leftCostText = FindTxt("Panel/Columns/LeftColumn/LeftCostText")
+                           ?? FindTxt("Panel/Columns/LeftColumn/GoldBar/LeftCostText")
+                           ?? FindTxt("Panel/ResourceRow/GoldPanel/LeftCostText");
+        }
+        rightCostValueText = rightCostValueText
+                             ?? FindTxt("Panel/Columns/RightColumn/RightCostText")
+                             ?? FindTxt("Panel/Columns/RightColumn/StoneBar/RightCostText");
+    }
+
+    void WireGoldPlusIfNeeded()
+    {
+        var plus = transform.Find("Panel/ResourceRow/GoldPanel/PlusButton")?.GetComponent<Button>();
+        if (plus == null) return;
+        plus.onClick.RemoveAllListeners();
+        plus.onClick.AddListener(OnClickGoldPlusUpgrade);
+    }
+
+    void OnClickGoldPlusUpgrade()
+    {
+        var talents = GetTalents();
+        int unlocked = TalentDefs.LeftUnlockedCount(talents);
+        if (unlocked >= TalentDefs.Left.Length) return;
+        OnClickLeft(unlocked);
+    }
+
     Image FindImg(string path)
     {
         var t = transform.Find(path);
@@ -1059,6 +1181,28 @@ public class TalentUI : MonoBehaviour
     {
         var t = transform.Find(path);
         return t != null ? t.GetComponent<Text>() : null;
+    }
+
+    Text FindDeepTextByParentName(string parentName, string childName)
+    {
+        if (string.IsNullOrEmpty(parentName)) return null;
+        var parent = FindDeepNamed(transform, parentName);
+        if (parent == null) return null;
+        var child = parent.Find(childName);
+        return child != null ? child.GetComponent<Text>() : null;
+    }
+
+    static Transform FindDeepNamed(Transform root, string name)
+    {
+        if (root == null) return null;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var c = root.GetChild(i);
+            if (c.name == name) return c;
+            var nested = FindDeepNamed(c, name);
+            if (nested != null) return nested;
+        }
+        return null;
     }
 
     static Image FindDeepImage(Transform root, string name)
@@ -1435,6 +1579,12 @@ public class TalentUI : MonoBehaviour
         EnsureSprite(ref sprRightLinkOff, "天赋_0017_技能链接-拷贝");
         EnsureSprite(ref sprRightLinkOn, "天赋_0019_技能链接");
         EnsureSprite(ref sprLock, "图层 3");
+        if (sprLock == null)
+            sprLock = Resources.Load<Sprite>("UI/Common/锁");
+#if UNITY_EDITOR
+        if (sprLock == null)
+            sprLock = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
+#endif
         EnsureSprite(ref sprArrow, "天赋_0015_箭头");
     }
 

@@ -82,13 +82,13 @@ public static class SkillNaming
     /// <summary>
     /// 技能特效套装解析（唯一入口）。优先级：
     /// 1. Heal（按 attackKit / skillType / id）
-    /// 2. SkillConfig.attackKit（非 None）
+    /// 2. SkillConfig.attackKit（非 None）；远程施法者的 MeleeSlash 改用 casterBasicKit
     /// 3. skillType=Projectile → Orb
-    /// 4. id 关键字兜底（thunder/magic/orb→Orb，bow/arrow→Bow）
-    /// 5. MeleeSlash
-    /// 禁止：用玩家武器套盖掉技能配置。
+    /// 4. id 关键字兜底
+    /// 5. casterBasicKit（弓/法）或 MeleeSlash
+    /// 禁止：用玩家武器套盖掉技能配置（仅佣兵远程纠正刀光误配）。
     /// </summary>
-    public static AttackVfxKit ResolveSkillVfxKit(SkillConfig cfg, string skillId = null)
+    public static AttackVfxKit ResolveSkillVfxKit(SkillConfig cfg, string skillId = null, AttackVfxKit casterBasicKit = AttackVfxKit.None)
     {
         string id = !string.IsNullOrEmpty(skillId) ? skillId
             : (cfg != null ? cfg.id : null);
@@ -96,11 +96,21 @@ public static class SkillNaming
         if (IsHealSkill(cfg, id))
             return AttackVfxKit.Heal;
 
+        bool rangedCaster = casterBasicKit == AttackVfxKit.Bow || casterBasicKit == AttackVfxKit.Orb;
+
         if (cfg != null && cfg.attackKit != AttackVfxKit.None)
-            return cfg.attackKit;
+        {
+            AttackVfxKit kit = cfg.attackKit;
+            // 弓手/法师技能表里常写死刀光，或法术误标成 Bow
+            if (rangedCaster && kit == AttackVfxKit.MeleeSlash)
+                return casterBasicKit;
+            if (casterBasicKit == AttackVfxKit.Orb && kit == AttackVfxKit.Bow)
+                return AttackVfxKit.Orb;
+            return kit;
+        }
 
         if (cfg != null && cfg.skillType == SkillSystem.SkillType.Projectile)
-            return AttackVfxKit.Orb;
+            return rangedCaster ? casterBasicKit : AttackVfxKit.Orb;
 
         if (!string.IsNullOrEmpty(id))
         {
@@ -113,6 +123,8 @@ public static class SkillNaming
                 return AttackVfxKit.Heal;
         }
 
+        if (rangedCaster)
+            return casterBasicKit;
         return AttackVfxKit.MeleeSlash;
     }
 

@@ -123,14 +123,14 @@ public class Hero : UnitBase
 
         // 主手优先，无主手则读副手（教程默认左手剑）
         float weaponRange = GameConfig.BASE_ATTACK_RANGE;
-        EquipTemplate weaponTpl = TryGetEquippedWeaponTemplate(bag);
-        if (weaponTpl != null)
-            weaponRange = GameConfig.ResolveWeaponAttackRange(weaponTpl);
+        EquipInstance weaponInst = TryGetEquippedWeaponInstance(bag);
+        if (weaponInst?.template != null)
+            weaponRange = WeaponCombatTable.GetAttackRangeWorld(WeaponCombatTable.ResolveKind(weaponInst));
         attr.SetAttr(AttrType.AttackRange, weaponRange);
-        if (weaponTpl != null)
+        if (weaponInst?.template != null)
         {
             float swordSpd = WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.WeaponKind.Sword);
-            float kindSpd = WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.ResolveKind(weaponTpl));
+            float kindSpd = WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.ResolveKind(weaponInst));
             float mul = swordSpd > 0.01f ? kindSpd / swordSpd : 1f;
             attr.SetAttr(AttrType.AttackSpeed, Mathf.Max(0.2f, attr.GetAttr(AttrType.AttackSpeed) * mul));
         }
@@ -179,22 +179,30 @@ public class Hero : UnitBase
 
     protected override AttackVfxKit GetAttackVfxKit()
     {
-        var tpl = GridBackpackSystem.Instance != null
-            ? TryGetEquippedWeaponTemplate(GridBackpackSystem.Instance)
-            : null;
-        return SkillNaming.KitFromWeaponKind(WeaponCombatTable.ResolveKind(tpl));
+        var bag = GridBackpackSystem.Instance;
+        if (bag == null) return AttackVfxKit.MeleeSlash;
+        var main = bag.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
+        if (main?.template != null && main.weaponType != WeaponType.None)
+            return SkillNaming.KitFromWeaponKind(WeaponCombatTable.ResolveKind(main));
+        var off = bag.GetEquippedInLogicalSlot(EquipSlotType.OffHand);
+        if (off?.template != null && off.weaponType != WeaponType.None)
+            return SkillNaming.KitFromWeaponKind(WeaponCombatTable.ResolveKind(off));
+        return AttackVfxKit.MeleeSlash;
     }
 
     /// <summary>攻击特效以逻辑主手武器为准；无主手则不看副手剑。</summary>
     static EquipTemplate TryGetEquippedWeaponTemplate(GridBackpackSystem bag)
+        => TryGetEquippedWeaponInstance(bag)?.template;
+
+    static EquipInstance TryGetEquippedWeaponInstance(GridBackpackSystem bag)
     {
         if (bag == null) return null;
         var main = bag.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
         if (main?.template != null && main.weaponType != WeaponType.None)
-            return main.template;
+            return main;
         var off = bag.GetEquippedInLogicalSlot(EquipSlotType.OffHand);
         if (off?.template != null && off.weaponType != WeaponType.None)
-            return off.template;
+            return off;
         return null;
     }
 
@@ -229,37 +237,15 @@ public class Hero : UnitBase
         _manualReleaseUntil = Time.time + GameConfig.HERO_MANUAL_RELEASE_HOLD;
     }
 
-    /// <summary>松摇杆：短冷却后再索敌，近战锁最近 / 远程锁场上最强。</summary>
+    /// <summary>松摇杆：短冷却后再索敌，一律锁最近怪（不按血量追远处）。</summary>
     public void BeginAutoAcquireOnRelease()
     {
         _manualMove = false;
         _manualHeld = false;
         _manualDir = Vector2.zero;
         _manualReleaseUntil = Time.time + GameConfig.HERO_MANUAL_RELEASE_HOLD;
-        _acquireLock = UsesMeleeBasicAttack()
-            ? FindNearestEnemyOnField()
-            : FindStrongestEnemyOnField();
+        _acquireLock = FindNearestEnemyOnField();
         _acquireUntil = Time.time + GameConfig.COMBO_WINDOW;
-    }
-
-    UnitBase FindStrongestEnemyOnField()
-    {
-        if (BattleManager.Instance?.monsters == null) return null;
-        UnitBase best = null;
-        float bestHp = -1f;
-        var list = BattleManager.Instance.monsters;
-        for (int i = 0; i < list.Count; i++)
-        {
-            var e = list[i];
-            if (e == null || e.isDead) continue;
-            float hp = e.attr != null ? e.attr.GetAttr(AttrType.MaxHp) : e.currentHp;
-            if (hp > bestHp)
-            {
-                bestHp = hp;
-                best = e;
-            }
-        }
-        return best;
     }
 
     protected override void AIUpdate()
@@ -272,7 +258,8 @@ public class Hero : UnitBase
 
         if (!_manualMove && TryHoldDuringAttack())
             return;
-        if (TryHoldDuringDamaged())
+        // 手动移动时不受击硬直打断走步（仍白闪）
+        if (!_manualMove && TryHoldDuringDamaged())
             return;
 
         // 摇杆优先：手动位移，期间不跑自动追敌（直接改坐标，避免 velocity 被 ApplyLaneY/SetWorldPosition 清掉）
@@ -306,11 +293,12 @@ public class Hero : UnitBase
                     float halfH = cam.orthographicSize;
                     float halfW = halfH * cam.aspect;
                     float camX = cam.transform.position.x;
-                    float margin = 1.5f;
-                    p.x = Mathf.Clamp(p.x, camX - halfW - margin, camX + halfW + margin);
+                    float margin = 0.3f;
+                    p.x = Mathf.Clamp(p.x, camX - halfW + margin, camX + halfW - margin);
                 }
             }
             GameConfig.SetWorldPosition(transform, p);
+            RefreshDepthSort();
 
             // 进距仍可普攻最近目标；有水平输入时朝向跟摇杆，不 FaceToward 抢向
             var near = FindNearestEnemyInDetectRange();
@@ -326,8 +314,12 @@ public class Hero : UnitBase
                 attackCd = GetAttackCooldown();
             }
 
+            // 按住摇杆时即使死区也保持走步，避免过中心闪站立
+            bool stickWalk = _manualHeld
+                || Mathf.Abs(vx) > 0.05f
+                || Mathf.Abs(_manualDir.y) > 0.08f;
             if (unitAnim != null)
-                unitAnim.SetMove(Mathf.Abs(vx) > 0.05f, facingDir);
+                unitAnim.SetMove(stickWalk, facingDir);
             return;
         }
 
@@ -353,13 +345,18 @@ public class Hero : UnitBase
             return;
         }
 
-        // 松手索敌窗口
+        // 松手索敌窗口：进距内有更近可打的怪时打断远锁
         if (_acquireLock != null)
         {
             if (_acquireLock.isDead || Time.time > _acquireUntil)
                 _acquireLock = null;
             else
+            {
+                var nearer = FindNearestEnemyOnField();
+                if (nearer != null && nearer != _acquireLock && IsInBasicAttackRange(nearer))
+                    _acquireLock = nearer;
                 target = _acquireLock;
+            }
         }
 
         bool alliesEngaged = HasAliveEnemyOnField();

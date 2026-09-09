@@ -181,7 +181,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     }
 
     /// <summary>从池取出实例并摆到世界坐标，不提前 Play（刀光须先改缩放/材质）。</summary>
-    GameObject AcquireVfxInstance(GameObject prefab, Vector3 position)
+    GameObject AcquireVfxInstance(GameObject prefab, Vector3 position, bool resetTint = true)
     {
         if (prefab == null) return null;
         GameObject go = null;
@@ -205,7 +205,9 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         go.transform.SetParent(transform, true);
         go.SetActive(true);
         SetVFXSortingLayer(go.transform);
-        ResetTintableColors(go);
+        // 刀光/共享特效需要复位；技能专属预制体保留原色，否则会整片变白
+        if (resetTint)
+            ResetTintableColors(go);
         StopAllParticles(go);
         return go;
     }
@@ -651,6 +653,36 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     }
 
     /// <summary>
+    /// 技能专属预制体：保留原色/粒子，不走刀光 PrepareSlash；可挂单位跟随。
+    /// </summary>
+    public GameObject PlaySkillPrefab(GameObject prefab, Vector3 position, int facingDir, float lifetime, Transform attach = null)
+    {
+        if (!_prefabsLoaded) AutoLoadPrefabs();
+        GameObject go = AcquireVfxInstance(prefab, position, resetTint: false);
+        if (go == null) return null;
+
+        go.transform.rotation = prefab.transform.rotation;
+        Vector3 baseScale = prefab.transform.localScale;
+        go.transform.localScale = new Vector3(
+            Mathf.Abs(baseScale.x) * (facingDir < 0 ? -1f : 1f),
+            baseScale.y,
+            baseScale.z);
+
+        SetVFXSortingLayer(go.transform);
+
+        if (attach != null)
+        {
+            Vector3 worldPos = position;
+            go.transform.SetParent(attach, true);
+            go.transform.position = worldPos;
+        }
+
+        PlayAllParticles(go);
+        ScheduleRelease(go, lifetime);
+        return go;
+    }
+
+    /// <summary>
     /// 所有世界特效唯一生成入口：取池 → 世界坐标 → 2D 朝向 →（可选）修粒子 → 染色复位 → Play → 回收。
     /// 禁止在调用方再手搓 Instantiate + Rotate Y。
     /// </summary>
@@ -658,7 +690,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         float scaleMul = 1f, bool prepareParticles = true)
     {
         if (!_prefabsLoaded) AutoLoadPrefabs();
-        GameObject go = AcquireVfxInstance(prefab, position);
+        GameObject go = AcquireVfxInstance(prefab, position, resetTint: true);
         if (go == null) return null;
 
         Vector3 baseScale = prefab.transform.localScale;

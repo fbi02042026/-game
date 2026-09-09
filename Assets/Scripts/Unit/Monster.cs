@@ -268,6 +268,9 @@ public class Monster : UnitBase
     private Vector3 _enterTargetPos;
     private float _enterSpeed = 1.6f;
 
+    /// <summary>是否仍在从屏外走进交战点。</summary>
+    public bool IsEnteringMap => _isEnteringMap;
+
     /// <summary>从地图边缘缓步走向交战点；faceDir 为入场朝向（左进场朝右=1，右进场朝左=-1）</summary>
     public void BeginMapEnter(Vector3 engagePos, float speed, int faceDir = -1)
     {
@@ -287,23 +290,40 @@ public class Monster : UnitBase
 
     protected override void AIUpdate()
     {
-        // 入场期间只走到交战点，禁止屏外开战（避免未见怪先挨子弹）
+        // 入场：默认剧情冻结时暂停；仅 AllowMonsterMapEnter 窗口可继续走进
         if (_isEnteringMap)
         {
-            if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
+            var bmEnter = BattleManager.Instance;
+            bool canEnter = bmEnter == null
+                || bmEnter.UnitsCanAct
+                || bmEnter.AllowMonsterMapEnter;
+            if (!canEnter)
             {
                 if (rb != null) rb.velocity = Vector2.zero;
+                if (unitAnim != null) unitAnim.SetMove(false, facingDir);
                 ApplyLaneY(Time.deltaTime);
                 return;
             }
 
             float dx = _enterTargetPos.x - MoveRoot.position.x;
-            if (Mathf.Abs(dx) <= 0.08f)
+            // 进场途中若已贴近英雄，提前结束进场并开打，避免穿身跑到对面
+            if (Hero.Instance != null && !Hero.Instance.isDead
+                && bmEnter != null && bmEnter.UnitsCanAct && !bmEnter.AllowMonsterMapEnter)
+            {
+                float distHero = Mathf.Abs(GetCombatX(this) - GetCombatX(Hero.Instance));
+                if (distHero <= GetEffectiveAttackRange() + 0.4f)
+                {
+                    _isEnteringMap = false;
+                    SyncLaneYFromWorld();
+                    target = Hero.Instance;
+                    FaceToward(Hero.Instance);
+                }
+            }
+            if (_isEnteringMap && Mathf.Abs(dx) <= 0.08f)
             {
                 GameConfig.SetWorldPosition(MoveRoot, new Vector3(_enterTargetPos.x, FootY, MoveRoot.position.z));
                 _isEnteringMap = false;
                 SyncLaneYFromWorld();
-                // 进场结束立刻索敌并朝向，避免继续朝默认方向冲
                 UnitBase enterFoe = FindNearestEnemyOnField();
                 if (enterFoe == null && Hero.Instance != null && !Hero.Instance.isDead)
                     enterFoe = Hero.Instance;
@@ -312,8 +332,16 @@ public class Monster : UnitBase
                     target = enterFoe;
                     FaceToward(enterFoe);
                 }
+                // 进场结束若仍在剧情窗：站住等「！」再开打
+                if (bmEnter != null && (!bmEnter.UnitsCanAct || bmEnter.AllowMonsterMapEnter))
+                {
+                    if (rb != null) rb.velocity = Vector2.zero;
+                    if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+                    ApplyLaneY(Time.deltaTime);
+                    return;
+                }
             }
-            else
+            else if (_isEnteringMap)
             {
                 int enterFace = _enterTargetPos.x >= MoveRoot.position.x ? 1 : -1;
                 facingDir = enterFace;
@@ -404,7 +432,8 @@ public class Monster : UnitBase
             ApplyLaneY(Time.deltaTime);
             return;
         }
-        if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
+        if (BattleManager.Instance != null
+            && (!BattleManager.Instance.UnitsCanAct || BattleManager.Instance.AllowMonsterMapEnter))
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
@@ -423,16 +452,26 @@ public class Monster : UnitBase
         float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
         float attackRange = GetEffectiveAttackRange();
         bool melee = UsesMeleeBasicAttack();
-        FaceToward(target);
-        // 近战并到目标水平对面再砍，避免上下错位刀光发飘
+        // 远程：进入后加离开迟滞，避免玩家微移就追着滑步
+        const float rangedLeaveSlack = 0.4f;
+        bool inHoldRange = melee
+            ? IsInBasicAttackRange(target)
+            : distance <= attackRange + rangedLeaveSlack;
+
         if (melee)
+        {
+            FaceToward(target);
             AdjustLaneTowardTarget(target, Time.deltaTime);
+        }
 
         bool isMoving = false;
-        if (IsInBasicAttackRange(target))
+        if (inHoldRange)
         {
             if (rb != null) rb.velocity = Vector2.zero;
-            if (attackCd <= 0 && (unitAnim == null || !unitAnim.InAttackLock))
+            if (!melee)
+                FaceToward(target);
+            if (attackCd <= 0 && (unitAnim == null || !unitAnim.InAttackLock)
+                && (melee || IsInBasicAttackRange(target) || distance <= attackRange))
             {
                 Attack(target);
                 attackCd = GetAttackCooldown();
@@ -440,12 +479,12 @@ public class Monster : UnitBase
         }
         else if (melee && distance <= attackRange)
         {
-            // X 齐、车道未齐：停 X 只并道
             if (rb != null) rb.velocity = Vector2.zero;
             isMoving = true;
         }
         else
         {
+            FaceToward(target);
             float spd = attr.GetAttr(AttrType.MoveSpeed);
             if (rb != null) rb.velocity = new Vector2(facingDir * spd, rb.velocity.y);
             isMoving = true;
@@ -457,7 +496,8 @@ public class Monster : UnitBase
 
     void AdvanceTowardEnemies()
     {
-        if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
+        if (BattleManager.Instance != null
+            && (!BattleManager.Instance.UnitsCanAct || BattleManager.Instance.AllowMonsterMapEnter))
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
@@ -481,7 +521,9 @@ public class Monster : UnitBase
         target = foe;
         float dist = Mathf.Abs(GetCombatX(foe) - GetCombatX(this));
         float attackRange = GetEffectiveAttackRange();
-        if (dist <= attackRange)
+        // 与 RunForcedCombat 一致：远程用离开迟滞，避免边界抖步
+        float hold = UsesMeleeBasicAttack() ? attackRange : attackRange + 0.4f;
+        if (dist <= hold)
         {
             RunForcedCombat();
             return;
@@ -650,13 +692,13 @@ public class Monster : UnitBase
             {
                 float tpl = GameConfig.NormalizeAttackRange(template.attackRange);
                 if (MonsterAttackStyleTable.IsRanged(_attackStyle))
-                    atkRange = Mathf.Max(atkRange, tpl);
+                    atkRange = Mathf.Max(atkRange, tpl * GameConfig.MONSTER_RANGED_RANGE_MUL);
                 else
-                    atkRange = tpl;
+                    atkRange = tpl * GameConfig.MONSTER_MELEE_RANGE_MUL;
             }
-            // 近战钳制：禁止表配过大导致站远处开砍
+            // 近战钳制：不超过单手剑，避免比玩家砍得更远
             if (!MonsterAttackStyleTable.IsRanged(_attackStyle))
-                atkRange = Mathf.Min(atkRange, GameConfig.RangePolearm);
+                atkRange = Mathf.Min(atkRange, GameConfig.RangeSword * GameConfig.MONSTER_MELEE_RANGE_MUL);
         }
         attr.SetAttr(AttrType.MoveSpeed, moveSpd);
         // 非 Boss：移速小幅岔开，减轻同相位叠走
@@ -811,19 +853,23 @@ public class Monster : UnitBase
     {
         if (_stackLabelRoot == null || _stackLabel == null) return;
 
+        Transform body = GetBodyTransform() != null ? GetBodyTransform() : transform;
         float labelY = 0.85f;
         if (sr != null && sr.sprite != null)
         {
-            var topLocal = transform.InverseTransformPoint(sr.bounds.max);
+            var topLocal = body.InverseTransformPoint(sr.bounds.max);
             labelY = Mathf.Max(labelY, topLocal.y + 0.12f);
         }
         else if (_worldHpBar != null)
         {
-            labelY = transform.InverseTransformPoint(MoveRoot.position).y + 0.14f;
+            labelY = body.InverseTransformPoint(MoveRoot.position).y + 0.14f;
         }
 
-        float rootAbs = Mathf.Max(0.01f, Mathf.Abs(transform.lossyScale.y));
+        float rootAbs = Mathf.Max(0.01f, Mathf.Abs(body.lossyScale.y));
         _stackLabelRoot.localPosition = new Vector3(0f, labelY / rootAbs, 0f);
+        // 防父节点万一带负 scale 时仍反字
+        float fixX = body.lossyScale.x < 0f ? -1f : 1f;
+        _stackLabelRoot.localScale = new Vector3(fixX, 1f, 1f);
         float charSize = StackLabelCharSizeBase * StackLabelSizeScale / rootAbs;
         _stackLabel.characterSize = charSize;
 
@@ -862,7 +908,9 @@ public class Monster : UnitBase
         _stackOutlineRenderers = null;
 
         _stackLabelRoot = new GameObject("StackCount").transform;
-        _stackLabelRoot.SetParent(transform, false);
+        // 挂 Body（不参与 Visual 镜像），避免朝左时 ×N 反字
+        Transform labelParent = GetBodyTransform() != null ? GetBodyTransform() : transform;
+        _stackLabelRoot.SetParent(labelParent, false);
 
         _stackOutlineLabels = new TextMesh[StackOutlineDirs.Length];
         _stackOutlineRenderers = new MeshRenderer[StackOutlineDirs.Length];
@@ -1091,19 +1139,22 @@ public class Monster : UnitBase
         shadowSr.sprite = shadowSp;
         shadowSr.color = new Color(0f, 0f, 0f, 0.35f);
         shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        shadowSr.sortingOrder = GameConfig.SORT_UNIT - 5;
+        // 必须低于躯干/SPUM 部件，避免阴影盖在怪脚上
+        shadowSr.sortingOrder = -20;
         shadowSr.sharedMaterial = GetFootShadowMaterial();
 
         float targetWorldW = 0.9f;
         if (sr != null && sr.sprite != null)
             targetWorldW = Mathf.Max(0.45f, sr.bounds.size.x * 0.56f);
+        // 整体再缩小 20%
+        targetWorldW *= 0.8f;
         float nativeW = shadowSp != null ? Mathf.Max(0.01f, shadowSp.bounds.size.x) : 1f;
         float lossyX = Mathf.Max(0.001f, Mathf.Abs(body.lossyScale.x));
         float sx = targetWorldW / (nativeW * lossyX);
-        // 本地：脚底略下；椭圆扁（除以阴影 Sprite 原生宽，避免 Shadow.png 爆大）
-        shadowSr.transform.localPosition = new Vector3(0f, -0.02f, 0f);
+        // 本地 Y=0.02；椭圆再压扁 20%（0.35→0.28）
+        shadowSr.transform.localPosition = new Vector3(0f, 0.02f, 0f);
         shadowSr.transform.localRotation = Quaternion.identity;
-        shadowSr.transform.localScale = new Vector3(sx, sx * 0.35f, 1f);
+        shadowSr.transform.localScale = new Vector3(sx, sx * 0.28f, 1f);
     }
 
     static Material _footShadowMat;
@@ -1204,7 +1255,8 @@ public class Monster : UnitBase
     protected override void Attack(UnitBase target)
     {
         if (_skillTelegraphing) return;
-        if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
+        if (BattleManager.Instance != null
+            && (!BattleManager.Instance.UnitsCanAct || BattleManager.Instance.AllowMonsterMapEnter))
             return;
 
         _swingStyle = ResolveSwingStyle(target);
@@ -1480,6 +1532,9 @@ public class Monster : UnitBase
     /// <summary>叠怪数字等仍用旧 Sprite 血条时才需要；现用 MonsterHealthBar 时可忽略。</summary>
     protected void LateUpdate()
     {
+        if (_stackLabelRoot != null && _stackLabelRoot.gameObject.activeSelf)
+            RefreshStackLabelLayout();
+
         if (_worldHpBar != null) return;
         if (_hpBarFill != null && _hpBarRoot != null && _hpBarRoot.gameObject.activeSelf)
         {

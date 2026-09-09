@@ -109,7 +109,9 @@ public class CharacterUI : MonoBehaviour, ITownPage
         // 页可能比背包系统更早预载，Show 时再补订一次
         WireBagEvents();
         RefreshAll();
-        TownHeroCostumePreview.EnsureOn(this)?.Show();
+        // SPUM 仅离屏换装；Portrait 用玩家立绘
+        TownHeroCostumePreview.EnsureOn(this)?.EnsureOffscreenCostume();
+        RefreshPlayerPortrait();
         TutorialHintUI.Ensure().Hide();
     }
 
@@ -128,10 +130,84 @@ public class CharacterUI : MonoBehaviour, ITownPage
     public void RefreshAll()
     {
         RefreshIdentity();
+        RefreshPlayerPortrait();
         RefreshCarriedSkill();
         RefreshAttrs();
         RefreshBag();
-        TownHeroCostumePreview.EnsureOn(this)?.RefreshCostume();
+        TownHeroCostumePreview.EnsureOn(this)?.EnsureOffscreenCostume();
+    }
+
+    void RefreshPlayerPortrait()
+    {
+        if (portraitImage == null)
+            portraitImage = transform.Find("Content/Stage/Portrait")?.GetComponent<Image>();
+        if (portraitImage == null) return;
+
+        // 清掉历史 SpumPreview
+        var junk = portraitImage.transform.Find("SpumPreview");
+        if (junk != null)
+            Destroy(junk.gameObject);
+
+        MercPortraitSprites.ClearCache();
+        var sp = MercPortraitSprites.GetStand("player");
+        if (sp != null)
+            SetPortrait(sp, _portraitFlipped);
+        else
+            portraitImage.enabled = true;
+    }
+
+    void RefreshCarriedSkill()
+    {
+        EnsureCarriedSkillIcon();
+        if (carriedSkillIcon == null) return;
+        string id = SaveSystem.Instance?.Data?.selectedPlayerSkillId;
+        if (string.IsNullOrEmpty(id))
+            id = PlayerSkillDefs.All != null && PlayerSkillDefs.All.Length > 0 ? PlayerSkillDefs.All[0].id : null;
+        Sprite sp = LoadPlayerSkillIcon(id);
+        if (sp != null)
+        {
+            carriedSkillIcon.sprite = sp;
+            carriedSkillIcon.enabled = true;
+            carriedSkillIcon.preserveAspect = true;
+            carriedSkillIcon.color = Color.white;
+        }
+        carriedSkillIcon.gameObject.SetActive(true);
+    }
+
+    static Sprite LoadPlayerSkillIcon(string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return null;
+        var sp = Resources.Load<Sprite>("Icons/SkillIcon/" + skillId);
+        if (sp != null) return sp;
+        var all = Resources.LoadAll<Sprite>("Icons/SkillIcon/" + skillId);
+        if (all != null && all.Length > 0) return all[0];
+#if UNITY_EDITOR
+        string artPath = "Assets/Art/UI/Icons/玩家SkillIcon/" + skillId + ".png";
+        sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(artPath);
+        if (sp != null) return sp;
+#endif
+        return null;
+    }
+
+    /// <summary>
+    /// 技能图画在 LeftSkillButton 自身 Image 上；子节点 Image 是装饰，禁止隐藏/禁止新建 Icon。
+    /// </summary>
+    void EnsureCarriedSkillIcon()
+    {
+        if (leftSkillButton == null) return;
+
+        // 清掉误生成的 Icon
+        var badIcon = leftSkillButton.transform.Find("Icon");
+        if (badIcon != null)
+            Destroy(badIcon.gameObject);
+
+        // 装饰图保持显示
+        var deco = leftSkillButton.transform.Find("Image");
+        if (deco != null)
+            deco.gameObject.SetActive(true);
+
+        carriedSkillIcon = leftSkillButton.targetGraphic as Image
+                           ?? leftSkillButton.GetComponent<Image>();
     }
 
     void WireBagEvents()
@@ -148,7 +224,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
         if (!gameObject.activeInHierarchy) return;
         RefreshBag();
         RefreshAttrs();
-        TownHeroCostumePreview.EnsureOn(this)?.RefreshCostume();
+        TownHeroCostumePreview.EnsureOn(this)?.EnsureOffscreenCostume();
     }
 
     void RefreshIdentity()
@@ -157,62 +233,6 @@ public class CharacterUI : MonoBehaviour, ITownPage
             titleText.text = PlayerIdentity.DisplayName;
         if (titleSubText != null)
             titleSubText.text = PlayerIdentity.Title;
-    }
-
-    void RefreshCarriedSkill()
-    {
-        EnsureCarriedSkillIcon();
-        if (carriedSkillIcon == null) return;
-        string id = SaveSystem.Instance?.Data?.selectedPlayerSkillId;
-        if (string.IsNullOrEmpty(id))
-            id = PlayerSkillDefs.All != null && PlayerSkillDefs.All.Length > 0 ? PlayerSkillDefs.All[0].id : null;
-        Sprite sp = LoadPlayerSkillIcon(id);
-        carriedSkillIcon.sprite = sp;
-        carriedSkillIcon.enabled = sp != null;
-        carriedSkillIcon.preserveAspect = true;
-        carriedSkillIcon.color = Color.white;
-        carriedSkillIcon.gameObject.SetActive(true);
-    }
-
-    static Sprite LoadPlayerSkillIcon(string skillId)
-    {
-        if (string.IsNullOrEmpty(skillId)) return null;
-        var sp = Resources.Load<Sprite>("Icons/SkillIcon/" + skillId);
-        if (sp != null) return sp;
-        var all = Resources.LoadAll<Sprite>("Icons/SkillIcon/" + skillId);
-        if (all != null && all.Length > 0) return all[0];
-        return null;
-    }
-
-    void EnsureCarriedSkillIcon()
-    {
-        if (carriedSkillIcon != null) return;
-        if (leftSkillButton == null) return;
-
-        string[] names = { "Icon", "SkillIcon" };
-        for (int i = 0; i < names.Length; i++)
-        {
-            var iconTf = leftSkillButton.transform.Find(names[i]);
-            if (iconTf == null) continue;
-            carriedSkillIcon = iconTf.GetComponent<Image>();
-            if (carriedSkillIcon != null) return;
-        }
-
-        var deco = leftSkillButton.transform.Find("Image");
-        if (deco != null)
-            deco.gameObject.SetActive(false);
-
-        var go = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        go.transform.SetParent(leftSkillButton.transform, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(10f, 22f);
-        rt.offsetMax = new Vector2(-10f, -30f);
-        carriedSkillIcon = go.GetComponent<Image>();
-        carriedSkillIcon.raycastTarget = false;
-        var label = leftSkillButton.transform.Find("Label");
-        if (label != null) label.SetAsLastSibling();
     }
 
     /// <summary>
@@ -272,47 +292,108 @@ public class CharacterUI : MonoBehaviour, ITownPage
     {
         float hp = GameConfig.BASE_HP, atk = GameConfig.BASE_ATTACK, def = GameConfig.BASE_DEFENSE;
         float spd = GameConfig.BASE_ATTACK_SPEED, crit = GameConfig.BASE_CRIT_RATE, resist = 0f;
+        float talAtk = 0f, talHp = 0f, talDef = 0f, talCrit = 0f, talSpd = 0f;
+        SumTalentAttrBonuses(ref talAtk, ref talHp, ref talDef, ref talCrit, ref talSpd);
         try
         {
+            AttrSystem src = null;
             var hero = Hero.Instance;
             if (hero != null && hero.attr != null)
             {
-                hp = hero.attr.GetAttr(AttrType.MaxHp);
-                atk = hero.attr.GetAttr(AttrType.Attack);
-                def = hero.attr.GetAttr(AttrType.Defense);
-                spd = hero.attr.GetAttr(AttrType.AttackSpeed);
-                crit = hero.attr.GetAttr(AttrType.CritRate);
+                src = hero.attr;
             }
             else
             {
-                // 城镇无 Hero 时用天赋汇总估算展示
-                int leftN = TalentDefs.LeftUnlockedCount(SaveSystem.Instance?.Data?.talents);
-                for (int i = 0; i < leftN; i++)
-                {
-                    var e = TalentDefs.Left[i].effect;
-                    switch (e.kind)
-                    {
-                        case TalentDefs.AttrKind.Attack: atk += e.value; break;
-                        case TalentDefs.AttrKind.Hp: hp += e.value; break;
-                        case TalentDefs.AttrKind.Defense: def += e.value; break;
-                        case TalentDefs.AttrKind.CritRate: crit += e.value; break;
-                        case TalentDefs.AttrKind.AtkSpeed: spd += e.value; break;
-                    }
-                }
+                src = new AttrSystem();
+                var bonuses = EquipStatRollup.BuildBonusList(GridBackpackSystem.Instance);
+                src.RecalcAllAttr(bonuses);
+            }
+
+            if (src != null)
+            {
+                hp = src.GetAttr(AttrType.MaxHp);
+                atk = src.GetAttr(AttrType.Attack);
+                def = src.GetAttr(AttrType.Defense);
+                spd = src.GetAttr(AttrType.AttackSpeed);
+                crit = src.GetAttr(AttrType.CritRate);
+                resist = 0f;
             }
         }
         catch { }
 
         float critDisplay = crit;
-        if (Hero.Instance != null && Hero.Instance.attr != null && critDisplay <= 1.5f)
+        if (critDisplay <= 1.5f)
             critDisplay *= 100f;
 
-        if (attrHpText != null) attrHpText.text = Mathf.RoundToInt(hp).ToString("N0");
-        if (attrAtkText != null) attrAtkText.text = Mathf.RoundToInt(atk).ToString("N0");
-        if (attrDefText != null) attrDefText.text = Mathf.RoundToInt(def).ToString("N0");
-        if (attrSpdText != null) attrSpdText.text = spd.ToString("0.##");
-        if (attrCritText != null) attrCritText.text = critDisplay.ToString("0.#") + "%";
+        // 天赋加成在后面用 +N 标出（与天赋页汇总一致）
+        if (attrHpText != null) attrHpText.text = FormatAttrWithTalent(hp, talHp, roundInt: true);
+        if (attrAtkText != null) attrAtkText.text = FormatAttrWithTalent(atk, talAtk, roundInt: true);
+        if (attrDefText != null) attrDefText.text = FormatAttrWithTalent(def, talDef, roundInt: true);
+        if (attrSpdText != null) attrSpdText.text = FormatAttrWithTalent(spd, talSpd, roundInt: false, decimals: "0.##");
+        if (attrCritText != null)
+        {
+            string core = FormatAttrWithTalent(critDisplay, talCrit, roundInt: false, decimals: "0.#");
+            attrCritText.text = core.EndsWith("%") ? core : core + "%";
+        }
         if (attrResistText != null) attrResistText.text = resist.ToString("0.#") + "%";
+    }
+
+    static void SumTalentAttrBonuses(ref float atk, ref float hp, ref float def, ref float crit, ref float spd)
+    {
+        var talents = SaveSystem.Instance?.Data?.talents;
+        if (talents == null) return;
+        int leftN = TalentDefs.LeftUnlockedCount(talents);
+        for (int i = 0; i < leftN; i++)
+        {
+            var e = TalentDefs.Left[i].effect;
+            if (e == null) continue;
+            switch (e.kind)
+            {
+                case TalentDefs.AttrKind.Attack: atk += e.value; break;
+                case TalentDefs.AttrKind.Hp: hp += e.value; break;
+                case TalentDefs.AttrKind.Defense: def += e.value; break;
+                case TalentDefs.AttrKind.CritRate: crit += e.value; break;
+                case TalentDefs.AttrKind.AtkSpeed: spd += e.value; break;
+            }
+        }
+        if (TalentDefs.RightExtra != null &&
+            talents.TryGetValue(TalentDefs.RightExtra.id, out int c1) && c1 > 0)
+            AccumulateChoiceTalent(TalentDefs.RightExtra.options, c1, ref atk, ref hp, ref def, ref crit, ref spd);
+        for (int i = 0; i < TalentDefs.Right.Length; i++)
+        {
+            if (!talents.TryGetValue(TalentDefs.Right[i].id, out int opt) || opt <= 0) continue;
+            AccumulateChoiceTalent(TalentDefs.Right[i].options, opt, ref atk, ref hp, ref def, ref crit, ref spd);
+        }
+    }
+
+    static void AccumulateChoiceTalent(TalentDefs.ChoiceOption[] options, int opt,
+        ref float atk, ref float hp, ref float def, ref float crit, ref float spd)
+    {
+        if (options == null || opt <= 0 || opt > options.Length) return;
+        var e = options[opt - 1].effect;
+        if (e == null) return;
+        switch (e.kind)
+        {
+            case TalentDefs.AttrKind.Attack: atk += e.value; break;
+            case TalentDefs.AttrKind.Hp: hp += e.value; break;
+            case TalentDefs.AttrKind.Defense: def += e.value; break;
+            case TalentDefs.AttrKind.CritRate: crit += e.value; break;
+            case TalentDefs.AttrKind.AtkSpeed: spd += e.value; break;
+        }
+    }
+
+    /// <summary>总数已含天赋时：显示 base+bonus（如 120+3）；无加成只显示总数。</summary>
+    static string FormatAttrWithTalent(float total, float talentBonus, bool roundInt, string decimals = "0")
+    {
+        if (Mathf.Abs(talentBonus) < 0.0001f)
+        {
+            if (roundInt) return Mathf.RoundToInt(total).ToString("N0");
+            return total.ToString(decimals);
+        }
+        float baseVal = total - talentBonus;
+        if (roundInt)
+            return Mathf.RoundToInt(baseVal).ToString("N0") + "+" + Mathf.RoundToInt(talentBonus).ToString();
+        return baseVal.ToString(decimals) + "+" + talentBonus.ToString(decimals);
     }
 
     void RefreshBag()
@@ -363,20 +444,28 @@ public class CharacterUI : MonoBehaviour, ITownPage
 
     public void OpenTalent()
     {
-        if (TalentUI.Instance != null)
+        TalentUI ui = TalentUI.Instance;
+        if (ui == null)
         {
-            TalentUI.Instance.Show();
-            return;
+            var prefab = Resources.Load<GameObject>("Prefabs/Talent/TalentUI");
+            if (prefab == null)
+            {
+                UIManager.Instance?.ShowToast("天赋界面未就绪");
+                return;
+            }
+            var go = Instantiate(prefab);
+            go.name = "TalentUI";
+            ui = go.GetComponent<TalentUI>();
         }
-        var prefab = Resources.Load<GameObject>("Prefabs/Talent/TalentUI");
-        if (prefab == null)
+        if (ui == null) return;
+        if (ui.onClosed == null) ui.onClosed = new UnityEngine.Events.UnityEvent();
+        ui.onClosed.RemoveAllListeners();
+        ui.onClosed.AddListener(() =>
         {
-            UIManager.Instance?.ShowToast("天赋界面未就绪");
-            return;
-        }
-        var go = Instantiate(prefab);
-        go.name = "TalentUI";
-        go.GetComponent<TalentUI>()?.Show();
+            if (gameObject.activeInHierarchy)
+                RefreshAttrs();
+        });
+        ui.Show();
     }
 
     public void OpenSkillSelect()
@@ -402,17 +491,14 @@ public class CharacterUI : MonoBehaviour, ITownPage
         portraitImage.GetComponent<PortraitIdleMotion>()?.RefreshBase();
     }
 
-    /// <summary>立绘用自身像素大小，仅翻转</summary>
+    /// <summary>立绘保持预制体框尺寸，只换 Sprite，禁止 SetNativeSize 撑破布局。</summary>
     public void SetPortrait(Sprite sprite, bool flip = false)
     {
         if (portraitImage == null) return;
         portraitImage.sprite = sprite;
         portraitImage.preserveAspect = true;
         if (sprite != null)
-        {
             portraitImage.enabled = true;
-            portraitImage.SetNativeSize();
-        }
         _portraitFlipped = flip;
         var s = portraitImage.rectTransform.localScale;
         float ax = Mathf.Abs(s.x) < 0.01f ? 1f : Mathf.Abs(s.x);

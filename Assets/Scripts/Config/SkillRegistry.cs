@@ -195,31 +195,60 @@ public class SkillRegistry : Singleton<SkillRegistry>
 
     /// <summary>
     /// 播放技能特效（唯一对外入口）。规则固定：
-    /// 1) 专属 prefab（配置拖入 或 VFX/Skills/.../{id}）
-    /// 2) 否则 SkillNaming.ResolveSkillVfxKit → 共用套
-    /// 不会再用玩家武器套盖掉技能。
+    /// 1) 专属 prefab（配置拖入 或 VFX/Skills/.../{id}）——远程施法者跳过近战 slash 专属，改走弹道
+    /// 2) 否则 SkillNaming.ResolveSkillVfxKit → 共用套；Bow/Orb 从 from→to 飞行
     /// </summary>
     public void PlaySkillVfx(string skillId, Vector3 pos, bool isAllyCaster, int facingDir = 1, Transform attach = null)
+    {
+        PlaySkillVfx(skillId, pos, pos, isAllyCaster, facingDir, attach, AttackVfxKit.None);
+    }
+
+    /// <param name="fromPos">弹道起点（施法者开火点）</param>
+    /// <param name="toPos">弹道/命中点</param>
+    /// <param name="casterBasicKit">施法者普攻套；远程用来纠正物攻技能误配的刀光</param>
+    public void PlaySkillVfx(
+        string skillId,
+        Vector3 fromPos,
+        Vector3 toPos,
+        bool isAllyCaster,
+        int facingDir = 1,
+        Transform attach = null,
+        AttackVfxKit casterBasicKit = AttackVfxKit.None)
     {
         if (string.IsNullOrEmpty(skillId)) return;
         var cfg = Get(skillId);
         VfxFaction faction = isAllyCaster ? VfxFaction.Ally : VfxFaction.Enemy;
+        bool rangedCaster = casterBasicKit == AttackVfxKit.Bow || casterBasicKit == AttackVfxKit.Orb;
+
+        AttackVfxKit kit = SkillNaming.ResolveSkillVfxKit(cfg, skillId, casterBasicKit);
 
         GameObject prefab = GetSkillVfxPrefab(skillId);
-        if (prefab != null)
+        // 远程单位放物攻技能时：专属多为近战 slash（挂在自身），跳过改走弓/法球弹道
+        if (prefab != null && !(rangedCaster && kit != AttackVfxKit.Heal))
         {
+            float life = 2.5f;
+            if (skillId != null && skillId.IndexOf("shield", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                life = 6.2f;
+            else if (cfg != null && cfg.duration > 0.5f)
+                life = Mathf.Max(2.5f, cfg.duration + 0.2f);
+
             if (BattleVFXSystem.Instance != null)
-                BattleVFXSystem.Instance.PlayWorldPrefab(prefab, pos, 2.5f, facingDir);
+                BattleVFXSystem.Instance.PlaySkillPrefab(prefab, toPos, facingDir, life, attach);
             else
             {
-                GameObject go = Object.Instantiate(prefab, pos, Quaternion.identity);
+                GameObject go = Object.Instantiate(prefab, toPos, prefab.transform.rotation);
+                if (attach != null)
+                {
+                    go.transform.SetParent(attach, true);
+                    go.transform.position = toPos;
+                }
                 if (facingDir < 0)
                 {
                     var s = go.transform.localScale;
                     s.x = -Mathf.Abs(s.x);
                     go.transform.localScale = s;
                 }
-                Object.Destroy(go, 2.5f);
+                Object.Destroy(go, life);
             }
             return;
         }
@@ -238,10 +267,18 @@ public class SkillRegistry : Singleton<SkillRegistry>
                 "本次用 ResolveSkillVfxKit 兜底，可能不是预期效果。");
         }
 
-        AttackVfxKit kit = SkillNaming.ResolveSkillVfxKit(cfg, skillId);
         if (kit == AttackVfxKit.Heal)
-            BattleVFXSystem.Instance.PlayHeal(pos, faction);
-        else
-            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, pos, pos, facingDir);
+        {
+            BattleVFXSystem.Instance.PlayHeal(toPos, faction);
+            return;
+        }
+
+        if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
+        {
+            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, fromPos, toPos, facingDir, attach);
+            return;
+        }
+
+        BattleVFXSystem.Instance.PlayAttackKit(kit, faction, fromPos, toPos, facingDir, attach);
     }
 }

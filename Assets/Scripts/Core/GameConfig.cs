@@ -15,8 +15,12 @@ public static class GameConfig
     /// <summary>组织全称。主界面标题、图鉴条目等统一用这个，不要再写「冒险者公会」。</summary>
     public const string GUILD_NAME = "皇家冒险者公会";
 
-    /// <summary>战斗地面单位可在站立线上下偏移的半高（玩家/怪统一）。</summary>
+    /// <summary>战斗地面单位可在站立线上下偏移的半高（对称参考；实际钳制用 MIN/MAX）。</summary>
     public const float BATTLE_LANE_HALF = 0.855f;
+    /// <summary>站立线上方可行走半高（相对 HALF 再缩约 10%）。</summary>
+    public const float BATTLE_LANE_MAX = BATTLE_LANE_HALF * 0.9025f;
+    /// <summary>站立线下方可行走半高（相对 HALF 再缩约 45%，取负）。</summary>
+    public const float BATTLE_LANE_MIN = -BATTLE_LANE_HALF * 0.54675f;
     public const float BATTLE_LANE_MOVE_SPEED = 1.35f;
     /// <summary>摇杆左右移速倍率（相对 GetCombatMoveSpeed）。</summary>
     public const float HERO_MANUAL_MOVE_X_MUL = 1.8f;
@@ -245,38 +249,30 @@ public static class GameConfig
         t.SetParent(root, true);
     }
 
-    /// <summary>统一写入战斗单位排序（Default / 15）</summary>
+    /// <summary>
+    /// 单位前后遮挡：只改 SortingGroup 的 sortingOrder（随世界 Y）。
+    /// 禁止改 SPUM/角色子 Sprite 的 sortingOrder、sortingLayer——部件层级全留预制体。
+    /// </summary>
     public static void ApplyUnitSorting(Transform root)
     {
         if (root == null) return;
-        var sg = root.GetComponent<UnityEngine.Rendering.SortingGroup>();
-        if (sg == null) sg = root.GetComponentInChildren<UnityEngine.Rendering.SortingGroup>();
-        if (sg != null)
-        {
-            sg.sortingLayerName = BATTLE_SORTING_LAYER;
-            sg.sortingOrder = SORT_UNIT;
-        }
-        var srs = root.GetComponentsInChildren<SpriteRenderer>(true);
-        for (int i = 0; i < srs.Length; i++)
-        {
-            // 血条节点保持预制体层级，避免被压到看不见
-            if (IsHpBarSprite(srs[i])) continue;
-            srs[i].sortingLayerName = BATTLE_SORTING_LAYER;
-            if (srs[i].sortingOrder < SORT_UNIT || srs[i].sortingOrder > SORT_VFX)
-                srs[i].sortingOrder = SORT_UNIT;
-        }
+        ApplyUnitSorting(root, root.position.y);
     }
 
-    static bool IsHpBarSprite(SpriteRenderer sr)
+    public static void ApplyUnitSorting(Transform root, float worldY)
     {
-        if (sr == null) return false;
-        Transform t = sr.transform;
-        while (t != null)
-        {
-            if (t.name == "HPBar") return true;
-            t = t.parent;
-        }
-        return false;
+        if (root == null) return;
+        // Y 越低越靠镜头前
+        int order = SORT_UNIT + Mathf.RoundToInt(-worldY * 40f);
+
+        // 优先用已有 SortingGroup（SPUM 常挂在 UnitRoot），禁止再往根上叠一层把部件搞乱
+        var sg = root.GetComponent<UnityEngine.Rendering.SortingGroup>();
+        if (sg == null) sg = root.GetComponentInChildren<UnityEngine.Rendering.SortingGroup>();
+        if (sg == null)
+            sg = root.gameObject.AddComponent<UnityEngine.Rendering.SortingGroup>();
+
+        sg.sortingLayerName = BATTLE_SORTING_LAYER;
+        sg.sortingOrder = order;
     }
 
     [Header("基础属性（对齐数值表·玩家 Lv1）")]
@@ -291,8 +287,10 @@ public static class GameConfig
     public const float MONSTER_ENGAGE_OFFSET = 3.2f;
     /// <summary>同波怪物横向间距（世界单位）；需大于精灵半宽，避免首波叠在同一点</summary>
     public const float MONSTER_WAVE_SPACING = 0.72f;
-    /// <summary>怪物远程射程倍率（相对数值表弓射程）；约 3~4 身位</summary>
-    public const float MONSTER_RANGED_RANGE_MUL = 1.05f;
+    /// <summary>怪物近战射程倍率（相对单手剑；勿超过玩家近战体感）</summary>
+    public const float MONSTER_MELEE_RANGE_MUL = 0.85f;
+    /// <summary>怪物远程射程倍率（相对数值表弓射程）；累计再缩）</summary>
+    public const float MONSTER_RANGED_RANGE_MUL = 0.588f;
     /// <summary>普通（非精英/非Boss）远程小怪的技能伤害折扣：技能只是为了看得到子弹，不该秒人</summary>
     public const float MONSTER_NORMAL_SKILL_DAMAGE_MUL = 0.55f;
     /// <summary>怪物普攻弹道速度倍率（勿随意改快）</summary>
@@ -308,8 +306,8 @@ public static class GameConfig
     public const float MONSTER_HP_BAR_HEIGHT = 0.09f;
     /// <summary>怪物血条相对脚底下沉（世界单位，负=更低）</summary>
     public const float MONSTER_HP_BAR_FOOT_DROP = -0.05f;
-    /// <summary>小怪默认移速（比玩家慢，避免擦肩而过）</summary>
-    public const float MONSTER_DEFAULT_MOVE_SPEED = 0.864f;
+    /// <summary>小怪默认移速（再降 20%）</summary>
+    public const float MONSTER_DEFAULT_MOVE_SPEED = 0.6912f;
     /// <summary>从右侧缓步入场速度</summary>
     public const float MONSTER_ENTER_SPEED = 0.4f;
     /// <summary>入场起点比交战点再远多少（世界单位）；过大容易出场「往前窜」</summary>
@@ -560,8 +558,10 @@ public static class GameConfig
     public const float COMBAT_KNOCKBACK_CRIT_KILL = 0.17f;
 
     /// <summary>暴击前摇慢放：timeScale 与真实等待秒数（暴击 / Boss·精英致死前摇）</summary>
-    public const float CRIT_WINDUP_TIME_SCALE = 0.05f;
-    public const float CRIT_WINDUP_UNSCALED = 2.0f;
+    public const float CRIT_WINDUP_TIME_SCALE = 0.1f;
+    public const float CRIT_WINDUP_UNSCALED = 0.5f;
+    /// <summary>暴击前摇跳起时玩家根节点统一放大倍率，下落/命中瞬间还原。</summary>
+    public const float CRIT_WINDUP_HERO_SCALE = 1.5f;
     /// <summary>暴击击杀死亡后倒视觉滑动（世界单位，仅程序化死亡 tween）</summary>
     public const float CRIT_KILL_DEATH_SLIDE = 0.15f;
     /// <summary>普通击杀死亡后倒滑动（短于暴击）</summary>
@@ -584,6 +584,9 @@ public static class GameConfig
     public const float KILL_FINISHER_SHAKE_AMP = 0.04f;
     public const float KILL_FINISHER_SHAKE_DUR = 0.1f;
     public static bool COMBAT_JUICE_KILL_FINISHER_SHAKE = true;
+
+    /// <summary>雷击奥义总开关：关闭时不充能、不自动释放（等后期玩家装备技能后再开）。</summary>
+    public static bool THUNDER_ULT_ENABLED = false;
 
     /// <summary>雷击奥义：伤害倍率、镜头、压暗</summary>
     public const float THUNDER_ULT_DAMAGE_MUL = 2.2f;

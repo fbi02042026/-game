@@ -929,8 +929,13 @@ public class BattleUI : MonoBehaviour
         {
             var mercs = mm != null ? mm.GetActiveMercs() : null;
             Mercenary m0 = (mercs != null && mercs.Count > 0) ? mercs[0] : null;
-            Sprite icon = GetMercSkillIcon(m0) ?? (m0 != null ? MercPortraitSprites.GetHead(!string.IsNullOrEmpty(m0.hireId) ? m0.hireId : m0.mercId) : null)
-                ?? (m0 != null && mm != null ? mm.GetIcon(m0.mercId) : null);
+            // 教程技能圆优先佣兵头像（H011），勿错绑技能图
+            string hire = m0 != null && !string.IsNullOrEmpty(m0.hireId)
+                ? m0.hireId
+                : StoryProgress.TutorialMercHireId;
+            Sprite icon = MercPortraitSprites.GetHead(hire)
+                ?? (m0 != null && mm != null ? mm.GetIcon(m0.mercId) : null)
+                ?? GetMercSkillIcon(m0);
             merc1SkillAvatar?.SetAvatar(icon);
             if (mercSlot1 != null && m0 != null)
                 mercSlot1.SetEnergyEnabled(m0.SkillCaster != null && m0.SkillCaster.HasActiveSkill && !MercSkillMigrate.IsMercSkillAutoCast());
@@ -1050,7 +1055,8 @@ public class BattleUI : MonoBehaviour
             var txt = organizeButton.GetComponentInChildren<Text>(true);
             if (txt != null)
                 txt.text = BattleLootMode.Active ? "确定" : "整理";
-            organizeButton.gameObject.SetActive(true);
+            // 平时隐藏整理；仅 Loot 模式显示「确定」
+            organizeButton.gameObject.SetActive(BattleLootMode.Active);
         }
         UpdateBackpackGrid();
         BattleJoystick.Instance?.SetVisible(!BattleLootMode.Active

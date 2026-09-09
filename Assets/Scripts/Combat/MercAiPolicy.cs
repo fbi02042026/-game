@@ -95,13 +95,13 @@ public static class MercAiPolicy
                 p.Priority = rarity >= MercRosterDefs.MercRarity.Rare
                     ? TargetPriority.FocusPrefer
                     : TargetPriority.Nearest;
-                p.Stance = Stance.KeepMidRange;
+                p.Stance = Stance.Backline;
                 break;
             case JobKind.Mage:
                 p.Priority = rarity >= MercRosterDefs.MercRarity.Rare
                     ? TargetPriority.FocusPrefer
                     : TargetPriority.DenseCluster;
-                p.Stance = Stance.KeepFar;
+                p.Stance = Stance.Backline;
                 break;
             case JobKind.Priest:
                 p.Priority = TargetPriority.Nearest;
@@ -228,8 +228,11 @@ public static class MercAiPolicy
                 desiredX = Mathf.Lerp(hx, tx, 0.42f);
                 return true;
             case Stance.FrontOfPlayer:
-                desiredX = hx + 1.1f + merc.GetPartyIndexOrZero() * 0.35f;
+            {
+                int slot = UnitCrowd.GetMercLineSlot(merc, rangedLine: false, merc.GetPartyIndexOrZero());
+                desiredX = hx + 0.58f + slot * 0.38f;
                 return true;
+            }
             case Stance.KeepMidRange:
                 if (target == null) return false;
                 float tMid = UnitBase.GetCombatX(target);
@@ -243,8 +246,23 @@ public static class MercAiPolicy
                 desiredX = tFar + f2 * FarRangeIdeal;
                 return true;
             case Stance.Backline:
-                desiredX = hx - 1.35f - merc.GetPartyIndexOrZero() * 0.25f;
+            {
+                int slot = UnitCrowd.GetMercLineSlot(merc, rangedLine: true, merc.GetPartyIndexOrZero());
+                float behind = hx - 0.58f - slot * 0.38f;
+                if (target != null && !target.isDead)
+                {
+                    // 尽量站在射程内，但不超过玩家（留在身后侧），避免「回后排 ↔ 冲上去」左右翻
+                    float tBack = UnitBase.GetCombatX(target);
+                    float range = Mathf.Max(0.8f, merc.GetEffectiveAttackRange() * 0.88f);
+                    float shootX = tBack - range; // 怪在右侧：站其左侧射程处
+                    desiredX = Mathf.Clamp(shootX, hx - 2.2f, hx - 0.22f);
+                    if (behind < desiredX)
+                        desiredX = Mathf.Lerp(behind, desiredX, 0.65f);
+                }
+                else
+                    desiredX = behind;
                 return true;
+            }
             default:
                 return false;
         }

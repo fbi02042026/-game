@@ -70,13 +70,26 @@ public abstract class UnitBase : MonoBehaviour
         if (t == null) return;
         var p = t.position;
         float target = FootY;
-        if (Mathf.Abs(p.y - target) < 0.002f) return;
+        if (Mathf.Abs(p.y - target) < 0.002f)
+        {
+            RefreshDepthSort();
+            return;
+        }
         p.y = Mathf.MoveTowards(p.y, target, GameConfig.BATTLE_LANE_MOVE_SPEED * dt);
         // SetWorldPosition 会清 velocity；保留水平速度，避免与追敌/手动位移打架
         float keepVx = rb != null ? rb.velocity.x : 0f;
         GameConfig.SetWorldPosition(t, p);
         if (rb != null)
             rb.velocity = new Vector2(keepVx, 0f);
+        RefreshDepthSort();
+    }
+
+    /// <summary>按脚底 Y 刷新前后遮挡（越靠下越前）。只动 SortingGroup，不改 SPUM 部件 order。</summary>
+    protected void RefreshDepthSort()
+    {
+        var foot = LaneMoveTransform;
+        if (foot == null) foot = transform;
+        GameConfig.ApplyUnitSorting(transform, foot.position.y);
     }
 
     /// <summary>最近一次造成伤害的来源（结算 MVP 击杀归属）。</summary>
@@ -86,6 +99,8 @@ public abstract class UnitBase : MonoBehaviour
     public float currentHp;
     protected float attackCd = 0;
     protected UnitBase target;
+    /// <summary>当前战斗目标（只读，供技能 VFX 等外部查询）。</summary>
+    public UnitBase CurrentTarget => target;
     public bool isDead => currentHp <= 0;
     public int facingDir = 1; // 1右 -1左
     public bool isAlly; // true己方 false敌方
@@ -597,7 +612,7 @@ public abstract class UnitBase : MonoBehaviour
         return facingDir >= 0 ? 1 : -1;
     }
 
-    /// <summary>限制单位不超出屏幕可见范围（放宽边距，减少贴边卡顿）</summary>
+    /// <summary>限制单位不超出屏幕可见范围</summary>
     protected void ClampToScreen()
     {
         Camera cam = Camera.main;
@@ -605,9 +620,9 @@ public abstract class UnitBase : MonoBehaviour
         float halfH = cam.orthographicSize;
         float halfW = halfH * cam.aspect;
         float camX = cam.transform.position.x;
-        float margin = 1.5f;
-        float minX = camX - halfW - margin;
-        float maxX = camX + halfW + margin;
+        float margin = 0.3f;
+        float minX = camX - halfW + margin;
+        float maxX = camX + halfW - margin;
         Vector3 pos = transform.position;
         if (pos.x < minX || pos.x > maxX)
         {
@@ -698,10 +713,19 @@ public abstract class UnitBase : MonoBehaviour
     {
         float r = attr != null ? attr.GetAttr(AttrType.AttackRange) : GameConfig.RangeSword;
         if (UsesMeleeBasicAttack())
-            r = Mathf.Min(r, GameConfig.RangePolearm);
-        // 我方近战再缩 10%，贴身手感
-        if (isAlly && UsesMeleeBasicAttack())
-            r *= 0.9f;
+        {
+            if (isAlly)
+            {
+                r = Mathf.Min(r, GameConfig.RangePolearm);
+                // 我方近战再缩 10%，贴身手感
+                r *= 0.9f;
+            }
+            else
+            {
+                // 敌方近战不超过单手剑×倍率，避免比玩家砍得更远
+                r = Mathf.Min(r, GameConfig.RangeSword * GameConfig.MONSTER_MELEE_RANGE_MUL);
+            }
+        }
         return Mathf.Max(0.2f, r);
     }
 
@@ -876,7 +900,7 @@ public abstract class UnitBase : MonoBehaviour
     bool ShouldUseKillWindup(UnitBase target, float damage, bool isCrit, bool openingHit)
     {
         if (target == null || target.isDead || target.attr == null) return false;
-        if (isCrit) return true;
+        // Boss/精英：仅预测致死的最后一击才慢放+放大（平时暴击不触发）
         if (target is Monster m && (m.IsBossUnit || m.IsEliteWave))
             return target.currentHp <= PredictBasicAttackDamage(target, damage, openingHit);
         return false;
@@ -903,7 +927,7 @@ public abstract class UnitBase : MonoBehaviour
         float delay;
         if (killWindup)
         {
-            CombatJuice.Instance?.BeginKillWindupJuice(true);
+            CombatJuice.Instance?.BeginKillWindupJuice(true, this);
             delay = GameConfig.CRIT_WINDUP_UNSCALED;
         }
         else
@@ -937,7 +961,7 @@ public abstract class UnitBase : MonoBehaviour
         AttackVfxKit kit, VfxFaction faction,
         Vector3 firePos, Vector3 hitPos, int facingDir, Transform hitTf)
     {
-        CombatJuice.Instance?.BeginKillWindupJuice(false);
+        CombatJuice.Instance?.BeginKillWindupJuice(false, this);
         yield return new WaitForSecondsRealtime(GameConfig.KILL_CAM_RANGED_WINDUP);
         CombatJuice.Instance?.EndKillWindupJuice();
 
@@ -988,6 +1012,9 @@ public abstract class UnitBase : MonoBehaviour
         float range = attr != null ? attr.GetAttr(AttrType.AttackRange) : 1.5f;
         return SkillNaming.KitFromAttackType(atkType, range);
     }
+
+    /// <summary>对外读取普攻套（佣兵技能 VFX 需按施法者弓/法球回退）。</summary>
+    public AttackVfxKit GetBasicAttackVfxKit() => GetAttackVfxKit();
 
     /// <summary>攻击间隔；弓/法球额外乘 PROJECTILE_ATK_SPEED_MUL（降发射频率）</summary>
     protected float GetAttackCooldown()
@@ -1121,10 +1148,17 @@ public abstract class UnitBase : MonoBehaviour
                 bm.RecordDamageDealt(finalDamage, mon.IsBossUnit);
                 if (isCrit) bm.RecordCrit();
                 if (source != null && source.isAlly)
+                {
                     bm.RecordAllyDamage(source, finalDamage);
+                    bm.AddCombatSkillEnergy(source, BattleManager.ENERGY_ON_ATTACK);
+                }
             }
             else
+            {
                 bm.RecordDamageTaken(finalDamage);
+                if (isAlly)
+                    bm.AddCombatSkillEnergy(this, BattleManager.ENERGY_ON_HIT);
+            }
         }
 
         if (unitAnim != null)

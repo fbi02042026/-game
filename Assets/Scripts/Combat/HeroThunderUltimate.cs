@@ -1,11 +1,10 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 挂机向雷击奥义：击杀充能，满条自动释放（也可点按钮）。
-/// 与头像治疗/配置技能（playerSkillEnergy）分离。
+/// 挂机向雷击奥义：击杀充能，满条自动释放。
+/// 总开关 GameConfig.THUNDER_ULT_ENABLED（当前关，等后期装备技能再开）。
 /// </summary>
 public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
 {
@@ -13,13 +12,14 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
     int _need = GameConfig.THUNDER_ULT_NEED_MIN;
     bool _casting;
     Coroutine _castCo;
-    /// <summary>教程内仅第一次雷击走压暗+拉镜电影感。</summary>
+    /// <summary>教程内仅第一次雷击走压暗电影感。</summary>
     bool _tutorialCinematicDone;
 
     Button _btn;
 
-    readonly List<SpriteRenderer> _dimmed = new List<SpriteRenderer>(128);
-    readonly List<Color> _dimmedColors = new List<Color>(128);
+    GameObject _sceneDimGo;
+    SpriteRenderer _sceneDimSr;
+    static Sprite _whiteSprite;
 
     public float ChargeRatio => _need <= 0 ? 0f : Mathf.Clamp01(_charge / (float)_need);
     public bool IsCasting => _casting;
@@ -32,6 +32,7 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
 
     void Update()
     {
+        if (!GameConfig.THUNDER_ULT_ENABLED) return;
         // 对话冻结时攒满：恢复行动后自动放
         if (!IsReady) return;
         var bm = BattleManager.Instance;
@@ -52,11 +53,14 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
             StopCoroutine(_castCo);
             _castCo = null;
         }
-        RestoreDim();
+        RestoreSceneDim();
         _casting = false;
         _tutorialCinematicDone = false;
         _charge = 0;
-        RecalcNeed();
+        if (GameConfig.THUNDER_ULT_ENABLED)
+            RecalcNeed();
+        else
+            _need = GameConfig.THUNDER_ULT_NEED_MIN;
         HideUltButton();
     }
 
@@ -89,6 +93,7 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
     /// <summary>击杀记账：小怪 1 / 精英 3 / Boss 6。</summary>
     public void OnMonsterKilled(Monster m)
     {
+        if (!GameConfig.THUNDER_ULT_ENABLED) return;
         if (m == null || _casting) return;
         if (BattleManager.Instance == null || !BattleManager.Instance.isInBattle) return;
 
@@ -105,18 +110,21 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
 
     public bool TryManualCast()
     {
+        if (!GameConfig.THUNDER_ULT_ENABLED) return false;
         if (!IsReady) return false;
         return BeginCast();
     }
 
     void TryAutoCast()
     {
+        if (!GameConfig.THUNDER_ULT_ENABLED) return;
         if (!IsReady) return;
         BeginCast();
     }
 
     bool BeginCast()
     {
+        if (!GameConfig.THUNDER_ULT_ENABLED) return false;
         if (_casting) return false;
         var bm = BattleManager.Instance;
         var hero = bm != null ? bm.hero : Hero.Instance;
@@ -145,15 +153,13 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
                 restoreAct = true;
             }
 
-            ApplyDimKeepHero(hero);
-            // 击杀/雷击拉镜已关闭：教程雷击也不再 BeginKillCamZoom
+            // 场景压暗（背景层），单位/特效保持原亮度
+            ApplySceneDim();
             AttackVfxKit kit = hero.GetWeaponVfxKit();
             hero.PlayAttackAnimOnly(kit, true);
             CombatJuice.Instance?.PlaySwingSfx();
-
-            yield return new WaitForSecondsRealtime(GameConfig.THUNDER_ULT_ZOOM_IN + 0.15f);
-
-            yield return new WaitForSecondsRealtime(0.08f);
+            // 短停顿即落雷，避免「全场黑一秒才出特效」
+            yield return new WaitForSecondsRealtime(0.12f);
             _tutorialCinematicDone = true;
         }
 
@@ -180,7 +186,7 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
         }
 
         if (tutorialCinematic)
-            RestoreDim();
+            RestoreSceneDim();
 
         if (restoreAct && bm != null && bm.isInBattle)
             bm.UnitsCanAct = true;
@@ -207,36 +213,63 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
         return pick;
     }
 
-    void ApplyDimKeepHero(Hero hero)
+    /// <summary>
+    /// 在 map(10) 与单位(15) 之间铺半透明黑幕，不改任何单位 Sprite 颜色。
+    /// </summary>
+    void ApplySceneDim()
     {
-        RestoreDim();
-        var srs = Object.FindObjectsOfType<SpriteRenderer>();
-        Transform heroRoot = hero != null ? hero.transform : null;
-        for (int i = 0; i < srs.Length; i++)
-        {
-            var sr = srs[i];
-            if (sr == null) continue;
-            if (heroRoot != null && sr.transform.IsChildOf(heroRoot))
-                continue;
-            _dimmed.Add(sr);
-            _dimmedColors.Add(sr.color);
-            Color c = sr.color;
-            c.r *= GameConfig.THUNDER_ULT_DIM;
-            c.g *= GameConfig.THUNDER_ULT_DIM;
-            c.b *= GameConfig.THUNDER_ULT_DIM;
-            sr.color = c;
-        }
+        RestoreSceneDim();
+        EnsureSceneDim();
+        if (_sceneDimGo == null || _sceneDimSr == null) return;
+
+        Camera cam = Camera.main;
+        if (cam == null) return;
+
+        float halfH = cam.orthographicSize;
+        float halfW = halfH * Mathf.Max(0.2f, cam.aspect);
+        Vector3 p = cam.transform.position;
+        p.z = 0f;
+        _sceneDimGo.transform.position = p;
+        // 1x1 sprite → 铺满镜头
+        _sceneDimGo.transform.localScale = new Vector3(halfW * 2.2f, halfH * 2.2f, 1f);
+        _sceneDimGo.SetActive(true);
+
+        Color c = _sceneDimSr.color;
+        c.a = Mathf.Clamp01(1f - GameConfig.THUNDER_ULT_DIM); // DIM=0.35 → alpha≈0.65
+        _sceneDimSr.color = c;
     }
 
-    void RestoreDim()
+    void EnsureSceneDim()
     {
-        for (int i = 0; i < _dimmed.Count; i++)
-        {
-            if (_dimmed[i] != null)
-                _dimmed[i].color = _dimmedColors[i];
-        }
-        _dimmed.Clear();
-        _dimmedColors.Clear();
+        if (_sceneDimGo != null && _sceneDimSr != null) return;
+
+        _sceneDimGo = new GameObject("ThunderSceneDim");
+        Object.DontDestroyOnLoad(_sceneDimGo);
+        _sceneDimSr = _sceneDimGo.AddComponent<SpriteRenderer>();
+        _sceneDimSr.sprite = GetWhiteSprite();
+        _sceneDimSr.color = new Color(0f, 0f, 0f, 0f);
+        _sceneDimSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        // 压在地图之上、单位之下，人物/怪不吃暗
+        _sceneDimSr.sortingOrder = GameConfig.SORT_MAPROOT + 2;
+        _sceneDimGo.SetActive(false);
+    }
+
+    void RestoreSceneDim()
+    {
+        if (_sceneDimGo != null)
+            _sceneDimGo.SetActive(false);
+    }
+
+    static Sprite GetWhiteSprite()
+    {
+        if (_whiteSprite != null) return _whiteSprite;
+        var tex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+        tex.SetPixel(0, 0, Color.white);
+        tex.Apply();
+        tex.hideFlags = HideFlags.HideAndDontSave;
+        _whiteSprite = Sprite.Create(tex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+        _whiteSprite.hideFlags = HideFlags.HideAndDontSave;
+        return _whiteSprite;
     }
 
     void EnsureUi()
@@ -253,7 +286,13 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
 
     protected override void OnDestroy()
     {
-        RestoreDim();
+        RestoreSceneDim();
+        if (_sceneDimGo != null)
+        {
+            Object.Destroy(_sceneDimGo);
+            _sceneDimGo = null;
+            _sceneDimSr = null;
+        }
         base.OnDestroy();
     }
 }

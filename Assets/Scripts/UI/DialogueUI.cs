@@ -566,8 +566,8 @@ public class DialogueUI : MonoBehaviour
 
         _portraitProfile = StoryPortraitLayout.Unified;
 
-        bool newPortraits = initiatorPortrait != null || otherPortrait != null;
-        if (propSprite == null && newPortraits)
+        bool newPortraits = initiatorPortrait != null || otherPortrait != null || soloCentered;
+        if (propSprite == null && (newPortraits || soloCentered))
         {
             var ctx = BuildPortraitContext();
             CacheLayoutsIfNeeded();
@@ -575,10 +575,27 @@ public class DialogueUI : MonoBehaviour
             {
                 _soloMode = true;
                 Sprite sp = otherPortrait != null ? otherPortrait : initiatorPortrait;
-                StoryPortraitPresenter.ApplySolo(
-                    rightPortraitImage, leftPortraitImage, sp,
-                    _rightPortraitLayout, _leftPortraitLayout,
-                    _portraitProfile, ctx);
+                if (sp == null)
+                {
+                    // 失败时清槽，禁止留旧图
+                    if (leftPortraitImage != null)
+                    {
+                        leftPortraitImage.sprite = null;
+                        leftPortraitImage.gameObject.SetActive(false);
+                    }
+                    if (rightPortraitImage != null)
+                    {
+                        rightPortraitImage.sprite = null;
+                        rightPortraitImage.gameObject.SetActive(false);
+                    }
+                }
+                else
+                {
+                    StoryPortraitPresenter.ApplySolo(
+                        rightPortraitImage, leftPortraitImage, sp,
+                        _rightPortraitLayout, _leftPortraitLayout,
+                        _portraitProfile, ctx);
+                }
                 ApplySoloNamePlate(sp != null);
             }
             else
@@ -607,7 +624,10 @@ public class DialogueUI : MonoBehaviour
         // #endregion
 
         if (_soloMode)
-            ApplySoloHighlight();
+        {
+            // ShowLine 默认按 speakerIsInitiator；旁白会再由 StoryDirector 调 SetSpeakerHighlight(0)
+            ApplySoloHighlight(narration: false);
+        }
         else
         {
             // 左右立绘朝向中间；右侧资源朝外时再强制翻一次
@@ -837,14 +857,18 @@ public class DialogueUI : MonoBehaviour
     static RectTransform GetPortraitHostRt(Image portrait)
         => StoryPortraitPresenter.GetHostRtPublic(portrait);
 
-    void ApplySoloHighlight()
+    /// <param name="narration">旁白/非角色台词：立绘暗掉；角色说话则亮起。</param>
+    void ApplySoloHighlight(bool narration = false)
     {
         bool propOn = storyPropImage != null && storyPropImage.gameObject.activeSelf && storyPropImage.sprite != null;
-        SetPortraitDim(rightPortraitImage, propOn);
+        // 道具在场时立绘本就藏/暗；旁白时强制暗掉仍在场的立绘
+        bool dim = propOn || narration;
+        SetPortraitDim(rightPortraitImage, dim);
+        SetPortraitDim(leftPortraitImage, dim);
         bool hasName = !string.IsNullOrEmpty(_otherName) || !string.IsNullOrEmpty(_initiatorName);
         if (leftNamePlateImage != null)
-            leftNamePlateImage.gameObject.SetActive(hasName);
-        SetPlateActive(leftNamePlateImage, leftNameText, true);
+            leftNamePlateImage.gameObject.SetActive(hasName && !narration);
+        SetPlateActive(leftNamePlateImage, leftNameText, !narration && hasName);
         // 名牌图自带头像位，子 Icon 保持关闭
         SetNamePlateIconVisible(leftNameIcon, false);
         if (rightNamePlateImage != null)
@@ -1025,16 +1049,19 @@ public class DialogueUI : MonoBehaviour
     {
         if (_soloMode)
         {
-            ApplySoloHighlight();
+            // 0=旁白暗立绘；角色说话（-1/1）亮起
+            ApplySoloHighlight(narration: speakerSide == 0);
+            SyncStoryPortraitIdleMotion();
             return;
         }
-        // -1 左说话 / 1 右说话 / 0 旁白两边正常
-        bool leftSpeak = speakerSide == -1 || speakerSide == 0;
-        bool rightSpeak = speakerSide == 1 || speakerSide == 0;
-        SetPlateActive(leftNamePlateImage, leftNameText, leftSpeak || speakerSide == 0);
-        SetPlateActive(rightNamePlateImage, rightNameText, rightSpeak || speakerSide == 0);
-        SetNamePlateIconVisible(leftNameIcon, (leftSpeak || speakerSide == 0) && !string.IsNullOrEmpty(_initiatorName));
-        SetNamePlateIconVisible(rightNameIcon, (rightSpeak || speakerSide == 0) && !string.IsNullOrEmpty(_otherName));
+        // -1 左说话 / 1 右说话 / 0 旁白两边都暗
+        bool leftSpeak = speakerSide == -1;
+        bool rightSpeak = speakerSide == 1;
+        bool narration = speakerSide == 0;
+        SetPlateActive(leftNamePlateImage, leftNameText, leftSpeak);
+        SetPlateActive(rightNamePlateImage, rightNameText, rightSpeak);
+        SetNamePlateIconVisible(leftNameIcon, leftSpeak && !string.IsNullOrEmpty(_initiatorName));
+        SetNamePlateIconVisible(rightNameIcon, rightSpeak && !string.IsNullOrEmpty(_otherName));
 
         if (speakerSide == -1)
         {
@@ -1051,9 +1078,15 @@ public class DialogueUI : MonoBehaviour
         }
         else
         {
-            SetPortraitDim(leftPortraitImage, false);
-            SetPortraitDim(rightPortraitImage, false);
+            // 旁白：两边立绘都暗（非对方/非发起方在说）
+            SetPortraitDim(leftPortraitImage, true);
+            SetPortraitDim(rightPortraitImage, true);
             FaceEachOther();
+        }
+        if (narration)
+        {
+            if (leftNamePlateImage != null) leftNamePlateImage.gameObject.SetActive(false);
+            if (rightNamePlateImage != null) rightNamePlateImage.gameObject.SetActive(false);
         }
         SyncStoryPortraitIdleMotion();
     }

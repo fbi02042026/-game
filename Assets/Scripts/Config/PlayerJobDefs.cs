@@ -300,13 +300,14 @@ public static class PlayerJobDefs
 
         var kit = GetJobWeaponKit(job);
         bool granted = false;
+        var jobKind = def.PrimaryWeapon;
 
         // 先发主手（会清对应槽）；再发副手
         if (!string.IsNullOrEmpty(kit.MainTemplateId) || !string.IsNullOrEmpty(kit.MainSpumOverride))
         {
             var mainTpl = ResolveKitTemplate(kit.MainTemplateId, kit.MainSpumOverride);
             if (mainTpl != null)
-                granted |= GrantAndEquipWeapon(bag, mainTpl, kit.ForceMainOneHand, forceOffHand: false, kit.MainSpumOverride);
+                granted |= GrantAndEquipWeapon(bag, mainTpl, kit.ForceMainOneHand, forceOffHand: false, kit.MainSpumOverride, forceKind: jobKind);
             else
                 Debug.LogWarning($"[PlayerJobDefs] 主手模板缺失: id={kit.MainTemplateId} spum={kit.MainSpumOverride}");
         }
@@ -378,7 +379,8 @@ public static class PlayerJobDefs
         EquipTemplate tpl,
         bool forceOneHand,
         bool forceOffHand,
-        string spumOverride)
+        string spumOverride,
+        WeaponCombatTable.WeaponKind? forceKind = null)
     {
         if (tpl == null || bag == null) return false;
         int lv = Hero.Instance != null ? Hero.Instance.level : 1;
@@ -408,6 +410,10 @@ public static class PlayerJobDefs
         }
         if (!string.IsNullOrEmpty(spumOverride))
             inst.spumNameOverride = spumOverride;
+
+        // 职业起步武器：模板显示名/射程常标错（如游侠弓叫「短刃」），写死逻辑类型到实例
+        if (forceKind.HasValue)
+            inst.weaponKindOverride = (int)forceKind.Value;
 
         // 格子过高塞不进默认行：压矮到可放入
         int unlocked = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);

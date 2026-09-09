@@ -343,8 +343,13 @@ public class UnitAnimation : MonoBehaviour
         {
             float prev = _attackAnimLock;
             _attackAnimLock -= Time.deltaTime;
-            if (_monsterClipMode && prev > 0f && _attackAnimLock <= 0f)
-                RestoreMonsterLocomotionClip();
+            if (prev > 0f && _attackAnimLock <= 0f)
+            {
+                if (_monsterClipMode)
+                    RestoreMonsterLocomotionClip();
+                else if (_isMoving && !_isDead)
+                    ForceResumeMoveAnim();
+            }
         }
 
         // 程序化动画更新
@@ -473,6 +478,13 @@ public class UnitAnimation : MonoBehaviour
         bool stateChanged = _isMoving != isMoving;
         _isMoving = isMoving;
 
+        // 攻击锁期间不切 MOVE/IDLE，避免出手中途闪站立；锁结束后 ForceResumeMoveAnim
+        if (_attackAnimLock > 0f)
+        {
+            ApplyMoveAnimSpeed(isMoving);
+            return;
+        }
+
         // SPUM模式
         if (_spum != null && _spum.OverrideController != null)
         {
@@ -491,7 +503,7 @@ public class UnitAnimation : MonoBehaviour
         {
             if (_monsterClipMode)
             {
-                if (stateChanged && _attackAnimLock <= 0f)
+                if (stateChanged)
                     PlayMonsterClip(isMoving ? "run" : "idle");
             }
             else if (stateChanged)
@@ -500,6 +512,25 @@ public class UnitAnimation : MonoBehaviour
                 _animator.SetBool("IsMoving", isMoving);
             }
             ApplyMoveAnimSpeed(isMoving);
+        }
+    }
+
+    /// <summary>攻击锁结束后若仍在移动，强制回到 MOVE（否则 SPUM 停在 ATTACK/IDLE）。</summary>
+    void ForceResumeMoveAnim()
+    {
+        if (_isDead || !_isMoving) return;
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            try { _spum.PlayAnimation(PlayerState.MOVE, 0); }
+            catch { }
+            ApplyMoveAnimSpeed(true);
+            return;
+        }
+        if (_animator != null && !_monsterClipMode)
+        {
+            _animator.SetBool("1_Move", true);
+            _animator.SetBool("IsMoving", true);
+            ApplyMoveAnimSpeed(true);
         }
     }
 

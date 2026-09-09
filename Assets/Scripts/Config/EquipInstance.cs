@@ -39,6 +39,8 @@ public class EquipInstance
     public string appearanceId;
     /// <summary>解析后的 SPUM 名；优先于 template.spumName</summary>
     public string spumNameOverride;
+    /// <summary>实例级武器逻辑类型覆盖（-1=跟模板/路径推断）。职业发装可写死，避免污染 EquipTemplate SO。</summary>
+    public int weaponKindOverride = -1;
 
     public string ResolveSpumName()
     {

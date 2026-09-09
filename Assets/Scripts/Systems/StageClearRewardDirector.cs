@@ -513,11 +513,14 @@ public class StageClearRewardDirector : MonoBehaviour
 
         _boxRoot.gameObject.SetActive(true);
         EnsureBoxController();
+        // 先对齐开箱姿态地面，再播特效，避免 World 粒子留在旧高度显得偏下
+        if (_closeSr != null) _closeSr.enabled = false;
+        if (_openSr != null) _openSr.enabled = true;
+        SnapBoxRootToGround(useOpenVisual: true);
+
         if (_boxAnim != null)
         {
             _boxAnim.enabled = true;
-            _boxAnim.Rebind();
-            _boxAnim.Update(0f);
             PlayBoxOpenEffect();
             _boxAnim.Play("open1", 0, 0f);
             yield return WaitAnimOrSeconds(_boxAnim, "open1", 0.9f);
@@ -525,8 +528,6 @@ public class StageClearRewardDirector : MonoBehaviour
         else
             yield return new WaitForSecondsRealtime(0.4f);
 
-        if (_closeSr != null) _closeSr.enabled = false;
-        if (_openSr != null) _openSr.enabled = true;
         SnapBoxRootToGround(useOpenVisual: true);
 
         GameObject ground = null;

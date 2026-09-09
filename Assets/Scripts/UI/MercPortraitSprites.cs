@@ -22,6 +22,8 @@ public static class MercPortraitSprites
         { "xiaomei", "C001" },
         { "altor", "C002" },
         { "grey", "C003" },
+        { "xiaobai", "H011" },
+        { "naima101", "H011" },
         // 剧情 NPC → 佣兵立绘目录中的稳定英文 ID（见 Sync / LoadEditorStand）
         { "receptionist", "receptionist" },
         { "guildmaster", "guildmaster" },
@@ -87,9 +89,10 @@ public static class MercPortraitSprites
         if (StandCache.TryGetValue(hireId, out var cached) && cached != null)
             return cached;
 
-        Sprite sp = LoadFromResources(ContentPaths.Icons.MercStand, hireId);
+        // 编辑器优先 Art/佣兵立绘（Resources 可能滞后，玩家立绘常被手改）
+        Sprite sp = LoadEditorStand(hireId);
         if (sp == null)
-            sp = LoadEditorStand(hireId);
+            sp = LoadFromResources(ContentPaths.Icons.MercStand, hireId);
         if (sp != null)
             StandCache[hireId] = sp;
         return sp;

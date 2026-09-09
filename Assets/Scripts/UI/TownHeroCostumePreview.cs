@@ -2,8 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 城镇角色页：用与战斗相同的 wanjia SPUM + HeroCostumeManager 实时换装预览。
-/// 不覆盖角色页预制体结构；在 Portrait 位挂 RawImage + 独立相机渲染。
+/// 城镇角色页离屏换装预览（给背包 HandRig）。不往 Portrait 挂 RawImage，立绘走静态 Sprite。
 /// </summary>
 public class TownHeroCostumePreview : MonoBehaviour
 {
@@ -56,30 +55,29 @@ public class TownHeroCostumePreview : MonoBehaviour
         }
     }
 
-    public void Show()
+    /// <summary>离屏构建换装，不盖住 Portrait。</summary>
+    public void EnsureOffscreenCostume()
     {
-        BuildIfNeeded();
-        if (_heroGo != null) _heroGo.SetActive(true);
-        if (_cam != null) _cam.enabled = true;
-        RefreshCostume();
-        if (targetImage != null) targetImage.enabled = true;
         if (host != null)
         {
+            var junk = host.Find("SpumPreview");
+            if (junk != null)
+                Destroy(junk.gameObject);
+            targetImage = null;
             var img = host.GetComponent<Image>();
-            if (img != null) img.enabled = false; // 隐藏静态立绘，显示 SPUM
+            if (img != null) img.enabled = true;
         }
+        BuildIfNeeded();
+        if (_heroGo != null) _heroGo.SetActive(true);
+        if (_cam != null) _cam.enabled = false;
+        RefreshCostume();
     }
+
+    public void Show() => EnsureOffscreenCostume();
 
     public void Hide()
     {
         if (_cam != null) _cam.enabled = false;
-        if (_heroGo != null) _heroGo.SetActive(false);
-        if (targetImage != null) targetImage.enabled = false;
-        if (host != null)
-        {
-            var img = host.GetComponent<Image>();
-            if (img != null) img.enabled = true;
-        }
     }
 
     public void RefreshCostume()
@@ -121,25 +119,9 @@ public class TownHeroCostumePreview : MonoBehaviour
     void BuildIfNeeded()
     {
         if (_built) return;
-        if (host == null) return;
-
-        // RawImage 盖在 Portrait 上
-        if (targetImage == null)
-        {
-            var go = new GameObject("SpumPreview", typeof(RectTransform), typeof(RawImage));
-            go.transform.SetParent(host, false);
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = rt.offsetMax = Vector2.zero;
-            targetImage = go.GetComponent<RawImage>();
-            targetImage.raycastTarget = false;
-            targetImage.color = Color.white;
-        }
 
         _rt = new RenderTexture(RtW, RtH, 16, RenderTextureFormat.ARGB32);
         _rt.Create();
-        targetImage.texture = _rt;
 
         var camGo = new GameObject("TownHeroPreviewCam");
         DontDestroyOnLoad(camGo);
@@ -173,7 +155,6 @@ public class TownHeroCostumePreview : MonoBehaviour
         _heroGo.transform.localScale = Vector3.one * 1.2f;
         _heroGo.transform.rotation = Quaternion.identity;
 
-        // 关掉战斗组件，只留形象
         foreach (var rb in _heroGo.GetComponentsInChildren<Rigidbody2D>(true))
         {
             rb.simulated = false;
@@ -190,11 +171,9 @@ public class TownHeroCostumePreview : MonoBehaviour
             _costume.spumPrefabs = _heroGo.GetComponentInChildren<SPUM_Prefabs>(true);
         if (_costume.spriteList == null)
             _costume.spriteList = _heroGo.GetComponentInChildren<SPUM_SpriteList>(true);
-        // 城镇预览不抢占战斗侧 Instance，避免回城/开战互相覆盖
         if (HeroCostumeManager.Instance == _costume)
             HeroCostumeManager.Instance = null;
 
-        // 分层：预览单位进专属层，相机只看这一层，避免扫到城镇 UI
         int layer = LayerMask.NameToLayer("Default");
         SetLayerRecursive(_heroGo, layer);
 

@@ -207,7 +207,8 @@ public class SettingsPopupUI : MonoBehaviour
 
     const float PanelWidth = 560f;
     const float PanelHeight = 720f;
-    const float ButtonLiftY = 80f;
+    /// <summary>不再抬高按钮，沿用预制体锚点 Y。</summary>
+    const float ButtonLiftY = 0f;
 
     void ApplyPanelAndButtonLayout()
     {
@@ -215,9 +216,13 @@ public class SettingsPopupUI : MonoBehaviour
         if (panel != null)
             panel.sizeDelta = new Vector2(PanelWidth, PanelHeight);
 
-        LiftButton(confirmButton, 172f + ButtonLiftY);
-        LiftButton(evacuateButton, 223f + ButtonLiftY);
-        LiftButton(primaryButton, 115f + ButtonLiftY);
+        // ButtonLiftY=0：不覆盖预制体按钮位置（避免撤离/取消偏高）
+        if (ButtonLiftY > 0.01f)
+        {
+            LiftButton(confirmButton, 172f + ButtonLiftY);
+            LiftButton(evacuateButton, 223f + ButtonLiftY);
+            LiftButton(primaryButton, 115f + ButtonLiftY);
+        }
     }
 
     static void LiftButton(Button btn, float y)
@@ -293,9 +298,8 @@ public class SettingsPopupUI : MonoBehaviour
 
     void OnEvacuate()
     {
-        Time.timeScale = 1f;
-        if (root != null) root.SetActive(false);
-        EvacuateConfirmPopupUI.Show(ConfirmEvacuate, OnEvacuateCancelled);
+        // 不再二次确认，直接撤离
+        DoEvacuate();
     }
 
     void OnEvacuateCancelled()

@@ -88,7 +88,8 @@ public static class MonsterAttackStyleTable
 
     public static float GetAttackRange(MonsterAttackStyle style)
     {
-        if (!IsRanged(style)) return GameConfig.RangeSword;
+        if (!IsRanged(style))
+            return GameConfig.RangeSword * GameConfig.MONSTER_MELEE_RANGE_MUL;
         return GameConfig.RangeBow * GameConfig.MONSTER_RANGED_RANGE_MUL;
     }
 

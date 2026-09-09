@@ -32,6 +32,11 @@ public class BattleManager : Singleton<BattleManager>
     public List<AttrBonusData> tempBuffs = new List<AttrBonusData>();
     /// <summary>开战过场结束后才允许单位行动</summary>
     public bool UnitsCanAct { get; set; } = true;
+    /// <summary>
+    /// 剧情仍冻结战斗（UnitsCanAct=false），但允许怪物继续走进场。
+    /// 仅埋伏过场等短窗口使用；对白期间必须关掉。
+    /// </summary>
+    public bool AllowMonsterMapEnter { get; set; }
     /// <summary>黑幕结束后队伍从左走进场（此期间播走路动画，但不战斗）</summary>
     public bool PartyIntroWalking { get; private set; }
     public bool IsTutorialRun { get; private set; }
@@ -54,12 +59,12 @@ public class BattleManager : Singleton<BattleManager>
     public float runMonsterAtkSpeedMul = 1f;
     /// <summary>正在走向 chuansongmen，放宽屏幕钳制</summary>
     public bool PortalWalkMode => _portalActive && !_stageCleared;
-    /// <summary>佣兵相对主角身后间距（世界单位）</summary>
-    public const float MERC_FRONT_SPACING = 0.42f;
+    /// <summary>佣兵相对主角前后间距（世界单位）；近战前/远程后由 UnitCrowd 决定符号。</summary>
+    public const float MERC_FRONT_SPACING = 0.55f;
     [System.Obsolete("Use MERC_FRONT_SPACING / UnitCrowd.GetMercDesiredCombatX")]
     public const float MERC_BEHIND_SPACING = MERC_FRONT_SPACING;
-    /// <summary>开场从站位左侧多远走进来</summary>
-    const float PARTY_ENTER_FROM = 2.5f;
+    /// <summary>开场从站位左侧多远走进来（越小出生越靠镜头/越靠右）</summary>
+    const float PARTY_ENTER_FROM = 1.15f;
 
     float _battleStartTime;
     bool _firstWaveSpawned;
@@ -186,8 +191,12 @@ public class BattleManager : Singleton<BattleManager>
             }
         }
     }
-    public const float ENERGY_PER_KILL = 0.2f;     // 每杀一个怪+20%能量
-    public const float ENERGY_PER_SECOND = 0.015f;  // 每秒+1.5%能量（约67秒从0到满）
+    public const float ENERGY_PER_KILL = 0.2f;     // 保留常量；击杀不再涨蓝
+    public const float ENERGY_PER_SECOND = 0.015f;  // 保留常量；时间不再涨蓝
+    /// <summary>友方造成伤害时涨蓝（攻击）</summary>
+    public const float ENERGY_ON_ATTACK = 0.035f;
+    /// <summary>友方受伤时涨蓝（受击）</summary>
+    public const float ENERGY_ON_HIT = 0.042f;
 
     protected override void Awake()
     {
@@ -225,6 +234,7 @@ public class BattleManager : Singleton<BattleManager>
         _portalEnterVfxPlayed = false;
         _chuanSongMen = null;
         UnitsCanAct = false;
+        AllowMonsterMapEnter = false;
         MonsterAttackStyleTable.Reload();
         playerSkillEnergy = 0f;
         mercSkillEnergy[0] = 0f;
@@ -492,6 +502,36 @@ public class BattleManager : Singleton<BattleManager>
     {
         playerSkillEnergy = MAX_SKILL_ENERGY;
         BattleUI.Instance?.UpdateSkillEnergy(0, playerSkillEnergy);
+    }
+
+    /// <summary>友方攻击造成伤害 / 友方受击时涨技能能量（玩家与对应佣兵槽）。</summary>
+    public void AddCombatSkillEnergy(UnitBase unit, float amount)
+    {
+        if (unit == null || !unit.isAlly || amount <= 0f || !isInBattle) return;
+        if (_stageCleared || _portalActive) return;
+
+        if (unit is Hero)
+        {
+            playerSkillEnergy = Mathf.Min(MAX_SKILL_ENERGY, playerSkillEnergy + amount);
+            BattleUI.Instance?.UpdateSkillEnergy(0, playerSkillEnergy);
+            return;
+        }
+
+        if (!(unit is Mercenary)) return;
+        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+        if (mercs == null) return;
+        int unlocked = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
+        bool solo = GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle;
+        bool tutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
+        for (int i = 0; i < mercSkillEnergy.Length && i < mercs.Count; i++)
+        {
+            if (mercs[i] != unit) continue;
+            bool slotUnlocked = solo ? (tutorialMerc && i == 0) : (i < unlocked);
+            if (!slotUnlocked) return;
+            mercSkillEnergy[i] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[i] + amount);
+            BattleUI.Instance?.UpdateSkillEnergy(i + 1, mercSkillEnergy[i]);
+            return;
+        }
     }
 
     /// <summary>引导开箱拿剑后进入强伤+多怪爽点。</summary>
@@ -799,6 +839,9 @@ public class BattleManager : Singleton<BattleManager>
         bool fromLeft = fromLeftOverride ?? ((_offscreenEnterSideToggle++ & 1) == 0);
         const float offscreenMargin = 1.35f;
         float enterX = fromLeft ? visMin - offscreenMargin : visMax + offscreenMargin;
+        // 交战点落在进场同侧，避免左侧怪跑到玩家右边再回头
+        float heroX = hero != null ? UnitBase.GetCombatX(hero) : engagePos.x;
+        engagePos.x = ResolveEngageXForEnterSide(heroX, fromLeft, engagePos.x, visMin, visMax);
         engagePos.y = UnitBase.GROUND_Y + laneY;
         Vector3 enterFrom = new Vector3(enterX, engagePos.y, z);
 
@@ -809,6 +852,31 @@ public class BattleManager : Singleton<BattleManager>
             monster.SetForcedTarget(forcedTarget);
         monster.BeginMapEnter(engagePos, GameConfig.MONSTER_ENTER_SPEED, fromLeft ? 1 : -1);
         return monster;
+    }
+
+    /// <summary>
+    /// 左进场停在英雄左侧，右进场停在英雄右侧；preferredX 仅作同侧微调参考。
+    /// </summary>
+    float ResolveEngageXForEnterSide(float heroX, bool fromLeft, float preferredX, float visMin, float visMax)
+    {
+        float ahead = IsTutorialRun
+            ? Mathf.Max(GameConfig.MONSTER_ENGAGE_OFFSET, 4.5f)
+            : GameConfig.MONSTER_ENGAGE_OFFSET;
+        float sideX = fromLeft ? heroX - ahead : heroX + ahead;
+        // 同侧优先用 preferred（波次间距），但不得跨过英雄
+        if (fromLeft)
+        {
+            if (preferredX < heroX - 0.6f)
+                sideX = preferredX;
+            sideX = Mathf.Min(sideX, heroX - 0.85f);
+        }
+        else
+        {
+            if (preferredX > heroX + 0.6f)
+                sideX = preferredX;
+            sideX = Mathf.Max(sideX, heroX + 0.85f);
+        }
+        return Mathf.Clamp(sideX, visMin + 0.45f, visMax - 0.45f);
     }
 
     public void RetargetAllMonsters(UnitBase target)
@@ -875,6 +943,7 @@ public class BattleManager : Singleton<BattleManager>
         _chuanSongMen = null;
         _totalMonstersSpawnedThisStage = 0;
         _eliteToastShownThisStage = false;
+        AllowMonsterMapEnter = false;
         playerSkillEnergy = 0f;
         mercSkillEnergy[0] = 0f;
         mercSkillEnergy[1] = 0f;
@@ -1444,7 +1513,11 @@ public class BattleManager : Singleton<BattleManager>
                 : heroX + MERC_FRONT_SPACING * (i + 1);
             GameConfig.SetWorldPosition(m.gameObject, new Vector3(mx, UnitBase.GROUND_Y, z));
             m.SetPartyIndex(i);
-            m.Face(1);
+            // 入场每帧 Face/ApplyFacing 会反复写 Visual scale，加重顿挫；朝向只在未正对时设一次
+            if (m.facingDir != 1)
+                m.Face(1);
+            else
+                m.facingDir = 1;
             EnsureSpritesEnabled(m.transform);
         }
     }
@@ -2004,10 +2077,9 @@ public class BattleManager : Singleton<BattleManager>
         if (!_portalActive)
             ClampHeroInCamera();
 
-        // 更新技能能量（渐变 + 时间累积）
+        // 技能能量：仅受击/攻击涨（见 AddCombatSkillEnergy），此处只刷新已满条 UI / 锁槽清零
         if (hero != null && !hero.isDead)
         {
-            playerSkillEnergy = Mathf.Min(MAX_SKILL_ENERGY, playerSkillEnergy + ENERGY_PER_SECOND * Time.deltaTime);
             if (BattleUI.Instance != null)
                 BattleUI.Instance.UpdateSkillEnergy(0, playerSkillEnergy);
         }
@@ -2030,7 +2102,6 @@ public class BattleManager : Singleton<BattleManager>
                     }
                     continue;
                 }
-                mercSkillEnergy[i] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[i] + ENERGY_PER_SECOND * 0.85f * Time.deltaTime);
                 BattleUI.Instance?.UpdateSkillEnergy(i + 1, mercSkillEnergy[i]);
             }
         }
@@ -2038,10 +2109,7 @@ public class BattleManager : Singleton<BattleManager>
         {
             var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
             if (mercs != null && mercs.Count > 0 && mercs[0] != null && !mercs[0].isDead)
-            {
-                mercSkillEnergy[0] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[0] + ENERGY_PER_SECOND * 0.85f * Time.deltaTime);
                 BattleUI.Instance?.UpdateSkillEnergy(1, mercSkillEnergy[0]);
-            }
             else if (mercSkillEnergy[0] > 0f)
             {
                 mercSkillEnergy[0] = 0f;
@@ -2071,14 +2139,23 @@ public class BattleManager : Singleton<BattleManager>
         Camera cam = Camera.main;
         if (cam == null || !cam.orthographic) return;
         float halfW = cam.orthographicSize * Mathf.Max(0.2f, cam.aspect);
-        float maxHeroX = cam.transform.position.x + halfW - 0.35f;
+        float camX = cam.transform.position.x;
+        float margin = 0.35f;
+        float minHeroX = camX - halfW + margin;
+        float maxHeroX = camX + halfW - margin;
         float hx = hero.transform.position.x;
-        if (hx > maxHeroX)
+        if (hx < minHeroX || hx > maxHeroX)
         {
             Vector3 p = hero.transform.position;
-            p.x = maxHeroX;
+            p.x = Mathf.Clamp(hx, minHeroX, maxHeroX);
             GameConfig.SetWorldPosition(hero.gameObject, p);
-            if (hero.rb != null) hero.rb.velocity = new Vector2(Mathf.Min(hero.rb.velocity.x, 0f), hero.rb.velocity.y);
+            if (hero.rb != null)
+            {
+                float vx = hero.rb.velocity.x;
+                if (p.x <= minHeroX) vx = Mathf.Max(vx, 0f);
+                if (p.x >= maxHeroX) vx = Mathf.Min(vx, 0f);
+                hero.rb.velocity = new Vector2(vx, hero.rb.velocity.y);
+            }
         }
     }
 
@@ -2379,8 +2456,8 @@ public class BattleManager : Singleton<BattleManager>
             float spawnY = UnitBase.GROUND_Y + lane;
             bool fromLeft = Random.value > 0.5f;
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
-            float engageX = engageBaseX + i * waveSpacing + Random.Range(-0.8f, 0.8f);
-            engageX = Mathf.Clamp(engageX, visMin + 0.45f, visMax - 0.45f);
+            float preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.8f, 0.8f);
+            float engageX = ResolveEngageXForEnterSide(heroCombatX, fromLeft, preferEngageX, visMin, visMax);
             if (wave.spawnAnchor != null)
                 spawnZ = wave.spawnAnchor.position.z;
 
@@ -2430,8 +2507,8 @@ public class BattleManager : Singleton<BattleManager>
             float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
             bool fromLeft = Random.value > 0.5f;
-            float engageX = engageBaseX + i * waveSpacing + Random.Range(-0.8f, 0.8f);
-            engageX = Mathf.Clamp(engageX, visMin + 0.45f, visMax - 0.45f);
+            float preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.8f, 0.8f);
+            float engageX = ResolveEngageXForEnterSide(heroCombatX, fromLeft, preferEngageX, visMin, visMax);
             const float offMargin = 1.35f;
             float enterX = fromLeft ? visMin - offMargin : visMax + offMargin;
             Vector3 pos = new Vector3(enterX, spawnY, spawnZ);
@@ -2609,26 +2686,7 @@ public class BattleManager : Singleton<BattleManager>
         int defeated = Mathf.Clamp(_defeatedMonsterKills, 0, goal);
         BattleUI.Instance?.UpdateQuest(_stageQuestObjective, defeated, goal, StageQuestClearGold);
 
-        float killGain = (m.config != null && m.config.isBoss) ? 0.5f : ENERGY_PER_KILL;
-        playerSkillEnergy = Mathf.Min(MAX_SKILL_ENERGY, playerSkillEnergy + killGain);
-
-        var killMercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-        int unlockedSlots = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
-        bool solo = GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle;
-        bool tutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
-        for (int i = 0; i < mercSkillEnergy.Length; i++)
-        {
-            // 未解锁 / 无在场佣兵：蓝条不涨
-            bool slotLive = killMercs != null && i < killMercs.Count && killMercs[i] != null && !killMercs[i].isDead;
-            bool slotUnlocked = solo ? (tutorialMerc && i == 0) : (i < unlockedSlots);
-            if (!slotUnlocked || !slotLive)
-            {
-                mercSkillEnergy[i] = 0f;
-                continue;
-            }
-            mercSkillEnergy[i] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[i] + killGain * 0.75f);
-        }
-
+        // 技能蓝条改由受击/攻击涨，击杀不再加能量
         AchievementSystem.Instance?.OnKillMonster(CurrentChapter, m.config != null && m.config.isBoss);
 
         // 图鉴：击败解锁完整描述；未见过则顺带记遭遇并发里程
@@ -2746,6 +2804,10 @@ public class BattleManager : Singleton<BattleManager>
         if (IsHealSkill(skill) || skillId == "SK011" || skillId == "SK013" || skillId == "SK015")
         {
             healTarget = FindPreferredHealTarget();
+            // 全员接近满血且无人眩晕待救时，不空放治疗
+            var stunMerc = healTarget as Mercenary;
+            if ((stunMerc == null || !stunMerc.TutorialStunned) && !AllyBelowHpRatio(0.92f))
+                return false;
             float atk = merc.attr != null ? merc.attr.GetAttr(AttrType.Attack) : 0f;
             var cfg = SkillRegistry.Instance?.Get(skillId);
             float mul = cfg != null && cfg.damageMultiplier > 0f ? cfg.damageMultiplier : 1.3f;
@@ -2782,12 +2844,31 @@ public class BattleManager : Singleton<BattleManager>
         else if (!(SkillSystem.Instance != null && SkillSystem.Instance.UseSkill(skill, merc)))
             ExecuteAllySkillFallback(merc, skill);
 
-        Vector3 vfxPos = healTarget != null ? healTarget.GetHitPosition() : merc.GetHitPosition();
-        Transform vfxAttach = healTarget != null ? healTarget.transform : merc.transform;
-        SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, merc.GetVfxFacingDir(), vfxAttach);
+        Vector3 vfxFrom = merc.GetFirePosition();
+        Vector3 vfxTo = healTarget != null
+            ? healTarget.GetHitPosition()
+            : (FindMercSkillVfxTarget(merc)?.GetHitPosition() ?? merc.GetHitPosition());
+        Transform vfxAttach = healTarget != null ? healTarget.transform : FindMercSkillVfxTarget(merc)?.transform;
+        int face = merc.GetVfxFacingDir();
+        if (vfxAttach != null)
+        {
+            float dx = vfxTo.x - vfxFrom.x;
+            if (Mathf.Abs(dx) > 0.05f) face = dx > 0f ? 1 : -1;
+        }
+        SkillRegistry.Instance?.PlaySkillVfx(
+            skill.skillId, vfxFrom, vfxTo, true, face, vfxAttach, merc.GetBasicAttackVfxKit());
 
         Debug.Log($"[BattleManager] 佣兵技能释放: {merc.mercId} → {skill.skillName} ({skill.skillId}) manual={manual}");
         return true;
+    }
+
+    static UnitBase FindMercSkillVfxTarget(Mercenary merc)
+    {
+        if (merc == null) return null;
+        var locked = merc.CurrentTarget;
+        if (locked != null && !locked.isDead && locked.isAlly != merc.isAlly)
+            return locked;
+        return merc.FindNearestEnemy();
     }
 
     void ApplyTeamShieldBuff(float ratio, float duration)
@@ -2949,6 +3030,29 @@ public class BattleManager : Singleton<BattleManager>
             }
         }
         return FindLowestHpAlly() ?? hero;
+    }
+
+    bool AllyBelowHpRatio(float ratio)
+    {
+        bool Check(UnitBase u)
+        {
+            if (u == null || u.isDead || u.attr == null) return false;
+            float maxHp = u.attr.GetAttr(AttrType.MaxHp);
+            return maxHp > 1f && u.currentHp / maxHp < ratio;
+        }
+        if (Check(hero)) return true;
+        if (allyUnits != null)
+        {
+            for (int i = 0; i < allyUnits.Count; i++)
+                if (Check(allyUnits[i])) return true;
+        }
+        var mercs = MercenaryManager.Instance?.GetActiveMercs();
+        if (mercs != null)
+        {
+            for (int i = 0; i < mercs.Count; i++)
+                if (Check(mercs[i])) return true;
+        }
+        return false;
     }
 
     UnitBase FindLowestHpAlly()
@@ -3267,12 +3371,39 @@ public class BattleManager : Singleton<BattleManager>
         // 撤离回城后打开冒险页（引导局另有收尾，不抢页签）
         if (!IsTutorialRun)
             TownHubController.PendingOpenAdventure = true;
+        // 教程也走结算界面，关闭后再回城接剧情
         if (SkipLegacyOnEvacuate || IsTutorialRun)
         {
-            FinishTutorialEvacuate();
+            TriggerTutorialEvacuateWithSettlement();
             return;
         }
         TriggerLegacyFlow(isDeath: false);
+    }
+
+    /// <summary>引导撤离：弹出结算 → 再回城（TownAfterBattle 剧情）。</summary>
+    void TriggerTutorialEvacuateWithSettlement()
+    {
+        if (TutorialDirector.Instance != null)
+            TutorialDirector.Instance.WaitingEvacuate = false;
+        if (!_stageQuestGoldGranted && StageQuestClearGold > 0)
+            TryGrantStageQuestGold();
+
+        // 结算前先快照；局内装备仍清（裂缝口径）
+        GridBackpackSystem.Instance?.ClearRunEquipment();
+        PersistBattleGold();
+        int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
+        if (talentGain > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
+        StoryProgress.MarkTutorialBattleCleared();
+        BattleStateSaver.Instance?.ClearBattleState();
+        SaveSystem.Instance?.Save();
+
+        FillSettlementSnapshot(isDeath: false, talentGain);
+        AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
+        BattleSettlementUI.Show(RunStats, () =>
+        {
+            GameSceneManager.Instance?.LoadTownScene();
+        });
     }
 
     void FinishTutorialEvacuate()

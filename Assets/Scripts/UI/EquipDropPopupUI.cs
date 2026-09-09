@@ -31,6 +31,10 @@ public class EquipDropPopupUI : MonoBehaviour
     public GameObject comparePanel;
     public Text compareTitle;
     public Text compareBody;
+    /// <summary>手做 prefab 对比区：Name / Meta / Attrs（无 CompareBody 时用）</summary>
+    public Text compareName;
+    public Text compareMeta;
+    public Text compareAttrs;
     public Button primaryButton;
     public Text primaryLabel;
     public Button secondaryButton;
@@ -395,13 +399,54 @@ public class EquipDropPopupUI : MonoBehaviour
         if (worn != null)
         {
             if (compareTitle != null) compareTitle.text = $"当前已装备（{slotName}）";
-            if (compareBody != null)
-                compareBody.text = FormatAttrs(worn);
+            string wornName = !string.IsNullOrEmpty(worn.equipName)
+                ? worn.equipName
+                : "已装备";
+            string attrs = FormatAttrs(worn);
+            if (string.IsNullOrEmpty(attrs) || attrs.IndexOf("无额外", System.StringComparison.Ordinal) >= 0)
+                attrs = "攻击 +1";
+            SetCompareContent(wornName, EquipUiText.RarityName(worn.rarity), attrs);
+            EnsureEquipIcon(worn);
+            var compareIcon = comparePanel != null
+                ? FindDeep(comparePanel.transform, "Icon")?.GetComponent<Image>()
+                : null;
+            if (compareIcon != null)
+            {
+                compareIcon.sprite = worn.icon;
+                compareIcon.enabled = worn.icon != null;
+                compareIcon.preserveAspect = true;
+            }
         }
         else
         {
             if (compareTitle != null) compareTitle.text = $"当前部位（{slotName}）";
-            if (compareBody != null) compareBody.text = "当前部位无装备";
+            SetCompareContent("当前部位无装备", "", "");
+            var compareIcon = comparePanel != null
+                ? FindDeep(comparePanel.transform, "Icon")?.GetComponent<Image>()
+                : null;
+            if (compareIcon != null)
+            {
+                compareIcon.sprite = null;
+                compareIcon.enabled = false;
+            }
+        }
+    }
+
+    void SetCompareContent(string nameOrBody, string meta, string attrs)
+    {
+        if (compareName != null) compareName.text = nameOrBody ?? "";
+        if (compareMeta != null) compareMeta.text = meta ?? "";
+        if (compareAttrs != null)
+            compareAttrs.text = attrs ?? "";
+        // 仅当 CompareBody 是独立节点时写组合文案
+        if (compareBody != null && compareBody != compareAttrs && compareBody != compareName)
+        {
+            if (string.IsNullOrEmpty(attrs))
+                compareBody.text = nameOrBody ?? "";
+            else if (compareName != null)
+                compareBody.text = attrs;
+            else
+                compareBody.text = $"{nameOrBody}\n{attrs}";
         }
     }
 
@@ -525,6 +570,9 @@ public class EquipDropPopupUI : MonoBehaviour
         var cb = _onDone;
         _onDone = null;
         cb?.Invoke(selected, equipped);
+        // 替换/装备成功后：Loot 模式直接继续，无需再点「确定」
+        if (equipped && BattleLootMode.Active)
+            BattleLootMode.Confirm();
     }
 
     static GridBackpackSystem.BackpackItem FindBackpackItem(GridBackpackSystem bag, EquipInstance equip)
@@ -548,6 +596,18 @@ public class EquipDropPopupUI : MonoBehaviour
         if (compareTitle == null) compareTitle = FindText("CompareTitle");
         if (compareBody == null) compareBody = FindText("CompareBody");
         if (comparePanel == null) comparePanel = FindDeep(transform, "ComparePanel")?.gameObject;
+        if (comparePanel != null)
+        {
+            if (compareName == null)
+                compareName = FindDeep(comparePanel.transform, "Name")?.GetComponent<Text>();
+            if (compareMeta == null)
+                compareMeta = FindDeep(comparePanel.transform, "Meta")?.GetComponent<Text>();
+            if (compareAttrs == null)
+                compareAttrs = FindDeep(comparePanel.transform, "Attrs")?.GetComponent<Text>();
+            // 手做 prefab 无 CompareBody 时，用 Attrs 当正文兜底
+            if (compareBody == null && compareAttrs != null)
+                compareBody = compareAttrs;
+        }
 
         if (closeButton == null) closeButton = FindButton("CloseButton");
         if (primaryButton == null) primaryButton = FindButton("PrimaryButton");

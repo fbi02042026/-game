@@ -11,8 +11,12 @@ public static class UnitCrowd
     public const float MonsterFallbackHalfWidth = 0.22f;
     const float OverlapPad = 0.08f;
     const float MinSeparation = 0.72f;
-    /// <summary>玩家与佣兵之间额外留出的「半个身位」（按较宽一侧半宽估算）。</summary>
-    const float HeroMercHalfBodyGapMul = 0.5f;
+    /// <summary>玩家与佣兵之间额外间隙倍率（半宽×该值×2）；越小站得越近。</summary>
+    const float HeroMercHalfBodyGapMul = 0.22f;
+    /// <summary>同排（近战前排 / 远程后排）相邻佣兵步进。</summary>
+    const float MercSameLineStep = 0.48f;
+    /// <summary>相对玩家的第一档前后距（半宽之外再加这点）。</summary>
+    const float MercLineBasePad = 0.12f;
     /// <summary>两怪 footprint 重叠达较小者宽度的该比例才显示 ×N</summary>
     const float StackOverlapRatio = 0.8f;
     static float _nextStackRefresh;
@@ -22,8 +26,8 @@ public static class UnitCrowd
         if (u == null) return DefaultHalfWidth;
         if (u is Monster mon)
             return mon.GetOpaqueFootprintHalfWidth();
-        float w = EstimateSpriteWidth(u);
-        return Mathf.Max(DefaultHalfWidth, w * 0.5f * SpriteScale);
+        // 友军走路动画会改 sprite bounds；每帧估宽会导致佣兵站位 X 抖动（入场一顿一顿）
+        return DefaultHalfWidth;
     }
 
     /// <summary>
@@ -154,20 +158,47 @@ public static class UnitCrowd
         return Mathf.Max(GetHalfWidth(self), GetHalfWidth(other)) * HeroMercHalfBodyGapMul * 2f;
     }
 
-    /// <summary>佣兵站位：在玩家前方（靠怪一侧），与玩家/其他佣兵之间留半个身位。</summary>
+    /// <summary>远程（弓/法/奶）站玩家身后；近战站玩家身前（靠怪）。可更近。</summary>
     public static float GetMercDesiredCombatX(Hero hero, Mercenary merc, int partyIndex)
     {
         if (hero == null) return 0f;
-        partyIndex = Mathf.Max(0, partyIndex);
         float heroX = UnitBase.GetCombatX(hero);
         float heroHalf = GetHalfWidth(hero);
-        float mercHalf = merc != null ? GetHalfWidth(merc) : heroHalf;
+        float mercHalf = merc != null ? GetHalfWidth(merc) : DefaultHalfWidth;
         float gap = heroHalf * HeroMercHalfBodyGapMul * 2f;
+        float first = heroHalf + gap + mercHalf + MercLineBasePad;
 
-        float offset = heroHalf + gap + mercHalf;
-        if (partyIndex > 0)
-            offset += partyIndex * (gap + mercHalf + mercHalf);
-        return heroX + offset;
+        bool ranged = IsRangedFormation(merc);
+        int lineSlot = GetMercLineSlot(merc, ranged, partyIndex);
+        float offset = first + lineSlot * MercSameLineStep;
+        return ranged ? heroX - offset : heroX + offset;
+    }
+
+    /// <summary>弓/杖类远程站后排；其余近战前排。</summary>
+    public static bool IsRangedFormation(Mercenary merc)
+    {
+        if (merc == null) return false;
+        return !Mercenary.IsMeleeRoleId(merc.mercId);
+    }
+
+    /// <summary>在同排（前/后）里的序号：按活跃列表顺序，不含对面排。</summary>
+    public static int GetMercLineSlot(Mercenary merc, bool rangedLine, int fallbackIndex)
+    {
+        var mm = MercenaryManager.Instance;
+        var list = mm != null ? mm.GetActiveMercs() : null;
+        if (list == null || list.Count == 0)
+            return Mathf.Max(0, fallbackIndex);
+
+        int slot = 0;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var m = list[i];
+            if (m == null || m.isDead) continue;
+            if (IsRangedFormation(m) != rangedLine) continue;
+            if (m == merc) return slot;
+            slot++;
+        }
+        return Mathf.Max(0, fallbackIndex);
     }
 
     static float EstimateSpriteWidth(UnitBase u)

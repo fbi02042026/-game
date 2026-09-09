@@ -255,7 +255,8 @@ public static class MercSkillTable
             case SkillCategory.Heal: return AttackVfxKit.Heal;
             case SkillCategory.Magic: return AttackVfxKit.Orb;
             case SkillCategory.Defense: return AttackVfxKit.Heal;
-            default: return AttackVfxKit.MeleeSlash;
+            // 物攻不写死刀光：由施法者 GetBasicAttackVfxKit 在 PlaySkillVfx 时纠正
+            default: return AttackVfxKit.None;
         }
     }
 

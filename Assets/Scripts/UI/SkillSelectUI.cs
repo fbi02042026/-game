@@ -100,6 +100,21 @@ public class SkillSelectUI : MonoBehaviour
 
     static readonly Color LockedTint = new Color(0.42f, 0.42f, 0.42f, 1f);
 
+    static Sprite LoadSkillIcon(string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return null;
+        var sp = Resources.Load<Sprite>("Icons/SkillIcon/" + skillId);
+        if (sp != null) return sp;
+        var all = Resources.LoadAll<Sprite>("Icons/SkillIcon/" + skillId);
+        if (all != null && all.Length > 0) return all[0];
+#if UNITY_EDITOR
+        string artPath = "Assets/Art/UI/Icons/玩家SkillIcon/" + skillId + ".png";
+        sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(artPath);
+        if (sp != null) return sp;
+#endif
+        return null;
+    }
+
     void RefreshSlots()
     {
         var data = SaveSystem.Instance?.Data;
@@ -109,23 +124,47 @@ public class SkillSelectUI : MonoBehaviour
             bool unlocked = PlayerSkillDefs.IsUnlocked(def, data);
             if (skillNames[i] != null)
                 skillNames[i].text = def.displayName;
+            EnsureSkillIcon(i);
             if (skillIcons[i] != null)
             {
-                var sp = Resources.Load<Sprite>("Icons/SkillIcon/" + def.id);
-                if (sp == null)
-                {
-                    var all = Resources.LoadAll<Sprite>("Icons/SkillIcon/" + def.id);
-                    if (all != null && all.Length > 0) sp = all[0];
-                }
+                var sp = LoadSkillIcon(def.id);
                 skillIcons[i].sprite = sp;
                 skillIcons[i].enabled = sp != null;
                 skillIcons[i].preserveAspect = true;
+                skillIcons[i].color = Color.white;
             }
             ApplySlotTint(i, unlocked);
             if (skillButtons[i] != null)
                 skillButtons[i].interactable = true;
         }
         ApplySelectedMarks(_selected);
+    }
+
+    void EnsureSkillIcon(int i)
+    {
+        if (i < 0 || i >= MaxSkills || skillButtons[i] == null) return;
+        if (skillIcons[i] != null) return;
+        var t = skillButtons[i].transform;
+        var iconTf = t.Find("Icon") ?? t.Find("icon") ?? t.Find("SkillIcon");
+        if (iconTf != null)
+        {
+            skillIcons[i] = iconTf.GetComponent<Image>();
+            if (skillIcons[i] != null) return;
+        }
+        // Skill_0 等缺 Icon 子节点时运行时补
+        var go = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(t, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.55f);
+        rt.anchorMax = new Vector2(0.5f, 0.55f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(52f, 52f);
+        rt.anchoredPosition = new Vector2(0f, 4f);
+        skillIcons[i] = go.GetComponent<Image>();
+        skillIcons[i].raycastTarget = false;
+        skillIcons[i].preserveAspect = true;
+        var label = t.Find("Label");
+        if (label != null) label.SetAsLastSibling();
     }
 
     void ApplySlotTint(int i, bool unlocked)
@@ -227,10 +266,13 @@ public class SkillSelectUI : MonoBehaviour
             var t = transform.Find($"Panel/Skills/Skill_{i}") ?? transform.Find($"Skills/Skill_{i}");
             if (t == null) continue;
             skillButtons[i] = t.GetComponent<Button>();
-            skillIcons[i] = t.Find("Icon")?.GetComponent<Image>();
+            skillIcons[i] = t.Find("Icon")?.GetComponent<Image>()
+                            ?? t.Find("icon")?.GetComponent<Image>();
             skillNames[i] = t.Find("Label")?.GetComponent<Text>();
             var mark = t.Find("选中") ?? t.Find("Selected") ?? t.Find("Select");
             if (mark != null) selectedMarks[i] = mark.gameObject;
+            if (skillIcons[i] == null)
+                EnsureSkillIcon(i);
         }
     }
 

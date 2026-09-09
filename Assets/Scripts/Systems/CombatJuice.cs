@@ -18,6 +18,11 @@ public class CombatJuice : Singleton<CombatJuice>
     float _critWindupSavedScale = 1f;
     bool _critWindupActive;
 
+    UnitBase _critScaleUnit;
+    float _critScaleBaseAbsX = 1f;
+    float _critScaleBaseY = 1f;
+    Coroutine _critScaleCo;
+
     float _lastSfxTime = -999f;
     string _lastSfxKey;
 
@@ -86,10 +91,11 @@ public class CombatJuice : Singleton<CombatJuice>
         }
     }
 
-    /// <summary>击杀前摇：慢放 + 镜头拉近（近战 fullWindup=true；远程短版 false）。</summary>
-    public void BeginKillWindupJuice(bool fullWindup = true)
+    /// <summary>击杀前摇：慢放 + 玩家跳起放大（近战 fullWindup=true；远程短版 false）。</summary>
+    public void BeginKillWindupJuice(bool fullWindup = true, UnitBase attacker = null)
     {
         BeginCritWindupSlowMo();
+        BeginCritHeroScalePop(attacker != null ? attacker : Hero.Instance);
         if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
         float inDur = fullWindup ? GameConfig.KILL_CAM_ZOOM_IN : GameConfig.KILL_CAM_RANGED_WINDUP;
         float mul = GameConfig.KILL_CAM_ZOOM_MUL;
@@ -100,13 +106,68 @@ public class CombatJuice : Singleton<CombatJuice>
         BattleBossHpBar.SetKillCamHidden(true);
     }
 
-    /// <summary>下劈/命中瞬间：还原 timeScale + 镜头瞬间弹回。血条等命中后再解藏。</summary>
+    /// <summary>下劈/命中瞬间：还原 timeScale + 玩家缩放 + 镜头瞬间弹回。血条等命中后再解藏。</summary>
     public void EndKillWindupJuice()
     {
         EndCritWindupSlowMo();
+        EndCritHeroScalePop();
         if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
         GetCameraFollow()?.ForceResetKillCamZoom();
         ResetKillCamScene();
+    }
+
+    void BeginCritHeroScalePop(UnitBase attacker)
+    {
+        EndCritHeroScalePop();
+        if (attacker == null || attacker.isDead || !attacker.isAlly) return;
+        _critScaleUnit = attacker;
+        var t = attacker.transform;
+        _critScaleBaseAbsX = Mathf.Max(0.01f, Mathf.Abs(t.localScale.x));
+        _critScaleBaseY = Mathf.Max(0.01f, Mathf.Abs(t.localScale.y));
+        if (_critScaleCo != null) StopCoroutine(_critScaleCo);
+        _critScaleCo = StartCoroutine(CoCritHeroScalePop());
+    }
+
+    IEnumerator CoCritHeroScalePop()
+    {
+        float targetMul = GameConfig.CRIT_WINDUP_HERO_SCALE;
+        float dur = 0.12f;
+        float elapsed = 0f;
+        while (elapsed < dur && _critScaleUnit != null)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(elapsed / dur);
+            // 跳起感：前半更快抬到满倍率
+            float ease = 1f - (1f - k) * (1f - k);
+            ApplyCritHeroScaleMul(Mathf.Lerp(1f, targetMul, ease));
+            yield return null;
+        }
+        ApplyCritHeroScaleMul(targetMul);
+        _critScaleCo = null;
+    }
+
+    void ApplyCritHeroScaleMul(float mul)
+    {
+        if (_critScaleUnit == null) return;
+        var t = _critScaleUnit.transform;
+        float sign = t.localScale.x >= 0f ? 1f : -1f;
+        float sx = _critScaleBaseAbsX * mul;
+        float sy = _critScaleBaseY * mul;
+        t.localScale = new Vector3(sign * sx, sy, t.localScale.z);
+    }
+
+    void EndCritHeroScalePop()
+    {
+        if (_critScaleCo != null)
+        {
+            StopCoroutine(_critScaleCo);
+            _critScaleCo = null;
+        }
+        if (_critScaleUnit != null)
+        {
+            ApplyCritHeroScaleMul(1f);
+            _critScaleUnit = null;
+        }
     }
 
     /// <summary>击杀镜头结束后再显示血条，避免解藏当帧又闪一下。</summary>

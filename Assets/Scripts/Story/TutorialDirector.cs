@@ -296,18 +296,20 @@ public class TutorialDirector : Singleton<TutorialDirector>
         StoryAssetLoader.Warmup(StoryAssetLoader.Backgrounds, StoryBackgrounds.GuildHall);
         yield return null;
         StoryPortraits.Warmup(
-            StoryPortraits.Player, StoryPortraits.LaoDun, StoryPortraits.Receptionist);
+            StoryPortraits.Player, StoryProgress.TutorialMercHireId, StoryPortraits.Receptionist);
         yield return null;
 
         yield return new WaitForSecondsRealtime(2.2f);
 
         bool done = false;
         DialogueUI.Instance?.PrepareForStoryBeat();
+        // 小白 = H011（牧师），禁止再用 LaoDun(H001 盾兵) 立绘
+        string xiaobaiId = StoryProgress.TutorialMercHireId;
         StoryDirector.Ensure().Play(new List<StoryBeat>
         {
             StoryDirector.Line("你", "小白",
                 "大难不死……回城歇歇吧。需要治疗的话，来酒馆找我。",
-                StoryPortraits.Player, StoryPortraits.LaoDun, 1)
+                StoryPortraits.Player, xiaobaiId, 1)
                 .Bg(StoryBackgrounds.GuildHall)
                 .SkipReveal()
         }, () => done = true);
@@ -328,8 +330,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         RectTransform highlight = null;
         if (nav != null && nav.characterButton != null)
             highlight = nav.characterButton.GetComponent<RectTransform>();
-        TutorialHintUI.Ensure().Show("可以先去人物界面看看属性。之后再进第一章，才是正式任务。",
-            highlight, 8f);
+        // 硬引导：指 BottomNav 角色入口
+        TutorialHintUI.Ensure().Show("可以去角色界面查看属性",
+            highlight, 12f);
 
         StoryProgress.MarkTutorialDone();
         _townFlowBusy = false;
@@ -352,14 +355,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         HaltUnit(Hero.Instance);
         yield return CoTeachControls(bm, hint, ui);
 
-        // —— 1) 首波 → 预告下一波 → 约 2 秒后第二小波 ——
+        // —— 1) 首波清场后进入宝箱剧情（不再刷第二小波）——
         hint.Show("靠近怪物会自动攻击。", null, 8f);
         if (bm != null) bm.UnitsCanAct = true;
         TutorialBattleTable.EnsureLoaded();
         bm?.ApplyTutorialBattleStep(1);
         yield return EnsureTutorialWave(bm, TutorialStepCount(1));
-        yield return WaitFieldClear();
-        yield return CoTutorialNextWave(bm, hint, 0f, 2);
         yield return WaitFieldClear();
 
         yield return WaitFieldClear(strict: true);
@@ -388,12 +389,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return TalkBlock(bm, headTalk, restoreAct: false,
             new TalkLine(Hero.Instance, "有个宝箱，真是好运！", 0.85f));
 
-        yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "！", 0.55f));
-
+        // 说完第一句 → 两边怪进场停稳 → 再「！」→ 开战
         float chestX = chestDir.ChestWorldX;
         var flankStep = TutorialBattleTable.GetStepOrDefault(3);
         bm.ApplyTutorialBattleStep(3);
+        if (bm != null)
+        {
+            bm.UnitsCanAct = false;
+            bm.AllowMonsterMapEnter = true; // 对白已结束：只放行怪走进，战斗仍冻
+        }
         bm.SpawnTutorialFlankAmbush(flankStep.count, chestX);
         {
             int guard = 0;
@@ -406,8 +410,26 @@ public class TutorialDirector : Singleton<TutorialDirector>
                     bm.SpawnTutorialFlankAmbush(flankStep.count, chestX);
             }
         }
+        yield return WaitMonstersFinishedEnter(bm);
+        if (bm != null)
+            bm.AllowMonsterMapEnter = false; // 「！」对白期间全部暂停
 
-        if (bm != null) bm.UnitsCanAct = true;
+        try
+        {
+            yield return TalkBlock(bm, headTalk, restoreAct: false,
+                new TalkLine(Hero.Instance, "！", 0.55f));
+        }
+        finally
+        {
+            if (bm != null)
+                bm.AllowMonsterMapEnter = false;
+        }
+
+        if (bm != null)
+        {
+            bm.AllowMonsterMapEnter = false;
+            bm.UnitsCanAct = true;
+        }
         yield return WaitFieldClear(strict: true);
 
         if (bm != null)
@@ -427,10 +449,25 @@ public class TutorialDirector : Singleton<TutorialDirector>
             bool closed = false;
             bool lootDone = false;
             BattleLootMode.Enter(() => lootDone = true);
-            EquipDropPopupUI.ShowSingle(drop, (_, __) => closed = true);
+            EquipDropPopupUI.ShowSingle(drop, (_, equipped) =>
+            {
+                closed = true;
+                if (groundIcon != null)
+                {
+                    Object.Destroy(groundIcon);
+                    groundIcon = null;
+                }
+            });
             while (!closed) yield return null;
-            UIManager.Instance?.ShowToast("整理装备后点「确定」");
-            while (!lootDone) yield return null;
+            // 替换已自动 Confirm；若丢弃/关窗未 Confirm 则等确定或超时放行
+            float waitLoot = 0f;
+            while (!lootDone && waitLoot < 120f)
+            {
+                waitLoot += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (!lootDone)
+                BattleLootMode.Confirm();
             if (bm != null)
             {
                 bm.UnitsCanAct = true;
@@ -875,6 +912,48 @@ public class TutorialDirector : Singleton<TutorialDirector>
             if (c > 127) return false;
         }
         return name.IndexOf('_') >= 0 || name.StartsWith("equip", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>等场上活怪都走完进场（停稳），再播惊吓台词。</summary>
+    static IEnumerator WaitMonstersFinishedEnter(BattleManager bm, float timeout = 10f)
+    {
+        if (bm == null) yield break;
+        // 等至少刷出一只并进入进场状态（或已停稳）
+        float t = 0f;
+        while (t < 1.5f && bm.GetAliveMonsterCount() <= 0)
+        {
+            t += Time.deltaTime;
+            yield return null;
+        }
+
+        t = 0f;
+        while (t < timeout)
+        {
+            bool anyEntering = false;
+            var list = bm.monsters;
+            if (list != null)
+            {
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var mon = list[i] as Monster;
+                    if (mon == null || mon.isDead) continue;
+                    if (mon.IsEnteringMap)
+                    {
+                        anyEntering = true;
+                        break;
+                    }
+                }
+            }
+            if (!anyEntering && bm.GetAliveMonsterCount() > 0)
+            {
+                // 停稳后再短顿一拍，让玩家看清
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield break;
+            }
+            t += Time.deltaTime;
+            yield return null;
+        }
+        Debug.LogWarning("[Tutorial] 等待怪进场超时，继续播「！」");
     }
 
     IEnumerator WaitFieldClear(bool strict = false)

@@ -44,11 +44,32 @@ public static class WeaponCombatTable
 
     public static WeaponKind ResolveKind(EquipTemplate tpl)
     {
+        return ResolveKind(tpl, tpl != null ? tpl.spumName : null, instanceOverride: -1);
+    }
+
+    public static WeaponKind ResolveKind(EquipInstance inst)
+    {
+        if (inst == null) return WeaponKind.Sword;
+        return ResolveKind(inst.template, inst.ResolveSpumName(), inst.weaponKindOverride);
+    }
+
+    /// <summary>
+    /// 解析武器逻辑类型。优先实例/模板 override；其次 SPUM 资源路径文件夹（如 3_Bow）；
+    /// 再回退名称关键词。游侠起步弓 New_Weapon_12 显示名是「短刃」且无 bow 字样，必须靠路径。
+    /// </summary>
+    public static WeaponKind ResolveKind(EquipTemplate tpl, string spumNameHint, int instanceOverride = -1)
+    {
+        if (instanceOverride >= 0 && instanceOverride <= (int)WeaponKind.Shield)
+            return (WeaponKind)instanceOverride;
         if (tpl == null) return WeaponKind.Sword;
         if (tpl.weaponKindOverride >= 0 && tpl.weaponKindOverride <= (int)WeaponKind.Shield)
             return (WeaponKind)tpl.weaponKindOverride;
 
-        string hint = ((tpl.spumName ?? "") + " " + (tpl.equipName ?? "") + " " + (tpl.name ?? "") + " " + (tpl.templateId ?? "")).ToLowerInvariant();
+        string spum = !string.IsNullOrEmpty(spumNameHint) ? spumNameHint : tpl.spumName;
+        if (TryKindFromSpum(spum, out var fromSpum))
+            return fromSpum;
+
+        string hint = ((spum ?? "") + " " + (tpl.equipName ?? "") + " " + (tpl.name ?? "") + " " + (tpl.templateId ?? "")).ToLowerInvariant();
         if (hint.Contains("bow") || hint.Contains("arrow") || hint.Contains("弓") || hint.Contains("弩"))
             return WeaponKind.Bow;
         if (hint.Contains("staff") || hint.Contains("wand") || hint.Contains("杖") || hint.Contains("魔杖") || hint.Contains("权杖"))
@@ -67,6 +88,85 @@ public static class WeaponCombatTable
         if (tpl.weaponType == WeaponType.TwoHand)
             return WeaponKind.Greatsword;
         return WeaponKind.Sword;
+    }
+
+    /// <summary>兼容旧调用：仅传模板 + spum 提示。</summary>
+    public static WeaponKind ResolveKind(EquipTemplate tpl, string spumNameHint)
+        => ResolveKind(tpl, spumNameHint, instanceOverride: -1);
+
+    static bool TryKindFromSpum(string spumName, out WeaponKind kind)
+    {
+        kind = WeaponKind.Sword;
+        if (string.IsNullOrEmpty(spumName)) return false;
+
+        string path = null;
+        var costume = HeroCostumeManager.Instance;
+        if (costume != null && costume.TryResolveSpumPath(spumName, out path) && !string.IsNullOrEmpty(path))
+        {
+            if (TryKindFromResourcePath(path, out kind))
+                return true;
+        }
+
+        // Costume 未就绪时：Ver300 Index 已知 New_Weapon_* 文件夹映射
+        switch (spumName)
+        {
+            case "New_Weapon_10":
+            case "New_Weapon_12":
+                kind = WeaponKind.Bow;
+                return true;
+            case "New_Weapon_03":
+                kind = WeaponKind.Staff;
+                return true;
+            case "New_Weapon_09":
+                kind = WeaponKind.Polearm;
+                return true;
+            case "New_Weapon_01":
+            case "New_Weapon_05":
+            case "New_Weapon_06":
+            case "New_Weapon_11":
+                kind = WeaponKind.Sword;
+                return true;
+            case "New_Weapon_04":
+            case "New_Weapon_08":
+            case "New_Weapon_07":
+                kind = WeaponKind.Sword; // 斧/锤单手按剑档
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    static bool TryKindFromResourcePath(string path, out WeaponKind kind)
+    {
+        kind = WeaponKind.Sword;
+        if (string.IsNullOrEmpty(path)) return false;
+        string p = path.Replace('\\', '/').ToLowerInvariant();
+        if (p.Contains("/3_bow/") || p.Contains("/2_bow/") || p.Contains("/bow/"))
+        {
+            kind = WeaponKind.Bow;
+            return true;
+        }
+        if (p.Contains("/5_wand/") || p.Contains("/wand/") || p.Contains("/staff/"))
+        {
+            kind = WeaponKind.Staff;
+            return true;
+        }
+        if (p.Contains("/1_spear/") || p.Contains("/spear/") || p.Contains("/polearm/"))
+        {
+            kind = WeaponKind.Polearm;
+            return true;
+        }
+        if (p.Contains("/shield/") || p.Contains("shield"))
+        {
+            kind = WeaponKind.Shield;
+            return true;
+        }
+        if (p.Contains("/0_sword/") || p.Contains("/6_dagger/") || p.Contains("/2_axe/") || p.Contains("/8_mace/"))
+        {
+            kind = WeaponKind.Sword;
+            return true;
+        }
+        return false;
     }
 
     /// <summary>精英/Boss 期望 TTK 缩放：章节越高血量系数越高，便于调表。</summary>

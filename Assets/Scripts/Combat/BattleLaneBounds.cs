@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 战斗可行走区：Gameplay 固定为 ±GameConfig.BATTLE_LANE_HALF。
+/// 战斗可行走区：Gameplay 为非对称上下界（GameConfig.BATTLE_LANE_MIN/MAX）。
 /// 场景 <c>BattleLaneArea</c> 仅作可视化标记，不参与上下界计算。
 /// </summary>
 public static class BattleLaneBounds
@@ -37,9 +37,8 @@ public static class BattleLaneBounds
 
     public static void GetLaneOffsetRange(out float minOffset, out float maxOffset)
     {
-        float h = GameConfig.BATTLE_LANE_HALF;
-        minOffset = -h;
-        maxOffset = h;
+        minOffset = GameConfig.BATTLE_LANE_MIN;
+        maxOffset = GameConfig.BATTLE_LANE_MAX;
     }
 
     public static float ClampLaneOffset(float offset)
