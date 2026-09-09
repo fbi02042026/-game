@@ -734,8 +734,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
             ? BattleJoystick.Instance.StickHighlight
             : null;
 
-        hint.Show("在屏幕下方滑动即可出现摇杆移动；松手后自动锁定敌人。", stickRt, 4f);
-        yield return new WaitForSecondsRealtime(3.5f);
+        hint.Show("下方滑动移动，松手自动锁敌。", stickRt, -1f);
+        float waitJoy = 0f;
+        while (BattleJoystick.Instance == null || !BattleJoystick.Instance.IsHeld)
+        {
+            waitJoy += Time.unscaledDeltaTime;
+            if (waitJoy > 15f) break;
+            yield return null;
+        }
+        hint.Hide();
 
         hint.Show("技能能量满会自动释放，无需点击。", null, 3.5f);
         yield return new WaitForSecondsRealtime(3.2f);

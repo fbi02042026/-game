@@ -85,7 +85,7 @@ public static class BackpackGridVisual
             img.raycastTarget = false;
             img.type = Image.Type.Simple;
             img.enabled = true;
-            PlaceIconInHost(rt, iconRt, img, p.equip.icon, p.h);
+            PlaceIconInHost(rt, iconRt, img, p.equip.icon, p.h, p.equip);
             EquipRarityMaterials.Apply(img, p.equip.rarity);
             img.color = !hasIcon
                 ? (p.equipped ? new Color(0.35f, 0.35f, 0.4f, 0.95f) : new Color(0.45f, 0.5f, 0.62f, 0.95f))
@@ -173,8 +173,9 @@ public static class BackpackGridVisual
     /// <summary>
     /// 宿主负责跨格占位；图标子节点在宿主内居中。
     /// 多格装备按宽度等比缩放，避免 Image.preserveAspect 在高矩形里视觉贴顶。
+    /// 盾牌图标再缩 20%，格子占位不变。
     /// </summary>
-    static void PlaceIconInHost(RectTransform host, RectTransform iconRt, Image img, Sprite sprite, int gridH)
+    static void PlaceIconInHost(RectTransform host, RectTransform iconRt, Image img, Sprite sprite, int gridH, EquipInstance equip = null)
     {
         if (host == null || iconRt == null || img == null) return;
 
@@ -185,6 +186,10 @@ public static class BackpackGridVisual
             iconRt.offsetMin = Vector2.zero;
             iconRt.offsetMax = Vector2.zero;
             img.preserveAspect = true;
+            if (ShouldShrinkShieldIcon(equip))
+                iconRt.localScale = Vector3.one * 0.8f;
+            else
+                iconRt.localScale = Vector3.one;
             return;
         }
 
@@ -202,12 +207,27 @@ public static class BackpackGridVisual
             drawW = drawH * aspect;
         }
 
+        if (ShouldShrinkShieldIcon(equip))
+        {
+            drawW *= 0.8f;
+            drawH *= 0.8f;
+        }
+
         img.preserveAspect = false;
+        iconRt.localScale = Vector3.one;
         iconRt.anchorMin = new Vector2(0.5f, 0.5f);
         iconRt.anchorMax = new Vector2(0.5f, 0.5f);
         iconRt.pivot = new Vector2(0.5f, 0.5f);
         iconRt.sizeDelta = new Vector2(drawW, drawH);
         iconRt.anchoredPosition = Vector2.zero;
+    }
+
+    static bool ShouldShrinkShieldIcon(EquipInstance equip)
+    {
+        if (equip == null) return false;
+        if (WeaponLoadoutRules.IsShield(equip)) return true;
+        return equip.slotType == EquipSlotType.OffHand
+               && equip.gridWidth == 2 && equip.gridHeight == 2;
     }
 
     static void AddNameFallback(Transform parent, string name)

@@ -4,12 +4,14 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 主界面底部导航（公会/角色/冒险/酒馆/日志）。
-/// 选中态：NavBg 换紫色底图；默认态：NavBg 换深色底图。「选中」子节点保持隐藏，避免叠两层同色框。
+/// 选中态：NavBg 换紫色底图，并以底部为原点放大 1.2 倍；默认态：NavBg 深色底图、scale=1。
+/// 「选中」子节点保持隐藏，避免叠两层同色框。
 /// </summary>
 public class MainBottomNav : MonoBehaviour
 {
     const string NavBgDefaultPath = "UI/Town/Nav/nav_bg_default";
     const string NavBgSelectedPath = "UI/Town/Nav/nav_bg_selected";
+    const float SelectedScale = 1.2f;
 
     public static MainBottomNav Instance { get; private set; }
 
@@ -38,6 +40,9 @@ public class MainBottomNav : MonoBehaviour
     GameObject[] _selected;
     Image[] _selectedImages;
     Image[] _navBgImages;
+    Button[] _buttons;
+    RectTransform[] _buttonRts;
+    bool[] _pivotReady;
     static Sprite _navBgDefault;
     static Sprite _navBgSelected;
     bool _wired;
@@ -114,6 +119,8 @@ public class MainBottomNav : MonoBehaviour
             }
         }
 
+        ApplySelectedScale(index, on);
+
         if (_selected == null || index < 0 || index >= _selected.Length) return;
         var go = _selected[index];
         if (go == null) return;
@@ -133,6 +140,43 @@ public class MainBottomNav : MonoBehaviour
 
         if (go.activeSelf)
             go.SetActive(false);
+    }
+
+    /// <summary>选中：底部中心为原点放大；未选中恢复 1。</summary>
+    void ApplySelectedScale(int index, bool on)
+    {
+        if (_buttonRts == null || index < 0 || index >= _buttonRts.Length) return;
+        RectTransform rt = _buttonRts[index];
+        if (rt == null) return;
+
+        EnsureBottomPivot(index, rt);
+        float s = on ? SelectedScale : 1f;
+        rt.localScale = new Vector3(s, s, 1f);
+
+        // 同步按压缩放基准，避免松手后回到 1 冲掉选中放大
+        var press = rt.GetComponent<UiButtonPressFeedback>();
+        if (press != null)
+            press.SyncBaseScale(rt.localScale);
+    }
+
+    /// <summary>把 pivot 改到底边中心，并补偿位置，避免视觉跳动。</summary>
+    void EnsureBottomPivot(int index, RectTransform rt)
+    {
+        if (_pivotReady != null && index < _pivotReady.Length && _pivotReady[index])
+            return;
+
+        Vector2 want = new Vector2(0.5f, 0f);
+        if ((rt.pivot - want).sqrMagnitude > 0.0001f)
+        {
+            Vector2 size = rt.rect.size;
+            Vector2 deltaPivot = want - rt.pivot;
+            Vector2 delta = new Vector2(deltaPivot.x * size.x, deltaPivot.y * size.y);
+            rt.pivot = want;
+            rt.anchoredPosition += delta;
+        }
+
+        if (_pivotReady != null && index < _pivotReady.Length)
+            _pivotReady[index] = true;
     }
 
     static void EnsureNavBgSprites()
@@ -264,11 +308,14 @@ public class MainBottomNav : MonoBehaviour
         _selected = new[] { guildSelected, characterSelected, adventureSelected, tavernSelected, logSelected };
         _selectedImages = new Image[_selected.Length];
         _navBgImages = new Image[_selected.Length];
-        Button[] buttons = { guildButton, characterButton, adventureButton, tavernButton, logButton };
+        _buttons = new[] { guildButton, characterButton, adventureButton, tavernButton, logButton };
+        _buttonRts = new RectTransform[_buttons.Length];
+        _pivotReady = new bool[_buttons.Length];
         for (int i = 0; i < _selected.Length; i++)
         {
             _selectedImages[i] = _selected[i] != null ? _selected[i].GetComponent<Image>() : null;
-            _navBgImages[i] = FindNavBg(buttons[i]);
+            _navBgImages[i] = FindNavBg(_buttons[i]);
+            _buttonRts[i] = _buttons[i] != null ? _buttons[i].transform as RectTransform : null;
         }
 
         EnsureNavBgSprites();

@@ -72,7 +72,11 @@ public abstract class UnitBase : MonoBehaviour
         float target = FootY;
         if (Mathf.Abs(p.y - target) < 0.002f) return;
         p.y = Mathf.MoveTowards(p.y, target, GameConfig.BATTLE_LANE_MOVE_SPEED * dt);
+        // SetWorldPosition 会清 velocity；保留水平速度，避免与追敌/手动位移打架
+        float keepVx = rb != null ? rb.velocity.x : 0f;
         GameConfig.SetWorldPosition(t, p);
+        if (rb != null)
+            rb.velocity = new Vector2(keepVx, 0f);
     }
 
     /// <summary>最近一次造成伤害的来源（结算 MVP 击杀归属）。</summary>
@@ -803,10 +807,22 @@ public abstract class UnitBase : MonoBehaviour
             float pendingDamage = damage;
             bool pendingCrit = isCrit;
             bool pendingOpening = openingHit;
+            Vector3 impactPos = hitPos;
+            UnitBase pendingTarget = target;
             BattleVFXSystem.Instance.PlaySkillProjectile(
                 faction, firePos, hitPos, facingDir, hitTf, kit, null, 1.2f,
                 GameConfig.MONSTER_BASIC_PROJECTILE_SPEED_MUL,
-                () => ResolveBasicAttackHit(target, pendingDamage, pendingCrit, pendingOpening));
+                () =>
+                {
+                    if (pendingTarget == null || pendingTarget.isDead) return;
+                    Vector3 cur = pendingTarget.GetHitPosition();
+                    float missDist = Vector2.Distance(
+                        new Vector2(impactPos.x, impactPos.y),
+                        new Vector2(cur.x, cur.y));
+                    if (missDist > GameConfig.PROJECTILE_IMPACT_MISS_DIST)
+                        return;
+                    ResolveBasicAttackHit(pendingTarget, pendingDamage, pendingCrit, pendingOpening);
+                });
             return;
         }
 
@@ -1112,10 +1128,17 @@ public abstract class UnitBase : MonoBehaviour
         }
 
         if (unitAnim != null)
-            unitAnim.PlayDamaged();
+            PlayHitReaction();
 
         if (currentHp <= 0)
             Die(isCrit && finalDamage > 0f);
+    }
+
+    /// <summary>受击表现：默认播受击动画+闪白；玩家/佣兵可覆盖。</summary>
+    protected virtual void PlayHitReaction()
+    {
+        if (unitAnim != null)
+            unitAnim.PlayDamaged(playHitAnim: true);
     }
 
     protected virtual void Die(bool isCritKill = false)

@@ -450,6 +450,11 @@ Shader "Sprite Shaders Ultimate/Uber/URP Lit Uber"
 			SHAPE_LIGHT(3)
 			#endif
 
+			// 团结 URP：CombinedShapeLightShared 依赖 SurfaceData2D / InputData2D，须先 include
+			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/SurfaceData2D.hlsl"
+			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/InputData2D.hlsl"
+			// 非 DEBUG 时也要 include，才能拿到空宏 stub（否则 SETUP_DEBUG_DATA_* 未声明）
+			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Debug/Debugging2D.hlsl"
 			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/CombinedShapeLightShared.hlsl"
 
 			#define ASE_NEEDS_VERT_POSITION
@@ -1824,7 +1829,8 @@ Shader "Sprite Shaders Ultimate/Uber/URP Lit Uber"
 				InitializeSurfaceData(Color.rgb, Color.a, Mask, surfaceData);
 				InputData2D inputData;
 				InitializeInputData(IN.texCoord0.xy, half2(IN.screenPosition.xy / IN.screenPosition.w), inputData);
-				SETUP_DEBUG_DATA_2D(inputData, positionWS);
+				// 团结 URP：SETUP_DEBUG_DATA_2D 现为三参数；无 CS 时用 NO_CS
+				SETUP_DEBUG_DATA_2D_NO_CS(inputData, positionWS);
 				return CombinedShapeLightShared(surfaceData, inputData);
 			}
 
@@ -4627,7 +4633,7 @@ Shader "Sprite Shaders Ultimate/Uber/URP Lit Uber"
 					InitializeInputData(positionWS.xy, half2(IN.texCoord0.xy), inputData);
 					half4 debugColor = 0;
 
-					SETUP_DEBUG_DATA_2D(inputData, positionWS);
+					SETUP_DEBUG_DATA_2D_NO_CS(inputData, positionWS);
 
 					if (CanDebugOverrideOutputColor(surfaceData, inputData, debugColor))
 					{

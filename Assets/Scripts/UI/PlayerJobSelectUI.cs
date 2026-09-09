@@ -15,7 +15,6 @@ public class PlayerJobSelectUI : MonoBehaviour
     public struct Options
     {
         public bool TutorialForceSwordFirst;
-        public string HintOverride;
         public bool RequireSwordShield;
     }
 
@@ -30,6 +29,8 @@ public class PlayerJobSelectUI : MonoBehaviour
         public Text AtkStat;
         public Text ControlStat;
         public Transform RatingRoot;
+        public CanvasGroup DimGroup;
+        public Outline SelectOutline;
     }
 
     Action _onEnterRift;
@@ -115,14 +116,15 @@ public class PlayerJobSelectUI : MonoBehaviour
         }
         if (_refreshLabel != null)
             _refreshLabel.text = tut ? "引导中不可刷新" : "刷新 (1)";
-        if (_hint != null)
+
+        // 手做 prefab：绝不碰 Hint（字号/字体/文案），也不整树套字体
+        if (!_fromPrefab)
         {
-            _hint.text = !string.IsNullOrEmpty(opts.HintOverride)
-                ? opts.HintOverride
-                : "请选择你想成为的职业，踏入裂隙，迎接挑战！";
+            if (_hint != null)
+                _hint.text = "请选择你想成为的职业，踏入裂隙，迎接挑战！";
+            if (_title != null)
+                _title.text = "选择职业";
         }
-        if (_title != null)
-            _title.text = "选择职业";
 
         if (_root != null)
         {
@@ -131,13 +133,36 @@ public class PlayerJobSelectUI : MonoBehaviour
         }
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
-        GameFonts.ApplyToHierarchy(transform);
+        if (!_fromPrefab)
+            GameFonts.ApplyToHierarchy(transform);
+
+        if (tut)
+            ShowTutorialPickSword();
     }
 
     public void Hide()
     {
+        if (_opts.TutorialForceSwordFirst)
+            TutorialHintUI.Instance?.Hide();
         if (_root != null) _root.SetActive(false);
         else gameObject.SetActive(false);
+    }
+
+    void ShowTutorialPickSword()
+    {
+        RectTransform target = null;
+        if (_cards.Count > 0 && _cards[0].Button != null)
+            target = _cards[0].Button.transform as RectTransform;
+        if (target == null) return;
+        TutorialHintUI.Ensure().ShowHard("请选择剑盾卫士。", target);
+    }
+
+    void ShowTutorialEnterRift()
+    {
+        if (_enterBtn == null) return;
+        var target = _enterBtn.transform as RectTransform;
+        if (target == null) return;
+        TutorialHintUI.Ensure().ShowHard("再点「进入裂隙」。", target);
     }
 
     void BuildIfNeeded()
@@ -220,6 +245,7 @@ public class PlayerJobSelectUI : MonoBehaviour
                 var legacy = FindText(cardTf, "Stats");
                 if (legacy != null) bind.HpStat = legacy;
             }
+            EnsureCardSelectFx(ref bind, cardTf);
             int idx = i;
             bind.Button.onClick.RemoveAllListeners();
             bind.Button.onClick.AddListener(() => OnCardClicked(idx));
@@ -436,10 +462,13 @@ public class PlayerJobSelectUI : MonoBehaviour
         _selected = job;
         RefreshCardsVisual();
         UpdateEnterInteractable();
+        if (_opts.TutorialForceSwordFirst && job == PlayerJobId.SwordShield)
+            ShowTutorialEnterRift();
     }
 
     void RefreshCardsVisual()
     {
+        bool hasSel = _selected.HasValue;
         for (int i = 0; i < _cards.Count; i++)
         {
             if (i >= _offer.Count) continue;
@@ -460,8 +489,6 @@ public class PlayerJobSelectUI : MonoBehaviour
             if (c.Desc != null)
             {
                 string body = string.IsNullOrEmpty(def.LongDesc) ? def.Blurb : def.LongDesc;
-                if (!string.IsNullOrEmpty(def.AttackStyleLabel))
-                    body = body + "\n" + def.AttackStyleLabel;
                 c.Desc.text = body;
             }
             ApplyRecommendStars(c.RatingRoot, def.RecommendStars);
@@ -475,19 +502,60 @@ public class PlayerJobSelectUI : MonoBehaviour
                 }
                 // 无 Resources 图时保留 prefab 已拖 Sprite，不刷色块
             }
-            bool sel = _selected.HasValue && _selected.Value == _offer[i];
-            if (c.Frame != null)
-                c.Frame.color = sel
-                    ? new Color(0.85f, 0.65f, 0.2f, 0.65f)
-                    : new Color(0.45f, 0.32f, 0.18f, 0.35f);
-            else if (c.Button != null)
-            {
-                var img = c.Button.GetComponent<Image>();
-                if (img != null)
-                    img.color = sel
-                        ? new Color(0.95f, 0.88f, 0.55f, 1f)
-                        : new Color(0.92f, 0.86f, 0.72f, 1f);
-            }
+            bool sel = hasSel && _selected.Value == _offer[i];
+            ApplyCardSelectVisual(c, sel, hasSel);
+        }
+    }
+
+    static void EnsureCardSelectFx(ref CardBind bind, Transform cardTf)
+    {
+        if (cardTf == null) return;
+        bind.DimGroup = cardTf.GetComponent<CanvasGroup>();
+        if (bind.DimGroup == null)
+            bind.DimGroup = cardTf.gameObject.AddComponent<CanvasGroup>();
+
+        var outlineHost = bind.Frame != null ? bind.Frame.gameObject : cardTf.gameObject;
+        bind.SelectOutline = outlineHost.GetComponent<Outline>();
+        if (bind.SelectOutline == null)
+            bind.SelectOutline = outlineHost.AddComponent<Outline>();
+        bind.SelectOutline.effectColor = new Color(1f, 0.85f, 0.25f, 0.95f);
+        bind.SelectOutline.effectDistance = new Vector2(4f, -4f);
+        bind.SelectOutline.useGraphicAlpha = true;
+        bind.SelectOutline.enabled = false;
+    }
+
+    static void ApplyCardSelectVisual(CardBind c, bool selected, bool anySelected)
+    {
+        if (c.DimGroup != null)
+        {
+            c.DimGroup.alpha = anySelected && !selected ? 0.4f : 1f;
+            // 默认三卡 0.98；有选中时：选中 1.02，另外两张 0.95
+            if (!anySelected)
+                c.DimGroup.transform.localScale = Vector3.one * 0.98f;
+            else
+                c.DimGroup.transform.localScale = selected
+                    ? Vector3.one * 1.02f
+                    : Vector3.one * 0.95f;
+        }
+
+        if (c.SelectOutline != null)
+            c.SelectOutline.enabled = selected;
+
+        if (c.Frame != null)
+        {
+            c.Frame.color = selected
+                ? new Color(0.95f, 0.78f, 0.28f, 0.85f)
+                : new Color(0.45f, 0.32f, 0.18f, 0.35f);
+        }
+        else if (c.Button != null)
+        {
+            var img = c.Button.GetComponent<Image>();
+            if (img != null)
+                img.color = selected
+                    ? new Color(0.95f, 0.88f, 0.55f, 1f)
+                    : (anySelected
+                        ? new Color(0.55f, 0.5f, 0.42f, 1f)
+                        : new Color(0.92f, 0.86f, 0.72f, 1f));
         }
     }
 
@@ -557,6 +625,8 @@ public class PlayerJobSelectUI : MonoBehaviour
             return;
         }
         PlayerJobDefs.SetSelected(_selected.Value);
+        if (_opts.TutorialForceSwordFirst)
+            TutorialHintUI.Instance?.Hide();
         Hide();
         var cb = _onEnterRift;
         _onEnterRift = null;

@@ -80,8 +80,10 @@ public class UnitAnimation : MonoBehaviour
     SpriteRenderer[] _spumFlashSrs;
     Color[] _spumFlashBaseline;
     int _spumFlashGen;
+    bool _hitFlashRunning;
+    bool _lowHpFlashOn;
     float _damagedRecoveryUntil;
-    const float DamagedRecoverySeconds = 0.18f;
+    const float DamagedFlashFadeSeconds = 0.28f;
 
     void Awake()
     {
@@ -639,6 +641,8 @@ public class UnitAnimation : MonoBehaviour
     }
 
     public bool InDamagedRecovery() => Time.unscaledTime < _damagedRecoveryUntil;
+    /// <summary>受击白闪协程进行中（低血闪红需让路）。</summary>
+    public bool HitFlashRunning => _hitFlashRunning;
     /// <summary>攻击动画锁定中（出手未结束，AI 不得换目标/滑步）。</summary>
     public bool InAttackLock => _attackAnimLock > 0f;
 
@@ -647,6 +651,7 @@ public class UnitAnimation : MonoBehaviour
     {
         _damagedRecoveryUntil = 0f;
         _spumFlashGen++;
+        _hitFlashRunning = false;
         RestoreSpumFlashColors();
         if (!_isMoving)
             ApplyAnimatorSpeed(1f);
@@ -883,31 +888,43 @@ public class UnitAnimation : MonoBehaviour
     }
 
     /// <summary>
-    /// 播放受伤动画
+    /// 播放受伤。playHitAnim=false 时只闪白不播 DAMAGED 动画（玩家 / 佣兵走路）。
     /// </summary>
-    public void PlayDamaged()
+    public void PlayDamaged(bool playHitAnim = true)
     {
         if (_isDead) return;
-        float recovery = DamagedRecoverySeconds / Mathf.Max(0.01f, GameConfig.DAMAGED_ANIM_SPEED);
-        _damagedRecoveryUntil = Time.unscaledTime + recovery;
 
-        // SPUM模式
-        if (_spum != null && _spum.OverrideController != null)
+        // 播受击动画、或站立仅闪白：短硬直防滑步；走路仅闪白不锁移动
+        bool lockRecovery = playHitAnim || !_isMoving;
+        if (lockRecovery)
         {
-            try
+            float recovery = DamagedFlashFadeSeconds / Mathf.Max(0.01f, GameConfig.DAMAGED_ANIM_SPEED);
+            _damagedRecoveryUntil = Time.unscaledTime + recovery;
+        }
+        else
+            _damagedRecoveryUntil = 0f;
+
+        if (playHitAnim)
+        {
+            // SPUM模式
+            if (_spum != null && _spum.OverrideController != null)
             {
-                _spum.PlayAnimation(PlayerState.DAMAGED, 0);
+                try
+                {
+                    _spum.PlayAnimation(PlayerState.DAMAGED, 0);
+                }
+                catch { }
             }
-            catch { }
+            // 原生Animator模式
+            else if (_animator != null)
+            {
+                SetTriggerSafe("Damaged");
+                SetTriggerSafe("4_Damaged");
+                SetTriggerSafe("Hit");
+            }
+            ApplyAnimatorSpeed(GameConfig.DAMAGED_ANIM_SPEED);
         }
-        // 原生Animator模式
-        else if (_animator != null)
-        {
-            SetTriggerSafe("Damaged");
-            SetTriggerSafe("4_Damaged");
-            SetTriggerSafe("Hit");
-        }
-        ApplyAnimatorSpeed(GameConfig.DAMAGED_ANIM_SPEED);
+
         // 程序化模式：受伤时短暂闪烁
         if (_procMode && _sr != null)
         {
@@ -923,48 +940,71 @@ public class UnitAnimation : MonoBehaviour
     public void RestoreSpumFlashColors()
     {
         if (_spum == null) return;
-        CacheSpumFlashRenderers();
+        // 禁止在此重采 baseline：白闪/脏色会被当成永久发色
         RestoreSpumFlashFromBaseline();
+    }
+
+    /// <summary>换装完成后重新采集 SPUM 基准色。</summary>
+    public void RecacheSpumFlashBaseline()
+    {
+        if (_spum == null) return;
+        CacheSpumFlashRenderers();
     }
 
     System.Collections.IEnumerator SpumDamagedFlash()
     {
         int gen = ++_spumFlashGen;
+        _hitFlashRunning = true;
         // 闪白期间禁止把白闪采成基准，否则还原会永远停在白色
         if (_spumFlashBaseline == null || _spumFlashSrs == null || _spumFlashSrs.Length == 0)
             CacheSpumFlashRenderers();
         var srs = _spumFlashSrs;
-        if (srs == null || srs.Length == 0 || _spumFlashBaseline == null) yield break;
+        if (srs == null || srs.Length == 0 || _spumFlashBaseline == null)
+        {
+            if (gen == _spumFlashGen) _hitFlashRunning = false;
+            yield break;
+        }
 
+        // 叠击：先回到基准再瞬间拉白，避免从半白继续错基准
         RestoreSpumFlashFromBaseline();
 
-        int shadowCount = 0;
-        int flashed = 0;
         for (int i = 0; i < srs.Length; i++)
         {
             if (srs[i] == null) continue;
-            if (IsShadowRenderer(srs[i]))
-            {
-                shadowCount++;
-                continue;
-            }
+            if (IsShadowRenderer(srs[i])) continue;
             var c = _spumFlashBaseline[i];
             srs[i].color = new Color(1f, 1f, 1f, c.a);
-            flashed++;
         }
-        // #region agent log
-        DebugAgentLog.Log("H1", "UnitAnimation.SpumDamagedFlash", "flash_start",
-            $"{{\"gen\":{gen},\"flashed\":{flashed},\"shadowSr\":{shadowCount},\"unit\":\"{EscapeJson(gameObject.name)}\"}}");
-        // #endregion
 
-        yield return new WaitForSecondsRealtime(0.12f);
+        float dur = DamagedFlashFadeSeconds;
+        float t = 0f;
+        while (t < dur)
+        {
+            if (gen != _spumFlashGen || _isDead)
+            {
+                if (gen == _spumFlashGen) _hitFlashRunning = false;
+                yield break;
+            }
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / dur);
+            for (int i = 0; i < srs.Length; i++)
+            {
+                if (srs[i] == null) continue;
+                if (IsShadowRenderer(srs[i])) continue;
+                var baseC = _spumFlashBaseline[i];
+                var white = new Color(1f, 1f, 1f, baseC.a);
+                srs[i].color = Color.Lerp(white, baseC, u);
+            }
+            yield return null;
+        }
 
-        if (gen != _spumFlashGen || _isDead) yield break;
+        if (gen != _spumFlashGen || _isDead)
+        {
+            if (gen == _spumFlashGen) _hitFlashRunning = false;
+            yield break;
+        }
         RestoreSpumFlashFromBaseline();
-        // #region agent log
-        DebugAgentLog.Log("H1", "UnitAnimation.SpumDamagedFlash", "flash_restore_baseline",
-            $"{{\"gen\":{gen},\"latestGen\":{_spumFlashGen}}}");
-        // #endregion
+        _hitFlashRunning = false;
     }
 
     static bool IsShadowRenderer(SpriteRenderer sr)
@@ -983,11 +1023,78 @@ public class UnitAnimation : MonoBehaviour
 
     System.Collections.IEnumerator ProcDamagedFlash()
     {
+        int gen = ++_spumFlashGen;
+        _hitFlashRunning = true;
+        if (_sr == null)
+        {
+            if (gen == _spumFlashGen) _hitFlashRunning = false;
+            yield break;
+        }
         Color origColor = _sr.color;
-        _sr.color = new Color(1f, 0.3f, 0.3f, origColor.a);
-        yield return new WaitForSecondsRealtime(0.12f);
-        if (_sr != null && !_isDead)
+        Color hitColor = new Color(1f, 0.3f, 0.3f, origColor.a);
+        _sr.color = hitColor;
+        float dur = DamagedFlashFadeSeconds;
+        float t = 0f;
+        while (t < dur)
+        {
+            if (gen != _spumFlashGen || _isDead || _sr == null)
+            {
+                if (gen == _spumFlashGen) _hitFlashRunning = false;
+                yield break;
+            }
+            t += Time.unscaledDeltaTime;
+            _sr.color = Color.Lerp(hitColor, origColor, Mathf.Clamp01(t / dur));
+            yield return null;
+        }
+        if (gen == _spumFlashGen && _sr != null && !_isDead)
             _sr.color = origColor;
+        if (gen == _spumFlashGen) _hitFlashRunning = false;
+    }
+
+    /// <summary>
+    /// 低血脉冲红。受击白闪进行中让路；脱离低血时还原。
+    /// </summary>
+    public void TickLowHpFlash(float hpRatio, bool dead)
+    {
+        bool want = !dead && hpRatio <= GameConfig.LOW_HP_WARN_RATIO + 0.0001f;
+        if (!want)
+        {
+            if (_lowHpFlashOn)
+            {
+                _lowHpFlashOn = false;
+                if (!_hitFlashRunning)
+                    RestoreSpumFlashFromBaseline();
+            }
+            return;
+        }
+
+        if (_hitFlashRunning || InDamagedRecovery())
+            return;
+
+        if (_spum != null)
+        {
+            if (_spumFlashBaseline == null || _spumFlashSrs == null || _spumFlashSrs.Length == 0)
+                CacheSpumFlashRenderers();
+            var srs = _spumFlashSrs;
+            if (srs == null || _spumFlashBaseline == null) return;
+            _lowHpFlashOn = true;
+            float pulse = 0.45f + 0.55f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 6.5f));
+            for (int i = 0; i < srs.Length; i++)
+            {
+                if (srs[i] == null || IsShadowRenderer(srs[i])) continue;
+                var baseC = _spumFlashBaseline[i];
+                var red = new Color(1f, 0.35f, 0.35f, baseC.a);
+                srs[i].color = Color.Lerp(baseC, red, pulse);
+            }
+        }
+        else if (_sr != null)
+        {
+            _lowHpFlashOn = true;
+            float pulse = 0.45f + 0.55f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 6.5f));
+            var baseC = Color.white;
+            var red = new Color(1f, 0.35f, 0.35f, _sr.color.a);
+            _sr.color = Color.Lerp(baseC, red, pulse);
+        }
     }
 
     /// <summary>

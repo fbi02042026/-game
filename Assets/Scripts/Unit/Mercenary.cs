@@ -87,11 +87,8 @@ public class Mercenary : UnitBase
             float finalDamage = Mathf.Max(1f, damage - defense);
             currentHp = Mathf.Max(1f, currentHp - finalDamage * 0.35f);
             DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage * 0.35f), isCrit, true, hitVfxFacing);
-            if (unitAnim != null)
-            {
-                unitAnim.PlayDamaged();
-                _stunAnimTimer = 0.35f;
-            }
+            PlayHitReaction();
+            _stunAnimTimer = 0.35f;
             return;
         }
 
@@ -102,6 +99,16 @@ public class Mercenary : UnitBase
         base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source);
         if (PassiveRunner != null && !Mathf.Approximately(before, currentHp))
             PassiveRunner.OnHpChanged();
+    }
+
+    /// <summary>站立播受击动画；走路只闪白。出手由 PlayAttack→InterruptDamaged 打断。</summary>
+    protected override void PlayHitReaction()
+    {
+        if (unitAnim == null) return;
+        bool playAnim = !unitAnim.IsMoving;
+        unitAnim.PlayDamaged(playHitAnim: playAnim);
+        if (playAnim)
+            _stunAnimTimer = 0.35f;
     }
 
     void WirePassiveOnAttack()
@@ -267,6 +274,16 @@ public class Mercenary : UnitBase
     void LateUpdate()
     {
         SyncNameLabelTransform();
+        TickLowHpWarn();
+    }
+
+    void TickLowHpWarn()
+    {
+        float maxHp = attr != null ? attr.GetAttr(AttrType.MaxHp) : 0f;
+        float ratio = maxHp > 0.01f ? currentHp / maxHp : 1f;
+        bool dead = isDead || currentHp <= 0f;
+        if (unitAnim != null)
+            unitAnim.TickLowHpFlash(ratio, dead);
     }
 
     void SyncNameLabelTransform()

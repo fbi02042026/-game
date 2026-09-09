@@ -267,12 +267,16 @@ public class BattleManager : Singleton<BattleManager>
         }
         if (IsTutorialRun)
             StoryProgress.ConsumeTutorialBattleFlag();
-        // 教程剑从宝箱剧情获得，开局不自动装武器（避免双手空挥时仍显示剑）
-        if (!IsTutorialRun && GridBackpackSystem.Instance != null)
+        // 选职后一律发职业武器（含教程）；木剑兜底仅非教程
+        if (GridBackpackSystem.Instance != null)
         {
-            if (GridBackpackSystem.Instance.EnsureStarterWeapon())
-                hero.RecalcAttr();
             PlayerJobDefs.ApplyForBattle();
+            if (!IsTutorialRun
+                && GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand) == null)
+            {
+                if (GridBackpackSystem.Instance.EnsureStarterWeapon())
+                    hero.RecalcAttr();
+            }
         }
         SuppressStageClear = IsTutorialRun;
         SkipLegacyOnEvacuate = IsTutorialRun;

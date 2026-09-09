@@ -29,21 +29,34 @@ public class TutorialHintUI : MonoBehaviour
     bool _hard;
     const float SwipeDur = 0.45f;
     const float HandSize = 96f;
+    const int DefaultSortOrder = GameConfig.UiSort.TutorialHint;
+    const string PrefabResourcesPath = "Prefabs/UI/TutorialHintUI";
 
     public static TutorialHintUI Ensure()
     {
         if (Instance != null) return Instance;
-        var go = new GameObject("TutorialHintUI");
+
+        GameObject go = null;
+        var prefab = Resources.Load<GameObject>(PrefabResourcesPath);
+        if (prefab != null)
+        {
+            go = Object.Instantiate(prefab);
+            go.name = "TutorialHintUI";
+        }
+        if (go == null)
+            go = new GameObject("TutorialHintUI");
+
         DontDestroyOnLoad(go);
-        var ui = go.AddComponent<TutorialHintUI>();
-        ui.Build();
+        var ui = go.GetComponent<TutorialHintUI>();
+        if (ui == null) ui = go.AddComponent<TutorialHintUI>();
+        ui.EnsureBuilt();
         return ui;
     }
 
     void Awake()
     {
         Instance = this;
-        if (_group == null) Build();
+        EnsureBuilt();
     }
 
     void OnDestroy()
@@ -51,11 +64,91 @@ public class TutorialHintUI : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    void EnsureBuilt()
+    {
+        if (_group != null && _label != null && _bannerRt != null) return;
+        if (TryBindFromHierarchy()) return;
+        Build();
+    }
+
+    bool TryBindFromHierarchy()
+    {
+        if (transform.Find("Banner") == null) return false;
+
+        var canvas = gameObject.GetComponent<Canvas>();
+        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
+        UICanvasSetup.ApplyPopup(canvas, DefaultSortOrder);
+        if (GetComponent<GraphicRaycaster>() == null)
+            gameObject.AddComponent<GraphicRaycaster>();
+        _raycaster = GetComponent<GraphicRaycaster>();
+
+        _group = gameObject.GetComponent<CanvasGroup>();
+        if (_group == null) _group = gameObject.AddComponent<CanvasGroup>();
+        _group.blocksRaycasts = false;
+        _group.interactable = false;
+        if (_group.alpha > 0.99f) _group.alpha = 0f;
+        if (_raycaster != null) _raycaster.enabled = false;
+
+        _dims = new RectTransform[4];
+        string[] names = { "DimTop", "DimBottom", "DimLeft", "DimRight" };
+        for (int i = 0; i < 4; i++)
+        {
+            var t = transform.Find(names[i]) as RectTransform;
+            _dims[i] = t;
+            if (t != null) t.gameObject.SetActive(false);
+        }
+
+        var hole = transform.Find("Hole");
+        if (hole != null)
+        {
+            _holeRt = hole as RectTransform;
+            _holeButton = hole.GetComponent<Button>();
+            if (_holeButton != null)
+            {
+                _holeButton.onClick.RemoveListener(OnHoleClicked);
+                _holeButton.onClick.AddListener(OnHoleClicked);
+            }
+            hole.gameObject.SetActive(false);
+        }
+
+        var banner = transform.Find("Banner") as RectTransform;
+        _bannerRt = banner;
+        if (banner != null)
+        {
+            var hint = banner.Find("HintText");
+            if (hint != null) _label = hint.GetComponent<Text>();
+            if (_label != null)
+            {
+                if (_label.font == null)
+                    _label.font = GameFonts.GetChinese();
+                _label.color = new Color(0xFC / 255f, 0xFD / 255f, 0xBE / 255f, 1f);
+                // 拉伸锚点：Top=10 / Bottom=18 / Left=Right=28（仅改 sizeDelta 且 pos=0 会变成上下各 14）
+                var lrt = _label.rectTransform;
+                lrt.anchorMin = Vector2.zero;
+                lrt.anchorMax = Vector2.one;
+                lrt.pivot = new Vector2(0.5f, 0.5f);
+                lrt.offsetMin = new Vector2(28f, 18f);
+                lrt.offsetMax = new Vector2(-28f, -10f);
+            }
+        }
+
+        var pointer = transform.Find("PointerHand");
+        if (pointer != null)
+        {
+            _pointerRt = pointer as RectTransform;
+            _pointerHand = pointer.GetComponent<Image>();
+            pointer.gameObject.SetActive(false);
+        }
+
+        PlaceBanner(null);
+        return _label != null && _bannerRt != null && _group != null;
+    }
+
     void Build()
     {
         var canvas = gameObject.GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TutorialHint);
+        UICanvasSetup.ApplyPopup(canvas, DefaultSortOrder);
         if (GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
         _raycaster = GetComponent<GraphicRaycaster>();
@@ -88,20 +181,24 @@ public class TutorialHintUI : MonoBehaviour
         _holeButton.onClick.AddListener(OnHoleClicked);
         holeGo.SetActive(false);
 
-        var banner = CreateImage(transform, "Banner", new Color(0.08f, 0.1f, 0.16f, 0.88f));
+        var banner = CreateImage(transform, "Banner", Color.white);
+        TryApplyBannerPlate(banner);
         _bannerRt = banner.rectTransform;
-        _bannerRt.anchorMin = new Vector2(0.08f, 0.58f);
-        _bannerRt.anchorMax = new Vector2(0.92f, 0.58f);
+        _bannerRt.anchorMin = new Vector2(0.02f, 0.58f);
+        _bannerRt.anchorMax = new Vector2(0.98f, 0.58f);
         _bannerRt.pivot = new Vector2(0.5f, 0.5f);
         _bannerRt.anchoredPosition = Vector2.zero;
-        _bannerRt.sizeDelta = new Vector2(0f, 140f);
+        _bannerRt.sizeDelta = new Vector2(0f, 100f);
 
         _label = CreateText(banner.transform, "HintText", "", 26, TextAnchor.MiddleCenter);
+        _label.font = GameFonts.GetChinese();
+        _label.color = new Color(0xFC / 255f, 0xFD / 255f, 0xBE / 255f, 1f);
         var lrt = _label.rectTransform;
         lrt.anchorMin = Vector2.zero;
         lrt.anchorMax = Vector2.one;
-        lrt.offsetMin = new Vector2(20f, 12f);
-        lrt.offsetMax = new Vector2(-20f, -12f);
+        lrt.pivot = new Vector2(0.5f, 0.5f);
+        lrt.offsetMin = new Vector2(28f, 18f);
+        lrt.offsetMax = new Vector2(-28f, -10f); // Top=10
         _label.horizontalOverflow = HorizontalWrapMode.Wrap;
         _label.verticalOverflow = VerticalWrapMode.Overflow;
 
@@ -120,6 +217,22 @@ public class TutorialHintUI : MonoBehaviour
         if (_label != null && _label.font == null)
             _label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         PlaceBanner(null);
+    }
+
+    static void TryApplyBannerPlate(Image banner)
+    {
+        if (banner == null) return;
+#if UNITY_EDITOR
+        var sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/引导/引导底框.png");
+        if (sp != null)
+        {
+            banner.sprite = sp;
+            banner.type = Image.Type.Simple;
+            banner.color = Color.white;
+            return;
+        }
+#endif
+        banner.color = new Color(0.08f, 0.1f, 0.16f, 0.88f);
     }
 
     static Image CreateImage(Transform parent, string name, Color color)
@@ -172,6 +285,7 @@ public class TutorialHintUI : MonoBehaviour
         // 没有目标就不能上硬引导：否则全屏挡住点击又没有挖空，直接卡死
         _hard = hard && highlight != null;
         hard = _hard;
+        ApplySortForHighlight(highlight, hard);
         _group.alpha = 1f;
         _group.blocksRaycasts = hard;
         _group.interactable = hard;
@@ -189,6 +303,30 @@ public class TutorialHintUI : MonoBehaviour
             BeginSwipeToTarget();
         else if (highlight == null)
             HidePointer();
+    }
+
+    /// <summary>硬引导盖过目标所在 Canvas（如 TownPopup 选职页）。</summary>
+    void ApplySortForHighlight(RectTransform highlight, bool hard)
+    {
+        var canvas = GetComponent<Canvas>();
+        if (canvas == null) return;
+        int order = DefaultSortOrder;
+        if (hard && highlight != null)
+        {
+            var followCanvas = highlight.GetComponentInParent<Canvas>();
+            if (followCanvas != null)
+                order = Mathf.Max(order, followCanvas.sortingOrder + 10);
+            else
+                order = Mathf.Max(order, GameConfig.UiSort.TownPopup + 10);
+        }
+        canvas.sortingOrder = order;
+    }
+
+    void RestoreDefaultSort()
+    {
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            canvas.sortingOrder = DefaultSortOrder;
     }
 
     /// <summary>确保软引导/隐藏后不留遮罩挡底栏。</summary>
@@ -218,6 +356,7 @@ public class TutorialHintUI : MonoBehaviour
         _follow = null;
         ForceClearBlockers();
         HidePointer();
+        RestoreDefaultSort();
     }
 
     /// <summary>设置弹窗等更高层 UI 打开时，暂时关掉硬遮罩挡点击。</summary>
@@ -245,11 +384,6 @@ public class TutorialHintUI : MonoBehaviour
         if (btn == null) btn = _follow.GetComponentInParent<Button>();
         if (btn != null && btn.interactable)
             btn.onClick.Invoke();
-    }
-
-    void EnsureBuilt()
-    {
-        if (_group == null) Build();
     }
 
     void Update()
@@ -337,7 +471,7 @@ public class TutorialHintUI : MonoBehaviour
         PlaceBanner(new Vector2(centerX, minY), maxY, top, bot, _pointerAbove ? handH + gap : 0f);
     }
 
-    /// <summary>文字横幅：固定宽度（贴着屏幕两侧留边），放在目标上方，放不下就换到下方。</summary>
+    /// <summary>文字横幅：高度固定 100，左右少留白，不按字高拉扁底图。</summary>
     void PlaceBanner(Vector2? target, float targetTop = 0f, float top = 0f, float bot = 0f,
         float extraTopClearance = 0f)
     {
@@ -345,14 +479,13 @@ public class TutorialHintUI : MonoBehaviour
         var root = transform as RectTransform;
         if (root == null) return;
 
-        float width = Mathf.Max(240f, root.rect.width - 80f);
+        const float bannerH = 100f;
+        // 左右各约 12px，避免两侧空一大截
+        float width = Mathf.Max(280f, root.rect.width - 24f);
         _bannerRt.anchorMin = _bannerRt.anchorMax = new Vector2(0.5f, 0.5f);
         _bannerRt.pivot = new Vector2(0.5f, 0.5f);
-        // 高度跟着文字走，短句不要糊一大块黑底
-        float height = 88f;
-        if (_label != null)
-            height = Mathf.Clamp(_label.preferredHeight + 32f, 76f, 280f);
-        _bannerRt.sizeDelta = new Vector2(width, height);
+        _bannerRt.sizeDelta = new Vector2(width, bannerH);
+
         bool hasText = _label != null && !string.IsNullOrEmpty(_label.text);
         _bannerRt.gameObject.SetActive(hasText);
 
@@ -362,7 +495,7 @@ public class TutorialHintUI : MonoBehaviour
             return;
         }
 
-        float half = height * 0.5f;
+        float half = bannerH * 0.5f;
         // 手在按钮上方时，横幅要让开整只手，否则字压在手背上
         float y = targetTop + 24f + extraTopClearance + half;
         if (y + half > top - 12f)

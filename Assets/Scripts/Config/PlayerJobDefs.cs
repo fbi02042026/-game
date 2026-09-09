@@ -222,13 +222,62 @@ public static class PlayerJobDefs
 
     static bool IsShieldTemplate(EquipTemplate t)
     {
-        if (t == null || t.slotType != EquipSlotType.OffHand) return false;
-        string n = (t.spumName ?? t.iconFileName ?? "").ToLowerInvariant();
+        if (t == null) return false;
+        if (t.slotType == EquipSlotType.OffHand && t.weaponType == WeaponType.None) return true;
+        string n = (t.spumName ?? t.iconFileName ?? t.templateId ?? "").ToLowerInvariant();
         return n.Contains("shield") || n.Contains("盾");
     }
 
+    struct JobWeaponKit
+    {
+        public string MainTemplateId;
+        public string OffTemplateId;
+        /// <summary>无模板时强制的 SPUM 名（法师 Ward_1）。</summary>
+        public string MainSpumOverride;
+        public bool ForceMainOneHand;
+        public bool ForceOffHand;
+    }
+
+    /// <summary>各职业对应 *101 佣兵预制体上的武器套（写死）。</summary>
+    static JobWeaponKit GetJobWeaponKit(PlayerJobId job)
+    {
+        switch (job)
+        {
+            case PlayerJobId.SwordShield:
+                return new JobWeaponKit
+                {
+                    MainTemplateId = "equip_new_weapon_04",
+                    OffTemplateId = "equip_steelshield1",
+                    ForceMainOneHand = true
+                };
+            case PlayerJobId.Berserker:
+                return new JobWeaponKit
+                {
+                    MainTemplateId = "equip_new_weapon_06",
+                    OffTemplateId = "equip_new_weapon_09",
+                    ForceMainOneHand = true,
+                    ForceOffHand = true
+                };
+            case PlayerJobId.Ranger:
+                return new JobWeaponKit { MainTemplateId = "equip_new_weapon_12" };
+            case PlayerJobId.Mage:
+                return new JobWeaponKit
+                {
+                    MainTemplateId = "weapon_twilight_staff",
+                    MainSpumOverride = "Ward_1",
+                    ForceMainOneHand = true
+                };
+            case PlayerJobId.Priest:
+                return new JobWeaponKit { MainTemplateId = "equip_new_weapon_03" };
+            case PlayerJobId.Heavy:
+                return new JobWeaponKit { MainTemplateId = "equip_axenormal1" };
+            default:
+                return new JobWeaponKit { MainTemplateId = "equip_new_weapon_04" };
+        }
+    }
+
     /// <summary>
-    /// 开战：按所选职业对应 101 佣兵只发武器（不含护甲），装备后 RefreshCostume。
+    /// 开战：按所选职业对应 101 佣兵武器套写死发装（不含护甲），装备后 RefreshCostume。
     /// </summary>
     public static void ApplyForBattle()
     {
@@ -243,26 +292,41 @@ public static class PlayerJobDefs
         }
 
         var bag = GridBackpackSystem.Instance;
-        if (bag == null || ConfigManager.Instance == null) return;
-
-        bool granted = false;
-        if (!HasPrimaryWeaponEquippedOrInBag(bag, job))
+        if (bag == null)
         {
-            EquipTemplate tpl = FindJobWeaponTemplate(job);
-            if (tpl != null)
-                granted |= GrantAndEquipWeapon(bag, tpl);
+            Debug.LogWarning("[PlayerJobDefs] ApplyForBattle: GridBackpackSystem 为空");
+            return;
         }
 
-        // 剑盾：副手盾（仍属武器位，不发护甲）
-        if (job == PlayerJobId.SwordShield && !HasShieldEquippedOrInBag(bag))
+        var kit = GetJobWeaponKit(job);
+        bool granted = false;
+
+        // 先发主手（会清对应槽）；再发副手
+        if (!string.IsNullOrEmpty(kit.MainTemplateId) || !string.IsNullOrEmpty(kit.MainSpumOverride))
         {
-            EquipTemplate shield = ConfigManager.Instance.FindBasicShieldTemplate();
-            if (shield != null)
-                granted |= GrantAndEquipWeapon(bag, shield);
+            var mainTpl = ResolveKitTemplate(kit.MainTemplateId, kit.MainSpumOverride);
+            if (mainTpl != null)
+                granted |= GrantAndEquipWeapon(bag, mainTpl, kit.ForceMainOneHand, forceOffHand: false, kit.MainSpumOverride);
+            else
+                Debug.LogWarning($"[PlayerJobDefs] 主手模板缺失: id={kit.MainTemplateId} spum={kit.MainSpumOverride}");
+        }
+
+        if (!string.IsNullOrEmpty(kit.OffTemplateId))
+        {
+            var offTpl = ResolveKitTemplate(kit.OffTemplateId, null);
+            if (offTpl != null)
+                granted |= GrantAndEquipWeapon(bag, offTpl, forceOneHand: true, forceOffHand: kit.ForceOffHand || IsShieldTemplate(offTpl), spumOverride: null);
+            else
+                Debug.LogWarning($"[PlayerJobDefs] 副手模板缺失: id={kit.OffTemplateId}");
         }
 
         Hero.Instance?.RecalcAttr();
-        Hero.Instance?.costumeManager?.RefreshCostume();
+        var costume = Hero.Instance?.costumeManager;
+        if (costume != null)
+        {
+            costume.EnsureRigReady();
+            costume.RefreshCostume();
+        }
         if (Hero.Instance != null && Hero.Instance.attr != null)
             Hero.Instance.currentHp = Hero.Instance.attr.GetAttr(AttrType.MaxHp);
         PlayerPassiveCombat.EnsureOn(Hero.Instance);
@@ -270,55 +334,96 @@ public static class PlayerJobDefs
             UIManager.Instance?.ShowToast($"已获得{def.DisplayName}武器");
     }
 
-    static bool GrantAndEquipWeapon(GridBackpackSystem bag, EquipTemplate tpl)
+    static EquipTemplate ResolveKitTemplate(string templateId, string spumFallback)
     {
-        if (tpl == null) return false;
+        if (!string.IsNullOrEmpty(templateId))
+        {
+            var t = LoadEquipTemplate(templateId);
+            if (t != null) return t;
+        }
+        // 法师 Ward_1 无独立模板：用任意 Staff 壳
+        if (!string.IsNullOrEmpty(spumFallback))
+        {
+            var cfg = ConfigManager.Instance;
+            if (cfg != null)
+            {
+                var staff = cfg.FindWeaponTemplateByKind(WeaponCombatTable.WeaponKind.Staff);
+                if (staff != null) return staff;
+            }
+            return LoadEquipTemplate("equip_new_weapon_03");
+        }
+        return null;
+    }
+
+    static EquipTemplate LoadEquipTemplate(string templateId)
+    {
+        if (string.IsNullOrEmpty(templateId)) return null;
+        var cfg = ConfigManager.Instance;
+        if (cfg != null)
+        {
+            var t = cfg.GetEquipTemplate(templateId);
+            if (t != null) return t;
+        }
+        var loaded = Resources.Load<EquipTemplate>(ContentPaths.Config.Equips + "/" + templateId);
+        if (loaded != null)
+        {
+            loaded.ResolveIcon();
+            cfg?.RegisterRuntimeEquip(loaded);
+        }
+        return loaded;
+    }
+
+    static bool GrantAndEquipWeapon(
+        GridBackpackSystem bag,
+        EquipTemplate tpl,
+        bool forceOneHand,
+        bool forceOffHand,
+        string spumOverride)
+    {
+        if (tpl == null || bag == null) return false;
         int lv = Hero.Instance != null ? Hero.Instance.level : 1;
         var inst = EquipInstance.GenerateFromTemplate(tpl, 0, lv, true, Rarity.Common);
-        if (inst == null) return false;
-        if (!bag.TryAddUniqueBySlot(inst, out _))
+        if (inst == null)
         {
+            Debug.LogWarning($"[PlayerJobDefs] GenerateFromTemplate 失败: {tpl.templateId}");
+            return false;
+        }
+
+        if (forceOneHand && inst.weaponType == WeaponType.TwoHand)
+            inst.weaponType = WeaponType.OneHand;
+        // 资源里部分武器 weaponType 未标；非盾则按单手武器处理，保证入包即生效
+        if (inst.weaponType == WeaponType.None && !IsShieldTemplate(tpl) && !WeaponLoadoutRules.IsShield(inst))
+            inst.weaponType = WeaponType.OneHand;
+
+        if (forceOffHand)
+        {
+            inst.weaponHand = WeaponHandSlot.OffHand;
+            inst.slotType = EquipSlotType.OffHand;
+        }
+        else
+        {
+            if (inst.weaponHand == WeaponHandSlot.None)
+                inst.weaponHand = WeaponHandSlot.MainHand;
+            inst.slotType = EquipSlotType.MainHand;
+        }
+        if (!string.IsNullOrEmpty(spumOverride))
+            inst.spumNameOverride = spumOverride;
+
+        // 格子过高塞不进默认行：压矮到可放入
+        int unlocked = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
+        if (inst.gridHeight > unlocked)
+            inst.gridHeight = Mathf.Max(1, unlocked);
+        if (inst.gridWidth > GameConfig.BACKPACK_WIDTH)
+            inst.gridWidth = GameConfig.BACKPACK_WIDTH;
+
+        if (!bag.TryAddUniqueBySlot(inst, out GridBackpackSystem.BackpackItem item))
+        {
+            Debug.LogWarning($"[PlayerJobDefs] 入包失败: {inst.equipName} ({tpl.templateId}) {inst.gridWidth}x{inst.gridHeight}");
             UIManager.Instance?.ShowToast("背包满，无法发放职业武器");
             return false;
         }
+        if (item != null)
+            bag.EquipItem(item);
         return true;
-    }
-
-    static bool HasPrimaryWeaponEquippedOrInBag(GridBackpackSystem bag, PlayerJobId job)
-    {
-        var want = Get(job).PrimaryWeapon;
-        var items = bag.GetAllBackpackItems();
-        if (items == null) return false;
-        for (int i = 0; i < items.Count; i++)
-        {
-            var e = items[i]?.equip;
-            if (e?.template == null) continue;
-            if (e.slotType != EquipSlotType.MainHand && e.slotType != EquipSlotType.OffHand) continue;
-            if (e.weaponType == WeaponType.None) continue;
-            if (WeaponCombatTable.ResolveKind(e.template) == want)
-                return true;
-        }
-        return false;
-    }
-
-    static bool HasShieldEquippedOrInBag(GridBackpackSystem bag)
-    {
-        var items = bag.GetAllBackpackItems();
-        if (items == null) return false;
-        for (int i = 0; i < items.Count; i++)
-        {
-            var e = items[i]?.equip;
-            if (e?.template == null) continue;
-            if (IsShieldTemplate(e.template))
-                return true;
-        }
-        return false;
-    }
-
-    static EquipTemplate FindJobWeaponTemplate(PlayerJobId job)
-    {
-        var cfg = ConfigManager.Instance;
-        if (cfg == null) return null;
-        return cfg.FindWeaponTemplateByKind(Get(job).PrimaryWeapon);
     }
 }

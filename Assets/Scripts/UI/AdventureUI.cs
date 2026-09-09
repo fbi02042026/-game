@@ -4,6 +4,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 /// <summary>
 /// 冒险界面（MainNavTab.Adventure）。
 ///
@@ -1052,8 +1056,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
             ? new PlayerJobSelectUI.Options
             {
                 TutorialForceSwordFirst = true,
-                RequireSwordShield = true,
-                HintOverride = "请选择剑盾卫士，再点「进入裂隙」"
+                RequireSwordShield = true
             }
             : default;
 
@@ -1611,7 +1614,11 @@ public class AdventureUI : MonoBehaviour, ITownPage
             var img = slots[i].icon.GetComponent<Image>();
             if (img == null) continue;
             var sp = LoadPreviewDropSprite(_previewDrops[i]);
-            if (sp == null) continue;
+            if (sp == null)
+            {
+                Debug.LogWarning($"[AdventureUI] 可能掉落图标加载失败 kind={_previewDrops[i]}");
+                continue;
+            }
             img.sprite = sp;
             img.color = Color.white;
             img.preserveAspect = true;
@@ -1662,53 +1669,97 @@ public class AdventureUI : MonoBehaviour, ITownPage
         public Transform icon;
     }
 
+    const string CommonDropArtRoot = "Assets/Art/UI/Icons/Common/";
+    const string CommonDropResourcesPath = "UI/Icons/Common/";
+
+    /// <summary>
+    /// 可能掉落图标：优先 Resources/UI/Icons/Common，编辑器回退 Art/UI/Icons/Common。
+    /// </summary>
+    static Sprite LoadCommonDropIcon(string fileNameWithoutExt)
+    {
+        if (string.IsNullOrEmpty(fileNameWithoutExt)) return null;
+
+        string resPath = CommonDropResourcesPath + fileNameWithoutExt;
+        var sp = Resources.Load<Sprite>(resPath);
+        if (sp != null) return sp;
+
+        var all = Resources.LoadAll<Sprite>(resPath);
+        if (all != null && all.Length > 0)
+        {
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i] != null && all[i].name == fileNameWithoutExt)
+                    return all[i];
+            }
+            return all[0];
+        }
+
+        var tex = Resources.Load<Texture2D>(resPath);
+        if (tex != null)
+        {
+            var made = Sprite.Create(
+                tex,
+                new Rect(0f, 0f, tex.width, tex.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            made.name = fileNameWithoutExt;
+            return made;
+        }
+
+#if UNITY_EDITOR
+        string assetPath = CommonDropArtRoot + fileNameWithoutExt + ".png";
+        var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+        if (ed != null) return ed;
+        var edAll = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+        if (edAll != null)
+        {
+            for (int i = 0; i < edAll.Length; i++)
+            {
+                if (edAll[i] is Sprite spEd) return spEd;
+            }
+        }
+        var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+        if (edTex != null)
+        {
+            var made = Sprite.Create(
+                edTex,
+                new Rect(0f, 0f, edTex.width, edTex.height),
+                new Vector2(0.5f, 0.5f),
+                100f);
+            made.name = fileNameWithoutExt;
+            return made;
+        }
+#endif
+        return null;
+    }
+
     Sprite LoadGoldDropSprite()
     {
         if (_goldDropSprite != null) return _goldDropSprite;
-        Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : null;
-        if (hall != null)
-        {
-            Transform t = TownSharedChrome.FindDeep(hall, "GoldIcon")
-                          ?? TownSharedChrome.FindDeep(hall, "金币");
-            if (t != null)
-            {
-                var img = t.GetComponent<Image>();
-                if (img != null && img.sprite != null)
-                    _goldDropSprite = img.sprite;
-            }
-        }
-        if (_goldDropSprite == null)
-            _goldDropSprite = Resources.Load<Sprite>("UI/Talent/金币");
-        return _goldDropSprite;
+        return _goldDropSprite = LoadCommonDropIcon("icon_gold");
     }
 
     Sprite LoadTalentDropSprite()
     {
         if (_talentDropSprite != null) return _talentDropSprite;
-        _talentDropSprite = Resources.Load<Sprite>("UI/Talent/天赋_0013_天赋石升级");
-        return _talentDropSprite;
+        return _talentDropSprite = LoadCommonDropIcon("icon_talent_stone");
     }
 
     Sprite LoadScrollDropSprite(MercRosterDefs.MercRarity rarity)
     {
+        // Common 目录仅一张雇佣卷轴，各稀有度共用
         if (rarity == MercRosterDefs.MercRarity.Legendary)
         {
             if (_scrollLegendarySprite != null) return _scrollLegendarySprite;
-            _scrollLegendarySprite = Resources.Load<Sprite>("UI/Icons/MercScrollLegendary");
-            if (_scrollLegendarySprite != null) return _scrollLegendarySprite;
-            return MercHireSession.LoadRarityFrame(rarity);
+            return _scrollLegendarySprite = LoadCommonDropIcon("icon_hire_scroll");
         }
         if (rarity == MercRosterDefs.MercRarity.Rare)
         {
             if (_scrollRareSprite != null) return _scrollRareSprite;
-            _scrollRareSprite = Resources.Load<Sprite>("UI/Icons/MercScrollRare");
-            if (_scrollRareSprite != null) return _scrollRareSprite;
-            return MercHireSession.LoadRarityFrame(rarity);
+            return _scrollRareSprite = LoadCommonDropIcon("icon_hire_scroll");
         }
         if (_scrollCommonSprite != null) return _scrollCommonSprite;
-        _scrollCommonSprite = Resources.Load<Sprite>("UI/Icons/MercScrollCommon");
-        if (_scrollCommonSprite != null) return _scrollCommonSprite;
-        return MercHireSession.LoadRarityFrame(rarity);
+        return _scrollCommonSprite = LoadCommonDropIcon("icon_hire_scroll");
     }
 
     Sprite LoadStaminaIconSprite()

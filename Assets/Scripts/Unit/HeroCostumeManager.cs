@@ -59,19 +59,21 @@ public class HeroCostumeManager : MonoBehaviour
         { EquipSlotType.Hands,     new[] { "2_Cloth" } },
         { EquipSlotType.Feet,      new[] { "3_Pant" } },
         { EquipSlotType.Cape,      new[] { "7_Back", "10_Back" } },
-        { EquipSlotType.MainHand,  new[] { "6_Weapons" } },
-        { EquipSlotType.OffHand,   new[] { "6_Weapons" } }
+        { EquipSlotType.MainHand,  new[] { "6_Weapons", "8_Weapons" } },
+        { EquipSlotType.OffHand,   new[] { "6_Weapons", "8_Weapons" } }
     };
 
     /// <summary>
-    /// 所有可能的武器子文件夹（Legacy和Ver121的子文件夹不同）
+    /// 所有可能的武器子文件夹（Legacy / Ver121 / Ver300 子目录不同）
     /// Legacy: 0_Sword, 1_Axe, 2_Bow, 3_Shield, 4_Spear, 5_Wand, 6_Hammer
     /// Ver121: 2_Axe, 7_Shield
+    /// Ver300(8_Weapons): 0_Sword, 1_Spear, 2_Axe, 3_Bow, 5_Wand, 6_Dagger, 7_Shield, 8_Mace
     /// </summary>
     private static readonly string[] AllWeaponSubFolders =
     {
         "0_Sword", "1_Axe", "2_Bow", "3_Shield", "4_Spear", "5_Wand", "6_Hammer",
-        "2_Axe", "7_Shield"
+        "2_Axe", "7_Shield",
+        "1_Spear", "3_Bow", "6_Dagger", "8_Mace"
     };
 
     /// <summary>
@@ -370,7 +372,7 @@ public class HeroCostumeManager : MonoBehaviour
         RefreshWeaponLoadout(useMatching);
 
         var ua = GetComponent<UnitAnimation>() ?? GetComponentInParent<UnitAnimation>();
-        ua?.RestoreSpumFlashColors();
+        ua?.RecacheSpumFlashBaseline();
 
         Debug.Log("[HeroCostumeManager] 换装刷新完成");
     }

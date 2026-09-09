@@ -39,6 +39,8 @@ public static class UICanvasSetup
         if (canvas.GetComponent<GraphicRaycaster>() == null)
             canvas.gameObject.AddComponent<GraphicRaycaster>();
 
+        UiButtonPressFeedback.AttachUnder(canvas.transform);
+
 #if UNITY_EDITOR
         if (cam == null)
             Debug.LogError("[UICanvasSetup] worldCamera 为空，UI 可能缩到一角：" + canvas.name, canvas);
@@ -127,6 +129,13 @@ public static class UICanvasSetup
     static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         RefreshDdolCanvases();
+        // 大厅等自带 Canvas、未走 Apply 的页：补一遍按压反馈
+        var canvases = Object.FindObjectsOfType<Canvas>(true);
+        for (int i = 0; i < canvases.Length; i++)
+        {
+            if (canvases[i] != null)
+                UiButtonPressFeedback.AttachUnder(canvases[i].transform);
+        }
     }
 
     /// <summary>

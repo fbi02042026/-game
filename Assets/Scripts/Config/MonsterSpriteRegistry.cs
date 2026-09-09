@@ -33,21 +33,22 @@ public class MonsterSpriteRegistry : ScriptableObject
     public List<Sprite> chapter8_Ice = new List<Sprite>();
 
     /// <summary>
-    /// 根据章节获取精灵列表
+    /// 根据游戏章节获取精灵列表。
+    /// 字段名表示列表内题材（非游戏章号）；对齐 chapter_theme_map / Monster.LoadSpriteFromResources。
     /// </summary>
     public List<Sprite> GetSpritesForChapter(int chapter)
     {
         switch (chapter)
         {
-            case 1: return chapter1_Undead;
-            case 2: return chapter2_Jungle;
-            case 3: return chapter3_Sea;
-            case 4: return chapter4_Forest;
-            case 5: return chapter5_Field;
-            case 6: return chapter6_Cave;
-            case 7: return chapter7_Devil;
-            case 8: return chapter8_Ice;
-            default: return chapter1_Undead;
+            case 1: return chapter4_Forest;   // 1 Forest
+            case 2: return chapter1_Undead;   // 2 Undead
+            case 3: return chapter2_Jungle;   // 3 Jungle
+            case 4: return chapter5_Field;    // 4 Field
+            case 5: return chapter3_Sea;      // 5 Sea
+            case 6: return chapter6_Cave;     // 6 Cave
+            case 7: return chapter7_Devil;    // 7 Devil
+            case 8: return chapter8_Ice;      // 8 Ice
+            default: return chapter4_Forest;
         }
     }
 

@@ -15,9 +15,13 @@ public static class GameConfig
     /// <summary>组织全称。主界面标题、图鉴条目等统一用这个，不要再写「冒险者公会」。</summary>
     public const string GUILD_NAME = "皇家冒险者公会";
 
-    /// <summary>战斗地面加宽后，单位可在站立线上下偏移的半高（无 BattleLaneArea 时的回退）。</summary>
-    public const float BATTLE_LANE_HALF = 0.95f;
+    /// <summary>战斗地面单位可在站立线上下偏移的半高（玩家/怪统一）。</summary>
+    public const float BATTLE_LANE_HALF = 0.855f;
     public const float BATTLE_LANE_MOVE_SPEED = 1.35f;
+    /// <summary>摇杆左右移速倍率（相对 GetCombatMoveSpeed）。</summary>
+    public const float HERO_MANUAL_MOVE_X_MUL = 1.8f;
+    /// <summary>松摇杆后短暂停自动追怪，避免与手动抢方向。</summary>
+    public const float HERO_MANUAL_RELEASE_HOLD = 0.25f;
     /// <summary>近战出手允许的车道 Y 误差：走到目标水平对面，上下可略偏，避免错位砍刀光发飘。</summary>
     public const float MELEE_LANE_ALIGN_TOL = 0.22f;
 
@@ -295,6 +299,8 @@ public static class GameConfig
     public const float MONSTER_BASIC_PROJECTILE_SPEED_MUL = 0.196f;
     /// <summary>怪物技能弹道速度倍率（勿随意改快）</summary>
     public const float MONSTER_SKILL_PROJECTILE_SPEED_MUL = 0.138f;
+    /// <summary>敌方远程普攻：落点与目标当前受击点距离超过此值则 miss（可躲开）。</summary>
+    public const float PROJECTILE_IMPACT_MISS_DIST = 0.55f;
 
     /// <summary>怪物血条宽度 = 精灵宽 × 此系数</summary>
     public const float MONSTER_HP_BAR_WIDTH_MUL = 0.72f;
@@ -314,6 +320,8 @@ public static class GameConfig
     public const float MOVE_ANIM_SPEED_SCALE = 0.4853f;
     /// <summary>受击动画播放速率（相对 1.0 快 20%）</summary>
     public const float DAMAGED_ANIM_SPEED = 1.2f;
+    /// <summary>玩家/佣兵低血警告阈值（含等于）</summary>
+    public const float LOW_HP_WARN_RATIO = 0.2f;
     /// <summary>镜头相对主角 X 偏移（过大易把身后佣兵挤出左缘）</summary>
     public const float CAMERA_FOLLOW_OFFSET_X = 0.85f;
     /// <summary>默认近战攻击距离（单手剑 96px @ PPU100）</summary>
@@ -544,7 +552,7 @@ public static class GameConfig
     /// <summary>我方近战命中时机：相对攻击动画时长比例（0.5=下劈中点）</summary>
     public const float ALLY_MELEE_HIT_NORM = 0.5f;
     /// <summary>我方近战暴击动画幅度倍率（仅视觉子节点）</summary>
-    public const float ALLY_MELEE_CRIT_AMP = 1.6f;
+    public const float ALLY_MELEE_CRIT_AMP = 1f;
 
     /// <summary>受击击退距离（世界单位）</summary>
     public const float COMBAT_KNOCKBACK_NORMAL = 0.06f;
@@ -568,7 +576,7 @@ public static class GameConfig
     public const float KILL_CAM_ZOOM_OUT = 0.07f;
     /// <summary>远程（弓/法球）击杀短前摇真实秒数</summary>
     public const float KILL_CAM_RANGED_WINDUP = 0.14f;
-    public static bool COMBAT_JUICE_KILL_CAM = true;
+    public static bool COMBAT_JUICE_KILL_CAM = false;
 
     /// <summary>击杀收刀顿帧/微震（独立于 COMBAT_JUICE_CAMERA_SHAKE 全局开关）</summary>
     public const float KILL_FINISHER_HIT_STOP = 0.04f;

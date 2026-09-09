@@ -124,9 +124,8 @@ public class TavernUI : MonoBehaviour, ITownPage
 
     static readonly string[] GuildHideWhenTavern =
     {
+        // 只藏整栏；不要点名未完成按钮再 SetActive(true)，否则会冲掉 HideUnfinishedHallButtons
         "LeftBar", "RightBar",
-        "MailButton", "NoticeButton", "ActivityButton",
-        "RankButton", "ShopButton", "SettingsButton",
         "TitleBadge"
     };
 
@@ -170,10 +169,17 @@ public class TavernUI : MonoBehaviour, ITownPage
                     b.gameObject.SetActive(show);
             }
         }
+
+        // 切回公会：再次隐藏未完成入口（热点缓存会把公告栏/武器库/执照厅点亮）
+        if (show)
+            hall.HideUnfinishedHallButtons();
     }
 
     static void EnsureGuildHideCache(GuildHallUI hall)
     {
+        // 名单变更后重建，避免旧缓存仍含 Mail/Shop 等并在切回时点亮
+        if (_guildHideCache != null && _guildHideCache.Length != GuildHideWhenTavern.Length)
+            _guildHideCache = null;
         if (_guildHideCache != null) return;
 
         var nodes = new System.Collections.Generic.List<Transform>();

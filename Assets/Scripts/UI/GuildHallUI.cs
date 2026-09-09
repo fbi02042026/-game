@@ -295,8 +295,10 @@ public class GuildHallUI : MonoBehaviour
         }
     }
 
-    void HideUnfinishedHallButtons()
+    /// <summary>未接通入口运行时隐藏（可重复调用；切回公会页时会再刷一遍）。</summary>
+    public void HideUnfinishedHallButtons()
     {
+        ResolveHallButtonRefs();
         // 未接通或半成品：运行时隐藏，不改预制体；清单见 Docs/软著后开发备忘.md「主界面暂隐入口」
         SetBtnHidden(shopButton);
         SetBtnHidden(noticeButton);
@@ -306,7 +308,39 @@ public class GuildHallUI : MonoBehaviour
         SetBtnHidden(noticeBoardButton); // 公告栏
         SetBtnHidden(armoryButton);      // 武器库（遗产浏览）
         SetBtnHidden(licenseHallButton); // 执照厅
+        // 按节点名再兜底（引用丢失时仍能藏）
+        HideNamed("ShopButton", "NoticeButton", "RankButton", "MailButton", "ActivityButton",
+            "NoticeBoard", "Armory", "LicenseHall");
         // 保留：底栏五入口、设置、咨询台、金币/体力加号
+    }
+
+    void ResolveHallButtonRefs()
+    {
+        if (mailButton == null) mailButton = FindBtn("MailButton");
+        if (noticeButton == null) noticeButton = FindBtn("NoticeButton");
+        if (activityButton == null) activityButton = FindBtn("ActivityButton");
+        if (rankButton == null) rankButton = FindBtn("RankButton");
+        if (shopButton == null) shopButton = FindBtn("ShopButton");
+        if (settingsButton == null) settingsButton = FindBtn("SettingsButton");
+        if (noticeBoardButton == null) noticeBoardButton = FindBtn("NoticeBoard");
+        if (licenseHallButton == null) licenseHallButton = FindBtn("LicenseHall");
+        if (armoryButton == null) armoryButton = FindBtn("Armory");
+        if (receptionistButton == null) receptionistButton = FindBtn("Receptionist");
+    }
+
+    Button FindBtn(string name)
+    {
+        var t = FindDeepChild(transform, name);
+        return t != null ? t.GetComponent<Button>() : null;
+    }
+
+    void HideNamed(params string[] names)
+    {
+        for (int i = 0; i < names.Length; i++)
+        {
+            var t = FindDeepChild(transform, names[i]);
+            if (t != null) t.gameObject.SetActive(false);
+        }
     }
 
     void WireHallClicks()

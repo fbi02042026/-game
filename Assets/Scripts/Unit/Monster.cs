@@ -272,7 +272,8 @@ public class Monster : UnitBase
     public void BeginMapEnter(Vector3 engagePos, float speed, int faceDir = -1)
     {
         _enterTargetPos = engagePos;
-        _enterSpeed = Mathf.Max(0.4f, speed);
+        float enterMul = _isBossUnit ? 1f : Random.Range(0.9f, 1.15f);
+        _enterSpeed = Mathf.Max(0.4f, speed * enterMul);
         _isEnteringMap = true;
         facingDir = faceDir > 0 ? 1 : -1;
         ApplyFacing(facingDir);
@@ -292,6 +293,7 @@ public class Monster : UnitBase
             if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
             {
                 if (rb != null) rb.velocity = Vector2.zero;
+                ApplyLaneY(Time.deltaTime);
                 return;
             }
 
@@ -301,7 +303,15 @@ public class Monster : UnitBase
                 GameConfig.SetWorldPosition(MoveRoot, new Vector3(_enterTargetPos.x, FootY, MoveRoot.position.z));
                 _isEnteringMap = false;
                 SyncLaneYFromWorld();
-                // 到达后再接强制目标 / 正常 AI
+                // 进场结束立刻索敌并朝向，避免继续朝默认方向冲
+                UnitBase enterFoe = FindNearestEnemyOnField();
+                if (enterFoe == null && Hero.Instance != null && !Hero.Instance.isDead)
+                    enterFoe = Hero.Instance;
+                if (enterFoe != null)
+                {
+                    target = enterFoe;
+                    FaceToward(enterFoe);
+                }
             }
             else
             {
@@ -312,6 +322,7 @@ public class Monster : UnitBase
                 float nx = Mathf.MoveTowards(MoveRoot.position.x, _enterTargetPos.x, step);
                 GameConfig.SetWorldPosition(MoveRoot, new Vector3(nx, FootY, MoveRoot.position.z));
                 if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+                ApplyLaneY(Time.deltaTime);
                 return;
             }
         }
@@ -320,6 +331,7 @@ public class Monster : UnitBase
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            ApplyLaneY(Time.deltaTime);
             return;
         }
 
@@ -389,15 +401,21 @@ public class Monster : UnitBase
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            ApplyLaneY(Time.deltaTime);
             return;
         }
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            ApplyLaneY(Time.deltaTime);
             return;
         }
-        if (target == null || target.isDead) return;
+        if (target == null || target.isDead)
+        {
+            ApplyLaneY(Time.deltaTime);
+            return;
+        }
 
         if (TryHoldDuringAttack())
             return;
@@ -434,6 +452,7 @@ public class Monster : UnitBase
         }
 
         if (unitAnim != null) unitAnim.SetMove(isMoving, facingDir);
+        ApplyLaneY(Time.deltaTime);
     }
 
     void AdvanceTowardEnemies()
@@ -442,34 +461,40 @@ public class Monster : UnitBase
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            ApplyLaneY(Time.deltaTime);
             return;
         }
 
         UnitBase foe = FindNearestEnemyOnField();
-        float dir;
-        if (foe != null)
+        if (foe == null && Hero.Instance != null && !Hero.Instance.isDead)
+            foe = Hero.Instance;
+
+        if (foe == null)
         {
-            target = foe;
-            float dist = Mathf.Abs(GetCombatX(foe) - GetCombatX(this));
-            float attackRange = GetEffectiveAttackRange();
-            if (dist <= attackRange)
-            {
-                RunForcedCombat();
-                return;
-            }
-            dir = GetCombatX(foe) > GetCombatX(this) ? 1f : -1f;
-        }
-        else
-        {
-            dir = -1f;
+            // 无目标：停步，勿写死往左冲
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            ApplyLaneY(Time.deltaTime);
+            return;
         }
 
+        target = foe;
+        float dist = Mathf.Abs(GetCombatX(foe) - GetCombatX(this));
+        float attackRange = GetEffectiveAttackRange();
+        if (dist <= attackRange)
+        {
+            RunForcedCombat();
+            return;
+        }
+
+        float dir = GetCombatX(foe) > GetCombatX(this) ? 1f : -1f;
         facingDir = (int)dir;
         ApplyFacing(facingDir);
 
         float spd = attr.GetAttr(AttrType.MoveSpeed);
         if (rb != null) rb.velocity = new Vector2(dir * spd, rb.velocity.y);
         if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+        ApplyLaneY(Time.deltaTime);
     }
 
     /// <summary>
@@ -634,6 +659,12 @@ public class Monster : UnitBase
                 atkRange = Mathf.Min(atkRange, GameConfig.RangePolearm);
         }
         attr.SetAttr(AttrType.MoveSpeed, moveSpd);
+        // 非 Boss：移速小幅岔开，减轻同相位叠走
+        if (!_isBossUnit)
+        {
+            float jitter = Random.Range(0.88f, 1.12f);
+            attr.SetAttr(AttrType.MoveSpeed, moveSpd * jitter);
+        }
         attr.SetAttr(AttrType.AttackRange, atkRange);
         attr.SetAttr(AttrType.CritRate, 0.05f);
 
@@ -948,7 +979,7 @@ public class Monster : UnitBase
         }
         if (disc != null) Destroy(disc);
         if (!isDead)
-            ApplySkillDamage(attr.GetAttr(AttrType.Attack) * 0.85f, 4.5f, null);
+            ApplySkillDamage(attr.GetAttr(AttrType.Attack) * 0.85f, 4.5f, null, transform.position.x);
         _bossPhaseShiftBusy = false;
     }
 
@@ -1022,6 +1053,98 @@ public class Monster : UnitBase
         }
         else
             Debug.LogWarning($"[Monster] ???????: ??{monsterChapter}, ??{effectiveSpriteIndex}??????????");
+
+        EnsureFootShadow();
+    }
+
+    /// <summary>怪脚下半透椭圆阴影（挂 Body，sort 低于躯干）。</summary>
+    void EnsureFootShadow()
+    {
+        Transform body = GetBodyTransform();
+        if (body == null) return;
+
+        Transform existing = null;
+        for (int i = 0; i < body.childCount; i++)
+        {
+            var ch = body.GetChild(i);
+            if (ch != null && ch.name.IndexOf("Shadow", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                existing = ch;
+                break;
+            }
+        }
+
+        SpriteRenderer shadowSr;
+        if (existing != null)
+        {
+            shadowSr = existing.GetComponent<SpriteRenderer>();
+            if (shadowSr == null) shadowSr = existing.gameObject.AddComponent<SpriteRenderer>();
+        }
+        else
+        {
+            var go = new GameObject("FootShadow");
+            go.transform.SetParent(body, false);
+            shadowSr = go.AddComponent<SpriteRenderer>();
+        }
+
+        Sprite shadowSp = LoadPlayerShadowSprite() ?? MakeCircleSprite();
+        shadowSr.sprite = shadowSp;
+        shadowSr.color = new Color(0f, 0f, 0f, 0.35f);
+        shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        shadowSr.sortingOrder = GameConfig.SORT_UNIT - 5;
+        shadowSr.sharedMaterial = GetFootShadowMaterial();
+
+        float targetWorldW = 0.9f;
+        if (sr != null && sr.sprite != null)
+            targetWorldW = Mathf.Max(0.45f, sr.bounds.size.x * 0.56f);
+        float nativeW = shadowSp != null ? Mathf.Max(0.01f, shadowSp.bounds.size.x) : 1f;
+        float lossyX = Mathf.Max(0.001f, Mathf.Abs(body.lossyScale.x));
+        float sx = targetWorldW / (nativeW * lossyX);
+        // 本地：脚底略下；椭圆扁（除以阴影 Sprite 原生宽，避免 Shadow.png 爆大）
+        shadowSr.transform.localPosition = new Vector3(0f, -0.02f, 0f);
+        shadowSr.transform.localRotation = Quaternion.identity;
+        shadowSr.transform.localScale = new Vector3(sx, sx * 0.35f, 1f);
+    }
+
+    static Material _footShadowMat;
+
+    static Material GetFootShadowMaterial()
+    {
+        if (_footShadowMat != null) return _footShadowMat;
+        var sh = Shader.Find("Battle/FootShadow");
+        if (sh != null)
+            _footShadowMat = new Material(sh);
+        else
+        {
+            var fallback = Shader.Find("Sprites/Default");
+            if (fallback != null)
+                _footShadowMat = new Material(fallback);
+        }
+        return _footShadowMat;
+    }
+
+    static Sprite _cachedPlayerShadow;
+
+    static Sprite LoadPlayerShadowSprite()
+    {
+        if (_cachedPlayerShadow != null) return _cachedPlayerShadow;
+        _cachedPlayerShadow = Resources.Load<Sprite>("SPUM/Shadow");
+        if (_cachedPlayerShadow != null) return _cachedPlayerShadow;
+        var tex = Resources.Load<Texture2D>("SPUM/Shadow");
+        if (tex != null)
+        {
+            _cachedPlayerShadow = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+            return _cachedPlayerShadow;
+        }
+#if UNITY_EDITOR
+        var ed = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/SPUM/Core/Basic_Resources/Ect/Shadow.png");
+        if (ed != null)
+        {
+            _cachedPlayerShadow = ed;
+            return _cachedPlayerShadow;
+        }
+#endif
+        return null;
     }
 
     /// <summary>
@@ -1250,36 +1373,30 @@ public class Monster : UnitBase
         {
             GameObject impact = SkillRegistry.Instance?.GetSkillVfxPrefab(_skillId);
             Transform targetTf = primaryTarget != null ? primaryTarget.transform : null;
+            float impactX = hitPos.x;
             BattleVFXSystem.Instance?.PlaySkillProjectile(
                 VfxFaction.Enemy, firePos, hitPos, GetVfxFacingDir(), targetTf, kit,
                 impact, SkillProjectileScale, SkillProjectileSpeedMul,
-                () => ApplySkillDamage(damage, radius, primaryTarget));
+                () => ApplySkillDamage(damage, radius, primaryTarget, impactX));
 
             if (BattleVFXSystem.Instance == null)
-                ApplySkillDamage(damage, radius, primaryTarget);
+                ApplySkillDamage(damage, radius, primaryTarget, impactX);
             return;
         }
 
         SkillRegistry.Instance?.PlaySkillVfx(_skillId, hitPos, false, GetVfxFacingDir(), transform);
-        ApplySkillDamage(damage, radius, primaryTarget);
+        ApplySkillDamage(damage, radius, primaryTarget, hitPos.x);
     }
 
     const float SkillProjectileScale = 1.6f;
     const float SkillProjectileSpeedMul = GameConfig.MONSTER_SKILL_PROJECTILE_SPEED_MUL;
 
     /// <summary>
-    /// ????????????????????
-    /// ?????????????????????????????????????????
-    /// ????????????????????????????????
+    /// 技能结算：AoE 圆心用开火/落点固定 X，不跟目标当前 X（可躲开）。
     /// </summary>
-    void ApplySkillDamage(float damage, float radius, UnitBase primaryTarget)
+    void ApplySkillDamage(float damage, float radius, UnitBase primaryTarget, float centerX)
     {
         if (this == null || isDead || !gameObject.activeInHierarchy) return;
-
-        // 圆心与预警圈 / 弹道落点一致：主目标世界 X，无目标则退回施法者
-        float centerX = primaryTarget != null
-            ? primaryTarget.transform.position.x
-            : transform.position.x;
 
         int vfxDir = GetVfxFacingDir();
         var allies = BattleManager.Instance?.allyUnits;
@@ -1297,7 +1414,11 @@ public class Monster : UnitBase
             return;
         }
         if (primaryTarget != null && !primaryTarget.isDead)
+        {
+            if (Mathf.Abs(primaryTarget.transform.position.x - centerX) > radius)
+                return;
             primaryTarget.TakeDamage(damage, false, false, true, vfxDir);
+        }
     }
 
     /// <summary>

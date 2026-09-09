@@ -535,8 +535,9 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
     public bool IsEquipped(EquipInstance equip)
     {
-        // 无穿戴槽：包内件均生效，UI 不再标「已装备」变暗
-        return false;
+        if (equip == null || !WeaponLoadoutRules.IsLoadoutItem(equip)) return false;
+        var logical = WeaponLoadoutRules.ResolveLogicalSlot(equip);
+        return GetEquippedInLogicalSlot(logical) == equip;
     }
 
     /// <summary>

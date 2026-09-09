@@ -2,6 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// 玩家靠近敌人时施加集火标记；佣兵 AI 优先攻击带标记目标。
+/// 不显示 Toast / 头顶「集火」文案。
 /// </summary>
 public class FocusMarkSystem : MonoBehaviour
 {
@@ -15,9 +16,6 @@ public class FocusMarkSystem : MonoBehaviour
     UnitBase _marked;
     float _markUntil;
     bool _nearMarked;
-    bool _toasted;
-    Transform _iconRoot;
-    TextMesh _iconLabel;
 
     public static FocusMarkSystem Ensure()
     {
@@ -46,10 +44,7 @@ public class FocusMarkSystem : MonoBehaviour
     {
         if (BattleManager.Instance == null || !BattleManager.Instance.isInBattle
             || !BattleManager.Instance.UnitsCanAct)
-        {
-            ClearMarkVisualOnly();
             return;
-        }
 
         var hero = Hero.Instance;
         if (hero == null || hero.isDead)
@@ -67,14 +62,7 @@ public class FocusMarkSystem : MonoBehaviour
             if (d <= MarkRange)
             {
                 if (_marked != nearest)
-                {
                     _marked = nearest;
-                    if (!_toasted)
-                    {
-                        _toasted = true;
-                        UIManager.Instance?.ShowToast("集火！");
-                    }
-                }
                 _nearMarked = true;
                 _markUntil = now + MarkHold;
             }
@@ -92,8 +80,6 @@ public class FocusMarkSystem : MonoBehaviour
 
         if (_marked != null && (_marked.isDead || now > _markUntil))
             ExpireMark();
-
-        UpdateMarkVisual();
     }
 
     static UnitBase FindNearestEnemyToHero(Hero hero)
@@ -121,59 +107,10 @@ public class FocusMarkSystem : MonoBehaviour
     {
         _marked = null;
         _nearMarked = false;
-        ClearMarkVisualOnly();
-    }
-
-    void ClearMarkVisualOnly()
-    {
-        if (_iconRoot != null)
-            _iconRoot.gameObject.SetActive(false);
-    }
-
-    void UpdateMarkVisual()
-    {
-        if (_marked == null || _marked.isDead)
-        {
-            ClearMarkVisualOnly();
-            return;
-        }
-
-        EnsureIcon();
-        _iconRoot.gameObject.SetActive(true);
-        Vector3 p = _marked.GetHitPosition();
-        p.y += 0.55f;
-        _iconRoot.position = p;
-    }
-
-    void EnsureIcon()
-    {
-        if (_iconRoot != null) return;
-        var go = new GameObject("FocusMarkIcon");
-        _iconRoot = go.transform;
-        var tm = go.AddComponent<TextMesh>();
-        _iconLabel = tm;
-        tm.text = "集火";
-        tm.characterSize = 0.08f;
-        tm.fontSize = 48;
-        tm.anchor = TextAnchor.MiddleCenter;
-        tm.alignment = TextAlignment.Center;
-        tm.color = new Color(1f, 0.35f, 0.2f, 1f);
-        var font = GameFonts.GetChinese();
-        if (font != null)
-        {
-            tm.font = font;
-            var mr = go.GetComponent<MeshRenderer>();
-            if (mr != null && font.material != null)
-                mr.sharedMaterial = font.material;
-        }
-        var r = go.GetComponent<MeshRenderer>();
-        if (r != null)
-            r.sortingOrder = GameConfig.SORT_UNIT + 20;
     }
 
     public void ResetForBattle()
     {
-        _toasted = false;
         ExpireMark();
     }
 }

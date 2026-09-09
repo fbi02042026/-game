@@ -17,9 +17,6 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
     bool _tutorialCinematicDone;
 
     Button _btn;
-    Image _fill;
-    Text _label;
-    CanvasGroup _btnCg;
 
     readonly List<SpriteRenderer> _dimmed = new List<SpriteRenderer>(128);
     readonly List<Color> _dimmedColors = new List<Color>(128);
@@ -44,8 +41,8 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
 
     public void EnsureBattleUi()
     {
-        EnsureUi();
-        RefreshUi();
+        // 雷击按钮隐藏：只保留充能 + 自动释放
+        HideUltButton();
     }
 
     public void ResetForBattle()
@@ -60,8 +57,22 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
         _tutorialCinematicDone = false;
         _charge = 0;
         RecalcNeed();
-        EnsureUi();
-        RefreshUi();
+        HideUltButton();
+    }
+
+    void HideUltButton()
+    {
+        if (_btn != null)
+        {
+            _btn.gameObject.SetActive(false);
+            return;
+        }
+        // 兼容：上一局已创建过的节点
+        var battleUi = BattleUI.Instance;
+        if (battleUi == null) return;
+        var existing = battleUi.transform.Find("ThunderUltButton");
+        if (existing != null)
+            existing.gameObject.SetActive(false);
     }
 
     public void RecalcNeed()
@@ -135,22 +146,12 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
             }
 
             ApplyDimKeepHero(hero);
-            var cam = Object.FindObjectOfType<CameraFollow>();
-            cam?.BeginKillCamZoom(GameConfig.THUNDER_ULT_ZOOM_MUL, GameConfig.THUNDER_ULT_ZOOM_IN);
-            BattleUI.ApplyKillCamHudCompensation(GameConfig.THUNDER_ULT_ZOOM_MUL);
-            MonsterHealthBar.SetKillCamHidden(true);
-            BattleBossHpBar.SetKillCamHidden(true);
-
+            // 击杀/雷击拉镜已关闭：教程雷击也不再 BeginKillCamZoom
             AttackVfxKit kit = hero.GetWeaponVfxKit();
             hero.PlayAttackAnimOnly(kit, true);
             CombatJuice.Instance?.PlaySwingSfx();
 
             yield return new WaitForSecondsRealtime(GameConfig.THUNDER_ULT_ZOOM_IN + 0.15f);
-
-            cam?.ForceResetKillCamZoom();
-            BattleUI.ResetKillCamHudCompensation();
-            MonsterHealthBar.SetKillCamHidden(false);
-            BattleBossHpBar.SetKillCamHidden(false);
 
             yield return new WaitForSecondsRealtime(0.08f);
             _tutorialCinematicDone = true;
@@ -240,85 +241,19 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
 
     void EnsureUi()
     {
-        if (_btn != null) return;
-        var battleUi = BattleUI.Instance;
-        if (battleUi == null) return;
-
-        Transform parent = battleUi.transform;
-        var go = new GameObject("ThunderUltButton", typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(1f, 0f);
-        rt.anchorMax = new Vector2(1f, 0f);
-        rt.pivot = new Vector2(1f, 0f);
-        rt.sizeDelta = new Vector2(110f, 110f);
-        rt.anchoredPosition = new Vector2(-24f, 180f);
-
-        var bg = go.AddComponent<Image>();
-        bg.color = new Color(0.12f, 0.14f, 0.22f, 0.92f);
-        bg.raycastTarget = true;
-
-        var fillGo = new GameObject("Fill", typeof(RectTransform));
-        fillGo.transform.SetParent(go.transform, false);
-        var fillRt = fillGo.GetComponent<RectTransform>();
-        fillRt.anchorMin = Vector2.zero;
-        fillRt.anchorMax = Vector2.one;
-        fillRt.offsetMin = new Vector2(8f, 8f);
-        fillRt.offsetMax = new Vector2(-8f, -8f);
-        _fill = fillGo.AddComponent<Image>();
-        _fill.color = new Color(0.45f, 0.75f, 1f, 0.85f);
-        _fill.type = Image.Type.Filled;
-        _fill.fillMethod = Image.FillMethod.Radial360;
-        _fill.fillOrigin = (int)Image.Origin360.Top;
-        _fill.fillClockwise = true;
-        _fill.raycastTarget = false;
-
-        var labelGo = new GameObject("Label", typeof(RectTransform));
-        labelGo.transform.SetParent(go.transform, false);
-        var lrt = labelGo.GetComponent<RectTransform>();
-        lrt.anchorMin = Vector2.zero;
-        lrt.anchorMax = Vector2.one;
-        lrt.offsetMin = Vector2.zero;
-        lrt.offsetMax = Vector2.zero;
-        _label = labelGo.AddComponent<Text>();
-        _label.alignment = TextAnchor.MiddleCenter;
-        _label.fontSize = 22;
-        _label.color = Color.white;
-        _label.raycastTarget = false;
-        _label.text = "雷击";
-        if (GameFonts.GetChinese() != null)
-            _label.font = GameFonts.GetChinese();
-
-        _btn = go.AddComponent<Button>();
-        _btn.targetGraphic = bg;
-        _btn.onClick.AddListener(() => TryManualCast());
-
-        _btnCg = go.AddComponent<CanvasGroup>();
-        GameFonts.ApplyToHierarchy(go.transform);
+        // 产品要求：战斗不显示雷击按钮（充能与自动释放仍走逻辑）
+        HideUltButton();
     }
 
     void RefreshUi()
     {
-        EnsureUi();
-        if (_fill != null)
-            _fill.fillAmount = ChargeRatio;
-        if (_label != null)
-        {
-            if (_casting)
-                _label.text = "雷击";
-            else if (IsReady)
-                _label.text = "就绪";
-            else
-                _label.text = $"雷击\n{_charge}/{_need}";
-        }
-        if (_btn != null)
-            _btn.interactable = IsReady;
-        if (_btnCg != null)
-            _btnCg.alpha = _casting ? 0.55f : 1f;
+        // 无 UI：不创建按钮
+        HideUltButton();
     }
 
-    void OnDestroy()
+    protected override void OnDestroy()
     {
         RestoreDim();
+        base.OnDestroy();
     }
 }

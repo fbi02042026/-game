@@ -39,6 +39,13 @@ public class Hero : UnitBase
             Instance = null;
     }
 
+    /// <summary>玩家受击：只闪白，不播 DAMAGED 动画。</summary>
+    protected override void PlayHitReaction()
+    {
+        if (unitAnim != null)
+            unitAnim.PlayDamaged(playHitAnim: false);
+    }
+
     public void InitNewRun()
     {
         if (GridBackpackSystem.Instance != null)
@@ -138,7 +145,19 @@ public class Hero : UnitBase
     protected override void Update()
     {
         base.Update();
+        TickLowHpWarn();
         // 通关只由 BattleManager 在「传送门已激活」后检测，避免未清怪就结算、每帧刷爆 OnStageClear
+    }
+
+    void TickLowHpWarn()
+    {
+        float maxHp = attr != null ? attr.GetAttr(AttrType.MaxHp) : 0f;
+        float ratio = maxHp > 0.01f ? currentHp / maxHp : 1f;
+        bool dead = isDead || currentHp <= 0f;
+        if (unitAnim != null)
+            unitAnim.TickLowHpFlash(ratio, dead);
+        bool low = !dead && ratio <= GameConfig.LOW_HP_WARN_RATIO + 0.0001f;
+        LowHpScreenEdgeFlash.Ensure().Tick(low);
     }
 
     /// <summary>
@@ -183,31 +202,40 @@ public class Hero : UnitBase
     public AttackVfxKit GetWeaponVfxKit() => GetAttackVfxKit();
 
     bool _manualMove;
+    bool _manualHeld;
     Vector2 _manualDir;
     UnitBase _acquireLock;
     float _acquireUntil;
+    float _manualReleaseUntil;
 
     public bool IsManualMove => _manualMove;
 
     public void SetManualMove(Vector2 dir)
     {
-        _manualMove = dir.sqrMagnitude > 0.0001f;
+        _manualHeld = true;
+        // 按住期间即使死区也保持手动，避免 AI 抢方向
+        _manualMove = true;
         _manualDir = dir;
         _acquireLock = null;
         _acquireUntil = 0f;
+        _manualReleaseUntil = 0f;
     }
 
     public void ClearManualMove()
     {
         _manualMove = false;
+        _manualHeld = false;
         _manualDir = Vector2.zero;
+        _manualReleaseUntil = Time.time + GameConfig.HERO_MANUAL_RELEASE_HOLD;
     }
 
-    /// <summary>松摇杆：近战锁最近怪，远程锁场上最强（MaxHp）怪，短暂优先追击。</summary>
+    /// <summary>松摇杆：短冷却后再索敌，近战锁最近 / 远程锁场上最强。</summary>
     public void BeginAutoAcquireOnRelease()
     {
         _manualMove = false;
+        _manualHeld = false;
         _manualDir = Vector2.zero;
+        _manualReleaseUntil = Time.time + GameConfig.HERO_MANUAL_RELEASE_HOLD;
         _acquireLock = UsesMeleeBasicAttack()
             ? FindNearestEnemyOnField()
             : FindStrongestEnemyOnField();
@@ -242,18 +270,16 @@ public class Hero : UnitBase
             return;
         }
 
-        if (TryHoldDuringAttack())
+        if (!_manualMove && TryHoldDuringAttack())
             return;
         if (TryHoldDuringDamaged())
             return;
 
-        // 摇杆优先：手动位移，期间不跑自动追敌
+        // 摇杆优先：手动位移，期间不跑自动追敌（直接改坐标，避免 velocity 被 ApplyLaneY/SetWorldPosition 清掉）
         if (_manualMove)
         {
             float spd = GetCombatMoveSpeed();
-            float vx = _manualDir.x * spd;
-            if (rb != null)
-                rb.velocity = new Vector2(vx, rb.velocity.y);
+            float vx = _manualDir.x * spd * GameConfig.HERO_MANUAL_MOVE_X_MUL;
 
             if (Mathf.Abs(_manualDir.x) > 0.05f)
             {
@@ -261,15 +287,32 @@ public class Hero : UnitBase
                 ApplyFacing(facingDir);
             }
 
-            // 车道微调
+            // 车道：固定 ±BATTLE_LANE_HALF，纵向与横向同基础移速
             if (Mathf.Abs(_manualDir.y) > 0.08f)
             {
-                float lane = LaneY + _manualDir.y * spd * Time.deltaTime * 0.85f;
-                lane = Mathf.Clamp(lane, -GameConfig.BATTLE_LANE_HALF, GameConfig.BATTLE_LANE_HALF);
+                float lane = LaneY + _manualDir.y * spd * Time.deltaTime;
+                lane = BattleLaneBounds.ClampLaneOffset(lane);
                 SetLaneY(lane);
             }
 
-            // 进距仍可普攻最近目标
+            Vector3 p = transform.position;
+            p.x += vx * Time.deltaTime;
+            p.y = Mathf.MoveTowards(p.y, FootY, GameConfig.BATTLE_LANE_MOVE_SPEED * Time.deltaTime);
+            if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
+            {
+                Camera cam = Camera.main;
+                if (cam != null)
+                {
+                    float halfH = cam.orthographicSize;
+                    float halfW = halfH * cam.aspect;
+                    float camX = cam.transform.position.x;
+                    float margin = 1.5f;
+                    p.x = Mathf.Clamp(p.x, camX - halfW - margin, camX + halfW + margin);
+                }
+            }
+            GameConfig.SetWorldPosition(transform, p);
+
+            // 进距仍可普攻最近目标；有水平输入时朝向跟摇杆，不 FaceToward 抢向
             var near = FindNearestEnemyInDetectRange();
             if (near != null && IsInBasicAttackRange(near)
                 && attackCd <= 0f
@@ -277,13 +320,33 @@ public class Hero : UnitBase
                 && (unitAnim == null || !unitAnim.InAttackLock))
             {
                 target = near;
-                FaceToward(near);
+                if (Mathf.Abs(_manualDir.x) <= 0.05f)
+                    FaceToward(near);
                 Attack(near);
                 attackCd = GetAttackCooldown();
             }
 
             if (unitAnim != null)
                 unitAnim.SetMove(Mathf.Abs(vx) > 0.05f, facingDir);
+            return;
+        }
+
+        // 松摇杆短冷却：不追怪，避免与手动抢方向；进距仍可普攻
+        if (Time.time < _manualReleaseUntil)
+        {
+            if (rb != null) rb.velocity = new Vector2(0f, rb.velocity.y);
+            var nearHold = FindNearestEnemyInDetectRange();
+            if (nearHold != null && IsInBasicAttackRange(nearHold)
+                && attackCd <= 0f
+                && (unitAnim == null || !unitAnim.InDamagedRecovery())
+                && (unitAnim == null || !unitAnim.InAttackLock))
+            {
+                target = nearHold;
+                FaceToward(nearHold);
+                Attack(nearHold);
+                attackCd = GetAttackCooldown();
+            }
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
             if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
                 ClampToScreen();
             ApplyLaneY(Time.deltaTime);
