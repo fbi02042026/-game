@@ -20,8 +20,11 @@ public static class MercPortraitSprites
         { "wanjia", "player" },
         { "laodun", "H001" },
         { "xiaomei", "C001" },
+        { "npc_xiaomei", "C001" },
         { "altor", "C002" },
+        { "npc_shengdian", "C002" },
         { "grey", "C003" },
+        { "npc_grey", "C003" },
         { "xiaobai", "H011" },
         { "naima101", "H011" },
         // 剧情 NPC → 佣兵立绘目录中的稳定英文 ID（见 Sync / LoadEditorStand）
@@ -74,7 +77,13 @@ public static class MercPortraitSprites
         if (HeadCache.TryGetValue(hireId, out var cached) && cached != null)
             return cached;
 
-        Sprite sp = LoadFromResources(ContentPaths.Icons.MercHead, hireId);
+        Sprite sp = null;
+#if UNITY_EDITOR
+        // 编辑器优先 Art/佣兵头像，与手改资源一致
+        sp = LoadEditorHead(hireId);
+#endif
+        if (sp == null)
+            sp = LoadFromResources(ContentPaths.Icons.MercHead, hireId);
         if (sp == null)
             sp = LoadEditorHead(hireId);
         if (sp != null)

@@ -82,6 +82,8 @@ public static class ContentPaths
         public const string PlayerNaming = "UI/PlayerNaming";
         /// <summary>开机工作室 Logo（Resources，无扩展名）。</summary>
         public const string StudioLogo = "UI/Boot/studio_logo";
+        /// <summary>登录前动画视频（Resources/UI/Boot/登录动画）。</summary>
+        public const string LoginIntro = "UI/Boot/登录动画";
     }
 
     public static class Source

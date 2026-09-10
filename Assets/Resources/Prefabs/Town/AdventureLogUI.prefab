@@ -724,7 +724,7 @@ GameObject:
   - component: {fileID: 5915930229548384269}
   - component: {fileID: 6662666361959829843}
   - component: {fileID: 2256728178725995485}
-  - component: {fileID: 1140365554065713421}
+  - component: {fileID: 122446347465303189}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: Objective
@@ -749,8 +749,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.42, y: 0.18}
   m_AnchorMax: {x: 0.96, y: 0.36}
-  m_AnchoredPosition: {x: -134.86713, y: 22.50499}
-  m_SizeDelta: {x: 17.006561, y: 47.01962}
+  m_AnchoredPosition: {x: -152.59836, y: 22.50499}
+  m_SizeDelta: {x: 16.803284, y: 47.01962}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &6662666361959829843
 CanvasRenderer:
@@ -794,16 +794,16 @@ MonoBehaviour:
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: "\u625310\u53EA\u602A"
---- !u!114 &1140365554065713421
+--- !u!114 &122446347465303189
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 743057642297994617}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.5}
@@ -3917,7 +3917,7 @@ GameObject:
   - component: {fileID: 7591287379740795283}
   - component: {fileID: 5703306497299763206}
   - component: {fileID: 2061056727840564629}
-  - component: {fileID: 7719694128811294767}
+  - component: {fileID: 6073892620963225662}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: Objective
@@ -3942,8 +3942,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.42, y: 0.18}
   m_AnchorMax: {x: 0.96, y: 0.36}
-  m_AnchoredPosition: {x: -134.86713, y: 22.50499}
-  m_SizeDelta: {x: 17.006561, y: 47.01962}
+  m_AnchoredPosition: {x: -151.39833, y: 22.50499}
+  m_SizeDelta: {x: 19.203339, y: 47.01962}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &5703306497299763206
 CanvasRenderer:
@@ -3975,7 +3975,7 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 12800000, guid: b7c8d9e0f1a2435566778899aabbcc01, type: 3}
-    m_FontSize: 20
+    m_FontSize: 22
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 2
@@ -3987,16 +3987,16 @@ MonoBehaviour:
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: "\u625310\u53EA\u602A"
---- !u!114 &7719694128811294767
+--- !u!114 &6073892620963225662
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5249442649630371181}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.5}
@@ -4533,7 +4533,7 @@ GameObject:
   - component: {fileID: 3316932708128896388}
   - component: {fileID: 3464366138312093340}
   - component: {fileID: 4285400784452912688}
-  - component: {fileID: 6554691239796767288}
+  - component: {fileID: 6634325872695240906}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: T
@@ -4558,7 +4558,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 2}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &3464366138312093340
@@ -4591,8 +4591,8 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 12800000, guid: b7c8d9e0f1a2435566778899aabbcc01, type: 3}
-    m_FontSize: 30
-    m_FontStyle: 1
+    m_FontSize: 20
+    m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 2
     m_MaxSize: 40
@@ -4602,8 +4602,8 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1
-  m_Text: "\u9886\u53D6\u6210\u5C31\u91CC\u7A0B"
---- !u!114 &6554691239796767288
+  m_Text: "\u9886\u53D6"
+--- !u!114 &6634325872695240906
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -4612,11 +4612,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 6174649112765711160}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
+  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   m_EffectColor: {r: 0, g: 0, b: 0, a: 0.5}
-  m_EffectDistance: {x: 2, y: -1}
+  m_EffectDistance: {x: 1, y: -1}
   m_UseGraphicAlpha: 1
 --- !u!1 &6284335567131861882
 GameObject:
@@ -5510,7 +5510,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.55, y: 0.01}
   m_AnchorMax: {x: 0.55, y: 0.01}
-  m_AnchoredPosition: {x: -18, y: 70}
+  m_AnchoredPosition: {x: -18, y: 43.899994}
   m_SizeDelta: {x: 100, y: 33}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &6615137260386263133
@@ -5960,6 +5960,7 @@ GameObject:
   - component: {fileID: 751436418895648496}
   - component: {fileID: 2004939577473221011}
   - component: {fileID: 2952273538452893789}
+  - component: {fileID: 7246940829896605355}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: Progress
@@ -6017,10 +6018,10 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 12800000, guid: f8e4a2b1c9d0476e8a3b5c7d9e1f2034, type: 3}
-    m_FontSize: 18
+    m_FontSize: 20
     m_FontStyle: 0
     m_BestFit: 0
-    m_MinSize: 10
+    m_MinSize: 2
     m_MaxSize: 40
     m_Alignment: 5
     m_AlignByGeometry: 0
@@ -6029,6 +6030,21 @@ MonoBehaviour:
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: 0/1
+--- !u!114 &7246940829896605355
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7457370305167187153}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 0.5}
+  m_EffectDistance: {x: 1, y: -1}
+  m_UseGraphicAlpha: 1
 --- !u!1 &7474907647755856032
 GameObject:
   m_ObjectHideFlags: 0
@@ -7174,6 +7190,7 @@ GameObject:
   - component: {fileID: 5943899780478148492}
   - component: {fileID: 3144087341742006760}
   - component: {fileID: 5680791719924555729}
+  - component: {fileID: 2608870715982785162}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: Progress
@@ -7243,6 +7260,21 @@ MonoBehaviour:
     m_VerticalOverflow: 1
     m_LineSpacing: 1
   m_Text: 0/1
+--- !u!114 &2608870715982785162
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8231820784124398018}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cfabb0440166ab443bba8876756fdfa9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 0.5}
+  m_EffectDistance: {x: 1, y: -1}
+  m_UseGraphicAlpha: 1
 --- !u!1 &8335306523043996463
 GameObject:
   m_ObjectHideFlags: 0

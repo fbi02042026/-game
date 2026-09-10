@@ -532,9 +532,7 @@ public class AdventureLogCodexPanel
         PlaceCell(go, pos, cellW, cellH);
 
         var rarity = AdventureCodex.GetMercRarity(e);
-        bool unlocked = AdventureLogCatalog.MercUnlocked(e);
-        bool seen = unlocked || AdventureCodex.IsSeenMerc(e.Id);
-        bool viewed = AdventureCodex.IsViewedMerc(e.Id);
+        bool revealed = AdventureCodex.IsMercRevealed(e);
         bool legendary = rarity == MercRosterDefs.MercRarity.Legendary;
 
         if (legendary)
@@ -549,18 +547,18 @@ public class AdventureLogCodexPanel
             ApplyMonsterFrame(go.transform, false);
             ApplyMercFrameTint(go.transform, rarity);
         }
-        ApplyPortrait(go.transform, AdventureCodex.LoadMercSprite(e), seen);
+        ApplyPortrait(go.transform, AdventureCodex.LoadMercHead(e), revealed);
         string display = string.IsNullOrEmpty(e.Nickname) ? e.Name : e.Nickname;
-        ApplyName(go.transform, seen ? display : "？？？");
-        ApplyBossTag(go.transform, legendary && seen);
+        ApplyName(go.transform, revealed ? display : "？？？", revealed ? (MercRosterDefs.MercRarity?)rarity : null);
+        ApplyBossTag(go.transform, legendary && revealed);
         var bossLabel = FindDeep(go.transform, "boss")?.GetComponentInChildren<Text>(true);
         if (bossLabel != null && legendary)
             bossLabel.text = "传奇";
-        ApplyRedDot(go.transform, seen && !viewed);
+        ApplyRedDot(go.transform, revealed && !AdventureCodex.IsViewedMerc(e.Id));
 
         WireClick(go, () =>
         {
-            if (!seen)
+            if (!revealed)
             {
                 UIManager.Instance?.ShowToast("尚未结识该角色");
                 return;
@@ -568,7 +566,7 @@ public class AdventureLogCodexPanel
             AdventureCodex.MarkMercViewed(e.Id);
             ApplyRedDot(go.transform, false);
             string meta = string.IsNullOrEmpty(e.Role) ? e.Place : e.Role + "  ·  " + e.Place;
-            CodexInfoPopupUI.Show(display, meta, e.Desc, e.Lore, AdventureCodex.LoadMercSprite(e));
+            CodexInfoPopupUI.Show(display, meta, e.Desc, e.Lore, AdventureCodex.LoadMercStand(e));
         });
         _spawned.Add(go);
     }
@@ -621,10 +619,13 @@ public class AdventureLogCodexPanel
         icon.color = lit ? Color.white : new Color(0f, 0f, 0f, 0.92f);
     }
 
-    void ApplyName(Transform cell, string text)
+    void ApplyName(Transform cell, string text, MercRosterDefs.MercRarity? mercRarity = null)
     {
         var name = FindDeep(cell, "name")?.GetComponent<Text>();
-        if (name != null) name.text = text ?? "";
+        if (name == null) return;
+        name.text = text ?? "";
+        // 已结识：名字按稀有度着色；剪影「？？？」保持白，避免透稀有度
+        name.color = mercRarity.HasValue ? MercRarityColor(mercRarity.Value) : Color.white;
     }
 
     void ApplyBossTag(Transform cell, bool on)
@@ -711,7 +712,7 @@ public class AdventureLogCodexPanel
             return;
         }
         UIManager.Instance?.ShowToast($"已领取日志里程 Lv{lv}");
-        if (_claimLabel != null) _claimLabel.text = "已领取";
+        // ClaimAch 文案保持预制体，不改「已领取」
         if (_claimBtn != null) _claimBtn.interactable = false;
     }
 

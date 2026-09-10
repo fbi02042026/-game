@@ -30,6 +30,8 @@ public static class AdventureLogCatalog
         public string Desc;
         public string Lore;
         public bool StoryNpc;
+        /// <summary>剧情 NPC 等无花名册时的稀有度；Hire 佣兵以 MercRosterDefs 为准。</summary>
+        public MercRosterDefs.MercRarity Rarity;
     }
 
     public struct AchEntry
@@ -288,7 +290,8 @@ public static class AdventureLogCatalog
     {
         Npc("C001", "小美", "npc_xiaomei", "青梅竹马 / 失踪小队队长",
             "绿色衣服、棕色双马尾的少女，法系冒险者，既能用法术输出也能为队友恢复生命。",
-            "她离开前借了你三枚铜板买面包，至今没还。公会没把这个写进失踪报告。"),
+            "她离开前借了你三枚铜板买面包，至今没还。公会没把这个写进失踪报告。",
+            MercRosterDefs.MercRarity.Rare),
         Npc("C002", "阿尔托", "npc_shengdian", "圣殿骑士",
             "金发、红缨头盔、持剑盾的年轻骑士，把荣耀挂在嘴边。",
             "他的盔甲擦得比公会的地板还亮。老盾怀疑他晚上穿着盔甲睡觉。"),
@@ -738,21 +741,25 @@ public static class AdventureLogCatalog
         };
     }
 
-    static MercEntry Npc(string id, string name, string asset, string role, string desc, string lore)
+    static MercEntry Npc(string id, string name, string asset, string role, string desc, string lore,
+        MercRosterDefs.MercRarity rarity = MercRosterDefs.MercRarity.Common)
     {
         return new MercEntry
         {
             Id = id, Name = name, Nickname = "", AssetId = asset, Role = role, Unlock = "主线推进",
-            Place = "剧情", Desc = desc, Lore = lore, StoryNpc = true
+            Place = "剧情", Desc = desc, Lore = lore, StoryNpc = true, Rarity = rarity
         };
     }
 
     static MercEntry Hire(string id, string name, string nickname, string asset, string role, string unlock, string place, string desc, string lore)
     {
+        var rarity = MercRosterDefs.MercRarity.Common;
+        if (MercRosterDefs.TryGetByHireId(id, out var def))
+            rarity = def.Rarity;
         return new MercEntry
         {
             Id = id, Name = name, Nickname = nickname, AssetId = asset, Role = role, Unlock = unlock,
-            Place = place, Desc = desc, Lore = lore, StoryNpc = false
+            Place = place, Desc = desc, Lore = lore, StoryNpc = false, Rarity = rarity
         };
     }
 

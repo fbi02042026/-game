@@ -8,11 +8,11 @@ public static class MercRarityColors
         switch (rarity)
         {
             case MercRosterDefs.MercRarity.Rare:
-                return new Color(0.55f, 0.78f, 1f, 1f);
+                return new Color(0.35f, 0.65f, 1f, 1f); // 蓝
             case MercRosterDefs.MercRarity.Legendary:
-                return new Color(1f, 0.82f, 0.28f, 1f);
+                return new Color(1f, 0.84f, 0.2f, 1f); // 金
             default:
-                return Color.white;
+                return Color.white; // 普通白
         }
     }
 

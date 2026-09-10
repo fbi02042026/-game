@@ -173,8 +173,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (_listContent == null && _scroll != null)
             _listContent = _scroll.content;
 
-        _claim = FindTransform("ClaimAch")?.gameObject;
         _paper = transform.Find("Root/Frame/Paper")?.gameObject;
+        BindAchievementClaimButton();
         _activeCard = FindTransform("ActiveCard")?.gameObject;
         var frame = transform.Find("Root/Frame");
         if (frame != null)
@@ -188,6 +188,33 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         BindTabIllustration();
         RedDot.RefreshCommon();
         _bound = true;
+    }
+
+    /// <summary>
+    /// 成就领取：用用户手做的 Paper1/ClaimAch（小按钮「领取」）。
+    /// Paper/ClaimAch 是旧大按钮，成就页隐藏，避免跟预制体不一致。
+    /// </summary>
+    void BindAchievementClaimButton()
+    {
+        var paper = transform.Find("Root/Frame/Paper");
+        var legacy = paper != null ? paper.Find("ClaimAch") : null;
+        var hand = transform.Find("Root/Frame/Paper1/ClaimAch");
+
+        if (hand != null && paper != null)
+        {
+            if (legacy != null)
+                legacy.gameObject.SetActive(false);
+            // 挂到 Paper 下，成就页关掉 Paper1 时按钮仍在；布局保持手做 Rect
+            if (hand.parent != paper)
+                hand.SetParent(paper, false);
+            _claim = hand.gameObject;
+            _claim.SetActive(false);
+            return;
+        }
+
+        _claim = legacy != null ? legacy.gameObject : FindTransform("ClaimAch")?.gameObject;
+        if (_claim != null)
+            _claim.SetActive(false);
     }
 
     /// <summary>
@@ -421,9 +448,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 RefreshBody();
                 RedDot.RefreshCommon();
             });
-            var claimLabel = _claim.GetComponentInChildren<Text>(true);
-            if (claimLabel != null)
-                claimLabel.text = "领取成就奖励";
+            // 按钮图与文案以预制体为准，禁止改 Text / 放大
         }
 
         var close = transform.Find("Root/CloseButton")?.GetComponent<Button>();

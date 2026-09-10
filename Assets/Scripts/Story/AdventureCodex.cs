@@ -271,13 +271,27 @@ public static class AdventureCodex
 
     public static MercRosterDefs.MercRarity GetMercRarity(AdventureLogCatalog.MercEntry e)
     {
-        if (e.StoryNpc) return MercRosterDefs.MercRarity.Common;
-        if (MercRosterDefs.TryGetByHireId(e.Id, out var def))
+        if (!e.StoryNpc && MercRosterDefs.TryGetByHireId(e.Id, out var def))
             return def.Rarity;
-        // 文案里写了传奇的兜底
-        string unlock = e.Unlock ?? "";
-        if (unlock.Contains("传奇")) return MercRosterDefs.MercRarity.Legendary;
-        return MercRosterDefs.MercRarity.Common;
+        // 剧情 NPC / 花名册缺失：用条目自带稀有度（小美=稀有等）
+        return e.Rarity;
+    }
+
+    /// <summary>已遭遇或已招募才亮彩色头像；否则剪影。不含「初始池已开放」。</summary>
+    public static bool IsMercRevealed(AdventureLogCatalog.MercEntry e)
+    {
+        if (string.IsNullOrEmpty(e.Id)) return false;
+        if (IsSeenMerc(e.Id)) return true;
+        if (!string.IsNullOrEmpty(e.AssetId) && AdventureLogCatalog.HasMerc(e.AssetId))
+            return true;
+        if (MercRosterDefs.TryGetByHireId(e.Id, out var def)
+            && !string.IsNullOrEmpty(def.AssetId)
+            && AdventureLogCatalog.HasMerc(def.AssetId))
+            return true;
+        // 剧情 NPC：用剧情遭遇条件（如小美教程开场），不走酒馆初始池解锁
+        if (e.StoryNpc && AdventureLogCatalog.MercUnlocked(e))
+            return true;
+        return false;
     }
 
     /// <summary>资源奖已收归日志里程等级；格子详情仅展示文案。</summary>
@@ -349,18 +363,41 @@ public static class AdventureCodex
         return Resources.Load<Sprite>($"Config/MonsterSpriteRegistry/{folder}/{assetId}");
     }
 
-    public static Sprite LoadMercSprite(AdventureLogCatalog.MercEntry e)
+    /// <summary>佣兵图鉴列表格：头像（佣兵头像文件夹 / MercHead，按 H/C 编号）。</summary>
+    public static Sprite LoadMercHead(AdventureLogCatalog.MercEntry e)
+    {
+        if (!string.IsNullOrEmpty(e.Id))
+        {
+            var sp = MercPortraitSprites.GetHead(e.Id);
+            if (sp != null) return sp;
+        }
+        if (!string.IsNullOrEmpty(e.AssetId))
+        {
+            var sp = MercPortraitSprites.GetHead(e.AssetId);
+            if (sp != null) return sp;
+        }
+        return null;
+    }
+
+    /// <summary>佣兵图鉴详情弹窗：全身立绘。</summary>
+    public static Sprite LoadMercStand(AdventureLogCatalog.MercEntry e)
     {
         if (!string.IsNullOrEmpty(e.Id))
         {
             var sp = MercPortraitSprites.GetStand(e.Id);
             if (sp != null) return sp;
         }
-        if (string.IsNullOrEmpty(e.AssetId)) return null;
-        if (MercenaryManager.Instance != null)
-            return MercenaryManager.Instance.GetIcon(e.AssetId);
-        return MercPortraitSprites.GetHead(e.AssetId);
+        if (!string.IsNullOrEmpty(e.AssetId))
+        {
+            var sp = MercPortraitSprites.GetStand(e.AssetId);
+            if (sp != null) return sp;
+        }
+        // 无立绘时回退头像，避免弹窗空白
+        return LoadMercHead(e);
     }
+
+    /// <summary>兼容旧调用：默认全身立绘。</summary>
+    public static Sprite LoadMercSprite(AdventureLogCatalog.MercEntry e) => LoadMercStand(e);
 
     public static bool UnlockWorld(string worldId)
     {
