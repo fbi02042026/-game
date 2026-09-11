@@ -711,7 +711,9 @@ public class BattleManager : Singleton<BattleManager>
             Vector3 engagePos = new Vector3(vx + ox, UnitBase.GROUND_Y + lane, z);
             bool isElite = i >= n - eliteCount;
             float scale = isElite ? GameConfig.ELITE_SCALE_MULTIPLIER : 1f;
-            Monster m = SpawnAmbushMonsterAt(engagePos, lane, scale);
+            float heroX = hero != null ? UnitBase.GetCombatX(hero) : vx;
+            bool fromLeft = engagePos.x < heroX;
+            Monster m = SpawnAmbushMonsterAt(engagePos, lane, scale, fromLeftOverride: fromLeft);
             if (m == null) continue;
             m.SetForcedTarget(victim);
             wave.aliveCount++;
@@ -766,7 +768,7 @@ public class BattleManager : Singleton<BattleManager>
             float ox = engageCenter + side * Random.Range(1.2f, 3.2f) + Random.Range(-0.5f, 0.5f);
             float lane = BattleLaneBounds.RandomLaneOffset();
             Vector3 engagePos = new Vector3(ox, UnitBase.GROUND_Y + lane, z);
-            Monster m = SpawnAmbushMonsterAt(engagePos, lane, 1f, usedSprites);
+            Monster m = SpawnAmbushMonsterAt(engagePos, lane, 1f, usedSprites, fromLeftOverride: side < 0f);
             if (m == null) continue;
             m.SetForcedTarget(hero);
             wave.aliveCount++;
@@ -799,7 +801,9 @@ public class BattleManager : Singleton<BattleManager>
             Vector3 engagePos = new Vector3(ox, UnitBase.GROUND_Y + lane, z);
             if (!TryPickWaveMonster(stageIdx, monsters.Count + i, false, usedSprites, out MonsterConfig cfg, out int spriteIdx))
                 continue;
-            Monster monster = SpawnMonsterOffscreenEnter(engagePos, lane, 1f, cfg, stageIdx, spriteIdx);
+            bool fromLeft = side < 0f;
+            Monster monster = SpawnMonsterOffscreenEnter(engagePos, lane, 1f, cfg, stageIdx, spriteIdx,
+                fromLeftOverride: fromLeft);
             if (monster == null) continue;
             monster.SetForcedTarget(hero);
             ApplyTutorialMonsterTuning(monster);
@@ -810,7 +814,8 @@ public class BattleManager : Singleton<BattleManager>
     /// <summary>埋伏/教程：在交战点刷怪，从屏外走入。</summary>
     Monster SpawnAmbushMonsterAt(
         Vector3 engagePos, float laneY, float scaleMultiplier = 1f,
-        System.Collections.Generic.HashSet<int> usedSprites = null)
+        System.Collections.Generic.HashSet<int> usedSprites = null,
+        bool? fromLeftOverride = null)
     {
         EnsureMonsterPrefabReady();
         int stageIdx = currentStage != null ? currentStage.stageIndex : 0;
@@ -818,14 +823,14 @@ public class BattleManager : Singleton<BattleManager>
                 out MonsterConfig cfg, out int spriteIdx))
             return null;
 
-        Monster monster = SpawnMonsterOffscreenEnter(engagePos, laneY, scaleMultiplier, cfg, stageIdx, spriteIdx);
+        Monster monster = SpawnMonsterOffscreenEnter(
+            engagePos, laneY, scaleMultiplier, cfg, stageIdx, spriteIdx,
+            fromLeftOverride: fromLeftOverride);
         if (monster == null) return null;
         ApplyTutorialMonsterTuning(monster);
         ForceEnableMonsterRenderers(monster.transform);
         return monster;
     }
-
-    int _offscreenEnterSideToggle;
 
     Monster SpawnMonsterOffscreenEnter(
         Vector3 engagePos, float laneY, float scaleMultiplier,
@@ -835,8 +840,8 @@ public class BattleManager : Singleton<BattleManager>
         if (cfg == null) return null;
         float z = unitRoot != null ? unitRoot.position.z : engagePos.z;
         GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
-        // 相对镜头左右交替进场（可覆盖）
-        bool fromLeft = fromLeftOverride ?? ((_offscreenEnterSideToggle++ & 1) == 0);
+        // 默认从右侧进场；埋伏/教程等调用方显式传入 fromLeftOverride。
+        bool fromLeft = fromLeftOverride ?? false;
         const float offscreenMargin = 1.35f;
         float enterX = fromLeft ? visMin - offscreenMargin : visMax + offscreenMargin;
         // 交战点落在进场同侧，避免左侧怪跑到玩家右边再回头
@@ -2454,7 +2459,7 @@ public class BattleManager : Singleton<BattleManager>
 
             float lane = BattleLaneBounds.RandomLaneOffset();
             float spawnY = UnitBase.GROUND_Y + lane;
-            bool fromLeft = Random.value > 0.5f;
+            bool fromLeft = false;
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
             float preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.8f, 0.8f);
             float engageX = ResolveEngageXForEnterSide(heroCombatX, fromLeft, preferEngageX, visMin, visMax);
@@ -2506,7 +2511,7 @@ public class BattleManager : Singleton<BattleManager>
             float spawnY = UnitBase.GROUND_Y + lane;
             float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
-            bool fromLeft = Random.value > 0.5f;
+            bool fromLeft = false;
             float preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.8f, 0.8f);
             float engageX = ResolveEngageXForEnterSide(heroCombatX, fromLeft, preferEngageX, visMin, visMax);
             const float offMargin = 1.35f;
@@ -2568,7 +2573,7 @@ public class BattleManager : Singleton<BattleManager>
             monster.Init(fallbackCfg, 0, CurrentChapter, fallbackScale, fallbackSpriteOverride);
             ApplyTutorialMonsterTuning(monster);
             monster.SetLaneY(lane);
-            monster.BeginMapEnter(engage, GameConfig.MONSTER_ENTER_SPEED);
+            monster.BeginMapEnter(engage, GameConfig.MONSTER_ENTER_SPEED, fromLeft ? 1 : -1);
             monster.OnDead += OnMonsterDead;
             monsters.Add(monster);
             _totalMonstersSpawnedThisStage++;

@@ -196,7 +196,7 @@ public class SkillRegistry : Singleton<SkillRegistry>
 
     /// <summary>
     /// 播放技能特效（唯一对外入口）。规则固定：
-    /// 1) 专属 prefab（配置拖入 或 VFX/Skills/.../{id}）——远程施法者跳过近战 slash 专属，改走弹道
+    /// 1) 专属 prefab（配置拖入 或 VFX/Skills/.../{id}）——保留预制体位移/旋转/缩放
     /// 2) 否则 SkillNaming.ResolveSkillVfxKit → 共用套；Bow/Orb 从 from→to 飞行
     /// </summary>
     public void PlaySkillVfx(string skillId, Vector3 pos, bool isAllyCaster, int facingDir = 1, Transform attach = null)
@@ -219,13 +219,12 @@ public class SkillRegistry : Singleton<SkillRegistry>
         if (string.IsNullOrEmpty(skillId)) return;
         var cfg = Get(skillId);
         VfxFaction faction = isAllyCaster ? VfxFaction.Ally : VfxFaction.Enemy;
-        bool rangedCaster = casterBasicKit == AttackVfxKit.Bow || casterBasicKit == AttackVfxKit.Orb;
 
         AttackVfxKit kit = SkillNaming.ResolveSkillVfxKit(cfg, skillId, casterBasicKit);
 
         GameObject prefab = GetSkillVfxPrefab(skillId);
-        // 远程单位放物攻技能时：专属多为近战 slash（挂在自身），跳过改走弓/法球弹道
-        if (prefab != null && !(rangedCaster && kit != AttackVfxKit.Heal))
+        // 有专属预制体就播它：用预制体自己的位移/旋转/缩放，不改走刀光/弓/法球套装。
+        if (prefab != null)
         {
             float life = 2.5f;
             if (skillId != null && skillId.IndexOf("shield", System.StringComparison.OrdinalIgnoreCase) >= 0)
@@ -237,18 +236,8 @@ public class SkillRegistry : Singleton<SkillRegistry>
                 BattleVFXSystem.Instance.PlaySkillPrefab(prefab, toPos, facingDir, life, attach);
             else
             {
-                GameObject go = Object.Instantiate(prefab, toPos, prefab.transform.rotation);
-                if (attach != null)
-                {
-                    go.transform.SetParent(attach, true);
-                    go.transform.position = toPos;
-                }
-                if (facingDir < 0)
-                {
-                    var s = go.transform.localScale;
-                    s.x = -Mathf.Abs(s.x);
-                    go.transform.localScale = s;
-                }
+                GameObject go = Object.Instantiate(prefab);
+                BattleVFXSystem.ApplyAuthoredSkillPrefabTransform(go, prefab, toPos, facingDir, attach);
                 Object.Destroy(go, life);
             }
             return;

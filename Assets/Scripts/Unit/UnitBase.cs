@@ -817,7 +817,8 @@ public abstract class UnitBase : MonoBehaviour
 
         float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit);
 
-        bool openingHit = this is Hero && GameConfig.IsOpeningStage();
+        // 仅引导「拿剑爽点」才覆盖为教学伤害；开场关不得把英雄真实 ATK 打成 2~5。
+        bool openingHit = this is Hero && GameConfig.IsTutorialPowerFantasy();
         if (openingHit)
             damage = GameConfig.RollOpeningAllyHitDamage(isCrit);
 

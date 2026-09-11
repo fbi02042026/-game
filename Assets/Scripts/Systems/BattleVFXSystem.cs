@@ -655,6 +655,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
     /// <summary>
     /// 技能专属预制体：保留原色/粒子，不走刀光 PrepareSlash；可挂单位跟随。
+    /// 根节点使用预制体自身 localPosition / localRotation / localScale（朝向只翻 X 符号）。
     /// </summary>
     public GameObject PlaySkillPrefab(GameObject prefab, Vector3 position, int facingDir, float lifetime, Transform attach = null)
     {
@@ -662,25 +663,82 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         GameObject go = AcquireVfxInstance(prefab, position, resetTint: false);
         if (go == null) return null;
 
-        go.transform.rotation = prefab.transform.rotation;
-        Vector3 baseScale = prefab.transform.localScale;
-        go.transform.localScale = new Vector3(
-            Mathf.Abs(baseScale.x) * (facingDir < 0 ? -1f : 1f),
-            baseScale.y,
-            baseScale.z);
-
+        ApplyAuthoredSkillPrefabTransform(go, prefab, position, facingDir, attach);
+        RestartAuthoredPlayback(go);
         SetVFXSortingLayer(go.transform);
-
-        if (attach != null)
-        {
-            Vector3 worldPos = position;
-            go.transform.SetParent(attach, true);
-            go.transform.position = worldPos;
-        }
-
         PlayAllParticles(go);
         ScheduleRelease(go, lifetime);
         return go;
+    }
+
+    /// <summary>
+    /// 把实例摆成预制体作者写的本地变换。朝向只翻转 X 符号，不改缩放幅度、不覆盖旋转。
+    /// </summary>
+    public static void ApplyAuthoredSkillPrefabTransform(
+        GameObject instance, GameObject prefab, Vector3 worldAnchor, int facingDir, Transform attach)
+    {
+        if (instance == null || prefab == null) return;
+
+        Vector3 authoredPos = prefab.transform.localPosition;
+        Quaternion authoredRot = prefab.transform.localRotation;
+        Vector3 authoredScale = prefab.transform.localScale;
+        float faceSign = facingDir < 0 ? -1f : 1f;
+
+        Vector3 offset = authoredPos;
+        offset.x *= faceSign;
+        Vector3 scale = new Vector3(
+            Mathf.Abs(authoredScale.x) * faceSign,
+            authoredScale.y,
+            authoredScale.z);
+
+        if (attach != null)
+        {
+            instance.transform.SetParent(attach, false);
+            instance.transform.localRotation = authoredRot;
+            Vector3 hitLocal = attach.InverseTransformPoint(worldAnchor);
+            instance.transform.localPosition = hitLocal + offset;
+            instance.transform.localScale = CompensateParentScale(scale, attach.lossyScale);
+        }
+        else
+        {
+            instance.transform.SetParent(null, true);
+            instance.transform.position = worldAnchor + offset;
+            instance.transform.rotation = authoredRot;
+            instance.transform.localScale = scale;
+        }
+    }
+
+    static Vector3 CompensateParentScale(Vector3 desiredWorldScale, Vector3 parentLossy)
+    {
+        return new Vector3(
+            desiredWorldScale.x / NonZero(parentLossy.x),
+            desiredWorldScale.y / NonZero(parentLossy.y),
+            desiredWorldScale.z / NonZero(parentLossy.z));
+    }
+
+    static float NonZero(float v) => Mathf.Abs(v) < 1e-5f ? 1f : v;
+
+    static void RestartAuthoredPlayback(GameObject go)
+    {
+        if (go == null) return;
+        var animators = go.GetComponentsInChildren<Animator>(true);
+        for (int i = 0; i < animators.Length; i++)
+        {
+            var animator = animators[i];
+            if (animator == null) continue;
+            animator.enabled = true;
+            animator.Rebind();
+            animator.Update(0f);
+        }
+        var animations = go.GetComponentsInChildren<Animation>(true);
+        for (int i = 0; i < animations.Length; i++)
+        {
+            var legacyAnim = animations[i];
+            if (legacyAnim == null) continue;
+            legacyAnim.enabled = true;
+            legacyAnim.Rewind();
+            legacyAnim.Play();
+        }
     }
 
     /// <summary>

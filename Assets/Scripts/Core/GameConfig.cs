@@ -682,7 +682,7 @@ public static class GameConfig
     public const int COMBO_AFTERIMAGE_MAX_PER_UNIT = 10;
     public const float COMBO_AFTERIMAGE_MOVE_EPS = 0.08f;
 
-    /// <summary>第一章第 1 关（教学节奏：打得慢、打得少）</summary>
+    /// <summary>第一章第 1 关（教学节奏：刷怪间隔等；不用于削弱我方伤害）</summary>
     public static bool IsOpeningStage()
     {
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
@@ -692,17 +692,26 @@ public static class GameConfig
         return ch <= 1 && st <= 0;
     }
 
+    /// <summary>引导拿剑后的强伤爽点；未开此旗时普攻必须走真实 ATK。</summary>
+    public static bool IsTutorialPowerFantasy()
+    {
+        return BattleManager.Instance != null && BattleManager.Instance.TutorialPowerFantasy;
+    }
+
     public static float GetWaveSpawnInterval()
     {
         return IsOpeningStage() ? OPENING_WAVE_SPAWN_INTERVAL : WAVE_SPAWN_INTERVAL;
     }
 
-    /// <summary>开局我方普攻最终伤害（2~5，暴击略高）；拿剑爽点后一刀一个。</summary>
+    /// <summary>
+    /// 仅 TutorialPowerFantasy：引导拿剑爽点伤害。
+    /// 根因：曾在第一章第 1 关整关把英雄 ATK 替换成 2~5，表现为「打半天才死」。
+    /// </summary>
     public static int RollOpeningAllyHitDamage(bool isCrit)
     {
-        if (BattleManager.Instance != null && BattleManager.Instance.TutorialPowerFantasy)
-            return isCrit ? Random.Range(35, 46) : Random.Range(25, 41);
-        return isCrit ? Random.Range(4, 8) : Random.Range(2, 6);
+        if (!IsTutorialPowerFantasy())
+            return isCrit ? Random.Range(4, 8) : Random.Range(2, 6);
+        return isCrit ? Random.Range(35, 46) : Random.Range(25, 41);
     }
 
     /// <summary>
