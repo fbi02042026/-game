@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 隐藏经验等级：不展示给玩家，驱动装备掉落品质权重。
+/// 隐藏经验等级：不展示给玩家。裂缝掉落稀有度的唯一真源（勿接 equip_rarity_rules 关卡段权重）。
 /// </summary>
 public static class HiddenLevelSystem
 {

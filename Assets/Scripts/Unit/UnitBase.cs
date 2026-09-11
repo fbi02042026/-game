@@ -96,6 +96,14 @@ public abstract class UnitBase : MonoBehaviour
     public UnitBase LastDamageSource { get; private set; }
 
     public AttrSystem attr = new AttrSystem();
+
+    void BindAttrOwnerKind()
+    {
+        if (attr == null) attr = new AttrSystem();
+        if (this is Hero) attr.SetOwnerKind(AttrOwnerKind.Player);
+        else if (this is Mercenary) attr.SetOwnerKind(AttrOwnerKind.Merc);
+        else if (this is Monster) attr.SetOwnerKind(AttrOwnerKind.Monster);
+    }
     public float currentHp;
     protected float attackCd = 0;
     protected UnitBase target;
@@ -114,6 +122,7 @@ public abstract class UnitBase : MonoBehaviour
 
     protected virtual void Awake()
     {
+        BindAttrOwnerKind();
         if (rb == null) rb = GetComponent<Rigidbody2D>();
         if (sr == null) sr = GetComponent<SpriteRenderer>();
         if (anim == null) anim = GetComponent<Animator>();

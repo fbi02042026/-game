@@ -47,7 +47,8 @@ public class BattleUI : MonoBehaviour
     public SkillAvatarUI playerSkillAvatar;   // 玩家技能头像（圆形+能量槽+光边）
     public SkillAvatarUI merc1SkillAvatar;    // 佣兵1技能头像
     public SkillAvatarUI merc2SkillAvatar;    // 佣兵2技能头像
-    public Button autoButton;                 // 自动战斗按钮
+    /// <summary>自动战斗未开放。运行时隐藏，勿在预制体里删节点。</summary>
+    public Button autoButton;
 
     [Header("=== 底部功能入口 ===")]
     public Button characterButton;   // 角色属性按钮
@@ -90,7 +91,7 @@ public class BattleUI : MonoBehaviour
         else
             UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
 
-        if (autoButton != null) autoButton.onClick.AddListener(ToggleAutoBattle);
+        BindAutoBattleUnavailable();
         if (pauseButton != null) pauseButton.onClick.AddListener(OnPause);
         if (characterButton != null) characterButton.onClick.AddListener(OnOpenCharacter);
         if (settingsButton != null) settingsButton.onClick.AddListener(OnOpenSettings);
@@ -414,6 +415,7 @@ public class BattleUI : MonoBehaviour
         if (maxSlots > 0) ApplyFillBars(mercSlot1);
         if (maxSlots > 1) ApplyFillBars(mercSlot2);
         WireSlotSkillClicks();
+        BindAutoBattleUnavailable();
         UpdateCharacterSlots();
         UpdateSkillAvatars();
         int stageIdx = BattleManager.Instance != null && BattleManager.Instance.currentStage != null
@@ -787,20 +789,22 @@ public class BattleUI : MonoBehaviour
         return null;
     }
 
-    /// <summary>
-    /// 切换自动战斗
-    /// </summary>
-    void ToggleAutoBattle()
+    /// <summary>自动战斗未接线：隐藏按钮；若仍被点到只 Toast，不改战斗 AI。</summary>
+    void BindAutoBattleUnavailable()
+    {
+        if (autoButton == null) return;
+        autoButton.onClick.RemoveListener(OnAutoBattleUnavailableClicked);
+        autoButton.onClick.AddListener(OnAutoBattleUnavailableClicked);
+        autoButton.gameObject.SetActive(false);
+        if (BattleManager.Instance != null)
+            BattleManager.Instance.isAutoBattle = false;
+    }
+
+    void OnAutoBattleUnavailableClicked()
     {
         if (BattleManager.Instance != null)
-        {
-            BattleManager.Instance.isAutoBattle = !BattleManager.Instance.isAutoBattle;
-            if (autoButton != null)
-            {
-                var txt = autoButton.GetComponentInChildren<Text>();
-                if (txt != null) txt.text = BattleManager.Instance.isAutoBattle ? "停止" : "自动";
-            }
-        }
+            BattleManager.Instance.isAutoBattle = false;
+        UIManager.Instance?.ShowToast("未开放");
     }
 
     /// <summary>

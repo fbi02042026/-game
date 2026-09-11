@@ -47,6 +47,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookEquipAnchors();
         CookMonsterStats();
         CookChapterThemeMap();
+        CookChapterStatScale();
         CookMonsterUnlockTier();
         CookStageSpawn();
         CookTutorialBattle();
@@ -59,7 +60,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookEquipSlotPools();
         CookEquipRarityRules();
         CookEquipAttrRanges();
-        CookRiftEquipGenSteps();
+        // rift_equip_gen_steps：未启用，运行时无读取，不再 Cook
         CookPlayerJobBaseStats();
         CookAttackRange();
         CookJobWeapons();
@@ -132,6 +133,11 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookTableFromSource(ContentPaths.Source.Tables + "/chapter_theme_map.csv", null, "chapter_theme_map");
     }
 
+    static void CookChapterStatScale()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/chapter_stat_scale.csv", null, "chapter_stat_scale");
+    }
+
     static void CookMonsterUnlockTier()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/monster_unlock_tier.csv", null, "monster_unlock_tier");
@@ -162,6 +168,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookTableFromSource(ContentPaths.Source.Tables + "/sprite_pick_weight.csv", null, "sprite_pick_weight");
     }
 
+    /// <summary>奇偶近战/远程槽位表（spriteIndex=0 不锁精灵）。</summary>
     static void CookWaveSlot()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/wave_slot.csv", null, "wave_slot");
@@ -192,6 +199,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookTableFromSource(ContentPaths.Source.Tables + "/equip_attr_ranges.csv", null, "equip_attr_ranges");
     }
 
+    /// <summary>未启用：无运行时读取。保留方法以免旧菜单引用，CookAll 不再调用。</summary>
     static void CookRiftEquipGenSteps()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/rift_equip_gen_steps.csv", null, "rift_equip_gen_steps");

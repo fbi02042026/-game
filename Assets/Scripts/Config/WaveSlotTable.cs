@@ -1,6 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// 波次槽：奇偶近战/远程（spriteIndex=0 不锁 ID，走加权）。
+/// 无匹配行时 BattleManager 仍走代码奇偶回退，手感相同。
+/// </summary>
 public static class WaveSlotTable
 {
     public struct SlotRule

@@ -2,7 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// 玩家进战职业：玩家算队伍一员；决定默认技能与武器掉落池。
-/// 展示字段对齐 Assets/Data/Source/Tables/player_jobs.csv。
+/// 展示字段以本类为准。player_jobs.csv 未启用（未 Cook），仅策划对照。
 /// </summary>
 public enum PlayerJobId
 {

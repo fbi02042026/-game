@@ -57,6 +57,7 @@ public class ConfigManager : Singleton<ConfigManager>
         }
 
         ChapterThemeMapTable.EnsureLoaded();
+        ChapterStatScaleTable.EnsureLoaded();
         MonsterUnlockTierTable.EnsureLoaded();
         AttackRangeTable.EnsureLoaded();
         PlayerJobBaseStats.EnsureLoaded();
@@ -145,7 +146,7 @@ public class ConfigManager : Singleton<ConfigManager>
 
     public List<EquipInstance> GetRandomEquipInstances(int count, int blacksmithLevel, int bonusStar, StageType stageType)
     {
-        // 裂缝程序化掉落（部位/品质/属性范围表）；失败时回退旧 SO 模板逻辑
+        // 裂缝程序化掉落。稀有度真源 HiddenLevelSystem；本回退才走 EquipDropRules。
         try
         {
             RiftEquipTables.EnsureLoaded();
