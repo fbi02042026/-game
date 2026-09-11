@@ -55,6 +55,8 @@ public class BattleManager : Singleton<BattleManager>
     int _tutorialSpriteMelee = 2;
     int _tutorialSpriteRanged = 1;
     int _tutorialEliteCount;
+    float _tutorialHpMul = GameConfig.TUTORIAL_MONSTER_HP_MUL;
+    float _tutorialDefMul = GameConfig.TUTORIAL_MONSTER_DEF_MUL;
     /// <summary>本局怪物攻速倍率（剧情选择等）</summary>
     public float runMonsterAtkSpeedMul = 1f;
     /// <summary>正在走向 chuansongmen，放宽屏幕钳制</summary>
@@ -534,12 +536,12 @@ public class BattleManager : Singleton<BattleManager>
         }
     }
 
-    /// <summary>引导开箱拿剑后进入强伤+多怪爽点。</summary>
+    /// <summary>引导开箱拿剑后继续流程（不再改玩家伤害）。</summary>
     public void BeginTutorialPowerFantasy()
     {
         if (!IsTutorialRun) return;
         TutorialPowerFantasy = true;
-        Debug.Log("[BattleManager] 引导拿剑爽点：一刀一个 + 后续加怪");
+        Debug.Log("[BattleManager] 引导拿剑完成，伤害走正式 ATK");
     }
 
     void PrepareTutorialWaves()
@@ -909,17 +911,20 @@ public class BattleManager : Singleton<BattleManager>
     void ApplyTutorialMonsterTuning(Monster monster)
     {
         if (!IsTutorialRun || monster == null || monster.attr == null) return;
-        if (monster.IsEliteWave)
+        // 不再写死 8~12 HP（那是配合 2~5 芯片伤害的）。在正式 Init 血防上乘引导表倍率。
+        float hpMul = _tutorialHpMul > 0.01f ? _tutorialHpMul : GameConfig.TUTORIAL_MONSTER_HP_MUL;
+        float defMul = _tutorialDefMul > 0.01f ? _tutorialDefMul : GameConfig.TUTORIAL_MONSTER_DEF_MUL;
+        if (Mathf.Abs(hpMul - 1f) > 0.001f)
         {
-            float hp = Random.Range(25, 36) * GameConfig.MONSTER_HP_GLOBAL_MUL;
+            float hp = Mathf.Max(1f, monster.attr.GetAttr(AttrType.MaxHp) * hpMul);
             monster.attr.SetAttr(AttrType.MaxHp, hp);
             monster.currentHp = hp;
-            return;
         }
-        // 引导怪总血量 8–12，玩家约 2 点伤害，3–4 下击杀
-        float normalHp = Random.Range(8, 13) * GameConfig.MONSTER_HP_GLOBAL_MUL;
-        monster.attr.SetAttr(AttrType.MaxHp, normalHp);
-        monster.currentHp = normalHp;
+        if (Mathf.Abs(defMul - 1f) > 0.001f)
+        {
+            float def = Mathf.Max(0f, monster.attr.GetAttr(AttrType.Defense) * defMul);
+            monster.attr.SetAttr(AttrType.Defense, def);
+        }
     }
 
     // ============================================================
@@ -2175,6 +2180,8 @@ public class BattleManager : Singleton<BattleManager>
         _tutorialSpriteMelee = step.spriteMelee > 0 ? step.spriteMelee : 2;
         _tutorialSpriteRanged = step.spriteRanged > 0 ? step.spriteRanged : 1;
         _tutorialEliteCount = step.eliteCount > 0 ? step.eliteCount : 0;
+        _tutorialHpMul = step.hpMul > 0.01f ? step.hpMul : GameConfig.TUTORIAL_MONSTER_HP_MUL;
+        _tutorialDefMul = step.defMul > 0.01f ? step.defMul : GameConfig.TUTORIAL_MONSTER_DEF_MUL;
     }
 
     /// <summary>单波内交替近战/远程；引导关强制混刷弓/法球与近战。</summary>

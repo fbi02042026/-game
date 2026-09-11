@@ -16,6 +16,8 @@ public static class TutorialBattleTable
         public float aheadDist;
         public bool stunned;
         public int eliteCount;
+        public float hpMul;
+        public float defMul;
         public string note;
     }
 
@@ -59,11 +61,29 @@ public static class TutorialBattleTable
                 aheadDist = c.Length > 8 && GameTableCsv.TryFloat(c[8], out float ad) ? ad : 0f,
                 stunned = c.Length > 9 && GameTableCsv.TryBool(c[9], out bool st) && st,
                 eliteCount = c.Length > 10 && GameTableCsv.TryInt(c[10], out int ec) ? ec : 0,
-                note = c.Length > 11 ? c[11] : ""
+                hpMul = ParseOptionalMul(c, 11),
+                defMul = ParseOptionalMul(c, 12),
+                note = ResolveNote(c)
             });
         }
         _steps.Sort((a, b) => a.order.CompareTo(b.order));
         Debug.Log($"[TutorialBattle] 已加载 {_steps.Count} 条");
+    }
+
+    static float ParseOptionalMul(string[] c, int index)
+    {
+        if (c == null || index >= c.Length) return 0f;
+        return GameTableCsv.TryFloat(c[index], out float v) ? v : 0f;
+    }
+
+    static string ResolveNote(string[] c)
+    {
+        if (c == null) return "";
+        if (c.Length > 13 && !string.IsNullOrEmpty(c[13])) return c[13];
+        // 旧表 note 在 eliteCount 后一列，且不是数字倍率
+        if (c.Length > 11 && !GameTableCsv.TryFloat(c[11], out _))
+            return c[11];
+        return "";
     }
 
     public static IReadOnlyList<Step> GetSteps()

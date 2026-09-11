@@ -702,9 +702,9 @@ public class Monster : UnitBase
 
         if (GameConfig.IsOpeningStage() && !bossUnit)
         {
-            attr.SetAttr(AttrType.MaxHp, attr.GetAttr(AttrType.MaxHp) * 1.25f);
-            attr.SetAttr(AttrType.Attack, attr.GetAttr(AttrType.Attack) * 0.7f);
-            attr.SetAttr(AttrType.AttackSpeed, attr.GetAttr(AttrType.AttackSpeed) * 0.7f);
+            attr.SetAttr(AttrType.MaxHp, attr.GetAttr(AttrType.MaxHp) * GameConfig.OPENING_MONSTER_HP_MUL);
+            attr.SetAttr(AttrType.Attack, attr.GetAttr(AttrType.Attack) * GameConfig.OPENING_MONSTER_ATK_MUL);
+            attr.SetAttr(AttrType.AttackSpeed, attr.GetAttr(AttrType.AttackSpeed) * GameConfig.OPENING_MONSTER_ATK_SPEED_MUL);
         }
 
         currentHp = attr.GetAttr(AttrType.MaxHp);

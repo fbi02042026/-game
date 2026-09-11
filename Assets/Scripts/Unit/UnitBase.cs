@@ -817,15 +817,10 @@ public abstract class UnitBase : MonoBehaviour
 
         float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit);
 
-        // 仅引导「拿剑爽点」才覆盖为教学伤害；开场关不得把英雄真实 ATK 打成 2~5。
-        bool openingHit = this is Hero && GameConfig.IsTutorialPowerFantasy();
-        if (openingHit)
-            damage = GameConfig.RollOpeningAllyHitDamage(isCrit);
-
         AttackVfxKit kit = GetAttackVfxKit();
         bool allyMelee = isAlly && kit == AttackVfxKit.MeleeSlash;
         bool allyRanged = isAlly && (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb);
-        bool killWindup = isAlly && ShouldUseKillWindup(target, damage, isCrit, openingHit);
+        bool killWindup = isAlly && ShouldUseKillWindup(target, damage, isCrit);
         float atkCd = GetAttackCooldown();
         if (unitAnim != null)
             unitAnim.PlayAttack(kit, allyMelee && (isCrit || killWindup), atkCd);
@@ -843,7 +838,7 @@ public abstract class UnitBase : MonoBehaviour
         if (!isAlly && SkillNaming.IsRangedKit(kit) && BattleVFXSystem.Instance != null)
         {
             StartCoroutine(CoRangedBasicProjectile(
-                target, damage, isCrit, openingHit, kit, faction, facingDir,
+                target, damage, isCrit, kit, faction, facingDir,
                 releaseDelay,
                 speedMul: GameConfig.MONSTER_BASIC_PROJECTILE_SPEED_MUL, scaleMul: 1.2f, dodgeOnMiss: true));
             return;
@@ -852,26 +847,26 @@ public abstract class UnitBase : MonoBehaviour
         if (allyMelee)
         {
             StartCoroutine(CoAllyMeleeAttack(
-                target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf, killWindup));
+                target, damage, isCrit, kit, faction, firePos, hitPos, facingDir, hitTf, killWindup));
             return;
         }
 
         if (allyRanged && killWindup)
         {
             StartCoroutine(CoAllyRangedKillWindup(
-                target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf));
+                target, damage, isCrit, kit, faction, firePos, hitPos, facingDir, hitTf));
             return;
         }
 
         if (allyRanged)
         {
             FireAllyRangedBasicProjectile(
-                target, damage, isCrit, openingHit, kit, faction, facingDir,
+                target, damage, isCrit, kit, faction, facingDir,
                 releaseDelay);
             return;
         }
 
-        ResolveBasicAttackHit(target, damage, isCrit, openingHit);
+        ResolveBasicAttackHit(target, damage, isCrit);
         if (kit == AttackVfxKit.MeleeSlash)
             CombatJuice.Instance?.OnMeleeAttackLunge(this);
         if (BattleVFXSystem.Instance != null)
@@ -880,12 +875,12 @@ public abstract class UnitBase : MonoBehaviour
 
     /// <summary>我方弓/法球普攻：点到点飞行，落地再结算（与敌方远程一致）。远程额外等出手延迟。</summary>
     void FireAllyRangedBasicProjectile(
-        UnitBase target, float damage, bool isCrit, bool openingHit,
+        UnitBase target, float damage, bool isCrit,
         AttackVfxKit kit, VfxFaction faction,
         int facingDir, float releaseDelay = 0f)
     {
         StartCoroutine(CoRangedBasicProjectile(
-            target, damage, isCrit, openingHit, kit, faction, facingDir, releaseDelay,
+            target, damage, isCrit, kit, faction, facingDir, releaseDelay,
             speedMul: 1f, scaleMul: 1f, dodgeOnMiss: false));
     }
 
@@ -894,7 +889,7 @@ public abstract class UnitBase : MonoBehaviour
     /// 延迟期间重采样发射/受击点，对齐释放帧而不是举弓/抬杖第一帧。
     /// </summary>
     IEnumerator CoRangedBasicProjectile(
-        UnitBase target, float damage, bool isCrit, bool openingHit,
+        UnitBase target, float damage, bool isCrit,
         AttackVfxKit kit, VfxFaction faction, int facingDir, float releaseDelay,
         float speedMul = 1f, float scaleMul = 1.2f, bool dodgeOnMiss = true)
     {
@@ -909,7 +904,6 @@ public abstract class UnitBase : MonoBehaviour
         Transform hitTf = target.transform;
         float pendingDamage = damage;
         bool pendingCrit = isCrit;
-        bool pendingOpening = openingHit;
         Vector3 impactPos = hitPos;
         UnitBase pendingTarget = target;
         bool checkMiss = dodgeOnMiss && !isAlly;
@@ -930,23 +924,23 @@ public abstract class UnitBase : MonoBehaviour
                         if (missDist > GameConfig.PROJECTILE_IMPACT_MISS_DIST)
                             return;
                     }
-                    ResolveBasicAttackHit(pendingTarget, pendingDamage, pendingCrit, pendingOpening);
+                    ResolveBasicAttackHit(pendingTarget, pendingDamage, pendingCrit);
                 });
         }
         else
-            ResolveBasicAttackHit(target, damage, isCrit, openingHit);
+            ResolveBasicAttackHit(target, damage, isCrit);
     }
 
-    bool ShouldUseKillWindup(UnitBase target, float damage, bool isCrit, bool openingHit)
+    bool ShouldUseKillWindup(UnitBase target, float damage, bool isCrit)
     {
         if (target == null || target.isDead || target.attr == null) return false;
         // Boss/精英：仅预测致死的最后一击才慢放+放大（平时暴击不触发）
         if (target is Monster m && (m.IsBossUnit || m.IsEliteWave))
-            return target.currentHp <= PredictBasicAttackDamage(target, damage, openingHit);
+            return target.currentHp <= PredictBasicAttackDamage(target, damage);
         return false;
     }
 
-    float PredictBasicAttackDamage(UnitBase target, float damage, bool openingHit)
+    float PredictBasicAttackDamage(UnitBase target, float damage)
     {
         float d = damage;
         if (this is Hero)
@@ -960,7 +954,7 @@ public abstract class UnitBase : MonoBehaviour
     }
 
     IEnumerator CoAllyMeleeAttack(
-        UnitBase target, float damage, bool isCrit, bool openingHit,
+        UnitBase target, float damage, bool isCrit,
         AttackVfxKit kit, VfxFaction faction,
         Vector3 firePos, Vector3 hitPos, int facingDir, Transform hitTf, bool killWindup)
     {
@@ -989,7 +983,7 @@ public abstract class UnitBase : MonoBehaviour
             yield break;
         }
 
-        ResolveBasicAttackHit(target, damage, isCrit, openingHit);
+        ResolveBasicAttackHit(target, damage, isCrit);
         if (BattleVFXSystem.Instance != null)
             BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
         if (killWindup)
@@ -997,7 +991,7 @@ public abstract class UnitBase : MonoBehaviour
     }
 
     IEnumerator CoAllyRangedKillWindup(
-        UnitBase target, float damage, bool isCrit, bool openingHit,
+        UnitBase target, float damage, bool isCrit,
         AttackVfxKit kit, VfxFaction faction,
         Vector3 firePos, Vector3 hitPos, int facingDir, Transform hitTf)
     {
@@ -1013,11 +1007,11 @@ public abstract class UnitBase : MonoBehaviour
 
         // 击杀前摇已等过；此处不再叠放箭延迟，立刻出弹
         FireAllyRangedBasicProjectile(
-            target, damage, isCrit, openingHit, kit, faction, facingDir, 0f);
+            target, damage, isCrit, kit, faction, facingDir, 0f);
         CombatJuice.Instance?.RevealKillCamBars();
     }
 
-    void ResolveBasicAttackHit(UnitBase target, float damage, bool isCrit, bool openingHit)
+    void ResolveBasicAttackHit(UnitBase target, float damage, bool isCrit)
     {
         if (target == null || target.isDead || target.attr == null) return;
 
@@ -1036,10 +1030,10 @@ public abstract class UnitBase : MonoBehaviour
             damage *= SpecialWeapons.GetDamageMultiplier(target);
             float fire = SpecialWeapons.GetFlatFireBonus();
             if (fire > 0f && !target.isDead)
-                target.TakeDamage(fire, false, openingHit, false, vfxDir, this);
+                target.TakeDamage(fire, false, false, false, vfxDir, this);
         }
 
-        target.TakeDamage(damage, isCrit, openingHit, true, vfxDir, this);
+        target.TakeDamage(damage, isCrit, false, true, vfxDir, this);
         OnAttack?.Invoke(target, damage, isCrit);
     }
 
@@ -1068,8 +1062,6 @@ public abstract class UnitBase : MonoBehaviour
         AttackVfxKit kit = GetAttackVfxKit();
         if (!isAlly && SkillNaming.IsRangedKit(kit))
             atkSpd *= GameConfig.PROJECTILE_ATK_SPEED_MUL;
-        if (isAlly && GameConfig.IsOpeningStage())
-            atkSpd *= 0.55f;
         if (isAlly && BattleManager.Instance != null)
             atkSpd *= BattleManager.Instance.KillComboSpeedMul;
         if (this is Hero && PlayerPassiveCombat.Instance != null)
