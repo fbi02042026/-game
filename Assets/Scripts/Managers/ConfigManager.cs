@@ -58,6 +58,9 @@ public class ConfigManager : Singleton<ConfigManager>
 
         ChapterThemeMapTable.EnsureLoaded();
         MonsterUnlockTierTable.EnsureLoaded();
+        AttackRangeTable.EnsureLoaded();
+        PlayerJobBaseStats.EnsureLoaded();
+        MercSkillTable.Reload();
 
         Debug.Log($"配置加载完成：{_allEquipTemplates.Count}个装备模板，{_allMonsters.Count}种怪物，{_talentDict.Count}个天赋");
         GameDataHub.ReportConfigs(_allEquipTemplates, _allMonsters, _talentDict);

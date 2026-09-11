@@ -7,7 +7,8 @@
 ///   A) Resources/VFX/Skills/{Ally|Monster|Merc}/{skillId}.prefab（或 SkillConfig.vfxPrefab）
 ///   B) SkillConfig.attackKit ≠ None（回退共用套：刀光/弓/法球/治疗）
 ///
-/// 共用套路径：Resources/VFX/Shared/{Ally|Enemy}/{MeleeSlash|Bow|Orb|Heal}/vfx_*
+/// 共用套路径：Resources/VFX/Shared/{Ally|Enemy}/{MeleeSlash|Bow|Orb|Heal}/vfx_{ally|enemy}_*
+/// 旧无前缀文件名（vfx_melee_hit 等）作迁移兜底。
 /// 暴击：不用特效套，用飘字区分。
 /// </summary>
 public enum AttackVfxKit
@@ -175,16 +176,17 @@ public static class SkillNaming
     public static string SharedKitResourceHint(AttackVfxKit kit, VfxFaction faction)
     {
         string side = faction == VfxFaction.Enemy ? "Enemy" : "Ally";
+        string pfx = faction == VfxFaction.Enemy ? "enemy_" : "ally_";
         switch (kit)
         {
             case AttackVfxKit.MeleeSlash:
-                return $"VFX/Shared/{side}/MeleeSlash/vfx_melee_hit";
+                return $"VFX/Shared/{side}/MeleeSlash/vfx_{pfx}melee_hit";
             case AttackVfxKit.Bow:
-                return $"VFX/Shared/{side}/Bow/vfx_bow_fly + vfx_bow_hit";
+                return $"VFX/Shared/{side}/Bow/vfx_{pfx}bow_fly + vfx_{pfx}bow_hit";
             case AttackVfxKit.Orb:
-                return $"VFX/Shared/{side}/Orb/vfx_orb_fly + vfx_orb_hit";
+                return $"VFX/Shared/{side}/Orb/vfx_{pfx}orb_fly + vfx_{pfx}orb_hit";
             case AttackVfxKit.Heal:
-                return $"VFX/Shared/{side}/Heal/vfx_heal";
+                return $"VFX/Shared/{side}/Heal/vfx_{pfx}heal";
             default:
                 return $"VFX/Shared/{side}/…";
         }

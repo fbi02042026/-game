@@ -27,5 +27,6 @@ public enum AttrType
     GoldBonus,
     CooldownReduce,
     MagicPower,     // 魔法强度
-    PhyPower        // 物理强度
+    PhyPower,       // 物理强度
+    CritDamage      // 暴击伤害倍率（1.5 = 150%）
 }

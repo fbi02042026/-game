@@ -61,6 +61,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookEquipAttrRanges();
         CookRiftEquipGenSteps();
         CookPlayerJobBaseStats();
+        CookAttackRange();
         CookJobWeapons();
         CookPlayerPassives();
         CookHiddenLevelRules();
@@ -199,6 +200,11 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookPlayerJobBaseStats()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/player_job_base_stats.csv", null, "player_job_base_stats");
+    }
+
+    static void CookAttackRange()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/attack_range.csv", null, "attack_range");
     }
 
     static void CookJobWeapons()

@@ -683,22 +683,11 @@ public class Monster : UnitBase
         float atkRange;
         if (_isBossUnit)
         {
-            atkRange = MonsterAttackStyleTable.GetAttackRange(MonsterAttackStyle.Ranged);
+            atkRange = AttackRangeTable.GetMonsterWorld(MonsterAttackStyle.Ranged);
         }
         else
         {
-            atkRange = MonsterAttackStyleTable.GetAttackRange(_attackStyle);
-            if (template != null && template.attackRange > 0.01f)
-            {
-                float tpl = GameConfig.NormalizeAttackRange(template.attackRange);
-                if (MonsterAttackStyleTable.IsRanged(_attackStyle))
-                    atkRange = Mathf.Max(atkRange, tpl * GameConfig.MONSTER_RANGED_RANGE_MUL);
-                else
-                    atkRange = tpl * GameConfig.MONSTER_MELEE_RANGE_MUL;
-            }
-            // 近战钳制：不超过单手剑，避免比玩家砍得更远
-            if (!MonsterAttackStyleTable.IsRanged(_attackStyle))
-                atkRange = Mathf.Min(atkRange, GameConfig.RangeSword * GameConfig.MONSTER_MELEE_RANGE_MUL);
+            atkRange = AttackRangeTable.GetMonsterWorld(_attackStyle);
         }
         attr.SetAttr(AttrType.MoveSpeed, moveSpd);
         // 非 Boss：移速小幅岔开，减轻同相位叠走

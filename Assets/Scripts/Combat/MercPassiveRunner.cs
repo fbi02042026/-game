@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 佣兵被动技能运行时（SK002~SK019 等）。
+/// 佣兵被动技能运行时（SK002 割裂、SK011 自愈、SK012 狂怒 等）。
 /// </summary>
 public class MercPassiveRunner : MonoBehaviour
 {
@@ -71,7 +71,7 @@ public class MercPassiveRunner : MonoBehaviour
 
     void TickAlways(float dt)
     {
-        if (_passiveId != "SK012") return;
+        if (_passiveId != "SK011") return;
         _regenTimer -= dt;
         if (_regenTimer > 0f) return;
         _regenTimer = 1f;
@@ -83,7 +83,7 @@ public class MercPassiveRunner : MonoBehaviour
 
     void TickLowHpAtk()
     {
-        if (_passiveId != "SK004" || _merc.attr == null) return;
+        if (_passiveId != "SK012" || _merc.attr == null) return;
         float ratio = _merc.currentHp / Mathf.Max(1f, _merc.attr.GetAttr(AttrType.MaxHp));
         bool should = ratio < 0.5f;
         if (should == _lowHpAtkOn) return;

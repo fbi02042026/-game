@@ -122,7 +122,7 @@ public class Hero : UnitBase
         attr.RecalcAllAttr(allBonus);
 
         // 主手优先，无主手则读副手（教程默认左手剑）
-        float weaponRange = GameConfig.BASE_ATTACK_RANGE;
+        float weaponRange = AttackRangeTable.GetJobWorld(PlayerJobDefs.GetSelected());
         EquipInstance weaponInst = TryGetEquippedWeaponInstance(bag);
         if (weaponInst?.template != null)
             weaponRange = WeaponCombatTable.GetAttackRangeWorld(WeaponCombatTable.ResolveKind(weaponInst));

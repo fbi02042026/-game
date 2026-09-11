@@ -84,10 +84,11 @@ public static class SkillVfxValidator
                     sb.AppendLine($"✓ {cfg.id} 回退共用套 {resolved}（{SkillNaming.SharedKitResourceHint(resolved, VfxFaction.Ally)}）");
                     // 抽查 Ally Shared 是否存在
                     if (resolved == AttackVfxKit.MeleeSlash
+                        && Resources.Load<GameObject>("VFX/Shared/Ally/MeleeSlash/vfx_ally_melee_hit") == null
                         && Resources.Load<GameObject>("VFX/Shared/Ally/MeleeSlash/vfx_melee_hit") == null)
                     {
                         issues++;
-                        sb.AppendLine($"  ✗ 缺 Shared 刀光 vfx_melee_hit");
+                        sb.AppendLine($"  ✗ 缺 Shared 刀光 vfx_ally_melee_hit / vfx_melee_hit");
                     }
                 }
             }

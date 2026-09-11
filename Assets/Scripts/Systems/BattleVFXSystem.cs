@@ -66,7 +66,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
                         hit = vfxSlash;
                     if (hit == null)
                     {
-                        Debug.LogWarning($"[VFX] 缺少刀光: {faction}/{kit}/hit → 请放 Resources/VFX/Shared/Ally/MeleeSlash/vfx_melee_hit");
+                        Debug.LogWarning($"[VFX] 缺少刀光: {faction}/{kit}/hit → 请放 Resources/VFX/Shared/Ally/MeleeSlash/vfx_ally_melee_hit（或旧名 vfx_melee_hit）");
                         return;
                     }
                     PlaySlash(toPos, facingDir, faction, hit);
@@ -154,7 +154,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
             prefab = vfxSlash;
         if (prefab == null)
         {
-            Debug.LogWarning($"[VFX] PlaySlash 无预制体 faction={faction}，期望 Resources/VFX/Shared/Ally/MeleeSlash/vfx_melee_hit");
+            Debug.LogWarning($"[VFX] PlaySlash 无预制体 faction={faction}，期望 Resources/VFX/Shared/Ally/MeleeSlash/vfx_ally_melee_hit");
             return;
         }
 
@@ -800,7 +800,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
 
         // 刀光必须用 Ally Shared；禁止留下旧 Pixel Craft / 敌方资源
         if (allyMelee != null) vfxSlash = allyMelee;
-        else Debug.LogError("[BattleVFXSystem] Ally MeleeSlash 缺失: Resources/VFX/Shared/Ally/MeleeSlash/vfx_melee_hit");
+        else Debug.LogError("[BattleVFXSystem] Ally MeleeSlash 缺失: Resources/VFX/Shared/Ally/MeleeSlash/vfx_ally_melee_hit（或旧名 vfx_melee_hit）");
         if (allyOrbHit != null) vfxMagicImpact = allyOrbHit;
         if (allyHeal != null) vfxHeal = allyHeal;
         if (allyOrbFly != null) vfxFireball = allyOrbFly;
@@ -810,7 +810,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
         {
             vfxSlash = LoadVFX("Sword Slash");
             if (vfxSlash != null)
-                Debug.LogError("[BattleVFXSystem] 刀光回退到 Pixel Craft「Sword Slash」——请补 Shared/Ally/MeleeSlash/vfx_melee_hit");
+                Debug.LogError("[BattleVFXSystem] 刀光回退到 Pixel Craft「Sword Slash」——请补 Shared/Ally/MeleeSlash/vfx_ally_melee_hit");
         }
         if (vfxMagicImpact == null) vfxMagicImpact = LoadVFX("Magic Impact");
         if (vfxHeal == null) vfxHeal = LoadVFX("Heal");
@@ -871,8 +871,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
             }
         }
 
-        // 敌方缺失：不再静默回退我方，避免「敌方也在用我方箭」
-        Debug.LogWarning($"[VFX] 加载失败: {factionFolder}/{kitFolder}/{stage} paths=[{string.Join(",", fileNames)}]（请放 Resources/VFX/Shared/{factionFolder}/{kitFolder}/）");
+        // 敌方缺失：不再静默回退我方；新名与旧名都失败时只打一条警告
+        Debug.LogWarning($"[BattleVFXSystem] 共用套加载失败: Resources/VFX/Shared/{factionFolder}/{kitFolder}/ 试过 [{string.Join(", ", fileNames)}]（using defaults / 跳过该特效）");
         return null;
     }
 
@@ -889,37 +889,30 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     }
 
     /// <summary>
-    /// 文件名按阵营区分。敌方弓箭必须用 vfx_enemy_bow_*，勿与 Ally 的 vfx_bow_* 同名。
+    /// 文件名按阵营区分：Ally=vfx_ally_*，Enemy=vfx_enemy_*。
+    /// 旧名（无阵营前缀）作迁移兜底，两者皆失败再打一条警告。
     /// </summary>
     static string[] GetSharedKitFileNames(AttackVfxKit kit, VfxFaction faction, string stage)
     {
         bool enemy = faction == VfxFaction.Enemy;
+        string prefix = enemy ? "vfx_enemy_" : "vfx_ally_";
         if (stage == "fly")
         {
             if (kit == AttackVfxKit.Bow)
-                return enemy
-                    ? new[] { "vfx_enemy_bow_fly", "vfx_bow_fly" }
-                    : new[] { "vfx_bow_fly" };
+                return new[] { prefix + "bow_fly", "vfx_bow_fly" };
             if (kit == AttackVfxKit.Orb)
-                return enemy
-                    ? new[] { "vfx_enemy_orb_fly", "vfx_orb_fly" }
-                    : new[] { "vfx_orb_fly" };
+                return new[] { prefix + "orb_fly", "vfx_orb_fly" };
         }
         if (stage == "hit")
         {
             if (kit == AttackVfxKit.MeleeSlash)
-                return enemy
-                    ? new[] { "vfx_enemy_melee_hit", "vfx_melee_hit" }
-                    : new[] { "vfx_melee_hit" };
+                return new[] { prefix + "melee_hit", "vfx_melee_hit" };
             if (kit == AttackVfxKit.Bow)
-                return enemy
-                    ? new[] { "vfx_enemy_bow_hit", "vfx_bow_hit" }
-                    : new[] { "vfx_bow_hit" };
+                return new[] { prefix + "bow_hit", "vfx_bow_hit" };
             if (kit == AttackVfxKit.Orb)
-                return enemy
-                    ? new[] { "vfx_enemy_orb_hit", "vfx_orb_hit" }
-                    : new[] { "vfx_orb_hit" };
-            if (kit == AttackVfxKit.Heal) return new[] { "vfx_heal" };
+                return new[] { prefix + "orb_hit", "vfx_orb_hit" };
+            if (kit == AttackVfxKit.Heal)
+                return new[] { prefix + "heal", "vfx_heal" };
         }
         return new string[0];
     }

@@ -3,6 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 玩家职业固定基础属性（无账号等级成长；成长列留待专属武器强化二期）。
+/// 战斗攻击距离只走 <see cref="AttackRangeTable"/>；CSV「攻击距离」列仅策划对照，已弃用于战斗。
 /// </summary>
 public static class PlayerJobBaseStats
 {
@@ -16,6 +17,7 @@ public static class PlayerJobBaseStats
         public float BaseMoveSpeed;
         public float CritRate;
         public float CritDamage;
+        /// <summary>CSV 攻击距离（像素），仅对照；战斗勿用。</summary>
         public float AttackRangePx;
         public float AttackInterval;
         public float CollisionScale;
@@ -26,6 +28,15 @@ public static class PlayerJobBaseStats
     static readonly Dictionary<PlayerJobId, Row> _byJob = new Dictionary<PlayerJobId, Row>();
     static bool _loaded;
 
+    public static bool HasData
+    {
+        get
+        {
+            EnsureLoaded();
+            return _byJob.Count > 0;
+        }
+    }
+
     public static void EnsureLoaded()
     {
         if (_loaded) return;
@@ -33,7 +44,8 @@ public static class PlayerJobBaseStats
         string raw = GameTableStore.LoadText(ContentPaths.Data.PlayerJobBaseStats);
         if (string.IsNullOrEmpty(raw))
         {
-            Debug.LogWarning("[PlayerJobBaseStats] 未找到 player_job_base_stats 表");
+            Debug.LogError("[PlayerJobBaseStats] 战斗表加载失败: Resources/" + ContentPaths.Data.PlayerJobBaseStats
+                + " （空或缺失），using defaults。");
             return;
         }
         var rows = GameTableCsv.ParseRows(raw);
@@ -60,6 +72,9 @@ public static class PlayerJobBaseStats
             if (TryMapJob(row.ConfigId, out PlayerJobId job))
                 _byJob[job] = row;
         }
+        if (_byJob.Count <= 0)
+            Debug.LogError("[PlayerJobBaseStats] 战斗表加载失败: Resources/" + ContentPaths.Data.PlayerJobBaseStats
+                + " （解析 0 条），using defaults。");
     }
 
     public static bool TryGet(PlayerJobId job, out Row row)
@@ -72,21 +87,30 @@ public static class PlayerJobBaseStats
     public static void ApplyToHero(Hero hero)
     {
         if (hero == null || hero.attr == null) return;
-        EnsureLoaded();
-        if (!TryGet(PlayerJobDefs.GetSelected(), out Row row)) return;
+        ApplyToAttr(hero.attr, PlayerJobDefs.GetSelected());
+        hero.currentHp = hero.attr.GetAttr(AttrType.MaxHp);
+    }
 
-        hero.attr.SetAttr(AttrType.MaxHp, row.BaseHp);
-        hero.attr.SetAttr(AttrType.Attack, row.BaseAtk);
-        hero.attr.SetAttr(AttrType.Defense, row.BaseDef);
+    /// <summary>把职业表写入 AttrSystem（射程只读 AttackRangeTable，不用 CSV 攻击距离）。</summary>
+    public static void ApplyToAttr(AttrSystem attr, PlayerJobId job)
+    {
+        if (attr == null) return;
+        EnsureLoaded();
+        if (!TryGet(job, out Row row)) return;
+
+        attr.SetAttr(AttrType.MaxHp, row.BaseHp);
+        attr.SetAttr(AttrType.Attack, row.BaseAtk);
+        attr.SetAttr(AttrType.Defense, row.BaseDef);
         // 表内移速以 100 为基准，映射到现有世界移速
         float ms = GameConfig.BASE_MOVE_SPEED * (row.BaseMoveSpeed / 100f);
-        hero.attr.SetAttr(AttrType.MoveSpeed, ms);
-        hero.attr.SetAttr(AttrType.CritRate, row.CritRate);
+        attr.SetAttr(AttrType.MoveSpeed, ms);
+        attr.SetAttr(AttrType.CritRate, row.CritRate);
+        if (row.CritDamage > 0f)
+            attr.SetAttr(AttrType.CritDamage, row.CritDamage);
         if (row.AttackInterval > 0.05f)
-            hero.attr.SetAttr(AttrType.AttackSpeed, 1f / row.AttackInterval);
-        if (row.AttackRangePx > 0f)
-            hero.attr.SetAttr(AttrType.AttackRange, GameConfig.NormalizeAttackRange(row.AttackRangePx));
-        hero.currentHp = hero.attr.GetAttr(AttrType.MaxHp);
+            attr.SetAttr(AttrType.AttackSpeed, 1f / row.AttackInterval);
+        // 攻击距离：CSV 列已弃用；唯一来源 AttackRangeTable.job_*
+        attr.SetAttr(AttrType.AttackRange, AttackRangeTable.GetJobWorld(job));
     }
 
     static float ParsePercent(string s)

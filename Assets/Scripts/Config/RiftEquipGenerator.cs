@@ -251,7 +251,7 @@ public static class RiftEquipGenerator
             return false;
         if (attrId == "RANGE")
             value = GameConfig.PixelsToUnits(Mathf.Max(1f, value));
-        if (type == AttrType.CritRate || type == AttrType.Dodge || type == AttrType.LifeSteal)
+        if (type == AttrType.CritRate || type == AttrType.CritDamage || type == AttrType.Dodge || type == AttrType.LifeSteal)
             isPercent = false;
         if (type == AttrType.AttackSpeed)
             isPercent = true;
@@ -276,7 +276,7 @@ public static class RiftEquipGenerator
             case "DODGE": type = AttrType.Dodge; return true;
             case "LIFE_STEAL": type = AttrType.LifeSteal; return true;
             case "ELE_DMG": type = AttrType.FireDamage; isPercent = true; return true;
-            case "CRIT_DMG": type = AttrType.PhyPower; isPercent = true; return true;
+            case "CRIT_DMG": type = AttrType.CritDamage; return true;
             case "DMG_RED": type = AttrType.Defense; isPercent = true; return true;
             default: return false;
         }

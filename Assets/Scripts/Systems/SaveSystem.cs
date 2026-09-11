@@ -189,6 +189,7 @@ public class SaveSystem : Singleton<SaveSystem>
                 }
                 loaded.SyncRuntimeFromLists();
                 _data = loaded;
+                MercSkillMigrate.AlignSave(_data);
                 Save();
                 onComplete?.Invoke(true);
             }

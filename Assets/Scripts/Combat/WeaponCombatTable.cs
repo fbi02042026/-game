@@ -31,15 +31,7 @@ public static class WeaponCombatTable
 
     public static float GetAttackRangeWorld(WeaponKind kind)
     {
-        switch (kind)
-        {
-            case WeaponKind.Greatsword: return GameConfig.RangeGreatsword;
-            case WeaponKind.Polearm: return GameConfig.RangePolearm;
-            case WeaponKind.Staff: return GameConfig.RangeStaff;
-            case WeaponKind.Bow: return GameConfig.RangeBow;
-            case WeaponKind.Shield: return GameConfig.RangeShield;
-            default: return GameConfig.RangeSword;
-        }
+        return AttackRangeTable.GetWeaponWorld(kind);
     }
 
     public static WeaponKind ResolveKind(EquipTemplate tpl)

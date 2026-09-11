@@ -49,14 +49,14 @@ public static class MercRosterDefs
         D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 180, 35, 18, 1.00f, 3.5f, null, "SK002", 600, true),
         D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 200, 42, 20, 0.95f, 3.4f, "SK003", null, 1600, true),
         D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 220, 40, 24, 1.00f, 3.3f, "SK001", null, 1900, false),
-        D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 250, 50, 22, 1.10f, 3.8f, "SK005", "SK004", 6000, false),
-        D("H011", "索菲", "小白", "naima101", "牧师", MercRarity.Common, 1.00f, 100, 15, 10, 1.20f, 3.6f, "SK011", "SK012", 500, true),
-        D("H012", "塞拉", "小蓝", "naima102", "水系法师", MercRarity.Rare, 1.15f, 110, 28, 20, 1.00f, 3.3f, "SK011", null, 1700, false),
+        D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 250, 50, 22, 1.10f, 3.8f, "SK005", "SK012", 6000, false),
+        D("H011", "索菲", "小白", "naima101", "牧师", MercRarity.Common, 1.00f, 100, 15, 10, 1.20f, 3.6f, "SK004", "SK011", 500, true),
+        D("H012", "塞拉", "小蓝", "naima102", "水系法师", MercRarity.Rare, 1.15f, 110, 28, 20, 1.00f, 3.3f, "SK004", null, 1700, false),
         D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 120, 30, 24, 1.00f, 3.2f, "SK013", null, 2000, false),
         D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 125, 48, 12, 1.20f, 3.6f, "SK020", "SK019", 8000, false),
         D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 115, 30, 10, 1.60f, 4.3f, null, "SK002", 500, true),
         D("H016", "杜娅", "怒角", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 200, 40, 20, 0.95f, 3.4f, "SK003", null, 1600, false),
-        D("H017", "莉娜", "圣光", "naima102", "牧师", MercRarity.Rare, 1.15f, 110, 18, 12, 1.20f, 3.5f, "SK011", null, 1700, false),
+        D("H017", "莉娜", "圣光", "naima102", "牧师", MercRarity.Rare, 1.15f, 110, 18, 12, 1.20f, 3.5f, "SK004", null, 1700, false),
         D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 210, 17, 28, 0.85f, 3.0f, null, "SK006", 700, true),
         D("H019", "艾琳", "星火", "fashi101", "法师", MercRarity.Common, 1.00f, 105, 34, 8, 1.35f, 3.6f, null, "SK017", 600, true),
         D("H020", "凯尔", "谜面", "fashi102", "法师", MercRarity.Rare, 1.15f, 115, 42, 10, 1.30f, 3.5f, "SK018", null, 1800, false),
@@ -208,12 +208,14 @@ public static class MercRosterDefs
 
     public static float ResolveRange(string assetId)
     {
-        if (string.IsNullOrEmpty(assetId)) return GameConfig.RangeSword;
-        if (assetId.StartsWith("gongshou")) return GameConfig.RangeBow;
+        if (string.IsNullOrEmpty(assetId))
+            return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Sword);
+        if (assetId.StartsWith("gongshou"))
+            return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Bow);
         if (assetId.StartsWith("naima") || assetId.StartsWith("fashi") || assetId.StartsWith("mushi"))
-            return GameConfig.RangeStaff;
+            return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Staff);
         if (assetId.StartsWith("zhongzhan") || assetId.StartsWith("qita"))
-            return GameConfig.RangePolearm;
-        return GameConfig.RangeSword;
+            return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Polearm);
+        return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Sword);
     }
 }

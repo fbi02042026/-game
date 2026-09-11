@@ -88,14 +88,12 @@ public static class MonsterAttackStyleTable
 
     public static float GetAttackRange(MonsterAttackStyle style)
     {
-        if (!IsRanged(style))
-            return GameConfig.RangeSword * GameConfig.MONSTER_MELEE_RANGE_MUL;
-        return GameConfig.RangeBow * GameConfig.MONSTER_RANGED_RANGE_MUL;
+        return AttackRangeTable.GetMonsterWorld(style);
     }
 
     /// <summary>
     /// 按表里的 style 分弹道：Bow=箭矢，Ranged/Orb/Magic=法球，其余近战刀光。
-    /// → Enemy/Bow/vfx_enemy_bow_fly|hit 或 Enemy/Orb/vfx_orb_fly|hit
+    /// → Enemy/Bow/vfx_enemy_bow_fly|hit 或 Enemy/Orb/vfx_enemy_orb_fly|hit
     /// </summary>
     public static AttackVfxKit GetVfxKit(MonsterAttackStyle style)
     {

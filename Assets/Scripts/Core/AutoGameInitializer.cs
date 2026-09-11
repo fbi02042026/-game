@@ -159,6 +159,7 @@ public class AutoGameInitializer : MonoBehaviour
         if (BattleVFXSystem.Instance != null)
             BattleVFXSystem.Instance.AutoLoadPrefabs();
         MonsterAttackStyleTable.Reload();
+        AttackRangeTable.Reload();
 
         // 开始新一局（同场次只一次）
         EnsureStageClearRewardDirector();

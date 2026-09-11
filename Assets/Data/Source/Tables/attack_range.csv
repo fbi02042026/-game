@@ -1,0 +1,22 @@
+id,range_px,notes
+job_sword_shield,120,P001 剑盾卫士；与 player_job_base_stats 攻击距离列同步（该列仅对照，战斗只读本表）
+job_P001,120,alias of job_sword_shield
+job_heavy,110,P002 重武者
+job_P002,110,alias of job_heavy
+job_berserker,100,P003 狂战士
+job_P003,100,alias of job_berserker
+job_ranger,220,P004 游侠
+job_P004,220,alias of job_ranger
+job_mage,200,P005 法师
+job_P005,200,alias of job_mage
+job_priest,160,P006 牧师
+job_P006,160,alias of job_priest
+weapon_sword,96,单手剑
+weapon_greatsword,144,大剑
+weapon_polearm,180,长柄
+weapon_staff,120,单手杖
+weapon_bow,300,弓箭
+weapon_shield,64,盾
+monster_melee,82,单手剑 96 × 0.85
+monster_ranged,176,弓 300 × 0.588
+monster_bow,176,敌方弓与远程同距

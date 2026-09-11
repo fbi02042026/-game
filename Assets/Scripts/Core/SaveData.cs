@@ -111,6 +111,9 @@ public class SaveData
     /// <summary>佣兵主动技释放：0=手动，1=自动（强制自动，UI 已隐藏）</summary>
     public int mercSkillCastMode = 1;
 
+    /// <summary>佣兵技能 ID 规范版本。&lt; 202609 为旧号：SK004=狂怒 / SK011=治愈 / SK012=自愈。</summary>
+    public int mercSkillCanonVersion = 0;
+
     public bool openingIntroPlayed;
     public bool tutorialIntroDone;
     public bool tutorialBattleCleared;

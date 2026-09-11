@@ -723,7 +723,7 @@ public abstract class UnitBase : MonoBehaviour
             else
             {
                 // 敌方近战不超过单手剑×倍率，避免比玩家砍得更远
-                r = Mathf.Min(r, GameConfig.RangeSword * GameConfig.MONSTER_MELEE_RANGE_MUL);
+                r = Mathf.Min(r, AttackRangeTable.GetMonsterWorld(MonsterAttackStyle.Melee));
             }
         }
         return Mathf.Max(0.2f, r);

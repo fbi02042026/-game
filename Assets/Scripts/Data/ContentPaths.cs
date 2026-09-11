@@ -32,6 +32,7 @@ public static class ContentPaths
         public const string EquipAttrRanges = "Data/Tables/equip_attr_ranges";
         public const string RiftEquipGenSteps = "Data/Tables/rift_equip_gen_steps";
         public const string PlayerJobBaseStats = "Data/Tables/player_job_base_stats";
+        public const string AttackRange = "Data/Tables/attack_range";
         public const string JobWeapons = "Data/Tables/job_weapons";
         public const string PlayerPassives = "Data/Tables/player_passives";
         public const string HiddenLevelRules = "Data/Tables/hidden_level_rules";

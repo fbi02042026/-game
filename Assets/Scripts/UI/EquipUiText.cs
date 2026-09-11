@@ -82,6 +82,7 @@ public static class EquipUiText
             case AttrType.Attack: return "攻击";
             case AttrType.AttackSpeed: return "攻速";
             case AttrType.CritRate: return "暴击";
+            case AttrType.CritDamage: return "暴击伤害";
             case AttrType.MoveSpeed: return "移速";
             case AttrType.AttackRange: return "射程";
             case AttrType.Defense: return "防御";

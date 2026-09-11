@@ -8,10 +8,15 @@ public static class DamageFormula
 {
     public const float MinDamage = 1f;
 
-    /// <summary>暴击倍率 = 1.5 + BASE_CRIT_DAMAGE（与数值表一致）。</summary>
-    public static float CritMultiplier(float critDamageBonus = 0f)
+    /// <summary>
+    /// 暴击倍率：优先攻击者 AttrType.CritDamage（职业表 150%→1.5）；
+    /// 未写入时回退 1.5+BASE_CRIT_DAMAGE。critDamageBonus 为额外加算。
+    /// </summary>
+    public static float CritMultiplier(AttrSystem attacker = null, float critDamageBonus = 0f)
     {
-        return 1.5f + GameConfig.BASE_CRIT_DAMAGE + Mathf.Max(0f, critDamageBonus);
+        float fromAttr = attacker != null ? attacker.GetAttr(AttrType.CritDamage) : 0f;
+        float baseMul = fromAttr > 0.01f ? fromAttr : GameConfig.DefaultCritMultiplier;
+        return baseMul + Mathf.Max(0f, critDamageBonus);
     }
 
     /// <summary>是否暴击。</summary>
@@ -31,7 +36,7 @@ public static class DamageFormula
         float damage = attacker.GetAttr(AttrType.Attack);
         isCrit = RollCrit(attacker);
         if (isCrit)
-            damage *= CritMultiplier();
+            damage *= CritMultiplier(attacker);
         return Mathf.Max(MinDamage, damage);
     }
 
@@ -52,7 +57,7 @@ public static class DamageFormula
     {
         isCrit = RollCrit(attacker);
         if (!isCrit) return Mathf.Max(MinDamage, baseDamage);
-        return Mathf.Max(MinDamage, baseDamage * CritMultiplier());
+        return Mathf.Max(MinDamage, baseDamage * CritMultiplier(attacker));
     }
 
     /// <summary>最终扣血量：raw 已含暴击；再减 DEF。

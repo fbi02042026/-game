@@ -33,6 +33,7 @@ public class AttrSystem
         _baseAttr[AttrType.Attack] = GameConfig.BASE_ATTACK;
         _baseAttr[AttrType.AttackSpeed] = GameConfig.BASE_ATTACK_SPEED;
         _baseAttr[AttrType.CritRate] = GameConfig.BASE_CRIT_RATE;
+        _baseAttr[AttrType.CritDamage] = GameConfig.DefaultCritMultiplier;
         _baseAttr[AttrType.MoveSpeed] = GameConfig.BASE_MOVE_SPEED;
         _baseAttr[AttrType.AttackRange] = GameConfig.BASE_ATTACK_RANGE;
         _baseAttr[AttrType.Defense] = GameConfig.BASE_DEFENSE;
@@ -134,6 +135,8 @@ public class AttrSystem
 
         // 7. 限制值
         _attr[AttrType.CritRate] = Mathf.Clamp01(_attr[AttrType.CritRate]);
+        if (_attr.ContainsKey(AttrType.CritDamage))
+            _attr[AttrType.CritDamage] = Mathf.Max(1f, _attr[AttrType.CritDamage]);
         _attr[AttrType.AttackSpeed] = Mathf.Max(0.2f, _attr[AttrType.AttackSpeed]);
         _attr[AttrType.Dodge] = Mathf.Clamp01(_attr.ContainsKey(AttrType.Dodge) ? _attr[AttrType.Dodge] : 0);
     }
@@ -168,18 +171,7 @@ public class AttrSystem
 
     void ApplyPlayerJobBaseIfAny()
     {
-        if (!PlayerJobBaseStats.TryGet(PlayerJobDefs.GetSelected(), out var row))
-            return;
-        if (row.BaseHp > 0f) _attr[AttrType.MaxHp] = row.BaseHp;
-        if (row.BaseAtk > 0f) _attr[AttrType.Attack] = row.BaseAtk;
-        if (row.BaseDef > 0f) _attr[AttrType.Defense] = row.BaseDef;
-        if (row.BaseMoveSpeed > 0f)
-            _attr[AttrType.MoveSpeed] = GameConfig.BASE_MOVE_SPEED * (row.BaseMoveSpeed / 100f);
-        if (row.CritRate > 0f) _attr[AttrType.CritRate] = row.CritRate;
-        if (row.AttackInterval > 0.05f)
-            _attr[AttrType.AttackSpeed] = 1f / row.AttackInterval;
-        if (row.AttackRangePx > 0f)
-            _attr[AttrType.AttackRange] = GameConfig.NormalizeAttackRange(row.AttackRangePx);
+        PlayerJobBaseStats.ApplyToAttr(this, PlayerJobDefs.GetSelected());
     }
 
     public void AddAttr(AttrType type, float value, bool isPercent)
@@ -261,6 +253,8 @@ public class AttrSystem
                 AddAttr(AttrType.AttackSpeed, fx.value * 0.01f, true);
                 break;
             case TalentDefs.AttrKind.CritDamage:
+                AddAttr(AttrType.CritDamage, fx.value * 0.01f, false);
+                break;
             case TalentDefs.AttrKind.PhysDamage:
             case TalentDefs.AttrKind.WeaponSwordShield:
             case TalentDefs.AttrKind.WeaponHeavy:

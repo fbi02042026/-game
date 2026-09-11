@@ -2801,7 +2801,7 @@ public class BattleManager : Singleton<BattleManager>
         if (skill == null) return false;
 
         UnitBase healTarget = null;
-        if (IsHealSkill(skill) || skillId == "SK011" || skillId == "SK013" || skillId == "SK015")
+        if (IsHealSkill(skill) || MercSkillTable.IsHealActiveId(skillId))
         {
             healTarget = FindPreferredHealTarget();
             // 全员接近满血且无人眩晕待救时，不空放治疗
@@ -3012,7 +3012,7 @@ public class BattleManager : Singleton<BattleManager>
         if (skill == null) return false;
         if (skill.skillId != null && skill.skillId.IndexOf("heal", System.StringComparison.OrdinalIgnoreCase) >= 0)
             return true;
-        if (skill.skillId == "SK011" || skill.skillId == "SK013" || skill.skillId == "SK015")
+        if (MercSkillTable.IsHealActiveId(skill.skillId))
             return true;
         var cfg = SkillRegistry.Instance?.Get(skill.skillId);
         return cfg != null && (cfg.healPercentOfMax > 0f || cfg.healBase > 0f);

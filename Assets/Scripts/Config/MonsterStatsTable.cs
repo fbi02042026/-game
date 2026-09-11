@@ -27,7 +27,8 @@ public static class MonsterStatsTable
         string raw = GameTableStore.LoadText(ContentPaths.Data.MonsterStats);
         if (string.IsNullOrEmpty(raw))
         {
-            Debug.LogWarning("[MonsterStats] 未找到 monster_stats 表，将回退 MonsterConfig SO");
+            Debug.LogError("[MonsterStatsTable] 战斗表加载失败: Resources/" + ContentPaths.Data.MonsterStats
+                + " （空或缺失），using defaults（回退 MonsterConfig SO）。");
             return;
         }
 
@@ -66,7 +67,11 @@ public static class MonsterStatsTable
             _byId[e.id] = e;
             _byKey[Key(monsterChapter, spriteIndex)] = e;
         }
-        Debug.Log($"[MonsterStats] 已加载 {_all.Count} 条");
+        if (_all.Count <= 0)
+            Debug.LogError("[MonsterStatsTable] 战斗表加载失败: Resources/" + ContentPaths.Data.MonsterStats
+                + " （解析 0 条），using defaults（回退 MonsterConfig SO）。");
+        else
+            Debug.Log($"[MonsterStats] 已加载 {_all.Count} 条");
     }
 
     static int Key(int monsterChapter, int spriteIndex) => monsterChapter * 100 + spriteIndex;

@@ -30,6 +30,8 @@ public static class TownSaveAlign
         int slots = Mathf.Clamp(data.townLevel.tavern, 0, 2);
         data.townLevel.tavern = slots;
 
+        MercSkillMigrate.AlignSave(data);
+
         // 好兵字段下限，避免 UI 显示异常
         for (int i = 0; i < data.permanentMercs.Count; i++)
         {

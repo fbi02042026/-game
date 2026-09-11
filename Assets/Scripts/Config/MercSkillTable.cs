@@ -48,6 +48,15 @@ public static class MercSkillTable
     static Dictionary<string, Row> _byId;
     static bool _loaded;
 
+    public static bool HasData
+    {
+        get
+        {
+            EnsureLoaded();
+            return _byId != null && _byId.Count > 0;
+        }
+    }
+
     public static void Reload()
     {
         _loaded = false;
@@ -64,7 +73,7 @@ public static class MercSkillTable
         string raw = GameTableStore.LoadText(ContentPaths.Data.MercSkills);
         if (string.IsNullOrEmpty(raw))
         {
-            Debug.LogWarning("[MercSkillTable] 未找到 merc_skills 表");
+            Debug.LogError("[MercSkillTable] 战斗表加载失败: Resources/" + ContentPaths.Data.MercSkills + " （空或缺失），using defaults。");
             return;
         }
 
@@ -102,7 +111,10 @@ public static class MercSkillTable
             _byId[id] = row;
             ok++;
         }
-        Debug.Log($"[MercSkillTable] 已加载 {ok} 条技能");
+        if (ok <= 0)
+            Debug.LogError("[MercSkillTable] 战斗表加载失败: Resources/" + ContentPaths.Data.MercSkills + " （解析 0 条），using defaults。");
+        else
+            Debug.Log($"[MercSkillTable] 已加载 {ok} 条技能");
     }
 
     static string[] SplitCsvLine(string line)
@@ -262,7 +274,7 @@ public static class MercSkillTable
 
     static SkillSystem.SkillType ResolveSkillType(Row row, SkillConfig cfg)
     {
-        if (row.Category == SkillCategory.Heal || cfg.healPercentOfMax > 0f || row.Id == "SK011" || row.Id == "SK013" || row.Id == "SK015")
+        if (row.Category == SkillCategory.Heal || cfg.healPercentOfMax > 0f || IsHealActiveId(row.Id))
             return SkillSystem.SkillType.Buff;
         if (row.Id == "SK007" || row.Id == "SK008" || row.Id == "SK018")
             return SkillSystem.SkillType.Buff;
@@ -271,6 +283,14 @@ public static class MercSkillTable
         if (row.TargetType != null && row.TargetType.Contains("单体"))
             return SkillSystem.SkillType.SingleTarget;
         return SkillSystem.SkillType.AOE;
+    }
+
+    /// <summary>主动治疗技（规范 ID：SK004 治愈之光；另含 SK013/SK015）。</summary>
+    public static bool IsHealActiveId(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return false;
+        if (id == "SK004" || id == "SK013" || id == "SK015") return true;
+        return TryGet(id, out var row) && !row.IsPassive && row.Category == SkillCategory.Heal;
     }
 
     public static Sprite LoadIcon(string skillId)

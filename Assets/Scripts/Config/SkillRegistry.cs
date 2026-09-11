@@ -91,7 +91,8 @@ public class SkillRegistry : Singleton<SkillRegistry>
 
     public string GetMercPassiveSkillId(MercenaryData data)
     {
-        if (data != null && !string.IsNullOrEmpty(data.passiveSkillId) && Get(data.passiveSkillId) != null)
+        if (data != null && !string.IsNullOrEmpty(data.passiveSkillId)
+            && (Get(data.passiveSkillId) != null || MercSkillTable.IsPassive(data.passiveSkillId)))
             return data.passiveSkillId;
         if (data != null)
         {

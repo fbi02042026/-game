@@ -41,7 +41,8 @@ public static class MercSkillMapping
         string raw = GameTableStore.LoadText(ContentPaths.Data.MercSkillMap);
         if (string.IsNullOrEmpty(raw))
         {
-            Debug.LogWarning("[MercSkillMapping] 未找到 merc_skill_map 表");
+            Debug.LogError("[MercSkillMapping] 战斗表加载失败: Resources/" + ContentPaths.Data.MercSkillMap
+                + " （空或缺失），using defaults。");
             return;
         }
 
@@ -78,6 +79,9 @@ public static class MercSkillMapping
             }
         }
         Debug.Log($"[MercSkillMapping] 已加载 {ok} 条映射");
+        if (ok <= 0)
+            Debug.LogError("[MercSkillMapping] 战斗表加载失败: Resources/" + ContentPaths.Data.MercSkillMap
+                + " （解析 0 条），using defaults。");
     }
 
     static string NormalizeSkillId(string s)

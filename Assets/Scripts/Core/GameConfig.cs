@@ -106,12 +106,12 @@ public static class GameConfig
     public const float RANGE_PX_BOW = 300f;       // 弓箭
     public const float RANGE_PX_SHIELD = 64f;     // 盾
 
-    public static float RangeSword => PixelsToUnits(RANGE_PX_SWORD);
-    public static float RangeGreatsword => PixelsToUnits(RANGE_PX_GREATSWORD);
-    public static float RangePolearm => PixelsToUnits(RANGE_PX_POLEARM);
-    public static float RangeStaff => PixelsToUnits(RANGE_PX_STAFF);
-    public static float RangeBow => PixelsToUnits(RANGE_PX_BOW);
-    public static float RangeShield => PixelsToUnits(RANGE_PX_SHIELD);
+    public static float RangeSword => AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Sword);
+    public static float RangeGreatsword => AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Greatsword);
+    public static float RangePolearm => AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Polearm);
+    public static float RangeStaff => AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Staff);
+    public static float RangeBow => AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Bow);
+    public static float RangeShield => AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Shield);
     /// <summary>Screen Space Camera 的 planeDistance</summary>
     public const float UI_PLANE_DISTANCE = 100f;
 
@@ -329,7 +329,9 @@ public static class GameConfig
     public const int BASE_HP = 200;
     public const int BASE_DEFENSE = 8;
     public const float BASE_CRIT_RATE = 0.05f;
-    public const float BASE_CRIT_DAMAGE = 0.5f; // 额外暴击伤害（总倍率 1.5+该值）
+    public const float BASE_CRIT_DAMAGE = 0.5f; // 额外暴击伤害（无职业表时总倍率 1.5+该值）
+    /// <summary>无职业/表暴击伤害时的默认暴击倍率。</summary>
+    public static float DefaultCritMultiplier => 1.5f + BASE_CRIT_DAMAGE;
     public const float BASE_HP_REGEN_RATE = 0.005f; // MaxHP×0.5%/秒
     public const int BASE_STRENGTH = 5;
     public const int BASE_INTELLIGENCE = 5;
