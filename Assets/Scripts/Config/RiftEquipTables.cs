@@ -179,8 +179,39 @@ public static class RiftEquipTables
         }
     }
 
-    /// <summary>部位池用中文属性名 → 属性范围表 ID。</summary>
-    
+    /// <summary>
+    /// 表 ID 是否已映射到战斗 AttrType。未落地的（毒/回复等）禁止进 EquipInstance / Recalc。
+    /// 新词条：先加 AttrType + 一处结算，再把 case 加进这里。
+    /// </summary>
+    public static bool IsCombatLanded(string attrId)
+    {
+        return TryResolveCombatAttr(attrId, out _, out _);
+    }
+
+    /// <summary>表 ID → AttrType。未列出的一律失败（不要静默发明映射）。</summary>
+    public static bool TryResolveCombatAttr(string attrId, out AttrType type, out bool isPercent)
+    {
+        isPercent = false;
+        type = AttrType.Attack;
+        if (string.IsNullOrEmpty(attrId)) return false;
+        switch (attrId)
+        {
+            case "ATK": type = AttrType.Attack; return true;
+            case "DEF": type = AttrType.Defense; return true;
+            case "HP": type = AttrType.MaxHp; return true;
+            case "MS": type = AttrType.MoveSpeed; return true;
+            case "CRIT_RATE": type = AttrType.CritRate; return true;
+            case "ATK_SPD": type = AttrType.AttackSpeed; return true;
+            case "RANGE": type = AttrType.AttackRange; return true;
+            case "DODGE": type = AttrType.Dodge; return true;
+            case "LIFE_STEAL": type = AttrType.LifeSteal; return true;
+            case "ELE_DMG": type = AttrType.FireDamage; isPercent = true; return true;
+            case "CRIT_DMG": type = AttrType.CritDamage; return true;
+            case "DMG_RED": type = AttrType.Defense; isPercent = true; return true;
+            default: return false;
+        }
+    }
+
     /// <summary>按稀有度从 equip_attr_ranges 掷属性（正式表）。</summary>
     public static float RollAttrFlat(string attrId, Rarity rarity, float mul = 1f)
     {

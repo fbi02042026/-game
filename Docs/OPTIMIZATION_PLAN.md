@@ -3,7 +3,7 @@
 > **读者**：产品 + 程序。  
 > **对照评审**：[`ARCHITECTURE_REVIEW.md`](./ARCHITECTURE_REVIEW.md)（问题编号 P0/P1/P2 以评审为准）。  
 > **原则**：保住当前战斗手感；先关门再迁表；大拆类只在「第二种战斗编排」真出现时做。  
-> **本 PR（#6）**：Phase 0 文档闸门 + Phase 1 止血 + **Phase 2 数值真源已落地**。Phase 3–5 只写计划。最终 ATK/HP/章节倍率与改前一致。
+> **本 PR（#6）**：Phase 0–3 已落地（评审 + 止血 + 数值真源 + 装备门闩）。Phase 4–5 按计划另开。
 
 ---
 
@@ -55,7 +55,7 @@
 | 波次构成 | `stage_spawn` + `wave_slot` 奇偶近战/远程 | `wave_slot` 已填 slot0–15 奇偶（spriteIndex=0 加权）；`monsterTotal=0` 明确=公式 | **Phase 2 完成** |
 | 关卡类型抽取 | `stage_roller_weights` + `StageRoller` | 仅普通/精英/休息/Boss | 保持；勿复活商人关 |
 | 引导波次 | `tutorial_battle` | 表有步进；执行仍嵌 BM | Phase 4 |
-| 装备词条数值 | `equip_attr_ranges` + 部位池 | 掷得出 30+，生效约 12 | Phase 3 |
+| 装备词条数值 | `equip_attr_ranges` + `IsCombatLanded` | 只抽已映射 12 种进包；未落地不占词条位 | **Phase 3 完成** |
 | 天赋 | `TalentDefs` C# | 可继续硬编码直到要热更 | 非本计划必做 |
 | 玩家技能 | 目标：CSV 如佣兵 | `PlayerSkillDefs` + Ally SO | Phase 5 |
 | 佣兵技能 | `merc_skills` | 已表驱动 | 保持 |
@@ -66,7 +66,7 @@
 
 **表有、战斗未落地（Phase 3 起禁止进包）**：`HP_REGEN` `HEAL` `REFLECT` `BLEED` `POISON` `BURN` `SLOW` `RICOCHET` `PURIFY` `AURA` `STATIC_DMG` `LOW_HP_DMG` `RANGE_DMG` `TAUNT` `ARMOR_BREAK` `STUN_DUR` `KNOCK_BACK` `PIERCE` `CONTROL_RES` `ANTI_CRIT` 等。
 
-**稀有度**：现状走 `HiddenLevelSystem`；`equip_rarity_rules` 的关卡段权重 `WeightForStage` 已写未用。Phase 3 必须二选一，禁止双轨。
+**稀有度（Phase 3 已定）**：裂缝掉落只走 `HiddenLevelSystem`。`WeightForStage` 关卡段权重保持 Obsolete、不接线。SO 回退路径才用 `EquipDropRules`。
 
 ### 0.3 能量一句话（运行时口径）
 
@@ -107,14 +107,18 @@
 
 ---
 
-## Phase 3 — 装备掷骰 vs 生效（独立 PR）
+## Phase 3 — 装备掷骰 vs 生效（本 PR 已实现）
 
 对应 P0-4。
 
-- 未映射词条不得写入 `EquipInstance` / 不得进 Recalc。
-- 稀有度单一真源（隐藏等级 **或** 关卡段权重）。
-- 新词条流程：先加 `AttrType` + 一处结算，再开放表权重。
-- `rift_equip_gen_steps` 要么接线要么继续未启用，禁止「Cook 了当正式流程」。
+| 项 | 状态 | 做法 |
+|----|------|------|
+| 未映射不进包 | 完成 | `RiftEquipTables.IsCombatLanded`；抽池只含已映射 ID |
+| 稀有度单源 | 完成 | 裂缝 = `HiddenLevelSystem`；`WeightForStage` Obsolete |
+| 新词条闸门 | 完成 | 须先加 `AttrType` + 结算，再写入 `TryResolveCombatAttr` |
+| `rift_equip_gen_steps` | 保持未启用 | 不 Cook、不读取 |
+
+**有意行为**：以前抽到毒/回复会占词条位再丢掉；现在改抽已落地属性，同品质装备可能多 0–2 条已映射词条。已映射词条的数值公式未改。
 
 ---
 
@@ -145,8 +149,7 @@
 
 | PR | 内容 | 依赖 |
 |----|------|------|
-| **#6（本 PR）** | 评审 + 本计划 + Phase 1 + Phase 2 | — |
-| 再下一 | Phase 3 装备门闩 | Phase 2 建议先合（Attr 更干净） |
+| **#6（本 PR）** | 评审 + 本计划 + Phase 1–3 | — |
 | 再下一 | Phase 4 引导刷怪 | 须完整手测引导 |
 | 按需 | Phase 5 单项 | 产品点名 |
 
@@ -192,3 +195,13 @@
 | `GameConfig.GetChapterStatScale` | 只读表 |
 | `wave_slot.csv/.bytes` | slot0–15 奇偶 Melee/Ranged |
 | `stage_spawn.csv/.bytes` | 注释明确 0=公式 |
+
+## Phase 3 实现对照
+
+| 文件 | 改动 |
+|------|------|
+| `RiftEquipTables.cs` | `IsCombatLanded` / `TryResolveCombatAttr` 单一映射 |
+| `RiftEquipGenerator.cs` | 只抽已落地词条；稀有度注释 + `WeightForStage` Obsolete |
+| `HiddenLevelSystem.cs` | 标明裂缝稀有度真源 |
+| `ConfigManager.cs` | SO 回退才走 `EquipDropRules` |
+| `equip_attr_ranges.csv` | 表头闸门说明 |

@@ -27,7 +27,7 @@ public static class RiftEquipGenerator
         var slot = PickSlot(wantWeapon, job);
         if (slot == null) return null;
 
-        var main = PickWeighted(slot.MainPool);
+        var main = PickWeightedLanded(slot.MainPool);
         if (string.IsNullOrEmpty(main))
             main = slot.IsWeapon ? "ATK" : "HP";
 
@@ -42,7 +42,7 @@ public static class RiftEquipGenerator
         var used = new HashSet<string> { main };
         for (int a = 0; a < affixCount; a++)
         {
-            string id = PickWeighted(slot.RandPool, used);
+            string id = PickWeightedLanded(slot.RandPool, used);
             if (string.IsNullOrEmpty(id)) break;
             used.Add(id);
             float v = RollAttrValue(id, rarity.Id, rarity.AffixMul, true);
@@ -89,6 +89,7 @@ public static class RiftEquipGenerator
         if (rules == null || rules.Count == 0)
             return FallbackRarity();
 
+        // 稀有度唯一真源：隐藏等级表。勿改用 WeightForStage（关卡段权重未启用）。
         HiddenLevelSystem.GetRarityWeights(out int wN, out int wR, out int wL);
         int total = 0;
         var weights = new int[rules.Count];
@@ -122,6 +123,7 @@ public static class RiftEquipGenerator
         }
     }
 
+    [System.Obsolete("稀有度真源是 HiddenLevelSystem，不要接关卡段权重。")]
     static int WeightForStage(RiftEquipTables.RarityRule r, StageType stageType)
     {
         switch (stageType)
@@ -186,13 +188,16 @@ public static class RiftEquipGenerator
         return pool[Random.Range(0, pool.Count)];
     }
 
-    static string PickWeighted(List<RiftEquipTables.WeightedAttr> pool, HashSet<string> exclude = null)
+    /// <summary>只从已落地词条里抽，未映射 ID 不占词条位、不进实例。</summary>
+    static string PickWeightedLanded(List<RiftEquipTables.WeightedAttr> pool, HashSet<string> exclude = null)
     {
         if (pool == null || pool.Count == 0) return null;
         int total = 0;
         for (int i = 0; i < pool.Count; i++)
         {
-            if (exclude != null && exclude.Contains(pool[i].AttrId)) continue;
+            string id = pool[i].AttrId;
+            if (exclude != null && exclude.Contains(id)) continue;
+            if (!RiftEquipTables.IsCombatLanded(id)) continue;
             total += Mathf.Max(0, pool[i].Weight);
         }
         if (total <= 0) return null;
@@ -200,11 +205,13 @@ public static class RiftEquipGenerator
         int acc = 0;
         for (int i = 0; i < pool.Count; i++)
         {
-            if (exclude != null && exclude.Contains(pool[i].AttrId)) continue;
+            string id = pool[i].AttrId;
+            if (exclude != null && exclude.Contains(id)) continue;
+            if (!RiftEquipTables.IsCombatLanded(id)) continue;
             acc += Mathf.Max(0, pool[i].Weight);
-            if (roll < acc) return pool[i].AttrId;
+            if (roll < acc) return id;
         }
-        return pool[0].AttrId;
+        return null;
     }
 
     static float RollAttrValue(string attrId, string rarityId, float mul, bool isAffix)
@@ -247,7 +254,7 @@ public static class RiftEquipGenerator
     static bool TryMapAttr(string attrId, float value, out AttrBonusData bonus)
     {
         bonus = null;
-        if (!TryResolveAttrType(attrId, out AttrType type, out bool isPercent))
+        if (!RiftEquipTables.TryResolveCombatAttr(attrId, out AttrType type, out bool isPercent))
             return false;
         if (attrId == "RANGE")
             value = GameConfig.PixelsToUnits(Mathf.Max(1f, value));
@@ -257,29 +264,6 @@ public static class RiftEquipGenerator
             isPercent = true;
         bonus = new AttrBonusData { attrType = type, value = value, isPercent = isPercent };
         return true;
-    }
-
-    /// <summary>只映射现有 AttrType；其余跳过（二期扩展枚举）。</summary>
-    static bool TryResolveAttrType(string attrId, out AttrType type, out bool isPercent)
-    {
-        isPercent = false;
-        type = AttrType.Attack;
-        switch (attrId)
-        {
-            case "ATK": type = AttrType.Attack; return true;
-            case "DEF": type = AttrType.Defense; return true;
-            case "HP": type = AttrType.MaxHp; return true;
-            case "MS": type = AttrType.MoveSpeed; return true;
-            case "CRIT_RATE": type = AttrType.CritRate; return true;
-            case "ATK_SPD": type = AttrType.AttackSpeed; return true;
-            case "RANGE": type = AttrType.AttackRange; return true;
-            case "DODGE": type = AttrType.Dodge; return true;
-            case "LIFE_STEAL": type = AttrType.LifeSteal; return true;
-            case "ELE_DMG": type = AttrType.FireDamage; isPercent = true; return true;
-            case "CRIT_DMG": type = AttrType.CritDamage; return true;
-            case "DMG_RED": type = AttrType.Defense; isPercent = true; return true;
-            default: return false;
-        }
     }
 
     static EquipSlotType MapSlotType(string slotId, PlayerJobId job)
