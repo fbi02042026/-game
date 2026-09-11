@@ -237,7 +237,7 @@ public class BattleSideHud : MonoBehaviour
         if (_comboGroup == null) return;
 
         // 引导战不显示连杀「击破」
-        if (BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun)
+        if (TutorialRules.Current.HideKillComboHud)
             combo = 0;
 
         if (combo <= 0)

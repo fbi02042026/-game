@@ -3,7 +3,8 @@
 > **读者**：产品 + 程序。  
 > **对照评审**：[`ARCHITECTURE_REVIEW.md`](./ARCHITECTURE_REVIEW.md)（问题编号 P0/P1/P2 以评审为准）。  
 > **原则**：保住当前战斗手感；先关门再迁表；大拆类只在「第二种战斗编排」真出现时做。  
-> **本 PR（#6）**：Phase 0–3 已落地（评审 + 止血 + 数值真源 + 装备门闩）。Phase 4–5 按计划另开。
+> **本 PR（#6）**：Phase 0–3 已落地（评审 + 止血 + 数值真源 + 装备门闩）。  
+> **Phase 4 PR**：引导 / 正式刷怪合流（HP 进表、埋伏走 SpawnWave 参数、TutorialRules）。Phase 5 按需另开。
 
 ---
 
@@ -54,7 +55,7 @@
 | 章节属性倍率 | `chapter_stat_scale`（1:1 旧数组） | 已迁表；缺表回退 `ChapterStatScaleTable.Fallback` | **Phase 2 完成** |
 | 波次构成 | `stage_spawn` + `wave_slot` 奇偶近战/远程 | `wave_slot` 已填 slot0–15 奇偶（spriteIndex=0 加权）；`monsterTotal=0` 明确=公式 | **Phase 2 完成** |
 | 关卡类型抽取 | `stage_roller_weights` + `StageRoller` | 仅普通/精英/休息/Boss | 保持；勿复活商人关 |
-| 引导波次 | `tutorial_battle` | 表有步进；执行仍嵌 BM | Phase 4 |
+| 引导波次 | `tutorial_battle` | 步进 + HP 档进表；导演只点 `QueueTutorialStep`；埋伏/夹击是 SpawnWave 参数 | **Phase 4 完成** |
 | 装备词条数值 | `equip_attr_ranges` + `IsCombatLanded` | 只抽已映射 12 种进包；未落地不占词条位 | **Phase 3 完成** |
 | 天赋 | `TalentDefs` C# | 可继续硬编码直到要热更 | 非本计划必做 |
 | 玩家技能 | 目标：CSV 如佣兵 | `PlayerSkillDefs` + Ally SO | Phase 5 |
@@ -122,14 +123,25 @@
 
 ---
 
-## Phase 4 — 引导 / 正式刷怪合并（独立 PR，手测最重）
+## Phase 4 — 引导 / 正式刷怪合并（本 PR）
 
-对应 P0-2。
+对应 P0-2。**约束：波次人数、L/R 进场、HP 档、错峰、受击回能、伤害公式与改前一致。**
 
-- 教程怪 HP 档进 `tutorial_battle`，删除 `ApplyTutorialMonsterTuning` 随机盖血。
-- 埋伏/夹击改为 `SpawnWave` 参数（锚点、forcedTarget），不是 BM 第二套刷怪。
-- `TutorialRules` 规则包收拢 `IsTutorialRun` 散点（禁佣兵、禁清关、交战距离等）。
-- **此后禁止**再往 BM 核心循环加新的 `IsTutorialRun` 分支；禁止再加 BM 技能 `if (id == SK0xx)`。
+| 项 | 状态 | 做法 | 手感 |
+|----|------|------|------|
+| 教程怪 HP 档 | 完成 | `tutorial_battle` 增 `hpMin/hpMax/eliteHpMin/eliteHpMax`（8/13、25/36，整型开区间，再乘 `MONSTER_HP_GLOBAL_MUL`）。表有值才盖血；BM 不再写死 8–13 / 25–36 | 普通约 8–12、精英 25–35（×0.6）同前 |
+| 埋伏/夹击合流 | 完成 | `WaveData` 增加锚点 / `bilateralEnter` / `aroundAnchor` / `forcedTarget` / `staggerOverride`；`CoSpawnWaveMonsters` 走 `SpawnMonsterOffscreenEnter`。宝箱/佣兵 L/R、普通波右侧、埋伏 stagger=0 | 进场方向与错峰同前 |
+| `TutorialRules` | 完成（有意未 100%） | 禁佣兵预召、禁清关 Banner、禁自动首波、交战距离/间距/stagger、禁第一章结局、撤离/成就/连杀 HUD 等收进规则包。`IsTutorialRun` = `Rules.Active` | 仅搬家，行为不变 |
+| 导演只编排节拍 | 完成 | `TutorialDirector` 调 `QueueTutorialStep(order)`；不再读 count / 自造刷怪数学 / 发明 HP | 节拍顺序不变 |
+
+**本阶段仍保留（下阶段再收，勿在本 PR 硬拆）**
+
+- `IsTutorialRun` 身份判断：导演启动、设置撤离、雷击过场、`BeginTutorialPowerFantasy`。
+- `BattleUI` 教程 HUD / 技能点击锁（仍问 `TutorialDirector`）。
+- `AllowMonsterMapEnter` 运行时窗口（节拍冻帧，不是刷怪轨）。
+- 救援佣兵放置 `SpawnTutorialMercAt`（节拍：放 NPC，不是怪波数学）。
+
+- **此后禁止**再往 BM 核心循环加新的 `IsTutorialRun` 分支（新旗标加 `TutorialRules`）；禁止再加 BM 技能 `if (id == SK0xx)`。
 
 ---
 
@@ -149,8 +161,8 @@
 
 | PR | 内容 | 依赖 |
 |----|------|------|
-| **#6（本 PR）** | 评审 + 本计划 + Phase 1–3 | — |
-| 再下一 | Phase 4 引导刷怪 | 须完整手测引导 |
+| **#6** | 评审 + 本计划 + Phase 1–3 | 已合 main `45ad6101` |
+| **本 PR** | Phase 4 引导刷怪合流 | 须完整手测引导（宝箱→佣兵→佣兵后一波）+ 第一章 1-0 手感对照 |
 | 按需 | Phase 5 单项 | 产品点名 |
 
 ---
@@ -205,3 +217,14 @@
 | `HiddenLevelSystem.cs` | 标明裂缝稀有度真源 |
 | `ConfigManager.cs` | SO 回退才走 `EquipDropRules` |
 | `equip_attr_ranges.csv` | 表头闸门说明 |
+
+## Phase 4 实现对照
+
+| 文件 | 改动 |
+|------|------|
+| `TutorialRules.cs` | 本局规则包 Formal / Tutorial；BM 核心循环读包不读散落 `IsTutorialRun` |
+| `TutorialBattleTable.cs` + `tutorial_battle.csv/.bytes` | HP 档列；缺列回退旧 8/13、25/36 |
+| `BattleManager.cs` | `QueueTutorialStep`；`WaveData` 刷怪参数；埋伏/夹击走 `SpawnWave`；表驱动盖血 |
+| `TutorialDirector.cs` | 只点步进与节拍；救援佣兵仍由导演放置 |
+| `BattleSideHud.cs` / `MercBattleBanter.cs` | 连杀隐藏 / 禁闲聊改问规则包 |
+| `GameDataTableTools.cs` | 种子表列与现网步进对齐 |

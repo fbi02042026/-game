@@ -16,8 +16,25 @@ public static class TutorialBattleTable
         public float aheadDist;
         public bool stunned;
         public int eliteCount;
+        /// <summary>普通怪 HP 下限（乘 MONSTER_HP_GLOBAL_MUL 前）。与旧 Random.Range 整型口径一致：max 为开区间。</summary>
+        public float hpMin;
+        public float hpMax;
+        public float eliteHpMin;
+        public float eliteHpMax;
         public string note;
+
+        public bool HasNormalHp => hpMin > 0f || hpMax > 0f;
+        public bool HasEliteHp => eliteHpMin > 0f || eliteHpMax > 0f;
+        public bool HasHp => HasNormalHp || HasEliteHp;
+        public bool IsFlank => action == "flank" || ambush;
+        public bool IsAround => action == "around";
     }
+
+    /// <summary>与 Phase 4 前 BattleManager.ApplyTutorialMonsterTuning 整型 Random.Range 一致。</summary>
+    public const float DefaultHpMin = 8f;
+    public const float DefaultHpMax = 13f;
+    public const float DefaultEliteHpMin = 25f;
+    public const float DefaultEliteHpMax = 36f;
 
     static readonly List<Step> _steps = new List<Step>();
     static bool _loaded;
@@ -59,11 +76,27 @@ public static class TutorialBattleTable
                 aheadDist = c.Length > 8 && GameTableCsv.TryFloat(c[8], out float ad) ? ad : 0f,
                 stunned = c.Length > 9 && GameTableCsv.TryBool(c[9], out bool st) && st,
                 eliteCount = c.Length > 10 && GameTableCsv.TryInt(c[10], out int ec) ? ec : 0,
-                note = c.Length > 11 ? c[11] : ""
+                hpMin = ReadHp(c, 11, DefaultHpMin),
+                hpMax = ReadHp(c, 12, DefaultHpMax),
+                eliteHpMin = ReadHp(c, 13, DefaultEliteHpMin),
+                eliteHpMax = ReadHp(c, 14, DefaultEliteHpMax),
+                note = c.Length > 15 ? c[15] : (c.Length > 11 && !LooksNumeric(c[11]) ? c[11] : "")
             });
         }
         _steps.Sort((a, b) => a.order.CompareTo(b.order));
         Debug.Log($"[TutorialBattle] 已加载 {_steps.Count} 条");
+    }
+
+    static float ReadHp(string[] c, int idx, float fallback)
+    {
+        if (c.Length > idx && GameTableCsv.TryFloat(c[idx], out float v) && v > 0f)
+            return v;
+        return fallback;
+    }
+
+    static bool LooksNumeric(string s)
+    {
+        return !string.IsNullOrEmpty(s) && GameTableCsv.TryFloat(s, out _);
     }
 
     public static IReadOnlyList<Step> GetSteps()
@@ -96,7 +129,11 @@ public static class TutorialBattleTable
             action = "normal",
             count = 2,
             spriteMelee = 1,
-            spriteRanged = 2
+            spriteRanged = 2,
+            hpMin = DefaultHpMin,
+            hpMax = DefaultHpMax,
+            eliteHpMin = DefaultEliteHpMin,
+            eliteHpMax = DefaultEliteHpMax
         };
     }
 }

@@ -6,6 +6,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 新手引导：城镇开场 → 短战斗（选职/牧师救援/强制撤离）→ 回城收尾。
+/// 只编排节拍（停手、对白、提示、何时刷第 N 步）；刷怪/HP 走 BattleManager.QueueTutorialStep + tutorial_battle。
 /// 正式第一章不走这里。
 /// </summary>
 public class TutorialDirector : Singleton<TutorialDirector>
@@ -359,8 +360,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         hint.Show("靠近怪物会自动攻击。", null, 8f);
         if (bm != null) bm.UnitsCanAct = true;
         TutorialBattleTable.EnsureLoaded();
-        bm?.ApplyTutorialBattleStep(1);
-        yield return EnsureTutorialWave(bm, TutorialStepCount(1));
+        yield return EnsureTutorialStep(bm, 1);
         yield return WaitFieldClear();
 
         yield return WaitFieldClear(strict: true);
@@ -391,23 +391,21 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         // 说完第一句 → 两边怪进场停稳 → 再「！」→ 开战
         float chestX = chestDir.ChestWorldX;
-        var flankStep = TutorialBattleTable.GetStepOrDefault(3);
-        bm.ApplyTutorialBattleStep(3);
         if (bm != null)
         {
             bm.UnitsCanAct = false;
             bm.AllowMonsterMapEnter = true; // 对白已结束：只放行怪走进，战斗仍冻
         }
-        bm.SpawnTutorialFlankAmbush(flankStep.count, chestX);
+        bm?.QueueTutorialStep(3, chestX);
         {
             int guard = 0;
-            while (bm.GetAliveMonsterCount() <= 0 && guard < 8)
+            while (bm != null && bm.GetAliveMonsterCount() <= 0 && guard < 8)
             {
                 guard++;
                 yield return null;
                 yield return null;
                 if (bm.GetAliveMonsterCount() <= 0)
-                    bm.SpawnTutorialFlankAmbush(flankStep.count, chestX);
+                    bm.QueueTutorialStep(3, chestX);
             }
         }
         yield return WaitMonstersFinishedEnter(bm);
@@ -489,20 +487,18 @@ public class TutorialDirector : Singleton<TutorialDirector>
         ui?.UpdateCharacterSlots();
 
         var rescueStep = TutorialBattleTable.GetStepOrDefault(4);
-        bm.ApplyTutorialBattleStep(4);
         string rescueMercId = string.IsNullOrEmpty(rescueStep.mercId)
             ? StoryProgress.TutorialMercId
             : rescueStep.mercId;
         float rescueHpRatio = rescueStep.mercHpRatio > 0f ? rescueStep.mercHpRatio : 0.35f;
         float rescueAhead = rescueStep.aheadDist > 0f ? rescueStep.aheadDist : 5.5f;
         var merc = bm.SpawnTutorialMercAt(rescueMercId, rescueHpRatio, rescueAhead, stunned: rescueStep.stunned);
-        int ambushCount = rescueStep.count > 0 ? rescueStep.count : 3;
         if (rescueStep.eliteCount > 0)
         {
             yield return TalkBlock(bm, headTalk, restoreAct: false,
                 new TalkLine(Hero.Instance, "有个块头更大的！", 0.75f));
         }
-        bm.SpawnTutorialAmbushAround(merc, ambushCount);
+        bm?.QueueTutorialStep(4, forcedTarget: merc);
         hint.Show("前方有人被怪物围住了，上前帮忙。", null, 4f);
 
         // 不冻结战斗：玩家可随时上前清怪
@@ -607,8 +603,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (bm != null) bm.UnitsCanAct = true;
 
         hint.Show("组队后佣兵会自动战斗。", null, 3f);
-        bm.ApplyTutorialBattleStep(5);
-        yield return EnsureTutorialWave(bm, TutorialStepCount(5));
+        yield return EnsureTutorialStep(bm, 5);
         yield return WaitFieldClear(strict: true);
 
         yield return TalkBlock(bm, headTalk,
@@ -760,8 +755,6 @@ public class TutorialDirector : Singleton<TutorialDirector>
         AdventureCodex.MarkMercSeen(mercId);
     }
 
-    static int TutorialStepCount(int order) => TutorialBattleTable.GetStepOrDefault(order).count;
-
     /// <summary>进战后先教摇杆与自动技能。</summary>
     static IEnumerator CoTeachControls(BattleManager bm, TutorialHintUI hint, BattleUI ui)
     {
@@ -795,31 +788,30 @@ public class TutorialDirector : Singleton<TutorialDirector>
     static IEnumerator CoTutorialNextWave(BattleManager bm, TutorialHintUI hint, float delaySec, int order)
     {
         hint.Hide();
-        bm?.ApplyTutorialBattleStep(order);
-        yield return EnsureTutorialWave(bm, TutorialStepCount(order));
+        yield return EnsureTutorialStep(bm, order);
     }
 
     /// <summary>
     /// 教程刷怪兜底：最多重试 3 次，每次等两帧看有没有真出怪。
-    /// 之前只 yield 一帧就判断，刷怪协程还没跑完就被当成「没刷出来」。
+    /// 导演只点步进号；人数/进场/HP 由 QueueTutorialStep 读表。
     /// </summary>
-    static IEnumerator EnsureTutorialWave(BattleManager bm, int count)
+    static IEnumerator EnsureTutorialStep(BattleManager bm, int order, float? anchorX = null, UnitBase forcedTarget = null)
     {
         if (bm == null) yield break;
         for (int attempt = 0; attempt < 3; attempt++)
         {
-            bm.QueueTutorialWave(count);
+            bm.QueueTutorialStep(order, anchorX, forcedTarget);
             yield return null;
             yield return null;
             if (bm.GetAliveMonsterCount() > 0)
             {
-                Debug.Log($"[Tutorial] 刷怪成功 attempt={attempt + 1} alive={bm.GetAliveMonsterCount()}");
+                Debug.Log($"[Tutorial] 刷怪成功 step={order} attempt={attempt + 1} alive={bm.GetAliveMonsterCount()}");
                 yield break;
             }
-            Debug.LogWarning($"[Tutorial] 刷怪未出怪 attempt={attempt + 1}，重试");
+            Debug.LogWarning($"[Tutorial] 刷怪未出怪 step={order} attempt={attempt + 1}，重试");
             yield return new WaitForSecondsRealtime(0.25f);
         }
-        Debug.LogError("[Tutorial] 连续 3 次刷怪失败，跳过本波以免卡流程");
+        Debug.LogError($"[Tutorial] 连续 3 次刷怪失败 step={order}，跳过本波以免卡流程");
     }
 
     static IEnumerator CoRefreshMercHudNextFrame(BattleUI ui)

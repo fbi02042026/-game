@@ -139,14 +139,13 @@ public static class GameDataTableTools
     static void WriteTutorialBattle()
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# order=执行顺序；action=normal|flank|around");
-        sb.AppendLine("order,action,count,spriteMelee,spriteRanged,ambush,mercId,mercHpRatio,aheadDist,stunned,note");
-        sb.AppendLine("1,normal,2,2,1,0,,,,,首波");
-        sb.AppendLine("2,normal,2,2,1,0,,,,,第二小波");
-        sb.AppendLine("3,flank,5,2,1,1,,,,,宝箱埋伏");
-        sb.AppendLine("4,around,3,2,1,0,dunbing101,0.35,5.5,1,围殴老盾");
-        sb.AppendLine("5,normal,4,2,1,0,,,,,组队后");
-        sb.AppendLine("6,flank,3,2,1,1,,,,,清场后侧翼");
+        sb.AppendLine("# order=执行顺序；action=normal|flank|around；hp* 与旧引导盖血档一致");
+        sb.AppendLine("order,action,count,spriteMelee,spriteRanged,ambush,mercId,mercHpRatio,aheadDist,stunned,eliteCount,hpMin,hpMax,eliteHpMin,eliteHpMax,note");
+        sb.AppendLine("1,normal,6,1,2,0,,,,,,8,13,25,36,首波");
+        sb.AppendLine("2,normal,7,1,2,0,,,,,,8,13,25,36,第二波");
+        sb.AppendLine("3,flank,7,1,2,1,,,,,,8,13,25,36,宝箱左右夹击");
+        sb.AppendLine("4,around,7,1,2,0,naima101,0.35,5.5,1,1,8,13,25,36,佣兵围攻");
+        sb.AppendLine("5,normal,8,1,2,0,,,,,,8,13,25,36,组队后");
         File.WriteAllText(TablesDir + "/tutorial_battle.csv", sb.ToString(), new UTF8Encoding(false));
     }
 
