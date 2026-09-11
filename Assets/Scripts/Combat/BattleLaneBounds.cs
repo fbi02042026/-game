@@ -53,6 +53,48 @@ public static class BattleLaneBounds
         return Random.Range(min, max);
     }
 
+    /// <summary>按波次人数均匀铺开车道，带轻微抖动，减少 Y 重叠。</summary>
+    public static float LaneSlot(int index, int count, float jitter = 0.06f)
+    {
+        GetLaneOffsetRange(out float min, out float max);
+        if (count <= 1)
+            return ClampLaneOffset((min + max) * 0.5f + Random.Range(-jitter, jitter));
+        float t = Mathf.Clamp01(index / (float)(count - 1));
+        // 交错：偶数偏下、奇数微调，避免整列对齐
+        float stagger = ((index & 1) == 0) ? -jitter * 0.5f : jitter * 0.5f;
+        return ClampLaneOffset(Mathf.Lerp(min, max, t) + stagger + Random.Range(-jitter, jitter));
+    }
+
+    /// <summary>在已占用车道中挑间距最大的候选，尽量不叠。</summary>
+    public static float PickSpreadLane(System.Collections.Generic.IList<float> usedLanes, float minGap = 0.32f)
+    {
+        GetLaneOffsetRange(out float min, out float max);
+        float best = Random.Range(min, max);
+        float bestNearest = -1f;
+        for (int attempt = 0; attempt < 14; attempt++)
+        {
+            float cand = Random.Range(min, max);
+            float nearest = float.MaxValue;
+            if (usedLanes != null)
+            {
+                for (int i = 0; i < usedLanes.Count; i++)
+                    nearest = Mathf.Min(nearest, Mathf.Abs(cand - usedLanes[i]));
+            }
+            else
+            {
+                nearest = max - min;
+            }
+            if (nearest > bestNearest)
+            {
+                bestNearest = nearest;
+                best = cand;
+            }
+            if (nearest >= minGap)
+                break;
+        }
+        return ClampLaneOffset(best);
+    }
+
     public static void SetVisualVisible(bool visible)
     {
         EnsureResolved();

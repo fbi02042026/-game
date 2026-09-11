@@ -52,9 +52,10 @@ public class BattleManager : Singleton<BattleManager>
     string _stageQuestObjective = "击败所有敌人";
     /// <summary>本关已击杀数（进度条口径；勿用 goal-alive，未刷波次会假满）</summary>
     int _defeatedMonsterKills;
-    int _tutorialSpriteMelee = 2;
-    int _tutorialSpriteRanged = 1;
+    int _tutorialSpriteMelee = 1;
+    int _tutorialSpriteRanged = 2;
     int _tutorialEliteCount;
+    int _tutorialWaveMonsterCount;
     /// <summary>本局怪物攻速倍率（剧情选择等）</summary>
     public float runMonsterAtkSpeedMul = 1f;
     /// <summary>正在走向 chuansongmen，放宽屏幕钳制</summary>
@@ -115,6 +116,7 @@ public class BattleManager : Singleton<BattleManager>
     public const float MAX_SKILL_ENERGY = 1f;
     /// <summary>佣兵技能能量（最多2槽）</summary>
     readonly float[] mercSkillEnergy = new float[2];
+    Coroutine _spawnWaveCo;
 
     public float GetMercSkillEnergy(int index)
     {
@@ -191,12 +193,12 @@ public class BattleManager : Singleton<BattleManager>
             }
         }
     }
-    public const float ENERGY_PER_KILL = 0.2f;     // 保留常量；击杀不再涨蓝
-    public const float ENERGY_PER_SECOND = 0.015f;  // 保留常量；时间不再涨蓝
+    public const float ENERGY_PER_KILL = 0f; // unused: energy from damage/MaxHp on hit only     // 保留常量；击杀不再涨蓝
+    public const float ENERGY_PER_SECOND = 0f; // unused: no time-based skill energy  // 保留常量；时间不再涨蓝
     /// <summary>友方造成伤害时涨蓝（攻击）</summary>
-    public const float ENERGY_ON_ATTACK = 0.035f;
+    public const float ENERGY_ON_ATTACK = 0f; // unused: no attack-based skill energy
     /// <summary>友方受伤时涨蓝（受击）</summary>
-    public const float ENERGY_ON_HIT = 0.042f;
+    public const float ENERGY_ON_HIT = 0f; // unused: use finalDamage/MaxHp instead
 
     protected override void Awake()
     {
@@ -505,6 +507,7 @@ public class BattleManager : Singleton<BattleManager>
     }
 
     /// <summary>友方攻击造成伤害 / 友方受击时涨技能能量（玩家与对应佣兵槽）。</summary>
+    /// <summary>盟友受击回能：传入 finalDamage/MaxHp（打满血约攒满一槽）。</summary>
     public void AddCombatSkillEnergy(UnitBase unit, float amount)
     {
         if (unit == null || !unit.isAlly || amount <= 0f || !isInBattle) return;
@@ -704,10 +707,13 @@ public class BattleManager : Singleton<BattleManager>
             eliteCount = step.eliteCount;
         }
         eliteCount = Mathf.Clamp(eliteCount, 0, n);
+        _tutorialWaveMonsterCount = n;
+        var usedLanes = new System.Collections.Generic.List<float>();
         for (int i = 0; i < n; i++)
         {
             float ox = offsets[i % offsets.Length] + Random.Range(-0.45f, 0.45f);
-            float lane = BattleLaneBounds.RandomLaneOffset();
+            float lane = BattleLaneBounds.PickSpreadLane(usedLanes);
+            usedLanes.Add(lane);
             Vector3 engagePos = new Vector3(vx + ox, UnitBase.GROUND_Y + lane, z);
             bool isElite = i >= n - eliteCount;
             float scale = isElite ? GameConfig.ELITE_SCALE_MULTIPLIER : 1f;
@@ -734,6 +740,7 @@ public class BattleManager : Singleton<BattleManager>
         float hx = anchorX ?? UnitBase.GetCombatX(hero);
         float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
         int n = Mathf.Max(2, count);
+        _tutorialWaveMonsterCount = n;
 
         var wave = new WaveData
         {
@@ -759,12 +766,14 @@ public class BattleManager : Singleton<BattleManager>
         // 左右夹击：交战点随机，从屏外走入
         GetBattleVisibleX(out float visMin, out float visMax);
         float engageCenter = Mathf.Clamp(hx, visMin + 1f, visMax - 1f);
+        var usedLanes = new System.Collections.Generic.List<float>();
         var usedSprites = new System.Collections.Generic.HashSet<int>();
         for (int i = 0; i < n; i++)
         {
             float side = (i % 2 == 0) ? -1f : 1f;
             float ox = engageCenter + side * Random.Range(1.2f, 3.2f) + Random.Range(-0.5f, 0.5f);
-            float lane = BattleLaneBounds.RandomLaneOffset();
+            float lane = BattleLaneBounds.PickSpreadLane(usedLanes);
+            usedLanes.Add(lane);
             Vector3 engagePos = new Vector3(ox, UnitBase.GROUND_Y + lane, z);
             Monster m = SpawnAmbushMonsterAt(engagePos, lane, 1f, usedSprites);
             if (m == null) continue;
@@ -791,15 +800,18 @@ public class BattleManager : Singleton<BattleManager>
         int n = Mathf.Max(2, count);
         int stageIdx = currentStage != null ? currentStage.stageIndex : 0;
         var usedSprites = new System.Collections.Generic.HashSet<int>();
+        var usedLanes = new System.Collections.Generic.List<float>();
         for (int i = 0; i < n; i++)
         {
             float side = (i % 2 == 0) ? -1f : 1f;
             float ox = engageCenter + side * Random.Range(1.0f, 2.8f) + Random.Range(-0.4f, 0.4f);
-            float lane = BattleLaneBounds.RandomLaneOffset();
+            float lane = BattleLaneBounds.PickSpreadLane(usedLanes);
+            usedLanes.Add(lane);
             Vector3 engagePos = new Vector3(ox, UnitBase.GROUND_Y + lane, z);
             if (!TryPickWaveMonster(stageIdx, monsters.Count + i, false, usedSprites, out MonsterConfig cfg, out int spriteIdx))
                 continue;
-            Monster monster = SpawnMonsterOffscreenEnter(engagePos, lane, 1f, cfg, stageIdx, spriteIdx);
+            bool fromLeft = engagePos.x < engageCenter;
+            Monster monster = SpawnMonsterOffscreenEnter(engagePos, lane, 1f, cfg, stageIdx, spriteIdx, null, fromLeft);
             if (monster == null) continue;
             monster.SetForcedTarget(hero);
             ApplyTutorialMonsterTuning(monster);
@@ -818,7 +830,11 @@ public class BattleManager : Singleton<BattleManager>
                 out MonsterConfig cfg, out int spriteIdx))
             return null;
 
-        Monster monster = SpawnMonsterOffscreenEnter(engagePos, laneY, scaleMultiplier, cfg, stageIdx, spriteIdx);
+        // 宝箱/佣兵伏击：落点在左则从左进场，在右则从右进场（普通波仍默认右侧）
+        float heroX = hero != null ? UnitBase.GetCombatX(hero) : engagePos.x;
+        bool fromLeft = engagePos.x < heroX;
+        Monster monster = SpawnMonsterOffscreenEnter(
+            engagePos, laneY, scaleMultiplier, cfg, stageIdx, spriteIdx, null, fromLeft);
         if (monster == null) return null;
         ApplyTutorialMonsterTuning(monster);
         ForceEnableMonsterRenderers(monster.transform);
@@ -1153,8 +1169,8 @@ public class BattleManager : Singleton<BattleManager>
         var usedSprites = new System.Collections.Generic.HashSet<int>();
         for (int i = 0; i < count; i++)
         {
-            float x = baseX + i * GetMonsterWaveSpacing() + Random.Range(-0.6f, 0.6f);
-            float lane = BattleLaneBounds.RandomLaneOffset();
+            float x = baseX + i * GetMonsterWaveSpacing() + Random.Range(-0.22f, 0.22f);
+            float lane = BattleLaneBounds.LaneSlot(i, count);
             Vector3 engagePos = new Vector3(x, UnitBase.GROUND_Y + lane, z);
 
             if (!TryPickWaveMonster(stageIdx, i, false, usedSprites, out MonsterConfig cfg, out int spriteIdx))
@@ -2167,8 +2183,8 @@ public class BattleManager : Singleton<BattleManager>
     public void ApplyTutorialBattleStep(int order)
     {
         var step = TutorialBattleTable.GetStepOrDefault(order);
-        _tutorialSpriteMelee = step.spriteMelee > 0 ? step.spriteMelee : 2;
-        _tutorialSpriteRanged = step.spriteRanged > 0 ? step.spriteRanged : 1;
+        _tutorialSpriteMelee = step.spriteMelee > 0 ? step.spriteMelee : 1;
+        _tutorialSpriteRanged = step.spriteRanged > 0 ? step.spriteRanged : 2;
         _tutorialEliteCount = step.eliteCount > 0 ? step.eliteCount : 0;
     }
 
@@ -2177,10 +2193,14 @@ public class BattleManager : Singleton<BattleManager>
     {
         if (availableSprites == null || availableSprites.Count == 0) return 1;
 
-        bool wantRanged = slotIndex % 2 == 1;
+        // 引导固定近战:远程 ≈ 4:2（按本波人数折算，前段近战、后段远程）
+        int waveN = Mathf.Max(1, _tutorialWaveMonsterCount);
+        int rangedSlots = Mathf.Max(1, Mathf.RoundToInt(waveN * 2f / 6f));
+        int meleeSlots = Mathf.Max(0, waveN - rangedSlots);
+        bool wantRanged = slotIndex >= meleeSlots;
         int monsterChapter = GameConfig.GetMonsterChapter(CurrentChapter);
-        int fallbackMelee = _tutorialSpriteMelee > 0 ? _tutorialSpriteMelee : 2;
-        int fallbackRanged = _tutorialSpriteRanged > 0 ? _tutorialSpriteRanged : 1;
+        int fallbackMelee = _tutorialSpriteMelee > 0 ? _tutorialSpriteMelee : 1;
+        int fallbackRanged = _tutorialSpriteRanged > 0 ? _tutorialSpriteRanged : 2;
 
         for (int i = 0; i < availableSprites.Count; i++)
         {
@@ -2358,7 +2378,7 @@ public class BattleManager : Singleton<BattleManager>
     {
         float spacing = GameConfig.MONSTER_WAVE_SPACING;
         if (IsTutorialRun)
-            spacing *= 1.45f;
+            spacing *= 1.65f;
         return spacing;
     }
 
@@ -2431,32 +2451,55 @@ public class BattleManager : Singleton<BattleManager>
         }
         ExtendCameraMaxX(engageBaseX + 6f);
 
+        if (_spawnWaveCo != null)
+        {
+            StopCoroutine(_spawnWaveCo);
+            _spawnWaveCo = null;
+        }
+        _spawnWaveCo = StartCoroutine(CoSpawnWaveMonsters(
+            wave, waveIndex, stageIdx, stageType, waveScaleMultiplier,
+            engageBaseX, heroCombatX, spawnZ));
+    }
+
+    System.Collections.IEnumerator CoSpawnWaveMonsters(
+        WaveData wave, int waveIndex, int stageIdx, StageType stageType, float waveScaleMultiplier,
+        float engageBaseX, float heroCombatX, float spawnZ)
+    {
+        if (IsTutorialRun)
+            _tutorialWaveMonsterCount = wave != null ? wave.monsterCount : 0;
         float waveSpacing = GetMonsterWaveSpacing();
         var usedSpritesThisWave = new System.Collections.Generic.HashSet<int>();
+        // 出生点逐只出场，避免叠在一起；引导间隔更长
+        float stagger = IsTutorialRun ? 0.65f : 0.35f;
 
         for (int i = 0; i < wave.monsterCount; i++)
         {
+            if (i > 0)
+                yield return new WaitForSeconds(stagger);
+
+            if (wave == null || BattleLootMode.Active)
+                yield break;
+
             if (!TryPickWaveMonster(stageIdx, i, wave.isBossWave, usedSpritesThisWave,
                     out MonsterConfig template, out int spriteIndexOverride, waveIndex, stageType))
             {
-                Debug.LogWarning($"[BattleManager] 波内第{i + 1}只取配置失败，跳过");
+                Debug.LogWarning($"[BattleManager] wave monster pick fail i={i}");
                 continue;
             }
 
             float monsterScale = waveScaleMultiplier;
             if (template.isBoss && !wave.isBossWave)
                 monsterScale = GameConfig.BOSS_SCALE_MULTIPLIER;
-            // 教程表 eliteCount：本波末尾若干只按精英缩放
             bool tutorialEliteSlot = IsTutorialRun && _tutorialEliteCount > 0
                 && i >= wave.monsterCount - _tutorialEliteCount;
             if (tutorialEliteSlot)
                 monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;
 
-            float lane = BattleLaneBounds.RandomLaneOffset();
+            float lane = BattleLaneBounds.LaneSlot(i, wave.monsterCount);
             float spawnY = UnitBase.GROUND_Y + lane;
-            bool fromLeft = false; // 默认右侧进场（原 Random 50%）
+            bool fromLeft = false;
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
-            float preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.8f, 0.8f);
+            float preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.22f, 0.22f);
             float engageX = ResolveEngageXForEnterSide(heroCombatX, fromLeft, preferEngageX, visMin, visMax);
             if (wave.spawnAnchor != null)
                 spawnZ = wave.spawnAnchor.position.z;
@@ -2472,12 +2515,12 @@ public class BattleManager : Singleton<BattleManager>
                 m.SetLaneY(lane);
                 ForceEnableMonsterRenderers(m.transform);
                 m.BeginMapEnter(engagePos, GameConfig.MONSTER_ENTER_SPEED, fromLeft ? 1 : -1);
-                // 精英属性倍率只在 Init(scaleMultiplier=ELITE) 一处；禁止再叠 *1.5 导致 currentHp>MaxHp
                 wave.aliveCount++;
             }
         }
 
-        GamePerf.Log($"[BattleManager] 波次{waveIndex + 1} 刷新{wave.monsterCount}只 @x={engageBaseX:F1} anchor={(wave.spawnAnchor != null ? wave.spawnAnchor.name : "null")}");
+        GamePerf.Log($"[BattleManager] wave {waveIndex + 1} spawned {wave.monsterCount} @x={engageBaseX:F1}");
+        _spawnWaveCo = null;
     }
 
     /// <summary>兜底怪物：刷在英雄前方可见处</summary>
@@ -2502,12 +2545,12 @@ public class BattleManager : Singleton<BattleManager>
 
         for (int i = 0; i < wave.monsterCount; i++)
         {
-            float lane = BattleLaneBounds.RandomLaneOffset();
+            float lane = BattleLaneBounds.LaneSlot(i, wave.monsterCount);
             float spawnY = UnitBase.GROUND_Y + lane;
             float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
-            bool fromLeft = false; // 默认右侧进场（原 Random 50%）
-            float preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.8f, 0.8f);
+            bool fromLeft = false; // 默认从右边进场
+            float preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.22f, 0.22f);
             float engageX = ResolveEngageXForEnterSide(heroCombatX, fromLeft, preferEngageX, visMin, visMax);
             const float offMargin = 1.35f;
             float enterX = fromLeft ? visMin - offMargin : visMax + offMargin;

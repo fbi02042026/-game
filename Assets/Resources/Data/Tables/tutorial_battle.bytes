@@ -1,7 +1,7 @@
-# order=执行顺序；action=normal|flank|around
+# order=执行顺序 action=normal|flank|around；首波4近2远=6，后续+1~2；佣兵波带精英。普通波右侧进场；宝箱/佣兵左右夹击。
 order,action,count,spriteMelee,spriteRanged,ambush,mercId,mercHpRatio,aheadDist,stunned,eliteCount,note
-1,normal,4,2,1,0,,,,,,首波
-2,normal,3,2,1,0,,,,,,第二小波
-3,flank,4,2,1,1,,,,,,宝箱埋伏
-4,around,4,2,1,0,naima101,0.35,5.5,1,1,围殴牧师含1精英
-5,normal,5,2,1,0,,,,,1,组队后4小怪+1精英
+1,normal,6,1,2,0,,,,,,首波4近2远，右侧
+2,normal,7,1,2,0,,,,,,第二波+1，右侧
+3,flank,7,1,2,1,,,,,,宝箱左右夹击
+4,around,7,1,2,0,naima101,0.35,5.5,1,1,佣兵围攻左右+精英
+5,normal,8,1,2,0,,,,,,佣兵入队后右侧增援+2

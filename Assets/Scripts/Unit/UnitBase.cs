@@ -1197,14 +1197,17 @@ public abstract class UnitBase : MonoBehaviour
                 if (source != null && source.isAlly)
                 {
                     bm.RecordAllyDamage(source, finalDamage);
-                    bm.AddCombatSkillEnergy(source, BattleManager.ENERGY_ON_ATTACK);
+                    // 技能能量不再靠出手/时间，只按下方法在受击时按伤害占比回充
                 }
             }
             else
             {
                 bm.RecordDamageTaken(finalDamage);
                 if (isAlly)
-                    bm.AddCombatSkillEnergy(this, BattleManager.ENERGY_ON_HIT);
+                {
+                    float maxHp = attr != null ? Mathf.Max(1f, attr.GetAttr(AttrType.MaxHp)) : 1f;
+                    bm.AddCombatSkillEnergy(this, finalDamage / maxHp);
+                }
             }
         }
 

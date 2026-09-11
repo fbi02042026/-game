@@ -51,8 +51,8 @@ public static class TutorialBattleTable
                 order = order,
                 action = c.Length > 1 ? c[1].Trim().ToLowerInvariant() : "normal",
                 count = GameTableCsv.TryInt(c[2], out int cnt) ? cnt : 2,
-                spriteMelee = GameTableCsv.TryInt(c[3], out int sm) ? sm : 2,
-                spriteRanged = GameTableCsv.TryInt(c[4], out int sr) ? sr : 1,
+                spriteMelee = GameTableCsv.TryInt(c[3], out int sm) ? sm : 1,
+                spriteRanged = GameTableCsv.TryInt(c[4], out int sr) ? sr : 2,
                 ambush = c.Length > 5 && GameTableCsv.TryBool(c[5], out bool amb) && amb,
                 mercId = c.Length > 6 ? c[6].Trim() : "",
                 mercHpRatio = c.Length > 7 && GameTableCsv.TryFloat(c[7], out float hp) ? hp : 0f,
@@ -95,8 +95,8 @@ public static class TutorialBattleTable
             order = order,
             action = "normal",
             count = 2,
-            spriteMelee = 2,
-            spriteRanged = 1
+            spriteMelee = 1,
+            spriteRanged = 2
         };
     }
 }

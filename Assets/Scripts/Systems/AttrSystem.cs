@@ -154,7 +154,9 @@ public class AttrSystem
         float vit = GetRawAttr(AttrType.Vitality);
 
         // 力量→物理攻击
-        AddAttr(AttrType.Attack, str * 2f, false);
+        // 英雄已走 player_job_base_stats 时，攻击以表为准，不再叠力量×2（否则引导开局总攻虚高）
+        if (!(Hero.Instance != null && Hero.Instance.attr == this && PlayerJobBaseStats.HasData))
+            AddAttr(AttrType.Attack, str * 2f, false);
         AddAttr(AttrType.PhyPower, str * 0.01f, true);
 
         // 智力→魔法攻击
