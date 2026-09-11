@@ -10,25 +10,58 @@ public class AttrSystem
     private Dictionary<AttrType, float> _attr = new Dictionary<AttrType, float>();
     private Dictionary<AttrType, float> _baseAttr = new Dictionary<AttrType, float>();
 
+    public AttrOwnerKind OwnerKind { get; private set; }
+
     // 基础属性（来自等级+天赋+遗产）
     public int Strength = 0;
     public int Intelligence = 0;
     public int Agility = 0;
     public int Vitality = 0;
 
-    public AttrSystem()
+    public AttrSystem() : this(AttrOwnerKind.Unspecified) { }
+
+    public AttrSystem(AttrOwnerKind ownerKind)
     {
-        // 只初始化基础字典，不调用 RecalcAllAttr
-        // RecalcAllAttr 会在 Awake/Init 时由外部调用（避免构造期间访问Singleton）
+        OwnerKind = ownerKind;
+        // 只初始化基础字典，不调用 RecalcAllAttr（避免构造期间访问 Singleton）
         InitBaseDict();
     }
 
+    /// <summary>单位 Awake 后绑定归属。会按 Owner 重写基底（玩家有职业表则直接写表值）。</summary>
+    public void SetOwnerKind(AttrOwnerKind kind)
+    {
+        if (OwnerKind == kind) return;
+        OwnerKind = kind;
+        InitBaseDict();
+    }
+
+    bool UsesPlayerJobTable => OwnerKind == AttrOwnerKind.Player && PlayerJobBaseStats.HasData;
+
     /// <summary>
-    /// 初始化基础属性字典（不访问任何Singleton，可在构造期间安全调用）
+    /// 初始化基础属性字典。玩家+职业表：直接写表，不先写 GameConfig.BASE_HP/ATK 再覆盖。
+    /// 佣兵/怪物：仍用 GameConfig 基底，再由各自 Init 覆盖。
     /// </summary>
     private void InitBaseDict()
     {
         _baseAttr.Clear();
+
+        Strength = GameConfig.BASE_STRENGTH;
+        Intelligence = GameConfig.BASE_INTELLIGENCE;
+        Agility = GameConfig.BASE_AGILITY;
+        Vitality = GameConfig.BASE_VITALITY;
+
+        bool wroteJob = UsesPlayerJobTable
+            && PlayerJobBaseStats.TryWriteCombatBases(this, PlayerJobDefs.GetSelected());
+        if (!wroteJob)
+            WriteGameConfigCombatBases();
+
+        _attr.Clear();
+        foreach (var pair in _baseAttr)
+            _attr[pair.Key] = pair.Value;
+    }
+
+    void WriteGameConfigCombatBases()
+    {
         _baseAttr[AttrType.MaxHp] = GameConfig.BASE_HP;
         _baseAttr[AttrType.Attack] = GameConfig.BASE_ATTACK;
         _baseAttr[AttrType.AttackSpeed] = GameConfig.BASE_ATTACK_SPEED;
@@ -37,16 +70,6 @@ public class AttrSystem
         _baseAttr[AttrType.MoveSpeed] = GameConfig.BASE_MOVE_SPEED;
         _baseAttr[AttrType.AttackRange] = GameConfig.BASE_ATTACK_RANGE;
         _baseAttr[AttrType.Defense] = GameConfig.BASE_DEFENSE;
-
-        Strength = GameConfig.BASE_STRENGTH;
-        Intelligence = GameConfig.BASE_INTELLIGENCE;
-        Agility = GameConfig.BASE_AGILITY;
-        Vitality = GameConfig.BASE_VITALITY;
-
-        // 复制基础属性到当前属性（不做派生计算）
-        _attr.Clear();
-        foreach (var pair in _baseAttr)
-            _attr[pair.Key] = pair.Value;
     }
 
     public void ResetToBase()
@@ -67,7 +90,7 @@ public class AttrSystem
         foreach (var pair in _baseAttr)
             _attr[pair.Key] = pair.Value;
 
-        // 1b. 裂缝混合口径：仅主角套职业固定基础属性（佣兵/怪物走各自表，勿盖成玩家 ATK）
+        // 1b. 仅 Player 套职业表（佣兵/怪物走各自 Init，勿盖成玩家 ATK）
         ApplyPlayerJobBaseIfAny();
 
         // 2. 四大基础属性加成（来自天赋和遗产）— 仅玩家相关，SaveSystem可能未初始化
@@ -153,9 +176,8 @@ public class AttrSystem
         float agi = GetRawAttr(AttrType.Agility);
         float vit = GetRawAttr(AttrType.Vitality);
 
-        // 力量→物理攻击
-        // 英雄已走 player_job_base_stats 时，攻击以表为准，不再叠力量×2（否则引导开局总攻虚高）
-        if (!(Hero.Instance != null && Hero.Instance.attr == this && PlayerJobBaseStats.HasData))
+        // 力量→物理攻击。玩家职业表已含 ATK，不再叠力量×2（否则开局总攻虚高）
+        if (!UsesPlayerJobTable)
             AddAttr(AttrType.Attack, str * 2f, false);
         AddAttr(AttrType.PhyPower, str * 0.01f, true);
 
@@ -173,7 +195,7 @@ public class AttrSystem
 
     void ApplyPlayerJobBaseIfAny()
     {
-        if (Hero.Instance == null || Hero.Instance.attr != this) return;
+        if (OwnerKind != AttrOwnerKind.Player) return;
         PlayerJobBaseStats.ApplyToAttr(this, PlayerJobDefs.GetSelected());
     }
 

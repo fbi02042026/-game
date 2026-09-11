@@ -57,6 +57,7 @@ public class ConfigManager : Singleton<ConfigManager>
         }
 
         ChapterThemeMapTable.EnsureLoaded();
+        ChapterStatScaleTable.EnsureLoaded();
         MonsterUnlockTierTable.EnsureLoaded();
         AttackRangeTable.EnsureLoaded();
         PlayerJobBaseStats.EnsureLoaded();

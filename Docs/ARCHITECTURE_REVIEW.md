@@ -3,7 +3,7 @@
 > **范围**：只读审查 `main` 现况（约 v0.3.5 后战斗手感/表驱动一轮）。不改玩法、不改预制体、不批量改名。  
 > **读者**：产品 + 程序。结论按「现在卡什么 / 扩内容会卡什么 / 先别动什么」排列。  
 > **证据日期**：2026-09-11，基于仓库当前 `main`。  
-> **落地计划**：[`OPTIMIZATION_PLAN.md`](./OPTIMIZATION_PLAN.md)（Phase 1 已在同一 PR 止血；Phase 2–5 按计划另开）。
+> **落地计划**：[`OPTIMIZATION_PLAN.md`](./OPTIMIZATION_PLAN.md)（Phase 1–2 已在同一 PR 落地；Phase 3–5 按计划另开）。
 
 ---
 

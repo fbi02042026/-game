@@ -1,0 +1,10 @@
+# 章节属性倍率。与旧 GameConfig.CHAPTER_STAT_SCALE 1:1，禁止改数字除非单独平衡 PR。
+gameChapter,statScale,note
+1,1.0,森林
+2,1.3,墓园
+3,1.6,雨林
+4,1.7,草原
+5,1.4,海岛
+6,2.0,洞穴
+7,2.4,熔岩
+8,2.8,冰川

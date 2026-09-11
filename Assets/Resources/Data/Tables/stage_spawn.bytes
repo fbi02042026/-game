@@ -1,6 +1,7 @@
-# monsterTotal=0 表示走 GameConfig 公式；* 为通配
+# monsterTotal=0 表示走 GameConfig.GetStageMonsterTotal 公式（含随机），不要改成具体数字以免冻死手感。
+# 仅第一章首关 (1,0,Normal)=9 为固定总数；其余通配行必须保持 0。
 gameChapter,stageIndex,stageType,monsterTotal,waveCountMin,waveCountMax,eliteScaleMul,note
-1,0,Normal,9,4,6,1.0,第一章首关
-*,*,Normal,0,3,6,1.0,默认普通关公式
-*,*,Elite,0,3,6,1.5,精英关公式
-*,*,Boss,0,3,7,1.0,Boss小怪公式
+1,0,Normal,9,4,6,1.0,第一章首关固定9（非公式）
+*,*,Normal,0,3,6,1.0,0=GameConfig公式
+*,*,Elite,0,3,6,1.5,0=GameConfig公式
+*,*,Boss,0,3,7,1.0,0=GameConfig公式（Boss本体另计）

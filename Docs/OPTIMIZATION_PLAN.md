@@ -3,7 +3,7 @@
 > **读者**：产品 + 程序。  
 > **对照评审**：[`ARCHITECTURE_REVIEW.md`](./ARCHITECTURE_REVIEW.md)（问题编号 P0/P1/P2 以评审为准）。  
 > **原则**：保住当前战斗手感；先关门再迁表；大拆类只在「第二种战斗编排」真出现时做。  
-> **本 PR（#6）**：Phase 0 文档闸门 + **Phase 1 低风险止血已落地**。Phase 2–5 只写计划，不在本 PR 改战斗数值。
+> **本 PR（#6）**：Phase 0 文档闸门 + Phase 1 止血 + **Phase 2 数值真源已落地**。Phase 3–5 只写计划。最终 ATK/HP/章节倍率与改前一致。
 
 ---
 
@@ -51,8 +51,8 @@
 | 攻击距离 | `attack_range` → `AttackRangeTable` | 已收口；职业表「攻击距离」列仅对照 | 保持 |
 | 武器攻速/射程 Kind | 目标：表；现状 `WeaponCombatTable` 硬编码 | 有武器时再乘 Kind 比值 | Phase 2 后（不本 PR） |
 | 怪物属性 | `monster_stats` 优先，SO 兜底 | 另叠 `GameConfig.MONSTER_*` 与章节数组 | Phase 2 |
-| 章节属性倍率 | 目标：表（如 `chapter_theme_map` 扩列） | `GameConfig.CHAPTER_STAT_SCALE[]` 8 个数 | Phase 2 |
-| 波次构成 | `stage_spawn` + 将来 `wave_slot` | `wave_slot` **未启用**（空表，代码奇偶回退） | Phase 2 填或继续禁用 |
+| 章节属性倍率 | `chapter_stat_scale`（1:1 旧数组） | 已迁表；缺表回退 `ChapterStatScaleTable.Fallback` | **Phase 2 完成** |
+| 波次构成 | `stage_spawn` + `wave_slot` 奇偶近战/远程 | `wave_slot` 已填 slot0–15 奇偶（spriteIndex=0 加权）；`monsterTotal=0` 明确=公式 | **Phase 2 完成** |
 | 关卡类型抽取 | `stage_roller_weights` + `StageRoller` | 仅普通/精英/休息/Boss | 保持；勿复活商人关 |
 | 引导波次 | `tutorial_battle` | 表有步进；执行仍嵌 BM | Phase 4 |
 | 装备词条数值 | `equip_attr_ranges` + 部位池 | 掷得出 30+，生效约 12 | Phase 3 |
@@ -91,15 +91,19 @@
 
 ---
 
-## Phase 2 — 数值真源（独立 PR）
+## Phase 2 — 数值真源（本 PR 已实现）
 
-对应 P0-3、P1-3。
+对应 P0-3、P1-3。**约束：最终 Recalc 数字与改前一致。**
 
-- `AttrSystem`：职业表存在时跳过 `GameConfig.BASE_*` 预写，**最终数字与现在一致**（先对表再改写入顺序）。
-- `CHAPTER_STAT_SCALE` 迁表，数值一字不改。
-- `wave_slot`：填第一章 **或** 保持未启用并在加载日志写清；禁止半填半回退却不声明。
-- `AttrOwnerKind`（Player/Merc/Monster）替代 `Hero.Instance.attr == this`。
-- 验收：第一章首关与引导战伤害/攻速/射程与 Phase 1 基线对照（允许浮点误差，不允许体感跳变）。
+| 项 | 状态 | 做法 | 手感 |
+|----|------|------|------|
+| 玩家 BASE_* 预写 | 完成 | `OwnerKind==Player` 且职业表有数据时，`InitBaseDict` 直接 `TryWriteCombatBases`，不先写 `BASE_HP/ATK` | 最终 ATK/HP 同前（仍叠体质派生与装备） |
+| `CHAPTER_STAT_SCALE` | 完成 | 新表 `chapter_stat_scale.csv`（1.0/1.3/1.6/1.7/1.4/2.0/2.4/2.8）；`GetChapterStatScale` 只读表 | 章节怪属性倍率不变 |
+| `wave_slot` | 完成 | slot 0–15 奇偶 Melee/Ranged，`spriteIndex=0` 走原加权；≥16 仍代码回退 | 近战/远程交替与加权不变 |
+| `stage_spawn` 的 0 | 完成 | 注释写明 `0=GameConfig.GetStageMonsterTotal`；仅 1-0 固定 9 | 不填具体总数，避免冻随机 |
+| `AttrOwnerKind` | 完成 | `UnitBase.Awake` 绑定 Player/Merc/Monster；派生不再问 `Hero.Instance` | 仅玩家跳过力量→ATK |
+
+验收：角色页 ATK/HP 与开战 Recalc 同职业+装备应与改前一致；第一章 1-0 清场时间同一量级。
 
 ---
 
@@ -141,8 +145,7 @@
 
 | PR | 内容 | 依赖 |
 |----|------|------|
-| **#6（本 PR）** | 评审 + 本计划 + Phase 1 代码 | — |
-| 下一 PR | Phase 2 数值真源（无手感变化） | #6 |
+| **#6（本 PR）** | 评审 + 本计划 + Phase 1 + Phase 2 | — |
 | 再下一 | Phase 3 装备门闩 | Phase 2 建议先合（Attr 更干净） |
 | 再下一 | Phase 4 引导刷怪 | 须完整手测引导 |
 | 按需 | Phase 5 单项 | 产品点名 |
@@ -154,7 +157,8 @@
 发战斗相关 PR 时至少勾：
 
 - [ ] **引导全程**：城镇开场 → 选职开战 → 摇杆教学 → 清波 → 宝箱埋伏 → 拿剑 → 救佣兵 → 撤离回城，无卡死、无重复气泡。
-- [ ] **第一章 1-0 手感对照**：怪量、出手节奏、射程、受击回能、掉落三选一与上一正式版体感一致（本 Phase 1 不得改这些）。
+- [ ] **第一章 1-0 手感对照**：怪量、出手节奏、射程、受击回能、掉落三选一与上一正式版体感一致（Phase 1–2 不得改这些）。
+- [ ] **职业面板**：同职业同装备的 ATK/HP 与开战 Recalc 一致（Phase 2）。
 - [ ] **无新 `IsTutorialRun` 散点**（Phase 4 之后为硬门闩；Phase 1–3 也不要新增）。
 - [ ] **无新 BM 技能 if**（Phase 4 之后为硬门闩）。
 - [ ] **无 prefab / 产品名批量改**。
@@ -175,3 +179,16 @@
 | `wave_slot.csv` / `rift_equip_gen_steps.csv` / `player_jobs.csv` | 表头「未启用」 |
 | `GameDataTableTools.cs` | 种子生成保留「未启用」注释 |
 | `Managers/SceneManager.cs` | 删除（零引用；切景只走 `GameSceneManager`） |
+
+## Phase 2 实现对照
+
+| 文件 | 改动 |
+|------|------|
+| `AttrOwnerKind.cs` | 新枚举 Player/Merc/Monster |
+| `AttrSystem.cs` | 按 Owner 写职业表基底；派生不再问 Hero |
+| `PlayerJobBaseStats.cs` | `TryWriteCombatBases` 直接写基底 |
+| `UnitBase.cs` | Awake 绑定 OwnerKind |
+| `ChapterStatScaleTable.cs` + `chapter_stat_scale.csv/.bytes` | 章节倍率表（1:1 旧数组） |
+| `GameConfig.GetChapterStatScale` | 只读表 |
+| `wave_slot.csv/.bytes` | slot0–15 奇偶 Melee/Ranged |
+| `stage_spawn.csv/.bytes` | 注释明确 0=公式 |

@@ -404,19 +404,14 @@ public static class GameConfig
     /// <summary>旧线性章节系数（仅兼容/兜底；属性缩放请用 GetChapterStatScale）</summary>
     public const float CHAPTER_SCALE_PER = 0.15f;
     /// <summary>
-    /// 相对第 1 章的属性倍率（游戏章 1..8）：
-    /// 森林1.0 / 墓园1.3 / 雨林1.6 / 草原1.7 / 海岛1.4 / 洞穴2.0 / 熔岩2.4 / 冰川2.8
+    /// 章节属性倍率已迁到 chapter_stat_scale 表。此数组仅作缺表 Fallback，数字必须与表 1:1。
     /// </summary>
-    public static readonly float[] CHAPTER_STAT_SCALE =
-    {
-        1.0f, 1.3f, 1.6f, 1.7f, 1.4f, 2.0f, 2.4f, 2.8f
-    };
+    public static readonly float[] CHAPTER_STAT_SCALE = ChapterStatScaleTable.Fallback;
 
-    /// <summary>按游戏章取属性倍率（恒等章节序）。</summary>
+    /// <summary>按游戏章取属性倍率（读 chapter_stat_scale；缺表回退 Fallback）。</summary>
     public static float GetChapterStatScale(int gameChapter)
     {
-        int idx = Mathf.Clamp(gameChapter, 1, CHAPTER_STAT_SCALE.Length) - 1;
-        return CHAPTER_STAT_SCALE[idx];
+        return ChapterStatScaleTable.Get(gameChapter);
     }
     /// <summary>精英额外 TTK 血量倍率（叠在章节系数上）</summary>
     public const float ELITE_TTK_HP_MUL = 1.15f;

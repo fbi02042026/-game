@@ -18,13 +18,15 @@ public static class ContentPaths
         public const string ConfigFingerprint = "Data/Tables/config_fingerprint";
         public const string MonsterStats = "Data/Tables/monster_stats";
         public const string ChapterThemeMap = "Data/Tables/chapter_theme_map";
+        /// <summary>章节属性倍率（与旧 CHAPTER_STAT_SCALE 1:1）。</summary>
+        public const string ChapterStatScale = "Data/Tables/chapter_stat_scale";
         public const string MonsterUnlockTier = "Data/Tables/monster_unlock_tier";
         public const string StageSpawn = "Data/Tables/stage_spawn";
         public const string TutorialBattle = "Data/Tables/tutorial_battle";
         public const string BattleQuest = "Data/Tables/battle_quest";
         public const string StageRollerWeights = "Data/Tables/stage_roller_weights";
         public const string SpritePickWeight = "Data/Tables/sprite_pick_weight";
-        /// <summary>未启用占位。空表时 WaveSlotTable 回退奇偶逻辑。</summary>
+        /// <summary>波次槽：奇偶近战/远程（spriteIndex=0 走加权）。未匹配 slot 仍回退奇偶。</summary>
         public const string WaveSlot = "Data/Tables/wave_slot";
         public const string ChapterBranch = "Data/Tables/chapter_branch";
         public const string ChapterBranchRules = "Data/Tables/chapter_branch_rules";

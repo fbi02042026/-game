@@ -1,3 +1,19 @@
-# 未启用：无数据行。WaveSlotTable 空表时回退代码奇偶近战/远程，勿当正式波次表填半截。
-# 启用前须在 OPTIMIZATION_PLAN Phase 2 填行并验收第一章手感。
+# 已启用：slot 奇偶 = 近战/远程，对齐旧代码回退。spriteIndex=0 不锁精灵，走加权随机。
+# slot≥16 无行时仍走代码奇偶回退，结果相同。勿半填具体 spriteIndex（会改变手感）。
 gameChapter,stageIndex,stageType,waveIndex,slotIndex,spriteIndex,styleFilter,allowDuplicate,note
+*,*,*,*,0,0,Melee,false,even=melee
+*,*,*,*,1,0,Ranged,false,odd=ranged
+*,*,*,*,2,0,Melee,false,even=melee
+*,*,*,*,3,0,Ranged,false,odd=ranged
+*,*,*,*,4,0,Melee,false,even=melee
+*,*,*,*,5,0,Ranged,false,odd=ranged
+*,*,*,*,6,0,Melee,false,even=melee
+*,*,*,*,7,0,Ranged,false,odd=ranged
+*,*,*,*,8,0,Melee,false,even=melee
+*,*,*,*,9,0,Ranged,false,odd=ranged
+*,*,*,*,10,0,Melee,false,even=melee
+*,*,*,*,11,0,Ranged,false,odd=ranged
+*,*,*,*,12,0,Melee,false,even=melee
+*,*,*,*,13,0,Ranged,false,odd=ranged
+*,*,*,*,14,0,Melee,false,even=melee
+*,*,*,*,15,0,Ranged,false,odd=ranged

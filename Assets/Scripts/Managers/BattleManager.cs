@@ -941,6 +941,7 @@ public class BattleManager : Singleton<BattleManager>
         BattleQuestTable.Reload();
         SpritePickWeightTable.Reload();
         WaveSlotTable.Reload();
+        ChapterStatScaleTable.Reload();
 
         currentStage = stage;
         ClearAllMonsters();

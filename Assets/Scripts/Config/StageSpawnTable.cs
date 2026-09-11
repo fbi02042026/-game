@@ -68,9 +68,11 @@ public static class StageSpawnTable
                 eliteScaleMul = GameTableCsv.TryFloat(c[6], out float esm) ? esm : 1f,
                 useFormulaForTotal = !GameTableCsv.TryInt(c[3], out _) || mt <= 0
             };
+            if (row.useFormulaForTotal)
+                row.monsterTotal = 0;
             _rows.Add(row);
         }
-        Debug.Log($"[StageSpawn] 已加载 {_rows.Count} 条");
+        Debug.Log($"[StageSpawn] 已加载 {_rows.Count} 条（monsterTotal=0 表示 GameConfig 公式）");
     }
 
     static StageType ParseStageType(string s)

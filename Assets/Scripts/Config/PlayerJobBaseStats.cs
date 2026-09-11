@@ -92,26 +92,43 @@ public static class PlayerJobBaseStats
         hero.currentHp = hero.attr.GetAttr(AttrType.MaxHp);
     }
 
-    /// <summary>把职业表写入 AttrSystem（射程只读 AttackRangeTable，不用 CSV 攻击距离）。</summary>
+    /// <summary>把职业表写入当前属性（射程只读 AttackRangeTable）。</summary>
     public static void ApplyToAttr(AttrSystem attr, PlayerJobId job)
     {
-        if (attr == null) return;
-        EnsureLoaded();
-        if (!TryGet(job, out Row row)) return;
+        WriteCombat(attr, job, toBase: false);
+    }
 
-        attr.SetAttr(AttrType.MaxHp, row.BaseHp);
-        attr.SetAttr(AttrType.Attack, row.BaseAtk);
-        attr.SetAttr(AttrType.Defense, row.BaseDef);
-        // 表内移速以 100 为基准，映射到现有世界移速
+    /// <summary>职业表直接写入基底，避免先写 GameConfig.BASE_* 再覆盖。</summary>
+    public static bool TryWriteCombatBases(AttrSystem attr, PlayerJobId job)
+    {
+        return WriteCombat(attr, job, toBase: true);
+    }
+
+    static bool WriteCombat(AttrSystem attr, PlayerJobId job, bool toBase)
+    {
+        if (attr == null) return false;
+        EnsureLoaded();
+        if (!TryGet(job, out Row row)) return false;
+
+        void W(AttrType type, float value)
+        {
+            if (toBase) attr.SetBaseAndCurrent(type, value);
+            else attr.SetAttr(type, value);
+        }
+
+        W(AttrType.MaxHp, row.BaseHp);
+        W(AttrType.Attack, row.BaseAtk);
+        W(AttrType.Defense, row.BaseDef);
         float ms = GameConfig.BASE_MOVE_SPEED * (row.BaseMoveSpeed / 100f);
-        attr.SetAttr(AttrType.MoveSpeed, ms);
-        attr.SetAttr(AttrType.CritRate, row.CritRate);
-        if (row.CritDamage > 0f)
-            attr.SetAttr(AttrType.CritDamage, row.CritDamage);
+        W(AttrType.MoveSpeed, ms);
+        W(AttrType.CritRate, row.CritRate);
+        W(AttrType.CritDamage, row.CritDamage > 0f ? row.CritDamage : GameConfig.DefaultCritMultiplier);
         if (row.AttackInterval > 0.05f)
-            attr.SetAttr(AttrType.AttackSpeed, 1f / row.AttackInterval);
-        // 攻击距离：CSV 列已弃用；唯一来源 AttackRangeTable.job_*
-        attr.SetAttr(AttrType.AttackRange, AttackRangeTable.GetJobWorld(job));
+            W(AttrType.AttackSpeed, 1f / row.AttackInterval);
+        else if (toBase)
+            W(AttrType.AttackSpeed, GameConfig.BASE_ATTACK_SPEED);
+        W(AttrType.AttackRange, AttackRangeTable.GetJobWorld(job));
+        return true;
     }
 
     static float ParsePercent(string s)
