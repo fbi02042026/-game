@@ -103,6 +103,7 @@ public class AutoGameInitializer : MonoBehaviour
 
         // 查找或创建出生点/终点/怪物刷新点（先摆 Spawn，再定 unit 站立线）
         Transform worldRoot = EnsureWorldRoot();
+        EnsureCombatWorldDetached(worldRoot, cam);
         Transform spawnPoint = EnsureSpawnPoint(worldRoot);
         Transform endPoint = EnsureEndPoint(worldRoot);
         Transform[] monsterSpawnPoints = EnsureMonsterSpawnPoints(worldRoot);
@@ -201,6 +202,7 @@ public class AutoGameInitializer : MonoBehaviour
         FixAllScaleZero();
         Camera cam = EnsureCamera();
         Transform worldRoot = EnsureWorldRoot();
+        EnsureCombatWorldDetached(worldRoot, cam);
         Transform spawnPoint = EnsureSpawnPoint(worldRoot);
         Transform endPoint = EnsureEndPoint(worldRoot);
         Transform[] monsterSpawnPoints = EnsureMonsterSpawnPoints(worldRoot);
@@ -419,6 +421,43 @@ public class AutoGameInitializer : MonoBehaviour
     }
 
     /// <summary>
+    /// 战斗世界与镜头必须解耦：WorldRoot/unit 不得挂在 Camera 或 Canvas 下，
+    /// Camera 也不得挂在 WorldRoot/主角下。否则 CameraFollow 一跟主角，全场单位一起平移。
+    /// </summary>
+    static void EnsureCombatWorldDetached(Transform worldRoot, Camera cam)
+    {
+        if (cam != null && cam.transform.parent != null)
+        {
+            Debug.LogWarning($"[AutoInit] Camera 从 {cam.transform.parent.name} 脱到场景根（避免带动战斗单位）");
+            cam.transform.SetParent(null, true);
+        }
+
+        if (worldRoot == null) return;
+
+        if (worldRoot.parent != null)
+        {
+            Debug.LogWarning($"[AutoInit] WorldRoot 从 {worldRoot.parent.name} 脱到场景根");
+            worldRoot.SetParent(null, true);
+        }
+        worldRoot.localScale = Vector3.one;
+
+        // 误挂到相机下的 unit / Ground 一并拖回 WorldRoot
+        if (cam == null) return;
+        Transform camTf = cam.transform;
+        for (int i = camTf.childCount - 1; i >= 0; i--)
+        {
+            Transform child = camTf.GetChild(i);
+            if (child == null) continue;
+            string n = child.name;
+            if (n == "WorldRoot" || n == "unit" || n == "Unit" || n == "Ground")
+            {
+                child.SetParent(worldRoot, true);
+                Debug.LogWarning($"[AutoInit] {n} 已从 Camera 移回 WorldRoot");
+            }
+        }
+    }
+
+    /// <summary>
     /// WorldRoot 必须在场景根（真世界坐标），与特效/相机同一空间。
     /// 挂进 BattleUI Canvas 会导致人物与特效错位、视差飙车。
     /// </summary>
@@ -430,12 +469,12 @@ public class AutoGameInitializer : MonoBehaviour
             wr = new GameObject("WorldRoot");
             Debug.Log("[AutoInit] WorldRoot 已创建（场景根）");
         }
-        // 若误挂在 Canvas 下，脱回场景根并保持世界坐标
-        if (wr.GetComponentInParent<Canvas>() != null)
+        // 若误挂在 Canvas 或 Camera 下，脱回场景根并保持世界坐标
+        if (wr.GetComponentInParent<Canvas>() != null || wr.GetComponentInParent<Camera>() != null)
         {
             wr.transform.SetParent(null, true);
             wr.transform.localScale = Vector3.one;
-            Debug.LogWarning("[AutoInit] WorldRoot 已从 Canvas 移回场景根");
+            Debug.LogWarning("[AutoInit] WorldRoot 已从 Canvas/Camera 移回场景根");
         }
         else
         {
@@ -481,6 +520,13 @@ public class AutoGameInitializer : MonoBehaviour
             Transform parent = ground != null ? ground : worldRoot;
             u.SetParent(parent, true);
             Debug.Log("[AutoInit] unit 从 Canvas 迁到 " + parent.name + "（保持世界坐标，不改缩放）");
+        }
+        else if (u.GetComponentInParent<Camera>() != null && worldRoot != null)
+        {
+            Transform ground = worldRoot.Find("Ground");
+            Transform parent = ground != null ? ground : worldRoot;
+            u.SetParent(parent, true);
+            Debug.LogWarning("[AutoInit] unit 从 Camera 迁到 " + parent.name + "（保持世界坐标）");
         }
 
         Debug.Log($"[AutoInit] unit 就绪 path={GetPath(u)} pos={u.position} lossy={u.lossyScale} parentScale={(u.parent != null ? u.parent.lossyScale.ToString() : "null")}");
@@ -655,6 +701,9 @@ public class AutoGameInitializer : MonoBehaviour
         follow.LockYZFromCurrent();
         if (heroTransform != null)
             follow.SetTarget(heroTransform);
+        // 相机保持场景根，绝不把 WorldRoot 挂进来
+        if (cam.transform.parent != null)
+            cam.transform.SetParent(null, true);
 
         Debug.Log($"[AutoInit] CameraFollow 仅X跟随就绪 minX={follow.minX:F1} maxX={follow.maxX:F1} camY={cam.transform.position.y:F2}");
     }

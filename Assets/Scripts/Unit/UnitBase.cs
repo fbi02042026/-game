@@ -612,9 +612,13 @@ public abstract class UnitBase : MonoBehaviour
         return facingDir >= 0 ? 1 : -1;
     }
 
-    /// <summary>限制单位不超出屏幕可见范围</summary>
+    /// <summary>
+    /// 仅玩家跟镜头钳制屏幕。佣兵/怪物必须保留世界坐标：
+    /// 若按相机左右缘夹单位，镜头跟随主角时会把整队/全场一起拖走。
+    /// </summary>
     protected void ClampToScreen()
     {
+        if (!(this is Hero)) return;
         Camera cam = Camera.main;
         if (cam == null) return;
         float halfH = cam.orthographicSize;
@@ -807,7 +811,7 @@ public abstract class UnitBase : MonoBehaviour
 
         float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit);
 
-        bool openingHit = isAlly && GameConfig.IsOpeningStage();
+        bool openingHit = this is Hero && GameConfig.IsOpeningStage();
         if (openingHit)
             damage = GameConfig.RollOpeningAllyHitDamage(isCrit);
 
@@ -828,25 +832,10 @@ public abstract class UnitBase : MonoBehaviour
         // 普攻：近战即时/下落时结算；弓/法球（敌我）FirePoint→HitPoint 飞到再结算
         if (!isAlly && (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb) && BattleVFXSystem.Instance != null)
         {
-            float pendingDamage = damage;
-            bool pendingCrit = isCrit;
-            bool pendingOpening = openingHit;
-            Vector3 impactPos = hitPos;
-            UnitBase pendingTarget = target;
-            BattleVFXSystem.Instance.PlaySkillProjectile(
-                faction, firePos, hitPos, facingDir, hitTf, kit, null, 1.2f,
-                GameConfig.MONSTER_BASIC_PROJECTILE_SPEED_MUL,
-                () =>
-                {
-                    if (pendingTarget == null || pendingTarget.isDead) return;
-                    Vector3 cur = pendingTarget.GetHitPosition();
-                    float missDist = Vector2.Distance(
-                        new Vector2(impactPos.x, impactPos.y),
-                        new Vector2(cur.x, cur.y));
-                    if (missDist > GameConfig.PROJECTILE_IMPACT_MISS_DIST)
-                        return;
-                    ResolveBasicAttackHit(pendingTarget, pendingDamage, pendingCrit, pendingOpening);
-                });
+            StartCoroutine(CoRangedBasicProjectile(
+                target, damage, isCrit, openingHit, kit, faction, facingDir,
+                kit == AttackVfxKit.Bow ? GameConfig.BOW_FIRE_RELEASE_DELAY : 0f,
+                speedMul: GameConfig.MONSTER_BASIC_PROJECTILE_SPEED_MUL, scaleMul: 1.2f, dodgeOnMiss: true));
             return;
         }
 
@@ -867,7 +856,8 @@ public abstract class UnitBase : MonoBehaviour
         if (allyRanged)
         {
             FireAllyRangedBasicProjectile(
-                target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf);
+                target, damage, isCrit, openingHit, kit, faction, facingDir,
+                kit == AttackVfxKit.Bow ? GameConfig.BOW_FIRE_RELEASE_DELAY : 0f);
             return;
         }
 
@@ -878,20 +868,60 @@ public abstract class UnitBase : MonoBehaviour
             BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
     }
 
-    /// <summary>我方弓/法球普攻：点到点飞行，落地再结算（与敌方远程一致）。</summary>
+    /// <summary>我方弓/法球普攻：点到点飞行，落地再结算（与敌方远程一致）。弓箭额外等放箭延迟。</summary>
     void FireAllyRangedBasicProjectile(
         UnitBase target, float damage, bool isCrit, bool openingHit,
         AttackVfxKit kit, VfxFaction faction,
-        Vector3 firePos, Vector3 hitPos, int facingDir, Transform hitTf)
+        int facingDir, float releaseDelay = 0f)
     {
+        StartCoroutine(CoRangedBasicProjectile(
+            target, damage, isCrit, openingHit, kit, faction, facingDir, releaseDelay,
+            speedMul: 1f, scaleMul: 1f, dodgeOnMiss: false));
+    }
+
+    /// <summary>
+    /// 远程普攻：可选放箭延迟后再从当前 FirePoint 出弹。
+    /// 延迟期间重采样发射/受击点，对齐释放帧而不是举弓第一帧。
+    /// </summary>
+    IEnumerator CoRangedBasicProjectile(
+        UnitBase target, float damage, bool isCrit, bool openingHit,
+        AttackVfxKit kit, VfxFaction faction, int facingDir, float releaseDelay,
+        float speedMul = 1f, float scaleMul = 1.2f, bool dodgeOnMiss = true)
+    {
+        if (releaseDelay > 0.001f)
+            yield return new WaitForSeconds(releaseDelay);
+
+        if (this == null || isDead || target == null || target.isDead)
+            yield break;
+
+        Vector3 firePos = GetFirePosition();
+        Vector3 hitPos = target.GetHitPosition();
+        Transform hitTf = target.transform;
+        float pendingDamage = damage;
+        bool pendingCrit = isCrit;
+        bool pendingOpening = openingHit;
+        Vector3 impactPos = hitPos;
+        UnitBase pendingTarget = target;
+        bool checkMiss = dodgeOnMiss && !isAlly;
+
         if (BattleVFXSystem.Instance != null)
         {
-            float pendingDamage = damage;
-            bool pendingCrit = isCrit;
-            bool pendingOpening = openingHit;
             BattleVFXSystem.Instance.PlaySkillProjectile(
-                faction, firePos, hitPos, facingDir, hitTf, kit, null, 1f, 1f,
-                () => ResolveBasicAttackHit(target, pendingDamage, pendingCrit, pendingOpening));
+                faction, firePos, hitPos, facingDir, hitTf, kit, null, scaleMul, speedMul,
+                () =>
+                {
+                    if (pendingTarget == null || pendingTarget.isDead) return;
+                    if (checkMiss)
+                    {
+                        Vector3 cur = pendingTarget.GetHitPosition();
+                        float missDist = Vector2.Distance(
+                            new Vector2(impactPos.x, impactPos.y),
+                            new Vector2(cur.x, cur.y));
+                        if (missDist > GameConfig.PROJECTILE_IMPACT_MISS_DIST)
+                            return;
+                    }
+                    ResolveBasicAttackHit(pendingTarget, pendingDamage, pendingCrit, pendingOpening);
+                });
         }
         else
             ResolveBasicAttackHit(target, damage, isCrit, openingHit);
@@ -971,9 +1001,9 @@ public abstract class UnitBase : MonoBehaviour
             yield break;
         }
 
-        // 前摇结束后再发射；伤害仍等弹道飞到受击点
+        // 击杀前摇已等过；此处不再叠放箭延迟，立刻出弹
         FireAllyRangedBasicProjectile(
-            target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf);
+            target, damage, isCrit, openingHit, kit, faction, facingDir, 0f);
         CombatJuice.Instance?.RevealKillCamBars();
     }
 

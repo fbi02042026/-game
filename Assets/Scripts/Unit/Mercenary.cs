@@ -483,7 +483,7 @@ public class Mercenary : UnitBase
         float hpMul = 1f + (level - 1) * 0.1f;
         float atkAdd = (level - 1) * 2f;
         attr.SetAttr(AttrType.MaxHp, baseHp * hpMul);
-        attr.SetAttr(AttrType.Attack, baseAtk + atkAdd);
+        attr.SetAttr(AttrType.Attack, (baseAtk + atkAdd) * GameConfig.MERC_ATK_MUL_COMMON);
         attr.SetAttr(AttrType.Defense, baseDef);
         attr.SetAttr(AttrType.AttackSpeed, 1f / Mathf.Max(0.2f, atkInterval));
         attr.SetAttr(AttrType.MoveSpeed, GameConfig.BASE_MOVE_SPEED);
