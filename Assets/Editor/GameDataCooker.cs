@@ -59,7 +59,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookEquipSlotPools();
         CookEquipRarityRules();
         CookEquipAttrRanges();
-        CookRiftEquipGenSteps();
+        // rift_equip_gen_steps：未启用，运行时无读取，不再 Cook
         CookPlayerJobBaseStats();
         CookAttackRange();
         CookJobWeapons();
@@ -162,6 +162,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookTableFromSource(ContentPaths.Source.Tables + "/sprite_pick_weight.csv", null, "sprite_pick_weight");
     }
 
+    /// <summary>占位表（未启用）。空表时 WaveSlotTable 回退奇偶逻辑，行为与现在一致。</summary>
     static void CookWaveSlot()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/wave_slot.csv", null, "wave_slot");
@@ -192,6 +193,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookTableFromSource(ContentPaths.Source.Tables + "/equip_attr_ranges.csv", null, "equip_attr_ranges");
     }
 
+    /// <summary>未启用：无运行时读取。保留方法以免旧菜单引用，CookAll 不再调用。</summary>
     static void CookRiftEquipGenSteps()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/rift_equip_gen_steps.csv", null, "rift_equip_gen_steps");

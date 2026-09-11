@@ -2,7 +2,8 @@
 
 > **范围**：只读审查 `main` 现况（约 v0.3.5 后战斗手感/表驱动一轮）。不改玩法、不改预制体、不批量改名。  
 > **读者**：产品 + 程序。结论按「现在卡什么 / 扩内容会卡什么 / 先别动什么」排列。  
-> **证据日期**：2026-09-11，基于仓库当前 `main`。
+> **证据日期**：2026-09-11，基于仓库当前 `main`。  
+> **落地计划**：[`OPTIMIZATION_PLAN.md`](./OPTIMIZATION_PLAN.md)（Phase 1 已在同一 PR 止血；Phase 2–5 按计划另开）。
 
 ---
 
@@ -299,4 +300,4 @@ SkillRegistry     →   SaveData + 背包 grantSkill + PlayerSkillDefs + MercSki
 - **拦住** 新的 `IsTutorialRun`、新的 BM 技能 if、新的 `GameConfig` 战斗倍率、新的未映射装备词条；  
 - **大拆类留到** 真的要做第二种战斗编排的时候，再按第 7 节 A→G 做。
 
-本文件只评审、不改代码。
+本文件只评审。代码改动按 [`OPTIMIZATION_PLAN.md`](./OPTIMIZATION_PLAN.md) 分阶段进行。

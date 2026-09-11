@@ -329,6 +329,7 @@ public static class GameDataTableTools
         File.WriteAllText(TablesDir + "/sprite_pick_weight.csv", pick.ToString(), new UTF8Encoding(false));
 
         var slot = new StringBuilder();
+        slot.AppendLine("# 未启用：无数据行。WaveSlotTable 空表时回退代码奇偶近战/远程。");
         slot.AppendLine("gameChapter,stageIndex,stageType,waveIndex,slotIndex,spriteIndex,styleFilter,allowDuplicate,note");
         File.WriteAllText(TablesDir + "/wave_slot.csv", slot.ToString(), new UTF8Encoding(false));
 

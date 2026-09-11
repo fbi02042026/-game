@@ -28,6 +28,7 @@ public class BattleManager : Singleton<BattleManager>
     int _matsAtRunStart;
     public BattleRunStats RunStats { get; private set; } = new BattleRunStats();
     public bool isInBattle = false;
+    /// <summary>自动战斗未开放：UI 已隐藏，战斗逻辑不读取。勿在本阶段接线 AI。</summary>
     public bool isAutoBattle = false;
     public List<AttrBonusData> tempBuffs = new List<AttrBonusData>();
     /// <summary>开战过场结束后才允许单位行动</summary>
@@ -193,13 +194,6 @@ public class BattleManager : Singleton<BattleManager>
             }
         }
     }
-    public const float ENERGY_PER_KILL = 0f; // unused: energy from damage/MaxHp on hit only     // 保留常量；击杀不再涨蓝
-    public const float ENERGY_PER_SECOND = 0f; // unused: no time-based skill energy  // 保留常量；时间不再涨蓝
-    /// <summary>友方造成伤害时涨蓝（攻击）</summary>
-    public const float ENERGY_ON_ATTACK = 0f; // unused: no attack-based skill energy
-    /// <summary>友方受伤时涨蓝（受击）</summary>
-    public const float ENERGY_ON_HIT = 0f; // unused: use finalDamage/MaxHp instead
-
     protected override void Awake()
     {
         base.Awake();
@@ -237,6 +231,7 @@ public class BattleManager : Singleton<BattleManager>
         _chuanSongMen = null;
         UnitsCanAct = false;
         AllowMonsterMapEnter = false;
+        isAutoBattle = false;
         MonsterAttackStyleTable.Reload();
         playerSkillEnergy = 0f;
         mercSkillEnergy[0] = 0f;
@@ -2093,7 +2088,7 @@ public class BattleManager : Singleton<BattleManager>
         if (!_portalActive)
             ClampHeroInCamera();
 
-        // 技能能量：仅受击/攻击涨（见 AddCombatSkillEnergy），此处只刷新已满条 UI / 锁槽清零
+        // 技能能量：仅盟友受击按伤害/MaxHp 涨（AddCombatSkillEnergy），此处只刷新 UI / 锁槽清零
         if (hero != null && !hero.isDead)
         {
             if (BattleUI.Instance != null)
@@ -2780,6 +2775,7 @@ public class BattleManager : Singleton<BattleManager>
         if (hero == null || hero.isDead) return false;
 
         var skill = ResolvePlayerSkill();
+        if (skill == null) return false;
         UnitBase healTarget = null;
         bool isHeal = IsHealSkill(skill);
 
@@ -2953,15 +2949,9 @@ public class BattleManager : Singleton<BattleManager>
     {
         var fromReg = SkillRegistry.Instance?.GetActiveSkill(skillId);
         if (fromReg != null) return fromReg;
-        return new SkillSystem.ActiveSkill
-        {
-            skillId = skillId,
-            skillName = skillId,
-            damageMultiplier = 2.5f,
-            cooldown = 0.1f,
-            skillType = SkillSystem.SkillType.AOE,
-            aoeRadius = 5f
-        };
+        Debug.LogError("[BattleManager] 技能配置缺失，拒绝释放: "
+            + (string.IsNullOrEmpty(skillId) ? "(empty)" : skillId));
+        return null;
     }
 
     void ExecuteAllySkillFallback(UnitBase caster, SkillSystem.ActiveSkill skill, UnitBase forcedHealTarget = null)

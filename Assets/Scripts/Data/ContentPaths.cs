@@ -24,12 +24,14 @@ public static class ContentPaths
         public const string BattleQuest = "Data/Tables/battle_quest";
         public const string StageRollerWeights = "Data/Tables/stage_roller_weights";
         public const string SpritePickWeight = "Data/Tables/sprite_pick_weight";
+        /// <summary>未启用占位。空表时 WaveSlotTable 回退奇偶逻辑。</summary>
         public const string WaveSlot = "Data/Tables/wave_slot";
         public const string ChapterBranch = "Data/Tables/chapter_branch";
         public const string ChapterBranchRules = "Data/Tables/chapter_branch_rules";
         public const string EquipSlotPools = "Data/Tables/equip_slot_pools";
         public const string EquipRarityRules = "Data/Tables/equip_rarity_rules";
         public const string EquipAttrRanges = "Data/Tables/equip_attr_ranges";
+        /// <summary>未启用：无运行时读取，已移出 CookAll。</summary>
         public const string RiftEquipGenSteps = "Data/Tables/rift_equip_gen_steps";
         public const string PlayerJobBaseStats = "Data/Tables/player_job_base_stats";
         public const string AttackRange = "Data/Tables/attack_range";

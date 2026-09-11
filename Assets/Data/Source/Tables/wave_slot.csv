@@ -1,2 +1,3 @@
-# 无数据行时全走代码奇偶远程逻辑
+# 未启用：无数据行。WaveSlotTable 空表时回退代码奇偶近战/远程，勿当正式波次表填半截。
+# 启用前须在 OPTIMIZATION_PLAN Phase 2 填行并验收第一章手感。
 gameChapter,stageIndex,stageType,waveIndex,slotIndex,spriteIndex,styleFilter,allowDuplicate,note

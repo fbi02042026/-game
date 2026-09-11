@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>未启用：源表无数据行时 HasData=false，刷怪回退奇偶近战/远程。</summary>
 public static class WaveSlotTable
 {
     public struct SlotRule
