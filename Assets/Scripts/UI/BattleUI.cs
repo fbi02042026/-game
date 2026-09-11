@@ -81,10 +81,10 @@ public class BattleUI : MonoBehaviour
         if (GameSceneGate.IsBattle)
             AutoGameInitializer.Initialize();
 
-        // 战斗场景：Match Width 铺满竖屏，避免 HUD 被裁切
+        // 战斗场景：map 自适应铺满；与主相机共用，避免拆分相机黑屏
         if (GameSceneGate.IsBattle)
         {
-            BattleViewportFit.Apply(UICanvasSetup.ResolveUiCamera(), GetComponent<Canvas>() ?? GetComponentInParent<Canvas>());
+            BattleViewportFit.Apply(Camera.main, GetComponent<Canvas>() ?? GetComponentInParent<Canvas>());
             UiPrefabRectGuard.Attach(transform, "Background");
         }
         else

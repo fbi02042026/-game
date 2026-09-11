@@ -491,7 +491,7 @@ public class TutorialHintUI : MonoBehaviour
 
         if (!target.HasValue)
         {
-            _bannerRt.anchoredPosition = new Vector2(0f, root.rect.height * 0.22f);
+            _bannerRt.anchoredPosition = new Vector2(0f, root.rect.height * 0.32f);
             return;
         }
 

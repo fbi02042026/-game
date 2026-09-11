@@ -10,7 +10,12 @@ public static class WeaponLoadoutRules
         if (equip == null) return false;
         if (equip.weaponType == WeaponType.TwoHand) return true;
         if (equip.weaponType != WeaponType.None) return true;
-        return IsShield(equip);
+        if (IsShield(equip)) return true;
+        // 职业发装写了 Kind override，但模板漏标 weaponType=None 时仍算武器组
+        if (equip.weaponKindOverride >= 0
+            && equip.weaponKindOverride <= (int)WeaponCombatTable.WeaponKind.Shield)
+            return true;
+        return false;
     }
 
     public static bool IsShield(EquipInstance equip)

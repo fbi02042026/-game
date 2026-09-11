@@ -273,7 +273,7 @@ public static class AdventureCodex
     {
         if (!e.StoryNpc && MercRosterDefs.TryGetByHireId(e.Id, out var def))
             return def.Rarity;
-        // 剧情 NPC / 花名册缺失：用条目自带稀有度（小美=稀有等）
+        // 剧情 NPC / 花名册缺失：用条目自带稀有度（艾丽娅=稀有等）
         return e.Rarity;
     }
 
@@ -288,7 +288,7 @@ public static class AdventureCodex
             && !string.IsNullOrEmpty(def.AssetId)
             && AdventureLogCatalog.HasMerc(def.AssetId))
             return true;
-        // 剧情 NPC：用剧情遭遇条件（如小美教程开场），不走酒馆初始池解锁
+        // 剧情 NPC：用剧情遭遇条件（如艾丽娅教程开场），不走酒馆初始池解锁
         if (e.StoryNpc && AdventureLogCatalog.MercUnlocked(e))
             return true;
         return false;

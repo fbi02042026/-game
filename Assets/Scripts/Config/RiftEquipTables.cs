@@ -180,6 +180,38 @@ public static class RiftEquipTables
     }
 
     /// <summary>部位池用中文属性名 → 属性范围表 ID。</summary>
+    
+    /// <summary>按稀有度从 equip_attr_ranges 掷属性（正式表）。</summary>
+    public static float RollAttrFlat(string attrId, Rarity rarity, float mul = 1f)
+    {
+        EnsureLoaded();
+        if (!_ranges.TryGetValue(attrId, out var range))
+            return 0f;
+        float lo, hi;
+        switch (rarity)
+        {
+            case Rarity.Legendary:
+            case Rarity.Epic:
+                lo = range.LegendMin; hi = range.LegendMax; break;
+            case Rarity.Rare:
+            case Rarity.Uncommon:
+                lo = range.RareMin; hi = range.RareMax; break;
+            default:
+                lo = range.CommonMin; hi = range.CommonMax; break;
+        }
+        if (hi < lo) hi = lo;
+        return Random.Range(lo, hi) * mul;
+    }
+
+    /// <summary>普通档中位 * ratio，用于初始/锚点武器（如训练剑 0.7）。</summary>
+    public static float CommonMid(string attrId, float ratio = 1f)
+    {
+        EnsureLoaded();
+        if (!_ranges.TryGetValue(attrId, out var range))
+            return 0f;
+        return (range.CommonMin + range.CommonMax) * 0.5f * ratio;
+    }
+
     public static string MapCnAttrToId(string cn)
     {
         switch (cn)

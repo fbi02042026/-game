@@ -26,6 +26,9 @@ public class LoadingUI : MonoBehaviour
         canvas.enabled = true;
         UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.Loading);
 
+        if (backgroundImage != null)
+            UiLayoutStretch.ApplyBgStretch(backgroundImage.rectTransform, backgroundImage);
+
         if (transform.localScale.sqrMagnitude < 0.0001f)
             transform.localScale = Vector3.one;
 

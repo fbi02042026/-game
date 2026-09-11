@@ -613,6 +613,8 @@ public class BattleStageMapUI : MonoBehaviour
             var t = root.transform.Find("Backdrop");
             if (t != null) backdrop = t.GetComponent<Image>();
         }
+        if (backdrop != null && backdrop.sprite != null)
+            UiLayoutStretch.ApplyEnvelopeImage(backdrop.rectTransform, backdrop);
         if (titleText == null)
         {
             var t = FindDeep(root.transform, "Title");

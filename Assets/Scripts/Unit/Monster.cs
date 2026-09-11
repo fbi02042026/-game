@@ -700,12 +700,7 @@ public class Monster : UnitBase
         attr.SetAttr(AttrType.AttackRange, atkRange);
         attr.SetAttr(AttrType.CritRate, 0.05f);
 
-        if (GameConfig.IsOpeningStage() && !bossUnit)
-        {
-            attr.SetAttr(AttrType.MaxHp, attr.GetAttr(AttrType.MaxHp) * 1.25f);
-            attr.SetAttr(AttrType.Attack, attr.GetAttr(AttrType.Attack) * 0.7f);
-            attr.SetAttr(AttrType.AttackSpeed, attr.GetAttr(AttrType.AttackSpeed) * 0.7f);
-        }
+        // 引导关怪物也走正式数值，不再开局 +25% 血 / 减攻速。
 
         currentHp = attr.GetAttr(AttrType.MaxHp);
         if (currentHp <= 0f)

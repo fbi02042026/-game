@@ -170,6 +170,8 @@ public class AdventureUI : MonoBehaviour, ITownPage
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
         TavernUI.SetGuildHallOverlayMode(true);
+        TownPageDim.Ensure(transform);
+        SoftenMapBgOverHall();
 
         Transform hall = GuildHallUI.Instance != null
             ? GuildHallUI.Instance.transform
@@ -203,9 +205,8 @@ public class AdventureUI : MonoBehaviour, ITownPage
         var rt = GetComponent<RectTransform>() ?? gameObject.AddComponent<RectTransform>();
         Stretch(rt);
 
-        // ── 可选：半透明遮罩覆盖主大厅 ──
-        var overlay = CreateImg(transform, "Overlay", new Color(0, 0, 0, 0.45f));
-        Stretch(overlay.rectTransform);
+        // ── 半透明遮罩覆盖主大厅（统一 TownPageDim）──
+        TownPageDim.Ensure(transform);
 
         // ── 主体：左侧副本列表 + 右侧内容 ──
         // 内容区上下留出 TopBar 和 BottomNav 的空间
@@ -1157,12 +1158,55 @@ public class AdventureUI : MonoBehaviour, ITownPage
         if (nextChapterBtn != null)
             nextChapterBtn.interactable = _selectedChapter < 8;
 
-        // MapBg 是底框，不换图。章节地图在 StageNodes/Node_1..8，只显示当前章那一张。
+        // MapBg 是内容区底框，不整页盖死大厅。章节地图在 StageNodes/Node_1..8。
         Sprite overrideBg = GetChapterBackground(_selectedChapter);
         if (overrideBg != null && mapBg != null)
             mapBg.sprite = overrideBg;
+        SoftenMapBgOverHall();
 
         RefreshMapLayers();
+    }
+
+    /// <summary>大厅当底时：MapBg 不做全屏偏左 Envelope；仅内容区等比居中。</summary>
+    void SoftenMapBgOverHall()
+    {
+        if (mapBg == null) return;
+        var rt = mapBg.rectTransform;
+        if (rt == null) return;
+
+        // 若 MapBg 几乎铺满整页（盖住大厅），改为半透明以免「换底」
+        var page = transform as RectTransform;
+        if (page != null && page.rect.height > 1f)
+        {
+            float fill = rt.rect.height / Mathf.Max(1f, page.rect.height);
+            if (fill > 0.85f && rt.parent == transform)
+            {
+                var c = mapBg.color;
+                c.a = Mathf.Min(c.a, 0.35f);
+                mapBg.color = c;
+                return;
+            }
+        }
+
+        // 内容区：中心锚点 + Envelope，避免长屏偏左
+        var parent = rt.parent as RectTransform;
+        if (parent == null) return;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        float pw = Mathf.Max(1f, parent.rect.width);
+        float ph = Mathf.Max(1f, parent.rect.height);
+        rt.sizeDelta = new Vector2(pw, ph);
+        mapBg.preserveAspect = false;
+        var fitter = mapBg.GetComponent<AspectRatioFitter>();
+        if (fitter == null) fitter = mapBg.gameObject.AddComponent<AspectRatioFitter>();
+        fitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+        var sp = mapBg.sprite;
+        if (sp != null)
+            fitter.aspectRatio = sp.rect.width / Mathf.Max(1f, sp.rect.height);
+        else
+            fitter.aspectRatio = GameConfig.DESIGN_WIDTH / GameConfig.DESIGN_HEIGHT;
     }
 
     void RefreshMapLayers()

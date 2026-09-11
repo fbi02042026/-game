@@ -167,6 +167,10 @@ public class TalentUI : MonoBehaviour
         var canvas = UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
         if (canvas != null)
             UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownVeil, UICanvasSetup.ResolveUiCamera());
+        // 已有自带 Dim 则不再叠 TownPageDim，避免过黑
+        if (transform.Find("Dim") == null)
+            TownPageDim.Ensure(transform);
+        TavernUI.SetGuildHallOverlayMode(true);
         EnsureLists();
         RefreshAll();
     }
@@ -175,6 +179,7 @@ public class TalentUI : MonoBehaviour
     {
         CloseChoicePopup();
         gameObject.SetActive(false);
+        TavernUI.SetGuildHallOverlayMode(false);
         onClosed?.Invoke();
     }
 

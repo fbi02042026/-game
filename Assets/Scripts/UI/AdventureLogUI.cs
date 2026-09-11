@@ -92,6 +92,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (hall != null)
             TownSharedChrome.RaiseSharedChrome(hall.transform);
         SetLogChrome(true);
+        TownPageDim.Ensure(transform);
         MainBottomNav.InvalidateNavBgCache();
         MainBottomNav.Instance?.SetSelected(MainNavTab.Log, notify: false);
         EnsureFrameClearsChrome();

@@ -102,6 +102,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
         SetGuildOverlay(true);
+        TownPageDim.Ensure(transform);
 
         Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);

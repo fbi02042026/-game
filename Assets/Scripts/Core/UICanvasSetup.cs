@@ -40,6 +40,7 @@ public static class UICanvasSetup
             canvas.gameObject.AddComponent<GraphicRaycaster>();
 
         UiButtonPressFeedback.AttachUnder(canvas.transform);
+        DesignAspectLetterbox.ApplyFallbackIfNeeded(cam);
 
 #if UNITY_EDITOR
         if (cam == null)
@@ -129,6 +130,10 @@ public static class UICanvasSetup
     static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         RefreshDdolCanvases();
+        // 离开战斗后恢复世界相机全屏，避免大厅仍被裁成条带
+        if (!GameSceneGate.IsBattle)
+            BattleViewportFit.RestoreWorldCameraFull();
+        DesignAspectLetterbox.ApplyFallbackIfNeeded();
         // 大厅等自带 Canvas、未走 Apply 的页：补一遍按压反馈
         var canvases = Object.FindObjectsOfType<Canvas>(true);
         for (int i = 0; i < canvases.Length; i++)

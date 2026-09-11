@@ -767,6 +767,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
     {
         if (bm != null) bm.UnitsCanAct = true;
         BattleJoystick.EnsureOn(ui != null ? ui.transform : null);
+        BattleJoystick.Instance?.SetVisible(true);
         RectTransform stickRt = BattleJoystick.Instance != null
             ? BattleJoystick.Instance.StickHighlight
             : null;

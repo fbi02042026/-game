@@ -103,6 +103,7 @@ public class EquipInstance
         // 武器：按 Kind 词条池 + 稀有度词条数 + 前缀命名
         if (inst.slotType == EquipSlotType.MainHand || inst.slotType == EquipSlotType.OffHand)
         {
+            ApplyTableDrivenWeaponAttack(inst, template, starMultiplier, rarityMul);
             EquipRollCeiling.ClampInstanceBaseAttrs(inst);
             if (!template.isAnchor)
                 WeaponAffixSystem.ApplyWeaponRoll(inst);
@@ -130,6 +131,36 @@ public class EquipInstance
         else
             inst.equipName = EquipNameGen.DisplayName(template);
         return inst;
+    }
+
+
+    static void ApplyTableDrivenWeaponAttack(EquipInstance inst, EquipTemplate template, float starMultiplier, float rarityMul)
+    {
+        if (inst?.attrBonus == null || template == null) return;
+        // 仅训练剑用普通档 70%；其它按稀有度掷 equip_attr_ranges
+        bool isStarter = !string.IsNullOrEmpty(template.templateId)
+            && template.templateId.IndexOf("training", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        float tableAtk = isStarter
+            ? RiftEquipTables.CommonMid("ATK", 0.7f)
+            : RiftEquipTables.RollAttrFlat("ATK", inst.rarity, 1f);
+        if (tableAtk <= 0.01f) return;
+        if (inst.slotType == EquipSlotType.OffHand)
+            tableAtk *= EquipStatRollup.OffHandAttackCapRatio;
+        float finalAtk = tableAtk * starMultiplier * rarityMul;
+        bool wrote = false;
+        for (int i = 0; i < inst.attrBonus.Count; i++)
+        {
+            var b = inst.attrBonus[i];
+            if (b == null || b.attrType != AttrType.Attack || b.isPercent) continue;
+            b.value = finalAtk;
+            wrote = true;
+            break;
+        }
+        if (!wrote)
+        {
+            inst.attrBonus.Insert(0, new AttrBonusData { attrType = AttrType.Attack, value = finalAtk, isPercent = false });
+            inst.baseAttrCount = Mathf.Max(inst.baseAttrCount, 1);
+        }
     }
 
     static List<AttrBonusData> CopySkillPassives(List<AttrBonusData> src)

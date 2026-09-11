@@ -1,7 +1,7 @@
 using UnityEngine;
 
 /// <summary>
-/// 佣兵 AI：索敌距内锁定最近怪 → 打到死/出距；无目标则跟玩家站位或推图。
+/// 佣兵 AI：索敌交战，但拴在玩家附近——过远或偏远打太久会收队回玩家再战。
 /// </summary>
 public class Mercenary : UnitBase
 {
@@ -20,6 +20,10 @@ public class Mercenary : UnitBase
     private int _partyIndex = -1;
     /// <summary>索敌距内粘滞目标：进距先锁谁打谁，死/出距才换。</summary>
     UnitBase _acquireLock;
+    /// <summary>收队回玩家中：到再入距前不索敌。</summary>
+    bool _recallingToHero;
+    /// <summary>相对玩家偏远时持续交战计时。</summary>
+    float _awayFightTimer;
     /// <summary>引导：原地眩晕，不跑 AI，受击不死。</summary>
     public bool TutorialStunned { get; private set; }
     float _stunAnimTimer;
@@ -441,43 +445,37 @@ public class Mercenary : UnitBase
 
         bool advanced = GameConfig.GetMercTier(id) == MercTier.Advanced;
         float baseHp, baseAtk, baseDef, atkInterval;
-        float atkRange = GameConfig.RangeSword;
+        float atkRange = AttackRangeTable.GetMercWorld(id);
 
         if (id.StartsWith("dunbing"))
         {
             if (advanced) { baseHp = 550; baseAtk = 18; baseDef = 20; atkInterval = 1.1f; }
             else { baseHp = 300; baseAtk = 10; baseDef = 10; atkInterval = 1.2f; }
-            atkRange = GameConfig.RangeSword;
         }
         else if (id.StartsWith("gongshou"))
         {
             if (advanced) { baseHp = 280; baseAtk = 35; baseDef = 5; atkInterval = 0.85f; }
             else { baseHp = 150; baseAtk = 20; baseDef = 3; atkInterval = 0.9f; }
-            atkRange = GameConfig.RangeBow;
         }
         else if (id.StartsWith("kuangzhan"))
         {
             if (advanced) { baseHp = 280; baseAtk = 35; baseDef = 5; atkInterval = 0.85f; }
             else { baseHp = 150; baseAtk = 20; baseDef = 3; atkInterval = 0.9f; }
-            atkRange = GameConfig.RangeSword;
         }
         else if (id.StartsWith("naima") || id.StartsWith("fashi") || id.StartsWith("mushi"))
         {
             if (advanced) { baseHp = 320; baseAtk = 15; baseDef = 8; atkInterval = 1.3f; }
             else { baseHp = 180; baseAtk = 8; baseDef = 4; atkInterval = 1.5f; }
-            atkRange = GameConfig.RangeStaff;
         }
         else if (id.StartsWith("zhongzhan"))
         {
             if (advanced) { baseHp = 360; baseAtk = 22; baseDef = 10; atkInterval = 1f; }
             else { baseHp = 200; baseAtk = 12; baseDef = 5; atkInterval = 1.1f; }
-            atkRange = GameConfig.RangePolearm;
         }
         else
         {
             if (advanced) { baseHp = 360; baseAtk = 22; baseDef = 10; atkInterval = 1f; }
             else { baseHp = 200; baseAtk = 12; baseDef = 5; atkInterval = 1.1f; }
-            atkRange = GameConfig.RangePolearm;
         }
 
         float hpMul = 1f + (level - 1) * 0.1f;
@@ -633,6 +631,19 @@ public class Mercenary : UnitBase
             return;
         }
 
+        // 拴绳：离玩家太远 / 偏远交战过久 → 清目标回队
+        if (UpdateHeroLeash(Time.deltaTime))
+        {
+            bool recallingMove = false;
+            FollowHeroOrIdle(ref recallingMove);
+            if (unitAnim != null)
+                unitAnim.SetMove(recallingMove, facingDir);
+            if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
+                ClampToScreen();
+            ApplyLaneY(Time.deltaTime);
+            return;
+        }
+
         RefreshAcquireTarget();
 
         bool isMoving = false;
@@ -682,9 +693,80 @@ public class Mercenary : UnitBase
         ApplyLaneY(Time.deltaTime);
     }
 
-    /// <summary>只认索敌距离：进距最近者锁定，直至死亡或出距。</summary>
+    /// <summary>
+    /// 维护与玩家的拴绳。返回 true 表示本帧应只回队、不交战。
+    /// </summary>
+    bool UpdateHeroLeash(float dt)
+    {
+        var hero = Hero.Instance;
+        if (hero == null || hero.isDead)
+        {
+            _recallingToHero = false;
+            _awayFightTimer = 0f;
+            return false;
+        }
+
+        float distHero = Mathf.Abs(GetCombatX(this) - GetCombatX(hero));
+
+        if (_recallingToHero)
+        {
+            if (distHero <= GameConfig.MERC_REJOIN_RADIUS)
+            {
+                _recallingToHero = false;
+                _awayFightTimer = 0f;
+                return false;
+            }
+            ClearAcquireLock();
+            return true;
+        }
+
+        if (distHero > GameConfig.MERC_LEASH_RADIUS)
+        {
+            BeginRecallToHero();
+            return true;
+        }
+
+        // 偏远交战：打一会就回去找玩家
+        bool fightingAway = target != null && !target.isDead && distHero > GameConfig.MERC_SOFT_AWAY_RADIUS;
+        if (fightingAway)
+        {
+            _awayFightTimer += dt;
+            if (_awayFightTimer >= GameConfig.MERC_AWAY_FIGHT_SEC)
+            {
+                BeginRecallToHero();
+                return true;
+            }
+        }
+        else
+        {
+            _awayFightTimer = 0f;
+        }
+
+        return false;
+    }
+
+    void BeginRecallToHero()
+    {
+        _recallingToHero = true;
+        _awayFightTimer = 0f;
+        ClearAcquireLock();
+    }
+
+    void ClearAcquireLock()
+    {
+        _acquireLock = null;
+        target = null;
+    }
+
+    /// <summary>只认索敌距离：进距最近者锁定，直至死亡或出距。收队中不索敌。</summary>
     void RefreshAcquireTarget()
     {
+        if (_recallingToHero)
+        {
+            ClearAcquireLock();
+            return;
+        }
+
         float detect = GetDetectRange();
         float myX = GetCombatX(this);
         const float leaveSlack = 0.75f;
@@ -704,10 +786,7 @@ public class Mercenary : UnitBase
 
         target = _acquireLock;
         if (target != null && target.isAlly == isAlly)
-        {
-            target = null;
-            _acquireLock = null;
-        }
+            ClearAcquireLock();
     }
 
     /// <summary>无锁定目标：贴玩家编队站位；玩家在推图则跟着走。</summary>

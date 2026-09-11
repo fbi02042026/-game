@@ -135,6 +135,7 @@ public class PlayerJobSelectUI : MonoBehaviour
         transform.SetAsLastSibling();
         if (!_fromPrefab)
             GameFonts.ApplyToHierarchy(transform);
+        TownPageDim.Ensure(transform);
 
         if (tut)
             ShowTutorialPickSword();

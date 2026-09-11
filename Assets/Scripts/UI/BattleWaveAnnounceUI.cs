@@ -22,6 +22,13 @@ public class BattleWaveAnnounceUI : MonoBehaviour
     static Sprite _sprNext;
     static Sprite _sprBoss;
 
+    /// <summary>换图后清缓存，避免运行中仍用旧 Sprite。</summary>
+    public static void InvalidateSpriteCache()
+    {
+        _sprNext = null;
+        _sprBoss = null;
+    }
+
     public static float GetPlayDuration(Kind kind) => UiBannerPopAnim.WaveIncomingTotalDuration;
 
     CanvasGroup _group;
@@ -111,6 +118,8 @@ public class BattleWaveAnnounceUI : MonoBehaviour
         if (canvas != null)
             UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.FullscreenFx);
 
+        // 允许运行前替换 Resources 图后立刻生效
+        InvalidateSpriteCache();
         Sprite sp = LoadSprite(kind);
         if (sp == null || _image == null || _group == null)
         {

@@ -149,6 +149,8 @@ public class AutoGameInitializer : MonoBehaviour
         FixBattleUICanvas(cam);
         EnsureCharacterBarVisibleRuntime();
         EnsureParallaxOnMaproot();
+        // 视差挂好后再算一次 map 条带与世界相机裁切
+        BattleViewportFit.Apply(cam);
 
         // 加载Monster预制体到对象池并预热，减轻首波卡顿
         EnsureMonsterPrefab();
@@ -439,7 +441,10 @@ public class AutoGameInitializer : MonoBehaviour
             Debug.LogWarning($"[AutoInit] WorldRoot 从 {worldRoot.parent.name} 脱到场景根");
             worldRoot.SetParent(null, true);
         }
-        worldRoot.localScale = Vector3.one;
+        // Do NOT force localScale=1 after SetParent(..., worldPositionStays:true).
+        // Detach from Canvas/Camera encodes previous lossy scale into localScale;
+        // resetting to 1 flings unit/Ground world Y and characters fall under the floor.
+
 
         // 误挂到相机下的 unit / Ground 一并拖回 WorldRoot
         if (cam == null) return;

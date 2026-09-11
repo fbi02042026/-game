@@ -836,7 +836,7 @@ public class BattleManager : Singleton<BattleManager>
         float z = unitRoot != null ? unitRoot.position.z : engagePos.z;
         GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
         // 相对镜头左右交替进场（可覆盖）
-        bool fromLeft = fromLeftOverride ?? ((_offscreenEnterSideToggle++ & 1) == 0);
+        bool fromLeft = fromLeftOverride ?? false; // 默认右侧进场；仅显式 override 才从左
         const float offscreenMargin = 1.35f;
         float enterX = fromLeft ? visMin - offscreenMargin : visMax + offscreenMargin;
         // 交战点落在进场同侧，避免左侧怪跑到玩家右边再回头
@@ -2454,7 +2454,7 @@ public class BattleManager : Singleton<BattleManager>
 
             float lane = BattleLaneBounds.RandomLaneOffset();
             float spawnY = UnitBase.GROUND_Y + lane;
-            bool fromLeft = Random.value > 0.5f;
+            bool fromLeft = false; // 默认右侧进场（原 Random 50%）
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
             float preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.8f, 0.8f);
             float engageX = ResolveEngageXForEnterSide(heroCombatX, fromLeft, preferEngageX, visMin, visMax);
@@ -2506,7 +2506,7 @@ public class BattleManager : Singleton<BattleManager>
             float spawnY = UnitBase.GROUND_Y + lane;
             float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
-            bool fromLeft = Random.value > 0.5f;
+            bool fromLeft = false; // 默认右侧进场（原 Random 50%）
             float preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.8f, 0.8f);
             float engageX = ResolveEngageXForEnterSide(heroCombatX, fromLeft, preferEngageX, visMin, visMax);
             const float offMargin = 1.35f;

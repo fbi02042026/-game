@@ -243,7 +243,9 @@ public class SkillRegistry : Singleton<SkillRegistry>
                     go.transform.SetParent(attach, true);
                     go.transform.position = toPos;
                 }
-                if (facingDir < 0)
+                // Merc 手做特效禁止改 localScale X/Y；其它技能可按朝向翻 X
+                bool merc = ResolveSkillVfxFolder(skillId) == "Merc";
+                if (!merc && facingDir < 0)
                 {
                     var s = go.transform.localScale;
                     s.x = -Mathf.Abs(s.x);

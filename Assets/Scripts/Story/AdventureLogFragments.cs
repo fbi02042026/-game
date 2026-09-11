@@ -19,7 +19,7 @@ public static class AdventureLogFragments
 
     public static readonly Recipe[] Recipes =
     {
-        new Recipe { FragmentId = "frag_forest", Cost = 3, UnlockSideId = "S014", Label = "森林残页 → 隐藏支线「小美的信物」" },
+        new Recipe { FragmentId = "frag_forest", Cost = 3, UnlockSideId = "S014", Label = "森林残页 → 隐藏支线「艾丽娅的信物」" },
         new Recipe { FragmentId = "frag_guild", Cost = 5, UnlockWorldId = "W008", Label = "公会密函 → 世界「空洞之喉」" },
         new Recipe { FragmentId = "frag_rift", Cost = 4, UnlockSideId = "S016", Label = "裂隙碎片 → 支线「最初的裂隙」" },
     };

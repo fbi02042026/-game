@@ -93,7 +93,7 @@ public class OpeningIntroOverlay : MonoBehaviour
         _rawImage = videoGo.GetComponent<RawImage>();
         _rawImage.color = Color.white;
         _rawImage.raycastTarget = false;
-        Stretch(_rawImage.rectTransform);
+        UiLayoutStretch.ApplyEnvelopeRawImage(_rawImage.rectTransform, 9f / 16f);
         _aspectFitter = videoGo.GetComponent<AspectRatioFitter>();
         _aspectFitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
         _aspectFitter.aspectRatio = 9f / 16f;
@@ -222,8 +222,11 @@ public class OpeningIntroOverlay : MonoBehaviour
 
         if (w == 0 || h == 0) return;
 
+        float ar = (float)w / h;
         if (_aspectFitter != null)
-            _aspectFitter.aspectRatio = (float)w / h;
+            _aspectFitter.aspectRatio = ar;
+        if (_rawImage != null)
+            UiLayoutStretch.ApplyEnvelopeRawImage(_rawImage.rectTransform, ar);
         RecreateRenderTexture((int)w, (int)h);
     }
 

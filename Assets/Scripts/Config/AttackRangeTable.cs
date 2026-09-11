@@ -93,23 +93,47 @@ public static class AttackRangeTable
         return GameConfig.PixelsToUnits(GameConfig.RANGE_PX_SWORD);
     }
 
-    public static float GetWeaponWorld(WeaponCombatTable.WeaponKind kind)
+    /// <summary>
+    /// 武器射程（像素）。fallback 用字面量，避免与 GameConfig.RANGE_PX_* 互相递归。
+    /// </summary>
+    public static float GetWeaponPx(WeaponCombatTable.WeaponKind kind)
     {
         switch (kind)
         {
             case WeaponCombatTable.WeaponKind.Greatsword:
-                return GetWorld("weapon_greatsword", GameConfig.RANGE_PX_GREATSWORD);
+                return GetPx("weapon_greatsword", 144f);
             case WeaponCombatTable.WeaponKind.Polearm:
-                return GetWorld("weapon_polearm", GameConfig.RANGE_PX_POLEARM);
+                return GetPx("weapon_polearm", 180f);
             case WeaponCombatTable.WeaponKind.Staff:
-                return GetWorld("weapon_staff", GameConfig.RANGE_PX_STAFF);
+                return GetPx("weapon_staff", 120f);
             case WeaponCombatTable.WeaponKind.Bow:
-                return GetWorld("weapon_bow", GameConfig.RANGE_PX_BOW);
+                return GetPx("weapon_bow", 300f);
             case WeaponCombatTable.WeaponKind.Shield:
-                return GetWorld("weapon_shield", GameConfig.RANGE_PX_SHIELD);
+                return GetPx("weapon_shield", 64f);
             default:
-                return GetWorld("weapon_sword", GameConfig.RANGE_PX_SWORD);
+                return GetPx("weapon_sword", 96f);
         }
+    }
+
+    public static float GetWeaponWorld(WeaponCombatTable.WeaponKind kind)
+        => GameConfig.NormalizeAttackRange(GetWeaponPx(kind));
+
+    /// <summary>佣兵：按 AssetId 前缀对齐职业/武器档。</summary>
+    public static float GetMercWorld(string assetId)
+    {
+        if (string.IsNullOrEmpty(assetId))
+            return GetWeaponWorld(WeaponCombatTable.WeaponKind.Sword);
+        if (assetId.StartsWith("gongshou"))
+            return GetWeaponWorld(WeaponCombatTable.WeaponKind.Bow);
+        if (assetId.StartsWith("fashi"))
+            return GetJobWorld(PlayerJobId.Mage);
+        if (assetId.StartsWith("naima") || assetId.StartsWith("mushi"))
+            return GetJobWorld(PlayerJobId.Priest);
+        if (assetId.StartsWith("zhongzhan") || assetId.StartsWith("qita"))
+            return GetWeaponWorld(WeaponCombatTable.WeaponKind.Polearm);
+        if (assetId.StartsWith("kuangzhan"))
+            return GetWeaponWorld(WeaponCombatTable.WeaponKind.Greatsword);
+        return GetWeaponWorld(WeaponCombatTable.WeaponKind.Sword);
     }
 
     public static float GetMonsterWorld(MonsterAttackStyle style)

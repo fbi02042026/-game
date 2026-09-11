@@ -24,6 +24,7 @@ public static class TownPageCanvas
             var own = page.GetComponent<Canvas>();
             if (own != null) Object.Destroy(own);
             UICanvasSetup.ApplyOn(hall.gameObject, UICanvasSetup.ResolveUiCamera());
+            TownPageDim.Ensure(page.transform);
             return;
         }
 
@@ -34,5 +35,6 @@ public static class TownPageCanvas
         UICanvasSetup.ApplyPopup(canvas, sortingOrder, UICanvasSetup.ResolveUiCamera());
         if (page.GetComponent<GraphicRaycaster>() == null)
             page.AddComponent<GraphicRaycaster>();
+        TownPageDim.Ensure(page.transform);
     }
 }

@@ -105,8 +105,8 @@ public class GlobalToastUI : MonoBehaviour
         _root = new GameObject("Root", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));
         _root.transform.SetParent(transform, false);
         _rootRt = _root.GetComponent<RectTransform>();
-        _rootRt.anchorMin = new Vector2(0.5f, 0.42f);
-        _rootRt.anchorMax = new Vector2(0.5f, 0.42f);
+        _rootRt.anchorMin = new Vector2(0.5f, 0.55f);
+        _rootRt.anchorMax = new Vector2(0.5f, 0.55f);
         _rootRt.pivot = new Vector2(0.5f, 0.5f);
         _rootRt.sizeDelta = new Vector2(560f, 72f);
         _basePos = Vector2.zero;

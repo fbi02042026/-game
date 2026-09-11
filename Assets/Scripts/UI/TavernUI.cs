@@ -72,6 +72,8 @@ public class TavernUI : MonoBehaviour, ITownPage
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
         SetGuildHallOverlayMode(true);
+        TownPageDim.Ensure(transform);
+        SoftenOpaqueHallCover();
 
         Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
@@ -102,6 +104,30 @@ public class TavernUI : MonoBehaviour, ITownPage
     public void Show() => ShowPage();
     public void Hide() => HidePage();
 
+    /// <summary>预制体全屏不透明底会盖死大厅；改为透出 TownPageDim。</summary>
+    void SoftenOpaqueHallCover()
+    {
+        string[] names = { "TavernBackground", "Background", "Bg", "bg" };
+        for (int i = 0; i < names.Length; i++)
+        {
+            Transform t = transform.Find(names[i]) ?? FindDeep(transform, names[i]);
+            if (t == null) continue;
+            // 内容区场景节点保留（TavernScene / portrait）
+            if (t.name.IndexOf("Scene", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                continue;
+            var img = t.GetComponent<Image>();
+            if (img == null) continue;
+            var rt = img.rectTransform;
+            var page = transform as RectTransform;
+            bool fullBleed = page != null && page.rect.height > 1f
+                && rt.rect.height / page.rect.height > 0.8f;
+            if (!fullBleed && t.parent != transform) continue;
+            // 关掉不透明全屏底，大厅 + Dim 可见
+            img.enabled = false;
+            t.gameObject.SetActive(false);
+        }
+    }
+
     /// <summary>预制体/编辑器里 scale 可能被存成 0，导致「酒馆空白」</summary>
     void EnsureVisibleTransform()
     {
@@ -122,12 +148,11 @@ public class TavernUI : MonoBehaviour, ITownPage
         _canvasConfigured = true;
     }
 
-    static readonly string[] GuildHideWhenTavern =
-    {
-        // 只藏整栏；不要点名未完成按钮再 SetActive(true)，否则会冲掉 HideUnfinishedHallButtons
-        "LeftBar", "RightBar",
-        "TitleBadge"
-    };
+    /// <summary>
+    /// 功能页以大厅为底 + 半透罩，不再整栏藏大厅装饰（立绘/场景底要露出来）。
+    /// 仅关易误点热点；顶栏仍走 SetTopBarResourceOnly。
+    /// </summary>
+    static readonly string[] GuildHideWhenTavern = { };
 
     static Transform[] _guildHideCache;
     static Button[] _guildHotspotCache;

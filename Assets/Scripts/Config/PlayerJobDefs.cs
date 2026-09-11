@@ -235,6 +235,8 @@ public static class PlayerJobDefs
         /// <summary>无模板时强制的 SPUM 名（法师 Ward_1）。</summary>
         public string MainSpumOverride;
         public bool ForceMainOneHand;
+        /// <summary>游侠弓等双手武器。</summary>
+        public bool ForceMainTwoHand;
         public bool ForceOffHand;
     }
 
@@ -259,7 +261,11 @@ public static class PlayerJobDefs
                     ForceOffHand = true
                 };
             case PlayerJobId.Ranger:
-                return new JobWeaponKit { MainTemplateId = "equip_new_weapon_12" };
+                return new JobWeaponKit
+                {
+                    MainTemplateId = "equip_new_weapon_12",
+                    ForceMainTwoHand = true
+                };
             case PlayerJobId.Mage:
                 return new JobWeaponKit
                 {
@@ -268,7 +274,11 @@ public static class PlayerJobDefs
                     ForceMainOneHand = true
                 };
             case PlayerJobId.Priest:
-                return new JobWeaponKit { MainTemplateId = "equip_new_weapon_03" };
+                return new JobWeaponKit
+                {
+                    MainTemplateId = "equip_new_weapon_03",
+                    ForceMainOneHand = true
+                };
             case PlayerJobId.Heavy:
                 return new JobWeaponKit { MainTemplateId = "equip_axenormal1" };
             default:
@@ -307,7 +317,7 @@ public static class PlayerJobDefs
         {
             var mainTpl = ResolveKitTemplate(kit.MainTemplateId, kit.MainSpumOverride);
             if (mainTpl != null)
-                granted |= GrantAndEquipWeapon(bag, mainTpl, kit.ForceMainOneHand, forceOffHand: false, kit.MainSpumOverride, forceKind: jobKind);
+                granted |= GrantAndEquipWeapon(bag, mainTpl, kit.ForceMainOneHand, kit.ForceMainTwoHand, forceOffHand: false, kit.MainSpumOverride, forceKind: jobKind);
             else
                 Debug.LogWarning($"[PlayerJobDefs] 主手模板缺失: id={kit.MainTemplateId} spum={kit.MainSpumOverride}");
         }
@@ -316,7 +326,7 @@ public static class PlayerJobDefs
         {
             var offTpl = ResolveKitTemplate(kit.OffTemplateId, null);
             if (offTpl != null)
-                granted |= GrantAndEquipWeapon(bag, offTpl, forceOneHand: true, forceOffHand: kit.ForceOffHand || IsShieldTemplate(offTpl), spumOverride: null);
+                granted |= GrantAndEquipWeapon(bag, offTpl, forceOneHand: true, forceTwoHand: false, forceOffHand: kit.ForceOffHand || IsShieldTemplate(offTpl), spumOverride: null);
             else
                 Debug.LogWarning($"[PlayerJobDefs] 副手模板缺失: id={kit.OffTemplateId}");
         }
@@ -378,6 +388,7 @@ public static class PlayerJobDefs
         GridBackpackSystem bag,
         EquipTemplate tpl,
         bool forceOneHand,
+        bool forceTwoHand,
         bool forceOffHand,
         string spumOverride,
         WeaponCombatTable.WeaponKind? forceKind = null)
@@ -391,10 +402,14 @@ public static class PlayerJobDefs
             return false;
         }
 
-        if (forceOneHand && inst.weaponType == WeaponType.TwoHand)
+        if (forceTwoHand)
+            inst.weaponType = WeaponType.TwoHand;
+        else if (forceOneHand && inst.weaponType == WeaponType.TwoHand)
             inst.weaponType = WeaponType.OneHand;
         // 资源里部分武器 weaponType 未标；非盾则按单手武器处理，保证入包即生效
-        if (inst.weaponType == WeaponType.None && !IsShieldTemplate(tpl) && !WeaponLoadoutRules.IsShield(inst))
+        if (!forceTwoHand && inst.weaponType == WeaponType.None && !IsShieldTemplate(tpl) && !WeaponLoadoutRules.IsShield(inst))
+            inst.weaponType = WeaponType.OneHand;
+        if (forceOneHand && !forceTwoHand && inst.weaponType != WeaponType.TwoHand)
             inst.weaponType = WeaponType.OneHand;
 
         if (forceOffHand)
@@ -413,7 +428,11 @@ public static class PlayerJobDefs
 
         // 职业起步武器：模板显示名/射程常标错（如游侠弓叫「短刃」），写死逻辑类型到实例
         if (forceKind.HasValue)
+        {
             inst.weaponKindOverride = (int)forceKind.Value;
+            if (forceKind.Value == WeaponCombatTable.WeaponKind.Staff)
+                inst.weaponAttackType = WeaponAttackType.Magic;
+        }
 
         // 格子过高塞不进默认行：压矮到可放入
         int unlocked = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);

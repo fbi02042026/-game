@@ -19,7 +19,7 @@ public static class BattleQuestConfig
         "击败 Boss 海妖蟹",
         "击败 Boss 时之风车精灵",
         "击败 Boss 晶石巨像",
-        "击败 Boss 裂隙化身 · 小美",
+        "击败 Boss 裂隙化身 · 艾丽娅",
         "击败 Boss 裂隙意志"
     };
 

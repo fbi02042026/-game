@@ -194,6 +194,13 @@ public static class GameConfig
     public const float CAMERA_ORTHO_SIZE = 5.4f;
 
     [Header("佣兵解锁")]
+
+    // 佣兵跟队/脱队（本地 WIP + Mercenary.cs 使用）
+    public const float MERC_LEASH_RADIUS = 4.2f;
+    public const float MERC_REJOIN_RADIUS = 2.5f;
+    public const float MERC_SOFT_AWAY_RADIUS = 2.8f;
+    public const float MERC_AWAY_FIGHT_SEC = 2.8f;
+
     public const int ADVANCED_MERC_GUILD_LEVEL = 5; // 优秀=公会5；稀有10/传奇20 另见 MercQuality
 
     [Header("战斗排序")]
@@ -698,6 +705,7 @@ public static class GameConfig
     }
 
     /// <summary>开局我方普攻最终伤害（2~5，暴击略高）；拿剑爽点后一刀一个。</summary>
+    [System.Obsolete("引导关已改正式 ATK，勿再调用")]
     public static int RollOpeningAllyHitDamage(bool isCrit)
     {
         if (BattleManager.Instance != null && BattleManager.Instance.TutorialPowerFantasy)

@@ -214,7 +214,15 @@ public class ConfigManager : Singleton<ConfigManager>
         for (int i = 0; i < _allEquipTemplates.Count; i++)
         {
             var t = _allEquipTemplates[i];
-            if (t == null || t.weaponType == WeaponType.None) continue;
+            if (t == null) continue;
+            // 部分杖/弓壳 weaponType 未标仍是武器（如 equip_new_weapon_03）
+            if (t.weaponType == WeaponType.None)
+            {
+                string spum = (t.spumName ?? t.iconFileName ?? "").ToLowerInvariant();
+                if (spum.Contains("shield") || spum.Contains("盾")) continue;
+                if (string.IsNullOrEmpty(t.spumName) && string.IsNullOrEmpty(t.iconFileName))
+                    continue;
+            }
             if (WeaponCombatTable.ResolveKind(t) == kind)
             {
                 best = t;

@@ -148,8 +148,6 @@ public class StageClearRewardDirector : MonoBehaviour
     }
 
     /// <summary>宝箱在 map 之上、与角色同层，避免被背景挡住。</summary>
-    const int BoxSortOrder = GameConfig.SORT_UNIT;
-
     void EnsureBoxPhysicsDisabled()
     {
         if (_boxRoot == null) return;
@@ -167,15 +165,18 @@ public class StageClearRewardDirector : MonoBehaviour
 
     void ApplyBoxSorting()
     {
+        if (_boxRoot == null) return;
+        // 与单位同一套：SortingGroup + Y 深度，避免预制体高 sortingOrder 盖住全体怪物
+        GameConfig.ApplyUnitSorting(_boxRoot);
         if (_closeSr != null)
         {
             _closeSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _closeSr.sortingOrder = BoxSortOrder;
+            _closeSr.sortingOrder = 0;
         }
         if (_openSr != null)
         {
             _openSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _openSr.sortingOrder = BoxSortOrder;
+            _openSr.sortingOrder = 1;
         }
     }
 
@@ -336,8 +337,7 @@ public class StageClearRewardDirector : MonoBehaviour
         p.x = worldX;
         p.z = worldZ;
         _boxRoot.position = p;
-        SnapBoxRootToGround();
-        ForceBoxRenderersVisible();
+        ApplyBoxSorting();
     }
 
     void ForceBoxRenderersVisible()
@@ -351,9 +351,11 @@ public class StageClearRewardDirector : MonoBehaviour
             srs[i].gameObject.SetActive(true);
             srs[i].enabled = true;
             srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            if (srs[i].sortingOrder < BoxSortOrder)
-                srs[i].sortingOrder = BoxSortOrder;
+            if (srs[i] != _closeSr && srs[i] != _openSr &&
+                (_effectRoot == null || !srs[i].transform.IsChildOf(_effectRoot)))
+                srs[i].sortingOrder = 0;
         }
+        ApplyBoxSorting();
         if (_closeSr != null)
         {
             _closeSr.enabled = true;
@@ -406,16 +408,7 @@ public class StageClearRewardDirector : MonoBehaviour
             srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
             srs[i].sortingOrder = GameConfig.SORT_VFX;
         }
-        if (_closeSr != null)
-        {
-            _closeSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _closeSr.sortingOrder = BoxSortOrder;
-        }
-        if (_openSr != null)
-        {
-            _openSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _openSr.sortingOrder = BoxSortOrder;
-        }
+        ApplyBoxSorting();
     }
 
     static Sprite LoadBoxSprite(string fileNameNoExt)

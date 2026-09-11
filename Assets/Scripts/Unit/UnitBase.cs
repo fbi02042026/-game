@@ -817,9 +817,8 @@ public abstract class UnitBase : MonoBehaviour
 
         float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit);
 
-        bool openingHit = this is Hero && GameConfig.IsOpeningStage();
-        if (openingHit)
-            damage = GameConfig.RollOpeningAllyHitDamage(isCrit);
+        // 引导关/开局也走正式 ATK，不再使用 2~5 点假伤害压制。
+        bool openingHit = false;
 
         AttackVfxKit kit = GetAttackVfxKit();
         bool allyMelee = isAlly && kit == AttackVfxKit.MeleeSlash;
@@ -1067,8 +1066,7 @@ public abstract class UnitBase : MonoBehaviour
         AttackVfxKit kit = GetAttackVfxKit();
         if (!isAlly && SkillNaming.IsRangedKit(kit))
             atkSpd *= GameConfig.PROJECTILE_ATK_SPEED_MUL;
-        if (isAlly && GameConfig.IsOpeningStage())
-            atkSpd *= 0.55f;
+        // 开局不再给己方攻速 0.55 惩罚，与正式战斗一致。
         if (isAlly && BattleManager.Instance != null)
             atkSpd *= BattleManager.Instance.KillComboSpeedMul;
         if (this is Hero && PlayerPassiveCombat.Instance != null)

@@ -288,7 +288,7 @@ public static class AdventureLogCatalog
 
     public static readonly MercEntry[] Mercs =
     {
-        Npc("C001", "小美", "npc_xiaomei", "青梅竹马 / 失踪小队队长",
+        Npc("C001", "艾丽娅", "npc_xiaomei", "青梅竹马 / 失踪小队队长",
             "绿色衣服、棕色双马尾的少女，法系冒险者，既能用法术输出也能为队友恢复生命。",
             "她离开前借了你三枚铜板买面包，至今没还。公会没把这个写进失踪报告。",
             MercRosterDefs.MercRarity.Rare),
@@ -296,7 +296,7 @@ public static class AdventureLogCatalog
             "金发、红缨头盔、持剑盾的年轻骑士，把荣耀挂在嘴边。",
             "他的盔甲擦得比公会的地板还亮。老盾怀疑他晚上穿着盔甲睡觉。"),
         Npc("C003", "格雷", "", "老猎人",
-            "头发花白、披着旧斗篷的老练猎人，小美小队成员。",
+            "头发花白、披着旧斗篷的老练猎人，艾丽娅小队成员。",
             "据说他闻一口空气就能判断附近有没有精英怪。也能判断食堂今天有没有肉。"),
         Npc("C004", "独眼", "npc_duyan", "酒馆情报商",
             "戴眼罩的中年男子，常在酒馆角落低声交换情报。",
@@ -470,7 +470,7 @@ public static class AdventureLogCatalog
         new StoryEntry
         {
             Id = "C1Z", Title = "第一章·尾声 归来的见习者", Unlock = "通关第一章普通难度",
-            Summary = "回到公会提交委托，会长态度微妙。咨询台小姐偷偷塞给玩家一张写有小美名字的纸条。",
+            Summary = "回到公会提交委托，会长态度微妙。咨询台小姐偷偷塞给玩家一张写有艾丽娅名字的纸条。",
             Extra = "做得好。但记住，见习者不该问太多问题。"
         },
     };
@@ -557,9 +557,9 @@ public static class AdventureLogCatalog
         },
         new StoryEntry
         {
-            Id = "S014", Title = "小美的信物", Unlock = "完成 S004 与 S009 后解锁",
-            Summary = "咨询台小姐终于承认：小美小队不是失踪，是会长派他们去裂隙更深处执行任务。",
-            Extra = "奖励：小美羁绊线索 ×1，金币 ×500"
+            Id = "S014", Title = "艾丽娅的信物", Unlock = "完成 S004 与 S009 后解锁",
+            Summary = "咨询台小姐终于承认：艾丽娅小队不是失踪，是会长派他们去裂隙更深处执行任务。",
+            Extra = "奖励：艾丽娅羁绊线索 ×1，金币 ×500"
         },
         new StoryEntry
         {

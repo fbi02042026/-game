@@ -347,8 +347,12 @@ public class UnitAnimation : MonoBehaviour
             {
                 if (_monsterClipMode)
                     RestoreMonsterLocomotionClip();
-                else if (_isMoving && !_isDead)
-                    ForceResumeMoveAnim();
+                else if (!_isDead)
+                {
+                    ResetAttackPoseResiduals();
+                    if (_isMoving) ForceResumeMoveAnim();
+                    else ForceResumeIdleAnim();
+                }
             }
         }
 
@@ -515,14 +519,27 @@ public class UnitAnimation : MonoBehaviour
         }
     }
 
-    /// <summary>攻击锁结束后若仍在移动，强制回到 MOVE（否则 SPUM 停在 ATTACK/IDLE）。</summary>
+    /// <summary>清掉攻击残留倾斜/拉伸，避免弓/法定格歪身。</summary>
+    void ResetAttackPoseResiduals()
+    {
+        if (_procMode && _sr != null)
+        {
+            _sr.transform.localRotation = Quaternion.identity;
+            if (_procBaseScale.sqrMagnitude > 1e-8f)
+                _sr.transform.localScale = _procBaseScale;
+            if (_sr.transform.localPosition != _procBasePos)
+                _sr.transform.localPosition = _procBasePos;
+        }
+    }
+
+    /// <summary>攻击锁结束后若仍在移动，强制回到 MOVE（否则 SPUM 停在 ATTACK 末帧）。</summary>
     void ForceResumeMoveAnim()
     {
         if (_isDead || !_isMoving) return;
+        ResetAttackPoseResiduals();
         if (_spum != null && _spum.OverrideController != null)
         {
-            try { _spum.PlayAnimation(PlayerState.MOVE, 0); }
-            catch { }
+            ForcePlaySpum(PlayerState.MOVE, 0);
             ApplyMoveAnimSpeed(true);
             return;
         }
@@ -531,6 +548,52 @@ public class UnitAnimation : MonoBehaviour
             _animator.SetBool("1_Move", true);
             _animator.SetBool("IsMoving", true);
             ApplyMoveAnimSpeed(true);
+        }
+    }
+
+    /// <summary>攻击锁结束后站桩：强制回 IDLE，避免弓/法攻击末帧定格歪身。</summary>
+    void ForceResumeIdleAnim()
+    {
+        if (_isDead || _isMoving) return;
+        ResetAttackPoseResiduals();
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            ForcePlaySpum(PlayerState.IDLE, 0);
+            ApplyMoveAnimSpeed(false);
+            return;
+        }
+        if (_animator != null && !_monsterClipMode)
+        {
+            _animator.SetBool("1_Move", false);
+            _animator.SetBool("IsMoving", false);
+            ApplyMoveAnimSpeed(false);
+        }
+    }
+
+    void ForcePlaySpum(PlayerState state, int index)
+    {
+        if (_spum == null) return;
+        try
+        {
+            // 先切一次其它态再切目标，迫使 SPUM 离开 ATTACK 末帧
+            if (state == PlayerState.IDLE)
+                _spum.PlayAnimation(PlayerState.MOVE, 0);
+            else
+                _spum.PlayAnimation(PlayerState.IDLE, 0);
+            _spum.PlayAnimation(state, index);
+        }
+        catch { }
+        if (_animator != null)
+        {
+            try
+            {
+                string stateName = state == PlayerState.MOVE ? "MOVE" : "IDLE";
+                if (!_animator.HasState(0, Animator.StringToHash(stateName)))
+                    stateName = state == PlayerState.MOVE ? "1_Move" : "0_Idle";
+                if (_animator.HasState(0, Animator.StringToHash(stateName)))
+                    _animator.Play(stateName, 0, 0f);
+            }
+            catch { }
         }
     }
 
@@ -710,12 +773,19 @@ public class UnitAnimation : MonoBehaviour
         if (_spum != null && _spum.OverrideController != null)
         {
             ResyncWeaponBeforeSpumAttack();
+            int atkIdx = ResolveSpumAttackIndex(kit);
             try
             {
-                _spum.PlayAnimation(PlayerState.ATTACK, ResolveSpumAttackIndex(kit));
+                _spum.PlayAnimation(PlayerState.ATTACK, atkIdx);
             }
             catch { }
             ResyncWeaponBeforeSpumAttack();
+            // 弓/法 clip 常长于默认 0.5s；锁对齐片段，避免末帧定格歪身
+            float clipLen = GetSpumAttackClipLength(atkIdx, _baseAttackDuration);
+            if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
+                clipLen = Mathf.Max(clipLen, _baseAttackDuration * 1.35f);
+            _attackAnimDuration = clipLen;
+            _attackAnimLock = clipLen;
         }
         // 原生Animator模式
         else if (_animator != null)
@@ -734,6 +804,15 @@ public class UnitAnimation : MonoBehaviour
             }
         }
         // 程序化模式：Update自动处理攻击拉伸
+    }
+
+    float GetSpumAttackClipLength(int attackIndex, float fallback)
+    {
+        var list = _spum != null ? _spum.ATTACK_List : null;
+        if (list == null || attackIndex < 0 || attackIndex >= list.Count || list[attackIndex] == null)
+            return Mathf.Max(0.2f, fallback);
+        float len = list[attackIndex].length;
+        return len > 0.05f ? len : Mathf.Max(0.2f, fallback);
     }
 
     [Header("技能动作（怪物放技能时的夸张程度）")]
