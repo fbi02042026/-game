@@ -407,6 +407,7 @@ public class Monster : UnitBase
         {
             var enemy = allies[i];
             if (enemy == null || enemy.isDead) continue;
+            if (!GameConfig.IsInCombatViewport(enemy)) continue;
             float dist = Mathf.Abs(myX - GetCombatX(enemy));
             if (dist < minDist)
             {
@@ -1404,29 +1405,45 @@ public class Monster : UnitBase
 
     void ExecuteActiveSkillNow(UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit)
     {
-        Vector3 firePos = GetFirePosition();
-        Vector3 hitPos = primaryTarget != null ? primaryTarget.GetHitPosition() : firePos;
+        Vector3 hitPos = primaryTarget != null ? primaryTarget.GetHitPosition() : GetFirePosition();
 
         if (unitAnim != null)
             unitAnim.PlaySkillCast(kit, (_isBossUnit || _eliteWave) ? 1.15f : 1f);
 
         if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
         {
-            GameObject impact = SkillRegistry.Instance?.GetSkillVfxPrefab(_skillId);
-            Transform targetTf = primaryTarget != null ? primaryTarget.transform : null;
-            float impactX = hitPos.x;
-            BattleVFXSystem.Instance?.PlaySkillProjectile(
-                VfxFaction.Enemy, firePos, hitPos, GetVfxFacingDir(), targetTf, kit,
-                impact, SkillProjectileScale, SkillProjectileSpeedMul,
-                () => ApplySkillDamage(damage, radius, primaryTarget, impactX));
-
-            if (BattleVFXSystem.Instance == null)
-                ApplySkillDamage(damage, radius, primaryTarget, impactX);
+            StartCoroutine(CoRangedSkillProjectile(primaryTarget, damage, radius, kit));
             return;
         }
 
         SkillRegistry.Instance?.PlaySkillVfx(_skillId, hitPos, false, GetVfxFacingDir(), transform);
         ApplySkillDamage(damage, radius, primaryTarget, hitPos.x);
+    }
+
+    IEnumerator CoRangedSkillProjectile(
+        UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit)
+    {
+        float delay = GameConfig.RANGED_FIRE_RELEASE_DELAY;
+        if (delay > 0.001f)
+            yield return new WaitForSeconds(delay);
+        if (this == null || isDead)
+            yield break;
+
+        Vector3 firePos = GetFirePosition();
+        Vector3 hitPos = primaryTarget != null && !primaryTarget.isDead
+            ? primaryTarget.GetHitPosition() : firePos;
+        GameObject impact = SkillRegistry.Instance?.GetSkillVfxPrefab(_skillId);
+        Transform targetTf = primaryTarget != null ? primaryTarget.transform : null;
+        float impactX = hitPos.x;
+        if (BattleVFXSystem.Instance != null)
+        {
+            BattleVFXSystem.Instance.PlaySkillProjectile(
+                VfxFaction.Enemy, firePos, hitPos, GetVfxFacingDir(), targetTf, kit,
+                impact, SkillProjectileScale, SkillProjectileSpeedMul,
+                () => ApplySkillDamage(damage, radius, primaryTarget, impactX));
+        }
+        else
+            ApplySkillDamage(damage, radius, primaryTarget, impactX);
     }
 
     const float SkillProjectileScale = 1.6f;

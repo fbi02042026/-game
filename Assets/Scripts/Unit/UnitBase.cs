@@ -655,6 +655,7 @@ public abstract class UnitBase : MonoBehaviour
             if (enemy == null || enemy.isDead) continue;
             if (isAlly && enemy.isAlly) continue;
             if (!isAlly && !enemy.isAlly) continue;
+            if (!GameConfig.IsInCombatViewport(enemy)) continue;
             float dist = Mathf.Abs(myX - GetCombatX(enemy));
             if (dist <= minDist)
             {
@@ -663,8 +664,9 @@ public abstract class UnitBase : MonoBehaviour
             }
         }
 
-        // 目标粘滞：新目标需明显更近才切换，避免贴身时左右抖
-        if (target != null && !target.isDead && nearest != null && nearest != target)
+        // 目标粘滞：新目标需明显更近才切换，避免贴身时左右抖；屏外目标不粘
+        if (target != null && !target.isDead && nearest != null && nearest != target
+            && GameConfig.IsInCombatViewport(target))
         {
             float curDist = Mathf.Abs(myX - GetCombatX(target));
             float newDist = Mathf.Abs(myX - GetCombatX(nearest));
@@ -688,7 +690,7 @@ public abstract class UnitBase : MonoBehaviour
         ApplyFacing(facingDir);
     }
 
-    /// <summary>场上最近敌（交战时寻敌进距用，不限屏幕索敌圈）。</summary>
+    /// <summary>场上最近敌（交战寻敌进距）。仍要求目标在镜头内，避免打屏外怪。</summary>
     public virtual UnitBase FindNearestEnemyOnField()
     {
         if (BattleManager.Instance == null) return null;
@@ -702,6 +704,7 @@ public abstract class UnitBase : MonoBehaviour
             if (enemy == null || enemy.isDead) continue;
             if (isAlly && enemy.isAlly) continue;
             if (!isAlly && !enemy.isAlly) continue;
+            if (!GameConfig.IsInCombatViewport(enemy)) continue;
             float dist = Mathf.Abs(myX - GetCombatX(enemy));
             if (dist < minDist)
             {
@@ -808,6 +811,9 @@ public abstract class UnitBase : MonoBehaviour
         // 进距才打：防配置过大射程 / AI 漏判导致半屏开砍
         if (!IsInBasicAttackRange(target))
             return;
+        // 屏外目标：不进入攻击（索敌已过滤；此处防 OnField/技能漏网）
+        if (!GameConfig.IsInCombatViewport(target))
+            return;
 
         float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit);
 
@@ -819,8 +825,9 @@ public abstract class UnitBase : MonoBehaviour
         bool allyMelee = isAlly && kit == AttackVfxKit.MeleeSlash;
         bool allyRanged = isAlly && (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb);
         bool killWindup = isAlly && ShouldUseKillWindup(target, damage, isCrit, openingHit);
+        float atkCd = GetAttackCooldown();
         if (unitAnim != null)
-            unitAnim.PlayAttack(kit, allyMelee && (isCrit || killWindup));
+            unitAnim.PlayAttack(kit, allyMelee && (isCrit || killWindup), atkCd);
         CombatJuice.Instance?.PlaySwingSfx();
 
         VfxFaction faction = isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
@@ -829,12 +836,14 @@ public abstract class UnitBase : MonoBehaviour
         Transform hitTf = target.transform;
         int facingDir = GetVfxFacingDir();
 
+        float releaseDelay = SkillNaming.IsRangedKit(kit) ? GameConfig.RANGED_FIRE_RELEASE_DELAY : 0f;
+
         // 普攻：近战即时/下落时结算；弓/法球（敌我）FirePoint→HitPoint 飞到再结算
-        if (!isAlly && (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb) && BattleVFXSystem.Instance != null)
+        if (!isAlly && SkillNaming.IsRangedKit(kit) && BattleVFXSystem.Instance != null)
         {
             StartCoroutine(CoRangedBasicProjectile(
                 target, damage, isCrit, openingHit, kit, faction, facingDir,
-                kit == AttackVfxKit.Bow ? GameConfig.BOW_FIRE_RELEASE_DELAY : 0f,
+                releaseDelay,
                 speedMul: GameConfig.MONSTER_BASIC_PROJECTILE_SPEED_MUL, scaleMul: 1.2f, dodgeOnMiss: true));
             return;
         }
@@ -857,7 +866,7 @@ public abstract class UnitBase : MonoBehaviour
         {
             FireAllyRangedBasicProjectile(
                 target, damage, isCrit, openingHit, kit, faction, facingDir,
-                kit == AttackVfxKit.Bow ? GameConfig.BOW_FIRE_RELEASE_DELAY : 0f);
+                releaseDelay);
             return;
         }
 
@@ -868,7 +877,7 @@ public abstract class UnitBase : MonoBehaviour
             BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
     }
 
-    /// <summary>我方弓/法球普攻：点到点飞行，落地再结算（与敌方远程一致）。弓箭额外等放箭延迟。</summary>
+    /// <summary>我方弓/法球普攻：点到点飞行，落地再结算（与敌方远程一致）。远程额外等出手延迟。</summary>
     void FireAllyRangedBasicProjectile(
         UnitBase target, float damage, bool isCrit, bool openingHit,
         AttackVfxKit kit, VfxFaction faction,
@@ -880,8 +889,8 @@ public abstract class UnitBase : MonoBehaviour
     }
 
     /// <summary>
-    /// 远程普攻：可选放箭延迟后再从当前 FirePoint 出弹。
-    /// 延迟期间重采样发射/受击点，对齐释放帧而不是举弓第一帧。
+    /// 远程普攻：可选出手延迟后再从当前 FirePoint 出弹。
+    /// 延迟期间重采样发射/受击点，对齐释放帧而不是举弓/抬杖第一帧。
     /// </summary>
     IEnumerator CoRangedBasicProjectile(
         UnitBase target, float damage, bool isCrit, bool openingHit,
@@ -1046,12 +1055,17 @@ public abstract class UnitBase : MonoBehaviour
     /// <summary>对外读取普攻套（佣兵技能 VFX 需按施法者弓/法球回退）。</summary>
     public AttackVfxKit GetBasicAttackVfxKit() => GetAttackVfxKit();
 
-    /// <summary>攻击间隔；弓/法球额外乘 PROJECTILE_ATK_SPEED_MUL（降发射频率）</summary>
+    /// <summary>
+    /// 攻击间隔（秒）= 1 / AttackSpeed。
+    /// 玩家职业表 AttackInterval 单位就是秒（P004 游侠 0.5 = 半秒一刀）。
+    /// 仅敌方弓/法球再乘 PROJECTILE_ATK_SPEED_MUL；我方不叠，否则表上的 0.5s 会变成 1s。
+    /// 实际出手还受 UnitAnimation 攻击锁限制（PlayAttack 会把锁钳到不超过本冷却）。
+    /// </summary>
     protected float GetAttackCooldown()
     {
         float atkSpd = Mathf.Max(0.05f, attr.GetAttr(AttrType.AttackSpeed));
         AttackVfxKit kit = GetAttackVfxKit();
-        if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
+        if (!isAlly && SkillNaming.IsRangedKit(kit))
             atkSpd *= GameConfig.PROJECTILE_ATK_SPEED_MUL;
         if (isAlly && GameConfig.IsOpeningStage())
             atkSpd *= 0.55f;
@@ -1160,9 +1174,14 @@ public abstract class UnitBase : MonoBehaviour
         if (showHitVfx && finalDamage > 0f && BattleVFXSystem.Instance != null
             && Time.time - _lastHitVfxTime >= HitVfxCooldown)
         {
-            _lastHitVfxTime = Time.time;
-            int dir = hitVfxFacing != 0 ? hitVfxFacing : -GetVfxFacingDir();
-            BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), isAlly, dir);
+            AttackVfxKit srcKit = source != null ? source.GetBasicAttackVfxKit() : AttackVfxKit.MeleeSlash;
+            // 远程弹道落地已播 Bow/Orb hit；再套刀光会让法师/弓手看起来在砍
+            if (!SkillNaming.IsRangedKit(srcKit))
+            {
+                _lastHitVfxTime = Time.time;
+                int dir = hitVfxFacing != 0 ? hitVfxFacing : -GetVfxFacingDir();
+                BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), isAlly, dir);
+            }
         }
 
         CombatJuice.Instance?.OnHit(this, finalDamage, isCrit, showHitVfx);

@@ -19,6 +19,7 @@ public static class PlayerJobBaseStats
         public float CritDamage;
         /// <summary>CSV 攻击距离（像素），仅对照；战斗勿用。</summary>
         public float AttackRangePx;
+        /// <summary>CSV「攻击间隔」列，单位秒（0.5=半秒）。写入 AttrType.AttackSpeed=1/间隔。</summary>
         public float AttackInterval;
         public float CollisionScale;
         public string StarterWeaponId;

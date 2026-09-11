@@ -69,6 +69,10 @@ public static class SkillNaming
         }
     }
 
+    /// <summary>弓 / 法球普攻或弹道（近战刀光与治疗除外）。</summary>
+    public static bool IsRangedKit(AttackVfxKit kit)
+        => kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb;
+
     public static AttackVfxKit KitFromAttackType(WeaponAttackType attackType, float attackRange = 1.5f)
     {
         if (attackType == WeaponAttackType.Magic)

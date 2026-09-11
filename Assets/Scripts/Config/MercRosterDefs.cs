@@ -195,8 +195,8 @@ public static class MercRosterDefs
         float hpMul = 1f + (level - 1) * 0.1f;
         float atkAdd = (level - 1) * 2f * g;
         hp = baseHp * hpMul;
-        float atkMul = MercAtkMul(d.Rarity);
-        atk = (baseAtk + atkAdd) * atkMul;
+        // 花名册 BaseAtk 即战斗 ATK，禁止再叠佣兵伤害系数。
+        atk = baseAtk + atkAdd;
         def = baseDef;
         // 设计表攻速≈攻击频率系数；移速为相对值（基准为 3.5），换算到世界单位
         atkSpeed = Mathf.Max(0.2f, d.AtkSpeed);
@@ -205,17 +205,6 @@ public static class MercRosterDefs
             ? GameConfig.BASE_MOVE_SPEED * (d.MoveSpeed / designMoveRef)
             : GameConfig.BASE_MOVE_SPEED;
         atkRange = ResolveRange(assetId);
-    }
-
-    /// <summary>普通佣兵额外抬 ATK；传奇默认不叠，避免破版。见 GameConfig.MERC_ATK_MUL_*。</summary>
-    public static float MercAtkMul(MercRarity rarity)
-    {
-        switch (rarity)
-        {
-            case MercRarity.Legendary: return GameConfig.MERC_ATK_MUL_LEGENDARY;
-            case MercRarity.Rare: return GameConfig.MERC_ATK_MUL_RARE;
-            default: return GameConfig.MERC_ATK_MUL_COMMON;
-        }
     }
 
     public static float ResolveRange(string assetId)

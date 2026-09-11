@@ -132,12 +132,15 @@ public class SkillSystem : Singleton<SkillSystem>
                 var cfg = SkillRegistry.Instance != null
                     ? SkillRegistry.Instance.Get(skill.skillId) : null;
                 AttackVfxKit kit = SkillNaming.ResolveProjectileKit(cfg, skill.skillId);
+                if (caster != null && SkillNaming.IsRangedKit(caster.GetBasicAttackVfxKit())
+                    && !SkillNaming.IsRangedKit(kit))
+                    kit = caster.GetBasicAttackVfxKit();
                 GameObject impactOverride = SkillRegistry.Instance != null
                     ? SkillRegistry.Instance.GetSkillVfxPrefab(skill.skillId) : null;
-                float bowDelay = kit == AttackVfxKit.Bow ? GameConfig.BOW_FIRE_RELEASE_DELAY : 0f;
-                if (bowDelay > 0.001f)
-                    StartCoroutine(CoBowSkillProjectile(
-                        src, locked, faction, vfxDir, kit, impactOverride, dmg, crit, bowDelay));
+                float rangedDelay = SkillNaming.IsRangedKit(kit) ? GameConfig.RANGED_FIRE_RELEASE_DELAY : 0f;
+                if (rangedDelay > 0.001f)
+                    StartCoroutine(CoRangedSkillProjectile(
+                        src, locked, faction, vfxDir, kit, impactOverride, dmg, crit, rangedDelay));
                 else
                 {
                     Vector3 hitPos = target.GetHitPosition();
@@ -158,7 +161,7 @@ public class SkillSystem : Singleton<SkillSystem>
         }
     }
 
-    IEnumerator CoBowSkillProjectile(
+    IEnumerator CoRangedSkillProjectile(
         UnitBase caster, UnitBase target, VfxFaction faction, int vfxDir,
         AttackVfxKit kit, GameObject impactOverride, float dmg, bool crit, float delay)
     {
@@ -248,12 +251,11 @@ public class SkillSystem : Singleton<SkillSystem>
 
         foreach (var enemy in enemyList)
         {
-            if (enemy.isDead) continue;
+            if (enemy == null || enemy.isDead) continue;
+            if (!GameConfig.IsInCombatViewport(enemy)) continue;
             float dist = Vector2.Distance(caster.transform.position, enemy.transform.position);
             if (dist <= range)
-            {
                 enemies.Add(enemy);
-            }
         }
         return enemies;
     }

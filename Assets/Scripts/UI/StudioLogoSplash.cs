@@ -4,12 +4,12 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 开机工作室 Logo：黑底上从 1.0 慢慢放大到 1.1；满不透明停留，最后淡隐。约 5.6 秒，不可跳过。
+/// 开机工作室 Logo：黑底上从 1.0 慢慢放大到 1.1；满不透明停留，最后淡隐。约 4.6 秒，不可跳过。
 /// 插在健康忠告之前，纯运行时构建，不改预制体。
 /// </summary>
 public class StudioLogoSplash : MonoBehaviour
 {
-    public const float TotalSeconds = 5.6f;
+    public const float TotalSeconds = 4.6f;
     const float FadeOutSeconds = 1.4f;
     const float ScaleFrom = 1.0f;
     const float ScaleTo = 1.1f;

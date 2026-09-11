@@ -427,13 +427,13 @@ public class Mercenary : UnitBase
         {
             MercRosterDefs.ApplyCombatStats(id, level,
                 out float hp, out float atk, out float def, out float atkSpd, out float move, out float range);
-            attr.SetAttr(AttrType.MaxHp, hp);
-            attr.SetAttr(AttrType.Attack, atk);
-            attr.SetAttr(AttrType.Defense, def);
-            attr.SetAttr(AttrType.AttackSpeed, atkSpd);
-            attr.SetAttr(AttrType.MoveSpeed, move);
-            attr.SetAttr(AttrType.AttackRange, range);
-            attr.SetAttr(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
+            attr.SetBaseAndCurrent(AttrType.MaxHp, hp);
+            attr.SetBaseAndCurrent(AttrType.Attack, atk);
+            attr.SetBaseAndCurrent(AttrType.Defense, def);
+            attr.SetBaseAndCurrent(AttrType.AttackSpeed, atkSpd);
+            attr.SetBaseAndCurrent(AttrType.MoveSpeed, move);
+            attr.SetBaseAndCurrent(AttrType.AttackRange, range);
+            attr.SetBaseAndCurrent(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
             currentHp = attr.GetAttr(AttrType.MaxHp);
             ApplyMeleeRangeVsPlayer();
             return;
@@ -482,13 +482,13 @@ public class Mercenary : UnitBase
 
         float hpMul = 1f + (level - 1) * 0.1f;
         float atkAdd = (level - 1) * 2f;
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpMul);
-        attr.SetAttr(AttrType.Attack, (baseAtk + atkAdd) * GameConfig.MERC_ATK_MUL_COMMON);
-        attr.SetAttr(AttrType.Defense, baseDef);
-        attr.SetAttr(AttrType.AttackSpeed, 1f / Mathf.Max(0.2f, atkInterval));
-        attr.SetAttr(AttrType.MoveSpeed, GameConfig.BASE_MOVE_SPEED);
-        attr.SetAttr(AttrType.AttackRange, atkRange);
-        attr.SetAttr(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
+        attr.SetBaseAndCurrent(AttrType.MaxHp, baseHp * hpMul);
+        attr.SetBaseAndCurrent(AttrType.Attack, baseAtk + atkAdd);
+        attr.SetBaseAndCurrent(AttrType.Defense, baseDef);
+        attr.SetBaseAndCurrent(AttrType.AttackSpeed, 1f / Mathf.Max(0.2f, atkInterval));
+        attr.SetBaseAndCurrent(AttrType.MoveSpeed, GameConfig.BASE_MOVE_SPEED);
+        attr.SetBaseAndCurrent(AttrType.AttackRange, atkRange);
+        attr.SetBaseAndCurrent(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
 
         currentHp = attr.GetAttr(AttrType.MaxHp);
         ApplyMeleeRangeVsPlayer();
@@ -694,6 +694,8 @@ public class Mercenary : UnitBase
             if (_acquireLock.isDead || _acquireLock.isAlly == isAlly)
                 _acquireLock = null;
             else if (Mathf.Abs(myX - GetCombatX(_acquireLock)) > detect + leaveSlack)
+                _acquireLock = null;
+            else if (!GameConfig.IsInCombatViewport(_acquireLock))
                 _acquireLock = null;
         }
 

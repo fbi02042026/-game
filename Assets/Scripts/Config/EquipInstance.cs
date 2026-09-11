@@ -73,6 +73,7 @@ public class EquipInstance
         inst.grantSkillId = template.grantSkillId;
         inst.skillPassives = CopySkillPassives(template.skillPassives);
         inst.weaponAttackType = template.weaponAttackType;
+        inst.weaponKindOverride = template.weaponKindOverride;
         if (WeaponLoadoutRules.IsLoadoutItem(inst))
             inst.slotType = WeaponLoadoutRules.ResolveLogicalSlot(inst);
         inst.armorPrefix = template.armorPrefix;

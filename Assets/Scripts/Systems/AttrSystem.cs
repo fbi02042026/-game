@@ -67,7 +67,7 @@ public class AttrSystem
         foreach (var pair in _baseAttr)
             _attr[pair.Key] = pair.Value;
 
-        // 1b. 裂缝混合口径：职业固定基础属性覆盖 GameConfig 基底（无账号等级成长）
+        // 1b. 裂缝混合口径：仅主角套职业固定基础属性（佣兵/怪物走各自表，勿盖成玩家 ATK）
         ApplyPlayerJobBaseIfAny();
 
         // 2. 四大基础属性加成（来自天赋和遗产）— 仅玩家相关，SaveSystem可能未初始化
@@ -171,6 +171,7 @@ public class AttrSystem
 
     void ApplyPlayerJobBaseIfAny()
     {
+        if (Hero.Instance == null || Hero.Instance.attr != this) return;
         PlayerJobBaseStats.ApplyToAttr(this, PlayerJobDefs.GetSelected());
     }
 
@@ -186,9 +187,16 @@ public class AttrSystem
         return _attr.ContainsKey(type) ? _attr[type] : 0;
     }
 
-    /// <summary>直接设置属性值（覆盖计算值）</summary>
+    /// <summary>直接设置属性值（覆盖计算值，不改基底；主角 RecalcAttr 后的射程/攻速覆盖走这里）。</summary>
     public void SetAttr(AttrType type, float value)
     {
+        _attr[type] = value;
+    }
+
+    /// <summary>佣兵花名册等：当前值与基底一起写，避免之后 RecalcAllAttr 回到 GameConfig.BASE_ATTACK。</summary>
+    public void SetBaseAndCurrent(AttrType type, float value)
+    {
+        _baseAttr[type] = value;
         _attr[type] = value;
     }
 

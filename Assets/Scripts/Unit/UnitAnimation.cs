@@ -691,13 +691,17 @@ public class UnitAnimation : MonoBehaviour
     /// <summary>
     /// 播放攻击动画。传入武器套装可选中 SPUM 里的弓/法术专用挥击。
     /// </summary>
-    public void PlayAttack(AttackVfxKit kit = AttackVfxKit.MeleeSlash, bool isCritAmp = false)
+    public void PlayAttack(AttackVfxKit kit = AttackVfxKit.MeleeSlash, bool isCritAmp = false, float lockCap = -1f)
     {
         if (_isDead) return;
         InterruptDamaged();
         if (_attackAnimLock > 0) return; // 动画锁定中
-        _attackAnimDuration = _baseAttackDuration;
-        _attackAnimLock = _attackAnimDuration;
+        float lockDur = _baseAttackDuration;
+        // 攻速表间隔短于默认 0.5s 锁时，钳锁时长，否则游侠 0.5s 间隔会被动画锁吃掉
+        if (lockCap > 0.05f)
+            lockDur = Mathf.Clamp(Mathf.Min(_baseAttackDuration, lockCap), 0.18f, _baseAttackDuration);
+        _attackAnimDuration = lockDur;
+        _attackAnimLock = lockDur;
         _procAttackKit = kit;
         _procAmp = isCritAmp ? GameConfig.ALLY_MELEE_CRIT_AMP : 1f;
         _procLunge = 0f;
@@ -829,7 +833,7 @@ public class UnitAnimation : MonoBehaviour
         switch (kit)
         {
             case AttackVfxKit.Bow: return new[] { "bow", "arrow", "range" };
-            case AttackVfxKit.Orb: return new[] { "magic", "staff", "wand" };
+            case AttackVfxKit.Orb: return new[] { "magic", "staff", "wand", "cast" };
             default: return new[] { "normal", "sword", "melee" };
         }
     }

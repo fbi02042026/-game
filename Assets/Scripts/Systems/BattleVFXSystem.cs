@@ -42,7 +42,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>
     public float maxFlightTime = 1.2f;
     /// <summary>弓箭发射点相对 GetFirePosition 的 Y 偏移（世界单位，正值向上）</summary>
     public float bowFireYOffset = 0.07f;
-    /// <summary>放箭时机见 GameConfig.BOW_FIRE_RELEASE_DELAY（由 UnitBase/SkillSystem 在调用本系统前等待）。</summary>
+    /// <summary>放箭/出球时机见 GameConfig.RANGED_FIRE_RELEASE_DELAY（由 UnitBase/SkillSystem 在调用本系统前等待）。</summary>
 
     private Dictionary<string, Queue<GameObject>> _pool = new Dictionary<string, Queue<GameObject>>();
     private readonly Dictionary<string, GameObject> _sharedKitCache = new Dictionary<string, GameObject>();

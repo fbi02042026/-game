@@ -48,10 +48,13 @@ public static class GameConfig
     }
 
     /// <summary>
-    /// 战斗索敌范围（世界单位）：与攻击射程无关，略大于当前屏幕可见宽度。
+    /// 战斗索敌范围（世界单位）：与攻击射程无关，约为当前屏幕可见宽度 + 少量边距。
+    /// 不要用过大 pad，否则会锁到镜头外的怪并开打。
     /// </summary>
-    public const float COMBAT_DETECT_SCREEN_PAD = 2f;
-    public const float COMBAT_DETECT_FALLBACK = 14f;
+    public const float COMBAT_DETECT_SCREEN_PAD = 0.35f;
+    public const float COMBAT_DETECT_FALLBACK = 8f;
+    /// <summary>镜头外多少世界单位仍算「在屏上」（索敌/出手允许的边距）。</summary>
+    public const float COMBAT_VIEWPORT_MARGIN = 0.35f;
 
     static float _combatDetectCached = -1f;
     static int _combatDetectCachedFrame = -1;
@@ -72,6 +75,34 @@ public static class GameConfig
         _combatDetectCached = range;
         _combatDetectCachedFrame = Time.frameCount;
         return range;
+    }
+
+    /// <summary>单位是否在战斗镜头内（含少量边距）。屏外目标不得被索敌/开打。</summary>
+    public static bool IsInCombatViewport(UnitBase unit, float marginWorld = COMBAT_VIEWPORT_MARGIN)
+    {
+        if (unit == null) return false;
+        Transform tf = unit.transform;
+        if (unit is Monster mon)
+            tf = mon.GetBodyTransform();
+        return IsInCombatViewport(tf != null ? tf.position : unit.transform.position, marginWorld);
+    }
+
+    public static bool IsInCombatViewport(Vector3 worldPos, float marginWorld = COMBAT_VIEWPORT_MARGIN)
+    {
+        var cam = Camera.main;
+        if (cam == null) return true;
+        if (!cam.orthographic)
+        {
+            Vector3 v = cam.WorldToViewportPoint(worldPos);
+            return v.z > 0f && v.x >= -0.02f && v.x <= 1.02f && v.y >= -0.02f && v.y <= 1.02f;
+        }
+        float halfH = cam.orthographicSize;
+        float halfW = halfH * cam.aspect;
+        Vector3 c = cam.transform.position;
+        return worldPos.x >= c.x - halfW - marginWorld
+            && worldPos.x <= c.x + halfW + marginWorld
+            && worldPos.y >= c.y - halfH - marginWorld
+            && worldPos.y <= c.y + halfH + marginWorld;
     }
 
     /// <summary>
@@ -207,16 +238,6 @@ public static class GameConfig
     {
         return RollMonsterRootScale(isElite, isBoss);
     }
-
-    /// <summary>
-    /// 普通（Common）佣兵战斗 ATK 倍率。花名册白板 ATK 偏低，开局小怪约 75HP/2DEF，
-    /// 1.7x 后近战约 3 下清一只；稀有/传奇用更小倍率，避免传说秒一切。
-    /// </summary>
-    public const float MERC_ATK_MUL_COMMON = 1.7f;
-    /// <summary>稀有佣兵 ATK 倍率（叠在花名册成长系数之后）。</summary>
-    public const float MERC_ATK_MUL_RARE = 1.25f;
-    /// <summary>传奇佣兵 ATK 倍率（默认 1=不额外抬，避免破版）。</summary>
-    public const float MERC_ATK_MUL_LEGENDARY = 1f;
 
     /// <summary>解析佣兵档位：npc / junior(1xx) / advanced(2xx)</summary>
     public static MercTier GetMercTier(string mercId)
@@ -368,7 +389,10 @@ public static class GameConfig
     /// 前期先压低；以后难度高了往 1 调（甚至 &gt;1）。
     /// </summary>
     public const float MONSTER_ATK_SPEED_MUL = 0.65f;
-    /// <summary>弓/法球等子弹单位攻速倍率（1=不变；0.5=发射频率降 50%）</summary>
+    /// <summary>
+    /// 仅敌方弓/法球普攻频率倍率（1=表值；0.5=再降一半）。
+    /// 我方（玩家职业表 AttackInterval、佣兵花名册 AtkSpeed）不再叠这个，否则 0.5 秒间隔会变成 1 秒。
+    /// </summary>
     public const float PROJECTILE_ATK_SPEED_MUL = 0.5f;
     /// <summary>旧线性章节系数（仅兼容/兜底；属性缩放请用 GetChapterStatScale）</summary>
     public const float CHAPTER_SCALE_PER = 0.15f;
@@ -562,10 +586,12 @@ public static class GameConfig
     /// <summary>我方近战命中时机：相对攻击动画时长比例（0.5=下劈中点）</summary>
     public const float ALLY_MELEE_HIT_NORM = 0.5f;
     /// <summary>
-    /// 弓箭放箭延迟（秒）：等举弓/拉弦接近释放帧再生成弹道，避免一抬手箭就飞出。
-    /// 只影响 Bow 套（普攻/弓技能弹道）；近战刀光与法球不走此值。建议 0.15~0.25。
+    /// 远程出手延迟（秒）：弓/法球（玩家、佣兵、怪物普攻与弹道技能）在举弓/抬杖后等这一拍再出弹。
+    /// 近战刀光不走此值。旧名 BOW_FIRE_RELEASE_DELAY。建议 0.15~0.25。
     /// </summary>
-    public const float BOW_FIRE_RELEASE_DELAY = 0.2f;
+    public const float RANGED_FIRE_RELEASE_DELAY = 0.2f;
+    /// <summary>兼容旧引用：等同 <see cref="RANGED_FIRE_RELEASE_DELAY"/>。</summary>
+    public const float BOW_FIRE_RELEASE_DELAY = RANGED_FIRE_RELEASE_DELAY;
     /// <summary>我方近战暴击动画幅度倍率（仅视觉子节点）</summary>
     public const float ALLY_MELEE_CRIT_AMP = 1f;
 

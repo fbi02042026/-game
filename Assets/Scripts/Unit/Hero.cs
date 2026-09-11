@@ -179,15 +179,20 @@ public class Hero : UnitBase
 
     protected override AttackVfxKit GetAttackVfxKit()
     {
+        AttackVfxKit jobKit = SkillNaming.KitFromWeaponKind(
+            PlayerJobDefs.Get(PlayerJobDefs.GetSelected()).PrimaryWeapon);
+
         var bag = GridBackpackSystem.Instance;
-        if (bag == null) return AttackVfxKit.MeleeSlash;
-        var main = bag.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
-        if (main?.template != null && main.weaponType != WeaponType.None)
-            return SkillNaming.KitFromWeaponKind(WeaponCombatTable.ResolveKind(main));
-        var off = bag.GetEquippedInLogicalSlot(EquipSlotType.OffHand);
-        if (off?.template != null && off.weaponType != WeaponType.None)
-            return SkillNaming.KitFromWeaponKind(WeaponCombatTable.ResolveKind(off));
-        return AttackVfxKit.MeleeSlash;
+        EquipInstance inst = TryGetEquippedWeaponInstance(bag);
+        if (inst == null)
+            return jobKit;
+
+        AttackVfxKit fromWeapon = SkillNaming.KitFromWeaponKind(WeaponCombatTable.ResolveKind(inst));
+        // 法师/牧师职业或魔法武器：禁止回退近战刀光（暮火之杖外观 New_Weapon_06 曾被当成剑）
+        if (fromWeapon == AttackVfxKit.MeleeSlash
+            && (jobKit == AttackVfxKit.Orb || inst.weaponAttackType == WeaponAttackType.Magic))
+            return AttackVfxKit.Orb;
+        return fromWeapon;
     }
 
     /// <summary>攻击特效以逻辑主手武器为准；无主手则不看副手剑。</summary>
@@ -198,7 +203,7 @@ public class Hero : UnitBase
     {
         if (bag == null) return null;
         var main = bag.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
-        if (main?.template != null && main.weaponType != WeaponType.None)
+        if (main?.template != null && (main.weaponType != WeaponType.None || main.slotType == EquipSlotType.MainHand))
             return main;
         var off = bag.GetEquippedInLogicalSlot(EquipSlotType.OffHand);
         if (off?.template != null && off.weaponType != WeaponType.None)
@@ -348,7 +353,8 @@ public class Hero : UnitBase
         // 松手索敌窗口：进距内有更近可打的怪时打断远锁
         if (_acquireLock != null)
         {
-            if (_acquireLock.isDead || Time.time > _acquireUntil)
+            if (_acquireLock.isDead || Time.time > _acquireUntil
+                || !GameConfig.IsInCombatViewport(_acquireLock))
                 _acquireLock = null;
             else
             {

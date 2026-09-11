@@ -57,6 +57,9 @@ public static class WeaponCombatTable
         if (tpl.weaponKindOverride >= 0 && tpl.weaponKindOverride <= (int)WeaponKind.Shield)
             return (WeaponKind)tpl.weaponKindOverride;
 
+        if (tpl.weaponAttackType == WeaponAttackType.Magic)
+            return WeaponKind.Staff;
+
         string spum = !string.IsNullOrEmpty(spumNameHint) ? spumNameHint : tpl.spumName;
         if (TryKindFromSpum(spum, out var fromSpum))
             return fromSpum;
@@ -75,8 +78,6 @@ public static class WeaponCombatTable
             return tpl.weaponType == WeaponType.TwoHand ? WeaponKind.Greatsword : WeaponKind.Sword;
         if (hint.Contains("great") || hint.Contains("大剑") || hint.Contains("twohand") || hint.Contains("双手"))
             return WeaponKind.Greatsword;
-        if (tpl.weaponAttackType == WeaponAttackType.Magic)
-            return WeaponKind.Staff;
         if (tpl.weaponType == WeaponType.TwoHand)
             return WeaponKind.Greatsword;
         return WeaponKind.Sword;
