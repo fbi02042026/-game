@@ -31,7 +31,7 @@ public class MercBattleBanter : MonoBehaviour
     {
         if (_bm == null) _bm = BattleManager.Instance;
         if (_bm == null || !_bm.isInBattle) return;
-        if (_bm.IsTutorialRun || _bm.PartyIntroWalking || !_bm.UnitsCanAct) return;
+        if (TutorialRules.Current.SkipMercBanter || _bm.PartyIntroWalking || !_bm.UnitsCanAct) return;
         if (_nextAt < 0f) ArmNext();
         if (Time.unscaledTime < _nextAt) return;
 

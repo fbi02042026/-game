@@ -3,7 +3,7 @@
 > **范围**：只读审查 `main` 现况（约 v0.3.5 后战斗手感/表驱动一轮）。不改玩法、不改预制体、不批量改名。  
 > **读者**：产品 + 程序。结论按「现在卡什么 / 扩内容会卡什么 / 先别动什么」排列。  
 > **证据日期**：2026-09-11，基于仓库当前 `main`。  
-> **落地计划**：[`OPTIMIZATION_PLAN.md`](./OPTIMIZATION_PLAN.md)（Phase 1–3 已在同一 PR 落地；Phase 4–5 按计划另开）。
+> **落地计划**：[`OPTIMIZATION_PLAN.md`](./OPTIMIZATION_PLAN.md)（Phase 1–3 已合 main；Phase 4 引导刷怪合流已在后续 PR 落地；Phase 5 按需另开）。
 
 ---
 
@@ -66,7 +66,7 @@ Battle                    AutoGameInitializer → GameRoot 上一打 Singleton
    `StageSpawnTable` + `stage_spawn.csv`（第一章首关 9 怪可改表）；`StageRoller` 现抽普通/精英/休息/Boss，与 `ChapterManager` 占位图分离——比旧「开局排死商人/诅咒」更可扩展。
 
 7. **引导有独立表 `tutorial_battle.csv`**  
-   步进 count/精灵/佣兵已部分表驱动，只是执行仍嵌在 BM 里。
+   步进 count/精灵/佣兵/HP 档表驱动；导演只点 `QueueTutorialStep`，埋伏是 SpawnWave 参数（Phase 4）。
 
 8. **佣兵技能已表驱动**  
    `merc_skills.csv` → `MercSkillTable` 运行时合成 `SkillConfig`，比玩家技能更接近目标态。
@@ -100,7 +100,7 @@ Battle                    AutoGameInitializer → GameRoot 上一打 Singleton
   - `BattleUI` 教程 HUD / `AllowBattleSkillClick`。
 - **现在**：引导手感靠「正式 Init 后再盖一层低血」和协程叙事，正式关公式测不准引导，引导改完也测不准正式关。
 - **以后**：第一章中段再加「剧本波」、活动教学关、第二职业教学，只会复制第三条刷怪轨道。
-- **方向**：约定 **TutorialDirector 只编排节拍**（停手、对白、提示、何时刷）；刷怪走与正式关相同的 `SpawnWave` 入口，参数来自 `tutorial_battle`（已有 count/精灵）。BM 上的 `IsTutorialRun` 逐步收成「本局规则包」（禁佣兵、禁清关、怪 HP 档），不要散落在 Update/交战距离里。
+- **方向（Phase 4 已落地）**：`TutorialDirector` 只编排节拍；刷怪走 `QueueTutorialStep` → 同一 `SpawnWave`（锚点 / L/R / forcedTarget）。`IsTutorialRun` 身份仍在，战斗循环旗标收进 `TutorialRules`。未 100% 拔掉身份判断（HUD/撤离/爽点）。
 
 #### P0-3 战斗数值仍有多层真源，表不是唯一出口
 

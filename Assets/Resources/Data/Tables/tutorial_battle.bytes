@@ -1,7 +1,8 @@
-# order=执行顺序 action=normal|flank|around；首波4近2远=6，后续+1~2；佣兵波带精英。普通波右侧进场；宝箱/佣兵左右夹击。
-order,action,count,spriteMelee,spriteRanged,ambush,mercId,mercHpRatio,aheadDist,stunned,eliteCount,note
-1,normal,6,1,2,0,,,,,,首波4近2远，右侧
-2,normal,7,1,2,0,,,,,,第二波+1，右侧
-3,flank,7,1,2,1,,,,,,宝箱左右夹击
-4,around,7,1,2,0,naima101,0.35,5.5,1,1,佣兵围攻左右+精英
-5,normal,8,1,2,0,,,,,,佣兵入队后右侧增援+2
+# order=执行顺序 action=normal|flank|around；普通波右侧进场；宝箱/佣兵左右夹击。
+# hp*=乘 MONSTER_HP_GLOBAL_MUL 前的档；与旧 ApplyTutorialMonsterTuning 整型 Random.Range(min,max开区间) 一致：普通 8–12、精英 25–35。
+order,action,count,spriteMelee,spriteRanged,ambush,mercId,mercHpRatio,aheadDist,stunned,eliteCount,hpMin,hpMax,eliteHpMin,eliteHpMax,note
+1,normal,6,1,2,0,,,,,,8,13,25,36,首波4近2远，右侧
+2,normal,7,1,2,0,,,,,,8,13,25,36,第二波+1，右侧
+3,flank,7,1,2,1,,,,,,8,13,25,36,宝箱左右夹击
+4,around,7,1,2,0,naima101,0.35,5.5,1,1,8,13,25,36,佣兵围攻左右+精英
+5,normal,8,1,2,0,,,,,,8,13,25,36,佣兵入队后右侧增援+2
