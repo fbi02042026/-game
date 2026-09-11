@@ -1,7 +1,7 @@
-# order=执行顺序；action=normal|flank|around
-order,action,count,spriteMelee,spriteRanged,ambush,mercId,mercHpRatio,aheadDist,stunned,eliteCount,note
-1,normal,4,2,1,0,,,,,,首波
-2,normal,3,2,1,0,,,,,,第二小波
-3,flank,4,2,1,1,,,,,,宝箱埋伏
-4,around,4,2,1,0,naima101,0.35,5.5,1,1,围殴牧师含1精英
-5,normal,5,2,1,0,,,,,1,组队后4小怪+1精英
+# order=执行顺序；action=normal|flank|around；hpMul/defMul 叠在正式怪物数值上（空则用 GameConfig 默认 1.5/1）
+order,action,count,spriteMelee,spriteRanged,ambush,mercId,mercHpRatio,aheadDist,stunned,eliteCount,hpMul,defMul,note
+1,normal,4,2,1,0,,,,,,1.5,1,首波
+2,normal,3,2,1,0,,,,,,1.5,1,第二小波
+3,flank,4,2,1,1,,,,,,1.5,1,宝箱埋伏
+4,around,4,2,1,0,naima101,0.35,5.5,1,1,1.5,1,围殴牧师含1精英
+5,normal,5,2,1,0,,,,,1,1.5,1,组队后4小怪+1精英

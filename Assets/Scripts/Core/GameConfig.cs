@@ -376,6 +376,16 @@ public static class GameConfig
     public const float MONSTER_NORMAL_ATK = 12f;
     public const float MONSTER_NORMAL_DEF = 2f;
     public const float MONSTER_NORMAL_ATK_INTERVAL = 1.5f;
+    /// <summary>开场关怪物 HP 倍率。芯片伤害时代曾 1.25；现走正式 ATK，不再额外灌血。</summary>
+    public const float OPENING_MONSTER_HP_MUL = 1f;
+    /// <summary>开场关怪物攻击倍率（略弱，避免教学生疏时被秒）。</summary>
+    public const float OPENING_MONSTER_ATK_MUL = 0.7f;
+    /// <summary>开场关怪物攻速倍率。</summary>
+    public const float OPENING_MONSTER_ATK_SPEED_MUL = 0.7f;
+    /// <summary>引导关在表 HP 上的默认倍率（tutorial_battle.hpMul 为空时用）。1.5 ≈ 剑盾 2 刀、游侠 2 刀。</summary>
+    public const float TUTORIAL_MONSTER_HP_MUL = 1.5f;
+    /// <summary>引导关防御倍率（1=表 DEF，正式减防）。</summary>
+    public const float TUTORIAL_MONSTER_DEF_MUL = 1f;
     public const float MONSTER_ELITE_HP = 180f;
     public const float MONSTER_ELITE_ATK = 24f;
     public const float MONSTER_ELITE_DEF = 6f;
@@ -682,7 +692,7 @@ public static class GameConfig
     public const int COMBO_AFTERIMAGE_MAX_PER_UNIT = 10;
     public const float COMBO_AFTERIMAGE_MOVE_EPS = 0.08f;
 
-    /// <summary>第一章第 1 关（教学节奏：打得慢、打得少）</summary>
+    /// <summary>第一章第 1 关（教学节奏：刷怪间隔等；不削弱我方 ATK）</summary>
     public static bool IsOpeningStage()
     {
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
@@ -695,14 +705,6 @@ public static class GameConfig
     public static float GetWaveSpawnInterval()
     {
         return IsOpeningStage() ? OPENING_WAVE_SPAWN_INTERVAL : WAVE_SPAWN_INTERVAL;
-    }
-
-    /// <summary>开局我方普攻最终伤害（2~5，暴击略高）；拿剑爽点后一刀一个。</summary>
-    public static int RollOpeningAllyHitDamage(bool isCrit)
-    {
-        if (BattleManager.Instance != null && BattleManager.Instance.TutorialPowerFantasy)
-            return isCrit ? Random.Range(35, 46) : Random.Range(25, 41);
-        return isCrit ? Random.Range(4, 8) : Random.Range(2, 6);
     }
 
     /// <summary>
