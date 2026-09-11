@@ -139,6 +139,12 @@ public class ParallaxBackground : MonoBehaviour
             Debug.LogWarning($"[Parallax] 未找到层节点 '{layer.autoFindByName}' under {LayerSearchRoot.name}");
             return;
         }
+        // 视差只许挪背景片；若误命中战斗单位节点则跳过，避免主角移动拖走全场
+        if (t.GetComponent<UnitBase>() != null || t.GetComponentInParent<UnitBase>() != null)
+        {
+            Debug.LogWarning($"[Parallax] 层节点 '{layer.autoFindByName}' 命中战斗单位，跳过");
+            return;
+        }
         var src = t as RectTransform;
         if (src == null) return;
 

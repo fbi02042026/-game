@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
@@ -125,7 +126,6 @@ public class SkillSystem : Singleton<SkillSystem>
             UnitBase src = caster;
             float dmg = finalDamage;
             bool crit = isCrit;
-            Vector3 hitPos = target.GetHitPosition();
 
             if (BattleVFXSystem.Instance != null)
             {
@@ -134,20 +134,55 @@ public class SkillSystem : Singleton<SkillSystem>
                 AttackVfxKit kit = SkillNaming.ResolveProjectileKit(cfg, skill.skillId);
                 GameObject impactOverride = SkillRegistry.Instance != null
                     ? SkillRegistry.Instance.GetSkillVfxPrefab(skill.skillId) : null;
-                BattleVFXSystem.Instance.PlaySkillProjectile(
-                    faction, firePos, hitPos, vfxDir, locked.transform, kit,
-                    impactOverride, 1f, 1f,
-                    () =>
-                    {
-                        if (locked == null || locked.isDead) return;
-                        locked.TakeDamage(dmg, crit, false, true, vfxDir, src);
-                    });
+                float bowDelay = kit == AttackVfxKit.Bow ? GameConfig.BOW_FIRE_RELEASE_DELAY : 0f;
+                if (bowDelay > 0.001f)
+                    StartCoroutine(CoBowSkillProjectile(
+                        src, locked, faction, vfxDir, kit, impactOverride, dmg, crit, bowDelay));
+                else
+                {
+                    Vector3 hitPos = target.GetHitPosition();
+                    BattleVFXSystem.Instance.PlaySkillProjectile(
+                        faction, firePos, hitPos, vfxDir, locked.transform, kit,
+                        impactOverride, 1f, 1f,
+                        () =>
+                        {
+                            if (locked == null || locked.isDead) return;
+                            locked.TakeDamage(dmg, crit, false, true, vfxDir, src);
+                        });
+                }
             }
             else
             {
                 target.TakeDamage(finalDamage, isCrit, false, true, vfxDir, caster);
             }
         }
+    }
+
+    IEnumerator CoBowSkillProjectile(
+        UnitBase caster, UnitBase target, VfxFaction faction, int vfxDir,
+        AttackVfxKit kit, GameObject impactOverride, float dmg, bool crit, float delay)
+    {
+        if (delay > 0.001f)
+            yield return new WaitForSeconds(delay);
+        if (caster == null || caster.isDead || target == null || target.isDead)
+            yield break;
+        if (BattleVFXSystem.Instance == null)
+        {
+            target.TakeDamage(dmg, crit, false, true, vfxDir, caster);
+            yield break;
+        }
+        Vector3 from = caster.GetFirePosition();
+        Vector3 to = target.GetHitPosition();
+        UnitBase locked = target;
+        UnitBase src = caster;
+        BattleVFXSystem.Instance.PlaySkillProjectile(
+            faction, from, to, vfxDir, locked.transform, kit,
+            impactOverride, 1f, 1f,
+            () =>
+            {
+                if (locked == null || locked.isDead) return;
+                locked.TakeDamage(dmg, crit, false, true, vfxDir, src);
+            });
     }
 
     private void ExecuteAOE(ActiveSkill skill, UnitBase caster)

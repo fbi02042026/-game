@@ -208,6 +208,16 @@ public static class GameConfig
         return RollMonsterRootScale(isElite, isBoss);
     }
 
+    /// <summary>
+    /// 普通（Common）佣兵战斗 ATK 倍率。花名册白板 ATK 偏低，开局小怪约 75HP/2DEF，
+    /// 1.7x 后近战约 3 下清一只；稀有/传奇用更小倍率，避免传说秒一切。
+    /// </summary>
+    public const float MERC_ATK_MUL_COMMON = 1.7f;
+    /// <summary>稀有佣兵 ATK 倍率（叠在花名册成长系数之后）。</summary>
+    public const float MERC_ATK_MUL_RARE = 1.25f;
+    /// <summary>传奇佣兵 ATK 倍率（默认 1=不额外抬，避免破版）。</summary>
+    public const float MERC_ATK_MUL_LEGENDARY = 1f;
+
     /// <summary>解析佣兵档位：npc / junior(1xx) / advanced(2xx)</summary>
     public static MercTier GetMercTier(string mercId)
     {
@@ -551,6 +561,11 @@ public static class GameConfig
 
     /// <summary>我方近战命中时机：相对攻击动画时长比例（0.5=下劈中点）</summary>
     public const float ALLY_MELEE_HIT_NORM = 0.5f;
+    /// <summary>
+    /// 弓箭放箭延迟（秒）：等举弓/拉弦接近释放帧再生成弹道，避免一抬手箭就飞出。
+    /// 只影响 Bow 套（普攻/弓技能弹道）；近战刀光与法球不走此值。建议 0.15~0.25。
+    /// </summary>
+    public const float BOW_FIRE_RELEASE_DELAY = 0.2f;
     /// <summary>我方近战暴击动画幅度倍率（仅视觉子节点）</summary>
     public const float ALLY_MELEE_CRIT_AMP = 1f;
 

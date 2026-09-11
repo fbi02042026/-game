@@ -199,6 +199,9 @@ public class CameraFollow : MonoBehaviour
                 target = Hero.Instance.transform;
             if (target == null) return;
         }
+        // 跟随目标必须是主角，不能是 unit/WorldRoot（否则镜头锁共享根，或看起来像全场平移）
+        if (target.GetComponent<Hero>() == null && Hero.Instance != null)
+            target = Hero.Instance.transform;
 
         float targetX = target.position.x + offset.x;
         if (float.IsNaN(targetX) || float.IsInfinity(targetX))
@@ -224,6 +227,7 @@ public class CameraFollow : MonoBehaviour
 
         transform.position = new Vector3(newX + _shakeOffset.x, _camY + _shakeOffset.y, _camZ);
         _lastShakeOffset = _shakeOffset;
+        // 只移动本相机；禁止把 WorldRoot/unit 挂到相机下，否则跟随会拖走全部战斗单位。
     }
 
     static bool _warnedInvalid;
@@ -275,6 +279,8 @@ public class CameraFollow : MonoBehaviour
     /// <summary>设置跟随目标</summary>
     public void SetTarget(Transform t)
     {
+        if (t != null && t.GetComponent<Hero>() == null && Hero.Instance != null)
+            t = Hero.Instance.transform;
         target = t;
 
         // 确保Y和Z已初始化（从当前相机位置读取）
