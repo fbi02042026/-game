@@ -201,7 +201,8 @@ public static class MercSkillTable
         if (atkMul > 0f)
             cfg.damageMultiplier = atkMul;
 
-        if (row.Category == SkillCategory.Heal || f.Contains("治疗") || cfg.id == "SK010")
+        bool healish = row.Category == SkillCategory.Heal || f.Contains("治疗");
+        if (healish)
         {
             if (f.Contains("攻击"))
             {
@@ -216,28 +217,37 @@ public static class MercSkillTable
             }
         }
 
-        // PHASE5 GATE：禁止再为新技能加 Id == SKxxx。新行只填公式/类型；历史 SK007/008/018 待 SkillCast 再迁。
-        if (row.Id == "SK007")
+        // 表驱 Buff：防御+ / 生命上限× / 目标攻击-。禁止再按 Id == SKxxx。
+        if (Regex.IsMatch(f, @"防御\s*\+"))
         {
             cfg.buffAttr = AttrType.Defense;
-            cfg.buffValue = 0.35f;
+            cfg.buffValue = ParseSignedPercent(f, 0.35f);
             cfg.buffIsPercent = true;
             cfg.duration = row.Duration > 0f ? row.Duration : 5f;
         }
-        else if (row.Id == "SK008")
+        else if (!healish && f.Contains("生命上限"))
         {
             cfg.buffAttr = AttrType.MaxHp;
-            cfg.buffValue = 0.10f;
+            cfg.buffValue = ParseSignedPercent(f, 0.10f);
             cfg.buffIsPercent = true;
             cfg.duration = row.Duration > 0f ? row.Duration : 6f;
         }
-        else if (row.Id == "SK018")
+        else if (f.Contains("目标攻击"))
         {
+            float v = ParseSignedPercent(f, -0.20f);
             cfg.buffAttr = AttrType.Attack;
-            cfg.buffValue = -0.20f;
+            cfg.buffValue = v > 0f ? -v : v;
             cfg.buffIsPercent = true;
             cfg.duration = row.Duration > 0f ? row.Duration : 8f;
         }
+    }
+
+    static float ParseSignedPercent(string formula, float fallback)
+    {
+        if (string.IsNullOrEmpty(formula)) return fallback;
+        var m = Regex.Match(formula, @"([+-]?\d+(?:\.\d+)?)\s*%");
+        if (!m.Success) return fallback;
+        return float.Parse(m.Groups[1].Value) / 100f;
     }
 
     static float ParseAttackMultiplier(string formula)
@@ -254,11 +264,13 @@ public static class MercSkillTable
 
     static float ResolveAoeRadius(Row row)
     {
-        if (row.Id == "SK003") return 5f;
-        if (row.Id == "SK005") return 2.5f;
-        if (row.Id == "SK016" || row.Id == "SK015" || row.Id == "SK010" || row.Id == "SK008") return 8f;
-        if (row.RangeDesc != null && row.RangeDesc.Contains("全体")) return 8f;
-        return row.TargetType != null && row.TargetType.Contains("单体") ? 0f : 4f;
+        string range = row.RangeDesc ?? "";
+        if (range.Contains("全体")) return 8f;
+        if (range.Contains("扇形")) return 5f;
+        // SK005 现网 2.5（公式含「溅射攻击」）；SK020 等同溅射仍 4
+        if (range.Contains("溅射") && (row.Formula ?? "").Contains("溅射攻击")) return 2.5f;
+        if (row.TargetType != null && row.TargetType.Contains("单体")) return 0f;
+        return 4f;
     }
 
     static AttackVfxKit ResolveAttackKit(Row row)
@@ -277,7 +289,10 @@ public static class MercSkillTable
     {
         if (row.Category == SkillCategory.Heal || cfg.healPercentOfMax > 0f || IsHealActiveId(row.Id))
             return SkillSystem.SkillType.Buff;
-        if (row.Id == "SK007" || row.Id == "SK008" || row.Id == "SK018")
+        if (row.Category == SkillCategory.Defense && row.TargetType != null
+            && (row.TargetType.Contains("自身") || row.TargetType.Contains("全体")))
+            return SkillSystem.SkillType.Buff;
+        if (row.Category == SkillCategory.Magic && (row.Formula ?? "").Contains("目标攻击"))
             return SkillSystem.SkillType.Buff;
         if (row.RangeDesc != null && (row.RangeDesc.Contains("全体") || row.RangeDesc.Contains("扇形") || row.RangeDesc.Contains("溅射")))
             return SkillSystem.SkillType.AOE;
@@ -286,12 +301,13 @@ public static class MercSkillTable
         return SkillSystem.SkillType.AOE;
     }
 
-    /// <summary>主动治疗技（规范 ID：SK004 治愈之光；另含 SK013/SK015）。</summary>
+    /// <summary>主动治疗技：优先表 Category=恢复；缺表回退现网 SK004/013/015。</summary>
     public static bool IsHealActiveId(string id)
     {
         if (string.IsNullOrEmpty(id)) return false;
-        if (id == "SK004" || id == "SK013" || id == "SK015") return true;
-        return TryGet(id, out var row) && !row.IsPassive && row.Category == SkillCategory.Heal;
+        if (TryGet(id, out var row))
+            return !row.IsPassive && row.Category == SkillCategory.Heal;
+        return id == "SK004" || id == "SK013" || id == "SK015";
     }
 
     public static Sprite LoadIcon(string skillId)

@@ -2,10 +2,9 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// 玩家可携带技能。元数据优先读 <see cref="PlayerSkillTable"/>（CSV Cook）；
-/// 缺表回退本类 Fallback（与 player_skills.csv 1:1）。
-/// 每次战斗只能带 1 个；受击回能、满条自动释放（引导可锁点击）。解锁只跟通关章节。
-/// 未知 id 返回 null，禁止静默回退「治愈之泉」。
+/// 玩家可携带技能。元数据+战斗数优先读 <see cref="PlayerSkillTable"/>（CSV Cook）；
+/// 缺表回退本类 Fallback（与 player_skills.csv 1:1，战斗数从现网 Ally SO 种子）。
+/// 运行时伤害/治疗/Buff/AOE 不读 Ally SkillConfig。未知 id 返回 null。
 /// </summary>
 public static class PlayerSkillDefs
 {
@@ -35,6 +34,20 @@ public static class PlayerSkillDefs
         public int unlockChapter; // 通关该章后解锁（maxUnlockedChapter > unlockChapter）；0=初始
         public string allyConfigId;
         public Color tint;
+        public SkillSystem.SkillType skillType;
+        public AttackVfxKit attackKit;
+        public float damageMultiplier;
+        public float baseDamage;
+        public float aoeRadius;
+        public int projectileCount;
+        public float projectileSpeed;
+        public AttrType buffAttr;
+        public float buffValue;
+        public bool buffIsPercent;
+        public float healBase;
+        public float healPercentOfMax;
+        public float energyCost;
+        public bool hasCombat;
     }
 
     /// <summary>缺表时的 1:1 种子；数值与 player_skills.csv / 设计文档一致。</summary>
@@ -52,7 +65,16 @@ public static class PlayerSkillDefs
             useHint = "血量危险时手动点击",
             unlockChapter = 0,
             allyConfigId = "ally_heal",
-            tint = new Color(0.35f, 0.75f, 0.4f)
+            tint = new Color(0.35f, 0.75f, 0.4f),
+            skillType = SkillSystem.SkillType.Buff,
+            attackKit = AttackVfxKit.Heal,
+            aoeRadius = 6f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            buffAttr = AttrType.MaxHp,
+            healPercentOfMax = 0.3f,
+            energyCost = 1f,
+            hasCombat = true
         },
         new Def
         {
@@ -66,7 +88,17 @@ public static class PlayerSkillDefs
             useHint = "精英/Boss 放大招前、或被包围时手动点击",
             unlockChapter = 1,
             allyConfigId = "ally_shield",
-            tint = new Color(0.35f, 0.55f, 0.9f)
+            tint = new Color(0.35f, 0.55f, 0.9f),
+            skillType = SkillSystem.SkillType.Buff,
+            attackKit = AttackVfxKit.None,
+            aoeRadius = 4f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            buffAttr = AttrType.Defense,
+            buffValue = 0.35f,
+            buffIsPercent = true,
+            energyCost = 1f,
+            hasCombat = true
         },
         new Def
         {
@@ -80,7 +112,17 @@ public static class PlayerSkillDefs
             useHint = "精英/Boss 战或大量小怪时手动点击",
             unlockChapter = 2,
             allyConfigId = "ally_atk_up",
-            tint = new Color(0.9f, 0.45f, 0.25f)
+            tint = new Color(0.9f, 0.45f, 0.25f),
+            skillType = SkillSystem.SkillType.Buff,
+            attackKit = AttackVfxKit.None,
+            aoeRadius = 6f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            buffAttr = AttrType.Attack,
+            buffValue = 0.3f,
+            buffIsPercent = true,
+            energyCost = 1f,
+            hasCombat = true
         },
         new Def
         {
@@ -94,7 +136,17 @@ public static class PlayerSkillDefs
             useHint = "输出窗口期手动点击",
             unlockChapter = 3,
             allyConfigId = "ally_atk_speed",
-            tint = new Color(0.4f, 0.7f, 0.95f)
+            tint = new Color(0.4f, 0.7f, 0.95f),
+            skillType = SkillSystem.SkillType.Buff,
+            attackKit = AttackVfxKit.None,
+            aoeRadius = 6f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            buffAttr = AttrType.AttackSpeed,
+            buffValue = 0.35f,
+            buffIsPercent = true,
+            energyCost = 1f,
+            hasCombat = true
         },
         new Def
         {
@@ -108,7 +160,17 @@ public static class PlayerSkillDefs
             useHint = "Boss 战或精英怪出现时手动点击",
             unlockChapter = 4,
             allyConfigId = "ally_crit_up",
-            tint = new Color(0.95f, 0.55f, 0.25f)
+            tint = new Color(0.95f, 0.55f, 0.25f),
+            skillType = SkillSystem.SkillType.Buff,
+            attackKit = AttackVfxKit.None,
+            aoeRadius = 6f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            buffAttr = AttrType.CritRate,
+            buffValue = 0.25f,
+            buffIsPercent = true,
+            energyCost = 1f,
+            hasCombat = true
         },
         new Def
         {
@@ -122,7 +184,16 @@ public static class PlayerSkillDefs
             useHint = "怪群聚集或 Boss 虚弱时手动点击",
             unlockChapter = 5,
             allyConfigId = "ally_thunder",
-            tint = new Color(0.65f, 0.4f, 0.9f)
+            tint = new Color(0.65f, 0.4f, 0.9f),
+            skillType = SkillSystem.SkillType.AOE,
+            attackKit = AttackVfxKit.None,
+            damageMultiplier = 3f,
+            aoeRadius = 8f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            buffAttr = AttrType.Attack,
+            energyCost = 1f,
+            hasCombat = true
         }
     };
 
@@ -192,7 +263,21 @@ public static class PlayerSkillDefs
             useHint = src.useHint,
             unlockChapter = src.unlockChapter,
             allyConfigId = src.allyConfigId,
-            tint = src.tint
+            tint = src.tint,
+            skillType = src.skillType,
+            attackKit = src.attackKit,
+            damageMultiplier = src.damageMultiplier,
+            baseDamage = src.baseDamage,
+            aoeRadius = src.aoeRadius,
+            projectileCount = src.projectileCount,
+            projectileSpeed = src.projectileSpeed,
+            buffAttr = src.buffAttr,
+            buffValue = src.buffValue,
+            buffIsPercent = src.buffIsPercent,
+            healBase = src.healBase,
+            healPercentOfMax = src.healPercentOfMax,
+            energyCost = src.energyCost,
+            hasCombat = src.hasCombat
         };
     }
 
@@ -208,6 +293,32 @@ public static class PlayerSkillDefs
         dest.useHint = row.UseHint;
         dest.unlockChapter = row.UnlockChapter;
         dest.allyConfigId = row.AllyConfigId;
+        if (row.HasCombat)
+        {
+            dest.skillType = row.SkillType;
+            dest.attackKit = row.AttackKit;
+            dest.damageMultiplier = row.DamageMultiplier;
+            dest.baseDamage = row.BaseDamage;
+            dest.aoeRadius = row.AoeRadius;
+            dest.projectileCount = row.ProjectileCount;
+            dest.projectileSpeed = row.ProjectileSpeed;
+            dest.buffAttr = row.BuffAttr;
+            dest.buffValue = row.BuffValue;
+            dest.buffIsPercent = row.BuffIsPercent;
+            dest.healBase = row.HealBase;
+            dest.healPercentOfMax = row.HealPercentOfMax;
+            dest.energyCost = row.EnergyCost;
+            dest.hasCombat = true;
+        }
+    }
+
+    public static Def GetByAllyConfigId(string allyId)
+    {
+        EnsureLoaded();
+        if (string.IsNullOrEmpty(allyId)) return null;
+        for (int i = 0; i < _all.Length; i++)
+            if (_all[i].allyConfigId == allyId) return _all[i];
+        return null;
     }
 
     static void Append(Def def)

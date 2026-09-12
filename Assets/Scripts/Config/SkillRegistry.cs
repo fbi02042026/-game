@@ -8,6 +8,7 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
 {
     private Dictionary<string, SkillConfig> _dict = new Dictionary<string, SkillConfig>();
     private Dictionary<string, SkillConfig> _runtimeMerc = new Dictionary<string, SkillConfig>();
+    private Dictionary<string, SkillConfig> _runtimePlayer = new Dictionary<string, SkillConfig>();
 
     /// <summary>仅文档/旧存档对照。战斗路径禁止再静默回退此 id。</summary>
     public const string DefaultPlayerSkillId = "ally_heal";
@@ -28,6 +29,7 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
     {
         _dict.Clear();
         _runtimeMerc.Clear();
+        _runtimePlayer.Clear();
         LoadFolder(ContentPaths.Config.SkillsAlly);
         LoadFolder(ContentPaths.Config.SkillsMonster);
         LoadFolder(ContentPaths.Config.SkillsPlayerLegacy);
@@ -50,6 +52,7 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
     public SkillConfig Get(string id)
     {
         if (string.IsNullOrEmpty(id)) return null;
+        if (TryGetPlayerCombatConfig(id, out var playerCfg)) return playerCfg;
         if (_dict.TryGetValue(id, out var c)) return c;
         if (_runtimeMerc.TryGetValue(id, out c)) return c;
         if (MercSkillTable.IsMercSkillId(id))
@@ -61,13 +64,48 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
         return null;
     }
 
+    /// <summary>
+    /// 玩家技能战斗数只走表。Ally SO 仅拷贝 vfxPrefab（若有）。
+    /// 可用玩家 id（heal_spring）或 allyConfigId（ally_heal）查询。
+    /// </summary>
+    bool TryGetPlayerCombatConfig(string id, out SkillConfig cfg)
+    {
+        cfg = null;
+        if (_runtimePlayer.TryGetValue(id, out cfg)) return cfg != null;
+
+        var def = PlayerSkillDefs.GetById(id) ?? PlayerSkillDefs.GetByAllyConfigId(id);
+        if (def == null || !def.hasCombat)
+        {
+            cfg = null;
+            return false;
+        }
+
+        cfg = PlayerSkillTable.BuildRuntimeConfig(def);
+        if (cfg == null) return false;
+        var ally = PeekAllyAsset(def.allyConfigId);
+        if (ally != null && ally.vfxPrefab != null)
+            cfg.vfxPrefab = ally.vfxPrefab;
+        _runtimePlayer[def.id] = cfg;
+        if (!string.IsNullOrEmpty(def.allyConfigId))
+            _runtimePlayer[def.allyConfigId] = cfg;
+        _runtimePlayer[id] = cfg;
+        return true;
+    }
+
+    /// <summary>只取 Ally 资源上的 VFX，不读伤害字段。</summary>
+    SkillConfig PeekAllyAsset(string allyId)
+    {
+        if (string.IsNullOrEmpty(allyId)) return null;
+        return _dict.TryGetValue(allyId, out var c) ? c : null;
+    }
+
     public SkillSystem.ActiveSkill GetActiveSkill(string id)
     {
         var cfg = Get(id);
         return cfg != null ? cfg.ToActiveSkill() : null;
     }
 
-    /// <summary>玩家当前携带技能（角色页选择；映射到现有 Ally SkillConfig）</summary>
+    /// <summary>玩家当前携带技能。返回 allyConfigId 供 VFX；战斗数由表合成。</summary>
     public string GetPlayerSkillId()
     {
         string fromEquip = EquipStatRollup.GetEquippedGrantSkillId(GridBackpackSystem.Instance);
@@ -86,13 +124,13 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
             Debug.LogError("[SkillRegistry] 未知玩家技能 id，拒绝释放: " + selected);
             return null;
         }
-        if (string.IsNullOrEmpty(def.allyConfigId) || Get(def.allyConfigId) == null)
+        if (!def.hasCombat)
         {
-            Debug.LogError("[SkillRegistry] 玩家技能缺 Ally 配置，拒绝释放: "
-                + selected + " → " + def.allyConfigId);
+            Debug.LogError("[SkillRegistry] 玩家技能缺表战斗数值，拒绝释放: " + selected);
             return null;
         }
-        return def.allyConfigId;
+        // VFX 仍走 allyConfigId 路径；伤害已由表合成，不再要求 Ally SO 存在
+        return string.IsNullOrEmpty(def.allyConfigId) ? def.id : def.allyConfigId;
     }
 
     public string GetMercDefaultSkillId(string mercId)

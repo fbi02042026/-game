@@ -5,7 +5,8 @@
 > **原则**：保住当前战斗手感；先关门再迁表；大拆类只在「第二种战斗编排」真出现时做。  
 > **本 PR（#6）**：Phase 0–3 已落地（评审 + 止血 + 数值真源 + 装备门闩）。  
 > **Phase 4 PR**：引导 / 正式刷怪合流（HP 进表、埋伏走 SpawnWave 参数、TutorialRules）。  
-> **Phase 5 PR**：按需减税（玩家技能元数据表、开战单入口、战斗单例禁自动 new、AttrOwnerKind 收口）。WavePlanner / SkillCast / 平台 SDK 仍按需另开。
+> **Phase 5 PR**：按需减税（玩家技能元数据表、开战单入口、战斗单例禁自动 new、AttrOwnerKind 收口）。  
+> **Phase 6 PR**：抽出 WavePlanner / SkillCastService；玩家技能战斗数离 Ally SO（表种子 1:1）。平台 SDK 仍推迟。
 
 ---
 
@@ -15,13 +16,13 @@
 2. **引导与正式关共用刷怪入口**，导演只编排节拍。
 3. **装备掷骰 ≠ 战斗生效**。未映射词条不进包。
 4. **一次只开一扇门**。每阶段可独立合入、可回滚。
-5. **禁止**改 `*.prefab`、批量改产品名、拆 `BattleManager` God-object（除非 Phase 5 有第二种战斗模式硬需求）。
+5. **禁止**改 `*.prefab`、批量改产品名。`BattleManager` 只做编排，刷怪/施法已抽到 WavePlanner / SkillCastService（Phase 6）。
 
 ---
 
 ## Non-goals（全程不做）
 
-- 一次性拆解 `BattleManager` / `BattleUI` / `AutoGameInitializer`。
+- 一次性拆解 `BattleUI` / `AutoGameInitializer`（BM 刷怪/施法已在 Phase 6 抽出）。
 - 把全部 `GameConfig` 迁进 CSV。
 - 删光 Equip / Monster / Skill ScriptableObject（表尚未 100% 覆盖）。
 - 重写天赋树、存档格式、上 ECS / Addressables。
@@ -59,7 +60,7 @@
 | 引导波次 | `tutorial_battle` | 步进 + HP 档进表；导演只点 `QueueTutorialStep`；埋伏/夹击是 SpawnWave 参数 | **Phase 4 完成** |
 | 装备词条数值 | `equip_attr_ranges` + `IsCombatLanded` | 只抽已映射 12 种进包；未落地不占词条位 | **Phase 3 完成** |
 | 天赋 | `TalentDefs` C# | 可继续硬编码直到要热更 | 非本计划必做 |
-| 玩家技能 | 目标：CSV 如佣兵 | `PlayerSkillDefs` + Ally SO | Phase 5 |
+| 玩家技能 | Cook `player_skills`（元数据+战斗数） | 表优先；Ally SO 仅 VFX | **Phase 6 完成** |
 | 佣兵技能 | `merc_skills` | 已表驱动 | 保持 |
 
 ### 0.2 装备词条落地清单（Phase 3 闸门，此处只记账）
@@ -158,10 +159,47 @@
 | 开战单入口 | **完成** | `BattleUI.Awake` 不再调 `AutoGameInitializer.Initialize`；开战只走场景组件 Awake。`TryStartNewRunOnce` 仍防重入 | 无 HUD 改动 |
 | 战斗单例禁自动 new | **完成** | `ICombatBoundSingleton`：BM / SkillSystem / SkillRegistry / BattleVFX / CombatJuice / DamageText / MonsterSpriteLoader / PoolManager / HeroThunderUltimate。找不到 → null + Error。Boot/城镇（Save/Config/MercenaryManager 等）仍可 getter 创建 | 装配后行为不变 |
 | AttrOwnerKind 尾巴 | **完成** | `RecalcAllAttr` 仅 Player 叠存档/天赋/传说；城镇角色页无 Hero 时 `new AttrSystem(Player)` | 开战 Recalc 同前；城镇面板更接近职业表 |
-| WavePlanner / SkillCast | **推迟** | 仅第二种战斗编排出现时再抽 | — |
+| WavePlanner / SkillCast | **Phase 6 完成** | 见下节 | — |
 | 平台 Bridge / 真广告 | **推迟** | 不上线微信前不改业务调用点 | — |
 
-**本阶段仍禁止**：改 `*.prefab`、拆 `BattleManager` God-object、改 `GameConfig` 战斗倍率、新 BM `IsTutorialRun` / 新技能 if。
+**本阶段仍禁止**：改 `*.prefab`、改 `GameConfig` 战斗倍率、新 BM `IsTutorialRun` / 新技能 if。
+
+---
+
+## Phase 6 — WavePlanner / SkillCast / 玩家技能离 SO（本 PR）
+
+对应评审 P0-1 抽出、P1-1 战斗数离 Ally SO。**约束：伤害公式、受击回能、刷怪人数/左右/stagger、教程 HP 档、VFX Kit、Ch1-0 与引导手感 1:1。**
+
+| 项 | 状态 | 做法 | 手感 |
+|----|------|------|------|
+| WavePlanner | **完成** | 正式 `SetupNormal/Elite/Boss` 与引导 `QueueTutorialStep` 都铺 `WaveData`，出怪仍走同一 `SpawnWave` / `CoSpawnWaveMonsters`（参数：bilateralEnter / aroundAnchor / staggerOverride / forcedTarget）。导演只点步进 | 人数/L-R/错峰/HP 档同前 |
+| SkillCastService | **完成** | 玩家/佣兵施放从 BM 迁出。佣兵分派 `MercSkillExecutor`（Category / TargetType / Formula），无 `if (id==SKxxx)` | SK007/008/010/015/018 现网数不变 |
+| 玩家技能离 Ally SO | **完成** | `player_skills` 增战斗列（skillType/attackKit/倍率/AOE/Buff/治疗/energyCost）。`SkillRegistry.Get` 先合成表配置；Ally SO 只拷 `vfxPrefab`。缺表回退 Fallback（与 CSV 1:1，种子见下） | 6 技能有效数 1:1 |
+| BM 变薄 | **完成** | 状态机 / 胜负 / 能量 / 过场仍在 BM；刷怪与施放只接线 | 无 |
+
+**战斗数种子（从现网 Ally SO 读一次，禁止发明）：**
+
+| 玩家 id | allyConfigId | skillType | attackKit | 有效数 |
+|---------|--------------|-----------|-----------|--------|
+| heal_spring | ally_heal | Buff | Heal | healPercent=0.3，aoe=6，cd=12 |
+| holy_barrier | ally_shield | Buff | None | Defense+35%（现网 ApplyTeamBuff，不是独立护盾条），dur=5，aoe=4，cd=18 |
+| battle_surge | ally_atk_up | Buff | None | Attack+30%，dur=8，aoe=6，cd=18 |
+| gale_stance | ally_atk_speed | Buff | None | AttackSpeed+35%，dur=6，aoe=6，cd=15 |
+| deadly_focus | ally_crit_up | Buff | None | CritRate+25%，dur=8，aoe=6，cd=18 |
+| thunder_verdict | ally_thunder | AOE | None | ATK×3，aoe=8，cd=25 |
+
+energyCost=1：满条消耗（与现网受击回能、满条自动一致）。VFX 仍按 `allyConfigId` 找 `Resources/VFX/Skills/Ally/{id}` 与 attackKit。
+
+**佣兵历史分支 → 表字段（现网数）：**
+
+| 现网 ID | 表依据 | 执行 |
+|---------|--------|------|
+| SK015 等恢复+全体 | Category=恢复 + 全体 | 群体治疗 atk×表倍率（缺省 1.3；SK015 表 120%） |
+| 恢复+单体 | Category=恢复 | 单体治疗 |
+| SK007 | 自身 + 防御 +「防御 +35%」 | ApplySelfDefBuff(duration 表=5) |
+| SK008 | 全体 +「生命上限 × 10%」 | 护盾 10% / 6s |
+| SK010 | 全体 + 公式含「治疗」 | 群体治疗 atk×50%（仍不接无敌） |
+| SK018 | 法术 +「目标攻击」 | Fear 8s + fallback |
 
 ---
 
@@ -171,8 +209,9 @@
 |----|------|------|
 | **#6** | 评审 + 本计划 + Phase 1–3 | 已合 main `45ad6101` |
 | **#7** | Phase 4 引导刷怪合流 | 已合 main `e7d4c56b` |
-| **本 PR** | Phase 5 按需减税 | 手测引导 + 第一章 1-0；故意缺技能配置应拒绝 |
-| 按需 | WavePlanner / SkillCast / 真 SDK | 第二种战斗编排或接 SDK 时 |
+| **#8** | Phase 5 按需减税 | 已合 main `f591f814` |
+| **本 PR** | Phase 6 WavePlanner + SkillCast + 玩家技能离 SO | 手测引导 + Ch1-0 + 六个玩家技能各放一次 |
+| 按需 | 真 SDK | 接微信/广告时 |
 
 ---
 
@@ -249,3 +288,18 @@
 | `BattleUI` / `AutoGameInitializer` | UI 不再开战；EnsureGameRoot 用 Find 不靠 getter new |
 | `Singleton.cs` | 战斗必需禁止自动创建 |
 | `AttrSystem` / `CharacterUI` | 存档加成仅 Player；城镇预览绑 Player |
+
+## Phase 6 实现对照
+
+| 文件 | 改动 |
+|------|------|
+| `WaveData.cs` | 原 BM 嵌套类外提；正式/引导共用 |
+| `WavePlanner.cs` | 铺波 + SpawnWave / 屏外进场 / 教程 HP / 精灵挑选（方法体从 BM 原样迁出） |
+| `SkillCastService.cs` | 玩家/佣兵施放、治疗/Buff fallback |
+| `MercSkillExecutor.cs` | 佣兵主动技按表字段分派 |
+| `player_skills.csv/.bytes` | 增战斗列；6 行 1:1 种子自 Ally SO |
+| `PlayerSkillTable` / `PlayerSkillDefs` | 解析战斗列；Fallback 带同数；`BuildRuntimeConfig` |
+| `SkillRegistry.Get` | 玩家 id / allyConfigId 先走表合成；Ally 只拷 vfxPrefab |
+| `MercSkillTable` | 公式/类型解析，去掉 SK007/008/018 if |
+| `BattleManager` | 编排器：QueueTutorial* / TryUse* 转发给 Planner / SkillCast |
+| `TutorialDirector` | 未改调用点，仍只 `QueueTutorialStep` |
