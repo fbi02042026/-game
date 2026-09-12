@@ -93,8 +93,8 @@ public class AttrSystem
         // 1b. 仅 Player 套职业表（佣兵/怪物走各自 Init，勿盖成玩家 ATK）
         ApplyPlayerJobBaseIfAny();
 
-        // 2. 四大基础属性加成（来自天赋和遗产）— 仅玩家相关，SaveSystem可能未初始化
-        var saveSys = SaveSystem.Instance;
+        // 2. 四大基础属性加成（来自天赋和遗产）— 仅 Player；佣兵/怪物走各自 Init，勿叠玩家存档
+        var saveSys = OwnerKind == AttrOwnerKind.Player ? SaveSystem.Instance : null;
         if (saveSys != null && saveSys.Data != null)
         {
             _attr[AttrType.Strength] = Strength + saveSys.Data.playerStrength;

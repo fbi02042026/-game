@@ -1,0 +1,10 @@
+# 玩家技能元数据（对齐佣兵 merc_skills 管线）。战斗数值/特效仍走 Ally SkillConfig（allyConfigId）。
+# 缺表回退 PlayerSkillDefs.Fallback（与下表 1:1）。未知 id 拒绝释放，禁止静默回退治愈之泉。
+# 运行时：受击回能、满条自动；useHint 仅角色页文案。
+id,displayName,kind,desc,numbers,cooldown,duration,useHint,unlockChapter,allyConfigId
+heal_spring,治愈之泉,Heal,给当前生命比例最低的我方单位回血（玩家或佣兵）。,恢复目标 30% 最大生命,12,0,血量危险时手动点击,0,ally_heal
+holy_barrier,圣盾壁垒,Shield,获得护盾，持续期间免疫控制。,获得 35% 最大生命的护盾，持续 5 秒,18,5,精英/Boss 放大招前、或被包围时手动点击,1,ally_shield
+battle_surge,战意爆发,AtkBuff,短时间内大幅提升攻击。,攻击 +30%，持续 8 秒,18,8,精英/Boss 战或大量小怪时手动点击,2,ally_atk_up
+gale_stance,疾风架势,AtkSpeedBuff,进入疾风状态，攻速大幅提升。,攻速 +35%，持续 6 秒,15,6,输出窗口期手动点击,3,ally_atk_speed
+deadly_focus,致命专注,CritBuff,集中精神，暴击率提升。,暴击率 +25%，持续 8 秒,18,8,Boss 战或精英怪出现时手动点击,4,ally_crit_up
+thunder_verdict,天雷裁决,Aoe,召唤天雷轰击目标区域。,造成 300% 攻击的范围伤害,25,0,怪群聚集或 Boss 虚弱时手动点击,5,ally_thunder

@@ -9,6 +9,8 @@ public static class ContentPaths
         public const string TablesRoot = "Data/Tables";
         public const string MonsterAttackStyle = "Data/Tables/monster_attack_style";
         public const string MercSkills = "Data/Tables/merc_skills";
+        /// <summary>玩家技能元数据（展示/解锁/Ally 映射）。战斗数值仍走 Ally SO。</summary>
+        public const string PlayerSkills = "Data/Tables/player_skills";
         public const string MercSkillMap = "Data/Tables/merc_skill_map";
         public const string MercLines = "Data/Tables/merc_lines";
         public const string IntelQuiz = "Data/Tables/intel_quiz";

@@ -4,11 +4,12 @@ using UnityEngine;
 /// <summary>
 /// 技能表：Ally=玩家+佣兵共用；Monster=敌人主动技
 /// </summary>
-public class SkillRegistry : Singleton<SkillRegistry>
+public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
 {
     private Dictionary<string, SkillConfig> _dict = new Dictionary<string, SkillConfig>();
     private Dictionary<string, SkillConfig> _runtimeMerc = new Dictionary<string, SkillConfig>();
 
+    /// <summary>仅文档/旧存档对照。战斗路径禁止再静默回退此 id。</summary>
     public const string DefaultPlayerSkillId = "ally_heal";
     public const string DefaultMercMeleeSkillId = "ally_shield";
     public const string DefaultMercRangedSkillId = "ally_thunder";
@@ -74,10 +75,24 @@ public class SkillRegistry : Singleton<SkillRegistry>
             return fromEquip;
 
         string selected = SaveSystem.Instance?.Data?.selectedPlayerSkillId;
+        if (string.IsNullOrEmpty(selected))
+        {
+            Debug.LogError("[SkillRegistry] 未选择玩家技能，拒绝映射默认 ally_heal");
+            return null;
+        }
         var def = PlayerSkillDefs.GetById(selected);
-        if (def != null && !string.IsNullOrEmpty(def.allyConfigId))
-            return def.allyConfigId;
-        return DefaultPlayerSkillId;
+        if (def == null)
+        {
+            Debug.LogError("[SkillRegistry] 未知玩家技能 id，拒绝释放: " + selected);
+            return null;
+        }
+        if (string.IsNullOrEmpty(def.allyConfigId) || Get(def.allyConfigId) == null)
+        {
+            Debug.LogError("[SkillRegistry] 玩家技能缺 Ally 配置，拒绝释放: "
+                + selected + " → " + def.allyConfigId);
+            return null;
+        }
+        return def.allyConfigId;
     }
 
     public string GetMercDefaultSkillId(string mercId)

@@ -7,7 +7,7 @@ using System.Collections.Generic;
 /// · 敌方受击：红字 → 始终往受害者后方（与怪物 GetVfxFacingDir 相反）
 /// · 暴击：前缀「暴击」、亮紫
 /// </summary>
-public class DamageTextSystem : Singleton<DamageTextSystem>
+public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSingleton
 {
     public enum TextKind
     {

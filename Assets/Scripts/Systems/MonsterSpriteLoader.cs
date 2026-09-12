@@ -5,7 +5,7 @@ using System.Collections.Generic;
 /// 怪物精灵加载器：通过MonsterSpriteRegistry ScriptableObject获取精灵
 /// 在编辑器中配置好精灵引用后，运行时直接使用
 /// </summary>
-public class MonsterSpriteLoader : Singleton<MonsterSpriteLoader>
+public class MonsterSpriteLoader : Singleton<MonsterSpriteLoader>, ICombatBoundSingleton
 {
     [Header("精灵注册表")]
     public MonsterSpriteRegistry registry;

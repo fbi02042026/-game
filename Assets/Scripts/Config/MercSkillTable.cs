@@ -216,6 +216,7 @@ public static class MercSkillTable
             }
         }
 
+        // PHASE5 GATE：禁止再为新技能加 Id == SKxxx。新行只填公式/类型；历史 SK007/008/018 待 SkillCast 再迁。
         if (row.Id == "SK007")
         {
             cfg.buffAttr = AttrType.Defense;

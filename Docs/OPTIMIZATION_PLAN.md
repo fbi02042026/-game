@@ -4,7 +4,8 @@
 > **对照评审**：[`ARCHITECTURE_REVIEW.md`](./ARCHITECTURE_REVIEW.md)（问题编号 P0/P1/P2 以评审为准）。  
 > **原则**：保住当前战斗手感；先关门再迁表；大拆类只在「第二种战斗编排」真出现时做。  
 > **本 PR（#6）**：Phase 0–3 已落地（评审 + 止血 + 数值真源 + 装备门闩）。  
-> **Phase 4 PR**：引导 / 正式刷怪合流（HP 进表、埋伏走 SpawnWave 参数、TutorialRules）。Phase 5 按需另开。
+> **Phase 4 PR**：引导 / 正式刷怪合流（HP 进表、埋伏走 SpawnWave 参数、TutorialRules）。  
+> **Phase 5 PR**：按需减税（玩家技能元数据表、开战单入口、战斗单例禁自动 new、AttrOwnerKind 收口）。WavePlanner / SkillCast / 平台 SDK 仍按需另开。
 
 ---
 
@@ -29,7 +30,7 @@
 - 复活商人 / 诅咒 / 锻造完整玩法。
 - 为对称而合并三套能量（先写清规则）。
 - 引导可视化时间轴大工程。
-- **本 PR 不做**：伤害 / 能量公式 / 刷怪数量 / VFX 调参（Phase 2–4 才允许动这些，且须手感对照）。
+- **Phase 5 不做**：伤害 / 能量公式 / 刷怪数量 / VFX 调参；不拆 BattleManager；不接真 SDK。
 
 ---
 
@@ -145,15 +146,22 @@
 
 ---
 
-## Phase 5 — 按需（有产品需求再开）
+## Phase 5 — 按需减税（本 PR 已落地可安全项）
 
-对应 P0-1、P1-1、P1-4、P1-5、P1-6。
+对应 P0-1（门闩）、P1-1、P1-3 尾巴、P1-4、P1-5。P1-6 / 大拆类仍按需。
 
-- 玩家技能 CSV 化（对齐佣兵 `MercSkillTable`）。
-- 抽出 `WavePlanner` / `SkillCast`：**仅当第二种战斗编排**（新模式/活动本）需要时。
-- 平台只改 Bridge，业务调用点不动；Release 广告不得模拟成功。
-- UI 不初始化战斗（`BattleUI.Awake` 后备入口收掉）。
-- Singleton getter 禁止为战斗必需系统自动 `new`。
+| 项 | 状态 | 做法 | 手感 |
+|----|------|------|------|
+| 玩家技能元数据 CSV | **完成** | `player_skills.csv` Cook → `PlayerSkillTable`；`PlayerSkillDefs` 缺表回退 Fallback（与表 1:1）。战斗数值/VFX 仍走 Ally SO（`allyConfigId`）。未知 id / 缺 Ally 配置：Error + 拒绝释放，不再静默 `ally_heal` | 已配置技能不变 |
+| 缺配置拒绝 | **保持** | `ResolveSkill` 失败返回 null（Phase 1）；`GetPlayerSkillId` 去掉 `DefaultPlayerSkillId` 静默回退 | 同左 |
+| BM 技能 `if (id==SKxxx)` | **门闩（未抽执行器）** | 抽出通用 SkillCast 会碰 SK007/008/010/015/018 历史分支，本阶段不加行为。`TryCastMercActiveSkill` / `MercSkillTable` 加 PHASE5 GATE：禁止再加新 ID 分支 | 不变 |
+| 开战单入口 | **完成** | `BattleUI.Awake` 不再调 `AutoGameInitializer.Initialize`；开战只走场景组件 Awake。`TryStartNewRunOnce` 仍防重入 | 无 HUD 改动 |
+| 战斗单例禁自动 new | **完成** | `ICombatBoundSingleton`：BM / SkillSystem / SkillRegistry / BattleVFX / CombatJuice / DamageText / MonsterSpriteLoader / PoolManager / HeroThunderUltimate。找不到 → null + Error。Boot/城镇（Save/Config/MercenaryManager 等）仍可 getter 创建 | 装配后行为不变 |
+| AttrOwnerKind 尾巴 | **完成** | `RecalcAllAttr` 仅 Player 叠存档/天赋/传说；城镇角色页无 Hero 时 `new AttrSystem(Player)` | 开战 Recalc 同前；城镇面板更接近职业表 |
+| WavePlanner / SkillCast | **推迟** | 仅第二种战斗编排出现时再抽 | — |
+| 平台 Bridge / 真广告 | **推迟** | 不上线微信前不改业务调用点 | — |
+
+**本阶段仍禁止**：改 `*.prefab`、拆 `BattleManager` God-object、改 `GameConfig` 战斗倍率、新 BM `IsTutorialRun` / 新技能 if。
 
 ---
 
@@ -162,8 +170,9 @@
 | PR | 内容 | 依赖 |
 |----|------|------|
 | **#6** | 评审 + 本计划 + Phase 1–3 | 已合 main `45ad6101` |
-| **本 PR** | Phase 4 引导刷怪合流 | 须完整手测引导（宝箱→佣兵→佣兵后一波）+ 第一章 1-0 手感对照 |
-| 按需 | Phase 5 单项 | 产品点名 |
+| **#7** | Phase 4 引导刷怪合流 | 已合 main `e7d4c56b` |
+| **本 PR** | Phase 5 按需减税 | 手测引导 + 第一章 1-0；故意缺技能配置应拒绝 |
+| 按需 | WavePlanner / SkillCast / 真 SDK | 第二种战斗编排或接 SDK 时 |
 
 ---
 
@@ -228,3 +237,15 @@
 | `TutorialDirector.cs` | 只点步进与节拍；救援佣兵仍由导演放置 |
 | `BattleSideHud.cs` / `MercBattleBanter.cs` | 连杀隐藏 / 禁闲聊改问规则包 |
 | `GameDataTableTools.cs` | 种子表列与现网步进对齐 |
+
+## Phase 5 实现对照
+
+| 文件 | 改动 |
+|------|------|
+| `player_skills.csv` + `.bytes` | 6 条元数据（与 Fallback 1:1） |
+| `PlayerSkillTable.cs` / `PlayerSkillDefs.cs` | Cook 表优先；未知 id → null |
+| `SkillRegistry.GetPlayerSkillId` | 缺配置 Error，不回退 `ally_heal` |
+| `BattleManager` | ResolvePlayerSkill 无默认 id；佣兵施法 GATE 注释；`ICombatBoundSingleton` |
+| `BattleUI` / `AutoGameInitializer` | UI 不再开战；EnsureGameRoot 用 Find 不靠 getter new |
+| `Singleton.cs` | 战斗必需禁止自动创建 |
+| `AttrSystem` / `CharacterUI` | 存档加成仅 Player；城镇预览绑 Player |

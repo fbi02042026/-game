@@ -6,7 +6,7 @@ using UnityEngine.UI;
 /// 挂机向雷击奥义：击杀充能，满条自动释放。
 /// 总开关 GameConfig.THUNDER_ULT_ENABLED（当前关，等后期装备技能再开）。
 /// </summary>
-public class HeroThunderUltimate : Singleton<HeroThunderUltimate>
+public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundSingleton
 {
     int _charge;
     int _need = GameConfig.THUNDER_ULT_NEED_MIN;

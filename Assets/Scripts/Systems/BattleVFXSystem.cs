@@ -6,7 +6,7 @@ using System.Collections;
 /// 战斗特效：共用套装（刀光/暴击/弓箭/法球/治疗）+ 我方/敌方阵营色。
 /// 弓箭与法球必须从 FirePoint 飞到 HitPoint，禁止瞬移命中。
 /// </summary>
-public class BattleVFXSystem : Singleton<BattleVFXSystem>
+public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
 {
     [Header("特效预制体引用（在Inspector中拖入）")]
     public GameObject vfxSlash;

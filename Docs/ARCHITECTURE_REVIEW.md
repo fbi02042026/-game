@@ -3,7 +3,7 @@
 > **范围**：只读审查 `main` 现况（约 v0.3.5 后战斗手感/表驱动一轮）。不改玩法、不改预制体、不批量改名。  
 > **读者**：产品 + 程序。结论按「现在卡什么 / 扩内容会卡什么 / 先别动什么」排列。  
 > **证据日期**：2026-09-11，基于仓库当前 `main`。  
-> **落地计划**：[`OPTIMIZATION_PLAN.md`](./OPTIMIZATION_PLAN.md)（Phase 1–3 已合 main；Phase 4 引导刷怪合流已在后续 PR 落地；Phase 5 按需另开）。
+> **落地计划**：[`OPTIMIZATION_PLAN.md`](./OPTIMIZATION_PLAN.md)（Phase 1–3 已合 main；Phase 4 引导刷怪合流已合；Phase 5 按需减税已在后续 PR 落地可安全项，WavePlanner/SDK 仍按需）。
 
 ---
 
@@ -148,7 +148,7 @@ Battle                    AutoGameInitializer → GameRoot 上一打 Singleton
 - **位置**：`PlayerSkillDefs.cs`、`SkillRegistry.cs`、`TalentDefs.cs`、`GameDataCooker.cs`（无 `player_jobs`）。
 - **现在**：改技能文案/解锁章要改代码发版。  
 - **以后**：每加一个主动技或转职，都要改 Defs + SO + BM if（佣兵侧已有 SK015/SK007 分支）。
-- **方向**：玩家技能对齐佣兵：CSV 元数据 + 运行时合成；BM 去掉 2.5 兜底，改为打日志并拒绝释放。天赋可继续 C#，直到要做「热更天赋树」。
+- **方向（Phase 5 已落地元数据）**：`player_skills.csv` + `PlayerSkillTable`；缺配置拒绝释放（不再静默 `ally_heal` / ×2.5）。战斗数值仍走 Ally SO。天赋可继续 C#，直到要做「热更天赋树」。新技能禁止 BM `if (id==SKxxx)`（GATE 注释，SkillCast 仍推迟）。
 
 #### P1-2 章节图注释与实现、特殊关废弃物
 
@@ -164,7 +164,7 @@ Battle                    AutoGameInitializer → GameRoot 上一打 Singleton
 - **位置**：`AttrSystem.cs` L157–178；`GameConfig.cs` 开局关判断。
 - **现在**：引导开局总攻曾被力量×2 抬高，才加了这处特例——说明循环已经制造过数值事故。  
 - **以后**：第二主角、训练场、无 Hero 的结算预览会再踩。
-- **方向**：`RecalcAllAttr` 增加 `AttrOwnerKind`（Player/Merc/Monster），不要问单例。
+- **方向（Phase 2 + Phase 5）**：`AttrOwnerKind` 已绑定；`RecalcAllAttr` 仅 Player 叠存档/天赋/传说，不再问 `Hero.Instance`。
 
 #### P1-4 Singleton 自动 `new` + PersistentRoot / GameRoot 双挂
 
@@ -172,7 +172,7 @@ Battle                    AutoGameInitializer → GameRoot 上一打 Singleton
 - **位置**：`Singleton.cs` L12–45；`AutoGameInitializer.cs`；`BootManager`。
 - **现在**：偶发「空引用后冒出一个裸单例、没有场景引用」。  
 - **以后**：多战斗模式/重进战斗时，生命周期更难推理。
-- **方向**：战斗必需单例禁止 getter 创建（找不到就 null + 明确错误）。Story/Tutorial 只挂 PersistentRoot。
+- **方向（Phase 5 已落地 getter）**：`ICombatBoundSingleton` 找不到 → null + Error，禁止 new 空物体。Story/Tutorial 仍挂 PersistentRoot；城镇 MercenaryManager 等保持可自动创建。
 
 #### P1-5 UI 单体与战斗双向耦合
 
@@ -180,7 +180,7 @@ Battle                    AutoGameInitializer → GameRoot 上一打 Singleton
 - **位置**：`Assets/Scripts/UI/BattleUI.cs`；`Assets/Editor/*PrefabGenerator*.cs`。
 - **现在**：改 HUD 容易碰到开战时序。  
 - **以后**：新战斗 HUD（昼夜、天气、第二种操作）会继续堆进 BattleUI。
-- **方向**：BattleUI 只绑数据；开战只走 `AutoGameInitializer` 一条路径。生成器只用于缺失预制体的脚手架，不覆盖手摆 UI。
+- **方向（Phase 5 开战单入口）**：`BattleUI.Awake` 不再调用 `AutoGameInitializer.Initialize`。生成器只用于缺失预制体的脚手架，不覆盖手摆 UI。
 
 #### P1-6 平台层全 Stub，业务已按「有云/有广告」写了分支
 
