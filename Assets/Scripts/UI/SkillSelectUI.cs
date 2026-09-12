@@ -71,6 +71,7 @@ public class SkillSelectUI : MonoBehaviour
     {
         index = Mathf.Clamp(index, 0, MaxSkills - 1);
         var def = PlayerSkillDefs.Get(index);
+        if (def == null) return;
         bool unlocked = PlayerSkillDefs.IsUnlocked(def, SaveSystem.Instance?.Data);
         if (persist && !unlocked)
         {
@@ -322,9 +323,10 @@ public class SkillSelectUI : MonoBehaviour
             var sk = CreateImg(skills.transform, "Skill_" + i, new Color(0.55f, 0.4f, 0.25f, 1f));
             Set(sk.rectTransform, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, x, 0f, 80f, 80f);
             sk.gameObject.AddComponent<Button>().targetGraphic = sk;
-            var icon = CreateImg(sk.transform, "Icon", PlayerSkillDefs.Get(i).tint);
+            var slot = PlayerSkillDefs.Get(i);
+            var icon = CreateImg(sk.transform, "Icon", slot != null ? slot.tint : Color.white);
             Set(icon.rectTransform, 0.5f, 0.55f, 0.5f, 0.55f, 0.5f, 0.5f, 0f, 4f, 48f, 48f);
-            var lab = CreateTxt(sk.transform, "Label", PlayerSkillDefs.Get(i).displayName, 14, Color.white);
+            var lab = CreateTxt(sk.transform, "Label", slot != null ? slot.displayName : "", 14, Color.white);
             Set(lab.rectTransform, 0f, 0f, 1f, 0.28f, 0.5f, 0f, 0f, 2f, 0f, 0f);
         }
 

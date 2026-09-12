@@ -4,7 +4,7 @@ using UnityEngine;
 /// <summary>
 /// 简易对象池，所有怪物/特效/子弹统一走池子，避免GC卡顿
 /// </summary>
-public class PoolManager : Singleton<PoolManager>
+public class PoolManager : Singleton<PoolManager>, ICombatBoundSingleton
 {
     [HideInInspector] public GameObject _monsterPrefab;
     private Dictionary<string, Queue<GameObject>> _pool = new Dictionary<string, Queue<GameObject>>();

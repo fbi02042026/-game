@@ -6,7 +6,7 @@ using System.Collections.Generic;
 /// 技能系统：管理技能数值和弹幕特效
 /// 技能分为主动技能和被动技能
 /// </summary>
-public class SkillSystem : Singleton<SkillSystem>
+public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
 {
     private List<ActiveSkill> _skills = new List<ActiveSkill>();
     private Dictionary<string, float> _cooldowns = new Dictionary<string, float>();

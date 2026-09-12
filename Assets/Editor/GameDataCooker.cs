@@ -39,6 +39,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         Directory.CreateDirectory(ContentPaths.Source.Tables);
         CookMonsterAttackStyle();
         CookMercSkills();
+        CookPlayerSkills();
         CookMercSkillMap();
         CookMercLines();
         CookIntelQuiz();
@@ -91,6 +92,11 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookMercSkills()
     {
         CookTableFromSource(SourceMercSkillsCsv, null, "merc_skills");
+    }
+
+    static void CookPlayerSkills()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/player_skills.csv", null, "player_skills");
     }
 
     static void CookMercSkillMap()

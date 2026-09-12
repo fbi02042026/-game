@@ -2,8 +2,10 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// 玩家可携带技能表（与 Docs/像素冒险：裂缝之刃_玩家技能设计.md 一致）。
-/// 每次战斗只能带 1 个；手动点击释放；解锁只跟通关章节，没有玩家等级。
+/// 玩家可携带技能。元数据优先读 <see cref="PlayerSkillTable"/>（CSV Cook）；
+/// 缺表回退本类 Fallback（与 player_skills.csv 1:1）。
+/// 每次战斗只能带 1 个；受击回能、满条自动释放（引导可锁点击）。解锁只跟通关章节。
+/// 未知 id 返回 null，禁止静默回退「治愈之泉」。
 /// </summary>
 public static class PlayerSkillDefs
 {
@@ -35,7 +37,8 @@ public static class PlayerSkillDefs
         public Color tint;
     }
 
-    public static readonly Def[] All =
+    /// <summary>缺表时的 1:1 种子；数值与 player_skills.csv / 设计文档一致。</summary>
+    public static readonly Def[] Fallback =
     {
         new Def
         {
@@ -123,25 +126,131 @@ public static class PlayerSkillDefs
         }
     };
 
+    static Def[] _all;
+    static bool _loaded;
+
+    public static Def[] All
+    {
+        get
+        {
+            EnsureLoaded();
+            return _all;
+        }
+    }
+
+    public static void Reload()
+    {
+        _loaded = false;
+        _all = null;
+        PlayerSkillTable.Reload();
+        EnsureLoaded();
+    }
+
+    public static void EnsureLoaded()
+    {
+        if (_loaded && _all != null) return;
+        _loaded = true;
+        _all = CloneFallback();
+
+        if (!PlayerSkillTable.HasData) return;
+
+        var rows = PlayerSkillTable.Rows;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            int idx = IndexOfLoaded(row.Id);
+            if (idx >= 0)
+                Overlay(_all[idx], row);
+            else
+            {
+                var extra = new Def { tint = Color.white };
+                Overlay(extra, row);
+                Append(extra);
+            }
+        }
+    }
+
+    static Def[] CloneFallback()
+    {
+        var copy = new Def[Fallback.Length];
+        for (int i = 0; i < Fallback.Length; i++)
+            copy[i] = CloneDef(Fallback[i]);
+        return copy;
+    }
+
+    static Def CloneDef(Def src)
+    {
+        return new Def
+        {
+            id = src.id,
+            displayName = src.displayName,
+            kind = src.kind,
+            desc = src.desc,
+            numbers = src.numbers,
+            cooldown = src.cooldown,
+            duration = src.duration,
+            useHint = src.useHint,
+            unlockChapter = src.unlockChapter,
+            allyConfigId = src.allyConfigId,
+            tint = src.tint
+        };
+    }
+
+    static void Overlay(Def dest, PlayerSkillTable.Row row)
+    {
+        dest.id = row.Id;
+        dest.displayName = row.DisplayName;
+        dest.kind = row.Kind;
+        dest.desc = row.Desc;
+        dest.numbers = row.Numbers;
+        dest.cooldown = row.Cooldown;
+        dest.duration = row.Duration;
+        dest.useHint = row.UseHint;
+        dest.unlockChapter = row.UnlockChapter;
+        dest.allyConfigId = row.AllyConfigId;
+    }
+
+    static void Append(Def def)
+    {
+        var next = new Def[_all.Length + 1];
+        Array.Copy(_all, next, _all.Length);
+        next[_all.Length] = def;
+        _all = next;
+    }
+
+    static int IndexOfLoaded(string id)
+    {
+        if (_all == null || string.IsNullOrEmpty(id)) return -1;
+        for (int i = 0; i < _all.Length; i++)
+            if (_all[i].id == id) return i;
+        return -1;
+    }
+
     public static Def Get(int index)
     {
-        if (index < 0 || index >= All.Length) return All[0];
-        return All[index];
+        EnsureLoaded();
+        if (index < 0 || index >= _all.Length) return null;
+        return _all[index];
     }
 
+    /// <summary>未知 id 返回 null（不再静默回退 All[0]）。</summary>
     public static Def GetById(string id)
     {
-        if (string.IsNullOrEmpty(id)) return All[0];
-        for (int i = 0; i < All.Length; i++)
-            if (All[i].id == id) return All[i];
-        return All[0];
+        EnsureLoaded();
+        if (string.IsNullOrEmpty(id)) return null;
+        for (int i = 0; i < _all.Length; i++)
+            if (_all[i].id == id) return _all[i];
+        return null;
     }
 
+    /// <summary>未找到返回 -1。</summary>
     public static int IndexOf(string id)
     {
-        for (int i = 0; i < All.Length; i++)
-            if (All[i].id == id) return i;
-        return 0;
+        EnsureLoaded();
+        if (string.IsNullOrEmpty(id)) return -1;
+        for (int i = 0; i < _all.Length; i++)
+            if (_all[i].id == id) return i;
+        return -1;
     }
 
     public static bool IsUnlocked(Def def, SaveData data)

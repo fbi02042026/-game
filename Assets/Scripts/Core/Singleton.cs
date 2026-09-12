@@ -1,6 +1,12 @@
 using UnityEngine;
 
 /// <summary>
+/// 战斗必需单例标记：<see cref="Singleton{T}.Instance"/> 找不到时返回 null 并打 Error，禁止 getter 里 new 空物体。
+/// Boot/城镇系统不要实现本接口（仍允许自动创建以免直接 Play 子场景崩）。
+/// </summary>
+public interface ICombatBoundSingleton { }
+
+/// <summary>
 /// 全局单例基类，继承这个的类全局唯一
 /// </summary>
 public class Singleton<T> : MonoBehaviour where T : MonoBehaviour
@@ -28,6 +34,13 @@ public class Singleton<T> : MonoBehaviour where T : MonoBehaviour
                             // 场景卸载/退出 Play 时禁止在 getter 里新建，避免 OnDestroy 链上刷 GridBackpackSystem 等
                             if (_instance == null && Application.isPlaying && !_applicationIsQuitting)
                             {
+                                if (typeof(ICombatBoundSingleton).IsAssignableFrom(typeof(T)))
+                                {
+                                    Debug.LogError("[Singleton] 战斗必需系统未挂载，拒绝自动创建空对象: "
+                                        + typeof(T).Name
+                                        + "。应由 AutoGameInitializer.EnsureGameRoot 装配。");
+                                    return null;
+                                }
                                 GameObject go = new GameObject(typeof(T).Name);
                                 _instance = go.AddComponent<T>();
                                 DontDestroyOnLoad(go);

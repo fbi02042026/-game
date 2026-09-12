@@ -305,7 +305,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
             }
             else
             {
-                src = new AttrSystem();
+                src = new AttrSystem(AttrOwnerKind.Player);
                 var bonuses = EquipStatRollup.BuildBonusList(GridBackpackSystem.Instance);
                 src.RecalcAllAttr(bonuses);
             }

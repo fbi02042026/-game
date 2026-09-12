@@ -5,7 +5,7 @@ using UnityEngine;
 /// 战斗打击感统一入口：顿帧 / 镜头震 / 音效 / 连杀递进。
 /// 各子效果由 GameConfig.COMBAT_JUICE_* 分步开关控制。
 /// </summary>
-public class CombatJuice : Singleton<CombatJuice>
+public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
 {
     const float HitJuiceCooldown = 0.08f;
     const float SfxCooldown = 0.08f;

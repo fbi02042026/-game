@@ -8,7 +8,7 @@ using UnityEngine;
 /// 玩家向右走，每走过一段距离触发一波怪物刷新
 /// 所有波次怪物清完后到达终点才算通关
 /// </summary>
-public class BattleManager : Singleton<BattleManager>
+public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 {
     [Header("场景引用")]
     public Hero hero;
@@ -2835,6 +2835,11 @@ public class BattleManager : Singleton<BattleManager>
     }
 
     /// <summary>佣兵主动技施放入口（自动/手动共用）</summary>
+    /// <remarks>
+    /// PHASE5 GATE：禁止再加 <c>if (skillId == "SKxxx")</c>。
+    /// 新主动技只加 merc_skills 行 + SkillSystem / MercSkillCaster 通用执行。
+    /// 下列 SK007/008/010/015/018 是历史债务，抽出 SkillCast 时再迁（第二种战斗编排才拆）。
+    /// </remarks>
     public bool TryCastMercActiveSkill(Mercenary merc, string skillId, bool manual)
     {
         if (merc == null || merc.isDead || string.IsNullOrEmpty(skillId)) return false;
@@ -2931,7 +2936,7 @@ public class BattleManager : Singleton<BattleManager>
     {
         string id = SkillRegistry.Instance != null
             ? SkillRegistry.Instance.GetPlayerSkillId()
-            : SkillRegistry.DefaultPlayerSkillId;
+            : null;
         return ResolveSkill(id);
     }
 

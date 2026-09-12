@@ -78,9 +78,7 @@ public class BattleUI : MonoBehaviour
 
         EnsureBattleControls();
 
-        // 后备入口：仅 Battle 场景才跑战斗初始化
-        if (GameSceneGate.IsBattle)
-            AutoGameInitializer.Initialize();
+        // 开战只走 AutoGameInitializer（场景组件 Awake）。UI 不再后备 Initialize，避免双入口叠开战。
 
         // 战斗场景：map 自适应铺满；与主相机共用，避免拆分相机黑屏
         if (GameSceneGate.IsBattle)
@@ -105,6 +103,8 @@ public class BattleUI : MonoBehaviour
 
     void Start()
     {
+        if (GameSceneGate.IsBattle && BattleManager.Instance == null)
+            Debug.LogError("[BattleUI] BattleManager 未装配：开战只走 AutoGameInitializer，UI 不再后备初始化。");
         Invoke(nameof(DelayedUpdateSlots), 0.1f);
     }
 

@@ -6,10 +6,8 @@ using UnityEngine.Rendering;
 /// Battle场景初始化器：挂在Battle场景的空GameObject上
 /// 查找或创建场景所需的所有对象（Camera、Ground、SpawnPoint、Hero、Monster等）
 ///
-/// 双入口设计：
-/// 1. 主入口：场景中AutoGameInitializer组件的Awake()（如果脚本引用正常）
-/// 2. 后备入口：BattleUI.Awake()调用AutoGameInitializer.Initialize()
-///    （当场景中脚本GUID断裂导致Missing Script时，由BattleUI触发初始化）
+/// 开战唯一入口：Battle 场景中本组件 Awake → Initialize。
+/// BattleUI 不再后备调用（Phase 5）。场景必须挂本脚本（GameSceneBuilder / Battle.unity 已有）。
 /// </summary>
 public class AutoGameInitializer : MonoBehaviour
 {
@@ -57,8 +55,7 @@ public class AutoGameInitializer : MonoBehaviour
     }
 
     /// <summary>
-    /// Battle场景初始化入口（静态方法，可从外部调用）
-    /// 当场景中的AutoGameInitializer脚本引用断裂时，BattleUI.Awake()会作为后备调用此方法
+    /// Battle 场景初始化入口。仅本组件 Awake 调用；二次进战走 RebindSceneAndRestartBattle。
     /// </summary>
     public static void Initialize()
     {
@@ -876,16 +873,14 @@ public class AutoGameInitializer : MonoBehaviour
     // ===== GameRoot 和系统组件 =====
 
     /// <summary>
-    /// GameRoot：所有常驻系统的宿主。
-    /// 系统单例可能已被 Singleton getter 提前创建在别的物体上，
-    /// 此时必须复用那个物体，否则重复组件会被销毁、系统引用错乱。
+    /// GameRoot：所有常驻系统的宿主。战斗必需单例由这里 AddIfMissing，禁止 Singleton getter 抢先 new。
     /// </summary>
     static GameObject EnsureGameRoot()
     {
         GameObject root = null;
 
-        // 单例可能已被 getter 提前创建，甚至挂在未激活物体上；必须复用它
-        BattleManager existing = BattleManager.Instance;
+        // 战斗单例禁止 getter 自动 new：用 Find 复用已挂组件，没有则本方法 AddIfMissing
+        BattleManager existing = Object.FindObjectOfType<BattleManager>(true);
         if (existing != null) root = existing.gameObject;
 
         if (root == null) root = GameObject.Find("GameRoot");
