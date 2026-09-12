@@ -1,0 +1,46 @@
+---
+description: 任何图片禁止擅自拉伸/缩放；原尺寸显示，需要时只裁切
+alwaysApply: true
+---
+
+# 图片：禁止擅自拉伸
+
+**适用范围：项目中所有 UI Image / RawImage / SpriteRenderer 展示**（立绘、图标、Banner、道具图、头像等）。
+
+## 必须遵守
+
+- **默认原尺寸**：换 Sprite 后用 `SetNativeSize()`（或预制体已定 `sizeDelta`），**禁止**按屏幕比例、父节点大小、`screenHeightFrac`、硬编码宽高去拉大/缩小图片。
+- **需要裁切**：用 `RectMask2D` / Mask **裁切**，不要把图非等比塞进固定框。
+- **禁止非等比拉伸**：不要为了「填满框」把 `preserveAspect = false` 后改 `sizeDelta` 扭曲宽高比。
+- **localScale**：展示用图保持 `(±1, 1, 1)`（允许仅 X 翻转朝向）；禁止 `scaleMul`、统一放大「看得清」。
+- **贴图导入**：Sprite 资源必须 `nPOTScale = None`；`ToNearest`/`ToLarger` 会把非二次幂图**非等比拉伸**进 GPU，看起来就是立绘被拉扁。
+
+## 仅有的例外（须走现有工具，勿随手写）
+
+| 场景 | 做法 |
+|------|------|
+| 全屏底图 `BgStretch` / `Bg` | `UiLayoutStretch.ApplyBgStretch`（等比 Envelope） |
+| 弹窗遮罩 `Dim` | `ApplyFillScreen`（纯色，无美术图） |
+| Banner 入场 | `UiBannerPopAnim`：sizeDelta 动画后终态仍为 native 100% |
+| 用户明确要求「放大/缩小到 X」 | 按口头指定改，并在回复说明 |
+
+## 禁止示例
+
+```csharp
+// ❌ 按画布高度缩放立绘
+h = canvasH * 0.92f;
+w = h * aspect;
+rt.sizeDelta = new Vector2(w, h);
+
+// ❌ 把图标塞进固定框并关闭等比
+img.preserveAspect = false;
+rt.sizeDelta = slotSize;
+
+// ✅ 原尺寸 + 裁切
+img.SetNativeSize();
+EnsureClipMask(img, clipHeightFrac, nativeW, nativeH);
+```
+
+## 若觉得图太大/太小
+
+先问用户是否改资源图或是否允许缩放；**不要默认帮用户拉伸适配屏幕**。
