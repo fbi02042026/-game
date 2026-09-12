@@ -1,10 +1,10 @@
-# 玩家技能元数据（对齐佣兵 merc_skills 管线）。战斗数值/特效仍走 Ally SkillConfig（allyConfigId）。
-# 缺表回退 PlayerSkillDefs.Fallback（与下表 1:1）。未知 id 拒绝释放，禁止静默回退治愈之泉。
-# 运行时：受击回能、满条自动；useHint 仅角色页文案。
-id,displayName,kind,desc,numbers,cooldown,duration,useHint,unlockChapter,allyConfigId
-heal_spring,治愈之泉,Heal,给当前生命比例最低的我方单位回血（玩家或佣兵）。,恢复目标 30% 最大生命,12,0,血量危险时手动点击,0,ally_heal
-holy_barrier,圣盾壁垒,Shield,获得护盾，持续期间免疫控制。,获得 35% 最大生命的护盾，持续 5 秒,18,5,精英/Boss 放大招前、或被包围时手动点击,1,ally_shield
-battle_surge,战意爆发,AtkBuff,短时间内大幅提升攻击。,攻击 +30%，持续 8 秒,18,8,精英/Boss 战或大量小怪时手动点击,2,ally_atk_up
-gale_stance,疾风架势,AtkSpeedBuff,进入疾风状态，攻速大幅提升。,攻速 +35%，持续 6 秒,15,6,输出窗口期手动点击,3,ally_atk_speed
-deadly_focus,致命专注,CritBuff,集中精神，暴击率提升。,暴击率 +25%，持续 8 秒,18,8,Boss 战或精英怪出现时手动点击,4,ally_crit_up
-thunder_verdict,天雷裁决,Aoe,召唤天雷轰击目标区域。,造成 300% 攻击的范围伤害,25,0,怪群聚集或 Boss 虚弱时手动点击,5,ally_thunder
+# 玩家技能：元数据 + 战斗数值（1:1 从 Resources/Config/Skills/Ally/*.asset 现网 SO 种子，禁止发明倍率）。
+# 运行时伤害/治疗/Buff/AOE/暴击走本表；Ally SO 只可提供 VFX prefab。缺表回退 PlayerSkillDefs.Fallback。
+# energyCost=1 表示满条消耗（与现网受击回能、满条自动一致）。
+id,displayName,kind,desc,numbers,cooldown,duration,useHint,unlockChapter,allyConfigId,skillType,attackKit,damageMultiplier,baseDamage,aoeRadius,projectileCount,projectileSpeed,buffAttr,buffValue,buffIsPercent,healBase,healPercentOfMax,energyCost
+heal_spring,治愈之泉,Heal,给当前生命比例最低的我方单位回血（玩家或佣兵）。,恢复目标 30% 最大生命,12,0,血量危险时手动点击,0,ally_heal,Buff,Heal,0,0,6,1,12,MaxHp,0,0,0,0.3,1
+holy_barrier,圣盾壁垒,Shield,获得护盾，持续期间免疫控制。,获得 35% 最大生命的护盾，持续 5 秒,18,5,精英/Boss 放大招前、或被包围时手动点击,1,ally_shield,Buff,None,0,0,4,1,12,Defense,0.35,1,0,0,1
+battle_surge,战意爆发,AtkBuff,短时间内大幅提升攻击。,攻击 +30%，持续 8 秒,18,8,精英/Boss 战或大量小怪时手动点击,2,ally_atk_up,Buff,None,0,0,6,1,12,Attack,0.3,1,0,0,1
+gale_stance,疾风架势,AtkSpeedBuff,进入疾风状态，攻速大幅提升。,攻速 +35%，持续 6 秒,15,6,输出窗口期手动点击,3,ally_atk_speed,Buff,None,0,0,6,1,12,AttackSpeed,0.35,1,0,0,1
+deadly_focus,致命专注,CritBuff,集中精神，暴击率提升。,暴击率 +25%，持续 8 秒,18,8,Boss 战或精英怪出现时手动点击,4,ally_crit_up,Buff,None,0,0,6,1,12,CritRate,0.25,1,0,0,1
+thunder_verdict,天雷裁决,Aoe,召唤天雷轰击目标区域。,造成 300% 攻击的范围伤害,25,0,怪群聚集或 Boss 虚弱时手动点击,5,ally_thunder,AOE,None,3,0,8,1,12,Attack,0,0,0,0,1

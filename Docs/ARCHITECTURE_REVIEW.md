@@ -3,7 +3,7 @@
 > **范围**：只读审查 `main` 现况（约 v0.3.5 后战斗手感/表驱动一轮）。不改玩法、不改预制体、不批量改名。  
 > **读者**：产品 + 程序。结论按「现在卡什么 / 扩内容会卡什么 / 先别动什么」排列。  
 > **证据日期**：2026-09-11，基于仓库当前 `main`。  
-> **落地计划**：[`OPTIMIZATION_PLAN.md`](./OPTIMIZATION_PLAN.md)（Phase 1–3 已合 main；Phase 4 引导刷怪合流已合；Phase 5 按需减税已在后续 PR 落地可安全项，WavePlanner/SDK 仍按需）。
+> **落地计划**：[`OPTIMIZATION_PLAN.md`](./OPTIMIZATION_PLAN.md)（Phase 1–5 已合 main；Phase 6 抽出 WavePlanner / SkillCast，玩家技能战斗数离 Ally SO）。
 
 ---
 
@@ -89,7 +89,7 @@ Battle                    AutoGameInitializer → GameRoot 上一打 Singleton
 - **位置**：`Assets/Scripts/Managers/BattleManager.cs`（职责从 L11 场景引用到 L3616 特殊关）。
 - **现在**：改手感/波次/引导任何一项都要在同一文件里绕开十几处旗标，回归面是「整局战斗」。
 - **以后**：新章节脚本战、新战斗模式（自动、昼夜、活动本）、新技能类型都会继续往这里加 `if`。
-- **方向**：不要一次拆完。下次改刷怪或引导时，**顺手抽出** `IWavePlanner`（正式表 vs 引导队列）和 `SkillCastService`（从 BM L2777–3062 挪出）。BM 只留「本局状态 + 调用」。
+- **方向（Phase 6 已落地）**：`WavePlanner` 管正式/引导铺波与 SpawnWave；`SkillCastService` + `MercSkillExecutor` 管施放。BM 只留本局状态、胜负、能量与接线。
 
 #### P0-2 引导特例泄漏进核心战斗循环
 
@@ -148,7 +148,7 @@ Battle                    AutoGameInitializer → GameRoot 上一打 Singleton
 - **位置**：`PlayerSkillDefs.cs`、`SkillRegistry.cs`、`TalentDefs.cs`、`GameDataCooker.cs`（无 `player_jobs`）。
 - **现在**：改技能文案/解锁章要改代码发版。  
 - **以后**：每加一个主动技或转职，都要改 Defs + SO + BM if（佣兵侧已有 SK015/SK007 分支）。
-- **方向（Phase 5 已落地元数据）**：`player_skills.csv` + `PlayerSkillTable`；缺配置拒绝释放（不再静默 `ally_heal` / ×2.5）。战斗数值仍走 Ally SO。天赋可继续 C#，直到要做「热更天赋树」。新技能禁止 BM `if (id==SKxxx)`（GATE 注释，SkillCast 仍推迟）。
+- **方向（Phase 5 元数据 + Phase 6 战斗数）**：`player_skills.csv` 含倍率/AOE/Buff/治疗；`SkillRegistry.Get` 合成表配置，Ally SO 只供 VFX。缺配置拒绝释放。佣兵施放走 `MercSkillExecutor`，禁止 BM `if (id==SKxxx)`。
 
 #### P1-2 章节图注释与实现、特殊关废弃物
 
@@ -269,7 +269,7 @@ Battle                    AutoGameInitializer → GameRoot 上一打 Singleton
 | D | `wave_slot` 填第一章 或 标明未启用；章节倍率进表 | P0-3, P1-2 | 中 |
 | E | 装备未映射词条不要进包；稀有度单一真源 | P0-4 | 中，掉落体感会变 |
 | F | 玩家技能缺配置失败而不是 ×2.5；新技能禁止 BM 新分支 | P1-1 | 低 |
-| G | 抽出 WavePlanner / SkillCast（有实际需求时再做） | P0-1 | 高，需回归全战斗 |
+| G | 抽出 WavePlanner / SkillCast（Phase 6 已做） | P0-1 | 需回归引导 + Ch1-0 + 六技能 |
 
 ---
 

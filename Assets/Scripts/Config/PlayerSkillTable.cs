@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 玩家技能元数据表（读 Cook 后的 player_skills.bytes）。
-/// 只提供展示/解锁/Ally 映射；伤害与特效仍走 Ally SkillConfig。
+/// 玩家技能表（读 Cook 后的 player_skills.bytes）。
+/// 元数据 + 战斗数值（倍率/范围/治疗/Buff）。伤害数学不读 Ally SO。
 /// </summary>
 public static class PlayerSkillTable
 {
@@ -19,6 +19,20 @@ public static class PlayerSkillTable
         public string UseHint;
         public int UnlockChapter;
         public string AllyConfigId;
+        public SkillSystem.SkillType SkillType;
+        public AttackVfxKit AttackKit;
+        public float DamageMultiplier;
+        public float BaseDamage;
+        public float AoeRadius;
+        public int ProjectileCount;
+        public float ProjectileSpeed;
+        public AttrType BuffAttr;
+        public float BuffValue;
+        public bool BuffIsPercent;
+        public float HealBase;
+        public float HealPercentOfMax;
+        public float EnergyCost;
+        public bool HasCombat;
     }
 
     static readonly List<Row> _rows = new List<Row>();
@@ -102,8 +116,43 @@ public static class PlayerSkillTable
                 Duration = dur,
                 UseHint = c[7].Trim(),
                 UnlockChapter = unlock,
-                AllyConfigId = c[9].Trim()
+                AllyConfigId = c[9].Trim(),
+                SkillType = SkillSystem.SkillType.Buff,
+                AttackKit = AttackVfxKit.None,
+                ProjectileCount = 1,
+                ProjectileSpeed = 12f,
+                EnergyCost = 1f
             };
+            if (c.Length >= 22)
+            {
+                row.HasCombat = true;
+                row.SkillType = ParseSkillType(Col(c, 10));
+                row.AttackKit = ParseAttackKit(Col(c, 11));
+                GameTableCsv.TryFloat(Col(c, 12), out float dmgMul);
+                GameTableCsv.TryFloat(Col(c, 13), out float baseDmg);
+                GameTableCsv.TryFloat(Col(c, 14), out float aoe);
+                GameTableCsv.TryInt(Col(c, 15), out int pn);
+                GameTableCsv.TryFloat(Col(c, 16), out float projSpd);
+                GameTableCsv.TryFloat(Col(c, 18), out float buffVal);
+                GameTableCsv.TryBool(Col(c, 19), out bool buffPct);
+                GameTableCsv.TryFloat(Col(c, 20), out float healBase);
+                GameTableCsv.TryFloat(Col(c, 21), out float healPct);
+                row.DamageMultiplier = dmgMul;
+                row.BaseDamage = baseDmg;
+                row.AoeRadius = aoe;
+                if (pn > 0) row.ProjectileCount = pn;
+                if (projSpd > 0f) row.ProjectileSpeed = projSpd;
+                row.BuffAttr = ParseBuffAttr(Col(c, 17));
+                row.BuffValue = buffVal;
+                row.BuffIsPercent = buffPct;
+                row.HealBase = healBase;
+                row.HealPercentOfMax = healPct;
+                if (c.Length > 22)
+                {
+                    GameTableCsv.TryFloat(Col(c, 22), out float energy);
+                    if (energy > 0f) row.EnergyCost = energy;
+                }
+            }
             _rows.Add(row);
             _byId[id] = row;
             ok++;
@@ -129,5 +178,89 @@ public static class PlayerSkillTable
             case "Aoe": kind = PlayerSkillDefs.Kind.Aoe; return true;
             default: return false;
         }
+    }
+
+    static string Col(string[] c, int i)
+    {
+        return i < c.Length ? c[i] : "";
+    }
+
+    static SkillSystem.SkillType ParseSkillType(string s)
+    {
+        switch ((s ?? "").Trim())
+        {
+            case "SingleTarget": return SkillSystem.SkillType.SingleTarget;
+            case "Projectile": return SkillSystem.SkillType.Projectile;
+            case "AOE": return SkillSystem.SkillType.AOE;
+            case "Chain": return SkillSystem.SkillType.Chain;
+            default: return SkillSystem.SkillType.Buff;
+        }
+    }
+
+    static AttackVfxKit ParseAttackKit(string s)
+    {
+        switch ((s ?? "").Trim())
+        {
+            case "MeleeSlash": return AttackVfxKit.MeleeSlash;
+            case "Bow": return AttackVfxKit.Bow;
+            case "Orb": return AttackVfxKit.Orb;
+            case "Heal": return AttackVfxKit.Heal;
+            default: return AttackVfxKit.None;
+        }
+    }
+
+    static AttrType ParseBuffAttr(string s)
+    {
+        switch ((s ?? "").Trim())
+        {
+            case "MaxHp": return AttrType.MaxHp;
+            case "Attack": return AttrType.Attack;
+            case "AttackSpeed": return AttrType.AttackSpeed;
+            case "CritRate": return AttrType.CritRate;
+            case "Defense": return AttrType.Defense;
+            case "MoveSpeed": return AttrType.MoveSpeed;
+            default: return AttrType.Attack;
+        }
+    }
+
+    public static bool TryGetByAllyConfigId(string allyId, out Row row)
+    {
+        EnsureLoaded();
+        row = default;
+        if (string.IsNullOrEmpty(allyId)) return false;
+        for (int i = 0; i < _rows.Count; i++)
+        {
+            if (_rows[i].AllyConfigId == allyId)
+            {
+                row = _rows[i];
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>用表行合成运行时 SkillConfig。id 用 allyConfigId 以便 VFX 路径不变。</summary>
+    public static SkillConfig BuildRuntimeConfig(PlayerSkillDefs.Def def)
+    {
+        if (def == null) return null;
+        var cfg = ScriptableObject.CreateInstance<SkillConfig>();
+        cfg.id = string.IsNullOrEmpty(def.allyConfigId) ? def.id : def.allyConfigId;
+        cfg.skillName = def.displayName;
+        cfg.desc = def.desc;
+        cfg.skillType = def.skillType;
+        cfg.attackKit = def.attackKit;
+        cfg.damageMultiplier = def.damageMultiplier;
+        cfg.baseDamage = def.baseDamage;
+        cfg.cooldown = def.cooldown;
+        cfg.aoeRadius = def.aoeRadius;
+        cfg.projectileCount = def.projectileCount > 0 ? def.projectileCount : 1;
+        cfg.projectileSpeed = def.projectileSpeed;
+        cfg.buffAttr = def.buffAttr;
+        cfg.buffValue = def.buffValue;
+        cfg.buffIsPercent = def.buffIsPercent;
+        cfg.duration = def.duration;
+        cfg.healBase = def.healBase;
+        cfg.healPercentOfMax = def.healPercentOfMax;
+        return cfg;
     }
 }
