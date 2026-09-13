@@ -212,6 +212,7 @@ energyCost=1：满条消耗（与现网受击回能、满条自动一致）。VF
 | **#8** | Phase 5 按需减税 | 已合 main `f591f814` |
 | **本 PR** | Phase 6 WavePlanner + SkillCast + 玩家技能离 SO | 手测引导 + Ch1-0 + 六个玩家技能各放一次 |
 | 按需 | 真 SDK | 接微信/广告时 |
+| **Phase 7** | 手机端 + 微信小游戏端优化（战斗帧止血 / 包体 / 平台层 / 出包闭环），含本次「引导关每波 −30%」「去掉重叠 ×N」 | 见 [`MOBILE_MINIGAME_PLAN.md`](./MOBILE_MINIGAME_PLAN.md) |
 
 ---
 

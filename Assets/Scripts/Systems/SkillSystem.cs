@@ -72,7 +72,7 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
             return false;
         }
 
-        _cooldowns[skill.skillId] = skill.cooldown;
+        _cooldowns[skill.skillId] = ApplyCooldownReduce(skill.cooldown);
 
         switch (skill.skillType)
         {
@@ -284,9 +284,80 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
     /// </summary>
     public List<ActiveSkill> GetSkills() => _skills;
 
+    // ============================================================
+    // 玩家本局携带技能（局内构筑：0..N 个，各自独立冷却）
+    // ============================================================
+
+    private readonly List<ActiveSkill> _playerSkills = new List<ActiveSkill>();
+
+    /// <summary>玩家本局携带的主动技（0 号为职业初始技）。</summary>
+    public List<ActiveSkill> GetPlayerSkills() => _playerSkills;
+
+    public void SetPlayerSkills(List<ActiveSkill> skills)
+    {
+        _playerSkills.Clear();
+        if (skills == null) return;
+        for (int i = 0; i < skills.Count; i++)
+            if (skills[i] != null) _playerSkills.Add(skills[i]);
+    }
+
+    public void ClearPlayerSkills() => _playerSkills.Clear();
+
+    /// <summary>取第一个不在冷却中的玩家技能；全部冷却中返回 null。</summary>
+    public ActiveSkill GetReadyPlayerSkill()
+    {
+        for (int i = 0; i < _playerSkills.Count; i++)
+        {
+            var s = _playerSkills[i];
+            if (s == null) continue;
+            if (!IsOnCooldown(s.skillId)) return s;
+        }
+        return null;
+    }
+
+    public bool HasReadyPlayerSkill() => GetReadyPlayerSkill() != null;
+
+    /// <summary>玩家技能冷却比例 0~1（1=冷却中，用于技能条填充）。</summary>
+    public float GetPlayerSkillCooldownRatio(int index)
+    {
+        if (index < 0 || index >= _playerSkills.Count) return 0f;
+        var s = _playerSkills[index];
+        if (s == null || s.cooldown <= 0.01f) return 0f;
+        float remain = GetCooldownRemaining(s.skillId);
+        return Mathf.Clamp01(remain / s.cooldown);
+    }
+
     public bool IsOnCooldown(string skillId)
     {
         return _cooldowns.ContainsKey(skillId) && _cooldowns[skillId] > 0;
+    }
+
+    /// <summary>
+    /// 外部登记冷却。Buff/治疗类玩家技能不走 <see cref="UseSkill"/>（走 BattleManager 的兜底分支），
+    /// 冷却必须在这里补上，否则同一增益会随能量反复刷屏。
+    /// </summary>
+    public void RegisterCooldown(string skillId, float seconds)
+    {
+        if (string.IsNullOrEmpty(skillId) || seconds <= 0f) return;
+        // 与 UseSkill 同样享受冷却缩减（Buff/治疗类走这条路，不进 UseSkill）
+        _cooldowns[skillId] = ApplyCooldownReduce(seconds);
+    }
+
+    /// <summary>
+    /// 把「冷却缩减」真正应用到冷却时长上。
+    /// 来源：天赋 R10（AttrSystem.SkillCooldown）+ 装备词缀（ArmorAffixSystem/WeaponAffixSystem 都会写 CooldownReduce）。
+    /// 之前这两个来源写进了属性却<b>没有任何地方读取</b> —— 点了天赋看不到变化，问题就在这里。
+    /// 读取英雄属性：佣兵技能也走 SkillSystem，所以佣兵同样会吃到（与文案不冲突，属可接受范围）。
+    /// </summary>
+    public float ApplyCooldownReduce(float baseCooldown)
+    {
+        if (baseCooldown <= 0f) return baseCooldown;
+        var hero = Hero.Instance;
+        float reduce = hero != null && hero.attr != null
+            ? hero.attr.GetAttr(AttrType.CooldownReduce)
+            : 0f;
+        reduce = Mathf.Clamp(reduce, 0f, GameConfig.SKILL_COOLDOWN_REDUCE_CAP);
+        return baseCooldown * (1f - reduce);
     }
 
     public float GetCooldownRemaining(string skillId)

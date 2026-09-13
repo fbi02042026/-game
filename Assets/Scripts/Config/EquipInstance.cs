@@ -147,6 +147,10 @@ public class EquipInstance
         if (inst.slotType == EquipSlotType.OffHand)
             tableAtk *= EquipStatRollup.OffHandAttackCapRatio;
         float finalAtk = tableAtk * starMultiplier * rarityMul;
+        // [BALANCE-TEMP] 打印每件主手/副手实际贡献的平攻，用于「基础攻击 vs 武器攻击」归因
+        Debug.Log($"[BALANCE] equip={template?.templateId} slot={inst.slotType} rarity={inst.rarity} " +
+                  $"isStarter={isStarter} tableAtk={tableAtk:F2} star={starMultiplier:F2} " +
+                  $"rarityMul={rarityMul:F2} finalAtk={finalAtk:F2}");
         bool wrote = false;
         for (int i = 0; i < inst.attrBonus.Count; i++)
         {

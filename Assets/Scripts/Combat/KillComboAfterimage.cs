@@ -32,27 +32,17 @@ public class KillComboAfterimage : MonoBehaviour
         var bm = BattleManager.Instance;
         if (bm == null || !bm.isInBattle) return;
 
-        float mul = bm.KillComboSpeedMul;
-        if (mul < GameConfig.COMBO_AFTERIMAGE_MUL_MIN) return;
-        if (!IsMoving()) return;
+        // 残影只与攻速技能绑定：攻速增益（gale_stance）生效期间才出现，连杀不再单独触发。
+        // 门控与 UnitBase.GetAttackSpeed 用同一个标志，保证「有残影 = 正在吃攻速 buff」。
+        if (!SkillCastService.IsTeamAttackSpeedBuffActive) return;
         if (_aliveGhosts >= GameConfig.COMBO_AFTERIMAGE_MAX_PER_UNIT) return;
 
         _spawnCd -= Time.deltaTime;
         if (_spawnCd > 0f) return;
 
-        float t = Mathf.InverseLerp(1f, 1f + GameConfig.KILL_COMBO_HASTE_MAX, mul);
-        _spawnCd = Mathf.Lerp(
-            GameConfig.COMBO_AFTERIMAGE_INTERVAL_SLOW,
-            GameConfig.COMBO_AFTERIMAGE_INTERVAL_FAST,
-            t);
-        SpawnGhost(Mathf.Lerp(GameConfig.COMBO_AFTERIMAGE_ALPHA * 0.75f, GameConfig.COMBO_AFTERIMAGE_ALPHA, t));
-    }
-
-    bool IsMoving()
-    {
-        if (_unit.rb != null && Mathf.Abs(_unit.rb.velocity.x) >= GameConfig.COMBO_AFTERIMAGE_MOVE_EPS)
-            return true;
-        return false;
+        // 不再随连杀倍率加速：固定间隔，避免攻速 buff 期间刷得比原来更密
+        _spawnCd = GameConfig.COMBO_AFTERIMAGE_INTERVAL_SLOW;
+        SpawnGhost(GameConfig.COMBO_AFTERIMAGE_ALPHA);
     }
 
     void SpawnGhost(float alpha)

@@ -468,6 +468,39 @@ public class TalentUI : MonoBehaviour
         return null;
     }
 
+    /// <summary>当前存档天赋字典（对外只读入口，引导用来判断"点了没有"）。</summary>
+    public static Dictionary<string, int> CurrentTalents()
+    {
+        return GetTalents();
+    }
+
+    /// <summary>已解锁的左栏节点数（0..TalentDefs.Left.Length）。</summary>
+    public static int LeftUnlockedCount()
+    {
+        return TalentDefs.LeftUnlockedCount(GetTalents());
+    }
+
+    /// <summary>
+    /// 取左栏第 index0 个节点的高亮目标（优先升级按钮，退回节点根）。
+    /// 新手引导「回城点一次天赋」用；列表还没建好就返回 null，引导自己要能容错。
+    /// </summary>
+    public RectTransform GetLeftNode(int index0)
+    {
+        EnsureLists();
+        if (index0 < 0 || index0 >= _leftViews.Count) return null;
+        var v = _leftViews[index0];
+        if (v == null) return null;
+        if (v.upgradeButton != null)
+        {
+            var rt = v.upgradeButton.GetComponent<RectTransform>();
+            if (rt != null && v.upgradeButton.gameObject.activeInHierarchy) return rt;
+        }
+        return v.root != null ? v.root.GetComponent<RectTransform>() : null;
+    }
+
+    /// <summary>界面当前是否打开（引导等待"玩家关掉天赋页"用）。</summary>
+    public bool IsOpen => gameObject.activeInHierarchy;
+
     static string FormatCompact(long v)
     {
         // 直接显示真实数量，不再压成 999999+

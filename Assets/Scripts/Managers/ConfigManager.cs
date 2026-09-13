@@ -139,19 +139,19 @@ public class ConfigManager : Singleton<ConfigManager>
     /// <summary>
     /// 获取随机装备实例
     /// </summary>
-    public List<EquipInstance> GetRandomEquipInstances(int count, int blacksmithLevel, int bonusStar = 0)
+    public List<EquipInstance> GetRandomEquipInstances(int count, int blacksmithLevel, int bonusStar = 0, float attrBonus = 0f)
     {
-        return GetRandomEquipInstances(count, blacksmithLevel, bonusStar, StageType.Normal);
+        return GetRandomEquipInstances(count, blacksmithLevel, bonusStar, StageType.Normal, attrBonus);
     }
 
-    public List<EquipInstance> GetRandomEquipInstances(int count, int blacksmithLevel, int bonusStar, StageType stageType)
+    public List<EquipInstance> GetRandomEquipInstances(int count, int blacksmithLevel, int bonusStar, StageType stageType, float attrBonus = 0f)
     {
         // 裂缝程序化掉落。稀有度真源 HiddenLevelSystem；本回退才走 EquipDropRules。
         try
         {
             RiftEquipTables.EnsureLoaded();
             if (RiftEquipTables.Slots != null && RiftEquipTables.Slots.Count > 0)
-                return RiftEquipGenerator.Generate(count, stageType, blacksmithLevel);
+                return RiftEquipGenerator.Generate(count, stageType, blacksmithLevel, attrBonus);
         }
         catch (System.Exception e)
         {

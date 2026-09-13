@@ -53,6 +53,23 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     public bool SkipLegacyOnEvacuate { get; set; }
     /// <summary>本局金币获得倍率（剧情选择等）</summary>
     public float runGoldGainMul = 1f;
+
+    /// <summary>
+    /// 结算金币时真正该用的倍率 = 局内修正 × 天赋「金币掉落」（AttrType.GoldBonus）。
+    /// GoldBonus 由 AttrSystem（天赋 GoldDrop）写入过，但之前<b>全项目没有任何地方读取</b>，
+    /// 所以天赋 R2B / R9B 点了看不出变化 —— 现在在这里消费它。
+    /// </summary>
+    public float GoldGainMul
+    {
+        get
+        {
+            float bonus = 0f;
+            var hero = Hero.Instance;
+            if (hero != null && hero.attr != null)
+                bonus = Mathf.Max(0f, hero.attr.GetAttr(AttrType.GoldBonus));
+            return runGoldGainMul * (1f + bonus);
+        }
+    }
     /// <summary>当前关任务清关金币（HUD 预览 + 开箱发放）</summary>
     public int StageQuestClearGold { get; private set; }
     bool _stageQuestGoldGranted;
@@ -116,9 +133,65 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     }
 
     // === 技能能量 ===
-    /// <summary>玩家技能能量 0~1（杀怪累积+时间累积，满了可以释放）</summary>
-    public float playerSkillEnergy = 0f;
+    /// <summary>
+    /// 玩家技能能量 0~1，<b>每个技能槽各一条</b>（V6）。索引 = RunLoadout 的技能槽序。
+    /// 只在盟友受击时按「伤害/最大生命」回充（见 AddCombatSkillEnergy），<b>冷却中的槽不充能</b> —— 这条是天然错峰的关键。
+    /// 槽序同时是自动释放优先级：SkillSystem.GetReadyPlayerSkill 取第一个「能量满且不在冷却」的技能。
+    /// </summary>
+    public float[] playerSkillEnergy = new float[Mathf.Max(1, RunLoadout.MaxSkillSlots)];
     public const float MAX_SKILL_ENERGY = 1f;
+
+    /// <summary>读某个技能槽的能量（越界返回 0）。</summary>
+    public float GetPlayerSkillEnergy(int slot)
+    {
+        if (playerSkillEnergy == null) return 0f;
+        if (slot < 0 || slot >= playerSkillEnergy.Length) return 0f;
+        return playerSkillEnergy[slot];
+    }
+
+    /// <summary>写某个技能槽的能量（自动钳到 0~1，并通知 HUD）。</summary>
+    public void SetPlayerSkillEnergy(int slot, float value)
+    {
+        if (playerSkillEnergy == null) return;
+        if (slot < 0 || slot >= playerSkillEnergy.Length) return;
+        playerSkillEnergy[slot] = Mathf.Clamp(value, 0f, MAX_SKILL_ENERGY);
+        BattleUI.Instance?.UpdateSkillEnergy(0, playerSkillEnergy[slot]);
+    }
+
+    /// <summary>全部技能槽能量清零（开战/波次重置用）。</summary>
+    public void ClearAllPlayerSkillEnergy()
+    {
+        if (playerSkillEnergy == null) return;
+        for (int i = 0; i < playerSkillEnergy.Length; i++)
+            playerSkillEnergy[i] = 0f;
+        BattleUI.Instance?.UpdateSkillEnergy(0, 0f);
+    }
+
+    /// <summary>
+    /// 找出一个可以释放的技能槽：能量已满，且该技能不在冷却中。返回 -1 表示没有。
+    /// 槽序即优先级 —— 多个同时就绪时取最靠前的那个。
+    /// </summary>
+    public int FindReadySkillSlot()
+    {
+        var sys = SkillSystem.Instance;
+        if (sys == null) return -1;
+        // 用 SkillSystem 的本体列表：返回引用不分配（RunLoadout.SkillIds() 每次 new List，
+        // 而本方法每帧都会被调用，不能在这里产生 GC）。
+        var skills = sys.GetPlayerSkills();
+        if (skills == null) return -1;
+
+        int count = Mathf.Min(playerSkillEnergy.Length, skills.Count);
+        for (int i = 0; i < count; i++)
+        {
+            if (playerSkillEnergy[i] < MAX_SKILL_ENERGY - 0.001f) continue;
+            var s = skills[i];
+            if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
+            if (sys.IsOnCooldown(s.skillId)) continue;
+            return i;
+        }
+        return -1;
+    }
+
     /// <summary>佣兵技能能量（最多2槽）</summary>
     readonly float[] mercSkillEnergy = new float[2];
     internal Coroutine _spawnWaveCo;
@@ -240,7 +313,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         AllowMonsterMapEnter = false;
         isAutoBattle = false;
         MonsterAttackStyleTable.Reload();
-        playerSkillEnergy = 0f;
+        ClearAllPlayerSkillEnergy();
         mercSkillEnergy[0] = 0f;
         mercSkillEnergy[1] = 0f;
         MercenaryManager.Instance?.ClearAllMercs();
@@ -300,7 +373,13 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (Rules.Active)
             Debug.Log("[BattleManager] 新手引导战斗：短关+强制撤离（规则包 TutorialRules）");
 
-        if (!GameConfig.SOLO_PLAYER_BATTLE && !Rules.SkipMercPrecall)
+        // === 局内构筑（肉鸽影子）：技能 + 佣兵全部走本局 loadout，不读城镇酒馆存档 ===
+        // 新手引导局：V6 起也开构筑（走内存模式），让玩家在引导里就学会三选一与技能顺序
+        if (!Rules.Active || Rules.EnableRunDraft)
+            RunDraftDirector.Ensure(this).OnRunStart();
+
+        // loadout 生效时不再走城镇酒馆雇佣；否则保留旧路径（异常/特殊规则兜底）
+        if (!RunLoadout.IsActive && !GameConfig.SOLO_PLAYER_BATTLE && !Rules.SkipMercPrecall)
         {
             EnsureTestMercenaries();
             SpawnMercenaries();
@@ -502,13 +581,70 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
     public int GetAliveMonsterCount() => CountAliveMonsters();
 
-    public void FillPlayerSkillEnergy()
+    /// <summary>是否还有「已排队但未刷出」的波次（教程步/普通波都算）。用于清场判定，避免刷怪空窗被误判为已清。</summary>
+    public bool HasPendingWaves => Planner != null && Planner.FindNextUnspawnedWaveIndex() >= 0;
+
+    /// <summary>
+    /// 玩家技能充能（V6）：<b>每个技能槽各一条</b>，受击时给所有「未满 且 不在冷却中」的槽同时注入。
+    /// 冷却中的槽不充 —— 这条是天然错峰的关键：短 CD 技能先攒满先放，长 CD 的护盾后放，
+    /// 不需要额外的「充能队列」逻辑，也不会出现四个技能同时爆发出。
+    /// 总量由 GameConfig.SKILL_ENERGY_CHARGE_MUL 统一压制（这是手感主旋钮）。
+    /// </summary>
+    public void AddPlayerSkillEnergy(float rawAmount)
     {
-        playerSkillEnergy = MAX_SKILL_ENERGY;
-        BattleUI.Instance?.UpdateSkillEnergy(0, playerSkillEnergy);
+        if (playerSkillEnergy == null || rawAmount <= 0f) return;
+
+        float mul = Mathf.Max(0f, GameConfig.SKILL_ENERGY_CHARGE_MUL);
+        float add = rawAmount * mul;
+        if (add <= 0f) return;
+
+        var sys = SkillSystem.Instance;
+        var skills = sys != null ? sys.GetPlayerSkills() : null;
+        int count = skills != null
+            ? Mathf.Min(playerSkillEnergy.Length, skills.Count)
+            : playerSkillEnergy.Length;
+
+        for (int i = 0; i < count; i++)
+        {
+            if (playerSkillEnergy[i] >= MAX_SKILL_ENERGY) continue;      // 已满，不浪费
+
+            if (skills != null)
+            {
+                var s = skills[i];
+                if (s != null && !string.IsNullOrEmpty(s.skillId) && sys.IsOnCooldown(s.skillId))
+                    continue;                                            // 冷却中，不充能
+            }
+
+            playerSkillEnergy[i] = Mathf.Min(MAX_SKILL_ENERGY, playerSkillEnergy[i] + add);
+        }
+        BattleUI.Instance?.UpdateSkillEnergy(0, PlayerSkillEnergyPeak);
     }
 
-    /// <summary>友方攻击造成伤害 / 友方受击时涨技能能量（玩家与对应佣兵槽）。</summary>
+    /// <summary>
+    /// 把所有技能槽的能量充满（V6：技能改为各自一条能量后，这里不再只充一条）。
+    /// 目前无正式调用方，是留给剧情/教程的显式钩子 —— 教程最后一波会用它保证玩家一定看到技能放出。
+    /// </summary>
+    public void FillPlayerSkillEnergy()
+    {
+        if (playerSkillEnergy == null) return;
+        for (int i = 0; i < playerSkillEnergy.Length; i++)
+            playerSkillEnergy[i] = MAX_SKILL_ENERGY;
+        BattleUI.Instance?.UpdateSkillEnergy(0, MAX_SKILL_ENERGY);
+    }
+
+    /// <summary>兼容旧的「单条能量」HUD：返回所有技能槽里充得最高的那条。</summary>
+    public float PlayerSkillEnergyPeak
+    {
+        get
+        {
+            if (playerSkillEnergy == null) return 0f;
+            float peak = 0f;
+            for (int i = 0; i < playerSkillEnergy.Length; i++)
+                if (playerSkillEnergy[i] > peak) peak = playerSkillEnergy[i];
+            return peak;
+        }
+    }
+
     /// <summary>盟友受击回能：传入 finalDamage/MaxHp（打满血约攒满一槽）。</summary>
     public void AddCombatSkillEnergy(UnitBase unit, float amount)
     {
@@ -517,8 +653,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         if (unit is Hero)
         {
-            playerSkillEnergy = Mathf.Min(MAX_SKILL_ENERGY, playerSkillEnergy + amount);
-            BattleUI.Instance?.UpdateSkillEnergy(0, playerSkillEnergy);
+            AddPlayerSkillEnergy(amount);
             return;
         }
 
@@ -654,7 +789,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         _totalMonstersSpawnedThisStage = 0;
         _eliteToastShownThisStage = false;
         AllowMonsterMapEnter = false;
-        playerSkillEnergy = 0f;
+        ClearAllPlayerSkillEnergy();
         mercSkillEnergy[0] = 0f;
         mercSkillEnergy[1] = 0f;
         HeroThunderUltimate.Instance?.ResetForBattle();
@@ -1249,6 +1384,16 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         return n;
     }
 
+    /// <summary>
+    /// 生成/移除怪物后必须调用：CountAliveMonsters 的缓存只按帧失效，
+    /// 同一帧内刷完怪立刻再读会拿到刷怪前的旧值（曾导致引导关误判"没刷出来"而补刷一整波）。
+    /// </summary>
+    internal void InvalidateAliveMonsterCache()
+    {
+        _aliveMonsterCacheFrame = -1;
+        _aliveMonsterCache = -1;
+    }
+
     int GetStageMonsterGoal()
     {
         int goal = 0;
@@ -1338,6 +1483,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             RunStats.BattleTimeSec += Time.deltaTime;
 
         PlayerSkillPassive.TickAutoCast();
+        // 升级三选一：可行动时消费升级队列
+        RunDraftDirector.Instance?.Tick();
 
         // 首波刷怪：主路径 ScheduleFirstWaveSpawn；兜底仅 CoFirstWaveHardFallback（勿在 Update 叠刷）
 
@@ -1423,7 +1570,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (hero != null && !hero.isDead)
         {
             if (BattleUI.Instance != null)
-                BattleUI.Instance.UpdateSkillEnergy(0, playerSkillEnergy);
+                BattleUI.Instance.UpdateSkillEnergy(0, PlayerSkillEnergyPeak);
         }
 
         if (!GameConfig.SOLO_PLAYER_BATTLE)
@@ -1509,7 +1656,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
     internal void OnMonsterDead(UnitBase monster)
     {
-        _aliveMonsterCacheFrame = -1;
+        InvalidateAliveMonsterCache();
         Monster m = monster as Monster;
         if (m == null) return;
 
@@ -1529,7 +1676,14 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         AdventureLogAchievements.OnMonsterKilled(m, CurrentChapter);
         HiddenLevelSystem.AddKillExp(m);
 
-        // 连杀（仅展示，击杀不掉金币）
+        // 英雄可见等级：接击杀经验（此前 AddExp 全项目零调用点，等级恒 Lv1，属死轴 bug；
+        // BattleStateSaver 已会跨关持久化 heroLevel，GridBackpackSystem 按 level 解锁装备）
+        int heroKillExp = GameConfig.HIDDEN_EXP_KILL_NORMAL;
+        if (m.IsBossUnit) heroKillExp = GameConfig.HIDDEN_EXP_KILL_BOSS;
+        else if (m.IsEliteWave) heroKillExp = GameConfig.HIDDEN_EXP_KILL_ELITE;
+        Hero.Instance?.AddExp(heroKillExp);
+
+        // 连杀：累计击杀连击数（≥3 起会在下方兑现额外金币，见 COMBO_BONUS_GOLD）
         float now = Time.time;
         if (now - _lastKillTime <= GameConfig.COMBO_WINDOW)
             _killCombo++;
@@ -1543,6 +1697,20 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         CombatJuice.Instance?.OnKillCombo(_killCombo);
         CombatJuice.Instance?.OnKillFinisher(m);
         HeroThunderUltimate.Instance?.OnMonsterKilled(m);
+
+        // 连杀续杯（R2）：连杀≥阈值时回少量血，高连击回得更多，让"连"成为资源
+        if (_killCombo >= GameConfig.COMBO_HEAL_MIN_COMBO && Hero.Instance != null)
+        {
+            var hero = Hero.Instance;
+            float maxHp = hero.attr != null ? hero.attr.GetAttr(AttrType.MaxHp) : 0f;
+            if (maxHp > 0f)
+            {
+                int heal = GameConfig.COMBO_HEAL_PER_KILL
+                           + Mathf.FloorToInt(_killCombo / 5f) * GameConfig.COMBO_HEAL_STEP;
+                hero.currentHp = Mathf.Min(maxHp, hero.currentHp + heal);
+                DamageTextSystem.Instance?.SpawnHealText(hero.transform.position, heal);
+            }
+        }
 
 
         _defeatedMonsterKills++;
@@ -1559,7 +1727,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         SpecialWeapons.TryFlavorToastOnKill();
 
-        BattleUI.Instance?.UpdateSkillEnergy(0, playerSkillEnergy);
+        BattleUI.Instance?.UpdateSkillEnergy(0, PlayerSkillEnergyPeak);
         BattleUI.Instance?.UpdateSkillEnergy(1, mercSkillEnergy[0]);
         BattleUI.Instance?.UpdateSkillEnergy(2, mercSkillEnergy[1]);
 
@@ -1654,7 +1822,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     void TryGrantStageQuestGold()
     {
         if (_stageQuestGoldGranted || StageQuestClearGold <= 0) return;
-        int grant = Mathf.RoundToInt(StageQuestClearGold * runGoldGainMul);
+        int grant = Mathf.RoundToInt(StageQuestClearGold * GoldGainMul);
         if (grant <= 0) return;
         _stageQuestGoldGranted = true;
         currentGold += grant;
@@ -1732,7 +1900,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             bonusGold = StageQuestClearGold > 0
                 ? StageQuestClearGold
                 : BattleQuestConfig.GetClearGold(ch, currentStage.type, BattleDifficulty);
-            bonusGold = Mathf.RoundToInt(bonusGold * runGoldGainMul);
+            bonusGold = Mathf.RoundToInt(bonusGold * GoldGainMul);
         }
 
         if (IsGoldDungeon)
@@ -1748,7 +1916,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 多出的奖励件直接折金，三选一只展示 3 张
         int blacksmithLevel = TownSystem.Instance != null ? TownSystem.Instance.GetBuildingLevel(BuildingType.Blacksmith) : 1;
         List<EquipInstance> rewards = (!IsGoldDungeon && ConfigManager.Instance != null)
-            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar, currentStage.type)
+            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar, currentStage.type, GameConfig.RIFT_DROP_ATTR_BONUS)
             : new List<EquipInstance>();
 
         if (rewards != null && rewards.Count > 3)
@@ -1816,6 +1984,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                 GridBackpackSystem.Instance?.ClearRunEquipment();
                 MercenaryManager.Instance?.ClearAllMercs();
                 MercHireSession.ClearHired();
+                EndRunLoadout();
                 GameSceneManager.Instance?.ReturnToTown();
             });
             return;
@@ -1832,6 +2001,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                         GridBackpackSystem.Instance?.ClearRunEquipment();
                         MercenaryManager.Instance?.ClearAllMercs();
                         MercHireSession.ClearHired();
+                        EndRunLoadout();
                         GameSceneManager.Instance?.ReturnToTown();
                     },
                     onNextChapter: () =>
@@ -1851,6 +2021,26 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                 UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
             });
         }
+    }
+
+    /// <summary>
+    /// 本局构筑收尾：死亡 / 撤离 / 回城统一走这里。
+    /// 引导局走内存模式：整包丢掉，不动玩家真正的本局存档；
+    /// 金币与天赋石已按阶段写回城镇存档，掉落装备本就不带出。
+    /// </summary>
+    void EndRunLoadout()
+    {
+        if (Rules.Active)
+        {
+            if (Rules.EnableRunDraft)
+            {
+                RunLoadout.EndMemoryMode();
+                RunSkillBarUI.Refresh();
+            }
+            return;
+        }
+        RunLoadout.Clear();
+        RunSkillBarUI.Refresh();
     }
 
     void PersistBattleGold()
@@ -1873,6 +2063,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         isInBattle = false;
         MercenaryManager.Instance?.ClearAllMercs();
         AdventureLogAchievements.OnDied();
+        EndRunLoadout();
         // 引导关死亡：不走遗产，按撤离收尾标记教程进度，避免反复卡在引导战
         if (Rules.Active || SkipLegacyOnEvacuate)
         {
@@ -1888,6 +2079,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         isInBattle = false;
         ClearAllMonsters();
         MercenaryManager.Instance?.ClearAllMercs();
+        // 主动撤离 = 本局结束：构筑作废，但金币/天赋石已入账
+        EndRunLoadout();
         if (!Rules.SkipMercHireClearOnEvacuate)
             MercHireSession.ClearHired();
         AdventureLogAchievements.OnEvacuated(Rules.Active);

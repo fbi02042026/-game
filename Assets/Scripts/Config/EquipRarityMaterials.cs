@@ -31,7 +31,11 @@ public static class EquipRarityMaterials
     {
         if (_defaultSpriteResolved) return _defaultSprite;
         _defaultSpriteResolved = true;
-        _defaultSprite = Resources.GetBuiltinResource<Material>("Sprites-Default.mat");
+        // 不能用 Resources.GetBuiltinResource<Material>("Sprites-Default.mat")：
+        // 该内置材质不在打包后的构建里，运行时会报 “Failed to find Sprites-Default.mat”，返回 null 导致材质丢失。
+        // 改为按 Shader 现建材质，与 Monster.cs 的阴影材质走同一稳妥路径。
+        var shader = Shader.Find("Sprites/Default");
+        _defaultSprite = shader != null ? new Material(shader) : null;
         return _defaultSprite;
     }
 

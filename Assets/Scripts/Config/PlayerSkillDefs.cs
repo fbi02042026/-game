@@ -194,6 +194,172 @@ public static class PlayerSkillDefs
             buffAttr = AttrType.Attack,
             energyCost = 1f,
             hasCombat = true
+        },
+
+        // ================= 局内抽卡扩充池 =================
+        // 说明：这些技能不进城镇技能选择页（SkillSelectUI 只认前 6 格），
+        // 只在战斗内「升级三选一」出现。无 allyConfigId → VFX 走 attackKit 共用套，
+        // 不依赖 Resources/VFX/Skills/Ally 下的专属预制体。
+        new Def
+        {
+            id = "flame_burst",
+            displayName = "烈焰爆裂",
+            kind = Kind.Aoe,
+            desc = "以自身为中心引爆烈焰，灼烧周围敌人。",
+            numbers = "造成 260% 攻击的范围伤害",
+            cooldown = 20f,
+            duration = 0f,
+            useHint = "怪群聚集时自动释放",
+            unlockChapter = 0,
+            allyConfigId = "",
+            tint = new Color(0.98f, 0.45f, 0.24f),
+            skillType = SkillSystem.SkillType.AOE,
+            attackKit = AttackVfxKit.Orb,
+            damageMultiplier = 2.6f,
+            aoeRadius = 7f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            energyCost = 1f,
+            hasCombat = true
+        },
+        new Def
+        {
+            id = "thunder_chain",
+            displayName = "连锁闪电",
+            kind = Kind.Aoe,
+            desc = "闪电在敌群中跳跃，逐个递减伤害。",
+            numbers = "连锁 5 段，首段 160% 攻击",
+            cooldown = 18f,
+            duration = 0f,
+            useHint = "敌人密集时收益最高",
+            unlockChapter = 0,
+            allyConfigId = "",
+            tint = new Color(0.66f, 0.48f, 0.98f),
+            skillType = SkillSystem.SkillType.Chain,
+            attackKit = AttackVfxKit.Orb,
+            damageMultiplier = 1.6f,
+            aoeRadius = 8f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            energyCost = 1f,
+            hasCombat = true
+        },
+        new Def
+        {
+            id = "wolf_volley",
+            displayName = "狼群箭雨",
+            kind = Kind.Aoe,
+            desc = "召唤狼群齐射，同时命中多个敌人。",
+            numbers = "对 3 个敌人各造成 120% 攻击",
+            cooldown = 16f,
+            duration = 0f,
+            useHint = "分散敌人也能稳住输出",
+            unlockChapter = 0,
+            allyConfigId = "",
+            tint = new Color(0.40f, 0.82f, 0.52f),
+            skillType = SkillSystem.SkillType.Projectile,
+            attackKit = AttackVfxKit.Bow,
+            damageMultiplier = 1.2f,
+            aoeRadius = 10f,
+            projectileCount = 3,
+            projectileSpeed = 14f,
+            energyCost = 1f,
+            hasCombat = true
+        },
+        new Def
+        {
+            id = "war_banner",
+            displayName = "战旗号令",
+            kind = Kind.AtkBuff,
+            desc = "竖起战旗，全队攻击大幅提升。",
+            numbers = "全队攻击 +35%，持续 10 秒",
+            cooldown = 24f,
+            duration = 10f,
+            useHint = "Boss 战开场立即释放",
+            unlockChapter = 0,
+            allyConfigId = "",
+            tint = new Color(0.98f, 0.78f, 0.28f),
+            skillType = SkillSystem.SkillType.Buff,
+            attackKit = AttackVfxKit.None,
+            aoeRadius = 6f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            buffAttr = AttrType.Attack,
+            buffValue = 0.35f,
+            buffIsPercent = true,
+            energyCost = 1f,
+            hasCombat = true
+        },
+        new Def
+        {
+            id = "iron_wall",
+            displayName = "铁壁壁垒",
+            kind = Kind.Shield,
+            desc = "展开壁垒，大幅提升全队防御。",
+            numbers = "全队防御 +45%，持续 8 秒",
+            cooldown = 22f,
+            duration = 8f,
+            useHint = "被围或 Boss 蓄力时释放",
+            unlockChapter = 0,
+            // V6：原来空着 → 走 attackKit 兜底套，玩家看不出这是护盾。
+            // 复用圣盾壁垒那套 ally_shield（Resources/VFX/Skills/Ally/ally_shield.prefab 已存在），
+            // 教程要让玩家「看见护盾放出来」，第二面护盾也必须一眼可辨。
+            allyConfigId = "ally_shield",
+            tint = new Color(0.42f, 0.72f, 0.94f),
+            skillType = SkillSystem.SkillType.Buff,
+            attackKit = AttackVfxKit.None,
+            aoeRadius = 5f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            buffAttr = AttrType.Defense,
+            buffValue = 0.45f,
+            buffIsPercent = true,
+            energyCost = 1f,
+            hasCombat = true
+        },
+        new Def
+        {
+            id = "frost_nova",
+            displayName = "霜华新星",
+            kind = Kind.Aoe,
+            desc = "冰霜自脚下炸开，覆盖极大范围。",
+            numbers = "造成 220% 攻击的超大范围伤害",
+            cooldown = 28f,
+            duration = 0f,
+            useHint = "清屏利器，冷却较长",
+            unlockChapter = 0,
+            allyConfigId = "",
+            tint = new Color(0.55f, 0.85f, 1f),
+            skillType = SkillSystem.SkillType.AOE,
+            attackKit = AttackVfxKit.Orb,
+            damageMultiplier = 2.2f,
+            aoeRadius = 9f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            energyCost = 1f,
+            hasCombat = true
+        },
+        new Def
+        {
+            id = "blood_harvest",
+            displayName = "血之收割",
+            kind = Kind.Aoe,
+            desc = "以血为刃横扫战场，伤害极高。",
+            numbers = "造成 340% 攻击的范围伤害",
+            cooldown = 30f,
+            duration = 0f,
+            useHint = "收割残血群",
+            unlockChapter = 0,
+            allyConfigId = "",
+            tint = new Color(0.85f, 0.22f, 0.30f),
+            skillType = SkillSystem.SkillType.AOE,
+            attackKit = AttackVfxKit.MeleeSlash,
+            damageMultiplier = 3.4f,
+            aoeRadius = 6f,
+            projectileCount = 1,
+            projectileSpeed = 12f,
+            energyCost = 1f,
+            hasCombat = true
         }
     };
 

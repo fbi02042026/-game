@@ -1463,9 +1463,13 @@ public class AdventureUI : MonoBehaviour, ITownPage
         string styleName = style == MonsterAttackStyle.Ranged ? "远程" : "近战";
         if (_tipBody != null)
         {
+            // 图鉴要显示「实战血量」而非裸配置值：Monster.Init 会把 baseHp
+            // 乘上章节系数与 MONSTER_HP_GLOBAL_MUL，这里跟着乘回来，避免面板写 78、实战只有 46。
+            float hpScale = GameConfig.GetChapterStatScale(_selectedChapter) * GameConfig.MONSTER_HP_GLOBAL_MUL;
+            float shownHp = cfg.baseHp * hpScale;
             _tipBody.text = cfg.isBoss
-                ? $"BOSS\n攻击 {cfg.baseAttack:0}\n生命 {cfg.baseHp:0}\n{styleName}"
-                : $"攻击 {cfg.baseAttack:0}\n生命 {cfg.baseHp:0}\n{styleName}";
+                ? $"BOSS\n攻击 {cfg.baseAttack:0}\n生命 {shownHp:0}\n{styleName}"
+                : $"攻击 {cfg.baseAttack:0}\n生命 {shownHp:0}\n{styleName}";
         }
     }
 

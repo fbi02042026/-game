@@ -51,6 +51,8 @@ public class EquipDropPopupUI : MonoBehaviour
         public Text meta;
         public Text attrs;
         public GameObject selectedMark;
+        /// <summary>推荐角标：新装备优于已装备同部位时点亮（代码搭建/美术预制体都可用，缺失则跳过）。</summary>
+        public GameObject recommendMark;
     }
 
     [Tooltip("代码搭建时才由脚本摆卡片位置；用美术预制体时保持关闭，避免覆盖手摆布局")]
@@ -181,8 +183,9 @@ public class EquipDropPopupUI : MonoBehaviour
             var c = cards[i];
             if (c == null) continue;
             BumpTextFont(c.name, delta);
-            BumpTextFont(c.meta, delta);
-            BumpTextFont(c.attrs, delta);
+            // 武器稀有度(meta)与属性(attrs)字号额外放大，更醒目
+            BumpTextFont(c.meta, delta + 4);
+            BumpTextFont(c.attrs, delta + 4);
         }
     }
 
@@ -254,6 +257,8 @@ public class EquipDropPopupUI : MonoBehaviour
             var eq = _drops[i];
             if (eq == null) continue;
             bool sel = i == _selected;
+            var worn = GetWorn(eq);
+            bool recommended = worn != null && AnalyzeUpgrade(eq, worn, out _, out _);
             EnsureEquipIcon(eq);
             if (c.icon == null && c.root != null)
                 c.icon = FindDeep(c.root.transform, "Icon")?.GetComponent<Image>();
@@ -277,7 +282,9 @@ public class EquipDropPopupUI : MonoBehaviour
                 c.meta.text = EquipUiText.RarityName(eq.rarity);
                 c.meta.color = EquipUiText.RarityTextColor(eq.rarity);
             }
-            if (c.attrs != null) c.attrs.text = FormatAttrs(eq);
+            if (c.attrs != null)
+                c.attrs.text = worn != null ? FormatAttrsWithDelta(eq, worn) : FormatAttrs(eq);
+            if (c.recommendMark != null) c.recommendMark.SetActive(recommended);
         }
     }
 
@@ -403,8 +410,8 @@ public class EquipDropPopupUI : MonoBehaviour
                 ? worn.equipName
                 : "已装备";
             string attrs = FormatAttrs(worn);
-            if (string.IsNullOrEmpty(attrs) || attrs.IndexOf("无额外", System.StringComparison.Ordinal) >= 0)
-                attrs = "攻击 +1";
+            // 不再用 “攻击 +1” 占位（会误导对比，看起来像真的加 1 攻击）；
+            // 无附加属性时 FormatAttrs 已返回「（无额外属性）」，如实显示即可。
             SetCompareContent(wornName, EquipUiText.RarityName(worn.rarity), attrs);
             EnsureEquipIcon(worn);
             var compareIcon = comparePanel != null
@@ -473,6 +480,16 @@ public class EquipDropPopupUI : MonoBehaviour
     {
         if (_selected < 0 || _selected >= _drops.Count) return null;
         return _drops[_selected];
+    }
+
+    /// <summary>取与给定装备同逻辑槽位上「已装备」的那件，作为推荐对比基线。</summary>
+    EquipInstance GetWorn(EquipInstance eq)
+    {
+        if (eq == null || GridBackpackSystem.Instance == null) return null;
+        EquipSlotType slot = WeaponLoadoutRules.IsLoadoutItem(eq)
+            ? WeaponLoadoutRules.ResolveLogicalSlot(eq)
+            : eq.slotType;
+        return GridBackpackSystem.Instance.GetEquippedInLogicalSlot(slot);
     }
 
     void SelectCard(int idx)
@@ -636,7 +653,8 @@ public class EquipDropPopupUI : MonoBehaviour
                     name = FindDeep(t, "Name")?.GetComponent<Text>(),
                     meta = FindDeep(t, "Meta")?.GetComponent<Text>(),
                     attrs = FindDeep(t, "Attrs")?.GetComponent<Text>(),
-                    selectedMark = FindDeep(t, "SelectedMark")?.gameObject
+                    selectedMark = FindDeep(t, "SelectedMark")?.gameObject,
+                    recommendMark = FindDeep(t, "RecommendMark")?.gameObject
                 });
             }
         }
@@ -653,6 +671,8 @@ public class EquipDropPopupUI : MonoBehaviour
                 c.meta = FindDeep(c.root.transform, "Meta")?.GetComponent<Text>();
             if (c.attrs == null)
                 c.attrs = FindDeep(c.root.transform, "Attrs")?.GetComponent<Text>();
+            if (c.recommendMark == null)
+                c.recommendMark = FindDeep(c.root.transform, "RecommendMark")?.gameObject;
         }
         // 点击一律重绑：Inspector 里手填 cards 时也要能选卡
         for (int i = 0; i < cards.Count; i++)
@@ -711,6 +731,92 @@ public class EquipDropPopupUI : MonoBehaviour
             if (a == null) continue;
             string v = a.isPercent ? $"{a.value * 100f:0.#}%" : a.value.ToString("0.#");
             sb.Append(EquipUiText.Attr(a.attrType)).Append(" +").Append(v);
+            if (i < n - 1) sb.Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>按 attrType 聚合同一装备的属性值（flat / percent 分开两张表，避免混加）。</summary>
+    static Dictionary<AttrType, float> AggregateAttrs(EquipInstance eq, bool percent)
+    {
+        var map = new Dictionary<AttrType, float>();
+        if (eq?.attrBonus == null) return map;
+        for (int i = 0; i < eq.attrBonus.Count; i++)
+        {
+            var b = eq.attrBonus[i];
+            if (b == null || b.isPercent != percent) continue;
+            float cur = 0f;
+            map.TryGetValue(b.attrType, out cur);
+            map[b.attrType] = cur + b.value;
+        }
+        return map;
+    }
+
+    static void DiffMaps(Dictionary<AttrType, float> nw, Dictionary<AttrType, float> old,
+        HashSet<AttrType> improved, HashSet<AttrType> downgraded)
+    {
+        const float eps = 1e-4f;
+        foreach (var kv in nw)
+        {
+            float o;
+            if (old.TryGetValue(kv.Key, out o))
+            {
+                if (kv.Value > o + eps) improved.Add(kv.Key);
+                else if (kv.Value < o - eps) downgraded.Add(kv.Key);
+            }
+            else
+            {
+                improved.Add(kv.Key); // 已装备件没有的新属性，算提升
+            }
+        }
+    }
+
+    /// <summary>
+    /// 判定新装备相对已装备同部位是否「推荐」（纯提升：至少一项提升、且没有任何一项下降）。
+    /// 同时回传提升/下降的属性集合，供高亮使用。
+    /// </summary>
+    static bool AnalyzeUpgrade(EquipInstance eq, EquipInstance worn,
+        out HashSet<AttrType> improved, out HashSet<AttrType> downgraded)
+    {
+        improved = new HashSet<AttrType>();
+        downgraded = new HashSet<AttrType>();
+        if (eq == null || worn == null) return false;
+        DiffMaps(AggregateAttrs(eq, false), AggregateAttrs(worn, false), improved, downgraded);
+        DiffMaps(AggregateAttrs(eq, true), AggregateAttrs(worn, true), improved, downgraded);
+        // 推荐：有提升、且没有任何属性变差
+        return improved.Count > 0 && downgraded.Count == 0;
+    }
+
+    /// <summary>该条属性（同类型且同为 flat/percent）相对已装备件是否提升。</summary>
+    static bool IsAttrImproved(AttrBonusData a, EquipInstance worn)
+    {
+        if (a == null || worn?.attrBonus == null) return false;
+        float best = float.MinValue;
+        bool found = false;
+        for (int i = 0; i < worn.attrBonus.Count; i++)
+        {
+            var b = worn.attrBonus[i];
+            if (b == null || b.attrType != a.attrType || b.isPercent != a.isPercent) continue;
+            if (!found || b.value > best) { best = b.value; found = true; }
+        }
+        return found && a.value > best + 1e-4f;
+    }
+
+    /// <summary>带「提升」高亮的属性文本：提升的属性用绿色 ↑ 标出（依赖 Text.supportRichText）。</summary>
+    static string FormatAttrsWithDelta(EquipInstance eq, EquipInstance worn)
+    {
+        if (eq?.attrBonus == null || eq.attrBonus.Count == 0) return "（无额外属性）";
+        var sb = new System.Text.StringBuilder();
+        int n = Mathf.Min(6, eq.attrBonus.Count);
+        for (int i = 0; i < n; i++)
+        {
+            var a = eq.attrBonus[i];
+            if (a == null) continue;
+            string v = a.isPercent ? $"{a.value * 100f:0.#}%" : a.value.ToString("0.#");
+            string line = EquipUiText.Attr(a.attrType) + " +" + v;
+            if (IsAttrImproved(a, worn))
+                line = "<color=#66E06A>↑ " + line + "</color>";
+            sb.Append(line);
             if (i < n - 1) sb.Append('\n');
         }
         return sb.ToString();
@@ -832,6 +938,19 @@ public class EquipDropPopupUI : MonoBehaviour
         AnchorTop(CreateText(card.transform, "Name", "—", 22, TextAnchor.UpperCenter).rectTransform, -122f, 176f, 30f);
         AnchorTop(CreateText(card.transform, "Meta", "", 18, TextAnchor.UpperCenter).rectTransform, -156f, 176f, 26f);
         AnchorTop(CreateText(card.transform, "Attrs", "", 18, TextAnchor.UpperLeft).rectTransform, -188f, 176f, 150f);
+
+        // 推荐角标：右上角绿色「推荐」小牌，由 RefreshCards 按「提升的属性」控制显隐
+        var rec = CreateImage(card.transform, "RecommendMark", new Color(0.12f, 0.62f, 0.22f, 1f));
+        var rrt = rec.rectTransform;
+        rrt.anchorMin = rrt.anchorMax = new Vector2(1f, 1f);
+        rrt.pivot = new Vector2(1f, 1f);
+        rrt.anchoredPosition = new Vector2(-8f, -8f);
+        rrt.sizeDelta = new Vector2(60f, 28f);
+        rec.raycastTarget = false;
+        var recLabel = CreateText(rec.transform, "Label", "推荐", 18, TextAnchor.MiddleCenter);
+        Stretch(recLabel.rectTransform);
+        recLabel.color = Color.white;
+        recLabel.raycastTarget = false;
     }
 
     static void AnchorTop(RectTransform rt, float y, float w, float h)

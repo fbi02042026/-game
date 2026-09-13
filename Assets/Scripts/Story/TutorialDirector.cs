@@ -19,6 +19,21 @@ public class TutorialDirector : Singleton<TutorialDirector>
     /// <summary>引导战斗：仅 heal 步骤允许点头像放技能。</summary>
     public bool AllowBattleSkillClick { get; private set; }
 
+    /// <summary>V6：引导局已经放过几次三选一（上限 <see cref="TutorialRules.MaxTutorialDrafts"/>）。</summary>
+    public int TutorialDraftsUsed { get; private set; }
+
+    /// <summary>
+    /// V6：引导局三选一的固定卡组。第一张是推荐项（护盾），引导会挖空高亮它。
+    /// 卡里有特效的技能优先，避免教学时看到一片空白。
+    /// </summary>
+    static readonly string[] TutorialDraftSkillIds = { "holy_barrier", "battle_surge", "thunder_verdict" };
+
+    /// <summary>引导三选一的推荐技能（护盾），超时兜底就替玩家选它。</summary>
+    const string TutorialPreferredSkillId = "holy_barrier";
+
+    /// <summary>P3 用：本段是否已经观察到玩家技能真的放出去了。</summary>
+    bool _sawPlayerSkillCast;
+
     bool _townFlowBusy;
     bool _battleTutorialFlowStarted;
     bool _extraHintShown;
@@ -126,6 +141,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         WaitingEvacuate = false;
         SkillUsedThisStep = false;
         AllowBattleSkillClick = false;
+        TutorialDraftsUsed = 0;
+        _sawPlayerSkillCast = false;
     }
 
     /// <summary>已废弃：引导改为打开冒险页再开战，不再从底栏直进战斗。</summary>
@@ -144,6 +161,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
     public void NotifyPlayerSkillUsed()
     {
         SkillUsedThisStep = true;
+        _sawPlayerSkillCast = true;
     }
 
     IEnumerator TownFirstEntryRoutine()
@@ -326,6 +344,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 .SkipReveal()
         }, () => done = true);
         while (!done) yield return null;
+
+        // —— V6 P4：回城引导点一次天赋（金币不够会自己跳过）——
+        yield return CoGuideTalentUpgrade();
 
         var nav = MainBottomNav.Instance;
         RectTransform highlight = null;
@@ -535,7 +556,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (bm != null) bm.UnitsCanAct = true;
         bm.RetargetAllMonsters(Hero.Instance);
         hint.Show("怪物冲过来了，靠近它们会自动攻击。", null, 5f);
-        yield return WaitFieldClear();
+        yield return WaitFieldClear(strict: true);
         bm.ClearMonsterForcedTargets();
 
         // 围殴怪已清：若玩家提前打完，也要进对话
@@ -600,10 +621,17 @@ public class TutorialDirector : Singleton<TutorialDirector>
             new TalkLine(merc, "我在后面托着，一起上。", 0.75f));
         headTalk?.HideNow();
         hint.Hide();
+
+        // —— V6 P1/P2：精英已清 → 固定三选一（强引导选护盾）→ 拖拽定释放顺序 ——
+        if (bm != null) bm.UnitsCanAct = false;
+        HaltUnit(Hero.Instance);
+        yield return CoTutorialSkillDraft(bm, hint);
         if (bm != null) bm.UnitsCanAct = true;
 
         hint.Show("组队后佣兵会自动战斗。", null, 3f);
         yield return EnsureTutorialStep(bm, 5);
+        // —— V6 P3：最后一波充满能量，让玩家看见技能自动放出去 ——
+        yield return CoWatchPlayerSkill(bm, hint);
         yield return WaitFieldClear(strict: true);
 
         yield return TalkBlock(bm, headTalk,
@@ -649,6 +677,236 @@ public class TutorialDirector : Singleton<TutorialDirector>
     {
         if (u == null || u.rb == null) return;
         u.rb.velocity = Vector2.zero;
+    }
+
+    // ============================================================
+    // V6：局内构筑教学（P1 三选一 → P2 拖顺序 → P3 看技能自动释放 → P4 回城点天赋）
+    // 强引导但可跳过：每一步都有超时兜底，超时就替玩家做默认选择，绝不卡死。
+    // ============================================================
+
+    /// <summary>
+    /// P1 + P2：精英清完 → 弹一次固定三选一（强引导选护盾）→ 进入拖拽排序阶段。
+    /// 走的还是正式局那条链路（RunDraftDirector.ApplyCard），只是卡组固定、有超时兜底。
+    /// </summary>
+    IEnumerator CoTutorialSkillDraft(BattleManager bm, TutorialHintUI hint)
+    {
+        if (bm == null || bm.Rules == null || !bm.Rules.EnableRunDraft) yield break;
+
+        int max = bm.Rules.MaxTutorialDrafts;
+        if (max > 0 && TutorialDraftsUsed >= max)
+        {
+            Debug.Log("[Tutorial] 引导三选一已达上限，跳过");
+            yield break;
+        }
+
+        var cards = new List<DraftCard>(TutorialDraftSkillIds.Length);
+        for (int i = 0; i < TutorialDraftSkillIds.Length; i++)
+        {
+            var c = RunDraftDirector.BuildSkillCardById(TutorialDraftSkillIds[i]);
+            if (c.IsValid && !RunLoadout.HasSkill(c.Id)) cards.Add(c);
+        }
+        if (cards.Count == 0)
+        {
+            Debug.LogWarning("[Tutorial] 引导三选一卡组为空，跳过");
+            yield break;
+        }
+
+        int preferred = 0;
+        for (int i = 0; i < cards.Count; i++)
+            if (cards[i].Id == TutorialPreferredSkillId) { preferred = i; break; }
+
+        var dir = RunDraftDirector.Instance ?? RunDraftDirector.Ensure(bm);
+        bool confirmed = false;
+
+        // manageFreeze=false：战斗已由引导冻住，弹层不要抢着恢复
+        LevelUpDraftUI.ShowOrderConfirm(cards, "挑一个技能（本局有效）",
+            card =>
+            {
+                TutorialDraftsUsed++;
+                if (dir != null)
+                {
+                    string msg = dir.ApplyCard(card);
+                    if (!string.IsNullOrEmpty(msg)) UIManager.Instance?.ShowToast(msg);
+                }
+                RunLoadout.Save();
+                RunSkillBarUI.Refresh();
+                Debug.Log($"[Tutorial] 引导三选一选择：{card.Id}");
+            },
+            () => confirmed = true,
+            manageFreeze: false);
+
+        // —— P1：挖空高亮推荐卡，超时替玩家选 ——
+        float t = 0f;
+        const float pickTimeout = 12f;
+        while (t < pickTimeout + 3f)
+        {
+            var ui = LevelUpDraftUI.Instance;
+            if (ui == null) break;
+            if (ui.InOrderPhase) break;          // 已选完，进排序阶段
+
+            if (t > 0.3f)
+            {
+                var rt = ui.CardRectAt(preferred);
+                if (rt != null)
+                    hint.ShowHard("选「圣盾壁垒」：给全队套一层护盾。", rt);
+            }
+            if (t >= pickTimeout)
+                ui.TryAutoPick(preferred);
+
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        // —— P2：拖拽定释放顺序，超时替玩家把护盾挪到 ① 再确认 ——
+        float t2 = 0f;
+        const float orderTimeout = 10f;
+        while (!confirmed && t2 < orderTimeout + 3f)
+        {
+            var ui = LevelUpDraftUI.Instance;
+            if (ui == null) break;
+
+            if (t2 > 0.3f)
+            {
+                var target = ui.InOrderPhase && ui.ConfirmRect != null ? ui.ConfirmRect : ui.OrderRowRect;
+                if (target != null)
+                    hint.ShowHard("拖动技能可改释放顺序：① 最先放。改完点「确认顺序」。", target);
+            }
+            if (t2 >= orderTimeout)
+            {
+                ui.ForceSkillToFront(TutorialPreferredSkillId);
+                ui.TryAutoPick(0);
+            }
+
+            t2 += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        hint.Hide();
+        yield return null;
+    }
+
+    /// <summary>
+    /// P3：最后一波把所有技能充满，让玩家亲眼看到技能自动放出去。
+    /// 「技能真放出去了」或「这一波打完」哪个先到就结束；最多等 8 秒，不拖流程。
+    /// </summary>
+    IEnumerator CoWatchPlayerSkill(BattleManager bm, TutorialHintUI hint)
+    {
+        if (bm == null) yield break;
+
+        _sawPlayerSkillCast = false;
+        bm.FillPlayerSkillEnergy();
+        RunSkillBarUI.Refresh();
+
+        var bar = RunSkillBarUI.Instance;
+        hint.Show("技能能量各自累积，满了会自动释放——看技能条。",
+            bar != null ? bar.GetComponent<RectTransform>() : null, 8f);
+
+        float t = 0f;
+        const float wait = 8f;
+        while (t < wait)
+        {
+            if (_sawPlayerSkillCast) break;
+            if (Hero.Instance == null || Hero.Instance.isDead) break;
+            if (bm.GetAliveMonsterCount() <= 0) break;
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (_sawPlayerSkillCast)
+        {
+            hint.Show("就是这样：技能按顺序自动放，你只管走位。", null, 3f);
+            yield return new WaitForSecondsRealtime(1.2f);
+        }
+        hint.Hide();
+    }
+
+    /// <summary>
+    /// P4：回城后引导点一次天赋（左栏属性节点，消耗金币）。
+    /// 金币不够 / 界面缺失 / 玩家直接关窗，都放行——引导不能把人卡在天赋页。
+    /// </summary>
+    IEnumerator CoGuideTalentUpgrade()
+    {
+        var hint = TutorialHintUI.Ensure();
+
+        int before = TalentUI.LeftUnlockedCount();
+        if (!TalentSystem.CanUnlockLeft(before + 1, out string reason))
+        {
+            Debug.Log($"[Tutorial] 跳过天赋引导：{reason}");
+            hint.Show("金币攒够后，可以在天赋页点满属性节点。", null, 5f);
+            yield return new WaitForSecondsRealtime(1.5f);
+            hint.Hide();
+            yield break;
+        }
+
+        // 1) 打开角色页
+        var hub = TownHubController.Instance;
+        if (hub != null) hub.OpenCharacter();
+
+        float bind = 0f;
+        while (bind < 4f)
+        {
+            var ch = CharacterUI.Instance;
+            if (ch != null && ch.gameObject.activeInHierarchy) break;
+            bind += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+            yield return null;
+        }
+
+        var character = CharacterUI.Instance;
+        if (character == null || !character.gameObject.activeInHierarchy)
+        {
+            Debug.LogWarning("[Tutorial] 角色页没打开，跳过天赋引导");
+            yield break;
+        }
+
+        // 2) 指向「天赋」按钮，超时就替玩家点开
+        RectTransform talentRt = character.talentButton != null
+            ? character.talentButton.GetComponent<RectTransform>() : null;
+        float t = 0f;
+        const float openTimeout = 8f;
+        while (t < openTimeout)
+        {
+            var talent = TalentUI.Instance;
+            if (talent != null && talent.IsOpen) break;
+            if (talentRt != null)
+                hint.ShowHard("点「天赋」，用金币点一个属性节点。", talentRt);
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (TalentUI.Instance == null || !TalentUI.Instance.IsOpen)
+        {
+            character.OpenTalent();
+            yield return null;
+            yield return null;
+        }
+
+        var talentUi = TalentUI.Instance;
+        if (talentUi == null || !talentUi.IsOpen)
+        {
+            Debug.LogWarning("[Tutorial] 天赋页没打开，跳过天赋引导");
+            hint.Hide();
+            yield break;
+        }
+
+        // 3) 高亮下一个可点节点，等玩家点
+        float t2 = 0f;
+        const float pickTimeout = 25f;
+        while (t2 < pickTimeout)
+        {
+            if (TalentUI.Instance == null || !TalentUI.Instance.IsOpen) break;
+            if (TalentUI.LeftUnlockedCount() > before) break;
+
+            var rt = TalentUI.Instance.GetLeftNode(before);
+            if (rt != null)
+                hint.ShowHard("点这个节点：属性立刻生效。", rt);
+
+            t2 += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        hint.Hide();
+        if (TalentUI.LeftUnlockedCount() > before)
+            UIManager.Instance?.ShowToast("天赋已生效，属性已更新");
     }
 
     /// <summary>放技能的点击目标：优先玩家头像槽，退回技能头像按钮。</summary>
@@ -870,7 +1128,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
 
         var list = ConfigManager.Instance != null
-            ? ConfigManager.Instance.GetRandomEquipInstances(1, 1)
+            ? ConfigManager.Instance.GetRandomEquipInstances(1, 1, attrBonus: GameConfig.RIFT_DROP_ATTR_BONUS)
             : null;
         if (list != null && list.Count > 0)
         {
@@ -958,7 +1216,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         while (bm != null && t < timeout)
         {
             int alive = bm.GetAliveMonsterCount();
-            if (alive > 0)
+            // 已排队但未刷出的波次也算「未清」：否则刷怪空窗 alive==0 会被误判为已清、提前进对话
+            bool pending = bm.HasPendingWaves;
+            if (alive > 0 || pending)
                 zeroHold = 0f;
             else
             {

@@ -6,20 +6,20 @@ using UnityEngine;
 /// </summary>
 public static class RiftEquipGenerator
 {
-    public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1)
+    public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f)
     {
         RiftEquipTables.EnsureLoaded();
         var list = new List<EquipInstance>();
         PlayerJobId job = PlayerJobDefs.GetSelected();
         for (int i = 0; i < count; i++)
         {
-            var inst = GenerateOne(stageType, job, blacksmithLevel);
+            var inst = GenerateOne(stageType, job, blacksmithLevel, attrBonus);
             if (inst != null) list.Add(inst);
         }
         return list;
     }
 
-    public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1)
+    public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1, float attrBonus = 0f)
     {
         RiftEquipTables.EnsureLoaded();
         var rarity = RollRarity(stageType, blacksmithLevel);
@@ -31,7 +31,7 @@ public static class RiftEquipGenerator
         if (string.IsNullOrEmpty(main))
             main = slot.IsWeapon ? "ATK" : "HP";
 
-        float mainVal = RollAttrValue(main, rarity.Id, rarity.BaseMul, false);
+        float mainVal = ApplyDropBonus(main, RollAttrValue(main, rarity.Id, rarity.BaseMul, false), attrBonus);
         var attrs = new List<AttrBonusData>();
         if (TryMapAttr(main, mainVal, out var mainBonus))
             attrs.Add(mainBonus);
@@ -45,7 +45,7 @@ public static class RiftEquipGenerator
             string id = PickWeightedLanded(slot.RandPool, used);
             if (string.IsNullOrEmpty(id)) break;
             used.Add(id);
-            float v = RollAttrValue(id, rarity.Id, rarity.AffixMul, true);
+            float v = ApplyDropBonus(id, RollAttrValue(id, rarity.Id, rarity.AffixMul, true), attrBonus);
             if (TryMapAttr(id, v, out var bonus))
                 attrs.Add(bonus);
         }
@@ -249,6 +249,19 @@ public static class RiftEquipGenerator
         return id == "CRIT_RATE" || id == "CRIT_DMG" || id == "ATK_SPD" || id == "DMG_RED"
             || id == "DODGE" || id == "LIFE_STEAL" || id == "ELE_DMG" || id == "HEAL"
             || id == "HP_REGEN" || id == "CONTROL_RES" || id == "ANTI_CRIT";
+    }
+
+    /// <summary>
+    /// 掉落装备属性整体加成：非百分比、非射程词条数值 +bonus。
+    /// 速率/百分比类（暴击、攻速、吸血、射程…）不参与，避免 +10 变成 +1000%。
+    /// </summary>
+    static float ApplyDropBonus(string attrId, float value, float bonus)
+    {
+        if (bonus == 0f) return value;
+        if (string.IsNullOrEmpty(attrId)) return value;
+        if (IsRateAttr(attrId)) return value;
+        if (attrId == "RANGE") return value; // 射程走像素→世界单位换算，不适合直接加
+        return value + bonus;
     }
 
     static bool TryMapAttr(string attrId, float value, out AttrBonusData bonus)

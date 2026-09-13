@@ -85,6 +85,11 @@ public class UnitAnimation : MonoBehaviour
     float _damagedRecoveryUntil;
     const float DamagedFlashFadeSeconds = 0.28f;
 
+    // 程序化模式（无 SPUM 的单位）的「原始色」基准。
+    // 闪红若以「当前色」为基准，叠击/多次受击会把脏红采成基准 → 永远卡在全红。
+    Color _procBaseColor = Color.white;
+    bool _procBaseValid;
+
     void Awake()
     {
         // 强制用配置值，避免预制体里序列化成 1 导致「看起来没减速」
@@ -1144,8 +1149,10 @@ public class UnitAnimation : MonoBehaviour
             if (gen == _spumFlashGen) _hitFlashRunning = false;
             yield break;
         }
-        Color origColor = _sr.color;
-        Color hitColor = new Color(1f, 0.3f, 0.3f, origColor.a);
+        Color baseColor;
+        if (_procBaseValid) baseColor = _procBaseColor;
+        else { EnsureProcBase(); baseColor = _procBaseColor; }
+        Color hitColor = new Color(1f, 0.3f, 0.3f, baseColor.a);
         _sr.color = hitColor;
         float dur = DamagedFlashFadeSeconds;
         float t = 0f;
@@ -1157,12 +1164,23 @@ public class UnitAnimation : MonoBehaviour
                 yield break;
             }
             t += Time.unscaledDeltaTime;
-            _sr.color = Color.Lerp(hitColor, origColor, Mathf.Clamp01(t / dur));
+            _sr.color = Color.Lerp(hitColor, baseColor, Mathf.Clamp01(t / dur));
             yield return null;
         }
         if (gen == _spumFlashGen && _sr != null && !_isDead)
-            _sr.color = origColor;
+            _sr.color = baseColor;
         if (gen == _spumFlashGen) _hitFlashRunning = false;
+    }
+
+    /// <summary>
+    /// 程序化单位的原始色基准：只在「非闪红」状态下采集一次，之后永远以它为还原目标。
+    /// 若以当前色为基准，连续受击会把脏红采成基准 → 全身卡红不还原。
+    /// </summary>
+    void EnsureProcBase()
+    {
+        if (_procBaseValid || _sr == null) return;
+        _procBaseColor = _sr.color;
+        _procBaseValid = true;
     }
 
     /// <summary>
@@ -1177,7 +1195,11 @@ public class UnitAnimation : MonoBehaviour
             {
                 _lowHpFlashOn = false;
                 if (!_hitFlashRunning)
+                {
                     RestoreSpumFlashFromBaseline();
+                    // 程序化单位：上面那句对无 SPUM 的单位是空操作，必须自己还原，否则低血红不退
+                    if (_sr != null) { EnsureProcBase(); _sr.color = _procBaseColor; }
+                }
             }
             return;
         }
@@ -1204,9 +1226,10 @@ public class UnitAnimation : MonoBehaviour
         else if (_sr != null)
         {
             _lowHpFlashOn = true;
+            EnsureProcBase();
             float pulse = 0.45f + 0.55f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 6.5f));
-            var baseC = Color.white;
-            var red = new Color(1f, 0.35f, 0.35f, _sr.color.a);
+            var baseC = _procBaseColor;
+            var red = new Color(1f, 0.35f, 0.35f, baseC.a);
             _sr.color = Color.Lerp(baseC, red, pulse);
         }
     }

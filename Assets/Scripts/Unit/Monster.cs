@@ -291,9 +291,10 @@ public class Monster : UnitBase
     protected override void AIUpdate()
     {
         // 入场：默认剧情冻结时暂停；仅 AllowMonsterMapEnter 窗口可继续走进
+        var bmEnter = BattleManager.Instance;
+        bool preFightPause = bmEnter != null && bmEnter.AllowMonsterMapEnter && !bmEnter.UnitsCanAct;
         if (_isEnteringMap)
         {
-            var bmEnter = BattleManager.Instance;
             bool canEnter = bmEnter == null
                 || bmEnter.UnitsCanAct
                 || bmEnter.AllowMonsterMapEnter;
@@ -346,13 +347,31 @@ public class Monster : UnitBase
                 int enterFace = _enterTargetPos.x >= MoveRoot.position.x ? 1 : -1;
                 facingDir = enterFace;
                 ApplyFacing(facingDir);
+                // 剧情前置暂停：只走到屏幕边缘即停，不深入；等「！」后 _isEnteringMap 仍未结束，继续推进到交战点
+                float effTargetX = _enterTargetPos.x;
+                if (preFightPause)
+                {
+                    BattleManager.GetBattleVisibleX(out float vMin, out float vMax);
+                    effTargetX = enterFace > 0 ? vMin + GameConfig.MONSTER_PAUSE_STOP_MARGIN
+                                              : vMax - GameConfig.MONSTER_PAUSE_STOP_MARGIN;
+                }
                 float step = _enterSpeed * Time.deltaTime;
-                float nx = Mathf.MoveTowards(MoveRoot.position.x, _enterTargetPos.x, step);
+                float nx = Mathf.MoveTowards(MoveRoot.position.x, effTargetX, step);
                 GameConfig.SetWorldPosition(MoveRoot, new Vector3(nx, FootY, MoveRoot.position.z));
-                if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+                bool stillWalking = Mathf.Abs(effTargetX - nx) > 0.02f;
+                if (unitAnim != null) unitAnim.SetMove(stillWalking, facingDir);
                 ApplyLaneY(Time.deltaTime);
                 return;
             }
+        }
+
+        // 剧情前置暂停：所有怪（含强制目标）原地等待玩家「！」，杜绝某怪绕过暂停直接冲向英雄
+        if (preFightPause)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            ApplyLaneY(Time.deltaTime);
+            return;
         }
 
         if (_skillTelegraphing || _bossPhaseShiftBusy)
@@ -730,6 +749,10 @@ public class Monster : UnitBase
         _eliteWave = eliteWave;
         if (!eliteWave) _eliteGlass = false;
         _bossPhase2Started = false;
+
+        // V6 词缀：属性全部按表算完之后再叠乘子，避免被后续赋值覆盖。
+        // 只给精英/Boss；普通小怪不 roll，否则满屏后缀变成视觉噪音。
+        MonsterAffix.RollAndAttach(this, _chapter, _isBossUnit || _eliteWave);
         _bossPhaseShiftBusy = false;
         _skillId = SkillRegistry.Instance != null
             ? SkillRegistry.Instance.GetMonsterSkillId(template, eliteWave, _isBossUnit, _attackStyle)
@@ -786,7 +809,7 @@ public class Monster : UnitBase
 
     public void SetOverlapStackCount(int count)
     {
-        if (count <= 1)
+        if (!GameConfig.SHOW_MONSTER_STACK_LABEL || count <= 1)
         {
             if (_stackLabelRoot != null) _stackLabelRoot.gameObject.SetActive(false);
             return;
@@ -981,9 +1004,32 @@ public class Monster : UnitBase
 
     public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null)
     {
-        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source);
-        if (!isDead)
-            BattleBossHpBar.RefreshFromField();
+        // V6 词缀「铁壁」：减伤在扣血之前生效
+        var affix = MonsterAffix.Get(this);
+        float inDamage = damage;
+        if (affix != null && affix.DamageTakenMul > 0f && !Mathf.Approximately(affix.DamageTakenMul, 1f))
+            inDamage = damage * affix.DamageTakenMul;
+
+        base.TakeDamage(inDamage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source);
+
+        // V6 词缀「荆棘」：打我的人按比例吃回一点伤害。
+        // 这里不区分攻击者是近战还是远程 —— 用一个「攻击者类型」判定既不可靠也会让词缀显得随机，
+        // 统一反弹更好懂。source 传 null 是必须的：否则会弹回来源、形成互弹死循环。
+        if (affix != null && affix.ThornsRatio > 0f && source != null && !source.isDead)
+        {
+            float back = inDamage * affix.ThornsRatio;
+            if (back >= 1f)
+                source.TakeDamage(back, false, true, true, 0, null);
+        }
+
+        if (isDead)
+        {
+            // V6 词缀「分裂」：死亡时分裂出残血小怪
+            if (affix != null) affix.NotifyDead();
+            return;
+        }
+
+        BattleBossHpBar.RefreshFromField();
         TryBeginBossPhase2();
     }
 
@@ -1090,33 +1136,40 @@ public class Monster : UnitBase
         EnsureFootShadow();
     }
 
-    /// <summary>怪脚下半透椭圆阴影（挂 Body，sort 低于躯干）。</summary>
+    /// <summary>
+    /// 怪脚下半透椭圆阴影。关键点：阴影必须挂到「承载身体部件的 SortingGroup」之下，
+    /// 与躯干/SPUM 部件处于同一组内，sortingOrder=-20 才能稳定排在躯干(>=0)之后。
+    /// 否则作为 _bodyRoot 下的独立节点时，-20 会低于地图(SORT_MAPROOT=10)，
+    /// 既可能被背景遮住，也可能因身体部件自身顺序更负而叠到身上（即“阴影跑到身子上面”）。
+    /// </summary>
     void EnsureFootShadow()
     {
         Transform body = GetBodyTransform();
         if (body == null) return;
 
-        Transform existing = null;
-        for (int i = 0; i < body.childCount; i++)
+        // 找到承载身体部件的 SortingGroup（ApplyUnitSorting 通常加在 transform 或其子节点上）
+        Transform host = transform;
+        var sg = GetComponent<UnityEngine.Rendering.SortingGroup>();
+        if (sg == null) sg = GetComponentInChildren<UnityEngine.Rendering.SortingGroup>(true);
+        if (sg == null)
         {
-            var ch = body.GetChild(i);
-            if (ch != null && ch.name.IndexOf("Shadow", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                existing = ch;
-                break;
-            }
+            GameConfig.ApplyUnitSorting(transform);
+            sg = GetComponent<UnityEngine.Rendering.SortingGroup>();
         }
+        if (sg != null) host = sg.transform;
 
+        Transform existing = FindFootShadowNode(transform);
         SpriteRenderer shadowSr;
         if (existing != null)
         {
+            existing.SetParent(host, false);
             shadowSr = existing.GetComponent<SpriteRenderer>();
             if (shadowSr == null) shadowSr = existing.gameObject.AddComponent<SpriteRenderer>();
         }
         else
         {
             var go = new GameObject("FootShadow");
-            go.transform.SetParent(body, false);
+            go.transform.SetParent(host, false);
             shadowSr = go.AddComponent<SpriteRenderer>();
         }
 
@@ -1124,7 +1177,7 @@ public class Monster : UnitBase
         shadowSr.sprite = shadowSp;
         shadowSr.color = new Color(0f, 0f, 0f, 0.35f);
         shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        // 必须低于躯干/SPUM 部件，避免阴影盖在怪脚上
+        // 组内相对顺序：低于躯干/SPUM 部件(>=0)，阴影藏在身子后面
         shadowSr.sortingOrder = -20;
         shadowSr.sharedMaterial = GetFootShadowMaterial();
 
@@ -1134,12 +1187,25 @@ public class Monster : UnitBase
         // 整体再缩小 20%
         targetWorldW *= 0.8f;
         float nativeW = shadowSp != null ? Mathf.Max(0.01f, shadowSp.bounds.size.x) : 1f;
-        float lossyX = Mathf.Max(0.001f, Mathf.Abs(body.lossyScale.x));
+        float lossyX = Mathf.Max(0.001f, Mathf.Abs(host.lossyScale.x));
         float sx = targetWorldW / (nativeW * lossyX);
         // 本地 Y=0.02；椭圆再压扁 20%（0.35→0.28）
         shadowSr.transform.localPosition = new Vector3(0f, 0.02f, 0f);
         shadowSr.transform.localRotation = Quaternion.identity;
         shadowSr.transform.localScale = new Vector3(sx, sx * 0.28f, 1f);
+    }
+
+    static Transform FindFootShadowNode(Transform root)
+    {
+        if (root == null) return null;
+        if (root.name.IndexOf("Shadow", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            return root;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var f = FindFootShadowNode(root.GetChild(i));
+            if (f != null) return f;
+        }
+        return null;
     }
 
     static Material _footShadowMat;

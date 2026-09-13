@@ -28,6 +28,8 @@ public class MercSkillCaster : MonoBehaviour
         if (_cooldownRemain > 0f)
             _cooldownRemain -= Time.deltaTime;
         if (_merc == null || _merc.isDead || string.IsNullOrEmpty(_activeSkillId)) return;
+        // 眩晕/被控期间不自动施放（含引导「原地眩晕」的小白）
+        if (_merc.IsStunned || _merc.TutorialStunned) return;
         if (_cooldownRemain > 0f) return;
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct) return;
         TryCast();

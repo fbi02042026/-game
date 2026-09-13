@@ -91,12 +91,15 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
         }
     }
 
-    /// <summary>击杀前摇：慢放 + 玩家跳起放大（近战 fullWindup=true；远程短版 false）。</summary>
-    public void BeginKillWindupJuice(bool fullWindup = true, UnitBase attacker = null)
+    /// <summary>击杀前摇：慢放 + 玩家跳起放大（近战 fullWindup=true；远程短版 false）。
+    /// victim 用于把「镜头拉近」限制为精英/Boss，普通杂兵击杀只保留慢放与英雄放大，避免眩晕。</summary>
+    public void BeginKillWindupJuice(bool fullWindup = true, UnitBase attacker = null, UnitBase victim = null)
     {
         BeginCritWindupSlowMo();
         BeginCritHeroScalePop(attacker != null ? attacker : Hero.Instance);
         if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
+        // 镜头拉近仅对精英/Boss：普通杂兵击杀只走慢放，降低晕眩
+        if (!(victim is Monster mon) || (!mon.IsBossUnit && !mon.IsEliteWave)) return;
         float inDur = fullWindup ? GameConfig.KILL_CAM_ZOOM_IN : GameConfig.KILL_CAM_RANGED_WINDUP;
         float mul = GameConfig.KILL_CAM_ZOOM_MUL;
         // 只缩 ortho：场景/单位同一相机一起拉近；勿再缩放视差层（会与 ortho 不同步）
@@ -324,6 +327,7 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
             if (!_comboToastShown.Contains("5"))
             {
                 _comboToastShown.Add("5");
+                DamageTextSystem.SetNextTextScaleMul(1.2f);
                 GlobalToastUI.ShowFlythrough("连杀 x5");
                 if (GameConfig.COMBAT_JUICE_HIT_STOP)
                     RequestHitStop(GameConfig.HIT_STOP_COMBO_ANNOUNCE);
@@ -333,7 +337,19 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
         if (combo >= 10 && !_comboToastShown.Contains("10"))
         {
             _comboToastShown.Add("10");
+            DamageTextSystem.SetNextTextScaleMul(1.35f);
+            GetCameraFollow()?.AddShake(0.1f, 0.18f);
             GlobalToastUI.ShowFlythrough("连杀 x10");
+            if (GameConfig.COMBAT_JUICE_HIT_STOP)
+                RequestHitStop(GameConfig.HIT_STOP_COMBO_ANNOUNCE);
+        }
+
+        if (combo >= 20 && !_comboToastShown.Contains("20"))
+        {
+            _comboToastShown.Add("20");
+            DamageTextSystem.SetNextTextScaleMul(1.5f);
+            GetCameraFollow()?.AddShake(0.14f, 0.22f);
+            GlobalToastUI.ShowFlythrough("连杀 x20");
             if (GameConfig.COMBAT_JUICE_HIT_STOP)
                 RequestHitStop(GameConfig.HIT_STOP_COMBO_ANNOUNCE);
         }

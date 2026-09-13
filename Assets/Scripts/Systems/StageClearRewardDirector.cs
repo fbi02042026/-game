@@ -93,20 +93,46 @@ public class StageClearRewardDirector : MonoBehaviour
         Transform root = wr != null ? wr.transform : null;
         // 外层 WorldRoot/box（缩放挂这里，不动动画本地曲线）
         _boxRoot = null;
+        string[] boxNames = { "box", "chest", "treasure", "宝箱", "rewardbox", "clearbox", "chestbox" };
         if (root != null)
         {
             for (int i = 0; i < root.childCount; i++)
             {
                 var c = root.GetChild(i);
-                if (string.Equals(c.name, "box", System.StringComparison.OrdinalIgnoreCase))
+                foreach (var bn in boxNames)
                 {
-                    _boxRoot = c;
-                    break;
+                    if (string.Equals(c.name, bn, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        _boxRoot = c;
+                        break;
+                    }
                 }
+                if (_boxRoot != null) break;
             }
         }
         if (_boxRoot == null)
-            _boxRoot = FindChildIgnoreCase(null, "box");
+        {
+            foreach (var bn in boxNames)
+            {
+                _boxRoot = FindChildIgnoreCase(null, bn);
+                if (_boxRoot != null) break;
+            }
+        }
+        if (_boxRoot == null)
+        {
+            string childNames = root != null ? "" : "(无 WorldRoot)";
+            if (root != null)
+            {
+                var sb = new System.Text.StringBuilder();
+                for (int i = 0; i < root.childCount; i++)
+                {
+                    if (i > 0) sb.Append(",");
+                    sb.Append(root.GetChild(i).name);
+                }
+                childNames = sb.ToString();
+            }
+            Debug.LogError($"[StageClearReward] 未找到宝箱节点（候选名: {string.Join("/", boxNames)}）。WorldRoot 子节点: {childNames}。请在该场景 WorldRoot 下放置名为 box 的宝箱节点（含 close/open 子精灵）。");
+        }
 
         _chuansongmen = FindChildIgnoreCase(root, "chuansongmen") ?? FindChildIgnoreCase(null, "chuansongmen");
 
@@ -163,20 +189,29 @@ public class StageClearRewardDirector : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 宝箱层级：固定高于地图/背景(SORT_MAPROOT=10)，避免按 Y 计算的排序把箱子压到背景之后导致“看不见宝箱”。
+    /// close/open 精灵同时给高于地图的绝对 order，即便它们落在某个 SortingGroup 之外也能浮在场景之上。
+    /// </summary>
     void ApplyBoxSorting()
     {
         if (_boxRoot == null) return;
-        // 与单位同一套：SortingGroup + Y 深度，避免预制体高 sortingOrder 盖住全体怪物
-        GameConfig.ApplyUnitSorting(_boxRoot);
+        const int boxGroup = GameConfig.SORT_MAPROOT + 5; // 15：与单位同一档，稳定高于地图(10)
+        var sg = _boxRoot.GetComponent<UnityEngine.Rendering.SortingGroup>();
+        if (sg == null) sg = _boxRoot.GetComponentInChildren<UnityEngine.Rendering.SortingGroup>();
+        if (sg == null) sg = _boxRoot.gameObject.AddComponent<UnityEngine.Rendering.SortingGroup>();
+        sg.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        sg.sortingOrder = boxGroup;
+
         if (_closeSr != null)
         {
             _closeSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _closeSr.sortingOrder = 0;
+            _closeSr.sortingOrder = GameConfig.SORT_MAPROOT + 2; // 12
         }
         if (_openSr != null)
         {
             _openSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _openSr.sortingOrder = 1;
+            _openSr.sortingOrder = GameConfig.SORT_MAPROOT + 3; // 13
         }
     }
 
@@ -732,6 +767,9 @@ public class StageClearRewardDirector : MonoBehaviour
             for (int i = 0; i < groundIcons.Count; i++)
                 if (groundIcons[i] != null) Destroy(groundIcons[i]);
         }
+
+        // —— 局内构筑进度落档（供「继续上一局」）。升级抽卡统一在升级时发生，这里不再额外出三选一 ——
+        RunDraftDirector.Instance?.NoteStageProgress();
 
         // —— 开箱整理：确定后再出传送门 / 摇杆 ——
         {

@@ -16,8 +16,8 @@ public static class CraftStageApply
             return false;
         }
 
-        // 优先走设计文档强化 +1～+10（有强化石时）
-        EquipInstance enhanceTarget = PickEnhanceTarget(bag);
+        // 优先走设计文档强化 +1～+10（有强化石时）；装备强化已关闭时跳到升星路径
+        EquipInstance enhanceTarget = GameConfig.EquipEnhanceEnabled ? PickEnhanceTarget(bag) : null;
         if (enhanceTarget != null)
         {
             int next = enhanceTarget.enhanceLevel + 1;

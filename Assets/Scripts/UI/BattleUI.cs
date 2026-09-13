@@ -125,7 +125,7 @@ public class BattleUI : MonoBehaviour
     }
 
     float _liveBarTimer;
-    float _lastPlayerHp = -1f, _lastPlayerMaxHp = -1f, _lastPlayerEnergy = -1f;
+    float _lastPlayerHp = -1f, _lastPlayerMaxHp = -1f, _lastPlayerEnergy = -1f, _lastPlayerExp = -1f;
     float _lastMerc1Hp = -1f, _lastMerc1Energy = -1f;
     float _lastMerc2Hp = -1f, _lastMerc2Energy = -1f;
     const float LiveBarInterval = 0.1f;
@@ -149,16 +149,22 @@ public class BattleUI : MonoBehaviour
         if (playerSlot != null && hero != null && !hero.isDead)
         {
             float maxHp = hero.attr.GetAttr(AttrType.MaxHp);
-            float energy = BattleManager.Instance != null ? BattleManager.Instance.playerSkillEnergy : 0f;
+            float energy = BattleManager.Instance != null ? BattleManager.Instance.PlayerSkillEnergyPeak : 0f;
+            float expRatio = hero.expToNextLevel > 0
+                ? Mathf.Clamp01((float)hero.currentExp / hero.expToNextLevel)
+                : 0f;
             if (!Mathf.Approximately(_lastPlayerHp, hero.currentHp)
                 || !Mathf.Approximately(_lastPlayerMaxHp, maxHp)
-                || !Mathf.Approximately(_lastPlayerEnergy, energy))
+                || !Mathf.Approximately(_lastPlayerEnergy, energy)
+                || !Mathf.Approximately(_lastPlayerExp, expRatio))
             {
                 _lastPlayerHp = hero.currentHp;
                 _lastPlayerMaxHp = maxHp;
                 _lastPlayerEnergy = energy;
-                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: false);
-                playerSlot.SetEnergy(energy);
+                _lastPlayerExp = expRatio;
+                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: true);
+                playerSlot.SetEnergy(energy);                              // 能量环/技能能量（若有）仍由技能能量驱动
+                playerSlot.SetExpBar(expRatio, hero.currentExp, hero.expToNextLevel); // 头像下蓝条改为经验进度
             }
         }
 
@@ -1148,7 +1154,7 @@ public class BattleUI : MonoBehaviour
             if (hero != null)
             {
                 float maxHp = hero.attr.GetAttr(AttrType.MaxHp);
-                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: false);
+                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: true);
             }
             // 玩家头像对接
             Sprite playerIcon = mm != null ? mm.GetPlayerIcon() : null;
@@ -1707,6 +1713,32 @@ public class CharacterSlotUI
             {
                 glowBorder.color = new Color(1f, 0.85f, 0.15f, 0.85f);
             }
+        }
+    }
+
+    /// <summary>
+    /// 头像下「蓝条」改为经验进度（玩家槽专用；佣兵槽仍用 SetEnergy 显示技能能量）。
+    /// 仅驱动 lanBarFill + lanText，不影响能量环/光边。
+    /// </summary>
+    public void SetExpBar(float ratio, int cur, int max)
+    {
+        if (lanBarFill != null)
+        {
+            lanBarFill.enabled = true;
+            lanBarFill.fillAmount = Mathf.Clamp01(ratio);
+        }
+        if (lanText != null)
+        {
+            lanText.gameObject.SetActive(true);
+            if (max <= 0)
+            {
+                lanText.text = "";
+                return;
+            }
+            // 满格前给出「升级 = 抽卡」的预告，让玩家知道爆点什么时候来
+            lanText.text = ratio >= 0.75f
+                ? $"EXP {cur}/{max}　升级抽卡!"
+                : $"EXP {cur}/{max}";
         }
     }
 

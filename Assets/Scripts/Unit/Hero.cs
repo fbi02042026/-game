@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// 主英雄类
@@ -11,6 +12,18 @@ public class Hero : UnitBase
     public int level = 1;
     public int currentExp = 0;
     public int expToNextLevel = 50;
+
+    /// <summary>
+    /// 待结算的升级次数（局内三选一抽卡队列）。
+    /// 由 <see cref="AddExp"/> 累加，<c>RunDraftDirector.Tick</c> 在可行动时消费，UI 弹在战斗层。
+    /// </summary>
+    public int pendingLevelUps;
+
+    // —— 闪避：独立按钮触发，无敌帧 + 飘字，不新增美术 ——
+    internal float invincibleUntil;
+    private float _dodgeCdUntil;
+    private Button _dodgeBtn;
+    private Image _dodgeBtnImg;
 
     [Header("SPUM换装")]
     public HeroCostumeManager costumeManager;
@@ -58,6 +71,9 @@ public class Hero : UnitBase
         level = 1;
         currentExp = 0;
         expToNextLevel = LevelSystem.GetExpForLevel(level);
+        pendingLevelUps = 0;
+        invincibleUntil = 0f;
+        _dodgeCdUntil = 0f;
         currentHp = attr.GetAttr(AttrType.MaxHp);
         // 优先用场景 SpawnPoint；无则回退硬编码 X + GROUND_Y
         Vector3 spawnPos = new Vector3(-7f, GROUND_Y, 0f);
@@ -86,6 +102,8 @@ public class Hero : UnitBase
         // 重置死亡状态和动画
         ResetForReuse();
 
+        EnsureDodgeButton();
+
         // 初始化换装后再按武器刷新攻击距离
         if (costumeManager != null)
             costumeManager.RefreshCostume();
@@ -102,6 +120,104 @@ public class Hero : UnitBase
             currentExp -= expToNextLevel;
             LevelSystem.OnLevelUp(this);
             expToNextLevel = LevelSystem.GetExpForLevel(level);
+            // 升级演出：飘字 + 特效，让"变强"可见（G1）
+            BattleVFXSystem.Instance?.PlayLevelUp(transform.position);
+            GlobalToastUI.Show($"升级！Lv{level}");
+            // 局内抽卡：排队一次三选一，由 RunDraftDirector.Tick 在可行动时消费
+            pendingLevelUps++;
+        }
+        // 本局战力快照（等级也是战力的一部分）
+        if (RunLoadout.IsActive)
+            RunLoadout.HeroLevel = this.level;
+    }
+
+    // —— 闪避系统（D2）：独立按钮 + 无敌帧 + 飘字，不新增美术 ——
+    protected override bool IsInvincibleNow() => Time.time < invincibleUntil;
+
+    // —— 残血加成（R1）：HP 低于阈值时攻速/普攻暴击提升，制造残血反扑 ——
+    private bool IsLowHp()
+        => attr != null && attr.GetAttr(AttrType.MaxHp) > 0
+        && currentHp > 0
+        && (float)currentHp / attr.GetAttr(AttrType.MaxHp) < GameConfig.LOW_HP_THRESHOLD;
+
+    protected override float GetLowHpAttackSpeedMul()
+        => IsLowHp() ? GameConfig.LOW_HP_ATK_SPEED_MUL : 1f;
+
+    protected override float GetLowHpCritRateBonus()
+        => IsLowHp() ? GameConfig.LOW_HP_CRIT_BONUS : 0f;
+
+    /// <summary>独立闪避按钮调用：冷却就绪、战斗中且可行动时触发，返回是否成功。</summary>
+    public bool TryDodge()
+    {
+        if (isDead || !gameObject.activeInHierarchy) return false;
+        var bm = BattleManager.Instance;
+        if (bm == null || !bm.isInBattle || !bm.UnitsCanAct) return false;
+        if (Time.time < _dodgeCdUntil) return false;
+
+        _dodgeCdUntil = Time.time + GameConfig.DODGE_COOLDOWN;
+        invincibleUntil = Time.time + GameConfig.DODGE_IFRAME;
+        DamageTextSystem.Instance?.SpawnDodgeText(transform.position, true);
+        return true;
+    }
+
+    private void EnsureDodgeButton()
+    {
+        if (_dodgeBtn != null) return;
+        var ui = BattleUI.Instance;
+        if (ui == null) return;
+
+        var go = new GameObject("DodgeButton", typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(ui.transform, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(1f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(1f, 0f);
+        rt.anchoredPosition = new Vector2(-90f, 96f); // 右下角，避开摇杆与技能区
+        rt.sizeDelta = new Vector2(96f, 96f);
+
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0.18f, 0.7f, 1f, 0.55f);
+
+        var btn = go.GetComponent<Button>();
+        btn.targetGraphic = img;
+        btn.transition = Selectable.Transition.ColorTint;
+        btn.onClick.AddListener(() => { TryDodge(); });
+
+        var txtGo = new GameObject("Label", typeof(Text));
+        txtGo.transform.SetParent(go.transform, false);
+        var txt = txtGo.GetComponent<Text>();
+        txt.text = "闪避";
+        txt.fontSize = 30;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.color = Color.white;
+        var trt = txtGo.GetComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.sizeDelta = Vector2.zero;
+        trt.anchoredPosition = Vector2.zero;
+
+        _dodgeBtn = btn;
+        _dodgeBtnImg = img;
+    }
+
+    private void TickDodgeButton()
+    {
+        if (_dodgeBtn == null)
+        {
+            // 战斗进行中但按钮尚未创建（如 BattleUI 晚于 InitNewRun 就绪）时自愈
+            var bm = BattleManager.Instance;
+            if (bm != null && bm.isInBattle && BattleUI.Instance != null)
+                EnsureDodgeButton();
+            return;
+        }
+        float remain = _dodgeCdUntil - Time.time;
+        bool ready = remain <= 0f;
+        _dodgeBtn.interactable = ready;
+        if (_dodgeBtnImg != null)
+        {
+            Color c = _dodgeBtnImg.color;
+            c.a = ready ? 0.55f : 0.2f;
+            _dodgeBtnImg.color = c;
         }
     }
 

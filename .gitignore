@@ -113,6 +113,9 @@ BattleDiagnose.log
 _excel_dump_lf.txt
 mem-log/
 
+# Local AI agent working data (memory / plans / cache) — not for repo
+.workbuddy/
+
 # local video backups
 Tools/backups/
 

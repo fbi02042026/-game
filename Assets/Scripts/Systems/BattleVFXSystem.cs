@@ -39,6 +39,11 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
     /// <summary>飞行贴图默认朝向修正：贴图尖端朝右=0，朝左=180，朝上=-90</summary>
     public float projectileAngleOffset = 0f;
     public float minFlightTime = 0.1f;
+    /// <summary>
+    /// 已废弃：不再用于截断飞行时间。截断会让慢速弹道（怪物 speedMul 0.196/0.138）顶格，
+    /// 速度参数失真、降速对它无效，造成敌我不对称。飞行时间现在恒等于 距离/速度。
+    /// 字段保留仅为兼容已序列化的 prefab 值。
+    /// </summary>
     public float maxFlightTime = 1.2f;
     /// <summary>弓箭发射点相对 GetFirePosition 的 Y 偏移（世界单位，正值向上）</summary>
     public float bowFireYOffset = 0.07f;
@@ -385,8 +390,12 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         Vector3 dirN = flightDir.sqrMagnitude > 1e-8f
             ? flightDir.normalized
             : Vector3.right * (facingDir >= 0 ? 1f : -1f);
-        float speed = Mathf.Max(0.1f, projectileSpeed * Mathf.Max(0.05f, speedMul));
-        float duration = Mathf.Clamp(distance / speed, minFlightTime, maxFlightTime);
+        // 全局降速 20%（GameConfig.PROJECTILE_SPEED_GLOBAL_MUL）；六种弹道共用本协程，一处生效。
+        float speed = Mathf.Max(0.1f, projectileSpeed * Mathf.Max(0.05f, speedMul)
+                                      * GameConfig.PROJECTILE_SPEED_GLOBAL_MUL);
+        // 飞行时间 = 距离 / 速度，即真实的「每秒移动 N 个单位」。
+        // 不再用 maxFlightTime 截断（原因见该字段注释）；只保留极近距离的 minFlightTime 下限。
+        float duration = Mathf.Max(minFlightTime, distance / speed);
         speed = distance / Mathf.Max(0.0001f, duration);
 
         GameObject projectile = Instantiate(projectilePrefab, fromPos, Quaternion.identity);
@@ -694,6 +703,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         GameObject go = AcquireVfxInstance(prefab, position, resetTint: true);
         if (go == null) return null;
 
+        // 池化实例会带走上一次的旋转：每次播放按预制体根旋转复位，否则改预制体 X/Y/Z 旋转不生效
+        go.transform.rotation = prefab.transform.rotation;
         Vector3 baseScale = prefab.transform.localScale;
         float mul = Mathf.Max(0.01f, scaleMul);
         go.transform.localScale = new Vector3(

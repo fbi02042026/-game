@@ -824,7 +824,7 @@ public abstract class UnitBase : MonoBehaviour
         if (!GameConfig.IsInCombatViewport(target))
             return;
 
-        float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit);
+        float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit, GetLowHpCritRateBonus());
 
         // 引导关/开局也走正式 ATK，不再使用 2~5 点假伤害压制。
         bool openingHit = false;
@@ -974,7 +974,7 @@ public abstract class UnitBase : MonoBehaviour
         float delay;
         if (killWindup)
         {
-            CombatJuice.Instance?.BeginKillWindupJuice(true, this);
+            CombatJuice.Instance?.BeginKillWindupJuice(true, this, target);
             delay = GameConfig.CRIT_WINDUP_UNSCALED;
         }
         else
@@ -1078,10 +1078,24 @@ public abstract class UnitBase : MonoBehaviour
         // 开局不再给己方攻速 0.55 惩罚，与正式战斗一致。
         if (isAlly && BattleManager.Instance != null)
             atkSpd *= BattleManager.Instance.KillComboSpeedMul;
+        // 攻速增益技能（gale_stance）的计时倍率，过期自动回到 1
+        if (isAlly)
+            atkSpd *= SkillCastService.GetTeamAttackSpeedMul();
         if (this is Hero && PlayerPassiveCombat.Instance != null)
             atkSpd *= PlayerPassiveCombat.Instance.GetAttackSpeedMul();
+        // 玩家攻速 -20%（仅 Hero；佣兵/怪物节奏不变）
+        if (this is Hero)
+            atkSpd *= GameConfig.PLAYER_ATTACK_SPEED_MUL;
+        // 残血加成（R1）：低血时提升攻速，越打越快制造反扑手感
+        atkSpd *= GetLowHpAttackSpeedMul();
         return 1f / Mathf.Max(0.05f, atkSpd);
     }
+
+    /// <summary>残血加成（R1）攻速倍率：默认 1（无加成）。仅 Hero 覆写。</summary>
+    protected virtual float GetLowHpAttackSpeedMul() => 1f;
+
+    /// <summary>残血加成（R1）普攻额外暴击率（绝对值）。默认 0。仅 Hero 覆写。</summary>
+    protected virtual float GetLowHpCritRateBonus() => 0f;
 
     /// <summary>友军连杀加速后的移速。</summary>
     protected float GetCombatMoveSpeed()
@@ -1162,9 +1176,15 @@ public abstract class UnitBase : MonoBehaviour
         body.velocity = Vector2.zero;
     }
 
+    /// <summary>子类可重写：当前是否处于无敌（如 Hero 闪避无敌帧）。默认 false。</summary>
+    protected virtual bool IsInvincibleNow() => false;
+
     public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null)
     {
         if (_isDying) return;
+        // 闪避无敌帧：仅免疫敌方伤害，关卡机制（source 为 null 或友方）仍生效
+        if (IsInvincibleNow() && source != null && !source.isAlly)
+            return;
 
         float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense);
         if (isAlly && PlayerPassiveCombat.Instance != null)
@@ -1174,6 +1194,14 @@ public abstract class UnitBase : MonoBehaviour
             LastDamageSource = source;
 
         currentHp -= finalDamage;
+
+        // V6 词缀「吸血」：造成伤害的一方（精英/Boss）按比回血
+        if (source is Monster && finalDamage > 0f)
+        {
+            var srcAffix = MonsterAffix.Get((Monster)source);
+            if (srcAffix != null) srcAffix.OnDealtDamage(finalDamage);
+        }
+
         // 怪物受击飘字：传受害者面向，由 DamageTextSystem 固定往其后方滑
         int textFacing = isAlly ? hitVfxFacing : GetVfxFacingDir();
         DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit, isAlly, textFacing);

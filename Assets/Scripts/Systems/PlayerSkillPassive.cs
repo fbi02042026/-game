@@ -14,7 +14,10 @@ public static class PlayerSkillPassive
         var bm = BattleManager.Instance;
         if (bm == null || !bm.isInBattle || !bm.UnitsCanAct) return;
         if (BattleLootMode.Active) return;
-        if (bm.playerSkillEnergy < 0.99f) return;
+        // V6：能量按技能槽独立 —— 先找「能量满且不在冷却」的槽，没有就本次不放。
+        // 槽序即释放优先级：多个技能同时就绪时取最靠前的那个。
+        // 本方法只负责触发，真正的释放与扣能量在 SkillCastService.TryUsePlayerSkillSlot。
+        if (bm.FindReadySkillSlot() < 0) return;
         bm.TryUsePlayerSkill();
     }
 }

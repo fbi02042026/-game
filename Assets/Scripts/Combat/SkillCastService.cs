@@ -18,7 +18,6 @@ public sealed class SkillCastService
     System.Collections.Generic.List<UnitBase> allyUnits => bm.allyUnits;
     System.Collections.Generic.List<UnitBase> monsters => bm.monsters;
     BattleRunStats RunStats => bm.RunStats;
-    float playerSkillEnergy { get => bm.playerSkillEnergy; set => bm.playerSkillEnergy = value; }
 
     void RecordAllyHeal(UnitBase healer, float amount) => bm.RecordAllyHeal(healer, amount);
 
@@ -27,16 +26,28 @@ public sealed class SkillCastService
     // 玩家技能释放（由头像点击触发）
     // ============================================================
 
-    /// <summary>释放玩家技能（需要能量满）— 头像点击</summary>
+    /// <summary>
+    /// 释放玩家技能。V6：技能能量改为<b>每槽一条</b>，所以要先找出「能量满且不在冷却」的槽，
+    /// 再只释放那一个、只清那一条能量。
+    /// </summary>
     public bool TryUsePlayerSkill()
     {
-        if (playerSkillEnergy < 0.99f) return false;
+        return TryUsePlayerSkillSlot(bm.FindReadySkillSlot());
+    }
+
+    /// <summary>释放指定技能槽的技能（slot 来自 BattleManager.FindReadySkillSlot）。</summary>
+    public bool TryUsePlayerSkillSlot(int slot)
+    {
+        if (slot < 0) return false;
+        if (bm.GetPlayerSkillEnergy(slot) < 0.99f) return false;
         if (hero == null || hero.isDead) return false;
 
-        var skill = ResolvePlayerSkill();
+        // 严格按槽取技能：取不到就本次不放（不放别的技能替补，避免清错能量）
+        var skill = ResolvePlayerSkillAt(slot);
         if (skill == null) return false;
         UnitBase healTarget = null;
         bool isHeal = IsHealSkill(skill);
+        bool isBuff = skill.skillType == SkillSystem.SkillType.Buff;
 
         if (isHeal)
         {
@@ -45,12 +56,17 @@ public sealed class SkillCastService
         }
         else
         {
-            bool ok = skill.skillType != SkillSystem.SkillType.Buff
+            bool ok = !isBuff
                 && SkillSystem.Instance != null
                 && SkillSystem.Instance.UseSkill(skill, hero);
             if (!ok)
                 ExecuteAllySkillFallback(hero, skill);
         }
+
+        // Buff / 治疗类不走 SkillSystem.UseSkill，冷却在此补齐，避免随能量反复刷屏
+        if ((isHeal || isBuff) && SkillSystem.Instance != null
+            && !SkillSystem.Instance.IsOnCooldown(skill.skillId))
+            SkillSystem.Instance.RegisterCooldown(skill.skillId, skill.cooldown);
 
         Vector3 vfxPos = healTarget != null ? healTarget.GetHitPosition() : hero.GetHitPosition();
         Transform vfxAttach = healTarget != null ? healTarget.transform : hero.transform;
@@ -61,8 +77,9 @@ public sealed class SkillCastService
             $"{{\"facingDir\":{hero.facingDir},\"vfxDir\":{hero.GetVfxFacingDir()},\"scaleX\":{hero.transform.localScale.x:F3},\"skill\":\"{skill.skillId}\"}}");
         // #endregion
 
-        playerSkillEnergy = 0f;
-        BattleUI.Instance?.UpdateSkillEnergy(0, 0f);
+        // V6：只清这一个技能槽的能量，其它槽照保留
+        bm.SetPlayerSkillEnergy(slot, 0f);
+        BattleUI.Instance?.UpdateSkillEnergy(0, bm.PlayerSkillEnergyPeak);
         TutorialDirector.Instance?.NotifyPlayerSkillUsed();
         Debug.Log($"[BattleManager] 玩家技能释放: {skill.skillName} ({skill.skillId}) → {(healTarget != null ? healTarget.name : "default")}");
         return true;
@@ -77,6 +94,8 @@ public sealed class SkillCastService
     public bool TryCastMercActiveSkill(Mercenary merc, string skillId, bool manual)
     {
         if (merc == null || merc.isDead || string.IsNullOrEmpty(skillId)) return false;
+        // 眩晕/被控期间禁止施放主动技（含引导「原地眩晕」的小白：TutorialStunned）
+        if (merc.IsStunned || merc.TutorialStunned) return false;
         if (MercSkillTable.IsPassive(skillId)) return false;
 
         var skill = ResolveSkill(skillId);
@@ -171,8 +190,27 @@ public sealed class SkillCastService
     }
 
 
+    /// <summary>
+    /// 取指定技能槽的运行时技能（V6）。索引与 RunLoadout.SkillIds() 一一对应，
+    /// 由 <see cref="RunDraftDirector"/> 重建时按序灌入 SkillSystem。
+    /// </summary>
+    SkillSystem.ActiveSkill ResolvePlayerSkillAt(int slot)
+    {
+        var sys = SkillSystem.Instance;
+        if (sys == null || slot < 0) return null;
+        var list = sys.GetPlayerSkills();
+        if (list == null || slot >= list.Count) return null;
+        return list[slot];
+    }
+
     SkillSystem.ActiveSkill ResolvePlayerSkill()
     {
+        // 局内构筑：优先取第一个不在冷却中的技能；全部冷却中则返回 null（本次不放，能量不消耗）
+        var sys = SkillSystem.Instance;
+        if (sys != null && sys.GetPlayerSkills().Count > 0)
+            return sys.GetReadyPlayerSkill();
+
+        // 回退：未灌入本局构筑时走旧的单技能路径
         string id = SkillRegistry.Instance != null
             ? SkillRegistry.Instance.GetPlayerSkillId()
             : null;
@@ -281,8 +319,29 @@ public sealed class SkillCastService
     }
 
 
+    // 团队攻速 buff 的计时状态。attr.AddAttr 是永久写值，技能表里的 duration 从未被消费，
+    // 导致 gale_stance 放一次 +35% 攻速永久生效（现存 bug）。攻速改走这里的到期时间：
+    // 由 UnitBase.GetAttackCooldown 按倍率消耗，到期自动失效；残影也用同一标志判断「攻速技能是否生效中」。
+    static float _teamAtkSpdBuffUntil = -1f;
+    static float _teamAtkSpdMul = 1f;
+
+    /// <summary>攻速增益技能是否处于生效期（残影与攻速计算共用的唯一判据）。</summary>
+    public static bool IsTeamAttackSpeedBuffActive => Time.time < _teamAtkSpdBuffUntil;
+
+    /// <summary>攻速增益倍率，过期返回 1（无增益）。</summary>
+    public static float GetTeamAttackSpeedMul() => IsTeamAttackSpeedBuffActive ? _teamAtkSpdMul : 1f;
+
     void ApplyTeamBuff(SkillConfig cfg)
     {
+        // 攻速类增益不再走 AddAttr（无法回收），改为计时倍率，duration 才真正生效。
+        if (cfg.buffAttr == AttrType.AttackSpeed && cfg.buffIsPercent && cfg.duration > 0f)
+        {
+            _teamAtkSpdMul = 1f + Mathf.Max(0f, cfg.buffValue);
+            _teamAtkSpdBuffUntil = Time.time + cfg.duration;
+            GamePerf.Log($"[SkillCast] 团队攻速增益 {_teamAtkSpdMul:0.##}x，持续 {cfg.duration}s");
+            return;
+        }
+
         void Apply(UnitBase u)
         {
             if (u == null || u.isDead || u.attr == null) return;

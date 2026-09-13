@@ -121,7 +121,11 @@ public sealed class WavePlanner
         if (BattleLootMode.Active) return;
         MarkUnspawnedWavesConsumed();
 
-        int n = Mathf.Max(1, count);
+        // 引导关人数真源 = tutorial_battle.csv，这里默认不缩放（MonsterCountMul=1）。
+        int raw = Mathf.Max(1, count);
+        int n = Rules.ScaleMonsterCount(raw, bilateralEnter || aroundAnchor);
+        if (n != raw)
+            GamePerf.Log($"[BattleManager] 引导波人数缩放 {raw} → {n}（MonsterCountMul={Rules.MonsterCountMul}）");
         float hx = hero != null ? UnitBase.GetCombatX(hero) : GetStageStartX();
         float trigger = (anchorX ?? hx) + (bilateralEnter || aroundAnchor ? 0f : GameConfig.MONSTER_ENGAGE_OFFSET);
         var wave = new WaveData
@@ -150,7 +154,10 @@ public sealed class WavePlanner
         int aliveBefore = CountAliveMonsters();
         TrySpawnTutorialWave(wave, waveIdx, spawnedBefore, aliveBefore);
 
-        if (CountAliveMonsters() == 0)
+        // 必须是「主波一只都没刷出来」才补刷，不能写 == 0：
+        // CountAliveMonsters() 有同帧缓存，主波协程还在按 stagger 出怪时读回来仍是刷怪前的旧值，
+        // 写 == 0 会误判成"没刷出来"再补一整波，实际怪量直接翻倍（6→8、7→10、8→12）。
+        if (CountAliveMonsters() <= aliveBefore)
         {
             if (bilateralEnter && !aroundAnchor)
             {
@@ -352,6 +359,12 @@ public sealed class WavePlanner
         float hp = rolled * GameConfig.MONSTER_HP_GLOBAL_MUL;
         monster.attr.SetAttr(AttrType.MaxHp, hp);
         monster.currentHp = hp;
+        // [BALANCE-TEMP] 教学关血量覆盖后的真实满血（一眼看出是不是被压到个位数）
+        string cfgId = monster.config != null ? monster.config.id : "-";
+        float cfgBaseHp = monster.config != null ? monster.config.baseHp : -1f;
+        Debug.Log($"[BALANCE] mon={monster.name} cfg={cfgId} cfgBaseHp={cfgBaseHp} " +
+                  $"elite={monster.IsEliteWave} rolled={rolled} MUL={GameConfig.MONSTER_HP_GLOBAL_MUL} " +
+                  $"finalMaxHp={hp:F1}");
     }
 
     // ---- extracted from BattleManager L1059-L1166 ----
@@ -393,7 +406,7 @@ public sealed class WavePlanner
         }
 
         int after = CountAliveMonsters();
-        Debug.Log($"[BattleManager] ForceSpawn 第1轮 beforeAlive={before} afterAlive={after} totalList={monsters.Count} waves={_waves.Count} prefab={(PoolManager.Instance != null && PoolManager.Instance._monsterPrefab != null)}");
+        GamePerf.Log($"[BattleManager] ForceSpawn 第1轮 beforeAlive={before} afterAlive={after} totalList={monsters.Count} waves={_waves.Count} prefab={(PoolManager.Instance != null && PoolManager.Instance._monsterPrefab != null)}");
 
         if (after <= 0)
         {
@@ -1199,6 +1212,15 @@ public sealed class WavePlanner
         GamePerf.Log($"[BattleManager] 兜底波次{waveIndex + 1}: {wave.monsterCount}只 @刷怪点 spawnedTotal={_totalMonstersSpawnedThisStage}");
     }
 
+    /// <summary>
+    /// 对外刷怪入口（V6 词缀「分裂」用）：在指定位置生成一只怪。
+    /// 本体 SpawnMonster 是私有的，这里只做一层 public 包装，不改动既有刷怪逻辑。
+    /// </summary>
+    public Monster SpawnMonsterAt(MonsterConfig template, int stageIdx, Vector3 pos, float scaleMultiplier = 1f)
+    {
+        return SpawnMonster(template, stageIdx, pos, scaleMultiplier, 0);
+    }
+
     Monster SpawnMonster(MonsterConfig template, int stageIdx, Vector3 pos, float scaleMultiplier = 1f, int spriteIndexOverride = 0)
     {
         if (PoolManager.Instance == null)
@@ -1238,8 +1260,9 @@ public sealed class WavePlanner
         monster.OnDead += OnMonsterDead;
         monsters.Add(monster);
         _totalMonstersSpawnedThisStage++;
+        bm.InvalidateAliveMonsterCache();
 
-        Debug.Log($"[BattleManager] 生成怪物: {go.name} parent={go.transform.parent?.name} pos={go.transform.position} scale={go.transform.localScale} lossy={go.transform.lossyScale} hp={monster.currentHp:F0}");
+        GamePerf.Log($"[BattleManager] 生成怪物: {monster.name} hp={monster.currentHp:F0} 存活={CountAliveMonsters()}");
         return monster;
     }
 

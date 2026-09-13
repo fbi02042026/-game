@@ -117,7 +117,7 @@ public static class PlayerJobBaseStats
         }
 
         W(AttrType.MaxHp, row.BaseHp);
-        W(AttrType.Attack, row.BaseAtk);
+        W(AttrType.Attack, Mathf.Max(1f, row.BaseAtk + GameConfig.HERO_BASE_ATTACK_OFFSET));
         W(AttrType.Defense, row.BaseDef);
         float ms = GameConfig.BASE_MOVE_SPEED * (row.BaseMoveSpeed / 100f);
         W(AttrType.MoveSpeed, ms);

@@ -323,6 +323,8 @@ public static class GameConfig
     public static bool SOLO_PLAYER_BATTLE = false;
     /// <summary>怪刷在英雄前方多远（原地等玩家走过来），约 3~4 身位</summary>
     public const float MONSTER_ENGAGE_OFFSET = 3.2f;
+    /// <summary>剧情前置暂停（AllowMonsterMapEnter）期间，怪物只走到屏幕边缘内多远即停（不再深入英雄）。配合 MONSTER 进场逻辑使用。</summary>
+    public const float MONSTER_PAUSE_STOP_MARGIN = 0.6f;
     /// <summary>同波怪物横向间距（世界单位）；需大于精灵半宽，避免首波叠在同一点</summary>
     public const float MONSTER_WAVE_SPACING = 0.72f;
     /// <summary>怪物近战射程倍率（相对单手剑；勿超过玩家近战体感）</summary>
@@ -378,8 +380,21 @@ public static class GameConfig
 
     [Header("怪物基础（对齐数值表·未缩放）")]
     public const float MONSTER_NORMAL_HP = 60f;
-    /// <summary>全局怪物 HP 倍率（0.6 = 减 40%）。</summary>
-    public const float MONSTER_HP_GLOBAL_MUL = 0.6f;
+    /// <summary>
+    /// 全局怪物 HP 倍率。1.0 = 直接用 monster_stats 表的 baseHp（与冒险图鉴显示的数值一致）。
+    /// 曾设为 0.6（减 40%），导致图鉴写「生命 78」而实战只有 46，教学关再叠一层只剩 5~7 被一刀秒。
+    /// 要整体调难/调易只改这里即可。
+    /// </summary>
+    public const float MONSTER_HP_GLOBAL_MUL = 1.0f;
+
+    /// <summary>
+    /// 怪物重叠时头顶是否显示 ×N 角标。
+    /// 关闭原因：①实际没有重叠也会亮（不同车道只比 X 不比 Y）；②每个角标 = 5 个 TextMesh
+    /// （1 填充 + 4 描边），手机上 DrawCall 与 GC 都吃不消，小游戏端更是直接掉帧。
+    /// 需要该提示时改为 true 即可（判定已修：同时比较 X 与车道 Y，且只有真正同簇才亮）。
+    /// </summary>
+    public const bool SHOW_MONSTER_STACK_LABEL = false;
+
     public const float MONSTER_NORMAL_ATK = 12f;
     public const float MONSTER_NORMAL_DEF = 2f;
     public const float MONSTER_NORMAL_ATK_INTERVAL = 1.5f;
@@ -401,6 +416,82 @@ public static class GameConfig
     /// 我方（玩家职业表 AttackInterval、佣兵花名册 AtkSpeed）不再叠这个，否则 0.5 秒间隔会变成 1 秒。
     /// </summary>
     public const float PROJECTILE_ATK_SPEED_MUL = 0.5f;
+
+    /// <summary>
+    /// 玩家（Hero）攻击速度倍率，0.8 = 出手间隔变慢 20%。
+    /// 只作用于 Hero，佣兵与怪物不受影响（在 UnitBase.GetAttackCooldown 的 is Hero 分支里乘）。
+    /// 与武器种族系数、连杀加速、被动攻速是乘法叠加。
+    /// </summary>
+    public const float PLAYER_ATTACK_SPEED_MUL = 0.8f;
+    /// <summary>英雄基础攻击（BaseAtk）全局偏移。负值=整体削弱。-10 即各职业基础攻击 -10，用于手感/平衡微调。</summary>
+    public const float HERO_BASE_ATTACK_OFFSET = -10f;
+
+    /// <summary>
+    /// 裂缝「掉落」装备属性整体加成：掉落生成时每个「非百分比」词条数值 +此值。
+    /// 只作用于掉落路径（关卡结算 / 教程宝箱），备战初始装备走默认 0 不受影响。
+    /// 百分比/速率类词条（暴击、攻速、吸血、射程等）不加，避免数值爆炸。
+    /// </summary>
+    public const float RIFT_DROP_ATTR_BONUS = 10f;
+
+    /// <summary>
+    /// 装备强化（+1~+10）开关。局内构筑改造后关闭：装备只在单局内有效，
+    /// 跨局成长改由「天赋树 + 局内技能/佣兵构筑」承担，避免双轨数值膨胀。
+    /// 关闭时 <see cref="CraftStageApply.TryForgeUpgrade"/> 不再走强化石路径，退回升星。
+    /// </summary>
+    public const bool EquipEnhanceEnabled = false;
+
+    // ============================================================
+    // 局内构筑 V6：技能能量（每个技能独立充能）
+    // ============================================================
+
+    /// <summary>
+    /// 技能能量注入倍率。技能能量由「共享单条」改为「每个技能一条」后，同一份受击回充会分摊到多条，
+    /// 总释放频率约为改造前的 3~4 倍，用它把整体频率压回来。
+    /// <b>这是本机的手感主旋钮</b>：放得太频繁往下调（0.35），太冷往上调。
+    /// 只作用于 BattleManager.AddCombatSkillEnergy 的玩家分支，佣兵能量不受影响。
+    /// </summary>
+    public const float SKILL_ENERGY_CHARGE_MUL = 0.5f;
+
+    /// <summary>
+    /// 技能冷却缩减读取的属性上限（防天赋堆叠到 100% 冷却）。
+    /// 见 AttrSystem.SkillCooldown → AttrType.CooldownReduce，SkillSystem.UseSkill 消费。
+    /// </summary>
+    public const float SKILL_COOLDOWN_REDUCE_CAP = 0.5f;
+
+    // ============================================================
+    // 敌人集中调参区：public static 便于实机热改与单点回退。
+    // 敌人数值只能靠手感，出问题改这里的值即可，不要散落到各处硬编码。
+    // ============================================================
+    public static class EnemyTuning
+    {
+        /// <summary>章内每关成长斜率（原硬编码 0.05 → Monster.cs 的 waveMul）</summary>
+        public static float StageGrowthPerStage = 0.09f;
+        /// <summary>高章单波人数上限每章 +N</summary>
+        public static int WaveCapBonusPerChapter = 1;
+        /// <summary>单波人数硬上限（原 2~4）</summary>
+        public static int WaveCapMax = 5;
+        /// <summary>Boss 二阶触发血量比例（原 0.70 → 更早进二阶）</summary>
+        public static float BossPhase2HpRatio = 0.60f;
+        /// <summary>Boss 二阶伤害倍率（原 1.18 → 二阶更狠）</summary>
+        public static float BossPhase2DmgMul = 1.30f;
+        /// <summary>全局怪物 HP 倍率（替代 MONSTER_HP_GLOBAL_MUL 的取值）</summary>
+        public static float MonsterHpGlobalMul = 1.45f;
+        /// <summary>全局怪物伤害倍率（替代 MONSTER_DAMAGE_MULTIPLIER 的取值）</summary>
+        public static float MonsterDmgGlobalMul = 1.15f;
+
+        /// <summary>精英/Boss 词缀：第几章开始有几率出 2 个词缀。</summary>
+        public static int AffixSecondFromChapter = 4;
+        /// <summary>精英/Boss 词缀：出第 2 个词缀的概率。</summary>
+        public static float AffixSecondChance = 0.3f;
+    }
+
+    /// <summary>
+    /// 所有弹道飞行速度倍率，0.8 = 全弹道放慢 20%（飞行时间 ×1.25）。
+    /// 作用在 BattleVFXSystem.ProjectileFlightCoroutine 的速度计算上，六种弹道统一生效。
+    /// 注意：飞行时间不再被 maxFlightTime 截断，否则怪物慢速弹道会顶格、降速对它无效。
+    /// </summary>
+    public const float PROJECTILE_SPEED_GLOBAL_MUL = 0.8f;
+
     /// <summary>旧线性章节系数（仅兼容/兜底；属性缩放请用 GetChapterStatScale）</summary>
     public const float CHAPTER_SCALE_PER = 0.15f;
     /// <summary>
@@ -566,12 +657,34 @@ public static class GameConfig
     public const float WAVE_SKIP_GOLD_PER_SEC = 3f;
     /// <summary>连杀判定窗口（秒）</summary>
     public const float COMBO_WINDOW = 3.2f;
-    /// <summary>连杀≥3 时每次额外金币</summary>
-    public const int COMBO_BONUS_GOLD = 1;
+    /// <summary>连杀≥3 时每杀额外金币：实际 = COMBO_BONUS_GOLD × 连击数（封顶 20 连）。基准击杀约 5~10 金，该值=2 时 10 连击击杀≈+20 金（≈2~4 倍单杀），作为"不挨打、会连段"的硬实力奖励；天赋换算 GOLD_PER_TALENT_POINT=100，单章多拿约 1~3 天赋点，可观但不破环经济。</summary>
+    public const int COMBO_BONUS_GOLD = 2;
+
+    // —— 连杀续杯（R2）：连杀窗口内击杀回血，让"连"成为可持续资源 ——
+    /// <summary>连杀达到该值才开始回血（避免单杀白嫖续航）。</summary>
+    public const int COMBO_HEAL_MIN_COMBO = 3;
+    /// <summary>每次合格连杀的基础回血量。</summary>
+    public const int COMBO_HEAL_PER_KILL = 5;
+    /// <summary>每多 5 连击额外回血量（高连击续航更强，封顶见下方 /5 计算）。</summary>
+    public const int COMBO_HEAL_STEP = 2;
+
+    // —— 闪避（独立按钮 + 无敌帧 + 飘字，不新增美术）——
+    /// <summary>闪避冷却（秒）</summary>
+    public const float DODGE_COOLDOWN = 3f;
+    /// <summary>闪避无敌帧时长（秒）：仅对敌方伤害生效，关卡机制伤害不免疫。0.4s 比 0.35s 多 50ms 容错，面向休闲/移动端更友好，仍属精准时机级窗口。</summary>
+    public const float DODGE_IFRAME = 0.4f;
+
+    // —— 低血加成（R1）：HP 低于阈值时攻速/暴击提升，制造残血反扑手感 ——
+    /// <summary>触发阈值：当前 HP / 最大 HP 低于此值进入残血爆发状态。</summary>
+    public const float LOW_HP_THRESHOLD = 0.3f;
+    /// <summary>残血时攻击速度倍率（>1 即更快）。1.3 = 攻速 +30%。</summary>
+    public const float LOW_HP_ATK_SPEED_MUL = 1.3f;
+    /// <summary>残血时额外暴击率（绝对值，0.15 = +15%）。仅作用于普攻，不影响技能。</summary>
+    public const float LOW_HP_CRIT_BONUS = 0.15f;
 
     // —— 战斗打击感分步开关（不满意可单独 false 回滚）——
     public static bool COMBAT_JUICE_HIT_STOP = true;
-    public static bool COMBAT_JUICE_CAMERA_SHAKE = false;
+    public static bool COMBAT_JUICE_CAMERA_SHAKE = true;
     public static bool COMBAT_JUICE_SFX = true;
     public static bool COMBAT_JUICE_DAMAGE_TEXT_BOOST = true;
     public static bool COMBAT_JUICE_KNOCKBACK = true;

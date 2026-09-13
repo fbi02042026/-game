@@ -1,7 +1,8 @@
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-/// <summary>软著自动截图：读取当前 UI 状态（Play 模式轮询用）。</summary>
+/// <summary>软著自动截图：读取当前 UI 状态（Play 模式轮询用）。仅 Editor 工具使用，不进包。</summary>
 public static class SoftCopyrightUiProbe
 {
     public static bool IsBootScene => GameSceneGate.IsBoot;
@@ -109,3 +110,4 @@ public static class SoftCopyrightUiProbe
         }
     }
 }
+#endif

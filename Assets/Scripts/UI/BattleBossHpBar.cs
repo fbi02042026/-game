@@ -130,6 +130,66 @@ public class BattleBossHpBar : MonoBehaviour
         _wantVisible = true;
         ApplyVisibility();
         SyncRatioFromBound();
+        UpdateAffixText();
+    }
+
+    // ============================================================
+    // V6：精英 / Boss 词缀后缀（「森林守卫·狂暴」）
+    // ============================================================
+
+    Text _affixText;
+
+    void EnsureAffixText()
+    {
+        if (_affixText != null || _root == null) return;
+
+        // 场景里若有名字节点就复用，否则运行时建一个（与 TutorialHintUI 同样的兜底套路）
+        var existing = FindDeep(_root, "名字") ?? FindDeep(_root, "Name") ?? FindDeep(_root, "NameText");
+        if (existing != null)
+        {
+            var t0 = existing.GetComponent<Text>();
+            if (t0 != null) { _affixText = t0; return; }
+        }
+
+        var go = new GameObject("AffixText", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(_root, false);
+        var t = go.GetComponent<Text>();
+        t.fontSize = 24;
+        t.color = new Color(1f, 0.72f, 0.42f);
+        t.alignment = TextAnchor.MiddleLeft;
+        t.raycastTarget = false;
+        var f = GameFonts.GetChinese();
+        if (f != null) t.font = f;
+
+        var rt = t.rectTransform;
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(6f, -2f);
+        rt.sizeDelta = new Vector2(560f, 34f);
+        _affixText = t;
+    }
+
+    /// <summary>只有挂了词缀的精英/Boss 才显示，普通目标保持原来的干净外观。</summary>
+    void UpdateAffixText()
+    {
+        var af = _bound != null ? MonsterAffix.Get(_bound) : null;
+        string suffix = af != null ? af.Suffix : "";
+        if (string.IsNullOrEmpty(suffix))
+        {
+            if (_affixText != null && _affixText.gameObject.activeSelf)
+                _affixText.gameObject.SetActive(false);
+            return;
+        }
+
+        EnsureAffixText();
+        if (_affixText == null) return;
+
+        string name = _bound != null && _bound.config != null && !string.IsNullOrEmpty(_bound.config.monsterName)
+            ? _bound.config.monsterName
+            : "";
+        if (!_affixText.gameObject.activeSelf) _affixText.gameObject.SetActive(true);
+        _affixText.text = name + suffix;
     }
 
     void SyncRatioFromBound()

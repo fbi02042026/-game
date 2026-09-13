@@ -20,21 +20,21 @@ public static class DamageFormula
     }
 
     /// <summary>是否暴击。</summary>
-    public static bool RollCrit(AttrSystem attacker)
+    public static bool RollCrit(AttrSystem attacker, float bonus = 0f)
     {
         if (attacker == null) return false;
-        return Random.value < attacker.GetAttr(AttrType.CritRate);
+        return Random.value < attacker.GetAttr(AttrType.CritRate) + bonus;
     }
 
     /// <summary>
     /// 从攻击者攻击力生成「击中前」伤害（已含暴击；尚未扣防）。
     /// </summary>
-    public static float BuildAttackRaw(AttrSystem attacker, out bool isCrit)
+    public static float BuildAttackRaw(AttrSystem attacker, out bool isCrit, float critRateBonus = 0f)
     {
         isCrit = false;
         if (attacker == null) return MinDamage;
         float damage = attacker.GetAttr(AttrType.Attack);
-        isCrit = RollCrit(attacker);
+        isCrit = RollCrit(attacker, critRateBonus);
         if (isCrit)
             damage *= CritMultiplier(attacker);
         return Mathf.Max(MinDamage, damage);

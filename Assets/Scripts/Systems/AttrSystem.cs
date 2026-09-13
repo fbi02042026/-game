@@ -52,6 +52,11 @@ public class AttrSystem
 
         bool wroteJob = UsesPlayerJobTable
             && PlayerJobBaseStats.TryWriteCombatBases(this, PlayerJobDefs.GetSelected());
+        // [BALANCE-TEMP] 判定 43 伤害是「Attack45 非暴击」还是「Attack30 暴击（职业表未生效回退 BASE_ATTACK）」
+        Debug.Log($"[BALANCE] jobApplied={wroteJob} hasData={PlayerJobBaseStats.HasData} " +
+                  $"owner={OwnerKind} job={PlayerJobDefs.GetSelected()} " +
+                  $"baseAtk={(_baseAttr.ContainsKey(AttrType.Attack) ? _baseAttr[AttrType.Attack] : -1f)} " +
+                  $"critDmg={(_baseAttr.ContainsKey(AttrType.CritDamage) ? _baseAttr[AttrType.CritDamage] : -1f)}");
         if (!wroteJob)
             WriteGameConfigCombatBases();
 
@@ -288,13 +293,18 @@ public class AttrSystem
                 AddAttr(AttrType.CritDamage, fx.value * 0.01f, false);
                 break;
             case TalentDefs.AttrKind.PhysDamage:
-            case TalentDefs.AttrKind.WeaponSwordShield:
-            case TalentDefs.AttrKind.WeaponHeavy:
                 AddAttr(AttrType.PhyPower, fx.value * 0.01f, true);
                 break;
             case TalentDefs.AttrKind.MagicDamage:
-            case TalentDefs.AttrKind.WeaponRangedMagic:
                 AddAttr(AttrType.MagicPower, fx.value * 0.01f, true);
+                break;
+            case TalentDefs.AttrKind.WeaponSwordShield:
+            case TalentDefs.AttrKind.WeaponHeavy:
+            case TalentDefs.AttrKind.WeaponRangedMagic:
+                // 武器专精：按<b>当前职业</b>落到对应的 Power。
+                // 旧代码无条件把剑盾/重装→PhyPower、远程法系→MagicPower，
+                // 于是法师点「剑盾伤害 +5%」拿到的是自己根本不用的 PhyPower —— 点了等于没点。
+                AddAttr(PrimaryPowerAttr(), fx.value * 0.01f, true);
                 break;
             case TalentDefs.AttrKind.SkillCooldown:
                 AddAttr(AttrType.CooldownReduce, fx.value * 0.01f, false);
@@ -306,7 +316,19 @@ public class AttrSystem
                 AddAttr(AttrType.GoldBonus, fx.value * 0.01f, true);
                 break;
             default:
+                // 吞掉的类型：体力恢复 / 商店折扣 / 材料掉落 / 天赋石掉落 / 撤离保留金币。
+                // 这些系统目前没有消费点，强行接线会牵动体力、商店、掉落、撤离结算四套逻辑。
+                // 处理方式：把这些天赋节点的效果在 TalentDefs 里换成「立刻生效的属性」，
+                // 文案同步改对 —— 玩家点任何天赋都应该看得到变化。
                 break;
         }
+    }
+
+    /// <summary>当前职业的主要伤害属性：法系走 MagicPower，其余走 PhyPower。</summary>
+    static AttrType PrimaryPowerAttr()
+    {
+        var job = PlayerJobDefs.GetSelected();
+        bool magic = job == PlayerJobId.Mage || job == PlayerJobId.Priest;
+        return magic ? AttrType.MagicPower : AttrType.PhyPower;
     }
 }

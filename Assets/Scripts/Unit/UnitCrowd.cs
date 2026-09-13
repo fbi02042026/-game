@@ -227,72 +227,79 @@ public static class UnitCrowd
             || n.Contains("mercname");
     }
 
-    /// <summary>统计真正重叠的怪物簇，仅在 N≥2 时显示 ×N。</summary>
+    // 簇统计的复用缓冲：原实现每 0.12s new 一次 List/int[]/Dictionary + 两个局部函数闭包，
+    // 手机上 GC 抖动明显。这里全部静态化，热路径零分配。
+    static readonly System.Collections.Generic.List<Monster> _stackAlive = new System.Collections.Generic.List<Monster>(48);
+    static readonly System.Collections.Generic.Dictionary<int, int> _clusterSize = new System.Collections.Generic.Dictionary<int, int>(48);
+    static readonly System.Collections.Generic.Dictionary<int, int> _clusterLeader = new System.Collections.Generic.Dictionary<int, int>(48);
+    static int[] _ufParent = new int[64];
+
+    /// <summary>统计真正重叠的怪物簇，仅在 N≥2 时显示 ×N（开关见 GameConfig.SHOW_MONSTER_STACK_LABEL）。</summary>
     public static void TickMonsterOverlapStacks()
     {
+        if (!GameConfig.SHOW_MONSTER_STACK_LABEL) return;
         if (Time.time < _nextStackRefresh) return;
         _nextStackRefresh = Time.time + 0.12f;
 
         var bm = BattleManager.Instance;
         if (bm == null || bm.monsters == null) return;
 
-        var alive = new System.Collections.Generic.List<Monster>(bm.monsters.Count);
+        _stackAlive.Clear();
         for (int i = 0; i < bm.monsters.Count; i++)
         {
             if (bm.monsters[i] is Monster m && m != null && !m.isDead)
-                alive.Add(m);
+                _stackAlive.Add(m);
         }
 
-        int n = alive.Count;
+        int n = _stackAlive.Count;
         if (n == 0) return;
 
-        var parent = new int[n];
-        for (int i = 0; i < n; i++) parent[i] = i;
-
-        int Find(int x)
-        {
-            while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
-            return x;
-        }
-
-        void Union(int a, int b)
-        {
-            a = Find(a); b = Find(b);
-            if (a != b) parent[b] = a;
-        }
+        if (_ufParent == null || _ufParent.Length < n)
+            _ufParent = new int[Mathf.NextPowerOfTwo(n)];
+        for (int i = 0; i < n; i++) _ufParent[i] = i;
 
         for (int i = 0; i < n; i++)
         {
             for (int j = i + 1; j < n; j++)
             {
-                if (MonsterFootprintsOverlap(alive[i], alive[j]))
-                    Union(i, j);
+                if (MonsterFootprintsOverlap(_stackAlive[i], _stackAlive[j]))
+                {
+                    int ra = FindSet(_ufParent, i);
+                    int rb = FindSet(_ufParent, j);
+                    if (ra != rb) _ufParent[rb] = ra;
+                }
             }
         }
 
-        var clusterSize = new System.Collections.Generic.Dictionary<int, int>();
-        var clusterLeader = new System.Collections.Generic.Dictionary<int, int>();
+        _clusterSize.Clear();
+        _clusterLeader.Clear();
         for (int i = 0; i < n; i++)
         {
-            int r = Find(i);
-            clusterSize.TryGetValue(r, out int c);
-            clusterSize[r] = c + 1;
+            int r = FindSet(_ufParent, i);
+            _clusterSize.TryGetValue(r, out int c);
+            _clusterSize[r] = c + 1;
 
-            if (!clusterLeader.TryGetValue(r, out int leaderIdx))
-                clusterLeader[r] = i;
-            else if (UnitBase.GetCombatX(alive[i]) < UnitBase.GetCombatX(alive[leaderIdx]))
-                clusterLeader[r] = i;
+            if (!_clusterLeader.TryGetValue(r, out int leaderIdx))
+                _clusterLeader[r] = i;
+            else if (UnitBase.GetCombatX(_stackAlive[i]) < UnitBase.GetCombatX(_stackAlive[leaderIdx]))
+                _clusterLeader[r] = i;
         }
 
         for (int i = 0; i < n; i++)
         {
-            int r = Find(i);
-            int size = clusterSize[r];
-            if (size >= 2 && clusterLeader[r] == i)
-                alive[i].SetOverlapStackCount(size);
+            int r = FindSet(_ufParent, i);
+            int size = _clusterSize[r];
+            if (size >= 2 && _clusterLeader[r] == i)
+                _stackAlive[i].SetOverlapStackCount(size);
             else
-                alive[i].SetOverlapStackCount(1);
+                _stackAlive[i].SetOverlapStackCount(1);
         }
+    }
+
+    static int FindSet(int[] parent, int x)
+    {
+        while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+        return x;
     }
 
     static bool MonsterFootprintsOverlap(Monster a, Monster b)
@@ -309,7 +316,23 @@ public static class UnitCrowd
         if (overlapLen <= 0f) return false;
 
         float minWidth = Mathf.Min(aHalf + aHalf, bHalf + bHalf);
-        return overlapLen >= minWidth * StackOverlapRatio;
+        if (overlapLen < minWidth * StackOverlapRatio) return false;
+
+        // 车道（Y）必须同时重叠：只比 X 会把上下两排错开的怪算成一簇，
+        // 这正是「明明没重叠还亮 ×N」的根因。
+        float dy = Mathf.Abs(a.FootY - b.FootY);
+        float yLimit = Mathf.Min(GetStackOverlapHalfHeight(a), GetStackOverlapHalfHeight(b))
+                       * 2f * StackOverlapRatio;
+        return dy < yLimit;
+    }
+
+    /// <summary>躯干竖直半高（sprite 含大量头部/透明留白，取半高再折半）。</summary>
+    static float GetStackOverlapHalfHeight(Monster m)
+    {
+        var sr = m != null ? m.sr : null;
+        if (sr != null && sr.sprite != null)
+            return Mathf.Max(0.25f, sr.bounds.size.y * 0.25f);
+        return 0.3f;
     }
 
     static float GetStackOverlapHalfWidth(Monster m)
