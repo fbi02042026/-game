@@ -86,7 +86,8 @@ def main():
     # 3) 内容核对：把所有新文件里缩进体（>=4 空格）的非空行做成多重集合，
     #    与 git HEAD 版本的原 BattleUI.cs 逐行比对。
     #    判据够硬：只要两边完全一致，就没有丢行、没有重复、也没有半截方法。
-    print("\n=== 3. 内容逐行核对（与 git HEAD 版本比对）===")
+    baseline = sys.argv[1] if len(sys.argv) > 1 else 'HEAD'
+    print("\n=== 3. 内容逐行核对（与 %s 版本的 BattleUI.cs 比对）===" % baseline)
     import subprocess
     import collections
 
@@ -102,12 +103,15 @@ def main():
                 out.append(re.sub(r'\s+', ' ', s.strip()))
         return out
 
+    # 基线版本：默认 HEAD。拆分已经提交后要传拆分前的那个 commit，例如：
+    #   python Tools/split_battleui_verify.py HEAD~1
+    baseline = sys.argv[1] if len(sys.argv) > 1 else 'HEAD'
     try:
         head = subprocess.check_output(
-            ['git', 'show', 'HEAD:Assets/Scripts/UI/BattleUI.cs'],
+            ['git', 'show', '%s:Assets/Scripts/UI/BattleUI.cs' % baseline],
             cwd=ROOT).decode('utf-8-sig').split('\n')
     except Exception as e:
-        print("  跳过：无法取 git HEAD 版本（%s）" % e)
+        print("  跳过：无法取 %s 版本的 BattleUI.cs（%s）" % (baseline, e))
         head = None
 
     if head:
