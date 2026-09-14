@@ -251,13 +251,6 @@ public class BattlePrefabGenerator : EditorWindow
         autoBtn.GetComponentInChildren<Text>().fontSize = 24;
         autoBtn.GetComponentInChildren<Text>().color = COLOR_HP_FILL;
 
-        // === 7. 暂停/返回按钮（左下角）===
-        Button pauseBtn = CreateButton(rootObj.transform, "PauseButton", 53, 53, COLOR_PANEL_LIGHT);
-        SetAnchored(pauseBtn.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(0f, 0f),
-            new Vector2(40, 200), new Vector2(53, 53));
-        pauseBtn.GetComponentInChildren<Text>().text = "‖";
-        pauseBtn.GetComponentInChildren<Text>().fontSize = 40;
-
         // === 绑定BattleUI组件引用 ===
         BattleUI battleUI = rootObj.GetComponent<BattleUI>();
 
@@ -294,7 +287,6 @@ public class BattlePrefabGenerator : EditorWindow
 
         // 战斗操作按钮
         battleUI.autoButton = autoBtn;
-        battleUI.pauseButton = pauseBtn;
 
         // === 保存为预制体 ===
         GameFonts.ApplyToHierarchy(rootObj.transform);
