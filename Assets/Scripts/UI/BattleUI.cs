@@ -423,6 +423,78 @@ public class BattleUI : MonoBehaviour
         // MercenaryManager 可能尚未创建，系统就绪后再 Wire / Configure
         WireSlotSkillClicks();
         ApplySoloBattleHud();
+        ReportBindingStatus();
+    }
+
+    /// <summary>
+    /// 绑定自检：把没绑上的引用一次性打到 Console（前缀 [BattleUI-绑定]），
+    /// 美术/策划对照补节点后重跑即可看到清单变短。
+    /// </summary>
+    void ReportBindingStatus()
+    {
+        var miss = new List<string>();
+        void Add(string field, bool ok) { if (!ok) miss.Add(field); }
+
+        Add("StageLabel", stageLabel != null);
+        Add("DifficultyLabel", difficultyLabel != null);
+        Add("GoldText", goldText != null);
+        Add("EnchantText", enchantStoneText != null);
+        Add("DecomposeText", decomposeMatText != null);
+        Add("TalentText(新预制体无此节点)", talentStoneText != null);
+        Add("SettingsButton", settingsButton != null);
+
+        Add("ProgressBar", progressContainer != null);
+        Add("PlayerMarker", playerMarker != null);
+        Add("EndFlag", endFlag != null);
+        if (progressNodes == null || progressNodes.Count == 0) miss.Add("ProgressNodes(Node_0..9)");
+
+        Add("QuestPanel", questPanel != null);
+        Add("QuestTitle", questTitle != null);
+        Add("QuestDesc", questDesc != null);
+        Add("QuestProgress", questProgress != null);
+        Add("jianglitubiao", questRewardIcon != null);
+        Add("jianglishuzi", questRewardAmount != null);
+
+        void AddSlot(string tag, CharacterSlotUI s)
+        {
+            if (s == null || s.root == null) { miss.Add(tag + ".root"); return; }
+            Add(tag + ".Portrait", s.portrait != null);
+            Add(tag + ".HPBarFill", s.hpBarFill != null);
+            Add(tag + ".HPText", s.hpText != null);
+            Add(tag + ".lanBarFill", s.lanBarFill != null);
+            Add(tag + ".lanText", s.lanText != null);
+            Add(tag + ".LockedOverlay", s.lockedOverlay != null);
+            Add(tag + ".Glow(光边)", s.glowBorder != null);
+            Add(tag + ".LevelLabel", s.levelLabel != null);
+            Add(tag + ".NameText", s.nameText != null);
+            Add(tag + ".PortraitPlaceholder", s.portraitPlaceholder != null);
+        }
+        AddSlot("PlayerSlot", playerSlot);
+        AddSlot("MercSlot1", mercSlot1);
+        AddSlot("MercSlot2", mercSlot2);
+
+        Add("SkillBar(主动技槽容器)", skillSlotRoot != null);
+        Add("zhuangbei(装备槽容器)", equipSlotRoot != null);
+        if (runSkillSlots == null || runSkillSlots.Count == 0) miss.Add("主动技槽(0 个)");
+        if (equipQuickSlots == null || equipQuickSlots.Count == 0) miss.Add("装备快捷槽(0 个)");
+        if (gridCells == null || gridCells.Count == 0) miss.Add("GridContainer 格子(0 个)");
+
+        Add("整理按钮", organizeButton != null);
+        Add("PauseButton", pauseButton != null);
+        Add("PausePanel", pausePanel != null);
+        Add("CharacterButton", characterButton != null);
+        Add("CharacterPanel", characterPanel != null);
+        Add("SettingsPanel", settingsPanel != null);
+        Add("AutoButton", autoButton != null);
+
+        string quick = equipQuickSlots != null && equipQuickSlots.Count > 0
+            ? string.Join("/", equipQuickSlots.ConvertAll(s => s.slotType.ToString()))
+            : "-";
+        Debug.Log($"[BattleUI-绑定] 技能槽={runSkillSlots?.Count ?? 0} 装备槽={(equipQuickSlots?.Count ?? 0)}({quick}) " +
+                  $"格子={gridCells?.Count ?? 0} 进度点={progressNodes?.Count ?? 0}");
+        Debug.Log(miss.Count == 0
+            ? "[BattleUI-绑定] 全部就绪 ✅"
+            : "[BattleUI-绑定] 缺失 " + miss.Count + " 项 -> " + string.Join(" | ", miss));
     }
 
     /// <summary>GameRoot/佣兵系统就绪后重绑：Fill、点击、进度条、槽位刷新</summary>
@@ -691,15 +763,85 @@ public class BattleUI : MonoBehaviour
     {
         Transform backpack = FindDeepChildIgnoreCase(transform, "BackpackPanel");
         if (skillSlotRoot == null)
-            skillSlotRoot = (backpack != null ? FindDeepChildIgnoreCase(backpack, "skill") : null)
-                            ?? FindDeepChildIgnoreCase(transform, "skill");
+        {
+            // 新预制体：4 个主动技槽挂在 BackpackPanel/SkillBar（旧名 skill），两个名字都认
+            skillSlotRoot = (backpack != null
+                                ? (FindDeepChildIgnoreCase(backpack, "skill")
+                                   ?? FindDeepChildIgnoreCase(backpack, "SkillBar"))
+                                : null)
+                            ?? FindDeepChildIgnoreCase(transform, "skill")
+                            ?? FindDeepChildIgnoreCase(transform, "SkillBar");
+        }
         if (equipSlotRoot == null)
-            equipSlotRoot = (backpack != null ? FindDeepChildIgnoreCase(backpack, "zhuangbei") : null)
+        {
+            Transform raw = (backpack != null ? FindDeepChildIgnoreCase(backpack, "zhuangbei") : null)
                             ?? FindDeepChildIgnoreCase(transform, "zhuangbei");
+            // 新预制体把装备槽又包了一层 bg，真正槽位在下一级，这里下探到槽位层
+            equipSlotRoot = ResolveEquipSlotContainer(raw);
+        }
 
         BindRunSkillSlots();
         BindEquipQuickSlots();
         Debug.Log($"[BattleUI] 底部快捷槽绑定 skill={runSkillSlots?.Count ?? 0} equip={equipQuickSlots?.Count ?? 0}");
+    }
+
+    /// <summary>
+    /// 装备快捷槽容器解析：新预制体是 zhuangbei/bg/[头|胸|脚|主手|副手]，
+    /// 旧预制体是 zhuangbei/[槽位]。这里返回真正含槽位的那一层。
+    /// </summary>
+    static Transform ResolveEquipSlotContainer(Transform root)
+    {
+        if (root == null) return null;
+        if (CountSlotLikeChildren(root) >= 2) return root;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var r = ResolveEquipSlotContainer(root.GetChild(i));
+            if (r != null) return r;
+        }
+        return null;
+    }
+
+    static int CountSlotLikeChildren(Transform parent)
+    {
+        int n = 0;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var c = parent.GetChild(i);
+            if (c == null) continue;
+            if (IsEquipSlotNode(c)) n++;
+        }
+        return n;
+    }
+
+    /// <summary>装备槽判定：按预制体实际命名（头/胸/手/脚/主手/副手），或带 icon底 子节点。</summary>
+    static bool IsEquipSlotNode(Transform t)
+    {
+        if (t == null) return false;
+        switch (t.name)
+        {
+            case "头": case "胸": case "手": case "脚":
+            case "主手": case "副手": case "披风":
+                return true;
+        }
+        return FindDeepChildIgnoreCase(t, "icon底") != null
+               || FindDeepChildIgnoreCase(t, "ItemIcon") != null;
+    }
+
+    /// <summary>槽位 → 装备部位。按名字认，不再按下标（新预制体少了「手」且顺序不同）。</summary>
+    static EquipSlotType EquipSlotTypeOf(string nodeName, int index)
+    {
+        if (!string.IsNullOrEmpty(nodeName))
+        {
+            // 先判主手/副手，避免被「手」抢先命中
+            if (nodeName.IndexOf("主手", System.StringComparison.Ordinal) >= 0) return EquipSlotType.MainHand;
+            if (nodeName.IndexOf("副手", System.StringComparison.Ordinal) >= 0) return EquipSlotType.OffHand;
+            if (nodeName.IndexOf("头", System.StringComparison.Ordinal) >= 0) return EquipSlotType.Head;
+            if (nodeName.IndexOf("胸", System.StringComparison.Ordinal) >= 0) return EquipSlotType.Chest;
+            if (nodeName.IndexOf("手", System.StringComparison.Ordinal) >= 0) return EquipSlotType.Hands;
+            if (nodeName.IndexOf("脚", System.StringComparison.Ordinal) >= 0) return EquipSlotType.Feet;
+            if (nodeName.IndexOf("披风", System.StringComparison.Ordinal) >= 0) return EquipSlotType.Cape;
+        }
+        return index < QuickSlotOrder.Length ? QuickSlotOrder[index] : EquipSlotType.Head;
     }
 
     void BindRunSkillSlots()
@@ -732,10 +874,12 @@ public class BattleUI : MonoBehaviour
         {
             Transform t = equipSlotRoot.GetChild(i);
             if (t == null) continue;
+            // 槽位层里混着 BackpackTitle 之类装饰节点，只认真正的装备槽
+            if (!IsEquipSlotNode(t)) continue;
             var slot = new EquipQuickSlotUI
             {
                 root = t.gameObject,
-                slotType = i < QuickSlotOrder.Length ? QuickSlotOrder[i] : EquipSlotType.Head
+                slotType = EquipSlotTypeOf(t.name, i)
             };
             slot.iconImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
             slot.slotLabel = t.GetComponentInChildren<Text>(true);  // 头 / 胸甲 / 手 / 脚 / 左手 / 右手
@@ -929,7 +1073,20 @@ public class BattleUI : MonoBehaviour
             }
         }
 
+        // 新预制体：GridContainer 下混着 bg / BackpackTitle 等装饰节点，不能当格子用
+        bool hasNamedCells = false;
+        for (int i = 0; i < grid.childCount; i++)
+        {
+            var c0 = grid.GetChild(i);
+            if (c0 != null && c0.name.StartsWith("Cell_", System.StringComparison.OrdinalIgnoreCase))
+            {
+                hasNamedCells = true;
+                break;
+            }
+        }
+
         var list = new List<GridCellUI>();
+        int cellIndex = 0;
         for (int i = 0; i < grid.childCount; i++)
         {
             Transform cell = grid.GetChild(i);
@@ -938,9 +1095,15 @@ public class BattleUI : MonoBehaviour
                 || cell.name.Equals("Lock", System.StringComparison.OrdinalIgnoreCase))
                 continue;
 
-            int gx = i % GameConfig.BACKPACK_WIDTH;
-            int gy = i / GameConfig.BACKPACK_WIDTH;
             string n = cell.name;
+            if (hasNamedCells && !n.StartsWith("Cell_", System.StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (n.IndexOf("Backpack", System.StringComparison.OrdinalIgnoreCase) >= 0
+                || n.Equals("bg", System.StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            int gx = cellIndex % GameConfig.BACKPACK_WIDTH;
+            int gy = cellIndex / GameConfig.BACKPACK_WIDTH;
             if (n.StartsWith("Cell_", System.StringComparison.OrdinalIgnoreCase))
             {
                 string[] parts = n.Split('_');
@@ -952,6 +1115,7 @@ public class BattleUI : MonoBehaviour
                     gy = py;
                 }
             }
+            cellIndex++;
 
             var ui = new GridCellUI
             {
