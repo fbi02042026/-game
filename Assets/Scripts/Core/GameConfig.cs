@@ -214,12 +214,14 @@ public static class GameConfig
     /// <summary>攻击特效</summary>
     public const int SORT_VFX = 50;
 
-    /// <summary>默认解锁的背包行数（最下方两行需天赋：R2 扩容 / R7 背包+1）</summary>
+    /// <summary>
+    /// 默认解锁的背包行数。改成 4 列×3 行（12 格）后，3 行即满，所以默认全开；
+    /// 原来的天赋解锁第 4/5 行在新尺寸下已无可加的空间（见 GetUnlockedBackpackRows）。
+    /// </summary>
     public const int BACKPACK_DEFAULT_ROWS = 3;
-    /// <summary>兼容旧存档：解锁第 4 行背包的天赋 ID</summary>
+    /// <summary>兼容旧存档：解锁第 4 行背包的天赋 ID（现在第 4 行不存在，保留常量免存档报错）</summary>
     public const string TALENT_BACKPACK_ROW4 = "backpack_row4";
 
-    /// <summary>当前存档已解锁的背包行数（默认 3 行，天赋最多再开 2 行）</summary>
     public static int GetUnlockedBackpackRows(SaveData data)
     {
         int rows = BACKPACK_DEFAULT_ROWS;
@@ -545,8 +547,10 @@ public static class GameConfig
     public const int DAILY_MERC_RECRUIT_MAX = 1;
     /// <summary>刷新佣兵三选一消耗宝石</summary>
     public const int MERC_REROLL_GEM_COST = 50;
-    public const int BACKPACK_WIDTH = 8; // 与预制体 GridContainer 列数一致（Cell_0~7）
-    public const int BACKPACK_HEIGHT = 5; // 高 5 行；最下方两行默认锁定，天赋解锁
+    /// <summary>背包列数：与美术新画的 GridContainer 一致（4 列，Cell_0_0 ~ Cell_3_2）</summary>
+    public const int BACKPACK_WIDTH = 4;
+    /// <summary>背包行数：3 行，共 12 格。双手武器 2×3 时会占掉一半，属于已知取舍。</summary>
+    public const int BACKPACK_HEIGHT = 3;
     public const int STAGES_PER_CHAPTER = 10; // 每章10关，最后一关是BOSS
     public const int SPECIAL_STAGES_PER_CHAPTER = 2; // 每章最多2个特殊关卡（商人/附魔/诅咒/休息）
     public const int MAX_OFFLINE_HOURS = 8; // 最多8小时离线收益
