@@ -398,12 +398,12 @@ public static class GameConfig
     public const float MONSTER_NORMAL_ATK = 12f;
     public const float MONSTER_NORMAL_DEF = 2f;
     public const float MONSTER_NORMAL_ATK_INTERVAL = 1.5f;
-    public const float MONSTER_ELITE_HP = 180f;
-    public const float MONSTER_ELITE_ATK = 24f;
+    public const float MONSTER_ELITE_HP = 105f;   // 2026-09-14：精英 91~133（玻璃/坦克分档），初始装备 3~6 刀、稀有武器 2~4 刀
+    public const float MONSTER_ELITE_ATK = 30f;
     public const float MONSTER_ELITE_DEF = 6f;
     public const float MONSTER_ELITE_ATK_INTERVAL = 1.7f;
-    public const float MONSTER_BOSS_HP = 3000f;
-    public const float MONSTER_BOSS_ATK = 45f;
+    public const float MONSTER_BOSS_HP = 800f;    // 兜底/下限：表内 Boss 血量低于 50%(400) 才抬到本值；第一章 Boss 由 monster_stats 表给 800/1050
+    public const float MONSTER_BOSS_ATK = 55f;    // 2026-09-14：Boss 伤害上浮，保证坦克（防 35）也会掉血
     public const float MONSTER_BOSS_DEF = 12f;
     public const float MONSTER_BOSS_ATK_INTERVAL = 2.2f;
     /// <summary>
@@ -424,7 +424,7 @@ public static class GameConfig
     /// </summary>
     public const float PLAYER_ATTACK_SPEED_MUL = 0.8f;
     /// <summary>英雄基础攻击（BaseAtk）全局偏移。负值=整体削弱。-10 即各职业基础攻击 -10，用于手感/平衡微调。</summary>
-    public const float HERO_BASE_ATTACK_OFFSET = -10f;
+    public const float HERO_BASE_ATTACK_OFFSET = 0f; // 2026-09-14：不再二次扣 10，职业表 baseAtk 即真源
 
     /// <summary>
     /// 裂缝「掉落」装备属性整体加成：掉落生成时每个「非百分比」词条数值 +此值。
@@ -517,11 +517,11 @@ public static class GameConfig
     public const float BOSS_PHASE_SHIFT_TELEGRAPH = 2.5f;
 
     /// <summary>精英血厚档</summary>
-    public const float ELITE_TANK_HP_MUL = 1.4f;
+    public const float ELITE_TANK_HP_MUL = 1.1f;
     public const float ELITE_TANK_ATK_MUL = 0.92f;
     public const float ELITE_TANK_TELEGRAPH = 3.2f;
     /// <summary>精英血薄档</summary>
-    public const float ELITE_GLASS_HP_MUL = 0.7f;
+    public const float ELITE_GLASS_HP_MUL = 0.75f;
     public const float ELITE_GLASS_ATK_MUL = 1.35f;
     public const float ELITE_GLASS_TELEGRAPH = 2.0f;
     /// <summary>公会等级系数：0.02×公会等级</summary>

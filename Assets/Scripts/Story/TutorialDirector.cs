@@ -1101,9 +1101,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
     static EquipInstance CreateTutorialEquipDrop()
     {
         // 宝箱只掉武器，避免误给防具
+        // 破旧木剑(equip_training_sword)走「起步武器 70% 普通档」，稀有度强制不生效，
+        // 玩家拿到手反而比初始武器弱，爽点会塌。引导宝箱改为优先给常规武器。
         string[] prefer =
         {
-            "equip_training_sword", "equip_sword_1", "equip_axesmall1"
+            "equip_sword_1", "equip_axesmall1", "equip_training_sword"
         };
         for (int i = 0; i < prefer.Length; i++)
         {
@@ -1115,7 +1117,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
             if (tpl == null) continue;
             tpl.ResolveIcon();
             int lv = Hero.Instance != null ? Hero.Instance.level : 1;
-            var eq = EquipInstance.GenerateFromTemplate(tpl, 0, lv);
+            // 强制稀有：初始武器是普通档(9~12)，稀有档(32~40)才撑得起「换装后 1~2 刀」的爽点
+            var eq = EquipInstance.GenerateFromTemplate(tpl, 0, lv, true, Rarity.Rare);
             if (eq != null)
             {
                 eq.requireLevel = 1;

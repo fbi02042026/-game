@@ -125,19 +125,30 @@ public class SaveData
     public List<StoryChoiceEntry> storyChoices = new List<StoryChoiceEntry>();
 
     // === 章节进度 ===
-    public int maxUnlockedChapter = 1; // 最大解锁章节
+    public int maxUnlockedChapter = 1; // 最大解锁章节（兼容字段；权威来源是 ChapterRouteTable.AvailableChapters）
     /// <summary>章节通关次数列表（用于渐进式怪物解锁）</summary>
     public List<ChapterClearCountEntry> chapterClearCounts = new List<ChapterClearCountEntry>();
+    /// <summary>已通关章节集合（权威；章节分叉后 maxUnlockedChapter 的减法不再成立，一律读这里）</summary>
+    public List<IntIdEntry> clearedChapterEntries = new List<IntIdEntry>();
+    [NonSerialized] public HashSet<int> clearedChapterIds = new HashSet<int>();
+    /// <summary>
+    /// 本周目在分叉点（第 2/3/4 章）选定的路线；0 = 未选。
+    /// 通关第 8 章后归零，允许下一周目换一条支线。
+    /// </summary>
+    public int chosenBranch = 0;
 
     // === 冒险日志图鉴 ===
     public List<StringIdEntry> seenMonsterEntries = new List<StringIdEntry>();
     public List<StringIdEntry> viewedMonsterEntries = new List<StringIdEntry>();
     public List<StringIdEntry> seenMercEntries = new List<StringIdEntry>();
     public List<StringIdEntry> viewedMercEntries = new List<StringIdEntry>();
+    /// <summary>已在酒馆解锁的佣兵（HireId）—— 只有解锁的才会进战斗内「佣兵三选一」随机池</summary>
+    public List<StringIdEntry> unlockedMercEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> seenMonsterIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> viewedMonsterIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> seenMercIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> viewedMercIds = new HashSet<string>();
+    [NonSerialized] public HashSet<string> unlockedMercIds = new HashSet<string>();
     public List<StringIdEntry> claimedCodexRewardEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> claimedCodexRewardIds = new HashSet<string>();
 
@@ -212,10 +223,12 @@ public class SaveData
         npcBonds ??= new List<NpcBondEntry>();
         storyChoices ??= new List<StoryChoiceEntry>();
         chapterClearCounts ??= new List<ChapterClearCountEntry>();
+        clearedChapterEntries ??= new List<IntIdEntry>();
         seenMonsterEntries ??= new List<StringIdEntry>();
         viewedMonsterEntries ??= new List<StringIdEntry>();
         seenMercEntries ??= new List<StringIdEntry>();
         viewedMercEntries ??= new List<StringIdEntry>();
+        unlockedMercEntries ??= new List<StringIdEntry>();
         claimedCodexRewardEntries ??= new List<StringIdEntry>();
         defeatedMonsterEntries ??= new List<StringIdEntry>();
         claimedLogMileageLevelEntries ??= new List<IntIdEntry>();
@@ -280,6 +293,7 @@ public class SaveData
         viewedMonsterIds = ToIdSet(viewedMonsterEntries);
         seenMercIds = ToIdSet(seenMercEntries);
         viewedMercIds = ToIdSet(viewedMercEntries);
+        unlockedMercIds = ToIdSet(unlockedMercEntries);
         claimedCodexRewardIds = ToIdSet(claimedCodexRewardEntries);
         defeatedMonsterIds = ToIdSet(defeatedMonsterEntries);
         unlockedWorldIds = ToIdSet(unlockedWorldEntries);
@@ -323,6 +337,94 @@ public class SaveData
             if (e == null || string.IsNullOrEmpty(e.id)) continue;
             logAchProgress[e.id] = e.value;
         }
+
+        MigrateClearedChapters();
+        if (unlockedMercIds.Count == 0)
+            SeedDefaultUnlockedMercs();
+    }
+
+    /// <summary>
+    /// 老档迁移：把 chapterClearCounts（count&gt;0）补进权威的 clearedChapterIds。
+    /// 新档本来就是空集合，走同一入口无副作用。
+    /// </summary>
+    void MigrateClearedChapters()
+    {
+        clearedChapterIds = new HashSet<int>();
+        for (int i = 0; i < clearedChapterEntries.Count; i++)
+        {
+            var e = clearedChapterEntries[i];
+            if (e != null && e.id > 0) clearedChapterIds.Add(e.id);
+        }
+        if (clearedChapterIds.Count > 0) return;
+
+        for (int i = 0; i < chapterClearCounts.Count; i++)
+        {
+            var e = chapterClearCounts[i];
+            if (e != null && e.chapter > 0 && e.clearCount > 0)
+                clearedChapterIds.Add(e.chapter);
+        }
+        if (clearedChapterIds.Count > 0)
+            clearedChapterEntries = FromIntIdSet(clearedChapterIds);
+    }
+
+    /// <summary>新档/空集合兜底：默认解锁 3 名基础佣兵，保证第一局就有佣兵卡可抽。</summary>
+    void SeedDefaultUnlockedMercs()
+    {
+        unlockedMercIds ??= new HashSet<string>();
+        foreach (string id in DefaultUnlockedMercIds)
+            unlockedMercIds.Add(id);
+        unlockedMercEntries = FromIdSet(unlockedMercIds);
+    }
+
+    /// <summary>默认解锁：H001 马库斯（剑盾/坦）· H005 米娅（游侠/远程）· H019 艾琳（法师/法系）</summary>
+    public static readonly string[] DefaultUnlockedMercIds = { "H001", "H005", "H019" };
+
+    /// <summary>该佣兵是否已在酒馆解锁（进战斗三选一池的必要条件）。</summary>
+    public bool IsMercUnlocked(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return false;
+        if (unlockedMercIds == null) unlockedMercIds = new HashSet<string>();
+        return unlockedMercIds.Contains(hireId);
+    }
+
+    /// <summary>解锁佣兵；返回是否本次新解锁。</summary>
+    public bool UnlockMerc(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return false;
+        if (unlockedMercIds == null) unlockedMercIds = new HashSet<string>();
+        if (!unlockedMercIds.Add(hireId)) return false;
+        unlockedMercEntries = FromIdSet(unlockedMercIds);
+        return true;
+    }
+
+    /// <summary>标记章节通关；通关第 8 章时把 chosenBranch 归零，允许下一周目换支线。</summary>
+    public void MarkChapterCleared(int chapter)
+    {
+        if (chapter <= 0) return;
+        if (clearedChapterIds == null) clearedChapterIds = new HashSet<int>();
+        if (clearedChapterIds.Add(chapter))
+            clearedChapterEntries = FromIntIdSet(clearedChapterIds);
+        if (chapter >= 8) chosenBranch = 0;
+    }
+
+    public bool HasClearedChapter(int chapter)
+    {
+        return clearedChapterIds != null && chapter > 0 && clearedChapterIds.Contains(chapter);
+    }
+
+    /// <summary>已通关章节数（困难/噩梦难度解锁门槛用；分叉后不能用 maxUnlockedChapter-1 推算）。</summary>
+    public int ClearedChapterCount()
+    {
+        return clearedChapterIds != null ? clearedChapterIds.Count : 0;
+    }
+
+    static List<IntIdEntry> FromIntIdSet(HashSet<int> set)
+    {
+        var list = new List<IntIdEntry>(set != null ? set.Count : 0);
+        if (set == null) return list;
+        foreach (int id in set)
+            list.Add(new IntIdEntry { id = id });
+        return list;
     }
 
     static HashSet<string> ToIdSet(List<StringIdEntry> list)
@@ -350,6 +452,8 @@ public class SaveData
         viewedMonsterIds ??= new HashSet<string>();
         seenMercIds ??= new HashSet<string>();
         viewedMercIds ??= new HashSet<string>();
+        unlockedMercIds ??= new HashSet<string>();
+        clearedChapterIds ??= new HashSet<int>();
         claimedCodexRewardIds ??= new HashSet<string>();
         defeatedMonsterIds ??= new HashSet<string>();
         claimedLogMileageLevels ??= new HashSet<int>();
@@ -391,6 +495,8 @@ public class SaveData
         viewedMonsterEntries = FromIdSet(viewedMonsterIds);
         seenMercEntries = FromIdSet(seenMercIds);
         viewedMercEntries = FromIdSet(viewedMercIds);
+        unlockedMercEntries = FromIdSet(unlockedMercIds);
+        clearedChapterEntries = FromIntIdSet(clearedChapterIds);
         claimedCodexRewardEntries = FromIdSet(claimedCodexRewardIds);
         defeatedMonsterEntries = FromIdSet(defeatedMonsterIds);
         unlockedWorldEntries = FromIdSet(unlockedWorldIds);

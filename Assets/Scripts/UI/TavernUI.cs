@@ -276,12 +276,13 @@ public class TavernUI : MonoBehaviour, ITownPage
 
     void WireClicks()
     {
-        // 招募 + 佣兵情报（信任/任务仍隐藏）
+        // 2026-09-14 改版：酒馆只做「解锁」，招募挪进战斗内三选一
         if (recruitButton != null)
         {
             recruitButton.onClick.RemoveAllListeners();
             recruitButton.gameObject.SetActive(true);
-            recruitButton.onClick.AddListener(() => MercenaryRecruitPopupUI.Show());
+            recruitButton.onClick.AddListener(() => TavernUnlockUI.Show());
+            RetitleRecruitCard("佣兵名册", "解锁佣兵，让其进入战斗三选一池");
         }
         if (trustButton != null) trustButton.gameObject.SetActive(false);
         if (questButton != null) questButton.gameObject.SetActive(false);
@@ -291,6 +292,19 @@ public class TavernUI : MonoBehaviour, ITownPage
             intelButton.onClick.RemoveAllListeners();
             intelButton.onClick.AddListener(() => InformantIntelDirector.StartDaily());
         }
+    }
+
+    /// <summary>把「招募」卡改成「名册/解锁」卡（预制体上已有同名节点时改文案）。</summary>
+    void RetitleRecruitCard(string title, string desc)
+    {
+        var card = recruitButton != null ? recruitButton.transform : null;
+        if (card == null) return;
+        var t = card.Find("Title");
+        var titleText = t != null ? t.GetComponent<Text>() : null;
+        if (titleText != null) titleText.text = title;
+        var d = card.Find("Desc");
+        var descText = d != null ? d.GetComponent<Text>() : null;
+        if (descText != null) descText.text = desc;
     }
 
     static void Wire(Button btn, string toast)
@@ -343,7 +357,7 @@ public class TavernUI : MonoBehaviour, ITownPage
         SetAnchored(grid, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
             new Vector2(0f, bottomNavReserve + 210f), new Vector2(640f, 360f));
 
-        recruitButton = CreateFeatureCard(grid.transform, "Recruit", "佣兵招募", "招募新佣兵加入队伍",
+        recruitButton = CreateFeatureCard(grid.transform, "Recruit", "佣兵名册", "解锁佣兵，让其进入战斗三选一池",
             new Vector2(-160f, 85f), new Color(0.55f, 0.42f, 0.28f));
         trustButton = CreateFeatureCard(grid.transform, "Trust", "信任交流", "提升信任解锁故事与事件",
             new Vector2(160f, 85f), new Color(0.65f, 0.32f, 0.35f));

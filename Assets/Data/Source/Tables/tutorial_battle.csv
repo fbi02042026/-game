@@ -1,8 +1,8 @@
 # order=执行顺序 action=normal|flank|around；普通波右侧进场；宝箱/佣兵左右夹击。
 # hp*=怪物最终满血（MONSTER_HP_GLOBAL_MUL 已改 1.0，本档不再二次缩放）；整型 Random.Range(min,max开区间)：普通 68–71、精英 170–189。
 order,action,count,spriteMelee,spriteRanged,ambush,mercId,mercHpRatio,aheadDist,stunned,eliteCount,hpMin,hpMax,eliteHpMin,eliteHpMax,note
-1,normal,6,1,2,0,,,,,,68,72,170,190,首波4近2远，右侧
-2,normal,7,1,2,0,,,,,,68,72,170,190,第二波+1，右侧
-3,flank,7,1,2,1,,,,,,68,72,170,190,宝箱左右夹击
-4,around,7,1,2,0,naima101,0.35,5.5,1,1,68,72,170,190,佣兵围攻左右+精英
-5,normal,8,1,2,0,,,,,,68,72,170,190,佣兵入队后右侧增援+2
+1,normal,6,1,2,0,,,,,,68,72,150,176,首波4近2远，右侧
+2,normal,7,1,2,0,,,,,,68,72,150,176,第二波+1，右侧
+3,flank,7,1,2,1,,,,,,68,72,150,176,宝箱左右夹击
+4,around,7,1,2,0,naima101,0.35,5.5,1,1,68,72,150,176,佣兵围攻左右+精英
+5,normal,8,1,2,0,,,,,,68,72,150,176,佣兵入队后右侧增援+2

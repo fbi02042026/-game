@@ -48,6 +48,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookEquipAnchors();
         CookMonsterStats();
         CookChapterThemeMap();
+        CookChapterRoute();
         CookChapterStatScale();
         CookMonsterUnlockTier();
         CookStageSpawn();
@@ -137,6 +138,11 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookChapterThemeMap()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/chapter_theme_map.csv", null, "chapter_theme_map");
+    }
+
+    static void CookChapterRoute()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/chapter_route.csv", null, "chapter_route");
     }
 
     static void CookChapterStatScale()

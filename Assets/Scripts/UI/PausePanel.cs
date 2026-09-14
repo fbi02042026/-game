@@ -80,11 +80,11 @@ public class PausePanel : MonoBehaviour
         // 更新提示文字
         if (timeoutHint != null)
         {
-            timeoutHint.text = "暂停超过30分钟将自动撤离\n（与死亡同规则：选1件遗产）";
+            timeoutHint.text = "暂停不会丢失进度，回来可继续战斗";
         }
         if (offlineHint != null)
         {
-            offlineHint.text = "直接退出游戏后，角色将停留在当前关卡\n下次上线可继续战斗";
+            offlineHint.text = "强退或杀掉进程将判定为撤离失败\n本局金币保留，技能/装备/佣兵清空";
         }
     }
 

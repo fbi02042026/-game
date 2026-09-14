@@ -162,9 +162,28 @@ public static class PlayerJobDefs
         }
     };
 
+    /// <summary>职业标美术源目录：编辑器直读此目录改图即时生效；真机走 Resources（见 Def.IconResourcePath）。</summary>
+    public const string IconArtFolder = "Assets/Art/UI/Icons/职业头像icon/";
+
+    /// <summary>
+    /// 职业标取图：编辑器优先读美术源目录 <see cref="IconArtFolder"/>，真机回退 Resources/UI/JobSelect/{名}。
+    /// 只返回 Sprite，不改 UI 的尺寸与位置（Image 的 RectTransform / preserveAspect 由 prefab 决定）。
+    /// </summary>
     public static Sprite TryLoadJobIcon(PlayerJobId id)
     {
         var def = Get(id);
+
+        // 1) 美术源目录（Assets/Art/UI/Icons/职业头像icon/{名}.png）
+#if UNITY_EDITOR
+        string artFile = IconFileName(def);
+        if (!string.IsNullOrEmpty(artFile))
+        {
+            var art = LoadArtIcon(artFile);
+            if (art != null) return art;
+        }
+#endif
+
+        // 2) Resources 拷贝（真机 / 打包）
         if (string.IsNullOrEmpty(def.IconResourcePath)) return null;
         var sp = Resources.Load<Sprite>(def.IconResourcePath);
         if (sp != null) return sp;
@@ -173,6 +192,35 @@ public static class PlayerJobDefs
         if (tex == null) return null;
         return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
     }
+
+    /// <summary>职业标文件名：取 IconResourcePath 末段（如 "UI/JobSelect/剑盾" → "剑盾"）。</summary>
+    static string IconFileName(Def def)
+    {
+        if (string.IsNullOrEmpty(def.IconResourcePath)) return null;
+        int slash = def.IconResourcePath.LastIndexOf('/');
+        return slash >= 0 ? def.IconResourcePath.Substring(slash + 1) : def.IconResourcePath;
+    }
+
+#if UNITY_EDITOR
+    static Sprite LoadArtIcon(string file)
+    {
+        string path = IconArtFolder + file + ".png";
+        var sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        if (sp != null) return sp;
+        // 图集 / 多子图：取其中第一个 Sprite
+        var all = UnityEditor.AssetDatabase.LoadAllAssetsAtPath(path);
+        if (all != null)
+        {
+            for (int i = 0; i < all.Length; i++)
+                if (all[i] is Sprite s) return s;
+        }
+        // 仅 Texture2D（未切成 Sprite）时临时补一个
+        var tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+        if (tex != null)
+            return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+        return null;
+    }
+#endif
 
     public static Def Get(PlayerJobId id)
     {

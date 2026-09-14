@@ -713,60 +713,17 @@ public class StageClearRewardDirector : MonoBehaviour
             }
         }
 
-        // —— 地上装备表现（不可点，仅视觉）——
+        // —— 宝箱装备折金：装备已并入「类型三选一」的装备方向，不再单独挑 ——
         Vector3 spawn = _boxRoot != null ? _boxRoot.position : Vector3.zero;
         spawn.y = UnitBase.GROUND_Y;
-        var show = new List<EquipInstance>();
-        if (rewards != null)
-        {
-            for (int i = 0; i < rewards.Count && show.Count < 3; i++)
-                if (rewards[i] != null) show.Add(rewards[i]);
-        }
-        var groundIcons = new List<GameObject>();
-        for (int i = 0; i < show.Count; i++)
-        {
-            float ox = (i - (show.Count - 1) * 0.5f) * 0.85f;
-            var icon = CreateGroundDrop(spawn + new Vector3(ox, 0f, 0f), show[i]);
-            if (icon != null)
-            {
-                var sr = icon.GetComponent<SpriteRenderer>();
-                if (sr != null && sr.sprite != null)
-                {
-                    var p = icon.transform.position;
-                    p.y = UnitBase.GROUND_Y + sr.bounds.extents.y;
-                    icon.transform.position = p;
-                }
-                groundIcons.Add(icon);
-            }
-        }
+        ScrapRewardEquips(rewards);
 
         yield return new WaitForSecondsRealtime(0.35f);
 
-        // —— 三选一 ——
-        if (show.Count > 0)
-        {
-            bool uiDone = false;
-            EquipInstance picked = null;
-            bool doEquip = false;
-            StageClearEquipUI.Show(show, bonusGold, (sel, equip) =>
-            {
-                picked = sel;
-                doEquip = equip;
-                uiDone = true;
-            });
-            while (!uiDone) yield return null;
-
-            // 清理地面表现
-            for (int i = 0; i < groundIcons.Count; i++)
-                if (groundIcons[i] != null) Destroy(groundIcons[i]);
-
-            ApplyEquipChoice(show, picked, doEquip);
-        }
-        else
-        {
-            for (int i = 0; i < groundIcons.Count; i++)
-                if (groundIcons[i] != null) Destroy(groundIcons[i]);
-        }
+        // —— 战斗结束三选一：先选方向（技能 / 装备 / 佣兵），再出该方向三选一 ——
+        // 每关 1 抽；Boss 关 2 抽（一章 10 关共 11 抽，槽位 12 格，第 2 章初凑满）
+        int picks = stageType == StageType.Boss ? 2 : 1;
+        yield return StartCoroutine(CoStageClearDraft(picks));
 
         // —— 局内构筑进度落档（供「继续上一局」）。升级抽卡统一在升级时发生，这里不再额外出三选一 ——
         RunDraftDirector.Instance?.NoteStageProgress();
@@ -802,6 +759,82 @@ public class StageClearRewardDirector : MonoBehaviour
 
         if (bm != null) bm.UnitsCanAct = true;
         _running = false;
+    }
+
+    /// <summary>宝箱掉落装备直接折金：装备已并入「类型三选一」的装备方向，不再单独挑。</summary>
+    void ScrapRewardEquips(List<EquipInstance> rewards)
+    {
+        if (rewards == null || rewards.Count == 0) return;
+        var bm = BattleManager.Instance;
+        if (bm == null) return;
+
+        int total = 0;
+        for (int i = 0; i < rewards.Count; i++)
+            total += ScrapGold(rewards[i]);
+        if (total <= 0) return;
+
+        bm.currentGold += total;
+        BattleUI.Instance?.UpdateGold(bm.currentGold);
+        UIManager.Instance?.ShowToast($"宝箱装备折金 +{total}");
+    }
+
+    /// <summary>
+    /// 战斗结束抽卡：先出「技能 / 装备 / 佣兵」方向三选一，玩家点定方向后再出该方向三选一。
+    /// 选完立即经 <see cref="RunDraftDirector"/> 生效。
+    /// </summary>
+    /// <param name="pickCount">本关抽卡次数（普通/精英 1 次，Boss 2 次）。</param>
+    IEnumerator CoStageClearDraft(int pickCount = 1)
+    {
+        var dir = RunDraftDirector.Instance;
+        if (dir == null && BattleManager.Instance != null)
+            dir = RunDraftDirector.Ensure(BattleManager.Instance);
+        if (dir == null)
+        {
+            Debug.LogWarning("[StageClearReward] RunDraftDirector 缺失，跳过战斗结束三选一");
+            yield break;
+        }
+
+        for (int round = 0; round < Mathf.Max(1, pickCount); round++)
+        {
+            var cats = DraftPool.BuildCategories();
+            if (cats == null || cats.Count == 0) yield break;
+
+            bool done = false;
+            var ui = LevelUpDraftUI.ShowCategorized(
+                cats,
+                DraftPool.BuildCards,
+                pickCount > 1 ? $"战斗结束！先选方向（{round + 1}/{pickCount}）" : "战斗结束！先选方向，再挑强化",
+                card =>
+                {
+                    if (card.IsValid)
+                    {
+                        dir.ApplyCard(card);
+                        RunLoadout.Save();
+                    }
+                    RunDraftDirector.RefreshSkillPower();
+                    done = true;
+                },
+                manageFreeze: false);
+
+            if (ui == null)
+            {
+                Debug.LogWarning("[StageClearReward] 抽卡弹层创建失败，跳过战斗结束三选一");
+                yield break;
+            }
+
+            float guard = 0f;
+            while (!done && guard < 180f)
+            {
+                guard += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (!done)
+            {
+                Debug.LogWarning("[StageClearReward] 战斗结束三选一超时未选择，已跳过");
+                yield break;
+            }
+            if (round < pickCount - 1) yield return new WaitForSecondsRealtime(0.25f);
+        }
     }
 
     /// <summary>给 chuansongmen 挂脉动动画（与旧 EndPoint PortalAnimator 同款）。</summary>

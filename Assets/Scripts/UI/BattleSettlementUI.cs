@@ -139,7 +139,10 @@ public class BattleSettlementUI : MonoBehaviour
 
         if (subtitleText != null)
         {
-            string kind = _stats.IsDeath ? "阵亡" : (_stats.IsVictory ? "通关" : "撤离成功");
+            string kind = _stats.IsDeath ? "阵亡"
+                : _stats.IsEvacFailed ? "撤离失败"
+                : _stats.IsVictory ? "通关"
+                : "撤离成功";
             subtitleText.text = string.IsNullOrEmpty(_stats.StageTitle)
                 ? kind
                 : _stats.StageTitle + " · " + kind;
@@ -267,7 +270,7 @@ public class BattleSettlementUI : MonoBehaviour
             : "冒险者";
         int ch = _stats.Chapter > 0 ? _stats.Chapter : 1;
         if (nameText != null)
-            nameText.text = $"第{ch}章 · {display}";
+            nameText.text = $"{GameConfig.GetChapterMapName(ch)} · {display}";
 
         if (portraitImage == null)
             portraitImage = ResolvePortraitImage(root != null ? root.transform : transform);

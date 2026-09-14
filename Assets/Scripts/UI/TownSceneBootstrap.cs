@@ -108,8 +108,28 @@ public class TownSceneBootstrap : MonoBehaviour
         yield return null;
         yield return null;
         TownHubController.ConsumePendingAdventure();
-        TryClaimTownOfflineReward();
+        // 上次战斗被强杀 → 判撤离失败并结算；弹了面板就跳过本轮离线收益
+        if (!SettleInterruptedRunOnce())
+            TryClaimTownOfflineReward();
         TutorialDirector.Instance?.NotifyTownReady();
+    }
+
+    static bool _resumeChecked;
+
+    /// <summary>每次进 Town 只检查一次中断结算（真结算了返回 true）</summary>
+    static bool SettleInterruptedRunOnce()
+    {
+        if (_resumeChecked) return false;
+        _resumeChecked = true;
+        try
+        {
+            return BattleStateSaver.SettleInterruptedRun();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[TownBootstrap] 中断结算异常: " + e.Message);
+            return false;
+        }
     }
 
     static bool _offlineClaimedThisTownVisit;

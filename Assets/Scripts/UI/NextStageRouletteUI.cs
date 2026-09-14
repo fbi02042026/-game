@@ -263,7 +263,7 @@ public class NextStageRouletteUI : MonoBehaviour
 
         BindRefs();
         if (titleText != null)
-            titleText.text = GameConfig.GetChapterTitleText(Mathf.Max(1, chapter));
+            titleText.text = GameConfig.GetChapterMapName(Mathf.Max(1, chapter));
         if (subTitleText != null)
             subTitleText.text = "由慢到快滚动中…点停止或等 5 秒";
 

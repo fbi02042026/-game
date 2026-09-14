@@ -309,16 +309,20 @@ public static class DraftPool
         var list = new List<WeightedCard>();
         if (RunLoadout.IsMercFull) return list;
 
-        var roster = MercRosterDefs.All;
-        if (roster == null) return list;
-
         SaveData data = SaveSystem.Instance?.Data;
-        int guild = data != null ? data.guildLevel : 1;
+
+        // 2026-09-14 改版：招募池 = 酒馆已解锁的佣兵，不再是全量花名册。
+        // 酒馆只负责解锁，真正的招募挪进战斗内三选一。
+        if (data == null || data.unlockedMercIds == null || data.unlockedMercIds.Count == 0)
+            return list;
+
+        int guild = data.guildLevel;
         int heroLv = RunLoadout.HeroLevel;
 
-        for (int i = 0; i < roster.Count; i++)
+        foreach (string hireId in data.unlockedMercIds)
         {
-            var def = roster[i];
+            if (string.IsNullOrEmpty(hireId)) continue;
+            if (!MercRosterDefs.TryGetByHireId(hireId, out var def)) continue;
             if (string.IsNullOrEmpty(def.AssetId)) continue;
             if (RunLoadout.HasMerc(def.HireId) || RunLoadout.HasMerc(def.AssetId)) continue;
 

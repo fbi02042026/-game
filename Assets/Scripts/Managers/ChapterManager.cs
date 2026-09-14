@@ -243,15 +243,20 @@ public class ChapterManager : Singleton<ChapterManager>
             // 1. 增加通关次数（用于渐进式怪物解锁）
             IncrementChapterClearCount(currentChapter);
 
-            // 2. 解锁下一章
+            // 2. 解锁下一章：走 ChapterRouteTable（不再是简单的 +1）
             var data = SaveSystem.Instance?.Data;
             if (data != null)
             {
-                int nextChapter = currentChapter + 1;
-                if (nextChapter > data.maxUnlockedChapter && nextChapter <= 8)
+                data.MarkChapterCleared(currentChapter);
+                var avail = ChapterRouteTable.AvailableChapters(data);
+                if (avail.Count > 0)
                 {
-                    data.maxUnlockedChapter = nextChapter;
-                    Debug.Log($"[ChapterManager] 解锁第{nextChapter}章！");
+                    int far = avail[avail.Count - 1];
+                    if (far > data.maxUnlockedChapter)
+                    {
+                        data.maxUnlockedChapter = far;
+                        Debug.Log($"[ChapterManager] 解锁新区域：{GameConfig.GetChapterMapName(far)}（内部第{far}章）");
+                    }
                 }
                 SaveSystem.Instance.Save();
             }

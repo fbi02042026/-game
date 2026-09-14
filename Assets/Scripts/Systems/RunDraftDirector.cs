@@ -77,24 +77,13 @@ public class RunDraftDirector : MonoBehaviour
         }
     }
 
-    /// <summary>续关时把玩家等级补回来（逐级走 LevelSystem，避免直接跳级丢属性成长）。</summary>
+    /// <summary>
+    /// 续关等级恢复 —— 等级系统已停用（属性成长只走城镇天赋），保留空实现供续关流程调用。
+    /// </summary>
     void RestoreHeroProgress()
     {
         var hero = Hero.Instance;
-        if (hero == null || RunLoadout.Data == null) return;
-
-        int target = Mathf.Max(1, RunLoadout.Data.heroLevel);
-        int guard = 0;
-        while (hero.level < target && guard++ < 500)
-        {
-            LevelSystem.OnLevelUp(hero);
-            hero.expToNextLevel = LevelSystem.GetExpForLevel(hero.level);
-        }
-        hero.currentExp = Mathf.Clamp(RunLoadout.Data.heroExp, 0, Mathf.Max(1, hero.expToNextLevel));
-        // 续关不补发抽卡，避免一开场连弹
-        hero.pendingLevelUps = 0;
-        hero.RecalcAttr();
-        Debug.Log($"[RunDraft] 续关恢复等级 Lv{hero.level} EXP {hero.currentExp}/{hero.expToNextLevel}");
+        if (hero != null) hero.pendingLevelUps = 0;
     }
 
     void SyncHeroLevel()
@@ -126,15 +115,9 @@ public class RunDraftDirector : MonoBehaviour
         if (hero == null || hero.isDead) return;
 
         SyncHeroLevel();
-        if (hero.pendingLevelUps <= 0) return;
-
-        hero.pendingLevelUps--;
-        var cats = DraftPool.BuildCategories();
-        LevelUpDraftUI.ShowCategorized(
-            cats,
-            DraftPool.BuildCards,
-            "升级！先选方向，再挑具体强化",
-            OnCardPicked);
+        // 等级系统已停用：不再有升级抽卡，队列直接清零（属性成长只走城镇天赋）
+        if (hero.pendingLevelUps > 0) hero.pendingLevelUps = 0;
+        return;
     }
 
     /// <summary>

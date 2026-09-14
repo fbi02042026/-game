@@ -164,8 +164,22 @@ public class MercenaryManager : Singleton<MercenaryManager>
 
     #region 出战佣兵
 
+    /// <summary>
+    /// 已解锁的佣兵槽数（0~2）。
+    /// 新流程：佣兵靠战斗结束/升级的「三选一」招募解锁 —— 招到几位就解锁几位。
+    /// 旧存档 / 未开局时回退到酒馆等级，保证城镇与旧流程仍可用。
+    /// </summary>
     public int GetMaxMercSlots()
     {
+        if (RunLoadout.IsActive)
+        {
+            int recruited = RunLoadout.Mercs() != null ? RunLoadout.Mercs().Count : 0;
+            // 引导局脚本化出佣兵时可能还没落进构筑，至少给 1 个槽
+            if (recruited <= 0 && TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud)
+                recruited = 1;
+            return Mathf.Clamp(recruited, 0, 2);
+        }
+
         int tavernLevel = SaveSystem.Instance != null && SaveSystem.Instance.Data != null
             ? SaveSystem.Instance.Data.townLevel.tavern
             : 0;

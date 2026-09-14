@@ -50,6 +50,22 @@ public class BattleUI : MonoBehaviour
     /// <summary>自动战斗未开放。运行时隐藏，勿在预制体里删节点。</summary>
     public Button autoButton;
 
+    [Header("=== 底部临时布局（4技能槽 / 6装备槽）===")]
+    public Transform skillSlotRoot;      // BackpackPanel/skill（4 个主动技槽，充能满自动释放）
+    public Transform equipSlotRoot;      // BackpackPanel/zhuangbei（6 个装备快捷槽）
+    public List<SkillAvatarUI> runSkillSlots = new List<SkillAvatarUI>();
+    public List<EquipQuickSlotUI> equipQuickSlots = new List<EquipQuickSlotUI>();
+    /// <summary>6 个装备快捷槽的顺序，与预制体 zhuangbei 下 icon底 子节点顺序一致（无披风）。</summary>
+    static readonly EquipSlotType[] QuickSlotOrder =
+    {
+        EquipSlotType.Head,     // 头
+        EquipSlotType.Chest,    // 胸甲
+        EquipSlotType.Hands,    // 手
+        EquipSlotType.Feet,     // 脚
+        EquipSlotType.OffHand,  // 左手（副手）
+        EquipSlotType.MainHand  // 右手（主手）
+    };
+
     [Header("=== 底部功能入口 ===")]
     public Button characterButton;   // 角色属性按钮
     public Button pauseButton;       // 暂停按钮
@@ -140,6 +156,7 @@ public class BattleUI : MonoBehaviour
         _liveBarTimer += Time.deltaTime;
         if (_liveBarTimer < LiveBarInterval) return;
         _liveBarTimer = 0f;
+        TickRunSkillSlots();
         RefreshLiveBars();
     }
 
@@ -150,21 +167,16 @@ public class BattleUI : MonoBehaviour
         {
             float maxHp = hero.attr.GetAttr(AttrType.MaxHp);
             float energy = BattleManager.Instance != null ? BattleManager.Instance.PlayerSkillEnergyPeak : 0f;
-            float expRatio = hero.expToNextLevel > 0
-                ? Mathf.Clamp01((float)hero.currentExp / hero.expToNextLevel)
-                : 0f;
+            // 等级/经验已移除，不再参与刷新判定
             if (!Mathf.Approximately(_lastPlayerHp, hero.currentHp)
                 || !Mathf.Approximately(_lastPlayerMaxHp, maxHp)
-                || !Mathf.Approximately(_lastPlayerEnergy, energy)
-                || !Mathf.Approximately(_lastPlayerExp, expRatio))
+                || !Mathf.Approximately(_lastPlayerEnergy, energy))
             {
                 _lastPlayerHp = hero.currentHp;
                 _lastPlayerMaxHp = maxHp;
                 _lastPlayerEnergy = energy;
-                _lastPlayerExp = expRatio;
-                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: true);
-                playerSlot.SetEnergy(energy);                              // 能量环/技能能量（若有）仍由技能能量驱动
-                playerSlot.SetExpBar(expRatio, hero.currentExp, hero.expToNextLevel); // 头像下蓝条改为经验进度
+                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: false);
+                playerSlot.SetEnergy(energy);   // 蓝条留给技能能量
             }
         }
 
@@ -403,6 +415,9 @@ public class BattleUI : MonoBehaviour
         BindSkillAvatar(ref merc1SkillAvatar, "SkillBtn2", "MercSkill1");
         BindSkillAvatar(ref merc2SkillAvatar, "SkillBtn3", "MercSkill2");
 
+        // 新底部布局：skill 4 槽 / zhuangbei 6 槽
+        BindBottomQuickSlots();
+
         EnsureGridCellsBound();
         FixCharacterBarLayout();
         // MercenaryManager 可能尚未创建，系统就绪后再 Wire / Configure
@@ -424,6 +439,8 @@ public class BattleUI : MonoBehaviour
         BindAutoBattleUnavailable();
         UpdateCharacterSlots();
         UpdateSkillAvatars();
+        UpdateRunSkillSlots();
+        UpdateEquipQuickSlots();
         int stageIdx = BattleManager.Instance != null && BattleManager.Instance.currentStage != null
             ? BattleManager.Instance.currentStage.stageIndex : 0;
         UpdateStageProgress(stageIdx);
@@ -665,6 +682,232 @@ public class BattleUI : MonoBehaviour
         }
     }
 
+    // ============================================================
+    // 新底部布局：skill（4 主动技槽） / zhuangbei（6 装备快捷槽）
+    // 临时 UI 上没挂任何项目脚本，这里纯按节点顺序建视图对象并缓存。
+    // ============================================================
+
+    void BindBottomQuickSlots()
+    {
+        Transform backpack = FindDeepChildIgnoreCase(transform, "BackpackPanel");
+        if (skillSlotRoot == null)
+            skillSlotRoot = (backpack != null ? FindDeepChildIgnoreCase(backpack, "skill") : null)
+                            ?? FindDeepChildIgnoreCase(transform, "skill");
+        if (equipSlotRoot == null)
+            equipSlotRoot = (backpack != null ? FindDeepChildIgnoreCase(backpack, "zhuangbei") : null)
+                            ?? FindDeepChildIgnoreCase(transform, "zhuangbei");
+
+        BindRunSkillSlots();
+        BindEquipQuickSlots();
+        Debug.Log($"[BattleUI] 底部快捷槽绑定 skill={runSkillSlots?.Count ?? 0} equip={equipQuickSlots?.Count ?? 0}");
+    }
+
+    void BindRunSkillSlots()
+    {
+        if (runSkillSlots == null) runSkillSlots = new List<SkillAvatarUI>();
+        runSkillSlots.Clear();
+        if (skillSlotRoot == null) return;
+
+        for (int i = 0; i < skillSlotRoot.childCount; i++)
+        {
+            Transform t = skillSlotRoot.GetChild(i);
+            if (t == null) continue;
+            var av = new SkillAvatarUI { root = t.gameObject };
+            // 图标层：不能用 icon底 自身背景（会盖掉美术底图），统一补一个子层
+            av.avatarImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
+            av.labelText = t.GetComponentInChildren<Text>(true);   // 临时 UI 的「被动」底字
+            av.cooldownText = EnsureChildText(t, "SkillCd", 16);
+            av.energyFill = EnsureChildBar(t, "SkillEnergy", new Color(0.98f, 0.78f, 0.28f, 1f));
+            runSkillSlots.Add(av);
+        }
+    }
+
+    void BindEquipQuickSlots()
+    {
+        if (equipQuickSlots == null) equipQuickSlots = new List<EquipQuickSlotUI>();
+        equipQuickSlots.Clear();
+        if (equipSlotRoot == null) return;
+
+        for (int i = 0; i < equipSlotRoot.childCount; i++)
+        {
+            Transform t = equipSlotRoot.GetChild(i);
+            if (t == null) continue;
+            var slot = new EquipQuickSlotUI
+            {
+                root = t.gameObject,
+                slotType = i < QuickSlotOrder.Length ? QuickSlotOrder[i] : EquipSlotType.Head
+            };
+            slot.iconImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
+            slot.slotLabel = t.GetComponentInChildren<Text>(true);  // 头 / 胸甲 / 手 / 脚 / 左手 / 右手
+            equipQuickSlots.Add(slot);
+        }
+    }
+
+    /// <summary>在槽位下补一个居中图标层，避免覆盖 icon底 的背景图。</summary>
+    static Image EnsureChildIcon(Transform parent)
+    {
+        var exist = FindDeepChildIgnoreCase(parent, "ItemIcon");
+        if (exist != null)
+        {
+            var e = exist.GetComponent<Image>();
+            if (e != null) { e.preserveAspect = true; e.raycastTarget = false; return e; }
+        }
+        var go = new GameObject("ItemIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(parent, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.16f, 0.16f);
+        rt.anchorMax = new Vector2(0.84f, 0.84f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var img = go.GetComponent<Image>();
+        img.raycastTarget = false;
+        img.preserveAspect = true;
+        img.sprite = null;   // 无 sprite 时不绘制，靠 SetAvatar 显隐控制
+        return img;
+    }
+
+    /// <summary>在槽位下补一行文字（星级 / 冷却）。</summary>
+    static Text EnsureChildText(Transform parent, string name, int fontSize)
+    {
+        var exist = FindDeepChildIgnoreCase(parent, name);
+        if (exist != null)
+        {
+            var e = exist.GetComponent<Text>();
+            if (e != null) return e;
+        }
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(parent, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0.14f);
+        rt.anchorMax = new Vector2(1f, 0.36f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var txt = go.GetComponent<Text>();
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.fontSize = fontSize;
+        txt.color = new Color(1f, 0.92f, 0.72f);
+        txt.raycastTarget = false;
+        var f = GameFonts.GetChinese();
+        if (f != null) txt.font = f;
+        return txt;
+    }
+
+    /// <summary>在槽位底部补一条细进度条，返回填充 Image。</summary>
+    static Image EnsureChildBar(Transform parent, string name, Color color)
+    {
+        var exist = FindDeepChildIgnoreCase(parent, name);
+        if (exist != null)
+        {
+            var existFill = FindImageNamed(exist, "Fill");
+            if (existFill != null) return existFill;
+        }
+        var bgGo = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        bgGo.transform.SetParent(parent, false);
+        var bgRt = bgGo.GetComponent<RectTransform>();
+        bgRt.anchorMin = new Vector2(0.10f, 0.03f);
+        bgRt.anchorMax = new Vector2(0.90f, 0.11f);
+        bgRt.offsetMin = Vector2.zero;
+        bgRt.offsetMax = Vector2.zero;
+        var bg = bgGo.GetComponent<Image>();
+        bg.color = new Color(0.06f, 0.06f, 0.09f, 0.85f);
+        bg.raycastTarget = false;
+
+        var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        fillGo.transform.SetParent(bgGo.transform, false);
+        var fRt = fillGo.GetComponent<RectTransform>();
+        fRt.anchorMin = Vector2.zero;
+        fRt.anchorMax = Vector2.one;
+        fRt.offsetMin = Vector2.zero;
+        fRt.offsetMax = Vector2.zero;
+        var fill = fillGo.GetComponent<Image>();
+        fill.color = color;
+        fill.raycastTarget = false;
+        fill.type = Image.Type.Filled;
+        fill.fillMethod = Image.FillMethod.Horizontal;
+        fill.fillOrigin = (int)Image.OriginHorizontal.Left;
+        fill.fillAmount = 0f;
+        return fill;
+    }
+
+    /// <summary>刷新底部 4 个主动技槽：本局构筑技能，充能满自动释放。</summary>
+    public void UpdateRunSkillSlots()
+    {
+        if (runSkillSlots == null || runSkillSlots.Count == 0) return;
+
+        var job = PlayerJobDefs.GetSelected();
+        var ids = RunLoadout.IsActive ? RunLoadout.SkillIds() : null;
+
+        for (int i = 0; i < runSkillSlots.Count; i++)
+        {
+            var slot = runSkillSlots[i];
+            if (slot == null) continue;
+
+            string id = ids != null && i < ids.Count ? ids[i] : null;
+            if (string.IsNullOrEmpty(id))
+            {
+                slot.SetAvatar(null);
+                slot.SetLabelVisible(true);
+                slot.SetEnergyFill(0f);
+                if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
+                continue;
+            }
+
+            var active = RunDraftDirector.BuildRunSkill(id, job);
+            int star = RunLoadout.StarOf(id);
+            slot.SetAvatar(active != null ? active.icon : null);
+            slot.SetLabelVisible(false);
+            if (slot.cooldownText != null)
+            {
+                slot.cooldownText.gameObject.SetActive(true);
+                slot.cooldownText.text = $"★{star}";
+            }
+        }
+    }
+
+    /// <summary>刷新底部 6 个装备快捷槽：头/胸甲/手/脚/左手/右手。</summary>
+    public void UpdateEquipQuickSlots()
+    {
+        if (equipQuickSlots == null || equipQuickSlots.Count == 0) return;
+        var bag = GridBackpackSystem.Instance;
+        for (int i = 0; i < equipQuickSlots.Count; i++)
+        {
+            var slot = equipQuickSlots[i];
+            if (slot == null) continue;
+            slot.Bind(bag != null ? bag.GetEquippedInSlot(slot.slotType) : null);
+        }
+    }
+
+    string _lastSkillKey = "\u0000";
+
+    /// <summary>逐帧（0.1s 节流）刷技能槽充能 / 冷却；技能列表变了就整槽重建。</summary>
+    void TickRunSkillSlots()
+    {
+        if (runSkillSlots == null || runSkillSlots.Count == 0) return;
+
+        var ids = RunLoadout.IsActive ? RunLoadout.SkillIds() : null;
+        string key = ids == null ? "" : string.Join(",", ids);
+        if (!string.Equals(key, _lastSkillKey))
+        {
+            _lastSkillKey = key;
+            UpdateRunSkillSlots();
+        }
+
+        var bm = BattleManager.Instance;
+        var sys = SkillSystem.Instance;
+        for (int i = 0; i < runSkillSlots.Count; i++)
+        {
+            var slot = runSkillSlots[i];
+            if (slot == null) continue;
+            bool has = ids != null && i < ids.Count;
+            slot.SetEnergyFill(has && bm != null ? bm.GetPlayerSkillEnergy(i) : 0f);
+            if (slot.cooldownText == null || !has) continue;
+            float cd = sys != null ? sys.GetPlayerSkillCooldownRatio(i) : 0f;
+            slot.cooldownText.text = cd > 0.01f
+                ? cd.ToString("0.0") + "s"
+                : "★" + RunLoadout.StarOf(ids[i]);
+        }
+    }
+
     void EnsureGridCellsBound()
     {
         Transform grid = FindDeepChildIgnoreCase(transform, "GridContainer");
@@ -874,7 +1117,7 @@ public class BattleUI : MonoBehaviour
             // 连底框一起藏：文字挂在 StageIcon 上，只藏文字会留一个空壳
             SetLabelWithFrameVisible(stageLabel, !hideStageInfo);
             if (!hideStageInfo)
-                stageLabel.text = $"第{chapter}章";
+                stageLabel.text = GameConfig.GetChapterMapName(chapter);
         }
         if (difficultyLabel != null)
         {
@@ -1034,6 +1277,8 @@ public class BattleUI : MonoBehaviour
         // 传入真实格子：没有 GridLayoutGroup（格子是美术手摆的）时也能算对位置
         BackpackGridVisual.ClearAndPlace(gridRt, gridLayout, placements, FindGridCellRect, BattleLootMode.Active);
         ApplyBackpackCellOccupiedColors(placements);
+        // 换装/整理后同步底部 6 个装备快捷槽
+        UpdateEquipQuickSlots();
         Debug.Log($"[BattleUI] 背包刷新 items={placements.Count} cells={gridCells.Count} layout={(gridLayout != null)}");
     }
 
@@ -1154,7 +1399,8 @@ public class BattleUI : MonoBehaviour
             if (hero != null)
             {
                 float maxHp = hero.attr.GetAttr(AttrType.MaxHp);
-                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: true);
+                // 等级系统已停用（2026-09-14）：局内不再显示 Lv，属性只由天赋/装备决定
+                playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: false);
             }
             // 玩家头像对接
             Sprite playerIcon = mm != null ? mm.GetPlayerIcon() : null;
@@ -1173,7 +1419,7 @@ public class BattleUI : MonoBehaviour
         var mercIds = mm != null ? mm.GetActiveMercIds() : new List<string>();
         var mercHireIds = mm != null ? mm.GetActiveMercHireIds() : new List<string>();
         var activeMercs = mm != null ? mm.GetActiveMercs() : new List<Mercenary>();
-        int maxSlots = mm != null ? mm.GetMaxMercSlots() : 0;
+        int maxSlots = ResolveMercSlotCount();
 
         SetupMercSlot(mercSlot1, 0, mercIds, mercHireIds, activeMercs, maxSlots, mm);
         SetupMercSlot(mercSlot2, 1, mercIds, mercHireIds, activeMercs, maxSlots, mm);
@@ -1217,16 +1463,27 @@ public class BattleUI : MonoBehaviour
     /// <summary>
     /// 设置单个佣兵槽位显示
     /// </summary>
+    /// <summary>佣兵槽锁定文案：新流程下招募即解锁。</summary>
+    const string MercLockedHint = "三选一解锁";
+
+    /// <summary>佣兵槽解锁数：优先本局已招募数（三选一解锁），未开局时回退酒馆等级。</summary>
+    static int ResolveMercSlotCount()
+    {
+        if (RunLoadout.IsActive)
+            return Mathf.Clamp(RunLoadout.Mercs() != null ? RunLoadout.Mercs().Count : 0, 0, 2);
+        return MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
+    }
+
     void SetupMercSlot(CharacterSlotUI slot, int index,
         List<string> mercIds, List<string> mercHireIds, List<Mercenary> activeMercs, int maxSlots, MercenaryManager mm)
     {
         if (slot == null) return;
 
-        // 酒馆未解锁的槽：显示「未解锁」
+        // 新流程：佣兵靠「三选一」招募解锁，没招募到的槽给明确指引
         bool unlocked = index < maxSlots;
         if (!unlocked)
         {
-            slot.ShowUnavailable("未解锁");
+            slot.ShowUnavailable(MercLockedHint);
             return;
         }
 
@@ -1529,6 +1786,10 @@ public class SkillAvatarUI
     public Image energyRing;          // 能量环（圆形填充）
     public Image glowBorder;          // 光边（能量满时显示）
     public Text cooldownText;         // 冷却倒计时文字
+    /// <summary>底部充能细条（新底部布局运行时补建）。</summary>
+    public Image energyFill;
+    /// <summary>槽位底字（如临时 UI 的「被动」），有技能图标时隐藏。</summary>
+    public Text labelText;
 
     [System.NonSerialized]
     public System.Action onClick;     // 点击回调
@@ -1595,6 +1856,18 @@ public class SkillAvatarUI
             avatarImage.sprite = icon;
             avatarImage.gameObject.SetActive(icon != null);
         }
+    }
+
+    /// <summary>底字（「被动」这类占位标签）显隐：有真图标时藏起来。</summary>
+    public void SetLabelVisible(bool visible)
+    {
+        if (labelText != null) labelText.gameObject.SetActive(visible);
+    }
+
+    /// <summary>充能比例 0~1（走底部细条，不依赖美术预设的能量环）。</summary>
+    public void SetEnergyFill(float ratio)
+    {
+        if (energyFill != null) energyFill.fillAmount = Mathf.Clamp01(ratio);
     }
 }
 
@@ -1720,25 +1993,16 @@ public class CharacterSlotUI
     /// 头像下「蓝条」改为经验进度（玩家槽专用；佣兵槽仍用 SetEnergy 显示技能能量）。
     /// 仅驱动 lanBarFill + lanText，不影响能量环/光边。
     /// </summary>
+    /// <summary>
+    /// 等级/经验已从战斗中移除：蓝条不再显示经验，直接隐藏（蓝条留给技能能量）。
+    /// 保留方法供旧调用点编译通过。
+    /// </summary>
     public void SetExpBar(float ratio, int cur, int max)
     {
-        if (lanBarFill != null)
-        {
-            lanBarFill.enabled = true;
-            lanBarFill.fillAmount = Mathf.Clamp01(ratio);
-        }
         if (lanText != null)
         {
-            lanText.gameObject.SetActive(true);
-            if (max <= 0)
-            {
-                lanText.text = "";
-                return;
-            }
-            // 满格前给出「升级 = 抽卡」的预告，让玩家知道爆点什么时候来
-            lanText.text = ratio >= 0.75f
-                ? $"EXP {cur}/{max}　升级抽卡!"
-                : $"EXP {cur}/{max}";
+            lanText.gameObject.SetActive(false);
+            lanText.text = "";
         }
     }
 
@@ -2093,4 +2357,42 @@ public class GridCellUI
             default: return Color.white;
         }
     }
+}
+
+/// <summary>
+/// 装备快捷槽（新底部布局 BackpackPanel/zhuangbei 下的 6 个格子：头/胸甲/手/脚/左手/右手）。
+/// 只做展示与点击，穿戴/卸下仍走背包。
+/// </summary>
+[System.Serializable]
+public class EquipQuickSlotUI
+{
+    public GameObject root;
+    public Image iconImage;
+    public Text slotLabel;                              // 空槽底字（头/胸甲/…）
+    public EquipSlotType slotType = EquipSlotType.Head;
+    [System.NonSerialized] public EquipInstance boundItem;
+
+    public void Bind(EquipInstance item)
+    {
+        boundItem = item;
+        if (root != null) root.SetActive(true);
+
+        bool has = item != null;
+        if (has)
+        {
+            item.template?.ResolveIcon();
+            if (item.icon == null && item.template != null)
+                item.icon = item.template.icon ?? EquipIcons.Get(item.template.iconFileName);
+        }
+
+        if (iconImage != null)
+        {
+            iconImage.gameObject.SetActive(has);
+            iconImage.sprite = has ? item.icon : null;
+            iconImage.enabled = has && item.icon != null;
+        }
+        if (slotLabel != null) slotLabel.gameObject.SetActive(!has);
+    }
+
+    public void Clear() => Bind(null);
 }

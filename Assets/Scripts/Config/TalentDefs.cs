@@ -165,9 +165,9 @@ public static class TalentDefs
     {
         string[] names = { "力量", "体质", "防御", "精准", "敏捷" };
         string[] romans = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII" };
-        float[] atk = { 3, 4, 5, 6, 7, 8, 9, 10 };
-        float[] hp = { 10, 12, 15, 18, 22, 26, 30, 35 };
-        float[] def = { 2, 2, 3, 3, 4, 4, 5, 5 };
+        float[] atk = { 5, 6, 7, 8, 10, 12, 14, 16 };
+        float[] hp = { 25, 30, 40, 50, 60, 75, 90, 110 };
+        float[] def = { 3, 4, 5, 6, 8, 10, 12, 15 };
         var list = new LeftNode[40];
         for (int i = 0; i < 40; i++)
         {
@@ -180,8 +180,8 @@ public static class TalentDefs
                 case 0: fx = Fx(AttrKind.Attack, atk[group], $"攻击 +{atk[group]:0}"); break;
                 case 1: fx = Fx(AttrKind.Hp, hp[group], $"生命 +{hp[group]:0}"); break;
                 case 2: fx = Fx(AttrKind.Defense, def[group], $"防御 +{def[group]:0}"); break;
-                case 3: fx = Fx(AttrKind.CritRate, 0.5f, "暴击率 +0.5%"); break;
-                default: fx = Fx(AttrKind.AtkSpeed, 1f, "攻击速度 +1%"); break;
+                case 3: fx = Fx(AttrKind.CritRate, 1f, "暴击率 +1%"); break;
+                default: fx = Fx(AttrKind.AtkSpeed, 2f, "攻击速度 +2%"); break;
             }
             list[i] = new LeftNode
             {

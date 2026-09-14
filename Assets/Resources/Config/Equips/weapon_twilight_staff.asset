@@ -23,7 +23,7 @@ MonoBehaviour:
   minLevel: 1
   baseAttr:
   - attrType: 5
-    value: 21
+    value: 12
     isPercent: 0
   - attrType: 18
     value: 0.12

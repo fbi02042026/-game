@@ -93,8 +93,8 @@ public class RunSkillBarUI : MonoBehaviour
         var title = MakeText("Title", root, "本局构筑", 22, new Color(0.98f, 0.88f, 0.62f));
         Anchor(title.rectTransform, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -18f, ChipW, 28f);
 
-        // 等级 + 战力（玩家要知道自己几级、离下次抽卡多远）
-        _powerText = MakeText("Power", root, "Lv.1　战力 0", 24, new Color(1f, 0.82f, 0.36f));
+        // 战力（等级系统已停用，只展示本局战力）
+        _powerText = MakeText("Power", root, "战力 0", 24, new Color(1f, 0.82f, 0.36f));
         Anchor(_powerText.rectTransform, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -48f, ChipW, 30f);
 
         // 经验条（满格 → 升级 → 弹抽卡）
@@ -224,20 +224,17 @@ public class RunSkillBarUI : MonoBehaviour
 
     void UpdateLevelAndPower()
     {
-        var hero = Hero.Instance;
-        int level = hero != null ? hero.level : RunLoadout.HeroLevel;
         if (_powerText != null)
-            _powerText.text = $"Lv.{level}　战力 {RunLoadout.TotalPower()}";
+            _powerText.text = $"战力 {RunLoadout.TotalPower()}";
 
-        if (_expText != null && _expFill != null)
+        // 等级/经验已移除：隐藏经验条与「升级抽卡」文案
+        if (_expText != null)
         {
-            int cur = hero != null ? hero.currentExp : RunLoadout.Data?.heroExp ?? 0;
-            int max = hero != null ? hero.expToNextLevel : 1;
-            if (max <= 0) max = 1;
-            float ratio = Mathf.Clamp01((float)cur / max);
-            SetCdFill(_expFill.rectTransform, ratio);
-            _expText.text = $"EXP {cur}/{max}　{(hero != null && hero.pendingLevelUps > 0 ? "抽卡待选!" : "升级抽卡")}";
+            _expText.gameObject.SetActive(false);
+            _expText.text = "";
         }
+        if (_expFill != null && _expFill.transform.parent != null)
+            _expFill.transform.parent.gameObject.SetActive(false);
     }
 
     void Update()

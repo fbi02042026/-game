@@ -138,7 +138,7 @@ public class BattleStageMapUI : MonoBehaviour
 
         int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         if (titleText != null)
-            titleText.text = GameConfig.GetChapterTitleText(chapter);
+            titleText.text = GameConfig.GetChapterMapName(chapter);
 
         RefreshPedestals(Phase.BeforeRoll);
 
@@ -172,7 +172,7 @@ public class BattleStageMapUI : MonoBehaviour
 
         int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         if (titleText != null)
-            titleText.text = GameConfig.GetChapterTitleText(chapter);
+            titleText.text = GameConfig.GetChapterMapName(chapter);
 
         RefreshPedestals(Phase.BranchSelect);
 

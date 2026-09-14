@@ -1,11 +1,23 @@
 using UnityEngine;
 using System;
+using System.Collections;
 using System.Linq;
 
 /// <summary>
-/// 战斗状态保存/恢复系统
-/// 玩家退出时保存当前战斗进度，上线时恢复
-/// 核心规则：退出=暂停，角色停留在当前关卡，不推进、不自动选路线
+/// 战斗中断存档 / 撤离失败结算（2026-09-14 改版）
+/// ------------------------------------------------------------------
+/// 旧规则：中断后 3 分钟内重进自动续关（从该关开头重打）。
+/// 新规则：
+///   · 不杀进程 → 游戏一直在内存里，进度自然保留，不需要任何存档。
+///   · 杀进程 / 崩溃 / 强退 → 下次进游戏判定为「撤离失败」：
+///       本局金币保留、照发天赋石、技能/装备/佣兵清空、体力不退，
+///       弹结算面板后回冒险页。**不再续关，也没有时间窗口。**
+///
+/// 判定依据：正常结束（通关 / 死亡 / 撤离）都会 ClearBattleState()，
+/// 所以「启动时有残留档」== 上次不是正常收尾 == 被强杀。
+///
+/// 只存「结算需要的数据」（关卡坐标 + 金币基线 + 统计快照），
+/// 不存装备/血量——进程死了它们本来就没了。
 /// </summary>
 public class BattleStateSaver : MonoBehaviour
 {
@@ -15,6 +27,11 @@ public class BattleStateSaver : MonoBehaviour
     private const string KEY_BATTLE_STATE = "BattleState";
     private const string KEY_PAUSE_START_TIME = "PauseStartTime";
 
+    /// <summary>心跳写入间隔（秒）：保证崩溃时快照不会太旧</summary>
+    private const float HEARTBEAT_INTERVAL = 10f;
+
+    private float _heartbeatTimer;
+
     /// <summary>
     /// 战斗状态数据（可序列化）
     /// </summary>
@@ -23,15 +40,25 @@ public class BattleStateSaver : MonoBehaviour
     {
         public bool hasActiveBattle;      // 是否有进行中的战斗
         public int chapterId;             // 当前章节
-        public int stageId;               // 当前关卡索引
-        public string stageType;          // 关卡类型（普通/精英/BOSS等）
-        public float heroCurrentHp;       // 玩家当前血量
-        public int heroLevel;             // 玩家等级
-        public long currentGold;          // 当前金币
-        public int currentExp;            // 当前经验
-        public string[] equippedItemIds;  // 身上装备的templateId列表
-        public string[] backpackItemIds;  // 背包中的装备templateId列表
-        public string exitTime;           // 退出时间（ISO 8601）
+        public int stageId;               // 当前关卡索引（0 起）
+        public string stageType;          // 关卡类型
+        public int difficulty;            // 难度 0/1/2
+        public bool isGoldDungeon;        // 是否金币副本
+        public long currentGold;          // 战斗内钱包快照（含城镇底金）
+        public long goldAtRunStart;       // 本局开始时的金币基线（算净赚用）
+        public float heroCurrentHp;       // 仅记录，不用于恢复
+        public int heroLevel;             // 等级系统已停用，仅占位
+        public int currentExp;            // 仅记录
+        public string exitTime;           // 退出/心跳时刻（ISO 8601 / UTC）
+
+        // === 结算面板需要的统计快照 ===
+        public int kills;
+        public int eliteKills;
+        public int bossKills;
+        public float damageDealt;
+        public float damageTaken;
+        public float healingReceived;
+        public float battleTimeSec;
     }
 
     void Awake()
@@ -45,175 +72,207 @@ public class BattleStateSaver : MonoBehaviour
             Instance = null;
     }
 
-    /// <summary>
-    /// 保存当前战斗状态（本版关闭：Restore 未接 LoadStage，写入会造成假续关）
-    /// </summary>
+    void Update()
+    {
+        // 心跳：只在真·战斗中写，保证崩溃时快照不过旧
+        if (!IsInActiveBattle()) return;
+        _heartbeatTimer += Time.unscaledDeltaTime;
+        if (_heartbeatTimer < HEARTBEAT_INTERVAL) return;
+        _heartbeatTimer = 0f;
+        SaveBattleState();
+    }
+
+    /// <summary>当前是否处在可记录的战斗中（排除休息关 / 已结算 / 城镇）</summary>
+    static bool IsInActiveBattle()
+    {
+        var bm = BattleManager.Instance;
+        if (bm == null) return false;
+        if (!bm.isInBattle) return false;
+        if (bm.currentStage == null) return false;
+        if (bm.currentStage.type == StageType.Rest) return false;
+        return true;
+    }
+
+    // ============================================================
+    // 写入
+    // ============================================================
+
+    /// <summary>写一次中断快照（进关时 + 每 10s 心跳 + 切后台 / 退出）。</summary>
     public void SaveBattleState()
     {
-        // 仅清理脏档，不写入可恢复状态
-        if (HasSavedBattle())
-            ClearBattleState();
+        if (!IsInActiveBattle())
+            return;
+
+        var bm = BattleManager.Instance;
+        var cm = ChapterManager.Instance;
+        var hero = Hero.Instance;
+        var st = bm.RunStats;
+
+        var data = new BattleStateData
+        {
+            hasActiveBattle = true,
+            chapterId = cm != null ? cm.currentChapter : bm.CurrentChapter,
+            stageId = bm.currentStage != null ? bm.currentStage.stageIndex : (cm != null ? cm.currentStageIndex : 0),
+            stageType = bm.currentStage != null ? bm.currentStage.type.ToString() : StageType.Normal.ToString(),
+            difficulty = bm.BattleDifficulty,
+            isGoldDungeon = bm.IsGoldDungeon,
+            currentGold = bm.currentGold,
+            goldAtRunStart = bm.GoldAtRunStart,
+            heroCurrentHp = hero != null ? hero.currentHp : 0f,
+            heroLevel = hero != null ? hero.level : 1,
+            currentExp = hero != null ? hero.currentExp : 0,
+            exitTime = DateTime.UtcNow.ToString("o"),
+            kills = st != null ? st.KillCount : 0,
+            eliteKills = st != null ? st.EliteKillCount : 0,
+            bossKills = st != null ? st.BossKillCount : 0,
+            damageDealt = st != null ? st.DamageDealt : 0f,
+            damageTaken = st != null ? st.DamageTaken : 0f,
+            healingReceived = st != null ? st.HealingReceived : 0f,
+            battleTimeSec = st != null ? st.BattleTimeSec : 0f
+        };
+
+        try
+        {
+            string json = JsonUtility.ToJson(data);
+            PlayerPrefs.SetString(KEY_BATTLE_STATE, json);
+            PlayerPrefs.SetString(KEY_PAUSE_START_TIME, data.exitTime);
+            PlayerPrefs.Save();
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[BattleStateSaver] 写入战斗存档失败: " + e.Message);
+        }
     }
 
-    /// <summary>
-    /// 检查是否有保存的战斗状态
-    /// </summary>
+    /// <summary>是否有中断残留档（不判时间——有档就说明上次没正常收尾）</summary>
     public bool HasSavedBattle()
     {
-        return PlayerPrefs.HasKey(KEY_BATTLE_STATE);
+        return PeekInterrupted() != null;
     }
 
-    /// <summary>清除未完成战斗存档（避免 Restore 不刷怪）</summary>
-    public void ClearBattleState()
+    /// <summary>清除中断存档</summary>
+    public void ClearBattleState() => ClearSaveStatic();
+
+    /// <summary>战斗正常结束（通关/死亡/撤离）时调用</summary>
+    public void ClearSavedState() => ClearSaveStatic();
+
+    // ============================================================
+    // 读取（静态，城镇启动时不依赖实例）
+    // ============================================================
+
+    /// <summary>解析中断存档；无效/损坏返回 null</summary>
+    public static BattleStateData PeekInterrupted()
+    {
+        if (!PlayerPrefs.HasKey(KEY_BATTLE_STATE)) return null;
+        string json = PlayerPrefs.GetString(KEY_BATTLE_STATE, "");
+        if (string.IsNullOrEmpty(json)) return null;
+        BattleStateData data = null;
+        try { data = JsonUtility.FromJson<BattleStateData>(json); }
+        catch { data = null; }
+        if (data == null || !data.hasActiveBattle) return null;
+        return data;
+    }
+
+    /// <summary>无条件清掉中断存档（启动结算后 / 开新战斗前的兜底）</summary>
+    public static void ClearInterruptedSave() => ClearSaveStatic();
+
+    static void ClearSaveStatic()
     {
         PlayerPrefs.DeleteKey(KEY_BATTLE_STATE);
         PlayerPrefs.DeleteKey(KEY_PAUSE_START_TIME);
         PlayerPrefs.Save();
-        Debug.Log("[BattleStateSaver] 已清除战斗存档");
     }
 
+    // ============================================================
+    // 撤离失败结算（Town 场景启动完成后调用一次）
+    // ============================================================
+
     /// <summary>
-    /// 恢复战斗状态（本版未接入；保留实现供后续续关）
+    /// 启动检查：有残留档 = 上次被强杀 → 按「撤离失败」结算。
+    /// 返回 true 表示弹了结算面板（调用方应跳过本轮的其它弹窗）。
     /// </summary>
-    public bool RestoreBattleState()
+    public static bool SettleInterruptedRun()
     {
-        ClearBattleState();
-        Debug.Log("[BattleStateSaver] 本版不支持中断续关，已清档");
-        return false;
+        var d = PeekInterrupted();
+        if (d == null) return false;
+
+        var data = SaveSystem.Instance?.Data;
+        if (data == null)
+        {
+            // 存档还没就绪，别瞎结算，等下次进城镇
+            return false;
+        }
+
+        // 引导期强退：直接丢掉，不弹面板，避免打断剧情
+        if (!StoryProgress.TutorialDone)
+        {
+            ClearSaveStatic();
+            Debug.Log("[BattleStateSaver] 引导期中断，静默清档");
+            return false;
+        }
+
+        ClearSaveStatic();
+
+        int chapter = d.chapterId < 1 ? 1 : d.chapterId;
+        int stageIdx = d.stageId < 0 ? 0 : d.stageId;
+        string stageLabel = d.isGoldDungeon ? "金币副本" : $"{GameConfig.GetChapterMapName(chapter)} 第{stageIdx + 1}关";
+
+        // === 结算：与撤离同经济（金币保留 + 天赋石照发；构筑清空；体力不退）===
+        long delta = d.currentGold - d.goldAtRunStart;   // 注意：Mathf.Max 没有 long 重载，别用
+        if (delta < 0) delta = 0;
+        if (delta > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, delta, save: false, notify: false);
+
+        int talentGain = (int)(delta / GameConfig.GOLD_PER_TALENT_POINT);
+        if (talentGain > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
+
+        // 本局构筑 / 城镇雇佣一律清空
+        RunLoadout.Clear();
+        if (data.hiredMercs == null) data.hiredMercs = new System.Collections.Generic.List<MercenaryData>();
+        data.hiredMercs.Clear();
+        MercHireSession.ClearHired();
+        SaveSystem.Instance.Save();
+
+        var stats = new BattleRunStats
+        {
+            IsEvacFailed = true,
+            IsDeath = false,
+            IsVictory = false,
+            Chapter = chapter,
+            StageTitle = stageLabel,
+            KillCount = d.kills,
+            EliteKillCount = d.eliteKills,
+            BossKillCount = d.bossKills,
+            DamageDealt = d.damageDealt,
+            DamageTaken = d.damageTaken,
+            HealingReceived = d.healingReceived,
+            BattleTimeSec = d.battleTimeSec,
+            GoldGained = (int)Mathf.Min(delta, int.MaxValue),
+            TalentGained = talentGain
+        };
+        stats.ResolveMvp();
+
+        Debug.Log($"[BattleStateSaver] 上次战斗被中断 → 判撤离失败：{stageLabel}，"
+                  + $"金币 +{delta}，天赋石 +{talentGain}");
+
+        // 此时已经在城镇，不要再重载场景；回冒险页即可
+        TownHubController.PendingOpenAdventure = true;
+        BattleSettlementUI.Show(stats, () =>
+        {
+            MercHireSession.ClearHired();
+            GlobalToastUI.Show("上次战斗被中断，已按撤离失败结算");
+        });
+        return true;
     }
 
-    /// <summary>
-    /// 恢复战斗场景和角色状态
-    /// </summary>
-    private void RestoreBattle(BattleStateData state)
-    {
-        // 设置章节和关卡
-        if (ChapterManager.Instance != null)
-        {
-            ChapterManager.Instance.SetChapter(state.chapterId);
-            ChapterManager.Instance.StartChapter(state.chapterId);
-        }
+    // ============================================================
+    // 生命周期
+    // ============================================================
 
-        if (BattleManager.Instance != null)
-        {
-            BattleManager.Instance.currentGold = state.currentGold;
-        }
-
-        // 恢复角色状态
-        if (Hero.Instance != null)
-        {
-            Hero.Instance.currentHp = state.heroCurrentHp;
-            Hero.Instance.level = state.heroLevel;
-            Hero.Instance.currentExp = state.currentExp;
-        }
-
-        // 恢复装备（简化版：根据templateId重新生成实例）
-        if (GridBackpackSystem.Instance != null && ConfigManager.Instance != null)
-        {
-            GridBackpackSystem.Instance.InitNewRun();
-
-            // 恢复背包装备
-            if (state.backpackItemIds != null)
-            {
-                foreach (string templateId in state.backpackItemIds)
-                {
-                    if (string.IsNullOrEmpty(templateId)) continue;
-                    EquipTemplate template = ConfigManager.Instance.GetEquipTemplate(templateId);
-                    if (template != null)
-                    {
-                        EquipInstance inst = EquipInstance.GenerateFromTemplate(template);
-                        GridBackpackSystem.Instance.TryAddItem(inst, out _);
-                    }
-                }
-            }
-
-            // 恢复身上装备（先放入背包再穿戴）
-            if (state.equippedItemIds != null)
-            {
-                foreach (string templateId in state.equippedItemIds)
-                {
-                    if (string.IsNullOrEmpty(templateId)) continue;
-                    EquipTemplate template = ConfigManager.Instance.GetEquipTemplate(templateId);
-                    if (template != null)
-                    {
-                        EquipInstance inst = EquipInstance.GenerateFromTemplate(template);
-                        if (GridBackpackSystem.Instance.TryAddItem(inst, out var backpackItem))
-                        {
-                            GridBackpackSystem.Instance.EquipItem(backpackItem);
-                        }
-                    }
-                }
-            }
-        }
-
-        // 更新UI
-        BattleUI.Instance?.UpdateStageInfo(state.chapterId, state.stageId, state.stageType, state.currentGold);
-        BattleUI.Instance?.UpdateCharacterSlots();
-    }
-
-    /// <summary>
-    /// 计算离线收益（农场离线宝箱）
-    /// 收益按农场等级计算，和是否在战斗中无关
-    /// </summary>
-    private void CalculateOfflineReward(TimeSpan duration)
-    {
-        int farmLevel = SaveSystem.Instance?.Data?.townLevel?.farm ?? 0;
-        long offlineGold = OfflineGoldCalc.FromDuration(duration, farmLevel);
-
-        if (offlineGold > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, offlineGold, save: true, notify: true);
-
-        if (offlineGold > 0)
-        {
-            Debug.Log($"[BattleStateSaver] 离线收益: {offlineGold} 金币 (离线{duration.TotalMinutes:F0}分钟)");
-            OfflineRewardPopup.Show(offlineGold, Math.Min(duration.TotalMinutes, (8 + farmLevel * 2) * 60.0));
-        }
-    }
-
-    /// <summary>
-    /// 触发撤离（死亡规则）
-    /// 暂停超时时调用，按死亡遗产流程处理
-    /// </summary>
-    private void TriggerEvacuation(BattleStateData state)
-    {
-        // 暂停超时按死亡经济：只保留进局前城镇金，禁止整额 Add
-        var save = SaveSystem.Instance?.Data;
-        if (save != null && state != null)
-        {
-            // state.currentGold 是战斗内钱包快照；用差额同步到城镇
-            long delta = state.currentGold - save.totalGold;
-            // 超时撤离按死亡：丢弃本局增量
-            if (delta > 0)
-            {
-                // 不写入本局增量
-            }
-            else if (delta < 0)
-                ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, -delta, save: true, notify: false);
-        }
-        ClearBattleState();
-        Debug.Log("[BattleStateSaver] 暂停超时撤离：本局金币增量已丢弃，战斗存档已清");
-    }
-
-    /// <summary>
-    /// 清除保存的战斗状态
-    /// 战斗正常结束（通关/死亡）时调用
-    /// </summary>
-    public void ClearSavedState()
-    {
-        ClearBattleState();
-    }
-
-    /// <summary>
-    /// 应用退出时保存
-    /// 监听应用退出事件
-    /// </summary>
     void OnApplicationPause(bool pause)
     {
-        if (pause)
-        {
-            // 应用进入后台，保存战斗状态
-            SaveBattleState();
-        }
+        if (pause) SaveBattleState();
     }
 
     void OnApplicationQuit()

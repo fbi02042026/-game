@@ -111,7 +111,7 @@ public class EvacuateConfirmPopupUI : MonoBehaviour
 
         if (titleText != null) titleText.text = "确认撤离？";
         if (bodyText != null)
-            bodyText.text = "撤离将结束本次裂隙探索。\n本局金币会保留；若有装备可再选一件作为遗产带回。";
+            bodyText.text = "撤离将结束本次裂隙探索。\n本局金币会保留，技能/装备/佣兵会被清空。";
 
         if (root != null)
         {

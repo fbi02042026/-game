@@ -32,6 +32,8 @@ public class BattleRunStats
     public int DecomposeMatDelta;
     public bool IsDeath;
     public bool IsVictory;
+    /// <summary>强退/杀进程导致本局中断，按撤离失败结算（金币保留、构筑清空）。</summary>
+    public bool IsEvacFailed;
     public int Chapter;
     public string StageTitle;
 
@@ -75,6 +77,7 @@ public class BattleRunStats
         DecomposeMatDelta = 0;
         IsDeath = false;
         IsVictory = false;
+        IsEvacFailed = false;
         Chapter = 1;
         StageTitle = "";
         MvpKey = PlayerMvpKey;

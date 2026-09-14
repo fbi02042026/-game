@@ -112,23 +112,13 @@ public class Hero : UnitBase
         Debug.Log($"[Hero] InitNewRun完成 | pos={transform.position} | scale={transform.localScale} | facingDir={facingDir} | range={attr.GetAttr(AttrType.AttackRange)}");
     }
 
+    /// <summary>
+    /// 等级/经验已从战斗中移除：属性成长只走城镇天赋（天赋石），战斗内不再获得经验、不再升级。
+    /// 保留方法让旧调用点（BattleManager 击杀经验等）仍能编译，调用即空转。
+    /// </summary>
     public void AddExp(int exp)
     {
-        currentExp += exp;
-        while (currentExp >= expToNextLevel)
-        {
-            currentExp -= expToNextLevel;
-            LevelSystem.OnLevelUp(this);
-            expToNextLevel = LevelSystem.GetExpForLevel(level);
-            // 升级演出：飘字 + 特效，让"变强"可见（G1）
-            BattleVFXSystem.Instance?.PlayLevelUp(transform.position);
-            GlobalToastUI.Show($"升级！Lv{level}");
-            // 局内抽卡：排队一次三选一，由 RunDraftDirector.Tick 在可行动时消费
-            pendingLevelUps++;
-        }
-        // 本局战力快照（等级也是战力的一部分）
-        if (RunLoadout.IsActive)
-            RunLoadout.HeroLevel = this.level;
+        // 有意空实现：等级系统停用时不做任何处理
     }
 
     // —— 闪避系统（D2）：独立按钮 + 无敌帧 + 飘字，不新增美术 ——

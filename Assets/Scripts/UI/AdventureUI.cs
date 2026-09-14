@@ -83,6 +83,8 @@ public class AdventureUI : MonoBehaviour, ITownPage
     int _selectedMode = 0;
     int _selectedDiff = 0;
     int _selectedChapter = 1;
+    /// <summary>当前可进的章节集合（升序）——箭头在它里面循环，取代旧的 1..maxUnlocked 连续段</summary>
+    readonly List<int> _availableChapters = new List<int>();
     List<Button> _stageNodeBtns = new List<Button>();
     readonly List<MonsterConfig> _previewMonsters = new List<MonsterConfig>();
     Text _bossTag;
@@ -943,11 +945,10 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
     void OnSelectChapter(int chapter)
     {
-        int max = GetMaxUnlockedChapter();
         if (chapter < 1 || chapter > 8) return;
-        if (chapter > max)
+        if (!ChapterRouteTable.CanEnter(chapter, SaveSystem.Instance?.Data))
         {
-            Toast("通关上一章后开启");
+            Toast("通关当前区域后开启");
             return;
         }
         _selectedChapter = chapter;
@@ -964,7 +965,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
         if (!IsDiffUnlocked(idx))
         {
             int need = idx >= 2 ? GameConfig.DIFF_NIGHTMARE_NEED_CLEARS : GameConfig.DIFF_HARD_NEED_CLEARS;
-            Toast($"通关第{need}章后开启{DiffLabel(idx)}");
+            Toast($"通关 {need} 张地图后开启{DiffLabel(idx)}");
             return;
         }
         _selectedDiff = idx;
@@ -974,24 +975,27 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
     void OnPrevChapter()
     {
-        if (_selectedChapter <= 1)
+        if (_availableChapters.Count <= 1)
         {
-            Toast("已是第一章");
+            Toast("暂无其它区域");
             return;
         }
-        _selectedChapter--;
+        int idx = AvailableIndex();
+        idx = (idx - 1 + _availableChapters.Count) % _availableChapters.Count;
+        _selectedChapter = _availableChapters[idx];
         RefreshAll();
     }
 
     void OnNextChapter()
     {
-        int max = GetMaxUnlockedChapter();
-        if (_selectedChapter >= max)
+        if (_availableChapters.Count <= 1)
         {
-            Toast(_selectedChapter >= 8 ? "已是最后一章" : "通关本章后开启下一章");
+            Toast("通关本区域后开启下一张地图");
             return;
         }
-        _selectedChapter++;
+        int idx = AvailableIndex();
+        idx = (idx + 1) % _availableChapters.Count;
+        _selectedChapter = _availableChapters[idx];
         RefreshAll();
     }
 
@@ -1014,7 +1018,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
         if (!IsDiffUnlocked(_selectedDiff))
         {
             int need = _selectedDiff >= 2 ? GameConfig.DIFF_NIGHTMARE_NEED_CLEARS : GameConfig.DIFF_HARD_NEED_CLEARS;
-            Toast($"通关第{need}章后开启{DiffLabel(_selectedDiff)}");
+            Toast($"通关 {need} 张地图后开启{DiffLabel(_selectedDiff)}");
             return;
         }
 
@@ -1037,9 +1041,8 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
     void TryEnterBattle()
     {
-        // 丢弃半残战斗存档，避免进战无怪 / 脏 Prefs
-        if (BattleStateSaver.Instance != null && BattleStateSaver.Instance.HasSavedBattle())
-            BattleStateSaver.Instance.ClearBattleState();
+        // 兜底清掉中断存档（正常情况下启动阶段就已结算完毕）
+        BattleStateSaver.ClearInterruptedSave();
 
         if (StaminaSystem.Current < StaminaSystem.ADVENTURE_COST)
         {
@@ -1085,10 +1088,26 @@ public class AdventureUI : MonoBehaviour, ITownPage
                 PendingBattleDifficulty = _selectedDiff;
                 PendingGoldDungeon = IsActivityMode(_selectedMode);
                 ChapterManager.Instance?.SetChapter(_selectedChapter);
+                NoteChosenBranch(_selectedChapter);
             }
             HidePage();
             GameSceneManager.Instance?.LoadBattleScene();
         }, opts);
+    }
+
+    /// <summary>
+    /// 在分叉点（第 2/3/4 章）第一次开打时锁定本周目路线，锁上后另外两条支线进不去，
+    /// 直到通关第 8 章由 SaveData.MarkChapterCleared 归零，下一周目可重选。
+    /// </summary>
+    void NoteChosenBranch(int chapter)
+    {
+        if (chapter < 2 || chapter > 4) return;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || data.chosenBranch == chapter) return;
+        if (data.chosenBranch != 0) return;   // 已经选过，不覆盖
+        data.chosenBranch = chapter;
+        SaveSystem.Instance.Save();
+        Debug.Log($"[AdventureUI] 本周目选定支线：{GameConfig.GetChapterMapName(chapter)}（内部第{chapter}章）");
     }
 
     void OnSweep() => Toast("扫荡（即将开放）");
@@ -1110,11 +1129,50 @@ public class AdventureUI : MonoBehaviour, ITownPage
     void RefreshAll()
     {
         HideTip();
+        RefreshAvailableChapters();
         RefreshModeHighlight();
         RefreshDiffHighlight();
         RefreshChapterChrome();
         RefreshDetailPanel();
         RefreshContentLock();
+    }
+
+    /// <summary>按路线表重算可选章节，并把 _selectedChapter 修正到集合内。</summary>
+    void RefreshAvailableChapters()
+    {
+        _availableChapters.Clear();
+        var data = SaveSystem.Instance?.Data;
+        var list = ChapterRouteTable.AvailableChapters(data);
+        if (list != null)
+        {
+            for (int i = 0; i < list.Count; i++)
+                _availableChapters.Add(list[i]);
+        }
+        if (_availableChapters.Count == 0)
+            _availableChapters.Add(1);
+
+        if (!_availableChapters.Contains(_selectedChapter))
+            _selectedChapter = _availableChapters[_availableChapters.Count - 1];
+    }
+
+    /// <summary>分叉点提示：支线可选时列出地图名（不露章节号）。</summary>
+    string BuildBranchHint()
+    {
+        var data = SaveSystem.Instance?.Data;
+        var choices = ChapterRouteTable.BranchChoices(data);
+        if (choices == null || choices.Count < 2) return "";
+
+        var names = new System.Collections.Generic.List<string>();
+        for (int i = 0; i < choices.Count; i++)
+            names.Add(GameConfig.GetChapterMapName(choices[i]));
+        return "可换路线：" + string.Join(" / ", names.ToArray());
+    }
+
+    /// <summary>_selectedChapter 在可选集合里的下标（找不到返回 0）。</summary>
+    int AvailableIndex()
+    {
+        int idx = _availableChapters.IndexOf(_selectedChapter);
+        return idx < 0 ? 0 : idx;
     }
 
     void RefreshModeHighlight()
@@ -1151,12 +1209,19 @@ public class AdventureUI : MonoBehaviour, ITownPage
     void RefreshChapterChrome()
     {
         if (chapterTitle != null)
-            chapterTitle.text = GameConfig.GetChapterTitleText(_selectedChapter);
+        {
+            // 玩家看不到「第X章」：只显示地图名
+            string name = GameConfig.GetChapterMapName(_selectedChapter);
+            string branchHint = BuildBranchHint();
+            chapterTitle.text = string.IsNullOrEmpty(branchHint) ? name : name + "\n" + branchHint;
+        }
 
+        int idx = AvailableIndex();
         if (prevChapterBtn != null)
-            prevChapterBtn.interactable = _selectedChapter > 1;
+            prevChapterBtn.interactable = _availableChapters.Count > 1;
         if (nextChapterBtn != null)
-            nextChapterBtn.interactable = _selectedChapter < 8;
+            nextChapterBtn.interactable = _availableChapters.Count > 1;
+        _ = idx; // 保留：后续若要改成非循环箭头可用
 
         // MapBg 是内容区底框，不整页盖死大厅。章节地图在 StageNodes/Node_1..8。
         Sprite overrideBg = GetChapterBackground(_selectedChapter);
@@ -1246,7 +1311,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
         bool main = _selectedMode == 0;
         bool activity = IsActivityMode(_selectedMode);
         bool playable = main || activity;
-        string title = GameConfig.GetChapterTitleText(_selectedChapter);
+        string title = GameConfig.GetChapterMapName(_selectedChapter);
         if (stageNameLabel != null)
         {
             if (activity) stageNameLabel.text = "金币副本";
@@ -1258,7 +1323,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
             if (activity)
             {
                 int gold = GameConfig.GetGoldDungeonClearGold(_selectedChapter, _selectedDiff);
-                stageDescLabel.text = $"怪物只掉金币。通关获得 {gold} 金币。困难需通关第{GameConfig.DIFF_HARD_NEED_CLEARS}章，噩梦需通关第{GameConfig.DIFF_NIGHTMARE_NEED_CLEARS}章。";
+                stageDescLabel.text = $"怪物只掉金币。通关获得 {gold} 金币。困难需通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图，噩梦需通关 {GameConfig.DIFF_NIGHTMARE_NEED_CLEARS} 张地图。";
             }
             else if (main)
                 stageDescLabel.text = GetChapterIntro(_selectedChapter);
@@ -1582,7 +1647,9 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
     static int GetClearedChapterCount()
     {
-        return Mathf.Max(0, GetMaxUnlockedChapter() - 1);
+        // 章节分叉后 maxUnlockedChapter-1 不再等于通关数，一律读权威集合
+        var data = SaveSystem.Instance?.Data;
+        return data != null ? data.ClearedChapterCount() : 0;
     }
 
     static bool IsDiffUnlocked(int diff)

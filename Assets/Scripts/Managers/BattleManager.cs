@@ -23,6 +23,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     public long currentGold = 0;
     /// <summary>开战时城镇金币快照；死亡时本局增量清零用</summary>
     long _goldAtRunStart;
+    /// <summary>本局开始时的金币基线（中断存档要写它，撤离开局才知道净赚多少）</summary>
+    public long GoldAtRunStart => _goldAtRunStart;
     int _enchantAtRunStart;
     int _matsAtRunStart;
     public BattleRunStats RunStats { get; private set; } = new BattleRunStats();
@@ -775,6 +777,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         SpritePickWeightTable.Reload();
         WaveSlotTable.Reload();
         ChapterStatScaleTable.Reload();
+        ChapterRouteTable.Reload();
 
         currentStage = stage;
         ClearAllMonsters();
@@ -820,6 +823,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         // 按关卡类型切 BGM（Loading 中会记 pending，结束后再播）
         GameBgm.PlayForStage(stage.type);
+
+        // 进关即写一次中断存档（后续由 BattleStateSaver 心跳续写退出时刻）
+        BattleStateSaver.Instance?.SaveBattleState();
 
         switch (stage.type)
         {
@@ -1019,7 +1025,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         var parallax = FindObjectOfType<ParallaxBackground>();
         if (parallax != null) parallax.ResetHeroOrigin();
 
-        string title = GameConfig.GetChapterTitleText(CurrentChapter);
+        string title = GameConfig.GetChapterMapName(CurrentChapter);
         string body = null;
         if (Rules.UseTutorialSplash)
         {
@@ -1674,14 +1680,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (m.LastDamageSource != null && m.LastDamageSource.isAlly)
             RecordAllyKill(m.LastDamageSource);
         AdventureLogAchievements.OnMonsterKilled(m, CurrentChapter);
+        // 英雄可见等级已停用（属性成长只走城镇天赋），只保留隐藏经验用于裂缝掉落稀有度
         HiddenLevelSystem.AddKillExp(m);
-
-        // 英雄可见等级：接击杀经验（此前 AddExp 全项目零调用点，等级恒 Lv1，属死轴 bug；
-        // BattleStateSaver 已会跨关持久化 heroLevel，GridBackpackSystem 按 level 解锁装备）
-        int heroKillExp = GameConfig.HIDDEN_EXP_KILL_NORMAL;
-        if (m.IsBossUnit) heroKillExp = GameConfig.HIDDEN_EXP_KILL_BOSS;
-        else if (m.IsEliteWave) heroKillExp = GameConfig.HIDDEN_EXP_KILL_ELITE;
-        Hero.Instance?.AddExp(heroKillExp);
 
         // 连杀：累计击杀连击数（≥3 起会在下方兑现额外金币，见 COMBO_BONUS_GOLD）
         float now = Time.time;
@@ -2006,8 +2006,19 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                     },
                     onNextChapter: () =>
                     {
-                        int next = (ChapterManager.Instance?.currentChapter ?? 1) + 1;
-                        if (next > 8) next = 8;
+                        // 走路线表：主线 1→2→5→6→7→8，第 8 章之后没有下一章（终局）
+                        int cur = ChapterManager.Instance?.currentChapter ?? 1;
+                        int next = ChapterRouteTable.NextChapter(cur, SaveSystem.Instance?.Data);
+                        if (next < 1)
+                        {
+                            Debug.Log("[BattleManager] 已是路线终点，直接回城");
+                            GridBackpackSystem.Instance?.ClearRunEquipment();
+                            MercenaryManager.Instance?.ClearAllMercs();
+                            MercHireSession.ClearHired();
+                            EndRunLoadout();
+                            GameSceneManager.Instance?.ReturnToTown();
+                            return;
+                        }
                         ChapterManager.Instance?.StartChapter(next);
                         if (ChapterManager.Instance?.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
                             ChapterManager.Instance.SelectStage(ChapterManager.Instance.stageMap[0]);
@@ -2137,23 +2148,21 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         GameSceneManager.Instance.LoadTownScene();
     }
 
-    /// <param name="isDeath">死亡：本局金币清零（保留进局快照）；撤离：保留本局金币。材料/附魔石均已在钱包中保留。</param>
+    /// <summary>
+    /// 死亡 / 撤离结算：构筑（装备/技能/佣兵）一律清空；
+    /// 金币与材料/附魔石等资源一律保留 —— 死亡也保留本局赚到的金币，并按金币产出天赋石。
+    /// </summary>
     void TriggerLegacyFlow(bool isDeath)
     {
-        if (isDeath)
-            currentGold = _goldAtRunStart;
-
         // 裂缝口径：局内装备/武器退出清空，不带出城镇
         GridBackpackSystem.Instance?.ClearRunEquipment();
 
         PersistBattleGold();
-        int talentGain = 0;
-        if (!isDeath)
-        {
-            talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
-            if (talentGain > 0)
-                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
-        }
+        // 金币保留 → 天赋石照发（死亡与撤离同规则）
+        int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
+        if (talentGain > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
+
         SaveSystem.Instance?.Save();
         BattleStateSaver.Instance?.ClearBattleState();
 
@@ -2172,7 +2181,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     {
         RunStats.IsDeath = isDeath;
         RunStats.IsVictory = isVictory && !isDeath;
-        RunStats.GoldGained = isDeath ? 0 : Mathf.Max(0, (int)(currentGold - _goldAtRunStart));
+        RunStats.GoldGained = Mathf.Max(0, (int)(currentGold - _goldAtRunStart));   // 死亡也保留金币，结算照常显示
         RunStats.TalentGained = talentGain;
         RunStats.EquipCount = GridBackpackSystem.Instance != null
             ? GridBackpackSystem.Instance.GetAllItemsForLegacy().Count
@@ -2189,16 +2198,22 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (currentStage != null)
             RunStats.StageTitle = ChapterManager.Instance != null
                 ? ChapterManager.Instance.GetCurrentStageDisplayName()
-                : $"第{RunStats.Chapter}章";
+                : GameConfig.GetChapterMapName(RunStats.Chapter);
         else
-            RunStats.StageTitle = $"第{RunStats.Chapter}章";
+            RunStats.StageTitle = GameConfig.GetChapterMapName(RunStats.Chapter);
         RunStats.ResolveMvp();
     }
 
     /// <summary>通关后弹结算，再执行后续选关/回城。</summary>
     public void ShowVictorySettlementThen(System.Action afterConfirm)
     {
+        // 金币已在通关时 PersistBattleGold 写回；这里按本局金币产出补发天赋石（此前只填了结算面板、没真发）
         int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
+        if (talentGain > 0)
+        {
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
+            SaveSystem.Instance?.Save();
+        }
         FillSettlementSnapshot(isDeath: false, talentGain, isVictory: true);
         AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
         BattleSettlementUI.Show(RunStats, afterConfirm);

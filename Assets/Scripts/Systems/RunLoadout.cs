@@ -70,8 +70,8 @@ public static class RunLoadout
 
     /// <summary>本局最多携带的主动技能数（含职业初始技）。V6：3 → 4。</summary>
     public const int MaxSkillSlots = 4;
-    /// <summary>本局最多同时出战的佣兵数（不受酒馆等级限制）。</summary>
-    public const int MaxRunMercs = 4;
+    /// <summary>本局最多同时出战的佣兵数（不受酒馆等级限制）。战斗 UI 只有 2 张佣兵卡，故上限 2。</summary>
+    public const int MaxRunMercs = 2;
 
     static RunLoadoutData _data;
     static readonly Dictionary<string, int> _themeCache = new Dictionary<string, int>();
@@ -111,6 +111,15 @@ public static class RunLoadout
     // 开新局 / 续关 / 落档
     // ============================================================
 
+    /// <summary>本局归属章节：优先冒险页实际选中的章，其次存档最远解锁章。</summary>
+    static int ResolveRunChapter()
+    {
+        int pending = AdventureUI.PendingBattleChapter;
+        if (pending >= 1) return pending;
+        int max = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
+        return Mathf.Max(1, max);
+    }
+
     /// <summary>开新局：职业初始技能进构筑，清空佣兵与势能。</summary>
     public static RunLoadoutData BeginNew(PlayerJobId job)
     {
@@ -118,7 +127,9 @@ public static class RunLoadout
         {
             active = true,
             jobId = (int)job,
-            chapter = Mathf.Max(1, SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1),
+            // 章节分叉后 maxUnlockedChapter 是「最远可达章」，玩家实际打的不一定是它；
+            // 优先用冒险页真正选中的章（PendingBattleChapter）
+            chapter = ResolveRunChapter(),
             stageIndex = 0,
             heroLevel = 1
         };

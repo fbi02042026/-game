@@ -80,7 +80,8 @@ public static class ResourceWallet
             case ResourceType.Stamina: return "体力";
             case ResourceType.EnchantStone: return "附魔石";
             case ResourceType.DecomposeMat: return "强化石";
-            case ResourceType.TalentPoint: return "天赋点";
+            // 枚举名沿用 TalentPoint（存档字段 talentPoints），对外统一叫「天赋石」
+            case ResourceType.TalentPoint: return "天赋石";
             default: return "资源";
         }
     }
