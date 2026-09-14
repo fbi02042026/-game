@@ -200,22 +200,28 @@ public class BattlePrefabGenerator : EditorWindow
         GameObject gridContainer = new GameObject("GridContainer");
         gridContainer.transform.SetParent(backpackPanel.transform, false);
         RectTransform gridRT = gridContainer.AddComponent<RectTransform>();
-        SetAnchored(gridRT, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-            new Vector2(0, -13), new Vector2(587, 307));
 
         GridLayoutGroup gridLayout = gridContainer.AddComponent<GridLayoutGroup>();
         gridLayout.cellSize = new Vector2(87, 87);
         gridLayout.spacing = new Vector2(7, 7);
         gridLayout.padding = new RectOffset(7, 7, 7, 7);
         gridLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        gridLayout.constraintCount = 6;
+        gridLayout.constraintCount = GameConfig.BACKPACK_WIDTH;
         gridLayout.childAlignment = TextAnchor.UpperCenter;
 
-        // 创建24个格子
+        // 容器尺寸按 4×3=12 格的实际占用计算，避免留大片空白（与 GameConfig 容量一致）
+        int cols = GameConfig.BACKPACK_WIDTH;
+        int rows = GameConfig.BACKPACK_HEIGHT;
+        float gw = cols * gridLayout.cellSize.x + (cols - 1) * gridLayout.spacing.x + gridLayout.padding.left + gridLayout.padding.right;
+        float gh = rows * gridLayout.cellSize.y + (rows - 1) * gridLayout.spacing.y + gridLayout.padding.top + gridLayout.padding.bottom;
+        SetAnchored(gridRT, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0, -13), new Vector2(gw, gh));
+
+        // 创建12个格子（与 GameConfig.BACKPACK_WIDTH×HEIGHT 容量一致）
         List<GridCellUI> gridCells = new List<GridCellUI>();
-        for (int y = 0; y < 4; y++)
+        for (int y = 0; y < rows; y++)
         {
-            for (int x = 0; x < 6; x++)
+            for (int x = 0; x < cols; x++)
             {
                 GridCellUI cell = CreateGridCell(gridContainer.transform, $"Cell_{x}_{y}", x, y);
                 gridCells.Add(cell);
