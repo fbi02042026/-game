@@ -98,21 +98,18 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 更新顶部资源：金币 / 天赋石 / 材料；附魔石有独立文本则另刷
+    /// 更新顶部资源：金币 / 天赋石 / 材料（附魔石按需求移除，不再显示）。
+    /// 金币走 UpdateGold（局内实时），这里只补另外两项。
     /// </summary>
     public void UpdateTopBarResources()
     {
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
 
-        if (talentStoneText != null)
-            talentStoneText.text = data.talentPoints.ToString();
-        else if (enchantStoneText != null)
-            // 旧布局三资源：金 / 天赋石(占附魔位) / 材料
-            enchantStoneText.text = data.talentPoints.ToString();
-
-        if (talentStoneText != null && enchantStoneText != null)
-            enchantStoneText.text = data.enchantStones.ToString();
+        // 天赋石：新预制体没有独立 TalentText，复用旧布局第三个资源位显示
+        var talentTarget = talentStoneText != null ? talentStoneText : enchantStoneText;
+        if (talentTarget != null)
+            talentTarget.text = data.talentPoints.ToString();
 
         if (decomposeMatText != null)
             decomposeMatText.text = data.decomposeMats.ToString();

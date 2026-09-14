@@ -93,7 +93,8 @@ public partial class BattleUI : MonoBehaviour
 
     GameObject _backpackRowLock; // GridContainer 下用户放的底行锁图案
 
-    /// <summary>刷新下方网格背包（只锁最底一行 y=3，用你放的锁图案）</summary>
+    /// <summary>刷新下方网格背包。现在是 4×3=12 格且默认全开，
+    /// 只有当解锁行数少于总行数时（以后加行）才会亮底行锁图案。</summary>
     public void UpdateBackpackGrid()
     {
         // 战斗中捡到装备时可能还没绑过格子，先补绑再判空
@@ -171,13 +172,13 @@ public partial class BattleUI : MonoBehaviour
 
     public void RefreshLootModeChrome()
     {
-        if (organizeButton != null)
+        if (lootConfirmButton != null)
         {
-            var txt = organizeButton.GetComponentInChildren<Text>(true);
+            var txt = lootConfirmButton.GetComponentInChildren<Text>(true);
             if (txt != null)
-                txt.text = BattleLootMode.Active ? "确定" : "整理";
-            // 平时隐藏整理；仅 Loot 模式显示「确定」
-            organizeButton.gameObject.SetActive(BattleLootMode.Active);
+                txt.text = "确定";
+            // 整理功能已移除：这个按钮只在拾取模式出现
+            lootConfirmButton.gameObject.SetActive(BattleLootMode.Active);
         }
         UpdateBackpackGrid();
         BattleJoystick.Instance?.SetVisible(!BattleLootMode.Active
@@ -239,13 +240,10 @@ public partial class BattleUI : MonoBehaviour
         return null;
     }
 
-    void OnOrganizeBackpack()
+    /// <summary>拾取模式的「确定」。整理背包已按需求移除，这里只负责确认。</summary>
+    void OnLootConfirm()
     {
         if (BattleLootMode.Active)
-        {
             BattleLootMode.Confirm();
-            return;
-        }
-        GridBackpackSystem.Instance?.OrganizeBackpack();
     }
 }

@@ -111,7 +111,10 @@ public partial class BattleUI : MonoBehaviour
             var av = new SkillAvatarUI { root = t.gameObject };
             // 图标层：不能用 icon底 自身背景（会盖掉美术底图），统一补一个子层
             av.avatarImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
-            av.labelText = t.GetComponentInChildren<Text>(true);   // 临时 UI 的「被动」底字
+            av.labelText = t.GetComponentInChildren<Text>(true);   // 原「被动」底字，改成显示技能名
+            // 右下角等级：美术在每个技能槽下放了 level 节点，优先用它；没有再运行时补
+            av.levelText = FindTextNamed(t, "level", "Level", "SkillLevel")
+                ?? EnsureCornerText(t, "SkillLevel", 12);
             av.cooldownText = EnsureChildText(t, "SkillCd", 16);
             av.energyFill = EnsureChildBar(t, "SkillEnergy", new Color(0.98f, 0.78f, 0.28f, 1f));
             runSkillSlots.Add(av);
@@ -184,6 +187,36 @@ public partial class BattleUI : MonoBehaviour
         txt.alignment = TextAnchor.MiddleCenter;
         txt.fontSize = fontSize;
         txt.color = new Color(1f, 0.92f, 0.72f);
+        txt.raycastTarget = false;
+        var f = GameFonts.GetChinese();
+        if (f != null) txt.font = f;
+        return txt;
+    }
+
+    /// <summary>
+    /// 在槽位右下角补一行小字（等级/星级）。锚在角上，只占一小块，不碰任何图片节点的尺寸。
+    /// </summary>
+    static Text EnsureCornerText(Transform parent, string name, int fontSize)
+    {
+        var exist = FindDeepChildIgnoreCase(parent, name);
+        if (exist != null)
+        {
+            var e = exist.GetComponent<Text>();
+            if (e != null) return e;
+        }
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(parent, false);
+        go.transform.SetAsLastSibling();
+        var rt = go.GetComponent<RectTransform>();
+        // 右下角固定一个小盒子：宽 = 父的 45%，高 = 父的 22%
+        rt.anchorMin = new Vector2(0.55f, 0.02f);
+        rt.anchorMax = new Vector2(1f, 0.24f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var txt = go.GetComponent<Text>();
+        txt.alignment = TextAnchor.LowerRight;
+        txt.fontSize = fontSize;
+        txt.color = new Color(1f, 0.96f, 0.78f);
         txt.raycastTarget = false;
         var f = GameFonts.GetChinese();
         if (f != null) txt.font = f;

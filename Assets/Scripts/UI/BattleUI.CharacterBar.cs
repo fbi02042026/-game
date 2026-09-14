@@ -27,9 +27,10 @@ public partial class BattleUI : MonoBehaviour
                 // 等级系统已停用（2026-09-14）：局内不再显示 Lv，属性只由天赋/装备决定
                 playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: false);
             }
-            // 玩家头像对接
+            // 玩家头像对接；玩家技能走底部 4 个被动槽，头像右上角不放技能图标
             Sprite playerIcon = mm != null ? mm.GetPlayerIcon() : null;
             playerSlot.SetPortrait(playerIcon);
+            playerSlot.SetSkillBadge(null);
         }
 
         if (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle)
@@ -62,6 +63,8 @@ public partial class BattleUI : MonoBehaviour
         Sprite mercIcon = MercPortraitSprites.GetHead(!string.IsNullOrEmpty(m.hireId) ? m.hireId : StoryProgress.TutorialMercHireId)
             ?? mm.GetIcon(m.mercId);
         mercSlot1.SetPortrait(mercIcon);
+        // 右上角小图标=该佣兵的技能（同样由 MercSkillCaster 自动释放）
+        mercSlot1.SetSkillBadge(GetMercSkillIcon(m));
         // 教程救援佣兵不在存档出战列表里，技能圆形头像要单独绑
         merc1SkillAvatar?.SetAvatar(mercIcon);
         // 没配头像时也不要露出「头像」占位白框
@@ -111,7 +114,6 @@ public partial class BattleUI : MonoBehaviour
             slot.ShowUnavailable(MercLockedHint);
             return;
         }
-
         if (index < mercIds.Count)
         {
             slot.SetLocked(false);
@@ -127,6 +129,8 @@ public partial class BattleUI : MonoBehaviour
             Sprite icon = MercPortraitSprites.GetHead(hireId) ?? MercPortraitSprites.GetHead(id) ?? (mm != null ? mm.GetIcon(id) : null);
             string job = mm != null ? mm.GetJobName(id) : id;
             slot.SetPortrait(icon);
+            // 右上角小图标=该佣兵的技能（自动释放，不用手点）
+            slot.SetSkillBadge(index < activeMercs.Count ? GetMercSkillIcon(activeMercs[index]) : null);
 
             if (index < activeMercs.Count && activeMercs[index] != null)
             {

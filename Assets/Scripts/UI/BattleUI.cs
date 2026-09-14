@@ -16,9 +16,9 @@ public partial class BattleUI : MonoBehaviour
     public Text difficultyLabel;    // 难度标识 "普通"
     public Text goldText;           // 金币
     public Text talentStoneText;    // 天赋石
-    public Text enchantStoneText;   // 附魔石（可选）
+    public Text enchantStoneText;   // 旧布局的第三个资源位；新顶栏用它显示天赋石，附魔石不再单列
     public Text decomposeMatText;   // 材料
-    public Button settingsButton;   // 设置按钮
+    public Button settingsButton;   // 设置按钮（右上角顶栏）
 
     [Header("=== 进度条 ===")]
     public Transform progressContainer; // 进度条容器
@@ -41,8 +41,9 @@ public partial class BattleUI : MonoBehaviour
 
     [Header("=== 网格背包 ===")]
     public GridLayoutGroup gridLayout;       // 网格布局组
-    public List<GridCellUI> gridCells;       // 24个格子
-    public Button organizeButton;            // 整理背包
+    public List<GridCellUI> gridCells;       // 12 格（4 列 × 3 行，与美术 GridContainer 一致）
+    /// <summary>拾取模式（BattleLootMode）的「确定」按钮。整理功能已移除。</summary>
+    public Button lootConfirmButton;
 
     [Header("=== 技能头像区 ===")]
     public SkillAvatarUI playerSkillAvatar;   // 玩家技能头像（圆形+能量槽+光边）
@@ -51,31 +52,30 @@ public partial class BattleUI : MonoBehaviour
     /// <summary>自动战斗未开放。运行时隐藏，勿在预制体里删节点。</summary>
     public Button autoButton;
 
-    [Header("=== 底部临时布局（4技能槽 / 6装备槽）===")]
-    public Transform skillSlotRoot;      // BackpackPanel/skill（4 个主动技槽，充能满自动释放）
-    public Transform equipSlotRoot;      // BackpackPanel/zhuangbei（6 个装备快捷槽）
+    [Header("=== 底部临时布局（4技能槽 / 5装备槽）===")]
+    public Transform skillSlotRoot;      // BackpackPanel/SkillBar（4 个被动技槽，自动释放）
+    public Transform equipSlotRoot;      // BackpackPanel/zhuangbei（5 个装备快捷槽）
     public List<SkillAvatarUI> runSkillSlots = new List<SkillAvatarUI>();
     public List<EquipQuickSlotUI> equipQuickSlots = new List<EquipQuickSlotUI>();
-    /// <summary>6 个装备快捷槽的顺序，与预制体 zhuangbei 下 icon底 子节点顺序一致（无披风）。</summary>
+    /// <summary>
+    /// 装备快捷槽顺序兜底：先按节点名认部位（见 EquipSlotTypeOf），认不出来才按下标取这里。
+    /// 按需求暂时不做「手」和「披风」两槽。
+    /// </summary>
     static readonly EquipSlotType[] QuickSlotOrder =
     {
         EquipSlotType.Head,     // 头
         EquipSlotType.Chest,    // 胸甲
-        EquipSlotType.Hands,    // 手
         EquipSlotType.Feet,     // 脚
-        EquipSlotType.OffHand,  // 左手（副手）
-        EquipSlotType.MainHand  // 右手（主手）
+        EquipSlotType.OffHand,  // 副手
+        EquipSlotType.MainHand  // 主手
     };
 
     [Header("=== 底部功能入口 ===")]
-    public Button characterButton;   // 角色属性按钮
-    public Button pauseButton;       // 暂停按钮
-    // settingsButton 已在顶部状态栏定义，底部复用同一个
+    public Button characterButton;   // 角色属性按钮（新预制体暂无此节点）
+    // 暂停已合并进右上角设置的弹窗里，不再单独放按钮
 
     [Header("=== 面板 ===")]
     public GameObject characterPanel;    // 角色属性面板
-    public GameObject pausePanel;        // 暂停面板
-    public GameObject settingsPanel;     // 设置面板
 
     void Awake()
     {
@@ -107,15 +107,19 @@ public partial class BattleUI : MonoBehaviour
             UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
 
         BindAutoBattleUnavailable();
-        if (pauseButton != null) pauseButton.onClick.AddListener(OnPause);
         if (characterButton != null) characterButton.onClick.AddListener(OnOpenCharacter);
-        if (settingsButton != null) settingsButton.onClick.AddListener(OnOpenSettings);
-        if (organizeButton != null)
+        // 设置入口固定在右上角；暂停与撤离都在这个弹窗里
+        if (settingsButton != null)
         {
-            organizeButton.onClick.RemoveListener(OnOrganizeBackpack);
-            organizeButton.onClick.AddListener(OnOrganizeBackpack);
+            settingsButton.onClick.RemoveListener(OnOpenSettings);
+            settingsButton.onClick.AddListener(OnOpenSettings);
         }
-        // 头像=技能：在 AutoBind + WireSlotSkillClicks 里统一绑 Player/Merc 槽
+        // 拾取模式的「确定」：平时隐藏，不需要整理按钮
+        if (lootConfirmButton != null)
+        {
+            lootConfirmButton.onClick.RemoveListener(OnLootConfirm);
+            lootConfirmButton.onClick.AddListener(OnLootConfirm);
+        }
     }
 
     void Start()
@@ -288,8 +292,6 @@ public partial class BattleUI : MonoBehaviour
     public void CloseAllPanels()
     {
         if (characterPanel != null) characterPanel.SetActive(false);
-        if (pausePanel != null) pausePanel.SetActive(false);
-        if (settingsPanel != null) settingsPanel.SetActive(false);
         if (SettingsPopupUI.Instance != null && SettingsPopupUI.Instance.IsOpen)
             SettingsPopupUI.Instance.Close();
     }

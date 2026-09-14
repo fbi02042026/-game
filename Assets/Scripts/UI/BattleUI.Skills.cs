@@ -8,7 +8,10 @@ using System.Collections.Generic;
 /// </summary>
 public partial class BattleUI : MonoBehaviour
 {
-    /// <summary>刷新底部 4 个主动技槽：本局构筑技能，充能满自动释放。</summary>
+    /// <summary>
+    /// 刷新底部 4 个技能槽：全部为被动技能，充能满后由 PlayerSkillPassive 自动释放，
+    /// 头像/槽位不再接手动释放。
+    /// </summary>
     public void UpdateRunSkillSlots()
     {
         if (runSkillSlots == null || runSkillSlots.Count == 0) return;
@@ -25,7 +28,8 @@ public partial class BattleUI : MonoBehaviour
             if (string.IsNullOrEmpty(id))
             {
                 slot.SetAvatar(null);
-                slot.SetLabelVisible(true);
+                slot.SetSkillName(null);            // 空槽退回「被动」占位
+                slot.SetLevelText("");
                 slot.SetEnergyFill(0f);
                 if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
                 continue;
@@ -34,12 +38,10 @@ public partial class BattleUI : MonoBehaviour
             var active = RunDraftDirector.BuildRunSkill(id, job);
             int star = RunLoadout.StarOf(id);
             slot.SetAvatar(active != null ? active.icon : null);
-            slot.SetLabelVisible(false);
-            if (slot.cooldownText != null)
-            {
-                slot.cooldownText.gameObject.SetActive(true);
-                slot.cooldownText.text = $"★{star}";
-            }
+            // 底字不再写死「被动」：有技能就显示技能名
+            slot.SetSkillName(active != null ? active.skillName : id);
+            // 右下角等级：本作技能没有独立等级，用星级表示
+            slot.SetLevelText($"★{star}");
         }
     }
 
@@ -80,10 +82,10 @@ public partial class BattleUI : MonoBehaviour
             bool has = ids != null && i < ids.Count;
             slot.SetEnergyFill(has && bm != null ? bm.GetPlayerSkillEnergy(i) : 0f);
             if (slot.cooldownText == null || !has) continue;
+            // 星级已经挪到右下角 level 节点，这里只显示剩余冷却
             float cd = sys != null ? sys.GetPlayerSkillCooldownRatio(i) : 0f;
-            slot.cooldownText.text = cd > 0.01f
-                ? cd.ToString("0.0") + "s"
-                : "★" + RunLoadout.StarOf(ids[i]);
+            slot.cooldownText.text = cd > 0.01f ? cd.ToString("0.0") + "s" : "";
+            slot.cooldownText.gameObject.SetActive(cd > 0.01f);
         }
     }
 
@@ -106,54 +108,9 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 暂停：打开暂停面板
+    /// 暂停已收进设置弹窗（SettingsPopupUI：继续/撤离），这里不再维护独立的暂停面板。
+    /// 头像/槽位也不再接手动释放：技能由 PlayerSkillPassive / MercSkillCaster 自动放。
     /// </summary>
-    void OnPause()
-    {
-        if (pausePanel != null)
-        {
-            var panel = pausePanel.GetComponent<PausePanel>();
-            if (panel != null)
-            {
-                panel.Show();
-            }
-            else
-            {
-                // 兜底：如果没有PausePanel组件，简单切换timeScale
-                pausePanel.SetActive(!pausePanel.activeSelf);
-                Time.timeScale = pausePanel.activeSelf ? 0f : 1f;
-            }
-        }
-    }
-
-    /// <summary>
-    /// 玩家技能释放（点击头像）— 已改为被动，默认不可手动。
-    /// </summary>
-    void OnPlayerSkillClick()
-    {
-        if (!PlayerSkillPassive.AllowManualCast)
-            return;
-
-        if (TutorialDirector.IsTutorialBattle
-            && TutorialDirector.Instance != null
-            && !TutorialDirector.Instance.AllowBattleSkillClick)
-            return;
-
-        if (BattleManager.Instance != null)
-        {
-            bool success = BattleManager.Instance.TryUsePlayerSkill();
-            if (!success)
-                UIManager.Instance?.ShowToast("技能能量不足");
-        }
-    }
-
-    void OnMercSkillClick(int mercIndex)
-    {
-        if (BattleManager.Instance == null) return;
-        bool success = BattleManager.Instance.TryUseMercSkill(mercIndex);
-        if (!success)
-            UIManager.Instance?.ShowToast("佣兵技能未就绪");
-    }
 
     /// <summary>更新技能区圆形头像</summary>
     public void UpdateSkillAvatars()

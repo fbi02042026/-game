@@ -22,7 +22,9 @@ public class CharacterSlotUI
     /// <summary>未解锁/空槽时为 false，蓝条强制保持 0</summary>
     public bool EnergyEnabled { get; private set; } = true;
     public Text lanText;                // 蓝条文字
-    public GameObject lockedOverlay;    // 锁定遮罩
+    public GameObject lockedOverlay;    // 锁定遮罩（预制体没有时运行时补建）
+    /// <summary>右上角技能小图标：佣兵技能的标识，自动释放。</summary>
+    public Image skillBadge;
 
     private float _lastEnergy = 0f;
 
@@ -92,6 +94,101 @@ public class CharacterSlotUI
         else
             fitter.aspectRatio = 1f;
         rt.localScale = Vector3.one;
+    }
+
+    /// <summary>
+    /// 未解锁遮罩：新预制体里没有这个节点，运行时补一个全拉伸的半透明黑底 + 居中文案。
+    /// 默认隐藏，由 SetLocked / ShowUnavailable / KeepArtistDefault 决定显隐。
+    /// </summary>
+    public void EnsureLockedOverlay()
+    {
+        if (lockedOverlay != null || root == null) return;
+
+        Transform exist = root.transform.Find("LockedOverlay");
+        GameObject go;
+        if (exist != null)
+        {
+            go = exist.gameObject;
+        }
+        else
+        {
+            go = new GameObject("LockedOverlay", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(root.transform, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            var img = go.GetComponent<Image>();
+            img.color = new Color(0.04f, 0.04f, 0.06f, 0.62f);
+            img.raycastTarget = false;
+
+            var txtGo = new GameObject("LockedText", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            txtGo.transform.SetParent(go.transform, false);
+            var trt = txtGo.GetComponent<RectTransform>();
+            trt.anchorMin = new Vector2(0.08f, 0.34f);
+            trt.anchorMax = new Vector2(0.92f, 0.66f);
+            trt.offsetMin = Vector2.zero;
+            trt.offsetMax = Vector2.zero;
+            var t = txtGo.GetComponent<Text>();
+            t.alignment = TextAnchor.MiddleCenter;
+            t.fontSize = 14;
+            t.color = new Color(1f, 0.92f, 0.72f);
+            t.text = "未解锁";
+            t.raycastTarget = false;
+            var f = GameFonts.GetChinese();
+            if (f != null) t.font = f;
+        }
+        lockedOverlay = go;
+        go.transform.SetAsLastSibling();
+        go.SetActive(false);
+    }
+
+    /// <summary>
+    /// 右上角技能小图标。必须挂在头像的「父节点」上 —— 头像自己被 FitPortraitNoStretch
+    /// 加了 AspectRatioFitter，挂在它身上会被按原图比例拉变形。
+    /// </summary>
+    public void EnsureSkillBadge()
+    {
+        if (skillBadge != null || portrait == null) return;
+
+        Transform holder = portrait.transform.parent != null ? portrait.transform.parent : root.transform;
+        Transform exist = holder.Find("SkillBadge");
+        GameObject go;
+        if (exist != null)
+        {
+            go = exist.gameObject;
+        }
+        else
+        {
+            go = new GameObject("SkillBadge", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(holder, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(1f, 1f);
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(-13f, -13f);
+            rt.sizeDelta = new Vector2(28f, 28f);
+            var img = go.GetComponent<Image>();
+            img.raycastTarget = false;
+            img.preserveAspect = true;   // 只按比例缩放，不改原图尺寸
+            img.sprite = null;
+            img.color = Color.white;
+        }
+        skillBadge = go.GetComponent<Image>();
+        go.transform.SetAsLastSibling();
+        go.SetActive(false);
+    }
+
+    /// <summary>设置/清除右上角技能图标；给 null 就隐藏。</summary>
+    public void SetSkillBadge(Sprite icon)
+    {
+        if (skillBadge == null) EnsureSkillBadge();
+        if (skillBadge == null) return;
+        skillBadge.preserveAspect = true;
+        skillBadge.sprite = icon;
+        skillBadge.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+        skillBadge.gameObject.SetActive(icon != null);
     }
 
     /// <summary>技能能量：底栏 lanBar 显示进度，满时仅显示光边（不改头像框）</summary>
@@ -194,6 +291,7 @@ public class CharacterSlotUI
     /// </summary>
     public void SetLocked(bool locked)
     {
+        EnsureLockedOverlay();
         if (lockedOverlay != null) lockedOverlay.SetActive(locked);
         if (root != null)
             root.SetActive(true);
@@ -229,7 +327,9 @@ public class CharacterSlotUI
     {
         SetEnergyEnabled(false);
         if (root != null) root.SetActive(true);
+        EnsureLockedOverlay();
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
+        SetSkillBadge(null);
         if (portrait != null) portrait.gameObject.SetActive(false);
         if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
         if (levelLabel != null) levelLabel.text = "";
@@ -244,6 +344,7 @@ public class CharacterSlotUI
         SetEnergyEnabled(false);
         if (root == null) return;
         root.SetActive(true);
+        EnsureLockedOverlay();
         if (lockedOverlay != null)
             lockedOverlay.SetActive(true);
         ClearNumericDisplays();
@@ -257,7 +358,9 @@ public class CharacterSlotUI
         SetEnergyEnabled(false);
         if (root == null) return;
         root.SetActive(true);
+        EnsureLockedOverlay();
         if (lockedOverlay != null) lockedOverlay.SetActive(true);
+        SetSkillBadge(null);
         if (portrait != null) portrait.gameObject.SetActive(false);
         if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
         ApplyLockedOverlayText(label ?? "未解锁");

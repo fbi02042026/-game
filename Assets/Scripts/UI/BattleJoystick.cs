@@ -197,8 +197,8 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     void RaiseOrganizeAbove()
     {
         var ui = BattleUI.Instance;
-        if (ui != null && ui.organizeButton != null)
-            ui.organizeButton.transform.SetAsLastSibling();
+        if (ui != null && ui.lootConfirmButton != null)
+            ui.lootConfirmButton.transform.SetAsLastSibling();
         transform.SetSiblingIndex(Mathf.Max(0, transform.parent.childCount - 2));
     }
 

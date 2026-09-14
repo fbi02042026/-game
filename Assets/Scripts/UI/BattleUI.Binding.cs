@@ -31,25 +31,10 @@ public partial class BattleUI : MonoBehaviour
             Transform t = FindDeepChildIgnoreCase(transform, "SettingsButton");
             if (t != null) settingsButton = t.GetComponent<Button>();
         }
-        if (settingsPanel == null)
-        {
-            Transform t = FindDeepChildIgnoreCase(transform, "SettingsPanel");
-            if (t != null) settingsPanel = t.gameObject;
-        }
-        if (pausePanel == null)
-        {
-            Transform t = FindDeepChildIgnoreCase(transform, "PausePanel");
-            if (t != null) pausePanel = t.gameObject;
-        }
         if (characterPanel == null)
         {
             Transform t = FindDeepChildIgnoreCase(transform, "CharacterPanel");
             if (t != null) characterPanel = t.gameObject;
-        }
-        if (pauseButton == null)
-        {
-            Transform t = FindDeepChildIgnoreCase(transform, "PauseButton");
-            if (t != null) pauseButton = t.GetComponent<Button>();
         }
         if (characterButton == null)
         {
@@ -61,25 +46,24 @@ public partial class BattleUI : MonoBehaviour
             Transform t = FindDeepChildIgnoreCase(transform, "AutoButton");
             if (t != null) autoButton = t.GetComponent<Button>();
         }
-        if (organizeButton == null)
+        if (lootConfirmButton == null)
         {
+            // 拾取模式的确认按钮：旧预制体叫「整理」，新美术还没出，两种名字都认
             Transform backpack = FindDeepChildIgnoreCase(transform, "BackpackPanel")
                 ?? FindDeepChildIgnoreCase(transform, "Backpack");
             Transform t = null;
             if (backpack != null)
-            {
-                t = FindDeepChildIgnoreCase(backpack, "整理")
-                    ?? FindDeepChildIgnoreCase(backpack, "整理Button")
-                    ?? FindDeepChildIgnoreCase(backpack, "OrganizeButton")
-                    ?? FindDeepChildIgnoreCase(backpack, "SortButton");
-            }
+                t = FindDeepChildIgnoreCase(backpack, "确定")
+                    ?? FindDeepChildIgnoreCase(backpack, "Confirm")
+                    ?? FindDeepChildIgnoreCase(backpack, "ConfirmButton")
+                    ?? FindDeepChildIgnoreCase(backpack, "整理")
+                    ?? FindDeepChildIgnoreCase(backpack, "OrganizeButton");
             if (t == null)
-            {
-                t = FindDeepChildIgnoreCase(transform, "整理")
-                    ?? FindDeepChildIgnoreCase(transform, "OrganizeButton")
-                    ?? FindDeepChildIgnoreCase(transform, "SortButton");
-            }
-            if (t != null) organizeButton = t.GetComponent<Button>();
+                t = FindDeepChildIgnoreCase(transform, "确定")
+                    ?? FindDeepChildIgnoreCase(transform, "ConfirmButton")
+                    ?? FindDeepChildIgnoreCase(transform, "整理")
+                    ?? FindDeepChildIgnoreCase(transform, "OrganizeButton");
+            if (t != null) lootConfirmButton = t.GetComponent<Button>();
         }
 
         if (questDesc == null) questDesc = FindUIText("QuestDesc");
@@ -138,10 +122,9 @@ public partial class BattleUI : MonoBehaviour
         Add("StageLabel", stageLabel != null);
         Add("DifficultyLabel", difficultyLabel != null);
         Add("GoldText", goldText != null);
-        Add("EnchantText", enchantStoneText != null);
+        Add("天赋石文本", talentStoneText != null || enchantStoneText != null);
         Add("DecomposeText", decomposeMatText != null);
-        Add("TalentText(新预制体无此节点)", talentStoneText != null);
-        Add("SettingsButton", settingsButton != null);
+        Add("SettingsButton(右上角)", settingsButton != null);
 
         Add("ProgressBar", progressContainer != null);
         Add("PlayerMarker", playerMarker != null);
@@ -179,12 +162,9 @@ public partial class BattleUI : MonoBehaviour
         if (equipQuickSlots == null || equipQuickSlots.Count == 0) miss.Add("装备快捷槽(0 个)");
         if (gridCells == null || gridCells.Count == 0) miss.Add("GridContainer 格子(0 个)");
 
-        Add("整理按钮", organizeButton != null);
-        Add("PauseButton", pauseButton != null);
-        Add("PausePanel", pausePanel != null);
+        Add("拾取确定按钮", lootConfirmButton != null);
         Add("CharacterButton", characterButton != null);
         Add("CharacterPanel", characterPanel != null);
-        Add("SettingsPanel", settingsPanel != null);
         Add("AutoButton", autoButton != null);
 
         string quick = equipQuickSlots != null && equipQuickSlots.Count > 0
@@ -343,6 +323,10 @@ public partial class BattleUI : MonoBehaviour
                 ?? FindDeepChildIgnoreCase(root, "Lock");
             if (l != null) slot.lockedOverlay = l.gameObject;
         }
+        // 新预制体没有锁遮罩节点：运行时补一个（默认隐藏），这样「未解锁」才有可见效果
+        slot.EnsureLockedOverlay();
+        // 右上角技能角标容器先备好（有技能图标时才显示）
+        slot.EnsureSkillBadge();
 
         // 未解锁槽：不改 Image.Filled，完全保留美术默认
         if (configureFills) ApplyFillBars(slot);
@@ -395,42 +379,11 @@ public partial class BattleUI : MonoBehaviour
         if (avatar?.root != null) avatar.root.SetActive(active);
     }
 
-    void WireSlotSkillClicks()
-    {
-        WireSlotClick(playerSlot, OnPlayerSkillClick);
-        bool tutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
-        if ((GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && !tutorialMerc) return;
-        if ((GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && tutorialMerc)
-        {
-            WireSlotClick(mercSlot1, () => OnMercSkillClick(0));
-            return;
-        }
-        int maxSlots = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
-        if (maxSlots > 0)
-            WireSlotClick(mercSlot1, () => OnMercSkillClick(0));
-        if (maxSlots > 1)
-            WireSlotClick(mercSlot2, () => OnMercSkillClick(1));
-        // 未解锁槽：不加 Button，保持美术默认
-    }
-
-    static void WireSlotClick(CharacterSlotUI slot, UnityEngine.Events.UnityAction action)
-    {
-        if (slot?.root == null || action == null) return;
-        Button btn = slot.root.GetComponent<Button>();
-        if (btn == null) btn = slot.root.AddComponent<Button>();
-        btn.transition = Selectable.Transition.None;
-        btn.onClick.RemoveAllListeners();
-        btn.onClick.AddListener(action);
-        // 头像也可点
-        if (slot.portrait != null)
-        {
-            var pBtn = slot.portrait.GetComponent<Button>();
-            if (pBtn == null) pBtn = slot.portrait.gameObject.AddComponent<Button>();
-            pBtn.transition = Selectable.Transition.None;
-            pBtn.onClick.RemoveAllListeners();
-            pBtn.onClick.AddListener(action);
-        }
-    }
+    /// <summary>
+    /// 技能全部改为被动、充能满自动释放（PlayerSkillPassive / MercSkillCaster），
+    /// 头像与槽位不再挂 Button 做手动释放，这里保留空实现供既有调用点继续呼叫。
+    /// </summary>
+    void WireSlotSkillClicks() { }
 
     void BindSkillAvatar(ref SkillAvatarUI avatar, params string[] names)
     {

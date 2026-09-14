@@ -15,8 +15,10 @@ public class SkillAvatarUI
     public Text cooldownText;         // 冷却倒计时文字
     /// <summary>底部充能细条（新底部布局运行时补建）。</summary>
     public Image energyFill;
-    /// <summary>槽位底字（如临时 UI 的「被动」），有技能图标时隐藏。</summary>
+    /// <summary>槽位底字（原临时 UI 的「被动」占位），现在改成显示技能名。</summary>
     public Text labelText;
+    /// <summary>右下角等级文字（美术在每个技能槽下加了 level 节点，没有就运行时补建）。</summary>
+    public Text levelText;
 
     [System.NonSerialized]
     public System.Action onClick;     // 点击回调
@@ -85,10 +87,26 @@ public class SkillAvatarUI
         }
     }
 
-    /// <summary>底字（「被动」这类占位标签）显隐：有真图标时藏起来。</summary>
+    /// <summary>底字（原来是「被动」占位，现在显示技能名）显隐。</summary>
     public void SetLabelVisible(bool visible)
     {
         if (labelText != null) labelText.gameObject.SetActive(visible);
+    }
+
+    /// <summary>把底字换成技能名；没名字时退回占位文案。</summary>
+    public void SetSkillName(string name, string fallback = "被动")
+    {
+        if (labelText == null) return;
+        labelText.text = string.IsNullOrEmpty(name) ? fallback : name;
+        labelText.gameObject.SetActive(true);
+    }
+
+    /// <summary>右下角等级/星级：空串时整个隐藏。</summary>
+    public void SetLevelText(string text)
+    {
+        if (levelText == null) return;
+        levelText.text = text ?? "";
+        levelText.gameObject.SetActive(!string.IsNullOrEmpty(levelText.text));
     }
 
     /// <summary>充能比例 0~1（走底部细条，不依赖美术预设的能量环）。</summary>
