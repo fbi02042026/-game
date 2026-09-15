@@ -39,6 +39,24 @@ public static class SkillDraftMeta
         { "iron_wall",       M(SkillRarity.Rare,      SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
         { "frost_nova",      M(SkillRarity.Legendary, SynergyTag.Thunder, (int)PlayerJobId.Mage) },
         { "blood_harvest",   M(SkillRarity.Legendary, SynergyTag.Fire,    (int)PlayerJobId.Berserker) },
+
+        // —— 2026-09-15 第二轮扩充（13 → 24）——
+        // 治疗线：牧师原来只有 1 个技能，补短 CD 续航 + 长 CD 大治疗
+        { "swift_mend",      M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.Priest) },
+        { "sacred_revival",  M(SkillRarity.Epic,      SynergyTag.Guard,   (int)PlayerJobId.Priest) },
+        // 守护线：补短 CD 常驻减伤 + 传说级长减伤
+        { "stone_skin",      M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
+        { "aegis_oath",      M(SkillRarity.Legendary, SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
+        // 重甲近战线：原来只有 gale_stance 一个
+        { "bull_rush",       M(SkillRarity.Common,    SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
+        { "quake_slam",      M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
+        // 游侠线：暴击增益 + 召唤流补到 3 个
+        { "hawk_eye",        M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Ranger) },
+        { "arrow_storm",     M(SkillRarity.Epic,      SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
+        { "spirit_wolf",     M(SkillRarity.Rare,      SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
+        // 剑盾输出 + 火系高伤
+        { "blade_storm",     M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.SwordShield) },
+        { "arcane_flame",    M(SkillRarity.Epic,      SynergyTag.Fire,    (int)PlayerJobId.Mage) },
     };
 
     static Meta M(SkillRarity r, SynergyTag tag, int jobAffinity)
@@ -73,18 +91,25 @@ public static class SkillDraftMeta
         return affinity < 0 || affinity == (int)job;
     }
 
+    /// <summary>每星伤害增幅：线性 +18%/星（1 星 = 1.0）。
+    /// 2026-09-15 由 +28% 下调：技能从能量制改纯 CD 制后释放频率大增，原曲线会滚雪球。</summary>
+    public const float StarDamageStep = 0.18f;
+
+    /// <summary>每星冷却缩减：线性 -6%/星（1 星 = 1.0，越高越短）。</summary>
+    public const float StarCooldownStep = 0.06f;
+
     /// <summary>星级 → 伤害倍率（1 星 = 1.0）。</summary>
     public static float StarDamageMul(int star)
     {
         int s = star < 1 ? 1 : star;
-        return 1f + (s - 1) * 0.28f;
+        return 1f + (s - 1) * StarDamageStep;
     }
 
     /// <summary>星级 → 冷却倍率（1 星 = 1.0，越高越短）。</summary>
     public static float StarCooldownMul(int star)
     {
         int s = star < 1 ? 1 : star;
-        float mul = 1f - (s - 1) * 0.08f;
+        float mul = 1f - (s - 1) * StarCooldownStep;
         return mul < 0.6f ? 0.6f : mul;
     }
 }

@@ -8,7 +8,8 @@ using UnityEngine.UI;
 /// </summary>
 public class SkillSelectUI : MonoBehaviour
 {
-    public const int MaxSkills = 6;
+    /// <summary>城镇技能选择页只展示前 6 个基础技能，其余 18 个是局内抽卡池专用。</summary>
+    public const int MaxSkills = PlayerSkillDefs.TownSelectCount;
 
     public static SkillSelectUI Instance { get; private set; }
 
