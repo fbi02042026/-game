@@ -169,6 +169,9 @@ public partial class BattleUI : MonoBehaviour
 
     void Update()
     {
+        // 每帧都要跟：开战/撤离/进入整理阶段都要立刻切换遮罩，不能等 0.1s 节流
+        TickBattleMask();
+
         if (playerSlot != null && playerSlot.glowBorder != null && playerSlot.glowBorder.gameObject.activeSelf)
             playerSlot.TickSkillReadyPulse();
         if (playerSkillAvatar != null && playerSkillAvatar.IsReadyPulse)

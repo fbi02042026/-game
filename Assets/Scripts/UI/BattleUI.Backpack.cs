@@ -93,6 +93,33 @@ public partial class BattleUI : MonoBehaviour
 
     GameObject _backpackRowLock; // GridContainer 下用户放的底行锁图案
 
+    // ===== 战斗遮罩（BackpackPanel/zhezhao）=====
+    GameObject _battleMask;
+    bool _battleMaskOn = true;   // 初始与预制体 m_IsActive:1 对齐，首帧 Tick 会纠正
+
+    void EnsureBattleMask()
+    {
+        if (_battleMask != null) return;
+        _battleMask = FindDeepChildIgnoreCase(transform, "zhezhao")?.gameObject;
+    }
+
+    /// <summary>
+    /// 战斗中盖住底部 HUD（血条/技槽/背包变暗且不可点），摇杆例外——由 BattleJoystick 提到遮罩之上。
+    /// 整理阶段（BattleLootMode）必须关掉，否则背包格子和技槽点不动。
+    /// </summary>
+    public void TickBattleMask()
+    {
+        EnsureBattleMask();
+        if (_battleMask == null) return;
+        var bm = BattleManager.Instance;
+        bool on = bm != null && bm.isInBattle && !BattleLootMode.Active;
+        if (on == _battleMaskOn) return;
+        _battleMaskOn = on;
+        _battleMask.SetActive(on);
+        // 遮罩一开就把摇杆顶到它上面，否则摇杆接收不到射线
+        if (on) BattleJoystick.Instance?.RaiseOrganizeAbove();
+    }
+
     /// <summary>刷新下方网格背包。现在是 4×3=12 格且默认全开，
     /// 只有当解锁行数少于总行数时（以后加行）才会亮底行锁图案。</summary>
     public void UpdateBackpackGrid()
@@ -200,6 +227,7 @@ public partial class BattleUI : MonoBehaviour
         // 整理阶段才允许拖动技槽调序（战斗中不开放，避免误触改掉释放优先级）
         RefreshSkillSlotDragState();
         if (BattleLootMode.Active) MaybeShowSkillReorderHint();
+        TickBattleMask();
         BattleJoystick.Instance?.SetVisible(!BattleLootMode.Active
             && BattleManager.Instance != null
             && BattleManager.Instance.isInBattle
@@ -225,6 +253,7 @@ public partial class BattleUI : MonoBehaviour
         BattleJoystick.EnsureOn(transform);
         // 道具操作浮层挂在 BattleUI 下（保证在 Canvas 内且在最上层）
         BackpackItemActionUI.Ensure(transform);
+        EnsureBattleMask();
         RefreshLootModeChrome();
     }
 

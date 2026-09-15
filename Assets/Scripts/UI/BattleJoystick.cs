@@ -194,12 +194,35 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
             _stickBase.anchoredPosition = new Vector2(0f, ResolveIdleY());
     }
 
-    void RaiseOrganizeAbove()
+    /// <summary>
+    /// 把「确定」按钮和摇杆压到最上层。
+    /// 注意：BackpackPanel 下现在有战斗遮罩 zhezhao，摇杆必须排在它<b>之后</b>，
+    /// 否则射线先被遮罩吃掉，战斗中摇杆完全拖不动（需求是摇杆在遮罩之上）。
+    /// </summary>
+    public void RaiseOrganizeAbove()
     {
+        var p = transform.parent;
+        if (p == null) return;
+
+        Transform mask = null;
+        for (int i = 0; i < p.childCount; i++)
+        {
+            var c = p.GetChild(i);
+            if (c == transform) continue;
+            if (c != null && c.name.Equals("zhezhao", System.StringComparison.OrdinalIgnoreCase))
+            {
+                mask = c;
+                break;
+            }
+        }
+        transform.SetSiblingIndex(mask != null
+            ? mask.GetSiblingIndex() + 1
+            : Mathf.Max(0, p.childCount - 2));
+
+        // 确定按钮最后再压一层，保证在摇杆之上（它只在整理阶段出现，那时摇杆已隐藏）
         var ui = BattleUI.Instance;
         if (ui != null && ui.lootConfirmButton != null)
             ui.lootConfirmButton.transform.SetAsLastSibling();
-        transform.SetSiblingIndex(Mathf.Max(0, transform.parent.childCount - 2));
     }
 
     public RectTransform StickHighlight
