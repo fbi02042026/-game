@@ -1,154 +1,204 @@
 using UnityEngine;
 
 /// <summary>
-/// 经济与进度节奏的**权威参考表**（2026-09-15 新增）。
+/// 经济与进度节奏的**权威参考表**（2026-09-15 第二版：产出去零 + 按「尝试次数」建模）。
 ///
-/// 这一份存在的理由：商店定价、碎片产出、登录奖励全都要拿「一局到底能挣多少」当尺子，
-/// 而这个数字之前散落在 monster_stats.csv / battle_quest.csv / GameConfig 三处，谁也说不清。
-/// 现在集中到这里，改经济只需要动这一张表 + 对得上号的源头。
+/// 第一版犯的错：把「一局」当成「通关一章」，直接按 10 关满关算收入。
+/// 实际上玩家**不会第一次就打完**——一局（一次冒险）是从第 1 关一路打到死/撤离/通关，
+/// 失败就从头再来。策划给的锚点是：**10 次尝试内通关第 1 章，累计 30 次内打完第 2 章**。
+/// 所以收入必须按「失败局 + 最后一次通关局」建模，否则会把玩家购买力高估 4 倍以上。
 ///
-/// ⚠️ 本表**不直接发钱**，只做估算与自检——避免没实测就把产出改崩。
-/// 真实产出仍在：怪 goldDrop（Monster.cs）、通关金（BattleQuestConfig）、
-/// 天赋石（GOLD_PER_TALENT_POINT=100 换算）。要改产出请改源头，然后回来同步本表。
+/// 同时执行「产出去零」：怪物 baseGold 与关卡 clearGold 全部 ÷10。
+/// 原因：去零前通关第 1 章就能攒 ≈2.2 万金，而商店全部技能加起来才 ≈2.4 万——
+/// **第 2 章没打完商店就空了**。
+///
+/// ⚠️ 本表**不直接发钱**，只做估算与自检。真实产出仍在 monster_stats.csv / battle_quest.csv /
+/// GameConfig。改产出请改源头，然后回来同步本表。
 /// </summary>
 public static class EconomyDefs
 {
     // ============================================================
-    // 一、一局净收入估算
+    // 一、单次尝试（一局）的收入
     // ============================================================
 
-    /// <summary>每章 10 关，其中约 2 关是特殊关。</summary>
+    /// <summary>每章 10 关，第 10 关是 Boss。</summary>
     public const int STAGES_PER_RUN = GameConfig.STAGES_PER_CHAPTER;
 
-    /// <summary>每关平均击杀数（含波次，按第一章首关 9 只、后面递增估的）。</summary>
-    public const int KILLS_PER_STAGE = 18;
-
-    /// <summary>每章怪物的平均基础金币（读 monster_stats.csv 的 baseGold 列估的）。</summary>
-    public static int AvgMonsterGold(int chapter)
-    {
-        switch (Mathf.Clamp(chapter, 1, 8))
-        {
-            case 1: return 18;
-            case 2: return 28;
-            case 3: return 40;
-            case 4: return 55;
-            case 5: return 72;
-            case 6: return 92;
-            case 7: return 115;
-            default: return 140;
-        }
-    }
+    /// <summary>各关期望怪数（读 GameConfig.GetStageMonsterTotal 的随机区间算的期望值）。</summary>
+    public static readonly float[] MonstersPerStage =
+        { 15.6f, 10.4f, 15.6f, 16.9f, 18.3f, 19.7f, 21.1f, 22.4f, 23.8f, 25.2f };
 
     /// <summary>波次加成：goldDrop = base × (1 + wave × 0.1)，平均取 1.25。</summary>
     public const float WAVE_GOLD_MUL = 1.25f;
 
-    /// <summary>一局的怪物金币收入。</summary>
-    public static int MonsterGoldPerRun(int chapter) =>
-        Mathf.RoundToInt(AvgMonsterGold(chapter) * WAVE_GOLD_MUL * KILLS_PER_STAGE * STAGES_PER_RUN);
-
-    /// <summary>一局的通关金收入（9 普通关 + 1 Boss）。</summary>
-    public static int ClearGoldPerRun(int chapter, int difficulty)
+    /// <summary>去零后各章普通怪平均 baseGold（monster_stats.csv 实际值）。</summary>
+    public static float AvgMonsterGold(int chapter)
     {
-        int ch = Mathf.Clamp(chapter, 1, 8);
-        int normal = 25 + ch * 10;                       // battle_quest.csv 普通关公式
-        int boss = BossClearGold(ch);
-        float mul = GameConfig.GetDifficultyGoldMul(difficulty);
-        return Mathf.RoundToInt((normal * (STAGES_PER_RUN - 1) + boss) * mul);
-    }
-
-    static int BossClearGold(int ch)
-    {
-        switch (ch)
+        switch (Mathf.Clamp(chapter, 1, 8))
         {
-            case 1: return 200;
-            case 2: return 300;
-            case 3: return 400;
-            case 4: return 500;
-            case 5: return 600;
-            case 6: return 700;
-            case 7: return 800;
-            default: return 2000;
+            case 1: return 2.6f;
+            case 2: return 2.5f;
+            case 3: return 2.6f;
+            case 4: return 2.8f;
+            case 5: return 2.7f;
+            case 6: return 3.0f;
+            case 7: return 3.1f;
+            default: return 3.2f;
         }
     }
 
-    /// <summary>一局总金币（怪物 + 通关金，不含装备分解）。</summary>
-    public static int RunGold(int chapter, int difficulty = 0) =>
-        MonsterGoldPerRun(chapter) + ClearGoldPerRun(chapter, difficulty);
+    /// <summary>Boss 本体的 baseGold（去零后统一 20）。</summary>
+    public const float BOSS_MONSTER_GOLD = 20f;
 
-    /// <summary>一局折算的天赋石（GOLD_PER_TALENT_POINT = 100）。</summary>
-    public static int RunTalentPoints(int chapter, int difficulty = 0) =>
-        RunGold(chapter, difficulty) / GameConfig.GOLD_PER_TALENT_POINT;
-
-    // ============================================================
-    // 二、节奏曲线：前期不卡 → 中期卡构筑 → 后期卡星级
-    // ============================================================
-
-    public enum GateKind
+    /// <summary>第 stageNo 关（1..10）的金币收入。</summary>
+    public static int StageGold(int chapter, int stageNo)
     {
-        None,      // 不设卡，纯爽
-        Build,     // 卡构筑：需要特定技能 / 佣兵 / 装备才过得去
-        Stat       // 卡数值：需要星级 / 强化等级
+        int s = Mathf.Clamp(stageNo, 1, STAGES_PER_RUN);
+        float g = AvgMonsterGold(chapter) * WAVE_GOLD_MUL;
+        float monsters = MonstersPerStage[s - 1];
+
+        if (s >= STAGES_PER_RUN) // Boss 关：小怪 + Boss 本体 + Boss 通关金
+            return Mathf.RoundToInt((monsters - 1f) * g + BOSS_MONSTER_GOLD + BossClearGold(chapter));
+
+        return Mathf.RoundToInt(monsters * g + NormalClearGold(chapter));
     }
+
+    /// <summary>普通关通关金（battle_quest.csv：normalBase 3 + normalChapterAdd 1 × 章节）。</summary>
+    public static int NormalClearGold(int chapter) => 3 + chapter;
+
+    /// <summary>Boss 关通关金（去零后：20/30/40/50/60/70/80/200）。</summary>
+    public static int BossClearGold(int chapter)
+    {
+        switch (Mathf.Clamp(chapter, 1, 8))
+        {
+            case 1: return 20;
+            case 2: return 30;
+            case 3: return 40;
+            case 4: return 50;
+            case 5: return 60;
+            case 6: return 70;
+            case 7: return 80;
+            default: return 200;
+        }
+    }
+
+    /// <summary>一次尝试清掉 n 关（可带小数）的收入。</summary>
+    public static int RunGold(int chapter, float stagesCleared)
+    {
+        float n = Mathf.Clamp(stagesCleared, 0f, STAGES_PER_RUN);
+        int full = Mathf.FloorToInt(n);
+        int gold = 0;
+        for (int s = 1; s <= full; s++) gold += StageGold(chapter, s);
+        float frac = n - full;
+        if (frac > 0f && full < STAGES_PER_RUN)
+            gold += Mathf.RoundToInt(StageGold(chapter, full + 1) * frac);
+        return gold;
+    }
+
+    // ============================================================
+    // 二、节奏：按「尝试次数」建模
+    // ============================================================
+
+    public enum GateKind { None, Build, Stat }
 
     public struct StageGate
     {
         public int chapter;
         public GateKind kind;
-        /// <summary>建议通关所需局数（含失败重试）。</summary>
-        public int expectedRuns;
-        /// <summary>卡点描述。</summary>
+        /// <summary>这一章预期需要**多少次尝试**（含失败重试）。</summary>
+        public int expectedTries;
+        /// <summary>失败局平均能清到第几关（玩家在变强，所以逐章递增）。</summary>
+        public float failStages;
         public string note;
     }
 
     /// <summary>
-    /// 八章的卡点设计。**前期（1~2）刻意不卡**——新玩家前 30 分钟不该被拦；
-    /// 中期（3~5）开始用「构筑」卡：你能过不是因为你等级高，而是因为你配对了东西；
-    /// 后期（6~8）才轮到数值（星级 / 强化）接管。
+    /// 八章节奏。**前两章的锚点由策划给定：第 1 章 ≤10 次、第 2 章累计 ≤30 次。**
+    /// 体力口径校验：满体力 100 点 = 10 次冒险，正好是第 1 章的预算；
+    /// 第 2 章 20 次 = 200 体力 ≈ 满体力 2 次 + 约 4 天自然回复（24 点/天）。
     /// </summary>
     public static readonly StageGate[] Gates =
     {
-        new StageGate { chapter = 1, kind = GateKind.None,  expectedRuns = 1, note = "教学章，必然通过；通关奖励够买 1 个普通技能" },
-        new StageGate { chapter = 2, kind = GateKind.None,  expectedRuns = 1, note = "仍不卡，让玩家尝到构筑成长的甜头" },
-        new StageGate { chapter = 3, kind = GateKind.Build, expectedRuns = 2, note = "首个卡点：怪开始成群，没 AOE 或群体控制会打得很难受" },
-        new StageGate { chapter = 4, kind = GateKind.Build, expectedRuns = 3, note = "主卡点：生存压力陡增，缺治疗/护盾/佣兵会反复失败" },
-        new StageGate { chapter = 5, kind = GateKind.Build, expectedRuns = 3, note = "Boss 有硬机制，需要对的技能组合而不是更高数值" },
-        new StageGate { chapter = 6, kind = GateKind.Stat,  expectedRuns = 4, note = "数值墙开始：需要装备强化等级" },
-        new StageGate { chapter = 7, kind = GateKind.Stat,  expectedRuns = 5, note = "星级墙：技能星级成为主要差距" },
-        new StageGate { chapter = 8, kind = GateKind.Stat,  expectedRuns = 6, note = "终章：金币不再是瓶颈，瓶颈是星级与词条" },
+        new StageGate { chapter = 1, kind = GateKind.None,  expectedTries = 10, failStages = 4.5f, note = "教学章，10 次内必过；满体力 100 点正好 = 10 次冒险" },
+        new StageGate { chapter = 2, kind = GateKind.None,  expectedTries = 20, failStages = 5.5f, note = "累计 30 次。仍不卡，让玩家尝到构筑成长的甜头" },
+        new StageGate { chapter = 3, kind = GateKind.Build, expectedTries = 22, failStages = 6.0f, note = "首个卡点：怪开始成群，没 AOE 会打得很难受" },
+        new StageGate { chapter = 4, kind = GateKind.Build, expectedTries = 25, failStages = 6.5f, note = "主卡点：生存压力陡增，缺治疗/护盾/佣兵会反复失败" },
+        new StageGate { chapter = 5, kind = GateKind.Build, expectedTries = 25, failStages = 7.0f, note = "Boss 有硬机制，需要对的技能组合而不是更高数值" },
+        new StageGate { chapter = 6, kind = GateKind.Stat,  expectedTries = 28, failStages = 7.5f, note = "数值墙开始：需要装备强化等级" },
+        new StageGate { chapter = 7, kind = GateKind.Stat,  expectedTries = 30, failStages = 8.0f, note = "星级墙：技能星级成为主要差距" },
+        new StageGate { chapter = 8, kind = GateKind.Stat,  expectedTries = 35, failStages = 8.5f, note = "终章：金币不再是瓶颈，瓶颈是星级与词条" },
     };
 
-    public static StageGate GateFor(int chapter) =>
-        Gates[Mathf.Clamp(chapter, 1, Gates.Length) - 1];
+    public static StageGate GateFor(int chapter) => Gates[Mathf.Clamp(chapter, 1, Gates.Length) - 1];
+
+    /// <summary>通关某一章的金币收入（前 n-1 次失败 + 最后一次通关）。</summary>
+    public static int ChapterGold(int chapter)
+    {
+        var g = GateFor(chapter);
+        return (g.expectedTries - 1) * RunGold(chapter, g.failStages) + RunGold(chapter, STAGES_PER_RUN);
+    }
+
+    /// <summary>从头打到第 chapter 章结束的**累计**金币。</summary>
+    public static int CumulativeGold(int chapter)
+    {
+        int sum = 0;
+        for (int ch = 1; ch <= Mathf.Clamp(chapter, 1, 8); ch++) sum += ChapterGold(ch);
+        return sum;
+    }
+
+    /// <summary>从头打到第 chapter 章结束的**累计**尝试次数。</summary>
+    public static int CumulativeTries(int chapter)
+    {
+        int sum = 0;
+        for (int ch = 1; ch <= Mathf.Clamp(chapter, 1, 8); ch++) sum += GateFor(ch).expectedTries;
+        return sum;
+    }
+
+    /// <summary>累计尝试次数换算的体力消耗（每次冒险 10 点）。</summary>
+    public static int CumulativeStamina(int chapter) => CumulativeTries(chapter) * StaminaSystem.ADVENTURE_COST;
+
+    /// <summary>一章折算的天赋石（GOLD_PER_TALENT_POINT = 100）。</summary>
+    public static int ChapterTalentPoints(int chapter) => ChapterGold(chapter) / GameConfig.GOLD_PER_TALENT_POINT;
 
     // ============================================================
     // 三、定价自检
     // ============================================================
 
-    /// <summary>某个价格相当于第 1 章几局的收入。用来判断商店定价是否合理。</summary>
+    /// <summary>某个金币价格相当于「通关第 1 章累计收入」的几倍。</summary>
     public static string DescribePrice(long price)
     {
-        int run = RunGold(1);
-        if (run <= 0) return price.ToString();
-        float n = price / (float)run;
-        return $"{price}（≈{n:0.0} 局 / 第1章）";
+        int c1 = ChapterGold(1);
+        if (c1 <= 0) return price.ToString();
+        float n = price / (float)c1;
+        return $"{price}（≈{n:0.00} × 通关第1章总收入）";
     }
 
-    /// <summary>打日志自检：把各章一局收入与主要定价打出来，方便实测后对照调整。</summary>
+    /// <summary>
+    /// 打日志自检：各章收入、累计购买力、所有金币定价，并标出可能失衡的商品。
+    /// 改完任何经济数值都跑一次。
+    /// </summary>
     public static void LogDiagnostics()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("[Economy] 一局净收入估算（难度 0）");
+        sb.AppendLine("[Economy] 单章收入（按尝试次数建模，产出去零后）");
         for (int ch = 1; ch <= 8; ch++)
-            sb.AppendLine($"  第{ch}章：金币 {RunGold(ch)}　≈天赋石 {RunTalentPoints(ch)}");
+        {
+            var g = GateFor(ch);
+            sb.AppendLine($"  第{ch}章：尝试 {g.expectedTries} 次（失败清 {g.failStages:0.0} 关）　" +
+                          $"单次失败 {RunGold(ch, g.failStages)}　单次通关 {RunGold(ch, STAGES_PER_RUN)}　" +
+                          $"本章 {ChapterGold(ch)}　累计 {CumulativeGold(ch)}　" +
+                          $"累计体力 {CumulativeStamina(ch)}");
+        }
 
-        sb.AppendLine("[Economy] 商店定价自检");
+        sb.AppendLine("[Economy] 商店金币定价自检（基准：通关第1章累计 " + ChapterGold(1) + " 金）");
         for (int i = 0; i < ShopDefs.All.Length; i++)
         {
             var it = ShopDefs.All[i];
             if (it.currency != ResourceWallet.ResourceType.Gold) continue;
-            float n = it.price / (float)RunGold(1);
+            float n = it.price / (float)ChapterGold(1);
             sb.AppendLine($"  {it.name}：{DescribePrice(it.price)}　限购 {it.dailyLimit}");
-            if (n > 6f) sb.AppendLine($"    ⚠ 超过 6 局收入，可能永远没人买");
+            if (n > 3f) sb.AppendLine("    ⚠ 超过 3 倍章节收入，玩家可能攒到弃游");
+            if (n < 0.05f) sb.AppendLine("    ⚠ 不到 5% 章节收入，太便宜会被秒空");
         }
         Debug.Log(sb.ToString());
     }

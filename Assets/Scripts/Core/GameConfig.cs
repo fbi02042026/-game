@@ -508,6 +508,27 @@ public static class GameConfig
         public static int AffixSecondFromChapter = 4;
         /// <summary>精英/Boss 词缀：出第 2 个词缀的概率。</summary>
         public static float AffixSecondChance = 0.3f;
+
+        // ===== V3.0 随机波次：只调波数与每波人数，不改敌人数值 =====
+        /// <summary>压力阀总开关。关掉后波数完全由模式表决定。</summary>
+        public static bool PressureEnabled = true;
+        /// <summary>连续 N 关「无死亡且通关血量 &gt; PressureHpRatio」后，下一关波数 +1。</summary>
+        public static int PressureStreakThreshold = 2;
+        /// <summary>加压上限：最多额外加几波。</summary>
+        public static int PressureWaveCap = 2;
+        /// <summary>上一关死亡过 → 下一关波数 −1（且首波延后）。</summary>
+        public static bool PressureMercyOnDeath = true;
+        /// <summary>判定「轻松通关」的血量线。</summary>
+        public static float PressureHpRatio = 0.70f;
+        /// <summary>职业 × 模式矩阵标「高」时，该关波数 −1。</summary>
+        public static bool ModeHandicapByJob = true;
+        /// <summary>每章每波人数的递增步长（第 1 章 1.00 → 第 8 章 1.21）。</summary>
+        public static float ChapterCountStep = 0.03f;
+        /// <summary>章内每关每波人数的递增步长（第 1 关 1.00 → 第 10 关 1.45）。</summary>
+        public static float StageCountStep = 0.05f;
+        /// <summary>每波人数随机浮动下限 / 上限。</summary>
+        public static float CountJitterMin = 0.85f;
+        public static float CountJitterMax = 1.15f;
     }
 
     /// <summary>
@@ -596,8 +617,8 @@ public static class GameConfig
     public const int DIFF_HARD_NEED_CLEARS = 3;
     /// <summary>通关满 N 章后开启噩梦</summary>
     public const int DIFF_NIGHTMARE_NEED_CLEARS = 6;
-    /// <summary>金币副本通关固定金：基数 × 章节 × 难度倍率</summary>
-    public const int GOLD_DUNGEON_CLEAR_BASE = 300;
+    /// <summary>金币副本通关固定金：基数 × 章节 × 难度倍率。2026-09-15 产出去零：300 → 30。</summary>
+    public const int GOLD_DUNGEON_CLEAR_BASE = 30;
 
     public static float GetDifficultyStatScale(int diff)
     {
@@ -681,11 +702,12 @@ public static class GameConfig
     /// <summary>第一章第一关：波间隔（已减半）</summary>
     public const float OPENING_WAVE_SPAWN_INTERVAL = 7f;
     /// <summary>点击加速出兵：剩余每秒兑换金币</summary>
-    public const float WAVE_SKIP_GOLD_PER_SEC = 3f;
+    public const float WAVE_SKIP_GOLD_PER_SEC = 1f;
     /// <summary>连杀判定窗口（秒）</summary>
     public const float COMBO_WINDOW = 3.2f;
     /// <summary>连杀≥3 时每杀额外金币：实际 = COMBO_BONUS_GOLD × 连击数（封顶 20 连）。基准击杀约 5~10 金，该值=2 时 10 连击击杀≈+20 金（≈2~4 倍单杀），作为"不挨打、会连段"的硬实力奖励；天赋换算 GOLD_PER_TALENT_POINT=100，单章多拿约 1~3 天赋点，可观但不破环经济。</summary>
-    public const int COMBO_BONUS_GOLD = 2;
+    /// 2026-09-15 产出去零：2 → 1（再÷10 会变 0，连击奖励必须保留最小值，否则"会连段"就没有正反馈了）。
+    public const int COMBO_BONUS_GOLD = 1;
 
     // —— 连杀续杯（R2）：连杀窗口内击杀回血，让"连"成为可持续资源 ——
     /// <summary>连杀达到该值才开始回血（避免单杀白嫖续航）。</summary>

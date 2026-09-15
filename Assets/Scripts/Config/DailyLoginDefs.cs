@@ -32,28 +32,32 @@ public static class DailyLoginDefs
     static Reward Res(string name, ResourceWallet.ResourceType type, int amount) =>
         new Reward { name = name, grant = Grant.Resource, type = type, amount = amount };
 
-    /// <summary>新手 7 日（按累计登录天数，断签不重置）。</summary>
+    /// <summary>
+    /// 新手 7 日（按累计登录天数，断签不重置）。
+    /// 2026-09-15 去零：整表 ÷10。两个例外在注释里写明——
+    /// 它们是「钩子」，压到 ÷10 就没有感知了。
+    /// </summary>
     public static readonly Reward[] Starter = new Reward[]
     {
-        Res("金币 ×3000",            ResourceWallet.ResourceType.Gold,         3000), // D1
-        Res("天赋石 ×5",             ResourceWallet.ResourceType.TalentPoint,    5), // D2
-        Res("钻石 ×500",             ResourceWallet.ResourceType.Diamond,       500), // D3（≈一次单抽）
-        Res("体力 ×60",              ResourceWallet.ResourceType.Stamina,        60), // D4
-        Res("强化石 ×20",            ResourceWallet.ResourceType.EnchantStone,   20), // D5
-        Res("分解材料 ×40",          ResourceWallet.ResourceType.DecomposeMat,   40), // D6
-        new Reward { name = "史诗技能残卷 ×40", grant = Grant.EpicFragment, amount = 40 }, // D7
+        Res("金币 ×300",             ResourceWallet.ResourceType.Gold,          300), // D1
+        Res("天赋石 ×1",             ResourceWallet.ResourceType.TalentPoint,     1), // D2
+        Res("钻石 ×50",              ResourceWallet.ResourceType.Diamond,        50), // D3
+        Res("体力 ×10",              ResourceWallet.ResourceType.Stamina,        10), // D4 例外：凑到「一次冒险」的整数，严格÷10 是 6
+        Res("强化石 ×2",             ResourceWallet.ResourceType.EnchantStone,    2), // D5
+        Res("分解材料 ×4",           ResourceWallet.ResourceType.DecomposeMat,    4), // D6
+        new Reward { name = "史诗技能残卷 ×20", grant = Grant.EpicFragment, amount = 20 }, // D7 例外：80 片合成的 1/4，让玩家看见长线目标在动
     };
 
-    /// <summary>每日循环（7 天一轮，可无限循环）。</summary>
+    /// <summary>每日循环（7 天一轮，可无限循环）。同样 ÷10。</summary>
     public static readonly Reward[] Cycle = new Reward[]
     {
-        Res("金币 ×1500",            ResourceWallet.ResourceType.Gold,         1500),
-        Res("体力 ×20",              ResourceWallet.ResourceType.Stamina,        20),
+        Res("金币 ×150",             ResourceWallet.ResourceType.Gold,          150),
+        Res("体力 ×5",               ResourceWallet.ResourceType.Stamina,         5),
         Res("天赋石 ×1",             ResourceWallet.ResourceType.TalentPoint,     1),
-        Res("强化石 ×5",             ResourceWallet.ResourceType.EnchantStone,    5),
-        Res("钻石 ×30",              ResourceWallet.ResourceType.Diamond,        30),
-        Res("分解材料 ×20",          ResourceWallet.ResourceType.DecomposeMat,    20),
-        new Reward { name = "技能残卷 ×10", grant = Grant.RandomFragment, amount = 10 },
+        Res("强化石 ×2",             ResourceWallet.ResourceType.EnchantStone,    2),
+        Res("钻石 ×5",               ResourceWallet.ResourceType.Diamond,         5),
+        Res("分解材料 ×4",           ResourceWallet.ResourceType.DecomposeMat,    4),
+        new Reward { name = "技能残卷 ×5", grant = Grant.RandomFragment, amount = 5 },
     };
 
     public static int CycleLength => Cycle.Length;

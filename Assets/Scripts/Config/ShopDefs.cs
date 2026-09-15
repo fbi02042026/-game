@@ -55,41 +55,41 @@ public static class ShopDefs
         new Item {
             id = "shop_skill_stone_skin", name = "石肤术", kind = Kind.Skill,
             desc = "防御 +30%，持续 10 秒。冷却 16 秒。\n原本通关第 2 章解锁，买断可立即获得。",
-            currency = ResourceWallet.ResourceType.Gold, price = 3000, skillId = "stone_skin"
+            currency = ResourceWallet.ResourceType.Gold, price = 2000, skillId = "stone_skin"
         },
         new Item {
             id = "shop_skill_iron_wall", name = "铁壁壁垒", kind = Kind.Skill,
             desc = "防御 +45%，持续 8 秒。冷却 22 秒。\n石肤术的上位版，减伤更猛但更短。",
-            currency = ResourceWallet.ResourceType.Gold, price = 3500, skillId = "iron_wall"
+            currency = ResourceWallet.ResourceType.Gold, price = 2500, skillId = "iron_wall"
         },
         new Item {
             id = "shop_skill_spirit_wolf", name = "灵狼突袭", kind = Kind.Skill,
             desc = "3 × 130% 弹幕伤害。冷却 18 秒。\n原本通关第 3 章解锁。",
-            currency = ResourceWallet.ResourceType.Gold, price = 3000, skillId = "spirit_wolf"
+            currency = ResourceWallet.ResourceType.Gold, price = 2000, skillId = "spirit_wolf"
         },
         new Item {
             id = "shop_skill_hawk_eye", name = "鹰眼", kind = Kind.Skill,
             desc = "全队暴击 +35%，持续 10 秒。冷却 20 秒。\n原本推进到第 4 章才解锁。",
-            currency = ResourceWallet.ResourceType.Gold, price = 3000, skillId = "hawk_eye"
+            currency = ResourceWallet.ResourceType.Gold, price = 2000, skillId = "hawk_eye"
         },
 
         // ================= 技能 · 稀有（金币 / 天赋石直购）=================
         new Item {
             id = "shop_skill_quake_slam", name = "震地重击", kind = Kind.Skill,
             desc = "300% 范围伤害，半径 8。冷却 21 秒。\n近战专属——远程职业不会看到本条。",
-            currency = ResourceWallet.ResourceType.Gold, price = 8000, skillId = "quake_slam",
+            currency = ResourceWallet.ResourceType.Gold, price = 6000, skillId = "quake_slam",
             showFromChapter = 2
         },
         new Item {
             id = "shop_skill_thunder_chain", name = "连锁闪电", kind = Kind.Skill,
             desc = "160% 攻击连锁 4 段（合计 2.176 倍）。冷却 18 秒。\n原本走天赋树，这里用天赋石买断。",
-            currency = ResourceWallet.ResourceType.TalentPoint, price = 3, skillId = "thunder_chain",
+            currency = ResourceWallet.ResourceType.TalentPoint, price = 5, skillId = "thunder_chain",
             showFromChapter = 2
         },
         new Item {
             id = "shop_skill_war_banner", name = "战旗号令", kind = Kind.Skill,
             desc = "全队攻击 +35%，持续 10 秒。冷却 24 秒。\n持续时间是同类增益里最长的。",
-            currency = ResourceWallet.ResourceType.TalentPoint, price = 4, skillId = "war_banner",
+            currency = ResourceWallet.ResourceType.TalentPoint, price = 7, skillId = "war_banner",
             showFromChapter = 3
         },
 
@@ -98,25 +98,25 @@ public static class ShopDefs
         new Item {
             id = "shop_frag_flame_burst", name = "烈焰爆裂残卷 ×5", kind = Kind.Fragment,
             desc = "260% 攻击的范围伤害，半径 7。冷却 20 秒。\n合成需 80 片，本条一次给 5 片。",
-            currency = ResourceWallet.ResourceType.Gold, price = 1250, skillId = "flame_burst",
+            currency = ResourceWallet.ResourceType.Gold, price = 800, skillId = "flame_burst",
             fragmentCount = 5, dailyLimit = 2, showFromChapter = 2
         },
         new Item {
             id = "shop_frag_sacred_revival", name = "圣愈术残卷 ×5", kind = Kind.Fragment,
             desc = "48% 最大生命 + 4.0×攻击的治疗。冷却 22 秒。\n合成需 80 片。",
-            currency = ResourceWallet.ResourceType.Gold, price = 1250, skillId = "sacred_revival",
+            currency = ResourceWallet.ResourceType.Gold, price = 800, skillId = "sacred_revival",
             fragmentCount = 5, dailyLimit = 2, showFromChapter = 3
         },
         new Item {
             id = "shop_frag_arrow_storm", name = "箭雨风暴残卷 ×5", kind = Kind.Fragment,
             desc = "5 × 90% 弹幕（合计 4.5 倍）。冷却 22 秒。\n合成需 80 片。",
-            currency = ResourceWallet.ResourceType.Gold, price = 1250, skillId = "arrow_storm",
+            currency = ResourceWallet.ResourceType.Gold, price = 800, skillId = "arrow_storm",
             fragmentCount = 5, dailyLimit = 2, showFromChapter = 3
         },
         new Item {
             id = "shop_frag_arcane_flame", name = "秘法烈焰残卷 ×5", kind = Kind.Fragment,
             desc = "310% 范围伤害，半径 8。冷却 26 秒。\n火流派后期核心，合成需 80 片。",
-            currency = ResourceWallet.ResourceType.Gold, price = 1250, skillId = "arcane_flame",
+            currency = ResourceWallet.ResourceType.Gold, price = 800, skillId = "arcane_flame",
             fragmentCount = 5, dailyLimit = 2, showFromChapter = 4
         },
 
@@ -138,7 +138,7 @@ public static class ShopDefs
         new Item {
             id = "shop_stamina_30", name = "体力药水", kind = Kind.Resource,
             desc = "立即恢复 30 点体力（一次冒险消耗 10 点）。",
-            currency = ResourceWallet.ResourceType.Gold, price = 1200,
+            currency = ResourceWallet.ResourceType.Gold, price = 400,
             grantType = ResourceWallet.ResourceType.Stamina, grantAmount = 30,
             dailyLimit = 3
         },
@@ -146,7 +146,7 @@ public static class ShopDefs
             id = "shop_gold_bag", name = "金币袋", kind = Kind.Resource,
             desc = "立即获得 5000 金币。",
             currency = ResourceWallet.ResourceType.Diamond, price = 50,
-            grantType = ResourceWallet.ResourceType.Gold, grantAmount = 5000,
+            grantType = ResourceWallet.ResourceType.Gold, grantAmount = 800,
             dailyLimit = 5
         },
         new Item {
@@ -161,14 +161,14 @@ public static class ShopDefs
         new Item {
             id = "shop_enchant_5", name = "强化石 ×5", kind = Kind.Material,
             desc = "装备强化材料。",
-            currency = ResourceWallet.ResourceType.Gold, price = 1500,
+            currency = ResourceWallet.ResourceType.Gold, price = 600,
             grantType = ResourceWallet.ResourceType.EnchantStone, grantAmount = 5,
             dailyLimit = 5
         },
         new Item {
             id = "shop_decompose_10", name = "分解材料 ×10", kind = Kind.Material,
             desc = "装备分解产物，用于兑换与合成。",
-            currency = ResourceWallet.ResourceType.Gold, price = 800,
+            currency = ResourceWallet.ResourceType.Gold, price = 300,
             grantType = ResourceWallet.ResourceType.DecomposeMat, grantAmount = 10,
             dailyLimit = 5
         },

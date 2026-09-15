@@ -129,7 +129,8 @@ public static class BattleQuestConfig
 
     static int GetNormalClearGold(int chapter, float diffMul)
     {
-        int baseGold = 25 + chapter * 10;
+        // 2026-09-15 产出去零：原 25 + chapter*10。与 battle_quest.csv 的 normalBase/normalChapterAdd(3/1) 保持一致。
+        int baseGold = 3 + chapter;
         return Mathf.RoundToInt(baseGold * diffMul);
     }
 }
