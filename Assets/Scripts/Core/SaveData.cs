@@ -59,6 +59,14 @@ public class SaveData
     public List<StringIdEntry> unlockedSkillEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> unlockedSkills = new HashSet<string>();
 
+    // === 商店每日限购（2026-09-15）===
+    // 记「商品 id → 当天已买次数」，配合 shopPurchaseDay 跨天清零。
+    // 没有限购的话，体力药水和金币袋会被无限搬空，通胀只是时间问题。
+    public List<StringIntEntry> shopPurchaseEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> shopPurchases = new Dictionary<string, int>();
+    /// <summary>yyyyMMdd，与今天不同则清空 shopPurchases。</summary>
+    public string shopPurchaseDay = "";
+
     // === 遗产装备 ===
     public List<EquipmentData> legacyEquipPool = new List<EquipmentData>();
 
@@ -129,6 +137,16 @@ public class SaveData
     public bool chapter1ChoiceDone;
     public List<NpcBondEntry> npcBonds = new List<NpcBondEntry>();
     public List<StoryChoiceEntry> storyChoices = new List<StoryChoiceEntry>();
+
+    // —— 叙事 V2.0 ——
+    /// <summary>第 7 章转折点：0=未选，1=A，2=B，3=C。同一周目不可更改。</summary>
+    public int endingChoice = 0;
+    public List<StringIdEntry> seenClueEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> seenClueIds = new HashSet<string>();
+    public List<StringIdEntry> seenEndingEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> seenEndingIds = new HashSet<string>();
+    /// <summary>酒馆靠窗座位的累计查看次数，第 5 次发放线索页 C26。</summary>
+    public int tavernSeatViewCount = 0;
 
     // === 章节进度 ===
     public int maxUnlockedChapter = 1; // 最大解锁章节（兼容字段；权威来源是 ChapterRouteTable.AvailableChapters）
@@ -219,6 +237,7 @@ public class SaveData
         talentEntries ??= new List<StringIntEntry>();
         unlockedLegendaryWeaponEntries ??= new List<StringIdEntry>();
         unlockedSkillEntries ??= new List<StringIdEntry>();
+        shopPurchaseEntries ??= new List<StringIntEntry>();
         achievementProgressEntries ??= new List<StringIntEntry>();
         completedAchievementEntries ??= new List<StringIdEntry>();
         claimedMilestoneEntries ??= new List<IntIdEntry>();
@@ -280,6 +299,24 @@ public class SaveData
             unlockedSkills.Add(e.id);
         }
 
+        shopPurchases = new Dictionary<string, int>();
+        string today = ShopDefs.TodayKey();
+        if (!string.IsNullOrEmpty(shopPurchaseDay) && shopPurchaseDay != today)
+        {
+            // 跨天：限购清零（不写回 List，下次 SyncListsFromRuntime 会同步）
+            shopPurchaseDay = today;
+        }
+        else
+        {
+            for (int i = 0; i < shopPurchaseEntries.Count; i++)
+            {
+                var e = shopPurchaseEntries[i];
+                if (e == null || string.IsNullOrEmpty(e.id)) continue;
+                shopPurchases[e.id] = e.value;
+            }
+        }
+        if (string.IsNullOrEmpty(shopPurchaseDay)) shopPurchaseDay = today;
+
         achievementProgress = new Dictionary<string, int>();
         for (int i = 0; i < achievementProgressEntries.Count; i++)
         {
@@ -314,6 +351,8 @@ public class SaveData
         unlockedWorldIds = ToIdSet(unlockedWorldEntries);
         completedMainIds = ToIdSet(completedMainEntries);
         completedSideIds = ToIdSet(completedSideEntries);
+        seenClueIds = ToIdSet(seenClueEntries);
+        seenEndingIds = ToIdSet(seenEndingEntries);
 
         claimedLogMileageLevels = new HashSet<int>();
         for (int i = 0; i < claimedLogMileageLevelEntries.Count; i++)
@@ -461,6 +500,7 @@ public class SaveData
         talents ??= new Dictionary<string, int>();
         unlockedLegendaryWeapons ??= new HashSet<string>();
         unlockedSkills ??= new HashSet<string>();
+        shopPurchases ??= new Dictionary<string, int>();
         achievementProgress ??= new Dictionary<string, int>();
         completedAchievements ??= new HashSet<string>();
         claimedMilestoneIds ??= new HashSet<int>();
@@ -499,6 +539,10 @@ public class SaveData
         foreach (string id in unlockedSkills)
             unlockedSkillEntries.Add(new StringIdEntry { id = id });
 
+        shopPurchaseEntries = new List<StringIntEntry>(shopPurchases.Count);
+        foreach (var kv in shopPurchases)
+            shopPurchaseEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
         achievementProgressEntries = new List<StringIntEntry>(achievementProgress.Count);
         foreach (var kv in achievementProgress)
             achievementProgressEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
@@ -522,6 +566,8 @@ public class SaveData
         unlockedWorldEntries = FromIdSet(unlockedWorldIds);
         completedMainEntries = FromIdSet(completedMainIds);
         completedSideEntries = FromIdSet(completedSideIds);
+        seenClueEntries = FromIdSet(seenClueIds);
+        seenEndingEntries = FromIdSet(seenEndingIds);
         logMileageGrantEntries = FromIdSet(logMileageGrantedKeys);
 
         claimedLogMileageLevelEntries = new List<IntIdEntry>(claimedLogMileageLevels.Count);

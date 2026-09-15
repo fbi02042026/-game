@@ -202,7 +202,12 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
     private void ExecuteAOE(ActiveSkill skill, UnitBase caster)
     {
         float damage = CalculateDamage(skill, caster);
-        List<UnitBase> enemies = GetEnemiesInRange(caster, skill.aoeRadius);
+        // 2026-09-15：落点从「施法者自身」改为「射程内的敌人密集处」。
+        // 原来以 caster 为中心取敌人，半径 6~9 —— 游侠/法师/牧师必须走进怪堆才能放 AOE，
+        // 也就是「让脆皮冲进怪里」。现在中心敌人必须在攻击距离内：
+        // 近战职业落点仍在身边，远程职业可以隔着大半屏砸。
+        Vector2 center = PickAoeCenter(caster, skill.aoeRadius);
+        List<UnitBase> enemies = GetEnemiesInRangeAt(caster, center, skill.aoeRadius);
 
         int vfxDir = caster.GetVfxFacingDir();
         foreach (var enemy in enemies)
@@ -231,7 +236,8 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         // 以前硬编码 8f，不吃表里的 aoeRadius —— thunder_chain 只是恰好也是 8，
         // 别的连锁技填了半径也不会生效。改成读表，没填才回退 8。
         float radius = skill.aoeRadius > 0f ? skill.aoeRadius : 8f;
-        List<UnitBase> enemies = GetEnemiesInRange(caster, radius);
+        Vector2 center = PickAoeCenter(caster, radius);
+        List<UnitBase> enemies = GetEnemiesInRangeAt(caster, center, radius);
 
         // 连锁伤害递减
         float chainMultiplier = 1f;
@@ -256,22 +262,90 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
     }
 
     /// <summary>
-    /// 获取范围内的敌人
+    /// 获取范围内的敌人（以施法者自身为中心）。旧接口，仅供不想改落点的调用点使用。
     /// </summary>
     private List<UnitBase> GetEnemiesInRange(UnitBase caster, float range)
     {
+        return GetEnemiesInRangeAt(caster, caster != null ? (Vector2)caster.transform.position : Vector2.zero, range);
+    }
+
+    /// <summary>以指定坐标为中心取敌人。</summary>
+    private List<UnitBase> GetEnemiesInRangeAt(UnitBase caster, Vector2 center, float range)
+    {
         List<UnitBase> enemies = new List<UnitBase>();
+        if (caster == null) return enemies;
         var enemyList = caster.isAlly ? BattleManager.Instance.monsters : BattleManager.Instance.allyUnits;
+        if (enemyList == null) return enemies;
 
         foreach (var enemy in enemyList)
         {
             if (enemy == null || enemy.isDead) continue;
             if (!GameConfig.IsInCombatViewport(enemy)) continue;
-            float dist = Vector2.Distance(caster.transform.position, enemy.transform.position);
+            float dist = Vector2.Distance(center, enemy.transform.position);
             if (dist <= range)
                 enemies.Add(enemy);
         }
         return enemies;
+    }
+
+    /// <summary>
+    /// AOE / 连锁的落点：在施法者攻击距离内，挑一个覆盖敌人最多的敌人位置。
+    /// 2026-09-15 新增。之前直接用施法者自身坐标，导致远程职业必须贴脸才能放 AOE。
+    /// 取不到任何合法中心时回退到自身（保持旧行为，不会打空）。
+    /// </summary>
+    private Vector2 PickAoeCenter(UnitBase caster, float radius)
+    {
+        if (caster == null) return Vector2.zero;
+        Vector2 self = caster.transform.position;
+
+        float reach = GetCasterReach(caster);
+        float maxDist = reach > 0f ? reach : radius;
+
+        var enemyList = caster.isAlly ? BattleManager.Instance.monsters : BattleManager.Instance.allyUnits;
+        if (enemyList == null || enemyList.Count == 0) return self;
+
+        Vector2 best = self;
+        int bestCount = 0;
+        float bestDist = float.MaxValue;
+
+        for (int i = 0; i < enemyList.Count; i++)
+        {
+            var e = enemyList[i];
+            if (e == null || e.isDead) continue;
+            if (!GameConfig.IsInCombatViewport(e)) continue;
+
+            Vector2 c = e.transform.position;
+            float d = Vector2.Distance(self, c);
+            if (d > maxDist) continue;
+
+            int n = 0;
+            for (int j = 0; j < enemyList.Count; j++)
+            {
+                var o = enemyList[j];
+                if (o == null || o.isDead) continue;
+                if (Vector2.Distance(c, o.transform.position) <= radius) n++;
+            }
+
+            // 覆盖敌人数优先；一样多时取离自己近的那个（近战不会因为"最密集"而跑偏）
+            if (n > bestCount || (n == bestCount && d < bestDist))
+            {
+                bestCount = n;
+                best = c;
+                bestDist = d;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// 施法者的攻击距离（世界单位）。用于限制 AOE 落点别超出手够得着的地方。
+    /// 我方统一按当前所选职业取（佣兵与玩家射程量级接近，误差可接受）；
+    /// 敌方返回 0 → 走 radius 兜底，等价于旧行为。
+    /// </summary>
+    private static float GetCasterReach(UnitBase caster)
+    {
+        if (caster == null || !caster.isAlly) return 0f;
+        return AttackRangeTable.GetJobWorld(PlayerJobDefs.GetSelected());
     }
 
     /// <summary>

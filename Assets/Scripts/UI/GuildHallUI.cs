@@ -300,7 +300,6 @@ public class GuildHallUI : MonoBehaviour
     {
         ResolveHallButtonRefs();
         // 未接通或半成品：运行时隐藏，不改预制体；清单见 Docs/软著后开发备忘.md「主界面暂隐入口」
-        SetBtnHidden(shopButton);
         SetBtnHidden(noticeButton);
         SetBtnHidden(rankButton);
         SetBtnHidden(mailButton);        // 无收件箱 UI，仅一键领完
@@ -308,8 +307,9 @@ public class GuildHallUI : MonoBehaviour
         SetBtnHidden(noticeBoardButton); // 公告栏
         SetBtnHidden(armoryButton);      // 武器库（遗产浏览）
         SetBtnHidden(licenseHallButton); // 执照厅
+        // 商店 2026-09-15 已接通（ShopUI），保留显示
         // 按节点名再兜底（引用丢失时仍能藏）
-        HideNamed("ShopButton", "NoticeButton", "RankButton", "MailButton", "ActivityButton",
+        HideNamed("NoticeButton", "RankButton", "MailButton", "ActivityButton",
             "NoticeBoard", "Armory", "LicenseHall");
         // 保留：底栏五入口、设置、咨询台、金币/体力加号
     }
@@ -350,7 +350,26 @@ public class GuildHallUI : MonoBehaviour
 
         if (settingsButton != null)
             settingsButton.onClick.AddListener(() => BattleSettingsPanel.Ensure().Open(SettingsHost.Town));
-        // mail / activity / license / armory：已隐藏，待后期再接线
+        // 商店：2026-09-15 接通，技能解锁 / 抽卡券 / 资源补给 / 材料 四个货架
+        if (shopButton != null)
+        {
+            shopButton.onClick.RemoveAllListeners();
+            shopButton.onClick.AddListener(() => ShopUI.Show());
+        }
+        else
+        {
+            // 预制体引用丢失时按节点名兜底，避免入口点不动
+            var shopNode = FindDeepChild(transform, "ShopButton");
+            if (shopNode != null)
+            {
+                shopButton = shopNode.GetComponent<Button>();
+                if (shopButton != null)
+                {
+                    shopButton.onClick.RemoveAllListeners();
+                    shopButton.onClick.AddListener(() => ShopUI.Show());
+                }
+            }
+        }
         if (goldPlusButton != null)
         {
             bool showAd = !SpotlightBuild.Enabled;

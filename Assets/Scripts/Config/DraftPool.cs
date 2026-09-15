@@ -276,6 +276,9 @@ public static class DraftPool
             // 前期只会遇到 Early 那 10 个，中后期技能靠章节 / 天赋 / 商店 / 成就逐步放出。
             // 详见 Docs/玩家技能分层解锁_2026-09-15.md
             if (!PlayerSkillDefs.IsUnlocked(def, SaveSystem.Instance?.Data)) continue;
+            // 近战专属：远程职业（游侠/法师/牧师）抽不到冲锋、剑刃风暴这类贴身技。
+            // 只过滤语义上过不去的少数几个，其余技能对全职业通用。
+            if (def.meleeOnly && !PlayerJobDefs.IsSelectedMelee()) continue;
 
             var rar = SkillDraftMeta.Rarity(def.id);
             var tag = SkillDraftMeta.Tag(def.id);

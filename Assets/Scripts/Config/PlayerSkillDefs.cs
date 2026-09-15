@@ -67,6 +67,11 @@ public static class PlayerSkillDefs
         public int unlockPrice;
         /// <summary>商店途径：货币（0=金币 1=天赋石 2=钻石）。</summary>
         public int unlockCurrency;
+        /// <summary>近战专属（2026-09-15）：true 时远程职业（游侠/法师/牧师）抽不到。
+        /// 只给"冲锋、剑刃风暴"这类动作本身就要求贴身的技能打标记——
+        /// 避免"脆皮游侠冲进怪堆"这种语义与操作都别扭的组合。
+        /// AOE 落点已改成可选远程位置，所以只有真正过不去的语义才需要这个标记。</summary>
+        public bool meleeOnly;
         public string allyConfigId;
         public Color tint;
         public SkillSystem.SkillType skillType;
@@ -552,6 +557,7 @@ public static class PlayerSkillDefs
             unlockChapter = 0,
             unlockSource = UnlockSource.None,
             unlockTier = UnlockTier.Early,
+            meleeOnly = true,
             allyConfigId = "",
             tint = new Color(0.80f, 0.55f, 0.28f),
             skillType = SkillSystem.SkillType.AOE,
@@ -576,6 +582,7 @@ public static class PlayerSkillDefs
             unlockChapter = 3,
             unlockSource = UnlockSource.Chapter,
             unlockTier = UnlockTier.Mid,
+            meleeOnly = true,
             allyConfigId = "",
             tint = new Color(0.70f, 0.45f, 0.22f),
             skillType = SkillSystem.SkillType.AOE,
@@ -676,6 +683,7 @@ public static class PlayerSkillDefs
             unlockChapter = 0,
             unlockSource = UnlockSource.None,
             unlockTier = UnlockTier.Early,
+            meleeOnly = true,
             allyConfigId = "",
             tint = new Color(0.85f, 0.88f, 0.95f),
             skillType = SkillSystem.SkillType.AOE,
@@ -784,6 +792,7 @@ public static class PlayerSkillDefs
             unlockParam = src.unlockParam,
             unlockPrice = src.unlockPrice,
             unlockCurrency = src.unlockCurrency,
+            meleeOnly = src.meleeOnly,
             allyConfigId = src.allyConfigId,
             tint = src.tint,
             skillType = src.skillType,

@@ -238,6 +238,21 @@ public static class PlayerJobDefs
         return (PlayerJobId)v;
     }
 
+    /// <summary>
+    /// 是否近战职业（2026-09-15）。近战 = 剑盾卫士 / 狂战士 / 重武者，
+    /// 远程 = 游侠 / 法师 / 牧师。用于过滤 meleeOnly 的技能（避免脆皮远程拿到冲锋类技能），
+    /// 也决定 AOE 能不能隔着距离砸。
+    /// </summary>
+    public static bool IsMelee(PlayerJobId job)
+    {
+        return job == PlayerJobId.SwordShield
+            || job == PlayerJobId.Berserker
+            || job == PlayerJobId.Heavy;
+    }
+
+    /// <summary>当前所选职业是否近战。</summary>
+    public static bool IsSelectedMelee() => IsMelee(GetSelected());
+
     public static void SetSelected(PlayerJobId id)
     {
         var data = SaveSystem.Instance?.Data;
