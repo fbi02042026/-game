@@ -35,8 +35,8 @@ public static class SkillDraftMeta
         { "flame_burst",     M(SkillRarity.Epic,      SynergyTag.Fire,    (int)PlayerJobId.Mage) },
         { "thunder_chain",   M(SkillRarity.Rare,      SynergyTag.Thunder, (int)PlayerJobId.Mage) },
         { "wolf_volley",     M(SkillRarity.Rare,      SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
-        { "war_banner",      M(SkillRarity.Epic,      SynergyTag.Combo,   (int)PlayerJobId.Berserker) },
-        { "iron_wall",       M(SkillRarity.Rare,      SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
+        { "war_banner",      M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Berserker) },
+        { "iron_wall",       M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
         { "frost_nova",      M(SkillRarity.Legendary, SynergyTag.Thunder, (int)PlayerJobId.Mage) },
         { "blood_harvest",   M(SkillRarity.Legendary, SynergyTag.Fire,    (int)PlayerJobId.Berserker) },
 
@@ -51,9 +51,9 @@ public static class SkillDraftMeta
         { "bull_rush",       M(SkillRarity.Common,    SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
         { "quake_slam",      M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
         // 游侠线：暴击增益 + 召唤流补到 3 个
-        { "hawk_eye",        M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Ranger) },
+        { "hawk_eye",        M(SkillRarity.Common,    SynergyTag.Combo,   (int)PlayerJobId.Ranger) },
         { "arrow_storm",     M(SkillRarity.Epic,      SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
-        { "spirit_wolf",     M(SkillRarity.Rare,      SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
+        { "spirit_wolf",     M(SkillRarity.Common,    SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
         // 剑盾输出 + 火系高伤
         { "blade_storm",     M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.SwordShield) },
         { "arcane_flame",    M(SkillRarity.Epic,      SynergyTag.Fire,    (int)PlayerJobId.Mage) },

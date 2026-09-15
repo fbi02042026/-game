@@ -162,19 +162,13 @@ public class ShopUI : MonoBehaviour
 
     void BuildTabs(Transform panel)
     {
-        var kinds = new[]
-        {
-            ShopDefs.Kind.Skill,
-            ShopDefs.Kind.Gacha,
-            ShopDefs.Kind.Resource,
-            ShopDefs.Kind.Material
-        };
-        float startX = -348f;
+        var kinds = ShopDefs.Kinds;
+        float startX = -352f;
         for (int i = 0; i < kinds.Length; i++)
         {
             var kind = kinds[i];
             var btn = CreateBtn(panel.transform, "Tab_" + kind, ShopDefs.KindName(kind),
-                new Vector2(startX + i * 232f, 400f), new Vector2(210f, 60f));
+                new Vector2(startX + i * 184f, 400f), new Vector2(170f, 60f));
             btn.onClick.AddListener(() => OnClickTab(kind));
             _tabButtons.Add(btn);
             _tabLabels.Add(btn.GetComponentInChildren<Text>());
@@ -199,6 +193,14 @@ public class ShopUI : MonoBehaviour
         c.nameText = CreateTxt(bg.transform, "Name", item.name, 26, TextAnchor.MiddleLeft);
         SetRect(c.nameText.rectTransform, 0f, 1f, 24f, -24f, 600f, 34f);
         c.nameText.rectTransform.pivot = new Vector2(0f, 1f);
+
+        bool isSkillRow = !string.IsNullOrEmpty(item.skillId);
+        if (isSkillRow)
+        {
+            var rarEnum = SkillDraftMeta.Rarity(item.skillId);
+            c.nameText.text = $"{SkillRarityUtil.DisplayName(rarEnum)} · {item.name}";
+            c.nameText.color = SkillRarityUtil.Tint(rarEnum);
+        }
 
         c.descText = CreateTxt(bg.transform, "Desc", item.desc.Replace("\n", "　"), 18, TextAnchor.UpperLeft);
         SetRect(c.descText.rectTransform, 0f, 1f, 24f, -62f, 620f, 74f);
@@ -283,9 +285,12 @@ public class ShopUI : MonoBehaviour
 
             if (row.limitText != null)
             {
-                row.limitText.text = item.dailyLimit > 0
+                string limit = item.dailyLimit > 0
                     ? $"今日限购 {item.dailyLimit} 次　剩余 {left}"
                     : "不限购";
+                if (item.kind == ShopDefs.Kind.Fragment)
+                    limit = $"碎片 {SkillFragmentSystem.ProgressText(item.skillId)}　{limit}";
+                row.limitText.text = limit;
             }
 
             if (!onShelf)

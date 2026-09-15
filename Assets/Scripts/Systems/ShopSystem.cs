@@ -50,14 +50,21 @@ public static class ShopSystem
         int left = RemainingToday(item, data);
         if (left == 0) { reason = "今日已售罄"; return false; }
 
-        if (item.kind == ShopDefs.Kind.Skill)
+        if (item.kind == ShopDefs.Kind.Skill || item.kind == ShopDefs.Kind.Fragment)
         {
-            if (PlayerSkillDefs.IsUnlocked(PlayerSkillDefs.GetById(item.skillId), data))
-            { reason = "已拥有"; return false; }
+            var def = PlayerSkillDefs.GetById(item.skillId);
+            if (def == null) { reason = "技能不存在"; return false; }
+            if (PlayerSkillDefs.IsUnlocked(def, data)) { reason = "已拥有"; return false; }
+            // 近战专属技能对远程职业整条隐藏：买了也用不了，不如别让他看见
+            if (def.meleeOnly && !PlayerJobDefs.IsSelectedMelee())
+            { reason = "当前职业不可用"; return false; }
+            if (item.kind == ShopDefs.Kind.Fragment && !SkillFragmentDefs.CanBuyFragment(SkillDraftMeta.Rarity(item.skillId)))
+            { reason = "传说碎片不出售"; return false; }
         }
         else if (item.kind == ShopDefs.Kind.Gacha)
         {
-            if (CollectGachaPool(data).Count == 0) { reason = "暂无可抽取的技能"; return false; }
+            if (CollectGachaPool(data).Count == 0 && CollectOwnedPool(data).Count == 0)
+            { reason = "暂无可抽取的技能"; return false; }
         }
 
         long have = ResourceWallet.Get(data, item.currency);
@@ -89,19 +96,46 @@ public static class ShopSystem
                 result.message = def != null ? $"已解锁「{def.displayName}」" : "已解锁技能";
                 break;
             }
+            case ShopDefs.Kind.Fragment:
+            {
+                if (!SkillFragmentSystem.TryBuyFragments(item.skillId, item.fragmentCount, out string fm))
+                { result.message = fm; return result; }
+                var fd = PlayerSkillDefs.GetById(item.skillId);
+                int have = SkillFragmentSystem.Get(item.skillId);
+                int need = SkillFragmentSystem.Needed(item.skillId);
+                string skillName = fd != null ? fd.displayName : item.skillId;
+                result.message = $"{skillName} 碎片 {have}/{need}";
+                break;
+            }
             case ShopDefs.Kind.Gacha:
             {
                 var pool = CollectGachaPool(data);
+                bool fromOwned = pool.Count == 0;
+                if (fromOwned) pool = CollectOwnedPool(data);
+
                 int n = Mathf.Min(item.drawCount, pool.Count);
                 for (int i = 0; i < n; i++)
                 {
                     string pick = WeightedPick(pool, i == n - 1 && item.drawCount >= 10);
                     if (string.IsNullOrEmpty(pick)) break;
-                    PlayerSkillDefs.Unlock(pick, data);
                     pool.Remove(pick);
-                    result.drawnSkillIds.Add(pick);
+
                     var d = PlayerSkillDefs.GetById(pick);
-                    result.drawnSkillNames.Add(d != null ? d.displayName : pick);
+                    string shown = d != null ? d.displayName : pick;
+
+                    if (PlayerSkillDefs.IsUnlocked(d, data))
+                    {
+                        // 已拥有 → 转碎片，抽卡在后期仍有意义
+                        int got = SkillFragmentSystem.GrantFromDuplicate(pick);
+                        result.drawnSkillIds.Add(pick);
+                        result.drawnSkillNames.Add($"{shown}碎片×{got}");
+                    }
+                    else
+                    {
+                        PlayerSkillDefs.Unlock(pick, data);
+                        result.drawnSkillIds.Add(pick);
+                        result.drawnSkillNames.Add(shown);
+                    }
                 }
                 result.message = result.drawnSkillNames.Count > 0
                     ? "抽到：" + string.Join("、", result.drawnSkillNames)
@@ -132,7 +166,12 @@ public static class ShopSystem
     /// 抽卡池：当前**未解锁**、且当前职业用得上的技能。
     /// 近战专属技能对远程职业不进池（和局内三选一同一套过滤规则）。
     /// </summary>
-    static List<string> CollectGachaPool(SaveData data)
+    static List<string> CollectGachaPool(SaveData data) => FilterSkills(data, false);
+
+    /// <summary>已解锁的技能池：未解锁抽完后走这里，抽到的是碎片。</summary>
+    static List<string> CollectOwnedPool(SaveData data) => FilterSkills(data, true);
+
+    static List<string> FilterSkills(SaveData data, bool wantUnlocked)
     {
         var list = new List<string>();
         var all = PlayerSkillDefs.All;
@@ -142,7 +181,7 @@ public static class ShopSystem
         {
             var def = all[i];
             if (def == null || string.IsNullOrEmpty(def.id)) continue;
-            if (PlayerSkillDefs.IsUnlocked(def, data)) continue;
+            if (PlayerSkillDefs.IsUnlocked(def, data) != wantUnlocked) continue;
             if (!SkillDraftMeta.InDraftPool(def.id)) continue;
             if (def.meleeOnly && !melee) continue;
             list.Add(def.id);

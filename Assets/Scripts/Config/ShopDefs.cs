@@ -1,24 +1,28 @@
 using System.Collections.Generic;
 
 /// <summary>
-/// 城镇商店的静态商品表（2026-09-15 新增）。
-/// 分四个货架：技能解锁 / 抽卡券 / 资源补给 / 材料。
+/// 城镇商店的静态商品表（2026-09-15 定稿第二版）。
 ///
-/// 为什么要有商店：技能分层解锁之后，「天赋」和「成就」两条途径都有明确入口，
-/// 只有「商店」缺一个能花钱的地方。商店的性格是**花钱买时间**——
-/// 所有商品都不提供独占内容，只让你比纯推图更早拿到。
+/// 定位：**花钱买时间，不卖独占内容**——所有商品都能通过推图免费拿到，买断只是提前。
 ///
-/// ⚠️ 所有价格都是 [PLACEHOLDER]：按「一局金币收入」和「一次十连的心理价位」估的，
-/// 没有真实经济数据支撑。上线前必须按实际产出速度重算，否则要么形同虚设要么通胀。
+/// 技能货架按稀有度分三种卖法（这是本版的核心改动）：
+///   普通 → 金币直购（便宜，1 局内可攒够）
+///   稀有 → 金币 / 天赋石直购（中价）
+///   史诗 → **只能买碎片**，攒够合成（长期目标，也让抽卡有存在价值）
+///   传说 → **完全不卖**，只走章节 / 成就 / 抽卡重复碎片，保住炫耀价值
+///
+/// ⚠️ 价格按「第一章一局净收入 ≈ 4500 金币」估的（怪 15~25 只×≈18 金×10 关 + 通关金 ≈ 515），
+/// 没有实测支撑。上线前必须按真实一局收入重算，否则要么形同虚设要么通胀。
 /// </summary>
 public static class ShopDefs
 {
     public enum Kind
     {
-        Skill,      // 直接解锁一个技能
-        Gacha,      // 技能券：随机解锁未解锁的技能
+        Skill,      // 直接解锁一个技能（普通 / 稀有）
+        Fragment,   // 技能碎片（史诗）
+        Gacha,      // 技能券：随机解锁未解锁的技能，重复转碎片
         Resource,   // 资源补给
-        Material    // 强化/分解材料
+        Material    // 强化 / 分解材料
     }
 
     public class Item
@@ -29,8 +33,10 @@ public static class ShopDefs
         public Kind kind;
         public ResourceWallet.ResourceType currency;
         public long price;
-        /// <summary>Kind=Skill 时填技能 id。</summary>
+        /// <summary>Kind=Skill / Fragment 时填技能 id。</summary>
         public string skillId;
+        /// <summary>Kind=Fragment 时填一次买几片。</summary>
+        public int fragmentCount;
         /// <summary>Kind=Gacha 时填抽取次数。</summary>
         public int drawCount;
         /// <summary>Kind=Resource/Material 时填发放的类型与数量。</summary>
@@ -38,42 +44,86 @@ public static class ShopDefs
         public long grantAmount;
         /// <summary>每天限购次数；0 = 不限。</summary>
         public int dailyLimit;
-        /// <summary>达到该章节才上架（0 = 一直上架）。配合分层解锁，避免开局就看到买不起的东西。</summary>
+        /// <summary>达到该章节才上架（0 = 一直上架）。</summary>
         public int showFromChapter;
     }
 
     public static readonly Item[] All =
     {
-        // ============ 技能货架：花钱提前拿到中期技能 ============
+        // ================= 技能 · 普通（金币直购）=================
+        // 这四个都是「等 2~4 章才会白给」的技能，花钱提前 1~2 章拿到。
         new Item {
-            id = "shop_skill_hawk_eye", name = "鹰眼", kind = Kind.Skill,
-            desc = "全队暴击 +35%，持续 10 秒。冷却 20 秒。\n原本要推进到第 4 章才解锁，买断可立即获得。",
-            currency = ResourceWallet.ResourceType.Gold, price = 3000, skillId = "hawk_eye",
-            showFromChapter = 2
+            id = "shop_skill_stone_skin", name = "石肤术", kind = Kind.Skill,
+            desc = "防御 +30%，持续 10 秒。冷却 16 秒。\n原本通关第 2 章解锁，买断可立即获得。",
+            currency = ResourceWallet.ResourceType.Gold, price = 3000, skillId = "stone_skin"
         },
         new Item {
-            id = "shop_skill_flame_burst", name = "烈焰爆裂", kind = Kind.Skill,
-            desc = "260% 攻击的范围伤害，半径 7。冷却 20 秒。\n火流派的核心输出技。",
-            currency = ResourceWallet.ResourceType.Gold, price = 8000, skillId = "flame_burst",
+            id = "shop_skill_iron_wall", name = "铁壁壁垒", kind = Kind.Skill,
+            desc = "防御 +45%，持续 8 秒。冷却 22 秒。\n石肤术的上位版，减伤更猛但更短。",
+            currency = ResourceWallet.ResourceType.Gold, price = 3500, skillId = "iron_wall"
+        },
+        new Item {
+            id = "shop_skill_spirit_wolf", name = "灵狼突袭", kind = Kind.Skill,
+            desc = "3 × 130% 弹幕伤害。冷却 18 秒。\n原本通关第 3 章解锁。",
+            currency = ResourceWallet.ResourceType.Gold, price = 3000, skillId = "spirit_wolf"
+        },
+        new Item {
+            id = "shop_skill_hawk_eye", name = "鹰眼", kind = Kind.Skill,
+            desc = "全队暴击 +35%，持续 10 秒。冷却 20 秒。\n原本推进到第 4 章才解锁。",
+            currency = ResourceWallet.ResourceType.Gold, price = 3000, skillId = "hawk_eye"
+        },
+
+        // ================= 技能 · 稀有（金币 / 天赋石直购）=================
+        new Item {
+            id = "shop_skill_quake_slam", name = "震地重击", kind = Kind.Skill,
+            desc = "300% 范围伤害，半径 8。冷却 21 秒。\n近战专属——远程职业不会看到本条。",
+            currency = ResourceWallet.ResourceType.Gold, price = 8000, skillId = "quake_slam",
             showFromChapter = 2
         },
         new Item {
             id = "shop_skill_thunder_chain", name = "连锁闪电", kind = Kind.Skill,
             desc = "160% 攻击连锁 4 段（合计 2.176 倍）。冷却 18 秒。\n原本走天赋树，这里用天赋石买断。",
-            currency = ResourceWallet.ResourceType.TalentPoint, price = 2, skillId = "thunder_chain",
-            showFromChapter = 3
+            currency = ResourceWallet.ResourceType.TalentPoint, price = 3, skillId = "thunder_chain",
+            showFromChapter = 2
         },
         new Item {
             id = "shop_skill_war_banner", name = "战旗号令", kind = Kind.Skill,
-            desc = "全队攻击 +35%，持续 10 秒。冷却 24 秒。\n持续时间是同类技能里最长的。",
-            currency = ResourceWallet.ResourceType.TalentPoint, price = 3, skillId = "war_banner",
+            desc = "全队攻击 +35%，持续 10 秒。冷却 24 秒。\n持续时间是同类增益里最长的。",
+            currency = ResourceWallet.ResourceType.TalentPoint, price = 4, skillId = "war_banner",
             showFromChapter = 3
         },
 
-        // ============ 抽卡券：随机解锁，比直接买断便宜但有随机性 ============
+        // ================= 技能 · 史诗（只卖碎片）=================
+        // 史诗不直购：攒 80 片合成，让顶级技能是「长期目标」而不是「一次大额消费」。
+        new Item {
+            id = "shop_frag_flame_burst", name = "烈焰爆裂残卷 ×5", kind = Kind.Fragment,
+            desc = "260% 攻击的范围伤害，半径 7。冷却 20 秒。\n合成需 80 片，本条一次给 5 片。",
+            currency = ResourceWallet.ResourceType.Gold, price = 1250, skillId = "flame_burst",
+            fragmentCount = 5, dailyLimit = 2, showFromChapter = 2
+        },
+        new Item {
+            id = "shop_frag_sacred_revival", name = "圣愈术残卷 ×5", kind = Kind.Fragment,
+            desc = "48% 最大生命 + 4.0×攻击的治疗。冷却 22 秒。\n合成需 80 片。",
+            currency = ResourceWallet.ResourceType.Gold, price = 1250, skillId = "sacred_revival",
+            fragmentCount = 5, dailyLimit = 2, showFromChapter = 3
+        },
+        new Item {
+            id = "shop_frag_arrow_storm", name = "箭雨风暴残卷 ×5", kind = Kind.Fragment,
+            desc = "5 × 90% 弹幕（合计 4.5 倍）。冷却 22 秒。\n合成需 80 片。",
+            currency = ResourceWallet.ResourceType.Gold, price = 1250, skillId = "arrow_storm",
+            fragmentCount = 5, dailyLimit = 2, showFromChapter = 3
+        },
+        new Item {
+            id = "shop_frag_arcane_flame", name = "秘法烈焰残卷 ×5", kind = Kind.Fragment,
+            desc = "310% 范围伤害，半径 8。冷却 26 秒。\n火流派后期核心，合成需 80 片。",
+            currency = ResourceWallet.ResourceType.Gold, price = 1250, skillId = "arcane_flame",
+            fragmentCount = 5, dailyLimit = 2, showFromChapter = 4
+        },
+
+        // ================= 抽卡券 =================
         new Item {
             id = "shop_gacha_1", name = "技能券 · 单抽", kind = Kind.Gacha,
-            desc = "从当前未解锁的技能里随机解锁 1 个。\n比直接买断便宜，但抽到哪个不一定。",
+            desc = "从当前未解锁的技能里随机解锁 1 个。\n抽到已拥有的会转成该技能碎片。",
             currency = ResourceWallet.ResourceType.Diamond, price = 500, drawCount = 1,
             showFromChapter = 2
         },
@@ -84,11 +134,11 @@ public static class ShopDefs
             showFromChapter = 2
         },
 
-        // ============ 资源补给 ============
+        // ================= 资源补给 =================
         new Item {
             id = "shop_stamina_30", name = "体力药水", kind = Kind.Resource,
-            desc = "立即恢复 30 点体力。",
-            currency = ResourceWallet.ResourceType.Gold, price = 800,
+            desc = "立即恢复 30 点体力（一次冒险消耗 10 点）。",
+            currency = ResourceWallet.ResourceType.Gold, price = 1200,
             grantType = ResourceWallet.ResourceType.Stamina, grantAmount = 30,
             dailyLimit = 3
         },
@@ -107,7 +157,7 @@ public static class ShopDefs
             dailyLimit = 3
         },
 
-        // ============ 材料 ============
+        // ================= 材料 =================
         new Item {
             id = "shop_enchant_5", name = "强化石 ×5", kind = Kind.Material,
             desc = "装备强化材料。",
@@ -139,6 +189,7 @@ public static class ShopDefs
         switch (kind)
         {
             case Kind.Skill: return "技能";
+            case Kind.Fragment: return "碎片";
             case Kind.Gacha: return "抽卡";
             case Kind.Resource: return "补给";
             default: return "材料";
@@ -157,4 +208,10 @@ public static class ShopDefs
             default: return "分解材料";
         }
     }
+
+    /// <summary>标签页顺序（ShopUI 按这个排）。</summary>
+    public static readonly Kind[] Kinds =
+    {
+        Kind.Skill, Kind.Fragment, Kind.Gacha, Kind.Resource, Kind.Material
+    };
 }

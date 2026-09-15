@@ -67,6 +67,24 @@ public class SaveData
     /// <summary>yyyyMMdd，与今天不同则清空 shopPurchases。</summary>
     public string shopPurchaseDay = "";
 
+    // === 技能碎片（2026-09-15）===
+    // 「技能 id → 该技能碎片数」。史诗/传说技能靠攒碎片合成；
+    // 抽卡抽到「已解锁」的技能也转成这里的碎片，让抽卡在后期仍有意义。
+    public List<StringIntEntry> skillFragmentEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> skillFragments = new Dictionary<string, int>();
+
+    // === 登录奖励（2026-09-15）===
+    // 用一张 StringInt 表存所有标记，避免为几个 int 反复加字段：
+    //   "days"   = 累计登录自然日数
+    //   "cycle"  = 每日循环已领到第几个
+    //   "s{N}"   = 新手第 N 天已领（1）
+    public List<StringIntEntry> loginFlagEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> loginFlags = new Dictionary<string, int>();
+    /// <summary>上次登录的 yyyyMMdd。</summary>
+    public string loginLastDay = "";
+    /// <summary>上次领取每日循环奖励的 yyyyMMdd。</summary>
+    public string loginCycleDay = "";
+
     // === 遗产装备 ===
     public List<EquipmentData> legacyEquipPool = new List<EquipmentData>();
 
@@ -238,6 +256,8 @@ public class SaveData
         unlockedLegendaryWeaponEntries ??= new List<StringIdEntry>();
         unlockedSkillEntries ??= new List<StringIdEntry>();
         shopPurchaseEntries ??= new List<StringIntEntry>();
+        skillFragmentEntries ??= new List<StringIntEntry>();
+        loginFlagEntries ??= new List<StringIntEntry>();
         achievementProgressEntries ??= new List<StringIntEntry>();
         completedAchievementEntries ??= new List<StringIdEntry>();
         claimedMilestoneEntries ??= new List<IntIdEntry>();
@@ -316,6 +336,22 @@ public class SaveData
             }
         }
         if (string.IsNullOrEmpty(shopPurchaseDay)) shopPurchaseDay = today;
+
+        skillFragments = new Dictionary<string, int>();
+        for (int i = 0; i < skillFragmentEntries.Count; i++)
+        {
+            var e = skillFragmentEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            skillFragments[e.id] = e.value;
+        }
+
+        loginFlags = new Dictionary<string, int>();
+        for (int i = 0; i < loginFlagEntries.Count; i++)
+        {
+            var e = loginFlagEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            loginFlags[e.id] = e.value;
+        }
 
         achievementProgress = new Dictionary<string, int>();
         for (int i = 0; i < achievementProgressEntries.Count; i++)
@@ -542,6 +578,14 @@ public class SaveData
         shopPurchaseEntries = new List<StringIntEntry>(shopPurchases.Count);
         foreach (var kv in shopPurchases)
             shopPurchaseEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        skillFragmentEntries = new List<StringIntEntry>(skillFragments.Count);
+        foreach (var kv in skillFragments)
+            skillFragmentEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        loginFlagEntries = new List<StringIntEntry>(loginFlags.Count);
+        foreach (var kv in loginFlags)
+            loginFlagEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
 
         achievementProgressEntries = new List<StringIntEntry>(achievementProgress.Count);
         foreach (var kv in achievementProgress)

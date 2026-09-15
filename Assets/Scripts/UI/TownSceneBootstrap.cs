@@ -108,10 +108,34 @@ public class TownSceneBootstrap : MonoBehaviour
         yield return null;
         yield return null;
         TownHubController.ConsumePendingAdventure();
-        // 上次战斗被强杀 → 判撤离失败并结算；弹了面板就跳过本轮离线收益
-        if (!SettleInterruptedRunOnce())
+        // 上次战斗被强杀 → 判撤离失败并结算；弹了面板就跳过本轮离线收益与登录奖励，
+        // 避免两个半透明弹窗叠在一起
+        bool settled = SettleInterruptedRunOnce();
+        if (!settled)
+        {
             TryClaimTownOfflineReward();
+            TryDailyLoginOnce();
+        }
         TutorialDirector.Instance?.NotifyTownReady();
+    }
+
+    static bool _loginCheckedThisTownVisit;
+
+    /// <summary>
+    /// 登录奖励：进 Town 检查一次，有可领的才弹。
+    /// 累计天数在 OnEnterGame 里按自然日累加（同一天重进不加）。
+    /// </summary>
+    static void TryDailyLoginOnce()
+    {
+        if (_loginCheckedThisTownVisit) return;
+        // 引导未完成不弹，避免半透明遮罩挡「点冒险」
+        if (!StoryProgress.TutorialDone) return;
+        if (SaveSystem.Instance?.Data == null) return;
+        _loginCheckedThisTownVisit = true;
+
+        DailyLoginSystem.OnEnterGame();
+        if (DailyLoginSystem.HasClaimable())
+            DailyLoginUI.Show();
     }
 
     static bool _resumeChecked;
