@@ -189,6 +189,14 @@ public class AchievementSystem : Singleton<AchievementSystem>
         // 折算进日志里程（防重）；战斗成就点数仍保留供旧查询
         AdventureLogMileage.GrantAchievement(achievementId, def.reward.achievementPoints);
 
+        // 成就奖励：解锁玩家技能（2026-09-15 分层解锁）
+        int unlockedSkillCount = PlayerSkillDefs.UnlockSkillsByAchievement(achievementId, data);
+        if (unlockedSkillCount > 0)
+        {
+            SaveSystem.Instance.Save();
+            Debug.Log($"[AchievementSystem] 成就解锁技能 x{unlockedSkillCount}: {achievementId}");
+        }
+
         OnAchievementCompleted?.Invoke(achievementId, def.reward);
         RedDot.RefreshCommon();
 

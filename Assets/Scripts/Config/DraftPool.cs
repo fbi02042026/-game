@@ -272,6 +272,10 @@ public static class DraftPool
             if (def == null || string.IsNullOrEmpty(def.id)) continue;
             if (RunLoadout.HasSkill(def.id)) continue;
             if (!SkillDraftMeta.InDraftPool(def.id)) continue;
+            // 分层解锁（2026-09-15）：未解锁的技能不进局内抽卡池。
+            // 前期只会遇到 Early 那 10 个，中后期技能靠章节 / 天赋 / 商店 / 成就逐步放出。
+            // 详见 Docs/玩家技能分层解锁_2026-09-15.md
+            if (!PlayerSkillDefs.IsUnlocked(def, SaveSystem.Instance?.Data)) continue;
 
             var rar = SkillDraftMeta.Rarity(def.id);
             var tag = SkillDraftMeta.Tag(def.id);

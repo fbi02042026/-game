@@ -53,6 +53,12 @@ public class SaveData
     public List<StringIdEntry> unlockedLegendaryWeaponEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> unlockedLegendaryWeapons = new HashSet<string>();
 
+    // === 玩家技能解锁（2026-09-15）===
+    // 只记录「非章节途径」解锁的技能 id：天赋树 / 商店购买 / 成就奖励。
+    // 章节解锁是动态判定（读 clearedChapterIds），不写进来，避免通关回退后状态不一致。
+    public List<StringIdEntry> unlockedSkillEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> unlockedSkills = new HashSet<string>();
+
     // === 遗产装备 ===
     public List<EquipmentData> legacyEquipPool = new List<EquipmentData>();
 
@@ -212,6 +218,7 @@ public class SaveData
     {
         talentEntries ??= new List<StringIntEntry>();
         unlockedLegendaryWeaponEntries ??= new List<StringIdEntry>();
+        unlockedSkillEntries ??= new List<StringIdEntry>();
         achievementProgressEntries ??= new List<StringIntEntry>();
         completedAchievementEntries ??= new List<StringIdEntry>();
         claimedMilestoneEntries ??= new List<IntIdEntry>();
@@ -263,6 +270,14 @@ public class SaveData
             var e = unlockedLegendaryWeaponEntries[i];
             if (e == null || string.IsNullOrEmpty(e.id)) continue;
             unlockedLegendaryWeapons.Add(e.id);
+        }
+
+        unlockedSkills = new HashSet<string>();
+        for (int i = 0; i < unlockedSkillEntries.Count; i++)
+        {
+            var e = unlockedSkillEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            unlockedSkills.Add(e.id);
         }
 
         achievementProgress = new Dictionary<string, int>();
@@ -445,6 +460,7 @@ public class SaveData
     {
         talents ??= new Dictionary<string, int>();
         unlockedLegendaryWeapons ??= new HashSet<string>();
+        unlockedSkills ??= new HashSet<string>();
         achievementProgress ??= new Dictionary<string, int>();
         completedAchievements ??= new HashSet<string>();
         claimedMilestoneIds ??= new HashSet<int>();
@@ -478,6 +494,10 @@ public class SaveData
         unlockedLegendaryWeaponEntries = new List<StringIdEntry>(unlockedLegendaryWeapons.Count);
         foreach (string id in unlockedLegendaryWeapons)
             unlockedLegendaryWeaponEntries.Add(new StringIdEntry { id = id });
+
+        unlockedSkillEntries = new List<StringIdEntry>(unlockedSkills.Count);
+        foreach (string id in unlockedSkills)
+            unlockedSkillEntries.Add(new StringIdEntry { id = id });
 
         achievementProgressEntries = new List<StringIntEntry>(achievementProgress.Count);
         foreach (var kv in achievementProgress)

@@ -21,6 +21,28 @@ public static class PlayerSkillDefs
         Aoe
     }
 
+    /// <summary>技能放出的阶段（2026-09-15 分层解锁）。
+    /// 前期 = 开局就能用；中期/后期靠章节、天赋、商店、成就逐步放出。
+    /// 只用于 UI 分组与文档，真正判定看 <see cref="Def.unlockSource"/>。</summary>
+    public enum UnlockTier
+    {
+        Early,  // 前期：开局解锁
+        Mid,    // 中期
+        Late    // 后期
+    }
+
+    /// <summary>技能解锁途径。
+    /// None = 开局自带；Chapter = 通关指定章节自动解锁（动态判定，不写存档）；
+    /// Talent / Shop / Achievement 解锁后写入 SaveData.unlockedSkills。</summary>
+    public enum UnlockSource
+    {
+        None,
+        Chapter,
+        Talent,
+        Shop,
+        Achievement
+    }
+
     [Serializable]
     public class Def
     {
@@ -32,7 +54,19 @@ public static class PlayerSkillDefs
         public float cooldown;
         public float duration;
         public string useHint;
-        public int unlockChapter; // 通关该章后解锁（maxUnlockedChapter > unlockChapter）；0=初始
+        // ===== 解锁条件（2026-09-15 分层解锁）=====
+        // 技能池按「前期 10 / 中期 8 / 后期 6」分批放出，避免开局 24 个一起糊脸。
+        // unlockSource 决定走哪条途径；章节用 unlockChapter 动态判定，
+        // 天赋/商店/成就解锁后写入 SaveData.unlockedSkills。
+        public int unlockChapter; // 通关该章后解锁（SaveData 权威通关集合包含该章）；0=不按章节
+        public UnlockSource unlockSource;
+        public UnlockTier unlockTier;
+        /// <summary>非章节途径的参数：天赋节点 key / 成就 id（商店不用，看价格）。</summary>
+        public string unlockParam;
+        /// <summary>商店途径：价格。0 = 不卖。</summary>
+        public int unlockPrice;
+        /// <summary>商店途径：货币（0=金币 1=天赋石 2=钻石）。</summary>
+        public int unlockCurrency;
         public string allyConfigId;
         public Color tint;
         public SkillSystem.SkillType skillType;
@@ -68,6 +102,8 @@ public static class PlayerSkillDefs
             duration = 0f,
             useHint = "血量危险时手动点击",
             unlockChapter = 0,
+            unlockSource = UnlockSource.None,
+            unlockTier = UnlockTier.Early,
             allyConfigId = "ally_heal",
             tint = new Color(0.35f, 0.75f, 0.4f),
             skillType = SkillSystem.SkillType.Buff,
@@ -90,7 +126,9 @@ public static class PlayerSkillDefs
             cooldown = 18f,
             duration = 5f,
             useHint = "精英/Boss 放大招前、或被包围时手动点击",
-            unlockChapter = 1,
+            unlockChapter = 0,
+            unlockSource = UnlockSource.None,
+            unlockTier = UnlockTier.Early,
             allyConfigId = "ally_shield",
             tint = new Color(0.35f, 0.55f, 0.9f),
             skillType = SkillSystem.SkillType.Buff,
@@ -114,7 +152,9 @@ public static class PlayerSkillDefs
             cooldown = 18f,
             duration = 8f,
             useHint = "精英/Boss 战或大量小怪时手动点击",
-            unlockChapter = 2,
+            unlockChapter = 0,
+            unlockSource = UnlockSource.None,
+            unlockTier = UnlockTier.Early,
             allyConfigId = "ally_atk_up",
             tint = new Color(0.9f, 0.45f, 0.25f),
             skillType = SkillSystem.SkillType.Buff,
@@ -138,7 +178,9 @@ public static class PlayerSkillDefs
             cooldown = 15f,
             duration = 6f,
             useHint = "输出窗口期手动点击",
-            unlockChapter = 3,
+            unlockChapter = 0,
+            unlockSource = UnlockSource.None,
+            unlockTier = UnlockTier.Early,
             allyConfigId = "ally_atk_speed",
             tint = new Color(0.4f, 0.7f, 0.95f),
             skillType = SkillSystem.SkillType.Buff,
@@ -162,7 +204,9 @@ public static class PlayerSkillDefs
             cooldown = 18f,
             duration = 8f,
             useHint = "Boss 战或精英怪出现时手动点击",
-            unlockChapter = 4,
+            unlockChapter = 0,
+            unlockSource = UnlockSource.None,
+            unlockTier = UnlockTier.Early,
             allyConfigId = "ally_crit_up",
             tint = new Color(0.95f, 0.55f, 0.25f),
             skillType = SkillSystem.SkillType.Buff,
@@ -186,7 +230,9 @@ public static class PlayerSkillDefs
             cooldown = 25f,
             duration = 0f,
             useHint = "怪群聚集或 Boss 虚弱时手动点击",
-            unlockChapter = 5,
+            unlockChapter = 0,
+            unlockSource = UnlockSource.None,
+            unlockTier = UnlockTier.Early,
             allyConfigId = "ally_thunder",
             tint = new Color(0.65f, 0.4f, 0.9f),
             skillType = SkillSystem.SkillType.AOE,
@@ -214,7 +260,11 @@ public static class PlayerSkillDefs
             cooldown = 20f,
             duration = 0f,
             useHint = "怪群聚集时自动释放",
-            unlockChapter = 0,
+            unlockChapter = 3,
+            unlockSource = UnlockSource.Shop,
+            unlockTier = UnlockTier.Mid,
+            unlockPrice = 8000,
+            unlockCurrency = 0,
             allyConfigId = "",
             tint = new Color(0.98f, 0.45f, 0.24f),
             skillType = SkillSystem.SkillType.AOE,
@@ -236,7 +286,10 @@ public static class PlayerSkillDefs
             cooldown = 18f,
             duration = 0f,
             useHint = "敌人密集时收益最高",
-            unlockChapter = 0,
+            unlockChapter = 4,
+            unlockSource = UnlockSource.Talent,
+            unlockTier = UnlockTier.Mid,
+            unlockParam = "talent_skill_thunder_chain",
             allyConfigId = "",
             tint = new Color(0.66f, 0.48f, 0.98f),
             skillType = SkillSystem.SkillType.Chain,
@@ -259,6 +312,8 @@ public static class PlayerSkillDefs
             duration = 0f,
             useHint = "分散敌人也能稳住输出",
             unlockChapter = 0,
+            unlockSource = UnlockSource.None,
+            unlockTier = UnlockTier.Early,
             allyConfigId = "",
             tint = new Color(0.40f, 0.82f, 0.52f),
             skillType = SkillSystem.SkillType.Projectile,
@@ -280,7 +335,10 @@ public static class PlayerSkillDefs
             cooldown = 24f,
             duration = 10f,
             useHint = "Boss 战开场立即释放",
-            unlockChapter = 0,
+            unlockChapter = 5,
+            unlockSource = UnlockSource.Talent,
+            unlockTier = UnlockTier.Mid,
+            unlockParam = "talent_skill_war_banner",
             allyConfigId = "",
             tint = new Color(0.98f, 0.78f, 0.28f),
             skillType = SkillSystem.SkillType.Buff,
@@ -304,7 +362,9 @@ public static class PlayerSkillDefs
             cooldown = 22f,
             duration = 8f,
             useHint = "被围或 Boss 蓄力时释放",
-            unlockChapter = 0,
+            unlockChapter = 2,
+            unlockSource = UnlockSource.Chapter,
+            unlockTier = UnlockTier.Mid,
             // V6：原来空着 → 走 attackKit 兜底套，玩家看不出这是护盾。
             // 复用圣盾壁垒那套 ally_shield（Resources/VFX/Skills/Ally/ally_shield.prefab 已存在），
             // 教程要让玩家「看见护盾放出来」，第二面护盾也必须一眼可辨。
@@ -331,7 +391,9 @@ public static class PlayerSkillDefs
             cooldown = 28f,
             duration = 0f,
             useHint = "清屏利器，冷却较长",
-            unlockChapter = 0,
+            unlockChapter = 8,
+            unlockSource = UnlockSource.Chapter,
+            unlockTier = UnlockTier.Late,
             allyConfigId = "",
             tint = new Color(0.55f, 0.85f, 1f),
             skillType = SkillSystem.SkillType.AOE,
@@ -353,7 +415,10 @@ public static class PlayerSkillDefs
             cooldown = 30f,
             duration = 0f,
             useHint = "收割残血群",
-            unlockChapter = 0,
+            unlockChapter = 8,
+            unlockSource = UnlockSource.Achievement,
+            unlockTier = UnlockTier.Late,
+            unlockParam = "kill_total_1000",
             allyConfigId = "",
             tint = new Color(0.85f, 0.22f, 0.30f),
             skillType = SkillSystem.SkillType.AOE,
@@ -381,6 +446,8 @@ public static class PlayerSkillDefs
             duration = 0f,
             useHint = "冷却短，适合持续续航",
             unlockChapter = 0,
+            unlockSource = UnlockSource.None,
+            unlockTier = UnlockTier.Early,
             allyConfigId = "",
             tint = new Color(0.45f, 0.85f, 0.55f),
             skillType = SkillSystem.SkillType.Buff,
@@ -404,7 +471,9 @@ public static class PlayerSkillDefs
             cooldown = 22f,
             duration = 0f,
             useHint = "救命大治疗，冷却较长",
-            unlockChapter = 0,
+            unlockChapter = 5,
+            unlockSource = UnlockSource.Chapter,
+            unlockTier = UnlockTier.Late,
             allyConfigId = "",
             tint = new Color(0.55f, 0.95f, 0.7f),
             skillType = SkillSystem.SkillType.Buff,
@@ -428,7 +497,9 @@ public static class PlayerSkillDefs
             cooldown = 16f,
             duration = 10f,
             useHint = "短 CD 常驻减伤",
-            unlockChapter = 0,
+            unlockChapter = 2,
+            unlockSource = UnlockSource.Chapter,
+            unlockTier = UnlockTier.Mid,
             allyConfigId = "",
             tint = new Color(0.62f, 0.58f, 0.50f),
             skillType = SkillSystem.SkillType.Buff,
@@ -452,7 +523,9 @@ public static class PlayerSkillDefs
             cooldown = 26f,
             duration = 12f,
             useHint = "Boss 大招前的减伤窗口",
-            unlockChapter = 0,
+            unlockChapter = 8,
+            unlockSource = UnlockSource.Chapter,
+            unlockTier = UnlockTier.Late,
             allyConfigId = "",
             tint = new Color(0.95f, 0.85f, 0.40f),
             skillType = SkillSystem.SkillType.Buff,
@@ -477,6 +550,8 @@ public static class PlayerSkillDefs
             duration = 0f,
             useHint = "短 CD 清杂兵",
             unlockChapter = 0,
+            unlockSource = UnlockSource.None,
+            unlockTier = UnlockTier.Early,
             allyConfigId = "",
             tint = new Color(0.80f, 0.55f, 0.28f),
             skillType = SkillSystem.SkillType.AOE,
@@ -498,7 +573,9 @@ public static class PlayerSkillDefs
             cooldown = 21f,
             duration = 0f,
             useHint = "中 CD 高伤，范围较大",
-            unlockChapter = 0,
+            unlockChapter = 3,
+            unlockSource = UnlockSource.Chapter,
+            unlockTier = UnlockTier.Mid,
             allyConfigId = "",
             tint = new Color(0.70f, 0.45f, 0.22f),
             skillType = SkillSystem.SkillType.AOE,
@@ -520,7 +597,11 @@ public static class PlayerSkillDefs
             cooldown = 20f,
             duration = 10f,
             useHint = "爆发窗口开暴击",
-            unlockChapter = 0,
+            unlockChapter = 4,
+            unlockSource = UnlockSource.Shop,
+            unlockTier = UnlockTier.Mid,
+            unlockPrice = 3000,
+            unlockCurrency = 0,
             allyConfigId = "",
             tint = new Color(1f, 0.70f, 0.30f),
             skillType = SkillSystem.SkillType.Buff,
@@ -544,7 +625,9 @@ public static class PlayerSkillDefs
             cooldown = 22f,
             duration = 0f,
             useHint = "敌人越多收益越高",
-            unlockChapter = 0,
+            unlockChapter = 5,
+            unlockSource = UnlockSource.Chapter,
+            unlockTier = UnlockTier.Late,
             allyConfigId = "",
             tint = new Color(0.75f, 0.90f, 0.45f),
             skillType = SkillSystem.SkillType.Projectile,
@@ -566,7 +649,9 @@ public static class PlayerSkillDefs
             cooldown = 18f,
             duration = 0f,
             useHint = "召唤流核心，中距离多点爆发",
-            unlockChapter = 0,
+            unlockChapter = 3,
+            unlockSource = UnlockSource.Chapter,
+            unlockTier = UnlockTier.Mid,
             allyConfigId = "",
             tint = new Color(0.50f, 0.90f, 0.65f),
             skillType = SkillSystem.SkillType.Projectile,
@@ -589,6 +674,8 @@ public static class PlayerSkillDefs
             duration = 0f,
             useHint = "被围时最有效",
             unlockChapter = 0,
+            unlockSource = UnlockSource.None,
+            unlockTier = UnlockTier.Early,
             allyConfigId = "",
             tint = new Color(0.85f, 0.88f, 0.95f),
             skillType = SkillSystem.SkillType.AOE,
@@ -610,7 +697,10 @@ public static class PlayerSkillDefs
             cooldown = 26f,
             duration = 0f,
             useHint = "火系高伤，配合灼烧流派",
-            unlockChapter = 0,
+            unlockChapter = 8,
+            unlockSource = UnlockSource.Achievement,
+            unlockTier = UnlockTier.Late,
+            unlockParam = "equip_collect_50",
             allyConfigId = "",
             tint = new Color(1f, 0.50f, 0.20f),
             skillType = SkillSystem.SkillType.AOE,
@@ -689,6 +779,11 @@ public static class PlayerSkillDefs
             duration = src.duration,
             useHint = src.useHint,
             unlockChapter = src.unlockChapter,
+            unlockSource = src.unlockSource,
+            unlockTier = src.unlockTier,
+            unlockParam = src.unlockParam,
+            unlockPrice = src.unlockPrice,
+            unlockCurrency = src.unlockCurrency,
             allyConfigId = src.allyConfigId,
             tint = src.tint,
             skillType = src.skillType,
@@ -796,10 +891,48 @@ public static class PlayerSkillDefs
     public static bool IsUnlocked(Def def, SaveData data)
     {
         if (def == null) return false;
-        if (def.unlockChapter <= 0) return true;
-        if (def.id == "holy_barrier" && data != null && data.chapter1ChoiceDone) return true;
-        int chapter = data != null ? data.maxUnlockedChapter : 1;
-        return chapter > def.unlockChapter;
+        // 1. 已通过天赋 / 商店 / 成就解锁过（写进存档，优先级最高）
+        if (data != null && data.unlockedSkills != null && data.unlockedSkills.Contains(def.id)) return true;
+        // 2. 开局自带
+        if (def.unlockSource == UnlockSource.None && def.unlockChapter <= 0) return true;
+        // 3. 章节解锁：动态判定，不写存档
+        if (def.unlockChapter > 0)
+        {
+            if (def.id == "holy_barrier" && data != null && data.chapter1ChoiceDone) return true;
+            if (data != null && data.clearedChapterIds != null && data.clearedChapterIds.Contains(def.unlockChapter))
+                return true;
+            int chapter = data != null ? data.maxUnlockedChapter : 1;
+            return chapter > def.unlockChapter;
+        }
+        // 4. 天赋 / 商店 / 成就：尚未写进存档 = 未解锁
+        return false;
+    }
+
+    /// <summary>写入解锁记录（天赋节点、成就奖励调用）。章节解锁不要走这里。</summary>
+    public static bool Unlock(string skillId, SaveData data)
+    {
+        if (string.IsNullOrEmpty(skillId) || data == null) return false;
+        data.unlockedSkills ??= new System.Collections.Generic.HashSet<string>();
+        if (data.unlockedSkills.Contains(skillId)) return false;
+        data.unlockedSkills.Add(skillId);
+        return true;
+    }
+
+    /// <summary>成就完成时调用：解锁所有以该成就为解锁条件的技能。返回解锁个数。</summary>
+    public static int UnlockSkillsByAchievement(string achievementId, SaveData data)
+    {
+        if (string.IsNullOrEmpty(achievementId) || data == null) return 0;
+        var all = All;
+        if (all == null) return 0;
+        int n = 0;
+        for (int i = 0; i < all.Length; i++)
+        {
+            var def = all[i];
+            if (def == null || def.unlockSource != UnlockSource.Achievement) continue;
+            if (string.IsNullOrEmpty(def.unlockParam) || def.unlockParam != achievementId) continue;
+            if (Unlock(def.id, data)) n++;
+        }
+        return n;
     }
 
     public static string FormatDetail(Def def)
@@ -811,7 +944,28 @@ public static class PlayerSkillDefs
     public static string FormatUnlockHint(Def def)
     {
         if (def == null) return "未解锁";
-        if (def.unlockChapter <= 0) return "未解锁";
-        return $"未解锁：通关第{def.unlockChapter}章后解锁";
+        switch (def.unlockSource)
+        {
+            case UnlockSource.Chapter:
+                return def.unlockChapter > 0 ? $"未解锁：通关第{def.unlockChapter}章后解锁" : "未解锁";
+            case UnlockSource.Talent:
+                return "未解锁：在天赋树中解锁";
+            case UnlockSource.Shop:
+                return $"未解锁：可在技能页花 {def.unlockPrice} {CurrencyName(def.unlockCurrency)} 解锁";
+            case UnlockSource.Achievement:
+                return "未解锁：完成对应成就后解锁";
+            default:
+                return def.unlockChapter > 0 ? $"未解锁：通关第{def.unlockChapter}章后解锁" : "未解锁";
+        }
+    }
+
+    public static string CurrencyName(int currency)
+    {
+        switch (currency)
+        {
+            case 1: return "天赋石";
+            case 2: return "钻石";
+            default: return "金币";
+        }
     }
 }

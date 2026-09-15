@@ -84,12 +84,39 @@ public static class MonsterAffixDefs
         return baseCount;
     }
 
+    /// <summary>
+    /// 下一次 <see cref="Roll"/> 使用的词缀偏好（| 分隔的枚举名，如 "Split"、"Bulwark|Thorns"）。
+    /// 由 WavePlanner 在实例化精英前挂上、Roll 消费后立即清空 —— 不给别的怪漏味。
+    /// </summary>
+    static string _pendingBias = "";
+
+    public static void SetPendingBias(string bias) { _pendingBias = bias ?? ""; }
+    public static void ClearPendingBias() { _pendingBias = ""; }
+
     /// <summary>随机抽 n 个不重复的词缀。</summary>
     public static List<MonsterAffixId> Roll(int chapter)
     {
         int n = RollCount(chapter);
         var pool = new List<MonsterAffixId>();
-        for (int i = 0; i < All.Length; i++) pool.Add(All[i].Id);
+
+        // 有偏好就只在偏好里抽（解析失败则退回全池，绝不因为配错表而崩）
+        string bias = _pendingBias;
+        _pendingBias = "";
+        if (!string.IsNullOrEmpty(bias))
+        {
+            var parts = bias.Split('|');
+            for (int i = 0; i < parts.Length; i++)
+            {
+                string p = parts[i].Trim();
+                if (string.IsNullOrEmpty(p)) continue;
+                if (System.Enum.TryParse(p, true, out MonsterAffixId bid) && bid != MonsterAffixId.None)
+                    pool.Add(bid);
+            }
+        }
+        if (pool.Count == 0)
+        {
+            for (int i = 0; i < All.Length; i++) pool.Add(All[i].Id);
+        }
 
         var picked = new List<MonsterAffixId>(n);
         for (int k = 0; k < n && pool.Count > 0; k++)
