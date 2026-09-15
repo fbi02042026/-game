@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 城镇/角色页背包网格：只绑定预制体里已摆好的格子，不改布局。
-/// 逻辑网格与预制体一致（8×5）；默认解锁上 3 行，最下方两行由天赋 R2/R7 扩容解锁。
+/// 逻辑网格与预制体一致（4×3）；默认 3 行全开，不再有天赋扩容行。
 /// </summary>
 public class TownBackpackGrid : MonoBehaviour
 {

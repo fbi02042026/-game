@@ -211,9 +211,26 @@ def main():
         return
 
     shutil.copyfile(PREFAB, PREFAB + '.bak')
-    with io.open(PREFAB, 'w', encoding='utf-8', newline='\n') as f:
-        f.write(out)
-    print("\n已写入 %s（备份 %s.bak）" % (PREFAB, os.path.basename(PREFAB)))
+
+    # Unity 文本序列化必须有这两行头指令（%TAG 用来解析 !u! 标签）。
+    # 丢掉它们会让 Unity 报 "File may be corrupted or was serialized with a newer version of Unity"。
+    prologue = []
+    for l in text.split('\n'):
+        if l.startswith('%'):
+            prologue.append(l)
+        elif l.strip() == '':
+            continue
+        else:
+            break
+    if prologue:
+        out = '\n'.join(prologue) + '\n' + out
+
+    # 保持原文件的换行风格（Windows 下 Unity 写的是 CRLF）
+    nl = '\r\n' if '\r\n' in text else '\n'
+    with io.open(PREFAB, 'w', encoding='utf-8', newline='') as f:
+        f.write(out.replace('\n', nl))
+    print("\n已写入 %s（备份 %s.bak，头部指令 %d 行，换行=%s）"
+          % (PREFAB, os.path.basename(PREFAB), len(prologue), 'CRLF' if nl == '\r\n' else 'LF'))
 
 
 if __name__ == '__main__':

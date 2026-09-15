@@ -99,7 +99,7 @@ public partial class BattleUI : MonoBehaviour
         BindSkillAvatar(ref merc1SkillAvatar, "SkillBtn2", "MercSkill1");
         BindSkillAvatar(ref merc2SkillAvatar, "SkillBtn3", "MercSkill2");
 
-        // 新底部布局：skill 4 槽 / zhuangbei 6 槽
+        // 新底部布局：skill 4 槽 / zhuangbei 5 槽（头/胸/脚/主手/副手）
         BindBottomQuickSlots();
 
         EnsureGridCellsBound();
@@ -354,12 +354,12 @@ public partial class BattleUI : MonoBehaviour
         // 单人/引导：两格伙伴都按未解锁处理，清掉占位血量数字
         bool lockExtraSlots = (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && !showTutorialMerc;
         if (lockExtraSlots)
-            mercSlot1?.ShowUnavailable("未解锁");
+            mercSlot1?.ShowUnavailable(MercLockedHint);
         else
             mercSlot1?.SetLocked(false);
 
         if (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle)
-            mercSlot2?.ShowUnavailable("未解锁");
+            mercSlot2?.ShowUnavailable(MercLockedHint);
         else
             mercSlot2?.SetLocked(false);
 

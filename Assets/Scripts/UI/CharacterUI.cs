@@ -5,7 +5,7 @@ using UnityEngine.UI;
 /// 角色页（MainNavTab.Character）。参考 Art/UI/Character/character_reference.png。
 /// - 无左侧装备栏
 /// - 右上：天赋 / 技能；左侧独立按钮也可打开技能选择
-/// - 背包格子按角色页预制体显示（8×5）；最下方两行天赋解锁
+/// - 背包格子按角色页预制体显示（4×3，共 12 格）
 /// - 不自建资源条/底栏，Show 时 RaiseSharedChrome，底部预留下方 150
 /// </summary>
 public class CharacterUI : MonoBehaviour, ITownPage

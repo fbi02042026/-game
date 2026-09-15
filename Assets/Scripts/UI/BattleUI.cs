@@ -12,7 +12,7 @@ public partial class BattleUI : MonoBehaviour
     public static BattleUI Instance;
 
     [Header("=== 顶部状态栏 ===")]
-    public Text stageLabel;         // 关卡标识 "第一章" / "1-1"
+    public Text stageLabel;         // 关卡标识：只显示地图名（暮影森林…），不再出现「第X章」
     public Text difficultyLabel;    // 难度标识 "普通"
     public Text goldText;           // 金币
     public Text talentStoneText;    // 天赋石
@@ -252,7 +252,6 @@ public partial class BattleUI : MonoBehaviour
         UpdateStageInfo(chapter, stageIdx, diff, gold);
         ApplySoloBattleHud();
         UpdateCharacterSlots();
-        UpdateSkillAvatars();
         UpdateSkillAvatars();
         UpdateBackpackGrid();
         UpdateStageProgress(stageIdx);

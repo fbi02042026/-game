@@ -144,7 +144,7 @@ public partial class BattleUI : MonoBehaviour
         // 传入真实格子：没有 GridLayoutGroup（格子是美术手摆的）时也能算对位置
         BackpackGridVisual.ClearAndPlace(gridRt, gridLayout, placements, FindGridCellRect, BattleLootMode.Active);
         ApplyBackpackCellOccupiedColors(placements);
-        // 换装/整理后同步底部 6 个装备快捷槽
+        // 换装后同步底部 5 个装备快捷槽
         UpdateEquipQuickSlots();
         Debug.Log($"[BattleUI] 背包刷新 items={placements.Count} cells={gridCells.Count} layout={(gridLayout != null)}");
     }

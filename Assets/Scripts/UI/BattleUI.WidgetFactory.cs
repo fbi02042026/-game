@@ -9,7 +9,7 @@ using System.Collections.Generic;
 public partial class BattleUI : MonoBehaviour
 {
     // ============================================================
-    // 新底部布局：skill（4 主动技槽） / zhuangbei（6 装备快捷槽）
+    // 新底部布局：skill（4 主动技槽） / zhuangbei（5 装备快捷槽）
     // 临时 UI 上没挂任何项目脚本，这里纯按节点顺序建视图对象并缓存。
     // ============================================================
 
@@ -18,13 +18,15 @@ public partial class BattleUI : MonoBehaviour
         Transform backpack = FindDeepChildIgnoreCase(transform, "BackpackPanel");
         if (skillSlotRoot == null)
         {
-            // 新预制体：4 个主动技槽挂在 BackpackPanel/SkillBar（旧名 skill），两个名字都认
-            skillSlotRoot = (backpack != null
-                                ? (FindDeepChildIgnoreCase(backpack, "skill")
-                                   ?? FindDeepChildIgnoreCase(backpack, "SkillBar"))
-                                : null)
-                            ?? FindDeepChildIgnoreCase(transform, "skill")
-                            ?? FindDeepChildIgnoreCase(transform, "SkillBar");
+            // 新预制体：4 个主动技槽挂在 BackpackPanel/SkillBar（旧预制体叫 skill）。
+            // 坑：MercSlot1 / MercSlot2 下还残留两个同名的空 "skill" 节点，
+            // 深度优先查找会先命中它们（子节点 0 个）导致技能槽全绑不上。
+            // 所以先找 SkillBar，并且只认「真的有子节点」的容器。
+            skillSlotRoot = PickSlotContainer(
+                (backpack != null ? FindDeepChildIgnoreCase(backpack, "SkillBar") : null)
+                    ?? FindDeepChildIgnoreCase(transform, "SkillBar"),
+                (backpack != null ? FindDeepChildIgnoreCase(backpack, "skill") : null)
+                    ?? FindDeepChildIgnoreCase(transform, "skill"));
         }
         if (equipSlotRoot == null)
         {
@@ -37,6 +39,23 @@ public partial class BattleUI : MonoBehaviour
         BindRunSkillSlots();
         BindEquipQuickSlots();
         Debug.Log($"[BattleUI] 底部快捷槽绑定 skill={runSkillSlots?.Count ?? 0} equip={equipQuickSlots?.Count ?? 0}");
+    }
+
+    /// <summary>
+    /// 从候选容器里挑真正装了槽位的那一个：优先「有子节点」的，全空则返回第一个非空。
+    /// 预制体里常有同名的空壳节点（历史残留），只按名字找会绑到空容器上。
+    /// </summary>
+    static Transform PickSlotContainer(params Transform[] candidates)
+    {
+        Transform first = null;
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            var c = candidates[i];
+            if (c == null) continue;
+            if (first == null) first = c;
+            if (c.childCount > 0) return c;
+        }
+        return first;
     }
 
     /// <summary>

@@ -3,7 +3,7 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 
 /// <summary>
-/// 底部 4 个主动技槽与 6 个装备快捷槽的刷新，以及技能/自动战斗相关的点击回调。
+/// 底部 4 个主动技槽与 5 个装备快捷槽的刷新，以及技能/自动战斗相关的点击回调。
 /// BattleUI 的 partial 分部，与 BattleUI.cs 同属一个类，成员签名保持原名。
 /// </summary>
 public partial class BattleUI : MonoBehaviour
@@ -45,7 +45,7 @@ public partial class BattleUI : MonoBehaviour
         }
     }
 
-    /// <summary>刷新底部 6 个装备快捷槽：头/胸甲/手/脚/左手/右手。</summary>
+    /// <summary>刷新底部 5 个装备快捷槽：头 / 胸 / 脚 / 主手 / 副手（暂不做「手」和「披风」）。</summary>
     public void UpdateEquipQuickSlots()
     {
         if (equipQuickSlots == null || equipQuickSlots.Count == 0) return;
