@@ -29,6 +29,12 @@ GAME_ONLY = ("/Resources/Prefabs/", "/Scenes/")
 EMPTY = "m_Sprite: {fileID: 0}"
 
 
+def unescape(s):
+    """Unity YAML 把非 ASCII 写成 \\uXXXX，解码后再输出中文节点名"""
+    return re.sub(r"\\u([0-9a-fA-F]{4})",
+                  lambda m: chr(int(m.group(1), 16)), s)
+
+
 def parse_docs(text):
     parts = re.split(r"^---\s+!u!(\d+)\s+&(-?\d+)", text, flags=re.M)
     out = []
@@ -51,7 +57,7 @@ def analyze(path):
     for cid, fid, body in docs:
         if cid == 1:      # GameObject
             m = re.search(r"^  m_Name:\s*(.*)$", body, re.M)
-            go_name[fid] = (m.group(1).strip().strip('"') if m else "?")
+            go_name[fid] = (unescape(m.group(1).strip().strip('"')) if m else "?")
         elif cid == 4 or cid == 224:   # Transform / RectTransform
             m = re.search(r"^  m_GameObject:\s*\{fileID:\s*(-?\d+)", body, re.M)
             if m:
