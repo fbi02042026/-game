@@ -17,10 +17,18 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     public class BackpackItem
     {
         public EquipInstance equip;
+        /// <summary>
+        /// 道具。2026-09-15：背包 12 格改为**只装道具**——
+        /// 装备直接穿、替换下来的自动分解，不再占格子。
+        /// </summary>
+        public ItemInstance item;
         public int x;
         public int y;
         public int width;
         public int height;
+
+        /// <summary>这一格装的是道具（而非装备）。</summary>
+        public bool IsItem => item != null;
     }
 
     /// <summary>撤离/死亡回城：清空局内背包与已装备（裂缝装备不带出）。</summary>
@@ -71,6 +79,117 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
     [System.Obsolete("Use EnsureStarterWeapon")]
     public bool EnsureStarterOffHandWeapon() => EnsureStarterWeapon();
+
+    // ===== 道具（2026-09-15：背包格子只装道具，装备不再入包）=====
+
+    /// <summary>
+    /// 往背包放一份道具，能叠就叠（受 stackMax 限制），全部放不下返回 false。
+    /// 道具一律 1×1。
+    /// </summary>
+    public bool TryAddItemStack(string defId, int count, out BackpackItem placed)
+    {
+        placed = null;
+        if (string.IsNullOrEmpty(defId) || count <= 0) return false;
+
+        var def = ItemDefs.Get(defId);
+        if (def == null)
+        {
+            Debug.LogWarning($"[背包] 未知道具 id：{defId}（道具表里没有这一行）");
+            return false;
+        }
+
+        int left = count;
+
+        // 1) 先往已有堆叠里塞
+        if (def.stackMax > 1)
+        {
+            for (int i = 0; i < _items.Count && left > 0; i++)
+            {
+                var it = _items[i];
+                if (it?.item == null || it.item.defId != defId) continue;
+                if (it.item.count >= def.stackMax) continue;
+                int add = Mathf.Min(def.stackMax - it.item.count, left);
+                it.item.count += add;
+                left -= add;
+                if (placed == null) placed = it;
+            }
+        }
+
+        // 2) 剩下的开新格
+        while (left > 0)
+        {
+            if (!FindEmptyPosition(1, 1, out int x, out int y)) break;
+            int add = def.stackMax > 1 ? Mathf.Min(def.stackMax, left) : 1;
+            var bi = new BackpackItem
+            {
+                item = new ItemInstance(defId, add),
+                x = x, y = y, width = 1, height = 1
+            };
+            OccupyGrid(x, y, 1, 1, true);
+            _items.Add(bi);
+            left -= add;
+            if (placed == null) placed = bi;
+        }
+
+        if (placed == null) return false;
+        NotifyBackpackChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// 使用一份道具。具体效果等道具内容定稿后按 def.useEffect 派发（见 ItemDef.useEffect 注释），
+    /// 这里只负责判定可用性与扣数量。
+    /// </summary>
+    public bool UseItem(BackpackItem bi)
+    {
+        if (bi?.item == null) return false;
+        var def = bi.item.Def;
+        if (def == null || !def.IsUsable) return false;
+
+        // TODO(道具内容定稿后)：按 def.useEffect 派发，如
+        //   heal_hp:30     -> Hero.Instance 回血 30
+        //   buff_atk:20:15 -> 攻击 +20，持续 15 秒
+        Debug.Log($"[背包] 使用道具 {def.name}（{def.useEffect}）——效果尚未实现，先扣数量");
+        ConsumeItem(bi, 1);
+        return true;
+    }
+
+    /// <summary>整格丢弃。任务道具等 canDrop=false 的返回 false（UI 应直接不显示丢弃按钮）。</summary>
+    public bool DropItemStack(BackpackItem bi)
+    {
+        if (bi?.item == null) return false;
+        var def = bi.item.Def;
+        if (def != null && !def.canDrop) return false;
+        RemoveItemCell(bi);
+        NotifyBackpackChanged();
+        return true;
+    }
+
+    void ConsumeItem(BackpackItem bi, int n)
+    {
+        if (bi?.item == null) return;
+        bi.item.count -= n;
+        if (bi.item.count > 0)
+        {
+            NotifyBackpackChanged();
+            return;
+        }
+        RemoveItemCell(bi);
+        NotifyBackpackChanged();
+    }
+
+    void RemoveItemCell(BackpackItem bi)
+    {
+        if (bi == null) return;
+        OccupyGrid(bi.x, bi.y, bi.width, bi.height, false);
+        _items.Remove(bi);
+    }
+
+    void NotifyBackpackChanged()
+    {
+        OnBackpackChanged?.Invoke();
+        BattleUI.Instance?.UpdateBackpackGrid();
+    }
 
     public bool TryAddItem(EquipInstance equip, out BackpackItem item)
     {
@@ -154,26 +273,8 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
             ScrapBagEquip(old);
     }
 
-    void ScrapBagEquip(EquipInstance equip)
-    {
-        if (equip == null) return;
-        var bi = FindBackpackItemByEquip(equip);
-        if (bi != null)
-        {
-            OccupyGrid(bi.x, bi.y, bi.width, bi.height, false);
-            _items.Remove(bi);
-        }
-        // 清旧槽位标记（兼容残留）
-        var keys = new List<EquipSlotType>(_equippedBySlot.Keys);
-        for (int i = 0; i < keys.Count; i++)
-        {
-            if (_equippedBySlot.TryGetValue(keys[i], out var cur) && cur == equip)
-                _equippedBySlot.Remove(keys[i]);
-        }
-        int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
-        WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
-        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats));
-    }
+    // 背包已满时自动让位：与「替换/丢掉直接分解」是同一套，统一走 ScrapEquip
+    void ScrapBagEquip(EquipInstance equip) => ScrapEquip(equip);
 
     /// <summary>同部位替换折强化石：按当前职业给一点口吻。</summary>
     static string BuildScrapToast(EquipInstance equip, int mats)
@@ -289,6 +390,17 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         for (int i = 0; i < _items.Count; i++)
         {
             if (_items[i]?.equip == equip) return _items[i];
+        }
+        return null;
+    }
+
+    /// <summary>按道具实例回查背包条目。overlay 重建后旧引用可能失效，用实例比对最稳。</summary>
+    public BackpackItem FindItemByItem(ItemInstance it)
+    {
+        if (it == null) return null;
+        for (int i = 0; i < _items.Count; i++)
+        {
+            if (_items[i] != null && ReferenceEquals(_items[i].item, it)) return _items[i];
         }
         return null;
     }
@@ -463,6 +575,70 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         return true;
     }
 
+    /// <summary>
+    /// 掉落/奖励装备「直接穿上」，**不进背包格子**。
+    /// 2026-09-15 需求：装备永不进背包，12 个格子留给道具；被替换下来的旧件自动分解。
+    /// 复用 EquipItem 的穿戴逻辑（含武器实际槽位解析与 SPUM 时装刷新），这里只包一层。
+    /// </summary>
+    public bool TryEquipDirect(EquipInstance equip)
+    {
+        if (equip == null) return false;
+
+        var rig = GetHeroHandRig();
+        EquipSlotType slot = rig.IsValid
+            ? WeaponLoadoutRules.ResolveWearSlot(equip, rig)
+            : WeaponLoadoutRules.ResolveLogicalSlot(equip);
+        // 换下谁，先记下来（穿成功后再分解它）
+        var old = GetEquippedInLogicalSlot(slot);
+
+        var tmp = new BackpackItem
+        {
+            equip = equip,
+            x = 0, y = 0,
+            width = equip.gridWidth,
+            height = equip.gridHeight
+        };
+        if (!EquipItem(tmp)) return false;
+
+        // 与入包穿戴同一套统计：拿到装备就算数（不进背包也要记）
+        AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
+        AdventureLogAchievements.OnEquipPicked();
+
+        if (old != null && old != equip)
+            ScrapEquip(old);
+
+        return true;
+    }
+
+    /// <summary>
+    /// 直接分解一件装备，**不要求它在背包里**（替换下来的旧件、没穿的掉落件都走这里）。
+    /// 给强化石；不会回流背包。分解即消失，不做二次确认（2026-09-15 需求）。
+    /// </summary>
+    public void ScrapEquip(EquipInstance equip)
+    {
+        if (equip == null) return;
+
+        // 万一它还在背包格子里，先把格子清出来
+        var bi = FindBackpackItemByEquip(equip);
+        if (bi != null)
+        {
+            OccupyGrid(bi.x, bi.y, bi.width, bi.height, false);
+            _items.Remove(bi);
+        }
+        // 清掉可能残留的已装备标记
+        var keys = new List<EquipSlotType>(_equippedBySlot.Keys);
+        for (int i = 0; i < keys.Count; i++)
+        {
+            if (_equippedBySlot.TryGetValue(keys[i], out var cur) && cur == equip)
+                _equippedBySlot.Remove(keys[i]);
+        }
+
+        int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
+        WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
+        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats));
+        OnBackpackChanged?.Invoke();
+    }
+
     void ClearSlotIfOccupied(EquipSlotType slot, EquipInstance keep)
     {
         if (!_equippedBySlot.TryGetValue(slot, out var old) || old == null || old == keep)
@@ -607,7 +783,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     /// <summary>开箱整理：把物品挪到新格子（不重叠）。</summary>
     public bool TryMoveItem(BackpackItem item, int newX, int newY)
     {
-        if (item == null || item.equip == null) return false;
+        if (item == null || (item.equip == null && item.item == null)) return false;
         int unlockedRows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
         int maxY = Mathf.Min(GameConfig.BACKPACK_HEIGHT, unlockedRows);
         if (newX < 0 || newY < 0 || newX + item.width > GameConfig.BACKPACK_WIDTH || newY + item.height > maxY)

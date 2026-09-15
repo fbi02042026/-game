@@ -248,6 +248,33 @@ public class CharacterSlotUI
         }
     }
 
+    /// <summary>
+    /// 玩家头像下第二条 = 雷击奥义充能（HeroThunderUltimate）。
+    /// 与佣兵的技能能量是两套语义，**不要复用 SetEnergy**——两者只是共用 lanBarFill / lanText
+    /// 这两个显示控件。按需求：即使 GameConfig.THUNDER_ULT_ENABLED 关闭也显示空条与 0/N，不隐藏。
+    /// 不改动条的颜色与光边（那套是技能能量就绪的表现，奥义不参与）。
+    /// </summary>
+    public void SetUltCharge(float ratio, int cur, int need, bool casting)
+    {
+        float r = Mathf.Clamp01(ratio);
+        if (lanBarFill != null)
+        {
+            lanBarFill.gameObject.SetActive(true);
+            lanBarFill.enabled = true;
+            lanBarFill.fillAmount = r;
+        }
+        if (lanText != null)
+        {
+            lanText.gameObject.SetActive(true);
+            if (casting)
+                lanText.text = "雷击中…";
+            else if (need > 0)
+                lanText.text = r >= 0.999f ? "雷击就绪" : $"{cur}/{need}";
+            else
+                lanText.text = "0";   // 没数据时也别空着（第二条默认显示 0）
+        }
+    }
+
     public void TickSkillReadyPulse()
     {
         if (glowBorder == null || !glowBorder.gameObject.activeSelf) return;

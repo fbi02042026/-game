@@ -489,14 +489,13 @@ public static class PlayerJobDefs
         if (inst.gridWidth > GameConfig.BACKPACK_WIDTH)
             inst.gridWidth = GameConfig.BACKPACK_WIDTH;
 
-        if (!bag.TryAddUniqueBySlot(inst, out GridBackpackSystem.BackpackItem item))
+        // 2026-09-15：职业起步装备直接穿上，不占背包格子（背包只留给道具）
+        if (!bag.TryEquipDirect(inst))
         {
-            Debug.LogWarning($"[PlayerJobDefs] 入包失败: {inst.equipName} ({tpl.templateId}) {inst.gridWidth}x{inst.gridHeight}");
-            UIManager.Instance?.ShowToast("背包满，无法发放职业武器");
+            Debug.LogWarning($"[PlayerJobDefs] 装备失败: {inst.equipName} ({tpl.templateId})");
+            UIManager.Instance?.ShowToast("无法装备职业武器");
             return false;
         }
-        if (item != null)
-            bag.EquipItem(item);
         return true;
     }
 }

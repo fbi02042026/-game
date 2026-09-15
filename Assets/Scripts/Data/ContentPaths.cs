@@ -25,6 +25,8 @@ public static class ContentPaths
         /// <summary>章节属性倍率（与旧 CHAPTER_STAT_SCALE 1:1）。</summary>
         public const string ChapterStatScale = "Data/Tables/chapter_stat_scale";
         public const string MonsterUnlockTier = "Data/Tables/monster_unlock_tier";
+        /// <summary>道具定义表（2026-09-15 新增；背包格子已改为只装道具）。</summary>
+        public const string ItemDefs = "Data/Tables/item_defs";
         public const string StageSpawn = "Data/Tables/stage_spawn";
         public const string TutorialBattle = "Data/Tables/tutorial_battle";
         public const string BattleQuest = "Data/Tables/battle_quest";

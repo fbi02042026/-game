@@ -16,7 +16,11 @@ public static class BackpackGridVisual
     {
         public int x, y, w, h;
         public EquipInstance equip;
+        /// <summary>道具。2026-09-15 起背包格子主要就是装它；与 equip 互斥。</summary>
+        public ItemInstance item;
         public bool equipped;
+
+        public bool IsItem => item != null;
     }
 
     /// <param name="cellAt">按 (x,y) 取真实格子；有它就不依赖 GridLayoutGroup 的数值。</param>
@@ -49,7 +53,9 @@ public static class BackpackGridVisual
         for (int i = 0; i < items.Count; i++)
         {
             var p = items[i];
-            if (p.equip == null || p.w < 1 || p.h < 1) continue;
+            bool isItem = p.item != null;
+            if (p.w < 1 || p.h < 1) continue;
+            if (!isItem && p.equip == null) continue;
 
             var go = new GameObject($"Item_{p.x}_{p.y}", typeof(RectTransform));
             go.transform.SetParent(layer, false);
@@ -73,35 +79,55 @@ public static class BackpackGridVisual
                 rt.sizeDelta = new Vector2(Mathf.Max(0f, totalW - IconPad * 2f), Mathf.Max(0f, totalH - IconPad * 2f));
             }
 
-            EquipIcons.Resolve(p.equip);
+            Sprite sprite;
+            if (isItem) sprite = ItemDefs.LoadIcon(p.item.defId);
+            else { EquipIcons.Resolve(p.equip); sprite = p.equip.icon; }
 
-            bool hasIcon = p.equip.icon != null;
+            bool hasIcon = sprite != null;
             // 图标画在子节点上，宿主只负责跨格占位；多格时子节点按宽等比后垂直居中
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             iconGo.transform.SetParent(go.transform, false);
             var iconRt = iconGo.GetComponent<RectTransform>();
             var img = iconGo.GetComponent<Image>();
-            img.sprite = p.equip.icon;
+            img.sprite = sprite;
             img.raycastTarget = false;
             img.type = Image.Type.Simple;
             img.enabled = true;
-            PlaceIconInHost(rt, iconRt, img, p.equip.icon, p.h, p.equip);
-            EquipRarityMaterials.Apply(img, p.equip.rarity);
-            img.color = !hasIcon
-                ? (p.equipped ? new Color(0.35f, 0.35f, 0.4f, 0.95f) : new Color(0.45f, 0.5f, 0.62f, 0.95f))
-                : (p.equipped ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white);
+            PlaceIconInHost(rt, iconRt, img, sprite, p.h, isItem ? null : p.equip);
+
+            if (isItem)
+            {
+                img.color = Color.white;
+            }
+            else
+            {
+                EquipRarityMaterials.Apply(img, p.equip.rarity);
+                img.color = !hasIcon
+                    ? (p.equipped ? new Color(0.35f, 0.35f, 0.4f, 0.95f) : new Color(0.45f, 0.5f, 0.62f, 0.95f))
+                    : (p.equipped ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white);
+            }
 
             if (!hasIcon)
-                AddNameFallback(go.transform, EquipUiText.EquipTitleWithHand(p.equip) ?? "装备");
+                AddNameFallback(go.transform,
+                    isItem ? (p.item.Name ?? "道具") : (EquipUiText.EquipTitleWithHand(p.equip) ?? "装备"));
 
-            if (WeaponLoadoutRules.IsLoadoutItem(p.equip))
-                AddHandBadge(go.transform, p.equip);
+            if (isItem)
+            {
+                // 可叠加道具显示右下角数量
+                if (p.item.count > 1) AddCountBadge(go.transform, p.item.count);
+            }
+            else
+            {
+                if (WeaponLoadoutRules.IsLoadoutItem(p.equip))
+                    AddHandBadge(go.transform, p.equip);
 
-            if (p.equipped)
-                AddEquippedBadge(go.transform, p.h);
+                if (p.equipped)
+                    AddEquippedBadge(go.transform, p.h);
+            }
 
-            // 开箱整理：可拖可点
-            if (enableDrag)
+            // 道具恒开射线（要点开「使用/丢弃」浮层）；拖拽本身仍只在开箱整理阶段生效
+            bool interactive = enableDrag || isItem;
+            if (interactive)
             {
                 img.raycastTarget = true;
                 var hostImg = go.GetComponent<Image>();
@@ -113,7 +139,8 @@ public static class BackpackGridVisual
                 hostImg.raycastTarget = true;
                 var drag = go.GetComponent<BattleBackpackItemDrag>();
                 if (drag == null) drag = go.AddComponent<BattleBackpackItemDrag>();
-                drag.Equip = p.equip;
+                drag.Equip = isItem ? null : p.equip;
+                drag.Item = isItem ? p.item : null;
                 drag.GridX = p.x;
                 drag.GridY = p.y;
                 drag.Width = p.w;
@@ -283,6 +310,32 @@ public static class BackpackGridVisual
         tr.anchorMax = Vector2.one;
         tr.offsetMin = Vector2.zero;
         tr.offsetMax = Vector2.zero;
+    }
+
+    /// <summary>堆叠道具右下角的数量，如「×12」。</summary>
+    static void AddCountBadge(Transform parent, int count)
+    {
+        var go = new GameObject("CountBadge", typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        var t = go.AddComponent<Text>();
+        t.text = "×" + count;
+        t.alignment = TextAnchor.LowerRight;
+        t.fontSize = 15;
+        t.color = Color.white;
+        t.raycastTarget = false;
+        t.font = GameFonts.GetChinese();
+        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+        // 描边，保证压在任何道具/装备底图上都能看清
+        var outline = go.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+        outline.effectDistance = new Vector2(1.2f, -1.2f);
+
+        var tr = t.rectTransform;
+        tr.anchorMin = Vector2.zero;
+        tr.anchorMax = Vector2.one;
+        tr.offsetMin = new Vector2(2f, 1f);
+        tr.offsetMax = new Vector2(-3f, -1f);
     }
 
     /// <summary>

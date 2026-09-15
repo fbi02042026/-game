@@ -107,10 +107,11 @@ public static class SpecialWeapons
 
         int lv = Hero.Instance != null ? Hero.Instance.level : 1;
         var inst = CreateTwilightStaff(lv);
-        if (!GridBackpackSystem.Instance.TryAddItem(inst, out _))
+        // 2026-09-15：装备不再进背包，直接穿上（换下来的自动分解）
+        if (!GridBackpackSystem.Instance.TryEquipDirect(inst))
         {
             if (showToast)
-                UIManager.Instance?.ShowToast("背包已满，清理后再领「暮火之杖」");
+                UIManager.Instance?.ShowToast("无法装备「暮火之杖」");
             return false;
         }
 

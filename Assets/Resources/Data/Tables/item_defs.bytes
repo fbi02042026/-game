@@ -1,0 +1,24 @@
+﻿# 道具定义表
+# 2026-09-15：背包 12 格已改为**只装道具**。装备不再入包——掉落即穿，替换下来的自动分解。
+# 本轮先把接口与表结构备好，具体道具等内容定稿后再往下面加行。
+#
+# 列说明：
+#   id              唯一 id
+#   name            道具名（选中浮层要显示，必填）
+#   icon            图标 Resources 路径，不带扩展名，如 Icons/Item/potion_hp
+#   type            Consumable=消耗品 / Material=材料 / Quest=任务道具
+#   stackMax        堆叠上限，1 = 不可堆叠
+#   canUseInBattle  战斗中是否允许使用 1/0
+#   canDrop         是否允许丢弃 1/0（任务道具填 0）
+#   useEffect       使用效果串，目前**只定义格式、尚未实现效果**：
+#                     heal_hp:30          -> 回血 30
+#                     buff_atk:20:15      -> 攻击 +20，持续 15 秒
+#                   留空 = 暂不可用（使用按钮置灰）
+#   useTarget       Self / Ally / Enemy
+#   desc            说明文字
+#   rarity          稀有度 0 起
+# 示例行（去掉行首的 # 即生效）：
+# item_potion_hp,治疗药水,Icons/Item/potion_hp,Consumable,20,1,1,heal_hp:30,Self,回复 30 点生命,1
+# item_bomb,手雷,Icons/Item/bomb,Consumable,10,1,1,,Enemy,暂无效果（useEffect 留空则使用置灰）,1
+#
+id,name,icon,type,stackMax,canUseInBattle,canDrop,useEffect,useTarget,desc,rarity

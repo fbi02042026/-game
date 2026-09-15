@@ -25,6 +25,11 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundS
     public bool IsCasting => _casting;
     public bool IsReady => !_casting && _charge >= _need;
 
+    /// <summary>当前已攒充能点数（HUD 第二条显示 cur/need 用）。</summary>
+    public int Charge => _charge;
+    /// <summary>本关释放所需点数（随章节/关卡变化，见 GameConfig.GetThunderUltNeedPoints）。</summary>
+    public int Need => _need;
+
     protected override void Awake()
     {
         base.Awake();
@@ -280,8 +285,10 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundS
 
     void RefreshUi()
     {
-        // 无 UI：不创建按钮
+        // 无按钮 UI：奥义自动释放，不提供手动按钮
         HideUltButton();
+        // 玩家头像下第二条 = 奥义充能；只刷这一条，不牵动整个角色栏
+        BattleUI.Instance?.RefreshPlayerUltBar();
     }
 
     protected override void OnDestroy()

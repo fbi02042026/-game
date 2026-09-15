@@ -242,11 +242,12 @@ public partial class BattleUI : MonoBehaviour
     /// </summary>
     public void UpdateSkillEnergy(int skillIndex, float energyRatio)
     {
-        if (skillIndex == 0 && playerSlot != null)
-        {
-            playerSlot.SetEnergy(energyRatio);
-        }
-        else if (skillIndex == 1 && mercSlot1 != null)
+        // skillIndex 0 = 玩家。**玩家头像下第二条已改为「雷击奥义充能」**（见 SetUltCharge），
+        // 这里不能再写 skill 能量，否则两边抢同一个 lanBarFill 会互相覆盖。
+        // 玩家 4 个被动技各自有独立能量条（RunSkillBarUI），第二条不必再重复显示技能能量峰值。
+        if (skillIndex == 0) return;
+
+        if (skillIndex == 1 && mercSlot1 != null)
         {
             if (!mercSlot1.EnergyEnabled) energyRatio = 0f;
             mercSlot1.SetEnergy(energyRatio);
@@ -255,6 +256,48 @@ public partial class BattleUI : MonoBehaviour
         {
             if (!mercSlot2.EnergyEnabled) energyRatio = 0f;
             mercSlot2.SetEnergy(energyRatio);
+        }
+    }
+
+    /// <summary>
+    /// 技槽拖拽结束 → 写回 RunLoadout 并重建技能。
+    /// 规则：技能数 &lt; 2 不排（1 个技能默认就是最优先，没什么可排）；
+    /// 空槽不参与——有几个技能就只有前几个槽能拖（2 个技能 = 只有前两个能调）。
+    /// </summary>
+    void OnSkillSlotReordered(int from, int to)
+    {
+        var ids = RunLoadout.SkillIds();
+        int owned = ids != null ? ids.Count : 0;
+        if (owned < 2) return;
+        if (from < 0 || to < 0 || from >= owned || to >= owned) return;
+        if (!RunLoadout.MoveSkill(from, to)) return;
+
+        RunLoadout.Save();
+        var dir = RunDraftDirector.Instance;
+        if (dir == null && BattleManager.Instance != null)
+            dir = RunDraftDirector.Ensure(BattleManager.Instance);
+        if (dir != null) dir.RebuildPlayerSkills();
+        RunSkillBarUI.Refresh();
+        RefreshBattleHud();
+    }
+
+    /// <summary>
+    /// 按「整理阶段」+「已拥有技能数」开/关技槽拖拽。
+    /// 只有 1 个技能时不可拖；2 个技能时只有前 2 个槽可拖（第 3、4 是空槽）。
+    /// </summary>
+    public void RefreshSkillSlotDragState()
+    {
+        if (runSkillSlots == null) return;
+        var ids = RunLoadout.SkillIds();
+        int owned = ids != null ? ids.Count : 0;
+        bool allow = BattleLootMode.Active && owned >= 2;
+        for (int i = 0; i < runSkillSlots.Count; i++)
+        {
+            var av = runSkillSlots[i];
+            if (av == null || av.root == null) continue;
+            var chip = av.root.GetComponent<SkillOrderChip>();
+            if (chip == null) continue;
+            chip.DragEnabled = allow && i < owned;
         }
     }
 }

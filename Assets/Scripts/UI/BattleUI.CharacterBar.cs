@@ -9,6 +9,22 @@ using System.Collections.Generic;
 public partial class BattleUI : MonoBehaviour
 {
     /// <summary>
+    /// 只刷新玩家头像下的第二条（雷击奥义充能）。
+    /// 击杀充能时由 HeroThunderUltimate 回调这里，避免动用完整的 UpdateCharacterSlots
+    /// （那会连带刷新两名佣兵与布局，击杀频繁时没必要）。
+    /// </summary>
+    public void RefreshPlayerUltBar()
+    {
+        if (playerSlot == null) return;
+        var ult = HeroThunderUltimate.Instance;
+        // 组件还没建（或功能关闭）时也照常显示「0/10」——按需求第二条不隐藏
+        if (ult == null)
+            playerSlot.SetUltCharge(0f, 0, GameConfig.THUNDER_ULT_NEED_MIN, false);
+        else
+            playerSlot.SetUltCharge(ult.ChargeRatio, ult.Charge, ult.Need, ult.IsCasting);
+    }
+
+    /// <summary>
     /// 更新角色栏
     /// </summary>
     public void UpdateCharacterSlots()
@@ -33,6 +49,8 @@ public partial class BattleUI : MonoBehaviour
             playerSlot.SetSkillBadge(null);
             // 职业 icon：xuetiaodi/职业icon，取当前所选职业
             playerSlot.SetJobIcon(PlayerJobDefs.TryLoadJobIcon(PlayerJobDefs.GetSelected()));
+            // 第二条 = 雷击奥义充能（开关关闭也显示 0/N 空条，不隐藏）
+            RefreshPlayerUltBar();
         }
 
         if (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle)

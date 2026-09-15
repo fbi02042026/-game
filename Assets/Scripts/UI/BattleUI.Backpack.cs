@@ -133,8 +133,21 @@ public partial class BattleUI : MonoBehaviour
         var gridRt = grid as RectTransform;
         foreach (var bip in items)
         {
-            if (bip == null || bip.equip == null) continue;
+            if (bip == null) continue;
             if (bip.y >= unlockedRows) continue;
+
+            // 道具：2026-09-15 起背包 12 格只装道具，永远 1×1
+            if (bip.item != null)
+            {
+                placements.Add(new BackpackGridVisual.ItemPlacement
+                {
+                    x = bip.x, y = bip.y, w = 1, h = 1, item = bip.item
+                });
+                continue;
+            }
+
+            // 装备：新流程下已不再入包，但兼容旧存档/历史数据
+            if (bip.equip == null) continue;
             placements.Add(new BackpackGridVisual.ItemPlacement
             {
                 x = bip.x, y = bip.y, w = bip.width, h = bip.height, equip = bip.equip,
@@ -172,6 +185,9 @@ public partial class BattleUI : MonoBehaviour
 
     public void RefreshLootModeChrome()
     {
+        // 阶段切换时收掉可能还开着的道具操作浮层，避免浮在下一阶段界面上
+        BackpackItemActionUI.Instance?.Hide();
+
         if (lootConfirmButton != null)
         {
             var txt = lootConfirmButton.GetComponentInChildren<Text>(true);
@@ -181,16 +197,34 @@ public partial class BattleUI : MonoBehaviour
             lootConfirmButton.gameObject.SetActive(BattleLootMode.Active);
         }
         UpdateBackpackGrid();
+        // 整理阶段才允许拖动技槽调序（战斗中不开放，避免误触改掉释放优先级）
+        RefreshSkillSlotDragState();
+        if (BattleLootMode.Active) MaybeShowSkillReorderHint();
         BattleJoystick.Instance?.SetVisible(!BattleLootMode.Active
             && BattleManager.Instance != null
             && BattleManager.Instance.isInBattle
             && BattleManager.Instance.UnitsCanAct);
     }
 
+    /// <summary>首次进入整理阶段且确实有得排（≥2 个技能）时提示一次，之后不再打扰。</summary>
+    const string SKILL_REORDER_HINT_KEY = "hint_skill_reorder_shown";
+
+    void MaybeShowSkillReorderHint()
+    {
+        var ids = RunLoadout.SkillIds();
+        if (ids == null || ids.Count < 2) return;      // 1 个技能没什么好排的
+        if (PlayerPrefs.GetInt(SKILL_REORDER_HINT_KEY, 0) != 0) return;
+        PlayerPrefs.SetInt(SKILL_REORDER_HINT_KEY, 1);
+        PlayerPrefs.Save();
+        UIManager.Instance?.ShowToast("整理阶段可拖动技能，调整自动释放顺序");
+    }
+
     public void EnsureBattleControls()
     {
         FocusMarkSystem.Ensure();
         BattleJoystick.EnsureOn(transform);
+        // 道具操作浮层挂在 BattleUI 下（保证在 Canvas 内且在最上层）
+        BackpackItemActionUI.Ensure(transform);
         RefreshLootModeChrome();
     }
 

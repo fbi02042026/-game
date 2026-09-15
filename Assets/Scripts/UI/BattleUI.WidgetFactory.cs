@@ -123,6 +123,12 @@ public partial class BattleUI : MonoBehaviour
         runSkillSlots.Clear();
         if (skillSlotRoot == null) return;
 
+        // 槽位是美术手摆的 anchoredPosition，没有 LayoutGroup（见 SkillOrderChip.UseLayoutGroup）
+        float step = 0f;
+        if (skillSlotRoot.childCount >= 2)
+            step = Mathf.Abs(skillSlotRoot.GetChild(1).position.x - skillSlotRoot.GetChild(0).position.x);
+        if (step <= 0f) step = 100f;
+
         for (int i = 0; i < skillSlotRoot.childCount; i++)
         {
             Transform t = skillSlotRoot.GetChild(i);
@@ -137,6 +143,14 @@ public partial class BattleUI : MonoBehaviour
             av.cooldownText = EnsureChildText(t, "SkillCd", 16);
             av.energyFill = EnsureChildBar(t, "SkillEnergy", new Color(0.98f, 0.78f, 0.28f, 1f));
             runSkillSlots.Add(av);
+
+            // 整理阶段可拖拽调序（空槽与「只有 1 个技能」时禁用，见 OnSkillSlotReordered）
+            var chip = t.GetComponent<SkillOrderChip>();
+            if (chip == null) chip = t.gameObject.AddComponent<SkillOrderChip>();
+            chip.UseLayoutGroup = false;
+            chip.SlotStep = step;
+            chip.DragEnabled = false;          // 由 RefreshSkillSlotDragState 按阶段打开
+            chip.OnOrderChanged = OnSkillSlotReordered;
         }
     }
 

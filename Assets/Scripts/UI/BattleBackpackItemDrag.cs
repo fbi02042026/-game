@@ -3,11 +3,13 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
-/// 开箱模式下背包物品拖拽换位；点击切换穿戴。
+/// 开箱模式下背包物品拖拽换位；点击：道具弹出「使用/丢弃」浮层，装备无操作。
 /// </summary>
 public class BattleBackpackItemDrag : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler
 {
     public EquipInstance Equip;
+    /// <summary>这一格装的是道具时非 null；与 Equip 互斥。</summary>
+    public ItemInstance Item;
     public int GridX;
     public int GridY;
     public int Width = 1;
@@ -52,7 +54,7 @@ public class BattleBackpackItemDrag : MonoBehaviour, IBeginDragHandler, IDragHan
 
         var bag = GridBackpackSystem.Instance;
         var ui = BattleUI.Instance;
-        if (bag == null || ui == null || Equip == null)
+        if (bag == null || ui == null || (Equip == null && Item == null))
         {
             ResetPos();
             return;
@@ -64,7 +66,10 @@ public class BattleBackpackItemDrag : MonoBehaviour, IBeginDragHandler, IDragHan
             return;
         }
 
-        GridBackpackSystem.BackpackItem item = bag.FindItem(Equip);
+        // 用「实例」回查条目，避免 overlay 重建后引用失效
+        GridBackpackSystem.BackpackItem item = Equip != null
+            ? bag.FindItem(Equip)
+            : bag.FindItemByItem(Item);
         if (item == null)
         {
             ResetPos();
@@ -82,7 +87,18 @@ public class BattleBackpackItemDrag : MonoBehaviour, IBeginDragHandler, IDragHan
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        // 无穿戴槽：点击不再穿脱，仅开箱模式可拖拽换位
+        if (_moved) return;   // 刚拖完不要顺带弹面板
+        if (Item == null) return;
+
+        var bag = GridBackpackSystem.Instance;
+        var ui = BattleUI.Instance;
+        if (bag == null || ui == null) return;
+
+        var entry = bag.FindItemByItem(Item);
+        if (entry == null) return;
+
+        var popup = BackpackItemActionUI.Ensure(ui.transform);
+        popup?.Show(entry, eventData.position);
     }
 
     void ResetPos()
