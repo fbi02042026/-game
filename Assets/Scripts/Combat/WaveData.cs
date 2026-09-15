@@ -22,5 +22,19 @@ public class WaveData
     public UnitBase forcedTarget;
     /// <summary>&lt;0 用规则包默认间隔；0=同一帧出齐（埋伏）。</summary>
     public float staggerOverride = -1f;
+    /// <summary>
+    /// V3.0：在原型自带精英额度之外追加的精英只数（精英关每波 +1）。
+    /// 占本波最后 N 个名额，不是额外追加。
+    /// </summary>
+    public int eliteBonus;
+    /// <summary>
+    /// 波次原型 id（wave_archetype.csv）。空 = 不接管，走旧的「奇偶近远 + 均分人数」逻辑。
+    /// 由 <see cref="StageModeTable"/> 抽到的模式铺进正式关；引导步进不填。
+    /// </summary>
+    public string archetypeId = "";
     public bool HasEngageAnchor => engageAnchorX > -900f;
+
+    /// <summary>本波原型；未接管时为 null。</summary>
+    public WaveArchetypeTable.Archetype Archetype =>
+        string.IsNullOrEmpty(archetypeId) ? null : WaveArchetypeTable.Get(archetypeId);
 }

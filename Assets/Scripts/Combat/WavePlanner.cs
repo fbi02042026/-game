@@ -38,6 +38,7 @@ public sealed class WavePlanner
     int _tutorialSpriteRanged { get => bm._tutorialSpriteRanged; set => bm._tutorialSpriteRanged = value; }
     int _tutorialEliteCount { get => bm._tutorialEliteCount; set => bm._tutorialEliteCount = value; }
     int _tutorialWaveMonsterCount { get => bm._tutorialWaveMonsterCount; set => bm._tutorialWaveMonsterCount = value; }
+    int _tutorialRangedCount { get => bm._tutorialRangedCount; set => bm._tutorialRangedCount = value; }
     float _tutorialHpMin { get => bm._tutorialHpMin; set => bm._tutorialHpMin = value; }
     float _tutorialHpMax { get => bm._tutorialHpMax; set => bm._tutorialHpMax = value; }
     float _tutorialEliteHpMin { get => bm._tutorialEliteHpMin; set => bm._tutorialEliteHpMin = value; }
@@ -46,6 +47,13 @@ public sealed class WavePlanner
     Coroutine _spawnWaveCo { get => bm._spawnWaveCo; set => bm._spawnWaveCo = value; }
     int _totalMonstersSpawnedThisStage { get => bm._totalMonstersSpawnedThisStage; set => bm._totalMonstersSpawnedThisStage = value; }
     int _offscreenEnterSideToggle { get => bm._offscreenEnterSideToggle; set => bm._offscreenEnterSideToggle = value; }
+
+    /// <summary>本关抽到的关卡模式名；空 = 没走模式逻辑。</summary>
+    public string StageModeName => _stageModeName;
+    /// <summary>本关模式的播报文案（给玩家的读条时间）。</summary>
+    public string StageModeTelegraph => _stageModeTelegraph;
+    string _stageModeName = "";
+    string _stageModeTelegraph = "";
 
     float GetStageStartX() => bm.GetStageStartX();
     int CountAliveMonsters() => bm.CountAliveMonsters();
@@ -598,23 +606,58 @@ public sealed class WavePlanner
                 usable.Add(points[i]);
         }
 
-        int total = elite
-            ? GameConfig.GetEliteStageMonsterTotal(stageIdx)
-            : GameConfig.GetNormalStageMonsterTotal(stageIdx);
-        int waveCountMin = GameConfig.STAGE_WAVE_MIN;
-        int waveCountMax = GameConfig.STAGE_WAVE_MAX;
         StageType spawnType = elite ? StageType.Elite : StageType.Normal;
-        if (StageSpawnTable.TryResolve(CurrentChapter, stageIdx, spawnType, out var spawnRule))
-        {
-            if (!spawnRule.useFormulaForTotal && spawnRule.monsterTotal > 0)
-                total = spawnRule.monsterTotal;
-            waveCountMin = Mathf.Max(1, spawnRule.waveCountMin);
-            waveCountMax = Mathf.Max(waveCountMin, spawnRule.waveCountMax);
-        }
 
-        int waveCount = GameConfig.GetSuggestedWaveCount(total, usable.Count);
-        waveCount = Mathf.Clamp(waveCount, waveCountMin, waveCountMax);
-        int[] perWave = GameConfig.DistributeMonstersToWaves(total, waveCount);
+        // —— V3.0：模式只给「原型池 / 波数范围 / 人数倍率」，每一波在池里现抽 ——
+        // 关卡可以重复出现，但同一模式的两次进关，波次组成与波次种类都不一样。
+        // 抽不到（没配表 / 该章没候选）就整段跳过，行为与 V3.0 之前完全一致。
+        var mode = StageModeTable.Draw(CurrentChapter, stageIdx, spawnType);
+        int total;
+        int waveCount;
+        int[] perWave;
+        List<string> archIds = null;
+        _stageModeName = "";
+        _stageModeTelegraph = "";
+        if (mode != null && WaveArchetypeTable.HasData && mode.HasPool)
+        {
+            // 波数上限 = 刷怪点数量（多出来的波会共用一个 anchor，触发 X 撞车）
+            int hardMax = usable.Count > 0 ? Mathf.Clamp(usable.Count, 1, GameConfig.STAGE_WAVE_MAX) : 0;
+            waveCount = StageModeTable.RollWaveCount(mode, ComputeWaveBonus(mode), hardMax);
+
+            // 逐波摇原型（受 maxRun 软约束），同一个模式也摇不出一模一样的序列
+            archIds = new List<string>(waveCount);
+            for (int i = 0; i < waveCount; i++)
+                archIds.Add(StageModeTable.RollArchetype(mode, archIds));
+
+            // 每波人数独立摇，总怪量 = Σ，不再先定总量再切分（避免被 cap 截断）
+            perWave = new int[waveCount];
+            total = 0;
+            for (int i = 0; i < waveCount; i++)
+            {
+                perWave[i] = RollWaveMonsterCount(archIds[i], mode, stageIdx);
+                total += perWave[i];
+            }
+            _stageModeName = mode.name;
+            _stageModeTelegraph = mode.telegraph;
+        }
+        else
+        {
+            total = elite
+                ? GameConfig.GetEliteStageMonsterTotal(stageIdx)
+                : GameConfig.GetNormalStageMonsterTotal(stageIdx);
+            int waveCountMin = GameConfig.STAGE_WAVE_MIN;
+            int waveCountMax = GameConfig.STAGE_WAVE_MAX;
+            if (StageSpawnTable.TryResolve(CurrentChapter, stageIdx, spawnType, out var spawnRule))
+            {
+                if (!spawnRule.useFormulaForTotal && spawnRule.monsterTotal > 0)
+                    total = spawnRule.monsterTotal;
+                waveCountMin = Mathf.Max(1, spawnRule.waveCountMin);
+                waveCountMax = Mathf.Max(waveCountMin, spawnRule.waveCountMax);
+            }
+            waveCount = GameConfig.GetSuggestedWaveCount(total, usable.Count);
+            waveCount = Mathf.Clamp(waveCount, waveCountMin, waveCountMax);
+            perWave = GameConfig.DistributeMonstersToWaves(total, waveCount);
+        }
 
         for (int i = 0; i < waveCount; i++)
         {
@@ -625,7 +668,7 @@ public sealed class WavePlanner
             else
                 triggerX = startX + 3.5f + i * GameConfig.VIRTUAL_WAVE_SPACING;
 
-            _waves.Add(new WaveData
+            var wave = new WaveData
             {
                 triggerX = triggerX,
                 spawnAnchor = anchor,
@@ -633,19 +676,200 @@ public sealed class WavePlanner
                 isBossWave = false,
                 spawned = false,
                 aliveCount = 0
-            });
+            };
+            // 原型接管进场方向 / 出怪间隔 / 人数上限 / 近远编成 / 精英额度
+            ApplyArchetypeToWave(wave, archIds != null ? archIds[i] : "");
+            if (elite) wave.eliteBonus = 1; // 精英关：每波在原型额度之上再 +1 精英
+            _waves.Add(wave);
         }
 
         _totalWaves = _waves.Count;
         string tag = elite ? "精英关" : "普通关";
-        GamePerf.Log($"[BattleManager] {tag} stage={stageIdx + 1} 总怪={total} → {_totalWaves}波 [{string.Join(",", perWave)}] 刷怪点={usable.Count} 起点={startX:F1}");
+        string modeTag = string.IsNullOrEmpty(_stageModeName) ? "无模式(旧逻辑)" : $"模式={_stageModeName}[{_stageModeTelegraph}]";
+        GamePerf.Log($"[BattleManager] {tag} stage={stageIdx + 1} {modeTag} 总怪={total} → {_totalWaves}波 [{string.Join(",", perWave)}] 刷怪点={usable.Count} 起点={startX:F1}");
         for (int i = 0; i < _waves.Count; i++)
         {
             var w = _waves[i];
             string an = w.spawnAnchor != null ? w.spawnAnchor.name : "virtual";
             float ax = w.spawnAnchor != null ? w.spawnAnchor.position.x : w.triggerX;
-            GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}");
+            string archTag = "";
+            if (!string.IsNullOrEmpty(w.archetypeId))
+            {
+                var a = w.Archetype;
+                string enter = a != null ? a.enter.ToString() : "?";
+                archTag = $" 原型={w.archetypeId}/{enter}/stagger={w.staggerOverride:F2}";
+            }
+            GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}{archTag}");
         }
+    }
+
+    /// <summary>把模式的原型序列铺成 waveCount 长；序列比波数短则循环，长则截断。</summary>
+    // ===== V3.0：随机波次（模式可重复，波次永不重复）=====
+
+    int _pressureStreak;
+    bool _lastStageDied;
+
+    /// <summary>
+    /// 战斗结果回报（压力阀输入）。died = 本关死过；hpRatio = 通关时剩余血量比例。
+    /// 由 BattleManager 在通关结算时调用；未接线时压力阀恒为 0，行为与 V3.0 之前一致。
+    /// </summary>
+    internal void NotifyStageResult(bool died, float hpRatio)
+    {
+        _lastStageDied = died;
+        if (died) { _pressureStreak = 0; return; }
+        _pressureStreak = hpRatio > GameConfig.EnemyTuning.PressureHpRatio ? _pressureStreak + 1 : 0;
+    }
+
+    /// <summary>换章时清零压力阀。</summary>
+    internal void ResetPressure()
+    {
+        _pressureStreak = 0;
+        _lastStageDied = false;
+    }
+
+    /// <summary>本关波数修正：压力阀 + 职业 × 模式弱势补偿，只调波数、不改数值。</summary>
+    int ComputeWaveBonus(StageModeTable.Mode mode)
+    {
+        int bonus = 0;
+        if (GameConfig.EnemyTuning.PressureEnabled)
+        {
+            if (_lastStageDied)
+            {
+                if (GameConfig.EnemyTuning.PressureMercyOnDeath) bonus -= 1;
+            }
+            else if (_pressureStreak >= GameConfig.EnemyTuning.PressureStreakThreshold)
+            {
+                bonus += Mathf.Min(GameConfig.EnemyTuning.PressureWaveCap,
+                    _pressureStreak - GameConfig.EnemyTuning.PressureStreakThreshold + 1);
+            }
+        }
+        if (GameConfig.EnemyTuning.ModeHandicapByJob && mode != null && StageModeTable.IsHardForJob(mode.id, PlayerJobDefs.GetSelected()))
+            bonus -= 1;
+        return bonus;
+    }
+
+    /// <summary>
+    /// 每波人数：原型基准 × 模式倍率 × 章节系数 × 关卡进度系数 × 随机浮动，夹到 [countMin, cap]。
+    /// 章内随关卡序号<b>严格单调上升</b>（V3.0 修掉了旧公式第 1 关比第 2 关怪多的倒挂）。
+    /// </summary>
+    int RollWaveMonsterCount(string archetypeId, StageModeTable.Mode mode, int stageIdx)
+    {
+        var a = WaveArchetypeTable.Get(archetypeId);
+        if (a == null) return GameConfig.WAVE_MONSTER_MIN;
+
+        float chapterMul = 1f + GameConfig.EnemyTuning.ChapterCountStep * (Mathf.Max(1, CurrentChapter) - 1);
+        float progressMul = 1f + GameConfig.EnemyTuning.StageCountStep * Mathf.Max(0, stageIdx);
+        float jitter = UnityEngine.Random.Range(GameConfig.EnemyTuning.CountJitterMin, GameConfig.EnemyTuning.CountJitterMax);
+        int count = Mathf.RoundToInt(a.countBase * mode.countMul * chapterMul * progressMul * jitter);
+        return Mathf.Clamp(count, a.countMin, Mathf.Max(a.countMin, a.cap));
+    }
+
+    /// <summary>V3.0 播报：本波原型的预告文案（读时保障，UI 未接时不报错）。</summary>
+    public string WaveTelegraph(int waveIndex)
+    {
+        var a = GetWaveArchetype(waveIndex);
+        return a != null ? a.telegraph : "";
+    }
+
+    /// <summary>V3.0 播报：本波原型的应对提示。</summary>
+    public string WaveTacticHint(int waveIndex)
+    {
+        var a = GetWaveArchetype(waveIndex);
+        return a != null ? a.tacticHint : "";
+    }
+
+    /// <summary>把原型写进 WaveData：进场方向 / 出怪间隔 / 编成标记。</summary>
+    static void ApplyArchetypeToWave(WaveData wave, string archetypeId)
+    {
+        if (wave == null || string.IsNullOrEmpty(archetypeId)) return;
+        var a = WaveArchetypeTable.Get(archetypeId);
+        if (a == null) return;
+
+        wave.archetypeId = a.id;
+        if (a.enter == WaveArchetypeTable.EnterMode.Bilateral)
+            wave.bilateralEnter = true;
+        else if (a.enter == WaveArchetypeTable.EnterMode.Around)
+            wave.aroundAnchor = true;
+        // stagger < 0 = 用规则包默认；>= 0 才接管（0 = 同一帧出齐）
+        if (a.stagger >= 0f)
+            wave.staggerOverride = a.stagger;
+    }
+
+    WaveArchetypeTable.Archetype GetWaveArchetype(int waveIndex)
+    {
+        if (_waves == null || waveIndex < 0 || waveIndex >= _waves.Count) return null;
+        var w = _waves[waveIndex];
+        return w == null ? null : w.Archetype;
+    }
+
+    int GetWaveMonsterCount(int waveIndex)
+    {
+        if (_waves == null || waveIndex < 0 || waveIndex >= _waves.Count) return 0;
+        var w = _waves[waveIndex];
+        return w != null ? w.monsterCount : 0;
+    }
+
+    /// <summary>
+    /// 按原型的 countBase 权重把总怪量分到各波，并夹在每波的 [min(2,cap), cap] 区间内。
+    /// 与 <see cref="GameConfig.DistributeMonstersToWaves"/> 的区别：旧版均分，
+    /// 这里让「围杀」这种大头波真的吃到大头，模式才有形状。
+    /// </summary>
+    static int[] DistributeMonstersToWavesWeighted(int total, int[] bases, int[] caps)
+    {
+        int n = Mathf.Min(bases.Length, caps.Length);
+        var counts = new int[n];
+        var mins = new int[n];
+        var maxs = new int[n];
+        int sumMin = 0, sumMax = 0, sumBase = 0;
+        for (int i = 0; i < n; i++)
+        {
+            maxs[i] = Mathf.Max(1, caps[i]);
+            mins[i] = Mathf.Min(GameConfig.WAVE_MONSTER_MIN, maxs[i]);
+            sumMin += mins[i];
+            sumMax += maxs[i];
+            sumBase += Mathf.Max(1, bases[i]);
+        }
+        // 先夹总量，保证一定分得下去（不会死循环）
+        total = Mathf.Clamp(total, sumMin, sumMax);
+
+        var rem = new float[n];
+        int assigned = 0;
+        float extra = total - sumMin;
+        for (int i = 0; i < n; i++)
+        {
+            float want = mins[i] + extra * (Mathf.Max(1, bases[i]) / (float)sumBase);
+            int floor = Mathf.FloorToInt(want);
+            counts[i] = Mathf.Clamp(floor, mins[i], maxs[i]);
+            rem[i] = want - floor;
+            assigned += counts[i];
+        }
+        // 余数从大到小补足（只补还有空间的波）
+        for (int guard = 0; assigned < total && guard < 512; guard++)
+        {
+            int best = -1; float bestRem = -1f;
+            for (int i = 0; i < n; i++)
+            {
+                if (counts[i] >= maxs[i]) continue;
+                if (rem[i] > bestRem) { bestRem = rem[i]; best = i; }
+            }
+            if (best < 0) break;
+            counts[best]++; assigned++;
+            rem[best] -= 1f; // 补过一轮后降权，避免总砸在同一波
+        }
+        // 分多了就从余数最小的波上扣（不动已经触底的波）
+        for (int guard = 0; assigned > total && guard < 512; guard++)
+        {
+            int worst = -1; float worstRem = 2f;
+            for (int i = 0; i < n; i++)
+            {
+                if (counts[i] <= mins[i]) continue;
+                if (rem[i] < worstRem) { worstRem = rem[i]; worst = i; }
+            }
+            if (worst < 0) break;
+            counts[worst]--; assigned--;
+            rem[worst] += 1f;
+        }
+        return counts;
     }
 
     List<Transform> GetSpawnPointsSortedByX()
@@ -754,6 +978,7 @@ public sealed class WavePlanner
         _tutorialSpriteMelee = step.spriteMelee > 0 ? step.spriteMelee : 1;
         _tutorialSpriteRanged = step.spriteRanged > 0 ? step.spriteRanged : 2;
         _tutorialEliteCount = step.eliteCount > 0 ? step.eliteCount : 0;
+        _tutorialRangedCount = step.rangedCount;
         _tutorialHpFromTable = step.HasHp;
         _tutorialHpMin = step.hpMin;
         _tutorialHpMax = step.hpMax;
@@ -766,9 +991,12 @@ public sealed class WavePlanner
     {
         if (availableSprites == null || availableSprites.Count == 0) return 1;
 
-        // 引导固定近战:远程 ≈ 4:2（按本波人数折算，前段近战、后段远程）
+        // 引导编成：表内 rangedCount >= 0 时按表来（可出纯近战/纯远程波）；
+        // 否则沿用旧的固定比例 近战:远程 ≈ 4:2（按本波人数折算，前段近战、后段远程）
         int waveN = Mathf.Max(1, _tutorialWaveMonsterCount);
-        int rangedSlots = Mathf.Max(1, Mathf.RoundToInt(waveN * 2f / 6f));
+        int rangedSlots = _tutorialRangedCount >= 0
+            ? Mathf.Clamp(_tutorialRangedCount, 0, waveN)
+            : Mathf.Max(1, Mathf.RoundToInt(waveN * 2f / 6f));
         int meleeSlots = Mathf.Max(0, waveN - rangedSlots);
         bool wantRanged = slotIndex >= meleeSlots;
         int monsterChapter = GameConfig.GetMonsterChapter(CurrentChapter);
@@ -820,6 +1048,19 @@ public sealed class WavePlanner
             return PickTutorialSpriteIndex(availableSprites, slotIndex);
 
         int chapter = CurrentChapter;
+
+        // —— 波次原型接管近/远编成：优先于 wave_slot 的「奇偶 = 近/远」——
+        // 这是「箭雨全是远程」「铁卫全是近战」这类模式形状能成立的前提。
+        var arch = GetWaveArchetype(waveIndex);
+        if (arch != null && arch.ControlsComposition)
+        {
+            int waveN = GetWaveMonsterCount(waveIndex);
+            int rangedN = arch.ResolveRanged(waveN);
+            // 远程排在最后几个槽位：spawn 顺序靠后 = 站位更靠右 = 站在近战后面
+            bool archRanged = slotIndex >= Mathf.Max(0, waveN - rangedN);
+            return PickSpriteByStyle(availableSprites, chapter, archRanged, usedThisWave, slotIndex, stageIdx);
+        }
+
         WaveSlotTable.EnsureLoaded();
         if (WaveSlotTable.TryGetSlot(chapter, stageIdx, stageType, waveIndex, slotIndex, out var slotRule))
         {
@@ -841,11 +1082,19 @@ public sealed class WavePlanner
         }
 
         bool wantRanged = slotIndex % 2 == 1;
+        return PickSpriteByStyle(availableSprites, chapter, wantRanged, usedThisWave, slotIndex, stageIdx);
+    }
+
+    /// <summary>按「要近战 / 要远程」过滤精灵池并加权抽 1 个（同波尽量不重复）。</summary>
+    int PickSpriteByStyle(System.Collections.Generic.List<int> availableSprites, int chapter, bool wantRanged,
+        System.Collections.Generic.HashSet<int> usedThisWave, int slotIndex, int stageIdx)
+    {
         var filtered = new System.Collections.Generic.List<int>();
+        int monsterChapter = GameConfig.GetMonsterChapter(chapter);
         for (int k = 0; k < availableSprites.Count; k++)
         {
             int idx = availableSprites[k];
-            var style = MonsterAttackStyleTable.Get(GameConfig.GetMonsterChapter(chapter), idx);
+            var style = MonsterAttackStyleTable.Get(monsterChapter, idx);
             bool isRanged = MonsterAttackStyleTable.IsRanged(style);
             if (wantRanged == isRanged)
                 filtered.Add(idx);
@@ -1070,6 +1319,13 @@ public sealed class WavePlanner
             if (tutorialEliteSlot)
                 monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;
 
+            // 原型精英额度：占本波最后一个/几个名额（不是额外追加），与引导关同一套口径
+            var arch = GetWaveArchetype(waveIndex);
+            int eliteQuota = (arch != null ? arch.elite : 0) + (wave != null ? wave.eliteBonus : 0);
+            bool archEliteSlot = eliteQuota > 0 && i >= wave.monsterCount - eliteQuota;
+            if (archEliteSlot)
+                monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;
+
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
             bool fromLeft = false;
             float preferEngageX;
@@ -1101,9 +1357,15 @@ public sealed class WavePlanner
                 spawnZ = wave.spawnAnchor.position.z;
 
             Vector3 engagePos = new Vector3(preferEngageX, UnitBase.GROUND_Y + lane, spawnZ);
+            // 词缀偏好：只在本次实例化期间挂上（Monster.Init 内同步 Roll 词缀），出完立刻清，
+            // 避免把「分裂」之类的偏好泄漏给下一只普通精英。
+            bool eliteUnit = monsterScale >= GameConfig.ELITE_SCALE_MULTIPLIER - 0.05f;
+            bool hasBias = arch != null && !string.IsNullOrEmpty(arch.affixBias) && eliteUnit;
+            if (hasBias) MonsterAffixDefs.SetPendingBias(arch.affixBias);
             Monster m = SpawnMonsterOffscreenEnter(
                 engagePos, lane, monsterScale, template, stageIdx, spriteIndexOverride,
                 wave.forcedTarget, fromLeft);
+            if (hasBias) MonsterAffixDefs.ClearPendingBias();
             if (m != null)
             {
                 ForceEnableMonsterRenderers(m.transform);

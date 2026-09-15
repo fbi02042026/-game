@@ -193,6 +193,194 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &419842362
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 7
+  m_Component:
+  - component: {fileID: 419842367}
+  - component: {fileID: 419842366}
+  - component: {fileID: 419842365}
+  - component: {fileID: 419842364}
+  - component: {fileID: 419842363}
+  m_Layer: 0
+  m_HasEditorInfo: 1
+  m_Name: WorldMapPopup
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &419842363
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 419842362}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1340940d05f058449bbcc4c36d9f590c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  mapBackground: {fileID: 0}
+  titleText: {fileID: 0}
+  descText: {fileID: 0}
+  defaultMapSprite: {fileID: 0}
+  regions:
+  - chapterId: 1
+    displayName: 
+    normalizedPosition: {x: 0, y: 0}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.12, g: 0.12, b: 0.12, a: 0.7}
+  - chapterId: 1
+    displayName: 
+    normalizedPosition: {x: 0, y: 0}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.12, g: 0.12, b: 0.12, a: 0.7}
+  - chapterId: 1
+    displayName: 
+    normalizedPosition: {x: 0, y: 0}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.12, g: 0.12, b: 0.12, a: 0.7}
+  - chapterId: 1
+    displayName: 
+    normalizedPosition: {x: 0, y: 0}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.12, g: 0.12, b: 0.12, a: 0.7}
+  - chapterId: 1
+    displayName: 
+    normalizedPosition: {x: 0, y: 0}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.12, g: 0.12, b: 0.12, a: 0.7}
+  - chapterId: 1
+    displayName: 
+    normalizedPosition: {x: 0, y: 0}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.12, g: 0.12, b: 0.12, a: 0.7}
+  - chapterId: 1
+    displayName: 
+    normalizedPosition: {x: 0, y: 0}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.12, g: 0.12, b: 0.12, a: 0.7}
+  - chapterId: 1
+    displayName: 
+    normalizedPosition: {x: 0, y: 0}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.12, g: 0.12, b: 0.12, a: 0.7}
+  enterButton: {fileID: 0}
+  enterButtonText: {fileID: 0}
+  highlightMaterial: {fileID: 0}
+  regionRoot: {fileID: 0}
+--- !u!114 &419842364
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 419842362}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_IgnoreReversedGraphics: 1
+  m_BlockingObjects: 0
+  m_BlockingMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!114 &419842365
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 419842362}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cd44c1031e13a943bb63640046fad76, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_UiScaleMode: 1
+  m_ReferencePixelsPerUnit: 100
+  m_ScaleFactor: 1
+  m_ReferenceResolution: {x: 720, y: 1280}
+  m_ScreenMatchMode: 0
+  m_MatchWidthOrHeight: 1
+  m_PhysicalUnit: 3
+  m_FallbackScreenDPI: 96
+  m_DefaultSpriteDPI: 96
+  m_DynamicPixelsPerUnit: 1
+  m_PresetInfoIsWorld: 0
+--- !u!223 &419842366
+Canvas:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 419842362}
+  m_Enabled: 1
+  serializedVersion: 3
+  m_RenderMode: 1
+  m_Camera: {fileID: 1382231308}
+  m_PlaneDistance: 100
+  m_PixelPerfect: 0
+  m_ReceivesEvents: 1
+  m_OverrideSorting: 0
+  m_OverridePixelPerfect: 0
+  m_SortingBucketNormalizedSize: 0
+  m_VertexColorAlwaysGammaSpace: 0
+  m_AdditionalShaderChannelsFlag: 0
+  m_UpdateRectTransformForStandalone: 0
+  m_SortingLayerID: 0
+  m_SortingOrder: 900
+  m_TargetDisplay: 0
+--- !u!224 &419842367
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 419842362}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 0, y: 0, z: 0}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0, y: 0}
 --- !u!1 &1382231306
 GameObject:
   m_ObjectHideFlags: 0
@@ -515,3 +703,4 @@ SceneRoots:
   - {fileID: 1707829224}
   - {fileID: 1692638285}
   - {fileID: 151073877}
+  - {fileID: 419842367}

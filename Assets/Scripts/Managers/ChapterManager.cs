@@ -266,9 +266,14 @@ public class ChapterManager : Singleton<ChapterManager>
             AchievementSystem.Instance?.OnChapterClear(currentChapter);
             if (currentChapter >= 1)
             {
-                AdventureCodex.CompleteMain("C1F");
-                AdventureCodex.UnlockWorld("W004");
-                AdventureCodex.UnlockWorld("W002");
+                // 叙事 V2.0：按本章发放线索页。旧代码无论第几章都标 C1F，是误标。
+                StoryClue.OnChapterBossCleared(currentChapter);
+                if (currentChapter == 1)
+                {
+                    AdventureCodex.CompleteMain("C1F");
+                    AdventureCodex.UnlockWorld("W004");
+                    AdventureCodex.UnlockWorld("W002");
+                }
             }
             int diff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0;
             bool perfect = BattleManager.Instance == null

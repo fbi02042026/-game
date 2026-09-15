@@ -26,6 +26,10 @@ public static class StoryProgress
     public const string NpcGrey = "grey";
     public const string NpcEileen = "eileen";
     public const string NpcMaster = "master";
+    /// <summary>梅莉莎（M）：叙事 V2.0 新增，第 3 章出场。</summary>
+    public const string NpcMelissa = "melissa";
+    /// <summary>老盾：支线 S001/S015 需要读他的羁绊值。</summary>
+    public const string NpcLaoDun = "laodun";
 
     // 引导救援牧师（H011）对应 naima101
     public const string TutorialMercId = "naima101";

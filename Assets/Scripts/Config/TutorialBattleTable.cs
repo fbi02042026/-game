@@ -16,6 +16,8 @@ public static class TutorialBattleTable
         public float aheadDist;
         public bool stunned;
         public int eliteCount;
+        /// <summary>本波远程只数；&lt;0 走旧规则自动折算（近战:远程 ≈ 4:2）。放在 CSV 末列，旧档不写即自动。</summary>
+        public int rangedCount;
         /// <summary>普通怪 HP 下限（乘 MONSTER_HP_GLOBAL_MUL 前）。与旧 Random.Range 整型口径一致：max 为开区间。</summary>
         public float hpMin;
         public float hpMax;
@@ -35,6 +37,9 @@ public static class TutorialBattleTable
     public const float DefaultHpMax = 13f;
     public const float DefaultEliteHpMin = 25f;
     public const float DefaultEliteHpMax = 36f;
+
+    /// <summary>CSV 未写 rangedCount 时的取值：沿用旧的自动折算规则。</summary>
+    public const int AutoRangedCount = -1;
 
     static readonly List<Step> _steps = new List<Step>();
     static bool _loaded;
@@ -76,6 +81,7 @@ public static class TutorialBattleTable
                 aheadDist = c.Length > 8 && GameTableCsv.TryFloat(c[8], out float ad) ? ad : 0f,
                 stunned = c.Length > 9 && GameTableCsv.TryBool(c[9], out bool st) && st,
                 eliteCount = c.Length > 10 && GameTableCsv.TryInt(c[10], out int ec) ? ec : 0,
+                rangedCount = c.Length > 16 && GameTableCsv.TryInt(c[16], out int rc) ? rc : AutoRangedCount,
                 hpMin = ReadHp(c, 11, DefaultHpMin),
                 hpMax = ReadHp(c, 12, DefaultHpMax),
                 eliteHpMin = ReadHp(c, 13, DefaultEliteHpMin),
@@ -130,6 +136,8 @@ public static class TutorialBattleTable
             count = 2,
             spriteMelee = 1,
             spriteRanged = 2,
+            eliteCount = 0,
+            rangedCount = AutoRangedCount,
             hpMin = DefaultHpMin,
             hpMax = DefaultHpMax,
             eliteHpMin = DefaultEliteHpMin,

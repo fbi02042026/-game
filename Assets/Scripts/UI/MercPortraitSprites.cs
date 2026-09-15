@@ -34,9 +34,10 @@ public static class MercPortraitSprites
         { "hunter", "C004" },
         { "duyan", "C004" },
         { "npc_duyan", "C004" },
-        // 酒馆老板娘暂无独立佣兵立绘，沿用前台
+        // 酒馆老板娘沿用前台立绘（美术已确认复用，不另出图）
         { "landlady", "receptionist" },
         { "boss_niang", "receptionist" },
+        { "innkeeper", "receptionist" },
     };
 
     public static string NormalizeHireId(string hireIdOrAlias)

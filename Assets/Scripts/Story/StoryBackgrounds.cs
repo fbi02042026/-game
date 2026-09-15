@@ -15,6 +15,12 @@ public static class StoryBackgrounds
 
     public static Sprite Get(string id)
     {
-        return StoryAssetLoader.Load(StoryAssetLoader.Backgrounds, id);
+        var sp = StoryAssetLoader.Load(StoryAssetLoader.Backgrounds, id);
+        if (sp != null) return sp;
+
+        // 缺背景就顶一张占位图，避免整屏黑。
+        var ph = PlaceholderArt.Background(id);
+        if (ph != null) PlaceholderArt.ReportMissing("背景", id);
+        return ph;
     }
 }

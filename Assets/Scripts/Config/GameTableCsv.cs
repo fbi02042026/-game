@@ -58,6 +58,27 @@ public static class GameTableCsv
         return float.TryParse(s.Trim(), out v);
     }
 
+    /// <summary>按列下标取整；越界 / 通配 / 解析失败都返回 def（配表少写几列不会炸）。</summary>
+    public static int TryInt(string[] row, int index, int def)
+    {
+        if (row == null || index < 0 || index >= row.Length) return def;
+        return TryInt(row[index], out int v) ? v : def;
+    }
+
+    /// <summary>按列下标取浮点；越界 / 通配 / 解析失败都返回 def。</summary>
+    public static float TryFloat(string[] row, int index, float def)
+    {
+        if (row == null || index < 0 || index >= row.Length) return def;
+        return TryFloat(row[index], out float v) ? v : def;
+    }
+
+    /// <summary>按列下标取布尔；越界 / 通配 / 解析失败都返回 def。</summary>
+    public static bool TryBool(string[] row, int index, bool def)
+    {
+        if (row == null || index < 0 || index >= row.Length) return def;
+        return TryBool(row[index], out bool v) ? v : def;
+    }
+
     public static bool TryBool(string s, out bool v)
     {
         v = false;

@@ -188,6 +188,27 @@ public class AdventureUI : MonoBehaviour, ITownPage
         RefreshAll();
     }
 
+    /// <summary>世界地图选完区域后的回调（传送门 WorldMapPortal 走这里开战）。</summary>
+    public void OnWorldMapEnter(int chapter)
+    {
+        if (chapter < 1 || chapter > 8) return;
+        if (!ChapterRouteTable.CanEnter(chapter, SaveSystem.Instance?.Data))
+        {
+            Toast("该区域尚未解锁");
+            return;
+        }
+        if (SaveSystem.Instance != null && SaveSystem.Instance.Data != null
+            && SaveSystem.Instance.Data.HasClearedChapter(chapter))
+        {
+            Toast("该区域已通关");
+            return;
+        }
+        _selectedChapter = chapter;
+        _selectedMode = 0;
+        _selectedDiff = 0;
+        OnStartBattle();
+    }
+
     public void HidePage()
     {
         HideTip();

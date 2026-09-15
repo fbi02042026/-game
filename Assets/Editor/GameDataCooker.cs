@@ -57,6 +57,8 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookStageRollerWeights();
         CookSpritePickWeight();
         CookWaveSlot();
+        CookWaveArchetype();
+        CookStageMode();
         CookChapterBranch();
         CookChapterBranchRules();
         CookEquipSlotPools();
@@ -184,6 +186,16 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookWaveSlot()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/wave_slot.csv", null, "wave_slot");
+    }
+
+    static void CookWaveArchetype()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/wave_archetype.csv", null, "wave_archetype");
+    }
+
+    static void CookStageMode()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/stage_mode.csv", null, "stage_mode");
     }
 
     static void CookChapterBranch()

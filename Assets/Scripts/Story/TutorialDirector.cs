@@ -391,6 +391,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return WaitFieldClear(strict: true);
         }
 
+        // —— 1b) 第二拍：混编波，让玩家认识「远程会站在后面射你」——
+        hint.Show("后面那个会射你，先冲上去解决它。", null, 5f);
+        yield return EnsureTutorialStep(bm, 2);
+        yield return WaitFieldClear(strict: true);
+
         // —— 2) 宝箱陷阱：发现 → 左右埋伏 → 清场 → 开箱拿剑 ——
         hint.Hide();
         var chestDir = StageClearRewardDirector.Instance;
@@ -630,13 +635,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         hint.Show("组队后佣兵会自动战斗。", null, 3f);
         yield return EnsureTutorialStep(bm, 5);
-        // —— V6 P3：最后一波充满能量，让玩家看见技能自动放出去 ——
+        // —— V6 P3：这一波充满能量，让玩家看见技能自动放出去 ——
         yield return CoWatchPlayerSkill(bm, hint);
         yield return WaitFieldClear(strict: true);
 
-        yield return TalkBlock(bm, headTalk,
-            new TalkLine(Hero.Instance, "这波清完了，先撤？", 1.2f),
-            new TalkLine(merc, "嗯，回城我给你疗个痛快。", 1.2f));
+        // —— 压轴：夹击 + 2 精英，正常打不完 —— 把「撤离」教成玩家自己的判断 ——
+        yield return CoFinalPressureBeat(bm, hint, headTalk, merc);
         headTalk?.HideNow();
 
         // 撤离引导：冻住单位，和佣兵原地等玩家点撤离；超时自动撤
@@ -818,6 +822,53 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return new WaitForSecondsRealtime(1.2f);
         }
         hint.Hide();
+    }
+
+    /// <summary>
+    /// 压轴拍（tutorial_battle order=6）：夹击 + 2 精英，正常打不完。
+    /// 这里<b>不能</b>等清场——清不完会白等 WaitFieldClear 的 90s 超时。
+    /// 收尾条件是三选一：血量跌破阈值 / 撑满时长 / 场上被打空（再补一波援军后仍空）。
+    /// 设计意图不是必死，而是让玩家自己产生「该撤了」的判断，撤离才不是被流程按头。
+    /// </summary>
+    IEnumerator CoFinalPressureBeat(BattleManager bm, TutorialHintUI hint,
+        BattleHeadTalkUI headTalk, UnitBase merc)
+    {
+        if (bm == null) yield break;
+
+        yield return EnsureTutorialStep(bm, 6);
+        hint.Show("撑不住就撤——活着才能把东西带回去。", null, 4f);
+
+        const float maxHold = 20f;
+        const float hpBailRatio = 0.4f;
+        float t = 0f;
+        bool reinforced = false;
+
+        while (t < maxHold)
+        {
+            if (bm == null || Hero.Instance == null || Hero.Instance.isDead) break;
+
+            float maxHp = Hero.Instance.attr != null ? Hero.Instance.attr.GetAttr(AttrType.MaxHp) : 0f;
+            if (maxHp > 0f && Hero.Instance.currentHp / maxHp <= hpBailRatio) break;
+
+            if (bm.GetAliveMonsterCount() <= 0 && !bm.HasPendingWaves)
+            {
+                // 玩家太强、压轴被打穿：补一波援军，保证「该撤了」的体感仍然成立
+                if (!reinforced)
+                {
+                    reinforced = true;
+                    yield return EnsureTutorialStep(bm, 6);
+                }
+                else break;
+            }
+
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        hint.Hide();
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(Hero.Instance, "撑不住了，先撤？", 1.2f),
+            new TalkLine(merc, "嗯，回城我给你疗个痛快。", 1.2f));
     }
 
     /// <summary>

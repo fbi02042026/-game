@@ -119,3 +119,8 @@ mem-log/
 # local video backups
 Tools/backups/
 
+
+# Unity/AI 工具运行期日志与缓存（不入库）
+debug-*.log
+.uploads/
+.cursor/
