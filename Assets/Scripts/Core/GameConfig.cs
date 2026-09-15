@@ -640,6 +640,20 @@ public static class GameConfig
         return Mathf.RoundToInt(GOLD_DUNGEON_CLEAR_BASE * ch * GetDifficultyGoldMul(diff));
     }
 
+    /// <summary>
+    /// 装备折金（唯一口径：多余奖励件折金 / 穿装失败折金 / 主动分解都走这里）。
+    /// 2026-09-15 产出去零：原 rarity * 5 * (1 + star) → 整体 ÷10。
+    /// 档位（满星）：白1 / 绿3 / 蓝6 / 紫10 / 橙15 金。
+    /// 设计理由：分解金是"装备塞不下"的兜底，必须显著低于卖一件装备的商店价，
+    /// 否则后期刷装备分解会反超打怪，把战斗产出挤成零头。
+    /// </summary>
+    public static int EquipScrapGold(Rarity rarity, int star)
+    {
+        int s = star < 0 ? 0 : star;
+        int v = (int)rarity * (1 + s) / 2;
+        return v < 1 ? 1 : v;
+    }
+
     [Header("怪物章节文件夹映射")]
     /// <summary>
     /// 章节对应的怪物文件夹名（在 Icons/default size/no shadow/ 下）

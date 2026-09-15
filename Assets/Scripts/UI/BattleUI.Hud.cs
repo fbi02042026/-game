@@ -10,7 +10,9 @@ public partial class BattleUI : MonoBehaviour
 {
     static Sprite _questGoldSprite;
 
-    int _questRewardGold = 100;
+    // 2026-09-15 产出去零：任务奖励金真实值来自 battle_quest.csv（普通关 3+章节，Boss 关 20~200），
+    // 默认值同步降一档，避免首帧显示一个已经被砍掉的量级。
+    int _questRewardGold = 10;
 
     /// <summary>任务奖励区：金币图标 + 数量（预制体默认是宝箱图）。</summary>
     public void RefreshQuestReward(int goldAmount = -1)

@@ -120,7 +120,7 @@ public static class AdventureLogFragments
             AdventureCodex.CompleteMain(r.UnlockMainId);
 
         // 合成奖励：支线完成本身已发里程；额外小额金币
-        ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 200, save: false, notify: false);
+        ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 20, save: false, notify: false);
         SaveSystem.Instance.Save();
         RedDot.RefreshCommon();
         msg = "合成成功：" + r.Label;

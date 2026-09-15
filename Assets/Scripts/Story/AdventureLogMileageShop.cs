@@ -31,7 +31,7 @@ public static class AdventureLogMileageShop
 
     public static readonly ShopItem[] Items =
     {
-        new ShopItem { Id = "gold_bag", Name = "金币袋", CostPoints = 20, WeeklyLimit = 5, Kind = RewardKind.Gold, Amount = 500 },
+        new ShopItem { Id = "gold_bag", Name = "金币袋", CostPoints = 20, WeeklyLimit = 5, Kind = RewardKind.Gold, Amount = 50 },
         new ShopItem { Id = "mats_3", Name = "强化石×3", CostPoints = 25, WeeklyLimit = 5, Kind = RewardKind.Mats, Amount = 3 },
         new ShopItem { Id = "stamina_1", Name = "体力药", CostPoints = 15, WeeklyLimit = 3, Kind = RewardKind.Stamina, Amount = 1 },
         new ShopItem { Id = "scroll_c", Name = "普通招募卷", CostPoints = 30, WeeklyLimit = 3, Kind = RewardKind.ScrollCommon, Amount = 1 },

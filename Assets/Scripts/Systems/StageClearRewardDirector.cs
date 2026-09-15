@@ -905,7 +905,8 @@ public class StageClearRewardDirector : MonoBehaviour
     static int ScrapGold(EquipInstance e)
     {
         if (e == null) return 0;
-        return (int)e.rarity * 5 * (1 + e.star);
+        // 统一走 GameConfig.EquipScrapGold，避免多处各写一份折金公式。
+        return GameConfig.EquipScrapGold(e.rarity, e.star);
     }
 
     IEnumerator CoFlyCoin(Vector3 from, int goldAdd)

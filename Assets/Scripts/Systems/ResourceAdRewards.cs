@@ -8,7 +8,7 @@ public static class ResourceAdRewards
 {
     public const int StaminaPerAd = 30;
     public const int StaminaAdsPerDay = 5;
-    public const int GoldPerAd = 200;
+    public const int GoldPerAd = 20;
     public const int GoldAdsPerDay = 10;
 
     static string TodayKey() => DateTime.UtcNow.ToString("yyyyMMdd");

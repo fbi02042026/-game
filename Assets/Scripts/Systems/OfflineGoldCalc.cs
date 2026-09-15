@@ -9,7 +9,7 @@ public static class OfflineGoldCalc
         if (offlineSeconds <= 0) return 0;
         int maxOfflineHours = Mathf.Max(GameConfig.MAX_OFFLINE_HOURS, 8 + Mathf.Max(0, farmLevel) * 2);
         double effectiveMinutes = Math.Min(offlineSeconds / 60.0, maxOfflineHours * 60.0);
-        int goldPerMinute = 10 + Mathf.Max(0, farmLevel) * 10;
+        int goldPerMinute = 1 + Mathf.Max(0, farmLevel) * 1;
         return (long)(effectiveMinutes * goldPerMinute);
     }
 

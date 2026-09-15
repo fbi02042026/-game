@@ -14,6 +14,21 @@ using UnityEngine;
 ///
 /// ⚠️ 本表**不直接发钱**，只做估算与自检。真实产出仍在 monster_stats.csv / battle_quest.csv /
 /// GameConfig。改产出请改源头，然后回来同步本表。
+///
+/// ── 去零口径（2026-09-15 第二轮补齐）──
+/// 已去零的**产出**：怪金、关卡通关金、金币副本、连杀奖励、加速出兵折金、装备分解金、
+/// 成就奖励、日志成就、日志里程、离线挂机、广告金、章节首通剧情金、金币袋。
+///
+/// 刻意**不去零**的（别顺手也除一下，会反向破坏节奏）：
+/// 1. GameConfig.GOLD_PER_TALENT_POINT = 100 —— 这是金币→天赋石的汇率，不是产出。
+///    保持 100 时：第1章 ≈28 石、全程 ≈995 石；右侧天赋树全点满需 491 石，
+///    即「打到第 6 章中点满流派树」，节奏刚好。改成 10 会变成第 1 章就能点掉半棵树。
+/// 2. TalentDefs.Left.goldCost（50 + i×15，全树 13700 金）—— 它是**金币主水槽**，
+///    不是产出。去零前第 1 章收入 2.2 万即可点满全树（这就是「给太多」）；
+///    现在需要攒到第 3~5 章，配合商店/佣兵分钱才点得满。
+/// 3. 佣兵解锁价 500 / 1500 / 5000（MercRosterDefs.RecruitGold）—— 同为水槽。
+///    现在 500 金 ≈ 通关第 1 章总收入的 18%，是个要取舍的决定，不再是随手买。
+/// 4. 商店价已在去零时**单独重定**（不是简单 ÷10），见 ShopDefs。
 /// </summary>
 public static class EconomyDefs
 {
@@ -51,14 +66,20 @@ public static class EconomyDefs
     public const float BOSS_MONSTER_GOLD = 20f;
 
     /// <summary>第 stageNo 关（1..10）的金币收入。</summary>
-    public static int StageGold(int chapter, int stageNo)
+    public static int StageGold(int chapter, int stageNo) => StageGold(chapter, stageNo, 1f);
+
+    /// <summary>
+    /// 第 stageNo 关的金币收入。monsterGoldMul = 难度倍率，
+    /// 只放大**怪物掉金**（含 Boss 本体），通关金是固定奖励、不随难度放大。
+    /// </summary>
+    public static int StageGold(int chapter, int stageNo, float monsterGoldMul)
     {
         int s = Mathf.Clamp(stageNo, 1, STAGES_PER_RUN);
-        float g = AvgMonsterGold(chapter) * WAVE_GOLD_MUL;
+        float g = AvgMonsterGold(chapter) * WAVE_GOLD_MUL * monsterGoldMul;
         float monsters = MonstersPerStage[s - 1];
 
         if (s >= STAGES_PER_RUN) // Boss 关：小怪 + Boss 本体 + Boss 通关金
-            return Mathf.RoundToInt((monsters - 1f) * g + BOSS_MONSTER_GOLD + BossClearGold(chapter));
+            return Mathf.RoundToInt((monsters - 1f) * g + BOSS_MONSTER_GOLD * monsterGoldMul + BossClearGold(chapter));
 
         return Mathf.RoundToInt(monsters * g + NormalClearGold(chapter));
     }
@@ -83,15 +104,18 @@ public static class EconomyDefs
     }
 
     /// <summary>一次尝试清掉 n 关（可带小数）的收入。</summary>
-    public static int RunGold(int chapter, float stagesCleared)
+    public static int RunGold(int chapter, float stagesCleared) => RunGold(chapter, stagesCleared, 1f);
+
+    /// <summary>一次尝试清掉 n 关的收入，怪物掉金再乘 monsterGoldMul（难度倍率）。</summary>
+    public static int RunGold(int chapter, float stagesCleared, float monsterGoldMul)
     {
         float n = Mathf.Clamp(stagesCleared, 0f, STAGES_PER_RUN);
         int full = Mathf.FloorToInt(n);
         int gold = 0;
-        for (int s = 1; s <= full; s++) gold += StageGold(chapter, s);
+        for (int s = 1; s <= full; s++) gold += StageGold(chapter, s, monsterGoldMul);
         float frac = n - full;
         if (frac > 0f && full < STAGES_PER_RUN)
-            gold += Mathf.RoundToInt(StageGold(chapter, full + 1) * frac);
+            gold += Mathf.RoundToInt(StageGold(chapter, full + 1, monsterGoldMul) * frac);
         return gold;
     }
 
@@ -188,6 +212,22 @@ public static class EconomyDefs
                           $"单次失败 {RunGold(ch, g.failStages)}　单次通关 {RunGold(ch, STAGES_PER_RUN)}　" +
                           $"本章 {ChapterGold(ch)}　累计 {CumulativeGold(ch)}　" +
                           $"累计体力 {CumulativeStamina(ch)}");
+        }
+
+        sb.AppendLine("[Economy] 单局金币峰值（用于校准「千金在手」阈值 1000；难度只放大怪物掉金）");
+        for (int ch = 1; ch <= 8; ch++)
+        {
+            sb.AppendLine($"  第{ch}章满关：普通 {RunGold(ch, STAGES_PER_RUN, GameConfig.GetDifficultyGoldMul(0))}　" +
+                          $"困难 {RunGold(ch, STAGES_PER_RUN, GameConfig.GetDifficultyGoldMul(1))}　" +
+                          $"噩梦 {RunGold(ch, STAGES_PER_RUN, GameConfig.GetDifficultyGoldMul(2))}");
+        }
+
+        sb.AppendLine("[Economy] 天赋石节奏（GOLD_PER_TALENT_POINT=100，右侧流派树全满需 491 石）");
+        int stones = 0;
+        for (int ch = 1; ch <= 8; ch++)
+        {
+            stones += ChapterTalentPoints(ch);
+            sb.AppendLine($"  打完第{ch}章：累计 {stones} 石");
         }
 
         sb.AppendLine("[Economy] 商店金币定价自检（基准：通关第1章累计 " + ChapterGold(1) + " 金）");

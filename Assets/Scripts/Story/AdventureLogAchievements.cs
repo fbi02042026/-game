@@ -30,17 +30,17 @@ public static class AdventureLogAchievements
     {
         switch (id)
         {
-            case "A001": return new AchReward { Gold = 100, Label = "金币×100" };
-            case "A002": return new AchReward { Gold = 50, Label = "金币×50" };
+            case "A001": return new AchReward { Gold = 10, Label = "金币×10" };
+            case "A002": return new AchReward { Gold = 5, Label = "金币×5" };
             case "A003": return new AchReward { Mats = 5, Label = "强化石×5" };
-            case "A004": return new AchReward { Gold = 200, Label = "金币×200" };
-            case "A005": return new AchReward { Gold = 100, Label = "金币×100" };
+            case "A004": return new AchReward { Gold = 20, Label = "金币×20" };
+            case "A005": return new AchReward { Gold = 10, Label = "金币×10" };
             case "A006": return new AchReward { Talent = 3, Label = "天赋石×3" };
             case "A007": return new AchReward { BackpackSlots = 1, Label = "背包扩容+1" };
             case "A008": return new AchReward { Mats = 10, Label = "强化石×10" };
-            case "A009": return new AchReward { Gold = 150, Label = "金币×150" };
+            case "A009": return new AchReward { Gold = 15, Label = "金币×15" };
             case "A010": return new AchReward { StaminaMax = 1, Label = "体力上限+1" };
-            case "A011": return new AchReward { Gold = 500, Label = "金币×500" };
+            case "A011": return new AchReward { Gold = 50, Label = "金币×50" };
             case "A012": return new AchReward { TitleId = "forest_untouched", Label = "称号「森林无伤者」" };
             case "A013": return new AchReward { Talent = 5, Label = "天赋石×5" };
             case "A014": return new AchReward { FrameId = "frame_nightmare", Label = "限定头像框" };
@@ -313,7 +313,10 @@ public static class AdventureLogAchievements
 
     public static void OnRunGoldPeak(long gold)
     {
-        if (gold >= 10000)
+        // 2026-09-15 产出去零：10000 → 1000。
+        // 去零后单局峰值：第1章满关 ≈690 金，第8章满关 ≈1070 金，困难/噩梦 ×1.35/1.8 才更容易破千。
+        // 阈值定 1000 = 「第 5 章困难或第 8 章普通打满一局」，是个需要真打的中期成就，不是白送。
+        if (gold >= 1000)
             SetProgressAtLeast("gold_run_10k", 1);
     }
 

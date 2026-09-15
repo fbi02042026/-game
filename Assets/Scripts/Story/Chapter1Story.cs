@@ -93,7 +93,7 @@ public static class Chapter1Story
         };
         StoryDirector.Ensure().Play(beats, () =>
         {
-            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 200, save: false, notify: true);
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 20, save: false, notify: true);
             ResourceWallet.Add(ResourceWallet.ResourceType.DecomposeMat, 3, save: true, notify: true);
             UIManager.Instance?.ShowToast("获得 圣盾壁垒、金币200、分解材料×3");
             StoryProgress.QueueChapter1TownReturn();

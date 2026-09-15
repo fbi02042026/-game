@@ -372,17 +372,17 @@ public static class AdventureLogCatalog
 
     public static readonly AchEntry[] Achievements =
     {
-        A("A001", "见习冒险者", "成长", "完成新手引导", "金币 ×100", "你拿到了见习徽章，虽然它看起来随时会掉色。"),
-        A("A002", "第一次撤离", "战斗", "首次从裂隙中撤离", "金币 ×50", "活着才有收益，公会这句话倒不是骗人的。"),
+        A("A001", "见习冒险者", "成长", "完成新手引导", "金币 ×10", "你拿到了见习徽章，虽然它看起来随时会掉色。"),
+        A("A002", "第一次撤离", "战斗", "首次从裂隙中撤离", "金币 ×5", "活着才有收益，公会这句话倒不是骗人的。"),
         A("A003", "第一次阵亡", "战斗", "首次在裂隙中死亡", "强化石 ×5", "金币没了，但装备和材料还在。记住这个教训。"),
         A("A004", "森林清道夫", "战斗", "在暮影森林累计击败 100 只怪物", "金币 ×200", "森林层的怪物看见你都会绕路。"),
         A("A005", "精英猎手", "战斗", "首次击败精英怪物", "金币 ×100", "精英怪不掉好装备，但它们掉的装备比普通怪好一点。"),
         A("A006", "首杀首领", "战斗", "首次击败森之守护者", "天赋石 ×3", "你砍倒了第一章的守门人。但门后面还有更多。"),
         A("A007", "装备收藏家", "收集", "累计拾取 50 件装备", "背包扩容 +1", "你的背包开始发出金属碰撞的声音。"),
         A("A008", "强化入门", "养成", "首次强化装备", "强化石 ×10", "把强化石砸进装备里，是冒险者最朴素的仪式感。"),
-        A("A009", "酒馆常客", "养成", "首次在酒馆招募佣兵", "金币 ×150", "一个人下本太危险，带个能挡刀的。"),
+        A("A009", "酒馆常客", "养成", "首次在酒馆招募佣兵", "金币 ×15", "一个人下本太危险，带个能挡刀的。"),
         A("A010", "裂隙探索者", "探索", "累计进入裂隙 10 次", "体力上限 +1", "你下裂隙的次数已经比回公会大厅还多了。"),
-        A("A011", "金币过万", "经济", "单局携带金币达到 10000", "金币 ×500", "有钱人的烦恼是：到底要不要撤离？"),
+        A("A011", "千金在手", "经济", "单局携带金币达到 1000", "金币 ×50", "有钱人的烦恼是：到底要不要撤离？"),
         A("A012", "完美首通", "挑战", "无伤通关第一章普通难度", "称号「森林无伤者」", "没有怪物能碰到你，包括那只树灵。"),
         A("A013", "困难挑战者", "挑战", "通关第一章困难难度", "天赋石 ×5", "困难难度的怪物不会更聪明，只会更不讲理。"),
         A("A014", "噩梦先驱", "挑战", "通关第一章噩梦难度", "限定头像框", "能活着走出噩梦难度的人，公会会记住你的名字。"),
@@ -718,9 +718,42 @@ public static class AdventureLogCatalog
                 return (SaveSystem.Instance?.Data?.ch1BestClearDifficulty ?? -1) >= 1;
             case "S016":
                 return (SaveSystem.Instance?.Data?.ch1BestClearDifficulty ?? -1) >= 2;
+
+            // —— 叙事 V2.0：以下 8 条原先落到 default:return false，永久无法解锁 ——
+            case "S005":
+                return AdventureLogAchievements.GetProgress(ProgressShopSpend) >= 1000;
+            case "S006":
+                return AdventureLogAchievements.GetProgress("merc_battles_H005") >= 10;   // 米娅
+            case "S007":
+                return AdventureLogAchievements.GetProgress("merc_battles_H007") >= 10;   // 布罗克
+            case "S008":
+                return AdventureLogAchievements.GetProgress("merc_battles_H011") >= 10;   // 索菲
+            case "S009":
+                return SideDone("S003") && (StoryClue.Has("C05") || StoryClue.Has("C20"));
+            case "S010":
+                return AdventureLogAchievements.GetProgress(ProgressShopSpend) >= 3000;
+            case "S014":
+                return SideDone("S004") && SideDone("S009");
+            case "S015":
+                return StoryProgress.GetBond(StoryProgress.NpcLaoDun) >= 20;
             default:
                 return false;
         }
+    }
+
+    /// <summary>累计商店消费金币。需要在消费结算处调用 AddProgress(ProgressShopSpend, 金额)。</summary>
+    public const string ProgressShopSpend = "shop_spend_total";
+
+    /// <summary>佣兵参战次数进度键。需要在参战判定处按参战佣兵调用 AddProgress(key, 1)。</summary>
+    public static string MercBattleKey(string mercAssetId)
+    {
+        return "merc_battles_" + mercAssetId;
+    }
+
+    static bool SideDone(string id)
+    {
+        var sides = SaveSystem.Instance?.Data?.completedSideIds;
+        return sides != null && sides.Contains(id);
     }
 
     static MonsterEntry M(string id, string name, string asset, string kind, string place, string unlock, string desc, string lore)

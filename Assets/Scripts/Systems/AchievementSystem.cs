@@ -48,37 +48,37 @@ public class AchievementSystem : Singleton<AchievementSystem>
         _achievementDefs = new Dictionary<string, AchievementDef>
         {
             // === 击杀成就 ===
-            { "kill_ch1_boss_1", new AchievementDef("kill_ch1_boss_1", "首次击杀", "击杀第1章BOSS 1次", AchievementType.Kill, 1, new AchievementReward(100, 0, 10)) },
-            { "kill_ch1_boss_5", new AchievementDef("kill_ch1_boss_5", "熟练猎手", "击杀第1章BOSS 5次", AchievementType.Kill, 5, new AchievementReward(300, 0, 20)) },
-            { "kill_ch1_boss_10", new AchievementDef("kill_ch1_boss_10", "章节主宰", "击杀第1章BOSS 10次", AchievementType.Kill, 10, new AchievementReward(500, 0, 30)) },
-            { "kill_ch1_boss_20", new AchievementDef("kill_ch1_boss_20", "终极猎杀", "击杀第1章BOSS 20次", AchievementType.Kill, 20, new AchievementReward(1000, 1, 50)) },
+            { "kill_ch1_boss_1", new AchievementDef("kill_ch1_boss_1", "首次击杀", "击杀第1章BOSS 1次", AchievementType.Kill, 1, new AchievementReward(10, 0, 10)) },
+            { "kill_ch1_boss_5", new AchievementDef("kill_ch1_boss_5", "熟练猎手", "击杀第1章BOSS 5次", AchievementType.Kill, 5, new AchievementReward(30, 0, 20)) },
+            { "kill_ch1_boss_10", new AchievementDef("kill_ch1_boss_10", "章节主宰", "击杀第1章BOSS 10次", AchievementType.Kill, 10, new AchievementReward(50, 0, 30)) },
+            { "kill_ch1_boss_20", new AchievementDef("kill_ch1_boss_20", "终极猎杀", "击杀第1章BOSS 20次", AchievementType.Kill, 20, new AchievementReward(100, 1, 50)) },
 
-            { "kill_total_100", new AchievementDef("kill_total_100", "百人斩", "累计击杀100只怪物", AchievementType.Kill, 100, new AchievementReward(200, 0, 15)) },
-            { "kill_total_500", new AchievementDef("kill_total_500", "千人斩", "累计击杀500只怪物", AchievementType.Kill, 500, new AchievementReward(500, 0, 30)) },
-            { "kill_total_1000", new AchievementDef("kill_total_1000", "万人斩", "累计击杀1000只怪物", AchievementType.Kill, 1000, new AchievementReward(1000, 2, 50)) },
+            { "kill_total_100", new AchievementDef("kill_total_100", "百人斩", "累计击杀100只怪物", AchievementType.Kill, 100, new AchievementReward(20, 0, 15)) },
+            { "kill_total_500", new AchievementDef("kill_total_500", "千人斩", "累计击杀500只怪物", AchievementType.Kill, 500, new AchievementReward(50, 0, 30)) },
+            { "kill_total_1000", new AchievementDef("kill_total_1000", "万人斩", "累计击杀1000只怪物", AchievementType.Kill, 1000, new AchievementReward(100, 2, 50)) },
 
             // === 副本成就 ===
-            { "clear_ch1", new AchievementDef("clear_ch1", "初出茅庐", "通关第1章", AchievementType.Dungeon, 1, new AchievementReward(200, 1, 20)) },
-            { "clear_ch3", new AchievementDef("clear_ch3", "渐入佳境", "通关第3章", AchievementType.Dungeon, 1, new AchievementReward(500, 0, 30)) },
-            { "clear_ch5", new AchievementDef("clear_ch5", "冒险大师", "通关第5章", AchievementType.Dungeon, 1, new AchievementReward(1000, 2, 50)) },
-            { "clear_ch8", new AchievementDef("clear_ch8", "传奇冒险家", "通关第8章", AchievementType.Dungeon, 1, new AchievementReward(2000, 5, 100)) },
+            { "clear_ch1", new AchievementDef("clear_ch1", "初出茅庐", "通关第1章", AchievementType.Dungeon, 1, new AchievementReward(20, 1, 20)) },
+            { "clear_ch3", new AchievementDef("clear_ch3", "渐入佳境", "通关第3章", AchievementType.Dungeon, 1, new AchievementReward(50, 0, 30)) },
+            { "clear_ch5", new AchievementDef("clear_ch5", "冒险大师", "通关第5章", AchievementType.Dungeon, 1, new AchievementReward(100, 2, 50)) },
+            { "clear_ch8", new AchievementDef("clear_ch8", "传奇冒险家", "通关第8章", AchievementType.Dungeon, 1, new AchievementReward(200, 5, 100)) },
 
             // === 装备收集 ===
-            { "equip_first_orange", new AchievementDef("equip_first_orange", "传说之始", "首次获得橙色品质武器", AchievementType.EquipCollect, 1, new AchievementReward(500, 2, 50)) },
-            { "equip_collect_10", new AchievementDef("equip_collect_10", "装备爱好者", "累计收集10件武器", AchievementType.EquipCollect, 10, new AchievementReward(200, 0, 15)) },
-            { "equip_collect_20", new AchievementDef("equip_collect_20", "武器大师", "累计收集20件武器", AchievementType.EquipCollect, 20, new AchievementReward(500, 0, 30)) },
-            { "equip_collect_50", new AchievementDef("equip_collect_50", "军械库", "累计收集50件武器", AchievementType.EquipCollect, 50, new AchievementReward(1000, 3, 60)) },
+            { "equip_first_orange", new AchievementDef("equip_first_orange", "传说之始", "首次获得橙色品质武器", AchievementType.EquipCollect, 1, new AchievementReward(50, 2, 50)) },
+            { "equip_collect_10", new AchievementDef("equip_collect_10", "装备爱好者", "累计收集10件武器", AchievementType.EquipCollect, 10, new AchievementReward(20, 0, 15)) },
+            { "equip_collect_20", new AchievementDef("equip_collect_20", "武器大师", "累计收集20件武器", AchievementType.EquipCollect, 20, new AchievementReward(50, 0, 30)) },
+            { "equip_collect_50", new AchievementDef("equip_collect_50", "军械库", "累计收集50件武器", AchievementType.EquipCollect, 50, new AchievementReward(100, 3, 60)) },
 
             // === 遗产收集 ===
-            { "legacy_1", new AchievementDef("legacy_1", "薪火相传", "带回1件遗产", AchievementType.Legacy, 1, new AchievementReward(100, 0, 10)) },
-            { "legacy_5", new AchievementDef("legacy_5", "积累传承", "带回5件遗产", AchievementType.Legacy, 5, new AchievementReward(300, 0, 20)) },
-            { "legacy_10", new AchievementDef("legacy_10", "遗产收藏家", "带回10件遗产", AchievementType.Legacy, 10, new AchievementReward(500, 1, 30)) },
-            { "legacy_20", new AchievementDef("legacy_20", "不朽传承", "带回20件遗产", AchievementType.Legacy, 20, new AchievementReward(1000, 2, 50)) },
+            { "legacy_1", new AchievementDef("legacy_1", "薪火相传", "带回1件遗产", AchievementType.Legacy, 1, new AchievementReward(10, 0, 10)) },
+            { "legacy_5", new AchievementDef("legacy_5", "积累传承", "带回5件遗产", AchievementType.Legacy, 5, new AchievementReward(30, 0, 20)) },
+            { "legacy_10", new AchievementDef("legacy_10", "遗产收藏家", "带回10件遗产", AchievementType.Legacy, 10, new AchievementReward(50, 1, 30)) },
+            { "legacy_20", new AchievementDef("legacy_20", "不朽传承", "带回20件遗产", AchievementType.Legacy, 20, new AchievementReward(100, 2, 50)) },
 
             // === 生存成就 ===
-            { "survive_stage5", new AchievementDef("survive_stage5", "深入险境", "单局到达第5关", AchievementType.Survive, 1, new AchievementReward(100, 0, 10)) },
-            { "survive_stage8", new AchievementDef("survive_stage8", "极限求生", "单局到达第8关", AchievementType.Survive, 1, new AchievementReward(300, 0, 20)) },
-            { "survive_clear", new AchievementDef("survive_clear", "完美通关", "单局通关一章", AchievementType.Survive, 1, new AchievementReward(500, 1, 30)) },
+            { "survive_stage5", new AchievementDef("survive_stage5", "深入险境", "单局到达第5关", AchievementType.Survive, 1, new AchievementReward(10, 0, 10)) },
+            { "survive_stage8", new AchievementDef("survive_stage8", "极限求生", "单局到达第8关", AchievementType.Survive, 1, new AchievementReward(30, 0, 20)) },
+            { "survive_clear", new AchievementDef("survive_clear", "完美通关", "单局通关一章", AchievementType.Survive, 1, new AchievementReward(50, 1, 30)) },
         };
     }
 
@@ -86,11 +86,11 @@ public class AchievementSystem : Singleton<AchievementSystem>
     {
         _milestoneDefs = new List<MilestoneDef>
         {
-            new MilestoneDef(1, 50, new AchievementReward(200, 1, 0), "里程 I"),
-            new MilestoneDef(2, 100, new AchievementReward(500, 2, 0), "里程 II"),
-            new MilestoneDef(3, 200, new AchievementReward(1000, 3, 0), "里程 III"),
-            new MilestoneDef(4, 500, new AchievementReward(2000, 5, 0), "里程 IV"),
-            new MilestoneDef(5, 1000, new AchievementReward(5000, 10, 0), "里程 V"),
+            new MilestoneDef(1, 50, new AchievementReward(20, 1, 0), "里程 I"),
+            new MilestoneDef(2, 100, new AchievementReward(50, 2, 0), "里程 II"),
+            new MilestoneDef(3, 200, new AchievementReward(100, 3, 0), "里程 III"),
+            new MilestoneDef(4, 500, new AchievementReward(200, 5, 0), "里程 IV"),
+            new MilestoneDef(5, 1000, new AchievementReward(500, 10, 0), "里程 V"),
         };
     }
 

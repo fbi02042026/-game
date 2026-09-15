@@ -82,6 +82,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     internal int _tutorialSpriteRanged = 2;
     internal int _tutorialEliteCount;
     internal int _tutorialWaveMonsterCount;
+    /// <summary>引导波远程只数；&lt;0 = 走旧规则自动折算（近战:远程 ≈ 4:2）。</summary>
+    internal int _tutorialRangedCount = TutorialBattleTable.AutoRangedCount;
     internal float _tutorialHpMin = TutorialBattleTable.DefaultHpMin;
     internal float _tutorialHpMax = TutorialBattleTable.DefaultHpMax;
     internal float _tutorialEliteHpMin = TutorialBattleTable.DefaultEliteHpMin;
@@ -113,6 +115,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     // === 波次系统（规划/出怪在 WavePlanner；此处只留本局状态） ===
     WavePlanner _wavePlanner;
     internal WavePlanner Planner => _wavePlanner ?? (_wavePlanner = new WavePlanner(this));
+    /// <summary>本关抽到的关卡模式名；空 = 没走模式逻辑（仍是旧均分波次）。UI 播报用。</summary>
+    public string StageModeName => _wavePlanner != null ? _wavePlanner.StageModeName : "";
+    /// <summary>本关模式的播报文案（如「两侧都有敌人」），给玩家 3 秒读条时间。</summary>
+    public string StageModeTelegraph => _wavePlanner != null ? _wavePlanner.StageModeTelegraph : "";
 
     internal List<WaveData> _waves = new List<WaveData>();
     internal int _totalWaves = 0;
@@ -335,6 +341,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     {
         Debug.Log("[BattleManager] ===== StartNewRun 开始 =====");
         StopBattleSpawnCoroutines();
+        // 新一局：清空「章内不重复」的关卡模式记录，重新洗牌（V3.0 起模式允许重复，此处仅清压力阀）
+        StageModeTable.ResetRun();
+        Planner?.ResetPressure();
         currentGold = SaveSystem.Instance?.Data?.totalGold ?? 0;
         _goldAtRunStart = currentGold;
         var data = SaveSystem.Instance?.Data;
@@ -1090,16 +1099,18 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         var parallax = FindObjectOfType<ParallaxBackground>();
         if (parallax != null) parallax.ResetHeroOrigin();
 
-        string title = GameConfig.GetChapterMapName(CurrentChapter);
+        // 叙事 V2.0：第 1–8 章都有「第 X 章 · 地图名 + 一段介绍」的开场卡
+        string title = ChapterStoryBeats.IntroTitle(CurrentChapter)
+                       ?? GameConfig.GetChapterMapName(CurrentChapter);
         string body = null;
         if (Rules.UseTutorialSplash)
         {
             title = "森林区域，第一层";
             body = "阳光还能照进来，怪物也不算太强。\n正好适合一个新人进去摸摸路。";
         }
-        else if (CurrentChapter <= 1 && StoryProgress.TutorialDone && !StoryProgress.Chapter1ChoiceDone)
+        else
         {
-            body = "新人任务开始。不要想太多。";
+            body = ChapterStoryBeats.OpeningLine(CurrentChapter);
         }
         // 先黑屏（盖住 Loading 底下的战斗场景），Loading 关掉后再开始计时
         var splash = ChapterSplashOverlay.Show(title, body, Rules.UseTutorialSplash, waitLoadingBeforeHold: true);
@@ -1905,13 +1916,30 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (_rewardSequenceStarted || _stageCleared) return;
         if (CountAliveMonsters() > 0) return;
         TryGrantStageQuestGold();
+        GrantStageClues();
         if (ShouldPlayChapter1Ending())
         {
             _rewardSequenceStarted = true;
             StartCoroutine(CoChapter1EndingThenRewards());
             return;
         }
+        if (ShouldPlayChapterStory())
+        {
+            _rewardSequenceStarted = true;
+            StartCoroutine(CoChapterStoryThenRewards());
+            return;
+        }
         BeginRewardSequence();
+    }
+
+    /// <summary>叙事 V2.0：按关卡进度发放冒险日志线索页（幂等，重复发放无副作用）。</summary>
+    void GrantStageClues()
+    {
+        if (currentStage == null) return;
+        int idx = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
+        StoryClue.OnStageCleared(CurrentChapter, idx);
+        if (currentStage.type == StageType.Elite)
+            StoryClue.OnEliteFirstKill(CurrentChapter);
     }
 
     bool ShouldPlayChapter1Ending()
@@ -1926,6 +1954,32 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     {
         bool done = false;
         Chapter1Story.PlayEnding(() => done = true);
+        while (!done) yield return null;
+        _rewardSequenceStarted = false;
+        BeginRewardSequence();
+    }
+
+    /// <summary>叙事 V2.0：第 2–8 章 Boss 后的关键对话节点（含第 7 章转折点与第 8 章结局）。</summary>
+    bool ShouldPlayChapterStory()
+    {
+        if (Rules.SkipChapter1Ending) return false;
+        if (CurrentChapter < 2) return false;
+        if (!StoryProgress.TutorialDone || !StoryProgress.Chapter1ChoiceDone) return false;
+        if (currentStage == null || currentStage.type != StageType.Boss) return false;
+        // 第 7 章的转折点是不可逆的：做过了就不再重播
+        if (CurrentChapter == 7 && ChapterStoryBeats.EndingChoiceDone) return false;
+        return true;
+    }
+
+    IEnumerator CoChapterStoryThenRewards()
+    {
+        bool done = false;
+        if (!ChapterStoryBeats.TryPlayPostBoss(CurrentChapter, () => done = true))
+        {
+            _rewardSequenceStarted = false;
+            BeginRewardSequence();
+            yield break;
+        }
         while (!done) yield return null;
         _rewardSequenceStarted = false;
         BeginRewardSequence();
@@ -1987,7 +2041,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (rewards != null && rewards.Count > 3)
         {
             for (int i = 3; i < rewards.Count; i++)
-                bonusGold += (int)rewards[i].rarity * 5 * (1 + rewards[i].star);
+                bonusGold += GameConfig.EquipScrapGold(rewards[i].rarity, rewards[i].star);
             rewards.RemoveRange(3, rewards.Count - 3);
         }
 
@@ -2030,6 +2084,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     {
         if (_stageCleared) return;
         _stageCleared = true;
+        // V3.0 压力阀：把本关通关血量喂给下一关（连续轻松通关 → 下一关多一波）
+        float clearMaxHp = hero != null && hero.attr != null ? hero.attr.GetAttr(AttrType.MaxHp) : 0f;
+        Planner?.NotifyStageResult(false, clearMaxHp > 0f ? hero.currentHp / clearMaxHp : 1f);
         isInBattle = false;
         UnitsCanAct = false;
 
@@ -2136,6 +2193,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
     public void OnHeroDead()
     {
+        Planner?.NotifyStageResult(true, 0f); // V3.0 压力阀：死过 → 下一关减一波
         isInBattle = false;
         MercenaryManager.Instance?.ClearAllMercs();
         AdventureLogAchievements.OnDied();

@@ -772,7 +772,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     {
         if (item?.equip != null && IsEquipped(item.equip))
             UnequipItem(item.equip.slotType);
-        int gold = (int)item.equip.rarity * 10 * (1 + item.equip.star);
+        int gold = GameConfig.EquipScrapGold(item.equip.rarity, item.equip.star);
         BattleManager.Instance.currentGold += gold;
         DropItem(item);
         UIManager.Instance?.ShowToast($"分解{item.equip.equipName}获得{gold}金币");
