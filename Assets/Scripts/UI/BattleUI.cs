@@ -53,10 +53,19 @@ public partial class BattleUI : MonoBehaviour
     public Button autoButton;
 
     [Header("=== 底部临时布局（4技能槽 / 5装备槽）===")]
-    public Transform skillSlotRoot;      // BackpackPanel/SkillBar（4 个被动技槽，自动释放）
+    public Transform skillSlotRoot;      // BackpackPanel/SkillBar（4 个玩家被动技槽）
     public Transform equipSlotRoot;      // BackpackPanel/zhuangbei（5 个装备快捷槽）
+    /// <summary>
+    /// 玩家被动技能槽（4 个）：技能由 PlayerSkillPassive 充能满后自动释放，放完进冷却。
+    /// 玩家不手动点，界面只表现「图标 + 名称 + 星级 + 充能条 + 冷却」。
+    /// </summary>
     public List<SkillAvatarUI> runSkillSlots = new List<SkillAvatarUI>();
     public List<EquipQuickSlotUI> equipQuickSlots = new List<EquipQuickSlotUI>();
+    /// <summary>
+    /// 佣兵自带技能槽（2 个）：节点在各自角色卡里 MercSlot1/skill、MercSlot2/skill，
+    /// 与上面的玩家被动技槽是两套。佣兵技能同样由 MercSkillCaster 自动释放。
+    /// </summary>
+    public List<SkillAvatarUI> mercSkillSlots = new List<SkillAvatarUI>();
     /// <summary>
     /// 装备快捷槽顺序兜底：先按节点名认部位（见 EquipSlotTypeOf），认不出来才按下标取这里。
     /// 按需求暂时不做「手」和「披风」两槽。
@@ -161,7 +170,8 @@ public partial class BattleUI : MonoBehaviour
         _liveBarTimer += Time.deltaTime;
         if (_liveBarTimer < LiveBarInterval) return;
         _liveBarTimer = 0f;
-        TickRunSkillSlots();
+        TickRunSkillSlots();      // 玩家 4 个被动技槽
+        TickMercSkillSlots();     // 佣兵自带技能槽（角色卡内 skill 节点）
         RefreshLiveBars();
     }
 
@@ -253,6 +263,7 @@ public partial class BattleUI : MonoBehaviour
         ApplySoloBattleHud();
         UpdateCharacterSlots();
         UpdateSkillAvatars();
+        UpdateMercSkillSlots();
         UpdateBackpackGrid();
         UpdateStageProgress(stageIdx);
 

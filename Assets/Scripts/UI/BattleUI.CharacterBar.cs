@@ -31,6 +31,8 @@ public partial class BattleUI : MonoBehaviour
             Sprite playerIcon = mm != null ? mm.GetPlayerIcon() : null;
             playerSlot.SetPortrait(playerIcon);
             playerSlot.SetSkillBadge(null);
+            // 职业 icon：xuetiaodi/职业icon，取当前所选职业
+            playerSlot.SetJobIcon(PlayerJobDefs.TryLoadJobIcon(PlayerJobDefs.GetSelected()));
         }
 
         if (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle)
@@ -67,6 +69,8 @@ public partial class BattleUI : MonoBehaviour
         mercSlot1.SetSkillBadge(GetMercSkillIcon(m));
         // 教程救援佣兵不在存档出战列表里，技能圆形头像要单独绑
         merc1SkillAvatar?.SetAvatar(mercIcon);
+        // 职业 icon：教程佣兵同样显示
+        mercSlot1.SetJobIcon(MercHireSession.LoadJobIcon(mm != null ? mm.GetJobName(m.mercId) : null));
         // 没配头像时也不要露出「头像」占位白框
         if (mercIcon == null && mercSlot1.portraitPlaceholder != null)
             mercSlot1.portraitPlaceholder.SetActive(false);
@@ -111,6 +115,7 @@ public partial class BattleUI : MonoBehaviour
         bool unlocked = index < maxSlots;
         if (!unlocked)
         {
+            slot.SetJobIcon(null);
             slot.ShowUnavailable(MercLockedHint);
             return;
         }
@@ -129,6 +134,8 @@ public partial class BattleUI : MonoBehaviour
             Sprite icon = MercPortraitSprites.GetHead(hireId) ?? MercPortraitSprites.GetHead(id) ?? (mm != null ? mm.GetIcon(id) : null);
             string job = mm != null ? mm.GetJobName(id) : id;
             slot.SetPortrait(icon);
+            // 职业 icon：按佣兵职业名取（防御/恢复/法术/物攻）
+            slot.SetJobIcon(MercHireSession.LoadJobIcon(job));
             // 右上角小图标=该佣兵的技能（自动释放，不用手点）
             slot.SetSkillBadge(index < activeMercs.Count ? GetMercSkillIcon(activeMercs[index]) : null);
 
@@ -148,6 +155,7 @@ public partial class BattleUI : MonoBehaviour
         else
         {
             // 已解锁但无佣兵：空槽占位
+            slot.SetJobIcon(null);
             slot.ShowEmpty();
         }
     }

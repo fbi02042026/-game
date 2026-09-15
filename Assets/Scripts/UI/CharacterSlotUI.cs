@@ -26,6 +26,9 @@ public class CharacterSlotUI
     /// <summary>右上角技能小图标：佣兵技能的标识，自动释放。</summary>
     public Image skillBadge;
 
+    /// <summary>职业图标：预制体节点 xuetiaodi/职业icon（玩家 = 所选职业，佣兵 = 佣兵职业）。</summary>
+    public Image jobIcon;
+
     private float _lastEnergy = 0f;
 
     /// <summary>
@@ -191,6 +194,17 @@ public class CharacterSlotUI
         skillBadge.gameObject.SetActive(icon != null);
     }
 
+    /// <summary>设置职业图标；给 null 就隐藏节点（不显示占位白块）。</summary>
+    public void SetJobIcon(Sprite icon)
+    {
+        if (jobIcon == null) return;
+        jobIcon.preserveAspect = true;
+        jobIcon.raycastTarget = false;
+        jobIcon.sprite = icon;
+        jobIcon.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+        jobIcon.gameObject.SetActive(icon != null);
+    }
+
     /// <summary>技能能量：底栏 lanBar 显示进度，满时仅显示光边（不改头像框）</summary>
     public void SetEnergy(float energy)
     {
@@ -330,6 +344,7 @@ public class CharacterSlotUI
         EnsureLockedOverlay();
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
         SetSkillBadge(null);
+        SetJobIcon(null);               // 空槽不显示职业 icon
         if (portrait != null) portrait.gameObject.SetActive(false);
         if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
         if (levelLabel != null) levelLabel.text = "";
@@ -361,6 +376,7 @@ public class CharacterSlotUI
         EnsureLockedOverlay();
         if (lockedOverlay != null) lockedOverlay.SetActive(true);
         SetSkillBadge(null);
+        SetJobIcon(null);               // 未解锁不显示职业 icon
         if (portrait != null) portrait.gameObject.SetActive(false);
         if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
         ApplyLockedOverlayText(label ?? "未解锁");

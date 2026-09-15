@@ -101,6 +101,8 @@ public partial class BattleUI : MonoBehaviour
 
         // 新底部布局：skill 4 槽 / zhuangbei 5 槽（头/胸/脚/主手/副手）
         BindBottomQuickSlots();
+        // 佣兵自带技能槽（角色卡内的 skill 节点），与上面玩家 4 槽是两套
+        BindMercSkillSlots();
 
         EnsureGridCellsBound();
         FixCharacterBarLayout();
@@ -161,6 +163,10 @@ public partial class BattleUI : MonoBehaviour
         if (runSkillSlots == null || runSkillSlots.Count == 0) miss.Add("主动技槽(0 个)");
         if (equipQuickSlots == null || equipQuickSlots.Count == 0) miss.Add("装备快捷槽(0 个)");
         if (gridCells == null || gridCells.Count == 0) miss.Add("GridContainer 格子(0 个)");
+        if (mercSkillSlots == null || mercSkillSlots.TrueForAll(s => s == null || s.root == null))
+            miss.Add("佣兵技能槽(MercSlot*/skill 均缺失)");
+
+        Add("PlayerSlot.职业icon", playerSlot?.jobIcon != null);
 
         Add("拾取确定按钮", lootConfirmButton != null);
         Add("CharacterButton", characterButton != null);
@@ -192,6 +198,7 @@ public partial class BattleUI : MonoBehaviour
         UpdateCharacterSlots();
         UpdateSkillAvatars();
         UpdateRunSkillSlots();
+        UpdateMercSkillSlots();
         UpdateEquipQuickSlots();
         int stageIdx = BattleManager.Instance != null && BattleManager.Instance.currentStage != null
             ? BattleManager.Instance.currentStage.stageIndex : 0;
@@ -327,6 +334,9 @@ public partial class BattleUI : MonoBehaviour
         slot.EnsureLockedOverlay();
         // 右上角技能角标容器先备好（有技能图标时才显示）
         slot.EnsureSkillBadge();
+
+        // 职业图标位：xuetiaodi/职业icon（玩家=所选职业，佣兵=佣兵职业）
+        if (slot.jobIcon == null) slot.jobIcon = EnsureJobIcon(root);
 
         // 未解锁槽：不改 Image.Filled，完全保留美术默认
         if (configureFills) ApplyFillBars(slot);

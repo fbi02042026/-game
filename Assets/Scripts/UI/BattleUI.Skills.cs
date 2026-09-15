@@ -58,6 +58,72 @@ public partial class BattleUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 刷新佣兵自带技能槽（MercSlot1/skill、MercSlot2/skill）。
+    /// 注意：这是**佣兵自己的技能**，和上面 4 个玩家被动技槽是两套，不要共用。
+    /// 佣兵技能同样由 MercSkillCaster 自动释放，这里只表现 图标 / 充能 / 冷却。
+    /// 没有对应佣兵或该佣兵没配技能时整槽隐藏，不露空框。
+    /// </summary>
+    public void UpdateMercSkillSlots()
+    {
+        if (mercSkillSlots == null || mercSkillSlots.Count == 0) return;
+        var mm = MercenaryManager.Instance;
+        var mercs = mm != null ? mm.GetActiveMercs() : null;
+
+        for (int i = 0; i < mercSkillSlots.Count; i++)
+        {
+            var slot = mercSkillSlots[i];
+            if (slot == null || slot.root == null) continue;
+
+            var m = (mercs != null && i < mercs.Count) ? mercs[i] : null;
+            var caster = m != null ? m.SkillCaster : null;
+            bool has = caster != null && caster.HasActiveSkill;
+            slot.root.SetActive(has);
+            if (!has) continue;
+
+            slot.SetAvatar(MercSkillTable.LoadIcon(caster.ActiveSkillId));
+            slot.SetEnergyFill(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(i) : 0f);
+        }
+    }
+
+    string _lastMercSkillKey = "\u0000";
+
+    /// <summary>逐帧刷佣兵技能充能 / 冷却；佣兵进出队或换人时整槽重建。</summary>
+    void TickMercSkillSlots()
+    {
+        if (mercSkillSlots == null || mercSkillSlots.Count == 0) return;
+        var mm = MercenaryManager.Instance;
+        var mercs = mm != null ? mm.GetActiveMercs() : null;
+
+        string key = "";
+        if (mercs != null)
+        {
+            for (int i = 0; i < mercs.Count && i < mercSkillSlots.Count; i++)
+                key += (mercs[i] != null && mercs[i].SkillCaster != null
+                           ? mercs[i].SkillCaster.ActiveSkillId : "-") + ",";
+        }
+        if (!string.Equals(key, _lastMercSkillKey))
+        {
+            _lastMercSkillKey = key;
+            UpdateMercSkillSlots();
+        }
+
+        for (int i = 0; i < mercSkillSlots.Count; i++)
+        {
+            var slot = mercSkillSlots[i];
+            if (slot == null || slot.root == null || !slot.root.activeSelf) continue;
+            var m = (mercs != null && i < mercs.Count) ? mercs[i] : null;
+            var caster = m != null ? m.SkillCaster : null;
+            if (caster == null) continue;
+
+            slot.SetEnergyFill(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(i) : 0f);
+            if (slot.cooldownText == null) continue;
+            float cd = caster.CooldownRemain;
+            slot.cooldownText.text = cd > 0.05f ? cd.ToString("0.0") + "s" : "";
+            slot.cooldownText.gameObject.SetActive(cd > 0.05f);
+        }
+    }
+
     string _lastSkillKey = "\u0000";
 
     /// <summary>逐帧（0.1s 节流）刷技能槽充能 / 冷却；技能列表变了就整槽重建。</summary>

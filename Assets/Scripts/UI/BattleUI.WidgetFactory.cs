@@ -331,6 +331,65 @@ public partial class BattleUI : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// 职业图标位：美术在 xuetiaodi 下放了「职业icon」节点，但可能没挂 Image 组件，缺了就运行时补一个。
+    /// 节点不存在时返回 null（老预制体没有这一层，不强行新建，避免挡住血条）。
+    /// </summary>
+    static Image EnsureJobIcon(Transform root)
+    {
+        Transform t = FindDeepChildIgnoreCase(root, "职业icon")
+                      ?? FindDeepChildIgnoreCase(root, "JobIcon");
+        if (t == null) return null;
+        var img = t.GetComponent<Image>();
+        if (img == null) img = t.gameObject.AddComponent<Image>();
+        img.raycastTarget = false;
+        img.preserveAspect = true;
+        img.sprite = null;
+        img.color = new Color(1f, 1f, 1f, 0f);
+        return img;
+    }
+
+    /// <summary>只在直接子节点里按名找（不递归），避免被更深层的同名节点抢走。</summary>
+    static Transform FindDirectChildIgnoreCase(Transform parent, string name)
+    {
+        if (parent == null || string.IsNullOrEmpty(name)) return null;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var c = parent.GetChild(i);
+            if (c != null && string.Equals(c.name, name, System.StringComparison.OrdinalIgnoreCase))
+                return c;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 佣兵自带技能槽：挂在各自角色卡下（MercSlot1/skill、MercSlot2/skill）。
+    /// 与底部 4 个「玩家被动技能」槽是**两套不同的东西**，不要合并、也不要互相顶替：
+    /// 玩家 4 槽走 BackpackPanel/SkillBar，佣兵技能走角色卡里的 skill 节点。
+    /// </summary>
+    void BindMercSkillSlots()
+    {
+        if (mercSkillSlots == null) mercSkillSlots = new List<SkillAvatarUI>();
+        mercSkillSlots.Clear();
+        mercSkillSlots.Add(BuildMercSkillSlot(mercSlot1));
+        mercSkillSlots.Add(BuildMercSkillSlot(mercSlot2));
+        Debug.Log($"[BattleUI] 佣兵技能槽绑定 " +
+                  $"1={(mercSkillSlots[0].root != null)} 2={(mercSkillSlots[1].root != null)}");
+    }
+
+    static SkillAvatarUI BuildMercSkillSlot(CharacterSlotUI slot)
+    {
+        var av = new SkillAvatarUI();
+        Transform t = slot?.root != null ? FindDirectChildIgnoreCase(slot.root.transform, "skill") : null;
+        if (t == null) return av;
+        av.root = t.gameObject;
+        // 容器在预制体里是空的（美术待填），图标/能量条/冷却字都运行时补
+        av.avatarImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
+        av.energyFill = EnsureChildBar(t, "MercSkillEnergy", new Color(0.55f, 0.85f, 1f, 1f));
+        av.cooldownText = EnsureChildText(t, "MercSkillCd", 14);
+        return av;
+    }
+
     static Transform FindDeepChildIgnoreCase(Transform parent, string name)
     {
         if (parent == null || string.IsNullOrEmpty(name)) return null;
