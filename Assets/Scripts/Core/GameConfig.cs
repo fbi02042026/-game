@@ -461,6 +461,29 @@ public static class GameConfig
     public const float SKILL_COOLDOWN_REDUCE_CAP = 0.5f;
 
     // ============================================================
+    // 玩家被动技能：纯冷却制（2026-09-15 改版）
+    // 去掉能量槽，改为「开局错峰给初始 CD → CD 好按槽序放一个 → 放完重进自己 CD」。
+    // 想整包退回能量制：PLAYER_SKILL_USE_ENERGY = true 且 PLAYER_SKILL_GCD = 0。
+    // ============================================================
+
+    /// <summary>玩家技能是否走能量制。false = 纯冷却制（当前方案）。</summary>
+    public const bool PLAYER_SKILL_USE_ENERGY = false;
+
+    /// <summary>
+    /// 全局释放间隔 GCD（秒）：放完任意一个玩家技能后，至少间隔这么久才能放下一个。
+    /// 防止多个技能同时冷却完毕时在同一瞬间全部炸出来。
+    /// 时间轴用 Time.time（与 SkillSystem 冷却递减的 Time.deltaTime 同轴），
+    /// 顿帧/暂停时两者同步停走，解冻后不会补放。
+    /// </summary>
+    public const float PLAYER_SKILL_GCD = 1.2f;
+
+    /// <summary>开局错峰：第 1 槽固定秒数（让它最快登场）。</summary>
+    public const float PLAYER_SKILL_SLOT0_OPENING_CD = 0.5f;
+
+    /// <summary>开局错峰系数（下标 = 槽位）：0 槽用上面的固定值，1~3 槽 = 自身 CD × 系数。</summary>
+    public static readonly float[] PLAYER_SKILL_OPENING_CD_MUL = { 0f, 0.33f, 0.66f, 1f };
+
+    // ============================================================
     // 敌人集中调参区：public static 便于实机热改与单点回退。
     // 敌人数值只能靠手感，出问题改这里的值即可，不要散落到各处硬编码。
     // ============================================================

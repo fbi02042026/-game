@@ -798,7 +798,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         RunSkillBarUI.Refresh();
 
         var bar = RunSkillBarUI.Instance;
-        hint.Show("技能能量各自累积，满了会自动释放——看技能条。",
+        hint.Show("技能各自倒计时，冷却好了会自动释放——看技能条。",
             bar != null ? bar.GetComponent<RectTransform>() : null, 8f);
 
         float t = 0f;

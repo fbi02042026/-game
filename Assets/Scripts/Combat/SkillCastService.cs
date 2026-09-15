@@ -39,7 +39,11 @@ public sealed class SkillCastService
     public bool TryUsePlayerSkillSlot(int slot)
     {
         if (slot < 0) return false;
-        if (bm.GetPlayerSkillEnergy(slot) < 0.99f) return false;
+        // 纯冷却制下不再看能量（PLAYER_SKILL_USE_ENERGY 置 true 可退回原行为）
+        if (GameConfig.PLAYER_SKILL_USE_ENERGY && bm.GetPlayerSkillEnergy(slot) < 0.99f) return false;
+        // 权威闸：早退闸只在 PlayerSkillPassive 里，任何别的调用方都必须在这里被挡住，
+        // 保证任意两次玩家技能释放至少隔 GameConfig.PLAYER_SKILL_GCD 秒。
+        if (!bm.IsPlayerSkillGcdReady) return false;
         if (hero == null || hero.isDead) return false;
 
         // 严格按槽取技能：取不到就本次不放（不放别的技能替补，避免清错能量）
@@ -77,9 +81,14 @@ public sealed class SkillCastService
             $"{{\"facingDir\":{hero.facingDir},\"vfxDir\":{hero.GetVfxFacingDir()},\"scaleX\":{hero.transform.localScale.x:F3},\"skill\":\"{skill.skillId}\"}}");
         // #endregion
 
-        // V6：只清这一个技能槽的能量，其它槽照保留
-        bm.SetPlayerSkillEnergy(slot, 0f);
-        BattleUI.Instance?.UpdateSkillEnergy(0, bm.PlayerSkillEnergyPeak);
+        // V6：只清这一个技能槽的能量，其它槽照保留（纯冷却制下这步不生效）
+        if (GameConfig.PLAYER_SKILL_USE_ENERGY)
+        {
+            bm.SetPlayerSkillEnergy(slot, 0f);
+            BattleUI.Instance?.UpdateSkillEnergy(0, bm.PlayerSkillEnergyPeak);
+        }
+        // 上膛：接下来 PLAYER_SKILL_GCD 秒内不再放下一个技能
+        bm.ArmPlayerSkillGcd();
         TutorialDirector.Instance?.NotifyPlayerSkillUsed();
         Debug.Log($"[BattleManager] 玩家技能释放: {skill.skillName} ({skill.skillId}) → {(healTarget != null ? healTarget.name : "default")}");
         return true;
@@ -339,6 +348,24 @@ public sealed class SkillCastService
             _teamAtkSpdMul = 1f + Mathf.Max(0f, cfg.buffValue);
             _teamAtkSpdBuffUntil = Time.time + cfg.duration;
             GamePerf.Log($"[SkillCast] 团队攻速增益 {_teamAtkSpdMul:0.##}x，持续 {cfg.duration}s");
+            return;
+        }
+
+        // 攻击 / 防御 / 暴击：走 AttrSystem 的定时增益层（到期自动失效、后放覆盖先放永不叠加）。
+        // 以前这里用 attr.AddAttr 永久写值，表里 duration 完全没被消费 —— 纯冷却制下会无限叠加。
+        if ((cfg.buffAttr == AttrType.Attack || cfg.buffAttr == AttrType.Defense
+             || cfg.buffAttr == AttrType.CritRate) && cfg.duration > 0f)
+        {
+            void ApplyTimed(UnitBase u)
+            {
+                if (u == null || u.isDead || u.attr == null) return;
+                u.attr.ApplyTimedBuff(cfg.buffAttr, cfg.buffValue, cfg.buffIsPercent, cfg.duration);
+            }
+            ApplyTimed(hero);
+            var team = MercenaryManager.Instance?.GetActiveMercs();
+            if (team != null)
+                foreach (var m in team) ApplyTimed(m);
+            GamePerf.Log($"[SkillCast] 团队增益 {cfg.buffAttr} ×{(1f + cfg.buffValue):0.##}，持续 {cfg.duration}s");
             return;
         }
 

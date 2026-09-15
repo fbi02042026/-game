@@ -213,7 +213,63 @@ public class AttrSystem
 
     public float GetAttr(AttrType type)
     {
-        return _attr.ContainsKey(type) ? _attr[type] : 0;
+        float v = _attr.ContainsKey(type) ? _attr[type] : 0;
+        return ApplyTimedBuff(type, v);
+    }
+
+    // ============================================================
+    // 定时增益层（2026-09-15）
+    // 技能 Buff（攻击 +50% / 防御 +35% / 暴击 +25%）原来走 AddAttr —— 那是永久写值，
+    // 技能表里的 duration 从来没被消费，导致放一次永久生效。能量制下节奏慢不明显，
+    // 改纯冷却制后 18 秒一次永久 +50% 攻击，3 分钟能叠 10 层。
+    //
+    // 这里改为「独立于 _attr 的计时倍率」：
+    //   - 到期自动失效，duration 真正生效
+    //   - 同类 Buff 后放的直接覆盖先放的，永不叠加
+    //   - 不参与 RecalcAttr，换装/升级重算基底不会把 Buff 弄丢或算重
+    //   - 不碰任何既有消费点，GetAttr 读到的就是已加成的值
+    // ============================================================
+
+    float _buffAtkMul = 1f, _buffAtkUntil = -1f;
+    float _buffDefMul = 1f, _buffDefUntil = -1f;
+    float _buffCritMul = 1f, _buffCritUntil = -1f;
+
+    /// <summary>施加一个定时增益。同类型已有生效中的会被覆盖（不叠加）。</summary>
+    public void ApplyTimedBuff(AttrType type, float value, bool isPercent, float duration)
+    {
+        if (duration <= 0f) return;
+        float until = Time.time + duration;
+        // 与 AddAttr 同语义：isPercent = 乘 (1+value)，否则加 value。
+        // 但攻击/防御/暴击在表里都是百分比档，统一按乘算存。
+        float mul = isPercent ? 1f + value : value;
+        if (mul <= 0f) mul = 1f;
+
+        switch (type)
+        {
+            case AttrType.Attack:   _buffAtkMul = mul;  _buffAtkUntil = until; break;
+            case AttrType.Defense:  _buffDefMul = mul;  _buffDefUntil = until; break;
+            case AttrType.CritRate: _buffCritMul = mul; _buffCritUntil = until; break;
+            default: return;   // 其它属性仍走调用方自己的处理（如攻速走 SkillCastService 计时）
+        }
+    }
+
+    /// <summary>清掉所有定时增益（换关/撤离/死亡时用，避免跨关残留）。</summary>
+    public void ClearTimedBuffs()
+    {
+        _buffAtkUntil = -1f;
+        _buffDefUntil = -1f;
+        _buffCritUntil = -1f;
+    }
+
+    float ApplyTimedBuff(AttrType type, float raw)
+    {
+        switch (type)
+        {
+            case AttrType.Attack:   return Time.time < _buffAtkUntil ? raw * _buffAtkMul : raw;
+            case AttrType.Defense:  return Time.time < _buffDefUntil ? raw * _buffDefMul : raw;
+            case AttrType.CritRate: return Time.time < _buffCritUntil ? raw * _buffCritMul : raw;
+            default: return raw;
+        }
     }
 
     /// <summary>直接设置属性值（覆盖计算值，不改基底；主角 RecalcAttr 后的射程/攻速覆盖走这里）。</summary>

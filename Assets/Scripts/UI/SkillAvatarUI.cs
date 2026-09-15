@@ -114,4 +114,13 @@ public class SkillAvatarUI
     {
         if (energyFill != null) energyFill.fillAmount = Mathf.Clamp01(ratio);
     }
+
+    /// <summary>
+    /// 显示/隐藏底部充能细条。2026-09-15 玩家技能改纯冷却制后不再需要它，
+    /// 这里保留节点只置隐藏（GameConfig.PLAYER_SKILL_USE_ENERGY 置 true 就能原样回来）。
+    /// </summary>
+    public void SetEnergyFillVisible(bool on)
+    {
+        if (energyFill != null) energyFill.gameObject.SetActive(on);
+    }
 }

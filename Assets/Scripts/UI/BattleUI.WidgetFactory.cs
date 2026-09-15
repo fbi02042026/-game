@@ -142,6 +142,8 @@ public partial class BattleUI : MonoBehaviour
                 ?? EnsureCornerText(t, "SkillLevel", 12);
             av.cooldownText = EnsureChildText(t, "SkillCd", 16);
             av.energyFill = EnsureChildBar(t, "SkillEnergy", new Color(0.98f, 0.78f, 0.28f, 1f));
+            // 纯冷却制：节点照样建（置 true 就能回来），默认隐藏
+            av.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
             runSkillSlots.Add(av);
 
             // 整理阶段可拖拽调序（空槽与「只有 1 个技能」时禁用，见 OnSkillSlotReordered）

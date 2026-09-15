@@ -185,13 +185,58 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         int count = Mathf.Min(playerSkillEnergy.Length, skills.Count);
         for (int i = 0; i < count; i++)
         {
-            if (playerSkillEnergy[i] < MAX_SKILL_ENERGY - 0.001f) continue;
+            // 纯冷却制下不再看能量，只看冷却（PLAYER_SKILL_USE_ENERGY 置 true 可退回原行为）
+            if (GameConfig.PLAYER_SKILL_USE_ENERGY && playerSkillEnergy[i] < MAX_SKILL_ENERGY - 0.001f) continue;
             var s = skills[i];
             if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
             if (sys.IsOnCooldown(s.skillId)) continue;
             return i;
         }
         return -1;
+    }
+
+    // ============================================================
+    // 玩家技能：纯冷却制调度（2026-09-15）
+    // 开局按槽位错峰给初始 CD；放完一个后全局间隔 PLAYER_SKILL_GCD 才能放下一个。
+    // 用实例字段而非静态字段：随 BattleManager 生命周期自然重置，不会跨局残留。
+    // ============================================================
+
+    /// <summary>下次允许释放玩家技能的时间（Time.time 轴）。</summary>
+    public float NextPlayerSkillCastAt { get; private set; } = -1f;
+
+    /// <summary>全局释放间隔是否已过（true = 现在可以放）。</summary>
+    public bool IsPlayerSkillGcdReady => Time.time >= NextPlayerSkillCastAt;
+
+    /// <summary>释放成功后调用：上膛，接下来 PLAYER_SKILL_GCD 秒内不再放。</summary>
+    public void ArmPlayerSkillGcd() => NextPlayerSkillCastAt = Time.time + GameConfig.PLAYER_SKILL_GCD;
+
+    /// <summary>立即解除间隔限制（开战/换关时用）。</summary>
+    public void ResetPlayerSkillGcd() => NextPlayerSkillCastAt = Time.time;
+
+    /// <summary>
+    /// 开局错峰：按槽位给每个玩家技能挂一段初始冷却，避免 4 个技能同时就绪一起炸出来。
+    /// 第 1 槽固定 0.5 秒（最快登场），2~4 槽 = 自身 CD × 0.33 / 0.66 / 1.0。
+    /// 只在这关刚开始时调用一次（LoadStage / StartNewRun），不要在升星或拖拽排序时调用
+    /// ——那会把战斗中已经跑掉的冷却重置。
+    /// </summary>
+    public void PrimePlayerSkillOpeningCooldowns()
+    {
+        var sys = SkillSystem.Instance;
+        if (sys == null) return;
+        var skills = sys.GetPlayerSkills();
+        if (skills == null) return;
+
+        for (int i = 0; i < skills.Count && i < GameConfig.PLAYER_SKILL_OPENING_CD_MUL.Length; i++)
+        {
+            var s = skills[i];
+            if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
+            if (sys.IsOnCooldown(s.skillId)) continue;   // 已有更长冷却的不覆盖
+
+            float cd = i == 0
+                ? GameConfig.PLAYER_SKILL_SLOT0_OPENING_CD
+                : s.cooldown * GameConfig.PLAYER_SKILL_OPENING_CD_MUL[i];
+            if (cd > 0.01f) sys.RegisterCooldown(s.skillId, cd);
+        }
     }
 
     /// <summary>佣兵技能能量（最多2槽）</summary>
@@ -315,7 +360,11 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         AllowMonsterMapEnter = false;
         isAutoBattle = false;
         MonsterAttackStyleTable.Reload();
-        ClearAllPlayerSkillEnergy();
+        // 纯冷却制：清能量换成「解除间隔 + 按槽位错峰上初始 CD」
+        ResetPlayerSkillGcd();
+        PrimePlayerSkillOpeningCooldowns();
+        // 上一局/上一关残留的攻击/防御/暴击增益（定时增益层）必须清掉，否则会跨关带着走
+        Hero.Instance?.attr?.ClearTimedBuffs();
         mercSkillEnergy[0] = 0f;
         mercSkillEnergy[1] = 0f;
         MercenaryManager.Instance?.ClearAllMercs();
@@ -626,12 +675,22 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// 把所有技能槽的能量充满（V6：技能改为各自一条能量后，这里不再只充一条）。
     /// 目前无正式调用方，是留给剧情/教程的显式钩子 —— 教程最后一波会用它保证玩家一定看到技能放出。
     /// </summary>
+    /// <summary>
+    /// 教程钩子：让玩家的技能立刻能放出来（教程最后一波靠它保证玩家一定看到技能）。
+    /// 纯冷却制后改为「解除全局间隔 + 清掉已有冷却并重新错峰」，语义与原来「充满能量」一致。
+    /// </summary>
     public void FillPlayerSkillEnergy()
     {
-        if (playerSkillEnergy == null) return;
-        for (int i = 0; i < playerSkillEnergy.Length; i++)
-            playerSkillEnergy[i] = MAX_SKILL_ENERGY;
-        BattleUI.Instance?.UpdateSkillEnergy(0, MAX_SKILL_ENERGY);
+        // 纯冷却制：技能本来就不看能量，要做的是「解除间隔 + 清掉冷却」，让它立刻能放
+        ResetPlayerSkillGcd();
+        SkillSystem.Instance?.ClearPlayerSkillCooldowns();
+
+        if (GameConfig.PLAYER_SKILL_USE_ENERGY && playerSkillEnergy != null)
+        {
+            for (int i = 0; i < playerSkillEnergy.Length; i++)
+                playerSkillEnergy[i] = MAX_SKILL_ENERGY;
+            BattleUI.Instance?.UpdateSkillEnergy(0, MAX_SKILL_ENERGY);
+        }
     }
 
     /// <summary>兼容旧的「单条能量」HUD：返回所有技能槽里充得最高的那条。</summary>
@@ -653,9 +712,11 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (unit == null || !unit.isAlly || amount <= 0f || !isInBattle) return;
         if (_stageCleared || _portalActive) return;
 
+        // 纯冷却制下玩家分支不再充能（佣兵分支照旧，一个字都不动）
         if (unit is Hero)
         {
-            AddPlayerSkillEnergy(amount);
+            if (GameConfig.PLAYER_SKILL_USE_ENERGY)
+                AddPlayerSkillEnergy(amount);
             return;
         }
 
@@ -792,7 +853,11 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         _totalMonstersSpawnedThisStage = 0;
         _eliteToastShownThisStage = false;
         AllowMonsterMapEnter = false;
-        ClearAllPlayerSkillEnergy();
+        // 纯冷却制：清能量换成「解除间隔 + 按槽位错峰上初始 CD」
+        ResetPlayerSkillGcd();
+        PrimePlayerSkillOpeningCooldowns();
+        // 上一局/上一关残留的攻击/防御/暴击增益（定时增益层）必须清掉，否则会跨关带着走
+        Hero.Instance?.attr?.ClearTimedBuffs();
         mercSkillEnergy[0] = 0f;
         mercSkillEnergy[1] = 0f;
         HeroThunderUltimate.Instance?.ResetForBattle();

@@ -207,8 +207,9 @@ public class RunSkillBarUI : MonoBehaviour
         Stretch(text.rectTransform);
         text.alignment = TextAnchor.MiddleCenter;
 
-        // V6：本技能自己的能量条（底部细条）。技能能量已改为每槽一条，各自攒满各自放。
+        // V6：本技能自己的能量条（底部细条）。2026-09-15 改纯冷却制后默认隐藏，只在建的时候设一次。
         var energyBg = MakeImage("EnergyBg", chipRoot.transform, new Color(0.08f, 0.08f, 0.12f, 0.95f));
+        energyBg.gameObject.SetActive(GameConfig.PLAYER_SKILL_USE_ENERGY);
         var ebRt = energyBg.rectTransform;
         ebRt.anchorMin = new Vector2(0f, 0f);
         ebRt.anchorMax = new Vector2(1f, 0f);
@@ -254,8 +255,8 @@ public class RunSkillBarUI : MonoBehaviour
                     float ratio = sys.GetPlayerSkillCooldownRatio(c.Index);
                     SetCdFill(c.CdFill.rectTransform, ratio);
                 }
-                // V6：每条技能有自己的能量，冷却中的那条不再充能（这是错峰的关键）
-                if (c.EnergyFill != null && bm != null)
+                // 纯冷却制下能量条已整体隐藏（PLAYER_SKILL_USE_ENERGY 置 true 可退回）
+                if (GameConfig.PLAYER_SKILL_USE_ENERGY && c.EnergyFill != null && bm != null)
                 {
                     float e = bm.GetPlayerSkillEnergy(c.Index);
                     SetCdFill(c.EnergyFill.rectTransform, e);

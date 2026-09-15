@@ -217,7 +217,10 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
     private void ExecuteChain(ActiveSkill skill, UnitBase caster)
     {
         float damage = CalculateDamage(skill, caster);
-        List<UnitBase> enemies = GetEnemiesInRange(caster, 8f);
+        // 以前硬编码 8f，不吃表里的 aoeRadius —— thunder_chain 只是恰好也是 8，
+        // 别的连锁技填了半径也不会生效。改成读表，没填才回退 8。
+        float radius = skill.aoeRadius > 0f ? skill.aoeRadius : 8f;
+        List<UnitBase> enemies = GetEnemiesInRange(caster, radius);
 
         // 连锁伤害递减
         float chainMultiplier = 1f;
@@ -363,5 +366,27 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
     public float GetCooldownRemaining(string skillId)
     {
         return _cooldowns.TryGetValue(skillId, out var cd) ? Mathf.Max(0, cd) : 0;
+    }
+
+    /// <summary>
+    /// 按槽位取玩家技能的<b>剩余冷却秒数</b>（不是比例）。
+    /// HUD 的冷却文字要显示 "7.3s" 这种真秒数，用 GetPlayerSkillCooldownRatio 会把 0~1 的比例当秒打出来。
+    /// </summary>
+    public float GetPlayerSkillCooldownRemaining(int index)
+    {
+        if (index < 0 || index >= _playerSkills.Count) return 0f;
+        var s = _playerSkills[index];
+        return s == null ? 0f : GetCooldownRemaining(s.skillId);
+    }
+
+    /// <summary>清掉玩家所有技能的冷却（教程钩子：保证玩家立刻能看到技能依次放出来）。</summary>
+    public void ClearPlayerSkillCooldowns()
+    {
+        for (int i = 0; i < _playerSkills.Count; i++)
+        {
+            var s = _playerSkills[i];
+            if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
+            _cooldowns.Remove(s.skillId);
+        }
     }
 }

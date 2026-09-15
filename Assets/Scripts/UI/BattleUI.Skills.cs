@@ -30,6 +30,7 @@ public partial class BattleUI : MonoBehaviour
                 slot.SetAvatar(null);
                 slot.SetSkillName(null);            // 空槽退回「被动」占位
                 slot.SetLevelText("");
+                slot.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
                 slot.SetEnergyFill(0f);
                 if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
                 continue;
@@ -146,12 +147,16 @@ public partial class BattleUI : MonoBehaviour
             var slot = runSkillSlots[i];
             if (slot == null) continue;
             bool has = ids != null && i < ids.Count;
-            slot.SetEnergyFill(has && bm != null ? bm.GetPlayerSkillEnergy(i) : 0f);
+            // 纯冷却制：能量条隐藏（PLAYER_SKILL_USE_ENERGY 置 true 可退回）
+            slot.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
+            if (GameConfig.PLAYER_SKILL_USE_ENERGY)
+                slot.SetEnergyFill(has && bm != null ? bm.GetPlayerSkillEnergy(i) : 0f);
             if (slot.cooldownText == null || !has) continue;
-            // 星级已经挪到右下角 level 节点，这里只显示剩余冷却
-            float cd = sys != null ? sys.GetPlayerSkillCooldownRatio(i) : 0f;
-            slot.cooldownText.text = cd > 0.01f ? cd.ToString("0.0") + "s" : "";
-            slot.cooldownText.gameObject.SetActive(cd > 0.01f);
+            // 星级已经挪到右下角 level 节点，这里只显示剩余冷却。
+            // 注意要取「剩余秒数」而不是 0~1 的比例 —— 以前把比例当秒打出来，显示一直是 0.0s
+            float cd = sys != null ? sys.GetPlayerSkillCooldownRemaining(i) : 0f;
+            slot.cooldownText.text = cd > 0.05f ? cd.ToString("0.0") + "s" : "";
+            slot.cooldownText.gameObject.SetActive(cd > 0.05f);
         }
     }
 
