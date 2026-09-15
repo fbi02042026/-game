@@ -494,7 +494,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 165, y: 30.6}
+  m_AnchoredPosition: {x: 167, y: 30.6}
   m_SizeDelta: {x: 82, y: 82}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &4239417702288709947
@@ -921,7 +921,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 91, y: 105}
+  m_AnchoredPosition: {x: 91, y: 108}
   m_SizeDelta: {x: 82, y: 82}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &6938900822313154535
@@ -3743,7 +3743,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 16, y: 105}
+  m_AnchoredPosition: {x: 16, y: 108}
   m_SizeDelta: {x: 82, y: 82}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &5843568532382040858
@@ -4165,7 +4165,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 165, y: 105}
+  m_AnchoredPosition: {x: 167, y: 108}
   m_SizeDelta: {x: 82, y: 82}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &12972833332280089
@@ -5058,7 +5058,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 91, y: -43.799973}
+  m_AnchoredPosition: {x: 91, y: -47}
   m_SizeDelta: {x: 82, y: 82}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &3009393661198423913
@@ -6804,7 +6804,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 165, y: -43.799988}
+  m_AnchoredPosition: {x: 167, y: -47}
   m_SizeDelta: {x: 82, y: 82}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &108424692586927963
@@ -7140,6 +7140,7 @@ MonoBehaviour:
     lanBarFill: {fileID: 0}
     lanText: {fileID: 0}
     lockedOverlay: {fileID: 0}
+    skillBadge: {fileID: 0}
   mercSlot1:
     root: {fileID: 0}
     portrait: {fileID: 0}
@@ -7153,6 +7154,7 @@ MonoBehaviour:
     lanBarFill: {fileID: 0}
     lanText: {fileID: 0}
     lockedOverlay: {fileID: 0}
+    skillBadge: {fileID: 0}
   mercSlot2:
     root: {fileID: 0}
     portrait: {fileID: 0}
@@ -7166,6 +7168,7 @@ MonoBehaviour:
     lanBarFill: {fileID: 0}
     lanText: {fileID: 0}
     lockedOverlay: {fileID: 0}
+    skillBadge: {fileID: 0}
   gridLayout: {fileID: 0}
   gridCells:
   - root: {fileID: 0}
@@ -7984,7 +7987,7 @@ MonoBehaviour:
       appearanceId: 
       spumNameOverride: 
       weaponKindOverride: -1
-  organizeButton: {fileID: 0}
+  lootConfirmButton: {fileID: 0}
   playerSkillAvatar:
     root: {fileID: 0}
     avatarImage: {fileID: 0}
@@ -7993,6 +7996,7 @@ MonoBehaviour:
     cooldownText: {fileID: 0}
     energyFill: {fileID: 0}
     labelText: {fileID: 0}
+    levelText: {fileID: 0}
   merc1SkillAvatar:
     root: {fileID: 0}
     avatarImage: {fileID: 0}
@@ -8001,6 +8005,7 @@ MonoBehaviour:
     cooldownText: {fileID: 0}
     energyFill: {fileID: 0}
     labelText: {fileID: 0}
+    levelText: {fileID: 0}
   merc2SkillAvatar:
     root: {fileID: 0}
     avatarImage: {fileID: 0}
@@ -8009,16 +8014,14 @@ MonoBehaviour:
     cooldownText: {fileID: 0}
     energyFill: {fileID: 0}
     labelText: {fileID: 0}
+    levelText: {fileID: 0}
   autoButton: {fileID: 0}
   skillSlotRoot: {fileID: 0}
   equipSlotRoot: {fileID: 0}
   runSkillSlots: []
   equipQuickSlots: []
   characterButton: {fileID: 0}
-  pauseButton: {fileID: 0}
   characterPanel: {fileID: 0}
-  pausePanel: {fileID: 0}
-  settingsPanel: {fileID: 0}
 --- !u!1 &5757527015607231999
 GameObject:
   m_ObjectHideFlags: 0
@@ -8456,7 +8459,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 16, y: -43.799973}
+  m_AnchoredPosition: {x: 16, y: -47}
   m_SizeDelta: {x: 82, y: 82}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1783666489036677022
@@ -8502,7 +8505,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: -60, y: -43.800003}
+  m_AnchoredPosition: {x: -62, y: -47}
   m_SizeDelta: {x: 82, y: 82}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &932251753512156223
@@ -9733,7 +9736,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: -60, y: 30.600014}
+  m_AnchoredPosition: {x: -62, y: 30.600014}
   m_SizeDelta: {x: 82, y: 82}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8483657548143042848
@@ -10801,7 +10804,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: -60, y: 105}
+  m_AnchoredPosition: {x: -62, y: 108}
   m_SizeDelta: {x: 82, y: 82}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &7111421200662755484
