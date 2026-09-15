@@ -98,6 +98,13 @@ public static class SkillDraftMeta
     /// <summary>每星冷却缩减：线性 -6%/星（1 星 = 1.0，越高越短）。</summary>
     public const float StarCooldownStep = 0.06f;
 
+    /// <summary>每星增益幅度：线性 +18%/星，与伤害同曲线（1 星 = 1.0）。
+    /// 2026-09-15 起治疗量与增益幅度也吃星级，不再只涨冷却。</summary>
+    public const float StarBuffStep = 0.18f;
+
+    /// <summary>每星增益持续：线性 +6%/星（1 星 = 1.0），与冷却缩减对称，上限 2.0 倍。</summary>
+    public const float StarDurationStep = 0.06f;
+
     /// <summary>星级 → 伤害倍率（1 星 = 1.0）。</summary>
     public static float StarDamageMul(int star)
     {
@@ -111,5 +118,20 @@ public static class SkillDraftMeta
         int s = star < 1 ? 1 : star;
         float mul = 1f - (s - 1) * StarCooldownStep;
         return mul < 0.6f ? 0.6f : mul;
+    }
+
+    /// <summary>星级 → 治疗量 / 增益幅度倍率（1 星 = 1.0）。与伤害同曲线。</summary>
+    public static float StarBuffMul(int star)
+    {
+        int s = star < 1 ? 1 : star;
+        return 1f + (s - 1) * StarBuffStep;
+    }
+
+    /// <summary>星级 → 增益持续秒数倍率（1 星 = 1.0，越高越久，封顶 2.0）。</summary>
+    public static float StarDurationMul(int star)
+    {
+        int s = star < 1 ? 1 : star;
+        float mul = 1f + (s - 1) * StarDurationStep;
+        return mul > 2f ? 2f : mul;
     }
 }

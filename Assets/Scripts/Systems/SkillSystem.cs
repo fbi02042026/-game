@@ -27,6 +27,17 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         public float projectileSpeed;   // 弹幕速度
         public float aoeRadius;         // 范围伤害半径
         public Sprite icon;             // 技能图标
+
+        // ===== 治疗 / 增益数值（2026-09-15 加入）=====
+        // 以前只有 SkillConfig 上有这些值，星级乘数改不到它们身上，
+        // 导致治疗量与增益幅度完全不吃升星。现在搬到这里，由 RunDraftDirector.BuildRunSkill 乘星级。
+        public float healBase;          // 治疗：固定值
+        public float healPercentOfMax;  // 治疗：目标最大生命的百分比
+        public float healAtkMul;        // 治疗：施法者攻击力的倍率
+        public AttrType buffAttr;       // 增益属性
+        public float buffValue;         // 增益数值（buffIsPercent 时 0.5 = +50%）
+        public bool buffIsPercent;
+        public float duration;          // 增益持续秒数
     }
 
     public enum SkillType

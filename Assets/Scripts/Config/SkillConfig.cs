@@ -34,6 +34,8 @@ public class SkillConfig : ScriptableObject
     public float healBase = 80f;
     [Tooltip("按最大生命百分比治疗，>0 时优先于 healBase")]
     public float healPercentOfMax = 0f;
+    [Tooltip("治疗：施法者攻击力 × 该倍率，与 healPercentOfMax 叠加。给治疗一条随装备成长的线")]
+    public float healAtkMul = 0f;
 
     [Header("特效预制体（可选；不填则按 id 从 Resources/VFX/Skills 加载）")]
     public GameObject vfxPrefab;
@@ -50,7 +52,15 @@ public class SkillConfig : ScriptableObject
             skillType = skillType,
             projectileCount = projectileCount,
             projectileSpeed = projectileSpeed,
-            aoeRadius = aoeRadius
+            aoeRadius = aoeRadius,
+            // 治疗/增益数值也要跟着走：星级乘数作用在这份拷贝上，不写回 SkillConfig 缓存
+            healBase = healBase,
+            healPercentOfMax = healPercentOfMax,
+            healAtkMul = healAtkMul,
+            buffAttr = buffAttr,
+            buffValue = buffValue,
+            buffIsPercent = buffIsPercent,
+            duration = duration
         };
     }
 }

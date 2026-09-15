@@ -31,6 +31,7 @@ public static class PlayerSkillTable
         public bool BuffIsPercent;
         public float HealBase;
         public float HealPercentOfMax;
+        public float HealAtkMul;
         public float EnergyCost;
         public bool HasCombat;
     }
@@ -152,6 +153,12 @@ public static class PlayerSkillTable
                     GameTableCsv.TryFloat(Col(c, 22), out float energy);
                     if (energy > 0f) row.EnergyCost = energy;
                 }
+                // 第 24 列（索引 23）：治疗按施法者攻击力的倍率，可缺省
+                if (c.Length > 23)
+                {
+                    GameTableCsv.TryFloat(Col(c, 23), out float healAtkMul);
+                    row.HealAtkMul = healAtkMul;
+                }
             }
             _rows.Add(row);
             _byId[id] = row;
@@ -261,6 +268,7 @@ public static class PlayerSkillTable
         cfg.duration = def.duration;
         cfg.healBase = def.healBase;
         cfg.healPercentOfMax = def.healPercentOfMax;
+        cfg.healAtkMul = def.healAtkMul;
         return cfg;
     }
 }

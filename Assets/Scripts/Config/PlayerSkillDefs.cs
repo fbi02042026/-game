@@ -47,6 +47,9 @@ public static class PlayerSkillDefs
         public bool buffIsPercent;
         public float healBase;
         public float healPercentOfMax;
+        /// <summary>治疗 = 目标最大生命 × healPercentOfMax + 施法者攻击 × healAtkMul。
+        /// 给治疗一条随装备成长的线（与佣兵治疗 atk×mul 同模型），两者都吃星级乘数。</summary>
+        public float healAtkMul;
         public float energyCost;
         public bool hasCombat;
     }
@@ -373,7 +376,7 @@ public static class PlayerSkillDefs
             displayName = "迅愈术",
             kind = Kind.Heal,
             desc = "快速缝合伤口，抬住血量最低的队友。",
-            numbers = "恢复目标 22% 最大生命",
+            numbers = "恢复目标 22% 最大生命 + 1.8 倍攻击",
             cooldown = 9f,
             duration = 0f,
             useHint = "冷却短，适合持续续航",
@@ -387,6 +390,7 @@ public static class PlayerSkillDefs
             projectileSpeed = 12f,
             buffAttr = AttrType.MaxHp,
             healPercentOfMax = 0.22f,
+            healAtkMul = 1.8f,
             energyCost = 1f,
             hasCombat = true
         },
@@ -396,7 +400,7 @@ public static class PlayerSkillDefs
             displayName = "圣愈术",
             kind = Kind.Heal,
             desc = "以圣光重塑血肉，瞬间拉回濒死的队友。",
-            numbers = "恢复目标 48% 最大生命",
+            numbers = "恢复目标 48% 最大生命 + 4.0 倍攻击",
             cooldown = 22f,
             duration = 0f,
             useHint = "救命大治疗，冷却较长",
@@ -410,6 +414,7 @@ public static class PlayerSkillDefs
             projectileSpeed = 12f,
             buffAttr = AttrType.MaxHp,
             healPercentOfMax = 0.48f,
+            healAtkMul = 4.0f,
             energyCost = 1f,
             hasCombat = true
         },
@@ -698,6 +703,7 @@ public static class PlayerSkillDefs
             buffIsPercent = src.buffIsPercent,
             healBase = src.healBase,
             healPercentOfMax = src.healPercentOfMax,
+            healAtkMul = src.healAtkMul,
             energyCost = src.energyCost,
             hasCombat = src.hasCombat
         };
@@ -729,6 +735,7 @@ public static class PlayerSkillDefs
             dest.buffIsPercent = row.BuffIsPercent;
             dest.healBase = row.HealBase;
             dest.healPercentOfMax = row.HealPercentOfMax;
+            dest.healAtkMul = row.HealAtkMul;
             dest.energyCost = row.EnergyCost;
             dest.hasCombat = true;
         }

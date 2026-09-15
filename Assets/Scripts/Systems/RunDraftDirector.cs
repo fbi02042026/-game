@@ -363,6 +363,18 @@ public class RunDraftDirector : MonoBehaviour
         active.damageMultiplier *= dmgMul;
         active.baseDamage *= dmgMul;
         active.cooldown = Mathf.Max(0.6f, active.cooldown * cdMul);
+
+        // 治疗 / 增益也吃星级：以前只涨冷却，治疗量与增益幅度永远停在 1 星数值。
+        // 治疗 = 目标最大生命 × healPercentOfMax + 施法者攻击 × healAtkMul，两段一起涨。
+        float buffMul = SkillDraftMeta.StarBuffMul(star) * RunLoadout.ThemeDamageMul(tag);
+        if (SkillDraftMeta.IsAffinity(skillId, job))
+            buffMul *= SkillDraftMeta.AffinityDamageMul;
+        active.healBase *= buffMul;
+        active.healPercentOfMax *= buffMul;
+        active.healAtkMul *= buffMul;
+        active.buffValue *= buffMul;
+        if (active.duration > 0f)
+            active.duration *= SkillDraftMeta.StarDurationMul(star);
         return active;
     }
 

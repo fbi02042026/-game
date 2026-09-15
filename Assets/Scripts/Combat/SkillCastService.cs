@@ -258,17 +258,29 @@ public sealed class SkillCastService
 
         if (skill.skillType == SkillSystem.SkillType.Buff || IsHealSkill(skill))
         {
-            float healBase = cfg != null && cfg.healBase > 0 ? cfg.healBase : skill.baseDamage;
-            float pct = cfg != null ? cfg.healPercentOfMax : 0f;
-            if (pct > 0f || healBase > 0 || IsHealSkill(skill))
+            // 优先用本局构筑算好的数值（含星级/流派/亲和），取不到才回退 SkillConfig 底稿。
+            // 2026-09-15：治疗与增益改吃星级后，必须读 ActiveSkill，否则星级乘数无效。
+            float healBase = skill.healBase > 0f
+                ? skill.healBase
+                : (cfg != null ? cfg.healBase : 0f);
+            float pct = skill.healPercentOfMax > 0f
+                ? skill.healPercentOfMax
+                : (cfg != null ? cfg.healPercentOfMax : 0f);
+            float atkMul = skill.healAtkMul > 0f
+                ? skill.healAtkMul
+                : (cfg != null ? cfg.healAtkMul : 0f);
+
+            if (pct > 0f || healBase > 0f || atkMul > 0f || IsHealSkill(skill))
             {
                 UnitBase target = forcedHealTarget != null ? forcedHealTarget : FindPreferredHealTarget();
                 if (target == null) target = caster;
                 float maxHp = 0f;
                 if (target.attr != null)
                     maxHp = target.attr.GetAttr(AttrType.MaxHp);
-                float heal = pct > 0f ? maxHp * pct : healBase + caster.attr.GetAttr(AttrType.Attack) * 0.5f;
-                if (pct <= 0f && IsHealSkill(skill))
+                float casterAtk = caster.attr != null ? caster.attr.GetAttr(AttrType.Attack) : 0f;
+                float heal = maxHp * pct + casterAtk * atkMul + healBase;
+                // 三项全为 0 又被判定为治疗技（历史数据），给个保底 30% 最大生命
+                if (heal <= 0f && IsHealSkill(skill))
                     heal = maxHp * 0.3f;
                 ApplyHealToUnit(target, heal, caster);
                 return;
@@ -276,7 +288,7 @@ public sealed class SkillCastService
 
             if (cfg != null && cfg.buffValue > 0)
             {
-                ApplyTeamBuff(cfg);
+                ApplyTeamBuff(skill, cfg);
                 return;
             }
         }
@@ -340,39 +352,45 @@ public sealed class SkillCastService
     /// <summary>攻速增益倍率，过期返回 1（无增益）。</summary>
     public static float GetTeamAttackSpeedMul() => IsTeamAttackSpeedBuffActive ? _teamAtkSpdMul : 1f;
 
-    void ApplyTeamBuff(SkillConfig cfg)
+    void ApplyTeamBuff(SkillSystem.ActiveSkill skill, SkillConfig cfg)
     {
+        // 数值以本局构筑为准（含星级/流派/亲和），SkillConfig 只作缺省兜底。
+        float buffValue = skill != null && skill.buffValue > 0f ? skill.buffValue : (cfg != null ? cfg.buffValue : 0f);
+        bool isPercent = skill != null ? skill.buffIsPercent : (cfg != null && cfg.buffIsPercent);
+        float duration = skill != null && skill.duration > 0f ? skill.duration : (cfg != null ? cfg.duration : 0f);
+        var buffAttr = skill != null ? skill.buffAttr : (cfg != null ? cfg.buffAttr : AttrType.Attack);
+
         // 攻速类增益不再走 AddAttr（无法回收），改为计时倍率，duration 才真正生效。
-        if (cfg.buffAttr == AttrType.AttackSpeed && cfg.buffIsPercent && cfg.duration > 0f)
+        if (buffAttr == AttrType.AttackSpeed && isPercent && duration > 0f)
         {
-            _teamAtkSpdMul = 1f + Mathf.Max(0f, cfg.buffValue);
-            _teamAtkSpdBuffUntil = Time.time + cfg.duration;
-            GamePerf.Log($"[SkillCast] 团队攻速增益 {_teamAtkSpdMul:0.##}x，持续 {cfg.duration}s");
+            _teamAtkSpdMul = 1f + Mathf.Max(0f, buffValue);
+            _teamAtkSpdBuffUntil = Time.time + duration;
+            GamePerf.Log($"[SkillCast] 团队攻速增益 {_teamAtkSpdMul:0.##}x，持续 {duration}s");
             return;
         }
 
         // 攻击 / 防御 / 暴击：走 AttrSystem 的定时增益层（到期自动失效、后放覆盖先放永不叠加）。
         // 以前这里用 attr.AddAttr 永久写值，表里 duration 完全没被消费 —— 纯冷却制下会无限叠加。
-        if ((cfg.buffAttr == AttrType.Attack || cfg.buffAttr == AttrType.Defense
-             || cfg.buffAttr == AttrType.CritRate) && cfg.duration > 0f)
+        if ((buffAttr == AttrType.Attack || buffAttr == AttrType.Defense
+             || buffAttr == AttrType.CritRate) && duration > 0f)
         {
             void ApplyTimed(UnitBase u)
             {
                 if (u == null || u.isDead || u.attr == null) return;
-                u.attr.ApplyTimedBuff(cfg.buffAttr, cfg.buffValue, cfg.buffIsPercent, cfg.duration);
+                u.attr.ApplyTimedBuff(buffAttr, buffValue, isPercent, duration);
             }
             ApplyTimed(hero);
             var team = MercenaryManager.Instance?.GetActiveMercs();
             if (team != null)
                 foreach (var m in team) ApplyTimed(m);
-            GamePerf.Log($"[SkillCast] 团队增益 {cfg.buffAttr} ×{(1f + cfg.buffValue):0.##}，持续 {cfg.duration}s");
+            GamePerf.Log($"[SkillCast] 团队增益 {buffAttr} ×{(1f + buffValue):0.##}，持续 {duration}s");
             return;
         }
 
         void Apply(UnitBase u)
         {
             if (u == null || u.isDead || u.attr == null) return;
-            u.attr.AddAttr(cfg.buffAttr, cfg.buffValue, cfg.buffIsPercent);
+            u.attr.AddAttr(buffAttr, buffValue, isPercent);
         }
         Apply(hero);
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
