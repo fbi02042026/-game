@@ -1,0 +1,117 @@
+======================================================================
+文件: Assets\Resources\Prefabs\Battle\BattleSettlement.prefab
+  正常引用的图片目录: Assets/Art/UI/NavCharacter(x1), Assets/Art/UI/battle(x1), Assets/Art/UI/冒险日志(x1)
+  - 悬空 27640c46f267de44498cdb914ad9f8b0   节点: Icon
+      (无候选)
+  - 悬空 30d487661a2678c48a4f6db25ea1cd17   节点: Icon
+      (无候选)
+  - 悬空 4d82dbd035dae4d4bbb779534b69f68f   节点: Icon
+      (无候选)
+  - 悬空 8baf16d1a1692a14589166ad9c0b57be   节点: Icon
+      (无候选)
+  - 悬空 9839559fab0b7c74f9de468093c0956d   节点: Icon
+      (无候选)
+  - 悬空 a1a71ef7599190b4d910a5c537c05845   节点: Panel
+      (无候选)
+  - 悬空 e1a8d61cd8a47d842952993f25d0296d   节点: PortraitHost
+      (无候选)
+  - 悬空 f072664b2ff63a44394b7e9bfd15d28e   节点: Icon
+      (无候选)
+======================================================================
+文件: Assets\Resources\Prefabs\Battle\BattleStageMap.prefab
+  正常引用的图片目录: Assets/Art/UI/关卡(x4), Assets/Art/UI/Adventure(x1), Assets/Art/Effects/Material(x1), Assets/Art/UI/Common(x1)
+  - 悬空 c0d4fd61fe83b8f4996b8a0be8ab86c7   节点: ?
+      (无候选)
+======================================================================
+文件: Assets\Resources\Prefabs\Battle\BattleUI.prefab
+  正常引用的图片目录: Assets/Art/UI/battle(x12), Assets/Art/UI/Icons/Common(x3), Assets/Art/UI/background/1 Forest(x3), Assets/Art/UI/Icons/玩家SkillIcon(x1)
+  - 悬空 027c6df94a8592b43964911bbf53ba7e   节点: PlayerSlot
+      (无候选)
+  - 悬空 1276863bcb10bd948b73f8373495b293   节点: boss
+      候选[同名] Assets/Art/UI/battle/boss血条/boss.png  (guid 362766cc711c46f9842daad60cd7f76b)
+  - 悬空 2c76fb5aa1c71914eb76c2e952374e8e   节点: xuetiaodi
+      (无候选)
+  - 悬空 45ffd3010b05a1a46a8470880cbafb6c   节点: bg
+      候选[同名] Assets/Art/Effects/2D Pixel RPG Monster Pack/bg.png  (guid 5bb19db0a4016449caea716e96c9555e)
+      候选[同名] Assets/Art/UI/战斗结算/bg.png  (guid cf6e20d5b34f468f8fbf1656de57fa79)
+  - 悬空 6558a0508c8614a47bfe4b054233912f   节点: \u8840\u6761
+      候选[同目录+名近] Assets/Art/UI/background/1 Forest/1.png  (guid 4073a96257bb477b84e9a78afb547871)
+  - 悬空 7039da37b4c452541838b17a53f1a9c4   节点: icon\u5E950, icon\u5E951, icon\u5E952, icon\u5E953
+      候选[同目录+名近] Assets/Art/UI/background/1 Forest/1.png  (guid 4073a96257bb477b84e9a78afb547871)
+      候选[同目录+名近] Assets/Art/UI/background/1 Forest/2.png  (guid dc10955b69b349c6a080ed919eadad69)
+      候选[同目录+名近] Assets/Art/UI/background/1 Forest/3.png  (guid a05d8cbb1dac45078f8faebf6072f40f)
+  - 悬空 9832842298c0ccb41aaab049dac53490   节点: Image (1)
+      候选[同目录+名近] Assets/Art/UI/background/1 Forest/1.png  (guid 4073a96257bb477b84e9a78afb547871)
+  - 悬空 aa003d0f03c992545ac7d06d320ab165   节点: di
+      候选[同名] Assets/Art/UI/battle/boss血条/di.png  (guid f3f7059ac19948b6af777af96df8e3a1)
+      候选[同名] Assets/Art/UI/摇杆/di.png  (guid 12476ddcf174412086872300a1108636)
+      候选[同名] Assets/Resources/UI/Joystick/di.png  (guid a1b2c3d4e5f6478980a1b2c3d4e5f601)
+      候选[同目录+名近] Assets/Art/UI/Icons/Common/icon_diamond_blue.png  (guid e9a2ad6e152b45f5aae9ecacb664f876)
+      候选[同目录+名近] Assets/Art/UI/Icons/玩家SkillIcon/thunder_verdict.png  (guid 678bd78e15054a598010ad9dd7091a88)
+  - 悬空 b86d1ec10d1e85f419e1efbea5a6d0b5   节点: bg
+      候选[同名] Assets/Art/Effects/2D Pixel RPG Monster Pack/bg.png  (guid 5bb19db0a4016449caea716e96c9555e)
+      候选[同名] Assets/Art/UI/战斗结算/bg.png  (guid cf6e20d5b34f468f8fbf1656de57fa79)
+  - 悬空 c504e6bf9cb074c4786bc308a0e8c13e   节点: Portrait
+      (无候选)
+  - 悬空 ebf8be9ef02423d4e949b7e1f785a675   节点: \u804C\u4E1Aicon
+      候选[同目录+名近] Assets/Art/UI/background/1 Forest/1.png  (guid 4073a96257bb477b84e9a78afb547871)
+======================================================================
+文件: Assets\Resources\Prefabs\Town\AdventureLogUI.prefab
+  正常引用的图片目录: Assets/Art/UI/冒险日志(x11), Assets/Art/UI/Login(x1), Assets/Art/Effects/2D Pixel RPG Monster Pack/Icons/default size/no shadow/6 Cave(x1), Assets/Art/UI/Common(x1)
+  - 悬空 0319aeb6b9d04b946bfada22f7e424ce   节点: boss\u8FB9\u6846
+      (无候选)
+  - 悬空 7c06b319a3e9b7c44af835113c6663a3   节点: \u666E\u901A\u8FB9\u6846
+      (无候选)
+======================================================================
+文件: Assets\Resources\Prefabs\Town\CharacterUI.prefab
+  正常引用的图片目录: Assets/Art/UI/NavCharacter(x8), Assets/Art/UI/Icons/玩家SkillIcon(x5), Assets/Art/UI/Icons/属性图标(x5), Assets/Art/Effects/Material(x1)
+  - 悬空 64363527937ad664b835674e026d620d   节点: Portrait
+      (无候选)
+======================================================================
+文件: Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab
+  正常引用的图片目录: Assets/Art/UI/Common(x2), Assets/Art/UI/Icons/Common(x2), Assets/Art/UI/Talent(x1), Assets/Art/UI/NavCharacter(x1)
+  - 悬空 2aad7e86c38a947479f21d635f1a5812   节点: ConfirmButton
+      (无候选)
+  - 悬空 2d75a2bc8aaddab47a36091a14fd85ce   节点: ?
+      (无候选)
+  - 悬空 3f274fb48d88bd0459cbc0eec3b6329a   节点: ?
+      (无候选)
+  - 悬空 602b128d185715448b47b3c67dbde94a   节点: Card1
+      (无候选)
+  - 悬空 83ac7766c0f15004696bc4239563b3ff   节点: Image
+      (无候选)
+  - 悬空 9060e15ffa3bd5841aa2307ee4a3b380   节点: Panel
+      (无候选)
+  - 悬空 992bf9b445656d84aa72fba0b230b2ee   节点: Card2
+      (无候选)
+  - 悬空 c3e5a4331868107489ed223ff559719a   节点: ConfirmButton1
+      (无候选)
+  - 悬空 da022ebf18601a14db5eee8502a7bdf9   节点: Skill1icon, Skill2icon
+      (无候选)
+  - 悬空 ea6d622f895205543b3dce647d457da6   节点: Card0
+      (无候选)
+  - 悬空 ebf8be9ef02423d4e949b7e1f785a675   节点: Role
+      (无候选)
+======================================================================
+文件: Assets\Resources\Prefabs\Town\PlayerNamingUI.prefab
+  正常引用的图片目录: (无)
+  - 悬空 0fdaf94cb374dd646b4996abe7921052   节点: DiceBtn
+      (无候选)
+  - 悬空 2f81cf3243b90da4ba28b7981ba9dd69   节点: InputBar
+      (无候选)
+  - 悬空 430bd0d6b082a0448aa5411680785e23   节点: ConfirmBtn
+      (无候选)
+  - 悬空 8e54f89fcf9ccbc468bb79d353bd91cb   节点: Panel
+      (无候选)
+  - 悬空 fec362aa451870949927212ac297a496   节点: ?
+      (无候选)
+======================================================================
+文件: Assets\SPUM\Core\Basic_Resources\Prefab\Pivot_Main.prefab
+  正常引用的图片目录: Assets/SPUM/Core/Script/Data(x1), Assets/SPUM/Core/Basic_Resources/Materials(x1)
+  - 悬空 d06e0fb5c21f64348bee8578bf96b687   节点: Acc
+      (无候选)
+======================================================================
+文件: Assets\Scenes\Battle.unity
+  正常引用的图片目录: Assets/Art/Effects/Epic Toon FX/Prefabs/Combat/Magic/Field(x1), Assets/Art/UI/background(x1), Assets/Art/Effects/Epic Toon FX/Prefabs/Combat/Magic/Sphere(x1), Assets/Art/Effects/Material(x1)
+  - 悬空 429795ccaa0c615408a6c4b24a06711d   节点: ?
+      (无候选)

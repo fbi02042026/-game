@@ -1,0 +1,224 @@
+Assets\Art\Effects\2D Pixel RPG Monster Pack\Font\Alata-Regular SDF.asset|71c1514a6bd24e1e882cebbe1904ce04
+Assets\Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity|058cba836c1846c3aa1c5fd2e28aea77
+Assets\Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity|75b73ed42062340c1a13fdf450695eb1
+Assets\Art\Effects\2D Pixel RPG Monster Pack\Scenes\PreviewScene.unity|f4688fdb7df04437aeb418b961361dc5
+Assets\Art\Effects\2D Pixel RPG Monster Pack\TextMesh Pro\Resources\Fonts & Materials\LiberationSans SDF - Fallback.asset|71c1514a6bd24e1e882cebbe1904ce04
+Assets\Art\Effects\2D Pixel RPG Monster Pack\TextMesh Pro\Resources\Fonts & Materials\LiberationSans SDF.asset|71c1514a6bd24e1e882cebbe1904ce04
+Assets\Art\Effects\2D Pixel RPG Monster Pack\TextMesh Pro\Resources\Sprite Assets\EmojiOne.asset|84a92b25f83d49b9bc132d206b370281
+Assets\Art\Effects\2D Pixel RPG Monster Pack\TextMesh Pro\Resources\Style Sheets\Default Style Sheet.asset|ab2114bdc8544297b417dfefe9f1e410
+Assets\Art\Effects\2D Pixel RPG Monster Pack\TextMesh Pro\Resources\TMP Settings.asset|2705215ac5b84b70bacc50632be6e391
+Assets\Art\Effects\Ani\box\box.controller|8448878bb4649ac46ad928fd36682ffc
+Assets\Art\Effects\Ani\box\box.controller|8c6e5e4227bd3fb4ea00ba3a6439dace
+Assets\Art\Effects\Epic Toon FX\Demo\ParticleEffectsShowcase\Scenes\PEDemoScene.unity|f980f6ea27e137b40a091a43f1068f5b
+Assets\Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Materials\M_VFX_Character_Showoff_01.mat|b269f0779cfd3e14eaedadbe43aa8795
+Assets\Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Materials\M_Grid.mat|4f1502c89b49fa2419daab4477020e86
+Assets\Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Materials\M_Grid.mat|7e86780f8818d774781e18cdb159f2f7
+Assets\Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Materials\M_Grid.mat|da692e001514ec24dbc4cca1949ff7e8
+Assets\Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Meshes\SM_VFX_Background_Plate_01.prefab|89209d2c2872ccb44adf7a6e4142fa6b
+Assets\Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset|0d7593b3a9277ac4696b20006c21dde2
+Assets\Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset|2d08ce26990eb1a4a9177b860541e702
+Assets\Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset|953beb541740ddc499d005ee80c9ff29
+Assets\Art\Effects\Pixel Craft VFX URP\Demo\_Resources\Scene\Settings\PostProProfile_Pixel.asset|d877ec3e844f2ca46830012e8e79319b
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Fireball\Materials\M_VFX_Fireball_Impact_01_Mask.mat|794b5fb3fd56e5a409feef1fa1639894
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Fireball\Materials\M_VFX_Fireball_Projectile_01_Mask.mat|794b5fb3fd56e5a409feef1fa1639894
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Fireball\Particles\Loop\VFX_Fireball_Projectile_01_Horizontal_Random_Flip_Billboard_Color_Loop_Static.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Fireball\Particles\Loop\VFX_Fireball_Projectile_01_Vertical_Random_Flip_Billboard_Color_Loop_Static.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Color.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Color_Dissolve.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Color_Random_Start.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Color_Random_Start_Speed.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Dissolve.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Fake_Outline.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Projectile Water\Particles\Loop\Vertical\VFX_Projectile_Water_01_Random_Start.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Vanish\Particles\Loop\VFX_Vanish_01_Mask_Loop_Static.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Vapor\Particles\Loop\VFX_Vapor_01_Color_Flip_Loop_Static.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\VFX\Vapor\Particles\Loop\VFX_Vapor_01_Mask_Flip_Loop_Static.prefab|0fc17236f67ee6b4b93e09eee791ee4e
+Assets\Art\Effects\Pixel Craft VFX URP\_ Extra\Materials\M_Vefects_Extra_Billboard_03.mat|64eaf890e0a833041a2f06885cc77c01
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_AddColor.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_AddHue.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_AlphaTint.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_BlackTint.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_Brightness.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_ColorReplace.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_Contrast.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_Hue.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_InkSpread.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_InnerOutline.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_OuterOutline.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_Recolor.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_Saturation.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_ShiftHue.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_SineGlow.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_SplitToning.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Color\_StrongTint.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_Burn.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_Camouflage.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_Frozen.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_Glitch.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_GlitchPre.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_GlitchUV.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_Hologram.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_HologramUV.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_Metal.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_Poison.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_Rainbow.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Effect\_Shine.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Fading\_CustomFade.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Fading\_DirectionalAlphaFade.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Fading\_DirectionalDistortion.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Fading\_DirectionalGlowFade.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Fading\_FullAlphaDissolve.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Fading\_FullDistortion.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Fading\_FullGlowDissolve.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Fading\_Halftone.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Fading\_SourceAlphaDissolve.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Fading\_SourceGlowDissolve.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Generated\_Checkerboard.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Generated\_Flame.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Generated\_Smoke.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Interactive\_Squish.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Interactive\_Wind.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Transform\_Pixelate.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Transform\_SineMove.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Transform\_SineRotate.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Transform\_Squeeze.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Transform\_UVDistort.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Transform\_UVRotate.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Transform\_UVScale.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Transform\_UVScroll.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Transform\_Vibrate.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_3DLitStuff.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_AdditiveAlpha.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_MultiplicativeAlpha.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberColor.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberColorFinal.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberCustomAlpha.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberDissolveFade.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberEffect.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberFading.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberGenerated.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberInteractive.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberSpreadFade.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberTransformOffset.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\Uber\_UberTransformUV.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\_Generic\AlphaMult.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\_Generic\Brightness.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\_Generic\LitHandler.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\_Generic\NoiseTexture.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\_Generic\ShaderMasker.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\_Generic\ShaderSpace.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\_Generic\ShaderTime.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\_Generic\SingleContrast.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\_Generic\TintVertex.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\ASE\_Generic\UVScale.asset|78b2425a2284af743826c689403a4924
+Assets\Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity|1c0841568877b4a4a989c5f8a22a8805
+Assets\Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity|8b9a305e18de0c04dbd257a21cd47087
+Assets\Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity|948f4100a11a5c24981795d21301da5c
+Assets\Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity|bc40766b6dfa57a42afec67bd8c7152e
+Assets\Art\Effects\Sprite Shaders Ultimate\Demo\All Shaders.unity|c7c9624ff825da04ab272ebd24d93c1b
+Assets\Art\Effects\Sprite Shaders Ultimate\Demo\Misc\PPProfile.asset|48a79b01ea5641d4aa6daa2e23605641
+Assets\Art\Effects\Sprite Shaders Ultimate\Demo\Misc\PPProfile.asset|8e6292b2c06870d4495f009f912b9600
+Assets\Art\Effects\UIShaderEffects-EdgeEffects\Demo\Demo.unity|01614664b831546d2ae94a42149d80ac
+Assets\Art\Effects\UIShaderEffects-EdgeEffects\Demo\Demo.unity|ca9f5fa95ffab41fb9a615ab714db018
+Assets\Art\Effects\UIShaderEffects-EdgeEffects\Effects\Material\EdgeGlow_09_2.mat|4a627623622a42d45a1fc6d53570d1f5
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\GUI\HyperbitBeamCanvas.prefab|f5f67c52d1564df4a8936ccd202a3bd8
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\GUI\HyperbitCanvas.prefab|f5f67c52d1564df4a8936ccd202a3bd8
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\GUI\HyperbitSceneSelect.prefab|f5f67c52d1564df4a8936ccd202a3bd8
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\Projectiles\Missiles\LongCube\LongCubeMissileBlueOBJ.prefab|14cbf7cdacd24b8419abd5f05fad3451
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\Projectiles\Missiles\LongCube\LongCubeMissileGreenOBJ.prefab|14cbf7cdacd24b8419abd5f05fad3451
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\Projectiles\Missiles\LongCube\LongCubeMissilePurpleOBJ.prefab|14cbf7cdacd24b8419abd5f05fad3451
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\Projectiles\Missiles\LongCube\LongCubeMissileRedOBJ.prefab|14cbf7cdacd24b8419abd5f05fad3451
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Prefabs\Projectiles\Missiles\LongCube\LongCubeMissileYellowOBJ.prefab|14cbf7cdacd24b8419abd5f05fad3451
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo1.unity|f5f67c52d1564df4a8936ccd202a3bd8
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo2.unity|f5f67c52d1564df4a8936ccd202a3bd8
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo3.unity|f5f67c52d1564df4a8936ccd202a3bd8
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo4.unity|f5f67c52d1564df4a8936ccd202a3bd8
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo5.unity|f5f67c52d1564df4a8936ccd202a3bd8
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo6.unity|f5f67c52d1564df4a8936ccd202a3bd8
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Demo\Scenes\demo7.unity|f5f67c52d1564df4a8936ccd202a3bd8
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Materials\SolidBlue.mat|204209ec58a7b6241a0b5962eed6a156
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Materials\SolidGreen.mat|204209ec58a7b6241a0b5962eed6a156
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Materials\SolidPurple.mat|204209ec58a7b6241a0b5962eed6a156
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Materials\SolidRed.mat|204209ec58a7b6241a0b5962eed6a156
+Assets\Art\Effects\unity像素风格科幻特效Hyperbit Arsenal 1.1\Materials\SolidYellow.mat|204209ec58a7b6241a0b5962eed6a156
+Assets\Art\RPG Props and Items 370+\1\Sword_1.prefab|e19c436299e63204aac49d53aa635732
+Assets\Resources\Prefabs\Battle\BattleSettlement.prefab|27640c46f267de44498cdb914ad9f8b0
+Assets\Resources\Prefabs\Battle\BattleSettlement.prefab|30d487661a2678c48a4f6db25ea1cd17
+Assets\Resources\Prefabs\Battle\BattleSettlement.prefab|4d82dbd035dae4d4bbb779534b69f68f
+Assets\Resources\Prefabs\Battle\BattleSettlement.prefab|8baf16d1a1692a14589166ad9c0b57be
+Assets\Resources\Prefabs\Battle\BattleSettlement.prefab|9839559fab0b7c74f9de468093c0956d
+Assets\Resources\Prefabs\Battle\BattleSettlement.prefab|a1a71ef7599190b4d910a5c537c05845
+Assets\Resources\Prefabs\Battle\BattleSettlement.prefab|e1a8d61cd8a47d842952993f25d0296d
+Assets\Resources\Prefabs\Battle\BattleSettlement.prefab|f072664b2ff63a44394b7e9bfd15d28e
+Assets\Resources\Prefabs\Battle\BattleStageMap.prefab|c0d4fd61fe83b8f4996b8a0be8ab86c7
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|027c6df94a8592b43964911bbf53ba7e
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|1276863bcb10bd948b73f8373495b293
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|2c76fb5aa1c71914eb76c2e952374e8e
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|45ffd3010b05a1a46a8470880cbafb6c
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|6558a0508c8614a47bfe4b054233912f
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|7039da37b4c452541838b17a53f1a9c4
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|9832842298c0ccb41aaab049dac53490
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|aa003d0f03c992545ac7d06d320ab165
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|b86d1ec10d1e85f419e1efbea5a6d0b5
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|c504e6bf9cb074c4786bc308a0e8c13e
+Assets\Resources\Prefabs\Battle\BattleUI.prefab|ebf8be9ef02423d4e949b7e1f785a675
+Assets\Resources\Prefabs\Dialogue\DialogueUI.prefab|e72524dade4520349b4d5956b2fc7b9b
+Assets\Resources\Prefabs\Talent\TalentUI.prefab|090e1c7b819f3324893f067082340234
+Assets\Resources\Prefabs\Talent\TalentUI.prefab|69b2e4173bee97f4f8b290de67cffcf9
+Assets\Resources\Prefabs\Town\AdventureLogUI.prefab|0319aeb6b9d04b946bfada22f7e424ce
+Assets\Resources\Prefabs\Town\AdventureLogUI.prefab|7c06b319a3e9b7c44af835113c6663a3
+Assets\Resources\Prefabs\Town\CharacterUI.prefab|64363527937ad664b835674e026d620d
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|2aad7e86c38a947479f21d635f1a5812
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|2d75a2bc8aaddab47a36091a14fd85ce
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|3f274fb48d88bd0459cbc0eec3b6329a
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|602b128d185715448b47b3c67dbde94a
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|83ac7766c0f15004696bc4239563b3ff
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|9060e15ffa3bd5841aa2307ee4a3b380
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|992bf9b445656d84aa72fba0b230b2ee
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|c3e5a4331868107489ed223ff559719a
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|da022ebf18601a14db5eee8502a7bdf9
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|ea6d622f895205543b3dce647d457da6
+Assets\Resources\Prefabs\Town\MercenaryRecruitPopup.prefab|ebf8be9ef02423d4e949b7e1f785a675
+Assets\Resources\Prefabs\Town\PlayerNamingUI.prefab|0fdaf94cb374dd646b4996abe7921052
+Assets\Resources\Prefabs\Town\PlayerNamingUI.prefab|2f81cf3243b90da4ba28b7981ba9dd69
+Assets\Resources\Prefabs\Town\PlayerNamingUI.prefab|430bd0d6b082a0448aa5411680785e23
+Assets\Resources\Prefabs\Town\PlayerNamingUI.prefab|8e54f89fcf9ccbc468bb79d353bd91cb
+Assets\Resources\Prefabs\Town\PlayerNamingUI.prefab|fec362aa451870949927212ac297a496
+Assets\Resources\Prefabs\UI\SettingsPopup.prefab|05172d466879c2543afca06097d24f54
+Assets\Resources\Prefabs\UI\SettingsPopup.prefab|26aec5fbe2c73664caff74f8892c87b6
+Assets\Resources\Prefabs\UI\SettingsPopup.prefab|2f4fc4ab6d63aaa48a4e10d81b7c7680
+Assets\Resources\Prefabs\UI\SettingsPopup.prefab|5fb04767ffe00e44998eedfd7e200474
+Assets\Resources\Prefabs\UI\SettingsPopup.prefab|6a8d85a9ecd97924597caa40185e41b8
+Assets\Resources\Prefabs\UI\SettingsPopup.prefab|8d5e009b8b83b1643bbfb27ad9065eed
+Assets\Resources\Prefabs\UI\SettingsPopup.prefab|9060e15ffa3bd5841aa2307ee4a3b380
+Assets\Resources\Prefabs\UI\SettingsPopup.prefab|aa4ceb58594512549ba01ff0210f0c0b
+Assets\Resources\Prefabs\UI\SettingsPopup.prefab|ae5068f0ab87a1c498727534c421b9f4
+Assets\Resources\Prefabs\UI\SettingsPopup.prefab|d325162e92d4ea44ab91b6ce59d0051f
+Assets\Resources\Prefabs\UI\WorldMapPopup.prefab|1340940d05f058449bbcc4c36d9f590c
+Assets\SPUM\Core\Basic_Resources\Prefab\LoadPrefabs_ChracterPivot.prefab|70a738dfe9e9fc942afcfbb6b2e4c25a
+Assets\SPUM\Core\Basic_Resources\Prefab\LoadPrefabs_ChracterPivot.prefab|86d1257a4dda4de4f89455caaf546783
+Assets\SPUM\Core\Basic_Resources\Prefab\LoadPrefabs_ChracterPivot.prefab|d06e0fb5c21f64348bee8578bf96b687
+Assets\SPUM\Core\Basic_Resources\Prefab\Pivot_Main.prefab|d06e0fb5c21f64348bee8578bf96b687
+Assets\SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab|3ac7eae6015494ea8a2fa57994878a4a
+Assets\SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab|70a738dfe9e9fc942afcfbb6b2e4c25a
+Assets\SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab|8a7a5a1ee7db842338a34b39a9bb9b5b
+Assets\SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab|bc54460ac3fe5478f9cacb9b1cbdcc69
+Assets\SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab|c0e9d36e72f4344ad96754666ce3ecef
+Assets\SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab|d06e0fb5c21f64348bee8578bf96b687
+Assets\SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab|de762082c58944bed975560c0771a0ed
+Assets\SPUM\Core\Basic_Resources\Prefab\SPUM_ListItem.prefab|deff391f79f79724e9d928bc6273e5b7
+Assets\SPUM\Core\Basic_Resources\Prefab\SPUM_PromptTagManager.prefab|ef6c1e85bfd052445bbbcc6b791592e5
+Assets\SPUM\Core\Basic_Resources\Prefab\SpriteEditorPrefab.prefab|88f524fc82bef814c943179e596c9955
+Assets\SPUM\Core\Basic_Resources\Prefab\SpriteEditorPrefab.prefab|c2fc0aafc4ba14749a6cc196ffeb52b8
+Assets\SPUM\Core\Basic_Resources\Prefab\SpritePrefab.prefab|70a738dfe9e9fc942afcfbb6b2e4c25a
+Assets\SPUM\Core\Basic_Resources\Prefab\SpritePrefab.prefab|86d1257a4dda4de4f89455caaf546783
+Assets\SPUM\Core\Basic_Resources\Prefab\SpritePrefab.prefab|d06e0fb5c21f64348bee8578bf96b687
+Assets\SPUM\Sample\Scene\Sample.unity|3b1c800c0a3bf4498a4d6a7bec9f935b
+Assets\SPUM\Scene\SPUM_Scene.unity|01614664b831546d2ae94a42149d80ac
+Assets\SPUM\Scene\SPUM_Scene.unity|ca9f5fa95ffab41fb9a615ab714db018
+Assets\SPUM\Scene\SPUM_Scene.unity|d932c376d1c47bd46acb782ac4161de6
+Assets\SPUM\Sprite_Editor(Beta)\SPUM_SpriteEditor.unity|9700114f3ccb3458e8e151f449085f62
+Assets\SPUM\Sprite_SheetExporter(Beta)\Scene\SPUM_SheetExporter.unity|d026e30b589c7454187a83b9cded7e58
+Assets\Scenes\Battle.unity|429795ccaa0c615408a6c4b24a06711d
+Assets\Scenes\Boot.unity|1340940d05f058449bbcc4c36d9f590c

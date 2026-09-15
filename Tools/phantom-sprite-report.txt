@@ -1,0 +1,508 @@
+幽灵 guid 引用报告（悬空总数 700 处，去重 guid 101 个）
+======================================================================
+
+guid 7c06b319a3e9b7c44af835113c6663a3
+  属性: m_Sprite
+  宿主节点: "\u666E\u901A\u8FB9\u6846"
+  所在文件: AdventureLogUI.prefab
+
+guid 0319aeb6b9d04b946bfada22f7e424ce
+  属性: m_Sprite
+  宿主节点: "boss\u8FB9\u6846"
+  所在文件: AdventureLogUI.prefab
+
+guid 71c1514a6bd24e1e882cebbe1904ce04
+  属性: m_Script
+  宿主节点: ?
+  所在文件: Alata-Regular SDF.asset, LiberationSans SDF - Fallback.asset, LiberationSans SDF.asset
+
+guid c7c9624ff825da04ab272ebd24d93c1b
+  属性: original
+  宿主节点: Grass (1), Grass (10), Grass (11), Grass (12), Grass (13), Grass (14), Grass (15), Grass (16), Grass (17), Grass (18), Grass (19), Grass (2), Grass (20), Grass (21), Grass (22), Grass (23), Grass (24), Grass (25), Grass (26), Grass (27), Grass (28), Grass (29), Grass (3), Grass (30), Grass (31), Grass (32), Grass (33), Grass (34), Grass (35), Grass (36), Grass (37), Grass (38), Grass (39), Grass (4), Grass (40), Grass (41), Grass (42), Grass (43), Grass (44), Grass (45), Grass (46), Grass (47), Grass (48), Grass (49), Grass (5), Grass (50), Grass (51), Grass (52), Grass (53), Grass (54), Grass (55), Grass (56), Grass (6), Grass (7), Grass (8), Grass (9)
+  所在文件: All Shaders.unity
+
+guid 948f4100a11a5c24981795d21301da5c
+  属性: m_Script
+  宿主节点: Camera
+  所在文件: All Shaders.unity
+
+guid 8b9a305e18de0c04dbd257a21cd47087
+  属性: m_Script
+  宿主节点: PostProcessing
+  所在文件: All Shaders.unity
+
+guid 1c0841568877b4a4a989c5f8a22a8805
+  属性: textureValue
+  宿主节点: Smoke 1
+  所在文件: All Shaders.unity
+
+guid bc40766b6dfa57a42afec67bd8c7152e
+  属性: original
+  宿主节点: Tree
+  所在文件: All Shaders.unity
+
+guid 78b2425a2284af743826c689403a4924
+  属性: m_Script
+  宿主节点: ?
+  所在文件: AlphaMult.asset, Brightness.asset, LitHandler.asset, NoiseTexture.asset, ShaderMasker.asset, ShaderSpace.asset, ShaderTime.asset, SingleContrast.asset, TintVertex.asset, UVScale.asset, _3DLitStuff.asset, _AddColor.asset, _AddHue.asset, _AdditiveAlpha.asset, _AlphaTint.asset, _BlackTint.asset, _Brightness.asset, _Burn.asset, _Camouflage.asset, _Checkerboard.asset, _ColorReplace.asset, _Contrast.asset, _CustomFade.asset, _DirectionalAlphaFade.asset, _DirectionalDistortion.asset, _DirectionalGlowFade.asset, _Flame.asset, _Frozen.asset, _FullAlphaDissolve.asset, _FullDistortion.asset, _FullGlowDissolve.asset, _Glitch.asset, _GlitchPre.asset, _GlitchUV.asset, _Halftone.asset, _Hologram.asset, _HologramUV.asset, _Hue.asset, _InkSpread.asset, _InnerOutline.asset, _Metal.asset, _MultiplicativeAlpha.asset, _OuterOutline.asset, _Pixelate.asset, _Poison.asset, _Rainbow.asset, _Recolor.asset, _Saturation.asset, _ShiftHue.asset, _Shine.asset, _SineGlow.asset, _SineMove.asset, _SineRotate.asset, _Smoke.asset, _SourceAlphaDissolve.asset, _SourceGlowDissolve.asset, _SplitToning.asset, _Squeeze.asset, _Squish.asset, _StrongTint.asset, _UVDistort.asset, _UVRotate.asset, _UVScale.asset, _UVScroll.asset, _UberColor.asset, _UberColorFinal.asset, _UberCustomAlpha.asset, _UberDissolveFade.asset, _UberEffect.asset, _UberFading.asset, _UberGenerated.asset, _UberInteractive.asset, _UberSpreadFade.asset, _UberTransformOffset.asset, _UberTransformUV.asset, _Vibrate.asset, _Wind.asset
+
+guid 429795ccaa0c615408a6c4b24a06711d
+  属性: - target, m_CorrespondingSourceObject, m_SourcePrefab
+  宿主节点: (未知)
+  所在文件: Battle.unity
+
+guid a1a71ef7599190b4d910a5c537c05845
+  属性: m_Sprite
+  宿主节点: Panel
+  所在文件: BattleSettlement.prefab
+
+guid f072664b2ff63a44394b7e9bfd15d28e
+  属性: m_Sprite
+  宿主节点: Icon
+  所在文件: BattleSettlement.prefab
+
+guid 4d82dbd035dae4d4bbb779534b69f68f
+  属性: m_Sprite
+  宿主节点: Icon
+  所在文件: BattleSettlement.prefab
+
+guid 27640c46f267de44498cdb914ad9f8b0
+  属性: m_Sprite
+  宿主节点: Icon
+  所在文件: BattleSettlement.prefab
+
+guid 8baf16d1a1692a14589166ad9c0b57be
+  属性: m_Sprite
+  宿主节点: Icon
+  所在文件: BattleSettlement.prefab
+
+guid e1a8d61cd8a47d842952993f25d0296d
+  属性: m_Sprite
+  宿主节点: PortraitHost
+  所在文件: BattleSettlement.prefab
+
+guid 30d487661a2678c48a4f6db25ea1cd17
+  属性: m_Sprite
+  宿主节点: Icon
+  所在文件: BattleSettlement.prefab
+
+guid 9839559fab0b7c74f9de468093c0956d
+  属性: m_Sprite
+  宿主节点: Icon
+  所在文件: BattleSettlement.prefab
+
+guid c0d4fd61fe83b8f4996b8a0be8ab86c7
+  属性: m_Material
+  宿主节点: Banner
+  所在文件: BattleStageMap.prefab
+
+guid 027c6df94a8592b43964911bbf53ba7e
+  属性: m_Sprite
+  宿主节点: PlayerSlot
+  所在文件: BattleUI.prefab
+
+guid 1276863bcb10bd948b73f8373495b293
+  属性: m_Sprite
+  宿主节点: boss
+  所在文件: BattleUI.prefab
+
+guid 6558a0508c8614a47bfe4b054233912f
+  属性: m_Sprite
+  宿主节点: "\u8840\u6761"
+  所在文件: BattleUI.prefab
+
+guid 2c76fb5aa1c71914eb76c2e952374e8e
+  属性: m_Sprite
+  宿主节点: xuetiaodi
+  所在文件: BattleUI.prefab
+
+guid ebf8be9ef02423d4e949b7e1f785a675
+  属性: m_Sprite
+  宿主节点: "\u804C\u4E1Aicon", Role
+  所在文件: BattleUI.prefab, MercenaryRecruitPopup.prefab
+
+guid 7039da37b4c452541838b17a53f1a9c4
+  属性: m_Sprite
+  宿主节点: "icon\u5E950", "icon\u5E951", "icon\u5E952", "icon\u5E953"
+  所在文件: BattleUI.prefab
+
+guid b86d1ec10d1e85f419e1efbea5a6d0b5
+  属性: m_Sprite
+  宿主节点: bg
+  所在文件: BattleUI.prefab
+
+guid c504e6bf9cb074c4786bc308a0e8c13e
+  属性: m_Sprite
+  宿主节点: Portrait
+  所在文件: BattleUI.prefab
+
+guid 9832842298c0ccb41aaab049dac53490
+  属性: m_Sprite
+  宿主节点: Image (1)
+  所在文件: BattleUI.prefab
+
+guid aa003d0f03c992545ac7d06d320ab165
+  属性: m_Sprite
+  宿主节点: di
+  所在文件: BattleUI.prefab
+
+guid 45ffd3010b05a1a46a8470880cbafb6c
+  属性: m_Sprite
+  宿主节点: bg
+  所在文件: BattleUI.prefab
+
+guid 1340940d05f058449bbcc4c36d9f590c
+  属性: m_Script
+  宿主节点: WorldMapPopup
+  所在文件: Boot.unity, WorldMapPopup.prefab
+
+guid 64363527937ad664b835674e026d620d
+  属性: m_Sprite
+  宿主节点: Portrait
+  所在文件: CharacterUI.prefab
+
+guid ab2114bdc8544297b417dfefe9f1e410
+  属性: m_Script
+  宿主节点: ?
+  所在文件: Default Style Sheet.asset
+
+guid 01614664b831546d2ae94a42149d80ac
+  属性: m_Script
+  宿主节点: EventSystem
+  所在文件: Demo.unity, SPUM_Scene.unity
+
+guid ca9f5fa95ffab41fb9a615ab714db018
+  属性: m_ActionsAsset, m_CancelAction, m_LeftClickAction, m_MiddleClickAction, m_MoveAction, m_PointAction, m_RightClickAction, m_ScrollWheelAction, m_SubmitAction, m_TrackedDeviceOrientationAction, m_TrackedDevicePositionAction
+  宿主节点: EventSystem
+  所在文件: Demo.unity, SPUM_Scene.unity
+
+guid e72524dade4520349b4d5956b2fc7b9b
+  属性: m_Sprite
+  宿主节点: LeftPortrait
+  所在文件: DialogueUI.prefab
+
+guid 4a627623622a42d45a1fc6d53570d1f5
+  属性: m_Texture
+  宿主节点: (未知)
+  所在文件: EdgeGlow_09_2.mat
+
+guid 84a92b25f83d49b9bc132d206b370281
+  属性: m_Script
+  宿主节点: ?
+  所在文件: EmojiOne.asset
+
+guid f5f67c52d1564df4a8936ccd202a3bd8
+  属性: m_Script
+  宿主节点: 1, 2, 3, 4, 5, 6, 7, Background, Button, EventSystem, Fill, Handle, HyperbitBeamCanvas, HyperbitCanvas, HyperbitSceneSelect, Next, NextText, Previous, PreviousText, Slider, Speed, Text
+  所在文件: HyperbitBeamCanvas.prefab, HyperbitCanvas.prefab, HyperbitSceneSelect.prefab, demo1.unity, demo2.unity, demo3.unity, demo4.unity, demo5.unity, demo6.unity, demo7.unity
+
+guid 70a738dfe9e9fc942afcfbb6b2e4c25a
+  属性: m_Sprite
+  宿主节点: Back, Front, LeftEyeBack, LeftEyeFront, RightEyeBack, RightEyeFront
+  所在文件: LoadPrefabs_ChracterPivot.prefab, SPUM_ListItem.prefab, SpritePrefab.prefab
+
+guid 86d1257a4dda4de4f89455caaf546783
+  属性: m_Sprite
+  宿主节点: -20_R_Arm, 20_L_Arm, 5_Head, Body, _12R_Foot, _3L_Foot
+  所在文件: LoadPrefabs_ChracterPivot.prefab, SpritePrefab.prefab
+
+guid d06e0fb5c21f64348bee8578bf96b687
+  属性: m_Sprite
+  宿主节点: Acc, Acc1, BodyBack, BodyFront, FootBackBackTop, FootBackBottom, FootBackFrontTop, FootFrontBackTop, FootFrontBottom, FootFrontFrontTop, FrontFootBottom, FrontFootTop, Head, Neck, Tail
+  所在文件: LoadPrefabs_ChracterPivot.prefab, Pivot_Main.prefab, SPUM_ListItem.prefab, SpritePrefab.prefab
+
+guid 14cbf7cdacd24b8419abd5f05fad3451
+  属性: objectReference
+  宿主节点: (未知)
+  所在文件: LongCubeMissileBlueOBJ.prefab, LongCubeMissileGreenOBJ.prefab, LongCubeMissilePurpleOBJ.prefab, LongCubeMissileRedOBJ.prefab, LongCubeMissileYellowOBJ.prefab
+
+guid 7e86780f8818d774781e18cdb159f2f7
+  属性: m_Texture
+  宿主节点: (未知)
+  所在文件: M_Grid.mat
+
+guid 4f1502c89b49fa2419daab4477020e86
+  属性: m_Texture
+  宿主节点: (未知)
+  所在文件: M_Grid.mat
+
+guid b269f0779cfd3e14eaedadbe43aa8795
+  属性: m_Texture
+  宿主节点: (未知)
+  所在文件: M_VFX_Character_Showoff_01.mat
+
+guid 794b5fb3fd56e5a409feef1fa1639894
+  属性: m_Texture
+  宿主节点: (未知)
+  所在文件: M_VFX_Fireball_Impact_01_Mask.mat, M_VFX_Fireball_Projectile_01_Mask.mat
+
+guid 64eaf890e0a833041a2f06885cc77c01
+  属性: m_Texture
+  宿主节点: (未知)
+  所在文件: M_Vefects_Extra_Billboard_03.mat
+
+guid da022ebf18601a14db5eee8502a7bdf9
+  属性: m_Sprite
+  宿主节点: Skill1icon, Skill2icon
+  所在文件: MercenaryRecruitPopup.prefab
+
+guid 2d75a2bc8aaddab47a36091a14fd85ce
+  属性: m_Material
+  宿主节点: ConfirmButton1
+  所在文件: MercenaryRecruitPopup.prefab
+
+guid c3e5a4331868107489ed223ff559719a
+  属性: m_Sprite
+  宿主节点: ConfirmButton1
+  所在文件: MercenaryRecruitPopup.prefab
+
+guid 2aad7e86c38a947479f21d635f1a5812
+  属性: m_Sprite
+  宿主节点: ConfirmButton
+  所在文件: MercenaryRecruitPopup.prefab
+
+guid 83ac7766c0f15004696bc4239563b3ff
+  属性: m_Sprite
+  宿主节点: Image
+  所在文件: MercenaryRecruitPopup.prefab
+
+guid ea6d622f895205543b3dce647d457da6
+  属性: m_Sprite
+  宿主节点: Card0
+  所在文件: MercenaryRecruitPopup.prefab
+
+guid 3f274fb48d88bd0459cbc0eec3b6329a
+  属性: m_Material
+  宿主节点: ConfirmButton1
+  所在文件: MercenaryRecruitPopup.prefab
+
+guid 992bf9b445656d84aa72fba0b230b2ee
+  属性: m_Sprite
+  宿主节点: Card2
+  所在文件: MercenaryRecruitPopup.prefab
+
+guid 9060e15ffa3bd5841aa2307ee4a3b380
+  属性: m_Sprite
+  宿主节点: Panel
+  所在文件: MercenaryRecruitPopup.prefab, SettingsPopup.prefab
+
+guid 602b128d185715448b47b3c67dbde94a
+  属性: m_Sprite
+  宿主节点: Card1
+  所在文件: MercenaryRecruitPopup.prefab
+
+guid f980f6ea27e137b40a091a43f1068f5b
+  属性: - target, m_SourcePrefab
+  宿主节点: (未知)
+  所在文件: PEDemoScene.unity
+
+guid 8e6292b2c06870d4495f009f912b9600
+  属性: m_Script
+  宿主节点: ?
+  所在文件: PPProfile.asset
+
+guid 48a79b01ea5641d4aa6daa2e23605641
+  属性: m_Script
+  宿主节点: ?
+  所在文件: PPProfile.asset
+
+guid fec362aa451870949927212ac297a496
+  属性: m_Script
+  宿主节点: PlayerNamingUI
+  所在文件: PlayerNamingUI.prefab
+
+guid 430bd0d6b082a0448aa5411680785e23
+  属性: m_Sprite
+  宿主节点: ConfirmBtn
+  所在文件: PlayerNamingUI.prefab
+
+guid 2f81cf3243b90da4ba28b7981ba9dd69
+  属性: m_Sprite
+  宿主节点: InputBar
+  所在文件: PlayerNamingUI.prefab
+
+guid 8e54f89fcf9ccbc468bb79d353bd91cb
+  属性: m_Sprite
+  宿主节点: Panel
+  所在文件: PlayerNamingUI.prefab
+
+guid 0fdaf94cb374dd646b4996abe7921052
+  属性: m_Sprite
+  宿主节点: DiceBtn
+  所在文件: PlayerNamingUI.prefab
+
+guid 0d7593b3a9277ac4696b20006c21dde2
+  属性: m_Script
+  宿主节点: ?
+  所在文件: PostProProfile_Pixel.asset
+
+guid 2d08ce26990eb1a4a9177b860541e702
+  属性: m_Script
+  宿主节点: ?
+  所在文件: PostProProfile_Pixel.asset
+
+guid 75b73ed42062340c1a13fdf450695eb1
+  属性: m_Sprite
+  宿主节点: Icon
+  所在文件: PreviewScene.unity
+
+guid f4688fdb7df04437aeb418b961361dc5
+  属性: m_Script
+  宿主节点: Text_Cave, Text_Devil, Text_Field, Text_Forest, Text_Ice, Text_Jungle, Text_Sea, Text_Undead
+  所在文件: PreviewScene.unity
+
+guid 058cba836c1846c3aa1c5fd2e28aea77
+  属性: m_Script
+  宿主节点: TMP SubMeshUI [Alata-Regular Atlas Material + LiberationSans SDF Atlas]
+  所在文件: PreviewScene.unity
+
+guid 89209d2c2872ccb44adf7a6e4142fa6b
+  属性: m_Mesh
+  宿主节点: SM_VFX_Background_Plate_01
+  所在文件: SM_VFX_Background_Plate_01.prefab
+
+guid bc54460ac3fe5478f9cacb9b1cbdcc69
+  属性: m_Sprite
+  宿主节点: LWImage, RWImage
+  所在文件: SPUM_ListItem.prefab
+
+guid c0e9d36e72f4344ad96754666ce3ecef
+  属性: m_Sprite
+  宿主节点: Body, Head, Left, LeftFoot, Right, RightFoot
+  所在文件: SPUM_ListItem.prefab
+
+guid deff391f79f79724e9d928bc6273e5b7
+  属性: m_Sprite
+  宿主节点: LeftShieldAImage, RightShieldAImage
+  所在文件: SPUM_ListItem.prefab
+
+guid de762082c58944bed975560c0771a0ed
+  属性: m_Sprite
+  宿主节点: Body
+  所在文件: SPUM_ListItem.prefab
+
+guid 8a7a5a1ee7db842338a34b39a9bb9b5b
+  属性: m_Sprite
+  宿主节点: Left, Right
+  所在文件: SPUM_ListItem.prefab
+
+guid 3ac7eae6015494ea8a2fa57994878a4a
+  属性: m_Sprite
+  宿主节点: Left, Right
+  所在文件: SPUM_ListItem.prefab
+
+guid ef6c1e85bfd052445bbbcc6b791592e5
+  属性: m_Script
+  宿主节点: SPUM_PromptTagManager
+  所在文件: SPUM_PromptTagManager.prefab
+
+guid d932c376d1c47bd46acb782ac4161de6
+  属性: m_Sprite
+  宿主节点: Scroll View
+  所在文件: SPUM_Scene.unity
+
+guid d026e30b589c7454187a83b9cded7e58
+  属性: - {fileID
+  宿主节点: SPUM_ExporterManager
+  所在文件: SPUM_SheetExporter.unity
+
+guid 9700114f3ccb3458e8e151f449085f62
+  属性: objectReference
+  宿主节点: (未知)
+  所在文件: SPUM_SpriteEditor.unity
+
+guid 3b1c800c0a3bf4498a4d6a7bec9f935b
+  属性: m_LightingSettings
+  宿主节点: (未知)
+  所在文件: Sample.unity
+
+guid 8d5e009b8b83b1643bbfb27ad9065eed
+  属性: m_Sprite
+  宿主节点: Icon
+  所在文件: SettingsPopup.prefab
+
+guid 2f4fc4ab6d63aaa48a4e10d81b7c7680
+  属性: m_Sprite
+  宿主节点: Icon
+  所在文件: SettingsPopup.prefab
+
+guid 6a8d85a9ecd97924597caa40185e41b8
+  属性: m_Sprite
+  宿主节点: PrimaryButton
+  所在文件: SettingsPopup.prefab
+
+guid aa4ceb58594512549ba01ff0210f0c0b
+  属性: m_Sprite
+  宿主节点: Knob
+  所在文件: SettingsPopup.prefab
+
+guid 5fb04767ffe00e44998eedfd7e200474
+  属性: m_Sprite
+  宿主节点: ConfirmButton
+  所在文件: SettingsPopup.prefab
+
+guid ae5068f0ab87a1c498727534c421b9f4
+  属性: m_Sprite
+  宿主节点: Image, Image (1)
+  所在文件: SettingsPopup.prefab
+
+guid 05172d466879c2543afca06097d24f54
+  属性: m_Sprite
+  宿主节点: Toggle
+  所在文件: SettingsPopup.prefab
+
+guid 26aec5fbe2c73664caff74f8892c87b6
+  属性: m_Sprite
+  宿主节点: EvacuateButton
+  所在文件: SettingsPopup.prefab
+
+guid d325162e92d4ea44ab91b6ce59d0051f
+  属性: m_Sprite
+  宿主节点: Icon
+  所在文件: SettingsPopup.prefab
+
+guid 204209ec58a7b6241a0b5962eed6a156
+  属性: m_Texture
+  宿主节点: (未知)
+  所在文件: SolidBlue.mat, SolidGreen.mat, SolidPurple.mat, SolidRed.mat, SolidYellow.mat
+
+guid 88f524fc82bef814c943179e596c9955
+  属性: _nowSprite
+  宿主节点: 6_FaceHair
+  所在文件: SpriteEditorPrefab.prefab
+
+guid c2fc0aafc4ba14749a6cc196ffeb52b8
+  属性: m_Controller
+  宿主节点: UnitRoot
+  所在文件: SpriteEditorPrefab.prefab
+
+guid e19c436299e63204aac49d53aa635732
+  属性: m_Sprite
+  宿主节点: icon
+  所在文件: Sword_1.prefab
+
+guid 2705215ac5b84b70bacc50632be6e391
+  属性: m_Script
+  宿主节点: ?
+  所在文件: TMP Settings.asset
+
+guid 090e1c7b819f3324893f067082340234
+  属性: m_Sprite
+  宿主节点: StonePlus
+  所在文件: TalentUI.prefab
+
+guid 69b2e4173bee97f4f8b290de67cffcf9
+  属性: m_Material
+  宿主节点: "\u9009\u4E2D"
+  所在文件: TalentUI.prefab
+
+guid 0fc17236f67ee6b4b93e09eee791ee4e
+  属性: m_audioClip
+  宿主节点: VFX_Fireball_Projectile_01_Horizontal_Random_Flip_Billboard_Color_Loop_Static, VFX_Fireball_Projectile_01_Vertical_Random_Flip_Billboard_Color_Loop_Static, VFX_Projectile_Water_01, VFX_Projectile_Water_01_Color, VFX_Projectile_Water_01_Color_Dissolve, VFX_Projectile_Water_01_Color_Random_Start, VFX_Projectile_Water_01_Color_Random_Start_Speed, VFX_Projectile_Water_01_Dissolve, VFX_Projectile_Water_01_Fake_Outline, VFX_Projectile_Water_01_Random_Start, VFX_Vanish_01_Mask_Loop_Static, VFX_Vapor_01_Color_Flip_Loop_Static, VFX_Vapor_01_Mask_Flip_Loop_Static
+  所在文件: VFX_Fireball_Projectile_01_Horizontal_Random_Flip_Billboard_Color_Loop_Static.prefab, VFX_Fireball_Projectile_01_Vertical_Random_Flip_Billboard_Color_Loop_Static.prefab, VFX_Projectile_Water_01.prefab, VFX_Projectile_Water_01_Color.prefab, VFX_Projectile_Water_01_Color_Dissolve.prefab, VFX_Projectile_Water_01_Color_Random_Start.prefab, VFX_Projectile_Water_01_Color_Random_Start_Speed.prefab, VFX_Projectile_Water_01_Dissolve.prefab, VFX_Projectile_Water_01_Fake_Outline.prefab, VFX_Projectile_Water_01_Random_Start.prefab, VFX_Vanish_01_Mask_Loop_Static.prefab, VFX_Vapor_01_Color_Flip_Loop_Static.prefab, VFX_Vapor_01_Mask_Flip_Loop_Static.prefab
+
+guid 8448878bb4649ac46ad928fd36682ffc
+  属性: m_Motion
+  宿主节点: (未知)
+  所在文件: box.controller
+
