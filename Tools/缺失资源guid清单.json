@@ -1,0 +1,284 @@
+{
+  "027c6df94a8592b43964911bbf53ba7e": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab"
+  ],
+  "0319aeb6b9d04b946bfada22f7e424ce": [
+    "Assets/Resources/Prefabs/Town/AdventureLogUI.prefab"
+  ],
+  "05172d466879c2543afca06097d24f54": [
+    "Assets/Resources/Prefabs/UI/SettingsPopup.prefab"
+  ],
+  "058cba836c1846c3aa1c5fd2e28aea77": [
+    "Assets/Art/Effects/2D Pixel RPG Monster Pack/Scenes/PreviewScene.unity"
+  ],
+  "090e1c7b819f3324893f067082340234": [
+    "Assets/Resources/Prefabs/Talent/TalentUI.prefab"
+  ],
+  "0fdaf94cb374dd646b4996abe7921052": [
+    "Assets/Resources/Prefabs/Town/PlayerNamingUI.prefab"
+  ],
+  "1276863bcb10bd948b73f8373495b293": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab"
+  ],
+  "1340940d05f058449bbcc4c36d9f590c": [
+    "Assets/Resources/Prefabs/UI/WorldMapPopup.prefab",
+    "Assets/Scenes/Boot.unity"
+  ],
+  "26aec5fbe2c73664caff74f8892c87b6": [
+    "Assets/Resources/Prefabs/UI/SettingsPopup.prefab"
+  ],
+  "2705215ac5b84b70bacc50632be6e391": [
+    "Assets/Art/Effects/2D Pixel RPG Monster Pack/TextMesh Pro/Resources/TMP Settings.asset"
+  ],
+  "27640c46f267de44498cdb914ad9f8b0": [
+    "Assets/Resources/Prefabs/Battle/BattleSettlement.prefab"
+  ],
+  "2aad7e86c38a947479f21d635f1a5812": [
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab"
+  ],
+  "2c76fb5aa1c71914eb76c2e952374e8e": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab"
+  ],
+  "2d75a2bc8aaddab47a36091a14fd85ce": [
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab"
+  ],
+  "2f4fc4ab6d63aaa48a4e10d81b7c7680": [
+    "Assets/Resources/Prefabs/UI/SettingsPopup.prefab"
+  ],
+  "2f81cf3243b90da4ba28b7981ba9dd69": [
+    "Assets/Resources/Prefabs/Town/PlayerNamingUI.prefab"
+  ],
+  "30d487661a2678c48a4f6db25ea1cd17": [
+    "Assets/Resources/Prefabs/Battle/BattleSettlement.prefab"
+  ],
+  "3f274fb48d88bd0459cbc0eec3b6329a": [
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab"
+  ],
+  "429795ccaa0c615408a6c4b24a06711d": [
+    "Assets/Scenes/Battle.unity"
+  ],
+  "430bd0d6b082a0448aa5411680785e23": [
+    "Assets/Resources/Prefabs/Town/PlayerNamingUI.prefab"
+  ],
+  "45ffd3010b05a1a46a8470880cbafb6c": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab"
+  ],
+  "4a627623622a42d45a1fc6d53570d1f5": [
+    "Assets/Art/Effects/UIShaderEffects-EdgeEffects/Effects/Material/EdgeGlow_09_2.mat"
+  ],
+  "4d82dbd035dae4d4bbb779534b69f68f": [
+    "Assets/Resources/Prefabs/Battle/BattleSettlement.prefab"
+  ],
+  "5fb04767ffe00e44998eedfd7e200474": [
+    "Assets/Resources/Prefabs/UI/SettingsPopup.prefab"
+  ],
+  "602b128d185715448b47b3c67dbde94a": [
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab"
+  ],
+  "64363527937ad664b835674e026d620d": [
+    "Assets/Resources/Prefabs/Town/CharacterUI.prefab"
+  ],
+  "6558a0508c8614a47bfe4b054233912f": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab"
+  ],
+  "69b2e4173bee97f4f8b290de67cffcf9": [
+    "Assets/Resources/Prefabs/Talent/TalentUI.prefab"
+  ],
+  "6a8d85a9ecd97924597caa40185e41b8": [
+    "Assets/Resources/Prefabs/UI/SettingsPopup.prefab"
+  ],
+  "7039da37b4c452541838b17a53f1a9c4": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab"
+  ],
+  "71c1514a6bd24e1e882cebbe1904ce04": [
+    "Assets/Art/Effects/2D Pixel RPG Monster Pack/Font/Alata-Regular SDF.asset",
+    "Assets/Art/Effects/2D Pixel RPG Monster Pack/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF - Fallback.asset",
+    "Assets/Art/Effects/2D Pixel RPG Monster Pack/TextMesh Pro/Resources/Fonts & Materials/LiberationSans SDF.asset"
+  ],
+  "75b73ed42062340c1a13fdf450695eb1": [
+    "Assets/Art/Effects/2D Pixel RPG Monster Pack/Scenes/PreviewScene.unity"
+  ],
+  "78b2425a2284af743826c689403a4924": [
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_AddColor.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_AddHue.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_AlphaTint.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_BlackTint.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_Brightness.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_ColorReplace.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_Contrast.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_Hue.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_InkSpread.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_InnerOutline.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_OuterOutline.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_Recolor.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_Saturation.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_ShiftHue.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_SineGlow.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_SplitToning.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Color/_StrongTint.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_Burn.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_Camouflage.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_Frozen.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_Glitch.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_GlitchPre.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_GlitchUV.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_Hologram.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_HologramUV.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_Metal.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_Poison.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_Rainbow.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Effect/_Shine.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Fading/_CustomFade.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Fading/_DirectionalAlphaFade.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Fading/_DirectionalDistortion.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Fading/_DirectionalGlowFade.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Fading/_FullAlphaDissolve.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Fading/_FullDistortion.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Fading/_FullGlowDissolve.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Fading/_Halftone.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Fading/_SourceAlphaDissolve.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Fading/_SourceGlowDissolve.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Generated/_Checkerboard.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Generated/_Flame.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Generated/_Smoke.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Interactive/_Squish.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Interactive/_Wind.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Transform/_Pixelate.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Transform/_SineMove.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Transform/_SineRotate.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Transform/_Squeeze.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Transform/_UVDistort.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Transform/_UVRotate.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Transform/_UVScale.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Transform/_UVScroll.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Transform/_Vibrate.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_3DLitStuff.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_AdditiveAlpha.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_MultiplicativeAlpha.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberColor.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberColorFinal.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberCustomAlpha.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberDissolveFade.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberEffect.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberFading.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberGenerated.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberInteractive.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberSpreadFade.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberTransformOffset.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/Uber/_UberTransformUV.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/_Generic/AlphaMult.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/_Generic/Brightness.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/_Generic/LitHandler.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/_Generic/NoiseTexture.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/_Generic/ShaderMasker.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/_Generic/ShaderSpace.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/_Generic/ShaderTime.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/_Generic/SingleContrast.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/_Generic/TintVertex.asset",
+    "Assets/Art/Effects/Sprite Shaders Ultimate/ASE/_Generic/UVScale.asset"
+  ],
+  "7c06b319a3e9b7c44af835113c6663a3": [
+    "Assets/Resources/Prefabs/Town/AdventureLogUI.prefab"
+  ],
+  "83ac7766c0f15004696bc4239563b3ff": [
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab"
+  ],
+  "8448878bb4649ac46ad928fd36682ffc": [
+    "Assets/Art/Effects/Ani/box/box.controller"
+  ],
+  "84a92b25f83d49b9bc132d206b370281": [
+    "Assets/Art/Effects/2D Pixel RPG Monster Pack/TextMesh Pro/Resources/Sprite Assets/EmojiOne.asset"
+  ],
+  "8baf16d1a1692a14589166ad9c0b57be": [
+    "Assets/Resources/Prefabs/Battle/BattleSettlement.prefab"
+  ],
+  "8c6e5e4227bd3fb4ea00ba3a6439dace": [
+    "Assets/Art/Effects/Ani/box/box.controller"
+  ],
+  "8d5e009b8b83b1643bbfb27ad9065eed": [
+    "Assets/Resources/Prefabs/UI/SettingsPopup.prefab"
+  ],
+  "8e54f89fcf9ccbc468bb79d353bd91cb": [
+    "Assets/Resources/Prefabs/Town/PlayerNamingUI.prefab"
+  ],
+  "9060e15ffa3bd5841aa2307ee4a3b380": [
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab",
+    "Assets/Resources/Prefabs/UI/SettingsPopup.prefab"
+  ],
+  "9832842298c0ccb41aaab049dac53490": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab"
+  ],
+  "9839559fab0b7c74f9de468093c0956d": [
+    "Assets/Resources/Prefabs/Battle/BattleSettlement.prefab"
+  ],
+  "992bf9b445656d84aa72fba0b230b2ee": [
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab"
+  ],
+  "XHlLsX+oBX2bXvXWH93UcmPb2AZqhJLYyE3iIs4k6QtrxZUhWC9wExc=": [
+    "ProjectSettings/EditorBuildSettings.asset"
+  ],
+  "XXhMtn6pBn5eQlJ7gVsSAEw7SmToh6Y/n4C8VJsKTfRMLenj3Cer7Qc=": [
+    "ProjectSettings/EditorBuildSettings.asset"
+  ],
+  "XntNt3muB3/AJKy/IEUT3oqz4Bq+twCE83RZ+OmJbBehwxIM0iJu8/4=": [
+    "ProjectSettings/EditorBuildSettings.asset"
+  ],
+  "a1a71ef7599190b4d910a5c537c05845": [
+    "Assets/Resources/Prefabs/Battle/BattleSettlement.prefab"
+  ],
+  "aa003d0f03c992545ac7d06d320ab165": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab"
+  ],
+  "aa4ceb58594512549ba01ff0210f0c0b": [
+    "Assets/Resources/Prefabs/UI/SettingsPopup.prefab"
+  ],
+  "ab2114bdc8544297b417dfefe9f1e410": [
+    "Assets/Art/Effects/2D Pixel RPG Monster Pack/TextMesh Pro/Resources/Style Sheets/Default Style Sheet.asset"
+  ],
+  "ae5068f0ab87a1c498727534c421b9f4": [
+    "Assets/Resources/Prefabs/UI/SettingsPopup.prefab"
+  ],
+  "b86d1ec10d1e85f419e1efbea5a6d0b5": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab"
+  ],
+  "c0d4fd61fe83b8f4996b8a0be8ab86c7": [
+    "Assets/Resources/Prefabs/Battle/BattleStageMap.prefab"
+  ],
+  "c3e5a4331868107489ed223ff559719a": [
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab"
+  ],
+  "c504e6bf9cb074c4786bc308a0e8c13e": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab"
+  ],
+  "d325162e92d4ea44ab91b6ce59d0051f": [
+    "Assets/Resources/Prefabs/UI/SettingsPopup.prefab"
+  ],
+  "da022ebf18601a14db5eee8502a7bdf9": [
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab"
+  ],
+  "e19c436299e63204aac49d53aa635732": [
+    "Assets/Art/RPG Props and Items 370+/1/Sword_1.prefab"
+  ],
+  "e1a8d61cd8a47d842952993f25d0296d": [
+    "Assets/Resources/Prefabs/Battle/BattleSettlement.prefab"
+  ],
+  "e72524dade4520349b4d5956b2fc7b9b": [
+    "Assets/Resources/Prefabs/Dialogue/DialogueUI.prefab"
+  ],
+  "ea6d622f895205543b3dce647d457da6": [
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab"
+  ],
+  "ebf8be9ef02423d4e949b7e1f785a675": [
+    "Assets/Resources/Prefabs/Battle/BattleUI.prefab",
+    "Assets/Resources/Prefabs/Town/MercenaryRecruitPopup.prefab"
+  ],
+  "f072664b2ff63a44394b7e9bfd15d28e": [
+    "Assets/Resources/Prefabs/Battle/BattleSettlement.prefab"
+  ],
+  "f4688fdb7df04437aeb418b961361dc5": [
+    "Assets/Art/Effects/2D Pixel RPG Monster Pack/Scenes/PreviewScene.unity"
+  ],
+  "fec362aa451870949927212ac297a496": [
+    "Assets/Resources/Prefabs/Town/PlayerNamingUI.prefab"
+  ]
+}
