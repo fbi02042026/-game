@@ -45,9 +45,16 @@ public partial class BattleUI : MonoBehaviour
     /// <summary>拾取模式（BattleLootMode）的「确定」按钮。整理功能已移除。</summary>
     public Button lootConfirmButton;
 
-    [Header("=== 技能头像区 ===")]
+    [Header("=== 技能头像区（旧布局遗留，当前预制体已无对应节点）===")]
+    /// <summary>
+    /// 已废弃：绑的是 SkillBtn1 / PlayerSkill，而 BattleUI.prefab 里这些节点已被美术改版删除，
+    /// BindSkillAvatar 找不到节点 → root 恒为 null，所有调用都是空转。
+    /// 保留字段只为不破坏预制体已序列化的数据；玩家技能实际走下面的 runSkillSlots。
+    /// </summary>
     public SkillAvatarUI playerSkillAvatar;   // 玩家技能头像（圆形+能量槽+光边）
+    /// <summary>已废弃：原绑 SkillBtn2 / MercSkill1，节点已不存在。佣兵技能实际走 mercSkillSlots。</summary>
     public SkillAvatarUI merc1SkillAvatar;    // 佣兵1技能头像
+    /// <summary>已废弃：原绑 SkillBtn3 / MercSkill2，节点已不存在。佣兵技能实际走 mercSkillSlots。</summary>
     public SkillAvatarUI merc2SkillAvatar;    // 佣兵2技能头像
     /// <summary>自动战斗未开放。运行时隐藏，勿在预制体里删节点。</summary>
     public Button autoButton;
