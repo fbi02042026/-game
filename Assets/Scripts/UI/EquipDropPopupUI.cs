@@ -284,7 +284,7 @@ public class EquipDropPopupUI : MonoBehaviour
             }
             if (c.attrs != null)
             {
-                // 增长用 <color> 标签上金色，必须开富文本，否则会把标签当字面量打出来
+                // 提升行用 <color> 标签上绿色，必须开富文本，否则会把标签当字面量打出来
                 c.attrs.supportRichText = true;
                 c.attrs.text = worn != null ? FormatAttrsWithDelta(eq, worn) : FormatAttrs(eq);
             }
@@ -780,28 +780,7 @@ public class EquipDropPopupUI : MonoBehaviour
         return found && a.value > best + 1e-4f;
     }
 
-    /// <summary>
-    /// 已装备件上同类型（且同为 flat/percent）属性的最大值，用来算「涨了多少」。
-    /// 与 IsAttrImproved 用同一套匹配规则，避免两处判定不一致。
-    /// </summary>
-    static bool TryGetWornAttrValue(EquipInstance worn, AttrBonusData a, out float value)
-    {
-        value = 0f;
-        if (a == null || worn?.attrBonus == null) return false;
-        float best = float.MinValue;
-        bool found = false;
-        for (int i = 0; i < worn.attrBonus.Count; i++)
-        {
-            var b = worn.attrBonus[i];
-            if (b == null || b.attrType != a.attrType || b.isPercent != a.isPercent) continue;
-            if (!found || b.value > best) { best = b.value; found = true; }
-        }
-        if (!found) return false;
-        value = best;
-        return true;
-    }
-
-    /// <summary>带「提升」高亮的属性文本：相对已装备件的增长用金色 +N 标出（依赖 Text.supportRichText）。</summary>
+    /// <summary>带「提升」高亮的属性文本：提升的属性用绿色 ↑ 标出（依赖 Text.supportRichText）。</summary>
     static string FormatAttrsWithDelta(EquipInstance eq, EquipInstance worn)
     {
         if (eq?.attrBonus == null || eq.attrBonus.Count == 0) return "（无额外属性）";
@@ -813,24 +792,8 @@ public class EquipDropPopupUI : MonoBehaviour
             if (a == null) continue;
             string v = a.isPercent ? $"{a.value * 100f:0.#}%" : a.value.ToString("0.#");
             string line = EquipUiText.Attr(a.attrType) + " +" + v;
-            // 相对已装备件的增长用金色数字标出（2026-09-15）：玩家要看的是「涨了多少」
-            if (worn != null)
-            {
-                if (TryGetWornAttrValue(worn, a, out float wornVal))
-                {
-                    float d = a.value - wornVal;
-                    if (d > 0.0001f)
-                    {
-                        string dt = a.isPercent ? $"{d * 100f:0.#}%" : d.ToString("0.#");
-                        line += " <color=#FFD24A>+" + dt + "</color>";
-                    }
-                }
-                else
-                {
-                    // 旧件没有这条属性 = 全新属性，整条算增长
-                    line = "<color=#FFD24A>" + line + "</color>";
-                }
-            }
+            if (IsAttrImproved(a, worn))
+                line = "<color=#66E06A>↑ " + line + "</color>";
             sb.Append(line);
             if (i < n - 1) sb.Append('\n');
         }
