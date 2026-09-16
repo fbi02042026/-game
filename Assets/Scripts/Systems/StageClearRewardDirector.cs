@@ -499,6 +499,10 @@ public class StageClearRewardDirector : MonoBehaviour
         HoldBoxClosedPose();
         if (_closeSr != null) { _closeSr.enabled = true; _closeSr.gameObject.SetActive(true); }
         if (_openSr != null) { _openSr.enabled = false; _openSr.gameObject.SetActive(true); }
+        // 摆放时按 close 精灵底边贴站立线（与正式关 CoReward 一致）。
+        // 场景里 box 节点的 y 是美术手摆的，教学关此前只改 x/z 不动 y，
+        // 一旦场景 y 与运行时 GROUND_Y 不一致，宝箱就会悬在半空。
+        SnapBoxRootToGround();
 
         float wait = 0f;
         const float maxWalkWait = 5f;
