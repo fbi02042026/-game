@@ -124,3 +124,14 @@ Tools/backups/
 debug-*.log
 .uploads/
 .cursor/
+
+# ===== 团结引擎：所有 .meta 一律入库（GUID 引用的唯一来源）=====
+# 漏一个 .meta 就会导致 prefab / scene 里的脚本与资源引用悬空。
+# 注意：被目录规则（Library/ 等）排除的目录仍不会被重新纳入，这里只救回
+# 被「文件后缀规则」（*.unitypackage / *.apk 等）误伤的同类 .meta。
+!**/*.meta
+
+# 仅 IDE / 构建产物自身携带的伪 .meta 仍不入库
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
