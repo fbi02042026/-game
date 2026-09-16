@@ -19,7 +19,20 @@ public class Singleton<T> : MonoBehaviour where T : MonoBehaviour
     {
         get
         {
-            if (_applicationIsQuitting || !Application.isPlaying)
+            // Application.isPlaying 在 MonoBehaviour 构造函数 / 实例字段初始化器里被访问会抛
+            // "get_IsPlaying is not allowed to be called from a MonoBehaviour constructor"。
+            // 那种时机本就只应返回已有实例、绝不能建物，故静默降级返回 _instance。
+            bool inPlay;
+            try
+            {
+                inPlay = Application.isPlaying;
+            }
+            catch (System.Exception)
+            {
+                return _instance;
+            }
+
+            if (_applicationIsQuitting || !inPlay)
                 return _instance;
 
             if (_instance == null)
