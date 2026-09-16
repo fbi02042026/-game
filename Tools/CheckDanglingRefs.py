@@ -28,6 +28,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 RG = re.compile(rb'guid:\s*([0-9A-Za-z+/\-_=]+)')
 BUILTIN = re.compile(r'^0{16}[0-9a-f]0{15}$')
+HEX32 = re.compile(r'^[0-9a-fA-F]{32}$')
 
 GUID_DIRS = ['Assets', 'Packages', 'Library/PackageCache']
 DEFAULT_SCAN = ['Assets/Resources/Prefabs', 'Assets/Scenes', 'Assets/Resources/UI']
@@ -41,7 +42,19 @@ NOISE = ('/Demo/', '/DemoResources/', 'PreviewScene', 'Sample',
          '2D Pixel RPG Monster Pack', 'RPG Props and Items')
 
 
+def kind_of(g):
+    if not g:
+        return 'empty'
+    if HEX32.match(g):
+        return 'hex32'
+    if re.match(r'^[0-9A-Za-z+/]+={0,2}$', g):
+        return 'base64'
+    return 'invalid'
+
+
 def build_guid_table():
+    """返回 {guid: (文件, 形态)}。base64 / invalid 形态要单独标记：
+    团结引擎会判它们非法并忽略对应 asset（2026-09-16 实测）。"""
     table = {}
     for base in GUID_DIRS:
         d = ROOT / base
@@ -53,13 +66,15 @@ def build_guid_table():
             except Exception:
                 continue
             if m:
-                table.setdefault(m.group(1).decode(), p.relative_to(ROOT).as_posix())
+                g = m.group(1).decode()
+                table.setdefault(g, (p.relative_to(ROOT).as_posix(), kind_of(g)))
     return table
 
 
 def scan(dirs, table):
     script_hits = defaultdict(set)   # guid -> files
     asset_hits = defaultdict(lambda: defaultdict(set))  # guid -> field -> files
+    b64_hits = defaultdict(set)      # guid -> files（形态非法，引擎会忽略）
     for d in dirs:
         dd = ROOT / d
         if not dd.exists():
@@ -77,14 +92,19 @@ def scan(dirs, table):
                 if not m:
                     continue
                 g = m.group(1)
-                if BUILTIN.match(g) or g in table:
+                if BUILTIN.match(g):
                     continue
-                if 'm_Script' in ln:
-                    script_hits[g].add(rel)
-                else:
-                    field = ln.strip().split(':')[0].strip()
-                    asset_hits[g][field].add(rel)
-    return script_hits, asset_hits
+                info = table.get(g)
+                if info is None:
+                    if 'm_Script' in ln:
+                        script_hits[g].add(rel)
+                    else:
+                        field = ln.strip().split(':')[0].strip()
+                        asset_hits[g][field].add(rel)
+                elif info[1] != 'hex32':
+                    # guid 在表里，但形态非法 —— 引擎照样不认
+                    b64_hits[g].add(rel)
+    return script_hits, asset_hits, b64_hits
 
 
 def is_noise(files):
@@ -103,7 +123,17 @@ def main():
 
     dirs = ['Assets'] if args.all else DEFAULT_SCAN
     print('[2/2] 扫描 %s ...' % ('整个 Assets' if args.all else '游戏本体'))
-    script_hits, asset_hits = scan(dirs, table)
+    script_hits, asset_hits, b64_hits = scan(dirs, table)
+
+    print()
+    print('===== 形态非法的 guid 引用（团结引擎会判非法并忽略该 asset）=====')
+    real_b64 = {g: f for g, f in b64_hits.items() if not is_noise(f)}
+    if not real_b64:
+        print('  无')
+    for g, files in sorted(real_b64.items(), key=lambda kv: -len(kv[1])):
+        print('  %s  (%d 个文件)  <- %s' % (g, len(files), table[g][0]))
+        for f in sorted(files)[:8]:
+            print('       ', f)
 
     print()
     print('===== 脚本类断链（Missing Script，必须修）=====')
@@ -140,9 +170,10 @@ def main():
 
     print()
     print('===== 汇总 =====')
+    print('  形态非法 guid 引用 : %d' % len(real_b64))
     print('  脚本类断链 guid 数 : %d' % len(real_script))
     print('  资源类断链 guid 数 : %d' % len(rows))
-    if args.strict and real_script:
+    if args.strict and (real_script or real_b64):
         sys.exit(1)
 
 
