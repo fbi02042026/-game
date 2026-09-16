@@ -29,6 +29,10 @@ public class TutorialHintUI : MonoBehaviour
     bool _hard;
     const float SwipeDur = 0.45f;
     const float HandSize = 96f;
+    /// <summary>引导条「打开」动画时长（秒）：短促展开 + 轻微回弹。</summary>
+    const float OpenDur = 0.26f;
+    /// <summary>展开进度：0=刚触发，1=完全展开。</summary>
+    float _openT = 1f;
     const int DefaultSortOrder = GameConfig.UiSort.TutorialHint;
     const string PrefabResourcesPath = "Prefabs/UI/TutorialHintUI";
 
@@ -280,7 +284,12 @@ public class TutorialHintUI : MonoBehaviour
 
         EnsureBuilt();
         bool targetChanged = highlight != _follow;
+        string prevHint = _label != null ? _label.text : "";
         if (_label != null) _label.text = text ?? "";
+        // 只在「换了说法」或「从隐藏变为显示」时重播展开动画，避免同一句被反复 Show 时抖动
+        bool wasHidden = string.IsNullOrEmpty(prevHint) || _group == null || _group.alpha < 0.05f;
+        if (wasHidden || !string.Equals(prevHint, _label != null ? _label.text : ""))
+            _openT = 0f;
         _follow = highlight;
         // 没有目标就不能上硬引导：否则全屏挡住点击又没有挖空，直接卡死
         _hard = hard && highlight != null;
@@ -354,6 +363,8 @@ public class TutorialHintUI : MonoBehaviour
         }
         _hideAt = -1f;
         _follow = null;
+        _openT = 1f;
+        if (_bannerRt != null) _bannerRt.localScale = Vector3.one;
         ForceClearBlockers();
         HidePointer();
         RestoreDefaultSort();
@@ -397,6 +408,7 @@ public class TutorialHintUI : MonoBehaviour
             return;
         }
         RefreshLayout();
+        UpdateOpenMotion();
         UpdatePointerMotion();
     }
 
@@ -545,6 +557,31 @@ public class TutorialHintUI : MonoBehaviour
 
         var root = transform as RectTransform;
         _pointerRt.anchoredPosition = ClampPointerTarget(root, pos);
+    }
+
+    /// <summary>引导条「打开」动画：纵向展开 + 轻微回弹，结束后恢复原始缩放。</summary>
+    void UpdateOpenMotion()
+    {
+        if (_bannerRt == null) return;
+        if (_openT >= 1f)
+        {
+            if (_bannerRt.localScale != Vector3.one) _bannerRt.localScale = Vector3.one;
+            return;
+        }
+        _openT = Mathf.Clamp01(_openT + Time.unscaledDeltaTime / OpenDur);
+        // 起点给一点高度，避免第一帧完全塌陷看不见
+        float e = Mathf.Max(0.08f, EaseOutBack(_openT));
+        _bannerRt.localScale = new Vector3(1f, e, 1f);
+        if (_openT >= 1f) _bannerRt.localScale = Vector3.one;
+    }
+
+    /// <summary>EaseOutBack：末尾轻微过冲后回弹，让展开有「打开」的手感。</summary>
+    static float EaseOutBack(float t)
+    {
+        const float c1 = 1.70158f;
+        const float c3 = c1 + 1f;
+        float p = t - 1f;
+        return 1f + c3 * p * p * p + c1 * p * p;
     }
 
     void HidePointer()

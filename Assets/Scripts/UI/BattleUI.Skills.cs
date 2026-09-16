@@ -84,7 +84,8 @@ public partial class BattleUI : MonoBehaviour
             if (!has)
             {
                 slot.SetAvatar(null);
-                slot.SetSkillName(null, "无");
+                // 佣兵技能槽占位统一用「空」（ SetAvatar(null) 会把图标置透明，不会留白片 ）
+                slot.SetSkillName(null, "空");
                 slot.SetLevelText("");
                 slot.SetEnergyFill(0f);
                 if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);

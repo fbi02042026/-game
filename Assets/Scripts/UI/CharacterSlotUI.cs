@@ -30,6 +30,13 @@ public class CharacterSlotUI
     public Image jobIcon;
 
     private float _lastEnergy = 0f;
+    /// <summary>整体压暗前记录的每个 Graphic 原始颜色，解锁时按原样还原。</summary>
+    readonly System.Collections.Generic.Dictionary<Graphic, Color> _dimBackup =
+        new System.Collections.Generic.Dictionary<Graphic, Color>();
+    /// <summary>当前是否已整体压暗（避免每帧重复遍历）。</summary>
+    bool _dimmed;
+    /// <summary>压暗强度：0.32 左右能明显「暗掉」又不至于糊成一团。</summary>
+    const float DimScale = 0.32f;
 
     /// <summary>
     /// 更新槽位显示
@@ -38,6 +45,7 @@ public class CharacterSlotUI
     {
         if (root == null) return;
         root.SetActive(true);
+        ApplyDim(false);
         var le = root.GetComponent<UnityEngine.UI.LayoutElement>();
         if (le != null) le.ignoreLayout = false;
 
@@ -112,39 +120,108 @@ public class CharacterSlotUI
         if (exist != null)
         {
             go = exist.gameObject;
+            // 旧节点是「半透明黑遮罩 + 未解锁文案」：按需求去掉那层遮罩，只留一把锁。
+            var oldImg = go.GetComponent<Image>();
+            if (oldImg != null) oldImg.color = new Color(0f, 0f, 0f, 0f);
+            ApplyLockIcon(go.transform);
         }
         else
         {
             go = new GameObject("LockedOverlay", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             go.transform.SetParent(root.transform, false);
             var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(38f, 38f);
             var img = go.GetComponent<Image>();
-            img.color = new Color(0.04f, 0.04f, 0.06f, 0.62f);
             img.raycastTarget = false;
-
-            var txtGo = new GameObject("LockedText", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-            txtGo.transform.SetParent(go.transform, false);
-            var trt = txtGo.GetComponent<RectTransform>();
-            trt.anchorMin = new Vector2(0.08f, 0.34f);
-            trt.anchorMax = new Vector2(0.92f, 0.66f);
-            trt.offsetMin = Vector2.zero;
-            trt.offsetMax = Vector2.zero;
-            var t = txtGo.GetComponent<Text>();
-            t.alignment = TextAnchor.MiddleCenter;
-            t.fontSize = 14;
-            t.color = new Color(1f, 0.92f, 0.72f);
-            t.text = "未解锁";
-            t.raycastTarget = false;
-            var f = GameFonts.GetChinese();
-            if (f != null) t.font = f;
+            img.preserveAspect = true;
+            img.color = Color.white;
+            img.sprite = RuntimeLockSprite.Get();
         }
         lockedOverlay = go;
         go.transform.SetAsLastSibling();
         go.SetActive(false);
+    }
+
+    /// <summary>把已有 LockedOverlay 节点改造成「居中显示一把锁」。</summary>
+    static void ApplyLockIcon(Transform overlay)
+    {
+        if (overlay == null) return;
+        var icon = overlay.Find("LockIcon");
+        GameObject iconGo;
+        if (icon != null)
+        {
+            iconGo = icon.gameObject;
+        }
+        else
+        {
+            iconGo = new GameObject("LockIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            iconGo.transform.SetParent(overlay, false);
+            var irt = iconGo.GetComponent<RectTransform>();
+            irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
+            irt.pivot = new Vector2(0.5f, 0.5f);
+            irt.anchoredPosition = Vector2.zero;
+            irt.sizeDelta = new Vector2(38f, 38f);
+        }
+        var img = iconGo.GetComponent<Image>();
+        if (img != null)
+        {
+            img.raycastTarget = false;
+            img.preserveAspect = true;
+            img.color = Color.white;
+            img.sprite = RuntimeLockSprite.Get();
+        }
+        iconGo.SetActive(true);
+        // 旧的「未解锁」文案节点不再使用
+        for (int i = 0; i < overlay.childCount; i++)
+        {
+            var child = overlay.GetChild(i);
+            if (child != null && child != iconGo.transform && child.name != "LockIcon")
+                child.gameObject.SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// 整槽「全部暗掉」：把槽里所有 Image/Text 的颜色按 DimScale 压暗，解锁时按备份原样还原。
+    /// 锁图标自身不参与压暗，否则连锁都看不见了。
+    /// </summary>
+    void ApplyDim(bool dim)
+    {
+        if (root == null) return;
+        if (dim == _dimmed) return;
+        _dimmed = dim;
+        var graphics = root.GetComponentsInChildren<Graphic>(true);
+        for (int i = 0; i < graphics.Length; i++)
+        {
+            var g = graphics[i];
+            if (g == null) continue;
+            if (IsPartOfLockIcon(g.transform)) continue;
+            Color origColor;
+            if (!_dimBackup.TryGetValue(g, out origColor))
+            {
+                origColor = g.color;
+                _dimBackup[g] = origColor;
+            }
+            g.color = dim
+                ? new Color(origColor.r * DimScale, origColor.g * DimScale, origColor.b * DimScale, origColor.a)
+                : origColor;
+        }
+    }
+
+    /// <summary>锁图标及其子节点、LockedOverlay 容器本身，都不参与压暗。</summary>
+    bool IsPartOfLockIcon(Transform t)
+    {
+        if (lockedOverlay == null || t == null) return false;
+        var lockRoot = lockedOverlay.transform;
+        Transform cur = t;
+        while (cur != null)
+        {
+            if (cur == lockRoot) return true;
+            cur = cur.parent;
+        }
+        return false;
     }
 
     /// <summary>
@@ -334,6 +411,7 @@ public class CharacterSlotUI
     {
         EnsureLockedOverlay();
         if (lockedOverlay != null) lockedOverlay.SetActive(locked);
+        ApplyDim(locked);
         if (root != null)
             root.SetActive(true);
         if (locked)
@@ -369,6 +447,7 @@ public class CharacterSlotUI
         SetEnergyEnabled(false);
         if (root != null) root.SetActive(true);
         EnsureLockedOverlay();
+        ApplyDim(false);
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
         SetSkillBadge(null);
         SetJobIcon(null);               // 空槽不显示职业 icon
@@ -387,6 +466,7 @@ public class CharacterSlotUI
         if (root == null) return;
         root.SetActive(true);
         EnsureLockedOverlay();
+        ApplyDim(true);
         if (lockedOverlay != null)
             lockedOverlay.SetActive(true);
         ClearNumericDisplays();
@@ -401,6 +481,7 @@ public class CharacterSlotUI
         if (root == null) return;
         root.SetActive(true);
         EnsureLockedOverlay();
+        ApplyDim(true);
         if (lockedOverlay != null) lockedOverlay.SetActive(true);
         SetSkillBadge(null);
         SetJobIcon(null);               // 未解锁不显示职业 icon

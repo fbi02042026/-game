@@ -83,7 +83,9 @@ public class SkillAvatarUI
         {
             avatarImage.preserveAspect = true;
             avatarImage.sprite = icon;
-            // 不要隐藏空槽，保留槽位框体可见；没图就空白。
+            // 不要隐藏空槽，保留槽位框体可见；
+            // 但没图时必须把颜色置透明 —— sprite 为空的 Image 会渲染成一块白片。
+            avatarImage.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
             avatarImage.gameObject.SetActive(true);
         }
     }
