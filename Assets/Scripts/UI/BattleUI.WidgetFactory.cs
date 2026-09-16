@@ -44,6 +44,10 @@ public partial class BattleUI : MonoBehaviour
 
         BindRunSkillSlots();
         BindEquipQuickSlots();
+        // 若此刻已经在战斗中，遮罩状态不会发生变化（TickBattleMask 会提前 return），
+        // 这里补一次，保证技槽在绑定后立刻被顶到遮罩之上。
+        EnsureBattleMask();
+        RefreshSkillBarMaskState();
         Debug.Log($"[BattleUI] 底部快捷槽绑定 skill={runSkillSlots?.Count ?? 0} equip={equipQuickSlots?.Count ?? 0}");
     }
 

@@ -104,7 +104,8 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 战斗中盖住底部 HUD（血条/技槽/背包变暗且不可点），摇杆例外——由 BattleJoystick 提到遮罩之上。
+    /// 战斗中盖住底部 HUD（血条/技槽/背包变暗且不可点），摇杆与主动技槽例外——
+    /// 它们会被顶到遮罩之上（见 RefreshSkillBarMaskState）。
     /// 整理阶段（BattleLootMode）必须关掉，否则背包格子和技槽点不动。
     /// </summary>
     public void TickBattleMask()
@@ -118,6 +119,37 @@ public partial class BattleUI : MonoBehaviour
         _battleMask.SetActive(on);
         // 遮罩一开就把摇杆顶到它上面，否则摇杆接收不到射线
         if (on) BattleJoystick.Instance?.RaiseOrganizeAbove();
+        RefreshSkillBarMaskState();
+    }
+
+    /// <summary>
+    /// 战斗中把 4 个主动技槽（SkillBar）顶到遮罩之上。
+    /// 遮罩 zhezhao 是 BackpackPanel 的最后一个子节点（黑幕 alpha≈0.59，730×670），
+    /// 绘制顺序压在 SkillBar 上，战斗中整条技能栏被吃掉，表现就是「技能不见了」。
+    /// 顶到遮罩之上后关掉射线，保留「战斗中无法调整」的语义（遮罩只是变暗，不接点击）。
+    /// 整理阶段遮罩关闭，射线恢复，槽位照常可拖拽调序。
+    /// </summary>
+    public void RefreshSkillBarMaskState()
+    {
+        if (skillSlotRoot == null || _battleMask == null) return;
+        if (!_battleMaskOn)
+        {
+            SetGraphicsRaycast(skillSlotRoot, true);
+            return;
+        }
+        var maskTr = _battleMask.transform;
+        if (skillSlotRoot.parent == maskTr.parent
+            && skillSlotRoot.GetSiblingIndex() < maskTr.GetSiblingIndex())
+            skillSlotRoot.SetSiblingIndex(maskTr.GetSiblingIndex() + 1);
+        SetGraphicsRaycast(skillSlotRoot, false);
+    }
+
+    static void SetGraphicsRaycast(Transform root, bool on)
+    {
+        if (root == null) return;
+        var gs = root.GetComponentsInChildren<Graphic>(true);
+        for (int i = 0; i < gs.Length; i++)
+            if (gs[i] != null) gs[i].raycastTarget = on;
     }
 
     /// <summary>刷新下方网格背包。现在是 4×3=12 格且默认全开，
