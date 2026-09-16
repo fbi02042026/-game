@@ -14,11 +14,13 @@
     python Tools/CheckDanglingRefs.py --strict        # 有脚本类断链就以非 0 退出（CI/钩子用）
 
 判定：
-    guid 表 = Assets + Packages + Library/PackageCache 下所有 .meta 里的 guid
-    内置资源 guid（形如 0000000000000000?000000000000000）跳过
-    被引用的 guid 不在表里 => 悬空
+    1) 悬空引用：被引用的 guid 不在表里（含内置资源跳过）
+    2) 形态非法：.meta 的 guid 不是「32 位十六进制」也不是「56 字符 base64（解码 41 字节）」
+       —— 只有这两种形态团结引擎接受；44 字符 base64（解码 32 字节）会被拒绝并忽略该资源。
+       详见 guid_kind() 的注释，别再把 581 个合法 base64 当成非法去改。
 """
 import argparse
+import base64
 import pathlib
 import re
 import sys
@@ -28,6 +30,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 RG = re.compile(rb'guid:\s*([0-9A-Za-z+/\-_=]+)')
 BUILTIN = re.compile(r'^0{16}[0-9a-f]0{15}$')
+HEX32 = re.compile(r'^[0-9a-fA-F]{32}$')
 
 GUID_DIRS = ['Assets', 'Packages', 'Library/PackageCache']
 DEFAULT_SCAN = ['Assets/Resources/Prefabs', 'Assets/Scenes', 'Assets/Resources/UI']
@@ -39,6 +42,48 @@ NOISE = ('/Demo/', '/DemoResources/', 'PreviewScene', 'Sample',
          'Sprite Shaders Ultimate', 'Epic Toon FX', 'SPUM',
          'Hyperbit', 'Pixel Craft VFX URP', 'UIShaderEffects',
          '2D Pixel RPG Monster Pack', 'RPG Props and Items')
+
+
+def guid_kind(g):
+    """判断 .meta 里 guid 的形态。
+
+    2026-09-16 实测全工程 7746 个 .meta：
+      32 字符十六进制              x 7164  合法（标准形态）
+      56 字符 base64（解码 41 字节）x  581  合法（团结引擎自有格式，千万别改）
+      44 字符 base64（解码 32 字节）x    1  非法，引擎直接忽略该资源
+
+    早期版本曾把 581 个合法的 56 字符 base64 误判为非法并全量改写，
+    导致 582 个资源重导入、UI 大面积缺图。判定务必按字节数，不要只看"是不是 base64"。
+    """
+    if HEX32.match(g):
+        return 'hex32'
+    try:
+        raw = g.encode('ascii')
+        dec = base64.b64decode(raw + b'=' * (-len(raw) % 4))
+    except Exception:
+        return 'unknown'
+    if len(dec) == 41:
+        return 'b64-ok'      # 团结引擎合法格式
+    if len(dec) == 32:
+        return 'b64-bad'     # 唯一被引擎拒绝的形态
+    return 'unknown'
+
+
+def bad_form_metas():
+    """扫出形态非法的 .meta（引擎会忽略这些资源）。"""
+    out = []
+    for p in (ROOT / 'Assets').rglob('*.meta'):
+        try:
+            m = RG.search(p.read_bytes())
+        except Exception:
+            continue
+        if not m:
+            continue
+        g = m.group(1).decode()
+        k = guid_kind(g)
+        if k in ('b64-bad', 'unknown'):
+            out.append((p.relative_to(ROOT).as_posix(), g, k))
+    return out
 
 
 def build_guid_table():
@@ -139,10 +184,20 @@ def main():
             print('       ', f)
 
     print()
+    print('===== 形态非法的 .meta guid（引擎会忽略该资源）=====')
+    bad = bad_form_metas()
+    if not bad:
+        print('  无')
+    for rel, g, k in bad:
+        print('  [%s] %s' % (k, rel))
+        print('        guid=%s' % g)
+
+    print()
     print('===== 汇总 =====')
     print('  脚本类断链 guid 数 : %d' % len(real_script))
     print('  资源类断链 guid 数 : %d' % len(rows))
-    if args.strict and real_script:
+    print('  形态非法 .meta 数  : %d' % len(bad))
+    if args.strict and (real_script or bad):
         sys.exit(1)
 
 
