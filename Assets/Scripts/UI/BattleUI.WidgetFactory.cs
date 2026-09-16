@@ -36,6 +36,12 @@ public partial class BattleUI : MonoBehaviour
             equipSlotRoot = ResolveEquipSlotContainer(raw);
         }
 
+        // SkillBar 链路（BackpackPanel -> SkillBar）里任何一级被关掉，
+        // 表现就是「战斗中技能不见了」，连带挂在链路上的说明文字（如「战斗中无法调整」）也不显示。
+        // 这里在绑定前统一拉活，不动 prefab。
+        EnsureVisibleUpwards(backpack);
+        EnsureVisibleUpwards(skillSlotRoot);
+
         BindRunSkillSlots();
         BindEquipQuickSlots();
         Debug.Log($"[BattleUI] 底部快捷槽绑定 skill={runSkillSlots?.Count ?? 0} equip={equipQuickSlots?.Count ?? 0}");
@@ -56,6 +62,23 @@ public partial class BattleUI : MonoBehaviour
             if (c.childCount > 0) return c;
         }
         return first;
+    }
+
+    /// <summary>
+    /// 向上逐级拉活：prefab 合并或美术误操作可能把关掉某一级整条链路。
+    /// 只拉到 BattleUI 自身节点为止（不含），避免把整个 HUD 强行点亮。
+    /// </summary>
+    static void EnsureVisibleUpwards(Transform t)
+    {
+        var stop = Instance != null ? Instance.transform : null;
+        Transform cur = t;
+        int guard = 0;
+        while (cur != null && cur != stop && guard++ < 32)
+        {
+            if (!cur.gameObject.activeSelf)
+                cur.gameObject.SetActive(true);
+            cur = cur.parent;
+        }
     }
 
     /// <summary>
@@ -133,6 +156,7 @@ public partial class BattleUI : MonoBehaviour
         {
             Transform t = skillSlotRoot.GetChild(i);
             if (t == null) continue;
+            EnsureVisibleUpwards(t);
             var av = new SkillAvatarUI { root = t.gameObject };
             // 图标层：不能用 icon底 自身背景（会盖掉美术底图），统一补一个子层
             av.avatarImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
