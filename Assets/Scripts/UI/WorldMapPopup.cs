@@ -223,6 +223,7 @@ public class WorldMapPopup : MonoBehaviour
     void RefreshRegions()
     {
         if (_slots == null || _slots.Length == 0) BindOrBuildSlots();
+        bool sharedEnterUsed = false;
         for (int i = 0; i < _slots.Length; i++)
         {
             var slot = _slots[i];
@@ -247,7 +248,21 @@ public class WorldMapPopup : MonoBehaviour
                 slot.lockRoot.SetActive(!unlocked);
             if (slot.highlight != null)
                 slot.highlight.SetActive(selected);
+
+            // 「进入」按钮：优先用地块自带的那颗，没有才把共享的那颗挪过来
+            if (slot.enterButton != null)
+            {
+                slot.enterButton.gameObject.SetActive(selected && !cleared);
+            }
+            else if (selected && !cleared)
+            {
+                MoveEnterButtonTo(slot.root.transform as RectTransform);
+                sharedEnterUsed = true;
+            }
         }
+
+        if (!sharedEnterUsed && enterButton != null)
+            enterButton.gameObject.SetActive(false);
 
         if (titleText != null)
         {
@@ -550,6 +565,21 @@ public class WorldMapPopup : MonoBehaviour
                     lockRoot = lockT != null ? lockT.gameObject : null,
                     def = FindDef(ch)
                 };
+
+                // 地块自带的「进入」按钮（第一章没有）
+                var ebT = t.Find("EnterButton");
+                if (ebT != null)
+                {
+                    var eb = ebT.GetComponent<Button>();
+                    if (eb != null)
+                    {
+                        eb.onClick.RemoveAllListeners();
+                        eb.onClick.AddListener(OnEnterClicked);
+                        eb.gameObject.SetActive(false);
+                        slot.enterButton = eb;
+                    }
+                }
+
                 var btn = t.GetComponent<Button>();
                 if (btn != null)
                 {
@@ -615,5 +645,7 @@ public class WorldMapPopup : MonoBehaviour
         public GameObject root;
         public GameObject highlight;
         public GameObject lockRoot;
+        /// <summary>该地块自己的「进入」按钮（美术在每个 Region_X 下各放了一个）。为空则回退到共享按钮。</summary>
+        public Button enterButton;
     }
 }
