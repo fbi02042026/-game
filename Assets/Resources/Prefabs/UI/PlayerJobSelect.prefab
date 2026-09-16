@@ -211,7 +211,6 @@ GameObject:
   - component: {fileID: 1214279221145777468}
   - component: {fileID: 4240319849070519285}
   - component: {fileID: 2197785830330924456}
-  - component: {fileID: 200082201812755285}
   - component: {fileID: 5343450362049373338}
   m_Layer: 0
   m_HasEditorInfo: 1
@@ -328,18 +327,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &200082201812755285
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 622592142025646107}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b18e64294b2d97446bf62bc27a2b6153, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!225 &5343450362049373338
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -1302,7 +1289,6 @@ GameObject:
   - component: {fileID: 6527288013628419758}
   - component: {fileID: 3893155717864385324}
   - component: {fileID: 6114544547804574773}
-  - component: {fileID: 4258709872147114324}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: PlayerJobSelect
@@ -1395,18 +1381,6 @@ MonoBehaviour:
   m_BlockingMask:
     serializedVersion: 2
     m_Bits: 4294967295
---- !u!114 &4258709872147114324
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2814167132137108788}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 04eef37c06f7e1f478af8d9881f92ab4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &2873261496462456841
 GameObject:
   m_ObjectHideFlags: 0
@@ -4048,7 +4022,6 @@ GameObject:
   - component: {fileID: 3869147713759143375}
   - component: {fileID: 7236263667585970318}
   - component: {fileID: 7334034065090684661}
-  - component: {fileID: 8235193581101630633}
   - component: {fileID: 4788603707693359238}
   m_Layer: 0
   m_HasEditorInfo: 1
@@ -4165,18 +4138,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &8235193581101630633
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7266576826023440537}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b18e64294b2d97446bf62bc27a2b6153, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!225 &4788603707693359238
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -4201,7 +4162,6 @@ GameObject:
   - component: {fileID: 8067152820131351490}
   - component: {fileID: 5969765788399271608}
   - component: {fileID: 3759767426499726225}
-  - component: {fileID: 8225810520237762388}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: EnterRiftBtn
@@ -4312,18 +4272,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &8225810520237762388
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7305868887614971310}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b18e64294b2d97446bf62bc27a2b6153, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &7311246528377620994
 GameObject:
   m_ObjectHideFlags: 0
@@ -5014,7 +4962,6 @@ GameObject:
   - component: {fileID: 5278331630397198485}
   - component: {fileID: 9208408445920457259}
   - component: {fileID: 3995992913662229537}
-  - component: {fileID: 3892972876608583733}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: RefreshBtn
@@ -5125,18 +5072,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &3892972876608583733
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8633590330936904217}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b18e64294b2d97446bf62bc27a2b6153, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &8640728933012081964
 GameObject:
   m_ObjectHideFlags: 0
@@ -5421,7 +5356,6 @@ GameObject:
   - component: {fileID: 7372745618967106411}
   - component: {fileID: 1699483597261280957}
   - component: {fileID: 4064794417784754641}
-  - component: {fileID: 2601939824474743100}
   - component: {fileID: 7222790512779626363}
   m_Layer: 0
   m_HasEditorInfo: 1
@@ -5538,18 +5472,6 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
---- !u!114 &2601939824474743100
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9100393419207603812}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b18e64294b2d97446bf62bc27a2b6153, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!225 &7222790512779626363
 CanvasGroup:
   m_ObjectHideFlags: 0
