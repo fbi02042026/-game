@@ -30,9 +30,11 @@ public static class PlayerJobSelectPrefabGenerator
         // 把用户手工摆好的 PlayerJobSelect 反复覆盖成白模，甚至整文件删掉。
         if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null)
         {
-            if (PrefabHasMissingScript())
-                Debug.LogWarning("[PlayerJobSelectPrefabGenerator] PlayerJobSelect.prefab 存在 Missing Script，" +
-                                 "已跳过自动重建（避免覆盖美术成果）。需要清理请手动在 Inspector 里删组件。");
+            int miss = CountMissingScripts(go);
+            if (miss > 0)
+                Debug.LogWarning("[PlayerJobSelectPrefabGenerator] PlayerJobSelect.prefab 有 " + miss +
+                                 " 个 Missing Script 组件（历史上随外部资源入库带进来的，不是业务脚本）。" +
+                                 "点菜单 Tools/UI/清理选中预制体的 Missing Script 一键移除，或手动在根节点 Inspector 删除。");
             return;
         }
 
@@ -71,6 +73,59 @@ public static class PlayerJobSelectPrefabGenerator
         if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null) return;
         EnsureFolders();
         BuildAndSave(showDialog: false);
+    }
+
+    /// <summary>统计预制体（含子节点）上 Missing Script 组件数量。</summary>
+    static int CountMissingScripts(GameObject go)
+    {
+        if (go == null) return 0;
+        int n = 0;
+        var comps = go.GetComponentsInChildren<Component>(true);
+        for (int i = 0; i < comps.Length; i++)
+        {
+            var c = comps[i];
+            if (c == null) n++;   // Unity 对 Missing Script 的组件返回 fake null
+        }
+        return n;
+    }
+
+    /// <summary>
+    /// 一键移除当前选中预制体上的全部 Missing Script 组件（含子节点）。
+    /// 只删「脚本已丢失的空壳组件」，不碰任何美术数据，是纯垃圾清理。
+    /// </summary>
+    [MenuItem("Tools/UI/清理选中预制体的 Missing Script")]
+    public static void CleanMissingScriptsOfSelection()
+    {
+        var go = Selection.activeGameObject;
+        if (go == null)
+        {
+            var loaded = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+            if (loaded == null)
+            {
+                Debug.LogWarning("[PlayerJobSelectPrefabGenerator] 请先在 Hierarchy/P Project 里选中一个预制体实例。");
+                return;
+            }
+            go = (GameObject)PrefabUtility.InstantiatePrefab(loaded);
+        }
+        int n = 0;
+        var comps = go.GetComponentsInChildren<Component>(true);
+        for (int i = comps.Length - 1; i >= 0; i--)
+        {
+            var c = comps[i];
+            if (c == null) continue;
+        }
+        // GameObjectUtility 是官方提供的删除 Missing Script 的 API
+        var transforms = go.GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < transforms.Length; i++)
+        {
+            n += GameObjectUtility.RemoveMonoBehavioursWithMissingScript(transforms[i].gameObject);
+        }
+        if (n > 0)
+        {
+            EditorUtility.SetDirty(go);
+            AssetDatabase.SaveAssets();
+        }
+        Debug.Log("[PlayerJobSelectPrefabGenerator] 清理完成：移除 " + n + " 个 Missing Script 组件。");
     }
 
     static bool PrefabHasMissingScript()
