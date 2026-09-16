@@ -8,8 +8,10 @@ using UnityEngine;
 /// </summary>
 public static class RuntimeLockSprite
 {
-    /// <summary>美术真图的覆盖路径（Resources 下）。</summary>
-    const string ResPath = "UI/Icons/LockIcon";
+    /// <summary>打包用的路径（Resources 下，放一份即可优先命中）。</summary>
+    const string ResPath = "UI/Common/锁";
+    /// <summary>美术实际放图的位置：Assets/Art/UI/Common/锁.png。</summary>
+    const string ArtPath = "Assets/Art/UI/Common/锁.png";
 
     static Sprite _cached;
 
@@ -17,6 +19,7 @@ public static class RuntimeLockSprite
     {
         if (_cached != null) return _cached;
 
+        // 1) 优先用 Resources 下那份（打包后也能加载）
         var external = Resources.Load<Sprite>(ResPath);
         if (external != null)
         {
@@ -24,6 +27,17 @@ public static class RuntimeLockSprite
             return _cached;
         }
 
+        // 2) 编辑器下直接用美术放好的 Assets/Art/UI/Common/锁.png
+#if UNITY_EDITOR
+        var art = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(ArtPath);
+        if (art != null)
+        {
+            _cached = art;
+            return _cached;
+        }
+#endif
+
+        // 3) 都没有才用代码画的兜底图标
         _cached = Build();
         return _cached;
     }

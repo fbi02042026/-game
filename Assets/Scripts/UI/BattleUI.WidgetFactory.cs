@@ -159,7 +159,7 @@ public partial class BattleUI : MonoBehaviour
             EnsureVisibleUpwards(t);
             var av = new SkillAvatarUI { root = t.gameObject };
             // 图标层：不能用 icon底 自身背景（会盖掉美术底图），统一补一个子层
-            av.avatarImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
+            av.avatarImage = ResolveSlotIcon(t);
             av.labelText = t.GetComponentInChildren<Text>(true);   // 原「被动」底字，改成显示技能名
             // 右下角等级：美术在每个技能槽下放了 level 节点，优先用它；没有再运行时补
             av.levelText = FindTextNamed(t, "level", "Level", "SkillLevel")
@@ -197,10 +197,38 @@ public partial class BattleUI : MonoBehaviour
                 root = t.gameObject,
                 slotType = EquipSlotTypeOf(t.name, i)
             };
-            slot.iconImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
+            slot.iconImage = ResolveSlotIcon(t);
             slot.slotLabel = t.GetComponentInChildren<Text>(true);  // 头 / 胸甲 / 手 / 脚 / 左手 / 右手
             equipQuickSlots.Add(slot);
         }
+    }
+
+    /// <summary>
+    /// 取槽位图标层：**优先用美术自己摆的节点**（icon / ItemIcon / Icon，不区分大小写）。
+    /// 美术调好位置的节点必须优先，否则代码另建一层就会和他摆的图叠在一起。
+    /// 若同时存在美术节点与代码以前补建的 ItemIcon，把后者关掉。
+    /// </summary>
+    static Image ResolveSlotIcon(Transform slotRoot)
+    {
+        if (slotRoot == null) return null;
+        var art = FindImageNamedNoFallback(slotRoot, "icon", "ItemIcon", "Icon");
+        if (art != null)
+        {
+            KillRedundantGeneratedIcon(slotRoot, art);
+            art.preserveAspect = true;
+            art.raycastTarget = false;
+            return art;
+        }
+        return EnsureChildIcon(slotRoot);
+    }
+
+    /// <summary>代码补建的图标层固定叫 ItemIcon；若美术另有自己的节点，把代码那份关掉避免重叠。</summary>
+    static void KillRedundantGeneratedIcon(Transform slotRoot, Image keep)
+    {
+        if (slotRoot == null || keep == null) return;
+        var gen = FindDeepChildIgnoreCase(slotRoot, "ItemIcon");
+        if (gen != null && gen != keep.transform && gen.name == "ItemIcon")
+            gen.gameObject.SetActive(false);
     }
 
     /// <summary>在槽位下补一个居中图标层，避免覆盖 icon底 的背景图。</summary>
