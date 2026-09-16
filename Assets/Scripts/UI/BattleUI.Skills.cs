@@ -28,7 +28,7 @@ public partial class BattleUI : MonoBehaviour
             if (string.IsNullOrEmpty(id))
             {
                 slot.SetAvatar(null);
-                slot.SetSkillName(null);            // 空槽退回「被动」占位
+                slot.SetSkillName(null, "无");      // 空槽标注「无」
                 slot.SetLevelText("");
                 slot.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
                 slot.SetEnergyFill(0f);
@@ -79,8 +79,17 @@ public partial class BattleUI : MonoBehaviour
             var m = (mercs != null && i < mercs.Count) ? mercs[i] : null;
             var caster = m != null ? m.SkillCaster : null;
             bool has = caster != null && caster.HasActiveSkill;
-            slot.root.SetActive(has);
-            if (!has) continue;
+            // 空槽也不隐藏，保持槽位可见
+            slot.root.SetActive(true);
+            if (!has)
+            {
+                slot.SetAvatar(null);
+                slot.SetSkillName(null, "无");
+                slot.SetLevelText("");
+                slot.SetEnergyFill(0f);
+                if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
+                continue;
+            }
 
             slot.SetAvatar(MercSkillTable.LoadIcon(caster.ActiveSkillId));
             slot.SetEnergyFill(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(i) : 0f);

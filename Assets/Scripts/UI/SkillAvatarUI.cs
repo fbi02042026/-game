@@ -83,7 +83,8 @@ public class SkillAvatarUI
         {
             avatarImage.preserveAspect = true;
             avatarImage.sprite = icon;
-            avatarImage.gameObject.SetActive(icon != null);
+            // 不要隐藏空槽，保留槽位框体可见；没图就空白。
+            avatarImage.gameObject.SetActive(true);
         }
     }
 

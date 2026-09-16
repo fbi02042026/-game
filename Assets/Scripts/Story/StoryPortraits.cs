@@ -18,20 +18,20 @@ public static class StoryPortraits
     public const string Grey = "grey";
 
     // —— 叙事 V2.0 新增角色 ——
-    /// <summary>梅莉莎（M）：公会装备科记录员，装箱的人。第 3 章出场。</summary>
+    /// <summary>梅莉莎（M）：公会装备科记录员，装箱的人。第 3 章出场。立绘已到位。</summary>
     public const string Melissa = "melissa";
-    /// <summary>裂缝意志：第 8 章 HAPPY 结局出场。</summary>
+    /// <summary>裂缝意志：第 8 章 HAPPY 结局出场。已定案不出正式立绘，长期用占位图。</summary>
     public const string RiftWill = "riftwill";
     /// <summary>老板娘：酒馆 NPC。立绘复用前台小姐（MercPortraitSprites 已 alias 到 receptionist）。</summary>
     public const string Innkeeper = "innkeeper";
 
     /// <summary>
-    /// 尚未制作立绘的角色。缺图时不刷警告、返回 null，剧情文字照常显示。
-    /// 美术资源补齐后请把对应 ID 从这里移除。
+    /// 尚未制作正式立绘的角色。缺图时不打「疑似配错」的警告（占位图照常给）。
+    /// 资源补齐后把对应 ID 从这里移除。
     /// </summary>
     static readonly HashSet<string> AwaitingArt = new HashSet<string>
     {
-        Melissa, RiftWill
+        RiftWill
     };
 
     public static Sprite Get(string id)

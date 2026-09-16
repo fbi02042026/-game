@@ -69,10 +69,12 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         eq.equipName = tpl.equipName;
         if (eq.icon == null) eq.icon = tpl.icon ?? EquipIcons.Get(tpl.iconFileName);
 
-        if (!TryAcquireLoadoutItem(eq, out BackpackItem item) || item == null)
+        if (!TryEquipDirect(eq))
+        {
+            Debug.LogWarning($"[GridBackpack] 默认武器无法装备: {eq.equipName}");
             return false;
+        }
 
-        Hero.Instance?.costumeManager?.RefreshCostume();
         Debug.Log($"[GridBackpack] 已装备默认武器到普攻手: {eq.equipName} hand={eq.weaponHand}");
         return true;
     }
@@ -717,12 +719,20 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     }
 
     /// <summary>
-    /// 获取所有生效装备（包内全部；同部位唯一约束下即当前套）。
+    /// 获取所有生效装备：直接穿戴字典 + 背包内按同部位唯一约束生效的装备。
     /// </summary>
     public List<EquipInstance> GetEquippedItems()
     {
         var list = new List<EquipInstance>();
         var seen = new HashSet<EquipInstance>();
+        // 1) 直接穿戴
+        foreach (var kv in _equippedBySlot)
+        {
+            var e = kv.Value;
+            if (e == null || !seen.Add(e)) continue;
+            list.Add(e);
+        }
+        // 2) 背包内生效装备
         for (int i = 0; i < _items.Count; i++)
         {
             var e = _items[i]?.equip;
@@ -733,7 +743,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     }
 
     /// <summary>
-    /// 获取指定槽位的装备（读背包，无穿戴字典）。
+    /// 获取指定槽位的装备。优先读穿戴字典，再兜底查背包。
     /// </summary>
     public EquipInstance GetEquippedInSlot(EquipSlotType slot)
     {
@@ -746,6 +756,11 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
                 return GetEquippedInLogicalSlot(EquipSlotType.OffHand);
         }
 
+        // 1) 直接穿戴字典
+        if (_equippedBySlot.TryGetValue(slot, out var direct) && direct != null)
+            return direct;
+
+        // 2) 背包内按 slotType 匹配
         for (int i = 0; i < _items.Count; i++)
         {
             var e = _items[i]?.equip;
@@ -755,9 +770,21 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         return null;
     }
 
-    /// <summary>按逻辑主手/副手查包内武器。</summary>
+    /// <summary>
+    /// 按逻辑主手/副手查当前生效武器。
+    /// 优先读穿戴字典（TryEquipDirect / EquipItem 写入），再兜底查背包格子。
+    /// </summary>
     public EquipInstance GetEquippedInLogicalSlot(EquipSlotType logicalSlot)
     {
+        // 1) 直接穿戴的装备（不进背包）
+        foreach (var kv in _equippedBySlot)
+        {
+            var e = kv.Value;
+            if (e == null || !WeaponLoadoutRules.IsLoadoutItem(e)) continue;
+            if (MatchesLogicalWeaponSlot(e, logicalSlot))
+                return e;
+        }
+        // 2) 背包里的武器（旧路径 / 奖励入包）
         for (int i = 0; i < _items.Count; i++)
         {
             var e = _items[i]?.equip;

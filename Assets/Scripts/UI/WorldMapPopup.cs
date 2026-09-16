@@ -232,10 +232,10 @@ public class WorldMapPopup : MonoBehaviour
             bool selected = slot.chapterId == _selectedChapter;
             bool cleared = IsCleared(slot.chapterId);
             // 已通关的地块不可再进（暗掉 + 不可点）
-            var btn = slot.root.GetComponent<Button>();
+            var btn = (slot.visual != null ? slot.visual : slot.root).GetComponent<Button>();
             if (btn != null) btn.interactable = unlocked && !cleared;
 
-            var img = slot.root.GetComponent<Image>();
+            var img = (slot.visual != null ? slot.visual : slot.root).GetComponent<Image>();
             if (img != null && slot.def != null)
             {
                 if (!unlocked) img.color = slot.def.lockedColor;        // 没解锁 → 灰显
@@ -557,10 +557,21 @@ public class WorldMapPopup : MonoBehaviour
                 if (ch < 1) continue;
                 var hiT = t.Find("Highlight");
                 var lockT = t.Find("Lock");
+
+                // 外层 Region_X 可能只是空容器，真正的 Image/Button 在同名的内层子节点上。
+                // 先找内层同名节点，没有就用外层自己。
+                var visualT = t;
+                if (t.GetComponent<Image>() == null)
+                {
+                    var inner = t.Find(t.name);
+                    if (inner != null && inner.GetComponent<Image>() != null) visualT = inner;
+                }
+
                 var slot = new RegionSlot
                 {
                     chapterId = ch,
                     root = t.gameObject,
+                    visual = visualT.gameObject,
                     highlight = hiT != null ? hiT.gameObject : null,
                     lockRoot = lockT != null ? lockT.gameObject : null,
                     def = FindDef(ch)
@@ -580,7 +591,9 @@ public class WorldMapPopup : MonoBehaviour
                     }
                 }
 
-                var btn = t.GetComponent<Button>();
+                // 点击：优先挂在内层（有 Image 才有射线命中）；内层没有就退回外层
+                var btn = visualT.GetComponent<Button>();
+                if (btn == null) btn = t.GetComponent<Button>();
                 if (btn != null)
                 {
                     int idx = list.Count;
@@ -643,6 +656,8 @@ public class WorldMapPopup : MonoBehaviour
         public RegionDef def;
         public int chapterId;
         public GameObject root;
+        /// <summary>真正带 Image 的节点（外层 Region_X 常常只是空容器，图在同名的内层子节点上）。</summary>
+        public GameObject visual;
         public GameObject highlight;
         public GameObject lockRoot;
         /// <summary>该地块自己的「进入」按钮（美术在每个 Region_X 下各放了一个）。为空则回退到共享按钮。</summary>
