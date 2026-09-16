@@ -13,6 +13,7 @@ public static class PlayerJobSelectPrefabGenerator
 {
     const string PrefabPath = "Assets/Resources/Prefabs/UI/PlayerJobSelect.prefab";
     const string RebuildOnceKey = "PlayerJobSelectPrefabGenerator.RebuiltMissing";
+    const string MissingWarnKey = "PlayerJobSelectPrefabGenerator.WarnedMissing";
 
     /// <summary>缺 prefab 时延迟创建；已存在则什么都不做（绝不删除/重建）。</summary>
     [InitializeOnLoadMethod]
@@ -28,13 +29,18 @@ public static class PlayerJobSelectPrefabGenerator
         // 只在「文件真的不存在」时生成一次白模。
         // 绝不再因为 Missing Script 就删掉美术调好的预制体 —— 历史上这个自动重建
         // 把用户手工摆好的 PlayerJobSelect 反复覆盖成白模，甚至整文件删掉。
-        if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null)
+        var existing = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+        if (existing != null)
         {
-            int miss = CountMissingScripts(go);
-            if (miss > 0)
+            int miss = CountMissingScripts(existing);
+            // 每个编辑器会话只提示一次（delayCall 会在每次编译后重跑，否则会反复弹同一条警告）
+            if (miss > 0 && !SessionState.GetBool(MissingWarnKey, false))
+            {
+                SessionState.SetBool(MissingWarnKey, true);
                 Debug.LogWarning("[PlayerJobSelectPrefabGenerator] PlayerJobSelect.prefab 有 " + miss +
                                  " 个 Missing Script 组件（历史上随外部资源入库带进来的，不是业务脚本）。" +
                                  "点菜单 Tools/UI/清理选中预制体的 Missing Script 一键移除，或手动在根节点 Inspector 删除。");
+            }
             return;
         }
 
@@ -96,36 +102,38 @@ public static class PlayerJobSelectPrefabGenerator
     [MenuItem("Tools/UI/清理选中预制体的 Missing Script")]
     public static void CleanMissingScriptsOfSelection()
     {
-        var go = Selection.activeGameObject;
-        if (go == null)
+        var sel = Selection.activeGameObject;
+        // 选中了预制体就处理它；没选中则默认处理 PlayerJobSelect.prefab
+        string assetPath = sel != null ? AssetDatabase.GetAssetPath(sel) : PrefabPath;
+        if (string.IsNullOrEmpty(assetPath)
+            || !assetPath.EndsWith(".prefab", System.StringComparison.OrdinalIgnoreCase))
         {
-            var loaded = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
-            if (loaded == null)
-            {
-                Debug.LogWarning("[PlayerJobSelectPrefabGenerator] 请先在 Hierarchy/P Project 里选中一个预制体实例。");
-                return;
-            }
-            go = (GameObject)PrefabUtility.InstantiatePrefab(loaded);
+            Debug.LogWarning("[PlayerJobSelectPrefabGenerator] 请先在 Project 里选中一个预制体；" +
+                             "不选则默认处理 PlayerJobSelect.prefab。");
+            return;
         }
+
+        // 直接改预制体资源本体：LoadPrefabContents → 清理 → SaveAsPrefabAsset，
+        // 不在场景里留实例，也不需要手动 Apply。
+        var root = PrefabUtility.LoadPrefabContents(assetPath);
         int n = 0;
-        var comps = go.GetComponentsInChildren<Component>(true);
-        for (int i = comps.Length - 1; i >= 0; i--)
+        try
         {
-            var c = comps[i];
-            if (c == null) continue;
+            // GameObjectUtility 是官方提供的删除 Missing Script 的 API
+            var transforms = root.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < transforms.Length; i++)
+            {
+                if (transforms[i] == null) continue;
+                n += GameObjectUtility.RemoveMonoBehavioursWithMissingScript(transforms[i].gameObject);
+            }
+            if (n > 0)
+                PrefabUtility.SaveAsPrefabAsset(root, assetPath);
         }
-        // GameObjectUtility 是官方提供的删除 Missing Script 的 API
-        var transforms = go.GetComponentsInChildren<Transform>(true);
-        for (int i = 0; i < transforms.Length; i++)
+        finally
         {
-            n += GameObjectUtility.RemoveMonoBehavioursWithMissingScript(transforms[i].gameObject);
+            PrefabUtility.UnloadPrefabContents(root);
         }
-        if (n > 0)
-        {
-            EditorUtility.SetDirty(go);
-            AssetDatabase.SaveAssets();
-        }
-        Debug.Log("[PlayerJobSelectPrefabGenerator] 清理完成：移除 " + n + " 个 Missing Script 组件。");
+        Debug.Log("[PlayerJobSelectPrefabGenerator] " + assetPath + " 清理完成：移除 " + n + " 个 Missing Script 组件。");
     }
 
     static bool PrefabHasMissingScript()
