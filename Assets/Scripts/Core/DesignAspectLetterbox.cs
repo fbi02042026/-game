@@ -30,6 +30,10 @@ public static class DesignAspectLetterbox
     /// </summary>
     public static void ApplyFallbackIfNeeded(Camera primary = null)
     {
+        // 只在运行时生效。编辑模式下执行会：① DontDestroyOnLoad 抛异常（非 play mode 不允许）
+        // ② 把相机 rect 写进场景，导致场景里永久出现黑竖条 / 多出 DesignAspectLetterboxCam 节点。
+        if (!Application.isPlaying) return;
+
         if (primary == null)
             primary = Camera.main != null ? Camera.main : UICanvasSetup.ResolveUiCamera();
 
@@ -59,6 +63,7 @@ public static class DesignAspectLetterbox
 
     public static void RefreshIfResolutionChanged()
     {
+        if (!Application.isPlaying) return;
         if (Screen.width == _lastW && Screen.height == _lastH) return;
         ApplyFallbackIfNeeded();
     }
@@ -91,6 +96,8 @@ public static class DesignAspectLetterbox
 
     static void EnsureBarsCamera()
     {
+        // 双保险：编辑模式下绝不创建相机 / 绝不调 DontDestroyOnLoad
+        if (!Application.isPlaying) return;
         if (_barsCam != null) return;
         var go = new GameObject("DesignAspectLetterboxCam");
         Object.DontDestroyOnLoad(go);

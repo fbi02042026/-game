@@ -4,15 +4,17 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 仅首次白模：已有完好 PlayerJobSelect.prefab 时拒绝覆盖。
-/// Missing Script / 文件缺失时允许重建一次。
+/// 仅「文件完全不存在」时生成一次白模。
+/// 2026-09-16 起：**不再因为 Missing Script 删除/重建预制体** ——
+/// 历史上这个自动重建把美术手工摆好的 PlayerJobSelect 反复覆盖成白模，
+/// 最后一次甚至把 .prefab 和 .meta 整个删掉。
 /// </summary>
 public static class PlayerJobSelectPrefabGenerator
 {
     const string PrefabPath = "Assets/Resources/Prefabs/UI/PlayerJobSelect.prefab";
     const string RebuildOnceKey = "PlayerJobSelectPrefabGenerator.RebuiltMissing";
 
-    /// <summary>缺 prefab 时延迟创建；Missing Script 时本会话重建一次。</summary>
+    /// <summary>缺 prefab 时延迟创建；已存在则什么都不做（绝不删除/重建）。</summary>
     [InitializeOnLoadMethod]
     static void EnsurePrefabExistsOnce()
     {
@@ -22,29 +24,42 @@ public static class PlayerJobSelectPrefabGenerator
     static void TryEnsurePrefab()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode) return;
-        if (TryRebuildIfBrokenOrMissing())
+
+        // 只在「文件真的不存在」时生成一次白模。
+        // 绝不再因为 Missing Script 就删掉美术调好的预制体 —— 历史上这个自动重建
+        // 把用户手工摆好的 PlayerJobSelect 反复覆盖成白模，甚至整文件删掉。
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null)
+        {
+            if (PrefabHasMissingScript())
+                Debug.LogWarning("[PlayerJobSelectPrefabGenerator] PlayerJobSelect.prefab 存在 Missing Script，" +
+                                 "已跳过自动重建（避免覆盖美术成果）。需要清理请手动在 Inspector 里删组件。");
             return;
-        if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null) return;
+        }
+
         EnsureFolders();
         BuildAndSave(showDialog: false);
         Debug.Log("[PlayerJobSelectPrefabGenerator] 首次自动生成白模 prefab（之后不会覆盖）");
     }
 
+    /// <summary>已废弃：自动重建已永久禁用，不再删除美术成果。</summary>
+    [System.Obsolete("禁止自动重建：会覆盖美术成果")]
+    static bool TryRebuildIfBrokenOrMissing()
+    {
+        return false;
+    }
+
     [MenuItem("Tools/UI/生成职业三选一预制体（仅首次白模）")]
     public static void Generate()
     {
-        if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null && !PrefabHasMissingScript())
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null)
         {
             EditorUtility.DisplayDialog("职业三选一预制体",
-                "已存在完好的 PlayerJobSelect.prefab，禁止覆盖。\n\n" +
+                "已存在 PlayerJobSelect.prefab，禁止覆盖、禁止删除。\n\n" +
                 "请直接在 Inspector 改 Sprite/布局；逻辑问题只改 PlayerJobSelectUI.cs。",
                 "OK");
             Selection.activeObject = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
             return;
         }
-
-        if (PrefabHasMissingScript())
-            AssetDatabase.DeleteAsset(PrefabPath);
 
         EnsureFolders();
         BuildAndSave(showDialog: true);
@@ -52,24 +67,10 @@ public static class PlayerJobSelectPrefabGenerator
 
     public static void GenerateBatch()
     {
-        EnsureFolders();
-        if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null && !PrefabHasMissingScript())
-            return;
-        if (PrefabHasMissingScript())
-            AssetDatabase.DeleteAsset(PrefabPath);
-        BuildAndSave(showDialog: false);
-    }
-
-    static bool TryRebuildIfBrokenOrMissing()
-    {
-        if (!PrefabHasMissingScript()) return false;
-        if (SessionState.GetBool(RebuildOnceKey, false)) return false;
-        SessionState.SetBool(RebuildOnceKey, true);
-        AssetDatabase.DeleteAsset(PrefabPath);
+        // 已存在就什么都不做 —— 不再删除重建
+        if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) != null) return;
         EnsureFolders();
         BuildAndSave(showDialog: false);
-        Debug.Log("[PlayerJobSelectPrefabGenerator] 检测到 Missing Script，已重建白模 prefab（本会话仅一次）");
-        return true;
     }
 
     static bool PrefabHasMissingScript()
