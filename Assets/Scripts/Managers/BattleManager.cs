@@ -196,6 +196,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             var s = skills[i];
             if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
             if (sys.IsOnCooldown(s.skillId)) continue;
+            // 2026-09-17：冷却好≠该放，还要等技能自己的战场状态触发条件（血线/怪群等）。
+            if (!PlayerSkillPassive.IsTriggerMet(s.skillId)) continue;
             return i;
         }
         return -1;
