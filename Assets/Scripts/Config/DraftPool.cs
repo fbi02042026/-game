@@ -343,10 +343,10 @@ public static class DraftPool
             int level = Mathf.Max(1, 1 + heroLv / 2);
             int weight = def.Rarity == MercRosterDefs.MercRarity.Legendary ? 2
                 : def.Rarity == MercRosterDefs.MercRarity.Rare ? 5 : 8;
-            SkillRarity rar = def.Rarity == MercRosterDefs.MercRarity.Legendary ? SkillRarity.Legendary
-                : def.Rarity == MercRosterDefs.MercRarity.Rare ? SkillRarity.Rare : SkillRarity.Common;
-            string rarName = def.Rarity == MercRosterDefs.MercRarity.Legendary ? "传说"
-                : def.Rarity == MercRosterDefs.MercRarity.Rare ? "稀有" : "普通";
+            // 2026-09-17 稀有度映射统一走 SkillRarityUtil（三档对三档，佣兵不出「史诗」），
+            // 卡面文字也随之统一，别再各写一份三目。
+            SkillRarity rar = SkillRarityUtil.FromMerc(def.Rarity);
+            string rarName = SkillRarityUtil.DisplayName(rar);
 
             list.Add(new WeightedCard
             {
@@ -391,7 +391,7 @@ public static class DraftPool
                     HireId = m.hireId,
                     Title = m.displayName,
                     Desc = $"等级 Lv{m.level} → Lv{next}　生命/攻击成长",
-                    Rarity = MercRarityToSkillRarity(m.star),
+                    Rarity = SkillRarityUtil.FromMercStar(m.star),
                     Tag = SynergyTag.Summon,
                     Star = Mathf.Max(1, m.star),
                     MercLevel = next,
@@ -425,7 +425,7 @@ public static class DraftPool
                     HireId = m.hireId,
                     Title = m.displayName,
                     Desc = $"★{star} → ★{star + 1}　星级 +1，同时等级 +1",
-                    Rarity = MercRarityToSkillRarity(star + 1),
+                    Rarity = SkillRarityUtil.FromMercStar(star + 1),
                     Tag = SynergyTag.Summon,
                     Star = star + 1,
                     MercLevel = Mathf.Max(1, m.level) + 1,
@@ -438,13 +438,9 @@ public static class DraftPool
         return list;
     }
 
-    static SkillRarity MercRarityToSkillRarity(int star)
-    {
-        if (star >= 5) return SkillRarity.Legendary;
-        if (star >= 4) return SkillRarity.Epic;
-        if (star >= 2) return SkillRarity.Rare;
-        return SkillRarity.Common;
-    }
+    // 2026-09-17 删除私有 MercRarityToSkillRarity(star)：它与 MercSkillMapping.StarToRarity 口径不一致
+    // （把 ★4 判成 Epic、★2 判成 Rare），导致同一佣兵图鉴是「稀有」、抽卡卡面是「史诗」。
+    // 现统一走 SkillRarityUtil.FromMercStar。
 
     static SkillRarity MapRarity(Rarity r)
     {

@@ -61,16 +61,37 @@ public static class SkillRarityUtil
         }
     }
 
-    /// <summary>稀有度色调（深色底上可读）。</summary>
-    public static Color Tint(SkillRarity r)
+    /// <summary>
+    /// 稀有度色调（深色底上可读）。
+    /// 2026-09-17 起色值统一收到 <see cref="RarityPalette"/>，这里只做转发，
+    /// 别把色值抄回来——本项目曾因此出现 5 份互不一致的稀有度色表。
+    /// </summary>
+    public static Color Tint(SkillRarity r) => RarityPalette.Get(r);
+
+    /// <summary>
+    /// 佣兵稀有度 → 技能稀有度。**三档对三档**：普通↔普通、稀有↔稀有、传说↔传说。
+    /// 佣兵没有「史诗」档，不要给它编一个出来。
+    /// </summary>
+    public static SkillRarity FromMerc(MercRosterDefs.MercRarity r)
     {
         switch (r)
         {
-            case SkillRarity.Legendary: return new Color(1f, 0.72f, 0.20f);
-            case SkillRarity.Epic: return new Color(0.72f, 0.42f, 0.95f);
-            case SkillRarity.Rare: return new Color(0.35f, 0.68f, 0.98f);
-            default: return new Color(0.80f, 0.82f, 0.86f);
+            case MercRosterDefs.MercRarity.Legendary: return SkillRarity.Legendary;
+            case MercRosterDefs.MercRarity.Rare: return SkillRarity.Rare;
+            default: return SkillRarity.Common;
         }
+    }
+
+    /// <summary>
+    /// 佣兵星级 → 技能稀有度。口径**必须**与 <see cref="MercSkillMapping.StarToRarity"/> 一致
+    /// （★≥5 传说 / ★≥3 稀有 / 其余普通），否则同一个佣兵在图鉴是「稀有」、在抽卡卡面是「史诗」。
+    /// 2026-09-17 修：原 DraftPool 私有映射把 ★4 判成 Epic、★2 判成 Rare，已按本条统一。
+    /// </summary>
+    public static SkillRarity FromMercStar(int star)
+    {
+        if (star >= 5) return SkillRarity.Legendary;
+        if (star >= 3) return SkillRarity.Rare;
+        return SkillRarity.Common;
     }
 }
 

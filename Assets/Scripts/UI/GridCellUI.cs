@@ -126,7 +126,8 @@ public class GridCellUI
         }
         if (rarityFrame != null)
         {
-            Color rarityColor = GetRarityColor(item.rarity);
+            // 统一色表：原 GetRarityColor 用的是 Color.blue / Color.green 纯色，与本项目柔和色板不符。
+            Color rarityColor = RarityPalette.Get(item.rarity);
             rarityFrame.color = rarityColor;
         }
     }
@@ -171,16 +172,6 @@ public class GridCellUI
         SetEmptyVisual();
     }
 
-    Color GetRarityColor(Rarity r)
-    {
-        switch (r)
-        {
-            case Rarity.Common: return new Color(0.7f, 0.7f, 0.7f);
-            case Rarity.Uncommon: return Color.green;
-            case Rarity.Rare: return Color.blue;
-            case Rarity.Epic: return new Color(0.6f, 0.2f, 0.8f);
-            case Rarity.Legendary: return new Color(1f, 0.6f, 0f);
-            default: return Color.white;
-        }
-    }
+    // 2026-09-17 删除本地 GetRarityColor：原先用 Color.green / Color.blue 等 Unity 内置纯色，
+    // 与技能/佣兵的稀有度色板完全是两套。现统一取 RarityPalette。
 }

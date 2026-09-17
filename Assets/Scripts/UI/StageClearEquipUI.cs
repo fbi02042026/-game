@@ -252,7 +252,7 @@ public class StageClearEquipUI : MonoBehaviour
 
             var eq = _rewards[i];
             bool sel = i == _selected;
-            card.color = sel ? RarityColor(eq.rarity) : new Color(0.18f, 0.16f, 0.22f, 1f);
+            card.color = sel ? RarityPalette.GetDeep(eq.rarity) : new Color(0.18f, 0.16f, 0.22f, 1f);
             EquipIcons.Resolve(eq);
             var icon = card.transform.Find("Icon")?.GetComponent<Image>();
             if (icon != null)
@@ -356,17 +356,8 @@ public class StageClearEquipUI : MonoBehaviour
         return sb.ToString();
     }
 
-    static Color RarityColor(Rarity r)
-    {
-        switch (r)
-        {
-            case Rarity.Uncommon: return new Color(0.2f, 0.45f, 0.25f, 1f);
-            case Rarity.Rare: return new Color(0.2f, 0.35f, 0.55f, 1f);
-            case Rarity.Epic: return new Color(0.4f, 0.25f, 0.55f, 1f);
-            case Rarity.Legendary: return new Color(0.55f, 0.4f, 0.15f, 1f);
-            default: return new Color(0.35f, 0.35f, 0.38f, 1f);
-        }
-    }
+    // 2026-09-17 删除本地 RarityColor：与 EquipDropPopupUI 里那份逐字重复，
+    // 色值即 RarityPalette 亮档 ×0.55，统一走 RarityPalette.GetDeep。
 
     static void AnchorTop(RectTransform rt, float y, float w, float h)
     {

@@ -607,7 +607,7 @@ public class AdventureLogCodexPanel
         }
     }
 
-    static Color MercRarityColor(MercRosterDefs.MercRarity rarity) => MercRarityColors.Get(rarity);
+    static Color MercRarityColor(MercRosterDefs.MercRarity rarity) => RarityPalette.Get(rarity);
 
     void ApplyPortrait(Transform cell, Sprite sp, bool lit)
     {

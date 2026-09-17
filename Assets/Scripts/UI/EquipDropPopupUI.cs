@@ -263,7 +263,7 @@ public class EquipDropPopupUI : MonoBehaviour
             if (c.icon == null && c.root != null)
                 c.icon = FindDeep(c.root.transform, "Icon")?.GetComponent<Image>();
             if (c.background != null)
-                c.background.color = sel ? RarityColor(eq.rarity) : new Color(0.18f, 0.16f, 0.22f, 1f);
+                c.background.color = sel ? RarityPalette.GetDeep(eq.rarity) : new Color(0.18f, 0.16f, 0.22f, 1f);
             if (c.selectedMark != null)
                 c.selectedMark.SetActive(sel && count > 1);
             if (c.icon != null)
@@ -800,17 +800,8 @@ public class EquipDropPopupUI : MonoBehaviour
         return sb.ToString();
     }
 
-    static Color RarityColor(Rarity r)
-    {
-        switch (r)
-        {
-            case Rarity.Uncommon: return new Color(0.2f, 0.45f, 0.25f, 1f);
-            case Rarity.Rare: return new Color(0.2f, 0.35f, 0.55f, 1f);
-            case Rarity.Epic: return new Color(0.4f, 0.25f, 0.55f, 1f);
-            case Rarity.Legendary: return new Color(0.55f, 0.4f, 0.15f, 1f);
-            default: return new Color(0.35f, 0.35f, 0.38f, 1f);
-        }
-    }
+    // 2026-09-17 删除本地 RarityColor：它的暗色调正好等于 RarityPalette 亮档 ×0.55，
+    // 已抽成 RarityPalette.GetDeep 共用。同一份色值不再在两个弹窗里各写一遍。
 
     // ===== 结构搭建（运行时兜底 + 编辑器生成预制体共用）=====
 

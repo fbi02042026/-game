@@ -252,10 +252,10 @@ public class Mercenary : UnitBase
     void ApplyNameLabelColor()
     {
         if (_nameLabel == null) return;
-        var rarity = MercRarityColors.ResolveMercRarity(mercId);
-        _nameLabel.color = MercRarityColors.Get(rarity);
+        var rarity = RarityPalette.ResolveMercRarity(mercId);
+        _nameLabel.color = RarityPalette.Get(rarity);
         if (_nameOutlineLabels == null) return;
-        var outline = MercRarityColors.GetOutline();
+        var outline = RarityPalette.Outline;
         for (int i = 0; i < _nameOutlineLabels.Length; i++)
         {
             if (_nameOutlineLabels[i] != null)
@@ -354,7 +354,7 @@ public class Mercenary : UnitBase
             o.anchor = TextAnchor.MiddleCenter;
             o.alignment = TextAlignment.Center;
             o.fontStyle = FontStyle.Bold;
-            o.color = MercRarityColors.GetOutline();
+            o.color = RarityPalette.Outline;
             _nameOutlineLabels[i] = o;
             _nameOutlineRenderers[i] = oGo.GetComponent<MeshRenderer>();
         }

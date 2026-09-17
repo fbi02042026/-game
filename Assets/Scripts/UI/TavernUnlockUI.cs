@@ -164,7 +164,7 @@ public class TavernUnlockUI : MonoBehaviour
 
         c.rarityText = CreateTxt(bg.transform, "Rarity", RarityName(def.Rarity), 20, TextAnchor.MiddleCenter);
         SetRect(c.rarityText.rectTransform, 0.5f, 0.67f, 0f, 0f, 250f, 28f);
-        c.rarityText.color = RarityColor(def.Rarity);
+        c.rarityText.color = RarityPalette.Get(def.Rarity);
 
         c.btn = CreateBtn(bg.transform, "UnlockBtn", "解锁", new Vector2(0f, -95f), new Vector2(220f, 52f));
         c.btnLabel = c.btn.GetComponentInChildren<Text>();
@@ -312,15 +312,9 @@ public class TavernUnlockUI : MonoBehaviour
         }
     }
 
-    static Color RarityColor(MercRosterDefs.MercRarity r)
-    {
-        switch (r)
-        {
-            case MercRosterDefs.MercRarity.Legendary: return new Color(1f, 0.72f, 0.32f);
-            case MercRosterDefs.MercRarity.Rare: return new Color(0.58f, 0.78f, 1f);
-            default: return new Color(0.82f, 0.86f, 0.92f);
-        }
-    }
+    // 2026-09-17 删掉本地 RarityColor：它原先自成一套
+    // （传说=橙 1/0.72/0.32、稀有=淡蓝 0.58/0.78/1、普通=灰白 0.82/0.86/0.92），
+    // 与中央色表不一致 —— 同一个佣兵在酒馆是橙、在图鉴是金。色值统一由 RarityPalette 提供。
 
     // ============================================================
     // UI 小工具
