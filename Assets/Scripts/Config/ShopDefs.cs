@@ -22,7 +22,8 @@ public static class ShopDefs
         Fragment,   // 技能碎片（史诗）
         Gacha,      // 技能券：随机解锁未解锁的技能，重复转碎片
         Resource,   // 资源补给
-        Material    // 强化 / 分解材料
+        Material,   // 强化 / 分解材料
+        Merc        // 解锁佣兵（酒馆名册不列的那部分，见 MercRosterDefs.ShopRoster）
     }
 
     public class Item
@@ -35,6 +36,8 @@ public static class ShopDefs
         public long price;
         /// <summary>Kind=Skill / Fragment 时填技能 id。</summary>
         public string skillId;
+        /// <summary>Kind=Merc 时填佣兵 HireId（H001~H022）。</summary>
+        public string mercId;
         /// <summary>Kind=Fragment 时填一次买几片。</summary>
         public int fragmentCount;
         /// <summary>Kind=Gacha 时填抽取次数。</summary>
@@ -48,7 +51,8 @@ public static class ShopDefs
         public int showFromChapter;
     }
 
-    public static readonly Item[] All =
+    /// <summary>手写货架：技能 / 碎片 / 抽卡 / 补给 / 材料。</summary>
+    static readonly Item[] Fixed =
     {
         // ================= 技能 · 普通（金币直购）=================
         // 这四个都是「等 2~4 章才会白给」的技能，花钱提前 1~2 章拿到。
@@ -174,6 +178,54 @@ public static class ShopDefs
         },
     };
 
+    /// <summary>
+    /// 全部商品 = 手写货架 + 佣兵货架。
+    /// 佣兵不手写：价格与归属跟着 MercRosterDefs 走，避免两处各抄一份后漂移。
+    /// </summary>
+    public static readonly Item[] All = BuildAll();
+
+    static Item[] BuildAll()
+    {
+        var list = new List<Item>(Fixed);
+        var shopMercs = MercRosterDefs.ShopRoster;
+        for (int i = 0; i < shopMercs.Count; i++)
+            list.Add(MercItem(shopMercs[i]));
+        return list.ToArray();
+    }
+
+    /// <summary>
+    /// 佣兵商品。**商店只挂普通档，直接卖、不加门槛**（用户 2026-09-17 定：好货只走酒馆）。
+    /// 稀有 / 传说留在酒馆名册，门槛见 <see cref="MercUnlockGate"/>。
+    /// </summary>
+    static Item MercItem(MercRosterDefs.Def def)
+    {
+        return new Item
+        {
+            id = "shop_merc_" + def.HireId,
+            name = def.Name + "·" + def.Nickname,
+            desc = MercDesc(def),
+            kind = Kind.Merc,
+            currency = ResourceWallet.ResourceType.Gold,
+            price = MercRosterDefs.UnlockCost(def),
+            mercId = def.HireId,
+            showFromChapter = 0
+        };
+    }
+
+    static string MercDesc(MercRosterDefs.Def def)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append(def.JobName).Append("　HP ").Append(def.BaseHp)
+          .Append(" / 攻 ").Append(def.BaseAtk).Append(" / 防 ").Append(def.BaseDef);
+
+        string act = MercRosterDefs.SkillDisplayName(def.ActiveSkillId);
+        string pas = MercRosterDefs.SkillDisplayName(def.PassiveSkillId);
+        if (!string.IsNullOrEmpty(act)) sb.Append("\n主动：").Append(act);
+        if (!string.IsNullOrEmpty(pas)) sb.Append("\n被动：").Append(pas);
+        sb.Append("\n解锁后进入战斗内的「佣兵」三选一池。");
+        return sb.ToString();
+    }
+
     /// <summary>每日限购用的日期键（本地时间 yyyyMMdd）。</summary>
     public static string TodayKey() => System.DateTime.Now.ToString("yyyyMMdd");
 
@@ -192,6 +244,7 @@ public static class ShopDefs
             case Kind.Fragment: return "碎片";
             case Kind.Gacha: return "抽卡";
             case Kind.Resource: return "补给";
+            case Kind.Merc: return "佣兵";
             default: return "材料";
         }
     }
@@ -209,9 +262,9 @@ public static class ShopDefs
         }
     }
 
-    /// <summary>标签页顺序（ShopUI 按这个排）。</summary>
+    /// <summary>标签页顺序（ShopUI 按这个排，索引与枚举值一一对应）。</summary>
     public static readonly Kind[] Kinds =
     {
-        Kind.Skill, Kind.Fragment, Kind.Gacha, Kind.Resource, Kind.Material
+        Kind.Skill, Kind.Fragment, Kind.Gacha, Kind.Resource, Kind.Material, Kind.Merc
     };
 }

@@ -477,8 +477,11 @@ public static class GameConfig
     /// </summary>
     public const float PLAYER_SKILL_GCD = 1.2f;
 
-    /// <summary>开局错峰：第 1 槽固定秒数（让它最快登场）。</summary>
-    public const float PLAYER_SKILL_SLOT0_OPENING_CD = 0.5f;
+    /// <summary>
+    /// 开局错峰：第 1 槽固定秒数（让它最快登场）。
+    /// 0.5 秒实测等于「一进战斗就放技能」，改成 3 秒，先让普攻打几下。
+    /// </summary>
+    public const float PLAYER_SKILL_SLOT0_OPENING_CD = 3f;
 
     /// <summary>开局错峰系数（下标 = 槽位）：0 槽用上面的固定值，1~3 槽 = 自身 CD × 系数。</summary>
     public static readonly float[] PLAYER_SKILL_OPENING_CD_MUL = { 0f, 0.33f, 0.66f, 1f };
@@ -615,21 +618,32 @@ public static class GameConfig
     [Header("难度 / 金币副本")]
     /// <summary>通关满 N 章后开启困难</summary>
     public const int DIFF_HARD_NEED_CLEARS = 3;
-    /// <summary>通关满 N 章后开启噩梦</summary>
-    public const int DIFF_NIGHTMARE_NEED_CLEARS = 6;
+    /// <summary>
+    /// 难度档位数量：普通 / 困难 / 噩梦 = 3。
+    /// 2026-09-17 改动：
+    /// ① **删除地狱**——原「地狱」与噩梦共用同一个数值分支（<c>diff &gt;= 2</c>），是空壳，已彻底移除；
+    /// ② **噩梦不再按通关章节数解锁**，改判「在困难难度下通关第 8 章」，
+    ///    存 <c>SaveData.hardCleared</c>（原 DIFF_NIGHTMARE_NEED_CLEARS 已删除）。
+    /// </summary>
+    public const int DIFF_COUNT = 3;
     /// <summary>金币副本通关固定金：基数 × 章节 × 难度倍率。2026-09-15 产出去零：300 → 30。</summary>
     public const int GOLD_DUNGEON_CLEAR_BASE = 30;
 
+    /// <summary>
+    /// 难度属性倍率（怪物血/攻/防）。2026-09-17：噩梦 1.8 → **2.0**（地狱删除后噩梦就是顶档）。
+    /// 防"无限难"的红线：只调这一个数，不新增乘区；怪物抗性封顶 50%。
+    /// </summary>
     public static float GetDifficultyStatScale(int diff)
     {
-        if (diff >= 2) return 1.8f;
+        if (diff >= 2) return 2.0f;
         if (diff == 1) return 1.35f;
         return 1f;
     }
 
+    /// <summary>难度掉金倍率。2026-09-17：噩梦 3.0 → **3.5**。</summary>
     public static float GetDifficultyGoldMul(int diff)
     {
-        if (diff >= 2) return 3f;
+        if (diff >= 2) return 3.5f;
         if (diff == 1) return 1.8f;
         return 1f;
     }

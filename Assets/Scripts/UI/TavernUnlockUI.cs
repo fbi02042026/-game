@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,7 +10,8 @@ using UnityEngine.UI;
 /// 新规则：**酒馆只做解锁**，花金币把佣兵解锁进「招募池」；
 /// 真正的招募挪进了战斗内的「佣兵三选一」（见 DraftPool.CollectRecruitMercs）。
 ///
-/// 解锁门槛：普通无条件；稀有需酒馆 Lv2；传说需酒馆 Lv3（让酒馆升级仍有意义）。
+/// 解锁门槛见 <see cref="MercUnlockGate"/>：按「已解锁 N 名佣兵 / 通关第 N 章」判定，
+/// 并且把条件直接印在卡面上当目标（酒馆本身没有等级功能，别再用等级当门槛）。
 /// </summary>
 public class TavernUnlockUI : MonoBehaviour
 {
@@ -20,18 +22,26 @@ public class TavernUnlockUI : MonoBehaviour
     Text _hintText;
     Transform _content;
     readonly List<Cell> _cells = new List<Cell>();
+    readonly List<Button> _filterButtons = new List<Button>();
+    readonly List<Text> _filterLabels = new List<Text>();
 
     class Cell
     {
         public GameObject go;
         public Image bg;
+        public Image portrait;
         public Text nameText;
         public Text jobText;
         public Text rarityText;
+        public Text statText;
+        public Text skillText;
         public Button btn;
         public Text btnLabel;
         public string hireId;
     }
+
+    /// <summary>筛选：0=全部　1=未解锁　2=已解锁。</summary>
+    int _filter;
 
     public static void Show()
     {
@@ -95,6 +105,17 @@ public class TavernUnlockUI : MonoBehaviour
         SetRect(_hintText.rectTransform, 0.5f, 0.85f, 0f, 0f, 900f, 30f);
         _hintText.color = new Color(0.72f, 0.78f, 0.9f);
 
+        int shopCount = MercRosterDefs.ShopRoster.Count;
+        if (shopCount > 0)
+        {
+            var shopHint = CreateTxt(panel.transform, "ShopHint",
+                $"另有 {shopCount} 名高价佣兵在商店解锁", 18, TextAnchor.MiddleCenter);
+            SetRect(shopHint.rectTransform, 0.5f, 0.822f, 0f, 0f, 900f, 26f);
+            shopHint.color = new Color(0.85f, 0.74f, 0.45f);
+        }
+
+        BuildFilterTabs(panel.transform);
+
         var close = CreateBtn(panel.transform, "CloseButton", "关闭", new Vector2(430f, 545f), new Vector2(110f, 52f));
         close.onClick.AddListener(Hide);
 
@@ -102,7 +123,7 @@ public class TavernUnlockUI : MonoBehaviour
         var scrollGo = new GameObject("Scroll", typeof(RectTransform));
         scrollGo.transform.SetParent(panel.transform, false);
         var scrollRt = scrollGo.GetComponent<RectTransform>();
-        SetRect(scrollRt, 0.5f, 0.5f, 0f, -30f, 920f, 940f);
+        SetRect(scrollRt, 0.5f, 0.5f, 0f, -110f, 920f, 800f);
 
         var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Mask), typeof(ScrollRect));
         viewportGo.transform.SetParent(scrollGo.transform, false);
@@ -121,7 +142,7 @@ public class TavernUnlockUI : MonoBehaviour
         contentRt.offsetMax = Vector2.zero;
 
         var grid = _content.gameObject.AddComponent<GridLayoutGroup>();
-        grid.cellSize = new Vector2(280f, 300f);
+        grid.cellSize = new Vector2(280f, 360f);
         grid.spacing = new Vector2(12f, 12f);
         grid.padding = new RectOffset(16, 16, 16, 16);
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
@@ -143,9 +164,44 @@ public class TavernUnlockUI : MonoBehaviour
         _root.SetActive(false);
     }
 
+    /// <summary>筛选页签：全部 / 未解锁 / 已解锁。放在提示行下方、滚动区上方。</summary>
+    void BuildFilterTabs(Transform panel)
+    {
+        string[] names = { "全部", "未解锁", "已解锁" };
+        for (int i = 0; i < names.Length; i++)
+        {
+            int idx = i;
+            var btn = CreateBtn(panel.transform, "Filter_" + idx, names[i],
+                new Vector2(-170f + idx * 170f, 340f), new Vector2(150f, 44f));
+            btn.onClick.AddListener(() => OnClickFilter(idx));
+            _filterButtons.Add(btn);
+            _filterLabels.Add(btn.GetComponentInChildren<Text>());
+        }
+    }
+
+    void OnClickFilter(int idx)
+    {
+        if (_filter == idx) return;
+        _filter = idx;
+        Refresh();
+        PaintFilterTabs();
+    }
+
+    void PaintFilterTabs()
+    {
+        for (int i = 0; i < _filterLabels.Count; i++)
+        {
+            var label = _filterLabels[i];
+            if (label == null) continue;
+            bool on = i == _filter;
+            label.color = on ? new Color(1f, 0.86f, 0.45f) : new Color(0.7f, 0.72f, 0.8f);
+            label.fontSize = on ? 22 : 19;
+        }
+    }
+
     void BuildCells()
     {
-        var roster = MercRosterDefs.All;
+        var roster = MercRosterDefs.TavernRoster;
         for (int i = 0; i < roster.Count; i++)
             _cells.Add(CreateCell(_content, roster[i]));
     }
@@ -155,21 +211,123 @@ public class TavernUnlockUI : MonoBehaviour
         var bg = CreateImg(parent, "Merc_" + def.HireId, new Color(0.17f, 0.15f, 0.20f, 1f));
         var c = new Cell { go = bg.gameObject, bg = bg, hireId = def.HireId };
 
-        c.nameText = CreateTxt(bg.transform, "Name", $"{def.Name}·{def.Nickname}", 26, TextAnchor.MiddleCenter);
-        SetRect(c.nameText.rectTransform, 0.5f, 0.86f, 0f, 0f, 250f, 34f);
+        // 整卡点击区：透明铺满，排在最底层，不挡上面的名字/技能/解锁按钮
+        var click = CreateImg(bg.transform, "ClickArea", new Color(1f, 1f, 1f, 0f));
+        Stretch(click.rectTransform);
+        click.transform.SetAsFirstSibling();
+        var cardBtn = click.gameObject.AddComponent<Button>();
+        cardBtn.targetGraphic = click;
+        cardBtn.transition = Selectable.Transition.None;
+        cardBtn.onClick.AddListener(() => OnClickCard(c));
 
-        c.jobText = CreateTxt(bg.transform, "Job", def.JobName, 20, TextAnchor.MiddleCenter);
-        SetRect(c.jobText.rectTransform, 0.5f, 0.76f, 0f, 0f, 250f, 28f);
+        // 立绘：稀有度头像框 + 头像（复用战斗角色栏同一套资源）
+        var frame = CreateImg(bg.transform, "Frame", Color.white);
+        SetRect(frame.rectTransform, 0.5f, 0.5f, 0f, 116f, 104f, 104f);
+        frame.raycastTarget = false;
+        var frameSp = MercHireSession.LoadRarityFrame(def.Rarity);
+        frame.sprite = frameSp;
+        frame.color = frameSp != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+
+        c.portrait = CreateImg(bg.transform, "Portrait", Color.white);
+        SetRect(c.portrait.rectTransform, 0.5f, 0.5f, 0f, 116f, 82f, 82f);
+        c.portrait.preserveAspect = true;
+        c.portrait.raycastTarget = false;
+        var head = LoadMercHead(def.HireId);
+        c.portrait.sprite = head;
+        c.portrait.color = head != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+
+        c.nameText = CreateTxt(bg.transform, "Name", $"{def.Name}·{def.Nickname}", 24, TextAnchor.MiddleCenter);
+        SetRect(c.nameText.rectTransform, 0.5f, 0.5f, 0f, 44f, 250f, 32f);
+
+        // 职业与稀有度同一行左右分列
+        c.jobText = CreateTxt(bg.transform, "Job", def.JobName, 19, TextAnchor.MiddleLeft);
+        SetRect(c.jobText.rectTransform, 0.28f, 0.5f, 0f, 12f, 130f, 26f);
         c.jobText.color = new Color(0.78f, 0.84f, 0.95f);
 
-        c.rarityText = CreateTxt(bg.transform, "Rarity", RarityName(def.Rarity), 20, TextAnchor.MiddleCenter);
-        SetRect(c.rarityText.rectTransform, 0.5f, 0.67f, 0f, 0f, 250f, 28f);
+        c.rarityText = CreateTxt(bg.transform, "Rarity", RarityName(def.Rarity), 19, TextAnchor.MiddleRight);
+        SetRect(c.rarityText.rectTransform, 0.75f, 0.5f, 0f, 12f, 110f, 26f);
         c.rarityText.color = RarityPalette.Get(def.Rarity);
 
-        c.btn = CreateBtn(bg.transform, "UnlockBtn", "解锁", new Vector2(0f, -95f), new Vector2(220f, 52f));
+        c.statText = CreateTxt(bg.transform, "Stats",
+            $"HP {def.BaseHp}　攻 {def.BaseAtk}　防 {def.BaseDef}", 19, TextAnchor.MiddleCenter);
+        SetRect(c.statText.rectTransform, 0.5f, 0.5f, 0f, -24f, 260f, 28f);
+        c.statText.color = new Color(0.92f, 0.90f, 0.82f);
+
+        string act = MercRosterDefs.SkillDisplayName(def.ActiveSkillId);
+        string pas = MercRosterDefs.SkillDisplayName(def.PassiveSkillId);
+        c.skillText = CreateTxt(bg.transform, "Skills", SkillLine(act, pas), 18, TextAnchor.MiddleCenter);
+        SetRect(c.skillText.rectTransform, 0.5f, 0.5f, 0f, -70f, 260f, 56f);
+        c.skillText.color = new Color(0.80f, 0.84f, 0.92f);
+
+        c.btn = CreateBtn(bg.transform, "UnlockBtn", "解锁", new Vector2(0f, -140f), new Vector2(220f, 48f));
         c.btnLabel = c.btn.GetComponentInChildren<Text>();
         c.btn.onClick.AddListener(() => OnClickUnlock(c));
         return c;
+    }
+
+    static string SkillLine(string act, string pas)
+    {
+        if (string.IsNullOrEmpty(act) && string.IsNullOrEmpty(pas)) return "无技能";
+        if (string.IsNullOrEmpty(act)) return "被动：" + pas;
+        if (string.IsNullOrEmpty(pas)) return "主动：" + act;
+        return "主动：" + act + "\n被动：" + pas;
+    }
+
+    /// <summary>头像走冒险日志图鉴同一入口（AdventureCodex），带 AssetId 兜底。</summary>
+    static Sprite LoadMercHead(string hireId)
+    {
+        if (AdventureLogCatalog.TryFindMerc(hireId, out var entry))
+        {
+            var sp = AdventureCodex.LoadMercHead(entry);
+            if (sp != null) return sp;
+        }
+        return MercPortraitSprites.GetHead(hireId);
+    }
+
+    /// <summary>
+    /// 二级详情：**复用冒险日志的佣兵图鉴弹窗**（CodexInfoPopupUI），不另造一套。
+    /// 字段映射：title=名字·绰号 / meta=职业·稀有度·完整数值 / desc=技能+简介 / lore=Lore。
+    /// 不调 MarkMercViewed——在商店里看图不该消耗图鉴红点。
+    /// </summary>
+    void OnClickCard(Cell c)
+    {
+        if (!MercRosterDefs.TryGetByHireId(c.hireId, out var def)) return;
+        AdventureLogCatalog.TryFindMerc(def.HireId, out var entry);
+
+        string meta = $"{def.JobName} · {RarityName(def.Rarity)}　"
+                    + $"HP {def.BaseHp}　攻 {def.BaseAtk}　防 {def.BaseDef}　"
+                    + $"攻速 {def.AtkSpeed:0.00}　移速 {def.MoveSpeed:0.00}";
+
+        string desc = BuildSkillBlock(def);
+        if (!string.IsNullOrEmpty(entry.Desc))
+            desc += (desc.Length > 0 ? "\n\n" : "") + entry.Desc;
+
+        Sprite stand = null;
+        if (AdventureLogCatalog.TryFindMerc(def.HireId, out var e2))
+            stand = AdventureCodex.LoadMercStand(e2);
+
+        CodexInfoPopupUI.Show($"{def.Name}·{def.Nickname}", meta, desc, entry.Lore, stand);
+    }
+
+    /// <summary>技能段：主动 / 被动的名字 + 效果 + 冷却（merc_skills 表）。</summary>
+    static string BuildSkillBlock(MercRosterDefs.Def def)
+    {
+        var sb = new StringBuilder();
+        AppendSkillDetail(sb, "主动", def.ActiveSkillId);
+        AppendSkillDetail(sb, "被动", def.PassiveSkillId);
+        return sb.Length > 0 ? sb.ToString() : "无技能";
+    }
+
+    static void AppendSkillDetail(StringBuilder sb, string tag, string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return;
+        if (sb.Length > 0) sb.Append('\n');
+        sb.Append(tag).Append("：").Append(MercRosterDefs.SkillDisplayName(skillId));
+        if (MercSkillTable.TryGet(skillId, out var row))
+        {
+            if (!string.IsNullOrEmpty(row.EffectDesc)) sb.Append("　").Append(row.EffectDesc);
+            if (row.Cooldown > 0f) sb.Append("　冷却 ").Append(row.Cooldown.ToString("0.#")).Append("s");
+        }
     }
 
     // ============================================================
@@ -182,6 +340,7 @@ public class TavernUnlockUI : MonoBehaviour
         Refresh();
         _root.SetActive(true);
         transform.SetAsLastSibling();
+        PaintFilterTabs();
         GameFonts.ApplyToHierarchy(transform);
     }
 
@@ -196,7 +355,6 @@ public class TavernUnlockUI : MonoBehaviour
         if (data == null) return;
         if (data.unlockedMercIds == null) data.unlockedMercIds = new HashSet<string>();
 
-        int tavern = data.townLevel != null ? Mathf.Max(1, data.townLevel.tavern) : 1;
         long gold = ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold);
         int total = MercRosterDefs.All.Count;
 
@@ -209,18 +367,28 @@ public class TavernUnlockUI : MonoBehaviour
             if (!MercRosterDefs.TryGetByHireId(c.hireId, out var def)) continue;
 
             bool unlocked = data.IsMercUnlocked(def.HireId);
-            bool gateOpen = IsGateOpen(def, tavern);
-            int cost = UnlockCost(def);
+
+            // 筛选：0 全部 / 1 未解锁 / 2 已解锁
+            bool show = _filter == 0 || ((_filter == 1) != unlocked);
+            c.go.SetActive(show);
+            if (!show) continue;
+
+            bool gateOpen = IsGateOpen(def, data);
+            int cost = MercRosterDefs.UnlockCost(def);
 
             if (unlocked)
             {
                 c.bg.color = new Color(0.14f, 0.22f, 0.16f, 1f);
-                SetBtn(c, "已在招募池", false, new Color(0.42f, 0.62f, 0.42f, 1f));
+                SetBtn(c, "已加入三选一池", false, new Color(0.42f, 0.62f, 0.42f, 1f));
             }
             else if (!gateOpen)
             {
-                c.bg.color = new Color(0.17f, 0.15f, 0.20f, 1f);
-                SetBtn(c, $"需酒馆 Lv{RequiredTavernLevel(def)}", false, new Color(0.5f, 0.45f, 0.5f, 1f));
+                // 条件是目标而不是死路：把"要做什么"直接印在按钮上
+                c.bg.color = new Color(0.15f, 0.14f, 0.17f, 1f);
+                string cond = MercUnlockGate.ConditionText(def.HireId, data) ?? "未开放";
+                string prog = MercUnlockGate.ProgressText(def.HireId, data);
+                SetBtn(c, string.IsNullOrEmpty(prog) ? cond : $"{cond}（{prog}）",
+                    false, new Color(0.62f, 0.60f, 0.68f, 1f));
             }
             else
             {
@@ -230,6 +398,40 @@ public class TavernUnlockUI : MonoBehaviour
                     afford ? new Color(0.95f, 0.78f, 0.35f, 1f) : new Color(0.55f, 0.5f, 0.4f, 1f));
             }
         }
+
+        Reorder(data, gold);
+    }
+
+    /// <summary>
+    /// 排序（P0-2）：买得起 → 买不起 → 条件未达成 → 已解锁置底；同档内按价格升序。
+    /// 只改 sibling 顺序，GridLayoutGroup 自动重排；隐藏的卡不参与排序。
+    /// </summary>
+    void Reorder(SaveData data, long gold)
+    {
+        var list = new List<Cell>();
+        for (int i = 0; i < _cells.Count; i++)
+            if (_cells[i].go.activeSelf) list.Add(_cells[i]);
+
+        list.Sort((a, b) =>
+        {
+            if (!MercRosterDefs.TryGetByHireId(a.hireId, out var da)) return 1;
+            if (!MercRosterDefs.TryGetByHireId(b.hireId, out var db)) return -1;
+            int ra = RankOf(da, data, gold);
+            int rb = RankOf(db, data, gold);
+            if (ra != rb) return ra.CompareTo(rb);
+            return MercRosterDefs.UnlockCost(da).CompareTo(MercRosterDefs.UnlockCost(db));
+        });
+
+        for (int i = 0; i < list.Count; i++)
+            list[i].go.transform.SetSiblingIndex(i);
+    }
+
+    /// <summary>0=买得起　1=买不起　2=条件未达成　3=已解锁。</summary>
+    static int RankOf(MercRosterDefs.Def def, SaveData data, long gold)
+    {
+        if (data.IsMercUnlocked(def.HireId)) return 3;
+        if (!IsGateOpen(def, data)) return 2;
+        return gold >= MercRosterDefs.UnlockCost(def) ? 0 : 1;
     }
 
     void SetBtn(Cell c, string label, bool interactable, Color textColor)
@@ -244,62 +446,73 @@ public class TavernUnlockUI : MonoBehaviour
 
     void OnClickUnlock(Cell c)
     {
-        var data = SaveSystem.Instance?.Data;
-        if (data == null) return;
         if (!MercRosterDefs.TryGetByHireId(c.hireId, out var def)) return;
+        if (!TryUnlock(def)) return;
 
-        int tavern = data.townLevel != null ? Mathf.Max(1, data.townLevel.tavern) : 1;
-        if (!IsGateOpen(def, tavern))
+        // 解锁反馈闭环（P0-3）：告诉玩家「三选一池」是什么、什么时候能抽到
+        if (_hintText != null)
+            _hintText.text = $"「{def.Name}」已加入三选一池，本局冒险即可在战斗中抽到";
+        Refresh();
+        StartCoroutine(CoFlash(c));
+    }
+
+    /// <summary>解锁执行：门槛校验 → 扣金币 → 写存档 → 图鉴 → toast。名册卡与详情弹窗共用。</summary>
+    public static bool TryUnlock(MercRosterDefs.Def def)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+
+        if (!IsGateOpen(def, data))
         {
-            GlobalToastUI.Show($"需要酒馆 Lv{RequiredTavernLevel(def)}");
-            return;
+            GlobalToastUI.Show("解锁条件：" + MercUnlockGate.FullText(def.HireId));
+            return false;
         }
 
-        int cost = UnlockCost(def);
+        int cost = MercRosterDefs.UnlockCost(def);
         if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, cost, save: false, notify: false))
         {
             GlobalToastUI.Show("金币不足");
-            return;
+            return false;
         }
 
         data.UnlockMerc(def.HireId);
         AdventureCodex.MarkMercSeen(def.HireId);
         SaveSystem.Instance.Save();
-        GlobalToastUI.Show($"{def.Name} 已加入招募池");
+        GlobalToastUI.Show($"{def.Name} 已加入三选一池");
         Debug.Log($"[TavernUnlock] 解锁佣兵 {def.HireId} {def.Name}，花费 {cost} 金币");
-        Refresh();
+        return true;
+    }
+
+    /// <summary>解锁后卡片闪一下，从高亮淡回「已解锁」底色。</summary>
+    System.Collections.IEnumerator CoFlash(Cell c)
+    {
+        var from = new Color(0.32f, 0.55f, 0.34f, 1f);
+        var to = new Color(0.14f, 0.22f, 0.16f, 1f);
+        for (int i = 0; i <= 8; i++)
+        {
+            if (c == null || c.bg == null) yield break;
+            c.bg.color = Color.Lerp(from, to, i / 8f);
+            yield return new WaitForSecondsRealtime(0.05f);
+        }
     }
 
     // ============================================================
     // 规则
     // ============================================================
 
-    /// <summary>解锁价格：用花名册的 RecruitGold，为 0 时按稀有度兜底。</summary>
+    /// <summary>解锁价格：口径搬到 MercRosterDefs（酒馆与商店共用），这里只做转发。</summary>
     public static int UnlockCost(MercRosterDefs.Def def)
     {
-        if (def.RecruitGold > 0) return def.RecruitGold;
-        switch (def.Rarity)
-        {
-            case MercRosterDefs.MercRarity.Legendary: return 5000;
-            case MercRosterDefs.MercRarity.Rare: return 1500;
-            default: return 500;
-        }
+        return MercRosterDefs.UnlockCost(def);
     }
 
-    /// <summary>酒馆等级门槛：普通无条件，稀有 Lv2，传说 Lv3。</summary>
-    public static int RequiredTavernLevel(MercRosterDefs.Def def)
+    /// <summary>
+    /// 门槛判定：**酒馆没有等级这个功能**，所以改走 <see cref="MercUnlockGate"/>。
+    /// 条件是明确可达成的（解锁 N 名佣兵 / 通关第 N 章），能直接印在卡面上当目标。
+    /// </summary>
+    public static bool IsGateOpen(MercRosterDefs.Def def, SaveData data)
     {
-        switch (def.Rarity)
-        {
-            case MercRosterDefs.MercRarity.Legendary: return 3;
-            case MercRosterDefs.MercRarity.Rare: return 2;
-            default: return 1;
-        }
-    }
-
-    public static bool IsGateOpen(MercRosterDefs.Def def, int tavernLevel)
-    {
-        return tavernLevel >= RequiredTavernLevel(def);
+        return MercUnlockGate.IsOpen(def.HireId, data);
     }
 
     static string RarityName(MercRosterDefs.MercRarity r)

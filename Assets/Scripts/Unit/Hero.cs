@@ -439,12 +439,15 @@ public class Hero : UnitBase
         {
             if (rb != null) rb.velocity = new Vector2(0f, rb.velocity.y);
             var nearHold = FindNearestEnemyInDetectRange();
+            // 手动走位时目标始终跟随最近的怪：玩家走到谁旁边就锁谁，
+            // 不再要求已在攻击范围内才改 target（否则会一直粘着第一个怪）
+            if (nearHold != null)
+                target = nearHold;
             if (nearHold != null && IsInBasicAttackRange(nearHold)
                 && attackCd <= 0f
                 && (unitAnim == null || !unitAnim.InDamagedRecovery())
                 && (unitAnim == null || !unitAnim.InAttackLock))
             {
-                target = nearHold;
                 FaceToward(nearHold);
                 Attack(nearHold);
                 attackCd = GetAttackCooldown();
@@ -465,8 +468,16 @@ public class Hero : UnitBase
             else
             {
                 var nearer = FindNearestEnemyOnField();
-                if (nearer != null && nearer != _acquireLock && IsInBasicAttackRange(nearer))
-                    _acquireLock = nearer;
+                if (nearer != null && nearer != _acquireLock)
+                {
+                    float dNew = Mathf.Abs(GetCombatX(this) - GetCombatX(nearer));
+                    float dCur = Mathf.Abs(GetCombatX(this) - GetCombatX(_acquireLock));
+                    // 走到新怪攻击范围内，或新怪明显更近（约 0.6 个怪间距）就换锁。
+                    // 原逻辑只在「已进入攻击范围」才换，导致站到另一个怪旁边仍然打第一个。
+                    const float retargetMargin = 0.45f;
+                    if (IsInBasicAttackRange(nearer) || dNew < dCur - retargetMargin)
+                        _acquireLock = nearer;
+                }
                 target = _acquireLock;
             }
         }

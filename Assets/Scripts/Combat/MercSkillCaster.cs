@@ -18,9 +18,10 @@ public class MercSkillCaster : MonoBehaviour
     {
         _merc = merc;
         _activeSkillId = activeSkillId;
-        _cooldownRemain = 0f;
         var cfg = SkillRegistry.Instance != null ? SkillRegistry.Instance.Get(activeSkillId) : null;
         CooldownTotal = cfg != null && cfg.cooldown > 0f ? cfg.cooldown : 8f;
+        // 开局按满冷却进场：先普攻，冷却走完才轮到第一发主动技（原为 0，进战瞬间就甩技能）
+        _cooldownRemain = CooldownTotal;
     }
 
     void Update()

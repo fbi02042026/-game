@@ -163,12 +163,16 @@ public class ShopUI : MonoBehaviour
     void BuildTabs(Transform panel)
     {
         var kinds = ShopDefs.Kinds;
-        float startX = -352f;
+        // 6 个页签排不下原本的 170 宽 ×184 间距，收窄一档；5 个时保持原排布不变。
+        bool narrow = kinds.Length >= 6;
+        float tabW = narrow ? 148f : 170f;
+        float gap = narrow ? 158f : 184f;
+        float startX = narrow ? -(kinds.Length - 1) * gap * 0.5f : -352f;
         for (int i = 0; i < kinds.Length; i++)
         {
             var kind = kinds[i];
             var btn = CreateBtn(panel.transform, "Tab_" + kind, ShopDefs.KindName(kind),
-                new Vector2(startX + i * 184f, 400f), new Vector2(170f, 60f));
+                new Vector2(startX + i * gap, 400f), new Vector2(tabW, 60f));
             btn.onClick.AddListener(() => OnClickTab(kind));
             _tabButtons.Add(btn);
             _tabLabels.Add(btn.GetComponentInChildren<Text>());
@@ -200,6 +204,13 @@ public class ShopUI : MonoBehaviour
             var rarEnum = SkillDraftMeta.Rarity(item.skillId);
             c.nameText.text = $"{SkillRarityUtil.DisplayName(rarEnum)} · {item.name}";
             c.nameText.color = SkillRarityUtil.Tint(rarEnum);
+        }
+
+        if (item.kind == ShopDefs.Kind.Merc
+            && MercRosterDefs.TryGetByHireId(item.mercId, out var mercDef))
+        {
+            c.nameText.text = $"{RarityName(mercDef.Rarity)} · {mercDef.Name}·{mercDef.Nickname}";
+            c.nameText.color = RarityPalette.Get(mercDef.Rarity);
         }
 
         c.descText = CreateTxt(bg.transform, "Desc", item.desc.Replace("\n", "　"), 18, TextAnchor.UpperLeft);
@@ -240,6 +251,17 @@ public class ShopUI : MonoBehaviour
     }
 
     public static bool IsOpen => Instance != null && Instance._root != null && Instance._root.activeSelf;
+
+    /// <summary>佣兵稀有度中文名：文字色统一走 RarityPalette。</summary>
+    static string RarityName(MercRosterDefs.MercRarity r)
+    {
+        switch (r)
+        {
+            case MercRosterDefs.MercRarity.Legendary: return "传说";
+            case MercRosterDefs.MercRarity.Rare: return "稀有";
+            default: return "普通";
+        }
+    }
 
     void OnClickTab(ShopDefs.Kind kind)
     {

@@ -93,7 +93,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             TownSharedChrome.RaiseSharedChrome(hall.transform);
         SetLogChrome(true);
         TownPageDim.Ensure(transform);
+        // 只在编辑器失效：运行时清缓存会让底栏下次点击重新 Resources.Load 图集，造成一次卡顿
+#if UNITY_EDITOR
         MainBottomNav.InvalidateNavBgCache();
+#endif
         MainBottomNav.Instance?.SetSelected(MainNavTab.Log, notify: false);
         EnsureFrameClearsChrome();
         EnsureCloseButtonPosition();

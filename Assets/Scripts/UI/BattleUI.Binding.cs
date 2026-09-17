@@ -272,6 +272,14 @@ public partial class BattleUI : MonoBehaviour
             if (slot.portrait == null)
                 slot.portrait = FindImageNamedNoFallback(root, "Portrait");
         }
+        // 头像框：玩家槽 root 自己就叫 PlayerSlot，佣兵槽是 root 下的 PlayerSlot 子节点。
+        // 只取这一层的 Image 当框，不做任何尺寸/节点改动。
+        if (slot.frameImage == null)
+        {
+            Transform frameRoot = FindDeepChildIgnoreCase(root, "PlayerSlot");
+            if (frameRoot != null && frameRoot != slot.portrait?.transform)
+                slot.frameImage = frameRoot.GetComponent<Image>();
+        }
         // 占位图：有真实头像时隐藏
         if (slot.portraitPlaceholder == null)
         {

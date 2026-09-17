@@ -64,9 +64,9 @@ public class AdventureUI : MonoBehaviour, ITownPage
     public Text    remainChancesLabel;
     public Button  addChancesBtn;
 
-    [Header("难度按钮（普通/困难/噩梦/地狱）")]
-    public Button[] difficultyButtons = new Button[4];
-    public Text[]   difficultyLabels  = new Text[4];
+    [Header("难度按钮（普通/困难/噩梦）")]
+    public Button[] difficultyButtons = new Button[3];
+    public Text[]   difficultyLabels  = new Text[3];
 
     [Header("底部操作")]
     public Button startBtn;
@@ -74,11 +74,11 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
     // ── 内部状态 ──
     static readonly string[] ModeNames  = { "主线冒险", "每日副本", "迷宫探索", "BOSS挑战", "活动副本" };
-    static readonly string[] DiffNames  = { "普通", "困难", "噩梦", "地狱" };
+    // 2026-09-17：删除「地狱」——它与噩梦共用同一数值分支，是空壳。现在只有 普通 / 困难 / 噩梦 三档。
+    static readonly string[] DiffNames  = { "普通", "困难", "噩梦" };
     static readonly Color    ColNormal  = new Color(0.30f, 0.55f, 0.22f, 1f);
     static readonly Color    ColHard    = new Color(0.28f, 0.42f, 0.65f, 1f);
     static readonly Color    ColNight   = new Color(0.45f, 0.22f, 0.62f, 1f);
-    static readonly Color    ColHell    = new Color(0.65f, 0.18f, 0.18f, 1f);
 
     int _selectedMode = 0;
     int _selectedDiff = 0;
@@ -716,9 +716,9 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
         // ── 难度选择行 ──
         float diffY = midY - 46;
-        Color[] diffCols = { ColNormal, ColHard, ColNight, ColHell };
+        Color[] diffCols = { ColNormal, ColHard, ColNight };
         float[] diffX    = { 0, 1f/4, 2f/4, 3f/4 };
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < GameConfig.DIFF_COUNT; i++)
         {
             int idx = i;
             var dBtn = BuildDiffBtn(panel.transform, DiffNames[i], diffCols[i], i, diffY);
@@ -879,9 +879,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
             modeButtons[i].gameObject.SetActive(i == 0);
         }
         _selectedMode = 0;
-        // 难度：隐藏「地狱」(index 3)
-        if (difficultyButtons != null && difficultyButtons.Length > 3 && difficultyButtons[3] != null)
-            difficultyButtons[3].gameObject.SetActive(false);
+        // 难度：2026-09-17「地狱」已删除，按钮只建 3 个，不再需要隐藏逻辑
         if (addChancesBtn != null)
             addChancesBtn.gameObject.SetActive(false);
     }
@@ -985,8 +983,9 @@ public class AdventureUI : MonoBehaviour, ITownPage
         }
         if (!IsDiffUnlocked(idx))
         {
-            int need = idx >= 2 ? GameConfig.DIFF_NIGHTMARE_NEED_CLEARS : GameConfig.DIFF_HARD_NEED_CLEARS;
-            Toast($"通关 {need} 张地图后开启{DiffLabel(idx)}");
+            // 噩梦门槛：困难难度下通关第 8 章（不再按通关地图数判定）
+            if (idx >= 2) Toast("在困难难度下通关一次冒险后开启噩梦");
+            else Toast($"通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图后开启{DiffLabel(idx)}");
             return;
         }
         _selectedDiff = idx;
@@ -1038,8 +1037,8 @@ public class AdventureUI : MonoBehaviour, ITownPage
         }
         if (!IsDiffUnlocked(_selectedDiff))
         {
-            int need = _selectedDiff >= 2 ? GameConfig.DIFF_NIGHTMARE_NEED_CLEARS : GameConfig.DIFF_HARD_NEED_CLEARS;
-            Toast($"通关 {need} 张地图后开启{DiffLabel(_selectedDiff)}");
+            if (_selectedDiff >= 2) Toast("在困难难度下通关一次冒险后开启噩梦");
+            else Toast($"通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图后开启{DiffLabel(_selectedDiff)}");
             return;
         }
 
@@ -1211,9 +1210,6 @@ public class AdventureUI : MonoBehaviour, ITownPage
         for (int i = 0; i < difficultyButtons.Length; i++)
         {
             if (difficultyButtons[i] == null) continue;
-            bool show = i < 3; // 只留普通/困难/噩梦
-            difficultyButtons[i].gameObject.SetActive(show);
-            if (!show) continue;
             bool unlocked = playable && IsDiffUnlocked(i);
             SetChildSelected(difficultyButtons[i].transform, playable && i == _selectedDiff && unlocked);
             SetGraphicDim(difficultyButtons[i].transform, !unlocked);
@@ -1344,7 +1340,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
             if (activity)
             {
                 int gold = GameConfig.GetGoldDungeonClearGold(_selectedChapter, _selectedDiff);
-                stageDescLabel.text = $"怪物只掉金币。通关获得 {gold} 金币。困难需通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图，噩梦需通关 {GameConfig.DIFF_NIGHTMARE_NEED_CLEARS} 张地图。";
+                stageDescLabel.text = $"怪物只掉金币。通关获得 {gold} 金币。困难需通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图，噩梦需在困难难度下通关第 8 章。";
             }
             else if (main)
                 stageDescLabel.text = GetChapterIntro(_selectedChapter);
@@ -1676,9 +1672,11 @@ public class AdventureUI : MonoBehaviour, ITownPage
     static bool IsDiffUnlocked(int diff)
     {
         if (diff <= 0) return true;
-        int cleared = GetClearedChapterCount();
-        if (diff == 1) return cleared >= GameConfig.DIFF_HARD_NEED_CLEARS;
-        if (diff == 2) return cleared >= GameConfig.DIFF_NIGHTMARE_NEED_CLEARS;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        if (diff == 1) return GetClearedChapterCount() >= GameConfig.DIFF_HARD_NEED_CLEARS;
+        // 噩梦：在困难（及以上）难度下通关过第 8 章
+        if (diff == 2) return data.hardCleared;
         return false;
     }
 
@@ -2055,6 +2053,12 @@ public class AdventureUI : MonoBehaviour, ITownPage
             string[] names = { "Diff_普通", "Diff_困难", "Diff_噩梦", "Diff_地狱" };
             var d = detail.Find(names[i]);
             if (d == null) continue;
+            // 2026-09-17：地狱已删除；预制体里若还留着「Diff_地狱」节点就隐藏，避免界面上多出一个按钮
+            if (i >= GameConfig.DIFF_COUNT)
+            {
+                d.gameObject.SetActive(false);
+                continue;
+            }
             if (difficultyButtons.Length > i) difficultyButtons[i] = d.GetComponent<Button>();
             if (difficultyLabels.Length > i) difficultyLabels[i] = d.Find("Lbl")?.GetComponent<Text>();
         }

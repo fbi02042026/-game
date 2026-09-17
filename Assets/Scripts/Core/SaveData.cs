@@ -174,6 +174,12 @@ public class SaveData
     public List<IntIdEntry> clearedChapterEntries = new List<IntIdEntry>();
     [NonSerialized] public HashSet<int> clearedChapterIds = new HashSet<int>();
     /// <summary>
+    /// 是否在困难（或更高）难度下通关过第 8 章。2026-09-17：**噩梦难度的唯一解锁条件**。
+    /// 由 <see cref="MarkChapterCleared(int, int)"/> 在通关第 8 章且难度 &gt;= 1 时置 true。
+    /// 旧存档默认 false —— 已通关的玩家重打一次困难第 8 章即可开启噩梦。
+    /// </summary>
+    public bool hardCleared = false;
+    /// <summary>
     /// 本周目在分叉点（第 2/3/4 章）选定的路线；0 = 未选。
     /// 通关第 8 章后归零，允许下一周目换一条支线。
     /// </summary>
@@ -488,13 +494,16 @@ public class SaveData
     }
 
     /// <summary>标记章节通关；通关第 8 章时把 chosenBranch 归零，允许下一周目换支线。</summary>
-    public void MarkChapterCleared(int chapter)
+    /// <param name="difficulty">本次通关所处的难度（0 普通 / 1 困难 / 2 噩梦）；传 -1 表示未知，不参与 hardCleared 判定。</param>
+    public void MarkChapterCleared(int chapter, int difficulty = -1)
     {
         if (chapter <= 0) return;
         if (clearedChapterIds == null) clearedChapterIds = new HashSet<int>();
         if (clearedChapterIds.Add(chapter))
             clearedChapterEntries = FromIntIdSet(clearedChapterIds);
         if (chapter >= 8) chosenBranch = 0;
+        // 噩梦门槛：在困难及以上难度通关第 8 章
+        if (chapter >= 8 && difficulty >= 1) hardCleared = true;
     }
 
     public bool HasClearedChapter(int chapter)

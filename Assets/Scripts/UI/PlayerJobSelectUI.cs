@@ -542,22 +542,8 @@ public class PlayerJobSelectUI : MonoBehaviour
         if (c.SelectOutline != null)
             c.SelectOutline.enabled = selected;
 
-        if (c.Frame != null)
-        {
-            c.Frame.color = selected
-                ? new Color(0.95f, 0.78f, 0.28f, 0.85f)
-                : new Color(0.45f, 0.32f, 0.18f, 0.35f);
-        }
-        else if (c.Button != null)
-        {
-            var img = c.Button.GetComponent<Image>();
-            if (img != null)
-                img.color = selected
-                    ? new Color(0.95f, 0.88f, 0.55f, 1f)
-                    : (anySelected
-                        ? new Color(0.55f, 0.5f, 0.42f, 1f)
-                        : new Color(0.92f, 0.86f, 0.72f, 1f));
-        }
+        // 选中态只做「描边 + 缩放 + 透明度」，不改 Frame/Button 的颜色，
+        // 保留预制体里美术配好的卡面配色。
     }
 
     static void ApplyRecommendStars(Transform ratingRoot, int stars)

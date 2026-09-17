@@ -572,7 +572,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: c2b2d75977c1dfd4f8423f764253658b, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 7e208e861ed01e246a52a6faaf9f3111, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -4687,7 +4687,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: c2b2d75977c1dfd4f8423f764253658b, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 4d7a11b6dde989549a760fe47391f96e, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -6676,7 +6676,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: c2b2d75977c1dfd4f8423f764253658b, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 7e208e861ed01e246a52a6faaf9f3111, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -7287,6 +7287,7 @@ MonoBehaviour:
   playerSlot:
     root: {fileID: 0}
     portrait: {fileID: 0}
+    frameImage: {fileID: 0}
     portraitPlaceholder: {fileID: 0}
     energyRing: {fileID: 0}
     glowBorder: {fileID: 0}
@@ -7302,6 +7303,7 @@ MonoBehaviour:
   mercSlot1:
     root: {fileID: 0}
     portrait: {fileID: 0}
+    frameImage: {fileID: 0}
     portraitPlaceholder: {fileID: 0}
     energyRing: {fileID: 0}
     glowBorder: {fileID: 0}
@@ -7317,6 +7319,7 @@ MonoBehaviour:
   mercSlot2:
     root: {fileID: 0}
     portrait: {fileID: 0}
+    frameImage: {fileID: 0}
     portraitPlaceholder: {fileID: 0}
     energyRing: {fileID: 0}
     glowBorder: {fileID: 0}

@@ -318,8 +318,10 @@ public static class PlayerJobDefs
             case PlayerJobId.Berserker:
                 return new JobWeaponKit
                 {
+                    // 双持：主副手同款「裂空细剑」（New_Weapon_06 → Sword 档）。
+                    // 原副手 equip_new_weapon_09 的 spum 是 New_Weapon_09，被判成 Polearm（长柄），不是剑。
                     MainTemplateId = "equip_new_weapon_06",
-                    OffTemplateId = "equip_new_weapon_09",
+                    OffTemplateId = "equip_new_weapon_06",
                     ForceMainOneHand = true,
                     ForceOffHand = true
                 };

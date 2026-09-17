@@ -247,7 +247,8 @@ public class ChapterManager : Singleton<ChapterManager>
             var data = SaveSystem.Instance?.Data;
             if (data != null)
             {
-                data.MarkChapterCleared(currentChapter);
+                int clearDiff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : -1;
+                data.MarkChapterCleared(currentChapter, clearDiff);
                 var avail = ChapterRouteTable.AvailableChapters(data);
                 if (avail.Count > 0)
                 {

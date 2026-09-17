@@ -36,32 +36,38 @@ public static class MercRosterDefs
         public string DefaultSkillId => !string.IsNullOrEmpty(ActiveSkillId) ? ActiveSkillId : PassiveSkillId;
         public int RecruitGold;
         public bool InInitialPool;
+        /// <summary>
+        /// true = 只在商店解锁，酒馆名册里不列出。
+        /// 2026-09-17 口径：**按稀有度切** —— 普通档进商店（直接挂卖、无门槛），
+        /// 稀有 + 传说留在酒馆（好货只在酒馆，带解锁条件）。当前 8 / 14。
+        /// </summary>
+        public bool SoldInShop;
     }
 
     static readonly Def[] Table =
     {
-        D("H001", "马库斯", "老盾", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 220, 18, 30, 0.90f, 3.2f, null, "SK006", 0, true),
+        D("H001", "马库斯", "老盾", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 220, 18, 30, 0.90f, 3.2f, null, "SK006", 0, true, true),
         D("H002", "洛恩", "铁皮", "dunbing102", "剑盾卫士", MercRarity.Rare, 1.15f, 240, 22, 35, 0.95f, 3.3f, "SK007", null, 1500, true),
         D("H003", "塔克", "重盾", "dunbing201", "剑盾卫士", MercRarity.Rare, 1.15f, 280, 20, 40, 0.80f, 2.8f, "SK008", null, 1800, false),
-        D("H004", "维克", "钢盾", "dunbing202", "剑盾卫士", MercRarity.Legendary, 1.30f, 300, 28, 48, 1.00f, 3.2f, "SK010", "SK009", 5000, false),
-        D("H005", "米娅", "小红", "gongshou101", "游侠", MercRarity.Common, 1.00f, 120, 32, 12, 1.50f, 4.2f, null, "SK002", 500, true),
-        D("H006", "希尔", "鹰眼", "gongshou201", "游侠", MercRarity.Rare, 1.15f, 135, 38, 14, 1.40f, 4.0f, "SK001", null, 2000, false),
-        D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 180, 35, 18, 1.00f, 3.5f, null, "SK002", 600, true),
+        D("H004", "维克", "钢盾", "dunbing202", "剑盾卫士", MercRarity.Legendary, 1.30f, 300, 28, 48, 1.00f, 3.2f, "SK010", "SK009", 5000, false, false),
+        D("H005", "米娅", "小红", "gongshou101", "游侠", MercRarity.Common, 1.00f, 120, 32, 12, 1.50f, 4.2f, null, "SK002", 500, true, true),
+        D("H006", "希尔", "鹰眼", "gongshou201", "游侠", MercRarity.Rare, 1.15f, 135, 38, 14, 1.40f, 4.0f, "SK001", null, 2000, false, false),
+        D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 180, 35, 18, 1.00f, 3.5f, null, "SK002", 600, true, true),
         D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 200, 42, 20, 0.95f, 3.4f, "SK003", null, 1600, true),
-        D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 220, 40, 24, 1.00f, 3.3f, "SK001", null, 1900, false),
-        D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 250, 50, 22, 1.10f, 3.8f, "SK005", "SK012", 6000, false),
-        D("H011", "索菲", "小白", "naima101", "牧师", MercRarity.Common, 1.00f, 100, 15, 10, 1.20f, 3.6f, "SK004", "SK011", 500, true),
+        D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 220, 40, 24, 1.00f, 3.3f, "SK001", null, 1900, false, false),
+        D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 250, 50, 22, 1.10f, 3.8f, "SK005", "SK012", 6000, false, false),
+        D("H011", "索菲", "小白", "naima101", "牧师", MercRarity.Common, 1.00f, 100, 15, 10, 1.20f, 3.6f, "SK004", "SK011", 500, true, true),
         D("H012", "塞拉", "小蓝", "naima102", "水系法师", MercRarity.Rare, 1.15f, 110, 28, 20, 1.00f, 3.3f, "SK004", null, 1700, false),
-        D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 120, 30, 24, 1.00f, 3.2f, "SK013", null, 2000, false),
-        D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 125, 48, 12, 1.20f, 3.6f, "SK020", "SK019", 8000, false),
-        D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 115, 30, 10, 1.60f, 4.3f, null, "SK002", 500, true),
+        D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 120, 30, 24, 1.00f, 3.2f, "SK013", null, 2000, false, false),
+        D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 125, 48, 12, 1.20f, 3.6f, "SK020", "SK019", 8000, false, false),
+        D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 115, 30, 10, 1.60f, 4.3f, null, "SK002", 500, true, true),
         D("H016", "杜娅", "怒角", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 200, 40, 20, 0.95f, 3.4f, "SK003", null, 1600, false),
         D("H017", "莉娜", "圣光", "naima102", "牧师", MercRarity.Rare, 1.15f, 110, 18, 12, 1.20f, 3.5f, "SK004", null, 1700, false),
-        D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 210, 17, 28, 0.85f, 3.0f, null, "SK006", 700, true),
-        D("H019", "艾琳", "星火", "fashi101", "法师", MercRarity.Common, 1.00f, 105, 34, 8, 1.35f, 3.6f, null, "SK017", 600, true),
+        D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 210, 17, 28, 0.85f, 3.0f, null, "SK006", 700, true, true),
+        D("H019", "艾琳", "星火", "fashi101", "法师", MercRarity.Common, 1.00f, 105, 34, 8, 1.35f, 3.6f, null, "SK017", 600, true, true),
         D("H020", "凯尔", "谜面", "fashi102", "法师", MercRarity.Rare, 1.15f, 115, 42, 10, 1.30f, 3.5f, "SK018", null, 1800, false),
-        D("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", MercRarity.Common, 1.00f, 230, 20, 26, 0.80f, 2.9f, null, "SK002", 800, true),
-        D("H022", "索尔", "铁面", "zhongzhan201", "重武者", MercRarity.Rare, 1.15f, 260, 26, 32, 0.85f, 2.8f, "SK003", null, 2200, false),
+        D("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", MercRarity.Common, 1.00f, 230, 20, 26, 0.80f, 2.9f, null, "SK002", 800, true, true),
+        D("H022", "索尔", "铁面", "zhongzhan201", "重武者", MercRarity.Rare, 1.15f, 260, 26, 32, 0.85f, 2.8f, "SK003", null, 2200, false, false),
     };
 
     static Dictionary<string, Def> _byHire;
@@ -70,7 +76,8 @@ public static class MercRosterDefs
     static Def D(
         string hireId, string name, string nick, string asset, string job,
         MercRarity rarity, float growth, float hp, float atk, float def,
-        float atkSpd, float move, string activeSkill, string passiveSkill, int gold, bool initial)
+        float atkSpd, float move, string activeSkill, string passiveSkill, int gold, bool initial,
+        bool soldInShop = false)
     {
         return new Def
         {
@@ -89,7 +96,8 @@ public static class MercRosterDefs
             ActiveSkillId = activeSkill,
             PassiveSkillId = passiveSkill,
             RecruitGold = gold,
-            InInitialPool = initial
+            InInitialPool = initial,
+            SoldInShop = soldInShop
         };
     }
 
@@ -113,6 +121,35 @@ public static class MercRosterDefs
         get { Ensure(); return Table; }
     }
 
+    /// <summary>酒馆名册：SoldInShop=false 的那部分（当前 15 名）。</summary>
+    public static IReadOnlyList<Def> TavernRoster
+    {
+        get { Ensure(); return FilterByShop(false); }
+    }
+
+    /// <summary>商店货架：SoldInShop=true 的那部分（当前 7 名，解锁价 ≥1900）。</summary>
+    public static IReadOnlyList<Def> ShopRoster
+    {
+        get { Ensure(); return FilterByShop(true); }
+    }
+
+    static IReadOnlyList<Def> _tavernCache;
+    static IReadOnlyList<Def> _shopCache;
+
+    static IReadOnlyList<Def> FilterByShop(bool soldInShop)
+    {
+        var cache = soldInShop ? _shopCache : _tavernCache;
+        if (cache != null) return cache;
+
+        var list = new List<Def>();
+        for (int i = 0; i < Table.Length; i++)
+            if (Table[i].SoldInShop == soldInShop)
+                list.Add(Table[i]);
+
+        if (soldInShop) _shopCache = list; else _tavernCache = list;
+        return list;
+    }
+
     public static bool TryGetByHireId(string hireId, out Def def)
     {
         Ensure();
@@ -123,6 +160,31 @@ public static class MercRosterDefs
     {
         Ensure();
         return _byAsset.TryGetValue(assetId ?? "", out def);
+    }
+
+    /// <summary>
+    /// 解锁价格（酒馆名册与商店货架共用同一口径）：用花名册的 RecruitGold，为 0 时按稀有度兜底。
+    /// </summary>
+    public static int UnlockCost(Def def)
+    {
+        if (def.RecruitGold > 0) return def.RecruitGold;
+        switch (def.Rarity)
+        {
+            case MercRarity.Legendary: return 5000;
+            case MercRarity.Rare: return 1500;
+            default: return 500;
+        }
+    }
+
+    /// <summary>
+    /// 佣兵技能显示名：优先读 merc_skills 表；表没 Cook 或查不到时退回技能 id，不留空。
+    /// </summary>
+    public static string SkillDisplayName(string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return "";
+        if (MercSkillTable.TryGet(skillId, out var row) && !string.IsNullOrEmpty(row.DisplayName))
+            return row.DisplayName;
+        return skillId;
     }
 
     public static string GetJobName(string assetId)

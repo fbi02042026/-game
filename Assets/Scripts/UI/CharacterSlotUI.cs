@@ -11,6 +11,11 @@ public class CharacterSlotUI
 {
     public GameObject root;             // 槽位根对象
     public Image portrait;              // 头像图标（不改头像框）
+    /// <summary>
+    /// 头像框：预制体里叫 PlayerSlot 的那层（玩家槽 root 本身就是它，佣兵槽是 root 下的子节点）。
+    /// 它不是头像图层，别拿它当头像用；这里只换框图，不改尺寸、不新增节点。
+    /// </summary>
+    public Image frameImage;
     public GameObject portraitPlaceholder; // 占位图
     public Image energyRing;            // 圆形能量环（可选）
     public Image glowBorder;            // 金色描边（能量满时显示）
@@ -72,21 +77,31 @@ public class CharacterSlotUI
         if (lanBarFill != null) lanBarFill.enabled = true;
     }
 
-    /// <summary>设置头像图片（只换图标，不改头像框；强制保持比例防拉伸）</summary>
+    /// <summary>
+    /// 设置头像图片（只换图，不动排版）。
+    /// 预制体里美术摆的是 sizeDelta 200×200 + localScale 0.7，头像资源本身也是 200×200 —— 直接换图即可，
+    /// 不要再改 preserveAspect / 加 AspectRatioFitter / 抹 localScale，否则头像会比预制体明显大一圈。
+    /// </summary>
     public void SetPortrait(Sprite icon)
     {
         if (portrait != null)
         {
-            portrait.preserveAspect = true;
             portrait.type = Image.Type.Simple;
             portrait.sprite = icon;
             portrait.gameObject.SetActive(icon != null);
             portrait.color = Color.white;
-            if (icon != null)
-                FitPortraitNoStretch(portrait);
         }
         if (portraitPlaceholder != null && portrait != null && portraitPlaceholder != portrait.gameObject)
             portraitPlaceholder.SetActive(icon == null);
+    }
+
+    /// <summary>换头像框（普通灰白 / 稀有蓝 / 传奇橙金）。只换图，不动 rect、不加节点。</summary>
+    public void SetFrame(Sprite frame)
+    {
+        if (frameImage == null) return;
+        frameImage.sprite = frame;
+        // 不改 preserveAspect：预制体里框设的是 0（填满 170×100），改成 1 会留白、跟美术摆的不一样
+        frameImage.enabled = frame != null;
     }
 
     static void FitPortraitNoStretch(Image img)

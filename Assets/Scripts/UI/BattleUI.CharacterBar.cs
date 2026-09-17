@@ -46,6 +46,8 @@ public partial class BattleUI : MonoBehaviour
             // 玩家头像对接；玩家技能走底部 4 个被动槽，头像右上角不放技能图标
             Sprite playerIcon = mm != null ? mm.GetPlayerIcon() : null;
             playerSlot.SetPortrait(playerIcon);
+            // 头像框：玩家默认普通，日后「大厅考证」提档只改 MercHireSession.PlayerFrameRarity
+            playerSlot.SetFrame(MercHireSession.LoadPlayerPortraitFrame());
             playerSlot.SetSkillBadge(null);
             // 职业 icon：xuetiaodi/职业icon，取当前所选职业
             playerSlot.SetJobIcon(PlayerJobDefs.TryLoadJobIcon(PlayerJobDefs.GetSelected()));
@@ -124,6 +126,17 @@ public partial class BattleUI : MonoBehaviour
         return MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
     }
 
+    /// <summary>佣兵稀有度：优先按 H 编号查花名册，查不到再按战斗 AssetId 查。</summary>
+    static MercRosterDefs.MercRarity ResolveMercRarity(string assetId, string hireId)
+    {
+        MercRosterDefs.Def def;
+        if (!string.IsNullOrEmpty(hireId) && MercRosterDefs.TryGetByHireId(hireId, out def))
+            return def.Rarity;
+        if (!string.IsNullOrEmpty(assetId) && MercRosterDefs.TryGetByAssetId(assetId, out def))
+            return def.Rarity;
+        return MercRosterDefs.MercRarity.Common;
+    }
+
     void SetupMercSlot(CharacterSlotUI slot, int index,
         List<string> mercIds, List<string> mercHireIds, List<Mercenary> activeMercs, int maxSlots, MercenaryManager mm)
     {
@@ -152,6 +165,8 @@ public partial class BattleUI : MonoBehaviour
             Sprite icon = MercPortraitSprites.GetHead(hireId) ?? MercPortraitSprites.GetHead(id) ?? (mm != null ? mm.GetIcon(id) : null);
             string job = mm != null ? mm.GetJobName(id) : id;
             slot.SetPortrait(icon);
+            // 头像框按本佣兵稀有度换（普通灰白 / 稀有蓝 / 传奇橙金）
+            slot.SetFrame(MercHireSession.LoadPortraitFrame(ResolveMercRarity(id, hireId)));
             // 职业 icon：按佣兵职业名取（防御/恢复/法术/物攻）
             slot.SetJobIcon(MercHireSession.LoadJobIcon(job));
             // 右上角小图标=该佣兵的技能（自动释放，不用手点）

@@ -630,6 +630,29 @@ public static class AdventureLogCatalog
         return AdventureCodex.IsSeenMonster(e.Id);
     }
 
+    /// <summary>
+    /// 按图鉴 Id（H001~H022 / C001~C004）查条目，找不到返回 false。
+    /// 2026-09-17：酒馆名册与商店也要按 HireId 取简介/Lore，这里给一个统一入口，
+    /// 免得两边各写一遍线性查找。
+    /// </summary>
+    public static bool TryFindMerc(string id, out MercEntry entry)
+    {
+        var all = Mercs;
+        if (all != null)
+        {
+            for (int i = 0; i < all.Length; i++)
+            {
+                if (all[i].Id == id)
+                {
+                    entry = all[i];
+                    return true;
+                }
+            }
+        }
+        entry = default(MercEntry);
+        return false;
+    }
+
     public static bool MercUnlocked(MercEntry e)
     {
         if (e.StoryNpc)

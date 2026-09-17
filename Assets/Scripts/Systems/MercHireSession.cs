@@ -209,6 +209,7 @@ public static class MercHireSession
         return null;
     }
 
+    // ⚠️ 这是「三选一招募卡」自己的边框，美术已调好，不要再改成头像框那套。
     public static Sprite LoadRarityFrame(MercRosterDefs.MercRarity rarity)
     {
         string name = rarity == MercRosterDefs.MercRarity.Legendary ? "frame_legendary"
@@ -216,6 +217,40 @@ public static class MercHireSession
         var sp = Resources.Load<Sprite>("UI/Recruit/" + name);
         if (sp != null) return sp;
         var all = Resources.LoadAll<Sprite>("UI/Recruit/" + name);
+        return all != null && all.Length > 0 ? all[0] : null;
+    }
+
+    /// <summary>
+    /// 战斗 HUD 的**头像框**（三档）：普通灰白 / 稀有蓝 / 传奇（史诗）橙金。
+    /// 与三选一招募卡的边框是两套东西，别混用。
+    /// 美术原图在 Assets/Art/UI/Common/头像框，运行时副本在 Resources/UI/Common/头像框
+    /// （两处都要放，Resources 那份才是 Resources.Load 能拿到的）。
+    /// </summary>
+    public const string PortraitFrameDir = "UI/Common/头像框";
+
+    public static Sprite LoadPortraitFrame(MercRosterDefs.MercRarity rarity)
+    {
+        // 史诗头像框 = 最高档，对应枚举 Legendary
+        string name = rarity == MercRosterDefs.MercRarity.Legendary ? "史诗头像框"
+            : rarity == MercRosterDefs.MercRarity.Rare ? "稀有头像框" : "普通头像框";
+        var sp = LoadFrameSprite(PortraitFrameDir + "/" + name);
+        if (sp != null) return sp;
+        // 副本缺失时退回三选一那套，避免开天窗
+        return LoadRarityFrame(rarity);
+    }
+
+    /// <summary>玩家头像框稀有度。默认普通，日后「大厅考证」提档只需改这里。</summary>
+    public static MercRosterDefs.MercRarity PlayerFrameRarity = MercRosterDefs.MercRarity.Common;
+
+    /// <summary>玩家头像框（当前一律普通，等大厅考证系统接入后按存档取值）。</summary>
+    public static Sprite LoadPlayerPortraitFrame() => LoadPortraitFrame(PlayerFrameRarity);
+
+    static Sprite LoadFrameSprite(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return null;
+        var sp = Resources.Load<Sprite>(path);
+        if (sp != null) return sp;
+        var all = Resources.LoadAll<Sprite>(path);
         return all != null && all.Length > 0 ? all[0] : null;
     }
 }

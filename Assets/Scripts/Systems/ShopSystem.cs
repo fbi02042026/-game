@@ -61,6 +61,11 @@ public static class ShopSystem
             if (item.kind == ShopDefs.Kind.Fragment && !SkillFragmentDefs.CanBuyFragment(SkillDraftMeta.Rarity(item.skillId)))
             { reason = "传说碎片不出售"; return false; }
         }
+        else if (item.kind == ShopDefs.Kind.Merc)
+        {
+            if (string.IsNullOrEmpty(item.mercId)) { reason = "商品不存在"; return false; }
+            if (data.IsMercUnlocked(item.mercId)) { reason = "已解锁"; return false; }
+        }
         else if (item.kind == ShopDefs.Kind.Gacha)
         {
             if (CollectGachaPool(data).Count == 0 && CollectOwnedPool(data).Count == 0)
@@ -105,6 +110,16 @@ public static class ShopSystem
                 int need = SkillFragmentSystem.Needed(item.skillId);
                 string skillName = fd != null ? fd.displayName : item.skillId;
                 result.message = $"{skillName} 碎片 {have}/{need}";
+                break;
+            }
+            case ShopDefs.Kind.Merc:
+            {
+                string shown = MercRosterDefs.TryGetByHireId(item.mercId, out var mdef)
+                    ? mdef.Name + "·" + mdef.Nickname
+                    : item.mercId;
+                data.UnlockMerc(item.mercId);
+                AdventureCodex.MarkMercSeen(item.mercId);
+                result.message = $"已解锁「{shown}」，已加入三选一池";
                 break;
             }
             case ShopDefs.Kind.Gacha:

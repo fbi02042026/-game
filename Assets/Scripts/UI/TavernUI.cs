@@ -284,7 +284,14 @@ public class TavernUI : MonoBehaviour, ITownPage
             recruitButton.onClick.AddListener(() => TavernUnlockUI.Show());
             RetitleRecruitCard("佣兵名册", "解锁佣兵，让其进入战斗三选一池");
         }
-        if (trustButton != null) trustButton.gameObject.SetActive(false);
+        if (trustButton != null)
+        {
+            // 2026-09-17 批次 B：这个卡位改成「请他喝一杯」，接 TavernLore 的独眼请酒
+            trustButton.gameObject.SetActive(true);
+            trustButton.onClick.RemoveAllListeners();
+            trustButton.onClick.AddListener(OpenInformantTreat);
+            RetitleCard(trustButton.transform, "请他喝一杯", "请独眼喝一杯，换一份情报");
+        }
         if (questButton != null) questButton.gameObject.SetActive(false);
         if (intelButton != null)
         {
@@ -294,10 +301,26 @@ public class TavernUI : MonoBehaviour, ITownPage
         }
     }
 
+    /// <summary>请独眼喝一杯：发一份 Tier-2/3 线索页，并出一段按进度推进的台词。</summary>
+    void OpenInformantTreat()
+    {
+        bool granted = TavernLore.TreatInformant();
+        string line = TavernLore.InformantLine();
+        string lore = granted
+            ? "他把杯子推回来，顺手塞给你一张纸条。"
+            : "他只是点了点头——这份情报你已经拿过了。";
+        CodexInfoPopupUI.Show("请他喝一杯", "酒馆角落 · 独眼", line, lore,
+            MercPortraitSprites.GetStand("duyan"));
+    }
+
     /// <summary>把「招募」卡改成「名册/解锁」卡（预制体上已有同名节点时改文案）。</summary>
     void RetitleRecruitCard(string title, string desc)
     {
-        var card = recruitButton != null ? recruitButton.transform : null;
+        RetitleCard(recruitButton != null ? recruitButton.transform : null, title, desc);
+    }
+
+    static void RetitleCard(Transform card, string title, string desc)
+    {
         if (card == null) return;
         var t = card.Find("Title");
         var titleText = t != null ? t.GetComponent<Text>() : null;
