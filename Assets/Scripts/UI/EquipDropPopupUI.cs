@@ -480,6 +480,24 @@ public class EquipDropPopupUI : MonoBehaviour
 
     static void EnsureEquipIcon(EquipInstance eq) => EquipIcons.Resolve(eq);
 
+    /// <summary>获得装备时弹「恭喜获得XXX」庆祝提示（2026-09-17 用户要求）。</summary>
+    static void ShowEquipGain(EquipInstance eq)
+    {
+        if (eq == null) return;
+        int atk = 0;
+        for (int i = 0; i < eq.attrBonus.Count; i++)
+        {
+            var b = eq.attrBonus[i];
+            if (b.attrType == AttrType.Attack && !b.isPercent) atk += Mathf.RoundToInt(b.value);
+        }
+        if (eq.globalBonus.attrType == AttrType.Attack && !eq.globalBonus.isPercent)
+            atk += Mathf.RoundToInt(eq.globalBonus.value);
+        string msg = atk > 0
+            ? $"恭喜获得【{eq.equipName}】，攻击+{atk}，实力大增！"
+            : $"恭喜获得【{eq.equipName}】，实力大增！";
+        GlobalToastUI.Show(msg);
+    }
+
     EquipInstance GetSelected()
     {
         if (_selected < 0 || _selected >= _drops.Count) return null;
@@ -529,6 +547,7 @@ public class EquipDropPopupUI : MonoBehaviour
             UIManager.Instance?.ShowToast("这件装备穿不上");
             return;
         }
+        ShowEquipGain(sel);
         BattleUI.Instance?.UpdateBackpackGrid();
         Finish(sel, true);
     }
