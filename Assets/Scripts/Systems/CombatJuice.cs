@@ -96,7 +96,11 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
     public void BeginKillWindupJuice(bool fullWindup = true, UnitBase attacker = null, UnitBase victim = null)
     {
         BeginCritWindupSlowMo();
-        BeginCritHeroScalePop(attacker != null ? attacker : Hero.Instance);
+        // 2026-09-17 用户口径：打精英/Boss 最后一下不要玩家放大演出，显得怪。
+        // 普通杂兵击杀保留放大；精英/Boss 只留慢放（镜头拉近本来也只对精英/Boss，且开关默认关）。
+        bool eliteOrBoss = victim is Monster mv && (mv.IsBossUnit || mv.IsEliteWave);
+        if (!eliteOrBoss)
+            BeginCritHeroScalePop(attacker != null ? attacker : Hero.Instance);
         if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
         // 镜头拉近仅对精英/Boss：普通杂兵击杀只走慢放，降低晕眩
         if (!(victim is Monster mon) || (!mon.IsBossUnit && !mon.IsEliteWave)) return;

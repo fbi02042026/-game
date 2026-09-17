@@ -114,12 +114,23 @@ public partial class BattleUI : MonoBehaviour
         if (_battleMask == null) return;
         var bm = BattleManager.Instance;
         bool on = bm != null && bm.isInBattle && !BattleLootMode.Active;
-        if (on == _battleMaskOn) return;
-        _battleMaskOn = on;
-        _battleMask.SetActive(on);
-        // 遮罩一开就把摇杆顶到它上面，否则摇杆接收不到射线
-        if (on) BattleJoystick.Instance?.RaiseOrganizeAbove();
-        RefreshSkillBarMaskState();
+        if (on != _battleMaskOn)
+        {
+            _battleMaskOn = on;
+            _battleMask.SetActive(on);
+            // 遮罩一开就把摇杆顶到它上面，否则摇杆接收不到射线
+            if (on) BattleJoystick.Instance?.RaiseOrganizeAbove();
+            SetGraphicsRaycast(skillSlotRoot, !on);
+        }
+        // 每帧幂等保证：prefab 重导入 / 别的代码动过 sibling 顺序也能立即纠正，
+        // 避免技能栏再次被遮罩盖掉（只比较 index，无 GC，代价可忽略）。
+        if (_battleMaskOn && skillSlotRoot != null)
+        {
+            var maskTr = _battleMask.transform;
+            if (skillSlotRoot.parent == maskTr.parent
+                && skillSlotRoot.GetSiblingIndex() < maskTr.GetSiblingIndex())
+                skillSlotRoot.SetSiblingIndex(maskTr.GetSiblingIndex() + 1);
+        }
     }
 
     /// <summary>

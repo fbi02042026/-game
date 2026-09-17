@@ -110,13 +110,13 @@ public partial class BattleUI : MonoBehaviour
             var m = (mercs != null && i < mercs.Count) ? mercs[i] : null;
             var caster = m != null ? m.SkillCaster : null;
             bool has = caster != null && caster.HasActiveSkill;
-            // 空槽也不隐藏，保持槽位可见
-            slot.root.SetActive(true);
+            // 没有佣兵 / 该佣兵没配主动技：整槽隐藏，既不留空框也不留「空」字。
+            // （2026-09-17 用户口径：没有佣兵时不用显示佣兵技能图标。）
+            slot.root.SetActive(has);
             if (!has)
             {
                 slot.SetAvatar(null);
-                // 佣兵技能槽占位统一用「空」（ SetAvatar(null) 会把图标置透明，不会留白片 ）
-                slot.SetSkillName(null, "空");
+                if (slot.labelText != null) slot.labelText.gameObject.SetActive(false);
                 slot.SetLevelText("");
                 slot.SetEnergyFill(0f);
                 if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
