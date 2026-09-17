@@ -14,6 +14,8 @@ public class EquipQuickSlotUI
     public Text slotLabel;                              // 空槽底字（头/胸甲/…）
     public EquipSlotType slotType = EquipSlotType.Head;
     [System.NonSerialized] public EquipInstance boundItem;
+    /// <summary>美术在该节点上放的占位图（临时图）；空槽时还原它，别把节点整个藏掉。</summary>
+    [System.NonSerialized] public Sprite placeholderSprite;
 
     public void Bind(EquipInstance item)
     {
@@ -27,14 +29,17 @@ public class EquipQuickSlotUI
             if (item.icon == null && item.template != null)
                 item.icon = item.template.icon ?? EquipIcons.Get(item.template.iconFileName);
         }
+        bool showIcon = has && item.icon != null;
 
         if (iconImage != null)
         {
-            iconImage.gameObject.SetActive(has);
-            iconImage.sprite = has ? item.icon : null;
-            iconImage.enabled = has && item.icon != null;
+            // 空槽保留节点可见，回退到美术放的占位图 —— 直接 SetActive(false) 会把槽位变成空洞
+            iconImage.gameObject.SetActive(true);
+            iconImage.preserveAspect = true;
+            iconImage.sprite = showIcon ? item.icon : placeholderSprite;
+            iconImage.enabled = iconImage.sprite != null;
         }
-        if (slotLabel != null) slotLabel.gameObject.SetActive(!has);
+        if (slotLabel != null) slotLabel.gameObject.SetActive(!showIcon);
     }
 
     public void Clear() => Bind(null);

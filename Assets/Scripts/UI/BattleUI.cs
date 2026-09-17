@@ -276,6 +276,10 @@ public partial class BattleUI : MonoBehaviour
         UpdateMercSkillSlots();
         UpdateBackpackGrid();
         UpdateStageProgress(stageIdx);
+        // 底部 4 技槽 / 5 装备槽以前只在 Start 后 0.1s 刷一次，
+        // 战斗中换装备、波次刷新都不会更新 —— 这里补上，保证每次全量刷新都同步。
+        UpdateRunSkillSlots();
+        UpdateEquipQuickSlots();
 
         // QuestText 任务默认文案（波次刷新后由 BattleManager 再改）
         if (questPanel != null && !questPanel.activeSelf)

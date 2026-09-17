@@ -202,6 +202,8 @@ public partial class BattleUI : MonoBehaviour
                 slotType = EquipSlotTypeOf(t.name, i)
             };
             slot.iconImage = ResolveSlotIcon(t);
+            // 先记下美术在这层放的占位图（临时图），空槽时 Bind 会把它还原回来
+            slot.placeholderSprite = slot.iconImage != null ? slot.iconImage.sprite : null;
             slot.slotLabel = t.GetComponentInChildren<Text>(true);  // 头 / 胸甲 / 手 / 脚 / 左手 / 右手
             equipQuickSlots.Add(slot);
         }

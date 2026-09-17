@@ -441,13 +441,13 @@ public class CharacterSlotUI
         }
     }
 
-    /// <summary>空槽占位显示（已解锁但无佣兵）</summary>
+    /// <summary>空槽占位显示（已解锁但无佣兵）：整槽压暗，一眼看出这个位置没人。</summary>
     public void ShowEmpty()
     {
         SetEnergyEnabled(false);
         if (root != null) root.SetActive(true);
         EnsureLockedOverlay();
-        ApplyDim(false);
+        ApplyDim(true);
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
         SetSkillBadge(null);
         SetJobIcon(null);               // 空槽不显示职业 icon

@@ -18,7 +18,6 @@ public partial class BattleUI : MonoBehaviour
 
         var job = PlayerJobDefs.GetSelected();
         var ids = RunLoadout.IsActive ? RunLoadout.SkillIds() : null;
-
         for (int i = 0; i < runSkillSlots.Count; i++)
         {
             var slot = runSkillSlots[i];
@@ -44,6 +43,38 @@ public partial class BattleUI : MonoBehaviour
             // 右下角等级：本作技能没有独立等级，用星级表示
             slot.SetLevelText($"★{star}");
         }
+
+        LogRunSkillDiagnostics(ids);
+    }
+
+    /// <summary>上次诊断输出的特征串，避免每次刷新都刷屏。</summary>
+    string _lastSkillDiagKey = "\u0000";
+
+    /// <summary>
+    /// 4 个技槽不显示时的定位日志：一次就能分清是「节点没绑上 / 被关掉」还是「本局没有技能」。
+    /// 只在结果特征变化时输出，不做任何显示上的改动。
+    /// </summary>
+    void LogRunSkillDiagnostics(System.Collections.Generic.List<string> ids)
+    {
+        if (runSkillSlots == null) return;
+        var sb = new System.Text.StringBuilder();
+        sb.Append("loadoutActive=").Append(RunLoadout.IsActive)
+          .Append(" ids=").Append(ids == null ? "null" : string.Join(",", ids));
+        if (SkillRegistry.Instance == null) sb.Append(" SkillRegistry=NULL");
+        for (int i = 0; i < runSkillSlots.Count; i++)
+        {
+            var s = runSkillSlots[i];
+            sb.Append(" | #").Append(i).Append(' ');
+            if (s == null) { sb.Append("slot=null"); continue; }
+            sb.Append("root=").Append(s.root == null ? "null"
+                      : (s.root.activeInHierarchy ? "on" : "OFF"));
+            sb.Append(" img=").Append(s.avatarImage == null ? "NO-IMG"
+                      : (s.avatarImage.sprite != null ? s.avatarImage.sprite.name : "no-sprite"));
+        }
+        string key = sb.ToString();
+        if (string.Equals(key, _lastSkillDiagKey)) return;
+        _lastSkillDiagKey = key;
+        Debug.Log("[BattleUI-技槽诊断] " + key);
     }
 
     /// <summary>刷新底部 5 个装备快捷槽：头 / 胸 / 脚 / 主手 / 副手（暂不做「手」和「披风」）。</summary>
