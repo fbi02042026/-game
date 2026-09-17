@@ -191,7 +191,8 @@ public static class MercHireSession
     public static string JobIconFile(string jobName)
     {
         if (string.IsNullOrEmpty(jobName)) return "物攻";
-        if (jobName.Contains("盾") || jobName.Contains("卫") || jobName.Contains("重武") || jobName.Contains("防御"))
+        // 重武(重武者) 走物攻分支（2026-09-17 用户纠正：重武也是物攻，不是防御）
+        if (jobName.Contains("盾") || jobName.Contains("卫") || jobName.Contains("防御"))
             return "防御";
         if (jobName.Contains("牧") || jobName.Contains("恢复") || jobName.Contains("圣"))
             return "恢复";

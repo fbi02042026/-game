@@ -49,8 +49,11 @@ public partial class BattleUI : MonoBehaviour
             // 头像框：玩家默认普通，日后「大厅考证」提档只改 MercHireSession.PlayerFrameRarity
             playerSlot.SetFrame(MercHireSession.LoadPlayerPortraitFrame());
             playerSlot.SetSkillBadge(null);
-            // 职业 icon：xuetiaodi/职业icon，取当前所选职业
-            playerSlot.SetJobIcon(PlayerJobDefs.TryLoadJobIcon(PlayerJobDefs.GetSelected()));
+            // 职业 icon：xuetiaodi/职业icon。2026-09-17 用户指定用 Icons/职业icon/ 四分类图
+            // （防御/恢复/法术/物攻）；取不到再回退原职业标，避免打包漏资源时空白。
+            var selJob = PlayerJobDefs.GetSelected();
+            playerSlot.SetJobIcon(PlayerJobDefs.TryLoadCombatBadgeIcon(selJob)
+                                  ?? PlayerJobDefs.TryLoadJobIcon(selJob));
             // 第二条 = 雷击奥义充能（开关关闭也显示 0/N 空条，不隐藏）
             RefreshPlayerUltBar();
         }

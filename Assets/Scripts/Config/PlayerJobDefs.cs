@@ -166,6 +166,25 @@ public static class PlayerJobDefs
     public const string IconArtFolder = "Assets/Art/UI/Icons/职业头像icon/";
 
     /// <summary>
+    /// 战斗头像框左下角的职业分类图（2026-09-17 用户指定）：Resources/UI/Icons/职业icon/ 下的
+    /// 防御 / 恢复 / 法术 / 物攻 四张。映射规则与 MercHireSession.JobIconFile 一致：
+    /// 剑盾→防御，重武·狂战·游侠→物攻，牧师→恢复，法师→法术。
+    /// 只给战斗头像框用；三选一卡面仍走 TryLoadJobIcon（职业立绘），别混。
+    /// </summary>
+    public static Sprite TryLoadCombatBadgeIcon(PlayerJobId id)
+    {
+        var def = Get(id);
+        string cls = MercHireSession.JobIconFile(def.DisplayName);
+        if (string.IsNullOrEmpty(cls)) return null;
+        string path = "Icons/职业icon/" + cls;
+        var sp = Resources.Load<Sprite>(path);
+        if (sp != null) return sp;
+        var tex = Resources.Load<Texture2D>(path);
+        if (tex == null) return null;
+        return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+    }
+
+    /// <summary>
     /// 职业标取图：编辑器优先读美术源目录 <see cref="IconArtFolder"/>，真机回退 Resources/UI/JobSelect/{名}。
     /// 只返回 Sprite，不改 UI 的尺寸与位置（Image 的 RectTransform / preserveAspect 由 prefab 决定）。
     /// </summary>
