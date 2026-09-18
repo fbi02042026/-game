@@ -5,7 +5,19 @@ public static class GameTableStore
 {
     public static string LoadText(string resourcesPathWithoutExt)
     {
-        var ta = Resources.Load<TextAsset>(resourcesPathWithoutExt);
+        TextAsset ta = null;
+        try
+        {
+            ta = Resources.Load<TextAsset>(resourcesPathWithoutExt);
+        }
+        catch (System.Exception e)
+        {
+            // 保险丝：构造期 / 反序列化期（MonoBehaviour 构造函数或字段初始化器）调用 Resources.Load
+            // 会抛 UnityException。这里吞掉并回退，避免整个 MonoBehaviour 实例化失败导致场景打不开。
+            Debug.LogWarning("[GameTableStore] Resources.Load 被拒绝（极可能是在构造函数或字段初始化器里调用）: "
+                + resourcesPathWithoutExt + " -> " + e.Message);
+            ta = null;
+        }
         if (ta != null && ta.bytes != null && ta.bytes.Length > 0)
         {
             // 旧加密包仍可读

@@ -12,6 +12,13 @@ public class AttrSystem
 
     public AttrOwnerKind OwnerKind { get; private set; }
 
+    /// <summary>
+    /// 构造期保险：MonoBehaviour 的字段初始化器（如 UnitBase.attr = new AttrSystem()）会在反序列化 .ctor 里执行，
+    /// 此期间 Resources.Load 会抛 UnityException（Load is not allowed to be called from a MonoBehaviour constructor）。
+    /// 构造期一律只读 GameConfig 常量、不读任何静态表；职业表等 SetOwnerKind（Awake 之后）再写。
+    /// </summary>
+    private bool _inConstruction;
+
     // 基础属性（来自等级+天赋+遗产）
     public int Strength = 0;
     public int Intelligence = 0;
@@ -22,9 +29,11 @@ public class AttrSystem
 
     public AttrSystem(AttrOwnerKind ownerKind)
     {
-        OwnerKind = ownerKind;
         // 只初始化基础字典，不调用 RecalcAllAttr（避免构造期间访问 Singleton）
+        _inConstruction = true;
+        OwnerKind = ownerKind;
         InitBaseDict();
+        _inConstruction = false;
     }
 
     /// <summary>单位 Awake 后绑定归属。会按 Owner 重写基底（玩家有职业表则直接写表值）。</summary>
@@ -35,7 +44,9 @@ public class AttrSystem
         InitBaseDict();
     }
 
-    bool UsesPlayerJobTable => OwnerKind == AttrOwnerKind.Player && PlayerJobBaseStats.HasData;
+    bool UsesPlayerJobTable => !_inConstruction
+        && OwnerKind == AttrOwnerKind.Player
+        && PlayerJobBaseStats.HasData;
 
     /// <summary>
     /// 初始化基础属性字典。玩家+职业表：直接写表，不先写 GameConfig.BASE_HP/ATK 再覆盖。
@@ -52,11 +63,8 @@ public class AttrSystem
 
         bool wroteJob = UsesPlayerJobTable
             && PlayerJobBaseStats.TryWriteCombatBases(this, PlayerJobDefs.GetSelected());
-        // [BALANCE-TEMP] 判定 43 伤害是「Attack45 非暴击」还是「Attack30 暴击（职业表未生效回退 BASE_ATTACK）」
-        Debug.Log($"[BALANCE] jobApplied={wroteJob} hasData={PlayerJobBaseStats.HasData} " +
-                  $"owner={OwnerKind} job={PlayerJobDefs.GetSelected()} " +
-                  $"baseAtk={(_baseAttr.ContainsKey(AttrType.Attack) ? _baseAttr[AttrType.Attack] : -1f)} " +
-                  $"critDmg={(_baseAttr.ContainsKey(AttrType.CritDamage) ? _baseAttr[AttrType.CritDamage] : -1f)}");
+        // 注意：这里不要再写裸的 PlayerJobBaseStats.HasData 之类的表读取——
+        // 构造期（_inConstruction）读表会触发 Resources.Load，Unity 会直接抛 UnityException。
         if (!wroteJob)
             WriteGameConfigCombatBases();
 
