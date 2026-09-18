@@ -101,6 +101,50 @@ public partial class BattleUI : MonoBehaviour
     {
         if (_battleMask != null) return;
         _battleMask = FindDeepChildIgnoreCase(transform, "zhezhao")?.gameObject;
+        RaiseSlotCanvasAboveParent(skillSlotRoot);
+    }
+
+    /// <summary>
+    /// 把槽位容器自身的嵌套 Canvas 抬到「BackpackPanel 的 Canvas order + 1」。
+    /// 复发根源修复：原先按「最近一级父 Canvas」抬序，一旦 SkillBar 父链变化（父级不再带 Canvas）
+    /// 就只抬到 1，被 BackpackPanel(100) + zhezhao 遮罩盖住 → 4 槽消失。
+    /// 现直接以 BackpackPanel 的 Canvas 为基准，不依赖 SkillBar 自身父链查找；
+    /// 找不到 BackpackPanel Canvas 时退回「最近父 Canvas + 1」兜底。
+    /// </summary>
+    static void RaiseSlotCanvasAboveParent(Transform t)
+    {
+        if (t == null) return;
+        var self = t.GetComponent<Canvas>();
+        if (self == null) return;
+
+        int baseOrder = 0;
+        bool foundBackpack = false;
+        // 向上查找 BackpackPanel 并取其 Canvas 的 order 作为基准（不依赖 t 自身父链）
+        for (var p = t.parent; p != null; p = p.parent)
+        {
+            if (p.name.IndexOf("BackpackPanel", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                var bpCanvas = p.GetComponent<Canvas>();
+                if (bpCanvas != null) { baseOrder = bpCanvas.sortingOrder; foundBackpack = true; }
+                break;
+            }
+        }
+        if (!foundBackpack)
+        {
+            // 兜底：退回「最近父 Canvas + 1」
+            for (var p = t.parent; p != null; p = p.parent)
+            {
+                var pc = p.GetComponent<Canvas>();
+                if (pc != null) { baseOrder = pc.sortingOrder; break; }
+            }
+        }
+
+        int target = baseOrder + 1;
+        if (self.sortingOrder < target)
+        {
+            self.overrideSorting = true;
+            self.sortingOrder = target;
+        }
     }
 
     /// <summary>
@@ -143,6 +187,8 @@ public partial class BattleUI : MonoBehaviour
     public void RefreshSkillBarMaskState()
     {
         if (skillSlotRoot == null || _battleMask == null) return;
+        // 技槽有自己的 Canvas 时，必须先抬层级，否则下面的兄弟排序对绘制顺序无效。
+        RaiseSlotCanvasAboveParent(skillSlotRoot);
         if (!_battleMaskOn)
         {
             SetGraphicsRaycast(skillSlotRoot, true);

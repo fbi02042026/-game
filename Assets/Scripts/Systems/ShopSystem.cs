@@ -89,7 +89,11 @@ public static class ShopSystem
         var data = saveSys.Data;
 
         if (!CanBuy(item, data, out string reason)) { result.message = reason; return result; }
-        if (!ResourceWallet.TrySpend(item.currency, item.price, save: false))
+
+        // ⚠ 碎片不能在这里预扣：SkillFragmentSystem.TryBuyFragments 内部会按单价再扣一次，
+        // 两处都扣会导致玩家付 800+1250=2050 金、界面却只显示 800；
+        // 更糟的是金币介于两者之间时，钱扣了但碎片没到账。碎片统一交给它自己扣。
+        if (item.kind != ShopDefs.Kind.Fragment && !ResourceWallet.TrySpend(item.currency, item.price, save: false))
         { result.message = "扣款失败"; return result; }
 
         switch (item.kind)

@@ -125,16 +125,22 @@ public static class ShopDefs
         },
 
         // ================= 抽卡券 =================
+        // ⚠ 2026-09-18 重定价：当前版本**不做内购**，钻石是纯免费货币，
+        // 免费产出 ≈ 240~340 钻/月（签到周峰值 60 + 连击档位）。
+        // 原 500/4500 意味着 2 个月才够一次单抽，抽卡对免费玩家等于关闭。
+        // 现按「首月 3 次单抽、4 个月 1 次十连」重定：150 / 1350（十连仍是 9 折）。
+        // 换算效率：单抽 150 钻换一个技能（普通直购 2000 金、稀有 6000 金）≈ 13~40 金/钻，
+        // 与金币袋的 16 金/钻 同一量级，两者都值得买、会形成取舍。
         new Item {
             id = "shop_gacha_1", name = "技能券 · 单抽", kind = Kind.Gacha,
             desc = "从当前未解锁的技能里随机解锁 1 个。\n抽到已拥有的会转成该技能碎片。",
-            currency = ResourceWallet.ResourceType.Diamond, price = 500, drawCount = 1,
+            currency = ResourceWallet.ResourceType.Diamond, price = 150, drawCount = 1,
             showFromChapter = 2
         },
         new Item {
             id = "shop_gacha_10", name = "技能券 · 十连", kind = Kind.Gacha,
             desc = "连续抽取 10 次，相当于 9 折。\n至少出 1 个稀有及以上。",
-            currency = ResourceWallet.ResourceType.Diamond, price = 4500, drawCount = 10,
+            currency = ResourceWallet.ResourceType.Diamond, price = 1350, drawCount = 10,
             showFromChapter = 2
         },
 
@@ -148,7 +154,7 @@ public static class ShopDefs
         },
         new Item {
             id = "shop_gold_bag", name = "金币袋", kind = Kind.Resource,
-            desc = "立即获得 5000 金币。",
+            desc = "立即获得 800 金币。",
             currency = ResourceWallet.ResourceType.Diamond, price = 50,
             grantType = ResourceWallet.ResourceType.Gold, grantAmount = 800,
             dailyLimit = 5

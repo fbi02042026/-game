@@ -844,7 +844,12 @@ public abstract class UnitBase : MonoBehaviour
         Transform hitTf = target.transform;
         int facingDir = GetVfxFacingDir();
 
-        float releaseDelay = SkillNaming.IsRangedKit(kit) ? GameConfig.RANGED_FIRE_RELEASE_DELAY : 0f;
+        // 远程前摇：游侠（P004）用更大的 0.35，其他远程统一 0.2
+        float releaseDelay = SkillNaming.IsRangedKit(kit)
+            ? (this is Hero && PlayerJobDefs.GetSelected() == PlayerJobId.Ranger
+                ? GameConfig.RANGED_FIRE_RELEASE_DELAY_RANGER
+                : GameConfig.RANGED_FIRE_RELEASE_DELAY)
+            : 0f;
 
         // 普攻：近战即时/下落时结算；弓/法球（敌我）FirePoint→HitPoint 飞到再结算
         if (!isAlly && SkillNaming.IsRangedKit(kit) && BattleVFXSystem.Instance != null)
@@ -1088,6 +1093,9 @@ public abstract class UnitBase : MonoBehaviour
             atkSpd *= GameConfig.PLAYER_ATTACK_SPEED_MUL;
         // 残血加成（R1）：低血时提升攻速，越打越快制造反扑手感
         atkSpd *= GetLowHpAttackSpeedMul();
+        // 游侠攻速减速（仅 Hero 且职业为游侠 P004）：额外乘 0.85，让游侠出手更慢、与前摇统一手感
+        if (this is Hero && PlayerJobDefs.GetSelected() == PlayerJobId.Ranger)
+            atkSpd *= 0.85f;
         return 1f / Mathf.Max(0.05f, atkSpd);
     }
 

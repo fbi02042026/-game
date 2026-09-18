@@ -190,18 +190,25 @@ public class StageClearRewardDirector : MonoBehaviour
     }
 
     /// <summary>
-    /// 宝箱层级：固定高于地图/背景(SORT_MAPROOT=10)，避免按 Y 计算的排序把箱子压到背景之后导致“看不见宝箱”。
-    /// close/open 精灵同时给高于地图的绝对 order，即便它们落在某个 SortingGroup 之外也能浮在场景之上。
+    /// 宝箱层级：**与单位同一套规则** —— SortingGroup 的 order 随脚下 Y 变化（越靠下越靠前），
+    /// 这样箱子会按它在场上的位置参与前后遮挡，而不是永远压在所有东西前面。
+    /// （2026-09-18 修：之前写死 SORT_MAPROOT+5=15，与单位同档且恒定，导致宝箱永远在最前。）
+    /// close/open 精灵的 12/13 只是**组内相对**次序，不再当作绝对 order 用。
     /// </summary>
     void ApplyBoxSorting()
     {
         if (_boxRoot == null) return;
-        const int boxGroup = GameConfig.SORT_MAPROOT + 5; // 15：与单位同一档，稳定高于地图(10)
+
+        // 用脚底 Y：有地面精灵就取地面精灵，否则取 boxRoot 自身
+        float footY = _boxRoot.position.y;
+        var groundSr = GetBoxGroundSprite();
+        if (groundSr != null) footY = groundSr.transform.position.y;
+
         var sg = _boxRoot.GetComponent<UnityEngine.Rendering.SortingGroup>();
         if (sg == null) sg = _boxRoot.GetComponentInChildren<UnityEngine.Rendering.SortingGroup>();
         if (sg == null) sg = _boxRoot.gameObject.AddComponent<UnityEngine.Rendering.SortingGroup>();
         sg.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        sg.sortingOrder = boxGroup;
+        sg.sortingOrder = GameConfig.SORT_UNIT + Mathf.RoundToInt(-footY * 40f);
 
         if (_closeSr != null)
         {

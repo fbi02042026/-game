@@ -57,6 +57,23 @@ public class BattleRunStats
 
     public List<AllyContribution> AllyContributions = new List<AllyContribution>();
 
+    /// <summary>本局实际获得的装备（弹出「恭喜获得」时记一笔）。</summary>
+    public List<EquipGainEntry> EquipGains = new List<EquipGainEntry>();
+
+    public void AddEquipGain(EquipInstance eq)
+    {
+        if (eq == null) return;
+        Sprite icon = eq.icon;
+        if (icon == null && eq.template != null)
+            icon = EquipIcons.Get(eq.template.iconFileName);
+        EquipGains.Add(new EquipGainEntry
+        {
+            name = string.IsNullOrEmpty(eq.equipName) ? "装备" : eq.equipName,
+            icon = icon,
+            rarity = eq.rarity
+        });
+    }
+
     public void Reset()
     {
         KillCount = 0;
@@ -84,6 +101,7 @@ public class BattleRunStats
         MvpDisplayName = "冒险者";
         MvpScore = 0f;
         AllyContributions.Clear();
+        EquipGains.Clear();
     }
 
     public AllyContribution EnsureAlly(string key, string displayName)
@@ -146,4 +164,13 @@ public class SettlementRewardCell
     public int count;
     public Sprite icon;
     public Color frameColor = new Color(0.55f, 0.45f, 0.25f, 1f);
+}
+
+/// <summary>本局获得的一件装备（结算奖励格用）。</summary>
+[Serializable]
+public class EquipGainEntry
+{
+    public string name;
+    public Sprite icon;
+    public Rarity rarity;
 }

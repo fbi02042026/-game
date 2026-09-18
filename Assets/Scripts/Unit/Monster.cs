@@ -265,11 +265,20 @@ public class Monster : UnitBase
     bool _bossPhaseShiftBusy;
     private int _bossSwingIndex;
     private bool _isEnteringMap;
+    /// <summary>
+    /// 剧情前置暂停（UnitsCanAct=false 且 AllowMonsterMapEnter=true）时，怪只走到屏幕边缘就停，
+    /// 此时 _isEnteringMap 仍为 true（要等「！」之后才继续推进到交战点）。
+    /// 引导流程要「最后一只怪站定就弹对白」，靠这个标志判断，不能只等 _isEnteringMap 变 false。
+    /// </summary>
+    private bool _enterAtPauseStop;
     private Vector3 _enterTargetPos;
     private float _enterSpeed = 1.6f;
 
     /// <summary>是否仍在从屏外走进交战点。</summary>
     public bool IsEnteringMap => _isEnteringMap;
+
+    /// <summary>已走到「剧情暂停位」（屏幕边缘）并站定；对引导来说等于「这只怪已入场完毕」。</summary>
+    public bool EnterAtPauseStop => _enterAtPauseStop;
 
     /// <summary>从地图边缘缓步走向交战点；faceDir 为入场朝向（左进场朝右=1，右进场朝左=-1）</summary>
     public void BeginMapEnter(Vector3 engagePos, float speed, int faceDir = -1)
@@ -278,6 +287,7 @@ public class Monster : UnitBase
         float enterMul = _isBossUnit ? 1f : Random.Range(0.9f, 1.15f);
         _enterSpeed = Mathf.Max(0.4f, speed * enterMul);
         _isEnteringMap = true;
+        _enterAtPauseStop = false;
         facingDir = faceDir > 0 ? 1 : -1;
         ApplyFacing(facingDir);
         if (rb != null) rb.velocity = Vector2.zero;
@@ -315,6 +325,7 @@ public class Monster : UnitBase
                 if (distHero <= GetEffectiveAttackRange() + 0.4f)
                 {
                     _isEnteringMap = false;
+                    _enterAtPauseStop = false;
                     SyncLaneYFromWorld();
                     target = Hero.Instance;
                     FaceToward(Hero.Instance);
@@ -324,6 +335,7 @@ public class Monster : UnitBase
             {
                 GameConfig.SetWorldPosition(MoveRoot, new Vector3(_enterTargetPos.x, FootY, MoveRoot.position.z));
                 _isEnteringMap = false;
+                _enterAtPauseStop = false;
                 SyncLaneYFromWorld();
                 UnitBase enterFoe = FindNearestEnemyOnField();
                 if (enterFoe == null && Hero.Instance != null && !Hero.Instance.isDead)
@@ -359,6 +371,8 @@ public class Monster : UnitBase
                 float nx = Mathf.MoveTowards(MoveRoot.position.x, effTargetX, step);
                 GameConfig.SetWorldPosition(MoveRoot, new Vector3(nx, FootY, MoveRoot.position.z));
                 bool stillWalking = Mathf.Abs(effTargetX - nx) > 0.02f;
+                // 剧情暂停窗内走到屏幕边缘即算「入场完毕」，供引导立即接管（否则要等到超时）
+                _enterAtPauseStop = preFightPause && !stillWalking;
                 if (unitAnim != null) unitAnim.SetMove(stillWalking, facingDir);
                 ApplyLaneY(Time.deltaTime);
                 return;
@@ -441,6 +455,9 @@ public class Monster : UnitBase
     {
         return !MonsterAttackStyleTable.IsRanged(_attackStyle);
     }
+
+    /// <summary>攻击风格是否为远程（弓/法球）。教程关按「近战厚 / 远程脆」分档配血用。</summary>
+    public bool IsRangedStyle => MonsterAttackStyleTable.IsRanged(_attackStyle);
 
     void RunForcedCombat()
     {
@@ -652,8 +669,19 @@ public class Monster : UnitBase
         }
         else if (eliteWave)
         {
-            baseHp = GameConfig.MONSTER_ELITE_HP;
-            baseAtk = GameConfig.MONSTER_ELITE_ATK;
+            // 精英不再写死常量：按本章普通怪平均基准推导，避免「精英比本章杂兵还脆」。
+            // 表缺该章数据时回退旧常量（MONSTER_ELITE_HP / ATK）。
+            float avgHp, avgAtk;
+            if (MonsterStatsTable.TryGetChapterAverage(monsterChapter, out avgHp, out avgAtk) && avgHp > 0f)
+            {
+                baseHp = avgHp * GameConfig.ELITE_HP_FROM_CHAPTER_AVG;
+                baseAtk = avgAtk * GameConfig.ELITE_ATK_FROM_CHAPTER_AVG;
+            }
+            else
+            {
+                baseHp = GameConfig.MONSTER_ELITE_HP;
+                baseAtk = GameConfig.MONSTER_ELITE_ATK;
+            }
             baseDef = GameConfig.MONSTER_ELITE_DEF;
             atkInterval = GameConfig.MONSTER_ELITE_ATK_INTERVAL;
             // 分档：关卡波次奇偶 → 血厚 / 血薄
@@ -677,7 +705,9 @@ public class Monster : UnitBase
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * GameConfig.MONSTER_HP_GLOBAL_MUL);
-        attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER);
+        // Boss 原先只有血量 TTK 加成，攻击没有 —— 补上，否则后期 Boss 打人比自家远程杂兵还轻
+        float atkTtkMul = bossUnit ? GameConfig.BOSS_TTK_ATK_MUL : 1f;
+        attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul);
         attr.SetAttr(AttrType.Defense, baseDef * scale);
         float atkSpeedMul = GameConfig.MONSTER_ATK_SPEED_MUL;
         if (BattleManager.Instance != null)
@@ -1634,6 +1664,7 @@ public class Monster : UnitBase
         base.ResetForReuse();
         _lastAppliedDir = 0;
         _isEnteringMap = false;
+        _enterAtPauseStop = false;
         _bossSwingIndex = 0;
         _forcedTarget = null;
         _worldHpBar = null;

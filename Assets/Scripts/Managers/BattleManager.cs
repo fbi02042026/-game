@@ -88,6 +88,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     internal float _tutorialHpMax = TutorialBattleTable.DefaultHpMax;
     internal float _tutorialEliteHpMin = TutorialBattleTable.DefaultEliteHpMin;
     internal float _tutorialEliteHpMax = TutorialBattleTable.DefaultEliteHpMax;
+    /// <summary>引导波远程怪 HP 档；0 = 不单独降血，与近战同档。</summary>
+    internal float _tutorialRangedHpMin;
+    internal float _tutorialRangedHpMax;
     internal bool _tutorialHpFromTable;
     /// <summary>本局怪物攻速倍率（剧情选择等）</summary>
     public float runMonsterAtkSpeedMul = 1f;
@@ -842,6 +845,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     public void LoadStage(StageData stage)
     {
         MonsterStatsTable.Reload();
+        StageDropTable.Reload();
         StageSpawnTable.Reload();
         TutorialBattleTable.Reload();
         MonsterAttackStyleTable.Reload();
@@ -892,6 +896,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         Time.timeScale = 1f;
         FocusMarkSystem.Ensure()?.ResetForBattle();
         BattleUI.Instance?.EnsureBattleControls();
+        BattleUI.Instance?.EnsureRunSkillSlotsRepaired();
         BattleJoystick.Instance?.SetVisible(true);
 
         // 触发章节背景切换
@@ -1919,6 +1924,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (CountAliveMonsters() > 0) return;
         TryGrantStageQuestGold();
         GrantStageClues();
+        GrantStageGrowDrops();
         if (ShouldPlayChapter1Ending())
         {
             _rewardSequenceStarted = true;
@@ -1942,6 +1948,23 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         StoryClue.OnStageCleared(CurrentChapter, idx);
         if (currentStage.type == StageType.Elite)
             StoryClue.OnEliteFirstKill(CurrentChapter);
+    }
+
+    /// <summary>
+    /// 2026-09-18：关卡掉落徽记（stage_drop.csv，见 StageDropTable / MercGrowInventory）。
+    /// Boss 关且该章通关次数 ≤1 视为「本章首次通关」，额外给 §7.4 的保底（+2 自选徽记）。
+    /// 用 ≤1 而不是 ==0：IncrementChapterClearCount 的时序若在清怪前，==0 会漏掉保底。
+    /// </summary>
+    void GrantStageGrowDrops()
+    {
+        if (currentStage == null) return;
+        string stageType = currentStage.type == StageType.Boss ? "Boss"
+                         : currentStage.type == StageType.Elite ? "Elite" : "Normal";
+        bool firstClear = currentStage.type == StageType.Boss
+            && (ChapterManager.Instance == null || ChapterManager.Instance.GetChapterClearCount(CurrentChapter) <= 1);
+        int got = MercGrowInventory.GrantStageDrops(CurrentChapter, stageType, firstClear);
+        if (got > 0)
+            GlobalToastUI.Show("获得职业徽记 ×" + got);
     }
 
     bool ShouldPlayChapter1Ending()
@@ -1996,6 +2019,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         FocusMarkSystem.Ensure()?.ResetForBattle();
         BattleUI.Instance?.EnsureBattleControls();
+        BattleUI.Instance?.EnsureRunSkillSlotsRepaired();
         BattleJoystick.Instance?.SetVisible(false);
 
         if (currentStage == null)
@@ -2153,7 +2177,16 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         {
             ShowVictorySettlementThen(() =>
             {
-                UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
+                var cm = ChapterManager.Instance;
+                var next = cm != null ? cm.availableNextStages : null;
+                // 只有一条路时不弹石墩选关界面，省掉一次没有选择余地的点击
+                if (next != null && next.Count == 1 && next[0] != null)
+                {
+                    Debug.Log("[BattleManager] 下一关只有一条路，跳过选关界面直接进关");
+                    cm.SelectStage(next[0]);
+                    return;
+                }
+                UIManager.Instance?.ShowStageSelectUI(next);
             });
         }
     }

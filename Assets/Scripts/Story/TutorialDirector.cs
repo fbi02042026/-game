@@ -326,9 +326,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         string xiaobaiId = StoryProgress.TutorialMercHireId;
         StoryDirector.Ensure().Play(new List<StoryBeat>
         {
-            StoryDirector.Line("你", "小白",
+            // 只有小白一个人说话：不要摆玩家立绘，直接让她单人居中说
+            //（约定：单人说台词一律用 Solo，别摆两个立绘站着不说话）
+            StoryDirector.Solo("小白",
                 "大难不死……回城歇歇吧。需要治疗的话，来酒馆找我。",
-                StoryPortraits.Player, xiaobaiId, 1)
+                xiaobaiId)
                 .Bg(StoryBackgrounds.GuildHall)
                 .SkipReveal()
         }, () => done = true);
@@ -527,7 +529,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         bm?.QueueTutorialStep(4, forcedTarget: merc);
         hint.Show("前方有人被怪物围住了，上前帮忙。", null, 4f);
 
-        // 不冻结战斗：玩家可随时上前清怪
+        // 不冻结战斗：玩家可随时上前清怪。
+        // 2026-09-18：这里原本会直接改写 Hero 坐标把玩家往前推（最高 18/秒），
+        // 触发瞬间看起来就是「被瞬移」。改为只等待，绝不动画家坐标。
         if (bm != null) bm.UnitsCanAct = true;
         float approach = 0f;
         const float approachTimeout = 4f;
@@ -538,18 +542,6 @@ public class TutorialDirector : Singleton<TutorialDirector>
             {
                 float dist = Mathf.Abs(UnitBase.GetCombatX(Hero.Instance) - UnitBase.GetCombatX(merc));
                 if (dist <= 4.2f) break;
-                if (approach > 0.08f)
-                {
-                    float hx = UnitBase.GetCombatX(Hero.Instance);
-                    float mx = UnitBase.GetCombatX(merc);
-                    float step = Mathf.Sign(mx - hx) * Mathf.Min(18f * Time.unscaledDeltaTime, Mathf.Max(0f, dist - 3.6f));
-                    if (Mathf.Abs(step) > 0.001f)
-                    {
-                        var p = Hero.Instance.transform.position;
-                        p.x += step;
-                        GameConfig.SetWorldPosition(Hero.Instance.gameObject, p);
-                    }
-                }
             }
             yield return null;
         }
@@ -616,7 +608,18 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return new WaitForSecondsRealtime(0.6f);
 
         if (merc != null && !merc.isDead)
+        {
             merc.currentHp = merc.attr.GetAttr(AttrType.MaxHp);
+            // 血回满了也要把低血红/受击闪的残留染色清掉，否则小白一身红跟着队伍走
+            // （unitAnim 是 protected，外部只能 GetComponent）
+            var anim = merc.GetComponent<UnitAnimation>();
+            if (anim != null) anim.ForceClearTint();
+        }
+        if (Hero.Instance != null)
+        {
+            var hAnim = Hero.Instance.GetComponent<UnitAnimation>();
+            if (hAnim != null) hAnim.ForceClearTint();
+        }
 
         ui?.UpdateCharacterSlots();
         AllowBattleSkillClick = false;
@@ -771,7 +774,19 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
             if (t2 > 0.3f)
             {
-                var target = ui.InOrderPhase && ui.ConfirmRect != null ? ui.ConfirmRect : ui.OrderRowRect;
+                // G：目标必须挑「当前真正可见」的那个。确认按钮还没显示时要用顺序条，
+                // 反过来顺序条在整理阶段会被 SetActive(false)（SetOrderRowVisible），
+                // 若把它交给引导，引导条会退化成「无目标」的默认落位（屏幕偏上）。
+                var confirm = ui.ConfirmRect;
+                var row = ui.OrderRowRect;
+                RectTransform target = null;
+                if (ui.InOrderPhase && confirm != null && confirm.gameObject.activeInHierarchy)
+                    target = confirm;
+                else if (row != null && row.gameObject.activeInHierarchy)
+                    target = row;
+                else if (confirm != null)
+                    target = confirm;
+
                 if (target != null)
                     hint.ShowHard("拖动技能可改释放顺序：① 最先放。改完点「确认顺序」。", target);
             }
@@ -889,15 +904,19 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield break;
         }
 
-        // 1) 打开角色页
-        var hub = TownHubController.Instance;
-        if (hub != null) hub.OpenCharacter();
+        // 1) 不自动打开角色页：让玩家自己点 BottomNav 的「角色」（用户口径：都让玩家点）
+        var nav = MainBottomNav.Instance;
+        RectTransform charRt = nav != null && nav.characterButton != null
+            ? nav.characterButton.GetComponent<RectTransform>() : null;
 
         float bind = 0f;
-        while (bind < 4f)
+        const float navTimeout = 15f;
+        while (bind < navTimeout)
         {
             var ch = CharacterUI.Instance;
             if (ch != null && ch.gameObject.activeInHierarchy) break;
+            if (charRt != null)
+                hint.ShowHard("先点下方「角色」，再点「天赋」。", charRt);
             bind += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
             yield return null;
         }
@@ -905,15 +924,16 @@ public class TutorialDirector : Singleton<TutorialDirector>
         var character = CharacterUI.Instance;
         if (character == null || !character.gameObject.activeInHierarchy)
         {
-            Debug.LogWarning("[Tutorial] 角色页没打开，跳过天赋引导");
+            Debug.LogWarning("[Tutorial] 玩家未进入角色页，跳过天赋引导");
+            hint.Hide();
             yield break;
         }
 
-        // 2) 指向「天赋」按钮，超时就替玩家点开
+        // 2) 指向「天赋」按钮；玩家不点就不往下走，**绝不替玩家点开**
         RectTransform talentRt = character.talentButton != null
             ? character.talentButton.GetComponent<RectTransform>() : null;
         float t = 0f;
-        const float openTimeout = 8f;
+        const float openTimeout = 15f;
         while (t < openTimeout)
         {
             var talent = TalentUI.Instance;
@@ -926,9 +946,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         if (TalentUI.Instance == null || !TalentUI.Instance.IsOpen)
         {
-            character.OpenTalent();
-            yield return null;
-            yield return null;
+            Debug.LogWarning("[Tutorial] 玩家未点开天赋页，跳过天赋引导");
+            hint.Hide();
+            yield break;
         }
 
         var talentUi = TalentUI.Instance;
@@ -1242,7 +1262,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 {
                     var mon = list[i] as Monster;
                     if (mon == null || mon.isDead) continue;
-                    if (mon.IsEnteringMap)
+                    // 剧情暂停窗里怪只走到屏幕边缘就站定（_isEnteringMap 仍为 true，
+                    // 要等「！」后才继续推进），所以必须把 EnterAtPauseStop 也算作业已入场，
+                    // 否则这里会一直空转到 timeout（10 秒）才弹对白。
+                    if (mon.IsEnteringMap && !mon.EnterAtPauseStop)
                     {
                         anyEntering = true;
                         break;

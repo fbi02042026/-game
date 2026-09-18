@@ -1,0 +1,54 @@
+# stage_drop：关卡掉落表（徽记 / 本命碎片）2026-09-18 新建
+# dropType = Badge 徽记 | Fragment 本命碎片
+# jobKey   = 剑盾 / 狂战 / 游侠 / 法师 / 牧师 / 重武；* = 本章主产职业里随机抽
+# tier     = 普通 / 稀有 / 传奇（对应养成文档 v4 的低 / 中 / 高档）
+# rate     每次通关判定一次的概率（0~1）。Normal 关 0.10 ≈ 10 只怪 × 1%（见养成文档 §7.2）
+# countMin/countMax  命中时的数量区间
+# firstClearBonus    本章首次通关额外发放数（保底，防脸黑；重复通关不再给）
+# 章 × 主产职业 × 档位分布 出自 Docs/佣兵养成_随机化与抗性_2026-09-17.md §7.3
+gameChapter,stageType,dropType,jobKey,tier,rate,countMin,countMax,firstClearBonus,note
+1,Normal,Badge,剑盾,普通,0.10,1,1,0,ch1暮影森林·主产
+1,Normal,Badge,游侠,普通,0.10,1,1,0,ch1暮影森林·主产
+1,Normal,Badge,重武,普通,0.10,1,1,0,ch1暮影森林·主产
+2,Normal,Badge,剑盾,普通,0.10,1,1,0,ch2墓园·主产
+2,Normal,Badge,狂战,普通,0.10,1,1,0,ch2墓园·主产
+2,Normal,Badge,游侠,普通,0.10,1,1,0,ch2墓园·主产
+3,Normal,Badge,狂战,普通,0.085,1,1,0,ch3雨林·低85%
+3,Normal,Badge,狂战,稀有,0.015,1,1,0,ch3雨林·中15%
+3,Normal,Badge,游侠,普通,0.085,1,1,0,ch3雨林·低85%
+3,Normal,Badge,游侠,稀有,0.015,1,1,0,ch3雨林·中15%
+3,Normal,Badge,重武,普通,0.085,1,1,0,ch3雨林·低85%
+3,Normal,Badge,重武,稀有,0.015,1,1,0,ch3雨林·中15%
+4,Normal,Badge,狂战,普通,0.065,1,1,0,ch4原野·低65%
+4,Normal,Badge,狂战,稀有,0.035,1,1,0,ch4原野·中35%
+4,Normal,Badge,法师,普通,0.065,1,1,0,ch4原野·低65%
+4,Normal,Badge,法师,稀有,0.035,1,1,0,ch4原野·中35%
+4,Normal,Badge,游侠,普通,0.065,1,1,0,ch4原野·低65%
+4,Normal,Badge,游侠,稀有,0.035,1,1,0,ch4原野·中35%
+5,Normal,Badge,法师,普通,0.035,1,1,0,ch5海渊·低35%
+5,Normal,Badge,法师,稀有,0.065,1,1,0,ch5海渊·中65%
+5,Normal,Badge,牧师,普通,0.035,1,1,0,ch5海渊·低35%
+5,Normal,Badge,牧师,稀有,0.065,1,1,0,ch5海渊·中65%
+5,Normal,Badge,狂战,普通,0.035,1,1,0,ch5海渊·低35%
+5,Normal,Badge,狂战,稀有,0.065,1,1,0,ch5海渊·中65%
+6,Normal,Badge,法师,稀有,0.08,1,1,0,ch6岩窟·中80%
+6,Normal,Badge,法师,传奇,0.02,1,1,0,ch6岩窟·高20%
+6,Normal,Badge,牧师,稀有,0.08,1,1,0,ch6岩窟·中80%
+6,Normal,Badge,牧师,传奇,0.02,1,1,0,ch6岩窟·高20%
+6,Normal,Badge,剑盾,稀有,0.08,1,1,0,ch6岩窟·中80%
+6,Normal,Badge,剑盾,传奇,0.02,1,1,0,ch6岩窟·高20%
+7,Normal,Badge,狂战,稀有,0.055,1,1,0,ch7炼狱·中55%
+7,Normal,Badge,狂战,传奇,0.045,1,1,0,ch7炼狱·高45%
+7,Normal,Badge,牧师,稀有,0.055,1,1,0,ch7炼狱·中55%
+7,Normal,Badge,牧师,传奇,0.045,1,1,0,ch7炼狱·高45%
+7,Normal,Badge,法师,稀有,0.055,1,1,0,ch7炼狱·中55%
+7,Normal,Badge,法师,传奇,0.045,1,1,0,ch7炼狱·高45%
+8,Normal,Badge,剑盾,稀有,0.03,1,1,0,ch8永霜·中30%
+8,Normal,Badge,剑盾,传奇,0.07,1,1,0,ch8永霜·高70%
+8,Normal,Badge,重武,稀有,0.03,1,1,0,ch8永霜·中30%
+8,Normal,Badge,重武,传奇,0.07,1,1,0,ch8永霜·高70%
+8,Normal,Badge,法师,稀有,0.03,1,1,0,ch8永霜·中30%
+8,Normal,Badge,法师,传奇,0.07,1,1,0,ch8永霜·高70%
+*,Elite,Badge,*,*,1.0,1,1,0,精英关额外+1（职业按本章主产随机）
+*,Boss,Badge,*,*,1.0,1,1,2,Boss必掉1；首次通关再给2个自选
+*,*,Fragment,*,*,0,0,0,0,本名碎片不走掉落；来源=商店买重复佣兵转化（TavernUnlockUI.TryUnlock）

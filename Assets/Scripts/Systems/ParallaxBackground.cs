@@ -42,7 +42,9 @@ public class ParallaxBackground : MonoBehaviour
     private int _pendingChapter = -1;
     private bool _layersInited;
     Vector3 _layerRootBaseScale = Vector3.one;
+    bool _baseScaleCaptured;
     float _killCamZoomMul = 1f;
+    float _viewportZoomMul = 1f;
 
     public void SetLayerRoot(Transform root)
     {
@@ -89,6 +91,9 @@ public class ParallaxBackground : MonoBehaviour
         RefreshLayerWidth(ref backLayer);
         RefreshLayerWidth(ref midLayer);
         RefreshLayerWidth(ref frontLayer);
+
+        // 层就绪后应用视口/KillCam 缩放（若 ApplyViewportZoom 先调用，这里兜底生效）
+        ApplyCombinedScale();
 
         Debug.Log($"[Parallax v18] root={LayerSearchRoot.name} ppu={_ppu:F1} tiles={TileCount} " +
                   $"w={frontLayer.width:F0} scale={frontLayer.baseScaleX:F2} step={EffectiveStep(frontLayer):F0}");
@@ -375,20 +380,43 @@ public class ParallaxBackground : MonoBehaviour
         if (_layerRoot == null)
             EnsureLayers();
         if (_layerRoot == null) return;
-        if (_killCamZoomMul >= 0.999f)
-            _layerRootBaseScale = _layerRoot.localScale;
         _killCamZoomMul = Mathf.Clamp(zoomMul, 0.55f, 1f);
-        float inv = 1f / _killCamZoomMul;
-        _layerRoot.localScale = new Vector3(
-            _layerRootBaseScale.x * inv,
-            _layerRootBaseScale.y * inv,
-            _layerRootBaseScale.z);
+        ApplyCombinedScale();
     }
 
     public void ResetKillCamZoom()
     {
         if (_layerRoot == null) return;
         _killCamZoomMul = 1f;
-        _layerRoot.localScale = _layerRootBaseScale;
+        ApplyCombinedScale();
+    }
+
+    /// <summary>
+    /// 视口缩放：屏幕比设计更瘦时相机正交尺寸变大、视野更高，
+    /// 按 orthoSize/基础尺寸等比放大视差层铺满（与 KillCam 缩放乘算叠加）。
+    /// </summary>
+    public void ApplyViewportZoom(float mul)
+    {
+        if (_layerRoot == null)
+            EnsureLayers();
+        if (_layerRoot == null) return;
+        _viewportZoomMul = mul > 0f ? mul : 1f;
+        ApplyCombinedScale();
+    }
+
+    /// <summary>合并 KillCam 与视口两个乘算缩放，统一作用到层根节点（uniform 等比）。</summary>
+    void ApplyCombinedScale()
+    {
+        if (_layerRoot == null) return;
+        if (!_baseScaleCaptured)
+        {
+            _layerRootBaseScale = _layerRoot.localScale;
+            _baseScaleCaptured = true;
+        }
+        float inv = 1f / Mathf.Max(0.0001f, _killCamZoomMul);
+        _layerRoot.localScale = new Vector3(
+            _layerRootBaseScale.x * inv * _viewportZoomMul,
+            _layerRootBaseScale.y * inv * _viewportZoomMul,
+            _layerRootBaseScale.z);
     }
 }

@@ -347,14 +347,14 @@ public class AdventureLogCodexPanel
     {
         bool unlocked = AdventureCodex.ChapterUnlocked(chapter);
         string title = GameConfig.GetChapterMapName(chapter);
-        y = SpawnSectionBanner(unlocked ? title : $"{title}（未解锁）", y);
-
-        var list = AdventureCodex.MonstersForChapter(chapter);
         float cellW, cellH;
         GetCellSize(out cellW, out cellH);
+        float gridW = Cols * cellW + (Cols - 1) * CellGapX;
+        y = SpawnSectionBanner(unlocked ? title : $"{title}（未解锁）", y, gridW);
+
+        var list = AdventureCodex.MonstersForChapter(chapter);
         int col = 0;
         float rowTop = y;
-        float gridW = Cols * cellW + (Cols - 1) * CellGapX;
         float originX = -gridW * 0.5f;
 
         for (int i = 0; i < list.Count; i++)
@@ -387,13 +387,13 @@ public class AdventureLogCodexPanel
 
     float SpawnMercSection(MercRosterDefs.MercRarity rarity, string title, float y)
     {
-        y = SpawnSectionBanner(title, y);
-
         float cellW, cellH;
         GetCellSize(out cellW, out cellH);
+        float gridW = Cols * cellW + (Cols - 1) * CellGapX;
+        y = SpawnSectionBanner(title, y, gridW);
+
         int col = 0;
         float rowTop = y;
-        float gridW = Cols * cellW + (Cols - 1) * CellGapX;
         float originX = -gridW * 0.5f;
 
         var list = AdventureLogCatalog.Mercs;
@@ -453,7 +453,7 @@ public class AdventureLogCodexPanel
         if (_pageLabel != null) _pageLabel.text = text ?? "";
     }
 
-    float SpawnSectionBanner(string text, float y)
+    float SpawnSectionBanner(string text, float y, float gridW = 0f)
     {
         // 复用格子名条风格：简单 Text 横条
         var go = new GameObject("SectionHeader", typeof(RectTransform));
@@ -462,7 +462,10 @@ public class AdventureLogCodexPanel
         rt.anchorMin = new Vector2(0.5f, 1f);
         rt.anchorMax = new Vector2(0.5f, 1f);
         rt.pivot = new Vector2(0.5f, 1f);
-        float width = _content.rect.width > 1f ? _content.rect.width - 20f : 420f;
+        // 与格子网格同宽，避免标题条随屏幕宽忽长忽短；窄屏再收窄防溢出
+        float width = gridW > 1f ? gridW : 420f;
+        if (_content != null && _content.rect.width > 1f)
+            width = Mathf.Min(width, _content.rect.width - 20f);
         rt.sizeDelta = new Vector2(width, HeaderH);
         rt.anchoredPosition = new Vector2(0f, y);
 

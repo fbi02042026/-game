@@ -8,6 +8,61 @@ using System.Collections.Generic;
 /// </summary>
 public partial class BattleUI : MonoBehaviour
 {
+    /// <summary>
+    /// 美术尚未出拾取确定按钮（旧预制体叫「整理」，新预制体 BackpackPanel 下没有这个节点），
+    /// 导致 lootConfirmButton 恒为 null、拾取模式无法确认。这里运行时补一个默认隐藏的按钮，
+    /// 显隐仍由 UpdateBackpackGrid 按 BattleLootMode.Active 控制。
+    /// </summary>
+    void EnsureLootConfirmButton()
+    {
+        if (lootConfirmButton != null) return;
+        Transform backpack = FindDeepChildIgnoreCase(transform, "BackpackPanel")
+            ?? FindDeepChildIgnoreCase(transform, "Backpack");
+        if (backpack == null) return;
+
+        var go = new GameObject("确定", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(backpack, false);
+        var rt = go.transform as RectTransform;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(220f, 76f);
+        rt.anchoredPosition = new Vector2(0f, -200f);
+
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0.16f, 0.12f, 0.09f, 0.95f);
+
+        var tGo = new GameObject("Text", typeof(RectTransform), typeof(Text));
+        tGo.transform.SetParent(go.transform, false);
+        var tr = tGo.transform as RectTransform;
+        tr.anchorMin = Vector2.zero;
+        tr.anchorMax = Vector2.one;
+        tr.offsetMin = Vector2.zero;
+        tr.offsetMax = Vector2.zero;
+        var tx = tGo.GetComponent<Text>();
+        tx.font = GameFonts.GetChinese();
+        tx.text = "确定";
+        tx.fontSize = 30;
+        tx.alignment = TextAnchor.MiddleCenter;
+        tx.color = Color.white;
+
+        // BackpackPanel 带 overrideSorting 的 Canvas，zhezhao 遮罩会盖住同级节点 → 抬一层
+        var parentCanvas = backpack.GetComponent<Canvas>();
+        if (parentCanvas != null)
+        {
+            var cv = go.AddComponent<Canvas>();
+            cv.overrideSorting = true;
+            cv.sortingOrder = parentCanvas.sortingOrder + 1;
+            go.AddComponent<GraphicRaycaster>();
+        }
+
+        var btn = go.AddComponent<Button>();
+        btn.targetGraphic = img;
+        lootConfirmButton = btn;
+        lootConfirmButton.onClick.AddListener(OnLootConfirm);
+        go.SetActive(false);
+    }
+
     /// <summary>按节点名自动补全未拖拽的引用</summary>
     void AutoBindMissingRefs()
     {
@@ -65,6 +120,7 @@ public partial class BattleUI : MonoBehaviour
                     ?? FindDeepChildIgnoreCase(transform, "OrganizeButton");
             if (t != null) lootConfirmButton = t.GetComponent<Button>();
         }
+        EnsureLootConfirmButton();
 
         if (questDesc == null) questDesc = FindUIText("QuestDesc");
         if (questProgress == null) questProgress = FindUIText("QuestProgress");
@@ -342,6 +398,9 @@ public partial class BattleUI : MonoBehaviour
         slot.EnsureLockedOverlay();
         // 右上角技能角标容器先备好（有技能图标时才显示）
         slot.EnsureSkillBadge();
+        // 美术还没画的名字 / 等级 / 占位底盘 / 技能就绪光边：一律运行时新建节点补上，
+        // 绑定自检（[BattleUI-绑定]）里的 NameText / LevelLabel / Glow / PortraitPlaceholder 就是缺这四样。
+        slot.EnsureRuntimeDecorations();
 
         // 职业图标位：xuetiaodi/职业icon（玩家=所选职业，佣兵=佣兵职业）
         if (slot.jobIcon == null) slot.jobIcon = EnsureJobIcon(root);

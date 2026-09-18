@@ -13,8 +13,13 @@ public class TalentUI : MonoBehaviour
 {
     public static TalentUI Instance { get; private set; }
 
+    // 设计真值（TalentUI.prefab）：Columns 宽 648（stretch -72），左右列各 -4。
+    // Columns 是横向 stretch，宽随 aspect 漂；节点宽取模板自身设计宽，不跟着列宽被拉/压。
+    const float DesignColumnsW = 648f;
     const float LeftNodeH = 108f;
     const float RightRowH = 126f;
+    const float LeftNodeW = 258.6f;   // 模板 stretch 到 720 根下的原始宽
+    const float RightRowW = 269.2f;
 
     [Header("壳")]
     public Image panelImage;
@@ -840,6 +845,9 @@ public class TalentUI : MonoBehaviour
         rightRowTemplate.SetActive(false);
         if (rightExtraRowTemplate != null) rightExtraRowTemplate.SetActive(false);
 
+        // 屏幕比设计稿更瘦时 Columns 被压窄 → 左列会被裁；整列等比缩小，不裁也不拉伸
+        FitColumnsScale();
+
         // 列表只用 LayoutGroup 排，禁止手写改每个框的坐标/宽高
         EnsureScrollContentLayout(leftContent);
         EnsureScrollContentLayout(rightContent);
@@ -849,7 +857,7 @@ public class TalentUI : MonoBehaviour
             var go = Instantiate(leftNodeTemplate, leftContent);
             go.name = "LeftNode_" + (i + 1);
             go.SetActive(true);
-            PrepareListItemUnderContent(go.transform as RectTransform, leftContent);
+            PrepareListItemUnderContent(go.transform as RectTransform, leftContent, LeftNodeW, LeftNodeH);
             var view = BindLeftNode(go, i);
             _leftViews.Add(view);
             int idx = i;
@@ -861,7 +869,7 @@ public class TalentUI : MonoBehaviour
             var go = Instantiate(rightRowTemplate, rightContent);
             go.name = "RightRow_" + (i + 1);
             go.SetActive(true);
-            PrepareListItemUnderContent(go.transform as RectTransform, rightContent);
+            PrepareListItemUnderContent(go.transform as RectTransform, rightContent, RightRowW, RightRowH);
             var view = BindChoiceRow(go, i, TalentSystem.Branch.Right, i + 1);
             _rightViews.Add(view);
             int ri = i;
@@ -878,7 +886,7 @@ public class TalentUI : MonoBehaviour
             var extraGo = Instantiate(extraTpl, rightContent);
             extraGo.name = "RightExtraRow";
             extraGo.SetActive(true);
-            PrepareListItemUnderContent(extraGo.transform as RectTransform, rightContent);
+            PrepareListItemUnderContent(extraGo.transform as RectTransform, rightContent, RightRowW, RightRowH);
             int visualRow = _rightViews.Count;
             var extraView = BindChoiceRow(extraGo, visualRow, TalentSystem.Branch.RightExtra, 1);
             _rightViews.Add(extraView);
@@ -924,17 +932,36 @@ public class TalentUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 模板原挂在根下（大负边距 stretch）。进 Content 后只烘焙为固定高宽，
-    /// 不改子节点；宽取列宽，高取模板高度。
+    /// Columns 是横向 stretch（sizeDelta.x = -72），屏幕比设计稿瘦时会被压窄，
+    /// 左列内容因此被裁。这里整列等比缩小：宽屏不放大（只留白），窄屏缩到放得下。
     /// </summary>
-    static void PrepareListItemUnderContent(RectTransform item, RectTransform content)
+    void FitColumnsScale()
+    {
+        var columns = FindAncestorNamed(leftContent, "Columns");
+        if (columns == null) return;
+        float w = columns.rect.width;
+        if (w <= 1f) return;
+        float s = Mathf.Min(1f, w / DesignColumnsW);
+        columns.localScale = new Vector3(s, s, 1f);
+    }
+
+    static RectTransform FindAncestorNamed(RectTransform from, string name)
+    {
+        for (var p = from; p != null; p = p.parent as RectTransform)
+            if (p.name == name) return p;
+        return null;
+    }
+
+    /// <summary>
+    /// 模板原挂在根下（大负边距 stretch）。进 Content 后只烘焙为固定高宽，
+    /// 不改子节点；宽锁模板设计宽，高用调用方的行高常量。
+    /// </summary>
+    static void PrepareListItemUnderContent(RectTransform item, RectTransform content, float defaultW, float defaultH)
     {
         if (item == null) return;
-        float h = Mathf.Abs(item.sizeDelta.y);
-        if (h < 8f) h = Mathf.Max(80f, item.rect.height);
-        float w = content != null && content.rect.width > 8f
-            ? content.rect.width
-            : Mathf.Max(200f, item.rect.width);
+        // 模板是 stretch 时 sizeDelta.y 是负边距不是高度，abs 会算出几百的假高度；只有正值才可信
+        float h = item.sizeDelta.y > 8f ? item.sizeDelta.y : defaultH;
+        float w = defaultW;
         item.anchorMin = item.anchorMax = new Vector2(0.5f, 1f);
         item.pivot = new Vector2(0.5f, 1f);
         item.sizeDelta = new Vector2(w, h);

@@ -184,6 +184,72 @@ public partial class BattleUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 保险丝：战斗 UI 因预制体重导入 / 父链变化 / 别处代码改动导致底部 4 个被动技能槽消失时，
+    /// 兜底修复。能不修就不修；只有真正发生了修复动作才打 [BattleUI-保险丝] 警告，正常时不刷日志。
+    /// 调用点：AutoGameInitializer.FixBattleUICanvas、BattleManager 两处 EnsureBattleControls 之后。
+    /// </summary>
+    public void EnsureRunSkillSlotsRepaired()
+    {
+        // 1) 容器根丢失 → 重新解析容器（BindBottomQuickSlots 内部会顺带 BindRunSkillSlots）
+        if (skillSlotRoot == null)
+        {
+            BindBottomQuickSlots();
+            Debug.LogWarning("[BattleUI-保险丝] skillSlotRoot 为空，已重新执行 BindBottomQuickSlots 重建容器");
+        }
+
+        // 2) 槽列表为空或含空引用 → 重新实例化
+        if (runSkillSlots == null || runSkillSlots.Count == 0 || runSkillSlots.Exists(s => s == null))
+        {
+            BindRunSkillSlots();
+            Debug.LogWarning("[BattleUI-保险丝] runSkillSlots 为空或含空引用，已重新执行 BindRunSkillSlots 重建");
+        }
+
+        if (skillSlotRoot != null)
+        {
+            // 3) 强制把 SkillBar 自身嵌套 Canvas 抬到 BackpackPanel 的 Canvas order + 1
+            //    （直接以 BackpackPanel 为准，不依赖 SkillBar 父链查找）；没有 Canvas 就补一个 overrideSorting。
+            Canvas skillCanvas = skillSlotRoot.GetComponent<Canvas>();
+            bool addedCanvas = false;
+            if (skillCanvas == null)
+            {
+                skillCanvas = skillSlotRoot.gameObject.AddComponent<Canvas>();
+                skillCanvas.overrideSorting = true;
+                addedCanvas = true;
+            }
+            int orderBefore = skillCanvas.sortingOrder;
+            RaiseSlotCanvasAboveParent(skillSlotRoot);
+            if (addedCanvas || skillCanvas.sortingOrder != orderBefore)
+                Debug.LogWarning($"[BattleUI-保险丝] SkillBar 嵌套 Canvas 已抬到 {skillCanvas.sortingOrder}（基准 BackpackPanel +1）");
+
+            // 4) 任一槽未激活 → 置 active；并确保 SkillBar 的 sibling 顺序在 zhezhao 遮罩之后
+            bool needActive = false;
+            for (int i = 0; i < runSkillSlots.Count; i++)
+            {
+                var av = runSkillSlots[i];
+                if (av != null && av.root != null && !av.root.activeInHierarchy)
+                {
+                    av.root.SetActive(true);
+                    needActive = true;
+                }
+            }
+            if (needActive)
+                Debug.LogWarning("[BattleUI-保险丝] 存在未激活的技能槽，已置 active");
+
+            var maskNode = FindDeepChildIgnoreCase(transform, "zhezhao");
+            if (maskNode != null)
+            {
+                var maskTr = maskNode.transform;
+                if (skillSlotRoot.parent == maskTr.parent
+                    && skillSlotRoot.GetSiblingIndex() < maskTr.GetSiblingIndex())
+                {
+                    skillSlotRoot.SetSiblingIndex(maskTr.GetSiblingIndex() + 1);
+                    Debug.LogWarning("[BattleUI-保险丝] SkillBar sibling 顺序已抬到 zhezhao 遮罩之后");
+                }
+            }
+        }
+    }
+
     void BindEquipQuickSlots()
     {
         if (equipQuickSlots == null) equipQuickSlots = new List<EquipQuickSlotUI>();

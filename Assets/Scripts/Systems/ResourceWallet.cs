@@ -78,8 +78,10 @@ public static class ResourceWallet
             case ResourceType.Gold: return "金币";
             case ResourceType.Diamond: return "钻石";
             case ResourceType.Stamina: return "体力";
-            case ResourceType.EnchantStone: return "附魔石";
-            case ResourceType.DecomposeMat: return "强化石";
+            case ResourceType.EnchantStone: return "强化石";
+            case ResourceType.DecomposeMat: return "分解材料";
+            // 2026-09-18 修正：这两行原为「附魔石 / 强化石」，与 ShopDefs.CurrencyName 正好对调，
+            // 导致商店页写"强化石"、领取提示弹"附魔石"。现以 ShopDefs 为准统一。
             // 枚举名沿用 TalentPoint（存档字段 talentPoints），对外统一叫「天赋石」
             case ResourceType.TalentPoint: return "天赋石";
             default: return "资源";
@@ -118,8 +120,15 @@ public static class ResourceWallet
         if (overflow > 0 && overflowToMail)
             MailSystem.EnqueueResourceOverflow(type, overflow);
 
-        if (notify && overflow > 0)
-            UIManager.Instance?.ShowToast($"{DisplayName(type)}已达到最大值");
+        if (notify)
+        {
+            // 统一「获得」反馈：凡是显式要求 notify 的发放都弹一条，玩家不必去看顶部数字。
+            // 战斗内逐次结算的发放走 notify:false，不会刷屏。
+            if (add > 0)
+                UIManager.Instance?.ShowToast($"获得 {DisplayName(type)} +{add}");
+            if (overflow > 0)
+                UIManager.Instance?.ShowToast($"{DisplayName(type)}已达到最大值");
+        }
 
         if (save && saveSys != null)
             saveSys.Save();

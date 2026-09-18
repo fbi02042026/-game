@@ -24,10 +24,14 @@ public static class TutorialBattleTable
         public float eliteHpMin;
         public float eliteHpMax;
         public string note;
+        /// <summary>远程怪 HP 档（0 = 与近战同档）。放在 CSV 末两列，旧档不写即走近战档。</summary>
+        public float rangedHpMin;
+        public float rangedHpMax;
 
         public bool HasNormalHp => hpMin > 0f || hpMax > 0f;
         public bool HasEliteHp => eliteHpMin > 0f || eliteHpMax > 0f;
         public bool HasHp => HasNormalHp || HasEliteHp;
+        public bool HasRangedHp => rangedHpMin > 0f || rangedHpMax > 0f;
         public bool IsFlank => action == "flank" || ambush;
         public bool IsAround => action == "around";
     }
@@ -86,6 +90,8 @@ public static class TutorialBattleTable
                 hpMax = ReadHp(c, 12, DefaultHpMax),
                 eliteHpMin = ReadHp(c, 13, DefaultEliteHpMin),
                 eliteHpMax = ReadHp(c, 14, DefaultEliteHpMax),
+                rangedHpMin = ReadHp(c, 17, 0f),
+                rangedHpMax = ReadHp(c, 18, 0f),
                 note = c.Length > 15 ? c[15] : (c.Length > 11 && !LooksNumeric(c[11]) ? c[11] : "")
             });
         }

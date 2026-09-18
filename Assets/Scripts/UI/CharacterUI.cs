@@ -497,8 +497,8 @@ public class CharacterUI : MonoBehaviour, ITownPage
     {
         if (portraitImage == null) return;
         portraitImage.sprite = sprite;
-        // 不改 preserveAspect：预制体里 Portrait 设的是 0（立绘填满 641×955 的框）。
-        // 设成 1 会按原图比例缩进去留白，看着比预制体小一圈。
+        // 立绘按原比例 fit 入框（preserveAspect），避免更瘦屏/异比例立绘被拉伸变形。
+        portraitImage.preserveAspect = true;
         if (sprite != null)
             portraitImage.enabled = true;
         _portraitFlipped = flip;

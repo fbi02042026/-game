@@ -88,7 +88,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     /// 往背包放一份道具，能叠就叠（受 stackMax 限制），全部放不下返回 false。
     /// 道具一律 1×1。
     /// </summary>
-    public bool TryAddItemStack(string defId, int count, out BackpackItem placed)
+    public bool TryAddItemStack(string defId, int count, out BackpackItem placed, bool notify = true)
     {
         placed = null;
         if (string.IsNullOrEmpty(defId) || count <= 0) return false;
@@ -135,6 +135,12 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         if (placed == null) return false;
         NotifyBackpackChanged();
+        if (notify)
+        {
+            int got = count - left;
+            if (got > 0)
+                UIManager.Instance?.ShowToast($"获得 {def.name} ×{got}");
+        }
         return true;
     }
 
@@ -456,7 +462,8 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
             UIManager.Instance?.ShowToast("背包已满，无法获得装备");
             return false;
         }
-        UIManager.Instance?.ShowToast("已放入背包");
+        string nm = string.IsNullOrEmpty(equip.equipName) ? "装备" : equip.equipName;
+        UIManager.Instance?.ShowToast($"获得 {nm}");
         return true;
     }
 

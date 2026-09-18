@@ -397,6 +397,9 @@ public static class GameConfig
     /// </summary>
     public const bool SHOW_MONSTER_STACK_LABEL = false;
 
+    // 2026-09-18：数值一律以表为准，这里保持原值不再跟表一起缩放。
+    // 注意 Monster.cs 的 Boss 兜底：表内 Boss 攻击 < 本值×0.5(27.5) 会被抬回 55，
+    // 所以 monster_stats 里 Boss 的 baseAttack 必须 >= 28（已按此填表）。
     public const float MONSTER_NORMAL_ATK = 12f;
     public const float MONSTER_NORMAL_DEF = 2f;
     public const float MONSTER_NORMAL_ATK_INTERVAL = 1.5f;
@@ -404,7 +407,7 @@ public static class GameConfig
     public const float MONSTER_ELITE_ATK = 30f;
     public const float MONSTER_ELITE_DEF = 6f;
     public const float MONSTER_ELITE_ATK_INTERVAL = 1.7f;
-    public const float MONSTER_BOSS_HP = 800f;    // 兜底/下限：表内 Boss 血量低于 50%(400) 才抬到本值；第一章 Boss 由 monster_stats 表给 800/1050
+    public const float MONSTER_BOSS_HP = 800f;    // 兜底/下限：表内 Boss 血量低于 50%(400) 才抬到本值；第一章 Boss 由 monster_stats 表给 400/525
     public const float MONSTER_BOSS_ATK = 55f;    // 2026-09-14：Boss 伤害上浮，保证坦克（防 35）也会掉血
     public const float MONSTER_BOSS_DEF = 12f;
     public const float MONSTER_BOSS_ATK_INTERVAL = 2.2f;
@@ -538,8 +541,9 @@ public static class GameConfig
     /// 所有弹道飞行速度倍率，0.8 = 全弹道放慢 20%（飞行时间 ×1.25）。
     /// 作用在 BattleVFXSystem.ProjectileFlightCoroutine 的速度计算上，六种弹道统一生效。
     /// 注意：飞行时间不再被 maxFlightTime 截断，否则怪物慢速弹道会顶格、降速对它无效。
+    /// 2026-09-18：由 0.8 改为 0.4，弹道（箭/法球等六种）再降速 50%。
     /// </summary>
-    public const float PROJECTILE_SPEED_GLOBAL_MUL = 0.8f;
+    public const float PROJECTILE_SPEED_GLOBAL_MUL = 0.4f;
 
     /// <summary>旧线性章节系数（仅兼容/兜底；属性缩放请用 GetChapterStatScale）</summary>
     public const float CHAPTER_SCALE_PER = 0.15f;
@@ -557,6 +561,20 @@ public static class GameConfig
     public const float ELITE_TTK_HP_MUL = 1.15f;
     /// <summary>Boss 额外 TTK 血量倍率</summary>
     public const float BOSS_TTK_HP_MUL = 1.35f;
+    /// <summary>
+    /// Boss 额外 TTK【攻击】倍率。原先只有血量加成没有攻击加成，
+    /// 第 8 章 Boss 攻击反而低于自家远程杂兵，故补上（2026-09-18 用户拍板）。
+    /// 剧情 Boss 想更狠就单独调 monster_stats 表里的 baseAtk，不要把这里往上堆。
+    /// </summary>
+    public const float BOSS_TTK_ATK_MUL = 1.35f;
+    /// <summary>
+    /// 精英血量 = 本章普通怪平均 baseHp × 本值。
+    /// 原先写死 MONSTER_ELITE_HP=105，第 3 章起精英比本章杂兵还脆（第 8 章只剩 19%），
+    /// 改为按章推导后自动跟随数值表（2026-09-18 用户拍板）。表缺数据时回退旧常量。
+    /// </summary>
+    public const float ELITE_HP_FROM_CHAPTER_AVG = 2.6f;
+    /// <summary>精英攻击 = 本章普通怪平均 baseAttack × 本值</summary>
+    public const float ELITE_ATK_FROM_CHAPTER_AVG = 1.6f;
     /// <summary>Boss 进入阶段 2 的血量比例（≤ 则换招）</summary>
     public const float BOSS_PHASE2_HP_RATIO = 0.7f;
     public const float BOSS_PHASE2_DAMAGE_MUL = 1.18f;
@@ -784,6 +802,8 @@ public static class GameConfig
     public const float RANGED_FIRE_RELEASE_DELAY = 0.2f;
     /// <summary>兼容旧引用：等同 <see cref="RANGED_FIRE_RELEASE_DELAY"/>。</summary>
     public const float BOW_FIRE_RELEASE_DELAY = RANGED_FIRE_RELEASE_DELAY;
+    /// <summary>游侠起手前摇（秒）：比通用远程 0.2 更大，给游侠攻击/技能加前摇（P004 游侠专用）。</summary>
+    public const float RANGED_FIRE_RELEASE_DELAY_RANGER = 0.35f;
     /// <summary>我方近战暴击动画幅度倍率（仅视觉子节点）</summary>
     public const float ALLY_MELEE_CRIT_AMP = 1f;
 

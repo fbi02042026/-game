@@ -252,6 +252,11 @@ public class SaveData
     public int mercScrollRare = 0;
     public int mercScrollLegendary = 0;
 
+    // === 佣兵养成道具（2026-09-18 新增：徽记 + 本命碎片）===
+    // id 口径：徽记 "badge:{职业key}:{档位}"（如 badge:剑盾:传奇）；本命碎片 "frag:{hireId}"（如 frag:H001）
+    public List<StringIntEntry> mercGrowItemEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> mercGrowItems = new Dictionary<string, int>();
+
     // === 时间戳 ===
     public long lastSaveTime = 0;
 
@@ -297,6 +302,7 @@ public class SaveData
         unlockedSkinEntries ??= new List<StringIdEntry>();
         craftedFragmentRecipeEntries ??= new List<StringIdEntry>();
         mileageShopBuyEntries ??= new List<StringIntEntry>();
+        mercGrowItemEntries ??= new List<StringIntEntry>();
         townLevel ??= new TownLevel();
         if (hiddenLevel <= 0) hiddenLevel = 1;
         if (hiddenExp < 0) hiddenExp = 0;
@@ -426,6 +432,17 @@ public class SaveData
             if (e == null || string.IsNullOrEmpty(e.id)) continue;
             mileageShopBought[e.id] = e.value;
         }
+        mercGrowItems = new Dictionary<string, int>();
+        if (mercGrowItemEntries != null)
+        {
+            for (int i = 0; i < mercGrowItemEntries.Count; i++)
+            {
+                var e = mercGrowItemEntries[i];
+                if (e == null || string.IsNullOrEmpty(e.id)) continue;
+                mercGrowItems[e.id] = e.value;
+            }
+        }
+
         logAchProgress = new Dictionary<string, int>();
         for (int i = 0; i < logAchProgressEntries.Count; i++)
         {
@@ -643,6 +660,10 @@ public class SaveData
         logAchProgressEntries = new List<StringIntEntry>(logAchProgress.Count);
         foreach (var kv in logAchProgress)
             logAchProgressEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        mercGrowItemEntries = new List<StringIntEntry>(mercGrowItems.Count);
+        foreach (var kv in mercGrowItems)
+            mercGrowItemEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
     }
 
     static List<StringIdEntry> FromIdSet(HashSet<string> set)

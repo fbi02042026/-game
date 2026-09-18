@@ -28,6 +28,7 @@ public class BattleSettlementUI : MonoBehaviour
     public Text valueTaken;
     public Text valueHeal;
     public Transform rewardsGrid;
+    public GameObject rewardsHeader;
     public Button confirmButton;
     public Text confirmLabel;
     public GameObject rewardCellPrefab;
@@ -117,6 +118,9 @@ public class BattleSettlementUI : MonoBehaviour
             var tmpl = FindDeep(root.transform, "RewardCellTemplate");
             if (tmpl != null) rewardCellPrefab = tmpl.gameObject;
         }
+        // 模板格只是克隆母版，不能自己显示出来（否则会多出一个假奖励格，图标还是预制体占位图）
+        if (rewardCellPrefab != null && rewardCellPrefab.activeSelf)
+            rewardCellPrefab.SetActive(false);
     }
 
     void Wire()
@@ -324,6 +328,18 @@ public class BattleSettlementUI : MonoBehaviour
 
         var cells = BuildRewardCells(_stats);
         int n = Mathf.Min(cells.Count, MaxRewardCells);
+
+        // 没有任何奖励时整块隐藏（标题 + 网格），不留下空区域
+        if (rewardsHeader == null && root != null)
+        {
+            var headerNode = FindDeep(root.transform, "RewardsHeader");
+            rewardsHeader = headerNode != null ? headerNode.gameObject : null;
+        }
+        bool any = n > 0;
+        rewardsGrid.gameObject.SetActive(any);
+        if (rewardsHeader != null) rewardsHeader.SetActive(any);
+        if (!any) return;
+
         for (int i = 0; i < n; i++)
             SpawnRewardCell(cells[i]);
         if (cells.Count > MaxRewardCells)
@@ -351,28 +367,21 @@ public class BattleSettlementUI : MonoBehaviour
         if (s.DecomposeMatDelta > 0)
             list.Add(MakeCell("强化材料", s.DecomposeMatDelta, LoadUiIcon("mat"), new Color(0.5f, 0.55f, 0.45f)));
 
-        if (GridBackpackSystem.Instance != null)
+        // 本局实际获得的装备（弹出「恭喜获得」时记录），不再倒出整个背包
+        if (s.EquipGains != null)
         {
-            var equips = GridBackpackSystem.Instance.GetAllItemsForLegacy();
-            for (int i = 0; i < equips.Count; i++)
+            for (int i = 0; i < s.EquipGains.Count; i++)
             {
-                var eq = equips[i];
-                if (eq == null) continue;
-                Sprite icon = eq.icon;
-                if (icon == null && eq.template != null)
-                    icon = EquipIcons.Get(eq.template.iconFileName);
+                var g = s.EquipGains[i];
+                if (g == null) continue;
                 list.Add(new SettlementRewardCell
                 {
-                    label = string.IsNullOrEmpty(eq.equipName) ? "装备" : eq.equipName,
+                    label = string.IsNullOrEmpty(g.name) ? "装备" : g.name,
                     count = 1,
-                    icon = icon,
-                    frameColor = RarityFrameColor(eq.rarity)
+                    icon = g.icon,
+                    frameColor = RarityFrameColor(g.rarity)
                 });
             }
-        }
-        else if (s.EquipCount > 0)
-        {
-            list.Add(MakeCell("装备", s.EquipCount, null, new Color(0.55f, 0.45f, 0.25f)));
         }
 
         return list;

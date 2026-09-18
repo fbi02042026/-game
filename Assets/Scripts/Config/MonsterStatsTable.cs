@@ -111,6 +111,32 @@ public static class MonsterStatsTable
         return list;
     }
 
+    /// <summary>
+    /// 取某章【普通怪】（排除 isBoss）的 baseHp / baseAttack 平均值。
+    /// 用途：精英兜底值不该写死常量（第 3 章起会低于本章杂兵），改由本章普通怪基准推导。
+    /// 表里没有该章普通怪时返回 false，调用方自行回退 GameConfig 常量。
+    /// </summary>
+    public static bool TryGetChapterAverage(int monsterChapter, out float avgHp, out float avgAtk)
+    {
+        avgHp = 0f;
+        avgAtk = 0f;
+        EnsureLoaded();
+        float hp = 0f, atk = 0f;
+        int n = 0;
+        for (int i = 0; i < _all.Count; i++)
+        {
+            var e = _all[i];
+            if (e == null || e.monsterChapter != monsterChapter || e.isBoss) continue;
+            hp += e.baseHp;
+            atk += e.baseAttack;
+            n++;
+        }
+        if (n <= 0) return false;
+        avgHp = hp / n;
+        avgAtk = atk / n;
+        return true;
+    }
+
     public static IReadOnlyList<MonsterStatsEntry> GetAll()
     {
         EnsureLoaded();

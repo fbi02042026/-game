@@ -34,7 +34,7 @@ public static class UICanvasSetup
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
         scaler.referenceResolution = new Vector2(GameConfig.DESIGN_WIDTH, GameConfig.DESIGN_HEIGHT);
-        scaler.matchWidthOrHeight = GameConfig.UI_MATCH;
+        scaler.matchWidthOrHeight = DesignAspectLetterbox.ResolveUiMatch();
 
         if (canvas.GetComponent<GraphicRaycaster>() == null)
             canvas.gameObject.AddComponent<GraphicRaycaster>();

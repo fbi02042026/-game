@@ -1184,6 +1184,23 @@ public class UnitAnimation : MonoBehaviour
     }
 
     /// <summary>
+    /// 强制清掉低血红 / 受击闪的残留染色。
+    /// 剧情结算（牧师入队疗伤）等场合用：血量已回满，但染色可能因协程中断卡住。
+    /// </summary>
+    public void ForceClearTint()
+    {
+        _lowHpFlashOn = false;
+        _spumFlashGen++;          // 让还在跑的闪白/闪红协程下次判断即退出
+        _hitFlashRunning = false;
+        RestoreSpumFlashFromBaseline();
+        if (_sr != null)
+        {
+            EnsureProcBase();
+            _sr.color = _procBaseColor;
+        }
+    }
+
+    /// <summary>
     /// 低血脉冲红。受击白闪进行中让路；脱离低血时还原。
     /// </summary>
     public void TickLowHpFlash(float hpRatio, bool dead)
@@ -1194,12 +1211,12 @@ public class UnitAnimation : MonoBehaviour
             if (_lowHpFlashOn)
             {
                 _lowHpFlashOn = false;
-                if (!_hitFlashRunning)
-                {
-                    RestoreSpumFlashFromBaseline();
-                    // 程序化单位：上面那句对无 SPUM 的单位是空操作，必须自己还原，否则低血红不退
-                    if (_sr != null) { EnsureProcBase(); _sr.color = _procBaseColor; }
-                }
+                // 原先这里被 `!_hitFlashRunning` 挡住：一旦 _hitFlashRunning 因场景切换/
+                // 协程被中断而卡在 true，低血红就永远退不掉（剧情打完小白一身红）。
+                // 受击闪的协程每帧都会重写颜色，这里无条件还原不会打断它。
+                RestoreSpumFlashFromBaseline();
+                // 程序化单位：上面那句对无 SPUM 的单位是空操作，必须自己还原，否则低血红不退
+                if (_sr != null) { EnsureProcBase(); _sr.color = _procBaseColor; }
             }
             return;
         }

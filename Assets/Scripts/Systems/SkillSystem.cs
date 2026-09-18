@@ -148,7 +148,12 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
                     kit = caster.GetBasicAttackVfxKit();
                 GameObject impactOverride = SkillRegistry.Instance != null
                     ? SkillRegistry.Instance.GetSkillVfxPrefab(skill.skillId) : null;
-                float rangedDelay = SkillNaming.IsRangedKit(kit) ? GameConfig.RANGED_FIRE_RELEASE_DELAY : 0f;
+                // 远程前摇：游侠（P004，且释放者为 Hero）用更大的 0.35，其他远程统一 0.2
+                float rangedDelay = SkillNaming.IsRangedKit(kit)
+                    ? (caster is Hero && PlayerJobDefs.GetSelected() == PlayerJobId.Ranger
+                        ? GameConfig.RANGED_FIRE_RELEASE_DELAY_RANGER
+                        : GameConfig.RANGED_FIRE_RELEASE_DELAY)
+                    : 0f;
                 if (rangedDelay > 0.001f)
                     StartCoroutine(CoRangedSkillProjectile(
                         src, locked, faction, vfxDir, kit, impactOverride, dmg, crit, rangedDelay));

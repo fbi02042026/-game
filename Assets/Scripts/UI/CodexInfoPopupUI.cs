@@ -22,12 +22,27 @@ public class CodexInfoPopupUI : MonoBehaviour
     public Text loreText;
     public Button closeButton;
     public Button dimButton;
+    /// <summary>可选「解锁」按钮：预制体里没有时运行时补一个，节点名固定 UnlockButton。</summary>
+    public Button unlockButton;
+    public Text unlockButtonLabel;
+
+    Action _onUnlock;
 
     public bool IsOpen => root != null && root.activeSelf;
 
     public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite)
     {
-        Ensure().Open(title, meta, desc, lore, portraitSprite);
+        Ensure().Open(title, meta, desc, lore, portraitSprite, null, null);
+    }
+
+    /// <summary>
+    /// 带解锁按钮的重载（2026-09-18 用户拍板 Q2）。
+    /// unlockText 非空且 onUnlock 非空才显示按钮；不显示时节点 SetActive(false)。
+    /// </summary>
+    public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite,
+        string unlockText, Action onUnlock)
+    {
+        Ensure().Open(title, meta, desc, lore, portraitSprite, unlockText, onUnlock);
     }
 
     public static void HideActive()
@@ -106,10 +121,65 @@ public class CodexInfoPopupUI : MonoBehaviour
         }
     }
 
-    void Open(string title, string meta, string desc, string lore, Sprite portraitSprite)
+    /// <summary>
+    /// 取解锁按钮：预制体里找 UnlockButton，找不到才运行时补建（不动预制体结构）。
+    /// create=false 时只查找，不补建。
+    /// </summary>
+    Button ResolveUnlockButton(bool create)
+    {
+        if (unlockButton == null)
+            unlockButton = FindDeep(root.transform, "UnlockButton")?.GetComponent<Button>();
+        if (unlockButton == null && create)
+            unlockButton = BuildUnlockButton();
+        if (unlockButton != null && unlockButtonLabel == null)
+            unlockButtonLabel = unlockButton.GetComponentInChildren<Text>();
+        return unlockButton;
+    }
+
+    Button BuildUnlockButton()
+    {
+        var host = panel != null ? panel.transform : (root != null ? root.transform : transform);
+        var rt = CreateUi(host, "UnlockButton", true);
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 96f);   // 关闭按钮（y=28，高 52）上方，不压住它
+        rt.sizeDelta = new Vector2(240f, 56f);
+        var img = rt.gameObject.AddComponent<Image>();
+        img.color = new Color(0.28f, 0.46f, 0.30f, 1f);
+        var btn = rt.gameObject.AddComponent<Button>();
+        btn.transition = Selectable.Transition.ColorTint;
+        unlockButtonLabel = AddLabel(rt, "Label", "解锁", 24, Vector2.zero,
+            new Vector2(240f, 56f), TextAnchor.MiddleCenter, stretch: true);
+        GameFonts.ApplyToHierarchy(rt);
+        return btn;
+    }
+
+    void OnClickUnlock()
+    {
+        var cb = _onUnlock;
+        if (cb == null) return;
+        cb();
+    }
+
+    void Open(string title, string meta, string desc, string lore, Sprite portraitSprite,
+        string unlockText, Action onUnlock)
     {
         BindRefs();
         Wire();
+
+        _onUnlock = onUnlock;
+        bool showUnlock = !string.IsNullOrEmpty(unlockText) && onUnlock != null;
+        var ub = ResolveUnlockButton(showUnlock);
+        if (ub != null)
+        {
+            ub.gameObject.SetActive(showUnlock);
+            if (showUnlock)
+            {
+                ub.onClick.RemoveAllListeners();
+                ub.onClick.AddListener(OnClickUnlock);
+                if (unlockButtonLabel != null) unlockButtonLabel.text = unlockText;
+            }
+        }
         if (titleText != null) titleText.text = title ?? "";
         if (metaText != null) metaText.text = meta ?? "";
         if (descText != null) descText.text = desc ?? "";

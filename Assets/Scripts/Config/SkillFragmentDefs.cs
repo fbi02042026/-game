@@ -38,14 +38,18 @@ public static class SkillFragmentDefs
         }
     }
 
-    /// <summary>商店直购 1 片碎片的金币单价。传说碎片不卖（只能靠抽卡重复与成就）。</summary>
+    /// <summary>商店直购 1 片碎片的金币单价。传说碎片不卖（只能靠抽卡重复与成就）。
+    /// ⚠ 2026-09-18 修正：史诗曾写 250，但 ShopDefs 定稿价是 800 金 / 5 片（=160/片），
+    /// 两处对不上会让"显示价 800、实扣 1250"。现统一按商店定稿口径对齐，并保持 1:2:4 比例：
+    /// 普通 40 / 稀有 80 / 史诗 160 → 合成一个技能分别 800 / 3200 / 12800 金。
+    /// 合成价比商店直购便宜（普通直购 2000、稀有 6000），符合"直购是买时间、碎片是慢慢攒"。</summary>
     public static int GoldPerFragment(SkillRarity r)
     {
         switch (r)
         {
-            case SkillRarity.Epic: return 250;
-            case SkillRarity.Rare: return 120;
-            default: return 60;
+            case SkillRarity.Epic: return 160;
+            case SkillRarity.Rare: return 80;
+            default: return 40;
         }
     }
 

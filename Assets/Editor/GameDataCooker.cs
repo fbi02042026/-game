@@ -52,6 +52,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookChapterStatScale();
         CookMonsterUnlockTier();
         CookStageSpawn();
+        CookStageDrop();
         CookTutorialBattle();
         CookBattleQuest();
         CookStageRollerWeights();
@@ -160,6 +161,12 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookStageSpawn()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/stage_spawn.csv", null, "stage_spawn");
+    }
+
+    /// <summary>关卡掉落（徽记掉落率 / 本命碎片来源），2026-09-18 新增。</summary>
+    static void CookStageDrop()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/stage_drop.csv", null, "stage_drop");
     }
 
     static void CookTutorialBattle()

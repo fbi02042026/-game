@@ -411,11 +411,139 @@ public class CharacterSlotUI
             rt.offsetMax = new Vector2(8f, 8f);
             var img = go.GetComponent<Image>();
             img.raycastTarget = false;
-            img.sprite = null;
+            // 必须有图：sprite 为空的 Image 会画成一块实心金色方块盖住头像。
+            // 这里用运行时生成的白色圆环蒙版，颜色仍由 SetEnergy 写成金色。
+            img.sprite = RuntimeUiArt.Ring();
             img.color = new Color(1f, 0.85f, 0.15f, 0.85f);
             img.preserveAspect = true;
         }
         glowBorder = go.GetComponent<Image>();
+        go.SetActive(false);
+    }
+
+    // ============================================================
+    // 运行时补齐美术未画的装饰件（L）
+    // CharacterBar 下的三张角色卡预制体里只有 Portrait + xuetiaodi，
+    // 绑定自检会报「NameText / LevelLabel / Glow / PortraitPlaceholder 缺失」。
+    // 这里全部运行时新建节点：不动预制体、不动已有节点的 rect，
+    // 只是给一份「能看」的占位，等美术/策划确认样式后再调位置和配色。
+    // ============================================================
+
+    /// <summary>补齐全部缺失装饰件。幂等，重复调用无副作用。</summary>
+    public void EnsureRuntimeDecorations()
+    {
+        EnsureNameText();
+        EnsureLevelLabel();
+        EnsurePortraitPlaceholderNode();
+        EnsureSkillGlow();
+    }
+
+    /// <summary>
+    /// 名字文字。落在「头像下半部 / 血条面板上方」那条空带上（卡片坐标 y≈8），
+    /// 这个位置不被 HP / 蓝条压住。
+    /// </summary>
+    void EnsureNameText()
+    {
+        if (nameText != null || root == null) return;
+        var t = EnsureRuntimeText("NameText", 20, TextAnchor.MiddleCenter, Color.white);
+        var rt = t.rectTransform;
+        rt.anchoredPosition = new Vector2(0f, 8f);
+        rt.sizeDelta = new Vector2(160f, 24f);
+        t.text = "";
+        nameText = t;
+    }
+
+    /// <summary>
+    /// 等级文字（Lv.N）。放在卡片左上角（y≈34），避开中间的脸。
+    /// 玩家槽走 UpdateSlot(showLevel:false)，只有佣兵槽会显示。
+    /// </summary>
+    void EnsureLevelLabel()
+    {
+        if (levelLabel != null || root == null) return;
+        var t = EnsureRuntimeText("LevelLabel", 18, TextAnchor.MiddleCenter,
+                                  new Color(1f, 0.84f, 0.42f));
+        var rt = t.rectTransform;
+        rt.anchoredPosition = new Vector2(-52f, 34f);
+        rt.sizeDelta = new Vector2(64f, 22f);
+        t.text = "";
+        levelLabel = t;
+    }
+
+    /// <summary>在卡片中心建一个 Text，统一字体 + 描边阴影（压在头像上也看得清）。</summary>
+    Text EnsureRuntimeText(string nodeName, int fontSize, TextAnchor align, Color color)
+    {
+        Transform exist = root.transform.Find(nodeName);
+        GameObject go = exist != null ? exist.gameObject
+            : new GameObject(nodeName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        if (exist == null)
+            go.transform.SetParent(root.transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = new Vector2(160f, 24f);
+
+        var t = go.GetComponent<Text>();
+        t.fontSize = fontSize;
+        t.alignment = align;
+        t.color = color;
+        t.raycastTarget = false;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        var f = GameFonts.GetChinese();
+        if (f != null) t.font = f;
+
+        // 名字/等级压在头像上，没有描边会糊成一片
+        if (go.GetComponent<Shadow>() == null)
+        {
+            var sh = go.AddComponent<Shadow>();
+            sh.effectColor = new Color(0f, 0f, 0f, 0.85f);
+            sh.effectDistance = new Vector2(1f, -1f);
+        }
+        go.transform.SetAsLastSibling();
+        go.SetActive(true);
+        return t;
+    }
+
+    /// <summary>
+    /// 无头像时的占位底盘。垫在头像框里、头像图层之下（SetAsFirstSibling），
+    /// 只在 SetPortrait(null) / SetLocked / ShowEmpty 时点亮。
+    /// </summary>
+    void EnsurePortraitPlaceholderNode()
+    {
+        if (portraitPlaceholder != null || root == null) return;
+
+        Transform holder = portrait != null && portrait.transform.parent != null
+            ? portrait.transform.parent
+            : root.transform;
+
+        Transform exist = holder.Find("PortraitPlaceholder");
+        GameObject go;
+        if (exist != null)
+        {
+            go = exist.gameObject;
+        }
+        else
+        {
+            go = new GameObject("PortraitPlaceholder", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(holder, false);
+            go.transform.SetAsFirstSibling();     // 必须在头像之下
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;   // 跟 Portrait 同一中心
+            rt.sizeDelta = portrait != null ? portrait.rectTransform.sizeDelta : new Vector2(140f, 140f);
+            // 头像节点自己带 localScale（预制体是 200×200 + scale 0.7），
+            // 占位盘是它的兄弟节点，必须跟着缩放，否则会比头像大一圈。
+            rt.localScale = portrait != null ? portrait.rectTransform.localScale : Vector3.one;
+            var img = go.GetComponent<Image>();
+            img.raycastTarget = false;
+            img.preserveAspect = true;
+            img.sprite = RuntimeUiArt.Disc();
+            img.color = new Color(0.28f, 0.27f, 0.32f, 0.9f);
+        }
+        portraitPlaceholder = go;
         go.SetActive(false);
     }
 

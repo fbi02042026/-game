@@ -64,7 +64,10 @@ public class GuildHallUI : MonoBehaviour
     {
         Instance = this;
         UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
-        UiPrefabRectGuard.Attach(transform, "Background");
+        // 城镇大厅底图（Background）运行时 envelope 铺满：覆盖更瘦屏（match width）
+        // canvas 逻辑高变高后的上下空区。原 UiPrefabRectGuard 会把底图还原为 prefab
+        // 固定尺寸导致长屏露空，故移除守卫、改为 envelope 拉伸。
+        ApplyBackgroundEnvelope();
         GameFonts.ApplyToHierarchy(transform);
         AutoBindMissingRefs();
         ApplyGuildNameTexts();
@@ -528,5 +531,15 @@ public class GuildHallUI : MonoBehaviour
             if (r != null) return r;
         }
         return null;
+    }
+
+    /// <summary>城镇大厅底图（Background）运行时 envelope 铺满，覆盖更瘦屏上下空区。</summary>
+    void ApplyBackgroundEnvelope()
+    {
+        Transform bg = FindDeepChild(transform, "Background");
+        if (bg == null) return;
+        var rt = bg as RectTransform;
+        if (rt == null) return;
+        UiLayoutStretch.ApplyEnvelopeImage(rt);
     }
 }

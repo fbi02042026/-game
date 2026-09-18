@@ -57,6 +57,7 @@ public class TavernUI : MonoBehaviour, ITownPage
         ConfigureHostCanvasOnce();
         GameFonts.ApplyToHierarchy(transform);
         EnsurePortraitMotion();
+        ApplyTavernSceneEnvelope();
         WireClicks();
         TavernUI.WarmGuildOverlayCache();
 
@@ -536,5 +537,15 @@ public class TavernUI : MonoBehaviour, ITownPage
             if (r != null) return r;
         }
         return null;
+    }
+
+    /// <summary>酒馆底图（TavernScene，~800×1424 中心锚定）运行时 envelope 铺满，覆盖更瘦屏上下空区。</summary>
+    void ApplyTavernSceneEnvelope()
+    {
+        Transform scene = transform.Find("TavernScene") ?? FindDeep(transform, "TavernScene");
+        if (scene == null) return;
+        var rt = scene as RectTransform;
+        if (rt == null) return;
+        UiLayoutStretch.ApplyEnvelopeImage(rt);
     }
 }

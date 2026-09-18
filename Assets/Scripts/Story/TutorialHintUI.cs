@@ -27,6 +27,9 @@ public class TutorialHintUI : MonoBehaviour
     bool _pointerAbove = true;
     float _hideAt = -1f;
     bool _hard;
+    /// <summary>上一次成功量到的目标矩形（引导条自身本地坐标）。</summary>
+    bool _hasLastFollowRect;
+    float _lastMinX, _lastMaxX, _lastMinY, _lastMaxY;
     const float SwipeDur = 0.45f;
     const float HandSize = 96f;
     /// <summary>引导条「打开」动画时长（秒）：短促展开 + 轻微回弹。</summary>
@@ -291,6 +294,8 @@ public class TutorialHintUI : MonoBehaviour
         if (wasHidden || !string.Equals(prevHint, _label != null ? _label.text : ""))
             _openT = 0f;
         _follow = highlight;
+        // 换了目标就丢掉旧矩形：避免新目标还没量到时，横幅短暂停在旧目标的位置上
+        if (targetChanged) _hasLastFollowRect = false;
         // 没有目标就不能上硬引导：否则全屏挡住点击又没有挖空，直接卡死
         _hard = hard && highlight != null;
         hard = _hard;
@@ -363,6 +368,7 @@ public class TutorialHintUI : MonoBehaviour
         }
         _hideAt = -1f;
         _follow = null;
+        _hasLastFollowRect = false;
         _openT = 1f;
         if (_bannerRt != null) _bannerRt.localScale = Vector3.one;
         ForceClearBlockers();
@@ -424,31 +430,67 @@ public class TutorialHintUI : MonoBehaviour
 
     void RefreshLayout()
     {
-        if (_follow == null || !_follow.gameObject.activeInHierarchy)
+        if (!HasUsableFollow())
         {
-            if (_holeRt != null) _holeRt.gameObject.SetActive(false);
-            // 目标没了（换场景等）就必须收掉遮罩，否则会留下几条黑带盖在新界面上
+            // 目标没了（换场景 / 节点被隐藏或重建）：必须收掉遮罩与挖空，
+            // 否则四条黑带会盖在新界面上、并且全屏挡点击。
+            // 但**横幅要沿用上一次的位置** —— 原来这里直接 PlaceBanner(null)，
+            // 会把引导条甩到「无目标」的默认位置（root 高度 +32%，屏幕偏上），
+            // 表现就是「拖动技能顺序的引导跑到场景上面去了」（G）。
             SetDimsActive(false);
-            PlaceBanner(null);
+            if (_holeRt != null) _holeRt.gameObject.SetActive(false);
+            HidePointer();
+            if (_hasLastFollowRect)
+                PlaceForRect(_lastMinX, _lastMaxX, _lastMinY, _lastMaxY, ghost: true);
+            else
+                PlaceBanner(null);
             return;
         }
 
         if (!TryGetFollowLocalRect(out float minX, out float maxX, out float minY, out float maxY))
-            return;
+            return;   // 这一帧量不到就保持上一帧画面，不要乱跳
 
+        _hasLastFollowRect = true;
+        _lastMinX = minX;
+        _lastMaxX = maxX;
+        _lastMinY = minY;
+        _lastMaxY = maxY;
+        PlaceForRect(minX, maxX, minY, maxY, ghost: false);
+    }
+
+    /// <summary>
+    /// 目标是否还可用。注意必须用 Unity 的 null 比较：
+    /// 目标 RectTransform 被 Destroy 后，引用本身不为 null，但 == null 成立。
+    /// </summary>
+    bool HasUsableFollow()
+    {
+        if (_follow == null) return false;
+        var go = _follow.gameObject;
+        return go != null && go.activeInHierarchy;
+    }
+
+    /// <summary>
+    /// 按目标矩形摆放遮罩 / 挖空 / 手指 / 横幅。
+    /// ghost=true 表示目标已失效，只沿用位置，**不画任何遮挡**（避免挡住点击）。
+    /// </summary>
+    void PlaceForRect(float rawMinX, float rawMaxX, float rawMinY, float rawMaxY, bool ghost)
+    {
         float pad = 8f;
-        minX -= pad;
-        maxX += pad;
-        minY -= pad;
-        maxY += pad;
+        float minX = rawMinX - pad;
+        float maxX = rawMaxX + pad;
+        float minY = rawMinY - pad;
+        float maxY = rawMaxY + pad;
 
         var root = transform as RectTransform;
+        if (root == null) return;
         float left = root.rect.xMin;
         float right = root.rect.xMax;
         float bot = root.rect.yMin;
         float top = root.rect.yMax;
 
-        if (_hard && _dims != null && _dims.Length == 4)
+        bool punch = _hard && !ghost;
+
+        if (punch && _dims != null && _dims.Length == 4)
         {
             PlaceStrip(_dims[0], left, right, maxY, top);
             PlaceStrip(_dims[1], left, right, bot, minY);
@@ -457,12 +499,22 @@ public class TutorialHintUI : MonoBehaviour
             SetDimsActive(true);
         }
         else
-            SetDimsActive(false);
-
-        if (_hard && _holeRt != null)
         {
-            _holeRt.gameObject.SetActive(true);
-            PlaceStrip(_holeRt, minX, maxX, minY, maxY);
+            SetDimsActive(false);
+        }
+
+        if (_holeRt != null)
+        {
+            bool showHole = punch;
+            _holeRt.gameObject.SetActive(showHole);
+            if (showHole) PlaceStrip(_holeRt, minX, maxX, minY, maxY);
+        }
+
+        if (ghost)
+        {
+            HidePointer();
+            PlaceBannerGhost(rawMinX, rawMaxX, rawMinY, rawMaxY);
+            return;
         }
 
         float centerX = (minX + maxX) * 0.5f;
@@ -481,6 +533,15 @@ public class TutorialHintUI : MonoBehaviour
             _pointerRt.localRotation = Quaternion.Euler(0f, 0f, _pointerAbove ? 180f : 0f);
 
         PlaceBanner(new Vector2(centerX, minY), maxY, top, bot, _pointerAbove ? handH + gap : 0f);
+    }
+
+    /// <summary>目标失效时的横幅落位：贴着上一次目标的下沿，不再用「无目标」的屏幕偏上默认值。</summary>
+    void PlaceBannerGhost(float minX, float maxX, float minY, float maxY)
+    {
+        var root = transform as RectTransform;
+        if (root == null || _bannerRt == null) return;
+        PlaceBanner(new Vector2((minX + maxX) * 0.5f, minY), maxY,
+                    root.rect.yMax, root.rect.yMin, 0f);
     }
 
     /// <summary>文字横幅：高度固定 100，左右少留白，不按字高拉扁底图。</summary>
@@ -591,7 +652,24 @@ public class TutorialHintUI : MonoBehaviour
         if (_pointerRt != null) _pointerRt.gameObject.SetActive(false);
     }
 
+    /// <summary>
+    /// 量目标矩形，量不到时强制回流一次再量。
+    /// 目标节点经常被整体重建（ClearChildren + 重新摆 chip），那一帧 LayoutGroup 还没回流，
+    /// 直接判定「量不到」会让引导条保持旧位置甚至跳回默认值。
+    /// </summary>
     bool TryGetFollowLocalRect(out float minX, out float maxX, out float minY, out float maxY)
+    {
+        if (MeasureFollowLocalRect(out minX, out maxX, out minY, out maxY))
+            return true;
+        if (_follow != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_follow);
+            return MeasureFollowLocalRect(out minX, out maxX, out minY, out maxY);
+        }
+        return false;
+    }
+
+    bool MeasureFollowLocalRect(out float minX, out float maxX, out float minY, out float maxY)
     {
         minX = maxX = minY = maxY = 0f;
         var root = transform as RectTransform;

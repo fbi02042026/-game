@@ -28,6 +28,8 @@ public static class ContentPaths
         /// <summary>道具定义表（2026-09-15 新增；背包格子已改为只装道具）。</summary>
         public const string ItemDefs = "Data/Tables/item_defs";
         public const string StageSpawn = "Data/Tables/stage_spawn";
+        /// <summary>关卡掉落：徽记掉落率 / 本命碎片来源（2026-09-18 新增，见 stage_drop.csv）。</summary>
+        public const string StageDrop = "Data/Tables/stage_drop";
         public const string TutorialBattle = "Data/Tables/tutorial_battle";
         public const string BattleQuest = "Data/Tables/battle_quest";
         public const string StageRollerWeights = "Data/Tables/stage_roller_weights";

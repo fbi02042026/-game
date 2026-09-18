@@ -9,6 +9,9 @@ public static class DesignAspectLetterbox
     /// <summary>相对设计 9:16，偏差超过该比例才启用黑边。</summary>
     public const float ExtremeAspectSlack = 0.12f;
 
+    /// <summary>更高/更瘦方向的放宽阈值：竖向铺满，不裁上下黑边。</summary>
+    public const float ExtremeAspectSlackTaller = 0.30f;
+
     static Camera _barsCam;
     static int _lastW;
     static int _lastH;
@@ -21,7 +24,19 @@ public static class DesignAspectLetterbox
         float screen = Screen.width / (float)Mathf.Max(1, Screen.height);
         float design = DesignAspect;
         float ratio = screen / design;
-        return ratio < 1f - ExtremeAspectSlack || ratio > 1f + ExtremeAspectSlack;
+        return ratio < 1f - ExtremeAspectSlackTaller || ratio > 1f + ExtremeAspectSlack;
+    }
+
+    /// <summary>
+    /// 高瘦屏改用按宽度匹配，保证 UI 逻辑宽恒为 720 不被左右裁切；
+    /// 其余机型沿用 GameConfig.UI_MATCH。
+    /// </summary>
+    public static float ResolveUiMatch()
+    {
+        float screen = Screen.width / (float)Mathf.Max(1, Screen.height);
+        float design = DesignAspect;
+        if (screen <= 0f || design <= 0f) return GameConfig.UI_MATCH;
+        return screen < design ? 0f : GameConfig.UI_MATCH;
     }
 
     /// <summary>

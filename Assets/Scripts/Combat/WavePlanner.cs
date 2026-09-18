@@ -43,6 +43,8 @@ public sealed class WavePlanner
     float _tutorialHpMax { get => bm._tutorialHpMax; set => bm._tutorialHpMax = value; }
     float _tutorialEliteHpMin { get => bm._tutorialEliteHpMin; set => bm._tutorialEliteHpMin = value; }
     float _tutorialEliteHpMax { get => bm._tutorialEliteHpMax; set => bm._tutorialEliteHpMax = value; }
+    float _tutorialRangedHpMin { get => bm._tutorialRangedHpMin; set => bm._tutorialRangedHpMin = value; }
+    float _tutorialRangedHpMax { get => bm._tutorialRangedHpMax; set => bm._tutorialRangedHpMax = value; }
     bool _tutorialHpFromTable { get => bm._tutorialHpFromTable; set => bm._tutorialHpFromTable = value; }
     Coroutine _spawnWaveCo { get => bm._spawnWaveCo; set => bm._spawnWaveCo = value; }
     int _totalMonstersSpawnedThisStage { get => bm._totalMonstersSpawnedThisStage; set => bm._totalMonstersSpawnedThisStage = value; }
@@ -344,6 +346,12 @@ public sealed class WavePlanner
         {
             min = _tutorialEliteHpMin;
             max = _tutorialEliteHpMax;
+        }
+        else if (monster.IsRangedStyle && (_tutorialRangedHpMin > 0f || _tutorialRangedHpMax > 0f))
+        {
+            // 远程怪单独降血：与近战同血会让「远程更脆」的手感不成立（近战 3~4 刀 / 远程 2~3 刀）。
+            min = _tutorialRangedHpMin;
+            max = _tutorialRangedHpMax;
         }
         else
         {
@@ -984,6 +992,8 @@ public sealed class WavePlanner
         _tutorialHpMax = step.hpMax;
         _tutorialEliteHpMin = step.eliteHpMin;
         _tutorialEliteHpMax = step.eliteHpMax;
+        _tutorialRangedHpMin = step.rangedHpMin;
+        _tutorialRangedHpMax = step.rangedHpMax;
     }
 
     /// <summary>单波内交替近战/远程；引导关强制混刷弓/法球与近战。</summary>

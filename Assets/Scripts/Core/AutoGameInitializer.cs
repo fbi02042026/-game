@@ -397,6 +397,9 @@ public class AutoGameInitializer : MonoBehaviour
         EnsureNestedSortOrder(FindDeepChildIgnoreCase(battleUI.transform, "CharacterBar"), 110);
         BattleSideHud.EnsureOn(battleUI.transform);
 
+        // 保险丝：Canvas 修复后兜底修复底部 4 个被动技能槽（容器/槽列表/Canvas抬序/激活/sibling 顺序）
+        battleUI.EnsureRunSkillSlotsRepaired();
+
         if (battleUI.GetComponent<ViewportFitDriver>() == null)
             battleUI.gameObject.AddComponent<ViewportFitDriver>();
 

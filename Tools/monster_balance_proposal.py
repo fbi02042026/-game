@@ -12,10 +12,20 @@
                         idx 5~10 = 0.95（第 3 关起补位）
                         idx 4     = 2.20（第 10 关才露面的章末精锐）
   roleMul（战斗定位）   血量：Melee 1.30 / Bow 0.90 / Ranged 0.80
-                        攻击：Melee 1.00 / Bow 1.05 / Ranged 1.15
+                        攻击：Melee 1.00 / Bow 1.18 / Ranged 1.28
   每章按各自"本次权重的加权和"归一化 → 该章平均值与现状**完全相等**（强度不漂移）
+
+硬约束（2026-09-18 用户拍板，脚本会断言，不满足直接报错退出）：
+  「可同刷集合」= 精灵 1~3 + 5~10（minWave 0/1/2，会混在同一波里）
+    ① min(近战血) > max(远程血)      近战永远比远程肉
+    ② min(远程攻) > max(近战攻)      远程永远比近战疼
+  精灵 4（minWave=9，第 10 关才单独露面的章末精锐）不参与，它是设计上的 Boss 级厚怪。
+
+用法：
+  python Tools/monster_balance_proposal.py          只预览 + 写候选稿 Tools/monster_balance_proposal.csv
+  python Tools/monster_balance_proposal.py --apply  预览通过后写正式表（csv + bytes 两处同步）
 """
-import csv, io, os
+import csv, io, os, sys, shutil, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "Assets", "Data", "Source", "Tables")
@@ -24,7 +34,7 @@ OUT = os.path.join(ROOT, "Tools", "monster_balance_proposal.csv")
 HP_TIER = {1: 1.15, 2: 1.15, 3: 1.15, 4: 2.20}
 HP_ROLE = {"Melee": 1.30, "Bow": 0.90, "Ranged": 0.80}
 ATK_TIER = {1: 1.05, 2: 1.05, 3: 1.05, 4: 1.30}
-ATK_ROLE = {"Melee": 1.00, "Bow": 1.05, "Ranged": 1.15}
+ATK_ROLE = {"Melee": 1.00, "Bow": 1.18, "Ranged": 1.28}
 
 
 def tier(idx):
@@ -126,6 +136,33 @@ for m in [m for m in norm if m["ch"] == 6]:
           (m["id"], m["idx"], m["style"], m["hp"], new_hp[m["id"]],
            m["atk"], new_atk[m["id"]]))
 
+print()
+print("=" * 88)
+print("硬约束断言（可同刷集合 = 精灵 1~3 + 5~10；精灵 4 章末精锐不参与）")
+print("  ① min(近战血) > max(远程血)    ② min(远程攻) > max(近战攻)")
+print("=" * 88)
+ok = True
+print("%-4s %-10s %-10s %-8s %-10s %-10s %-8s" %
+      ("章", "最脆近战血", "最肉远程血", "OK①", "最弱远程攻", "最强近战攻", "OK②"))
+for ch in range(1, 9):
+    rows = [m for m in norm if m["ch"] == ch and m["idx"] != 4]
+    melee = [m for m in rows if m["style"] == "Melee"]
+    ranged = [m for m in rows if m["style"] != "Melee"]
+    if not melee or not ranged:
+        print("%-4d 单侧集合为空（近战%d 远程%d），跳过" % (ch, len(melee), len(ranged)))
+        continue
+    min_melee_hp = min(new_hp[m["id"]] for m in melee)
+    max_ranged_hp = max(new_hp[m["id"]] for m in ranged)
+    min_ranged_atk = min(new_atk[m["id"]] for m in ranged)
+    max_melee_atk = max(new_atk[m["id"]] for m in melee)
+    c1 = min_melee_hp > max_ranged_hp
+    c2 = min_ranged_atk > max_melee_atk
+    ok = ok and c1 and c2
+    print("%-4d %-10.1f %-10.1f %-8s %-10.1f %-10.1f %-8s" %
+          (ch, min_melee_hp, max_ranged_hp, "PASS" if c1 else "FAIL",
+           min_ranged_atk, max_melee_atk, "PASS" if c2 else "FAIL"))
+print("\n硬约束总判定：%s" % ("PASS —— 可以写入正式表" if ok else "FAIL —— 拒绝写入，先调 HP_ROLE / ATK_ROLE"))
+
 # 目标是将来可能直接替换 Assets/Data/Source/Tables/monster_stats.csv，
 # 该表工程内统一 CRLF（core.autocrlf=true），这里跟着写 CRLF，避免将来 diff 出现换行噪音。
 # head = 表头（load 返回的 body 是**数据行**，别再误当成全表）
@@ -133,14 +170,37 @@ head, _ = load(os.path.join(SRC, "monster_stats.csv"))
 COMMENTS = [
     "# monster_stats：怪物数值与出场（monsterChapter=素材章 1~8）",
 ]
-with io.open(OUT, "w", encoding="utf-8-sig", newline="") as f:
-    for c in COMMENTS:
-        f.write(c + "\r\n")
-    f.write(",".join(head) + "\r\n")
-    for m in mons:
-        r = list(m["raw"])
-        if not m["boss"]:
-            r[7] = "%.1f" % new_hp[m["id"]]
-            r[8] = "%.1f" % new_atk[m["id"]]
-        f.write(",".join(r) + "\r\n")
+def dump(path, with_bom):
+    """写表。正式表与 .bytes 都不带 BOM（与工程现状一致），候选稿带 BOM 方便 Excel 直接打开。"""
+    with io.open(path, "w", encoding="utf-8-sig" if with_bom else "utf-8", newline="") as f:
+        for c in COMMENTS:
+            f.write(c + "\r\n")
+        f.write(",".join(head) + "\r\n")
+        for m in mons:
+            r = list(m["raw"])
+            if not m["boss"]:
+                r[7] = "%.1f" % new_hp[m["id"]]
+                r[8] = "%.1f" % new_atk[m["id"]]
+            f.write(",".join(r) + "\r\n")
+
+
+dump(OUT, True)
 print("\n候选全表已写出（未生效）：" + OUT)
+
+if "--apply" in sys.argv:
+    if not ok:
+        print("\n[拒绝写入] 硬约束未通过。")
+        sys.exit(2)
+    CSV = os.path.join(SRC, "monster_stats.csv")
+    BYTES = os.path.join(ROOT, "Assets", "Resources", "Data", "Tables", "monster_stats.bytes")
+    bak = os.path.join(ROOT, ".workbuddy", "backup", "monster_stats_20260918")
+    os.makedirs(bak, exist_ok=True)
+    ts = time.strftime("%H%M%S")
+    for p in (CSV, BYTES):
+        dst = os.path.join(bak, os.path.basename(p) + "." + ts + ".bak")
+        shutil.copy2(p, dst)
+        print("backup: " + dst)
+    # 纪律：改表必须 .csv 与 .bytes 两处同步（.bytes 就是明文 CSV 改后缀）
+    dump(CSV, False)
+    dump(BYTES, False)
+    print("\n已写入正式表：\n  " + CSV + "\n  " + BYTES)

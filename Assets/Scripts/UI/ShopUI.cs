@@ -99,10 +99,9 @@ public class ShopUI : MonoBehaviour
         SetRect(_walletText.rectTransform, 0.5f, 0.912f, 0f, 0f, 940f, 32f);
         _walletText.color = new Color(1f, 0.86f, 0.5f);
 
-        var hint = CreateTxt(panel.transform, "Hint",
-            "商店只卖时间，不卖独占内容——所有商品都能通过推图免费拿到", 18, TextAnchor.MiddleCenter);
-        SetRect(hint.rectTransform, 0.5f, 0.878f, 0f, 0f, 940f, 26f);
-        hint.color = new Color(0.66f, 0.72f, 0.84f);
+        // 2026-09-18：原「商店只卖时间，不卖独占内容」定位文案按用户要求去掉。
+        // 原因：7 个佣兵只能靠商店解锁，这句话与实际情况冲突，留着会被打脸。
+        // 位置（0.5, 0.878）留空，标题与钱包行之间不再塞说明文字。
 
         BuildTabs(panel.transform);
 

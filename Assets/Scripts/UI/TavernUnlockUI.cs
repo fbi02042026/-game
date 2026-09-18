@@ -82,6 +82,14 @@ public class TavernUnlockUI : MonoBehaviour
         var canvas = gameObject.AddComponent<Canvas>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
 
+        // prefab 里残留上一版运行时节点（Root/Frame/Panel…），Unity 保存时把运行时状态序列化进去了。
+        // 不清理会与本帧生成的界面叠加，导致面板双份、宽度溢出跑到屏幕外。只删名为 "Root" 的，避免误删美术节点。
+        for (int i = transform.childCount - 1; i >= 0; i--)
+        {
+            var child = transform.GetChild(i);
+            if (child.name == "Root") Destroy(child.gameObject);
+        }
+
         _root = new GameObject("Root", typeof(RectTransform));
         _root.transform.SetParent(transform, false);
         Stretch(_root.GetComponent<RectTransform>());
@@ -90,8 +98,17 @@ public class TavernUnlockUI : MonoBehaviour
         Stretch(dim.rectTransform);
         dim.gameObject.AddComponent<Button>().onClick.AddListener(Hide);
 
+        // 读取当前 canvas 逻辑尺寸（不写死常数，兼容更瘦屏逻辑高度 1600）：
+        // 当前走 match width，逻辑宽恒为参考分辨率宽，逻辑高 = 屏高 × 参考宽 / 屏宽
+        var scaler = canvas.GetComponent<CanvasScaler>();
+        float refW = scaler != null ? scaler.referenceResolution.x : 720f;
+        float logicalH = (scaler != null && scaler.matchWidthOrHeight < 0.5f)
+            ? Screen.height * refW / Mathf.Max(Screen.width, 1)
+            : (scaler != null ? scaler.referenceResolution.y : 1280f);
+        // 面板收窄到 660（左右各留 30 边距）；高度随屏高动态：9:16 约 1200，9:20 约 1500
+        float panelH = Mathf.Min(logicalH - 80f, 1500f);
         var panel = CreateImg(_root.transform, "Panel", new Color(0.09f, 0.08f, 0.10f, 0.98f));
-        SetRect(panel.rectTransform, 0.5f, 0.5f, 0f, 0f, 980f, 1200f);
+        SetRect(panel.rectTransform, 0.5f, 0.5f, 0f, 0f, 660f, panelH);
 
         var title = CreateTxt(panel.transform, "Title", "佣兵名册", 40, TextAnchor.MiddleCenter);
         SetRect(title.rectTransform, 0.5f, 0.93f, 0f, 0f, 520f, 52f);
@@ -102,7 +119,7 @@ public class TavernUnlockUI : MonoBehaviour
 
         _hintText = CreateTxt(panel.transform, "Hint",
             "解锁后的佣兵会出现在战斗内的「佣兵」三选一中", 20, TextAnchor.MiddleCenter);
-        SetRect(_hintText.rectTransform, 0.5f, 0.85f, 0f, 0f, 900f, 30f);
+        SetRect(_hintText.rectTransform, 0.5f, 0.85f, 0f, 0f, 600f, 30f);
         _hintText.color = new Color(0.72f, 0.78f, 0.9f);
 
         int shopCount = MercRosterDefs.ShopRoster.Count;
@@ -110,20 +127,21 @@ public class TavernUnlockUI : MonoBehaviour
         {
             var shopHint = CreateTxt(panel.transform, "ShopHint",
                 $"另有 {shopCount} 名高价佣兵在商店解锁", 18, TextAnchor.MiddleCenter);
-            SetRect(shopHint.rectTransform, 0.5f, 0.822f, 0f, 0f, 900f, 26f);
+            SetRect(shopHint.rectTransform, 0.5f, 0.822f, 0f, 0f, 600f, 26f);
             shopHint.color = new Color(0.85f, 0.74f, 0.45f);
         }
 
         BuildFilterTabs(panel.transform);
 
-        var close = CreateBtn(panel.transform, "CloseButton", "关闭", new Vector2(430f, 545f), new Vector2(110f, 52f));
+        // 关闭按钮移到面板右上内侧（面板半宽 330，按钮宽 110 → x 约 250 留 25 边距）
+        var close = CreateBtn(panel.transform, "CloseButton", "关闭", new Vector2(250f, 545f), new Vector2(110f, 52f));
         close.onClick.AddListener(Hide);
 
         // 滚动列表
         var scrollGo = new GameObject("Scroll", typeof(RectTransform));
         scrollGo.transform.SetParent(panel.transform, false);
         var scrollRt = scrollGo.GetComponent<RectTransform>();
-        SetRect(scrollRt, 0.5f, 0.5f, 0f, -110f, 920f, 800f);
+        SetRect(scrollRt, 0.5f, 0.5f, 0f, -110f, 620f, 800f);
 
         var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Mask), typeof(ScrollRect));
         viewportGo.transform.SetParent(scrollGo.transform, false);
@@ -146,7 +164,7 @@ public class TavernUnlockUI : MonoBehaviour
         grid.spacing = new Vector2(12f, 12f);
         grid.padding = new RectOffset(16, 16, 16, 16);
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        grid.constraintCount = 3;
+        grid.constraintCount = 2;
         grid.childAlignment = TextAnchor.UpperCenter;
 
         var fitter = _content.gameObject.AddComponent<ContentSizeFitter>();
@@ -306,7 +324,25 @@ public class TavernUnlockUI : MonoBehaviour
         if (AdventureLogCatalog.TryFindMerc(def.HireId, out var e2))
             stand = AdventureCodex.LoadMercStand(e2);
 
-        CodexInfoPopupUI.Show($"{def.Name}·{def.Nickname}", meta, desc, entry.Lore, stand);
+        // 2026-09-18 Q2：未解锁且门槛已开 → 详情弹窗里直接给「解锁 N」按钮，不用退回卡面再点一次
+        string unlockText = null;
+        System.Action onUnlock = null;
+        var data = SaveSystem.Instance?.Data;
+        if (data != null && !data.IsMercUnlocked(def.HireId) && IsGateOpen(def, data))
+        {
+            int cost = MercRosterDefs.UnlockCost(def);
+            long gold = ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold);
+            unlockText = gold >= cost ? $"解锁 {cost}" : $"解锁 {cost}（金币不足）";
+            onUnlock = () =>
+            {
+                if (!TryUnlock(def)) return;
+                Refresh();
+                CodexInfoPopupUI.HideActive();
+            };
+        }
+
+        CodexInfoPopupUI.Show($"{def.Name}·{def.Nickname}", meta, desc, entry.Lore, stand,
+            unlockText, onUnlock);
     }
 
     /// <summary>技能段：主动 / 被动的名字 + 效果 + 冷却（merc_skills 表）。</summary>
@@ -378,8 +414,12 @@ public class TavernUnlockUI : MonoBehaviour
 
             if (unlocked)
             {
+                // 已解锁也能再买：重复 → 转本命碎片（2026-09-18）
                 c.bg.color = new Color(0.14f, 0.22f, 0.16f, 1f);
-                SetBtn(c, "已加入三选一池", false, new Color(0.42f, 0.62f, 0.42f, 1f));
+                bool dupAfford = gold >= cost;
+                int frag = MercGrowInventory.DupFragCountOf(def);
+                SetBtn(c, $"再招募 → 本命碎片 {frag}", dupAfford,
+                    dupAfford ? new Color(0.95f, 0.78f, 0.35f, 1f) : new Color(0.55f, 0.5f, 0.4f, 1f));
             }
             else if (!gateOpen)
             {
@@ -466,6 +506,22 @@ public class TavernUnlockUI : MonoBehaviour
         {
             GlobalToastUI.Show("解锁条件：" + MercUnlockGate.FullText(def.HireId));
             return false;
+        }
+
+        // 2026-09-18 用户拍板：买到**已解锁**的佣兵 = 重复，直接转本命碎片（不再重复进池）
+        if (data.IsMercUnlocked(def.HireId))
+        {
+            int dupCost = MercRosterDefs.UnlockCost(def);
+            if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, dupCost, save: false, notify: false))
+            {
+                GlobalToastUI.Show("金币不足");
+                return false;
+            }
+            int got = MercGrowInventory.ConvertDuplicateMerc(def);
+            SaveSystem.Instance.Save();
+            GlobalToastUI.Show($"「{def.Name}」已在名册中 → 转为本命碎片 ×{got}");
+            Debug.Log($"[TavernUnlock] 重复佣兵 {def.HireId} {def.Name} → 本命碎片 ×{got}，花费 {dupCost} 金币");
+            return true;
         }
 
         int cost = MercRosterDefs.UnlockCost(def);

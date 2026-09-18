@@ -395,12 +395,7 @@ public class EquipDropPopupUI : MonoBehaviour
 
         EquipInstance worn = null;
         if (GridBackpackSystem.Instance != null)
-        {
-            EquipSlotType compareSlot = WeaponLoadoutRules.IsLoadoutItem(sel)
-                ? WeaponLoadoutRules.ResolveLogicalSlot(sel)
-                : sel.slotType;
-            worn = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(compareSlot);
-        }
+            worn = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(ResolveWornSlot(sel));
 
         // 下部对比区始终显示：有则属性，无则「当前部位无装备」
         if (comparePanel != null) comparePanel.SetActive(true);
@@ -484,6 +479,8 @@ public class EquipDropPopupUI : MonoBehaviour
     static void ShowEquipGain(EquipInstance eq)
     {
         if (eq == null) return;
+        // 记进本局战报：结算界面只列「本局获得的装备」，不再倒出整个背包
+        BattleManager.Instance?.RunStats?.AddEquipGain(eq);
         int atk = 0;
         for (int i = 0; i < eq.attrBonus.Count; i++)
         {
@@ -504,14 +501,27 @@ public class EquipDropPopupUI : MonoBehaviour
         return _drops[_selected];
     }
 
-    /// <summary>取与给定装备同逻辑槽位上「已装备」的那件，作为推荐对比基线。</summary>
+    /// <summary>
+    /// 取与给定装备同一个「穿戴槽」上已装备的那件。
+    /// 武器必须走 **HeroWeaponRig 的 Attack/Secondary 槽**（与真正穿上身的口径一致），
+    /// 不能只按逻辑 MainHand/OffHand 取——攻击手可能是副手，
+    /// 那样弹窗里显示的主手就不是玩家手里那把（2026-09-18 修）。
+    /// </summary>
+    static EquipSlotType ResolveWornSlot(EquipInstance eq)
+    {
+        if (!WeaponLoadoutRules.IsLoadoutItem(eq)) return eq.slotType;
+
+        var rig = Hero.Instance?.costumeManager?.HandRig ?? default;
+        return rig.IsValid
+            ? WeaponLoadoutRules.ResolveWearSlot(eq, rig)
+            : WeaponLoadoutRules.ResolveLogicalSlot(eq);
+    }
+
+    /// <summary>取与给定装备同穿戴槽位上「已装备」的那件，作为推荐对比基线。</summary>
     EquipInstance GetWorn(EquipInstance eq)
     {
         if (eq == null || GridBackpackSystem.Instance == null) return null;
-        EquipSlotType slot = WeaponLoadoutRules.IsLoadoutItem(eq)
-            ? WeaponLoadoutRules.ResolveLogicalSlot(eq)
-            : eq.slotType;
-        return GridBackpackSystem.Instance.GetEquippedInLogicalSlot(slot);
+        return GridBackpackSystem.Instance.GetEquippedInLogicalSlot(ResolveWornSlot(eq));
     }
 
     void SelectCard(int idx)

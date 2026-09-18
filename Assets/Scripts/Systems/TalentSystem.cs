@@ -45,7 +45,20 @@ public static class TalentSystem
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
         Hero.Instance?.RecalcAttr();
+        // 点了哪条就报哪条：文案直接取该节点的 effect.display（如「攻击 +5」「生命 +40」），
+        // 不再打一句笼统的「天赋已解锁」。
+        AnnounceTalentGain(node != null ? node.name : null, node != null ? node.effect : null);
         return true;
+    }
+
+    /// <summary>天赋生效提示：节点名 + 该条属性的具体提升（如「力量 I · 攻击 +5」）。</summary>
+    static void AnnounceTalentGain(string nodeName, TalentDefs.Effect fx)
+    {
+        if (fx == null || string.IsNullOrEmpty(fx.display)) return;
+        string text = string.IsNullOrEmpty(nodeName)
+            ? fx.display
+            : $"{nodeName} · {fx.display}";
+        UIManager.Instance?.ShowToast(text);
     }
 
     public static bool CanUnlockChoice(Branch branch, int index1Based, int option1Based, out string reason)
@@ -87,6 +100,10 @@ public static class TalentSystem
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
         Hero.Instance?.RecalcAttr();
+        var picked = node?.options != null && option1Based >= 1 && option1Based <= node.options.Length
+            ? node.options[option1Based - 1] : null;
+        AnnounceTalentGain(picked != null ? picked.name : (node != null ? node.groupName : null),
+                           picked != null ? picked.effect : null);
         return true;
     }
 
