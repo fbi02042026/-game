@@ -1,0 +1,26 @@
+#!/bin/sh
+# git post-merge hook：每次 pull / merge 完成后，在终端打印当前待办清单。
+#
+# 安装（仓库根目录执行一次即可）：
+#   cp Tools/git-hooks/post-merge .git/hooks/post-merge
+# Windows（Git Bash 同理）：
+#   copy Tools\git-hooks\post-merge .git\hooks\post-merge
+#
+# 说明：.git/hooks 不受版本控制，所以换机器/新克隆后要重新安装一次。
+
+TODO="Docs/待办清单_2026-09-18.md"
+
+if [ ! -f "$TODO" ]; then
+  exit 0
+fi
+
+echo ""
+echo "=============================================="
+echo " 拉取完成 · 当前待办事项（$TODO）"
+echo "=============================================="
+# 打印 §2「还没做」整节，直到 §3 为止
+sed -n '/^## 2\./,/^## 3\./p' "$TODO" | sed '/^## 3\./d'
+echo "=============================================="
+echo " 完整清单见：$TODO"
+echo "=============================================="
+echo ""
