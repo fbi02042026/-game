@@ -403,7 +403,8 @@ public class DialogueUI : MonoBehaviour
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
         _revealBlack = go.GetComponent<Image>();
-        _revealBlack.color = Color.black;
+        // 新铁律（2026-09-19）：游戏内揭示黑幕也不给纯黑，封顶 0.8（见 SetRevealBlack）。
+        _revealBlack.color = new Color(0f, 0f, 0f, 0.8f);
         _revealBlack.raycastTarget = false;
         go.transform.SetSiblingIndex(1);
     }

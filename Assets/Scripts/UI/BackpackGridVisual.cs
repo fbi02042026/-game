@@ -11,6 +11,8 @@ public static class BackpackGridVisual
 {
     const string LayerName = "ItemOverlayLayer";
     const float IconPad = 2f;
+    const string LockOverlayName = "LockedOverlay";
+    const string LockIconName = "LockIcon";
 
     public struct ItemPlacement
     {
@@ -383,6 +385,79 @@ public static class BackpackGridVisual
         tr.anchorMax = Vector2.one;
         tr.offsetMin = Vector2.zero;
         tr.offsetMax = Vector2.zero;
+    }
+
+    /// <summary>
+    /// 未解锁行格子的外观：半透明黑遮罩 + 居中锁图标。
+    /// 锁图优先复用项目现有的 Resources/UI/Common/锁（RuntimeLockSprite 内部已做了
+    /// “有图用图、无图代码画”的兜底）；不新建美术资源、不改预制体。
+    /// 返回的遮罩默认隐藏，由调用方按“行号 >= 已解锁行数”决定是否显示。
+    /// </summary>
+    public static GameObject EnsureLockOverlay(Transform cell)
+    {
+        if (cell == null) return null;
+
+        var exist = FindDirectChild(cell, LockOverlayName);
+        if (exist != null)
+        {
+            EnsureLockIcon(exist);
+            return exist.gameObject;
+        }
+
+        var go = new GameObject(LockOverlayName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(cell, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        var mask = go.GetComponent<Image>();
+        mask.sprite = null;
+        mask.color = new Color(0f, 0f, 0f, 0.55f);
+        // 吃掉点击：未解锁格不可点、不可放物品（数据层本就拒绝，这里只补上交互层）
+        mask.raycastTarget = true;
+
+        EnsureLockIcon(go.transform);
+        go.SetActive(false);
+        return go;
+    }
+
+    /// <summary>
+    /// 锁图标按格子的 44% 占比居中；用锚点而非 sizeDelta，
+    /// 这样即使创建时 GridLayout 还没重建、rect 为 0 也不会缩成一点。
+    /// </summary>
+    static void EnsureLockIcon(Transform overlay)
+    {
+        if (overlay == null) return;
+        if (FindDirectChild(overlay, LockIconName) != null) return;
+
+        var go = new GameObject(LockIconName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(overlay, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.28f, 0.28f);
+        rt.anchorMax = new Vector2(0.72f, 0.72f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        var img = go.GetComponent<Image>();
+        img.sprite = RuntimeLockSprite.Get();
+        img.color = Color.white;
+        img.preserveAspect = true;
+        img.raycastTarget = false;
+    }
+
+    static Transform FindDirectChild(Transform parent, string name)
+    {
+        if (parent == null) return null;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var c = parent.GetChild(i);
+            if (c != null && c.name == name) return c;
+        }
+        return null;
     }
 
     static Transform EnsureLayer(RectTransform gridContainer)

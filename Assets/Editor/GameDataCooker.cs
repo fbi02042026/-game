@@ -72,6 +72,8 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookPlayerPassives();
         CookHiddenLevelRules();
         CookEquipAppearanceMap();
+        CookTalentRight();
+        CookMercRoster();
         if (ContentProtection.Enabled)
             CookFingerprint();
         else
@@ -266,6 +268,19 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookTableFromSource(ContentPaths.Source.Tables + "/equip_appearance_map.csv", null, "equip_appearance_map");
     }
 
+
+    /// <summary>佣兵花名册（2026-09-19 新增）：Assets/Data/Source/Tables/merc_roster.csv
+    /// → Resources/Data/Tables/merc_roster.bytes（明文，与 .csv 逐字一致）。</summary>
+    static void CookMercRoster()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/merc_roster.csv", null, "merc_roster");
+    }
+    static void CookTalentRight()
+    {
+        // 右列天赋重制表：Assets/Data/Source/Tables/talent_right.csv
+        // → Resources/Data/Tables/talent_right.bytes（明文，与 .csv 逐字一致）。
+        CookTableFromSource(ContentPaths.Source.Tables + "/talent_right.csv", null, "talent_right");
+    }
     static void CookTableFromSource(string sourceCsv, string legacyResourcesPath, string outName)
     {
         string csv = null;

@@ -44,7 +44,8 @@ public static class MercRosterDefs
         public bool SoldInShop;
     }
 
-    static readonly Def[] Table =
+    // 默认 = 硬编码数组（缺表/解析失败时回退用）；读表成功后整体替换为表数据。
+    static Def[] Table =
     {
         D("H001", "马库斯", "老盾", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 110, 9, 15, 0.90f, 3.2f, null, "SK006", 0, true, true),
         D("H002", "洛恩", "铁皮", "dunbing102", "剑盾卫士", MercRarity.Rare, 1.15f, 120, 11, 17.5f, 0.95f, 3.3f, "SK007", null, 1500, true),
@@ -72,6 +73,76 @@ public static class MercRosterDefs
 
     static Dictionary<string, Def> _byHire;
     static Dictionary<string, Def> _byAsset;
+    /// <summary>是否已尝试过读 merc_roster 表（只试一次，避免每次 Ensure 都 Load）。</summary>
+    static bool _csvTried;
+
+    /// <summary>
+    /// 优先读 merc_roster 表（Resources/Data/Tables/merc_roster.bytes，明文 CSV）。
+    /// 缺表 / 行数不足 / 解析为空 → 保留 <see cref="Table"/> 的硬编码初值（不崩）。
+    /// 列顺序见 merc_roster.csv 表头：HireId,Name,Nickname,AssetId,JobName,Rarity,Growth,
+    /// BaseHp,BaseAtk,BaseDef,AtkSpeed,MoveSpeed,ActiveSkillId,PassiveSkillId,RecruitGold,InInitialPool,SoldInShop
+    /// </summary>
+    static void LoadTableFromCsv()
+    {
+        if (_csvTried) return;
+        _csvTried = true;
+
+        string raw = GameTableStore.LoadText(ContentPaths.Data.MercRoster);
+        if (string.IsNullOrEmpty(raw))
+        {
+            Debug.LogWarning("[MercRoster] 缺 merc_roster 表（回退硬编码数组）");
+            return;
+        }
+
+        var rows = GameTableCsv.ParseRows(raw);
+        if (rows.Count < 2)
+        {
+            Debug.LogWarning("[MercRoster] merc_roster 行数不足（回退硬编码数组）");
+            return;
+        }
+
+        // rows[0] 是表头，数据从 index 1 起。
+        var list = new List<Def>();
+        for (int i = 1; i < rows.Count; i++)
+        {
+            var c = rows[i];
+            if (c.Length < 12) continue; // 至少到 MoveSpeed 才有意义
+
+            string activeStr = c.Length > 12 ? c[12].Trim() : null;
+            string passiveStr = c.Length > 13 ? c[13].Trim() : null;
+
+            var d = new Def
+            {
+                HireId = c[0].Trim(),
+                Name = c[1].Trim(),
+                Nickname = c[2].Trim(),
+                AssetId = c[3].Trim(),
+                JobName = c[4].Trim(),
+                Rarity = (MercRarity)GameTableCsv.TryInt(c, 5, 0),
+                Growth = GameTableCsv.TryFloat(c, 6, 1f),
+                BaseHp = GameTableCsv.TryFloat(c, 7, 0f),
+                BaseAtk = GameTableCsv.TryFloat(c, 8, 0f),
+                BaseDef = GameTableCsv.TryFloat(c, 9, 0f),
+                AtkSpeed = GameTableCsv.TryFloat(c, 10, 1f),
+                MoveSpeed = GameTableCsv.TryFloat(c, 11, 3.5f),
+                ActiveSkillId = string.IsNullOrEmpty(activeStr) ? null : activeStr,
+                PassiveSkillId = string.IsNullOrEmpty(passiveStr) ? null : passiveStr,
+                RecruitGold = GameTableCsv.TryInt(c, 14, 0),
+                InInitialPool = GameTableCsv.TryBool(c, 15, false),
+                SoldInShop = GameTableCsv.TryBool(c, 16, false),
+            };
+            if (string.IsNullOrEmpty(d.HireId)) continue;
+            list.Add(d);
+        }
+
+        if (list.Count == 0)
+        {
+            Debug.LogWarning("[MercRoster] merc_roster 解析为空（回退硬编码数组）");
+            return;
+        }
+
+        Table = list.ToArray();
+    }
 
     static Def D(
         string hireId, string name, string nick, string asset, string job,
@@ -104,6 +175,7 @@ public static class MercRosterDefs
     static void Ensure()
     {
         if (_byHire != null) return;
+        LoadTableFromCsv(); // 表优先；失败则保留硬编码 Table
         _byHire = new Dictionary<string, Def>();
         _byAsset = new Dictionary<string, Def>();
         for (int i = 0; i < Table.Length; i++)

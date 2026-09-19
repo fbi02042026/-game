@@ -801,7 +801,11 @@ public abstract class UnitBase : MonoBehaviour
     protected void AdjustLaneTowardTarget(UnitBase chaseTarget, float dt)
     {
         if (chaseTarget == null || attr == null) return;
-        float laneSpeed = Mathf.Max(0.55f, attr.GetAttr(AttrType.MoveSpeed) * 0.85f);
+        // 换道速度：必须恒 < 直行移速，否则「换道比直行快」会看着怪异。
+        // 移速减半后（怪物≈0.3456）0.3456×0.85=0.294 < 0.55，原硬下限 0.55 会把换道钳得比直行还快，
+        // 故去掉绝对硬下限，改用 MoveSpeed 的比例（0.35 为防极端慢速的兜底，恒 < 0.85）。
+        float moveSpd = attr.GetAttr(AttrType.MoveSpeed);
+        float laneSpeed = Mathf.Max(moveSpd * 0.35f, moveSpd * 0.85f);
         float targetLane = chaseTarget.GetWorldLaneOffset();
         SetLaneY(Mathf.MoveTowards(LaneY, targetLane, laneSpeed * dt));
     }

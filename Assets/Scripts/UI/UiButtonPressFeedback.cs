@@ -18,6 +18,12 @@ public class UiButtonPressFeedback : MonoBehaviour, IPointerDownHandler, IPointe
     bool _pressed;
     bool _captured;
 
+    /// <summary>
+    /// 跳过按压反馈：点它只触发点击，不缩放、不变暗。
+    /// 例如登录协议文案「我已详细阅读并同意…」——点文字只是勾选，缩放会让整行字跳动。
+    /// </summary>
+    public bool suppress;
+
     void Awake()
     {
         CaptureBaseline();
@@ -56,8 +62,19 @@ public class UiButtonPressFeedback : MonoBehaviour, IPointerDownHandler, IPointe
             _rt.localScale = _baseScale;
     }
 
+    /// <summary>运行时把某个按钮的按压反馈关掉（含已经挂上的）。</summary>
+    public static void Suppress(GameObject go)
+    {
+        if (go == null) return;
+        var f = go.GetComponent<UiButtonPressFeedback>();
+        if (f == null) return;
+        f.suppress = true;
+        f.Restore();
+    }
+
     public void OnPointerDown(PointerEventData eventData)
     {
+        if (suppress) return;
         var btn = GetComponent<Button>();
         if (btn != null && !btn.interactable) return;
         if (!_captured) CaptureBaseline();
@@ -109,6 +126,10 @@ public class UiButtonPressFeedback : MonoBehaviour, IPointerDownHandler, IPointe
         if (ContainsIgnoreCase(n, "Dim") || ContainsIgnoreCase(n, "Hole")
             || ContainsIgnoreCase(n, "Joystick") || ContainsIgnoreCase(n, "摇杆")
             || ContainsIgnoreCase(n, "Blocker") || ContainsIgnoreCase(n, "Mask"))
+            return true;
+        // 协议/条款文案：点它只是勾选，不做缩放与变暗，避免整行字跳动
+        if (ContainsIgnoreCase(n, "AgreeLabel") || ContainsIgnoreCase(n, "LegalBar")
+            || ContainsIgnoreCase(n, "协议") || ContainsIgnoreCase(n, "条款"))
             return true;
         var g = btn.targetGraphic != null ? btn.targetGraphic : btn.GetComponent<Graphic>();
         if (g == null) return true;

@@ -4,7 +4,9 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 城镇/角色页背包网格：只绑定预制体里已摆好的格子，不改布局。
-/// 逻辑网格与预制体一致（4×3）；默认 3 行全开，不再有天赋扩容行。
+/// 逻辑网格列数固定 4；行数上限 BACKPACK_HEIGHT_MAX（4）。默认解锁 BACKPACK_DEFAULT_ROWS(3) 行，
+/// 第 4 行由天赋 R_BAG（SaveData.backpackRows）解锁——运行期 BuildGrid 会建满 4 行，未解锁行逐格锁定。
+/// 注意：角色页内嵌网格来自预制体（仅 12 格=3 行），4 行只在运行期新建的弹窗网格中出现。
 /// </summary>
 public class TownBackpackGrid : MonoBehaviour
 {
@@ -69,7 +71,7 @@ public class TownBackpackGrid : MonoBehaviour
             };
             ui.CaptureDefaultVisual();
             if (ui.lockedOverlay == null)
-                ui.lockedOverlay = CreateLockOverlay(cell);
+                ui.lockedOverlay = BackpackGridVisual.EnsureLockOverlay(cell);
             cells.Add(ui);
         }
     }
@@ -106,7 +108,7 @@ public class TownBackpackGrid : MonoBehaviour
         gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         gl.constraintCount = GameConfig.BACKPACK_WIDTH;
 
-        for (int y = 0; y < GameConfig.BACKPACK_HEIGHT; y++)
+        for (int y = 0; y < GameConfig.BACKPACK_HEIGHT_MAX; y++)
         {
             for (int x = 0; x < GameConfig.BACKPACK_WIDTH; x++)
                 CreateCell(go.transform, x, y);
@@ -151,13 +153,11 @@ public class TownBackpackGrid : MonoBehaviour
         ii.raycastTarget = false;
         ii.enabled = false;
 
-        var locked = new GameObject("LockedOverlay", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        locked.transform.SetParent(cell.transform, false);
-        Stretch(locked.GetComponent<RectTransform>(), 0f);
-        var li = locked.GetComponent<Image>();
-        li.color = new Color(0.2f, 0.18f, 0.15f, 0.75f);
-        li.raycastTarget = false;
-        locked.SetActive(y >= GameConfig.BACKPACK_DEFAULT_ROWS);
+        // 初始显隐按当前解锁行数（天赋可开出第 4 行），不写死默认 3 行；
+        // 具体是否锁定仍由 Refresh() 每次重算。
+        var locked = BackpackGridVisual.EnsureLockOverlay(cell.transform);
+        if (locked != null)
+            locked.SetActive(y >= GameConfig.UnlockedBackpackRows());
     }
 
     /// <summary>角色页与战斗页格子规格统一，避免同一套装备两边占位观感不一致。</summary>
@@ -329,19 +329,6 @@ public class TownBackpackGrid : MonoBehaviour
     {
         int rows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
         return rows * GameConfig.BACKPACK_WIDTH;
-    }
-
-    static GameObject CreateLockOverlay(Transform cell)
-    {
-        var go = new GameObject("LockedOverlay", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        go.transform.SetParent(cell, false);
-        var rt = go.GetComponent<RectTransform>();
-        Stretch(rt, 0f);
-        var img = go.GetComponent<Image>();
-        img.color = new Color(0.12f, 0.1f, 0.08f, 0.62f);
-        img.raycastTarget = false;
-        go.SetActive(false);
-        return go;
     }
 
     static Image FindImgNamedOnly(Transform root, params string[] names)

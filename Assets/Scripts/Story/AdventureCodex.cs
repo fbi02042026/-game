@@ -294,15 +294,43 @@ public static class AdventureCodex
         return false;
     }
 
-    /// <summary>资源奖已收归日志里程等级；格子详情仅展示文案。</summary>
+    /// <summary>资源奖（金币）已收归日志里程等级，不再发放。</summary>
     public static int CodexRewardGold(bool bossOrLegendary) => 0;
 
-    public static bool CanClaimCodexReward(string catalogId) => false;
+    /// <summary>
+    /// 图鉴首次记录奖励（2026-09-18 用户拍板）：普通怪 10 钻、首领 30 钻。
+    /// 每只只发一次，记在 data.claimedCodexRewardIds。
+    /// </summary>
+    public const int CodexRewardDiamondNormal = 10;
+    public const int CodexRewardDiamondBoss = 30;
 
-    public static bool TryClaimCodexReward(string catalogId, bool bossOrLegendary, out int gold)
+    public static int CodexRewardDiamond(bool bossOrLegendary) =>
+        bossOrLegendary ? CodexRewardDiamondBoss : CodexRewardDiamondNormal;
+
+    public static bool CanClaimCodexReward(string catalogId)
     {
-        gold = 0;
-        return false;
+        if (string.IsNullOrEmpty(catalogId)) return false;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        data.claimedCodexRewardIds ??= new HashSet<string>();
+        return !data.claimedCodexRewardIds.Contains(catalogId);
+    }
+
+    /// <summary>领取图鉴首次记录奖励（钻石）；已领过返回 false。</summary>
+    public static bool TryClaimCodexReward(string catalogId, bool bossOrLegendary, out int diamond)
+    {
+        diamond = 0;
+        if (string.IsNullOrEmpty(catalogId)) return false;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        data.claimedCodexRewardIds ??= new HashSet<string>();
+        if (!data.claimedCodexRewardIds.Add(catalogId)) return false;
+
+        diamond = CodexRewardDiamond(bossOrLegendary);
+        ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, diamond, save: true, notify: false);
+        if (SaveSystem.Instance != null)
+            SaveSystem.Instance.Save();
+        return true;
     }
 
     public static string GuessAssetIdFromSprite(int monsterChapter, int spriteIndex)

@@ -96,10 +96,10 @@ public class TalentUI : MonoBehaviour
     public UnityEvent onResetRequested;
 
     readonly List<LeftNodeView> _leftViews = new List<LeftNodeView>();
-    readonly List<ChoiceRowView> _rightViews = new List<ChoiceRowView>();
-    TalentSystem.Branch _pendingBranch = TalentSystem.Branch.Right;
+    readonly List<RightNodeView> _rightViews = new List<RightNodeView>();
     int _pendingRowIndex = -1;
     int _pendingSelectedOpt = -1;
+    TalentDefs.TalentRightNode _pendingNode;
     bool _wired;
     bool _listsBuilt;
     bool _scrollSyncing;
@@ -119,10 +119,9 @@ public class TalentUI : MonoBehaviour
         public Text upgradeCostText;
     }
 
-    class ChoiceRowView
+    class RightNodeView
     {
-        public TalentSystem.Branch branch;
-        public int dataIndex;
+        public TalentDefs.TalentRightNode node;
         public int visualIndex;
         public GameObject root;
         public Text titleText;
@@ -131,9 +130,7 @@ public class TalentUI : MonoBehaviour
         public Image diamond;
         public Image line;
         public GameObject redDot;
-        public readonly List<Button> optionButtons = new List<Button>();
-        public readonly List<Text> optionLabels = new List<Text>();
-        public readonly List<Image> optionIcons = new List<Image>();
+        public Button button;
     }
 
     void Awake()
@@ -283,116 +280,92 @@ public class TalentUI : MonoBehaviour
     {
         var talents = GetTalents();
         int leftUnlocked = TalentDefs.LeftUnlockedCount(talents);
-        int rightUnlocked = TalentDefs.RightUnlockedCount(talents);
-        int nextCost = rightUnlocked < TalentDefs.Right.Length
-            ? TalentDefs.Right[rightUnlocked].stoneCost
-            : 0;
 
         for (int i = 0; i < _rightViews.Count; i++)
-            RefreshOneChoiceRow(_rightViews[i], talents, leftUnlocked, rightUnlocked);
+            RefreshOneRightNode(_rightViews[i], talents, leftUnlocked);
 
-        if (rightCostValueText != null)
-            rightCostValueText.text = nextCost > 0 ? nextCost.ToString() : "0";
         if (rightTipText != null)
-            rightTipText.text = "消耗天赋石解锁辅助/专精天赋";
+            rightTipText.text = "消耗天赋石解锁/升级天赋（分批开放）";
+        if (rightCostValueText != null)
+            rightCostValueText.text = "";
     }
 
-    void RefreshOneChoiceRow(ChoiceRowView v, Dictionary<string, int> talents, int leftUnlocked, int rightUnlocked)
+    void RefreshOneRightNode(RightNodeView v, Dictionary<string, int> talents, int leftUnlocked)
     {
-        var def = GetRowDef(v);
-        if (def == null) return;
+        var node = v.node;
+        if (node == null) return;
 
-        int selLv = 0;
-        bool picked = talents != null && talents.TryGetValue(def.id, out selLv) && selLv > 0;
-        bool canPick = CanPickRow(v, talents, leftUnlocked, rightUnlocked, picked);
-        bool locked = !picked && !canPick;
-        bool canAfford = canPick && SaveSystem.Instance?.Data != null &&
-                         SaveSystem.Instance.Data.talentPoints >= def.stoneCost;
+        var data = SaveSystem.Instance?.Data;
+        int level = TalentDefs.GetRightNodeLevel(talents, node.id);
+        bool unlocked = level > 0;
+        bool mutexLocked = !unlocked && TalentDefs.IsRightNodeMutexLocked(node, talents);
+        bool thresholdLocked = !unlocked && leftUnlocked < node.unlockLeftIndex;
+        int cap = TalentDefs.RightNodeLevelCap(node, leftUnlocked);
 
-        if (v.titleText != null) v.titleText.text = def.groupName;
-        if (v.costText != null) v.costText.text = def.stoneCost.ToString();
+        string status;
+        bool canAct = false;
+        if (unlocked && level >= node.maxLevel)
+            status = "MAX";
+        else if (unlocked)
+        {
+            // 任务3：等级上限受左列已点数量限制
+            if (level >= cap)
+                status = "Lv" + cap + " (左列↑)";
+            else
+            {
+                int cost = node.costByLevel != null && level < node.costByLevel.Length ? node.costByLevel[level] : 0;
+                status = "升级 " + cost;
+                canAct = data != null && data.talentPoints >= cost;
+            }
+        }
+        else if (thresholdLocked)
+            status = "左列 L" + node.unlockLeftIndex;   // 任务3：分批开放提示
+        else if (mutexLocked)
+            status = "互斥";                            // 任务4：互斥置灰
+        else
+        {
+            int cost = node.costByLevel != null && node.costByLevel.Length > 0 ? node.costByLevel[0] : 0;
+            status = "解锁 " + cost;
+            canAct = data != null && data.talentPoints >= cost;
+        }
+
+        if (v.titleText != null)
+            v.titleText.text = node.name + (unlocked ? "  Lv" + level : "");
+        if (v.costText != null)
+            v.costText.text = status;
+
+        bool locked = !unlocked && (thresholdLocked || mutexLocked);
         EnsureRightLock(v);
         if (v.lockIcon != null)
         {
-            // 未解锁：右下角锁；已解锁/可选：隐藏。保留预制体锁图，勿用错资源覆盖
             v.lockIcon.gameObject.SetActive(locked);
-            if (locked)
-            {
-                if (v.lockIcon.sprite == null)
-                {
-                    var lockSp = sprLock ?? Resources.Load<Sprite>("UI/Common/锁");
-#if UNITY_EDITOR
-                    if (lockSp == null)
-                        lockSp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
-#endif
-                    if (lockSp != null)
-                        ApplySprite(v.lockIcon, lockSp, true);
-                }
-                v.lockIcon.enabled = true;
-                v.lockIcon.color = Color.white;
-                v.lockIcon.transform.SetAsLastSibling();
-            }
+            if (locked) ApplyLockSprite(v.lockIcon);
         }
         if (v.diamond != null)
-            ApplySprite(v.diamond, picked || canPick ? sprDiamondOn : sprDiamondOff, true);
+            ApplySprite(v.diamond, unlocked ? sprDiamondOn : sprDiamondOff, true);
         if (v.line != null)
         {
             bool showLine = v.visualIndex < _rightViews.Count - 1;
             v.line.gameObject.SetActive(showLine);
             if (showLine)
-                ApplySprite(v.line, picked || canPick ? sprRightLinkOn : sprRightLinkOff, false);
+                ApplySprite(v.line, unlocked ? sprRightLinkOn : sprRightLinkOff, false);
         }
 
         if (v.root != null) v.root.SetActive(true);
-        bool milestoneLocked = leftUnlocked < def.requireLeftIndex;
-        // 未解锁略压暗但仍能看清右下角锁；勿用过低 alpha 把锁「隐掉」
-        SetRowGray(v.root, (locked || milestoneLocked) ? 0.72f : 1f);
-        SetRowRedDot(v.root, ref v.redDot, canAfford);
-
-        int selectedOpt = picked ? selLv : 0;
-        for (int o = 0; o < v.optionButtons.Count; o++)
-        {
-            bool has = o < def.options.Length;
-            var btnGo = v.optionButtons[o] != null ? v.optionButtons[o].gameObject : null;
-            if (!has) { if (btnGo != null) btnGo.SetActive(false); continue; }
-
-            bool isSelected = picked && selectedOpt == o + 1;
-            // 未点选时选项全显；已点选只留选中项
-            bool showOpt = !picked || isSelected;
-            if (btnGo != null) btnGo.SetActive(showOpt);
-
-            if (v.optionLabels[o] != null)
-                v.optionLabels[o].text = def.options[o].name;
-            if (v.optionIcons[o] != null)
-            {
-                var sp = TalentIcons.GetTalent(def.options[o].name);
-                if (sp != null) ApplySprite(v.optionIcons[o], sp, true);
-                v.optionIcons[o].color = locked ? new Color(0.5f, 0.5f, 0.5f, 1f)
-                    : (canPick ? Color.white : (isSelected ? Color.white : new Color(0.65f, 0.65f, 0.65f, 1f)));
-            }
-            if (v.optionButtons[o] != null)
-            {
-                v.optionButtons[o].interactable = canPick;
-                var bg = v.optionButtons[o].targetGraphic as Image;
-                if (bg != null)
-                    ApplySprite(bg, o == 1 ? sprRightHexAlt : sprRightHex, true);
-            }
-        }
+        SetRowGray(v.root, locked ? 0.72f : 1f);
+        SetRowRedDot(v.root, ref v.redDot, canAct);
+        if (v.button != null) v.button.interactable = !locked;
     }
 
-    static bool CanPickRow(ChoiceRowView v, Dictionary<string, int> talents, int leftUnlocked, int rightUnlocked, bool picked)
+    void ApplyLockSprite(Image img)
     {
-        if (picked) return false;
-        var def = GetRowDef(v);
-        if (def == null || leftUnlocked < def.requireLeftIndex) return false;
-        if (v.branch == TalentSystem.Branch.RightExtra) return true;
-        return v.dataIndex - 1 == rightUnlocked;
-    }
-
-    static TalentDefs.ChoiceNode GetRowDef(ChoiceRowView v)
-    {
-        if (v.branch == TalentSystem.Branch.RightExtra) return TalentDefs.RightExtra;
-        return TalentDefs.GetRight(v.dataIndex);
+        if (img == null || img.sprite != null) return;
+        var lockSp = sprLock ?? Resources.Load<Sprite>("UI/Common/锁");
+#if UNITY_EDITOR
+        if (lockSp == null)
+            lockSp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
+#endif
+        if (lockSp != null) ApplySprite(img, lockSp, true);
     }
 
     void RefreshResetButton()
@@ -429,13 +402,24 @@ public class TalentUI : MonoBehaviour
                     case TalentDefs.AttrKind.AtkSpeed: spd += e.value; break;
                 }
             }
-            if (TalentDefs.RightExtra != null &&
-                talents.TryGetValue(TalentDefs.RightExtra.id, out int c1) && c1 > 0)
-                AccumulateChoiceEffect(TalentDefs.RightExtra.options, c1, ref atk, ref hp, ref def, ref crit, ref spd);
-            for (int i = 0; i < TalentDefs.Right.Length; i++)
+            // 右列节点：攻击/生命/防御/暴击/攻速 计入面板汇总
+            for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
             {
-                if (!talents.TryGetValue(TalentDefs.Right[i].id, out int opt) || opt <= 0) continue;
-                AccumulateChoiceEffect(TalentDefs.Right[i].options, opt, ref atk, ref hp, ref def, ref crit, ref spd);
+                var node = TalentDefs.RightNodes[i];
+                int lv = TalentDefs.GetRightNodeLevel(talents, node.id);
+                if (lv <= 0) continue;
+                int job = TalentDefs.GetRightNodeChosenJob(talents, node.id);
+                var opt = node.IsJobChoice ? node.ChosenOption(job)
+                                           : (node.options != null && node.options.Length > 0 ? node.options[0] : null);
+                if (opt == null) continue;
+                switch (opt.kind)
+                {
+                    case TalentDefs.AttrKind.Attack: atk += node.EffectValue(lv, job); break;
+                    case TalentDefs.AttrKind.Hp: hp += node.EffectValue(lv, job); break;
+                    case TalentDefs.AttrKind.Defense: def += node.EffectValue(lv, job); break;
+                    case TalentDefs.AttrKind.CritRate: crit += node.EffectValue(lv, job); break;
+                    case TalentDefs.AttrKind.AtkSpeed: spd += node.EffectValue(lv, job); break;
+                }
             }
         }
 
@@ -444,22 +428,6 @@ public class TalentUI : MonoBehaviour
         if (sumDefText != null) sumDefText.text = "+" + def.ToString("0");
         if (sumCritText != null) sumCritText.text = "+" + crit.ToString("0.##") + "%";
         if (sumAtkSpdText != null) sumAtkSpdText.text = "+" + spd.ToString("0.##") + "%";
-    }
-
-    static void AccumulateChoiceEffect(TalentDefs.ChoiceOption[] options, int opt,
-        ref float atk, ref float hp, ref float def, ref float crit, ref float spd)
-    {
-        if (options == null || opt <= 0 || opt > options.Length) return;
-        var e = options[opt - 1].effect;
-        if (e == null) return;
-        switch (e.kind)
-        {
-            case TalentDefs.AttrKind.Attack: atk += e.value; break;
-            case TalentDefs.AttrKind.Hp: hp += e.value; break;
-            case TalentDefs.AttrKind.Defense: def += e.value; break;
-            case TalentDefs.AttrKind.CritRate: crit += e.value; break;
-            case TalentDefs.AttrKind.AtkSpeed: spd += e.value; break;
-        }
     }
 
     static Dictionary<string, int> GetTalents()
@@ -693,83 +661,99 @@ public class TalentUI : MonoBehaviour
         RefreshAll();
     }
 
-    static TalentDefs.ChoiceNode GetRowDefByBranch(TalentSystem.Branch branch, int rowIndex0)
+    /// <summary>
+    /// 右列节点点击：未解锁→解锁（JobChoice 先弹 6选1）；已解锁→升级。
+    /// 分批开放/互斥/双修前置由 TalentSystem 统一判定并返回 reason。
+    /// </summary>
+    void OnClickRightNode(int visualIndex0)
     {
-        if (branch == TalentSystem.Branch.RightExtra) return TalentDefs.RightExtra;
-        if (rowIndex0 < 0 || rowIndex0 >= TalentDefs.Right.Length) return null;
-        return TalentDefs.Right[rowIndex0];
-    }
-
-    static int ChoiceDataIndex(TalentSystem.Branch branch, int rowIndex0)
-    {
-        return branch == TalentSystem.Branch.RightExtra ? 1 : rowIndex0 + 1;
-    }
-
-    void OnClickChoiceOption(TalentSystem.Branch branch, int rowIndex0, int optIndex0)
-    {
-        var def = GetRowDefByBranch(branch, rowIndex0);
-        if (def?.options == null || def.options.Length == 0) return;
+        if (visualIndex0 < 0 || visualIndex0 >= _rightViews.Count) return;
+        var node = _rightViews[visualIndex0].node;
+        if (node == null) return;
 
         var talents = GetTalents();
-        if (talents != null && talents.TryGetValue(def.id, out int picked) && picked > 0)
-            return;
+        int level = TalentDefs.GetRightNodeLevel(talents, node.id);
 
-        if (def.options.Length == 1)
+        if (level <= 0)
         {
-            int dataIndex = ChoiceDataIndex(branch, rowIndex0);
-            if (TalentSystem.TryUnlockChoice(branch, dataIndex, 1, out string reason))
-            {
-                onRightChoiceRequested?.Invoke(dataIndex, 1);
+            // 任务4：JobChoice 必须先选职业
+            if (node.IsJobChoice)
+                OpenRightJobChoice(node);
+            else if (TalentSystem.TryUnlockRightNode(node.id, 0, out string reason))
                 RefreshAll();
-            }
-            else Debug.Log("[TalentUI] " + reason);
-            return;
+            else
+                Debug.Log("[TalentUI] " + reason);
         }
-
-        OpenChoicePopup(branch, rowIndex0, optIndex0);
+        else
+        {
+            // 已解锁：升级（JobChoice 沿用已选职业）
+            if (TalentSystem.TryUpgradeRightNode(node.id, out string reason))
+                RefreshAll();
+            else
+                Debug.Log("[TalentUI] " + reason);
+        }
     }
 
-    void OpenChoicePopup(TalentSystem.Branch branch, int rowIndex0, int initialOpt0)
+    /// <summary>任务4 / R_JOB 6选1：打开职业选择弹层（最多 6 个职业）。</summary>
+    void OpenRightJobChoice(TalentDefs.TalentRightNode node)
     {
         EnsureChoicePopupBindings();
         WireChoiceConfirmIfNeeded();
 
-        _pendingBranch = branch;
-        _pendingRowIndex = rowIndex0;
-        _pendingSelectedOpt = initialOpt0;
-
-        var def = GetRowDefByBranch(branch, rowIndex0);
+        _pendingNode = node;
+        _pendingRowIndex = node.index - 1;
+        _pendingSelectedOpt = -1;
 
         if (choicePopup != null) choicePopup.SetActive(true);
-        if (choiceTitleText != null) choiceTitleText.text = def.groupName;
+        if (choiceTitleText != null) choiceTitleText.text = node.name;
 
-        EnsureChoicePopupOptions(def.options.Length);
+        var opts = node.options ?? new TalentDefs.TalentRightOption[0];
+        EnsureChoicePopupOptions(opts.Length);
         for (int i = 0; i < choiceButtons.Length; i++)
         {
-            bool on = i < def.options.Length;
+            bool on = i < opts.Length;
             if (choiceButtons[i] != null) choiceButtons[i].gameObject.SetActive(on);
             if (!on) continue;
-            if (choiceLabels[i] != null)
-                choiceLabels[i].text = def.options[i].name;
+            if (choiceLabels[i] != null) choiceLabels[i].text = opts[i].name;
             if (choiceIcons[i] != null)
             {
-                var sp = TalentIcons.GetTalent(def.options[i].name);
+                var sp = TalentIcons.GetTalent(opts[i].name);
                 if (sp != null) ApplySprite(choiceIcons[i], sp, true);
             }
         }
-        SelectChoicePopupOption(initialOpt0);
+        SelectChoicePopupOption(0);
     }
 
+    /// <summary>弹层选项数量可能超过 3（如 6 职业）；按需克隆按钮并保留原有 Click 绑定。</summary>
     void EnsureChoicePopupOptions(int count)
     {
-        if (choiceOptionTemplate == null && choiceButtons[0] != null)
+        if (choiceOptionTemplate == null && choiceButtons != null && choiceButtons.Length > 0 && choiceButtons[0] != null)
             choiceOptionTemplate = choiceButtons[0].gameObject;
 
-        // 弹层里最多 3 个选项；不足时隐藏多余按钮
-        for (int i = 0; i < choiceButtons.Length; i++)
+        // 数组扩到 count（默认只有 3 个，6 职业需扩容）
+        if (choiceButtons == null || choiceButtons.Length < count)
         {
-            if (choiceButtons[i] == null && choiceOptionTemplate != null && i > 0)
+            int n = count;
+            var nb = new Button[n];
+            var nl = new Text[n];
+            var ni = new Image[n];
+            int copy = choiceButtons != null ? System.Math.Min(choiceButtons.Length, n) : 0;
+            for (int i = 0; i < copy; i++)
             {
+                nb[i] = choiceButtons[i];
+                nl[i] = choiceLabels != null ? choiceLabels[i] : null;
+                ni[i] = choiceIcons != null ? choiceIcons[i] : null;
+            }
+            choiceButtons = nb;
+            choiceLabels = nl;
+            choiceIcons = ni;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            if (choiceButtons[i] == null)
+            {
+                if (choiceOptionTemplate == null) break;
                 var clone = Instantiate(choiceOptionTemplate, choicePopup.transform);
                 clone.name = "Choice_" + i;
                 float xOff = -120f + i * 120f;
@@ -788,13 +772,14 @@ public class TalentUI : MonoBehaviour
 
     void SelectChoicePopupOption(int optIndex0)
     {
-        if (_pendingRowIndex < 0) return;
+        if (_pendingNode == null || optIndex0 < 0) return;
         _pendingSelectedOpt = optIndex0;
-        var def = GetRowDefByBranch(_pendingBranch, _pendingRowIndex);
-        if (optIndex0 < 0 || def == null || optIndex0 >= def.options.Length) return;
+        var opts = _pendingNode.options;
+        if (opts == null || optIndex0 >= opts.Length) return;
 
+        // 弹层文案显示该职业 1 级效果（JobChoice 各职业 +4%×等级）
         if (choiceDescText != null)
-            choiceDescText.text = def.options[optIndex0].effect.display;
+            choiceDescText.text = _pendingNode.EffectSummary(1, optIndex0 + 1);
 
         for (int i = 0; i < choiceButtons.Length; i++)
         {
@@ -805,14 +790,14 @@ public class TalentUI : MonoBehaviour
 
     void ConfirmChoicePopup()
     {
-        if (_pendingRowIndex < 0 || _pendingSelectedOpt < 0) return;
-        int dataIndex = ChoiceDataIndex(_pendingBranch, _pendingRowIndex);
-        if (!TalentSystem.TryUnlockChoice(_pendingBranch, dataIndex, _pendingSelectedOpt + 1, out string reason))
+        if (_pendingNode == null || _pendingSelectedOpt < 0) return;
+        int chosenJob1Based = _pendingSelectedOpt + 1;
+        if (!TalentSystem.TryUnlockRightNode(_pendingNode.id, chosenJob1Based, out string reason))
         {
             Debug.Log("[TalentUI] " + reason);
             return;
         }
-        onRightChoiceRequested?.Invoke(dataIndex, _pendingSelectedOpt + 1);
+        onRightChoiceRequested?.Invoke(_pendingNode.index, chosenJob1Based);
         CloseChoicePopup();
         RefreshAll();
     }
@@ -820,6 +805,7 @@ public class TalentUI : MonoBehaviour
     void CloseChoicePopup()
     {
         if (choicePopup != null) choicePopup.SetActive(false);
+        _pendingNode = null;
         _pendingRowIndex = -1;
         _pendingSelectedOpt = -1;
     }
@@ -864,38 +850,15 @@ public class TalentUI : MonoBehaviour
             view.button?.onClick.AddListener(() => OnClickLeft(idx));
         }
 
-        for (int i = 0; i < TalentDefs.Right.Length; i++)
+        for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
         {
             var go = Instantiate(rightRowTemplate, rightContent);
             go.name = "RightRow_" + (i + 1);
             go.SetActive(true);
             PrepareListItemUnderContent(go.transform as RectTransform, rightContent, RightRowW, RightRowH);
-            var view = BindChoiceRow(go, i, TalentSystem.Branch.Right, i + 1);
+            var node = TalentDefs.RightNodes[i];
+            var view = BindRightNode(go, i, node);
             _rightViews.Add(view);
-            int ri = i;
-            for (int o = 0; o < view.optionButtons.Count; o++)
-            {
-                int oi = o;
-                view.optionButtons[o]?.onClick.AddListener(() =>
-                    OnClickChoiceOption(TalentSystem.Branch.Right, ri, oi));
-            }
-        }
-        if (TalentDefs.RightExtra != null)
-        {
-            var extraTpl = rightExtraRowTemplate != null ? rightExtraRowTemplate : rightRowTemplate;
-            var extraGo = Instantiate(extraTpl, rightContent);
-            extraGo.name = "RightExtraRow";
-            extraGo.SetActive(true);
-            PrepareListItemUnderContent(extraGo.transform as RectTransform, rightContent, RightRowW, RightRowH);
-            int visualRow = _rightViews.Count;
-            var extraView = BindChoiceRow(extraGo, visualRow, TalentSystem.Branch.RightExtra, 1);
-            _rightViews.Add(extraView);
-            for (int o = 0; o < extraView.optionButtons.Count; o++)
-            {
-                int oi = o;
-                extraView.optionButtons[o]?.onClick.AddListener(() =>
-                    OnClickChoiceOption(TalentSystem.Branch.RightExtra, 0, oi));
-            }
         }
 
         Canvas.ForceUpdateCanvases();
@@ -1013,7 +976,7 @@ public class TalentUI : MonoBehaviour
     }
 
     /// <summary>右列缺 Lock 时按手做模板补一个右下角锁（不改已有坐标）。</summary>
-    void EnsureRightLock(ChoiceRowView v)
+    void EnsureRightLock(RightNodeView v)
     {
         if (v == null || v.root == null) return;
         if (v.lockIcon != null) return;
@@ -1079,15 +1042,11 @@ public class TalentUI : MonoBehaviour
         return v;
     }
 
-    ChoiceRowView BindChoiceRow(GameObject go, int visualIndex0, TalentSystem.Branch branch, int dataIndex1Based)
+    RightNodeView BindRightNode(GameObject go, int visualIndex0, TalentDefs.TalentRightNode node)
     {
-        var def = branch == TalentSystem.Branch.RightExtra
-            ? TalentDefs.RightExtra
-            : TalentDefs.GetRight(dataIndex1Based);
-        var v = new ChoiceRowView
+        var v = new RightNodeView
         {
-            branch = branch,
-            dataIndex = dataIndex1Based,
+            node = node,
             visualIndex = visualIndex0,
             root = go
         };
@@ -1097,29 +1056,39 @@ public class TalentUI : MonoBehaviour
         v.diamond = go.transform.Find("Diamond")?.GetComponent<Image>();
         v.line = go.transform.Find("Line")?.GetComponent<Image>();
         EnsureRightLock(v);
-        if (def == null) return v;
-        if (v.titleText != null) v.titleText.text = def.groupName;
-        if (v.costText != null) v.costText.text = def.stoneCost.ToString();
+        if (v.titleText != null) v.titleText.text = node.name;
+        if (v.costText != null) v.costText.text = "";
 
+        // 整行点击：解锁 / 升级 / JobChoice 弹 6选1。右列每行一个节点，无分行选项按钮。
+        var rowBtn = go.GetComponent<Button>() ?? go.AddComponent<Button>();
+        rowBtn.targetGraphic = go.GetComponent<Image>();
+        rowBtn.onClick.RemoveAllListeners();
+        rowBtn.onClick.AddListener(() => OnClickRightNode(visualIndex0));
+        v.button = rowBtn;
+
+        // 单选项节点：把唯一选项显示到第 1 个 Opt 槽（图标+名）。JobChoice 不在此显示，靠弹层选。
+        var singleOpt = (!node.IsJobChoice && node.options != null && node.options.Length > 0) ? node.options[0] : null;
         for (int o = 0; o < 3; o++)
         {
             var opt = go.transform.Find("Opt_" + o);
             if (opt == null) continue;
-            var btn = opt.GetComponent<Button>() ?? opt.gameObject.AddComponent<Button>();
-            var label = opt.Find("Label")?.GetComponent<Text>();
-            var iconT = opt.Find("Icon") ?? opt.Find("icon");
-            var icon = iconT != null ? iconT.GetComponent<Image>() : null;
-            v.optionButtons.Add(btn);
-            v.optionLabels.Add(label);
-            v.optionIcons.Add(icon);
-            bool has = o < def.options.Length;
-            opt.gameObject.SetActive(has);
-            if (has && label != null) label.text = def.options[o].name;
-            if (has && icon != null)
+            bool show = o == 0 && singleOpt != null;
+            opt.gameObject.SetActive(show);
+            if (show)
             {
-                var sp = TalentIcons.GetTalent(def.options[o].name);
-                if (sp != null) ApplySprite(icon, sp, true);
+                var label = opt.Find("Label")?.GetComponent<Text>();
+                var iconT = opt.Find("Icon") ?? opt.Find("icon");
+                var icon = iconT != null ? iconT.GetComponent<Image>() : null;
+                if (label != null) label.text = singleOpt.name;
+                if (icon != null)
+                {
+                    var sp = TalentIcons.GetTalent(singleOpt.name);
+                    if (sp != null) ApplySprite(icon, sp, true);
+                }
             }
+            // 整行点击即可，禁用子选项独立响应（避免点中选项区不触发整行）
+            var ob = opt.GetComponent<Button>();
+            if (ob != null) ob.enabled = false;
         }
         return v;
     }

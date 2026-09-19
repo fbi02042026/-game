@@ -7,7 +7,7 @@ using System.Linq;
 /// </summary>
 public class GridBackpackSystem : Singleton<GridBackpackSystem>
 {
-    private bool[,] _grid = new bool[GameConfig.BACKPACK_WIDTH, GameConfig.BACKPACK_HEIGHT];
+    private bool[,] _grid = new bool[GameConfig.BACKPACK_WIDTH, GameConfig.BACKPACK_HEIGHT_MAX];
     // 按槽位索引的装备字典，key为EquipSlotType
     private Dictionary<EquipSlotType, EquipInstance> _equippedBySlot = new Dictionary<EquipSlotType, EquipInstance>();
     private List<BackpackItem> _items = new List<BackpackItem>();
@@ -39,7 +39,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
     public void InitNewRun()
     {
-        _grid = new bool[GameConfig.BACKPACK_WIDTH, GameConfig.BACKPACK_HEIGHT];
+        _grid = new bool[GameConfig.BACKPACK_WIDTH, GameConfig.BACKPACK_HEIGHT_MAX];
         _equippedBySlot.Clear();
         _items.Clear();
         OnBackpackChanged?.Invoke();
@@ -419,7 +419,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     {
         outX = -1; outY = -1;
         int unlockedRows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
-        int maxY = Mathf.Min(GameConfig.BACKPACK_HEIGHT, unlockedRows);
+        int maxY = Mathf.Min(GameConfig.BACKPACK_HEIGHT_MAX, unlockedRows);
         if (h > maxY) return false;
         for (int y = 0; y <= maxY - h; y++)
             for (int x = 0; x <= GameConfig.BACKPACK_WIDTH - w; x++)
@@ -819,7 +819,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     {
         if (item == null || (item.equip == null && item.item == null)) return false;
         int unlockedRows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
-        int maxY = Mathf.Min(GameConfig.BACKPACK_HEIGHT, unlockedRows);
+        int maxY = Mathf.Min(GameConfig.BACKPACK_HEIGHT_MAX, unlockedRows);
         if (newX < 0 || newY < 0 || newX + item.width > GameConfig.BACKPACK_WIDTH || newY + item.height > maxY)
             return false;
 
@@ -849,7 +849,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         var pending = new List<BackpackItem>(_items);
         _items.Clear();
-        _grid = new bool[GameConfig.BACKPACK_WIDTH, GameConfig.BACKPACK_HEIGHT];
+        _grid = new bool[GameConfig.BACKPACK_WIDTH, GameConfig.BACKPACK_HEIGHT_MAX];
 
         // 面积大优先，其次高/宽，尽量先占左侧
         pending.Sort((a, b) =>

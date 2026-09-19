@@ -16,11 +16,12 @@ public static class StageDropTable
 {
     public class DropResult
     {
+        public DropType type;
         public string id;
         public int count;
     }
 
-    enum DropType { Badge, Fragment }
+    public enum DropType { Badge, Fragment, Item }
 
     class Row
     {
@@ -77,7 +78,10 @@ public static class StageDropTable
                 firstClearBonus = GameTableCsv.TryInt(c[8], out int fb) ? fb : 0
             };
             r.type = c[2].Trim().Equals("Fragment", StringComparison.OrdinalIgnoreCase)
-                ? DropType.Fragment : DropType.Badge;
+                ? DropType.Fragment
+                : c[2].Trim().Equals("Item", StringComparison.OrdinalIgnoreCase)
+                ? DropType.Item
+                : DropType.Badge;
             if (r.countMax < r.countMin) r.countMax = r.countMin;
             _rows.Add(r);
         }
@@ -102,10 +106,13 @@ public static class StageDropTable
     }
 
     /// <summary>
-    /// 掷一次关卡的徽记掉落。firstClear 传 true 时额外给保底（§7.4：每章首次通关 +2）。
-    /// 返回的 id 是存档口径（badge:{职业}:{档位}），直接喂给 MercGrowInventory.Add。
+    /// 掷一次关卡掉落（徽记 / 本命碎片 / 道具）。firstClear 传 true 时徽记额外给保底。
+    /// 返回的 DropResult.type 区分三类；id 已是存档口径：
+    ///   Badge  → badge:{职业}:{档位}（MercGrowInventory.Add）
+    ///   Fragment → frag:{hireId}（按职业随机抽取本命碎片归属的佣兵）
+    ///   Item   → itemId（jobKey 列复用为 itemId，喂背包系统）
     /// </summary>
-    public static List<DropResult> RollBadges(int gameChapter, string stageType, bool firstClear)
+    public static List<DropResult> RollDrops(int gameChapter, string stageType, bool firstClear)
     {
         var res = new List<DropResult>();
         EnsureLoaded();
@@ -116,51 +123,119 @@ public static class StageDropTable
         for (int i = 0; i < _rows.Count; i++)
         {
             var r = _rows[i];
-            if (r.type != DropType.Badge) continue;
             if (r.chapter != 0 && r.chapter != gameChapter) continue;
             if (!string.IsNullOrEmpty(r.stageType) &&
                 !r.stageType.Equals(stageType, StringComparison.OrdinalIgnoreCase)) continue;
 
-            if (firstClear && r.firstClearBonus > bonus) bonus = r.firstClearBonus;
+            // 保底只针对徽记（与旧逻辑一致）
+            if (r.type == DropType.Badge && firstClear && r.firstClearBonus > bonus) bonus = r.firstClearBonus;
 
             if (r.rate <= 0f) continue;
             if (rng.NextDouble() >= r.rate) continue;
 
-            string job = r.jobKey;
-            string tier = r.tier;
-            if (string.IsNullOrEmpty(job) || string.IsNullOrEmpty(tier))
-            {
-                if (pool.Count <= 0) continue;
-                var pick = pool[rng.Next(pool.Count)];
-                job = pick.jobKey;
-                tier = pick.tier;
-            }
-            int n = r.countMax > r.countMin ? rng.Next(r.countMin, r.countMax + 1) : r.countMin;
-            Add(res, MercGrowInventory.BadgeId(job, tier), n);
+            AddRolled(res, r, pool, rng);
         }
 
-        // 保底：本章首次通关额外给 N 个（职业/档位同样按主产随机）
+        // 保底：本章首次通关额外给 N 个徽记（职业/档位按主产随机）
         for (int i = 0; i < bonus; i++)
         {
             if (pool.Count <= 0) break;
             var pick = pool[rng.Next(pool.Count)];
-            Add(res, MercGrowInventory.BadgeId(pick.jobKey, pick.tier), 1);
+            Add(res, DropType.Badge, MercGrowInventory.BadgeId(pick.jobKey, pick.tier), 1);
         }
 
         return res;
     }
 
-    static void Add(List<DropResult> list, string id, int count)
+    /// <summary>徽记专用入口（兼容旧调用）；只返回 Badge 类结果。</summary>
+    public static List<DropResult> RollBadges(int gameChapter, string stageType, bool firstClear)
+    {
+        var all = RollDrops(gameChapter, stageType, firstClear);
+        var badges = new List<DropResult>();
+        for (int i = 0; i < all.Count; i++)
+            if (all[i].type == DropType.Badge) badges.Add(all[i]);
+        return badges;
+    }
+
+    static void AddRolled(List<DropResult> res, Row r, List<Row> pool, System.Random rng)
+    {
+        int n = r.countMax > r.countMin ? rng.Next(r.countMin, r.countMax + 1) : r.countMin;
+        if (n <= 0) return;
+
+        if (r.type == DropType.Badge)
+        {
+            string job = r.jobKey;
+            string tier = r.tier;
+            if (string.IsNullOrEmpty(job) || string.IsNullOrEmpty(tier))
+            {
+                if (pool.Count <= 0) return;
+                var pick = pool[rng.Next(pool.Count)];
+                job = pick.jobKey;
+                tier = pick.tier;
+            }
+            Add(res, DropType.Badge, MercGrowInventory.BadgeId(job, tier), n);
+        }
+        else if (r.type == DropType.Fragment)
+        {
+            string hireId = ResolveFragmentHireId(r.jobKey, pool, rng);
+            if (string.IsNullOrEmpty(hireId)) return;
+            Add(res, DropType.Fragment, MercGrowInventory.FragmentId(hireId), n);
+        }
+        else // Item：jobKey 列复用为 itemId
+        {
+            if (string.IsNullOrEmpty(r.jobKey)) return;
+            Add(res, DropType.Item, r.jobKey, n);
+        }
+    }
+
+    /// <summary>本命碎片按职业随机归属到某个佣兵（jobKey 为 csv 短职业名，如 剑盾/狂战）。</summary>
+    static string ResolveFragmentHireId(string shortJob, List<Row> pool, System.Random rng)
+    {
+        string jobName = MapShortJob(shortJob);
+        var hireIds = new List<string>();
+        var all = MercRosterDefs.All;
+        for (int i = 0; i < all.Count; i++)
+            if (all[i].JobName == jobName) hireIds.Add(all[i].HireId);
+
+        if (hireIds.Count == 0 && pool.Count > 0)
+        {
+            // 通配：从本章主产徽记池随机抽一个职业再取该职业佣兵
+            var pick = pool[rng.Next(pool.Count)];
+            jobName = MapShortJob(pick.jobKey);
+            for (int i = 0; i < all.Count; i++)
+                if (all[i].JobName == jobName) hireIds.Add(all[i].HireId);
+        }
+        if (hireIds.Count == 0) return null;
+        return hireIds[rng.Next(hireIds.Count)];
+    }
+
+    /// <summary>csv 短职业名 → 花名册 JobName 口径。</summary>
+    static string MapShortJob(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        switch (s.Trim())
+        {
+            case "剑盾": return "剑盾卫士";
+            case "狂战": return "狂战士";
+            case "游侠": return "游侠";
+            case "法师": return "法师";
+            case "牧师": return "牧师";
+            case "重武": return "重武者";
+            default: return s.Trim();
+        }
+    }
+
+    static void Add(List<DropResult> list, DropType type, string id, int count)
     {
         if (string.IsNullOrEmpty(id) || count <= 0) return;
         for (int i = 0; i < list.Count; i++)
         {
-            if (list[i].id == id)
+            if (list[i].type == type && list[i].id == id)
             {
                 list[i].count += count;
                 return;
             }
         }
-        list.Add(new DropResult { id = id, count = count });
+        list.Add(new DropResult { type = type, id = id, count = count });
     }
 }

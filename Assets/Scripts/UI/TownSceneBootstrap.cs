@@ -117,6 +117,15 @@ public class TownSceneBootstrap : MonoBehaviour
             TryDailyLoginOnce();
         }
         TutorialDirector.Instance?.NotifyTownReady();
+        // 主界面「当前目标」条：进 Town 就挂上，玩家不用点开冒险日志才知道干嘛
+        try
+        {
+            QuestHudBar.Ensure();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[TownBootstrap] 任务条挂载异常: " + e.Message);
+        }
     }
 
     static bool _loginCheckedThisTownVisit;

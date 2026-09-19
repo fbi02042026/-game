@@ -45,6 +45,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
     public void NotifyTownReady()
     {
         if (_townFlowBusy) return;
+
+        // 首次启动的「分步强制软引导」起嗓子：城镇一就绪就从上次落盘的那一步继续
+        //（自身负责高亮圈 + 半透明遮罩 + 气泡；已完成 / 已跳过则什么也不做）
+        FirstRunGuide.NotifyTownReady();
+
         if (StoryProgress.TutorialOutroPending && StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)
             StoryDirector.Instance.StopPlaying();
         else if (StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)
@@ -125,7 +130,20 @@ public class TutorialDirector : Singleton<TutorialDirector>
         RectTransform highlight = null;
         if (adv.startBtn != null)
             highlight = adv.startBtn.GetComponent<RectTransform>();
-        TutorialHintUI.Ensure().ShowHard("点下方「开始冒险」，选择职业后进入裂隙。", highlight);
+        // 「开始冒险」交给首次强制软引导（FirstRunGuide.FirstBattle）统一呈现；
+        // 那一步已经走过/跳过时才退回原来的硬提示，避免两层指引同时出现打架。
+        if (!GuideCovers(FirstRunGuide.GuideStep.FirstBattle))
+            TutorialHintUI.Ensure().ShowHard("点下方「开始冒险」，选择职业后进入裂隙。", highlight);
+    }
+
+    /// <summary>
+    /// 首次强制软引导（FirstRunGuide）是否还在负责这一步。
+    /// 负责时这里的旧「弱提示 / 硬提示」一律让位，不然同一个位置会叠两层指引。
+    /// </summary>
+    static bool GuideCovers(FirstRunGuide.GuideStep step)
+    {
+        var guide = FirstRunGuide.Instance;
+        return guide != null && !guide.IsFinished && !guide.IsStepDone(step);
     }
 
     /// <summary>引导战重进时重置运行时状态（背包另由 StoryProgress 清）。</summary>
@@ -200,8 +218,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         ClearTownBlockers();
 
         if (adv == null) adv = ResolveAdventureButton();
-        TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂隙。",
-            adv != null ? adv.GetComponent<RectTransform>() : null);
+        if (!GuideCovers(FirstRunGuide.GuideStep.Adventure))
+            TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂隙。",
+                adv != null ? adv.GetComponent<RectTransform>() : null);
         _townFlowBusy = false;
         _flow = null;
     }
@@ -228,8 +247,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return null;
         }
 
-        TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂隙。",
-            adv != null ? adv.GetComponent<RectTransform>() : null);
+        if (!GuideCovers(FirstRunGuide.GuideStep.Adventure))
+            TutorialHintUI.Ensure().ShowHard("点下方「冒险」，前往裂隙。",
+                adv != null ? adv.GetComponent<RectTransform>() : null);
         _townFlowBusy = false;
         _flow = null;
     }
@@ -354,9 +374,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         RectTransform highlight = null;
         if (nav != null && nav.characterButton != null)
             highlight = nav.characterButton.GetComponent<RectTransform>();
-        // 硬引导：指 BottomNav 角色入口
-        TutorialHintUI.Ensure().Show("可以去角色界面查看属性",
-            highlight, 12f);
+        // 软引导：指 BottomNav 角色入口。引导还在管这一步时让位，别两层一起指同一个按钮。
+        if (!GuideCovers(FirstRunGuide.GuideStep.Talent))
+            TutorialHintUI.Ensure().Show("可以去角色界面查看属性",
+                highlight, 12f);
 
         StoryProgress.MarkTutorialDone();
         _townFlowBusy = false;
@@ -893,6 +914,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
     IEnumerator CoGuideTalentUpgrade()
     {
         var hint = TutorialHintUI.Ensure();
+
+        // 2026-09-19：天赋引导已并入「首次启动强制软引导」（FirstRunGuide.Talent）：
+        // 角色页 → 天赋按钮 → 节点，三步都带高亮圈 + 半透明遮罩 + 气泡，且每步落盘可续。
+        // 只有引导那一步已经结束（含跳过）时，才退回原来这条一次性弱提示兜底。
+        if (GuideCovers(FirstRunGuide.GuideStep.Talent))
+        {
+            Debug.Log("[Tutorial] 天赋引导交给 FirstRunGuide.Talent，跳过旧提示");
+            yield break;
+        }
 
         int before = TalentUI.LeftUnlockedCount();
         if (!TalentSystem.CanUnlockLeft(before + 1, out string reason))

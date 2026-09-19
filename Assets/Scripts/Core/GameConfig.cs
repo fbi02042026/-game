@@ -215,24 +215,39 @@ public static class GameConfig
     public const int SORT_VFX = 50;
 
     /// <summary>
-    /// 默认解锁的背包行数。改成 4 列×3 行（12 格）后，3 行即满，所以默认全开；
-    /// 原来的天赋解锁第 4/5 行在新尺寸下已无可加的空间（见 GetUnlockedBackpackRows）。
+    /// 默认解锁的背包行数。本期扩容到 4 行，默认全开 3 行，第 4 行由背包扩容天赋 R_BAG 解锁。
     /// </summary>
     public const int BACKPACK_DEFAULT_ROWS = 3;
-    /// <summary>兼容旧存档：解锁第 4 行背包的天赋 ID（现在第 4 行不存在，保留常量免存档报错）</summary>
+    /// <summary>兼容旧存档：解锁第 4 行背包的旧天赋 ID（已并入 R_BAG，保留常量免存档报错）</summary>
     public const string TALENT_BACKPACK_ROW4 = "backpack_row4";
 
+    /// <summary>
+    /// 当前存档实际可用的背包行数（钳到 [1, BACKPACK_HEIGHT_MAX]）。
+    /// <para>真值来源优先级：</para>
+    /// 1) SaveData.backpackRows —— 设计上由天赋 R_BAG 解锁后写回（默认 3，解锁置 4）；
+    /// 2) 天赋字典兜底（CountBagRowUnlocks / TALENT_BACKPACK_ROW4），保证 TalentSystem 尚未把结果
+    ///    写回 backpackRows 时，R_BAG 解锁依然能即时扩容，避免功能失效。
+    /// <para>// TODO: 需要 TalentSystem 在解锁 R_BAG 时设置 SaveData.backpackRows = 4，
+    /// 以便统一收敛到单一真值（当前兜底已让链路端到端可用，但字段才是设计上的权威来源）。</para>
+    /// </summary>
     public static int GetUnlockedBackpackRows(SaveData data)
     {
         int rows = BACKPACK_DEFAULT_ROWS;
-        if (data?.talents != null)
+        if (data != null)
         {
-            rows += TalentDefs.CountBagRowUnlocks(data.talents);
-            if (data.talents.TryGetValue(TALENT_BACKPACK_ROW4, out int lv) && lv > 0)
-                rows = Mathf.Max(rows, BACKPACK_DEFAULT_ROWS + 1);
+            rows = data.backpackRows;
+            if (data.talents != null)
+            {
+                rows = Mathf.Max(rows, BACKPACK_DEFAULT_ROWS + TalentDefs.CountBagRowUnlocks(data.talents));
+                if (data.talents.TryGetValue(TALENT_BACKPACK_ROW4, out int lv) && lv > 0)
+                    rows = Mathf.Max(rows, BACKPACK_DEFAULT_ROWS + 1);
+            }
         }
-        return Mathf.Clamp(rows, 1, BACKPACK_HEIGHT);
+        return Mathf.Clamp(rows, 1, BACKPACK_HEIGHT_MAX);
     }
+
+    /// <summary>调试/UI 容量显示用：直接读当前存档解锁的背包行数（无需传参）。</summary>
+    public static int UnlockedBackpackRows() => GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
 
     /// <summary>投普通/精英/Boss 怪物根缩放（子节点已归一为 1）</summary>
     public static float RollMonsterRootScale(bool isElite, bool isBoss)
@@ -350,6 +365,13 @@ public static class GameConfig
     public const float MONSTER_HP_BAR_FOOT_DROP = -0.05f;
     /// <summary>小怪默认移速（再降 20%）</summary>
     public const float MONSTER_DEFAULT_MOVE_SPEED = 0.6912f;
+    /// <summary>
+    /// 怪物表移速(baseMoveSpeed) → 世界移速换算系数。
+    /// 推导：历史硬编码 MONSTER_DEFAULT_MOVE_SPEED(0.6912) 实际对应「表值 2.2」的世界速度，
+    /// 即 0.6912 = 2.2 × k → k = 0.6912 / 2.2 ≈ 0.3142。
+    /// monster_stats 表 moveSpeed 已全体减半（2.2→1.1），乘同一系数得 1.1 × 0.3142 = 0.3456（世界单位）。
+    /// </summary>
+    public const float MONSTER_MOVE_SPEED_TO_WORLD = 0.3142f;
     /// <summary>从右侧缓步入场速度</summary>
     public const float MONSTER_ENTER_SPEED = 0.4f;
     /// <summary>入场起点比交战点再远多少（世界单位）；过大容易出场「往前窜」</summary>
@@ -614,8 +636,12 @@ public static class GameConfig
     public const int MERC_REROLL_GEM_COST = 50;
     /// <summary>背包列数：与美术新画的 GridContainer 一致（4 列，Cell_0_0 ~ Cell_3_2）</summary>
     public const int BACKPACK_WIDTH = 4;
-    /// <summary>背包行数：3 行，共 12 格。双手武器 2×3 时会占掉一半，属于已知取舍。</summary>
+    /// <summary>背包初始/默认解锁行数：3 行，共 12 格。双手武器 2×3 时会占掉一半，属于已知取舍。
+    /// 注意：此值只表示「默认解锁几行」，不再作为网格行数上限（见 BACKPACK_HEIGHT_MAX）。</summary>
     public const int BACKPACK_HEIGHT = 3;
+    /// <summary>背包行数上限（本期扩容到 4 行 = 16 格）。
+    /// 底层网格按此上限分配；实际可用行数受 SaveData.backpackRows / 天赋 R_BAG 钳制到该上限。</summary>
+    public const int BACKPACK_HEIGHT_MAX = 4;
     public const int STAGES_PER_CHAPTER = 10; // 每章10关，最后一关是BOSS
     public const int SPECIAL_STAGES_PER_CHAPTER = 2; // 每章最多2个特殊关卡（商人/附魔/诅咒/休息）
     public const int MAX_OFFLINE_HOURS = 8; // 最多8小时离线收益
@@ -632,6 +658,25 @@ public static class GameConfig
     public const int STAMINA_ADVENTURE_COST = StaminaSystem.ADVENTURE_COST;
     /// <summary>回复 1 点体力所需秒数</summary>
     public const int STAMINA_REGEN_SECONDS = StaminaSystem.REGEN_SECONDS_PER_POINT;
+
+    // ===== 广告位 → 钻石消耗位（2026-09-19 主人拍板）=====
+    /// <summary>
+    /// 广告总开关。**聚光灯功能正式上线前必须保持 false。**
+    /// false = 所有原本「看广告」获得奖励 / 开启的入口一律走钻石
+    ///        （ResourceAdRewards 的体力/金币补给、PreLevelSystem 的遗产三选一刷新）；
+    /// true  = 恢复「看广告」路径。
+    /// 后期接激励视频广告 SDK 时把这里置 true 即可切回，UI 与奖励发放代码是同一套，改动点只有这一个常量。
+    /// 决策依据：现阶段核心指标是在线时长与留存，广告是后期变现，须等聚光灯等合规/SDK 就绪。
+    /// 把广告位先做成钻石消耗位，后期「看广告」= 免钻石 / 得钻石，改造成本最低。
+    /// </summary>
+    public const bool ADS_ENABLED_BEFORE_SPOTLIGHT = false;
+
+    /// <summary>钻石定价：顶栏体力补给一次（体力 +ResourceAdRewards.StaminaPerAd）。</summary>
+    public const int AD_SLOT_STAMINA_DIAMOND = 20;
+    /// <summary>钻石定价：顶栏金币补给一次（金币 +ResourceAdRewards.GoldPerAd）。</summary>
+    public const int AD_SLOT_GOLD_DIAMOND = 20;
+    /// <summary>钻石定价：战前遗产三选一刷新一次（每局限一次）。</summary>
+    public const int AD_SLOT_PRELEVEL_REFRESH_DIAMOND = 50;
 
     [Header("难度 / 金币副本")]
     /// <summary>通关满 N 章后开启困难</summary>

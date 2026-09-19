@@ -68,6 +68,13 @@ public static class LoadingTips
     static int _lastBattle = -1;
     static bool _firstTownShown;
 
+    /// <summary>
+    /// 「佣兵 / 世界杂记」混入概率：0 = 只走剧情，1 = 只走杂记。
+    /// 2026-09-18 用户要求：加载文案不要枯燥，掺一些好玩的佣兵杂记与裂隙见闻。
+    /// 剧情主线句仍占大头（带章节门槛，不剧透），杂记只负责调味。
+    /// </summary>
+    const float MercNoteChance = 0.35f;
+
     public static string Pick(SceneLoadingCoordinator.LoadTarget target)
     {
         if (target != SceneLoadingCoordinator.LoadTarget.Battle)
@@ -78,8 +85,12 @@ public static class LoadingTips
                 _firstTownShown = true;
                 return FirstTownLine;
             }
+            if (UnityEngine.Random.value < MercNoteChance)
+                return LoadingFlavorText.Next();
             return PickGated(TownTips, TownGate, ref _lastTown);
         }
+        if (UnityEngine.Random.value < MercNoteChance)
+            return LoadingFlavorText.Next();
         return PickGated(BattleTips, BattleGate, ref _lastBattle);
     }
 

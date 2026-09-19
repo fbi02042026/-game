@@ -223,9 +223,8 @@ public class BattleStateSaver : MonoBehaviour
         if (delta > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.Gold, delta, save: false, notify: false);
 
-        int talentGain = (int)(delta / GameConfig.GOLD_PER_TALENT_POINT);
-        if (talentGain > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
+        // 2026-09-19：天赋石不再由战斗内金币换算产出，改由冒险日志里程碑发放。
+        int talentGain = 0;
 
         // 本局构筑 / 城镇雇佣一律清空
         RunLoadout.Clear();

@@ -976,12 +976,16 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     }
 
     Coroutine _firstWaveHardFallbackCo;
+    /// <summary>战前剧情（TryPlayPreBattle）播放中：硬刷兜底须等它结束，防止剧透中刷怪抢跑。</summary>
+    bool _preBattleStoryPlaying;
 
     /// <summary>停掉开战/硬刷协程，避免连续 LoadStage 叠多个兜底。</summary>
     public void StopBattleSpawnCoroutines()
     {
         StopCoroutine("BattleStartSequenceCoroutine");
         StopWaveAnnounce();
+        // 战前剧情若在播放中被打断，标志位必须复位，否则 CoFirstWaveHardFallback 会永久卡在等待里
+        _preBattleStoryPlaying = false;
         if (_firstWaveSpawnCo != null)
         {
             StopCoroutine(_firstWaveSpawnCo);
@@ -1062,7 +1066,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// <summary>硬性保险：过场/协程被停也能刷出第一波（独立协程，不被 StopCoroutine(string) 误伤）</summary>
     IEnumerator CoFirstWaveHardFallback()
     {
-        while (!_battleIntroFinished)
+        while (!_battleIntroFinished || _preBattleStoryPlaying)
             yield return null;
         yield return new WaitForSecondsRealtime(2.2f);
         if (!isInBattle || _stageCleared || _firstWaveSpawned) yield break;
@@ -1143,7 +1147,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (Rules.DirectorOwnsWaves)
             TutorialDirector.Instance?.NotifyBattleSplashFinished();
         else
-            ScheduleFirstWaveSpawn();
+            // 时序：过场卡→队伍进场→战前剧情→首波。
+            // 协程内部已包含“剧情不可用则直接放行首波”的兜底逻辑。
+            yield return CoPreBattleStoryThenFirstWave();
 
         if (hero != null && monsters.Count > 0)
         {
@@ -1400,8 +1406,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         bool boss = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
                     && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
         var kind = boss ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
+        // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样
+        string announce = Planner != null ? Planner.WaveAnnounceText(nextIdx) : "";
 
-        yield return BattleWaveAnnounceUI.CoPlay(kind);
+        yield return BattleWaveAnnounceUI.CoPlay(kind, announce);
 
         _waveAnnounceRunning = false;
         _waveAnnounceCo = null;
@@ -1421,7 +1429,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         bool boss = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
                     && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
         var kind = boss ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
-        yield return BattleWaveAnnounceUI.CoPlay(kind);
+        string announce = Planner != null ? Planner.WaveAnnounceText(nextIdx) : "";
+        yield return BattleWaveAnnounceUI.CoPlay(kind, announce);
         _waveAnnounceRunning = false;
     }
 
@@ -1964,7 +1973,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             && (ChapterManager.Instance == null || ChapterManager.Instance.GetChapterClearCount(CurrentChapter) <= 1);
         int got = MercGrowInventory.GrantStageDrops(CurrentChapter, stageType, firstClear);
         if (got > 0)
-            GlobalToastUI.Show("获得职业徽记 ×" + got);
+            GlobalToastUI.Show("获得养成掉落 ×" + got);
     }
 
     bool ShouldPlayChapter1Ending()
@@ -2008,6 +2017,52 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         while (!done) yield return null;
         _rewardSequenceStarted = false;
         BeginRewardSequence();
+    }
+
+    /// <summary>
+    /// 两段式（2026-09-19 定调）：进关后、首波怪物出现前播战前剧情，与战后 TryPlayPostBoss 对称。
+    /// 只在每章第一关（currentStageIndex == 0）播；玩家点「跳过」时 StoryDirector 直接走 onDone 放行。
+    /// </summary>
+    bool ShouldPlayPreBattleStory()
+    {
+        if (Rules.SkipChapter1Ending) return false;
+        if (Rules.UseTutorialSplash) return false;   // 新手教学关有自己的引导节奏
+        if (Rules.SkipFirstWaveAuto) return false;   // 教程关刷怪归 TutorialDirector
+        if (CurrentChapter < 1 || CurrentChapter > 8) return false;
+        if (!StoryProgress.TutorialDone || !StoryProgress.Chapter1ChoiceDone) return false;
+        var cm = ChapterManager.Instance;
+        if (cm == null || cm.currentStageIndex != 0) return false;
+        return true;
+    }
+
+    IEnumerator CoPreBattleStoryThenFirstWave()
+    {
+        bool done = false;
+        bool playing = false;
+        // 剧情播放定义在别处，任何异常都不能把战斗卡在“无首波”状态：捕住异常并直接放行。
+        try
+        {
+            if (ShouldPlayPreBattleStory())
+                playing = ChapterStoryBeats.TryPlayPreBattle(CurrentChapter, () => done = true);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[BattleManager] 战前剧情播放异常，直接放行首波: " + e.Message);
+            playing = false;
+        }
+
+        if (!playing)
+        {
+            _preBattleStoryPlaying = false;
+            ScheduleFirstWaveSpawn();
+            yield break;
+        }
+
+        _preBattleStoryPlaying = true;
+        while (!done) yield return null;
+        _preBattleStoryPlaying = false;
+        // 剧情结束（含跳过）后才放首波
+        ScheduleFirstWaveSpawn();
     }
 
     void BeginRewardSequence()
@@ -2276,9 +2331,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 结算前先快照；局内装备仍清（裂缝口径）
         GridBackpackSystem.Instance?.ClearRunEquipment();
         PersistBattleGold();
-        int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
-        if (talentGain > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
+        // 2026-09-19：天赋石不再由战斗内金币换算产出，改由冒险日志里程碑（首次/整章通关）发放。
+        int talentGain = 0;
         StoryProgress.MarkTutorialBattleCleared();
         BattleStateSaver.Instance?.ClearBattleState();
         SaveSystem.Instance?.Save();
@@ -2365,13 +2419,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// <summary>通关后弹结算，再执行后续选关/回城。</summary>
     public void ShowVictorySettlementThen(System.Action afterConfirm)
     {
-        // 金币已在通关时 PersistBattleGold 写回；这里按本局金币产出补发天赋石（此前只填了结算面板、没真发）
-        int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
-        if (talentGain > 0)
-        {
-            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
-            SaveSystem.Instance?.Save();
-        }
+        // 金币已在通关时 PersistBattleGold 写回；天赋石改由冒险日志里程碑发放，此处不再按金币补发。
+        int talentGain = 0;
         FillSettlementSnapshot(isDeath: false, talentGain, isVictory: true);
         AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
         BattleSettlementUI.Show(RunStats, afterConfirm);

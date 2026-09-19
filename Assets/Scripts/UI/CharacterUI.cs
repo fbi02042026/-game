@@ -19,7 +19,9 @@ public class CharacterUI : MonoBehaviour, ITownPage
     [Header("入口")]
     public Button talentButton;
     public Button skillButton;
-    public Button leftSkillButton; // 左侧独立按钮，同样打开技能界面
+    public Button leftSkillButton; // 2026-09-19 起按主人要求移除显示：原左下角「装备技能」入口，技能改随机后失效
+    Button backpackEntryButton;     // 运行时创建的「背包」入口，挂在天赋按钮同父节点下方
+    Button boardEntryButton;        // 运行时创建的「看板」入口，挂在天赋按钮同父节点下方（背包之后）
 
     [Header("展示")]
     public Image portraitImage;
@@ -110,6 +112,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
         // 页可能比背包系统更早预载，Show 时再补订一次
         WireBagEvents();
         RefreshAll();
+        EnsureStageShadow();
         // SPUM 仅离屏换装；Portrait 用玩家立绘
         TownHeroCostumePreview.EnsureOn(this)?.EnsureOffscreenCostume();
         RefreshPlayerPortrait();
@@ -132,7 +135,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
     {
         RefreshIdentity();
         RefreshPlayerPortrait();
-        RefreshCarriedSkill();
+        // 携带技能展示按主人 2026-09-19 要求移除（技能改随机，已装备技能入口失效），不再刷新
         RefreshAttrs();
         RefreshBag();
         TownHeroCostumePreview.EnsureOn(this)?.EnsureOffscreenCostume();
@@ -150,29 +153,37 @@ public class CharacterUI : MonoBehaviour, ITownPage
             Destroy(junk.gameObject);
 
         MercPortraitSprites.ClearCache();
-        var sp = MercPortraitSprites.GetStand("player");
+        string boardId = GetCurrentBoardId(); // "player" 或 佣兵 HireId
+        var sp = MercPortraitSprites.GetStand(boardId);
         if (sp != null)
             SetPortrait(sp, _portraitFlipped);
         else
             portraitImage.enabled = true;
     }
 
+    /// <summary>当前看板 id：默认玩家自己（"player"），否则已选佣兵 HireId。持久化走 PlayerPrefs。</summary>
+    public string GetCurrentBoardId()
+    {
+        return PlayerPrefs.GetString(BoardKey, "player");
+    }
+
+    /// <summary>设为看板并立即刷新立绘；id 为空或 "player" 表示恢复默认（玩家自己）。</summary>
+    public void ApplyBoardSelection(string id)
+    {
+        if (string.IsNullOrEmpty(id)) id = "player";
+        PlayerPrefs.SetString(BoardKey, id);
+        PlayerPrefs.Save();
+        RefreshPlayerPortrait();
+    }
+
+    static readonly string BoardKey = "CharBoardId";
+
+    // 2026-09-19 主人要求移除左下角「装备技能」：技能已改为随机，携带技能展示失效，改为不显示。
+    // 保留方法签名以免其它引用处（如技能选择回调）编译报错，但不再绘制图标。
     void RefreshCarriedSkill()
     {
-        EnsureCarriedSkillIcon();
-        if (carriedSkillIcon == null) return;
-        string id = SaveSystem.Instance?.Data?.selectedPlayerSkillId;
-        if (string.IsNullOrEmpty(id))
-            id = PlayerSkillDefs.All != null && PlayerSkillDefs.All.Length > 0 ? PlayerSkillDefs.All[0].id : null;
-        Sprite sp = LoadPlayerSkillIcon(id);
-        if (sp != null)
-        {
-            carriedSkillIcon.sprite = sp;
-            carriedSkillIcon.enabled = true;
-            carriedSkillIcon.preserveAspect = true;
-            carriedSkillIcon.color = Color.white;
-        }
-        carriedSkillIcon.gameObject.SetActive(true);
+        if (carriedSkillIcon != null)
+            carriedSkillIcon.gameObject.SetActive(false);
     }
 
     static Sprite LoadPlayerSkillIcon(string skillId)
@@ -357,29 +368,31 @@ public class CharacterUI : MonoBehaviour, ITownPage
                 case TalentDefs.AttrKind.AtkSpeed: spd += e.value; break;
             }
         }
-        if (TalentDefs.RightExtra != null &&
-            talents.TryGetValue(TalentDefs.RightExtra.id, out int c1) && c1 > 0)
-            AccumulateChoiceTalent(TalentDefs.RightExtra.options, c1, ref atk, ref hp, ref def, ref crit, ref spd);
-        for (int i = 0; i < TalentDefs.Right.Length; i++)
+        // 右列重制节点：累加可计入面板的属性（攻击/生命/防御/暴击/攻速）
+        for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
         {
-            if (!talents.TryGetValue(TalentDefs.Right[i].id, out int opt) || opt <= 0) continue;
-            AccumulateChoiceTalent(TalentDefs.Right[i].options, opt, ref atk, ref hp, ref def, ref crit, ref spd);
+            var node = TalentDefs.RightNodes[i];
+            int lv = TalentDefs.GetRightNodeLevel(talents, node.id);
+            if (lv <= 0) continue;
+            int job = TalentDefs.GetRightNodeChosenJob(talents, node.id);
+            var opt = node.IsJobChoice ? node.ChosenOption(job)
+                                       : (node.options != null && node.options.Length > 0 ? node.options[0] : null);
+            if (opt == null) continue;
+            AccumulateRightTalent(opt.kind, node.EffectValue(lv, job),
+                ref atk, ref hp, ref def, ref crit, ref spd);
         }
     }
 
-    static void AccumulateChoiceTalent(TalentDefs.ChoiceOption[] options, int opt,
+    static void AccumulateRightTalent(TalentDefs.AttrKind kind, float value,
         ref float atk, ref float hp, ref float def, ref float crit, ref float spd)
     {
-        if (options == null || opt <= 0 || opt > options.Length) return;
-        var e = options[opt - 1].effect;
-        if (e == null) return;
-        switch (e.kind)
+        switch (kind)
         {
-            case TalentDefs.AttrKind.Attack: atk += e.value; break;
-            case TalentDefs.AttrKind.Hp: hp += e.value; break;
-            case TalentDefs.AttrKind.Defense: def += e.value; break;
-            case TalentDefs.AttrKind.CritRate: crit += e.value; break;
-            case TalentDefs.AttrKind.AtkSpeed: spd += e.value; break;
+            case TalentDefs.AttrKind.Attack: atk += value; break;
+            case TalentDefs.AttrKind.Hp: hp += value; break;
+            case TalentDefs.AttrKind.Defense: def += value; break;
+            case TalentDefs.AttrKind.CritRate: crit += value; break;
+            case TalentDefs.AttrKind.AtkSpeed: spd += value; break;
         }
     }
 
@@ -425,11 +438,17 @@ public class CharacterUI : MonoBehaviour, ITownPage
             skillButton.onClick.RemoveAllListeners();
             skillButton.onClick.AddListener(OpenSkillSelect);
         }
+        // 2026-09-19 主人要求：移除左下角「装备技能」入口（技能改随机，入口失效），隐藏并停用
         if (leftSkillButton != null)
         {
             leftSkillButton.onClick.RemoveAllListeners();
-            leftSkillButton.onClick.AddListener(OpenSkillSelect);
+            leftSkillButton.gameObject.SetActive(false);
         }
+        if (carriedSkillIcon != null)
+            carriedSkillIcon.gameObject.SetActive(false);
+
+        EnsureBackpackEntry();
+        EnsureBoardEntry();
         if (flipPortraitButton != null)
         {
             flipPortraitButton.onClick.RemoveAllListeners();
@@ -481,6 +500,72 @@ public class CharacterUI : MonoBehaviour, ITownPage
         skillSelect.Show();
     }
 
+    /// <summary>
+    /// 运行时在天赋按钮同父节点（右侧按钮列）下、技能按钮之后创建一个「背包」入口。
+    /// 不改任何预制体；复用 BuildSideBtn 同款外观。点击打开独立背包弹窗。
+    /// </summary>
+    void EnsureBackpackEntry()
+    {
+        if (backpackEntryButton != null) return;
+        if (talentButton == null) return;
+        Transform parent = talentButton.transform.parent;
+        if (parent == null) return;
+
+        // 技能按钮（SkillButton）在 BuildSideBtn 约定里 y = -90，背包入口排在其下方 y = -180
+        BuildSideBtn(parent, "BackpackButton", "背包", -180f, new Color(0.45f, 0.4f, 0.25f, 1f));
+        backpackEntryButton = parent.Find("BackpackButton")?.GetComponent<Button>();
+        if (backpackEntryButton != null)
+        {
+            backpackEntryButton.onClick.RemoveAllListeners();
+            backpackEntryButton.onClick.AddListener(OpenBackpack);
+        }
+    }
+
+    /// <summary>打开独立背包弹窗（复用 TownBackpackGrid / BackpackItemActionUI）。</summary>
+    public void OpenBackpack()
+    {
+        var popup = BackpackPopupUI.Ensure(transform);
+        if (popup == null)
+        {
+            UIManager.Instance?.ShowToast("背包未就绪");
+            return;
+        }
+        popup.Show();
+    }
+
+    /// <summary>
+    /// 运行时在右侧按钮列（天赋/技能/背包之后）创建一个「看板」入口，点击打开看板选择弹窗。
+    /// 不改任何预制体；复用 BuildSideBtn 同款外观。
+    /// </summary>
+    void EnsureBoardEntry()
+    {
+        if (boardEntryButton != null) return;
+        if (talentButton == null) return;
+        Transform parent = talentButton.transform.parent;
+        if (parent == null) return;
+
+        // 背包入口 y = -180，看板入口排在其下方 y = -270（与列内 90 间距一致）
+        BuildSideBtn(parent, "BoardButton", "看板", -270f, new Color(0.4f, 0.3f, 0.55f, 1f));
+        boardEntryButton = parent.Find("BoardButton")?.GetComponent<Button>();
+        if (boardEntryButton != null)
+        {
+            boardEntryButton.onClick.RemoveAllListeners();
+            boardEntryButton.onClick.AddListener(OpenBoard);
+        }
+    }
+
+    /// <summary>打开看板选择弹窗（列出已解锁佣兵，可设为看板或恢复默认）。</summary>
+    public void OpenBoard()
+    {
+        var popup = BoardSelectPopupUI.Ensure(transform);
+        if (popup == null)
+        {
+            UIManager.Instance?.ShowToast("看板未就绪");
+            return;
+        }
+        popup.Show();
+    }
+
     void FlipPortrait()
     {
         if (portraitImage == null) return;
@@ -506,6 +591,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
         float ax = Mathf.Abs(s.x) < 0.01f ? 1f : Mathf.Abs(s.x);
         s.x = ax * (flip ? -1f : 1f);
         portraitImage.rectTransform.localScale = s;
+        EnsureStageShadow();
         if (sprite != null)
             PortraitIdleMotion.EnsureOn(portraitImage.rectTransform, 0.42f);
         else
@@ -535,10 +621,42 @@ public class CharacterUI : MonoBehaviour, ITownPage
             transform.localScale = Vector3.one;
     }
 
+    /// <summary>
+    /// 立绘与影子等比对齐兜底（不改预制体文件）：
+    /// 1) 预制体保存时把 shadow 的 localScale 存成了 0，影子整个不可见；
+    /// 2) 立绘开了 preserveAspect 后实际显示宽随图片比例变化，影子宽度要跟着等比联动。
+    /// 影子图是 SPUM 的白椭圆（1024×1024，椭圆约占七成宽），中心贴在人物脚底。
+    /// </summary>
+    void EnsureStageShadow()
+    {
+        var stage = transform.Find("Content/Stage");
+        var shadowRt = stage != null ? stage.Find("shadow") as RectTransform : null;
+        if (shadowRt == null) return;
+        if (shadowRt.localScale.sqrMagnitude < 0.0001f)
+            shadowRt.localScale = Vector3.one;
+        if (portraitImage == null || portraitImage.sprite == null) return;
+
+        var box = portraitImage.rectTransform;
+        float boxW = box.rect.width, boxH = box.rect.height;
+        if (boxW < 1f || boxH < 1f) return;
+
+        var sp = portraitImage.sprite;
+        float ar = sp.rect.width / Mathf.Max(1f, sp.rect.height);
+        float boxAr = boxW / boxH;
+        float drawW = boxW, drawH = boxH;
+        if (ar > boxAr) drawH = drawW / ar;
+        else drawW = drawH * ar;
+
+        // 椭圆可见宽 ≈ 节点宽 × 0.7，让影子略宽于人物肩宽
+        float shadowW = drawW * 1.3f;
+        shadowRt.sizeDelta = new Vector2(shadowW, shadowW);
+        float footY = box.anchoredPosition.y - drawH * 0.5f;
+        shadowRt.anchoredPosition = new Vector2(box.anchoredPosition.x, footY);
+    }
+
     bool _canvasConfigured;
     void ConfigureHostCanvasOnce()
-    {
-        if (_canvasConfigured) return;
+    {        if (_canvasConfigured) return;
         EnsureVisibleTransform();
         TownPageCanvas.Configure(gameObject, 20, stripCanvasWhenNested: true);
         _canvasConfigured = true;

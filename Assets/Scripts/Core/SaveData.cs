@@ -224,6 +224,27 @@ public class SaveData
     public List<StringIntEntry> logFragmentEntries = new List<StringIntEntry>();
     [NonSerialized] public Dictionary<string, int> logFragments = new Dictionary<string, int>();
 
+    // === 天赋石里程碑发放（2026-09-19）===
+    // 已首次通关的关卡 key（格式 chapter_stageIndex，如 3_7）。重复通关不再发石。
+    // 用 List<StringIdEntry> 做可序列化镜像（JsonUtility 不支持 HashSet）。
+    [NonSerialized] public HashSet<string> clearedStages = new HashSet<string>();
+    public List<StringIdEntry> clearedStageEntries = new List<StringIdEntry>();
+    /// <summary>洗点次数（天赋系统只读，本文件只负责加字段）。</summary>
+    public int respecCount = 0;
+    /// <summary>背包已解锁行数，默认 3（与 GameConfig 默认值保持一致）。</summary>
+    public int backpackRows = 3;
+
+    // === 每日任务「通关 3 关」保底天赋石（2026-09-19）===
+    /// <summary>当日累计通关计数所绑定的日期键（yyyyMMdd）。</summary>
+    public string dailyStageClearDayKey = "";
+    public int dailyStageClearCount = 0;
+    /// <summary>已领取「通关 3 关」5 石奖励的日期键（跨天后可再领）。</summary>
+    public string dailyClearTaskClaimDayKey = "";
+    /// <summary>每日任务阈值：当日通关 3 关。</summary>
+    public const int DAILY_CLEAR_TASK_NEED = 3;
+    /// <summary>每日任务奖励：5 天赋石。</summary>
+    public const int DAILY_CLEAR_TASK_STONES = 5;
+
     // === 日志成就 A001–A015 ===
     public List<StringIdEntry> completedLogAchEntries = new List<StringIdEntry>();
     public List<StringIdEntry> claimedLogAchEntries = new List<StringIdEntry>();
@@ -303,9 +324,11 @@ public class SaveData
         craftedFragmentRecipeEntries ??= new List<StringIdEntry>();
         mileageShopBuyEntries ??= new List<StringIntEntry>();
         mercGrowItemEntries ??= new List<StringIntEntry>();
+        clearedStageEntries ??= new List<StringIdEntry>();
         townLevel ??= new TownLevel();
         if (hiddenLevel <= 0) hiddenLevel = 1;
         if (hiddenExp < 0) hiddenExp = 0;
+        if (backpackRows < 1) backpackRows = 3;
 
         talents = new Dictionary<string, int>();
         for (int i = 0; i < talentEntries.Count; i++)
@@ -418,6 +441,7 @@ public class SaveData
             if (e == null || string.IsNullOrEmpty(e.id)) continue;
             logFragments[e.id] = e.value;
         }
+        clearedStages = ToIdSet(clearedStageEntries);
 
         completedLogAchIds = ToIdSet(completedLogAchEntries);
         claimedLogAchIds = ToIdSet(claimedLogAchEntries);
@@ -534,6 +558,47 @@ public class SaveData
         return clearedChapterIds != null ? clearedChapterIds.Count : 0;
     }
 
+    /// <summary>标记某关首次通关；返回本次应发的天赋石（按章首次通关石）。重复通关返回 0。</summary>
+    public int GrantTalentForStageFirstClear(int chapter, int stageIndex)
+    {
+        clearedStages ??= new HashSet<string>();
+        string key = chapter + "_" + stageIndex;
+        if (!clearedStages.Add(key)) return 0;     // 重复通关不再发石
+        clearedStageEntries = FromIdSet(clearedStages);
+        int ch = chapter < 1 ? 1 : (chapter > 8 ? 8 : chapter);
+        return TalentDefs.TalentStoneRewards.FirstClearStone(ch);
+    }
+
+    /// <summary>某章已首次通关的关卡数（冒险日志里程碑进度用）。</summary>
+    public int ClearedStageCountInChapter(int chapter)
+    {
+        if (clearedStages == null || clearedStages.Count == 0) return 0;
+        string prefix = chapter + "_";
+        int n = 0;
+        foreach (var k in clearedStages)
+            if (!string.IsNullOrEmpty(k) && k.StartsWith(prefix)) n++;
+        return n;
+    }
+
+    /// <summary>每日任务「通关 3 关」：当日累计通关达阈值且未领过则发 5 天赋石。返回发放数（0 或 5）。</summary>
+    public int TryDailyClearTaskStones()
+    {
+        string today = ShopDefs.TodayKey();
+        if (string.IsNullOrEmpty(today)) return 0;
+        if (dailyStageClearDayKey != today)
+        {
+            dailyStageClearDayKey = today;
+            dailyStageClearCount = 0;
+        }
+        dailyStageClearCount++;
+        if (dailyStageClearCount >= DAILY_CLEAR_TASK_NEED && dailyClearTaskClaimDayKey != today)
+        {
+            dailyClearTaskClaimDayKey = today;
+            return DAILY_CLEAR_TASK_STONES;
+        }
+        return 0;
+    }
+
     static List<IntIdEntry> FromIntIdSet(HashSet<int> set)
     {
         var list = new List<IntIdEntry>(set != null ? set.Count : 0);
@@ -647,6 +712,8 @@ public class SaveData
         logFragmentEntries = new List<StringIntEntry>(logFragments.Count);
         foreach (var kv in logFragments)
             logFragmentEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        clearedStageEntries = FromIdSet(clearedStages);
 
         completedLogAchEntries = FromIdSet(completedLogAchIds);
         claimedLogAchEntries = FromIdSet(claimedLogAchIds);

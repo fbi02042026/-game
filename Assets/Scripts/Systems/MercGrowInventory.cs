@@ -82,22 +82,35 @@ public static class MercGrowInventory
     }
 
     /// <summary>
-    /// 关卡结算发放徽记。返回本次拿到的总个数（0 = 没掉，调用方可以不弹提示）。
-    /// firstClear 传「本章是否首次通关」，用来触发 §7.4 的保底。
+    /// 关卡结算发放掉落：徽记 / 本命碎片 / 道具。
+    /// 返回本次拿到的总个数（0 = 没掉，调用方可以不弹提示）。
+    /// firstClear 传「本章是否首次通关」，用来触发徽记保底。
     /// </summary>
     public static int GrantStageDrops(int gameChapter, string stageType, bool firstClear)
     {
-        var drops = StageDropTable.RollBadges(gameChapter, stageType, firstClear);
+        var drops = StageDropTable.RollDrops(gameChapter, stageType, firstClear);
         if (drops == null || drops.Count <= 0) return 0;
 
         int total = 0;
         for (int i = 0; i < drops.Count; i++)
         {
-            Add(drops[i].id, drops[i].count);
-            total += drops[i].count;
+            var d = drops[i];
+            if (d.type == StageDropTable.DropType.Item)
+            {
+                // 道具进背包（jobKey 列复用为 itemId）
+                var gb = GridBackpackSystem.Instance;
+                if (gb != null && gb.TryAddItemStack(d.id, d.count, out GridBackpackSystem.BackpackItem placed, notify: false))
+                    total += d.count;
+            }
+            else
+            {
+                // Badge / Fragment 都走本命养成仓库（id 已是 badge:/frag: 口径）
+                Add(d.id, d.count);
+                total += d.count;
+            }
         }
         SaveSystem.Instance?.Save();
-        Debug.Log($"[MercGrow] 关卡掉落 ch{gameChapter} {stageType} first={firstClear} → {total} 个徽记");
+        Debug.Log($"[MercGrow] 关卡掉落 ch{gameChapter} {stageType} first={firstClear} → {total} 个（徽记/碎片/道具）");
         return total;
     }
 

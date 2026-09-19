@@ -59,6 +59,8 @@ public class TownIntroVeil : MonoBehaviour
         var bgGo = new GameObject("Black", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         bgGo.transform.SetParent(transform, false);
         var bg = bgGo.GetComponent<Image>();
+        // 保留纯黑依据：片头→开场剧情之间的过渡黑幕，演出期间城镇 UI 未上，
+        // 底下无 UI 可遮；纯黑避免露出空场景（与 OpeningIntroOverlay 的约定一致）。
         bg.color = Color.black;
         bg.raycastTarget = false;
         var rt = bg.rectTransform;

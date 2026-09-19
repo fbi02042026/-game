@@ -119,8 +119,9 @@ public class AdventureLogCodexPanel
         var scrollRt = _scroll.transform as RectTransform;
         if (scrollRt != null)
         {
-            scrollRt.anchorMin = new Vector2(0.04f, 0.12f);
-            scrollRt.anchorMax = new Vector2(0.96f, 0.86f);
+            // 顶边提到 0.94：纸的视觉顶边更高，0.86 会在第一个章节条上方留一截空白
+            scrollRt.anchorMin = new Vector2(0.04f, 0.10f);
+            scrollRt.anchorMax = new Vector2(0.96f, 0.94f);
             scrollRt.offsetMin = Vector2.zero;
             scrollRt.offsetMax = Vector2.zero;
             scrollRt.anchoredPosition = Vector2.zero;
@@ -516,6 +517,14 @@ public class AdventureLogCodexPanel
             }
             AdventureCodex.MarkMonsterViewed(e.Id);
             ApplyRedDot(go.transform, false);
+
+            // 2026-09-18 用户拍板：图鉴首次记录发钻石（普通 10 / 首领 30），带文字提示
+            if (AdventureCodex.TryClaimCodexReward(e.Id, isBoss, out int dia) && dia > 0)
+            {
+                string tag = isBoss ? "（首领）" : "";
+                UIManager.Instance?.ShowToast($"图鉴首次记录：{e.Name}{tag}　钻石 +{dia}");
+            }
+
             bool defeated = AdventureCodex.IsDefeatedMonster(e.Id);
             string body = defeated ? e.Desc : e.Lore;
             string tip = defeated
@@ -651,8 +660,9 @@ public class AdventureLogCodexPanel
             rt.anchorMin = new Vector2(1f, 1f);
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = new Vector2(-8f, -8f);
-            rt.sizeDelta = new Vector2(16f, 16f);
+            // 2026-09-18 用户反馈：16px 红点太小不明显，加大到 28 并压进角内
+            rt.anchoredPosition = new Vector2(-4f, -4f);
+            rt.sizeDelta = new Vector2(28f, 28f);
             var img = go.GetComponent<Image>();
             img.sprite = RedDot.Sprite;
             img.color = Color.white;

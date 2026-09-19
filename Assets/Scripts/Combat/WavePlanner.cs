@@ -82,6 +82,7 @@ public sealed class WavePlanner
         _allWavesSpawned = false;
         _activeWaveIndex = -1;
         _firstWaveSpawned = true; // 关掉 Update/过场后的硬刷；真正刷怪只走 TutorialDirector
+        _lastWaveSprites.Clear();
         SuppressStageClear = Rules.SuppressStageClear;
         SkipLegacyOnEvacuate = Rules.SkipLegacyOnEvacuate;
         Debug.Log("[BattleManager] 引导关：波次由 TutorialDirector 分步刷，入口仍是 SpawnWave");
@@ -605,6 +606,7 @@ public sealed class WavePlanner
 
     void BuildCombatWaves(int stageIdx, bool elite)
     {
+        _lastWaveSprites.Clear();
         float startX = GetStageStartX();
         var points = GetSpawnPointsSortedByX();
         var usable = new List<Transform>();
@@ -786,6 +788,25 @@ public sealed class WavePlanner
         return a != null ? a.tacticHint : "";
     }
 
+    /// <summary>
+    /// 波次预告条上那一行：「第N波 · 原型名：播报 — 应对提示」。
+    /// 没有原型（旧均分逻辑 / 无表）时普通波返回空（只放预告图），Boss 波至少给「首领」。
+    /// </summary>
+    public string WaveAnnounceText(int waveIndex)
+    {
+        if (_waves == null || waveIndex < 0 || waveIndex >= _waves.Count) return "";
+        bool boss = _waves[waveIndex] != null && _waves[waveIndex].isBossWave;
+        string head = boss ? "首领" : "第" + (waveIndex + 1) + "波";
+
+        var a = GetWaveArchetype(waveIndex);
+        if (a == null) return boss ? head : "";
+
+        string line = head + " · " + a.name;
+        if (!string.IsNullOrEmpty(a.telegraph)) line += "：" + a.telegraph;
+        if (!string.IsNullOrEmpty(a.tacticHint)) line += " — " + a.tacticHint;
+        return line;
+    }
+
     /// <summary>把原型写进 WaveData：进场方向 / 出怪间隔 / 编成标记。</summary>
     static void ApplyArchetypeToWave(WaveData wave, string archetypeId)
     {
@@ -952,9 +973,23 @@ public sealed class WavePlanner
         minionWaves = Mathf.Clamp(minionWaves, 3, 7);
         int[] perWave = GameConfig.DistributeMonstersToWaves(minions, minionWaves);
 
+        // —— 2026-09-18：Boss 关的小怪波原来固定「右侧进场 + 均分」，每波长得一模一样。
+        // 这里让小怪波也进模式池逐波摇原型（Boss 本体那波不动）。
+        // 抽不到模式/原型时行为与改动前完全一致（ApplyArchetypeToWave 对空 id 直接返回）。
+        var mode = StageModeTable.Draw(CurrentChapter, stageIdx, StageType.Normal);
+        List<string> archIds = null;
+        if (mode != null && WaveArchetypeTable.HasData && mode.HasPool)
+        {
+            archIds = new List<string>(minionWaves);
+            for (int i = 0; i < minionWaves; i++)
+                archIds.Add(StageModeTable.RollArchetype(mode, archIds));
+            _stageModeName = mode.name;
+            _stageModeTelegraph = mode.telegraph;
+        }
+
         for (int i = 0; i < minionWaves; i++)
         {
-            _waves.Add(new WaveData
+            var wave = new WaveData
             {
                 triggerX = startX + 3.5f + i * GameConfig.VIRTUAL_WAVE_SPACING,
                 spawnAnchor = null,
@@ -962,7 +997,9 @@ public sealed class WavePlanner
                 isBossWave = false,
                 spawned = false,
                 aliveCount = 0
-            });
+            };
+            if (archIds != null) ApplyArchetypeToWave(wave, archIds[i]);
+            _waves.Add(wave);
         }
 
         float bossX = endPoint != null ? endPoint.position.x - 2f : startX + 3.5f + minionWaves * GameConfig.VIRTUAL_WAVE_SPACING + 2f;
@@ -975,7 +1012,9 @@ public sealed class WavePlanner
             aliveCount = 0
         });
         _totalWaves = _waves.Count;
-        GamePerf.Log($"[BattleManager] Boss关 stage={stageIdx + 1} 小怪={minions}×{minionWaves}波 + Boss={bossCount} X={bossX:F1}");
+        string bossModeTag = string.IsNullOrEmpty(_stageModeName) ? "无模式(旧逻辑)" : $"模式={_stageModeName}";
+        GamePerf.Log($"[BattleManager] Boss关 stage={stageIdx + 1} {bossModeTag} " +
+                     $"小怪={minions}×{minionWaves}波 + Boss={bossCount} X={bossX:F1}");
     }
 
     // ---- extracted from BattleManager L2157-L2682 ----
@@ -1095,7 +1134,15 @@ public sealed class WavePlanner
         return PickSpriteByStyle(availableSprites, chapter, wantRanged, usedThisWave, slotIndex, stageIdx);
     }
 
-    /// <summary>按「要近战 / 要远程」过滤精灵池并加权抽 1 个（同波尽量不重复）。</summary>
+    /// <summary>
+    /// 上一波实际用到过的精灵。只记 1 波，用来让相邻两波的「脸」不一样
+    /// （2026-09-18：波次每波变一下）。同样是从同一个池里抽，但优先挑上一波没出现过的；
+    /// 全是老面孔时才退回原池，不会强行换素材、不碰任何数值。
+    /// </summary>
+    readonly System.Collections.Generic.HashSet<int> _lastWaveSprites =
+        new System.Collections.Generic.HashSet<int>();
+
+    /// <summary>按「要近战 / 要远程」过滤精灵池并加权抽 1 个（同波尽量不重复，邻波尽量换脸）。</summary>
     int PickSpriteByStyle(System.Collections.Generic.List<int> availableSprites, int chapter, bool wantRanged,
         System.Collections.Generic.HashSet<int> usedThisWave, int slotIndex, int stageIdx)
     {
@@ -1117,6 +1164,13 @@ public sealed class WavePlanner
             var unused = filtered.Where(idx => !usedThisWave.Contains(idx)).ToList();
             if (unused.Count > 0)
                 filtered = unused;
+        }
+
+        // 邻波换脸：挑得到「上一波没用过」的就优先挑它，挑不到保持原样（只影响外观种类）
+        if (_lastWaveSprites.Count > 0 && filtered.Count > 1)
+        {
+            var fresh = filtered.Where(idx => !_lastWaveSprites.Contains(idx)).ToList();
+            if (fresh.Count > 0) filtered = fresh;
         }
 
         if (ConfigManager.Instance == null)
@@ -1382,6 +1436,10 @@ public sealed class WavePlanner
                 wave.aliveCount++;
             }
         }
+
+        // 记账：这一波用到过哪些精灵，下一波优先换一批（只影响外观）
+        _lastWaveSprites.Clear();
+        _lastWaveSprites.UnionWith(usedSpritesThisWave);
 
         GamePerf.Log($"[BattleManager] wave {waveIndex + 1} spawned {wave.monsterCount} @x={engageBaseX:F1}");
         _spawnWaveCo = null;

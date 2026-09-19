@@ -27,7 +27,9 @@ public partial class BattleUI : MonoBehaviour
             if (string.IsNullOrEmpty(id))
             {
                 slot.SetAvatar(null);
-                slot.SetSkillName(null, "无");      // 空槽标注「无」
+                // 空槽保留美术的框体，但不写「无」字：
+                // 与佣兵技能槽同一口径（没有就不显示，别留空字占位）。
+                slot.SetLabelVisible(false);
                 slot.SetLevelText("");
                 slot.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
                 slot.SetEnergyFill(0f);

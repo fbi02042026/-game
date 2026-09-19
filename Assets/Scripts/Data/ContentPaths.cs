@@ -53,6 +53,10 @@ public static class ContentPaths
         public const string PlayerPassives = "Data/Tables/player_passives";
         public const string HiddenLevelRules = "Data/Tables/hidden_level_rules";
         public const string EquipAppearanceMap = "Data/Tables/equip_appearance_map";
+        /// <summary>右列天赋重制表（CSV → .bytes，见 talent_right.csv）。缺表时 TalentDefs 回退硬编码。</summary>
+        public const string TalentRight = "Data/Tables/talent_right";
+        /// <summary>佣兵花名册（CSV → .bytes，见 merc_roster.csv）。缺表时 MercRosterDefs 回退硬编码。</summary>
+        public const string MercRoster = "Data/Tables/merc_roster";
     }
 
     public static class Icons

@@ -22,3 +22,16 @@
 # item_bomb,手雷,Icons/Item/bomb,Consumable,10,1,1,,Enemy,暂无效果（useEffect 留空则使用置灰）,1
 #
 id,name,icon,type,stackMax,canUseInBattle,canDrop,useEffect,useTarget,desc,rarity
+# 2026-09-19 首次填充。icon = Resources 路径（不带扩展名）。
+# 标 TODO_ART 的图标为占位图，等主人补资源后替换（见 Docs/缺图清单_2026-09-16.md）。
+item_talent_stone,天赋石,Icons/Item/icon_talent_stone,Material,9999,0,0,,Self,用于解锁与升级右侧天赋。,2
+item_mat_decompose,分解材料,Icons/Item/icon_decompose_mat,Material,9999,0,1,,Self,装备分解所得，用于强化装备。,0
+item_enchant_stone,附魔石,Icons/Item/icon_enchant_stone,Material,999,0,1,,Self,用于装备附魔。,1
+item_scroll_merc_common,佣兵招募卷·普通,Icons/Item/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募普通佣兵时抵扣。,1
+item_scroll_merc_rare,佣兵招募卷·稀有,Icons/Item/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募稀有佣兵时抵扣。,2
+item_scroll_merc_legendary,佣兵招募卷·传奇,Icons/Item/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募传奇佣兵时抵扣。,3
+item_fragment_birth,本命碎片,Icons/MercBirthFragment/frag_H001_普通,Material,999,0,1,,Self,佣兵本命碎片，用于佣兵升阶。按佣兵与档位生成独立图标。,2
+item_fragment_skill,技能残卷,Icons/Item/icon_skill_scroll,Material,999,0,1,,Self,用于技能升星。,1
+item_fragment_log,日志碎片,Icons/Item/icon_log_fragment,Material,999,0,1,,Self,冒险日志碎片，可合成完整条目。,0
+item_merc_grow,佣兵养成道具,Icons/Item/icon_merc_grow,Material,999,0,1,,Self,用于佣兵养成。,1
+item_potion_hp,治疗药水,Icons/Item/icon_potion_hp,Consumable,20,1,1,heal_hp:30,Self,回复 30 点生命。,1

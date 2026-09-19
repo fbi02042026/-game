@@ -208,6 +208,8 @@ public class LoginUI : MonoBehaviour
                     labelBtn.transition = Selectable.Transition.None;
                     labelBtn.onClick.RemoveListener(ToggleAgree);
                     labelBtn.onClick.AddListener(ToggleAgree);
+                    // 协议文案只做勾选：不按压缩放、不变暗（缩放会让整行字跳动）
+                    UiButtonPressFeedback.Suppress(label.gameObject);
                 }
             }
 

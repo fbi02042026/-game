@@ -308,28 +308,29 @@ public class AttrSystem
             int val = pair.Value;
             if (string.IsNullOrEmpty(key) || val <= 0) continue;
 
-            TalentDefs.Effect fx = null;
+            // 左列 L 节点
             if (key.Length > 1 && key[0] == 'L' && int.TryParse(key.Substring(1), out int li))
             {
                 var node = TalentDefs.GetLeft(li);
-                if (node != null) fx = node.effect;
+                if (node != null) ApplyTalentEffect(node.effect);
+                continue;
             }
-            else if (key == "C1")
-            {
-                var node = TalentDefs.RightExtra;
-                if (node?.options != null && val >= 1 && val <= node.options.Length)
-                    fx = node.options[val - 1].effect;
-            }
-            else if (key.Length > 1 && key[0] == 'R' && int.TryParse(key.Substring(1), out int ri))
-            {
-                var node = TalentDefs.GetRight(ri);
-                if (node?.options != null && val >= 1 && val <= node.options.Length)
-                    fx = node.options[val - 1].effect;
-            }
-
-            if (fx != null)
-                ApplyTalentEffect(fx);
+            // 右列重制节点（id 形如 R_F1 / R_C1 / R_JOB ...）
+            var rnode = TalentDefs.GetRightNodeById(key);
+            if (rnode != null)
+                ApplyRightNodeEffect(rnode, val, TalentDefs.GetRightNodeChosenJob(talents, key));
         }
+    }
+
+    /// <summary>按右列节点当前等级应用效果；JobChoice 用已选职业选项。</summary>
+    void ApplyRightNodeEffect(TalentDefs.TalentRightNode node, int level, int chosenJob)
+    {
+        if (node == null || level <= 0) return;
+        var opt = node.IsJobChoice ? node.ChosenOption(chosenJob)
+                                   : (node.options != null && node.options.Length > 0 ? node.options[0] : null);
+        if (opt == null) return;
+        // 复用左列已有的 Effect→Attr 映射（ApplyTalentEffect 已处理 %/绝对值）
+        ApplyTalentEffect(new TalentDefs.Effect { kind = opt.kind, value = node.EffectValue(level, chosenJob) });
     }
 
     void ApplyTalentEffect(TalentDefs.Effect fx)
@@ -375,6 +376,10 @@ public class AttrSystem
                 break;
             case TalentDefs.AttrKind.SkillDamage:
                 AddAttr(AttrType.Attack, fx.value * 0.01f, true);
+                break;
+            case TalentDefs.AttrKind.MoveSpeed:
+                // 移速 +3% = 基础移速的 3%（与攻速/暴击一致按百分比加成）
+                AddAttr(AttrType.MoveSpeed, fx.value * 0.01f, true);
                 break;
             case TalentDefs.AttrKind.GoldDrop:
                 AddAttr(AttrType.GoldBonus, fx.value * 0.01f, true);

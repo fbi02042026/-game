@@ -722,14 +722,14 @@ public class Monster : UnitBase
             attr.SetAttr(AttrType.AttackSpeed,
                 attr.GetAttr(AttrType.AttackSpeed) / 0.6f);
         }
-        // 非 Boss：固定玩家移速×0.9；Boss 仍走表移速 + DEFAULT×1.5 上限
-        float moveSpd = GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
-        if (_isBossUnit)
-        {
-            moveSpd = template != null && template.baseMoveSpeed > 0.01f
-                ? Mathf.Min(template.baseMoveSpeed, GameConfig.MONSTER_DEFAULT_MOVE_SPEED * 1.5f)
-                : GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
-        }
+        // 怪物移速统一由表驱动（非 Boss 与 Boss 同一逻辑）。
+        // 表 moveSpeed 为「世界前」相对值，需乘 MONSTER_MOVE_SPEED_TO_WORLD 转世界单位；
+        // monster_stats 已全体减半(2.2→1.1)，1.1 × 0.3142 = 0.3456 世界单位。
+        // 注：原 Boss 走 Mathf.Min(表值, DEFAULT×1.5) 会被钳回 1.0368；减半后表值远低于该上限，
+        // 若保留上限会把减半后的速度又钳高，故这里不再设上限。
+        float moveSpd = (template != null && template.baseMoveSpeed > 0.01f)
+            ? template.baseMoveSpeed * GameConfig.MONSTER_MOVE_SPEED_TO_WORLD
+            : GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
         float atkRange;
         if (_isBossUnit)
         {

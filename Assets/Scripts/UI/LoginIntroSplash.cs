@@ -63,6 +63,7 @@ public class LoginIntroSplash : MonoBehaviour
         var bgGo = new GameObject("Black", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         bgGo.transform.SetParent(transform, false);
         var bg = bgGo.GetComponent<Image>();
+        // 保留纯黑依据：登录前视频垫层，属启动演出，底下无 UI 可遮。
         bg.color = Color.black;
         bg.raycastTarget = true;
         Stretch(bg.rectTransform);

@@ -1,0 +1,13 @@
+﻿id,name,type,unlockLeftIndex,maxLevel,mutexGroup,costByLevel,optKeys,optNames,optKinds,optValues
+R_F1,流派·物理专精,Mutex,10,5,path,5/12/22/38/60,phys,物理专精,PhysDamage,5/10/15/20/25
+R_F2,流派·魔法专精,Mutex,10,5,path,5/12/22/38/60,magic,魔法专精,MagicDamage,5/10/15/20/25
+R_C1,利刃,Attr,20,3,-,6/14/26,atk,利刃,Attack,3/6/10
+R_C2,体魄,Attr,20,3,-,6/14/26,hp,体魄,Hp,40/80/140
+R_C3,精准,Attr,20,3,-,14/30/52,crit,精准,CritRate,1/2/3
+R_C4,迅捷,Attr,20,3,-,14/30/52,spd,迅捷,AtkSpeed,3/6/10
+R_C5,疾行,Attr,30,3,-,25/50/85,move,疾行,MoveSpeed,3/6/10
+R_C6,凝神,Attr,30,3,-,25/50/85,cd,凝神,SkillCooldown,4/8/13
+R_JOB,职业专精,JobChoice,30,5,job,15/32/55/85/125,j0/j1/j2/j3/j4/j5,剑盾卫士/狂战士/游侠/法师/牧师/重装,JOB,4/8/12/16/20
+R_BAG,背包扩容,OneTime,30,1,-,60,bag,背包扩容,Custom,0
+R_SLOT,技能槽 IV,OneTime,40,1,-,95,slot,技能槽 IV,Custom,0
+R_DUAL,双修解锁,OneTime,40,1,-,180,dual,双修解锁,Custom,0

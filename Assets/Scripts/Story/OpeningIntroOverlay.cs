@@ -84,6 +84,8 @@ public class OpeningIntroOverlay : MonoBehaviour
         var bgGo = new GameObject("Black", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         bgGo.transform.SetParent(transform, false);
         var bg = bgGo.GetComponent<Image>();
+        // 保留纯黑依据：首次进城镇的片头视频遮罩（垫在视频 RawImage 下，仅 prepare/淡隐瞬间可见），
+        // 开场演出期间城镇 UI 全部隐藏，底下无 UI 可遮；纯黑是为避免露出未加载完的空场景。
         bg.color = Color.black;
         bg.raycastTarget = true;
         Stretch(bg.rectTransform);

@@ -234,6 +234,24 @@ public class ChapterManager : Singleton<ChapterManager>
         StageData cleared = GetCurrentStage();
         if (cleared != null) RollState.RecordCleared(cleared.type);
 
+        // === 天赋石里程碑发放（2026-09-19）===
+        // 首次通关按章发石；重复通关 clearedStages 已含该关 key，不再发。
+        // 每日任务「通关 3 关」保底石也在每次真实通关后累计。
+        var milestoneData = SaveSystem.Instance?.Data;
+        if (milestoneData != null)
+        {
+            int stageTalent = milestoneData.GrantTalentForStageFirstClear(currentChapter, currentStageIndex);
+            if (stageTalent > 0)
+                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, stageTalent, save: false, notify: true);
+
+            int dailyTalent = milestoneData.TryDailyClearTaskStones();
+            if (dailyTalent > 0)
+                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, dailyTalent, save: false, notify: true);
+
+            // 里程碑/每日石已写入内存（save:false），此处统一落盘，避免未存档前退出丢失。
+            SaveSystem.Instance?.Save();
+        }
+
         // 首领关可能提前出现在倒数三关里：打完首领这一章就结束
         bool bossCleared = cleared != null && cleared.type == StageType.Boss;
         if (bossCleared || currentStageIndex >= GameConfig.STAGES_PER_CHAPTER - 1)
@@ -247,8 +265,15 @@ public class ChapterManager : Singleton<ChapterManager>
             var data = SaveSystem.Instance?.Data;
             if (data != null)
             {
+                // 整章通关额外天赋石：仅首次通关该章时发放一次
+                bool firstChapterClear = !data.HasClearedChapter(currentChapter);
+
                 int clearDiff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : -1;
                 data.MarkChapterCleared(currentChapter, clearDiff);
+
+                int chapterTalent = TalentDefs.TalentStoneRewards.ChapterClearStone(currentChapter);
+                if (firstChapterClear && chapterTalent > 0)
+                    ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, chapterTalent, save: false, notify: true);
                 var avail = ChapterRouteTable.AvailableChapters(data);
                 if (avail.Count > 0)
                 {

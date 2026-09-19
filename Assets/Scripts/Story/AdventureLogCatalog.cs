@@ -63,6 +63,20 @@ public static class AdventureLogCatalog
         public string Extra;
     }
 
+    /// <summary>
+    /// 冒险日志【里程碑】分类条目（2026-09-19）。
+    /// 每章只建 1 条带进度的条目，不按关建；展示形如「第 3 章 · 翡翠秘境　进度 4/10」。
+    /// 进度 = 该章已首次通关关数 / 每章关数；已发石 = 首次通关石×已通数 +（整章通关额外石，若已通章）。
+    /// </summary>
+    public struct MilestoneEntry
+    {
+        public int Chapter;
+        public string Name;          // 翡翠秘境
+        public string Title;         // 第 3 章 · 翡翠秘境
+        public int FirstClearStone;  // 按章首次通关石（来自 TalentDefs.TalentStoneRewards）
+        public int ChapterClearStone;// 整章通关额外石
+    }
+
     public static readonly MonsterEntry[] Monsters =
     {
         // —— 暮影森林（第一章）——
@@ -574,6 +588,42 @@ public static class AdventureLogCatalog
             Extra = "奖励：传奇装备箱 ×1"
         },
     };
+
+    /// <summary>
+    /// 里程碑条目：每章 1 条（共 8 条），展示该章累计已发天赋石与进度。
+    /// 章名与 GameConfig.ChapterMapNames 一致（暮影森林 / 幽冥墓园 / 翡翠秘境 / 晨曦草原 /
+    /// 海岛遗迹 / 巨岩深窟 / 赤焰炼狱 / 永霜雪境）。
+    /// </summary>
+    public static readonly MilestoneEntry[] Milestones = new MilestoneEntry[]
+    {
+        M(1, "暮影森林"), M(2, "幽冥墓园"), M(3, "翡翠秘境"), M(4, "晨曦草原"),
+        M(5, "海岛遗迹"), M(6, "巨岩深窟"), M(7, "赤焰炼狱"), M(8, "永霜雪境"),
+    };
+
+    static MilestoneEntry M(int ch, string name) => new MilestoneEntry
+    {
+        Chapter = ch,
+        Name = name,
+        Title = "第 " + ch + " 章 · " + name,
+        FirstClearStone = TalentDefs.TalentStoneRewards.FirstClearStone(ch),
+        ChapterClearStone = TalentDefs.TalentStoneRewards.ChapterClearStone(ch),
+    };
+
+    /// <summary>某章里程碑进度：已首次通关关数 / 每章关数。</summary>
+    public static int MilestoneStageProgress(int chapter)
+    {
+        return SaveSystem.Instance?.Data?.ClearedStageCountInChapter(chapter) ?? 0;
+    }
+
+    /// <summary>某章累计已发天赋石（首次通关石×已通数 + 整章通关额外石（若已通章））。</summary>
+    public static int MilestoneIssuedStones(int chapter)
+    {
+        int cleared = MilestoneStageProgress(chapter);
+        int stones = cleared * TalentDefs.TalentStoneRewards.FirstClearStone(chapter);
+        if (SaveSystem.Instance?.Data?.HasClearedChapter(chapter) == true)
+            stones += TalentDefs.TalentStoneRewards.ChapterClearStone(chapter);
+        return stones;
+    }
 
     public static bool ChapterCleared(int chapter)
     {

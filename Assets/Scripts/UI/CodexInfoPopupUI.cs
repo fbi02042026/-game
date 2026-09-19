@@ -77,7 +77,42 @@ public class CodexInfoPopupUI : MonoBehaviour
         Instance = this;
         BindRefs();
         Wire();
+        ApplyProjectArt();
         if (root != null) root.SetActive(false);
+    }
+
+    /// <summary>
+    /// 用项目里的现成素材给程序搭的壳“换皮”（2026-09-18 用户要求：程序生成的先在项目里找素材拼）。
+    /// 走 UiKeyedBackgrounds 运行时替换，找不到素材时保持原样，不动预制体文件。
+    /// 面板 = Frames/内容底（羊皮纸），头像框/关闭钮 = Frames/图层 1，解锁钮 = Frames/字底；
+    /// 纸底上白字看不清，正文统一改深棕。
+    /// </summary>
+    void ApplyProjectArt()
+    {
+        if (panel != null && UiKeyedBackgrounds.ApplyLogFrame(panel, "内容底", preserveAspect: false))
+        {
+            panel.type = Image.Type.Simple;
+            var dark = new Color(0.24f, 0.15f, 0.08f, 1f);
+            if (titleText != null) titleText.color = dark;
+            if (metaText != null) metaText.color = new Color(0.35f, 0.24f, 0.14f, 1f);
+            if (descText != null) descText.color = dark;
+            if (loreText != null) loreText.color = new Color(0.32f, 0.21f, 0.12f, 1f);
+        }
+
+        var frameImg = FindDeep(root != null ? root.transform : transform, "PortraitFrame")?.GetComponent<Image>();
+        if (frameImg != null)
+            UiKeyedBackgrounds.ApplyLogFrame(frameImg, "图层 1", preserveAspect: false);
+
+        var closeImg = closeButton != null ? closeButton.GetComponent<Image>() : null;
+        if (closeImg != null)
+            UiKeyedBackgrounds.ApplyLogFrame(closeImg, "图层 1", preserveAspect: false);
+
+        if (unlockButton != null)
+        {
+            var ubImg = unlockButton.GetComponent<Image>();
+            if (ubImg != null)
+                UiKeyedBackgrounds.ApplyLogFrame(ubImg, "字底", preserveAspect: false);
+        }
     }
 
     void OnDestroy()
@@ -146,6 +181,8 @@ public class CodexInfoPopupUI : MonoBehaviour
         rt.sizeDelta = new Vector2(240f, 56f);
         var img = rt.gameObject.AddComponent<Image>();
         img.color = new Color(0.28f, 0.46f, 0.30f, 1f);
+        // 程序生成的按钮底也换成项目素材（字底横条），找不到素材时保留绿色兜底
+        UiKeyedBackgrounds.ApplyLogFrame(img, "字底", preserveAspect: false);
         var btn = rt.gameObject.AddComponent<Button>();
         btn.transition = Selectable.Transition.ColorTint;
         unlockButtonLabel = AddLabel(rt, "Label", "解锁", 24, Vector2.zero,

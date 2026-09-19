@@ -56,7 +56,9 @@ public class ChapterSplashOverlay : MonoBehaviour
         bgGo.transform.SetParent(transform, false);
         var bg = bgGo.AddComponent<Image>();
         bg.sprite = CreateSolidSprite();
-        bg.color = new Color(0f, 0f, 0f, 1f);
+        // 新铁律（2026-09-19）：全屏遮罩最多半透，不许完全遮住背后 UI。
+        // 0.72：衬得住白字，又看得见战斗 UI 轮廓。
+        bg.color = new Color(0f, 0f, 0f, 0.72f);
         bg.raycastTarget = true;
         var bgRt = bg.rectTransform;
         bgRt.anchorMin = Vector2.zero;

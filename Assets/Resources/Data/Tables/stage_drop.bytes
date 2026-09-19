@@ -51,4 +51,59 @@ gameChapter,stageType,dropType,jobKey,tier,rate,countMin,countMax,firstClearBonu
 8,Normal,Badge,法师,传奇,0.07,1,1,0,ch8永霜·高70%
 *,Elite,Badge,*,*,1.0,1,1,0,精英关额外+1（职业按本章主产随机）
 *,Boss,Badge,*,*,1.0,1,1,2,Boss必掉1；首次通关再给2个自选
-*,*,Fragment,*,*,0,0,0,0,本名碎片不走掉落；来源=商店买重复佣兵转化（TavernUnlockUI.TryUnlock）
+# 旧规则作废：*,*,Fragment,*,*,0,0,0,0 —— 2026-09-19 主人拍板：本命碎片改为走掉落（原为商店买重复佣兵转化）
+# ---------------------------------------------------------------------------
+# 本命碎片 Fragment（2026-09-19 新增）：按章 × 职业 × 档位
+#   档位对应 Assets/Resources/Icons/MercFragmentBase 的 普通/稀有/传奇 碎片底图
+#   命中后在该职业的佣兵里随机一个（图标由 MercFragmentBase + MercHead 合成，见 Tools/prefab-analysis/gen_birth_fragment.py）
+#   firstClearBonus = 该关首次通关额外给 1 个（保底，防脸黑）
+# ---------------------------------------------------------------------------
+1,Normal,Fragment,剑盾,普通,0.050,1,1,1,ch1暮影森林·本命碎片普通
+1,Normal,Fragment,游侠,普通,0.050,1,1,1,ch1暮影森林·本命碎片普通
+1,Normal,Fragment,重武,普通,0.050,1,1,1,ch1暮影森林·本命碎片普通
+2,Normal,Fragment,剑盾,普通,0.050,1,1,1,ch2幽冥墓园·本命碎片普通
+2,Normal,Fragment,狂战,普通,0.050,1,1,1,ch2幽冥墓园·本命碎片普通
+2,Normal,Fragment,游侠,普通,0.050,1,1,1,ch2幽冥墓园·本命碎片普通
+3,Normal,Fragment,狂战,普通,0.040,1,1,1,ch3翡翠秘境·本命碎片普通
+3,Normal,Fragment,狂战,稀有,0.012,1,1,0,ch3翡翠秘境·本命碎片稀有
+3,Normal,Fragment,游侠,普通,0.040,1,1,1,ch3翡翠秘境·本命碎片普通
+3,Normal,Fragment,游侠,稀有,0.012,1,1,0,ch3翡翠秘境·本命碎片稀有
+3,Normal,Fragment,重武,普通,0.040,1,1,1,ch3翡翠秘境·本命碎片普通
+3,Normal,Fragment,重武,稀有,0.012,1,1,0,ch3翡翠秘境·本命碎片稀有
+4,Normal,Fragment,狂战,普通,0.038,1,1,1,ch4晨曦草原·本命碎片普通
+4,Normal,Fragment,狂战,稀有,0.016,1,1,0,ch4晨曦草原·本命碎片稀有
+4,Normal,Fragment,法师,普通,0.038,1,1,1,ch4晨曦草原·本命碎片普通
+4,Normal,Fragment,法师,稀有,0.016,1,1,0,ch4晨曦草原·本命碎片稀有
+5,Normal,Fragment,牧师,普通,0.030,1,1,1,ch5海岛遗迹·本命碎片普通
+5,Normal,Fragment,牧师,稀有,0.018,1,1,0,ch5海岛遗迹·本命碎片稀有
+5,Normal,Fragment,游侠,普通,0.030,1,1,1,ch5海岛遗迹·本命碎片普通
+5,Normal,Fragment,游侠,稀有,0.018,1,1,0,ch5海岛遗迹·本命碎片稀有
+5,Normal,Fragment,剑盾,传奇,0.004,1,1,0,ch5海岛遗迹·本命碎片传奇
+6,Normal,Fragment,重武,普通,0.030,1,1,1,ch6巨岩深窟·本命碎片普通
+6,Normal,Fragment,重武,稀有,0.018,1,1,0,ch6巨岩深窟·本命碎片稀有
+6,Normal,Fragment,法师,普通,0.030,1,1,1,ch6巨岩深窟·本命碎片普通
+6,Normal,Fragment,法师,稀有,0.018,1,1,0,ch6巨岩深窟·本命碎片稀有
+6,Normal,Fragment,狂战,传奇,0.004,1,1,0,ch6巨岩深窟·本命碎片传奇
+7,Normal,Fragment,牧师,普通,0.025,1,1,1,ch7赤焰炼狱·本命碎片普通
+7,Normal,Fragment,牧师,稀有,0.022,1,1,0,ch7赤焰炼狱·本命碎片稀有
+7,Normal,Fragment,法师,普通,0.025,1,1,1,ch7赤焰炼狱·本命碎片普通
+7,Normal,Fragment,法师,稀有,0.022,1,1,0,ch7赤焰炼狱·本命碎片稀有
+7,Normal,Fragment,游侠,传奇,0.008,1,1,0,ch7赤焰炼狱·本命碎片传奇
+8,Normal,Fragment,剑盾,普通,0.025,1,1,1,ch8永霜雪境·本命碎片普通
+8,Normal,Fragment,剑盾,稀有,0.022,1,1,0,ch8永霜雪境·本命碎片稀有
+8,Normal,Fragment,重武,普通,0.025,1,1,1,ch8永霜雪境·本命碎片普通
+8,Normal,Fragment,重武,稀有,0.022,1,1,0,ch8永霜雪境·本命碎片稀有
+8,Normal,Fragment,法师,传奇,0.008,1,1,0,ch8永霜雪境·本命碎片传奇
+*,Elite,Fragment,*,普通,0.600,1,1,1,精英关高概率（职业按本章主产随机）
+*,Boss,Fragment,*,稀有,1.000,1,1,1,Boss必掉1稀有；首次通关再给1
+# ---------------------------------------------------------------------------
+# 道具 Item（2026-09-19 新增）：dropType=Item 时，jobKey 列复用为 itemId（见 item_defs.csv）
+#   tier 列留空
+# ---------------------------------------------------------------------------
+*,Normal,Item,item_mat_decompose,,0.350,1,3,0,分解材料·普通关
+*,Normal,Item,item_potion_hp,,0.120,1,2,0,治疗药水·普通关
+*,Normal,Item,item_fragment_log,,0.080,1,1,0,日志碎片·普通关
+*,Elite,Item,item_enchant_stone,,0.500,1,2,1,附魔石·精英关
+*,Elite,Item,item_mat_decompose,,0.800,2,5,0,分解材料·精英关（更多）
+*,Boss,Item,item_fragment_skill,,1.000,1,2,1,技能残卷·Boss必掉；首次通关再给1
+*,Boss,Item,item_merc_grow,,0.600,1,2,1,佣兵养成道具·Boss关

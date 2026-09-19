@@ -73,6 +73,7 @@ public class HealthNoticeUI : MonoBehaviour
         var bgGo = new GameObject("Bg", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         bgGo.transform.SetParent(root.transform, false);
         var bg = bgGo.GetComponent<Image>();
+        // 保留纯黑依据：登录界面之前的健康忠告，属启动演出，底下没有任何 UI 可遮。
         bg.color = Color.black;
         bg.raycastTarget = false;
         Stretch(bgGo.GetComponent<RectTransform>());

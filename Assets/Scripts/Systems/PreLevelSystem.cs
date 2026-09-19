@@ -86,7 +86,9 @@ public class PreLevelSystem : Singleton<PreLevelSystem>
     }
 
     /// <summary>
-    /// 看广告刷新选项
+    /// 刷新遗产三选一选项（每局限一次）。
+    /// TODO: 聚光灯上线后改为「看广告」；当前阶段（2026-09-19 主人拍板）统一走钻石，
+    /// 走哪条路径由 <c>GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT</c> 决定。
     /// </summary>
     public bool RefreshOptions()
     {
@@ -96,6 +98,15 @@ public class PreLevelSystem : Singleton<PreLevelSystem>
             return false;
         }
 
+        if (GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT)
+            return RefreshOptionsByAd();
+
+        return RefreshOptionsByDiamond();
+    }
+
+    /// <summary>广告路径（保留备用）：仅在 GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT=true 时调用。</summary>
+    bool RefreshOptionsByAd()
+    {
         // 聚光灯禁广告：免费刷新一次
         if (SpotlightBuild.Enabled)
         {
@@ -117,6 +128,25 @@ public class PreLevelSystem : Singleton<PreLevelSystem>
             GamePerf.Log("[PreLevelSystem] 已刷新遗产选项");
         });
         return ok || hasRefreshedThisRun;
+    }
+
+    /// <summary>钻石路径（当前默认）：钻石够就扣并刷新，不够提示差多少。</summary>
+    bool RefreshOptionsByDiamond()
+    {
+        int price = GameConfig.AD_SLOT_PRELEVEL_REFRESH_DIAMOND;
+        if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Diamond, price, save: true, notify: false))
+        {
+            var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+            long own = ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond);
+            UIManager.Instance?.ShowToast($"钻石不足：遗产刷新需 {price} 钻（当前 {own} 钻）");
+            return false;
+        }
+
+        hasRefreshedThisRun = true;
+        GenerateOptions();
+        selectedIndex = -1;
+        GamePerf.Log($"[PreLevelSystem] 钻石开启：已刷新遗产选项（-{price} 钻）");
+        return true;
     }
 
     /// <summary>

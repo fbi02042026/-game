@@ -27,6 +27,8 @@ public class TownHubController : MonoBehaviour
         new System.Collections.Generic.HashSet<MainNavTab>();
     /// <summary>首次切页正在协程里等下一帧，期间再点直接忽略（避免叠加两次构建）。</summary>
     bool _firstSwitchBusy;
+    /// <summary>等待下一帧执行的切页（连点时取消上一个，只保留最后一次）。</summary>
+    Coroutine _pendingSwitch;
     Image _switchVeil;
     MainNavTab _current = MainNavTab.Guild;
     bool _wasLandladyBanned;
@@ -70,6 +72,88 @@ public class TownHubController : MonoBehaviour
         if (!_pagesPreloaded)
             PreloadAllPages();
         ConsumePendingAdventure();
+        StartCoroutine(CoWarmupPages());
+    }
+
+    /// <summary>
+    /// 进镇预热（2026-09-18 用户要求：加载过程中把要提前加载的都加载掉）：
+    /// 亮 Loading 界面 → ① StartupPreloader 预加载常用资源 → ② 把常点页面逐帧
+    /// 「点亮一遍再藏回去」完成首次构建 → 收起 Loading。
+    /// 之后点任何入口都是纯 Show/Hide。若玩家已经在用某页（回城自动开冒险）则放弃预热。
+    /// </summary>
+    System.Collections.IEnumerator CoWarmupPages()
+    {
+        var order = new[] { MainNavTab.Character, MainNavTab.Adventure, MainNavTab.Tavern, MainNavTab.Log };
+
+        // 玩家已在用某页（回城自动开冒险）→ 不遮、不预热
+        foreach (var tab in order)
+        {
+            var mb0 = PageOf(tab) as MonoBehaviour;
+            if (mb0 != null && mb0.gameObject.activeSelf) yield break;
+        }
+
+        var loading = EnsureWarmupLoading();
+
+        // ① 常用资源预加载（字体 / 底图 / 插图 / 图标 / 城镇页 prefab）
+        if (loading != null)
+        {
+            var lv = loading;
+            yield return StartCoroutine(StartupPreloader.Run((v, tip) =>
+            {
+                if (lv != null)
+                {
+                    lv.SetProgress(0.05f + v * 0.35f);
+                    if (!string.IsNullOrEmpty(tip)) lv.SetTip(tip);
+                }
+            }));
+        }
+        else
+        {
+            yield return StartCoroutine(StartupPreloader.Run(null));
+        }
+
+        // ② 常点页面逐帧构建一次（首建成本提前摊掉）
+        for (int i = 0; i < order.Length; i++)
+        {
+            var tab = order[i];
+            var page = PageOf(tab);
+            var mb = page as MonoBehaviour;
+            if (page == null || mb == null) continue;
+            if (mb.gameObject.activeSelf) continue;
+            if (loading != null)
+            {
+                loading.SetTip(LoadingFlavorText.Next());
+                loading.SetProgress(0.4f + 0.55f * ((i + 1) / (float)order.Length));
+            }
+            page.ShowPage();
+            _shownOnce.Add(tab);
+            yield return null;
+            page.HidePage();
+        }
+
+        if (loading != null)
+        {
+            loading.SetTip(LoadingFlavorText.Next());
+            loading.SetProgress(1f);
+            yield return null;
+            Destroy(loading.gameObject);
+        }
+        ShowGuildOnly(); // 恢复大厅底图状态（清掉预热期间页面设置的 overlay 模式）
+    }
+
+    /// <summary>预热用的 Loading 实例（自己持有，不抢 BattleLoadingOverlay 的单例，避免被场景流程提前 Hide）。</summary>
+    LoadingUI EnsureWarmupLoading()
+    {
+        var prefab = Resources.Load<GameObject>(LoadingUI.ResourcePath);
+        if (prefab == null) return null;
+        var go = Instantiate(prefab, transform, false);
+        go.name = "WarmupLoading";
+        var ui = go.GetComponent<LoadingUI>() ?? go.AddComponent<LoadingUI>();
+        ui.PrepareCanvas();
+        ui.SetTip(LoadingFlavorText.Next());
+        ui.SetProgress(0.05f);
+        go.transform.SetAsLastSibling();
+        return ui;
     }
 
     /// <summary>回城后打开冒险页（撤离等场景用）。可在 Bootstrap 完成后再调一次。</summary>
@@ -172,7 +256,19 @@ public class TownHubController : MonoBehaviour
             StartCoroutine(CoFirstSwitch(tab));
             return;
         }
+
+        // 第二次以后：底栏高亮已在 MainBottomNav.HandleClick 里当帧生效，
+        // 这里把整段切页推到下一帧，避免点击这一帧就承担整页重建（点了像卡住）。
+        if (_pendingSwitch != null) StopCoroutine(_pendingSwitch);
+        _pendingSwitch = StartCoroutine(CoSwitchNextFrame(tab));
+    }
+
+    System.Collections.IEnumerator CoSwitchNextFrame(MainNavTab tab)
+    {
+        yield return null;
+        _pendingSwitch = null;
         SwitchTabNow(tab);
+        _shownOnce.Add(tab);
     }
 
     System.Collections.IEnumerator CoFirstSwitch(MainNavTab tab)
@@ -223,20 +319,27 @@ public class TownHubController : MonoBehaviour
 
         _current = tab;
         _nav?.SetSelected(tab, notify: false);
+
+        // 目标页已在前台：只保持底栏高亮，不再重跑 ShowPage。
+        // 之前每次点同一入口都会整页重建（背包/地图/日志列表全量重来），点一下卡一帧。
+        var target = PageOf(tab);
+        if (target != null && IsPageActive(target))
+            return;
+
+        // 已经隐藏的页不再跑 HidePage：Hide 里若销毁整页内容，重复调用纯属浪费。
+        HideIfVisible(_tavern);
+        HideIfVisible(_adventure);
+        HideIfVisible(_character);
+        HideIfVisible(_log);
+
         if (tab == MainNavTab.Tavern)
         {
             TutorialDirector.Instance?.NotifyTownTab(tab);
-            _adventure?.HidePage();
-            _character?.HidePage();
-            _log?.HidePage();
             _tavern?.ShowPage();
             GameBgm.Play(GameBgm.Track.Tavern);
         }
         else if (tab == MainNavTab.Adventure)
         {
-            _tavern?.HidePage();
-            _character?.HidePage();
-            _log?.HidePage();
             _adventure?.ShowPage();
             TutorialDirector.Instance?.NotifyAdventureOpened();
             GameBgm.Play(GameBgm.Track.Town);
@@ -244,30 +347,42 @@ public class TownHubController : MonoBehaviour
         else if (tab == MainNavTab.Character)
         {
             TutorialDirector.Instance?.NotifyTownTab(tab);
-            _tavern?.HidePage();
-            _adventure?.HidePage();
-            _log?.HidePage();
             _character?.ShowPage();
             GameBgm.Play(GameBgm.Track.Town);
         }
         else if (tab == MainNavTab.Log)
         {
-            _tavern?.HidePage();
-            _adventure?.HidePage();
-            _character?.HidePage();
             EnsureLogPreloaded();
             _log?.ShowPage();
             GameBgm.Play(GameBgm.Track.Town);
         }
         else
         {
-            _tavern?.HidePage();
-            _adventure?.HidePage();
-            _character?.HidePage();
-            _log?.HidePage();
             ShowGuildOnly();
             GameBgm.Play(GameBgm.Track.Town);
         }
+    }
+
+    ITownPage PageOf(MainNavTab tab)
+    {
+        if (tab == MainNavTab.Tavern) return _tavern;
+        if (tab == MainNavTab.Adventure) return _adventure;
+        if (tab == MainNavTab.Character) return _character;
+        if (tab == MainNavTab.Log) return _log;
+        return null;
+    }
+
+    static bool IsPageActive(ITownPage page)
+    {
+        var mb = page as MonoBehaviour;
+        return mb != null && mb.gameObject.activeSelf;
+    }
+
+    static void HideIfVisible(ITownPage page)
+    {
+        if (page == null) return;
+        if (!IsPageActive(page)) return;
+        page.HidePage();
     }
 
     void ShowGuildOnly()

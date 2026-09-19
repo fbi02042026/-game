@@ -71,6 +71,7 @@ public class BootManager : MonoBehaviour
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = rt.offsetMax = Vector2.zero;
+        // 保留纯黑依据：引擎启动到健康忠告之间的 Boot 黑幕，最早一帧，底下无任何 UI。
         imgGo.GetComponent<Image>().color = Color.black;
     }
 

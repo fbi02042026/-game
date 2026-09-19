@@ -100,6 +100,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         MainBottomNav.Instance?.SetSelected(MainNavTab.Log, notify: false);
         EnsureFrameClearsChrome();
         EnsureCloseButtonPosition();
+        EnsureSidebarLayout();
         _phase3 = AdventureLogPhase3Panel.Ensure(this);
         RedDot.RefreshCommon();
         BindSidebarTabIcons();
@@ -185,6 +186,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             _codex = new AdventureLogCodexPanel(frame);
         HidePaper1Template();
         PrepareDoneTemplate();
+        EnsureLogChromeUsable();
         WireTabs();
         BindSidebarTabIcons();
         WireButtons();
@@ -374,6 +376,168 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
         _rowTemplate = done.gameObject;
         _rowTemplate.SetActive(false);
+
+        // 「已完成/已记录」状态字兜底：预制体 Progress 框宽仅 8px 且锚出行右缘，
+        // 文字靠溢出渲染，右半被 Scroll Viewport 的 Mask 裁掉。
+        // 运行时把框收进行内右端并加 BestFit，不改预制体文件。
+        var prog = done.Find("Progress");
+        if (prog != null)
+        {
+            var prt = (RectTransform)prog;
+            prt.anchorMin = new Vector2(1f, 0.5f);
+            prt.anchorMax = new Vector2(1f, 0.5f);
+            prt.pivot = new Vector2(1f, 0.5f);
+            // y 略偏下（相对行中心 −10）：状态字在行内靠下时不容易被上边缘压住，整行都能露出来
+            prt.anchoredPosition = new Vector2(-16f, -10f);
+            prt.sizeDelta = new Vector2(264f, 44f);
+            var pt = prog.GetComponent<Text>();
+            if (pt != null)
+            {
+                pt.alignment = TextAnchor.MiddleRight;
+                pt.horizontalOverflow = HorizontalWrapMode.Wrap;
+                pt.resizeTextForBestFit = true;
+                pt.resizeTextMinSize = 16;
+                int baseSize = Mathf.RoundToInt(pt.fontSize);
+                pt.resizeTextMaxSize = Mathf.Clamp(baseSize, 20, 64);
+            }
+        }
+
+        // 行标题同样兜底：预制体框是跨行全宽（还超出行左缘），长标题会横向溢出被 Mask 裁。
+        // 左右分区：Objective 只占左段，右侧整段留给 Progress，互不覆盖。
+        var obj = done.Find("Objective");
+        if (obj != null)
+        {
+            var ort = (RectTransform)obj;
+            ort.anchorMin = new Vector2(0f, 0.5f);
+            ort.anchorMax = new Vector2(1f, 0.5f);
+            ort.pivot = new Vector2(0.5f, 0.5f);
+            ort.offsetMin = new Vector2(16f, 0f);
+            ort.offsetMax = new Vector2(-300f, 0f);
+            ort.anchoredPosition = Vector2.zero;
+            var ot = obj.GetComponent<Text>();
+            if (ot != null)
+            {
+                ot.alignment = TextAnchor.MiddleLeft;
+                ot.horizontalOverflow = HorizontalWrapMode.Wrap;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 冒险日志可点性/标题自适应兜底（不改预制体）：
+    /// 1) Paper / Paper1 是全屏拉伸容器，自身 Image 参与射线且渲染序压在 Sidebar 之上，
+    ///    点击命中后沿父链找不到 Button 就被吞掉 —— 左侧标签永远点不到。关掉容器自身
+    ///    的 raycast（子级滚动区/按钮/格子都是后代，不受影响）。
+    /// 2) 标题「冒险日志」的文本框(约 150 宽)没跟随横幅 bg(291×103)，字号大时溢出错位。
+    ///    文本框改为居中铺满横幅内缩区域，并开 BestFit 自适应字号。
+    /// </summary>
+    void EnsureLogChromeUsable()
+    {
+        DisableOwnRaycast(_paper);
+        DisableOwnRaycast(transform.Find("Root/Frame/Paper1")?.gameObject);
+
+        var biaotou = transform.Find("Root/Frame/biaotou");
+        if (biaotou == null) return;
+
+        var bgTr = biaotou.Find("bg");
+        var bgImg = bgTr != null ? bgTr.GetComponent<Image>() : null;
+        if (bgImg != null) bgImg.raycastTarget = false;
+
+        var titleTr = biaotou.Find("Title (1)");
+        if (titleTr == null)
+        {
+            // 名字对不上时退化为取 biaotou 下的第一个 Text
+            for (int i = 0; i < biaotou.childCount && titleTr == null; i++)
+            {
+                var c = biaotou.GetChild(i);
+                if (c.GetComponent<Text>() != null) titleTr = c;
+            }
+        }
+        if (titleTr == null) return;
+
+        var t = titleTr.GetComponent<Text>();
+        if (t != null) t.raycastTarget = false;
+
+        var rt = (RectTransform)titleTr;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = new Vector2(260f, 78f); // 横幅 291×103 内缩留边
+
+        if (t != null)
+        {
+            t.alignment = TextAnchor.MiddleCenter;
+            t.horizontalOverflow = HorizontalWrapMode.Wrap;
+            t.verticalOverflow = VerticalWrapMode.Truncate;
+            t.resizeTextForBestFit = true;
+            int baseSize = Mathf.RoundToInt(t.fontSize);
+            t.resizeTextMaxSize = Mathf.Clamp(baseSize, 20, 64);
+            t.resizeTextMinSize = 18;
+            if (t.resizeTextMinSize >= t.resizeTextMaxSize)
+                t.resizeTextMinSize = Mathf.Max(10, t.resizeTextMaxSize / 2);
+        }
+    }
+
+    static void DisableOwnRaycast(GameObject go)
+    {
+        if (go == null) return;
+        var img = go.GetComponent<Image>();
+        if (img != null) img.raycastTarget = false;
+    }
+
+    /// <summary>
+    /// 侧栏布局兜底（不改预制体文件）：
+    /// 预制体的标题横幅(biaotou)和 Tab 锚点是按旧 Frame 尺寸摆的，Frame 被运行时拉满后
+    /// 横幅漂进标签区、把第一个「主线」标签顶出屏外。这里显式重排：
+    /// 横幅钉在 Frame 左上角，Tab0~5 从横幅下方开始等距排到 Emblem 之上，任何分辨率都不重叠。
+    /// </summary>
+    void EnsureSidebarLayout()
+    {
+        var frame = transform.Find("Root/Frame") as RectTransform;
+        var sidebar = frame != null ? frame.Find("Sidebar") as RectTransform : null;
+        var tabs = sidebar != null ? sidebar.Find("Tabs") as RectTransform : null;
+        if (frame == null || tabs == null) return;
+
+        float frameH = frame.rect.height;
+        if (frameH < 400f) return;
+
+        // Tabs：占 Sidebar 左侧 300 宽、全高
+        tabs.anchorMin = new Vector2(0f, 0f);
+        tabs.anchorMax = new Vector2(0f, 1f);
+        tabs.pivot = new Vector2(0f, 0.5f);
+        tabs.offsetMin = new Vector2(0f, 0f);
+        tabs.offsetMax = new Vector2(300f, 0f);
+
+        // 标题横幅：钉在 Frame 左上（bg 291×103，biaotou 中心对 bg 中心）
+        float headerH = 103f, headerTopPad = 10f;
+        var biaotou = frame.Find("biaotou") as RectTransform;
+        if (biaotou != null)
+        {
+            biaotou.anchorMin = biaotou.anchorMax = new Vector2(0f, 1f);
+            biaotou.pivot = new Vector2(0.5f, 0.5f);
+            biaotou.anchoredPosition = new Vector2(12f + 145.5f, -(headerTopPad + headerH * 0.5f));
+            biaotou.SetAsLastSibling(); // 横幅最上，但已不与标签重叠
+        }
+
+        // 底部给徽章(Emblem)留白
+        const float bottomReserve = 175f;
+        float top = headerTopPad + headerH + 14f;
+        float availH = frameH - top - bottomReserve;
+        float minStep = 62f;
+        float step = Mathf.Max(minStep, availH / TabNames.Length);
+
+        for (int i = 0; i < TabNames.Length; i++)
+        {
+            var tab = tabs.Find("Tab" + i) as RectTransform;
+            if (tab == null) continue;
+            tab.anchorMin = tab.anchorMax = new Vector2(0.5f, 1f);
+            tab.pivot = new Vector2(0.5f, 1f);
+            const float h = 65f; // 预制体 Tab 统一 162×65
+            tab.sizeDelta = new Vector2(162f, h);
+            // 每个标签在自己的 step 槽位里垂直居中
+            tab.anchoredPosition = new Vector2(150f, -(top + step * i + (step - h) * 0.5f));
+        }
     }
 
     void WireTabs()
@@ -740,14 +904,29 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
     void RebuildRows(List<LogRow> rows)
     {
+        if (_rowTemplate == null || _listContent == null) return;
+
+        // 行数一致时复用已有行，只更新文本与点击回调。
+        // 之前每次切页都整批 Destroy + Instantiate（几十行），是底栏切页卡顿的大头之一。
+        if (_spawnedRows.Count == rows.Count && rows.Count > 0)
+        {
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var exist = _spawnedRows[i];
+                if (exist == null) continue;
+                if (!exist.activeSelf) exist.SetActive(true);
+                ApplyRow(exist.transform, rows[i], showHeader: i == 0);
+                WireRowClick(exist, rows[i]);
+            }
+            return;
+        }
+
         for (int i = 0; i < _spawnedRows.Count; i++)
         {
             if (_spawnedRows[i] != null)
                 Destroy(_spawnedRows[i]);
         }
         _spawnedRows.Clear();
-
-        if (_rowTemplate == null || _listContent == null) return;
 
         for (int i = 0; i < rows.Count; i++)
         {

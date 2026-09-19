@@ -461,15 +461,15 @@ RectTransform:
   m_GameObject: {fileID: 6022}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.78, y: 0.78, z: 0.78}
+  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
   m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 6019}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.15}
   m_AnchorMax: {x: 0.5, y: 0.15}
-  m_AnchoredPosition: {x: 0, y: -237}
-  m_SizeDelta: {x: 641, y: 955}
+  m_AnchoredPosition: {x: 0, y: -226}
+  m_SizeDelta: {x: 1171, y: 1345}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!222 &6024
 CanvasRenderer:
@@ -528,7 +528,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &6027
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4649,7 +4649,9 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 1
     m_LineSpacing: 1.3
-  m_Text: "\u751F\u547D\u4F4E\u4E8E 60% \u6216\u88AB\u5305\u56F4\u65F6\u81EA\u52A8\u91CA\u653E\uFF0C\u83B7\u5F97 35% \u6700\u5927\u751F\u547D\u7684\u62A4\u76FE\uFF0C\u6301\u7EED 5 \u79D2\uFF0C\u671F\u95F4\u514D\u75AB\u63A7\u5236\u3002\u51B7\u5374 18 \u79D2\u3002"
+  m_Text: "\u751F\u547D\u4F4E\u4E8E 60% \u6216\u88AB\u5305\u56F4\u65F6\u81EA\u52A8\u91CA\u653E\uFF0C\u83B7\u5F97
+    35% \u6700\u5927\u751F\u547D\u7684\u62A4\u76FE\uFF0C\u6301\u7EED 5 \u79D2\uFF0C\u671F\u95F4\u514D\u75AB\u63A7\u5236\u3002\u51B7\u5374
+    18 \u79D2\u3002"
 --- !u!1 &174286056997947571
 GameObject:
   m_ObjectHideFlags: 0

@@ -51,6 +51,7 @@ public class StudioLogoSplash : MonoBehaviour
         blocker.transform.SetParent(transform, false);
         Stretch(blocker.GetComponent<RectTransform>());
         var blockerImg = blocker.GetComponent<Image>();
+        // 保留纯黑依据：开机 Logo 片头，纯启动演出，底下无 UI 可遮。
         blockerImg.color = Color.black;
         blockerImg.raycastTarget = true;
 

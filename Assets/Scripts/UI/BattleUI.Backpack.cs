@@ -86,6 +86,10 @@ public partial class BattleUI : MonoBehaviour
                 gridY = gy
             };
             ui.CaptureDefaultVisual();
+            // 预制体格子没有锁图案时补一层（半透明遮罩 + 锁图标 + 拦截点击），
+            // 显隐仍由后续的 SetRowLocked 决定。
+            if (ui.lockedOverlay == null)
+                ui.lockedOverlay = BackpackGridVisual.EnsureLockOverlay(cell);
             list.Add(ui);
         }
         gridCells = list;

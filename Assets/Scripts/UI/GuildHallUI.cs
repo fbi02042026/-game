@@ -373,21 +373,19 @@ public class GuildHallUI : MonoBehaviour
                 }
             }
         }
+        // 2026-09-19：这两个加号原是「看广告」入口，现已改成钻石开启，不属于广告内容，
+        // 所以聚光灯版本也要显示（原先 SpotlightBuild.Enabled 时会整个隐藏）。
         if (goldPlusButton != null)
         {
-            bool showAd = !SpotlightBuild.Enabled;
-            goldPlusButton.gameObject.SetActive(showAd);
+            goldPlusButton.gameObject.SetActive(true);
             goldPlusButton.onClick.RemoveAllListeners();
-            if (showAd)
-                goldPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimGold);
+            goldPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimGold);
         }
         if (staminaPlusButton != null)
         {
-            bool showAd = !SpotlightBuild.Enabled;
-            staminaPlusButton.gameObject.SetActive(showAd);
+            staminaPlusButton.gameObject.SetActive(true);
             staminaPlusButton.onClick.RemoveAllListeners();
-            if (showAd)
-                staminaPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimStamina);
+            staminaPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimStamina);
         }
     }
 

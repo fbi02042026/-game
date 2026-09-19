@@ -974,6 +974,20 @@ public class AdventureUI : MonoBehaviour, ITownPage
         RefreshAll();
     }
 
+    /// <summary>
+    /// 任务跳转用（2026-09-19 新增）：把冒险页定位到指定章节。
+    /// 只改选中章 + 刷新，不做其他事；章节现在进不去就静默保留当前选择，
+    /// 免得从任务条点进来被一句「未解锁」打断。
+    /// </summary>
+    public void FocusChapter(int chapter)
+    {
+        if (chapter < 1 || chapter > 8) return;
+        if (!ChapterRouteTable.CanEnter(chapter, SaveSystem.Instance?.Data)) return;
+
+        _selectedChapter = chapter;
+        if (_built && gameObject.activeInHierarchy) RefreshAll();
+    }
+
     void OnSelectDiff(int idx)
     {
         if (!IsModePlayable(_selectedMode))

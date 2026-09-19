@@ -135,7 +135,7 @@ public class PreLevelEquipUI : MonoBehaviour
         refRt.anchoredPosition = new Vector2(110f, 28f);
         refRt.sizeDelta = new Vector2(200f, 52f);
         refresh.GetComponent<Image>().color = new Color(0.35f, 0.4f, 0.55f, 1f);
-        CreateText(refresh.transform, "T", "刷新(广告)", 22, TextAnchor.MiddleCenter);
+        CreateText(refresh.transform, "T", RefreshButtonLabel(), 22, TextAnchor.MiddleCenter);
         refresh.GetComponent<Button>().onClick.AddListener(OnRefresh);
     }
 
@@ -164,7 +164,9 @@ public class PreLevelEquipUI : MonoBehaviour
         if (_hint != null && _sys != null)
             _hint.text = _sys.hasRefreshedThisRun
                 ? "本局已刷新过"
-                : (SpotlightBuild.Enabled ? "可免费刷新一次" : "可看广告刷新一次");
+                : (GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT
+                    ? (SpotlightBuild.Enabled ? "可免费刷新一次" : "可看广告刷新一次")
+                    : $"可钻石刷新一次（{GameConfig.AD_SLOT_PRELEVEL_REFRESH_DIAMOND}钻）");
     }
 
     static string DisplayName(EquipmentData d)
@@ -193,6 +195,15 @@ public class PreLevelEquipUI : MonoBehaviour
         Close();
     }
 
+    /// <summary>刷新按钮文案：广告关闭时直接写钻石定价。</summary>
+    static string RefreshButtonLabel()
+    {
+        // TODO: 聚光灯上线后改为「看广告」；当前阶段（2026-09-19 主人拍板）统一走钻石
+        return GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT
+            ? "刷新(广告)"
+            : $"钻石刷新({GameConfig.AD_SLOT_PRELEVEL_REFRESH_DIAMOND}钻)";
+    }
+
     void OnRefresh()
     {
         if (_sys == null) return;
@@ -200,9 +211,11 @@ public class PreLevelEquipUI : MonoBehaviour
         {
             _selected = 0;
             RefreshCards();
+            return;
         }
-        else
-            UIManager.Instance?.ShowToast("本局无法再刷新");
+        // 钻石不足时差额已由 PreLevelSystem 提示，这里不覆盖，只对「本局已刷过」补一句
+        if (_sys.hasRefreshedThisRun)
+            UIManager.Instance?.ShowToast("本局已刷新过");
     }
 
     void Close()

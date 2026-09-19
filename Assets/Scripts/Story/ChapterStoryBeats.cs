@@ -28,6 +28,121 @@ public static class ChapterStoryBeats
         }
     }
 
+    /// <summary>
+    /// 章节进关后、首波怪物出现前尝试播放战前剧情（与战后 TryPlayPostBoss 对称的两段式）。
+    /// 返回 true 表示有脚本在播（调用方应等回调）；false 表示无脚本，直接刷首波。
+    /// 文案方向（2026-09-19 定调）：世界观 + 「玩家 × 艾丽娅」的过往
+    /// （三枚铜板买面包 / 转正仪式 / 她介绍你进公会 / 第七支小队），
+    /// 并讲清「这是什么地方 / 为什么出现怪 / 跟主线什么关系」。
+    /// 配置方式与战后一致：静态数组 + StoryDirector；后续若出剧情配置表可一并迁表。
+    /// </summary>
+    public static bool TryPlayPreBattle(int chapter, Action onDone)
+    {
+        switch (chapter)
+        {
+            case 1: PlayPre1(onDone); return true;
+            case 2: PlayPre2(onDone); return true;
+            case 3: PlayPre3(onDone); return true;
+            case 4: PlayPre4(onDone); return true;
+            case 5: PlayPre5(onDone); return true;
+            case 6: PlayPre6(onDone); return true;
+            case 7: PlayPre7(onDone); return true;
+            case 8: PlayPre8(onDone); return true;
+            default: return false;
+        }
+    }
+
+    // ---------- 战前剧情｜第 1–8 章：每章 2–4 句，首波前弹出 ----------
+
+    static void PlayPre1(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Solo("艾丽娅", "还记得吗？三年前你揣着三枚铜板买面包，排在我后面。", StoryPortraits.Xiaomei),
+            StoryDirector.Solo("艾丽娅", "现在你是公会第七支小队的队长了。今天只是新人试炼，别紧张。", StoryPortraits.Xiaomei),
+            StoryDirector.Narration("这里是裂隙第一层的暮影森林。怪物是从缝里渗出来的——清完这波，把样本带回去交差。"),
+            StoryDirector.Solo("你", "转正仪式上说好的，债没还清之前我哪都不去。走吧。", StoryPortraits.Player),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    static void PlayPre2(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("幽冥墓园：城外的旧墓园，三年前起埋着的东西开始往外爬。"),
+            StoryDirector.Solo("艾丽娅", "这片园里埋着以前的冒险者。公会对外说是地脉波动——你信吗？", StoryPortraits.Xiaomei),
+            StoryDirector.Solo("你", "第七支小队之前的六支，全都进过裂缝。一块碑都没立回来。", StoryPortraits.Player),
+            StoryDirector.Solo("艾丽娅", "所以我们才要走到最里面，看看他们到底碰上了什么。", StoryPortraits.Xiaomei),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    static void PlayPre3(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Solo("艾丽娅", "岔路这边是翡翠秘境。十一年前，有一整支小队消失在这一层。", StoryPortraits.Xiaomei),
+            StoryDirector.Solo("艾丽娅", "你转正那天，会长亲自给你别上徽章——他看我们的眼神，像在数还剩几个人。", StoryPortraits.Xiaomei),
+            StoryDirector.Solo("你", "路标是新的。有人一直走在我们前面。", StoryPortraits.Player),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    static void PlayPre4(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("晨曦草原：裂隙第二层的风车草原。叶片一圈三年，替谁数着日子。"),
+            StoryDirector.Solo("你", "艾丽娅，当年介绍我进公会的时候，你是不是早就知道会有今天？", StoryPortraits.Player),
+            StoryDirector.Solo("艾丽娅", "我只知道第七支小队不能白组。走吧——今天风停了，这不正常。", StoryPortraits.Xiaomei),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    static void PlayPre5(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Solo("艾丽娅", "三条岔路在海岛遗迹汇合。那艘补给船的残骸是新的，最多三个月。", StoryPortraits.Xiaomei),
+            StoryDirector.Solo("你", "三个月前……正好是我们转正的月份。", StoryPortraits.Player),
+            StoryDirector.Solo("艾丽娅", "怪物越来越像被赶过来的。有什么东西在深处催它们。", StoryPortraits.Xiaomei),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    static void PlayPre6(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("巨岩深窟：再往下，诸神留下的东西就压在这一层底下。"),
+            StoryDirector.Solo("艾丽娅", "当年我拉你进公会，你说『面包钱还没还我呢』。现在我怕你还想讨这笔债。", StoryPortraits.Xiaomei),
+            StoryDirector.Solo("你", "三枚铜板，记着呢。等出去了，你请。", StoryPortraits.Player),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    static void PlayPre7(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("赤焰炼狱：通往最深处前的最后一层。这里的热不是火——是裂缝本身在烧。"),
+            StoryDirector.Solo("你", "她把话说完就自己先进来了。炼狱烧不穿她留下的脚印。", StoryPortraits.Player),
+            StoryDirector.Solo("你", "第七支小队走到这儿的，只剩我一个。答案和债，今天一起结。", StoryPortraits.Player),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    static void PlayPre8(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("永霜雪境：裂隙最深处，雪一直下。这一趟的终点就在前面。"),
+            StoryDirector.Solo("你", "从三枚铜板到今天。艾丽娅，这笔账，马上就能结清了。", StoryPortraits.Player),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
     // ---------- N2｜第 2 章（分支 A · 亡者之径）：这不是第一次 ----------
 
     static void PlayN2(Action onDone)

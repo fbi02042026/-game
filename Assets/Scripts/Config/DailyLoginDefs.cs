@@ -110,7 +110,7 @@ public static class DailyLoginDefs
         Res("体力 ×15",           ResourceWallet.ResourceType.Stamina,       15), // D1
         Res("金币 ×250",          ResourceWallet.ResourceType.Gold,         250), // D2
         Frag("塔克碎片 ×3",       STARTER_MERC_ID,                            3), // D3
-        Res("天赋石 ×1",          ResourceWallet.ResourceType.TalentPoint,    1), // D4
+        Res("天赋石 ×3",          ResourceWallet.ResourceType.TalentPoint,    3), // D4 每日登录保底 3 石
         Res("强化石 ×2",          ResourceWallet.ResourceType.EnchantStone,   2), // D5
         Res("分解材料 ×8",        ResourceWallet.ResourceType.DecomposeMat,   8), // D6
         Pack(Res("钻石 ×60",      ResourceWallet.ResourceType.Diamond,       60),
