@@ -1,0 +1,17 @@
+﻿# 关卡事件层 V1.0：波与波之间随机插入 1~2 个，有取舍感、有预告。
+#
+# 抽签规则：命中「起始章节 ≤ 当前章」的候选 → 按权重抽 1 个挂到某一波（非首波、非 Boss 波）。
+# 单关事件数由 WavePlanner.RollEventCount 按章概率决定（1~2 个，第 1~2 章恒为 0）。
+# 事件层是「额外的」：StageEventTable.EventsEnabled=false 时本关与改动前完全一致。
+#
+# effect 字段格式：TYPE|key=val;key=val（无 ASCII 逗号，避免列错位）
+#   REINFORCE countMul=下一波人数倍率 goldMul=本关金币倍率
+#   ELITE     eliteAdd=额外精英数 stone=通关发放强化石数
+#   SUPPLY    healPct=出兵前全队回血比例
+#   HAZARD    movePenalty=英雄移速惩罚(0~1) goldMul=通关补偿金币倍率
+#
+# id,name,weight,startChapter,telegraph,effect
+E01,增援突袭,10,3,敌援将至：下一波人数+30% 本关金币+20%,REINFORCE|countMul=1.30;goldMul=1.20
+E02,精英小队,10,3,精英小队压境：下一波多一名精英 击破得强化石,ELITE|eliteAdd=1;stone=1
+E03,补给点,4,3,发现补给点：下一波前全队回血15%,SUPPLY|healPct=0.15
+E04,环境灾害,8,5,环境灾害：下波脚步迟滞 通关补偿更丰,HAZARD|movePenalty=0.20;goldMul=1.25

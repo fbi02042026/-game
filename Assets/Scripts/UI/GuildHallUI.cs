@@ -389,6 +389,8 @@ public class GuildHallUI : MonoBehaviour
         }
     }
 
+    // 2026-09-20 主人要求：离线金币（含城镇主动入口 + 钻石翻倍）已暂停，相关代码已移除，待重设计后重新实现。
+
     static void SetBtnHidden(Button btn)
     {
         if (btn != null) btn.gameObject.SetActive(false);

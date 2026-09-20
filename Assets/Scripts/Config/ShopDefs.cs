@@ -131,6 +131,8 @@ public static class ShopDefs
         // 现按「首月 3 次单抽、4 个月 1 次十连」重定：150 / 1350（十连仍是 9 折）。
         // 换算效率：单抽 150 钻换一个技能（普通直购 2000 金、稀有 6000 金）≈ 13~40 金/钻，
         // 与金币袋的 16 金/钻 同一量级，两者都值得买、会形成取舍。
+        // 2026-09-20 钻石经济调整（方案 A+C）：在上述基础上再把金币袋 50→30、天赋石×3 200→120，
+        // 进一步压低日常刚需的钻石门槛，与「每日免费额度」配套，确保零氪玩家第 3 天不撞墙；抽卡 150/1350 维持不动。
         new Item {
             id = "shop_gacha_1", name = "技能券 · 单抽", kind = Kind.Gacha,
             desc = "从当前未解锁的技能里随机解锁 1 个。\n抽到已拥有的会转成该技能碎片。",
@@ -155,14 +157,14 @@ public static class ShopDefs
         new Item {
             id = "shop_gold_bag", name = "金币袋", kind = Kind.Resource,
             desc = "立即获得 800 金币。",
-            currency = ResourceWallet.ResourceType.Diamond, price = 50,
+            currency = ResourceWallet.ResourceType.Diamond, price = 30,
             grantType = ResourceWallet.ResourceType.Gold, grantAmount = 800,
             dailyLimit = 5
         },
         new Item {
             id = "shop_talent_stone_3", name = "天赋石 ×3", kind = Kind.Resource,
             desc = "天赋树与技能解锁的通用货币。",
-            currency = ResourceWallet.ResourceType.Diamond, price = 200,
+            currency = ResourceWallet.ResourceType.Diamond, price = 120,
             grantType = ResourceWallet.ResourceType.TalentPoint, grantAmount = 3,
             dailyLimit = 3
         },

@@ -1,3 +1,14 @@
+// ============================================================
+//  [已停用 / DEPRECATED] LegacyChooseUI
+//  原因：本弹窗用于"死亡/撤离时从本局装备中选 1 件作为遗产带回"。
+//        其唯一入口 UIManager.ShowLegacyChooseUI() 已全工程零调用点（死代码），
+//        经主人明确要求，停用「遗产选择界面」功能。
+//  处理：本文件【保留未删】，类内逻辑未做任何改动。
+//        待主人关闭 Unity 引擎、确认后，可直接删除整个 LegacyChooseUI.cs
+//        及其 .meta 文件（注意：删除前必须完全关闭引擎，以免 meta 错乱）。
+//  关联：GameConfig.UiSort.BattleLegacyChoose (= 960) 被 CodexInfoPopupUI.cs 复用，
+//        请勿随本文件一并删除该常量。
+// ============================================================
 using System;
 using System.Collections.Generic;
 using UnityEngine;

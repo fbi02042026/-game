@@ -23,6 +23,22 @@ public class GameSceneManager : Singleton<GameSceneManager>
         base.Awake();
     }
 
+    /// <summary>
+    /// 切后台 / 回到前台。微信小游戏侧 wx.onHide→pause=true，wx.onShow→pause=false。
+    /// 切后台即结束本会话（计时 + flush）；回前台重新开一个会话。
+    /// </summary>
+    void OnApplicationPause(bool pause)
+    {
+        if (pause) Analytics.SessionEnd();
+        else Analytics.SessionStart();
+    }
+
+    /// <summary>进程退出：结束会话并 flush，避免丢失尾数据。</summary>
+    void OnApplicationQuit()
+    {
+        Analytics.SessionEnd();
+    }
+
     public void LoadTownScene() => LoadTownSceneAsync();
 
     public void GoMainHub() => LoadTownSceneAsync();

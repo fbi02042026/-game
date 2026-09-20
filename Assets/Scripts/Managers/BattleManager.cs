@@ -55,6 +55,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     public bool SkipLegacyOnEvacuate { get; set; }
     /// <summary>本局金币获得倍率（剧情选择等）</summary>
     public float runGoldGainMul = 1f;
+    /// <summary>关卡事件层金币补偿倍率（增援突袭 / 环境灾害）。默认 1 = 无事件，关闭事件层时恒为 1。</summary>
+    public float stageEventGoldMul = 1f;
 
     /// <summary>
     /// 结算金币时真正该用的倍率 = 局内修正 × 天赋「金币掉落」（AttrType.GoldBonus）。
@@ -69,7 +71,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             var hero = Hero.Instance;
             if (hero != null && hero.attr != null)
                 bonus = Mathf.Max(0f, hero.attr.GetAttr(AttrType.GoldBonus));
-            return runGoldGainMul * (1f + bonus);
+            return runGoldGainMul * (1f + bonus) * stageEventGoldMul;
         }
     }
     /// <summary>当前关任务清关金币（HUD 预览 + 开箱发放）</summary>
@@ -854,6 +856,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         WaveSlotTable.Reload();
         ChapterStatScaleTable.Reload();
         ChapterRouteTable.Reload();
+        StageEventTable.Reload(); // 事件层 V1.0：每关重载（缺表/关闭时 Draw 返回 null，回退无事件）
 
         currentStage = stage;
         ClearAllMonsters();
@@ -953,6 +956,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             _battleIntroFinished = false;
             _battleStartTime = Time.unscaledTime;
             EnsureMonsterPrefabReady();
+            Analytics.StageStart(CurrentChapter, stage.stageIndex); // 埋点：关卡开始
 
             Debug.Log($"[BattleManager] LoadStage 战斗关 type={stage.type} waves={_waves?.Count ?? 0} heroX={UnitBase.GetCombatX(hero):F2}");
 
@@ -1891,6 +1895,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     public void OnStageClear()
     {
         // 兼容旧调用：直接走完整结算选关（无宝箱时）
+        Planner?.ClearStageEventState(); // 事件层：清场，避免移速/金币倍率泄漏到下一关
         FinishStageAfterPortalReached();
     }
 
@@ -1931,6 +1936,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     {
         if (_rewardSequenceStarted || _stageCleared) return;
         if (CountAliveMonsters() > 0) return;
+        Planner?.GrantStageEventRewards(); // 事件层：发放精英小队累计的强化石
         TryGrantStageQuestGold();
         GrantStageClues();
         GrantStageGrowDrops();
@@ -2177,6 +2183,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         ChapterManager.Instance?.OnStageComplete();
 
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : CurrentChapter;
+        Analytics.StageEnd(ch, currentStage != null ? currentStage.stageIndex : 0, true,
+            (double)(Time.unscaledTime - _battleStartTime)); // 埋点：关卡通关（胜利）
         bool bossStage = currentStage != null && currentStage.type == StageType.Boss;
         AdventureLogFragments.TryDropOnStageClear(ch, bossStage);
 
@@ -2285,6 +2293,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     {
         Planner?.NotifyStageResult(true, 0f); // V3.0 压力阀：死过 → 下一关减一波
         isInBattle = false;
+        Analytics.StageEnd(CurrentChapter, currentStage != null ? currentStage.stageIndex : 0, false,
+            (double)(Time.unscaledTime - _battleStartTime)); // 埋点：关卡结束（阵亡/失败）
         MercenaryManager.Instance?.ClearAllMercs();
         AdventureLogAchievements.OnDied();
         EndRunLoadout();
@@ -2301,6 +2311,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     {
         TryGrantStageQuestGoldIfQuestComplete();
         isInBattle = false;
+        Analytics.StageEnd(CurrentChapter, currentStage != null ? currentStage.stageIndex : 0, false,
+            (double)(Time.unscaledTime - _battleStartTime)); // 埋点：关卡结束（主动撤离）
         ClearAllMonsters();
         MercenaryManager.Instance?.ClearAllMercs();
         // 主动撤离 = 本局结束：构筑作废，但金币/天赋石已入账

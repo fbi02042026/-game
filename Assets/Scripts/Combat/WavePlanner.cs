@@ -537,6 +537,7 @@ public sealed class WavePlanner
     {
         if (_waves == null || _waves.Count == 0 || hero == null) return;
         EnsureMonsterPrefabReady();
+        RestoreHazardPenalty(); // 清掉上一波灾害残留，避免跨波泄漏
 
         int waveIdx = FindNextUnspawnedWaveIndex();
         if (waveIdx < 0)
@@ -555,6 +556,13 @@ public sealed class WavePlanner
         try
         {
             int aliveBefore = CountAliveMonsters();
+            // 事件层：本波若为补给/灾害，出兵前先结算预效果（仅一次）
+            if (wave != null && !wave.stageEventApplied)
+            {
+                if (wave.stageEventHealPct > 0f) HealTeamOnEvent(wave);
+                else if (wave.stageEventMovePenalty > 0f) ApplyHazardPenalty(wave);
+                wave.stageEventApplied = true;
+            }
             SpawnWave(wave, waveIdx);
             int aliveAfter = CountAliveMonsters();
             if (aliveAfter > aliveBefore)
@@ -693,6 +701,7 @@ public sealed class WavePlanner
             _waves.Add(wave);
         }
 
+        PlanStageEvents();
         _totalWaves = _waves.Count;
         string tag = elite ? "精英关" : "普通关";
         string modeTag = string.IsNullOrEmpty(_stageModeName) ? "无模式(旧逻辑)" : $"模式={_stageModeName}[{_stageModeTelegraph}]";
@@ -735,6 +744,173 @@ public sealed class WavePlanner
     {
         _pressureStreak = 0;
         _lastStageDied = false;
+    }
+
+    // ============================================================
+    // 关卡事件层 V1.0（A 部分）：波与波之间随机插入 1~2 个有取舍的事件
+    // —— 完全「额外」：关闭 StageEventTable.EventsEnabled / 第 1~2 章 / 无候选 时一律不触发，
+    //    行为与接入前完全一致（不碰战斗核心公式、不改默认人数/血量缩放）。
+    // ============================================================
+    int _pendingStones;            // 精英小队累计的强化石，通关时发放
+    bool _hazardActive;
+    float _hazardMoveBase;
+
+    /// <summary>
+    /// 本关波次铺好后调用：按章概率抽 0~2 个事件挂到「非首波、非 Boss 波」上。
+    /// 第 1~2 章直接拦截（硬约束）。关掉事件层 / 缺表 时整段跳过。
+    /// </summary>
+    internal void PlanStageEvents()
+    {
+        // 每关重置事件层累计状态，保证「关掉即与改动前一致」
+        _pendingStones = 0;
+        _hazardActive = false;
+        if (bm != null) bm.stageEventGoldMul = 1f;
+
+        if (!StageEventTable.EventsEnabled) return;
+        if (CurrentChapter <= 2) return;            // 硬约束：保护新手期手感
+        if (_waves == null || _waves.Count == 0) return;
+
+        // 候选波：非 Boss、且不是第一波（事件插在波与波之间）
+        var candidate = new List<int>();
+        for (int i = 0; i < _waves.Count; i++)
+        {
+            if (_waves[i] != null && !_waves[i].isBossWave && i > 0)
+                candidate.Add(i);
+        }
+        if (candidate.Count == 0) return;
+
+        int want = RollEventCount(CurrentChapter);
+        if (want <= 0) return;
+
+        // 洗牌候选，避免事件总挂在固定波
+        for (int i = candidate.Count - 1; i > 0; i--)
+        {
+            int j = UnityEngine.Random.Range(0, i + 1);
+            int t = candidate[i]; candidate[i] = candidate[j]; candidate[j] = t;
+        }
+
+        int applied = 0;
+        int stageIdx = currentStage != null ? currentStage.stageIndex : 0;
+        foreach (int wi in candidate)
+        {
+            if (applied >= want) break;
+            var ev = StageEventTable.Draw(CurrentChapter, stageIdx);
+            if (ev == null) continue;
+            ApplyStageEvent(ev, _waves[wi]);
+            applied++;
+        }
+        if (applied > 0)
+            GamePerf.Log($"[StageEvent] 本关插入 {applied} 个事件（章{CurrentChapter} 目标{want}）");
+    }
+
+    /// <summary>单关事件数：第 3 章起概率渐增，最多 2 个；1~2 章恒 0。</summary>
+    int RollEventCount(int chapter)
+    {
+        if (chapter <= 2) return 0;
+        // 至少一个事件的概率随章上升：ch3≈20% → ch7+≈60%
+        float p1 = Mathf.Clamp(0.20f + (chapter - 3) * 0.10f, 0.20f, 0.60f);
+        if (UnityEngine.Random.value > p1) return 0;
+        // 第二个事件概率较低：ch3≈5% → ch7+≈35%
+        float p2 = Mathf.Clamp(0.05f + (chapter - 3) * 0.075f, 0.05f, 0.35f);
+        return UnityEngine.Random.value < p2 ? 2 : 1;
+    }
+
+    /// <summary>把一个事件挂到目标波上，落实其「预效果」参数。</summary>
+    void ApplyStageEvent(StageEventTable.EventDef ev, WaveData wave)
+    {
+        if (ev == null || wave == null) return;
+        wave.stageEventId = ev.id;
+        wave.stageEventTelegraph = ev.telegraph;
+
+        switch (ev.effectType)
+        {
+            case StageEventTable.EffectType.REINFORCE:
+                // 风险换收益：下一波怪数 +30%，本关金币 +20%
+                wave.monsterCount = Mathf.Max(1, Mathf.CeilToInt(wave.monsterCount * ev.countMul));
+                if (bm != null) bm.stageEventGoldMul *= ev.goldMul;
+                break;
+            case StageEventTable.EffectType.ELITE:
+                // 难度换材料：下一波多 1 名精英，通关发强化石
+                wave.eliteBonus += Mathf.Max(0, ev.eliteAdd);
+                _pendingStones += Mathf.Max(0, ev.stone);
+                break;
+            case StageEventTable.EffectType.SUPPLY:
+                // 纯喘息（稀有）：出兵前全队回血，参数记下、spawn 时结算
+                wave.stageEventHealPct = ev.healPct;
+                break;
+            case StageEventTable.EffectType.HAZARD:
+                // 纯压力：英雄移速惩罚，通关给高金币补偿
+                wave.stageEventMovePenalty = Mathf.Clamp01(ev.movePenalty);
+                if (bm != null) bm.stageEventGoldMul *= ev.goldMul;
+                break;
+        }
+    }
+
+    /// <summary>出兵前结算本波的「补给」回血（全队）。</summary>
+    void HealTeamOnEvent(WaveData wave)
+    {
+        float pct = wave.stageEventHealPct;
+        if (pct <= 0f) return;
+        HealUnitPct(hero, pct);
+        if (MercenaryManager.Instance != null)
+        {
+            var mercs = MercenaryManager.Instance.GetActiveMercs();
+            if (mercs != null)
+                for (int i = 0; i < mercs.Count; i++)
+                    HealUnitPct(mercs[i], pct);
+        }
+        if (!string.IsNullOrEmpty(wave.stageEventTelegraph))
+            GlobalToastUI.Show(wave.stageEventTelegraph);
+    }
+
+    void HealUnitPct(UnitBase u, float pct)
+    {
+        if (u == null || u.attr == null) return;
+        float maxHp = u.attr.GetAttr(AttrType.MaxHp);
+        if (maxHp <= 0f) return;
+        u.currentHp = Mathf.Min(maxHp, u.currentHp + maxHp * pct);
+    }
+
+    /// <summary>出兵时给英雄挂移速惩罚（环境灾害）。先清上一段残留。</summary>
+    void ApplyHazardPenalty(WaveData wave)
+    {
+        RestoreHazardPenalty();
+        if (wave.stageEventMovePenalty <= 0f) return;
+        if (hero != null && hero.attr != null)
+        {
+            _hazardMoveBase = hero.attr.GetAttr(AttrType.MoveSpeed);
+            hero.attr.SetAttr(AttrType.MoveSpeed, _hazardMoveBase * (1f - wave.stageEventMovePenalty));
+            _hazardActive = true;
+        }
+        if (!string.IsNullOrEmpty(wave.stageEventTelegraph))
+            GlobalToastUI.Show(wave.stageEventTelegraph);
+    }
+
+    /// <summary>恢复英雄移速（下一波出兵前 / 通关时调用）。</summary>
+    void RestoreHazardPenalty()
+    {
+        if (_hazardActive && hero != null && hero.attr != null)
+            hero.attr.SetAttr(AttrType.MoveSpeed, _hazardMoveBase);
+        _hazardActive = false;
+    }
+
+    /// <summary>通关结算：发放精英小队累计的强化石。</summary>
+    internal void GrantStageEventRewards()
+    {
+        if (_pendingStones > 0)
+        {
+            ResourceWallet.Add(ResourceWallet.ResourceType.EnchantStone, _pendingStones, save: false, notify: true);
+            _pendingStones = 0;
+        }
+        RestoreHazardPenalty();
+    }
+
+    /// <summary>换关 / 通关 / 事件层关闭时清场，保证不泄漏状态到下一关。</summary>
+    internal void ClearStageEventState()
+    {
+        _pendingStones = 0;
+        RestoreHazardPenalty();
+        if (bm != null) bm.stageEventGoldMul = 1f;
     }
 
     /// <summary>本关波数修正：压力阀 + 职业 × 模式弱势补偿，只调波数、不改数值。</summary>
@@ -798,12 +974,21 @@ public sealed class WavePlanner
         bool boss = _waves[waveIndex] != null && _waves[waveIndex].isBossWave;
         string head = boss ? "首领" : "第" + (waveIndex + 1) + "波";
 
-        var a = GetWaveArchetype(waveIndex);
-        if (a == null) return boss ? head : "";
+        var we = _waves[waveIndex];
+        string ev = (we != null && !string.IsNullOrEmpty(we.stageEventTelegraph)) ? we.stageEventTelegraph : "";
 
-        string line = head + " · " + a.name;
-        if (!string.IsNullOrEmpty(a.telegraph)) line += "：" + a.telegraph;
-        if (!string.IsNullOrEmpty(a.tacticHint)) line += " — " + a.tacticHint;
+        var a = GetWaveArchetype(waveIndex);
+        if (a == null && string.IsNullOrEmpty(ev)) return boss ? head : "";
+
+        string line = head;
+        if (a != null)
+        {
+            line += " · " + a.name;
+            if (!string.IsNullOrEmpty(a.telegraph)) line += "：" + a.telegraph;
+            if (!string.IsNullOrEmpty(a.tacticHint)) line += " — " + a.tacticHint;
+        }
+        // 事件层预告：紧随波次播报，让玩家提前知道下一波会怎样
+        if (!string.IsNullOrEmpty(ev)) line += "  ◆ " + ev;
         return line;
     }
 
@@ -1011,6 +1196,7 @@ public sealed class WavePlanner
             spawned = false,
             aliveCount = 0
         });
+        PlanStageEvents();
         _totalWaves = _waves.Count;
         string bossModeTag = string.IsNullOrEmpty(_stageModeName) ? "无模式(旧逻辑)" : $"模式={_stageModeName}";
         GamePerf.Log($"[BattleManager] Boss关 stage={stageIdx + 1} {bossModeTag} " +

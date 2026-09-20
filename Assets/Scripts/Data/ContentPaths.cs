@@ -40,6 +40,8 @@ public static class ContentPaths
         public const string WaveArchetype = "Data/Tables/wave_archetype";
         /// <summary>关卡模式：每关随机抽一个，决定本关的波次原型序列（章内不重复）。</summary>
         public const string StageMode = "Data/Tables/stage_mode";
+        /// <summary>关卡事件层：波间随机插入的有取舍事件（id/权重/起始章节/预告/效果参数）。</summary>
+        public const string StageEvent = "Data/Tables/stage_event";
         public const string ChapterBranch = "Data/Tables/chapter_branch";
         public const string ChapterBranchRules = "Data/Tables/chapter_branch_rules";
         public const string EquipSlotPools = "Data/Tables/equip_slot_pools";

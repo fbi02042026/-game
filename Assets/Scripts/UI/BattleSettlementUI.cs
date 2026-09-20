@@ -358,8 +358,6 @@ public class BattleSettlementUI : MonoBehaviour
 
         if (!s.IsDeath && s.GoldGained > 0)
             list.Add(MakeCell("金币", (int)s.GoldGained, LoadUiIcon("gold"), new Color(0.85f, 0.7f, 0.25f)));
-        if (s.DiamondGained > 0)
-            list.Add(MakeCell("钻石", s.DiamondGained, LoadUiIcon("diamond"), new Color(0.35f, 0.55f, 0.9f)));
         if (s.TalentGained > 0)
             list.Add(MakeCell("天赋石", s.TalentGained, LoadUiIcon("talent"), new Color(0.55f, 0.4f, 0.75f)));
         if (s.EnchantStoneDelta > 0)

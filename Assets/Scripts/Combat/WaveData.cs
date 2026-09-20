@@ -32,6 +32,19 @@ public class WaveData
     /// 由 <see cref="StageModeTable"/> 抽到的模式铺进正式关；引导步进不填。
     /// </summary>
     public string archetypeId = "";
+    /// <summary>
+    /// 关卡事件层 V1.0：本波挂载的事件 id（空 = 无事件）。
+    /// 仅在 WavePlanner.PlanStageEvents 按章概率命中时填写；关闭事件层时恒为空。
+    /// </summary>
+    public string stageEventId = "";
+    /// <summary>事件预告文案（出波前随波次播报一同显示）。</summary>
+    public string stageEventTelegraph = "";
+    /// <summary>事件预效果是否已结算（防止 SpawnNextPendingWave 重入时重复触发）。</summary>
+    public bool stageEventApplied;
+    /// <summary>SUPPLY 事件：出兵前全队回血比例（0 = 无）。</summary>
+    public float stageEventHealPct;
+    /// <summary>HAZARD 事件：英雄移速惩罚比例 0~1（0 = 无）。</summary>
+    public float stageEventMovePenalty;
     public bool HasEngageAnchor => engageAnchorX > -900f;
 
     /// <summary>本波原型；未接管时为 null。</summary>

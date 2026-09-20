@@ -25,7 +25,6 @@ public class BattleRunStats
     public int MaxKillCombo;
     public float HealingReceived;
     public long GoldGained;
-    public int DiamondGained;
     public int TalentGained;
     public int EquipCount;
     public int EnchantStoneDelta;
@@ -87,7 +86,6 @@ public class BattleRunStats
         MaxKillCombo = 0;
         HealingReceived = 0f;
         GoldGained = 0;
-        DiamondGained = 0;
         TalentGained = 0;
         EquipCount = 0;
         EnchantStoneDelta = 0;

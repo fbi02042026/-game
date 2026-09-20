@@ -527,10 +527,8 @@ public static class GameConfig
         public static float BossPhase2HpRatio = 0.60f;
         /// <summary>Boss 二阶伤害倍率（原 1.18 → 二阶更狠）</summary>
         public static float BossPhase2DmgMul = 1.30f;
-        /// <summary>全局怪物 HP 倍率（替代 MONSTER_HP_GLOBAL_MUL 的取值）</summary>
-        public static float MonsterHpGlobalMul = 1.45f;
-        /// <summary>全局怪物伤害倍率（替代 MONSTER_DAMAGE_MULTIPLIER 的取值）</summary>
-        public static float MonsterDmgGlobalMul = 1.15f;
+        // 2026-09-20 删除：MonsterHpGlobalMul / MonsterDmgGlobalMul 全工程零引用（死代码）。
+        // 怪物强度现在一律由 monster_stats 表决定，不再提供全局倍率（主人：「让怪硬什么已经没用了，现在都读表了」）。
 
         /// <summary>精英/Boss 词缀：第几章开始有几率出 2 个词缀。</summary>
         public static int AffixSecondFromChapter = 4;
@@ -567,8 +565,6 @@ public static class GameConfig
     /// </summary>
     public const float PROJECTILE_SPEED_GLOBAL_MUL = 0.4f;
 
-    /// <summary>旧线性章节系数（仅兼容/兜底；属性缩放请用 GetChapterStatScale）</summary>
-    public const float CHAPTER_SCALE_PER = 0.15f;
     /// <summary>
     /// 章节属性倍率已迁到 chapter_stat_scale 表。此数组仅作缺表 Fallback，数字必须与表 1:1。
     /// </summary>
@@ -604,6 +600,20 @@ public static class GameConfig
     public const float BOSS_PHASE2_TELEGRAPH = 2.2f;
     public const float BOSS_PHASE1_TELEGRAPH = 3f;
     public const float BOSS_PHASE_SHIFT_TELEGRAPH = 2.5f;
+    /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：Boss 震屏幅度</summary>
+    public const float BOSS_SKILL_RELEASE_SHAKE_AMP = 0.18f;
+    /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：Boss 震屏时长</summary>
+    public const float BOSS_SKILL_RELEASE_SHAKE_DUR = 0.26f;
+
+    // ===== Boss 狂暴机制（只加这一种；仅改攻击间隔，不动伤害/属性缩放）=====
+    /// <summary>Boss 狂暴总开关。false=完全关闭；true=第 BOSS_ENRAGE_MIN_CHAPTER 章起启用。</summary>
+    public const bool BOSS_ENRAGE_ENABLED = true;
+    /// <summary>狂暴起始章节（含）：前 4 章 Boss 保持原样，第 5 章起才触发。</summary>
+    public const int BOSS_ENRAGE_MIN_CHAPTER = 5;
+    /// <summary>触发狂暴的血量阈值（当前/最大 ≤ 此值触发）。0.40=低于 40%。</summary>
+    public const float BOSS_ENRAGE_HP_RATIO = 0.40f;
+    /// <summary>狂暴攻速倍率（>1 即更快）。1.5=攻击速度 +50%（攻击间隔 ÷1.5）。</summary>
+    public const float BOSS_ENRAGE_ATK_SPEED_MUL = 1.5f;
 
     /// <summary>精英血厚档</summary>
     public const float ELITE_TANK_HP_MUL = 1.1f;
@@ -613,6 +623,10 @@ public static class GameConfig
     public const float ELITE_GLASS_HP_MUL = 0.75f;
     public const float ELITE_GLASS_ATK_MUL = 1.35f;
     public const float ELITE_GLASS_TELEGRAPH = 2.0f;
+    /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：精英震屏幅度</summary>
+    public const float ELITE_SKILL_RELEASE_SHAKE_AMP = 0.12f;
+    /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：精英震屏时长</summary>
+    public const float ELITE_SKILL_RELEASE_SHAKE_DUR = 0.20f;
     /// <summary>公会等级系数：0.02×公会等级</summary>
     public const float GUILD_SCALE_PER = 0.02f;
 
@@ -632,8 +646,6 @@ public static class GameConfig
     public const int HIDDEN_EXP_STAGE_CLEAR_PER_CHAPTER = 5;
     /// <summary>每日酒馆招募次数上限</summary>
     public const int DAILY_MERC_RECRUIT_MAX = 1;
-    /// <summary>刷新佣兵三选一消耗宝石</summary>
-    public const int MERC_REROLL_GEM_COST = 50;
     /// <summary>背包列数：与美术新画的 GridContainer 一致（4 列，Cell_0_0 ~ Cell_3_2）</summary>
     public const int BACKPACK_WIDTH = 4;
     /// <summary>背包初始/默认解锁行数：3 行，共 12 格。双手武器 2×3 时会占掉一半，属于已知取舍。
@@ -671,10 +683,10 @@ public static class GameConfig
     /// </summary>
     public const bool ADS_ENABLED_BEFORE_SPOTLIGHT = false;
 
-    /// <summary>钻石定价：顶栏体力补给一次（体力 +ResourceAdRewards.StaminaPerAd）。</summary>
-    public const int AD_SLOT_STAMINA_DIAMOND = 20;
-    /// <summary>钻石定价：顶栏金币补给一次（金币 +ResourceAdRewards.GoldPerAd）。</summary>
-    public const int AD_SLOT_GOLD_DIAMOND = 20;
+    /// <summary>钻石定价：顶栏体力补给一次（体力 +ResourceAdRewards.StaminaPerAd）。2026-09-20 钻石经济调整：20→15。</summary>
+    public const int AD_SLOT_STAMINA_DIAMOND = 15;
+    /// <summary>钻石定价：顶栏金币补给一次（金币 +ResourceAdRewards.GoldPerAd）。2026-09-20 钻石经济调整：20→10。</summary>
+    public const int AD_SLOT_GOLD_DIAMOND = 10;
     /// <summary>钻石定价：战前遗产三选一刷新一次（每局限一次）。</summary>
     public const int AD_SLOT_PRELEVEL_REFRESH_DIAMOND = 50;
 

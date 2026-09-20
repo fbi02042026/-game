@@ -59,11 +59,19 @@ public struct MainQuestDef
 public static class MainQuestDefs
 {
     public const string NpcInnkeeper = "innkeeper";
+    public const string NpcGuildmaster = "guildmaster";
+    public const string NpcAlia = "alia";
+    public const string NpcHaldon = "haldon";
     public const string StoryC1Blade = "c1_blade";
+    public const string StoryC3Jungle = "c3_jungle";
+    public const string StoryC4Field = "c4_field";
+    public const string StoryC6Cave = "c6_cave";
+    public const string StoryC8Ice = "c8_ice";
 
     /// <summary>
-    /// 第一批样例：第 1~2 章，每章 4 条（含非战斗目标）。
-    /// 文案为**占位**，等主人补正式版。
+    /// 第 1~2 章为首批样例（各 4 条，含非战斗目标）；
+    /// 第 3~8 章于 2026-09-20 配满（各 4 条），标题为正式文案 V1
+    /// （见 Docs/正式文案_V1_2026-09-20.md）。
     /// </summary>
     public static readonly MainQuestDef[] All = new MainQuestDef[]
     {
@@ -97,15 +105,98 @@ public static class MainQuestDefs
         new MainQuestDef { id = "C2_Q4", chapter = 2, type = MainQuestType.ClearStage,
             title = "\u8d70\u5230\u534a\u7a0b", desc = "", targetCount = 1, param = "4", rewardStones = 0 },
 
-        // TODO(主人后续补)：第 3~8 章主线任务待配，照上面格式往数组里加即可。
-        // 建议节奏：每章 3~4 条，其中至少 1 条非战斗（TalkNpc / WatchStory / RecruitMerc / UpgradeTalent），
-        // 非战斗条放章节开头或中段，别放末尾（末尾要给「打完这章」的冲刺感）。
+        // ===== 第 3 章：密林 =====
+        new MainQuestDef { id = "C3_Q1", chapter = 3, type = MainQuestType.TalkNpc,
+            title = "密林的另一头", desc = "", targetCount = 1, param = NpcInnkeeper, rewardStones = 1 },
+
+        new MainQuestDef { id = "C3_Q2", chapter = 3, type = MainQuestType.ClearStage,
+            title = "穿过藤蔓", desc = "", targetCount = 1, param = "2", rewardStones = 0 },
+
+        // 非战斗：章节中段插一段世界观
+        new MainQuestDef { id = "C3_Q3", chapter = 3, type = MainQuestType.WatchStory,
+            title = "秘境守望者", desc = "", targetCount = 1, param = StoryC3Jungle, rewardStones = 1 },
+
+        new MainQuestDef { id = "C3_Q4", chapter = 3, type = MainQuestType.ClearStage,
+            title = "翡翠尽头", desc = "", targetCount = 1, param = "9", rewardStones = 0 },
+
+        // ===== 第 4 章：草原 =====
+        new MainQuestDef { id = "C4_Q1", chapter = 4, type = MainQuestType.RecruitMerc,
+            title = "再添一人", desc = "", targetCount = 1, param = "", rewardStones = 1 },
+
+        new MainQuestDef { id = "C4_Q2", chapter = 4, type = MainQuestType.ClearStage,
+            title = "草原的风", desc = "", targetCount = 1, param = "3", rewardStones = 0 },
+
+        // 非战斗：章节中段插一段世界观
+        new MainQuestDef { id = "C4_Q3", chapter = 4, type = MainQuestType.WatchStory,
+            title = "风里的名字", desc = "", targetCount = 1, param = StoryC4Field, rewardStones = 1 },
+
+        new MainQuestDef { id = "C4_Q4", chapter = 4, type = MainQuestType.ClearStage,
+            title = "长风尽头", desc = "", targetCount = 1, param = "9", rewardStones = 0 },
+
+        // ===== 第 5 章：出海 =====
+        new MainQuestDef { id = "C5_Q1", chapter = 5, type = MainQuestType.TalkNpc,
+            title = "出海前的委托", desc = "", targetCount = 1, param = NpcGuildmaster, rewardStones = 1 },
+
+        new MainQuestDef { id = "C5_Q2", chapter = 5, type = MainQuestType.ClearStage,
+            title = "潮汐之上", desc = "", targetCount = 1, param = "2", rewardStones = 0 },
+
+        // 非战斗：把玩家推去天赋页
+        new MainQuestDef { id = "C5_Q3", chapter = 5, type = MainQuestType.UpgradeTalent,
+            title = "沉下心来", desc = "", targetCount = 3, param = "", rewardStones = 1 },
+
+        new MainQuestDef { id = "C5_Q4", chapter = 5, type = MainQuestType.ClearStage,
+            title = "遗迹之门", desc = "", targetCount = 1, param = "9", rewardStones = 0 },
+
+        // ===== 第 6 章：深窟 =====
+        new MainQuestDef { id = "C6_Q1", chapter = 6, type = MainQuestType.ClearStage,
+            title = "走进深窟", desc = "", targetCount = 1, param = "1", rewardStones = 0 },
+
+        // 非战斗：章节中段插一段世界观
+        new MainQuestDef { id = "C6_Q2", chapter = 6, type = MainQuestType.WatchStory,
+            title = "石壁旧字", desc = "", targetCount = 1, param = StoryC6Cave, rewardStones = 1 },
+
+        new MainQuestDef { id = "C6_Q3", chapter = 6, type = MainQuestType.RecruitMerc,
+            title = "带上帮手", desc = "", targetCount = 1, param = "", rewardStones = 1 },
+
+        new MainQuestDef { id = "C6_Q4", chapter = 6, type = MainQuestType.ClearStage,
+            title = "深窟尽头", desc = "", targetCount = 1, param = "9", rewardStones = 0 },
+
+        // ===== 第 7 章：烈焰 =====
+        new MainQuestDef { id = "C7_Q1", chapter = 7, type = MainQuestType.TalkNpc,
+            title = "老板娘的劝阻", desc = "", targetCount = 1, param = NpcInnkeeper, rewardStones = 1 },
+
+        new MainQuestDef { id = "C7_Q2", chapter = 7, type = MainQuestType.ClearStage,
+            title = "烈焰之前", desc = "", targetCount = 1, param = "2", rewardStones = 0 },
+
+        // 非战斗：把玩家推去天赋页
+        new MainQuestDef { id = "C7_Q3", chapter = 7, type = MainQuestType.UpgradeTalent,
+            title = "炼心", desc = "", targetCount = 3, param = "", rewardStones = 1 },
+
+        new MainQuestDef { id = "C7_Q4", chapter = 7, type = MainQuestType.ClearStage,
+            title = "炼狱尽头", desc = "", targetCount = 1, param = "9", rewardStones = 0 },
+
+        // ===== 第 8 章：裂隙尽头 =====
+        // 非战斗：章节中段插一段世界观
+        new MainQuestDef { id = "C8_Q1", chapter = 8, type = MainQuestType.WatchStory,
+            title = "裂隙的尽头", desc = "", targetCount = 1, param = StoryC8Ice, rewardStones = 1 },
+
+        new MainQuestDef { id = "C8_Q2", chapter = 8, type = MainQuestType.ClearStage,
+            title = "雪境行", desc = "", targetCount = 1, param = "3", rewardStones = 0 },
+
+        new MainQuestDef { id = "C8_Q3", chapter = 8, type = MainQuestType.TalkNpc,
+            title = "最后一杯", desc = "", targetCount = 1, param = NpcInnkeeper, rewardStones = 1 },
+
+        new MainQuestDef { id = "C8_Q4", chapter = 8, type = MainQuestType.ClearStage,
+            title = "终末之刃", desc = "", targetCount = 1, param = "9", rewardStones = 0 },
     };
 
     /// <summary>NPC 显示名（新增 NPC 在这里加，UI 与自动文案都读这里）。</summary>
     public static string NpcName(string npcId)
     {
         if (npcId == NpcInnkeeper) return "\u9152\u9986\u8001\u677f\u5a18";
+        if (npcId == NpcGuildmaster) return "会长";
+        if (npcId == NpcAlia) return "艾丽娅";
+        if (npcId == NpcHaldon) return "劳顿";
         return string.IsNullOrEmpty(npcId) ? "NPC" : npcId;
     }
 
@@ -113,6 +204,10 @@ public static class MainQuestDefs
     public static string StoryTitle(string storyId)
     {
         if (storyId == StoryC1Blade) return "\u88c2\u9699\u4e4b\u5203\u7684\u65e7\u7f3a\u53e3";
+        if (storyId == StoryC3Jungle) return "翡翠秘境的守望者";
+        if (storyId == StoryC4Field) return "风里带回来的名字";
+        if (storyId == StoryC6Cave) return "石壁上的旧字";
+        if (storyId == StoryC8Ice) return "裂隙的尽头";
         return string.IsNullOrEmpty(storyId) ? "\u4e00\u6bb5\u5267\u60c5" : storyId;
     }
 

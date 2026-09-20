@@ -229,6 +229,18 @@ public class SaveData
     // 用 List<StringIdEntry> 做可序列化镜像（JsonUtility 不支持 HashSet）。
     [NonSerialized] public HashSet<string> clearedStages = new HashSet<string>();
     public List<StringIdEntry> clearedStageEntries = new List<StringIdEntry>();
+
+    // === 主线任务进度（2026-09-20 迁移：从 PlayerPrefs mq_v1_* 迁入云存档）===
+    // 已完成集合：id = questId（如 C1_Q2）
+    public List<StringIdEntry> mainQuestDoneEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> mainQuestDone = new HashSet<string>();
+    // 计数：TalkNpc/WatchStory 完成时记 = need（一次性达成）
+    public List<StringIntEntry> mainQuestCntEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> mainQuestCnt = new Dictionary<string, int>();
+    // 基线：RecruitMerc/UpgradeTalent 接任务时的快照（雇佣数 / 天赋石），progress = 当前 - 基线
+    public List<StringIntEntry> mainQuestBaseEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> mainQuestBase = new Dictionary<string, int>();
+
     /// <summary>洗点次数（天赋系统只读，本文件只负责加字段）。</summary>
     public int respecCount = 0;
     /// <summary>背包已解锁行数，默认 3（与 GameConfig 默认值保持一致）。</summary>
@@ -325,6 +337,9 @@ public class SaveData
         mileageShopBuyEntries ??= new List<StringIntEntry>();
         mercGrowItemEntries ??= new List<StringIntEntry>();
         clearedStageEntries ??= new List<StringIdEntry>();
+        mainQuestDoneEntries ??= new List<StringIdEntry>();
+        mainQuestCntEntries ??= new List<StringIntEntry>();
+        mainQuestBaseEntries ??= new List<StringIntEntry>();
         townLevel ??= new TownLevel();
         if (hiddenLevel <= 0) hiddenLevel = 1;
         if (hiddenExp < 0) hiddenExp = 0;
@@ -442,6 +457,24 @@ public class SaveData
             logFragments[e.id] = e.value;
         }
         clearedStages = ToIdSet(clearedStageEntries);
+
+        mainQuestDone = ToIdSet(mainQuestDoneEntries);
+
+        mainQuestCnt = new Dictionary<string, int>();
+        for (int i = 0; i < mainQuestCntEntries.Count; i++)
+        {
+            var e = mainQuestCntEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            mainQuestCnt[e.id] = e.value;
+        }
+
+        mainQuestBase = new Dictionary<string, int>();
+        for (int i = 0; i < mainQuestBaseEntries.Count; i++)
+        {
+            var e = mainQuestBaseEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            mainQuestBase[e.id] = e.value;
+        }
 
         completedLogAchIds = ToIdSet(completedLogAchEntries);
         claimedLogAchIds = ToIdSet(claimedLogAchEntries);
@@ -653,6 +686,9 @@ public class SaveData
         unlockedSkinIds ??= new HashSet<string>();
         craftedFragmentRecipes ??= new HashSet<string>();
         mileageShopBought ??= new Dictionary<string, int>();
+        mainQuestDone ??= new HashSet<string>();
+        mainQuestCnt ??= new Dictionary<string, int>();
+        mainQuestBase ??= new Dictionary<string, int>();
 
         talentEntries = new List<StringIntEntry>(talents.Count);
         foreach (var kv in talents)
@@ -714,6 +750,16 @@ public class SaveData
             logFragmentEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
 
         clearedStageEntries = FromIdSet(clearedStages);
+
+        mainQuestDoneEntries = FromIdSet(mainQuestDone);
+
+        mainQuestCntEntries = new List<StringIntEntry>(mainQuestCnt.Count);
+        foreach (var kv in mainQuestCnt)
+            mainQuestCntEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        mainQuestBaseEntries = new List<StringIntEntry>(mainQuestBase.Count);
+        foreach (var kv in mainQuestBase)
+            mainQuestBaseEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
 
         completedLogAchEntries = FromIdSet(completedLogAchIds);
         claimedLogAchEntries = FromIdSet(claimedLogAchIds);

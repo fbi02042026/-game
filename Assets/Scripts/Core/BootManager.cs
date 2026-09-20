@@ -50,6 +50,7 @@ public class BootManager : MonoBehaviour
     void Start()
     {
         WeChatMiniGameConfig.EnsureDesignResolution();
+        Analytics.Init(); // 埋点：会话开始（内部记 session_start）
         if (!GameSceneGate.IsBoot) return;
         StudioLogoSplash.Present(() =>
             HealthNoticeUI.Present(() =>

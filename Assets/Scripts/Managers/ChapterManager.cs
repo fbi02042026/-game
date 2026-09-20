@@ -240,13 +240,23 @@ public class ChapterManager : Singleton<ChapterManager>
         var milestoneData = SaveSystem.Instance?.Data;
         if (milestoneData != null)
         {
+            // C.1 每关首通 +3 钻：必须在 GrantTalentForStageFirstClear 写入 clearedStages 之前判定，否则永远不是首次
+            string stageClearKey = currentChapter + "_" + currentStageIndex;
+            bool isStageFirstClear = milestoneData.clearedStages == null || !milestoneData.clearedStages.Contains(stageClearKey);
+
             int stageTalent = milestoneData.GrantTalentForStageFirstClear(currentChapter, currentStageIndex);
             if (stageTalent > 0)
                 ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, stageTalent, save: false, notify: true);
+            if (isStageFirstClear)
+                ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, 3, save: true, notify: true);
 
             int dailyTalent = milestoneData.TryDailyClearTaskStones();
             if (dailyTalent > 0)
+            {
                 ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, dailyTalent, save: false, notify: true);
+                // C.3 每日通关任务 +5 钻：与天赋石同处发放，判重逻辑（dailyClearTaskClaimDayKey）不改
+                ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, 5, save: true, notify: true);
+            }
 
             // 里程碑/每日石已写入内存（save:false），此处统一落盘，避免未存档前退出丢失。
             SaveSystem.Instance?.Save();
@@ -274,15 +284,19 @@ public class ChapterManager : Singleton<ChapterManager>
                 int chapterTalent = TalentDefs.TalentStoneRewards.ChapterClearStone(currentChapter);
                 if (firstChapterClear && chapterTalent > 0)
                     ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, chapterTalent, save: false, notify: true);
+                // C.2 每章首通 +30 钻：firstChapterClear 在 MarkChapterCleared 之前判定，顺序正确
+                if (firstChapterClear)
+                    ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, 30, save: false, notify: true);
                 var avail = ChapterRouteTable.AvailableChapters(data);
                 if (avail.Count > 0)
                 {
                     int far = avail[avail.Count - 1];
-                    if (far > data.maxUnlockedChapter)
-                    {
-                        data.maxUnlockedChapter = far;
-                        Debug.Log($"[ChapterManager] 解锁新区域：{GameConfig.GetChapterMapName(far)}（内部第{far}章）");
-                    }
+                if (far > data.maxUnlockedChapter)
+                {
+                    data.maxUnlockedChapter = far;
+                    Debug.Log($"[ChapterManager] 解锁新区域：{GameConfig.GetChapterMapName(far)}（内部第{far}章）");
+                    Analytics.ChapterReach(far); // 埋点：章节解锁
+                }
                 }
                 SaveSystem.Instance.Save();
             }

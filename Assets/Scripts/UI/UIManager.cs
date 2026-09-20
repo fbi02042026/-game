@@ -208,11 +208,6 @@ public class UIManager : Singleton<UIManager>
         return t;
     }
 
-    public void ShowLegacyChooseUI(List<EquipInstance> allEquips, Action<EquipInstance> onSelect)
-    {
-        LegacyChooseUI.Show(allEquips, onSelect);
-    }
-
     public void ShowMerchantUI(List<EquipInstance> goods, Action onClose)
     {
         ShowToast("本版本未开放商人关");

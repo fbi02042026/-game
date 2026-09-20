@@ -426,4 +426,26 @@ public static class ChapterStoryBeats
             default: return null;
         }
     }
+
+    /// <summary>
+    /// 开章引言：每章一句，轻剧情重氛围（V1 补录，见 Docs/正式文案_V1）。
+    /// 与 OpeningLine 分工：OpeningLine 是「世界观 + 氛围」两行正文；本章引言是单句钩子。
+    /// 落点：章节过场（ChapterSplash）。当前 UI 调用方只消费 IntroTitle / OpeningLine，
+    /// 要显示本章引言，在 ChapterSplash 里追加一行 ChapterQuote(chapter) 即可（未改动 UI）。
+    /// </summary>
+    public static string ChapterQuote(int chapter)
+    {
+        switch (chapter)
+        {
+            case 1: return "「林子里的光是斜的，照不到地上。」";
+            case 2: return "「碑上的名字，大多只剩一半。」";
+            case 3: return "「藤蔓比路还老。」";
+            case 4: return "「风是从更远的地方吹来的。」";
+            case 5: return "「潮水每天退一次，退一次就露出一点旧东西。」";
+            case 6: return "「越往下走，石壁上的字越多。」";
+            case 7: return "「这里的火不烧木头。」";
+            case 8: return "「雪落下来，就不化了。」";
+            default: return null;
+        }
+    }
 }

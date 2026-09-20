@@ -116,6 +116,8 @@ public static class ResourceWallet
         result.current = Get(data, type);
         result.max = max;
         result.hitCap = overflow > 0 || result.current >= max;
+        if (type == ResourceType.Diamond)
+            Analytics.DiamondChange("gain", amount, Get(data, type)); // 埋点：钻石收入（不影响返回值）
 
         if (overflow > 0 && overflowToMail)
             MailSystem.EnqueueResourceOverflow(type, overflow);
@@ -154,6 +156,8 @@ public static class ResourceWallet
         }
 
         Set(data, type, cur - amount);
+        if (type == ResourceType.Diamond)
+            Analytics.DiamondChange("spend", amount, Get(data, type)); // 埋点：钻石支出（不影响返回值）
         if (save) saveSys.Save();
         GuildHallUI.RefreshAllHudStatic();
         return true;

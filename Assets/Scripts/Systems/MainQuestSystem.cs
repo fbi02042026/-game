@@ -35,25 +35,104 @@ public struct DailyQuestView
 ///
 /// 只做三件事：读进度 → 判完成 → 发反馈。不碰战斗，不改章节推进规则。
 ///
-/// ⚠ 持久化方案（重要，后续要迁）：
-///   本次**禁止改 SaveData.cs**，所以「非战斗任务的完成状态」落在 PlayerPrefs
-///   （key 前缀 mq_v1_），而**战斗类（ClearStage）直接复用存档已有的
-///   clearedStages**（chapter_stageIndex），不额外存一份。
-///   代价：PlayerPrefs 不随云存档/换设备走，清数据会丢非战斗任务的打勾。
-///   TODO(后续)：SaveData 加 mainQuestDoneEntries / mainQuestCntEntries 两个
-///   List&lt;StringIdEntry&gt; / List&lt;StringIntEntry&gt;，把 PP_DONE / PP_CNT / PP_BASE
-///   三处读写换成 HashSet/Dictionary 即可，MainQuestSystem 对外接口不变。
+    /// 持久化方案（2026-09-20 已迁移）：
+    ///   非战斗任务的完成状态现在落在 SaveData 的 mainQuestDone / mainQuestCnt /
+    ///   mainQuestBase（双写：List 镜像 + [NonSerialized] 运行时集合），随云存档走；
+    ///   战斗类（ClearStage）仍复用存档已有的 clearedStages（chapter_stageIndex），不额外存。
+    ///   老档（PlayerPrefs 的 mq_v1_*）首次启动由 EnsureMigrated 一次性搬入 SaveData，
+    ///   PP 原值不删除，留作退路。对外接口不变。
 /// </summary>
 public static class MainQuestSystem
 {
     const string PP_DONE = "mq_v1_done_";
     const string PP_CNT = "mq_v1_cnt_";
     const string PP_BASE = "mq_v1_base_";
+    const string PP_MIGRATED = "mq_v1_migrated";
 
     /// <summary>任务状态变化（完成/领取）→ HUD 与面板刷新。</summary>
     public static event Action OnChanged;
 
     static SaveData Data => SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+
+    // 迁移一次性标记（本会话内）。存档未就绪时静默跳过，下次访问再试。
+    static bool _migrated = false;
+
+    static void Persist() => SaveSystem.Instance?.Save();
+
+    static bool IsDoneId(string id)
+    {
+        var d = Data;
+        if (d == null || d.mainQuestDone == null) return false;
+        return d.mainQuestDone.Contains(id);
+    }
+
+    static void MarkDone(string id)
+    {
+        var d = Data;
+        if (d == null) return;
+        if (d.mainQuestDone == null) d.mainQuestDone = new HashSet<string>();
+        if (d.mainQuestDone.Add(id)) Persist();
+    }
+
+    static int GetCnt(string id)
+    {
+        var d = Data;
+        if (d == null || d.mainQuestCnt == null) return 0;
+        return d.mainQuestCnt.TryGetValue(id, out int v) ? v : 0;
+    }
+
+    static void BumpCnt(string id, int need)
+    {
+        var d = Data;
+        if (d == null) return;
+        if (d.mainQuestCnt == null) d.mainQuestCnt = new Dictionary<string, int>();
+        d.mainQuestCnt[id] = need;
+        Persist();
+    }
+
+    static int ReadBase(string id, int current)
+    {
+        var d = Data;
+        if (d == null) return current;
+        if (d.mainQuestBase == null) d.mainQuestBase = new Dictionary<string, int>();
+        if (d.mainQuestBase.TryGetValue(id, out int v)) return v;
+        d.mainQuestBase[id] = current;
+        Persist();
+        return current;
+    }
+
+    /// <summary>
+    /// 旧档迁移：把 PlayerPrefs 的 mq_v1_* 进度一次性搬到 SaveData（只搬一次，靠 PP 标记防重）。
+    /// 存档未就绪时静默跳过，下次访问再试。不删除 PP 原值，留作退路。
+    /// </summary>
+    static void EnsureMigrated()
+    {
+        if (_migrated) return;
+        var d = Data;
+        if (d == null) return; // 存档还没好，等下次
+        if (PlayerPrefs.GetInt(PP_MIGRATED, 0) > 0) { _migrated = true; return; }
+
+        if (d.mainQuestDone == null) d.mainQuestDone = new HashSet<string>();
+        if (d.mainQuestCnt == null) d.mainQuestCnt = new Dictionary<string, int>();
+        if (d.mainQuestBase == null) d.mainQuestBase = new Dictionary<string, int>();
+
+        for (int i = 0; i < MainQuestDefs.All.Length; i++)
+        {
+            var def = MainQuestDefs.All[i];
+            if (string.IsNullOrEmpty(def.id)) continue;
+            if (PlayerPrefs.GetInt(PP_DONE + def.id, 0) > 0)
+                d.mainQuestDone.Add(def.id);
+            if (PlayerPrefs.HasKey(PP_CNT + def.id))
+                d.mainQuestCnt[def.id] = PlayerPrefs.GetInt(PP_CNT + def.id, 0);
+            if (PlayerPrefs.HasKey(PP_BASE + def.id))
+                d.mainQuestBase[def.id] = PlayerPrefs.GetInt(PP_BASE + def.id, 0);
+        }
+
+        PlayerPrefs.SetInt(PP_MIGRATED, 1);
+        PlayerPrefs.Save();
+        _migrated = true;
+        Persist(); // 把搬迁结果落盘
+    }
 
     // ============================================================
     // 章节
@@ -134,8 +213,9 @@ public static class MainQuestSystem
 
     public static bool IsDone(MainQuestDef def)
     {
+        EnsureMigrated();
         if (string.IsNullOrEmpty(def.id)) return false;
-        if (PlayerPrefs.GetInt(PP_DONE + def.id, 0) > 0) return true;
+        if (IsDoneId(def.id)) return true;
 
         // 整章已通关 → 该章任务一律算完成，避免老玩家被非战斗任务卡住
         if (IsChapterCleared(def.chapter)) return true;
@@ -159,6 +239,7 @@ public static class MainQuestSystem
     /// </summary>
     static int ProgressOf(MainQuestDef def)
     {
+        EnsureMigrated();
         var d = Data;
         if (d == null) return 0;
 
@@ -172,7 +253,7 @@ public static class MainQuestSystem
 
             case MainQuestType.TalkNpc:
             case MainQuestType.WatchStory:
-                return PlayerPrefs.GetInt(PP_CNT + def.id, 0);
+                return GetCnt(def.id);
 
             case MainQuestType.RecruitMerc:
             {
@@ -193,11 +274,7 @@ public static class MainQuestSystem
     /// <summary>首次评估时记下基线（雇佣数 / 天赋石），之后 progress = 变化量。</summary>
     static int Baseline(string id, int current)
     {
-        string key = PP_BASE + id;
-        if (PlayerPrefs.HasKey(key)) return PlayerPrefs.GetInt(key, current);
-        PlayerPrefs.SetInt(key, current);
-        PlayerPrefs.Save();
-        return current;
+        return ReadBase(id, current);
     }
 
     // ============================================================
@@ -231,6 +308,7 @@ public static class MainQuestSystem
 
     static void BumpCount(Func<MainQuestDef, bool> match)
     {
+        EnsureMigrated();
         var defs = MainQuestDefs.QuestsOf(CurrentChapter());
         for (int i = 0; i < defs.Count; i++)
         {
@@ -239,8 +317,7 @@ public static class MainQuestSystem
             if (IsDone(def)) continue;
 
             int need = NeedOf(def);
-            PlayerPrefs.SetInt(PP_CNT + def.id, need);
-            PlayerPrefs.Save();
+            BumpCnt(def.id, need);
             Complete(def);
             return;
         }
@@ -248,11 +325,11 @@ public static class MainQuestSystem
 
     static void Complete(MainQuestDef def)
     {
+        EnsureMigrated();
         if (string.IsNullOrEmpty(def.id)) return;
-        if (PlayerPrefs.GetInt(PP_DONE + def.id, 0) > 0) return;
+        if (IsDoneId(def.id)) return;
 
-        PlayerPrefs.SetInt(PP_DONE + def.id, 1);
-        PlayerPrefs.Save();
+        MarkDone(def.id);
 
         if (def.rewardStones > 0)
         {
@@ -267,6 +344,7 @@ public static class MainQuestSystem
         }
 
         Debug.Log("[MainQuest] done: " + def.id);
+        Analytics.QuestComplete(def.id); // 埋点：主线任务完成
         OnChanged?.Invoke();
     }
 
@@ -320,7 +398,7 @@ public static class MainQuestSystem
             desc = "\u4eca\u65e5\u901a\u5173 " + cur + "/" + need + " \u5173",
             progress = cur,
             need = need,
-            rewardText = "\u5929\u8d4b\u77f3 \u00d7" + SaveData.DAILY_CLEAR_TASK_STONES,
+            rewardText = "\u5929\u8d4b\u77f3 \u00d7" + SaveData.DAILY_CLEAR_TASK_STONES + "\u3000\u94bb\u77f3 \u00d75",
             done = clearClaimed || cur >= need,
             claimable = false
         });
@@ -338,4 +416,17 @@ public static class MainQuestSystem
     }
 
     public static void NotifyChanged() => OnChanged?.Invoke();
+
+    /// <summary>第三级兜底：是否还有未领取的成就（里程）奖励。只新增，不改既有行为。</summary>
+    public static bool HasOpenAchievement()
+    {
+        var sys = AchievementSystem.Instance;
+        return sys != null && sys.HasUnclaimedMilestone();
+    }
+
+    /// <summary>第三级兜底：是否还有未首次查看/记录的图鉴条目。只新增，不改既有行为。</summary>
+    public static bool HasUnrecordedCodex()
+    {
+        return AdventureCodex.HasUnviewedCodex();
+    }
 }

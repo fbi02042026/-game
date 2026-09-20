@@ -26,20 +26,21 @@ using UnityEngine.UI;
 /// </summary>
 public class FirstRunGuide : MonoBehaviour
 {
-    /// <summary>引导步骤。顺序即流程顺序，序号进存档，中间不允许插队。</summary>
+    /// <summary>引导步骤。顺序即流程顺序（由枚举整数值决定，序号进存档），中间不允许插队。</summary>
     public enum GuideStep
     {
         /// <summary>欢迎 + 两句世界观。</summary>
         Welcome = 0,
+        /// <summary>顶部「当前目标」条：纯文字提示，告诉玩家顶部那条就是任务条、点它能直达。</summary>
+        /// 方案 B：降级为纯文字、不指向实物——任务条（QuestHudBar）显示条件是 TutorialDone，第 2 步时它还没挂出，
+        /// 硬高亮会空引用/死锁。所以提前到第 2 位只做文字告知，不依赖实物、不查它的 Rect。
+        QuestBar = 1,
         /// <summary>底栏「冒险」：切到冒险页。</summary>
-        Adventure = 1,
+        Adventure = 2,
         /// <summary>冒险页「开始冒险」：进战斗即算完成。</summary>
-        FirstBattle = 2,
+        FirstBattle = 3,
         /// <summary>角色页 → 天赋 → 点一个节点。</summary>
-        Talent = 3,
-        /// <summary>顶部「当前目标」条：告诉你现在该干嘛。</summary>
-        /// 排在教学战之后是因为这条任务条的显示条件是 TutorialDone，太早喊它出来指不到实物。
-        QuestBar = 4,
+        Talent = 4,
         /// <summary>酒馆 → 认识老板娘。</summary>
         Tavern = 5,
         /// <summary>游标抵达这里＝全部完成。</summary>
@@ -97,6 +98,8 @@ public class FirstRunGuide : MonoBehaviour
 
     /// <summary>游标：下一个要跑的步骤下标（= 已完成步骤数）。</summary>
     int _stepIndex;
+    /// <summary>已上报过 analytics 的步骤下标，避免 Drive 每帧重复上报。</summary>
+    int _lastAnalyticsStep = -1;
     Coroutine _drive;
 
     RectTransform _target;
@@ -189,6 +192,11 @@ public class FirstRunGuide : MonoBehaviour
         while (!IsFinished)
         {
             var step = (GuideStep)_stepIndex;
+            if (_stepIndex != _lastAnalyticsStep && step != GuideStep.Done)
+            {
+                _lastAnalyticsStep = _stepIndex;
+                Analytics.TutorialStep(step.ToString(), (int)step); // 埋点：新手引导每步进入
+            }
             if (!CanRun(step))
             {
                 if (_visible) Hide();
@@ -236,9 +244,11 @@ public class FirstRunGuide : MonoBehaviour
             case GuideStep.FirstBattle:
                 return StoryProgress.TutorialIntroDone;
             case GuideStep.Talent:
-            case GuideStep.QuestBar:
             case GuideStep.Tavern:
                 return StoryProgress.TutorialBattleCleared;
+            case GuideStep.QuestBar:
+                // 方案 B：纯文字第 2 步，不需要任务条实物存在，故不依赖 TutorialBattleCleared。
+                return true;
             default:
                 return false;
         }
@@ -323,23 +333,15 @@ public class FirstRunGuide : MonoBehaviour
         }
     }
 
-    // ---- 4) 顶部「当前目标」条（排在首战之后：这条这时才常驻）----
+    // ---- 4) 顶部「当前目标」条（纯文字第 2 步：只告知，不指向实物）----
 
     IEnumerator CoQuestBar()
     {
-        // QuestHudBar 的显示条件是 TutorialDone，正常到这里它已经在屏幕顶部了。
-        // 万一还没挂出来（切页瞬时 / 面板没建好）就用无目标气泡把「位置 + 用途」讲清楚。
-        if (QuestBarRect() != null)
-        {
-            yield return CoPoint("屏幕顶部这条会告诉你「现在该做什么」，点一下直达对应玩法。",
-                QuestBarRect, null, true, TapStepTimeout);
-        }
-        else
-        {
-            yield return CoPoint("记一下屏幕顶部：这里会出现「当前目标」条，"
-                              + "随时告诉你下一步去哪，点一下直达。",
-                null, null, true, TapStepTimeout);
-        }
+        // 方案 B：此时任务条（QuestHudBar）因显示条件 TutorialDone 还未挂出，不做实物高亮，
+        // 也不去查找它的 Rect（找不到会 null）。只弹一行纯文字气泡讲清「顶部任务条」的用途。
+        // target 传 null → CoPoint 走「无目标」分支：全屏半透遮罩 + 居中气泡，代码可容忍 null，不会空引用崩。
+        yield return CoPoint("顶部会出现一条「任务条」，写着你当前该做什么——点它能直接跳到对应玩法。",
+            null, null, true, TapStepTimeout);
         FinishStep(GuideStep.QuestBar, "任务条说明");
     }
 

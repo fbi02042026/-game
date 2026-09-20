@@ -113,7 +113,8 @@ public class TownSceneBootstrap : MonoBehaviour
         bool settled = SettleInterruptedRunOnce();
         if (!settled)
         {
-            TryClaimTownOfflineReward();
+            // 2026-09-20 主人要求：离线金币暂停，等重新设计后再启用（进城镇不再自动结算/弹窗）。
+            // TryClaimTownOfflineReward();
             TryDailyLoginOnce();
         }
         TutorialDirector.Instance?.NotifyTownReady();
@@ -168,31 +169,31 @@ public class TownSceneBootstrap : MonoBehaviour
     static bool _offlineClaimedThisTownVisit;
 
     /// <summary>进城镇一次最多弹一次离线收益（农场金）。</summary>
+    // 2026-09-20 主人要求：离线金币暂停，等重新设计后再启用。
+    // 自动结算（ResourceWallet.Add 金币）与自动入口/弹窗均停止；方法保留以便重设计时一行打开。
     static void TryClaimTownOfflineReward()
     {
-        if (_offlineClaimedThisTownVisit) return;
-        // 新手引导未完成时不弹，避免半透明遮罩挡「点冒险」
-        if (!StoryProgress.TutorialDone) return;
+        // 2026-09-20 离线金币暂停：直接返回，不结算、不弹窗、不建入口。
+        // 恢复方式：删掉下面这行 return，并取消注释原逻辑块即可。
+        return;
 
-        var save = SaveSystem.Instance;
-        if (save?.Data == null) return;
-
-        long now = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        long secs = System.Math.Max(0, now - save.Data.lastSaveTime);
-        if (secs < 60) return; // 不足 1 分钟不弹
-
-        int farm = save.Data.townLevel != null ? save.Data.townLevel.farm : 0;
-        long gold = save.CalcOfflineGold();
-        _offlineClaimedThisTownVisit = true;
-        if (gold <= 0)
-        {
-            save.Save();
-            return;
-        }
-
-        ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: true, notify: false);
-        double maxMin = (8 + farm * 2) * 60.0;
-        OfflineRewardPopup.Show(gold, System.Math.Min(secs / 60.0, maxMin));
+        // —— 以下为暂停前的原逻辑（已注释，待重设计后恢复）——
+        // if (_offlineClaimedThisTownVisit) return;
+        // if (!StoryProgress.TutorialDone) return;
+        // var save = SaveSystem.Instance;
+        // if (save?.Data == null) return;
+        // long now = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        // long secs = System.Math.Max(0, now - save.Data.lastSaveTime);
+        // if (secs < 60) return;
+        // int farm = save.Data.townLevel != null ? save.Data.townLevel.farm : 0;
+        // long gold = save.CalcOfflineGold();
+        // _offlineClaimedThisTownVisit = true;
+        // if (gold <= 0) { save.Save(); return; }
+        // ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: true, notify: false);
+        // double minutes = System.Math.Min(secs / 60.0, (8 + farm * 2) * 60.0);
+        // GuildHallUI.OfflineRewardGold = gold;
+        // GuildHallUI.OfflineRewardMinutes = minutes;
+        // GuildHallUI.Instance?.TryShowOfflineRewardEntry();
     }
 
     void OnDestroy()

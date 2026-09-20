@@ -109,6 +109,33 @@ public class ChapterSplashOverlay : MonoBehaviour
             brt.offsetMax = Vector2.zero;
         }
 
+        // 开章引言：每章一句氛围钩子（ChapterStoryBeats.ChapterQuote）。
+        // 落在标题/正文下方的留白处，不改动既有标题/正文的位置字号颜色。
+        // 章节号取自 ChapterManager，与战斗内其他叙事取值一致，不写死。
+        int qChapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        string quote = ChapterStoryBeats.ChapterQuote(qChapter);
+        if (!string.IsNullOrEmpty(quote))
+        {
+            var quoteGo = new GameObject("Quote");
+            quoteGo.transform.SetParent(transform, false);
+            var quoteText = quoteGo.AddComponent<Text>();
+            quoteText.text = quote;
+            quoteText.alignment = TextAnchor.MiddleCenter;
+            quoteText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            quoteText.verticalOverflow = VerticalWrapMode.Overflow;
+            quoteText.fontSize = 26;
+            quoteText.fontStyle = FontStyle.Italic;
+            quoteText.color = new Color(1f, 1f, 1f, 0.85f); // 纯白，略低于正文以区分层次
+            quoteText.raycastTarget = false;
+            quoteText.font = GameFonts.GetChinese(); // 与标题/正文同款中文字体
+            var qrt = quoteText.rectTransform;
+            // 正文底沿在 0.22：引言放在其下方 0.04–0.18 的留白带，避免与标题/正文重叠。
+            qrt.anchorMin = new Vector2(0.1f, 0.04f);
+            qrt.anchorMax = new Vector2(0.9f, 0.18f);
+            qrt.offsetMin = Vector2.zero;
+            qrt.offsetMax = Vector2.zero;
+        }
+
         IsFinished = false;
     }
 
