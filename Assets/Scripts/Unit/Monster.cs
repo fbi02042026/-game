@@ -263,6 +263,7 @@ public class Monster : UnitBase
     bool _eliteGlass;
     bool _bossPhase2Started;
     bool _bossPhaseShiftBusy;
+    bool _enraged;
     private int _bossSwingIndex;
     private bool _isEnteringMap;
     /// <summary>
@@ -796,7 +797,7 @@ public class Monster : UnitBase
             : 0f;
         _skillCooldown = _canUseActiveSkill && !strong ? (rangedSkill ? 0f : 3f) : 0f;
 
-        Debug.Log($"[Monster:{template.id}] Init | mCh={monsterChapter} sprite={_spriteIndex} style={_attackStyle} kit={MonsterAttackStyleTable.GetVfxKit(_attackStyle)} boss={_isBossUnit} range={atkRange:F1} skill={_skillId} vfxSys={(BattleVFXSystem.Instance != null)}");
+        Debug.Log($"[Monster:{(template != null ? template.id : "fallback")}] Init | mCh={monsterChapter} sprite={_spriteIndex} style={_attackStyle} kit={MonsterAttackStyleTable.GetVfxKit(_attackStyle)} boss={_isBossUnit} range={atkRange:F1} skill={_skillId} vfxSys={(BattleVFXSystem.Instance != null)}");
         BattleBossHpBar.RefreshFromField();
     }
 
@@ -1040,6 +1041,13 @@ public class Monster : UnitBase
         if (affix != null && affix.DamageTakenMul > 0f && !Mathf.Approximately(affix.DamageTakenMul, 1f))
             inDamage = damage * affix.DamageTakenMul;
 
+        // 天赋「精英猎手」：玩家侧对精英 / Boss 的伤害加成
+        if (source != null && !(source is Monster) && (_isBossUnit || _eliteWave))
+        {
+            float bonus = source.attr != null ? source.attr.GetAttr(AttrType.EliteDamage) : 0f;
+            if (bonus > 0f) inDamage *= (1f + bonus);
+        }
+
         base.TakeDamage(inDamage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source);
 
         // V6 词缀「荆棘」：打我的人按比例吃回一点伤害。
@@ -1061,6 +1069,7 @@ public class Monster : UnitBase
 
         BattleBossHpBar.RefreshFromField();
         TryBeginBossPhase2();
+        TryBeginEnrage();
     }
 
     void TryBeginBossPhase2()
@@ -1093,6 +1102,36 @@ public class Monster : UnitBase
     }
 
     /// <summary>?????????????????????????/summary>
+    // ===== Boss 狂暴机制：仅第 5 章起、总开关控制；只改攻击间隔 =====
+    /// <summary>
+    /// 运行期标志，不持久化。条件满足即进入狂暴一次：
+    /// 是 Boss、未死、总开关开、章节≥阈值、当前/最大血量≤阈值。
+    /// 恢复存档后本标志随怪物重建而重置，下一帧 Update 会按当前血量重新判定。
+    /// </summary>
+    void TryBeginEnrage()
+    {
+        if (!_isBossUnit || _enraged || isDead) return;
+        if (!GameConfig.BOSS_ENRAGE_ENABLED) return;
+        if (_chapter < GameConfig.BOSS_ENRAGE_MIN_CHAPTER) return;
+        float maxHp = attr != null ? attr.GetAttr(AttrType.MaxHp) : 0f;
+        if (maxHp < 1f) return;
+        if (currentHp / maxHp > GameConfig.BOSS_ENRAGE_HP_RATIO) return;
+        _enraged = true;
+        UIManager.Instance?.ShowToast("Boss 进入狂暴！");
+        // 视觉反馈：直接复用现有「受击」特效（PlayVictimHit），不新造特效系统
+        if (BattleVFXSystem.Instance != null)
+            BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), false, GetVfxFacingDir());
+    }
+
+    /// <summary>狂暴：只把攻击间隔 ÷倍率（即攻速 ×倍率），不动伤害/属性缩放。</summary>
+    protected override float GetAttackCooldown()
+    {
+        float cd = base.GetAttackCooldown();
+        if (_enraged)
+            cd /= GameConfig.BOSS_ENRAGE_ATK_SPEED_MUL;
+        return cd;
+    }
+
     void BringHpBarFront()
     {
         s_hpBarFrontBoost = (s_hpBarFrontBoost + 2) % 40;
@@ -1324,6 +1363,8 @@ public class Monster : UnitBase
 
     protected override void Update()
     {
+        // 狂暴重判定：存档恢复后本帧按当前血量立即进入（不持久化，重建即重置）
+        if (!isDead && _isBossUnit) TryBeginEnrage();
         if (!isDead && _canUseActiveSkill)
         {
             _skillCooldown -= Time.deltaTime;
@@ -1429,7 +1470,9 @@ public class Monster : UnitBase
             ? new Vector3(primaryTarget.transform.position.x, GROUND_Y + 0.02f, primaryTarget.transform.position.z)
             : new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
 
-        GameObject disc = CreateTelegraphDisc(center, radius);
+        GameObject disc = MonsterAttackStyleTable.IsRanged(_swingStyle)
+            ? CreateTelegraphDisc(center, radius)
+            : CreateTelegraphFan(new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z), radius, GetVfxFacingDir());
         float t = 0f;
         float warn = Mathf.Max(0.5f, telegraphSec);
         while (t < warn)
@@ -1447,6 +1490,10 @@ public class Monster : UnitBase
 
         if (!isDead && gameObject.activeInHierarchy)
         {
+            // 预警结束、技能真正释放瞬间触发一次震屏（仅首次释放；Boss 阶段2 连砸不再震）
+            CombatJuice.Shake(
+                _isBossUnit ? GameConfig.BOSS_SKILL_RELEASE_SHAKE_AMP : GameConfig.ELITE_SKILL_RELEASE_SHAKE_AMP,
+                _isBossUnit ? GameConfig.BOSS_SKILL_RELEASE_SHAKE_DUR : GameConfig.ELITE_SKILL_RELEASE_SHAKE_DUR);
             ExecuteActiveSkillNow(primaryTarget, damage, radius, kit);
             // Boss 阶段 2：连砸第二下
             if (_isBossUnit && GetBossPhase() >= 2 && !MonsterAttackStyleTable.IsRanged(_swingStyle))
@@ -1492,6 +1539,61 @@ public class Monster : UnitBase
         tex.Apply();
         _circleSprite = Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), s);
         return _circleSprite;
+    }
+
+    static Sprite _fanSprite;
+    static Sprite MakeFanSprite()
+    {
+        if (_fanSprite != null) return _fanSprite;
+        // 贴图宽 w、高 h=2w：锚点(左中)即扇形顶点，贴图右半为一张 90° 扇形（朝 +X）。
+        const int w = 128;
+        const int h = 256;
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        float c = (h - 1) * 0.5f;   // 顶点(左中)对应像素 y
+        float maxR = w;             // 扇形最大半径(像素，沿 +X)
+        float half = Mathf.PI * 0.25f; // 半角 45°（总 90°，-45°~+45°）
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            float dx = x;
+            float dy = y - c;
+            float radial = Mathf.Sqrt(dx * dx + dy * dy);
+            if (radial > maxR || dx < 0f)
+            {
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, 0f));
+                continue;
+            }
+            float ang = Mathf.Atan2(dy, dx); // 以 +X 为 0
+            if (Mathf.Abs(ang) > half)
+            {
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, 0f));
+                continue;
+            }
+            // 半径方向软边衰减
+            float aR = 1f - Mathf.SmoothStep(0.82f, 1f, radial / maxR);
+            // 角度两侧软边
+            float aA = 1f - Mathf.SmoothStep(half * 0.9f, half, Mathf.Abs(ang));
+            tex.SetPixel(x, y, new Color(1f, 1f, 1f, aR * aA));
+        }
+        tex.Apply();
+        _fanSprite = Sprite.Create(tex, new Rect(0f, 0f, w, h), new Vector2(0f, 0.5f), w);
+        return _fanSprite;
+    }
+
+    static GameObject CreateTelegraphFan(Vector3 origin, float radius, int facingDir)
+    {
+        var go = new GameObject("SkillTelegraphFan");
+        go.transform.position = origin;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = MakeFanSprite();
+        sr.color = new Color(0.95f, 0.12f, 0.1f, 0.42f);
+        sr.sortingOrder = GameConfig.SORT_UNIT - 2;
+        // 锚点(左中)：扇形从施法者脚下朝外展开；朝左时 localScale.x 取负实现 X 翻转。
+        // 贴图 128x256 / ppu=128 → 世界尺寸 (1,2)，故 radius 即 scale.x；Y 压缩比与红圈一致 0.35。
+        int sign = facingDir >= 0 ? 1 : -1;
+        go.transform.localScale = new Vector3(radius * sign, radius * 0.35f, 1f);
+        return go;
     }
 
     void ExecuteActiveSkillNow(UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit)
@@ -1666,6 +1768,7 @@ public class Monster : UnitBase
         _isEnteringMap = false;
         _enterAtPauseStop = false;
         _bossSwingIndex = 0;
+        _enraged = false;
         _forcedTarget = null;
         _worldHpBar = null;
         HideStackLabel();

@@ -4,7 +4,7 @@ using UnityEngine;
 
 /// <summary>
 /// 天赋 V4 静态表（右列重制）。
-/// 左列 L1-L40（金币，线性必点）；右列 12 个「天赋石」节点（花石、可升级、分批开放、互斥）。
+/// 左列 L1-L40（金币，线性必点）；右列 13 个「天赋石」节点（花石、可升级、分批开放、互斥）。
 /// 右列数据来源：Assets/Data/Source/Tables/talent_right.csv → Resources/Data/Tables/talent_right.bytes。
 /// 缺表/解析失败时回退到下方 HardcodedRightNodes()，保证天赋界面一定开得起来。
 /// </summary>
@@ -36,7 +36,8 @@ public static class TalentDefs
         MagicDamage,
         PhysPen,
         MoveSpeed,
-        Custom
+        Custom,
+        EliteDamage      // 对精英 / Boss 的伤害加成（百分点，8 = +8%）
     }
 
     public enum Side
@@ -426,6 +427,9 @@ public static class TalentDefs
             new[] { 95 }, AttrKind.Custom, new[] { 0f }, "slot", "技能槽 IV"));
         list.Add(HNode(12, "R_DUAL", "双修解锁", RightNodeType.OneTime, 40, 1, "",
             new[] { 180 }, AttrKind.Custom, new[] { 0f }, "dual", "双修解锁"));
+        // R_HUNT：后期战力节点，替代已取消的 R14/R15 —— 对精英 / Boss 的伤害加成
+        list.Add(HNode(13, "R_HUNT", "精英猎手", RightNodeType.Attr, 30, 3, "",
+            new[] { 30, 65, 110 }, AttrKind.EliteDamage, new[] { 8f, 15f, 25f }, "hunt", "精英猎手"));
         return list.ToArray();
     }
 
@@ -587,6 +591,7 @@ public static class TalentDefs
             case AttrKind.AtkSpeed: return "攻速";
             case AttrKind.MoveSpeed: return "移速";
             case AttrKind.SkillCooldown: return "技能冷却";
+            case AttrKind.EliteDamage: return "精英伤害";
             default: return "";
         }
     }

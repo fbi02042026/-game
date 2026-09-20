@@ -11,3 +11,4 @@ R_JOB,职业专精,JobChoice,30,5,job,15/32/55/85/125,j0/j1/j2/j3/j4/j5,剑盾�
 R_BAG,背包扩容,OneTime,30,1,-,60,bag,背包扩容,Custom,0
 R_SLOT,技能槽 IV,OneTime,40,1,-,95,slot,技能槽 IV,Custom,0
 R_DUAL,双修解锁,OneTime,40,1,-,180,dual,双修解锁,Custom,0
+R_HUNT,精英猎手,Attr,30,3,-,30/65/110,hunt,精英猎手,EliteDamage,8/15/25

@@ -63,6 +63,15 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
         return _cameraFollow;
     }
 
+    /// <summary>
+    /// 精英/Boss 红圈/扇形预警结束、技能真正释放瞬间的屏幕震动。
+    /// 通过单例取相机跟随组件触发，无需持有实例。
+    /// </summary>
+    public static void Shake(float amplitude, float duration)
+    {
+        Instance?.GetCameraFollow()?.AddShake(amplitude, duration);
+    }
+
     /// <summary>受击结算后调用（finalDamage &gt; 0）。</summary>
     public void OnHit(UnitBase victim, float finalDamage, bool isCrit, bool showJuice)
     {

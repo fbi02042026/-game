@@ -114,27 +114,39 @@ public static class MonsterStatsTable
     /// <summary>
     /// 取某章【普通怪】（排除 isBoss）的 baseHp / baseAttack 平均值。
     /// 用途：精英兜底值不该写死常量（第 3 章起会低于本章杂兵），改由本章普通怪基准推导。
-    /// 表里没有该章普通怪时返回 false，调用方自行回退 GameConfig 常量。
+    /// 表缺失兜底（分级）：本章无普通怪 → 依次向低章（chapter-1 … 1）借基准；
+    /// 全部章节都没数据才返回 false，调用方回退 GameConfig 常量。
     /// </summary>
     public static bool TryGetChapterAverage(int monsterChapter, out float avgHp, out float avgAtk)
     {
         avgHp = 0f;
         avgAtk = 0f;
         EnsureLoaded();
-        float hp = 0f, atk = 0f;
-        int n = 0;
-        for (int i = 0; i < _all.Count; i++)
+
+        int from = monsterChapter;
+        if (from < 1) from = 1;
+        for (int ch = from; ch >= 1; ch--)
         {
-            var e = _all[i];
-            if (e == null || e.monsterChapter != monsterChapter || e.isBoss) continue;
-            hp += e.baseHp;
-            atk += e.baseAttack;
-            n++;
+            float hp = 0f, atk = 0f;
+            int n = 0;
+            for (int i = 0; i < _all.Count; i++)
+            {
+                var e = _all[i];
+                if (e == null || e.monsterChapter != ch || e.isBoss) continue;
+                hp += e.baseHp;
+                atk += e.baseAttack;
+                n++;
+            }
+            if (n <= 0) continue;
+
+            avgHp = hp / n;
+            avgAtk = atk / n;
+            if (ch != monsterChapter)
+                Debug.LogWarning($"[MonsterStatsTable] 第 {monsterChapter} 章无普通怪数据，精英基准借用第 {ch} 章。");
+            return true;
         }
-        if (n <= 0) return false;
-        avgHp = hp / n;
-        avgAtk = atk / n;
-        return true;
+        Debug.LogWarning("[MonsterStatsTable] 所有章节均无普通怪数据，精英回退 GameConfig 常量。");
+        return false;
     }
 
     public static IReadOnlyList<MonsterStatsEntry> GetAll()

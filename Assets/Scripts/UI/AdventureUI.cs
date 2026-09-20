@@ -361,7 +361,12 @@ public class AdventureUI : MonoBehaviour, ITownPage
         rt.offsetMax = new Vector2(0, top);
 
         // ── 地图背景区 ──
-        float mapH = 1280f - TOP_H - BOT_H - DETAIL_H - 16f;
+        // 当前 UI 逻辑高度：瘦屏（9:19~9:21）按宽度匹配时 > 1280，标准 720×1280 屏恒为 1280。
+        // 直接复用 CanvasScaler 的取值逻辑，避免把地图高度写死成设计分辨率。
+        float uiLogicalH = DesignAspectLetterbox.ResolveUiMatch() < 0.5f
+            ? GameConfig.DESIGN_WIDTH / Mathf.Max(1e-3f, Screen.width / (float)Screen.height)
+            : GameConfig.DESIGN_HEIGHT;
+        float mapH = uiLogicalH - TOP_H - BOT_H - DETAIL_H - 16f;
         var mapRoot = new GameObject("MapRoot", typeof(RectTransform));
         mapRoot.transform.SetParent(go.transform, false);
         var mapRt = mapRoot.GetComponent<RectTransform>();

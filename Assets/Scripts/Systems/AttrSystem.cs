@@ -363,6 +363,10 @@ public class AttrSystem
             case TalentDefs.AttrKind.MagicDamage:
                 AddAttr(AttrType.MagicPower, fx.value * 0.01f, true);
                 break;
+            case TalentDefs.AttrKind.EliteDamage:
+                // 精英猎手：对精英 / Boss 的伤害加成倍率（0.08 = +8%）
+                AddAttr(AttrType.EliteDamage, fx.value * 0.01f, true);
+                break;
             case TalentDefs.AttrKind.WeaponSwordShield:
             case TalentDefs.AttrKind.WeaponHeavy:
             case TalentDefs.AttrKind.WeaponRangedMagic:

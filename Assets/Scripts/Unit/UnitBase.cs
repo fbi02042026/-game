@@ -1077,8 +1077,10 @@ public abstract class UnitBase : MonoBehaviour
     /// 玩家职业表 AttackInterval 单位就是秒（P004 游侠 0.5 = 半秒一刀）。
     /// 仅敌方弓/法球再乘 PROJECTILE_ATK_SPEED_MUL；我方不叠，否则表上的 0.5s 会变成 1s。
     /// 实际出手还受 UnitAnimation 攻击锁限制（PlayAttack 会把锁钳到不超过本冷却）。
+    /// 2026-09-20：改为 virtual —— Monster 需要覆写它实现 Boss 狂暴（狂暴时把冷却 ÷倍率）。
+    /// 其它子类行为完全不变（它们不覆写）。
     /// </summary>
-    protected float GetAttackCooldown()
+    protected virtual float GetAttackCooldown()
     {
         float atkSpd = Mathf.Max(0.05f, attr.GetAttr(AttrType.AttackSpeed));
         AttackVfxKit kit = GetAttackVfxKit();

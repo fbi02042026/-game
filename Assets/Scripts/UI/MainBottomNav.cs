@@ -55,6 +55,16 @@ public class MainBottomNav : MonoBehaviour
         Instance = this;
         AutoBind();
         WireClicks();
+
+        // P2-5 SafeArea：底部五入口根节点（本组件所在 GameObject）贴底，
+        // 内缩底部安全区（挖孔/手势条），避免按钮被遮挡。左右不缩。
+        // 运行时补组件，不碰预制体；GetComponent 守卫避免重复挂。
+        if (GetComponent<SafeAreaFitter>() == null)
+        {
+            var navSafe = gameObject.AddComponent<SafeAreaFitter>();
+            navSafe.edge = SafeAreaFitter.Edge.Bottom;
+            navSafe.enabledFit = true;
+        }
     }
 
     void OnDestroy()

@@ -104,6 +104,10 @@ public class TalentUI : MonoBehaviour
     bool _listsBuilt;
     bool _scrollSyncing;
 
+    // 洗点二次确认弹窗（运行时建树，不碰 prefab）
+    GameObject _resetConfirmPopup;
+    Text _resetConfirmDesc;
+
     class LeftNodeView
     {
         public int index;
@@ -161,6 +165,7 @@ public class TalentUI : MonoBehaviour
         EnsureCurrencyBindings();
         EnsureChoicePopupBindings();
         CloseChoicePopup(); // 预制体 ChoicePopup 默认可能为 active，打开时强制关
+        CloseResetConfirm(); // 顺手关掉可能残留的洗点确认框
         LoadArtSprites();
         if (!_wired) WireClicks();
         else WireChoiceConfirmIfNeeded();
@@ -646,8 +651,8 @@ public class TalentUI : MonoBehaviour
             Debug.Log("[TalentUI] " + reason);
             return;
         }
-        onResetRequested?.Invoke();
-        RefreshAll();
+        // 二次确认：先弹确认框，确认后才真正洗点（洗点逻辑本身不动）
+        OpenResetConfirm();
     }
 
     void OnClickLeft(int index0)
@@ -808,6 +813,108 @@ public class TalentUI : MonoBehaviour
         _pendingNode = null;
         _pendingRowIndex = -1;
         _pendingSelectedOpt = -1;
+    }
+
+    // ===== 任务：洗点二次确认弹窗（运行时建树，沿用 CreateImage/CreateText 风格）=====
+    /// <summary>打开洗点确认框，并动态填入本次返还预览（口径与 TalentSystem.TryRespecRight 一致）。</summary>
+    void OpenResetConfirm()
+    {
+        EnsureResetConfirmPopup();
+        if (_resetConfirmPopup == null) return;
+
+        // 与 TryRespecRight 口径一致：统计右列已投入天赋石，返还 80%（向下取整）
+        var talents = GetTalents();
+        int totalSpent = 0;
+        if (talents != null)
+        {
+            for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
+            {
+                var node = TalentDefs.RightNodes[i];
+                int lv = TalentDefs.GetRightNodeLevel(talents, node.id);
+                if (lv > 0) totalSpent += TalentDefs.RightNodeTotalSpent(node, lv);
+            }
+        }
+        int refund = (int)(totalSpent * 0.8f); // 向下取整，与洗点逻辑一致
+
+        if (_resetConfirmDesc != null)
+        {
+            _resetConfirmDesc.text =
+                "确认要洗点吗？\n\n" +
+                "· 将清空全部右侧天赋（含已选职业），可重新分配。\n" +
+                "· 返还已投入天赋石的 80%（向下取整）：本次预计返还 " + refund +
+                    "（已投入 " + totalSpent + "）。\n" +
+                "· 左侧金币天赋不参与洗点，已花费的金币不返还。";
+        }
+
+        _resetConfirmPopup.SetActive(true);
+        _resetConfirmPopup.transform.SetAsLastSibling();
+    }
+
+    void CloseResetConfirm()
+    {
+        if (_resetConfirmPopup != null) _resetConfirmPopup.SetActive(false);
+    }
+
+    /// <summary>点「确定」才真正执行洗点（即原 OnClickReset 的洗点动作，逻辑未改）。</summary>
+    void ConfirmReset()
+    {
+        CloseResetConfirm();
+        onResetRequested?.Invoke();
+        RefreshAll();
+    }
+
+    /// <summary>懒建洗点确认弹窗。独立 Canvas，层级 TownPopup(900)：高于天赋面板 TownVeil(200)，
+    /// 低于最顶层弹窗（Loading/Toast/FullscreenFx）。</summary>
+    void EnsureResetConfirmPopup()
+    {
+        if (_resetConfirmPopup != null) return;
+
+        var root = CreateRect(transform, "ResetConfirmPopup");
+        Stretch(root.GetComponent<RectTransform>());
+
+        var canvas = root.AddComponent<Canvas>();
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup, UICanvasSetup.ResolveUiCamera());
+        root.AddComponent<GraphicRaycaster>();
+
+        var dim = CreateImage(root.transform, "Dim", new Color(0f, 0f, 0f, 0.62f));
+        Stretch(dim.rectTransform);
+
+        var box = CreateImage(root.transform, "Box", new Color(0.93f, 0.88f, 0.78f, 1f));
+        SetAnchored(box.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(560f, 380f));
+
+        var title = CreateText(box.transform, "Title", "洗点确认", 30, new Color(0.25f, 0.15f, 0.1f));
+        SetAnchored(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -24f), new Vector2(480f, 44f));
+
+        var desc = CreateText(box.transform, "Desc", "", 20, new Color(0.2f, 0.12f, 0.08f));
+        desc.alignment = TextAnchor.UpperLeft;
+        SetAnchored(desc.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 10f), new Vector2(500f, 220f));
+        _resetConfirmDesc = desc;
+
+        var cancel = CreateImage(box.transform, "Cancel", new Color(0.45f, 0.3f, 0.2f, 1f));
+        SetAnchored(cancel.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0.5f),
+            new Vector2(-110f, 28f), new Vector2(200f, 56f));
+        cancel.raycastTarget = true;
+        var cancelBtn = cancel.gameObject.AddComponent<Button>();
+        cancelBtn.targetGraphic = cancel;
+        cancelBtn.onClick.AddListener(CloseResetConfirm);
+        var cancelTxt = CreateText(cancel.transform, "Label", "取消", 26, Color.white);
+        Stretch(cancelTxt.rectTransform);
+
+        var ok = CreateImage(box.transform, "Confirm", new Color(0.55f, 0.35f, 0.2f, 1f));
+        SetAnchored(ok.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0.5f),
+            new Vector2(110f, 28f), new Vector2(200f, 56f));
+        ok.raycastTarget = true;
+        var okBtn = ok.gameObject.AddComponent<Button>();
+        okBtn.targetGraphic = ok;
+        okBtn.onClick.AddListener(ConfirmReset);
+        var okTxt = CreateText(ok.transform, "Label", "确定洗点", 26, Color.white);
+        Stretch(okTxt.rectTransform);
+
+        _resetConfirmPopup = root;
+        root.SetActive(false);
     }
 
     void EnsureLists()

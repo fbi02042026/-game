@@ -28,5 +28,6 @@ public enum AttrType
     CooldownReduce,
     MagicPower,     // 魔法强度
     PhyPower,       // 物理强度
-    CritDamage      // 暴击伤害倍率（1.5 = 150%）
+        CritDamage,     // 暴击伤害倍率（1.5 = 150%）
+        EliteDamage      // 对精英/Boss 的伤害加成倍率（0.08 = +8%）
 }
