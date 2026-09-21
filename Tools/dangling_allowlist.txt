@@ -1,0 +1,33 @@
+# 已人工确认无害的断链 guid
+#
+# CheckDanglingRefs.py 会把这里登记的 guid 单独归到「已确认无害」一栏，
+# 并且**不参与 --strict 退出码** —— 也就是说它们不会再让体检"变红"。
+#
+# 什么时候往这里加：实机/编辑器里看过，确认界面上没有粉块、空图、丢组件，才登记。
+# 格式：一行一个 guid，`#` 后面写清楚「是什么、在哪个界面、为什么无害」。
+#
+# ⚠ 新出现的断链**不会**自动进这个表 —— 只有确认过才加。
+#   所以每次体检「需要处理的（未豁免）」那一栏冒出来的，就是真正的新问题。
+#
+# 2026-09-21 主人确认：「你说的丢失脚本和引用的没有问题」→ 下列 11 条全部登记豁免。
+
+# ===== 脚本类（1 条）=====
+1340940d05f058449bbcc4c36d9f590c   # WorldMapPopup.prefab（世界地图弹窗）Missing Script；已确认是资源改名后的残留引用，界面上无异常
+
+# ===== 材质类（7 条 · m_Material, fileID 2100000）=====
+# 说明：SpriteRenderer / CanvasRenderer 的材质大量指向「引擎内置材质」，这些 guid 本来就不在 Assets 里，
+#       磁盘侧扫描查不到属于正常现象，界面上看不出来。
+ca02b3ec27d7d7b419655c701d8e5a98   # WorldMapPopup.prefab ×8
+b047fcc20947fa349b7f20e175d878ca   # WorldMapPopup.prefab ×8
+86d5fd751fa7e5544849c61d8bee9c41   # WorldMapPopup.prefab ×8
+c0d4fd61fe83b8f4996b8a0be8ab86c7   # BattleStageMap.prefab ×1
+69b2e4173bee97f4f8b290de67cffcf9   # TalentUI.prefab ×5
+3f274fb48d88bd0459cbc0eec3b6329a   # MercenaryRecruitPopup.prefab ×1
+2d75a2bc8aaddab47a36091a14fd85ce   # MercenaryRecruitPopup.prefab ×1
+
+# ===== 精灵类（2 条 · m_Sprite, fileID 21300000）=====
+7e208e861ed01e246a52a6faaf9f3111   # BattleUI.prefab ×2；已确认战斗 HUD 上无空图/粉块
+4d7a11b6dde989549a760fe47391f96e   # BattleUI.prefab ×1；已确认战斗 HUD 上无空图/粉块
+
+# ===== 场景实例引用（1 条）=====
+429795ccaa0c615408a6c4b24a06711d   # Battle.unity：Monster 预制体实例的 m_SourcePrefab / m_CorrespondingSourceObject，属实例化残留
