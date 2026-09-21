@@ -182,6 +182,19 @@ public class TownBackpackGrid : MonoBehaviour
         gridLayout.childAlignment = TextAnchor.UpperCenter;
     }
 
+    /// <summary>本网格实际有几行（= 已绑定格子的最大 gridY + 1），用于判断「整行锁图案」该不该亮。</summary>
+    public int GridRowCount()
+    {
+        if (cells.Count == 0) return GameConfig.BACKPACK_HEIGHT;
+        int maxY = 0;
+        for (int i = 0; i < cells.Count; i++)
+        {
+            var c = cells[i];
+            if (c != null && c.gridY > maxY) maxY = c.gridY;
+        }
+        return maxY + 1;
+    }
+
     public void Refresh()
     {
         if (cells.Count == 0) BindFromHierarchy();
@@ -193,7 +206,8 @@ public class TownBackpackGrid : MonoBehaviour
             LayoutRebuilder.ForceRebuildLayoutImmediate(gridContainer);
 
         int unlockedRows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
-        bool bottomLocked = unlockedRows < GameConfig.BACKPACK_HEIGHT;
+        // 整行锁图案亮的条件 = 本网格实际行数 > 已解锁行数（原来拿 BACKPACK_HEIGHT(3) 比，4 行网格时锁永远不亮）
+        bool bottomLocked = unlockedRows < GridRowCount();
         if (rowLockOverlay != null)
             rowLockOverlay.SetActive(bottomLocked);
 

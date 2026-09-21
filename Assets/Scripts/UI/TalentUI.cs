@@ -867,6 +867,18 @@ public class TalentUI : MonoBehaviour
     /// 低于最顶层弹窗（Loading/Toast/FullscreenFx）。</summary>
     void EnsureResetConfirmPopup()
     {
+        // 防两套叠加：域重载 / 重新实例化后内存字段 _resetConfirmPopup 归零，
+        // 但 prefab 重建时旧 ResetConfirmPopup 节点可能已残留；只判字段会重影。
+        // 先按名字探测，存在则倒序销毁旧节点再重建，并把字段置空避免悬空引用。
+        var existing = transform.Find("ResetConfirmPopup");
+        if (existing != null)
+        {
+            for (int i = existing.childCount - 1; i >= 0; i--)
+                Destroy(existing.GetChild(i).gameObject);
+            Destroy(existing.gameObject);
+            _resetConfirmPopup = null;
+        }
+
         if (_resetConfirmPopup != null) return;
 
         var root = CreateRect(transform, "ResetConfirmPopup");

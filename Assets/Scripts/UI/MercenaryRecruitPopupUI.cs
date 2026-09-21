@@ -228,6 +228,8 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         bool alreadyHired = MercHireSession.IsAlreadyHired(offer);
         ApplyHiredVisual(c, alreadyHired);
 
+        RefreshGrowBadge(c, offer, rarity);
+
         int gold = MercHireSession.GoldCost(offer);
         bool canHireMore = MercHireSession.CanHireMore();
         bool hasGold = ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.Gold) >= gold;
@@ -433,6 +435,56 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         rt.sizeDelta = new Vector2(280f, 40f);
         t.gameObject.SetActive(false);
         return t;
+    }
+
+    /// <summary>补挂「佣兵养成构件」：职业徽记角标 + 本命碎片数量（懒创建，reroll 时只刷新不重建）。</summary>
+    static void RefreshGrowBadge(CardView c, MercenaryData offer, MercRosterDefs.MercRarity rarity)
+    {
+        if (c == null || c.root == null || offer == null) return;
+        var cardRoot = c.root.transform;
+
+        // —— 职业徽记角标（右上角）——
+        Image badge = cardRoot.Find("MG_Badge")?.GetComponent<Image>();
+        string key = !string.IsNullOrEmpty(offer.hireId) ? offer.hireId : offer.mercId;
+        if (badge == null)
+        {
+            badge = MercGrowUI.CreateBadgeForMerc(cardRoot, "MG_Badge", key, rarity, 40f);
+            if (badge != null)   // 兜空：构件返回 null 或素材缺失都不加空节点、不改排版
+            {
+                var rt = badge.rectTransform;
+                rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+                rt.pivot = new Vector2(1f, 1f);
+                rt.anchoredPosition = new Vector2(-6f, -6f);
+            }
+        }
+        else
+        {
+            MercGrowUI.RefreshBadge(badge, MercRosterDefs.GetJobName(key), rarity);
+        }
+
+        // —— 本命碎片数量（角标下方，0 时不显示）——
+        Text frag = cardRoot.Find("MG_Fragment")?.GetComponent<Text>();
+        if (frag == null)
+        {
+            frag = CreateTxt(cardRoot, "MG_Fragment", "", 16, TextAnchor.MiddleRight);
+            var rt = frag.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(1f, 0f);
+            rt.anchoredPosition = new Vector2(-6f, -50f);
+            rt.sizeDelta = new Vector2(160f, 24f);
+            frag.color = new Color(1f, 0.86f, 0.42f, 1f);
+        }
+        if (frag != null)
+        {
+            int fragCount = MercGrowInventory.FragmentCount(offer.hireId);
+            if (fragCount <= 0)
+                frag.gameObject.SetActive(false);
+            else
+            {
+                frag.gameObject.SetActive(true);
+                frag.text = "碎片 x" + fragCount;
+            }
+        }
     }
 
     void WireOnce()

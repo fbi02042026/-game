@@ -182,10 +182,10 @@ public static class GameConfig
     /// <summary>Monstersmoban / ani 片段已按 scale=1 录制，不再做 Canvas→战斗缩放</summary>
     public const float MONSTER_PREFAB_MONSTERS_SCALE = 1f;
     public const float MONSTER_ANCHOR_SCALE_FACTOR = 1f;
-    public const float ELITE_SCALE_MULTIPLIER = 1.3f;
-    public const float BOSS_SCALE_MULTIPLIER = 1.6f;
-    public const float ELITE_UNIT_SCALE = MONSTER_SCALE_MIN * ELITE_SCALE_MULTIPLIER;
-    public const float BOSS_UNIT_SCALE = MONSTER_SCALE_MIN * BOSS_SCALE_MULTIPLIER;
+    // 2026-09-21：精英/Boss 体型倍率已迁 combat_tuning 表（可运行时调）。
+    // 原来把它们卡住的 ELITE_UNIT_SCALE / BOSS_UNIT_SCALE（const 派生）经查全工程零引用 = 死代码，已删。
+    public static float ELITE_SCALE_MULTIPLIER => CombatTuningTable.Get("ELITE_SCALE_MULTIPLIER", 1.3f);
+    public static float BOSS_SCALE_MULTIPLIER => CombatTuningTable.Get("BOSS_SCALE_MULTIPLIER", 1.6f);
     public const float MONSTER_BASE_SCALE = 4.125f;
     /// <summary>怪物血条脚下 Y（与预制体 Monstersmoban 本地坐标一致）</summary>
     public const float MONSTER_HP_BAR_FOOT_LOCAL_Y = -2.2f;
@@ -218,17 +218,22 @@ public static class GameConfig
     /// 默认解锁的背包行数。本期扩容到 4 行，默认全开 3 行，第 4 行由背包扩容天赋 R_BAG 解锁。
     /// </summary>
     public const int BACKPACK_DEFAULT_ROWS = 3;
-    /// <summary>兼容旧存档：解锁第 4 行背包的旧天赋 ID（已并入 R_BAG，保留常量免存档报错）</summary>
-    public const string TALENT_BACKPACK_ROW4 = "backpack_row4";
+    /// <summary>
+    /// 战斗内背包固定只开放的行数（2026-09-21 主人定）。战斗内场地有限，只给前 2 行 = 8 格，
+    /// 第 3 行锁上；城镇 / 角色页不受此限制（仍走 <see cref="GetUnlockedBackpackRows"/> 的 3~4 行）。
+    /// 注意：这是**显示与可用行数的上限**，逻辑网格仍按 BACKPACK_HEIGHT_MAX 分配。
+    /// </summary>
+    public const int BATTLE_BACKPACK_ROWS = 2;
 
     /// <summary>
     /// 当前存档实际可用的背包行数（钳到 [1, BACKPACK_HEIGHT_MAX]）。
     /// <para>真值来源优先级：</para>
-    /// 1) SaveData.backpackRows —— 设计上由天赋 R_BAG 解锁后写回（默认 3，解锁置 4）；
-    /// 2) 天赋字典兜底（CountBagRowUnlocks / TALENT_BACKPACK_ROW4），保证 TalentSystem 尚未把结果
-    ///    写回 backpackRows 时，R_BAG 解锁依然能即时扩容，避免功能失效。
-    /// <para>// TODO: 需要 TalentSystem 在解锁 R_BAG 时设置 SaveData.backpackRows = 4，
-    /// 以便统一收敛到单一真值（当前兜底已让链路端到端可用，但字段才是设计上的权威来源）。</para>
+    /// 1) SaveData.backpackRows —— **权威来源**，由 TalentSystem 在 R_BAG 解锁 / 洗点时写回
+    ///    （解锁置 4，洗点清掉 R_BAG 后回落 3，见 TalentSystem.SyncBackpackRows）；
+    /// 2) 天赋字典兜底（TalentDefs.CountBagRowUnlocks），仅用于旧存档
+    ///    「天赋已点但字段还没落盘」时的兼容。
+    /// <para>2026-09-21：删除旧天赋 id 常量 TALENT_BACKPACK_ROW4（"backpack_row4"）及其死分支
+    /// —— 真天赋 id 早已是 R_BAG，旧 id 永远匹配不到。</para>
     /// </summary>
     public static int GetUnlockedBackpackRows(SaveData data)
     {
@@ -237,14 +242,14 @@ public static class GameConfig
         {
             rows = data.backpackRows;
             if (data.talents != null)
-            {
                 rows = Mathf.Max(rows, BACKPACK_DEFAULT_ROWS + TalentDefs.CountBagRowUnlocks(data.talents));
-                if (data.talents.TryGetValue(TALENT_BACKPACK_ROW4, out int lv) && lv > 0)
-                    rows = Mathf.Max(rows, BACKPACK_DEFAULT_ROWS + 1);
-            }
         }
         return Mathf.Clamp(rows, 1, BACKPACK_HEIGHT_MAX);
     }
+
+    /// <summary>战斗内实际可用的背包行数：在存档真值之上再压 <see cref="BATTLE_BACKPACK_ROWS"/> 的上限。</summary>
+    public static int GetBattleBackpackRows(SaveData data) =>
+        Mathf.Clamp(Mathf.Min(GetUnlockedBackpackRows(data), BATTLE_BACKPACK_ROWS), 1, BACKPACK_HEIGHT_MAX);
 
     /// <summary>调试/UI 容量显示用：直接读当前存档解锁的背包行数（无需传参）。</summary>
     public static int UnlockedBackpackRows() => GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
@@ -349,11 +354,11 @@ public static class GameConfig
     /// <summary>怪物远程射程倍率（相对数值表弓射程）；累计再缩）</summary>
     public const float MONSTER_RANGED_RANGE_MUL = 0.588f;
     /// <summary>普通（非精英/非Boss）远程小怪的技能伤害折扣：技能只是为了看得到子弹，不该秒人</summary>
-    public const float MONSTER_NORMAL_SKILL_DAMAGE_MUL = 0.55f;
+    public static float MONSTER_NORMAL_SKILL_DAMAGE_MUL => CombatTuningTable.Get("MONSTER_NORMAL_SKILL_DAMAGE_MUL", 0.55f);
     /// <summary>怪物普攻弹道速度倍率（勿随意改快）</summary>
     public const float MONSTER_BASIC_PROJECTILE_SPEED_MUL = 0.196f;
     /// <summary>怪物技能弹道速度倍率（勿随意改快）</summary>
-    public const float MONSTER_SKILL_PROJECTILE_SPEED_MUL = 0.138f;
+    public static float MONSTER_SKILL_PROJECTILE_SPEED_MUL => CombatTuningTable.Get("MONSTER_SKILL_PROJECTILE_SPEED_MUL", 0.138f);
     /// <summary>敌方远程普攻：落点与目标当前受击点距离超过此值则 miss（可躲开）。</summary>
     public const float PROJECTILE_IMPACT_MISS_DIST = 0.55f;
 
@@ -517,44 +522,40 @@ public static class GameConfig
     // ============================================================
     public static class EnemyTuning
     {
-        /// <summary>章内每关成长斜率（原硬编码 0.05 → Monster.cs 的 waveMul）</summary>
-        public static float StageGrowthPerStage = 0.09f;
-        /// <summary>高章单波人数上限每章 +N</summary>
-        public static int WaveCapBonusPerChapter = 1;
-        /// <summary>单波人数硬上限（原 2~4）</summary>
-        public static int WaveCapMax = 5;
-        /// <summary>Boss 二阶触发血量比例（原 0.70 → 更早进二阶）</summary>
-        public static float BossPhase2HpRatio = 0.60f;
-        /// <summary>Boss 二阶伤害倍率（原 1.18 → 二阶更狠）</summary>
-        public static float BossPhase2DmgMul = 1.30f;
+        // 2026-09-21：本节 12 项已迁 combat_tuning 表，`=> CombatTuningTable.Get(...)`；
+        // 默认值 = 原硬编码值，表缺失/构造期读表被拒时行为与硬编码完全一致。
+        // 2026-09-21 删除 5 个「全工程零引用」死字段（主人：「没用的都删掉」），真值去向已记录：
+        //   · StageGrowthPerStage        → 真值在 Monster.cs:702 `waveMul = 1f + waveNum * 0.05f`
+        //   · WaveCapBonusPerChapter / WaveCapMax → 真值走 STAGE_WAVE_MAX + StageModeTable.RollWaveCount（WavePlanner:643/666-677）
+        //   · BossPhase2HpRatio / BossPhase2DmgMul → 真值 = BOSS_PHASE2_HP_RATIO / BOSS_PHASE2_DAMAGE_MUL（已迁表）
         // 2026-09-20 删除：MonsterHpGlobalMul / MonsterDmgGlobalMul 全工程零引用（死代码）。
         // 怪物强度现在一律由 monster_stats 表决定，不再提供全局倍率（主人：「让怪硬什么已经没用了，现在都读表了」）。
 
         /// <summary>精英/Boss 词缀：第几章开始有几率出 2 个词缀。</summary>
-        public static int AffixSecondFromChapter = 4;
+        public static int AffixSecondFromChapter => CombatTuningTable.GetInt("AFFIX_SECOND_FROM_CHAPTER", 4);
         /// <summary>精英/Boss 词缀：出第 2 个词缀的概率。</summary>
-        public static float AffixSecondChance = 0.3f;
+        public static float AffixSecondChance => CombatTuningTable.Get("AFFIX_SECOND_CHANCE", 0.3f);
 
         // ===== V3.0 随机波次：只调波数与每波人数，不改敌人数值 =====
         /// <summary>压力阀总开关。关掉后波数完全由模式表决定。</summary>
-        public static bool PressureEnabled = true;
+        public static bool PressureEnabled => CombatTuningTable.GetBool("PRESSURE_ENABLED", true);
         /// <summary>连续 N 关「无死亡且通关血量 &gt; PressureHpRatio」后，下一关波数 +1。</summary>
-        public static int PressureStreakThreshold = 2;
+        public static int PressureStreakThreshold => CombatTuningTable.GetInt("PRESSURE_STREAK_THRESHOLD", 2);
         /// <summary>加压上限：最多额外加几波。</summary>
-        public static int PressureWaveCap = 2;
+        public static int PressureWaveCap => CombatTuningTable.GetInt("PRESSURE_WAVE_CAP", 2);
         /// <summary>上一关死亡过 → 下一关波数 −1（且首波延后）。</summary>
-        public static bool PressureMercyOnDeath = true;
+        public static bool PressureMercyOnDeath => CombatTuningTable.GetBool("PRESSURE_MERCY_ON_DEATH", true);
         /// <summary>判定「轻松通关」的血量线。</summary>
-        public static float PressureHpRatio = 0.70f;
+        public static float PressureHpRatio => CombatTuningTable.Get("PRESSURE_HP_RATIO", 0.70f);
         /// <summary>职业 × 模式矩阵标「高」时，该关波数 −1。</summary>
-        public static bool ModeHandicapByJob = true;
+        public static bool ModeHandicapByJob => CombatTuningTable.GetBool("MODE_HANDICAP_BY_JOB", true);
         /// <summary>每章每波人数的递增步长（第 1 章 1.00 → 第 8 章 1.21）。</summary>
-        public static float ChapterCountStep = 0.03f;
+        public static float ChapterCountStep => CombatTuningTable.Get("CHAPTER_COUNT_STEP", 0.03f);
         /// <summary>章内每关每波人数的递增步长（第 1 关 1.00 → 第 10 关 1.45）。</summary>
-        public static float StageCountStep = 0.05f;
+        public static float StageCountStep => CombatTuningTable.Get("STAGE_COUNT_STEP", 0.05f);
         /// <summary>每波人数随机浮动下限 / 上限。</summary>
-        public static float CountJitterMin = 0.85f;
-        public static float CountJitterMax = 1.15f;
+        public static float CountJitterMin => CombatTuningTable.Get("COUNT_JITTER_MIN", 0.85f);
+        public static float CountJitterMax => CombatTuningTable.Get("COUNT_JITTER_MAX", 1.15f);
     }
 
     /// <summary>
@@ -575,60 +576,63 @@ public static class GameConfig
     {
         return ChapterStatScaleTable.Get(gameChapter);
     }
+    // ===== 2026-09-21：以下 15 项已迁 combat_tuning 表，默认值 = 原硬编码值（零行为变化）=====
     /// <summary>精英额外 TTK 血量倍率（叠在章节系数上）</summary>
-    public const float ELITE_TTK_HP_MUL = 1.15f;
+    public static float ELITE_TTK_HP_MUL => CombatTuningTable.Get("ELITE_TTK_HP_MUL", 1.15f);
     /// <summary>Boss 额外 TTK 血量倍率</summary>
-    public const float BOSS_TTK_HP_MUL = 1.35f;
+    public static float BOSS_TTK_HP_MUL => CombatTuningTable.Get("BOSS_TTK_HP_MUL", 1.35f);
     /// <summary>
     /// Boss 额外 TTK【攻击】倍率。原先只有血量加成没有攻击加成，
     /// 第 8 章 Boss 攻击反而低于自家远程杂兵，故补上（2026-09-18 用户拍板）。
     /// 剧情 Boss 想更狠就单独调 monster_stats 表里的 baseAtk，不要把这里往上堆。
     /// </summary>
-    public const float BOSS_TTK_ATK_MUL = 1.35f;
+    public static float BOSS_TTK_ATK_MUL => CombatTuningTable.Get("BOSS_TTK_ATK_MUL", 1.35f);
     /// <summary>
     /// 精英血量 = 本章普通怪平均 baseHp × 本值。
     /// 原先写死 MONSTER_ELITE_HP=105，第 3 章起精英比本章杂兵还脆（第 8 章只剩 19%），
     /// 改为按章推导后自动跟随数值表（2026-09-18 用户拍板）。表缺数据时回退旧常量。
     /// </summary>
-    public const float ELITE_HP_FROM_CHAPTER_AVG = 2.6f;
+    public static float ELITE_HP_FROM_CHAPTER_AVG => CombatTuningTable.Get("ELITE_HP_FROM_CHAPTER_AVG", 2.6f);
     /// <summary>精英攻击 = 本章普通怪平均 baseAttack × 本值</summary>
-    public const float ELITE_ATK_FROM_CHAPTER_AVG = 1.6f;
+    public static float ELITE_ATK_FROM_CHAPTER_AVG => CombatTuningTable.Get("ELITE_ATK_FROM_CHAPTER_AVG", 1.6f);
     /// <summary>Boss 进入阶段 2 的血量比例（≤ 则换招）</summary>
-    public const float BOSS_PHASE2_HP_RATIO = 0.7f;
-    public const float BOSS_PHASE2_DAMAGE_MUL = 1.18f;
-    public const float BOSS_PHASE2_RADIUS_MUL = 1.35f;
-    public const float BOSS_PHASE2_TELEGRAPH = 2.2f;
-    public const float BOSS_PHASE1_TELEGRAPH = 3f;
-    public const float BOSS_PHASE_SHIFT_TELEGRAPH = 2.5f;
+    public static float BOSS_PHASE2_HP_RATIO => CombatTuningTable.Get("BOSS_PHASE2_HP_RATIO", 0.7f);
+    public static float BOSS_PHASE2_DAMAGE_MUL => CombatTuningTable.Get("BOSS_PHASE2_DAMAGE_MUL", 1.18f);
+    public static float BOSS_PHASE2_RADIUS_MUL => CombatTuningTable.Get("BOSS_PHASE2_RADIUS_MUL", 1.35f);
+    public static float BOSS_PHASE2_TELEGRAPH => CombatTuningTable.Get("BOSS_PHASE2_TELEGRAPH", 2.2f);
+    /// <summary>Boss 一阶段技能预警时长</summary>
+    public static float BOSS_PHASE1_TELEGRAPH => CombatTuningTable.Get("BOSS_PHASE1_TELEGRAPH", 3f);
+    /// <summary>Boss 阶段切换时的预警时长</summary>
+    public static float BOSS_PHASE_SHIFT_TELEGRAPH => CombatTuningTable.Get("BOSS_PHASE_SHIFT_TELEGRAPH", 2.5f);
     /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：Boss 震屏幅度</summary>
-    public const float BOSS_SKILL_RELEASE_SHAKE_AMP = 0.18f;
+    public static float BOSS_SKILL_RELEASE_SHAKE_AMP => CombatTuningTable.Get("BOSS_SKILL_RELEASE_SHAKE_AMP", 0.18f);
     /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：Boss 震屏时长</summary>
-    public const float BOSS_SKILL_RELEASE_SHAKE_DUR = 0.26f;
+    public static float BOSS_SKILL_RELEASE_SHAKE_DUR => CombatTuningTable.Get("BOSS_SKILL_RELEASE_SHAKE_DUR", 0.26f);
 
     // ===== Boss 狂暴机制（只加这一种；仅改攻击间隔，不动伤害/属性缩放）=====
     /// <summary>Boss 狂暴总开关。false=完全关闭；true=第 BOSS_ENRAGE_MIN_CHAPTER 章起启用。</summary>
-    public const bool BOSS_ENRAGE_ENABLED = true;
+    public static bool BOSS_ENRAGE_ENABLED => CombatTuningTable.GetBool("BOSS_ENRAGE_ENABLED", true);
     /// <summary>狂暴起始章节（含）：前 4 章 Boss 保持原样，第 5 章起才触发。</summary>
-    public const int BOSS_ENRAGE_MIN_CHAPTER = 5;
+    public static int BOSS_ENRAGE_MIN_CHAPTER => CombatTuningTable.GetInt("BOSS_ENRAGE_MIN_CHAPTER", 5);
     /// <summary>触发狂暴的血量阈值（当前/最大 ≤ 此值触发）。0.40=低于 40%。</summary>
-    public const float BOSS_ENRAGE_HP_RATIO = 0.40f;
+    public static float BOSS_ENRAGE_HP_RATIO => CombatTuningTable.Get("BOSS_ENRAGE_HP_RATIO", 0.40f);
     /// <summary>狂暴攻速倍率（>1 即更快）。1.5=攻击速度 +50%（攻击间隔 ÷1.5）。</summary>
-    public const float BOSS_ENRAGE_ATK_SPEED_MUL = 1.5f;
+    public static float BOSS_ENRAGE_ATK_SPEED_MUL => CombatTuningTable.Get("BOSS_ENRAGE_ATK_SPEED_MUL", 1.5f);
 
     /// <summary>精英血厚档</summary>
-    public const float ELITE_TANK_HP_MUL = 1.1f;
-    public const float ELITE_TANK_ATK_MUL = 0.92f;
-    public const float ELITE_TANK_TELEGRAPH = 3.2f;
+    public static float ELITE_TANK_HP_MUL => CombatTuningTable.Get("ELITE_TANK_HP_MUL", 1.1f);
+    public static float ELITE_TANK_ATK_MUL => CombatTuningTable.Get("ELITE_TANK_ATK_MUL", 0.92f);
+    public static float ELITE_TANK_TELEGRAPH => CombatTuningTable.Get("ELITE_TANK_TELEGRAPH", 3.2f);
     /// <summary>精英血薄档</summary>
-    public const float ELITE_GLASS_HP_MUL = 0.75f;
-    public const float ELITE_GLASS_ATK_MUL = 1.35f;
-    public const float ELITE_GLASS_TELEGRAPH = 2.0f;
+    public static float ELITE_GLASS_HP_MUL => CombatTuningTable.Get("ELITE_GLASS_HP_MUL", 0.75f);
+    public static float ELITE_GLASS_ATK_MUL => CombatTuningTable.Get("ELITE_GLASS_ATK_MUL", 1.35f);
+    public static float ELITE_GLASS_TELEGRAPH => CombatTuningTable.Get("ELITE_GLASS_TELEGRAPH", 2.0f);
     /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：精英震屏幅度</summary>
-    public const float ELITE_SKILL_RELEASE_SHAKE_AMP = 0.12f;
+    public static float ELITE_SKILL_RELEASE_SHAKE_AMP => CombatTuningTable.Get("ELITE_SKILL_RELEASE_SHAKE_AMP", 0.12f);
     /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：精英震屏时长</summary>
-    public const float ELITE_SKILL_RELEASE_SHAKE_DUR = 0.20f;
+    public static float ELITE_SKILL_RELEASE_SHAKE_DUR => CombatTuningTable.Get("ELITE_SKILL_RELEASE_SHAKE_DUR", 0.20f);
     /// <summary>公会等级系数：0.02×公会等级</summary>
-    public const float GUILD_SCALE_PER = 0.02f;
+    public static float GUILD_SCALE_PER => CombatTuningTable.Get("GUILD_SCALE_PER", 0.02f);
 
     [Header("战斗配置")]
     /// <summary>怪物伤害倍率（数值表已校准，默认 1）</summary>
@@ -672,23 +676,24 @@ public static class GameConfig
     public const int STAMINA_REGEN_SECONDS = StaminaSystem.REGEN_SECONDS_PER_POINT;
 
     // ===== 广告位 → 钻石消耗位（2026-09-19 主人拍板）=====
-    /// <summary>
-    /// 广告总开关。**聚光灯功能正式上线前必须保持 false。**
-    /// false = 所有原本「看广告」获得奖励 / 开启的入口一律走钻石
-    ///        （ResourceAdRewards 的体力/金币补给、PreLevelSystem 的遗产三选一刷新）；
-    /// true  = 恢复「看广告」路径。
-    /// 后期接激励视频广告 SDK 时把这里置 true 即可切回，UI 与奖励发放代码是同一套，改动点只有这一个常量。
-    /// 决策依据：现阶段核心指标是在线时长与留存，广告是后期变现，须等聚光灯等合规/SDK 就绪。
-    /// 把广告位先做成钻石消耗位，后期「看广告」= 免钻石 / 得钻石，改造成本最低。
-    /// </summary>
-    public const bool ADS_ENABLED_BEFORE_SPOTLIGHT = false;
+    // 2026-09-21 主人要求：**广告相关全部停用**（聚光灯计划参赛包不得出现任何广告）。
+    // 原「广告总开关」ADS_ENABLED_BEFORE_SPOTLIGHT 已注释停用，广告路径（RewardedAdBridge）
+    // 的两处调用点同步注释，见 ResourceAdRewards.TryClaimStamina / TryClaimGold。
+    // 现在顶栏的体力 / 金币补给是**纯钻石消耗位**（每日前 2 次免费），不再有任何「看广告」分支。
+    // 将来真要恢复广告：把下面这段常量与 ResourceAdRewards 里注释掉的广告分支一起解注释即可。
+    //
+    // /// <summary>
+    // /// 广告总开关。**聚光灯功能正式上线前必须保持 false。**
+    // /// false = 所有原本「看广告」获得奖励 / 开启的入口一律走钻石
+    // ///        （ResourceAdRewards 的体力/金币补给）；
+    // /// true  = 恢复「看广告」路径。
+    // /// </summary>
+    // public const bool ADS_ENABLED_BEFORE_SPOTLIGHT = false;
 
     /// <summary>钻石定价：顶栏体力补给一次（体力 +ResourceAdRewards.StaminaPerAd）。2026-09-20 钻石经济调整：20→15。</summary>
     public const int AD_SLOT_STAMINA_DIAMOND = 15;
     /// <summary>钻石定价：顶栏金币补给一次（金币 +ResourceAdRewards.GoldPerAd）。2026-09-20 钻石经济调整：20→10。</summary>
     public const int AD_SLOT_GOLD_DIAMOND = 10;
-    /// <summary>钻石定价：战前遗产三选一刷新一次（每局限一次）。</summary>
-    public const int AD_SLOT_PRELEVEL_REFRESH_DIAMOND = 50;
 
     [Header("难度 / 金币副本")]
     /// <summary>通关满 N 章后开启困难</summary>

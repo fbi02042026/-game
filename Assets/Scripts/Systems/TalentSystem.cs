@@ -56,11 +56,13 @@ public static class TalentSystem
         return Mathf.Max(1, Mathf.RoundToInt(node.goldCost));
     }
 
-    /// <summary>天赋生效提示：节点名 + 该条属性的具体提升。</summary>
+    /// <summary>左列天赋购买成功后的「恭喜获得」庆祝提示（2026-09-21 用户要求，样式对齐装备的 EquipDropPopupUI.ShowEquipGain）。</summary>
     static void AnnounceTalentGain(string nodeName, TalentDefs.Effect fx)
     {
         if (fx == null || string.IsNullOrEmpty(fx.display)) return;
-        string text = string.IsNullOrEmpty(nodeName) ? fx.display : $"{nodeName} · {fx.display}";
+        string text = string.IsNullOrEmpty(nodeName)
+            ? $"恭喜获得【{fx.display}】，实力大增！"
+            : $"恭喜获得【{nodeName}】，{fx.display}，实力大增！";
         UIManager.Instance?.ShowToast(text);
     }
 
@@ -74,6 +76,20 @@ public static class TalentSystem
             if (!string.IsNullOrEmpty(eff) && eff != node.name) text += " · " + eff;
         }
         UIManager.Instance?.ShowToast(text);
+    }
+
+    /// <summary>
+    /// 把「背包可用行数」的真值写回存档（唯一权威写入点，2026-09-21 主人要求）。
+    /// R_BAG（背包扩容）解锁 → 4 行；洗点把 R_BAG 清掉 → 回落默认 3 行。
+    /// 这样 GameConfig.GetUnlockedBackpackRows 里的天赋字典兜底只承担旧存档兼容，
+    /// 不再是「字段没落盘也能用」的主路径。
+    /// </summary>
+    static void SyncBackpackRows(SaveData data)
+    {
+        if (data == null) return;
+        data.backpackRows = Mathf.Clamp(
+            GameConfig.BACKPACK_DEFAULT_ROWS + TalentDefs.CountBagRowUnlocks(data.talents),
+            1, GameConfig.BACKPACK_HEIGHT_MAX);
     }
 
     // ===== 右列（天赋石，重制后模型）=====
@@ -127,6 +143,7 @@ public static class TalentSystem
         { reason = "天赋石不足"; return false; }
 
         data.talents[id] = 1;
+        SyncBackpackRows(data);   // R_BAG 解锁 → SaveData.backpackRows = 4
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
         Hero.Instance?.RecalcAttr();
@@ -168,6 +185,7 @@ public static class TalentSystem
         { reason = "天赋石不足"; return false; }
 
         data.talents[id] = level + 1;
+        SyncBackpackRows(data);
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
         Hero.Instance?.RecalcAttr();
@@ -214,6 +232,7 @@ public static class TalentSystem
         if (refund > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, refund, save: true, notify: true);
 
+        SyncBackpackRows(data);   // 洗点清掉 R_BAG → SaveData.backpackRows 回落 3
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
         Hero.Instance?.RecalcAttr();

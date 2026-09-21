@@ -149,7 +149,7 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("墓园最里侧有一排没有名字的公会墓碑。你数了数，一共七块。"),
+            StoryDirector.Narration("墓园最里侧有一排没有名字的公会墓碑。你数了数，一共七块。").Bg(StoryBackgrounds.GraveSeven),
             StoryDirector.Narration("碑上的日期是三块一组排着的：十四年前。十一年前。三个月前。"),
             StoryDirector.Solo("你", "……七块。", StoryPortraits.Player),
             StoryDirector.Narration("最老那块刻着「M. 灰鸦小队 记录员」。再往旁边挪一步，还有第八块——空的。"),
@@ -165,7 +165,7 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("遗迹深处的藤蔓后面，居然有一处收拾干净的营地。篝火还热着。"),
+            StoryDirector.Narration("遗迹深处的藤蔓后面，居然有一处收拾干净的营地。篝火还热着。").Bg(StoryBackgrounds.MelissaCamp),
             StoryDirector.Solo("?", "别动。你踩到我第二道线了。", StoryPortraits.Melissa),
             StoryDirector.Narration("一个头发花白的女人从阴影里出来，手里攥着一支笔，不是刀。"),
             StoryDirector.Solo("?", "我等了三天才等到下一个活人走进来。坐下，先别问，我写字慢。", StoryPortraits.Melissa),
@@ -189,7 +189,7 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("风车停住了。不是坏了——它的叶片正对着某个位置，像是被谁按下暂停键。"),
+            StoryDirector.Narration("风车停住了。不是坏了——它的叶片正对着某个位置，像是被谁按下暂停键。").Bg(StoryBackgrounds.Windmill),
             StoryDirector.Narration("齿轮上刻的不是图腾，是刻度。一圈三年。"),
             StoryDirector.Solo("你", "这不是用来稳定裂缝的设备。", StoryPortraits.Player),
             StoryDirector.Narration("轴上还有一列没刻完的名字。最后两个是空的。再往下，有一道新的划痕——"),
@@ -205,7 +205,7 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("搁浅的补给船歪在礁石里。舱门是被人从里面撬开的。"),
+            StoryDirector.Narration("搁浅的补给船歪在礁石里。舱门是被人从里面撬开的。").Bg(StoryBackgrounds.WreckShip),
             StoryDirector.Narration("补给箱码得整整齐齐，箱面编号你能背出来——那是她的队号。"),
             StoryDirector.Solo("你", "她不是去执行普通委托吗。", StoryPortraits.Player),
             StoryDirector.Narration("箱底压着一张纸条，纸是新的。上面只有一个名字：——M"),
@@ -227,7 +227,7 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("洞穴正中悬着一枚黑曜结构，有节奏地搏动，像在替什么人喘气。"),
+            StoryDirector.Narration("洞穴正中悬着一枚黑曜结构，有节奏地搏动，像在替什么人喘气。").Bg(StoryBackgrounds.ThroneSeat),
             StoryDirector.Narration("周围散落着更旧的战斗痕迹。十四年前的盾。十一年前那批的箭。"),
             StoryDirector.Solo("你", "沉座。是要有人坐上去的东西。", StoryPortraits.Player),
             StoryDirector.Narration("你在十一年的那堆残骸里翻到半张烧过的纸。只剩两行字："),
@@ -249,7 +249,7 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("黑雾从她身上崩散。她软下去，你把她接住。"),
+            StoryDirector.Narration("黑雾从她身上崩散。她软下去，你把她接住。").Bg(StoryBackgrounds.AbyssChoice),
             StoryDirector.Solo("艾丽娅", "……你追到这儿来了。真笨。", StoryPortraits.Xiaomei),
             StoryDirector.Solo("艾丽娅", "听我说，别浪费时间。它不是想杀我们——", StoryPortraits.Xiaomei),
             StoryDirector.Solo("艾丽娅", "它是想让我坐上去。坐进那个沉座。", StoryPortraits.Xiaomei),
@@ -346,19 +346,20 @@ public static class ChapterStoryBeats
 
     static void BuildHappy(List<StoryBeat> b)
     {
-        b.Add(StoryDirector.Narration("黑曜结构在你面前碎成八瓣。第八块空碑上的名字，终于没人刻得上去了。"));
-        b.Add(StoryDirector.Solo("裂缝意志", "……你们以为砸了它，就结束了？", StoryPortraits.RiftWill));
+        b.Add(StoryDirector.Narration("黑曜结构在你面前碎成八瓣。第八块空碑上的名字，终于没人刻得上去了。").Bg(StoryBackgrounds.EndHappy));
         b.Add(StoryDirector.Solo("艾丽娅", "结束了。对我们来说，结束了。", StoryPortraits.Xiaomei));
         b.Add(StoryDirector.Narration("你们拼命往回跑。跑出口的时候天亮得刺眼。"));
         b.Add(StoryDirector.Solo("艾丽娅", "……三枚铜板。我还没还。", StoryPortraits.Xiaomei));
         b.Add(StoryDirector.Solo("你", "不急。你欠账的时间比我长多了。", StoryPortraits.Player));
         b.Add(StoryDirector.Solo("艾丽娅", "那我用以后还。够不够长？", StoryPortraits.Xiaomei));
         b.Add(StoryDirector.Narration("——《像素冒险：裂隙之刃》 追上她的人，终于赶上了。"));
+        // 收尾钩子：裂缝意志不出立绘，改成纯黑屏 + 一句话（定案 2026-09-21）
+        b.Add(StoryDirector.BlackLine("……你们以为砸了它，就结束了？"));
     }
 
     static void BuildBadHome(List<StoryBeat> b)
     {
-        b.Add(StoryDirector.Narration("你没往下走。你把她背了回来。"));
+        b.Add(StoryDirector.Narration("你没往下走。你把她背了回来。").Bg(StoryBackgrounds.EndBadHome));
         b.Add(StoryDirector.Narration("她确实活下来了。医官说恢复得不错。"));
         b.Add(StoryDirector.Narration("只是从那以后，她每隔几天就会忘记一件事。先是裂隙里的名字，再是阿尔托的全名。"));
         b.Add(StoryDirector.Solo("艾丽娅", "……今天我是不是又问过你一遍，我欠你多少钱？", StoryPortraits.Xiaomei));
@@ -370,7 +371,7 @@ public static class ChapterStoryBeats
 
     static void BuildBadGate(List<StoryBeat> b)
     {
-        b.Add(StoryDirector.Narration("她坐了上去。黑曜合拢的时候，她回头看了你最后一眼。"));
+        b.Add(StoryDirector.Narration("她坐了上去。黑曜合拢的时候，她回头看了你最后一眼。").Bg(StoryBackgrounds.EndBadGate));
         b.Add(StoryDirector.Narration("裂隙真的止住了。王国今年没有新的裂缝记录。公会照常发任务、照常清点人数、照常涨价。"));
         b.Add(StoryDirector.Solo("会长", "牺牲少数保全多数——这就是结算方式。", StoryPortraits.GuildMaster));
         b.Add(StoryDirector.Solo("你", "她的名字，写进去吗。", StoryPortraits.Player));
@@ -381,7 +382,7 @@ public static class ChapterStoryBeats
 
     static void BuildTrue(List<StoryBeat> b)
     {
-        b.Add(StoryDirector.Narration("沉座崩解的最后，你看到一个不属于这里的东西卡在晶格里——一张叠了十一年的纸条。"));
+        b.Add(StoryDirector.Narration("沉座崩解的最后，你看到一个不属于这里的东西卡在晶格里——一张叠了十一年的纸条。").Bg(StoryBackgrounds.EndTrue));
         b.Add(StoryDirector.Solo("梅莉莎", "那是我塞的。第九支队伍的箱子。", StoryPortraits.Melissa));
         b.Add(StoryDirector.Narration("她从崩落的裂缝出口走进来，径直走到裂隙的中心，走得比你还稳。"));
         b.Add(StoryDirector.Solo("梅莉莎", "我装箱装了十一年。今天开始，我不用装了。", StoryPortraits.Melissa));

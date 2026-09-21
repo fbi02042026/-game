@@ -26,8 +26,10 @@ public static class StoryPortraits
     public const string Innkeeper = "innkeeper";
 
     /// <summary>
-    /// 尚未制作正式立绘的角色。缺图时不打「疑似配错」的警告（占位图照常给）。
-    /// 资源补齐后把对应 ID 从这里移除。
+    /// 已定案「不做正式立绘」的角色。这类角色**连占位图都不铺**，剧情里只出名字 + 对话框，
+    /// 不会在结局里出现一张写着 ID 的灰盒子。
+    /// （2026-09-21 修正：原来这个集合只用来免打警告，占位图照铺 —— 与「不出立绘」的定案矛盾。）
+    /// 若以后要补图：把 ID 从这里移出并放好图即可。
     /// </summary>
     static readonly HashSet<string> AwaitingArt = new HashSet<string>
     {
@@ -40,7 +42,10 @@ public static class StoryPortraits
         var sp = MercPortraitSprites.GetStand(id);
         if (sp != null) return sp;
 
-        // 没图就顶一张占位图：标着角色 ID，美术补齐后自动换真图，不用改代码。
+        // 定案不出立绘的角色：直接返回 null（不铺占位图），剧情按「无立绘」排版。
+        if (AwaitingArt.Contains(id)) return null;
+
+        // 其余缺图就顶一张占位图：标着角色 ID，美术补齐后自动换真图，不用改代码。
         var ph = PlaceholderArt.Portrait(id);
         if (ph != null)
         {
@@ -48,7 +53,6 @@ public static class StoryPortraits
             return ph;
         }
 
-        if (AwaitingArt.Contains(id)) return null;
         Debug.LogWarning("[StoryPortraits] missing MercStand for id=" + id);
         return null;
     }

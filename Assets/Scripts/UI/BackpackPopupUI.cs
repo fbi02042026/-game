@@ -296,7 +296,7 @@ public class BackpackPopupUI : MonoBehaviour
             {
                 if (!kv.Key.StartsWith("frag:")) continue;
                 string hireId = kv.Key.Length > 5 ? kv.Key.Substring(5) : kv.Key;
-                AddRow("本命碎片·" + hireId, kv.Value.ToString(), dim: kv.Value <= 0);
+                AddRow("本命碎片·" + hireId, kv.Value.ToString(), dim: kv.Value <= 0, icon: FragmentIcon(hireId));
                 fragShown = true;
             }
         }
@@ -332,7 +332,7 @@ public class BackpackPopupUI : MonoBehaviour
             foreach (var kv in data.mercGrowItems)
             {
                 if (kv.Key.StartsWith("frag:")) continue;
-                AddRow("养成道具·" + kv.Key, kv.Value.ToString(), dim: kv.Value <= 0);
+                AddRow(BadgeLabel(kv.Key), kv.Value.ToString(), dim: kv.Value <= 0, icon: BadgeIcon(kv.Key));
                 growShown = true;
             }
         }
@@ -343,7 +343,38 @@ public class BackpackPopupUI : MonoBehaviour
         AddRow("遗产装备", legacy.ToString());
     }
 
-    void AddRow(string label, string value, bool dim = false)
+    /// <summary>本命碎片图标：按雇佣兵稀有度取碎片底版；查不到退回普通底版。</summary>
+    static Sprite FragmentIcon(string hireId)
+    {
+        var rarity = MercRosterDefs.MercRarity.Common;
+        if (MercRosterDefs.TryGetByHireId(hireId, out var def)) rarity = def.Rarity;
+        return MercGrowSprites.LoadFragmentBase(rarity);
+    }
+
+    /// <summary>徽记 id "badge:{职业}:{档位}" → 徽记图标。</summary>
+    static Sprite BadgeIcon(string badgeId)
+    {
+        var parts = badgeId.Split(':');
+        if (parts.Length < 3) return null;
+        return MercGrowSprites.LoadJobBadge(parts[1], RarityFromTier(parts[2]));
+    }
+
+    /// <summary>徽记 id → 大白话名字，例 badge:剑盾:传奇 → 「职业徽记·剑盾·传奇」。</summary>
+    static string BadgeLabel(string badgeId)
+    {
+        var parts = badgeId.Split(':');
+        if (parts.Length < 3) return "职业徽记";
+        return "职业徽记·" + parts[1] + "·" + parts[2];
+    }
+
+    static MercRosterDefs.MercRarity RarityFromTier(string tier)
+    {
+        if (tier == "传奇") return MercRosterDefs.MercRarity.Legendary;
+        if (tier == "稀有") return MercRosterDefs.MercRarity.Rare;
+        return MercRosterDefs.MercRarity.Common;
+    }
+
+    void AddRow(string label, string value, bool dim = false, Sprite icon = null)
     {
         var row = new GameObject("Row", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         row.transform.SetParent(_matList, false);
@@ -358,6 +389,23 @@ public class BackpackPopupUI : MonoBehaviour
         le.preferredHeight = 40f;
         le.flexibleWidth = 1f;
 
+        // 图标（可选）：有图标时标签整体右移让出位置；没图标时保持原样不动
+        if (icon != null)
+        {
+            var ig = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            ig.transform.SetParent(rt, false);
+            var iImg = ig.GetComponent<Image>();
+            iImg.sprite = icon;
+            iImg.preserveAspect = true;
+            iImg.raycastTarget = false;
+            var irt = ig.GetComponent<RectTransform>();
+            irt.anchorMin = new Vector2(0f, 0.5f);
+            irt.anchorMax = new Vector2(0f, 0.5f);
+            irt.pivot = new Vector2(0f, 0.5f);
+            irt.anchoredPosition = new Vector2(8f, 0f);
+            irt.sizeDelta = new Vector2(30f, 30f);
+        }
+
         var lt = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
         lt.transform.SetParent(rt, false);
         var ltxt = lt.GetComponent<Text>();
@@ -370,7 +418,7 @@ public class BackpackPopupUI : MonoBehaviour
         var lrt = lt.GetComponent<RectTransform>();
         lrt.anchorMin = new Vector2(0f, 0f);
         lrt.anchorMax = new Vector2(1f, 1f);
-        lrt.offsetMin = new Vector2(10f, 2f);
+        lrt.offsetMin = new Vector2(icon != null ? 44f : 10f, 2f);
         lrt.offsetMax = new Vector2(-90f, -2f);
 
         var vt = new GameObject("Value", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));

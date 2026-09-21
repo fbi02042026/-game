@@ -50,6 +50,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookChapterThemeMap();
         CookChapterRoute();
         CookChapterStatScale();
+        CookCombatTuning();
         CookMonsterUnlockTier();
         CookStageSpawn();
         CookStageDrop();
@@ -153,6 +154,12 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookChapterStatScale()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/chapter_stat_scale.csv", null, "chapter_stat_scale");
+    }
+
+    /// <summary>战斗调参表（combat_tuning）。把 GameConfig 11 个战斗常量收编进表，缺表回退硬编码。</summary>
+    static void CookCombatTuning()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/combat_tuning.csv", null, "combat_tuning");
     }
 
     static void CookMonsterUnlockTier()

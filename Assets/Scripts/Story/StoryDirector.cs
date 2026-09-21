@@ -22,6 +22,8 @@ public class StoryBeat
     public string propId;
     /// <summary>换背景时跳过「地点揭示」黑场（开场已有黑幕时用，避免再等几秒）。</summary>
     public bool skipLocationReveal;
+    /// <summary>结局终幕：全屏黑屏 + 一句字幕（无立绘 / 无对话框）。见 <see cref="StoryDirector.BlackLine"/>。</summary>
+    public bool blackScreen;
 
     public StoryBeat Bg(string id)
     {
@@ -189,6 +191,16 @@ public class StoryDirector : Singleton<StoryDirector>
             }
 
             bool skipRest = false;
+
+            if (b.blackScreen)
+            {
+                // 终幕黑屏：不铺背景、不出立绘，只有黑底 + 一行字幕
+                bool blackAdvanced = false;
+                ui.ShowEndBlackLine(b.text, () => blackAdvanced = true);
+                while (!blackAdvanced) yield return null;
+                continue;
+            }
+
             ui.ShowLine(
                 b.leftName,
                 b.rightName,
@@ -228,6 +240,7 @@ public class StoryDirector : Singleton<StoryDirector>
             if (skipRest) break;
         }
 
+        ui.ClearEndBlackLine();
         if (_keepSceneArt)
         {
             ui.SetDialogueChromeVisible(false);
@@ -301,6 +314,22 @@ public class StoryDirector : Singleton<StoryDirector>
             rightPortraitId = portraitId,
             speaker = 1,
             soloCentered = true
+        };
+    }
+
+    /// <summary>
+    /// 结局终幕：全屏黑屏 + 居中一句（无背景、无立绘、无对话框），点屏幕继续。
+    /// 放在整段剧情最后一句用；播放收尾时黑屏会被自动收掉。
+    /// </summary>
+    public static StoryBeat BlackLine(string text)
+    {
+        return new StoryBeat
+        {
+            leftName = "",
+            rightName = "",
+            text = text,
+            speaker = 0,
+            blackScreen = true
         };
     }
 }

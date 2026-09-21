@@ -246,6 +246,12 @@ public class SaveData
     /// <summary>背包已解锁行数，默认 3（与 GameConfig 默认值保持一致）。</summary>
     public int backpackRows = 3;
 
+    // === 新手引导进度（2026-09-21 从 PlayerPrefs 迁入云存档）===
+    /// <summary>首次软引导游标：下一个要跑的步骤下标（= 已完成步骤数）；7 = FirstRunGuide.GuideStep.Done，已走完。</summary>
+    public int guideStep = 0;
+    /// <summary>首次引导是否已全部完成（旧版本只写这个标记，用于老存档补齐游标）。</summary>
+    public bool guideDone = false;
+
     // === 每日任务「通关 3 关」保底天赋石（2026-09-19）===
     /// <summary>当日累计通关计数所绑定的日期键（yyyyMMdd）。</summary>
     public string dailyStageClearDayKey = "";

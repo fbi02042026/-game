@@ -30,7 +30,7 @@ item_enchant_stone,附魔石,Icons/Item/icon_enchant_stone,Material,999,0,1,,Sel
 item_scroll_merc_common,佣兵招募卷·普通,Icons/Item/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募普通佣兵时抵扣。,1
 item_scroll_merc_rare,佣兵招募卷·稀有,Icons/Item/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募稀有佣兵时抵扣。,2
 item_scroll_merc_legendary,佣兵招募卷·传奇,Icons/Item/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募传奇佣兵时抵扣。,3
-item_fragment_birth,本命碎片,Icons/MercBirthFragment/frag_H001_普通,Material,999,0,1,,Self,佣兵本命碎片，用于佣兵升阶。按佣兵与档位生成独立图标。,2
+item_fragment_birth,本命碎片,,Material,999,0,1,,Self,佣兵本命碎片，用于佣兵升阶。按佣兵与档位生成独立图标。,2
 item_fragment_skill,技能残卷,Icons/Item/icon_skill_scroll,Material,999,0,1,,Self,用于技能升星。,1
 item_fragment_log,日志碎片,Icons/Item/icon_log_fragment,Material,999,0,1,,Self,冒险日志碎片，可合成完整条目。,0
 item_merc_grow,佣兵养成道具,Icons/Item/icon_merc_grow,Material,999,0,1,,Self,用于佣兵养成。,1

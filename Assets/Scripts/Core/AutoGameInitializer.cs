@@ -911,7 +911,6 @@ public class AutoGameInitializer : MonoBehaviour
         AddIfMissing<SkillRegistry>(root);
         AddIfMissing<BattleStateSaver>(root);
         AddIfMissing<AchievementSystem>(root);
-        AddIfMissing<PreLevelSystem>(root);
         AddIfMissing<TownSystem>(root);
         AddIfMissing<MercenaryManager>(root);
         AddIfMissing<BattleManager>(root);

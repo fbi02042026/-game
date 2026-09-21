@@ -20,9 +20,8 @@ using UnityEngine.UI;
 /// 战斗内引导；本类只负责**城镇侧那几个关键入口**的分步指路，两边不会同时抢同一件事
 /// （详见 TutorialDirector 里 IsStepDone 的让位判断）。
 ///
-/// TODO(建议后续迁入存档)：进度先落 PlayerPrefs（本次不得改 SaveData.cs）。
-/// 下一个存档版本请把 guideStep / guideDone 两个字段迁进 SaveData，再删掉这里的
-/// PlayerPrefs 读写，改成 SaveSystem.Instance.Data 读写。
+/// 进度持久化（2026-09-21 已迁入存档）：真值在 SaveData.guideStep / guideDone，随云存档走，
+/// 清缓存 / 换机不再重播引导。PlayerPrefs 只作老存档迁移来源与写失败时的兜底，两处同时写。
 /// </summary>
 public class FirstRunGuide : MonoBehaviour
 {
@@ -48,7 +47,7 @@ public class FirstRunGuide : MonoBehaviour
     }
 
     // ============================================================
-    // 持久化（PlayerPrefs；后续建议迁入 SaveData）
+    // 持久化（SaveData 为真值；PlayerPrefs 只作迁移来源与兜底）
     // ============================================================
     const string PrefStep = "PA.FirstGuide.Step";
     const string PrefDone = "PA.FirstGuide.Done";
@@ -142,17 +141,57 @@ public class FirstRunGuide : MonoBehaviour
 
     void LoadProgress()
     {
-        _stepIndex = PlayerPrefs.GetInt(PrefStep, 0);
+        // 旧来源（老存档 / 存档尚未就绪时用）
+        int step = PlayerPrefs.GetInt(PrefStep, 0);
+        bool done = PlayerPrefs.GetInt(PrefDone, 0) == 1;
+
+        var data = SaveSystem.Instance?.Data;
+        if (data != null)
+        {
+            // 一次性迁移：云存档还是空但本地 PlayerPrefs 有进度 → 搬进存档
+            if (data.guideStep <= 0 && step > 0)
+            {
+                data.guideStep = step;
+                if (done) data.guideDone = true;
+                SaveSystem.Instance.Save();
+            }
+            step = data.guideStep;
+            done = data.guideDone;
+        }
+
+        _stepIndex = step;
         if (_stepIndex < 0) _stepIndex = 0;
         if (_stepIndex > (int)GuideStep.Done) _stepIndex = (int)GuideStep.Done;
         // 老版本只写了 Done 标记：补齐游标，避免重复播放
-        if (_stepIndex < (int)GuideStep.Done && PlayerPrefs.GetInt(PrefDone, 0) == 1)
+        if (_stepIndex < (int)GuideStep.Done && done)
             _stepIndex = (int)GuideStep.Done;
     }
 
     void Persist()
     {
+        var data = SaveSystem.Instance?.Data;
+        if (data != null)
+        {
+            data.guideStep = _stepIndex;
+            SaveSystem.Instance.Save();
+        }
+        // 兜底：存档不可用时仍写一份本地，避免进度直接丢
         PlayerPrefs.SetInt(PrefStep, _stepIndex);
+        PlayerPrefs.Save();
+    }
+
+    /// <summary>全部走完的标记：存档 + 本地各写一份（存档为准）。</summary>
+    void MarkDone()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data != null)
+        {
+            data.guideStep = (int)GuideStep.Done;
+            data.guideDone = true;
+            SaveSystem.Instance.Save();
+        }
+        PlayerPrefs.SetInt(PrefStep, (int)GuideStep.Done);
+        PlayerPrefs.SetInt(PrefDone, 1);
         PlayerPrefs.Save();
     }
 
@@ -219,11 +258,7 @@ public class FirstRunGuide : MonoBehaviour
         }
 
         Hide();
-        if (PlayerPrefs.GetInt(PrefDone, 0) != 1)
-        {
-            PlayerPrefs.SetInt(PrefDone, 1);
-            PlayerPrefs.Save();
-        }
+        MarkDone();
         Debug.Log("[Guide] 首次引导全部完成，之后不再出现");
         _drive = null;
     }

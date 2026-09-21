@@ -34,7 +34,6 @@ public static class SoftCopyrightSourceExport
         "Assets/Scripts/Systems/ResourceWallet.cs",
         "Assets/Scripts/Systems/StaminaSystem.cs",
         "Assets/Scripts/Systems/StageClearRewardDirector.cs",
-        "Assets/Scripts/Systems/PreLevelSystem.cs",
         "Assets/Scripts/Systems/OfflineGoldCalc.cs",
         "Assets/Scripts/Systems/TownSaveAlign.cs",
         "Assets/Scripts/Managers/BattleManager.cs",

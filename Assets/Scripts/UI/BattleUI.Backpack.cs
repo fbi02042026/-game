@@ -213,8 +213,21 @@ public partial class BattleUI : MonoBehaviour
             if (gs[i] != null) gs[i].raycastTarget = on;
     }
 
-    /// <summary>刷新下方网格背包。现在是 4×3=12 格且默认全开，
-    /// 只有当解锁行数少于总行数时（以后加行）才会亮底行锁图案。</summary>
+    /// <summary>本网格实际有几行（= 已绑定格子的最大 gridY + 1），用于判断「整行锁图案」该不该亮。</summary>
+    int GridRowCount()
+    {
+        if (gridCells == null || gridCells.Count == 0) return GameConfig.BACKPACK_HEIGHT;
+        int maxY = 0;
+        for (int i = 0; i < gridCells.Count; i++)
+        {
+            var c = gridCells[i];
+            if (c != null && c.gridY > maxY) maxY = c.gridY;
+        }
+        return maxY + 1;
+    }
+
+    /// <summary>刷新下方网格背包。预制体是 4×3=12 格；2026-09-21 起战斗内只开放前 2 行（8 格），
+    /// 第 3 行起上锁（<see cref="GameConfig.BATTLE_BACKPACK_ROWS"/>）；城镇/角色页不受此限制。</summary>
     public void UpdateBackpackGrid()
     {
         // 战斗中捡到装备时可能还没绑过格子，先补绑再判空
@@ -226,8 +239,11 @@ public partial class BattleUI : MonoBehaviour
             return;
         }
 
-        int unlockedRows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
-        bool bottomLocked = unlockedRows < GameConfig.BACKPACK_HEIGHT;
+        // 2026-09-21：战斗内只开放前 BATTLE_BACKPACK_ROWS(2) 行，第 3 行起上锁（主人定）。
+        int unlockedRows = GameConfig.GetBattleBackpackRows(SaveSystem.Instance?.Data);
+        // 整行锁图案亮的条件 = 本网格实际行数 > 已解锁行数。
+        // 原写法拿 GameConfig.BACKPACK_HEIGHT(3) 去比，12 格网格解锁 3 行时永远 false → 锁图案从不亮。
+        bool bottomLocked = unlockedRows < GridRowCount();
 
         // 整行锁图案（GridContainer/LockedOverlay）
         if (_backpackRowLock != null)

@@ -1640,7 +1640,9 @@ public class Monster : UnitBase
     }
 
     const float SkillProjectileScale = 1.6f;
-    const float SkillProjectileSpeedMul = GameConfig.MONSTER_SKILL_PROJECTILE_SPEED_MUL;
+    // 2026-09-21：MONSTER_SKILL_PROJECTILE_SPEED_MUL 已迁 combat_tuning 表（运行时读），
+    // 右值不再是编译期常量 → const 改 static readonly（仅此一处引用，行为不变）。
+    static readonly float SkillProjectileSpeedMul = GameConfig.MONSTER_SKILL_PROJECTILE_SPEED_MUL;
 
     /// <summary>
     /// 技能结算：AoE 圆心用开火/落点固定 X，不跟目标当前 X（可躲开）。

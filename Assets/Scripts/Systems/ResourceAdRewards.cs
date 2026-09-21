@@ -2,10 +2,11 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// 顶栏金币/体力加号：原为激励视频广告入口，现改为钻石开启。
+/// 顶栏金币/体力加号：原为激励视频广告入口，现改为**纯钻石消耗位**。
 /// 2026-09-19 主人拍板：聚光灯上线前不接任何广告，所有「看广告」位改成钻石消耗位。
-/// 总开关 <c>GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT</c>：false = 走钻石（当前）；true = 走广告。
-/// 后期 SDK 就绪后把开关置 true 即可切回，UI 与发奖逻辑无需改动。
+/// 2026-09-21 主人要求：广告相关**全部停用**（聚光灯参赛包不得出现广告），
+/// 广告分支（RewardedAdBridge）与 GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT 一起注释掉。
+/// 现在这里只有一条路径：每日前 N 次免费，超出扣钻石。恢复广告时把注释解开即可。
 /// </summary>
 public static class ResourceAdRewards
 {
@@ -72,12 +73,13 @@ public static class ResourceAdRewards
             return;
         }
 
-        // TODO: 聚光灯上线后改为「看广告」；当前阶段（2026-09-19 主人拍板）统一走钻石
-        if (GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT)
-        {
-            ClaimStaminaByAd(data);
-            return;
-        }
+        // 2026-09-21：广告路径整体停用（聚光灯参赛包不得含广告），下面不再有「看广告」分支。
+        // 需要恢复时：解注释下面 5 行 + GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT + 文件末尾的 ClaimStaminaByAd。
+        // if (GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT)
+        // {
+        //     ClaimStaminaByAd(data);
+        //     return;
+        // }
 
         // 2026-09-20 钻石经济调整：每日前 StaminaFreePerDay 次免费，超出才扣钻（日总上限 StaminaAdsPerDay 不变）
         bool freeStamina = data.adStaminaClaimCount < StaminaFreePerDay;
@@ -92,6 +94,10 @@ public static class ResourceAdRewards
             : "体力已满，溢出已进邮件");
         Analytics.AdSlotClick("stamina", true); // 埋点：体力补给位点击（成功发奖）
     }
+
+    /* ===== 2026-09-21 广告路径整体停用（聚光灯参赛包不得含广告）=====
+       恢复步骤：解注释本段 + GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT + TryClaimStamina 里的广告分支。
+       注意 RewardedAdBridge.cs 文件本身仍保留（未删），只是不再被任何业务代码调用。
 
     /// <summary>广告路径（保留备用）：仅在 GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT=true 时调用。</summary>
     static void ClaimStaminaByAd(SaveData data)
@@ -117,6 +123,7 @@ public static class ResourceAdRewards
                 : "体力已满，溢出已进邮件");
         });
     }
+    ===== 广告路径停用结束 ===== */
 
     public static void TryClaimGold()
     {
@@ -133,12 +140,13 @@ public static class ResourceAdRewards
             return;
         }
 
-        // TODO: 聚光灯上线后改为「看广告」；当前阶段（2026-09-19 主人拍板）统一走钻石
-        if (GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT)
-        {
-            ClaimGoldByAd(data);
-            return;
-        }
+        // 2026-09-21：广告路径整体停用（聚光灯参赛包不得含广告），下面不再有「看广告」分支。
+        // 需要恢复时：解注释下面 5 行 + GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT + 文件末尾的 ClaimGoldByAd。
+        // if (GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT)
+        // {
+        //     ClaimGoldByAd(data);
+        //     return;
+        // }
 
         // 2026-09-20 钻石经济调整：每日前 GoldFreePerDay 次免费，超出才扣钻（日总上限 GoldAdsPerDay 不变）
         bool freeGold = data.adGoldClaimCount < GoldFreePerDay;
@@ -153,6 +161,9 @@ public static class ResourceAdRewards
             : "金币已达上限，溢出已进邮件");
         Analytics.AdSlotClick("gold", true); // 埋点：金币补给位点击（成功发奖）
     }
+
+    /* ===== 2026-09-21 广告路径整体停用 =====
+       恢复步骤：解注释本段 + GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT + TryClaimGold 里的广告分支。
 
     /// <summary>广告路径（保留备用）：仅在 GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT=true 时调用。</summary>
     static void ClaimGoldByAd(SaveData data)
@@ -178,6 +189,7 @@ public static class ResourceAdRewards
                 : "金币已达上限，溢出已进邮件");
         });
     }
+    ===== 广告路径停用结束 ===== */
 
 }
 

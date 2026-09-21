@@ -222,8 +222,30 @@ public class AdventureUI : MonoBehaviour, ITownPage
     // 构建 UI 树
     // ────────────────────────────────────────────────────
 
+    /// <summary>倒序销毁 parent 下名为 name 的旧子节点及其所有子孙（防两套叠加）。</summary>
+    static void DestroyNamedChild(Transform parent, string name)
+    {
+        if (parent == null) return;
+        var old = parent.Find(name);
+        if (old == null) return;
+        for (int i = old.childCount - 1; i >= 0; i--)
+            Destroy(old.GetChild(i).gameObject);
+        Destroy(old.gameObject);
+    }
+
     void Build()
     {
+        // 防两套叠加：运行时 prefab 可能已把生成树烘焙进资源；若走到重建路径
+        // （PreloadOnce 的 Find 未命中 LeftSidebar/RightContent），先按实际父级倒序
+        // 销毁同名旧节点再重建，避免「prefab 旧残留 + 代码新生成」两份叠加（界面变宽/重影）。
+        DestroyNamedChild(transform, "LeftSidebar");
+        DestroyNamedChild(transform, "RightContent");
+        // MapRoot/StageNodes 挂在 RightContent 下，DetailPanel 挂在 RightContent 下：
+        // 销毁 RightContent 已级联销毁它们；此处按实际父级兜底清一次（父缺失则为 no-op）。
+        DestroyNamedChild(transform.Find("RightContent"), "MapRoot");
+        DestroyNamedChild(transform.Find("MapRoot"), "StageNodes");
+        DestroyNamedChild(transform.Find("RightContent"), "DetailPanel");
+
         // ── 根 RectTransform ──
         var rt = GetComponent<RectTransform>() ?? gameObject.AddComponent<RectTransform>();
         Stretch(rt);

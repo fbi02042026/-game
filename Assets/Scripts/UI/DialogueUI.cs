@@ -1191,6 +1191,56 @@ public class DialogueUI : MonoBehaviour
             advanceButton.interactable = on;
     }
 
+    // ---------- 结局终幕：黑屏字幕（无立绘 / 无对话框） ----------
+
+    /// <summary>
+    /// 结局终幕：全屏纯黑 + 居中一句字幕，点屏幕任意处继续。
+    /// 收起立绘、对话框、名牌、跳过，只留黑幕和一行字。
+    /// （2026-09-21 定案：裂缝意志不出正式立绘，结局收尾改成黑屏 + 一句话。）
+    /// </summary>
+    public void ShowEndBlackLine(string text, Action onAdvance)
+    {
+        _onAdvance = onAdvance;
+        _onSkip = null;
+        _onChoice = null;
+        _typing = false;
+        _typeComplete = true;
+        _revealing = false;
+        _choicesVisible = false;
+
+        gameObject.SetActive(true);
+        transform.SetAsLastSibling();
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.StoryDialogue);
+        Canvas.ForceUpdateCanvases();
+
+        SetDialogueChromeVisible(false);
+        SetStoryProp(null);
+        SetSceneBackground(null);
+        SetBgDim(0f);
+        SetRevealBlack(1f);
+        // 字幕复用「地点名」层：它天生居中，且会被抬到黑幕之上
+        SetLocationCaption(text ?? "", 1f);
+
+        // 黑屏也要能点继续：把全屏点击层重新打开（chrome 关闭时被关掉了）
+        if (advanceButton != null)
+        {
+            advanceButton.gameObject.SetActive(true);
+            advanceButton.interactable = true;
+            var img = advanceButton.targetGraphic as Image;
+            if (img != null) img.raycastTarget = true;
+        }
+    }
+
+    /// <summary>收掉终幕黑屏字幕（走 keepSceneArt 分支时也必须调，否则黑屏会留在场景上）。</summary>
+    public void ClearEndBlackLine()
+    {
+        // 没建过节点说明这段剧情根本没用过黑屏，不在这里凭空造节点
+        if (_revealBlack != null) SetRevealBlack(0f);
+        if (_locationCaption != null) SetLocationCaption("", 0f);
+    }
+
     public void Hide()
     {
         _onAdvance = null;

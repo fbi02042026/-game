@@ -59,6 +59,8 @@ public static class ContentPaths
         public const string TalentRight = "Data/Tables/talent_right";
         /// <summary>佣兵花名册（CSV → .bytes，见 merc_roster.csv）。缺表时 MercRosterDefs 回退硬编码。</summary>
         public const string MercRoster = "Data/Tables/merc_roster";
+        /// <summary>战斗调参表（CSV → .bytes，见 combat_tuning.csv）。缺表时 GameConfig 回退硬编码。</summary>
+        public const string CombatTuning = "Data/Tables/combat_tuning";
     }
 
     public static class Icons

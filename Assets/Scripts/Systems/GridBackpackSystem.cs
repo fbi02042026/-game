@@ -418,7 +418,11 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     private bool FindEmptyPosition(int w, int h, out int outX, out int outY)
     {
         outX = -1; outY = -1;
-        int unlockedRows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
+        // 战斗内只开放前 BATTLE_BACKPACK_ROWS(2) 行，与战斗背包 UI 的锁定行数保持一致
+        //（否则道具会被放进战斗中根本看不到的第 3 行）。城镇 / 角色页仍走存档真值 3~4 行。
+        int unlockedRows = GameSceneGate.IsBattle
+            ? GameConfig.GetBattleBackpackRows(SaveSystem.Instance?.Data)
+            : GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
         int maxY = Mathf.Min(GameConfig.BACKPACK_HEIGHT_MAX, unlockedRows);
         if (h > maxY) return false;
         for (int y = 0; y <= maxY - h; y++)
