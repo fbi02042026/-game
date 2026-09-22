@@ -28,6 +28,18 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     const float IdleYFallback = 280f;
     const float StickAlpha = 0.7f;
 
+    // —— 2026-09-22 主人要求：进战斗先亮几秒告诉玩家摇杆在哪，之后「按住显示、松手隐藏」——
+    /// <summary>进场预览剩余时长：这段时间摇杆常显（半透），过后隐藏等玩家按。</summary>
+    const float IntroShowSeconds = 3f;
+    float _introHideAt = -1f;
+
+    /// <summary>进场/SetVisible(true) 时调用：常显 IntroShowSeconds 秒。</summary>
+    public void BeginIntroPreview()
+    {
+        _introHideAt = Time.unscaledTime + IntroShowSeconds;
+        ShowStickVisual();
+    }
+
     float ResolveIdleY()
     {
         float h = _pad != null ? _pad.rect.height : 0f;
@@ -64,7 +76,29 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
         joy.BuildKnob(go.transform);
         joy.ResetStickIdle();
         joy.RaiseOrganizeAbove();
+        joy.EnsureAboveSkillBar();
+        joy.BeginIntroPreview();
         return joy;
+    }
+
+    /// <summary>
+    /// 2026-09-22：摇杆必须**始终**压过 SkillBar（技能栏被抬到 BackpackPanel+1 的嵌套 Canvas，
+    /// 单靠 sibling 排序会被它盖住——这就是「技能 UI 跑到摇杆上面」的根源）。
+    /// 给摇杆也补一个 overrideSorting 嵌套 Canvas，order 取「父 Canvas + 2」。
+    /// </summary>
+    void EnsureAboveSkillBar()
+    {
+        if (GetComponent<Canvas>() != null) return;
+        var parentCanvas = GetComponentInParent<Canvas>();
+        int order = 0;
+        if (parentCanvas != null)
+        {
+            // parentCanvas 可能就是摇杆自己刚被加的？不会——此刻还没加。取 BackpackPanel 链上的
+            order = parentCanvas.sortingOrder + 2;
+        }
+        var canvas = gameObject.AddComponent<Canvas>();
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = order;
     }
 
     void Awake()
@@ -184,14 +218,27 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
         _stickGroup.alpha = StickAlpha;
     }
 
-    /// <summary>松手：回背包中部 Idle，保持半透常显（不藏掉）。</summary>
+    /// <summary>松手：回背包中部 Idle 并**隐藏**，等下次按住再出现（2026-09-22 主人要求）。</summary>
     void ResetStickToIdlePos()
     {
-        if (_stickGroup != null)
-            _stickGroup.alpha = StickAlpha;
         if (_knob != null) _knob.anchoredPosition = Vector2.zero;
         if (_stickBase != null)
             _stickBase.anchoredPosition = new Vector2(0f, ResolveIdleY());
+    }
+
+    void HideStickVisual()
+    {
+        if (_stickGroup != null) _stickGroup.alpha = 0f;
+    }
+
+    void Update()
+    {
+        // 进场预览时间到（且没按着）→ 收掉，等玩家按住再显示
+        if (!_held && _introHideAt > 0f && Time.unscaledTime >= _introHideAt)
+        {
+            _introHideAt = -1f;
+            HideStickVisual();
+        }
     }
 
     /// <summary>
@@ -232,6 +279,8 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
             if (_stickBase != null)
             {
                 ShowStickVisual();
+                // 引导指着摇杆期间别让它自动收起：续一次预览时长
+                _introHideAt = Time.unscaledTime + IntroShowSeconds;
                 return _stickBase;
             }
             return _pad;
@@ -253,6 +302,8 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
         {
             ResetStickToIdlePos();
             RaiseOrganizeAbove();
+            EnsureAboveSkillBar();
+            BeginIntroPreview();
         }
     }
 
@@ -281,6 +332,8 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     {
         _held = false;
         ResetStickToIdlePos();
+        HideStickVisual();          // 2026-09-22：松手就藏，按住再出现
+        _introHideAt = -1f;
         Hero.Instance?.ClearManualMove();
         if (acquire)
             Hero.Instance?.BeginAutoAcquireOnRelease();

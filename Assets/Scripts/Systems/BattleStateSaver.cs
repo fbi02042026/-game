@@ -10,8 +10,10 @@ using System.Linq;
 /// 新规则：
 ///   · 不杀进程 → 游戏一直在内存里，进度自然保留，不需要任何存档。
 ///   · 杀进程 / 崩溃 / 强退 → 下次进游戏判定为「撤离失败」：
-///       本局金币保留、照发天赋石、技能/装备/佣兵清空、体力不退，
-///       弹结算面板后回冒险页。**不再续关，也没有时间窗口。**
+///       本局金币保留、照发天赋石、技能/装备/佣兵清空、体力不退。
+///       **不再续关，也没有时间窗口。**
+///   · 2026-09-22 主人要求：这种「中断退出」**不弹结算面板**（隔很久再上线看到一屏结算很怪），
+///       静默走同一套结算规则，只给一条轻提示；结算面板只在**在线撤离 / 在线失败**时弹（BattleManager）。
 ///
 /// 判定依据：正常结束（通关 / 死亡 / 撤离）都会 ClearBattleState()，
 /// 所以「启动时有残留档」== 上次不是正常收尾 == 被强杀。
@@ -188,8 +190,9 @@ public class BattleStateSaver : MonoBehaviour
     // ============================================================
 
     /// <summary>
-    /// 启动检查：有残留档 = 上次被强杀 → 按「撤离失败」结算。
-    /// 返回 true 表示弹了结算面板（调用方应跳过本轮的其它弹窗）。
+    /// 启动检查：有残留档 = 上次被强杀 → 按「撤离失败」结算（经济/清档规则同在线撤离失败）。
+    /// 2026-09-22 起**不弹结算面板**，只静默结算 + 一条轻提示。
+    /// 返回 true 表示弹了面板（调用方应跳过本轮其它弹窗）；本流程恒返回 false。
     /// </summary>
     public static bool SettleInterruptedRun()
     {
@@ -233,36 +236,14 @@ public class BattleStateSaver : MonoBehaviour
         MercHireSession.ClearHired();
         SaveSystem.Instance.Save();
 
-        var stats = new BattleRunStats
-        {
-            IsEvacFailed = true,
-            IsDeath = false,
-            IsVictory = false,
-            Chapter = chapter,
-            StageTitle = stageLabel,
-            KillCount = d.kills,
-            EliteKillCount = d.eliteKills,
-            BossKillCount = d.bossKills,
-            DamageDealt = d.damageDealt,
-            DamageTaken = d.damageTaken,
-            HealingReceived = d.healingReceived,
-            BattleTimeSec = d.battleTimeSec,
-            GoldGained = (int)Mathf.Min(delta, int.MaxValue),
-            TalentGained = talentGain
-        };
-        stats.ResolveMvp();
+        Debug.Log($"[BattleStateSaver] 上次战斗被中断 → 判撤离失败（静默，不弹结算面板）：{stageLabel}，"
+                  + $"金币 +{delta}，天赋石 +{talentGain}，击杀 {d.kills}");
 
-        Debug.Log($"[BattleStateSaver] 上次战斗被中断 → 判撤离失败：{stageLabel}，"
-                  + $"金币 +{delta}，天赋石 +{talentGain}");
-
-        // 此时已经在城镇，不要再重载场景；回冒险页即可
-        TownHubController.PendingOpenAdventure = true;
-        BattleSettlementUI.Show(stats, () =>
-        {
-            MercHireSession.ClearHired();
-            GlobalToastUI.Show("上次战斗被中断，已按撤离失败结算");
-        });
-        return true;
+        // 2026-09-22 主人要求：中断退出不再弹结算面板，隔很久再上线看到一屏结算很怪。
+        // 结算面板只在「在线撤离 / 在线失败」时弹（见 BattleManager）。
+        // 这里的经济与清档规则**一字不改**，只把面板换成一条轻提示。
+        GlobalToastUI.Show("上次战斗被中断，已按撤离失败结算，本局金币已保留");
+        return false;
     }
 
     // ============================================================

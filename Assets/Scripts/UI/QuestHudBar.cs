@@ -424,17 +424,9 @@ public class QuestHudBar : MonoBehaviour
         // 顶部让位第一次量得到之后还要再摆一次（首帧 rect 可能是 0）
         if (!_layoutDone) Layout();
 
-        // ④ 无操作收缩：用 unscaledDeltaTime 累加，不接 Input 事件系统
-        if (!_collapsed && !_celebrating)
-        {
-            _idleTimer += Time.unscaledDeltaTime;
-            if (_idleTimer >= IdleTimeout)
-            {
-                _collapsed = true;
-                _layoutDone = false;
-                Layout();
-            }
-        }
+        // 2026-09-22 主人要求：任务条**不要缩回去**，一直保持展开状态。
+        // 原来的「3 秒无操作收缩成胶囊」逻辑（_idleTimer / IdleTimeout / _collapsed）停用，
+        // 字段和胶囊 UI 保留，将来要恢复收缩只改这里。
 
         _timer -= Time.unscaledDeltaTime;
         if (_timer > 0f) return;

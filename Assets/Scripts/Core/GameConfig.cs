@@ -846,9 +846,11 @@ public static class GameConfig
     public static bool COMBAT_JUICE_DAMAGE_TEXT_BOOST = true;
     public static bool COMBAT_JUICE_KNOCKBACK = true;
     public static bool COMBAT_JUICE_COMBO = true;
+    /// <summary>受击挤压回弹（squash &amp; stretch）：只压怪物，我方挨打不压，避免「往后顿」发飘。</summary>
+    public static bool COMBAT_JUICE_SQUASH = true;
 
-    /// <summary>顿帧时长（秒，unscaled）</summary>
-    public const float HIT_STOP_NORMAL = 0.035f;
+    /// <summary>顿帧时长（秒，unscaled）。NORMAL=1/20 秒（60fps 约 3 帧），是「明显一顿但不粘手」的甜点值。</summary>
+    public const float HIT_STOP_NORMAL = 0.05f;
     public const float HIT_STOP_CRIT = 0.055f;
     public const float HIT_STOP_BOSS = 0.08f;
     public const float HIT_STOP_COMBO_ANNOUNCE = 0.04f;

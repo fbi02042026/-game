@@ -428,6 +428,10 @@ public partial class BattleUI : MonoBehaviour
         SetSlotRootActive(mercSlot1, true);
         SetSlotRootActive(mercSlot2, true);
 
+        // 2026-09-22 主人要求：玩家卡只留头像，名字不再显示
+        if (playerSlot?.nameText != null)
+            playerSlot.nameText.gameObject.SetActive(false);
+
         // 单人/引导：两格伙伴都按未解锁处理，清掉占位血量数字
         bool lockExtraSlots = (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && !showTutorialMerc;
         if (lockExtraSlots)

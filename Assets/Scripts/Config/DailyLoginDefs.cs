@@ -9,7 +9,7 @@ using System.Collections.Generic;
 ///   2. 每日循环给**该佣兵的本命碎片**，让"每天回来"在长线上看得见进度。
 ///   3. 峰值/谷值比 ≥ 3:1：谷值日给当天能花掉的（体力），峰值日给要攒的（碎片/钻石）。
 ///
-/// 新手 7 日按**累计登录自然日**计算，断签不重置（惩罚断签会劝退休闲玩家）；
+/// 新手 8 日按**累计登录自然日**计算，断签不重置（惩罚断签会劝退休闲玩家）；
 /// 「今天必须来」的压力交给连击加成——连击断签清零，但**已领过的档位不回退**。
 ///
 /// ⚠ 2026-09-18 口径变更：登录奖励**不再发技能残卷**（用户定：走佣兵线）。
@@ -85,20 +85,45 @@ public static class DailyLoginDefs
     };
 
     /// <summary>
-    /// 新手 7 日（按累计登录天数，断签不重置）。
-    /// 顺序刻意是「钱 → 体力 → 强化 → 天赋 → 钻石 → 材料 → 佣兵」：
+    /// 新手 8 日（2026-09-22 参考全屏版参考图扩到 8 天：佣兵峰值从第 7 天挪到第 8 天「限定」位；
+    /// 前 6 天奖励与顺序保持不变，老存档已领标记按天记，兼容）。
+    /// 顺序刻意是「钱 → 体力 → 强化 → 天赋 → 钻石 → 材料 → 强化(翻倍) → 佣兵」：
     /// 前期给能立刻花掉的，最后一天给能改变构筑的。
     /// </summary>
     public static readonly Reward[] Starter = new Reward[]
     {
         Res("金币 ×500",         ResourceWallet.ResourceType.Gold,         500), // D1
-        Res("体力 ×30",          ResourceWallet.ResourceType.Stamina,       30), // D2 = 3 次冒险
+        Res("体力 ×30",          ResourceWallet.ResourceType.Stamina,       30), // D2 X2
         Res("强化石 ×5",         ResourceWallet.ResourceType.EnchantStone,   5), // D3
         Res("天赋石 ×3",         ResourceWallet.ResourceType.TalentPoint,    3), // D4
-        Res("钻石 ×50",          ResourceWallet.ResourceType.Diamond,       50), // D5
+        Res("钻石 ×50",          ResourceWallet.ResourceType.Diamond,       50), // D5 X2
         Res("分解材料 ×10",      ResourceWallet.ResourceType.DecomposeMat,  10), // D6
-        MercGrant("稀有佣兵\n塔克·重盾", STARTER_MERC_ID),                        // D7 峰值
+        Res("强化石 ×15",        ResourceWallet.ResourceType.EnchantStone,  15), // D7 X2
+        MercGrant("稀有佣兵\n塔克·重盾", STARTER_MERC_ID),                        // D8 限定峰值
     };
+
+    /// <summary>
+    /// X2 双倍日（累计登录第 N 天）：UI 显示「X2」角标，领取时奖励**实发翻倍**。
+    /// 佣兵类（Grant.Merc）不参与翻倍，所以最后一日不放进这里。
+    /// 想调整哪几天有 X2，改这个数组即可（UI 与发放都跟它走）。
+    /// </summary>
+    public static readonly int[] StarterDoubleDays = { 2, 5, 7 };
+
+    public static bool IsStarterDouble(int day)
+    {
+        for (int i = 0; i < StarterDoubleDays.Length; i++)
+            if (StarterDoubleDays[i] == day) return true;
+        return false;
+    }
+
+    /// <summary>把一份奖励的数量翻倍（佣兵类不动，资源/碎片类数量 ×2）。</summary>
+    public static Reward Doubled(Reward r)
+    {
+        var c = r;
+        if (c.grant != Grant.Merc) c.amount *= 2;
+        if (c.HasSecond && c.grant2 != Grant.Merc) c.amount2 *= 2;
+        return c;
+    }
 
     /// <summary>
     /// 每日循环（7 天一轮，可无限循环）。

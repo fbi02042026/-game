@@ -65,6 +65,8 @@ public class FirstRunGuide : MonoBehaviour
     const float BubbleHeight = 140f;
     const float BubbleSideInset = 20f;
     const float RingPulseHz = 1.6f;
+    /// <summary>气泡打字机速度（字/秒）。打完之前点屏幕不推进，防止玩家点太快看不到字。</summary>
+    const float TypeCharsPerSecond = 28f;
 
     // ============================================================
     // 流程参数（超时一律放行 + 记日志，绝不卡死）
@@ -108,6 +110,13 @@ public class FirstRunGuide : MonoBehaviour
     Vector4 _lastRect;
     /// <summary>最近一次 CoPoint 的结果：true=达成（不论是玩家做成的还是已经满足）。</summary>
     bool _pointOk;
+
+    // —— 2026-09-22 主人要求：气泡用以前的引导底框、去掉「继续」按钮改点任意处、打字机逐字显示 ——
+    /// <summary>当前气泡是否「点任意处推进」（tapToAdvance 步骤）；等玩家实操的步骤不响应点击。</summary>
+    bool _tapAdv;
+    /// <summary>打字机是否正在逐字显示（没播完时点击无效）。</summary>
+    bool _typing;
+    Coroutine _typeCo;
 
     // ============================================================
     // 生命周期 / 对外入口
@@ -289,7 +298,7 @@ public class FirstRunGuide : MonoBehaviour
         }
     }
 
-    // ---- 0) 欢迎 + 世界观（无目标：居中气泡 + 半透明全屏遮罩，点「继续」推进）----
+    // ---- 0) 欢迎 + 世界观（无目标：居中气泡 + 半透明全屏遮罩，点任意处推进）----
 
     IEnumerator CoWelcome()
     {
@@ -679,6 +688,16 @@ public class FirstRunGuide : MonoBehaviour
     {
         var bg = NewImage(transform, "Bubble", BubbleColor);
         bg.raycastTarget = false;
+        // 2026-09-22 主人要求：气泡背景用回以前的「引导底框」图（与 TutorialHintUI 顶部横幅同一张）。
+        // 图本体在 Assets/Art/UI/引导/（不在 Resources 下），这里从 TutorialHintUI 的 prefab 上取
+        // 它的 sprite 引用（prefab 在 Resources/Prefabs/UI/，打包后也能加载），不改任何美术文件。
+        var plate = LoadGuidePlateSprite();
+        if (plate != null)
+        {
+            bg.sprite = plate;
+            bg.type = Image.Type.Simple;
+            bg.color = Color.white;
+        }
         _bubbleRt = bg.rectTransform;
         _bubbleRt.anchorMin = _bubbleRt.anchorMax = new Vector2(0.5f, 0.5f);
         _bubbleRt.pivot = new Vector2(0.5f, 0.5f);
@@ -689,6 +708,8 @@ public class FirstRunGuide : MonoBehaviour
         _bubbleText.color = TextColor;
         _bubbleText.horizontalOverflow = HorizontalWrapMode.Wrap;
 
+        // 2026-09-22 主人要求：去掉「继续」按钮，点屏幕任意处进入下一步。
+        // 节点保留但永不激活（最小增量，不删预制体结构），推进改为 Update 里全屏点击检测。
         var okImg = NewImage(_bubbleRt, "Ok", OkColor);
         okImg.raycastTarget = true;
         var okRt = okImg.rectTransform;
@@ -701,6 +722,20 @@ public class FirstRunGuide : MonoBehaviour
         var okLabel = NewText(okRt, "Label", "继续", 24, TextAnchor.MiddleCenter);
         Stretch(okLabel.rectTransform);
         okLabel.color = new Color(0.14f, 0.11f, 0.05f, 1f);
+        okImg.gameObject.SetActive(false);
+    }
+
+    /// <summary>从 TutorialHintUI 的 prefab 上借「引导底框」sprite（只借引用，实例立刻销毁）。</summary>
+    static Sprite LoadGuidePlateSprite()
+    {
+        var prefab = Resources.Load<GameObject>("Prefabs/UI/TutorialHintUI");
+        if (prefab == null) return null;
+        var tmp = UnityEngine.Object.Instantiate(prefab);
+        var banner = tmp.transform.Find("Banner");
+        var img = banner != null ? banner.GetComponent<Image>() : null;
+        var sp = img != null ? img.sprite : null;
+        UnityEngine.Object.Destroy(tmp);
+        return sp;
     }
 
     void SetTarget(RectTransform target)
@@ -716,17 +751,18 @@ public class FirstRunGuide : MonoBehaviour
         SetTarget(target);
         _hasLastRect = false;
         _tapDone = false;
+        _tapAdv = tapToAdvance;
         _visible = true;
 
-        if (_bubbleText != null) _bubbleText.text = text ?? string.Empty;
-        if (_okBtn != null) _okBtn.gameObject.SetActive(tapToAdvance);
+        // 2026-09-22：文字改为打字机逐字显示；「继续」按钮去掉，推进走 Update 里的全屏点击
+        StartTyping(text);
+        if (_okBtn != null) _okBtn.gameObject.SetActive(false);
 
-        // 文字给「继续」按钮让位：有按钮时下边距抬起
         if (_bubbleText != null)
         {
             var lrt = _bubbleText.rectTransform;
             Stretch(lrt);
-            lrt.offsetMin = new Vector2(24f, tapToAdvance ? 82f : 20f);
+            lrt.offsetMin = new Vector2(24f, 20f);
             lrt.offsetMax = new Vector2(-24f, -20f);
         }
 
@@ -747,6 +783,7 @@ public class FirstRunGuide : MonoBehaviour
         _target = null;
         _hasLastRect = false;
         _tapDone = false;
+        StopTyping();
 
         if (_group != null)
         {
@@ -775,6 +812,65 @@ public class FirstRunGuide : MonoBehaviour
         _tapDone = true;
     }
 
+    // ============================================================
+    // 打字机 + 点任意处推进（2026-09-22）
+    // ============================================================
+
+    void StartTyping(string full)
+    {
+        if (_typeCo != null)
+        {
+            StopCoroutine(_typeCo);
+            _typeCo = null;
+        }
+        _fullGuideText = full ?? string.Empty;
+        _typing = true;
+        if (_bubbleText != null) _bubbleText.text = string.Empty;
+        _typeCo = StartCoroutine(CoType(_fullGuideText));
+    }
+
+    string _fullGuideText;
+
+    IEnumerator CoType(string full)
+    {
+        if (_bubbleText == null)
+        {
+            _typing = false;
+            yield break;
+        }
+        float delay = 1f / Mathf.Max(1f, TypeCharsPerSecond);
+        for (int i = 1; i <= full.Length; i++)
+        {
+            _bubbleText.text = full.Substring(0, i);
+            float t = 0f;
+            while (t < delay)
+            {
+                t += Time.unscaledDeltaTime;
+                yield return null;
+            }
+        }
+        _bubbleText.text = full;
+        _typing = false;
+        _typeCo = null;
+    }
+
+    void StopTyping()
+    {
+        if (_typeCo != null)
+        {
+            StopCoroutine(_typeCo);
+            _typeCo = null;
+        }
+        _typing = false;
+    }
+
+    static bool ScreenTapped()
+    {
+        if (Input.GetMouseButtonDown(0)) return true;
+        if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began) return true;
+        return false;
+    }
+
     void Update()
     {
         if (!_visible) return;
@@ -784,6 +880,12 @@ public class FirstRunGuide : MonoBehaviour
             Hide();
             return;
         }
+
+        // 2026-09-22：点任意处进入下一步（只对原本用「继续」按钮的步骤生效）。
+        // 打字机没播完时点击**无效**——防止玩家点太快字还没看完就翻页。
+        if (_tapAdv && !_typing && ScreenTapped())
+            _tapDone = true;
+
         RefreshLayout();
         PulseRing();
     }

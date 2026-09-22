@@ -108,8 +108,9 @@ public class TownSceneBootstrap : MonoBehaviour
         yield return null;
         yield return null;
         TownHubController.ConsumePendingAdventure();
-        // 上次战斗被强杀 → 判撤离失败并结算；弹了面板就跳过本轮离线收益与登录奖励，
-        // 避免两个半透明弹窗叠在一起
+        // 上次战斗被强杀 → 判撤离失败并结算。
+        // 2026-09-22 起中断结算改为静默（不弹面板），所以这里恒为 false，
+        // 登录奖励等本轮弹窗照常走（保留返回值的判断，将来恢复弹窗时不用改调用方）。
         bool settled = SettleInterruptedRunOnce();
         if (!settled)
         {

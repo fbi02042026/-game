@@ -5,10 +5,11 @@ using UnityEngine;
 /// 登录奖励系统（2026-09-18 第二版：改走佣兵线）。
 ///
 /// 三条线并行：
-///   · 新手 7 日：按**累计**登录自然日解锁，断签不重置（惩罚断签只会劝退休闲玩家）
+///   · 新手 8 日：按**累计**登录自然日解锁，断签不重置（惩罚断签只会劝退休闲玩家）
 ///   · 每日循环：每天领 1 个，7 天一轮，无限循环
 ///   · 连击加成：按**连续**登录天数解锁，断签清零（唯一制造回归压力的机制，
 ///               但已领过的档位不回退——清零的是天数不是领奖记录）
+///   · X2 双倍日：DailyLoginDefs.StarterDoubleDays（2026-09-22 参考全屏版新增，实发翻倍）
 ///
 /// 只管发奖与状态，不管 UI。UI 调 <see cref="HasClaimable"/> 决定要不要弹。
 /// </summary>
@@ -114,10 +115,13 @@ public static class DailyLoginSystem
         if (IsStarterClaimed(day)) { msg = "已领取"; return false; }
 
         var r = DailyLoginDefs.Starter[day - 1];
+        // 2026-09-22：X2 双倍日——角标之外**实发也翻倍**（佣兵类不翻，见 Doubled）
+        bool dbl = DailyLoginDefs.IsStarterDouble(day);
+        if (dbl) r = DailyLoginDefs.Doubled(r);
         Grant(r);
         SetFlag(StarterKeyPrefix + day, 1);
         SaveSystem.Instance.Save();
-        msg = "已领取：" + r.DisplayName.Replace("\n", "、");
+        msg = "已领取：" + r.DisplayName.Replace("\n", "、") + (dbl ? "（X2 双倍日，数量已翻倍）" : "");
         return true;
     }
 

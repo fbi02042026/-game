@@ -85,6 +85,14 @@ public class UnitAnimation : MonoBehaviour
     float _damagedRecoveryUntil;
     const float DamagedFlashFadeSeconds = 0.28f;
 
+    // —— 受击挤压回弹（squash & stretch）：只压程序化 / Monster 片段动画的怪物，SPUM（玩家、佣兵）不压 ——
+    /// <summary>挤压强度：命中瞬间 X 压扁比例（体积守恒感，Y 同步拉长）。</summary>
+    const float HitSquashX = 0.22f;
+    const float HitSquashY = 0.16f;
+    /// <summary>回弹时长（秒，unscaled）。略长于顿帧 0.05s：顿帧期间压住，结束后迅速弹回。</summary>
+    const float HitSquashDur = 0.13f;
+    float _squashUntil;
+
     // 程序化模式（无 SPUM 的单位）的「原始色」基准。
     // 闪红若以「当前色」为基准，叠击/多次受击会把脏红采成基准 → 永远卡在全红。
     Color _procBaseColor = Color.white;
@@ -327,6 +335,12 @@ public class UnitAnimation : MonoBehaviour
     {
         if (_sr != null)
         {
+            // 挤压回弹进行中必须先还原：否则会把「压扁后的缩放」采成新基准 → 怪物永久变扁
+            if (_squashUntil > 0f)
+            {
+                _squashUntil = 0f;
+                _sr.transform.localScale = _procBaseScale;
+            }
             _procBaseScale = _sr.transform.localScale;
             _procBasePos = _sr.transform.localPosition;
         }
@@ -382,6 +396,12 @@ public class UnitAnimation : MonoBehaviour
 
         if (_isDead)
         {
+            // 死亡演出不叠挤压：先把压扁的缩放还原，否则死相会一直保持扁的
+            if (_squashUntil > 0f)
+            {
+                _squashUntil = 0f;
+                t.localScale = _procBaseScale;
+            }
             _procDeathTime += Time.deltaTime;
             float dt = Mathf.Clamp01(_procDeathTime / procDeathDuration);
             float targetAngle = _flipXFacing ? (-90f * _lastFacingDir) : (90f * _lastFacingDir);
@@ -473,6 +493,41 @@ public class UnitAnimation : MonoBehaviour
             );
             t.localRotation = Quaternion.identity;
         }
+        // 注：受击挤压不在这里叠，统一放 LateUpdate
+        // （Animator 在 Update 之后写 scale，只有 LateUpdate 才能压过 monsterClipMode 的片段动画）
+    }
+
+    /// <summary>
+    /// 命中瞬间挤压（squash &amp; stretch）：X 压扁、Y 拉长，再弹回。
+    /// 只对程序化 / Monster 片段动画的怪物生效——SPUM（玩家、佣兵）的缩放由动画系统驱动，不抢。
+    /// 由 CombatJuice.OnHit 在敌人受击时调用。
+    /// </summary>
+    public void PunchHitSquash()
+    {
+        if (_isDead) return;
+        // 只压程序化 / Monster 片段动画的怪物；SPUM（玩家、佣兵）的缩放由动画系统全权驱动，不抢
+        if (!_procMode && !_monsterClipMode) return;
+        _squashUntil = Time.unscaledTime + HitSquashDur;
+    }
+
+    /// <summary>把挤压系数叠到本帧最终 localScale 上。由 LateUpdate 调用，才能压过 Animator。</summary>
+    void ApplyHitSquash()
+    {
+        Transform t = _sr != null ? _sr.transform : transform;
+        if (_squashUntil <= 0f || t == null) return;
+        float left = _squashUntil - Time.unscaledTime;
+        if (left <= 0f)
+        {
+            _squashUntil = 0f;
+            return;
+        }
+        // k: 1 → 0。sin 曲线在 k=1 附近斜率≈0 → 顿帧期间压住最深，之后迅速弹回
+        float k = Mathf.Clamp01(left / HitSquashDur);
+        float amp = Mathf.Sin(k * Mathf.PI * 0.5f);
+        t.localScale = new Vector3(
+            t.localScale.x * (1f - HitSquashX * amp),
+            t.localScale.y * (1f + HitSquashY * amp),
+            t.localScale.z);
     }
 
     /// <summary>
@@ -625,6 +680,9 @@ public class UnitAnimation : MonoBehaviour
     {
         if (_monsterClipMode)
             StabilizeMonsterBodyTransform();
+
+        // 受击挤压：必须在 LateUpdate 叠——Animator 会在 Update 之后重写 scale，早于此会被抹掉
+        ApplyHitSquash();
 
         // 受击中每帧锁住 DAMAGED 速率；移动中锁移动倍率（SPUM PlayAnimation 可能把 speed 打回 1）
         if (!_isDead && InDamagedRecovery())
@@ -1265,6 +1323,7 @@ public class UnitAnimation : MonoBehaviour
         // 程序化模式：恢复缩放、旋转、颜色
         if (_procMode && _sr != null)
         {
+            _squashUntil = 0f;
             _sr.transform.localScale = _procBaseScale;
             _sr.transform.localRotation = Quaternion.identity;
             _sr.color = Color.white;

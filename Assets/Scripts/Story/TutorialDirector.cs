@@ -39,8 +39,19 @@ public class TutorialDirector : Singleton<TutorialDirector>
     bool _extraHintShown;
     Coroutine _flow;
 
-    public static bool IsTutorialBattle =>
-        BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
+    // 2026-09-22：改用 FindObjectOfType 直查，不走 Singleton<BattleManager>.Instance ——
+    // BattleUI.Awake 早于 AutoGameInitializer 装配 GameRoot，此时 getter 会命中
+    // ICombatBoundSingleton 分支，每次进战斗都刷一条
+    // "[Singleton] 战斗必需系统未挂载，拒绝自动创建空对象: BattleManager"。
+    // 这里只是探测"当前是不是教学战"，拿不到就当 false，不该报错也不该建空物体。
+    public static bool IsTutorialBattle
+    {
+        get
+        {
+            var bm = FindObjectOfType<BattleManager>();
+            return bm != null && bm.IsTutorialRun;
+        }
+    }
 
     public void NotifyTownReady()
     {

@@ -39,14 +39,34 @@ public partial class BattleUI : MonoBehaviour
 
             var active = RunDraftDirector.BuildRunSkill(id, job);
             int star = RunLoadout.StarOf(id);
-            slot.SetAvatar(active != null ? active.icon : null);
+            // 2026-09-22：ActiveSkill.icon 从来没有赋值链路（SkillRegistry 不填），技槽因此一直空白。
+            // 这里按 id 兜底加载（图在 Resources/Icons/SkillIcon/{id}.png，6 张玩家技能全齐）。
+            var icon = active != null ? active.icon : null;
+            if (icon == null) icon = LoadRunSkillIcon(id);
+            slot.SetAvatar(icon);
             // 底字不再写死「被动」：有技能就显示技能名
             slot.SetSkillName(active != null ? active.skillName : id);
-            // 右下角等级：本作技能没有独立等级，用星级表示
-            slot.SetLevelText($"★{star}");
+            // 右下角等级：2026-09-22 主人要求——战斗内技能只升级，右下角只显示**数字**，
+            // 不要再拼「★」前缀（数字节点用预制体里美术摆的 level，见 BindRunSkillSlots）
+            slot.SetLevelText(star > 0 ? star.ToString() : "");
         }
 
         LogRunSkillDiagnostics(ids);
+    }
+
+    /// <summary>玩家技能图标：Resources 优先（打包可用），编辑器再兜 Art 源目录；与 SkillSelectUI 同路径口径。</summary>
+    static Sprite LoadRunSkillIcon(string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return null;
+        var sp = Resources.Load<Sprite>("Icons/SkillIcon/" + skillId);
+        if (sp != null) return sp;
+        var all = Resources.LoadAll<Sprite>("Icons/SkillIcon/" + skillId);
+        if (all != null && all.Length > 0) return all[0];
+#if UNITY_EDITOR
+        sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
+            "Assets/Art/UI/Icons/玩家SkillIcon/" + skillId + ".png");
+#endif
+        return sp;
     }
 
     /// <summary>上次诊断输出的特征串，避免每次刷新都刷屏。</summary>

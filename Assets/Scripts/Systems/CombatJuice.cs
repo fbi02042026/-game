@@ -98,6 +98,10 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
                     : GameConfig.COMBAT_KNOCKBACK_CRIT;
             victim.ApplyKnockback(-victim.facingDir * kb);
         }
+
+        // 受击挤压回弹：同样只压敌人（我方挨打不压，避免「往后顿」发飘）
+        if (GameConfig.COMBAT_JUICE_SQUASH && !victim.isAlly)
+            victim.GetComponent<UnitAnimation>()?.PunchHitSquash();
     }
 
     /// <summary>击杀前摇：慢放 + 玩家跳起放大（近战 fullWindup=true；远程短版 false）。
