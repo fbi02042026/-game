@@ -45,6 +45,21 @@ public class WaveData
     public float stageEventHealPct;
     /// <summary>HAZARD 事件：英雄移速惩罚比例 0~1（0 = 无）。</summary>
     public float stageEventMovePenalty;
+    /// <summary>
+    /// Boss 关变体 V1.0：Boss 波挂载的变体 id（空 = 无变体 / 未接入）。
+    /// 仅在 WavePlanner.SetupBossWave 抽中时填写；关掉变体表时恒为空。
+    /// </summary>
+    public string bossVariantId = "";
+    /// <summary>变体预告文案（进 Boss 波时随波次播报一同显示）。</summary>
+    public string bossVariantTelegraph = "";
+    /// <summary>GUARD：Boss 波额外带的精英亲卫只数，占本波最前 N 个名额（Boss 最后出场）。</summary>
+    public int bossGuardCount;
+    /// <summary>TIMED：开打到第一次涌怪的秒数（≤0 = 不触发）。</summary>
+    public float bossPressureDelay;
+    /// <summary>TIMED：两次涌怪的间隔秒数。</summary>
+    public float bossPressureInterval;
+    /// <summary>TIMED：涌怪总数上限。</summary>
+    public int bossPressureCap;
     public bool HasEngageAnchor => engageAnchorX > -900f;
 
     /// <summary>本波原型；未接管时为 null。</summary>

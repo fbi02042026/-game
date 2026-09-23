@@ -61,6 +61,8 @@ public static class ContentPaths
         public const string MercRoster = "Data/Tables/merc_roster";
         /// <summary>战斗调参表（CSV → .bytes，见 combat_tuning.csv）。缺表时 GameConfig 回退硬编码。</summary>
         public const string CombatTuning = "Data/Tables/combat_tuning";
+        /// <summary>Boss 关变体：Boss 波的亲卫 / 软性限时涌怪（CSV → .bytes，见 boss_stage_variant.csv）。缺表时回退「只有 Boss 本体」。</summary>
+        public const string BossStageVariant = "Data/Tables/boss_stage_variant";
     }
 
     public static class Icons

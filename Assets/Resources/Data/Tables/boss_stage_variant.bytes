@@ -1,0 +1,20 @@
+﻿# Boss 关变体 V1.0：每关进 Boss 波前抽 1 个变体，只定义「首领随从 / 软性限时压力」。
+#               目的：打破「N 波小怪 → 最后 1 波 Boss」的恒定骨架，让同一个 Boss 关每次打起来不完全一样
+#               （骨架恒定是重复疲劳的主因，直接关系在线时长 → 留存）。
+#
+# 抽签规则：命中 startChapter ≤ 当前章的候选，按 weight 加权抽 1 个。
+#           无任何候选 / 缺表 / 关闭（BossStageVariantTable.VariantsEnabled=false）时返回 null，
+#           WavePlanner 回退到「只有 Boss 本体」——与接入前完全一致，缺表不会让关卡开不起来。
+#
+# effect 格式：TYPE|key=val;key=val
+#   NONE                                   = 常规首领，什么都不加（保持现状）
+#   GUARD|count=2                          = Boss 波额外带 count 只精英亲卫（同章非 Boss 怪，精英体型），
+#                                            亲卫先出场、Boss 最后出场（先清随从再打首领）
+#   TIMED|delay=40;interval=12;cap=3       = 开打 delay 秒后，每 interval 秒从右侧增援 1 只小怪，
+#                                            最多 cap 只；不设失败条件，只加压（软性限时）
+#
+# ⚠ 数值口径：亲卫与增援怪的强度一律走 monster_stats 表 + 现有缩放，不在本表里发明新倍率。
+id,name,weight,startChapter,telegraph,effect,note
+V01,常规首领,7,1,,NONE,现状：只有 Boss 本体，行为与接入前完全一致
+V02,双护法,3,3,首领带着亲卫,GUARD|count=2,Boss 波多 2 只精英亲卫，先清随从再集火
+V03,裂隙涌动,2,4,裂隙还在往外冒东西,TIMED|delay=40;interval=12;cap=3,拖太久会陆续涌出小怪，最多 3 只

@@ -857,6 +857,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         ChapterStatScaleTable.Reload();
         ChapterRouteTable.Reload();
         StageEventTable.Reload(); // 事件层 V1.0：每关重载（缺表/关闭时 Draw 返回 null，回退无事件）
+        BossStageVariantTable.Reload(); // Boss 关变体 V1.0：每关重载（缺表/关闭时回退「只有 Boss 本体」）
 
         currentStage = stage;
         ClearAllMonsters();

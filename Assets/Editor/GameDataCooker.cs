@@ -75,6 +75,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookEquipAppearanceMap();
         CookTalentRight();
         CookMercRoster();
+        CookBossStageVariant();
         if (ContentProtection.Enabled)
             CookFingerprint();
         else
@@ -287,6 +288,11 @@ public class GameDataCooker : IPreprocessBuildWithReport
         // 右列天赋重制表：Assets/Data/Source/Tables/talent_right.csv
         // → Resources/Data/Tables/talent_right.bytes（明文，与 .csv 逐字一致）。
         CookTableFromSource(ContentPaths.Source.Tables + "/talent_right.csv", null, "talent_right");
+    }
+    /// <summary>Boss 关变体表（亲卫 / 软性限时涌怪）：boss_stage_variant.csv → .bytes。缺表时回退「只有 Boss 本体」。</summary>
+    static void CookBossStageVariant()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/boss_stage_variant.csv", null, "boss_stage_variant");
     }
     static void CookTableFromSource(string sourceCsv, string legacyResourcesPath, string outName)
     {

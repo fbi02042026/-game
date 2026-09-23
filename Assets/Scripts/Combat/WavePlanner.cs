@@ -57,6 +57,9 @@ public sealed class WavePlanner
     string _stageModeName = "";
     string _stageModeTelegraph = "";
 
+    /// <summary>Boss 关变体「裂隙涌动」的增援协程；换关 / 通关时随事件层一起清掉。</summary>
+    Coroutine _bossPressureCo;
+
     float GetStageStartX() => bm.GetStageStartX();
     int CountAliveMonsters() => bm.CountAliveMonsters();
     int GetAliveMonsterCount() => bm.GetAliveMonsterCount();
@@ -910,6 +913,9 @@ public sealed class WavePlanner
     {
         _pendingStones = 0;
         RestoreHazardPenalty();
+        // Boss 关变体的涌怪协程：换关 / 通关时一并停掉，避免泄漏到下一关
+        StopCoroutine(_bossPressureCo);
+        _bossPressureCo = null;
         if (bm != null) bm.stageEventGoldMul = 1f;
     }
 
@@ -976,9 +982,10 @@ public sealed class WavePlanner
 
         var we = _waves[waveIndex];
         string ev = (we != null && !string.IsNullOrEmpty(we.stageEventTelegraph)) ? we.stageEventTelegraph : "";
+        string bv = (we != null && !string.IsNullOrEmpty(we.bossVariantTelegraph)) ? we.bossVariantTelegraph : "";
 
         var a = GetWaveArchetype(waveIndex);
-        if (a == null && string.IsNullOrEmpty(ev)) return boss ? head : "";
+        if (a == null && string.IsNullOrEmpty(ev) && string.IsNullOrEmpty(bv)) return boss ? head : "";
 
         string line = head;
         if (a != null)
@@ -989,6 +996,8 @@ public sealed class WavePlanner
         }
         // 事件层预告：紧随波次播报，让玩家提前知道下一波会怎样
         if (!string.IsNullOrEmpty(ev)) line += "  ◆ " + ev;
+        // Boss 关变体预告：进 Boss 波前告诉玩家这关的首领「多了点什么」
+        if (!string.IsNullOrEmpty(bv)) line += "  ◆ " + bv;
         return line;
     }
 
@@ -1149,6 +1158,9 @@ public sealed class WavePlanner
     /// <summary>Boss关：若干波小怪 + 最后 1 波 Boss</summary>
     internal void SetupBossWave(int stageIdx)
     {
+        StopCoroutine(_bossPressureCo);
+        _bossPressureCo = null;
+
         float startX = GetStageStartX();
         int minions = GameConfig.GetBossStageMinionTotal(stageIdx);
         int bossCount = GameConfig.GetBossStageMonsterTotal();
@@ -1187,19 +1199,52 @@ public sealed class WavePlanner
             _waves.Add(wave);
         }
 
+        // —— Boss 关变体 V1.0：最后一波不再是「永远孤零零一个 Boss」。
+        // 只加两类外挂参数：GUARD 亲卫（占本波最前 N 个名额）/ TIMED 软性限时涌怪（不判负，只加压）。
+        // 缺表 / 关闭 / 抽不到时 variant = null → 与接入前完全一致。
+        var variant = BossStageVariantTable.Draw(CurrentChapter);
+        int guardCount = 0;
+        float pressureDelay = 0f;
+        float pressureInterval = 0f;
+        int pressureCap = 0;
+        string variantId = "";
+        string variantTelegraph = "";
+        if (variant != null)
+        {
+            variantId = variant.id;
+            variantTelegraph = variant.telegraph;
+            if (variant.effectType == BossStageVariantTable.EffectType.GUARD)
+                guardCount = Mathf.Max(0, variant.guardCount);
+            else if (variant.effectType == BossStageVariantTable.EffectType.TIMED)
+            {
+                pressureDelay = variant.delaySec;
+                pressureInterval = variant.intervalSec;
+                pressureCap = Mathf.Max(0, variant.cap);
+            }
+        }
+
         float bossX = endPoint != null ? endPoint.position.x - 2f : startX + 3.5f + minionWaves * GameConfig.VIRTUAL_WAVE_SPACING + 2f;
         _waves.Add(new WaveData
         {
             triggerX = bossX - 1f,
-            monsterCount = bossCount,
+            monsterCount = bossCount + guardCount,
             isBossWave = true,
             spawned = false,
-            aliveCount = 0
+            aliveCount = 0,
+            bossVariantId = variantId,
+            bossVariantTelegraph = variantTelegraph,
+            bossGuardCount = guardCount,
+            bossPressureDelay = pressureDelay,
+            bossPressureInterval = pressureInterval,
+            bossPressureCap = pressureCap
         });
         PlanStageEvents();
         _totalWaves = _waves.Count;
         string bossModeTag = string.IsNullOrEmpty(_stageModeName) ? "无模式(旧逻辑)" : $"模式={_stageModeName}";
-        GamePerf.Log($"[BattleManager] Boss关 stage={stageIdx + 1} {bossModeTag} " +
+        string bossVariantTag = string.IsNullOrEmpty(variantId)
+            ? "无变体(旧逻辑)"
+            : $"变体={variantId}(亲卫{guardCount}/涌怪{pressureCap}@{pressureDelay:F0}s)";
+        GamePerf.Log($"[BattleManager] Boss关 stage={stageIdx + 1} {bossModeTag} {bossVariantTag} " +
                      $"小怪={minions}×{minionWaves}波 + Boss={bossCount} X={bossX:F1}");
     }
 
@@ -1389,10 +1434,14 @@ public sealed class WavePlanner
         return result;
     }
 
+    /// <summary>
+    /// 挑一只本槽位的怪。
+    /// <paramref name="forceNonBoss"/>：Boss 波的「亲卫」槽位用 —— 走普通怪分支，避免抢到 Boss 模板。
+    /// </summary>
     bool TryPickWaveMonster(int stageIdx, int slotIndex, bool isBossWave,
         System.Collections.Generic.HashSet<int> usedSprites,
         out MonsterConfig template, out int spriteIndexOverride,
-        int waveIndex = 0, StageType stageType = StageType.Normal)
+        int waveIndex = 0, StageType stageType = StageType.Normal, bool forceNonBoss = false)
     {
         template = null;
         spriteIndexOverride = 1;
@@ -1401,8 +1450,10 @@ public sealed class WavePlanner
         var pool = ConfigManager.Instance.GetWaveMonsterPool(CurrentChapter, stageIdx);
         if (pool == null || pool.Count == 0) return false;
 
-        var availableSprites = ConfigManager.Instance.GetAvailableSpriteIndices(CurrentChapter, stageIdx, isBossWave);
-        if (!isBossWave)
+        bool wantBoss = isBossWave && !forceNonBoss;
+
+        var availableSprites = ConfigManager.Instance.GetAvailableSpriteIndices(CurrentChapter, stageIdx, wantBoss);
+        if (!wantBoss)
         {
             var nonBossSprites = pool.Where(m => !m.isBoss && m.spriteIndex > 0)
                 .Select(m => m.spriteIndex).Distinct().OrderBy(s => s).ToList();
@@ -1413,10 +1464,10 @@ public sealed class WavePlanner
                     availableSprites = nonBossSprites;
             }
         }
-        if (!isBossWave && availableSprites.Count == 0)
+        if (!wantBoss && availableSprites.Count == 0)
             availableSprites.Add(1);
 
-        if (isBossWave)
+        if (wantBoss)
         {
             // 优先真 Boss 行（sprite 11/12）；避免高阶小怪 isBoss 误抢模板
             var trueBosses = pool.Where(m => m.isBoss && m.spriteIndex >= GameConfig.BOSS_SPRITE_START).ToList();
@@ -1554,8 +1605,11 @@ public sealed class WavePlanner
             if (wave == null || BattleLootMode.Active)
                 yield break;
 
+            // Boss 关变体「双护法」：本波最前 N 个名额是精英亲卫（非 Boss 模板），Boss 本体最后出场
+            bool guardSlot = wave.isBossWave && wave.bossGuardCount > 0 && i < wave.bossGuardCount;
+
             if (!TryPickWaveMonster(stageIdx, i, wave.isBossWave, usedSpritesThisWave,
-                    out MonsterConfig template, out int spriteIndexOverride, waveIndex, stageType))
+                    out MonsterConfig template, out int spriteIndexOverride, waveIndex, stageType, guardSlot))
             {
                 Debug.LogWarning($"[BattleManager] wave monster pick fail i={i}");
                 continue;
@@ -1574,6 +1628,9 @@ public sealed class WavePlanner
             int eliteQuota = (arch != null ? arch.elite : 0) + (wave != null ? wave.eliteBonus : 0);
             bool archEliteSlot = eliteQuota > 0 && i >= wave.monsterCount - eliteQuota;
             if (archEliteSlot)
+                monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;
+            // 亲卫：强制精英体型（同章普通怪模板 + 精英缩放），Boss 本体仍走 Boss 体型
+            if (guardSlot)
                 monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;
 
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
@@ -1628,7 +1685,68 @@ public sealed class WavePlanner
         _lastWaveSprites.UnionWith(usedSpritesThisWave);
 
         GamePerf.Log($"[BattleManager] wave {waveIndex + 1} spawned {wave.monsterCount} @x={engageBaseX:F1}");
+
+        // Boss 波：变体「裂隙涌动」的软性限时压力（开打 delay 秒后周期性增援，最多 cap 只）
+        if (wave != null && wave.isBossWave && wave.bossPressureDelay > 0f && wave.bossPressureCap > 0)
+        {
+            StopCoroutine(_bossPressureCo);
+            _bossPressureCo = StartCoroutine(CoBossPressureReinforce(wave, stageIdx));
+        }
+
         _spawnWaveCo = null;
+    }
+
+    /// <summary>
+    /// Boss 关变体「裂隙涌动」：开打 delay 秒后，每 interval 秒从右侧增援 1 只小怪，最多 cap 只。
+    /// 软性限时 —— 不设失败条件，只加压；Boss 波清空 / 战斗结束 / 撤离时立刻停。
+    /// </summary>
+    System.Collections.IEnumerator CoBossPressureReinforce(WaveData wave, int stageIdx)
+    {
+        float delay = wave.bossPressureDelay;
+        if (delay > 0f)
+            yield return new WaitForSeconds(delay);
+
+        int spawned = 0;
+        while (wave != null && spawned < wave.bossPressureCap)
+        {
+            if (!isInBattle || BattleLootMode.Active) break;
+            if (CountAliveMonsters() <= 0) break;   // Boss 波已清空，不再加压
+
+            SpawnBossPressureMonster(wave, stageIdx);
+            spawned++;
+            if (!string.IsNullOrEmpty(wave.bossVariantTelegraph))
+                GlobalToastUI.Show(wave.bossVariantTelegraph);
+
+            yield return new WaitForSeconds(Mathf.Max(1f, wave.bossPressureInterval));
+        }
+        _bossPressureCo = null;
+    }
+
+    /// <summary>涌怪：同章普通怪模板、默认体型、右侧进场，位置取英雄前方可见处。</summary>
+    void SpawnBossPressureMonster(WaveData wave, int stageIdx)
+    {
+        var used = new System.Collections.Generic.HashSet<int>();
+        if (!TryPickWaveMonster(stageIdx, 0, false, used,
+                out MonsterConfig template, out int spriteIndexOverride))
+            return;
+
+        float heroCombatX = hero != null ? UnitBase.GetCombatX(hero) : GetStageStartX();
+        float engageBaseX = GetMonsterEngageBaseX(heroCombatX);
+        GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
+        float lane = BattleLaneBounds.LaneSlot(0, 3);
+        float spawnZ = unitRoot != null ? unitRoot.position.z : 0f;
+        var engagePos = new Vector3(
+            Mathf.Clamp(engageBaseX, visMin + 0.5f, visMax - 0.5f),
+            UnitBase.GROUND_Y + lane,
+            spawnZ);
+
+        Monster m = SpawnMonsterOffscreenEnter(engagePos, lane, 1f, template, stageIdx, spriteIndexOverride, null, false);
+        if (m != null)
+        {
+            ForceEnableMonsterRenderers(m.transform);
+            wave.aliveCount++;
+            GamePerf.Log($"[BossVariant] 裂隙涌动：增援 1 只（已 {wave.aliveCount}）");
+        }
     }
 
     /// <summary>兜底怪物：刷在英雄前方可见处</summary>
