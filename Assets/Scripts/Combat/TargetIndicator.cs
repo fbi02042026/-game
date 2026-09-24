@@ -241,6 +241,7 @@ public class TargetIndicator : MonoBehaviour
                 _appliedArrowSpr = wantSpr;
             }
             _arrowSr.gameObject.SetActive(true);
+            _arrowSr.enabled = true;   // 缺陷4：兜底图加载失败时 SpriteRenderer 仍 disabled，需补启用
         }
         _ringSr.gameObject.SetActive(true);
         _shown = true;

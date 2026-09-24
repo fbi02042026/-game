@@ -64,7 +64,7 @@ public class BattleBossHpBar : MonoBehaviour
     public static void PlayBossIntro(Monster boss)
     {
         // 已在播放：不打断（重进战斗/重复调用安全）。注意本方法是 static，必须经 _inst 访问实例字段
-        if (_inst != null && _inst._introPlaying) return;
+        if (_inst != null && _inst._introPlaying && _inst._bound == boss) return;
         if (boss == null) return;
         Ensure();                             // 内部自动 BindUi
         if (_inst._root == null || _inst._fillRt == null) return; // 战斗 UI 还没建好，静默返回（不打日志）

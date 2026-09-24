@@ -217,7 +217,12 @@ public partial class BattleUI : MonoBehaviour
             slot.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
             if (GameConfig.PLAYER_SKILL_USE_ENERGY)
                 slot.SetEnergyFill(has && bm != null ? bm.GetPlayerSkillEnergy(i) : 0f);
-            if (!has) continue;
+            if (!has)
+            {
+                // 缺陷3：空槽（技能已卸下）清掉上一次残留的冷却遮罩
+                slot.SetCooldownRatio(0f);
+                continue;
+            }
             // 冷却改为黑色半透遮罩 + Radial360 收缩（钟表式）：剩余/总时长。
             float cd = sys != null ? sys.GetPlayerSkillCooldownRemaining(i) : 0f;
             float total = sys != null ? sys.GetPlayerSkillCooldownTotal(i) : 0f;

@@ -383,6 +383,17 @@ public partial class BattleUI : MonoBehaviour
         return txt;
     }
 
+    /// <summary>冷却遮罩复用的纯白 sprite（只创建一次）。</summary>
+    static Sprite _maskWhiteSprite;
+    static Sprite GetMaskWhiteSprite()
+    {
+        if (_maskWhiteSprite != null) return _maskWhiteSprite;
+        var tex = Texture2D.whiteTexture;
+        _maskWhiteSprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 1f);
+        _maskWhiteSprite.name = "SkillCooldownMaskWhite";
+        return _maskWhiteSprite;
+    }
+
     /// <summary>在槽位上补一层黑色半透遮罩（Radial360 填充），用于技能冷却的钟表式收缩。</summary>
     static Image EnsureChildMask(Transform parent, string name)
     {
@@ -390,7 +401,12 @@ public partial class BattleUI : MonoBehaviour
         if (exist != null)
         {
             var e = exist.GetComponent<Image>();
-            if (e != null) return e;
+            if (e != null)
+            {
+                // 缺陷1：已存在节点也要确保有 sprite，否则 fillAmount 不生效
+                if (e.sprite == null) e.sprite = GetMaskWhiteSprite();
+                return e;
+            }
         }
         var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         go.transform.SetParent(parent, false);
@@ -408,6 +424,15 @@ public partial class BattleUI : MonoBehaviour
         img.fillOrigin = (int)Image.Origin360.Top;
         img.fillClockwise = true;
         img.fillAmount = 0f;
+        img.sprite = GetMaskWhiteSprite();   // 缺陷1：必须有 sprite，Radial360 才会按 fillAmount 收缩
+        // 缺陷2：把遮罩插到第一个带 Text 子节点之前（图标之后、文字之下），避免盖住技能名/等级文字
+        Transform textTr = null;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var c = parent.GetChild(i);
+            if (c != null && c.GetComponent<Text>() != null) { textTr = c; break; }
+        }
+        if (textTr != null) go.transform.SetSiblingIndex(textTr.GetSiblingIndex());
         go.SetActive(false);   // 默认隐藏，冷却时再点亮
         return img;
     }
