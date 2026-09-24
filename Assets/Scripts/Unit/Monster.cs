@@ -706,6 +706,9 @@ public class Monster : UnitBase
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * GameConfig.MONSTER_HP_GLOBAL_MUL);
+        // ⚠ 流程测试开关（2026-09-23，测完注释掉）：Boss 压成 1 滴血，一击通关好验证流程
+        if (GameConfig.TEST_BOSS_HP > 0 && bossUnit)
+            attr.SetAttr(AttrType.MaxHp, GameConfig.TEST_BOSS_HP);
         // Boss 原先只有血量 TTK 加成，攻击没有 —— 补上，否则后期 Boss 打人比自家远程杂兵还轻
         float atkTtkMul = bossUnit ? GameConfig.BOSS_TTK_ATK_MUL : 1f;
         attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul);

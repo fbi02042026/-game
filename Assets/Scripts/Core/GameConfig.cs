@@ -619,6 +619,16 @@ public static class GameConfig
     /// <summary>狂暴攻速倍率（>1 即更快）。1.5=攻击速度 +50%（攻击间隔 ÷1.5）。</summary>
     public static float BOSS_ENRAGE_ATK_SPEED_MUL => CombatTuningTable.Get("BOSS_ENRAGE_ATK_SPEED_MUL", 1.5f);
 
+    // =====================================================================
+    // ⚠⚠ 流程测试开关（2026-09-23 加）—— 测完必须整段注释掉 / 删掉 ⚠⚠
+    // 只影响 Boss 关，纯代码侧，不碰任何配表。
+    // ---------------------------------------------------------------------
+    /// <summary>Boss 关只出 Boss 本体，不出小怪波（小怪数按 0 处理）。</summary>
+    public const bool TEST_BOSS_SOLO = true;
+    /// <summary>Boss 血量压到固定值，方便一击通关验证流程。0 或负 = 关闭此开关。</summary>
+    public const int TEST_BOSS_HP = 1;
+    // =====================================================================
+
     /// <summary>精英血厚档</summary>
     public static float ELITE_TANK_HP_MUL => CombatTuningTable.Get("ELITE_TANK_HP_MUL", 1.1f);
     public static float ELITE_TANK_ATK_MUL => CombatTuningTable.Get("ELITE_TANK_ATK_MUL", 0.92f);
@@ -1012,7 +1022,11 @@ public static class GameConfig
     /// <summary>BOSS 本体数量</summary>
     public static int GetBossStageMonsterTotal() => 1;
 
-    /// <summary>BOSS 关小怪数 = 同关随机总数 − 1</summary>
+    /// <summary>
+    /// BOSS 关小怪数 = 同关随机总数 − 1。
+    /// ⚠ 这只是「兜底」：WavePlanner.ResolveBossMinionTotal 优先读 stage_spawn.csv 的 Boss 行，
+    /// 表里配了正数就走表，表没配（0 / 空）才回来用这个公式。
+    /// </summary>
     public static int GetBossStageMinionTotal(int stageIndex0Based)
         => Mathf.Max(8, GetStageMonsterTotal(stageIndex0Based) - GetBossStageMonsterTotal());
 

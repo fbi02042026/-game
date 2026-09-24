@@ -1,7 +1,9 @@
-# monsterTotal=0 表示走 GameConfig.GetStageMonsterTotal 公式（含随机），不要改成具体数字以免冻死手感。
-# 仅第一章首关 (1,0,Normal)=9 为固定总数；其余通配行必须保持 0。
+# ⚠ 流程测试数据版（2026-09-23）：每关 1 只怪 / 1 波，只用来跑通流程，测完必须还原。
+# 正式版备份在 .workbuddy/backup/20260923_stage_test_data/stage_spawn.csv
+# 原表说明：monsterTotal=0 表示走 GameConfig.GetStageMonsterTotal 公式（含随机）；
+#           仅第一章首关 (1,0,Normal)=9 为固定总数，其余通配行保持 0 以免冻死手感。
 gameChapter,stageIndex,stageType,monsterTotal,waveCountMin,waveCountMax,eliteScaleMul,note
-1,0,Normal,9,4,6,1.0,第一章首关固定9（非公式）
-*,*,Normal,0,3,6,1.0,0=GameConfig公式
-*,*,Elite,0,3,6,1.5,0=GameConfig公式
-*,*,Boss,0,3,7,1.0,0=GameConfig公式（Boss本体另计）
+1,0,Normal,1,1,1,1.0,TEST首关也1只1波（原9只6波）
+*,*,Normal,1,1,1,1.0,TEST普通关1只1波
+*,*,Elite,1,1,1,1.5,TEST精英关1只1波
+*,*,Boss,1,1,1,1.0,TEST Boss关：本行 monsterTotal 现=小怪数（WavePlanner.ResolveBossMinionTotal 读），正数才生效；0/空=回退GameConfig公式。测试期另有 GameConfig.TEST_BOSS_SOLO 直接归0
