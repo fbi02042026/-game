@@ -12,7 +12,9 @@ public class SkillAvatarUI
     public Image avatarImage;         // 圆形头像（Mask裁剪）
     public Image energyRing;          // 能量环（圆形填充）
     public Image glowBorder;          // 光边（能量满时显示）
-    public Text cooldownText;         // 冷却倒计时文字
+    public Text cooldownText;         // 冷却倒计时文字（已废弃数字显示，仅保留节点兼容）
+    /// <summary>冷却黑色半透遮罩（Radial360 填充，钟表式收缩）。</summary>
+    public Image cooldownMask;
     /// <summary>底部充能细条（新底部布局运行时补建）。</summary>
     public Image energyFill;
     /// <summary>槽位底字（原临时 UI 的「被动」占位），现在改成显示技能名。</summary>
@@ -72,6 +74,22 @@ public class SkillAvatarUI
             cooldownText.text = text;
             cooldownText.gameObject.SetActive(!string.IsNullOrEmpty(text));
         }
+    }
+
+    /// <summary>
+    /// 设置冷却遮罩比例（钟表式收缩）：
+    /// ratio<=0 隐藏遮罩；>0 时显示并按比例填充（Radial360，满→空）。
+    /// </summary>
+    public void SetCooldownRatio(float ratio)
+    {
+        if (cooldownMask == null) return;
+        if (ratio <= 0f)
+        {
+            cooldownMask.gameObject.SetActive(false);
+            return;
+        }
+        cooldownMask.gameObject.SetActive(true);
+        cooldownMask.fillAmount = Mathf.Clamp01(ratio);
     }
 
     /// <summary>

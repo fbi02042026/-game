@@ -169,6 +169,7 @@ public partial class BattleUI : MonoBehaviour
             av.levelText = FindTextNamed(t, "level", "Level", "SkillLevel")
                 ?? EnsureCornerText(t, "SkillLevel", 12);
             av.cooldownText = EnsureChildText(t, "SkillCd", 16);
+            av.cooldownMask = EnsureChildMask(t, "SkillCdMask");
             av.energyFill = EnsureChildBar(t, "SkillEnergy", new Color(0.98f, 0.78f, 0.28f, 1f));
             // 纯冷却制：节点照样建（置 true 就能回来），默认隐藏
             av.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
@@ -382,6 +383,35 @@ public partial class BattleUI : MonoBehaviour
         return txt;
     }
 
+    /// <summary>在槽位上补一层黑色半透遮罩（Radial360 填充），用于技能冷却的钟表式收缩。</summary>
+    static Image EnsureChildMask(Transform parent, string name)
+    {
+        var exist = FindDeepChildIgnoreCase(parent, name);
+        if (exist != null)
+        {
+            var e = exist.GetComponent<Image>();
+            if (e != null) return e;
+        }
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(parent, false);
+        var rt = go.GetComponent<RectTransform>();
+        // 铺满整个技能槽图标区域（stretch 锚点），不改槽位本身的锚点/尺寸/位置。
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var img = go.GetComponent<Image>();
+        img.raycastTarget = false;
+        img.color = new Color(0f, 0f, 0f, 0.6f);   // 黑色半透，不遮死图标
+        img.type = Image.Type.Filled;
+        img.fillMethod = Image.FillMethod.Radial360;
+        img.fillOrigin = (int)Image.Origin360.Top;
+        img.fillClockwise = true;
+        img.fillAmount = 0f;
+        go.SetActive(false);   // 默认隐藏，冷却时再点亮
+        return img;
+    }
+
     /// <summary>在槽位底部补一条细进度条，返回填充 Image。</summary>
     static Image EnsureChildBar(Transform parent, string name, Color color)
     {
@@ -527,6 +557,7 @@ public partial class BattleUI : MonoBehaviour
         av.avatarImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
         av.energyFill = EnsureChildBar(t, "MercSkillEnergy", new Color(0.55f, 0.85f, 1f, 1f));
         av.cooldownText = EnsureChildText(t, "MercSkillCd", 14);
+        av.cooldownMask = EnsureChildMask(t, "MercSkillCdMask");
         return av;
     }
 

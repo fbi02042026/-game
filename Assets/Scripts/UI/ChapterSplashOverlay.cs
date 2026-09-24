@@ -39,6 +39,18 @@ public class ChapterSplashOverlay : MonoBehaviour
         return driver;
     }
 
+    /// <summary>战斗开场章节卡：与 BattleManager 原逻辑同款文案，供进战斗前（Loading 期间）调用。</summary>
+    public static ChapterSplashOverlay ShowBattleChapter(int chapter, bool isTutorial)
+    {
+        string title = ChapterStoryBeats.IntroTitle(chapter) ?? GameConfig.GetChapterMapName(chapter);
+        string body = isTutorial
+            ? "阳光还能照进来，怪物也不算太强。\n正好适合一个新人进去摸摸路。"
+            : ChapterStoryBeats.OpeningLine(chapter);
+        if (isTutorial) title = "森林区域，第一层";
+        // 不等 Loading：卡片自己就是进战斗前的过场，演完再加载战斗场景
+        return Show(title, body, isTutorial, waitLoadingBeforeHold: false);
+    }
+
     void Build(string title, string body)
     {
         var canvas = gameObject.AddComponent<Canvas>();

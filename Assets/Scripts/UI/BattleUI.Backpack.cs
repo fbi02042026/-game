@@ -160,7 +160,9 @@ public partial class BattleUI : MonoBehaviour
     {
         EnsureBattleMask();
         if (_battleMask == null) return;
-        var bm = BattleManager.Instance;
+        // 系统尚未装配（BattleUI.Awake 早于 AutoGameInitializer）时 bm 可能为 null，
+        // 用 InstanceQuiet 静默查询，不刷 Error。
+        var bm = BattleManager.InstanceQuiet;
         bool on = bm != null && bm.isInBattle && !BattleLootMode.Active;
         if (on != _battleMaskOn)
         {
@@ -337,10 +339,15 @@ public partial class BattleUI : MonoBehaviour
         RefreshSkillSlotDragState();
         if (BattleLootMode.Active) MaybeShowSkillReorderHint();
         TickBattleMask();
-        BattleJoystick.Instance?.SetVisible(!BattleLootMode.Active
-            && BattleManager.Instance != null
-            && BattleManager.Instance.isInBattle
-            && BattleManager.Instance.UnitsCanAct);
+        // 系统尚未装配（BattleUI.Awake 早于 AutoGameInitializer）时 bm 为 null：
+        // 跳过本次摇杆开关，保留摇杆当前状态，避免被误关导致进战斗没有摇杆、无法操作。
+        var bm = BattleManager.InstanceQuiet;
+        if (bm != null)
+        {
+            BattleJoystick.Instance?.SetVisible(!BattleLootMode.Active
+                && bm.isInBattle
+                && bm.UnitsCanAct);
+        }
     }
 
     /// <summary>首次进入整理阶段且确实有得排（≥2 个技能）时提示一次，之后不再打扰。</summary>
@@ -359,6 +366,7 @@ public partial class BattleUI : MonoBehaviour
     public void EnsureBattleControls()
     {
         FocusMarkSystem.Ensure();
+        TargetIndicator.Ensure();
         BattleJoystick.EnsureOn(transform);
         // 道具操作浮层挂在 BattleUI 下（保证在 Canvas 内且在最上层）
         BackpackItemActionUI.Ensure(transform);

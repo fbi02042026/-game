@@ -288,6 +288,7 @@ public class Monster : UnitBase
         float enterMul = _isBossUnit ? 1f : Random.Range(0.9f, 1.15f);
         _enterSpeed = Mathf.Max(0.4f, speed * enterMul);
         _isEnteringMap = true;
+        if (_isBossUnit) BattleBossHpBar.PlayBossIntro(this); // BOSS 出场：血条入场演出，与走进场同时进行
         _enterAtPauseStop = false;
         facingDir = faceDir > 0 ? 1 : -1;
         ApplyFacing(facingDir);

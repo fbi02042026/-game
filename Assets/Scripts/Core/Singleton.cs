@@ -71,6 +71,62 @@ public class Singleton<T> : MonoBehaviour where T : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 静默查询单例：仅在 <see cref="_instance"/> 为空时做一次 <see cref="FindObjectOfType{T}"/>；
+    /// 不自动 new 空物体、不打印任何 Log/LogError、异常也静默降级返回当前值（不向外抛）。
+    /// 找不到就返回 null。用于系统尚未装配时（如 BattleUI.Awake 早于 AutoGameInitializer）
+    /// 查询战斗单例，避免刷 Error、也不误关交互。
+    /// </summary>
+    public static T InstanceQuiet
+    {
+        get
+        {
+            // Application.isPlaying 在 MonoBehaviour 构造期访问会抛，静默降级返回已有实例、绝不建物
+            bool inPlay;
+            try
+            {
+                inPlay = Application.isPlaying;
+            }
+            catch (System.Exception)
+            {
+                return _instance;
+            }
+
+            if (_applicationIsQuitting || !inPlay)
+                return _instance;
+
+            if (_instance == null)
+            {
+                try
+                {
+                    lock (_lock)
+                    {
+                        if (_instance == null)
+                            _instance = FindOnly();
+                    }
+                }
+                catch (System.Exception)
+                {
+                    return _instance;
+                }
+            }
+            return _instance;
+        }
+    }
+
+    /// <summary>仅做一次场景查找，失败返回 null（不 new、不报错）。</summary>
+    static T FindOnly()
+    {
+        try
+        {
+            return FindObjectOfType<T>();
+        }
+        catch (System.Exception)
+        {
+            return null;
+        }
+    }
+
     protected virtual void Awake()
     {
         if (_instance != null && _instance != this)

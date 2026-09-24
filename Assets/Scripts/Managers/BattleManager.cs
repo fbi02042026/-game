@@ -1115,36 +1115,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         var parallax = FindObjectOfType<ParallaxBackground>();
         if (parallax != null) parallax.ResetHeroOrigin();
 
-        // 叙事 V2.0：第 1–8 章都有「第 X 章 · 地图名 + 一段介绍」的开场卡
-        string title = ChapterStoryBeats.IntroTitle(CurrentChapter)
-                       ?? GameConfig.GetChapterMapName(CurrentChapter);
-        string body = null;
-        if (Rules.UseTutorialSplash)
-        {
-            title = "森林区域，第一层";
-            body = "阳光还能照进来，怪物也不算太强。\n正好适合一个新人进去摸摸路。";
-        }
-        else
-        {
-            body = ChapterStoryBeats.OpeningLine(CurrentChapter);
-        }
-        // 先黑屏（盖住 Loading 底下的战斗场景），Loading 关掉后再开始计时
-        var splash = ChapterSplashOverlay.Show(title, body, Rules.UseTutorialSplash, waitLoadingBeforeHold: true);
-        float need = (Rules.UseTutorialSplash
-            ? ChapterSplashOverlay.TutorialHoldSeconds + ChapterSplashOverlay.TutorialFadeSeconds
-            : ChapterSplashOverlay.HoldSeconds + ChapterSplashOverlay.FadeSeconds) + 0.5f;
-        float guard = 0f;
-        while (splash != null && !splash.IsFinished && guard < need)
-        {
-            guard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
-            yield return null;
-        }
-        if (splash != null && !splash.IsFinished)
-        {
-            Debug.LogWarning("[BattleManager] 章节过场超时，强制关闭");
-            Object.Destroy(splash.gameObject);
-        }
-
+        // 章节开场卡已在进战斗前（Loading 期间）演完，见 GameSceneManager.LoadBattleAsync。
         yield return CoPartyWalkInFromLeft(startX, z);
 
         FinishBattleIntro(follow);

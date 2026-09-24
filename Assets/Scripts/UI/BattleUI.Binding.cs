@@ -259,6 +259,8 @@ public partial class BattleUI : MonoBehaviour
         int stageIdx = BattleManager.Instance != null && BattleManager.Instance.currentStage != null
             ? BattleManager.Instance.currentStage.stageIndex : 0;
         UpdateStageProgress(stageIdx);
+        // 系统一就绪立刻校正摇杆/遮罩开关状态（bm 此时已装配，能正确打开摇杆，避免进战斗无摇杆）
+        RefreshLootModeChrome();
     }
 
     void BindProgressBar()

@@ -28,8 +28,10 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     const float IdleYFallback = 280f;
     const float StickAlpha = 0.7f;
 
-    // —— 2026-09-22 主人要求：进战斗先亮几秒告诉玩家摇杆在哪，之后「按住显示、松手隐藏」——
-    /// <summary>进场预览剩余时长：这段时间摇杆常显（半透），过后隐藏等玩家按。</summary>
+    // —— 2026-09-24 主人要求：摇杆一直显示，只有「战斗结束、可以调整」时（整理阶段 / 不可操作）才消失——
+    // 整体显隐统一由 _group 控制（SetVisible(false) 会连同摇杆头一起隐藏）；
+    // 摇杆头自身不再做「松手淡出」，保持 StickAlpha 常显（2026-09-22 的「按住显示、松手隐藏」作废）。
+    /// <summary>进场预览时长：这段时间摇杆常显，过后继续常显（不再淡出）。</summary>
     const float IntroShowSeconds = 3f;
     float _introHideAt = -1f;
 
@@ -226,19 +228,56 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
             _stickBase.anchoredPosition = new Vector2(0f, ResolveIdleY());
     }
 
+    /// <summary>
+    /// 松手 / 预览结束：不再淡出，保持常显（主人 2026-09-24 要求「摇杆一直显示」）。
+    /// 真正要隐藏走 <see cref="SetVisible"/>(false) / TickAutoVisibility 关掉 _group。
+    /// </summary>
     void HideStickVisual()
     {
-        if (_stickGroup != null) _stickGroup.alpha = 0f;
+        if (_stickGroup != null) _stickGroup.alpha = StickAlpha;
     }
 
     void Update()
     {
+        // 每帧自愈摇杆交互开关：系统就绪后即便外部很久没调 SetVisible，也能自行把摇杆打开
+        TickAutoVisibility();
         // 进场预览时间到（且没按着）→ 收掉，等玩家按住再显示
         if (!_held && _introHideAt > 0f && Time.unscaledTime >= _introHideAt)
         {
             _introHideAt = -1f;
             HideStickVisual();
         }
+    }
+
+    /// <summary>
+    /// 每帧自愈摇杆的「交互可见」开关：只操作 <see cref="_group"/>（整体 alpha / 射线 / 可交互），
+    /// 不碰 <c>_stickGroup</c> 视觉、不调 BeginIntroPreview / ResetStickToIdlePos /
+    /// RaiseOrganizeAbove / EnsureAboveSkillBar（这些有副作用，每帧调会刷爆）。
+    /// 判定条件沿用 SetVisible 既有逻辑；bm 用 InstanceQuiet 取，避免在系统未装配时刷 Error；
+    /// bm 为 null（系统尚未就绪）时保持当前开关状态，不主动关。
+    /// 关键：保留「按住显示、松手隐藏」的视觉行为，仅修开关链。
+    /// </summary>
+    void TickAutoVisibility()
+    {
+        var bm = BattleManager.InstanceQuiet;
+        if (bm == null) return;   // 系统尚未装配：保留当前状态，交回首帧/外部校正
+
+        bool show = !BattleLootMode.Active && bm.isInBattle && bm.UnitsCanAct;
+        if (_group == null) return;
+
+        // 状态未变则跳过，避免每帧重复写属性
+        if (_group.alpha == (show ? 1f : 0f)
+            && _group.blocksRaycasts == show
+            && _group.interactable == show)
+            return;
+
+        // 关闭时若正按着，按现有 SetVisible 里的逻辑释放
+        if (!show && _held)
+            ForceRelease(false);
+
+        _group.alpha = show ? 1f : 0f;
+        _group.blocksRaycasts = show;
+        _group.interactable = show;
     }
 
     /// <summary>
@@ -310,7 +349,9 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     public void OnPointerDown(PointerEventData eventData)
     {
         if (BattleLootMode.Active) return;
-        if (BattleManager.Instance == null || !BattleManager.Instance.UnitsCanAct) return;
+        // 用静默查询：系统未装配时只是不响应，不刷 Error
+        var bm = BattleManager.InstanceQuiet;
+        if (bm == null || !bm.UnitsCanAct) return;
         _held = true;
         PlaceStickAtPointer(eventData);
         UpdateStick(eventData);

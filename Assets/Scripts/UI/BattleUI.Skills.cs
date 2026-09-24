@@ -34,6 +34,7 @@ public partial class BattleUI : MonoBehaviour
                 slot.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
                 slot.SetEnergyFill(0f);
                 if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
+                slot.SetCooldownRatio(0f);
                 continue;
             }
 
@@ -142,6 +143,7 @@ public partial class BattleUI : MonoBehaviour
                 slot.SetLevelText("");
                 slot.SetEnergyFill(0f);
                 if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
+                slot.SetCooldownRatio(0f);
                 continue;
             }
 
@@ -181,10 +183,11 @@ public partial class BattleUI : MonoBehaviour
             if (caster == null) continue;
 
             slot.SetEnergyFill(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(i) : 0f);
-            if (slot.cooldownText == null) continue;
+            if (slot.cooldownMask == null) continue;
+            // 冷却改为黑色半透遮罩 + Radial360 收缩（钟表式）：剩余/总时长。
             float cd = caster.CooldownRemain;
-            slot.cooldownText.text = cd > 0.05f ? cd.ToString("0.0") + "s" : "";
-            slot.cooldownText.gameObject.SetActive(cd > 0.05f);
+            float total = caster.CooldownTotal;
+            slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
         }
     }
 
@@ -214,12 +217,11 @@ public partial class BattleUI : MonoBehaviour
             slot.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
             if (GameConfig.PLAYER_SKILL_USE_ENERGY)
                 slot.SetEnergyFill(has && bm != null ? bm.GetPlayerSkillEnergy(i) : 0f);
-            if (slot.cooldownText == null || !has) continue;
-            // 星级已经挪到右下角 level 节点，这里只显示剩余冷却。
-            // 注意要取「剩余秒数」而不是 0~1 的比例 —— 以前把比例当秒打出来，显示一直是 0.0s
+            if (!has) continue;
+            // 冷却改为黑色半透遮罩 + Radial360 收缩（钟表式）：剩余/总时长。
             float cd = sys != null ? sys.GetPlayerSkillCooldownRemaining(i) : 0f;
-            slot.cooldownText.text = cd > 0.05f ? cd.ToString("0.0") + "s" : "";
-            slot.cooldownText.gameObject.SetActive(cd > 0.05f);
+            float total = sys != null ? sys.GetPlayerSkillCooldownTotal(i) : 0f;
+            slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
         }
     }
 

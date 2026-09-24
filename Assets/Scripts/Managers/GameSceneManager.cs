@@ -124,6 +124,27 @@ public class GameSceneManager : Singleton<GameSceneManager>
         SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);
         yield return null;
 
+        // 进战斗前过场：章节卡在 Loading 期间演完再加载战斗场景（详见主人需求）。
+        // 章节号/isTutorial 同 BattleManager 原口径，但切场景那一刻 Rules 还没赋值，
+        // 必须用 StoryProgress 自己判断，不要读 BattleManager.Rules。
+        int splashChapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        bool splashTutorial = StoryProgress.ShouldStartTutorialBattle();
+        var splash = ChapterSplashOverlay.ShowBattleChapter(splashChapter, splashTutorial);
+        {
+            float waitGuard = 0f;
+            const float splashTimeout = 8f;
+            while (splash != null && !splash.IsFinished && waitGuard < splashTimeout)
+            {
+                waitGuard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+                yield return null;
+            }
+            if (splash != null && !splash.IsFinished)
+            {
+                Debug.LogWarning("[GameSceneManager] 章节过场超时，强制关闭后继续进战斗");
+                Object.Destroy(splash.gameObject);
+            }
+        }
+
         var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(BATTLE_SCENE);
         if (op == null)
         {

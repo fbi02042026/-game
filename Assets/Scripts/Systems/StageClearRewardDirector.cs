@@ -21,6 +21,9 @@ public class StageClearRewardDirector : MonoBehaviour
     Transform _boxRoot;
     Transform _boxAnimHost;
     Transform _effectRoot;
+    Transform _fxMu;   // 开箱特效：普通木箱（effect 下节点 "1"）
+    Transform _fxYin;  // 开箱特效：稀有银箱（effect 下节点 "2"）
+    Transform _fxJin;  // 开箱特效：传奇金箱（effect 下节点 "3"）
     SpriteRenderer _closeSr;
     SpriteRenderer _openSr;
     Animator _boxAnim;
@@ -140,11 +143,26 @@ public class StageClearRewardDirector : MonoBehaviour
         {
             _boxAnim = _boxRoot.GetComponentInChildren<Animator>(true);
             _boxAnimHost = _boxAnim != null ? _boxAnim.transform : _boxRoot;
+            // 箱皮兜底：_boxRoot 在但 close/open 精灵整体缺失（预制体丢失）时，运行时补建渲染节点。
+            // 必须在 _closeSr/_openSr/_effectRoot 赋值之前调用，使后面的查找与贴地采样能拿到刚建好的节点。
+            EnsureBoxVisualFallback();
             var closeT = FindChildIgnoreCase(_boxAnimHost, "close");
             var openT = FindChildIgnoreCase(_boxAnimHost, "open");
             _closeSr = closeT != null ? closeT.GetComponent<SpriteRenderer>() : null;
             _openSr = openT != null ? openT.GetComponent<SpriteRenderer>() : null;
             _effectRoot = FindChildIgnoreCase(_boxAnimHost, "effect");
+            // 开箱特效按稀有度分节点（effect 下 "1"/"2"/"3"）：缓存并默认全关，
+            // 由 ShowTierEffect 按 tier 在播 open1 时只开对应编号节点。
+            _fxMu = _fxYin = _fxJin = null;
+            if (_effectRoot != null)
+            {
+                _fxMu = FindChildIgnoreCase(_effectRoot, "1");
+                _fxYin = FindChildIgnoreCase(_effectRoot, "2");
+                _fxJin = FindChildIgnoreCase(_effectRoot, "3");
+                if (_fxMu != null) _fxMu.gameObject.SetActive(false);
+                if (_fxYin != null) _fxYin.gameObject.SetActive(false);
+                if (_fxJin != null) _fxJin.gameObject.SetActive(false);
+            }
             _boxBaseScale = _boxRoot.localScale;
             if (_boxBaseScale == Vector3.zero) _boxBaseScale = Vector3.one;
             _effectBaseScale = _effectRoot != null ? _effectRoot.localScale : Vector3.one;
@@ -165,6 +183,9 @@ public class StageClearRewardDirector : MonoBehaviour
         _boxRoot = null;
         _boxAnimHost = null;
         _effectRoot = null;
+        _fxMu = null;
+        _fxYin = null;
+        _fxJin = null;
         _closeSr = null;
         _openSr = null;
         _boxAnim = null;
@@ -237,6 +258,48 @@ public class StageClearRewardDirector : MonoBehaviour
 #endif
     }
 
+    /// <summary>
+    /// 运行时兜底补建箱皮：当 _boxRoot 存在但 close/open 精灵整体缺失（箱皮预制体丢失）时，
+    /// 在 _boxRoot（或动画宿主）下补建 close/open 的 SpriteRenderer 与 effect 占位根，
+    /// 使宝箱可见、可被换皮、可被开关。不补 Animator、不加载 box.controller ——
+    /// 原动画绑定路径随预制体丢失，强行挂 controller 反而会把 close 的 alpha 驱动成透明。
+    /// 仅在箱皮整体缺失（close/open 都没有）时动手；已有箱皮一律不动。
+    /// </summary>
+    void EnsureBoxVisualFallback()
+    {
+        if (_boxRoot == null) return;
+        // 已有箱皮（close/open 任一存在）则不动
+        if (_closeSr != null || _openSr != null) return;
+
+        var host = _boxAnimHost != null ? _boxAnimHost : _boxRoot;
+        // 防止运行时重复补建：host 下已有 close/open 子节点则跳过（重进 CacheSceneRefs 时场景里已存在）
+        if (FindChildIgnoreCase(host, "close") != null || FindChildIgnoreCase(host, "open") != null)
+            return;
+
+        // close：空 GameObject + SpriteRenderer，sprite 留空由 ApplyBoxVisual 按稀有度填充
+        var closeGo = new GameObject("close");
+        closeGo.transform.SetParent(host, false); // 保持默认位置/缩放（零/一），不手动设置
+        var closeSr = closeGo.AddComponent<SpriteRenderer>();
+        closeSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        closeSr.sortingOrder = GameConfig.SORT_MAPROOT + 2; // 与 ApplyBoxSorting 中 close 写法一致
+
+        // open：同上，排序 +1
+        var openGo = new GameObject("open");
+        openGo.transform.SetParent(host, false);
+        var openSr = openGo.AddComponent<SpriteRenderer>();
+        openSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        openSr.sortingOrder = GameConfig.SORT_MAPROOT + 3; // 与 ApplyBoxSorting 中 open 写法一致
+
+        // effect：仅作粒子根占位，无组件
+        var effectGo = new GameObject("effect");
+        effectGo.transform.SetParent(host, false);
+
+        // 赋回字段，供后续 CacheSceneRefs 的查找赋值与贴地采样使用
+        _closeSr = closeSr;
+        _openSr = openSr;
+        _effectRoot = effectGo.transform;
+    }
+
     public static ClearBoxTier ResolveBoxTier(StageType stageType)
     {
         float roll = Random.value;
@@ -289,12 +352,14 @@ public class StageClearRewardDirector : MonoBehaviour
         StopBoxEffect();
     }
 
-    /// <summary>关箱待机：禁用 Animator（open1 第 0 帧会把 close 透明），手动复位 close。</summary>
+    /// <summary>
+    /// 关箱待机：先手动复位 close/open 显隐（兜底，万一动画绑定失效图还在），
+    /// 再保持 Animator 启用并播 close。close.anim 是主人做的"从天上掉下来落稳"动画
+    /// （0.5s 非循环，播完停末帧）。不再禁用 Animator（旧 prefab 无 close 动画时的兜底已不需要）。
+    /// </summary>
     void HoldBoxClosedPose()
     {
         StopBoxEffect();
-        if (_boxAnim != null)
-            _boxAnim.enabled = false;
         if (_closeSr != null)
         {
             _closeSr.gameObject.SetActive(true);
@@ -302,7 +367,8 @@ public class StageClearRewardDirector : MonoBehaviour
             var c = _closeSr.color;
             c.a = 1f;
             _closeSr.color = c;
-            _closeSr.transform.localPosition = new Vector3(0f, 1f, 0f);
+            // 2026-09-24：不再手动挪 close 的 localPosition（旧兜底的 (0,1,0) 已删）——
+            // close 的位置/下落完全由主人做的 close.anim 驱动，prefab 里的摆放就是初始位。
         }
         if (_openSr != null)
         {
@@ -310,6 +376,12 @@ public class StageClearRewardDirector : MonoBehaviour
             _openSr.gameObject.SetActive(true);
         }
         ApplyBoxSorting();
+        // Animator 保持启用，播下落落稳动画
+        if (_boxAnim != null)
+        {
+            _boxAnim.enabled = true;
+            _boxAnim.Play("close", 0, 0f);
+        }
     }
 
     /// <summary>关箱待机姿态，便于按 close 贴图底边算地面。</summary>
@@ -325,9 +397,17 @@ public class StageClearRewardDirector : MonoBehaviour
         return null;
     }
 
-    /// <summary>按 close/open 精灵底边贴 GROUND_Y，避免根节点 y=GROUND_Y 导致悬空或沉入地下。</summary>
+    /// <summary>
+    /// 旧：按 close/open 精灵底边贴 GROUND_Y。
+    /// 2026-09-24 主人要求：宝箱位置以美术手摆为准（close 是从天上下落的动画，落点由摆放决定），
+    /// 运行时禁止再改 box 的 y。本方法改为 no-op：保留方法与签名、所有调用点不动。
+    /// </summary>
     void SnapBoxRootToGround(bool useOpenVisual = false)
     {
+        // 2026-09-24 位置锁死：直接返回，不再贴地改 y。原有贴地逻辑保留在下面以备回滚。
+        return;
+
+        // —— 以下为旧贴地逻辑（已停用）——
         if (_boxRoot == null) return;
         if (useOpenVisual)
         {
@@ -419,6 +499,68 @@ public class StageClearRewardDirector : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 按稀有度只开对应编号的开箱特效节点，关掉另外两个（1=普通木箱、2=稀有银箱、3=传奇金箱）。
+    /// 在播 open1 的同时调用；节点为 null 时静默跳过。
+    /// </summary>
+    void ShowTierEffect(ClearBoxTier tier)
+    {
+        if (_fxMu != null) _fxMu.gameObject.SetActive(tier == ClearBoxTier.Mu);
+        if (_fxYin != null) _fxYin.gameObject.SetActive(tier == ClearBoxTier.Yin);
+        if (_fxJin != null) _fxJin.gameObject.SetActive(tier == ClearBoxTier.Jin);
+        if (tier == ClearBoxTier.Mu) ActivateAndPlayNode(_fxMu);
+        else if (tier == ClearBoxTier.Yin) ActivateAndPlayNode(_fxYin);
+        else ActivateAndPlayNode(_fxJin);
+    }
+
+    /// <summary>激活并播放某个开箱特效节点（含其下 SpriteRenderer 与 ParticleSystem），并设好 VFX 排序。</summary>
+    void ActivateAndPlayNode(Transform node)
+    {
+        if (node == null) return;
+        node.gameObject.SetActive(true);
+        var srs = node.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+        {
+            if (srs[i] == null) continue;
+            srs[i].gameObject.SetActive(true);
+            srs[i].enabled = true;
+            srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            srs[i].sortingOrder = GameConfig.SORT_VFX;
+        }
+        var ps = node.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < ps.Length; i++)
+        {
+            if (ps[i] == null) continue;
+            ps[i].gameObject.SetActive(true);
+            ps[i].Clear(true);
+            ps[i].Play(true);
+            var pr = ps[i].GetComponent<ParticleSystemRenderer>();
+            if (pr != null)
+            {
+                pr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+                pr.sortingOrder = GameConfig.SORT_VFX;
+            }
+        }
+    }
+
+    /// <summary>t 是否为 node 自身或其后裔。</summary>
+    static bool IsWithin(Transform t, Transform node)
+    {
+        if (node == null) return false;
+        while (t != null)
+        {
+            if (t == node) return true;
+            t = t.parent;
+        }
+        return false;
+    }
+
+    /// <summary>粒子/精灵是否属于按稀有度分开关的 1/2/3 节点（这些由 ShowTierEffect 负责）。</summary>
+    bool IsTierEffectNode(Transform t)
+    {
+        return IsWithin(t, _fxMu) || IsWithin(t, _fxYin) || IsWithin(t, _fxJin);
+    }
+
     /// <summary>开箱瞬间：撒烟花/粒子（仅 open 时调用）。</summary>
     void PlayBoxOpenEffect()
     {
@@ -432,6 +574,8 @@ public class StageClearRewardDirector : MonoBehaviour
         for (int i = 0; i < particles.Length; i++)
         {
             if (particles[i] == null) continue;
+            // 1/2/3 按稀有度分开关的节点交由 ShowTierEffect 处理，这里跳过
+            if (IsTierEffectNode(particles[i].transform)) continue;
             if (!particles[i].gameObject.activeSelf)
                 particles[i].gameObject.SetActive(true);
             particles[i].Clear(true);
@@ -447,6 +591,8 @@ public class StageClearRewardDirector : MonoBehaviour
         for (int i = 0; i < srs.Length; i++)
         {
             if (srs[i] == null) continue;
+            // 1/2/3 按稀有度分开关的节点交由 ShowTierEffect 处理，这里跳过
+            if (IsTierEffectNode(srs[i].transform)) continue;
             srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
             srs[i].sortingOrder = GameConfig.SORT_VFX;
         }
@@ -561,6 +707,7 @@ public class StageClearRewardDirector : MonoBehaviour
         {
             _boxAnim.enabled = true;
             PlayBoxOpenEffect();
+            ShowTierEffect(ClearBoxTier.Mu); // 教程固定木箱 → 普通开箱特效 1
             _boxAnim.Play("open1", 0, 0f);
             yield return WaitAnimOrSeconds(_boxAnim, "open1", 0.9f);
         }
@@ -678,6 +825,7 @@ public class StageClearRewardDirector : MonoBehaviour
             {
                 _boxAnim.enabled = true;
                 PlayBoxOpenEffect();
+                ShowTierEffect(tier); // 按稀有度开对应开箱特效节点（1/2/3）
                 _boxAnim.Play("open1", 0, 0f);
                 yield return WaitAnimOrSeconds(_boxAnim, "open1", 1.15f);
                 if (_closeSr != null) _closeSr.enabled = false;
@@ -696,7 +844,14 @@ public class StageClearRewardDirector : MonoBehaviour
                 HideBoxVisual();
             }
             else
+            {
+                // 无 Animator（箱皮丢失兜底补建路径）：手动切到 open 显示并贴地，让玩家看到箱子开了
+                if (_closeSr != null) _closeSr.enabled = false;
+                if (_openSr != null) _openSr.enabled = true;
+                SnapBoxRootToGround(useOpenVisual: true);
+                PlayBoxOpenEffect();
                 yield return new WaitForSecondsRealtime(0.8f);
+            }
         }
         else
         {

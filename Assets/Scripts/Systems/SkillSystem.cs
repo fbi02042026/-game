@@ -469,6 +469,17 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         return s == null ? 0f : GetCooldownRemaining(s.skillId);
     }
 
+    /// <summary>
+    /// 按槽位取玩家技能的<b>总冷却时长</b>（秒），与写入冷却同一口径走 ApplyCooldownReduce，
+    /// 保证「剩余/总时长」比例不失真。HUD 的冷却遮罩用这个算填充比例。
+    /// </summary>
+    public float GetPlayerSkillCooldownTotal(int index)
+    {
+        if (index < 0 || index >= _playerSkills.Count) return 0f;
+        var s = _playerSkills[index];
+        return s == null ? 0f : ApplyCooldownReduce(s.cooldown);
+    }
+
     /// <summary>清掉玩家所有技能的冷却（教程钩子：保证玩家立刻能看到技能依次放出来）。</summary>
     public void ClearPlayerSkillCooldowns()
     {

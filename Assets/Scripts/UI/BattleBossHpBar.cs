@@ -21,6 +21,12 @@ public class BattleBossHpBar : MonoBehaviour
     Transform _questMap;
     bool _chromeCached;
 
+    // BOSS 出场血条入场演出状态（1.2 秒从 0 填充到满）
+    bool _introPlaying;
+    float _introT;
+    float _introRatio;
+    const float BOSS_INTRO_FILL_TIME = 1.2f;
+
     public static BattleBossHpBar Ensure(Transform searchRoot = null)
     {
         if (_inst == null)
@@ -49,6 +55,28 @@ public class BattleBossHpBar : MonoBehaviour
         if (_inst == null) return;
         _inst._killCamHidden = hidden;
         _inst.ApplyVisibility();
+    }
+
+    /// <summary>
+    /// BOSS 出场血条入场演出：1.2 秒内从 0 慢慢填充到满，同时显示 BossBar 并隐藏顶部 ProgressBar/QuestMap。
+    /// 已在播放中则不重启动画（重进战斗/重复调用不打断）。
+    /// </summary>
+    public static void PlayBossIntro(Monster boss)
+    {
+        // 已在播放：不打断（重进战斗/重复调用安全）。注意本方法是 static，必须经 _inst 访问实例字段
+        if (_inst != null && _inst._introPlaying) return;
+        if (boss == null) return;
+        Ensure();                             // 内部自动 BindUi
+        if (_inst._root == null || _inst._fillRt == null) return; // 战斗 UI 还没建好，静默返回（不打日志）
+
+        _inst._bound = boss;
+        _inst._wantVisible = true;
+        _inst.ApplyVisibility();              // BossBar 显示、ProgressBar/QuestMap 隐藏
+        _inst._introPlaying = true;
+        _inst._introT = 0f;
+        _inst._introRatio = 0f;
+        _inst.SetRatio(0f);
+        _inst.UpdateAffixText();
     }
 
     void BindUi(Transform searchRoot)
@@ -106,8 +134,32 @@ public class BattleBossHpBar : MonoBehaviour
 
     void LateUpdate()
     {
-        if (_bound == null || _bound.isDead) return;
+        // 目标没了（BOSS 被秒 / 切场景）：复位入场标志，否则下次 BOSS 出场会因 _introPlaying 残留而不播
+        if (_bound == null || _bound.isDead)
+        {
+            _introPlaying = false;
+            return;
+        }
         if (!_wantVisible || _killCamHidden) return;
+
+        // BOSS 出场入场动画：1.2 秒内从 0 填充到满，期间绝不回真实血量
+        if (_introPlaying)
+        {
+            _introT += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(_introT / BOSS_INTRO_FILL_TIME);
+            _introRatio = k;
+            SetRatio(k);
+            if (k >= 1f)
+            {
+                _introPlaying = false;
+                // 不 return：继续走下方 SyncRatioFromBound 回归真实血量（满血，无跳变）
+            }
+            else
+            {
+                return; // 播放期间必须 return，避免 SyncRatioFromBound 覆盖动画值
+            }
+        }
+
         SyncRatioFromBound();
     }
 
@@ -121,6 +173,7 @@ public class BattleBossHpBar : MonoBehaviour
         if (pick == null)
         {
             _bound = null;
+            _introPlaying = false;   // 场上无 Boss/精英：复位入场标志，避免残留导致下次出场不播
             _wantVisible = false;
             ApplyVisibility();
             return;
@@ -129,7 +182,8 @@ public class BattleBossHpBar : MonoBehaviour
         _bound = pick;
         _wantVisible = true;
         ApplyVisibility();
-        SyncRatioFromBound();
+        if (!_introPlaying)
+            SyncRatioFromBound();   // 入场动画播放中不打真实值，避免开场瞬间被覆盖
         UpdateAffixText();
     }
 

@@ -6,7 +6,7 @@
 order,action,count,spriteMelee,spriteRanged,ambush,mercId,mercHpRatio,aheadDist,stunned,eliteCount,hpMin,hpMax,eliteHpMin,eliteHpMax,note,rangedCount,rangedHpMin,rangedHpMax
 1,normal,2,1,2,0,,,,,0,38,40,75,88,试探·2只纯近战,0,,
 2,normal,3,1,2,0,,,,,0,38,40,75,88,散兵·2近1弓教远程威胁,1,26,28
-3,flank,4,1,2,1,,,,,0,38,40,75,88,宝箱陷阱·左右夹击,1,26,28
+3,around,4,1,2,1,,,,,0,38,40,75,88,宝箱陷阱·四面围攻,1,26,28
 4,around,4,1,2,0,naima101,0.35,5.5,1,1,38,40,55,65,牧师被围·含1精英,1,26,28
 5,normal,4,1,2,0,,,,,0,38,40,65,75,入队后一波·验证技能自动释放,1,26,28
 6,flank,5,1,2,1,,,,,2,38,40,75,88,压轴·夹击+2精英，正常打不完→撤离,1,26,28

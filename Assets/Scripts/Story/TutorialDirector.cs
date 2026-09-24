@@ -475,7 +475,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         try
         {
             yield return TalkBlock(bm, headTalk, restoreAct: false,
-                new TalkLine(Hero.Instance, "！", 0.55f));
+                new TalkLine(Hero.Instance, "糟了，是陷阱！", 1.0f));
         }
         finally
         {
