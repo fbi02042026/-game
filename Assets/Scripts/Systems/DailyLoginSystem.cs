@@ -46,6 +46,18 @@ public static class DailyLoginSystem
     public static int CycleIndex => Mathf.Clamp(Flag(KEY_CYCLE), 0, DailyLoginDefs.CycleLength - 1);
 
     public static bool IsStarterClaimed(int day) => Flag(StarterKeyPrefix + day) > 0;
+
+    /// <summary>
+    /// 新手 8 日的限定佣兵（塔克）是否已经拿到过。
+    /// 2026-09-23：轮回后每轮的佣兵日都还是「塔克」，但只可能解锁一次——
+    /// UI 用它把底部那条压暗并显示「已领」（主人要求：领完佣兵后就一直暗着）。
+    /// </summary>
+    public static bool IsStarterMercOwned()
+    {
+        var d = Data;
+        var id = DailyLoginDefs.STARTER_MERC_ID;
+        return d != null && !string.IsNullOrEmpty(id) && d.IsMercUnlocked(id);
+    }
     public static bool CycleClaimedToday => Data != null && Data.loginCycleDay == ShopDefs.TodayKey();
 
     /// <summary>
@@ -92,9 +104,12 @@ public static class DailyLoginSystem
     public static bool HasClaimable()
     {
         if (Data == null) return false;
-        for (int i = 0; i < DailyLoginDefs.Starter.Length; i++)
+        // 2026-09-23 轮回：按当前轮次里的累计天数判定（第 9 天起是 9~16，第 17 天起是 17~24…）
+        int len = DailyLoginDefs.Starter.Length;
+        int round = len > 0 ? (Mathf.Max(1, LoginDays) - 1) / len : 0;
+        for (int i = 0; i < len; i++)
         {
-            int day = i + 1;
+            int day = round * len + i + 1;
             if (LoginDays >= day && !IsStarterClaimed(day)) return true;
         }
         for (int i = 0; i < DailyLoginDefs.Streak.Length; i++)
@@ -105,16 +120,25 @@ public static class DailyLoginSystem
         return !CycleClaimedToday;
     }
 
+    /// <summary>
+    /// 第 day 天（累计天数）的**实际奖励**：塔克已解锁时，佣兵日自动换成碎片 ×10。
+    /// UI 显示与 TryClaimStarter 发放都走这一个入口，保证「看到的 = 拿到的」。
+    /// </summary>
+    public static DailyLoginDefs.Reward EffectiveStarterReward(int day)
+        => DailyLoginDefs.EffectiveStarterReward(day, IsStarterMercOwned());
+
     public static bool TryClaimStarter(int day, out string msg)
     {
         msg = "";
         var d = Data;
         if (d == null) { msg = "存档未就绪"; return false; }
-        if (day < 1 || day > DailyLoginDefs.Starter.Length) { msg = "没有这一天的奖励"; return false; }
+        if (day < 1) { msg = "没有这一天的奖励"; return false; }
         if (LoginDays < day) { msg = $"第 {LoginDays} 天，还没到第 {day} 天"; return false; }
         if (IsStarterClaimed(day)) { msg = "已领取"; return false; }
 
-        var r = DailyLoginDefs.Starter[day - 1];
+        // 2026-09-23 轮回：day 是**累计天数**（可以 >8），奖励按 8 天一轮回取；
+        // 佣兵已解锁的佣兵日自动换碎片（EffectiveStarterReward），不会再发空气。
+        var r = EffectiveStarterReward(day);
         // 2026-09-22：X2 双倍日——角标之外**实发也翻倍**（佣兵类不翻，见 Doubled）
         bool dbl = DailyLoginDefs.IsStarterDouble(day);
         if (dbl) r = DailyLoginDefs.Doubled(r);

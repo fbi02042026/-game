@@ -64,6 +64,7 @@ public class DailyLoginUI : MonoBehaviour
     Text _infoDays;
     Text _infoMerc;
     Image _infoMercIcon;
+    Image _infoBar;     // 底部整条（领完佣兵后压暗）
 
     class Cell
     {
@@ -75,6 +76,7 @@ public class DailyLoginUI : MonoBehaviour
         public Text rewardText;
         public GameObject x2Badge;
         public GameObject rareBadge;
+        public Text markText;   // ★ 45°「已领」斜字（claimed 状态才显示）
         public Button btn;
         public int day;
     }
@@ -84,11 +86,26 @@ public class DailyLoginUI : MonoBehaviour
     public static DailyLoginUI Ensure()
     {
         if (Instance != null) return Instance;
-        var go = new GameObject("DailyLoginUI", typeof(RectTransform));
-        UnityEngine.Object.DontDestroyOnLoad(go);
-        var ui = go.AddComponent<DailyLoginUI>();
-        ui.Build();
-        return ui;
+
+        // 完整弹窗预制体优先（2026-09-23）：自带 Canvas + 全部节点，组件直接挂实例根上
+        var prefab = Resources.Load<GameObject>(PrefabPath);
+        if (prefab != null && prefab.GetComponent<Canvas>() != null)
+        {
+            var go = UnityEngine.Object.Instantiate(prefab);
+            go.name = "DailyLoginUI";
+            DontDestroyOnLoad(go);
+            var ui = go.GetComponent<DailyLoginUI>();
+            if (ui == null) ui = go.AddComponent<DailyLoginUI>();
+            ui.Build();
+            return ui;
+        }
+
+        // 兜底：老路径，代码从零生成（预制体缺失/还是旧皮肤层版时走这里）
+        var fb = new GameObject("DailyLoginUI", typeof(RectTransform));
+        DontDestroyOnLoad(fb);
+        var ui2 = fb.AddComponent<DailyLoginUI>();
+        ui2.Build();
+        return ui2;
     }
 
     void Awake()
@@ -112,7 +129,12 @@ public class DailyLoginUI : MonoBehaviour
 
     void Build()
     {
-        var canvas = gameObject.AddComponent<Canvas>();
+        // 完整弹窗预制体：画布与节点都在预制体上，直接按名字绑定（2026-09-23）
+        if (TryBindFullPrefab()) return;
+
+        // ---- 兜底：代码从零生成 ----
+        var canvas = GetComponent<Canvas>();
+        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
 
         _root = new GameObject("Root", typeof(RectTransform));
@@ -130,6 +152,118 @@ public class DailyLoginUI : MonoBehaviour
         BuildInfoBar();
 
         _root.SetActive(false);
+    }
+
+    /// <summary>
+    /// 完整弹窗预制体绑定（2026-09-23）：预制体自带 Canvas + 全部节点（见 Tools/每日登录/生成器），
+    /// 这里只按名字抓引用，不再创建节点。任何必需节点缺失都返回 false 走代码生成兜底。
+    /// 节点名即契约：Cell_N / DayTag/Label / IconHolder(+Fallback) / Reward / X2 / Rare / Mark
+    ///               CycleBar(Tag/Name/ClaimBtn+Label) / StreakBar(Tag/Streak_天数) / InfoBar(Cap/Days/MercIcon/MercText)
+    /// </summary>
+    bool TryBindFullPrefab()
+    {
+        var canvas = GetComponent<Canvas>();
+        if (canvas == null) return false;                 // 不是完整弹窗预制体
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
+
+        // 先全部检查完再写入成员，避免绑一半失败后回退造成节点重复
+        var bound = new List<Cell>();
+        for (int i = 1; i <= DailyLoginDefs.Starter.Length; i++)
+        {
+            var t = FindChild(transform, "Cell_" + i);
+            if (t == null)
+            {
+                Debug.LogError("[DailyLoginUI] 预制体缺格子 Cell_" + i + "，回退代码生成");
+                return false;
+            }
+            var bg = t.GetComponent<Image>();
+            if (bg == null) return false;
+
+            var c = new Cell { go = t.gameObject, bg = bg, day = i };
+
+            var tag = FindChild(t, "DayTag");
+            c.dayText = tag != null ? tag.GetComponentInChildren<Text>() : null;
+
+            var icon = FindChild(t, "IconHolder");
+            if (icon != null)
+            {
+                c.icon = icon.GetComponent<Image>();
+                c.iconFallback = icon.GetComponentInChildren<Text>();
+            }
+
+            var reward = FindChild(t, "Reward");
+            c.rewardText = reward != null ? reward.GetComponent<Text>() : null;
+
+            var x2 = FindChild(t, "X2");
+            c.x2Badge = x2 != null ? x2.gameObject : null;
+            var rare = FindChild(t, "Rare");
+            c.rareBadge = rare != null ? rare.gameObject : null;
+            var mark = FindChild(t, "Mark");
+            c.markText = mark != null ? mark.GetComponent<Text>() : null;
+
+            c.btn = t.GetComponent<Button>();
+            if (c.btn == null) c.btn = t.gameObject.AddComponent<Button>();
+            c.btn.transition = Selectable.Transition.None;
+            // 用 cell.day 而不是绑死的 i：轮回后 cell.day 会在 Refresh 里换成累计天数（9、10…）
+            c.btn.onClick.AddListener(() => OnClickStarter(c.day));
+            bound.Add(c);
+        }
+
+        // 2026-09-23 主人决定：每日循环条 / 连击加成条不再在界面显示（连击改为双倍奖励）。
+        // 所以这三条都按「可选」处理——缺了就跳过，BindBars/Refresh/Layout 内部都有判空。
+        BindBars();
+        _starterCells.AddRange(bound);
+        _root = gameObject;                               // Layout/Refresh/Hide 全按根节点找名字
+        return true;
+    }
+
+    /// <summary>绑定三条横带的子节点引用（名字同兜底路径，Layout() 直接复用）。</summary>
+    void BindBars()
+    {
+        var cycle = FindChild(transform, "CycleBar");
+        if (cycle != null)
+        {
+            var nameT = FindChild(cycle, "Name");
+            _cycleName = nameT != null ? nameT.GetComponent<Text>() : null;
+            var btnT = FindChild(cycle, "ClaimBtn");
+            if (btnT != null)
+            {
+                _cycleBtn = btnT.GetComponent<Button>();
+                if (_cycleBtn == null) _cycleBtn = btnT.gameObject.AddComponent<Button>();
+                _cycleBtn.onClick.AddListener(OnClickCycle);
+                _cycleState = btnT.GetComponentInChildren<Text>();
+            }
+        }
+
+        var streak = FindChild(transform, "StreakBar");
+        if (streak != null)
+        {
+            var tagT = FindChild(streak, "Tag");
+            _streakTag = tagT != null ? tagT.GetComponent<Text>() : null;
+            for (int i = 0; i < DailyLoginDefs.Streak.Length && i < _streakBtns.Length; i++)
+            {
+                var s = DailyLoginDefs.Streak[i];
+                var bt = FindChild(streak, "Streak_" + s.days);
+                if (bt == null) continue;                 // 改了 Streak 天数后重跑生成器即可
+                _streakBtns[i] = bt.GetComponent<Button>();
+                if (_streakBtns[i] == null) _streakBtns[i] = bt.gameObject.AddComponent<Button>();
+                int streakDays = s.days;
+                _streakBtns[i].onClick.AddListener(() => OnClickStreak(streakDays));
+                _streakLabels[i] = bt.GetComponentInChildren<Text>();
+            }
+        }
+
+        var info = FindChild(transform, "InfoBar");
+        if (info != null)
+        {
+            _infoBar = info.GetComponent<Image>();
+            var daysT = FindChild(info, "Days");
+            _infoDays = daysT != null ? daysT.GetComponent<Text>() : null;
+            var mercT = FindChild(info, "MercText");
+            _infoMerc = mercT != null ? mercT.GetComponent<Text>() : null;
+            var iconT = FindChild(info, "MercIcon");
+            _infoMercIcon = iconT != null ? iconT.GetComponent<Image>() : null;
+        }
     }
 
     /// <summary>美术预制体存在则实例化为最底层皮肤，返回是否有皮肤（有就跳过临时色块）。</summary>
@@ -259,10 +393,28 @@ public class DailyLoginUI : MonoBehaviour
         rareTxt.color = new Color(1f, 0.9f, 0.5f, 1f);
         c.rareBadge = rare.gameObject;
 
+        // ★ 45° 已领斜字（兜底路径同样要有，绑定路径由预制体提供）
+        var markGo = new GameObject("Mark", typeof(RectTransform));
+        markGo.transform.SetParent(bg.transform, false);
+        markGo.layer = 5;
+        var mrt = markGo.GetComponent<RectTransform>();
+        mrt.anchorMin = mrt.anchorMax = new Vector2(0.5f, 0.5f);
+        mrt.pivot = new Vector2(0.5f, 0.5f);
+        mrt.anchoredPosition = Vector2.zero;
+        mrt.sizeDelta = new Vector2(220f, 44f);
+        markGo.transform.localRotation = Quaternion.Euler(0f, 0f, 45f);
+        c.markText = CreateTxt(markGo.transform, "Label", "已 领", 34, TextAnchor.MiddleCenter);
+        Stretch(c.markText.rectTransform);
+        c.markText.color = Color.white;
+        var markOl = markGo.AddComponent<Outline>();
+        markOl.effectColor = new Color(0f, 0f, 0f, 0.85f);
+        markOl.effectDistance = new Vector2(2f, -2f);
+        markGo.SetActive(false);
+
         c.btn = bg.gameObject.AddComponent<Button>();
         c.btn.transition = Selectable.Transition.None;
-        int day = c.day;
-        c.btn.onClick.AddListener(() => OnClickStarter(day));
+        // 同上：点的时候读 cell.day（Refresh 会把它换成累计天数）
+        c.btn.onClick.AddListener(() => OnClickStarter(c.day));
         return c;
     }
 
@@ -328,6 +480,7 @@ public class DailyLoginUI : MonoBehaviour
     void BuildInfoBar()
     {
         var bar = CreateImg(_root.transform, "InfoBar", new Color(0.20f, 0.06f, 0.07f, 0.97f));
+        _infoBar = bar;
         var brt = bar.rectTransform;
         brt.anchorMin = new Vector2(0.03f, 0.5f);
         brt.anchorMax = new Vector2(0.97f, 0.5f);
@@ -488,15 +641,19 @@ public class DailyLoginUI : MonoBehaviour
         int days = DailyLoginSystem.LoginDays;
 
         // ---- 8 天格 ----
+        // 2026-09-23 轮回（主人要求）：第 1 轮 1~8 天，第 2 轮 9~16 天，第 3 轮 17~24 天……
+        // 奖励仍按 Starter[i] 循环取；已领记录按累计天数存，所以不需要重置存档。
         int lastDay = DailyLoginDefs.Starter.Length;
-        for (int i = 0; i < _starterCells.Count && i < DailyLoginDefs.Starter.Length; i++)
+        int round = lastDay > 0 ? (Mathf.Max(1, days) - 1) / lastDay : 0;
+        for (int i = 0; i < _starterCells.Count && i < lastDay; i++)
         {
             var cell = _starterCells[i];
-            var r = DailyLoginDefs.Starter[i];
-            int day = i + 1;
+            int day = round * lastDay + i + 1;                      // ★ 轮回后的真实累计天数
+            var r = DailyLoginSystem.EffectiveStarterReward(day);   // 轮回后佣兵日自动换碎片，显示=实发
+            cell.day = day;                        // 点击领取用的就是这个
 
             bool dbl = DailyLoginDefs.IsStarterDouble(day);
-            bool isLast = day == lastDay;
+            bool isLast = i == lastDay - 1;        // 本轮最后一格（佣兵）
             bool claimed = DailyLoginSystem.IsStarterClaimed(day);
             bool reached = days >= day;
 
@@ -508,6 +665,9 @@ public class DailyLoginUI : MonoBehaviour
             // 图标
             var sp = LoadRewardIcon(r);
             SetIcon(cell, sp, r.name);
+
+            // ★ 已领斜字：只有 claimed 状态亮出来
+            if (cell.markText != null) cell.markText.gameObject.SetActive(claimed);
 
             // 状态配色
             if (claimed)
@@ -526,8 +686,9 @@ public class DailyLoginUI : MonoBehaviour
                 cell.dayText.color = new Color(0.55f, 0.55f, 0.58f, 1f);
             }
 
-            // 最后一日（限定佣兵）金框高亮：未领取时描一圈金色边
-            ApplyGlow(cell.bg, isLast && !claimed && reached);
+            // ★ 2026-09-23 主人要求：当天可领的那一格套光圈，点它就能领（其余按已领/未到区分）
+            bool isToday = reached && !claimed && day == days;
+            ApplyGlow(cell.bg, isToday);
 
             cell.btn.interactable = reached && !claimed;
         }
@@ -570,18 +731,28 @@ public class DailyLoginUI : MonoBehaviour
         }
 
         // ---- 底部信息条 ----
+        // 2026-09-23 主人要求：领完佣兵后这条压暗 + 显示「已领」
+        int mercDay = round * lastDay + lastDay;          // 本轮的佣兵日（8 / 16 / 24 …）
+        // 佣兵只能解锁一次，拿到过就永久显示「已领」并压暗（不是只按本轮判定）
+        bool mercGot = DailyLoginSystem.IsStarterMercOwned()
+                       || DailyLoginSystem.IsStarterClaimed(mercDay);
+
         if (_infoDays != null)
-            _infoDays.text = Mathf.Min(days, lastDay) + " / " + lastDay + " 天";
+            _infoDays.text = mercGot ? "已领" : days + " 天";
 
         var mercReward = DailyLoginDefs.Starter[lastDay - 1];
         if (_infoMerc != null)
         {
             string name = mercReward.name.Replace("\n", "·");
-            bool got = DailyLoginSystem.IsStarterClaimed(lastDay);
-            _infoMerc.text = got
-                ? "第 " + lastDay + " 天限定佣兵已入队：" + name
-                : "第 " + lastDay + " 天可领取\n限定角色：" + name;
+            _infoMerc.text = mercGot
+                ? "已领"
+                : "第 " + mercDay + " 天可领取\n限定角色：" + name;
         }
+        // 整条压暗
+        if (_infoBar != null)
+            _infoBar.color = mercGot ? new Color(0.16f, 0.15f, 0.16f, 1f) : Color.white;
+        if (_infoDays != null) _infoDays.color = mercGot ? new Color(0.55f, 0.55f, 0.58f, 1f) : ColText;
+        if (_infoMerc != null) _infoMerc.color = mercGot ? new Color(0.55f, 0.55f, 0.58f, 1f) : ColText;
         if (_infoMercIcon != null && mercReward.grant == DailyLoginDefs.Grant.Merc)
         {
             var head = MercPortraitSprites.GetHead(mercReward.hireId);
@@ -595,6 +766,10 @@ public class DailyLoginUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 给「当天可领」的格子套一圈金色光圈（用 Outline 描边实现，沿贴图轮廓走）。
+    /// 美术后面要换成真正的光圈图时：在 Cell 下加一个 Glow 子节点（Image），这里改成开关它的 active 即可。
+    /// </summary>
     static void ApplyGlow(Image bg, bool on)
     {
         var old = bg.GetComponent<Outline>();
@@ -602,7 +777,7 @@ public class DailyLoginUI : MonoBehaviour
         if (!on) return;
         var outline = bg.gameObject.AddComponent<Outline>();
         outline.effectColor = ColGold;
-        outline.effectDistance = new Vector2(3f, -3f);
+        outline.effectDistance = new Vector2(5f, -5f);   // 比原来粗，远看像一圈光
     }
 
     static void SetIcon(Cell cell, Sprite sp, string rewardName)

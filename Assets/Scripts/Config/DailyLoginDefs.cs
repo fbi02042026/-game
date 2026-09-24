@@ -85,35 +85,54 @@ public static class DailyLoginDefs
     };
 
     /// <summary>
-    /// 新手 8 日（2026-09-22 参考全屏版参考图扩到 8 天：佣兵峰值从第 7 天挪到第 8 天「限定」位；
-    /// 前 6 天奖励与顺序保持不变，老存档已领标记按天记，兼容）。
-    /// 顺序刻意是「钱 → 体力 → 强化 → 天赋 → 钻石 → 材料 → 强化(翻倍) → 佣兵」：
-    /// 前期给能立刻花掉的，最后一天给能改变构筑的。
+    /// 新手 8 日（2026-09-23 按主人要求重排：金币/体力/钻石/碎片 四件套循环 ×2）。
+    /// 节奏目标：塔克（稀有）满级要 **75 本命碎片**（Docs/佣兵养成_随机化与抗性_2026-09-17.md §4.2），
+    /// 碎片日 = 每轮 D4 / D8（即累计 4、8、12、16、20、24、28…每 4 天一次），
+    /// 叠加「个位 3/6/9 双倍」（16、24 双倍）→ 30 天全勤 ≈ 90 片 ≥ 75 → **满级正好拖到一个月**。
+    /// 体力给上限的一半（50，主人定的）；强化石/天赋石已停用不再产出。
+    /// 老存档已领标记按天记，兼容。
     /// </summary>
     public static readonly Reward[] Starter = new Reward[]
     {
         Res("金币 ×500",         ResourceWallet.ResourceType.Gold,         500), // D1
-        Res("体力 ×30",          ResourceWallet.ResourceType.Stamina,       30), // D2 X2
-        Res("强化石 ×5",         ResourceWallet.ResourceType.EnchantStone,   5), // D3
-        Res("天赋石 ×3",         ResourceWallet.ResourceType.TalentPoint,    3), // D4
-        Res("钻石 ×50",          ResourceWallet.ResourceType.Diamond,       50), // D5 X2
-        Res("分解材料 ×10",      ResourceWallet.ResourceType.DecomposeMat,  10), // D6
-        Res("强化石 ×15",        ResourceWallet.ResourceType.EnchantStone,  15), // D7 X2
-        MercGrant("稀有佣兵\n塔克·重盾", STARTER_MERC_ID),                        // D8 限定峰值
+        Res("体力 ×50",          ResourceWallet.ResourceType.Stamina,       50), // D2（体力上限一半）
+        Res("钻石 ×30",          ResourceWallet.ResourceType.Diamond,       30), // D3
+        Frag("塔克碎片 ×10",     STARTER_MERC_ID,                           10), // D4 碎片日
+        Res("金币 ×800",         ResourceWallet.ResourceType.Gold,         800), // D5
+        Res("体力 ×50",          ResourceWallet.ResourceType.Stamina,       50), // D6
+        Res("钻石 ×50",          ResourceWallet.ResourceType.Diamond,       50), // D7
+        MercGrant("稀有佣兵\n塔克·重盾", STARTER_MERC_ID),                        // D8 限定峰值（轮回后自动换碎片，见 EffectiveStarterReward）
     };
 
     /// <summary>
-    /// X2 双倍日（累计登录第 N 天）：UI 显示「X2」角标，领取时奖励**实发翻倍**。
-    /// 佣兵类（Grant.Merc）不参与翻倍，所以最后一日不放进这里。
-    /// 想调整哪几天有 X2，改这个数组即可（UI 与发放都跟它走）。
+    /// 轮回后 D8 的「实际奖励」：塔克已解锁就自动换成碎片 ×10。
+    /// 修掉旧坑：Grant.Merc 对已解锁佣兵是空发（GrantOne 直接 break），
+    /// 不换的话第 16/24/32 天点了格子什么都拿不到却变灰。
+    /// UI 显示与实际发放都必须走这一个入口。
     /// </summary>
-    public static readonly int[] StarterDoubleDays = { 2, 5, 7 };
+    public static Reward EffectiveStarterReward(int day, bool mercOwned)
+    {
+        var r = Starter[(day - 1) % Starter.Length];
+        if (r.grant == Grant.Merc && mercOwned)
+            r = Frag("塔克碎片 ×10", STARTER_MERC_ID, 10);
+        return r;
+    }
+
+    /// <summary>
+    /// X2 双倍日（累计登录第 N 天）：UI 显示「X2」角标，领取时奖励**实发翻倍**。
+    /// 佣兵类（Grant.Merc）不参与翻倍，所以佣兵日天然不在其中。
+    ///
+    /// ⚠ 2026-09-23 主人点名规则：**看个位数字**，个位是 3 / 6 / 9 的都双倍，一直循环。
+    ///   即 3、6、9、13、16、19、23、26、29、33、36、39……
+    ///   改规则就改 IsStarterDouble 这一个方法（UI 角标与实际发放都走它）。
+    /// </summary>
+    public static readonly int[] StarterDoubleDays = { 3, 6, 9 };  // 仅作文档用：个位 3/6/9 的示范值
 
     public static bool IsStarterDouble(int day)
     {
-        for (int i = 0; i < StarterDoubleDays.Length; i++)
-            if (StarterDoubleDays[i] == day) return true;
-        return false;
+        // 个位 3 / 6 / 9 → 双倍（一直循环，13 / 26 / 39 同理）
+        int last = day % 10;
+        return last == 3 || last == 6 || last == 9;
     }
 
     /// <summary>把一份奖励的数量翻倍（佣兵类不动，资源/碎片类数量 ×2）。</summary>
