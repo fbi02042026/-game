@@ -135,3 +135,4 @@ debug-*.log
 *.pidb.meta
 *.pdb.meta
 *.mdb.meta
+Tools/_tmp_*.py
