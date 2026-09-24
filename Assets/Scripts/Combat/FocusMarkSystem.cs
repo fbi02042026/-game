@@ -42,8 +42,8 @@ public class FocusMarkSystem : MonoBehaviour
 
     void LateUpdate()
     {
-        if (BattleManager.Instance == null || !BattleManager.Instance.isInBattle
-            || !BattleManager.Instance.UnitsCanAct)
+        var bm = BattleManager.InstanceQuiet;   // 用静默查询，避免战斗外每帧刷 Error
+        if (bm == null || !bm.isInBattle || !bm.UnitsCanAct)
             return;
 
         var hero = Hero.Instance;

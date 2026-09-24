@@ -278,6 +278,14 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
         _group.alpha = show ? 1f : 0f;
         _group.blocksRaycasts = show;
         _group.interactable = show;
+
+        // 自愈打开时补齐层级，避免压在 zhezhao 之下
+        if (show)
+        {
+            ResetStickToIdlePos();
+            RaiseOrganizeAbove();
+            EnsureAboveSkillBar();
+        }
     }
 
     /// <summary>
