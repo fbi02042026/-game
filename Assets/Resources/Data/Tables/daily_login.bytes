@@ -1,0 +1,28 @@
+# 每日登录奖励主表（CSV → .bytes）
+# 列：id,table,day,name,grant,param,amount,name2,grant2,param2,amount2,note
+# table：starter=新手8日 / cycle=每日循环7日 / streak=连击档（day 填连击天数 3/7/14/30）/ accum=累计登录领限定佣兵（day 填所需累计天数）
+# grant：resource / merc / mercfrag / legendfrag / none
+# param：grant=resource 时填资源名(gold/diamond/stamina/talent/enchant/decompose)；merc/mercfrag 时填 hireId；其它留空
+# 本表数据先把旧硬编码 1:1 抄入，再按主人口径改 D4（佣兵）与 D8（碎片）；其余数值保持原样。
+# 第 0 行为表头，# 开头行忽略。
+id,table,day,name,grant,param,amount,name2,grant2,param2,amount2,note
+starter_1,starter,1,金币 ×500,resource,gold,500,,,,,新手第1天
+starter_2,starter,2,体力 ×50,resource,stamina,50,,,,,,
+starter_3,starter,3,钻石 ×30,resource,diamond,30,,,,,
+starter_4,starter,4,塔克碎片 ×10,mercfrag,H003,10,,,,,★格子只给碎片不给佣兵；佣兵改由累计 8 天在底部领取
+starter_5,starter,5,金币 ×800,resource,gold,800,,,,,,
+starter_6,starter,6,塔克碎片 ×10,mercfrag,H003,10,,,,,★双倍格(第6格)：实发20片，不来就亏（养成向稀缺资源，不通胀）
+starter_7,starter,7,钻石 ×50,resource,diamond,50,,,,,,
+starter_8,starter,8,塔克碎片 ×15,mercfrag,H003,15,,,,,★格子只给碎片；D8 起每轮补碎片；佣兵改累计8天底部领取
+cycle_1,cycle,1,体力 ×15,resource,stamina,15,,,,,
+cycle_2,cycle,2,金币 ×250,resource,gold,250,,,,,,
+cycle_3,cycle,3,塔克碎片 ×3,mercfrag,H003,3,,,,,,
+cycle_4,cycle,4,天赋石 ×3,resource,talent,3,,,,,每日登录保底3石
+cycle_5,cycle,5,强化石 ×2,resource,enchant,2,,,,,,
+cycle_6,cycle,6,分解材料 ×8,resource,decompose,8,,,,,
+cycle_7,cycle,7,钻石 ×60,resource,diamond,60,传说碎片 ×2,legendfrag,,2,周峰值
+streak_3,streak,3,体力 ×10,resource,stamina,10,,,,,,
+streak_7,streak,7,塔克碎片 ×5,mercfrag,H003,5,,,,,
+streak_14,streak,14,钻石 ×30,resource,diamond,30,传说碎片 ×3,legendfrag,,3,
+streak_30,streak,30,钻石 ×100,resource,diamond,100,传说碎片 ×15,legendfrag,,15,
+accum_8,accum,8,塔克·重盾,merc,H003,,,,,,★累计登录 8 天可在底部领取限定佣兵

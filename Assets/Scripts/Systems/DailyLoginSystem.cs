@@ -20,6 +20,7 @@ public static class DailyLoginSystem
     const string KEY_STREAK = "streak";
     const string StarterKeyPrefix = "s";
     const string StreakKeyPrefix = "k";
+    const string KEY_ACCUM = "acc";
 
     static SaveData Data => SaveSystem.Instance?.Data;
 
@@ -67,6 +68,36 @@ public static class DailyLoginSystem
     public static int StreakDays => Mathf.Max(0, Flag(KEY_STREAK));
 
     public static bool IsStreakClaimed(int days) => Flag(StreakKeyPrefix + days) > 0;
+
+    /// <summary>累计登录限定佣兵是否已领取（flag acc=1）。</summary>
+    public static bool IsAccumClaimed() => Flag(KEY_ACCUM) > 0;
+
+    /// <summary>是否已累计登录达到领取限定佣兵的天数（默认 8 天，由 DailyLoginDefs.AccumTargetDays 决定）。</summary>
+    public static bool IsAccumReached() => LoginDays >= DailyLoginDefs.AccumTargetDays;
+
+    /// <summary>
+    /// 从界面底部信息条领取“累计登录限定佣兵”。
+    /// 佣兵类在 GrantOne 内部已处理“已解锁就不重复写”，重复点安全；达到天数但没点之前 HasClaimable 会亮起。
+    /// </summary>
+    public static bool TryClaimAccum(out string msg)
+    {
+        msg = "";
+        var d = Data;
+        if (d == null) { msg = "存档未就绪"; return false; }
+        if (IsAccumClaimed()) { msg = "已领取"; return false; }
+        if (LoginDays < DailyLoginDefs.AccumTargetDays)
+        {
+            int remain = DailyLoginDefs.AccumTargetDays - LoginDays;
+            msg = $"累计登录 {LoginDays} 天，还需 {remain} 天";
+            return false;
+        }
+        var r = DailyLoginDefs.AccumReward;
+        Grant(r);
+        SetFlag(KEY_ACCUM, 1);
+        SaveSystem.Instance.Save();
+        msg = "已领取：" + r.DisplayName.Replace("\n", "、");
+        return true;
+    }
 
     /// <summary>
     /// 每次进游戏（城镇就绪后）调用一次：累加登录天数。
@@ -117,6 +148,8 @@ public static class DailyLoginSystem
             int need = DailyLoginDefs.Streak[i].days;
             if (StreakDays >= need && !IsStreakClaimed(need)) return true;
         }
+        // 累计登录领限定佣兵：达到天数且未领取，也算“有得领”，让底部信息条亮起（在 streak 之后、cycle 之前判断）。
+        if (IsAccumReached() && !IsAccumClaimed()) return true;
         return !CycleClaimedToday;
     }
 

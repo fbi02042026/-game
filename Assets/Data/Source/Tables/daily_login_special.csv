@@ -1,0 +1,11 @@
+# 节日 / 特定日登录奖励覆盖表（CSV → .bytes）
+# 列：id,date,name,grant,param,amount,name2,grant2,param2,amount2,note
+# date：MM-DD（年年生效，如 10-01 国庆）/ YYYY-MM-DD（仅该年，如 2027-01-01）
+# 命中规则：先查 YYYY-MM-DD 精确匹配，没有再查 MM-DD；命中则「今天」的新手格奖励整条覆盖。
+#   ★ 只覆盖 Starter 新手格，Cycle / Streak 不覆盖（范围不扩大）。
+# 下面都是【注释掉的示例】，未生效；主人需要真实节日奖励时，去掉行首 # 并按格式填即可。
+# 示例1：春节送稀有佣兵塔克·重盾
+# CNY,02-10,稀有佣兵·塔克·重盾,merc,H003,,, , , ,春节送佣兵示例
+# 示例2：元旦送钻石 + 传说碎片组合
+# NEWYEAR,01-01,钻石 ×100,resource,diamond,100,传说碎片 ×5,legendfrag,,5,元旦示例
+id,date,name,grant,param,amount,name2,grant2,param2,amount2,note

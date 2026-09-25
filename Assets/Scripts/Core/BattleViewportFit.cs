@@ -102,6 +102,9 @@ public static class BattleViewportFit
         Canvas.ForceUpdateCanvases();
         FitBattleMapWidth(rootCanvas.transform);
         FitBattleBackground(rootCanvas.transform);
+        // 以「地图 map」为界：地图上方的直接子节点贴顶、下方的贴底（仅运行时改锚点，不动 .prefab）。
+        // 必须在 FitBattleMapWidth 之后调用，才能拿到 map 撑满后的最终中心 y。
+        UiLayoutStretch.ApplyVerticalSplitByMap(rootCanvas.transform);
     }
 
     /// <summary>map 战斗条带：顶栏与背包之间自适应</summary>

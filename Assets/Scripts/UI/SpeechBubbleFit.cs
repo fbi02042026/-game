@@ -9,6 +9,21 @@ using UnityEngine.UI;
 /// </summary>
 public static class SpeechBubbleFit
 {
+    /// <summary>气泡根节点放大时，底图子节点是否同步放大；关闭后恢复为改动前行为。</summary>
+    public static bool EnableBubbleBgFollow = true;
+
+    sealed class BubbleBgBase
+    {
+        public RectTransform rectTransform;
+        public Vector2 sizeDelta;
+        public Image image;
+        public Image.Type imageType;
+        public bool preserveAspect;
+    }
+
+    static readonly System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<BubbleBgBase>> _bubbleBgBases =
+        new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<BubbleBgBase>>();
+
     static TextGenerator _gen;
 
     /// <param name="baseSize">预制体/默认气泡尺寸（宽高比以此为准）</param>
@@ -67,6 +82,9 @@ public static class SpeechBubbleFit
             needH = _gen.GetPreferredHeight(fitted, settings);
         }
 
+        // 选择方案 A：只同步底图尺寸，保留现有字号与自动换行观感；若缩放根节点会连文字一起放大。
+        ApplyBubbleBgScale(bubbleRt, text.rectTransform, scale);
+
         // 放大到上限仍塞不下：裁切并加省略号（仍保持 Wrap，不改成单行溢出）
         if (needH > availH + 0.5f && fitted.Length > 1)
         {
@@ -93,6 +111,87 @@ public static class SpeechBubbleFit
         if (bubbleRt == null) return;
         if (baseSize.x > 1f && baseSize.y > 1f)
             bubbleRt.sizeDelta = baseSize;
+        RestoreBubbleBgs(bubbleRt);
+    }
+
+    static void ApplyBubbleBgScale(RectTransform bubbleRt, RectTransform textRt, float scale)
+    {
+        if (!EnableBubbleBgFollow)
+        {
+            RestoreBubbleBgs(bubbleRt);
+            return;
+        }
+
+        int id = bubbleRt.GetInstanceID();
+        if (!_bubbleBgBases.TryGetValue(id, out var bases))
+        {
+            bases = CaptureBubbleBgs(bubbleRt, textRt);
+            _bubbleBgBases[id] = bases;
+        }
+
+        for (int i = 0; i < bases.Count; i++)
+        {
+            var item = bases[i];
+            if (item.rectTransform == null || item.image == null) continue;
+            item.rectTransform.sizeDelta = item.sizeDelta * scale;
+            EnsureImageNotStretched(item.image);
+        }
+    }
+
+    static System.Collections.Generic.List<BubbleBgBase> CaptureBubbleBgs(
+        RectTransform bubbleRt, RectTransform textRt)
+    {
+        var named = new System.Collections.Generic.List<BubbleBgBase>();
+        BubbleBgBase first = null;
+        for (int i = 0; i < bubbleRt.childCount; i++)
+        {
+            var child = bubbleRt.GetChild(i);
+            if (child == textRt) continue;
+            var childRt = child as RectTransform;
+            var image = child.GetComponent<Image>();
+            if (childRt == null || image == null) continue;
+
+            var item = new BubbleBgBase
+            {
+                rectTransform = childRt,
+                sizeDelta = childRt.sizeDelta,
+                image = image,
+                imageType = image.type,
+                preserveAspect = image.preserveAspect,
+            };
+            if (first == null) first = item;
+            if (IsBubbleBgName(child.name)) named.Add(item);
+        }
+
+        // 预制体未采用常见底图命名时，只兜底跟随第一个直接 Image 子节点，避免误改图标。
+        if (named.Count == 0 && first != null) named.Add(first);
+        return named;
+    }
+
+    static bool IsBubbleBgName(string nodeName)
+    {
+        if (string.IsNullOrEmpty(nodeName)) return false;
+        return nodeName.IndexOf("Bg", System.StringComparison.OrdinalIgnoreCase) >= 0
+               || nodeName.IndexOf("Background", System.StringComparison.OrdinalIgnoreCase) >= 0
+               || nodeName.IndexOf("Frame", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    static void RestoreBubbleBgs(RectTransform bubbleRt)
+    {
+        int id = bubbleRt.GetInstanceID();
+        if (!_bubbleBgBases.TryGetValue(id, out var bases)) return;
+        for (int i = 0; i < bases.Count; i++)
+        {
+            var item = bases[i];
+            if (item.rectTransform != null)
+                item.rectTransform.sizeDelta = item.sizeDelta;
+            if (item.image != null)
+            {
+                item.image.type = item.imageType;
+                item.image.preserveAspect = item.preserveAspect;
+            }
+        }
+        _bubbleBgBases.Remove(id);
     }
 
     static string Sanitize(string content)
@@ -141,7 +240,11 @@ public static class SpeechBubbleFit
 
     static void EnsureImageNotStretched(RectTransform bubbleRt)
     {
-        var img = bubbleRt.GetComponent<Image>();
+        EnsureImageNotStretched(bubbleRt.GetComponent<Image>());
+    }
+
+    static void EnsureImageNotStretched(Image img)
+    {
         if (img == null) return;
         img.type = Image.Type.Simple;
         // Simple + 已按原图比例设 sizeDelta：不要用 preserveAspect 再裁切，否则文字区会对不齐

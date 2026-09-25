@@ -28,7 +28,8 @@ public class BattlePrefabGenerator : EditorWindow
     static readonly Color COLOR_PROGRESS_DONE = new Color(0.3f, 0.7f, 0.3f);
     static readonly Color COLOR_PLAYER_MARKER = new Color(0.3f, 0.6f, 1f);
 
-    [MenuItem("Tools/_归档/生成战斗预制体")]
+    // 菜单入口已移除（2026-09-25 菜单清理；BattleUI.prefab 早已生成且被手改过，重新生成会覆盖）。
+    // 功能保留：AutoConfigEditor.cs 里仍会调 BattlePrefabGenerator.ShowWindow()。
     public static void ShowWindow()
     {
         GenerateBattleUIPrefab();

@@ -389,6 +389,14 @@ public class TownHubController : MonoBehaviour
     {
         TavernUI.SetGuildHallOverlayMode(false);
         TownSharedChrome.RaiseSharedChrome(transform);
+
+        // 显示公会页 = 底栏默认入口，必须把选中态拉回公会。
+        // 预热协程会逐页 ShowPage，而 AdventureLogUI.ShowPage() 里会把底栏钉成 Log，
+        // 预热结束回到公会页时若不还原，玩家一进主界面就看到「冒险日志」亮着。
+        // notify:false：只刷视觉，不走 OnTabSelected / OnTabClickOverride，避免切页回环。
+        EnsureNavBound();
+        _nav?.SetSelected(MainNavTab.Guild, notify: false);
+        _current = MainNavTab.Guild;
     }
 
     void EnsureNavBound()

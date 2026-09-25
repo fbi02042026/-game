@@ -60,6 +60,14 @@ public class GuildHallUI : MonoBehaviour
     /// <summary>首次引导未完成前隐藏大厅，避免片头/剧情前闪一下主界面。</summary>
     public static bool ShouldHideTownForIntro => !StoryProgress.TutorialIntroDone;
 
+    /// <summary>
+    /// 热点（咨询台 / 对话气泡）跟随背景底图等比放大的总开关。
+    /// 主人反馈「主界面背景上的咨询台底框不对、跟美术对不上」：Background 被 Envelope 整体等比放大后，
+    /// 预制体里「锚点居中 + 固定绝对偏移」的热点不会跟着放大，于是热区框还留在原地、美术却往外移了。
+    /// 置 false 即完整还原到改动前的行为（标准屏与瘦屏都不做任何缩放）。
+    /// </summary>
+    public static bool EnableHotspotFollowBg = true;
+
     void Awake()
     {
         Instance = this;
@@ -533,13 +541,191 @@ public class GuildHallUI : MonoBehaviour
         return null;
     }
 
+    // ────────────────────────────────────────────────────────────────────────
+    // 瘦屏：热点跟随背景底图等比放大（本界面专用，不进 UiLayoutStretch 通用规则）
+    // ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 需要跟随背景底图一起等比放大的热点节点名；以后加热点直接往这个数组里加即可。
+    /// 这些节点在预制体里是「锚点居中 + 固定绝对偏移」，底图被 EnvelopeParent 放大后它们不会跟着走，
+    /// 于是美术里的咨询台 / 气泡和热区框就错开了。
+    /// </summary>
+    static readonly string[] HotspotFollowNames = { "Receptionist", "SpeechBubble" };
+
+    /// <summary>热点基准：首次执行时捕获，之后每次都「从 base 重算」，绝不基于当前值累加。</summary>
+    struct HotspotFollowBase
+    {
+        public RectTransform rectTransform;
+        public Vector2 anchorMin;
+        public Vector2 anchorMax;
+        public Vector2 pivot;
+        public Vector2 anchoredPosition;
+        public Vector3 localScale;
+        public bool hasBase;
+    }
+
+    readonly HotspotFollowBase[] _hotspotFollows = new HotspotFollowBase[HotspotFollowNames.Length];
+
+    RectTransform _bgRect;
+    float _bgBaseW;
+    float _bgBaseH;
+    bool _bgBaseCaptured;
+    bool _hotspotFollowApplied;
+    float _hotspotFollowK = 1f;
+    bool _hotspotFollowPending;
+    bool _applyingBgEnvelope;
+
     /// <summary>城镇大厅底图（Background）运行时 envelope 铺满，覆盖更瘦屏上下空区。</summary>
     void ApplyBackgroundEnvelope()
     {
-        Transform bg = FindDeepChild(transform, "Background");
-        if (bg == null) return;
-        var rt = bg as RectTransform;
-        if (rt == null) return;
-        UiLayoutStretch.ApplyEnvelopeImage(rt);
+        // 防重入：改 rect 可能触发自身的尺寸变化回调（见 OnRectTransformDimensionsChange）。
+        if (_applyingBgEnvelope) return;
+        _applyingBgEnvelope = true;
+        try
+        {
+            Transform bg = FindDeepChild(transform, "Background");
+            if (bg == null) return;
+            var rt = bg as RectTransform;
+            if (rt == null) return;
+            _bgRect = rt;
+            UiLayoutStretch.ApplyEnvelopeImage(rt);
+            CaptureBgBaseRect(rt);
+            // 此刻 rect 还没被 AspectRatioFitter 放大，这里多半算出 k≈1（等于把热点还原到 base）。
+            ApplyHotspotFollowBg();
+            // 等 Canvas 布局重建、AspectRatioFitter 把 rect 写回之后再补算一次（一次性，不是每帧轮询）。
+            EnsureHotspotFollowDeferred();
+        }
+        finally
+        {
+            _applyingBgEnvelope = false;
+        }
+    }
+
+    /// <summary>
+    /// 捕获 Background 的基准 rect（算放大倍数 k 的分母）。
+    /// 为什么选「ApplyEnvelopeImage 之后、AspectRatioFitter 生效之前」这一瞬间，而不是更早或更晚：
+    ///   - 更早（调用 ApplyEnvelopeImage 之前）拿到的是预制体的出血尺寸 799×1420，它比 720×1280 设计框
+    ///     还大 1.11 倍，拿它当分母会让 k 在标准 9:16 屏上变成 0.90，标准屏也会被缩放，
+    ///     违反「标准屏一个像素都不动」的硬要求，所以不能更早；
+    ///   - ApplyEnvelopeCenter 会先把 anchor/pivot 居中、把 sizeDelta 设成「父级 rect」，
+    ///     而 AspectRatioFitter 要到下一次 Canvas 布局重建（本帧稍后）才会把 rect 调成最终放大值，
+    ///     所以紧跟在 ApplyEnvelopeImage 之后同步读到的正是「父级设计框」720×H，这才是设计基准的正确含义；
+    ///   - 更晚（等 rect 稳定后再捕）读到的是「当前屏幕的放大结果」，屏幕一变基准就跟着变，k 会恒等于 1。
+    /// 另外这里每次 ApplyBackgroundEnvelope 都重捕一次、而不是只捕一次：旋转 / 分辨率变化后父级高度会变，
+    /// 基准必须同步更新，否则「从瘦屏切到更瘦屏」时 k 会算错。重捕不产生累积：k 永远由 base 重算。
+    /// </summary>
+    void CaptureBgBaseRect(RectTransform bgRt)
+    {
+        if (bgRt == null) return;
+        // 没有 Image 时 ApplyEnvelopeImage 会直接 return，rect 仍是预制体出血尺寸，不能当基准。
+        if (bgRt.GetComponent<Image>() == null) return;
+        var r = bgRt.rect;
+        // 父级还没量好尺寸（w/h 为 0）：保留已有基准，等下一次调用再捕。
+        if (r.width < 1f || r.height < 1f) return;
+        _bgBaseW = r.width;
+        _bgBaseH = r.height;
+        _bgBaseCaptured = true;
+    }
+
+    /// <summary>
+    /// 让热点按背景底图的放大倍数一起等比放大：锚点 / 轴心保持 base 不变，
+    /// 「离屏中心的距离」（anchoredPosition）与「自身大小」（localScale）同乘 k，
+    /// 等价于把这些热点塞进 Background 里跟底图一起缩放，美术与热区框就重新对齐。
+    /// </summary>
+    void ApplyHotspotFollowBg()
+    {
+        if (!_bgBaseCaptured || _bgRect == null) return;
+        var r = _bgRect.rect;
+        if (r.width < 1f || r.height < 1f) return;
+
+        // 整体等比 = 取较大者，与 AspectRatioFitter.EnvelopeParent「铺满父级」的语义一致。
+        float k = Mathf.Max(r.width / _bgBaseW, r.height / _bgBaseH);
+        bool apply = EnableHotspotFollowBg
+                     && (UiLayoutStretch.IsThinnerScreen() || Mathf.Abs(k - 1f) > 0.001f);
+
+        // 幂等守卫：状态没变就不重复写，既防重复叠加，也避免和其它布局回调互相打架。
+        if (apply && _hotspotFollowApplied && Mathf.Abs(k - _hotspotFollowK) < 0.0005f) return;
+        if (!apply && !_hotspotFollowApplied) return;
+        _hotspotFollowApplied = apply;
+        _hotspotFollowK = apply ? k : 1f;
+
+        ResolveHotspots();
+        CaptureHotspotBases();
+        // apply=false（标准屏 k≈1 或开关关掉）时传 1f，等于把热点完整还原到 base。
+        WriteHotspots(apply ? k : 1f);
+    }
+
+    /// <summary>按名字找热点；找不到就留空，之后一直跳过，绝不新建节点。</summary>
+    void ResolveHotspots()
+    {
+        for (int i = 0; i < HotspotFollowNames.Length; i++)
+        {
+            if (_hotspotFollows[i].rectTransform != null) continue;
+            var t = FindDeepChild(transform, HotspotFollowNames[i]);
+            var rt = t as RectTransform;
+            if (rt == null) continue;
+            _hotspotFollows[i].rectTransform = rt;
+        }
+    }
+
+    /// <summary>首次遇到时捕获热点基准（anchorMin/anchorMax/pivot/anchoredPosition/localScale）。</summary>
+    void CaptureHotspotBases()
+    {
+        for (int i = 0; i < _hotspotFollows.Length; i++)
+        {
+            var item = _hotspotFollows[i];
+            if (item.rectTransform == null || item.hasBase) continue;
+            var rt = item.rectTransform;
+            item.anchorMin = rt.anchorMin;
+            item.anchorMax = rt.anchorMax;
+            item.pivot = rt.pivot;
+            item.anchoredPosition = rt.anchoredPosition;
+            item.localScale = rt.localScale;
+            item.hasBase = true;
+            _hotspotFollows[i] = item;
+        }
+    }
+
+    /// <summary>从 base 重算写入（k=1 即还原）。只写偏移与缩放，不动子节点结构与 sizeDelta。</summary>
+    void WriteHotspots(float k)
+    {
+        for (int i = 0; i < _hotspotFollows.Length; i++)
+        {
+            var item = _hotspotFollows[i];
+            var rt = item.rectTransform;
+            if (rt == null || !item.hasBase) continue;
+            rt.anchorMin = item.anchorMin;
+            rt.anchorMax = item.anchorMax;
+            rt.pivot = item.pivot;
+            rt.anchoredPosition = item.anchoredPosition * k;
+            rt.localScale = new Vector3(item.localScale.x * k, item.localScale.y * k, item.localScale.z * k);
+        }
+    }
+
+    /// <summary>布局稳定后补算一次；已有待执行的就不再排队。</summary>
+    void EnsureHotspotFollowDeferred()
+    {
+        if (_hotspotFollowPending) return;
+        if (!gameObject.activeInHierarchy) return;
+        _hotspotFollowPending = true;
+        StartCoroutine(HotspotFollowDeferred());
+    }
+
+    IEnumerator HotspotFollowDeferred()
+    {
+        yield return new WaitForEndOfFrame();   // 本帧渲染前 Canvas 已重建布局，fitter 写完 rect
+        yield return null;                      // 再多等一帧，确保读到的是稳定后的 rect
+        _hotspotFollowPending = false;
+        ApplyHotspotFollowBg();
+    }
+
+    /// <summary>
+    /// 分辨率 / 旋转导致根节点尺寸变化时重跑一遍（覆盖「瘦屏旋转 / 分辨率变化」）。
+    /// 走 Unity 的尺寸变化回调，不是每帧轮询（项目里 SafeAreaFitter / LoginUI 也是这么接的）。
+    /// </summary>
+    void OnRectTransformDimensionsChange()
+    {
+        if (_bgRect == null) return;   // 尚未初始化（Awake 里 ApplyBackgroundEnvelope 之前）不处理
+        ApplyBackgroundEnvelope();
     }
 }

@@ -34,8 +34,9 @@ public class GameSceneManager : Singleton<GameSceneManager>
     }
 
     /// <summary>进程退出：结束会话并 flush，避免丢失尾数据。</summary>
-    void OnApplicationQuit()
+    protected override void OnApplicationQuit()
     {
+        base.OnApplicationQuit();
         Analytics.SessionEnd();
     }
 

@@ -48,6 +48,16 @@ public class MainBottomNav : MonoBehaviour
     bool _wired;
     bool _loadingBattle;
 
+    /// <summary>
+    /// 选中态兜底总开关（主人反馈「默认选中跑到了冒险日志」）。
+    /// true：AutoBind / Initialize / SetSelected 三处都会先无条件清掉按钮下的「选中」层，并强制只有目标项高亮；
+    /// false：完全恢复改动前的旧行为，方便一键回退对比。
+    /// </summary>
+    public static bool EnableNavSelectedGuard = true;
+
+    /// <summary>缺图警告只打一次，避免每次 SetSelected 刷五条重复日志。</summary>
+    static bool _navBgWarned;
+
     public MainNavTab Current => _current;
 
     void Awake()
@@ -85,6 +95,8 @@ public class MainBottomNav : MonoBehaviour
     public void Initialize(MainNavTab tab)
     {
         AutoBind();
+        // 双保险：绑定完先把预制体里默认亮着的「选中」层清掉，再决定谁该高亮
+        if (EnableNavSelectedGuard) ForceCleanSelectedVisuals();
         WireClicks();
         SetSelected(tab, notify: false);
     }
@@ -92,9 +104,13 @@ public class MainBottomNav : MonoBehaviour
     public void SetSelected(MainNavTab tab, bool notify = true)
     {
         _current = tab;
+        // 先无条件清一遍「选中」层：即使下面 _selected 为 null 直接 return，也不会留下错误高亮
+        if (EnableNavSelectedGuard) ForceCleanSelectedVisuals();
         if (_selected == null) AutoBind();
         if (_selected == null) return;
 
+        // 只有 index == (int)tab 的按钮走选中态（NavBg 换 _navBgSelected + localScale=SelectedScale），
+        // 其余一律强制普通态（NavBg 换 _navBgDefault + localScale=1），杜绝上一个高亮残留。
         for (int i = 0; i < _selected.Length; i++)
         {
             bool on = i == (int)tab;
@@ -126,6 +142,14 @@ public class MainBottomNav : MonoBehaviour
                     bg.color = Color.white;
                     bg.enabled = true;
                 }
+                else if (!_navBgWarned)
+                {
+                    // 缺图不能静默：不然界面上「看不出谁被选中」很难定位
+                    _navBgWarned = true;
+                    string state = on ? "选中态" : "普通态";
+                    Debug.LogWarning("[MainBottomNav] NavBg 底图缺失（" + state + "，路径 "
+                        + NavBgDefaultPath + " / " + NavBgSelectedPath + "），选中高亮可能看不出来。");
+                }
             }
         }
 
@@ -150,6 +174,67 @@ public class MainBottomNav : MonoBehaviour
 
         if (go.activeSelf)
             go.SetActive(false);
+    }
+
+    /// <summary>
+    /// 无条件清掉 5 个按钮子树里的「选中」层（幂等，可重复调用）。
+    /// 为什么：预制体 MainBottomNav.prefab 里 5 个 Nav* 下的「选中」节点默认全是 activeSelf=true 且 Image 启用，
+    /// 而 ApplySelectedVisual 只有被 SetSelected 遍历到才隐藏它；一旦 AutoBind 没绑上（_selected 元素为 null）
+    /// 或 SetSelected 中途 return，就会留下一个亮着的「选中」框，看起来就是「默认选中项跑偏」。
+    /// 这里不依赖 _selected 是否绑定成功，按按钮逐个 FindDeep 处理。
+    /// </summary>
+    public void ForceCleanSelectedVisuals()
+    {
+        Button[] btns = { guildButton, characterButton, adventureButton, tavernButton, logButton };
+        int bound = 0;
+        for (int i = 0; i < btns.Length; i++)
+        {
+            if (btns[i] == null) continue;
+            bound++;
+            CleanSelectedUnder(btns[i]);
+        }
+
+        // 还有按钮没绑上（AutoBind 未执行/部分失败）：退化成整棵底栏子树扫一遍同名节点。
+        // 注意这里不能再调 AutoBind，否则与 AutoBind 末尾的清理互相调用会死递归。
+        if (bound < btns.Length)
+        {
+            Transform searchRoot = FindDirectChild(transform, "BottomNav");
+            CleanSelectedInSubtree(searchRoot != null ? searchRoot : transform);
+        }
+    }
+
+    /// <summary>整棵子树里所有名为「选中」/「Selected」/「Select」的节点全部关掉。</summary>
+    static void CleanSelectedInSubtree(Transform root)
+    {
+        if (root == null) return;
+        if (root.name == "选中" || root.name == "Selected" || root.name == "Select")
+        {
+            Image img = root.GetComponent<Image>();
+            if (img != null) img.enabled = false;
+            if (root.gameObject.activeSelf) root.gameObject.SetActive(false);
+        }
+        for (int i = 0; i < root.childCount; i++)
+            CleanSelectedInSubtree(root.GetChild(i));
+    }
+
+    /// <summary>单个按钮子树：有 Image 就 enabled=false，同时 SetActive(false)（预制体叫「选中」，兼容 Selected/Select）。</summary>
+    static void CleanSelectedUnder(Button btn)
+    {
+        if (btn == null) return;
+        Transform[] overlays =
+        {
+            FindDeepChild(btn.transform, "选中"),
+            FindDeepChild(btn.transform, "Selected"),
+            FindDeepChild(btn.transform, "Select"),
+        };
+        for (int i = 0; i < overlays.Length; i++)
+        {
+            Transform t = overlays[i];
+            if (t == null) continue;
+            Image img = t.GetComponent<Image>();
+            if (img != null) img.enabled = false;
+            if (t.gameObject.activeSelf) t.gameObject.SetActive(false);
+        }
     }
 
     /// <summary>选中：底部中心为原点放大；未选中恢复 1。</summary>
@@ -341,6 +426,9 @@ public class MainBottomNav : MonoBehaviour
                 break;
             }
         }
+
+        // 绑完立刻清一遍：不管绑定成功与否，都不让预制体里默认亮着的「选中」层留在屏幕上
+        if (EnableNavSelectedGuard) ForceCleanSelectedVisuals();
     }
 
     static Image FindNavBg(Button btn)

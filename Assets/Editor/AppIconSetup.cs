@@ -15,7 +15,7 @@ public static class AppIconSetup
     /// <summary>Adaptive 前景内容占画布比例（Android 安全区约 66%，略放大到 68%）。</summary>
     const float AdaptiveContentScale = 0.68f;
 
-    [MenuItem("Tools/_归档/配置游戏 Icon")]
+    // 菜单入口已移除（2026-09-25 菜单清理）。功能保留：打包脚本 CliAndroidBuild.cs 会直接调 AppIconSetup.Apply()。
     public static void ApplyFromMenu()
     {
         string report;
@@ -23,7 +23,7 @@ public static class AppIconSetup
         EditorUtility.DisplayDialog(ok ? "游戏 Icon 成功" : "游戏 Icon 失败", report, "好的");
     }
 
-    [MenuItem("Tools/检查游戏 Icon")]
+    // 菜单入口已移除（2026-09-25 菜单清理）。需要检查时直接从代码调 BuildInspectReport()。
     public static void InspectFromMenu()
     {
         EditorUtility.DisplayDialog("游戏 Icon 检查", BuildInspectReport(), "好的");

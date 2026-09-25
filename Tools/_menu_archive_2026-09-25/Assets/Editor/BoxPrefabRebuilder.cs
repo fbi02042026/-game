@@ -29,8 +29,8 @@ public static class BoxPrefabRebuilder
     private const string CLOSE_SPRITE_PATH = "Assets/Art/UI/box/mubox_close.png";
     private const string OPEN_SPRITE_PATH  = "Assets/Art/UI/box/mubox_open.png";
     private const string CONTROLLER_PATH   = "Assets/Art/Effects/Ani/box/box.controller";
-    private const string PREFAB_DIR        = "Assets/Prefabs";
-    private const string PREFAB_PATH       = "Assets/Prefabs/box.prefab";
+    private const string PREFAB_DIR        = "Assets/Resources/Prefabs/Battle";
+    private const string PREFAB_PATH       = "Assets/Resources/Prefabs/Battle/box.prefab";
     private const string BATTLE_SCENE_PATH = "Assets/Scenes/Battle.unity";
 
     // ------------------------------------------------------------------
@@ -94,7 +94,7 @@ public static class BoxPrefabRebuilder
         // 6) 确保目标文件夹存在
         if (!AssetDatabase.IsValidFolder(PREFAB_DIR))
         {
-            AssetDatabase.CreateFolder("Assets", "Prefabs");
+            AssetDatabase.CreateFolder("Assets/Resources/Prefabs", "Battle");
             Debug.Log("[BoxPrefabRebuilder] 已创建文件夹：" + PREFAB_DIR);
         }
 

@@ -14,6 +14,9 @@ using UnityEngine.UI;
 public static class MercGrowUI
 {
     /// <summary>底版是否压在头像上层。</summary>
+    /// 注意：走主人碎片预制体（<see cref="MercFragmentCardUI"/>）的那条路径下这个开关<b>无意义</b> ——
+    /// 层级由主人预制体定死（suipianicon 框体在下、mask/HeadIcon 头像在上），代码不许再去改层级。
+    /// 本开关只对「主人预制体加载不到」时的手搭兜底路径生效。
     public static bool FrameOnTop = true;
 
     // ==================== 本命碎片卡 ====================
@@ -33,10 +36,23 @@ public static class MercGrowUI
         public MercRosterDefs.MercRarity Rarity;
         public string HireId;
 
+        /// <summary>
+        /// 走主人碎片预制体时的托管封装。非 null 表示本卡是主人预制体实例，
+        /// Apply 全部转调它 —— 避免这里再赋一遍 sprite / 再设一次 showMaskGraphic 导致两份引用状态漂移。
+        /// </summary>
+        internal MercFragmentCardUI Owner;
+
         public void Apply(MercRosterDefs.MercRarity rarity, string hireIdOrAssetId)
         {
             Rarity = rarity;
             HireId = hireIdOrAssetId;
+
+            // 主人预制体路径：换图的活儿全交给 MercFragmentCardUI（它只换 sprite，不动几何）。
+            if (Owner != null)
+            {
+                Owner.Apply(rarity, hireIdOrAssetId);
+                return;
+            }
 
             var baseSp = MercGrowSprites.LoadFragmentBase(rarity);
             if (Clip != null)
@@ -62,9 +78,32 @@ public static class MercGrowUI
     }
 
     /// <summary>建一张本命碎片卡。<paramref name="size"/> 为底版边长（方形）。</summary>
+    /// 注意：主人已有定版碎片预制体（见 <see cref="MercFragmentCardUI"/>），尺寸、位置、锚点、
+    /// 缩放、层级全部由预制体说了算，所以走主人预制体这条路径时 <paramref name="size"/> <b>被忽略</b>
+    /// —— 主人明确说过「大小我都调整好了 不要再给我变了」。
+    /// size 只在兜底的手搭路径（主人预制体加载不到，或 MercFragmentCardUI.EnableOwnerPrefab=false）里生效。
     public static FragmentCard CreateFragmentCard(Transform parent, string name,
         MercRosterDefs.MercRarity rarity, string hireIdOrAssetId, float size)
     {
+        // 主人预制体路径：实例化主人的 yongbingsuipian.prefab，只换图，不动一个像素。
+        // Create 内部已经做过一次 Apply，这里不要再重复赋值。
+        var owner = MercFragmentCardUI.Create(parent, name, rarity, hireIdOrAssetId);
+        if (owner != null)
+        {
+            return new FragmentCard
+            {
+                Owner = owner,
+                Root = owner.Root,
+                Rect = owner.Rect,
+                Clip = owner.MaskGraphic,
+                Portrait = owner.Head,
+                Frame = owner.Frame,
+                Rarity = rarity,
+                HireId = hireIdOrAssetId,
+            };
+        }
+
+        // 兜底：主人预制体丢了（或开关关了）才手搭，保证不至于黑屏。
         var root = NewNode(name, parent, size, size);
         var card = new FragmentCard
         {

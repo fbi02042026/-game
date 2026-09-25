@@ -10,8 +10,8 @@ public class TargetIndicator : MonoBehaviour
     public static TargetIndicator Instance { get; private set; }
 
     [Header("箭头")]
-    [Tooltip("箭头图方向未知，默认翻转 Y 让悬在头顶的箭头指向下方的目标")]
-    public bool arrowFlipY = true;
+    [Tooltip("三张箭头贴图(PT/JY/箭头01)本身都是尖朝下，直接显示即为正确朝向，故默认不翻转(false)。保留此开关以备将来换图需要翻转时使用")]
+    public bool arrowFlipY = false;
     public float arrowFloatFreq = 2.8f;   // 上下浮动频率
     public float arrowFloatAmp = 0.12f;    // 上下浮动幅度（世界单位）
     public float arrowHeadOffset = 0.25f;  // 头顶再往上抬一点

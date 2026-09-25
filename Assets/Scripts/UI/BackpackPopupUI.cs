@@ -84,7 +84,19 @@ public class BackpackPopupUI : MonoBehaviour
         }
         else
         {
-            pImg.color = new Color(0.13f, 0.12f, 0.16f, 0.98f);
+            // 退回战斗背包面板同款底框（恢复底框.png），再没有才用纯色面板。
+            // 尺寸/配色沿用战斗预制体：Sliced + 白色，不改 Panel 的大小与层级。
+            var panelArt = BackpackGridVisual.PanelBgSprite();
+            if (panelArt != null)
+            {
+                pImg.sprite = panelArt;
+                pImg.type = Image.Type.Sliced;
+                pImg.color = Color.white;
+            }
+            else
+            {
+                pImg.color = new Color(0.13f, 0.12f, 0.16f, 0.98f);
+            }
         }
         var pRt = _panel.GetComponent<RectTransform>();
         pRt.anchorMin = new Vector2(0.5f, 0.5f);
@@ -140,7 +152,19 @@ public class BackpackPopupUI : MonoBehaviour
         _bagPage = new GameObject("BagPage", typeof(RectTransform), typeof(Image));
         _bagPage.transform.SetParent(parent, false);
         var img = _bagPage.GetComponent<Image>();
-        img.color = new Color(0.1f, 0.09f, 0.13f, 0.6f);
+        // 复用战斗背包 GridContainer/bg 同款底板（图层 8.png，预制体里是 Simple + 白色）；
+        // 拿不到就退回原来的纯色。只换图片，不动尺寸与层级。
+        var gridArt = BackpackGridVisual.GridBgSprite();
+        if (gridArt != null)
+        {
+            img.sprite = gridArt;
+            img.type = Image.Type.Simple;
+            img.color = Color.white;
+        }
+        else
+        {
+            img.color = new Color(0.1f, 0.09f, 0.13f, 0.6f);
+        }
         Stretch(_bagPage.GetComponent<RectTransform>());
 
         _capacityText = MakeText(_bagPage.transform, "CapacityText", "0 / 0", 18, TextAnchor.MiddleRight);
@@ -163,7 +187,19 @@ public class BackpackPopupUI : MonoBehaviour
         _matPage = new GameObject("MatPage", typeof(RectTransform), typeof(Image), typeof(Mask));
         _matPage.transform.SetParent(parent, false);
         var img = _matPage.GetComponent<Image>();
-        img.color = new Color(0.1f, 0.09f, 0.13f, 0.6f);
+        // 同 BagPage：战斗背包 GridContainer/bg 同款底板（图层 8.png）。
+        // 这里 Image 同时是 Mask 的遮罩源，图层 8 中心区域不透明，列表不会被裁掉。
+        var gridArt = BackpackGridVisual.GridBgSprite();
+        if (gridArt != null)
+        {
+            img.sprite = gridArt;
+            img.type = Image.Type.Simple;
+            img.color = Color.white;
+        }
+        else
+        {
+            img.color = new Color(0.1f, 0.09f, 0.13f, 0.6f);
+        }
         var mask = _matPage.GetComponent<Mask>();
         mask.showMaskGraphic = false;
         Stretch(_matPage.GetComponent<RectTransform>());

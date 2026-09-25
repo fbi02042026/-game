@@ -63,6 +63,10 @@ public static class ContentPaths
         public const string CombatTuning = "Data/Tables/combat_tuning";
         /// <summary>Boss 关变体：Boss 波的亲卫 / 软性限时涌怪（CSV → .bytes，见 boss_stage_variant.csv）。缺表时回退「只有 Boss 本体」。</summary>
         public const string BossStageVariant = "Data/Tables/boss_stage_variant";
+        /// <summary>每日登录奖励（CSV → .bytes，见 daily_login.csv）。starter/cycle/streak 三表合一，用 table 列区分。缺表 / 空表时 DailyLoginDefs 回退硬编码数组（D4=佣兵、D8=碎片由表覆盖）。</summary>
+        public const string DailyLogin = "Data/Tables/daily_login";
+        /// <summary>节日 / 特定日登录奖励覆盖（CSV → .bytes，见 daily_login_special.csv）。仅覆盖新手格当天奖励，命中当天整条替换；date 支持 MM-DD（年年生效）与 YYYY-MM-DD（仅该年）。</summary>
+        public const string DailyLoginSpecial = "Data/Tables/daily_login_special";
     }
 
     public static class Icons

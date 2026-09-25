@@ -186,6 +186,346 @@ public class AdventureUI : MonoBehaviour, ITownPage
             _selectedChapter = max;
         HideUnfinishedEntries();
         RefreshAll();
+
+        // 竖屏专用适配：更瘦屏时把 RightContent 居右、MapRoot 右溢出归零、DetailPanel 宽对齐下沉到底。
+        // 已迁移到本界面自身（ApplyAdventureFit），标准 9:16 屏或开关关闭时该方法内部直接回退、不改任何东西。
+        ApplyAdventureFit();
+    }
+
+    // ────────────────────────────────────────────────────
+    // 竖屏专用适配（主人点名：搬进界面自己文件，不通用；与 DailyLoginUI.ApplyFit 同思路）
+    // 仅「更瘦屏」（逻辑高 > 设计高 1280）生效；标准 9:16 保持美术预制体原样，直接 return 不改任何东西。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>AdventureUI 专用竖屏适配总开关。false 时还原到预制体原始锚点/偏移，方便紧急一键回退。</summary>
+    public static bool EnableAdventureUiFit = true;
+
+    /// <summary>
+    /// 改动 4 总开关（主人总方针"中间有背景就平铺"）：MapRoot 自带 MapBg 背景层，瘦屏下拉伸填满中间空隙；不满意一句关掉。
+    /// 默认 false：主人反馈「右边的背景框怎么放大了」——MapRoot 一拉伸就把自带的 MapBg 撑到几乎满屏，
+    /// 视觉上就是背景框被放大。要恢复中间拉伸，把这里改回 true 即可（拉伸代码与高度上限约束都还在）。
+    /// </summary>
+    public static bool EnableAdventureMapStretch = false;
+
+    /// <summary>
+    /// 底部功能入口留位总开关：true 时 DetailPanel 底距按「运行时量到的 BottomNav 高度 + NAV_GAP_PAD」抬高，
+    /// 给底栏（公会/角色/冒险/酒馆/冒险日志）让位；false 时回到原来的「贴屏幕最下」行为，方便一键对比。
+    /// </summary>
+    public static bool EnableNavGapReserve = true;
+
+    // 防递归守卫（与 _verticalSplitApplying 同思路），避免改锚点触发的重入。
+    bool _adventureUiApplying;
+
+    // 记录被重锚定节点的原始锚点/偏移/轴心，用于幂等重算与一键回退还原（按 instanceID）。
+    struct AdventureUiBase
+    {
+        public Vector2 anchorMin;
+        public Vector2 anchorMax;
+        public Vector2 offsetMin;
+        public Vector2 offsetMax;
+        public Vector2 pivot;
+        public bool applied;
+    }
+    readonly System.Collections.Generic.Dictionary<int, AdventureUiBase> _adventureUiBase =
+        new System.Collections.Generic.Dictionary<int, AdventureUiBase>();
+
+    /// <summary>MapRoot 右溢出修正：原值 35 让地图超出 RightContent 右边 35px，主人嫌地图没居右，归零贴 RightContent 右边。</summary>
+    const float MAP_RIGHT_INSET = 0f;
+    /// <summary>DetailPanel 底部预留（原行为 / 关掉留位开关时用）：底部贴到屏幕最下。</summary>
+    const float DETAIL_PANEL_BOTTOM_GAP = 0f;
+    /// <summary>运行时量不到底部功能入口时的兜底预留（主人截图里底栏约 150px 高，取整留一点余量）。</summary>
+    const float DETAIL_PANEL_BOTTOM_GAP_FALLBACK = 160f;
+    /// <summary>DetailPanel 底边与底部功能入口之间的视觉间距。</summary>
+    const float NAV_GAP_PAD = 8f;
+    /// <summary>MapRoot 底边与 DetailPanel 顶边之间的间隙；瘦屏拉伸填满中间时作用于此。</summary>
+    const float MAP_BOTTOM_GAP = 16f;
+
+    /// <summary>
+    /// AdventureUI 专用竖屏适配（主人点名要求的三条改动统一入口）。
+    /// 触发：ShowPage() 末尾 RefreshAll 之后调用一次。
+    /// 铁律：仅在「更瘦屏」（逻辑高 > 设计高 1280）生效；标准 9:16 必须保持美术预制体原样，直接 return 不改任何东西。
+    /// 幂等：按 instanceID 记录首次 base，重复调用从 base 重算，不累积偏移；EnableAdventureUiFit=false 或标准屏时还原到预制体原始状态。
+    /// 节点不存在（RightContent/DetailPanel/MapRoot 缺失）则 no-op，不报错。
+    /// </summary>
+    void ApplyAdventureFit()
+    {
+        Transform root = transform;
+        if (root == null) return;
+        if (_adventureUiApplying) return;
+        _adventureUiApplying = true;
+        try
+        {
+            var right = root.Find("RightContent") as RectTransform;
+            var detail = root.Find("DetailPanel") as RectTransform;
+            var mapRoot = right != null ? right.Find("MapRoot") as RectTransform : null;
+
+            // 紧急关闭 或 标准屏：还原到预制体原始锚点/偏移即可，不改动任何东西。
+            if (!EnableAdventureUiFit || !UiLayoutStretch.IsThinnerScreen())
+            {
+                if (right != null) RestoreAdventureBase(right);
+                if (mapRoot != null) RestoreAdventureBase(mapRoot);
+                if (detail != null) RestoreAdventureBase(detail);
+                return;
+            }
+
+            // 首帧 Canvas 可能尚未 rebuild，rect 仍为 0 → 直接 return 会永久失效。
+            // 先强制刷新一次画布再取尺寸（保持同步调用，不改用协程）；仍为 0 才放弃本次。
+            var canvas = root.GetComponentInParent<Canvas>();
+            if (canvas != null) Canvas.ForceUpdateCanvases();
+            var rootRt = root as RectTransform;
+            if (rootRt == null || rootRt.rect.width <= 0f || rootRt.rect.height <= 0f) return;
+
+            // 底部五入口（公会/角色/冒险/酒馆/冒险日志）占住屏幕底部，详情面板必须给它让位，
+            // 否则面板底部（进入关卡按钮那一排）会被压在导航栏下面看不见。
+            float navReserved = EnableNavGapReserve ? ResolveBottomNavReserved(rootRt) : 0f;
+            float detailBottomGap = DETAIL_PANEL_BOTTOM_GAP;
+            if (EnableNavGapReserve)
+            {
+                float gap = navReserved + NAV_GAP_PAD;
+                // 量不到导航节点（独立打开 / 组件未就绪）时用兜底常量，不能退回 0 让面板贴到屏幕最下
+                detailBottomGap = gap > 0f ? gap : DETAIL_PANEL_BOTTOM_GAP_FALLBACK;
+            }
+
+            if (right != null)
+            {
+                FitAdventureRightContent(right);
+                if (mapRoot != null) FitAdventureMapRootRight(mapRoot);
+            }
+            if (detail != null) FitAdventureDetailPanel(detail, detailBottomGap);
+            // 改动 4 必须最后：依赖 RightContent 顶边与 DetailPanel 的最终位置，顺序不能反。
+            if (mapRoot != null && right != null && detail != null && EnableAdventureMapStretch)
+                FitAdventureMapRootStretch(mapRoot, right, detail, navReserved);
+        }
+        finally
+        {
+            _adventureUiApplying = false;
+        }
+    }
+
+    /// <summary>首次遇到节点记录预制体原始锚点/偏移/轴心（用于幂等重算与一键回退）。返回 base（值类型，改完需写回字典）。</summary>
+    AdventureUiBase CaptureAdventureBase(RectTransform rt)
+    {
+        int id = rt.GetInstanceID();
+        if (!_adventureUiBase.TryGetValue(id, out var b))
+        {
+            b = new AdventureUiBase
+            {
+                anchorMin = rt.anchorMin,
+                anchorMax = rt.anchorMax,
+                offsetMin = rt.offsetMin,
+                offsetMax = rt.offsetMax,
+                pivot = rt.pivot,
+                applied = false,
+            };
+            _adventureUiBase[id] = b;
+        }
+        return b;
+    }
+
+    /// <summary>把曾经改过的节点还原到预制体原始锚点/偏移/轴心（一键回退 / 标准屏 / 关开关时调用）。</summary>
+    void RestoreAdventureBase(RectTransform rt)
+    {
+        int id = rt.GetInstanceID();
+        if (_adventureUiBase.TryGetValue(id, out var b) && b.applied)
+        {
+            rt.anchorMin = b.anchorMin;
+            rt.anchorMax = b.anchorMax;
+            rt.offsetMin = b.offsetMin;
+            rt.offsetMax = b.offsetMax;
+            rt.pivot = b.pivot;
+            b.applied = false;
+            _adventureUiBase[id] = b;
+        }
+    }
+
+    /// <summary>锚点在父矩形内插值出的参考点（Unity 锚点语义：x/y 各自按 anchor 的分量插值）。注意是 Mathf.Lerp 逐分量，不是 Vector2.Lerp。</summary>
+    static Vector2 AnchorPointInParent(Vector2 pMin, Vector2 pMax, Vector2 anchor)
+    {
+        return new Vector2(
+            Mathf.Lerp(pMin.x, pMax.x, anchor.x),
+            Mathf.Lerp(pMin.y, pMax.y, anchor.y));
+    }
+
+    /// <summary>
+    /// 运行时量出底部功能入口在屏幕底部占用的高度；量不到返回 0（调用方再退回兜底常量）。
+    /// 优先 MainBottomNav 单例所在节点，其次在页面 root 里按名字找 BottomNav / MainBottomNav。
+    /// 只量不改：不碰预制体，也不写死常量，换屏/换预制体都能跟上。
+    /// </summary>
+    static float ResolveBottomNavReserved(RectTransform pageRoot)
+    {
+        RectTransform nav = null;
+        if (MainBottomNav.Instance != null)
+            nav = MainBottomNav.Instance.transform as RectTransform;
+        if (nav == null && pageRoot != null)
+        {
+            Transform found = FindDeepChild(pageRoot, "BottomNav")
+                              ?? FindDeepChild(pageRoot, "MainBottomNav");
+            if (found != null) nav = found as RectTransform;
+        }
+        if (nav == null) return 0f;
+
+        // 导航栏本体 + BottomNavBG（它比栏本体高、会往下溢出）取并集，别只算根节点
+        float top = TopEdgeY(nav);
+        float bottom = BottomEdgeY(nav);
+        for (int i = 0; i < nav.childCount; i++)
+        {
+            var child = nav.GetChild(i) as RectTransform;
+            if (child == null) continue;
+            if (child.name != "BottomNavBG" && child.name != "BottomNav") continue;
+            top = Mathf.Max(top, TopEdgeY(child));
+            bottom = Mathf.Min(bottom, BottomEdgeY(child));
+        }
+
+        float reserved = top - Mathf.Max(0f, bottom);   // 屏幕底以上真正被占住的高度
+        if (reserved <= 0f) reserved = nav.rect.height; // 量不出来就退回节点自身高度
+        return reserved;
+    }
+
+    /// <summary>节点底边在父矩形局部坐标里的 Y（父底边为 0）。</summary>
+    static float BottomEdgeY(RectTransform rt)
+    {
+        var parent = rt.parent as RectTransform;
+        Vector2 pMin = parent != null ? parent.rect.min : Vector2.zero;
+        Vector2 pMax = parent != null ? parent.rect.max : Vector2.zero;
+        return AnchorPointInParent(pMin, pMax, rt.anchorMin).y + rt.offsetMin.y;
+    }
+
+    /// <summary>节点顶边在父矩形局部坐标里的 Y（父底边为 0）。</summary>
+    static float TopEdgeY(RectTransform rt)
+    {
+        var parent = rt.parent as RectTransform;
+        Vector2 pMin = parent != null ? parent.rect.min : Vector2.zero;
+        Vector2 pMax = parent != null ? parent.rect.max : Vector2.zero;
+        return AnchorPointInParent(pMin, pMax, rt.anchorMax).y + rt.offsetMax.y;
+    }
+
+    /// <summary>按名字深找子孙节点（含自身）。</summary>
+    static Transform FindDeepChild(Transform parent, string name)
+    {
+        if (parent == null) return null;
+        if (parent.name == name) return parent;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var r = FindDeepChild(parent.GetChild(i), name);
+            if (r != null) return r;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 改动 1 — RightContent 整体右锚定：保持当前实际矩形（相对父的 left/right/top/bottom 像素）不变，
+    /// 仅把水平锚点从 stretch(0→1) 改为右锚定(anchorMin.x=anchorMax.x=1)；垂直方向保持 stretch(0→1) 不动。
+    /// 顶边超出父顶 98.15px 等美术摆出的偏移属原始设定，不擅自改，只还原到同样的矩形。
+    /// </summary>
+    void FitAdventureRightContent(RectTransform rt)
+    {
+        var b = CaptureAdventureBase(rt);
+        var parent = rt.parent as RectTransform;
+        if (parent == null) return;
+        Vector2 pMin = parent.rect.min;
+        Vector2 pMax = parent.rect.max;
+        // 从 base 重算当前矩形边缘（幂等：始终以预制体原始锚点/偏移为准，重复调用不累积）。
+        Vector2 curMin = AnchorPointInParent(pMin, pMax, b.anchorMin) + b.offsetMin;
+        Vector2 curMax = AnchorPointInParent(pMin, pMax, b.anchorMax) + b.offsetMax;
+
+        // 水平右锚定，垂直保持 stretch。
+        rt.anchorMin = new Vector2(1f, b.anchorMin.y);
+        rt.anchorMax = new Vector2(1f, b.anchorMax.y);
+        Vector2 newMinA = new Vector2(1f, b.anchorMin.y);
+        Vector2 newMaxA = new Vector2(1f, b.anchorMax.y);
+        // 用同样的矩形边缘反推右锚定下的 offset，精确还原 left/right/top/bottom。
+        rt.offsetMin = curMin - AnchorPointInParent(pMin, pMax, newMinA);
+        rt.offsetMax = curMax - AnchorPointInParent(pMin, pMax, newMaxA);
+
+        b.applied = true;
+        _adventureUiBase[rt.GetInstanceID()] = b;
+    }
+
+    /// <summary>
+    /// 改动 2 — MapRoot 右侧溢出归零：offsetMax.x 由原始 35 改为 MAP_RIGHT_INSET(0)，
+    /// 让地图贴 RightContent 右边（不再超出右边 35px）；高度与纵向偏移保持预制体设定不变。
+    /// </summary>
+    void FitAdventureMapRootRight(RectTransform rt)
+    {
+        var b = CaptureAdventureBase(rt);
+        // 仅改右溢出，纵向(offsetMax.y)与左/下偏移均用 base 原始值，保证幂等。
+        rt.offsetMin = b.offsetMin;
+        rt.offsetMax = new Vector2(MAP_RIGHT_INSET, b.offsetMax.y);
+
+        b.applied = true;
+        _adventureUiBase[rt.GetInstanceID()] = b;
+    }
+
+    /// <summary>
+    /// 改动 3 — DetailPanel 宽对齐 + 下沉到底：
+    ///   - 宽对齐：水平从单点(0.5)改左右 stretch(0→1)，左右边距取「当前两侧边距较大者」对称化，宽度随父自适应；
+    ///   - 下沉到底：垂直改底部锚定(anchorMin.y=anchorMax.y=0) + pivot.y=0，底部抬到底部功能入口之上(offsetMin.y=bottomGap)；
+    ///   - 高度保持原始值不变：offsetMax.y = offsetMin.y + 原始高度。
+    /// </summary>
+    void FitAdventureDetailPanel(RectTransform rt, float bottomGap)
+    {
+        var b = CaptureAdventureBase(rt);
+        var parent = rt.parent as RectTransform;
+        if (parent == null) return;
+        Vector2 pMin = parent.rect.min;
+        Vector2 pMax = parent.rect.max;
+        Vector2 curMin = AnchorPointInParent(pMin, pMax, b.anchorMin) + b.offsetMin;
+        Vector2 curMax = AnchorPointInParent(pMin, pMax, b.anchorMax) + b.offsetMax;
+
+        float origH = curMax.y - curMin.y;   // 保持原始高度不变
+        float leftMargin = curMin.x - pMin.x;
+        float rightMargin = pMax.x - curMax.x;
+        float margin = Mathf.Max(leftMargin, rightMargin);   // 对称化：取两侧边距较大者
+
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.offsetMin = new Vector2(margin, bottomGap);
+        rt.offsetMax = new Vector2(-margin, bottomGap + origH);
+
+        b.applied = true;
+        _adventureUiBase[rt.GetInstanceID()] = b;
+    }
+
+    /// <summary>
+    /// 改动 4 — MapRoot 中间拉伸填满：MapRoot 自带 MapBg 背景层，瘦屏下把"地图内容上方挤、中间空一大块"的空隙补满。
+    ///   - 顶边不变：offsetMax.y 保持 base（RightContent 顶下 14），只改高度；
+    ///   - 底边落到「DetailPanel 顶边 + MAP_BOTTOM_GAP」：高度 = 顶边 - (DetailPanel顶 + MAP_BOTTOM_GAP)；
+    ///     手算 offsetMin.y = offsetMax.y - h（offsetMax.y 不动），高度=h、顶边固定、底边自然下移到目标；
+    ///   - DetailPanel 顶边按"上次改完后的实际位置"算（detail.offsetMin.y + 原始高度，detail 现在底部锚定）。
+    /// 仅更瘦屏 + EnableAdventureMapStretch 为真时执行；关开关或标准屏由 ApplyAdventureFit 的 RestoreAdventureBase 还原。
+    /// </summary>
+    void FitAdventureMapRootStretch(RectTransform mapRoot, RectTransform right, RectTransform detail, float navReserved)
+    {
+        var b = CaptureAdventureBase(mapRoot);
+        var rightBase = CaptureAdventureBase(right);
+        var detailBase = CaptureAdventureBase(detail);
+
+        // 逻辑高 H：RightContent 的父即 AdventureUI 根（stretch 全屏），取其 rect.height。
+        var rootRt = right.parent as RectTransform;
+        float H = rootRt != null && rootRt.rect.height > 0f ? rootRt.rect.height : GameConfig.DESIGN_HEIGHT;
+
+        // MapRoot 顶边（bottom-origin，root 帧）：RightContent 顶(H + rightBase.offsetMax.y) + MapRoot 顶溢出(b.offsetMax.y)，保持不动。
+        float mapTopY = H + rightBase.offsetMax.y + b.offsetMax.y;
+        // DetailPanel 顶边（bottom-origin）：底部锚定，顶 = 当前底距 offsetMin.y + 原始高度。
+        float origDetailH = detailBase.offsetMax.y - detailBase.offsetMin.y;
+        float detailTopY = detail.offsetMin.y + origDetailH;
+
+        float h = mapTopY - (detailTopY + MAP_BOTTOM_GAP);
+        // 上限约束：MapRoot 自带 MapBg 背景层，拉过头就是主人说的「背景框放大了」。
+        // 可视范围 = root 高 H - 顶部占用 - 底部功能入口预留 - DetailPanel 高度 - 中间间隙，超出部分不再拉。
+        float topOccupied = Mathf.Max(0f, H - mapTopY);
+        float maxH = H - topOccupied - navReserved - origDetailH - MAP_BOTTOM_GAP;
+        if (maxH > 0f && h > maxH) h = maxH;
+        if (h < 1f) h = 1f;   // 极端屏高兜底，避免算出负值
+
+        // anchor y=(1,1) 单点 + pivot.y=1：sizeDelta.y = offsetMax.y - offsetMin.y。
+        // 保持 offsetMax.y（顶边）不变，只把 offsetMin.y 推到 offsetMax.y - h，即高度=h、顶边不动、底边落到 detailTop+gap。
+        mapRoot.offsetMax = new Vector2(MAP_RIGHT_INSET, b.offsetMax.y);
+        mapRoot.offsetMin = new Vector2(b.offsetMin.x, b.offsetMax.y - h);
+
+        b.applied = true;
+        _adventureUiBase[mapRoot.GetInstanceID()] = b;
     }
 
     /// <summary>世界地图选完区域后的回调（传送门 WorldMapPortal 走这里开战）。</summary>

@@ -42,6 +42,11 @@ public static class UICanvasSetup
         UiButtonPressFeedback.AttachUnder(canvas.transform);
         DesignAspectLetterbox.ApplyFallbackIfNeeded(cam);
 
+        // 竖屏适配统一收尾：非战斗界面以界面中心为界重锚定上下元素，并（无背景时）垫黑底。
+        // 这套规则一次覆盖 AdventureUI / MainBottomNav / ResourceBar / LoginUI 及后续所有界面。
+        UiLayoutStretch.ApplyVerticalSplit(canvas.transform);
+        UiLayoutStretch.EnsureFitBackdrop(canvas.transform as RectTransform);
+
 #if UNITY_EDITOR
         if (cam == null)
             Debug.LogError("[UICanvasSetup] worldCamera 为空，UI 可能缩到一角：" + canvas.name, canvas);
@@ -127,6 +132,18 @@ public static class UICanvasSetup
         UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
     }
 
+    /// <summary>该 Canvas 是否战斗 UI（含 map/MapRoot 节点）。战斗走 BattleViewportFit，通用适配应跳过。</summary>
+    static bool HasBattleMap(Transform root)
+    {
+        if (root == null) return false;
+        if (UiLayoutStretch.IsStretchHorizontalName(root.name)) return true;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            if (HasBattleMap(root.GetChild(i))) return true;
+        }
+        return false;
+    }
+
     static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         RefreshDdolCanvases();
@@ -140,6 +157,18 @@ public static class UICanvasSetup
         {
             if (canvases[i] != null)
                 UiButtonPressFeedback.AttachUnder(canvases[i].transform);
+        }
+
+        // 竖屏适配重试：首帧 Canvas 根 rect 可能还没量出尺寸，导致 Apply 里黑底/重锚定被跳过。
+        // 场景加载完成、布局已算好后，对所有非战斗（含 map）Canvas 再补一次通用适配（幂等）。
+        var fitCanvases = Object.FindObjectsOfType<Canvas>(true);
+        for (int i = 0; i < fitCanvases.Length; i++)
+        {
+            var c = fitCanvases[i];
+            if (c == null || c.renderMode != RenderMode.ScreenSpaceCamera) continue;
+            if (HasBattleMap(c.transform)) continue;   // 战斗走 BattleViewportFit，避免中心分界误伤 map/血条
+            UiLayoutStretch.ApplyVerticalSplit(c.transform);
+            UiLayoutStretch.EnsureFitBackdrop(c.transform as RectTransform);
         }
     }
 

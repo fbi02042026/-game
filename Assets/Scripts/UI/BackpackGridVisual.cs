@@ -25,6 +25,39 @@ public static class BackpackGridVisual
         public bool IsItem => item != null;
     }
 
+    // ===== 背包美术图：与战斗侧预制体同一批 =====
+    // 战斗侧 3 张图原身在 Assets/Art/UI/... 下，是 BattleUI.prefab 里直接引用（GUID 直连），
+    // 运行时代码侧 Resources.Load 取不到，所以在 Assets/Resources/UI/Battle 下放了同名副本。
+    // 加载失败一律返回 null，调用方保留原来的纯色块兜底（颜色/尺寸/层级都不动）。
+    const string CellBgRes = "UI/Battle/装备格";
+    const string PanelBgRes = "UI/Battle/恢复底框";
+    const string GridBgRes = "UI/Battle/图层 8";
+
+    static Sprite _cellBgSprite;
+    static Sprite _panelBgSprite;
+    static Sprite _gridBgSprite;
+
+    /// <summary>格子底图：与战斗预制体 GridContainer/Cell_x_y/CellBg 同款（装备格.png）。</summary>
+    public static Sprite CellBgSprite()
+    {
+        if (_cellBgSprite == null) _cellBgSprite = Resources.Load<Sprite>(CellBgRes);
+        return _cellBgSprite;
+    }
+
+    /// <summary>背包面板底框：与战斗预制体 BackpackPanel 同款（恢复底框.png）。</summary>
+    public static Sprite PanelBgSprite()
+    {
+        if (_panelBgSprite == null) _panelBgSprite = Resources.Load<Sprite>(PanelBgRes);
+        return _panelBgSprite;
+    }
+
+    /// <summary>网格底板：与战斗预制体 GridContainer/bg 同款（图层 8.png）。</summary>
+    public static Sprite GridBgSprite()
+    {
+        if (_gridBgSprite == null) _gridBgSprite = Resources.Load<Sprite>(GridBgRes);
+        return _gridBgSprite;
+    }
+
     /// <param name="cellAt">按 (x,y) 取真实格子；有它就不依赖 GridLayoutGroup 的数值。</param>
     public static void ClearAndPlace(
         RectTransform gridContainer,

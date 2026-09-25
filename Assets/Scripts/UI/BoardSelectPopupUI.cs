@@ -16,6 +16,9 @@ public class BoardSelectPopupUI : MonoBehaviour
     const float PanelW = 560f;
     const float PanelH = 640f;
 
+    /// <summary>玩家自己的看板 key，必须与 CharacterUI.BoardKey 的默认值一致。</summary>
+    const string PlayerBoardId = "player";
+
     GameObject _dismiss;
     GameObject _panel;
     // 每行：hireId + 打勾文本引用，方便刷新勾选
@@ -103,10 +106,6 @@ public class BoardSelectPopupUI : MonoBehaviour
         var close = MakeButton(_panel.transform, "Close", "×", new Vector2(PanelW * 0.5f - 28f, -28f), new Vector2(40f, 40f));
         close.onClick.AddListener(Hide);
 
-        // 恢复默认（玩家自己）
-        var reset = MakeButton(_panel.transform, "Reset", "恢复默认（玩家）", new Vector2(0f, -92f), new Vector2(PanelW - 24f, 40f));
-        reset.onClick.AddListener(() => SelectBoard("player"));
-
         // 列表
         var listWrap = new GameObject("ListWrap", typeof(RectTransform), typeof(Image), typeof(Mask), typeof(ScrollRect));
         listWrap.transform.SetParent(_panel.transform, false);
@@ -145,6 +144,12 @@ public class BoardSelectPopupUI : MonoBehaviour
         _scroll.content = list.GetComponent<RectTransform>();
         _scroll.viewport = listWrap.GetComponent<RectTransform>();
 
+        // 恢复默认（玩家自己）：必须在 ListWrap 之后创建，
+        // 否则同层级的 ListWrap（Image raycast 开着）会盖住它导致点不动、换不回玩家。
+        var reset = MakeButton(_panel.transform, "Reset", "恢复默认（玩家）", new Vector2(0f, -92f), new Vector2(PanelW - 24f, 40f));
+        reset.onClick.AddListener(() => SelectBoard(PlayerBoardId));
+        reset.transform.SetAsLastSibling();
+
         GameFonts.ApplyToHierarchy(transform);
     }
 
@@ -157,9 +162,12 @@ public class BoardSelectPopupUI : MonoBehaviour
             Destroy(_list.GetChild(i).gameObject);
         _rows.Clear();
 
-        _current = CharacterUI.Instance != null ? CharacterUI.Instance.GetCurrentBoardId() : "player";
+        _current = CharacterUI.Instance != null ? CharacterUI.Instance.GetCurrentBoardId() : PlayerBoardId;
 
-        // 已解锁佣兵
+        // 玩家自己永远排第一：候选集合不能只有佣兵，否则换成佣兵后换不回来
+        AddPlayerRow();
+
+        // 已解锁佣兵（排在玩家之后）
         var data = SaveSystem.Instance?.Data;
         var all = MercRosterDefs.All;
         for (int i = 0; i < all.Count; i++)
@@ -182,9 +190,38 @@ public class BoardSelectPopupUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 玩家自己这一行，永远排第一。id 用 "player"，与 CharacterUI.BoardKey 的默认值一致，
+    /// 这样「默认 = 玩家」且随时能切回玩家。
+    /// </summary>
+    void AddPlayerRow()
+    {
+        AddMercRow(PlayerBoardId, PlayerIdentity.DisplayName,
+                   "本命 · 冒险者", new Color(1f, 0.85f, 0.45f, 1f),
+                   MercPortraitSprites.GetHead(PlayerBoardId));
+    }
+
     void AddMercRow(MercRosterDefs.Def def)
     {
-        var row = new GameObject("Row_" + def.HireId, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        if (string.IsNullOrEmpty(def.HireId)) return;   // Def 是 struct，不能判 null
+        string rarityText;
+        Color rarityCol;
+        switch (def.Rarity)
+        {
+            case MercRosterDefs.MercRarity.Legendary:
+                rarityText = "传说 · " + def.JobName; rarityCol = new Color(1f, 0.78f, 0.25f, 1f); break;
+            case MercRosterDefs.MercRarity.Rare:
+                rarityText = "稀有 · " + def.JobName; rarityCol = new Color(0.45f, 0.7f, 1f, 1f); break;
+            default:
+                rarityText = "普通 · " + def.JobName; rarityCol = new Color(0.85f, 0.85f, 0.9f, 1f); break;
+        }
+        AddMercRow(def.HireId, def.Name, rarityText, rarityCol, MercPortraitSprites.GetHead(def.HireId));
+    }
+
+    void AddMercRow(string hireId, string displayName, string jobText, Color jobColor, Sprite headSprite)
+    {
+        if (string.IsNullOrEmpty(hireId)) return;
+        var row = new GameObject("Row_" + hireId, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         row.transform.SetParent(_list, false);
         var rt = row.GetComponent<RectTransform>();
         rt.anchorMin = new Vector2(0f, 1f);
@@ -207,10 +244,9 @@ public class BoardSelectPopupUI : MonoBehaviour
         hrt.anchoredPosition = new Vector2(42f, 0f);
         hrt.sizeDelta = new Vector2(56f, 56f);
         var hImg = head.GetComponent<Image>();
-        var sp = MercPortraitSprites.GetHead(def.HireId);
-        if (sp != null)
+        if (headSprite != null)
         {
-            hImg.sprite = sp;
+            hImg.sprite = headSprite;
             hImg.preserveAspect = true;
             hImg.enabled = true;
         }
@@ -218,35 +254,24 @@ public class BoardSelectPopupUI : MonoBehaviour
         hImg.raycastTarget = false;
 
         // 名字
-        var name = MakeText(rt, "Name", def.Name, 20, TextAnchor.MiddleLeft);
+        var name = MakeText(rt, "Name", displayName, 20, TextAnchor.MiddleLeft);
         var nrt = name.GetComponent<RectTransform>();
         nrt.anchorMin = new Vector2(0f, 0.5f);
         nrt.anchorMax = new Vector2(1f, 1f);
         nrt.offsetMin = new Vector2(80f, 0f);
         nrt.offsetMax = new Vector2(-70f, -4f);
 
-        // 职业 + 稀有度
-        string rarityText;
-        Color rarityCol;
-        switch (def.Rarity)
-        {
-            case MercRosterDefs.MercRarity.Legendary:
-                rarityText = "传说 · " + def.JobName; rarityCol = new Color(1f, 0.78f, 0.25f, 1f); break;
-            case MercRosterDefs.MercRarity.Rare:
-                rarityText = "稀有 · " + def.JobName; rarityCol = new Color(0.45f, 0.7f, 1f, 1f); break;
-            default:
-                rarityText = "普通 · " + def.JobName; rarityCol = new Color(0.85f, 0.85f, 0.9f, 1f); break;
-        }
-        var job = MakeText(rt, "Job", rarityText, 16, TextAnchor.MiddleLeft);
+        // 职业 + 稀有度（文本与颜色由调用方按 Def 算好；玩家行走玩家自己的一套）
+        var job = MakeText(rt, "Job", jobText, 16, TextAnchor.MiddleLeft);
         var jrt = job.GetComponent<RectTransform>();
         jrt.anchorMin = new Vector2(0f, 0f);
         jrt.anchorMax = new Vector2(1f, 0.5f);
         jrt.offsetMin = new Vector2(80f, 4f);
         jrt.offsetMax = new Vector2(-70f, 0f);
-        job.color = rarityCol;
+        job.color = jobColor;
 
         // 打勾
-        var check = MakeText(rt, "Check", _current == def.HireId ? "\u2713" : "", 26, TextAnchor.MiddleCenter);
+        var check = MakeText(rt, "Check", _current == hireId ? "\u2713" : "", 26, TextAnchor.MiddleCenter);
         var crt2 = check.GetComponent<RectTransform>();
         crt2.anchorMin = new Vector2(1f, 0f);
         crt2.anchorMax = new Vector2(1f, 1f);
@@ -255,12 +280,12 @@ public class BoardSelectPopupUI : MonoBehaviour
         crt2.offsetMax = new Vector2(-10f, 0f);
         check.color = new Color(0.5f, 1f, 0.6f, 1f);
 
-        var rowRef = new RowRef { hireId = def.HireId, check = check };
+        var rowRef = new RowRef { hireId = hireId, check = check };
         _rows.Add(rowRef);
 
         var btn = row.AddComponent<Button>();
         btn.transition = Selectable.Transition.None;
-        btn.onClick.AddListener(() => SelectBoard(def.HireId));
+        btn.onClick.AddListener(() => SelectBoard(hireId));
     }
 
     void SelectBoard(string id)
