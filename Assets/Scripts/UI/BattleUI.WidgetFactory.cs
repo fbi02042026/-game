@@ -164,6 +164,8 @@ public partial class BattleUI : MonoBehaviour
             var av = new SkillAvatarUI { root = t.gameObject };
             // 图标层：不能用 icon底 自身背景（会盖掉美术底图），统一补一个子层
             av.avatarImage = ResolveSlotIcon(t);
+            // 底框就是槽根自己那层 Image；空槽压暗只动它（见 SkillAvatarUI.SetEmptyDim）
+            av.frameImage = t.GetComponent<Image>();
             av.labelText = t.GetComponentInChildren<Text>(true);   // 原「被动」底字，改成显示技能名
             // 右下角等级：美术在每个技能槽下放了 level 节点，优先用它；没有再运行时补
             av.levelText = FindTextNamed(t, "level", "Level", "SkillLevel")

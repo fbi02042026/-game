@@ -1263,6 +1263,8 @@ public class UnitAnimation : MonoBehaviour
     /// </summary>
     public void TickLowHpFlash(float hpRatio, bool dead)
     {
+        // 主人定死（2026-09-26）：只有血量 <= 20% 才闪红。任何改动前必须经主人确认。
+        // 这里是“小白红闪”第 3 次复发的染色修复入口；以后改染色还原逻辑时不要顺手改这个数。
         bool want = !dead && hpRatio <= GameConfig.LOW_HP_WARN_RATIO + 0.0001f;
         if (!want)
         {

@@ -46,6 +46,8 @@ public static class RiftEquipTables
         public float RareMin, RareMax;
         public float LegendMin, LegendMax;
         public bool IsPercent;
+        // 2026-09-26 主人拍板：毒伤只给游侠，职业白名单走表（equip_attr_ranges.适用职业），不写死
+        public string AllowedJobs;
     }
 
     static readonly List<SlotPool> _slots = new List<SlotPool>();
@@ -153,6 +155,8 @@ public static class RiftEquipTables
                 AttrName = c[1].Trim(),
                 IsPercent = (c[9] ?? "").Contains("%") || (c[2] ?? "").Contains("百分比")
             };
+            // 2026-09-26 主人拍板：毒伤只给游侠，职业白名单走表（equip_attr_ranges 第 12 列 适用职业），不写死
+            r.AllowedJobs = c.Length > 11 ? (c[11] ?? "").Trim() : "";
             r.CommonMin = ParseNum(c[3]);
             r.CommonMax = ParseNum(c[4]);
             r.RareMin = ParseNum(c[5]);
@@ -208,8 +212,42 @@ public static class RiftEquipTables
             case "ELE_DMG": type = AttrType.FireDamage; isPercent = true; return true;
             case "CRIT_DMG": type = AttrType.CritDamage; return true;
             case "DMG_RED": type = AttrType.Defense; isPercent = true; return true;
+            // 2026-09-26 主人拍板：放行「中毒」词缀（游侠武器，百分比制），先有 AttrType.Poison + 结算(PoisonDotRunner) 再放行
+            case "POISON": type = AttrType.Poison; isPercent = true; return true;
+            // 2026-09-26 主人拍板：装备加魔攻/魔防属性（按职业走，法师|牧师）。数值制(点)，与 ATK/DEF 同量级。
+            case "MAGIC_ATK": type = AttrType.MagicAttack; return true;
+            case "MAGIC_DEF": type = AttrType.MagicDefense; return true;
             default: return false;
         }
+    }
+
+    /// <summary>
+    /// 2026-09-26 主人拍板：毒伤只给游侠，职业白名单走表（equip_attr_ranges.适用职业），不写死。
+    /// 词缀是否在指定职业可用：白名单为空 = 全职业可用；支持 "|" 分隔多职业（填 PlayerJobDefs 的 DisplayName，如 "游侠|法师"）。
+    /// 不在范围表里的词缀默认放行（不强制限制）。
+    /// </summary>
+    public static bool IsAttrAllowedForJob(string attrId, PlayerJobId job)
+    {
+        EnsureLoaded();
+        if (!_ranges.TryGetValue(attrId, out var r)) return true;
+        if (string.IsNullOrEmpty(r.AllowedJobs)) return true;
+        string jobName = PlayerJobDefs.Get(job).DisplayName;
+        var parts = r.AllowedJobs.Split(new[] { '|' }, System.StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < parts.Length; i++)
+            if (parts[i].Trim() == jobName) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// 2026-09-26 主人拍板：毒伤只给游侠，职业白名单走表，不写死。
+    /// 带职业参数的放行：词缀虽已落地（有 AttrType 映射），但不在本职业白名单内直接失败，
+    /// 不进 EquipInstance、不结算。无职业上下文的调用请用上面的无参版本。
+    /// </summary>
+    public static bool TryResolveCombatAttr(string attrId, PlayerJobId job, out AttrType type, out bool isPercent)
+    {
+        if (!TryResolveCombatAttr(attrId, out type, out isPercent)) return false;
+        if (!IsAttrAllowedForJob(attrId, job)) return false;
+        return true;
     }
 
     /// <summary>按稀有度从 equip_attr_ranges 掷属性（正式表）。</summary>

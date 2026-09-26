@@ -18,6 +18,10 @@ public class MonsterStatsEntry
     public int baseGoldDrop;
     public int expDrop;
     public float spriteScale = 1f;
+    /// <summary>魔法攻击（monster_stats 表 baseMagAtk 列）。0 = 沿用 baseAttack。</summary>
+    public float baseMagicAttack;
+    /// <summary>魔法防御（monster_stats 表 baseMagDef 列）。0 = 沿用物理防御（Monster.Init 里按 baseDef 推）。</summary>
+    public float baseMagicDefense;
 
     public MonsterConfig ToRuntimeConfig()
     {
@@ -36,6 +40,8 @@ public class MonsterStatsEntry
         m.expDrop = expDrop;
         m.spriteIndex = spriteIndex;
         m.spriteScale = spriteScale > 0.01f ? spriteScale : 1f;
+        m.baseMagicAttack = baseMagicAttack;
+        m.baseMagicDefense = baseMagicDefense;
         return m;
     }
 }

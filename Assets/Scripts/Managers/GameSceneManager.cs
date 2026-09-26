@@ -131,6 +131,46 @@ public class GameSceneManager : Singleton<GameSceneManager>
         int splashChapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         bool splashTutorial = StoryProgress.ShouldStartTutorialBattle();
         var splash = ChapterSplashOverlay.ShowBattleChapter(splashChapter, splashTutorial);
+
+        // 战斗场景与章节卡并行加载（旧写法是「卡片演完才开始加载」，卡片淡出后 LoadingUI 还挂着，
+        // 要等 AutoGameInitializer 报满 100% 才 Hide —— 于是 Loading 又冒出来一次）。
+        // 现在卡片全程盖住 Loading，并自己等 Loading 关掉才淡出，淡出即见战斗。
+        var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(BATTLE_SCENE);
+        if (op == null)
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene(BATTLE_SCENE);
+            _loadingBattle = false;
+            yield return WaitForBattleInitComplete();
+            yield break;
+        }
+
+        // 先不自动激活：等章节卡把字显完再放行，免得战斗在黑卡背后偷偷开打。
+        op.allowSceneActivation = false;
+        {
+            float revealGuard = 0f;
+            const float revealTimeout = 8f;
+            while (splash != null && !splash.IsRevealed && revealGuard < revealTimeout)
+            {
+                revealGuard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+                SceneLoadingCoordinator.ReportSceneAsync(op);
+                yield return null;
+            }
+        }
+        op.allowSceneActivation = true;
+
+        while (!op.isDone)
+        {
+            SceneLoadingCoordinator.ReportSceneAsync(op);
+            yield return null;
+        }
+
+        SceneLoadingCoordinator.ReportSceneLoaded();
+        // 进场景后的初始化由 AutoGameInitializer 上报 45~100% 并 Finish
+        yield return WaitForBattleInitComplete();
+
+        // 卡片自己会等 Loading 关掉后淡出并自毁，这里不再管它（硬关会把淡出切掉）。
+        // 兜底：万一卡片还活着（等待超时等异常），直接清掉进战斗。
+        if (splash != null && !splash.IsFinished)
         {
             float waitGuard = 0f;
             const float splashTimeout = 8f;
@@ -145,25 +185,6 @@ public class GameSceneManager : Singleton<GameSceneManager>
                 Object.Destroy(splash.gameObject);
             }
         }
-
-        var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(BATTLE_SCENE);
-        if (op == null)
-        {
-            UnityEngine.SceneManagement.SceneManager.LoadScene(BATTLE_SCENE);
-            _loadingBattle = false;
-            yield return WaitForBattleInitComplete();
-            yield break;
-        }
-
-        while (!op.isDone)
-        {
-            SceneLoadingCoordinator.ReportSceneAsync(op);
-            yield return null;
-        }
-
-        SceneLoadingCoordinator.ReportSceneLoaded();
-        // 进场景后的初始化由 AutoGameInitializer 上报 45~100% 并 Finish
-        yield return WaitForBattleInitComplete();
 
         _loadingBattle = false;
     }

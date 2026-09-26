@@ -572,7 +572,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 7e208e861ed01e246a52a6faaf9f3111, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1c2ba89fb4b64daab271ac8d0b7d9652, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -4561,7 +4561,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &4383562565519451534
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4687,7 +4687,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 4d7a11b6dde989549a760fe47391f96e, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1c2ba89fb4b64daab271ac8d0b7d9652, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -6676,7 +6676,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 21300000, guid: 7e208e861ed01e246a52a6faaf9f3111, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1c2ba89fb4b64daab271ac8d0b7d9652, type: 3}
   m_Type: 0
   m_PreserveAspect: 0
   m_FillCenter: 1
@@ -8157,27 +8157,33 @@ MonoBehaviour:
     energyRing: {fileID: 0}
     glowBorder: {fileID: 0}
     cooldownText: {fileID: 0}
+    cooldownMask: {fileID: 0}
     energyFill: {fileID: 0}
     labelText: {fileID: 0}
     levelText: {fileID: 0}
+    frameImage: {fileID: 0}
   merc1SkillAvatar:
     root: {fileID: 0}
     avatarImage: {fileID: 0}
     energyRing: {fileID: 0}
     glowBorder: {fileID: 0}
     cooldownText: {fileID: 0}
+    cooldownMask: {fileID: 0}
     energyFill: {fileID: 0}
     labelText: {fileID: 0}
     levelText: {fileID: 0}
+    frameImage: {fileID: 0}
   merc2SkillAvatar:
     root: {fileID: 0}
     avatarImage: {fileID: 0}
     energyRing: {fileID: 0}
     glowBorder: {fileID: 0}
     cooldownText: {fileID: 0}
+    cooldownMask: {fileID: 0}
     energyFill: {fileID: 0}
     labelText: {fileID: 0}
     levelText: {fileID: 0}
+    frameImage: {fileID: 0}
   autoButton: {fileID: 0}
   skillSlotRoot: {fileID: 0}
   equipSlotRoot: {fileID: 0}
@@ -8775,7 +8781,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &7808842153698692845
 RectTransform:
   m_ObjectHideFlags: 0

@@ -39,6 +39,40 @@ public abstract class UnitBase : MonoBehaviour
     public float LaneY { get; private set; }
     public float FootY => GROUND_Y + LaneY;
 
+    /// <summary>当前生效的车道对齐容错偏移（Y，世界单位）。未启用则为 0。
+    /// 追击方要扣掉目标身上这份偏移，否则「我追你+偏移、你追我」会两边一起漂到车道边界。</summary>
+    public float LaneAlignBiasY { get; private set; }
+    /// <summary>当前生效的左右容错（世界单位，恒 ≥0：表示站位比射程再近多少）。</summary>
+    public float LaneAlignBiasX { get; private set; }
+    /// <summary>是否启用车道对齐容错（基类默认关；Hero 打开）。关=完全回退成严丝合缝对齐。</summary>
+    protected virtual bool UseLaneAlignTolerance => false;
+    /// <summary>当前这份偏移是为哪个目标抽的（换目标才重抽，绝不每帧重抽）。</summary>
+    UnitBase _laneBiasOwner;
+
+    /// <summary>清空容错偏移（换局/复位）。</summary>
+    protected void ClearLaneAlignBias()
+    {
+        _laneBiasOwner = null;
+        LaneAlignBiasY = 0f;
+        LaneAlignBiasX = 0f;
+    }
+
+    /// <summary>换目标或首次进战斗时抽一次偏移方向（上下 ± 与一点点左右），之后固定不变，避免每帧抖动。</summary>
+    void RollLaneAlignBias(UnitBase chaseTarget)
+    {
+        _laneBiasOwner = chaseTarget;
+        if (!GameConfig.ENABLE_LANE_ALIGN_TOLERANCE)
+        {
+            LaneAlignBiasY = 0f;
+            LaneAlignBiasX = 0f;
+            return;
+        }
+        float amp = GameConfig.LANE_ALIGN_TOLERANCE
+            * Random.Range(Mathf.Clamp01(GameConfig.LANE_ALIGN_TOLERANCE_MIN_RATIO), 1f);
+        LaneAlignBiasY = Random.value < 0.5f ? -amp : amp;
+        LaneAlignBiasX = Mathf.Max(0f, Random.Range(0f, GameConfig.LANE_ALIGN_TOLERANCE_X));
+    }
+
     public void SetLaneY(float offset)
     {
         LaneY = BattleLaneBounds.ClampLaneOffset(offset);
@@ -522,12 +556,14 @@ public abstract class UnitBase : MonoBehaviour
 
     /// <summary>
     /// 攻击动画锁定：保留当前目标，停步且不转身/并道。
-    /// 目标已死则不锁定，允许立刻重索敌。
+    /// 目标死亡、失活或离开战斗镜头则不锁定，允许立刻重索敌。
     /// </summary>
     protected bool TryHoldDuringAttack()
     {
         if (unitAnim == null || !unitAnim.InAttackLock) return false;
-        if (target == null || target.isDead || target.isAlly == isAlly) return false;
+        if (target == null || target.isDead || target.isAlly == isAlly
+            || !target.gameObject.activeInHierarchy || !GameConfig.IsInCombatViewport(target))
+            return false;
 
         if (rb != null) rb.velocity = Vector2.zero;
         if (unitAnim != null) unitAnim.SetMove(false, facingDir);
@@ -658,32 +694,41 @@ public abstract class UnitBase : MonoBehaviour
         UnitBase nearest = null;
         float minDist = detectRange;
         float myX = GetCombatX(this);
+        bool currentTargetCandidate = false;
         IEnumerable<UnitBase> enemyList = isAlly ? BattleManager.Instance.monsters : BattleManager.Instance.allyUnits;
+        if (enemyList == null) return null;
         foreach (var enemy in enemyList)
         {
-            if (enemy == null || enemy.isDead) continue;
+            if (enemy == null || enemy.isDead || !enemy.gameObject.activeInHierarchy) continue;
             if (isAlly && enemy.isAlly) continue;
             if (!isAlly && !enemy.isAlly) continue;
             if (!GameConfig.IsInCombatViewport(enemy)) continue;
             float dist = Mathf.Abs(myX - GetCombatX(enemy));
+            if (dist > detectRange) continue;
+            if (enemy == target) currentTargetCandidate = true;
             if (dist <= minDist)
             {
                 minDist = dist;
                 nearest = enemy;
             }
         }
+        return ApplyNearestTargetStickiness(nearest, myX, currentTargetCandidate);
+    }
 
-        // 目标粘滞：新目标需明显更近才切换，避免贴身时左右抖；屏外目标不粘
-        if (target != null && !target.isDead && nearest != null && nearest != target
-            && GameConfig.IsInCombatViewport(target))
-        {
-            float curDist = Mathf.Abs(myX - GetCombatX(target));
-            float newDist = Mathf.Abs(myX - GetCombatX(nearest));
-            const float switchMargin = 0.45f;
-            if (curDist <= detectRange && newDist > curDist - switchMargin)
-                nearest = target;
-        }
-        return nearest;
+    const float TargetSwitchMargin = 0.45f;
+
+    /// <summary>
+    /// 切换规则：当前目标死亡、销毁、失活、离开敌方列表/镜头/本次索敌范围时立即改选；
+    /// 否则新目标至少近 0.45 才立即切换，距离差小于 0.45 时才保留当前目标防抖。
+    /// </summary>
+    UnitBase ApplyNearestTargetStickiness(UnitBase nearest, float myX, bool currentTargetCandidate)
+    {
+        if (!currentTargetCandidate || target == null || nearest == null || nearest == target)
+            return nearest;
+
+        float curDist = Mathf.Abs(myX - GetCombatX(target));
+        float newDist = Mathf.Abs(myX - GetCombatX(nearest));
+        return newDist <= curDist - TargetSwitchMargin ? nearest : target;
     }
 
     /// <summary>朝目标转身；贴身时保持当前朝向，避免左右来回闪。</summary>
@@ -706,14 +751,16 @@ public abstract class UnitBase : MonoBehaviour
         UnitBase nearest = null;
         float minDist = float.MaxValue;
         float myX = GetCombatX(this);
+        bool currentTargetCandidate = false;
         IEnumerable<UnitBase> enemyList = isAlly ? BattleManager.Instance.monsters : BattleManager.Instance.allyUnits;
         if (enemyList == null) return null;
         foreach (var enemy in enemyList)
         {
-            if (enemy == null || enemy.isDead) continue;
+            if (enemy == null || enemy.isDead || !enemy.gameObject.activeInHierarchy) continue;
             if (isAlly && enemy.isAlly) continue;
             if (!isAlly && !enemy.isAlly) continue;
             if (!GameConfig.IsInCombatViewport(enemy)) continue;
+            if (enemy == target) currentTargetCandidate = true;
             float dist = Mathf.Abs(myX - GetCombatX(enemy));
             if (dist < minDist)
             {
@@ -721,7 +768,7 @@ public abstract class UnitBase : MonoBehaviour
                 nearest = enemy;
             }
         }
-        return nearest;
+        return ApplyNearestTargetStickiness(nearest, myX, currentTargetCandidate);
     }
 
     /// <summary>普攻有效射程；近战钳到不超过长柄，避免表配过大导致半屏开砍。</summary>
@@ -806,8 +853,25 @@ public abstract class UnitBase : MonoBehaviour
         // 故去掉绝对硬下限，改用 MoveSpeed 的比例（0.35 为防极端慢速的兜底，恒 < 0.85）。
         float moveSpd = attr.GetAttr(AttrType.MoveSpeed);
         float laneSpeed = Mathf.Max(moveSpd * 0.35f, moveSpd * 0.85f);
-        float targetLane = chaseTarget.GetWorldLaneOffset();
-        SetLaneY(Mathf.MoveTowards(LaneY, targetLane, laneSpeed * dt));
+        // 目标自身的容错偏移要扣掉：否则「我追你+偏移、你追我」双方会一起漂到车道边界。
+        float targetLane = chaseTarget.GetWorldLaneOffset() - chaseTarget.LaneAlignBiasY;
+        if (UseLaneAlignTolerance)
+        {
+            // 只在换目标（或首次进战斗）时重抽一次，之后沿用，绝不每帧重抽
+            if (_laneBiasOwner != chaseTarget)
+                RollLaneAlignBias(chaseTarget);
+
+            float wanted = targetLane + LaneAlignBiasY;
+            float clamped = BattleLaneBounds.ClampLaneOffset(wanted);
+            // 贴车道边界时偏移会被钳没（又变回严丝合缝对齐），这时翻向另一侧
+            if (Mathf.Abs(clamped - targetLane) < 0.02f)
+            {
+                LaneAlignBiasY = -LaneAlignBiasY;
+                clamped = BattleLaneBounds.ClampLaneOffset(targetLane + LaneAlignBiasY);
+            }
+            targetLane = clamped;
+        }
+        SetLaneY(Mathf.MoveTowards(LaneY, targetLane, laneSpeed * GameConfig.LANE_ALIGN_SPEED_MUL * dt));
     }
 
     protected void AdjustFormationLane(float dt)
@@ -828,7 +892,11 @@ public abstract class UnitBase : MonoBehaviour
         if (!GameConfig.IsInCombatViewport(target))
             return;
 
-        float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit, GetLowHpCritRateBonus());
+        // 2026-09-26：魔法伤害单位（法师/牧师、法球怪）用魔法攻击力起手
+        float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit, GetLowHpCritRateBonus(), IsMagicDamageDealer());
+        // 友方「降低目标攻击」类减益（如 SK018 威慑凝视 -20%）：数值已在 MercPassiveRunner 里按表实现，
+        // 之前没有任何调用点，等于白放。这里在普攻出伤害前消费一次。
+        damage = ApplyAllyAttackDebuffs(damage);
 
         // 引导关/开局也走正式 ATK，不再使用 2~5 点假伤害压制。
         bool openingHit = false;
@@ -951,6 +1019,20 @@ public abstract class UnitBase : MonoBehaviour
         }
         else
             ResolveBasicAttackHit(target, damage, isCrit, openingHit);
+    }
+
+    /// <summary>友方施加在「我」身上的降攻减益合计倍率（MercPassiveRunner.ModifyTargetAttack 的消费点）。</summary>
+    float ApplyAllyAttackDebuffs(float damage)
+    {
+        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+        if (mercs == null || mercs.Count <= 0) return damage;
+        for (int i = 0; i < mercs.Count; i++)
+        {
+            var m = mercs[i];
+            if (m == null || m.isDead || m.PassiveRunner == null) continue;
+            damage = m.PassiveRunner.ModifyTargetAttack(this, damage);
+        }
+        return damage;
     }
 
     bool ShouldUseKillWindup(UnitBase target, float damage, bool isCrit, bool openingHit)
@@ -1128,6 +1210,60 @@ public abstract class UnitBase : MonoBehaviour
         return WeaponAttackType.Physical;
     }
 
+    /// <summary>
+    /// 是否「魔法伤害单位」（主人 2026-09-26 口径）：本单位打出的伤害算魔法伤害，走目标的魔法防御。
+    /// 法师 / 牧师 = 魔法；其余职业 = 物理。默认按武器攻击类型判（佣兵法师/牧师已标 Magic），
+    /// Hero 按所选职业判（<see cref="Hero"/>），怪物按攻击风格判（<see cref="Monster"/>）。
+    /// </summary>
+    public virtual bool IsMagicDamageDealer() => GetAttackType() == WeaponAttackType.Magic;
+
+    /// <summary>
+    /// 火/冰附加伤害：2026-09-26 主人拍板「冰火附加按百分比」。
+    /// 口径：附加伤害 = 最终伤害 × 词缀值 × GameConfig.FIRE/ICE_BONUS_PER_POINT（默认 0.01f = 1%/点，词缀值 5 → +5%）。
+    /// 飘字颜色保持：火=橙、冰=蓝；加在**扣防之后**的最终伤害上（不被防御吃掉，穿了必看得见）。
+    /// 调数值只改 GameConfig.FIRE/ICE_BONUS_PER_POINT。
+    /// 返回本次伤害该用的飘字元素（火=橙 / 冰=蓝 / 都没有 = None）。
+    /// </summary>
+    static DamageTextSystem.DamageElement ResolveElementalBonus(UnitBase source, ref float finalDamage)
+    {
+        if (source == null || source.attr == null || finalDamage <= 0f)
+            return DamageTextSystem.DamageElement.None;
+
+        float fire = source.attr.GetAttr(AttrType.FireDamage);
+        float ice = source.attr.GetAttr(AttrType.IceDamage);
+        float bonus = 0f;
+        DamageTextSystem.DamageElement element = DamageTextSystem.DamageElement.None;
+        // 同时有火有冰时取数值大的那一系（相等取火）
+        if (ice > fire)
+        {
+            if (ice > 0f) { bonus = finalDamage * ice * GameConfig.ICE_BONUS_PER_POINT; element = DamageTextSystem.DamageElement.Ice; }
+        }
+        else if (fire > 0f)
+        {
+            bonus = finalDamage * fire * GameConfig.FIRE_BONUS_PER_POINT; element = DamageTextSystem.DamageElement.Fire;
+        }
+        if (bonus > 0f) finalDamage += bonus;
+        return element;
+    }
+
+    /// <summary>
+    /// 吸血：造成伤害的一方按「GameConfig.LIFESTEAL_RATIO(10%) + 装备词缀吸血比例」回血。
+    /// 只在我方（Hero / 佣兵）身上生效——装备词缀是玩家侧的东西；怪物侧回血仍走 V6 词缀「吸血」。
+    /// </summary>
+    static void ApplyLifesteal(UnitBase dealer, float finalDamage)
+    {
+        if (dealer == null || dealer.isDead || dealer.attr == null || finalDamage <= 0f) return;
+        float ratio = GameConfig.LIFESTEAL_RATIO + Mathf.Max(0f, dealer.attr.GetAttr(AttrType.LifeSteal));
+        if (ratio <= 0f) return;
+
+        float maxHp = Mathf.Max(1f, dealer.attr.GetAttr(AttrType.MaxHp));
+        float before = dealer.currentHp;
+        dealer.currentHp = Mathf.Min(maxHp, before + finalDamage * ratio);
+        float healed = dealer.currentHp - before;
+        if (healed >= 1f)
+            DamageTextSystem.Instance?.SpawnHealText(dealer.GetHitPosition(), Mathf.RoundToInt(healed));
+    }
+
     float _lastHitVfxTime = -999f;
     const float HitVfxCooldown = 0.08f;
     float _lastKnockbackTime = -999f;
@@ -1200,9 +1336,24 @@ public abstract class UnitBase : MonoBehaviour
         if (IsInvincibleNow() && source != null && !source.isAlly)
             return;
 
-        float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense);
+        // 2026-09-26 主人口径：先归类本次伤害 —— 法师/牧师（法球怪）算魔法，走魔法防御
+        bool magicHit = source != null && source.IsMagicDamageDealer();
+
+        // SK017「魔法伤害 +15%」：佣兵被动 MercPassiveRunner.OnDealMagicDamage 的消费点
+        // （之前没有任何调用点，等于白放）。只吃魔法伤害那一档。
+        if (magicHit && source is Mercenary hitMerc && hitMerc.PassiveRunner != null)
+            hitMerc.PassiveRunner.OnDealMagicDamage(ref damage);
+
+        float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense, magicHit);
         if (isAlly && PlayerPassiveCombat.Instance != null)
             finalDamage *= PlayerPassiveCombat.Instance.GetAllyIncomingDamageMul(this);
+        // 佣兵「圣光庇护」类团队护盾落在玩家身上的那层：先吸收再扣血（数值取自 merc_skills 表）
+        if (this is Hero && PlayerPassiveCombat.Instance != null)
+            finalDamage = PlayerPassiveCombat.Instance.AbsorbTeamShield(finalDamage);
+
+        // 火/冰附加伤害（装备词缀 FireDamage / IceDamage）：2026-09-26 改百分比 = 最终伤害 × 词缀值 × PER_POINT，
+        // 加在扣防之后的最终伤害上，保证穿了就能在飘字上看见（详见 ResolveElementalBonus 注释）。
+        DamageTextSystem.DamageElement element = ResolveElementalBonus(source, ref finalDamage);
 
         if (source != null && finalDamage > 0f)
             LastDamageSource = source;
@@ -1216,9 +1367,13 @@ public abstract class UnitBase : MonoBehaviour
             if (srcAffix != null) srcAffix.OnDealtDamage(finalDamage);
         }
 
+        // 吸血（主人 2026-09-26）：造成伤害的一方（我方）按 10%（+ 装备词缀「吸血」）回血
+        if (source != null && source.isAlly && finalDamage > 0f)
+            ApplyLifesteal(source, finalDamage);
+
         // 怪物受击飘字：传受害者面向，由 DamageTextSystem 固定往其后方滑
         int textFacing = isAlly ? hitVfxFacing : GetVfxFacingDir();
-        DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit, isAlly, textFacing);
+        DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit, isAlly, textFacing, element);
 
         if (showHitVfx && finalDamage > 0f && BattleVFXSystem.Instance != null
             && Time.time - _lastHitVfxTime >= HitVfxCooldown)

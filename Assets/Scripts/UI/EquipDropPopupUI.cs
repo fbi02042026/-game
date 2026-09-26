@@ -53,10 +53,31 @@ public class EquipDropPopupUI : MonoBehaviour
         public GameObject selectedMark;
         /// <summary>推荐角标：新装备优于已装备同部位时点亮（代码搭建/美术预制体都可用，缺失则跳过）。</summary>
         public GameObject recommendMark;
+        /// <summary>「新」角标：新获得装备的图标右上角（2026-09-26 主人要求）。预制体没有就运行时补建。</summary>
+        public GameObject newMark;
     }
 
     [Tooltip("代码搭建时才由脚本摆卡片位置；用美术预制体时保持关闭，避免覆盖手摆布局")]
     public bool autoLayoutCards;
+
+    /// <summary>
+    /// 「新」角标总开关（2026-09-26 主人要求：获得装备弹窗里装备卡的图标右上角标一个「新」）。
+    /// 项目里没有现成的「新」角标图（Assets/Art/UI/battle/新 只是个空目录，Resources 下也没有 新/new/badge/角标 图），
+    /// 所以按本文件 RecommendMark 的同款做法在运行时建：底框 Image + Text「新」，不动预制体。
+    /// 美术补真图后放进 NewBadgeFrameRes 会自动优先命中。一键回退：置 false。
+    /// </summary>
+    public static bool EnableNewBadge = true;
+
+    /// <summary>「新」角标底框图的美术补图入口；拿不到就退回纯色底框（同 RecommendMark）。</summary>
+    const string NewBadgeFrameRes = "UI/Common/NewBadgeFrame";
+
+    // ===== 「新」角标尺寸 / 位置旋钮（2026-09-26 主人要求：放大 50% 并往右移一点）=====
+    const float NewBadgeBaseWidth = 34f;
+    const float NewBadgeBaseHeight = 30f;
+    /// <summary>尺寸放大系数：1.5 = 放大 50%。</summary>
+    const float NewBadgeScale = 1.5f;
+    /// <summary>在「图标右上角」基础上再往右挪的像素。</summary>
+    const float NewBadgeShiftRight = 12f;
 
     EquipDropMode _mode;
     readonly List<EquipInstance> _drops = new List<EquipInstance>();
@@ -240,6 +261,7 @@ public class EquipDropPopupUI : MonoBehaviour
             {
                 // 还原闲置卡的家位置，下次三选一不歪
                 RestoreCardHome(i);
+                if (c.newMark != null) c.newMark.SetActive(false);
                 continue;
             }
 
@@ -289,7 +311,68 @@ public class EquipDropPopupUI : MonoBehaviour
                 c.attrs.text = worn != null ? FormatAttrsWithDelta(eq, worn) : FormatAttrs(eq);
             }
             if (c.recommendMark != null) c.recommendMark.SetActive(recommended);
+            ApplyNewMark(c);
         }
+    }
+
+    /// <summary>
+    /// 「新」角标：只标「新获得」的装备。
+    /// 判定依据：本弹窗的卡片列表只装新掉落 / 宝箱奖励（_drops），身上已装备的那件
+    /// 走的是下部对比区（comparePanel，不是卡片），备件也不进本弹窗，所以这里不用再筛。
+    /// </summary>
+    void ApplyNewMark(CardRefs c)
+    {
+        var mark = EnsureNewMark(c);
+        if (mark != null) mark.SetActive(EnableNewBadge);
+    }
+
+    /// <summary>懒建「新」角标：挂在图标的父节点上、贴着图标右上角。预制体已有同名节点就直接复用。</summary>
+    static GameObject EnsureNewMark(CardRefs c)
+    {
+        if (c == null || c.root == null) return null;
+        if (c.newMark != null) return c.newMark;
+        var exist = FindDeep(c.root.transform, "NewMark");
+        if (exist != null)
+        {
+            c.newMark = exist.gameObject;
+            return c.newMark;
+        }
+
+        var holder = c.icon != null && c.icon.transform.parent != null
+            ? c.icon.transform.parent
+            : c.root.transform;
+        var bg = CreateImage(holder, "NewMark", new Color(0.86f, 0.22f, 0.22f, 1f));
+        var frame = Resources.Load<Sprite>(NewBadgeFrameRes);
+        if (frame != null)
+        {
+            bg.sprite = frame;
+            bg.type = Image.Type.Simple;
+        }
+        var rt = bg.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        // 贴着图标右上角：按图标 rect 现算（图标是 anchor(0.5,1)+pivot(0.5,1)，右上角 = (ix+iw/2, iy)），
+        // 美术改图标尺寸不用回来改数字。往内收 4px，让角标骑在角上而不是飘在外面。
+        float ix = 0f, iy = -14f, iw = 100f;
+        if (c.icon != null)
+        {
+            var irt = c.icon.rectTransform;
+            ix = irt.anchoredPosition.x;
+            iy = irt.anchoredPosition.y;
+            if (irt.rect.width > 1f) iw = irt.rect.width;
+        }
+        rt.anchoredPosition = new Vector2(ix + iw * 0.5f - 4f + NewBadgeShiftRight, iy - 4f);
+        rt.sizeDelta = new Vector2(NewBadgeBaseWidth * NewBadgeScale, NewBadgeBaseHeight * NewBadgeScale);
+        bg.raycastTarget = false;
+        bg.transform.SetAsLastSibling();
+
+        var label = CreateText(bg.transform, "Label", "新", 16, TextAnchor.MiddleCenter);
+        Stretch(label.rectTransform);
+        label.color = Color.white;
+        label.raycastTarget = false;
+
+        c.newMark = bg.gameObject;
+        return c.newMark;
     }
 
     void CacheCardHomePositions()
@@ -413,9 +496,7 @@ public class EquipDropPopupUI : MonoBehaviour
             // 无附加属性时 FormatAttrs 已返回「（无额外属性）」，如实显示即可。
             SetCompareContent(wornName, EquipUiText.RarityName(worn.rarity), attrs);
             EnsureEquipIcon(worn);
-            var compareIcon = comparePanel != null
-                ? FindDeep(comparePanel.transform, "Icon")?.GetComponent<Image>()
-                : null;
+            var compareIcon = FindCompareIcon(comparePanel);
             if (compareIcon != null)
             {
                 compareIcon.sprite = worn.icon;
@@ -427,15 +508,38 @@ public class EquipDropPopupUI : MonoBehaviour
         {
             if (compareTitle != null) compareTitle.text = $"当前部位（{slotName}）";
             SetCompareContent("当前部位无装备", "", "");
-            var compareIcon = comparePanel != null
-                ? FindDeep(comparePanel.transform, "Icon")?.GetComponent<Image>()
-                : null;
+            var compareIcon = FindCompareIcon(comparePanel);
             if (compareIcon != null)
             {
                 compareIcon.sprite = null;
                 compareIcon.enabled = false;
             }
         }
+    }
+
+    /// <summary>
+    /// 对比区图标节点。手做 prefab 的 Icon 挂在 Panel 下、是 ComparePanel 的**兄弟**（不是子节点），
+    /// 只在 ComparePanel 内部 FindDeep 会永远拿不到 → 图标一直停在预制体那张默认图（一把剑），
+    /// 跟实际拿的武器对不上（2026-09-26 修）。先找内部，再退回同级同名节点；两级都没有才放弃。
+    /// 只认 ComparePanel 父级的**直接**子节点，避免误抓三张卡的 Icon。
+    /// </summary>
+    static Image FindCompareIcon(GameObject comparePanel)
+    {
+        if (comparePanel == null) return null;
+        var inside = FindDeep(comparePanel.transform, "Icon")?.GetComponent<Image>();
+        if (inside != null) return inside;
+
+        var parent = comparePanel.transform.parent;
+        if (parent == null) return null;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var child = parent.GetChild(i);
+            if (child == null) continue;
+            if (!string.Equals(child.name, "Icon", StringComparison.OrdinalIgnoreCase)) continue;
+            var img = child.GetComponent<Image>();
+            if (img != null) return img;
+        }
+        return null;
     }
 
     void SetCompareContent(string nameOrBody, string meta, string attrs)
@@ -661,7 +765,8 @@ public class EquipDropPopupUI : MonoBehaviour
                     meta = FindDeep(t, "Meta")?.GetComponent<Text>(),
                     attrs = FindDeep(t, "Attrs")?.GetComponent<Text>(),
                     selectedMark = FindDeep(t, "SelectedMark")?.gameObject,
-                    recommendMark = FindDeep(t, "RecommendMark")?.gameObject
+                    recommendMark = FindDeep(t, "RecommendMark")?.gameObject,
+                    newMark = FindDeep(t, "NewMark")?.gameObject
                 });
             }
         }
@@ -680,6 +785,8 @@ public class EquipDropPopupUI : MonoBehaviour
                 c.attrs = FindDeep(c.root.transform, "Attrs")?.GetComponent<Text>();
             if (c.recommendMark == null)
                 c.recommendMark = FindDeep(c.root.transform, "RecommendMark")?.gameObject;
+            if (c.newMark == null)
+                c.newMark = FindDeep(c.root.transform, "NewMark")?.gameObject;
         }
         // 点击一律重绑：Inspector 里手填 cards 时也要能选卡
         for (int i = 0; i < cards.Count; i++)

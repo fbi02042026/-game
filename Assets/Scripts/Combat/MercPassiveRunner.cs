@@ -2,160 +2,121 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 佣兵被动技能运行时（SK002 割裂、SK011 自愈、SK012 狂怒 等）。
+/// 佣兵被动运行时——【调度器】。
+/// 2026-09-26 主人拍板：被动逻辑按 SK0xx 拆到 Assets/Scripts/Combat/Passives/* 各模块类
+/// （SK002_Bleed / SK006_Block / SK009_IronWill / SK011_Regen / SK012_Fury /
+/// SK014_LifeBloom / SK017_MagicSurge / SK019_ArmorShred），本类只做分发 +
+/// 持有「共享状态」（团队护盾层 / 恐惧减益 / 自身防御 buff——这些来自主动技、与被动无关，
+/// 故留在调度器，见各字段注释）。
+///
+/// ⚠️ 对外 public API 签名与行为不变（这是防连带 bug 的关键）：
+/// Bind / OnBasicAttackHit / OnDealMagicDamage / ModifyIncomingDamage / OnHpChanged /
+/// OnOwnerHealed / ApplyTeamShieldFromActive / ApplySelfDefBuff / ModifyTargetAttack /
+/// ApplyFearDebuff / ShieldAmount / ShieldMax。
+/// 外部调用方（Mercenary.cs / UnitBase.cs / SkillCastService.cs）无需改动。
 /// </summary>
 public class MercPassiveRunner : MonoBehaviour
 {
     Mercenary _merc;
     string _passiveId;
+    MercPassiveModule _module;
 
-    float _regenTimer;
-    bool _lowHpAtkOn;
-    bool _ironWillUsed;
-    float _ironWillTimer;
-    float _defBuffTimer;
-    float _shieldAmount;
+    // —— 以下为「共享状态」：不是某被动私有，而是主动技落到本佣兵上的效果层 ——
+    float _defBuffTimer;                       // SK007 坚守：自身防御 buff 计时
+    float _shieldAmount;                       // 团队护盾层（来自 SK008/holy_barrier 等）
     float _shieldTimer;
+    float _shieldMax;                          // 护盾上限（2026-09-26 主人拍板补上，勿丢）
+    readonly Dictionary<UnitBase, float> _fearTimers = new Dictionary<UnitBase, float>(); // SK018 恐惧减益
 
-    readonly Dictionary<UnitBase, BleedState> _bleeds = new Dictionary<UnitBase, BleedState>();
-    readonly Dictionary<UnitBase, ArmorShredState> _shreds = new Dictionary<UnitBase, ArmorShredState>();
-    readonly Dictionary<UnitBase, float> _fearTimers = new Dictionary<UnitBase, float>();
-
-    struct BleedState
-    {
-        public int Stacks;
-        public float Timer;
-        public float Dps;
-    }
-
-    struct ArmorShredState
-    {
-        public int Stacks;
-        public float Timer;
-    }
+    /// <summary>本佣兵单元（供模块访问 _merc）。</summary>
+    public Mercenary Merc { get { return _merc; } }
 
     public void Bind(Mercenary merc, string passiveSkillId)
     {
         _merc = merc;
         _passiveId = passiveSkillId;
+        _module = CreateModule(_passiveId);
+        if (_module != null) _module.Runner = this;
+        // 2026-09-26 主人拍板：数值走表，模块只管模式。查 merc_skills 表行灌给模块 Configure；
+        // 表缺失时模块用自身默认硬编码值兜底，行为不变（对外 API 不变）。
+        if (_module != null && MercSkillTable.TryGet(_passiveId, out var row))
+            _module.Configure(row);
         ResetState();
     }
 
     void ResetState()
     {
-        _regenTimer = 0f;
-        _lowHpAtkOn = false;
-        _ironWillUsed = false;
-        _ironWillTimer = 0f;
         _defBuffTimer = 0f;
         _shieldAmount = 0f;
+        _shieldMax = 0f;
         _shieldTimer = 0f;
-        _bleeds.Clear();
-        _shreds.Clear();
         _fearTimers.Clear();
     }
 
     void Update()
     {
+        // 原版：_passiveId 为空时整体早退，共享 tick（恐惧/防御buff/护盾）也一并跳过——这里完全等价保留
         if (_merc == null || _merc.isDead || string.IsNullOrEmpty(_passiveId)) return;
         float dt = Time.deltaTime;
-        TickAlways(dt);
-        TickBleeds(dt);
-        TickShreds(dt);
-        TickFear(dt);
-        TickIronWill(dt);
-        TickDefBuff(dt);
-        TickShield(dt);
-        TickLowHpAtk();
+        if (_module != null) _module.OnUpdate(dt); // 被动私有 tick（SK002/SK009/SK011/SK012/SK019…）
+        TickFear(dt);     // 共享：SK018 恐惧减益计时
+        TickDefBuff(dt);  // 共享：SK007 自身防御 buff 计时
+        TickShield(dt);   // 共享：团队护盾层计时
     }
 
-    void TickAlways(float dt)
-    {
-        if (_passiveId != "SK011") return;
-        _regenTimer -= dt;
-        if (_regenTimer > 0f) return;
-        _regenTimer = 1f;
-        if (_merc.attr == null) return;
-        float maxHp = _merc.attr.GetAttr(AttrType.MaxHp);
-        float heal = maxHp * 0.01f;
-        _merc.currentHp = Mathf.Min(maxHp, _merc.currentHp + heal);
-    }
-
-    void TickLowHpAtk()
-    {
-        if (_passiveId != "SK012" || _merc.attr == null) return;
-        float ratio = _merc.currentHp / Mathf.Max(1f, _merc.attr.GetAttr(AttrType.MaxHp));
-        bool should = ratio < 0.5f;
-        if (should == _lowHpAtkOn) return;
-        _lowHpAtkOn = should;
-        _merc.attr.AddAttr(AttrType.Attack, should ? 0.25f : -0.25f, true);
-    }
-
+    // === 被动事件转发（签名不变）===
     public void OnBasicAttackHit(UnitBase target, float damage)
     {
         if (target == null || _merc == null || string.IsNullOrEmpty(_passiveId)) return;
-
-        if (_passiveId == "SK002" && Random.value < 0.3f)
-            ApplyBleed(target);
-
-        if (_passiveId == "SK019")
-            ApplyArmorShred(target);
+        if (_module != null) _module.OnBasicAttackHit(target, damage);
     }
 
     public void OnDealMagicDamage(ref float damage)
     {
-        if (_passiveId == "SK017")
-            damage *= 1.15f;
+        if (_module != null) _module.OnDealMagicDamage(ref damage);
     }
 
     public float ModifyIncomingDamage(float damage)
     {
         if (_merc == null || string.IsNullOrEmpty(_passiveId)) return damage;
-
-        if (_passiveId == "SK006" && Random.value < 0.2f)
-            damage *= 0.7f;
-
-        if (_passiveId == "SK009" && _ironWillTimer > 0f)
-            damage *= 0.6f;
-
+        float dmg = damage;
+        if (_module != null) _module.ModifyIncomingDamage(ref dmg); // SK006 格挡 / SK009 铁意
+        // 共享：团队护盾层 1:1 抵扣，必须在被动减伤之后（顺序与旧版一致）
         if (_shieldAmount > 0f && _shieldTimer > 0f)
         {
-            float absorbed = Mathf.Min(_shieldAmount, damage);
+            float absorbed = Mathf.Min(_shieldAmount, dmg);
             _shieldAmount -= absorbed;
-            damage -= absorbed;
+            dmg -= absorbed;
         }
-        return damage;
+        return dmg;
     }
 
     public void OnHpChanged()
     {
-        if (_passiveId != "SK009" || _ironWillUsed || _merc == null || _merc.attr == null) return;
-        float ratio = _merc.currentHp / Mathf.Max(1f, _merc.attr.GetAttr(AttrType.MaxHp));
-        if (ratio < 0.3f)
-        {
-            _ironWillUsed = true;
-            _ironWillTimer = 5f;
-        }
+        if (_module != null) _module.OnHpChanged();
     }
 
     public void OnOwnerHealed(float amount)
     {
-        if (_passiveId != "SK014" || amount <= 0f) return;
-        // HoT on self when healing others — simplified: self regen burst
-        if (_merc != null && _merc.attr != null)
-        {
-            float hot = _merc.attr.GetAttr(AttrType.Attack) * 0.3f * 3f;
-            _merc.currentHp = Mathf.Min(_merc.attr.GetAttr(AttrType.MaxHp), _merc.currentHp + hot * 0.33f);
-        }
+        if (_module != null) _module.OnOwnerHealed(amount);
     }
 
+    // === 共享：团队护盾层（来自主动技 SK008 / holy_barrier，数值由 MercSkillExecutor.TeamShieldParams 传入）===
     public void ApplyTeamShieldFromActive(float ratio, float duration)
     {
         if (_merc == null || _merc.attr == null) return;
         _shieldAmount = _merc.attr.GetAttr(AttrType.MaxHp) * ratio;
+        _shieldMax = _shieldAmount;
         _shieldTimer = duration;
     }
 
+    /// <summary>佣兵护盾当前值（到期读成 0）。只给盾条读，不改战斗数值。</summary>
+    public float ShieldAmount => (_shieldAmount > 0f && _shieldTimer > 0f) ? _shieldAmount : 0f;
+
+    /// <summary>佣兵护盾上限。没盾时 0，盾条据此隐藏。</summary>
+    public float ShieldMax => ShieldAmount > 0f ? Mathf.Max(1f, _shieldMax) : 0f;
+
+    // === 共享：自身防御 buff（SK007 坚守）===
     public void ApplySelfDefBuff(float duration)
     {
         _defBuffTimer = duration;
@@ -163,6 +124,7 @@ public class MercPassiveRunner : MonoBehaviour
             _merc.attr.AddAttr(AttrType.Defense, 0.35f, true);
     }
 
+    // === 共享：恐惧减益（SK018 威慑凝视）===
     public float ModifyTargetAttack(UnitBase target, float atk)
     {
         if (target == null) return atk;
@@ -171,72 +133,13 @@ public class MercPassiveRunner : MonoBehaviour
         return atk;
     }
 
-    void ApplyBleed(UnitBase target)
-    {
-        if (!_bleeds.TryGetValue(target, out var st))
-            st = new BleedState();
-        st.Stacks = Mathf.Min(2, st.Stacks + 1);
-        st.Timer = 3f;
-        st.Dps = (_merc.attr != null ? _merc.attr.GetAttr(AttrType.Attack) : 10f) * 0.25f * st.Stacks;
-        _bleeds[target] = st;
-    }
-
-    void ApplyArmorShred(UnitBase target)
-    {
-        if (!_shreds.TryGetValue(target, out var st))
-            st = new ArmorShredState();
-        st.Stacks = Mathf.Min(3, st.Stacks + 1);
-        st.Timer = 5f;
-        _shreds[target] = st;
-        if (target.attr != null)
-            target.attr.AddAttr(AttrType.Defense, -0.1f, true);
-    }
-
     public void ApplyFearDebuff(UnitBase target, float duration)
     {
         if (target == null) return;
         _fearTimers[target] = duration;
     }
 
-    void TickBleeds(float dt)
-    {
-        if (_bleeds.Count == 0) return;
-        var keys = new List<UnitBase>(_bleeds.Keys);
-        for (int i = 0; i < keys.Count; i++)
-        {
-            var target = keys[i];
-            if (target == null || target.isDead)
-            {
-                _bleeds.Remove(target);
-                continue;
-            }
-            var st = _bleeds[target];
-            st.Timer -= dt;
-            target.TakeDamage(st.Dps * dt, false, true, showHitVfx: false, source: _merc);
-            if (st.Timer <= 0f) _bleeds.Remove(target);
-            else _bleeds[target] = st;
-        }
-    }
-
-    void TickShreds(float dt)
-    {
-        if (_shreds.Count == 0) return;
-        var keys = new List<UnitBase>(_shreds.Keys);
-        for (int i = 0; i < keys.Count; i++)
-        {
-            var target = keys[i];
-            if (target == null || target.isDead)
-            {
-                _shreds.Remove(target);
-                continue;
-            }
-            var st = _shreds[target];
-            st.Timer -= dt;
-            if (st.Timer <= 0f) _shreds.Remove(target);
-            else _shreds[target] = st;
-        }
-    }
-
+    // === 共享 tick ===
     void TickFear(float dt)
     {
         if (_fearTimers.Count == 0) return;
@@ -255,12 +158,6 @@ public class MercPassiveRunner : MonoBehaviour
         }
     }
 
-    void TickIronWill(float dt)
-    {
-        if (_ironWillTimer <= 0f) return;
-        _ironWillTimer -= dt;
-    }
-
     void TickDefBuff(float dt)
     {
         if (_defBuffTimer <= 0f) return;
@@ -274,5 +171,22 @@ public class MercPassiveRunner : MonoBehaviour
         if (_shieldTimer <= 0f) return;
         _shieldTimer -= dt;
         if (_shieldTimer <= 0f) _shieldAmount = 0f;
+    }
+
+    // === 模块工厂（按 passiveId 选模块；未识别返回 null，行为与旧版一致）===
+    static MercPassiveModule CreateModule(string id)
+    {
+        switch (id)
+        {
+            case "SK002": return new SK002_Bleed();
+            case "SK006": return new SK006_Block();
+            case "SK009": return new SK009_IronWill();
+            case "SK011": return new SK011_Regen();
+            case "SK012": return new SK012_Fury();
+            case "SK014": return new SK014_LifeBloom();
+            case "SK017": return new SK017_MagicSurge();
+            case "SK019": return new SK019_ArmorShred();
+            default: return null;
+        }
     }
 }

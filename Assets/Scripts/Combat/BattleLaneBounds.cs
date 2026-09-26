@@ -35,10 +35,26 @@ public static class BattleLaneBounds
             SetVisualVisible(false);
     }
 
+    /// <summary>
+    /// 场景缩放系数：可行走区域是「相对场景 unit 节点」的偏移，必须乘上场景整体缩放，
+    /// 否则不同场景（缩放不同）会出现"场景变了、可行走区域不变"。
+    /// 取不到 unit 时退回 1（不改变原行为）。
+    /// </summary>
+    static float SceneScale()
+    {
+        Transform host = BattleManager.Instance != null ? BattleManager.Instance.unitRoot : null;
+        if (host == null && _area != null) host = _area.parent;
+        if (host == null) return 1f;
+        float s = Mathf.Abs(host.lossyScale.y);
+        return s > 0.0001f ? s : 1f;
+    }
+
     public static void GetLaneOffsetRange(out float minOffset, out float maxOffset)
     {
-        minOffset = GameConfig.BATTLE_LANE_MIN;
-        maxOffset = GameConfig.BATTLE_LANE_MAX;
+        // 整体下移（BATTLE_LANE_Y_DROP）+ 跟随场景缩放（× SceneScale），两者缺一不可
+        float s = SceneScale();
+        minOffset = (GameConfig.BATTLE_LANE_MIN - GameConfig.BATTLE_LANE_Y_DROP) * s;
+        maxOffset = (GameConfig.BATTLE_LANE_MAX - GameConfig.BATTLE_LANE_Y_DROP) * s;
     }
 
     public static float ClampLaneOffset(float offset)
@@ -132,7 +148,10 @@ public static class BattleLaneBounds
         var go = new GameObject(AreaName);
         if (parent != null)
             go.transform.SetParent(parent, false);
-        go.transform.localPosition = new Vector3(0f, 0.22f, 0f);
+        // 可视化标记与 Gameplay 上下界同源：同样整体下移一点点（本地坐标，随父级场景缩放一起放大）
+        float centerLocal = (GameConfig.BATTLE_LANE_MIN + GameConfig.BATTLE_LANE_MAX) * 0.5f
+                            - GameConfig.BATTLE_LANE_Y_DROP;
+        go.transform.localPosition = new Vector3(0f, centerLocal, 0f);
         go.transform.localRotation = Quaternion.identity;
         // 仅可视化参考；实际范围由 BATTLE_LANE_HALF 决定
         go.transform.localScale = new Vector3(24f, 0.25f, 1f);

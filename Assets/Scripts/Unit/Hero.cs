@@ -44,6 +44,10 @@ public class Hero : UnitBase
         if (costumeManager == null)
             costumeManager = GetComponent<HeroCostumeManager>();
         KillComboAfterimage.Ensure(this);
+
+        // 2026-09-26 主人拍板：挂载毒 DOT 运行器（游侠武器「中毒」词缀结算点），照抄 Mercenary 挂 PassiveRunner
+        if (GetComponent<PoisonDotRunner>() == null)
+            gameObject.AddComponent<PoisonDotRunner>();
     }
 
     void OnDestroy()
@@ -74,6 +78,7 @@ public class Hero : UnitBase
         pendingLevelUps = 0;
         invincibleUntil = 0f;
         _dodgeCdUntil = 0f;
+        ClearLaneAlignBias(); // 换局重新抽对齐偏移
         currentHp = attr.GetAttr(AttrType.MaxHp);
         // 优先用场景 SpawnPoint；无则回退硬编码 X + GROUND_Y
         Vector3 spawnPos = new Vector3(-7f, GROUND_Y, 0f);
@@ -283,6 +288,18 @@ public class Hero : UnitBase
         return WeaponAttackType.Physical;
     }
 
+    /// <summary>
+    /// 是否魔法伤害单位（主人 2026-09-26 口径）：法师（P005）/ 牧师（P006）打出的伤害 = 魔法伤害，
+    /// 走目标的魔法防御；其余职业走物理防御。
+    /// 按职业判定而不是只看当前武器，避免法师捡了把剑就变物理。
+    /// </summary>
+    public override bool IsMagicDamageDealer()
+    {
+        PlayerJobId job = PlayerJobDefs.GetSelected();
+        if (job == PlayerJobId.Mage || job == PlayerJobId.Priest) return true;
+        return GetAttackType() == WeaponAttackType.Magic;
+    }
+
     protected override AttackVfxKit GetAttackVfxKit()
     {
         AttackVfxKit jobKit = SkillNaming.KitFromWeaponKind(
@@ -326,6 +343,9 @@ public class Hero : UnitBase
     UnitBase _acquireLock;
     float _acquireUntil;
     float _manualReleaseUntil;
+
+    /// <summary>英雄追敌时启用车道对齐容错：不再严丝合缝站到敌人同一条水平线上（怪物/佣兵不受影响）。</summary>
+    protected override bool UseLaneAlignTolerance => true;
 
     public bool IsManualMove => _manualMove;
 
@@ -411,14 +431,14 @@ public class Hero : UnitBase
             GameConfig.SetWorldPosition(transform, p);
             RefreshDepthSort();
 
-            // 进距仍可普攻最近目标；有水平输入时朝向跟摇杆，不 FaceToward 抢向
+            // 手动移动也每帧刷新当前目标；没有合法候选时立刻清空，不能等到可攻击才换目标
             var near = FindNearestEnemyInDetectRange();
+            target = near;
             if (near != null && IsInBasicAttackRange(near)
                 && attackCd <= 0f
                 && (unitAnim == null || !unitAnim.InDamagedRecovery())
                 && (unitAnim == null || !unitAnim.InAttackLock))
             {
-                target = near;
                 if (Mathf.Abs(_manualDir.x) <= 0.05f)
                     FaceToward(near);
                 Attack(near);
@@ -439,10 +459,8 @@ public class Hero : UnitBase
         {
             if (rb != null) rb.velocity = new Vector2(0f, rb.velocity.y);
             var nearHold = FindNearestEnemyInDetectRange();
-            // 手动走位时目标始终跟随最近的怪：玩家走到谁旁边就锁谁，
-            // 不再要求已在攻击范围内才改 target（否则会一直粘着第一个怪）
-            if (nearHold != null)
-                target = nearHold;
+            // 松手冷却只禁止追怪，不冻结索敌；无合法候选时也要清掉旧目标
+            target = nearHold;
             if (nearHold != null && IsInBasicAttackRange(nearHold)
                 && attackCd <= 0f
                 && (unitAnim == null || !unitAnim.InDamagedRecovery())
@@ -459,25 +477,15 @@ public class Hero : UnitBase
             return;
         }
 
-        // 松手索敌窗口：进距内有更近可打的怪时打断远锁
+        // 松手索敌窗口：每帧重新比较最近目标，窗口只保留连击语义，不能把首次目标锁死
         if (_acquireLock != null)
         {
-            if (_acquireLock.isDead || Time.time > _acquireUntil
-                || !GameConfig.IsInCombatViewport(_acquireLock))
+            if (Time.time > _acquireUntil)
                 _acquireLock = null;
             else
             {
-                var nearer = FindNearestEnemyOnField();
-                if (nearer != null && nearer != _acquireLock)
-                {
-                    float dNew = Mathf.Abs(GetCombatX(this) - GetCombatX(nearer));
-                    float dCur = Mathf.Abs(GetCombatX(this) - GetCombatX(_acquireLock));
-                    // 走到新怪攻击范围内，或新怪明显更近（约 0.6 个怪间距）就换锁。
-                    // 原逻辑只在「已进入攻击范围」才换，导致站到另一个怪旁边仍然打第一个。
-                    const float retargetMargin = 0.45f;
-                    if (IsInBasicAttackRange(nearer) || dNew < dCur - retargetMargin)
-                        _acquireLock = nearer;
-                }
+                // 场上索敌统一执行 0.45 粘滞：明显更近立即换，差距小时才保留当前目标
+                _acquireLock = FindNearestEnemyOnField();
                 target = _acquireLock;
             }
         }
@@ -500,6 +508,9 @@ public class Hero : UnitBase
             float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
             float attackRange = GetEffectiveAttackRange();
             bool melee = UsesMeleeBasicAttack();
+            // 左右容错：比射程再近一点点才停，不精确卡在射程边缘（恒更靠内，进距普攻判定不受影响）
+            float stopDist = attackRange - LaneAlignBiasX;
+            if (stopDist < 0f) stopDist = 0f;
             FaceToward(target);
             if (melee || !alliesEngaged)
                 AdjustLaneTowardTarget(target, Time.deltaTime);
@@ -514,7 +525,7 @@ public class Hero : UnitBase
                     attackCd = GetAttackCooldown();
                 }
             }
-            else if (melee && distance <= attackRange)
+            else if (melee && distance <= stopDist)
             {
                 if (rb != null) rb.velocity = Vector2.zero;
                 isMoving = true;

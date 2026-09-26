@@ -19,7 +19,9 @@ public class MercSkillCaster : MonoBehaviour
         _merc = merc;
         _activeSkillId = activeSkillId;
         var cfg = SkillRegistry.Instance != null ? SkillRegistry.Instance.Get(activeSkillId) : null;
-        CooldownTotal = cfg != null && cfg.cooldown > 0f ? cfg.cooldown : 8f;
+        // 2026-09-26：技能 CD 延长 1 倍（GameConfig.SKILL_COOLDOWN_MUL）。
+        // 佣兵 CD 来自 SkillRegistry（asset 或 merc_skills 表），只有这里一个出口，统一在这乘。
+        CooldownTotal = (cfg != null && cfg.cooldown > 0f ? cfg.cooldown : 8f) * GameConfig.SKILL_COOLDOWN_MUL;
         // 开局按满冷却进场：先普攻，冷却走完才轮到第一发主动技（原为 0，进战瞬间就甩技能）
         _cooldownRemain = CooldownTotal;
     }

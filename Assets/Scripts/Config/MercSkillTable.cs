@@ -43,6 +43,11 @@ public static class MercSkillTable
         public float Duration;
         public string RangeDesc;
         public string IconId;
+        // 2026-09-26 主人拍板：数值走表，模块只管模式。被动技能通用数值参数列（p1/p2/p3），
+        // 含义由对应 SK0xx 模块 Configure 解释；留空(0)时模块回退默认硬编码值。
+        public float Param1;
+        public float Param2;
+        public float Param3;
     }
 
     static Dictionary<string, Row> _byId;
@@ -106,7 +111,11 @@ public static class MercSkillTable
                 Cooldown = ParseFloat(cols.Length > 12 ? cols[12] : ""),
                 Duration = ParseFloat(cols.Length > 13 ? cols[13] : ""),
                 RangeDesc = cols.Length > 14 ? cols[14].Trim() : "",
-                IconId = id
+                IconId = id,
+                // 2026-09-26 主人拍板：数值走表。p1/p2/p3 在「备注」列之后（索引 19/20/21）。
+                Param1 = ParseFloat(cols.Length > 19 ? cols[19] : ""),
+                Param2 = ParseFloat(cols.Length > 20 ? cols[20] : ""),
+                Param3 = ParseFloat(cols.Length > 21 ? cols[21] : "")
             };
             _byId[id] = row;
             ok++;
@@ -173,6 +182,35 @@ public static class MercSkillTable
     public static bool IsMercSkillId(string id)
     {
         return !string.IsNullOrEmpty(id) && id.StartsWith("SK") && TryGet(id, out _);
+    }
+
+    /// <summary>技能要求的佣兵「最低稀有度」：读表列「适用佣兵稀有度」（MercRarityMin）。</summary>
+    public static MercRosterDefs.MercRarity RequiredMercRarity(string id)
+    {
+        if (!TryGet(id, out var row)) return MercRosterDefs.MercRarity.Common;
+        return ParseRarityTier(row.MercRarityMin);
+    }
+
+    /// <summary>把「适用佣兵稀有度」文案映射到枚举（普通/稀有/传奇）。集中一处，避免散落魔法值。</summary>
+    static MercRosterDefs.MercRarity ParseRarityTier(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return MercRosterDefs.MercRarity.Common;
+        if (s.Contains("传奇")) return MercRosterDefs.MercRarity.Legendary;
+        if (s.Contains("稀有")) return MercRosterDefs.MercRarity.Rare;
+        return MercRosterDefs.MercRarity.Common;
+    }
+
+    /// <summary>
+    /// 配置驱动的「该佣兵能否用此技能」：佣兵实际稀有度（RarityPalette.ResolveMercRarity）
+    /// ≥ 技能门槛即可。传奇限定类技能（如 SK021）设置「适用佣兵稀有度=传奇」后自动只对传奇生效，
+    /// 技能逻辑里无需再写 <c>if (rarity == Legendary)</c>。
+    /// </summary>
+    public static bool MercCanUseSkill(string mercId, string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return false;
+        var req = RequiredMercRarity(skillId);
+        var rarity = RarityPalette.ResolveMercRarity(mercId);
+        return rarity >= req;
     }
 
     /// <summary>从表行生成运行时 SkillConfig（SkillRegistry 查不到 asset 时回退）。</summary>

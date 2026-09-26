@@ -586,6 +586,16 @@ public class TutorialDirector : Singleton<TutorialDirector>
         bm.RetargetAllMonsters(Hero.Instance);
         hint.Show("怪物冲过来了，靠近它们会自动攻击。", null, 5f);
         yield return WaitFieldClear(strict: true);
+        // 清场兜底：WaitFieldClear 靠「存活数 + 未刷出波次」连读 0.45s 判定已清，
+        // 遇到刷怪空窗 / 存活数同帧缓存会提前返回，导致围殴怪还没打完就进小白入队剧情。
+        // 这里再按现成的存活怪计数确认一次，确保场上真的清空了才继续（上限 30s，不会卡死流程）。
+        float clearGuard = 0f;
+        while (bm != null && clearGuard < 30f
+               && (bm.GetAliveMonsterCount() > 0 || bm.HasPendingWaves))
+        {
+            clearGuard += Time.unscaledDeltaTime;
+            yield return null;
+        }
         bm.ClearMonsterForcedTargets();
 
         // 围殴怪已清：若玩家提前打完，也要进对话
@@ -1129,7 +1139,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
     static IEnumerator CoTeachControls(BattleManager bm, TutorialHintUI hint, BattleUI ui)
     {
         if (bm != null) bm.UnitsCanAct = true;
-        BattleJoystick.EnsureOn(ui != null ? ui.transform : null);
+        // ui 是 BattleRoutine 开场那一帧抓的 BattleUI，此刻可能还没装配出来；
+        // 兜底再查一次当前实例，确保摇杆真的建出来（否则引导战整场没有摇杆）。
+        var joyRoot = ui != null ? ui.transform
+            : (BattleUI.Instance != null ? BattleUI.Instance.transform : null);
+        BattleJoystick.EnsureOn(joyRoot);
         BattleJoystick.Instance?.SetVisible(true);
         RectTransform stickRt = BattleJoystick.Instance != null
             ? BattleJoystick.Instance.StickHighlight
@@ -1215,11 +1229,18 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 宝箱只掉武器，避免误给防具
         // 破旧木剑(equip_training_sword)走「起步武器 70% 普通档」，稀有度强制不生效，
         // 玩家拿到手反而比初始武器弱，爽点会塌。引导宝箱改为优先给常规武器。
-        string[] prefer =
-        {
-            "equip_sword_1", "equip_axesmall1", "equip_training_sword"
-        };
-        for (int i = 0; i < prefer.Length; i++)
+        // 2026-09-26：教程宝箱按当前职业发 —— 第一优先读 player_job_base_stats 的「主手模板ID」，
+        // 拿到后仍过一遍 PlayerJobDefs.TemplateMatchesJob（按职业/武器类型过滤），
+        // 不再让法师、牧师开出剑、斧。
+        var job = PlayerJobDefs.GetSelected();
+        var prefer = new List<string>();
+        PlayerJobBaseStats.TryGet(job, out PlayerJobBaseStats.Row jobRow);
+        if (!string.IsNullOrEmpty(jobRow.StarterMainTemplateId))
+            prefer.Add(jobRow.StarterMainTemplateId);
+        prefer.Add("equip_sword_1");
+        prefer.Add("equip_axesmall1");
+        prefer.Add("equip_training_sword");
+        for (int i = 0; i < prefer.Count; i++)
         {
             EquipTemplate tpl = ConfigManager.Instance != null
                 ? ConfigManager.Instance.GetEquipTemplate(prefer[i])
@@ -1227,6 +1248,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
             if (tpl == null)
                 tpl = Resources.Load<EquipTemplate>(ContentPaths.Config.Equips + "/" + prefer[i]);
             if (tpl == null) continue;
+            // 只发本职业能用（武器类型匹配 / 配表有映射）的武器
+            if (!PlayerJobDefs.TemplateMatchesJob(tpl, job)) continue;
             tpl.ResolveIcon();
             int lv = Hero.Instance != null ? Hero.Instance.level : 1;
             // 强制稀有：初始武器是普通档(9~12)，稀有档(32~40)才撑得起「换装后 1~2 刀」的爽点

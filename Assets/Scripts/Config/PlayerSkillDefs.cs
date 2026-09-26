@@ -748,20 +748,33 @@ public static class PlayerSkillDefs
         _loaded = true;
         _all = CloneFallback();
 
-        if (!PlayerSkillTable.HasData) return;
-
-        var rows = PlayerSkillTable.Rows;
-        for (int i = 0; i < rows.Count; i++)
+        // 缺表也要乘：表在不在都得延长 CD，所以这里只跳过 overlay，不能整段 return
+        if (PlayerSkillTable.HasData)
         {
-            var row = rows[i];
-            int idx = IndexOfLoaded(row.Id);
-            if (idx >= 0)
-                Overlay(_all[idx], row);
-            else
+            var rows = PlayerSkillTable.Rows;
+            for (int i = 0; i < rows.Count; i++)
             {
-                var extra = new Def { tint = Color.white };
-                Overlay(extra, row);
-                Append(extra);
+                var row = rows[i];
+                int idx = IndexOfLoaded(row.Id);
+                if (idx >= 0)
+                    Overlay(_all[idx], row);
+                else
+                {
+                    var extra = new Def { tint = Color.white };
+                    Overlay(extra, row);
+                    Append(extra);
+                }
+            }
+        }
+
+        // 2026-09-26 主人要求：技能 CD 延长 1 倍。表与 Fallback 只在这里统一乘一次，
+        // 战斗（PlayerSkillTable.BuildRuntimeConfig）与 UI 文案（FormatDetail）看到的是同一份冷却。
+        if (_all != null)
+        {
+            for (int i = 0; i < _all.Length; i++)
+            {
+                if (_all[i] == null) continue;
+                _all[i].cooldown *= GameConfig.SKILL_COOLDOWN_MUL;
             }
         }
     }

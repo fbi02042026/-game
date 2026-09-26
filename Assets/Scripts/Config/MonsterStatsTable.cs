@@ -58,7 +58,11 @@ public static class MonsterStatsTable
                 baseMoveSpeed = GameTableCsv.TryFloat(c[11], out float ms) ? ms : 2.2f,
                 baseGoldDrop = GameTableCsv.TryInt(c[12], out int gold) ? gold : 10,
                 expDrop = GameTableCsv.TryInt(c[13], out int exp) ? exp : 5,
-                spriteScale = GameTableCsv.TryFloat(c[14], out float sc) ? sc : 1f
+                spriteScale = GameTableCsv.TryFloat(c[14], out float sc) ? sc : 1f,
+                // 2026-09-26 新增：魔法攻击 / 魔法防御（旧 .bytes 只有 15 列 → 缺列时留 0，
+                // 由 Monster.Init 等比沿用 baseAttack / baseDef，不发明数值）
+                baseMagicAttack = (c.Length > 15 && GameTableCsv.TryFloat(c[15], out float matk)) ? matk : 0f,
+                baseMagicDefense = (c.Length > 16 && GameTableCsv.TryFloat(c[16], out float mdef)) ? mdef : 0f
             };
             if (string.IsNullOrEmpty(e.id))
                 e.id = BuildDefaultId(monsterChapter, spriteIndex);

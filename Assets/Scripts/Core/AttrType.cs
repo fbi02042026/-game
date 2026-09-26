@@ -29,5 +29,10 @@ public enum AttrType
     MagicPower,     // 魔法强度
     PhyPower,       // 物理强度
         CritDamage,     // 暴击伤害倍率（1.5 = 150%）
-        EliteDamage      // 对精英/Boss 的伤害加成倍率（0.08 = +8%）
+        EliteDamage,     // 对精英/Boss 的伤害加成倍率（0.08 = +8%）
+        // 2026-09-26 新增（追加在末尾，不改变既有枚举值，避免序列化错位）
+        MagicAttack,     // 魔法攻击力：法师/牧师类与法球怪专用；未写入时回退 Attack
+        MagicDefense,    // 魔法防御：魔法伤害扣这一项；未写入时回退 Defense × GameConfig.MAGIC_DEFENSE_FALLBACK_RATIO
+        // 2026-09-26 主人拍板：落地「中毒」装备词缀（游侠武器专属，百分比制），供 PoisonDotRunner 消费
+        Poison           // 中毒：装备词缀值（如 0.10 = 10%）；每跳伤害系数见 GameConfig.POISON_DPS_RATIO
 }

@@ -2,8 +2,10 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 怪物近战/远程表：读 Resources/Config/MonsterAttackStyle.csv
-/// style = Melee | Ranged（法球） | Bow（弓箭）
+/// 怪物近战/远程表：读 Resources/Data/Tables/monster_attack_style.bytes（由 csv Cook 而来）。
+/// style = Melee | Ranged（法球） | Bow（弓箭），决定弹道视觉与射程；
+/// magicChance（第 4 列，0~1）= 该怪被判为魔法型的概率，供 MonsterAttackTypeResolver 掷骰用。
+/// 2026-09-26 主人拍板：物理/魔法按 magicChance 随机，不写死名单。
 /// </summary>
 public enum MonsterAttackStyle
 {
@@ -15,6 +17,9 @@ public enum MonsterAttackStyle
 public static class MonsterAttackStyleTable
 {
     static Dictionary<int, MonsterAttackStyle> _map;
+    // 2026-09-26 主人拍板：物理/魔法随机参杂——每只怪被判为魔法型的概率（缺配回退 0.35）。
+    // 补声明：上一轮只用了这个字段却漏了声明，导致 CS0103。
+    static Dictionary<int, float> _chance;
     static bool _loaded;
 
     public static void Reload()
@@ -29,6 +34,7 @@ public static class MonsterAttackStyleTable
         if (_loaded) return;
         _loaded = true;
         _map = new Dictionary<int, MonsterAttackStyle>();
+        _chance = new Dictionary<int, float>();
 
         string raw = GameTableStore.LoadText(ContentPaths.Data.MonsterAttackStyle);
         if (string.IsNullOrEmpty(raw))
@@ -51,6 +57,9 @@ public static class MonsterAttackStyleTable
             if (!int.TryParse(cols[1].Trim(), out int idx)) continue;
 
             _map[Key(ch, idx)] = ParseStyle(cols[2].Trim());
+            // 第 4 列 magicChance（可选）：缺列/解析失败则留空，运行时回退默认 0.35
+            if (cols.Length > 3 && float.TryParse(cols[3].Trim(), out float mc))
+                _chance[Key(ch, idx)] = Mathf.Clamp01(mc);
             ok++;
         }
         Debug.Log($"[MonsterAttackStyle] 已加载 {ok} 条");
@@ -75,6 +84,16 @@ public static class MonsterAttackStyleTable
     }
 
     static int Key(int monsterChapter, int spriteIndex) => monsterChapter * 100 + spriteIndex;
+
+    /// <summary>该怪被判定为魔法型的概率(0~1)。缺配置时回退 0.35（约 1/3 魔法）。</summary>
+    public static float GetMagicChance(int monsterChapter, int spriteIndex)
+    {
+        EnsureLoaded();
+        // 2026-09-26 修编译错误：out 变量先声明再用，避免 CS0165（未赋值就 return）
+        float c;
+        if (_chance != null && _chance.TryGetValue(Key(monsterChapter, spriteIndex), out c)) return c;
+        return 0.35f;
+    }
 
     public static MonsterAttackStyle Get(int monsterChapter, int spriteIndex)
     {

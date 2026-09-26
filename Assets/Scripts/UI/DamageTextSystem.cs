@@ -20,6 +20,27 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
         Gold
     }
 
+    /// <summary>
+    /// 伤害元素（2026-09-26 主人口径）：火焰伤害飘字橙色、冰霜伤害飘字蓝色。
+    /// 只有 Fire / Ice 会覆盖飘字颜色，None 走原来的普伤/暴击配色。
+    /// </summary>
+    public enum DamageElement
+    {
+        None = 0,
+        Fire = 1,
+        Ice = 2
+    }
+
+    /// <summary>火焰伤害飘字：橙色。</summary>
+    public static readonly Color FireTextColor = new Color(1f, 0.55f, 0.12f, 1f);
+    /// <summary>冰霜伤害飘字：蓝色。</summary>
+    public static readonly Color IceTextColor = new Color(0.42f, 0.80f, 1f, 1f);
+
+    static Color ElementColor(DamageElement element)
+    {
+        return element == DamageElement.Ice ? IceTextColor : FireTextColor;
+    }
+
     enum MotionPhase { Pop, Slide, Hold, Rise }
 
     [Header("敌方普伤 — 打在敌人身上（比己方略小 10%）")]
@@ -107,11 +128,19 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
 
     public void SpawnDamageText(Vector3 pos, int damage, bool isCrit, bool victimIsAlly, int hitVfxFacing = 0)
     {
+        SpawnDamageText(pos, damage, isCrit, victimIsAlly, hitVfxFacing, DamageElement.None);
+    }
+
+    /// <summary>
+    /// 带元素色的伤害飘字：火 = 橙、冰 = 蓝。数字已含附加伤害（见 UnitBase.ResolveElementalBonus）。
+    /// </summary>
+    public void SpawnDamageText(Vector3 pos, int damage, bool isCrit, bool victimIsAlly, int hitVfxFacing, DamageElement element)
+    {
         TextKind kind = isCrit
             ? (victimIsAlly ? TextKind.InCrit : TextKind.OutCrit)
             : (victimIsAlly ? TextKind.InNormal : TextKind.OutNormal);
         string text = FormatDamageText(damage, kind);
-        SpawnDirectional(pos, text, kind, victimIsAlly, hitVfxFacing: hitVfxFacing);
+        SpawnDirectional(pos, text, kind, victimIsAlly, hitVfxFacing: hitVfxFacing, element: element);
     }
 
     string FormatDamageText(int damage, TextKind kind)
@@ -173,9 +202,12 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
     float ResolvePopFlashStrength() =>
         GameConfig.COMBAT_JUICE_DAMAGE_TEXT_BOOST ? 0.72f : popFlashStrength;
 
-    void SpawnDirectional(Vector3 pos, string text, TextKind kind, bool victimIsAlly, bool forceUp = false, int hitVfxFacing = 0)
+    void SpawnDirectional(Vector3 pos, string text, TextKind kind, bool victimIsAlly, bool forceUp = false, int hitVfxFacing = 0, DamageElement element = DamageElement.None)
     {
         GetStyle(kind, out Color color, out int fontSize, out float scale);
+        // 火 / 冰附加伤害：飘字整体换成橙 / 蓝（主人 2026-09-26 口径）
+        if (element != DamageElement.None)
+            color = ElementColor(element);
 
         DamageTextInstance inst = GetOrCreateInstance();
         float ox = Random.Range(-spreadRadiusX, spreadRadiusX);

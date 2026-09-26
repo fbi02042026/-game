@@ -227,11 +227,12 @@ public class CharacterUI : MonoBehaviour, ITownPage
 
         MercPortraitSprites.ClearCache();
         string boardId = GetCurrentBoardId(); // "player" 或 佣兵 HireId
-        // 看板统一显示「佣兵头像」（与佣兵碎片预制体 HeadIcon 同源）：
-        // 优先 MercPortraitSprites.GetHead → Resources/Icons/MercHead（编辑器直读 Art/UI/Icons/佣兵头像，玩家为 玩家.png）
-        // 头像取不到才退回立绘 GetStand；两者都拿不到就保留预制体里主人摆好的图
-        var head = MercPortraitSprites.GetHead(boardId);
-        var sp = head ?? MercPortraitSprites.GetStand(boardId);
+        // 看板显示佣兵立绘（Content/Stage/Portrait 主人摆的就是立绘位）：
+        // 优先 GetStand → Resources/Icons/MercStand（编辑器直读 Art/UI/Icons/佣兵立绘）；
+        // 取不到才用头像 GetHead 兜底，都没有则保留预制体里主人摆好的图。
+        // 2026-09-26 还原：此前曾用 GetHead 优先，导致立绘被头像替换。
+        var stand = MercPortraitSprites.GetStand(boardId);
+        var sp = stand ?? MercPortraitSprites.GetHead(boardId);
         if (sp != null)
             SetPortrait(sp, _portraitFlipped);
         else
@@ -1159,6 +1160,12 @@ public class CharacterUI : MonoBehaviour, ITownPage
     {        if (_canvasConfigured) return;
         EnsureVisibleTransform();
         TownPageCanvas.Configure(gameObject, 20, stripCanvasWhenNested: true);
+        // 页根自身没有布局：CharacterUI.prefab 的 RectTransform 序列化为 anchor(0,0)/(0,0)、sizeDelta(0,0)、localScale(0,0,0)，
+        // 过去靠本页自带的 Canvas 走 Apply 时被 EnsureRootStretch 拉满全屏。
+        // 现在 TownPageCanvas.Configure 的 nested 分支会把这个 Canvas 销毁掉（改由大厅 Canvas 驱动），
+        // 之后就没人铺页根了 ⇒ 整页缩成 0×0、子节点全挤到原点（主人反馈「角色界面整体跑偏」）。
+        // 这里自己补一次拉伸：只定页根的边框，不碰任何子节点坐标，删掉本行即可一键回退。
+        UICanvasSetup.EnsureRootStretch(transform as RectTransform);
         _canvasConfigured = true;
     }
 

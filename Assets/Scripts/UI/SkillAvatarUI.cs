@@ -21,9 +21,24 @@ public class SkillAvatarUI
     public Text labelText;
     /// <summary>右下角等级文字（美术在每个技能槽下加了 level 节点，没有就运行时补建）。</summary>
     public Text levelText;
+    /// <summary>槽位底框：槽根自己那层 Image（美术底图就在这一层，图标层是另建的子层）。</summary>
+    public Image frameImage;
 
     [System.NonSerialized]
     public System.Action onClick;     // 点击回调
+
+    /// <summary>
+    /// 「没装备技能」时底框压暗总开关（2026-09-26 主人要求）。
+    /// 口径与 DailyLoginUI.EnableCellDim 一致：**先记录底框原始色，再按系数相乘压暗**，
+    /// 绝不写死颜色去覆盖美术底图。一键回退：置 false。
+    /// </summary>
+    public static bool EnableEmptySlotDim = true;
+
+    /// <summary>空槽压暗系数（与 DailyLoginUI 未解锁格同档 0.45：够暗又不糊）。</summary>
+    const float EmptySlotDimK = 0.45f;
+
+    Color _frameBaseColor;
+    bool _frameBaseCaptured;
 
     private bool _isReady = false;
 
@@ -106,6 +121,24 @@ public class SkillAvatarUI
             avatarImage.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
             avatarImage.gameObject.SetActive(true);
         }
+    }
+
+    /// <summary>
+    /// 没装备技能 → 底框压暗（base × 0.45，保 alpha）；已装备 → 还原 base。
+    /// 幂等，重复调用无副作用。frameImage 没绑到就整段跳过（不新建节点、不改预制体）。
+    /// </summary>
+    public void SetEmptyDim(bool empty)
+    {
+        if (frameImage == null) return;
+        if (!_frameBaseCaptured)
+        {
+            _frameBaseColor = frameImage.color;
+            _frameBaseCaptured = true;
+        }
+        var c = _frameBaseColor;
+        frameImage.color = (empty && EnableEmptySlotDim)
+            ? new Color(c.r * EmptySlotDimK, c.g * EmptySlotDimK, c.b * EmptySlotDimK, c.a)
+            : c;
     }
 
     /// <summary>底字（原来是「被动」占位，现在显示技能名）显隐。</summary>

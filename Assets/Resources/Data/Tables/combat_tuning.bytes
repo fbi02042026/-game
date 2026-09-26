@@ -1,4 +1,4 @@
-﻿# 战斗调参表（combat_tuning）。把 GameConfig 中散落的战斗硬编码常量收编进表，改数值不用改代码。
+# 战斗调参表（combat_tuning）。把 GameConfig 中散落的战斗硬编码常量收编进表，改数值不用改代码。
 # 缺表 / key 缺失 / 构造期读表被拒时，运行时回退 GameConfig 默认值，行为与原硬编码完全一致，可随时回退。
 key,value,comment
 BOSS_PHASE2_HP_RATIO,0.7,Boss 二阶段触发血量比例（当前/最大≤此值则换招）

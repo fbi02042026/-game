@@ -87,20 +87,36 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     /// 2026-09-22：摇杆必须**始终**压过 SkillBar（技能栏被抬到 BackpackPanel+1 的嵌套 Canvas，
     /// 单靠 sibling 排序会被它盖住——这就是「技能 UI 跑到摇杆上面」的根源）。
     /// 给摇杆也补一个 overrideSorting 嵌套 Canvas，order 取「父 Canvas + 2」。
+    /// 2026-09-26：父级 Canvas（BackpackPanel）的 order 会在摇杆创建<b>之后</b>才被
+    /// AutoGameInitializer.FixBattleUICanvas 抬到 100；原先只在创建时算一次且加了
+    /// 「已有 Canvas 就直接 return」的短路，摇杆会永久卡在旧 order（预制体 20 → 22），
+    /// 被背包本体与 zhezhao 遮罩（100）盖住——这就是「战斗里看不到摇杆」的根源。
+    /// 故改为每次调用都按当前父级 Canvas 重算并只抬不降。
     /// </summary>
     void EnsureAboveSkillBar()
     {
-        if (GetComponent<Canvas>() != null) return;
-        var parentCanvas = GetComponentInParent<Canvas>();
-        int order = 0;
-        if (parentCanvas != null)
+        // 只认**父级链**上的 Canvas：自己那个 override Canvas 必须排除，否则会拿自己当基准
+        Canvas parentCanvas = null;
+        for (var p = transform.parent; p != null; p = p.parent)
         {
-            // parentCanvas 可能就是摇杆自己刚被加的？不会——此刻还没加。取 BackpackPanel 链上的
-            order = parentCanvas.sortingOrder + 2;
+            var c = p.GetComponent<Canvas>();
+            if (c != null) { parentCanvas = c; break; }
         }
-        var canvas = gameObject.AddComponent<Canvas>();
+        int order = parentCanvas != null ? parentCanvas.sortingOrder + 2 : 0;
+
+        var canvas = GetComponent<Canvas>();
+        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
+        // 关键：嵌套 Canvas 必须自带 GraphicRaycaster。父级 Canvas（BackpackPanel）的
+        // GraphicRaycaster 只遍历「注册在自己名下」的 Graphic；本节点一加 Canvas，摇杆根 Image
+        // 与摇杆头就注册到本节点 Canvas 名下，父级 Raycaster 再也扫不到 → 画得出来却收不到
+        // 射线，OnPointerDown/OnDrag 永不触发（表现为「看得见、点不动」）。
+        // 与全项目惯例一致：AutoGameInitializer.EnsureNestedSortOrder 加 Canvas 必补 Raycaster。
+        if (GetComponent<GraphicRaycaster>() == null)
+            gameObject.AddComponent<GraphicRaycaster>();
         canvas.overrideSorting = true;
-        canvas.sortingOrder = order;
+        if (parentCanvas != null) canvas.sortingLayerName = parentCanvas.sortingLayerName;
+        if (canvas.sortingOrder < order)
+            canvas.sortingOrder = order;   // 只抬不降：避免与 SkillBar 的「+1」互相打架
     }
 
     void Awake()
@@ -264,6 +280,11 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
 
         bool show = !BattleLootMode.Active && bm.isInBattle && bm.UnitsCanAct;
         if (_group == null) return;
+
+        // 显示态下每帧校正一次嵌套 Canvas 层级：BackpackPanel 的 order 是在摇杆创建之后
+        // 才被 AutoGameInitializer 抬到 100 的，不补这一下摇杆会一直压在遮罩底下。
+        // 内部只在需要抬序时才写属性，绝大多数帧是空转。
+        if (show) EnsureAboveSkillBar();
 
         // 状态未变则跳过，避免每帧重复写属性
         if (_group.alpha == (show ? 1f : 0f)

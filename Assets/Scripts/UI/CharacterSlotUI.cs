@@ -31,6 +31,27 @@ public class CharacterSlotUI
     /// <summary>右上角技能小图标：佣兵技能的标识，自动释放。</summary>
     public Image skillBadge;
 
+    // ============================================================
+    // 蓝色盾条（抵扣型护盾：先扣盾、再扣血）
+    // 建在血条底框（HPBarBg）里、血条正下方，只在有护盾时 SetActive(true)，
+    // 平时隐藏不占地方。不动血条 / 蓝条本身的布局与颜色。
+    // 一键关掉整条盾条：CharacterSlotUI.ShieldBarEnabled = false。
+    // ============================================================
+    /// <summary>盾条总开关：置 false 则三个角色槽都不再显示盾条。</summary>
+    public static bool ShieldBarEnabled = true;
+    const string ShieldBarNodeName = "ShieldBar";
+    /// <summary>盾条高度（像素）。血条 12px、与下方雷击充能条之间只有 ≈4.3px 空档，默认 4 刚好不压到。</summary>
+    const float ShieldBarHeight = 4f;
+    /// <summary>盾条与血条底边的间距（像素）。</summary>
+    const float ShieldBarGap = 0f;
+    /// <summary>盾条填充色（蓝）。</summary>
+    static readonly Color ShieldBarFillColor = new Color(0.30f, 0.68f, 1.00f, 0.95f);
+    /// <summary>盾条底色（深蓝）。</summary>
+    static readonly Color ShieldBarBgColor = new Color(0.08f, 0.16f, 0.28f, 0.80f);
+
+    GameObject _shieldBarRoot;
+    Image _shieldBarFill;
+
     /// <summary>职业图标：预制体节点 xuetiaodi/职业icon（玩家 = 所选职业，佣兵 = 佣兵职业）。</summary>
     public Image jobIcon;
 
@@ -40,8 +61,25 @@ public class CharacterSlotUI
         new System.Collections.Generic.Dictionary<Graphic, Color>();
     /// <summary>当前是否已整体压暗（避免每帧重复遍历）。</summary>
     bool _dimmed;
-    /// <summary>压暗强度：0.32 左右能明显「暗掉」又不至于糊成一团。</summary>
-    const float DimScale = 0.32f;
+    /// <summary>
+    /// 压暗强度：先记录原始色再按系数相乘（不写死颜色），与 DailyLoginUI.EnableCellDim、
+    /// SkillAvatarUI.EmptySlotDimK 同款 k=0.45，落在主人给的 0.45~0.5 惯例区间内。
+    /// 只影响被压暗的槽（未招募 / 空槽 / 未解锁），已雇佣槽不参与。
+    /// </summary>
+    const float DimScale = 0.45f;
+
+    /// <summary>
+    /// 未招募（未解锁 / 空槽）佣兵槽 =「玩家那一套外观 + 没有头像 + 整体压暗」总开关（2026-09-26 主人最新口径）。
+    /// 口径变化记录：
+    ///   ① 更早：未雇佣态点亮 portraitPlaceholder（RuntimeUiArt.Disc 深灰圆盘 0.28,0.27,0.32,0.9）当底框；
+    ///   ② 2026-09-26 早些时候：主人要求「未雇佣底框用白色」，于是加了 UnhiredFrameWhite +
+    ///      PaintUnhiredFrame 把那个盘置白并挡掉整体压暗 —— 该方向已被主人否掉
+    ///      （一大块白/灰圆盘太抢眼，像多顶了一个头像）；
+    ///   ③ 现在：底框一律不置白，头像位直接留白；血条 / 能量条 / 技能位照抄玩家槽保留；
+    ///      「未招募」只靠 ApplyDim 整体压暗 + 锁图标表达。
+    /// 一键回退：置 false（回到「点亮占位圆盘」的旧表现）。
+    /// </summary>
+    public static bool UnhiredShowPlayerLook = true;
 
     /// <summary>
     /// 更新槽位显示
@@ -200,7 +238,8 @@ public class CharacterSlotUI
 
     /// <summary>
     /// 整槽「全部暗掉」：把槽里所有 Image/Text 的颜色按 DimScale 压暗，解锁时按备份原样还原。
-    /// 锁图标自身不参与压暗，否则连锁都看不见了。
+    /// 2026-09-26 主人最新口径：锁图标（lockedOverlay）也跟着一起压暗 —— 它的语义就是「未招募」，
+    /// 跟整槽同一套明暗才协调（0.45 只压暗不隐身，锁仍看得清）。
     /// </summary>
     void ApplyDim(bool dim)
     {
@@ -212,7 +251,6 @@ public class CharacterSlotUI
         {
             var g = graphics[i];
             if (g == null) continue;
-            if (IsPartOfLockIcon(g.transform)) continue;
             Color origColor;
             if (!_dimBackup.TryGetValue(g, out origColor))
             {
@@ -225,18 +263,35 @@ public class CharacterSlotUI
         }
     }
 
-    /// <summary>锁图标及其子节点、LockedOverlay 容器本身，都不参与压暗。</summary>
-    bool IsPartOfLockIcon(Transform t)
+    /// <summary>
+    /// 未招募态的头像位：直接留白 —— 头像关掉，占位盘（那个深灰/白圆盘）也不点亮。
+    /// 2026-09-26 主人口径：未招募槽就是「玩家那一套，除了头像没有」，头像位不该再顶一个圆盘。
+    /// 已废弃的两个方向：① 点亮 portraitPlaceholder 深灰盘；② 把那个盘置白 —— 都不再使用，底框不置白。
+    /// </summary>
+    void ApplyUnhiredPortrait()
     {
-        if (lockedOverlay == null || t == null) return false;
-        var lockRoot = lockedOverlay.transform;
-        Transform cur = t;
-        while (cur != null)
+        if (portrait != null) portrait.gameObject.SetActive(false);
+        if (portraitPlaceholder == null) return;
+        // 开关关掉 = 回退到「点亮占位圆盘」的旧表现；默认关掉圆盘，头像位留白。
+        portraitPlaceholder.SetActive(!UnhiredShowPlayerLook);
+    }
+
+    /// <summary>
+    /// 未招募态也要「玩家那一套」：血条 / 蓝条（能量条）的条本体保留可见，只是 0 填充 + 空文字，
+    /// 不整条隐藏 —— 隐藏了就只剩空框，跟左边玩家槽长得不一样。
+    /// </summary>
+    void KeepBarGraphicsVisible()
+    {
+        if (hpBarFill != null)
         {
-            if (cur == lockRoot) return true;
-            cur = cur.parent;
+            hpBarFill.enabled = true;
+            hpBarFill.fillAmount = 0f;
         }
-        return false;
+        if (lanBarFill != null)
+        {
+            lanBarFill.enabled = true;
+            lanBarFill.fillAmount = 0f;
+        }
     }
 
     /// <summary>
@@ -365,6 +420,89 @@ public class CharacterSlotUI
             else
                 lanText.text = "0";   // 没数据时也别空着（第二条默认显示 0）
         }
+    }
+
+    /// <summary>
+    /// 显示护盾（抵扣型）：amount = 当前护盾值，max = 护盾上限。两者任一 ≤ 0 就隐藏盾条。
+    /// 条本身只表达「当前 / 上限」的比例，不写数字（条高只有 4px，塞字会糊）。
+    /// </summary>
+    public void SetShield(float amount, float max)
+    {
+        if (!ShieldBarEnabled || amount <= 0f || max <= 0f || root == null)
+        {
+            HideShieldBar();
+            return;
+        }
+        if (!EnsureShieldBar()) return;
+        _shieldBarRoot.SetActive(true);
+        _shieldBarFill.fillAmount = Mathf.Clamp01(amount / max);
+    }
+
+    /// <summary>护盾耗尽 / 过期 / 槽位清空时把盾条收起来。</summary>
+    public void HideShieldBar()
+    {
+        if (_shieldBarRoot != null) _shieldBarRoot.SetActive(false);
+    }
+
+    /// <summary>运行时建盾条（幂等）。挂在血条底框里，跟着血条一起缩放平移。</summary>
+    bool EnsureShieldBar()
+    {
+        if (_shieldBarRoot != null && _shieldBarFill != null) return true;
+        if (root == null) return false;
+
+        // 血条底框（HPBarBg）是血条的父节点；取不到就退回槽位根，保证不崩
+        Transform host = hpBarFill != null && hpBarFill.transform.parent != null
+            ? hpBarFill.transform.parent
+            : root.transform;
+
+        Transform exist = host.Find(ShieldBarNodeName);
+        GameObject go = exist != null ? exist.gameObject
+            : new GameObject(ShieldBarNodeName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        if (exist == null)
+        {
+            go.transform.SetParent(host, false);
+            var bgImg = go.GetComponent<Image>();
+            bgImg.raycastTarget = false;
+            bgImg.sprite = RuntimeUiArt.Bar();
+            bgImg.color = ShieldBarBgColor;
+            bgImg.type = Image.Type.Simple;
+
+            var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            fillGo.transform.SetParent(go.transform, false);
+            var fillRt = fillGo.GetComponent<RectTransform>();
+            fillRt.anchorMin = Vector2.zero;
+            fillRt.anchorMax = Vector2.one;
+            fillRt.pivot = new Vector2(0.5f, 0.5f);
+            fillRt.offsetMin = Vector2.zero;
+            fillRt.offsetMax = Vector2.zero;
+            var fillImg = fillGo.GetComponent<Image>();
+            fillImg.raycastTarget = false;
+            fillImg.sprite = RuntimeUiArt.Bar();
+            fillImg.color = ShieldBarFillColor;
+            fillImg.type = Image.Type.Filled;
+            fillImg.fillMethod = Image.FillMethod.Horizontal;
+            fillImg.fillOrigin = (int)Image.OriginHorizontal.Left;
+            fillImg.fillAmount = 1f;
+        }
+
+        var rt = go.GetComponent<RectTransform>();
+        var hostRt = host as RectTransform;
+        // 布局还没算出来时给一组保底尺寸，避免盾条被压成 0
+        float w = hostRt != null && hostRt.rect.width > 1f ? hostRt.rect.width : 100f;
+        float h = hostRt != null && hostRt.rect.height > 1f ? hostRt.rect.height : 12f;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(w, ShieldBarHeight);
+        // 血条底边再往下 ShieldBarGap：正好落在血条与雷击充能条之间的空档里
+        rt.anchoredPosition = new Vector2(0f, -(h * 0.5f + ShieldBarHeight * 0.5f + ShieldBarGap));
+
+        _shieldBarRoot = go;
+        Transform fillT = go.transform.Find("Fill");
+        _shieldBarFill = fillT != null ? fillT.GetComponent<Image>() : null;
+        if (_shieldBarFill == null) return false;
+        go.SetActive(false);
+        return true;
     }
 
     public void TickSkillReadyPulse()
@@ -559,9 +697,11 @@ public class CharacterSlotUI
             root.SetActive(true);
         if (locked)
         {
-            if (portrait != null) portrait.gameObject.SetActive(false);
-            if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
-            SetEnergyEnabled(false);
+            // 未招募：头像位留白，其余结构（血条/能量条/技能位）照玩家槽保留可见，只整体压暗。
+            // 这里不再 SetEnergyEnabled(false) 把蓝条清零关掉：按主人「用玩家那一套」的口径，
+            // 条本体要留着（KeepBarGraphicsVisible），充能仍由 ShowEmpty/ShowUnavailable 那侧负责关。
+            ApplyUnhiredPortrait();
+            KeepBarGraphicsVisible();
         }
         else
         {
@@ -594,10 +734,10 @@ public class CharacterSlotUI
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
         SetSkillBadge(null);
         SetJobIcon(null);               // 空槽不显示职业 icon
-        if (portrait != null) portrait.gameObject.SetActive(false);
-        if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
+        ApplyUnhiredPortrait();         // 空槽（未雇佣）：头像位留白，不再点亮/置白占位盘
         if (levelLabel != null) levelLabel.text = "";
         ClearNumericDisplays();
+        if (UnhiredShowPlayerLook) KeepBarGraphicsVisible();   // 条本体保留，跟玩家槽同一套
     }
 
     /// <summary>
@@ -628,12 +768,12 @@ public class CharacterSlotUI
         if (lockedOverlay != null) lockedOverlay.SetActive(true);
         SetSkillBadge(null);
         SetJobIcon(null);               // 未解锁不显示职业 icon
-        if (portrait != null) portrait.gameObject.SetActive(false);
-        if (portraitPlaceholder != null) portraitPlaceholder.SetActive(true);
+        ApplyUnhiredPortrait();         // 未解锁（未雇佣）：头像位留白，不再点亮/置白占位盘
         ApplyLockedOverlayText(label ?? "未解锁");
         if (levelLabel != null)
             levelLabel.text = "";
         ClearNumericDisplays();
+        if (UnhiredShowPlayerLook) KeepBarGraphicsVisible();   // 条本体保留，跟玩家槽同一套
     }
 
     void ApplyLockedOverlayText(string text)
@@ -654,6 +794,7 @@ public class CharacterSlotUI
     /// <summary>清掉血条/蓝条上的数值与填充，避免未解锁槽露出占位数字。</summary>
     void ClearNumericDisplays()
     {
+        HideShieldBar();          // 空槽 / 未解锁槽不该残留盾条
         if (hpText != null)
         {
             hpText.text = "";

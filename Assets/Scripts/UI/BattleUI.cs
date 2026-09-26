@@ -183,6 +183,7 @@ public partial class BattleUI : MonoBehaviour
         TickRunSkillSlots();      // 玩家 4 个被动技槽
         TickMercSkillSlots();     // 佣兵自带技能槽（角色卡内 skill 节点）
         RefreshLiveBars();
+        RefreshShieldBars();      // 蓝色盾条（有护盾时才显形）
     }
 
     void RefreshLiveBars()

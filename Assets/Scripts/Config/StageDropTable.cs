@@ -11,6 +11,13 @@ using UnityEngine;
 ///
 /// 通配写法：gameChapter / stageType / jobKey / tier 写 `*` 表示通配。
 /// jobKey / tier 为通配时，从该章 Normal 行的主产组合里随机抽一个。
+///
+/// 2026-09-26 主人拍板（掉落按怪物类型区分，V1 结构版）：
+///   第 10 列 monsterType（可选，空=any）：physical / magic / any。
+///   带类型的行只在「本关主导怪物类型」匹配时才参与掷骰；空/any 行对所有关都生效（旧行为不变）。
+///   主导类型由 BattleManager 按本关击杀的物理/魔法怪数量推导，透传到 RollDrops(monsterTypeBias)。
+///   注：装备(RiftEquipGenerator)本身无物理/魔法向字段，故本版只在掉落池（道具/徽记）层按类型分池，
+///   具体 physical/magic 各掉什么由主人在 csv 里加带类型的行决定（本版不写死任何掉落物）。
 /// </summary>
 public static class StageDropTable
 {
@@ -34,6 +41,11 @@ public static class StageDropTable
         public int countMin = 1;
         public int countMax = 1;
         public int firstClearBonus;
+        /// <summary>
+        /// 2026-09-26 主人拍板：掉落按怪物主导类型分池。
+        /// "" = 通配（任何类型都参与，旧行行为不变）；physical / magic = 仅该类型参与；any = 显式通配。
+        /// </summary>
+        public string monsterType = "";
     }
 
     static readonly List<Row> _rows = new List<Row>();
@@ -75,7 +87,8 @@ public static class StageDropTable
                 rate = GameTableCsv.TryFloat(c[5], out float rate) ? rate : 0f,
                 countMin = GameTableCsv.TryInt(c[6], out int mn) ? mn : 1,
                 countMax = GameTableCsv.TryInt(c[7], out int mx) ? mx : 1,
-                firstClearBonus = GameTableCsv.TryInt(c[8], out int fb) ? fb : 0
+                firstClearBonus = GameTableCsv.TryInt(c[8], out int fb) ? fb : 0,
+                monsterType = c.Length > 9 ? c[9].Trim() : ""
             };
             r.type = c[2].Trim().Equals("Fragment", StringComparison.OrdinalIgnoreCase)
                 ? DropType.Fragment
@@ -114,6 +127,15 @@ public static class StageDropTable
     /// </summary>
     public static List<DropResult> RollDrops(int gameChapter, string stageType, bool firstClear)
     {
+        return RollDrops(gameChapter, stageType, firstClear, null);
+    }
+
+    /// <summary>
+    /// 掷一次关卡掉落。monsterTypeBias 为本关主导怪物类型（null/空=不限制，按旧行为全生效）；
+    /// 带 monsterType 的行仅在该类型匹配时参与掷骰。其余逻辑同旧版。
+    /// </summary>
+    public static List<DropResult> RollDrops(int gameChapter, string stageType, bool firstClear, string monsterTypeBias)
+    {
         var res = new List<DropResult>();
         EnsureLoaded();
         var pool = MainPool(gameChapter);
@@ -126,6 +148,12 @@ public static class StageDropTable
             if (r.chapter != 0 && r.chapter != gameChapter) continue;
             if (!string.IsNullOrEmpty(r.stageType) &&
                 !r.stageType.Equals(stageType, StringComparison.OrdinalIgnoreCase)) continue;
+            // 2026-09-26 主人拍板：按怪物类型分池——带类型的行只在主导类型匹配时生效
+            if (!string.IsNullOrEmpty(r.monsterType) &&
+                !r.monsterType.Equals("any", StringComparison.OrdinalIgnoreCase) &&
+                (monsterTypeBias == null ||
+                 !r.monsterType.Equals(monsterTypeBias, StringComparison.OrdinalIgnoreCase)))
+                continue;
 
             // 保底只针对徽记（与旧逻辑一致）
             if (r.type == DropType.Badge && firstClear && r.firstClearBonus > bonus) bonus = r.firstClearBonus;

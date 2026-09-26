@@ -260,6 +260,11 @@ public class Monster : UnitBase
     private int _spriteIndex;
     private bool _isBossUnit;
     private bool _eliteWave;
+    // 2026-09-26 主人拍板：本怪物是魔法型(true)还是物理型(false)，攻击/防御二选一不混搭。
+    // 该值在 Init 时按 monster_attack_style.csv 的 magicChance 掷骰一次后固定，终身不变。
+    private bool _isMagicType;
+    /// <summary>本怪物随机判定出的物理/魔法类型（Init 掷一次后固定）。供掉落按类型区分时读取。</summary>
+    public bool IsMagicType => _isMagicType;
     bool _eliteGlass;
     bool _bossPhase2Started;
     bool _bossPhaseShiftBusy;
@@ -610,6 +615,10 @@ public class Monster : UnitBase
                          && scaleMultiplier < GameConfig.BOSS_SCALE_MULTIPLIER - 0.05f;
         bool bossUnit = (template != null && template.isBoss) || scaleMultiplier >= GameConfig.BOSS_SCALE_MULTIPLIER - 0.05f;
         float rootScale = GameConfig.RollMonsterRootScale(eliteWave, bossUnit);
+        // Boss 不参与本次缩小（主人 2026-09-26 拍板）：MONSTER_SMALL_SHRINK 已乘进 MONSTER_SCALE_MIN/MAX，
+        // 这里对 Boss 除回去以恢复原尺寸；普通怪/精英仍保持 ×0.7（Normal : Elite = 1 : 1.3 不变）。
+        if (bossUnit && !GameConfig.MONSTER_BOSS_APPLY_SMALL_SHRINK && GameConfig.MONSTER_SMALL_SHRINK > 0.0001f)
+            rootScale /= GameConfig.MONSTER_SMALL_SHRINK;
         GameConfig.AttachToUnitRoot(MoveRoot);
         MoveRoot.localScale = Vector3.one * rootScale;
         ApplyMonsterVisualScaleRules();
@@ -712,8 +721,41 @@ public class Monster : UnitBase
             attr.SetAttr(AttrType.MaxHp, GameConfig.TEST_BOSS_HP);
         // Boss 原先只有血量 TTK 加成，攻击没有 —— 补上，否则后期 Boss 打人比自家远程杂兵还轻
         float atkTtkMul = bossUnit ? GameConfig.BOSS_TTK_ATK_MUL : 1f;
-        attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul);
-        attr.SetAttr(AttrType.Defense, baseDef * scale);
+        // 2026-09-26 主人拍板：怪物只分物理 / 魔法，攻击与防御二选一、不混搭。
+        // 魔法型（掷骰命中 magicChance）→ 物攻/物防置 0，攻击与防御全部走 MagicAttack / MagicDefense；
+        // 物理型 → 魔攻/魔防置 0，只走 Attack / Defense。
+        // 判定走 MonsterAttackTypeResolver。2026-09-26 主人拍板：刷怪配置整合到关卡级——
+        // 优先按 stage_spawn.csv 本关 magicChance 掷骰（含 Boss 0.5）；本关未配才回退单怪级。
+        int gChapter = BattleManager.Instance != null ? BattleManager.Instance.CurrentChapter : monsterChapter;
+        StageType gStageType = BattleManager.Instance != null && BattleManager.Instance.currentStage != null
+            ? BattleManager.Instance.currentStage.type : StageType.Normal;
+        bool isMagicType = MonsterAttackTypeResolver.IsMagicMonster(
+            monsterChapter, Mathf.Max(1, effectiveSpriteIndex), gChapter, gStageType);
+        _isMagicType = isMagicType;
+        // 2026-09-26 主人拍板：魔法型强制改法球弹道(Ranged)→视觉与伤害类型(魔法)一致；物理型保持表内 style。
+        if (isMagicType)
+            _attackStyle = MonsterAttackStyle.Ranged;
+        if (isMagicType)
+        {
+            attr.SetAttr(AttrType.Attack, 0f);
+            attr.SetAttr(AttrType.Defense, 0f);
+            // 魔法侧数值：配表(MonsterConfig.baseMagicAttack/Defense)给了就用，没给则等比沿用本单位的 baseAttack / baseDef。
+            float baseMagAtk = (template != null && template.baseMagicAttack > 0f)
+                ? template.baseMagicAttack
+                : baseAtk * GameConfig.MONSTER_MAGIC_ATK_RATIO;
+            float baseMagDef = (template != null && template.baseMagicDefense > 0f)
+                ? template.baseMagicDefense
+                : baseDef * GameConfig.MONSTER_MAGIC_DEF_RATIO;
+            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul);
+            attr.SetAttr(AttrType.MagicDefense, baseMagDef * scale);
+        }
+        else
+        {
+            attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul);
+            attr.SetAttr(AttrType.Defense, baseDef * scale);
+            attr.SetAttr(AttrType.MagicAttack, 0f);
+            attr.SetAttr(AttrType.MagicDefense, 0f);
+        }
         float atkSpeedMul = GameConfig.MONSTER_ATK_SPEED_MUL;
         if (BattleManager.Instance != null)
             atkSpeedMul *= BattleManager.Instance.runMonsterAtkSpeedMul;
@@ -1029,6 +1071,20 @@ public class Monster : UnitBase
     public bool IsEliteWave => _eliteWave;
     public bool IsEliteGlass => _eliteGlass;
 
+    /// <summary>
+    /// 是否魔法伤害单位（主人 2026-09-26 口径）：法球（MonsterAttackStyle.Ranged）打的是魔法伤害，
+    /// 走目标的魔法防御；近战 / 弓走物理防御。小怪、精英、Boss 一视同仁 ——
+    /// 主人明确「不止小怪，精英和 Boss 也是魔法伤害的单位」。
+    /// </summary>
+    // 2026-09-26 主人拍板：伤害类型随「随机判定出的物理/魔法类型」走（与属性路由一致），不再看 style。
+    public override bool IsMagicDamageDealer() => _isMagicType;
+
+    /// <summary>2026-09-26 主人拍板：魔法型取魔攻、物理型取物攻（技能 / 阶段技结算用，避免魔法怪 Attack=0 导致技能打不出伤害）。</summary>
+    float GetMainAttackStat()
+    {
+        return _isMagicType ? attr.GetAttr(AttrType.MagicAttack) : attr.GetAttr(AttrType.Attack);
+    }
+
     public int GetBossPhase()
     {
         if (!_isBossUnit || attr == null) return 0;
@@ -1101,7 +1157,7 @@ public class Monster : UnitBase
         }
         if (disc != null) Destroy(disc);
         if (!isDead)
-            ApplySkillDamage(attr.GetAttr(AttrType.Attack) * 0.85f, 4.5f, null, transform.position.x);
+            ApplySkillDamage(GetMainAttackStat() * 0.85f, 4.5f, null, transform.position.x);
         _bossPhaseShiftBusy = false;
     }
 
@@ -1430,7 +1486,7 @@ public class Monster : UnitBase
         float mult = skill != null ? skill.damageMultiplier : 2.2f;
         float extra = skill != null ? skill.baseDamage : 0f;
         float tier = (_isBossUnit || _eliteWave) ? 1f : GameConfig.MONSTER_NORMAL_SKILL_DAMAGE_MUL;
-        float damage = (attr.GetAttr(AttrType.Attack) * mult + extra) * tier;
+        float damage = (GetMainAttackStat() * mult + extra) * tier;
         float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
         float telegraph = GameConfig.BOSS_PHASE1_TELEGRAPH;
 

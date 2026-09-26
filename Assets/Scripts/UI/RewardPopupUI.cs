@@ -16,6 +16,8 @@ using UnityEngine.UI;
 ///       ≤4 个奖励整体保持原样，>4 个分成多行并把框体上下拉伸。
 ///       找不到预制体时用纯色块兜底，兜底层级与预制体一致，排版代码两条路通用。
 /// 字体：Open 时 GameFonts.ApplyToHierarchy 统一刷（中文 fusion-pixel / 数字 PixelFont）。
+/// 层级：画布 sortingOrder 用 <see cref="GameConfig.UiSort.RewardPopup"/>(905)——高于 TownPopup(900)，
+///       免得与每日登录界面同为 900 时排序不定被盖住；低于 BattlePopup(920) 与 Toast(11000)。
 ///
 /// 铁律：**以主人预制体里的效果为准** —— 尺寸/位置/美术图一律从「首次打开时捕获的预制体原始几何」
 /// （见 <see cref="Geo"/> / <see cref="BaseGeo"/>）出发重算，不允许用代码常量覆盖主人调好的值。
@@ -100,6 +102,11 @@ public class RewardPopupUI : MonoBehaviour
     /// 面板 localScale 恒 1、alpha 恒 1，不再跑任何协程（动画本身也只动 scale / alpha）。
     /// </summary>
     public static bool EnableImpactAnim = true;
+
+    /// <summary>整体缩放系数（主人 2026-09-26 要求：获得奖励弹窗整体缩小 30%）。关掉开关即回到预制体原始大小。</summary>
+    public const float OverallScale = 0.7f;
+    /// <summary>一键回退开关：置 false 完全还原预制体尺寸。</summary>
+    public static bool EnableOverallScale = true;
 
     // B12 入场动画参数（只动 scale 与 alpha，**不改面板尺寸 / 位置 / 九宫格**，主人铁律）
     const float IMPACT_TIME = 0.24f;    // 总时长（秒）
@@ -234,7 +241,7 @@ public class RewardPopupUI : MonoBehaviour
         var canvas = GetComponent<Canvas>();
         if (canvas == null) { BuildFallback(); return; }
         // 运行时补 GraphicRaycaster / 相机 / 缩放器（预制体里没有也不许加，铁律：不碰 .prefab）
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.RewardPopup);
 
         var panelT = FindChild(transform, "Panel");
         _panel = panelT != null ? panelT.gameObject : null;
@@ -314,7 +321,7 @@ public class RewardPopupUI : MonoBehaviour
     {
         var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.RewardPopup);
 
         var rt = (RectTransform)transform;
         rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one;
@@ -399,7 +406,7 @@ public class RewardPopupUI : MonoBehaviour
         gameObject.SetActive(true);
         // DDOL 弹窗每次 Show 重新绑一次相机（切场景后旧相机会失效）
         var cv = GetComponent<Canvas>();
-        if (cv != null) UICanvasSetup.RefreshPopup(cv, GameConfig.UiSort.TownPopup);
+        if (cv != null) UICanvasSetup.RefreshPopup(cv, GameConfig.UiSort.RewardPopup);
         Layout(items);                              // 尺寸先自己定好，再交给字体/动画
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
@@ -433,8 +440,19 @@ public class RewardPopupUI : MonoBehaviour
     void ResetImpact()
     {
         if (_impactCo != null) { StopCoroutine(_impactCo); _impactCo = null; }
-        if (_panel != null) _panel.transform.localScale = _panelScaleCaptured ? _panelBaseScale : Vector3.one;
+        ApplyPanelScale();   // 统一走一处：关掉整体缩放开关也能正确还原
         if (_panelGroup != null) _panelGroup.alpha = 1f;
+    }
+
+    /// <summary>面板的目标缩放 = 预制体原始缩放 × 整体系数（未捕获原始值时用 Vector3.one 代替）。只此一处产出缩放，避免与 B12 动画互相覆盖。</summary>
+    Vector3 PanelTargetScale()
+        => (_panelScaleCaptured ? _panelBaseScale : Vector3.one) * (EnableOverallScale ? OverallScale : 1f);
+
+    /// <summary>把目标缩放写到 Panel 上（Panel 为空直接什么都不做）。只动 localScale，不碰任何尺寸 / 位置。</summary>
+    void ApplyPanelScale()
+    {
+        if (_panel == null) return;
+        _panel.transform.localScale = PanelTargetScale();
     }
 
     System.Collections.IEnumerator CoImpact()
@@ -450,6 +468,8 @@ public class RewardPopupUI : MonoBehaviour
             _panelBaseScale = tr.localScale;   // 记下预制体缩放，动画从它出发、也回到它
             _panelScaleCaptured = true;
         }
+        // 整体系数在这里一次性并入基准：动画前后都回到同一个「目标缩放」，不会把 0.7 打回 1
+        var target = PanelTargetScale();
         float t = 0f;
         while (t < IMPACT_TIME)
         {
@@ -459,11 +479,11 @@ public class RewardPopupUI : MonoBehaviour
             float s = p < 0.7f
                 ? Mathf.Lerp(IMPACT_FROM, IMPACT_OVER, p / 0.7f)
                 : Mathf.Lerp(IMPACT_OVER, 1f, (p - 0.7f) / 0.3f);
-            tr.localScale = new Vector3(_panelBaseScale.x * s, _panelBaseScale.y * s, _panelBaseScale.z);
+            tr.localScale = new Vector3(target.x * s, target.y * s, target.z);
             _panelGroup.alpha = Mathf.Clamp01(p * 1.6f);   // 透明度比缩放更快到位，避免"半透明软弹出"
             yield return null;
         }
-        tr.localScale = _panelBaseScale;
+        ApplyPanelScale();
         _panelGroup.alpha = 1f;
         _impactCo = null;
     }
@@ -476,6 +496,14 @@ public class RewardPopupUI : MonoBehaviour
     {
         if (_baseCaptured) return;
         var panelT = _panel != null ? _panel.transform : null;
+
+        // T2：顺手把 Panel 的预制体原始 localScale 也登记一份（**不乘系数**，原始值绝不能被 0.7 污染）。
+        // 这样即使 EnableImpactAnim=false、CoImpact 的捕获块没跑过，整体缩放也有正确基准。
+        if (!_panelScaleCaptured && panelT != null)
+        {
+            _panelBaseScale = panelT.localScale;
+            _panelScaleCaptured = true;
+        }
 
         _titleRt = FindChild(panelT, "Title") as RectTransform;
         _confirmRt = _confirmBtn != null
@@ -570,6 +598,9 @@ public class RewardPopupUI : MonoBehaviour
 
             FillCell(cell.transform, items[i]);
         }
+
+        // 整体缩放在几何算完后施加；随后 PlayImpact 会在同一基准上叠加缩放动画
+        ApplyPanelScale();
     }
 
     /// <summary>把一个格子的图标 / 文案 / 碎片卡填好（几何一律不动）。</summary>

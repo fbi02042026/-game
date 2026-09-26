@@ -23,6 +23,15 @@ public static class PlayerJobBaseStats
         public float AttackInterval;
         public float CollisionScale;
         public string StarterWeaponId;
+        /// <summary>2026-09-26 新增表列：起步主手武器模板 id（第 14 列）。空 = 回退 PlayerJobDefs 里的写死值。</summary>
+        public string StarterMainTemplateId;
+        /// <summary>2026-09-26 新增表列：起步副手武器模板 id（第 15 列）。空 = 该职业不发副手。</summary>
+        public string StarterOffTemplateId;
+        /// <summary>
+        /// 2026-09-26 主人拍板新增表列：职业伤害类型（第 16 列）—— "magic"=魔法职业(法师/牧师)，其余(空/"physical")=物理职业。
+        /// 决定武器掉落按物理/魔法分池（主人要求「魔法职业只掉魔法装备」），配表不写死。
+        /// </summary>
+        public string DamageType;
     }
 
     static readonly Dictionary<string, Row> _byConfigId = new Dictionary<string, Row>();
@@ -68,8 +77,13 @@ public static class PlayerJobBaseStats
             row.CritDamage = ParsePercent(c[7]);
             GameTableCsv.TryFloat(c[8], out row.AttackRangePx);
             GameTableCsv.TryFloat(c[9], out row.AttackInterval);
-            GameTableCsv.TryFloat(c[10], out row.CollisionScale);
-            _byConfigId[row.ConfigId] = row;
+                GameTableCsv.TryFloat(c[10], out row.CollisionScale);
+                // 起步武器模板 id：旧表没有这两列，缺列时留空（回退写死值）
+                if (c.Length > 13) row.StarterMainTemplateId = c[13].Trim();
+                if (c.Length > 14) row.StarterOffTemplateId = c[14].Trim();
+                // 2026-09-26 主人拍板：伤害类型列（第 16 列）——magic=魔法职业，缺列留空=物理
+                if (c.Length > 15) row.DamageType = c[15].Trim();
+                _byConfigId[row.ConfigId] = row;
             if (TryMapJob(row.ConfigId, out PlayerJobId job))
                 _byJob[job] = row;
         }
@@ -82,6 +96,18 @@ public static class PlayerJobBaseStats
     {
         EnsureLoaded();
         return _byJob.TryGetValue(job, out row);
+    }
+
+    /// <summary>
+    /// 2026-09-26 主人拍板：该职业是否魔法职业——**读表第 16 列 damageType**，不写死。
+    /// "magic"=魔法（法师/牧师）→ 武器掉落走魔法池；其余=物理。
+    /// 表缺失时兜底：Mage/Priest 算魔法（与表里 P005/P006 填的一致）。
+    /// </summary>
+    public static bool IsMagicJob(PlayerJobId job)
+    {
+        if (TryGet(job, out var row) && !string.IsNullOrEmpty(row.DamageType))
+            return row.DamageType.Equals("magic", System.StringComparison.OrdinalIgnoreCase);
+        return job == PlayerJobId.Mage || job == PlayerJobId.Priest;
     }
 
     /// <summary>开战套用固定基础属性（覆盖当前战斗属性核心项）。</summary>
@@ -122,7 +148,9 @@ public static class PlayerJobBaseStats
         float ms = GameConfig.BASE_MOVE_SPEED * (row.BaseMoveSpeed / 100f);
         W(AttrType.MoveSpeed, ms);
         W(AttrType.CritRate, row.CritRate);
-        W(AttrType.CritDamage, row.CritDamage > 0f ? row.CritDamage : GameConfig.DefaultCritMultiplier);
+        // 2026-09-26 主人拍板：暴击倍率统一 = 2，不再读本表「暴击伤害」列（原 150%~180%）。
+        // 表里那一列已同步改成 200%，这里仍以 GameConfig.CRIT_MULTIPLIER 为准，避免以后改表又漂回去。
+        W(AttrType.CritDamage, GameConfig.CRIT_MULTIPLIER);
         if (row.AttackInterval > 0.05f)
             W(AttrType.AttackSpeed, 1f / row.AttackInterval);
         else if (toBase)

@@ -21,6 +21,8 @@ public static class GameConfig
     public const float BATTLE_LANE_MAX = BATTLE_LANE_HALF * 0.9025f;
     /// <summary>站立线下方可行走半高（相对 HALF 再缩约 45%，取负）。</summary>
     public const float BATTLE_LANE_MIN = -BATTLE_LANE_HALF * 0.54675f;
+    /// <summary>可行走区域整体 Y 下移量（世界单位，正值=往下挪）。主人要"往下挪一点点"，调这个值即可二次微调。</summary>
+    public const float BATTLE_LANE_Y_DROP = 0.12f;
     public const float BATTLE_LANE_MOVE_SPEED = 1.35f;
     /// <summary>摇杆左右移速倍率（相对 GetCombatMoveSpeed）。</summary>
     public const float HERO_MANUAL_MOVE_X_MUL = 1.8f;
@@ -28,6 +30,23 @@ public static class GameConfig
     public const float HERO_MANUAL_RELEASE_HOLD = 0.25f;
     /// <summary>近战出手允许的车道 Y 误差：走到目标水平对面，上下可略偏，避免错位砍刀光发飘。</summary>
     public const float MELEE_LANE_ALIGN_TOL = 0.22f;
+
+    /// <summary>追敌车道对齐容错开关：true=不严格站到与目标同一条水平线（留随机偏移）；false=完全回退原行为。</summary>
+    public const bool ENABLE_LANE_ALIGN_TOLERANCE = true;
+
+    /// <summary>酒馆功能开关（2026-09-26 主人拍板：佣兵功能待调好再开，点击酒馆先显示"未开放"）。调好后改成 true。</summary>
+    public const bool TAVERN_ENABLED = false;
+    /// <summary>车道对齐容错带（世界单位，Y 方向）：站位最多保留这么多上下偏移，不再收敛到严丝合缝。
+    /// 取值依据：车道全高 MAX-MIN≈1.24，角色身高约 1.2 单位，0.12≈身高 10%（肉眼能看出错位、又不散）；
+    /// 且恒小于近战出手闸门 MELEE_LANE_ALIGN_TOL(0.22)，绝不会挡住普攻。</summary>
+    public const float LANE_ALIGN_TOLERANCE = 0.12f;
+    /// <summary>容错偏移幅度下限比例：实际偏移 = TOLERANCE × Random(该值, 1)，避免每场都偏得一模一样。</summary>
+    public const float LANE_ALIGN_TOLERANCE_MIN_RATIO = 0.45f;
+    /// <summary>左右容错（世界单位）：近战站位比攻击射程再近这么一点（恒更靠内，进距普攻判定不受影响）。
+    /// 剑射程 0.96，取 0.08 ≈ 8%；设 0 即取消左右偏移。注意：仅作用于近战站位距离，远程英雄不适用。</summary>
+    public const float LANE_ALIGN_TOLERANCE_X = 0.08f;
+    /// <summary>车道对齐速度倍率（乘在换道速度上）。1=不改手感；调小更缓更"稳"，调大更快"贴脸"。</summary>
+    public const float LANE_ALIGN_SPEED_MUL = 1f;
 
     /// <summary>像素 → 世界单位（对齐数值表「攻击范围(像素)」）</summary>
     public static float PixelsToUnits(float pixels) => pixels / PIXEL_PER_UNIT;
@@ -156,6 +175,8 @@ public static class GameConfig
         public const int StoryNaming = 560;
         public const int TutorialHint = 600;
         public const int TownPopup = 900;
+        /// 通用「获得奖励」弹窗：必须高于 TownPopup(900)——否则与每日登录界面同为 900 时排序不定、会被盖住；低于 BattlePopup(920) 与 Toast(11000)。
+        public const int RewardPopup = 905;
         public const int BattleStageMap = 880;
         public const int BattlePopup = 920;
         public const int BattleLegacyPool = 940;
@@ -176,8 +197,14 @@ public static class GameConfig
     /// 普通怪根缩放。用户说的 250~300 是 Canvas≈0.01 下的观感值；
     /// 迁到 WorldRoot 后等价为 2.5~3.0，并把 Monsters 子节点归一为 1。
     /// </summary>
-    public const float MONSTER_SCALE_MIN = 3.75f;
-    public const float MONSTER_SCALE_MAX = 4.5f;
+    /// <summary>小怪整体缩小 30%（主人 2026-09-26 定）：在原有 MIN/MAX 之上乘 0.7，不写死新数值。
+    /// 精英仍乘 ELITE_SCALE_MULTIPLIER（Normal : Elite 保持 1 : 1.3）；Boss 除外，见下。</summary>
+    public const float MONSTER_SMALL_SHRINK = 0.7f;
+    /// <summary>Boss 是否参与 MONSTER_SMALL_SHRINK 缩小（主人 2026-09-26 拍板：Boss 先不缩，只缩小怪）。
+    /// false = Boss 保持原尺寸，在 Monster 设置根缩放时把 0.7 除回去。</summary>
+    public const bool MONSTER_BOSS_APPLY_SMALL_SHRINK = false;
+    public const float MONSTER_SCALE_MIN = 3.75f * MONSTER_SMALL_SHRINK;
+    public const float MONSTER_SCALE_MAX = 4.5f * MONSTER_SMALL_SHRINK;
     public const float MONSTER_CHILD_REF_SCALE = 1f;
     /// <summary>Monstersmoban / ani 片段已按 scale=1 录制，不再做 Canvas→战斗缩放</summary>
     public const float MONSTER_PREFAB_MONSTERS_SCALE = 1f;
@@ -399,9 +426,50 @@ public static class GameConfig
     public const int BASE_DEFENSE = 8;
     public const float BASE_CRIT_RATE = 0.05f;
     public const float BASE_CRIT_DAMAGE = 0.5f; // 额外暴击伤害（无职业表时总倍率 1.5+该值）
+    /// <summary>
+    /// 暴击倍率（主人 2026-09-26 拍板 = 2，统一口径）。
+    /// 原值：DefaultCritMultiplier = 1.5f + BASE_CRIT_DAMAGE = 2.0f，但 player_job_base_stats 表的
+    /// 「暴击伤害」列（150%~180%）会把实战倍率覆盖成 1.5~1.8，所以现在统一写本常量，
+    /// 不再读表列（见 PlayerJobBaseStats.WriteCombat）。
+    /// </summary>
+    public const float CRIT_MULTIPLIER = 2f;
     /// <summary>无职业/表暴击伤害时的默认暴击倍率。</summary>
-    public static float DefaultCritMultiplier => 1.5f + BASE_CRIT_DAMAGE;
+    public static float DefaultCritMultiplier => CRIT_MULTIPLIER;
+
+    /// <summary>
+    /// 吸血（主人 2026-09-26 拍板）：造成伤害后按本比例给「造成伤害的一方」回血（10%）。
+    /// 装备词缀「吸血」（AttrType.LifeSteal，配表 0.02~0.05 的比例值）在其上叠加；没穿吸血装就是 10%。
+    /// </summary>
+    public const float LIFESTEAL_RATIO = 0.1f;
+
+    /// <summary>
+    /// 魔法防御兜底倍率：目标没写 MagicDefense（玩家/佣兵目前没配魔法防御）时，
+    /// 按「物理 Defense × 本值」当魔法防御。主人没给魔法防御数值 → 等比沿用物理防御（1.0），
+    /// 等配表补了真值再改这里。
+    /// </summary>
+    public const float MAGIC_DEFENSE_FALLBACK_RATIO = 1f;
+    /// <summary>怪物魔法攻击 = baseAttack × 本值（主人没给数 → 等比沿用物理攻击）。</summary>
+    public const float MONSTER_MAGIC_ATK_RATIO = 1f;
+    /// <summary>怪物魔法防御 = 物理防御 baseDef × 本值（主人没给数 → 等比沿用物理防御）。</summary>
+    public const float MONSTER_MAGIC_DEF_RATIO = 1f;
+
+    /// <summary>
+    /// 火/冰附加伤害「每点词缀 = 百分之几」（主人 2026-09-26 拍板「冰火附加按百分比」）。
+    /// 附加伤害 = 最终伤害 × 词缀值 × 本值。默认 0.01f 即 1%/点（词缀值 5 → +5% 最终伤害）。
+    /// 后期调数值只改这里：想让词缀值 5 变成 +50%，把本值改成 0.1f 即可。
+    /// </summary>
+    public const float FIRE_BONUS_PER_POINT = 0.01f;
+    /// <summary>同上，冰霜附加每点词缀 = 百分之几（默认 1%/点）。</summary>
+    public const float ICE_BONUS_PER_POINT = 0.01f;
     public const float BASE_HP_REGEN_RATE = 0.005f; // MaxHP×0.5%/秒
+    // === 毒 DOT（游侠武器「中毒」词缀结算）2026-09-26 主人拍板：之前毒根本没落地，本次补上 ===
+    // 节奏参数全部集中在这里，后期想「调快/调痛」只改本段，不用动 PoisonDotRunner。
+    /// <summary>毒 DOT 跳伤间隔（秒）。之前没有 DOT，本值即首版默认。</summary>
+    public const float POISON_TICK_INTERVAL = 0.5f;
+    /// <summary>毒 DOT 总持续时间（秒）。照抄流血 3s。</summary>
+    public const float POISON_DURATION = 3f;
+    /// <summary>毒每跳伤害系数：每跳伤害 = 攻击者攻击力 × 中毒词缀值(如0.10) × 本值。</summary>
+    public const float POISON_DPS_RATIO = 0.5f;
     public const int BASE_STRENGTH = 5;
     public const int BASE_INTELLIGENCE = 5;
     public const int BASE_AGILITY = 5;
@@ -490,6 +558,26 @@ public static class GameConfig
     /// </summary>
     public const float SKILL_COOLDOWN_REDUCE_CAP = 0.5f;
 
+    /// <summary>
+    /// 技能冷却总倍率（2026-09-26 主人要求：技能 CD 延长 1 倍；后又反馈「恢复还是太快」，再延长 1 倍 → ×4）。
+    /// 单点旋钮：玩家技能在 PlayerSkillDefs 装载完统一乘（表 / Fallback / UI 文案同源），
+    /// 佣兵技能在 MercSkillCaster.Bind 乘。要调回来只改这一个值。
+    /// 决定「玩家/佣兵技能多久能再放一次」的就是它（叠加在 CSV/表的基础 CD 之上）。
+    /// </summary>
+    public const float SKILL_COOLDOWN_MUL = 4f;
+
+    /// <summary>
+    /// 圣盾壁垒（holy_barrier）护盾量 = 最大生命 × 本系数（抵扣型护盾：先扣盾、再扣血）。
+    /// 2026-09-26 主人拍板：holy_barrier 从「防御+35%」改成抵扣型护盾。后期升级只改这个系数。
+    /// </summary>
+    public const float HOLY_BARRIER_SHIELD_RATIO = 0.35f;
+
+    /// <summary>
+    /// 圣盾壁垒（holy_barrier）护盾持续秒数。2026-09-26 主人拍板：原「防御+35%」改用护盾后，
+    /// 覆盖时长单独提成常量，后期升级可改这里延长/缩短。
+    /// </summary>
+    public const float HOLY_BARRIER_SHIELD_DURATION = 5f;
+
     // ============================================================
     // 玩家被动技能：纯冷却制（2026-09-15 改版）
     // 去掉能量槽，改为「开局错峰给初始 CD → CD 好按槽序放一个 → 放完重进自己 CD」。
@@ -505,7 +593,8 @@ public static class GameConfig
     /// 时间轴用 Time.time（与 SkillSystem 冷却递减的 Time.deltaTime 同轴），
     /// 顿帧/暂停时两者同步停走，解冻后不会补放。
     /// </summary>
-    public const float PLAYER_SKILL_GCD = 1.2f;
+    // 2026-09-26：随技能 CD 一起 ×2（原 1.2），间隔与冷却同口径延长
+    public const float PLAYER_SKILL_GCD = 2.4f;
 
     /// <summary>
     /// 开局错峰：第 1 槽固定秒数（让它最快登场）。
@@ -645,8 +734,15 @@ public static class GameConfig
     public static float GUILD_SCALE_PER => CombatTuningTable.Get("GUILD_SCALE_PER", 0.02f);
 
     [Header("战斗配置")]
-    /// <summary>怪物伤害倍率（数值表已校准，默认 1）</summary>
-    public const float MONSTER_DAMAGE_MULTIPLIER = 1f;
+    /// <summary>
+    /// 怪物伤害倍率（数值表已校准）。
+    /// 2026-09-26 主人反馈「玩家受击只掉 1 血、开不开护盾都是 -1」：
+    /// monster_stats 的 baseAttack 只有 3.6~13.7，而玩家防御起步就有 10.5（剑盾）+ 体力 5 + 装备，
+    /// DamageFormula.FinalHit 的减法结果长期 ≤ 0，被 MinDamage=1 钳成 1 —— 不是护盾没接，是根本没得可减。
+    /// 【原值 1f → 新值 3f】第 1 章杂兵 raw 26~41：剑盾（防≈20）净伤 6~21，法师净伤 16~31。
+    /// 这是唯一的全局旋钮（Monster.cs 攻击赋值处），Boss 同步放大（原净伤≈18 → 现≈93），嫌狠就往下调。
+    /// </summary>
+    public const float MONSTER_DAMAGE_MULTIPLIER = 3f;
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备
     public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手（已改为包内同部位唯一，无穿戴槽）

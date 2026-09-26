@@ -188,7 +188,8 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
         if (c.roleIcon != null)
         {
-            var sp = MercHireSession.LoadJobIcon(job);
+            // 招募卡的 Role 角标 = 佣兵职业四分类徽标（Icons/职业icon）
+            var sp = MercHireSession.LoadMercJobBadge(job);
             c.roleIcon.sprite = sp;
             c.roleIcon.enabled = sp != null;
             c.roleIcon.preserveAspect = true;

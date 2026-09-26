@@ -53,6 +53,9 @@ public class FocusMarkSystem : MonoBehaviour
             return;
         }
 
+        if (_marked != null && !IsMarkedEnemyAvailable(_marked))
+            ExpireMark();
+
         UnitBase nearest = FindNearestEnemyToHero(hero);
         float now = Time.time;
 
@@ -92,7 +95,8 @@ public class FocusMarkSystem : MonoBehaviour
         for (int i = 0; i < list.Count; i++)
         {
             var e = list[i];
-            if (e == null || e.isDead) continue;
+            if (e == null || e.isDead || !e.gameObject.activeInHierarchy) continue;
+            if (!GameConfig.IsInCombatViewport(e)) continue;
             float d = Mathf.Abs(hx - UnitBase.GetCombatX(e));
             if (d < bestD)
             {
@@ -101,6 +105,22 @@ public class FocusMarkSystem : MonoBehaviour
             }
         }
         return best;
+    }
+
+    static bool IsMarkedEnemyAvailable(UnitBase marked)
+    {
+        if (marked == null || marked.isDead || !marked.gameObject.activeInHierarchy
+            || !GameConfig.IsInCombatViewport(marked))
+            return false;
+
+        var list = BattleManager.Instance?.monsters;
+        if (list == null) return false;
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (list[i] == marked)
+                return true;
+        }
+        return false;
     }
 
     void ExpireMark()

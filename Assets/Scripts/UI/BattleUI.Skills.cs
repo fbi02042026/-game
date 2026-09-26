@@ -27,6 +27,8 @@ public partial class BattleUI : MonoBehaviour
             if (string.IsNullOrEmpty(id))
             {
                 slot.SetAvatar(null);
+                // 没装备技能：底框压暗（base × 0.45），空槽仍保留美术的框体
+                slot.SetEmptyDim(true);
                 // 空槽保留美术的框体，但不写「无」字：
                 // 与佣兵技能槽同一口径（没有就不显示，别留空字占位）。
                 slot.SetLabelVisible(false);
@@ -45,6 +47,8 @@ public partial class BattleUI : MonoBehaviour
             var icon = active != null ? active.icon : null;
             if (icon == null) icon = LoadRunSkillIcon(id);
             slot.SetAvatar(icon);
+            // 已装备技能：底框还原原始色，不压暗
+            slot.SetEmptyDim(false);
             // 底字不再写死「被动」：有技能就显示技能名
             slot.SetSkillName(active != null ? active.skillName : id);
             // 右下角等级：2026-09-22 主人要求——战斗内技能只升级，右下角只显示**数字**，

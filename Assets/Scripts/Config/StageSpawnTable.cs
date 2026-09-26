@@ -12,6 +12,8 @@ public static class StageSpawnTable
         public int waveCountMin;
         public int waveCountMax;
         public float eliteScaleMul;
+        /// <summary>本关魔法怪占比(0~1)。-1 = 表未配置，由调用方回退单怪级(magicChance)。</summary>
+        public float magicChance;
         public bool useFormulaForTotal;
     }
 
@@ -26,6 +28,7 @@ public static class StageSpawnTable
         public int waveCountMin;
         public int waveCountMax;
         public float eliteScaleMul;
+        public float magicChance;
         public bool useFormulaForTotal;
     }
 
@@ -66,6 +69,9 @@ public static class StageSpawnTable
                 waveCountMin = GameTableCsv.TryInt(c[4], out int wmin) ? wmin : 3,
                 waveCountMax = GameTableCsv.TryInt(c[5], out int wmax) ? wmax : 6,
                 eliteScaleMul = GameTableCsv.TryFloat(c[6], out float esm) ? esm : 1f,
+                // 2026-09-26 主人拍板：刷怪配置整合——magicChance(第8列) = 本关魔法怪占比。
+                // -1 = 未配置，由调用方回退 monster_attack_style.csv 的单怪级判定。
+                magicChance = c.Length > 7 && GameTableCsv.TryFloat(c[7], out float mc) ? mc : -1f,
                 useFormulaForTotal = !GameTableCsv.TryInt(c[3], out _) || mt <= 0
             };
             if (row.useFormulaForTotal)
@@ -125,6 +131,7 @@ public static class StageSpawnTable
             waveCountMin = b.waveCountMin,
             waveCountMax = b.waveCountMax,
             eliteScaleMul = b.eliteScaleMul,
+            magicChance = b.magicChance,
             useFormulaForTotal = b.useFormulaForTotal
         };
         return true;

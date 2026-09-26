@@ -130,6 +130,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     internal bool _allWavesSpawned = false;
     private bool _stageCleared = false;
     internal int _totalMonstersSpawnedThisStage = 0;
+    // 2026-09-26 主人拍板：按本关击杀的物理/魔法怪数量推导「主导怪物类型」，用于掉落按类型分池。
+    int _physicalKills, _magicKills;
     /// <summary>当前进行中的波次下标；-1=尚未开刷</summary>
     internal int _activeWaveIndex = -1;
     private bool _waveAnnounceRunning;
@@ -870,6 +872,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         _portalEnterVfxPlayed = false;
         _chuanSongMen = null;
         _totalMonstersSpawnedThisStage = 0;
+        _physicalKills = 0;
+        _magicKills = 0;
         _eliteToastShownThisStage = false;
         AllowMonsterMapEnter = false;
         // 纯冷却制：清能量换成「解除间隔 + 按槽位错峰上初始 CD」
@@ -1745,6 +1749,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             }
         }
         if (m.IsBossUnit) RunStats.BossKillCount++;
+        // 2026-09-26 主人拍板：累计本关物理/魔法击杀数，用于掉落按类型分池（主导类型 = 数量多者）。
+        if (m.IsMagicType) _magicKills++;
+        else _physicalKills++;
         if (m.LastDamageSource != null && m.LastDamageSource.isAlly)
             RecordAllyKill(m.LastDamageSource);
         AdventureLogAchievements.OnMonsterKilled(m, CurrentChapter);
@@ -1949,7 +1956,11 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                          : currentStage.type == StageType.Elite ? "Elite" : "Normal";
         bool firstClear = currentStage.type == StageType.Boss
             && (ChapterManager.Instance == null || ChapterManager.Instance.GetChapterClearCount(CurrentChapter) <= 1);
-        int got = MercGrowInventory.GrantStageDrops(CurrentChapter, stageType, firstClear);
+        // 2026-09-26 主人拍板：按本关物理/魔法击杀占比推导主导类型，透传给掉落分池（平局=不限制）。
+        string dropBias = null;
+        if (_magicKills > _physicalKills) dropBias = "magic";
+        else if (_physicalKills > _magicKills) dropBias = "physical";
+        int got = MercGrowInventory.GrantStageDrops(CurrentChapter, stageType, firstClear, dropBias);
         if (got > 0)
             GlobalToastUI.Show("获得养成掉落 ×" + got);
     }

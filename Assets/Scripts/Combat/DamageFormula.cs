@@ -9,8 +9,8 @@ public static class DamageFormula
     public const float MinDamage = 1f;
 
     /// <summary>
-    /// 暴击倍率：优先攻击者 AttrType.CritDamage（职业表 150%→1.5）；
-    /// 未写入时回退 1.5+BASE_CRIT_DAMAGE。critDamageBonus 为额外加算。
+    /// 暴击倍率：优先攻击者 AttrType.CritDamage；未写入时回退 GameConfig.CRIT_MULTIPLIER。
+    /// 2026-09-26 主人拍板统一 = 2（PlayerJobBaseStats 不再写职业表的 150%~180%）。critDamageBonus 为额外加算。
     /// </summary>
     public static float CritMultiplier(AttrSystem attacker = null, float critDamageBonus = 0f)
     {
@@ -28,12 +28,19 @@ public static class DamageFormula
 
     /// <summary>
     /// 从攻击者攻击力生成「击中前」伤害（已含暴击；尚未扣防）。
+    /// magicAttack：本次是魔法伤害（法师/牧师、法球怪）→ 优先取 MagicAttack，没配就回退 Attack。
     /// </summary>
-    public static float BuildAttackRaw(AttrSystem attacker, out bool isCrit, float critRateBonus = 0f)
+    public static float BuildAttackRaw(AttrSystem attacker, out bool isCrit, float critRateBonus = 0f, bool magicAttack = false)
     {
         isCrit = false;
         if (attacker == null) return MinDamage;
         float damage = attacker.GetAttr(AttrType.Attack);
+        // 2026-09-26：魔法伤害单位用魔法攻击力；未配 MagicAttack（=0）时沿用物理攻击力，行为不变
+        if (magicAttack)
+        {
+            float mag = attacker.GetAttr(AttrType.MagicAttack);
+            if (mag > 0f) damage = mag;
+        }
         isCrit = RollCrit(attacker, critRateBonus);
         if (isCrit)
             damage *= CritMultiplier(attacker);
@@ -62,13 +69,21 @@ public static class DamageFormula
 
     /// <summary>最终扣血量：raw 已含暴击；再减 DEF。
     /// ignoreDefense：引导等特殊命中。
+    /// isMagic：2026-09-26 主人口径 —— 魔法伤害走魔法防御（MagicDefense），物理伤害走物理防御（Defense）。
+    /// 目标没写 MagicDefense 时，按 Defense × GameConfig.MAGIC_DEFENSE_FALLBACK_RATIO 兜底（沿用物理防御）。
     /// </summary>
-    public static float FinalHit(float rawDamage, AttrSystem defender, bool ignoreDefense = false)
+    public static float FinalHit(float rawDamage, AttrSystem defender, bool ignoreDefense = false, bool isMagic = false)
     {
         float dmg = Mathf.Max(0f, rawDamage);
         if (!ignoreDefense && defender != null)
         {
             float def = defender.GetAttr(AttrType.Defense);
+            if (isMagic)
+            {
+                float magicDef = defender.GetAttr(AttrType.MagicDefense);
+                // 没配魔法防御 → 等比沿用物理防御，等配表补真值
+                def = magicDef > 0f ? magicDef : def * GameConfig.MAGIC_DEFENSE_FALLBACK_RATIO;
+            }
             dmg = Mathf.Max(MinDamage, dmg - def);
         }
         return Mathf.Max(MinDamage, dmg);

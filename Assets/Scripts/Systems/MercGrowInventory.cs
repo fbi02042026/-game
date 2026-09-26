@@ -85,10 +85,16 @@ public static class MercGrowInventory
     /// 关卡结算发放掉落：徽记 / 本命碎片 / 道具。
     /// 返回本次拿到的总个数（0 = 没掉，调用方可以不弹提示）。
     /// firstClear 传「本章是否首次通关」，用来触发徽记保底。
+    /// monsterTypeBias 传本关主导怪物类型（null=不限制），供 stage_drop.csv 按类型分池。
     /// </summary>
     public static int GrantStageDrops(int gameChapter, string stageType, bool firstClear)
     {
-        var drops = StageDropTable.RollDrops(gameChapter, stageType, firstClear);
+        return GrantStageDrops(gameChapter, stageType, firstClear, null);
+    }
+
+    public static int GrantStageDrops(int gameChapter, string stageType, bool firstClear, string monsterTypeBias)
+    {
+        var drops = StageDropTable.RollDrops(gameChapter, stageType, firstClear, monsterTypeBias);
         if (drops == null || drops.Count <= 0) return 0;
 
         int total = 0;

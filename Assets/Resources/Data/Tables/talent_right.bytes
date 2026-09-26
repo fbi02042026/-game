@@ -1,4 +1,4 @@
-﻿id,name,type,unlockLeftIndex,maxLevel,mutexGroup,costByLevel,optKeys,optNames,optKinds,optValues
+id,name,type,unlockLeftIndex,maxLevel,mutexGroup,costByLevel,optKeys,optNames,optKinds,optValues
 R_F1,流派·物理专精,Mutex,10,5,path,5/12/22/38/60,phys,物理专精,PhysDamage,5/10/15/20/25
 R_F2,流派·魔法专精,Mutex,10,5,path,5/12/22/38/60,magic,魔法专精,MagicDamage,5/10/15/20/25
 R_C1,利刃,Attr,20,3,-,6/14/26,atk,利刃,Attack,3/6/10

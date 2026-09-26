@@ -171,10 +171,13 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         Vector3 baseScale = prefab.transform.localScale;
         float mul = Mathf.Max(0.01f, sharedKitScale);
         if (faction == VfxFaction.Ally) mul *= 1.3f;
-        // 刀光原图凹面朝右；禁止负 scale.x（Hierarchy 粒子会消失）。镜像用 Z 轴 180°。
-        float absX = Mathf.Abs(baseScale.x) * mul;
-        go.transform.localScale = new Vector3(absX, baseScale.y * mul, baseScale.z * mul);
-        go.transform.localRotation = Quaternion.Euler(0f, 0f, facingDir < 0 ? 180f : 0f);
+        // 刀光原图凹面朝右。朝向靠根节点整体 x 取反（子节点随父级一起镜像），
+        // 不是"只把特效位置挪到左边"：向左攻击时 scale.x 为负，整棵特效树左右翻转。
+        // 旧方案用 Z 轴 180° 旋转代做镜像，那会额外上下颠倒（且是旋转不是镜像），已废弃。
+        float signedX = Mathf.Abs(baseScale.x) * mul * (facingDir < 0 ? -1f : 1f);
+        go.transform.localScale = new Vector3(signedX, baseScale.y * mul, baseScale.z * mul);
+        // 复位成预制体自身旋转（池化实例会带走上一次的旋转，旧代码这里写死过 Z=180）
+        go.transform.rotation = prefab.transform.rotation;
 
         PrepareSlashParticles(go);
         ApplySlashLocalFacing(go);

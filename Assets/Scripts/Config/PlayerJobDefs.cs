@@ -162,26 +162,28 @@ public static class PlayerJobDefs
         }
     };
 
-    /// <summary>职业标美术源目录：编辑器直读此目录改图即时生效；真机走 Resources（见 Def.IconResourcePath）。</summary>
+    /// <summary>
+    /// 职业标美术源目录：编辑器直读此目录改图即时生效；真机走 Resources（见 Def.IconResourcePath）。
+    /// ⚠ 这是**玩家职业立绘头像**（Assets/Art/UI/Icons/职业头像icon/），不是四分类徽标、
+    /// 也不是 Assets/Art/UI/Icons/玩家职业icon/。左下角战斗 HUD 的职业分类 icon 请走
+    /// <see cref="TryLoadCombatBadgeIcon"/>。
+    /// </summary>
     public const string IconArtFolder = "Assets/Art/UI/Icons/职业头像icon/";
 
     /// <summary>
-    /// 战斗头像框左下角的职业分类图（2026-09-17 用户指定）：Resources/UI/Icons/职业icon/ 下的
-    /// 防御 / 恢复 / 法术 / 物攻 四张。映射规则与 MercHireSession.JobIconFile 一致：
-    /// 剑盾→防御，重武·狂战·游侠→物攻，牧师→恢复，法师→法术。
-    /// 只给战斗头像框用；三选一卡面仍走 TryLoadJobIcon（职业立绘），别混。
+    /// 战斗头像框左下角的职业分类图（2026-09-17 用户指定）：Icons/职业icon 下的
+    /// 防御 / 恢复 / 法术 / 物攻 四张（**佣兵四分类**那一套，玩家职业换算到四分类后取图）。
+    /// 只给战斗 HUD 的职业 icon 位用；三选一卡面仍走 TryLoadJobIcon（玩家职业立绘头像），别混。
+    ///
+    /// 2026-09-26：路径口径统一收敛到 <see cref="MercHireSession.LoadMercJobBadge"/>（那里
+    /// 先试 Icons/职业icon、再回退现有副本 Icons/Job），这里不再自己拼路径 —— 原来只认
+    /// Icons/职业icon，而该目录没有 Resources 副本，导致取不到图、被回退成职业立绘头像，
+    /// 正是主人说的「总和玩家职业icon搞混」。
     /// </summary>
     public static Sprite TryLoadCombatBadgeIcon(PlayerJobId id)
     {
         var def = Get(id);
-        string cls = MercHireSession.JobIconFile(def.DisplayName);
-        if (string.IsNullOrEmpty(cls)) return null;
-        string path = "Icons/职业icon/" + cls;
-        var sp = Resources.Load<Sprite>(path);
-        if (sp != null) return sp;
-        var tex = Resources.Load<Texture2D>(path);
-        if (tex == null) return null;
-        return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+        return MercHireSession.LoadMercJobBadge(def.DisplayName);
     }
 
     /// <summary>
@@ -322,16 +324,22 @@ public static class PlayerJobDefs
         public bool ForceOffHand;
     }
 
-    /// <summary>各职业对应 *101 佣兵预制体上的武器套（写死）。</summary>
+    /// <summary>
+    /// 各职业对应 *101 佣兵预制体上的武器套。
+    /// 2026-09-26：主/副手模板 id 改读 player_job_base_stats 表的「主手模板ID / 副手模板ID」
+    /// 两列（<see cref="PlayerJobBaseStats.Row.StarterMainTemplateId"/>），表里没配才用下面的写死值兜底。
+    /// 以后调起步装备只改表，不再动这里。
+    /// </summary>
     static JobWeaponKit GetJobWeaponKit(PlayerJobId job)
     {
+        PlayerJobBaseStats.TryGet(job, out PlayerJobBaseStats.Row row);
         switch (job)
         {
             case PlayerJobId.SwordShield:
                 return new JobWeaponKit
                 {
-                    MainTemplateId = "equip_new_weapon_04",
-                    OffTemplateId = "equip_steelshield1",
+                    MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_new_weapon_04"),
+                    OffTemplateId = KitTemplate(row.StarterOffTemplateId, "equip_steelshield1"),
                     ForceMainOneHand = true
                 };
             case PlayerJobId.Berserker:
@@ -339,35 +347,42 @@ public static class PlayerJobDefs
                 {
                     // 双持：主副手同款「裂空细剑」（New_Weapon_06 → Sword 档）。
                     // 原副手 equip_new_weapon_09 的 spum 是 New_Weapon_09，被判成 Polearm（长柄），不是剑。
-                    MainTemplateId = "equip_new_weapon_06",
-                    OffTemplateId = "equip_new_weapon_06",
+                    MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_new_weapon_06"),
+                    OffTemplateId = KitTemplate(row.StarterOffTemplateId, "equip_new_weapon_06"),
                     ForceMainOneHand = true,
                     ForceOffHand = true
                 };
             case PlayerJobId.Ranger:
                 return new JobWeaponKit
                 {
-                    MainTemplateId = "equip_new_weapon_12",
+                    MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_new_weapon_12"),
                     ForceMainTwoHand = true
                 };
             case PlayerJobId.Mage:
                 return new JobWeaponKit
                 {
-                    MainTemplateId = "weapon_twilight_staff",
+                    MainTemplateId = KitTemplate(row.StarterMainTemplateId, "weapon_twilight_staff"),
                     MainSpumOverride = "Ward_1",
                     ForceMainOneHand = true
                 };
             case PlayerJobId.Priest:
                 return new JobWeaponKit
                 {
-                    MainTemplateId = "equip_new_weapon_03",
+                    MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_new_weapon_03"),
                     ForceMainOneHand = true
                 };
             case PlayerJobId.Heavy:
-                return new JobWeaponKit { MainTemplateId = "equip_axenormal1" };
+                // 起步主手改为 WP102 碎岩战锤（equip_f_sr_hammer）；表丢了也兜底发锤，不退回斧子
+                return new JobWeaponKit { MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_f_sr_hammer") };
             default:
-                return new JobWeaponKit { MainTemplateId = "equip_new_weapon_04" };
+                return new JobWeaponKit { MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_new_weapon_04") };
         }
+    }
+
+    /// <summary>表里的起步武器模板 id 优先；表没配（缺列/空）才用写死值。</summary>
+    static string KitTemplate(string tableId, string fallback)
+    {
+        return !string.IsNullOrEmpty(tableId) ? tableId : fallback;
     }
 
     /// <summary>

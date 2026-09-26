@@ -4,6 +4,9 @@ using UnityEngine;
 
 /// <summary>
 /// 本局雇佣的佣兵（下本结束离队）。图鉴见 AdventureCodex / seenMerc。
+///
+/// 图标口径提醒：职业相关的图有三套，各走各的入口，取图前先看清
+/// <see cref="LoadMercJobBadge"/> 上方那段说明，别再拿玩家职业 icon 画佣兵。
 /// </summary>
 public static class MercHireSession
 {
@@ -178,17 +181,64 @@ public static class MercHireSession
         SaveSystem.Instance.Save();
     }
 
-    public static Sprite LoadJobIcon(string jobName)
+    // ==========================================================================
+    // ★★★ 三套「职业图标」的口径，别再互相搞混（2026-09-26 主人反馈「总和玩家职业icon搞混」）★★★
+    //
+    // 1) 佣兵职业分类徽标（四分类）—— Assets/Art/UI/Icons/职业icon/{物攻,法术,防御,恢复}.png
+    //    用途：战斗左下角角色栏的「职业 icon」（玩家槽和佣兵槽都要这一套）、招募三选一卡的 Role 角标。
+    //    取图入口：MercHireSession.LoadMercJobBadge。
+    //    注意：Resources 副本目前放在 Icons/Job（与 Art 源同名同图），所以两个路径都试。
+    //
+    // 2) 玩家职业立绘头像 —— Assets/Art/UI/Icons/职业头像icon/（PlayerJobDefs.IconArtFolder）
+    //    用途：职业选择 / 三选一卡面那种「人像」。入口：PlayerJobDefs.TryLoadJobIcon。
+    //    ⚠ 不要拿它当左下角的职业分类 icon。
+    //
+    // 3) 玩家职业 icon（6 张）—— Assets/Art/UI/Icons/玩家职业icon/{剑盾,法师,游侠,牧师,狂战,重武}.png
+    //    ⚠ 这是玩家职业的，不要拿它画佣兵，也不要拿它当左下角分类 icon。
+    //
+    // 另有一套「佣兵养成·职业徽记」（6 职业 × 普通/稀有/传奇，见 MercGrowSprites.LoadJobBadge），
+    // 那是徽章不是分类图，同样别混进来。
+    // ==========================================================================
+
+    /// <summary>佣兵职业分类徽标（四分类）Resources 主目录：主人指定的美术源是 Icons/职业icon。</summary>
+    public const string MercJobBadgeRes = "Icons/职业icon";
+    /// <summary>四分类图的现有 Resources 副本目录（与 Art 源同名同图）。主目录缺资源时回退这里。</summary>
+    const string MercJobBadgeResFallback = "Icons/Job";
+
+    /// <summary>
+    /// 佣兵职业分类徽标（四分类：物攻 / 法术 / 防御 / 恢复）。
+    /// 旧名 LoadJobIcon —— 改名只为和「玩家职业 icon」区分开，旧名保留为转调。
+    /// </summary>
+    public static Sprite LoadMercJobBadge(string jobName)
     {
-        string file = JobIconFile(jobName);
-        string path = "Icons/Job/" + file;
+        string file = MercJobBadgeFile(jobName);
+        if (string.IsNullOrEmpty(file)) return null;
+        var sp = LoadJobBadgeSprite(MercJobBadgeRes + "/" + file);
+        if (sp != null) return sp;
+        return LoadJobBadgeSprite(MercJobBadgeResFallback + "/" + file);
+    }
+
+    /// <summary>旧名，保留为转调，避免既有调用点断编译。新代码请用 <see cref="LoadMercJobBadge"/>。</summary>
+    public static Sprite LoadJobIcon(string jobName) => LoadMercJobBadge(jobName);
+
+    static Sprite LoadJobBadgeSprite(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return null;
         var sp = Resources.Load<Sprite>(path);
         if (sp != null) return sp;
         var all = Resources.LoadAll<Sprite>(path);
-        return all != null && all.Length > 0 ? all[0] : null;
+        if (all != null && all.Length > 0) return all[0];
+        // 兜底：从 Assets/Art 拷进 Resources 的 png 若被团结按「默认贴图」导入（meta 里
+        // textureType=0 / spriteMode=0，spriteSheet 为空），Resources.Load<Sprite> 取不到，
+        // 左下角职业 icon 就会空白。这里退一步读 Texture2D 现造 Sprite，不改 .meta 也能显示。
+        var tex = Resources.Load<Texture2D>(path);
+        if (tex == null) return null;
+        return Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height),
+            new Vector2(0.5f, 0.5f), 100f);
     }
 
-    public static string JobIconFile(string jobName)
+    /// <summary>佣兵职业名 → 四分类文件名。旧名 JobIconFile，改名只为区分口径。</summary>
+    public static string MercJobBadgeFile(string jobName)
     {
         if (string.IsNullOrEmpty(jobName)) return "物攻";
         // 重武(重武者) 走物攻分支（2026-09-17 用户纠正：重武也是物攻，不是防御）
@@ -200,6 +250,9 @@ public static class MercHireSession
             return "法术";
         return "物攻";
     }
+
+    /// <summary>旧名，保留为转调，避免既有调用点断编译。新代码请用 <see cref="MercJobBadgeFile"/>。</summary>
+    public static string JobIconFile(string jobName) => MercJobBadgeFile(jobName);
 
     public static Material LoadScrollButtonMaterial(MercRosterDefs.MercRarity rarity)
     {

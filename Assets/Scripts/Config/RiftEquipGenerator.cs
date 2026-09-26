@@ -27,13 +27,13 @@ public static class RiftEquipGenerator
         var slot = PickSlot(wantWeapon, job);
         if (slot == null) return null;
 
-        var main = PickWeightedLanded(slot.MainPool);
+        var main = PickWeightedLanded(slot.MainPool, job);
         if (string.IsNullOrEmpty(main))
             main = slot.IsWeapon ? "ATK" : "HP";
 
         float mainVal = ApplyDropBonus(main, RollAttrValue(main, rarity.Id, rarity.BaseMul, false), attrBonus);
         var attrs = new List<AttrBonusData>();
-        if (TryMapAttr(main, mainVal, out var mainBonus))
+        if (TryMapAttr(main, mainVal, job, out var mainBonus))
             attrs.Add(mainBonus);
 
         int affixCount = rarity.AffixMin >= rarity.AffixMax
@@ -42,16 +42,18 @@ public static class RiftEquipGenerator
         var used = new HashSet<string> { main };
         for (int a = 0; a < affixCount; a++)
         {
-            string id = PickWeightedLanded(slot.RandPool, used);
+            string id = PickWeightedLanded(slot.RandPool, job, used);
             if (string.IsNullOrEmpty(id)) break;
             used.Add(id);
             float v = ApplyDropBonus(id, RollAttrValue(id, rarity.Id, rarity.AffixMul, true), attrBonus);
-            if (TryMapAttr(id, v, out var bonus))
+            if (TryMapAttr(id, v, job, out var bonus))
                 attrs.Add(bonus);
         }
 
         EquipSlotType slotType = MapSlotType(slot.SlotId, job);
         EquipTemplate visual = PickVisualTemplate(slotType, job);
+        // 本职业没有可用武器模板 → 这件直接不掉，不拿别职业武器凑数
+        if (visual == null && slot.IsWeapon) return null;
         string appearanceId = EquipAppearanceTables.PickAppearanceId(slotType, slot.IsWeapon);
         string spum = EquipAppearanceTables.ResolveSpumName(appearanceId,
             visual != null ? visual.spumName : null);
@@ -188,8 +190,9 @@ public static class RiftEquipGenerator
         return pool[Random.Range(0, pool.Count)];
     }
 
-    /// <summary>只从已落地词条里抽，未映射 ID 不占词条位、不进实例。</summary>
-    static string PickWeightedLanded(List<RiftEquipTables.WeightedAttr> pool, HashSet<string> exclude = null)
+    /// <summary>只从已落地词条里抽，未映射 ID 不占词条位、不进实例。
+    /// 2026-09-26 主人拍板：毒伤只给游侠，职业白名单走表，不写死——非本职业白名单的词缀（如毒）直接不 roll。</summary>
+    static string PickWeightedLanded(List<RiftEquipTables.WeightedAttr> pool, PlayerJobId job, HashSet<string> exclude = null)
     {
         if (pool == null || pool.Count == 0) return null;
         int total = 0;
@@ -198,6 +201,7 @@ public static class RiftEquipGenerator
             string id = pool[i].AttrId;
             if (exclude != null && exclude.Contains(id)) continue;
             if (!RiftEquipTables.IsCombatLanded(id)) continue;
+            if (!RiftEquipTables.IsAttrAllowedForJob(id, job)) continue;
             total += Mathf.Max(0, pool[i].Weight);
         }
         if (total <= 0) return null;
@@ -208,6 +212,7 @@ public static class RiftEquipGenerator
             string id = pool[i].AttrId;
             if (exclude != null && exclude.Contains(id)) continue;
             if (!RiftEquipTables.IsCombatLanded(id)) continue;
+            if (!RiftEquipTables.IsAttrAllowedForJob(id, job)) continue;
             acc += Mathf.Max(0, pool[i].Weight);
             if (roll < acc) return id;
         }
@@ -264,10 +269,14 @@ public static class RiftEquipGenerator
         return value + bonus;
     }
 
-    static bool TryMapAttr(string attrId, float value, out AttrBonusData bonus)
+    /// <summary>
+    /// 2026-09-26 主人拍板：毒伤只给游侠，职业白名单走表，不写死。
+    /// 用带职业参数的 TryResolveCombatAttr：不在本职业白名单内的词缀（如毒）映射直接失败，不进 EquipInstance。
+    /// </summary>
+    static bool TryMapAttr(string attrId, float value, PlayerJobId job, out AttrBonusData bonus)
     {
         bonus = null;
-        if (!RiftEquipTables.TryResolveCombatAttr(attrId, out AttrType type, out bool isPercent))
+        if (!RiftEquipTables.TryResolveCombatAttr(attrId, job, out AttrType type, out bool isPercent))
             return false;
         if (attrId == "RANGE")
             value = GameConfig.PixelsToUnits(Mathf.Max(1f, value));
@@ -337,17 +346,39 @@ public static class RiftEquipGenerator
                 pool.Add(t);
             }
         }
+        // 2026-09-26 主人拍板：武器按职业伤害类型分池——魔法职业(法师/牧师)优先掉魔法武器，物理职业优先掉物理武器。
+        // 判定走表（player_job_base_stats.伤害类型），不写死职业。
+        // ⚠ 做成「优先」而非「强制」：现项目魔法武器模板极少（仅 weapon_twilight_staff / equip_weapon_002），
+        //    强制过滤会让法师/牧师几乎不掉武器；优先池为空时回退到按职业过滤的池。
+        //    等魔法武器模板补齐后，这里可改成强制（删掉 prefer.Count > 0 的回退分支）。
+        if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
+        {
+            bool wantMagic = PlayerJobBaseStats.IsMagicJob(job);
+            var prefer = new List<EquipTemplate>();
+            for (int i = 0; i < pool.Count; i++)
+            {
+                var t = pool[i];
+                if (t == null) continue;
+                bool isMagicWeapon = t.weaponAttackType == WeaponAttackType.Magic;
+                if (isMagicWeapon == wantMagic) prefer.Add(t);
+            }
+            if (prefer.Count > 0) pool = prefer;
+        }
+
         if (pool.Count == 0)
         {
+            // 2026-09-26：武器池按职业过滤后为空 → 宁可这件不掉，也绝不退回「不过滤」的随机武器
+            // （旧兜底正是重武者/法师开到别职业武器的原因）。防具部位无职业限制，保持原兜底。
+            if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand) return null;
             for (int i = 0; i < templates.Length; i++)
             {
                 var t = templates[i];
                 if (t == null || t.isAnchor) continue;
-                if (t.slotType == slot || (slot == EquipSlotType.MainHand && t.weaponType != WeaponType.None))
+                if (t.slotType == slot)
                     pool.Add(t);
             }
         }
-        if (pool.Count == 0) return templates[0];
+        if (pool.Count == 0) return null;
         var pick = pool[Random.Range(0, pool.Count)];
         pick.ResolveIcon();
         return pick;

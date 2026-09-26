@@ -39,6 +39,27 @@ public static class RuntimeUiArt
         return _disc;
     }
 
+    static Sprite _bar;
+    const string BarResPath = "UI/Common/BarWhite";
+
+    /// <summary>实心白条：盾条这类运行时细长条的蒙版（颜色同样交给 Image.color）。</summary>
+    public static Sprite Bar()
+    {
+        if (_bar != null) return _bar;
+        var external = Resources.Load<Sprite>(BarResPath);
+        if (external != null) { _bar = external; return _bar; }
+        _bar = BuildBar(32);
+        return _bar;
+    }
+
+    static Sprite BuildBar(int n)
+    {
+        var tex = NewTexture(n);
+        var px = NewClear(n);
+        for (int i = 0; i < px.Length; i++) px[i] = Color.white;
+        return Finish(tex, px, n);
+    }
+
     static Sprite BuildRing(int n, int thickness)
     {
         var tex = NewTexture(n);

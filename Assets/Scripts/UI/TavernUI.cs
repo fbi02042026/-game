@@ -102,7 +102,16 @@ public class TavernUI : MonoBehaviour, ITownPage
         SetGuildHallOverlayMode(false);
     }
 
-    public void Show() => ShowPage();
+    public void Show()
+    {
+        // 2026-09-26 主人拍板：酒馆暂不开（佣兵功能调好再开）。开关在 GameConfig.TAVERN_ENABLED。
+        if (!GameConfig.TAVERN_ENABLED)
+        {
+            GlobalToastUI.Show("酒馆暂未开放");
+            return;
+        }
+        ShowPage();
+    }
     public void Hide() => HidePage();
 
     /// <summary>预制体全屏不透明底会盖死大厅；改为透出 TownPageDim。</summary>

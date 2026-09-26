@@ -24,6 +24,12 @@ public class MonsterConfig : ScriptableObject
     public int baseGoldDrop;
     public int expDrop;
 
+    [Header("魔法侧（2026-09-26）")]
+    [Tooltip("魔法攻击。0 = 等比沿用 baseAttack（GameConfig.MONSTER_MAGIC_ATK_RATIO）")]
+    public float baseMagicAttack;
+    [Tooltip("魔法防御。0 = 等比沿用物理防御 baseDef（GameConfig.MONSTER_MAGIC_DEF_RATIO）")]
+    public float baseMagicDefense;
+
     [Header("精灵配置")]
     [Tooltip("在章节文件夹中的精灵编号（1-12），0表示随机")]
     public int spriteIndex = 0;

@@ -53,7 +53,13 @@ public sealed class SkillCastService
         bool isHeal = IsHealSkill(skill);
         bool isBuff = skill.skillType == SkillSystem.SkillType.Buff;
 
-        if (isHeal)
+        // 2026-09-26 主人拍板：holy_barrier 改为「抵扣型护盾」——先扣盾、再扣血，不再走防御+35% buff 分支。
+        // 走团队护盾路径（玩家 + 佣兵同享一层，与旧团队防御 buff 同范围），ratio/duration 取自 GameConfig 常量。
+        if (skill.skillId == "holy_barrier")
+        {
+            ApplyTeamShieldBuff(GameConfig.HOLY_BARRIER_SHIELD_RATIO, GameConfig.HOLY_BARRIER_SHIELD_DURATION);
+        }
+        else if (isHeal)
         {
             healTarget = FindPreferredHealTarget();
             ExecuteAllySkillFallback(hero, skill, healTarget);
@@ -106,6 +112,13 @@ public sealed class SkillCastService
         // 眩晕/被控期间禁止施放主动技（含引导「原地眩晕」的小白：TutorialStunned）
         if (merc.IsStunned || merc.TutorialStunned) return false;
         if (MercSkillTable.IsPassive(skillId)) return false;
+        // 2026-09-26 主人拍板：传奇限定类技能（适用佣兵稀有度=传奇）只对传奇佣兵生效。
+        // 配置驱动：读 merc_skills 表「适用佣兵稀有度」列 + 佣兵实际稀有度，无需在技能逻辑里硬编码。
+        if (!MercSkillTable.MercCanUseSkill(merc.mercId, skillId))
+        {
+            Debug.LogWarning($"[SkillCast] 佣兵 {merc.mercId} 稀有度不满足技能 {skillId} 的适用门槛，跳过施放");
+            return false;
+        }
 
         var skill = ResolveSkill(skillId);
         if (skill == null) return false;
@@ -187,6 +200,8 @@ public sealed class SkillCastService
 
     void ApplyTeamShieldBuff(float ratio, float duration)
     {
+        // 玩家（英雄）也要吃到这层护盾：以前只遍历佣兵，玩家开了技能一点减伤都没有。
+        PlayerPassiveCombat.Instance?.ApplyTeamShieldFromActive(ratio, duration);
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
         if (mercs != null)
         {

@@ -2,8 +2,8 @@
 # 正式版备份在 .workbuddy/backup/20260923_stage_test_data/stage_spawn.csv
 # 原表说明：monsterTotal=0 表示走 GameConfig.GetStageMonsterTotal 公式（含随机）；
 #           仅第一章首关 (1,0,Normal)=9 为固定总数，其余通配行保持 0 以免冻死手感。
-gameChapter,stageIndex,stageType,monsterTotal,waveCountMin,waveCountMax,eliteScaleMul,note
-1,0,Normal,1,1,1,1.0,TEST首关也1只1波（原9只6波）
-*,*,Normal,1,1,1,1.0,TEST普通关1只1波
-*,*,Elite,1,1,1,1.5,TEST精英关1只1波
-*,*,Boss,1,1,1,1.0,TEST Boss关：本行 monsterTotal 现=小怪数（WavePlanner.ResolveBossMinionTotal 读），正数才生效；0/空=回退GameConfig公式。测试期另有 GameConfig.TEST_BOSS_SOLO 直接归0
+gameChapter,stageIndex,stageType,monsterTotal,waveCountMin,waveCountMax,eliteScaleMul,magicChance,note
+1,0,Normal,1,1,1,1.0,0.35,TEST首关也1只1波（原9只6波）；magicChance=魔法怪占比
+*,*,Normal,1,1,1,1.0,0.35,TEST普通关1只1波；magicChance=魔法怪占比
+*,*,Elite,1,1,1,1.5,0.35,TEST精英关1只1波；magicChance=魔法怪占比
+*,*,Boss,1,1,1,1.0,0.5,TEST Boss关：本行 monsterTotal 现=小怪数（WavePlanner.ResolveBossMinionTotal 读），正数才生效；0/空=回退GameConfig公式。测试期另有 GameConfig.TEST_BOSS_SOLO 直接归0。magicChance=Boss 魔法概率（主人定 0.5）

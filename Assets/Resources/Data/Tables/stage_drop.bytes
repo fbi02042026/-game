@@ -5,8 +5,13 @@
 # rate     每次通关判定一次的概率（0~1）。Normal 关 0.10 ≈ 10 只怪 × 1%（见养成文档 §7.2）
 # countMin/countMax  命中时的数量区间
 # firstClearBonus    本章首次通关额外发放数（保底，防脸黑；重复通关不再给）
+# monsterType（第10列，可选，2026-09-26 新增）：physical / magic / any（空=any）。
+#   带类型的行只在「本关主导怪物类型」匹配时才参与掷骰；空/any 行对所有关都生效（旧行为不变）。
+#   主导类型由 BattleManager 按本关击杀的物理/魔法怪数量推导并透传，无需在代码写死任何掉落物。
+#   例（取消注释即可启用，itemId 由你定）：
+#   *,Boss,Item,item_orb_essence,,1.0,1,1,0,magic   ← 魔法怪主导的 Boss 关额外掉魔法精华
 # 章 × 主产职业 × 档位分布 出自 Docs/佣兵养成_随机化与抗性_2026-09-17.md §7.3
-gameChapter,stageType,dropType,jobKey,tier,rate,countMin,countMax,firstClearBonus,note
+gameChapter,stageType,dropType,jobKey,tier,rate,countMin,countMax,firstClearBonus,monsterType,note
 1,Normal,Badge,剑盾,普通,0.10,1,1,0,ch1暮影森林·主产
 1,Normal,Badge,游侠,普通,0.10,1,1,0,ch1暮影森林·主产
 1,Normal,Badge,重武,普通,0.10,1,1,0,ch1暮影森林·主产

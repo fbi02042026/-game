@@ -16,6 +16,11 @@ public static class PlayerPassiveTables
         public string Note;
         public float ValueNumber;
         public float CooldownSeconds;
+        // 2026-09-26 主人拍板：数值走表，模块只管模式。被动通用数值参数列（p1/p2/p3），
+        // 含义由对应 PS0xx 模块 Configure 解释；留空(0)时模块回退默认硬编码值。
+        public float Param1;
+        public float Param2;
+        public float Param3;
     }
 
     static readonly Dictionary<string, Row> _byId = new Dictionary<string, Row>();
@@ -46,7 +51,11 @@ public static class PlayerPassiveTables
                 Desc = c[5].Trim(),
                 ValueRaw = c[6].Trim(),
                 CooldownRaw = c.Length > 7 ? c[7].Trim() : "",
-                Note = c.Length > 8 ? c[8].Trim() : ""
+                Note = c.Length > 8 ? c[8].Trim() : "",
+                // 2026-09-26 主人拍板：数值走表。p1/p2/p3 在「备注」列之后（索引 9/10/11）。
+                Param1 = c.Length > 9 ? ParseLeadingNumber(c[9]) : 0f,
+                Param2 = c.Length > 10 ? ParseLeadingNumber(c[10]) : 0f,
+                Param3 = c.Length > 11 ? ParseLeadingNumber(c[11]) : 0f
             };
             row.ValueNumber = ParseLeadingNumber(row.ValueRaw);
             row.CooldownSeconds = ParseLeadingNumber(row.CooldownRaw);

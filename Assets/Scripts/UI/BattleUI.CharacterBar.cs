@@ -9,6 +9,12 @@ using System.Collections.Generic;
 public partial class BattleUI : MonoBehaviour
 {
     /// <summary>
+    /// 第一个佣兵（玩家右侧第一个槽 = mercSlot1）右上角不显示技能图片（2026-09-26 主人反馈）。
+    /// 只关 index 0 这一个槽；佣兵2 与教程技能圆（SkillBtn2）照旧。一键回退：置 false。
+    /// </summary>
+    public static bool HideFirstMercSkillBadge = true;
+
+    /// <summary>
     /// 只刷新玩家头像下的第二条（雷击奥义充能）。
     /// 击杀充能时由 HeroThunderUltimate 回调这里，避免动用完整的 UpdateCharacterSlots
     /// （那会连带刷新两名佣兵与布局，击杀频繁时没必要）。
@@ -22,6 +28,37 @@ public partial class BattleUI : MonoBehaviour
             playerSlot.SetUltCharge(0f, 0, GameConfig.THUNDER_ULT_NEED_MIN, false);
         else
             playerSlot.SetUltCharge(ult.ChargeRatio, ult.Charge, ult.Need, ult.IsCasting);
+    }
+
+    /// <summary>
+    /// 刷新三张角色卡的蓝色盾条（抵扣型护盾：佣兵 SK008 圣光庇护那一层）。
+    /// 与血条分开刷：护盾掉值 / 到期时血量数字不一定变，不能挂进 RefreshLiveBars 的
+    /// 「血量有变化才刷」判定里，否则盾条会卡在旧值不消失。
+    /// </summary>
+    public void RefreshShieldBars()
+    {
+        var passive = PlayerPassiveCombat.Instance;
+        if (playerSlot != null)
+            playerSlot.SetShield(passive != null ? passive.TeamShieldAmount : 0f,
+                                 passive != null ? passive.TeamShieldMax : 0f);
+
+        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+        RefreshMercShield(mercSlot1, mercs, 0);
+        RefreshMercShield(mercSlot2, mercs, 1);
+    }
+
+    static void RefreshMercShield(CharacterSlotUI slot, List<Mercenary> mercs, int index)
+    {
+        if (slot == null) return;
+        var runner = (mercs != null && index < mercs.Count && mercs[index] != null)
+            ? mercs[index].PassiveRunner
+            : null;
+        if (runner == null)
+        {
+            slot.SetShield(0f, 0f);
+            return;
+        }
+        slot.SetShield(runner.ShieldAmount, runner.ShieldMax);
     }
 
     /// <summary>
@@ -50,10 +87,11 @@ public partial class BattleUI : MonoBehaviour
             playerSlot.SetFrame(MercHireSession.LoadPlayerPortraitFrame());
             playerSlot.SetSkillBadge(null);
             // 职业 icon：xuetiaodi/职业icon。2026-09-17 用户指定用 Icons/职业icon/ 四分类图
-            // （防御/恢复/法术/物攻）；取不到再回退原职业标，避免打包漏资源时空白。
+            // （防御/恢复/法术/物攻）。
+            // 2026-09-26：去掉「取不到回退职业立绘头像」——那正是主人说的「总和玩家职业icon搞混」，
+            // 现在四分类走 MercHireSession.LoadMercJobBadge（Icons/职业icon → Icons/Job 副本），能取到。
             var selJob = PlayerJobDefs.GetSelected();
-            playerSlot.SetJobIcon(PlayerJobDefs.TryLoadCombatBadgeIcon(selJob)
-                                  ?? PlayerJobDefs.TryLoadJobIcon(selJob));
+            playerSlot.SetJobIcon(PlayerJobDefs.TryLoadCombatBadgeIcon(selJob));
             // 第二条 = 雷击奥义充能（开关关闭也显示 0/N 空条，不隐藏）
             RefreshPlayerUltBar();
         }
@@ -89,11 +127,12 @@ public partial class BattleUI : MonoBehaviour
             ?? mm.GetIcon(m.mercId);
         mercSlot1.SetPortrait(mercIcon);
         // 右上角小图标=该佣兵的技能（同样由 MercSkillCaster 自动释放）
-        mercSlot1.SetSkillBadge(GetMercSkillIcon(m));
+        // 2026-09-26 主人反馈：第一个佣兵不显示技能图片
+        mercSlot1.SetSkillBadge(HideFirstMercSkillBadge ? null : GetMercSkillIcon(m));
         // 教程救援佣兵不在存档出战列表里，技能圆形头像要单独绑
         merc1SkillAvatar?.SetAvatar(mercIcon);
-        // 职业 icon：教程佣兵同样显示
-        mercSlot1.SetJobIcon(MercHireSession.LoadJobIcon(mm != null ? mm.GetJobName(m.mercId) : null));
+        // 职业 icon：教程佣兵同样显示（四分类徽标，走 LoadMercJobBadge）
+        mercSlot1.SetJobIcon(MercHireSession.LoadMercJobBadge(mm != null ? mm.GetJobName(m.mercId) : null));
         // 没配头像时也不要露出「头像」占位白框
         if (mercIcon == null && mercSlot1.portraitPlaceholder != null)
             mercSlot1.portraitPlaceholder.SetActive(false);
@@ -170,10 +209,14 @@ public partial class BattleUI : MonoBehaviour
             slot.SetPortrait(icon);
             // 头像框按本佣兵稀有度换（普通灰白 / 稀有蓝 / 传奇橙金）
             slot.SetFrame(MercHireSession.LoadPortraitFrame(ResolveMercRarity(id, hireId)));
-            // 职业 icon：按佣兵职业名取（防御/恢复/法术/物攻）
-            slot.SetJobIcon(MercHireSession.LoadJobIcon(job));
+            // 职业 icon：按佣兵职业名取四分类（防御/恢复/法术/物攻）
+            slot.SetJobIcon(MercHireSession.LoadMercJobBadge(job));
             // 右上角小图标=该佣兵的技能（自动释放，不用手点）
-            slot.SetSkillBadge(index < activeMercs.Count ? GetMercSkillIcon(activeMercs[index]) : null);
+            // 2026-09-26 主人反馈：第一个佣兵（index 0）不显示技能图片，其余槽照旧
+            bool hideSkillBadge = HideFirstMercSkillBadge && index == 0;
+            slot.SetSkillBadge(hideSkillBadge
+                ? null
+                : (index < activeMercs.Count ? GetMercSkillIcon(activeMercs[index]) : null));
 
             if (index < activeMercs.Count && activeMercs[index] != null)
             {
