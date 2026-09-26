@@ -186,7 +186,7 @@ public static class MercHireSession
     //
     // 1) 佣兵职业分类徽标（四分类）—— Assets/Art/UI/Icons/职业icon/{物攻,法术,防御,恢复}.png
     //    用途：战斗左下角角色栏的「职业 icon」（玩家槽和佣兵槽都要这一套）、招募三选一卡的 Role 角标。
-    //    取图入口：MercHireSession.LoadMercJobBadge。
+    //    取图唯一入口：JobIconResolver.CombatBadge（2026-09-26 收口，本类只保留转调）。
     //    注意：Resources 副本目前放在 Icons/Job（与 Art 源同名同图），所以两个路径都试。
     //
     // 2) 玩家职业立绘头像 —— Assets/Art/UI/Icons/职业头像icon/（PlayerJobDefs.IconArtFolder）
@@ -201,58 +201,25 @@ public static class MercHireSession
     // ==========================================================================
 
     /// <summary>佣兵职业分类徽标（四分类）Resources 主目录：主人指定的美术源是 Icons/职业icon。</summary>
-    public const string MercJobBadgeRes = "Icons/职业icon";
-    /// <summary>四分类图的现有 Resources 副本目录（与 Art 源同名同图）。主目录缺资源时回退这里。</summary>
-    const string MercJobBadgeResFallback = "Icons/Job";
+    public const string MercJobBadgeRes = JobIconResolver.BadgeRes;
 
     /// <summary>
     /// 佣兵职业分类徽标（四分类：物攻 / 法术 / 防御 / 恢复）。
-    /// 旧名 LoadJobIcon —— 改名只为和「玩家职业 icon」区分开，旧名保留为转调。
+    /// 2026-09-26：取图实现已收口到唯一入口 <see cref="JobIconResolver.CombatBadge"/>，这里只做转调，
+    /// 旧调用点不用改也不会断；换图 / 改路径一律改 JobIconResolver 那一处。逻辑与收口前完全一致。
     /// </summary>
-    public static Sprite LoadMercJobBadge(string jobName)
-    {
-        string file = MercJobBadgeFile(jobName);
-        if (string.IsNullOrEmpty(file)) return null;
-        var sp = LoadJobBadgeSprite(MercJobBadgeRes + "/" + file);
-        if (sp != null) return sp;
-        return LoadJobBadgeSprite(MercJobBadgeResFallback + "/" + file);
-    }
+    public static Sprite LoadMercJobBadge(string jobName) => JobIconResolver.CombatBadge(jobName);
 
-    /// <summary>旧名，保留为转调，避免既有调用点断编译。新代码请用 <see cref="LoadMercJobBadge"/>。</summary>
-    public static Sprite LoadJobIcon(string jobName) => LoadMercJobBadge(jobName);
+    /// <summary>旧名，已废弃。请用 <see cref="JobIconResolver.CombatBadge"/>。</summary>
+    [System.Obsolete("职业图标已收口到单一入口，请用 JobIconResolver.CombatBadge")]
+    public static Sprite LoadJobIcon(string jobName) => JobIconResolver.CombatBadge(jobName);
 
-    static Sprite LoadJobBadgeSprite(string path)
-    {
-        if (string.IsNullOrEmpty(path)) return null;
-        var sp = Resources.Load<Sprite>(path);
-        if (sp != null) return sp;
-        var all = Resources.LoadAll<Sprite>(path);
-        if (all != null && all.Length > 0) return all[0];
-        // 兜底：从 Assets/Art 拷进 Resources 的 png 若被团结按「默认贴图」导入（meta 里
-        // textureType=0 / spriteMode=0，spriteSheet 为空），Resources.Load<Sprite> 取不到，
-        // 左下角职业 icon 就会空白。这里退一步读 Texture2D 现造 Sprite，不改 .meta 也能显示。
-        var tex = Resources.Load<Texture2D>(path);
-        if (tex == null) return null;
-        return Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height),
-            new Vector2(0.5f, 0.5f), 100f);
-    }
+    /// <summary>佣兵职业名 → 四分类文件名。实现在 <see cref="JobIconResolver.BadgeFile"/>（唯一入口）。</summary>
+    public static string MercJobBadgeFile(string jobName) => JobIconResolver.BadgeFile(jobName);
 
-    /// <summary>佣兵职业名 → 四分类文件名。旧名 JobIconFile，改名只为区分口径。</summary>
-    public static string MercJobBadgeFile(string jobName)
-    {
-        if (string.IsNullOrEmpty(jobName)) return "物攻";
-        // 重武(重武者) 走物攻分支（2026-09-17 用户纠正：重武也是物攻，不是防御）
-        if (jobName.Contains("盾") || jobName.Contains("卫") || jobName.Contains("防御"))
-            return "防御";
-        if (jobName.Contains("牧") || jobName.Contains("恢复") || jobName.Contains("圣"))
-            return "恢复";
-        if (jobName.Contains("法") || jobName.Contains("术") || jobName.Contains("水系") || jobName.Contains("雷系") || jobName.Contains("火系"))
-            return "法术";
-        return "物攻";
-    }
-
-    /// <summary>旧名，保留为转调，避免既有调用点断编译。新代码请用 <see cref="MercJobBadgeFile"/>。</summary>
-    public static string JobIconFile(string jobName) => MercJobBadgeFile(jobName);
+    /// <summary>旧名，已废弃。请用 <see cref="JobIconResolver.BadgeFile"/>。</summary>
+    [System.Obsolete("职业图标已收口到单一入口，请用 JobIconResolver.BadgeFile")]
+    public static string JobIconFile(string jobName) => JobIconResolver.BadgeFile(jobName);
 
     public static Material LoadScrollButtonMaterial(MercRosterDefs.MercRarity rarity)
     {

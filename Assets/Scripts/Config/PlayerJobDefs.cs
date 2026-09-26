@@ -175,7 +175,7 @@ public static class PlayerJobDefs
     /// 防御 / 恢复 / 法术 / 物攻 四张（**佣兵四分类**那一套，玩家职业换算到四分类后取图）。
     /// 只给战斗 HUD 的职业 icon 位用；三选一卡面仍走 TryLoadJobIcon（玩家职业立绘头像），别混。
     ///
-    /// 2026-09-26：路径口径统一收敛到 <see cref="MercHireSession.LoadMercJobBadge"/>（那里
+    /// 2026-09-26：路径口径统一收敛到 <see cref="JobIconResolver.CombatBadge"/>（职业图标的唯一入口，
     /// 先试 Icons/职业icon、再回退现有副本 Icons/Job），这里不再自己拼路径 —— 原来只认
     /// Icons/职业icon，而该目录没有 Resources 副本，导致取不到图、被回退成职业立绘头像，
     /// 正是主人说的「总和玩家职业icon搞混」。
@@ -183,7 +183,7 @@ public static class PlayerJobDefs
     public static Sprite TryLoadCombatBadgeIcon(PlayerJobId id)
     {
         var def = Get(id);
-        return MercHireSession.LoadMercJobBadge(def.DisplayName);
+        return JobIconResolver.CombatBadge(def.DisplayName);
     }
 
     /// <summary>

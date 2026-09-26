@@ -89,7 +89,7 @@ public partial class BattleUI : MonoBehaviour
             // 职业 icon：xuetiaodi/职业icon。2026-09-17 用户指定用 Icons/职业icon/ 四分类图
             // （防御/恢复/法术/物攻）。
             // 2026-09-26：去掉「取不到回退职业立绘头像」——那正是主人说的「总和玩家职业icon搞混」，
-            // 现在四分类走 MercHireSession.LoadMercJobBadge（Icons/职业icon → Icons/Job 副本），能取到。
+            // 现在四分类走 JobIconResolver.CombatBadge（Icons/职业icon → Icons/Job 副本），能取到。
             var selJob = PlayerJobDefs.GetSelected();
             playerSlot.SetJobIcon(PlayerJobDefs.TryLoadCombatBadgeIcon(selJob));
             // 第二条 = 雷击奥义充能（开关关闭也显示 0/N 空条，不隐藏）
@@ -131,8 +131,8 @@ public partial class BattleUI : MonoBehaviour
         mercSlot1.SetSkillBadge(HideFirstMercSkillBadge ? null : GetMercSkillIcon(m));
         // 教程救援佣兵不在存档出战列表里，技能圆形头像要单独绑
         merc1SkillAvatar?.SetAvatar(mercIcon);
-        // 职业 icon：教程佣兵同样显示（四分类徽标，走 LoadMercJobBadge）
-        mercSlot1.SetJobIcon(MercHireSession.LoadMercJobBadge(mm != null ? mm.GetJobName(m.mercId) : null));
+        // 职业 icon：教程佣兵同样显示（四分类徽标，走 JobIconResolver.CombatBadge 唯一入口）
+        mercSlot1.SetJobIcon(JobIconResolver.CombatBadge(mm != null ? mm.GetJobName(m.mercId) : null));
         // 没配头像时也不要露出「头像」占位白框
         if (mercIcon == null && mercSlot1.portraitPlaceholder != null)
             mercSlot1.portraitPlaceholder.SetActive(false);
@@ -209,8 +209,8 @@ public partial class BattleUI : MonoBehaviour
             slot.SetPortrait(icon);
             // 头像框按本佣兵稀有度换（普通灰白 / 稀有蓝 / 传奇橙金）
             slot.SetFrame(MercHireSession.LoadPortraitFrame(ResolveMercRarity(id, hireId)));
-            // 职业 icon：按佣兵职业名取四分类（防御/恢复/法术/物攻）
-            slot.SetJobIcon(MercHireSession.LoadMercJobBadge(job));
+            // 职业 icon：按佣兵职业名取四分类（防御/恢复/法术/物攻），唯一入口 JobIconResolver.CombatBadge
+            slot.SetJobIcon(JobIconResolver.CombatBadge(job));
             // 右上角小图标=该佣兵的技能（自动释放，不用手点）
             // 2026-09-26 主人反馈：第一个佣兵（index 0）不显示技能图片，其余槽照旧
             bool hideSkillBadge = HideFirstMercSkillBadge && index == 0;
