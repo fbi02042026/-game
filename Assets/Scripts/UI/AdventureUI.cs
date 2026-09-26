@@ -2033,15 +2033,18 @@ public class AdventureUI : MonoBehaviour, ITownPage
         }
     }
 
-    bool IsModePlayable(int mode) => mode == 0;
+    /// <summary>
+    /// 该入口是否已开放。改问模式注册表，不再写 <c>mode == 0</c> 这种魔数。
+    /// 以后开放金币本 / 无限关卡 / 世界boss，只改对应 <see cref="BattleMode"/> 的 IsPlayable。
+    /// </summary>
+    bool IsModePlayable(int mode) => BattleModes.FromSlot(mode).IsPlayable;
 
-    bool IsActivityMode(int mode)
-    {
-        string label = ModeLabel(mode);
-        if (!string.IsNullOrEmpty(label) && label.IndexOf("活动", StringComparison.Ordinal) >= 0)
-            return true;
-        return mode == 4;
-    }
+    /// <summary>
+    /// 是否金币本。
+    /// 以前是「按钮文字里有没有'活动'两个字」再配一个魔数 <c>mode == 4</c> —— 文案一改就判错，
+    /// 而且判错是静默的（直接走错建关分支）。现在直接问模式本身。
+    /// </summary>
+    bool IsActivityMode(int mode) => BattleModes.FromSlot(mode).Id == BattleModeId.GoldDungeon;
 
     static int GetClearedChapterCount()
     {

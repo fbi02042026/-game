@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -9,6 +9,7 @@ using UnityEngine;
 /// </summary>
 public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 {
+    #region 场景引用与单位
     [Header("场景引用")]
     public Hero hero;
     public Transform spawnPoint;
@@ -20,6 +21,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     public List<UnitBase> allyUnits = new List<UnitBase>();
     public List<UnitBase> monsters = new List<UnitBase>();
     public StageData currentStage;
+    #endregion
+    #region 本局状态 · 模式 · 难度
     public long currentGold = 0;
     /// <summary>开战时城镇金币快照；死亡时本局增量清零用</summary>
     long _goldAtRunStart;
@@ -49,6 +52,13 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         private set => _rules = value ?? TutorialRules.Formal;
     }
     public bool IsTutorialRun => Rules.Active;
+    /// <summary>
+    /// 本局玩法模式。<b>「这是哪一种玩法」一律问它</b>，
+    /// 不要在核心里再散 <c>IsGoldDungeon</c> / <c>IsEndless</c> 这类 bool —— 每加一种玩法就要在
+    /// 同样 8 处各加一个分支，正是「改一处牵连另一处」的来源。
+    /// 开局由 <see cref="ResolveMode"/> 定一次，整局不变。
+    /// </summary>
+    public IBattleMode Mode { get; private set; }
     /// <summary>引导拿剑后：强伤一刀一个怪的爽点阶段。</summary>
     public bool TutorialPowerFantasy { get; private set; }
     public bool SuppressStageClear { get; set; }
@@ -113,10 +123,24 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
     public int CurrentChapter => ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
     public int BattleDifficulty { get; private set; }
-    public bool IsGoldDungeon { get; private set; }
+    /// <summary>
+    /// 是否金币本。
+    /// 以前是开局从 <c>AdventureUI.PendingGoldDungeon</c> 拷进来的一个独立 bool（虽然只有一处写入），
+    /// 现在改为从 <see cref="Mode"/> 派生——玩法身份只有一个来源，不再有第二个可写的地方。
+    /// 对外签名不变，Monster / ChapterManager / BattleStateSaver 照旧读。
+    /// </summary>
+    public bool IsGoldDungeon => Mode != null && Mode.Id == BattleModeId.GoldDungeon;
+
+    /// <summary>
+    /// 本模式掉不掉装备。由 <see cref="Mode"/> 自己声明（金币本 false，主线/引导 true）。
+    /// 结算只看这个，不再判「是不是金币本」—— 以后「武器副本」这类活动也能自然掉装。
+    /// </summary>
+    public bool DropsEquipment => Mode != null && Mode.DropsEquipment;
     public float DifficultyStatScale => GameConfig.GetDifficultyStatScale(BattleDifficulty);
     public float DifficultyGoldMul => GameConfig.GetDifficultyGoldMul(BattleDifficulty);
 
+    #endregion
+    #region 波次系统
     // === 波次系统（规划/出怪在 WavePlanner；此处只留本局状态） ===
     WavePlanner _wavePlanner;
     internal WavePlanner Planner => _wavePlanner ?? (_wavePlanner = new WavePlanner(this));
@@ -153,6 +177,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// 只在盟友受击时按「伤害/最大生命」回充（见 AddCombatSkillEnergy），<b>冷却中的槽不充能</b> —— 这条是天然错峰的关键。
     /// 槽序同时是自动释放优先级：SkillSystem.GetReadyPlayerSkill 取第一个「能量满且不在冷却」的技能。
     /// </summary>
+    #endregion
+    #region 玩家技能能量
     public float[] playerSkillEnergy = new float[Mathf.Max(1, RunLoadout.MaxSkillSlots)];
     public const float MAX_SKILL_ENERGY = 1f;
 
@@ -256,6 +282,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
     /// <summary>佣兵技能能量（最多2槽）</summary>
     readonly float[] mercSkillEnergy = new float[2];
+    #endregion
+    #region 佣兵技能与施放
     internal Coroutine _spawnWaveCo;
     internal int _offscreenEnterSideToggle;
     SkillCastService _skillCast;
@@ -269,6 +297,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
     // === 传送门 ===
     /// <summary>传送门是否已激活（所有怪清完后激活，玩家进入后通关）</summary>
+    #endregion
+    #region 传送门
     private bool _portalActive = false;
     private bool _rewardSequenceStarted = false;
     private Transform _chuanSongMen;
@@ -336,6 +366,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             }
         }
     }
+    #endregion
+    #region 生命周期与开局
     protected override void Awake()
     {
         base.Awake();
@@ -344,6 +376,24 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     public void StartNewRun()
     {
         StartNewRunInternal();
+    }
+
+    /// <summary>
+    /// 定本局的玩法模式。<b>这是全项目唯一决定「这是哪一种玩法」的地方。</b>
+    /// 以后加无限关卡 / 世界BOSS / PVP，只在这里多加一条返回，其余代码一行不动。
+    /// </summary>
+    IBattleMode ResolveMode()
+    {
+        // 引导优先：它由剧情触发，跟玩家在冒险界面选哪个按钮无关。
+        // 注意要在 StoryProgress.ConsumeTutorialBattleFlag() 之前判。
+        if (StoryProgress.ShouldStartTutorialBattle()) return BattleModes.Tutorial;
+
+        // 活动副本（冒险界面下标 4）。这是一个「类」，不是一种玩法：
+        // 现在只开了金币本；以后佣兵副本 / 武器副本 / 技能副本上了，
+        // 在这里按「当前开放的是哪一个活动」返回对应模式即可。
+        if (AdventureUI.PendingGoldDungeon) return BattleModes.GoldDungeon;
+
+        return BattleModes.Normal;
     }
 
     void StartNewRunInternal()
@@ -414,7 +464,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             Debug.LogError($"[BattleManager] hero.InitNewRun 异常（继续开战）: {e}");
         }
 
-        Rules = StoryProgress.ShouldStartTutorialBattle() ? TutorialRules.Tutorial : TutorialRules.Formal;
+        // 玩法身份只在这里定一次；规则包由模式自带，不再单独判一次 IsTutorial。
+        Mode = ResolveMode();
+        Rules = Mode.Rules;
         TutorialPowerFantasy = false;
         _tutorialHpFromTable = false;
         if (Rules.Active)
@@ -459,7 +511,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             targetChapter = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
         if (targetChapter < 1) targetChapter = 1;
         BattleDifficulty = Mathf.Clamp(AdventureUI.PendingBattleDifficulty, 0, 2);
-        IsGoldDungeon = AdventureUI.PendingGoldDungeon;
+        // IsGoldDungeon 不再在这里写入：它由 Mode 派生（见属性定义）。
+        // PendingGoldDungeon 只保留「读完即清」，避免下一局被上一局的静态标志污染。
         AdventureUI.PendingBattleChapter = 0;
         AdventureUI.PendingBattleDifficulty = 0;
         AdventureUI.PendingGoldDungeon = false;
@@ -471,10 +524,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             return;
         }
 
-        if (IsGoldDungeon)
-            ChapterManager.Instance.StartGoldDungeon(targetChapter);
-        else
-            ChapterManager.Instance.StartChapter(targetChapter);
+        // 建关交给模式自己：核心不需要知道一共有几种玩法。
+        Mode.BuildChapter(ChapterManager.Instance, targetChapter);
 
         StageData first = null;
         if (ChapterManager.Instance.availableNextStages != null && ChapterManager.Instance.availableNextStages.Count > 0)
@@ -607,6 +658,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         Debug.Log($"[BattleManager] 已生成佣兵 {spawned} 个 (tavern槽={max})");
     }
 
+    #endregion
+    #region 战斗查询与增益
     public void OnMercenaryDead(UnitBase merc)
     {
         allyUnits.Remove(merc);
@@ -756,6 +809,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     }
 
     /// <summary>引导开箱拿剑后进入强伤+多怪爽点。</summary>
+    #endregion
+    #region 新手引导战斗
     public void BeginTutorialPowerFantasy()
     {
         if (!IsTutorialRun) return;
@@ -846,6 +901,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     // 波次生成
     // ============================================================
 
+    #endregion
+    #region 关卡加载与波次执行
     public void LoadStage(StageData stage)
     {
         MonsterStatsTable.Reload();
@@ -1732,6 +1789,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     // 怪物死亡
     // ============================================================
 
+    #endregion
+    #region 怪物死亡与技能施放
     internal void OnMonsterDead(UnitBase monster)
     {
         InvalidateAliveMonsterCache();
@@ -1871,6 +1930,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     // 关卡通关
     // ============================================================
 
+    #endregion
+    #region 通关结算
     public void OnStageClear()
     {
         // 兼容旧调用：直接走完整结算选关（无宝箱时）
@@ -2092,7 +2153,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             bonusGold = Mathf.RoundToInt(bonusGold * GoldGainMul);
         }
 
-        if (IsGoldDungeon)
+        // 问「这个模式掉不掉装备」，不再问「是不是金币本」——
+        // 以后「武器副本」这类活动就算走活动入口，只要声明 DropsEquipment = true 就会掉装。
+        if (!DropsEquipment)
             equipCount = 0;
         else if (isBoss)
         {
@@ -2104,7 +2167,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         // 多出的奖励件直接折金，三选一只展示 3 张
         int blacksmithLevel = TownSystem.Instance != null ? TownSystem.Instance.GetBuildingLevel(BuildingType.Blacksmith) : 1;
-        List<EquipInstance> rewards = (!IsGoldDungeon && ConfigManager.Instance != null)
+        List<EquipInstance> rewards = (DropsEquipment && ConfigManager.Instance != null)
             ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar, currentStage.type, GameConfig.RIFT_DROP_ATTR_BONUS)
             : new List<EquipInstance>();
 
@@ -2171,33 +2234,29 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         bool bossStage = currentStage != null && currentStage.type == StageType.Boss;
         AdventureLogFragments.TryDropOnStageClear(ch, bossStage);
 
-        if (IsGoldDungeon)
+        // 通关结算交给模式：核心不需要知道一共有几种玩法、各自发什么、之后去哪。
+        if (Mode == null)
         {
-            ShowVictorySettlementThen(() =>
-            {
-                GridBackpackSystem.Instance?.ClearRunEquipment();
-                MercenaryManager.Instance?.ClearAllMercs();
-                MercHireSession.ClearHired();
-                EndRunLoadout();
-                GameSceneManager.Instance?.ReturnToTown();
-            });
+            Debug.LogError("[BattleManager] 通关结算失败：Mode 为空（本局不是从 StartNewRun 开始的？）");
             return;
         }
+        Mode.SettleStageClear(this);
+    }
 
+    /// <summary>
+    /// 主线冒险的通关结算：boss 弹「回城 / 进下一章」选择，普通关进下一关。
+    /// 内容原样从 <see cref="FinishStageAfterPortalReached"/> 搬过来，由 <see cref="NormalBattleMode"/> 调用。
+    /// 金币本这类模式有自己的结算，不进这里。
+    /// </summary>
+    public void SettleNormalStageClear()
+    {
         bool isBoss = currentStage != null && currentStage.type == StageType.Boss;
         if (isBoss)
         {
             ShowVictorySettlementThen(() =>
             {
                 UIManager.Instance?.ShowChapterClearChoice(
-                    onReturnTown: () =>
-                    {
-                        GridBackpackSystem.Instance?.ClearRunEquipment();
-                        MercenaryManager.Instance?.ClearAllMercs();
-                        MercHireSession.ClearHired();
-                        EndRunLoadout();
-                        GameSceneManager.Instance?.ReturnToTown();
-                    },
+                    onReturnTown: EndRunAndReturnToTown,
                     onNextChapter: () =>
                     {
                         // 走路线表：主线 1→2→5→6→7→8，第 8 章之后没有下一章（终局）
@@ -2206,11 +2265,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                         if (next < 1)
                         {
                             Debug.Log("[BattleManager] 已是路线终点，直接回城");
-                            GridBackpackSystem.Instance?.ClearRunEquipment();
-                            MercenaryManager.Instance?.ClearAllMercs();
-                            MercHireSession.ClearHired();
-                            EndRunLoadout();
-                            GameSceneManager.Instance?.ReturnToTown();
+                            EndRunAndReturnToTown();
                             return;
                         }
                         ChapterManager.Instance?.StartChapter(next);
@@ -2257,6 +2312,21 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         RunSkillBarUI.Refresh();
     }
 
+    /// <summary>
+    /// 通关后「结束本局并回城」：清本局装备 → 清佣兵 → 清雇佣会话 → 结束构筑 → 回城。
+    /// 这段原本在通关结算里被复制了 3 份，收成一处；以后改收尾流程只改这里。
+    /// 注意：死亡（<see cref="OnHeroDead"/>）与主动撤离（<see cref="TriggerEvacuation"/>）
+    /// 走的是另一套收尾（遗产 / 教程流程，且不回城），不共用本方法。
+    /// </summary>
+    public void EndRunAndReturnToTown()
+    {
+        GridBackpackSystem.Instance?.ClearRunEquipment();
+        MercenaryManager.Instance?.ClearAllMercs();
+        MercHireSession.ClearHired();
+        EndRunLoadout();
+        GameSceneManager.Instance?.ReturnToTown();
+    }
+
     void PersistBattleGold()
     {
         var save = SaveSystem.Instance?.Data;
@@ -2272,6 +2342,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         currentGold = save.totalGold;
     }
 
+    #endregion
+    #region 死亡与撤离
     public void OnHeroDead()
     {
         Planner?.NotifyStageResult(true, 0f); // V3.0 压力阀：死过 → 下一关减一波
@@ -2421,6 +2493,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         BattleSettlementUI.Show(RunStats, afterConfirm);
     }
 
+    #endregion
+    #region 战斗统计
     public void RecordDamageDealt(float amount, bool toBoss)
     {
         if (amount <= 0f) return;
@@ -2564,4 +2638,5 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             new CurseBuff { buffName = "坚壁：生命+50%，移速-30%", buff = new AttrBonusData { attrType = AttrType.MaxHp, value = 0.5f, isPercent = true }, debuff = new AttrBonusData { attrType = AttrType.MoveSpeed, value = -0.3f, isPercent = true } }
         };
     }
+    #endregion
 }
