@@ -24,6 +24,8 @@ c0d4fd61fe83b8f4996b8a0be8ab86c7   # BattleStageMap.prefab ×1
 69b2e4173bee97f4f8b290de67cffcf9   # TalentUI.prefab ×5
 3f274fb48d88bd0459cbc0eec3b6329a   # MercenaryRecruitPopup.prefab ×1
 2d75a2bc8aaddab47a36091a14fd85ce   # MercenaryRecruitPopup.prefab ×1
+e53c359d0f207e043ae6be067e7900d0   # DailyLoginFull.prefab ×1；引擎内置材质 guid，界面无异常
+31cd9b6a566e185469d63b339a593da4   # DailyLoginFull.prefab ×1；引擎内置材质 guid，界面无异常
 
 # ===== 精灵类（2 条 · m_Sprite, fileID 21300000）=====
 7e208e861ed01e246a52a6faaf9f3111   # BattleUI.prefab ×2；已确认战斗 HUD 上无空图/粉块
