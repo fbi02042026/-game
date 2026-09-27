@@ -220,8 +220,52 @@ def check_g5_new_singleton():
                  % s[:100])
 
 
+# ---------------------------------------------------------------------------
+# G6 堵增量：本次改动里不许新增 PlayerPrefs 直接调用（2026-09-26 建）
+#     存档规范层是 Core/SaveSystem.cs（写 player.dat 文件），而不是 PlayerPrefs。
+#     但全项目仍有 13 个文件直接散调 PlayerPrefs（GameAudio / MainQuestSystem /
+#     BattleStateSaver / CharacterUI / SettingsPopupUI / QuestHudBar / ...），
+#     属 8.3「存档入口收口」要治理的对象。
+#     这里不碰既有 13 个文件（只扫「本次新增行 + 新增 .cs」），但**新的持久化
+#     状态必须走 SaveSystem / SaveData**，不允许再散一个 PlayerPrefs 进去 ——
+#     否则以后收口时又要翻一遍这些文件。
+# ---------------------------------------------------------------------------
+def check_g6_new_playerprefs():
+    name = "G6 新增 PlayerPrefs 堵增量"
+    pat = re.compile(r"\bPlayerPrefs\.")
+    try:
+        r = subprocess.run(["git", "diff", "HEAD", "-U0", "--", "*.cs"], cwd=ROOT,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        added = [l[1:] for l in r.stdout.splitlines()
+                 if l.startswith("+") and not l.startswith("+++")]
+    except Exception:
+        added = []
+
+    new_files = []
+    try:
+        r2 = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=ROOT,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        new_files = [f.strip() for f in r2.stdout.splitlines() if f.strip().endswith(".cs")]
+    except Exception:
+        pass
+
+    for fn in new_files:
+        p = os.path.join(ROOT, fn)
+        if os.path.exists(p):
+            with open(p, encoding="utf-8-sig") as f:
+                added.extend(f.read().splitlines())
+
+    for l in added:
+        s = l.strip()
+        # 注释里提到 PlayerPrefs 不算真实调用（G2/G5 都踩过注释误报的坑）
+        if s.startswith("//") or s.startswith("*") or s.startswith("/*"):
+            continue
+        if pat.search(l):
+            warn(name, "本次改动新增了 PlayerPrefs 直接调用：%s —— 新持久化状态请走 SaveSystem/SaveData，别再散一个 PlayerPrefs" % s[:100])
+
+
 CHECKS = [check_g1_job_icon, check_g2_singleton, check_g3_prefab,
-          check_g4_fallback_inventory, check_g5_new_singleton]
+          check_g4_fallback_inventory, check_g5_new_singleton, check_g6_new_playerprefs]
 
 
 def main():

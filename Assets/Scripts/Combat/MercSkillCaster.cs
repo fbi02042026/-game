@@ -49,6 +49,7 @@ public class MercSkillCaster : MonoBehaviour
         return ok;
     }
 
+    [Obsolete("语义陷阱：清零冷却 = 立刻可放技能，与 Bind() 的『满冷却进场，先普攻』语义相反；留着易被误调用破坏进战手感。2026-09-26 已确认零调用，若真需要请新建显式方法。")]
     public void ResetCooldown()
     {
         _cooldownRemain = 0f;

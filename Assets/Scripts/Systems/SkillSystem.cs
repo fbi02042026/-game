@@ -394,6 +394,7 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
             if (skills[i] != null) _playerSkills.Add(skills[i]);
     }
 
+    [Obsolete("语义陷阱：误调用会直接清空玩家技能列表。2026-09-26 已确认零调用，若真需要请走显式的技能管理入口。")]
     public void ClearPlayerSkills() => _playerSkills.Clear();
 
     /// <summary>取第一个不在冷却中的玩家技能；全部冷却中返回 null。</summary>
