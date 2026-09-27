@@ -264,8 +264,70 @@ def check_g6_new_playerprefs():
             warn(name, "本次改动新增了 PlayerPrefs 直接调用：%s —— 新持久化状态请走 SaveSystem/SaveData，别再散一个 PlayerPrefs" % s[:100])
 
 
+# ---------------------------------------------------------------------------
+# G7 分辨率适配代码「各界面各自写」（2026-09-27 主人拍板，建此闸门）
+#     主人原话：「注意不要写到所有适配的文件 每个界面单独一个文件 写到单独的界面代码里 以后也是」
+#     背景：适配逻辑一进通用文件，就会同时作用到所有界面 —— 改了 A 界面连带弄坏 B 界面，
+#     正是「改好又坏」的复发路径。所以：
+#       - UiLayoutStretch.cs / UICanvasSetup.cs / DesignAspectLetterbox.cs / BattleViewportFit.cs
+#         只允许放【判定工具】与【按名字/角色泛化的通用动作】，不许出现具体界面名 / 具体节点名。
+#       - 每个界面的适配请写在自己文件里（如 AdventureUI.ApplyAdventureFit / DailyLoginUI.ApplyFit）。
+#     判定范围：本次改动新增的行 + 新增的未跟踪 .cs（不翻存量，避免误报历史代码）。
+# ---------------------------------------------------------------------------
+UI_COMMON_FILES = (
+    "Assets/Scripts/UI/UiLayoutStretch.cs",
+    "Assets/Scripts/Core/UICanvasSetup.cs",
+    "Assets/Scripts/Core/DesignAspectLetterbox.cs",
+    "Assets/Scripts/Core/BattleViewportFit.cs",
+)
+# 具体界面名 / 具体节点名（出现即说明通用文件里混入了某个界面的专用逻辑）
+UI_SPECIFIC_TOKENS = re.compile(
+    r"\b(?:AdventureUI|DailyLoginUI|RewardPopup|CharacterUI|GuildHallUI|TavernUI|TalentUI"
+    r"|SkillSelectUI|WorldMapPopup|BattleStageMapUI|QuestHudBar|MainBottomNav)"
+    r"\b|RightContent|LeftSidebar|DetailPanel|MapRoot")
+
+
+def check_g7_ui_fit_location():
+    name = "G7 适配代码各界面各自写"
+    try:
+        r = subprocess.run(["git", "diff", "HEAD", "-U0", "--", "*.cs"], cwd=ROOT,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        diff = r.stdout
+    except Exception:
+        return
+
+    cur_file = None
+    for line in diff.splitlines():
+        if line.startswith("+++ b/"):
+            cur_file = line[6:].strip().replace("\\", "/")
+            continue
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        if cur_file not in UI_COMMON_FILES:
+            continue
+        s = line[1:].strip()
+        # 注释行不算（G2/G5/G6 都踩过注释误报的坑）
+        if s.startswith("//") or s.startswith("*") or s.startswith("/*"):
+            continue
+        if UI_SPECIFIC_TOKENS.search(s):
+            warn(name, "通用文件里出现具体界面/节点名，适配逻辑应写在该界面自己的脚本里："
+                       "%s  %s" % (cur_file, s[:96]))
+
+    # 新增的未跟踪 .cs 也一并看
+    try:
+        r2 = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=ROOT,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        news = [f.strip().replace("\\", "/") for f in r2.stdout.splitlines() if f.strip().endswith(".cs")]
+    except Exception:
+        news = []
+    for f in news:
+        if f in UI_COMMON_FILES:
+            warn(name, "新增了通用适配文件 %s —— 适配请写在各界面自己的脚本里（第 0.1 节）" % f)
+
+
 CHECKS = [check_g1_job_icon, check_g2_singleton, check_g3_prefab,
-          check_g4_fallback_inventory, check_g5_new_singleton, check_g6_new_playerprefs]
+          check_g4_fallback_inventory, check_g5_new_singleton, check_g6_new_playerprefs,
+          check_g7_ui_fit_location]
 
 
 def main():

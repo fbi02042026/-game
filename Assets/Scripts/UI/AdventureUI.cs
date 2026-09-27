@@ -458,10 +458,20 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
     /// <summary>
     /// 改动 3 — DetailPanel 宽对齐 + 下沉到底：
-    ///   - 宽对齐：水平从单点(0.5)改左右 stretch(0→1)，左右边距取「当前两侧边距较大者」对称化，宽度随父自适应；
+    ///   - 宽对齐：水平从单点(0.5)改左右 stretch(0→1)，左右边距对称化后**夹进父级可视宽**，宽度随父自适应；
     ///   - 下沉到底：垂直改底部锚定(anchorMin.y=anchorMax.y=0) + pivot.y=0，底部抬到底部功能入口之上(offsetMin.y=bottomGap)；
     ///   - 高度保持原始值不变：offsetMax.y = offsetMin.y + 原始高度。
     /// </summary>
+    /// <remarks>
+    /// 2026-09-27 主人拍板修复「两边被切」——别再改回纯对称化：
+    ///   根因：预制体里 DetailPanel 宽硬编码 711.4，而父级 RightContent 只有 720-170=550 宽，
+    ///         原始矩形已向两侧各溢出 80.7；旧代码取 margin = Max(leftMargin, rightMargin)，
+    ///         两侧都是 **负** −80.7，max 后仍为负 → 负边距被原样保留 → 继续溢出 → 被父级裁掉，
+    ///         表现就是主人截图里「左边吃掉主线冒险标签、右边吃掉噩梦按钮」。
+    ///   修法（单一入口）：对称化之后再显式夹到父级可视宽内 —— margin 不许为负，宽度不许超过父级宽。
+    ///   「对称化」≠「夹进父级」，负边距是**溢出信号**，不是可用的边距。见 Docs/分辨率适配规范_v2_2026-09-27.md §3 必查 1。
+    ///   本修复只在本界面自己的文件里做，不进通用文件（主人 2026-09-27 约束）。
+    /// </remarks>
     void FitAdventureDetailPanel(RectTransform rt, float bottomGap)
     {
         var b = CaptureAdventureBase(rt);
@@ -473,9 +483,16 @@ public class AdventureUI : MonoBehaviour, ITownPage
         Vector2 curMax = AnchorPointInParent(pMin, pMax, b.anchorMax) + b.offsetMax;
 
         float origH = curMax.y - curMin.y;   // 保持原始高度不变
+        float parentW = pMax.x - pMin.x;
         float leftMargin = curMin.x - pMin.x;
         float rightMargin = pMax.x - curMax.x;
         float margin = Mathf.Max(leftMargin, rightMargin);   // 对称化：取两侧边距较大者
+
+        // 2026-09-27 主人拍板：夹进父级可视宽。子面板宽度不许超过父级，否则会被父级裁掉（两边被切）。
+        // 负边距 = 溢出信号，必须抬到 0；父级太窄时至少给 1px，避免算出负宽度。
+        margin = Mathf.Max(0f, margin);
+        if (parentW - margin * 2f < 1f)
+            margin = Mathf.Max(0f, (parentW - 1f) * 0.5f);
 
         rt.anchorMin = new Vector2(0f, 0f);
         rt.anchorMax = new Vector2(1f, 0f);
