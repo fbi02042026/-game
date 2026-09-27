@@ -115,6 +115,14 @@ public abstract class UnitBase : MonoBehaviour
         GameConfig.SetWorldPosition(t, p);
         if (rb != null)
             rb.velocity = new Vector2(keepVx, 0f);
+
+        // 2026-09-27 主人反馈：「打完后又滑步到场景中间车道」。
+        // 归道（击杀后回中间车道）时 X 速度为 0，AIUpdate 判定 isMoving=false 播的是站立，
+        // 但身体在 Y 方向被搬 → 站着滑过去。这里在有实际 Y 位移时补一次走路动画。
+        // 只补我方（主人报的就是我方滑步）；攻击锁 / 受击硬直期间不补，免得打断出手动作。
+        if (isAlly && unitAnim != null && !unitAnim.InAttackLock && !unitAnim.InDamagedRecovery())
+            unitAnim.SetMove(true, facingDir);
+
         RefreshDepthSort();
     }
 
@@ -728,6 +736,17 @@ public abstract class UnitBase : MonoBehaviour
 
         float curDist = Mathf.Abs(myX - GetCombatX(target));
         float newDist = Mathf.Abs(myX - GetCombatX(nearest));
+
+        // 2026-09-27 主人反馈：「移动到别的怪前面，却还在打第一个索敌的敌人」。
+        // 根因：原来只有「新目标比当前目标近 ≥0.45」这一条防抖规则，
+        // 当当前目标还挂在锁定上（没死、没出距）时，哪怕玩家已经站到另一只怪脸前也不会改打。
+        // 补一条硬规则：**新目标已经进攻击范围、而当前目标还在范围外** → 立刻改打新目标。
+        // 防抖阈值只用于「两只都够得着」时的抖动，不该拦住「够得着的 vs 够不着的」。
+        // （射程取当前攻击距离；取不到时本条不生效，退回原来的防抖逻辑，不改原行为。）
+        float reach = attr != null ? attr.GetAttr(AttrType.AttackRange) : 0f;
+        if (reach > 0.01f && newDist <= reach && curDist > reach)
+            return nearest;
+
         return newDist <= curDist - TargetSwitchMargin ? nearest : target;
     }
 
@@ -1357,6 +1376,13 @@ public abstract class UnitBase : MonoBehaviour
 
         if (source != null && finalDamage > 0f)
             LastDamageSource = source;
+
+        // 2026-09-27 主人拍板：引导局我方不死人。自动战斗也会掉血到 0，一旦死掉整套引导流程就崩
+        // （死亡 → 回城 → 直接跳到小白剧情）。只在这一个入口钳血：最低留 1 点，别处不再改。
+        // 玩家和引导牧师都算「我方」，牧师（小白）中途死了同样会走进队失败的分支。
+        var tutBm = BattleManager.Instance;
+        if (isAlly && tutBm != null && tutBm.IsTutorialRun && finalDamage >= currentHp - 1f)
+            finalDamage = Mathf.Max(0f, currentHp - 1f);
 
         currentHp -= finalDamage;
 

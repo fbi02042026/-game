@@ -338,7 +338,13 @@ public static class PlayerJobDefs
             case PlayerJobId.SwordShield:
                 return new JobWeaponKit
                 {
-                    MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_new_weapon_04"),
+                    // 2026-09-27 主人拍板（口述规则）：「把每个职业佣兵编号 101 的武器当做该玩家职业的初始装备」。
+                    // 剑盾对应 dunbing101（老盾）。2026-09-27 主人再拍板：老盾的主手换成 Sword_1（Legacy/6_Weapons/0_Sword，
+                    // 真正的剑形图），玩家剑盾同步用 equip_sword_1（spumName=Sword_1，ATK 5 / 攻距 96 / 1x2，与旧的 04 数值相同）。
+                    // 旧值 equip_new_weapon_04 的图 New_Weapon_04 在 8_Weapons/2_Axe，画的是斧子形 —— 名字叫「守夜钢剑」但外观是斧，
+                    // 这套名字错配的根因在 EquipNameGen.TempName（按 id 猜名字），已一并修掉。
+                    // 表（player_job_base_stats 主手模板ID）与这里必须同值：两处不一致 = 表一丢/没 Cook 就换外观。
+                    MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_sword_1"),
                     OffTemplateId = KitTemplate(row.StarterOffTemplateId, "equip_steelshield1"),
                     ForceMainOneHand = true
                 };
@@ -361,21 +367,27 @@ public static class PlayerJobDefs
             case PlayerJobId.Mage:
                 return new JobWeaponKit
                 {
+                    // 2026-09-27 主人拍板「摘掉补丁」：暮火之杖的 spum 已真源对齐为 New_Weapon_03（5_Wand 法杖图），
+                    // 不再需要 MainSpumOverride="Ward_1" 盖一层 —— 否则图标是 New_Weapon_03、手上却是 Ward_1，
+                    // 又变回「两个入口各说一套」。外观唯一真源 = weapon_twilight_staff.asset 的 spumName。
                     MainTemplateId = KitTemplate(row.StarterMainTemplateId, "weapon_twilight_staff"),
-                    MainSpumOverride = "Ward_1",
                     ForceMainOneHand = true
                 };
             case PlayerJobId.Priest:
                 return new JobWeaponKit
                 {
-                    MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_new_weapon_03"),
+                    // 2026-09-27 主人拍板：牧师也按「101 佣兵的武器」来 —— naima101（小白）手上的是 New_Weapon_07（8_Mace 钉锤），
+                    // 所以主手用 equip_magic_weapon_07（New_Weapon_07 的魔法版，weaponAttackType=1，名字「灰烬钉锤·魔」）。
+                    // 两处必须同值，别再退回 equip_magic_weapon_03 / 物理那把 equip_new_weapon_03。
+                    MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_magic_weapon_07"),
                     ForceMainOneHand = true
                 };
             case PlayerJobId.Heavy:
                 // 起步主手改为 WP102 碎岩战锤（equip_f_sr_hammer）；表丢了也兜底发锤，不退回斧子
                 return new JobWeaponKit { MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_f_sr_hammer") };
             default:
-                return new JobWeaponKit { MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_new_weapon_04") };
+                // 与 SwordShield 同值（equip_sword_1）：语义是「同职业 101 佣兵的武器」，别再单方面写成别的
+                return new JobWeaponKit { MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_sword_1") };
         }
     }
 

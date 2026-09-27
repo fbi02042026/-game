@@ -115,7 +115,13 @@ public static class GameBgm
         next.Play();
 
         _current = track;
-        _pendingAfterLoading = track;
+        // 2026-09-27 主人反馈：点得快时，登录 BGM 进了主界面还在放。
+        // 根因：UI 级的 Play（LoginUI 每次 OnEnable 都会调）会顺手把 pending 写成「当前曲=Login」，
+        // 把载入流程显式 SetPending(Town) 冲掉 → 加载结束恢复播放时取的还是 Login。
+        // 修法：**Loading 静音期间一律不许 UI 级 Play 改 pending**（此时 pending 已由流程指定），
+        // 保证「谁显式指定谁说了算」，UI 不得抢。不要再改回无条件赋值。
+        if (!_loadingMuted)
+            _pendingAfterLoading = track;
         _active = next;
 
         if (_fadeCo != null) _runner.StopCoroutine(_fadeCo);

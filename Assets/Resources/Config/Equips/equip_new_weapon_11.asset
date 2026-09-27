@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_11
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_11
-  equipName: "霜脊长剑"
+  equipName: "霜脊匕首"
   icon: {fileID: 21300000, guid: 4526cc6520cd4f2195cf6efe8c471c13, type: 3}
   iconFileName: New_Weapon_11
   gridWidth: 1

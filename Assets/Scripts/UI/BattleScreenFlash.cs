@@ -18,20 +18,24 @@ public static class BattleScreenFlash
         _group.alpha = 0f;
         _group.gameObject.SetActive(true);
 
+        // 2026-09-27 主人反馈「全屏红色闪屏效果不对」：
+        // 根因是**浓度被乘了两次** —— img.color 里已经带了 alpha（如 0.55），
+        // CanvasGroup.alpha 又乘一遍同样的值 → 实际只有 0.55×0.55≈0.30，比配置淡得多。
+        // 现在浓度**只由 img.color.a 表达**，CanvasGroup 只做 0→1→0 的开关，不再重复缩放。
         float t = 0f;
         while (t < holdSeconds)
         {
             t += Time.unscaledDeltaTime;
-            _group.alpha = Mathf.Lerp(0f, color.a, Mathf.Clamp01(t / Mathf.Max(0.05f, holdSeconds * 0.5f)));
+            _group.alpha = Mathf.Lerp(0f, 1f, Mathf.Clamp01(t / Mathf.Max(0.05f, holdSeconds * 0.5f)));
             yield return null;
         }
-        _group.alpha = color.a;
+        _group.alpha = 1f;
 
         t = 0f;
         while (t < fadeSeconds)
         {
             t += Time.unscaledDeltaTime;
-            _group.alpha = color.a * (1f - Mathf.Clamp01(t / fadeSeconds));
+            _group.alpha = 1f - Mathf.Clamp01(t / fadeSeconds);
             yield return null;
         }
         _group.alpha = 0f;

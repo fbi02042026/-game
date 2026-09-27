@@ -159,11 +159,12 @@ public static partial class GameConfig
     public const float LIFESTEAL_RATIO = 0.1f;
 
     /// <summary>
-    /// 魔法防御兜底倍率：目标没写 MagicDefense（玩家/佣兵目前没配魔法防御）时，
-    /// 按「物理 Defense × 本值」当魔法防御。主人没给魔法防御数值 → 等比沿用物理防御（1.0），
-    /// 等配表补了真值再改这里。
+    /// 魔法防御的**基础真源**：属性系统初始化时写入 AttrType.MagicDefense，之后由装备/词缀往上叠。
+    /// 2026-09-27 主人拍板：防御拆成物理(Defense)与魔法(MagicDefense)两条，魔法防御是**独立属性**，
+    /// 不再由物理防御换算（原 MAGIC_DEFENSE_FALLBACK_RATIO 兜底已删除）。
+    /// 主人还没给数值 → 先 0（目标魔法防御为 0 时，魔法伤害打上去就是全额）。
     /// </summary>
-    public const float MAGIC_DEFENSE_FALLBACK_RATIO = 1f;
+    public const float BASE_MAGIC_DEFENSE = 0f;
     /// <summary>怪物魔法攻击 = baseAttack × 本值（主人没给数 → 等比沿用物理攻击）。</summary>
     public const float MONSTER_MAGIC_ATK_RATIO = 1f;
     /// <summary>怪物魔法防御 = 物理防御 baseDef × 本值（主人没给数 → 等比沿用物理防御）。</summary>

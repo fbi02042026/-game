@@ -21,8 +21,10 @@ public static partial class GameConfig
     public const float BATTLE_LANE_MAX = BATTLE_LANE_HALF * 0.9025f;
     /// <summary>站立线下方可行走半高（相对 HALF 再缩约 45%，取负）。</summary>
     public const float BATTLE_LANE_MIN = -BATTLE_LANE_HALF * 0.54675f;
-    /// <summary>可行走区域整体 Y 下移量（世界单位，正值=往下挪）。主人要"往下挪一点点"，调这个值即可二次微调。</summary>
-    public const float BATTLE_LANE_Y_DROP = 0.12f;
+    /// <summary>可行走区域整体 Y 下移量（世界单位，正值=往下挪）。
+    /// 2026-09-27 主人要求「可行走区域往上调上一次改动的 50%」：上次改动是往下挪 0.12，
+    /// 回一半 = 0.06。再要调只改这一个数。</summary>
+    public const float BATTLE_LANE_Y_DROP = 0.06f;
     public const float BATTLE_LANE_MOVE_SPEED = 1.35f;
     /// <summary>摇杆左右移速倍率（相对 GetCombatMoveSpeed）。</summary>
     public const float HERO_MANUAL_MOVE_X_MUL = 1.8f;

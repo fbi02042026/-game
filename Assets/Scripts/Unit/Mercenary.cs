@@ -434,6 +434,9 @@ public class Mercenary : UnitBase
             attr.SetBaseAndCurrent(AttrType.MaxHp, hp);
             attr.SetBaseAndCurrent(AttrType.Attack, atk);
             attr.SetBaseAndCurrent(AttrType.Defense, def);
+            // 2026-09-27 主人拍板：防御拆物/魔两条，佣兵同样登记魔防键（伤害公式缺键会报 DF-003）
+            attr.SetBaseAndCurrent(AttrType.MagicDefense, def);
+            attr.SetBaseAndCurrent(AttrType.MagicAttack, GetAttackType() == WeaponAttackType.Magic ? atk : 0f);
             attr.SetBaseAndCurrent(AttrType.AttackSpeed, atkSpd);
             attr.SetBaseAndCurrent(AttrType.MoveSpeed, move);
             attr.SetBaseAndCurrent(AttrType.AttackRange, range);
@@ -483,6 +486,9 @@ public class Mercenary : UnitBase
         attr.SetBaseAndCurrent(AttrType.MaxHp, baseHp * hpMul);
         attr.SetBaseAndCurrent(AttrType.Attack, baseAtk + atkAdd);
         attr.SetBaseAndCurrent(AttrType.Defense, baseDef);
+        // 2026-09-27 主人拍板：防御拆物/魔两条，佣兵同样登记魔防键（伤害公式缺键会报 DF-003）
+        attr.SetBaseAndCurrent(AttrType.MagicDefense, baseDef);
+        attr.SetBaseAndCurrent(AttrType.MagicAttack, GetAttackType() == WeaponAttackType.Magic ? (baseAtk + atkAdd) : 0f);
         attr.SetBaseAndCurrent(AttrType.AttackSpeed, 1f / Mathf.Max(0.2f, atkInterval));
         attr.SetBaseAndCurrent(AttrType.MoveSpeed, GameConfig.BASE_MOVE_SPEED);
         attr.SetBaseAndCurrent(AttrType.AttackRange, atkRange);

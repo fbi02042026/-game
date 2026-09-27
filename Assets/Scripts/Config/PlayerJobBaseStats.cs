@@ -32,6 +32,12 @@ public static class PlayerJobBaseStats
         /// 决定武器掉落按物理/魔法分池（主人要求「魔法职业只掉魔法装备」），配表不写死。
         /// </summary>
         public string DamageType;
+        /// <summary>
+        /// 2026-09-27 主人拍板新增表列：基础魔法防御（第 17 列）。
+        /// 主人说「把防御分成物理和魔法的」→ 物防走 BaseDef、魔防走本列，两条独立不再互相换算。
+        /// 初始值暂与「基础防御」同值（保持现有手感不变），主人想调直接改表，不用改代码。
+        /// </summary>
+        public float BaseMagicDef;
     }
 
     static readonly Dictionary<string, Row> _byConfigId = new Dictionary<string, Row>();
@@ -83,6 +89,8 @@ public static class PlayerJobBaseStats
                 if (c.Length > 14) row.StarterOffTemplateId = c[14].Trim();
                 // 2026-09-26 主人拍板：伤害类型列（第 16 列）——magic=魔法职业，缺列留空=物理
                 if (c.Length > 15) row.DamageType = c[15].Trim();
+                // 2026-09-27 主人拍板：基础魔防列（第 17 列），缺列=0
+                if (c.Length > 16) GameTableCsv.TryFloat(c[16], out row.BaseMagicDef);
                 _byConfigId[row.ConfigId] = row;
             if (TryMapJob(row.ConfigId, out PlayerJobId job))
                 _byJob[job] = row;
@@ -145,6 +153,14 @@ public static class PlayerJobBaseStats
         W(AttrType.MaxHp, row.BaseHp);
         W(AttrType.Attack, Mathf.Max(1f, row.BaseAtk + GameConfig.HERO_BASE_ATTACK_OFFSET));
         W(AttrType.Defense, row.BaseDef);
+        // 2026-09-27 主人拍板：防御拆成物理(Defense) / 魔法(MagicDefense) 两条独立属性，
+        // 魔防读表第 17 列，**不由物防换算**。伤害公式取不到键会报 DF-003，所以这里必须写。
+        W(AttrType.MagicDefense, row.BaseMagicDef);
+        // 魔法职业（法师/牧师）的攻击力**同时**登记为 MagicAttack：
+        // 伤害公式 BuildAttackRaw(magicAttack:true) 取 MagicAttack，取不到会报 DF-004。
+        // 物理职业写 0（键照样登记，表示「不会魔法伤害」），不是兜底。
+        bool magicJob = IsMagicJob(job);
+        W(AttrType.MagicAttack, magicJob ? Mathf.Max(1f, row.BaseAtk + GameConfig.HERO_BASE_ATTACK_OFFSET) : 0f);
         float ms = GameConfig.BASE_MOVE_SPEED * (row.BaseMoveSpeed / 100f);
         W(AttrType.MoveSpeed, ms);
         W(AttrType.CritRate, row.CritRate);

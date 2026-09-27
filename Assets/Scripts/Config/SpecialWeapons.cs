@@ -49,7 +49,10 @@ public static class SpecialWeapons
             _twilightTpl = ScriptableObject.CreateInstance<EquipTemplate>();
             _twilightTpl.templateId = TwilightStaffId;
             _twilightTpl.equipName = DisplayName;
-            _twilightTpl.iconFileName = "New_Weapon_06";
+            // 2026-09-27 主人要求「真源对齐」：暮火之杖是**法杖**，图标/外观必须指 5_Wand 的法杖图。
+            // 旧值 New_Weapon_06 是 0_Sword 的剑图 —— 名字叫杖、身上拿剑，只能靠 PlayerJobDefs 的
+            // MainSpumOverride="Ward_1" 打补丁盖住。这里与 weapon_twilight_staff.asset 必须同值（单入口）。
+            _twilightTpl.iconFileName = "New_Weapon_03";
             _twilightTpl.gridWidth = 1;
             _twilightTpl.gridHeight = 2;
             _twilightTpl.baseRarity = Rarity.Rare;
@@ -59,7 +62,7 @@ public static class SpecialWeapons
             _twilightTpl.weaponAttackType = WeaponAttackType.Magic;
             _twilightTpl.attackRange = GameConfig.RANGE_PX_STAFF;
             _twilightTpl.weaponKindOverride = (int)WeaponCombatTable.WeaponKind.Staff;
-            _twilightTpl.spumName = "New_Weapon_06";
+            _twilightTpl.spumName = "New_Weapon_03";
             _twilightTpl.baseAttr = new List<AttrBonusData>
             {
                 new AttrBonusData { attrType = AttrType.Attack, value = 21f, isPercent = false },

@@ -13,7 +13,9 @@ public class TargetIndicator : MonoBehaviour
     [Tooltip("三张箭头贴图(PT/JY/箭头01)本身都是尖朝下，直接显示即为正确朝向，故默认不翻转(false)。保留此开关以备将来换图需要翻转时使用")]
     public bool arrowFlipY = false;
     public float arrowFloatFreq = 2.8f;   // 上下浮动频率
-    public float arrowFloatAmp = 0.12f;    // 上下浮动幅度（世界单位）
+    /// <summary>上下浮动幅度（世界单位）。2026-09-27 主人要求「浮动距离缩短 50%」：0.12 → 0.06。
+    /// 要再调只改这一个数；频率（arrowFloatFreq）没让改，别动。</summary>
+    public float arrowFloatAmp = 0.06f;    // 上下浮动幅度（世界单位）
     public float arrowHeadOffset = 0.25f;  // 头顶间隙兜底值（拿不到包围盒时才用；正常走 ArrowHeadGapRatio 按身高比例算）
     /// <summary>头顶间隙 = 目标包围盒高度 × 该比例。怪大箭头就高一点、怪小就近一点，不再写死一个偏移。</summary>
     const float ArrowHeadGapRatio = 0.08f;

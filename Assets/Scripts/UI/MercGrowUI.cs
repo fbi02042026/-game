@@ -144,6 +144,15 @@ public static class MercGrowUI
     {
         var img = NewFixedImage(name, parent, size).GetComponent<Image>();
         RefreshBadge(img, MercRosterDefs.GetJobName(hireIdOrAssetId), rarity);
+        // 2026-09-27 主人拍板：职业图标按**图片自身的尺寸**来（职业图原图 44×50），代码不许自己改。
+        // 原来 NewFixedImage 用传入的 size 建出**正方形**节点、且 AddImage 把 preserveAspect 置 false，
+        // 结果 44×50 的图被压成 40×40。现在建完立刻按图还原：SetNativeSize = 用 sprite 原始像素尺寸。
+        // 注意：只对**代码新建**的节点这么做；预制体里主人自己摆好的徽记不动（走 RefreshBadge 那条路）。
+        if (img != null && img.sprite != null)
+        {
+            img.preserveAspect = true;
+            img.SetNativeSize();
+        }
         return img;
     }
 

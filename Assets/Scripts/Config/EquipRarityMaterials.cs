@@ -52,11 +52,18 @@ public static class EquipRarityMaterials
         }
     }
 
+    /// <summary>
+    /// 2026-09-27 主人反馈：武器/装备图标「变红后显示有白色区域，感觉没有透明通道了」。
+    /// 根因：Armor_xiyou / Armor_chuanqi 是 **SPUM 角色染色**材质（不透明、带描边、走世界空间），
+    /// 挂到 UI Image 上不走 UI 的 alpha 混合 → 整块被不透明填充，贴图外的部分就成了白/红方块。
+    /// 修法：**UI 图标一律不挂材质**（null = 用 UI 内置默认材质，透明通道正常）；
+    /// 稀有度在 UI 上用颜色/边框表达，别再往 Image 上挂世界材质。
+    /// 世界空间的 SpriteRenderer 染色仍走 <see cref="Apply(SpriteRenderer, Rarity)"/>，不受影响。
+    /// </summary>
     public static void Apply(UnityEngine.UI.Image img, Rarity rarity)
     {
         if (img == null) return;
-        var mat = Get(rarity);
-        img.material = mat;
+        img.material = null;
     }
 
     static Material LoadRare()

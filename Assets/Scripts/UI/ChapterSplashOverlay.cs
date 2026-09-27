@@ -24,25 +24,31 @@ public class ChapterSplashOverlay : MonoBehaviour
     /// </summary>
     public const float ContentLiftY = 0.05f;
 
-    /// <summary>
-    /// 章节文字逐字显现（打字机）总开关（2026-09-26 主人要求「一个一个出现」）。
-    /// 改 false = 三段文字整段直接出现，回到原来的行为。
-    /// 只影响显现方式：不动文案、颜色、字号、位置（含 ContentLiftY）、淡入淡出时长与不透明底。
-    /// </summary>
-    public const bool CharRevealEnabled = true;
-    /// <summary>
-    /// 每字间隔（秒）：标题+描述+引用合计约 60 字 ≈ 2.7s，刚好在 Hold 2.5s 前后铺完，不额外拖长卡片。
-    /// 中文按 char 计，一个汉字算一个字。
-    /// </summary>
-    public const float CharRevealInterval = 0.045f;
-    /// <summary>标题 → 描述 → 引用 之间的停顿（秒）：三段依次显现，显得有节奏。</summary>
-    public const float GroupRevealGap = 0.16f;
+    // =========================================================================
+    // 2026-09-27 主人拍板（**不要改回逐字**）：章节文字不再「一个字一个字」出现。
+    // 现在的口径是：三段（标题 → 正文 → 引言）**整段**出现，从上到下接力 ——
+    // 上一段「出现」进度走到 80% 时，下一段才开始出现；出现完停留，最后整卡淡出（消失）。
+    // 状态序列即：消失（透明）→ 出现（整段淡入）→ 消失（卡片 Fade）。
+    // 逐字实现（原 CoRevealTexts / CharRevealEnabled / CharRevealInterval / GroupRevealGap）
+    // 已**整体删除**，不是留开关关掉 —— 目的就是防止以后又被打开、问题复发。
+    // 若主人再要调快慢/先后，只改下面这两个常量，别动 CoRevealLines 的结构。
+    // =========================================================================
 
-    /// <summary>一段待逐字显现的文字：Text 引用 + 缓存的目标串（避免逐帧重新取 text）。</summary>
+    /// <summary>单段文字「出现」所用的时长（秒）。整段一起淡入，不是逐字。
+    /// 2026-09-27 主人要求「出现的时间再延长一倍」：0.35 → 0.70（只用这一个数调快慢）。</summary>
+    public const float LineRevealSeconds = 0.7f;
+    /// <summary>
+    /// 接力比例：下一段在**上一段出现进度走到本比例**时开始出现。主人要 80% → 0.8。
+    /// 相邻两段的起始间隔 = LineRevealSeconds × LineStaggerRatio。
+    /// </summary>
+    public const float LineStaggerRatio = 0.8f;
+
+    /// <summary>一段待显现的文字：Text 引用 + 整段目标串 + 该段原本的不透明度（淡入的终点）。</summary>
     struct RevealItem
     {
         public Text text;
         public string target;
+        public float alpha;
     }
 
     CanvasGroup _group;
@@ -147,7 +153,7 @@ public class ChapterSplashOverlay : MonoBehaviour
         text.color = new Color(1f, 1f, 1f, 1f); // 纯白不透明
         text.raycastTarget = false;
         text.font = GameFonts.GetChinese(); // 章节中文：fusion-pixel
-        _revealItems.Add(new RevealItem { text = text, target = title ?? "" });
+        _revealItems.Add(new RevealItem { text = text, target = title ?? "", alpha = text.color.a });
 
         var outline = textGo.AddComponent<Outline>();
         outline.effectColor = new Color(0f, 0f, 0f, 1f);
@@ -171,7 +177,7 @@ public class ChapterSplashOverlay : MonoBehaviour
             bodyText.color = new Color(1f, 1f, 1f, 0.92f);
             bodyText.raycastTarget = false;
             bodyText.font = GameFonts.GetChinese();
-            _revealItems.Add(new RevealItem { text = bodyText, target = body });
+            _revealItems.Add(new RevealItem { text = bodyText, target = body, alpha = bodyText.color.a });
             var brt = bodyText.rectTransform;
             brt.anchorMin = new Vector2(0.1f, 0.22f);
             brt.anchorMax = new Vector2(0.9f, 0.46f);
@@ -197,7 +203,7 @@ public class ChapterSplashOverlay : MonoBehaviour
             quoteText.color = new Color(1f, 1f, 1f, 0.85f); // 纯白，略低于正文以区分层次
             quoteText.raycastTarget = false;
             quoteText.font = GameFonts.GetChinese(); // 与标题/正文同款中文字体
-            _revealItems.Add(new RevealItem { text = quoteText, target = quote });
+            _revealItems.Add(new RevealItem { text = quoteText, target = quote, alpha = quoteText.color.a });
             var qrt = quoteText.rectTransform;
             // 正文底沿在 0.22：引言放在其下方 0.04–0.18 的留白带，避免与标题/正文重叠。
             qrt.anchorMin = new Vector2(0.1f, 0.04f);
@@ -211,68 +217,68 @@ public class ChapterSplashOverlay : MonoBehaviour
     }
 
     /// <summary>
-    /// 开关关掉：三段直接整段出现（原行为）。
-    /// 开关打开：先清空，交给 CoRevealTexts 逐字填。
+    /// 三段文字**整段**就位（文案一次写全），先把不透明度压到 0 = 「消失」态，
+    /// 再交给 <see cref="CoRevealLines"/> 从上到下接力淡入（「出现」）。
+    /// 与逐字无关：这里不再碰 text 的内容，只管透明度。
     /// </summary>
     void ApplyRevealState()
     {
-        if (!CharRevealEnabled)
-        {
-            FinishRevealAll();
-            return;
-        }
         for (int i = 0; i < _revealItems.Count; i++)
         {
             var t = _revealItems[i].text;
-            if (t != null) t.text = "";
+            if (t == null) continue;
+            t.text = _revealItems[i].target;
+            SetLineAlpha(_revealItems[i], 0f);
         }
     }
 
-    /// <summary>把还没显完的字一次性补齐（点击跳过 / 开关关闭时用）。</summary>
+    /// <summary>把三段一次性补齐到「已出现」态（点击跳过时用）：文案写全 + 不透明度回到原值。</summary>
     void FinishRevealAll()
     {
         for (int i = 0; i < _revealItems.Count; i++)
         {
             var t = _revealItems[i].text;
-            if (t != null) t.text = _revealItems[i].target;
+            if (t == null) continue;
+            t.text = _revealItems[i].target;
+            SetLineAlpha(_revealItems[i], 1f);
         }
         IsRevealed = true;
     }
 
-    /// <summary>
-    /// 标题 → 描述 → 引用 依次逐个字显现：缓存目标串后每字只做一次 Substring，不整段重建。
-    /// </summary>
-    IEnumerator CoRevealTexts()
+    /// <summary>把某一段的不透明度设为「原值 × k」（k=0 消失，k=1 完全出现）。</summary>
+    static void SetLineAlpha(RevealItem item, float k)
     {
-        for (int g = 0; g < _revealItems.Count; g++)
+        var t = item.text;
+        if (t == null) return;
+        var c = t.color;
+        c.a = item.alpha * Mathf.Clamp01(k);
+        t.color = c;
+    }
+
+    /// <summary>
+    /// 标题 → 正文 → 引言 从上到下**整段接力出现**：
+    /// 第 g 段的起点 = g × (LineRevealSeconds × LineStaggerRatio)，
+    /// 即上一段走到 80% 时下一段开始 —— 全程只改不透明度，不碰文案/字号/位置。
+    /// </summary>
+    IEnumerator CoRevealLines()
+    {
+        int n = _revealItems.Count;
+        if (n <= 0) { IsRevealed = true; yield break; }
+
+        float step = LineRevealSeconds * LineStaggerRatio;
+        float total = (n - 1) * step + LineRevealSeconds;
+
+        float t = 0f;
+        while (t < total)
         {
-            var item = _revealItems[g];
-            if (item.text == null || string.IsNullOrEmpty(item.target)) continue;
-
-            if (g > 0)
-            {
-                float gap = 0f;
-                while (gap < GroupRevealGap && !IsRevealed)
-                {
-                    gap += DeltaT();
-                    yield return null;
-                }
-            }
-
-            int len = item.target.Length;
-            for (int i = 1; i <= len; i++)
-            {
-                if (IsRevealed) yield break; // 已被跳过后补齐，不用再逐字
-                if (item.text == null) yield break;
-                item.text.text = item.target.Substring(0, i);
-                float w = 0f;
-                while (w < CharRevealInterval)
-                {
-                    w += DeltaT();
-                    yield return null;
-                }
-            }
+            if (IsRevealed) break;      // 已被跳过（FinishRevealAll 补齐过）
+            t += DeltaT();
+            for (int g = 0; g < n; g++)
+                SetLineAlpha(_revealItems[g], (t - g * step) / LineRevealSeconds);
+            yield return null;
         }
+        for (int g = 0; g < n; g++)
+            SetLineAlpha(_revealItems[g], 1f);
         IsRevealed = true;
     }
 
@@ -298,8 +304,8 @@ public class ChapterSplashOverlay : MonoBehaviour
         float holdSec = _isTutorial ? TutorialHoldSeconds : HoldSeconds;
         float fadeSec = _isTutorial ? TutorialFadeSeconds : FadeSeconds;
 
-        // 逐字显现与 Hold 共用同一计时：卡片停留 = max(Hold, 显现耗时)，不额外拖长时间。
-        if (CharRevealEnabled) StartCoroutine(CoRevealTexts());
+        // 整段接力显现与 Hold 共用同一计时：卡片停留 = max(Hold, 显现耗时)，不额外拖长时间。
+        StartCoroutine(CoRevealLines());
         float hold = 0f;
         while (hold < holdSec || !IsRevealed)
         {

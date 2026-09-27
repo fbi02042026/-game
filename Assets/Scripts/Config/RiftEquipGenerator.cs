@@ -54,9 +54,19 @@ public static class RiftEquipGenerator
         EquipTemplate visual = PickVisualTemplate(slotType, job);
         // 本职业没有可用武器模板 → 这件直接不掉，不拿别职业武器凑数
         if (visual == null && slot.IsWeapon) return null;
-        string appearanceId = EquipAppearanceTables.PickAppearanceId(slotType, slot.IsWeapon);
-        string spum = EquipAppearanceTables.ResolveSpumName(appearanceId,
-            visual != null ? visual.spumName : null);
+        // 2026-09-27 主人要求「副本掉的装备名字和图片也要对齐」——根因在这里：
+        // 旧写法先按职业/魔法分池挑出正确的模板 visual（名字、图标、spum 三者一致），
+        // 紧接着又用「按部位纯随机」的外观表 id 盖掉 spumName —— 于是名字来自模板、
+        // 手上拿的却是随机抽到的另一类武器（法师掉「法杖」却举着斧/剑），
+        // 而且 ResolveKind 也拿错 spum，攻击距离和特效一并判错。
+        // 真源唯一：有模板就用模板自己的 spumName；外观表只在没有模板（防具临时件）时兜底。
+        string appearanceId = null;
+        string spum = visual != null ? visual.spumName : null;
+        if (string.IsNullOrEmpty(spum))
+        {
+            appearanceId = EquipAppearanceTables.PickAppearanceId(slotType, slot.IsWeapon);
+            spum = EquipAppearanceTables.ResolveSpumName(appearanceId, null);
+        }
 
         var inst = new EquipInstance();
         inst.template = visual;
@@ -348,9 +358,10 @@ public static class RiftEquipGenerator
         }
         // 2026-09-26 主人拍板：武器按职业伤害类型分池——魔法职业(法师/牧师)优先掉魔法武器，物理职业优先掉物理武器。
         // 判定走表（player_job_base_stats.伤害类型），不写死职业。
-        // ⚠ 做成「优先」而非「强制」：现项目魔法武器模板极少（仅 weapon_twilight_staff / equip_weapon_002），
-        //    强制过滤会让法师/牧师几乎不掉武器；优先池为空时回退到按职业过滤的池。
-        //    等魔法武器模板补齐后，这里可改成强制（删掉 prefer.Count > 0 的回退分支）。
+        // ⚠ 做成「优先」而非「强制」：优先池为空时回退到按职业过滤的池，避免某职业一件武器都不掉。
+        //    2026-09-26 补了 6 个魔法武器模板（equip_magic_weapon_01/03/05/09/11/16），
+        //    加上原有的 weapon_twilight_staff / equip_weapon_002，魔法池共 8 个。
+        //    若主人要改成「强制」，删掉下面 prefer.Count > 0 的回退分支即可。
         if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
         {
             bool wantMagic = PlayerJobBaseStats.IsMagicJob(job);

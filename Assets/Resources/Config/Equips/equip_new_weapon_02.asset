@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_02
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_02
-  equipName: "旅人佩剑"
+  equipName: "旅人短斧"
   icon: {fileID: 21300000, guid: 98c4504611884769835b81e8b5f5e8cb, type: 3}
   iconFileName: New_weapon_02
   gridWidth: 1

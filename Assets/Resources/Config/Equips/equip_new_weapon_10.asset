@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_10
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_10
-  equipName: "暗潮曲刀"
+  equipName: "暗潮短弓"
   icon: {fileID: 21300000, guid: da32ed931c104119ae964e899d81d321, type: 3}
   iconFileName: New_Weapon_10
   gridWidth: 1

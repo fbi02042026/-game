@@ -31,7 +31,7 @@ public class StageClearRewardDirector : MonoBehaviour
     Vector3 _boxBaseScale = Vector3.one;
     Vector3 _effectBaseScale = Vector3.one;
     Vector3 _boxScenePos;
-    bool _boxScenePosCached;
+    bool _boxSnapErrorLogged;
     bool _running;
 
     public bool IsRunning => _running;
@@ -168,7 +168,6 @@ public class StageClearRewardDirector : MonoBehaviour
             _effectBaseScale = _effectRoot != null ? _effectRoot.localScale : Vector3.one;
             if (_effectBaseScale == Vector3.zero) _effectBaseScale = Vector3.one;
             _boxScenePos = _boxRoot.position;
-            _boxScenePosCached = true;
             EnsureBoxController();
             _boxRoot.gameObject.SetActive(false);
         }
@@ -179,7 +178,6 @@ public class StageClearRewardDirector : MonoBehaviour
     /// <summary>切场景 / 重开战后调用，强制下次 CacheSceneRefs 重新采样。</summary>
     public void InvalidateSceneCache()
     {
-        _boxScenePosCached = false;
         _boxRoot = null;
         _boxAnimHost = null;
         _effectRoot = null;
@@ -229,7 +227,13 @@ public class StageClearRewardDirector : MonoBehaviour
         if (sg == null) sg = _boxRoot.GetComponentInChildren<UnityEngine.Rendering.SortingGroup>();
         if (sg == null) sg = _boxRoot.gameObject.AddComponent<UnityEngine.Rendering.SortingGroup>();
         sg.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        sg.sortingOrder = GameConfig.SORT_UNIT + Mathf.RoundToInt(-footY * 40f);
+        // 2026-09-27 主人反馈「宝箱还是看不见」：这一行原来会算出**低于地图**的 order。
+        // 公式 15 - footY*40 在 footY 为正（地面/箱子在原点上方）时会掉到 10 以下，
+        // 而地图根是 SORT_MAPROOT=10 → 箱子被地图整块盖掉，等于隐形。
+        // 加下限：至少压在地图之上（SORT_MAPROOT + 5 = 15，与单位同档起点），
+        // 同时保留按 Y 参与前后遮挡的原意。要再往上只调这个下限。
+        int minBoxOrder = GameConfig.SORT_MAPROOT + 5;
+        sg.sortingOrder = Mathf.Max(minBoxOrder, GameConfig.SORT_UNIT + Mathf.RoundToInt(-footY * 40f));
 
         if (_closeSr != null)
         {
@@ -384,63 +388,42 @@ public class StageClearRewardDirector : MonoBehaviour
         }
     }
 
-    /// <summary>关箱待机姿态，便于按 close 贴图底边算地面。</summary>
-    void PrepareBoxClosedPose()
-    {
-        HoldBoxClosedPose();
-    }
-
+    /// <summary>当前显示在场上的那张箱皮（用于取底边贴地）。</summary>
     SpriteRenderer GetBoxGroundSprite()
     {
+        if (_openSr != null && _openSr.enabled && _openSr.sprite != null) return _openSr;
         if (_closeSr != null && _closeSr.sprite != null) return _closeSr;
         if (_openSr != null && _openSr.sprite != null) return _openSr;
         return null;
     }
 
     /// <summary>
-    /// 旧：按 close/open 精灵底边贴 GROUND_Y。
-    /// 2026-09-24 主人要求：宝箱位置以美术手摆为准（close 是从天上下落的动画，落点由摆放决定），
-    /// 运行时禁止再改 box 的 y。本方法改为 no-op：保留方法与签名、所有调用点不动。
+    /// 宝箱贴地：把当前箱皮的**底边**对齐到「可行走区域中心」的地面高度。
+    /// 2026-09-27 主人拍板：宝箱悬在半空（偏上、没落地），应落在可行走区域中心。
+    /// 旧的 2026-09-24「位置锁死、以美术手摆 y 为准」实现（连同 useOpenVisual 开关、+0.12 魔数）
+    /// 已整段删除，不留回退分支 —— 落点真源只有一个：BattleLaneBounds 的车道中心。
     /// </summary>
-    void SnapBoxRootToGround(bool useOpenVisual = false)
+    void SnapBoxRootToGround()
     {
-        // 2026-09-24 位置锁死：直接返回，不再贴地改 y。原有贴地逻辑保留在下面以备回滚。
-        return;
-
-        // —— 以下为旧贴地逻辑（已停用）——
         if (_boxRoot == null) return;
-        if (useOpenVisual)
-        {
-            if (_openSr != null)
-            {
-                _openSr.gameObject.SetActive(true);
-                _openSr.enabled = true;
-            }
-            if (_closeSr != null)
-                _closeSr.enabled = false;
-            if (_boxAnim != null)
-                _boxAnim.Update(0f);
-        }
-        else
-        {
-            PrepareBoxClosedPose();
-        }
 
         var sr = GetBoxGroundSprite();
         if (sr == null)
         {
-            if (_boxScenePosCached)
+            // fail closed：没有箱皮就量不出底边，宁可不动位置也要把问题报出来。
+            // 开箱那段会每帧调用本方法，只报一次，避免刷屏淹没别的错。
+            if (!_boxSnapErrorLogged)
             {
-                var fallback = _boxRoot.position;
-                fallback.y = _boxScenePos.y;
-                _boxRoot.position = fallback;
+                _boxSnapErrorLogged = true;
+                Debug.LogError("[StageClearReward] 宝箱贴地失败：box 下没有可用箱皮 SpriteRenderer，位置保持不动");
             }
             return;
         }
 
-        float dy = UnitBase.GROUND_Y - sr.bounds.min.y;
-        if (useOpenVisual)
-            dy += 0.12f;
+        BattleLaneBounds.GetLaneOffsetRange(out float laneMin, out float laneMax);
+        float groundY = UnitBase.GROUND_Y + (laneMin + laneMax) * 0.5f;
+
+        float dy = groundY - sr.bounds.min.y;
         if (Mathf.Abs(dy) < 0.0005f) return;
         var p = _boxRoot.position;
         float beforeY = p.y;
@@ -448,7 +431,7 @@ public class StageClearRewardDirector : MonoBehaviour
         _boxRoot.position = p;
         // #region agent log
         DebugAgentLog.Log("H6", "StageClearRewardDirector.SnapBoxRootToGround", "box_snap",
-            $"{{\"useOpen\":{(useOpenVisual ? "true" : "false")},\"beforeY\":{beforeY:F3},\"afterY\":{p.y:F3},\"groundY\":{UnitBase.GROUND_Y:F3},\"boundsMinY\":{sr.bounds.min.y:F3}}}");
+            $"{{\"beforeY\":{beforeY:F3},\"afterY\":{p.y:F3},\"groundY\":{groundY:F3},\"boundsMinY\":{sr.bounds.min.y:F3}}}");
         // #endregion
     }
 
@@ -652,9 +635,9 @@ public class StageClearRewardDirector : MonoBehaviour
         HoldBoxClosedPose();
         if (_closeSr != null) { _closeSr.enabled = true; _closeSr.gameObject.SetActive(true); }
         if (_openSr != null) { _openSr.enabled = false; _openSr.gameObject.SetActive(true); }
-        // 摆放时按 close 精灵底边贴站立线（与正式关 CoReward 一致）。
-        // 场景里 box 节点的 y 是美术手摆的，教学关此前只改 x/z 不动 y，
-        // 一旦场景 y 与运行时 GROUND_Y 不一致，宝箱就会悬在半空。
+        // 摆放时按当前箱皮底边贴「可行走区域中心」（与正式关 CoReward 同一入口）。
+        // 场景里 box 节点的 y 是美术手摆的，落点一律由 SnapBoxRootToGround 统一算，
+        // 只改 x/z 的地方不再各自决定高度（2026-09-27：单一真源，避免又飘回半空）。
         SnapBoxRootToGround();
 
         float wait = 0f;
@@ -701,7 +684,7 @@ public class StageClearRewardDirector : MonoBehaviour
         // 先对齐开箱姿态地面，再播特效，避免 World 粒子留在旧高度显得偏下
         if (_closeSr != null) _closeSr.enabled = false;
         if (_openSr != null) _openSr.enabled = true;
-        SnapBoxRootToGround(useOpenVisual: true);
+        SnapBoxRootToGround();
 
         if (_boxAnim != null)
         {
@@ -714,7 +697,7 @@ public class StageClearRewardDirector : MonoBehaviour
         else
             yield return new WaitForSecondsRealtime(0.4f);
 
-        SnapBoxRootToGround(useOpenVisual: true);
+        SnapBoxRootToGround();
 
         GameObject ground = null;
         if (drop != null)
@@ -736,7 +719,7 @@ public class StageClearRewardDirector : MonoBehaviour
         onGroundIcon?.Invoke(ground);
         yield return new WaitForSecondsRealtime(0.25f);
         if (_boxAnim != null) _boxAnim.Play("open2", 0, 0f);
-        SnapBoxRootToGround(useOpenVisual: true);
+        SnapBoxRootToGround();
         HideBoxVisual();
     }
 
@@ -830,14 +813,14 @@ public class StageClearRewardDirector : MonoBehaviour
                 yield return WaitAnimOrSeconds(_boxAnim, "open1", 1.15f);
                 if (_closeSr != null) _closeSr.enabled = false;
                 if (_openSr != null) _openSr.enabled = true;
-                SnapBoxRootToGround(useOpenVisual: true);
+                SnapBoxRootToGround();
                 // open2 已在控制器里设为循环；播完 open1 后强制切入并保持循环
                 _boxAnim.Play("open2", 0, 0f);
-                SnapBoxRootToGround(useOpenVisual: true);
+                SnapBoxRootToGround();
                 float open2Snap = 0f;
                 while (open2Snap < 2.5f)
                 {
-                    SnapBoxRootToGround(useOpenVisual: true);
+                    SnapBoxRootToGround();
                     open2Snap += Time.unscaledDeltaTime;
                     yield return null;
                 }
@@ -848,7 +831,7 @@ public class StageClearRewardDirector : MonoBehaviour
                 // 无 Animator（箱皮丢失兜底补建路径）：手动切到 open 显示并贴地，让玩家看到箱子开了
                 if (_closeSr != null) _closeSr.enabled = false;
                 if (_openSr != null) _openSr.enabled = true;
-                SnapBoxRootToGround(useOpenVisual: true);
+                SnapBoxRootToGround();
                 PlayBoxOpenEffect();
                 yield return new WaitForSecondsRealtime(0.8f);
             }

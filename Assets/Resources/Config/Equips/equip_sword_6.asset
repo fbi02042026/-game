@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_sword_6
   m_EditorClassIdentifier: 
   templateId: equip_sword_6
-  equipName: "裂空细剑"
+  equipName: "裂空佩剑"
   icon: {fileID: 21300000, guid: 8baf8e36f871477e941b94afcfa97049, type: 3}
   iconFileName: Sword_6
   gridWidth: 1

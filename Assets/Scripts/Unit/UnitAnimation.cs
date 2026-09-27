@@ -545,7 +545,15 @@ public class UnitAnimation : MonoBehaviour
         // 攻击锁期间不切 MOVE/IDLE，避免出手中途闪站立；锁结束后 ForceResumeMoveAnim
         if (_attackAnimLock > 0f)
         {
-            ApplyMoveAnimSpeed(isMoving);
+            // 2026-09-27 主人反馈：「打死敌人后前往下一个敌人时会切到站立动作，然后滑步过去」。
+            // 原因：锁期间一律不切动画，攻击末帧/IDLE 会一直挂着，而位移（UnitBase 的 velocity）已经下发
+            // → 身体在动、动画是站着的，看起来就是滑步。
+            // 修法：锁期间**从静止转为移动**（= 这一击已经打完、要去赶下一个目标）时强制补播 MOVE；
+            // 原地不动（isMoving=false）时保持原样，仍然不许中途闪站立。
+            if (stateChanged && isMoving)
+                ForceResumeMoveAnim();
+            else
+                ApplyMoveAnimSpeed(isMoving);
             return;
         }
 

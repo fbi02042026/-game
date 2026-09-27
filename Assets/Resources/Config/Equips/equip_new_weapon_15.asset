@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_15
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_15
-  equipName: "风暴刺剑"
+  equipName: "风暴长弓"
   icon: {fileID: 21300000, guid: bf6ab89ee76b4be19121ac8e857b818c, type: 3}
   iconFileName: New_Weapon_15
   gridWidth: 1

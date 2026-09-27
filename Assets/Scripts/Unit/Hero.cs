@@ -311,7 +311,9 @@ public class Hero : UnitBase
             return jobKit;
 
         AttackVfxKit fromWeapon = SkillNaming.KitFromWeaponKind(WeaponCombatTable.ResolveKind(inst));
-        // 法师/牧师职业或魔法武器：禁止回退近战刀光（暮火之杖外观 New_Weapon_06 曾被当成剑）
+        // 法师/牧师职业或魔法武器：禁止回退近战刀光。
+        // 注：暮火之杖的 spum 已于 2026-09-27 真源对齐为 New_Weapon_03（5_Wand 法杖图，不再需要 Ward_1 补丁），
+        // 这里保留判断是因为**其它**魔法武器仍可能被 ResolveKind 判成 MeleeSlash。
         if (fromWeapon == AttackVfxKit.MeleeSlash
             && (jobKit == AttackVfxKit.Orb || inst.weaponAttackType == WeaponAttackType.Magic))
             return AttackVfxKit.Orb;

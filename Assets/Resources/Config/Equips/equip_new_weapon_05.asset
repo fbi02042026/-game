@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_new_weapon_05
   m_EditorClassIdentifier: 
   templateId: equip_new_weapon_05
-  equipName: "林间长刃"
+  equipName: "林间匕首"
   icon: {fileID: 21300000, guid: 19ec13d547a64218ad3b49f2b3c488a3, type: 3}
   iconFileName: New_Weapon_05
   gridWidth: 1

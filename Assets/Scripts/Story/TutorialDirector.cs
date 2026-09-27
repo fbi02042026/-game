@@ -412,10 +412,13 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return CoTeachControls(bm, hint, ui);
 
         // —— 1) 首波清场后进入宝箱剧情（不再刷第二小波）——
-        hint.Show("靠近怪物会自动攻击。", null, 8f);
-        if (bm != null) bm.UnitsCanAct = true;
+        // 2026-09-27 主人反馈「引导到自动攻击时怪还没出来」→ **先刷怪、再弹提示**。
+        // 原来顺序是先 Show 提示再 EnsureTutorialStep(1)，怪在玩家读字期间才开始生成+屏外走进场，
+        // 于是提示说完玩家面前还是空的。现在把刷怪整段提到提示之前，怪已经在场才说「靠近会自动攻击」。
         TutorialBattleTable.EnsureLoaded();
         yield return EnsureTutorialStep(bm, 1);
+        hint.Show("靠近怪物会自动攻击。", null, 8f);
+        if (bm != null) bm.UnitsCanAct = true;
         yield return WaitFieldClear();
 
         yield return WaitFieldClear(strict: true);
@@ -441,8 +444,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         chestDir.CacheSceneRefs();
 
         var drop = CreateTutorialEquipDrop();
-        if (bm != null) bm.UnitsCanAct = false;
         hint.Hide();
+        // 2026-09-27 主人拍板：清完上一波不要马上进宝箱剧情 —— 先让玩家往前走两步，
+        // 宝箱再「突然出现」。UnitsCanAct 保持 true（WaitFieldClear 结尾已放开，场上无怪 → 向右推图），
+        // 走够距离才冻结进剧情。只等，绝不改写 Hero 坐标（2026-09-18 教训）。
+        yield return CoWaitHeroAdvance(2.4f, 4f);
+        if (bm != null) bm.UnitsCanAct = false;
         yield return chestDir.CoTutorialPlaceChest(4f, waitForHeroApproach: false);
         chestDir.SnapHeroBeforeChest();
 
@@ -1260,7 +1267,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 if (eq.icon == null && tpl.icon != null) eq.icon = tpl.icon;
                 if (eq.icon == null) eq.icon = EquipIcons.Get(tpl.iconFileName);
                 AlignWeaponToHeroAttackHand(eq);
-                eq.equipName = EquipNameGen.RandomWeaponName(eq.slotType);
+                // 2026-09-27：传模板进去 —— 只给槽位的话，弓/斧也会被随机成剑名（名字和图对不上）。
+                eq.equipName = EquipNameGen.RandomWeaponName(tpl, eq.slotType);
                 return eq;
             }
         }
@@ -1278,7 +1286,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
             if (eq != null && WeaponLoadoutRules.IsLoadoutItem(eq))
                 AlignWeaponToHeroAttackHand(eq);
             if (eq != null && (string.IsNullOrEmpty(eq.equipName) || LooksLikeEnglishFileName(eq.equipName)))
-                eq.equipName = EquipNameGen.RandomWeaponName(eq.slotType);
+                eq.equipName = EquipNameGen.RandomWeaponName(eq.template, eq.slotType);
             return eq;
         }
         return null;
@@ -1376,6 +1384,33 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         if (bm != null && strict)
             bm.UnitsCanAct = true;
+    }
+
+    /// <summary>
+    /// 2026-09-27 主人要求「清完一波走两步再出宝箱」：等玩家自己往前走够距离。
+    /// 只等不推 —— 绝不改写 Hero 坐标（2026-09-18 主人明确：推坐标看起来像瞬移）。
+    /// 超时只是放行继续流程（不是拿别的值顶替），并把实际走了多远打出来，便于定位「为什么不走」。
+    /// </summary>
+    IEnumerator CoWaitHeroAdvance(float dist, float timeout = 4f)
+    {
+        var bm = BattleManager.Instance;
+        if (bm != null) bm.UnitsCanAct = true;
+
+        var hero = Hero.Instance;
+        if (hero == null || dist <= 0f) yield break;
+
+        float startX = UnitBase.GetCombatX(hero);
+        float t = 0f;
+        while (t < timeout)
+        {
+            t += Time.unscaledDeltaTime;
+            if (hero == null) yield break;
+            if (UnitBase.GetCombatX(hero) - startX >= dist) yield break;
+            yield return null;
+        }
+
+        if (hero != null && UnitBase.GetCombatX(hero) - startX < dist)
+            Debug.LogWarning($"[Tutorial] 等待玩家前进超时：只走了 {(UnitBase.GetCombatX(hero) - startX):F2}/{dist:F2}，继续流程");
     }
 
     static Button ResolveAdventureButton()

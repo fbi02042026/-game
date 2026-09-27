@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
-  m_Name: equip_new_weapon_13
+  m_Name: equip_magic_weapon_11
   m_EditorClassIdentifier: 
-  templateId: equip_new_weapon_13
-  equipName: "月影长枪"
-  icon: {fileID: 21300000, guid: b0fbce9233bb4c3baa91b2c4c94eb97e, type: 3}
-  iconFileName: New_Weapon_13
+  templateId: equip_magic_weapon_11
+  equipName: "霜脊匕首·魔"
+  icon: {fileID: 21300000, guid: 4526cc6520cd4f2195cf6efe8c471c13, type: 3}
+  iconFileName: New_Weapon_11
   gridWidth: 1
   gridHeight: 2
   tags: []
@@ -32,7 +32,8 @@ MonoBehaviour:
   isLegendary: 0
   slotType: 5
   weaponType: 0
-  weaponAttackType: 0
+  weaponAttackType: 1
   attackRange: 96
+  weaponKindOverride: 3
   armorPrefix: 0
-  spumName: New_Weapon_13
+  spumName: New_Weapon_11

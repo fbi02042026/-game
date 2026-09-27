@@ -14,8 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   templateId: weapon_twilight_staff
   equipName: "\u66AE\u706B\u4E4B\u6756"
-  icon: {fileID: 21300000, guid: 399523ebacf24d44bc1a07c090932d7d, type: 3}
-  iconFileName: New_Weapon_06
+  icon: {fileID: 21300000, guid: d47e9ab9029142e4bfd3ca80a083cb72, type: 3}
+  iconFileName: New_Weapon_03
   gridWidth: 1
   gridHeight: 2
   tags: []
@@ -45,4 +45,4 @@ MonoBehaviour:
   attackRange: 120
   weaponKindOverride: 3
   armorPrefix: 0
-  spumName: New_Weapon_06
+  spumName: New_Weapon_03

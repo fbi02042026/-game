@@ -273,9 +273,12 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
             if (sys.IsOnCooldown(s.skillId)) continue;   // 已有更长冷却的不覆盖
 
-            float cd = i == 0
-                ? GameConfig.PLAYER_SKILL_SLOT0_OPENING_CD
-                : s.cooldown * GameConfig.PLAYER_SKILL_OPENING_CD_MUL[i];
+            // 2026-09-27 主人拍板：**每个技能进战都要先走一遍自己的完整冷却**，不许一上来就放。
+            // 原实现：第 1 槽固定 0.5s、2~4 槽只跑自身 CD 的 0.33/0.66/1.0 倍 —— 等于刚进战就能放，
+            // 主人反馈「玩家的技能不要一上来就释放」。现在统一 = 技能自身 CD；
+            // 各技能 CD 本来就不一样，天然错峰，不再需要 PLAYER_SKILL_OPENING_CD_MUL 那套倍率
+            // （常量保留不删，但本函数已不使用，别再拿它改回错峰）。
+            float cd = s.cooldown;
             if (cd > 0.01f) sys.RegisterCooldown(s.skillId, cd);
         }
     }
@@ -747,14 +750,15 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// 目前无正式调用方，是留给剧情/教程的显式钩子 —— 教程最后一波会用它保证玩家一定看到技能放出。
     /// </summary>
     /// <summary>
-    /// 教程钩子：让玩家的技能立刻能放出来（教程最后一波靠它保证玩家一定看到技能）。
-    /// 纯冷却制后改为「解除全局间隔 + 清掉已有冷却并重新错峰」，语义与原来「充满能量」一致。
+    /// 教程钩子：让玩家的技能进入「可预期的一段冷却」后自然放出来（教程最后一波靠它让玩家看到技能）。
+    /// 2026-09-27 主人拍板：这里**不再清冷却**（ClearPlayerSkillCooldowns 会让技能瞬间可放，
+    /// 与主人口径「技能刚上来要先走一遍冷却」冲突）→ 改为重新挂一遍完整开场冷却。
     /// </summary>
     public void FillPlayerSkillEnergy()
     {
-        // 纯冷却制：技能本来就不看能量，要做的是「解除间隔 + 清掉冷却」，让它立刻能放
+        // 纯冷却制：技能本来就不看能量，要做的是「解除全局间隔 + 重新挂完整冷却」，让它走完 CD 再放
         ResetPlayerSkillGcd();
-        SkillSystem.Instance?.ClearPlayerSkillCooldowns();
+        PrimePlayerSkillOpeningCooldowns();
 
         if (GameConfig.PLAYER_SKILL_USE_ENERGY && playerSkillEnergy != null)
         {
@@ -839,14 +843,29 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     public Mercenary SpawnTutorialMercAt(string mercId, float hpRatio, float aheadDist, bool stunned)
     {
         var mm = MercenaryManager.Instance;
-        if (mm == null || hero == null) return null;
+        // 2026-09-27：以前失败只返回 null，导演侧只看到「牧师入队失败：merc 为空」这半句，
+        // 不知道卡在哪一关。现在按 fail-closed 把原因打出来（不静默沿用、不拿别的单位顶替）。
+        if (mm == null)
+        {
+            Debug.LogError("[BattleManager] SpawnTutorialMercAt 失败：MercenaryManager.Instance 为空");
+            return null;
+        }
+        if (hero == null)
+        {
+            Debug.LogError("[BattleManager] SpawnTutorialMercAt 失败：hero 为空（玩家已阵亡或本局已收尾）");
+            return null;
+        }
 
         float heroX = UnitBase.GetCombatX(hero);
         float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
         Vector3 pos = new Vector3(heroX + aheadDist, UnitBase.GROUND_Y, z);
         string useId = string.IsNullOrEmpty(mercId) ? StoryProgress.TutorialMercId : mercId;
         var merc = mm.SpawnMercenary(useId, pos, 1);
-        if (merc == null) return null;
+        if (merc == null)
+        {
+            Debug.LogError($"[BattleManager] SpawnTutorialMercAt 失败：SpawnMercenary 返回空 mercId={useId}");
+            return null;
+        }
         MercRosterDefs.GetSkillIds(useId, out string active, out string passive);
         merc.SetupBattleSkills(active, passive);
         merc.SetDisplayName(StoryProgress.TutorialMercDisplayName, StoryProgress.TutorialMercNickname);
@@ -2353,10 +2372,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         MercenaryManager.Instance?.ClearAllMercs();
         AdventureLogAchievements.OnDied();
         EndRunLoadout();
-        // 引导关死亡：不走遗产，按撤离收尾标记教程进度，避免反复卡在引导战
+        // 引导关死亡：不走遗产，也不标记教程通关 —— 重进引导战斗（2026-09-27 主人拍板）
         if (Rules.Active || SkipLegacyOnEvacuate)
         {
-            FinishTutorialEvacuate();
+            RestartTutorialBattle();
             return;
         }
         TriggerLegacyFlow(isDeath: true);
@@ -2412,19 +2431,31 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         });
     }
 
-    void FinishTutorialEvacuate()
+    /// <summary>
+    /// 引导局阵亡收尾：重新进入引导战斗（重头走引导步骤）。
+    /// 2026-09-27 主人拍板：旧实现是「MarkTutorialBattleCleared + 回城」，
+    /// 等于把引导里的一次阵亡当成通关 —— 回主界面就直接加载小白剧情。
+    /// 现在只重进战斗场景（TutorialBattleCleared 没写 → ShouldStartTutorialBattle 仍为 true，
+    /// 重新加载后还是引导局），金币照常写回，通关奖励不再发。
+    /// </summary>
+    void RestartTutorialBattle()
     {
         if (TutorialDirector.Instance != null)
             TutorialDirector.Instance.WaitingEvacuate = false;
-        if (!_stageQuestGoldGranted && StageQuestClearGold > 0)
-            TryGrantStageQuestGold();
         GridBackpackSystem.Instance?.ClearRunEquipment();
         // currentGold 含城镇底金，必须走差额写回，禁止整额 Add
         PersistBattleGold();
-        StoryProgress.MarkTutorialBattleCleared();
         BattleStateSaver.Instance?.ClearBattleState();
         SaveSystem.Instance?.Save();
-        GameSceneManager.Instance.LoadTownScene();
+
+        var gsm = GameSceneManager.Instance;
+        if (gsm == null)
+        {
+            Debug.LogError("[BattleManager] 引导局阵亡后重进战斗失败：GameSceneManager 为空");
+            return;
+        }
+        Debug.LogWarning("[BattleManager] 引导局阵亡：重新进入引导战斗");
+        gsm.LoadBattleScene();
     }
 
     /// <summary>

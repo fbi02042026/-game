@@ -68,6 +68,12 @@ public class AttrSystem
         if (!wroteJob)
             WriteGameConfigCombatBases();
 
+        // 2026-09-27：走职业表那条路径目前只写物理防御 → 这里补上魔法防御的**基础真源**，
+        // 保证 AttrType.MagicDefense 这个键一定存在（伤害公式取不到键会报 DF-003 错误码）。
+        // 这是「属性初始化」不是「兜底换算」：值就是 BASE_MAGIC_DEFENSE，不从物防推导。
+        if (!_baseAttr.ContainsKey(AttrType.MagicDefense))
+            _baseAttr[AttrType.MagicDefense] = GameConfig.BASE_MAGIC_DEFENSE;
+
         _attr.Clear();
         foreach (var pair in _baseAttr)
             _attr[pair.Key] = pair.Value;
@@ -83,6 +89,9 @@ public class AttrSystem
         _baseAttr[AttrType.MoveSpeed] = GameConfig.BASE_MOVE_SPEED;
         _baseAttr[AttrType.AttackRange] = GameConfig.BASE_ATTACK_RANGE;
         _baseAttr[AttrType.Defense] = GameConfig.BASE_DEFENSE;
+        // 2026-09-27 主人拍板：防御拆成物理 / 魔法两条，魔防是独立属性（不再由物防换算）。
+        // 这里写入的是**基础真源**，装备的魔法防御会往上叠。
+        _baseAttr[AttrType.MagicDefense] = GameConfig.BASE_MAGIC_DEFENSE;
     }
 
     public void ResetToBase()
@@ -224,6 +233,12 @@ public class AttrSystem
         float v = _attr.ContainsKey(type) ? _attr[type] : 0;
         return ApplyTimedBuff(type, v);
     }
+
+    /// <summary>
+    /// 属性表里**有没有登记**这个属性（区分「没登记」和「登记了但值是 0」）。
+    /// 2026-09-27：物理/魔法防御拆开后，伤害公式靠它判断该报错还是正常按 0 结算。
+    /// </summary>
+    public bool HasAttr(AttrType type) => _attr.ContainsKey(type);
 
     // ============================================================
     // 定时增益层（2026-09-15）

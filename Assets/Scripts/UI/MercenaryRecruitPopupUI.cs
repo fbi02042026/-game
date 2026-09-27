@@ -449,6 +449,8 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         string key = !string.IsNullOrEmpty(offer.hireId) ? offer.hireId : offer.mercId;
         if (badge == null)
         {
+            // 2026-09-27：末位那个 40f 只是新建节点的初始占位，真实尺寸由
+            // CreateBadgeForMerc 按**图片自身尺寸**（职业图 44×50）还原，代码不再压成正方形。
             badge = MercGrowUI.CreateBadgeForMerc(cardRoot, "MG_Badge", key, rarity, 40f);
             if (badge != null)   // 兜空：构件返回 null 或素材缺失都不加空节点、不改排版
             {

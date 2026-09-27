@@ -13,6 +13,11 @@ public class TownBackpackGrid : MonoBehaviour
     public const float CellSize = 82f;
     public const float CellSpacing = 0f;
     public const int Pad = 10;
+    /// <summary>
+    /// 排查「背包到底锁了几格」用的诊断日志开关：**当前为 true（开着）**，每次 Refresh 打一条
+    /// `[BagLock] cols/cells/unlockedRows/lockedRows`。主人确认锁行正确后把它置回 false。
+    /// </summary>
+    public const bool LogRowLockDecision = true;
 
     public GridLayoutGroup gridLayout;
     public RectTransform gridContainer;
@@ -189,7 +194,48 @@ public class TownBackpackGrid : MonoBehaviour
         return DisplayColumns() != LogicalColumns() || DisplayPageIndex() != 0;
     }
 
-    /// <summary>按「显示索引 → 逻辑坐标」重算每个格子的 gridX/gridY。</summary>
+    /// <summary>命名顺序自检只报一次，避免每次 Refresh 刷屏。</summary>
+    static bool _cellNameOrderChecked;
+
+    /// <summary>
+    /// 自检：格子「名字里的行列」是否与「屏幕上的行列」一致。不一致说明格子是竖着一组一组复制出来的。
+    /// 坐标已按屏幕顺序纠正（功能正确），这里只给主人一条**带错误码**的提示，不在运行时偷偷改任何东西。
+    /// </summary>
+    void CheckCellNameOrderOnce(int cols)
+    {
+        if (_cellNameOrderChecked) return;
+        if (cells.Count == 0 || cols <= 0) return;
+        _cellNameOrderChecked = true;
+
+        int mismatch = 0;
+        for (int i = 0; i < cells.Count; i++)
+        {
+            var c = cells[i];
+            if (c == null || c.root == null) continue;
+            string n = c.root.name;
+            if (!n.StartsWith("Cell_", System.StringComparison.OrdinalIgnoreCase)) continue;
+            string[] p = n.Split('_');
+            if (p.Length < 3) continue;
+            if (!int.TryParse(p[1], out int nr) || !int.TryParse(p[2], out int nc)) continue;
+            if (nr != i / cols || nc != i % cols) mismatch++;
+        }
+        if (mismatch > 0)
+            Debug.LogWarning($"[BAG-ORDER-01] {name}：{mismatch}/{cells.Count} 个格子的命名与屏幕排列顺序不一致" +
+                "（这批格子是竖着 4 个一组复制出来的，不是横着 0-7 一行）。\n" +
+                "坐标已按屏幕顺序纠正，图标落格与整行上锁都按屏幕行来，功能不受影响；\n" +
+                "若想在 Hierarchy 里也对齐，请把 GridContainer 下的格子按 Cell_行_列 的行优先顺序重排一遍。");
+    }
+
+    /// <summary>
+    /// 按「实际排列顺序 → 逻辑坐标」重算每个格子的 gridX/gridY。
+    /// <para>2026-09-27 主人纠错：角色页 32 格是**从战斗背包那 4 格竖着一组一组复制**出来的，
+    /// 所以预制体里格子的兄弟顺序是「Cell_0_0 → Cell_1_0 → Cell_2_0 → Cell_3_0 → Cell_0_1 …」（列优先），
+    /// 而 GridLayoutGroup 是按兄弟顺序横着摆 8 列的 —— **名字里的"行"和屏幕上真正的行完全错位**。
+    /// 结果就是：① 图标落错格子；② 按名字判锁行会在每个视觉行里锁出零散的 4 格（主人看到的"半行锁"）。
+    /// </para>
+    /// <para>修法：**一律用格子在 cells 里的顺序（= 兄弟顺序 = 屏幕顺序）÷ 显示列数**，
+    /// 名字只当备注，不再参与坐标。这样不用改预制体、不用重排节点，行为就是主人要的「一行 8 格」。</para>
+    /// </summary>
     void RemapDisplayCoords(int cols)
     {
         if (gridContainer == null || cols <= 0) return;
@@ -197,10 +243,10 @@ public class TownBackpackGrid : MonoBehaviour
         {
             var cell = cells[i];
             if (cell == null || cell.root == null) continue;
-            int idx = cell.root.transform.GetSiblingIndex();
-            if (idx < 0) continue;
+            // 用 cells 的序号而不是 GetSiblingIndex()：cells 绑定时已跳过 LockedOverlay 等非格子节点，
+            // 序号与「第几个格子」严格一一对应，不受多出来的遮罩节点影响。
             int gx, gy;
-            MapDisplayIndexToLogical(idx, cols, out gx, out gy);
+            MapDisplayIndexToLogical(i, cols, out gx, out gy);
             cell.gridX = gx;
             cell.gridY = gy;
         }
@@ -442,9 +488,12 @@ public class TownBackpackGrid : MonoBehaviour
             LayoutRebuilder.ForceRebuildLayoutImmediate(gridContainer);
 
         int cols = DisplayColumns();
-        // 显示规格被子类覆盖时（列折叠 / 分页偏移），按显示索引重算格子逻辑坐标，列数与页一变就地生效
-        if (HasDisplayOverride())
-            RemapDisplayCoords(cols);
+        // 2026-09-27：**无条件**按实际排列顺序重算格子坐标。
+        // 原来只在「子类改了列数/翻页」时才重算，其余情况沿用绑定时从**名字**解析出来的坐标；
+        // 而角色页格子是竖着 4 个一组复制的，名字与屏幕位置错位 → 图标落错格、锁行锁出零散半行。
+        // 现在一律以「第几个格子 ÷ 显示列数」为准（见 RemapDisplayCoords 的说明）。
+        RemapDisplayCoords(cols);
+        CheckCellNameOrderOnce(cols);
 
         // 道具真实可放范围仍按存档/天赋算（逻辑行），只把「显示」的锁行单独判
         int unlockedRows = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
@@ -454,13 +503,23 @@ public class TownBackpackGrid : MonoBehaviour
         if (rowLockOverlay != null)
             rowLockOverlay.SetActive(bottomLocked);
 
-        foreach (var cell in cells)
+        // 2026-09-26 主人要求：上锁的最小单位必须是「一整行」，绝不允许出现半行。
+        // 行号一律按「格子在 cells 里的顺序 ÷ 显示列数」算 —— cells 是绑定时按 GridContainer
+        // 的兄弟顺序建的，与 GridLayoutGroup 的实际排布一一对应，是**唯一权威**的行号来源；
+        // 不再用 gridY（那要经过名字解析 + 列折叠 + 分页偏移三道换算，任一处列数对不上
+        // 就会把一行劈成「前 4 格解锁、后 4 格锁」）。
+        for (int i = 0; i < cells.Count; i++)
         {
+            var cell = cells[i];
             if (cell == null) continue;
-            bool rowLocked = IsCellLocked(cell, cols, unlockedRowsDisplay);
+            int row = cols > 0 ? i / cols : 0;
+            bool rowLocked = row >= unlockedRowsDisplay;
             cell.SetRowLocked(rowLocked);
             if (!rowLocked) cell.Clear();
         }
+        if (LogRowLockDecision)
+            Debug.Log($"[BagLock] name={name} cols={cols} cells={cells.Count} unlockedRows={unlockedRowsDisplay} " +
+                      $"lockedRows={Mathf.Max(0, DisplayRowCount(cols) - unlockedRowsDisplay)}");
 
         // 子类专属数据源（角色页 8 列网格 → CharacterBagSystem）：
         // 子类给了自己的整套排布就直接铺，绝不掺用下面那条 4 列 GridBackpackSystem / bip.y >= unlockedRows 的过滤逻辑。
