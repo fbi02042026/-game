@@ -21,6 +21,19 @@
 
 ---
 
+## B0. 签名 / 加密 / 打包设置
+
+> 详见 **`Docs/聚光灯_签名与打包设置方案_2026-09-27.md`**（2026-09-27 主人拍板）
+
+| 项 | 本轮决定 |
+|---|---|
+| 正式 keystore | **本次就定下**：`Keys/pixeladventure-release.jks`（一键脚本 `Tools/make_keystore.bat`）。签名一旦定下不可更换 |
+| 版本号 `bundleVersion` / `versionCode` | 测试期**不动**；正式上传前再 +1（届时会提醒） |
+| 代码裁剪 `AndroidMinifyRelease` | **保持关闭**（0） |
+| 内容保护 / 资源加密 / AssetBundle | **全部不做**（上次加密把预制体搞坏过；聚光灯也禁热更）。`ContentProtection.Enabled` 保持 `false` |
+
+---
+
 ## B. 工程合规（仓库已落地）
 
 编译宏：`SPOTLIGHT_BUILD`（Spotlight 参赛包自动带上）
