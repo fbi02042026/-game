@@ -4,6 +4,9 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
+/// ⚠️ 已废弃（2026-09-30 主人拍板）：进关抽奖改成装在战斗 HUD 底部的 BackpackPanel 里，
+/// 走 <see cref="BattleEntryDraftPanel"/>。本类已无任何调用点，保留只为可回退，勿再接线。
+///
 /// 进关抽奖面板（2026-09-29 改造：两按钮「抽奖/跳过」→ 四个抽奖按钮 +「开始战斗」）。
 ///
 /// 面板在**开战前常驻**：只要抽奖币够，玩家可以一直抽；点「开始战斗」才关面板开打。

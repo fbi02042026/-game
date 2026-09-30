@@ -2196,7 +2196,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// · 只要抽奖币够就能一直抽；点「开始战斗」或超时才关面板开打。
     ///
     /// 🔴 战斗一开始必须完全隐藏抽奖面板 —— 战斗画面里只留战斗，不留任何抽奖入口。
-    /// 这里在循环结束后统一调 <see cref="SlotOfferUI.Hide"/> 兜底，不管从哪条路退出。
+    /// 这里在循环结束后统一调 <see cref="BattleEntryDraftPanel.Hide"/> 兜底，不管从哪条路退出。
     ///
     /// 引导关（Rules.GuideEntryDraft）开局会圈住「随机抽奖」按钮强制引导一次，抽完收起提示，
     /// 之后按 TutorialDirector 的既有节拍一步一步走。
@@ -2227,14 +2227,17 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         {
             DraftCategory? picked = null;
             int choice = 0;
-            SlotOfferUI.Show(price, focusPrice, cats, SlotMachineSystem.Coins(),
+            // 2026-09-30 主人改版：抽奖按钮长在战斗 HUD 底部的 BackpackPanel 里
+            //（BackpackPanel 收起 600 / 展开 750），不再弹居中面板 SlotOfferUI。
+            BattleEntryDraftPanel.Show(price, focusPrice, cats, SlotMachineSystem.Coins(),
                 c => { picked = c; choice = 1; },
                 () => choice = 2);
 
             // 引导关：开局先教玩家抽奖，圈住「随机抽奖」按钮
             if (tutorialGuide)
             {
-                var rect = SlotOfferUI.Instance != null ? SlotOfferUI.Instance.RandomButtonRect : null;
+                var rect = BattleEntryDraftPanel.Instance != null
+                    ? BattleEntryDraftPanel.Instance.NormalButtonRect : null;
                 TutorialHintUI.Ensure().ShowHard("先抽一次奖，开局白拿一个强化。", rect);
             }
 
@@ -2272,8 +2275,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             yield return CoJackpot(cats);
         }
 
-        // 退出循环 = 要开战了：面板和引导提示都关掉
-        SlotOfferUI.Hide();
+        // 退出循环 = 要开战了：收起 BackpackPanel、隐藏抽奖按钮与「继续」，引导提示也关掉
+        BattleEntryDraftPanel.Hide();
         if (Rules.GuideEntryDraft) TutorialHintUI.Instance?.Hide();
     }
 
