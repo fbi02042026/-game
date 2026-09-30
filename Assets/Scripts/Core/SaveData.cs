@@ -28,6 +28,11 @@ public class SaveData
 {
     // === 货币 / 资源（统一上限见 ResourceWallet，体力有特殊上限）===
     public long totalGold = 0;
+    /// <summary>
+    /// 抽奖币（2026-09-29 新增）：只用于进关抽奖，与 totalGold 完全分开。
+    /// 战斗通关产出，抽奖消耗；城镇升级 / 商店 / 天赋仍旧只花 totalGold。
+    /// </summary>
+    public int slotCoins = 0;
     public int talentPoints = 0;
     public int diamond = 0;
     public int enchantStones = 0;   // 附魔石

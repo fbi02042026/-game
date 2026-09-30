@@ -30,9 +30,9 @@ public static partial class GameConfig
     /// <summary>背包初始/默认解锁行数：3 行，共 12 格。双手武器 2×3 时会占掉一半，属于已知取舍。
     /// 注意：此值只表示「默认解锁几行」，不再作为网格行数上限（见 BACKPACK_HEIGHT_MAX）。</summary>
     public const int BACKPACK_HEIGHT = 3;
-    /// <summary>背包行数上限（本期扩容到 4 行 = 16 格）。
+    /// <summary>背包行数上限（2026-09-29：默认 3 行 + 天赋 R_BAG 三级各 1 行 = **6 行 = 24 格**）。
     /// 底层网格按此上限分配；实际可用行数受 SaveData.backpackRows / 天赋 R_BAG 钳制到该上限。</summary>
-    public const int BACKPACK_HEIGHT_MAX = 4;
+    public const int BACKPACK_HEIGHT_MAX = 6;
     public const int STAGES_PER_CHAPTER = 10; // 每章10关，最后一关是BOSS
     public const int SPECIAL_STAGES_PER_CHAPTER = 2; // 每章最多2个特殊关卡（商人/附魔/诅咒/休息）
     public const int MAX_OFFLINE_HOURS = 8; // 最多8小时离线收益

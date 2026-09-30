@@ -56,11 +56,12 @@ public class FocusMarkSystem : MonoBehaviour
         if (_marked != null && !IsMarkedEnemyAvailable(_marked))
             ExpireMark();
 
-        UnitBase nearest = FindNearestEnemyToHero(hero);
+        UnitBase nearest = PickMarkTarget(hero);
         float now = Time.time;
 
         if (nearest != null)
         {
+            // 进入标记范围仍只看 X（MarkRange 就是按 X 标的），选谁才用二维 —— 别混用
             float d = Mathf.Abs(UnitBase.GetCombatX(hero) - UnitBase.GetCombatX(nearest));
             if (d <= MarkRange)
             {
@@ -85,11 +86,24 @@ public class FocusMarkSystem : MonoBehaviour
             ExpireMark();
     }
 
+    /// <summary>
+    /// 2026-09-28 主人反馈「玩家可以攻击最近的敌人了，但是目标敌人头上的箭头没有切换」：
+    /// 根因是英雄索敌已升级成二维距离（X+Y），而这里仍只比 X —— 两套尺子选出不同的怪，
+    /// 箭头自然指着另一只。现在优先直接跟英雄当前目标（英雄自带 0.45 粘滞，不会来回跳），
+    /// 取不到再退回二维最近，与英雄索敌同一把尺。
+    /// </summary>
+    static UnitBase PickMarkTarget(Hero hero)
+    {
+        var live = hero != null ? hero.CurrentTarget : null;
+        if (live != null && IsMarkedEnemyAvailable(live))
+            return live;
+        return FindNearestEnemyToHero(hero);
+    }
+
     static UnitBase FindNearestEnemyToHero(Hero hero)
     {
         var list = BattleManager.Instance?.monsters;
         if (list == null) return null;
-        float hx = UnitBase.GetCombatX(hero);
         UnitBase best = null;
         float bestD = float.MaxValue;
         for (int i = 0; i < list.Count; i++)
@@ -97,7 +111,8 @@ public class FocusMarkSystem : MonoBehaviour
             var e = list[i];
             if (e == null || e.isDead || !e.gameObject.activeInHierarchy) continue;
             if (!GameConfig.IsInCombatViewport(e)) continue;
-            float d = Mathf.Abs(hx - UnitBase.GetCombatX(e));
+            // 与 UnitBase 索敌同尺：二维距离（X+Y），不再只比 X
+            float d = UnitBase.GetCombatDist(hero, e);
             if (d < bestD)
             {
                 bestD = d;

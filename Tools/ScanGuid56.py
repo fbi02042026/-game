@@ -10,13 +10,24 @@
 
 默认行为：只出检测报告（不写任何文件）。
 确实需要给资产换发新 hex32 标识时（人工确认后），显式加 --apply 执行。
+
+2026-09-28 性能修复：引用扫描原来对每个 56 字符 guid 都重新 os.walk + 全量读盘
+（304 × 全部 prefab/scene/asset），跑到超时。现改为**全量只读一遍**再按字符段比对，
+判定结果与 --apply 行为完全不变（只是快了）。
 """
 import os, re, sys, io, time, shutil, random
 sys.stdout.reconfigure(encoding='utf-8')
-ROOT = r'Y:\PixelAdventureTown'
+
+# 仓库根：优先按脚本自身位置推导（换机 / 换盘符也能跑），推导不出来再退回本机硬编码路径。
+ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+if not os.path.isdir(os.path.join(ROOT, 'Assets')):
+    ROOT = r'Y:\PixelAdventureTown'
 APPLY = '--apply' in sys.argv
 
 HEX32 = re.compile(r'^[0-9a-f]{32}$')
+# 连续 56 个以上“GUID/Base64 字符”，用来把引用扫描从「每个 guid 全量重扫一遍」压成「全量只读一遍」。
+GUID_RUN = re.compile(r'[0-9A-Za-z+/=]{56,}')
+ASSET_EXT = ('.prefab', '.unity', '.asset')
 
 def read_guid(meta_path):
     try:
@@ -27,6 +38,43 @@ def read_guid(meta_path):
     except Exception:
         return None
     return None
+
+def _list_asset_files():
+    """全部可能持有资源引用的文件（prefab / scene / asset），只枚举一次。"""
+    out = []
+    for dp, dn, fn in os.walk(os.path.join(ROOT, 'Assets')):
+        for f in fn:
+            if f.endswith(ASSET_EXT):
+                out.append(os.path.join(dp, f))
+    return out
+
+def count_refs(guids):
+    """一次性读完 prefab/scene/asset，返回 {guid: 被多少个文件引用}。
+
+    与原实现（对每个 guid 重新 os.walk + 全量读盘）**判定结果等价**：
+    任何一次「子串命中」必然落在某个长度 ≥56 的同类字符连续段里，所以先切段再比对，
+    不会漏报；也不会因为共用一次读盘而多报。
+    """
+    hits = dict((g, 0) for g in guids)
+    gset = set(guids)
+    for fp in _list_asset_files():
+        try:
+            t = io.open(fp, encoding='utf-8', errors='replace').read()
+        except Exception:
+            continue
+        runs = set(GUID_RUN.findall(t))
+        if not runs:
+            continue
+        matched = set(runs & gset)          # 整段就是一个 guid 的情况（绝大多数）
+        for r in runs:
+            if len(r) == 56:
+                continue
+            for g in guids:                 # 更长段里再找子串，保证不漏
+                if g in r:
+                    matched.add(g)
+        for g in matched:
+            hits[g] += 1
+    return hits
 
 # 1) 扫全工程 .meta
 t0 = time.time()
@@ -50,6 +98,7 @@ print('=' * 68)
 print('团结 GUID 扫描报告   模式: %s' % ('APPLY（人工确认后执行）' if APPLY else 'REPORT（只报告，不写盘）'))
 print('=' * 68)
 print('hex32 合法: %d    56字符Base64: %d    其它形态: %d' % (hexn, len(b56), len(other)))
+print('meta 扫描耗时: %.2fs' % (time.time() - t0))
 
 if not b56:
     print('\n✅ 没有 56 字符的 .meta guid，无需处理。')
@@ -57,23 +106,16 @@ if not b56:
 
 # 2) 逐条 Warning + 是否被引擎引用（决定"换标识"是否安全）
 print('\n=== ⚠️ 56 字符 Base64（非法 GUID Base64，规范不允许解码转换）===')
+print('[扫描] 正在统计引用（prefab/scene/asset 只读一遍）...')
+_t_ref = time.time()
+_refs = count_refs(list(b56.keys()))
+print('[扫描] 引用统计完成，耗时 %.2fs' % (time.time() - _t_ref))
 by_dir = {}
 safe, risky = [], []
 for g, rel in b56.items():
     d = os.path.dirname(rel.replace(ROOT + '\\', '')) or '(根)'
     by_dir[d] = by_dir.get(d, 0) + 1
-    # 在 prefab/scene/asset 里是否被引用
-    hits = 0
-    for dp, dn, fn in os.walk(os.path.join(ROOT, 'Assets')):
-        for f in fn:
-            if not f.endswith(('.prefab', '.unity', '.asset')):
-                continue
-            try:
-                t = io.open(os.path.join(dp, f), encoding='utf-8', errors='replace').read()
-            except Exception:
-                continue
-            if g in t:
-                hits += 1
+    hits = _refs.get(g, 0)
     (safe if hits == 0 else risky).append((rel, g, hits))
 
 print('按目录分布:')

@@ -32,6 +32,9 @@ public static class RedDot
     public const string LogMerc = "log.merc";
     public const string Guild = "nav.guild";
     public const string Adventure = "nav.adventure";
+    /// <summary>2026-09-29：天赋入口红点 —— 左列推到某个右列门槛时点亮（TalentSystem.BuildRightUnlockHint），
+    /// 玩家打开一次天赋页就清掉（TalentUI.Show）。</summary>
+    public const string Talent = "nav.talent";
 
     public static Sprite Sprite
     {
@@ -57,14 +60,18 @@ public static class RedDot
         }
 
 #if UNITY_EDITOR
-        sp = AssetDatabase.LoadAssetAtPath<Sprite>(ArtPath);
-        if (sp != null) return sp;
-        var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(ArtPath);
-        if (edTex != null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            sp = Sprite.Create(edTex, new Rect(0f, 0f, edTex.width, edTex.height), new Vector2(0.5f, 0.5f), 100f);
-            sp.name = "红点";
-            return sp;
+            sp = AssetDatabase.LoadAssetAtPath<Sprite>(ArtPath);
+            if (sp != null) return sp;
+            var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(ArtPath);
+            if (edTex != null)
+            {
+                sp = Sprite.Create(edTex, new Rect(0f, 0f, edTex.width, edTex.height), new Vector2(0.5f, 0.5f), 100f);
+                sp.name = "红点";
+                return sp;
+            }
         }
 #endif
         Debug.LogWarning("[RedDot] 未找到红点图: " + ArtPath);
@@ -151,6 +158,10 @@ public static class RedDot
                       || AdventureLogFragments.HasAnyCraftable();
         Set(Activity, reward);
         Set(Achievement, reward);
+        // 2026-09-29：天赋入口红点 —— 还有「新开通、整批没碰过」的右列天赋就亮。
+        // 挂在这里是为了**登录 / 回城就亮**，不用等玩家先打开一次天赋页。
+        var data = SaveSystem.Instance?.Data;
+        Set(Talent, data != null && TalentDefs.AnyNewlyOpen(data.talents));
         AdventureCodex.RefreshRedDots();
     }
 }

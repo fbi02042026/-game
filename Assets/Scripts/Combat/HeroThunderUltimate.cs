@@ -173,7 +173,10 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundS
         float dmgMul = GameConfig.GetThunderUltDamageMul(ch, st, tutorialCinematic);
 
         int strikes = Random.Range(3, 6); // 3~5
-        float atk = hero.attr != null ? hero.attr.GetAttr(AttrType.Attack) : 10f;
+        // 2026-09-29：按职业取攻击力 —— 法师/牧师的攻击力在 MagicAttack 上，
+        // 读 Attack 会拿到一个自己根本不用的物攻值。
+        AttrType atkKey = PlayerJobBaseStats.CurrentAttackAttr();
+        float atk = hero.attr != null ? hero.attr.GetAttr(atkKey) : 10f;
         float raw = Mathf.Max(1f, atk * dmgMul);
         float strikeGap = tutorialCinematic ? 0.28f : 0.18f;
 

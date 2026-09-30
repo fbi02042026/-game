@@ -8,7 +8,9 @@ R_C4,迅捷,Attr,20,3,-,14/30/52,spd,迅捷,AtkSpeed,3/6/10
 R_C5,疾行,Attr,30,3,-,25/50/85,move,疾行,MoveSpeed,3/6/10
 R_C6,凝神,Attr,30,3,-,25/50/85,cd,凝神,SkillCooldown,4/8/13
 R_JOB,职业专精,JobChoice,30,5,job,15/32/55/85/125,j0/j1/j2/j3/j4/j5,剑盾卫士/狂战士/游侠/法师/牧师/重装,JOB,4/8/12/16/20
-R_BAG,背包扩容,OneTime,30,1,-,60,bag,背包扩容,Custom,0
-R_SLOT,技能槽 IV,OneTime,40,1,-,95,slot,技能槽 IV,Custom,0
-R_DUAL,双修解锁,OneTime,40,1,-,180,dual,双修解锁,Custom,0
-R_HUNT,精英猎手,Attr,30,3,-,30/65/110,hunt,精英猎手,EliteDamage,8/15/25
+R_BAG,背包扩容,Attr,30,3,-,60/140/260,bag,背包扩容,Custom,0/0/0
+R_SLOT,致命一击,Attr,40,3,-,25/55/95,critdmg,致命一击,CritDamage,15/30/50
+R_DUAL,技能精通,Attr,40,3,-,40/90/160,skill,技能精通,SkillDamage,10/20/35
+R_HUNT,精英猎手,Attr,30,3,-,30/65/110,hunt,精英猎手,EliteDamage,15/30/50
+R_LUCK,幸运提升,Attr,30,3,-,20/45/80,luck,幸运提升,Custom,3/6/9
+R_FUND,初始资金,Attr,30,3,-,20/45/80,fund,初始资金,Custom,4/8/12

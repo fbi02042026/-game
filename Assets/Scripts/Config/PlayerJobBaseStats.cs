@@ -118,6 +118,23 @@ public static class PlayerJobBaseStats
         return job == PlayerJobId.Mage || job == PlayerJobId.Priest;
     }
 
+    /// <summary>
+    /// 2026-09-29 主人拍板：该职业的**攻击力属性键**——魔法职业走 MagicAttack，其余走 Attack。
+    /// 一切「加攻击」的入口（升级 / 武器基础 ATK / 词缀 / 被动 / 临时 buff）都该走这里，
+    /// 不要再硬写 <see cref="AttrType.Attack"/>，否则法师/牧师吃完初始魔攻后就再也涨不动。
+    /// </summary>
+    public static AttrType AttackAttrOf(PlayerJobId job)
+        => IsMagicJob(job) ? AttrType.MagicAttack : AttrType.Attack;
+
+    /// <summary>
+    /// 当前选中职业的攻击力属性键。非战斗期（如城镇装备预览）也可用。
+    /// <para>🔴 主人口径「不要兜底」：这里**不做**「表没加载就看枚举」的静默降级 ——
+    /// 表加载失败就该让 <see cref="EnsureLoaded"/> 把错误打出来。
+    /// 若启动期崩在构造期读表（坑④：Resources.Load 抛 UnityException），说明调用链有问题，要修调用点而不是在这降级。</para>
+    /// </summary>
+    public static AttrType CurrentAttackAttr()
+        => AttackAttrOf(PlayerJobDefs.GetSelected());
+
     /// <summary>开战套用固定基础属性（覆盖当前战斗属性核心项）。</summary>
     public static void ApplyToHero(Hero hero)
     {

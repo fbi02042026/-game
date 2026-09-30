@@ -75,27 +75,31 @@ public static class EquipIcons
         }
 
 #if UNITY_EDITOR
-        string assetPath = Root + file + ".png";
-        var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
-        if (ed != null) return ed;
-        var edAll = AssetDatabase.LoadAllAssetsAtPath(assetPath);
-        if (edAll != null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            for (int i = 0; i < edAll.Length; i++)
+            string assetPath = Root + file + ".png";
+            var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+            if (ed != null) return ed;
+            var edAll = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+            if (edAll != null)
             {
-                if (edAll[i] is Sprite spEd) return spEd;
+                for (int i = 0; i < edAll.Length; i++)
+                {
+                    if (edAll[i] is Sprite spEd) return spEd;
+                }
             }
-        }
-        var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
-        if (edTex != null)
-        {
-            var made = Sprite.Create(
-                edTex,
-                new Rect(0f, 0f, edTex.width, edTex.height),
-                new Vector2(0.5f, 0.5f),
-                100f);
-            made.name = file;
-            return made;
+            var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            if (edTex != null)
+            {
+                var made = Sprite.Create(
+                    edTex,
+                    new Rect(0f, 0f, edTex.width, edTex.height),
+                    new Vector2(0.5f, 0.5f),
+                    100f);
+                made.name = file;
+                return made;
+            }
         }
 #endif
         Debug.LogWarning($"[EquipIcons] 未找到图标: {file}");

@@ -265,8 +265,10 @@ public class Hero : UnitBase
         float maxHp = attr != null ? attr.GetAttr(AttrType.MaxHp) : 0f;
         float ratio = maxHp > 0.01f ? currentHp / maxHp : 1f;
         bool dead = isDead || currentHp <= 0f;
+        // 2026-09-28 主人拍板：玩家形象不再身上闪红（残血改屏幕边缘闪红，见 LowHpScreenEdgeFlash）。
+        // 这里只负责把历史残留的低血红清掉；佣兵仍保留身上闪红（Mercenary.TickLowHpWarn 未动）。
         if (unitAnim != null)
-            unitAnim.TickLowHpFlash(ratio, dead);
+            unitAnim.CancelLowHpFlash();
         bool low = !dead && ratio <= GameConfig.LOW_HP_WARN_RATIO + 0.0001f;
         LowHpScreenEdgeFlash.Ensure().Tick(low);
     }
@@ -295,9 +297,10 @@ public class Hero : UnitBase
     /// </summary>
     public override bool IsMagicDamageDealer()
     {
-        PlayerJobId job = PlayerJobDefs.GetSelected();
-        if (job == PlayerJobId.Mage || job == PlayerJobId.Priest) return true;
-        return GetAttackType() == WeaponAttackType.Magic;
+        // 2026-09-29：统一按职业判定，不再看当前武器。
+        // 原实现法师/牧师按职业、其余职业按武器 —— 不对称，物理职业捡把法杖就会走进
+        // magicAttack 分支、而自己的 MagicAttack 恒为 0 → 报 DF-004 并退回物攻结算。
+        return PlayerJobBaseStats.IsMagicJob(PlayerJobDefs.GetSelected());
     }
 
     protected override AttackVfxKit GetAttackVfxKit()

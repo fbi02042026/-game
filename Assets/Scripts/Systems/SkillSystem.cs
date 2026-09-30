@@ -227,9 +227,11 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
     private void ExecuteBuff(ActiveSkill skill, UnitBase caster)
     {
         // Buff类技能：给自身加临时属性
+        // 2026-09-29：按施法者自己的伤害类型分流（Hero 走职业、Merc 走武器），
+        // 否则法师/牧师的加攻 buff 打在物攻上 = 白加。
         BattleManager.Instance.tempBuffs.Add(new AttrBonusData
         {
-            attrType = AttrType.Attack,
+            attrType = (caster != null && caster.IsMagicDamageDealer()) ? AttrType.MagicAttack : AttrType.Attack,
             value = skill.damageMultiplier,
             isPercent = true
         });
@@ -264,7 +266,9 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
     private float CalculateDamage(ActiveSkill skill, UnitBase caster)
     {
         if (skill == null || caster == null || caster.attr == null) return DamageFormula.MinDamage;
-        return DamageFormula.BuildSkillBase(skill.baseDamage, skill.damageMultiplier, caster.attr);
+        // 2026-09-29：伤害类型与普攻/扣防口径一致 —— 魔法单位取 MagicAttack 作基底，
+        // 否则法师/牧师的技能伤害会被锁死在 baseDamage（攻击力全在 MagicAttack 上）。
+        return DamageFormula.BuildSkillBase(skill.baseDamage, skill.damageMultiplier, caster.attr, caster.IsMagicDamageDealer());
     }
 
     /// <summary>

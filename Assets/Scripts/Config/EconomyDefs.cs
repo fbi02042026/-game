@@ -39,9 +39,14 @@ public static class EconomyDefs
     /// <summary>每章 10 关，第 10 关是 Boss。</summary>
     public const int STAGES_PER_RUN = GameConfig.STAGES_PER_CHAPTER;
 
-    /// <summary>各关期望怪数（读 GameConfig.GetStageMonsterTotal 的随机区间算的期望值）。</summary>
+    /// <summary>
+    /// 各关期望怪数（读 GameConfig.GetStageMonsterTotal 的随机区间算的期望值）。
+    /// 2026-09-29 同步新曲线：从第 1 关起严格单调递增 10 → 28，每关 +2。
+    /// 旧值是 {15.6, 10.4, 15.6, ...} —— 第 1 关比第 2 关还多，属于已修掉的倒退。
+    /// ⚠ 改 GameConfig.MONSTER_TOTAL_BASE / _STEP 后，这张表必须跟着重算，否则自检会骗人。
+    /// </summary>
     public static readonly float[] MonstersPerStage =
-        { 15.6f, 10.4f, 15.6f, 16.9f, 18.3f, 19.7f, 21.1f, 22.4f, 23.8f, 25.2f };
+        { 10f, 12f, 14f, 16f, 18f, 20f, 22f, 24f, 26f, 28f };
 
     /// <summary>波次加成：goldDrop = base × (1 + wave × 0.1)，平均取 1.25。</summary>
     public const float WAVE_GOLD_MUL = 1.25f;
@@ -75,13 +80,13 @@ public static class EconomyDefs
     public static int StageGold(int chapter, int stageNo, float monsterGoldMul)
     {
         int s = Mathf.Clamp(stageNo, 1, STAGES_PER_RUN);
-        float g = AvgMonsterGold(chapter) * WAVE_GOLD_MUL * monsterGoldMul;
-        float monsters = MonstersPerStage[s - 1];
 
-        if (s >= STAGES_PER_RUN) // Boss 关：小怪 + Boss 本体 + Boss 通关金
-            return Mathf.RoundToInt((monsters - 1f) * g + BOSS_MONSTER_GOLD * monsterGoldMul + BossClearGold(chapter));
-
-        return Mathf.RoundToInt(monsters * g + NormalClearGold(chapter));
+        // 2026-09-29：金币产出改为「每关固定额度」（StageGoldDefs.StageGold），
+        // 旧的「怪物掉金累加」口径作废 —— 怪物数量不再决定金币，所以上面那张
+        // MonstersPerStage 表从此只用于估波次/战斗时长，不再参与金币估算。
+        // 难度倍率 monsterGoldMul 对固定额度不生效，参数保留只为兼容旧调用点。
+        int clear = s >= STAGES_PER_RUN ? BossClearGold(chapter) : NormalClearGold(chapter);
+        return StageGoldDefs.StageGold(chapter, s - 1) + clear;
     }
 
     /// <summary>普通关通关金（battle_quest.csv：normalBase 3 + normalChapterAdd 1 × 章节）。</summary>

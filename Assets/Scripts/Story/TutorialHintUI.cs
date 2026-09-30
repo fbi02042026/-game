@@ -230,13 +230,17 @@ public class TutorialHintUI : MonoBehaviour
     {
         if (banner == null) return;
 #if UNITY_EDITOR
-        var sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/引导/引导底框.png");
-        if (sp != null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            banner.sprite = sp;
-            banner.type = Image.Type.Simple;
-            banner.color = Color.white;
-            return;
+            var sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/引导/引导底框.png");
+            if (sp != null)
+            {
+                banner.sprite = sp;
+                banner.type = Image.Type.Simple;
+                banner.color = Color.white;
+                return;
+            }
         }
 #endif
         banner.color = new Color(0.08f, 0.1f, 0.16f, 0.88f);
@@ -544,7 +548,7 @@ public class TutorialHintUI : MonoBehaviour
                     root.rect.yMax, root.rect.yMin, 0f);
     }
 
-    /// <summary>文字横幅：高度固定 100，左右少留白，不按字高拉扁底图。</summary>
+    /// <summary>文字横幅：高度随文字行数自适应（下限 100 不改变原观感，上限 340 防刷屏）。</summary>
     void PlaceBanner(Vector2? target, float targetTop = 0f, float top = 0f, float bot = 0f,
         float extraTopClearance = 0f)
     {
@@ -552,9 +556,10 @@ public class TutorialHintUI : MonoBehaviour
         var root = transform as RectTransform;
         if (root == null) return;
 
-        const float bannerH = 100f;
         // 左右各约 12px，避免两侧空一大截
         float width = Mathf.Max(280f, root.rect.width - 24f);
+        // 2026-09-28 主人反馈：字多时溢出底框 —— 高度改为按文字实测行高自适应（原写死 100）。
+        float bannerH = MeasureBannerHeight(width);
         _bannerRt.anchorMin = _bannerRt.anchorMax = new Vector2(0.5f, 0.5f);
         _bannerRt.pivot = new Vector2(0.5f, 0.5f);
         _bannerRt.sizeDelta = new Vector2(width, bannerH);
@@ -575,6 +580,19 @@ public class TutorialHintUI : MonoBehaviour
             y = target.Value.y - 24f - half;
         y = Mathf.Clamp(y, bot + half + 12f, top - half - 12f);
         _bannerRt.anchoredPosition = new Vector2(0f, y);
+    }
+
+    /// <summary>按当前文案与横幅宽度量文字实际高度 + 上下留白（Top=10 / Bottom=18，与 HintText 边距一致）。</summary>
+    float MeasureBannerHeight(float bannerWidth)
+    {
+        const float minH = 100f;
+        const float maxH = 340f;
+        if (_label == null || string.IsNullOrEmpty(_label.text)) return minH;
+        float textW = Mathf.Max(40f, bannerWidth - 56f);   // 与 HintText 左右 offsetMin/Max(28) 对应
+        var settings = _label.GetGenerationSettings(new Vector2(textW, 9999f));
+        float pref = _label.cachedTextGeneratorForLayout.GetPreferredHeight(_label.text, settings);
+        if (pref <= 0f) return minH;
+        return Mathf.Clamp(Mathf.CeilToInt(pref) + 28f, minH, maxH);
     }
 
     void BeginSwipeToTarget()

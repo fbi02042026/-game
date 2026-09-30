@@ -29,11 +29,15 @@ public static class RuntimeLockSprite
 
         // 2) 编辑器下直接用美术放好的 Assets/Art/UI/Common/锁.png
 #if UNITY_EDITOR
-        var art = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(ArtPath);
-        if (art != null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            _cached = art;
-            return _cached;
+            var art = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(ArtPath);
+            if (art != null)
+            {
+                _cached = art;
+                return _cached;
+            }
         }
 #endif
 

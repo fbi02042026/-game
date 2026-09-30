@@ -649,10 +649,12 @@ public class BattleSettlementUI : MonoBehaviour
     static Sprite LoadSettlementArt(string fileNameNoExt)
     {
 #if UNITY_EDITOR
-        return UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(ArtRoot + fileNameNoExt + ".png");
-#else
-        return Resources.Load<Sprite>("UI/Settlement/" + fileNameNoExt);
+        if (DeviceParity.EditorFallbackEnabled)
+            return UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(ArtRoot + fileNameNoExt + ".png");
 #endif
+        var sp = Resources.Load<Sprite>("UI/Settlement/" + fileNameNoExt);
+        if (sp == null) DeviceParity.ReportMissing("UI/Settlement/" + fileNameNoExt, "结算图");
+        return sp;
     }
 
     static RectTransform Mk(Transform parent, string name)

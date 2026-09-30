@@ -426,17 +426,20 @@ public class PlayerNamingUI : MonoBehaviour
         var sp = Resources.Load<Sprite>(ResRoot + "/" + id);
         if (sp != null) return sp;
 #if UNITY_EDITOR
-        string path = "Assets/Art/UI/玩家起名/" + id switch
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            "panel" => "背景 拷贝.png",
-            "input_bar" => "图层 1.png",
-            "confirm_btn" => "图层 2.png",
-            "dice" => "图层 3.png",
-            _ => id + ".png",
-        };
-        return UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
-#else
-        return null;
+            string path = "Assets/Art/UI/玩家起名/" + id switch
+            {
+                "panel" => "背景 拷贝.png",
+                "input_bar" => "图层 1.png",
+                "confirm_btn" => "图层 2.png",
+                "dice" => "图层 3.png",
+                _ => id + ".png",
+            };
+            return UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        }
 #endif
+        DeviceParity.ReportMissing(ResRoot + "/" + id, "玩家起名界面图");
+        return null;
     }
 }

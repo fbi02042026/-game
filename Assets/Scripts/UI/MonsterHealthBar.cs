@@ -288,7 +288,11 @@ public class MonsterHealthBar : MonoBehaviour
         {
             _prefabChecked = true;
 #if UNITY_EDITOR
-            _cachedPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/Prefabs/Monster/MonsterHealthBar.prefab");
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+                _cachedPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/Prefabs/Monster/MonsterHealthBar.prefab");
+        }
 #endif
             if (_cachedPrefab == null)
                 _cachedPrefab = Resources.Load<GameObject>("Prefabs/Monster/MonsterHealthBar");

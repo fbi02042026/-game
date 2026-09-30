@@ -122,6 +122,10 @@ public partial class BattleUI : MonoBehaviour
         else
             UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
 
+        // 刘海 / 挖孔：战斗顶栏（TopBar / TopStatus / ProgressBar 那条）整体下移 safeArea 顶部高度。
+        // 只挪 anchoredPosition、不动锚点与尺寸；只会挑最外层那个节点，父子不会双倍下推。
+        SafeAreaFitter.ApplyTopOffset(transform, "TopBar", "TopStatus", "ProgressBar");
+
         BindAutoBattleUnavailable();
         if (characterButton != null) characterButton.onClick.AddListener(OnOpenCharacter);
         // 设置入口固定在右上角；暂停与撤离都在这个弹窗里

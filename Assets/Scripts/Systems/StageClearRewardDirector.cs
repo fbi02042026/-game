@@ -26,6 +26,8 @@ public class StageClearRewardDirector : MonoBehaviour
     Transform _fxJin;  // 开箱特效：传奇金箱（effect 下节点 "3"）
     SpriteRenderer _closeSr;
     SpriteRenderer _openSr;
+    /// <summary>箱底投影（box 下 "shadow"）。2026-09-28 主人反馈「阴影都不见了」—— 以前没人管它的排序。</summary>
+    SpriteRenderer _shadowSr;
     Animator _boxAnim;
     Transform _chuansongmen;
     Vector3 _boxBaseScale = Vector3.one;
@@ -150,6 +152,13 @@ public class StageClearRewardDirector : MonoBehaviour
             var openT = FindChildIgnoreCase(_boxAnimHost, "open");
             _closeSr = closeT != null ? closeT.GetComponent<SpriteRenderer>() : null;
             _openSr = openT != null ? openT.GetComponent<SpriteRenderer>() : null;
+            // 2026-09-28 主人反馈「阴影都不见了」：root 下还有个 "shadow" 从来没被采样过，
+            // 于是它一直留在预制体的默认分层/order 上，被地图整块盖掉。这里补缓存。
+            var shadowT = FindChildIgnoreCase(_boxAnimHost, "shadow")
+                          ?? FindChildIgnoreCase(_boxRoot, "shadow");
+            _shadowSr = shadowT != null ? shadowT.GetComponent<SpriteRenderer>() : null;
+            if (_shadowSr == null && shadowT != null)
+                _shadowSr = shadowT.GetComponentInChildren<SpriteRenderer>(true);
             _effectRoot = FindChildIgnoreCase(_boxAnimHost, "effect");
             // 开箱特效按稀有度分节点（effect 下 "1"/"2"/"3"）：缓存并默认全关，
             // 由 ShowTierEffect 按 tier 在播 open1 时只开对应编号节点。
@@ -186,6 +195,7 @@ public class StageClearRewardDirector : MonoBehaviour
         _fxJin = null;
         _closeSr = null;
         _openSr = null;
+        _shadowSr = null;
         _boxAnim = null;
         _chuansongmen = null;
         StopAllCoroutines();
@@ -245,6 +255,13 @@ public class StageClearRewardDirector : MonoBehaviour
             _openSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
             _openSr.sortingOrder = GameConfig.SORT_MAPROOT + 3; // 13
         }
+        // 2026-09-28 主人反馈「阴影都不见了」：影子必须抬到地图之上、箱皮之下（地图根 10 / 影子 11 / close 12）。
+        // 只在这里统一铺排层级，别再靠 ForceBoxRenderersVisible 顺手把它打成 order 0。
+        if (_shadowSr != null)
+        {
+            _shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            _shadowSr.sortingOrder = GameConfig.SORT_MAPROOT + 1; // 11
+        }
     }
 
     void EnsureBoxController()
@@ -253,11 +270,15 @@ public class StageClearRewardDirector : MonoBehaviour
         ApplyBoxSorting();
         if (_boxAnim == null) return;
 #if UNITY_EDITOR
-        if (_boxAnim.runtimeAnimatorController == null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            var ctrl = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(
-                "Assets/Art/Effects/Ani/box/box.controller");
-            if (ctrl != null) _boxAnim.runtimeAnimatorController = ctrl;
+            if (_boxAnim.runtimeAnimatorController == null)
+            {
+                var ctrl = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(
+                    "Assets/Art/Effects/Ani/box/box.controller");
+                if (ctrl != null) _boxAnim.runtimeAnimatorController = ctrl;
+            }
         }
 #endif
     }
@@ -456,7 +477,9 @@ public class StageClearRewardDirector : MonoBehaviour
             srs[i].gameObject.SetActive(true);
             srs[i].enabled = true;
             srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            if (srs[i] != _closeSr && srs[i] != _openSr &&
+            // 2026-09-28 主人反馈「阴影都不见了」：影子以前落在这一行里被 Reset 成 order 0，
+            // 结果被地图根（SORT_MAPROOT=10）整块盖掉。影子归 ApplyBoxSorting 管，这里跳过。
+            if (srs[i] != _closeSr && srs[i] != _openSr && srs[i] != _shadowSr &&
                 (_effectRoot == null || !srs[i].transform.IsChildOf(_effectRoot)))
                 srs[i].sortingOrder = 0;
         }
@@ -588,11 +611,15 @@ public class StageClearRewardDirector : MonoBehaviour
         if (sp != null) return sp;
         Texture2D tex = Resources.Load<Texture2D>("UI/box/" + fileNameNoExt);
 #if UNITY_EDITOR
-        if (sp == null)
-            sp = AssetDatabase.LoadAssetAtPath<Sprite>($"Assets/Art/UI/box/{fileNameNoExt}.png");
-        if (tex == null)
-            tex = AssetDatabase.LoadAssetAtPath<Texture2D>($"Assets/Art/UI/box/{fileNameNoExt}.png");
-        if (sp != null) return sp;
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            if (sp == null)
+                sp = AssetDatabase.LoadAssetAtPath<Sprite>($"Assets/Art/UI/box/{fileNameNoExt}.png");
+            if (tex == null)
+                tex = AssetDatabase.LoadAssetAtPath<Texture2D>($"Assets/Art/UI/box/{fileNameNoExt}.png");
+            if (sp != null) return sp;
+        }
 #endif
         if (tex == null) return null;
         return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
@@ -720,6 +747,12 @@ public class StageClearRewardDirector : MonoBehaviour
         yield return new WaitForSecondsRealtime(0.25f);
         if (_boxAnim != null) _boxAnim.Play("open2", 0, 0f);
         SnapBoxRootToGround();
+        // 2026-09-28 主人反馈「特效也没有看到」：原来 open2 一 Play 立刻就跟一句 HideBoxVisual，
+        // 整个 box（连同 effect 下 1/2/3 的 SparkleWhite / PowerupGlow 粒子）同帧被 SetActive(false)，
+        // 粒子刚冒头就被掐灭。这里等 open2 播完，再留 0.6 秒给粒子飘一下，最后才收箱。
+        if (_boxAnim != null)
+            yield return WaitAnimOrSeconds(_boxAnim, "open2", 0.9f);
+        yield return new WaitForSecondsRealtime(0.6f);
         HideBoxVisual();
     }
 
@@ -869,10 +902,10 @@ public class StageClearRewardDirector : MonoBehaviour
 
         yield return new WaitForSecondsRealtime(0.35f);
 
-        // —— 战斗结束三选一：先选方向（技能 / 装备 / 佣兵），再出该方向三选一 ——
-        // 每关 1 抽；Boss 关 2 抽（一章 10 关共 11 抽，槽位 12 格，第 2 章初凑满）
-        int picks = stageType == StageType.Boss ? 2 : 1;
-        yield return StartCoroutine(CoStageClearDraft(picks));
+        // —— 2026-09-29：关卡结算的免费三选一已停掉 ——
+        // 构筑获取统一走「进关金币抽奖」（BattleManager.CoStageEntryDraft，老虎机定类型再三选一）。
+        // 要恢复旧的战斗结束抽卡，把下面这行的注释去掉即可：
+        // yield return StartCoroutine(CoStageClearDraft(stageType == StageType.Boss ? 2 : 1));
 
         // —— 局内构筑进度落档（供「继续上一局」）。升级抽卡统一在升级时发生，这里不再额外出三选一 ——
         RunDraftDirector.Instance?.NoteStageProgress();

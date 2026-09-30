@@ -86,6 +86,10 @@ public static class EquipUiText
             case AttrType.MoveSpeed: return "移速";
             case AttrType.AttackRange: return "射程";
             case AttrType.Defense: return "防御";
+            // 2026-09-29：物攻/魔攻、物防/魔防拆开后必须给中文名，
+            // 否则装备面板会直接把枚举名 "MagicAttack" / "MagicDefense" 显示给玩家。
+            case AttrType.MagicAttack: return "魔攻";
+            case AttrType.MagicDefense: return "魔防";
             case AttrType.LifeSteal: return "吸血";
             case AttrType.Dodge: return "闪避";
             case AttrType.FireDamage: return "火焰伤害";

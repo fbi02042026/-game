@@ -41,11 +41,17 @@ public static class TalentSystem
             reason = "金币不足";
             return false;
         }
+        // 2026-09-29：先记左列点数，写档后再算一次 —— 用于判断「这一步有没有把右列节点顶过门槛」。
+        int leftBefore = TalentDefs.LeftUnlockedCount(data.talents);
         data.talents[node.id] = 1;
+        int leftAfter = TalentDefs.LeftUnlockedCount(data.talents);
+        string rightHint = BuildRightUnlockHint(leftBefore, leftAfter, data.talents);
+        RefreshTalentEntryRedDot(data);
+
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
         Hero.Instance?.RecalcAttr();
-        AnnounceTalentGain(node != null ? node.name : null, node != null ? node.effect : null);
+        AnnounceTalentGain(node != null ? node.name : null, node != null ? node.effect : null, rightHint);
         return true;
     }
 
@@ -57,14 +63,71 @@ public static class TalentSystem
     }
 
     /// <summary>左列天赋购买成功后的「恭喜获得」庆祝提示（2026-09-21 用户要求，样式对齐装备的 EquipDropPopupUI.ShowEquipGain）。</summary>
-    static void AnnounceTalentGain(string nodeName, TalentDefs.Effect fx)
+    /// <param name="rightHint">2026-09-29：右列新解锁 / 可升级提示，拼进同一条 toast（见 <see cref="BuildRightUnlockHint"/>）。</param>
+    static void AnnounceTalentGain(string nodeName, TalentDefs.Effect fx, string rightHint = null)
     {
         if (fx == null || string.IsNullOrEmpty(fx.display)) return;
         string text = string.IsNullOrEmpty(nodeName)
             ? $"恭喜获得【{fx.display}】，实力大增！"
             : $"恭喜获得【{nodeName}】，{fx.display}，实力大增！";
+        if (!string.IsNullOrEmpty(rightHint)) text += "\n" + rightHint;
         UIManager.Instance?.ShowToast(text);
     }
+
+    /// <summary>
+    /// 2026-09-29 主人要求：左列推到某个右列门槛时**必须明确告诉玩家右边有东西可点**，
+    /// 不能让玩家点了半天左列却不知道右列已经开了。
+    /// 覆盖两种情况：① 节点跨过门槛、首次可解锁；② 已解锁节点的等级上限提高、可以继续升。
+    /// <para>🔴 只**生成文案**、不自己弹：GlobalToastUI 是覆盖式的（Play 会 StopCoroutine 掉上一条），
+    /// 连弹两条只会剩下后一条，所以必须由 <see cref="AnnounceTalentGain"/> 拼进同一条 toast。</para>
+    /// </summary>
+    /// <summary>2026-09-29 主人定稿文案：只说一句，不列节点名。</summary>
+    const string RightUnlockHint = "右侧有新的天赋可以升级";
+
+    /// <summary>
+    /// 天赋入口红点 = **还有没有「新开通未点」的右列节点**。
+    /// 2026-09-29 主人纠正：玩家点左列时本来就已经在天赋页里了，所以「打开天赋页就清」等于永远看不到红点；
+    /// 正确口径是**点了右侧那个新天赋**才灭（level &gt; 0 → 不再是新）。
+    /// </summary>
+    static void RefreshTalentEntryRedDot(SaveData data)
+    {
+        RedDot.Set(RedDot.Talent, data != null && TalentDefs.AnyNewlyOpen(data.talents));
+    }
+
+    static string BuildRightUnlockHint(int leftBefore, int leftAfter, IDictionary<string, int> talents)
+    {
+        if (talents == null || leftAfter <= leftBefore) return null;
+        for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
+        {
+            var node = TalentDefs.RightNodes[i];
+            if (node == null || leftAfter < node.unlockLeftIndex) continue;
+
+            int lv = TalentDefs.GetRightNodeLevel(talents, node.id);
+            if (lv <= 0)
+            {
+                // 互斥组里已选了其它流派 → 这个节点玩家点不了，不算「有新天赋」（避免点了才发现被锁）
+                if (TalentDefs.IsRightNodeMutexLocked(node, talents)) continue;
+                // R_DUAL 还有「主流派满 5 级」的前置，没满足也不算
+                if (node.id == "R_DUAL" && !DualPathReady(talents)) continue;
+            }
+            else
+            {
+                if (node.IsOneTime || lv >= node.maxLevel) continue;
+                int capBefore = leftBefore >= node.unlockLeftIndex ? TalentDefs.RightNodeLevelCap(node, leftBefore) : 0;
+                int capAfter = TalentDefs.RightNodeLevelCap(node, leftAfter);
+                if (capAfter <= capBefore || capAfter <= lv) continue;   // 上限没变 / 已到顶 → 不算
+            }
+
+            // 任意一条成立就提示（文案统一，不列名字）
+            return RightUnlockHint;
+        }
+        return null;
+    }
+
+    /// <summary>R_DUAL 的前置：主流派（R_F1 / R_F2 任一）满 5 级。</summary>
+    static bool DualPathReady(IDictionary<string, int> talents) =>
+        TalentDefs.GetRightNodeLevel(talents, "R_F1") >= 5
+        || TalentDefs.GetRightNodeLevel(talents, "R_F2") >= 5;
 
     static void AnnounceRightGain(TalentDefs.TalentRightNode node, int level, int chosenJob)
     {
@@ -143,7 +206,8 @@ public static class TalentSystem
         { reason = "天赋石不足"; return false; }
 
         data.talents[id] = 1;
-        SyncBackpackRows(data);   // R_BAG 解锁 → SaveData.backpackRows = 4
+        SyncBackpackRows(data);   // R_BAG 解锁 → SaveData.backpackRows 按等级 +行
+        RefreshTalentEntryRedDot(data);   // 点了右侧新天赋 → 「新」消失，没有其它新节点就灭红点
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
         Hero.Instance?.RecalcAttr();
@@ -186,6 +250,7 @@ public static class TalentSystem
 
         data.talents[id] = level + 1;
         SyncBackpackRows(data);
+        RefreshTalentEntryRedDot(data);
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
         Hero.Instance?.RecalcAttr();

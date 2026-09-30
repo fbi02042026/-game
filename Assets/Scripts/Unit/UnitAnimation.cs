@@ -1267,6 +1267,18 @@ public class UnitAnimation : MonoBehaviour
     }
 
     /// <summary>
+    /// 关闭低血闪红并还原染色（2026-09-28 主人拍板：玩家不再身上闪红，改屏幕边缘闪红）。
+    /// 不动受击白闪：HitFlashRunning / 协程一概不碰，白闪每帧重写颜色，这里还原不会打断它。
+    /// </summary>
+    public void CancelLowHpFlash()
+    {
+        if (!_lowHpFlashOn) return;
+        _lowHpFlashOn = false;
+        RestoreSpumFlashFromBaseline();
+        if (_sr != null) { EnsureProcBase(); _sr.color = _procBaseColor; }
+    }
+
+    /// <summary>
     /// 低血脉冲红。受击白闪进行中让路；脱离低血时还原。
     /// </summary>
     public void TickLowHpFlash(float hpRatio, bool dead)

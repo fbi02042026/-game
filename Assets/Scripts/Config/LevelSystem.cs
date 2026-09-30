@@ -17,7 +17,9 @@ public static class LevelSystem
         hero.attr.Vitality += 1;
 
         // 同时增加战斗属性
-        hero.attr.AddAttr(AttrType.Attack, 3, false);
+        // 2026-09-29：攻击按职业伤害类型分流 —— 法师/牧师加 MagicAttack，其余加 Attack。
+        // 之前无条件加 Attack，导致法师/牧师升级只涨物攻、魔攻永远锁死在职业表初始值。
+        hero.attr.AddAttr(PlayerJobBaseStats.CurrentAttackAttr(), 3, false);
         hero.attr.AddAttr(AttrType.MaxHp, 15, false);
 
         hero.currentHp = hero.attr.GetAttr(AttrType.MaxHp);

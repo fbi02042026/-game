@@ -133,11 +133,11 @@ public static class RunLoadout
             stageIndex = 0,
             heroLevel = 1
         };
-        string starter = SaveSystem.Instance?.Data?.selectedPlayerSkillId;
-        if (string.IsNullOrEmpty(starter) || PlayerSkillDefs.GetById(starter) == null)
-            starter = PlayerJobDefs.Get(job).DefaultSkillId;
-        if (!string.IsNullOrEmpty(starter))
-            AddSkillEntry(_data, starter, 1);
+        // 2026-09-30 主人拍板：**开局不带初始技能** —— 技能全部靠局内构筑拿（进关抽奖 / 升级三选一）。
+        // 旧逻辑会把「角色界面选的技能 / 职业默认技能」直接塞进开局构筑，
+        // 第一个技能槽开局就满，玩家少了第一次「我这局要什么流派」的决策。
+        // ⚠ 连带影响：新局 skills 为空，所以下方 ResumeOrBegin / HasResumable 的续局判定
+        //   已改为只看 active，不能再拿 skills.Count > 0 当依据（否则每次进战斗都重置到第 1 关）。
         SyncThemeCache();
         return _data;
     }
@@ -149,7 +149,8 @@ public static class RunLoadout
     public static bool ResumeOrBegin(PlayerJobId job)
     {
         var saved = LoadFromPrefs();
-        if (saved != null && saved.active && saved.skills != null && saved.skills.Count > 0)
+        // 2026-09-30：开局不再带初始技能，新局 skills 可以是空的 —— 续局判定只看 active
+        if (saved != null && saved.active)
         {
             _data = saved;
             Normalize(_data);
@@ -165,8 +166,9 @@ public static class RunLoadout
 
     public static bool HasResumable()
     {
+        // 同 ResumeOrBegin：2026-09-30 起不再要求 skills 非空
         var saved = LoadFromPrefs();
-        return saved != null && saved.active && saved.skills != null && saved.skills.Count > 0;
+        return saved != null && saved.active;
     }
 
     /// <summary>写 PlayerPrefs（离线，不联网）。</summary>

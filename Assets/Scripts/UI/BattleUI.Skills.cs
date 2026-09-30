@@ -68,8 +68,12 @@ public partial class BattleUI : MonoBehaviour
         var all = Resources.LoadAll<Sprite>("Icons/SkillIcon/" + skillId);
         if (all != null && all.Length > 0) return all[0];
 #if UNITY_EDITOR
-        sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
-            "Assets/Art/UI/Icons/玩家SkillIcon/" + skillId + ".png");
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
+                "Assets/Art/UI/Icons/玩家SkillIcon/" + skillId + ".png");
+        }
 #endif
         return sp;
     }

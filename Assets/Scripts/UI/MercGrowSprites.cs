@@ -120,9 +120,12 @@ public static class MercGrowSprites
 
         Sprite sp = null;
 #if UNITY_EDITOR
-        sp = LoadEditorSprite(artPath);
+        // 2026-09-28 主人拍板：编辑器不再优先读美术源目录，改走 Resources。
+        if (DeviceParity.EditorFallbackEnabled)
+            sp = LoadEditorSprite(artPath);
 #endif
         if (sp == null) sp = LoadFromResources(resPath);
+        if (sp == null) DeviceParity.ReportMissing(resPath, "徽记/碎片图");
         if (sp != null) Cache[cacheKey] = sp;
         return sp;
     }

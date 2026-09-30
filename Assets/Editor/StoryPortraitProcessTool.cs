@@ -4,13 +4,14 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// 剧情立绘：黑底转透明 + 裁掉空白边，再同步到 Resources/Story/Portraits。
+/// 剧情立绘：黑底转透明 + 裁掉空白边，再同步到 Assets/Art/UI/Story/portrait_alpha。
 /// 美术导出 RGB 黑底全身图时跑一遍即可。
+/// 注：2026-09-28 起输出目录移出 Resources（游戏运行不读这批图，留着只是白占包体）。
 /// </summary>
 public static class StoryPortraitProcessTool
 {
     const string ArtDir = "Assets/Art/UI/Story";
-    const string ResDir = "Assets/Resources/Story/Portraits";
+    const string ResDir = "Assets/Art/UI/Story/portrait_alpha";
 
     [MenuItem("Tools/UI/处理剧情立绘（抠黑底+裁剪+同步）")]
     public static void ProcessAndSync()
@@ -51,7 +52,7 @@ public static class StoryPortraitProcessTool
 
         AssetDatabase.Refresh();
         Debug.Log("[StoryPortraitProcessTool]\n" + stdout);
-        EditorUtility.DisplayDialog("剧情立绘", "黑底已抠除并同步到 Resources。\n" + stdout, "OK");
+        EditorUtility.DisplayDialog("剧情立绘", "黑底已抠除并同步到 portrait_alpha。\n" + stdout, "OK");
     }
 }
 #endif

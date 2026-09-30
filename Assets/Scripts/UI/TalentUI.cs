@@ -71,6 +71,7 @@ public class TalentUI : MonoBehaviour
 
     [Header("底栏")]
     public Text sumAttackText;
+    public Text sumMagicText;
     public Text sumHpText;
     public Text sumDefText;
     public Text sumCritText;
@@ -135,6 +136,8 @@ public class TalentUI : MonoBehaviour
         public Image line;
         public GameObject redDot;
         public Button button;
+        /// <summary>2026-09-29：右上角红色「新」字（节点刚开通、还没点过才显示，点了就消失）。</summary>
+        public Text newTag;
     }
 
     void Awake()
@@ -180,6 +183,8 @@ public class TalentUI : MonoBehaviour
         TavernUI.SetGuildHallOverlayMode(true);
         EnsureLists();
         RefreshAll();
+        // 2026-09-29 主人纠正：**打开天赋页不清红点** —— 玩家点左列时本来就在天赋页里，
+        // 那样红点等于永远看不到。红点只在「点了右侧那个新天赋」之后才灭，见 RefreshRight / TalentSystem。
     }
 
     public void Hide()
@@ -238,7 +243,7 @@ public class TalentUI : MonoBehaviour
             if (v.effectText != null) v.effectText.text = def.effect.display;
             if (v.icon != null)
             {
-                var sp = TalentIcons.GetLeftAttr(i % 5);
+                var sp = TalentIcons.GetLeftAttr(i % 4);
                 if (sp != null) ApplySprite(v.icon, sp, true);
                 v.icon.preserveAspect = true;
                 v.icon.type = Image.Type.Simple;
@@ -288,6 +293,10 @@ public class TalentUI : MonoBehaviour
 
         for (int i = 0; i < _rightViews.Count; i++)
             RefreshOneRightNode(_rightViews[i], talents, leftUnlocked);
+
+        // 2026-09-29：入口红点 = 还有没有「新开通未点」的右列节点。
+        // 玩家点了右侧那个新天赋 → 它不再是新 → 没有其它新节点时红点自动灭。
+        RedDot.Set(RedDot.Talent, TalentDefs.AnyNewlyOpen(talents));
 
         if (rightTipText != null)
             rightTipText.text = "消耗天赋石解锁/升级天赋（分批开放）";
@@ -359,6 +368,9 @@ public class TalentUI : MonoBehaviour
         if (v.root != null) v.root.SetActive(true);
         SetRowGray(v.root, locked ? 0.72f : 1f);
         SetRowRedDot(v.root, ref v.redDot, canAct);
+        // 2026-09-29 主人要求：新开通且还没点过的节点右上角标红「新」；玩家一点就消失。
+        // 判定统一走 TalentDefs.IsNewlyOpen（与入口红点同一口径），不要在这里另写一套条件。
+        SetRowNewTag(v.root, ref v.newTag, TalentDefs.IsNewlyOpen(node, talents, leftUnlocked));
         if (v.button != null) v.button.interactable = !locked;
     }
 
@@ -367,8 +379,12 @@ public class TalentUI : MonoBehaviour
         if (img == null || img.sprite != null) return;
         var lockSp = sprLock ?? Resources.Load<Sprite>("UI/Common/锁");
 #if UNITY_EDITOR
-        if (lockSp == null)
-            lockSp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            if (lockSp == null)
+                lockSp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
+        }
 #endif
         if (lockSp != null) ApplySprite(img, lockSp, true);
     }
@@ -390,7 +406,7 @@ public class TalentUI : MonoBehaviour
 
     void RefreshSummary()
     {
-        float atk = 0, hp = 0, def = 0, crit = 0, spd = 0;
+        float atk = 0, mag = 0, hp = 0, def = 0, crit = 0, spd = 0;
         var talents = GetTalents();
         if (talents != null)
         {
@@ -401,6 +417,7 @@ public class TalentUI : MonoBehaviour
                 switch (e.kind)
                 {
                     case TalentDefs.AttrKind.Attack: atk += e.value; break;
+                    case TalentDefs.AttrKind.Intelligence: mag += e.value; break;
                     case TalentDefs.AttrKind.Hp: hp += e.value; break;
                     case TalentDefs.AttrKind.Defense: def += e.value; break;
                     case TalentDefs.AttrKind.CritRate: crit += e.value; break;
@@ -420,6 +437,7 @@ public class TalentUI : MonoBehaviour
                 switch (opt.kind)
                 {
                     case TalentDefs.AttrKind.Attack: atk += node.EffectValue(lv, job); break;
+                    case TalentDefs.AttrKind.Intelligence: mag += node.EffectValue(lv, job); break;
                     case TalentDefs.AttrKind.Hp: hp += node.EffectValue(lv, job); break;
                     case TalentDefs.AttrKind.Defense: def += node.EffectValue(lv, job); break;
                     case TalentDefs.AttrKind.CritRate: crit += node.EffectValue(lv, job); break;
@@ -428,7 +446,8 @@ public class TalentUI : MonoBehaviour
             }
         }
 
-        if (sumAttackText != null) sumAttackText.text = "+" + atk.ToString("0");
+        if (sumAttackText != null) sumAttackText.text = "物攻 +" + atk.ToString("0");
+        if (sumMagicText != null) sumMagicText.text = "魔攻 +" + mag.ToString("0");
         if (sumHpText != null) sumHpText.text = "+" + hp.ToString("0");
         if (sumDefText != null) sumDefText.text = "+" + def.ToString("0");
         if (sumCritText != null) sumCritText.text = "+" + crit.ToString("0.##") + "%";
@@ -535,6 +554,31 @@ public class TalentUI : MonoBehaviour
             img.preserveAspect = true;
         }
         dot.SetActive(true);
+    }
+
+    /// <summary>
+    /// 2026-09-29：节点右上角红色「新」字（<see cref="RightNodeView.newTag"/>）。
+    /// 位置刻意让开右上角那个「可点/可升级」小红点（-6,-6），故往左挪到 (-34,-12)。
+    /// </summary>
+    static void SetRowNewTag(GameObject rowRoot, ref Text tag, bool show)
+    {
+        if (rowRoot == null) return;
+        if (!show)
+        {
+            if (tag != null) tag.gameObject.SetActive(false);
+            return;
+        }
+        if (tag == null)
+        {
+            // 用现成的 CreateText：已带中文字体 / 居中 / 不挡射线
+            tag = CreateText(rowRoot.transform, "NewTag", "新", 20, new Color(1f, 0.22f, 0.18f));
+            var rt = tag.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(30f, 24f);
+            rt.anchoredPosition = new Vector2(-34f, -12f);
+        }
+        tag.gameObject.SetActive(true);
     }
 
     void WireClicks()
@@ -1119,8 +1163,12 @@ public class TalentUI : MonoBehaviour
         v.lockIcon.preserveAspect = true;
         var lockSp = sprLock ?? Resources.Load<Sprite>("UI/Common/锁");
 #if UNITY_EDITOR
-        if (lockSp == null)
-            lockSp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            if (lockSp == null)
+                lockSp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
+        }
 #endif
         if (lockSp != null)
             v.lockIcon.sprite = lockSp;
@@ -1154,7 +1202,7 @@ public class TalentUI : MonoBehaviour
         if (v.effectText != null) v.effectText.text = def.effect.display;
         if (v.icon != null)
         {
-            var sp = TalentIcons.GetLeftAttr(index0 % 5);
+            var sp = TalentIcons.GetLeftAttr(index0 % 4);
             if (sp != null) ApplySprite(v.icon, sp, true);
         }
         // 布局交给 Content 的 VerticalLayoutGroup；禁止再改本节点/子节点坐标
@@ -1242,6 +1290,7 @@ public class TalentUI : MonoBehaviour
         rightExtraRowTemplate = transform.Find("RightRowTemplate (1)")?.gameObject;
 
         sumAttackText = FindTxt("Panel/Footer/SumAttack");
+        sumMagicText = FindTxt("Panel/Footer/SumMagic");
         sumHpText = FindTxt("Panel/Footer/SumHp");
         sumDefText = FindTxt("Panel/Footer/SumDef");
         sumCritText = FindTxt("Panel/Footer/SumCrit");
@@ -1559,11 +1608,14 @@ public class TalentUI : MonoBehaviour
         SetAnchored(label.rectTransform, new Vector2(0f, 1f), new Vector2(0.55f, 1f), new Vector2(0f, 1f),
             new Vector2(16f, -8f), new Vector2(0f, 28f));
 
-        CreateSum(footer.transform, "SumAttack", "+0", 0f);
-        CreateSum(footer.transform, "SumHp", "+0", 0.18f);
-        CreateSum(footer.transform, "SumDef", "+0", 0.36f);
-        CreateSum(footer.transform, "SumCrit", "+0%", 0.54f);
-        CreateSum(footer.transform, "SumAtkSpd", "+0%", 0.72f);
+        // 2026-09-29：左列改「力量=物攻 / 智力=魔攻」后，汇总要能看到**两条攻击**。
+        // 5 格 → 6 格，间距 0.18→0.15（CreateSum 内宽度同步 0.16→0.145 防重叠）。
+        CreateSum(footer.transform, "SumAttack", "+0", 0f);      // 力量 → 物攻
+        CreateSum(footer.transform, "SumMagic", "+0", 0.15f);    // 智力 → 魔攻
+        CreateSum(footer.transform, "SumHp", "+0", 0.30f);
+        CreateSum(footer.transform, "SumDef", "+0", 0.45f);
+        CreateSum(footer.transform, "SumCrit", "+0%", 0.60f);
+        CreateSum(footer.transform, "SumAtkSpd", "+0%", 0.75f);
 
         var reset = CreateImage(footer.transform, "ResetButton", Color.white, sprReset, false);
         SetAnchored(reset.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
@@ -1577,7 +1629,7 @@ public class TalentUI : MonoBehaviour
     {
         var t = CreateText(footer, name, value, 20, new Color(0.7f, 0.95f, 0.65f));
         t.alignment = TextAnchor.MiddleCenter;
-        SetAnchored(t.rectTransform, new Vector2(xNorm, 0f), new Vector2(xNorm + 0.16f, 0.55f), new Vector2(0.5f, 0.5f),
+        SetAnchored(t.rectTransform, new Vector2(xNorm, 0f), new Vector2(xNorm + 0.145f, 0.55f), new Vector2(0.5f, 0.5f),
             Vector2.zero, Vector2.zero);
     }
 
@@ -1735,8 +1787,12 @@ public class TalentUI : MonoBehaviour
         if (sprLock == null)
             sprLock = Resources.Load<Sprite>("UI/Common/锁");
 #if UNITY_EDITOR
-        if (sprLock == null)
-            sprLock = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            if (sprLock == null)
+                sprLock = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/Common/锁.png");
+        }
 #endif
         EnsureSprite(ref sprArrow, "天赋_0015_箭头");
     }
@@ -1746,9 +1802,13 @@ public class TalentUI : MonoBehaviour
         if (field != null) return;
         field = Resources.Load<Sprite>("UI/Talent/" + fileStem);
 #if UNITY_EDITOR
-        if (field == null)
-            field = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
-                "Assets/Art/UI/Talent/" + fileStem + ".png");
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            if (field == null)
+                field = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(
+                    "Assets/Art/UI/Talent/" + fileStem + ".png");
+        }
 #endif
     }
 

@@ -15,6 +15,20 @@ public static partial class GameConfig
     public const int STAGE_WAVE_MIN = 3;
     /// <summary>一关最多波次</summary>
     public const int STAGE_WAVE_MAX = 9;
+
+    // —— 2026-09-29 主人拍板重做总怪数曲线 ——
+    // 旧曲线（GetStageMonsterTotal）是「第 1 关 15.6 只、第 2 关 10.4 只」，
+    // 也就是**不单调**：波次跟着变成 5 波 → 3 波，玩家打到第 2 关会觉得「怎么变简单了」。
+    // 改成从第一关起**严格单调递增**：10 → 28，每关 +2，区间内 ±10% 随机保留手感差异。
+    // 关键点：**一章总怪量与旧曲线基本持平（190 vs 189）** ——
+    // 只把怪从「前重后轻」挪成「前轻后重」，金币总收入不变，
+    // 商店 / 天赋那套已调好的节奏不会被推倒重来。
+    /// <summary>第 1 关的总怪数（全章最少）。</summary>
+    public const int MONSTER_TOTAL_BASE = 10;
+    /// <summary>每推进一关多几只怪。</summary>
+    public const int MONSTER_TOTAL_STEP = 2;
+    /// <summary>总怪数在基准值上下浮动的幅度（0.1 = ±10%）。</summary>
+    public const float MONSTER_TOTAL_JITTER = 0.1f;
     /// <summary>无刷怪点时，波与波之间的世界距离（兼容旧逻辑）</summary>
     public const float VIRTUAL_WAVE_SPACING = 4.2f;
 
@@ -196,22 +210,19 @@ public static partial class GameConfig
     }
 
     /// <summary>
-    /// 关卡总怪数：第一章第一关略多、拉长战斗；前两关 10~15；
-    /// 之后按进度抬高，并在区间内随机，章末附近可到 30~35。
+    /// 关卡总怪数：**从第 1 关起严格单调递增** 10 → 28（每关 +2，±10% 随机）。
+    /// 2026-09-29 重做，旧版的「第 1 关特意加量拉长战斗」会让波次在第 2 关倒退，已去掉。
+    /// 波次数由 <see cref="GetSuggestedWaveCount"/> 按「总数 / 单波上限」推，所以跟着单调不减。
     /// </summary>
     public static int GetStageMonsterTotal(int stageIndex0Based)
     {
-        int stageNo = Mathf.Max(1, stageIndex0Based + 1);
-        if (IsOpeningStage() || (stageNo == 1 && (ChapterManager.Instance == null || ChapterManager.Instance.currentChapter <= 1)))
-            return Mathf.Max(1, Mathf.RoundToInt(Random.Range(16, 23) * 0.8f));
-        if (stageNo <= 2)
-            return Mathf.Max(1, Mathf.RoundToInt(Random.Range(10, 16) * 0.8f));
+        int stageNo = Mathf.Clamp(stageIndex0Based + 1, 1, STAGES_PER_CHAPTER);
+        int baseTotal = MONSTER_TOTAL_BASE + (stageNo - 1) * MONSTER_TOTAL_STEP;
 
-        float t = Mathf.Clamp01((stageNo - 1) / 9f);
-        int lo = Mathf.RoundToInt(Mathf.Lerp(14, 28, t));
-        int hi = Mathf.RoundToInt(Mathf.Lerp(18, 35, t));
+        int lo = Mathf.RoundToInt(baseTotal * (1f - MONSTER_TOTAL_JITTER));
+        int hi = Mathf.RoundToInt(baseTotal * (1f + MONSTER_TOTAL_JITTER));
         if (hi < lo) hi = lo;
-        return Mathf.Max(1, Mathf.RoundToInt(Random.Range(lo, hi + 1) * 0.8f));
+        return Mathf.Max(1, Random.Range(lo, hi + 1));
     }
 
     /// <summary>普通关总怪数</summary>
@@ -239,7 +250,9 @@ public static partial class GameConfig
     public static int GetSuggestedWaveCount(int totalMonsters, int spawnPointCount)
     {
         int byTotal = Mathf.CeilToInt(totalMonsters / (float)WAVE_MONSTER_MAX);
-        int waveMin = IsOpeningStage() ? 5 : STAGE_WAVE_MIN;
+        // 2026-09-29：开头不再强拉 5 波 —— 教学关就该是全场最短（10 只 / 3 波），
+        // 旧的「开局 5 波」是跟着「第 1 关怪最多」一起来的，那条曲线已经废了。
+        int waveMin = STAGE_WAVE_MIN;
         byTotal = Mathf.Clamp(byTotal, waveMin, STAGE_WAVE_MAX);
         if (spawnPointCount <= 0)
             return byTotal;

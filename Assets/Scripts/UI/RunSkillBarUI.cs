@@ -85,17 +85,21 @@ public class RunSkillBarUI : MonoBehaviour
         root.anchorMax = new Vector2(0f, 0.5f);
         root.pivot = new Vector2(0f, 0.5f);
         root.anchoredPosition = new Vector2(10f, 40f);
-        root.sizeDelta = new Vector2(ChipW + 12f, 492f);
+        // 2026-09-28：标题区隐藏后高度 492 → 398（收掉空出的 94）
+        root.sizeDelta = new Vector2(ChipW + 12f, 398f);
 
         var bg = MakeImage("Bg", root, new Color(0.10f, 0.09f, 0.13f, 0.72f));
         Stretch(bg.rectTransform);
 
+        // 2026-09-28 主人拍板：手机上不要「本局构筑 / 战力」标题区 —— 只保留技能/佣兵列表（教程拖拽排序还依赖它）。
         var title = MakeText("Title", root, "本局构筑", 22, new Color(0.98f, 0.88f, 0.62f));
         Anchor(title.rectTransform, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -18f, ChipW, 28f);
+        title.gameObject.SetActive(false);
 
         // 战力（等级系统已停用，只展示本局战力）
         _powerText = MakeText("Power", root, "战力 0", 24, new Color(1f, 0.82f, 0.36f));
         Anchor(_powerText.rectTransform, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -48f, ChipW, 30f);
+        _powerText.gameObject.SetActive(false);
 
         // 经验条（满格 → 升级 → 弹抽卡）
         var expBg = MakeImage("ExpBg", root, new Color(0.06f, 0.06f, 0.09f, 0.95f));
@@ -110,7 +114,7 @@ public class RunSkillBarUI : MonoBehaviour
         Anchor(_expText.rectTransform, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -86f, ChipW, 20f);
 
         _chipRoot = MakeRect("Chips", root);
-        Anchor(_chipRoot, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -112f, ChipW, 360f);
+        Anchor(_chipRoot, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -18f, ChipW, 360f);
         var layout = _chipRoot.gameObject.AddComponent<VerticalLayoutGroup>();
         layout.spacing = 6f;
         layout.childAlignment = TextAnchor.UpperCenter;

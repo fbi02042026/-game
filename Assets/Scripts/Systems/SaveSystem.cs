@@ -98,6 +98,9 @@ public class SaveSystem : Singleton<SaveSystem>
         data.SyncRuntimeFromLists();
         if (string.IsNullOrEmpty(data.selectedPlayerSkillId))
             data.selectedPlayerSkillId = "heal_spring";
+        // 2026-09-29：新档给启动抽奖币。抽奖与金币已分开，金币维持 0，不动城镇经济。
+        // 每局进关时还会按 SlotMachineSystem.EnsureStarterCoins 补到下限（含「初始资金」天赋加成）。
+        data.slotCoins = SlotMachineDefs.STARTER_COINS;
         return data;
     }
 

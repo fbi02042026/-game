@@ -433,8 +433,12 @@ public class SettingsPopupUI : MonoBehaviour
         var fromRes = Resources.Load<Sprite>("UI/Settings/" + fileName);
         if (fromRes != null) return fromRes;
 #if UNITY_EDITOR
-        var ed = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(SettingsArtRoot + fileName + ".png");
-        if (ed != null) return ed;
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            var ed = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(SettingsArtRoot + fileName + ".png");
+            if (ed != null) return ed;
+        }
 #endif
         EnsureToggleSpriteCache();
         if (fileName == "开") return _cachedOn;

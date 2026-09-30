@@ -3,8 +3,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 剧情立绘唯一布局入口：原图像素尺寸 + RectMask 裁切；单/双仅槽位不同。
-/// 禁止按屏幕比例缩放/拉伸立绘。
+/// 剧情立绘唯一布局入口：原图像素尺寸 × 屏幕系数（720×1280 为基准，只放大不缩小）+ RectMask 裁切；单/双仅槽位不同。
+/// 2026-09-28 前的旧规「禁止按屏幕比例缩放」已被主人推翻：大分辨率机型立绘要跟着放大。
 /// </summary>
 public static class StoryPortraitPresenter
 {
@@ -120,8 +120,11 @@ public static class StoryPortraitPresenter
         portraitRt.pivot = new Vector2(0.5f, 0f);
         portraitRt.anchoredPosition = Vector2.zero;
 
-        // 原图像素尺寸，禁止按屏幕比例缩放/拉伸；仅 RectMask 裁切
-        ApplyNativePixelSize(img, out float w, out float h);
+        // 原图像素尺寸 × 屏幕系数；仅 RectMask 裁切，不拉伸变形
+        // 2026-09-28 主人拍板：以 720×1280 设计分辨率的效果为标准，逻辑画布更高（更瘦屏）时
+        // 立绘等比放大，标准屏保持原效果；系数下限 1，**只放大不缩小**（修「大分辨率机上立绘偏小」）。
+        float scale = ResolvePortraitScale(ctx);
+        ApplyNativePixelSize(img, scale, out float w, out float h);
         EnsureClipMask(img, profile.clipHeightFrac, w, h);
 
         var hostRt = GetHostRt(img);
@@ -132,7 +135,20 @@ public static class StoryPortraitPresenter
         ClampInsideCanvas(hostRt, ctx.CanvasRt);
     }
 
-    static void ApplyNativePixelSize(Image img, out float w, out float h)
+    /// <summary>
+    /// 立绘屏幕系数：逻辑画布高 / 设计高（720×1280 为基准）。
+    /// 标准屏=1（维持美术定稿效果）；更瘦屏（如 1240×2772 逻辑高≈1610）≈1.26 等比放大；
+    /// 更宽/更矮屏钳回 1，只放大不缩小。裁切窗用缩放后的尺寸，比例关系不变。
+    /// </summary>
+    static float ResolvePortraitScale(Context ctx)
+    {
+        float canvasH = ctx.CanvasRt != null ? ctx.CanvasRt.rect.height : 0f;
+        if (canvasH < 64f) canvasH = GameConfig.DESIGN_HEIGHT;
+        float k = canvasH / Mathf.Max(1f, GameConfig.DESIGN_HEIGHT);
+        return Mathf.Max(1f, k);
+    }
+
+    static void ApplyNativePixelSize(Image img, float scale, out float w, out float h)
     {
         w = 0f;
         h = 0f;
@@ -152,7 +168,7 @@ public static class StoryPortraitPresenter
         h = sp.rect.height;
         if (w < 1f) w = sp.texture != null ? sp.texture.width : 1f;
         if (h < 1f) h = sp.texture != null ? sp.texture.height : 1f;
-        img.rectTransform.sizeDelta = new Vector2(w, h);
+        img.rectTransform.sizeDelta = new Vector2(w * scale, h * scale);
     }
 
     static float ResolveBottomY(RectTransform hostRt, StoryPortraitLayout.Profile profile, Context ctx)

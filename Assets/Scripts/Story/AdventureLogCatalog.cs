@@ -437,7 +437,7 @@ public static class AdventureLogCatalog
         {
             Id = "P0", Title = "序章 见习者的第一天", Unlock = "完成新手引导",
             Summary = "玩家加入皇家冒险者公会，会长派发森林层委托。老盾作为临时队友入队，咨询台小姐传授三条下裂隙规则。",
-            Extra = "新人，森林层最近有些怪物躁动。去吧，证明你有资格留下。"
+            Extra = "新人，森林层那帮怪物最近闹得凶。下去走一趟，能不能留下，看你自己的造化。"
         },
         new StoryEntry
         {

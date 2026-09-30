@@ -123,8 +123,9 @@ public class TownSceneManager : MonoBehaviour
         // 商店按钮
         CreateButton(btnPanel.transform, "商店", 1, btnHeight, spacing, OnOpenShop);
 
-        // 天赋按钮
-        CreateButton(btnPanel.transform, "天赋升级", 2, btnHeight, spacing, OnOpenTalent);
+        // 天赋按钮（2026-09-29：挂红点，右列有新天赋可点时亮，打开天赋页后清）
+        var talentBtn = CreateButton(btnPanel.transform, "天赋升级", 2, btnHeight, spacing, OnOpenTalent);
+        if (talentBtn != null) RedDot.Bind(talentBtn.transform, RedDot.Talent);
 
         // 设置按钮
         CreateButton(btnPanel.transform, "设置", 3, btnHeight, spacing, OnOpenSettings);

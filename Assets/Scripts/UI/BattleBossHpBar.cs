@@ -3,7 +3,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 战斗场景屏幕 Boss 血条：按名绑定 BossBar/血条，Sliced 左对齐按宽度比例扣血。
-/// 仅 IsBossUnit，或精英关 IsEliteWave 显示。
+/// 显示对象：IsBossUnit，或任意精英（IsEliteWave）。
+/// 2026-09-28 主人要求：精英也配上这条血条 —— 原来只在「精英关」才显示，普通关里的精英（如引导第 4 波）看不到。
 /// </summary>
 public class BattleBossHpBar : MonoBehaviour
 {
@@ -286,7 +287,6 @@ public class BattleBossHpBar : MonoBehaviour
         var bm = BattleManager.Instance;
         if (bm == null || bm.monsters == null) return null;
 
-        bool eliteStage = bm.currentStage != null && bm.currentStage.type == StageType.Elite;
         Monster bestBoss = null;
         Monster bestElite = null;
         float bestBossHp = -1f;
@@ -306,7 +306,8 @@ public class BattleBossHpBar : MonoBehaviour
                     bestBoss = m;
                 }
             }
-            else if (eliteStage && m.IsEliteWave)
+            // 2026-09-28 主人要求：精英也给血条（去掉「仅精英关」限制）——取血最多的那只精英
+            else if (m.IsEliteWave)
             {
                 if (maxHp > bestEliteHp)
                 {

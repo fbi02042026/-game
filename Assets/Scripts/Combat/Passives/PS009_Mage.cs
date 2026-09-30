@@ -41,8 +41,11 @@ public class PS009_Mage : PlayerPassiveModule
             _stillTimer = 0f;
             if (_mageStandingBonus)
             {
-                float atk = hero.attr.GetAttr(AttrType.Attack);
-                hero.attr.SetAttr(AttrType.Attack, atk / (1f + _mageAtkBonusPct));
+                // 2026-09-29：法师的攻击力在 MagicAttack 上，加成必须打在同一侧，
+                // 否则「站桩 +20% 攻击」加在物攻上 = 白加。
+                AttrType at = PlayerJobBaseStats.CurrentAttackAttr();
+                float atk = hero.attr.GetAttr(at);
+                hero.attr.SetAttr(at, atk / (1f + _mageAtkBonusPct));
                 _mageStandingBonus = false;
             }
             return;
@@ -50,8 +53,9 @@ public class PS009_Mage : PlayerPassiveModule
         _stillTimer += Time.deltaTime;
         if (!_mageStandingBonus && _stillTimer >= _mageStandDelay)
         {
-            float atk = hero.attr.GetAttr(AttrType.Attack);
-            hero.attr.SetAttr(AttrType.Attack, atk * (1f + _mageAtkBonusPct));
+            AttrType at = PlayerJobBaseStats.CurrentAttackAttr();
+            float atk = hero.attr.GetAttr(at);
+            hero.attr.SetAttr(at, atk * (1f + _mageAtkBonusPct));
             _mageStandingBonus = true;
         }
     }

@@ -120,8 +120,15 @@ public static partial class GameConfig
     /// monster_stats 表 moveSpeed 已全体减半（2.2→1.1），乘同一系数得 1.1 × 0.3142 = 0.3456（世界单位）。
     /// </summary>
     public const float MONSTER_MOVE_SPEED_TO_WORLD = 0.3142f;
-    /// <summary>从右侧缓步入场速度</summary>
-    public const float MONSTER_ENTER_SPEED = 0.4f;
+    /// <summary>
+    /// 从右侧缓步入场速度。
+    /// 【0.4 → 1.0】2026-09-28 主人反馈「第一波的敌人出来的还是晚，再早点」：
+    /// 怪刷在镜头右缘外 1.35 处、交战点在英雄前方 3.2，实际要走约 2.4 个世界单位，
+    /// 0.4/s 要跑 6 秒才站定 —— 这就是「怪还没出来」的体感来源。
+    /// 1.0/s 下约 2.4 秒站定、约 1.3 秒就露头（仍比小怪移速 0.3456 快，但不至于瞬移）。
+    /// 只动这一个数，刷怪位置/交战点一概不动。
+    /// </summary>
+    public const float MONSTER_ENTER_SPEED = 1.0f;
     /// <summary>入场起点比交战点再远多少（世界单位）；过大容易出场「往前窜」</summary>
     public const float MONSTER_ENTER_DISTANCE = 1.2f;
     /// <summary>玩家出生相对 SpawnPoint 再往左偏（世界单位）</summary>
@@ -227,7 +234,15 @@ public static partial class GameConfig
     /// 怪物攻速总倍率（最终攻速 = 1/间隔 × 本值 × MonsterConfig.baseAttackSpeed）。
     /// 前期先压低；以后难度高了往 1 调（甚至 &gt;1）。
     /// </summary>
-    public const float MONSTER_ATK_SPEED_MUL = 0.65f;
+    /// 【0.65 → 0.39】2026-09-28 主人要求「敌人的攻击频率有点快，再减少 40%」：0.65 × 0.6 = 0.39。
+    /// 只动这一个数；下面远程怪那档 ÷0.6 会一起跟着降，远近都比原来慢 40%。
+    public const float MONSTER_ATK_SPEED_MUL = 0.39f;
+    /// <summary>
+    /// 2026-09-28 主人要求「远程敌人的攻击要比近战高」：远程（弓/法球）怪物攻击力倍率。
+    /// 只作用于敌方远程，Boss 不吃（Boss 有自己的 BOSS_TTK_ATK_MUL）。
+    /// 嫌远程太痛/不够痛只改这一个数。
+    /// </summary>
+    public const float MONSTER_RANGED_ATK_MUL = 1.35f;
     /// <summary>
     /// 仅敌方弓/法球普攻频率倍率（1=表值；0.5=再降一半）。
     /// 我方（玩家职业表 AttackInterval、佣兵花名册 AtkSpeed）不再叠这个，否则 0.5 秒间隔会变成 1 秒。
@@ -240,8 +255,24 @@ public static partial class GameConfig
     /// 与武器种族系数、连杀加速、被动攻速是乘法叠加。
     /// </summary>
     public const float PLAYER_ATTACK_SPEED_MUL = 0.8f;
+
+    /// <summary>
+    /// 玩家（Hero）行走/移动速度倍率。2026-09-28 主人要求「玩家行走速度再加快 10%」→ 1.1。
+    /// 只作用于 Hero（在 UnitBase.GetCombatMoveSpeed 里乘），佣兵与怪物不受影响，
+    /// 避免把整场推进节奏一起带快。再要调只改这一个数。
+    /// 注意：摇杆手动移动是在这个值之上再乘 HERO_MANUAL_MOVE_X_MUL，所以手动/自动会同步变快。
+    /// </summary>
+    public const float PLAYER_MOVE_SPEED_MUL = 1.1f;
     /// <summary>英雄基础攻击（BaseAtk）全局偏移。负值=整体削弱。-10 即各职业基础攻击 -10，用于手感/平衡微调。</summary>
     public const float HERO_BASE_ATTACK_OFFSET = 0f; // 2026-09-14：不再二次扣 10，职业表 baseAtk 即真源
+
+    /// <summary>
+    /// 2026-09-29 主人拍板：天赋「流派·物理专精 / 魔法专精」的**跨系折扣**。
+    /// 点**本系**流派满额生效；点**另一系**按此系数打折（0.5 = 只拿一半）。
+    /// 设计意图：给玩家一个明确的培养目标（专一养物理或法系），但跨系**不是不能玩、只是要花代价**。
+    /// 例：法师点满「物理专精 +25%」实际只拿到 +12.5%。
+    /// </summary>
+    public const float TALENT_CROSS_PATH_RATIO = 0.5f;
 
     /// <summary>
     /// 裂缝「掉落」装备属性整体加成：掉落生成时每个「非百分比」词条数值 +此值。
@@ -456,10 +487,11 @@ public static partial class GameConfig
     /// 2026-09-26 主人反馈「玩家受击只掉 1 血、开不开护盾都是 -1」：
     /// monster_stats 的 baseAttack 只有 3.6~13.7，而玩家防御起步就有 10.5（剑盾）+ 体力 5 + 装备，
     /// DamageFormula.FinalHit 的减法结果长期 ≤ 0，被 MinDamage=1 钳成 1 —— 不是护盾没接，是根本没得可减。
-    /// 【原值 1f → 新值 3f】第 1 章杂兵 raw 26~41：剑盾（防≈20）净伤 6~21，法师净伤 16~31。
-    /// 这是唯一的全局旋钮（Monster.cs 攻击赋值处），Boss 同步放大（原净伤≈18 → 现≈93），嫌狠就往下调。
+    /// 【原值 1f → 3f】2026-09-26：第 1 章杂兵 raw 26~41，3f 下剑盾净伤 6~21。
+    /// 【3f → 2f】2026-09-28 主人拍板：3f 连引导关都嫌痛，先降回 2f。
+    /// 这是唯一的全局旋钮（Monster.cs 攻击赋值处），Boss 同步放大，嫌狠就往下调。
     /// </summary>
-    public const float MONSTER_DAMAGE_MULTIPLIER = 3f;
+    public const float MONSTER_DAMAGE_MULTIPLIER = 2f;
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备
     public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手（已改为包内同部位唯一，无穿戴槽）

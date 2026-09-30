@@ -43,7 +43,9 @@ public class PoisonDotRunner : MonoBehaviour
         float poison = _hero.attr.GetAttr(AttrType.Poison);
         if (poison <= 0f) return;                                   // 没穿中毒词缀不触发
         if (target == null || target.isDead || target.attr == null) return;
-        float atk = _hero.attr.GetAttr(AttrType.Attack);
+        // 2026-09-29：按职业取攻击力（当前毒伤只开放给游侠=物理职业，取到 Attack；
+        // 以后若开放给法系职业，这里自动跟到 MagicAttack，不用再改一遍）。
+        float atk = _hero.attr.GetAttr(PlayerJobBaseStats.CurrentAttackAttr());
         float perTick = atk * poison * GameConfig.POISON_DPS_RATIO; // 每跳伤害
         ApplyPoison(target, perTick);
     }

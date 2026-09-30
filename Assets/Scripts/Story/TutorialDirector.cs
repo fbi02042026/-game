@@ -12,6 +12,21 @@ using UnityEngine.UI;
 public class TutorialDirector : Singleton<TutorialDirector>
 {
     const string OpeningIntroRelativePath = "Art/Video/opening_intro.mp4";
+    /// <summary>StreamingAssets 里的片头文件名（真机播放入口，见 ResolveOpeningIntroPath）。</summary>
+    const string OpeningIntroStreamingName = "opening_intro.mp4";
+
+    /// <summary>
+    /// 2026-09-28 修复真机不播片头：原逻辑用 Application.dataPath + File.Exists，
+    /// Android 上 dataPath 指向 base.apk，File.Exists 必失败 → 片头被静默跳过（编辑器正常，真机没了）。
+    /// 真机改走 StreamingAssets（VideoPlayer 可直接播 jar:// URL）；编辑器仍回退工程内 Assets/Art/Video。
+    /// 另注意：片头只在 StoryProgress.OpeningIntroPlayed==false 时播一次，老存档本就不会再播。
+    /// </summary>
+    static string ResolveOpeningIntroPath()
+    {
+        if (!Application.isEditor)
+            return Path.Combine(Application.streamingAssetsPath, OpeningIntroStreamingName);
+        return Path.Combine(Application.dataPath, OpeningIntroRelativePath);
+    }
 
     public bool ShowMercHud { get; private set; }
     public bool WaitingEvacuate { get; set; }
@@ -281,7 +296,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         var beats = new List<StoryBeat>
         {
             StoryDirector.Solo("会长",
-                "新人，森林层最近有些怪物躁动。去吧，证明你有资格留下。",
+                "新人，森林层那帮怪物最近闹得凶。下去走一趟，能不能留下，看你自己的本事。",
                 StoryPortraits.GuildMaster)
                 .Bg(StoryBackgrounds.GuildOffice),
             StoryDirector.Solo("会长",
@@ -302,6 +317,21 @@ public class TutorialDirector : Singleton<TutorialDirector>
             while (!named) yield return null;
         }
 
+        // 2026-09-28 主人要求：起名后会长补一句送客台词
+        {
+            string playerName = StoryProgress.GetPlayerName();
+            var sendOff = new List<StoryBeat>
+            {
+                StoryDirector.Solo("会长",
+                    $"{playerName}，你可以出去了。往后的路，自己当心。",
+                    StoryPortraits.GuildMaster)
+                    .Bg(StoryBackgrounds.GuildOffice),
+            };
+            done = false;
+            StoryDirector.Ensure().Play(sendOff, () => done = true, keepSceneArt: true);
+            while (!done) yield return null;
+        }
+
         var afterNaming = new List<StoryBeat>
         {
             StoryDirector.Solo("咨询台小姐",
@@ -316,7 +346,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
     IEnumerator PlayOpeningIntroIfNeeded()
     {
-        string fullPath = Path.Combine(Application.dataPath, OpeningIntroRelativePath);
+        string fullPath = ResolveOpeningIntroPath();
         var overlay = OpeningIntroOverlay.Show(fullPath);
         if (overlay == null)
         {
@@ -391,6 +421,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 highlight, 12f);
 
         StoryProgress.MarkTutorialDone();
+        // 2026-09-29 主人拍板：引导一结束就把小白清掉，不让他跟到正式关卡。
+        // 引导关撤离走的是 SkipMercHireClearOnEvacuate=true（不清雇佣），所以必须在这里主动清。
+        ClearTutorialMerc();
         _townFlowBusy = false;
         _flow = null;
     }
@@ -409,14 +442,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // —— 0) 教摇杆 + 自动技能（选职已在冒险页完成）——
         if (bm != null) bm.UnitsCanAct = false;
         HaltUnit(Hero.Instance);
-        yield return CoTeachControls(bm, hint, ui);
+        yield return CoTeachControls(bm, hint, ui, preloadStep: 1);
 
         // —— 1) 首波清场后进入宝箱剧情（不再刷第二小波）——
         // 2026-09-27 主人反馈「引导到自动攻击时怪还没出来」→ **先刷怪、再弹提示**。
-        // 原来顺序是先 Show 提示再 EnsureTutorialStep(1)，怪在玩家读字期间才开始生成+屏外走进场，
-        // 于是提示说完玩家面前还是空的。现在把刷怪整段提到提示之前，怪已经在场才说「靠近会自动攻击」。
+        // 2026-09-28 再提前：第 1 波已在 CoTeachControls 里刷（preloadStep:1），
+        // 借「技能能量满会自动释放」那 3.2 秒读字时间走完进场，这里不再重复刷
+        // （EnsureTutorialStep 不看是否已刷过，重复调用会多排一波）。
         TutorialBattleTable.EnsureLoaded();
-        yield return EnsureTutorialStep(bm, 1);
         hint.Show("靠近怪物会自动攻击。", null, 8f);
         if (bm != null) bm.UnitsCanAct = true;
         yield return WaitFieldClear();
@@ -449,6 +482,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 宝箱再「突然出现」。UnitsCanAct 保持 true（WaitFieldClear 结尾已放开，场上无怪 → 向右推图），
         // 走够距离才冻结进剧情。只等，绝不改写 Hero 坐标（2026-09-18 教训）。
         yield return CoWaitHeroAdvance(2.4f, 4f);
+        // 2026-09-28：最后一只怪的尸体彻底消失之后再让宝箱冒出来（等 deathAnimDuration 走完）
+        yield return CoWaitMonstersGone(bm);
         if (bm != null) bm.UnitsCanAct = false;
         yield return chestDir.CoTutorialPlaceChest(4f, waitForHeroApproach: false);
         chestDir.SnapHeroBeforeChest();
@@ -564,6 +599,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         {
             yield return TalkBlock(bm, headTalk, restoreAct: false,
                 new TalkLine(Hero.Instance, "有个块头更大的！", 0.75f));
+            // 2026-09-28 主人要求：这段佣兵救援剧情说完先砸「首领来袭」预告，再开始战斗
+            // （怪在下一行 QueueTutorialStep 才刷，预告播完正好开打；精英血条由 BattleBossHpBar 显示）
+            yield return BattleWaveAnnounceUI.CoPlay(BattleWaveAnnounceUI.Kind.Boss,
+                $"精英 ×{rescueStep.eliteCount} 来袭 — 先清围殴她的怪");
         }
         bm?.QueueTutorialStep(4, forcedTarget: merc);
         hint.Show("前方有人被怪物围住了，上前帮忙。", null, 4f);
@@ -1131,19 +1170,49 @@ public class TutorialDirector : Singleton<TutorialDirector>
             skillId = active,
             passiveSkillId = passive
         };
-        // 教程：写入临时雇佣；图鉴仍 MarkMercSeen
+        // 教程：写入本局雇佣（引导期临时）；图鉴仍 MarkMercSeen
         data.hiredMercs ??= new System.Collections.Generic.List<MercenaryData>();
         data.hiredMercs.Add(entry);
-        // 兼容旧逻辑：也记一条 permanent（不用于出战优先）
-        data.permanentMercs.Add(entry);
+        // 2026-09-29 主人拍板：小白是**引导期佣兵**，引导完就清空，不跟到正式关卡。
+        // 原来这里还会额外写一条 permanentMercs（跨局永久），导致他每局自动进队 —— 已去掉。
+        // 正式关卡里要佣兵，只能靠进关抽奖（DraftPool 从 unlockedMercIds 抽）。
         SaveSystem.Instance.Save();
-        Debug.Log($"[Tutorial] 牧师已写入 permanentMercs id={mercId}");
+        Debug.Log($"[Tutorial] 牧师已写入本局雇佣（引导期临时，不跨局）id={mercId}");
         AdventureCodex.MarkMercSeen(StoryProgress.TutorialMercHireId);
         AdventureCodex.MarkMercSeen(mercId);
     }
 
+    /// <summary>
+    /// 2026-09-29 主人拍板：小白是**引导期佣兵**，引导结束就清空，不跟到正式关卡。
+    /// 同时清 hiredMercs（本局雇佣）与 permanentMercs（旧存档可能残留的那一条）。
+    /// 之后想在正式关卡里带佣兵，只能靠进关抽奖。
+    /// </summary>
+    static void ClearTutorialMerc()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+        string id = StoryProgress.TutorialMercId;
+        if (string.IsNullOrEmpty(id)) return;
+
+        RemoveMercFrom(data.hiredMercs, id);
+        RemoveMercFrom(data.permanentMercs, id);
+        SaveSystem.Instance.Save();
+        Debug.Log($"[Tutorial] 引导期佣兵已清空 id={id}");
+    }
+
+    static void RemoveMercFrom(System.Collections.Generic.List<MercenaryData> list, string mercId)
+    {
+        if (list == null) return;
+        for (int i = list.Count - 1; i >= 0; i--)
+        {
+            if (list[i] != null && list[i].mercId == mercId)
+                list.RemoveAt(i);
+        }
+    }
+
     /// <summary>进战后先教摇杆与自动技能。</summary>
-    static IEnumerator CoTeachControls(BattleManager bm, TutorialHintUI hint, BattleUI ui)
+    /// <param name="preloadStep">&gt;0 时在技能提示之前先把这一波刷出来（让怪借读字时间进场）。</param>
+    static IEnumerator CoTeachControls(BattleManager bm, TutorialHintUI hint, BattleUI ui, int preloadStep = 0)
     {
         if (bm != null) bm.UnitsCanAct = true;
         // ui 是 BattleRoutine 开场那一帧抓的 BattleUI，此刻可能还没装配出来；
@@ -1165,6 +1234,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return null;
         }
         hint.Hide();
+
+        // 2026-09-28 主人反馈「第一波的敌人出来的还是晚，再早点」：
+        // 把第 1 波的刷怪提到技能提示之前，利用这 3.2 秒读字时间让怪走进场，
+        // 等下面「靠近怪物会自动攻击」这句出来时，怪已经站在脸上了。
+        if (preloadStep > 0)
+            yield return EnsureTutorialStep(bm, preloadStep);
 
         hint.Show("技能能量满会自动释放，无需点击。", null, 3.5f);
         yield return new WaitForSecondsRealtime(3.2f);
@@ -1384,6 +1459,34 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         if (bm != null && strict)
             bm.UnitsCanAct = true;
+    }
+
+    /// <summary>
+    /// 2026-09-28 主人要求「宝箱剧情前打死最后一个敌人，要等这个敌人消失了再出现宝箱」：
+    /// WaitFieldClear 只看 isDead —— 怪一断气就算清场，尸体还在播 0.8 秒死亡动画（deathAnimDuration），
+    /// 宝箱会当着尸体冒出来。这里补一步：等场上再没有任何「还在场上的怪（活着的 + 尸体）」才放行。
+    /// 纯等待，不改写任何坐标；超时直接放行，绝不卡流程。
+    /// </summary>
+    static IEnumerator CoWaitMonstersGone(BattleManager bm, float timeout = 3f)
+    {
+        if (bm == null) yield break;
+        float t = 0f;
+        while (t < timeout)
+        {
+            bool anyOnField = false;
+            var all = Object.FindObjectsOfType<Monster>();
+            for (int i = 0; i < all.Length; i++)
+            {
+                var m = all[i];
+                if (m == null || !m.gameObject.activeInHierarchy) continue;
+                anyOnField = true;
+                break;
+            }
+            if (!anyOnField) yield break;
+
+            t += 0.12f;
+            yield return new WaitForSecondsRealtime(0.12f);
+        }
     }
 
     /// <summary>

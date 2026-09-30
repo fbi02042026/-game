@@ -49,6 +49,9 @@ public static class TownSharedChrome
             if (!_cachedTop.gameObject.activeSelf)
                 _cachedTop.gameObject.SetActive(true);
             _cachedTop.SetAsLastSibling();
+            // 刘海 / 挖孔：顶栏整体下移 safeArea 顶部高度，别让金币/体力被摄像头压住。
+            // 只挪 anchoredPosition，不动锚点与尺寸（SafeAreaFitter.Offset），幂等，可重复调。
+            SafeAreaFitter.EnsureTopOffset(_cachedTop as RectTransform);
             if (!_topFontsDone)
             {
                 GameFonts.ApplyToHierarchy(_cachedTop);
@@ -83,6 +86,7 @@ public static class TownSharedChrome
         Transform existing = host.Find("TopBar") ?? FindDeep(host, "TopBar") ?? FindDeep(host, "SharedResourceBar");
         if (existing != null)
         {
+            SafeAreaFitter.EnsureTopOffset(existing as RectTransform);   // 刘海避让
             GameFonts.ApplyToHierarchy(existing);
             return existing;
         }
@@ -93,6 +97,7 @@ public static class TownSharedChrome
             GameObject go = Object.Instantiate(prefab, host, false);
             go.name = "TopBar";
             StretchTop(go.GetComponent<RectTransform>());
+            SafeAreaFitter.EnsureTopOffset(go.GetComponent<RectTransform>());   // 刘海避让
             GameFonts.ApplyToHierarchy(go.transform);
             return go.transform;
         }
@@ -105,6 +110,7 @@ public static class TownSharedChrome
         GameObject clone = Object.Instantiate(src.gameObject, host, false);
         clone.name = "TopBar";
         clone.SetActive(true);
+        SafeAreaFitter.EnsureTopOffset(clone.GetComponent<RectTransform>());    // 刘海避让
         GameFonts.ApplyToHierarchy(clone.transform);
         return clone.transform;
     }

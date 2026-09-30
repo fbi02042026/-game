@@ -35,7 +35,9 @@ public class CharacterUI : MonoBehaviour, ITownPage
     [Header("基础属性")]
     public Text attrHpText;
     public Text attrAtkText;
+    public Text attrMagicAtkText;   // 2026-09-29 魔攻（面板新增节点，找不到则不显示）
     public Text attrDefText;
+    public Text attrMagicDefText;   // 2026-09-29 魔防（面板新增节点，找不到则不显示）
     public Text attrSpdText;
     public Text attrCritText;
     public Text attrResistText;
@@ -271,9 +273,13 @@ public class CharacterUI : MonoBehaviour, ITownPage
         var all = Resources.LoadAll<Sprite>("Icons/SkillIcon/" + skillId);
         if (all != null && all.Length > 0) return all[0];
 #if UNITY_EDITOR
-        string artPath = "Assets/Art/UI/Icons/玩家SkillIcon/" + skillId + ".png";
-        sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(artPath);
-        if (sp != null) return sp;
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            string artPath = "Assets/Art/UI/Icons/玩家SkillIcon/" + skillId + ".png";
+            sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(artPath);
+            if (sp != null) return sp;
+        }
 #endif
         return null;
     }
@@ -393,19 +399,75 @@ public class CharacterUI : MonoBehaviour, ITownPage
         var sp = Resources.Load<Sprite>("UI/NavCharacter/" + fileNameWithoutExt);
         if (sp != null) return sp;
 #if UNITY_EDITOR
-        string path = "Assets/Art/UI/NavCharacter/" + fileNameWithoutExt + ".png";
-        var ed = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
-        if (ed != null) return ed;
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            string path = "Assets/Art/UI/NavCharacter/" + fileNameWithoutExt + ".png";
+            var ed = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(path);
+            if (ed != null) return ed;
+        }
 #endif
         return null;
+    }
+
+    /// <summary>
+    /// <summary>
+    /// 2026-09-29：取「魔攻 / 魔防」这两行的 Text。
+    /// <para>🔴 主人口径「不要兜底、出错要让我看见」：只按标准名
+    /// <c>AttrPanel/{stdName}Root/{stdName}</c> 找，**不做关键字模糊匹配、也不运行时克隆** ——
+    /// 缺节点直接报错，绝不静默地显示不出来。</para>
+    /// </summary>
+    Text ResolveMagicAttrRow(string stdName, string cnName)
+    {
+        var hit = FindTxt("Content/AttrPanel/" + stdName + "Root/" + stdName)
+                  ?? FindTxt("Content/AttrPanel/" + stdName);
+        if (hit == null)
+        {
+            Debug.LogError($"[CharacterUI] 角色面板缺少属性节点 Content/AttrPanel/{stdName}Root/{stdName}，" +
+                           $"【{cnName}】这一条不会显示 —— 请在 CharacterUI 预制体的 AttrPanel 下补这个节点。");
+        }
+        return hit;
+    }
+
+    /// <summary>给魔攻 / 魔防那两行换上对应图标（图在 Resources/UI/AttrIcons 下）。同样不兜底。</summary>
+    void EnsureMagicAttrIcons()
+    {
+        SetRowIcon(attrMagicAtkText, "角色_0001s_0000_魔攻", "魔攻");
+        SetRowIcon(attrMagicDefText, "角色_0001s_0000_魔防", "魔防");
+    }
+
+    static void SetRowIcon(Text valueText, string iconFile, string cnName)
+    {
+        if (valueText == null) return;   // 节点缺失上面已经报过错，不重复刷屏
+        var row = valueText.transform.parent;
+        var spr = TalentIcons.GetAttrSprite(iconFile);
+        if (spr == null)
+        {
+            Debug.LogError($"[CharacterUI] 属性图标缺失：Resources/UI/AttrIcons/{iconFile}.png，" +
+                           $"【{cnName}】那一行会显示成别的图标 —— 请把图放进 Resources/UI/AttrIcons。");
+            return;
+        }
+        if (row == null) return;
+        bool applied = false;
+        foreach (var img in row.GetComponentsInChildren<Image>(true))
+        {
+            if (img == null) continue;
+            img.sprite = spr;
+            applied = true;
+            break;   // 只换该行第一个 Image（图标位）
+        }
+        if (!applied)
+            Debug.LogError($"[CharacterUI] 【{cnName}】行（{row.name}）下找不到 Image 组件，图标换不上去。");
     }
 
     void RefreshAttrs()
     {
         float hp = GameConfig.BASE_HP, atk = GameConfig.BASE_ATTACK, def = GameConfig.BASE_DEFENSE;
         float spd = GameConfig.BASE_ATTACK_SPEED, crit = GameConfig.BASE_CRIT_RATE, resist = 0f;
-        float talAtk = 0f, talHp = 0f, talDef = 0f, talCrit = 0f, talSpd = 0f;
-        SumTalentAttrBonuses(ref talAtk, ref talHp, ref talDef, ref talCrit, ref talSpd);
+        // 2026-09-29：攻击/防御各拆两条（物攻 mag 侧 / 魔攻，物防 / 魔防），面板分区显示
+        float mag = GameConfig.BASE_ATTACK, magicDef = 0f;
+        float talAtk = 0f, talMag = 0f, talHp = 0f, talDef = 0f, talCrit = 0f, talSpd = 0f;
+        SumTalentAttrBonuses(ref talAtk, ref talMag, ref talHp, ref talDef, ref talCrit, ref talSpd);
         try
         {
             AttrSystem src = null;
@@ -424,8 +486,12 @@ public class CharacterUI : MonoBehaviour, ITownPage
             if (src != null)
             {
                 hp = src.GetAttr(AttrType.MaxHp);
+                // 2026-09-29：面板分区 —— 物攻 / 魔攻 / 物防 / 魔防 **四条都显示**。
+                // 天赋是跨局成长、两条都给，玩家换职业要看得到自己攒的两边各是多少。
                 atk = src.GetAttr(AttrType.Attack);
+                mag = src.GetAttr(AttrType.MagicAttack);
                 def = src.GetAttr(AttrType.Defense);
+                magicDef = src.GetAttr(AttrType.MagicDefense);
                 spd = src.GetAttr(AttrType.AttackSpeed);
                 crit = src.GetAttr(AttrType.CritRate);
                 resist = 0f;
@@ -441,6 +507,9 @@ public class CharacterUI : MonoBehaviour, ITownPage
         if (attrHpText != null) attrHpText.text = FormatAttrWithTalent(hp, talHp, roundInt: true);
         if (attrAtkText != null) attrAtkText.text = FormatAttrWithTalent(atk, talAtk, roundInt: true);
         if (attrDefText != null) attrDefText.text = FormatAttrWithTalent(def, talDef, roundInt: true);
+        // 魔攻 / 魔防：需要面板新增节点。找不到就不显示（不会报错），等排版定好后接上。
+        if (attrMagicAtkText != null) attrMagicAtkText.text = FormatAttrWithTalent(mag, talMag, roundInt: true);
+        if (attrMagicDefText != null) attrMagicDefText.text = FormatAttrWithTalent(magicDef, talDef, roundInt: true);
         if (attrSpdText != null) attrSpdText.text = FormatAttrWithTalent(spd, talSpd, roundInt: false, decimals: "0.##");
         if (attrCritText != null)
         {
@@ -450,7 +519,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
         if (attrResistText != null) attrResistText.text = resist.ToString("0.#") + "%";
     }
 
-    static void SumTalentAttrBonuses(ref float atk, ref float hp, ref float def, ref float crit, ref float spd)
+    static void SumTalentAttrBonuses(ref float atk, ref float mag, ref float hp, ref float def, ref float crit, ref float spd)
     {
         var talents = SaveSystem.Instance?.Data?.talents;
         if (talents == null) return;
@@ -462,6 +531,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
             switch (e.kind)
             {
                 case TalentDefs.AttrKind.Attack: atk += e.value; break;
+                case TalentDefs.AttrKind.Intelligence: mag += e.value; break;
                 case TalentDefs.AttrKind.Hp: hp += e.value; break;
                 case TalentDefs.AttrKind.Defense: def += e.value; break;
                 case TalentDefs.AttrKind.CritRate: crit += e.value; break;
@@ -479,16 +549,17 @@ public class CharacterUI : MonoBehaviour, ITownPage
                                        : (node.options != null && node.options.Length > 0 ? node.options[0] : null);
             if (opt == null) continue;
             AccumulateRightTalent(opt.kind, node.EffectValue(lv, job),
-                ref atk, ref hp, ref def, ref crit, ref spd);
+                ref atk, ref mag, ref hp, ref def, ref crit, ref spd);
         }
     }
 
     static void AccumulateRightTalent(TalentDefs.AttrKind kind, float value,
-        ref float atk, ref float hp, ref float def, ref float crit, ref float spd)
+        ref float atk, ref float mag, ref float hp, ref float def, ref float crit, ref float spd)
     {
         switch (kind)
         {
             case TalentDefs.AttrKind.Attack: atk += value; break;
+            case TalentDefs.AttrKind.Intelligence: mag += value; break;
             case TalentDefs.AttrKind.Hp: hp += value; break;
             case TalentDefs.AttrKind.Defense: def += value; break;
             case TalentDefs.AttrKind.CritRate: crit += value; break;
@@ -532,6 +603,8 @@ public class CharacterUI : MonoBehaviour, ITownPage
         {
             talentButton.onClick.RemoveAllListeners();
             talentButton.onClick.AddListener(OpenTalent);
+            // 2026-09-29：天赋入口红点 —— 右列有新天赋可点时亮，玩家打开一次天赋页后清。
+            RedDot.Bind(talentButton.transform, RedDot.Talent);
         }
         if (skillButton != null)
         {
@@ -1238,9 +1311,15 @@ public class CharacterUI : MonoBehaviour, ITownPage
         attrHpText = FindTxt("Content/AttrPanel/AttrHpRoot/AttrHp") ?? FindTxt("Content/AttrPanel/AttrHp");
         attrAtkText = FindTxt("Content/AttrPanel/AttrAtkRoot/AttrAtk") ?? FindTxt("Content/AttrPanel/AttrAtk");
         attrDefText = FindTxt("Content/AttrPanel/AttrDefRoot/AttrDef") ?? FindTxt("Content/AttrPanel/AttrDef");
+        // 2026-09-29：魔攻 / 魔防节点（已规范命名为 AttrMagicAtkRoot/AttrMagicAtk 等），
+        // 找不到就报错，不模糊匹配、不克隆。
+        attrMagicAtkText = ResolveMagicAttrRow("AttrMagicAtk", "魔攻");
+        attrMagicDefText = ResolveMagicAttrRow("AttrMagicDef", "魔防");
         attrSpdText = FindTxt("Content/AttrPanel/AttrSpdRoot/AttrSpd") ?? FindTxt("Content/AttrPanel/AttrSpd");
         attrCritText = FindTxt("Content/AttrPanel/AttrCritRoot/AttrCrit") ?? FindTxt("Content/AttrPanel/AttrCrit");
         attrResistText = FindTxt("Content/AttrPanel/AttrResistRoot/AttrResist") ?? FindTxt("Content/AttrPanel/AttrResist");
+
+        EnsureMagicAttrIcons();
 
         // 界面内背包面板（「背包」按钮切换用；可能在预制体里被展开着，初始化时会收起）
         bagPanelRoot = transform.Find("Content/BackpackPanel") ?? FindDeep(transform, "BackpackPanel");

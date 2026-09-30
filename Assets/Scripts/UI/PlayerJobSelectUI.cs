@@ -470,6 +470,10 @@ public class PlayerJobSelectUI : MonoBehaviour
     void RefreshCardsVisual()
     {
         bool hasSel = _selected.HasValue;
+        // 2026-09-28 主人要求：推荐角标（tuijian）只给本次三张里星数最高的卡，并列最高则都给。
+        int maxStars = 0;
+        for (int i = 0; i < _offer.Count && i < _cards.Count; i++)
+            maxStars = Mathf.Max(maxStars, PlayerJobDefs.Get(_offer[i]).RecommendStars);
         for (int i = 0; i < _cards.Count; i++)
         {
             if (i >= _offer.Count) continue;
@@ -493,6 +497,13 @@ public class PlayerJobSelectUI : MonoBehaviour
                 c.Desc.text = body;
             }
             ApplyRecommendStars(c.RatingRoot, def.RecommendStars);
+            // 推荐角标：预制体每张卡有一颗 tuijian（三颗星左边），默认常开 —— 这里按「星数是否并列最高」控制显隐。
+            if (c.Button != null)
+            {
+                var badge = FindDeep(c.Button.transform, "tuijian");
+                if (badge != null)
+                    badge.gameObject.SetActive(maxStars > 0 && def.RecommendStars >= maxStars);
+            }
             if (c.Icon != null)
             {
                 var sp = PlayerJobDefs.TryLoadJobIcon(_offer[i]);

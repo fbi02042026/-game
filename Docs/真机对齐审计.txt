@@ -1,0 +1,68 @@
+真机对齐审计报告    2026-09-28 10:31:41
+（本文件由离线扫描器生成，与 Unity 菜单「Tools/真机对齐审计」结果一致）
+============================================================
+
+【一】真机必空的 Resources 路径（代码里写死的字面量，Resources 下找不到）
+      共 12 条 / 检查了 41 个不同路径
+
+      x Art/UI/RestStage/illustration
+        <- Assets/Scripts/UI/RestStagePopupUI.cs:348
+      x Art/UI/StageSelect/bg_stage_select
+        <- Assets/Scripts/UI/BattleStageMapUI.cs:723
+      x Audio/SFX/dodge
+        <- Assets/Scripts/Systems/CombatJuice.cs:51
+      x Audio/SFX/hit_crit
+        <- Assets/Scripts/Systems/CombatJuice.cs:50
+      x Audio/SFX/hit_melee_in
+        <- Assets/Scripts/Systems/CombatJuice.cs:49
+      x Audio/SFX/hit_melee_out
+        <- Assets/Scripts/Systems/CombatJuice.cs:48
+      x Monster
+        <- Assets/Scripts/Core/AutoGameInitializer.cs:1121
+      x Prefabs/Monster/MonsterHealthBar
+        <- Assets/Scripts/UI/MonsterHealthBar.cs:298
+      x SPUM/Shadow
+        <- Assets/Scripts/Unit/Monster.cs:1362
+      x Units/wanjia
+        <- Assets/Scripts/Core/AutoGameInitializer.cs:966
+      x VFX/other/world/portal_open
+        <- Assets/Scripts/Systems/StageClearRewardDirector.cs:1161
+      x btn06
+        <- Assets/Scripts/UI/BattleStageMapUI.cs:471
+
+【二】#if UNITY_EDITOR 里还指着美术源目录、且【未】被 DeviceParity 收口的分支
+      共 2 处 / 资源类编辑器分支共 22 处
+
+      · Assets/Scripts/Story/StoryAssetLoader.cs:96
+          Assets/Art/UI/Story/portrait_
+      · Assets/Scripts/UI/MercPortraitSprites.cs:148
+          Assets/Art/UI/Icons/佣兵头像
+          Assets/Art/UI/Icons/佣兵立绘
+
+【三】已收口的资源类编辑器分支（参考，共 20 处）
+
+      · Assets/Scripts/Core/AutoGameInitializer.cs:1122  (2 个美术路径)
+      · Assets/Scripts/Story/StoryAssetLoader.cs:54  (3 个美术路径)
+      · Assets/Scripts/Story/TutorialHintUI.cs:232  (1 个美术路径)
+      · Assets/Scripts/Systems/BattleVFXSystem.cs:947  (1 个美术路径)
+      · Assets/Scripts/Systems/MercenaryManager.cs:91  (1 个美术路径)
+      · Assets/Scripts/Systems/StageClearRewardDirector.cs:255  (1 个美术路径)
+      · Assets/Scripts/Systems/StageClearRewardDirector.cs:594  (1 个美术路径)
+      · Assets/Scripts/UI/BattleUI.Skills.cs:70  (1 个美术路径)
+      · Assets/Scripts/UI/CharacterUI.cs:273  (1 个美术路径)
+      · Assets/Scripts/UI/CharacterUI.cs:399  (1 个美术路径)
+      · Assets/Scripts/UI/GameFonts.cs:19  (2 个美术路径)
+      · Assets/Scripts/UI/GameFonts.cs:45  (2 个美术路径)
+      · Assets/Scripts/UI/MonsterHealthBar.cs:290  (1 个美术路径)
+      · Assets/Scripts/UI/PlayerNamingUI.cs:428  (1 个美术路径)
+      · Assets/Scripts/UI/SkillSelectUI.cs:142  (1 个美术路径)
+      · Assets/Scripts/UI/TalentUI.cs:369  (1 个美术路径)
+      · Assets/Scripts/UI/TalentUI.cs:1125  (1 个美术路径)
+      · Assets/Scripts/UI/TalentUI.cs:1745  (1 个美术路径)
+      · Assets/Scripts/UI/TalentUI.cs:1760  (1 个美术路径)
+      · Assets/Scripts/Unit/Monster.cs:1370  (1 个美术路径)
+
+============================================================
+说明：只读，不改任何资源。
+      「编辑器是否走 Resources」由 DeviceParity.EditorFallbackEnabled 统一控制，
+      当前值 = False（真机口径，缺图露白框）。

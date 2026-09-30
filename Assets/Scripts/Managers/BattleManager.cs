@@ -1061,7 +1061,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     }
 
     Coroutine _firstWaveHardFallbackCo;
-    /// <summary>战前剧情（TryPlayPreBattle）播放中：硬刷兜底须等它结束，防止剧透中刷怪抢跑。</summary>
+    /// <summary>
+    /// 战前剧情（TryPlayPreBattle）或进关抽奖进行中：硬刷兜底须等它结束，防止剧透/选卡时刷怪抢跑。
+    /// 2026-09-29 起进关抽奖也复用这个标志，见 <see cref="CoStageEntryDraft"/>。
+    /// </summary>
     bool _preBattleStoryPlaying;
 
     /// <summary>停掉开战/硬刷协程，避免连续 LoadStage 叠多个兜底。</summary>
@@ -1201,11 +1204,23 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         FinishBattleIntro(follow);
 
         if (Rules.DirectorOwnsWaves)
+        {
+            // 引导关也走金币抽奖（2026-09-29）：在 TutorialDirector 接管波次之前抽。
+            // NotifyBattleSplashFinished 只是启动引导协程，晚一点调用不会打断它。
+            yield return CoStageEntryDraft();
             TutorialDirector.Instance?.NotifyBattleSplashFinished();
+        }
         else
-            // 时序：过场卡→队伍进场→战前剧情→首波。
+            // 时序：过场卡→队伍进场→战前剧情→抽奖→首波。
             // 协程内部已包含“剧情不可用则直接放行首波”的兜底逻辑。
             yield return CoPreBattleStoryThenFirstWave();
+
+        // 2026-09-30：抽完奖才出发 —— 抽奖期间队伍在开战位原地静止（见 FinishBattleIntro）
+        StartPartyAdvance(follow);
+
+        // 点上「继续」之后先甩出「开始游戏」大字再正式开打。
+        // 放在出发之后播：字在飘的同时队伍已经在走，不额外拖时间。引导关同样要出。
+        yield return StageStartBannerUI.CoPlay("开始游戏");
 
         if (hero != null && monsters.Count > 0)
         {
@@ -1259,13 +1274,47 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         SnapCameraToBattleView(targetHeroX);
     }
 
-    /// <summary>走进场结束：恢复镜头跟随 + 立即接战斗 AI（不停步、不切 idle）</summary>
+    /// <summary>
+    /// 走进场结束：队伍**停在开战位静止**，等玩家抽完奖再出发。
+    /// 2026-09-30 主人要求：进关先站着不动，抽奖面板走完才前进。
+    /// 出发动作见 <see cref="StartPartyAdvance"/>。
+    /// </summary>
     void FinishBattleIntro(CameraFollow follow)
     {
         if (hero != null)
         {
             float z = hero.transform.position.z;
             PlacePartyAt(UnitBase.GetCombatX(hero), z);
+            if (hero.rb != null) hero.rb.velocity = Vector2.zero;
+
+            var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+            if (mercs != null)
+            {
+                for (int i = 0; i < mercs.Count; i++)
+                {
+                    var m = mercs[i];
+                    if (m == null || m.rb == null) continue;
+                    m.rb.velocity = Vector2.zero;
+                }
+            }
+            SetPartyWalkAnim(false);
+        }
+
+        // 镜头保持暂停：抽奖期间画面固定在开战视角，不跟队伍跑
+        PartyIntroWalking = false;
+        _battleIntroFinished = true;
+        UnitsCanAct = false;
+        MercBattleBanter.EnsureOn(this);
+    }
+
+    /// <summary>
+    /// 抽奖结束 → 队伍出发：给速度、开战斗 AI、恢复镜头跟随、放出摇杆。
+    /// 与 <see cref="FinishBattleIntro"/> 配对使用，中间夹着进关抽奖。
+    /// </summary>
+    void StartPartyAdvance(CameraFollow follow)
+    {
+        if (hero != null)
+        {
             float spd = Mathf.Max(0.5f, hero.attr.GetAttr(AttrType.MoveSpeed));
             if (hero.rb != null)
                 hero.rb.velocity = new Vector2(spd, 0f);
@@ -1288,10 +1337,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         else if (follow != null)
             follow.ResumeFollowX();
 
-        PartyIntroWalking = false;
-        _battleIntroFinished = true;
         UnitsCanAct = true;
-        MercBattleBanter.EnsureOn(this);
+        BattleJoystick.Instance?.SetVisible(true);
     }
 
     float GetPartyEnterX(float battleStartX)
@@ -2122,6 +2169,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         if (!playing)
         {
+            // 没有剧情：直接进抽奖。抽奖期间保持 _preBattleStoryPlaying=true，
+            // 否则 CoFirstWaveHardFallback 会在 2.2s 后硬刷怪，玩家还在选卡就被打。
+            _preBattleStoryPlaying = true;
+            yield return CoStageEntryDraft();
             _preBattleStoryPlaying = false;
             ScheduleFirstWaveSpawn();
             yield break;
@@ -2129,9 +2180,197 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         _preBattleStoryPlaying = true;
         while (!done) yield return null;
+        // 剧情结束（含跳过）后进抽奖，期间继续压住硬刷兜底
+        yield return CoStageEntryDraft();
         _preBattleStoryPlaying = false;
-        // 剧情结束（含跳过）后才放首波
+        // 抽完才放首波
         ScheduleFirstWaveSpawn();
+    }
+
+    /// <summary>
+    /// 进关抽奖（2026-09-29 第二版）：面板在开战前**常驻**，四个按钮（随机 / 佣兵 / 装备 / 技能）。
+    ///
+    /// · 点四个按钮之一 = **买**：扣抽奖币，立刻出 1 张结果并生效、弹提示，**不弹三选一**。
+    ///   玩家买的是「结果」不是「选择」，所以一秒都不等（抽奖就图个快）。
+    /// · 「再来一次」触发 = **送**：免费老虎机走个形式 → 弹该类型的三选一，玩家在这里才做选择。
+    /// · 只要抽奖币够就能一直抽；点「开始战斗」或超时才关面板开打。
+    ///
+    /// 🔴 战斗一开始必须完全隐藏抽奖面板 —— 战斗画面里只留战斗，不留任何抽奖入口。
+    /// 这里在循环结束后统一调 <see cref="SlotOfferUI.Hide"/> 兜底，不管从哪条路退出。
+    ///
+    /// 引导关（Rules.GuideEntryDraft）开局会圈住「随机抽奖」按钮强制引导一次，抽完收起提示，
+    /// 之后按 TutorialDirector 的既有节拍一步一步走。
+    /// 由 <see cref="CoPreBattleStoryThenFirstWave"/> 在「剧情播完之后、首波之前」调用。
+    /// </summary>
+    IEnumerator CoStageEntryDraft()
+    {
+        // 开局启动抽奖币（不足才补，已攒的不清零；含「初始资金」天赋加成）
+        SlotMachineSystem.EnsureStarterCoins();
+
+        var cats = SlotMachineSystem.AvailableCategories();
+        if (cats.Count == 0)
+        {
+            // 2026-09-30：不静默跳过 —— 池子全空就等于面板压根不出现，控制台必须能看到原因
+            Debug.LogError("[BattleManager] 抽奖池全空（技能 / 佣兵 / 装备都取不到内容），进关抽奖不弹出");
+            yield break;
+        }
+
+        // 抽奖期间收起摇杆：此刻玩家在看面板选卡，不该同时操作移动
+        BattleJoystick.Instance?.SetVisible(false);
+
+        int price = SlotMachineSystem.Price(SlotMachineSystem.RunStageIndex());
+        int focusPrice = SlotMachineSystem.FocusPrice(SlotMachineSystem.RunStageIndex());
+
+        bool tutorialGuide = Rules.GuideEntryDraft;
+
+        while (true)
+        {
+            DraftCategory? picked = null;
+            int choice = 0;
+            SlotOfferUI.Show(price, focusPrice, cats, SlotMachineSystem.Coins(),
+                c => { picked = c; choice = 1; },
+                () => choice = 2);
+
+            // 引导关：开局先教玩家抽奖，圈住「随机抽奖」按钮
+            if (tutorialGuide)
+            {
+                var rect = SlotOfferUI.Instance != null ? SlotOfferUI.Instance.RandomButtonRect : null;
+                TutorialHintUI.Ensure().ShowHard("先抽一次奖，开局白拿一个强化。", rect);
+            }
+
+            // 面板常驻，给足看构筑的时间；不点就一直不开战（上限 5 分钟防卡死）
+            float offerGuard = 0f;
+            while (choice == 0 && offerGuard < 300f)
+            {
+                offerGuard += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (choice != 1) break;
+
+            // null = 点的是随机；有值 = 点的是定向
+            var target = picked.HasValue ? picked.Value : SlotMachineSystem.RollCategory(cats);
+            int cost = picked.HasValue ? focusPrice : price;
+            if (!SlotMachineSystem.TrySpend(cost))
+            {
+                UIManager.Instance?.ShowToast("抽奖币不足");
+                break;
+            }
+
+            // 买了就直接给结果，不走三选一
+            yield return CoInstantPick(target);
+
+            if (tutorialGuide)
+            {
+                tutorialGuide = false;
+                TutorialHintUI.Instance?.Hide();
+            }
+
+            // 「再来一次」= 免费老虎机 + 三选一，这是奖励，玩家在这里才做选择
+            if (!SlotMachineSystem.RollReroll()) continue;
+            UIManager.Instance?.ShowToast("再来一次！免费老虎机");
+            yield return new WaitForSecondsRealtime(0.35f);
+            yield return CoJackpot(cats);
+        }
+
+        // 退出循环 = 要开战了：面板和引导提示都关掉
+        SlotOfferUI.Hide();
+        if (Rules.GuideEntryDraft) TutorialHintUI.Instance?.Hide();
+    }
+
+    /// <summary>
+    /// 点了抽奖按钮：不弹三选一，直接从该类型里抽 1 张、立刻生效，并把结果提示给玩家。
+    /// 玩家买的是结果，不是选择 —— 选择留给免费的老虎机三选一。
+    /// </summary>
+    IEnumerator CoInstantPick(DraftCategory cat)
+    {
+        var cards = DraftPool.BuildCards(cat);
+        if (cards == null || cards.Count == 0)
+        {
+            Debug.LogError("[BattleManager] 抽奖池为空，无法出结果: " + cat);
+            yield break;
+        }
+
+        var dir = RunDraftDirector.Instance ?? RunDraftDirector.Ensure(this);
+        if (dir == null)
+        {
+            Debug.LogError("[BattleManager] RunDraftDirector 缺失，抽奖奖励无法生效");
+            yield break;
+        }
+
+        var card = cards[Random.Range(0, cards.Count)];
+        if (!card.IsValid)
+        {
+            Debug.LogError("[BattleManager] 抽到的卡无效: " + cat);
+            yield break;
+        }
+
+        string msg = dir.ApplyCard(card);
+        RunLoadout.Save();
+        RunDraftDirector.RefreshSkillPower();
+
+        string got = !string.IsNullOrEmpty(msg) ? msg
+                   : !string.IsNullOrEmpty(card.Title) ? card.Title
+                   : "已生效";
+        UIManager.Instance?.ShowToast($"【{SlotMachineSystem.CategoryName(cat)}】{got}");
+    }
+
+    /// <summary>
+    /// 「再来一次」的免费奖励：随机一类 → 老虎机走个形式 → 弹**该类型的三选一**。
+    /// 不扣钱；玩家在这里才做选择，所以演出可以慢一点（JACKPOT_REVEAL_SEC）。
+    /// </summary>
+    IEnumerator CoJackpot(List<DraftCategory> cats)
+    {
+        var cat = SlotMachineSystem.RollCategory(cats);
+
+        bool rolled = false;
+        SlotMachineUI.Show(cats, cat, 0, () => rolled = true);
+        float rollGuard = 0f;
+        while (!rolled && rollGuard < 20f)
+        {
+            rollGuard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (!rolled)
+        {
+            Debug.LogWarning("[BattleManager] 老虎机没有回调，跳过本次免费奖励");
+            yield break;
+        }
+
+        yield return CoPickFromCategory(cat);
+    }
+
+    /// <summary>老虎机停下那一类的三选一：复用现成的 LevelUpDraftUI.Show。</summary>
+    IEnumerator CoPickFromCategory(DraftCategory cat)
+    {
+        var cards = DraftPool.BuildCards(cat);
+        if (cards == null || cards.Count == 0) yield break;
+
+        var dir = RunDraftDirector.Instance ?? RunDraftDirector.Ensure(this);
+        if (dir == null)
+        {
+            Debug.LogError("[BattleManager] RunDraftDirector 缺失，抽奖奖励无法生效");
+            yield break;
+        }
+
+        bool picked = false;
+        LevelUpDraftUI.Show(cards, "抽奖结果 · 选一个", card =>
+        {
+            if (card.IsValid)
+            {
+                string msg = dir.ApplyCard(card);
+                if (!string.IsNullOrEmpty(msg)) UIManager.Instance?.ShowToast(msg);
+                RunLoadout.Save();
+                RunDraftDirector.RefreshSkillPower();
+            }
+            picked = true;
+        }, manageFreeze: false);
+
+        float guard = 0f;
+        while (!picked && guard < 180f)
+        {
+            guard += Time.unscaledDeltaTime;
+            yield return null;
+        }
     }
 
     void BeginRewardSequence()
@@ -2151,6 +2390,20 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             Debug.LogError("[BattleManager] 结算时 currentStage 为空");
             FinishStageAfterPortalReached();
             return;
+        }
+
+        // 2026-09-29：通关发抽奖币（与金币奖励完全分开，只用于下关进关抽奖）
+        SlotMachineSystem.GrantStageCoins(currentStage.type);
+
+        // 2026-09-29：通关发**固定**关卡金币 —— 每关额度确定（章内递增），
+        // 不再是「怪物掉金累加」那种浮动值。打完一章拿满，中途撤离只拿已通关那几关的部分。
+        // 死亡同样保留已通关的部分（结算侧本来就是这个口径，见 RunStats.GoldGained）。
+        int stageGold = StageGoldDefs.CurrentStageGold();
+        if (stageGold > 0)
+        {
+            currentGold += stageGold;
+            BattleUI.Instance?.UpdateGold(currentGold);
+            GlobalToastUI.Show($"通关金币 +{stageGold}");
         }
 
         bool isBoss = currentStage.type == StageType.Boss;
@@ -2662,10 +2915,13 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
     List<CurseBuff> GenerateCurseOptions()
     {
+        // 2026-09-29：攻击% 按职业分流到 Attack / MagicAttack，否则法师/牧师选「嗜血」=
+        // 加在用不上的物攻上，选「疾风」= 扣了个自己没有的东西。
+        AttrType atk = PlayerJobBaseStats.CurrentAttackAttr();
         return new List<CurseBuff>
         {
-            new CurseBuff { buffName = "嗜血：攻击+30%，生命-15%", buff = new AttrBonusData { attrType = AttrType.Attack, value = 0.3f, isPercent = true }, debuff = new AttrBonusData { attrType = AttrType.MaxHp, value = -0.15f, isPercent = true } },
-            new CurseBuff { buffName = "疾风：攻速+40%，攻击-20%", buff = new AttrBonusData { attrType = AttrType.AttackSpeed, value = 0.4f, isPercent = true }, debuff = new AttrBonusData { attrType = AttrType.Attack, value = -0.2f, isPercent = true } },
+            new CurseBuff { buffName = "嗜血：攻击+30%，生命-15%", buff = new AttrBonusData { attrType = atk, value = 0.3f, isPercent = true }, debuff = new AttrBonusData { attrType = AttrType.MaxHp, value = -0.15f, isPercent = true } },
+            new CurseBuff { buffName = "疾风：攻速+40%，攻击-20%", buff = new AttrBonusData { attrType = AttrType.AttackSpeed, value = 0.4f, isPercent = true }, debuff = new AttrBonusData { attrType = atk, value = -0.2f, isPercent = true } },
             new CurseBuff { buffName = "坚壁：生命+50%，移速-30%", buff = new AttrBonusData { attrType = AttrType.MaxHp, value = 0.5f, isPercent = true }, debuff = new AttrBonusData { attrType = AttrType.MoveSpeed, value = -0.3f, isPercent = true } }
         };
     }

@@ -37,9 +37,11 @@ public static class CommonIconSprites
         if (sp == null)
         {
 #if UNITY_EDITOR
-            sp = LoadFromArt(fileNameWithoutExt);
+            if (DeviceParity.EditorFallbackEnabled)
+                sp = LoadFromArt(fileNameWithoutExt);
 #endif
         }
+        if (sp == null) DeviceParity.ReportMissing(ResRoot + fileNameWithoutExt, "通用图标");
         Cache[fileNameWithoutExt] = sp;
         return sp;
     }

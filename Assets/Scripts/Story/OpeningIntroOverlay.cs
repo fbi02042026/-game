@@ -27,7 +27,11 @@ public class OpeningIntroOverlay : MonoBehaviour
 
     public static OpeningIntroOverlay Show(string videoPath)
     {
-        if (string.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
+        // 2026-09-28：Android 的 StreamingAssets 是 jar:// URL，File.Exists 对 URL 恒 false，
+        // 会把真机片头静默跳掉 —— URL 一律视为存在，交给 VideoPlayer 自己报错。
+        bool pathOk = !string.IsNullOrEmpty(videoPath)
+                      && (videoPath.Contains("://") || File.Exists(videoPath));
+        if (!pathOk)
         {
             Debug.LogWarning("[OpeningIntro] 片头文件不存在: " + videoPath);
             return null;

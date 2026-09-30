@@ -30,6 +30,14 @@ public static class EquipStatRollup
         return list;
     }
 
+    /// <summary>
+    /// 2026-09-29：攻击力已拆成物理(<see cref="AttrType.Attack"/>) / 魔法(<see cref="AttrType.MagicAttack"/>)，
+    /// 「固定值攻击条目」的判定必须两侧都认 —— 否则法师副手法杖吃不到副手上限、
+    /// 装备攻击力汇总也少算一整条。
+    /// </summary>
+    static bool IsAttackFlat(AttrType attr, bool isPercent)
+        => !isPercent && (attr == AttrType.Attack || attr == AttrType.MagicAttack);
+
     static void AppendEquipBonuses(List<AttrBonusData> list, EquipInstance equip, bool capOffAttack, float mainAttack)
     {
         if (equip?.attrBonus == null) return;
@@ -43,7 +51,7 @@ public static class EquipStatRollup
             float v = b.value;
             if (i < baseCount && enhanceMul > 1.001f)
                 v *= enhanceMul;
-            if (capOffAttack && b.attrType == AttrType.Attack && !b.isPercent)
+            if (capOffAttack && IsAttackFlat(b.attrType, b.isPercent))
                 v = CapOffHandAttack(v, mainAttack);
             list.Add(new AttrBonusData
             {
@@ -59,7 +67,7 @@ public static class EquipStatRollup
             var enchant = equip.enchants[i];
             if (enchant == null) continue;
             float v = enchant.value;
-            if (capOffAttack && enchant.attrType == AttrType.Attack && !enchant.isPercent)
+            if (capOffAttack && IsAttackFlat(enchant.attrType, enchant.isPercent))
                 v = CapOffHandAttack(v, mainAttack);
             list.Add(new AttrBonusData
             {
@@ -95,7 +103,7 @@ public static class EquipStatRollup
         for (int i = 0; i < equip.attrBonus.Count; i++)
         {
             var b = equip.attrBonus[i];
-            if (b == null || b.attrType != AttrType.Attack || b.isPercent) continue;
+            if (b == null || !IsAttackFlat(b.attrType, b.isPercent)) continue;
             float v = b.value;
             if (i < baseCount && enhanceMul > 1.001f)
                 v *= enhanceMul;

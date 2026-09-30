@@ -89,19 +89,23 @@ public class MercenaryManager : Singleton<MercenaryManager>
         }
 
 #if UNITY_EDITOR
-        string artPath = "Assets/Art/UI/Icons/Heads/" + fileNameWithoutExt + ".png";
-        sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(artPath);
-        if (sp != null) return sp;
-        tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(artPath);
-        if (tex != null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            var made = Sprite.Create(
-                tex,
-                new Rect(0f, 0f, tex.width, tex.height),
-                new Vector2(0.5f, 0.5f),
-                100f);
-            made.name = fileNameWithoutExt;
-            return made;
+            string artPath = "Assets/Art/UI/Icons/Heads/" + fileNameWithoutExt + ".png";
+            sp = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>(artPath);
+            if (sp != null) return sp;
+            tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(artPath);
+            if (tex != null)
+            {
+                var made = Sprite.Create(
+                    tex,
+                    new Rect(0f, 0f, tex.width, tex.height),
+                    new Vector2(0.5f, 0.5f),
+                    100f);
+                made.name = fileNameWithoutExt;
+                return made;
+            }
         }
 #endif
         return null;

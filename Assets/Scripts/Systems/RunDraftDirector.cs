@@ -266,7 +266,8 @@ public class RunDraftDirector : MonoBehaviour
                 bm.tempBuffs.Add(new AttrBonusData { attrType = AttrType.AttackSpeed, value = 0.10f, isPercent = true });
                 break;
             default:
-                bm.tempBuffs.Add(new AttrBonusData { attrType = AttrType.Attack, value = 0.14f, isPercent = true });
+                // 2026-09-29：攻击% 按职业分流（法师/牧师 → MagicAttack）
+                bm.tempBuffs.Add(new AttrBonusData { attrType = PlayerJobBaseStats.CurrentAttackAttr(), value = 0.14f, isPercent = true });
                 break;
         }
 

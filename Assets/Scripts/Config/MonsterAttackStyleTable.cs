@@ -3,9 +3,13 @@ using UnityEngine;
 
 /// <summary>
 /// 怪物近战/远程表：读 Resources/Data/Tables/monster_attack_style.bytes（由 csv Cook 而来）。
-/// style = Melee | Ranged（法球） | Bow（弓箭），决定弹道视觉与射程；
-/// magicChance（第 4 列，0~1）= 该怪被判为魔法型的概率，供 MonsterAttackTypeResolver 掷骰用。
-/// 2026-09-26 主人拍板：物理/魔法按 magicChance 随机，不写死名单。
+/// style = Melee | Ranged（法球） | Bow（弓箭/物理子弹），决定弹道视觉与射程；
+/// magicChance（第 4 列，0~1）= **精英/Boss** 被判为魔法型的概率，供 MonsterAttackTypeResolver 掷骰用。
+///
+/// 2026-09-28 主人纠正（推翻 2026-09-26 的「所有怪都掷骰」）：
+///   🔴 普通小怪**不掷骰**，表里写什么就是什么 —— 近战就是近战，弓就是弓（物理子弹），
+///      只有表里写明 Ranged 的法师才丢魔法球。以前所有怪都掷骰，近战小蘑菇会跑去丢法球。
+///   ✅ magicChance 只对 **精英 / Boss** 生效（它们才有几率遇到不同攻击方式的单位）。
 /// </summary>
 public enum MonsterAttackStyle
 {

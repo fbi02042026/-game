@@ -70,11 +70,14 @@ public static class DamageFormula
 
     /// <summary>
     /// 技能基础伤害（未暴击）：base + ATK * mul * (1+物魔强)。
+    /// <para>2026-09-29：新增 <paramref name="magic"/> —— 魔法伤害技能取 <see cref="AttrType.MagicAttack"/>
+    /// 作基底，与普攻（<see cref="BuildAttackRaw"/>）口径一致。之前无条件取 Attack(物攻)，
+    /// 攻击力分流到 MagicAttack 之后法师/牧师的技能会直接塌成 baseDamage。</para>
     /// </summary>
-    public static float BuildSkillBase(float baseDamage, float atkMul, AttrSystem attacker)
+    public static float BuildSkillBase(float baseDamage, float atkMul, AttrSystem attacker, bool magic = false)
     {
         if (attacker == null) return Mathf.Max(MinDamage, baseDamage);
-        float attack = attacker.GetAttr(AttrType.Attack);
+        float attack = attacker.GetAttr(magic ? AttrType.MagicAttack : AttrType.Attack);
         float phy = attacker.GetAttr(AttrType.PhyPower);
         float mag = attacker.GetAttr(AttrType.MagicPower);
         return Mathf.Max(MinDamage, baseDamage + attack * atkMul * (1f + phy + mag));

@@ -17,10 +17,12 @@ public static partial class GameConfig
 
     /// <summary>战斗地面单位可在站立线上下偏移的半高（对称参考；实际钳制用 MIN/MAX）。</summary>
     public const float BATTLE_LANE_HALF = 0.855f;
-    /// <summary>站立线上方可行走半高（相对 HALF 再缩约 10%）。</summary>
-    public const float BATTLE_LANE_MAX = BATTLE_LANE_HALF * 0.9025f;
-    /// <summary>站立线下方可行走半高（相对 HALF 再缩约 45%，取负）。</summary>
-    public const float BATTLE_LANE_MIN = -BATTLE_LANE_HALF * 0.54675f;
+    /// <summary>站立线上方可行走半高（相对 HALF 再缩约 10%）。
+    /// 2026-09-28 主人要求「可行走范围上下界限再缩小 5%」：0.9025 × 0.95 = 0.857375。</summary>
+    public const float BATTLE_LANE_MAX = BATTLE_LANE_HALF * 0.857375f;
+    /// <summary>站立线下方可行走半高（相对 HALF 再缩约 45%，取负）。
+    /// 2026-09-28 同上再缩 5%：0.54675 × 0.95 = 0.5194125。</summary>
+    public const float BATTLE_LANE_MIN = -BATTLE_LANE_HALF * 0.5194125f;
     /// <summary>可行走区域整体 Y 下移量（世界单位，正值=往下挪）。
     /// 2026-09-27 主人要求「可行走区域往上调上一次改动的 50%」：上次改动是往下挪 0.12，
     /// 回一半 = 0.06。再要调只改这一个数。</summary>
@@ -32,6 +34,16 @@ public static partial class GameConfig
     public const float HERO_MANUAL_RELEASE_HOLD = 0.25f;
     /// <summary>近战出手允许的车道 Y 误差：走到目标水平对面，上下可略偏，避免错位砍刀光发飘。</summary>
     public const float MELEE_LANE_ALIGN_TOL = 0.22f;
+    /// <summary>
+    /// 敌方近战「换道追击」的最大幅度（世界单位，Y 方向）。
+    /// 2026-09-28 主人反馈「最上面的敌人能打到最下面的玩家」：根因不是出手闸门太松
+    /// （MELEE_LANE_ALIGN_TOL 一直拦着隔排砍），而是换道没有上限 —— 怪每帧朝玩家那一排滑，
+    /// 只要时间够就能从最上排一路滑到最下排，滑到同排后闸门自然放行。
+    /// 这里给敌方换道加个锚点范围：以「锁定目标那一刻自己所在的车道」为中心，上下最多挪这么多。
+    /// 0.6 ≈ 两排的间距，够追隔壁一排的玩家，但够不到屏幕另一头。
+    /// 只作用于敌方（!isAlly）；我方佣兵/玩家照旧自由并道，否则会打不到人。
+    /// </summary>
+    public const float MONSTER_LANE_CHASE_MAX = 0.6f;
 
     /// <summary>追敌车道对齐容错开关：true=不严格站到与目标同一条水平线（留随机偏移）；false=完全回退原行为。</summary>
     public const bool ENABLE_LANE_ALIGN_TOLERANCE = true;

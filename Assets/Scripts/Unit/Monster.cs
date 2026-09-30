@@ -325,10 +325,11 @@ public class Monster : UnitBase
 
             float dx = _enterTargetPos.x - MoveRoot.position.x;
             // 进场途中若已贴近英雄，提前结束进场并开打，避免穿身跑到对面
+            // 2026-09-28：距离改二维（X+Y），别在别的车道就提前停步「站原地开打」
             if (Hero.Instance != null && !Hero.Instance.isDead
                 && bmEnter != null && bmEnter.UnitsCanAct && !bmEnter.AllowMonsterMapEnter)
             {
-                float distHero = Mathf.Abs(GetCombatX(this) - GetCombatX(Hero.Instance));
+                float distHero = GetCombatDist(this, Hero.Instance);
                 if (distHero <= GetEffectiveAttackRange() + 0.4f)
                 {
                     _isEnteringMap = false;
@@ -434,13 +435,12 @@ public class Monster : UnitBase
         RunForcedCombat();
     }
 
-    /// <summary>场上最近友军（交战寻敌）。</summary>
+    /// <summary>场上最近友军（交战寻敌）。距离用二维（X+Y），与 UnitBase 索敌同尺（2026-09-28）。</summary>
     public override UnitBase FindNearestEnemyOnField()
     {
         if (BattleManager.Instance == null) return null;
         UnitBase nearest = null;
         float minDist = float.MaxValue;
-        float myX = GetCombatX(this);
         var allies = BattleManager.Instance.allyUnits;
         if (allies == null) return null;
         for (int i = 0; i < allies.Count; i++)
@@ -448,7 +448,7 @@ public class Monster : UnitBase
             var enemy = allies[i];
             if (enemy == null || enemy.isDead) continue;
             if (!GameConfig.IsInCombatViewport(enemy)) continue;
-            float dist = Mathf.Abs(myX - GetCombatX(enemy));
+            float dist = GetCombatDist(this, enemy);
             if (dist < minDist)
             {
                 minDist = dist;
@@ -724,17 +724,28 @@ public class Monster : UnitBase
         // 2026-09-26 主人拍板：怪物只分物理 / 魔法，攻击与防御二选一、不混搭。
         // 魔法型（掷骰命中 magicChance）→ 物攻/物防置 0，攻击与防御全部走 MagicAttack / MagicDefense；
         // 物理型 → 魔攻/魔防置 0，只走 Attack / Defense。
-        // 判定走 MonsterAttackTypeResolver。2026-09-26 主人拍板：刷怪配置整合到关卡级——
-        // 优先按 stage_spawn.csv 本关 magicChance 掷骰（含 Boss 0.5）；本关未配才回退单怪级。
+        // 判定走 MonsterAttackTypeResolver。
+        // 2026-09-28 主人纠正：只有 **精英 / Boss** 才掷骰换攻击方式（stage_spawn.csv 关卡级
+        //   magicChance 优先，含 Boss 0.5；未配才回退单怪级）。普通小怪**不掷骰**，表里写什么
+        //   就是什么：近战就是近战、弓就是弓（丢物理子弹，黄色小球那套），法师（Ranged）才丢魔法球。
+        //   —— 之前所有怪都掷骰，美术上明明是近战的小蘑菇被判成魔法型后跑去丢法球。
         int gChapter = BattleManager.Instance != null ? BattleManager.Instance.CurrentChapter : monsterChapter;
         StageType gStageType = BattleManager.Instance != null && BattleManager.Instance.currentStage != null
             ? BattleManager.Instance.currentStage.type : StageType.Normal;
-        bool isMagicType = MonsterAttackTypeResolver.IsMagicMonster(
-            monsterChapter, Mathf.Max(1, effectiveSpriteIndex), gChapter, gStageType);
+        bool isMagicType = (eliteWave || _isBossUnit)
+            ? MonsterAttackTypeResolver.IsMagicMonster(
+                monsterChapter, Mathf.Max(1, effectiveSpriteIndex), gChapter, gStageType)
+            : MonsterAttackTypeResolver.IsMagicMonster(monsterChapter, Mathf.Max(1, effectiveSpriteIndex));
         _isMagicType = isMagicType;
-        // 2026-09-26 主人拍板：魔法型强制改法球弹道(Ranged)→视觉与伤害类型(魔法)一致；物理型保持表内 style。
+        // 魔法型强制改法球弹道(Ranged)→视觉与伤害类型(魔法)一致；物理型保持表内 style。
+        // 普通小怪的魔法型本就等于「表里是法师」，这里赋值与表内原值一致；
+        // 只有精英/Boss 掷骰命中魔法时，这里才会真的把 Melee/Bow 改成法球。
         if (isMagicType)
             _attackStyle = MonsterAttackStyle.Ranged;
+        // 2026-09-28 主人要求「远程敌人的攻击要比近战高」：远程（弓/法球）攻击力上浮一档。
+        // 放在 style 定稿之后、写 attr 之前，魔法型（已强制 Ranged）也一起吃到。Boss 不吃。
+        if (!_isBossUnit && MonsterAttackStyleTable.IsRanged(_attackStyle))
+            baseAtk *= GameConfig.MONSTER_RANGED_ATK_MUL;
         if (isMagicType)
         {
             attr.SetAttr(AttrType.Attack, 0f);
@@ -803,9 +814,16 @@ public class Monster : UnitBase
             currentHp = Mathf.Max(1f, GameConfig.MONSTER_NORMAL_HP);
         isAlly = false; // ??????????
         float goldMul = BattleManager.Instance != null ? BattleManager.Instance.DifficultyGoldMul : 1f;
-        if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
+        // 2026-09-29：正式关的金币改成「每关固定额度」（见 StageGoldDefs），击杀不再掉金，
+        // 所以这里乘一个全局倍率（默认 0）。**金币副本是专门刷金的模式，不受影响**，仍按击杀掉金 ×2。
+        float killGoldMul = StageGoldDefs.MONSTER_KILL_GOLD_MUL;
+        bool goldDungeon = BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon;
+        if (goldDungeon)
+        {
             goldMul *= 2f;
-        goldDrop = Mathf.FloorToInt((template != null ? template.baseGoldDrop : 5) * (1 + waveNum * 0.1f) * scale * goldMul);
+            killGoldMul = 1f;
+        }
+        goldDrop = Mathf.FloorToInt((template != null ? template.baseGoldDrop : 5) * (1 + waveNum * 0.1f) * scale * goldMul * killGoldMul);
         expDrop = Mathf.FloorToInt((template != null ? template.expDrop : 3) * (1 + waveNum * 0.1f) * scale);
 
         // ??????????????
@@ -1368,11 +1386,15 @@ public class Monster : UnitBase
             return _cachedPlayerShadow;
         }
 #if UNITY_EDITOR
-        var ed = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/SPUM/Core/Basic_Resources/Ect/Shadow.png");
-        if (ed != null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            _cachedPlayerShadow = ed;
-            return _cachedPlayerShadow;
+            var ed = UnityEditor.AssetDatabase.LoadAssetAtPath<Sprite>("Assets/SPUM/Core/Basic_Resources/Ect/Shadow.png");
+            if (ed != null)
+            {
+                _cachedPlayerShadow = ed;
+                return _cachedPlayerShadow;
+            }
         }
 #endif
         return null;

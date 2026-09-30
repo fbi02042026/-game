@@ -195,12 +195,16 @@ public static class PlayerJobDefs
         var def = Get(id);
 
         // 1) 美术源目录（Assets/Art/UI/Icons/职业头像icon/{名}.png）
+        // 2026-09-28 主人拍板：编辑器不再兜底读美术源目录，一律走 Resources，缺图直接露白框。
 #if UNITY_EDITOR
-        string artFile = IconFileName(def);
-        if (!string.IsNullOrEmpty(artFile))
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            var art = LoadArtIcon(artFile);
-            if (art != null) return art;
+            string artFile = IconFileName(def);
+            if (!string.IsNullOrEmpty(artFile))
+            {
+                var art = LoadArtIcon(artFile);
+                if (art != null) return art;
+            }
         }
 #endif
 
@@ -208,6 +212,7 @@ public static class PlayerJobDefs
         if (string.IsNullOrEmpty(def.IconResourcePath)) return null;
         var sp = Resources.Load<Sprite>(def.IconResourcePath);
         if (sp != null) return sp;
+        DeviceParity.ReportMissing(def.IconResourcePath, "职业头像图标");
         // 整图未切 Sprite 时尝试 Texture → 临时 Sprite（仅兜底）
         var tex = Resources.Load<Texture2D>(def.IconResourcePath);
         if (tex == null) return null;
@@ -512,6 +517,10 @@ public static class PlayerJobDefs
             Debug.LogWarning($"[PlayerJobDefs] GenerateFromTemplate 失败: {tpl.templateId}");
             return false;
         }
+
+        // 2026-09-29：职业起步武器白送，EquipInstance 的 requireLevel 是随机的（heroLevel-3 ~ heroLevel+1），
+        // 1 级开局可能抽到 2，被 GridBackpackSystem.EquipItem 的等级校验挡下 → 主手槽空、武器模型不显示。
+        inst.requireLevel = Mathf.Min(inst.requireLevel, Mathf.Max(1, lv));
 
         if (forceTwoHand)
             inst.weaponType = WeaponType.TwoHand;

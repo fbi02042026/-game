@@ -65,7 +65,9 @@ public static class SpecialWeapons
             _twilightTpl.spumName = "New_Weapon_03";
             _twilightTpl.baseAttr = new List<AttrBonusData>
             {
-                new AttrBonusData { attrType = AttrType.Attack, value = 21f, isPercent = false },
+                // 2026-09-29：暮火之杖是魔法武器（weaponAttackType=Magic），21 点基础攻击
+                // 之前挂在 Attack(物攻) 上 → 法师拿法杖一点魔攻都不涨。改挂 MagicAttack。
+                new AttrBonusData { attrType = AttrType.MagicAttack, value = 21f, isPercent = false },
                 new AttrBonusData { attrType = AttrType.MagicPower, value = 0.12f, isPercent = true },
                 new AttrBonusData { attrType = AttrType.FireDamage, value = 8f, isPercent = false },
                 new AttrBonusData { attrType = AttrType.AttackSpeed, value = 0.2f, isPercent = true },

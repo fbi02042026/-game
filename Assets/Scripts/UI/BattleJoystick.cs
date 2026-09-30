@@ -23,6 +23,10 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     CanvasGroup _group;
     CanvasGroup _stickGroup;
     bool _held;
+    /// <summary>这一次的「按住」是手指给的（键盘让位，避免两边抢方向）。</summary>
+    bool _pointerHeld;
+    /// <summary>键盘（仅编辑器 WASD）是否正在驱动摇杆。字段不带 #if：ForceRelease 也要清它。</summary>
+    bool _keyDriving;
     public bool IsHeld => _held;
     const float MaxRadius = 146f;
     const float IdleYFallback = 280f;
@@ -191,23 +195,27 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
             return made;
         }
 #if UNITY_EDITOR
-        string assetPath = ArtRoot + fileStem + ".png";
-        var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
-        if (ed != null) return ed;
-        var edAll = AssetDatabase.LoadAllAssetsAtPath(assetPath);
-        if (edAll != null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            for (int i = 0; i < edAll.Length; i++)
+            string assetPath = ArtRoot + fileStem + ".png";
+            var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+            if (ed != null) return ed;
+            var edAll = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+            if (edAll != null)
             {
-                if (edAll[i] is Sprite s) return s;
+                for (int i = 0; i < edAll.Length; i++)
+                {
+                    if (edAll[i] is Sprite s) return s;
+                }
             }
-        }
-        var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
-        if (edTex != null)
-        {
-            var made = Sprite.Create(edTex, new Rect(0f, 0f, edTex.width, edTex.height), new Vector2(0.5f, 0.5f), 100f);
-            made.name = fileStem;
-            return made;
+            var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            if (edTex != null)
+            {
+                var made = Sprite.Create(edTex, new Rect(0f, 0f, edTex.width, edTex.height), new Vector2(0.5f, 0.5f), 100f);
+                made.name = fileStem;
+                return made;
+            }
         }
 #endif
         return null;
@@ -257,6 +265,10 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     {
         // 每帧自愈摇杆交互开关：系统就绪后即便外部很久没调 SetVisible，也能自行把摇杆打开
         TickAutoVisibility();
+#if UNITY_EDITOR
+        // 2026-09-28 主人要求：编辑器里用 WASD 代替手指拖摇杆（只在编辑器，打包后整段不存在）
+        TickKeyboardJoystick();
+#endif
         // 进场预览时间到（且没按着）→ 收掉，等玩家按住再显示
         if (!_held && _introHideAt > 0f && Time.unscaledTime >= _introHideAt)
         {
@@ -264,6 +276,52 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
             HideStickVisual();
         }
     }
+
+#if UNITY_EDITOR
+    /// <summary>
+    /// 2026-09-28 主人要求：编辑器里把摇杆映射到 WASD，方便不用摸屏幕也能试战斗。
+    /// W/S/A/D = 上/下/左/右，同时按自动归一化成斜向；全松开 = 松手（清手动 + 自动锁敌）。
+    /// 与手指互斥：手指正按着时键盘完全让位，避免两边抢方向。
+    /// 走的还是同一条输入链（Hero.SetManualMove / ForceRelease），所以引导「等玩家动一下摇杆」
+    /// 那一关也能用键盘过（IsHeld 会为 true）。真机打包不含本段，行为不变。
+    /// </summary>
+    void TickKeyboardJoystick()
+    {
+        if (_pointerHeld) return;                                  // 手指优先
+        if (BattleLootMode.Active) return;
+        // 用静默查询：系统未装配时只是不响应，不刷 Error
+        var bm = BattleManager.InstanceQuiet;
+        if (bm == null || !bm.UnitsCanAct) return;
+        if (_group == null || _group.alpha <= 0.01f) return;       // 摇杆不可见/不可交互时不响应
+
+        float x = 0f, y = 0f;
+        if (Input.GetKey(KeyCode.D)) x += 1f;
+        if (Input.GetKey(KeyCode.A)) x -= 1f;
+        if (Input.GetKey(KeyCode.W)) y += 1f;
+        if (Input.GetKey(KeyCode.S)) y -= 1f;
+
+        var axis = new Vector2(x, y);
+        if (axis.sqrMagnitude > 0.0001f)
+        {
+            axis.Normalize();
+            if (!_keyDriving)
+            {
+                _keyDriving = true;
+                _held = true;
+                ShowStickVisual();
+                _introHideAt = -1f;      // 键盘接管期间别让预览计时把摇杆收掉
+            }
+            if (_knob != null)
+                _knob.anchoredPosition = axis * MaxRadius;   // 视觉上摇杆头跟着走，看得见反馈
+            Hero.Instance?.SetManualMove(axis);
+        }
+        else if (_keyDriving)
+        {
+            _keyDriving = false;
+            ForceRelease(true);          // 与手指松手完全一致：清手动 + 回自动锁敌
+        }
+    }
+#endif
 
     /// <summary>
     /// 每帧自愈摇杆的「交互可见」开关：只操作 <see cref="_group"/>（整体 alpha / 射线 / 可交互），
@@ -382,6 +440,7 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
         var bm = BattleManager.InstanceQuiet;
         if (bm == null || !bm.UnitsCanAct) return;
         _held = true;
+        _pointerHeld = true;
         PlaceStickAtPointer(eventData);
         UpdateStick(eventData);
     }
@@ -401,6 +460,8 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
     void ForceRelease(bool acquire)
     {
         _held = false;
+        _pointerHeld = false;
+        _keyDriving = false;
         ResetStickToIdlePos();
         HideStickVisual();          // 2026-09-22：松手就藏，按住再出现
         _introHideAt = -1f;

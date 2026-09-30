@@ -12,7 +12,8 @@ public static class TalentDefs
 {
     public enum AttrKind
     {
-        Attack,
+        Attack,          // 力量：物理攻击（固定值，只加 AttrType.Attack）
+        Intelligence,    // 智力：2026-09-29 新增 —— 法系攻击（固定值，只加 AttrType.MagicAttack）
         Hp,
         Defense,
         CritRate,
@@ -241,15 +242,22 @@ public static class TalentDefs
 
     // ===== 任务3：等级上限公式（实现位置，加注释）=====
     /// <summary>
-    /// 可升上限 = min(maxLevel, 1 + floor((当前左列已点数 - unlockLeftIndex) / 5))。
-    /// 例：R_F1 门槛 10 → L10 上限1、L15 上限2、L20 上限3、L25 上限4、L30 上限5。
-    /// 未达门槛返回 0（不可解锁）。
+    /// 可升上限 = 在「门槛 → 左列点满(40)」这段区间里，把 maxLevel 级**线性铺满**。
+    /// cap = 1 + (左列已点 - 门槛) * (maxLevel - 1) / (左列总数 - 门槛)，向上不超过 maxLevel；未达门槛返回 0。
+    /// <para>例：R_F1（门槛 10 / 满级 5）→ L10 上限1、L20 上限2、L30 上限3、L40 上限5；
+    /// R_HUNT（门槛 30 / 满级 3）→ L30 上限1、L35 上限2、L40 上限3；
+    /// 门槛 = 40 的节点（span 0）→ 解锁即可升到满级。</para>
+    /// <para>2026-09-29 主人玩法口径：右列**不是必须点**，玩家可以「点新节点」也可以「把已开的旧节点升满」，
+    /// 由玩家取舍（都花天赋石）。旧公式 1 + (已点-门槛)/5 有个硬伤：门槛 40 的节点左列总共才 40，
+    /// 永远停在 Lv1 —— 「不点新的、只升旧的」这条路线直接走不通，因此改成线性铺满。</para>
     /// </summary>
     public static int RightNodeLevelCap(TalentRightNode node, int leftUnlocked)
     {
         if (node == null) return 0;
         if (leftUnlocked < node.unlockLeftIndex) return 0;
-        int cap = 1 + (leftUnlocked - node.unlockLeftIndex) / 5; // 整数除法即 floor
+        int span = Left.Length - node.unlockLeftIndex;
+        if (span <= 0) return node.maxLevel;                 // 门槛即终点：解锁后可直接升满
+        int cap = 1 + (leftUnlocked - node.unlockLeftIndex) * (node.maxLevel - 1) / span;
         return cap < node.maxLevel ? cap : node.maxLevel;
     }
 
@@ -271,6 +279,45 @@ public static class TalentDefs
         return false;
     }
 
+    // ===== 「新开通」判定：右列「新」字与入口红点的唯一口径 =====
+    /// <summary>
+    /// 该节点是否还顶着「新」：跨过门槛 + 没被互斥锁 + 前置满足 + level = 0，
+    /// **并且同一批（同一 unlockLeftIndex 门槛）里没有任何一个已被点过**。
+    /// <para>2026-09-29 主人口径：**同一批开通的新天赋是一体的** —— 玩家只要点了其中任意一个，
+    /// 这批剩下的全部去掉「新」字，入口红点也一起灭。所以判定必须看整批，不能只看单个节点。</para>
+    /// 右列行的红色「新」字与天赋入口红点**共用这一个判定**，不要各写一套。
+    /// </summary>
+    public static bool IsNewlyOpen(TalentRightNode node, IDictionary<string, int> talents, int leftUnlocked)
+    {
+        if (node == null || talents == null) return false;
+        if (leftUnlocked < node.unlockLeftIndex) return false;               // 还没到门槛
+        if (GetRightNodeLevel(talents, node.id) > 0) return false;           // 自己已经点了
+        if (IsRightNodeMutexLocked(node, talents)) return false;             // 互斥组已选其它
+        // R_DUAL 的额外前置：主流派（R_F1 / R_F2 任一）满 5 级，没满足不算「可点」
+        if (node.id == "R_DUAL"
+            && GetRightNodeLevel(talents, "R_F1") < 5
+            && GetRightNodeLevel(talents, "R_F2") < 5) return false;
+
+        // 同批（同门槛）里只要有一个已经被点 → 整批都不再算「新」
+        for (int i = 0; i < RightNodes.Length; i++)
+        {
+            var o = RightNodes[i];
+            if (o == null || o.unlockLeftIndex != node.unlockLeftIndex) continue;
+            if (GetRightNodeLevel(talents, o.id) > 0) return false;
+        }
+        return true;
+    }
+
+    /// <summary>是否还有任意一个「新开通未点」的右列节点（天赋入口红点的开关）。</summary>
+    public static bool AnyNewlyOpen(IDictionary<string, int> talents)
+    {
+        if (talents == null) return false;
+        int leftUnlocked = LeftUnlockedCount(talents);
+        for (int i = 0; i < RightNodes.Length; i++)
+            if (IsNewlyOpen(RightNodes[i], talents, leftUnlocked)) return true;
+        return false;
+    }
+
     // ===== 任务7：背包 / 技能槽 / 双修 查询 =====
     /// <summary>是否已解锁背包第 4 行（R_BAG 点了即 true）。实际网格改造由另一子代理做。</summary>
     public static bool IsBagRow4Unlocked(IDictionary<string, int> talents) =>
@@ -288,9 +335,17 @@ public static class TalentDefs
     public static bool IsDualPathUnlocked(IDictionary<string, int> talents) =>
         talents != null && GetRightNodeLevel(talents, "R_DUAL") > 0;
 
-    /// <summary>兼容旧存档/GameConfig：解锁的额外背包行数（R_BAG 提供 1 行）。</summary>
-    public static int CountBagRowUnlocks(IDictionary<string, int> talents) =>
-        IsBagRow4Unlocked(talents) ? 1 : 0;
+    /// <summary>
+    /// 额外解锁的背包行数 = R_BAG 的等级（2026-09-29：改 3 级，**每级 +1 行**）。
+    /// 只作用于角色界面的背包（装备不带出副本，里面放的是道具 / 碎片）。
+    /// 上限由 <c>GameConfig.BACKPACK_HEIGHT_MAX</c> 钳住。
+    /// </summary>
+    public static int CountBagRowUnlocks(IDictionary<string, int> talents)
+    {
+        if (talents == null) return 0;
+        int lv = GetRightNodeLevel(talents, "R_BAG");
+        return lv > 0 ? lv : 0;
+    }
 
     /// <summary>洗点时退石计算用：节点从 0 升到 level 累计花费的石。</summary>
     public static int RightNodeTotalSpent(TalentRightNode node, int level)
@@ -420,16 +475,29 @@ public static class TalentDefs
         list.Add(HJob(9, "R_JOB", "职业专精", 30, 5, "job",
             new[] { 15, 32, 55, 85, 125 }, new[] { 4f, 8f, 12f, 16f, 20f },
             new[] { "剑盾卫士", "狂战士", "游侠", "法师", "牧师", "重装" }));
-        // 一次性节点：kind=Custom（无数值效果，仅靠查询判定解锁状态）
-        list.Add(HNode(10, "R_BAG", "背包扩容", RightNodeType.OneTime, 30, 1, "",
-            new[] { 60 }, AttrKind.Custom, new[] { 0f }, "bag", "背包扩容"));
-        list.Add(HNode(11, "R_SLOT", "技能槽 IV", RightNodeType.OneTime, 40, 1, "",
-            new[] { 95 }, AttrKind.Custom, new[] { 0f }, "slot", "技能槽 IV"));
-        list.Add(HNode(12, "R_DUAL", "双修解锁", RightNodeType.OneTime, 40, 1, "",
-            new[] { 180 }, AttrKind.Custom, new[] { 0f }, "dual", "双修解锁"));
-        // R_HUNT：后期战力节点，替代已取消的 R14/R15 —— 对精英 / Boss 的伤害加成
+        // R_BAG 2026-09-29 主人拍板：改 **3 级、每级 +1 行背包**（只针对角色界面的背包 ——
+        // 装备不带出副本，里头放的是道具 / 碎片这类）。kind=Custom 无数值效果，靠等级查行数。
+        list.Add(HNode(10, "R_BAG", "背包扩容", RightNodeType.Attr, 30, 3, "",
+            new[] { 60, 140, 260 }, AttrKind.Custom, new[] { 0f, 0f, 0f }, "bag", "背包扩容"));
+        // 2026-09-29 主人拍板：R_SLOT / R_DUAL 原「技能槽 IV」「双修解锁」**没有消费点**（点了没效果），
+        // 换成两条**现有属性系统已经消费**的后期战力节点：暴击伤害 / 技能伤害。
+        list.Add(HNode(11, "R_SLOT", "致命一击", RightNodeType.Attr, 40, 3, "",
+            new[] { 25, 55, 95 }, AttrKind.CritDamage, new[] { 15f, 30f, 50f }, "critdmg", "致命一击"));
+        list.Add(HNode(12, "R_DUAL", "技能精通", RightNodeType.Attr, 40, 3, "",
+            new[] { 40, 90, 160 }, AttrKind.SkillDamage, new[] { 10f, 20f, 35f }, "skill", "技能精通"));
+        // R_HUNT：后期战力节点 —— 对精英 / Boss 的伤害加成（窄覆盖 → 单位数值给得比通用增伤高）
         list.Add(HNode(13, "R_HUNT", "精英猎手", RightNodeType.Attr, 30, 3, "",
-            new[] { 30, 65, 110 }, AttrKind.EliteDamage, new[] { 8f, 15f, 25f }, "hunt", "精英猎手"));
+            new[] { 30, 65, 110 }, AttrKind.EliteDamage, new[] { 15f, 30f, 50f }, "hunt", "精英猎手"));
+        // 2026-09-29 新增：R_LUCK 幸运提升 —— 提高进关抽奖「再来一次」的概率。
+        // kind=Custom 不走属性系统（属性系统没有「概率」这一项），数值由
+        // SlotMachineSystem.RerollChance 按等级直接读：每级 +3%（1/2/3 级 = +3%/+6%/+9%）。
+        // optValues 与 SlotMachineDefs.REROLL_PER_TALENT 必须一致，改一处要同步另一处。
+        list.Add(HNode(14, "R_LUCK", "幸运提升", RightNodeType.Attr, 30, 3, "",
+            new[] { 20, 45, 80 }, AttrKind.Custom, new[] { 3f, 6f, 9f }, "luck", "幸运提升"));
+        // 2026-09-29 新增：R_FUND 初始资金 —— 每局开局的启动抽奖币 +4/级。
+        // 同 R_LUCK，kind=Custom 不走属性系统，由 SlotMachineSystem.EnsureStarterCoins 按等级读。
+        list.Add(HNode(15, "R_FUND", "初始资金", RightNodeType.Attr, 30, 3, "",
+            new[] { 20, 45, 80 }, AttrKind.Custom, new[] { 4f, 8f, 12f }, "fund", "初始资金"));
         return list.ToArray();
     }
 
@@ -481,27 +549,39 @@ public static class TalentDefs
     }
 
     // ===== 左列（保持不变）=====
+    /// <summary>
+    /// 2026-09-29 主人重排：左列改 **4 类 × 10 组 = 40 个节点**。
+    /// 去掉「精准(暴击) / 敏捷(攻速)」（这两个右列已有 R_C3 精准 / R_C4 迅捷，左列重复），
+    /// 新增「智力」= 法系攻击，与「力量」= 物理攻击并列。
+    /// <para>🔴 设计意图（主人原话）：**左列是跨局账号成长，玩家点满之后可以随时换职业** ——
+    /// 所以力量给物攻、智力给魔攻，**两条都给、不做职业过滤**，
+    /// 换个职业立刻就能用，不会出现「我只点了法系的，玩不了物理」。</para>
+    /// 对照：等级 +3 和装备 ATK 是**局内**成长（hero.level 不进存档、装备单局有效），
+    /// 那两条仍按当前职业分流，只有天赋这条跨局的给全。
+    /// </summary>
     static LeftNode[] BuildLeft()
     {
-        string[] names = { "力量", "体质", "防御", "精准", "敏捷" };
-        string[] romans = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII" };
-        float[] atk = { 5, 6, 7, 8, 10, 12, 14, 16 };
-        float[] hp = { 25, 30, 40, 50, 60, 75, 90, 110 };
-        float[] def = { 3, 4, 5, 6, 8, 10, 12, 15 };
+        // 2026-09-29 主人定序：**体质 → 物攻 → 防御 → 魔攻**
+        string[] names = { "体质", "力量", "防御", "智力" };
+        string[] romans = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
+        float[] atk = { 3, 4, 5, 6, 7, 8, 10, 12, 14, 16 };        // 力量：物攻，点满 +85
+        float[] mag = { 3, 4, 5, 6, 7, 8, 10, 12, 14, 16 };        // 智力：魔攻，点满 +85
+        float[] hp = { 15, 20, 25, 32, 40, 50, 60, 72, 85, 100 };  // 体质：生命，点满 +499
+        float[] def = { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };          // 防御：物防+魔防各 +65
         var list = new LeftNode[40];
         for (int i = 0; i < 40; i++)
         {
-            int group = i / 5;
-            int slot = i % 5;
+            int group = i / 4;
+            int slot = i % 4;
             string nm = names[slot] + " " + romans[group];
             Effect fx;
             switch (slot)
             {
-                case 0: fx = Fx(AttrKind.Attack, atk[group], $"攻击 +{atk[group]:0}"); break;
-                case 1: fx = Fx(AttrKind.Hp, hp[group], $"生命 +{hp[group]:0}"); break;
-                case 2: fx = Fx(AttrKind.Defense, def[group], $"防御 +{def[group]:0}"); break;
-                case 3: fx = Fx(AttrKind.CritRate, 1f, "暴击率 +1%"); break;
-                default: fx = Fx(AttrKind.AtkSpeed, 2f, "攻击速度 +2%"); break;
+                case 0: fx = Fx(AttrKind.Hp, hp[group], $"生命 +{hp[group]:0}"); break;
+                case 1: fx = Fx(AttrKind.Attack, atk[group], $"物攻 +{atk[group]:0}"); break;
+                // 防御天赋是**物防 + 魔防两侧都加**，文案写「双防」才对得上实际效果
+                case 2: fx = Fx(AttrKind.Defense, def[group], $"双防 +{def[group]:0}"); break;
+                default: fx = Fx(AttrKind.Intelligence, mag[group], $"魔攻 +{mag[group]:0}"); break;
             }
             list[i] = new LeftNode
             {
@@ -584,10 +664,15 @@ public static class TalentDefs
             case AttrKind.PhysDamage: return "物理伤害";
             case AttrKind.MagicDamage: return "魔法伤害";
             case AttrKind.WeaponSwordShield: return "职业伤害";
-            case AttrKind.Attack: return "攻击";
+            case AttrKind.Attack: return "物攻";
+            case AttrKind.Intelligence: return "魔攻";
             case AttrKind.Hp: return "生命";
             case AttrKind.Defense: return "防御";
             case AttrKind.CritRate: return "暴击率";
+            // 2026-09-29：R_SLOT 改「致命一击」/ R_DUAL 改「技能精通」后补的两个文案标签，
+            // 缺了它们 EffectSummary 会返回空串，升级提示变成「 +15%」。
+            case AttrKind.CritDamage: return "暴击伤害";
+            case AttrKind.SkillDamage: return "技能伤害";
             case AttrKind.AtkSpeed: return "攻速";
             case AttrKind.MoveSpeed: return "移速";
             case AttrKind.SkillCooldown: return "技能冷却";

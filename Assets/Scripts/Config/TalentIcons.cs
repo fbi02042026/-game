@@ -12,25 +12,43 @@ public static class TalentIcons
     const string AttrRoot = "Assets/Art/UI/Icons/属性图标/";
     const string TalentRoot = "Assets/Art/UI/Icons/天赋图标/";
 
+    /// <summary>
+    /// 2026-09-29：左列改 4 类，顺序 **体质 → 物攻 → 防御 → 魔攻**（与 <c>TalentDefs.BuildLeft</c> 的
+    /// names 数组一一对应，改顺序时两边必须同时改）。
+    /// </summary>
     static readonly string[] LeftAttrFiles =
     {
-        "角色_0001s_0000_攻击",
-        "角色_0001s_0001_生命",
-        "角色_0001s_0002_防御",
-        "角色_0001s_0003_暴击",
-        "角色_0001s_0004_攻速"
+        "角色_0001s_0001_生命",   // 0 体质 → 生命
+        "角色_0001s_0000_攻击",   // 1 力量 → 物攻
+        "角色_0001s_0002_防御",   // 2 防御
+        "角色_0001s_0000_魔攻"    // 3 智力 → 魔攻（2026-09-29 新图）
     };
 
-    public static Sprite GetLeftAttr(int slot0to4)
+    /// <summary>
+    /// 2026-09-29：按属性图标文件名取图（供 CharacterUI 给「魔攻 / 魔防」行换图标用）。
+    /// 走 <see cref="Load"/>，即优先 Resources/UI/AttrIcons —— 新图必须放一份进 Resources，
+    /// 否则真机（<c>DeviceParity.EditorFallbackEnabled = false</c>）会加载不到、露白框。
+    /// </summary>
+    public static Sprite GetAttrSprite(string fileNameWithoutExt)
     {
-        if (slot0to4 < 0 || slot0to4 >= LeftAttrFiles.Length) return null;
-        return Load(AttrRoot + LeftAttrFiles[slot0to4] + ".png");
+        if (string.IsNullOrEmpty(fileNameWithoutExt)) return null;
+        return Load(AttrRoot + fileNameWithoutExt + ".png");
+    }
+
+    public static Sprite GetLeftAttr(int slot0to3)
+    {
+        if (slot0to3 < 0 || slot0to3 >= LeftAttrFiles.Length) return null;
+        return Load(AttrRoot + LeftAttrFiles[slot0to3] + ".png");
     }
 
     /// <summary>按选项展示名取图标（与天赋图标文件夹文件名一致）。</summary>
     public static Sprite GetTalent(string displayName)
     {
-        if (string.IsNullOrEmpty(displayName)) return null;
+        if (string.IsNullOrEmpty(displayName))
+        {
+            Debug.LogError("[TalentIcons] GetTalent 收到空的展示名，取不到天赋图标。");
+            return null;
+        }
         // 设计文档名 → 资源文件名
         switch (displayName)
         {
@@ -47,8 +65,35 @@ public static class TalentIcons
             case "强化采集 II": return Load(TalentRoot + "战利品筛选.png");
             case "资源管理": return Load(TalentRoot + "点金之手.png");
             case "终极觉醒": return Load(TalentRoot + "觉醒.png");
+
+            // 2026-09-29 主人指定映射（talent_right.csv 的 optNames → 图标文件名）：
+            // R_JOB 六职业 → 三张职业专精图；一次性节点 → 敛财/扩容/快速休整/天赋共鸣。
+            case "剑盾卫士": return Load(TalentRoot + "剑盾专精.png");   // 剑盾
+            case "狂战士":                                              // 重兵
+            case "重装":   return Load(TalentRoot + "重兵专精.png");
+            case "游侠":                                                // 远魔
+            case "法师":
+            case "牧师":   return Load(TalentRoot + "远魔专精.png");
+            case "背包扩容":  return Load(TalentRoot + "敛财.png");
+            case "技能槽 IV": return Load(TalentRoot + "扩容.png");
+            case "双修解锁":  return Load(TalentRoot + "快速休整.png");
+            case "精英猎手":  return Load(TalentRoot + "天赋共鸣.png");
+            // 2026-09-29：R_SLOT/R_DUAL 换节点后补的图（复用图标目录里已有的两张）。
+            case "致命一击":  return Load(TalentRoot + "弱点洞察.png");
+            case "技能精通":  return Load(TalentRoot + "力量爆发.png");
+            // 2026-09-29：进关抽奖相关两个新节点。幸运提升有同名图会走 default；
+            // 初始资金暂时复用「点金之手」，等主人出专属图再换。
+            case "初始资金":  return Load(TalentRoot + "点金之手.png");
+            // 利刃 / 体魄 / 精准 / 迅捷 / 疾行 / 凝神：图标与节点同名，走下边 default 直取。
+
             default:
-                return Load(TalentRoot + displayName + ".png");
+                // 2026-09-29：右列 V4 重制后节点名换了一批，图标目录里大多还是旧版名字 →
+                // 大量节点取不到图。按主人口径「不要兜底」：取不到就报错，不静默露白框。
+                var s = Load(TalentRoot + displayName + ".png");
+                if (s == null)
+                    Debug.LogError($"[TalentIcons] 天赋图标缺失：Resources/UI/TalentIcons/{displayName}.png " +
+                                   "（右列节点名与图标文件名对不上，请补图或改节点名）。");
+                return s;
         }
     }
 
@@ -63,8 +108,12 @@ public static class TalentIcons
               ?? Resources.Load<Sprite>($"UI/TalentIcons/{file}");
         if (res != null) return res;
 #if UNITY_EDITOR
-        var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
-        if (ed != null) return ed;
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+            if (ed != null) return ed;
+        }
 #endif
         return null;
     }

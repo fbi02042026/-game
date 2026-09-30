@@ -945,13 +945,17 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
             if (prefab != null) return prefab;
         }
 #if UNITY_EDITOR
-        string[] guids = UnityEditor.AssetDatabase.FindAssets(
-            $"t:Prefab VFX_{key}_01_Color",
-            new[] { "Assets/Art/Effects/Pixel Craft VFX URP/VFX" });
-        if (guids.Length > 0)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
-            return UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            string[] guids = UnityEditor.AssetDatabase.FindAssets(
+                $"t:Prefab VFX_{key}_01_Color",
+                new[] { "Assets/Art/Effects/Pixel Craft VFX URP/VFX" });
+            if (guids.Length > 0)
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[0]);
+                return UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            }
         }
 #endif
         Debug.LogWarning($"[BattleVFXSystem] 未找到VFX: {vfxFolderName}");

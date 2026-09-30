@@ -19,6 +19,8 @@ public static class WeaponAffixSystem
         new Prefix { Name = "疾风之", Attr = AttrType.AttackSpeed, Kinds = new[] { WeaponCombatTable.WeaponKind.Bow, WeaponCombatTable.WeaponKind.Sword } },
         new Prefix { Name = "鹰眼之", Attr = AttrType.CritRate, Kinds = new[] { WeaponCombatTable.WeaponKind.Bow } },
         new Prefix { Name = "碎骨之", Attr = AttrType.PhyPower, Kinds = new[] { WeaponCombatTable.WeaponKind.Greatsword, WeaponCombatTable.WeaponKind.Sword } },
+        // 2026-09-29：法杖此前只有「秘法之」(MagicPower%)，没有对应物理武器「裂隙之」的固定值前缀 → 补一条
+        new Prefix { Name = "秘能之", Attr = AttrType.MagicAttack, Kinds = new[] { WeaponCombatTable.WeaponKind.Staff } },
         new Prefix { Name = "秘法之", Attr = AttrType.MagicPower, Kinds = new[] { WeaponCombatTable.WeaponKind.Staff } },
         new Prefix { Name = "炽焰之", Attr = AttrType.FireDamage, Kinds = new[] { WeaponCombatTable.WeaponKind.Staff, WeaponCombatTable.WeaponKind.Bow } },
         new Prefix { Name = "霜冻之", Attr = AttrType.IceDamage, Kinds = new[] { WeaponCombatTable.WeaponKind.Staff, WeaponCombatTable.WeaponKind.Bow } },
@@ -36,7 +38,9 @@ public static class WeaponAffixSystem
                 list.AddRange(new[] { AttrType.Attack, AttrType.AttackSpeed, AttrType.CritRate, AttrType.AttackRange, AttrType.PhyPower });
                 break;
             case WeaponCombatTable.WeaponKind.Staff:
-                list.AddRange(new[] { AttrType.MagicPower, AttrType.FireDamage, AttrType.IceDamage, AttrType.CooldownReduce, AttrType.AttackSpeed });
+                // 2026-09-29：法杖池原先只有 MagicPower(%)，**没有任何一条固定值魔攻** →
+                // 法师的词缀收益只有百分比，永远追不上物理职业的「Attack +N」。补 MagicAttack 作主词条。
+                list.AddRange(new[] { AttrType.MagicAttack, AttrType.MagicPower, AttrType.FireDamage, AttrType.IceDamage, AttrType.CooldownReduce, AttrType.AttackSpeed });
                 break;
             case WeaponCombatTable.WeaponKind.Shield:
                 list.AddRange(new[] { AttrType.Defense, AttrType.MaxHp, AttrType.Dodge, AttrType.LifeSteal });
@@ -208,6 +212,8 @@ public static class WeaponAffixSystem
         switch (attr)
         {
             case AttrType.Attack: v = (2f + Random.Range(1f, 5f)) * mul; break;
+            // 2026-09-29：魔法攻击固定值，与 Attack 同档（法杖词缀池已开始产出）
+            case AttrType.MagicAttack: v = (2f + Random.Range(1f, 5f)) * mul; break;
             case AttrType.AttackSpeed: v = (0.04f + Random.Range(0.02f, 0.08f)) * mul; break;
             case AttrType.CritRate: v = (0.02f + Random.Range(0.01f, 0.04f)) * mul; break;
             case AttrType.PhyPower: v = (0.05f + Random.Range(0.02f, 0.08f)) * mul; break;
@@ -223,7 +229,9 @@ public static class WeaponAffixSystem
             default: v = 1f * mul; break;
         }
 
-        if (inst != null && inst.weaponHand == WeaponHandSlot.OffHand && attr == AttrType.Attack)
+        // 副手衰减同样适用于魔法攻击（副手法杖不该和主手同值）
+        if (inst != null && inst.weaponHand == WeaponHandSlot.OffHand
+            && (attr == AttrType.Attack || attr == AttrType.MagicAttack))
             v *= 0.65f;
         return v;
     }

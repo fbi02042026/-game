@@ -1120,10 +1120,14 @@ public class AutoGameInitializer : MonoBehaviour
         if (monsterPrefabObj == null)
             monsterPrefabObj = Resources.Load<GameObject>("Monster");
 #if UNITY_EDITOR
-        if (monsterPrefabObj == null)
-            monsterPrefabObj = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/Prefabs/Monster/Monstersmoban.prefab");
-        if (monsterPrefabObj == null)
-            monsterPrefabObj = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/Prefabs/Monster/Monster.prefab");
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+        {
+            if (monsterPrefabObj == null)
+                monsterPrefabObj = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/Prefabs/Monster/Monstersmoban.prefab");
+            if (monsterPrefabObj == null)
+                monsterPrefabObj = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/Prefabs/Monster/Monster.prefab");
+        }
 #endif
 
         if (monsterPrefabObj != null)

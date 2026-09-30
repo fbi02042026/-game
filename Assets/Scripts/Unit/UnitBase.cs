@@ -49,10 +49,16 @@ public abstract class UnitBase : MonoBehaviour
     /// <summary>当前这份偏移是为哪个目标抽的（换目标才重抽，绝不每帧重抽）。</summary>
     UnitBase _laneBiasOwner;
 
+    /// <summary>敌方换道锚点：锁定目标那一刻自己所在的车道（换目标才重设）。</summary>
+    float _laneChaseAnchorY;
+    UnitBase _laneChaseAnchorOwner;
+
     /// <summary>清空容错偏移（换局/复位）。</summary>
     protected void ClearLaneAlignBias()
     {
         _laneBiasOwner = null;
+        _laneChaseAnchorOwner = null;
+        _laneChaseAnchorY = 0f;
         LaneAlignBiasY = 0f;
         LaneAlignBiasX = 0f;
     }
@@ -693,7 +699,9 @@ public abstract class UnitBase : MonoBehaviour
         return FindNearestEnemyInDetectRange();
     }
 
-    /// <summary>在索敌范围内找最近敌人（索敌范围=屏幕宽+缓冲，与攻击射程无关）</summary>
+    /// <summary>在索敌范围内找最近敌人（索敌范围=屏幕宽+缓冲，与攻击射程无关）。
+    /// 2026-09-28 主人反馈「不按距离、总先打最下面一排」：根因是旧逻辑只比 X，上下车道不参与比较；
+    /// 现改为 X+Y 二维距离（<see cref="GetCombatDist"/>）。</summary>
     public virtual UnitBase FindNearestEnemyInDetectRange()
     {
         if (BattleManager.Instance == null) return null;
@@ -701,7 +709,6 @@ public abstract class UnitBase : MonoBehaviour
         float detectRange = GetDetectRange();
         UnitBase nearest = null;
         float minDist = detectRange;
-        float myX = GetCombatX(this);
         bool currentTargetCandidate = false;
         IEnumerable<UnitBase> enemyList = isAlly ? BattleManager.Instance.monsters : BattleManager.Instance.allyUnits;
         if (enemyList == null) return null;
@@ -711,7 +718,7 @@ public abstract class UnitBase : MonoBehaviour
             if (isAlly && enemy.isAlly) continue;
             if (!isAlly && !enemy.isAlly) continue;
             if (!GameConfig.IsInCombatViewport(enemy)) continue;
-            float dist = Mathf.Abs(myX - GetCombatX(enemy));
+            float dist = GetCombatDist(this, enemy);
             if (dist > detectRange) continue;
             if (enemy == target) currentTargetCandidate = true;
             if (dist <= minDist)
@@ -720,7 +727,7 @@ public abstract class UnitBase : MonoBehaviour
                 nearest = enemy;
             }
         }
-        return ApplyNearestTargetStickiness(nearest, myX, currentTargetCandidate);
+        return ApplyNearestTargetStickiness(nearest, currentTargetCandidate);
     }
 
     const float TargetSwitchMargin = 0.45f;
@@ -728,14 +735,15 @@ public abstract class UnitBase : MonoBehaviour
     /// <summary>
     /// 切换规则：当前目标死亡、销毁、失活、离开敌方列表/镜头/本次索敌范围时立即改选；
     /// 否则新目标至少近 0.45 才立即切换，距离差小于 0.45 时才保留当前目标防抖。
+    /// 2026-09-28：距离比较从 |ΔX| 升级为二维距离（X+Y），与索敌同一把尺。
     /// </summary>
-    UnitBase ApplyNearestTargetStickiness(UnitBase nearest, float myX, bool currentTargetCandidate)
+    UnitBase ApplyNearestTargetStickiness(UnitBase nearest, bool currentTargetCandidate)
     {
         if (!currentTargetCandidate || target == null || nearest == null || nearest == target)
             return nearest;
 
-        float curDist = Mathf.Abs(myX - GetCombatX(target));
-        float newDist = Mathf.Abs(myX - GetCombatX(nearest));
+        float curDist = GetCombatDist(this, target);
+        float newDist = GetCombatDist(this, nearest);
 
         // 2026-09-27 主人反馈：「移动到别的怪前面，却还在打第一个索敌的敌人」。
         // 根因：原来只有「新目标比当前目标近 ≥0.45」这一条防抖规则，
@@ -763,13 +771,12 @@ public abstract class UnitBase : MonoBehaviour
         ApplyFacing(facingDir);
     }
 
-    /// <summary>场上最近敌（交战寻敌进距）。仍要求目标在镜头内，避免打屏外怪。</summary>
+    /// <summary>场上最近敌（交战寻敌进距）。仍要求目标在镜头内，避免打屏外怪。距离用二维（X+Y），与索敌同尺。</summary>
     public virtual UnitBase FindNearestEnemyOnField()
     {
         if (BattleManager.Instance == null) return null;
         UnitBase nearest = null;
         float minDist = float.MaxValue;
-        float myX = GetCombatX(this);
         bool currentTargetCandidate = false;
         IEnumerable<UnitBase> enemyList = isAlly ? BattleManager.Instance.monsters : BattleManager.Instance.allyUnits;
         if (enemyList == null) return null;
@@ -780,14 +787,14 @@ public abstract class UnitBase : MonoBehaviour
             if (!isAlly && !enemy.isAlly) continue;
             if (!GameConfig.IsInCombatViewport(enemy)) continue;
             if (enemy == target) currentTargetCandidate = true;
-            float dist = Mathf.Abs(myX - GetCombatX(enemy));
+            float dist = GetCombatDist(this, enemy);
             if (dist < minDist)
             {
                 minDist = dist;
                 nearest = enemy;
             }
         }
-        return ApplyNearestTargetStickiness(nearest, myX, currentTargetCandidate);
+        return ApplyNearestTargetStickiness(nearest, currentTargetCandidate);
     }
 
     /// <summary>普攻有效射程；近战钳到不超过长柄，避免表配过大导致半屏开砍。</summary>
@@ -855,6 +862,29 @@ public abstract class UnitBase : MonoBehaviour
         return x;
     }
 
+    /// <summary>战斗用纵向坐标（与 GetCombatX 同一参照：怪取身体节点）。</summary>
+    public static float GetCombatY(UnitBase u)
+    {
+        if (u == null) return 0f;
+        Transform moveTf = u.transform;
+        if (u is Monster m)
+            moveTf = m.GetBodyTransform();
+        return moveTf != null ? moveTf.position.y : 0f;
+    }
+
+    /// <summary>
+    /// 战斗索敌/换目标统一距离：X + Y 二维。
+    /// 2026-09-28 主人反馈「不按距离、总先打最下面一排、隔车道也开打」——旧逻辑只比 X；
+    /// 上下车道差现在也计入距离，追击/换目标仍由车道归位（ApplyLaneY）拉回同一排再出刀。
+    /// </summary>
+    public static float GetCombatDist(UnitBase a, UnitBase b)
+    {
+        if (a == null || b == null) return float.MaxValue;
+        float dx = GetCombatX(a) - GetCombatX(b);
+        float dy = GetCombatY(a) - GetCombatY(b);
+        return Mathf.Sqrt(dx * dx + dy * dy);
+    }
+
     /// <summary>仅播攻击动画（奥义演出用，不带弹道/刀光）。</summary>
     public void PlayAttackAnimOnly(AttackVfxKit kit, bool critAmp = false)
     {
@@ -874,6 +904,15 @@ public abstract class UnitBase : MonoBehaviour
         float laneSpeed = Mathf.Max(moveSpd * 0.35f, moveSpd * 0.85f);
         // 目标自身的容错偏移要扣掉：否则「我追你+偏移、你追我」双方会一起漂到车道边界。
         float targetLane = chaseTarget.GetWorldLaneOffset() - chaseTarget.LaneAlignBiasY;
+
+        // 敌方换道锚点：只在换目标（或首次进战斗）时记一次，之后沿用，绝不每帧重设，
+        // 否则锚点会跟着自己一起漂，等于没上限。
+        if (_laneChaseAnchorOwner != chaseTarget)
+        {
+            _laneChaseAnchorOwner = chaseTarget;
+            _laneChaseAnchorY = LaneY;
+        }
+
         if (UseLaneAlignTolerance)
         {
             // 只在换目标（或首次进战斗）时重抽一次，之后沿用，绝不每帧重抽
@@ -890,6 +929,17 @@ public abstract class UnitBase : MonoBehaviour
             }
             targetLane = clamped;
         }
+
+        // 2026-09-28 主人反馈「最上面的敌人能打到最下面的玩家」：敌方换道加上限，
+        // 只能在「锁定目标时自己那一排」上下 MONSTER_LANE_CHASE_MAX 范围内并道。
+        // 我方（玩家/佣兵）不受限，否则会追不上怪。
+        if (!isAlly && GameConfig.MONSTER_LANE_CHASE_MAX > 0f)
+        {
+            float lo = _laneChaseAnchorY - GameConfig.MONSTER_LANE_CHASE_MAX;
+            float hi = _laneChaseAnchorY + GameConfig.MONSTER_LANE_CHASE_MAX;
+            targetLane = Mathf.Clamp(targetLane, lo, hi);
+        }
+
         SetLaneY(Mathf.MoveTowards(LaneY, targetLane, laneSpeed * GameConfig.LANE_ALIGN_SPEED_MUL * dt));
     }
 
@@ -1218,6 +1268,9 @@ public abstract class UnitBase : MonoBehaviour
         float spd = attr != null ? attr.GetAttr(AttrType.MoveSpeed) : 1f;
         if (isAlly && BattleManager.Instance != null)
             spd *= BattleManager.Instance.KillComboSpeedMul;
+        // 2026-09-28 主人要求「玩家行走速度再加快 10%」：只加玩家，佣兵/怪物不动
+        if (this is Hero)
+            spd *= GameConfig.PLAYER_MOVE_SPEED_MUL;
         return spd;
     }
 

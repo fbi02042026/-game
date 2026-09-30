@@ -15,22 +15,28 @@ public static class TutorialPointerArt
     {
         if (_cached != null) return _cached;
 #if UNITY_EDITOR
-        _cached = AssetDatabase.LoadAssetAtPath<Sprite>(AssetPath);
-        if (_cached == null)
+        // 2026-09-28 主人拍板：编辑器不再走美术源目录，与真机口径一致。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(AssetPath);
-            if (tex != null)
-                _cached = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 1f), 100f);
-        }
-#else
-        _cached = Resources.Load<Sprite>("UI/Tutorial/pointer_hand");
-        if (_cached == null)
-        {
-            var tex = Resources.Load<Texture2D>("UI/Tutorial/pointer_hand");
-            if (tex != null)
-                _cached = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 1f), 100f);
+            _cached = AssetDatabase.LoadAssetAtPath<Sprite>(AssetPath);
+            if (_cached == null)
+            {
+                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(AssetPath);
+                if (tex != null)
+                    _cached = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 1f), 100f);
+            }
         }
 #endif
+        if (_cached == null)
+        {
+            _cached = Resources.Load<Sprite>("UI/Tutorial/pointer_hand");
+            if (_cached == null)
+            {
+                var tex = Resources.Load<Texture2D>("UI/Tutorial/pointer_hand");
+                if (tex != null)
+                    _cached = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 1f), 100f);
+            }
+        }
         return _cached;
     }
 }

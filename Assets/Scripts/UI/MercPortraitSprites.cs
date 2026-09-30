@@ -80,13 +80,18 @@ public static class MercPortraitSprites
 
         Sprite sp = null;
 #if UNITY_EDITOR
-        // 编辑器优先 Art/佣兵头像，与手改资源一致
-        sp = LoadEditorHead(hireId);
+        // 2026-09-28 主人拍板：编辑器不再优先读美术源目录，改走 Resources，缺图露白框。
+        if (DeviceParity.EditorFallbackEnabled)
+            sp = LoadEditorHead(hireId);
 #endif
         if (sp == null)
             sp = LoadFromResources(ContentPaths.Icons.MercHead, hireId);
-        if (sp == null)
+#if UNITY_EDITOR
+        if (sp == null && DeviceParity.EditorFallbackEnabled)
             sp = LoadEditorHead(hireId);
+#endif
+        if (sp == null)
+            DeviceParity.ReportMissing(ContentPaths.Icons.MercHead + "/" + hireId, "佣兵头像");
         if (sp != null)
             HeadCache[hireId] = sp;
         return sp;
@@ -99,10 +104,16 @@ public static class MercPortraitSprites
         if (StandCache.TryGetValue(hireId, out var cached) && cached != null)
             return cached;
 
-        // 编辑器优先 Art/佣兵立绘（Resources 可能滞后，玩家立绘常被手改）
-        Sprite sp = LoadEditorStand(hireId);
+        // 2026-09-28 主人拍板：编辑器不再优先读美术源目录，改走 Resources，缺图露白框。
+        Sprite sp = null;
+#if UNITY_EDITOR
+        if (DeviceParity.EditorFallbackEnabled)
+            sp = LoadEditorStand(hireId);
+#endif
         if (sp == null)
             sp = LoadFromResources(ContentPaths.Icons.MercStand, hireId);
+        if (sp == null)
+            DeviceParity.ReportMissing(ContentPaths.Icons.MercStand + "/" + hireId, "佣兵立绘");
         if (sp != null)
             StandCache[hireId] = sp;
         return sp;

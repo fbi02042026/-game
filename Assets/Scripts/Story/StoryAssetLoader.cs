@@ -11,6 +11,8 @@ using UnityEditor;
 public static class StoryAssetLoader
 {
     public const string Root = ContentPaths.Story.Root;
+    // 2026-09-28：Resources/Story/Portraits 已整目录移出 Resources（零调用、纯占包体），
+    // 立绘统一走 MercPortraitSprites → Resources/Icons/MercStand。此常量仅为兼容保留，勿再用于加载。
     public const string Portraits = ContentPaths.Story.Portraits;
     public const string Backgrounds = ContentPaths.Story.Backgrounds;
     public const string Props = ContentPaths.Story.Props;
@@ -52,22 +54,29 @@ public static class StoryAssetLoader
         if (sp == null)
             sp = SpriteFromTexture(path);
 #if UNITY_EDITOR
-        if (sp == null && group == Portraits)
-            sp = LoadEditorPortrait(id);
-        if (sp == null && group == Backgrounds)
-            sp = LoadEditorSprite("Assets/Art/UI/Story/bg_" + id + ".png");
-        if (sp == null && group == Props)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            if (id == "speech_bubble")
-                sp = LoadEditorSprite("Assets/Art/UI/Story/ui_speech_bubble.png");
-            else if (id == "quest_paper")
-                sp = LoadEditorSprite("Assets/Art/UI/Story/ui_quest_paper.png");
+            if (sp == null && group == Portraits)
+                sp = LoadEditorPortrait(id);
+            if (sp == null && group == Backgrounds)
+                sp = LoadEditorSprite("Assets/Art/UI/Story/bg_" + id + ".png");
+            if (sp == null && group == Props)
+            {
+                if (id == "speech_bubble")
+                    sp = LoadEditorSprite("Assets/Art/UI/Story/ui_speech_bubble.png");
+                else if (id == "quest_paper")
+                    sp = LoadEditorSprite("Assets/Art/UI/Story/ui_quest_paper.png");
+            }
         }
 #endif
         if (sp != null)
             Cache[key] = sp;
         else
+        {
+            DeviceParity.ReportMissing(path, "剧情图");
             Debug.LogWarning("[StoryAsset] missing " + path);
+        }
         return sp;
     }
 

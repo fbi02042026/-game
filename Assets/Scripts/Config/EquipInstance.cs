@@ -151,21 +151,27 @@ public class EquipInstance
         Debug.Log($"[BALANCE] equip={template?.templateId} slot={inst.slotType} rarity={inst.rarity} " +
                   $"isStarter={isStarter} tableAtk={tableAtk:F2} star={starMultiplier:F2} " +
                   $"rarityMul={rarityMul:F2} finalAtk={finalAtk:F2}");
+        // 2026-09-29：武器攻击力按**当前职业**分流 —— 法师/牧师落 MagicAttack，其余落 Attack。
+        // 之前一律写 Attack，导致法师拿法杖只涨物攻、魔攻纹丝不动（暮火之杖 21 点全给了物攻）。
+        // 按职业而不是按武器类型：主人已拍板「中途不能换职业」，且掉落池本就按职业分
+        // （RiftEquipGenerator），这样跨类型穿装也不会把攻击力加到用不上的那一侧。
+        AttrType atkAttr = PlayerJobBaseStats.CurrentAttackAttr();
         bool wrote = false;
         for (int i = 0; i < inst.attrBonus.Count; i++)
         {
             var b = inst.attrBonus[i];
-            if (b == null || b.attrType != AttrType.Attack || b.isPercent) continue;
+            if (b == null || b.attrType != atkAttr || b.isPercent) continue;
             b.value = finalAtk;
             wrote = true;
             break;
         }
         if (!wrote)
         {
-            inst.attrBonus.Insert(0, new AttrBonusData { attrType = AttrType.Attack, value = finalAtk, isPercent = false });
+            inst.attrBonus.Insert(0, new AttrBonusData { attrType = atkAttr, value = finalAtk, isPercent = false });
             inst.baseAttrCount = Mathf.Max(inst.baseAttrCount, 1);
         }
     }
+
 
     static List<AttrBonusData> CopySkillPassives(List<AttrBonusData> src)
     {
@@ -203,7 +209,8 @@ public class EquipInstance
         {
             case ArmorPrefix.Berserk:
                 inst.attrBonus.Add(new AttrBonusData { attrType = AttrType.Strength, value = 2 + (int)inst.rarity, isPercent = false });
-                inst.attrBonus.Add(new AttrBonusData { attrType = AttrType.Attack, value = 0.1f + (int)inst.rarity * 0.02f, isPercent = true });
+                // 2026-09-29：防具不区分武器类型，攻击% 按**当前职业**分流（法师/牧师 → MagicAttack）
+                inst.attrBonus.Add(new AttrBonusData { attrType = PlayerJobBaseStats.CurrentAttackAttr(), value = 0.1f + (int)inst.rarity * 0.02f, isPercent = true });
                 break;
             case ArmorPrefix.Arcane:
                 inst.attrBonus.Add(new AttrBonusData { attrType = AttrType.Intelligence, value = 2 + (int)inst.rarity, isPercent = false });
@@ -253,7 +260,9 @@ public class EquipInstance
         if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
         {
             // 武器可随机到的属性
-            attrs.AddRange(new[] { AttrType.Attack, AttrType.AttackSpeed, AttrType.CritRate,
+            // 2026-09-29：攻击条目按职业取 Attack 或 MagicAttack，不要两侧都放进去
+            // （否则物理职业会随机到一条永远用不上的魔攻词条）
+            attrs.AddRange(new[] { PlayerJobBaseStats.CurrentAttackAttr(), AttrType.AttackSpeed, AttrType.CritRate,
                 AttrType.FireDamage, AttrType.IceDamage, AttrType.LifeSteal,
                 AttrType.PhyPower, AttrType.MagicPower });
         }
@@ -273,6 +282,8 @@ public class EquipInstance
         switch (attr)
         {
             case AttrType.Attack: return 2 + UnityEngine.Random.Range(1, 5) * rarityMultiplier;
+            // 2026-09-29：与 Attack 同档，否则随机到魔攻会落进 default
+            case AttrType.MagicAttack: return 2 + UnityEngine.Random.Range(1, 5) * rarityMultiplier;
             case AttrType.MaxHp: return 10 + UnityEngine.Random.Range(5, 20) * rarityMultiplier;
             case AttrType.AttackSpeed: return 0.05f + UnityEngine.Random.Range(0.02f, 0.1f) * rarityMultiplier;
             case AttrType.CritRate: return 0.02f + UnityEngine.Random.Range(0.01f, 0.05f) * rarityMultiplier;

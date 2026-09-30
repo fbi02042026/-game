@@ -17,13 +17,17 @@ public static class GameFonts
         if (_numberFont != null) return _numberFont;
         _numberFont = Resources.Load<Font>("Fonts/PixelFont");
 #if UNITY_EDITOR
-        if (_numberFont == null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            _numberFont = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>(
-                "Assets/Resources/Fonts/PixelFont.ttf");
             if (_numberFont == null)
+            {
                 _numberFont = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>(
-                    "Assets/SPUM/Core/Basic_Resources/Font/PixelFont.ttf");
+                    "Assets/Resources/Fonts/PixelFont.ttf");
+                if (_numberFont == null)
+                    _numberFont = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>(
+                        "Assets/SPUM/Core/Basic_Resources/Font/PixelFont.ttf");
+            }
         }
 #endif
         if (_numberFont == null)
@@ -39,13 +43,17 @@ public static class GameFonts
         // 优先 ttf，再 otf
         _chineseFont = Resources.Load<Font>("Fonts/fusion-pixel");
 #if UNITY_EDITOR
-        if (_chineseFont == null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            _chineseFont = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>(
-                "Assets/Resources/Fonts/fusion-pixel.ttf");
             if (_chineseFont == null)
+            {
                 _chineseFont = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>(
-                    "Assets/Resources/Fonts/fusion-pixel.otf");
+                    "Assets/Resources/Fonts/fusion-pixel.ttf");
+                if (_chineseFont == null)
+                    _chineseFont = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>(
+                        "Assets/Resources/Fonts/fusion-pixel.otf");
+            }
         }
 #endif
         if (_chineseFont == null)

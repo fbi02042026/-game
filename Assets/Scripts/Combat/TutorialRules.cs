@@ -51,6 +51,13 @@ public sealed class TutorialRules
     /// <summary>引导关允许的技能三选一上限（0 = 不限）。</summary>
     public int MaxTutorialDrafts { get; private set; }
 
+    /// <summary>
+    /// 引导关开局是否「强制引导玩家抽奖一次」（圈住随机按钮、抽完收起）。
+    /// 2026-09-29 主人要求：引导关一开始就教玩家用进关抽奖，之后按既有节拍一步一步走。
+    /// 正式关恒 false —— 不抽就直接开打，不给打扰。
+    /// </summary>
+    public bool GuideEntryDraft { get; private set; }
+
     /// <summary>交战点最少超前（引导 4.5，正式 2.0）。</summary>
     public float EngageMinAhead { get; private set; }
 
@@ -132,6 +139,7 @@ public sealed class TutorialRules
             AllowStackSpawnWhileAlive = true,
             EnableRunDraft = true,
             MaxTutorialDrafts = 1,
+            GuideEntryDraft = true,
             EngageMinAhead = 4.5f,
             EngageAheadOverride = 4.5f,
             WaveSpacingMul = 1.65f,

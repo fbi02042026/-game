@@ -295,6 +295,13 @@ public class AdventureUI : MonoBehaviour, ITownPage
             // 改动 4 必须最后：依赖 RightContent 顶边与 DetailPanel 的最终位置，顺序不能反。
             if (mapRoot != null && right != null && detail != null && EnableAdventureMapStretch)
                 FitAdventureMapRootStretch(mapRoot, right, detail, navReserved);
+
+            // 2026-09-28 主人反馈真机「下面空了大片黑底」：排版不敢盲改，先打一行诊断数据，
+            // 真机跑一次把这条 log 发回来，用真实数字定根因（导航预留量大了？还是面板没沉底？）。
+            if (detail != null && rootRt != null)
+                Debug.Log($"[AdventureFit] rootH={rootRt.rect.height:F0} navReserved={navReserved:F0} " +
+                          $"detailBottomGap={detailBottomGap:F0} detailBottom={detail.offsetMin.y:F0} " +
+                          $"detailTop={detail.offsetMax.y:F0} screenW={Screen.width} screenH={Screen.height}");
         }
         finally
         {
@@ -2242,27 +2249,31 @@ public class AdventureUI : MonoBehaviour, ITownPage
         }
 
 #if UNITY_EDITOR
-        string assetPath = CommonDropArtRoot + fileNameWithoutExt + ".png";
-        var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
-        if (ed != null) return ed;
-        var edAll = AssetDatabase.LoadAllAssetsAtPath(assetPath);
-        if (edAll != null)
+        // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
+        if (DeviceParity.EditorFallbackEnabled)
         {
-            for (int i = 0; i < edAll.Length; i++)
+            string assetPath = CommonDropArtRoot + fileNameWithoutExt + ".png";
+            var ed = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+            if (ed != null) return ed;
+            var edAll = AssetDatabase.LoadAllAssetsAtPath(assetPath);
+            if (edAll != null)
             {
-                if (edAll[i] is Sprite spEd) return spEd;
+                for (int i = 0; i < edAll.Length; i++)
+                {
+                    if (edAll[i] is Sprite spEd) return spEd;
+                }
             }
-        }
-        var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
-        if (edTex != null)
-        {
-            var made = Sprite.Create(
-                edTex,
-                new Rect(0f, 0f, edTex.width, edTex.height),
-                new Vector2(0.5f, 0.5f),
-                100f);
-            made.name = fileNameWithoutExt;
-            return made;
+            var edTex = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            if (edTex != null)
+            {
+                var made = Sprite.Create(
+                    edTex,
+                    new Rect(0f, 0f, edTex.width, edTex.height),
+                    new Vector2(0.5f, 0.5f),
+                    100f);
+                made.name = fileNameWithoutExt;
+                return made;
+            }
         }
 #endif
         return null;

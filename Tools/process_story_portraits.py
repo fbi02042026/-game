@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Sync story portraits from 佣兵立绘 -> Art/UI/Story + Resources/Story/Portraits.
+"""Sync story portraits from 佣兵立绘 -> Art/UI/Story + Art/UI/Story/portrait_alpha.
+
+注：2026-09-28 起处理后的立绘不再写进 Resources（游戏运行不读这批图，
+     留在 Resources 只会白占包体），输出目录改到 Assets/Art/UI/Story/portrait_alpha。
 
 IMPORTANT: Do NOT run black-key transparency here. The old process_rgba(threshold=30)
 punched holes in dark shadows (arms/body gaps). Always copy source PNG bytes as-is.
@@ -9,11 +12,11 @@ import shutil
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 ART = os.path.join(ROOT, "Assets", "Art", "UI", "Story")
-RES = os.path.join(ROOT, "Assets", "Resources", "Story", "Portraits")
+RES = os.path.join(ROOT, "Assets", "Art", "UI", "Story", "portrait_alpha")
 MERC_ART = os.path.join(ROOT, "Assets", "Art", "UI", "Icons", "\u4f63\u5175\u7acb\u7ed8")
 MERC_RES = os.path.join(ROOT, "Assets", "Resources", "Icons", "MercStand")
 
-# merc filename -> story portrait key (Resources/Story/Portraits/{key}.png)
+# merc filename -> story portrait key (portrait_alpha/{key}.png)
 MERC_TO_STORY = [
     ("\u4f1a\u957f\u2014\u2014\u5927\u4f17.png", "guildmaster"),
     ("\u4f1a\u957f\u2014\u2014\u9634\u6697.png", "guildmaster_hidden"),

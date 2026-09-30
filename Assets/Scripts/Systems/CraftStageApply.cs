@@ -55,9 +55,10 @@ public static class CraftStageApply
 
         best.star = Mathf.Min((int)best.rarity, best.star + 1);
         if (best.attrBonus == null) best.attrBonus = new List<AttrBonusData>();
+        // 2026-09-29：升星奖励的攻击% 按职业分流（法师/牧师 → MagicAttack）
         best.attrBonus.Add(new AttrBonusData
         {
-            attrType = AttrType.Attack,
+            attrType = PlayerJobBaseStats.CurrentAttackAttr(),
             value = 0.03f,
             isPercent = true
         });
@@ -125,7 +126,9 @@ public static class CraftStageApply
         switch (r)
         {
             case 0:
-                return new EnchantData { enchantName = "锋利", attrType = AttrType.Attack, value = 0.08f, isPercent = true };
+                // 2026-09-29：攻击% 按职业分流（法师/牧师 → MagicAttack）。
+                // 注：名字仍叫「锋利」，法师身上文案略怪，要不要加个法系别名等主人定。
+                return new EnchantData { enchantName = "锋利", attrType = PlayerJobBaseStats.CurrentAttackAttr(), value = 0.08f, isPercent = true };
             case 1:
                 return new EnchantData { enchantName = "坚韧", attrType = AttrType.MaxHp, value = 0.1f, isPercent = true };
             case 2:

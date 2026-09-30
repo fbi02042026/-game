@@ -354,13 +354,23 @@ public class AttrSystem
         switch (fx.kind)
         {
             case TalentDefs.AttrKind.Attack:
+                // 2026-09-29：天赋是**跨局账号成长**，力量只加物攻、不做职业过滤。
+                // 玩家点满之后随时可以换职业，物攻那一栏换到物理职业立刻能用 ——
+                // 若按当前职业分流，换了职业就等于前面积累的一半全废。
                 AddAttr(AttrType.Attack, fx.value, false);
+                break;
+            case TalentDefs.AttrKind.Intelligence:
+                // 2026-09-29 新增：智力 → 法系攻击（与力量对称）。
+                AddAttr(AttrType.MagicAttack, fx.value, false);
                 break;
             case TalentDefs.AttrKind.Hp:
                 AddAttr(AttrType.MaxHp, fx.value, false);
                 break;
             case TalentDefs.AttrKind.Defense:
+                // 2026-09-29：防御已拆成物理 / 魔法两条，天赋**两侧都要加** ——
+                // 之前只加 Defense，玩家点满防御天赋后魔法防御一点没涨，进法师章直接被打穿。
                 AddAttr(AttrType.Defense, fx.value, false);
+                AddAttr(AttrType.MagicDefense, fx.value, false);
                 break;
             case TalentDefs.AttrKind.CritRate:
                 // TalentDefs 用百分点（0.5 = +0.5%）
@@ -373,14 +383,24 @@ public class AttrSystem
                 AddAttr(AttrType.CritDamage, fx.value * 0.01f, false);
                 break;
             case TalentDefs.AttrKind.PhysDamage:
-                AddAttr(AttrType.PhyPower, fx.value * 0.01f, true);
-                break;
             case TalentDefs.AttrKind.MagicDamage:
-                AddAttr(AttrType.MagicPower, fx.value * 0.01f, true);
+                // 2026-09-29 主人拍板：**流派要保留区分度**（给玩家一个培养目标，鼓励专一养物理或法系），
+                // 但跨系**不是不能玩、只是要花代价** → 本系满额、跨系按 CrossPathRatio 打折。
+                // 例：法师点「物理专精 +25%」实际只拿到 +12.5%，能玩但明显亏。
+                {
+                    bool wantPhys = fx.kind == TalentDefs.AttrKind.PhysDamage;
+                    bool crossPath = wantPhys == IsMagicJobNow();
+                    float ratio = crossPath ? GameConfig.TALENT_CROSS_PATH_RATIO : 1f;
+                    AddAttr(wantPhys ? AttrType.PhyPower : AttrType.MagicPower,
+                            fx.value * 0.01f * ratio, true);
+                }
                 break;
             case TalentDefs.AttrKind.EliteDamage:
-                // 精英猎手：对精英 / Boss 的伤害加成倍率（0.08 = +8%）
-                AddAttr(AttrType.EliteDamage, fx.value * 0.01f, true);
+                // 精英猎手：对精英 / Boss 的伤害加成倍率（0.15 = +15%）。
+                // 2026-09-29：这里**必须用绝对值**，不能 isPercent —— EliteDamage 没有基础值（InitBaseDict
+                // 与 PlayerJobBaseStats 都没写），百分比加会变成 0 * 1.15 = 0，点了等于没点。
+                // 消费点 Monster.TakeDamage：inDamage *= (1f + bonus)。
+                AddAttr(AttrType.EliteDamage, fx.value * 0.01f, false);
                 break;
             case TalentDefs.AttrKind.WeaponSwordShield:
             case TalentDefs.AttrKind.WeaponHeavy:
@@ -394,7 +414,9 @@ public class AttrSystem
                 AddAttr(AttrType.CooldownReduce, fx.value * 0.01f, false);
                 break;
             case TalentDefs.AttrKind.SkillDamage:
+                // 2026-09-29：与力量/智力同口径 —— 跨局成长两侧都给，换职业不吃亏。
                 AddAttr(AttrType.Attack, fx.value * 0.01f, true);
+                AddAttr(AttrType.MagicAttack, fx.value * 0.01f, true);
                 break;
             case TalentDefs.AttrKind.MoveSpeed:
                 // 移速 +3% = 基础移速的 3%（与攻速/暴击一致按百分比加成）
@@ -414,9 +436,13 @@ public class AttrSystem
 
     /// <summary>当前职业的主要伤害属性：法系走 MagicPower，其余走 PhyPower。</summary>
     static AttrType PrimaryPowerAttr()
+        => IsMagicJobNow() ? AttrType.MagicPower : AttrType.PhyPower;
+
+    /// <summary>当前职业是否法系（法师/牧师）。与 <see cref="PrimaryPowerAttr"/> 同一口径，不读表。</summary>
+    static bool IsMagicJobNow()
     {
         var job = PlayerJobDefs.GetSelected();
-        bool magic = job == PlayerJobId.Mage || job == PlayerJobId.Priest;
-        return magic ? AttrType.MagicPower : AttrType.PhyPower;
+        return job == PlayerJobId.Mage || job == PlayerJobId.Priest;
     }
+
 }

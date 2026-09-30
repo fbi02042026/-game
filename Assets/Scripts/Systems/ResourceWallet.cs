@@ -17,7 +17,12 @@ public static class ResourceWallet
         Stamina,
         EnchantStone,
         DecomposeMat,
-        TalentPoint
+        TalentPoint,
+        /// <summary>
+        /// 抽奖币（2026-09-29 新增）：只用于「进关抽奖」，与城镇金币完全分开。
+        /// 战斗通关产出，抽奖消耗；金币该升级建筑还是升级建筑，两边不抢钱。
+        /// </summary>
+        SlotCoin
     }
 
     public struct AddResult
@@ -54,6 +59,7 @@ public static class ResourceWallet
             case ResourceType.EnchantStone: return data.enchantStones;
             case ResourceType.DecomposeMat: return data.decomposeMats;
             case ResourceType.TalentPoint: return data.talentPoints;
+            case ResourceType.SlotCoin: return data.slotCoins;
             default: return 0;
         }
     }
@@ -68,6 +74,7 @@ public static class ResourceWallet
             case ResourceType.EnchantStone: data.enchantStones = (int)Mathf.Clamp(value, 0, int.MaxValue); break;
             case ResourceType.DecomposeMat: data.decomposeMats = (int)Mathf.Clamp(value, 0, int.MaxValue); break;
             case ResourceType.TalentPoint: data.talentPoints = (int)Mathf.Clamp(value, 0, int.MaxValue); break;
+            case ResourceType.SlotCoin: data.slotCoins = (int)Mathf.Clamp(value, 0, int.MaxValue); break;
         }
     }
 
@@ -84,6 +91,7 @@ public static class ResourceWallet
             // 导致商店页写"强化石"、领取提示弹"附魔石"。现以 ShopDefs 为准统一。
             // 枚举名沿用 TalentPoint（存档字段 talentPoints），对外统一叫「天赋石」
             case ResourceType.TalentPoint: return "天赋石";
+            case ResourceType.SlotCoin: return "抽奖币";
             default: return "资源";
         }
     }
