@@ -113,6 +113,7 @@ PlayerSettings:
   forceSingleInstance: 0
   useFlipModelSwapchain: 1
   resizableWindow: 0
+  renderOverUI: 0
   useMacAppStoreValidation: 0
   wglDisableFBODepthStencil: 0
   macAppStoreCategory: public.app-category.games
@@ -187,7 +188,7 @@ PlayerSettings:
   loadStoreDebugModeEnabled: 0
   visionOSBundleVersion: 1.0
   tvOSBundleVersion: 1.0
-  bundleVersion: 0.3.1
+  bundleVersion: 1.0.0
   preloadedAssets: []
   metroInputSource: 0
   wsaTransparentSwapchain: 0
@@ -385,7 +386,7 @@ PlayerSettings:
   - m_BuildTarget: 
     m_Icons:
     - serializedVersion: 2
-      m_Icon: {fileID: 2800000, guid: f3215c10d1c17214c8ad23b248976b10, type: 3}
+      m_Icon: {fileID: 2800000, guid: e2949026d1c71744e922db3056f342ca, type: 3}
       m_Width: 128
       m_Height: 128
       m_Kind: 0
@@ -814,6 +815,7 @@ PlayerSettings:
   mobileMTRendering:
     Android: 1
     HMIAndroid: 1
+    OpenHarmony: 1
     VisionOS: 1
     iPhone: 1
     tvOS: 1
@@ -1325,7 +1327,6 @@ PlayerSettings:
     m_VersionCode: 1
     m_VersionName: 
   hmiPlayerDataPath: 
-  hmiForceSRGBBlit: 0
   embeddedLinuxEnableGamepadInput: 0
   logStartupTiming: 0
   hmiCpuConfiguration: 
