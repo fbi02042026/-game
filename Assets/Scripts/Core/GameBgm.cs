@@ -79,9 +79,11 @@ public static class GameBgm
     public static void Play(Track track, float fadeSeconds = DefaultFade)
     {
         EnsureHost();
+        Debug.Log($"[BgmDiag] Play enter track={track} current={_current} loadingMuted={_loadingMuted} cutsceneMuted={_cutsceneMuted} pending={_pendingAfterLoading}");
         if (_loadingMuted || _cutsceneMuted)
         {
-            _pendingAfterLoading = track;
+            // 2026-10-04 主人拍板：静音期间 UI 级 Play 会覆盖流程显式 SetPending 的目标曲。
+            // 保持「谁显式指定谁说了算」，别再改回无条件赋值。
             return;
         }
         if (!GameAudio.MusicEnabled)
@@ -95,8 +97,6 @@ public static class GameBgm
             Stop(fadeSeconds);
             return;
         }
-        if (track == _current && _active != null && _active.isPlaying)
-            return;
 
         AudioClip clip = LoadClip(track);
         if (clip == null)
@@ -104,7 +104,10 @@ public static class GameBgm
             Debug.LogWarning($"[GameBgm] 找不到曲目 {track}，请确认 Resources/{ResRoot}{Paths[track]} 已导入");
             return;
         }
+        if (track == _current && _active != null && _active.isPlaying && _active.clip == clip)
+            return;
 
+        Debug.Log($"[BgmDiag] Play switch {_current} -> {track}");
         AudioSource next = (_active == _a) ? _b : _a;
         AudioSource prev = _active;
 
@@ -120,7 +123,9 @@ public static class GameBgm
         // 把载入流程显式 SetPending(Town) 冲掉 → 加载结束恢复播放时取的还是 Login。
         // 修法：**Loading 静音期间一律不许 UI 级 Play 改 pending**（此时 pending 已由流程指定），
         // 保证「谁显式指定谁说了算」，UI 不得抢。不要再改回无条件赋值。
-        if (!_loadingMuted)
+        // 2026-10-04 主人拍板：片头静音也会让 UI 级 Play 抢写 pending，必须与 Loading 一并保护。
+        // 只在完全未静音时同步 pending，别再改回无条件赋值。
+        if (!_loadingMuted && !_cutsceneMuted)
             _pendingAfterLoading = track;
         _active = next;
 
@@ -225,6 +230,7 @@ public static class GameBgm
         Track want = _pendingAfterLoading;
         if (want == Track.None)
             want = GuessTrackFromScene();
+        Debug.Log($"[BgmDiag] UnmuteAfterLoading want={want} pending={_pendingAfterLoading}");
 
         _current = Track.None; // 强制重新淡入
         if (want != Track.None)
@@ -258,6 +264,7 @@ public static class GameBgm
         Track want = _pendingAfterLoading;
         if (want == Track.None)
             want = GuessTrackFromScene();
+        Debug.Log($"[BgmDiag] UnmuteAfterCutscene want={want} pending={_pendingAfterLoading}");
 
         _current = Track.None;
         if (want != Track.None)

@@ -177,6 +177,7 @@ public class TownHubController : MonoBehaviour
         _log?.HidePage();
         _adventure?.ShowPage();
         _current = MainNavTab.Adventure;
+        Debug.Log($"[BgmDiag] OpenAdventure before Town current={GameBgm.Current}");
         GameBgm.Play(GameBgm.Track.Town);
     }
 
@@ -342,6 +343,7 @@ public class TownHubController : MonoBehaviour
         {
             _adventure?.ShowPage();
             TutorialDirector.Instance?.NotifyAdventureOpened();
+            Debug.Log($"[BgmDiag] SwitchTabNow Adventure before Town current={GameBgm.Current}");
             GameBgm.Play(GameBgm.Track.Town);
         }
         else if (tab == MainNavTab.Character)

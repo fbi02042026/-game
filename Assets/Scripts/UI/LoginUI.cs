@@ -374,6 +374,11 @@ public class LoginUI : MonoBehaviour
     {
         if (!EnsureAgreed()) return;
         GlobalToastUI.Hide();
+        // 2026-10-04 主人拍板：从点「开始游戏」这一刻起就停登录 BGM，不等 Loading 出现才静音。
+        // 用 Stop（只淡出、不置 _loadingMuted）—— 若走 GameSceneManager 那条
+        // 「!isActiveAndEnabled 直接 LoadScene」的旁路，不会经过 SceneLoadingCoordinator，
+        // 用 MuteForLoading 会把 _loadingMuted 永久留 true，进 Town 后再也不出声。
+        GameBgm.Stop(0.05f);
         onStartGame?.Invoke();
         Debug.Log("[LoginUI] 开始游戏");
         EnterTown();

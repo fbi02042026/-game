@@ -48,6 +48,16 @@ public class MainBottomNav : MonoBehaviour
     bool _wired;
     bool _loadingBattle;
 
+    /// <summary>运行时补出来的「安全区背景延伸」节点名（不进预制体）。</summary>
+    const string SafeAreaBackdropName = "SafeAreaBackdrop";
+
+    RectTransform _safeBackdrop;
+    int _backdropW = -1;
+    int _backdropH = -1;
+    Rect _backdropSafe = new Rect(0f, 0f, -1f, -1f);
+    float _backdropScale = -1f;
+    Vector2 _backdropRootOffsetMin = new Vector2(float.NaN, float.NaN);
+
     /// <summary>
     /// 选中态兜底总开关（主人反馈「默认选中跑到了冒险日志」）。
     /// true：AutoBind / Initialize / SetSelected 三处都会先无条件清掉按钮下的「选中」层，并强制只有目标项高亮；
@@ -65,6 +75,10 @@ public class MainBottomNav : MonoBehaviour
         Instance = this;
         AutoBind();
         WireClicks();
+
+        // 2026-10-04 主人拍板：底栏根节点被 SafeAreaFitter(Shift) 整体上移后，栏底与屏幕底之间露出 Canvas 黑底
+        // → 先补一条贴屏幕最底的延伸背景垫底，再挂 SafeAreaFitter（顺序不能反）。别再改回「只靠 BottomNavBG 往下溢出」。
+        EnsureSafeAreaBackdrop();
 
         // P2-5 SafeArea：底部五入口根节点（本组件所在 GameObject）贴底，
         // 内缩底部安全区（挖孔/手势条），避免按钮被遮挡。左右不缩。
@@ -90,6 +104,142 @@ public class MainBottomNav : MonoBehaviour
     void Start()
     {
         SetSelected(_current, notify: false);
+    }
+
+    /// <summary>
+    /// 屏幕尺寸 / 安全区 / 画布缩放 / 根节点底边距四者任一变化才重算一次延伸背景。
+    /// 为什么必须盯住根节点 offsetMin：背景条是根节点的子节点，根节点被 SafeAreaFitter 上移时它会跟着走，
+    /// 只在屏幕变化时重算会漏掉「安全区先变、根节点后重排」的那一帧。平时每帧只做几次比较，不写 RectTransform。
+    /// </summary>
+    void LateUpdate()
+    {
+        var rootRt = transform as RectTransform;
+        if (rootRt == null) return;
+
+        int w = Screen.width;
+        int h = Screen.height;
+        Rect safe = Screen.safeArea;
+        float sf = CanvasScaleFactor();
+        Vector2 rootOffsetMin = rootRt.offsetMin;
+
+        if (w == _backdropW && h == _backdropH && safe == _backdropSafe
+            && Mathf.Approximately(sf, _backdropScale) && rootOffsetMin == _backdropRootOffsetMin)
+            return;
+
+        _backdropW = w;
+        _backdropH = h;
+        _backdropSafe = safe;
+        _backdropScale = sf;
+        _backdropRootOffsetMin = rootOffsetMin;
+        EnsureSafeAreaBackdrop();
+    }
+
+    /// <summary>
+    /// 在本节点下补（或复用）一条「安全区背景延伸」，盖住导航栏底与屏幕底之间的黑底。
+    /// 幂等：同名子节点已存在就复用，只刷新矩形/颜色，绝不重复创建。
+    /// </summary>
+    void EnsureSafeAreaBackdrop()
+    {
+        var rootRt = transform as RectTransform;
+        if (rootRt == null) return;
+
+        RectTransform rt = _safeBackdrop;
+        if (rt == null)
+        {
+            Transform exist = transform.Find(SafeAreaBackdropName);
+            GameObject go = exist != null
+                ? exist.gameObject
+                : new GameObject(SafeAreaBackdropName, typeof(RectTransform), typeof(Image));
+            if (exist == null) go.transform.SetParent(transform, false);
+
+            rt = go.transform as RectTransform;
+            var img0 = go.GetComponent<Image>();
+            if (img0 == null) img0 = go.AddComponent<Image>();
+            if (rt == null || img0 == null)
+            {
+                Debug.LogError("[MainBottomNav] SafeAreaBackdrop 创建失败，节点路径：" + NodePath(transform)
+                               + "/" + SafeAreaBackdropName);
+                return;
+            }
+        }
+
+        var img = rt.GetComponent<Image>();
+        if (img == null) img = rt.gameObject.AddComponent<Image>();
+        _safeBackdrop = rt;
+
+        // 垫在最底层：先画它，再画 BottomNavBG 和按钮，两层同色才接缝不露馅
+        rt.SetAsFirstSibling();
+
+        // 绝不挂 SafeAreaFitter：它必须永远贴屏幕最底，跟着根节点一起上移就白补了
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+
+        // 视觉对齐 BottomNavBG：优先复制它的 sprite + color，取不到就用导航栏深色兜底（不静默放过）
+        Transform bgNode = FindDeepChild(transform, "BottomNavBG");
+        Image bgImg = bgNode != null ? bgNode.GetComponent<Image>() : null;
+        if (bgImg != null)
+        {
+            img.sprite = bgImg.sprite;
+            img.color = bgImg.color;
+        }
+        else
+        {
+            img.sprite = null;
+            img.color = new Color(0.10f, 0.09f, 0.13f, 1f);
+        }
+        img.raycastTarget = false;   // 只是背景，不能吃掉按钮点击
+
+        var parent = rootRt.parent as RectTransform;
+        if (parent == null || parent.rect.width <= 0f || parent.rect.height <= 0f)
+        {
+            // 量不到父级矩形就没有换算基准：先收成 0 高度，绝不能凭空撑出一条色带
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            return;
+        }
+
+        Vector2 pMin = parent.rect.min;
+        Vector2 pMax = parent.rect.max;
+        // 根节点四边在父级坐标里的实际位置（SafeAreaFitter 上移量已经算在 offsetMin.y 里，取当前值最准）
+        float rootBottomY = Mathf.Lerp(pMin.y, pMax.y, rootRt.anchorMin.y) + rootRt.offsetMin.y;
+        float rootLeftX = Mathf.Lerp(pMin.x, pMax.x, rootRt.anchorMin.x) + rootRt.offsetMin.x;
+        float rootRightX = Mathf.Lerp(pMin.x, pMax.x, rootRt.anchorMax.x) + rootRt.offsetMax.x;
+
+        // 2026-10-04 主人拍板：填的是「根节点底边 → 屏幕（父级）最底」之间的全部空隙，
+        // 不管空的是 safeArea 还是预制体本来就有的原始底边间隙，一次性全吃掉，别再改回「只补 safeArea」。
+        // 顶边贴根节点底边（节点自身坐标系里就是 0），底边贴父级最底 → 高度 = rootBottomY - pMin.y。
+        // 夹到 >= 0：根节点向下溢出/数值异常时 rootBottomY <= pMin.y，不夹会算出反向矩形。
+        float gap = Mathf.Max(0f, rootBottomY - pMin.y);
+        rt.offsetMin = new Vector2(pMin.x - rootLeftX, -gap);
+        rt.offsetMax = new Vector2(pMax.x - rootRightX, 0f);
+    }
+
+    /// <summary>屏幕像素 → 画布参考单位的换算系数（取最外层带 CanvasScaler 的 Canvas；取不到就 1，继续往下走）。</summary>
+    float CanvasScaleFactor()
+    {
+        var canvases = GetComponentsInParent<Canvas>(true);
+        for (int i = canvases.Length - 1; i >= 0; i--)
+        {
+            var c = canvases[i];
+            if (c == null) continue;
+            if (c.GetComponent<CanvasScaler>() != null && c.scaleFactor > 0f)
+                return c.scaleFactor;
+        }
+        return 1f;
+    }
+
+    /// <summary>拼出节点全路径，给创建失败日志定位用。</summary>
+    static string NodePath(Transform t)
+    {
+        if (t == null) return "(null)";
+        string path = t.name;
+        while (t.parent != null)
+        {
+            t = t.parent;
+            path = t.name + "/" + path;
+        }
+        return path;
     }
 
     public void Initialize(MainNavTab tab)

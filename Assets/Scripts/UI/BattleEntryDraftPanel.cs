@@ -247,9 +247,11 @@ public class BattleEntryDraftPanel : MonoBehaviour
         else
         {
             _continueBtn = EnsureClickable(cont);
-            // 「继续」在预制体里只有 Image + Shadow，没有文字节点，这里补一个
-            if (cont.GetComponentInChildren<Text>() == null)
-                CreateText(cont, "继续", 26, Color.white);
+            // 2026-10-04 主人拍板：「继续」按钮不要文字，只留美术图标。
+            // 不管预制体自带还是别处补的 Text，一律关掉 —— 不留第二个文字入口。
+            var contTexts = cont.GetComponentsInChildren<Text>(true);
+            for (int i = 0; i < contTexts.Length; i++)
+                contTexts[i].gameObject.SetActive(false);
             if (_continueBtn != null) _continueBtn.onClick.AddListener(OnContinueClicked);
         }
 
@@ -435,15 +437,12 @@ public class BattleEntryDraftPanel : MonoBehaviour
     IEnumerator CoAnimHeight(float target)
     {
         float from = _panel.sizeDelta.y;
-        bool expand = target > from;
         if (Mathf.Approximately(from, target))
         {
             _panel.sizeDelta = new Vector2(_panel.sizeDelta.x, target);
-            ApplyShift(expand ? ContentShiftUp : 0f);
+            ApplyShiftForHeight();
             yield break;
         }
-        float fromShift = expand ? 0f : ContentShiftUp;
-        float toShift = expand ? ContentShiftUp : 0f;
         float t = 0f;
         while (t < AnimSec)
         {
@@ -451,11 +450,25 @@ public class BattleEntryDraftPanel : MonoBehaviour
             float k = Mathf.Clamp01(t / AnimSec);
             float e = 1f - (1f - k) * (1f - k);          // ease-out
             _panel.sizeDelta = new Vector2(_panel.sizeDelta.x, Mathf.Lerp(from, target, e));
-            ApplyShift(Mathf.Lerp(fromShift, toShift, e));
+            ApplyShiftForHeight();
             yield return null;
         }
         _panel.sizeDelta = new Vector2(_panel.sizeDelta.x, target);
-        ApplyShift(toShift);
+        ApplyShiftForHeight();
+    }
+
+    /// <summary>
+    /// 按面板<b>当前实际高度</b>算内容该上移多少（2026-10-04 主人拍板）。
+    /// 内容锚在父中心 → 面板长高 (h-600) 时会自动带出 (h-600)*0.5；这里再手动补同样多，
+    /// 总位移 = h-600（展开到 750 正好 150 = 底部让出的整块空地）。
+    /// ⚠ 绝不再用 "target &gt; from" 反推方向：面板高度若已是 750，反推得到 expand=false
+    /// → ApplyShift(0) → 内容完全不上移、抽奖按钮落进内容里被遮住（主人实测的 bug）。
+    /// 改成按高度算之后，面板此刻是 600 还是 750，结果都对。
+    /// </summary>
+    void ApplyShiftForHeight()
+    {
+        float dy = Mathf.Max(0f, (_panel.sizeDelta.y - HeightCollapsed) * 0.5f);
+        ApplyShift(dy);
     }
 
     /// <summary>
