@@ -615,6 +615,8 @@ public class LevelUpDraftUI : MonoBehaviour
             case DraftCardKind.MercLevelUp: return $"佣兵升级 Lv{card.MercLevel}";
             case DraftCardKind.MercStarUp: return $"佣兵升星 ★{card.Star}";
             case DraftCardKind.Equip: return "本局装备";
+            // 2026-10-05 安慰奖只剩金币一档（强化石那档主人拍板删了），别落进 default 显示成「强化」
+            case DraftCardKind.Gold: return "金币";
             default: return "强化";
         }
     }

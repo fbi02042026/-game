@@ -162,12 +162,17 @@ public static class WeaponCombatTable
         return false;
     }
 
-    /// <summary>精英/Boss 期望 TTK 缩放：章节越高血量系数越高，便于调表。</summary>
-    public static float EliteBossHpMul(int chapter, bool isBoss)
+    /// <summary>
+    /// 精英/Boss 期望 TTK 缩放：章节越高、章内越靠后，血量系数越高，便于调表。
+    /// <para>2026-10-05：倍率改走 <c>GameConfig.GetStatScale(章, 章内第几关)</c> ——
+    /// 章倍率 × 章内倍率，与 <c>Monster.Init</c> 里普通怪用的是<b>同一个出口</b>，
+    /// 不会出现「普通怪爬坡了、Boss 没爬」这种两边对不上的情况。</para>
+    /// </summary>
+    public static float EliteBossHpMul(int chapter, bool isBoss, int stageIndex0Based)
     {
-        float ch = GameConfig.GetChapterStatScale(chapter);
+        float scale = GameConfig.GetStatScale(chapter, stageIndex0Based);
         // Boss 额外抬高，目标 TTK 更长
         float role = isBoss ? GameConfig.BOSS_TTK_HP_MUL : GameConfig.ELITE_TTK_HP_MUL;
-        return ch * role;
+        return scale * role;
     }
 }

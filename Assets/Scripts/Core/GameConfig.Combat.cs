@@ -129,6 +129,13 @@ public static partial class GameConfig
     /// 只动这一个数，刷怪位置/交战点一概不动。
     /// </summary>
     public const float MONSTER_ENTER_SPEED = 1.0f;
+    /// <summary>
+    /// 【2026-10-05 主人拍板「多点出生点」】同波第 i 只怪的入场起点比第 0 只再往外错开多少（世界单位）。
+    /// 一整波不再从屏外同一个点排队进场，而是从远近不同的位置一起涌进来。
+    /// 不能复用 MONSTER_WAVE_SPACING(0.72)：进场速度只有 1.0，按 0.72 累加第 8 只要走 6.4 秒才到，
+    /// 观感就变成「一只一只慢慢来」而不是「一波压过来」。0.18 时最远那只比第一只晚约 1.3 秒抵达。
+    /// </summary>
+    public const float MONSTER_ENTER_DEPTH_STEP = 0.18f;
     /// <summary>入场起点比交战点再远多少（世界单位）；过大容易出场「往前窜」</summary>
     public const float MONSTER_ENTER_DISTANCE = 1.2f;
     /// <summary>玩家出生相对 SpawnPoint 再往左偏（世界单位）</summary>
@@ -412,6 +419,29 @@ public static partial class GameConfig
     public static float GetChapterStatScale(int gameChapter)
     {
         return ChapterStatScaleTable.Get(gameChapter);
+    }
+
+    /// <summary>
+    /// 按「章内第几关」取章内爬坡倍率（读 stage_stat_scale；缺表回退 Fallback）。
+    /// 2026-10-05 新增：主人要求「每章里面的关卡也是如此」递增。
+    /// </summary>
+    /// <param name="stageIndex0Based">章内第几关（0 起，0~9）；负数当作第 1 关。</param>
+    public static float GetStageStatScale(int stageIndex0Based)
+    {
+        return StageStatScaleTable.Get0Based(stageIndex0Based);
+    }
+
+    /// <summary>
+    /// <b>怪物属性总倍率的唯一出口</b> = 章倍率 × 章内倍率。
+    /// <para>2026-10-05 主人拍板：难度曲线「每章都上升、有高有低，章内关卡也是如此」。
+    /// 拆成两张表（chapter_stat_scale / stage_stat_scale）后，<b>相乘只有这一处</b> ——
+    /// 谁要算最终倍率就调这里，绝不许在别处自己把两个数乘一遍（那才是「多入口」）。</para>
+    /// </summary>
+    /// <param name="gameChapter">第几章（1 起）</param>
+    /// <param name="stageIndex0Based">章内第几关（0 起，0~9）</param>
+    public static float GetStatScale(int gameChapter, int stageIndex0Based)
+    {
+        return GetChapterStatScale(gameChapter) * GetStageStatScale(stageIndex0Based);
     }
     // ===== 2026-09-21：以下 15 项已迁 combat_tuning 表，默认值 = 原硬编码值（零行为变化）=====
     /// <summary>精英额外 TTK 血量倍率（叠在章节系数上）</summary>

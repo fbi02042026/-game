@@ -141,6 +141,26 @@ public partial class BattleUI : MonoBehaviour
         mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
     }
 
+    /// <summary>
+    /// 引导局「未招募」佣兵槽的预览（2026-10-05 主人拍板）：
+    /// 灰掉 + 佣兵头像 + 血条 + 稀有度头像框，不挂锁图标。
+    /// 人从哪来 = 真源链 <c>StoryProgress.TutorialMercHireId</c>（H011 小白）→ <c>MercRosterDefs</c> 花名册，
+    /// 不写死头像 / 血量 / 稀有度，花名册一改这里跟着变。
+    /// </summary>
+    public void ApplyTutorialMercPreview(CharacterSlotUI slot)
+    {
+        if (slot == null) return;
+        string hireId = StoryProgress.TutorialMercHireId;
+        MercRosterDefs.Def def;
+        bool hasDef = MercRosterDefs.TryGetByHireId(hireId, out def);
+        float maxHp = hasDef ? def.BaseHp : 0f;
+        slot.ShowLockedPreview(
+            MercPortraitSprites.GetHead(hireId),
+            MercHireSession.LoadPortraitFrame(hasDef ? def.Rarity : MercRosterDefs.MercRarity.Common),
+            hasDef && !string.IsNullOrEmpty(def.Nickname) ? def.Nickname : StoryProgress.TutorialMercNickname,
+            maxHp, maxHp);
+    }
+
     void RefreshTutorialMercLiveBar()
     {
         var mm = MercenaryManager.Instance;
@@ -259,8 +279,17 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 头像栏保留美术摆的位置，但不许超出父容器：
-    /// 窄屏/高屏下预制体的固定偏移会把整条栏顶到框外，这里只把越界的部分推回来。
+    /// 头像栏保留美术摆的位置，<b>只在父级真有可见边框时才夹</b>。
+    ///
+    /// <para>⚠ 2026-10-05 主人拍板（根因修复）：父级 <c>zhuangshi</c> 是<b>纯 RectTransform、零组件</b>
+    /// 的锚点容器，它的 100×100 sizeDelta 只是 Unity 新建节点的默认值，<b>不是框、不是边界</b>。
+    /// 老版本拿这个 100×100 当硬边界，把 CharacterBar（y=165）一路推到 y=0，
+    /// 每次进战斗推一次 —— 主人报的「老是调整 zhuangshi 里面的位置」就是这里干的，
+    /// 跟 BattleEntryDraftPanel 一点关系都没有。</para>
+    ///
+    /// <para>现在的判据：父级<b>没有 Image/Graphic 之类的可见框</b>时一律不夹
+    /// （美术摆哪就哪，类只做兜底、不做重排）；只有父级确实画了一块可见面板（宽高有效）
+    /// 才把越界的部分推回来。</para>
     /// </summary>
     public void ClampCharacterBarInsideParent()
     {
@@ -269,6 +298,11 @@ public partial class BattleUI : MonoBehaviour
         if (bar == null) return;
         var parent = bar.parent as RectTransform;
         if (parent == null) return;
+
+        // 父级没有可见 Graphic（zhuangshi 就是这种纯锚点容器）→ 它没有"框"，无从谈越界。
+        // 绝不按它默认的 100×100 去夹子节点，否则每次进战斗都会把美术摆好的栏推走。
+        if (parent.GetComponent<Graphic>() == null)
+            return;
 
         // 布局这一帧可能还没算完，先强制刷新再量
         LayoutRebuilder.ForceRebuildLayoutImmediate(bar);

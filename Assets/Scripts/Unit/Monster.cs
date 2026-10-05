@@ -659,10 +659,14 @@ public class Monster : UnitBase
         // ??????????????????/????
         attr.ResetToBase();
         int guildLv = SaveSystem.Instance?.Data?.guildLevel ?? 0;
-        float chapterScale = GameConfig.GetChapterStatScale(chapter);
+        // 2026-10-05 主人拍板：难度曲线「每章都上升、章内关卡也要上升」。
+        // → 总倍率 = 章倍率 × 章内倍率，**唯一出口是 GameConfig.GetStatScale(章, 章内第几关)**，
+        //   绝不在这里自己把两个数乘一遍（那是第二处口径，改表时会漏）。
+        int stageIdx0 = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
+        float statScale = GameConfig.GetStatScale(chapter, stageIdx0);
         float guildScale = 1f + GameConfig.GUILD_SCALE_PER * guildLv;
         float diffScale = BattleManager.Instance != null ? BattleManager.Instance.DifficultyStatScale : 1f;
-        float scale = chapterScale * guildScale * diffScale;
+        float scale = statScale * guildScale * diffScale;
 
         float baseHp = template != null && template.baseHp > 0 ? template.baseHp : GameConfig.MONSTER_NORMAL_HP;
         float baseAtk = template != null && template.baseAttack > 0 ? template.baseAttack : GameConfig.MONSTER_NORMAL_ATK;
@@ -711,8 +715,8 @@ public class Monster : UnitBase
 
         float waveMul = 1f + waveNum * 0.05f;
         float ttkMul = (bossUnit || eliteWave)
-            ? WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit)
-            : GameConfig.GetChapterStatScale(chapter);
+            ? WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit, stageIdx0)
+            : GameConfig.GetStatScale(chapter, stageIdx0);
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * GameConfig.MONSTER_HP_GLOBAL_MUL);

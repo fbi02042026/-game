@@ -29,6 +29,22 @@ public interface IBattleMode
     bool DropsEquipment { get; }
 
     /// <summary>
+    /// 本模式开局送几次**免费**抽奖（不扣抽奖币）。0 = 没有。
+    /// <para>2026-10-05 主人拍板：金币本「开始的时候可以先抽几次，不用耗金币，暂定 5 次」。
+    /// 金币本是**单关**玩法，没有「这关攒着下关抽定向」的节奏，局内币经济在它身上不成立 ——
+    /// 所以直接给 N 次免费抽，让玩家一进门就把构筑搭起来，再拿这套构筑去打。</para>
+    /// ⚠ 次数写在模式上（<c>SlotMachineDefs.GOLD_DUNGEON_FREE_DRAWS</c>），核心只问这个数。
+    /// </summary>
+    int FreeEntryDraws { get; }
+
+    /// <summary>
+    /// 本模式通关要不要发**局内抽奖币**（<c>SlotCoin</c>）。
+    /// <para>金币本 = false：它打完就直接结算回城、币随局清零（<c>SlotMachineSystem.ClearRunCoins</c>），
+    /// 通关再发一笔马上就被清掉的钱，只会让玩家看到一条「+100」然后归零的假收益。</para>
+    /// </summary>
+    bool GrantsRunCoins { get; }
+
+    /// <summary>
     /// 建关：决定这一局打哪些关卡。
     /// 核心只调这一个方法，不再写 <c>if (IsGoldDungeon) ... else ...</c>。
     /// </summary>

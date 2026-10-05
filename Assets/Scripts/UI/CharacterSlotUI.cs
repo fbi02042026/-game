@@ -776,6 +776,55 @@ public class CharacterSlotUI
         if (UnhiredShowPlayerLook) KeepBarGraphicsVisible();   // 条本体保留，跟玩家槽同一套
     }
 
+    /// <summary>
+    /// 未招募「预览态」：整体压暗（灰掉）+ 佣兵头像 + 血条 + 稀有度头像框，<b>不显示锁图标</b>。
+    /// 2026-10-05 主人拍板：头像栏「跟现在一样灰掉，但应该有佣兵头像和血条，没有锁的图标，
+    /// 还有跟佣兵稀有度一样的头像框」。
+    /// 与 <see cref="ShowUnavailable"/> 的唯一区别：这里拿得到「这个槽将来站的是谁」，
+    /// 所以把人画出来，而不是留白 + 挂一把锁。拿不到人（普通局未解锁槽）仍旧走 ShowUnavailable。
+    /// </summary>
+    public void ShowLockedPreview(Sprite face, Sprite frame, string displayName, float hp, float maxHp)
+    {
+        if (root == null) return;
+        ApplyDim(false);          // 先还原，避免随后新设的颜色逃过压暗
+        SetEnergyEnabled(false);
+        root.SetActive(true);
+        EnsureLockedOverlay();
+        if (lockedOverlay != null) lockedOverlay.SetActive(false);   // 主人：不要锁的图标
+        SetPortrait(face);
+        SetFrame(frame);          // 头像框 = 佣兵稀有度（普通灰白 / 稀有蓝 / 传奇橙金）
+        SetSkillBadge(null);
+        SetJobIcon(null);
+        if (nameText != null) nameText.text = displayName ?? "";
+        if (levelLabel != null)
+        {
+            levelLabel.gameObject.SetActive(false);
+            levelLabel.text = "";
+        }
+        if (hpText != null)
+        {
+            hpText.gameObject.SetActive(true);
+            hpText.text = $"{Mathf.RoundToInt(hp)}";
+        }
+        if (hpBarFill != null)
+        {
+            hpBarFill.enabled = true;
+            hpBarFill.fillAmount = maxHp > 0f ? Mathf.Clamp01(hp / maxHp) : 0f;
+        }
+        if (lanBarFill != null)
+        {
+            lanBarFill.enabled = true;
+            lanBarFill.fillAmount = 0f;
+        }
+        if (lanText != null)
+        {
+            lanText.text = "";
+            lanText.gameObject.SetActive(false);
+        }
+        HideShieldBar();
+        ApplyDim(true);           // 最后整体压暗：灰掉
+    }
+
     void ApplyLockedOverlayText(string text)
     {
         if (lockedOverlay == null) return;

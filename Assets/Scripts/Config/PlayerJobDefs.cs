@@ -350,7 +350,10 @@ public static class PlayerJobDefs
                     // 这套名字错配的根因在 EquipNameGen.TempName（按 id 猜名字），已一并修掉。
                     // 表（player_job_base_stats 主手模板ID）与这里必须同值：两处不一致 = 表一丢/没 Cook 就换外观。
                     MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_sword_1"),
-                    OffTemplateId = KitTemplate(row.StarterOffTemplateId, "equip_steelshield1"),
+                    // 2026-10-05 主人拍板：剑盾起步的盾是「木制圆盾」equip_shield_1（spumName/icon = Shield_1）。
+                    // 旧值 equip_steelshield1 是钢盾，档位太高，不该出现在起步套里。
+                    // 表（player_job_base_stats 副手模板ID）与这里必须同值，两处都改。
+                    OffTemplateId = KitTemplate(row.StarterOffTemplateId, "equip_shield_1"),
                     ForceMainOneHand = true
                 };
             case PlayerJobId.Berserker:

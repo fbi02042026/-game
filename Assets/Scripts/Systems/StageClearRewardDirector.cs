@@ -982,17 +982,16 @@ public class StageClearRewardDirector : MonoBehaviour
             if (cats == null || cats.Count == 0) yield break;
 
             bool done = false;
+            // 2026-10-05：装备卡要弹「换不换」确认窗（异步），不能在回调里直接结算 ——
+            // 这里只记下玩家选了哪张，真正的生效挪到等待循环之后（那里才能 yield）。
+            DraftCard chosen = default;
             var ui = LevelUpDraftUI.ShowCategorized(
                 cats,
                 DraftPool.BuildCards,
                 pickCount > 1 ? $"战斗结束！先选方向（{round + 1}/{pickCount}）" : "战斗结束！先选方向，再挑强化",
                 card =>
                 {
-                    if (card.IsValid)
-                    {
-                        dir.ApplyCard(card);
-                        RunLoadout.Save();
-                    }
+                    if (card.IsValid) chosen = card;
                     RunDraftDirector.RefreshSkillPower();
                     done = true;
                 },
@@ -1015,6 +1014,29 @@ public class StageClearRewardDirector : MonoBehaviour
                 Debug.LogWarning("[StageClearReward] 战斗结束三选一超时未选择，已跳过");
                 yield break;
             }
+
+            if (chosen.IsValid)
+            {
+                if (chosen.Kind == DraftCardKind.Equip)
+                {
+                    // 与进关抽奖同口径：换不换要问玩家，换下来的旧件折强化石
+                    yield return dir.CoApplyEquipCard(chosen, (ok, msg) =>
+                    {
+                        if (!ok && !string.IsNullOrEmpty(msg)) UIManager.Instance?.ShowToast(msg);
+                    });
+                }
+                else if (!dir.TryApplyCard(chosen, out string applyMsg))
+                {
+                    Debug.LogError($"[StageClearReward] 战斗结束三选一结果无法生效：{applyMsg}");
+                    UIManager.Instance?.ShowToast(applyMsg);
+                }
+                else if (!string.IsNullOrEmpty(applyMsg))
+                {
+                    UIManager.Instance?.ShowToast(applyMsg);
+                }
+                RunLoadout.Save();
+            }
+
             if (round < pickCount - 1) yield return new WaitForSecondsRealtime(0.25f);
         }
     }

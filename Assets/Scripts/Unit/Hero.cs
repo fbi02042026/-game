@@ -410,7 +410,7 @@ public class Hero : UnitBase
                 ApplyFacing(facingDir);
             }
 
-            // 车道：固定 ±BATTLE_LANE_HALF，纵向与横向同基础移速
+            // 车道：上下界由 map 下的 walk 框投影决定（BattleLaneBounds，不再是常量），纵向与横向同基础移速
             if (Mathf.Abs(_manualDir.y) > 0.08f)
             {
                 float lane = LaneY + _manualDir.y * spd * Time.deltaTime;

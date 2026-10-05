@@ -22,12 +22,16 @@ public struct DraftCard
     public int PowerDelta;
     /// <summary>装备卡专用：本局装备实例（撤离不带出）。</summary>
     public EquipInstance Equip;
+    /// <summary>金币卡的数量（2026-10-05 安慰奖用；强化石那档已删）。</summary>
+    public int Amount;
 
     public bool IsValid
     {
         get
         {
             if (Kind == DraftCardKind.Equip) return Equip != null;
+            // 金币：Id 只是类型标记，真正的判据是数量 > 0（2026-10-05）
+            if (Kind == DraftCardKind.Gold) return Amount > 0;
             return !string.IsNullOrEmpty(Id);
         }
     }
@@ -90,50 +94,288 @@ public static class DraftPool
     // 第二层：具体三选一
     // ============================================================
 
-    public static List<DraftCard> BuildCards(DraftCategory c)
+    /// <summary>
+    /// 该类的三选一（含安慰奖）。
+    /// </summary>
+    public static List<DraftCard> BuildCards(DraftCategory c) => BuildCards(c, true);
+
+    /// <param name="consolation">
+    /// 要不要把「金币」安慰奖放进池子。（2026-10-05：强化石那档主人拍板删了，只剩金币一档）
+    /// 2026-10-05：<b>引导局定序那几抽必须传 false</b> —— 主人拍板「第一次装备、第二次佣兵、第三次技能」，
+    /// 若安慰奖混进去，玩家花第一抽的钱抽到一堆币，教学就白教了（保底不用写出来，但得真的给到）。
+    /// 正式关恒传 true —— 主人拍板「正式关应该都是随机的」，安慰奖从第 1 抽起就在池里。
+    /// 免费老虎机、通关三选一这类「白送的」继续带安慰奖。
+    /// </param>
+    public static List<DraftCard> BuildCards(DraftCategory c, bool consolation)
     {
         switch (c)
         {
-            case DraftCategory.Merc: return BuildMercCards();
-            case DraftCategory.Equip: return BuildEquipCards();
-            default: return BuildSkillCards();
+            case DraftCategory.Merc: return BuildMercCards(consolation);
+            case DraftCategory.Equip: return BuildEquipCards(consolation);
+            default: return BuildSkillCards(consolation);
         }
     }
 
-    static List<DraftCard> BuildSkillCards()
+    static List<DraftCard> BuildSkillCards(bool consolation)
     {
         var cards = new List<DraftCard>(CardCount);
-        var pool = new List<WeightedCard>();
-        pool.AddRange(CollectNewSkills());
-        pool.AddRange(CollectUpgradableSkills());
-        FillFromWeighted(pool, cards);
+        FillFromWeighted(BuildWeightedPool(DraftCategory.Skill, consolation), cards);
         FillFallback(cards, DraftCategory.Skill);
         return cards;
     }
 
-    static List<DraftCard> BuildMercCards()
+    static List<DraftCard> BuildMercCards(bool consolation)
     {
         var cards = new List<DraftCard>(CardCount);
-        var pool = new List<WeightedCard>();
-        pool.AddRange(CollectRecruitMercs());
-        pool.AddRange(CollectMercLevelCards());
-        pool.AddRange(CollectMercStarCards());
-        FillFromWeighted(pool, cards);
+        FillFromWeighted(BuildWeightedPool(DraftCategory.Merc, consolation), cards);
         FillFallback(cards, DraftCategory.Merc);
         return cards;
     }
 
-    static List<DraftCard> BuildEquipCards()
+    /// <summary>
+    /// 该类卡池的**完整加权候选**（三选一和「直接抽 1 张」共用同一份，概率公示也从这里算 ——
+    /// 只此一处，弹窗上写的概率就永远是真数，不会跟实际抽取对不上）。
+    /// </summary>
+    static List<WeightedCard> BuildWeightedPool(DraftCategory c, bool consolation)
+    {
+        var pool = new List<WeightedCard>();
+        switch (c)
+        {
+            case DraftCategory.Merc:
+                pool.AddRange(CollectRecruitMercs());
+                pool.AddRange(CollectMercLevelCards());
+                pool.AddRange(CollectMercStarCards());
+                break;
+            case DraftCategory.Equip:
+                pool.AddRange(CollectEquipCards());
+                break;
+            default:
+                pool.AddRange(CollectNewSkills());
+                pool.AddRange(CollectUpgradableSkills());
+                break;
+        }
+        AddConsolation(pool, consolation);
+        return pool;
+    }
+
+    /// <summary>
+    /// 「点了抽奖按钮直接出结果」用：按权重从整池里抽 <b>1 张</b>。
+    /// 概率就是「权重 ÷ 总权重」，跟概率公示弹窗上写的完全一致 ——
+    /// 之前是「先造 3 张再等权选 1」，那 3 张是无放回抽的，实际概率跟权重并不相等，
+    /// 公示出来就成了假数。
+    /// 池子空时回落强化卡，保持「永不空手」。
+    /// </summary>
+    public static DraftCard PickOne(DraftCategory c, bool consolation)
+    {
+        var pool = BuildWeightedPool(c, consolation);
+        var picked = new HashSet<string>();
+        var one = new List<DraftCard>(1);
+        if (pool.Count > 0 && TryPickWeighted(pool, 1, picked, one) && one.Count > 0)
+            return one[0];
+        return BuildPowerUpCard(0);
+    }
+
+    /// <summary>概率公示的一行。<see cref="Section"/> 只有「类型」「品质」两种，弹窗按它分段。</summary>
+    public struct OddsRow
+    {
+        public string Section;
+        public string Label;
+        public float Percent;
+        public Color Color;
+    }
+
+    public const string SEC_TYPE = "类型";
+    public const string SEC_QUALITY = "品质";
+
+    // 品质段的固定行序：好东西排前面，玩家一眼看到「传说有多稀有」（2026-10-05 主人要的极简口径）
+    static readonly string[] QualityOrder = { "传说", "稀有", "普通", "金币" };
+
+    /// <summary>
+    /// 概率公示弹窗的表：按**当前真实卡池现算**，不是写死的文案。
+    /// 玩家解锁的技能变多、佣兵池变了，这里会跟着变 —— 玩家看到的就是真概率。
+    ///
+    /// <para>只给两段，主人拍板「简单点方便玩家理解」：<br/>
+    /// ① 类型段：抽到 技能 / 佣兵 / 装备 各占多少（权重真源 <c>SlotMachineDefs.CategoryWeight</c>，
+    ///    与 <c>SlotMachineSystem.RollCategory</c> 同一份 —— 改权重两边一起变，不会各说一套）；<br/>
+    /// ② 品质段：抽到 普通 / 稀有 / 传说 / 金币 各占多少（先按类型权重分层，类内再按品质权重，两层相乘）。</para>
+    ///
+    /// <para>2026-10-05：安慰奖带不带，跟 <c>PickOne</c> 这一次抽<b>用同一个口径</b>
+    ///（<c>SlotMachineSystem.InGuaranteeWindow()</c>）—— 引导局那几抽不带安慰奖，公示里也就不能出现金币；
+    /// 否则「公示的概率」跟「实际抽到的概率」对不上，就是假数。</para>
+    /// </summary>
+    public static List<OddsRow> BuildOddsRows()
+    {
+        var rows = new List<OddsRow>();
+        bool consolation = !SlotMachineSystem.InGuaranteeWindow();
+        var cats = BuildCategories();
+        if (cats.Count == 0) return rows;
+
+        int catTotal = 0;
+        for (int i = 0; i < cats.Count; i++)
+            catTotal += Mathf.Max(1, SlotMachineDefs.CategoryWeight(cats[i]));
+        if (catTotal <= 0) return rows;
+
+        // —— 第一段：抽到哪一类 ——
+        for (int i = 0; i < cats.Count; i++)
+        {
+            var c = cats[i];
+            int w = Mathf.Max(1, SlotMachineDefs.CategoryWeight(c));
+            rows.Add(new OddsRow
+            {
+                Section = SEC_TYPE,
+                Label = CategoryName(c),
+                Percent = w / (float)catTotal * 100f,
+                Color = CategoryColor(c)
+            });
+        }
+
+        // —— 第二段：抽到什么品质 ——
+        var acc = new Dictionary<string, float>();
+        var colors = new Dictionary<string, Color>();
+        for (int i = 0; i < cats.Count; i++)
+        {
+            var c = cats[i];
+            float catP = Mathf.Max(1, SlotMachineDefs.CategoryWeight(c)) / (float)catTotal;
+            var pool = BuildWeightedPool(c, consolation);
+            int total = 0;
+            for (int j = 0; j < pool.Count; j++)
+                if (pool[j].Card.IsValid) total += Mathf.Max(1, pool[j].Weight);
+            if (total <= 0) continue;
+
+            for (int j = 0; j < pool.Count; j++)
+            {
+                var w = pool[j];
+                if (!w.Card.IsValid) continue;
+                string label = QualityBucket(w.Card);
+                float cur;
+                acc.TryGetValue(label, out cur);
+                acc[label] = cur + catP * (Mathf.Max(1, w.Weight) / (float)total);
+                colors[label] = QualityColor(w.Card);
+            }
+        }
+        for (int i = 0; i < QualityOrder.Length; i++)
+        {
+            float p;
+            if (!acc.TryGetValue(QualityOrder[i], out p)) continue;
+            rows.Add(new OddsRow
+            {
+                Section = SEC_QUALITY,
+                Label = QualityOrder[i],
+                Percent = p * 100f,
+                Color = colors[QualityOrder[i]]
+            });
+        }
+        return rows;
+    }
+
+    /// <summary>类型段的三个名字（只此一处，弹窗不许再写一份）。</summary>
+    static string CategoryName(DraftCategory c)
+    {
+        switch (c)
+        {
+            case DraftCategory.Merc: return "佣兵";
+            case DraftCategory.Equip: return "装备";
+            default: return "技能";
+        }
+    }
+
+    static Color CategoryColor(DraftCategory c)
+    {
+        switch (c)
+        {
+            case DraftCategory.Merc: return new Color(0.55f, 0.90f, 0.70f);
+            case DraftCategory.Equip: return new Color(0.98f, 0.78f, 0.42f);
+            default: return new Color(0.62f, 0.82f, 1f);
+        }
+    }
+
+    /// <summary>品质段把卡片归到哪个桶（同一桶的概率会累加）—— 只有四档，没有「史诗」。</summary>
+    static string QualityBucket(DraftCard card)
+    {
+        if (card.Kind == DraftCardKind.Gold) return "金币";
+        return RarityBucket(card.Rarity);
+    }
+
+    static string RarityBucket(SkillRarity r)
+    {
+        switch (r)
+        {
+            // 2026-10-05 主人拍板：没有「史诗」品质 —— 紫装 / 原史诗技能都已并进传说档，
+            // 这一档不再出现在概率公示里（SkillRarity.Epic 只为旧存档留着，新代码不产出）。
+            case SkillRarity.Legendary: return "传说";
+            case SkillRarity.Epic: return "传说";
+            case SkillRarity.Rare: return "稀有";
+            default: return "普通";
+        }
+    }
+
+    static Color QualityColor(DraftCard card)
+    {
+        if (card.Kind == DraftCardKind.Gold) return new Color(1f, 0.85f, 0.35f);
+        switch (card.Rarity)
+        {
+            case SkillRarity.Legendary: return new Color(1f, 0.62f, 0.25f);
+            case SkillRarity.Epic: return new Color(1f, 0.62f, 0.25f);
+            case SkillRarity.Rare: return new Color(0.42f, 0.72f, 0.98f);
+            default: return new Color(0.88f, 0.88f, 0.90f);
+        }
+    }
+
+    /// <summary>往池子里塞安慰奖（只有金币一档）。权重见 <see cref="SlotMachineDefs"/>。</summary>
+    static void AddConsolation(List<WeightedCard> pool, bool consolation)
+    {
+        if (!consolation) return;
+        pool.Add(CollectGoldCard());
+    }
+
+    /// <summary>安慰奖一：金币（= 抽奖币，本局抽奖用的那套）。</summary>
+    static WeightedCard CollectGoldCard()
+    {
+        int amount = SlotMachineSystem.GoldPrize();
+        return new WeightedCard
+        {
+            Card = new DraftCard
+            {
+                Kind = DraftCardKind.Gold,
+                Id = "gold",
+                Title = $"金币 ×{amount}",
+                Desc = "抽奖币回血 —— 接着抽！",
+                Rarity = SkillRarity.Common,
+                Tag = SynergyTag.None,
+                Star = 1,
+                Amount = amount,
+                PowerDelta = 0
+            },
+            Weight = SlotMachineDefs.WEIGHT_GOLD,
+            Key = "gold"
+        };
+    }
+
+    // ⚠【2026-10-05 已删除】CollectMaterialCard() —— 主人拍板「强化石不能抽奖得到」。
+    // 强化石只剩铁匠铺 / 分解这两条路，抽奖池里彻底没有它。删了就删了，不留开关。
+
+    static List<DraftCard> BuildEquipCards(bool consolation)
     {
         var cards = new List<DraftCard>(CardCount);
         if (!HasEquipContent()) return cards;
 
+        FillFromWeighted(BuildWeightedPool(DraftCategory.Equip, consolation), cards);
+        FillFallback(cards, DraftCategory.Equip);
+        return cards;
+    }
+
+    /// <summary>装备类的加权候选。生成逻辑只此一处（BuildWeightedPool 与概率公示都走它）。</summary>
+    static List<WeightedCard> CollectEquipCards()
+    {
+        var pool = new List<WeightedCard>();
         int blacksmith = TownSystem.Instance != null
             ? TownSystem.Instance.GetBuildingLevel(BuildingType.Blacksmith)
             : 1;
-        var job = PlayerJobDefs.GetSelected();
         StageType st = ResolveDraftStageType();
 
+        // 2026-10-05：装备也走**加权**了（跟技能 / 佣兵同一把尺子），
+        // 之前是「生成几件就直接全塞进去」，橙色跟白色一样常见 —— 主人要的
+        // 「好的佣兵技能装备什么的都是低概率的」在装备这边根本没生效。
         for (int i = 0; i < CardCount; i++)
         {
             EquipInstance eq = null;
@@ -149,21 +391,28 @@ public static class DraftPool
             }
             if (eq == null) break;
 
-            cards.Add(new DraftCard
+            var rar = MapRarity(eq.rarity);
+            pool.Add(new WeightedCard
             {
-                Kind = DraftCardKind.Equip,
-                Id = "equip_" + eq.templateId + "_" + i,
-                Title = string.IsNullOrEmpty(eq.equipName) ? eq.templateId : eq.equipName,
-                Desc = FormatEquipDesc(eq),
-                Rarity = MapRarity(eq.rarity),
-                Tag = SynergyTag.None,
-                Star = eq.star < 1 ? 1 : eq.star,
-                PowerDelta = (int)eq.rarity * 60 + Mathf.Max(1, eq.star) * 80
-                             + (eq.attrBonus != null ? eq.attrBonus.Count : 0) * 30,
-                Equip = eq
+                Card = new DraftCard
+                {
+                    Kind = DraftCardKind.Equip,
+                    Id = "equip_" + eq.templateId + "_" + i,
+                    Title = string.IsNullOrEmpty(eq.equipName) ? eq.templateId : eq.equipName,
+                    Desc = FormatEquipDesc(eq),
+                    Rarity = rar,
+                    Tag = SynergyTag.None,
+                    Star = eq.star < 1 ? 1 : eq.star,
+                    PowerDelta = (int)eq.rarity * 60 + Mathf.Max(1, eq.star) * 80
+                                 + (eq.attrBonus != null ? eq.attrBonus.Count : 0) * 30,
+                    Equip = eq
+                },
+                // 好装备低概率：橙 1 / 紫 3 / 蓝 6 / 白 10，与技能、佣兵同一套权重
+                Weight = SkillRarityUtil.Weight(rar),
+                Key = "equip_" + eq.templateId + "_" + i
             });
         }
-        return cards;
+        return pool;
     }
 
     /// <summary>抽卡用关卡类型：只保留精英/Boss 的品质倾斜，其余按普通关，避免休息/商人关出怪池。</summary>
@@ -176,7 +425,8 @@ public static class DraftPool
         return StageType.Normal;
     }
 
-    static string FormatEquipDesc(EquipInstance eq)
+    /// <summary>装备的一句话描述（部位 + 最多三条属性 + 强化等级）。替换确认弹窗复用，不另写一份。</summary>
+    public static string FormatEquipDesc(EquipInstance eq)
     {
         var sb = new StringBuilder();
         sb.Append(EquipUiText.Slot(eq.slotType));
@@ -442,12 +692,17 @@ public static class DraftPool
     // （把 ★4 判成 Epic、★2 判成 Rare），导致同一佣兵图鉴是「稀有」、抽卡卡面是「史诗」。
     // 现统一走 SkillRarityUtil.FromMercStar。
 
-    static SkillRarity MapRarity(Rarity r)
+    /// <summary>装备品质 → 卡牌稀有度。对外公开：替换确认弹窗要显示品质名，不能自己再写一份映射。</summary>
+    /// <para>2026-10-05 主人拍板「没有史诗品质」→ 卡面统一三档 普通 / 稀有 / 传说，
+    /// 紫装（<c>Rarity.Epic</c>）并入传说档，跟技能那边 5 张原史诗技能并进传说是同一把尺子。
+    /// 要改成并进「稀有」就改这一行，别处没有第二份映射。
+    /// （抽奖池真源 RiftEquipGenerator 本来就只出 普通/稀有/传说 三档，Epic 只有表没加载的回退路径才会碰到。）</para>
+    public static SkillRarity MapRarity(Rarity r)
     {
         switch (r)
         {
-            case Rarity.Legendary: return SkillRarity.Legendary;
-            case Rarity.Epic: return SkillRarity.Epic;
+            case Rarity.Legendary:
+            case Rarity.Epic: return SkillRarity.Legendary;
             case Rarity.Rare:
             case Rarity.Uncommon: return SkillRarity.Rare;
             default: return SkillRarity.Common;

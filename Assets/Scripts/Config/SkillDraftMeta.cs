@@ -21,6 +21,12 @@ public static class SkillDraftMeta
     public const float AffinityDamageMul = 1.2f;
     public const float AffinityCooldownMul = 0.85f;
 
+    /// <summary>
+    /// 稀有度登记表的**唯一真源**。
+    /// <para>2026-10-05 主人拍板：**没有史诗品质**（品质统一三档 普通 / 稀有 / 传奇，
+    /// 跟装备表 NORMAL/RARE/LEGEND、佣兵三档对齐）→ 原来的 5 个史诗技能已并进「传说」。
+    /// 若主人要改成并进「稀有」，改这 5 行即可，别处没有第二份稀有度。</para>
+    /// </summary>
     static readonly Dictionary<string, Meta> Table = new Dictionary<string, Meta>
     {
         // —— 原始 6 技能 ——
@@ -29,10 +35,10 @@ public static class SkillDraftMeta
         { "battle_surge",    M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Berserker) },
         { "gale_stance",     M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
         { "deadly_focus",    M(SkillRarity.Common,    SynergyTag.Combo,   (int)PlayerJobId.Ranger) },
-        { "thunder_verdict", M(SkillRarity.Epic,      SynergyTag.Thunder, (int)PlayerJobId.Mage) },
+        { "thunder_verdict", M(SkillRarity.Legendary,      SynergyTag.Thunder, (int)PlayerJobId.Mage) },
 
         // —— 局内扩充池（VFX 走 attackKit 共用套，无 allyConfigId 依赖）——
-        { "flame_burst",     M(SkillRarity.Epic,      SynergyTag.Fire,    (int)PlayerJobId.Mage) },
+        { "flame_burst",     M(SkillRarity.Legendary,      SynergyTag.Fire,    (int)PlayerJobId.Mage) },
         { "thunder_chain",   M(SkillRarity.Rare,      SynergyTag.Thunder, (int)PlayerJobId.Mage) },
         { "wolf_volley",     M(SkillRarity.Rare,      SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
         { "war_banner",      M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Berserker) },
@@ -43,7 +49,7 @@ public static class SkillDraftMeta
         // —— 2026-09-15 第二轮扩充（13 → 24）——
         // 治疗线：牧师原来只有 1 个技能，补短 CD 续航 + 长 CD 大治疗
         { "swift_mend",      M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.Priest) },
-        { "sacred_revival",  M(SkillRarity.Epic,      SynergyTag.Guard,   (int)PlayerJobId.Priest) },
+        { "sacred_revival",  M(SkillRarity.Legendary,      SynergyTag.Guard,   (int)PlayerJobId.Priest) },
         // 守护线：补短 CD 常驻减伤 + 传说级长减伤
         { "stone_skin",      M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
         { "aegis_oath",      M(SkillRarity.Legendary, SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
@@ -52,11 +58,11 @@ public static class SkillDraftMeta
         { "quake_slam",      M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
         // 游侠线：暴击增益 + 召唤流补到 3 个
         { "hawk_eye",        M(SkillRarity.Common,    SynergyTag.Combo,   (int)PlayerJobId.Ranger) },
-        { "arrow_storm",     M(SkillRarity.Epic,      SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
+        { "arrow_storm",     M(SkillRarity.Legendary,      SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
         { "spirit_wolf",     M(SkillRarity.Common,    SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
         // 剑盾输出 + 火系高伤
         { "blade_storm",     M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.SwordShield) },
-        { "arcane_flame",    M(SkillRarity.Epic,      SynergyTag.Fire,    (int)PlayerJobId.Mage) },
+        { "arcane_flame",    M(SkillRarity.Legendary,      SynergyTag.Fire,    (int)PlayerJobId.Mage) },
     };
 
     static Meta M(SkillRarity r, SynergyTag tag, int jobAffinity)

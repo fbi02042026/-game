@@ -1,4 +1,4 @@
-/// <summary>
+﻿/// <summary>
 /// 本局战斗规则包。引导特例收拢于此，避免往 BattleManager 核心循环继续堆 IsTutorialRun。
 /// 正式关用 Formal；引导关用 Tutorial。身份判断仍可用 BattleManager.IsTutorialRun（= Rules.Active）。
 /// Phase 4 之后禁止再往 BM 核心循环加新的 IsTutorialRun 分支；新旗标加在本包。
@@ -42,21 +42,35 @@ public sealed class TutorialRules
     public bool AllowStackSpawnWhileAlive { get; private set; }
 
     /// <summary>
-    /// 引导关是否也开「局内构筑」（升级三选一 / 佣兵 / 技能三选一）。
-    /// 以前引导关整条构筑链是关掉的（玩家学不到核心循环），现在打开，
-    /// 但只放 <see cref="MaxTutorialDrafts"/> 次技能三选一，且卡组由 TutorialDirector 固定。
+    /// 引导关是否也开「局内构筑」（装备 / 佣兵 / 技能都从抽奖来）。
+    /// 以前引导关整条构筑链是关掉的（玩家学不到核心循环），现在打开。
+    /// 2026-10-05：教学拍已改成正式抽奖入口 <c>BattleManager.CoMidBattleDraft</c>，
+    /// 卡池与保底规则都在正式系统里（引导三拍的类型定序 = <c>SlotMachineDefs.TutorialDrawOrder</c>），
+    /// 引导不再自带一套。⚠ 定序**只有引导局走**，正式关从第 1 抽起就是等权随机。
     /// </summary>
     public bool EnableRunDraft { get; private set; }
-
-    /// <summary>引导关允许的技能三选一上限（0 = 不限）。</summary>
-    public int MaxTutorialDrafts { get; private set; }
 
     /// <summary>
     /// 引导关开局是否「强制引导玩家抽奖一次」（圈住随机按钮、抽完收起）。
     /// 2026-09-29 主人要求：引导关一开始就教玩家用进关抽奖，之后按既有节拍一步一步走。
     /// 正式关恒 false —— 不抽就直接开打，不给打扰。
+    ///
+    /// <para><b>== 引导「每拍只抽一次」这个开关是唯一真源 ==</b>
+    /// 2026-10-05 主人拍板：「引导的时候每次只能抽一次，然后还是按那个顺序引导」。
+    /// 为 <c>true</c> 时 <c>BattleManager.OneDrawPerBeat</c> 也为 true →
+    /// ① 开局（<c>CoStageEntryDraft</c>）抽一抽就收面板开打；
+    /// ②③ 打完两波 / 再两波那两拍走 <c>CoMidBattleDraft</c>（它本身一拍一抽）。
+    /// 三拍 × 一抽 = 保底定序走满三格 = <b>装备 → 佣兵 → 技能</b>，顺序不另写一份。</para>
     /// </summary>
     public bool GuideEntryDraft { get; private set; }
+
+    /// <summary>
+    /// 引导局：抽奖抽到「佣兵」时给该佣兵的**本命碎片**而不是直接招募。
+    /// 2026-10-05 主人拍板「保留救援戏，抽奖给小白碎片」—— 小白走第 4 拍剧情救援入队，
+    /// 抽奖再招一个会跟剧情打架，所以这一抽发的是 `frag:H011`。
+    /// 正式关恒 false：抽到佣兵就是正常招募。
+    /// </summary>
+    public bool MercDraftGivesFragment { get; private set; }
 
     /// <summary>交战点最少超前（引导 4.5，正式 2.0）。</summary>
     public float EngageMinAhead { get; private set; }
@@ -106,7 +120,9 @@ public sealed class TutorialRules
             EngageMinAhead = 2.0f,
             EngageAheadOverride = -1f,
             WaveSpacingMul = 1f,
-            SpawnStagger = 0.35f,
+            // 【2026-10-05 主人拍板「多点出生点」】入场起点已按序号往外错开，不再靠长间隔排队出场。
+            // 只留 0.12s 把实例化帧错开（防同帧卡顿），一整波 8 只在 0.84s 内全部出海。
+            SpawnStagger = 0.12f,
             MonsterCountMul = 1f
         };
     }
@@ -138,12 +154,13 @@ public sealed class TutorialRules
             QuestCountsOnlySpawnedWaves = true,
             AllowStackSpawnWhileAlive = true,
             EnableRunDraft = true,
-            MaxTutorialDrafts = 1,
             GuideEntryDraft = true,
+            MercDraftGivesFragment = true,
             EngageMinAhead = 4.5f,
             EngageAheadOverride = 4.5f,
             WaveSpacingMul = 1.65f,
-            SpawnStagger = 0.65f,
+            // 同上：0.65 → 0.12。教程围攻/夹击波走 staggerOverride=0（同帧同时到场），不受影响。
+            SpawnStagger = 0.12f,
             MonsterCountMul = 1f
         };
     }

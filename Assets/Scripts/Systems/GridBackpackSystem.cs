@@ -756,6 +756,20 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     /// <summary>
     /// 获取指定槽位的装备。优先读穿戴字典，再兜底查背包。
     /// </summary>
+    /// <summary>
+    /// 这件装备装上去会顶掉谁（同部位的旧件）；没有旧件返回 null。
+    /// 2026-10-05：抽奖 / 通关拿到新装备要先弹窗问玩家「换不换新」，
+    /// 「谁会被顶掉」只在这里算一处 —— 武器走逻辑槽、防具走部位槽，
+    /// 别让 UI 层再猜一遍槽位规则（猜错就是顶错人）。
+    /// </summary>
+    public EquipInstance FindSameSlotEquip(EquipInstance newEq)
+    {
+        if (newEq == null) return null;
+        if (WeaponLoadoutRules.IsLoadoutItem(newEq))
+            return GetEquippedInLogicalSlot(WeaponLoadoutRules.ResolveLogicalSlot(newEq));
+        return GetEquippedInSlot(newEq.slotType);
+    }
+
     public EquipInstance GetEquippedInSlot(EquipSlotType slot)
     {
         var rig = GetHeroHandRig();

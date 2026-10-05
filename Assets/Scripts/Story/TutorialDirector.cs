@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -34,17 +34,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
     /// <summary>引导战斗：仅 heal 步骤允许点头像放技能。</summary>
     public bool AllowBattleSkillClick { get; private set; }
 
-    /// <summary>V6：引导局已经放过几次三选一（上限 <see cref="TutorialRules.MaxTutorialDrafts"/>）。</summary>
-    public int TutorialDraftsUsed { get; private set; }
 
-    /// <summary>
-    /// V6：引导局三选一的固定卡组。第一张是推荐项（护盾），引导会挖空高亮它。
-    /// 卡里有特效的技能优先，避免教学时看到一片空白。
-    /// </summary>
-    static readonly string[] TutorialDraftSkillIds = { "holy_barrier", "battle_surge", "thunder_verdict" };
 
-    /// <summary>引导三选一的推荐技能（护盾），超时兜底就替玩家选它。</summary>
-    const string TutorialPreferredSkillId = "holy_barrier";
 
     /// <summary>P3 用：本段是否已经观察到玩家技能真的放出去了。</summary>
     bool _sawPlayerSkillCast;
@@ -185,7 +176,6 @@ public class TutorialDirector : Singleton<TutorialDirector>
         WaitingEvacuate = false;
         SkillUsedThisStep = false;
         AllowBattleSkillClick = false;
-        TutorialDraftsUsed = 0;
         _sawPlayerSkillCast = false;
     }
 
@@ -461,10 +451,20 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return WaitFieldClear(strict: true);
         }
 
-        // —— 1b) 第二拍：混编波，让玩家认识「远程会站在后面射你」——
-        hint.Show("后面那个会射你，先冲上去解决它。", null, 5f);
+        // —— 1b) 第二拍：混编波 ——
+        // ⚠【2026-10-05 主人拍板删除】原本文案是「后面那个会射你，先冲上去解决它。」
+        //   现在是**自动攻击**，玩家没有「选择打谁」的操作，这条引导教了个不存在的动作 —— 删掉。
+        //   第二拍照常刷怪（tutorial_battle.csv order=2 的混编波），只是不再显示这条提示。
         yield return EnsureTutorialStep(bm, 2);
         yield return WaitFieldClear(strict: true);
+
+        // —— 1c) 第二次抽（佣兵）：走正式入口 CoMidBattleDraft（冻场 → 弹面板 → 抽一次 → 解冻）。
+        // 抽奖是主玩法，不是引导脚本 —— 这里的节拍只是「什么时候弹」，规则在 SlotMachineSystem。
+        // 引导局这一发给的是小白的本命碎片（她在第 4 拍走剧情入队）。
+        // 引导三拍的钱**只有开局那 240**（每拍一抽 80，正好三抽）；不再有任何中途补贴 ——
+        // 2026-10-05 主人拍板「清零 + 不要总打补丁」，TUTORIAL_WAVE_BONUS_COINS 整条链路已删。
+        if (bm != null)
+            yield return bm.CoMidBattleDraft("打完两波，再抽一次：这次是伙伴。");
 
         // —— 2) 宝箱陷阱：发现 → 左右埋伏 → 清场 → 开箱拿剑 ——
         hint.Hide();
@@ -476,7 +476,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
         chestDir.CacheSceneRefs();
 
-        var drop = CreateTutorialEquipDrop();
+        // 2026-10-05 主人拍板：宝箱不再掉装备（掉天赋石，见 GrantTutorialChestTalentStones），
+        // 装备由开局抽奖保底给。开箱演出照旧，只是箱子里不再吐一件装备。
         hint.Hide();
         // 2026-09-27 主人拍板：清完上一波不要马上进宝箱剧情 —— 先让玩家往前走两步，
         // 宝箱再「突然出现」。UnitsCanAct 保持 true（WaitFieldClear 结尾已放开，场上无怪 → 向右推图），
@@ -542,44 +543,24 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return TalkBlock(bm, headTalk, restoreAct: false,
             new TalkLine(Hero.Instance, "打开看看里面有什么。", 0.7f));
         GameObject groundIcon = null;
-        yield return chestDir.CoTutorialOpenChestAndDropEquip(drop, g => groundIcon = g);
+        // 2026-10-05 主人拍板：宝箱改掉**天赋石**，不再掉装备 → 这里传 null（箱子里不吐装备），
+        // 开箱演出与「清掉埋伏 → 开箱」的节拍原样保留。
+        yield return chestDir.CoTutorialOpenChestAndDropEquip(null, g => groundIcon = g);
 
-        if (drop != null)
-        {
-            bool closed = false;
-            bool lootDone = false;
-            BattleLootMode.Enter(() => lootDone = true);
-            EquipDropPopupUI.ShowSingle(drop, (_, equipped) =>
-            {
-                closed = true;
-                if (groundIcon != null)
-                {
-                    Object.Destroy(groundIcon);
-                    groundIcon = null;
-                }
-            });
-            while (!closed) yield return null;
-            // 替换已自动 Confirm；若丢弃/关窗未 Confirm 则等确定或超时放行
-            float waitLoot = 0f;
-            while (!lootDone && waitLoot < 120f)
-            {
-                waitLoot += Time.unscaledDeltaTime;
-                yield return null;
-            }
-            if (!lootDone)
-                BattleLootMode.Confirm();
-            if (bm != null)
-            {
-                bm.UnitsCanAct = true;
-                bm.BeginTutorialPowerFantasy();
-            }
-            BattleUI.Instance?.UpdateBackpackGrid();
-            Hero.Instance?.costumeManager?.RefreshCostume();
-        }
+        GrantTutorialChestTalentStones();
+
         if (groundIcon != null)
             Object.Destroy(groundIcon);
 
-        hint.Show("属性更好就装备，旧的会变成强化材料。", null, 1.8f);
+        if (bm != null)
+        {
+            bm.UnitsCanAct = true;
+            bm.BeginTutorialPowerFantasy();
+        }
+        BattleUI.Instance?.UpdateBackpackGrid();
+        Hero.Instance?.costumeManager?.RefreshCostume();
+
+        hint.Show("天赋石可以在城镇里点天赋。", null, 1.8f);
         yield return new WaitForSecondsRealtime(0.2f);
 
         // —— 4) 救援戏：牧师先在前方眩晕被围殴 ——
@@ -718,10 +699,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
         headTalk?.HideNow();
         hint.Hide();
 
-        // —— V6 P1/P2：精英已清 → 固定三选一（强引导选护盾）→ 拖拽定释放顺序 ——
-        if (bm != null) bm.UnitsCanAct = false;
-        HaltUnit(Hero.Instance);
-        yield return CoTutorialSkillDraft(bm, hint);
+        // —— 第三次抽（技能）：走正式入口 CoMidBattleDraft ——
+        // 2026-10-05 主人拍板「技能就是初始带的那个，只不过这回是抽奖给的」。
+        // 保底在正式系统里：本局第一次抽到技能 = 该职业的初始技能（SlotMachineSystem.BuildGuaranteedSkillCard）。
+        // ⚠ 原来这里的「固定三选一 + 拖拽定释放顺序」教学拍（CoTutorialSkillDraft）已被这一抽顶掉并删除。
+        //   拖拽教学改由 SkillOrderGuide 做软引导：玩家凑够 2 个技能时弹一条会自己消失的气泡，不挡操作。
+        // 第三抽的钱来自开局 240 的最后 80（240 − 80×3 = 0），中途没有任何补贴。
+        if (bm != null)
+            yield return bm.CoMidBattleDraft("再抽一次：这次是本命技能。");
         if (bm != null) bm.UnitsCanAct = true;
 
         hint.Show("组队后佣兵会自动战斗。", null, 3f);
@@ -772,124 +757,6 @@ public class TutorialDirector : Singleton<TutorialDirector>
     {
         if (u == null || u.rb == null) return;
         u.rb.velocity = Vector2.zero;
-    }
-
-    // ============================================================
-    // V6：局内构筑教学（P1 三选一 → P2 拖顺序 → P3 看技能自动释放 → P4 回城点天赋）
-    // 强引导但可跳过：每一步都有超时兜底，超时就替玩家做默认选择，绝不卡死。
-    // ============================================================
-
-    /// <summary>
-    /// P1 + P2：精英清完 → 弹一次固定三选一（强引导选护盾）→ 进入拖拽排序阶段。
-    /// 走的还是正式局那条链路（RunDraftDirector.ApplyCard），只是卡组固定、有超时兜底。
-    /// </summary>
-    IEnumerator CoTutorialSkillDraft(BattleManager bm, TutorialHintUI hint)
-    {
-        if (bm == null || bm.Rules == null || !bm.Rules.EnableRunDraft) yield break;
-
-        int max = bm.Rules.MaxTutorialDrafts;
-        if (max > 0 && TutorialDraftsUsed >= max)
-        {
-            Debug.Log("[Tutorial] 引导三选一已达上限，跳过");
-            yield break;
-        }
-
-        var cards = new List<DraftCard>(TutorialDraftSkillIds.Length);
-        for (int i = 0; i < TutorialDraftSkillIds.Length; i++)
-        {
-            var c = RunDraftDirector.BuildSkillCardById(TutorialDraftSkillIds[i]);
-            if (c.IsValid && !RunLoadout.HasSkill(c.Id)) cards.Add(c);
-        }
-        if (cards.Count == 0)
-        {
-            Debug.LogWarning("[Tutorial] 引导三选一卡组为空，跳过");
-            yield break;
-        }
-
-        int preferred = 0;
-        for (int i = 0; i < cards.Count; i++)
-            if (cards[i].Id == TutorialPreferredSkillId) { preferred = i; break; }
-
-        var dir = RunDraftDirector.Instance ?? RunDraftDirector.Ensure(bm);
-        bool confirmed = false;
-
-        // manageFreeze=false：战斗已由引导冻住，弹层不要抢着恢复
-        LevelUpDraftUI.ShowOrderConfirm(cards, "挑一个技能（本局有效）",
-            card =>
-            {
-                TutorialDraftsUsed++;
-                if (dir != null)
-                {
-                    string msg = dir.ApplyCard(card);
-                    if (!string.IsNullOrEmpty(msg)) UIManager.Instance?.ShowToast(msg);
-                }
-                RunLoadout.Save();
-                RunSkillBarUI.Refresh();
-                Debug.Log($"[Tutorial] 引导三选一选择：{card.Id}");
-            },
-            () => confirmed = true,
-            manageFreeze: false);
-
-        // —— P1：挖空高亮推荐卡，超时替玩家选 ——
-        float t = 0f;
-        const float pickTimeout = 12f;
-        while (t < pickTimeout + 3f)
-        {
-            var ui = LevelUpDraftUI.Instance;
-            if (ui == null) break;
-            if (ui.InOrderPhase) break;          // 已选完，进排序阶段
-
-            if (t > 0.3f)
-            {
-                var rt = ui.CardRectAt(preferred);
-                if (rt != null)
-                    hint.ShowHard("选「圣盾壁垒」：给全队套一层护盾。", rt);
-            }
-            if (t >= pickTimeout)
-                ui.TryAutoPick(preferred);
-
-            t += Time.unscaledDeltaTime;
-            yield return null;
-        }
-
-        // —— P2：拖拽定释放顺序，超时替玩家把护盾挪到 ① 再确认 ——
-        float t2 = 0f;
-        const float orderTimeout = 10f;
-        while (!confirmed && t2 < orderTimeout + 3f)
-        {
-            var ui = LevelUpDraftUI.Instance;
-            if (ui == null) break;
-
-            if (t2 > 0.3f)
-            {
-                // G：目标必须挑「当前真正可见」的那个。确认按钮还没显示时要用顺序条，
-                // 反过来顺序条在整理阶段会被 SetActive(false)（SetOrderRowVisible），
-                // 若把它交给引导，引导条会退化成「无目标」的默认落位（屏幕偏上）。
-                var confirm = ui.ConfirmRect;
-                var row = ui.OrderRowRect;
-                RectTransform target = null;
-                if (ui.InOrderPhase && confirm != null && confirm.gameObject.activeInHierarchy)
-                    target = confirm;
-                else if (row != null && row.gameObject.activeInHierarchy)
-                    target = row;
-                else if (confirm != null)
-                    target = confirm;
-
-                if (target != null)
-                    hint.ShowHard("拖动技能可改释放顺序：① 最先放。改完点「确认顺序」。", target);
-            }
-            if (t2 >= orderTimeout)
-            {
-                ui.ForceSkillToFront(TutorialPreferredSkillId);
-                ui.TryAutoPick(0);
-            }
-
-            t2 += Time.unscaledDeltaTime;
-            yield return null;
-        }
-
-        hint.Hide();
-        yield return null;
     }
 
     /// <summary>
@@ -1215,25 +1082,25 @@ public class TutorialDirector : Singleton<TutorialDirector>
     static IEnumerator CoTeachControls(BattleManager bm, TutorialHintUI hint, BattleUI ui, int preloadStep = 0)
     {
         if (bm != null) bm.UnitsCanAct = true;
-        // ui 是 BattleRoutine 开场那一帧抓的 BattleUI，此刻可能还没装配出来；
-        // 兜底再查一次当前实例，确保摇杆真的建出来（否则引导战整场没有摇杆）。
-        var joyRoot = ui != null ? ui.transform
-            : (BattleUI.Instance != null ? BattleUI.Instance.transform : null);
-        BattleJoystick.EnsureOn(joyRoot);
-        BattleJoystick.Instance?.SetVisible(true);
-        RectTransform stickRt = BattleJoystick.Instance != null
-            ? BattleJoystick.Instance.StickHighlight
-            : null;
-
-        hint.Show("下方滑动移动，松手自动锁敌。", stickRt, -1f);
-        float waitJoy = 0f;
-        while (BattleJoystick.Instance == null || !BattleJoystick.Instance.IsHeld)
-        {
-            waitJoy += Time.unscaledDeltaTime;
-            if (waitJoy > 15f) break;
-            yield return null;
-        }
-        hint.Hide();
+        // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
+        // 原来这一段是「教摇杆」：建摇杆 → 显示「下方滑动移动，松手自动锁敌。」
+        // → 死等玩家真的推一下（最多 15 秒）。摇杆没了，这一步绝不能留 —— 留着就是白等 15 秒。
+        // var joyRoot = ui != null ? ui.transform
+        //     : (BattleUI.Instance != null ? BattleUI.Instance.transform : null);
+        // BattleJoystick.EnsureOn(joyRoot);
+        // BattleJoystick.Instance?.SetVisible(true);
+        // RectTransform stickRt = BattleJoystick.Instance != null
+        //     ? BattleJoystick.Instance.StickHighlight
+        //     : null;
+        // hint.Show("下方滑动移动，松手自动锁敌。", stickRt, -1f);
+        // float waitJoy = 0f;
+        // while (BattleJoystick.Instance == null || !BattleJoystick.Instance.IsHeld)
+        // {
+        //     waitJoy += Time.unscaledDeltaTime;
+        //     if (waitJoy > 15f) break;
+        //     yield return null;
+        // }
+        // hint.Hide();
 
         // 2026-09-28 主人反馈「第一波的敌人出来的还是晚，再早点」：
         // 把第 1 波的刷怪提到技能提示之前，利用这 3.2 秒读字时间让怪走进场，
@@ -1244,7 +1111,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         hint.Show("技能能量满会自动释放，无需点击。", null, 3.5f);
         yield return new WaitForSecondsRealtime(3.2f);
         hint.Hide();
-        BattleJoystick.Instance?.ResetStickIdle();
+        // 【2026-10-05 「不要摇杆了」→ 停用，先注释不删】
+        // BattleJoystick.Instance?.ResetStickIdle();
 
         if (bm != null) bm.UnitsCanAct = false;
         HaltUnit(Hero.Instance);
@@ -1304,6 +1172,45 @@ public class TutorialDirector : Singleton<TutorialDirector>
         while (!closed) yield return null;
 
         BattleUI.Instance?.UpdateBackpackGrid();
+    }
+
+    /// <summary>
+    /// 引导局抽奖抽到「佣兵」那一发的产出：**小白(H011) 的本命碎片**。
+    /// 2026-10-05 主人拍板「保留救援戏，抽奖给小白碎片」—— 她走第 4 拍剧情救援入队，
+    /// 抽奖不再重复招人。数量改 <see cref="SlotMachineDefs.TUTORIAL_MERC_FRAG_COUNT"/> 一个数。
+    /// 存档口径 `frag:{hireId}`（见 MercGrowInventory），背包里能直接看到。
+    /// </summary>
+    public static bool TryGrantTutorialMercFragment(out string msg)
+    {
+        msg = null;
+        string hireId = StoryProgress.TutorialMercHireId;
+        string fragId = MercGrowInventory.FragmentId(hireId);
+        int n = SlotMachineDefs.TUTORIAL_MERC_FRAG_COUNT;
+        if (string.IsNullOrEmpty(fragId) || n <= 0) return false;
+
+        MercGrowInventory.Add(fragId, n);
+        SaveSystem.Instance?.Save();
+        // 头像栏那一格的「灰像」判据就是碎片数（BattleUI.TutorialMercDrawn），
+        // 抽完必须立刻刷一次，否则要等下一次全量刷新才亮出来 —— 主人会以为没抽到。
+        BattleUI.Instance?.UpdateCharacterSlots();
+        msg = $"{StoryProgress.TutorialMercNickname}的本命碎片 ×{n}";
+        return true;
+    }
+
+    /// <summary>
+    /// 引导宝箱的开箱产出（2026-10-05 主人拍板）：**天赋石**。
+    /// 原来掉一把武器，但开局抽奖已经保底给了装备（木制圆盾），宝箱再掉装备就重复了；
+    /// 天赋石是城镇点天赋的硬通货，正好把「开箱 = 长期成长」这一课补上。
+    /// 数量就改这一个常量。
+    /// </summary>
+    const int TutorialChestTalentStones = 3;
+
+    static void GrantTutorialChestTalentStones()
+    {
+        if (TutorialChestTalentStones <= 0) return;
+        ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, TutorialChestTalentStones,
+                           save: true, notify: true);
+        UIManager.Instance?.ShowToast($"获得天赋石 ×{TutorialChestTalentStones}");
     }
 
     static EquipInstance CreateTutorialEquipDrop()

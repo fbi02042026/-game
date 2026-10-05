@@ -58,6 +58,11 @@ public class RunLoadoutData
     public List<RunMercEntry> mercs = new List<RunMercEntry>();
     /// <summary>流派势能（Phase 2）：累积点，不换不退。</summary>
     public List<StringIntEntry> themeEntries = new List<StringIntEntry>();
+    /// <summary>
+    /// 本局已抽奖次数（2026-10-05 新增）：引导局「装备→佣兵→技能」定序的序号就靠它推进，
+    /// 随构筑一起落 PlayerPrefs、局末一起清空 —— 所以「本局第几次抽」跨关累计。
+    /// </summary>
+    public int drawCount;
 }
 
 /// <summary>
@@ -162,6 +167,19 @@ public static class RunLoadout
         BeginNew(job);
         Debug.Log($"[RunLoadout] 开新局：job={(int)job}");
         return false;
+    }
+
+    /// <summary>本局已抽奖次数（引导定序用；正式关只作统计）。没开局时返回 0。</summary>
+    public static int DrawCount => _data != null ? _data.drawCount : 0;
+
+    /// <summary>
+    /// 记一次抽奖：把保底定序的序号往前推一格，并立刻落盘（中途退游戏也不会重抽）。
+    /// </summary>
+    public static void NoteDraw()
+    {
+        if (_data == null) return;
+        _data.drawCount++;
+        Save();
     }
 
     public static bool HasResumable()
@@ -301,6 +319,14 @@ public static class RunLoadout
         if (!_starRecord.TryGetValue(id, out prev) || star > prev)
             _starRecord[id] = star;
     }
+
+    /// <summary>
+    /// 本局身上**有没有**技能（一个都算没有）。
+    /// 真源 = 这一份；「本局第一次拿到技能要给本命技」的判定只认它
+    ///（见 <c>SlotMachineSystem.BuildGuaranteedSkillCard</c>）。
+    /// 2026-10-05：正式关改纯随机后，保底不再挂在「第几抽」这个序号上，改判这个。
+    /// </summary>
+    public static bool HasAnySkill => _data?.skills != null && _data.skills.Count > 0;
 
     public static bool IsSkillFull => _data?.skills != null && _data.skills.Count >= MaxSkillSlots;
 

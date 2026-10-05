@@ -65,6 +65,9 @@ public class RunSkillBarUI : MonoBehaviour
     {
         if (Instance == null) return;
         Instance.Rebuild();
+        // 2026-10-05 主人拍板：凑够两个技能时软引导一次「拖动技能改释放顺序」。
+        // 挂在这里是因为技能栏重建 = 「本局技能变了」的唯一出口，别的调用点不用各自记得调。
+        SkillOrderGuide.NotifySkillsChanged();
     }
 
     void Awake()

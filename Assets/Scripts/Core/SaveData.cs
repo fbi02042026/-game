@@ -27,7 +27,12 @@ public class IntIdEntry
 public class SaveData
 {
     // === 货币 / 资源（统一上限见 ResourceWallet，体力有特殊上限）===
-    public long totalGold = 0;
+    /// <summary>
+    /// 初始金币：2026-10-05 主人要求「初始给的金币数量也设计一下」。
+    /// 定 500 —— 进城就能点几次天赋（天赋第一次消费门槛远低于此），不至于开局一分钱干瞪眼；
+    /// 又不至于多到跳过前期积累。要改只改这一处（新档唯一真源），老档从磁盘读不受影响。
+    /// </summary>
+    public long totalGold = 500;
     /// <summary>
     /// 抽奖币（2026-09-29 新增）：只用于进关抽奖，与 totalGold 完全分开。
     /// 战斗通关产出，抽奖消耗；城镇升级 / 商店 / 天赋仍旧只花 totalGold。

@@ -53,6 +53,19 @@ public class RunDraftDirector : MonoBehaviour
         else
             resumed = RunLoadout.ResumeOrBegin(job);
 
+        // 开局启动抽奖币：**每局只补一次**（2026-10-05 主人拍板「开始金币是每局的，不是每关的」）。
+        // 续关（resumed=true）不再补。
+        // ⚠ 2026-10-05 主人最终口径：**战斗内的都是局内的** —— 所以「每关通关 +100」发的也是
+        //   抽奖币 SlotCoin（见 SlotMachineSystem.GrantStageCoins），「每关都能抽」就是靠它。
+        //   局外金币 Gold **只有**结算界面按通过关卡数发（StageGoldDefs），跟抽奖无关。
+        //   抽奖币的全部来源（**就这三条，别处不再有第二个给币口径**）：
+        //     ① 每局携带 240（EnsureStarterCoins）+ 初始资金天赋每级 80
+        //     ② 每关通关 +100（GrantStageCoins，金币本不发 —— Mode.GrantsRunCoins=false）
+        //     ③ 抽中「金币」安慰奖（一抽价 × 0.5 = 40）
+        //   **局末清零**（回城 / 死亡 / 撤离）；章末选「进下一章」不清零，币带过去。
+        //   一章 10 关 ≈ 14 抽（3 + 1×9 + 安慰奖回血约 +1）；开局 240 = 3 抽。
+        if (!resumed) SlotMachineSystem.EnsureStarterCoins();
+
         if (resumed) RestoreHeroProgress();
         SyncHeroLevel();
 
@@ -198,58 +211,152 @@ public class RunDraftDirector : MonoBehaviour
     /// <summary>把一张卡的效果真正落进本局构筑（教程三选一也走这里，确保和正式局同一条链路）。</summary>
     public string ApplyCard(DraftCard card)
     {
+        TryApplyCard(card, out string msg);
+        return msg;
+    }
+
+    /// <summary>
+    /// 同 <see cref="ApplyCard"/>，但<b>明确告诉调用方「到底生效了没有」</b>。
+    ///
+    /// <para>2026-10-05 补：抽奖是<b>先扣钱、后发奖</b>的，原来只有一句文案，
+    /// 调用方分不清「技能槽已满 / 背包已满 / 佣兵位已满」是失败还是成功 ——
+    /// 于是出现「钱扣了、东西没拿到」的漏洞。现在判据只有这一个出口，
+    /// 抽奖侧拿到 false 就<b>不扣钱、不推进保底定序</b>。</para>
+    ///
+    /// <para><paramref name="msg"/>：成功 = 获得文案，失败 = 失败原因（可直接弹给玩家）。</para>
+    /// </summary>
+    public bool TryApplyCard(DraftCard card, out string msg)
+    {
+        msg = null;
         switch (card.Kind)
         {
             case DraftCardKind.SkillNew:
-                if (!RunLoadout.TryAddSkill(card.Id)) return "技能槽已满";
+                if (!RunLoadout.TryAddSkill(card.Id)) { msg = "技能槽已满"; return false; }
                 RebuildPlayerSkills();
-                return $"获得技能：{card.Title}";
+                msg = $"获得技能：{card.Title}";
+                return true;
 
             case DraftCardKind.SkillUp:
-                if (!RunLoadout.TryUpgradeSkill(card.Id)) return $"{card.Title} 已满星";
+                if (!RunLoadout.TryUpgradeSkill(card.Id)) { msg = $"{card.Title} 已满星"; return false; }
                 RebuildPlayerSkills();
-                return $"{card.Title} 升至 ★{card.Star}";
+                msg = $"{card.Title} 升至 ★{card.Star}";
+                return true;
 
             case DraftCardKind.MercRecruit:
-                return RecruitMerc(card);
+                return RecruitMerc(card, out msg);
 
             case DraftCardKind.MercLevelUp:
             {
                 int lv = RunLoadout.TryLevelUpMerc(card.Id);
-                if (lv <= 0) return "佣兵已离队";
+                if (lv <= 0) { msg = "佣兵已离队"; return false; }
                 RefreshMercUnit(card.Id);
-                return $"{card.Title} 升至 Lv{lv}";
+                msg = $"{card.Title} 升至 Lv{lv}";
+                return true;
             }
 
             case DraftCardKind.MercStarUp:
-                if (!RunLoadout.TryUpgradeMercStar(card.Id)) return $"{card.Title} 已满星";
+                if (!RunLoadout.TryUpgradeMercStar(card.Id)) { msg = $"{card.Title} 已满星"; return false; }
                 RefreshMercUnit(card.Id);
-                return $"{card.Title} 升至 ★{card.Star}（Lv 同时 +1）";
+                msg = $"{card.Title} 升至 ★{card.Star}（Lv 同时 +1）";
+                return true;
 
             case DraftCardKind.Equip:
-                return ApplyEquip(card);
+                // 2026-10-05 主人拍板：装备替换必须弹窗问玩家，不能直接塞进去。
+                // 弹窗是异步的，所以装备一律走 CoApplyEquipCard（协程）；
+                // 这里 fail closed —— 谁在协程外偷偷调用都会立刻暴露，绝不会静默走无确认的旧路径。
+                msg = "装备奖励必须走替换确认流程（CoApplyEquipCard）";
+                return false;
+
+            case DraftCardKind.Gold:
+            {
+                // 主人拍板「抽中的金币是当局抽奖用的」→ 给的是抽奖币（SlotCoin），不是城镇那套通用金币
+                if (card.Amount <= 0) { msg = "金币奖励数值异常"; return false; }
+                ResourceWallet.Add(ResourceWallet.ResourceType.SlotCoin, card.Amount, save: true, notify: true);
+                msg = $"获得金币 ×{card.Amount}";
+                return true;
+            }
+
+            // ⚠【2026-10-05 已删除】case DraftCardKind.Material —— 主人拍板「强化石不能抽奖得到」，
+            // 强化石只剩铁匠铺 / 分解两条路。走到 default 会 LogError 报错，不会静默当成功。
 
             case DraftCardKind.PowerUp:
-                return ApplyPowerUp(card.Id, card.Title);
+            {
+                // 强化卡要写 BattleManager.tempBuffs，不在战斗中就什么都没加上 —— 算失败，别当成功吞掉
+                string m = ApplyPowerUp(card.Id, card.Title);
+                if (string.IsNullOrEmpty(m)) { msg = "强化未能生效（不在战斗中）"; return false; }
+                msg = m;
+                return true;
+            }
 
             default:
-                return null;
+                msg = "无法识别的奖励";
+                return false;
         }
     }
 
-    string ApplyEquip(DraftCard card)
+    /// <summary>
+    /// 装备卡的生效流程 —— **异步**，因为要先问玩家换不换。
+    ///
+    /// <para>2026-10-05 主人拍板：「只会抽中高级的直接替换低级的，然后低级的变成材料，
+    /// 不过需要弹出个弹窗告诉玩家是否替换」。</para>
+    ///
+    /// 两条路都算「生效了」（玩家拿到了东西，就该扣钱）：
+    /// <list type="bullet">
+    /// <item>换上新的 → 新件入包，旧件由 <see cref="GridBackpackSystem.TryEquipFromReward"/> 折成强化石；</item>
+    /// <item>留着旧的 → 新件同样折成强化石（不占背包，也不白抽）。</item>
+    /// </list>
+    /// 同部位没有旧件时不弹窗，直接入包。
+    /// </summary>
+    /// <param name="done">(是否生效, 给玩家看的文案)。</param>
+    public IEnumerator CoApplyEquipCard(DraftCard card, System.Action<bool, string> done)
     {
         var eq = card.Equip;
-        if (eq == null) return "装备数据缺失";
+        if (eq == null)
+        {
+            done?.Invoke(false, "装备数据缺失");
+            yield break;
+        }
 
         var bag = GridBackpackSystem.Instance;
-        if (bag != null && bag.TryEquipFromReward(eq))
+        if (bag == null)
         {
+            done?.Invoke(false, "背包系统未就绪");
+            yield break;
+        }
+
+        // 谁会被顶掉 —— 判据只有 GridBackpackSystem.FindSameSlotEquip 一处
+        var old = bag.FindSameSlotEquip(eq);
+        bool replace = true;
+        if (old != null && old != eq)
+        {
+            bool chose = false;
+            yield return EquipReplaceConfirmUI.CoShow(eq, old, r => chose = r);
+            replace = chose;
+        }
+
+        if (replace)
+        {
+            if (!bag.TryEquipFromReward(eq))
+            {
+                done?.Invoke(false, $"背包已满，{NameOf(card, eq)} 未能入包");
+                yield break;
+            }
             var hero = Hero.Instance;
             if (hero != null) hero.RecalcAttr();
-            return $"获得装备：{card.Title}";
+            done?.Invoke(true, $"获得装备：{NameOf(card, eq)}");
+            yield break;
         }
-        return $"背包已满，{card.Title} 未能入包";
+
+        // 玩家选择留着旧的：新件拆成强化石（ScrapEquip 自带提示与发料）
+        bag.ScrapEquip(eq);
+        done?.Invoke(true, $"{NameOf(card, eq)} 已拆成强化石");
+    }
+
+    static string NameOf(DraftCard card, EquipInstance eq)
+    {
+        if (!string.IsNullOrEmpty(card.Title)) return card.Title;
+        if (eq != null && !string.IsNullOrEmpty(eq.equipName)) return eq.equipName;
+        return "装备";
     }
 
     string ApplyPowerUp(string id, string title)
@@ -276,10 +383,11 @@ public class RunDraftDirector : MonoBehaviour
         return $"{title} 已生效";
     }
 
-    string RecruitMerc(DraftCard card)
+    bool RecruitMerc(DraftCard card, out string msg)
     {
+        msg = null;
         var data = BuildMercData(card.Id, card.HireId, card.MercLevel, card.Star);
-        if (data == null) return "佣兵数据缺失";
+        if (data == null) { msg = "佣兵数据缺失"; return false; }
 
         var entry = new RunMercEntry
         {
@@ -292,9 +400,10 @@ public class RunDraftDirector : MonoBehaviour
             skillId = data.skillId,
             passiveSkillId = data.passiveSkillId
         };
-        if (!RunLoadout.TryAddMerc(entry)) return "佣兵位已满";
+        if (!RunLoadout.TryAddMerc(entry)) { msg = "佣兵位已满"; return false; }
         SpawnRunMerc(entry);
-        return $"佣兵加入：{entry.displayName}（Lv{entry.level} ★{entry.star}）";
+        msg = $"佣兵加入：{entry.displayName}（Lv{entry.level} ★{entry.star}）";
+        return true;
     }
 
     static MercenaryData BuildMercData(string assetId, string hireId, int level, int star)

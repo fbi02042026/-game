@@ -99,7 +99,9 @@ public class SaveSystem : Singleton<SaveSystem>
         if (string.IsNullOrEmpty(data.selectedPlayerSkillId))
             data.selectedPlayerSkillId = "heal_spring";
         // 2026-09-29：新档给启动抽奖币。抽奖与金币已分开，金币维持 0，不动城镇经济。
-        // 每局进关时还会按 SlotMachineSystem.EnsureStarterCoins 补到下限（含「初始资金」天赋加成）。
+        // 开新局时还会按 SlotMachineSystem.EnsureStarterCoins 补到下限（含「初始资金」天赋加成）。
+        // ⚠ 2026-10-05 主人拍板：「开始金币是每局的 不是每关的」—— 只在开新局那一关补一次，
+        //   续关不再补；每关要能抽靠的是通关产出（已抬到 ≥ 下一关一抽的价格）。
         data.slotCoins = SlotMachineDefs.STARTER_COINS;
         return data;
     }

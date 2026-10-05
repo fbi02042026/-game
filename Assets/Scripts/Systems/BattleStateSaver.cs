@@ -48,6 +48,9 @@ public class BattleStateSaver : MonoBehaviour
         public bool isGoldDungeon;        // 是否金币副本
         public long currentGold;          // 战斗内钱包快照（含城镇底金）
         public long goldAtRunStart;       // 本局开始时的金币基线（算净赚用）
+        // 2026-10-05：局外金币改成「结算界面才发」后，通关但还没发的那一笔存在这里。
+        // 不写进快照 = 杀进程/切后台被判撤离时这笔钱凭空消失（玩家白打几关）。
+        public long pendingStageGold;
         public float heroCurrentHp;       // 仅记录，不用于恢复
         public int heroLevel;             // 等级系统已停用，仅占位
         public int currentExp;            // 仅记录
@@ -120,6 +123,7 @@ public class BattleStateSaver : MonoBehaviour
             isGoldDungeon = bm.IsGoldDungeon,
             currentGold = bm.currentGold,
             goldAtRunStart = bm.GoldAtRunStart,
+            pendingStageGold = bm.RunStageGoldPending,
             heroCurrentHp = hero != null ? hero.currentHp : 0f,
             heroLevel = hero != null ? hero.level : 1,
             currentExp = hero != null ? hero.currentExp : 0,
@@ -221,7 +225,9 @@ public class BattleStateSaver : MonoBehaviour
         string stageLabel = d.isGoldDungeon ? "金币副本" : $"{GameConfig.GetChapterMapName(chapter)} 第{stageIdx + 1}关";
 
         // === 结算：与撤离同经济（金币保留 + 天赋石照发；构筑清空；体力不退）===
-        long delta = d.currentGold - d.goldAtRunStart;   // 注意：Mathf.Max 没有 long 重载，别用
+        // 注意：Mathf.Max 没有 long 重载，别用
+        // 2026-10-05：局外金币是「结算才发」，中断时那笔还没进 currentGold，要另加回来。
+        long delta = (d.currentGold + d.pendingStageGold) - d.goldAtRunStart;
         if (delta < 0) delta = 0;
         if (delta > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.Gold, delta, save: false, notify: false);
@@ -231,6 +237,10 @@ public class BattleStateSaver : MonoBehaviour
 
         // 本局构筑 / 城镇雇佣一律清空
         RunLoadout.Clear();
+        // 局内抽奖币同属「局内的」，本局作废（2026-10-05 主人拍板）。
+        // ⚠ 不补这一行 = 杀进程就能把局内币囤到下一局（下局开局还有 240 启动金），是个白嫖口子。
+        //   清零出口统一走 SlotMachineSystem.ClearRunCoins，别另写一份。
+        SlotMachineSystem.ClearRunCoins();
         if (data.hiredMercs == null) data.hiredMercs = new System.Collections.Generic.List<MercenaryData>();
         data.hiredMercs.Clear();
         MercHireSession.ClearHired();

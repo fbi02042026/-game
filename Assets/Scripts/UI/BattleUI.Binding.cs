@@ -23,11 +23,11 @@ public partial class BattleUI : MonoBehaviour
         var go = new GameObject("确定", typeof(RectTransform), typeof(Image));
         go.transform.SetParent(backpack, false);
         var rt = go.transform as RectTransform;
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        // 锚点做成「面板左下角」：以后屏再变，位置只需重算 anchoredPosition 就够了。
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(220f, 76f);
-        rt.anchoredPosition = new Vector2(0f, -200f);
 
         var img = go.GetComponent<Image>();
         img.color = new Color(0.16f, 0.12f, 0.09f, 0.95f);
@@ -46,6 +46,10 @@ public partial class BattleUI : MonoBehaviour
         tx.alignment = TextAnchor.MiddleCenter;
         tx.color = Color.white;
 
+        // 位置统一由 ReanchorLootConfirmButton 按当前面板 rect 算（竖屏适配会重锚/改高面板，
+        // 写死 "中心往上 100" 屏一变就跑到面板外面看不见了）。
+        ReanchorLootConfirmButton();
+
         // BackpackPanel 带 overrideSorting 的 Canvas，zhezhao 遮罩会盖住同级节点 → 抬一层
         var parentCanvas = backpack.GetComponent<Canvas>();
         if (parentCanvas != null)
@@ -61,6 +65,26 @@ public partial class BattleUI : MonoBehaviour
         lootConfirmButton = btn;
         lootConfirmButton.onClick.AddListener(OnLootConfirm);
         go.SetActive(false);
+    }
+
+    /// <summary>
+    /// 把「确定」按<b>当前</b> BackpackPanel 的矩形重摆到面板底边下方 60（面板本地下方，
+    /// 拾取阶段面板收起、这里是空着的）。<b>不写死坐标</b>：竖屏适配（UiLayoutStretch /
+    /// BattleViewportFit）会在运行时把面板重锚成「贴底」、高度也随屏幕变，
+    /// 任何写死的 "BackpackPanel 中心往上 100" 都是预制体时代的坐标，屏一变就落到面板外看不见。
+    /// 幂等，可反复调用。
+    /// </summary>
+    void ReanchorLootConfirmButton()
+    {
+        if (lootConfirmButton == null) return;
+        var rt = lootConfirmButton.transform as RectTransform;
+        var parent = rt != null ? rt.parent as RectTransform : null;
+        if (rt == null || parent == null || parent.rect.height <= 1f) return;
+        Rect r = parent.rect;                              // 面板本地坐标（原点在锚点处）
+        rt.anchorMin = Vector2.zero;                       // 锚点锁左下角
+        rt.anchorMax = Vector2.zero;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(0f, r.yMin - 60f);
     }
 
     /// <summary>按节点名自动补全未拖拽的引用</summary>
@@ -422,6 +446,19 @@ public partial class BattleUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 引导局：玩家<b>已经抽到</b>那个佣兵了吗 —— 决定头像栏要不要亮出她的灰像。
+    ///
+    /// <para>真源 = <b>该佣兵的本命碎片数</b>（<c>MercGrowInventory.FragmentCount</c>）。
+    /// 引导局抽到「佣兵」发的是小白的碎片而不是直接招募（<c>TutorialRules.MercDraftGivesFragment</c>，
+    /// 2026-10-05 主人拍板「保留救援戏，抽奖给小白碎片」），所以「有碎片」＝「这一抽已经抽过了」。</para>
+    ///
+    /// <para>不另起一个 bool 标记：碎片数就是存档里的真数据，两处状态不会对不上
+    /// （主人铁律：状态标记只许一个出口）。</para>
+    /// </summary>
+    static bool TutorialMercDrawn =>
+        MercGrowInventory.FragmentCount(StoryProgress.TutorialMercHireId) > 0;
+
     void ApplySoloBattleHud()
     {
         // 单人模式也保留三个头像位：未解锁显示「锁定」，不要藏掉第 3 个
@@ -437,7 +474,20 @@ public partial class BattleUI : MonoBehaviour
         // 单人/引导：两格伙伴都按未解锁处理，清掉占位血量数字
         bool lockExtraSlots = (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && !showTutorialMerc;
         if (lockExtraSlots)
-            mercSlot1?.ShowUnavailable(MercLockedHint);
+        {
+            // 2026-10-05 主人拍板：引导局这个槽「灰掉 + 有佣兵头像和血条 + 没有锁的图标 + 稀有度头像框」，
+            // 也就是把「三选一解锁」的空锁换成小白本人的灰像，玩家一眼看到要招的是谁。
+            //
+            // ⚠ 但**不是一开局就摆出来**（主人 2026-10-05 报「佣兵还没抽怎么就已经在头像栏里了」）：
+            // 得等玩家真抽到佣兵才亮。真源用「本局有没有这个佣兵的碎片」——
+            // 引导局那一抽发的是小白本命碎片（TutorialRules.MercDraftGivesFragment），
+            // 抽之前碎片为 0 → 空锁；抽完有碎片 → 亮灰像；等她剧情入队（ShowMercHud）→ 走正常头像。
+            // 用碎片数而不是另起一个 bool，省得两处状态对不上（状态只许一个出口）。
+            if (TutorialDirector.IsTutorialBattle && TutorialMercDrawn)
+                ApplyTutorialMercPreview(mercSlot1);
+            else
+                mercSlot1?.ShowUnavailable(MercLockedHint);
+        }
         else
             mercSlot1?.SetLocked(false);
 
