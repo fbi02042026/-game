@@ -35,11 +35,19 @@ public class GlobalToastUI : MonoBehaviour
         if (_instance._rootRt != null) _instance._rootRt.anchoredPosition = _instance._basePos;
     }
 
-    public static void Show(string msg)
+    public static void Show(string msg) => Show(msg, false);
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】物品变动（获得 / 分解 / 丢弃）必须让玩家看到 ——
+    /// 哪怕屏幕上正有对话 / 引导遮罩 / 气泡在显示，也要弹出来，不能被 <see cref="AnyBubbleShowing"/> 吞掉。
+    /// 走 <paramref name="force"/> = true 这一条；普通提示（「暂时无法前往」之类）仍走默认压制，避免盖住对话。
+    /// 出口仍是这一个 <see cref="Show"/>，不另起一套。
+    /// </summary>
+    public static void Show(string msg, bool force)
     {
         if (string.IsNullOrEmpty(msg)) return;
-        // 直接调 GlobalToastUI 的路径也要挡气泡
-        if (AnyBubbleShowing) return;
+        // 直接调 GlobalToastUI 的路径也要挡气泡 —— 除非 force（物品变动）
+        if (!force && AnyBubbleShowing) return;
         Ensure().Play(msg);
     }
 

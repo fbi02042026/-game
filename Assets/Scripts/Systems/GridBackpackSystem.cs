@@ -139,7 +139,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         {
             int got = count - left;
             if (got > 0)
-                UIManager.Instance?.ShowToast($"获得 {def.name} ×{got}");
+                UIManager.Instance?.ShowToast($"获得 {def.name} ×{got}", true);   // 2026-10-06 主人拍板：物品获得 force 弹
         }
         return true;
     }
@@ -388,7 +388,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
         WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
-        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats));
+        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats), true);
         Hero.Instance?.RecalcAttr();
     }
 
@@ -463,11 +463,11 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         if (equip == null) return false;
         if (!TryAddUniqueBySlot(equip, out _))
         {
-            UIManager.Instance?.ShowToast("背包已满，无法获得装备");
+            UIManager.Instance?.ShowToast("背包已满，无法获得装备", true);
             return false;
         }
         string nm = string.IsNullOrEmpty(equip.equipName) ? "装备" : equip.equipName;
-        UIManager.Instance?.ShowToast($"获得 {nm}");
+        UIManager.Instance?.ShowToast($"获得 {nm}", true);
         return true;
     }
 
@@ -620,7 +620,24 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         if (old != null && old != equip)
             ScrapEquip(old);
 
+        // 【2026-10-06 主人报「我的主武器怎么没了」→ 诊断日志】
+        // 奖励装备走这条「直接穿上」的链，会把同槽旧件 <b>分解成强化石</b>（主人定的规则：低级的变成材料）。
+        // 旧件没了是<b>设计如此</b>；要盯的是新件到底有没有真正落进穿戴槽 —— 落不进去就会表现为「空手」。
+        // 出问题时看这一行：槽位、rig、旧件、穿完后两个槽各是谁，一眼能分清楚。
+        Debug.Log($"[GridBackpack] 奖励装备直接穿上：新={equip.equipName}({equip.templateId}) " +
+                  $"槽={slot} rig有效={rig.IsValid} 攻击槽={rig.AttackSlot} 图标={(equip.icon != null ? "有" : "空")} " +
+                  $"spum={equip.ResolveSpumName()}｜顶掉并分解的旧件=" +
+                  $"{(old != null ? old.equipName + "(" + old.templateId + ")" : "无")}" +
+                  $"｜穿完 主手={SlotDesc(EquipSlotType.MainHand)} 副手={SlotDesc(EquipSlotType.OffHand)}");
         return true;
+    }
+
+    /// <summary>给诊断日志用：某个穿戴槽现在装着谁（没有就写「空」）。</summary>
+    string SlotDesc(EquipSlotType slot)
+    {
+        if (_equippedBySlot != null && _equippedBySlot.TryGetValue(slot, out var e) && e != null)
+            return $"{e.equipName}({e.templateId})";
+        return "空";
     }
 
     /// <summary>
@@ -648,7 +665,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
         WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
-        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats));
+        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats), true);
         OnBackpackChanged?.Invoke();
     }
 
@@ -827,7 +844,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         int gold = GameConfig.EquipScrapGold(item.equip.rarity, item.equip.star);
         BattleManager.Instance.currentGold += gold;
         DropItem(item);
-        UIManager.Instance?.ShowToast($"分解{item.equip.equipName}获得{gold}金币");
+        UIManager.Instance?.ShowToast($"分解{item.equip.equipName}获得{gold}金币", true);
     }
 
     public List<BackpackItem> GetAllBackpackItems() => _items;

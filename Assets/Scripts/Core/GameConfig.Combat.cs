@@ -37,6 +37,11 @@ public static partial class GameConfig
         public const int RewardPopup = 905;
         public const int BattleStageMap = 880;
         public const int BattlePopup = 920;
+        /// <summary>
+        /// 【2026-10-06 主人拍板】替换装备确认弹窗（Resources/Prefabs/Battle/EquipReplaceConfirmPopup）。
+        /// 必须高于 <see cref="BattlePopup"/>（抽奖面板那一层），否则宣布白拿的弹窗会被压在面板下面看不见。
+        /// </summary>
+        public const int EquipReplaceConfirm = 925;
         public const int BattleLegacyPool = 940;
         public const int BattleHud = 950;
         public const int BattleLegacyChoose = 960;
@@ -585,6 +590,30 @@ public static partial class GameConfig
     ///    存 <c>SaveData.hardCleared</c>（原 DIFF_NIGHTMARE_NEED_CLEARS 已删除）。
     /// </summary>
     public const int DIFF_COUNT = 3;
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】难度名<b>全局唯一出处</b>：下标 = 难度档（0 普通 / 1 困难 / 2 噩梦），
+    /// 与 <see cref="DIFF_COUNT"/> 一一对应。
+    /// 收敛原因（主人铁律「同一语义只留一个出口」）：原先 AdventureUI 里有一份私有 DiffNames，
+    /// 战斗内左上角 HUD 还要再显示同一个难度名 —— 两份各写必然漂移（改一处忘一处）。
+    /// 现在谁要显示难度名都走 <see cref="GetDifficultyName"/>，别再抄一份字符串。
+    /// 颜色不在这里：难度按钮配色是冒险页自己的美术色彩，留在 AdventureUI。
+    /// </summary>
+    public static readonly string[] DifficultyNames = { "普通", "困难", "噩梦" };
+
+    /// <summary>
+    /// 难度名。越界<b>不静默</b>：打 Error 并落到「普通」（铁律「认不出/越界 → LogError + 占位」）。
+    /// </summary>
+    public static string GetDifficultyName(int diff)
+    {
+        if (diff < 0 || diff >= DifficultyNames.Length)
+        {
+            Debug.LogError($"[GameConfig] 难度档越界：{diff}（合法 0~{DifficultyNames.Length - 1}）");
+            return DifficultyNames[0];
+        }
+        return DifficultyNames[diff];
+    }
+
     /// <summary>金币副本通关固定金：基数 × 章节 × 难度倍率。2026-09-15 产出去零：300 → 30。</summary>
     public const int GOLD_DUNGEON_CLEAR_BASE = 30;
 

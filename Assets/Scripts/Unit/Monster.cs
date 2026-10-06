@@ -1368,9 +1368,14 @@ public class Monster : UnitBase
             shadowSr.transform.localScale = new Vector3(sx, sx * 0.28f, 1f);
         }
 
-        // 分层与组内顺序：两种来源都统一（低于躯干/SPUM 部件 >= 0，阴影藏在身子后面）
-        shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        shadowSr.sortingOrder = -20;
+        // 【2026-10-06 主人拍板】分层 / 组内顺序也一律听预制体的：
+        // 主人已经在 Monstersmoban 里把 shadow 摆好并调好显示了，代码**一个值都不许覆盖**
+        //（铁律 2：预制体有值 → 代码不写）。只有「预制体里压根没有 shadow」时才由代码给默认值。
+        if (prefabAlpha < 0f)
+        {
+            shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            shadowSr.sortingOrder = -20;
+        }
 
         // 【2026-10-06 诊断】只打前 3 条，之后静默：主人报「给敌人都加了 shadow 节点，为什么没看到」。
         // 只报不改 —— 节点一个不删，值一个不调，主人拿这条日志对账就知道影子去哪了。

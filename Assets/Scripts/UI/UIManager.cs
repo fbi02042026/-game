@@ -22,13 +22,20 @@ public class UIManager : Singleton<UIManager>
         }
     }
 
-    public void ShowToast(string msg)
+    public void ShowToast(string msg) => ShowToast(msg, false);
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】物品变动（获得 / 分解 / 丢弃）走 <paramref name="force"/> = true，
+    /// 不被对话 / 引导遮罩 / 气泡压制 —— 主人要求「操作玩家物品的都要弹提示，不管获得还是消失」。
+    /// 普通提示仍走默认压制，避免盖住对话。底层仍只走 <see cref="GlobalToastUI.Show"/>。
+    /// </summary>
+    public void ShowToast(string msg, bool force)
     {
         if (string.IsNullOrEmpty(msg)) return;
-        if (ShouldSuppressToastForBubble())
+        if (!force && ShouldSuppressToastForBubble())
             return;
         Debug.Log("[Toast] " + msg);
-        GlobalToastUI.Show(msg);
+        GlobalToastUI.Show(msg, force);
     }
 
     /// <summary>有对话/头顶气泡/看板娘气泡时，不叠屏幕 Toast。</summary>

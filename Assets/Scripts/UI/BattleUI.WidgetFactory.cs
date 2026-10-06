@@ -175,6 +175,10 @@ public partial class BattleUI : MonoBehaviour
             av.energyFill = EnsureChildBar(t, "SkillEnergy", new Color(0.98f, 0.78f, 0.28f, 1f));
             // 左上角释放顺序角标（① 最先放）：与整理阶段的拖拽调序同一口径，空槽由 SetOrderText("") 隐藏
             av.orderText = EnsureTopLeftText(t, "SkillOrder", 16);
+            // 【2026-10-06 主人拍板】右上角「新」角标：本拍抽奖刚拿到的技能才亮，点「继续」后清。
+            // 建出来先隐藏，点亮与否由 UpdateRunSkillSlots 按 NewLootMarks.Has 决定（判据只有一处）。
+            av.newText = EnsureTopRightText(t, "SkillNew", 14);
+            av.SetNewBadge(false);
             // 纯冷却制：节点照样建（置 true 就能回来），默认隐藏
             av.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
             runSkillSlots.Add(av);
@@ -194,6 +198,22 @@ public partial class BattleUI : MonoBehaviour
     /// 与 EnsureCornerText 同口径，只是锚点镜像到左上角、字号放大一档（顺序＝优先级，要看得清）。
     /// </summary>
     static Text EnsureTopLeftText(Transform parent, string name, int fontSize)
+        => EnsureCornerBadge(parent, name, fontSize, topRight: false,
+                             new Color(1f, 0.88f, 0.42f));   // 顺序角标：金
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】右上角「新」角标：本拍抽奖刚拿到的技能 / 佣兵技能才显示。
+    /// 与左上角顺序角标同一套盒子（各占一角，互不遮挡），只是锚点镜像 + 改成醒目的红。
+    /// </summary>
+    static Text EnsureTopRightText(Transform parent, string name, int fontSize)
+        => EnsureCornerBadge(parent, name, fontSize, topRight: true,
+                             new Color(1f, 0.34f, 0.28f));   // 「新」角标：红
+
+    /// <summary>
+    /// 槽位角标的<b>唯一建节点出口</b>：在槽根的左上 / 右上角固定一个小盒子（宽 42%、高 24%），
+    /// 只放一行小字，不碰任何图片节点的尺寸。已存在同名节点就直接复用（幂等）。
+    /// </summary>
+    static Text EnsureCornerBadge(Transform parent, string name, int fontSize, bool topRight, Color color)
     {
         var exist = FindDeepChildIgnoreCase(parent, name);
         if (exist != null)
@@ -205,15 +225,15 @@ public partial class BattleUI : MonoBehaviour
         go.transform.SetParent(parent, false);
         go.transform.SetAsLastSibling();
         var rt = go.GetComponent<RectTransform>();
-        // 左上角固定一个小盒子：宽 = 父的 42%，高 = 父的 24%
-        rt.anchorMin = new Vector2(0f, 0.76f);
-        rt.anchorMax = new Vector2(0.42f, 1f);
+        // 角标小盒子：宽 = 父的 42%，高 = 父的 24%；topRight 时横向镜像到右上角
+        rt.anchorMin = new Vector2(topRight ? 0.58f : 0f, 0.76f);
+        rt.anchorMax = new Vector2(topRight ? 1f : 0.42f, 1f);
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
         var txt = go.GetComponent<Text>();
-        txt.alignment = TextAnchor.UpperLeft;
+        txt.alignment = topRight ? TextAnchor.UpperRight : TextAnchor.UpperLeft;
         txt.fontSize = fontSize;
-        txt.color = new Color(1f, 0.88f, 0.42f);
+        txt.color = color;
         txt.raycastTarget = false;
         var f = GameFonts.GetChinese();
         if (f != null) txt.font = f;
@@ -641,6 +661,10 @@ public partial class BattleUI : MonoBehaviour
         av.energyFill = EnsureChildBar(t, "MercSkillEnergy", new Color(0.55f, 0.85f, 1f, 1f));
         av.cooldownText = EnsureChildText(t, "MercSkillCd", 14);
         av.cooldownMask = EnsureChildMask(t, "MercSkillCdMask");
+        // 【2026-10-06 主人拍板】佣兵技能同样要「新」角标（主人点名：不管是佣兵技能还是装备）。
+        // 建出来先隐藏，点亮由 UpdateMercSkillSlots 按 NewLootMarks.Has 决定。
+        av.newText = EnsureTopRightText(t, "MercSkillNew", 14);
+        av.SetNewBadge(false);
         return av;
     }
 

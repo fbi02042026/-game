@@ -119,6 +119,13 @@ public static class GameAudio
     {
         Load();
         var all = Object.FindObjectsOfType<AudioSource>(true);
+        // 【2026-10-06 主人拍板】主人反馈「登录进主城 Loading 没走完就有城镇曲」→ 先只加诊断日志、不改行为。
+        // 关键点：ApplyLoadingMute() 会 continue 掉所有 isMusic 源（只静音音效），
+        // 所以 Loading 期间凡是「被判成音乐」的源都不受静音管。这里把它们全列出来，
+        // 若场景/预制体里冒出第二个会响的源，下次复现一眼就能看见。
+        bool diag = _loadingMuted;
+        var sb = diag ? new System.Text.StringBuilder() : null;
+        int musicCount = 0;
         for (int i = 0; i < all.Length; i++)
         {
             var src = all[i];
@@ -127,6 +134,15 @@ public static class GameAudio
             if (src.gameObject.name == "GameBgm") continue;
 
             bool isMusic = IsMusicSource(src);
+            if (diag && isMusic)
+            {
+                musicCount++;
+                // ⚠ C# 老限制：插值字符串的 {...} 洞内**不许用 \" 转义引号**（编译器报 CS1073）。
+                // 所以 clip 名先在洞外算好，洞里只放变量 —— 别再改回洞内写三元。
+                string clipName = src.clip != null ? src.clip.name : "null";
+                sb.Append($"\n  · [{src.gameObject.name}] clip={clipName} " +
+                          $"loop={src.loop} isPlaying={src.isPlaying} mute={src.mute} vol={src.volume:F2}");
+            }
             bool on = isMusic ? _musicEnabled : _sfxEnabled;
             if (!isMusic && _loadingMuted) on = false;
             src.mute = !on;
@@ -135,6 +151,10 @@ public static class GameAudio
             else if (isMusic && on && !src.isPlaying && src.clip != null)
                 src.UnPause();
         }
+
+        if (diag)
+            Debug.Log($"[AudioDiag] Loading 期间 Apply()：共 {all.Length} 个 AudioSource，" +
+                      $"其中判为音乐的 {musicCount} 个（ApplyLoadingMute 不管它们）{sb}");
     }
 
     static void ApplyLoadingMute()

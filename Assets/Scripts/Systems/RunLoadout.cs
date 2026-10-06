@@ -653,8 +653,29 @@ public static class RunLoadout
         }
         foreach (var kv in _themeCache)
             power += kv.Value * 30;
+
+        // 【2026-10-06 主人拍板】本局战力要「算上所有的」—— 已穿戴装备也必须计入。
+        // 之前只算等级/技能/佣兵/主题协同，抽到装备战力纹丝不动，玩家看不到反馈。
+        // 口径与上面保持一致：稀有度 + 星级 + 强化等级，三项各自一个系数。
+        var bag = GridBackpackSystem.Instance;
+        if (bag != null)
+        {
+            for (int i = 0; i < PowerEquipSlots.Length; i++)
+            {
+                var eq = bag.GetEquippedInSlot(PowerEquipSlots[i]);
+                if (eq == null) continue;
+                power += (int)eq.rarity * 60 + Mathf.Max(1, eq.star) * 90 + Mathf.Max(0, eq.enhanceLevel) * 45;
+            }
+        }
         return power;
     }
+
+    /// <summary>计入战力的装备部位。写死数组避免 <c>Enum.GetValues</c> 每次装箱（战力刷新很频繁）。</summary>
+    static readonly EquipSlotType[] PowerEquipSlots =
+    {
+        EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.Hands, EquipSlotType.Feet,
+        EquipSlotType.Cape, EquipSlotType.MainHand, EquipSlotType.OffHand
+    };
 
     /// <summary>本局战力相对上一档的提升（UI 弹跳用），无则返回 0。</summary>
     public static int ConsumeLastDelta()

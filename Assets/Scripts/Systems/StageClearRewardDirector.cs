@@ -973,7 +973,7 @@ public class StageClearRewardDirector : MonoBehaviour
 
         bm.currentGold += total;
         BattleUI.Instance?.UpdateGold(bm.currentGold);
-        UIManager.Instance?.ShowToast($"宝箱装备折金 +{total}");
+        UIManager.Instance?.ShowToast($"宝箱装备折金 +{total}", true);   // 2026-10-06 主人拍板：装备折金（消失+获得）force 弹
     }
 
     /// <summary>
@@ -1048,7 +1048,7 @@ public class StageClearRewardDirector : MonoBehaviour
                 }
                 else if (!string.IsNullOrEmpty(applyMsg))
                 {
-                    UIManager.Instance?.ShowToast(applyMsg);
+                    UIManager.Instance?.ShowToast(applyMsg, true);   // 2026-10-06 主人拍板：抽卡获得 force 弹
                 }
                 RunLoadout.Save();
             }
@@ -1086,14 +1086,14 @@ public class StageClearRewardDirector : MonoBehaviour
             {
                 AchievementSystem.Instance?.OnObtainEquip(picked.rarity);
                 AdventureLogAchievements.OnEquipPicked();
-                UIManager.Instance?.ShowToast($"已装备：{picked.equipName ?? picked.templateId}");
+                UIManager.Instance?.ShowToast($"已装备：{picked.equipName ?? picked.templateId}", true);   // 2026-10-06 主人拍板：装备获得 force 弹（注：1085 走 TryEquipFromReward 只入包不穿槽，文案"已装备"待主人点头改 TryEquipDirect 后才名副其实）
             }
             else
             {
                 int g = ScrapGold(picked);
                 bm.currentGold += g;
                 BattleUI.Instance?.UpdateGold(bm.currentGold);
-                UIManager.Instance?.ShowToast($"穿装失败，折合金币 +{g}");
+                UIManager.Instance?.ShowToast($"穿装失败，折合金币 +{g}", true);   // 2026-10-06 主人拍板：装备折金 force 弹
             }
         }
         else if (picked != null)
@@ -1101,7 +1101,7 @@ public class StageClearRewardDirector : MonoBehaviour
             int g = ScrapGold(picked);
             bm.currentGold += g;
             BattleUI.Instance?.UpdateGold(bm.currentGold);
-            UIManager.Instance?.ShowToast($"已丢弃，折合金币 +{g}");
+            UIManager.Instance?.ShowToast($"已丢弃，折合金币 +{g}", true);   // 2026-10-06 主人拍板：装备丢弃（消失）force 弹
         }
 
         if (show != null)
@@ -1117,7 +1117,7 @@ public class StageClearRewardDirector : MonoBehaviour
             {
                 bm.currentGold += scrapTotal;
                 BattleUI.Instance?.UpdateGold(bm.currentGold);
-                UIManager.Instance?.ShowToast($"其余折合金币 +{scrapTotal}");
+                UIManager.Instance?.ShowToast($"其余折合金币 +{scrapTotal}", true);   // 2026-10-06 主人拍板：装备折金 force 弹
             }
         }
     }

@@ -2228,7 +2228,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         _stageQuestGoldGranted = true;
         currentGold += grant;
         BattleUI.Instance?.UpdateGold(currentGold);
-        GlobalToastUI.Show($"获得任务金币 +{grant}");
+        GlobalToastUI.Show($"获得任务金币 +{grant}", true);   // 2026-10-06 主人拍板：物品/金币获得，force 弹出
         // #region agent log
         DebugAgentLog.Log("H9", "BattleManager.TryGrantStageQuestGold", "quest_gold_granted",
             $"{{\"grant\":{grant},\"currentGold\":{currentGold}}}");
@@ -2287,7 +2287,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         else if (_physicalKills > _magicKills) dropBias = "physical";
         int got = MercGrowInventory.GrantStageDrops(CurrentChapter, stageType, firstClear, dropBias);
         if (got > 0)
-            GlobalToastUI.Show("获得养成掉落 ×" + got);
+            GlobalToastUI.Show("获得养成掉落 ×" + got, true);   // 2026-10-06 主人拍板：物品/掉落获得，force 弹出
     }
 
     bool ShouldPlayChapter1Ending()
@@ -2402,6 +2402,16 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// </summary>
 
     /// <summary>
+    /// 最近一抽「到底获得了什么」的文案（<see cref="CoInstantPick"/> 发奖成功后写入）。
+    ///
+    /// <para>为什么要单独存一份：<c>CoInstantPick</c> 是协程、拿不到返回值，
+    /// 而 <see cref="WaitForContinue"/> 的硬引导文案必须<b>带上这件东西的名字</b> ——
+    /// 只弹一句「奖励到手了」玩家根本不知道自己拿到了啥（2026-10-06 主人反馈）。</para>
+    /// <para>为什么不能只靠 Toast：Toast 会被硬引导遮罩盖住 / 一闪而过，等于没提示。</para>
+    /// </summary>
+    string _lastDrawRewardMsg;
+
+    /// <summary>
     /// 【2026-10-06 主人拍板】抽完奖励<b>不许自动继续</b> —— 引导局 / 正式关一律等玩家点「继续」。
     ///
     /// <para>· <paramref name="lockDraw"/> = true：这一拍不能再抽（引导局一次一抽、中途抽一次一抽）。<br/>
@@ -2409,6 +2419,21 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// · 面板上跑 <c>BattleEntryDraftPanel.ContinueCountdownSec</c> 秒倒计时，
     ///   归零自动当作玩家点了继续 —— 只做「挂着不动」的兜底，不是第二条流程。</para>
     /// </summary>
+    /// <summary>
+    /// 「等玩家点继续」那句引导的<b>前半段</b> —— 必须是「这一抽拿到了什么」，
+    /// 不能只是「奖励到手了」（2026-10-06 主人反馈）。
+    /// <para>拿不到记录说明发奖链路没走到，按铁律 14 打 Error 报出来，不静默糊一句。</para>
+    /// </summary>
+    string RewardTip()
+    {
+        if (string.IsNullOrEmpty(_lastDrawRewardMsg))
+        {
+            Debug.LogError("[BattleManager] 要弹「奖励到手」却没记下获得了什么 —— 玩家看不到奖励内容");
+            return "奖励到手了";
+        }
+        return _lastDrawRewardMsg;
+    }
+
     IEnumerator WaitForContinue(bool lockDraw, string guideText, System.Func<bool> isDone)
     {
         var panel = BattleEntryDraftPanel.Instance;
@@ -2417,7 +2442,11 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (lockDraw) panel.SetDrawLocked(true);
         if (!string.IsNullOrEmpty(guideText))
             TutorialHintUI.Ensure().ShowHard(guideText, panel.ContinueButtonRect);
-        panel.StartContinueCountdown();
+        // 【2026-10-06 主人二次拍板】这里<b>不再起表</b> —— 倒计时早在面板弹出（Begin）那一刻就开走了，
+        // 抽奖/结算期间被冻住，到这里只是<b>解冻接着走剩下的秒数</b>。
+        // 原写法在这里 StartContinueCountdown() = 抽完又把 30s 补满，玩家看到的正是
+        // 「怎么还是抽完才开始计时」。
+        panel.SetCountdownPaused(false);
 
         // 300s 只是异常兜底（倒计时本身会先归零走 DoContinue）
         float guard = 0f;
@@ -2489,6 +2518,12 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         }
         if (choice != 1) break;
 
+        // 【2026-10-06 主人二次拍板】玩家一按抽奖就<b>冻结</b>倒计时：接下来是扣币 / 老虎机 /
+        // 三选一 / 换装备弹窗这一串结算，这段时间不该催玩家点「继续」。
+        // ⚠ 冻的是<b>剩余秒数</b>，不重新起表 —— 结算完接着走剩下的，绝不给它偷偷补满。
+        if (BattleEntryDraftPanel.Instance != null)
+            BattleEntryDraftPanel.Instance.SetCountdownPaused(true);
+
         // 每一轮都重算一次可抽类型：上一抽可能把技能槽 / 佣兵位占满，
         // 用旧列表会随机到一个已经发不出去的类型（2026-10-05）。
         cats = SlotMachineSystem.AvailableCategories();
@@ -2528,28 +2563,30 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             {
                 // 引导局 = 一次一抽：锁住抽奖按钮（只剩「继续」能点），引导指向「继续」，
                 // 等玩家点继续 / 倒计时归零。
-                yield return WaitForContinue(true, "奖励到手了，点「继续」开打。", () => choice == 2);
+                yield return WaitForContinue(true, $"{RewardTip()}　点「继续」开打。", () => choice == 2);
                 break;
             }
 
             // 正式关：**连抽仍然是玩法** —— 抽完回到面板，玩家想再抽就再抽；
             // 不想抽、或者币不够（按钮会自动置灰）时，点「继续」就继续战斗。
-            // ⚠ 不是「每抽一次就得点一次继续」：这里不锁按钮、不 break，只给 30s 决策倒计时。
+            // ⚠ 不是「每抽一次就得点一次继续」：这里不锁按钮、不 break，只把冻住的倒计时松开继续走。
+            // 【2026-10-06 主人二次拍板】抽完<b>只解冻、不重置</b>：总预算就是面板弹出时那 30s，
+            // 抽完又给补满，正是主人报「抽完才开始计时」的那颗钉子。
             var entryPanel = BattleEntryDraftPanel.Instance;
-            if (entryPanel != null) entryPanel.StartContinueCountdown();
+            if (entryPanel != null) entryPanel.SetCountdownPaused(false);
 
             // 「再来一次」= 免费老虎机 + 三选一，这是奖励，玩家在这里才做选择
             if (SlotMachineSystem.RollReroll())
             {
-                // 三选一期间不催：先把倒计时停掉，选完再给 30s 决定「再抽 or 开打」
-                if (entryPanel != null) entryPanel.StopContinueCountdown();
+                // 三选一期间不催：再把倒计时冻住，选完松开接着走（同样不重置）
+                if (entryPanel != null) entryPanel.SetCountdownPaused(true);
                 UIManager.Instance?.ShowToast("再来一次！免费老虎机");
                 // 【2026-10-06 主人拍板】左侧滑入 → 慢慢滑行 1 秒 → 快速向右滑走的大字横幅
                 SlotMachineAgainBanner.Show();
                 // 等横幅播完（0.30 滑入 + 1.00 滑行 + 0.22 滑出 ≈ 1.52s）再弹三选一
                 yield return new WaitForSecondsRealtime(1.55f);
                 yield return CoJackpot(cats);
-                if (entryPanel != null) entryPanel.StartContinueCountdown();
+                if (entryPanel != null) entryPanel.SetCountdownPaused(false);
             }
         }
 
@@ -2646,7 +2683,12 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         string got = !string.IsNullOrEmpty(msg) ? msg
                    : !string.IsNullOrEmpty(card.Title) ? card.Title
                    : "已生效";
-        UIManager.Instance?.ShowToast($"【{SlotMachineSystem.CategoryName(cat)}】{got}");
+        // 【2026-10-06 主人反馈「获得的东西怎么不弹出提示，只弹奖励到手了」】
+        // 存一份给后面的「等玩家点继续」硬引导用 —— 引导文案里会带这份内容。
+        // 【2026-10-06 主人二次拍板：物品变动都要弹，不管对话/遮罩在不在】→ Toast 走 force=true，
+        // 不再被 AnyBubbleShowing 吞掉；引导文案那份保留，等于屏幕浮字 + 引导框双保险。
+        _lastDrawRewardMsg = $"【{SlotMachineSystem.CategoryName(cat)}】{got}";
+        UIManager.Instance?.ShowToast(_lastDrawRewardMsg, true);
     }
 
     /// <summary>
@@ -2717,7 +2759,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                     // 锁抽 + 面板倒计时，等玩家点「继续」才收面板、恢复战斗。
                     choice = 0;
                     yield return WaitForContinue(true,
-                        !string.IsNullOrEmpty(guideText) ? "奖励到手了，点「继续」继续战斗。" : null,
+                        !string.IsNullOrEmpty(guideText) ? $"{RewardTip()}　点「继续」继续战斗。" : null,
                         () => choice == 2);
                 }
             }
@@ -2796,6 +2838,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (picked && chosen.IsValid)
         {
             string msg = null;
+            // 【2026-10-06 主人拍板】战力涨幅：发奖前后各取一次真值，差多少就在玩家头顶飘多少。
+            // 不用 RunLoadout.ConsumeLastDelta（那是「相对上次调用」的累计，会跨次叠加）。
+            int powerBefore = RunLoadout.TotalPower();
             if (chosen.Kind == DraftCardKind.Equip)
                 yield return dir.CoApplyEquipCard(chosen, (o, m) => { landed = o; msg = m; });
             else
@@ -2809,6 +2854,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                 RunDraftDirector.RefreshSkillPower();
                 // 2026-10-05：免费这一抽也可能给技能，技能栏必须重建，否则新技能不上 HUD
                 RunSkillBarUI.Refresh();
+                // 【2026-10-06 主人拍板】战力涨了 → 头顶飘「战力 +N」+ 三档称赞；没涨就只刷数字。
+                int delta = RunLoadout.TotalPower() - powerBefore;
+                if (delta > 0) PlayerPowerHud.NotifyGain(delta);
+                else PlayerPowerHud.NotifyPowerChanged();
             }
         }
 

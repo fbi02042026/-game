@@ -28,6 +28,12 @@ public class SkillAvatarUI
     /// 空槽不显示。与 SkillOrderGuide 的「拖动技能可改释放顺序：① 最先放。」同一口径。
     /// </summary>
     public Text orderText;
+    /// <summary>
+    /// 【2026-10-06 主人拍板】右上角「新」角标：本拍抽奖刚拿到的<b>技能 / 佣兵技能</b>才显示，
+    /// 玩家点「继续」后由 <c>NewLootMarks.ClearAll()</c> 统一清掉（判据只有 <c>NewLootMarks.Has</c> 一处）。
+    /// 与左上角 ①②③④ 各占一角，互不遮挡。节点由 <c>BattleUI.WidgetFactory</c> 运行时补建（不改预制体）。
+    /// </summary>
+    public Text newText;
 
     [System.NonSerialized]
     public System.Action onClick;     // 点击回调
@@ -193,6 +199,17 @@ public class SkillAvatarUI
         if (orderText == null) return;
         orderText.text = text ?? "";
         orderText.gameObject.SetActive(!string.IsNullOrEmpty(orderText.text));
+    }
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】右上角「新」角标显隐。幂等，重复调用无副作用；
+    /// 节点没绑到就整段跳过（不新建节点、不改预制体）。
+    /// </summary>
+    public void SetNewBadge(bool isNew)
+    {
+        if (newText == null) return;
+        newText.text = isNew ? "新" : "";
+        newText.gameObject.SetActive(isNew);
     }
 
     /// <summary>右下角等级/星级：空串时整个隐藏。</summary>

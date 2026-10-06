@@ -176,7 +176,7 @@ public class RunDraftDirector : MonoBehaviour
         RunLoadout.Save();
         RunSkillBarUI.Refresh();
         if (!string.IsNullOrEmpty(msg))
-            GlobalToastUI.Show(msg);
+            GlobalToastUI.Show(msg, true);   // 2026-10-06 主人拍板：物品/技能/佣兵获得，force 弹出
     }
 
     /// <summary>
@@ -233,6 +233,8 @@ public class RunDraftDirector : MonoBehaviour
             case DraftCardKind.SkillNew:
                 if (!RunLoadout.TryAddSkill(card.Id)) { msg = "技能槽已满"; return false; }
                 RebuildPlayerSkills();
+                // 【2026-10-06 主人拍板】新获得的技能打「新」标记，点「继续」才消失。
+                NewLootMarks.Mark(NewLootMarks.KindSkill, card.Id);
                 msg = $"获得技能：{card.Title}";
                 return true;
 
@@ -336,13 +338,25 @@ public class RunDraftDirector : MonoBehaviour
 
         if (replace)
         {
-            if (!bag.TryEquipFromReward(eq))
+            // 【2026-10-06 主人报「抽到的钉锤没换到装备栏、也没换到玩家形象上」——根因修复】
+            //
+            // 旧写法 <c>TryEquipFromReward</c> → <c>TryAddUniqueBySlot</c> → <c>TryAcquireLoadoutItem</c>，
+            // 那条链的注释白纸黑字写着「**只入包不穿槽**」：武器只落进背包格子，
+            // 不写 <c>_equippedBySlot</c>（=装备栏），<c>NotifyCostumeChanged</c> 这条刷新 SPUM 的
+            // 链路自然也就读不到它 —— 装备栏与玩家形象两处都纹丝不动，符合主人看到的现象。
+            //
+            // 真正「穿上」的出口是 <c>TryEquipDirect</c>：走 <c>EquipItem</c> → 写穿戴槽 +
+            // <c>NotifyCostumeChanged()</c>（内含 <c>HeroCostumeManager.RefreshCostume</c> 刷 SPUM 时装），
+            // 顺带把顶下来的旧件 <c>ScrapEquip</c> 成强化石 —— 正好就是主人定的「低级的变成材料」。
+            if (!bag.TryEquipDirect(eq))
             {
-                done?.Invoke(false, $"背包已满，{NameOf(card, eq)} 未能入包");
+                done?.Invoke(false, $"{NameOf(card, eq)} 穿戴失败");
                 yield break;
             }
             var hero = Hero.Instance;
             if (hero != null) hero.RecalcAttr();
+            // 【2026-10-06 主人拍板】换上的新装备打「新」标记，点「继续」才消失。
+            NewLootMarks.Mark(NewLootMarks.KindEquip, eq.templateId);
             done?.Invoke(true, $"获得装备：{NameOf(card, eq)}");
             yield break;
         }
@@ -402,6 +416,8 @@ public class RunDraftDirector : MonoBehaviour
         };
         if (!RunLoadout.TryAddMerc(entry)) { msg = "佣兵位已满"; return false; }
         SpawnRunMerc(entry);
+        // 【2026-10-06 主人拍板】佣兵技能一样要标「新」（主人点名：不管是佣兵技能还是装备）。
+        NewLootMarks.Mark(NewLootMarks.KindSkill, entry.skillId);
         msg = $"佣兵加入：{entry.displayName}（Lv{entry.level} ★{entry.star}）";
         return true;
     }

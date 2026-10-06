@@ -264,12 +264,14 @@ public partial class BattleUI : MonoBehaviour
     {
         int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         int stageIdx = 0;
-        string diff = "普通";
+        // 【2026-10-06 主人拍板】左上角那格显示的是「玩家选的难度」（真源 BattleManager.BattleDifficulty，
+        // 引导局开局写 0 = 普通），**不再**按关卡类型显示「精英 / Boss」——
+        // 「精英」是关卡类型、「困难」是难度，两套词混在同一格里会读错。
+        // 难度名的唯一出处是 GameConfig.GetDifficultyName（原 StageTypeToDifficulty 已删）。
+        string diff = GameConfig.GetDifficultyName(
+            BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0);
         if (BattleManager.Instance != null && BattleManager.Instance.currentStage != null)
-        {
             stageIdx = BattleManager.Instance.currentStage.stageIndex;
-            diff = StageTypeToDifficulty(BattleManager.Instance.currentStage.type);
-        }
         long gold = BattleManager.Instance != null ? BattleManager.Instance.currentGold : 0;
         var save = SaveSystem.Instance?.Data;
         if (save != null && gold <= 0) gold = save.totalGold;

@@ -48,55 +48,47 @@ public partial class BattleUI : MonoBehaviour
         return _questGoldSprite;
     }
 
-    static string StageTypeToDifficulty(StageType t)
-    {
-        switch (t)
-        {
-            case StageType.Elite: return "精英";
-            case StageType.Boss: return "Boss";
-            default: return "普通";
-        }
-    }
-
     /// <summary>
-    /// 更新关卡信息（章节、难度、金币）并刷新资源条
+    /// 更新关卡信息（章节地区、难度、金币）并刷新资源条。
+    ///
+    /// 【2026-10-06 主人拍板】两条口径定死：
+    /// ① <b>地区 = 章节地点</b>（暮影森林 / 幽冥墓园 …），取自 <see cref="GameConfig.GetChapterMapName"/>；
+    /// ② <b>难度 = 玩家选的难度</b>（普通/困难/噩梦），引导局锁普通 —— 真源是
+    ///    <c>BattleManager.BattleDifficulty</c>（引导开局写 0），<b>不再</b>按关卡类型显示「精英/Boss」。
+    ///    旧实现那段 <c>StageTypeToDifficulty</c> 已删：同一格子里「精英」和「困难」会读成两个意思。
+    /// ③ <b>引导局也照常显示</b>：旧实现按 <c>TutorialDirector.IsTutorialBattle</c> 整块藏掉
+    ///    （连底框一起藏），主人看到的是左上角空一片，以为根本没做这个 HUD —— 判据已彻底删除。
     /// </summary>
     public void UpdateStageInfo(int chapter, int stage, string difficulty, long gold)
     {
-        bool hideStageInfo = TutorialDirector.IsTutorialBattle;
         if (stageLabel != null)
         {
-            // 连底框一起藏：文字挂在 StageIcon 上，只藏文字会留一个空壳
-            SetLabelWithFrameVisible(stageLabel, !hideStageInfo);
-            if (!hideStageInfo)
-                stageLabel.text = GameConfig.GetChapterMapName(chapter);
+            ShowLabelWithFrame(stageLabel);
+            stageLabel.text = GameConfig.GetChapterMapName(chapter);
         }
         if (difficultyLabel != null)
         {
-            SetLabelWithFrameVisible(difficultyLabel, !hideStageInfo);
-            if (!hideStageInfo)
-                difficultyLabel.text = string.IsNullOrEmpty(difficulty) ? "普通" : difficulty;
+            ShowLabelWithFrame(difficultyLabel);
+            difficultyLabel.text = string.IsNullOrEmpty(difficulty)
+                ? GameConfig.DifficultyNames[0]
+                : difficulty;
         }
         UpdateGold(gold);
         UpdateTopBarResources();
     }
 
     /// <summary>
-    /// 章节/难度标签连同它的底框一起显示或隐藏。
-    /// 标签是底框（StageIcon / DifficultyIcon）的子节点，所以往上找一层带 Image 的父节点整块关掉。
+    /// 把「地区 / 难度」标签连同它的底框一起点亮。
+    /// 标签是底框（StageIcon / DifficultyIcon）的子节点，只点亮文字会留一个空壳底框，
+    /// 所以往上找一层带 Image 的父节点整块点亮（父节点是共用的多子容器时不碰，只点亮文字）。
     /// </summary>
-    static void SetLabelWithFrameVisible(Text label, bool visible)
+    static void ShowLabelWithFrame(Text label)
     {
         if (label == null) return;
+        label.gameObject.SetActive(true);
         Transform parent = label.transform.parent;
-        // 父节点自己有图（就是底框）时关父节点；否则退化成只关文字
-        if (parent != null && parent.GetComponent<Image>() != null
-            && parent.childCount <= 3)
-        {
-            parent.gameObject.SetActive(visible);
-            return;
-        }
-        label.gameObject.SetActive(visible);
+        if (parent != null && parent.GetComponent<Image>() != null && parent.childCount <= 3)
+            parent.gameObject.SetActive(true);
     }
 
     /// <summary>
@@ -108,10 +100,17 @@ public partial class BattleUI : MonoBehaviour
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
 
-        // 天赋石：新预制体没有独立 TalentText，复用旧布局第三个资源位显示
+        // 【2026-10-06 主人拍板】战斗内顶栏**不再显示天赋石**：
+        // 主人原话「天赋石在战斗内不要资源条，只有获得奖励道具后在背包里显示」。
+        // 天赋石是城镇成长货币，战斗里露出来既用不上、又让顶栏挤。
+        // 旧布局那第三个资源位（enchantStoneText / talentStoneText）整段停用：
+        // 文本清空并把节点藏掉，避免留下一个「0」的空壳。
         var talentTarget = talentStoneText != null ? talentStoneText : enchantStoneText;
         if (talentTarget != null)
-            talentTarget.text = data.talentPoints.ToString();
+        {
+            talentTarget.text = "";
+            talentTarget.gameObject.SetActive(false);
+        }
 
         if (decomposeMatText != null)
             decomposeMatText.text = data.decomposeMats.ToString();

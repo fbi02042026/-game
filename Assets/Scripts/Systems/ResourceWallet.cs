@@ -135,7 +135,7 @@ public static class ResourceWallet
             // 统一「获得」反馈：凡是显式要求 notify 的发放都弹一条，玩家不必去看顶部数字。
             // 战斗内逐次结算的发放走 notify:false，不会刷屏。
             if (add > 0)
-                UIManager.Instance?.ShowToast($"获得 {DisplayName(type)} +{add}");
+                UIManager.Instance?.ShowToast($"获得 {DisplayName(type)} +{add}", true);   // 2026-10-06 主人拍板：资源获得 force 弹
             if (overflow > 0)
                 UIManager.Instance?.ShowToast($"{DisplayName(type)}已达到最大值");
         }

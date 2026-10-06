@@ -75,7 +75,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
     // ── 内部状态 ──
     static readonly string[] ModeNames  = { "主线冒险", "每日副本", "迷宫探索", "BOSS挑战", "活动副本" };
     // 2026-09-17：删除「地狱」——它与噩梦共用同一数值分支，是空壳。现在只有 普通 / 困难 / 噩梦 三档。
-    static readonly string[] DiffNames  = { "普通", "困难", "噩梦" };
+    // 2026-10-06：难度名一份拷贝都不留，全部改走 GameConfig.GetDifficultyName（战斗内 HUD 也读它）。
     static readonly Color    ColNormal  = new Color(0.30f, 0.55f, 0.22f, 1f);
     static readonly Color    ColHard    = new Color(0.28f, 0.42f, 0.65f, 1f);
     static readonly Color    ColNight   = new Color(0.45f, 0.22f, 0.62f, 1f);
@@ -1112,7 +1112,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
         for (int i = 0; i < GameConfig.DIFF_COUNT; i++)
         {
             int idx = i;
-            var dBtn = BuildDiffBtn(panel.transform, DiffNames[i], diffCols[i], i, diffY);
+            var dBtn = BuildDiffBtn(panel.transform, GameConfig.GetDifficultyName(i), diffCols[i], i, diffY);
             difficultyButtons[i] = dBtn;
             var lbls = dBtn.GetComponentsInChildren<Text>(true);
             if (lbls.Length > 0) difficultyLabels[i] = lbls[0];
@@ -2040,7 +2040,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
         if (difficultyLabels != null && i >= 0 && i < difficultyLabels.Length && difficultyLabels[i] != null
             && !string.IsNullOrEmpty(difficultyLabels[i].text))
             return difficultyLabels[i].text;
-        if (i >= 0 && i < DiffNames.Length) return DiffNames[i];
+        if (i >= 0 && i < GameConfig.DIFF_COUNT) return GameConfig.GetDifficultyName(i);
         return "难度";
     }
 

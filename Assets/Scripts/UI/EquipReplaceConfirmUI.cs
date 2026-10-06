@@ -3,17 +3,23 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 装备替换确认弹窗（2026-10-05 主人拍板）。
+/// 装备替换确认弹窗（2026-10-05 主人拍板；2026-10-06 改走<b>预制体</b>）。
 ///
-/// 主人原话：「只会抽中高级的直接替换低级的，然后低级的变成材料，不过需要弹出个弹窗告诉玩家是否替换」。
+/// 主人原话：「只会抽中高级的直接替换低级的，然后低级的变成材料，不过需要弹出个弹窗告诉玩家是否替换」
 /// → 拿到新装备、且同部位已经有旧件时，**先把新旧摆在一起给玩家看**，由玩家决定：
 ///   · 换上新的 → 新件入包，旧件走 <see cref="GridBackpackSystem.ScrapEquip"/> 折成强化石（低级的变成材料）
 ///   · 留着旧的 → 新件同样折成强化石（不占背包，也不白白吞掉这次奖励）
 ///
-/// <para>全程**运行时建树，不碰任何 prefab**。沿用项目惯例：挂在 BattleUI 下做子 Canvas
-/// （<see cref="GameConfig.SORT_POPUP"/> + overrideSorting），并按铁律补 <c>GraphicRaycaster</c>。
-/// 强弱判据只有 <see cref="EquipCompare"/> 一处，这里只负责显示。</para>
+/// <para><b>2026-10-06 主人二次拍板</b>：「用项目里的资源把替换装备的那个弹窗拼出来然后生成个预制体，
+/// 把'换上新装备吗'那个字放到弹窗的上方 不要挡住弹窗」。
+/// → 外观<b>不再运行时用纯色块拼</b>，改为加载预制体
+/// <c>Resources/Prefabs/Battle/EquipReplaceConfirmPopup</c>
+/// （由 <c>Assets/Editor/EquipReplaceConfirmPrefabBuilder.cs</c> 单点生成，
+/// 资源全部取自项目现有美术：撤离弹窗同款 Panel 底图 + 确定/取消按钮）；
+/// 标题「换上新装备吗？」在预制体里就挂在 <b>Panel 顶边之外</b>，不占面板内部空间、不挡内容。
+/// 本类只负责<b>填数据</b>与按钮回调，一行排版都不写。</para>
 ///
+/// <para>强弱判据只有 <see cref="EquipCompare"/> 一处，这里只负责显示。</para>
 /// <para>玩家一直不点时**默认「留着旧的」** —— 保守方向，绝不会弄丢玩家身上已有的装备。</para>
 /// </summary>
 public class EquipReplaceConfirmUI : MonoBehaviour
@@ -21,11 +27,20 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     /// <summary>玩家多久不点就按「留着旧的」处理（防协程永远挂着）。</summary>
     const float TimeoutSec = 60f;
 
-    const float PanelW = 640f;
-    const float PanelH = 470f;
+    /// <summary>
+    /// 预制体路径 —— 与 <c>EquipReplaceConfirmPrefabBuilder.PrefabPath</c> <b>必须同值</b>。
+    /// 改一边忘了另一边 = 运行时加载不到。
+    /// </summary>
+    public const string PrefabPath = "Prefabs/Battle/EquipReplaceConfirmPopup";
 
     static EquipReplaceConfirmUI _inst;
     GameObject _root;
+    Text _title;
+    Text _verdict;
+    Button _replaceBtn;
+    Button _keepBtn;
+    Button _dimBtn;
+
     System.Action<bool> _onDone;
     bool _answered;
     bool _answer;
@@ -47,7 +62,7 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
         ui._answered = false;
         ui._answer = false;
-        ui.Build(newEq, oldEq);
+        ui.Fill(newEq, oldEq);
 
         float t = 0f;
         while (!ui._answered && t < TimeoutSec)
@@ -64,120 +79,119 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     {
         if (_inst != null) return _inst;
 
-        Transform parent = BattleUI.Instance != null ? BattleUI.Instance.transform : null;
-        if (parent == null)
+        var prefab = Resources.Load<GameObject>(PrefabPath);
+        if (prefab == null)
         {
-            var canvas = Object.FindObjectOfType<Canvas>();
-            parent = canvas != null ? canvas.transform : null;
-        }
-        if (parent == null)
-        {
-            Debug.LogError("[EquipReplaceConfirm] 找不到 UI 父节点");
+            // 不静默跳过（铁律 14）：没预制体就没得谈，交给上层按「留着旧的」放行
+            Debug.LogError($"[EquipReplaceConfirm] 找不到预制体 Resources/{PrefabPath}，" +
+                           "请先在团结菜单跑 Tools → 装备 → 生成替换装备确认弹窗预制体");
             return null;
         }
 
-        var go = new GameObject("EquipReplaceConfirm", typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        _inst = go.AddComponent<EquipReplaceConfirmUI>();
-        return _inst;
+        var go = Instantiate(prefab);
+        go.name = "EquipReplaceConfirmPopup";
+        // 与 EvacuateConfirmPopup 同一套口径：自带 Overlay Canvas，不挂在 BattleUI 下、不随场景销毁
+        DontDestroyOnLoad(go);
+        return go.GetComponent<EquipReplaceConfirmUI>() ?? go.AddComponent<EquipReplaceConfirmUI>();
     }
 
-    void Build(EquipInstance newEq, EquipInstance oldEq)
+    void Awake()
     {
-        if (_root != null) Destroy(_root);
-        _root = new GameObject("Root", typeof(RectTransform));
-        _root.transform.SetParent(transform, false);
+        _inst = this;
+        BindRefs();
+        Wire();
+        if (_root != null) _root.SetActive(false);
+    }
 
-        var rootRt = _root.GetComponent<RectTransform>();
-        Stretch(rootRt);
-        // 独立排序层：压在所有战斗 HUD / 特效之上，否则按钮点不到
-        var c = _root.AddComponent<Canvas>();
-        c.overrideSorting = true;
-        c.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        c.sortingOrder = GameConfig.SORT_POPUP;
-        if (_root.GetComponent<GraphicRaycaster>() == null)
-            _root.AddComponent<GraphicRaycaster>();
+    void OnDestroy()
+    {
+        if (_inst == this) _inst = null;
+    }
 
-        // 遮罩：吃掉点击，避免穿透到下面的抽奖面板
-        var veil = CreateImage("Veil", _root.transform, new Color(0f, 0f, 0f, 0.62f));
-        Stretch(veil.rectTransform);
+    void BindRefs()
+    {
+        if (_root == null) _root = transform.Find("Root")?.gameObject ?? gameObject;
+        _title = Text_(FindDeep(_root.transform, "Title"));
+        _verdict = Text_(FindDeep(_root.transform, "Verdict"));
+        _replaceBtn = FindDeep(_root.transform, "ReplaceButton")?.GetComponent<Button>();
+        _keepBtn = FindDeep(_root.transform, "KeepButton")?.GetComponent<Button>();
+        _dimBtn = FindDeep(_root.transform, "Dim")?.GetComponent<Button>();
+    }
 
-        var panel = CreateImage("Panel", _root.transform, new Color(0.10f, 0.11f, 0.14f, 0.98f));
-        var prt = panel.rectTransform;
-        prt.anchorMin = new Vector2(0.5f, 0.5f);
-        prt.anchorMax = new Vector2(0.5f, 0.5f);
-        prt.pivot = new Vector2(0.5f, 0.5f);
-        prt.anchoredPosition = Vector2.zero;
-        prt.sizeDelta = new Vector2(PanelW, PanelH);
+    void Wire()
+    {
+        if (_replaceBtn != null)
+        {
+            _replaceBtn.onClick.RemoveAllListeners();
+            _replaceBtn.onClick.AddListener(() => Answer(true));
+        }
+        if (_keepBtn != null)
+        {
+            _keepBtn.onClick.RemoveAllListeners();
+            _keepBtn.onClick.AddListener(() => Answer(false));
+        }
+        // 点空白处＝不冒险，按「留着旧的」处理（与超时同一个保守方向）
+        if (_dimBtn != null)
+        {
+            _dimBtn.onClick.RemoveAllListeners();
+            _dimBtn.onClick.AddListener(() => Answer(false));
+        }
+    }
 
-        var title = CreateText("Title", panel.transform, "换上新装备吗？", 30, new Color(1f, 0.92f, 0.72f));
-        SetRect(title.rectTransform, new Vector2(0f, -18f), new Vector2(PanelW - 40f, 40f));
+    /// <summary>
+    /// 只<b>填数据</b>，不碰排版：所有位置 / 字体 / 图片都是预制体里主人调好的。
+    /// </summary>
+    void Fill(EquipInstance newEq, EquipInstance oldEq)
+    {
+        BindRefs();
+        Wire();
 
-        string verdict = EquipCompare.Verdict(newEq, oldEq);
+        if (_title != null) _title.text = "换上新装备吗？";
+
         bool newBetter = EquipCompare.Compare(newEq, oldEq) > 0;
-        var vd = CreateText("Verdict", panel.transform, verdict, 26,
-            newBetter ? new Color(0.55f, 0.95f, 0.60f) : new Color(0.95f, 0.72f, 0.45f));
-        SetRect(vd.rectTransform, new Vector2(0f, -62f), new Vector2(PanelW - 40f, 34f));
+        if (_verdict != null)
+        {
+            _verdict.text = EquipCompare.Verdict(newEq, oldEq);
+            _verdict.color = newBetter ? new Color(0.55f, 0.95f, 0.60f) : new Color(0.95f, 0.72f, 0.45f);
+        }
 
-        // 两列对比：左 = 抽到的，右 = 现在穿的
-        AddColumn(panel.transform, "New", -160f, "抽到的", newEq);
-        AddColumn(panel.transform, "Old", 160f, "现在穿的", oldEq);
-
-        var hint = CreateText("Hint", panel.transform, "不换的那件会拆成强化石，不会浪费", 20,
-            new Color(0.72f, 0.72f, 0.76f));
-        SetRect(hint.rectTransform, new Vector2(0f, -220f), new Vector2(PanelW - 40f, 30f));
-
-        AddButton(panel.transform, "BtnReplace", -140f, "换上新的", new Color(0.20f, 0.55f, 0.30f), true);
-        AddButton(panel.transform, "BtnKeep", 140f, "留着旧的", new Color(0.38f, 0.38f, 0.44f), false);
+        FillColumn(_root.transform, "ColumnNew", newEq);
+        FillColumn(_root.transform, "ColumnOld", oldEq);
 
         GameFonts.ApplyToHierarchy(_root.transform);
-        _root.SetActive(true);
+        if (_root != null)
+        {
+            _root.SetActive(true);
+            transform.SetAsLastSibling();
+        }
     }
 
-    void AddColumn(Transform panel, string nodeName, float x, string header, EquipInstance eq)
+    void FillColumn(Transform scope, string columnName, EquipInstance eq)
     {
-        var col = CreateImage(nodeName, panel, new Color(1f, 1f, 1f, 0.05f));
-        var rt = col.rectTransform;
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(x, 90f);
-        rt.sizeDelta = new Vector2(300f, 290f);
-
-        var h = CreateText("Head", col.transform, header, 24, new Color(0.85f, 0.82f, 0.70f));
-        SetRect(h.rectTransform, new Vector2(0f, -10f), new Vector2(280f, 32f));
+        var col = FindDeep(scope, columnName);
+        if (col == null)
+        {
+            Debug.LogError($"[EquipReplaceConfirm] 预制体里缺少节点 {columnName}");
+            return;
+        }
 
         string name = eq != null && !string.IsNullOrEmpty(eq.equipName) ? eq.equipName : "（空）";
-        var nm = CreateText("Name", col.transform, name, 24, Color.white);
-        SetRect(nm.rectTransform, new Vector2(0f, -48f), new Vector2(280f, 32f));
+        SetText(col, "Name", name);
+        SetText(col, "Info", eq == null ? "-"
+            : $"{RarityName(eq)}　★{Mathf.Max(1, eq.star)}　+{Mathf.Max(0, eq.enhanceLevel)}");
+        SetText(col, "Desc", eq != null ? DraftPool.FormatEquipDesc(eq) : "");
 
-        string line = eq == null ? "-" : $"{RarityName(eq)}　★{Mathf.Max(1, eq.star)}　+{Mathf.Max(0, eq.enhanceLevel)}";
-        var info = CreateText("Info", col.transform, line, 22, RarityColor(eq));
-        SetRect(info.rectTransform, new Vector2(0f, -84f), new Vector2(280f, 30f));
+        var infoText = Text_(FindDeep(col, "Info"));
+        if (infoText != null) infoText.color = RarityColor(eq);
 
-        string desc = eq != null ? DraftPool.FormatEquipDesc(eq) : "";
-        var d = CreateText("Desc", col.transform, desc, 19, new Color(0.80f, 0.80f, 0.84f));
-        SetRect(d.rectTransform, new Vector2(0f, -120f), new Vector2(280f, 150f));
-    }
-
-    void AddButton(Transform panel, string nodeName, float x, string label, Color bg, bool answer)
-    {
-        var img = CreateImage(nodeName, panel, bg);
-        var rt = img.rectTransform;
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(x, -175f);
-        rt.sizeDelta = new Vector2(240f, 74f);
-
-        var btn = img.gameObject.GetComponent<Button>();
-        if (btn == null) btn = img.gameObject.AddComponent<Button>();
-        btn.targetGraphic = img;
-        btn.onClick.RemoveAllListeners();
-        btn.onClick.AddListener(() => Answer(answer));
-
-        var t = CreateText("Label", img.transform, label, 26, Color.white);
-        Stretch(t.rectTransform);
+        // 图标走项目唯一出口，不自己拼路径
+        var icon = FindDeep(col, "Icon")?.GetComponent<Image>();
+        if (icon != null)
+        {
+            Sprite sp = eq != null ? EquipIcons.Resolve(eq) : null;
+            icon.sprite = sp;
+            icon.enabled = sp != null;
+        }
     }
 
     void Answer(bool replace)
@@ -188,14 +202,18 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
     void Hide()
     {
-        if (_root != null)
-        {
-            Destroy(_root);
-            _root = null;
-        }
+        if (_root != null) _root.SetActive(false);
     }
 
-    // ——— 小工具：与项目里其它运行时建 UI 的写法保持一致 ———
+    // ——— 小工具 ———
+
+    static void SetText(Transform scope, string nodeName, string text)
+    {
+        var t = Text_(FindDeep(scope, nodeName));
+        if (t != null) t.text = text;
+    }
+
+    static Text Text_(Transform t) => t != null ? t.GetComponent<Text>() : null;
 
     static string RarityName(EquipInstance eq)
     {
@@ -215,48 +233,15 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         }
     }
 
-    static Image CreateImage(string name, Transform parent, Color color)
+    static Transform FindDeep(Transform root, string name)
     {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        go.transform.SetParent(parent, false);
-        var img = go.GetComponent<Image>();
-        img.color = color;
-        return img;
-    }
-
-    static Text CreateText(string name, Transform parent, string text, int size, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        go.transform.SetParent(parent, false);
-        var t = go.GetComponent<Text>();
-        t.text = text;
-        t.fontSize = size;
-        t.color = color;
-        t.alignment = TextAnchor.MiddleCenter;
-        t.horizontalOverflow = HorizontalWrapMode.Wrap;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        t.raycastTarget = false;
-        var f = GameFonts.GetChinese();
-        if (f != null) t.font = f;
-        return t;
-    }
-
-    static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
-
-    /// <summary>统一用「父级中心为基准」的中锚点（= Inspector 的 Pos Y 那把尺子），避免各处 y 正负号不一致。</summary>
-    static void SetRect(RectTransform rt, Vector2 pos, Vector2 size)
-    {
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = pos;
-        rt.sizeDelta = size;
+        if (root == null) return null;
+        if (root.name == name) return root;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var f = FindDeep(root.GetChild(i), name);
+            if (f != null) return f;
+        }
+        return null;
     }
 }

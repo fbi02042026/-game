@@ -300,7 +300,7 @@ public partial class BattleUI : MonoBehaviour
         }
         // 传入真实格子：没有 GridLayoutGroup（格子是美术手摆的）时也能算对位置
         BackpackGridVisual.ClearAndPlace(gridRt, gridLayout, placements, FindGridCellRect, BattleLootMode.Active);
-        ApplyBackpackCellOccupiedColors(placements);
+        RestoreBackpackCellVisuals();
         // 换装后同步底部 5 个装备快捷槽
         UpdateEquipQuickSlots();
         Debug.Log($"[BattleUI] 背包刷新 items={placements.Count} cells={gridCells.Count} layout={(gridLayout != null)}");
@@ -384,7 +384,13 @@ public partial class BattleUI : MonoBehaviour
         RefreshLootModeChrome();
     }
 
-    void ApplyBackpackCellOccupiedColors(List<BackpackGridVisual.ItemPlacement> placements)
+    /// <summary>
+    /// 【2026-10-06 主人拍板】战斗背包格子底图恒为美术原色 —— 不再按「有装备 / 已穿戴」刷代码色
+    /// （旧实现刷深蓝 0.24,0.30,0.38 / 铜色 0.30,0.26,0.16，把美术底图盖掉了）。
+    /// 稀有度改由图标外沿那圈描边表达（BackpackGridVisual → EquipRarityRim），与底色无关。
+    /// 这里只负责把上次刷新可能残留的染色还原。
+    /// </summary>
+    void RestoreBackpackCellVisuals()
     {
         if (gridCells == null) return;
         foreach (var cell in gridCells)
@@ -392,29 +398,6 @@ public partial class BattleUI : MonoBehaviour
             if (cell == null) continue;
             cell.SetEmptyVisual();
         }
-        if (placements == null) return;
-        for (int i = 0; i < placements.Count; i++)
-        {
-            var p = placements[i];
-            for (int dx = 0; dx < p.w; dx++)
-            for (int dy = 0; dy < p.h; dy++)
-            {
-                var cell = FindGridCell(p.x + dx, p.y + dy);
-                cell?.SetOccupiedVisual(p.equipped);
-            }
-        }
-    }
-
-    GridCellUI FindGridCell(int gx, int gy)
-    {
-        if (gridCells == null) return null;
-        for (int i = 0; i < gridCells.Count; i++)
-        {
-            var c = gridCells[i];
-            if (c != null && c.gridX == gx && c.gridY == gy)
-                return c;
-        }
-        return null;
     }
 
     /// <summary>按格子坐标取真实格子的 RectTransform，供多格装备量取实际占位。</summary>

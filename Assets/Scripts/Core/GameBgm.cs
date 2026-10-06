@@ -84,6 +84,8 @@ public static class GameBgm
         {
             // 2026-10-04 主人拍板：静音期间 UI 级 Play 会覆盖流程显式 SetPending 的目标曲。
             // 保持「谁显式指定谁说了算」，别再改回无条件赋值。
+            // 【2026-10-06 主人拍板】诊断用：只有被拦下时才打调用栈，日志量可控。
+            Debug.Log($"[BgmDiag] Play 被静音拦下 track={track}\n{UnityEngine.StackTraceUtility.ExtractStackTrace()}");
             return;
         }
         if (!GameAudio.MusicEnabled)
@@ -107,7 +109,11 @@ public static class GameBgm
         if (track == _current && _active != null && _active.isPlaying && _active.clip == clip)
             return;
 
-        Debug.Log($"[BgmDiag] Play switch {_current} -> {track}");
+        // 【2026-10-06 主人拍板】诊断用：真正开始出声的时刻 + 调用栈。
+        // 主人反馈「Loading 没走完就有城镇曲」→ 只要这条出现在 [LoadDiag] Hide+Unmute 之前，元凶就是它。
+        Debug.Log($"[BgmDiag] Play switch {_current} -> {track} loadingMuted={_loadingMuted} " +
+                  $"cutsceneMuted={_cutsceneMuted} overlayShowing={BattleLoadingOverlay.IsShowing}\n" +
+                  UnityEngine.StackTraceUtility.ExtractStackTrace());
         AudioSource next = (_active == _a) ? _b : _a;
         AudioSource prev = _active;
 
@@ -196,6 +202,11 @@ public static class GameBgm
     public static void MuteForLoading(float fadeSeconds = 0.35f)
     {
         EnsureHost();
+        // 【2026-10-06 主人拍板】主人反馈「登录进主城 Loading 没走完就有城镇曲」→ 先只加诊断日志、不改行为。
+        // 这里记录「静音那一刻的真实状态」，与 [LoadDiag] / [BgmDiag] Unmute 三条对齐即可定位是谁提前放的。
+        Debug.Log($"[BgmDiag] MuteForLoading enter current={_current} pending={_pendingAfterLoading} " +
+                  $"loadingMuted(before)={_loadingMuted} cutsceneMuted={_cutsceneMuted} " +
+                  $"scene={UnityEngine.SceneManagement.SceneManager.GetActiveScene().name}");
         _storyHold = 0;
         _restoreAfterStory = Track.None;
         if (_endStoryCo != null)
@@ -212,6 +223,11 @@ public static class GameBgm
     public static void UnmuteAfterLoading(float fadeSeconds = DefaultFade)
     {
         EnsureHost();
+        // 【2026-10-06 主人拍板】诊断用：解除静音的那一刻，把「是谁触发的」记清楚。
+        Debug.Log($"[BgmDiag] UnmuteAfterLoading enter loadingMuted(before)={_loadingMuted} " +
+                  $"cutsceneMuted={_cutsceneMuted} pending={_pendingAfterLoading} current={_current} " +
+                  $"overlayShowing={BattleLoadingOverlay.IsShowing} " +
+                  $"scene={UnityEngine.SceneManagement.SceneManager.GetActiveScene().name}");
         _loadingMuted = false;
         if (!GameAudio.MusicEnabled)
         {

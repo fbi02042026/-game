@@ -34,6 +34,7 @@ public partial class BattleUI : MonoBehaviour
                 slot.SetLabelVisible(false);
                 slot.SetLevelText("");
                 slot.SetOrderText("");   // 空槽不标序号，避免「这格也算一发」的误读
+                slot.SetNewBadge(false); // 空槽不可能「新」
                 slot.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
                 slot.SetEnergyFill(0f);
                 if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
@@ -58,6 +59,8 @@ public partial class BattleUI : MonoBehaviour
             // 左上角序号 = 释放优先级（① 最先放）。不拖拽时 = 获得技能的先后顺序，
             // 玩家在整理阶段拖动槽位改顺序后，这里跟着 RunLoadout.SkillIds() 一起变。
             slot.SetOrderText(SkillOrderLabel(i));
+            // 【2026-10-06 主人拍板】本拍抽奖刚拿到的技能，右上角亮「新」，点「继续」后清。
+            slot.SetNewBadge(NewLootMarks.Has(NewLootMarks.KindSkill, id));
         }
 
         LogRunSkillDiagnostics(ids);
@@ -163,10 +166,13 @@ public partial class BattleUI : MonoBehaviour
                 slot.SetEnergyFill(0f);
                 if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
                 slot.SetCooldownRatio(0f);
+                slot.SetNewBadge(false);
                 continue;
             }
 
             slot.SetAvatar(MercSkillTable.LoadIcon(caster.ActiveSkillId));
+            // 【2026-10-06 主人拍板】佣兵技能刚抽到时右上角亮「新」，点「继续」后清。
+            slot.SetNewBadge(NewLootMarks.Has(NewLootMarks.KindSkill, caster.ActiveSkillId));
             // 2026-10-06：底部细条语义由「充能」改为「剩余 MP 比例」（仍 0~1）
             slot.SetEnergyFill(BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(i) : 0f);
         }

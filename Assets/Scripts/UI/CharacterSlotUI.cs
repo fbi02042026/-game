@@ -171,6 +171,33 @@ public class CharacterSlotUI
         frameImage.enabled = frame != null;
     }
 
+    /// <summary>
+    /// 职业 icon 不拉伸：在<b>预制体已经给好的框</b>里按 sprite 真实宽高比收敛。
+    ///
+    /// <para>为什么不能用 <c>SetNativeSize()</c>：它把 RectTransform 直接改成 sprite 的<b>原始像素尺寸</b>，
+    /// 等于把主人在预制体里调好的那一框整个盖掉（违铁律 2：预制体有值 → 代码不写），
+    /// 图一大就顶出框、再叠上父级缩放，看着就是「被拉伸」。</para>
+    ///
+    /// <para>这里以预制体（或代码兜底）给的 <c>sizeDelta</c> 当<b>天花板</b>：
+    /// 框比图宽就按高定宽，框比图高就按宽定高 —— 图永远完整、比例永远对、也不超出主人摆的位置。</para>
+    /// </summary>
+    static void FitJobIconNoStretch(Image img)
+    {
+        if (img == null || img.sprite == null) return;
+        var rt = img.rectTransform;
+
+        float boxW = Mathf.Max(1f, rt.sizeDelta.x);
+        float boxH = Mathf.Max(1f, rt.sizeDelta.y);
+        var r = img.sprite.rect;
+        float spr = Mathf.Max(0.01f, r.width / Mathf.Max(1f, r.height));
+
+        float w = boxW, h = boxH;
+        if (boxW / boxH > spr) w = boxH * spr;   // 框偏宽 → 以高为准收窄
+        else                   h = boxW / spr;   // 框偏高 → 以宽为准收矮
+
+        rt.sizeDelta = new Vector2(w, h);
+    }
+
     static void FitPortraitNoStretch(Image img)
     {
         if (img == null) return;
@@ -378,7 +405,7 @@ public class CharacterSlotUI
         jobIcon.raycastTarget = false;
         jobIcon.sprite = icon;
         // 2026-10-06 主人拍板：职业 icon 用贴图原始尺寸，别被美术摆的 sizeDelta 拉满框变形
-        if (icon != null) jobIcon.SetNativeSize();
+        if (icon != null) FitJobIconNoStretch(jobIcon);
         jobIcon.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
         jobIcon.gameObject.SetActive(icon != null);
         // 只打一次：UpdateCharacterSlots 每次刷血条都会调到这里，逐帧打印会刷爆控制台

@@ -162,6 +162,12 @@ public class BattleEntryDraftPanel : MonoBehaviour
     RectTransform _mapRt;
     bool _mapBaseLogged;
     Coroutine _animCo;
+    /// <summary>
+    /// 【2026-10-06 主人拍板】入场归位协程：把适配摆在展开位（实测 361 / scale 1.0）的 map
+    /// 平滑滑回收起位（250 / scale 1.13），避免「一进战斗 map 啪地跳一下」。
+    /// 它在跑的时候 <c>LateUpdate</c> 让路，绝不与两态钳制同时写 map。
+    /// </summary>
+    Coroutine _settleCo;
     /// <summary>0 = 收起，1 = 展开。整套两态只有这一个状态出口。</summary>
     float _animK;
     Button _continueBtn;
@@ -184,10 +190,26 @@ public class BattleEntryDraftPanel : MonoBehaviour
     long _lastCoins;
     List<DraftCategory> _lastCats;
 
-    /// <summary>「继续」倒计时：抽完开始跑，归零自动当作玩家点了继续（防卡死）。</summary>
+    /// <summary>
+    /// 【2026-10-06 二次拍板】「继续」倒计时总时长（秒）。
+    /// 起表点<b>只有 <see cref="Begin"/> 一处</b> —— 面板一露头就开始走，
+    /// 抽奖全程连续递减；<b>抽完不重置</b>（主人：「不是说过抽奖的时候就开始计时吗」）。
+    /// </summary>
     public const float ContinueCountdownSec = 30f;
 
-    Coroutine _countdownCo;
+    /// <summary>
+    /// 倒计时数字字号。【2026-10-06 主人校准】摆到 map 正中间后要「放大点」才显眼。
+    /// 要大小只改这一个数。
+    /// </summary>
+    const int CountdownFontSize = 120;
+
+    /// <summary>倒计时剩余秒数。&gt;0 表示在跑；0 表示没在跑。</summary>
+    float _countdownLeft;
+    /// <summary>
+    /// 冻结开关：抽奖结算（老虎机 / 三选一 / 装备替换弹窗）期间为 true。
+    /// <b>只冻结、不清零</b> —— 结算完接着走剩下的秒数，绝不给它偷偷补满。
+    /// </summary>
+    bool _countdownPaused;
     Text _countdownText;
 
     Action<DraftCategory?> _onPick;
@@ -271,12 +293,28 @@ public class BattleEntryDraftPanel : MonoBehaviour
         // 打出来的对照值才是「适配给的基准」。
         c._mapRt = c.ResolveMap();
         c.LogMapBaseOnce();
-        // 【2026-10-06 主人拍板】组件一出生就把 map 按主人给的收起态（中心Y 250 / scale 1.13）拍上去。
+        // 【2026-10-06 主人拍板】组件一出生就把 map 往主人给的收起态（中心Y 250 / scale 1.13）落。
         // 原因：适配是按「那一刻面板多高」算的，而那一刻面板还停在预制体的展开态 750，
         // 算出来的 map 落点本身就是展开位 —— 这就是主人报「一上来就跑到上面」的根因。
-        // 这里补一次落位：Build / Show 还没跑到的时候，map 就已经在收起位。
-        c.ApplyMapState(0f);
+        // 这里补一次落位：Build / Show 还没跑到的时候，map 就已经在往收起位走。
+        // 【2026-10-06 主人二次拍板】不要瞬移 —— 走 SettleMapToCollapsed 平滑滑过去。
+        c.SettleMapToCollapsed();
         return c;
+    }
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板 · 方案 A】战斗 UI 就绪后<b>立刻</b>把本组件建出来，不再等 <c>Show()</c>。
+    /// <para>为什么非要这一步：<c>Ensure()</c> 原本只在 <c>Show()</c>（抽奖弹面板）里调，
+    /// 于是「战斗一开始还没抽奖」的那段时间内 <b>本类实例根本不存在</b> →
+    /// <c>LateUpdate</c> 不跑 → 没有任何人把 map 从适配给的展开位 361 拉回收起位 250
+    /// → 主人看到的「map 一上来就在上面」。</para>
+    /// <para>本方法<b>只建组件、不显示任何东西</b>（显隐仍归 <c>Begin/Finish</c>），
+    /// 创建出口仍是 <c>Ensure()</c> 一个，这里只是提前调它。</para>
+    /// </summary>
+    public static void Prewarm()
+    {
+        if (BattleUI.Instance == null) return;
+        Ensure();
     }
 
     RectTransform ResolveMap()
@@ -305,10 +343,25 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// </summary>
     void ApplyMapState(float k)
     {
+        WriteMapTransform(
+            Mathf.Lerp(MapCollapsedPosY, MapExpandedPosY, k),
+            Mathf.Lerp(MapCollapsedScale, MapExpandedScale, k));
+    }
+
+    /// <summary>
+    /// 写 map 的<b>唯一出口</b>：给一对绝对值（中心 Y + 缩放），由它按<b>当时的锚点</b>落笔。
+    /// <para>· 点锚点：直接写 <c>anchoredPosition.y</c>；</para>
+    /// <para>· 竖向拉伸锚点（<c>UiLayoutStretch.ApplyBattleMapWidth</c> 会把它改成 (0,0)~(1,1)）：
+    ///   <c>anchoredPosition.y</c> 是派生的，写了会被反算覆盖 —— 必须按差值推
+    ///   <c>offsetMin/offsetMax</c> 整体平移。</para>
+    /// 每帧都按「目标 − 当前」算差值，所以别处什么时候改了 map，下一帧都会被拉回本类给的值，
+    /// 不需要缓存基准，也不会有累积漂移。
+    /// </summary>
+    void WriteMapTransform(float targetY, float scale)
+    {
         if (_mapRt == null) return;
 
-        float target = Mathf.Lerp(MapCollapsedPosY, MapExpandedPosY, k);
-        float d = target - _mapRt.anchoredPosition.y;
+        float d = targetY - _mapRt.anchoredPosition.y;
         if (Mathf.Abs(d) > 0.01f)
         {
             if (!Mathf.Approximately(_mapRt.anchorMin.y, _mapRt.anchorMax.y))
@@ -318,10 +371,49 @@ public class BattleEntryDraftPanel : MonoBehaviour
             }
             else
             {
-                _mapRt.anchoredPosition = new Vector2(_mapRt.anchoredPosition.x, target);
+                _mapRt.anchoredPosition = new Vector2(_mapRt.anchoredPosition.x, targetY);
             }
         }
-        _mapRt.localScale = Vector3.one * Mathf.Lerp(MapCollapsedScale, MapExpandedScale, k);
+        _mapRt.localScale = Vector3.one * scale;
+    }
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】map 落到收起态时<b>不许瞬移</b> —— 主人原话「往上移动或往下移动加个效果，不要突然出来」。
+    /// <para>为什么需要它：竖屏适配把 map 摆在 <b>361 / scale 1.0</b>（展开位），
+    /// 而主人定的收起态是 <b>250 / scale 1.13</b>。直接写目标值就会「啪」地跳一下。
+    /// 这里从<b>当前实际位置</b>起算，用与展开/收起同一段时长（<c>AnimSec</c>）平滑滑回收起位。</para>
+    /// <para>已经在收起位（差值小于半个像素）就不需要动，直接落位，不起协程。</para>
+    /// </summary>
+    void SettleMapToCollapsed()
+    {
+        if (_mapRt == null) return;
+
+        bool atRest = Mathf.Abs(_mapRt.anchoredPosition.y - MapCollapsedPosY) < 0.5f
+                      && Mathf.Abs(_mapRt.localScale.x - MapCollapsedScale) < 0.001f;
+        if (atRest)
+        {
+            ApplyMapState(0f);
+            return;
+        }
+        if (_settleCo != null) StopCoroutine(_settleCo);
+        _settleCo = StartCoroutine(CoSettleMap());
+    }
+
+    IEnumerator CoSettleMap()
+    {
+        float fromY = _mapRt.anchoredPosition.y;
+        float fromS = _mapRt.localScale.x;
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.unscaledDeltaTime / AnimSec;
+            float e = Mathf.Clamp01(t);
+            WriteMapTransform(Mathf.Lerp(fromY, MapCollapsedPosY, e),
+                              Mathf.Lerp(fromS, MapCollapsedScale, e));
+            yield return null;
+        }
+        _settleCo = null;
+        ApplyMapState(0f);
     }
 
     /// <summary>
@@ -362,7 +454,11 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// </summary>
     void LateUpdate()
     {
-        if (_mapRt == null || _animCo != null) return;
+        // 倒计时每帧走：与本类两态动画、入场归位互不干涉，各自独立。
+        TickContinueCountdown();
+
+        // 入场归位（_settleCo）在跑时也让路：同一时刻只有一处写 map。
+        if (_mapRt == null || _animCo != null || _settleCo != null) return;
         ApplyMapState(_animK);
     }
 
@@ -381,9 +477,12 @@ public class BattleEntryDraftPanel : MonoBehaviour
                Action<DraftCategory?> onPick, Action onFight, int freeLeft = 0)
     {
         Build();
-        // 【2026-10-06 主人拍板】一进抽奖环节就开始计时（**不是**抽完才计时）：
-        // 面板一出现就把 30s 倒计时重置满，归零 = 自动当作玩家点了「继续」。
-        // 连抽回到面板同样走这里 → 每次回面板都重新给满 30s，想再抽就再抽。
+        // 【2026-10-06 主人二次拍板】这里是倒计时<b>唯一</b>的起表点：
+        // 面板一露头（= 抽奖环节开始）就开始走 30s，**不是抽完才开始**；
+        // 抽奖全程连续递减，抽完<b>不重置</b>（原来 CoStageEntryDraft 在抽完又起一次表，
+        // 玩家看到的就是「数字跳回 30 重新开始」—— 主人报「怎么还是抽完才开始计时」的根因）。
+        // 归零 = 玩家挂着没动 → 当作点了「继续」。
+        // 连抽中途回面板只是<b>解冻</b>（SetCountdownPaused(false)），不补满 —— 总预算就是这 30s。
         _drawLocked = false;
         StartContinueCountdown();
         _onPick = onPick;
@@ -670,8 +769,27 @@ public class BattleEntryDraftPanel : MonoBehaviour
     {
         if (!_draftActive) return;
         StopContinueCountdown();
+        // 【2026-10-06 主人拍板】点「继续」→ 本拍抽奖打上的「新」标记一次性清掉，角标跟着消失。
+        ClearNewLootBadges();
         var cb = _onFight;
         cb?.Invoke();
+    }
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】清「新」的<b>唯一出口</b>：玩家点「继续」、倒计时归零两条路都走
+    /// <see cref="DoContinue"/> → 这里。别处一律不许清，免得「新」字提前消失（或永远不消失）。
+    /// <para>顺序不能反：<b>先清标记，再刷 UI</b> —— 反了刷出来的还是带标记的那一版。</para>
+    /// <para>没有标记就什么都不做（不无故刷 UI）。</para>
+    /// </summary>
+    void ClearNewLootBadges()
+    {
+        if (NewLootMarks.Count <= 0) return;
+        NewLootMarks.ClearAll();
+        var ui = BattleUI.Instance;
+        if (ui == null) return;
+        ui.UpdateRunSkillSlots();
+        ui.UpdateMercSkillSlots();
+        ui.UpdateEquipQuickSlots();
     }
 
     /// <summary>
@@ -692,40 +810,54 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// <para>用 <c>WaitForSecondsRealtime</c>：抽奖阶段战斗是冻住的（timeScale 可能为 0），
     /// 普通 WaitForSeconds 会永远不走。</para>
     /// </summary>
+    /// <summary>
+    /// 【2026-10-06 二次拍板】倒计时<b>唯一</b>起表口 —— 只在 <see cref="Begin"/> 调用。
+    ///
+    /// <para>为什么不用协程：协程会随 GameObject 显隐被掐断/延后，主人在外面看到的就是
+    /// 「计时好像没在走 / 抽完才开始跳」。现在改 <see cref="TickContinueCountdown"/> 每帧
+    /// 按 <c>Time.unscaledDeltaTime</c> 递减 —— 抽奖阶段 timeScale 冻住也不受影响，
+    /// 且一定是从面板出现那一刻起连续走。</para>
+    /// </summary>
     public void StartContinueCountdown(float seconds = ContinueCountdownSec)
     {
-        StopContinueCountdown();
         EnsureCountdownText();
         if (_countdownText == null) return;
-        _countdownCo = StartCoroutine(CoContinueCountdown(Mathf.Max(1f, seconds)));
+        _countdownLeft = Mathf.Max(1f, seconds);
+        _countdownPaused = false;
+        _countdownText.gameObject.SetActive(true);
+        _countdownText.text = Mathf.CeilToInt(_countdownLeft).ToString();
+        Debug.Log($"[BattleEntryDraftPanel] 倒计时起表 {_countdownLeft:F0}s（面板出现即开始，抽奖全程连续，抽完不重置）");
+    }
+
+    /// <summary>
+    /// 冻结 / 解冻倒计时（抽奖结算、三选一这类挡住玩家的流程）。
+    /// <b>只暂停不清零</b> —— 解冻后接着走剩下的秒数，不偷偷补满。
+    /// </summary>
+    public void SetCountdownPaused(bool paused)
+    {
+        _countdownPaused = paused;
     }
 
     public void StopContinueCountdown()
     {
-        if (_countdownCo != null)
-        {
-            StopCoroutine(_countdownCo);
-            _countdownCo = null;
-        }
+        _countdownLeft = 0f;
+        _countdownPaused = false;
         if (_countdownText != null) _countdownText.gameObject.SetActive(false);
     }
 
-    IEnumerator CoContinueCountdown(float seconds)
+    void TickContinueCountdown()
     {
-        var txt = _countdownText;
-        if (txt != null) txt.gameObject.SetActive(true);
-
-        float left = seconds;
-        const float step = 0.25f;
-        while (left > 0f)
+        if (_countdownLeft <= 0f || _countdownPaused) return;
+        _countdownLeft -= Time.unscaledDeltaTime;
+        if (_countdownLeft <= 0f)
         {
-            if (txt != null) txt.text = Mathf.CeilToInt(left).ToString();
-            yield return new WaitForSecondsRealtime(step);
-            left -= step;
+            _countdownLeft = 0f;
+            // 归零 = 玩家挂着不动 → 与手点「继续」同一个出口
+            DoContinue();
+            return;
         }
-
-        _countdownCo = null;
-        DoContinue();
+        if (_countdownText != null)
+            _countdownText.text = Mathf.CeilToInt(_countdownLeft).ToString();
     }
 
     /// <summary>
@@ -736,39 +868,44 @@ public class BattleEntryDraftPanel : MonoBehaviour
     {
         if (_countdownText != null) return;
 
+        // 【2026-10-06 主人二次校准】倒计时挪到 <b>map 节点的正中间</b>并放大 ——
+        // 之前挂「继续」按钮上方太小、不显眼；中间的大数字玩家一眼躲不开。
+        //
+        // ⚠ 宿主为什么不用「继续」按钮了：按钮会被 <c>SetDraftVisible(false)</c> 整块藏掉，
+        // 且 600↔750 两态动画会带着它跑，位置判定反而在变。map 一直常驻在屏幕中间，
+        // 挂它下面既稳定又醒目。
+        var host = _mapRt;
+        if (host == null)
+        {
+            Debug.LogError("[BattleEntryDraftPanel] 找不到 map 节点，倒计时无处可挂");
+            return;
+        }
+
         var go = new GameObject("ContinueCountdown", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        go.transform.SetParent(transform, false);
+        go.transform.SetParent(host, false);
 
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = new Vector2(0.5f, 0.5f);
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(80f, 40f);
-
-        var hostRt = _continueBtn != null ? _continueBtn.transform as RectTransform : null;
-        if (hostRt != null)
-        {
-            // 用世界角点换到本节点局部坐标，按钮是什么锚点都不影响
-            var w = new Vector3[4];
-            hostRt.GetWorldCorners(w);
-            Vector2 c = transform.InverseTransformPoint((w[0] + w[2]) * 0.5f);
-            rt.anchoredPosition = new Vector2(c.x, c.y + 42f);
-        }
-        else
-        {
-            rt.anchoredPosition = Vector2.zero;
-        }
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = new Vector2(420f, 200f);
+        rt.SetAsLastSibling();
 
         var t = go.GetComponent<Text>();
         t.text = "";
-        t.fontSize = 30;
+        t.fontSize = CountdownFontSize;
         t.color = new Color(1f, 0.88f, 0.45f);
         t.alignment = TextAnchor.MiddleCenter;
         t.raycastTarget = false;
         t.horizontalOverflow = HorizontalWrapMode.Overflow;
         t.verticalOverflow = VerticalWrapMode.Overflow;
-        var f = GameFonts.GetChinese();
-        if (f != null) t.font = f;
+        var ff = GameFonts.GetChinese();
+        if (ff != null) t.font = ff;
+        // 大字号更要描边：压在地图美术上才不会糊成一团
+        var ol = go.AddComponent<Outline>();
+        ol.effectColor = new Color(0f, 0f, 0f, 0.9f);
+        ol.effectDistance = new Vector2(4f, -4f);
 
         _countdownText = t;
     }
@@ -927,6 +1064,33 @@ public class BattleEntryDraftPanel : MonoBehaviour
         // map：中心 Y 250 → 350（主人给的绝对值），缩放 1.13 → 1。
         // 写的是「Pos Y / 中心 Y」这把尺子，不是「离父级底边多少」—— 换算错尺子会把 map 顶飞。
         ApplyMapState(k);
+
+        // 【2026-10-06 主人拍板】map 上移时，<b>战斗场景里的玩家</b>（世界单位）要跟着一起上移：
+        // 主人原话「map 上移时 玩家没有跟着移动上去」—— 背景上去了、人还在原地，看着像人掉下去了。
+        ApplyWorldLift(k);
+    }
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】map 上移 100 逻辑像素时，世界层要抬多少（世界单位）。
+    /// <para>两把尺子不一样：map 走 UI 逻辑像素（250→350 = +100），世界层是 Unity 单位。
+    /// 按「竖屏可视高 ≈ 1280 逻辑像素 = 2 × orthographicSize(5.4) ≈ 10.8 世界单位」折算，
+    /// 100 像素 ≈ 0.85 世界单位。<b>主人在团结里看着差一点，只改这一个数。</b></para>
+    /// </summary>
+    const float WorldLiftY = 0.85f;
+
+    /// <summary>
+    /// 世界层跟随位移：只挪 <c>unitRoot</c> 这一层（玩家/佣兵都是它的子节点，会整体跟着走），
+    /// 基准恒取 <c>UnitBase.GROUND_Y</c>（主人给的站立线），<b>不缓存</b>——
+    /// 二次进战斗 unitRoot 重建也不会算错。
+    /// </summary>
+    void ApplyWorldLift(float k)
+    {
+        var bm = BattleManager.Instance;
+        var root = bm != null ? bm.unitRoot : null;
+        if (root == null) return;
+        var p = root.position;
+        p.y = UnitBase.GROUND_Y + Mathf.Lerp(0f, WorldLiftY, k);
+        root.position = p;
     }
 
     static void SetY(RectTransform rt, float y)

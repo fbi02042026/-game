@@ -201,6 +201,12 @@ public class AutoGameInitializer : MonoBehaviour
         BattleUI.Instance?.UpdateTopBarResources();
         BattleSideHud.EnsureOn(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
         EnsureCharacterBarVisibleRuntime();
+        // 【2026-10-06 主人拍板 · 方案 A】不等抽奖弹面板，UI 一就绪就把 BattleEntryDraftPanel 建出来：
+        // 它的 LateUpdate 是从第一帧就把 map 钳在收起位（250/1.13）的唯一守卫。
+        // 不提前建 → 战斗一开始没人钳 → map 停在适配给的展开位 361（主人报「一上来就在上面」）。
+        BattleEntryDraftPanel.Prewarm();
+        // 【2026-10-06 主人拍板】玩家头顶战力（艺术字）跟住 Hero，只算本局、算上所有获得物。
+        if (Hero.Instance != null) PlayerPowerHud.Ensure(Hero.Instance.transform);
 
         GamePerf.Log("[AutoInit] Battle场景初始化完成");
         IsBattleLoadComplete = true;
@@ -284,6 +290,10 @@ public class AutoGameInitializer : MonoBehaviour
         BattleUI.Instance?.UpdateTopBarResources();
         BattleSideHud.EnsureOn(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
         EnsureCharacterBarVisibleRuntime();
+        // 【2026-10-06 主人拍板 · 方案 A】二次进战斗同理：UI 就绪即建，不等抽奖弹面板。
+        BattleEntryDraftPanel.Prewarm();
+        // 二次进战斗 Hero 是重建的，头顶战力必须重新跟一次。
+        if (Hero.Instance != null) PlayerPowerHud.Ensure(Hero.Instance.transform);
         GamePerf.Log(started
             ? "[AutoInit] 二次进战斗重绑完成，已 StartNewRun"
             : "[AutoInit] 二次进战斗重绑完成（本场已开战）");
