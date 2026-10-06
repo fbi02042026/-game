@@ -91,6 +91,11 @@ public static class PlayerSkillDefs
         public float healAtkMul;
         public float energyCost;
         public bool hasCombat;
+        /// <summary>
+        /// 单次释放耗蓝（2026-10-06 主人拍板）。0 = 无蓝（纯 CD，不参与 MP 闸门）。
+        /// 真源：player_skills.csv「耗蓝」列（索引 24）；缺表时走 Fallback 里的这个值，两边同值。
+        /// </summary>
+        public float mpCost;
     }
 
     /// <summary>缺表时的 1:1 种子；数值与 player_skills.csv / 设计文档一致。</summary>
@@ -99,6 +104,7 @@ public static class PlayerSkillDefs
         new Def
         {
             id = "heal_spring",
+            mpCost = 100f,
             displayName = "治愈之泉",
             kind = Kind.Heal,
             desc = "给当前生命比例最低的我方单位回血（玩家或佣兵）。",
@@ -228,6 +234,7 @@ public static class PlayerSkillDefs
         new Def
         {
             id = "thunder_verdict",
+            mpCost = 120f,
             displayName = "天雷裁决",
             kind = Kind.Aoe,
             desc = "召唤天雷轰击目标区域。",
@@ -258,6 +265,7 @@ public static class PlayerSkillDefs
         new Def
         {
             id = "flame_burst",
+            mpCost = 120f,
             displayName = "烈焰爆裂",
             kind = Kind.Aoe,
             desc = "以自身为中心引爆烈焰，灼烧周围敌人。",
@@ -284,6 +292,7 @@ public static class PlayerSkillDefs
         new Def
         {
             id = "thunder_chain",
+            mpCost = 120f,
             displayName = "连锁闪电",
             kind = Kind.Aoe,
             desc = "闪电在敌群中跳跃，逐个递减伤害。",
@@ -389,6 +398,7 @@ public static class PlayerSkillDefs
         new Def
         {
             id = "frost_nova",
+            mpCost = 120f,
             displayName = "霜华新星",
             kind = Kind.Aoe,
             desc = "冰霜自脚下炸开，覆盖极大范围。",
@@ -443,6 +453,7 @@ public static class PlayerSkillDefs
         new Def
         {
             id = "swift_mend",
+            mpCost = 90f,
             displayName = "迅愈术",
             kind = Kind.Heal,
             desc = "快速缝合伤口，抬住血量最低的队友。",
@@ -469,6 +480,7 @@ public static class PlayerSkillDefs
         new Def
         {
             id = "sacred_revival",
+            mpCost = 120f,
             displayName = "圣愈术",
             kind = Kind.Heal,
             desc = "以圣光重塑血肉，瞬间拉回濒死的队友。",
@@ -698,6 +710,7 @@ public static class PlayerSkillDefs
         new Def
         {
             id = "arcane_flame",
+            mpCost = 120f,
             displayName = "秘法烈焰",
             kind = Kind.Aoe,
             desc = "引燃秘法之火，焚烧大片区域。",
@@ -898,6 +911,19 @@ public static class PlayerSkillDefs
         for (int i = 0; i < _all.Length; i++)
             if (_all[i].id == id) return _all[i];
         return null;
+    }
+
+    /// <summary>
+    /// 玩家技能单次耗蓝的<b>唯一出口</b>（2026-10-06）。
+    /// 读表优先（player_skills.csv「耗蓝」列），缺表回退 Fallback —— 两边数值必须同值。
+    /// 返回值：&gt;0 = 有蓝；0 = 无蓝（纯 CD）；<b>-1 = 这个 id 根本不存在</b>（调用方按无蓝处理，不静默当 0）。
+    /// </summary>
+    public static float MpCostOf(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return -1f;
+        if (PlayerSkillTable.TryGet(id, out var row)) return row.MpCost;
+        var def = GetById(id);
+        return def != null ? def.mpCost : -1f;
     }
 
     /// <summary>未找到返回 -1。</summary>

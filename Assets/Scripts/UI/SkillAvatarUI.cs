@@ -23,6 +23,11 @@ public class SkillAvatarUI
     public Text levelText;
     /// <summary>槽位底框：槽根自己那层 Image（美术底图就在这一层，图标层是另建的子层）。</summary>
     public Image frameImage;
+    /// <summary>
+    /// 左上角释放顺序角标 ①②③④（2026-10-06 主人拍板：底部技槽要能看出「顺序＝优先级」）。
+    /// 空槽不显示。与 SkillOrderGuide 的「拖动技能可改释放顺序：① 最先放。」同一口径。
+    /// </summary>
+    public Text orderText;
 
     [System.NonSerialized]
     public System.Action onClick;     // 点击回调
@@ -39,6 +44,9 @@ public class SkillAvatarUI
 
     Color _frameBaseColor;
     bool _frameBaseCaptured;
+
+    Color _avatarBaseColor = Color.white;
+    bool _avatarBaseCaptured;
 
     private bool _isReady = false;
 
@@ -153,6 +161,38 @@ public class SkillAvatarUI
         if (labelText == null) return;
         labelText.text = string.IsNullOrEmpty(name) ? fallback : name;
         labelText.gameObject.SetActive(true);
+    }
+
+    /// <summary>
+    /// 蓝不够放这一发 → 头像压暗（灰度 ×0.45），够了还原（2026-10-06）。
+    /// 只动<b>图标层</b>，与 SetEmptyDim 的底框压暗各管一层，互不打架。幂等，重复调用无副作用。
+    /// </summary>
+    public void SetMpShortage(bool shortage)
+    {
+        if (avatarImage == null) return;
+        if (!_avatarBaseCaptured)
+        {
+            _avatarBaseColor = avatarImage.color;
+            _avatarBaseCaptured = true;
+        }
+        var c = _avatarBaseColor;
+        if (shortage)
+        {
+            float g = (c.r + c.g + c.b) / 3f * 0.45f;
+            avatarImage.color = new Color(g, g, g, c.a);
+        }
+        else
+        {
+            avatarImage.color = c;
+        }
+    }
+
+    /// <summary>左上角释放顺序角标：空串时整个隐藏。</summary>
+    public void SetOrderText(string text)
+    {
+        if (orderText == null) return;
+        orderText.text = text ?? "";
+        orderText.gameObject.SetActive(!string.IsNullOrEmpty(orderText.text));
     }
 
     /// <summary>右下角等级/星级：空串时整个隐藏。</summary>

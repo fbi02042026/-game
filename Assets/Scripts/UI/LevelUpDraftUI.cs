@@ -149,6 +149,11 @@ public class LevelUpDraftUI : MonoBehaviour
     }
 
     /// <summary>把指定技能拖到第一位（教程：没动手就替玩家把护盾排到 ①）。</summary>
+    /// <remarks>
+    /// 2026-10-06 主人拍板：玩家技能默认顺序 = **获得技能的先后顺序**（RunLoadout.TryAddSkill 追加到尾部）。
+    /// 本方法是这条默认规则的**唯一例外**——只在「教程三段抽且玩家没自己拖」时由引导程序强制置顶，
+    /// 除此之外任何地方都不许改动技能顺序（改序只走 RunLoadout.MoveSkill 这一个出口）。
+    /// </remarks>
     public void ForceSkillToFront(string skillId)
     {
         if (string.IsNullOrEmpty(skillId)) return;

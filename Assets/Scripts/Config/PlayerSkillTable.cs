@@ -34,6 +34,11 @@ public static class PlayerSkillTable
         public float HealAtkMul;
         public float EnergyCost;
         public bool HasCombat;
+        /// <summary>
+        /// 单次释放耗蓝（2026-10-06 主人拍板）。0 = 无蓝（纯 CD）。
+        /// 牧师三技 90/100/120、法师五技 120，其余 0。
+        /// </summary>
+        public float MpCost;
     }
 
     static readonly List<Row> _rows = new List<Row>();
@@ -158,6 +163,12 @@ public static class PlayerSkillTable
                 {
                     GameTableCsv.TryFloat(Col(c, 23), out float healAtkMul);
                     row.HealAtkMul = healAtkMul;
+                }
+                // 第 25 列（索引 24）：单次耗蓝，可缺省（2026-10-06）
+                if (c.Length > 24)
+                {
+                    GameTableCsv.TryFloat(Col(c, 24), out float mpCost);
+                    row.MpCost = mpCost;
                 }
             }
             _rows.Add(row);

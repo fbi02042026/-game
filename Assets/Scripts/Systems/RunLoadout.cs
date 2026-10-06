@@ -22,6 +22,13 @@ public class RunMercEntry
     public int star = 1;
     public string skillId;
     public string passiveSkillId;
+    /// <summary>
+    /// 本局是否已阵亡（2026-10-06 主人拍板）：阵亡不再「下一关满血白嫖复活」，
+    /// 而是带惩罚复活 —— 血 20% 起步，之后每通过一关 +30%，回到 100% 才算彻底养回来。
+    /// </summary>
+    public bool fallen;
+    /// <summary>阵亡后已经通过的关数（0 = 刚死，下一关就是 20% 血进场）。</summary>
+    public int fallenStages;
 
     public MercenaryData ToMercenaryData()
     {
@@ -434,10 +441,74 @@ public static class RunLoadout
     public static bool TryAddMerc(RunMercEntry entry)
     {
         if (_data == null || entry == null || string.IsNullOrEmpty(entry.mercId)) return false;
-        if (IsMercFull || HasMerc(entry.hireId ?? entry.mercId)) return false;
+        if (HasMerc(entry.hireId ?? entry.mercId)) return false;
         _data.mercs ??= new List<RunMercEntry>();
-        _data.mercs.Add(entry);
+
+        if (!IsMercFull)
+        {
+            _data.mercs.Add(entry);
+            return true;
+        }
+        // 2026-10-06 主人拍板：位子满了但**有人阵亡** → 新人直接顶掉阵亡那个（满血满蓝进，按卡面星级）。
+        // 旧实现是「位满就 return false」，导致阵亡佣兵永久占坑、玩家抽到新佣兵却加不进来。
+        int fallenAt = IndexOfFallenMerc();
+        if (fallenAt < 0) return false;
+        _data.mercs[fallenAt] = entry;
+        _data.mercs[fallenAt].fallen = false;
+        _data.mercs[fallenAt].fallenStages = 0;
         return true;
+    }
+
+    /// <summary>第一个「已阵亡」佣兵的下标；没有返回 -1。</summary>
+    public static int IndexOfFallenMerc()
+    {
+        if (_data?.mercs == null) return -1;
+        for (int i = 0; i < _data.mercs.Count; i++)
+        {
+            var m = _data.mercs[i];
+            if (m != null && m.fallen) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// 标记某佣兵阵亡（2026-10-06）。阵亡计数清零 → 下一关按最低档 20% 血复活。
+    /// 由 BattleManager.OnMercenaryDead 调用，是「阵亡」这件事的唯一入口。
+    /// </summary>
+    public static void MarkMercFallen(string hireIdOrMercId)
+    {
+        var m = FindMerc(hireIdOrMercId);
+        if (m == null) return;
+        m.fallen = true;
+        m.fallenStages = 0;
+    }
+
+    /// <summary>
+    /// 每通过一关调用一次：阵亡过的佣兵养回 30% 血（封顶 100%）。
+    /// 2026-10-06 主人拍板：要有回血路径，否则 20% 血进场必然连死成死亡螺旋。
+    /// </summary>
+    public static void TickFallenMercsStagePassed()
+    {
+        if (_data?.mercs == null) return;
+        for (int i = 0; i < _data.mercs.Count; i++)
+        {
+            var m = _data.mercs[i];
+            if (m == null || !m.fallen) continue;
+            if (m.fallenStages >= GameConfig.MERC_REVIVE_STAGES_TO_FULL) continue;
+            m.fallenStages++;
+        }
+    }
+
+    /// <summary>
+    /// 阵亡佣兵的复活血比例（唯一出口）：20% 起步，每通过一关 +30%，封顶 100%。
+    /// 没阵亡过的佣兵返回 1（满血进场，与旧行为一致）。
+    /// </summary>
+    public static float MercReviveHpRatio(RunMercEntry entry)
+    {
+        if (entry == null || !entry.fallen) return 1f;
+        float r = GameConfig.MERC_REVIVE_HP_BASE
+                  + GameConfig.MERC_REVIVE_HP_PER_STAGE * Mathf.Max(0, entry.fallenStages);
+        return Mathf.Clamp01(r);
     }
 
     public static RunMercEntry FindMerc(string hireIdOrMercId)

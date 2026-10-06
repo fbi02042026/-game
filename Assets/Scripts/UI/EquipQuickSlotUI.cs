@@ -39,7 +39,8 @@ public class EquipQuickSlotUI
             iconImage.sprite = showIcon ? item.icon : placeholderSprite;
             iconImage.enabled = iconImage.sprite != null;
         }
-        if (slotLabel != null) slotLabel.gameObject.SetActive(!showIcon);
+        // 2026-10-06 主人拍板：装备槽下面的「头 / 脚」底字一律去掉，只隐藏文字节点
+        if (slotLabel != null) slotLabel.gameObject.SetActive(false);
     }
 
     public void Clear() => Bind(null);

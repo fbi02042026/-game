@@ -8,6 +8,12 @@ public class Mercenary : UnitBase
     public string mercId;
     public string hireId;
     public int mercLevel = 1;
+    /// <summary>
+    /// 佣兵星级 1~5（2026-10-06 新增）：MP 池与回复的成长真源。
+    /// 由局内佣兵生成处（RunDraftDirector.SpawnRunMerc / RefreshMercUnit）写入；
+    /// 非局内来源（城镇/教程）保持 1 星 —— 花名册里 ★1 就是最低档，不是兜底值。
+    /// </summary>
+    public int mercStar = 1;
     public string DisplayName { get; private set; }
     /// <summary>本局佩戴主动技能（来自存档；空则无主动技）</summary>
     public string equippedSkillId;

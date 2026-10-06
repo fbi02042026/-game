@@ -227,7 +227,7 @@ public partial class BattleUI : MonoBehaviour
         {
             var m = mercs[0];
             float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(0) : 0f;
+            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(0) : 0f;
             if (!Mathf.Approximately(_lastMerc1Hp, m.currentHp) || !Mathf.Approximately(_lastMerc1Energy, energy))
             {
                 _lastMerc1Hp = m.currentHp;
@@ -240,7 +240,7 @@ public partial class BattleUI : MonoBehaviour
         {
             var m = mercs[1];
             float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(1) : 0f;
+            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(1) : 0f;
             if (!Mathf.Approximately(_lastMerc2Hp, m.currentHp) || !Mathf.Approximately(_lastMerc2Energy, energy))
             {
                 _lastMerc2Hp = m.currentHp;

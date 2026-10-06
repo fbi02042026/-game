@@ -48,6 +48,11 @@ public static class MercSkillTable
         public float Param1;
         public float Param2;
         public float Param3;
+        /// <summary>
+        /// 单次释放耗蓝（2026-10-06 主人拍板）。物攻/防御/被动 = 0（无蓝，纯 CD）；
+        /// 恢复/法术 = 100~120。硬约束：不得大于治疗/法术基础池（150）。
+        /// </summary>
+        public float MpCost;
     }
 
     static Dictionary<string, Row> _byId;
@@ -115,7 +120,9 @@ public static class MercSkillTable
                 // 2026-09-26 主人拍板：数值走表。p1/p2/p3 在「备注」列之后（索引 19/20/21）。
                 Param1 = ParseFloat(cols.Length > 19 ? cols[19] : ""),
                 Param2 = ParseFloat(cols.Length > 20 ? cols[20] : ""),
-                Param3 = ParseFloat(cols.Length > 21 ? cols[21] : "")
+                Param3 = ParseFloat(cols.Length > 21 ? cols[21] : ""),
+                // 2026-10-06：耗蓝列在 p3 之后（索引 22）
+                MpCost = ParseFloat(cols.Length > 22 ? cols[22] : "")
             };
             _byId[id] = row;
             ok++;
@@ -211,6 +218,18 @@ public static class MercSkillTable
         var req = RequiredMercRarity(skillId);
         var rarity = RarityPalette.ResolveMercRarity(mercId);
         return rarity >= req;
+    }
+
+    /// <summary>
+    /// 单次耗蓝的<b>唯一出口</b>。
+    /// 返回值：&gt;0 = 有蓝技能；0 = 无蓝（纯 CD）；<b>-1 = 表里查不到这个技能</b>
+    /// → 调用方必须 LogError 并拒绝释放，<b>不许静默当 0 处理</b>（fail closed）。
+    /// </summary>
+    public static float MpCostOf(string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return -1f;
+        if (!TryGet(skillId, out var row)) return -1f;
+        return row.MpCost;
     }
 
     /// <summary>从表行生成运行时 SkillConfig（SkillRegistry 查不到 asset 时回退）。</summary>

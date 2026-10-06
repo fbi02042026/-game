@@ -9,10 +9,14 @@ using System.Collections.Generic;
 public partial class BattleUI : MonoBehaviour
 {
     /// <summary>
-    /// 第一个佣兵（玩家右侧第一个槽 = mercSlot1）右上角不显示技能图片（2026-09-26 主人反馈）。
-    /// 只关 index 0 这一个槽；佣兵2 与教程技能圆（SkillBtn2）照旧。一键回退：置 false。
+    /// 【2026-10-06 主人拍板】佣兵头像框右上角<b>不显示技能角标</b> ——
+    /// 佣兵技能由 <c>MercSkillCaster</c> <b>自动释放</b>（<c>MercSkillMigrate.IsMercSkillAutoCast() == true</c>），
+    /// 玩家既不需要看、也没有手动点击入口，图标一律隐藏。
+    ///
+    /// <para>旧口径（2026-09-26）只关 index 0 那一个槽，其余槽照旧显示 —— 现已作废，
+    /// <b>全部佣兵槽都不显示</b>。旧开关 <c>HideFirstMercSkillBadge</c> 一并删除
+    ///（铁律：不留 <c>xxxEnabled</c> 开关）—— 两处调用点直接写 <c>SetSkillBadge(null)</c>。</para>
     /// </summary>
-    public static bool HideFirstMercSkillBadge = true;
 
     /// <summary>
     /// 只刷新玩家头像下的第二条（雷击奥义充能）。
@@ -122,13 +126,14 @@ public partial class BattleUI : MonoBehaviour
         var m = mercs[0];
         mercSlot1.SetLocked(false);
         bool tutHasActive = m.SkillCaster != null && m.SkillCaster.HasActiveSkill;
-        mercSlot1.SetEnergyEnabled(tutHasActive && !MercSkillMigrate.IsMercSkillAutoCast());
+        // 2026-10-06：蓝条只给「有蓝」的技能显示（治疗/法术型），无蓝技能纯 CD 不显示
+        mercSlot1.SetEnergyEnabled(tutHasActive && m.SkillCaster != null
+                                   && m.SkillCaster.MpType != MpArchetype.None);
         Sprite mercIcon = MercPortraitSprites.GetHead(!string.IsNullOrEmpty(m.hireId) ? m.hireId : StoryProgress.TutorialMercHireId)
             ?? mm.GetIcon(m.mercId);
         mercSlot1.SetPortrait(mercIcon);
-        // 右上角小图标=该佣兵的技能（同样由 MercSkillCaster 自动释放）
-        // 2026-09-26 主人反馈：第一个佣兵不显示技能图片
-        mercSlot1.SetSkillBadge(HideFirstMercSkillBadge ? null : GetMercSkillIcon(m));
+        // 右上角小图标=该佣兵的技能：2026-10-06 主人拍板 → 佣兵技能角标全部隐藏（技能自动释放，不需要手点）
+        mercSlot1.SetSkillBadge(null);
         // 教程救援佣兵不在存档出战列表里，技能圆形头像要单独绑
         merc1SkillAvatar?.SetAvatar(mercIcon);
         // 职业 icon：教程佣兵同样显示（四分类徽标，走 JobIconResolver.CombatBadge 唯一入口）
@@ -171,7 +176,7 @@ public partial class BattleUI : MonoBehaviour
         float maxHp = m.attr.GetAttr(AttrType.MaxHp);
         string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercNickname;
         mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
-        mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(0) : 0f);
+        mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(0) : 0f);
     }
 
     /// <summary>
@@ -219,7 +224,10 @@ public partial class BattleUI : MonoBehaviour
                 && activeMercs[index] != null
                 && activeMercs[index].SkillCaster != null
                 && activeMercs[index].SkillCaster.HasActiveSkill;
-            slot.SetEnergyEnabled(hasActive && !MercSkillMigrate.IsMercSkillAutoCast());
+            // 2026-10-06：蓝条只给「有蓝」的技能显示（治疗/法术型）；无蓝技能纯 CD，不显示。
+            // 旧口径是「手动模式才显示」，而自动模式恒为 true → 蓝条永远是关的，这条判定已作废。
+            bool hasMpBar = hasActive && activeMercs[index].SkillCaster.MpType != MpArchetype.None;
+            slot.SetEnergyEnabled(hasMpBar);
             string id = mercIds[index];
             string hireId = index < mercHireIds.Count ? mercHireIds[index] : null;
             if (index < activeMercs.Count && activeMercs[index] != null && !string.IsNullOrEmpty(activeMercs[index].hireId))
@@ -231,12 +239,8 @@ public partial class BattleUI : MonoBehaviour
             slot.SetFrame(MercHireSession.LoadPortraitFrame(ResolveMercRarity(id, hireId)));
             // 职业 icon：按佣兵职业名取四分类（防御/恢复/法术/物攻），唯一入口 JobIconResolver.CombatBadge
             slot.SetJobIcon(JobIconResolver.CombatBadge(job));
-            // 右上角小图标=该佣兵的技能（自动释放，不用手点）
-            // 2026-09-26 主人反馈：第一个佣兵（index 0）不显示技能图片，其余槽照旧
-            bool hideSkillBadge = HideFirstMercSkillBadge && index == 0;
-            slot.SetSkillBadge(hideSkillBadge
-                ? null
-                : (index < activeMercs.Count ? GetMercSkillIcon(activeMercs[index]) : null));
+            // 右上角小图标=该佣兵的技能：2026-10-06 主人拍板 → 佣兵技能角标全部隐藏（技能自动释放，不用手点）
+            slot.SetSkillBadge(null);
 
             if (index < activeMercs.Count && activeMercs[index] != null)
             {

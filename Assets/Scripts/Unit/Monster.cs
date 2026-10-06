@@ -1285,6 +1285,8 @@ public class Monster : UnitBase
             Debug.LogWarning($"[Monster] ???????: ??{monsterChapter}, ??{effectiveSpriteIndex}??????????");
 
         EnsureFootShadow();
+        // 2026-10-06 主人要求：把「运行中的真实尺寸」抄一份给他对照调预制体（只读，每局只做一次）
+        MonsterTemplateProbe.DumpOnce(transform);
     }
 
     /// <summary>
@@ -1311,10 +1313,26 @@ public class Monster : UnitBase
 
         Transform existing = FindFootShadowNode(transform);
         SpriteRenderer shadowSr;
+        // 【2026-10-06 诊断日志 · 主人报「给敌人加了 shadow 节点但看不到」】
+        // 只打日志、不改任何节点：把「影子是从预制体拿的还是代码新建的」以及最终数值全打出来，
+        // 主人一眼就能看出影子是不是被谁关了 / 盖住 / 透明了。绝不删节点、绝不静默跳过。
+        float prefabAlpha = -1f;
+        bool prefabActive = false;
         if (existing != null)
         {
-            existing.SetParent(host, false);
+            // 【2026-10-06 主人拍板「不要随意动我摆的节点」】只有「影子当前这条父链上没有 SortingGroup、
+            // 且它不是挂在 host 下」时才挪位置（否则组内 order -20 会被地图整块盖掉 = 看不见）；
+            // 已经在 SortingGroup 里就保持主人的层级原样不动。
+            if (existing.parent != host
+                && existing.GetComponentInParent<UnityEngine.Rendering.SortingGroup>() == null)
+                existing.SetParent(host, false);
+
             shadowSr = existing.GetComponent<SpriteRenderer>();
+            if (shadowSr != null)
+            {
+                prefabAlpha = shadowSr.color.a;
+                prefabActive = shadowSr.gameObject.activeInHierarchy && shadowSr.enabled;
+            }
             if (shadowSr == null) shadowSr = existing.gameObject.AddComponent<SpriteRenderer>();
         }
         else
@@ -1324,26 +1342,52 @@ public class Monster : UnitBase
             shadowSr = go.AddComponent<SpriteRenderer>();
         }
 
-        Sprite shadowSp = LoadPlayerShadowSprite() ?? MakeCircleSprite();
-        shadowSr.sprite = shadowSp;
-        shadowSr.color = new Color(0f, 0f, 0f, 0.35f);
-        shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        // 组内相对顺序：低于躯干/SPUM 部件(>=0)，阴影藏在身子后面
-        shadowSr.sortingOrder = -20;
-        shadowSr.sharedMaterial = GetFootShadowMaterial();
+        // 【2026-10-06 主人拍板】预制体里**已经摆了 shadow 节点**（Monstersmoban 下那个）→
+        // 一律保留主人在预制体里调好的外观：贴图 / 透明度 / 缩放 / 位置**一个都不动**，
+        // 代码只统一「分层 + 组内顺序」（那才是「能不能被看见」的关键）。
+        // 只有「预制体里压根没有 shadow」时才由代码新建并给一套默认值
+        //（铁律 2：预制体有值 → 代码不写；预制体空 → 代码兜底）。
+        if (prefabAlpha < 0f)
+        {
+            Sprite shadowSp = LoadPlayerShadowSprite() ?? MakeCircleSprite();
+            shadowSr.sprite = shadowSp;
+            shadowSr.color = new Color(0f, 0f, 0f, 0.35f);
+            shadowSr.sharedMaterial = GetFootShadowMaterial();
 
-        float targetWorldW = 0.9f;
-        if (sr != null && sr.sprite != null)
-            targetWorldW = Mathf.Max(0.45f, sr.bounds.size.x * 0.56f);
-        // 整体再缩小 20%
-        targetWorldW *= 0.8f;
-        float nativeW = shadowSp != null ? Mathf.Max(0.01f, shadowSp.bounds.size.x) : 1f;
-        float lossyX = Mathf.Max(0.001f, Mathf.Abs(host.lossyScale.x));
-        float sx = targetWorldW / (nativeW * lossyX);
-        // 本地 Y=0.02；椭圆再压扁 20%（0.35→0.28）
-        shadowSr.transform.localPosition = new Vector3(0f, 0.02f, 0f);
-        shadowSr.transform.localRotation = Quaternion.identity;
-        shadowSr.transform.localScale = new Vector3(sx, sx * 0.28f, 1f);
+            float targetWorldW = 0.9f;
+            if (sr != null && sr.sprite != null)
+                targetWorldW = Mathf.Max(0.45f, sr.bounds.size.x * 0.56f);
+            // 整体再缩小 20%
+            targetWorldW *= 0.8f;
+            float nativeW = shadowSp != null ? Mathf.Max(0.01f, shadowSp.bounds.size.x) : 1f;
+            float lossyX = Mathf.Max(0.001f, Mathf.Abs(host.lossyScale.x));
+            float sx = targetWorldW / (nativeW * lossyX);
+            // 本地 Y=0.02；椭圆再压扁 20%（0.35→0.28）
+            shadowSr.transform.localPosition = new Vector3(0f, 0.02f, 0f);
+            shadowSr.transform.localRotation = Quaternion.identity;
+            shadowSr.transform.localScale = new Vector3(sx, sx * 0.28f, 1f);
+        }
+
+        // 分层与组内顺序：两种来源都统一（低于躯干/SPUM 部件 >= 0，阴影藏在身子后面）
+        shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        shadowSr.sortingOrder = -20;
+
+        // 【2026-10-06 诊断】只打前 3 条，之后静默：主人报「给敌人都加了 shadow 节点，为什么没看到」。
+        // 只报不改 —— 节点一个不删，值一个不调，主人拿这条日志对账就知道影子去哪了。
+        if (_shadowLogCount < 3)
+        {
+            _shadowLogCount++;
+            bool visible = shadowSr.gameObject.activeInHierarchy && shadowSr.enabled;
+            Debug.Log($"[Monster] 脚底阴影#{_shadowLogCount} 单位={name}" +
+                      (prefabAlpha >= 0f
+                          ? $" 来源=预制体节点「{existing.name}」预制体alpha={prefabAlpha:F2} 预制体可见={prefabActive}" +
+                            $"（⚠ 代码会把它统一成 alpha 0.35 + SPUM 椭圆图，主人调的透明度会被覆盖）"
+                          : " 来源=代码新建 FootShadow（预制体里没找到任何 shadow 节点）") +
+                      $" | 挂在={host.name} 最终alpha={shadowSr.color.a:F2}" +
+                      $" layer={shadowSr.sortingLayerName} order={shadowSr.sortingOrder}" +
+                      $" scale=({shadowSr.transform.localScale.x:F3},{shadowSr.transform.localScale.y:F3})" +
+                      $" 可见={visible}");
+        }
     }
 
     static Transform FindFootShadowNode(Transform root)
@@ -1358,6 +1402,9 @@ public class Monster : UnitBase
         }
         return null;
     }
+
+    /// <summary>脚底阴影诊断日志只打前几条（每只怪都打会刷屏）。2026-10-06 主人报「敌人 shadow 看不到」。</summary>
+    static int _shadowLogCount;
 
     static Material _footShadowMat;
 

@@ -159,6 +159,16 @@ public class StageClearRewardDirector : MonoBehaviour
             _shadowSr = shadowT != null ? shadowT.GetComponent<SpriteRenderer>() : null;
             if (_shadowSr == null && shadowT != null)
                 _shadowSr = shadowT.GetComponentInChildren<SpriteRenderer>(true);
+            // 【2026-10-06 诊断】主人报「宝箱没有 shadow 节点了」—— 只报不改：
+            // 拿到就报它现在的数值（ApplyBoxSorting 之后才是最终 order），拿不到就报错说清没找到。
+            // 代码从来没删过 box 下的任何节点，这里也不新建、不兜底。
+            if (_shadowSr != null)
+                Debug.Log($"[StageClearReward] 宝箱阴影：节点={_shadowSr.name} 路径={_shadowSr.transform.parent?.name}/{_shadowSr.name}" +
+                          $" alpha={_shadowSr.color.a:F2} 预制体order={_shadowSr.sortingOrder}" +
+                          $" 激活={_shadowSr.gameObject.activeInHierarchy} 可见={_shadowSr.enabled}");
+            else
+                Debug.LogError("[StageClearReward] 宝箱阴影：box 下找不到 shadow 节点（代码不新建、不删节点）。" +
+                               "请确认 Resources/Prefabs/Battle/box.prefab 里的 shadow 子节点还在不在。");
             _effectRoot = FindChildIgnoreCase(_boxAnimHost, "effect");
             // 开箱特效按稀有度分节点（effect 下 "1"/"2"/"3"）：缓存并默认全关，
             // 由 ShowTierEffect 按 tier 在播 open1 时只开对应编号节点。
@@ -242,8 +252,14 @@ public class StageClearRewardDirector : MonoBehaviour
         // 而地图根是 SORT_MAPROOT=10 → 箱子被地图整块盖掉，等于隐形。
         // 加下限：至少压在地图之上（SORT_MAPROOT + 5 = 15，与单位同档起点），
         // 同时保留按 Y 参与前后遮挡的原意。要再往上只调这个下限。
-        int minBoxOrder = GameConfig.SORT_MAPROOT + 5;
-        sg.sortingOrder = Mathf.Max(minBoxOrder, GameConfig.SORT_UNIT + Mathf.RoundToInt(-footY * 40f));
+        // 【2026-10-06 主人拍板「宝箱改改 order」】原来箱子与单位用**同一条公式** →
+        // 同一个 Y 上两者 order 完全相同，谁后渲染谁盖谁，结果箱子把敌人挡住了。
+        // 现在整箱压到「同 Y 的角色之下 5 档」：箱子仍按前后 Y 参与遮挡，但永远不挡角色。
+        // 下限只要求压在地图之上（SORT_MAPROOT + 1），不再抬到与单位同档。
+        const int BoxBelowUnit = 5;
+        int minBoxOrder = GameConfig.SORT_MAPROOT + 1;
+        sg.sortingOrder = Mathf.Max(minBoxOrder,
+            GameConfig.SORT_UNIT + Mathf.RoundToInt(-footY * 40f) - BoxBelowUnit);
 
         if (_closeSr != null)
         {

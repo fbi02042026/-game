@@ -64,13 +64,9 @@ public sealed class TutorialRules
     /// </summary>
     public bool GuideEntryDraft { get; private set; }
 
-    /// <summary>
-    /// 引导局：抽奖抽到「佣兵」时给该佣兵的**本命碎片**而不是直接招募。
-    /// 2026-10-05 主人拍板「保留救援戏，抽奖给小白碎片」—— 小白走第 4 拍剧情救援入队，
-    /// 抽奖再招一个会跟剧情打架，所以这一抽发的是 `frag:H011`。
-    /// 正式关恒 false：抽到佣兵就是正常招募。
-    /// </summary>
-    public bool MercDraftGivesFragment { get; private set; }
+    // 【2026-10-06 已删除】MercDraftGivesFragment（引导抽到佣兵给本命碎片）。
+    //   主人当天拍板：第 2 抽 = **直接招募小白入队**，不是发碎片；
+    //   第 4 拍的「牧师被围 → 救援入队」整段删掉改成普通波次。整条链路删除，不留开关。
 
     /// <summary>交战点最少超前（引导 4.5，正式 2.0）。</summary>
     public float EngageMinAhead { get; private set; }
@@ -155,7 +151,6 @@ public sealed class TutorialRules
             AllowStackSpawnWhileAlive = true,
             EnableRunDraft = true,
             GuideEntryDraft = true,
-            MercDraftGivesFragment = true,
             EngageMinAhead = 4.5f,
             EngageAheadOverride = 4.5f,
             WaveSpacingMul = 1.65f,

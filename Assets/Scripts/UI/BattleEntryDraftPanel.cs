@@ -169,6 +169,27 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// <summary>概率公示的「!」按钮（运行时建，见 BuildOddsButton）。</summary>
     Button _oddsBtn;
 
+    // ===== 抽完后「等玩家点继续」的两件套（2026-10-06 主人拍板）=====
+
+    /// <summary>
+    /// 抽完之后「本拍不能再抽」的锁 —— 只影响按钮可用性（置灰），不动显隐、不动美术。
+    /// 引导局抽完要锁（一次一抽）；正式关连抽是玩法，<b>不锁</b>。
+    /// </summary>
+    bool _drawLocked;
+
+    /// <summary>上一次 <see cref="Refresh"/> 的参数：锁抽时要按同一组参数重刷按钮，不能另算一套。</summary>
+    int _lastRandomPrice;
+    int _lastFocusPrice;
+    int _lastFreeLeft;
+    long _lastCoins;
+    List<DraftCategory> _lastCats;
+
+    /// <summary>「继续」倒计时：抽完开始跑，归零自动当作玩家点了继续（防卡死）。</summary>
+    public const float ContinueCountdownSec = 30f;
+
+    Coroutine _countdownCo;
+    Text _countdownText;
+
     Action<DraftCategory?> _onPick;
     Action _onFight;
     bool _expanded;
@@ -179,6 +200,13 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// <summary>「普通」（随机）按钮的 RectTransform —— 引导关要圈住它做高亮。</summary>
     public RectTransform NormalButtonRect =>
         _slots.Count > 0 && _slots[0].Root != null ? _slots[0].Root : null;
+
+    /// <summary>
+    /// 「继续」按钮的 RectTransform —— 抽完奖励后引导要圈住它（2026-10-06 主人拍板：
+    /// 抽完不许自动继续，必须玩家点「继续」）。
+    /// </summary>
+    public RectTransform ContinueButtonRect =>
+        _continueBtn != null ? _continueBtn.transform as RectTransform : null;
 
     /// <summary>
     /// 抽奖面板是否处于<b>展开</b>态 —— 遮罩 <c>zhezhao</c> 该不该压暗底部 HUD 的<b>唯一判据</b>。
@@ -243,6 +271,11 @@ public class BattleEntryDraftPanel : MonoBehaviour
         // 打出来的对照值才是「适配给的基准」。
         c._mapRt = c.ResolveMap();
         c.LogMapBaseOnce();
+        // 【2026-10-06 主人拍板】组件一出生就把 map 按主人给的收起态（中心Y 250 / scale 1.13）拍上去。
+        // 原因：适配是按「那一刻面板多高」算的，而那一刻面板还停在预制体的展开态 750，
+        // 算出来的 map 落点本身就是展开位 —— 这就是主人报「一上来就跑到上面」的根因。
+        // 这里补一次落位：Build / Show 还没跑到的时候，map 就已经在收起位。
+        c.ApplyMapState(0f);
         return c;
     }
 
@@ -312,6 +345,27 @@ public class BattleEntryDraftPanel : MonoBehaviour
                   $" scale={_mapRt.localScale.x:F3}");
     }
 
+    /// <summary>
+    /// 【2026-10-06 主人拍板】map 的纵向位置与缩放<b>由本类独占</b>：静止时按当前进度 <c>_animK</c> 写回去。
+    ///
+    /// <para>为什么非要这一步：竖屏适配 <c>BattleViewportFit.Apply</c>（实际是
+    /// <c>UiLayoutStretch.ApplyBattleMapWidth</c>）会把 map 重锚成「顶栏底 ~ 背包顶」的拉伸锚点，
+    /// <b>它只认跑的那一刻面板多高</b>；那一刻面板常常还停在展开态 750（预制体就是这么摆的），
+    /// 于是算出来的 map 落点本身就是展开位 —— 主人报「map 一上来就在展开位置、跑到上面了」的根因。
+    /// 而这套适配<b>随时可能再跑一次</b>（<c>BattleUI.Start</c> 与
+    /// <c>AutoGameInitializer</c> 都在调），跑完 map 就又飘去展开位，
+    /// 要等下一次 <c>SetExpanded</c> 才被拉回来。</para>
+    ///
+    /// <para>所以静止态每帧按当前 k 写一次 —— 与本类同一个出口（<c>ApplyMapState</c>）、
+    /// 同一组真值（250/1.13 ↔ 350/1），不另立一套；动画正在跑的那一帧交给动画协程，
+    /// 绝不两个地方同时写。</para>
+    /// </summary>
+    void LateUpdate()
+    {
+        if (_mapRt == null || _animCo != null) return;
+        ApplyMapState(_animK);
+    }
+
     void Awake() { Instance = this; }
 
     void OnDestroy()
@@ -327,6 +381,11 @@ public class BattleEntryDraftPanel : MonoBehaviour
                Action<DraftCategory?> onPick, Action onFight, int freeLeft = 0)
     {
         Build();
+        // 【2026-10-06 主人拍板】一进抽奖环节就开始计时（**不是**抽完才计时）：
+        // 面板一出现就把 30s 倒计时重置满，归零 = 自动当作玩家点了「继续」。
+        // 连抽回到面板同样走这里 → 每次回面板都重新给满 30s，想再抽就再抽。
+        _drawLocked = false;
+        StartContinueCountdown();
         _onPick = onPick;
         _onFight = onFight;
         _draftActive = true;
@@ -339,6 +398,8 @@ public class BattleEntryDraftPanel : MonoBehaviour
 
     void Finish()
     {
+        // 面板收了，倒计时也得停 —— 不然协程还挂在已经隐藏的面板上，归零会再触发一次「继续」
+        StopContinueCountdown();
         _onPick = null;
         _onFight = null;
         _draftActive = false;
@@ -558,6 +619,13 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// <summary>刷新价格与可用状态：池子空或币不够 → 置灰，绝不自动扣钱。</summary>
     void Refresh(int randomPrice, int focusPrice, List<DraftCategory> cats, long coins, int freeLeft = 0)
     {
+        // 记下这一组参数：抽完锁按钮时要按同一组重刷，绝不另算一套（2026-10-06）
+        _lastRandomPrice = randomPrice;
+        _lastFocusPrice = focusPrice;
+        _lastFreeLeft = freeLeft;
+        _lastCoins = coins;
+        _lastCats = cats;
+
         // 2026-10-05：金币本开局送的免费抽 —— 还有额度时按钮上写「免费 ×N」，不看余额也能点。
         bool free = freeLeft > 0;
         for (int i = 0; i < _slots.Count; i++)
@@ -567,7 +635,8 @@ public class BattleEntryDraftPanel : MonoBehaviour
             bool isRandom = !s.Cat.HasValue;
             bool has = isRandom || (cats != null && cats.Contains(s.Cat.Value));
             int price = isRandom ? randomPrice : focusPrice;
-            bool on = has && (free || coins >= price);
+            // 2026-10-06：本拍已抽完（引导局一次一抽）→ 全部置灰，玩家只剩「继续」可点。
+            bool on = !_drawLocked && has && (free || coins >= price);
             // 置灰交给 Button.interactable —— 它会按 disabledColor 作用在 icon 上；
             // 不去改 name/金额 的文字颜色，那是主人调好的美术。
             s.Btn.interactable = on;
@@ -589,9 +658,119 @@ public class BattleEntryDraftPanel : MonoBehaviour
 
     void OnContinueClicked()
     {
+        DoContinue();
+    }
+
+    /// <summary>
+    /// 「继续」的<b>唯一出口</b> —— 玩家点按钮、倒计时归零，两条路都走这里。
+    /// <para>2026-10-06 主人拍板：抽完奖励<b>不许自动继续</b>，必须有明确动作；
+    /// 倒计时只是「玩家挂着不动」的兜底，不是第二条流程。</para>
+    /// </summary>
+    void DoContinue()
+    {
         if (!_draftActive) return;
+        StopContinueCountdown();
         var cb = _onFight;
         cb?.Invoke();
+    }
+
+    /// <summary>
+    /// 抽完之后锁住抽奖按钮（<b>只置灰，不动显隐 / 不动美术</b>），这一拍玩家只剩「继续」可点。
+    /// 正式关连抽本身就是玩法 → <b>不要调它</b>（主人 2026-10-06：正式关抽完也要点继续，但还能接着抽）。
+    /// </summary>
+    public void SetDrawLocked(bool locked)
+    {
+        _drawLocked = locked;
+        if (!_draftActive) return;
+        // 按上一次 Refresh 的同一组参数重刷，不另算一套
+        Refresh(_lastRandomPrice, _lastFocusPrice, _lastCats, _lastCoins, _lastFreeLeft);
+    }
+
+    /// <summary>
+    /// 抽完奖励后开「继续」倒计时：「继续」按钮上方显示剩余秒数，
+    /// 归零自动走 <see cref="DoContinue"/>（防玩家挂着不动把战斗卡死）。
+    /// <para>用 <c>WaitForSecondsRealtime</c>：抽奖阶段战斗是冻住的（timeScale 可能为 0），
+    /// 普通 WaitForSeconds 会永远不走。</para>
+    /// </summary>
+    public void StartContinueCountdown(float seconds = ContinueCountdownSec)
+    {
+        StopContinueCountdown();
+        EnsureCountdownText();
+        if (_countdownText == null) return;
+        _countdownCo = StartCoroutine(CoContinueCountdown(Mathf.Max(1f, seconds)));
+    }
+
+    public void StopContinueCountdown()
+    {
+        if (_countdownCo != null)
+        {
+            StopCoroutine(_countdownCo);
+            _countdownCo = null;
+        }
+        if (_countdownText != null) _countdownText.gameObject.SetActive(false);
+    }
+
+    IEnumerator CoContinueCountdown(float seconds)
+    {
+        var txt = _countdownText;
+        if (txt != null) txt.gameObject.SetActive(true);
+
+        float left = seconds;
+        const float step = 0.25f;
+        while (left > 0f)
+        {
+            if (txt != null) txt.text = Mathf.CeilToInt(left).ToString();
+            yield return new WaitForSecondsRealtime(step);
+            left -= step;
+        }
+
+        _countdownCo = null;
+        DoContinue();
+    }
+
+    /// <summary>
+    /// 倒计时数字：挂在<b>本组件自己的节点</b>下（不是美术的 BackpackPanel 子节点），
+    /// 摆在「继续」按钮正上方 —— 不新建美术节点、不改预制体（铁律 3）。
+    /// </summary>
+    void EnsureCountdownText()
+    {
+        if (_countdownText != null) return;
+
+        var go = new GameObject("ContinueCountdown", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(transform, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(80f, 40f);
+
+        var hostRt = _continueBtn != null ? _continueBtn.transform as RectTransform : null;
+        if (hostRt != null)
+        {
+            // 用世界角点换到本节点局部坐标，按钮是什么锚点都不影响
+            var w = new Vector3[4];
+            hostRt.GetWorldCorners(w);
+            Vector2 c = transform.InverseTransformPoint((w[0] + w[2]) * 0.5f);
+            rt.anchoredPosition = new Vector2(c.x, c.y + 42f);
+        }
+        else
+        {
+            rt.anchoredPosition = Vector2.zero;
+        }
+
+        var t = go.GetComponent<Text>();
+        t.text = "";
+        t.fontSize = 30;
+        t.color = new Color(1f, 0.88f, 0.45f);
+        t.alignment = TextAnchor.MiddleCenter;
+        t.raycastTarget = false;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        var f = GameFonts.GetChinese();
+        if (f != null) t.font = f;
+
+        _countdownText = t;
     }
 
     /// <summary>「背包」按钮：任何时候都能点，切换展开/收起（抽奖阶段也能收起来看战斗画面）。</summary>

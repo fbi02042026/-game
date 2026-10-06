@@ -92,8 +92,7 @@ public class CharacterSlotUI
         var le = root.GetComponent<UnityEngine.UI.LayoutElement>();
         if (le != null) le.ignoreLayout = false;
 
-        if (nameText != null && !string.IsNullOrEmpty(name))
-            nameText.text = name;
+        SetName(name);
         if (levelLabel != null)
         {
             levelLabel.gameObject.SetActive(showLevel);
@@ -113,6 +112,36 @@ public class CharacterSlotUI
         }
         if (lanText != null) lanText.gameObject.SetActive(true);
         if (lanBarFill != null) lanBarFill.enabled = true;
+    }
+
+    /// <summary>
+    /// 角色名的<b>唯一出口</b>：空值清空并隐藏节点，有值则赋值并显示。
+    /// 2026-10-06 主人拍板：空槽 / 未解锁 / 未招募这些分支之前只清了等级和血蓝，
+    /// 漏清 nameText，导致预制体默认名或上一局残留的名字一直挂着；
+    /// 此后任何地方都不许再直接碰 nameText（绑定处除外），一律走这里。
+    /// </summary>
+    /// <summary>nameText 缺失只报一次：UpdateSlot 每次刷血条都会走到这里，每帧 LogError 会刷爆控制台。</summary>
+    static bool _nameTextMissingLogged;
+
+    public void SetName(string name)
+    {
+        if (nameText == null)
+        {
+            if (!_nameTextMissingLogged)
+            {
+                _nameTextMissingLogged = true;
+                Debug.LogError("[CharacterSlotUI] SetName 拿不到 nameText，节点缺失，名字无法显示（只报一次）");
+            }
+            return;
+        }
+        if (string.IsNullOrEmpty(name))
+        {
+            nameText.text = "";
+            nameText.gameObject.SetActive(false);
+            return;
+        }
+        nameText.text = name;
+        nameText.gameObject.SetActive(true);
     }
 
     /// <summary>
@@ -348,8 +377,40 @@ public class CharacterSlotUI
         jobIcon.preserveAspect = true;
         jobIcon.raycastTarget = false;
         jobIcon.sprite = icon;
+        // 2026-10-06 主人拍板：职业 icon 用贴图原始尺寸，别被美术摆的 sizeDelta 拉满框变形
+        if (icon != null) jobIcon.SetNativeSize();
         jobIcon.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
         jobIcon.gameObject.SetActive(icon != null);
+        // 只打一次：UpdateCharacterSlots 每次刷血条都会调到这里，逐帧打印会刷爆控制台
+        if (icon != null && !_jobIconScaleLogged)
+        {
+            _jobIconScaleLogged = true;
+            LogJobIconScale(jobIcon.rectTransform);
+        }
+    }
+
+    /// <summary>职业 icon 的缩放链日志只打一次（见 SetJobIcon）。</summary>
+    static bool _jobIconScaleLogged;
+
+    /// <summary>
+    /// 只打印职业 icon 的 sizeDelta 与父链 localScale 供排查（父链非等比缩放会让 SetNativeSize 之后仍旧变形）。
+    /// 2026-10-06 主人拍板：只打日志，不擅自改别人的节点。
+    /// </summary>
+    static void LogJobIconScale(RectTransform rt)
+    {
+        if (rt == null) return;
+        var chain = new System.Text.StringBuilder();
+        Transform t = rt;
+        while (t != null)
+        {
+            var s = t.localScale;
+            bool nonUniform = Mathf.Abs(s.x - s.y) > 0.0001f || Mathf.Abs(s.y - s.z) > 0.0001f;
+            chain.Append(t.name).Append('(').Append(s.x.ToString("F3")).Append(',')
+                 .Append(s.y.ToString("F3")).Append(',').Append(s.z.ToString("F3"))
+                 .Append(nonUniform ? " 非等比" : "").Append(") <- ");
+            t = t.parent;
+        }
+        Debug.Log($"[CharacterSlotUI] 职业icon sizeDelta={rt.sizeDelta} 父链: {chain}");
     }
 
     /// <summary>技能能量：底栏 lanBar 显示进度，满时仅显示光边（不改头像框）</summary>
@@ -715,6 +776,7 @@ public class CharacterSlotUI
     public void Clear()
     {
         SetEnergyEnabled(false);
+        SetName(null);                  // 2026-10-06 主人拍板：清空槽位也要把名字收掉，别留上一局的残留
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
         if (root != null)
         {
@@ -735,6 +797,7 @@ public class CharacterSlotUI
         SetSkillBadge(null);
         SetJobIcon(null);               // 空槽不显示职业 icon
         ApplyUnhiredPortrait();         // 空槽（未雇佣）：头像位留白，不再点亮/置白占位盘
+        SetName(null);                  // 2026-10-06 主人拍板：空槽下面不许残留名字
         if (levelLabel != null) levelLabel.text = "";
         ClearNumericDisplays();
         if (UnhiredShowPlayerLook) KeepBarGraphicsVisible();   // 条本体保留，跟玩家槽同一套
@@ -752,6 +815,7 @@ public class CharacterSlotUI
         ApplyDim(true);
         if (lockedOverlay != null)
             lockedOverlay.SetActive(true);
+        SetName(null);                  // 2026-10-06 主人拍板：未解锁槽保留美术布局，但清掉占位名字
         ClearNumericDisplays();
     }
 
@@ -770,6 +834,7 @@ public class CharacterSlotUI
         SetJobIcon(null);               // 未解锁不显示职业 icon
         ApplyUnhiredPortrait();         // 未解锁（未雇佣）：头像位留白，不再点亮/置白占位盘
         ApplyLockedOverlayText(label ?? "未解锁");
+        SetName(null);                  // 2026-10-06 主人拍板：未解锁槽下面不许残留名字
         if (levelLabel != null)
             levelLabel.text = "";
         ClearNumericDisplays();
@@ -795,7 +860,7 @@ public class CharacterSlotUI
         SetFrame(frame);          // 头像框 = 佣兵稀有度（普通灰白 / 稀有蓝 / 传奇橙金）
         SetSkillBadge(null);
         SetJobIcon(null);
-        if (nameText != null) nameText.text = displayName ?? "";
+        SetName(displayName);           // 2026-10-06 主人拍板：名字统一走 SetName（空名自动隐藏节点）
         if (levelLabel != null)
         {
             levelLabel.gameObject.SetActive(false);

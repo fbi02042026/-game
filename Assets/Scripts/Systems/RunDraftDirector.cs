@@ -545,6 +545,7 @@ public class RunDraftDirector : MonoBehaviour
         if (merc == null || entry == null) return;
 
         merc.Init(entry.mercId, Mathf.Max(1, entry.level));
+        merc.mercStar = Mathf.Clamp(entry.star, 1, 5);   // 2026-10-06：MP 池/回复的星级真源
         merc.SetupBattleSkills(entry.skillId, entry.passiveSkillId);
         merc.SetDisplayName(entry.displayName, entry.nickname);
         if (!string.IsNullOrEmpty(entry.hireId)) merc.SetHireId(entry.hireId);
@@ -568,6 +569,18 @@ public class RunDraftDirector : MonoBehaviour
 
         var merc = mm.SpawnMercenary(e.mercId, new Vector3(baseX, UnitBase.GROUND_Y, z), Mathf.Max(1, e.level));
         if (merc == null) return;
+
+        merc.mercStar = Mathf.Clamp(e.star, 1, 5);       // 2026-10-06：MP 池/回复的星级真源
+
+        // 2026-10-06 主人拍板：阵亡过的佣兵**带惩罚复活**（血 20% 起步，每通过一关 +30%）。
+        // SpawnMercenary → Init 会重置满血，所以惩罚必须在这里补砍回去。
+        float reviveRatio = RunLoadout.MercReviveHpRatio(e);
+        if (reviveRatio < 1f && merc.attr != null)
+        {
+            float maxHp = merc.attr.GetAttr(AttrType.MaxHp);
+            merc.currentHp = Mathf.Max(1f, maxHp * reviveRatio);
+            Debug.Log($"[RunDraft] 佣兵 {e.displayName} 阵亡复活：血量 {reviveRatio * 100f:0.}%（蓝条照常灌满）");
+        }
 
         merc.SetupBattleSkills(e.skillId, e.passiveSkillId);
         merc.SetPartyIndex(slot);

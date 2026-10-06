@@ -173,6 +173,8 @@ public partial class BattleUI : MonoBehaviour
             av.cooldownText = EnsureChildText(t, "SkillCd", 16);
             av.cooldownMask = EnsureChildMask(t, "SkillCdMask");
             av.energyFill = EnsureChildBar(t, "SkillEnergy", new Color(0.98f, 0.78f, 0.28f, 1f));
+            // 左上角释放顺序角标（① 最先放）：与整理阶段的拖拽调序同一口径，空槽由 SetOrderText("") 隐藏
+            av.orderText = EnsureTopLeftText(t, "SkillOrder", 16);
             // 纯冷却制：节点照样建（置 true 就能回来），默认隐藏
             av.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
             runSkillSlots.Add(av);
@@ -185,6 +187,37 @@ public partial class BattleUI : MonoBehaviour
             chip.DragEnabled = false;          // 由 RefreshSkillSlotDragState 按阶段打开
             chip.OnOrderChanged = OnSkillSlotReordered;
         }
+    }
+
+    /// <summary>
+    /// 在槽位左上角补一行小字（释放顺序 ①②③④）。锚在角上，只占一小块，不碰任何图片节点的尺寸。
+    /// 与 EnsureCornerText 同口径，只是锚点镜像到左上角、字号放大一档（顺序＝优先级，要看得清）。
+    /// </summary>
+    static Text EnsureTopLeftText(Transform parent, string name, int fontSize)
+    {
+        var exist = FindDeepChildIgnoreCase(parent, name);
+        if (exist != null)
+        {
+            var e = exist.GetComponent<Text>();
+            if (e != null) return e;
+        }
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(parent, false);
+        go.transform.SetAsLastSibling();
+        var rt = go.GetComponent<RectTransform>();
+        // 左上角固定一个小盒子：宽 = 父的 42%，高 = 父的 24%
+        rt.anchorMin = new Vector2(0f, 0.76f);
+        rt.anchorMax = new Vector2(0.42f, 1f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var txt = go.GetComponent<Text>();
+        txt.alignment = TextAnchor.UpperLeft;
+        txt.fontSize = fontSize;
+        txt.color = new Color(1f, 0.88f, 0.42f);
+        txt.raycastTarget = false;
+        var f = GameFonts.GetChinese();
+        if (f != null) txt.font = f;
+        return txt;
     }
 
     /// <summary>
@@ -529,20 +562,43 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 职业图标位：美术在 xuetiaodi 下放了「职业icon」节点，但可能没挂 Image 组件，缺了就运行时补一个。
-    /// 节点不存在时返回 null（老预制体没有这一层，不强行新建，避免挡住血条）。
+    /// 职业图标位（头像框左下角）。
+    ///
+    /// <para><b>【2026-10-06 主人报「左下角职业 icon 没加载 / 还是缩放」→ 真正的根因】</b>
+    /// 团结日志里<b>从来没有</b> <c>JobIconResolver</c> 的「取不到」警告 —— 说明不是资源路径的问题，
+    /// 而是这个节点<b>根本不存在</b>：预制体里没有「职业icon」，老代码「找不到就 return null」，
+    /// 于是 <c>SetJobIcon</c> 一进门就 return，<c>Icons/职业icon</c> 那 4 张图<b>一次都没被加载过</b>。</para>
+    ///
+    /// <para>现在：有美术摆的就用（英文 <c>JobIcon</c> / 中文「职业icon」都认），
+    /// <b>没有就运行时在头像框左下角补一个</b>（铁律 2：预制体里空 → 代码兜底）。
+    /// 节点名统一用英文 <c>JobIcon</c>（主人 2026-10-06 要求「重新起个名，免得每次都找不到」）。</para>
     /// </summary>
     static Image EnsureJobIcon(Transform root)
     {
-        Transform t = FindDeepChildIgnoreCase(root, "职业icon")
-                      ?? FindDeepChildIgnoreCase(root, "JobIcon");
-        if (t == null) return null;
+        if (root == null) return null;
+
+        Transform t = FindDeepChildIgnoreCase(root, "JobIcon")
+                      ?? FindDeepChildIgnoreCase(root, "职业icon");
+
+        if (t == null)
+        {
+            // 位置口径跟 EnsureLevelLabel 的 (-52, 34) 上下对称，落在头像框左下角
+            var go = new GameObject("JobIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(root, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(-52f, -34f);
+            rt.sizeDelta = new Vector2(44f, 44f);
+            t = go.transform;
+        }
+
         var img = t.GetComponent<Image>();
         if (img == null) img = t.gameObject.AddComponent<Image>();
         img.raycastTarget = false;
-        img.preserveAspect = true;
-        img.sprite = null;
-        img.color = new Color(1f, 1f, 1f, 0f);
+        img.preserveAspect = true;                               // 只按比例，绝不拉变形
+        if (img.sprite == null) img.color = new Color(1f, 1f, 1f, 0f);
         return img;
     }
 

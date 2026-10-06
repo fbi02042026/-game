@@ -5,7 +5,8 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 新手引导：城镇开场 → 短战斗（选职/牧师救援/强制撤离）→ 回城收尾。
+/// 新手引导：城镇开场 → 短战斗（选职 / 三段抽奖：装备 → 招募小白 → 本命技能 / 强制撤离）→ 回城收尾。
+/// 2026-10-06 主人拍板：小白在第 2 抽直接入队，原来第 4 拍「牧师被围 → 救援入队」整段删除改成普通波次。
 /// 只编排节拍（停手、对白、提示、何时刷第 N 步）；刷怪/HP 走 BattleManager.QueueTutorialStep + tutorial_battle。
 /// 正式第一章不走这里。
 /// </summary>
@@ -28,7 +29,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
         return Path.Combine(Application.dataPath, OpeningIntroRelativePath);
     }
 
-    public bool ShowMercHud { get; private set; }
+    /// <summary>
+    /// 引导局：小白的头像栏要不要走「真人头像 + 职业 icon + 血条」（= 她已经在队里了）。
+    /// <para>2026-10-06 主人拍板：<b>只读推导</b>，不再是一个可以随便写的 bool ——
+    /// 原来散在四处赋值（175/428/568/660），跟「本局抽数」那套判据会对不上。
+    /// 真源只有 <see cref="SlotMachineSystem.TutorialMercDrawn"/> 一处；
+    /// 抽数每局归零 = 自动重置，不需要手动置 false/true。</para>
+    /// </summary>
+    public bool ShowMercHud => SlotMachineSystem.TutorialMercDrawn;
     public bool WaitingEvacuate { get; set; }
     public bool SkillUsedThisStep { get; private set; }
     /// <summary>引导战斗：仅 heal 步骤允许点头像放技能。</summary>
@@ -172,7 +180,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
             _flow = null;
         }
         _battleTutorialFlowStarted = false;
-        ShowMercHud = false;
+        // 2026-10-06 主人拍板：ShowMercHud 改成只读推导（SlotMachineSystem.TutorialMercDrawn），
+        // 这里的赋值删掉 —— 抽数每局归零，等于自动重置。
         WaitingEvacuate = false;
         SkillUsedThisStep = false;
         AllowBattleSkillClick = false;
@@ -425,7 +434,6 @@ public class TutorialDirector : Singleton<TutorialDirector>
         var ui = BattleUI.Instance;
         var headTalk = BattleHeadTalkUI.Ensure();
         SkillUsedThisStep = false;
-        ShowMercHud = false;
         AllowBattleSkillClick = false;
         WaitingEvacuate = false;
 
@@ -460,11 +468,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         // —— 1c) 第二次抽（佣兵）：走正式入口 CoMidBattleDraft（冻场 → 弹面板 → 抽一次 → 解冻）。
         // 抽奖是主玩法，不是引导脚本 —— 这里的节拍只是「什么时候弹」，规则在 SlotMachineSystem。
-        // 引导局这一发给的是小白的本命碎片（她在第 4 拍走剧情入队）。
+        // 2026-10-06 主人拍板：这一发 = **直接招募小白本人入队**（H011 牧师），
+        // 保底卡在 SlotMachineSystem.BuildGuaranteedMercCard（碎片那条口径作废）。
         // 引导三拍的钱**只有开局那 240**（每拍一抽 80，正好三抽）；不再有任何中途补贴 ——
         // 2026-10-05 主人拍板「清零 + 不要总打补丁」，TUTORIAL_WAVE_BONUS_COINS 整条链路已删。
         if (bm != null)
             yield return bm.CoMidBattleDraft("打完两波，再抽一次：这次是伙伴。");
+        // 2026-10-06 主人拍板：招募完立刻刷一次头像栏，否则要等下一次全量刷新才亮出来
+        // （ShowMercHud 由本局抽数推导，抽数已在 CoInstantPick 里 +1）。
+        ui?.UpdateCharacterSlots();
 
         // —— 2) 宝箱陷阱：发现 → 左右埋伏 → 清场 → 开箱拿剑 ——
         hint.Hide();
@@ -477,7 +489,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         chestDir.CacheSceneRefs();
 
         // 2026-10-05 主人拍板：宝箱不再掉装备（掉天赋石，见 GrantTutorialChestTalentStones），
-        // 装备由开局抽奖保底给。开箱演出照旧，只是箱子里不再吐一件装备。
+        // 装备由开局抽奖随机给（第一抽没有装备保底）。开箱演出照旧，只是箱子里不再吐一件装备。
         hint.Hide();
         // 2026-09-27 主人拍板：清完上一波不要马上进宝箱剧情 —— 先让玩家往前走两步，
         // 宝箱再「突然出现」。UnitsCanAct 保持 true（WaitFieldClear 结尾已放开，场上无怪 → 向右推图），
@@ -563,58 +575,39 @@ public class TutorialDirector : Singleton<TutorialDirector>
         hint.Show("天赋石可以在城镇里点天赋。", null, 1.8f);
         yield return new WaitForSecondsRealtime(0.2f);
 
-        // —— 4) 救援戏：牧师先在前方眩晕被围殴 ——
+        // —— 4) 精英波：小白已在队，跟着一起打 ——
+        // 2026-10-06 主人拍板：小白第 2 抽就招募入队了，原来这段
+        //「牧师在前方眩晕被围殴 → 清场 → 三段对白 → 入队」**整段删除**，第 4 拍改成普通波次。
         hint.Hide();
-        ShowMercHud = false;
         ui?.ApplySoloBattleHudPublic();
         ui?.UpdateCharacterSlots();
 
-        var rescueStep = TutorialBattleTable.GetStepOrDefault(4);
-        string rescueMercId = string.IsNullOrEmpty(rescueStep.mercId)
-            ? StoryProgress.TutorialMercId
-            : rescueStep.mercId;
-        float rescueHpRatio = rescueStep.mercHpRatio > 0f ? rescueStep.mercHpRatio : 0.35f;
-        float rescueAhead = rescueStep.aheadDist > 0f ? rescueStep.aheadDist : 5.5f;
-        var merc = bm.SpawnTutorialMercAt(rescueMercId, rescueHpRatio, rescueAhead, stunned: rescueStep.stunned);
-        if (rescueStep.eliteCount > 0)
+        // 小白已经在队里了：这里只从佣兵管理器取场上那个单位（压轴对白 / 撤离要用）
+        var activeMercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+        var merc = (activeMercs != null && activeMercs.Count > 0) ? activeMercs[0] : null;
+
+        var step4 = TutorialBattleTable.GetStepOrDefault(4);
+        if (step4.eliteCount > 0)
         {
             yield return TalkBlock(bm, headTalk, restoreAct: false,
                 new TalkLine(Hero.Instance, "有个块头更大的！", 0.75f));
-            // 2026-09-28 主人要求：这段佣兵救援剧情说完先砸「首领来袭」预告，再开始战斗
+            // 2026-09-28 主人要求：这段说完先砸「首领来袭」预告，再开始战斗
             // （怪在下一行 QueueTutorialStep 才刷，预告播完正好开打；精英血条由 BattleBossHpBar 显示）
             yield return BattleWaveAnnounceUI.CoPlay(BattleWaveAnnounceUI.Kind.Boss,
-                $"精英 ×{rescueStep.eliteCount} 来袭 — 先清围殴她的怪");
+                $"精英 ×{step4.eliteCount} 来袭");
         }
-        bm?.QueueTutorialStep(4, forcedTarget: merc);
-        hint.Show("前方有人被怪物围住了，上前帮忙。", null, 4f);
+        // 2026-10-06 主人拍板：没有要救的人了 → 去掉 forcedTarget，怪正常打
+        bm?.QueueTutorialStep(4);
 
         // 不冻结战斗：玩家可随时上前清怪。
         // 2026-09-18：这里原本会直接改写 Hero 坐标把玩家往前推（最高 18/秒），
-        // 触发瞬间看起来就是「被瞬移」。改为只等待，绝不动画家坐标。
-        if (bm != null) bm.UnitsCanAct = true;
-        float approach = 0f;
-        const float approachTimeout = 4f;
-        while (approach < approachTimeout)
-        {
-            approach += Time.unscaledDeltaTime;
-            if (Hero.Instance != null && merc != null)
-            {
-                float dist = Mathf.Abs(UnitBase.GetCombatX(Hero.Instance) - UnitBase.GetCombatX(merc));
-                if (dist <= 4.2f) break;
-            }
-            yield return null;
-        }
-
-        yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "先把围殴她的怪清掉！", 0.75f));
-
-        // 解冻开打；清完立刻再冻，防止自动往前跑错过入队
+        // 触发瞬间看起来就是「被瞬移」。只等待，绝不动画家坐标。
         if (bm != null) bm.UnitsCanAct = true;
         bm.RetargetAllMonsters(Hero.Instance);
         hint.Show("怪物冲过来了，靠近它们会自动攻击。", null, 5f);
         yield return WaitFieldClear(strict: true);
         // 清场兜底：WaitFieldClear 靠「存活数 + 未刷出波次」连读 0.45s 判定已清，
-        // 遇到刷怪空窗 / 存活数同帧缓存会提前返回，导致围殴怪还没打完就进小白入队剧情。
+        // 遇到刷怪空窗 / 存活数同帧缓存会提前返回。
         // 这里再按现成的存活怪计数确认一次，确保场上真的清空了才继续（上限 30s，不会卡死流程）。
         float clearGuard = 0f;
         while (bm != null && clearGuard < 30f
@@ -625,74 +618,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
         bm.ClearMonsterForcedTargets();
 
-        // 围殴怪已清：若玩家提前打完，也要进对话
-        if (merc == null || merc.isDead)
-            merc = bm.SpawnTutorialMercAt(StoryProgress.TutorialMercId, 0.6f, 2.0f, stunned: false);
-        if (merc != null)
-            merc.StopTutorialStunAnim();
-
-        if (bm != null) bm.UnitsCanAct = false;
-        HaltUnit(Hero.Instance);
-        if (merc != null) HaltUnit(merc);
-        yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(merc, "咳……谢了，我差点交代在这儿。", 1.4f),
-            new TalkLine(Hero.Instance, "还能走吗？跟我一起撤。", 1.1f),
-            new TalkLine(merc, "我叫小白，是个牧师。行，我跟你。", 1.3f));
-
-        string joinName = StoryProgress.TutorialMercNickname;
-        if (merc != null)
-        {
-            merc.SetTutorialStunned(false);
-            if (Hero.Instance != null)
-            {
-                float frontX = UnitCrowd.GetMercDesiredCombatX(Hero.Instance, merc, 0);
-                Vector3 front = new Vector3(frontX, UnitBase.GROUND_Y, Hero.Instance.transform.position.z);
-                GameConfig.SetWorldPosition(merc.gameObject, front);
-            }
-            merc.Face(1);
-            merc.SetPartyIndex(0);
-            EnsureTutorialMercPermanent(StoryProgress.TutorialMercId, StoryProgress.TutorialMercDisplayName);
-            Debug.Log("[Tutorial] 牧师入队完成");
-        }
-        else
-            Debug.LogError("[Tutorial] 牧师入队失败：merc 为空");
-
-        ShowMercHud = true;
-        ui?.ApplySoloBattleHudPublic();
-        ui?.UpdateCharacterSlots();
-        if (ui != null)
-            ui.StartCoroutine(CoRefreshMercHudNextFrame(ui));
-        hint.Show($"{joinName}加入了队伍。", null, 2.0f);
-        UIManager.Instance?.ShowToast($"{joinName}加入队伍！");
-
-        // 牧师入队：为玩家疗伤
-        if (Hero.Instance != null && Hero.Instance.attr != null)
-        {
-            float maxHp = Hero.Instance.attr.GetAttr(AttrType.MaxHp);
-            Hero.Instance.currentHp = maxHp;
-            UIManager.Instance?.ShowToast("牧师为你疗伤");
-            ui?.UpdateCharacterSlots();
-        }
-
-        yield return new WaitForSecondsRealtime(0.6f);
-
-        if (merc != null && !merc.isDead)
-        {
-            merc.currentHp = merc.attr.GetAttr(AttrType.MaxHp);
-            // 血回满了也要把低血红/受击闪的残留染色清掉，否则小白一身红跟着队伍走
-            // （unitAnim 是 protected，外部只能 GetComponent）
-            var anim = merc.GetComponent<UnitAnimation>();
-            if (anim != null) anim.ForceClearTint();
-        }
-        if (Hero.Instance != null)
-        {
-            var hAnim = Hero.Instance.GetComponent<UnitAnimation>();
-            if (hAnim != null) hAnim.ForceClearTint();
-        }
-
-        ui?.UpdateCharacterSlots();
         AllowBattleSkillClick = false;
-        if (bm != null) bm.UnitsCanAct = true;
 
         yield return TalkBlock(bm, headTalk,
             new TalkLine(merc, "我在后面托着，一起上。", 0.75f));
@@ -772,7 +698,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         RunSkillBarUI.Refresh();
 
         var bar = RunSkillBarUI.Instance;
-        hint.Show("技能各自倒计时，冷却好了会自动释放——看技能条。",
+        // 2026-10-06 主人拍板：说清「顺序＝优先级」，与底部槽左上角 ①②③④ 和
+        // SkillOrderGuide 的「拖动技能可改释放顺序：① 最先放。」同一口径。
+        hint.Show("技能各自倒计时，冷却好了自动释放，顺序看左上角 ①②③④。",
             bar != null ? bar.GetComponent<RectTransform>() : null, 8f);
 
         float t = 0f;
@@ -1009,45 +937,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return TalkBlock(bm, talk, new TalkLine(speaker, content, hold));
     }
 
-    /// <summary>教程入队写入永久花名册，回城酒馆也能看见。</summary>
-    static void EnsureTutorialMercPermanent(string mercId, string displayName)
-    {
-        var data = SaveSystem.Instance?.Data;
-        if (data == null || string.IsNullOrEmpty(mercId)) return;
-        if (data.permanentMercs == null)
-            data.permanentMercs = new System.Collections.Generic.List<MercenaryData>();
-        for (int i = 0; i < data.permanentMercs.Count; i++)
-        {
-            if (data.permanentMercs[i] != null && data.permanentMercs[i].mercId == mercId)
-                return;
-        }
-        MercRosterDefs.GetSkillIds(mercId, out string active, out string passive);
-        string nick = StoryProgress.TutorialMercNickname;
-        string shown = string.IsNullOrEmpty(displayName) ? StoryProgress.TutorialMercDisplayName : displayName;
-        var entry = new MercenaryData
-        {
-            mercId = mercId,
-            displayName = shown,
-            nickname = nick,
-            hireId = StoryProgress.TutorialMercHireId,
-            uid = "tutorial_" + mercId,
-            favorLevel = 1,
-            level = 1,
-            star = 1,
-            skillId = active,
-            passiveSkillId = passive
-        };
-        // 教程：写入本局雇佣（引导期临时）；图鉴仍 MarkMercSeen
-        data.hiredMercs ??= new System.Collections.Generic.List<MercenaryData>();
-        data.hiredMercs.Add(entry);
-        // 2026-09-29 主人拍板：小白是**引导期佣兵**，引导完就清空，不跟到正式关卡。
-        // 原来这里还会额外写一条 permanentMercs（跨局永久），导致他每局自动进队 —— 已去掉。
-        // 正式关卡里要佣兵，只能靠进关抽奖（DraftPool 从 unlockedMercIds 抽）。
-        SaveSystem.Instance.Save();
-        Debug.Log($"[Tutorial] 牧师已写入本局雇佣（引导期临时，不跨局）id={mercId}");
-        AdventureCodex.MarkMercSeen(StoryProgress.TutorialMercHireId);
-        AdventureCodex.MarkMercSeen(mercId);
-    }
+    // 【2026-10-06 已删除】EnsureTutorialMercPermanent：它是第 4 拍「救援入队」的配套
+    //   （把小白写进本局 hiredMercs + 图鉴 MarkMercSeen）。入队戏整段删掉后已无任何调用点，
+    //   小白现在由正式招募链路 RunDraftDirector.RecruitMerc 入队 → 整方法删除，不留死代码。
 
     /// <summary>
     /// 2026-09-29 主人拍板：小白是**引导期佣兵**，引导结束就清空，不跟到正式关卡。
@@ -1108,7 +1000,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (preloadStep > 0)
             yield return EnsureTutorialStep(bm, preloadStep);
 
-        hint.Show("技能能量满会自动释放，无需点击。", null, 3.5f);
+        // 2026-10-06：① 原话「能量满」是纯冷却制之前的旧文案，改回「冷却好」；
+        // ② 补一句顺序角标，让玩家一眼知道 ① 先放、整理阶段可拖动改。
+        hint.Show("技能冷却好会自动释放，无需点击；顺序看左上角 ①②③④。", null, 3.5f);
         yield return new WaitForSecondsRealtime(3.2f);
         hint.Hide();
         // 【2026-10-05 「不要摇杆了」→ 停用，先注释不删】
@@ -1148,14 +1042,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         Debug.LogError($"[Tutorial] 连续 3 次刷怪失败 step={order}，跳过本波以免卡流程");
     }
 
-    static IEnumerator CoRefreshMercHudNextFrame(BattleUI ui)
-    {
-        yield return null;
-        ui?.ApplySoloBattleHudPublic();
-        ui?.UpdateCharacterSlots();
-        // 救援佣兵出现后补绑技能点击（SOLO 下原先会跳过）
-        ui?.RebindAfterSystemsReady();
-    }
+    // 【2026-10-06 已删除】CoRefreshMercHudNextFrame：只被「救援入队」那一段调用，
+    //   入队戏删除后无调用点 → 整方法删除（HUD 现在靠 SlotMachineSystem.TutorialMercDrawn 推导，抽完即亮）。
 
     IEnumerator OfferTutorialEquip()
     {
@@ -1174,32 +1062,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
         BattleUI.Instance?.UpdateBackpackGrid();
     }
 
-    /// <summary>
-    /// 引导局抽奖抽到「佣兵」那一发的产出：**小白(H011) 的本命碎片**。
-    /// 2026-10-05 主人拍板「保留救援戏，抽奖给小白碎片」—— 她走第 4 拍剧情救援入队，
-    /// 抽奖不再重复招人。数量改 <see cref="SlotMachineDefs.TUTORIAL_MERC_FRAG_COUNT"/> 一个数。
-    /// 存档口径 `frag:{hireId}`（见 MercGrowInventory），背包里能直接看到。
-    /// </summary>
-    public static bool TryGrantTutorialMercFragment(out string msg)
-    {
-        msg = null;
-        string hireId = StoryProgress.TutorialMercHireId;
-        string fragId = MercGrowInventory.FragmentId(hireId);
-        int n = SlotMachineDefs.TUTORIAL_MERC_FRAG_COUNT;
-        if (string.IsNullOrEmpty(fragId) || n <= 0) return false;
-
-        MercGrowInventory.Add(fragId, n);
-        SaveSystem.Instance?.Save();
-        // 头像栏那一格的「灰像」判据就是碎片数（BattleUI.TutorialMercDrawn），
-        // 抽完必须立刻刷一次，否则要等下一次全量刷新才亮出来 —— 主人会以为没抽到。
-        BattleUI.Instance?.UpdateCharacterSlots();
-        msg = $"{StoryProgress.TutorialMercNickname}的本命碎片 ×{n}";
-        return true;
-    }
+    // 【2026-10-06 已删除】TryGrantTutorialMercFragment（引导抽到佣兵发小白本命碎片）。
+    //   主人当天拍板：第 2 抽 = **直接招募小白入队**（SlotMachineSystem.BuildGuaranteedMercCard），
+    //   碎片那条口径作废。方法 + 调用点整条删除，不留开关；
+    //   「小白招没招」的判据只剩 SlotMachineSystem.TutorialMercDrawn 一处。
 
     /// <summary>
     /// 引导宝箱的开箱产出（2026-10-05 主人拍板）：**天赋石**。
-    /// 原来掉一把武器，但开局抽奖已经保底给了装备（木制圆盾），宝箱再掉装备就重复了；
+    /// 原来掉一把武器，但开局第一抽就会随机给一件装备（2026-10-06：装备没有保底，木制圆盾只是起步装备），
+    /// 宝箱再掉装备就重复了；
     /// 天赋石是城镇点天赋的硬通货，正好把「开箱 = 长期成长」这一课补上。
     /// 数量就改这一个常量。
     /// </summary>

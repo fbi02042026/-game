@@ -35,6 +35,8 @@ public static class JobIconResolver
     /// </summary>
     public static Sprite CombatBadge(string jobOrDisplayName)
     {
+        SelfCheck();
+
         string file = BadgeFile(jobOrDisplayName);
         if (string.IsNullOrEmpty(file)) return null;
 
@@ -61,6 +63,28 @@ public static class JobIconResolver
             || jobOrDisplayName.Contains("雷系") || jobOrDisplayName.Contains("火系"))
             return "法术";
         return "物攻";
+    }
+
+    static bool _selfChecked;
+
+    /// <summary>
+    /// 一次性自检（2026-10-06 主人报「职业 icon 每次都找不到 / 每次都没加载」）：
+    /// 把四分类图在两个目录下的加载结果各打一行。主人一眼就能分清是「图没进来」还是「节点没建」。
+    /// </summary>
+    static void SelfCheck()
+    {
+        if (_selfChecked) return;
+        _selfChecked = true;
+
+        string[] files = { "物攻", "法术", "防御", "恢复" };
+        var sb = new System.Text.StringBuilder("[JobIconResolver] 四分类徽标自检：");
+        for (int i = 0; i < files.Length; i++)
+        {
+            bool ok = LoadSprite(BadgeRes + "/" + files[i]) != null;
+            sb.Append(' ').Append(files[i]).Append('=').Append(ok ? "OK" : "取不到");
+        }
+        sb.Append("（主目录 ").Append(BadgeRes).Append("；回退 ").Append(BadgeResFallback).Append("）");
+        Debug.Log(sb.ToString());
     }
 
     static Sprite LoadSprite(string path)

@@ -203,7 +203,19 @@ public static class SlotMachineSystem
     public static int DrawIndex => RunLoadout.DrawCount;
 
     /// <summary>记一次抽奖：把本局抽数往前推一格（跨关累计，随本局构筑一起落盘）。</summary>
-    public static void NoteDraw() => RunLoadout.NoteDraw();
+    public static void NoteDraw()
+    {
+        // 2026-10-06 主人拍板：引导三拍只加一条自检日志，节拍一处都不挪 —— 指望日志核对三拍依次是
+        // 装备 / 佣兵 / 技能。序号取推进**之前**的 DrawCount：这一抽正是按 order[n] 定的类别（见 ResolveCategory）。
+        if (IsTutorialRun)
+        {
+            int n = RunLoadout.DrawCount;
+            var order = SlotMachineDefs.TutorialDrawOrder;
+            string name = (order != null && n >= 0 && n < order.Length) ? CategoryName(order[n]) : "随机";
+            Debug.Log($"[SlotMachineSystem] 引导局抽奖：序号 {n}（本局第 {n + 1} 抽）类别 = {name}");
+        }
+        RunLoadout.NoteDraw();
+    }
 
     /// <summary>
     /// 现在是不是引导局 —— 决定走不走「前三抽定序」。
@@ -262,6 +274,68 @@ public static class SlotMachineSystem
         if (string.IsNullOrEmpty(id) || RunLoadout.HasSkill(id)) return default;
         return RunDraftDirector.BuildSkillCardById(id);
     }
+
+    /// <summary>
+    /// 引导局：小白（<see cref="StoryProgress.TutorialMercHireId"/>，H011 牧师）**已经抽到了吗**。
+    /// <para><b>2026-10-06 主人拍板：「引导小白招没招」只许有一个出口</b> ——
+    /// 原来是两套状态（<c>BattleUI.TutorialMercDrawn</c> 一份、<c>TutorialDirector.ShowMercHud</c> 一份），会对不上。
+    /// 现在全项目只有这一处判据，两边都来读它。</para>
+    /// <para>判据 = 本局抽数<b>越过</b> <see cref="SlotMachineDefs.TutorialDrawOrder"/> 里「佣兵」那一格。
+    /// 抽数是<b>局内</b>数据（<c>RunLoadout.drawCount</c>），每局归零 → 不需要手动置 false/true。</para>
+    /// </summary>
+    public static bool TutorialMercDrawn =>
+        IsTutorialRun && DrawIndex > System.Array.IndexOf(SlotMachineDefs.TutorialDrawOrder, DraftCategory.Merc);
+
+    /// <summary>
+    /// 佣兵类的保底内容：引导局第 2 抽（定序里「佣兵」那一格）= <b>直接招募小白本人入队</b>。
+    /// <para>2026-10-06 主人拍板：「第 2 抽就是直接招募小白入队」，碎片那条口径作废。</para>
+    /// <para>正式关 / 序号不匹配 → 返回 <c>default</c>，走正常随机池；
+    /// 取不到花名册定义或 AssetId 为空 → <c>LogError</c> + <c>default</c>（fail closed，绝不静默回退随机）。</para>
+    /// <para>序号一律从 <see cref="SlotMachineDefs.TutorialDrawOrder"/> 取，<b>不写死 1</b>。</para>
+    /// </summary>
+    public static DraftCard BuildGuaranteedMercCard()
+    {
+        var order = SlotMachineDefs.TutorialDrawOrder;
+        int mercSlot = order != null ? System.Array.IndexOf(order, DraftCategory.Merc) : -1;
+        if (!IsTutorialRun || mercSlot < 0 || DrawIndex != mercSlot) return default;
+
+        // ⚠ MercRosterDefs.Def 是 struct，判空只能看字段（HireId / AssetId）
+        if (!MercRosterDefs.TryGetByHireId(StoryProgress.TutorialMercHireId, out var def)
+            || string.IsNullOrEmpty(def.HireId))
+        {
+            Debug.LogError($"[SlotMachineSystem] 引导招募保底取不到花名册定义 hireId={StoryProgress.TutorialMercHireId}（不回退随机池）");
+            return default;
+        }
+        if (string.IsNullOrEmpty(def.AssetId))
+        {
+            Debug.LogError($"[SlotMachineSystem] 引导招募保底花名册缺 AssetId：hireId={def.HireId}（不回退随机池）");
+            return default;
+        }
+
+        // 花名册里没有星级 / 等级字段 → 取初始 1 星 1 级（与 BuildMercData 的兜底一致）
+        int star = 1;
+        int level = 1;
+        // 稀有度映射照 DraftPool.CollectRecruitMercs 的写法走 SkillRarityUtil，不自己发明三目
+        SkillRarity rar = SkillRarityUtil.FromMerc(def.Rarity);
+        string rarName = SkillRarityUtil.DisplayName(rar);
+        return new DraftCard
+        {
+            Kind = DraftCardKind.MercRecruit,
+            Id = def.AssetId,
+            HireId = def.HireId,
+            Title = $"{def.Name}·{def.Nickname}",
+            Desc = $"[{rarName}] {def.JobName}　Lv{level}　★{star}",
+            Rarity = rar,
+            Tag = SynergyTag.Summon,
+            Star = star,
+            MercLevel = level
+        };
+    }
+
+    // 【2026-10-06 撤回】这里原本加过 BuildGuaranteedEquipCard（引导第 1 抽必给木制圆盾 equip_shield_1）。
+    // 主人当天澄清：**第一抽是「随机拿到一件新装备」**，木制圆盾只是**起步装备**换成它
+    // （player_job_base_stats P001 副手 = equip_shield_1），跟抽奖无关。
+    // 装备类一律走 DraftPool 随机池，不再有装备保底 —— 旧实现整段删除，不留开关。
 
     /// <summary>类型的中文名，用于抽奖结果的提示文案。</summary>
     public static string CategoryName(DraftCategory c)

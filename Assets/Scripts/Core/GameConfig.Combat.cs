@@ -83,7 +83,8 @@ public static partial class GameConfig
     /// <summary>进战斗后首波刷怪延迟（秒）</summary>
     public const float FIRST_WAVE_SPAWN_DELAY = 1.5f;
     /// <summary>
-    /// 仅玩家单人战斗（不生成/显示佣兵）。正式局默认 false；引导关仍单独刷救援佣兵。
+    /// 仅玩家单人战斗（不生成/显示佣兵）。正式局默认 false；
+    /// 引导关的佣兵（小白 H011）由第 2 抽招募入队，不再单独刷（2026-10-06 主人拍板）。
     /// </summary>
     public static bool SOLO_PLAYER_BATTLE = false;
     /// <summary>怪刷在英雄前方多远（原地等玩家走过来），约 3~4 身位</summary>
@@ -320,6 +321,53 @@ public static partial class GameConfig
     /// 决定「玩家/佣兵技能多久能再放一次」的就是它（叠加在 CSV/表的基础 CD 之上）。
     /// </summary>
     public const float SKILL_COOLDOWN_MUL = 4f;
+
+    // ============================================================
+    // 蓝条（MP）数值 —— 2026-10-06 主人拍板
+    // 口径：自然回复 / 耗蓝进技能表 / CD+MP 双门槛 / 每关开局回满。
+    // 全部数值只此一处，业务里不许再写数字；公式见 MpProfile。
+    // 设计演算：Docs/蓝条数值设计_职业与佣兵_2026-10-06.md §2 / §5
+    // ============================================================
+
+    /// <summary>治疗型（类型分类=恢复）基础 MP 池。满池只存 1.25~1.5 发，★1 连喷是不可能的 —— 紧张感的根。</summary>
+    public const float MP_POOL_HEAL = 150f;
+
+    /// <summary>法术型（类型分类=法术）基础 MP 池。</summary>
+    public const float MP_POOL_MAGIC = 150f;
+
+    /// <summary>玩家（牧师 / 法师，4 个技能共用一条）基础 MP 池。只有佣兵的 2 倍却要供 4 个技能 → 天然更紧。</summary>
+    public const float MP_POOL_PLAYER = 300f;
+
+    /// <summary>治疗型每秒回复。回满一发要 83~100 秒（比一关还长）—— 主人拍板「回蓝不要太快」。</summary>
+    public const float MP_REGEN_HEAL = 1.2f;
+
+    /// <summary>法术型每秒回复。</summary>
+    public const float MP_REGEN_MAGIC = 1.3f;
+
+    /// <summary>玩家每秒回复。</summary>
+    public const float MP_REGEN_PLAYER = 1.8f;
+
+    /// <summary>每升 1 级，MP 池 +这么多（回复不随等级涨）。</summary>
+    public const float MP_POOL_PER_LEVEL = 6f;
+
+    /// <summary>每升 1 星，池与回复各 +12%（对基础值线性叠加，★5 = ×1.48）。</summary>
+    public const float MP_GROWTH_PER_STAR = 0.12f;
+
+    // ============================================================
+    // 佣兵阵亡惩罚（2026-10-06 主人拍板）
+    // 旧行为：阵亡只是从 allyUnits 摘掉，下一关 RestoreRunMercs 重新 spawn → 满血满蓝复活，
+    // 等于阵亡零成本。现在改成带惩罚复活：血 20% 起步、每过一关 +30%，最多 3 关养回满血。
+    // ⚠ 蓝不动（每关照常灌满）：蓝池只够 1.2~1.5 发，再砍蓝治疗佣兵复活后连一发奶都放不出 → 全队雪崩。
+    // ============================================================
+
+    /// <summary>阵亡佣兵下一关的复活血比例（20%）。</summary>
+    public const float MERC_REVIVE_HP_BASE = 0.2f;
+
+    /// <summary>阵亡后每通过一关，复活血比例 +30%。</summary>
+    public const float MERC_REVIVE_HP_PER_STAGE = 0.3f;
+
+    /// <summary>阵亡后需要通过几关才养回满血（0.2 + 0.3×3 = 1.1 → 封顶 1.0）。</summary>
+    public const int MERC_REVIVE_STAGES_TO_FULL = 3;
 
     /// <summary>
     /// 圣盾壁垒（holy_barrier）护盾量 = 最大生命 × 本系数（抵扣型护盾：先扣盾、再扣血）。

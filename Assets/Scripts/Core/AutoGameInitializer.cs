@@ -978,6 +978,8 @@ public class AutoGameInitializer : MonoBehaviour
             hero.transform.localScale = new Vector3(sign * s, s, s);
             hero.costumeManager?.EnsureRigReady();
             bm.hero = hero;
+            // 2026-10-06 主人拍板：玩家阴影透明度减少 10%（真源仍是预制体 Shadow 的 alpha，这里只乘一次系数）
+            UnitShadowAlpha.ApplyPlayer(hero.transform);
             return hero;
         }
 
@@ -1078,6 +1080,8 @@ public class AutoGameInitializer : MonoBehaviour
             heroGo.AddComponent<HeroCostumeManager>();
 
         bm.hero = hero;
+        // 2026-10-06 主人拍板：玩家阴影透明度减少 10%（真源仍是预制体 Shadow 的 alpha，这里只乘一次系数）
+        UnitShadowAlpha.ApplyPlayer(hero.transform);
         return hero;
     }
 

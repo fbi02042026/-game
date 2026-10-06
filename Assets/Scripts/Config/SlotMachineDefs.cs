@@ -269,8 +269,9 @@ public static class SlotMachineDefs
         DraftCategory.Skill
     };
 
-    /// <summary>引导局第 2 次抽（佣兵类）给多少本命碎片 —— 小白走剧情入队，抽奖给的是她的碎片。</summary>
-    public const int TUTORIAL_MERC_FRAG_COUNT = 8;
+    // 【2026-10-06 已删除】TUTORIAL_MERC_FRAG_COUNT（引导抽到佣兵发的本命碎片数）。
+    //   主人当天拍板：第 2 抽 = **直接招募小白入队**，碎片那条口径作废 → 常量连同
+    //   TutorialDirector.TryGrantTutorialMercFragment / TutorialRules.MercDraftGivesFragment 整条删除。
 
     // ============================================================
     // 三·补②、【2026-10-05 已删除】引导局「每打完两波」的抽奖币补贴 TUTORIAL_WAVE_BONUS_COINS

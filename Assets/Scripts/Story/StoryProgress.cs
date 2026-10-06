@@ -31,7 +31,7 @@ public static class StoryProgress
     /// <summary>老盾：支线 S001/S015 需要读他的羁绊值。</summary>
     public const string NpcLaoDun = "laodun";
 
-    // 引导救援牧师（H011）对应 naima101
+    // 引导牧师小白（H011）对应 naima101；2026-10-06 主人拍板：她在第 2 抽直接招募入队，不再走救援戏
     public const string TutorialMercId = "naima101";
     public const string TutorialMercHireId = "H011";
     public const string TutorialMercDisplayName = "索菲";

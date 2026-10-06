@@ -262,6 +262,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             if (sys.IsOnCooldown(s.skillId)) continue;
             // 2026-09-17：冷却好≠该放，还要等技能自己的战场状态触发条件（血线/怪群等）。
             if (!PlayerSkillPassive.IsTriggerMet(s.skillId)) continue;
+            // 2026-10-06 主人拍板：蓝不足 = 这一槽本轮不可释放，**顺位给下一个**（与触发条件不满足同一口径）。
+            // 无蓝技能（耗蓝 0）永远过得去 = 地板节奏；耗蓝技能才吃稀缺窗口，见设计文档 §9。
+            float mpCost = PlayerSkillDefs.MpCostOf(s.skillId);
+            if (mpCost > 0f && _playerMp + 0.001f < mpCost) continue;
             return i;
         }
         return -1;
@@ -314,8 +318,13 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         }
     }
 
-    /// <summary>佣兵技能能量（最多2槽）</summary>
-    readonly float[] mercSkillEnergy = new float[2];
+    /// <summary>
+    /// 佣兵蓝条 MP（最多 2 槽）。2026-10-06 主人拍板：由「技能能量」改为真正的蓝条，
+    /// 按<b>槽位</b>存（换佣兵不回满，防「换人刷蓝」）。
+    /// </summary>
+    readonly float[] mercMp = new float[2];
+    /// <summary>本关该槽是否已灌满过：每关开局回满一次，之后只靠自然回复。</summary>
+    readonly bool[] _mercMpFilled = new bool[2];
     #endregion
     #region 佣兵技能与施放
     internal Coroutine _spawnWaveCo;
@@ -323,10 +332,151 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     SkillCastService _skillCast;
     internal SkillCastService SkillCast => _skillCast ?? (_skillCast = new SkillCastService(this));
 
-    public float GetMercSkillEnergy(int index)
+    /// <summary>取第 index 个在场佣兵（越界 / 无管理器 → null）。</summary>
+    static Mercenary MercAt(int index)
     {
-        if (index < 0 || index >= mercSkillEnergy.Length) return 0f;
-        return mercSkillEnergy[index];
+        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+        if (mercs == null || index < 0 || index >= mercs.Count) return null;
+        return mercs[index];
+    }
+
+    /// <summary>该槽 MP 池上限（该佣兵是「无蓝」技能 → 0，蓝条不显示）。</summary>
+    public static float MercMpPool(int index)
+    {
+        var m = MercAt(index);
+        if (m == null) return 0f;
+        return MpProfile.Pool(MpProfile.OfMercSkill(m.equippedSkillId), m.mercLevel, m.mercStar);
+    }
+
+    /// <summary>该槽每秒自然回复（该佣兵是「无蓝」技能 → 0）。</summary>
+    public static float MercMpRegen(int index)
+    {
+        var m = MercAt(index);
+        if (m == null) return 0f;
+        return MpProfile.Regen(MpProfile.OfMercSkill(m.equippedSkillId), m.mercStar);
+    }
+
+    /// <summary>
+    /// 佣兵槽蓝条比例 0~1（当前蓝 ÷ 池上限），喂 UI 用。
+    /// 槽未启用 / 该佣兵技能无蓝 → 0（蓝条由 UI 侧隐藏）。
+    /// </summary>
+    public float GetMercMp(int index)
+    {
+        if (index < 0 || index >= mercMp.Length) return 0f;
+        float pool = MercMpPool(index);
+        if (pool <= 0f) return 0f;
+        return Mathf.Clamp01(mercMp[index] / pool);
+    }
+
+    /// <summary>
+    /// 扣蓝的<b>唯一出口</b>：蓝够才扣并返回 true；蓝不够 / 槽位非法 → false（调用方不放技能）。
+    /// cost &lt;= 0 视为无蓝技能，直接放行、不扣蓝。
+    /// </summary>
+    public bool TrySpendMercMp(Mercenary merc, float cost)
+    {
+        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+        if (mercs == null || merc == null) return false;
+        int slot = mercs.IndexOf(merc);
+        if (slot < 0 || slot >= mercMp.Length) return false;
+        if (cost <= 0f) return true;
+        if (mercMp[slot] + 0.001f < cost) return false;
+        mercMp[slot] = Mathf.Max(0f, mercMp[slot] - cost);
+        BattleUI.Instance?.UpdateSkillEnergy(slot + 1, GetMercMp(slot));
+        return true;
+    }
+
+    // ============================================================
+    // 玩家蓝条（2026-10-06 主人拍板：与佣兵同一套 MpProfile，4 个技能共用一条）
+    // ============================================================
+
+    /// <summary>玩家当前蓝量。</summary>
+    float _playerMp;
+    /// <summary>本关是否已灌满过（每关开局回满，与佣兵同口径）。</summary>
+    bool _playerMpFilled;
+
+    /// <summary>
+    /// 玩家本局有没有蓝：4 个技能里<b>只要有一个耗蓝 &gt; 0</b> 就有。
+    /// 与佣兵同口径 —— 按「技能本身」判，不按职业，避免「职业有蓝但技能不耗蓝」的孤儿配置。
+    /// </summary>
+    public static bool PlayerHasMp()
+    {
+        var ids = RunLoadout.IsActive ? RunLoadout.SkillIds() : null;
+        if (ids == null) return false;
+        for (int i = 0; i < ids.Count; i++)
+            if (MpProfile.OfPlayerSkill(ids[i]) != MpArchetype.None) return true;
+        return false;
+    }
+
+    /// <summary>玩家蓝条星级：4 技共用一条蓝 → 按已装备技能里<b>最高</b>的那个星算。</summary>
+    static int PlayerMpStar()
+    {
+        int star = 1;
+        var ids = RunLoadout.IsActive ? RunLoadout.SkillIds() : null;
+        if (ids == null) return star;
+        for (int i = 0; i < ids.Count; i++)
+            star = Mathf.Max(star, RunLoadout.StarOf(ids[i]));
+        return star;
+    }
+
+    /// <summary>玩家 MP 池上限（本局没有耗蓝技能 → 0，蓝条不显示、不做闸门）。</summary>
+    public static float PlayerMpPool()
+    {
+        if (!PlayerHasMp()) return 0f;
+        return MpProfile.Pool(MpArchetype.Player, RunLoadout.HeroLevel, PlayerMpStar());
+    }
+
+    /// <summary>玩家每秒自然回复（本局没有耗蓝技能 → 0）。</summary>
+    public static float PlayerMpRegen()
+    {
+        if (!PlayerHasMp()) return 0f;
+        return MpProfile.Regen(MpArchetype.Player, PlayerMpStar());
+    }
+
+    /// <summary>玩家蓝够不够这一发（<b>只看不扣</b>；扣蓝唯一出口仍是 TrySpendPlayerMp）。</summary>
+    public bool CanAffordPlayerMp(float cost)
+    {
+        if (cost <= 0f) return true;
+        return _playerMp + 0.001f >= cost;
+    }
+
+    /// <summary>玩家蓝条比例 0~1（喂 UI 用）。</summary>
+    public float GetPlayerMp()
+    {
+        float pool = PlayerMpPool();
+        if (pool <= 0f) return 0f;
+        return Mathf.Clamp01(_playerMp / pool);
+    }
+
+    /// <summary>
+    /// 扣玩家蓝的<b>唯一出口</b>：够才扣并返回 true；不够 → false（不放技能）。
+    /// cost &lt;= 0 视为无蓝技能，直接放行、不扣蓝。
+    /// </summary>
+    public bool TrySpendPlayerMp(float cost)
+    {
+        if (cost <= 0f) return true;
+        if (_playerMp + 0.001f < cost) return false;
+        _playerMp = Mathf.Max(0f, _playerMp - cost);
+        return true;
+    }
+
+    /// <summary>玩家蓝条每帧：本关首次进场灌满 → 之后按自然回复回蓝（面板冻结时 deltaTime=0 不回）。</summary>
+    void TickPlayerMp(float dt)
+    {
+        float pool = PlayerMpPool();
+        if (pool <= 0f)
+        {
+            if (_playerMp > 0f) _playerMp = 0f;
+            return;
+        }
+        if (!_playerMpFilled)
+        {
+            _playerMp = pool;
+            _playerMpFilled = true;
+        }
+        else
+        {
+            _playerMp = Mathf.Min(pool, _playerMp + PlayerMpRegen() * dt);
+        }
     }
 
     // === 传送门 ===
@@ -468,8 +618,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         PrimePlayerSkillOpeningCooldowns();
         // 上一局/上一关残留的攻击/防御/暴击增益（定时增益层）必须清掉，否则会跨关带着走
         Hero.Instance?.attr?.ClearTimedBuffs();
-        mercSkillEnergy[0] = 0f;
-        mercSkillEnergy[1] = 0f;
+        ResetMpForNewStage();
         MercenaryManager.Instance?.ClearAllMercs();
         allyUnits.RemoveAll(u => u == null || u is Mercenary);
 
@@ -698,6 +847,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     public void OnMercenaryDead(UnitBase merc)
     {
         allyUnits.Remove(merc);
+        // 2026-10-06 主人拍板：阵亡不再零成本 —— 记进本局构筑，下一关按 20% 血复活（每过一关养回 30%）。
+        if (merc is Mercenary m)
+            RunLoadout.MarkMercFallen(!string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId);
         TryPlayMercDeathLine(merc);
     }
 
@@ -819,7 +971,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (unit == null || !unit.isAlly || amount <= 0f || !isInBattle) return;
         if (_stageCleared || _portalActive) return;
 
-        // 纯冷却制下玩家分支不再充能（佣兵分支照旧，一个字都不动）
+        // 玩家侧：纯冷却制下不充能（PLAYER_SKILL_USE_ENERGY 置 true 可退回原行为）。
         if (unit is Hero)
         {
             if (GameConfig.PLAYER_SKILL_USE_ENERGY)
@@ -827,21 +979,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             return;
         }
 
-        if (!(unit is Mercenary)) return;
-        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-        if (mercs == null) return;
-        int unlocked = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
-        bool solo = GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle;
-        bool tutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
-        for (int i = 0; i < mercSkillEnergy.Length && i < mercs.Count; i++)
-        {
-            if (mercs[i] != unit) continue;
-            bool slotUnlocked = solo ? (tutorialMerc && i == 0) : (i < unlocked);
-            if (!slotUnlocked) return;
-            mercSkillEnergy[i] = Mathf.Min(MAX_SKILL_ENERGY, mercSkillEnergy[i] + amount);
-            BattleUI.Instance?.UpdateSkillEnergy(i + 1, mercSkillEnergy[i]);
-            return;
-        }
+        // 2026-10-06 主人拍板：佣兵改「自然回复制」，受击回蓝这条通道整段删除（旧实现不留）。
+        // 佣兵蓝条只由 TickMercMp 每秒回，受击不再给任何蓝 —— 否则血线越低回得越快，与紧张感口径相反。
+        return;
     }
 
     /// <summary>引导开箱拿剑后进入强伤+多怪爽点。</summary>
@@ -993,8 +1133,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         PrimePlayerSkillOpeningCooldowns();
         // 上一局/上一关残留的攻击/防御/暴击增益（定时增益层）必须清掉，否则会跨关带着走
         Hero.Instance?.attr?.ClearTimedBuffs();
-        mercSkillEnergy[0] = 0f;
-        mercSkillEnergy[1] = 0f;
+        ResetMpForNewStage();
         HeroThunderUltimate.Instance?.ResetForBattle();
 
         float startX = GetStageStartX();
@@ -1815,59 +1954,74 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (!_portalActive)
             ClampHeroInCamera();
 
-        // 技能能量：仅盟友受击按伤害/MaxHp 涨（AddCombatSkillEnergy），此处只刷新 UI / 锁槽清零
         if (hero != null && !hero.isDead)
         {
             if (BattleUI.Instance != null)
                 BattleUI.Instance.UpdateSkillEnergy(0, PlayerSkillEnergyPeak);
         }
 
-        if (!GameConfig.SOLO_PLAYER_BATTLE)
+        // 2026-10-06：佣兵蓝条统一走 TickMercMp（自然回复 + 每关开局灌满 + 刷 UI），
+        // 正式关 / 单人局 / 引导局三套分支合并成一个出口，不再有「自动模式就归零」的旧逻辑。
+        TickMercMp(Time.deltaTime);
+        TickPlayerMp(Time.deltaTime);
+    }
+
+    /// <summary>
+    /// 每关开局：佣兵与玩家的蓝条清零并重新灌满一次
+    /// （佣兵换人不回满 —— 只有新的一关才回满；玩家同理）。
+    /// </summary>
+    void ResetMpForNewStage()
+    {
+        for (int i = 0; i < mercMp.Length; i++)
         {
-            var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-            int unlocked = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
-            for (int i = 0; i < mercSkillEnergy.Length; i++)
+            mercMp[i] = 0f;
+            _mercMpFilled[i] = false;
+        }
+        _playerMp = 0f;
+        _playerMpFilled = false;
+    }
+
+    /// <summary>
+    /// 佣兵蓝条每帧：本关首次见到有效佣兵 → 灌满；之后按 MpProfile 的自然回复回蓝；最后刷 UI。
+    /// 抽卡 / 面板冻结时 Time.deltaTime = 0，天然不回蓝。
+    /// 槽未解锁 / 无佣兵 / 无主动技 / 该技能无蓝 → 归零（蓝条由 UI 隐藏）。
+    /// </summary>
+    void TickMercMp(float dt)
+    {
+        bool solo = GameConfig.SOLO_PLAYER_BATTLE;
+        bool tutorialMerc = TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud;
+        int unlocked = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetMaxMercSlots() : 0;
+
+        for (int i = 0; i < mercMp.Length; i++)
+        {
+            var m = MercAt(i);
+            bool live = m != null && !m.isDead;
+            bool hasActive = live && m.SkillCaster != null && m.SkillCaster.HasActiveSkill;
+            // 单人局只认引导小白那一条（槽 0）；正式关按已解锁槽数
+            bool slotUsable = solo ? (tutorialMerc && i == 0) : (i < unlocked);
+            float pool = MercMpPool(i);
+
+            if (!slotUsable || !live || !hasActive || pool <= 0f)
             {
-                bool live = mercs != null && i < mercs.Count && mercs[i] != null && !mercs[i].isDead;
-                bool hasActive = live && mercs[i].SkillCaster != null && mercs[i].SkillCaster.HasActiveSkill;
-                bool manual = !MercSkillMigrate.IsMercSkillAutoCast();
-                if (i >= unlocked || !live || !hasActive || !manual)
+                if (mercMp[i] > 0f)
                 {
-                    if (mercSkillEnergy[i] > 0f)
-                    {
-                        mercSkillEnergy[i] = 0f;
-                        BattleUI.Instance?.UpdateSkillEnergy(i + 1, 0f);
-                    }
-                    continue;
+                    mercMp[i] = 0f;
+                    BattleUI.Instance?.UpdateSkillEnergy(i + 1, 0f);
                 }
-                BattleUI.Instance?.UpdateSkillEnergy(i + 1, mercSkillEnergy[i]);
+                continue;
             }
-        }
-        else if (TutorialDirector.Instance != null && TutorialDirector.Instance.ShowMercHud)
-        {
-            var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-            if (mercs != null && mercs.Count > 0 && mercs[0] != null && !mercs[0].isDead)
-                BattleUI.Instance?.UpdateSkillEnergy(1, mercSkillEnergy[0]);
-            else if (mercSkillEnergy[0] > 0f)
+
+            if (!_mercMpFilled[i])
             {
-                mercSkillEnergy[0] = 0f;
-                BattleUI.Instance?.UpdateSkillEnergy(1, 0f);
+                // 每关开局回满。换佣兵（同槽位）时 _mercMpFilled 仍为 true → 沿用当前蓝量，不回满。
+                mercMp[i] = pool;
+                _mercMpFilled[i] = true;
             }
-            if (mercSkillEnergy[1] > 0f)
+            else
             {
-                mercSkillEnergy[1] = 0f;
-                BattleUI.Instance?.UpdateSkillEnergy(2, 0f);
+                mercMp[i] = Mathf.Min(pool, mercMp[i] + MercMpRegen(i) * dt);
             }
-        }
-        else
-        {
-            // 单人/教学锁槽：蓝条强制归零，避免杀怪残留能量把锁头像底下蓝条刷满
-            for (int i = 0; i < mercSkillEnergy.Length; i++)
-            {
-                if (mercSkillEnergy[i] <= 0f) continue;
-                mercSkillEnergy[i] = 0f;
-                BattleUI.Instance?.UpdateSkillEnergy(i + 1, 0f);
-            }
+            BattleUI.Instance?.UpdateSkillEnergy(i + 1, GetMercMp(i));
         }
     }
 
@@ -1976,8 +2130,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         SpecialWeapons.TryFlavorToastOnKill();
 
         BattleUI.Instance?.UpdateSkillEnergy(0, PlayerSkillEnergyPeak);
-        BattleUI.Instance?.UpdateSkillEnergy(1, mercSkillEnergy[0]);
-        BattleUI.Instance?.UpdateSkillEnergy(2, mercSkillEnergy[1]);
+        BattleUI.Instance?.UpdateSkillEnergy(1, GetMercMp(0));
+        BattleUI.Instance?.UpdateSkillEnergy(2, GetMercMp(1));
 
         // 本波清完 → 播「下一波来袭」
         if (CountAliveMonsters() <= 1) // 含即将移除的自己，下一帧会清；用 <=1 更稳
@@ -2017,8 +2171,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     public bool TryUseMercSkill(int mercIndex)
     {
         if (MercSkillMigrate.IsMercSkillAutoCast()) return false;
-        if (mercIndex < 0 || mercIndex >= mercSkillEnergy.Length) return false;
-        if (mercSkillEnergy[mercIndex] < 0.99f) return false;
+        if (mercIndex < 0 || mercIndex >= mercMp.Length) return false;
 
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
         if (mercs == null || mercIndex >= mercs.Count) return false;
@@ -2026,12 +2179,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (merc == null || merc.isDead) return false;
         if (merc.SkillCaster == null || !merc.SkillCaster.HasActiveSkill) return false;
 
-        bool ok = merc.SkillCaster.TryCast(manual: true);
-        if (!ok) return false;
-
-        mercSkillEnergy[mercIndex] = 0f;
-        BattleUI.Instance?.UpdateSkillEnergy(mercIndex + 1, 0f);
-        return true;
+        // 2026-10-06：手动模式的「能量满」判定换成 MP 闸门，扣蓝统一走 MercSkillCaster.TryCast
+        // → BattleManager.TrySpendMercMp，这里不再自己清零（UI 由扣蓝出口负责刷）。
+        return merc.SkillCaster.TryCast(manual: true);
     }
 
     /// <summary>佣兵主动技施放入口（自动/手动共用）。执行在 SkillCastService。</summary>
@@ -2250,6 +2400,35 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// 之后按 TutorialDirector 的既有节拍一步一步走。
     /// 由 <see cref="CoPreBattleStoryThenFirstWave"/> 在「剧情播完之后、首波之前」调用。
     /// </summary>
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】抽完奖励<b>不许自动继续</b> —— 引导局 / 正式关一律等玩家点「继续」。
+    ///
+    /// <para>· <paramref name="lockDraw"/> = true：这一拍不能再抽（引导局一次一抽、中途抽一次一抽）。<br/>
+    /// · <paramref name="guideText"/> = null：不弹硬引导（正式关玩家自己知道点「继续」）。<br/>
+    /// · 面板上跑 <c>BattleEntryDraftPanel.ContinueCountdownSec</c> 秒倒计时，
+    ///   归零自动当作玩家点了继续 —— 只做「挂着不动」的兜底，不是第二条流程。</para>
+    /// </summary>
+    IEnumerator WaitForContinue(bool lockDraw, string guideText, System.Func<bool> isDone)
+    {
+        var panel = BattleEntryDraftPanel.Instance;
+        if (panel == null) yield break;      // 面板都没了就没得等，直接放玩家走（绝不卡死）
+
+        if (lockDraw) panel.SetDrawLocked(true);
+        if (!string.IsNullOrEmpty(guideText))
+            TutorialHintUI.Ensure().ShowHard(guideText, panel.ContinueButtonRect);
+        panel.StartContinueCountdown();
+
+        // 300s 只是异常兜底（倒计时本身会先归零走 DoContinue）
+        float guard = 0f;
+        while (!isDone() && guard < 300f)
+        {
+            guard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        TutorialHintUI.Instance?.Hide();
+    }
+
     IEnumerator CoStageEntryDraft()
     {
         // ⚠ 启动抽奖币**不在这里补**（2026-10-05 主人拍板：「开始金币是每局的，不是每关的」）。
@@ -2340,17 +2519,38 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             //   放它过去 = 引导三拍会缺一件（缺的往往是最后那件本命技能，引导直接断在半路）。
             //   → 让它再点一次；最多重试 1 次，池子真出不了卡时不把玩家卡在面板里。
             // ⚠ 「只抽一次」的判定只用 OneDrawPerBeat 一处，别在别处加第二个。
+            // 【2026-10-06 主人拍板】引导局：只有「这一抽没生效」才放它再点一次（最多重试 1 次，
+            // 否则引导三拍会缺一件）；抽到了就往下走，进「等玩家点继续」。
+            if (onceOnly && !landed && ++beatRetry <= 1)
+                continue;
+
             if (onceOnly)
             {
-                if (landed || ++beatRetry > 1) break;
-                continue;
+                // 引导局 = 一次一抽：锁住抽奖按钮（只剩「继续」能点），引导指向「继续」，
+                // 等玩家点继续 / 倒计时归零。
+                yield return WaitForContinue(true, "奖励到手了，点「继续」开打。", () => choice == 2);
+                break;
             }
 
+            // 正式关：**连抽仍然是玩法** —— 抽完回到面板，玩家想再抽就再抽；
+            // 不想抽、或者币不够（按钮会自动置灰）时，点「继续」就继续战斗。
+            // ⚠ 不是「每抽一次就得点一次继续」：这里不锁按钮、不 break，只给 30s 决策倒计时。
+            var entryPanel = BattleEntryDraftPanel.Instance;
+            if (entryPanel != null) entryPanel.StartContinueCountdown();
+
             // 「再来一次」= 免费老虎机 + 三选一，这是奖励，玩家在这里才做选择
-            if (!SlotMachineSystem.RollReroll()) continue;
-            UIManager.Instance?.ShowToast("再来一次！免费老虎机");
-            yield return new WaitForSecondsRealtime(0.35f);
-            yield return CoJackpot(cats);
+            if (SlotMachineSystem.RollReroll())
+            {
+                // 三选一期间不催：先把倒计时停掉，选完再给 30s 决定「再抽 or 开打」
+                if (entryPanel != null) entryPanel.StopContinueCountdown();
+                UIManager.Instance?.ShowToast("再来一次！免费老虎机");
+                // 【2026-10-06 主人拍板】左侧滑入 → 慢慢滑行 1 秒 → 快速向右滑走的大字横幅
+                SlotMachineAgainBanner.Show();
+                // 等横幅播完（0.30 滑入 + 1.00 滑行 + 0.22 滑出 ≈ 1.52s）再弹三选一
+                yield return new WaitForSecondsRealtime(1.55f);
+                yield return CoJackpot(cats);
+                if (entryPanel != null) entryPanel.StartContinueCountdown();
+            }
         }
 
         // 退出循环 = 要开战了：收起 BackpackPanel、隐藏抽奖按钮与「继续」，引导提示也关掉
@@ -2379,24 +2579,20 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             yield break;
         }
 
-        // ① 引导局：抽到「佣兵」给小白的本命碎片 —— 她走第 4 拍剧情救援入队，
-        //    抽奖再招一个会跟剧情打架。真源 TutorialRules.MercDraftGivesFragment。
-        if (IsTutorialRun && cat == DraftCategory.Merc
-            && TutorialRules.Current.MercDraftGivesFragment
-            && TutorialDirector.TryGrantTutorialMercFragment(out string fragMsg))
-        {
-            SlotMachineSystem.TrySpend(cost);
-            SlotMachineSystem.NoteDraw();
-            UIManager.Instance?.ShowToast($"【{SlotMachineSystem.CategoryName(cat)}】{fragMsg}");
-            yield break;
-        }
-
-        // ② 保底：本局第一次抽到技能 = 该职业的初始技能（正式规则，不是引导特例）
+        // ① 保底：引导三拍的保底内容**只有这一处**编排，不许散成两处。
         DraftCard card = default;
+        // 本局第一次抽到技能 = 该职业的初始技能（正式规则，不是引导特例）
         if (cat == DraftCategory.Skill)
             card = SlotMachineSystem.BuildGuaranteedSkillCard();
+        // 2026-10-06 主人拍板：引导第 2 抽（佣兵）= 直接招募小白本人入队（H011 牧师），
+        // 碎片那条口径已作废（TutorialRules.MercDraftGivesFragment 整条删除）。
+        if (cat == DraftCategory.Merc)
+            card = SlotMachineSystem.BuildGuaranteedMercCard();
+        // 2026-10-06 主人澄清：第一抽是「随机拿到一件新装备」，不是保底木盾；
+        // 木制圆盾（equip_shield_1）只是**起步装备**换成它（player_job_base_stats P001 副手），
+        // 跟抽奖是两码事 —— 装备保底那条已撤回，装备类一律走随机池。
 
-        // ③ 其余走正常卡池随机：按权重从整池里抽 1 张（概率与公示弹窗一致）
+        // ② 其余走正常卡池随机：按权重从整池里抽 1 张（概率与公示弹窗一致）
         if (!card.IsValid)
         {
             // 引导局定序那几抽不带安慰奖（金币）：主人拍板引导三拍必须是 装备→佣兵→技能。
@@ -2412,7 +2608,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             yield break;
         }
 
-        // ④ 先确认这张卡现在真能生效（槽位 / 星级 / 背包位 / 玩家肯不肯换装备），生效了才扣钱
+        // ③ 先确认这张卡现在真能生效（槽位 / 星级 / 背包位 / 玩家肯不肯换装备），生效了才扣钱
         bool ok;
         string msg;
         if (card.Kind == DraftCardKind.Equip)
@@ -2515,7 +2711,15 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                 if (SlotMachineSystem.Coins() < cost)
                     UIManager.Instance?.ShowToast("抽奖币不足");
                 else
+                {
                     yield return CoInstantPick(target, cost);
+                    // 【2026-10-06 主人拍板】抽完奖励不许自动继续（引导 ②③ 拍 + 正式关中途抽都算）：
+                    // 锁抽 + 面板倒计时，等玩家点「继续」才收面板、恢复战斗。
+                    choice = 0;
+                    yield return WaitForContinue(true,
+                        !string.IsNullOrEmpty(guideText) ? "奖励到手了，点「继续」继续战斗。" : null,
+                        () => choice == 2);
+                }
             }
         }
         finally
@@ -2744,6 +2948,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     {
         if (_stageCleared) return;
         _stageCleared = true;
+        // 2026-10-06 主人拍板：真正通关一关 → 阵亡过的佣兵养回 30% 血（防 20% 血进场的死亡螺旋）。
+        // 挂在「通关」而不是「加载下一关」上：反复重打同一关不会白刷恢复。
+        RunLoadout.TickFallenMercsStagePassed();
         // V3.0 压力阀：把本关通关血量喂给下一关（连续轻松通关 → 下一关多一波）
         float clearMaxHp = hero != null && hero.attr != null ? hero.attr.GetAttr(AttrType.MaxHp) : 0f;
         Planner?.NotifyStageResult(false, clearMaxHp > 0f ? hero.currentHp / clearMaxHp : 1f);

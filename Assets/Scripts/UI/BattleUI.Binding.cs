@@ -446,18 +446,9 @@ public partial class BattleUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 引导局：玩家<b>已经抽到</b>那个佣兵了吗 —— 决定头像栏要不要亮出她的灰像。
-    ///
-    /// <para>真源 = <b>该佣兵的本命碎片数</b>（<c>MercGrowInventory.FragmentCount</c>）。
-    /// 引导局抽到「佣兵」发的是小白的碎片而不是直接招募（<c>TutorialRules.MercDraftGivesFragment</c>，
-    /// 2026-10-05 主人拍板「保留救援戏，抽奖给小白碎片」），所以「有碎片」＝「这一抽已经抽过了」。</para>
-    ///
-    /// <para>不另起一个 bool 标记：碎片数就是存档里的真数据，两处状态不会对不上
-    /// （主人铁律：状态标记只许一个出口）。</para>
-    /// </summary>
-    static bool TutorialMercDrawn =>
-        MercGrowInventory.FragmentCount(StoryProgress.TutorialMercHireId) > 0;
+    // 【2026-10-06 已删除】private static bool TutorialMercDrawn（本局抽数判据）。
+    //   主人拍板：同一个语义只留一个出口 → 搬到 SlotMachineSystem.TutorialMercDrawn，
+    //   BattleUI 与 TutorialDirector.ShowMercHud 都来读它，这里不再写第二份。
 
     void ApplySoloBattleHud()
     {
@@ -467,9 +458,8 @@ public partial class BattleUI : MonoBehaviour
         SetSlotRootActive(mercSlot1, true);
         SetSlotRootActive(mercSlot2, true);
 
-        // 2026-09-22 主人要求：玩家卡只留头像，名字不再显示
-        if (playerSlot?.nameText != null)
-            playerSlot.nameText.gameObject.SetActive(false);
+        // 2026-10-06 主人拍板：口径变更，玩家名要正常显示（旧口径「玩家卡只留头像」已作废）。
+        // 名字由 BattleUI.CharacterBar 的 playerSlot.UpdateSlot(PlayerIdentity.DisplayName, ...) 写入。
 
         // 单人/引导：两格伙伴都按未解锁处理，清掉占位血量数字
         bool lockExtraSlots = (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && !showTutorialMerc;
@@ -479,11 +469,10 @@ public partial class BattleUI : MonoBehaviour
             // 也就是把「三选一解锁」的空锁换成小白本人的灰像，玩家一眼看到要招的是谁。
             //
             // ⚠ 但**不是一开局就摆出来**（主人 2026-10-05 报「佣兵还没抽怎么就已经在头像栏里了」）：
-            // 得等玩家真抽到佣兵才亮。真源用「本局有没有这个佣兵的碎片」——
-            // 引导局那一抽发的是小白本命碎片（TutorialRules.MercDraftGivesFragment），
-            // 抽之前碎片为 0 → 空锁；抽完有碎片 → 亮灰像；等她剧情入队（ShowMercHud）→ 走正常头像。
-            // 用碎片数而不是另起一个 bool，省得两处状态对不上（状态只许一个出口）。
-            if (TutorialDirector.IsTutorialBattle && TutorialMercDrawn)
+            // 得等玩家真抽到佣兵才亮。真源只有 SlotMachineSystem.TutorialMercDrawn 一处
+            //（本局抽数有没有越过「佣兵」那一格）—— 抽之前 = 空锁；抽完（招募入队）= 走正常头像。
+            // 抽数是局内数据所以每局都会归零；碎片那种跨局存档会残留，绝不能拿来当判据。
+            if (TutorialDirector.IsTutorialBattle && SlotMachineSystem.TutorialMercDrawn)
                 ApplyTutorialMercPreview(mercSlot1);
             else
                 mercSlot1?.ShowUnavailable(MercLockedHint);
