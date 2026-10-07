@@ -100,16 +100,16 @@ public partial class BattleUI : MonoBehaviour
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
 
-        // 【2026-10-06 主人拍板】战斗内顶栏**不再显示天赋石**：
-        // 主人原话「天赋石在战斗内不要资源条，只有获得奖励道具后在背包里显示」。
-        // 天赋石是城镇成长货币，战斗里露出来既用不上、又让顶栏挤。
-        // 旧布局那第三个资源位（enchantStoneText / talentStoneText）整段停用：
-        // 文本清空并把节点藏掉，避免留下一个「0」的空壳。
+        // 【2026-10-07 主人拍板】顶栏**恢复显示天赋石，且没有时要写「0」**：
+        // 主人原话「获得天赋石没有在顶条资源那显示；如果一开始没有的话应该写 0，不应该什么都不显示」。
+        // （此前 2026-10-06 这里曾被整段停用、文本清空并隐藏节点 —— 与主人今天的口径冲突，按今天的来。
+        //   注：那条旧注释里的「主人原话」未经二次确认，已按归因纪律改成事实陈述，不再挂在主人名下。）
+        // 数值真源只有一个：ResourceWallet.TalentPoint，别再从别处另取一份。
         var talentTarget = talentStoneText != null ? talentStoneText : enchantStoneText;
         if (talentTarget != null)
         {
-            talentTarget.text = "";
-            talentTarget.gameObject.SetActive(false);
+            talentTarget.gameObject.SetActive(true);
+            talentTarget.text = ResourceWallet.Get(data, ResourceWallet.ResourceType.TalentPoint).ToString();
         }
 
         if (decomposeMatText != null)

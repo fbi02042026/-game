@@ -1394,9 +1394,12 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 2026-09-30：抽完奖才出发 —— 抽奖期间队伍在开战位原地静止（见 FinishBattleIntro）
         StartPartyAdvance(follow);
 
-        // 点上「继续」之后先甩出「开始游戏」大字再正式开打。
-        // 放在出发之后播：字在飘的同时队伍已经在走，不额外拖时间。引导关同样要出。
-        yield return StageStartBannerUI.CoPlay("开始游戏");
+        // 【2026-10-07 主人拍板】去掉「开始游戏」大字横幅。
+        // 这里原本会在抽完奖点「继续」后先甩出大字、再正式开打（2026-09-30 加入）。
+        // 现在不要了，直接移除调用（不留开关，符合「加保险·不多入口·不兜底」）。
+        // StageStartBannerUI 类随之停用。
+        // ⚠ 注：此处原注释写着「主人要求」，但主人 2026-10-07 明确说并未要求过加这个字 ——
+        //    那是当时的误记。**凡涉及「主人要求 / 主人拍板」的归因，没听清就必须当场问，不许替主人脑补。**
 
         if (hero != null && monsters.Count > 0)
         {
@@ -1687,7 +1690,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                     && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
         var kind = boss ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
         // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样
-        string announce = Planner != null ? Planner.WaveAnnounceText(nextIdx) : "";
+        // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样。
+        // 【2026-10-07 主人拍板】Boss 波已经有「首领来袭」大图，下面不再叠一行字。
+        string announce = (boss || Planner == null) ? "" : Planner.WaveAnnounceText(nextIdx);
 
         yield return BattleWaveAnnounceUI.CoPlay(kind, announce);
 
@@ -1709,7 +1714,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         bool boss = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
                     && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
         var kind = boss ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
-        string announce = Planner != null ? Planner.WaveAnnounceText(nextIdx) : "";
+        // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样。
+        // 【2026-10-07 主人拍板】Boss 波已经有「首领来袭」大图，下面不再叠一行字。
+        string announce = (boss || Planner == null) ? "" : Planner.WaveAnnounceText(nextIdx);
         yield return BattleWaveAnnounceUI.CoPlay(kind, announce);
         _waveAnnounceRunning = false;
     }
@@ -2076,6 +2083,14 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             }
         }
         if (m.IsBossUnit) RunStats.BossKillCount++;
+
+        // 佣兵币产出（2026-10-07 主人拍板：「击杀精英1个 击杀Boss两个」）。
+        // Boss 优先、不与精英叠加（Boss 波可能同时带精英标记，叠加会变成 3）。
+        // 发放只走 ResourceWallet.GrantMercGold 这一个出口（铁律 15）。
+        if (m.IsBossUnit)
+            ResourceWallet.GrantMercGold(GameConfig.MERC_GOLD_PER_BOSS, "击杀Boss");
+        else if (m.IsEliteWave)
+            ResourceWallet.GrantMercGold(GameConfig.MERC_GOLD_PER_ELITE, "击杀精英");
         // 2026-09-26 主人拍板：累计本关物理/魔法击杀数，用于掉落按类型分池（主导类型 = 数量多者）。
         if (m.IsMagicType) _magicKills++;
         else _physicalKills++;
@@ -2477,7 +2492,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         int focusPrice = SlotMachineSystem.FocusPrice(SlotMachineSystem.RunStageIndex());
 
         // 2026-10-05 主人拍板：金币本开局免费抽 N 次（额度写在模式上）。进关清零，一关一算。
-        SlotMachineSystem.ResetStageFreeDraws();
+        // ⚠ 这行已于 2026-10-07 上移到 CoStartBattle 的「引导 / 正式」分叉之前（唯一入口，见那里）；
+        //    引导关不再进 CoStageEntryDraft，额度仍要清，别在这里再加一次。
 
         // 引导局：这一拍只抽一次就开打（唯一判定见 OneDrawPerBeat）
         bool onceOnly = OneDrawPerBeat;
@@ -2530,13 +2546,15 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
             // null = 点的是随机；有值 = 点的是定向
             var target = picked.HasValue ? picked.Value : SlotMachineSystem.ResolveCategory(cats);
-            int cost = freeLeft > 0 ? 0 : (picked.HasValue ? focusPrice : price);
+            // 定向价按类型各自的币种算（佣兵 = 佣兵币价，装备 / 技能 = 抽奖币价）。
+            int cost = freeLeft > 0 ? 0
+                     : (picked.HasValue ? SlotMachineSystem.FocusPrice(picked.Value) : price);
             // 只在这里「查余额」；真正的扣款挪进 CoInstantPick，等结果确认能生效了才扣
             // （2026-10-05：原来先扣后出结果，槽位/背包满时会白扣钱）
-            // 免费抽 cost = 0，余额检查自然通过，也不会扣币。
-            if (SlotMachineSystem.Coins() < cost)
+            // 免费抽 cost = 0，余额检查自然通过，也不会扣币。币种口径见 CanAffordDraw。
+            if (!CanAffordDraw(picked, cost, out string shortBy))
             {
-                UIManager.Instance?.ShowToast("抽奖币不足");
+                UIManager.Instance?.ShowToast(shortBy + "不足");
                 break;
             }
 
@@ -2596,6 +2614,21 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     }
 
     /// <summary>
+    /// 抽奖「查余额」的<b>唯一出口</b>（只看不扣；真扣款在 <see cref="CoInstantPick"/> 里、
+    /// 确认结果能生效之后才做）。币种按目标类型选：佣兵 = 佣兵币，其余 = 抽奖币
+    /// （真源 <c>SlotMachineSystem.FocusCurrency</c>，与面板上的货币图标同口径）。
+    /// </summary>
+    /// <param name="shortBy">不够时回传币种显示名（「佣兵币」/「抽奖币」），给 toast 用。</param>
+    static bool CanAffordDraw(DraftCategory? picked, int cost, out string shortBy)
+    {
+        ResourceWallet.ResourceType cur = picked.HasValue
+            ? SlotMachineSystem.FocusCurrency(picked.Value)
+            : ResourceWallet.ResourceType.SlotCoin;
+        shortBy = ResourceWallet.DisplayName(cur);
+        return cost <= 0 || SlotMachineSystem.Balance(cur) >= cost;
+    }
+
+    /// <summary>
     /// 点了抽奖按钮：不弹三选一，直接从该类型里抽 1 张、立刻生效，并把结果提示给玩家。
     /// 玩家买的是结果，不是选择 —— 选择留给免费的老虎机三选一。
     ///
@@ -2616,12 +2649,28 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             yield break;
         }
 
+        // 【2026-10-07 主人拍板】佣兵定向「一次一枚佣兵币，有几率失败」：
+        // 花一枚币开一次口，未必说得动对方 —— 失败 = 币照花、人没来（设计好的赌，不是 bug）。
+        // ⚠ 引导局的保底佣兵（塔克）绝不许失败，否则引导会断在半路 → 引导局整段跳过；
+        // ⚠ 免费额度（金币本）那几次 cost = 0，也不参与失败判定。
+        if (cat == DraftCategory.Merc && cost > 0 && !IsTutorialRun)
+        {
+            float rate = SlotMachineDefs.MERC_FOCUS_SUCCESS_RATE;
+            if (Random.value >= rate)
+            {
+                SlotMachineSystem.TrySpendFocus(cat, cost);   // 失败也要把这一枚花掉
+                Debug.Log($"[BattleManager] 佣兵定向招募失败（成功率 {rate:P0}），扣 {cost} 枚佣兵币");
+                UIManager.Instance?.ShowToast("招募失败：这一回没能说动对方。", true);
+                yield break;
+            }
+        }
+
         // ① 保底：引导三拍的保底内容**只有这一处**编排，不许散成两处。
         DraftCard card = default;
         // 本局第一次抽到技能 = 该职业的初始技能（正式规则，不是引导特例）
         if (cat == DraftCategory.Skill)
             card = SlotMachineSystem.BuildGuaranteedSkillCard();
-        // 2026-10-06 主人拍板：引导第 2 抽（佣兵）= 直接招募小白本人入队（H011 牧师），
+        // 2026-10-07 主人拍板：引导第 2 抽（佣兵）= 直接招募塔克本人入队（H003 剑盾卫士，稀有），
         // 碎片那条口径已作废（TutorialRules.MercDraftGivesFragment 整条删除）。
         if (cat == DraftCategory.Merc)
             card = SlotMachineSystem.BuildGuaranteedMercCard();
@@ -2641,7 +2690,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         {
             // fail closed：出不了卡就不许扣钱，报出来让主人看见
             Debug.LogError($"[BattleManager] 抽奖池出不了卡（{cat}），本次未扣币、未计入保底定序");
-            UIManager.Instance?.ShowToast("这一抽没能出结果，未扣除抽奖币");
+            UIManager.Instance?.ShowToast("这一抽没能出结果，未扣币");
             yield break;
         }
 
@@ -2663,7 +2712,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (!ok)
         {
             Debug.LogError($"[BattleManager] 抽奖结果无法生效（{cat}）：{msg}　本次未扣币、未计入保底定序");
-            UIManager.Instance?.ShowToast($"{msg}（未扣除抽奖币）");
+            UIManager.Instance?.ShowToast($"{msg}（未扣币）");
             yield break;
         }
 
@@ -2671,7 +2720,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // ⚠ 抽数序号照常推进 —— 引导局靠它一格一格走「装备→佣兵→技能」，
         //   不推进的话引导三拍会全落在同一类上，等于白教（正式关是纯随机，序号只作统计）。
         if (cost > 0)
-            SlotMachineSystem.TrySpend(cost);
+            // 按类型选币种扣（佣兵 = 佣兵币，装备 / 技能 = 抽奖币）—— 唯一扣费出口
+            SlotMachineSystem.TrySpendFocus(cat, cost);
         else
             SlotMachineSystem.ConsumeFreeDraw();
         SlotMachineSystem.NoteDraw();          // 本局抽数 +1（跨关不清零）
@@ -2744,14 +2794,39 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             }
             TutorialHintUI.Instance?.Hide();
 
+            // 【2026-10-06 主人拍板】引导三拍（装备→佣兵→技能）靠「本局累计抽数」定位序，
+            // 玩家这一拍直接点「继续」（或倒计时走完）不抽 → 定序**不走格**，下一拍就重复出同一类
+            //（主人报的正是「第二次没抽，第三次抽就抽出佣兵了」）。
+            // → 引导局这一拍替他补抽一次，把定序推回正轨；**正式关一律不帮忙**
+            //（主人原话「正式关就不要帮忙抽了」——正式关等权随机，本就没有定序可错）。
+            if (choice == 2 && OneDrawPerBeat)
+            {
+                var autoTarget = SlotMachineSystem.ResolveCategory(cats);
+                int autoCost = freeLeft > 0 ? 0 : price;
+                if (SlotMachineSystem.Coins() < autoCost)
+                {
+                    // fail closed：不静默跳过，报出来让主人看见「引导三拍的钱不够了」
+                    Debug.LogError($"[BattleManager] 引导补抽失败：抽奖币不足" +
+                                   $"（需 {autoCost}，现有 {SlotMachineSystem.Coins()}），本拍定序不会推进");
+                }
+                else
+                {
+                    int autoBefore = SlotMachineSystem.DrawIndex;
+                    yield return CoInstantPick(autoTarget, autoCost);
+                    Debug.Log($"[BattleManager] 引导补抽：玩家这一拍没抽，已自动抽一次（{autoTarget}）" +
+                              $"　抽数 {autoBefore} → {SlotMachineSystem.DrawIndex}");
+                }
+            }
+
             if (choice == 1)
             {
                 // null = 点的是随机；有值 = 点的是定向
                 var target = picked.HasValue ? picked.Value : SlotMachineSystem.ResolveCategory(cats);
-                int cost = freeLeft > 0 ? 0 : (picked.HasValue ? focusPrice : price);
-                // 与开局抽奖同口径：这里只查余额，真扣款等 CoInstantPick 确认结果能生效了再做
-                if (SlotMachineSystem.Coins() < cost)
-                    UIManager.Instance?.ShowToast("抽奖币不足");
+                int cost = freeLeft > 0 ? 0
+                         : (picked.HasValue ? SlotMachineSystem.FocusPrice(picked.Value) : price);
+                // 与开局抽奖同口径：这里只查余额（按各自币种），真扣款等 CoInstantPick 确认结果能生效了再做
+                if (!CanAffordDraw(picked, cost, out string shortBy))
+                    UIManager.Instance?.ShowToast(shortBy + "不足");
                 else
                 {
                     yield return CoInstantPick(target, cost);

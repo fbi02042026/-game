@@ -160,7 +160,7 @@ public partial class BattleUI : MonoBehaviour
     /// <summary>
     /// 引导局「未招募」佣兵槽的预览（2026-10-05 主人拍板）：
     /// 灰掉 + 佣兵头像 + 血条 + 稀有度头像框，不挂锁图标。
-    /// 人从哪来 = 真源链 <c>StoryProgress.TutorialMercHireId</c>（H011 小白）→ <c>MercRosterDefs</c> 花名册，
+    /// 人从哪来 = 真源链 <c>StoryProgress.TutorialMercHireId</c>（H003 塔克）→ <c>MercRosterDefs</c> 花名册，
     /// 不写死头像 / 血量 / 稀有度，花名册一改这里跟着变。
     /// </summary>
     public void ApplyTutorialMercPreview(CharacterSlotUI slot)
@@ -231,6 +231,7 @@ public partial class BattleUI : MonoBehaviour
         if (index < mercIds.Count)
         {
             slot.SetLocked(false);
+            slot.SetFallen(false);      // 在场/活着：清掉上一帧可能留下的阵亡压暗
             bool hasActive = index < activeMercs.Count
                 && activeMercs[index] != null
                 && activeMercs[index].SkillCaster != null
@@ -261,9 +262,11 @@ public partial class BattleUI : MonoBehaviour
             }
             else
             {
-                // 出战名单有占位但单位未生成：也不涨蓝条
+                // 出战名单有占位但单位未生成（绝大多数就是<b>已阵亡</b>）：也不涨蓝条
+                // 【2026-10-07 主人拍板】阵亡不再 ShowEmpty 清成空框 —— 头像 / 职业 icon 保留，整槽压暗（变灰）。
                 slot.SetEnergyEnabled(false);
                 slot.UpdateSlot(job, 1, 0, 0);
+                slot.SetFallen(true);
             }
         }
         else

@@ -364,6 +364,31 @@ public static class DraftPool
         return cards;
     }
 
+    /// <summary>
+    /// 【2026-10-07 主人拍板】抽奖给的**武器**，攻击再高一档。
+    /// 主人原话「抽奖给的武器的攻击要稍微高点，这才能体现出抽奖的重要性」——
+    /// 开局那把初始武器打两波，抽出来的武器必须让人一眼看出「更强」，抽奖这件事才有分量。
+    /// 🔴 只作用在<b>抽奖池里的主手武器</b>：防具、副手盾牌不动；倍率只有这一个出口，
+    /// 不进 <c>EquipInstance</c>（那是所有掉落共用的生成逻辑，抽奖的加成不该污染它）。
+    /// </summary>
+    const float DraftWeaponAttackMul = 1.18f;
+
+    static void BoostDraftWeaponAttack(EquipInstance eq)
+    {
+        // 只认主手武器槽：盾牌（副手）与防具都不算「武器」
+        if (eq == null || eq.slotType != EquipSlotType.MainHand) return;
+        var list = eq.attrBonus;
+        if (list == null) return;
+        AttrType atkAttr = PlayerJobBaseStats.CurrentAttackAttr();
+        for (int i = 0; i < list.Count; i++)
+        {
+            var b = list[i];
+            if (b == null || b.attrType != atkAttr || b.isPercent) continue;
+            b.value *= DraftWeaponAttackMul;
+            return;
+        }
+    }
+
     /// <summary>装备类的加权候选。生成逻辑只此一处（BuildWeightedPool 与概率公示都走它）。</summary>
     static List<WeightedCard> CollectEquipCards()
     {
@@ -376,20 +401,34 @@ public static class DraftPool
         // 2026-10-05：装备也走**加权**了（跟技能 / 佣兵同一把尺子），
         // 之前是「生成几件就直接全塞进去」，橙色跟白色一样常见 —— 主人要的
         // 「好的佣兵技能装备什么的都是低概率的」在装备这边根本没生效。
+        // 【钩子2·2026-10-07】引导局第一抽（DrawCount==0）装备必出蓝色及以上（reroll 白色）：
+        // 让玩家下一波立刻验证「变强」，喂首次留存（方案见 Docs/引导流程优化建议_2026-10-07.md）。
+        // reroll 上限 8 次：blacksmith 低时可能多白，出不来到保底不空池，用最后一次。
+        bool guaranteeRare = BattleManager.Instance != null
+            && BattleManager.Instance.IsTutorialRun
+            && RunLoadout.DrawCount == 0;
+
         for (int i = 0; i < CardCount; i++)
         {
             EquipInstance eq = null;
-            try
+            int rareRoll = 0;
+            do
             {
-                var one = ConfigManager.Instance.GetRandomEquipInstances(
-                    1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS);
-                if (one != null && one.Count > 0) eq = one[0];
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogWarning("[DraftPool] 装备卡生成失败: " + e.Message);
-            }
+                try
+                {
+                    var one = ConfigManager.Instance.GetRandomEquipInstances(
+                        1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS);
+                    if (one != null && one.Count > 0) eq = one[0];
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning("[DraftPool] 装备卡生成失败: " + e.Message);
+                }
+                if (eq == null) break;
+                rareRoll++;
+            } while (guaranteeRare && MapRarity(eq.rarity) == SkillRarity.Common && rareRoll < 8);
             if (eq == null) break;
+            BoostDraftWeaponAttack(eq);
 
             var rar = MapRarity(eq.rarity);
             pool.Add(new WeightedCard

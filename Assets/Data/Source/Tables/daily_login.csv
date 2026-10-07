@@ -9,11 +9,11 @@ id,table,day,name,grant,param,amount,name2,grant2,param2,amount2,note
 starter_1,starter,1,金币 ×500,resource,gold,500,,,,,新手第1天
 starter_2,starter,2,体力 ×50,resource,stamina,50,,,,,,
 starter_3,starter,3,钻石 ×30,resource,diamond,30,,,,,
-starter_4,starter,4,塔克碎片 ×10,mercfrag,H003,10,,,,,★格子只给碎片不给佣兵；佣兵改由累计 8 天在底部领取
+starter_4,starter,4,塔克·重盾,merc,H003,,,,,,★第4天直接送稀有佣兵本体（已拥有则自动折算碎片×10）；碎片在 D6/D8 与累计段给
 starter_5,starter,5,金币 ×800,resource,gold,800,,,,,,
 starter_6,starter,6,塔克碎片 ×10,mercfrag,H003,10,,,,,★双倍格(第6格)：实发20片，不来就亏（养成向稀缺资源，不通胀）
 starter_7,starter,7,钻石 ×50,resource,diamond,50,,,,,,
-starter_8,starter,8,塔克碎片 ×15,mercfrag,H003,15,,,,,★格子只给碎片；D8 起每轮补碎片；佣兵改累计8天底部领取
+starter_8,starter,8,塔克碎片 ×15,mercfrag,H003,15,,,,,★格子只给碎片；佣兵本体已在第4天给过，这里起每轮补碎片
 cycle_1,cycle,1,体力 ×15,resource,stamina,15,,,,,
 cycle_2,cycle,2,金币 ×250,resource,gold,250,,,,,,
 cycle_3,cycle,3,塔克碎片 ×3,mercfrag,H003,3,,,,,,
@@ -25,4 +25,4 @@ streak_3,streak,3,体力 ×10,resource,stamina,10,,,,,,
 streak_7,streak,7,塔克碎片 ×5,mercfrag,H003,5,,,,,
 streak_14,streak,14,钻石 ×30,resource,diamond,30,传说碎片 ×3,legendfrag,,3,
 streak_30,streak,30,钻石 ×100,resource,diamond,100,传说碎片 ×15,legendfrag,,15,
-accum_8,accum,8,塔克·重盾,merc,H003,,,,,,★累计登录 8 天可在底部领取限定佣兵
+accum_8,accum,8,塔克碎片 ×15,mercfrag,H003,15,,,,,★累计登录 8 天领碎片（佣兵本体已挪到第 4 天，不能再重复送第二个）

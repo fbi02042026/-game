@@ -170,8 +170,13 @@ public partial class BattleUI : MonoBehaviour
             // 右下角等级：美术在每个技能槽下放了 level 节点，优先用它；没有再运行时补
             av.levelText = FindTextNamed(t, "level", "Level", "SkillLevel")
                 ?? EnsureCornerText(t, "SkillLevel", 12);
-            av.cooldownText = EnsureChildText(t, "SkillCd", 16);
-            av.cooldownMask = EnsureChildMask(t, "SkillCdMask");
+            // 【2026-10-07 主人拍板】冷却遮罩 / 倒计时数字**只挂在图标框那一个节点上**，
+            // 不再铺满整个槽位根：主人原话「转圈的冷却中心有点偏离，把左边那个加号也算上了，
+            // 应该就只有右边图标框的地方显示那个转圈冷却」。
+            // 槽位根里除了图标框还有别的装饰（左边的「+」），铺满根 = 圆心被拉偏、还盖住加号。
+            Transform cdNode = av.avatarImage != null ? av.avatarImage.transform : t;
+            av.cooldownText = EnsureChildText(cdNode, "SkillCd", 16);
+            av.cooldownMask = EnsureChildMask(cdNode, "SkillCdMask");
             av.energyFill = EnsureChildBar(t, "SkillEnergy", new Color(0.98f, 0.78f, 0.28f, 1f));
             // 左上角释放顺序角标（① 最先放）：与整理阶段的拖拽调序同一口径，空槽由 SetOrderText("") 隐藏
             av.orderText = EnsureTopLeftText(t, "SkillOrder", 16);
@@ -659,8 +664,10 @@ public partial class BattleUI : MonoBehaviour
         // 容器在预制体里是空的（美术待填），图标/能量条/冷却字都运行时补
         av.avatarImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
         av.energyFill = EnsureChildBar(t, "MercSkillEnergy", new Color(0.55f, 0.85f, 1f, 1f));
-        av.cooldownText = EnsureChildText(t, "MercSkillCd", 14);
-        av.cooldownMask = EnsureChildMask(t, "MercSkillCdMask");
+        // 同上（2026-10-07 主人拍板）：冷却只画在图标框上，不铺满整个 skill 容器。
+        Transform mercCdNode = av.avatarImage != null ? av.avatarImage.transform : t;
+        av.cooldownText = EnsureChildText(mercCdNode, "MercSkillCd", 14);
+        av.cooldownMask = EnsureChildMask(mercCdNode, "MercSkillCdMask");
         // 【2026-10-06 主人拍板】佣兵技能同样要「新」角标（主人点名：不管是佣兵技能还是装备）。
         // 建出来先隐藏，点亮由 UpdateMercSkillSlots 按 NewLootMarks.Has 决定。
         av.newText = EnsureTopRightText(t, "MercSkillNew", 14);

@@ -19,8 +19,17 @@ public class BattleHeadTalkUI : MonoBehaviour
     bool _advance;
     bool _storyBgmHeld;
     bool _typingDone;
-    const float TypeCharsPerSecond = 36f;
-    const float DefaultHold = 1.35f;
+    /// <summary>
+    /// 打字机速度（字/秒）。【2026-10-07 主人拍板】36 → 18（慢一倍）：
+    /// 主人原话「小白说的话太快了没看到…字出现的速度慢点」。
+    /// 战斗头顶气泡只有一两秒的窗口，字一闪就没了，玩家根本读不完。
+    /// </summary>
+    const float TypeCharsPerSecond = 18f;
+    /// <summary>
+    /// 打完字之后的停留（秒）。【2026-10-07 主人拍板】1.35 → 2.4：
+    /// 主人原话「剧情对话时间都长点」。停留太短 = 刚打完就消失，等于没说。
+    /// </summary>
+    const float DefaultHold = 2.4f;
 
     static readonly Vector2 BaseBubbleSize = new Vector2(200f, 107f);
     const float PadX = 18f;

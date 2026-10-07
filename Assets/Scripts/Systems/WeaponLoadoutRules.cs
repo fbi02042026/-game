@@ -70,6 +70,10 @@ public static class WeaponLoadoutRules
     public static EquipSlotType ResolveLogicalSlot(EquipInstance equip)
     {
         if (equip == null) return EquipSlotType.MainHand;
+        // 【2026-10-07 主人拍板】防具 / 饰品等非武器组：**按它自己的穿戴槽**走，不许兜底成武器槽。
+        // 反例（改前）：鞋子 slotType=Feet、weaponType=None，一路落不到任何分支，末尾 return MainHand
+        // → 被判进主手槽，顺着 EquipItem 顶掉并 ScrapEquip **分解了玩家的主武器**（主人报「主武器没了」）。
+        if (!IsLoadoutItem(equip)) return equip.slotType;
         if (ReplacesEntireLoadout(equip)) return EquipSlotType.MainHand;
         if (equip.weaponHand == WeaponHandSlot.OffHand || IsShield(equip))
             return EquipSlotType.OffHand;
@@ -78,6 +82,10 @@ public static class WeaponLoadoutRules
 
     public static EquipSlotType ResolveWearSlot(EquipInstance equip, in HeroWeaponRig.HandRig rig)
     {
+        // 同上（唯一出口改一处，四个调用方一起受益）：非武器组不参与 Attack / Secondary 映射，
+        // 返回自身槽位 —— fail closed，不兜底成攻击槽。
+        if (equip != null && !IsLoadoutItem(equip)) return equip.slotType;
+
         if (!rig.IsValid)
             return ResolveLogicalSlot(equip);
 

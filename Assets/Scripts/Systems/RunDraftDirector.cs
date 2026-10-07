@@ -418,7 +418,19 @@ public class RunDraftDirector : MonoBehaviour
         SpawnRunMerc(entry);
         // 【2026-10-06 主人拍板】佣兵技能一样要标「新」（主人点名：不管是佣兵技能还是装备）。
         NewLootMarks.Mark(NewLootMarks.KindSkill, entry.skillId);
-        msg = $"佣兵加入：{entry.displayName}（Lv{entry.level} ★{entry.star}）";
+        // 【2026-10-07 主人拍板】抽中佣兵要**报喜**，不要干巴巴一句「佣兵加入：XXX」。
+        // 主人原话：「显示恭喜抽中史诗佣兵 实力大增什么的」—— 引导第 2 抽开出来的就是这位。
+        // 稀有度名字只有 SkillRarityUtil 一个真源（与 SlotMachineSystem.BuildGuaranteedMercCard 同款写法），
+        // 不许在这里另写一套「Rare→稀有」的枚举映射。
+        string rarityName = MercRosterDefs.TryGetByHireId(entry.hireId, out var rd)
+            ? SkillRarityUtil.DisplayName(SkillRarityUtil.FromMerc(rd.Rarity))
+            : "";
+        string fullName = string.IsNullOrEmpty(entry.nickname)
+            ? entry.displayName
+            : $"{entry.displayName}·{entry.nickname}";
+        msg = string.IsNullOrEmpty(rarityName)
+            ? $"恭喜抽中佣兵·{fullName}，实力大增！"
+            : $"恭喜抽中{rarityName}佣兵·{fullName}，实力大增！";
         return true;
     }
 

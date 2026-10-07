@@ -37,6 +37,47 @@ public static class SlotMachineSystem
         return Price(runStageIndex) * SlotMachineDefs.FOCUS_PRICE_MULT;
     }
 
+    /// <summary>
+    /// 某一类的定向抽奖用哪种币 —— <b>唯一出口</b>（2026-10-07 主人拍板）。
+    /// 佣兵 = <see cref="ResourceWallet.ResourceType.MercGold"/>（佣兵币），其余 = 抽奖币。
+    /// ⚠ 其余三类按钮开放后要换币，只改这一个函数；面板上的货币图标也查它
+    /// （<c>BattleEntryDraftPanel.CurrencyOf</c> 必须与这里同口径）。
+    /// </summary>
+    public static ResourceWallet.ResourceType FocusCurrency(DraftCategory cat)
+    {
+        return cat == DraftCategory.Merc
+            ? ResourceWallet.ResourceType.MercGold
+            : ResourceWallet.ResourceType.SlotCoin;
+    }
+
+    /// <summary>
+    /// 某一类定向抽奖的价格（按各自的币种算）。
+    /// 佣兵 = <see cref="SlotMachineDefs.MERC_FOCUS_PRICE"/> 枚佣兵币；
+    /// 装备 / 技能 = 随机价 × <see cref="SlotMachineDefs.FOCUS_PRICE_MULT"/> 枚抽奖币。
+    /// </summary>
+    public static int FocusPrice(DraftCategory cat)
+    {
+        return cat == DraftCategory.Merc
+            ? SlotMachineDefs.MERC_FOCUS_PRICE
+            : FocusPrice(RunStageIndex());
+    }
+
+    /// <summary>查某个币种的余额（面板判「买得起吗」用，与扣费同一套口径）。</summary>
+    public static long Balance(ResourceWallet.ResourceType type)
+    {
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        return ResourceWallet.Get(data, type);
+    }
+
+    /// <summary>
+    /// 扣某一类定向抽奖的币（按 <see cref="FocusCurrency"/> 选币种）。这是定向抽奖的<b>唯一扣费出口</b>。
+    /// </summary>
+    public static bool TrySpendFocus(DraftCategory cat, int price)
+    {
+        if (price <= 0) return true;
+        return ResourceWallet.TrySpend(FocusCurrency(cat), price, save: true, notify: false);
+    }
+
     /// <summary>当前抽奖币。</summary>
     public static long Coins()
     {
@@ -45,7 +86,7 @@ public static class SlotMachineSystem
     }
 
     /// <summary>
-    /// 扣本关抽奖的抽奖币。
+    /// 扣本关**随机**抽奖的抽奖币（定向走 <see cref="TrySpendFocus"/>）。
     /// 抽奖币直接存在存档里，不经过 <c>BattleManager.currentGold</c> 那套金币镜像，
     /// 所以既不需要同步镜像，也不需要再调 PersistBattleGold（那是为金币对齐加的）。
     /// </summary>
@@ -276,8 +317,8 @@ public static class SlotMachineSystem
     }
 
     /// <summary>
-    /// 引导局：小白（<see cref="StoryProgress.TutorialMercHireId"/>，H011 牧师）**已经抽到了吗**。
-    /// <para><b>2026-10-06 主人拍板：「引导小白招没招」只许有一个出口</b> ——
+    /// 引导局：塔克（<see cref="StoryProgress.TutorialMercHireId"/>，H003 剑盾卫士）**已经抽到了吗**。
+    /// <para><b>2026-10-06 主人拍板：「引导佣兵招没招」只许有一个出口</b> ——
     /// 原来是两套状态（<c>BattleUI.TutorialMercDrawn</c> 一份、<c>TutorialDirector.ShowMercHud</c> 一份），会对不上。
     /// 现在全项目只有这一处判据，两边都来读它。</para>
     /// <para>判据 = 本局抽数<b>越过</b> <see cref="SlotMachineDefs.TutorialDrawOrder"/> 里「佣兵」那一格。
@@ -287,8 +328,8 @@ public static class SlotMachineSystem
         IsTutorialRun && DrawIndex > System.Array.IndexOf(SlotMachineDefs.TutorialDrawOrder, DraftCategory.Merc);
 
     /// <summary>
-    /// 佣兵类的保底内容：引导局第 2 抽（定序里「佣兵」那一格）= <b>直接招募小白本人入队</b>。
-    /// <para>2026-10-06 主人拍板：「第 2 抽就是直接招募小白入队」，碎片那条口径作废。</para>
+    /// 佣兵类的保底内容：引导局第 2 抽（定序里「佣兵」那一格）= <b>直接招募塔克本人入队</b>。
+    /// <para>2026-10-06 主人拍板：「第 2 抽就是直接招募引导佣兵入队」，碎片那条口径作废。</para>
     /// <para>正式关 / 序号不匹配 → 返回 <c>default</c>，走正常随机池；
     /// 取不到花名册定义或 AssetId 为空 → <c>LogError</c> + <c>default</c>（fail closed，绝不静默回退随机）。</para>
     /// <para>序号一律从 <see cref="SlotMachineDefs.TutorialDrawOrder"/> 取，<b>不写死 1</b>。</para>

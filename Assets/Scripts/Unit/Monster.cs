@@ -221,6 +221,24 @@ public class Monster : UnitBase
             firePoint = fire;
             StartCoroutine(CalcFirePointCenter(fire));
         }
+
+        // 【2026-10-06 修 · 主人反馈「敌人的影子还是没有」】
+        // 根因：预制体 Monstersmoban 里 shadow 节点的 m_LocalPosition.z = -16000，
+        // 而战斗相机是正交、far clip plane = 1000 → 影子整个落在视锥外，**压根不渲染**。
+        // 同一个预制体里 Monsters / fire / beattack 的 z 都已被本类归零（所以怪能看见），
+        // 唯独 shadow 漏了。这里按同一套「归一化 z」口径把它拉回 0。
+        // ⚠ 只改深度，主人摆的 x / y / 缩放 / 贴图 / 透明度一个都不动（铁律 2）。
+        Transform shadow = FindFootShadowNode(transform);
+        if (shadow != null)
+        {
+            Vector3 lp = shadow.localPosition;
+            if (Mathf.Abs(lp.z) > 0.0001f)
+            {
+                shadow.localPosition = new Vector3(lp.x, lp.y, 0f);
+                Debug.Log($"[Monster] 脚底阴影 z 归一化：{shadow.name} z {lp.z} → 0" +
+                          $"（原值在正交相机远裁面 1000 之外，影子不会渲染）");
+            }
+        }
     }
 
     System.Collections.IEnumerator CalcFirePointCenter(Transform fireTransform)
@@ -593,6 +611,13 @@ public class Monster : UnitBase
         _chapter = chapter;
         config = template;
         gameObject.name = "Visual";
+
+        // 【2026-10-07 E-13 诊断】③ 出场：看是不是「上一命还死着就被复用」，以及出场时的世界 Y。
+        // 只读日志，不改任何行为；定位后删除。
+        if (_e13Log < 40)
+            Debug.Log($"[E13] ③出场 id={gameObject.GetInstanceID()} 模板={template?.id}" +
+                      $" y={transform.position.y:F2} parent={ParentName(transform)}" +
+                      $" 上一条命仍在死亡中={_isDying} active={gameObject.activeSelf} 日志#{++_e13Log}");
 
         ResetForReuse();
         EnsureBodyRoot();
@@ -1890,6 +1915,15 @@ public class Monster : UnitBase
 
     protected override void Die(bool isCritKill = false)
     {
+        // 【2026-10-07 E-13 诊断 · 主人确认「是同一只又从下面出现」】
+        // 只读日志，**不改任何行为**。三处联打印实例 ID + 世界 Y + 父节点：
+        // ① 死亡瞬间 ② 真正回收进池 ③ 下次出场（含「上一条命是否还是死亡中」）。
+        // 下次跑一遍看 ID 与 Y 就能判定：ID 相同 = 尸体被复用；Init 的 Y 与 Die 的 Y 差很多 = 出场坐标算错。
+        // ⚠ 定位后整段删除（上限 40 条，防止刷屏）。
+        if (_e13Log < 40)
+            Debug.Log($"[E13] ①死亡 id={gameObject.GetInstanceID()} name={name}" +
+                      $" y={transform.position.y:F2} parent={ParentName(transform)} 日志#{++_e13Log}");
+
         if (_hpBarRoot != null)
             _hpBarRoot.gameObject.SetActive(false);
         if (_worldHpBar != null)
@@ -1898,6 +1932,21 @@ public class Monster : UnitBase
         HideStackLabel();
         base.Die(isCritKill);
         BattleBossHpBar.RefreshFromField();
+    }
+
+    /// <summary>E-13 诊断日志计数（上限 40 条）。定位后连同三处日志一起删除。</summary>
+    static int _e13Log;
+
+    static string ParentName(Transform t) => t != null && t.parent != null ? t.parent.name : "(null)";
+
+    /// <summary>【2026-10-07 E-13 诊断】② 真正回收进池的那一刻（只读日志，行为与基类完全一致）。</summary>
+    protected override void OnDeathRelease()
+    {
+        if (_e13Log < 40)
+            Debug.Log($"[E13] ②回收 id={gameObject.GetInstanceID()} name={name}" +
+                      $" y={transform.position.y:F2} parent={ParentName(transform)}" +
+                      $" active={gameObject.activeSelf} 日志#{++_e13Log}");
+        base.OnDeathRelease();
     }
 
     public override void ResetForReuse()

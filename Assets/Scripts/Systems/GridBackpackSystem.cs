@@ -601,8 +601,13 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         EquipSlotType slot = rig.IsValid
             ? WeaponLoadoutRules.ResolveWearSlot(equip, rig)
             : WeaponLoadoutRules.ResolveLogicalSlot(equip);
+        // 【2026-10-07 主人报「抽中装备后主手武器消失」→ 修】
+        // 这里<b>必须</b>用 GetEquippedInSlot：slot 可能是 Chest / Feet 这类<b>防具槽</b>。
+        // 改前用的是 GetEquippedInLogicalSlot —— 那是「查逻辑主手 / 副手的<b>武器</b>」专用 API，
+        // 内部 MatchesLogicalWeaponSlot 对非 OffHand 一律 return true（根本不看传进去的槽），
+        // 于是拿 Chest 去问，它会把<b>主武器</b>当成 Chest 的旧件返回 → ScrapEquip 当场把剑分解了。
         // 换下谁，先记下来（穿成功后再分解它）
-        var old = GetEquippedInLogicalSlot(slot);
+        var old = GetEquippedInSlot(slot);
 
         var tmp = new BackpackItem
         {
@@ -941,6 +946,12 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     static bool MatchesLogicalWeaponSlot(EquipInstance eq, EquipSlotType logicalSlot)
     {
         if (eq == null || !WeaponLoadoutRules.IsLoadoutItem(eq)) return false;
+        // 【2026-10-07 主人拍板】fail closed：本函数<b>只</b>在「逻辑主手 / 副手」这组武器槽里做判断。
+        // 传进 Chest / Feet 等防具槽 → 一律不匹配。
+        // 改前末尾 `return !offHandRole;` 完全不看 logicalSlot，拿 Chest 来问会把主武器
+        // 当成同槽旧件交出去，被 TryEquipDirect 分解掉（主人报「主武器没了 / 抽中装备后消失」）。
+        if (logicalSlot != EquipSlotType.MainHand && logicalSlot != EquipSlotType.OffHand)
+            return false;
         bool offHandRole = WeaponLoadoutRules.IsShield(eq) || WeaponLoadoutRules.IsOffHandWeapon(eq);
         if (logicalSlot == EquipSlotType.OffHand) return offHandRole;
         return !offHandRole;

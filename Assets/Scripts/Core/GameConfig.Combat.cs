@@ -89,7 +89,7 @@ public static partial class GameConfig
     public const float FIRST_WAVE_SPAWN_DELAY = 1.5f;
     /// <summary>
     /// 仅玩家单人战斗（不生成/显示佣兵）。正式局默认 false；
-    /// 引导关的佣兵（小白 H011）由第 2 抽招募入队，不再单独刷（2026-10-06 主人拍板）。
+    /// 引导关的佣兵（塔克 H003）由第 2 抽招募入队，不再单独刷（2026-10-06 主人拍板）。
     /// </summary>
     public static bool SOLO_PLAYER_BATTLE = false;
     /// <summary>怪刷在英雄前方多远（原地等玩家走过来），约 3~4 身位</summary>
@@ -100,8 +100,12 @@ public static partial class GameConfig
     public const float MONSTER_WAVE_SPACING = 0.72f;
     /// <summary>怪物近战射程倍率（相对单手剑；勿超过玩家近战体感）</summary>
     public const float MONSTER_MELEE_RANGE_MUL = 0.85f;
-    /// <summary>怪物远程射程倍率（相对数值表弓射程）；累计再缩）</summary>
-    public const float MONSTER_RANGED_RANGE_MUL = 0.588f;
+    /// <summary>
+    /// 怪物远程射程倍率（相对数值表弓射程）；**只在 attack_range 表读不到时兜底**。
+    /// 真源是表：表内 monster_ranged / monster_bow 现在写 230（2026-10-07 主人拍板拉开远程射程），
+    /// 300 × 0.767 ≈ 230 —— 与表同值，别让兜底和表各说一套。
+    /// </summary>
+    public const float MONSTER_RANGED_RANGE_MUL = 0.767f;
     /// <summary>普通（非精英/非Boss）远程小怪的技能伤害折扣：技能只是为了看得到子弹，不该秒人</summary>
     public static float MONSTER_NORMAL_SKILL_DAMAGE_MUL => CombatTuningTable.Get("MONSTER_NORMAL_SKILL_DAMAGE_MUL", 0.55f);
     /// <summary>怪物普攻弹道速度倍率（勿随意改快）</summary>

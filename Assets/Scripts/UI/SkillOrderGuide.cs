@@ -21,7 +21,14 @@ using UnityEngine;
 public static class SkillOrderGuide
 {
     const string PrefsKey = "RiftGuide_SkillOrderHint_v1";
-    const string Text = "拖动技能可改释放顺序：① 最先放。";
+
+    /// <summary>
+    /// 这条提示的**唯一文案来源**。引导局那一拍（抽中技能后）也读它，别在别处再抄一份。
+    /// 【2026-10-07 主人要求】把原来开局就弹的「技能冷却好会自动释放，无需点击；顺序看左上角 ①②③④。」
+    /// 并到这一条里 —— 那句话要在**抽中技能、能调顺序**的那一拍才出现，不是一进战斗就出来。
+    /// </summary>
+    public const string Text = "技能冷却好会自动释放，无需点击；拖动技能可改释放顺序，① 最先放。";
+
     const float ShowSeconds = 5f;
 
     /// <summary>已经教过了（换局也不再弹）。</summary>

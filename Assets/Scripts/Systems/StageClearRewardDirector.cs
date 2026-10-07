@@ -232,8 +232,15 @@ public class StageClearRewardDirector : MonoBehaviour
     /// 宝箱层级：**与单位同一套规则** —— SortingGroup 的 order 随脚下 Y 变化（越靠下越靠前），
     /// 这样箱子会按它在场上的位置参与前后遮挡，而不是永远压在所有东西前面。
     /// （2026-09-18 修：之前写死 SORT_MAPROOT+5=15，与单位同档且恒定，导致宝箱永远在最前。）
-    /// close/open 精灵的 12/13 只是**组内相对**次序，不再当作绝对 order 用。
+    /// close/open 精灵的 1/2 只是**组内相对**次序（与怪的 身体1/血条2 同口径），不再当作绝对 order 用。
     /// </summary>
+    /// <remarks>
+    /// 相对次序常量放在类级：<c>EnsureBoxVisualFallback</c> 补建箱皮时用同一组值，避免两处各写一份。
+    /// </remarks>
+    private const int BoxShadowRel = 0;
+    private const int BoxCloseRel = 1;
+    private const int BoxOpenRel = 2;
+
     void ApplyBoxSorting()
     {
         if (_boxRoot == null) return;
@@ -258,25 +265,32 @@ public class StageClearRewardDirector : MonoBehaviour
         // 下限只要求压在地图之上（SORT_MAPROOT + 1），不再抬到与单位同档。
         const int BoxBelowUnit = 5;
         int minBoxOrder = GameConfig.SORT_MAPROOT + 1;
+        // 2026-10-06：改走 GameConfig.ComputeUnitSortOrder（与怪同一个出口），不再自己抄一条公式。
         sg.sortingOrder = Mathf.Max(minBoxOrder,
-            GameConfig.SORT_UNIT + Mathf.RoundToInt(-footY * 40f) - BoxBelowUnit);
+            GameConfig.ComputeUnitSortOrder(footY) - BoxBelowUnit);
 
+        // 【2026-10-06 修 · 主人原话「宝箱还是遮挡住怪了，这个 order 怎么总有问题」】
+        // 根因：这三个值原来写的是**绝对口径** 11/12/13（贴合「地图根 10」那套老常数），
+        // 但它们身在箱子自己的 SortingGroup 里 —— 引擎会把 group 的 order **叠加**上去，
+        // 于是箱子实际成了 11+11=22 ~ 11+13=24，而怪是「group + 0/1/2」→ 箱子永远压在怪前面。
+        // 现在改成与怪**同一套相对口径**：影子 0 / 箱皮 1 / 开箱 2（怪是 影子0/身体1/血条2）。
+        // 组内顺序不变（影子仍在箱皮之下），但整箱回到与怪同一量级，按脚下 Y 正常参与遮挡。
         if (_closeSr != null)
         {
             _closeSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _closeSr.sortingOrder = GameConfig.SORT_MAPROOT + 2; // 12
+            _closeSr.sortingOrder = BoxCloseRel;
         }
         if (_openSr != null)
         {
             _openSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _openSr.sortingOrder = GameConfig.SORT_MAPROOT + 3; // 13
+            _openSr.sortingOrder = BoxOpenRel;
         }
-        // 2026-09-28 主人反馈「阴影都不见了」：影子必须抬到地图之上、箱皮之下（地图根 10 / 影子 11 / close 12）。
+        // 影子仍在箱皮之下（0 < 1），整箱 group 至少压在地图之上（SORT_MAPROOT + 1）。
         // 只在这里统一铺排层级，别再靠 ForceBoxRenderersVisible 顺手把它打成 order 0。
         if (_shadowSr != null)
         {
             _shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            _shadowSr.sortingOrder = GameConfig.SORT_MAPROOT + 1; // 11
+            _shadowSr.sortingOrder = BoxShadowRel;
         }
     }
 
@@ -322,14 +336,14 @@ public class StageClearRewardDirector : MonoBehaviour
         closeGo.transform.SetParent(host, false); // 保持默认位置/缩放（零/一），不手动设置
         var closeSr = closeGo.AddComponent<SpriteRenderer>();
         closeSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        closeSr.sortingOrder = GameConfig.SORT_MAPROOT + 2; // 与 ApplyBoxSorting 中 close 写法一致
+        closeSr.sortingOrder = BoxCloseRel; // 与 ApplyBoxSorting 同一个类级常量，不另写一份
 
         // open：同上，排序 +1
         var openGo = new GameObject("open");
         openGo.transform.SetParent(host, false);
         var openSr = openGo.AddComponent<SpriteRenderer>();
         openSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        openSr.sortingOrder = GameConfig.SORT_MAPROOT + 3; // 与 ApplyBoxSorting 中 open 写法一致
+        openSr.sortingOrder = BoxOpenRel; // 与 ApplyBoxSorting 同一个类级常量，不另写一份
 
         // effect：仅作粒子根占位，无组件
         var effectGo = new GameObject("effect");
@@ -390,6 +404,8 @@ public class StageClearRewardDirector : MonoBehaviour
         Sprite openSp = LoadBoxSprite(TierPrefix(tier) + "_open");
         if (_closeSr != null && closeSp != null) _closeSr.sprite = closeSp;
         if (_openSr != null && openSp != null) _openSr.sprite = openSp;
+        // 换皮后箱皮尺寸可能变（木/银/金），影子与特效按新箱皮重新对齐一次
+        AlignShadowAndEffectToSkin();
         StopBoxEffect();
     }
 
@@ -423,6 +439,8 @@ public class StageClearRewardDirector : MonoBehaviour
             _boxAnim.enabled = true;
             _boxAnim.Play("close", 0, 0f);
         }
+        // 下落动画只驱动 close —— 影子 / 特效按箱皮当前位置补一次，别被落在原地
+        AlignShadowAndEffectToSkin();
     }
 
     /// <summary>当前显示在场上的那张箱皮（用于取底边贴地）。</summary>
@@ -461,15 +479,55 @@ public class StageClearRewardDirector : MonoBehaviour
         float groundY = UnitBase.GROUND_Y + (laneMin + laneMax) * 0.5f;
 
         float dy = groundY - sr.bounds.min.y;
-        if (Mathf.Abs(dy) < 0.0005f) return;
         var p = _boxRoot.position;
         float beforeY = p.y;
         p.y += dy;
         _boxRoot.position = p;
-        // #region agent log
-        DebugAgentLog.Log("H6", "StageClearRewardDirector.SnapBoxRootToGround", "box_snap",
-            $"{{\"beforeY\":{beforeY:F3},\"afterY\":{p.y:F3},\"groundY\":{groundY:F3},\"boundsMinY\":{sr.bounds.min.y:F3}}}");
+        // 贴完地，影子 / 特效再按箱皮自己的底边对齐一次（见 AlignShadowAndEffectToSkin）
+        AlignShadowAndEffectToSkin();
+        // #region agent log（只在真的挪动了才打，避免开箱那段每帧刷屏）
+        if (Mathf.Abs(dy) >= 0.0005f)
+            DebugAgentLog.Log("H6", "StageClearRewardDirector.SnapBoxRootToGround", "box_snap",
+                $"{{\"beforeY\":{beforeY:F3},\"afterY\":{p.y:F3},\"groundY\":{groundY:F3},\"boundsMinY\":{sr.bounds.min.y:F3}}}");
         // #endregion
+    }
+
+    /// <summary>
+    /// 【2026-10-07 主人拍板】影子 / 特效**跟着箱皮整体走**，不再各飘各的。
+    ///
+    /// <para>主人原话：「我说的是 PosY —— 阴影在 box 的头顶位置，没有用我的预制体里的位置；
+    /// 还有那个特效也是有偏移了。」</para>
+    ///
+    /// <para><b>根因</b>：<c>close.anim</c>（主人做的「从天上掉下来落稳」）里只有
+    /// <c>path: close</c> 的 <c>m_LocalPosition.y</c> 曲线；<c>shadow</c> 和 <c>effect</c>
+    /// <b>不在这条动画里</b>。于是箱皮被动画挪动时，影子与特效纹丝不动，
+    /// 预制体里摆好的相对位置当场散架 —— 这不是代码在调 box 里的位置，是动画只驱动了其中一层。</para>
+    ///
+    /// <para><b>做法</b>：不改预制体、不写任何偏移魔数。偏移量<b>从箱皮自己的 bounds 量出来</b>：
+    /// 影子中心对齐箱皮底边，特效根对齐箱皮中心。箱皮怎么动（动画 / 换皮换尺寸）它们就怎么跟。</para>
+    /// </summary>
+    void AlignShadowAndEffectToSkin()
+    {
+        var sr = GetBoxGroundSprite();
+        if (sr == null || _boxRoot == null) return;
+        Bounds b = sr.bounds;
+
+        if (_shadowSr != null)
+        {
+            var sp = _shadowSr.transform.position;
+            float before = sp.y;
+            sp.y = b.min.y;              // 影子中心压在箱皮底边：箱皮在哪，影子就在哪
+            if (Mathf.Abs(sp.y - before) > 0.0005f)
+                _shadowSr.transform.position = sp;
+        }
+        if (_effectRoot != null)
+        {
+            var ep = _effectRoot.position;
+            float before = ep.y;
+            ep.y = b.center.y;           // 特效根对齐箱皮中心（换皮尺寸变了也不会偏）
+            if (Mathf.Abs(ep.y - before) > 0.0005f)
+                _effectRoot.position = ep;
+        }
     }
 
     void PlaceBoxAt(float worldX, float worldZ)
@@ -1082,11 +1140,13 @@ public class StageClearRewardDirector : MonoBehaviour
 
         if (picked != null && doEquip)
         {
-            if (GridBackpackSystem.Instance != null && GridBackpackSystem.Instance.TryEquipFromReward(picked))
+            if (GridBackpackSystem.Instance != null && GridBackpackSystem.Instance.TryEquipDirect(picked))
             {
-                AchievementSystem.Instance?.OnObtainEquip(picked.rarity);
-                AdventureLogAchievements.OnEquipPicked();
-                UIManager.Instance?.ShowToast($"已装备：{picked.equipName ?? picked.templateId}", true);   // 2026-10-06 主人拍板：装备获得 force 弹（注：1085 走 TryEquipFromReward 只入包不穿槽，文案"已装备"待主人点头改 TryEquipDirect 后才名副其实）
+                // 【2026-10-06 主人拍板】统计<b>不在这里调</b>：TryEquipDirect 内部已统一调
+                // AchievementSystem.OnObtainEquip + AdventureLogAchievements.OnEquipPicked
+                // （见 GridBackpackSystem.cs:617-618）。外面再调一次会让成就 / 冒险日志翻倍 ——
+                // 铁律 15「同一语义只留一个出口」，这条统计的出口就是 TryEquipDirect 那两行。
+                UIManager.Instance?.ShowToast($"已装备：{picked.equipName ?? picked.templateId}", true);   // 2026-10-06 主人拍板：装备获得 force 弹；改走 TryEquipDirect 后「已装备」才名副其实（真的穿进槽里了）
             }
             else
             {

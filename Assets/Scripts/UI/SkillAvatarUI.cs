@@ -126,15 +126,45 @@ public class SkillAvatarUI
     /// </summary>
     public void SetAvatar(Sprite icon)
     {
-        if (avatarImage != null)
+        if (avatarImage == null) return;
+        avatarImage.preserveAspect = true;
+        avatarImage.sprite = icon;
+        // 不要隐藏空槽，保留槽位框体可见；
+        // 但没图时必须把颜色置透明 —— sprite 为空的 Image 会渲染成一块白片。
+        avatarImage.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+        avatarImage.gameObject.SetActive(true);
+        if (icon != null) EnsureIconRectVisible();
+    }
+
+    /// <summary>
+    /// 【2026-10-07 主人报「4 技槽上没图标」】sprite 明明加载到了却看不见。
+    ///
+    /// <para>排查口径：把「图标到底能不能被画出来」的量<b>一次打全</b>，别再靠猜 ——
+    /// rect 尺寸 / alpha / 激活 / 兄弟序 / 父节点名。</para>
+    ///
+    /// <para>只在 rect 退化成 0（画不出来的唯一常见原因）时动手修正：拉伸到父节点的 68% 并居中。
+    /// 这不是静默兜底 —— 修之前先 <c>LogError</c> 报出来。</para>
+    /// </summary>
+    void EnsureIconRectVisible()
+    {
+        var rt = avatarImage.rectTransform;
+        if (rt == null) return;
+        var sz = rt.rect.size;
+        if (sz.x >= 1f && sz.y >= 1f)
         {
-            avatarImage.preserveAspect = true;
-            avatarImage.sprite = icon;
-            // 不要隐藏空槽，保留槽位框体可见；
-            // 但没图时必须把颜色置透明 —— sprite 为空的 Image 会渲染成一块白片。
-            avatarImage.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
-            avatarImage.gameObject.SetActive(true);
+            Debug.Log($"[SkillAvatar] 技槽图标：{avatarImage.sprite?.name} 节点={avatarImage.name}" +
+                      $" 父={avatarImage.transform.parent?.name} rect={sz.x:F1}×{sz.y:F1}" +
+                      $" alpha={avatarImage.color.a:F2} 激活={avatarImage.gameObject.activeInHierarchy}" +
+                      $" 兄弟序={avatarImage.transform.GetSiblingIndex()}/{avatarImage.transform.parent?.childCount ?? 0}");
+            return;
         }
+        Debug.LogError($"[SkillAvatar] 技槽图标 rect 退化成 {sz.x:F1}×{sz.y:F1}（画不出来）：" +
+                       $"节点={avatarImage.name} 父={avatarImage.transform.parent?.name} " +
+                       $"锚点={rt.anchorMin}~{rt.anchorMax} sizeDelta={rt.sizeDelta} → 已按父节点 68% 居中拉伸");
+        rt.anchorMin = new Vector2(0.16f, 0.16f);
+        rt.anchorMax = new Vector2(0.84f, 0.84f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
     }
 
     /// <summary>

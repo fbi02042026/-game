@@ -44,10 +44,12 @@ public static class DailyLoginDefs
     public static int AccumTargetDays = 8;
 
     /// <summary>
-    /// 累计登录领限定佣兵的奖励。表有 accum 行时取该行翻译结果；缺表兜底 = 送塔克·重盾（H003）。
-    /// 名字不带稀有度前缀——主人要求名字只写名字（“稀有佣兵·塔克·重盾”太长）。
+    /// 累计登录（默认第 8 天）底部那一格的奖励。表有 accum 行时取该行翻译结果。
+    ///
+    /// <para>【2026-10-07 主人拍板】佣兵本体挪到**第 4 天**（<see cref="Starter"/> 的第 4 格），
+    /// 所以这里**不能再送第二个塔克** —— 兜底改成碎片 ×15，与 daily_login.csv 的 accum_8 同一口径。</para>
     /// </summary>
-    public static Reward AccumReward = MercGrant("塔克·重盾", STARTER_MERC_ID);
+    public static Reward AccumReward = Frag("塔克碎片 ×15", STARTER_MERC_ID, 15);
 
     public enum Grant
     {
@@ -100,11 +102,11 @@ public static class DailyLoginDefs
 
     /// <summary>
     /// 新手 8 日【硬编码兜底】：表 daily_login.csv（starter 段）有数据时被整段覆盖。
-    /// 兜底数值与"改动前"一致：D4=塔克碎片×10、D8=稀有佣兵塔克·重盾。
-    /// 表里的口径（主人要求）：**D4=稀有佣兵塔克（H003）、D8 起改碎片×10**，其余相同。
-    /// —— 即表优先、缺表 / 空表 / 该行缺失 回退硬编码，行为与改动前完全一致（"缺表回退，不让登录奖励开不起来"）。
-    /// 节奏目标：塔克（稀有）满级要 **75 本命碎片**，D4 给佣兵、D8 起每轮碎片日补碎片，
-    /// 叠加「个位 3/6/9 双倍」→ 30 天全勤 ≈ 满级。体力给上限一半（50）；强化石/天赋石已停用。
+    /// 【2026-10-07 主人拍板】口径 = **第 4 天直接送稀有佣兵塔克（H003）本体，后面（D6/D8 与累计段）给碎片**。
+    /// 已拥有塔克的玩家在第 4 天会由 <see cref="EffectiveStarterReward"/> 自动折成碎片 ×10（不会白点）。
+    /// —— 表优先、缺表 / 空表 / 该行缺失回退本数组（"缺表回退，不让登录奖励开不起来"）。
+    /// 节奏目标：塔克（稀有）满级要 **75 本命碎片**，D4 给佣兵、D6/D8 起每轮补碎片，
+    /// 叠加「每轮第 3、6 格双倍」→ 30 天全勤 ≈ 满级。体力给上限一半（50）；强化石/天赋石已停用。
     /// 老存档已领标记按天记，兼容。注意：本数组是兜底，运行时真正生效看表（见 EnsureTableApplied）。
     /// </summary>
     public static Reward[] Starter = new Reward[]
@@ -112,11 +114,11 @@ public static class DailyLoginDefs
         Res("金币 ×500",         ResourceWallet.ResourceType.Gold,         500), // D1
         Res("体力 ×50",          ResourceWallet.ResourceType.Stamina,       50), // D2（体力上限一半）
         Res("钻石 ×30",          ResourceWallet.ResourceType.Diamond,       30), // D3
-        Frag("塔克碎片 ×10",     STARTER_MERC_ID,                           10), // D4 兜底=碎片（新口径：格子只给碎片，佣兵改 accum 底部领取）
+        MercGrant("塔克·重盾",   STARTER_MERC_ID),                                // D4 稀有佣兵本体（已拥有 → 自动折碎片×10）
         Res("金币 ×800",         ResourceWallet.ResourceType.Gold,         800), // D5
-        Res("体力 ×50",          ResourceWallet.ResourceType.Stamina,       50), // D6
+        Frag("塔克碎片 ×10",     STARTER_MERC_ID,                           10), // D6（第 6 格是双倍格，实发 20 片）
         Res("钻石 ×50",          ResourceWallet.ResourceType.Diamond,       50), // D7
-        Frag("塔克碎片 ×15", STARTER_MERC_ID, 15),                             // D8 兜底=碎片（新口径：格子只给碎片，佣兵改由 accum 累计8天底部领取，见 TryClaimAccum）
+        Frag("塔克碎片 ×15",     STARTER_MERC_ID,                           15), // D8 起每轮补碎片
     };
 
     /// <summary>
@@ -280,8 +282,9 @@ public static class DailyLoginDefs
             Streak = arr;
         }
 
-        // accum 段：累计登录领限定佣兵。取第一个 accum 行（按 day 升序）的 day 作为目标天数、
-        // 该行翻译结果作为奖励；缺表 / 空表 / 无 accum 行则保持上面的硬编码兜底（AccumTargetDays=8、AccumReward=送塔克）。
+        // accum 段：累计登录底部那一格。取第一个 accum 行（按 day 升序）的 day 作为目标天数、
+        // 该行翻译结果作为奖励；缺表 / 空表 / 无 accum 行则保持上面的硬编码兜底
+        //（AccumTargetDays=8、AccumReward=塔克碎片×15 —— 佣兵本体已在第 4 天发过，这里不再重复送）。
         if (DailyLoginTable.AccumCount > 0)
         {
             var first = DailyLoginTable.AccumRows[0];

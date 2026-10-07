@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -45,30 +45,39 @@ public static class MercRosterDefs
     }
 
     // 默认 = 硬编码数组（缺表/解析失败时回退用）；读表成功后整体替换为表数据。
+    // 【2026-10-07 主人拍板】稀有度战力差距拉大：原「稀有≈普通 1.2 倍、传说≈普通 1.5 倍」太接近，
+    // 主人原话「怎么稀有跟普通攻击差不多 把差距拉大点才能体现传奇的优势 这不谁还买」。
+    // 现口径（同职业内 Base 值倍率，最终战力还要再乘 Growth 1.00 / 1.15 / 1.30）：
+    //   普通 = 基准
+    //   稀有 = 血 ×1.30 / 攻 ×1.45 / 防 ×1.35   → 最终约 攻 1.67×、血 1.50×、防 1.55×
+    //   传说 = 血 ×1.70 / 攻 ×2.00 / 防 ×1.85   → 最终约 攻 2.60×、血 2.21×、防 2.41×
+    // 改数值必须 CSV（Assets/Data/Source/Tables/merc_roster.csv）+ .bytes + 本数组 三处同值，不许只改一处。
     static Def[] Table =
     {
         D("H001", "马库斯", "老盾", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 110, 9, 15, 0.90f, 3.2f, null, "SK006", 0, true, true),
-        D("H002", "洛恩", "铁皮", "dunbing102", "剑盾卫士", MercRarity.Rare, 1.15f, 120, 11, 17.5f, 0.95f, 3.3f, "SK007", null, 1500, true),
-        D("H003", "塔克", "重盾", "dunbing201", "剑盾卫士", MercRarity.Rare, 1.15f, 140, 10, 20, 0.80f, 2.8f, "SK008", null, 1800, false),
-        D("H004", "维克", "钢盾", "dunbing202", "剑盾卫士", MercRarity.Legendary, 1.30f, 150, 14, 24, 1.00f, 3.2f, "SK010", "SK009", 5000, false, false),
+        D("H002", "洛恩", "铁皮", "dunbing102", "剑盾卫士", MercRarity.Rare, 1.15f, 145, 13, 20, 0.95f, 3.3f, "SK007", null, 1500, true),
+        D("H003", "塔克", "重盾", "dunbing201", "剑盾卫士", MercRarity.Rare, 1.15f, 155, 12, 23, 0.80f, 2.8f, "SK008", null, 1800, false),
+        D("H004", "维克", "钢盾", "dunbing202", "剑盾卫士", MercRarity.Legendary, 1.30f, 190, 18, 28, 1.00f, 3.2f, "SK010", "SK009", 5000, false, false),
         D("H005", "米娅", "小红", "gongshou101", "游侠", MercRarity.Common, 1.00f, 60, 16, 6, 1.50f, 4.2f, null, "SK002", 500, true, true),
-        D("H006", "希尔", "鹰眼", "gongshou201", "游侠", MercRarity.Rare, 1.15f, 67.5f, 19, 7, 1.40f, 4.0f, "SK001", null, 2000, false, false),
+        D("H006", "希尔", "鹰眼", "gongshou201", "游侠", MercRarity.Rare, 1.15f, 78, 23, 8, 1.40f, 4.0f, "SK001", null, 2000, false, false),
         D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 90, 17.5f, 9, 1.00f, 3.5f, null, "SK002", 600, true, true),
-        D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 100, 21, 10, 0.95f, 3.4f, "SK003", null, 1600, true),
-        D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 110, 20, 12, 1.00f, 3.3f, "SK001", null, 1900, false, false),
-        D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 125, 25, 11, 1.10f, 3.8f, "SK005", "SK012", 6000, false, false),
-        D("H011", "索菲", "小白", "naima101", "牧师", MercRarity.Common, 1.00f, 50, 7.5f, 5, 1.20f, 3.6f, "SK004", "SK011", 500, true, true),
-        D("H012", "塞拉", "小蓝", "naima102", "水系法师", MercRarity.Rare, 1.15f, 55, 14, 10, 1.00f, 3.3f, "SK004", null, 1700, false),
-        D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 60, 15, 12, 1.00f, 3.2f, "SK013", null, 2000, false, false),
-        D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 62.5f, 24, 6, 1.20f, 3.6f, "SK020", "SK019", 8000, false, false),
+        D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 117, 25, 12, 0.95f, 3.4f, "SK003", null, 1600, true),
+        D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 125, 23, 14, 1.00f, 3.3f, "SK001", null, 1900, false, false),
+        D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 155, 35, 17, 1.10f, 3.8f, "SK005", "SK012", 6000, false, false),
+        // 【2026-10-07 主人拍板】昵称原为「小白」，主人说太敷衍、玩家记不住 → 与真名统一为「索菲」。
+        // 她是新手期必得的牧师，名字要好记、好认；头像框 / 对白 / 日志现在都显示同一个名字。
+        D("H011", "索菲", "索菲", "naima101", "牧师", MercRarity.Common, 1.00f, 50, 7.5f, 5, 1.20f, 3.6f, "SK004", "SK011", 500, true, true),
+        D("H012", "塞拉", "小蓝", "naima102", "水系法师", MercRarity.Rare, 1.15f, 68, 24, 11, 1.00f, 3.3f, "SK004", null, 1700, false),
+        D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 72, 25, 13, 1.00f, 3.2f, "SK013", null, 2000, false, false),
+        D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 89, 34, 16, 1.20f, 3.6f, "SK020", "SK019", 8000, false, false),
         D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 57.5f, 15, 5, 1.60f, 4.3f, null, "SK002", 500, true, true),
-        D("H016", "杜娅", "怒角", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 100, 20, 10, 0.95f, 3.4f, "SK003", null, 1600, false),
-        D("H017", "莉娜", "圣光", "naima102", "牧师", MercRarity.Rare, 1.15f, 55, 9, 6, 1.20f, 3.5f, "SK004", null, 1700, false),
+        D("H016", "杜娅", "怒角", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 118, 24, 12, 0.95f, 3.4f, "SK003", null, 1600, false),
+        D("H017", "莉娜", "圣光", "naima102", "牧师", MercRarity.Rare, 1.15f, 65, 11, 7, 1.20f, 3.5f, "SK004", null, 1700, false),
         D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 105, 8.5f, 14, 0.85f, 3.0f, null, "SK006", 700, true, true),
         D("H019", "艾琳", "星火", "fashi101", "法师", MercRarity.Common, 1.00f, 52.5f, 17, 4, 1.35f, 3.6f, null, "SK017", 600, true, true),
-        D("H020", "凯尔", "谜面", "fashi102", "法师", MercRarity.Rare, 1.15f, 57.5f, 21, 5, 1.30f, 3.5f, "SK018", null, 1800, false),
+        D("H020", "凯尔", "谜面", "fashi102", "法师", MercRarity.Rare, 1.15f, 68, 25, 6, 1.30f, 3.5f, "SK018", null, 1800, false),
         D("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", MercRarity.Common, 1.00f, 115, 10, 13, 0.80f, 2.9f, null, "SK002", 800, true, true),
-        D("H022", "索尔", "铁面", "zhongzhan201", "重武者", MercRarity.Rare, 1.15f, 130, 13, 16, 0.85f, 2.8f, "SK003", null, 2200, false, false),
+        D("H022", "索尔", "铁面", "zhongzhan201", "重武者", MercRarity.Rare, 1.15f, 150, 15, 18, 0.85f, 2.8f, "SK003", null, 2200, false, false),
     };
 
     static Dictionary<string, Def> _byHire;

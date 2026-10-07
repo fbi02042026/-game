@@ -265,6 +265,18 @@ public static partial class GameConfig
     }
 
     /// <summary>
+    /// 单位前后遮挡的 order 公式 —— <b>全场唯一出口</b>（铁律 15：同一语义只留一个出口）。
+    /// Y 越低越靠镜头前。
+    /// <para>2026-10-06：宝箱原来在自己那边抄了一条同形公式，两边各改各的，
+    /// 结果箱子永远压在怪身上（主人原话「宝箱还是遮挡住怪了 / 不能和怪统一一下吗」）。
+    /// 现在怪与箱共用这一个出口，要调前后关系只改这里。</para>
+    /// </summary>
+    public static int ComputeUnitSortOrder(float worldY)
+    {
+        return SORT_UNIT + Mathf.RoundToInt(-worldY * 40f);
+    }
+
+    /// <summary>
     /// 单位前后遮挡：只改 SortingGroup 的 sortingOrder（随世界 Y）。
     /// 禁止改 SPUM/角色子 Sprite 的 sortingOrder、sortingLayer——部件层级全留预制体。
     /// </summary>
@@ -277,8 +289,7 @@ public static partial class GameConfig
     public static void ApplyUnitSorting(Transform root, float worldY)
     {
         if (root == null) return;
-        // Y 越低越靠镜头前
-        int order = SORT_UNIT + Mathf.RoundToInt(-worldY * 40f);
+        int order = ComputeUnitSortOrder(worldY);
 
         // 优先用已有 SortingGroup（SPUM 常挂在 UnitRoot），禁止再往根上叠一层把部件搞乱
         var sg = root.GetComponent<UnityEngine.Rendering.SortingGroup>();

@@ -136,7 +136,7 @@ public class TownSceneBootstrap : MonoBehaviour
     /// 登录奖励：进 Town 检查一次，有可领的才弹。
     /// 累计天数在 OnEnterGame 里按自然日累加（同一天重进不加）。
     /// </summary>
-    static void TryDailyLoginOnce()
+    public static void TryDailyLoginOnce()
     {
         if (_loginCheckedThisTownVisit) return;
         // 引导未完成不弹，避免半透明遮罩挡「点冒险」

@@ -176,8 +176,7 @@ public partial class BattleUI : MonoBehaviour
         // 每帧都要跟：开战/撤离/进入整理阶段都要立刻切换遮罩，不能等 0.1s 节流
         TickBattleMask();
 
-        if (playerSlot != null && playerSlot.glowBorder != null && playerSlot.glowBorder.gameObject.activeSelf)
-            playerSlot.TickSkillReadyPulse();
+        // 【2026-10-07 主人拍板】角色卡头像的「技能就绪」金色光环已整条删除（glowBorder / TickSkillReadyPulse）。
         if (playerSkillAvatar != null && playerSkillAvatar.IsReadyPulse)
             playerSkillAvatar.TickReadyPulse();
 

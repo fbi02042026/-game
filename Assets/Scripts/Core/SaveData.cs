@@ -38,6 +38,14 @@ public class SaveData
     /// 战斗通关产出，抽奖消耗；城镇升级 / 商店 / 天赋仍旧只花 totalGold。
     /// </summary>
     public int slotCoins = 0;
+    /// <summary>
+    /// 佣兵币（2026-10-07 主人拍板新增）：只用于「佣兵」这一类**定向抽奖**的支付币种。
+    /// 主人原话「定向招募改用特殊的金币 也可以叫佣兵币」，与 totalGold / slotCoins 三边不通用。
+    /// 图标：<c>Assets/Art/UI/Icons/Common/icon_yongbinggold.png</c>
+    /// （Resources 副本 <c>Resources/UI/Icons/Common/icon_yongbinggold.png</c>，按铁律 4 同名复制）。
+    /// 币种归属的唯一出口 = <c>SlotMachineSystem.FocusCurrency</c>。
+    /// </summary>
+    public int mercGold = 0;
     public int talentPoints = 0;
     public int diamond = 0;
     public int enchantStones = 0;   // 附魔石

@@ -214,6 +214,8 @@ public partial class BattleUI : MonoBehaviour
             float cd = caster.CooldownRemain;
             float total = caster.CooldownTotal;
             slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
+            // 同上（2026-10-07 主人拍板）：佣兵技能也给数字倒计时，口径与玩家技能一致。
+            slot.SetCooldownText(cd > 0.05f ? Mathf.CeilToInt(cd).ToString() : "");
         }
     }
 
@@ -258,6 +260,9 @@ public partial class BattleUI : MonoBehaviour
             float cd = sys != null ? sys.GetPlayerSkillCooldownRemaining(i) : 0f;
             float total = sys != null ? sys.GetPlayerSkillCooldownTotal(i) : 0f;
             slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
+            // 【2026-10-07 主人拍板】转圈之外再给一个**数字倒计时**（主人原话「技能的 CD 写个数字倒计时」）：
+            // 只剩 0.05s 以上才显示，向上取整（剩 2.3s 显示 3），归零立刻清空，不留一个「0」闪一下。
+            slot.SetCooldownText(cd > 0.05f ? Mathf.CeilToInt(cd).ToString() : "");
         }
     }
 

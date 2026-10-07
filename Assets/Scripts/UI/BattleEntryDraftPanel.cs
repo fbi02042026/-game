@@ -139,6 +139,94 @@ public class BattleEntryDraftPanel : MonoBehaviour
         public Text CostText;
         /// <summary>null = 普通（随机抽奖）；有值 = 该类型的定向抽奖。</summary>
         public DraftCategory? Cat;
+        /// <summary>按钮左侧的货币图标（运行时建在 Cost 左外侧，见 BuildCoinIcon）。</summary>
+        public Image CoinIcon;
+    }
+
+    /// <summary>币种图标缓存：别每次 Refresh 都 Resources.Load。</summary>
+    static readonly Dictionary<ResourceWallet.ResourceType, Sprite> _currencyIcons =
+        new Dictionary<ResourceWallet.ResourceType, Sprite>();
+
+    /// <summary>
+    /// 抽奖按钮上显示哪种币的图标 —— <b>单一出口</b>。
+    /// 主人原话：「在抽奖的按钮左侧加个货币的图标 金币就加金币的 佣兵就加佣兵的，
+    /// 目前只有佣兵是佣兵币 其他的都是金币 等其他三个抽奖按钮开放了再说」。
+    /// 哪天其余按钮要换币，只改这一个函数，别在调用处各写一遍。
+    /// <para>【2026-10-07 主人二次拍板】「<b>抽奖币默认金币</b>」—— 随机 / 装备 / 技能这几抽
+    /// 真扣的是抽奖币 <c>SlotCoin</c>，但按钮上就显示<b>金币</b>图标（主人的口径，不是不一致）。
+    /// 哪天要换成抽奖币自己的图，只改这一个函数。佣兵 = 佣兵币，与
+    /// <c>SlotMachineSystem.FocusCurrency</c> 必须同值。</para>
+    /// </summary>
+    static ResourceWallet.ResourceType CurrencyOf(DraftCategory? cat)
+    {
+        return cat.HasValue && cat.Value == DraftCategory.Merc
+            ? ResourceWallet.ResourceType.MercGold
+            : ResourceWallet.ResourceType.Gold;
+    }
+
+    /// <summary>币种 → 图标资源路径（单一出口，别处不许再抄一遍路径）。</summary>
+    static string CurrencyIconPath(ResourceWallet.ResourceType t)
+    {
+        switch (t)
+        {
+            case ResourceWallet.ResourceType.MercGold: return "UI/Icons/Common/icon_yongbinggold";
+            case ResourceWallet.ResourceType.Gold: return "UI/Icons/Common/icon_gold";
+            default: return null;
+        }
+    }
+
+    /// <summary>
+    /// 取币种图标。缺图 → LogError + 返回 null（铁律 14：兜底 fail closed，
+    /// 绝不静默拿别的图顶上，免得玩家看着金币图标其实扣的是佣兵币）。
+    /// </summary>
+    static Sprite GetCurrencyIcon(ResourceWallet.ResourceType t)
+    {
+        Sprite s;
+        if (_currencyIcons.TryGetValue(t, out s)) return s;
+
+        string path = CurrencyIconPath(t);
+        if (string.IsNullOrEmpty(path))
+        {
+            Debug.LogError("[BattleEntryDraftPanel] 币种没配图标路径: " + t);
+            _currencyIcons[t] = null;
+            return null;
+        }
+        s = Resources.Load<Sprite>(path);
+        if (s == null)
+            Debug.LogError("[BattleEntryDraftPanel] 缺货币图标 Resources/" + path + ".png（把 Art 下同名图复制进 Resources）");
+        _currencyIcons[t] = s;
+        return s;
+    }
+
+    /// <summary>
+    /// 在价格文本的<b>左外侧</b>建一个货币图标 —— 主人原话「在抽奖的按钮左侧加个货币的图标」。
+    /// 做成 Cost 的子节点：Cost 的位置/字体是主人在预制体里调好的，这里一个字都不改，
+    /// 图标挂上去跟着它走，也不会盖到 icon / name。
+    /// </summary>
+    void BuildCoinIcon(DraftSlot slot, Transform costNode)
+    {
+        var costRt = costNode as RectTransform;
+        if (costRt == null) return;
+
+        var go = new GameObject("CoinIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(costNode, false);
+
+        var rt = go.GetComponent<RectTransform>();
+        // 锚在 Cost 的左中，pivot 取右中 → 整个图标落在 Cost 左边外面。
+        rt.anchorMin = new Vector2(0f, 0.5f);
+        rt.anchorMax = new Vector2(0f, 0.5f);
+        rt.pivot = new Vector2(1f, 0.5f);
+        float size = Mathf.Max(24f, costRt.rect.height * 0.9f);
+        rt.sizeDelta = new Vector2(size, size);
+        rt.anchoredPosition = new Vector2(-6f, 0f);
+
+        var img = go.GetComponent<Image>();
+        img.raycastTarget = false;                 // 别挡按钮点击
+        img.preserveAspect = true;                 // 背景/底图绝不拉伸
+        img.sprite = GetCurrencyIcon(CurrencyOf(slot.Cat));
+        // 显隐的统一出口在 Refresh（免费抽要隐）；这里只按「有没有图」先定一次初始态。
+        go.SetActive(img.sprite != null);
+        slot.CoinIcon = img;
     }
 
     readonly List<DraftSlot> _slots = new List<DraftSlot>();
@@ -601,18 +689,19 @@ public class BattleEntryDraftPanel : MonoBehaviour
 
         var rt0 = t as RectTransform;
 
-        // 2026-10-05 主人拍板：暂时只开放「普通」（随机）抽奖，定向的佣兵/装备/技能三个按钮隐藏。
-        // 做成「隐藏」而不是「置灰」：置灰还会占位、玩家点了才知道不能抽，隐藏更干净。
+        // 【2026-10-07 主人拍板】定向招募 = 装备 / 佣兵 / 技能 三个按钮，**通过第一章后才开放**；
+        // 没过第一章只留「普通」（随机）抽奖。
+        // 平时用「隐藏」而不是「置灰」：置灰还会占位、玩家点了才知道不能抽，隐藏更干净。
         // 只在这里动显隐（单一出口），SetDraftVisible 管的是整个容器，不会把它们再打开。
+        bool focusUnlocked = SaveSystem.Instance?.Data?.HasClearedChapter(1) == true;
         if (cat.HasValue)
         {
-            t.gameObject.SetActive(false);
+            t.gameObject.SetActive(focusUnlocked);
         }
-        else if (rt0 != null)
+        else if (!focusUnlocked && rt0 != null)
         {
-            // 与上面「隐藏三个定向按钮」成对：四个按钮原本摆在 x = -255 / -85 / 85 / 255，
-            // 只留第一个会偏在最左边 —— 主人拍板挪到容器中间（x = 0）。
-            // ⚠ 哪天恢复四个按钮，这两段一起删，否则 BtnNormal 会叠在中间。
+            // 四个按钮原本摆在 x = -255 / -85 / 85 / 255。没过第一章只剩第一个时会偏在最左边
+            // —— 把它挪到容器中间（x = 0）；解锁后<b>一个坐标都不动</b>，直接用主人摆好的四格。
             rt0.anchoredPosition = new Vector2(0f, rt0.anchoredPosition.y);
         }
 
@@ -627,6 +716,10 @@ public class BattleEntryDraftPanel : MonoBehaviour
         // 早期写成 FindDeep(nameNode, ...) 导致永远拿不到引用、价格数字不显示。
         var costNode = FindDeep(t, NodeCost);
         if (costNode != null) slot.CostText = costNode.GetComponent<Text>();
+
+        // 按钮左侧的货币图标（2026-10-07 主人拍板）：建在 Cost 左外侧，不动主人调好的美术。
+        if (costNode != null) BuildCoinIcon(slot, costNode);
+        else Debug.LogError("[BattleEntryDraftPanel] 抽奖按钮 " + nodeName + " 找不到价格节点 " + NodeCost + "，货币图标没地方挂");
 
         if (slot.Btn != null)
         {
@@ -715,7 +808,12 @@ public class BattleEntryDraftPanel : MonoBehaviour
         return btn;
     }
 
-    /// <summary>刷新价格与可用状态：池子空或币不够 → 置灰，绝不自动扣钱。</summary>
+    /// <summary>
+    /// 刷新价格与可用状态：池子空或币不够 → 置灰，绝不自动扣钱。
+    /// <para>⚠ <paramref name="focusPrice"/> <b>已不再使用</b>（2026-10-07）：定向价改由循环里按
+    /// <c>slot.Cat</c> 各自的币种算（佣兵 = 佣兵币价，装备 / 技能 = 抽奖币价），
+    /// 参数保留只是为了不动三个调用点的签名。<paramref name="coins"/> 只用于「普通」随机按钮。</para>
+    /// </summary>
     void Refresh(int randomPrice, int focusPrice, List<DraftCategory> cats, long coins, int freeLeft = 0)
     {
         // 记下这一组参数：抽完锁按钮时要按同一组重刷，绝不另算一套（2026-10-06）
@@ -733,9 +831,14 @@ public class BattleEntryDraftPanel : MonoBehaviour
             if (s.Btn == null) continue;
             bool isRandom = !s.Cat.HasValue;
             bool has = isRandom || (cats != null && cats.Contains(s.Cat.Value));
-            int price = isRandom ? randomPrice : focusPrice;
+            // 价格与余额都按<b>各自币种</b>算（真源 SlotMachineSystem，单出口）：
+            // 佣兵定向 = 佣兵币的价与余额；装备/技能定向 = 抽奖币的价与余额。
+            int price = isRandom ? randomPrice : SlotMachineSystem.FocusPrice(s.Cat.Value);
+            long wallet = isRandom
+                ? coins
+                : SlotMachineSystem.Balance(SlotMachineSystem.FocusCurrency(s.Cat.Value));
             // 2026-10-06：本拍已抽完（引导局一次一抽）→ 全部置灰，玩家只剩「继续」可点。
-            bool on = !_drawLocked && has && (free || coins >= price);
+            bool on = !_drawLocked && has && (free || wallet >= price);
             // 置灰交给 Button.interactable —— 它会按 disabledColor 作用在 icon 上；
             // 不去改 name/金额 的文字颜色，那是主人调好的美术。
             s.Btn.interactable = on;
@@ -744,6 +847,13 @@ public class BattleEntryDraftPanel : MonoBehaviour
                 s.CostText.text = !has ? "-"
                                : free ? $"免费×{freeLeft}"
                                : price.ToString();
+            // 免费抽不扣任何币 → 货币图标跟着一起隐（要改成「一直显示」只改这一处）。
+            if (s.CoinIcon != null)
+            {
+                bool showIcon = has && !free && s.CoinIcon.sprite != null;
+                if (s.CoinIcon.gameObject.activeSelf != showIcon)
+                    s.CoinIcon.gameObject.SetActive(showIcon);
+            }
         }
     }
 

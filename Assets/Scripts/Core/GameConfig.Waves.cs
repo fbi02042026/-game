@@ -44,6 +44,13 @@ public static partial class GameConfig
     /// 2026-09-15 产出去零：2 → 1（再÷10 会变 0，连击奖励必须保留最小值，否则"会连段"就没有正反馈了）。
     public const int COMBO_BONUS_GOLD = 1;
 
+    // —— 佣兵币产出（2026-10-07 主人拍板：「佣兵币击杀精英1个 击杀Boss两个」）——
+    // 唯一的发放点在 BattleManager.OnMonsterDead（按 Boss 优先、不与精英叠加）。
+    /// <summary>击杀 1 只精英发的佣兵币。</summary>
+    public const int MERC_GOLD_PER_ELITE = 1;
+    /// <summary>击杀 1 个 Boss 发的佣兵币。</summary>
+    public const int MERC_GOLD_PER_BOSS = 2;
+
     // —— 连杀续杯（R2）：连杀窗口内击杀回血，让"连"成为可持续资源 ——
     /// <summary>连杀达到该值才开始回血（避免单杀白嫖续航）。</summary>
     public const int COMBO_HEAL_MIN_COMBO = 3;

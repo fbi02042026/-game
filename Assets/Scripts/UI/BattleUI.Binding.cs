@@ -229,7 +229,7 @@ public partial class BattleUI : MonoBehaviour
             Add(tag + ".lanBarFill", s.lanBarFill != null);
             Add(tag + ".lanText", s.lanText != null);
             Add(tag + ".LockedOverlay", s.lockedOverlay != null);
-            Add(tag + ".Glow(光边)", s.glowBorder != null);
+            // 【2026-10-07 主人拍板】Glow(光边) 绑定自检项删除：头像外圈金环整条链路已删。
             Add(tag + ".LevelLabel", s.levelLabel != null);
             Add(tag + ".NameText", s.nameText != null);
             Add(tag + ".PortraitPlaceholder", s.portraitPlaceholder != null);
@@ -404,13 +404,8 @@ public partial class BattleUI : MonoBehaviour
         if (slot.energyRing == null)
             slot.energyRing = FindImageNamedNoFallback(root, "Energy", "EnergyRing", "Ring");
 
-        if (slot.glowBorder == null)
-        {
-            Transform g = FindDeepChildIgnoreCase(root, "Glow")
-                ?? FindDeepChildIgnoreCase(root, "GlowBorder")
-                ?? FindDeepChildIgnoreCase(root, "SkillGlow");
-            if (g != null) slot.glowBorder = g.GetComponent<Image>();
-        }
+        // 【2026-10-07 主人拍板删除】原 glowBorder 的 Glow / GlowBorder / SkillGlow 三个查找。
+        // 头像外圈那个「技能就绪」金色大圆环不要了（自动释放，不需要就绪提示）。
         // 按用户要求：不对头像框做任何运行时改造，不再改尺寸/新增节点
 
         if (slot.lockedOverlay == null)

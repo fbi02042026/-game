@@ -55,8 +55,12 @@ public class PlayerPowerHud : MonoBehaviour
     /// 块高（像素）：标题与数字<b>横向并排、垂直居中</b>，所以就是两者较高的那个 ≈ 41。
     /// </summary>
     const float FrameBlockHeight = 42f;
-    /// <summary>「战斗力」三个字与右侧数字之间的水平间隙（像素）。</summary>
-    const float FrameLabelGap = 6f;
+    /// <summary>
+    /// 「战斗力」三个字与右侧数字之间的水平间隙（像素）。
+    /// 【2026-10-07 主人拍板】6 → 2 → <b>0</b>：主人两次要求「数字和字离得近点」。
+    /// ⚠ 标题是艺术字贴图（本身带透明边），若还想更近就写成负数（如 -2f）—— 只改这一个值。
+    /// </summary>
+    const float FrameLabelGap = 0f;
     /// <summary>数字之间的字距（像素）。</summary>
     const float FrameDigitTracking = 2.2f;
     /// <summary>块的初始宽度（像素）。真正宽度每次刷新按「标题 + 数字」实测重算，见 <see cref="PaintNumber"/>。</summary>
@@ -67,6 +71,18 @@ public class PlayerPowerHud : MonoBehaviour
     /// 主人要是觉得高了 / 低了，<b>只改这一个数</b>（正 = 往上、负 = 往下）。
     /// </summary>
     const float FrameBlockOffsetY = 4f;
+    /// <summary>
+    /// 【2026-10-07 主人拍板 A 案】战力块离头像框<b>左边</b>再往右多少（像素）。
+    ///
+    /// <para>改前整块以头像框<b>中心</b>居中，块（≈237px）又比头像框（170px）宽，
+    /// 于是左边那一半（「战斗力」标题）被推出屏幕外 —— 主人报「战斗力的字出屏幕外了」。</para>
+    ///
+    /// <para>现在改成<b>左对齐</b>：块左边缘贴头像框左边缘，内容从左往右排。
+    /// 战力位数变多（4 位、5 位）只会<b>往右伸</b>，左边永远不会再溢出。</para>
+    ///
+    /// 主人要是觉得太贴屏幕左边 / 想整体挪一挪，<b>只改这一个数</b>（正 = 往右）。
+    /// </summary>
+    const float FrameBlockOffsetX = 0f;
 
     /// <summary>战力最多显示几位（999999 够用；位数不够时左边不留空位）。</summary>
     const int MaxDigits = 6;
@@ -161,11 +177,13 @@ public class PlayerPowerHud : MonoBehaviour
         var blockGo = new GameObject("PowerFrameBlock", typeof(RectTransform));
         blockGo.transform.SetParent(frameRt, false);
         _frameBlock = blockGo.GetComponent<RectTransform>();
-        // 挂在头像框<b>顶边之上</b>：pivot 压自身<b>底边中点</b>，anchoredPosition.y 为正 = 往上
-        _frameBlock.anchorMin = new Vector2(0.5f, 1f);
-        _frameBlock.anchorMax = new Vector2(0.5f, 1f);
-        _frameBlock.pivot = new Vector2(0.5f, 0f);
-        _frameBlock.anchoredPosition = new Vector2(0f, FrameBlockOffsetY);
+        // 【2026-10-07 主人拍板 A 案】挂在头像框<b>顶边之上</b>，
+        // pivot 压自身<b>左下角</b>、anchor 压头像框<b>左边</b>（改前是各自的中点）——
+        // 从头像框左边缘起往右排，块再宽也不会往左溢出屏幕。位数的增长只往右走。
+        _frameBlock.anchorMin = new Vector2(0f, 1f);
+        _frameBlock.anchorMax = new Vector2(0f, 1f);
+        _frameBlock.pivot = new Vector2(0f, 0f);
+        _frameBlock.anchoredPosition = new Vector2(FrameBlockOffsetX, FrameBlockOffsetY);
         _frameBlock.sizeDelta = new Vector2(FrameBlockWidthInit, FrameBlockHeight);
 
         bool art = LoadArtSprites();
@@ -352,16 +370,18 @@ public class PlayerPowerHud : MonoBehaviour
             digitsW += _digitSprites[_digitBuf[i]].rect.width * FrameArtScale + FrameDigitTracking;
         digitsW -= FrameDigitTracking;
 
-        // 【2026-10-06 主人校准】横向排：块宽 = 标题 + 间隙 + 数字，块本身在头像框上居中，
-        // 于是标题落左端、数字紧跟其右 —— 位数变化时整块自动重新居中，不会忽左忽右。
+        // 【2026-10-07 主人拍板 A 案】<b>左对齐</b>排：标题贴块的<b>左边缘</b>（x=0），数字紧跟其右。
+        // 改前两处都是以中心为基准（块的 anchor/pivot 居中 + 这里 x 从 -contentW/2 起），
+        // 两者叠加把「战斗力」标题推出了屏幕左边。现在块 pivot 已在左下角，x=0 即块左边缘，
+        // 位数增加只会往右长，左边不再溢出。
         float labelW = _labelSprite != null ? _labelSprite.rect.width * FrameArtScale : 0f;
         float contentW = labelW + FrameLabelGap + digitsW;
         if (_frameBlock != null)
             _frameBlock.sizeDelta = new Vector2(contentW, FrameBlockHeight);
         if (_labelImage != null)
-            _labelImage.rectTransform.anchoredPosition = new Vector2(-contentW * 0.5f, 0f);
+            _labelImage.rectTransform.anchoredPosition = new Vector2(0f, 0f);
 
-        float x = -contentW * 0.5f + labelW + FrameLabelGap;
+        float x = labelW + FrameLabelGap;
         for (int slot = 0; slot < count; slot++)
         {
             var sp = _digitSprites[_digitBuf[count - 1 - slot]];   // 高位在左：缓存是倒序的

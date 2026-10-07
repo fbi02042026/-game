@@ -30,7 +30,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
     }
 
     /// <summary>
-    /// 引导局：小白的头像栏要不要走「真人头像 + 职业 icon + 血条」（= 她已经在队里了）。
+    /// 引导局：引导佣兵（塔克，男）的头像栏要不要走「真人头像 + 职业 icon + 血条」（= 他已经在队里了）。
     /// <para>2026-10-06 主人拍板：<b>只读推导</b>，不再是一个可以随便写的 bool ——
     /// 原来散在四处赋值（175/428/568/660），跟「本局抽数」那套判据会对不上。
     /// 真源只有 <see cref="SlotMachineSystem.TutorialMercDrawn"/> 一处；
@@ -382,15 +382,19 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         bool done = false;
         DialogueUI.Instance?.PrepareForStoryBeat();
-        // 小白 = H011（牧师），禁止再用 LaoDun(H001 盾兵) 立绘
-        string xiaobaiId = StoryProgress.TutorialMercHireId;
+        // 【2026-10-07 主人拍板】引导救场那位 = 每日登录送的塔克（H003 剑盾卫士）。
+        // 立绘走花名册 hireId（H003），禁止再用 LaoDun(H001 盾兵) 顶替。
+        string rescuerId = StoryProgress.TutorialMercHireId;
         StoryDirector.Ensure().Play(new List<StoryBeat>
         {
-            // 只有小白一个人说话：不要摆玩家立绘，直接让她单人居中说
+            // 只有塔克一个人说话：不要摆玩家立绘，直接让他单人居中说
             //（约定：单人说台词一律用 Solo，别摆两个立绘站着不说话）
-            StoryDirector.Solo("小白",
-                "大难不死……回城歇歇吧。需要治疗的话，来酒馆找我。",
-                xiaobaiId)
+            // 台词把钩子3串起来：①「成功撤离」正反馈（不再是「大难不死」的挫败感框架）
+            // ②「带回奖励」让撤离有获得感 ③「我等你回来」种次日留钩子
+            // ④「每日签到别落下」继续指向紧接着弹出的每日登录弹窗。
+            StoryDirector.Solo(StoryProgress.TutorialMercDisplayName,
+                "成功撤离！带回来的奖励够你歇口气。明儿见——我等你回来。每日签到别落下，那儿有我的份。",
+                rescuerId)
                 .Bg(StoryBackgrounds.GuildHall)
                 .SkipReveal()
         }, () => done = true);
@@ -420,9 +424,16 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 highlight, 12f);
 
         StoryProgress.MarkTutorialDone();
-        // 2026-09-29 主人拍板：引导一结束就把小白清掉，不让他跟到正式关卡。
+        // 2026-09-29 主人拍板：引导一结束就把塔克清掉，不让他跟到正式关卡。
         // 引导关撤离走的是 SkipMercHireClearOnEvacuate=true（不清雇佣），所以必须在这里主动清。
         ClearTutorialMerc();
+
+        // 【2026-10-07 主人拍板】引导收尾 → 立刻弹每日登录，把「刚才救场的塔克」和
+        //「签到才能领到塔克」串成一条线（主人原话：回城剧情完了后出现每日登录弹窗，这样能连起来）。
+        // 入口只有一个 TownSceneBootstrap.TryDailyLoginOnce：进 Town 本来也走它，
+        // 只是那时 StoryProgress.TutorialDone 还是 false 会跳过，这里 MarkTutorialDone 之后补一次。
+        TownSceneBootstrap.TryDailyLoginOnce();
+
         _townFlowBusy = false;
         _flow = null;
     }
@@ -466,14 +477,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return EnsureTutorialStep(bm, 2);
         yield return WaitFieldClear(strict: true);
 
-        // —— 1c) 第二次抽（佣兵）：走正式入口 CoMidBattleDraft（冻场 → 弹面板 → 抽一次 → 解冻）。
+        // —— 1c) 第一抽：走正式入口 CoMidBattleDraft（冻场 → 弹面板 → 抽一次 → 解冻）。
         // 抽奖是主玩法，不是引导脚本 —— 这里的节拍只是「什么时候弹」，规则在 SlotMachineSystem。
-        // 2026-10-06 主人拍板：这一发 = **直接招募小白本人入队**（H011 牧师），
-        // 保底卡在 SlotMachineSystem.BuildGuaranteedMercCard（碎片那条口径作废）。
+        // 【2026-10-07 主人拍板】文案不剧透类别（主人原话「不要说这次抽的是佣兵，要给玩家惊喜」），
+        // 三拍统一用 TutorialDrawBeatText —— 类别按 SlotMachineDefs.TutorialDrawOrder 定序。
         // 引导三拍的钱**只有开局那 240**（每拍一抽 80，正好三抽）；不再有任何中途补贴 ——
         // 2026-10-05 主人拍板「清零 + 不要总打补丁」，TUTORIAL_WAVE_BONUS_COINS 整条链路已删。
         if (bm != null)
-            yield return bm.CoMidBattleDraft("打完两波，再抽一次：这次是伙伴。");
+            yield return bm.CoMidBattleDraft(TutorialDrawBeatText);
         // 2026-10-06 主人拍板：招募完立刻刷一次头像栏，否则要等下一次全量刷新才亮出来
         // （ShowMercHud 由本局抽数推导，抽数已在 CoInstantPick 里 +1）。
         ui?.UpdateCharacterSlots();
@@ -530,7 +541,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         try
         {
             yield return TalkBlock(bm, headTalk, restoreAct: false,
-                new TalkLine(Hero.Instance, "糟了，是陷阱！", 1.0f));
+                new TalkLine(Hero.Instance, "糟了，是陷阱！", 2.0f));
         }
         finally
         {
@@ -543,7 +554,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
             bm.AllowMonsterMapEnter = false;
             bm.UnitsCanAct = true;
         }
-        yield return WaitFieldClear(strict: true);
+
+        // —— 3) 埋伏：故意让玩家扛不住 → 喊救命 → 塔克天降一击清场 ——
+        // 【2026-10-07 主人拍板】埋伏这一波改成 7 只纯近战（tutorial_battle.csv order=3，rangedCount=0），
+        // 玩家一个人顶不住。这里**不等清场**：等的是「撑不住」这个时刻（掉血阈值 / 打够时长 / 场上空了），
+        // 然后进「遭了，中埋伏了」的戏，再由每日登录那位稀有佣兵从屏幕外跳进来一刀清场 —— 爽感全在这一拍。
+        yield return CoWaitAmbushPressure(bm);
 
         if (bm != null)
         {
@@ -553,13 +569,31 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         hint.Hide();
         yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "打开看看里面有什么。", 0.7f));
+            new TalkLine(Hero.Instance, "遭了，中埋伏了！这回……要死回城了。", 2.0f),
+            new TalkLine(Hero.Instance, "我刚抽的那把剑还没捂热呢，别啊！", 2.0f));
+
+        // 塔克天降 + 一击清场（他这一拍只是**演出替身**，抽到之后才正式入队）
+        Mercenary rescuer = null;
+        yield return CoTutorialRescueBeat(bm, m => rescuer = m);
+
+        yield return TalkBlock(bm, headTalk, restoreAct: false,
+            new TalkLine(rescuer, "这里不适合你这种的新手。", 2.2f),
+            new TalkLine(rescuer, "我带你出去吧。", 2.2f),
+            new TalkLine(Hero.Instance, "等等——箱子还没开呢！", 1.9f),
+            new TalkLine(rescuer, "……", 1.6f));
+
+        yield return TalkBlock(bm, headTalk, restoreAct: false,
+            new TalkLine(Hero.Instance, "打开看看里面有什么。", 1.7f));
         GameObject groundIcon = null;
         // 2026-10-05 主人拍板：宝箱改掉**天赋石**，不再掉装备 → 这里传 null（箱子里不吐装备），
         // 开箱演出与「清掉埋伏 → 开箱」的节拍原样保留。
         yield return chestDir.CoTutorialOpenChestAndDropEquip(null, g => groundIcon = g);
 
         GrantTutorialChestTalentStones();
+        // 【2026-10-06 主人反馈「宝箱获得的东西太快了，没看到是啥就没了」】
+        // 宝箱给的东西原来只有一条普通 toast，还紧跟着就被下一条引导气泡顶掉。
+        // 这里给足停留时间让玩家看清拿到了什么，再往下走（想再长就调这个秒数）。
+        yield return new WaitForSecondsRealtime(ChestRewardReadSec);
 
         if (groundIcon != null)
             Object.Destroy(groundIcon);
@@ -573,31 +607,35 @@ public class TutorialDirector : Singleton<TutorialDirector>
         Hero.Instance?.costumeManager?.RefreshCostume();
 
         hint.Show("天赋石可以在城镇里点天赋。", null, 1.8f);
-        yield return new WaitForSecondsRealtime(0.2f);
+        yield return new WaitForSecondsRealtime(1.8f);
 
-        // —— 4) 精英波：小白已在队，跟着一起打 ——
-        // 2026-10-06 主人拍板：小白第 2 抽就招募入队了，原来这段
+        // —— 3b) 第二抽：抽中的就是刚才救场那位（塔克·重盾，稀有） ——
+        // 【2026-10-07 主人拍板】天降那位 = 这一抽开出来的佣兵，抽完他正式入队。
+        // ① 两波后（装备）→ ② 这里（按定序出佣兵）→ ③ 精英波清完（技能）。
+        // 保底卡在 SlotMachineSystem.BuildGuaranteedMercCard（碎片那条口径已作废）。
+        hint.Hide();
+        // 演出替身收掉再弹面板：正式入队走 RunDraftDirector.RecruitMerc，不收会变成两个塔克。
+        // 收的时机正好是抽奖面板盖上来的时候，玩家看不到空场。
+        if (rescuer != null) MercenaryManager.Instance?.DespawnMercenary(rescuer);
+        if (bm != null)
+            yield return bm.CoMidBattleDraft(TutorialDrawBeatText);
+        ui?.UpdateCharacterSlots();
+
+        // —— 4) 第三波：塔克已在队，跟着一起打 ——
+        // 2026-10-07 主人拍板：塔克第 2 抽就招募入队了，原来这段
         //「牧师在前方眩晕被围殴 → 清场 → 三段对白 → 入队」**整段删除**，第 4 拍改成普通波次。
         hint.Hide();
         ui?.ApplySoloBattleHudPublic();
         ui?.UpdateCharacterSlots();
 
-        // 小白已经在队里了：这里只从佣兵管理器取场上那个单位（压轴对白 / 撤离要用）
+        // 塔克已经在队里了：这里只从佣兵管理器取场上那个单位（精英宿敌对白 / 压轴 / 撤离要用）
         var activeMercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
         var merc = (activeMercs != null && activeMercs.Count > 0) ? activeMercs[0] : null;
 
-        var step4 = TutorialBattleTable.GetStepOrDefault(4);
-        if (step4.eliteCount > 0)
-        {
-            yield return TalkBlock(bm, headTalk, restoreAct: false,
-                new TalkLine(Hero.Instance, "有个块头更大的！", 0.75f));
-            // 2026-09-28 主人要求：这段说完先砸「首领来袭」预告，再开始战斗
-            // （怪在下一行 QueueTutorialStep 才刷，预告播完正好开打；精英血条由 BattleBossHpBar 显示）
-            yield return BattleWaveAnnounceUI.CoPlay(BattleWaveAnnounceUI.Kind.Boss,
-                $"精英 ×{step4.eliteCount} 来袭");
-        }
-        // 2026-10-06 主人拍板：没有要救的人了 → 去掉 forcedTarget，怪正常打
-        bm?.QueueTutorialStep(4);
+        // 【2026-10-07 主人拍板「数据表最好不要为了引导改动」】
+        // 这一拍直接用表里现成的 **order=5 普通波**（4 只，含 1 远程），一个数字都不改；
+        // 表上含 1 精英的 order=4 留给后面的宿敌戏（见下）。
+        bm?.QueueTutorialStep(5);
 
         // 不冻结战斗：玩家可随时上前清怪。
         // 2026-09-18：这里原本会直接改写 Hero 坐标把玩家往前推（最高 18/秒），
@@ -620,8 +658,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         AllowBattleSkillClick = false;
 
+        // 【2026-10-07 主人反馈「佣兵说的话太快了，没看到」】0.75 → 1.9（同上：气泡停留拉长）。
         yield return TalkBlock(bm, headTalk,
-            new TalkLine(merc, "我在后面托着，一起上。", 0.75f));
+            new TalkLine(merc, "跟紧我，别走散。", 1.9f));
         headTalk?.HideNow();
         hint.Hide();
 
@@ -632,14 +671,56 @@ public class TutorialDirector : Singleton<TutorialDirector>
         //   拖拽教学改由 SkillOrderGuide 做软引导：玩家凑够 2 个技能时弹一条会自己消失的气泡，不挡操作。
         // 第三抽的钱来自开局 240 的最后 80（240 − 80×3 = 0），中途没有任何补贴。
         if (bm != null)
-            yield return bm.CoMidBattleDraft("再抽一次：这次是本命技能。");
+            yield return bm.CoMidBattleDraft(TutorialDrawBeatText);
         if (bm != null) bm.UnitsCanAct = true;
 
+        // —— 5) 精英宿敌：认出塔克 → 放狠话 → 打到残血留遗言 ——
+        // 【2026-10-07 主人拍板】精英和塔克有过节：出场点名挑衅，被塔克打死前留一句
+        //「我不过是个小杂鱼……你前面的路将会是一片黑暗」，然后塔克「……」「走吧」收尾。
+        // 用表里现成的 **order=4**（本来就是「含 1 精英」那波，HP 档 55~65），不新增、不改数值。
+        var stepElite = TutorialBattleTable.GetStepOrDefault(4);
+        if (stepElite.eliteCount > 0)
+        {
+            // 【2026-10-07 主人反馈「玩家说的 boss 那句话也没看到」】先让玩家自己喊一句，
+            // 再砸「精英来袭」预告 —— 两句之间要能看清字，停留一律 ≥1.9s。
+            yield return TalkBlock(bm, headTalk, restoreAct: false,
+                new TalkLine(Hero.Instance, "有个块头更大的！", 1.9f));
+            yield return BattleWaveAnnounceUI.CoPlay(BattleWaveAnnounceUI.Kind.Boss,
+                $"精英 ×{stepElite.eliteCount} 来袭");
+        }
+        yield return EnsureTutorialStep(bm, 4);
+        if (bm != null) bm.UnitsCanAct = true;
         hint.Show("组队后佣兵会自动战斗。", null, 3f);
-        yield return EnsureTutorialStep(bm, 5);
+
+        Monster rival = null;
+        yield return CoFindWaveElite(bm, m => rival = m);
+
+        if (rival != null && !rival.isDead)
+        {
+            // 【2026-10-07 主人反馈「说的话太快了，没看到」】气泡停留一律往 2 秒以上给。
+            yield return TalkBlock(bm, headTalk, restoreAct: false,
+                new TalkLine(rival, "老大交代过：小心那个扛盾的。说的就是你吧？", 2.4f),
+                new TalkLine(rival, "我看也没什么了不起——让我试试你的实力。", 2.4f));
+            if (bm != null) bm.UnitsCanAct = true;
+        }
+        else
+        {
+            Debug.LogError("[Tutorial] 精英波没找到精英单位（order=4 的 eliteCount 是不是写 0 了？），宿敌对白跳过");
+        }
+
         // —— V6 P3：这一波充满能量，让玩家看见技能自动放出去 ——
         yield return CoWatchPlayerSkill(bm, hint);
+
+        if (rival != null)
+            yield return CoEliteLastWords(bm, headTalk, rival);
+
         yield return WaitFieldClear(strict: true);
+
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(merc, "……", 1.8f),
+            new TalkLine(merc, "走吧。", 2.0f));
+        headTalk?.HideNow();
+        hint.Hide();
 
         // —— 压轴：夹击 + 2 精英，正常打不完 —— 把「撤离」教成玩家自己的判断 ——
         yield return CoFinalPressureBeat(bm, hint, headTalk, merc);
@@ -683,6 +764,195 @@ public class TutorialDirector : Singleton<TutorialDirector>
     {
         if (u == null || u.rb == null) return;
         u.rb.velocity = Vector2.zero;
+    }
+
+    // ============================================================
+    // 埋伏拍：撑不住 → 塔克天降一击清场（2026-10-07 主人拍板）
+    // ============================================================
+
+    /// <summary>天降那一击的伤害：直接判死，不走数值（演出用，不是战斗平衡）。</summary>
+    const float TutorialRescueDamage = 999999f;
+
+    /// <summary>天降起点：玩家右侧这么远 = 屏幕外。</summary>
+    const float RescueEnterDist = 9.5f;
+
+    /// <summary>天降落点：玩家右前方这么远（站到玩家和怪之间）。</summary>
+    const float RescueLandDist = 2.0f;
+
+    /// <summary>
+    /// 埋伏拍：等「玩家撑不住」这个时刻 —— 掉血跌破阈值 / 打够时长 / 场上清了，哪个先到算哪个。
+    ///
+    /// <para>为什么不等 <c>WaitFieldClear</c>：主人要的是「被围殴到喊救命」，
+    /// 让玩家自己打完就没有天降的理由了（7 只纯近战是照这个意图配的，见 tutorial_battle.csv order=3）。</para>
+    /// </summary>
+    IEnumerator CoWaitAmbushPressure(BattleManager bm)
+    {
+        // 【2026-10-07 主人拍板「数据表不要为了引导改动」】埋伏波就用表里现成的 4 只（order=3），
+        // 不再为引导把数量加到 7 —— 塔克一击一个，几只都能秒，爽感不靠堆量。
+        // 所以这里等的是「玩家扛不住」的时刻，不是等清场：掉血阈值收紧、时长缩短，
+        // 保证天降那一刻场上还有怪可杀（玩家真把 4 只清完了才走 finally 那条分支）。
+        const float maxWait = 5f;
+        const float bailHpRatio = 0.62f;
+        float t = 0f;
+        while (t < maxWait)
+        {
+            if (bm == null) break;
+            var hero = Hero.Instance;
+            if (hero == null || hero.isDead) break;
+            if (bm.GetAliveMonsterCount() <= 0) break;
+
+            float max = hero.attr != null ? hero.attr.GetAttr(AttrType.MaxHp) : 0f;
+            if (max > 0f && hero.currentHp / max <= bailHpRatio) break;
+
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+    }
+
+    /// <summary>
+    /// 【2026-10-07 主人拍板】埋伏拍的高潮：<see cref="StoryProgress.TutorialMercDisplayName"/>（塔克·重盾，稀有）
+    /// 从屏幕外跳进来，落地一击（每个怪身上落一道闪电）把场上小怪全清掉。
+    ///
+    /// <para>⚠ 出场这位是<b>演出替身</b>：真正入队走下一拍的抽奖招募（<c>RunDraftDirector.RecruitMerc</c>），
+    /// 所以调用方要在弹抽奖面板之前 <c>MercenaryManager.DespawnMercenary</c> 收掉他 —— 不然场上两个塔克。</para>
+    ///
+    /// <para>只改坐标做抛物线跳跃，不碰动画器、不改预制体（以主人预制体效果为准）。</para>
+    /// </summary>
+    IEnumerator CoTutorialRescueBeat(BattleManager bm, System.Action<Mercenary> onSpawned)
+    {
+        onSpawned?.Invoke(null);
+        if (bm == null) yield break;
+
+        var merc = bm.SpawnTutorialMercAt(null, 1f, RescueEnterDist, stunned: false);
+        if (merc == null)
+        {
+            Debug.LogError("[Tutorial] 塔克天降失败：SpawnTutorialMercAt 返回空（救场演出整段跳过，流程继续）");
+            yield break;
+        }
+        onSpawned?.Invoke(merc);
+
+        float heroX = Hero.Instance != null ? UnitBase.GetCombatX(Hero.Instance) : 0f;
+        float z = bm.unitRoot != null ? bm.unitRoot.position.z : merc.transform.position.z;
+        float fromX = heroX + RescueEnterDist;
+        float toX = heroX + RescueLandDist;
+
+        // ① 抛物线跳进来（0.55 秒）：只改世界坐标
+        const float jumpDur = 0.55f;
+        const float jumpHeight = 2.6f;
+        float jt = 0f;
+        while (jt < jumpDur)
+        {
+            jt += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(jt / jumpDur);
+            float x = Mathf.Lerp(fromX, toX, k);
+            float y = UnitBase.GROUND_Y + Mathf.Sin(k * Mathf.PI) * jumpHeight;
+            GameConfig.SetWorldPosition(merc.gameObject, new Vector3(x, y, z));
+            yield return null;
+        }
+        GameConfig.SetWorldPosition(merc.gameObject, new Vector3(toX, UnitBase.GROUND_Y, z));
+
+        // ② 落地一击：**一击一个**（主人口径「那个佣兵就能一击打死一个怪」）——
+        // 每只怪身上一道闪电 + 走正常受伤流程判死（尸体动画 / 掉落照旧），
+        // 逐只错开 0.07s，读起来是「一刀一个扫过去」，不是一坨同时消失。
+        var vfx = BattleVFXSystem.Instance;
+        var victims = new List<UnitBase>();
+        for (int i = 0; i < bm.monsters.Count; i++)
+        {
+            var m = bm.monsters[i];
+            if (m != null && !m.isDead) victims.Add(m);
+        }
+        for (int i = 0; i < victims.Count; i++)
+        {
+            var m = victims[i];
+            if (m == null || m.isDead) continue;
+            vfx?.PlayLightning(m.transform.position, VfxFaction.Ally);
+            m.TakeDamage(TutorialRescueDamage, true, true, true, 0, merc);
+            if (i < victims.Count - 1)
+                yield return new WaitForSecondsRealtime(0.07f);
+        }
+        Debug.Log($"[Tutorial] 塔克天降一击清场：{victims.Count} 只");
+
+        yield return new WaitForSecondsRealtime(0.45f);
+    }
+
+    // ============================================================
+    // 精英宿敌拍（2026-10-07 主人拍板）
+    // ============================================================
+
+    /// <summary>精英血量跌到这个比例就说遗言（说完好让塔克收掉他）。</summary>
+    const float EliteLastWordsHpRatio = 0.30f;
+
+    /// <summary>
+    /// 等精英真刷出来（波次是异步进场的），找到就回调出去。
+    /// 找精英只看 <c>Monster.IsEliteWave</c> 一处真源，找不到再按满血最高的那只兜 ——
+    /// 兜不住就回 null，由调用方 LogError，绝不拿普通小怪冒充精英说台词。
+    /// </summary>
+    IEnumerator CoFindWaveElite(BattleManager bm, System.Action<Monster> onFound)
+    {
+        onFound?.Invoke(null);
+        if (bm == null) yield break;
+
+        float t = 0f;
+        Monster elite = null;
+        while (t < 8f)
+        {
+            elite = FindElite(bm);
+            if (elite != null) break;
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (elite == null)
+        {
+            // 再按「满血最高」兜一次：精英血档本来就比小怪高一截
+            float best = -1f;
+            for (int i = 0; i < bm.monsters.Count; i++)
+            {
+                var m = bm.monsters[i] as Monster;
+                if (m == null || m.isDead) continue;
+                float maxHp = m.attr != null ? m.attr.GetAttr(AttrType.MaxHp) : 0f;
+                if (maxHp > best) { best = maxHp; elite = m; }
+            }
+        }
+
+        onFound?.Invoke(elite);
+    }
+
+    static Monster FindElite(BattleManager bm)
+    {
+        if (bm == null || bm.monsters == null) return null;
+        for (int i = 0; i < bm.monsters.Count; i++)
+        {
+            var m = bm.monsters[i] as Monster;
+            if (m != null && !m.isDead && m.IsEliteWave) return m;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 精英残血遗言：血跌到 <see cref="EliteLastWordsHpRatio"/> 就冻场让他把话说完再死。
+    /// 已经死了 / 超时没打到残血 → 直接返回，不拖流程（不倒回来补台词）。
+    /// </summary>
+    IEnumerator CoEliteLastWords(BattleManager bm, BattleHeadTalkUI headTalk, Monster elite)
+    {
+        if (bm == null || elite == null || elite.isDead) yield break;
+
+        float maxHp = elite.attr != null ? elite.attr.GetAttr(AttrType.MaxHp) : 0f;
+        if (maxHp <= 0f) yield break;
+
+        float t = 0f;
+        while (t < 25f)
+        {
+            if (elite == null || elite.isDead) yield break;
+            if (elite.currentHp / maxHp <= EliteLastWordsHpRatio) break;
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (elite == null || elite.isDead) yield break;
+
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(elite, "我不过是个小杂鱼……", 2.2f),
+            new TalkLine(elite, "可你前面的路，将会是一片黑暗。", 2.6f));
     }
 
     /// <summary>
@@ -942,7 +1212,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
     //   小白现在由正式招募链路 RunDraftDirector.RecruitMerc 入队 → 整方法删除，不留死代码。
 
     /// <summary>
-    /// 2026-09-29 主人拍板：小白是**引导期佣兵**，引导结束就清空，不跟到正式关卡。
+    /// 2026-09-29 主人拍板：引导佣兵（现为塔克）是**引导期佣兵**，引导结束就清空，不跟到正式关卡。
     /// 同时清 hiredMercs（本局雇佣）与 permanentMercs（旧存档可能残留的那一条）。
     /// 之后想在正式关卡里带佣兵，只能靠进关抽奖。
     /// </summary>
@@ -1000,11 +1270,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (preloadStep > 0)
             yield return EnsureTutorialStep(bm, preloadStep);
 
-        // 2026-10-06：① 原话「能量满」是纯冷却制之前的旧文案，改回「冷却好」；
-        // ② 补一句顺序角标，让玩家一眼知道 ① 先放、整理阶段可拖动改。
-        hint.Show("技能冷却好会自动释放，无需点击；顺序看左上角 ①②③④。", null, 3.5f);
+        // 【2026-10-07 主人拍板】这句「技能自动释放 + 顺序」的提示**不再开局就弹** ——
+        // 它属于「抽中技能、能调整顺序」的那一拍，出口收敛到 SkillOrderGuide.Text（唯一文案源），
+        // 由 RunSkillBarUI.Refresh 在技能数凑够 2 个时弹。这里只保留原来的 3.2 秒空档：
+        // 这段时间是给上面 preloadStep 刷出来的第一波怪走进场用的（主人口径「第一波要早点」），
+        // 别把 yield 一起删掉，删了怪会站得更远。
         yield return new WaitForSecondsRealtime(3.2f);
-        hint.Hide();
         // 【2026-10-05 「不要摇杆了」→ 停用，先注释不删】
         // BattleJoystick.Instance?.ResetStickIdle();
 
@@ -1076,12 +1347,33 @@ public class TutorialDirector : Singleton<TutorialDirector>
     /// </summary>
     const int TutorialChestTalentStones = 3;
 
+    /// <summary>
+    /// 开箱拿到东西后，留给玩家看清楚的停留秒数。
+    /// 【2026-10-06 主人反馈「宝箱获得的东西太快了，没看到是啥就没了」】—— 要再长就调这一个值。
+    /// </summary>
+    const float ChestRewardReadSec = 1.6f;
+
+    /// <summary>
+    /// 引导三拍抽奖的统一文案（2026-10-07 主人拍板）。
+    ///
+    /// <para>① <b>不剧透类别</b>：原来写的是「这次是伙伴 / 这次是本命技能」，
+    /// 主人原话「不是说过不要说这次抽的是佣兵吗，要给玩家惊喜」——抽到什么自己开出来才有惊喜感。</para>
+    /// <para>② <b>三拍同一句</b>：文案只有这一个出口，别在三处各写一份（铁律「不多入口」）。</para>
+    /// </summary>
+    const string TutorialDrawBeatText = "清场！奖励你抽一次 —— 开出什么全看手气。";
+
     static void GrantTutorialChestTalentStones()
     {
         if (TutorialChestTalentStones <= 0) return;
         ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, TutorialChestTalentStones,
                            save: true, notify: true);
-        UIManager.Instance?.ShowToast($"获得天赋石 ×{TutorialChestTalentStones}");
+        // 【2026-10-06 主人拍板：物品变动一律 force 弹出】普通 toast 会被引导遮罩/气泡吞掉，
+        // 走 GlobalToastUI 的 force 通道，保证宝箱给的东西一定露脸。
+        GlobalToastUI.Show($"获得天赋石 ×{TutorialChestTalentStones}", true);
+        // 【2026-10-07 主人反馈「获得天赋石没有在顶条资源那显示」】
+        // 顶栏只在 AutoGameInitializer 里刷过一次，中途拿到石头不会自己重画；
+        // 这里拿到就刷一次，玩家能在顶条上看到数字从 0 变成 3。
+        BattleUI.Instance?.UpdateTopBarResources();
     }
 
     static EquipInstance CreateTutorialEquipDrop()
