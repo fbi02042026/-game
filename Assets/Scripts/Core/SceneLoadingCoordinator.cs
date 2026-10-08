@@ -49,6 +49,11 @@ public static class SceneLoadingCoordinator
         GameBgm.SetPending(target == LoadTarget.Town ? GameBgm.Track.Town : GameBgm.Track.Battle);
         BattleLoadingOverlay.Show(storyTip);
         BattleLoadingOverlay.SetProgress(0f);
+        // 【2026-10-06 主人拍板】主人反馈「登录进主城 Loading 没走完就有城镇曲」→ 先只加诊断日志、不改行为。
+        // [LoadDiag] 与 [BgmDiag] 对齐看：Begin(静音开始) → Finish(进度封顶) → Hide+Unmute(BGM 放行)。
+        Debug.Log($"[LoadDiag] Begin target={target} tip={storyTip} " +
+                  $"scene={UnityEngine.SceneManagement.SceneManager.GetActiveScene().name} " +
+                  $"overlayShowing={BattleLoadingOverlay.IsShowing} bgmMuted={GameBgm.IsLoadingMuted}");
         StartDisplayTick();
     }
 
@@ -89,6 +94,9 @@ public static class SceneLoadingCoordinator
         if (!_active || _finishRequested) return;
         _finishRequested = true;
         _realProgress = 1f;
+        // 【2026-10-06 主人拍板】诊断用：进度封顶时刻。这条之后还要 hold 0.4s + 走到 100% 才会放行 BGM。
+        Debug.Log($"[LoadDiag] Finish requested display={_displayProgress:F3} real={_realProgress:F3} " +
+                  $"overlayShowing={BattleLoadingOverlay.IsShowing} bgmMuted={GameBgm.IsLoadingMuted}");
     }
 
     static void StartDisplayTick()
@@ -137,6 +145,10 @@ public static class SceneLoadingCoordinator
                 holdT += dt;
                 if (holdT >= HoldAt100Seconds)
                 {
+                    // 【2026-10-06 主人拍板】诊断用：真正放行 BGM 的时刻。
+                    // 若这里是 1.000 且 Hide 后 overlayShowing=false，说明 BGM 放行时机是对的，声音另有来源。
+                    Debug.Log($"[LoadDiag] Hide+Unmute display={_displayProgress:F3} " +
+                              $"overlayShowing(beforeHide)={BattleLoadingOverlay.IsShowing} bgmMuted={GameBgm.IsLoadingMuted}");
                     BattleLoadingOverlay.Hide();
                     GameBgm.UnmuteAfterLoading();
                     GameAudio.UnmuteAfterLoading();

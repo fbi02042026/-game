@@ -17,6 +17,12 @@ public abstract class BattleMode : IBattleMode
 
     public virtual bool DropsEquipment => true;
 
+    /// <summary>默认不送免费抽 —— 主线靠「每关产出」走正常取舍，不该有无偿次数。</summary>
+    public virtual int FreeEntryDraws => 0;
+
+    /// <summary>默认通关发局内抽奖币（主线：每关 +<c>COIN_PER_*</c>）。</summary>
+    public virtual bool GrantsRunCoins => true;
+
     public virtual void BuildChapter(ChapterManager cm, int chapter)
     {
         if (cm == null)
@@ -65,6 +71,15 @@ public sealed class GoldDungeonBattleMode : BattleMode
     public override bool IsPlayable => false;
 
     public override bool DropsEquipment => false;
+
+    /// <summary>
+    /// 金币本开局免费抽 <see cref="SlotMachineDefs.GOLD_DUNGEON_FREE_DRAWS"/> 次（主人暂定 5）。
+    /// 想调次数只改那一个常量，这里不动。
+    /// </summary>
+    public override int FreeEntryDraws => SlotMachineDefs.GOLD_DUNGEON_FREE_DRAWS;
+
+    /// <summary>金币本通关不发局内抽奖币 —— 打完就结算回城、币随局清零，发了等于白发。</summary>
+    public override bool GrantsRunCoins => false;
 
     public override void BuildChapter(ChapterManager cm, int chapter)
     {

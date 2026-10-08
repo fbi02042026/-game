@@ -22,6 +22,13 @@ public class RunMercEntry
     public int star = 1;
     public string skillId;
     public string passiveSkillId;
+    /// <summary>
+    /// 本局是否已阵亡（2026-10-06 主人拍板）：阵亡不再「下一关满血白嫖复活」，
+    /// 而是带惩罚复活 —— 血 20% 起步，之后每通过一关 +30%，回到 100% 才算彻底养回来。
+    /// </summary>
+    public bool fallen;
+    /// <summary>阵亡后已经通过的关数（0 = 刚死，下一关就是 20% 血进场）。</summary>
+    public int fallenStages;
 
     public MercenaryData ToMercenaryData()
     {
@@ -58,6 +65,11 @@ public class RunLoadoutData
     public List<RunMercEntry> mercs = new List<RunMercEntry>();
     /// <summary>流派势能（Phase 2）：累积点，不换不退。</summary>
     public List<StringIntEntry> themeEntries = new List<StringIntEntry>();
+    /// <summary>
+    /// 本局已抽奖次数（2026-10-05 新增）：引导局「装备→佣兵→技能」定序的序号就靠它推进，
+    /// 随构筑一起落 PlayerPrefs、局末一起清空 —— 所以「本局第几次抽」跨关累计。
+    /// </summary>
+    public int drawCount;
 }
 
 /// <summary>
@@ -162,6 +174,19 @@ public static class RunLoadout
         BeginNew(job);
         Debug.Log($"[RunLoadout] 开新局：job={(int)job}");
         return false;
+    }
+
+    /// <summary>本局已抽奖次数（引导定序用；正式关只作统计）。没开局时返回 0。</summary>
+    public static int DrawCount => _data != null ? _data.drawCount : 0;
+
+    /// <summary>
+    /// 记一次抽奖：把保底定序的序号往前推一格，并立刻落盘（中途退游戏也不会重抽）。
+    /// </summary>
+    public static void NoteDraw()
+    {
+        if (_data == null) return;
+        _data.drawCount++;
+        Save();
     }
 
     public static bool HasResumable()
@@ -302,6 +327,14 @@ public static class RunLoadout
             _starRecord[id] = star;
     }
 
+    /// <summary>
+    /// 本局身上**有没有**技能（一个都算没有）。
+    /// 真源 = 这一份；「本局第一次拿到技能要给本命技」的判定只认它
+    ///（见 <c>SlotMachineSystem.BuildGuaranteedSkillCard</c>）。
+    /// 2026-10-05：正式关改纯随机后，保底不再挂在「第几抽」这个序号上，改判这个。
+    /// </summary>
+    public static bool HasAnySkill => _data?.skills != null && _data.skills.Count > 0;
+
     public static bool IsSkillFull => _data?.skills != null && _data.skills.Count >= MaxSkillSlots;
 
     /// <summary>获得新技能；槽位满或已拥有则失败。</summary>
@@ -408,10 +441,74 @@ public static class RunLoadout
     public static bool TryAddMerc(RunMercEntry entry)
     {
         if (_data == null || entry == null || string.IsNullOrEmpty(entry.mercId)) return false;
-        if (IsMercFull || HasMerc(entry.hireId ?? entry.mercId)) return false;
+        if (HasMerc(entry.hireId ?? entry.mercId)) return false;
         _data.mercs ??= new List<RunMercEntry>();
-        _data.mercs.Add(entry);
+
+        if (!IsMercFull)
+        {
+            _data.mercs.Add(entry);
+            return true;
+        }
+        // 2026-10-06 主人拍板：位子满了但**有人阵亡** → 新人直接顶掉阵亡那个（满血满蓝进，按卡面星级）。
+        // 旧实现是「位满就 return false」，导致阵亡佣兵永久占坑、玩家抽到新佣兵却加不进来。
+        int fallenAt = IndexOfFallenMerc();
+        if (fallenAt < 0) return false;
+        _data.mercs[fallenAt] = entry;
+        _data.mercs[fallenAt].fallen = false;
+        _data.mercs[fallenAt].fallenStages = 0;
         return true;
+    }
+
+    /// <summary>第一个「已阵亡」佣兵的下标；没有返回 -1。</summary>
+    public static int IndexOfFallenMerc()
+    {
+        if (_data?.mercs == null) return -1;
+        for (int i = 0; i < _data.mercs.Count; i++)
+        {
+            var m = _data.mercs[i];
+            if (m != null && m.fallen) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// 标记某佣兵阵亡（2026-10-06）。阵亡计数清零 → 下一关按最低档 20% 血复活。
+    /// 由 BattleManager.OnMercenaryDead 调用，是「阵亡」这件事的唯一入口。
+    /// </summary>
+    public static void MarkMercFallen(string hireIdOrMercId)
+    {
+        var m = FindMerc(hireIdOrMercId);
+        if (m == null) return;
+        m.fallen = true;
+        m.fallenStages = 0;
+    }
+
+    /// <summary>
+    /// 每通过一关调用一次：阵亡过的佣兵养回 30% 血（封顶 100%）。
+    /// 2026-10-06 主人拍板：要有回血路径，否则 20% 血进场必然连死成死亡螺旋。
+    /// </summary>
+    public static void TickFallenMercsStagePassed()
+    {
+        if (_data?.mercs == null) return;
+        for (int i = 0; i < _data.mercs.Count; i++)
+        {
+            var m = _data.mercs[i];
+            if (m == null || !m.fallen) continue;
+            if (m.fallenStages >= GameConfig.MERC_REVIVE_STAGES_TO_FULL) continue;
+            m.fallenStages++;
+        }
+    }
+
+    /// <summary>
+    /// 阵亡佣兵的复活血比例（唯一出口）：20% 起步，每通过一关 +30%，封顶 100%。
+    /// 没阵亡过的佣兵返回 1（满血进场，与旧行为一致）。
+    /// </summary>
+    public static float MercReviveHpRatio(RunMercEntry entry)
+    {
+        if (entry == null || !entry.fallen) return 1f;
+        float r = GameConfig.MERC_REVIVE_HP_BASE
+                  + GameConfig.MERC_REVIVE_HP_PER_STAGE * Mathf.Max(0, entry.fallenStages);
+        return Mathf.Clamp01(r);
     }
 
     public static RunMercEntry FindMerc(string hireIdOrMercId)
@@ -556,8 +653,29 @@ public static class RunLoadout
         }
         foreach (var kv in _themeCache)
             power += kv.Value * 30;
+
+        // 【2026-10-06 主人拍板】本局战力要「算上所有的」—— 已穿戴装备也必须计入。
+        // 之前只算等级/技能/佣兵/主题协同，抽到装备战力纹丝不动，玩家看不到反馈。
+        // 口径与上面保持一致：稀有度 + 星级 + 强化等级，三项各自一个系数。
+        var bag = GridBackpackSystem.Instance;
+        if (bag != null)
+        {
+            for (int i = 0; i < PowerEquipSlots.Length; i++)
+            {
+                var eq = bag.GetEquippedInSlot(PowerEquipSlots[i]);
+                if (eq == null) continue;
+                power += (int)eq.rarity * 60 + Mathf.Max(1, eq.star) * 90 + Mathf.Max(0, eq.enhanceLevel) * 45;
+            }
+        }
         return power;
     }
+
+    /// <summary>计入战力的装备部位。写死数组避免 <c>Enum.GetValues</c> 每次装箱（战力刷新很频繁）。</summary>
+    static readonly EquipSlotType[] PowerEquipSlots =
+    {
+        EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.Hands, EquipSlotType.Feet,
+        EquipSlotType.Cape, EquipSlotType.MainHand, EquipSlotType.OffHand
+    };
 
     /// <summary>本局战力相对上一档的提升（UI 弹跳用），无则返回 0。</summary>
     public static int ConsumeLastDelta()

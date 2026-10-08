@@ -136,11 +136,16 @@ public static class BackpackGridVisual
             }
             else
             {
-                EquipRarityMaterials.Apply(img, p.equip.rarity);
+                // 【2026-10-06 主人拍板】装备图片上**不挂任何稀有度效果**（UI 图标一律走内置默认材质，
+                // 透明通道才正常）；稀有度改在格子外沿画一圈描边（见下面 EquipRarityRim.Apply）。
+                EquipRarityMaterials.Apply(img);
                 img.color = !hasIcon
                     ? (p.equipped ? new Color(0.35f, 0.35f, 0.4f, 0.95f) : new Color(0.45f, 0.5f, 0.62f, 0.95f))
                     : (p.equipped ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white);
             }
+
+            // 稀有度描边：只有装备有稀有度，道具不画。压在图标之上、角标之下（所以放在角标之前）。
+            EquipRarityRim.Apply(go.transform, isItem ? (Rarity?)null : p.equip.rarity);
 
             if (!hasIcon)
                 AddNameFallback(go.transform,

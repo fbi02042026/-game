@@ -33,6 +33,8 @@ public partial class BattleUI : MonoBehaviour
                 // 与佣兵技能槽同一口径（没有就不显示，别留空字占位）。
                 slot.SetLabelVisible(false);
                 slot.SetLevelText("");
+                slot.SetOrderText("");   // 空槽不标序号，避免「这格也算一发」的误读
+                slot.SetNewBadge(false); // 空槽不可能「新」
                 slot.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
                 slot.SetEnergyFill(0f);
                 if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
@@ -54,9 +56,21 @@ public partial class BattleUI : MonoBehaviour
             // 右下角等级：2026-09-22 主人要求——战斗内技能只升级，右下角只显示**数字**，
             // 不要再拼「★」前缀（数字节点用预制体里美术摆的 level，见 BindRunSkillSlots）
             slot.SetLevelText(star > 0 ? star.ToString() : "");
+            // 左上角序号 = 释放优先级（① 最先放）。不拖拽时 = 获得技能的先后顺序，
+            // 玩家在整理阶段拖动槽位改顺序后，这里跟着 RunLoadout.SkillIds() 一起变。
+            slot.SetOrderText(SkillOrderLabel(i));
+            // 【2026-10-06 主人拍板】本拍抽奖刚拿到的技能，右上角亮「新」，点「继续」后清。
+            slot.SetNewBadge(NewLootMarks.Has(NewLootMarks.KindSkill, id));
         }
 
         LogRunSkillDiagnostics(ids);
+    }
+
+    /// <summary>技能槽序号文案：0→① … 9→⑩；再往后没有圈字符号，返回空串（底部只有 4 槽，走不到）。</summary>
+    static string SkillOrderLabel(int index)
+    {
+        if (index < 0 || index > 9) return "";
+        return ((char)(0x2460 + index)).ToString();
     }
 
     /// <summary>玩家技能图标：Resources 优先（打包可用），编辑器再兜 Art 源目录；与 SkillSelectUI 同路径口径。</summary>
@@ -152,11 +166,15 @@ public partial class BattleUI : MonoBehaviour
                 slot.SetEnergyFill(0f);
                 if (slot.cooldownText != null) slot.cooldownText.gameObject.SetActive(false);
                 slot.SetCooldownRatio(0f);
+                slot.SetNewBadge(false);
                 continue;
             }
 
             slot.SetAvatar(MercSkillTable.LoadIcon(caster.ActiveSkillId));
-            slot.SetEnergyFill(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(i) : 0f);
+            // 【2026-10-06 主人拍板】佣兵技能刚抽到时右上角亮「新」，点「继续」后清。
+            slot.SetNewBadge(NewLootMarks.Has(NewLootMarks.KindSkill, caster.ActiveSkillId));
+            // 2026-10-06：底部细条语义由「充能」改为「剩余 MP 比例」（仍 0~1）
+            slot.SetEnergyFill(BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(i) : 0f);
         }
     }
 
@@ -190,12 +208,14 @@ public partial class BattleUI : MonoBehaviour
             var caster = m != null ? m.SkillCaster : null;
             if (caster == null) continue;
 
-            slot.SetEnergyFill(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(i) : 0f);
+            slot.SetEnergyFill(BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(i) : 0f);
             if (slot.cooldownMask == null) continue;
             // 冷却改为黑色半透遮罩 + Radial360 收缩（钟表式）：剩余/总时长。
             float cd = caster.CooldownRemain;
             float total = caster.CooldownTotal;
             slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
+            // 同上（2026-10-07 主人拍板）：佣兵技能也给数字倒计时，口径与玩家技能一致。
+            slot.SetCooldownText(cd > 0.05f ? Mathf.CeilToInt(cd).ToString() : "");
         }
     }
 
@@ -229,12 +249,20 @@ public partial class BattleUI : MonoBehaviour
             {
                 // 缺陷3：空槽（技能已卸下）清掉上一次残留的冷却遮罩
                 slot.SetCooldownRatio(0f);
+                slot.SetMpShortage(false);
                 continue;
             }
+            // 2026-10-06：蓝不够这一发 → 头像压暗，让玩家一眼看出「这个现在放不出来」。
+            // 无蓝技能（耗蓝 0）永远不压暗 —— 它们是地板节奏，照常按 CD 放。
+            float mpNeed = PlayerSkillDefs.MpCostOf(ids[i]);
+            slot.SetMpShortage(bm != null && mpNeed > 0f && !bm.CanAffordPlayerMp(mpNeed));
             // 冷却改为黑色半透遮罩 + Radial360 收缩（钟表式）：剩余/总时长。
             float cd = sys != null ? sys.GetPlayerSkillCooldownRemaining(i) : 0f;
             float total = sys != null ? sys.GetPlayerSkillCooldownTotal(i) : 0f;
             slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
+            // 【2026-10-07 主人拍板】转圈之外再给一个**数字倒计时**（主人原话「技能的 CD 写个数字倒计时」）：
+            // 只剩 0.05s 以上才显示，向上取整（剩 2.3s 显示 3），归零立刻清空，不留一个「0」闪一下。
+            slot.SetCooldownText(cd > 0.05f ? Mathf.CeilToInt(cd).ToString() : "");
         }
     }
 
@@ -283,8 +311,10 @@ public partial class BattleUI : MonoBehaviour
                 ?? (m0 != null && mm != null ? mm.GetIcon(m0.mercId) : null)
                 ?? GetMercSkillIcon(m0);
             merc1SkillAvatar?.SetAvatar(icon);
+            // 2026-10-06：蓝条只看「这个技能有没有蓝」—— 无蓝技能（物攻/防御/被动）纯 CD，不显示蓝条。
             if (mercSlot1 != null && m0 != null)
-                mercSlot1.SetEnergyEnabled(m0.SkillCaster != null && m0.SkillCaster.HasActiveSkill && !MercSkillMigrate.IsMercSkillAutoCast());
+                mercSlot1.SetEnergyEnabled(m0.SkillCaster != null && m0.SkillCaster.HasActiveSkill
+                                           && m0.SkillCaster.MpType != MpArchetype.None);
             return;
         }
 

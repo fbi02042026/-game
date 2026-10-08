@@ -75,7 +75,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
     // ── 内部状态 ──
     static readonly string[] ModeNames  = { "主线冒险", "每日副本", "迷宫探索", "BOSS挑战", "活动副本" };
     // 2026-09-17：删除「地狱」——它与噩梦共用同一数值分支，是空壳。现在只有 普通 / 困难 / 噩梦 三档。
-    static readonly string[] DiffNames  = { "普通", "困难", "噩梦" };
+    // 2026-10-06：难度名一份拷贝都不留，全部改走 GameConfig.GetDifficultyName（战斗内 HUD 也读它）。
     static readonly Color    ColNormal  = new Color(0.30f, 0.55f, 0.22f, 1f);
     static readonly Color    ColHard    = new Color(0.28f, 0.42f, 0.65f, 1f);
     static readonly Color    ColNight   = new Color(0.45f, 0.22f, 0.62f, 1f);
@@ -1112,7 +1112,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
         for (int i = 0; i < GameConfig.DIFF_COUNT; i++)
         {
             int idx = i;
-            var dBtn = BuildDiffBtn(panel.transform, DiffNames[i], diffCols[i], i, diffY);
+            var dBtn = BuildDiffBtn(panel.transform, GameConfig.GetDifficultyName(i), diffCols[i], i, diffY);
             difficultyButtons[i] = dBtn;
             var lbls = dBtn.GetComponentsInChildren<Text>(true);
             if (lbls.Length > 0) difficultyLabels[i] = lbls[0];
@@ -1952,7 +1952,10 @@ public class AdventureUI : MonoBehaviour, ITownPage
         {
             // 图鉴要显示「实战血量」而非裸配置值：Monster.Init 会把 baseHp
             // 乘上章节系数与 MONSTER_HP_GLOBAL_MUL，这里跟着乘回来，避免面板写 78、实战只有 46。
-            float hpScale = GameConfig.GetChapterStatScale(_selectedChapter) * GameConfig.MONSTER_HP_GLOBAL_MUL;
+            // 2026-10-05：难度新增「章内爬坡」后，图鉴是静态展示、没有"当前第几关"的概念，
+            // 统一按**章首（章内第 1 关）**算 —— 也就是该章的基准血量。
+            // ⚠ 倍率仍走唯一出口 GetStatScale，只是 stage 固定传 0，不在别处另算一遍。
+            float hpScale = GameConfig.GetStatScale(_selectedChapter, 0) * GameConfig.MONSTER_HP_GLOBAL_MUL;
             float shownHp = cfg.baseHp * hpScale;
             _tipBody.text = cfg.isBoss
                 ? $"BOSS\n攻击 {cfg.baseAttack:0}\n生命 {shownHp:0}\n{styleName}"
@@ -2037,7 +2040,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
         if (difficultyLabels != null && i >= 0 && i < difficultyLabels.Length && difficultyLabels[i] != null
             && !string.IsNullOrEmpty(difficultyLabels[i].text))
             return difficultyLabels[i].text;
-        if (i >= 0 && i < DiffNames.Length) return DiffNames[i];
+        if (i >= 0 && i < GameConfig.DIFF_COUNT) return GameConfig.GetDifficultyName(i);
         return "难度";
     }
 

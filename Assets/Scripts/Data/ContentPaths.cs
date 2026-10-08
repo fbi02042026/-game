@@ -22,8 +22,13 @@ public static class ContentPaths
         public const string ChapterThemeMap = "Data/Tables/chapter_theme_map";
         /// <summary>章节路线：主线 1→2→5→6→7→8，第 3/4 章是通关第 8 章后开放的支线。</summary>
         public const string ChapterRoute = "Data/Tables/chapter_route";
-        /// <summary>章节属性倍率（与旧 CHAPTER_STAT_SCALE 1:1）。</summary>
+        /// <summary>章节属性倍率（章基准，与旧 CHAPTER_STAT_SCALE 同源）。</summary>
         public const string ChapterStatScale = "Data/Tables/chapter_stat_scale";
+        /// <summary>
+        /// 章内关卡属性倍率（2026-10-05 新增）。最终倍率 = 章倍率 × 章内倍率。
+        /// 表：<c>Assets/Data/Source/Tables/stage_stat_scale.csv</c>。
+        /// </summary>
+        public const string StageStatScale = "Data/Tables/stage_stat_scale";
         public const string MonsterUnlockTier = "Data/Tables/monster_unlock_tier";
         /// <summary>道具定义表（2026-09-15 新增；背包格子已改为只装道具）。</summary>
         public const string ItemDefs = "Data/Tables/item_defs";

@@ -15,18 +15,9 @@ public static partial class GameConfig
     /// <summary>组织全称。主界面标题、图鉴条目等统一用这个，不要再写「冒险者公会」。</summary>
     public const string GUILD_NAME = "皇家冒险者公会";
 
-    /// <summary>战斗地面单位可在站立线上下偏移的半高（对称参考；实际钳制用 MIN/MAX）。</summary>
-    public const float BATTLE_LANE_HALF = 0.855f;
-    /// <summary>站立线上方可行走半高（相对 HALF 再缩约 10%）。
-    /// 2026-09-28 主人要求「可行走范围上下界限再缩小 5%」：0.9025 × 0.95 = 0.857375。</summary>
-    public const float BATTLE_LANE_MAX = BATTLE_LANE_HALF * 0.857375f;
-    /// <summary>站立线下方可行走半高（相对 HALF 再缩约 45%，取负）。
-    /// 2026-09-28 同上再缩 5%：0.54675 × 0.95 = 0.5194125。</summary>
-    public const float BATTLE_LANE_MIN = -BATTLE_LANE_HALF * 0.5194125f;
-    /// <summary>可行走区域整体 Y 下移量（世界单位，正值=往下挪）。
-    /// 2026-09-27 主人要求「可行走区域往上调上一次改动的 50%」：上次改动是往下挪 0.12，
-    /// 回一半 = 0.06。再要调只改这一个数。</summary>
-    public const float BATTLE_LANE_Y_DROP = 0.06f;
+    // 可行走区上下界不再用常量（2026-10-05 主人拍板）：
+    // 真源 = 「BattleUI ▸ map ▸ walk」这个 UI 节点的矩形，由 BattleLaneBounds 把它投影到世界、
+    // 减去站立线得到上下偏移。要调范围请在团结里挪 / 缩 walk 框，代码里没有第二个入口。
     public const float BATTLE_LANE_MOVE_SPEED = 1.35f;
     /// <summary>摇杆左右移速倍率（相对 GetCombatMoveSpeed）。</summary>
     public const float HERO_MANUAL_MOVE_X_MUL = 1.8f;
@@ -172,6 +163,11 @@ public static partial class GameConfig
     public const int SORT_UNIT = 15;
     /// <summary>攻击特效</summary>
     public const int SORT_VFX = 50;
+    /// <summary>
+    /// 运行时建的**模态弹窗**层（装备替换确认 / 抽奖概率公示等）。
+    /// 必须压在所有战斗 HUD 之上（特效 50 之上），否则玩家点不到按钮。
+    /// </summary>
+    public const int SORT_POPUP = 200;
 
     /// <summary>
     /// 默认解锁的背包行数。本期扩容到 4 行，默认全开 3 行，第 4 行由背包扩容天赋 R_BAG 解锁。
@@ -269,6 +265,18 @@ public static partial class GameConfig
     }
 
     /// <summary>
+    /// 单位前后遮挡的 order 公式 —— <b>全场唯一出口</b>（铁律 15：同一语义只留一个出口）。
+    /// Y 越低越靠镜头前。
+    /// <para>2026-10-06：宝箱原来在自己那边抄了一条同形公式，两边各改各的，
+    /// 结果箱子永远压在怪身上（主人原话「宝箱还是遮挡住怪了 / 不能和怪统一一下吗」）。
+    /// 现在怪与箱共用这一个出口，要调前后关系只改这里。</para>
+    /// </summary>
+    public static int ComputeUnitSortOrder(float worldY)
+    {
+        return SORT_UNIT + Mathf.RoundToInt(-worldY * 40f);
+    }
+
+    /// <summary>
     /// 单位前后遮挡：只改 SortingGroup 的 sortingOrder（随世界 Y）。
     /// 禁止改 SPUM/角色子 Sprite 的 sortingOrder、sortingLayer——部件层级全留预制体。
     /// </summary>
@@ -281,8 +289,7 @@ public static partial class GameConfig
     public static void ApplyUnitSorting(Transform root, float worldY)
     {
         if (root == null) return;
-        // Y 越低越靠镜头前
-        int order = SORT_UNIT + Mathf.RoundToInt(-worldY * 40f);
+        int order = ComputeUnitSortOrder(worldY);
 
         // 优先用已有 SortingGroup（SPUM 常挂在 UnitRoot），禁止再往根上叠一层把部件搞乱
         var sg = root.GetComponent<UnityEngine.Rendering.SortingGroup>();

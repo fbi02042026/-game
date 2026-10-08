@@ -18,7 +18,8 @@ public static class BattleLootMode
         Active = true;
         Changed?.Invoke(true);
         BattleUI.Instance?.RefreshLootModeChrome();
-        BattleJoystick.Instance?.SetVisible(false);
+        // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
+        // BattleJoystick.Instance?.SetVisible(false);
     }
 
     public static void Exit()
@@ -28,10 +29,11 @@ public static class BattleLootMode
         _onConfirm = null;
         Changed?.Invoke(false);
         BattleUI.Instance?.RefreshLootModeChrome();
-        bool showStick = BattleManager.Instance != null
-            && BattleManager.Instance.isInBattle
-            && BattleManager.Instance.UnitsCanAct;
-        BattleJoystick.Instance?.SetVisible(showStick);
+        // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
+        // bool showStick = BattleManager.Instance != null
+        //     && BattleManager.Instance.isInBattle
+        //     && BattleManager.Instance.UnitsCanAct;
+        // BattleJoystick.Instance?.SetVisible(showStick);
     }
 
     public static void Confirm()

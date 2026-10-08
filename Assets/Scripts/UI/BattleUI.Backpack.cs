@@ -163,13 +163,19 @@ public partial class BattleUI : MonoBehaviour
         // 系统尚未装配（BattleUI.Awake 早于 AutoGameInitializer）时 bm 可能为 null，
         // 用 InstanceQuiet 静默查询，不刷 Error。
         var bm = BattleManager.InstanceQuiet;
-        bool on = bm != null && bm.isInBattle && !BattleLootMode.Active;
+        // 2026-10-05 主人拍板：抽奖面板展开期间<b>不许压暗</b>。
+        // zhezhao 是 BackpackPanel 的最后一个子节点（画在最上层，730×610 覆盖面板 y≈75~685），
+        // 而 BattleManager 进战斗就置 isInBattle=true、抽奖协程在它之后才跑 →
+        // 抽奖期间遮罩一开，DraftRoot(抽奖按钮)/zhuangbei(装备)/BtnBackpack(背包) 全被压掉。
+        // 判据只有一个：BattleEntryDraftPanel.IsLotteryOpen。遮罩显隐仍归本方法独家管。
+        bool on = bm != null && bm.isInBattle && !BattleLootMode.Active
+                  && !BattleEntryDraftPanel.IsLotteryOpen;
         if (on != _battleMaskOn)
         {
             _battleMaskOn = on;
             _battleMask.SetActive(on);
-            // 遮罩一开就把摇杆顶到它上面，否则摇杆接收不到射线
-            if (on) BattleJoystick.Instance?.RaiseOrganizeAbove();
+            // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
+            // if (on) BattleJoystick.Instance?.RaiseOrganizeAbove();
             SetGraphicsRaycast(skillSlotRoot, !on);
         }
         // 每帧幂等保证：prefab 重导入 / 别的代码动过 sibling 顺序也能立即纠正，
@@ -294,7 +300,7 @@ public partial class BattleUI : MonoBehaviour
         }
         // 传入真实格子：没有 GridLayoutGroup（格子是美术手摆的）时也能算对位置
         BackpackGridVisual.ClearAndPlace(gridRt, gridLayout, placements, FindGridCellRect, BattleLootMode.Active);
-        ApplyBackpackCellOccupiedColors(placements);
+        RestoreBackpackCellVisuals();
         // 换装后同步底部 5 个装备快捷槽
         UpdateEquipQuickSlots();
         Debug.Log($"[BattleUI] 背包刷新 items={placements.Count} cells={gridCells.Count} layout={(gridLayout != null)}");
@@ -333,21 +339,23 @@ public partial class BattleUI : MonoBehaviour
                 txt.text = "确定";
             // 整理功能已移除：这个按钮只在拾取模式出现
             lootConfirmButton.gameObject.SetActive(BattleLootMode.Active);
+            // 竖屏适配会重锚/改高面板，创建时算好的落点会失效 → 每次显隐都按当前面板重摆。
+            if (BattleLootMode.Active) ReanchorLootConfirmButton();
         }
         UpdateBackpackGrid();
         // 整理阶段才允许拖动技槽调序（战斗中不开放，避免误触改掉释放优先级）
         RefreshSkillSlotDragState();
         if (BattleLootMode.Active) MaybeShowSkillReorderHint();
         TickBattleMask();
-        // 系统尚未装配（BattleUI.Awake 早于 AutoGameInitializer）时 bm 为 null：
-        // 跳过本次摇杆开关，保留摇杆当前状态，避免被误关导致进战斗没有摇杆、无法操作。
-        var bm = BattleManager.InstanceQuiet;
-        if (bm != null)
-        {
-            BattleJoystick.Instance?.SetVisible(!BattleLootMode.Active
-                && bm.isInBattle
-                && bm.UnitsCanAct);
-        }
+        // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
+        // 原每帧校正摇杆开关：
+        // var bm = BattleManager.InstanceQuiet;
+        // if (bm != null)
+        // {
+        //     BattleJoystick.Instance?.SetVisible(!BattleLootMode.Active
+        //         && bm.isInBattle
+        //         && bm.UnitsCanAct);
+        // }
     }
 
     /// <summary>首次进入整理阶段且确实有得排（≥2 个技能）时提示一次，之后不再打扰。</summary>
@@ -367,14 +375,22 @@ public partial class BattleUI : MonoBehaviour
     {
         FocusMarkSystem.Ensure();
         TargetIndicator.Ensure();
-        BattleJoystick.EnsureOn(transform);
+        // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
+        // 摇杆就建在这里；注释掉 = 摇杆永远不会被创建，下面所有 BattleJoystick.Instance?. 都是空转。
+        // BattleJoystick.EnsureOn(transform);
         // 道具操作浮层挂在 BattleUI 下（保证在 Canvas 内且在最上层）
         BackpackItemActionUI.Ensure(transform);
         EnsureBattleMask();
         RefreshLootModeChrome();
     }
 
-    void ApplyBackpackCellOccupiedColors(List<BackpackGridVisual.ItemPlacement> placements)
+    /// <summary>
+    /// 【2026-10-06 主人拍板】战斗背包格子底图恒为美术原色 —— 不再按「有装备 / 已穿戴」刷代码色
+    /// （旧实现刷深蓝 0.24,0.30,0.38 / 铜色 0.30,0.26,0.16，把美术底图盖掉了）。
+    /// 稀有度改由图标外沿那圈描边表达（BackpackGridVisual → EquipRarityRim），与底色无关。
+    /// 这里只负责把上次刷新可能残留的染色还原。
+    /// </summary>
+    void RestoreBackpackCellVisuals()
     {
         if (gridCells == null) return;
         foreach (var cell in gridCells)
@@ -382,29 +398,6 @@ public partial class BattleUI : MonoBehaviour
             if (cell == null) continue;
             cell.SetEmptyVisual();
         }
-        if (placements == null) return;
-        for (int i = 0; i < placements.Count; i++)
-        {
-            var p = placements[i];
-            for (int dx = 0; dx < p.w; dx++)
-            for (int dy = 0; dy < p.h; dy++)
-            {
-                var cell = FindGridCell(p.x + dx, p.y + dy);
-                cell?.SetOccupiedVisual(p.equipped);
-            }
-        }
-    }
-
-    GridCellUI FindGridCell(int gx, int gy)
-    {
-        if (gridCells == null) return null;
-        for (int i = 0; i < gridCells.Count; i++)
-        {
-            var c = gridCells[i];
-            if (c != null && c.gridX == gx && c.gridY == gy)
-                return c;
-        }
-        return null;
     }
 
     /// <summary>按格子坐标取真实格子的 RectTransform，供多格装备量取实际占位。</summary>

@@ -23,6 +23,17 @@ public class SkillAvatarUI
     public Text levelText;
     /// <summary>槽位底框：槽根自己那层 Image（美术底图就在这一层，图标层是另建的子层）。</summary>
     public Image frameImage;
+    /// <summary>
+    /// 左上角释放顺序角标 ①②③④（2026-10-06 主人拍板：底部技槽要能看出「顺序＝优先级」）。
+    /// 空槽不显示。与 SkillOrderGuide 的「拖动技能可改释放顺序：① 最先放。」同一口径。
+    /// </summary>
+    public Text orderText;
+    /// <summary>
+    /// 【2026-10-06 主人拍板】右上角「新」角标：本拍抽奖刚拿到的<b>技能 / 佣兵技能</b>才显示，
+    /// 玩家点「继续」后由 <c>NewLootMarks.ClearAll()</c> 统一清掉（判据只有 <c>NewLootMarks.Has</c> 一处）。
+    /// 与左上角 ①②③④ 各占一角，互不遮挡。节点由 <c>BattleUI.WidgetFactory</c> 运行时补建（不改预制体）。
+    /// </summary>
+    public Text newText;
 
     [System.NonSerialized]
     public System.Action onClick;     // 点击回调
@@ -39,6 +50,9 @@ public class SkillAvatarUI
 
     Color _frameBaseColor;
     bool _frameBaseCaptured;
+
+    Color _avatarBaseColor = Color.white;
+    bool _avatarBaseCaptured;
 
     private bool _isReady = false;
 
@@ -112,15 +126,45 @@ public class SkillAvatarUI
     /// </summary>
     public void SetAvatar(Sprite icon)
     {
-        if (avatarImage != null)
+        if (avatarImage == null) return;
+        avatarImage.preserveAspect = true;
+        avatarImage.sprite = icon;
+        // 不要隐藏空槽，保留槽位框体可见；
+        // 但没图时必须把颜色置透明 —— sprite 为空的 Image 会渲染成一块白片。
+        avatarImage.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+        avatarImage.gameObject.SetActive(true);
+        if (icon != null) EnsureIconRectVisible();
+    }
+
+    /// <summary>
+    /// 【2026-10-07 主人报「4 技槽上没图标」】sprite 明明加载到了却看不见。
+    ///
+    /// <para>排查口径：把「图标到底能不能被画出来」的量<b>一次打全</b>，别再靠猜 ——
+    /// rect 尺寸 / alpha / 激活 / 兄弟序 / 父节点名。</para>
+    ///
+    /// <para>只在 rect 退化成 0（画不出来的唯一常见原因）时动手修正：拉伸到父节点的 68% 并居中。
+    /// 这不是静默兜底 —— 修之前先 <c>LogError</c> 报出来。</para>
+    /// </summary>
+    void EnsureIconRectVisible()
+    {
+        var rt = avatarImage.rectTransform;
+        if (rt == null) return;
+        var sz = rt.rect.size;
+        if (sz.x >= 1f && sz.y >= 1f)
         {
-            avatarImage.preserveAspect = true;
-            avatarImage.sprite = icon;
-            // 不要隐藏空槽，保留槽位框体可见；
-            // 但没图时必须把颜色置透明 —— sprite 为空的 Image 会渲染成一块白片。
-            avatarImage.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
-            avatarImage.gameObject.SetActive(true);
+            Debug.Log($"[SkillAvatar] 技槽图标：{avatarImage.sprite?.name} 节点={avatarImage.name}" +
+                      $" 父={avatarImage.transform.parent?.name} rect={sz.x:F1}×{sz.y:F1}" +
+                      $" alpha={avatarImage.color.a:F2} 激活={avatarImage.gameObject.activeInHierarchy}" +
+                      $" 兄弟序={avatarImage.transform.GetSiblingIndex()}/{avatarImage.transform.parent?.childCount ?? 0}");
+            return;
         }
+        Debug.LogError($"[SkillAvatar] 技槽图标 rect 退化成 {sz.x:F1}×{sz.y:F1}（画不出来）：" +
+                       $"节点={avatarImage.name} 父={avatarImage.transform.parent?.name} " +
+                       $"锚点={rt.anchorMin}~{rt.anchorMax} sizeDelta={rt.sizeDelta} → 已按父节点 68% 居中拉伸");
+        rt.anchorMin = new Vector2(0.16f, 0.16f);
+        rt.anchorMax = new Vector2(0.84f, 0.84f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
     }
 
     /// <summary>
@@ -153,6 +197,49 @@ public class SkillAvatarUI
         if (labelText == null) return;
         labelText.text = string.IsNullOrEmpty(name) ? fallback : name;
         labelText.gameObject.SetActive(true);
+    }
+
+    /// <summary>
+    /// 蓝不够放这一发 → 头像压暗（灰度 ×0.45），够了还原（2026-10-06）。
+    /// 只动<b>图标层</b>，与 SetEmptyDim 的底框压暗各管一层，互不打架。幂等，重复调用无副作用。
+    /// </summary>
+    public void SetMpShortage(bool shortage)
+    {
+        if (avatarImage == null) return;
+        if (!_avatarBaseCaptured)
+        {
+            _avatarBaseColor = avatarImage.color;
+            _avatarBaseCaptured = true;
+        }
+        var c = _avatarBaseColor;
+        if (shortage)
+        {
+            float g = (c.r + c.g + c.b) / 3f * 0.45f;
+            avatarImage.color = new Color(g, g, g, c.a);
+        }
+        else
+        {
+            avatarImage.color = c;
+        }
+    }
+
+    /// <summary>左上角释放顺序角标：空串时整个隐藏。</summary>
+    public void SetOrderText(string text)
+    {
+        if (orderText == null) return;
+        orderText.text = text ?? "";
+        orderText.gameObject.SetActive(!string.IsNullOrEmpty(orderText.text));
+    }
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】右上角「新」角标显隐。幂等，重复调用无副作用；
+    /// 节点没绑到就整段跳过（不新建节点、不改预制体）。
+    /// </summary>
+    public void SetNewBadge(bool isNew)
+    {
+        if (newText == null) return;
+        newText.text = isNew ? "新" : "";
+        newText.gameObject.SetActive(isNew);
     }
 
     /// <summary>右下角等级/星级：空串时整个隐藏。</summary>

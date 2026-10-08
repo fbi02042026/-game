@@ -167,7 +167,9 @@ public class SlotOfferUI : MonoBehaviour
             _focusLabels.Add(btn.GetComponentInChildren<Text>());
         }
 
-        // 2026-09-30 主人要求：抽完奖点这里叫「继续」，点完屏幕会出现「开始游戏」大字再开打
+        // 2026-09-30：这个按钮文案叫「继续」，点完原先会在屏幕上甩出「开始游戏」大字再开打
+        //             （该大字已于 2026-10-07 移除，见 StageStartBannerUI 与 BattleManager）
+        // ⚠ 原注释写着「主人要求」，主人明确否认要求过加那个大字 —— 属误记，已撤掉该说法。
         var fightBtn = CreateButton("BtnFight", panel.transform, "继续", 26, Color.white, BtnSkipColor);
         Anchor(fightBtn.GetComponent<RectTransform>(), 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -322f, BtnFightW, BtnFightH);
         fightBtn.onClick.AddListener(OnFightClicked);

@@ -19,8 +19,13 @@ public class TargetIndicator : MonoBehaviour
     public float arrowHeadOffset = 0.25f;  // 头顶间隙兜底值（拿不到包围盒时才用；正常走 ArrowHeadGapRatio 按身高比例算）
     /// <summary>头顶间隙 = 目标包围盒高度 × 该比例。怪大箭头就高一点、怪小就近一点，不再写死一个偏移。</summary>
     const float ArrowHeadGapRatio = 0.08f;
-    /// <summary>箭头整体再往下挪多少（世界单位）。主人反馈"还是太高" → 调大这个值即可，往下挪就加大。</summary>
-    const float ArrowHeadDropY = 0.30f;
+    /// <summary>
+    /// 箭头整体再往下挪多少（世界单位）。<b>往下挪加大、往上挪减小</b>。
+    /// <para>【2026-10-06 主人拍板】0.30 → 0.04：主人反馈「敌人头上的箭头没有在敌人头顶，偏下了」。
+    /// 头顶位置本身由 <c>ArrowHeadGapRatio</c>（包围盒高 × 8%）算，这里只做微调，
+    /// 默认几乎不再额外下移，让箭头真正落在头顶。</para>
+    /// </summary>
+    const float ArrowHeadDropY = 0.04f;
     /// <summary>箭头设计基准「世界缩放」：改挂容器之前箭头挂在怪物自身下、localScale=1 时的视觉尺寸基准。</summary>
     const float ArrowBaseWorldScale = 1.0f;
     /// <summary>主人要求视觉缩小：先 ×0.7，2026-09-26 再缩小 20% → 0.7 × 0.8 = 0.56。
@@ -261,7 +266,15 @@ public class TargetIndicator : MonoBehaviour
         if (_currentTarget != target)
         {
             _currentTarget = target;
-            _targetBodySr = target.GetComponentInChildren<SpriteRenderer>(true);
+            // 【2026-10-06 主人报「敌人头上的箭头还是不在指定的地方」——根因修复】
+            // 旧写法 <c>GetComponentInChildren&lt;SpriteRenderer&gt;(true)</c> 抓的是层级里<b>第一个</b> SR。
+            // 而 Monstersmoban 的层级顺序是 HPBar → HPBarFill → shadow → HPBarBG → Monsters，
+            // 第一个命中的是 <b>HPBarFill（血条填充）</b>，不是怪物身体 ——
+            // 于是头顶高度取的是「血条顶边」，箭头跟着血条跑，还会随血量伸缩来回飘，
+            // 怎么微调偏移量都对不上位。
+            // 身体 Sprite 的真源只有 <c>UnitBase.sr</c>（Monster 绑定时用同一条：sr 为空才去 Find("Monsters")）。
+            // 拿不到它时才退回「取不到包围盒」的兜底路径，绝不回头去抓第一个 SR。
+            _targetBodySr = target != null ? target.sr : null;
             _snap = true; // 目标变了，下一处直接定位
             AttachArrowToTargetParent(target.transform);
         }

@@ -21,9 +21,16 @@ public class AutoGameInitializer : MonoBehaviour
     /// <summary>本次进 Battle 场景后初始化是否完成（供 Loading 等待）</summary>
     public static bool IsBattleLoadComplete { get; private set; }
 
+    /// <summary>
+    /// 怪物预制体是否就绪。【2026-10-05 主人拍板「资源层 fail fast」】
+    /// 为 false 时不放行开战 —— 波次层不做兜底，硬开只会变成「刷不出怪 → 下一波来袭无限重播」。
+    /// </summary>
+    static bool MonsterPrefabReady;
+
     public static void ResetForSceneLoad()
     {
         IsBattleLoadComplete = false;
+        MonsterPrefabReady = false;
         _battleSceneGeneration++;
     }
 
@@ -150,9 +157,10 @@ public class AutoGameInitializer : MonoBehaviour
         BattleViewportFit.Apply(cam);
 
         // 加载Monster预制体到对象池并预热，减轻首波卡顿
-        EnsureMonsterPrefab();
-        PoolManager.Instance?.Warm("Monster", 6);
-        GamePerf.Log("[AutoInit] 7/8 怪物池预热完成");
+        MonsterPrefabReady = EnsureMonsterPrefab();
+        if (MonsterPrefabReady)
+            PoolManager.Instance?.Warm("Monster", MONSTER_POOL_WARM);
+        GamePerf.Log($"[AutoInit] 7/8 怪物池预热完成 ready={MonsterPrefabReady}");
         ReportInitStep(7);
 
         // 加载战斗特效（内部有缓存，不重复 Load）
@@ -163,7 +171,12 @@ public class AutoGameInitializer : MonoBehaviour
 
         // 开始新一局（同场次只一次）
         EnsureStageClearRewardDirector();
-        TryStartNewRunOnce(bm, clearMonstersFirst: false);
+        // 【2026-10-05 主人拍板「资源层 fail fast」】缺怪物预制体就不放行开战：
+        // 波次层不做任何兜底，硬开只会变成「刷不出怪 → 下一波来袭无限重播」。
+        if (MonsterPrefabReady)
+            TryStartNewRunOnce(bm, clearMonstersFirst: false);
+        else
+            Debug.LogError("[AutoInit] 怪物预制体缺失 → 不放行开战（波次层无兜底，请先补 Resources/Prefabs/Monster/）");
         if (hero != null)
         {
             GameConfig.AttachToUnitRoot(hero.transform);
@@ -188,6 +201,12 @@ public class AutoGameInitializer : MonoBehaviour
         BattleUI.Instance?.UpdateTopBarResources();
         BattleSideHud.EnsureOn(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
         EnsureCharacterBarVisibleRuntime();
+        // 【2026-10-06 主人拍板 · 方案 A】不等抽奖弹面板，UI 一就绪就把 BattleEntryDraftPanel 建出来：
+        // 它的 LateUpdate 是从第一帧就把 map 钳在收起位（250/1.13）的唯一守卫。
+        // 不提前建 → 战斗一开始没人钳 → map 停在适配给的展开位 361（主人报「一上来就在上面」）。
+        BattleEntryDraftPanel.Prewarm();
+        // 【2026-10-06 主人拍板】玩家头顶战力（艺术字）跟住 Hero，只算本局、算上所有获得物。
+        if (Hero.Instance != null) PlayerPowerHud.Ensure(Hero.Instance.transform);
 
         GamePerf.Log("[AutoInit] Battle场景初始化完成");
         IsBattleLoadComplete = true;
@@ -240,13 +259,19 @@ public class AutoGameInitializer : MonoBehaviour
         FixBattleUICanvas(cam);
         EnsureCharacterBarVisibleRuntime();
         EnsureParallaxOnMaproot();
-        EnsureMonsterPrefab();
-        PoolManager.Instance?.Warm("Monster", 6);
+        MonsterPrefabReady = EnsureMonsterPrefab();
+        if (MonsterPrefabReady)
+            PoolManager.Instance?.Warm("Monster", MONSTER_POOL_WARM);
         ReportInitStep(7);
 
         StageClearRewardDirector.Instance?.InvalidateSceneCache();
         EnsureStageClearRewardDirector();
-        bool started = TryStartNewRunOnce(bm, clearMonstersFirst: true);
+        bool started = false;
+        // 同上：缺怪物预制体不放行开战
+        if (MonsterPrefabReady)
+            started = TryStartNewRunOnce(bm, clearMonstersFirst: true);
+        else
+            Debug.LogError("[AutoInit] 怪物预制体缺失 → 不放行开战（波次层无兜底，请先补 Resources/Prefabs/Monster/）");
         if (!started)
             GamePerf.Log("[AutoInit] 重绑完成但跳过重复 StartNewRun");
 
@@ -265,6 +290,10 @@ public class AutoGameInitializer : MonoBehaviour
         BattleUI.Instance?.UpdateTopBarResources();
         BattleSideHud.EnsureOn(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
         EnsureCharacterBarVisibleRuntime();
+        // 【2026-10-06 主人拍板 · 方案 A】二次进战斗同理：UI 就绪即建，不等抽奖弹面板。
+        BattleEntryDraftPanel.Prewarm();
+        // 二次进战斗 Hero 是重建的，头顶战力必须重新跟一次。
+        if (Hero.Instance != null) PlayerPowerHud.Ensure(Hero.Instance.transform);
         GamePerf.Log(started
             ? "[AutoInit] 二次进战斗重绑完成，已 StartNewRun"
             : "[AutoInit] 二次进战斗重绑完成（本场已开战）");
@@ -959,6 +988,8 @@ public class AutoGameInitializer : MonoBehaviour
             hero.transform.localScale = new Vector3(sign * s, s, s);
             hero.costumeManager?.EnsureRigReady();
             bm.hero = hero;
+            // 2026-10-06 主人拍板：玩家阴影透明度减少 10%（真源仍是预制体 Shadow 的 alpha，这里只乘一次系数）
+            UnitShadowAlpha.ApplyPlayer(hero.transform);
             return hero;
         }
 
@@ -1059,6 +1090,8 @@ public class AutoGameInitializer : MonoBehaviour
             heroGo.AddComponent<HeroCostumeManager>();
 
         bm.hero = hero;
+        // 2026-10-06 主人拍板：玩家阴影透明度减少 10%（真源仍是预制体 Shadow 的 alpha，这里只乘一次系数）
+        UnitShadowAlpha.ApplyPlayer(hero.transform);
         return hero;
     }
 
@@ -1104,14 +1137,19 @@ public class AutoGameInitializer : MonoBehaviour
 
     // ===== Monster预制体 =====
 
-    static void EnsureMonsterPrefab()
+    /// <summary>
+    /// 【2026-10-05 主人拍板「资源层 fail fast」】返回怪物预制体是否就绪。
+    /// 缺预制体属于致命错误：波次层不做任何兜底（不伪造怪、不重试放行），
+    /// 由初始化侧直接不放行开战，让问题暴露在日志里，而不是变成「下一波来袭」无限重播。
+    /// </summary>
+    static bool EnsureMonsterPrefab()
     {
         if (PoolManager.Instance == null)
         {
             Debug.LogError("[AutoInit] PoolManager 未就绪，无法加载怪物预制体");
-            return;
+            return false;
         }
-        if (PoolManager.Instance._monsterPrefab != null) return;
+        if (PoolManager.Instance._monsterPrefab != null) return true;
 
         // 优先 Monstersmoban，其次 Monster.prefab
         GameObject monsterPrefabObj = Resources.Load<GameObject>("Prefabs/Monster/Monstersmoban");
@@ -1132,15 +1170,21 @@ public class AutoGameInitializer : MonoBehaviour
 
         if (monsterPrefabObj != null)
         {
-            PoolManager.Instance.Preload("Monster", monsterPrefabObj, 8);
+            PoolManager.Instance.Preload("Monster", monsterPrefabObj, MONSTER_POOL_WARM);
             PoolManager.Instance._monsterPrefab = monsterPrefabObj;
             Debug.Log($"[AutoInit] 怪物预制体已入池: {monsterPrefabObj.name} path=Prefabs/Monster/");
+            return true;
         }
-        else
-        {
-            Debug.LogError("[AutoInit] 怪物预制体未找到：Resources/Prefabs/Monster/Monstersmoban 或 Monster");
-        }
+
+        Debug.LogError("[AutoInit] 怪物预制体未找到：Resources/Prefabs/Monster/Monstersmoban 或 Monster");
+        return false;
     }
+
+    /// <summary>
+    /// 怪物对象池预热数量。【2026-10-05】多点出生点后一整波是同帧成批出海的，
+    /// 原来只预热 6 / Preload 8，一波 8 只时会边打边实例化（首波卡顿）。取 12 覆盖最大波。
+    /// </summary>
+    const int MONSTER_POOL_WARM = 12;
 
     // ===== 辅助 =====
 

@@ -26,8 +26,10 @@ public sealed class WavePlanner
     TutorialRules Rules => bm.Rules;
     int CurrentChapter => bm.CurrentChapter;
     bool isInBattle => bm.isInBattle;
-    bool SuppressStageClear { get => bm.SuppressStageClear; set => bm.SuppressStageClear = value; }
-    bool SkipLegacyOnEvacuate { get => bm.SkipLegacyOnEvacuate; set => bm.SkipLegacyOnEvacuate = value; }
+    // 【2026-10-05】这两个旗标真源唯一 = 规则包，BattleManager 侧已改只读直通，
+    // 这里同步去掉 setter（原先每次教程波都写一遍，是残留值的帮凶）。
+    bool SuppressStageClear => bm.SuppressStageClear;
+    bool SkipLegacyOnEvacuate => bm.SkipLegacyOnEvacuate;
 
     List<WaveData> _waves { get => bm._waves; set => bm._waves = value; }
     int _totalWaves { get => bm._totalWaves; set => bm._totalWaves = value; }
@@ -86,8 +88,6 @@ public sealed class WavePlanner
         _activeWaveIndex = -1;
         _firstWaveSpawned = true; // 关掉 Update/过场后的硬刷；真正刷怪只走 TutorialDirector
         _lastWaveSprites.Clear();
-        SuppressStageClear = Rules.SuppressStageClear;
-        SkipLegacyOnEvacuate = Rules.SkipLegacyOnEvacuate;
         Debug.Log("[BattleManager] 引导关：波次由 TutorialDirector 分步刷，入口仍是 SpawnWave");
     }
 
@@ -161,7 +161,6 @@ public sealed class WavePlanner
         _totalWaves = _waves.Count;
         _allWavesSpawned = false;
         _activeWaveIndex = -1;
-        SuppressStageClear = Rules.SuppressStageClear;
 
         int waveIdx = _waves.Count - 1;
         int spawnedBefore = wave.aliveCount;
@@ -288,10 +287,15 @@ public sealed class WavePlanner
         return monster;
     }
 
+    /// <param name="enterDepthOffset">
+    /// 【2026-10-05 主人拍板「多点出生点」】本只在同波里的序号 × MONSTER_ENTER_DEPTH_STEP：
+    /// 入场起点按序号往外错开，一整波从远近不同的位置一起涌进来，而不是全挤在屏外同一个点。
+    /// 传 0 = 退回原来的单点进场（单只补刷 / 兜底路径用）。
+    /// </param>
     Monster SpawnMonsterOffscreenEnter(
         Vector3 engagePos, float laneY, float scaleMultiplier,
         MonsterConfig cfg, int stageIdx, int spriteIdx, UnitBase forcedTarget = null,
-        bool? fromLeftOverride = null)
+        bool? fromLeftOverride = null, float enterDepthOffset = 0f)
     {
         if (cfg == null) return null;
         float z = unitRoot != null ? unitRoot.position.z : engagePos.z;
@@ -299,7 +303,8 @@ public sealed class WavePlanner
         // 相对镜头左右交替进场（可覆盖）
         bool fromLeft = fromLeftOverride ?? false; // 默认右侧进场；仅显式 override 才从左
         const float offscreenMargin = 1.35f;
-        float enterX = fromLeft ? visMin - offscreenMargin : visMax + offscreenMargin;
+        float depth = offscreenMargin + Mathf.Max(0f, enterDepthOffset);
+        float enterX = fromLeft ? visMin - depth : visMax + depth;
         // 交战点落在进场同侧，避免左侧怪跑到玩家右边再回头
         float heroX = hero != null ? UnitBase.GetCombatX(hero) : engagePos.x;
         engagePos.x = ResolveEngageXForEnterSide(heroX, fromLeft, engagePos.x, visMin, visMax);
@@ -1669,9 +1674,15 @@ public sealed class WavePlanner
             bool eliteUnit = monsterScale >= GameConfig.ELITE_SCALE_MULTIPLIER - 0.05f;
             bool hasBias = arch != null && !string.IsNullOrEmpty(arch.affixBias) && eliteUnit;
             if (hasBias) MonsterAffixDefs.SetPendingBias(arch.affixBias);
+            // 【2026-10-05 主人拍板「多点出生点」】普通波按序号把入场起点往外错开，
+            // 一整波从远近不同位置一起涌进来（观感「成群压过来」，也不再需要靠长 stagger 排队）。
+            // 围攻/夹击波本来就是同帧同时到场的设计，保持 offset=0 不动。
+            float enterDepth = (wave.aroundAnchor || wave.bilateralEnter)
+                ? 0f
+                : i * GameConfig.MONSTER_ENTER_DEPTH_STEP;
             Monster m = SpawnMonsterOffscreenEnter(
                 engagePos, lane, monsterScale, template, stageIdx, spriteIndexOverride,
-                wave.forcedTarget, fromLeft);
+                wave.forcedTarget, fromLeft, enterDepth);
             if (hasBias) MonsterAffixDefs.ClearPendingBias();
             if (m != null)
             {
@@ -1843,6 +1854,10 @@ public sealed class WavePlanner
             _totalMonstersSpawnedThisStage++;
             wave.aliveCount++;
         }
+        // 【2026-10-05 波次排查】兜底波是同步刷的，和正常路径 SpawnMonster 一样必须失效存活缓存：
+        // CountAliveMonsters 按帧缓存，不失效的话 SpawnNextPendingWave 的 aliveAfter 会读回刷怪前的旧值
+        // → 误判「无新增活怪」→ spawned=false → 反复重刷兜底波，关卡永远结算不了。
+        bm.InvalidateAliveMonsterCache();
         GamePerf.Log($"[BattleManager] 兜底波次{waveIndex + 1}: {wave.monsterCount}只 @刷怪点 spawnedTotal={_totalMonstersSpawnedThisStage}");
     }
 

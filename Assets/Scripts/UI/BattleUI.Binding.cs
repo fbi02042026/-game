@@ -23,11 +23,11 @@ public partial class BattleUI : MonoBehaviour
         var go = new GameObject("确定", typeof(RectTransform), typeof(Image));
         go.transform.SetParent(backpack, false);
         var rt = go.transform as RectTransform;
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        // 锚点做成「面板左下角」：以后屏再变，位置只需重算 anchoredPosition 就够了。
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.zero;
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(220f, 76f);
-        rt.anchoredPosition = new Vector2(0f, -200f);
 
         var img = go.GetComponent<Image>();
         img.color = new Color(0.16f, 0.12f, 0.09f, 0.95f);
@@ -46,6 +46,10 @@ public partial class BattleUI : MonoBehaviour
         tx.alignment = TextAnchor.MiddleCenter;
         tx.color = Color.white;
 
+        // 位置统一由 ReanchorLootConfirmButton 按当前面板 rect 算（竖屏适配会重锚/改高面板，
+        // 写死 "中心往上 100" 屏一变就跑到面板外面看不见了）。
+        ReanchorLootConfirmButton();
+
         // BackpackPanel 带 overrideSorting 的 Canvas，zhezhao 遮罩会盖住同级节点 → 抬一层
         var parentCanvas = backpack.GetComponent<Canvas>();
         if (parentCanvas != null)
@@ -61,6 +65,26 @@ public partial class BattleUI : MonoBehaviour
         lootConfirmButton = btn;
         lootConfirmButton.onClick.AddListener(OnLootConfirm);
         go.SetActive(false);
+    }
+
+    /// <summary>
+    /// 把「确定」按<b>当前</b> BackpackPanel 的矩形重摆到面板底边下方 60（面板本地下方，
+    /// 拾取阶段面板收起、这里是空着的）。<b>不写死坐标</b>：竖屏适配（UiLayoutStretch /
+    /// BattleViewportFit）会在运行时把面板重锚成「贴底」、高度也随屏幕变，
+    /// 任何写死的 "BackpackPanel 中心往上 100" 都是预制体时代的坐标，屏一变就落到面板外看不见。
+    /// 幂等，可反复调用。
+    /// </summary>
+    void ReanchorLootConfirmButton()
+    {
+        if (lootConfirmButton == null) return;
+        var rt = lootConfirmButton.transform as RectTransform;
+        var parent = rt != null ? rt.parent as RectTransform : null;
+        if (rt == null || parent == null || parent.rect.height <= 1f) return;
+        Rect r = parent.rect;                              // 面板本地坐标（原点在锚点处）
+        rt.anchorMin = Vector2.zero;                       // 锚点锁左下角
+        rt.anchorMax = Vector2.zero;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(0f, r.yMin - 60f);
     }
 
     /// <summary>按节点名自动补全未拖拽的引用</summary>
@@ -205,7 +229,7 @@ public partial class BattleUI : MonoBehaviour
             Add(tag + ".lanBarFill", s.lanBarFill != null);
             Add(tag + ".lanText", s.lanText != null);
             Add(tag + ".LockedOverlay", s.lockedOverlay != null);
-            Add(tag + ".Glow(光边)", s.glowBorder != null);
+            // 【2026-10-07 主人拍板】Glow(光边) 绑定自检项删除：头像外圈金环整条链路已删。
             Add(tag + ".LevelLabel", s.levelLabel != null);
             Add(tag + ".NameText", s.nameText != null);
             Add(tag + ".PortraitPlaceholder", s.portraitPlaceholder != null);
@@ -380,13 +404,8 @@ public partial class BattleUI : MonoBehaviour
         if (slot.energyRing == null)
             slot.energyRing = FindImageNamedNoFallback(root, "Energy", "EnergyRing", "Ring");
 
-        if (slot.glowBorder == null)
-        {
-            Transform g = FindDeepChildIgnoreCase(root, "Glow")
-                ?? FindDeepChildIgnoreCase(root, "GlowBorder")
-                ?? FindDeepChildIgnoreCase(root, "SkillGlow");
-            if (g != null) slot.glowBorder = g.GetComponent<Image>();
-        }
+        // 【2026-10-07 主人拍板删除】原 glowBorder 的 Glow / GlowBorder / SkillGlow 三个查找。
+        // 头像外圈那个「技能就绪」金色大圆环不要了（自动释放，不需要就绪提示）。
         // 按用户要求：不对头像框做任何运行时改造，不再改尺寸/新增节点
 
         if (slot.lockedOverlay == null)
@@ -422,6 +441,10 @@ public partial class BattleUI : MonoBehaviour
         }
     }
 
+    // 【2026-10-06 已删除】private static bool TutorialMercDrawn（本局抽数判据）。
+    //   主人拍板：同一个语义只留一个出口 → 搬到 SlotMachineSystem.TutorialMercDrawn，
+    //   BattleUI 与 TutorialDirector.ShowMercHud 都来读它，这里不再写第二份。
+
     void ApplySoloBattleHud()
     {
         // 单人模式也保留三个头像位：未解锁显示「锁定」，不要藏掉第 3 个
@@ -430,14 +453,25 @@ public partial class BattleUI : MonoBehaviour
         SetSlotRootActive(mercSlot1, true);
         SetSlotRootActive(mercSlot2, true);
 
-        // 2026-09-22 主人要求：玩家卡只留头像，名字不再显示
-        if (playerSlot?.nameText != null)
-            playerSlot.nameText.gameObject.SetActive(false);
+        // 2026-10-06 主人拍板：口径变更，玩家名要正常显示（旧口径「玩家卡只留头像」已作废）。
+        // 名字由 BattleUI.CharacterBar 的 playerSlot.UpdateSlot(PlayerIdentity.DisplayName, ...) 写入。
 
         // 单人/引导：两格伙伴都按未解锁处理，清掉占位血量数字
         bool lockExtraSlots = (GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle) && !showTutorialMerc;
         if (lockExtraSlots)
-            mercSlot1?.ShowUnavailable(MercLockedHint);
+        {
+            // 2026-10-05 主人拍板：引导局这个槽「灰掉 + 有佣兵头像和血条 + 没有锁的图标 + 稀有度头像框」，
+            // 也就是把「三选一解锁」的空锁换成小白本人的灰像，玩家一眼看到要招的是谁。
+            //
+            // ⚠ 但**不是一开局就摆出来**（主人 2026-10-05 报「佣兵还没抽怎么就已经在头像栏里了」）：
+            // 得等玩家真抽到佣兵才亮。真源只有 SlotMachineSystem.TutorialMercDrawn 一处
+            //（本局抽数有没有越过「佣兵」那一格）—— 抽之前 = 空锁；抽完（招募入队）= 走正常头像。
+            // 抽数是局内数据所以每局都会归零；碎片那种跨局存档会残留，绝不能拿来当判据。
+            if (TutorialDirector.IsTutorialBattle && SlotMachineSystem.TutorialMercDrawn)
+                ApplyTutorialMercPreview(mercSlot1);
+            else
+                mercSlot1?.ShowUnavailable(MercLockedHint);
+        }
         else
             mercSlot1?.SetLocked(false);
 

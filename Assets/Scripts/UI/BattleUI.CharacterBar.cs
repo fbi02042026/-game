@@ -9,10 +9,14 @@ using System.Collections.Generic;
 public partial class BattleUI : MonoBehaviour
 {
     /// <summary>
-    /// 第一个佣兵（玩家右侧第一个槽 = mercSlot1）右上角不显示技能图片（2026-09-26 主人反馈）。
-    /// 只关 index 0 这一个槽；佣兵2 与教程技能圆（SkillBtn2）照旧。一键回退：置 false。
+    /// 【2026-10-06 主人拍板】佣兵头像框右上角<b>不显示技能角标</b> ——
+    /// 佣兵技能由 <c>MercSkillCaster</c> <b>自动释放</b>（<c>MercSkillMigrate.IsMercSkillAutoCast() == true</c>），
+    /// 玩家既不需要看、也没有手动点击入口，图标一律隐藏。
+    ///
+    /// <para>旧口径（2026-09-26）只关 index 0 那一个槽，其余槽照旧显示 —— 现已作废，
+    /// <b>全部佣兵槽都不显示</b>。旧开关 <c>HideFirstMercSkillBadge</c> 一并删除
+    ///（铁律：不留 <c>xxxEnabled</c> 开关）—— 两处调用点直接写 <c>SetSkillBadge(null)</c>。</para>
     /// </summary>
-    public static bool HideFirstMercSkillBadge = true;
 
     /// <summary>
     /// 只刷新玩家头像下的第二条（雷击奥义充能）。
@@ -86,6 +90,17 @@ public partial class BattleUI : MonoBehaviour
             // 头像框：玩家默认普通，日后「大厅考证」提档只改 MercHireSession.PlayerFrameRarity
             playerSlot.SetFrame(MercHireSession.LoadPlayerPortraitFrame());
             playerSlot.SetSkillBadge(null);
+            // 【2026-10-06 主人二次拍板】常驻战力字搬到<b>玩家头像框</b>上（左上角那张卡的最左边）。
+            // 宿主就是这张卡的头像框（预制体里叫 PlayerSlot 的那层），位置跟着它走。
+            if (playerSlot.frameImage != null)
+            {
+                PlayerPowerHud.Ensure(hero != null ? hero.transform : null)
+                              .AttachToFrame(playerSlot.frameImage.rectTransform);
+            }
+            else
+            {
+                Debug.LogError("[BattleUI] 玩家槽没有头像框（frameImage 为空），战力字无处可挂");
+            }
             // 职业 icon：xuetiaodi/职业icon。2026-09-17 用户指定用 Icons/职业icon/ 四分类图
             // （防御/恢复/法术/物攻）。
             // 2026-09-26：去掉「取不到回退职业立绘头像」——那正是主人说的「总和玩家职业icon搞混」，
@@ -122,13 +137,14 @@ public partial class BattleUI : MonoBehaviour
         var m = mercs[0];
         mercSlot1.SetLocked(false);
         bool tutHasActive = m.SkillCaster != null && m.SkillCaster.HasActiveSkill;
-        mercSlot1.SetEnergyEnabled(tutHasActive && !MercSkillMigrate.IsMercSkillAutoCast());
+        // 2026-10-06：蓝条只给「有蓝」的技能显示（治疗/法术型），无蓝技能纯 CD 不显示
+        mercSlot1.SetEnergyEnabled(tutHasActive && m.SkillCaster != null
+                                   && m.SkillCaster.MpType != MpArchetype.None);
         Sprite mercIcon = MercPortraitSprites.GetHead(!string.IsNullOrEmpty(m.hireId) ? m.hireId : StoryProgress.TutorialMercHireId)
             ?? mm.GetIcon(m.mercId);
         mercSlot1.SetPortrait(mercIcon);
-        // 右上角小图标=该佣兵的技能（同样由 MercSkillCaster 自动释放）
-        // 2026-09-26 主人反馈：第一个佣兵不显示技能图片
-        mercSlot1.SetSkillBadge(HideFirstMercSkillBadge ? null : GetMercSkillIcon(m));
+        // 右上角小图标=该佣兵的技能：2026-10-06 主人拍板 → 佣兵技能角标全部隐藏（技能自动释放，不需要手点）
+        mercSlot1.SetSkillBadge(null);
         // 教程救援佣兵不在存档出战列表里，技能圆形头像要单独绑
         merc1SkillAvatar?.SetAvatar(mercIcon);
         // 职业 icon：教程佣兵同样显示（四分类徽标，走 JobIconResolver.CombatBadge 唯一入口）
@@ -141,6 +157,26 @@ public partial class BattleUI : MonoBehaviour
         mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
     }
 
+    /// <summary>
+    /// 引导局「未招募」佣兵槽的预览（2026-10-05 主人拍板）：
+    /// 灰掉 + 佣兵头像 + 血条 + 稀有度头像框，不挂锁图标。
+    /// 人从哪来 = 真源链 <c>StoryProgress.TutorialMercHireId</c>（H003 塔克）→ <c>MercRosterDefs</c> 花名册，
+    /// 不写死头像 / 血量 / 稀有度，花名册一改这里跟着变。
+    /// </summary>
+    public void ApplyTutorialMercPreview(CharacterSlotUI slot)
+    {
+        if (slot == null) return;
+        string hireId = StoryProgress.TutorialMercHireId;
+        MercRosterDefs.Def def;
+        bool hasDef = MercRosterDefs.TryGetByHireId(hireId, out def);
+        float maxHp = hasDef ? def.BaseHp : 0f;
+        slot.ShowLockedPreview(
+            MercPortraitSprites.GetHead(hireId),
+            MercHireSession.LoadPortraitFrame(hasDef ? def.Rarity : MercRosterDefs.MercRarity.Common),
+            hasDef && !string.IsNullOrEmpty(def.Nickname) ? def.Nickname : StoryProgress.TutorialMercNickname,
+            maxHp, maxHp);
+    }
+
     void RefreshTutorialMercLiveBar()
     {
         var mm = MercenaryManager.Instance;
@@ -151,7 +187,7 @@ public partial class BattleUI : MonoBehaviour
         float maxHp = m.attr.GetAttr(AttrType.MaxHp);
         string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercNickname;
         mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
-        mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(0) : 0f);
+        mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(0) : 0f);
     }
 
     /// <summary>
@@ -195,11 +231,15 @@ public partial class BattleUI : MonoBehaviour
         if (index < mercIds.Count)
         {
             slot.SetLocked(false);
+            slot.SetFallen(false);      // 在场/活着：清掉上一帧可能留下的阵亡压暗
             bool hasActive = index < activeMercs.Count
                 && activeMercs[index] != null
                 && activeMercs[index].SkillCaster != null
                 && activeMercs[index].SkillCaster.HasActiveSkill;
-            slot.SetEnergyEnabled(hasActive && !MercSkillMigrate.IsMercSkillAutoCast());
+            // 2026-10-06：蓝条只给「有蓝」的技能显示（治疗/法术型）；无蓝技能纯 CD，不显示。
+            // 旧口径是「手动模式才显示」，而自动模式恒为 true → 蓝条永远是关的，这条判定已作废。
+            bool hasMpBar = hasActive && activeMercs[index].SkillCaster.MpType != MpArchetype.None;
+            slot.SetEnergyEnabled(hasMpBar);
             string id = mercIds[index];
             string hireId = index < mercHireIds.Count ? mercHireIds[index] : null;
             if (index < activeMercs.Count && activeMercs[index] != null && !string.IsNullOrEmpty(activeMercs[index].hireId))
@@ -211,12 +251,8 @@ public partial class BattleUI : MonoBehaviour
             slot.SetFrame(MercHireSession.LoadPortraitFrame(ResolveMercRarity(id, hireId)));
             // 职业 icon：按佣兵职业名取四分类（防御/恢复/法术/物攻），唯一入口 JobIconResolver.CombatBadge
             slot.SetJobIcon(JobIconResolver.CombatBadge(job));
-            // 右上角小图标=该佣兵的技能（自动释放，不用手点）
-            // 2026-09-26 主人反馈：第一个佣兵（index 0）不显示技能图片，其余槽照旧
-            bool hideSkillBadge = HideFirstMercSkillBadge && index == 0;
-            slot.SetSkillBadge(hideSkillBadge
-                ? null
-                : (index < activeMercs.Count ? GetMercSkillIcon(activeMercs[index]) : null));
+            // 右上角小图标=该佣兵的技能：2026-10-06 主人拍板 → 佣兵技能角标全部隐藏（技能自动释放，不用手点）
+            slot.SetSkillBadge(null);
 
             if (index < activeMercs.Count && activeMercs[index] != null)
             {
@@ -226,9 +262,11 @@ public partial class BattleUI : MonoBehaviour
             }
             else
             {
-                // 出战名单有占位但单位未生成：也不涨蓝条
+                // 出战名单有占位但单位未生成（绝大多数就是<b>已阵亡</b>）：也不涨蓝条
+                // 【2026-10-07 主人拍板】阵亡不再 ShowEmpty 清成空框 —— 头像 / 职业 icon 保留，整槽压暗（变灰）。
                 slot.SetEnergyEnabled(false);
                 slot.UpdateSlot(job, 1, 0, 0);
+                slot.SetFallen(true);
             }
         }
         else
@@ -259,8 +297,17 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 头像栏保留美术摆的位置，但不许超出父容器：
-    /// 窄屏/高屏下预制体的固定偏移会把整条栏顶到框外，这里只把越界的部分推回来。
+    /// 头像栏保留美术摆的位置，<b>只在父级真有可见边框时才夹</b>。
+    ///
+    /// <para>⚠ 2026-10-05 主人拍板（根因修复）：父级 <c>zhuangshi</c> 是<b>纯 RectTransform、零组件</b>
+    /// 的锚点容器，它的 100×100 sizeDelta 只是 Unity 新建节点的默认值，<b>不是框、不是边界</b>。
+    /// 老版本拿这个 100×100 当硬边界，把 CharacterBar（y=165）一路推到 y=0，
+    /// 每次进战斗推一次 —— 主人报的「老是调整 zhuangshi 里面的位置」就是这里干的，
+    /// 跟 BattleEntryDraftPanel 一点关系都没有。</para>
+    ///
+    /// <para>现在的判据：父级<b>没有 Image/Graphic 之类的可见框</b>时一律不夹
+    /// （美术摆哪就哪，类只做兜底、不做重排）；只有父级确实画了一块可见面板（宽高有效）
+    /// 才把越界的部分推回来。</para>
     /// </summary>
     public void ClampCharacterBarInsideParent()
     {
@@ -269,6 +316,11 @@ public partial class BattleUI : MonoBehaviour
         if (bar == null) return;
         var parent = bar.parent as RectTransform;
         if (parent == null) return;
+
+        // 父级没有可见 Graphic（zhuangshi 就是这种纯锚点容器）→ 它没有"框"，无从谈越界。
+        // 绝不按它默认的 100×100 去夹子节点，否则每次进战斗都会把美术摆好的栏推走。
+        if (parent.GetComponent<Graphic>() == null)
+            return;
 
         // 布局这一帧可能还没算完，先强制刷新再量
         LayoutRebuilder.ForceRebuildLayoutImmediate(bar);

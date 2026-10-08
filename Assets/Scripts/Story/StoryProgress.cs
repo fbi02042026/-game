@@ -31,11 +31,21 @@ public static class StoryProgress
     /// <summary>老盾：支线 S001/S015 需要读他的羁绊值。</summary>
     public const string NpcLaoDun = "laodun";
 
-    // 引导救援牧师（H011）对应 naima101
-    public const string TutorialMercId = "naima101";
-    public const string TutorialMercHireId = "H011";
-    public const string TutorialMercDisplayName = "索菲";
-    public const string TutorialMercNickname = "小白";
+    // 【2026-10-07 主人拍板】引导佣兵**换成每日登录送的那位**：塔克·重盾（H003，剑盾卫士 / dunbing201）。
+    // 主人原话：「或者把那个佣兵改成每日登录那个佣兵也行，回城后剧情完了后出现每日登录弹窗，这样能连起来」。
+    // 目的：引导里天降救场的那个人 = 玩家回城后第一天从「每日登录」领到的人 → 剧情与日常系统串成一条线，
+    // 玩家对他的第一印象（一击清场）直接变成「每天回来领他碎片」的动力。
+    // ⚠ 原来这里写的是 H011 索菲（牧师 / naima101）—— 她是治疗，撑不起「天降一击清场」的演出，已换掉。
+    // 【2026-10-07 主人澄清】塔克是**男的**：对白 / 注释一律用「他」，别再写成「她」。
+    public const string TutorialMercId = "dunbing201";
+    public const string TutorialMercHireId = "H003";
+    /// <summary>引导佣兵的真名：塔克（花名册 H003）。对白 / 头像 / 日志都只写这一个名字。</summary>
+    public const string TutorialMercDisplayName = "塔克";
+    /// <summary>
+    /// 兜底昵称（花名册取不到名字时用它）。主人 2026-10-07 口径：
+    /// 名字要**好记、好认**（嫌「小白」太敷衍），且与真名一致、不出现第二个叫法。
+    /// </summary>
+    public const string TutorialMercNickname = "塔克";
 
     static bool _pendingTutorialBattle;
     static bool _pendingChapter1TownReturn;

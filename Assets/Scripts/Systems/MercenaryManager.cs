@@ -361,5 +361,24 @@ public class MercenaryManager : Singleton<MercenaryManager>
         _activeMercs.Clear();
     }
 
+    /// <summary>
+    /// 【2026-10-07 主人拍板】收掉某一位**演出用**佣兵（引导「塔克天降救场」那位）。
+    ///
+    /// <para>为什么要单独一个出口：天降那位只是剧情替身，真正入队走正式招募链路
+    /// （战斗中抽奖 → <c>RunDraftDirector.RecruitMerc</c>）。替身不收，抽完场上就是两个塔克。</para>
+    ///
+    /// <para>这里同时清 <c>_activeMercs</c> 与 <c>BattleManager.allyUnits</c>，
+    /// 别在调用方各清一半（铁律「同一语义只留一个出口」）。</para>
+    /// </summary>
+    public void DespawnMercenary(Mercenary merc)
+    {
+        if (merc == null) return;
+        _activeMercs.Remove(merc);
+        var bm = BattleManager.Instance;
+        if (bm != null) bm.allyUnits.Remove(merc);
+        if (Application.isPlaying) Destroy(merc.gameObject);
+        else DestroyImmediate(merc.gameObject);
+    }
+
     #endregion
 }

@@ -9,6 +9,12 @@ using UnityEditor;
 /// <summary>
 /// 战斗虚拟摇杆：触摸区=下方装备栏/背包整区；按下时在触点生成浮动摇杆，松手回背包中部常显（半透）。
 /// 「整理/确定」提到最上层以免被挡。按下优先手动，松手近战最近 / 远程最强。
+///
+/// ⚠⚠【2026-10-05 主人拍板「不要摇杆了」—— 本类整条链路停用，按主人要求**只注释不删**】
+///   停用方式：`BattleUI.Backpack.EnsureBattleControls` 里 `BattleJoystick.EnsureOn(transform)` 已注释，
+///   → 摇杆永远不会被创建；其余 `BattleJoystick.Instance?.Xxx()` 全部是空转（Instance 恒 null）。
+///   如果哪天要恢复：把各处注释掉的那一行放开即可，本文件不用动。
+///   另在 Awake 里加了保险（见下）：万一有别处 new 出实例，也会立刻把自己藏起来。
 /// </summary>
 public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IDragHandler
 {
@@ -128,6 +134,9 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
         Instance = this;
         if (_group == null) _group = GetComponent<CanvasGroup>();
         if (_pad == null) _pad = GetComponent<RectTransform>();
+        // 【2026-10-05「不要摇杆了」的保险】主人没让删类，那就保证「即使被别处 new 出来也绝不显示」。
+        // 正常路径下本类根本不会被创建（EnsureOn 已注释），这里是最后一道闸。
+        gameObject.SetActive(false);
     }
 
     void OnDestroy()

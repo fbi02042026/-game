@@ -139,7 +139,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         {
             int got = count - left;
             if (got > 0)
-                UIManager.Instance?.ShowToast($"获得 {def.name} ×{got}");
+                UIManager.Instance?.ShowToast($"获得 {def.name} ×{got}", true);   // 2026-10-06 主人拍板：物品获得 force 弹
         }
         return true;
     }
@@ -388,7 +388,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
         WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
-        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats));
+        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats), true);
         Hero.Instance?.RecalcAttr();
     }
 
@@ -463,11 +463,11 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         if (equip == null) return false;
         if (!TryAddUniqueBySlot(equip, out _))
         {
-            UIManager.Instance?.ShowToast("背包已满，无法获得装备");
+            UIManager.Instance?.ShowToast("背包已满，无法获得装备", true);
             return false;
         }
         string nm = string.IsNullOrEmpty(equip.equipName) ? "装备" : equip.equipName;
-        UIManager.Instance?.ShowToast($"获得 {nm}");
+        UIManager.Instance?.ShowToast($"获得 {nm}", true);
         return true;
     }
 
@@ -601,8 +601,13 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         EquipSlotType slot = rig.IsValid
             ? WeaponLoadoutRules.ResolveWearSlot(equip, rig)
             : WeaponLoadoutRules.ResolveLogicalSlot(equip);
+        // 【2026-10-07 主人报「抽中装备后主手武器消失」→ 修】
+        // 这里<b>必须</b>用 GetEquippedInSlot：slot 可能是 Chest / Feet 这类<b>防具槽</b>。
+        // 改前用的是 GetEquippedInLogicalSlot —— 那是「查逻辑主手 / 副手的<b>武器</b>」专用 API，
+        // 内部 MatchesLogicalWeaponSlot 对非 OffHand 一律 return true（根本不看传进去的槽），
+        // 于是拿 Chest 去问，它会把<b>主武器</b>当成 Chest 的旧件返回 → ScrapEquip 当场把剑分解了。
         // 换下谁，先记下来（穿成功后再分解它）
-        var old = GetEquippedInLogicalSlot(slot);
+        var old = GetEquippedInSlot(slot);
 
         var tmp = new BackpackItem
         {
@@ -620,7 +625,24 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         if (old != null && old != equip)
             ScrapEquip(old);
 
+        // 【2026-10-06 主人报「我的主武器怎么没了」→ 诊断日志】
+        // 奖励装备走这条「直接穿上」的链，会把同槽旧件 <b>分解成强化石</b>（主人定的规则：低级的变成材料）。
+        // 旧件没了是<b>设计如此</b>；要盯的是新件到底有没有真正落进穿戴槽 —— 落不进去就会表现为「空手」。
+        // 出问题时看这一行：槽位、rig、旧件、穿完后两个槽各是谁，一眼能分清楚。
+        Debug.Log($"[GridBackpack] 奖励装备直接穿上：新={equip.equipName}({equip.templateId}) " +
+                  $"槽={slot} rig有效={rig.IsValid} 攻击槽={rig.AttackSlot} 图标={(equip.icon != null ? "有" : "空")} " +
+                  $"spum={equip.ResolveSpumName()}｜顶掉并分解的旧件=" +
+                  $"{(old != null ? old.equipName + "(" + old.templateId + ")" : "无")}" +
+                  $"｜穿完 主手={SlotDesc(EquipSlotType.MainHand)} 副手={SlotDesc(EquipSlotType.OffHand)}");
         return true;
+    }
+
+    /// <summary>给诊断日志用：某个穿戴槽现在装着谁（没有就写「空」）。</summary>
+    string SlotDesc(EquipSlotType slot)
+    {
+        if (_equippedBySlot != null && _equippedBySlot.TryGetValue(slot, out var e) && e != null)
+            return $"{e.equipName}({e.templateId})";
+        return "空";
     }
 
     /// <summary>
@@ -648,7 +670,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
         int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
         WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
-        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats));
+        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats), true);
         OnBackpackChanged?.Invoke();
     }
 
@@ -756,6 +778,20 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     /// <summary>
     /// 获取指定槽位的装备。优先读穿戴字典，再兜底查背包。
     /// </summary>
+    /// <summary>
+    /// 这件装备装上去会顶掉谁（同部位的旧件）；没有旧件返回 null。
+    /// 2026-10-05：抽奖 / 通关拿到新装备要先弹窗问玩家「换不换新」，
+    /// 「谁会被顶掉」只在这里算一处 —— 武器走逻辑槽、防具走部位槽，
+    /// 别让 UI 层再猜一遍槽位规则（猜错就是顶错人）。
+    /// </summary>
+    public EquipInstance FindSameSlotEquip(EquipInstance newEq)
+    {
+        if (newEq == null) return null;
+        if (WeaponLoadoutRules.IsLoadoutItem(newEq))
+            return GetEquippedInLogicalSlot(WeaponLoadoutRules.ResolveLogicalSlot(newEq));
+        return GetEquippedInSlot(newEq.slotType);
+    }
+
     public EquipInstance GetEquippedInSlot(EquipSlotType slot)
     {
         var rig = GetHeroHandRig();
@@ -813,7 +849,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         int gold = GameConfig.EquipScrapGold(item.equip.rarity, item.equip.star);
         BattleManager.Instance.currentGold += gold;
         DropItem(item);
-        UIManager.Instance?.ShowToast($"分解{item.equip.equipName}获得{gold}金币");
+        UIManager.Instance?.ShowToast($"分解{item.equip.equipName}获得{gold}金币", true);
     }
 
     public List<BackpackItem> GetAllBackpackItems() => _items;
@@ -910,6 +946,12 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     static bool MatchesLogicalWeaponSlot(EquipInstance eq, EquipSlotType logicalSlot)
     {
         if (eq == null || !WeaponLoadoutRules.IsLoadoutItem(eq)) return false;
+        // 【2026-10-07 主人拍板】fail closed：本函数<b>只</b>在「逻辑主手 / 副手」这组武器槽里做判断。
+        // 传进 Chest / Feet 等防具槽 → 一律不匹配。
+        // 改前末尾 `return !offHandRole;` 完全不看 logicalSlot，拿 Chest 来问会把主武器
+        // 当成同槽旧件交出去，被 TryEquipDirect 分解掉（主人报「主武器没了 / 抽中装备后消失」）。
+        if (logicalSlot != EquipSlotType.MainHand && logicalSlot != EquipSlotType.OffHand)
+            return false;
         bool offHandRole = WeaponLoadoutRules.IsShield(eq) || WeaponLoadoutRules.IsOffHandWeapon(eq);
         if (logicalSlot == EquipSlotType.OffHand) return offHandRole;
         return !offHandRole;

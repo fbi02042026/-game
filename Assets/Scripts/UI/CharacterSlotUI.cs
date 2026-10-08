@@ -18,7 +18,9 @@ public class CharacterSlotUI
     public Image frameImage;
     public GameObject portraitPlaceholder; // 占位图
     public Image energyRing;            // 圆形能量环（可选）
-    public Image glowBorder;            // 金色描边（能量满时显示）
+    // 【2026-10-07 主人拍板删除】glowBorder（头像外圈那个「技能好了」的金色大圆圈）。
+    // 主人原话：「是个金色的大圆圈，如果是技能好的就去掉，不用显示；cd 好了、释放条件允许就自动释放。」
+    // 自动释放不需要「就绪提示」——玩家点了也没用，那圈金环只会糊住头像。整条链路删除，不留开关。
     public Text levelLabel;             // 等级标签 "Lv.4"
     public Text nameText;               // 角色名（签名后延用）
     public Image hpBarFill;             // 血条填充 HPBarFill
@@ -92,8 +94,7 @@ public class CharacterSlotUI
         var le = root.GetComponent<UnityEngine.UI.LayoutElement>();
         if (le != null) le.ignoreLayout = false;
 
-        if (nameText != null && !string.IsNullOrEmpty(name))
-            nameText.text = name;
+        SetName(name);
         if (levelLabel != null)
         {
             levelLabel.gameObject.SetActive(showLevel);
@@ -113,6 +114,36 @@ public class CharacterSlotUI
         }
         if (lanText != null) lanText.gameObject.SetActive(true);
         if (lanBarFill != null) lanBarFill.enabled = true;
+    }
+
+    /// <summary>
+    /// 角色名的<b>唯一出口</b>：空值清空并隐藏节点，有值则赋值并显示。
+    /// 2026-10-06 主人拍板：空槽 / 未解锁 / 未招募这些分支之前只清了等级和血蓝，
+    /// 漏清 nameText，导致预制体默认名或上一局残留的名字一直挂着；
+    /// 此后任何地方都不许再直接碰 nameText（绑定处除外），一律走这里。
+    /// </summary>
+    /// <summary>nameText 缺失只报一次：UpdateSlot 每次刷血条都会走到这里，每帧 LogError 会刷爆控制台。</summary>
+    static bool _nameTextMissingLogged;
+
+    public void SetName(string name)
+    {
+        if (nameText == null)
+        {
+            if (!_nameTextMissingLogged)
+            {
+                _nameTextMissingLogged = true;
+                Debug.LogError("[CharacterSlotUI] SetName 拿不到 nameText，节点缺失，名字无法显示（只报一次）");
+            }
+            return;
+        }
+        if (string.IsNullOrEmpty(name))
+        {
+            nameText.text = "";
+            nameText.gameObject.SetActive(false);
+            return;
+        }
+        nameText.text = name;
+        nameText.gameObject.SetActive(true);
     }
 
     /// <summary>
@@ -140,6 +171,33 @@ public class CharacterSlotUI
         frameImage.sprite = frame;
         // 不改 preserveAspect：预制体里框设的是 0（填满 170×100），改成 1 会留白、跟美术摆的不一样
         frameImage.enabled = frame != null;
+    }
+
+    /// <summary>
+    /// 职业 icon 不拉伸：在<b>预制体已经给好的框</b>里按 sprite 真实宽高比收敛。
+    ///
+    /// <para>为什么不能用 <c>SetNativeSize()</c>：它把 RectTransform 直接改成 sprite 的<b>原始像素尺寸</b>，
+    /// 等于把主人在预制体里调好的那一框整个盖掉（违铁律 2：预制体有值 → 代码不写），
+    /// 图一大就顶出框、再叠上父级缩放，看着就是「被拉伸」。</para>
+    ///
+    /// <para>这里以预制体（或代码兜底）给的 <c>sizeDelta</c> 当<b>天花板</b>：
+    /// 框比图宽就按高定宽，框比图高就按宽定高 —— 图永远完整、比例永远对、也不超出主人摆的位置。</para>
+    /// </summary>
+    static void FitJobIconNoStretch(Image img)
+    {
+        if (img == null || img.sprite == null) return;
+        var rt = img.rectTransform;
+
+        float boxW = Mathf.Max(1f, rt.sizeDelta.x);
+        float boxH = Mathf.Max(1f, rt.sizeDelta.y);
+        var r = img.sprite.rect;
+        float spr = Mathf.Max(0.01f, r.width / Mathf.Max(1f, r.height));
+
+        float w = boxW, h = boxH;
+        if (boxW / boxH > spr) w = boxH * spr;   // 框偏宽 → 以高为准收窄
+        else                   h = boxW / spr;   // 框偏高 → 以宽为准收矮
+
+        rt.sizeDelta = new Vector2(w, h);
     }
 
     static void FitPortraitNoStretch(Image img)
@@ -348,8 +406,52 @@ public class CharacterSlotUI
         jobIcon.preserveAspect = true;
         jobIcon.raycastTarget = false;
         jobIcon.sprite = icon;
+        // 【2026-10-07 主人拍板】职业 icon 直接写死 42×50（主人给定），不再按贴图比例 fit。
+        // 改前走 FitJobIconNoStretch（按贴图比例收进美术摆的 sizeDelta 框里），主人看到的仍是拉伸。
+        // preserveAspect 关掉：贴图本就是 42×50，按这尺寸 1:1 摆即为原比例，留着它反而可能留白。
+        if (icon != null)
+        {
+            jobIcon.rectTransform.sizeDelta = JobIconFixedSize;
+            jobIcon.preserveAspect = false;
+        }
         jobIcon.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
         jobIcon.gameObject.SetActive(icon != null);
+        // 只打一次：UpdateCharacterSlots 每次刷血条都会调到这里，逐帧打印会刷爆控制台
+        if (icon != null && !_jobIconScaleLogged)
+        {
+            _jobIconScaleLogged = true;
+            LogJobIconScale(jobIcon.rectTransform);
+        }
+    }
+
+    /// <summary>
+    /// 【2026-10-07 主人拍板】职业 icon 的<b>固定尺寸</b> 42×50（主人给定的数，改这一个就行）。
+    /// 贴图本身就是 42×50，按这个尺寸 1:1 摆正好不拉伸；不再走「按贴图比例收进框」的那套。
+    /// </summary>
+    static readonly Vector2 JobIconFixedSize = new Vector2(42f, 50f);
+
+    /// <summary>职业 icon 的缩放链日志只打一次（见 SetJobIcon）。</summary>
+    static bool _jobIconScaleLogged;
+
+    /// <summary>
+    /// 只打印职业 icon 的 sizeDelta 与父链 localScale 供排查（父链非等比缩放会让 SetNativeSize 之后仍旧变形）。
+    /// 2026-10-06 主人拍板：只打日志，不擅自改别人的节点。
+    /// </summary>
+    static void LogJobIconScale(RectTransform rt)
+    {
+        if (rt == null) return;
+        var chain = new System.Text.StringBuilder();
+        Transform t = rt;
+        while (t != null)
+        {
+            var s = t.localScale;
+            bool nonUniform = Mathf.Abs(s.x - s.y) > 0.0001f || Mathf.Abs(s.y - s.z) > 0.0001f;
+            chain.Append(t.name).Append('(').Append(s.x.ToString("F3")).Append(',')
+                 .Append(s.y.ToString("F3")).Append(',').Append(s.z.ToString("F3"))
+                 .Append(nonUniform ? " 非等比" : "").Append(") <- ");
+            t = t.parent;
+        }
+        Debug.Log($"[CharacterSlotUI] 职业icon sizeDelta={rt.sizeDelta} 父链: {chain}");
     }
 
     /// <summary>技能能量：底栏 lanBar 显示进度，满时仅显示光边（不改头像框）</summary>
@@ -366,16 +468,8 @@ public class CharacterSlotUI
         // 不用头像框/头像当进度条
         if (energyRing != null)
             energyRing.fillAmount = 0f;
-
-        bool isReady = e >= 0.99f;
-        if (glowBorder != null)
-        {
-            glowBorder.gameObject.SetActive(isReady);
-            if (isReady)
-            {
-                glowBorder.color = new Color(1f, 0.85f, 0.15f, 0.85f);
-            }
-        }
+        // 【2026-10-07 主人拍板】能量满不再亮金色光环（glowBorder 已删）：技能是自动释放的，
+        // 「就绪」这件事不该再往头像上糊一层装饰。能量进度仍然走 lanBarFill / lanText。
     }
 
     /// <summary>
@@ -505,17 +599,8 @@ public class CharacterSlotUI
         return true;
     }
 
-    public void TickSkillReadyPulse()
-    {
-        if (glowBorder == null || !glowBorder.gameObject.activeSelf) return;
-        float a = 0.35f + 0.65f * (0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 7f));
-        var c = glowBorder.color;
-        c.r = 1f;
-        c.g = 0.85f;
-        c.b = 0.15f;
-        c.a = a;
-        glowBorder.color = c;
-    }
+    // 【2026-10-07 主人拍板删除】TickSkillReadyPulse：金色光环的呼吸闪烁，随 glowBorder 一起删。
+    // ⚠ 别再补回来 —— 主人要的是「cd 好了、条件允许就自动释放」，头像上不需要任何就绪提示。
 
     public void SetEnergyEnabled(bool enabled)
     {
@@ -524,40 +609,7 @@ public class CharacterSlotUI
             SetEnergy(0f);
     }
 
-    /// <summary>满能量光边：叠在 Portrait 父节点上，不用头像当进度条</summary>
-    public void EnsureSkillGlow()
-    {
-        if (glowBorder != null) return;
-        Transform portraitRoot = portrait != null ? portrait.transform.parent : null;
-        if (portraitRoot == null) return;
-
-        Transform existing = portraitRoot.Find("SkillGlow");
-        GameObject go;
-        if (existing != null)
-        {
-            go = existing.gameObject;
-        }
-        else
-        {
-            go = new GameObject("SkillGlow", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            go.transform.SetParent(portraitRoot, false);
-            go.transform.SetAsLastSibling();
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = new Vector2(-8f, -8f);
-            rt.offsetMax = new Vector2(8f, 8f);
-            var img = go.GetComponent<Image>();
-            img.raycastTarget = false;
-            // 必须有图：sprite 为空的 Image 会画成一块实心金色方块盖住头像。
-            // 这里用运行时生成的白色圆环蒙版，颜色仍由 SetEnergy 写成金色。
-            img.sprite = RuntimeUiArt.Ring();
-            img.color = new Color(1f, 0.85f, 0.15f, 0.85f);
-            img.preserveAspect = true;
-        }
-        glowBorder = go.GetComponent<Image>();
-        go.SetActive(false);
-    }
+    // 【2026-10-07 主人拍板删除】EnsureSkillGlow：运行时往头像外圈补的那个金色大圆环（见字段处说明）。
 
     // ============================================================
     // 运行时补齐美术未画的装饰件（L）
@@ -573,7 +625,7 @@ public class CharacterSlotUI
         EnsureNameText();
         EnsureLevelLabel();
         EnsurePortraitPlaceholderNode();
-        EnsureSkillGlow();
+        // 【2026-10-07 主人拍板】EnsureSkillGlow() 不再调用：头像外圈金环已删。
     }
 
     /// <summary>
@@ -715,6 +767,7 @@ public class CharacterSlotUI
     public void Clear()
     {
         SetEnergyEnabled(false);
+        SetName(null);                  // 2026-10-06 主人拍板：清空槽位也要把名字收掉，别留上一局的残留
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
         if (root != null)
         {
@@ -735,6 +788,7 @@ public class CharacterSlotUI
         SetSkillBadge(null);
         SetJobIcon(null);               // 空槽不显示职业 icon
         ApplyUnhiredPortrait();         // 空槽（未雇佣）：头像位留白，不再点亮/置白占位盘
+        SetName(null);                  // 2026-10-06 主人拍板：空槽下面不许残留名字
         if (levelLabel != null) levelLabel.text = "";
         ClearNumericDisplays();
         if (UnhiredShowPlayerLook) KeepBarGraphicsVisible();   // 条本体保留，跟玩家槽同一套
@@ -752,12 +806,27 @@ public class CharacterSlotUI
         ApplyDim(true);
         if (lockedOverlay != null)
             lockedOverlay.SetActive(true);
+        SetName(null);                  // 2026-10-06 主人拍板：未解锁槽保留美术布局，但清掉占位名字
         ClearNumericDisplays();
     }
 
     bool _lockedLabelSized;
 
     /// <summary>未开放槽：保留节点可见，头像关掉，文案显示「未解锁」</summary>
+    /// <summary>
+    /// 【2026-10-07 主人拍板】佣兵<b>阵亡</b>态：头像 / 职业 icon / 名字<b>全部保留</b>，整槽压暗（变灰）。
+    ///
+    /// <para>改前阵亡走的是 <see cref="ShowEmpty"/> —— 清成「没有佣兵时的空框」，主人要的是「头像变灰」。</para>
+    /// <para>复用 <see cref="ApplyDim"/>：与锁定 / 空槽同一套压暗口径，灰度只由 <c>DimScale</c> 一处控制。</para>
+    /// <para>幂等（<see cref="ApplyDim"/> 内有 <c>dim == _dimmed</c> 短路），每帧刷也不怕。</para>
+    /// </summary>
+    public void SetFallen(bool fallen)
+    {
+        if (root != null) root.SetActive(true);
+        if (lockedOverlay != null) lockedOverlay.SetActive(false);
+        ApplyDim(fallen);
+    }
+
     public void ShowUnavailable(string label = "未解锁")
     {
         SetEnergyEnabled(false);
@@ -770,10 +839,60 @@ public class CharacterSlotUI
         SetJobIcon(null);               // 未解锁不显示职业 icon
         ApplyUnhiredPortrait();         // 未解锁（未雇佣）：头像位留白，不再点亮/置白占位盘
         ApplyLockedOverlayText(label ?? "未解锁");
+        SetName(null);                  // 2026-10-06 主人拍板：未解锁槽下面不许残留名字
         if (levelLabel != null)
             levelLabel.text = "";
         ClearNumericDisplays();
         if (UnhiredShowPlayerLook) KeepBarGraphicsVisible();   // 条本体保留，跟玩家槽同一套
+    }
+
+    /// <summary>
+    /// 未招募「预览态」：整体压暗（灰掉）+ 佣兵头像 + 血条 + 稀有度头像框，<b>不显示锁图标</b>。
+    /// 2026-10-05 主人拍板：头像栏「跟现在一样灰掉，但应该有佣兵头像和血条，没有锁的图标，
+    /// 还有跟佣兵稀有度一样的头像框」。
+    /// 与 <see cref="ShowUnavailable"/> 的唯一区别：这里拿得到「这个槽将来站的是谁」，
+    /// 所以把人画出来，而不是留白 + 挂一把锁。拿不到人（普通局未解锁槽）仍旧走 ShowUnavailable。
+    /// </summary>
+    public void ShowLockedPreview(Sprite face, Sprite frame, string displayName, float hp, float maxHp)
+    {
+        if (root == null) return;
+        ApplyDim(false);          // 先还原，避免随后新设的颜色逃过压暗
+        SetEnergyEnabled(false);
+        root.SetActive(true);
+        EnsureLockedOverlay();
+        if (lockedOverlay != null) lockedOverlay.SetActive(false);   // 主人：不要锁的图标
+        SetPortrait(face);
+        SetFrame(frame);          // 头像框 = 佣兵稀有度（普通灰白 / 稀有蓝 / 传奇橙金）
+        SetSkillBadge(null);
+        SetJobIcon(null);
+        SetName(displayName);           // 2026-10-06 主人拍板：名字统一走 SetName（空名自动隐藏节点）
+        if (levelLabel != null)
+        {
+            levelLabel.gameObject.SetActive(false);
+            levelLabel.text = "";
+        }
+        if (hpText != null)
+        {
+            hpText.gameObject.SetActive(true);
+            hpText.text = $"{Mathf.RoundToInt(hp)}";
+        }
+        if (hpBarFill != null)
+        {
+            hpBarFill.enabled = true;
+            hpBarFill.fillAmount = maxHp > 0f ? Mathf.Clamp01(hp / maxHp) : 0f;
+        }
+        if (lanBarFill != null)
+        {
+            lanBarFill.enabled = true;
+            lanBarFill.fillAmount = 0f;
+        }
+        if (lanText != null)
+        {
+            lanText.text = "";
+            lanText.gameObject.SetActive(false);
+        }
+        HideShieldBar();
+        ApplyDim(true);           // 最后整体压暗：灰掉
     }
 
     void ApplyLockedOverlayText(string text)

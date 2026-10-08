@@ -596,7 +596,8 @@ public class EquipDropPopupUI : MonoBehaviour
         string msg = atk > 0
             ? $"恭喜获得【{eq.equipName}】，攻击+{atk}，实力大增！"
             : $"恭喜获得【{eq.equipName}】，实力大增！";
-        GlobalToastUI.Show(msg);
+        GlobalToastUI.Show(msg, true);   // 2026-09-17 用户要求：获得装备弹庆祝提示（2026-10-06 force 弹出）
+        // ⚠ 2026-10-07 曾据此句误判为「主人要求去掉播报」而删过一次，已回滚 —— 主人明确说没说过不播报。
     }
 
     EquipInstance GetSelected()

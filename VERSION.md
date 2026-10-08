@@ -10,6 +10,28 @@ git show v0.3.3:VERSION.md
 
 ---
 
+## v1.0.0 — 2026-10-04（TapTap 上架版 · 图标全量替换 + 对外版本号）
+
+### 图标（各平台 / 各机型槽位全覆盖）
+- APP 图标换成「紫晶裂痕少女」推荐版（`app_icon_1024_rift.png` 同源）：
+  - `app_icon.png` ← 覆盖为 **1024×1024 正方真 PNG**（顺带修掉「假 PNG：JPEG 头 / 954×1024」历史遗留）
+  - **自适应图标（Android 8+ 各 ROM）**：`app_icon_adaptive_fg.png` = 主体椭圆羽化版（四角透明），
+    `app_icon_adaptive_bg.png` = 同源放大模糊 + 提亮的紫雾底；方角 / 圆形 / 方圆 / 水滴蒙版均自然
+  - 实现口径：**只覆盖图片内容，不动任何 `.meta` / guid / ProjectSettings 槽位**
+    （绕开「56 字符 guid 引用不落盘」的雷，见 `Docs/56字符Base64处置口径_2026-09-24.md`）
+- 旧图备份：`.workbuddy/tmp/app_icon_OLD_954x1024.png`、`adaptive_fg_OLD.png`、`adaptive_bg_OLD.png`
+
+### 版本号
+- 对外版本 `bundleVersion: 0.3.1 → 1.0.0`（主人拍板对外从 1.0.0 起步）
+- `AndroidBundleVersionCode` 保持 1（此前从未上传过商店，首次上架即 1；以后每次商店更新 +1）
+
+### 遗留 / 待办
+- `app_icon_1024*.png`、`icon_source_amethyst.jpg` 等 10-04 新导入图为 **56 字符 guid**（当前零引用，
+  按口径只报告不处理）
+- 团结聚焦窗口重导入后，需**打真机包**验收图标（编辑器看到的 ≠ 打包后的）
+
+---
+
 ## v0.3.4 — 2026-08-23（酒馆招募 + 口径收口）
 
 ### 酒馆

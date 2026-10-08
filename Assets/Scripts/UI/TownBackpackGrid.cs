@@ -37,7 +37,7 @@ public class TownBackpackGrid : MonoBehaviour
 
     /// <summary>
     /// 子类专属数据源钩子（**基类默认返回 null，走原本的 GridBackpackSystem 逻辑，行为一个字节都不变**）。
-    /// <para>返回非 null = 由子类全权决定铺什么：Refresh() 拿它直接 ClearAndPlace + ApplyOccupiedColors 后 return，
+    /// <para>返回非 null = 由子类全权决定铺什么：Refresh() 拿它直接 ClearAndPlace + RestoreCellVisuals 后 return，
     /// **不再走下面那条 4 列网格 + `bip.y >= unlockedRows` 的过滤分支**。</para>
     /// <para>坐标语义：子类自己的网格坐标；由子类负责与格子实际使用的逻辑坐标对齐。</para>
     /// </summary>
@@ -527,7 +527,7 @@ public class TownBackpackGrid : MonoBehaviour
         if (custom != null)
         {
             BackpackGridVisual.ClearAndPlace(gridContainer, gridLayout, custom, FindCellRect);
-            ApplyOccupiedColors(custom);
+            RestoreCellVisuals();
             return;
         }
 
@@ -550,7 +550,7 @@ public class TownBackpackGrid : MonoBehaviour
                     });
                 }
                 BackpackGridVisual.ClearAndPlace(gridContainer, gridLayout, placements, FindCellRect);
-                ApplyOccupiedColors(placements);
+                RestoreCellVisuals();
                 return;
             }
         }
@@ -559,7 +559,7 @@ public class TownBackpackGrid : MonoBehaviour
         if (data?.legacyEquipPool == null)
         {
             BackpackGridVisual.ClearAndPlace(gridContainer, gridLayout, placements, FindCellRect);
-            ApplyOccupiedColors(placements);
+            RestoreCellVisuals();
             return;
         }
         int slot = 0;
@@ -579,38 +579,22 @@ public class TownBackpackGrid : MonoBehaviour
             slot += w * h;
         }
         BackpackGridVisual.ClearAndPlace(gridContainer, gridLayout, placements, FindCellRect);
-        ApplyOccupiedColors(placements);
+        RestoreCellVisuals();
     }
 
-    void ApplyOccupiedColors(List<BackpackGridVisual.ItemPlacement> placements)
+    /// <summary>
+    /// 【2026-10-06 主人拍板】格子底图恒为美术原色 —— 不再按「有装备 / 已穿戴」刷代码色
+    /// （旧实现刷深蓝 0.24,0.30,0.38 / 铜色 0.30,0.26,0.16，把美术底图盖掉了）。
+    /// 稀有度改由图标外沿那圈描边表达（BackpackGridVisual → EquipRarityRim），与底色无关。
+    /// 这里只负责把上次刷新可能残留的染色还原。
+    /// </summary>
+    void RestoreCellVisuals()
     {
         foreach (var cell in cells)
         {
             if (cell == null) continue;
             cell.SetEmptyVisual();
         }
-        if (placements == null) return;
-        for (int i = 0; i < placements.Count; i++)
-        {
-            var p = placements[i];
-            for (int dx = 0; dx < p.w; dx++)
-            for (int dy = 0; dy < p.h; dy++)
-            {
-                var cell = FindCell(p.x + dx, p.y + dy);
-                cell?.SetOccupiedVisual(p.equipped);
-            }
-        }
-    }
-
-    GridCellUI FindCell(int gx, int gy)
-    {
-        for (int i = 0; i < cells.Count; i++)
-        {
-            var c = cells[i];
-            if (c != null && c.gridX == gx && c.gridY == gy)
-                return c;
-        }
-        return null;
     }
 
     RectTransform FindCellRect(int gx, int gy)

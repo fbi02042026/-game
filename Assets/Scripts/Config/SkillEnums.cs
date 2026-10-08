@@ -3,12 +3,17 @@ using UnityEngine;
 /// <summary>
 /// 技能稀有度（局内抽卡权重用）。
 /// 注意：与装备全局 <c>Rarity</c>、佣兵 <see cref="MercRosterDefs.MercRarity"/> 取值不同，勿混用、勿互转。
+///
+/// <para><b>2026-10-05 主人拍板：品质只有三档 —— 普通 / 稀有 / 传奇，「史诗」不再使用。</b>
+/// 与装备表（NORMAL / RARE / LEGEND）、佣兵（普通 / 稀有 / 传说）对齐：三处同款三档，玩家不用记第四档。
+/// 原来的 5 个史诗技能已并进「传说」（见 <c>SkillDraftMeta</c> 表），
+/// 枚举值 <c>Epic = 2</c> 保留只为旧存档数值兼容 —— <b>新代码不要产出 Epic</b>。</para>
 /// </summary>
 public enum SkillRarity
 {
     Common = 0,
     Rare = 1,
-    Epic = 2,
+    Epic = 2,        // ⚠ 已废弃（主人 2026-10-05 拍板）：保留数值只为兼容，不要再产出
     Legendary = 3
 }
 
@@ -133,7 +138,11 @@ public enum DraftCardKind
     PowerUp = 3,       // 直接强化（攻击 / 生命 / 攻速）
     Equip = 4,         // 本局装备（撤离不带出）
     MercLevelUp = 5,   // 已有佣兵升级（佣兵不自动升级，只能抽卡升）
-    MercStarUp = 6     // 已有佣兵升星（★+1，同时等级 +1）
+    MercStarUp = 6,    // 已有佣兵升星（★+1，同时等级 +1）
+    Gold = 7           // 抽奖币（本局抽奖用的那套）—— 2026-10-05 主人拍板新增的安慰奖
+    // ⚠【2026-10-05 已删除】Material = 8（强化石）：主人拍板「强化石不能抽奖得到」。
+    //   强化石照旧走铁匠铺 / 休息关 / 商店（`StageRoller.RestMaterialReward`、`ShopDefs`），那几处不受影响。
+    //   枚举值 8 不再复用，免得旧存档里的数值被读成别的卡。
 }
 
 /// <summary>

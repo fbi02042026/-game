@@ -254,16 +254,45 @@ public class PlayerJobSelectUI : MonoBehaviour
         }
     }
 
-    /// <summary>手做卡：Stats/血量/Stats(Text)；或节点自身带 Text。</summary>
+    /// <summary>
+    /// 手做卡的一行属性：行节点（名字=「血量 / 攻击 / 操控」）下面的 Text。
+    ///
+    /// <para>⚠ 2026-10-05 根因：预制体里这三个行节点是<b>图标大小</b>（26×24 / 28×29 / 31×31），
+    /// 而它们下面的 <c>Stats</c> Text 是 <c>sizeDelta 0×0 + anchor 0~1 拉伸</c> →
+    /// 文字被压进图标框里，配上 <c>Wrap + Truncate</c>，「血量 高」这种 4 个字被折行截断，
+    /// 看着就像「没绑定数据 / 显示不对」。</para>
+    ///
+    /// <para>数据其实<b>一直在绑</b>。真正的病是那个畸形的小框。本方法只做一件兜底：
+    /// 把 Text 的横向溢出改成 <see cref="HorizontalWrapMode.Overflow"/>，
+    /// 让文字按原样完整画出来 —— <b>不动任何位置 / 尺寸 / 字体 / 颜色</b>（那些是美术的），
+    /// 也不改预制体。要根治请主人在团结里把三个行节点的框拉宽（见汇报）。</para>
+    /// </summary>
     static Text FindStatLineText(Transform card, string rowName)
     {
         var row = FindDeep(card, rowName);
         if (row == null) return null;
         var nested = FindText(row, "Stats");
-        if (nested != null) return nested;
+        if (nested != null) return RelaxTextClipping(nested);
         var label = FindText(row, "Label");
-        if (label != null) return label;
-        return row.GetComponent<Text>();
+        if (label != null) return RelaxTextClipping(label);
+        return RelaxTextClipping(row.GetComponent<Text>());
+    }
+
+    /// <summary>
+    /// 文字被塞进过小的框时，允许它溢出绘制（只放宽 overflow，不改 sizeDelta / 位置）。
+    /// 用于属性行那种「框只有图标大小」的预制体结构。
+    /// </summary>
+    static Text RelaxTextClipping(Text t)
+    {
+        if (t == null) return null;
+        var rt = t.rectTransform;
+        if (rt == null) return t;
+        // 只在框确实装不下时才放宽；框够大就完全不碰（保持美术的换行设置）
+        float needW = t.fontSize * (t.text != null ? t.text.Length : 0) + 8f;   // 粗略：一个全角字 ≈ 一个 fontSize
+        if (rt.rect.width >= needW) return t;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        return t;
     }
 
     void BuildRuntimeWhitebox(bool isPrefabBuild)

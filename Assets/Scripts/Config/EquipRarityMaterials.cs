@@ -1,31 +1,24 @@
 using UnityEngine;
 
 /// <summary>
-/// 装备/武器稀有度材质：普通不挂；稀有 Armor_xiyou；传奇 Armor_chuanqi。
-/// 资源路径：Resources/Materials/Armor_xiyou、Armor_chuanqi。
+/// 装备材质口径（2026-10-06 主人拍板收敛后只剩两条路）。
+///
+/// <b>世界空间（SpriteRenderer）：装备不带描边</b> —— 一律 Sprites/Default，装备就是美术图本来的样子。
+/// 原实现给 稀有 / 传奇 挂 <c>Armor_xiyou</c> / <c>Armor_chuanqi</c>：这两个材质用的是
+/// 「Sprite Shaders Ultimate/Standard/Color/Outer Outline」着色器，唯一效果就是沿轮廓描一圈
+/// 蓝（稀有 _OuterOutlineColor ≈ 0.46,0.53,1）/ 黄（传奇 ≈ 0.97,1,0.49）外描边
+/// （该着色器只把 alpha&lt;1 的边缘像素往描边色拉，本体像素不动）。
+/// 主人原话「装备不要带描边」→ 整条外层描边链路删除；两个 .mat 文件留着不动（美术资源不删）。
+///
+/// <b>UI（Image）：一律不挂材质</b>（null = UI 内置默认材质，透明通道才正常）。
+/// 2026-09-27 的教训：Armor_xiyou 是不透明的世界空间材质，挂到 Image 上会把整块填成色块。
+///
+/// 稀有度在 UI 上只由 <see cref="EquipRarityRim"/> 的格子描边表达，别再往图标上挂东西。
 /// </summary>
 public static class EquipRarityMaterials
 {
-    const string RarePath = "Materials/Armor_xiyou";
-    const string LegendaryPath = "Materials/Armor_chuanqi";
-
-    static Material _rare;
-    static Material _legendary;
     static Material _defaultSprite;
     static bool _defaultSpriteResolved;
-
-    public static Material Get(Rarity rarity)
-    {
-        switch (rarity)
-        {
-            case Rarity.Rare:
-                return LoadRare();
-            case Rarity.Legendary:
-                return LoadLegendary();
-            default:
-                return null;
-        }
-    }
 
     public static Material DefaultSpriteMaterial()
     {
@@ -39,44 +32,18 @@ public static class EquipRarityMaterials
         return _defaultSprite;
     }
 
-    public static void Apply(SpriteRenderer sr, Rarity rarity)
+    /// <summary>世界空间装备：一律默认精灵材质（不带稀有度描边，见类注释）。</summary>
+    public static void Apply(SpriteRenderer sr)
     {
         if (sr == null) return;
-        var mat = Get(rarity);
-        if (mat != null)
-            sr.sharedMaterial = mat;
-        else
-        {
-            var def = DefaultSpriteMaterial();
-            if (def != null) sr.sharedMaterial = def;
-        }
+        var def = DefaultSpriteMaterial();
+        if (def != null) sr.sharedMaterial = def;
     }
 
-    /// <summary>
-    /// 2026-09-27 主人反馈：武器/装备图标「变红后显示有白色区域，感觉没有透明通道了」。
-    /// 根因：Armor_xiyou / Armor_chuanqi 是 **SPUM 角色染色**材质（不透明、带描边、走世界空间），
-    /// 挂到 UI Image 上不走 UI 的 alpha 混合 → 整块被不透明填充，贴图外的部分就成了白/红方块。
-    /// 修法：**UI 图标一律不挂材质**（null = 用 UI 内置默认材质，透明通道正常）；
-    /// 稀有度在 UI 上用颜色/边框表达，别再往 Image 上挂世界材质。
-    /// 世界空间的 SpriteRenderer 染色仍走 <see cref="Apply(SpriteRenderer, Rarity)"/>，不受影响。
-    /// </summary>
-    public static void Apply(UnityEngine.UI.Image img, Rarity rarity)
+    /// <summary>UI 图标：一律不挂材质（null = UI 内置默认材质，透明通道正常）。</summary>
+    public static void Apply(UnityEngine.UI.Image img)
     {
         if (img == null) return;
         img.material = null;
-    }
-
-    static Material LoadRare()
-    {
-        if (_rare == null)
-            _rare = Resources.Load<Material>(RarePath);
-        return _rare;
-    }
-
-    static Material LoadLegendary()
-    {
-        if (_legendary == null)
-            _legendary = Resources.Load<Material>(LegendaryPath);
-        return _legendary;
     }
 }

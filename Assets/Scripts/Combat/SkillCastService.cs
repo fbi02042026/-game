@@ -49,6 +49,16 @@ public sealed class SkillCastService
         // 严格按槽取技能：取不到就本次不放（不放别的技能替补，避免清错能量）
         var skill = ResolvePlayerSkillAt(slot);
         if (skill == null) return false;
+
+        // 2026-10-06 主人拍板：玩家侧也走蓝条（与佣兵同一套 MpProfile，4 个技能共用一条）。
+        // 蓝不足 → 不放、CD 不重置、不排队。扣蓝唯一出口 bm.TrySpendPlayerMp。
+        float mpCost = PlayerSkillDefs.MpCostOf(skill.skillId);
+        if (mpCost < 0f)
+        {
+            Debug.LogError($"[SkillCast] 玩家技能 {skill.skillId} 在 player_skills 里查不到耗蓝 → 拒绝释放（fail closed）");
+            return false;
+        }
+        if (!bm.TrySpendPlayerMp(mpCost)) return false;
         UnitBase healTarget = null;
         bool isHeal = IsHealSkill(skill);
         bool isBuff = skill.skillType == SkillSystem.SkillType.Buff;

@@ -176,8 +176,7 @@ public partial class BattleUI : MonoBehaviour
         // 每帧都要跟：开战/撤离/进入整理阶段都要立刻切换遮罩，不能等 0.1s 节流
         TickBattleMask();
 
-        if (playerSlot != null && playerSlot.glowBorder != null && playerSlot.glowBorder.gameObject.activeSelf)
-            playerSlot.TickSkillReadyPulse();
+        // 【2026-10-07 主人拍板】角色卡头像的「技能就绪」金色光环已整条删除（glowBorder / TickSkillReadyPulse）。
         if (playerSkillAvatar != null && playerSkillAvatar.IsReadyPulse)
             playerSkillAvatar.TickReadyPulse();
 
@@ -227,7 +226,7 @@ public partial class BattleUI : MonoBehaviour
         {
             var m = mercs[0];
             float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(0) : 0f;
+            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(0) : 0f;
             if (!Mathf.Approximately(_lastMerc1Hp, m.currentHp) || !Mathf.Approximately(_lastMerc1Energy, energy))
             {
                 _lastMerc1Hp = m.currentHp;
@@ -240,7 +239,7 @@ public partial class BattleUI : MonoBehaviour
         {
             var m = mercs[1];
             float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercSkillEnergy(1) : 0f;
+            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(1) : 0f;
             if (!Mathf.Approximately(_lastMerc2Hp, m.currentHp) || !Mathf.Approximately(_lastMerc2Energy, energy))
             {
                 _lastMerc2Hp = m.currentHp;
@@ -264,12 +263,14 @@ public partial class BattleUI : MonoBehaviour
     {
         int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         int stageIdx = 0;
-        string diff = "普通";
+        // 【2026-10-06 主人拍板】左上角那格显示的是「玩家选的难度」（真源 BattleManager.BattleDifficulty，
+        // 引导局开局写 0 = 普通），**不再**按关卡类型显示「精英 / Boss」——
+        // 「精英」是关卡类型、「困难」是难度，两套词混在同一格里会读错。
+        // 难度名的唯一出处是 GameConfig.GetDifficultyName（原 StageTypeToDifficulty 已删）。
+        string diff = GameConfig.GetDifficultyName(
+            BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0);
         if (BattleManager.Instance != null && BattleManager.Instance.currentStage != null)
-        {
             stageIdx = BattleManager.Instance.currentStage.stageIndex;
-            diff = StageTypeToDifficulty(BattleManager.Instance.currentStage.type);
-        }
         long gold = BattleManager.Instance != null ? BattleManager.Instance.currentGold : 0;
         var save = SaveSystem.Instance?.Data;
         if (save != null && gold <= 0) gold = save.totalGold;

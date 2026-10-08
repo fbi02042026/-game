@@ -34,28 +34,10 @@ public class GridCellUI
     public void CaptureDefaultVisual()
     {
         if (_artistCached) return;
-        if (cellBg != null)
-        {
-            Color c = cellBg.color;
-            // 勿把程序占用色当成美术默认（重绑/二次 Capture 会把空格锁成深色）
-            if (ApproxColor(c, OccupiedBg) || ApproxColor(c, EquippedBg))
-                c = Color.white;
-            _artistBg = c;
-        }
+        if (cellBg != null) _artistBg = cellBg.color;
         if (rarityFrame != null) _artistFrame = rarityFrame.color;
         _artistCached = true;
     }
-
-    static bool ApproxColor(Color a, Color b)
-    {
-        return Mathf.Abs(a.r - b.r) < 0.04f
-            && Mathf.Abs(a.g - b.g) < 0.04f
-            && Mathf.Abs(a.b - b.b) < 0.04f;
-    }
-
-    // 空格不染色，保留预制体图片本色；仅有装备时才换色
-    static readonly Color OccupiedBg = new Color(0.24f, 0.30f, 0.38f, 0.95f);
-    static readonly Color EquippedBg = new Color(0.30f, 0.26f, 0.16f, 0.95f);
 
     /// <summary>底行等：天赋未解锁时显示锁定遮罩，格子本身保持显示（不关节点，避免 GridLayout 重排）。</summary>
     public void SetRowLocked(bool locked)
@@ -146,16 +128,10 @@ public class GridCellUI
     public void SetEmptyVisual()
     {
         CaptureDefaultVisual();
-        // 空格：还原美术默认色，不刷深色底
+        // 2026-10-06 主人拍板：格子底图**恒为美术原色**，不再按占用/已穿戴刷代码色
+        // （旧的 OccupiedBg / EquippedBg 已删）；稀有度只由图标外沿描边表达（EquipRarityRim）。
         if (cellBg != null) cellBg.color = _artistBg;
         if (rarityFrame != null) rarityFrame.color = _artistFrame;
-    }
-
-    public void SetOccupiedVisual(bool equipped)
-    {
-        CaptureDefaultVisual();
-        if (cellBg != null)
-            cellBg.color = equipped ? EquippedBg : OccupiedBg;
     }
 
     /// <summary>

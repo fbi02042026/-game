@@ -170,9 +170,20 @@ public partial class BattleUI : MonoBehaviour
             // 右下角等级：美术在每个技能槽下放了 level 节点，优先用它；没有再运行时补
             av.levelText = FindTextNamed(t, "level", "Level", "SkillLevel")
                 ?? EnsureCornerText(t, "SkillLevel", 12);
-            av.cooldownText = EnsureChildText(t, "SkillCd", 16);
-            av.cooldownMask = EnsureChildMask(t, "SkillCdMask");
+            // 【2026-10-07 主人拍板】冷却遮罩 / 倒计时数字**只挂在图标框那一个节点上**，
+            // 不再铺满整个槽位根：主人原话「转圈的冷却中心有点偏离，把左边那个加号也算上了，
+            // 应该就只有右边图标框的地方显示那个转圈冷却」。
+            // 槽位根里除了图标框还有别的装饰（左边的「+」），铺满根 = 圆心被拉偏、还盖住加号。
+            Transform cdNode = av.avatarImage != null ? av.avatarImage.transform : t;
+            av.cooldownText = EnsureChildText(cdNode, "SkillCd", 16);
+            av.cooldownMask = EnsureChildMask(cdNode, "SkillCdMask");
             av.energyFill = EnsureChildBar(t, "SkillEnergy", new Color(0.98f, 0.78f, 0.28f, 1f));
+            // 左上角释放顺序角标（① 最先放）：与整理阶段的拖拽调序同一口径，空槽由 SetOrderText("") 隐藏
+            av.orderText = EnsureTopLeftText(t, "SkillOrder", 16);
+            // 【2026-10-06 主人拍板】右上角「新」角标：本拍抽奖刚拿到的技能才亮，点「继续」后清。
+            // 建出来先隐藏，点亮与否由 UpdateRunSkillSlots 按 NewLootMarks.Has 决定（判据只有一处）。
+            av.newText = EnsureTopRightText(t, "SkillNew", 14);
+            av.SetNewBadge(false);
             // 纯冷却制：节点照样建（置 true 就能回来），默认隐藏
             av.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
             runSkillSlots.Add(av);
@@ -185,6 +196,53 @@ public partial class BattleUI : MonoBehaviour
             chip.DragEnabled = false;          // 由 RefreshSkillSlotDragState 按阶段打开
             chip.OnOrderChanged = OnSkillSlotReordered;
         }
+    }
+
+    /// <summary>
+    /// 在槽位左上角补一行小字（释放顺序 ①②③④）。锚在角上，只占一小块，不碰任何图片节点的尺寸。
+    /// 与 EnsureCornerText 同口径，只是锚点镜像到左上角、字号放大一档（顺序＝优先级，要看得清）。
+    /// </summary>
+    static Text EnsureTopLeftText(Transform parent, string name, int fontSize)
+        => EnsureCornerBadge(parent, name, fontSize, topRight: false,
+                             new Color(1f, 0.88f, 0.42f));   // 顺序角标：金
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】右上角「新」角标：本拍抽奖刚拿到的技能 / 佣兵技能才显示。
+    /// 与左上角顺序角标同一套盒子（各占一角，互不遮挡），只是锚点镜像 + 改成醒目的红。
+    /// </summary>
+    static Text EnsureTopRightText(Transform parent, string name, int fontSize)
+        => EnsureCornerBadge(parent, name, fontSize, topRight: true,
+                             new Color(1f, 0.34f, 0.28f));   // 「新」角标：红
+
+    /// <summary>
+    /// 槽位角标的<b>唯一建节点出口</b>：在槽根的左上 / 右上角固定一个小盒子（宽 42%、高 24%），
+    /// 只放一行小字，不碰任何图片节点的尺寸。已存在同名节点就直接复用（幂等）。
+    /// </summary>
+    static Text EnsureCornerBadge(Transform parent, string name, int fontSize, bool topRight, Color color)
+    {
+        var exist = FindDeepChildIgnoreCase(parent, name);
+        if (exist != null)
+        {
+            var e = exist.GetComponent<Text>();
+            if (e != null) return e;
+        }
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(parent, false);
+        go.transform.SetAsLastSibling();
+        var rt = go.GetComponent<RectTransform>();
+        // 角标小盒子：宽 = 父的 42%，高 = 父的 24%；topRight 时横向镜像到右上角
+        rt.anchorMin = new Vector2(topRight ? 0.58f : 0f, 0.76f);
+        rt.anchorMax = new Vector2(topRight ? 1f : 0.42f, 1f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var txt = go.GetComponent<Text>();
+        txt.alignment = topRight ? TextAnchor.UpperRight : TextAnchor.UpperLeft;
+        txt.fontSize = fontSize;
+        txt.color = color;
+        txt.raycastTarget = false;
+        var f = GameFonts.GetChinese();
+        if (f != null) txt.font = f;
+        return txt;
     }
 
     /// <summary>
@@ -529,20 +587,43 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 职业图标位：美术在 xuetiaodi 下放了「职业icon」节点，但可能没挂 Image 组件，缺了就运行时补一个。
-    /// 节点不存在时返回 null（老预制体没有这一层，不强行新建，避免挡住血条）。
+    /// 职业图标位（头像框左下角）。
+    ///
+    /// <para><b>【2026-10-06 主人报「左下角职业 icon 没加载 / 还是缩放」→ 真正的根因】</b>
+    /// 团结日志里<b>从来没有</b> <c>JobIconResolver</c> 的「取不到」警告 —— 说明不是资源路径的问题，
+    /// 而是这个节点<b>根本不存在</b>：预制体里没有「职业icon」，老代码「找不到就 return null」，
+    /// 于是 <c>SetJobIcon</c> 一进门就 return，<c>Icons/职业icon</c> 那 4 张图<b>一次都没被加载过</b>。</para>
+    ///
+    /// <para>现在：有美术摆的就用（英文 <c>JobIcon</c> / 中文「职业icon」都认），
+    /// <b>没有就运行时在头像框左下角补一个</b>（铁律 2：预制体里空 → 代码兜底）。
+    /// 节点名统一用英文 <c>JobIcon</c>（主人 2026-10-06 要求「重新起个名，免得每次都找不到」）。</para>
     /// </summary>
     static Image EnsureJobIcon(Transform root)
     {
-        Transform t = FindDeepChildIgnoreCase(root, "职业icon")
-                      ?? FindDeepChildIgnoreCase(root, "JobIcon");
-        if (t == null) return null;
+        if (root == null) return null;
+
+        Transform t = FindDeepChildIgnoreCase(root, "JobIcon")
+                      ?? FindDeepChildIgnoreCase(root, "职业icon");
+
+        if (t == null)
+        {
+            // 位置口径跟 EnsureLevelLabel 的 (-52, 34) 上下对称，落在头像框左下角
+            var go = new GameObject("JobIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(root, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(-52f, -34f);
+            rt.sizeDelta = new Vector2(44f, 44f);
+            t = go.transform;
+        }
+
         var img = t.GetComponent<Image>();
         if (img == null) img = t.gameObject.AddComponent<Image>();
         img.raycastTarget = false;
-        img.preserveAspect = true;
-        img.sprite = null;
-        img.color = new Color(1f, 1f, 1f, 0f);
+        img.preserveAspect = true;                               // 只按比例，绝不拉变形
+        if (img.sprite == null) img.color = new Color(1f, 1f, 1f, 0f);
         return img;
     }
 
@@ -583,8 +664,14 @@ public partial class BattleUI : MonoBehaviour
         // 容器在预制体里是空的（美术待填），图标/能量条/冷却字都运行时补
         av.avatarImage = FindImageNamedNoFallback(t, "ItemIcon", "Icon") ?? EnsureChildIcon(t);
         av.energyFill = EnsureChildBar(t, "MercSkillEnergy", new Color(0.55f, 0.85f, 1f, 1f));
-        av.cooldownText = EnsureChildText(t, "MercSkillCd", 14);
-        av.cooldownMask = EnsureChildMask(t, "MercSkillCdMask");
+        // 同上（2026-10-07 主人拍板）：冷却只画在图标框上，不铺满整个 skill 容器。
+        Transform mercCdNode = av.avatarImage != null ? av.avatarImage.transform : t;
+        av.cooldownText = EnsureChildText(mercCdNode, "MercSkillCd", 14);
+        av.cooldownMask = EnsureChildMask(mercCdNode, "MercSkillCdMask");
+        // 【2026-10-06 主人拍板】佣兵技能同样要「新」角标（主人点名：不管是佣兵技能还是装备）。
+        // 建出来先隐藏，点亮由 UpdateMercSkillSlots 按 NewLootMarks.Has 决定。
+        av.newText = EnsureTopRightText(t, "MercSkillNew", 14);
+        av.SetNewBadge(false);
         return av;
     }
 

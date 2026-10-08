@@ -221,6 +221,24 @@ public class Monster : UnitBase
             firePoint = fire;
             StartCoroutine(CalcFirePointCenter(fire));
         }
+
+        // 【2026-10-06 修 · 主人反馈「敌人的影子还是没有」】
+        // 根因：预制体 Monstersmoban 里 shadow 节点的 m_LocalPosition.z = -16000，
+        // 而战斗相机是正交、far clip plane = 1000 → 影子整个落在视锥外，**压根不渲染**。
+        // 同一个预制体里 Monsters / fire / beattack 的 z 都已被本类归零（所以怪能看见），
+        // 唯独 shadow 漏了。这里按同一套「归一化 z」口径把它拉回 0。
+        // ⚠ 只改深度，主人摆的 x / y / 缩放 / 贴图 / 透明度一个都不动（铁律 2）。
+        Transform shadow = FindFootShadowNode(transform);
+        if (shadow != null)
+        {
+            Vector3 lp = shadow.localPosition;
+            if (Mathf.Abs(lp.z) > 0.0001f)
+            {
+                shadow.localPosition = new Vector3(lp.x, lp.y, 0f);
+                Debug.Log($"[Monster] 脚底阴影 z 归一化：{shadow.name} z {lp.z} → 0" +
+                          $"（原值在正交相机远裁面 1000 之外，影子不会渲染）");
+            }
+        }
     }
 
     System.Collections.IEnumerator CalcFirePointCenter(Transform fireTransform)
@@ -594,6 +612,13 @@ public class Monster : UnitBase
         config = template;
         gameObject.name = "Visual";
 
+        // 【2026-10-07 E-13 诊断】③ 出场：看是不是「上一命还死着就被复用」，以及出场时的世界 Y。
+        // 只读日志，不改任何行为；定位后删除。
+        if (_e13Log < 40)
+            Debug.Log($"[E13] ③出场 id={gameObject.GetInstanceID()} 模板={template?.id}" +
+                      $" y={transform.position.y:F2} parent={ParentName(transform)}" +
+                      $" 上一条命仍在死亡中={_isDying} active={gameObject.activeSelf} 日志#{++_e13Log}");
+
         ResetForReuse();
         EnsureBodyRoot();
         MoveRoot.name = template.id;
@@ -659,10 +684,14 @@ public class Monster : UnitBase
         // ??????????????????/????
         attr.ResetToBase();
         int guildLv = SaveSystem.Instance?.Data?.guildLevel ?? 0;
-        float chapterScale = GameConfig.GetChapterStatScale(chapter);
+        // 2026-10-05 主人拍板：难度曲线「每章都上升、章内关卡也要上升」。
+        // → 总倍率 = 章倍率 × 章内倍率，**唯一出口是 GameConfig.GetStatScale(章, 章内第几关)**，
+        //   绝不在这里自己把两个数乘一遍（那是第二处口径，改表时会漏）。
+        int stageIdx0 = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
+        float statScale = GameConfig.GetStatScale(chapter, stageIdx0);
         float guildScale = 1f + GameConfig.GUILD_SCALE_PER * guildLv;
         float diffScale = BattleManager.Instance != null ? BattleManager.Instance.DifficultyStatScale : 1f;
-        float scale = chapterScale * guildScale * diffScale;
+        float scale = statScale * guildScale * diffScale;
 
         float baseHp = template != null && template.baseHp > 0 ? template.baseHp : GameConfig.MONSTER_NORMAL_HP;
         float baseAtk = template != null && template.baseAttack > 0 ? template.baseAttack : GameConfig.MONSTER_NORMAL_ATK;
@@ -711,8 +740,8 @@ public class Monster : UnitBase
 
         float waveMul = 1f + waveNum * 0.05f;
         float ttkMul = (bossUnit || eliteWave)
-            ? WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit)
-            : GameConfig.GetChapterStatScale(chapter);
+            ? WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit, stageIdx0)
+            : GameConfig.GetStatScale(chapter, stageIdx0);
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * GameConfig.MONSTER_HP_GLOBAL_MUL);
@@ -1281,6 +1310,8 @@ public class Monster : UnitBase
             Debug.LogWarning($"[Monster] ???????: ??{monsterChapter}, ??{effectiveSpriteIndex}??????????");
 
         EnsureFootShadow();
+        // 2026-10-06 主人要求：把「运行中的真实尺寸」抄一份给他对照调预制体（只读，每局只做一次）
+        MonsterTemplateProbe.DumpOnce(transform);
     }
 
     /// <summary>
@@ -1307,10 +1338,26 @@ public class Monster : UnitBase
 
         Transform existing = FindFootShadowNode(transform);
         SpriteRenderer shadowSr;
+        // 【2026-10-06 诊断日志 · 主人报「给敌人加了 shadow 节点但看不到」】
+        // 只打日志、不改任何节点：把「影子是从预制体拿的还是代码新建的」以及最终数值全打出来，
+        // 主人一眼就能看出影子是不是被谁关了 / 盖住 / 透明了。绝不删节点、绝不静默跳过。
+        float prefabAlpha = -1f;
+        bool prefabActive = false;
         if (existing != null)
         {
-            existing.SetParent(host, false);
+            // 【2026-10-06 主人拍板「不要随意动我摆的节点」】只有「影子当前这条父链上没有 SortingGroup、
+            // 且它不是挂在 host 下」时才挪位置（否则组内 order -20 会被地图整块盖掉 = 看不见）；
+            // 已经在 SortingGroup 里就保持主人的层级原样不动。
+            if (existing.parent != host
+                && existing.GetComponentInParent<UnityEngine.Rendering.SortingGroup>() == null)
+                existing.SetParent(host, false);
+
             shadowSr = existing.GetComponent<SpriteRenderer>();
+            if (shadowSr != null)
+            {
+                prefabAlpha = shadowSr.color.a;
+                prefabActive = shadowSr.gameObject.activeInHierarchy && shadowSr.enabled;
+            }
             if (shadowSr == null) shadowSr = existing.gameObject.AddComponent<SpriteRenderer>();
         }
         else
@@ -1320,26 +1367,57 @@ public class Monster : UnitBase
             shadowSr = go.AddComponent<SpriteRenderer>();
         }
 
-        Sprite shadowSp = LoadPlayerShadowSprite() ?? MakeCircleSprite();
-        shadowSr.sprite = shadowSp;
-        shadowSr.color = new Color(0f, 0f, 0f, 0.35f);
-        shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        // 组内相对顺序：低于躯干/SPUM 部件(>=0)，阴影藏在身子后面
-        shadowSr.sortingOrder = -20;
-        shadowSr.sharedMaterial = GetFootShadowMaterial();
+        // 【2026-10-06 主人拍板】预制体里**已经摆了 shadow 节点**（Monstersmoban 下那个）→
+        // 一律保留主人在预制体里调好的外观：贴图 / 透明度 / 缩放 / 位置**一个都不动**，
+        // 代码只统一「分层 + 组内顺序」（那才是「能不能被看见」的关键）。
+        // 只有「预制体里压根没有 shadow」时才由代码新建并给一套默认值
+        //（铁律 2：预制体有值 → 代码不写；预制体空 → 代码兜底）。
+        if (prefabAlpha < 0f)
+        {
+            Sprite shadowSp = LoadPlayerShadowSprite() ?? MakeCircleSprite();
+            shadowSr.sprite = shadowSp;
+            shadowSr.color = new Color(0f, 0f, 0f, 0.35f);
+            shadowSr.sharedMaterial = GetFootShadowMaterial();
 
-        float targetWorldW = 0.9f;
-        if (sr != null && sr.sprite != null)
-            targetWorldW = Mathf.Max(0.45f, sr.bounds.size.x * 0.56f);
-        // 整体再缩小 20%
-        targetWorldW *= 0.8f;
-        float nativeW = shadowSp != null ? Mathf.Max(0.01f, shadowSp.bounds.size.x) : 1f;
-        float lossyX = Mathf.Max(0.001f, Mathf.Abs(host.lossyScale.x));
-        float sx = targetWorldW / (nativeW * lossyX);
-        // 本地 Y=0.02；椭圆再压扁 20%（0.35→0.28）
-        shadowSr.transform.localPosition = new Vector3(0f, 0.02f, 0f);
-        shadowSr.transform.localRotation = Quaternion.identity;
-        shadowSr.transform.localScale = new Vector3(sx, sx * 0.28f, 1f);
+            float targetWorldW = 0.9f;
+            if (sr != null && sr.sprite != null)
+                targetWorldW = Mathf.Max(0.45f, sr.bounds.size.x * 0.56f);
+            // 整体再缩小 20%
+            targetWorldW *= 0.8f;
+            float nativeW = shadowSp != null ? Mathf.Max(0.01f, shadowSp.bounds.size.x) : 1f;
+            float lossyX = Mathf.Max(0.001f, Mathf.Abs(host.lossyScale.x));
+            float sx = targetWorldW / (nativeW * lossyX);
+            // 本地 Y=0.02；椭圆再压扁 20%（0.35→0.28）
+            shadowSr.transform.localPosition = new Vector3(0f, 0.02f, 0f);
+            shadowSr.transform.localRotation = Quaternion.identity;
+            shadowSr.transform.localScale = new Vector3(sx, sx * 0.28f, 1f);
+        }
+
+        // 【2026-10-06 主人拍板】分层 / 组内顺序也一律听预制体的：
+        // 主人已经在 Monstersmoban 里把 shadow 摆好并调好显示了，代码**一个值都不许覆盖**
+        //（铁律 2：预制体有值 → 代码不写）。只有「预制体里压根没有 shadow」时才由代码给默认值。
+        if (prefabAlpha < 0f)
+        {
+            shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            shadowSr.sortingOrder = -20;
+        }
+
+        // 【2026-10-06 诊断】只打前 3 条，之后静默：主人报「给敌人都加了 shadow 节点，为什么没看到」。
+        // 只报不改 —— 节点一个不删，值一个不调，主人拿这条日志对账就知道影子去哪了。
+        if (_shadowLogCount < 3)
+        {
+            _shadowLogCount++;
+            bool visible = shadowSr.gameObject.activeInHierarchy && shadowSr.enabled;
+            Debug.Log($"[Monster] 脚底阴影#{_shadowLogCount} 单位={name}" +
+                      (prefabAlpha >= 0f
+                          ? $" 来源=预制体节点「{existing.name}」预制体alpha={prefabAlpha:F2} 预制体可见={prefabActive}" +
+                            $"（⚠ 代码会把它统一成 alpha 0.35 + SPUM 椭圆图，主人调的透明度会被覆盖）"
+                          : " 来源=代码新建 FootShadow（预制体里没找到任何 shadow 节点）") +
+                      $" | 挂在={host.name} 最终alpha={shadowSr.color.a:F2}" +
+                      $" layer={shadowSr.sortingLayerName} order={shadowSr.sortingOrder}" +
+                      $" scale=({shadowSr.transform.localScale.x:F3},{shadowSr.transform.localScale.y:F3})" +
+                      $" 可见={visible}");
+        }
     }
 
     static Transform FindFootShadowNode(Transform root)
@@ -1354,6 +1432,9 @@ public class Monster : UnitBase
         }
         return null;
     }
+
+    /// <summary>脚底阴影诊断日志只打前几条（每只怪都打会刷屏）。2026-10-06 主人报「敌人 shadow 看不到」。</summary>
+    static int _shadowLogCount;
 
     static Material _footShadowMat;
 
@@ -1834,6 +1915,15 @@ public class Monster : UnitBase
 
     protected override void Die(bool isCritKill = false)
     {
+        // 【2026-10-07 E-13 诊断 · 主人确认「是同一只又从下面出现」】
+        // 只读日志，**不改任何行为**。三处联打印实例 ID + 世界 Y + 父节点：
+        // ① 死亡瞬间 ② 真正回收进池 ③ 下次出场（含「上一条命是否还是死亡中」）。
+        // 下次跑一遍看 ID 与 Y 就能判定：ID 相同 = 尸体被复用；Init 的 Y 与 Die 的 Y 差很多 = 出场坐标算错。
+        // ⚠ 定位后整段删除（上限 40 条，防止刷屏）。
+        if (_e13Log < 40)
+            Debug.Log($"[E13] ①死亡 id={gameObject.GetInstanceID()} name={name}" +
+                      $" y={transform.position.y:F2} parent={ParentName(transform)} 日志#{++_e13Log}");
+
         if (_hpBarRoot != null)
             _hpBarRoot.gameObject.SetActive(false);
         if (_worldHpBar != null)
@@ -1842,6 +1932,21 @@ public class Monster : UnitBase
         HideStackLabel();
         base.Die(isCritKill);
         BattleBossHpBar.RefreshFromField();
+    }
+
+    /// <summary>E-13 诊断日志计数（上限 40 条）。定位后连同三处日志一起删除。</summary>
+    static int _e13Log;
+
+    static string ParentName(Transform t) => t != null && t.parent != null ? t.parent.name : "(null)";
+
+    /// <summary>【2026-10-07 E-13 诊断】② 真正回收进池的那一刻（只读日志，行为与基类完全一致）。</summary>
+    protected override void OnDeathRelease()
+    {
+        if (_e13Log < 40)
+            Debug.Log($"[E13] ②回收 id={gameObject.GetInstanceID()} name={name}" +
+                      $" y={transform.position.y:F2} parent={ParentName(transform)}" +
+                      $" active={gameObject.activeSelf} 日志#{++_e13Log}");
+        base.OnDeathRelease();
     }
 
     public override void ResetForReuse()

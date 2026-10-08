@@ -37,6 +37,11 @@ public static partial class GameConfig
         public const int RewardPopup = 905;
         public const int BattleStageMap = 880;
         public const int BattlePopup = 920;
+        /// <summary>
+        /// 【2026-10-06 主人拍板】替换装备确认弹窗（Resources/Prefabs/Battle/EquipReplaceConfirmPopup）。
+        /// 必须高于 <see cref="BattlePopup"/>（抽奖面板那一层），否则宣布白拿的弹窗会被压在面板下面看不见。
+        /// </summary>
+        public const int EquipReplaceConfirm = 925;
         public const int BattleLegacyPool = 940;
         public const int BattleHud = 950;
         public const int BattleLegacyChoose = 960;
@@ -83,7 +88,8 @@ public static partial class GameConfig
     /// <summary>进战斗后首波刷怪延迟（秒）</summary>
     public const float FIRST_WAVE_SPAWN_DELAY = 1.5f;
     /// <summary>
-    /// 仅玩家单人战斗（不生成/显示佣兵）。正式局默认 false；引导关仍单独刷救援佣兵。
+    /// 仅玩家单人战斗（不生成/显示佣兵）。正式局默认 false；
+    /// 引导关的佣兵（塔克 H003）由第 2 抽招募入队，不再单独刷（2026-10-06 主人拍板）。
     /// </summary>
     public static bool SOLO_PLAYER_BATTLE = false;
     /// <summary>怪刷在英雄前方多远（原地等玩家走过来），约 3~4 身位</summary>
@@ -94,8 +100,12 @@ public static partial class GameConfig
     public const float MONSTER_WAVE_SPACING = 0.72f;
     /// <summary>怪物近战射程倍率（相对单手剑；勿超过玩家近战体感）</summary>
     public const float MONSTER_MELEE_RANGE_MUL = 0.85f;
-    /// <summary>怪物远程射程倍率（相对数值表弓射程）；累计再缩）</summary>
-    public const float MONSTER_RANGED_RANGE_MUL = 0.588f;
+    /// <summary>
+    /// 怪物远程射程倍率（相对数值表弓射程）；**只在 attack_range 表读不到时兜底**。
+    /// 真源是表：表内 monster_ranged / monster_bow 现在写 230（2026-10-07 主人拍板拉开远程射程），
+    /// 300 × 0.767 ≈ 230 —— 与表同值，别让兜底和表各说一套。
+    /// </summary>
+    public const float MONSTER_RANGED_RANGE_MUL = 0.767f;
     /// <summary>普通（非精英/非Boss）远程小怪的技能伤害折扣：技能只是为了看得到子弹，不该秒人</summary>
     public static float MONSTER_NORMAL_SKILL_DAMAGE_MUL => CombatTuningTable.Get("MONSTER_NORMAL_SKILL_DAMAGE_MUL", 0.55f);
     /// <summary>怪物普攻弹道速度倍率（勿随意改快）</summary>
@@ -129,6 +139,13 @@ public static partial class GameConfig
     /// 只动这一个数，刷怪位置/交战点一概不动。
     /// </summary>
     public const float MONSTER_ENTER_SPEED = 1.0f;
+    /// <summary>
+    /// 【2026-10-05 主人拍板「多点出生点」】同波第 i 只怪的入场起点比第 0 只再往外错开多少（世界单位）。
+    /// 一整波不再从屏外同一个点排队进场，而是从远近不同的位置一起涌进来。
+    /// 不能复用 MONSTER_WAVE_SPACING(0.72)：进场速度只有 1.0，按 0.72 累加第 8 只要走 6.4 秒才到，
+    /// 观感就变成「一只一只慢慢来」而不是「一波压过来」。0.18 时最远那只比第一只晚约 1.3 秒抵达。
+    /// </summary>
+    public const float MONSTER_ENTER_DEPTH_STEP = 0.18f;
     /// <summary>入场起点比交战点再远多少（世界单位）；过大容易出场「往前窜」</summary>
     public const float MONSTER_ENTER_DISTANCE = 1.2f;
     /// <summary>玩家出生相对 SpawnPoint 再往左偏（世界单位）</summary>
@@ -314,6 +331,53 @@ public static partial class GameConfig
     /// </summary>
     public const float SKILL_COOLDOWN_MUL = 4f;
 
+    // ============================================================
+    // 蓝条（MP）数值 —— 2026-10-06 主人拍板
+    // 口径：自然回复 / 耗蓝进技能表 / CD+MP 双门槛 / 每关开局回满。
+    // 全部数值只此一处，业务里不许再写数字；公式见 MpProfile。
+    // 设计演算：Docs/蓝条数值设计_职业与佣兵_2026-10-06.md §2 / §5
+    // ============================================================
+
+    /// <summary>治疗型（类型分类=恢复）基础 MP 池。满池只存 1.25~1.5 发，★1 连喷是不可能的 —— 紧张感的根。</summary>
+    public const float MP_POOL_HEAL = 150f;
+
+    /// <summary>法术型（类型分类=法术）基础 MP 池。</summary>
+    public const float MP_POOL_MAGIC = 150f;
+
+    /// <summary>玩家（牧师 / 法师，4 个技能共用一条）基础 MP 池。只有佣兵的 2 倍却要供 4 个技能 → 天然更紧。</summary>
+    public const float MP_POOL_PLAYER = 300f;
+
+    /// <summary>治疗型每秒回复。回满一发要 83~100 秒（比一关还长）—— 主人拍板「回蓝不要太快」。</summary>
+    public const float MP_REGEN_HEAL = 1.2f;
+
+    /// <summary>法术型每秒回复。</summary>
+    public const float MP_REGEN_MAGIC = 1.3f;
+
+    /// <summary>玩家每秒回复。</summary>
+    public const float MP_REGEN_PLAYER = 1.8f;
+
+    /// <summary>每升 1 级，MP 池 +这么多（回复不随等级涨）。</summary>
+    public const float MP_POOL_PER_LEVEL = 6f;
+
+    /// <summary>每升 1 星，池与回复各 +12%（对基础值线性叠加，★5 = ×1.48）。</summary>
+    public const float MP_GROWTH_PER_STAR = 0.12f;
+
+    // ============================================================
+    // 佣兵阵亡惩罚（2026-10-06 主人拍板）
+    // 旧行为：阵亡只是从 allyUnits 摘掉，下一关 RestoreRunMercs 重新 spawn → 满血满蓝复活，
+    // 等于阵亡零成本。现在改成带惩罚复活：血 20% 起步、每过一关 +30%，最多 3 关养回满血。
+    // ⚠ 蓝不动（每关照常灌满）：蓝池只够 1.2~1.5 发，再砍蓝治疗佣兵复活后连一发奶都放不出 → 全队雪崩。
+    // ============================================================
+
+    /// <summary>阵亡佣兵下一关的复活血比例（20%）。</summary>
+    public const float MERC_REVIVE_HP_BASE = 0.2f;
+
+    /// <summary>阵亡后每通过一关，复活血比例 +30%。</summary>
+    public const float MERC_REVIVE_HP_PER_STAGE = 0.3f;
+
+    /// <summary>阵亡后需要通过几关才养回满血（0.2 + 0.3×3 = 1.1 → 封顶 1.0）。</summary>
+    public const int MERC_REVIVE_STAGES_TO_FULL = 3;
+
     /// <summary>
     /// 圣盾壁垒（holy_barrier）护盾量 = 最大生命 × 本系数（抵扣型护盾：先扣盾、再扣血）。
     /// 2026-09-26 主人拍板：holy_barrier 从「防御+35%」改成抵扣型护盾。后期升级只改这个系数。
@@ -413,6 +477,29 @@ public static partial class GameConfig
     {
         return ChapterStatScaleTable.Get(gameChapter);
     }
+
+    /// <summary>
+    /// 按「章内第几关」取章内爬坡倍率（读 stage_stat_scale；缺表回退 Fallback）。
+    /// 2026-10-05 新增：主人要求「每章里面的关卡也是如此」递增。
+    /// </summary>
+    /// <param name="stageIndex0Based">章内第几关（0 起，0~9）；负数当作第 1 关。</param>
+    public static float GetStageStatScale(int stageIndex0Based)
+    {
+        return StageStatScaleTable.Get0Based(stageIndex0Based);
+    }
+
+    /// <summary>
+    /// <b>怪物属性总倍率的唯一出口</b> = 章倍率 × 章内倍率。
+    /// <para>2026-10-05 主人拍板：难度曲线「每章都上升、有高有低，章内关卡也是如此」。
+    /// 拆成两张表（chapter_stat_scale / stage_stat_scale）后，<b>相乘只有这一处</b> ——
+    /// 谁要算最终倍率就调这里，绝不许在别处自己把两个数乘一遍（那才是「多入口」）。</para>
+    /// </summary>
+    /// <param name="gameChapter">第几章（1 起）</param>
+    /// <param name="stageIndex0Based">章内第几关（0 起，0~9）</param>
+    public static float GetStatScale(int gameChapter, int stageIndex0Based)
+    {
+        return GetChapterStatScale(gameChapter) * GetStageStatScale(stageIndex0Based);
+    }
     // ===== 2026-09-21：以下 15 项已迁 combat_tuning 表，默认值 = 原硬编码值（零行为变化）=====
     /// <summary>精英额外 TTK 血量倍率（叠在章节系数上）</summary>
     public static float ELITE_TTK_HP_MUL => CombatTuningTable.Get("ELITE_TTK_HP_MUL", 1.15f);
@@ -507,6 +594,30 @@ public static partial class GameConfig
     ///    存 <c>SaveData.hardCleared</c>（原 DIFF_NIGHTMARE_NEED_CLEARS 已删除）。
     /// </summary>
     public const int DIFF_COUNT = 3;
+
+    /// <summary>
+    /// 【2026-10-06 主人拍板】难度名<b>全局唯一出处</b>：下标 = 难度档（0 普通 / 1 困难 / 2 噩梦），
+    /// 与 <see cref="DIFF_COUNT"/> 一一对应。
+    /// 收敛原因（主人铁律「同一语义只留一个出口」）：原先 AdventureUI 里有一份私有 DiffNames，
+    /// 战斗内左上角 HUD 还要再显示同一个难度名 —— 两份各写必然漂移（改一处忘一处）。
+    /// 现在谁要显示难度名都走 <see cref="GetDifficultyName"/>，别再抄一份字符串。
+    /// 颜色不在这里：难度按钮配色是冒险页自己的美术色彩，留在 AdventureUI。
+    /// </summary>
+    public static readonly string[] DifficultyNames = { "普通", "困难", "噩梦" };
+
+    /// <summary>
+    /// 难度名。越界<b>不静默</b>：打 Error 并落到「普通」（铁律「认不出/越界 → LogError + 占位」）。
+    /// </summary>
+    public static string GetDifficultyName(int diff)
+    {
+        if (diff < 0 || diff >= DifficultyNames.Length)
+        {
+            Debug.LogError($"[GameConfig] 难度档越界：{diff}（合法 0~{DifficultyNames.Length - 1}）");
+            return DifficultyNames[0];
+        }
+        return DifficultyNames[diff];
+    }
+
     /// <summary>金币副本通关固定金：基数 × 章节 × 难度倍率。2026-09-15 产出去零：300 → 30。</summary>
     public const int GOLD_DUNGEON_CLEAR_BASE = 30;
 

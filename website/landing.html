@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>像素冒险：裂隙之刃 — 官方网站</title>
+<meta name="description" content="《像素冒险：裂隙之刃》是一款 2D 像素风自动战斗 Roguelike 冒险游戏。自动战斗负责爽感，取舍与构筑负责乐趣。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#030014; --bg2:#05021C; --bg3:#080418;
+    --card:#0C0730; --line:#1B1440;
+    --text:#FFFFFF; --text2:#A29CD0; --text3:#8E88BC;
+    --cyan:#13DDC4; --blue:#2EA7FF; --purple:#9381FF;
+    --pink:#FF3366; --amber:#FFB454;
+    --pixel:"Press Start 2P","VT323",monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);color:var(--text);
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden;
+  }
+  /* 登录界面背景图 → 半透浅纹理 */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:url("images/bg-texture.png") center/cover no-repeat fixed;
+    opacity:.16;
+  }
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.05;
+    background:repeating-linear-gradient(180deg,#fff 0 1px,transparent 1px 4px);
+  }
+  .wrap{position:relative;z-index:2}
+  .container{max-width:1200px;margin:0 auto;padding:0 32px}
+
+  /* Header */
+  header{position:sticky;top:0;z-index:50;background:rgba(5,2,28,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .nav{max-width:1200px;margin:0 auto;padding:18px 32px;display:flex;align-items:center;gap:32px}
+  .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:#fff}
+  .brand-mark{width:30px;height:30px;background:var(--cyan);box-shadow:4px 4px 0 var(--purple);flex:none}
+  .brand-name{font-size:19px;font-weight:700;letter-spacing:.5px}
+  .nav-links{display:flex;gap:30px;margin-left:auto}
+  .nav-links a{color:var(--text3);text-decoration:none;font-size:15px;transition:color .2s}
+  .nav-links a:hover{color:var(--cyan)}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;
+    background:var(--cyan);color:#030014;font-weight:700;font-size:15px;
+    padding:14px 26px;border:0;border-radius:4px;text-decoration:none;
+    box-shadow:5px 5px 0 var(--purple);transition:transform .12s,box-shadow .12s;
+  }
+  .btn:hover{transform:translate(2px,2px);box-shadow:3px 3px 0 var(--purple)}
+  .btn:active{transform:translate(5px,5px);box-shadow:0 0 0 var(--purple)}
+  .btn-blue{background:var(--blue);box-shadow:6px 6px 0 var(--purple)}
+  .btn-ghost{background:transparent;color:#C9C4E8;border:2px solid rgba(147,129,255,.55);box-shadow:none;padding:17px 28px}
+  .btn-ghost:hover{border-color:var(--cyan);color:var(--cyan);transform:none;box-shadow:none}
+
+  /* 顶部宣传图 + Hero 文案 */
+  .poster{margin-top:24px;border:2px solid rgba(147,129,255,.5);box-shadow:12px 12px 0 rgba(147,129,255,.3);background:#0B0726}
+  .poster img{width:100%;display:block}
+  .hero{padding:24px 0 72px;text-align:center}
+  .kicker{font-family:var(--pixel);font-size:11px;color:var(--cyan);letter-spacing:1px;margin-bottom:22px}
+  h1{font-size:clamp(40px,5.4vw,68px);font-weight:900;line-height:1.08;letter-spacing:-1px;margin-bottom:20px}
+  h1 .glow{background:linear-gradient(92deg,var(--cyan),var(--blue) 45%,var(--purple));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero-sub{font-size:18px;color:var(--text2);max-width:640px;margin:0 auto 32px}
+  .hero-cta{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;align-items:center;margin-bottom:44px}
+  .hero-stats{display:flex;gap:38px;flex-wrap:wrap;justify-content:center;padding-top:28px;border-top:1px solid var(--line);max-width:760px;margin:0 auto}
+  .stat-num{font-family:var(--pixel);font-size:20px;color:var(--amber);line-height:1.4}
+  .stat-num.t{color:var(--cyan)}
+  .stat-label{font-size:12px;color:#7E78A8;margin-top:4px}
+
+  /* 通用 section */
+  .section{padding:80px 0;border-top:1px solid var(--line)}
+  .section.alt{background:rgba(5,2,28,.55);backdrop-filter:blur(2px)}
+  .sec-kicker{font-family:var(--pixel);font-size:11px;color:var(--purple);letter-spacing:1px;margin-bottom:18px}
+  .sec-kicker.c{color:var(--cyan)}
+  .sec-kicker.p{color:var(--pink)}
+  h2{font-size:clamp(28px,3.4vw,44px);font-weight:900;line-height:1.25;margin-bottom:18px}
+  .sec-desc{font-size:17px;color:var(--text2);max-width:680px;margin-bottom:40px}
+  .lead{font-size:17px;color:var(--text2);max-width:760px;margin-bottom:18px;line-height:1.85}
+  .lead b{color:#fff;font-weight:700}
+
+  /* 公会告示板 */
+  .notice{
+    border:2px solid rgba(19,221,196,.45);background:rgba(8,4,24,.7);
+    padding:26px 30px;margin-bottom:44px;max-width:760px;
+  }
+  .notice h4{font-family:var(--pixel);font-size:11px;color:var(--cyan);margin-bottom:14px}
+  .notice ol{margin-left:20px;display:flex;flex-direction:column;gap:10px}
+  .notice li{font-size:15px;color:var(--text2);line-height:1.7}
+  .notice li b{color:#fff;font-weight:700}
+
+  /* 左右滑动组件 */
+  .slider{position:relative}
+  .slider-track{
+    display:flex;gap:24px;overflow-x:auto;scroll-snap-type:x mandatory;
+    scroll-behavior:smooth;padding-bottom:10px;scrollbar-width:none;-ms-overflow-style:none;
+  }
+  .slider-track::-webkit-scrollbar{display:none}
+  .slider-track.dragging{scroll-snap-type:none;scroll-behavior:auto;cursor:grabbing;user-select:none}
+  .slide{flex:0 0 auto;scroll-snap-align:start}
+  .slider-nav{display:flex;gap:12px;justify-content:flex-end;margin-top:22px}
+  .s-nav{
+    width:46px;height:46px;flex:none;border:2px solid rgba(147,129,255,.5);border-radius:4px;
+    background:rgba(8,4,24,.6);color:#C9C4E8;font-size:17px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:.15s;
+  }
+  .s-nav:hover:not(:disabled){border-color:var(--cyan);color:var(--cyan)}
+  .s-nav:disabled{opacity:.3;cursor:not-allowed}
+  .slider-hint{font-size:12px;color:#6E6896;margin-top:10px;text-align:right}
+
+  /* 章节卡 */
+  .chapter{width:470px;background:var(--card);border:2px solid rgba(147,129,255,.35);display:flex;flex-direction:column}
+  .chapter .pic{background:#0A0620;border-bottom:2px solid rgba(147,129,255,.35)}
+  .chapter .pic img{width:100%;height:240px;object-fit:cover;display:block}
+  .chapter-body{padding:24px 26px 28px;display:flex;flex-direction:column;gap:12px}
+  .ch-no{font-family:var(--pixel);font-size:11px}
+  .c1 .ch-no{color:var(--cyan)} .c2 .ch-no{color:var(--blue)}
+  .c3 .ch-no{color:var(--amber)} .c4 .ch-no{color:var(--pink)}
+  .chapter h3{font-size:24px;font-weight:700}
+  .chapter p{font-size:15px;color:#9E98C8;line-height:1.8}
+  .ch-tip{
+    margin-top:4px;padding:12px 14px;border-left:3px solid var(--amber);
+    background:rgba(255,180,84,.08);font-size:13px;color:#D6C9AE;
+  }
+
+  /* 更多地貌 */
+  .more-stage{margin-top:48px}
+  .more-stage > p{font-size:14px;color:#9E98C8;margin-bottom:14px;line-height:1.8}
+  .more-shots{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  .more-shots figure{border:2px solid rgba(147,129,255,.25);background:#0A0620;overflow:hidden;margin:0}
+  .more-shots img{width:100%;height:132px;object-fit:cover;display:block}
+  .more-shots figcaption{font-size:12px;color:#8E88BC;padding:9px 12px}
+
+  /* 佣兵趣事：头像网格 */
+  .merc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+  .merc{
+    background:var(--card);border:2px solid rgba(147,129,255,.35);
+    padding:22px;display:flex;gap:18px;align-items:flex-start;
+    transition:transform .16s,border-color .16s;
+  }
+  .merc:hover{transform:translateY(-4px);border-color:rgba(147,129,255,.7)}
+  .merc .head{
+    width:84px;height:84px;flex:none;overflow:hidden;background:#0A0620;
+    border:2px solid rgba(147,129,255,.5);
+  }
+  .merc .head img{width:100%;height:100%;object-fit:cover;object-position:center;display:block}
+  .merc-body{display:flex;flex-direction:column;gap:8px;min-width:0}
+  .merc-role{font-family:var(--pixel);font-size:10px}
+  .m1 .merc-role{color:var(--cyan)} .m2 .merc-role{color:var(--pink)}
+  .m3 .merc-role{color:var(--amber)} .m4 .merc-role{color:var(--blue)}
+  .m5 .merc-role{color:var(--purple)} .m6 .merc-role{color:var(--cyan)}
+  .merc h3{font-size:19px;font-weight:700}
+  .merc .tale{font-size:14px;color:#9E98C8;line-height:1.8}
+  .merc .tale b{color:#D8D2F0;font-weight:700}
+
+  /* 职业选择：Tab 切换 + 详情面板 */
+  .class-tabs{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:26px}
+  .class-tab{
+    background:var(--card);border:2px solid rgba(147,129,255,.35);cursor:pointer;
+    padding:10px 10px 12px;display:flex;flex-direction:column;gap:9px;align-items:center;
+    transition:transform .15s,border-color .15s,box-shadow .15s;font-family:inherit;
+  }
+  .class-tab .face{width:100%;aspect-ratio:1;overflow:hidden;background:#0A0620}
+  .class-tab .face img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+  .class-tab .tname{font-size:14px;font-weight:700;color:var(--text2)}
+  .class-tab:hover{transform:translateY(-4px);border-color:rgba(147,129,255,.7)}
+  .class-tab.active{border-color:var(--cyan);transform:translateY(-4px);box-shadow:5px 5px 0 rgba(19,221,196,.35)}
+  .class-tab.active .tname{color:#fff}
+
+  .class-panel{
+    display:grid;grid-template-columns:380px 1fr;background:var(--card);
+    border:2px solid rgba(147,129,255,.35);
+  }
+  .cp-pic{background:#0A0620;border-right:2px solid rgba(147,129,255,.35);overflow:hidden;height:400px}
+  .cp-pic img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+  .cp-info{padding:34px 40px;display:flex;flex-direction:column;gap:14px;min-width:0}
+  .cp-role{font-family:var(--pixel);font-size:10px;letter-spacing:1px}
+  .cp-info h3{font-size:30px;font-weight:900}
+  .cp-desc{font-size:15px;color:#9E98C8;line-height:1.85}
+  .cp-tags{display:flex;gap:10px;flex-wrap:wrap;margin-top:2px}
+  .cp-tags span{
+    font-size:12px;color:#C9C4E8;padding:6px 12px;
+    border:1px solid rgba(147,129,255,.45);background:rgba(147,129,255,.08);
+  }
+  .cp-quote{
+    margin-top:auto;padding:14px 18px;border-left:3px solid var(--amber);
+    background:rgba(255,180,84,.08);font-size:14px;color:#D6C9AE;font-style:italic;
+  }
+  .cp-fade{animation:cpIn .28s ease}
+  @keyframes cpIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  /* 下载 CTA */
+  .cta{
+    position:relative;padding:110px 0;text-align:center;border-top:1px solid var(--line);
+    background:url("images/stage-ice.png") center/cover no-repeat;
+  }
+  .cta::before{content:"";position:absolute;inset:0;background:rgba(3,0,20,.82)}
+  .cta .container{position:relative}
+  .cta h2{font-size:clamp(30px,4vw,52px);margin-bottom:14px}
+  .cta p{color:var(--text2);font-size:17px;margin-bottom:36px}
+  .cta .btn{font-size:17px;padding:20px 40px}
+  .cta-note{margin-top:16px;font-size:13px;color:#8E88BC}
+
+  /* Footer */
+  .glow-bar{height:6px;background:linear-gradient(90deg,var(--blue),var(--purple) 50%,var(--cyan))}
+  footer{background:rgba(3,0,20,.92);padding:64px 0 32px;border-top:1px solid var(--line)}
+  .foot-top{display:flex;gap:64px;flex-wrap:wrap;justify-content:space-between}
+  .foot-brand{display:flex;flex-direction:column;gap:14px;max-width:280px}
+  .foot-name{font-size:24px;font-weight:700}
+  .foot-tag{font-size:14px;color:var(--text3)}
+  .foot-links{display:flex;gap:72px;flex-wrap:wrap}
+  .foot-col{display:flex;flex-direction:column;gap:13px;min-width:96px}
+  .foot-col h4{font-size:14px;font-weight:600;color:#C9C4E8}
+  .foot-col a,.foot-col span{font-size:14px;color:var(--text3);text-decoration:none}
+  .foot-col a:hover{color:var(--cyan)}
+  .foot-cta{display:flex;flex-direction:column;gap:12px}
+  .foot-note{font-size:12px;color:#7A749F}
+  .foot-bottom{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-top:44px;padding-top:24px;border-top:1px solid var(--line);font-size:13px;color:#6E6896}
+  .foot-bottom a{color:#6E6896;text-decoration:none}
+  .foot-bottom a:hover{color:var(--cyan)}
+
+  @media (max-width:1080px){
+    .more-shots{grid-template-columns:repeat(2,1fr)}
+    .merc-grid{grid-template-columns:repeat(2,1fr)}
+    .class-panel{grid-template-columns:300px 1fr}
+    .cp-pic{height:340px}
+  }
+  @media (max-width:720px){
+    .container,.nav{padding:0 20px}
+    .nav{padding:16px 20px}
+    .nav-links{display:none}
+    .hero{padding:20px 0 52px}
+    .section{padding:56px 0}
+    .more-shots{grid-template-columns:1fr}
+    .chapter{width:86vw}
+    .merc-grid{grid-template-columns:1fr}
+    .hero-stats{gap:24px}
+    .foot-top{flex-direction:column;gap:36px}
+    .foot-links{gap:40px}
+    .class-tabs{grid-template-columns:repeat(3,1fr);gap:10px}
+    .class-panel{grid-template-columns:1fr}
+    .cp-pic{height:280px;border-right:0;border-bottom:2px solid rgba(147,129,255,.35)}
+    .cp-info{padding:24px 22px 26px}
+  }
+
+  /* 投放用：移动端底部悬浮下载条 */
+  .sticky-cta{display:none}
+  @media (max-width:720px){
+    body{padding-bottom:74px}
+    .sticky-cta{
+      display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;
+      background:rgba(5,2,28,.96);border-top:1px solid var(--line);
+      padding:12px 16px;gap:12px;align-items:center;
+    }
+    .sticky-cta .txt{flex:1;min-width:0;font-size:12px;color:var(--text3);line-height:1.4}
+    .sticky-cta .txt b{display:block;color:#fff;font-size:14px}
+    .sticky-cta .btn{padding:12px 18px;font-size:14px;box-shadow:3px 3px 0 var(--purple);flex:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <nav class="nav">
+      <a class="brand" href="#top">
+        <span class="brand-mark"></span>
+        <span class="brand-name">像素冒险：裂隙之刃</span>
+      </a>
+      <div class="nav-links">
+        <a href="#story">游戏背景</a>
+        <a href="#mercs">佣兵趣事</a>
+        <a href="#classes">职业玩法</a>
+        <a href="#download">立即下载</a>
+      </div>
+      <!-- 主人上架后把 href 换成 TapTap 游戏页地址 -->
+      <a class="btn" href="https://www.taptap.cn/" target="_blank" rel="noopener">前往 TapTap 下载</a>
+    </nav>
+  </header>
+
+  <!-- 顶部：宣传图（主人稍后替换新图） -->
+  <section class="hero" id="top">
+    <div class="container">
+      <div class="poster">
+        <img src="images/banner.jpg" alt="像素冒险：裂隙之刃 主视觉">
+      </div>
+      <div class="kicker" style="margin-top:44px">CHAPTER 01 // RIFT BLADE</div>
+      <h1>裂隙之下<span class="glow">，由你决定</span></h1>
+      <p class="hero-sub">
+        2D 像素风自动战斗 Roguelike。队伍自动索敌出手，你负责更关键的决定：
+        走哪条路线、捡哪件装备、要不要再往深处走一层。
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-blue" href="https://www.taptap.cn/" target="_blank" rel="noopener">前往 TapTap 下载</a>
+        <a class="btn btn-ghost" href="#story">看看这个世界</a>
+      </div>
+      <div class="hero-stats">
+        <div><div class="stat-num t">竖屏</div><div class="stat-label">单手可玩</div></div>
+        <div><div class="stat-num">5.1+</div><div class="stat-label">Android 版本要求</div></div>
+        <div><div class="stat-num">175MB</div><div class="stat-label">安装包体积</div></div>
+        <div><div class="stat-num t">12+</div><div class="stat-label">适龄分级</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 游戏背景 -->
+  <section class="section alt" id="story">
+    <div class="container">
+      <div class="sec-kicker p">STORY.CHAPTERS</div>
+      <h2>裂隙越往下走，越不像出发时听说的地方</h2>
+      <p class="lead">
+        大陆边缘的天空裂开了一道口子，人们叫它<b>「裂隙」</b>。裂隙里涌出的不只是怪物——
+        地形、气候、甚至连时间都跟着一起错乱。每一次踏入，深处都会重新长成另一副样子。
+      </p>
+      <p class="lead">
+        冒险者公会坐落在山脚下的小镇，是所有故事的起点。墙上钉满了任务单，
+        有些下面画着已完成的记号，有些再也没人来取。你会是下一个在上面签名的人。
+      </p>
+
+      <div class="notice">
+        <h4>GUILD NOTICE · 入会须知</h4>
+        <ol>
+          <li>裂隙每次进入都会<b>重新生成</b>，世上没有两张相同的地图。</li>
+          <li>队伍会<b>自动出手</b>，你只需要决定走哪条路、捡哪件装备。</li>
+          <li><b>活着带着战利品撤离</b>，这一局才算真的结束。</li>
+          <li>如遇故人，<b>请勿应答</b>。</li>
+        </ol>
+      </div>
+
+      <!-- 章节左右滑动 -->
+      <div class="slider">
+        <div class="slider-track">
+          <article class="slide chapter c1">
+            <div class="pic"><img src="images/stage-forest.png" alt="第一章：暮影森林"></div>
+            <div class="chapter-body">
+              <div class="ch-no">CH.01</div>
+              <h3>暮影森林</h3>
+              <p>公会的第一张任务单上只写了一句话：「去森林里看看那道光。」签下名字的冒险者有七个。</p>
+              <p>古树投下的影子里藏着第一道裂缝的入口。里面不深，怪物也不凶，足够让新手学会一件事——活着回来，比走得更深重要。</p>
+              <p>所幸森林的裂隙口离公会最近，撤退的人天黑前就能坐回酒馆——这也是所有人敢来试一试的原因。</p>
+              <div class="ch-tip">公会记录：森林里最容易犯的错，是为了一件装备多走两层。</div>
+            </div>
+          </article>
+          <article class="slide chapter c2">
+            <div class="pic"><img src="images/stage-cave.png" alt="深处：晶洞回廊"></div>
+            <div class="chapter-body">
+              <div class="ch-no">CH.02</div>
+              <h3>晶洞回廊</h3>
+              <p>往下走，林子让位给石头。蓝晶从岩壁里长出来，把整条回廊照得发亮，连影子都有两层。</p>
+              <p>光越亮的地方，选择越多：宝箱、岔路、还有看起来很像宝箱的东西。老手说，蓝晶照到的路不一定是活路，但没人照到的路一定不是。</p>
+              <p>在这里，队伍第一次会因为一件装备吵起来——要不要为了它多绕两层？吵完通常还是会绕，因为谁都不想承认自己怕。</p>
+              <div class="ch-tip">公会记录：晶洞回廊的岔路口，平均每个队伍会停下来 40 秒。</div>
+            </div>
+          </article>
+          <article class="slide chapter c3">
+            <div class="pic"><img src="images/stage-lava.png" alt="深处：熔火深域"></div>
+            <div class="chapter-body">
+              <div class="ch-no">CH.03</div>
+              <h3>熔火深域</h3>
+              <p>再往下，石头开始发烫。熔岩在脚边流动，路边插着上一批队伍留下的武器——有些还攥在没松开的手里。</p>
+              <p>走到这里的队伍，早就不是出发时的那套阵容了：有人留在了上一层，有人是半路在酒馆招来的新面孔，彼此连名字都还没记熟。</p>
+              <p>这里的敌人不吃恐惧，只吃伤害。有人选择在这里掉头，也有人在这里第一次拿下能写进公会计事板的战利品。</p>
+              <div class="ch-tip">公会记录：熔岩层掉的东西，往往值得你在这里赌一把。</div>
+            </div>
+          </article>
+          <article class="slide chapter c4">
+            <div class="pic"><img src="images/stage-undead.png" alt="尽头：亡者之地"></div>
+            <div class="chapter-body">
+              <div class="ch-no">CH.04</div>
+              <h3>亡者之地</h3>
+              <p>裂隙的最深处撕开了生死。这里没有天，也没有地，只有一片不肯散去的雾，和雾里走动的、本该已经死去的东西。</p>
+              <p>有冒险者声称在这里见到了上一次没能回来的队友。公会不置可否，只在任务单上多印了一行小字：「如遇故人，请勿应答」。</p>
+              <p>从这里活着带出战利品的人，名字会被刻在公会的石板上。石板很新，上面的名字已经不少了。</p>
+              <div class="ch-tip">公会记录：这一层不建议单独进入。</div>
+            </div>
+          </article>
+        </div>
+        <div class="slider-nav">
+          <button class="s-nav prev" type="button" aria-label="上一章">&#10094;</button>
+          <button class="s-nav next" type="button" aria-label="下一章">&#10095;</button>
+        </div>
+        <div class="slider-hint">左右拖动 / 点箭头，一路往裂隙深处走</div>
+      </div>
+
+      <div class="more-stage">
+        <p>公会的档案柜里还压着几张探险队的临摹图——每一张，都是活着回来的人凭记忆画下的。</p>
+        <div class="more-shots">
+          <figure><img src="images/stage-jungle.png" alt="雨林裂隙"><figcaption>雨林 · 古老石门</figcaption></figure>
+          <figure><img src="images/stage-coast.png" alt="海岸裂隙"><figcaption>海岸 · 沉没王城</figcaption></figure>
+          <figure><img src="images/stage-field.png" alt="田野裂隙"><figcaption>田野 · 风车与麦浪</figcaption></figure>
+          <figure><img src="images/stage-ice.png" alt="冰川裂隙"><figcaption>冰川 · 白色尽头</figcaption></figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 佣兵趣事 -->
+  <section class="section" id="mercs">
+    <div class="container">
+      <div class="sec-kicker c">MERC.TALES</div>
+      <h2>酒馆里这些人，各有各的怪毛病</h2>
+      <p class="sec-desc">
+        佣兵不会写日记，但一起下过几次裂隙，你就会记住他们每一个人——包括那些没回来的。
+      </p>
+      <div class="merc-grid">
+        <article class="merc m1">
+          <div class="head"><img src="images/merc-head-player.png" alt="见习冒险者头像"></div>
+          <div class="merc-body">
+            <div class="merc-role">YOU · 见习</div>
+            <h3>刚拿到徽章的你</h3>
+            <p class="tale">第一次下裂隙前，会长让你在墙上签名——那是给还没回来的人留的位置。你签完才发现，<b>上面那一行墨还没干</b>。</p>
+          </div>
+        </article>
+        <article class="merc m2">
+          <div class="head"><img src="images/merc-head-knight.png" alt="重骑士头像"></div>
+          <div class="merc-body">
+            <div class="merc-role">TANK · 前排</div>
+            <h3>把荣耀挂在嘴边的骑士</h3>
+            <p class="tale">他的盔甲擦得比公会的地板还亮，荣耀两个字从不离口。有人说他的盾比他的剑值钱——他听完之后，<b>把剑换成了更贵的一把</b>。</p>
+          </div>
+        </article>
+        <article class="merc m3">
+          <div class="head"><img src="images/merc-head-cleric.png" alt="牧师头像"></div>
+          <div class="merc-body">
+            <div class="merc-role">HEALER · 辅助</div>
+            <h3>留一口蓝的牧师</h3>
+            <p class="tale">她的治疗有个规矩：先救还能站着的。有人问「那躺着的呢」，她说<b>「躺着的人不疼」</b>——但每次她都会偷偷多留一口蓝。</p>
+          </div>
+        </article>
+        <article class="merc m4">
+          <div class="head"><img src="images/merc-head-warrior.png" alt="剑士头像"></div>
+          <div class="merc-body">
+            <div class="merc-role">DPS · 近战</div>
+            <h3>冲太快的剑士</h3>
+            <p class="tale">他冲得比谁都快，倒得也比谁都快。队伍里流传一句话：<b>剑士能活着走出裂隙的日子，都是牧师加班的日子</b>。</p>
+          </div>
+        </article>
+        <article class="merc m5">
+          <div class="head"><img src="images/merc-head-mona.png" alt="莫娜头像"></div>
+          <div class="merc-body">
+            <div class="merc-role">MAGE · 雷法</div>
+            <h3>一喝酒就全说漏的莫娜</h3>
+            <p class="tale">她嫌见习冒险者问题太多，平时一手短杖一手大盾，站在队伍最后。可只要你请她喝一杯，<b>她能把你想知道的全倒出来</b>——第二天她会假装自己什么都没说过。</p>
+          </div>
+        </article>
+        <article class="merc m6">
+          <div class="head"><img src="images/merc-head-lina.png" alt="莉娜头像"></div>
+          <div class="merc-body">
+            <div class="merc-role">HEALER · 牧师</div>
+            <h3>先叹口气再念咒的莉娜</h3>
+            <p class="tale">治疗之前她总要叹一口气。有人问她念的到底是什么，她说<b>「炖菜配方」</b>——步骤和祷告一样，都能让人安心。</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 职业玩法 -->
+  <section class="section alt" id="classes">
+    <div class="container">
+      <div class="sec-kicker c">CLASS.SELECT</div>
+      <h2>六种职业，谁上路，就有什么打法</h2>
+      <p class="sec-desc">
+        前排顶住、后排输出、治疗兜底——分工对了，弱队也能走得很深；分工错了，神装也救不回来。点下面的头像，看看他们各自的活法。
+      </p>
+      <div class="class-tabs" id="classTabs" role="tablist" aria-label="职业选择"></div>
+      <div class="class-panel" id="classPanel"></div>
+    </div>
+  </section>
+
+  <!-- 下载 CTA -->
+  <section class="cta" id="download">
+    <div class="container">
+      <h2>裂缝已经撕开了，就等你</h2>
+      <p>竖屏单手可玩，一局随时开随时停。活下去，把战利品带回来。</p>
+      <a class="btn" href="https://www.taptap.cn/" target="_blank" rel="noopener">前往 TapTap 下载</a>
+      <div class="cta-note">Android 5.1 及以上 · 仅 64 位设备 · 适龄 12+</div>
+    </div>
+  </section>
+
+  <div class="glow-bar"></div>
+  <footer>
+    <div class="container">
+      <div class="foot-top">
+        <div class="foot-brand">
+          <span class="brand-mark" style="width:40px;height:40px"></span>
+          <span class="foot-name">像素冒险：裂隙之刃</span>
+          <span class="foot-tag">自动战斗 × 随机裂隙 × 装备构筑</span>
+        </div>
+        <div class="foot-links">
+          <div class="foot-col">
+            <h4>游戏</h4>
+            <a href="#story">游戏背景</a>
+            <a href="#mercs">佣兵趣事</a>
+            <a href="#classes">职业玩法</a>
+          </div>
+          <div class="foot-col">
+            <h4>关于</h4>
+            <a href="#top">回到顶部</a>
+            <span>更新日志</span>
+          </div>
+          <div class="foot-col">
+            <h4>合规</h4>
+            <a href="https://riftblade-privacy.app.workbuddy.host/" target="_blank" rel="noopener">隐私政策</a>
+            <span>适龄分级 12+</span>
+          </div>
+        </div>
+        <div class="foot-cta">
+          <a class="btn" href="https://www.taptap.cn/" target="_blank" rel="noopener">前往 TapTap 下载</a>
+          <span class="foot-note">Android 5.1 及以上 · 仅 64 位设备</span>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <span>2026 苹果核工坊　像素冒险：裂隙之刃</span>
+        <span>运营主体：苹果核工坊　·　联系邮箱：635016409@qq.com　·　适龄 12+</span>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  function initSlider(root){
+    var track = root.querySelector('.slider-track');
+    if(!track) return;
+    var prev = root.querySelector('.s-nav.prev');
+    var next = root.querySelector('.s-nav.next');
+
+    function step(){
+      var card = track.querySelector('.slide');
+      if(!card) return track.clientWidth;
+      var gap = parseFloat(getComputedStyle(track).columnGap || '0') || 0;
+      return card.getBoundingClientRect().width + gap;
+    }
+    function update(){
+      var max = track.scrollWidth - track.clientWidth;
+      if(prev) prev.disabled = track.scrollLeft <= 2;
+      if(next) next.disabled = track.scrollLeft >= max - 2;
+    }
+    function go(dir){
+      track.scrollBy({left: dir * step(), behavior: 'smooth'});
+    }
+    if(prev) prev.addEventListener('click', function(){ go(-1); });
+    if(next) next.addEventListener('click', function(){ go(1); });
+    track.addEventListener('scroll', update);
+
+    var down = false, startX = 0, startScroll = 0;
+    track.addEventListener('pointerdown', function(e){
+      if(e.target.closest('a,button')) return;
+      down = true; startX = e.clientX; startScroll = track.scrollLeft;
+      track.classList.add('dragging');
+    });
+    track.addEventListener('pointermove', function(e){
+      if(!down) return;
+      track.scrollLeft = startScroll - (e.clientX - startX);
+    });
+    function end(){
+      if(!down) return;
+      down = false;
+      track.classList.remove('dragging');
+      var s = step();
+      track.scrollTo({left: Math.round(track.scrollLeft / s) * s, behavior: 'smooth'});
+    }
+    track.addEventListener('pointerup', end);
+    track.addEventListener('pointerleave', end);
+    track.addEventListener('pointercancel', end);
+
+    update();
+  }
+  document.querySelectorAll('.slider').forEach(initSlider);
+})();
+
+/* 职业选择：Tab 切换 */
+(function(){
+  var CLASSES = [
+    {
+      name:'剑盾', img:'images/class-sword.png', role:'TANK · 前排', color:'#13DDC4',
+      desc:'剑与盾，永远站在最前面。他挡下的每一次攻击，都是给全队争取的出手时间。新手队里最让人安心的一张脸——只要他还站着，后排就还有得打。',
+      tags:['嘲讽拉怪','格挡减伤','全队屏障'],
+      quote:'「站到我身后。就一句话，说完了。」'
+    },
+    {
+      name:'狂战', img:'images/class-berserk.png', role:'DPS · 近战', color:'#FF3366',
+      desc:'双刃出鞘，冲得比谁都快，倒得也比谁都快。伤害全队最高，命也最硬——硬扛的那种硬。得有人替他挡着，他才砍得动深处。',
+      tags:['高额爆发','低防站前排','越乱越强'],
+      quote:'「谁替我挡一下，我砍得快一点。」'
+    },
+    {
+      name:'重武', img:'images/class-heavy.png', role:'HEAVY · 破阵', color:'#FFB454',
+      desc:'碎岩重锤，出手慢半拍，但被砸中的敌人基本站不起来。阵型越密他越开心——一锤下去的事，从不多费第二下。',
+      tags:['范围击倒','破甲','节奏稳'],
+      quote:'「一锤子的事，别磨叽。」'
+    },
+    {
+      name:'游侠', img:'images/class-ranger.png', role:'RANGER · 远程', color:'#13DDC4',
+      desc:'站在最后一排放箭，专挑脆皮和落单的打。风声不对时，第一个喊撤退的也是他——毕竟全队的命，都押在他看得准不准上。',
+      tags:['远程点杀','脆皮猎手','视野担当'],
+      quote:'「再走一层？箭还够，人不好说。」'
+    },
+    {
+      name:'法师', img:'images/class-mage.png', role:'MAGE · 爆发', color:'#2EA7FF',
+      desc:'范围法术清场，怪物成群时最可靠。蓝空了之前，再密的怪海也围不拢队伍；蓝空了之后——那就跑吧。',
+      tags:['AOE 清场','蓝耗大户','怪海克星'],
+      quote:'「蓝还在，怕什么。」'
+    },
+    {
+      name:'牧师', img:'images/class-priest.png', role:'HEALER · 辅助', color:'#9381FF',
+      desc:'队伍能走多深，往往取决于她的蓝量。治疗与增益兜底，把「差点团灭」变成「还能再走一层」——公会计事板上一半的名字，欠她的。',
+      tags:['治疗','增益加持','蓝量管理'],
+      quote:'「都过来，我数到三。」'
+    }
+  ];
+
+  var tabsBox = document.getElementById('classTabs');
+  var panel = document.getElementById('classPanel');
+  if(!tabsBox || !panel) return;
+
+  CLASSES.forEach(function(c, i){
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'class-tab'; b.setAttribute('role','tab');
+    b.innerHTML = '<span class="face"><img src="'+c.img+'" alt="'+c.name+'"></span><span class="tname">'+c.name+'</span>';
+    b.addEventListener('click', function(){ select(i); });
+    tabsBox.appendChild(b);
+  });
+  var tabEls = tabsBox.querySelectorAll('.class-tab');
+
+  function render(c){
+    panel.innerHTML =
+      '<div class="cp-pic"><img src="'+c.img+'" alt="'+c.name+'"></div>'+
+      '<div class="cp-info cp-fade">'+
+        '<div class="cp-role" style="color:'+c.color+'">'+c.role+'</div>'+
+        '<h3>'+c.name+'</h3>'+
+        '<p class="cp-desc">'+c.desc+'</p>'+
+        '<div class="cp-tags">'+c.tags.map(function(t){return '<span>'+t+'</span>';}).join('')+'</div>'+
+        '<div class="cp-quote">'+c.quote+'</div>'+
+      '</div>';
+  }
+  function select(i){
+    tabEls.forEach(function(t, j){ t.classList.toggle('active', i===j); });
+    render(CLASSES[i]);
+  }
+  select(0);
+})();
+</script>
+
+<!-- 投放用：移动端底部悬浮下载条 -->
+<div class="sticky-cta">
+  <div class="txt"><b>像素冒险：裂隙之刃</b>竖屏单手 · 175MB · 适龄 12+</div>
+  <a class="btn" href="https://www.taptap.cn/" target="_blank" rel="noopener">下载</a>
+</div>
+
+</body>
+</html>
