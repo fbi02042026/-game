@@ -65,8 +65,9 @@ public sealed class TutorialRules
     public bool GuideEntryDraft { get; private set; }
 
     // 【2026-10-06 已删除】MercDraftGivesFragment（引导抽到佣兵给本命碎片）。
-    //   主人当天拍板：第 2 抽 = **直接招募小白入队**，不是发碎片；
+    //   主人当天拍板：第 2 抽 = **直接把引导佣兵招募入队**，不是发碎片；
     //   第 4 拍的「牧师被围 → 救援入队」整段删掉改成普通波次。整条链路删除，不留开关。
+    //   【2026-10-08 补记】当时那位是 H011 路加（牧师）；2026-10-07 起引导佣兵为 H003 塔克。
 
     /// <summary>交战点最少超前（引导 4.5，正式 2.0）。</summary>
     public float EngageMinAhead { get; private set; }

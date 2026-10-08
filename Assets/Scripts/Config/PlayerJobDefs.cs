@@ -384,7 +384,7 @@ public static class PlayerJobDefs
             case PlayerJobId.Priest:
                 return new JobWeaponKit
                 {
-                    // 2026-09-27 主人拍板：牧师也按「101 佣兵的武器」来 —— naima101（小白）手上的是 New_Weapon_07（8_Mace 钉锤），
+                    // 2026-09-27 主人拍板：牧师也按「101 佣兵的武器」来 —— naima101（H011 路加）手上的是 New_Weapon_07（8_Mace 钉锤），
                     // 所以主手用 equip_magic_weapon_07（New_Weapon_07 的魔法版，weaponAttackType=1，名字「灰烬钉锤·魔」）。
                     // 两处必须同值，别再退回 equip_magic_weapon_03 / 物理那把 equip_new_weapon_03。
                     MainTemplateId = KitTemplate(row.StarterMainTemplateId, "equip_magic_weapon_07"),

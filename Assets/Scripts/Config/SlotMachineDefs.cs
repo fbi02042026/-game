@@ -302,8 +302,9 @@ public static class SlotMachineDefs
     };
 
     // 【2026-10-06 已删除】TUTORIAL_MERC_FRAG_COUNT（引导抽到佣兵发的本命碎片数）。
-    //   主人当天拍板：第 2 抽 = **直接招募小白入队**，碎片那条口径作废 → 常量连同
+    //   主人当天拍板：第 2 抽 = **直接把引导佣兵招募入队**，碎片那条口径作废 → 常量连同
     //   TutorialDirector.TryGrantTutorialMercFragment / TutorialRules.MercDraftGivesFragment 整条删除。
+    //   【2026-10-08 补记】当时那位是 H011 路加（牧师）；2026-10-07 起引导佣兵为 H003 塔克。
 
     // ============================================================
     // 三·补②、【2026-10-05 已删除】引导局「每打完两波」的抽奖币补贴 TUTORIAL_WAVE_BONUS_COINS

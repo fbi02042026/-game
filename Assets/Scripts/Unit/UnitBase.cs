@@ -1431,8 +1431,8 @@ public abstract class UnitBase : MonoBehaviour
             LastDamageSource = source;
 
         // 2026-09-27 主人拍板：引导局我方不死人。自动战斗也会掉血到 0，一旦死掉整套引导流程就崩
-        // （死亡 → 回城 → 直接跳到小白剧情）。只在这一个入口钳血：最低留 1 点，别处不再改。
-        // 玩家和引导牧师都算「我方」，牧师（小白）中途死了同样会走进队失败的分支。
+        // （死亡 → 回城 → 直接跳到引导后续剧情）。只在这一个入口钳血：最低留 1 点，别处不再改。
+        // 玩家和引导佣兵（现为 H003 塔克，非牧师）都算「我方」，他中途死了同样会走进队失败的分支。
         var tutBm = BattleManager.Instance;
         if (isAlly && tutBm != null && tutBm.IsTutorialRun && finalDamage >= currentHp - 1f)
             finalDamage = Mathf.Max(0f, currentHp - 1f);

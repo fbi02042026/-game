@@ -21,7 +21,7 @@ public class BattleHeadTalkUI : MonoBehaviour
     bool _typingDone;
     /// <summary>
     /// 打字机速度（字/秒）。【2026-10-07 主人拍板】36 → 18（慢一倍）：
-    /// 主人原话「小白说的话太快了没看到…字出现的速度慢点」。
+    /// 主人原话「佣兵说的话太快了没看到…字出现的速度慢点」（此处的佣兵＝引导局那位 H003 塔克）。
     /// 战斗头顶气泡只有一两秒的窗口，字一闪就没了，玩家根本读不完。
     /// </summary>
     const float TypeCharsPerSecond = 18f;

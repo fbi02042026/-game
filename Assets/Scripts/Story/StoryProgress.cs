@@ -35,7 +35,8 @@ public static class StoryProgress
     // 主人原话：「或者把那个佣兵改成每日登录那个佣兵也行，回城后剧情完了后出现每日登录弹窗，这样能连起来」。
     // 目的：引导里天降救场的那个人 = 玩家回城后第一天从「每日登录」领到的人 → 剧情与日常系统串成一条线，
     // 玩家对他的第一印象（一击清场）直接变成「每天回来领他碎片」的动力。
-    // ⚠ 原来这里写的是 H011 索菲（牧师 / naima101）—— 她是治疗，撑不起「天降一击清场」的演出，已换掉。
+    // ⚠ 原来这里写的是 H011 路加（牧师 / naima101）—— 他是治疗，撑不起「天降一击清场」的演出，已换掉。
+    //   2026-10-07 起引导局那位是 H003 塔克；H011 走酒馆招募，不再参与引导。
     // 【2026-10-07 主人澄清】塔克是**男的**：对白 / 注释一律用「他」，别再写成「她」。
     public const string TutorialMercId = "dunbing201";
     public const string TutorialMercHireId = "H003";
@@ -43,7 +44,7 @@ public static class StoryProgress
     public const string TutorialMercDisplayName = "塔克";
     /// <summary>
     /// 兜底昵称（花名册取不到名字时用它）。主人 2026-10-07 口径：
-    /// 名字要**好记、好认**（嫌「小白」太敷衍），且与真名一致、不出现第二个叫法。
+    /// 名字要**好记、好认**，且与真名一致、不出现第二个叫法。
     /// </summary>
     public const string TutorialMercNickname = "塔克";
 

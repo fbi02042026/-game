@@ -5,8 +5,10 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 新手引导：城镇开场 → 短战斗（选职 / 三段抽奖：装备 → 招募小白 → 本命技能 / 强制撤离）→ 回城收尾。
-/// 2026-10-06 主人拍板：小白在第 2 抽直接入队，原来第 4 拍「牧师被围 → 救援入队」整段删除改成普通波次。
+/// 新手引导：城镇开场 → 短战斗（选职 / 三段抽奖：装备 → 招募塔克 → 本命技能 / 强制撤离）→ 回城收尾。
+/// 2026-10-06 主人拍板：引导佣兵在第 2 抽直接入队，原来第 4 拍「牧师被围 → 救援入队」整段删除改成普通波次。
+/// 【2026-10-07 主人拍板】这位引导佣兵 = H003 塔克（重盾 / 剑盾卫士 / Rare），不再是 H011 路加（牧师）。
+/// 【2026-10-08 补记】早前正文写的那位引导佣兵旧名已过时，与上述口径冲突，已统一为塔克。
 /// 只编排节拍（停手、对白、提示、何时刷第 N 步）；刷怪/HP 走 BattleManager.QueueTutorialStep + tutorial_battle。
 /// 正式第一章不走这里。
 /// </summary>
@@ -1225,8 +1227,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
     }
 
     // 【2026-10-06 已删除】EnsureTutorialMercPermanent：它是第 4 拍「救援入队」的配套
-    //   （把小白写进本局 hiredMercs + 图鉴 MarkMercSeen）。入队戏整段删掉后已无任何调用点，
-    //   小白现在由正式招募链路 RunDraftDirector.RecruitMerc 入队 → 整方法删除，不留死代码。
+    //   （把引导佣兵写进本局 hiredMercs + 图鉴 MarkMercSeen）。入队戏整段删掉后已无任何调用点，
+    //   引导佣兵现在由正式招募链路 RunDraftDirector.RecruitMerc 入队 → 整方法删除，不留死代码。
+    //   【2026-10-08 补记】当时的引导佣兵是 H011 路加（牧师）；2026-10-07 起那位已换成 H003 塔克。
 
     /// <summary>
     /// 2026-09-29 主人拍板：引导佣兵（现为塔克）是**引导期佣兵**，引导结束就清空，不跟到正式关卡。
@@ -1350,10 +1353,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         BattleUI.Instance?.UpdateBackpackGrid();
     }
 
-    // 【2026-10-06 已删除】TryGrantTutorialMercFragment（引导抽到佣兵发小白本命碎片）。
-    //   主人当天拍板：第 2 抽 = **直接招募小白入队**（SlotMachineSystem.BuildGuaranteedMercCard），
+    // 【2026-10-06 已删除】TryGrantTutorialMercFragment（引导抽到佣兵发本命碎片）。
+    //   主人当天拍板：第 2 抽 = **直接把引导佣兵招募入队**（SlotMachineSystem.BuildGuaranteedMercCard），
     //   碎片那条口径作废。方法 + 调用点整条删除，不留开关；
-    //   「小白招没招」的判据只剩 SlotMachineSystem.TutorialMercDrawn 一处。
+    //   「引导佣兵招没招」的判据只剩 SlotMachineSystem.TutorialMercDrawn 一处。
+    //   【2026-10-08 补记】当时那位是 H011 路加（牧师）；2026-10-07 起引导佣兵为 H003 塔克。
 
     /// <summary>
     /// 引导宝箱的开箱产出（2026-10-05 主人拍板）：**天赋石**。

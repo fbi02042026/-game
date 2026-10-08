@@ -119,7 +119,7 @@ public sealed class SkillCastService
     public bool TryCastMercActiveSkill(Mercenary merc, string skillId, bool manual)
     {
         if (merc == null || merc.isDead || string.IsNullOrEmpty(skillId)) return false;
-        // 眩晕/被控期间禁止施放主动技（含引导「原地眩晕」的小白：TutorialStunned）
+        // 眩晕/被控期间禁止施放主动技（含引导「原地眩晕」的引导佣兵 H003 塔克：TutorialStunned）
         if (merc.IsStunned || merc.TutorialStunned) return false;
         if (MercSkillTable.IsPassive(skillId)) return false;
         // 2026-09-26 主人拍板：传奇限定类技能（适用佣兵稀有度=传奇）只对传奇佣兵生效。

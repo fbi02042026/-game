@@ -346,7 +346,7 @@ public static class AdventureLogCatalog
         Hire("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", "累计击败精英怪物 30 次后开放招募（前期传奇）", "酒馆",
             "披兽皮、戴兽牙项链的野性战士，攻击时会发出怪叫。",
             "他的怪叫其实是为了壮胆。老盾知道，但从不拆穿。"),
-        Hire("H011", "索菲", "小白", "naima101", "牧师", "新手引导自动入队", "暮影森林·教学关",
+        Hire("H011", "路加", "路加", "naima101", "牧师", "完成新手引导后酒馆可招募", "暮影森林·教学关",
             "持法杖的白衣治疗者，新手冒险者最喜欢的队友类型。",
             "她的治疗术是公会同级考试第一名。缺点是念咒时不能被打断，否则会奶到怪物。"),
         Hire("H012", "塞拉", "小蓝", "naima102", "水系法师", "累计使用佣兵完成 15 次战斗后开放招募", "酒馆",
@@ -535,9 +535,9 @@ public static class AdventureLogCatalog
         },
         new StoryEntry
         {
-            Id = "S008", Title = "索菲的炖菜配方", Unlock = "索菲累计参战 10 次",
-            Summary = "索菲终于把治疗咒语和炖菜配方分清了，并送给玩家一份“吃了不会看见会长跳舞”的应急口粮。",
-            Extra = "奖励：索菲好感度 +10，应急口粮 ×3"
+            Id = "S008", Title = "路加的炖菜配方", Unlock = "路加累计参战 10 次",
+            Summary = "路加终于把治疗咒语和炖菜配方分清了，并送给玩家一份“吃了不会看见会长跳舞”的应急口粮。",
+            Extra = "奖励：路加好感度 +10，应急口粮 ×3"
         },
         new StoryEntry
         {
@@ -800,7 +800,7 @@ public static class AdventureLogCatalog
             case "S007":
                 return AdventureLogAchievements.GetProgress("merc_battles_H007") >= 10;   // 布罗克
             case "S008":
-                return AdventureLogAchievements.GetProgress("merc_battles_H011") >= 10;   // 索菲
+                return AdventureLogAchievements.GetProgress("merc_battles_H011") >= 10;   // 路加
             case "S009":
                 return SideDone("S003") && (StoryClue.Has("C05") || StoryClue.Has("C20"));
             case "S010":

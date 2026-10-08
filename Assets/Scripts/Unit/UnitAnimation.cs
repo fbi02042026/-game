@@ -1284,7 +1284,7 @@ public class UnitAnimation : MonoBehaviour
     public void TickLowHpFlash(float hpRatio, bool dead)
     {
         // 主人定死（2026-09-26）：只有血量 <= 20% 才闪红。任何改动前必须经主人确认。
-        // 这里是“小白红闪”第 3 次复发的染色修复入口；以后改染色还原逻辑时不要顺手改这个数。
+        // 这里是“引导佣兵低血红闪”第 3 次复发的染色修复入口；以后改染色还原逻辑时不要顺手改这个数。
         bool want = !dead && hpRatio <= GameConfig.LOW_HP_WARN_RATIO + 0.0001f;
         if (!want)
         {
@@ -1292,7 +1292,7 @@ public class UnitAnimation : MonoBehaviour
             {
                 _lowHpFlashOn = false;
                 // 原先这里被 `!_hitFlashRunning` 挡住：一旦 _hitFlashRunning 因场景切换/
-                // 协程被中断而卡在 true，低血红就永远退不掉（剧情打完小白一身红）。
+                // 协程被中断而卡在 true，低血红就永远退不掉（剧情打完引导佣兵一身红）。
                 // 受击闪的协程每帧都会重写颜色，这里无条件还原不会打断它。
                 RestoreSpumFlashFromBaseline();
                 // 程序化单位：上面那句对无 SPUM 的单位是空操作，必须自己还原，否则低血红不退

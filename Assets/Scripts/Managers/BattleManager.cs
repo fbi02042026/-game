@@ -2008,7 +2008,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             var m = MercAt(i);
             bool live = m != null && !m.isDead;
             bool hasActive = live && m.SkillCaster != null && m.SkillCaster.HasActiveSkill;
-            // 单人局只认引导小白那一条（槽 0）；正式关按已解锁槽数
+            // 单人局只认引导佣兵那一条（槽 0，H003 塔克）；正式关按已解锁槽数
             bool slotUsable = solo ? (tutorialMerc && i == 0) : (i < unlocked);
             float pool = MercMpPool(i);
 
@@ -3332,7 +3332,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// <summary>
     /// 引导局阵亡收尾：重新进入引导战斗（重头走引导步骤）。
     /// 2026-09-27 主人拍板：旧实现是「MarkTutorialBattleCleared + 回城」，
-    /// 等于把引导里的一次阵亡当成通关 —— 回主界面就直接加载小白剧情。
+    /// 等于把引导里的一次阵亡当成通关 —— 回主界面就直接加载引导后续剧情。
     /// 现在只重进战斗场景（TutorialBattleCleared 没写 → ShouldStartTutorialBattle 仍为 true，
     /// 重新加载后还是引导局），金币照常写回，通关奖励不再发。
     /// </summary>
