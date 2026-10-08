@@ -60,6 +60,12 @@ public static class SoftCopyrightUiProbe
     public static bool DialogueContains(string keyword) =>
         Dialogue != null && Dialogue.IsVisible && TextHas(Dialogue.CurrentLine, keyword);
 
+    /// <summary>屏幕浮字：UIManager.ShowToast 最终落到 GlobalToastUI（入队 / 招募结果走这条，不是引导气泡）。</summary>
+    public static string ToastMessage => GlobalToastUI.CurrentMessage ?? "";
+
+    public static bool ToastContains(string keyword) =>
+        GlobalToastUI.IsShowing && TextHas(ToastMessage, keyword);
+
     public static bool HeadTalkContains(string keyword)
     {
         var talk = BattleHeadTalkUI.Instance;
