@@ -1,0 +1,49 @@
+#!/bin/sh
+# git pre-commit：拦截「56 字符 guid」的 .meta 被提交（2026-10-08 新增）
+#
+# 为什么要有这道钩子：
+#   团结引擎"重新导入"时会把部分 .meta 的 guid 写成 56 字符长串（引擎自有标识，
+#   不是合法 hex32），prefab 里存的旧 hex32 引用会立刻断链 → UI 空图 / 粉块。
+#   实测反复复发：2026-09-24 换发 626 个、09-29 又长出 309 个、10-08 pull 又带回 4 个。
+#   根因是「某台机器重导写坏 → 提交推送 → 另一台 pull 拿到 → 又断」，
+#   所以在提交口子上卡死，谁都推不上远端，从源头断根。
+#
+# 安装（.git/hooks 不受版本控制，换机器 / 新克隆都要重装一次）：
+#   cp Tools/git-hooks/pre-commit .git/hooks/pre-commit
+#   cp Tools/git-hooks/post-merge .git/hooks/post-merge
+#
+# 只检查"本次要提交的 .meta"，不扫全库，所以很快。
+
+# core.quotepath=false：否则中文路径会被输出成八进制转义，后面 [ -f ] 判定失败导致漏检
+FILES=$(git -c core.quotepath=false diff --cached --name-only --diff-filter=ACM | grep -E '\.meta$')
+[ -z "$FILES" ] && exit 0
+
+HITS=""
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [ -f "$f" ] || continue
+    # 合法 hex32 是 32 位；{40,} 只命中 56 字符那类长串
+    if grep -Eq '^guid:[[:space:]]*[0-9A-Za-z+/=]{40,}' "$f"; then
+        HITS="$HITS  $f
+"
+    fi
+done <<EOF
+$FILES
+EOF
+
+if [ -n "$HITS" ]; then
+    echo ""
+    echo "❌ 提交被拦截：下面这些 .meta 的 guid 是 56 字符长串（重导写坏），推上去别人 pull 完就断链："
+    echo ""
+    printf '%s' "$HITS"
+    echo ""
+    echo "   修法（写回旧 hex32，改完必须重启引擎才生效）："
+    echo "     python Tools/FixGuid56.py --apply"
+    echo "   先看看是哪些 / 影响多大："
+    echo "     python Tools/Guid56Guard.py --fast"
+    echo "     python Tools/CheckDanglingRefs.py --strict"
+    echo ""
+    exit 1
+fi
+
+exit 0

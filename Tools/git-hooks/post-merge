@@ -58,6 +58,31 @@ if [ "$DEL" -gt 200 ]; then
     echo ""
 fi
 
+# ===== 56 字符 guid 报警（2026-10-08 新增）=====
+# pull 把别人写坏的 56 字符 .meta 拉下来会立刻断链（prefab 里是旧 hex32）。
+# 这里只扫"本次 merge 动过的 .meta"，不扫全库，很快。
+if [ -f .git/ORIG_HEAD ]; then
+    RANGE="$(git rev-parse ORIG_HEAD 2>/dev/null)..HEAD"
+else
+    RANGE="HEAD~1..HEAD"
+fi
+BAD56=$(git -c core.quotepath=false diff --name-only --diff-filter=ACM "$RANGE" 2>/dev/null \
+    | grep -E '\.meta$' \
+    | while IFS= read -r f; do
+          [ -f "$f" ] || continue
+          grep -Eq '^guid:[[:space:]]*[0-9A-Za-z+/=]{40,}' "$f" && echo "$f"
+      done)
+if [ -n "$BAD56" ]; then
+    N=$(echo "$BAD56" | grep -c .)
+    echo ""
+    echo "⚠⚠⚠  本次拉取带入 $N 个 56 字符 guid 的 .meta（重导写坏，可能已断链）："
+    echo "$BAD56" | sed 's/^/       /' | head -20
+    echo ""
+    echo "      下一步：python Tools/CheckDanglingRefs.py --strict  看有没有真断链"
+    echo "              断了的：python Tools/FixGuid56.py --apply   写回旧 hex32 后重启引擎"
+    echo ""
+fi
+
 # ===== 打印待办 =====
 TODO="Docs/待办清单_2026-09-18.md"
 if [ ! -f "$TODO" ]; then

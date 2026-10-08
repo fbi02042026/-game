@@ -99,6 +99,7 @@ credentials.json
 
 # Local Unity Editor install (do not commit)
 2022.3.62t12/
+2022.3.62t16/
 
 # Local AI / IDE tooling caches
 .codely-cli/
