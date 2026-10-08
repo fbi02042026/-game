@@ -1381,9 +1381,13 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         if (Rules.DirectorOwnsWaves)
         {
-            // 引导关也走金币抽奖（2026-09-29）：在 TutorialDirector 接管波次之前抽。
+            // 【2026-10-08 主人拍板】引导局开局不抽奖 —— 先打完第一波，再抽装备，
+            // 玩家才看得到「换了家伙之后变强」的对比。第一抽改由 TutorialDirector.BattleRoutine
+            // 在第一波清场后弹（CoMidBattleDraft）。
+            // 旧口径（2026-09-29「引导关也走金币抽奖，在 Director 接管波次之前抽」）已作废。
             // NotifyBattleSplashFinished 只是启动引导协程，晚一点调用不会打断它。
-            yield return CoStageEntryDraft();
+            if (!IsTutorialRun)
+                yield return CoStageEntryDraft();
             TutorialDirector.Instance?.NotifyBattleSplashFinished();
         }
         else
@@ -2384,8 +2388,12 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         {
             // 没有剧情：直接进抽奖。抽奖期间保持 _preBattleStoryPlaying=true，
             // 否则 CoFirstWaveHardFallback 会在 2.2s 后硬刷怪，玩家还在选卡就被打。
+            //
+            // 【2026-10-08 主人拍板】引导局**开局不抽奖** —— 先让玩家用初始武器打完第一波，
+            // 清场后由 TutorialDirector 弹第一抽（BattleRoutine 里 1c 那一拍）。
+            // 这样「抽到装备换上 → 下一波明显变强」才看得出来；正式关照常进关抽奖。
             _preBattleStoryPlaying = true;
-            yield return CoStageEntryDraft();
+            if (!IsTutorialRun) yield return CoStageEntryDraft();
             _preBattleStoryPlaying = false;
             ScheduleFirstWaveSpawn();
             yield break;
@@ -2394,7 +2402,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         _preBattleStoryPlaying = true;
         while (!done) yield return null;
         // 剧情结束（含跳过）后进抽奖，期间继续压住硬刷兜底
-        yield return CoStageEntryDraft();
+        // 同上：引导局跳过进关抽奖，第一抽留给第一波清场之后。
+        if (!IsTutorialRun) yield return CoStageEntryDraft();
         _preBattleStoryPlaying = false;
         // 抽完才放首波
         ScheduleFirstWaveSpawn();
@@ -2461,7 +2470,11 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 抽奖/结算期间被冻住，到这里只是<b>解冻接着走剩下的秒数</b>。
         // 原写法在这里 StartContinueCountdown() = 抽完又把 30s 补满，玩家看到的正是
         // 「怎么还是抽完才开始计时」。
-        panel.SetCountdownPaused(false);
+        //
+        // 【2026-10-08 主人拍板】引导局**全程不催**：倒计时保持冻住，玩家想看多久看多久，
+        // 只有他自己点「继续」才往下走。正式关照常解冻、接着走剩下的秒数（30s 总预算是正式关的玩法）。
+        if (!IsTutorialRun)
+            panel.SetCountdownPaused(false);
 
         // 300s 只是异常兜底（倒计时本身会先归零走 DoContinue）
         float guard = 0f;
@@ -2516,13 +2529,22 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                 c => { picked = c; choice = 1; },
                 () => choice = 2, freeLeft);
 
+            // 同上（CoMidBattleDraft 那份）：引导局不催，面板一弹出就冻住倒计时。
+            // 现在引导局已跳过进关抽奖，这行是给「以后引导又走这条路」兜的同一道保险。
+            if (IsTutorialRun)
+                BattleEntryDraftPanel.Instance?.SetCountdownPaused(true);
+
             // 引导关：开局先教玩家抽奖，圈住「随机抽奖」按钮
             if (onceOnly && !guideHintShown)
             {
                 guideHintShown = true;
                 var rect = BattleEntryDraftPanel.Instance != null
                     ? BattleEntryDraftPanel.Instance.NormalButtonRect : null;
-                TutorialHintUI.Ensure().ShowHard("先抽一次奖，开局白拿一个强化。", rect);
+                // 【2026-10-08 主人拍板】原文案「先抽一次奖，开局白拿一个强化。」作废 ——
+                //   主人原话「引导文字不要说开局白拿一个抽奖」：引导现在也不再从开局白送，
+                //   第一抽是**打完第一波才给**的（见 TutorialDirector 1c 那一拍）。
+                //   文案只说「抽一次」，不提白拿、不剧透类别。
+                TutorialHintUI.Ensure().ShowHard("先抽一次奖，看看能开出什么。", rect);
             }
 
             // 面板常驻，给足看构筑的时间；不点就一直不开战（上限 5 分钟防卡死）
@@ -2783,6 +2805,12 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                 c => { picked = c; choice = 1; },
                 () => choice = 2, freeLeft);
 
+            // 【2026-10-08 主人拍板】引导局**不催**：面板一弹出就把倒计时冻住（引导三拍都走这里），
+            // 玩家看清楚自己抽到了什么再点「继续」。正式关照常跑那 30s 总预算。
+            // 后面 WaitForContinue 里也有同一道判定，保证整段引导都不解冻。
+            if (IsTutorialRun)
+                BattleEntryDraftPanel.Instance?.SetCountdownPaused(true);
+
             if (!string.IsNullOrEmpty(guideText) && BattleEntryDraftPanel.Instance != null)
                 TutorialHintUI.Ensure().ShowHard(guideText, BattleEntryDraftPanel.Instance.NormalButtonRect);
 
@@ -2836,6 +2864,11 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                     yield return WaitForContinue(true,
                         !string.IsNullOrEmpty(guideText) ? $"{RewardTip()}　点「继续」继续战斗。" : null,
                         () => choice == 2);
+                    // 【2026-10-08 主人拍板】点完「继续」立刻弹一句「继续前进」——
+                    // 面板收起、战斗恢复的那一刻，给玩家一个明确的「接着往前走」的信号。
+                    // 只走引导（guideText 非空）；正式关不打扰。想改停留秒数就改这个 2.2f。
+                    if (!string.IsNullOrEmpty(guideText))
+                        TutorialHintUI.Ensure().Show("继续前进", null, 2.2f);
                 }
             }
         }

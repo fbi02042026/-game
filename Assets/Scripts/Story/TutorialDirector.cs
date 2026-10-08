@@ -459,7 +459,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 借「技能能量满会自动释放」那 3.2 秒读字时间走完进场，这里不再重复刷
         // （EnsureTutorialStep 不看是否已刷过，重复调用会多排一波）。
         TutorialBattleTable.EnsureLoaded();
-        hint.Show("靠近怪物会自动攻击。", null, 8f);
+        // 【2026-10-08 主人拍板】第一波先给一句「热身」的引导，再教自动攻击 ——
+        // 主人原话「先打一波热热手什么的」；这句是唯一文案源，想改措辞改这里即可。
+        hint.Show("先打一波热热身。靠近怪物会自动攻击。", null, 8f);
         if (bm != null) bm.UnitsCanAct = true;
         yield return WaitFieldClear();
 
@@ -470,24 +472,38 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return WaitFieldClear(strict: true);
         }
 
-        // —— 1b) 第二拍：混编波 ——
-        // ⚠【2026-10-05 主人拍板删除】原本文案是「后面那个会射你，先冲上去解决它。」
-        //   现在是**自动攻击**，玩家没有「选择打谁」的操作，这条引导教了个不存在的动作 —— 删掉。
-        //   第二拍照常刷怪（tutorial_battle.csv order=2 的混编波），只是不再显示这条提示。
-        yield return EnsureTutorialStep(bm, 2);
-        yield return WaitFieldClear(strict: true);
-
         // —— 1c) 第一抽：走正式入口 CoMidBattleDraft（冻场 → 弹面板 → 抽一次 → 解冻）。
         // 抽奖是主玩法，不是引导脚本 —— 这里的节拍只是「什么时候弹」，规则在 SlotMachineSystem。
         // 【2026-10-07 主人拍板】文案不剧透类别（主人原话「不要说这次抽的是佣兵，要给玩家惊喜」），
         // 三拍统一用 TutorialDrawBeatText —— 类别按 SlotMachineDefs.TutorialDrawOrder 定序。
         // 引导三拍的钱**只有开局那 240**（每拍一抽 80，正好三抽）；不再有任何中途补贴 ——
         // 2026-10-05 主人拍板「清零 + 不要总打补丁」，TUTORIAL_WAVE_BONUS_COINS 整条链路已删。
+        //
+        // 【2026-10-08 主人拍板】这一拍的<b>位置</b>：原来排在「打完两波（order=1 + order=2）」之后，
+        //   玩家还没拿过装备、也还没体会过换装前后的差别就抽了 —— 看不出「换了装备」。
+        //   现在<b>前移到第一波（order=1）清场之后</b>：先用初始武器打完一波 → 抽到装备换上 →
+        //   紧接着 order=2 混编波，换装带来的变强立刻看得见。拍数不变（仍是三抽）。
         if (bm != null)
             yield return bm.CoMidBattleDraft(TutorialDrawBeatText);
         // 2026-10-06 主人拍板：招募完立刻刷一次头像栏，否则要等下一次全量刷新才亮出来
         // （ShowMercHud 由本局抽数推导，抽数已在 CoInstantPick 里 +1）。
         ui?.UpdateCharacterSlots();
+
+        // —— 1d) 【2026-10-08 主人拍板】抽中武器以为能大展身手，结果十几只小怪压上来 ——
+        // 主人原话：「抽中一个武器 以为大展身手的时候到了 结果来了十几个小怪
+        //   正在玩家感觉要死了的时候 佣兵闪亮登场」。
+        // 这一波（tutorial_battle.csv order=7）只给**数量**压迫：12 只、单体血 20~24
+        // 比主流波 38~40 低，换装后一刀一只也清不完一轮，被围住自然就「要死了」。
+        yield return EnsureTutorialStep(bm, 7);
+        yield return WaitFieldClear(strict: true);
+
+        // —— 1b) 第二拍：混编波 ——
+        // ⚠【2026-10-05 主人拍板删除】原本文案是「后面那个会射你，先冲上去解决它。」
+        //   现在是**自动攻击**，玩家没有「选择打谁」的操作，这条引导教了个不存在的动作 —— 删掉。
+        //   第二拍照常刷怪（tutorial_battle.csv order=2 的混编波），只是不再显示这条提示。
+        // 【2026-10-08】这一波现在是「抽完装备之后」的第一波 —— 换装效果就靠它来体现。
+        yield return EnsureTutorialStep(bm, 2);
+        yield return WaitFieldClear(strict: true);
 
         // —— 2) 宝箱陷阱：发现 → 左右埋伏 → 清场 → 开箱拿剑 ——
         hint.Hide();
@@ -500,7 +516,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         chestDir.CacheSceneRefs();
 
         // 2026-10-05 主人拍板：宝箱不再掉装备（掉天赋石，见 GrantTutorialChestTalentStones），
-        // 装备由开局抽奖随机给（第一抽没有装备保底）。开箱演出照旧，只是箱子里不再吐一件装备。
+        // 装备由**第一波清场后那一抽**随机给（第一抽没有装备保底；2026-10-08 前已不是开局抽）。
+        // 开箱演出照旧，只是箱子里不再吐一件装备。
         hint.Hide();
         // 2026-09-27 主人拍板：清完上一波不要马上进宝箱剧情 —— 先让玩家往前走两步，
         // 宝箱再「突然出现」。UnitsCanAct 保持 true（WaitFieldClear 结尾已放开，场上无怪 → 向右推图），

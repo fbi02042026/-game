@@ -565,6 +565,14 @@ public class BattleEntryDraftPanel : MonoBehaviour
                Action<DraftCategory?> onPick, Action onFight, int freeLeft = 0)
     {
         Build();
+        // 【2026-10-08 主人拍板】玩家手动点开的「看背包」态：抽奖一开始先收回去，
+        // 再由下面 SetExpanded(true) 从收起态平滑展开显示抽奖 —— 不让背包和抽奖叠在一起。
+        // ⚠ 判据必须放在 _draftActive = true 之前：否则连抽中途回面板也会被当成「玩家开的」。
+        if (_expanded && !_draftActive)
+        {
+            SetExpanded(false);
+            ApplyState(0f);   // 立刻归位到收起态（不等动画走完），下面展开才有「收 → 展」的观感
+        }
         // 【2026-10-06 主人二次拍板】这里是倒计时<b>唯一</b>的起表点：
         // 面板一露头（= 抽奖环节开始）就开始走 30s，**不是抽完才开始**；
         // 抽奖全程连续递减，抽完<b>不重置</b>（原来 CoStageEntryDraft 在抽完又起一次表，

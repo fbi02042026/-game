@@ -90,17 +90,11 @@ public partial class BattleUI : MonoBehaviour
             // 头像框：玩家默认普通，日后「大厅考证」提档只改 MercHireSession.PlayerFrameRarity
             playerSlot.SetFrame(MercHireSession.LoadPlayerPortraitFrame());
             playerSlot.SetSkillBadge(null);
-            // 【2026-10-06 主人二次拍板】常驻战力字搬到<b>玩家头像框</b>上（左上角那张卡的最左边）。
-            // 宿主就是这张卡的头像框（预制体里叫 PlayerSlot 的那层），位置跟着它走。
-            if (playerSlot.frameImage != null)
-            {
-                PlayerPowerHud.Ensure(hero != null ? hero.transform : null)
-                              .AttachToFrame(playerSlot.frameImage.rectTransform);
-            }
-            else
-            {
-                Debug.LogError("[BattleUI] 玩家槽没有头像框（frameImage 为空），战力字无处可挂");
-            }
+            // 【2026-10-08 主人拍板】常驻战力接<b>玩家头像下面</b>的「战斗力」节点
+            // （预制体 PlayerSlot → 战斗力：标题 zhandouli 是静态贴图，数字位由代码按位换图）。
+            // 不再运行时建树 / 加载图集 —— 取不到节点由 AttachToPowerNode 自己打 Error。
+            PlayerPowerHud.Ensure(hero != null ? hero.transform : null)
+                          .AttachToPowerNode(playerSlot);
             // 职业 icon：xuetiaodi/职业icon。2026-09-17 用户指定用 Icons/职业icon/ 四分类图
             // （防御/恢复/法术/物攻）。
             // 2026-09-26：去掉「取不到回退职业立绘头像」——那正是主人说的「总和玩家职业icon搞混」，

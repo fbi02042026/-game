@@ -188,7 +188,9 @@ public class GlobalToastUI : MonoBehaviour
         }
         _cg.alpha = 1f;
 
-        yield return new WaitForSecondsRealtime(1f);
+        // 【2026-10-08 主人拍板】战斗内提示字（「获得 XXX」/「抽中 XXX」…）一闪而过看不清
+        // → **停留时长 ×2**（1s → 2s）。淡入 / 淡出是过场动画，保持原速，只把「看得见的时间」翻倍。
+        yield return new WaitForSecondsRealtime(2f);
 
         // 往上飘并淡出
         t = 0f;
@@ -228,7 +230,9 @@ public class GlobalToastUI : MonoBehaviour
         _root.transform.SetAsLastSibling();
 
         const float inDur = 0.22f;
-        const float driftDur = 1.5f;
+        // 【2026-10-08 主人拍板】飞字停留 ×2（1.5s → 3s）：「连杀 x5」「精英击破！」这类战斗播报。
+        // 左右飞入 / 飞出的过场动画保持原速，只把中间「看得见的时间」翻倍。
+        const float driftDur = 3f;
         const float outDur = 0.22f;
         const float startX = -520f;
         const float centerX = 0f;

@@ -168,8 +168,14 @@ public partial class BattleUI : MonoBehaviour
         // 而 BattleManager 进战斗就置 isInBattle=true、抽奖协程在它之后才跑 →
         // 抽奖期间遮罩一开，DraftRoot(抽奖按钮)/zhuangbei(装备)/BtnBackpack(背包) 全被压掉。
         // 判据只有一个：BattleEntryDraftPanel.IsLotteryOpen。遮罩显隐仍归本方法独家管。
-        bool on = bm != null && bm.isInBattle && !BattleLootMode.Active
-                  && !BattleEntryDraftPanel.IsLotteryOpen;
+        // 【2026-10-08 主人拍板「背包不用遮罩」】战斗中不再用黑幕压暗底部 HUD ——
+        //   主人要「战斗过程中能点开背包查看」，而遮罩一开背包格子就点不动（见上方 157 行原注释：
+        //   「整理阶段必须关掉，否则背包格子和技槽点不动」）。
+        //   判据（原样备用，改回一行即可恢复）：
+        //   bool on = bm != null && bm.isInBattle && !BattleLootMode.Active
+        //             && !BattleEntryDraftPanel.IsLotteryOpen;
+        //   遮罩恒关 → 下面 SetGraphicsRaycast(skillSlotRoot, !on) 会把技槽射线恢复成可点。
+        bool on = false;
         if (on != _battleMaskOn)
         {
             _battleMaskOn = on;

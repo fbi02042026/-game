@@ -2413,7 +2413,6 @@ GameObject:
   - component: {fileID: 1779213794565534077}
   - component: {fileID: 1291344015723303006}
   - component: {fileID: 1362703348845295642}
-  - component: {fileID: 6715005649759488109}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: WorldMapPopup
@@ -2454,7 +2453,7 @@ Canvas:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3261693433372323098}
   m_Enabled: 1
-  serializedVersion: 3
+  serializedVersion: 4
   m_RenderMode: 1
   m_Camera: {fileID: 0}
   m_PlaneDistance: 100
@@ -2464,6 +2463,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
+  m_AlwaysInGammaSpace: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -2521,91 +2521,6 @@ CanvasGroup:
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
---- !u!114 &6715005649759488109
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3261693433372323098}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1340940d05f058449bbcc4c36d9f590c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  mapBackground: {fileID: 5247502537392319735}
-  titleText: {fileID: 5869082144868926356}
-  descText: {fileID: 9176290107046780703}
-  defaultMapSprite: {fileID: 0}
-  regions:
-  - chapterId: 1
-    displayName: 
-    normalizedPosition: {x: 0, y: 0}
-    icon: {fileID: 0}
-    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
-    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
-    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
-    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
-  - chapterId: 1
-    displayName: 
-    normalizedPosition: {x: 0, y: 0}
-    icon: {fileID: 0}
-    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
-    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
-    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
-    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
-  - chapterId: 1
-    displayName: 
-    normalizedPosition: {x: 0, y: 0}
-    icon: {fileID: 0}
-    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
-    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
-    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
-    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
-  - chapterId: 1
-    displayName: 
-    normalizedPosition: {x: 0, y: 0}
-    icon: {fileID: 0}
-    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
-    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
-    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
-    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
-  - chapterId: 1
-    displayName: 
-    normalizedPosition: {x: 0, y: 0}
-    icon: {fileID: 0}
-    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
-    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
-    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
-    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
-  - chapterId: 1
-    displayName: 
-    normalizedPosition: {x: 0, y: 0}
-    icon: {fileID: 0}
-    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
-    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
-    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
-    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
-  - chapterId: 1
-    displayName: 
-    normalizedPosition: {x: 0, y: 0}
-    icon: {fileID: 0}
-    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
-    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
-    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
-    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
-  - chapterId: 1
-    displayName: 
-    normalizedPosition: {x: 0, y: 0}
-    icon: {fileID: 0}
-    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
-    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
-    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
-    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
-  enterButton: {fileID: 4516455149768299587}
-  enterButtonText: {fileID: 3492009229068842102}
-  highlightMaterial: {fileID: 0}
-  regionRoot: {fileID: 187442375143839283}
 --- !u!1 &3621953826545866884
 GameObject:
   m_ObjectHideFlags: 0

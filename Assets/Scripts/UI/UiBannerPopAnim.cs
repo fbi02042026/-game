@@ -21,7 +21,13 @@ public static class UiBannerPopAnim
     public const float WaveStartSizeRatio = 4.2f;
     public const float WaveSlamDuration = 0.26f;
     public const float WaveLandShakeDuration = 0.14f;
-    public const float WaveHoldDuration = 0.52f;
+    /// <summary>
+    /// 波次横幅的停留时长（秒）。
+    /// 【2026-10-08 主人拍板】战斗内提示时间 ×2（0.52 → 1.04）——
+    /// 使用者：<c>BattleWaveAnnounceUI</c>（「第 N 波 / 精英来袭」）与 <c>StageStartBannerUI</c>（关卡开场横幅）。
+    /// 砸入 / 落地颤 / 淡出是过场动画，保持原速，只把停留翻倍。
+    /// </summary>
+    public const float WaveHoldDuration = 1.04f;
     public const float WaveFadeOutDuration = 0.34f;
 
     public static float WaveIncomingTotalDuration =>

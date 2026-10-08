@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: CnkZtC/4VH3tdQuGTFrf64/HK1C0Y/rCF++ipWg0pIk8w4vEbmQvr8Y=
+guid: 53615e76ad8f07a4486c4d74da471604
 TextureImporter:
   internalIDToNameTable: []
   externalObjects: {}
@@ -203,31 +203,10 @@ TextureImporter:
       name: "\u6218\u6597\u529B"
       rect:
         serializedVersion: 2
-        x: 253
-        y: 184
-        width: 514
-        height: 174
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      outline: []
-      physicsShape: []
-      tessellationDetail: 0
-      bones: []
-      spriteID: 23fb226ade089294eacde3e332b14b81
-      internalID: 680598706
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: "\u6218\u6597\u529B_0"
-      rect:
-        serializedVersion: 2
-        x: 9
-        y: 32
-        width: 87
-        height: 127
+        x: 126
+        y: 92
+        width: 258
+        height: 88
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -242,13 +221,13 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: "\u6218\u6597\u529B_1"
+      name: "\u6218\u6597\u529B_0"
       rect:
         serializedVersion: 2
-        x: 109
-        y: 28
-        width: 74
-        height: 136
+        x: 4
+        y: 16
+        width: 44
+        height: 64
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -263,13 +242,13 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: "\u6218\u6597\u529B_2"
+      name: "\u6218\u6597\u529B_1"
       rect:
         serializedVersion: 2
-        x: 188
-        y: 30
-        width: 106
-        height: 132
+        x: 54
+        y: 13
+        width: 38
+        height: 70
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -284,13 +263,13 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: "\u6218\u6597\u529B_3"
+      name: "\u6218\u6597\u529B_2"
       rect:
         serializedVersion: 2
-        x: 296
-        y: 34
-        width: 101
-        height: 122
+        x: 93
+        y: 15
+        width: 54
+        height: 66
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -305,13 +284,13 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: "\u6218\u6597\u529B_4"
+      name: "\u6218\u6597\u529B_3"
       rect:
         serializedVersion: 2
-        x: 403
-        y: 30
-        width: 103
-        height: 131
+        x: 148
+        y: 17
+        width: 51
+        height: 61
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -326,13 +305,13 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: "\u6218\u6597\u529B_5"
+      name: "\u6218\u6597\u529B_4"
       rect:
         serializedVersion: 2
-        x: 507
-        y: 31
-        width: 105
-        height: 132
+        x: 201
+        y: 14
+        width: 52
+        height: 67
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -347,13 +326,13 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: "\u6218\u6597\u529B_6"
+      name: "\u6218\u6597\u529B_5"
       rect:
         serializedVersion: 2
-        x: 623
-        y: 32
-        width: 82
-        height: 133
+        x: 253
+        y: 15
+        width: 53
+        height: 67
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -368,13 +347,13 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: "\u6218\u6597\u529B_7"
+      name: "\u6218\u6597\u529B_6"
       rect:
         serializedVersion: 2
-        x: 718
-        y: 28
-        width: 101
-        height: 136
+        x: 312
+        y: 16
+        width: 41
+        height: 67
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -389,13 +368,13 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: "\u6218\u6597\u529B_8"
+      name: "\u6218\u6597\u529B_7"
       rect:
         serializedVersion: 2
-        x: 821
-        y: 26
-        width: 88
-        height: 131
+        x: 359
+        y: 14
+        width: 50
+        height: 68
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -410,13 +389,13 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: "\u6218\u6597\u529B_9"
+      name: "\u6218\u6597\u529B_8"
       rect:
         serializedVersion: 2
-        x: 917
-        y: 30
-        width: 93
-        height: 129
+        x: 410
+        y: 13
+        width: 44
+        height: 66
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -426,6 +405,27 @@ TextureImporter:
       bones: []
       spriteID: 9abc8e4ce2968804b93138bc5478af48
       internalID: 461521617
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: "\u6218\u6597\u529B_9"
+      rect:
+        serializedVersion: 2
+        x: 458
+        y: 15
+        width: 47
+        height: 65
+      alignment: 0
+      pivot: {x: 0.5, y: 0.5}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      outline: []
+      physicsShape: []
+      tessellationDetail: 0
+      bones: []
+      spriteID: 60c051eeb26161d4b9288a0e6b7f8cf7
+      internalID: -84074172
       vertices: []
       indices: 
       edges: []
@@ -441,17 +441,17 @@ TextureImporter:
     weights: []
     secondaryTextures: []
     nameFileIdTable:
-      "\u6218\u6597\u529B": 680598706
-      "\u6218\u6597\u529B_0": -1972697362
-      "\u6218\u6597\u529B_1": 2092790875
-      "\u6218\u6597\u529B_2": 929453022
-      "\u6218\u6597\u529B_3": 1466675203
-      "\u6218\u6597\u529B_4": -2143814362
-      "\u6218\u6597\u529B_5": 779452620
-      "\u6218\u6597\u529B_6": 1957704211
-      "\u6218\u6597\u529B_7": 135078851
-      "\u6218\u6597\u529B_8": -451461308
-      "\u6218\u6597\u529B_9": 461521617
+      "\u6218\u6597\u529B": -1972697362
+      "\u6218\u6597\u529B_0": 2092790875
+      "\u6218\u6597\u529B_1": 929453022
+      "\u6218\u6597\u529B_2": 1466675203
+      "\u6218\u6597\u529B_3": -2143814362
+      "\u6218\u6597\u529B_4": 779452620
+      "\u6218\u6597\u529B_5": 1957704211
+      "\u6218\u6597\u529B_6": 135078851
+      "\u6218\u6597\u529B_7": -451461308
+      "\u6218\u6597\u529B_8": 461521617
+      "\u6218\u6597\u529B_9": -84074172
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   doOverrideTextureManagerOperations: 0
