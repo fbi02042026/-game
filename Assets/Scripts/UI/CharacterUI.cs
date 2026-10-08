@@ -361,36 +361,11 @@ public class CharacterUI : MonoBehaviour, ITownPage
         var rightBg = transform.Find("Content/Stage/RightButtons/bg");
         if (rightBg != null)
             rightBg.gameObject.SetActive(false);
-
-        EnsureRightButtonArt();
     }
-
-    /// <summary>
-    /// 2026-09-27：右侧 4 个按钮的底图在预制体里是**断链**的（引用的 sprite guid 在项目里已不存在 ——
-    /// 天赋/技能/背包/立绘 这 4 张图后来重新导入过，guid 变了，预制体还指着旧 guid）。
-    /// 按铁律「预制体优先、代码只兜底」：**只有当按钮自己的 Image.sprite 为空（= 图丢了）**时才补；
-    /// 主人在预制体里重新拖好并保存后，这里就自动不再插手。
-    /// </summary>
-    void EnsureRightButtonArt()
-    {
-        FillButtonArtIfMissing(talentButton, "天赋");
-        FillButtonArtIfMissing(skillButton, "技能");
-        FillButtonArtIfMissing(backpackEntryButton, "背包");
-        FillButtonArtIfMissing(boardEntryButton, "立绘");
-    }
-
-    static void FillButtonArtIfMissing(Button btn, string artName)
-    {
-        if (btn == null) return;
-        var img = btn.targetGraphic as Image ?? btn.GetComponent<Image>();
-        if (img == null) return;
-        if (img.sprite != null) return;          // 预制体里有图 → 代码不写（铁律）
-        var sp = LoadNavArt(artName);
-        if (sp == null) return;
-        img.sprite = sp;
-        img.preserveAspect = true;
-        img.color = Color.white;
-    }
+    // 🔴 2026-10-08 主人拍板删除 EnsureRightButtonArt() 调用：不要兜底。
+    //    断链就修 guid / 重拖预制体，不许运行时 Resources.Load 补图；
+    //    上次兜底把 4 张图复制进 Resources 造成同图两份，团结遂签 56 字符反复复发。
+    //    4 张现已回到预制体（指向 Resources 那份的新 hex32），此处不需要任何补图逻辑。
 
     static Sprite LoadNavArt(string fileNameWithoutExt)
     {
