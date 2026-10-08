@@ -157,25 +157,31 @@ public partial class BattleUI : MonoBehaviour
         mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
     }
 
-    /// <summary>
-    /// 引导局「未招募」佣兵槽的预览（2026-10-05 主人拍板）：
-    /// 灰掉 + 佣兵头像 + 血条 + 稀有度头像框，不挂锁图标。
-    /// 人从哪来 = 真源链 <c>StoryProgress.TutorialMercHireId</c>（H003 塔克）→ <c>MercRosterDefs</c> 花名册，
-    /// 不写死头像 / 血量 / 稀有度，花名册一改这里跟着变。
-    /// </summary>
-    public void ApplyTutorialMercPreview(CharacterSlotUI slot)
-    {
-        if (slot == null) return;
-        string hireId = StoryProgress.TutorialMercHireId;
-        MercRosterDefs.Def def;
-        bool hasDef = MercRosterDefs.TryGetByHireId(hireId, out def);
-        float maxHp = hasDef ? def.BaseHp : 0f;
-        slot.ShowLockedPreview(
-            MercPortraitSprites.GetHead(hireId),
-            MercHireSession.LoadPortraitFrame(hasDef ? def.Rarity : MercRosterDefs.MercRarity.Common),
-            hasDef && !string.IsNullOrEmpty(def.Nickname) ? def.Nickname : StoryProgress.TutorialMercNickname,
-            maxHp, maxHp);
-    }
+    // =====================================================================
+    // 【2026-10-08 主人拍板：先注释掉，不删】
+    // 引导局「未招募」佣兵槽的预览（2026-10-05 旧口径）：
+    // 灰掉 + 佣兵头像 + 血条 + 稀有度头像框，不挂锁图标。
+    // 人从哪来 = 真源链 StoryProgress.TutorialMercHireId（H003 塔克）→ MercRosterDefs 花名册，
+    // 不写死头像 / 血量 / 稀有度，花名册一改这里跟着变。
+    //
+    // 停用原因：① 口径已改成「抽中入队之后才显示头像」，入队前露灰头像正好相反；
+    //          ② 唯一调用点（BattleUI.Binding.ApplySoloBattleHud 里那一支）与外层条件互斥，
+    //             本来就走不到（2026-10-08 已删）。
+    // 恢复办法：去掉下面的注释，并在 BattleUI.Binding.ApplySoloBattleHud 里重新加调用点。
+    // =====================================================================
+    // public void ApplyTutorialMercPreview(CharacterSlotUI slot)
+    // {
+    //     if (slot == null) return;
+    //     string hireId = StoryProgress.TutorialMercHireId;
+    //     MercRosterDefs.Def def;
+    //     bool hasDef = MercRosterDefs.TryGetByHireId(hireId, out def);
+    //     float maxHp = hasDef ? def.BaseHp : 0f;
+    //     slot.ShowLockedPreview(
+    //         MercPortraitSprites.GetHead(hireId),
+    //         MercHireSession.LoadPortraitFrame(hasDef ? def.Rarity : MercRosterDefs.MercRarity.Common),
+    //         hasDef && !string.IsNullOrEmpty(def.Nickname) ? def.Nickname : StoryProgress.TutorialMercNickname,
+    //         maxHp, maxHp);
+    // }
 
     void RefreshTutorialMercLiveBar()
     {

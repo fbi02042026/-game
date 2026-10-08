@@ -467,10 +467,11 @@ public partial class BattleUI : MonoBehaviour
             // 得等玩家真抽到佣兵才亮。真源只有 SlotMachineSystem.TutorialMercDrawn 一处
             //（本局抽数有没有越过「佣兵」那一格）—— 抽之前 = 空锁；抽完（招募入队）= 走正常头像。
             // 抽数是局内数据所以每局都会归零；碎片那种跨局存档会残留，绝不能拿来当判据。
-            if (TutorialDirector.IsTutorialBattle && SlotMachineSystem.TutorialMercDrawn)
-                ApplyTutorialMercPreview(mercSlot1);
-            else
-                mercSlot1?.ShowUnavailable(MercLockedHint);
+            // 【2026-10-08 主人拍板删除】ApplyTutorialMercPreview（灰掉 + 塔克头像 + 血条）那一支。
+            //   ① 口径是「入队之后才显示头像」，入队前露灰头像正好相反；
+            //   ② 它要求 TutorialMercDrawn，而外层 lockExtraSlots 要求 !showTutorialMerc，
+            //      两者互斥 → 本来就走不到。删掉后这里恒为「未解锁」。
+            mercSlot1?.ShowUnavailable(MercLockedHint);
         }
         else
             mercSlot1?.SetLocked(false);

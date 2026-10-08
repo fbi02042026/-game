@@ -30,6 +30,18 @@ public class CharacterSlotUI
     public bool EnergyEnabled { get; private set; } = true;
     public Text lanText;                // 蓝条文字
     public GameObject lockedOverlay;    // 锁定遮罩（预制体没有时运行时补建）
+    /// <summary>
+    /// 「未解锁 / 没抽中佣兵」遮罩：美术在 MercSlot1 / MercSlot2 下摆的那层，节点名 <c>EmptyMask</c>。
+    /// 【2026-10-08 主人拍板】佣兵槽只有两种状态：<b>有佣兵</b> / <b>未解锁</b>，
+    /// 没有「已解锁但没佣兵」这一种。所以这层的语义就一句话 ——
+    /// <b>没抽中佣兵入队就露出，抽中入队就收掉</b>。
+    /// 出口：ShowEmpty / ShowUnavailable / SetLocked(true) 露；UpdateSlot（真有角色）收。
+    /// 玩家槽没有这层，取不到就什么都不做，<b>不补建</b>。
+    /// </summary>
+    public GameObject emptyMask;
+    const string EmptyMaskNodeName = "EmptyMask";
+    /// <summary>遮罩缺失只报一次：UpdateSlot 每次刷血条都会走到，逐帧 LogError 会刷爆控制台。</summary>
+    static bool _emptyMaskMissingLogged;
     /// <summary>右上角技能小图标：佣兵技能的标识，自动释放。</summary>
     public Image skillBadge;
 
@@ -91,6 +103,9 @@ public class CharacterSlotUI
         if (root == null) return;
         root.SetActive(true);
         ApplyDim(false);
+        // 槽里真有角色（玩家 / 佣兵 / 阵亡佣兵都走这里）→ 收掉「未解锁、没佣兵」那层遮罩。
+        // 挂在这儿最稳：抽中佣兵后任何一处刷新血条 / 名字都会走到，不会漏关。
+        SetEmptyMask(false);
         var le = root.GetComponent<UnityEngine.UI.LayoutElement>();
         if (le != null) le.ignoreLayout = false;
 
@@ -226,6 +241,12 @@ public class CharacterSlotUI
     {
         if (lockedOverlay != null || root == null) return;
 
+        // 【2026-10-08 主人拍板】佣兵槽的「未解锁」已经由美术那层 EmptyMask（黑幕 + suo 锁）表达，
+        // 运行时<b>不再补建</b> LockedOverlay —— 否则未解锁态会同时冒出两把锁（运行时一把 + suo 一把）。
+        // 玩家槽没有 EmptyMask，仍走下面补建那套，行为不变。
+        EnsureEmptyMask();
+        if (emptyMask != null) return;
+
         Transform exist = root.transform.Find("LockedOverlay");
         GameObject go;
         if (exist != null)
@@ -254,6 +275,56 @@ public class CharacterSlotUI
         lockedOverlay = go;
         go.transform.SetAsLastSibling();
         go.SetActive(false);
+    }
+
+    /// <summary>
+    /// 按名字找回 EmptyMask 节点：<b>先直接子级、再往下深找</b>，命中即缓存。
+    /// 取不到只 LogError，<b>不补建</b>（这层是美术摆的，代码不该替它造）。
+    /// </summary>
+    public void EnsureEmptyMask()
+    {
+        if (emptyMask != null || root == null) return;
+        var t = FindChildByName(root.transform, EmptyMaskNodeName);
+        if (t == null)
+        {
+            // 只有佣兵槽才「应该有」这层（美术摆在 MercSlot1 / MercSlot2 下）；玩家槽本来就没有，
+            // 静默跳过即可 —— 否则每局开局都会白刷一条报错。
+            bool isMercSlot = root.name.IndexOf("MercSlot", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            if (isMercSlot && !_emptyMaskMissingLogged)
+            {
+                _emptyMaskMissingLogged = true;
+                Debug.LogError($"[CharacterSlotUI] 佣兵槽 {root.name} 下找不到遮罩节点 {EmptyMaskNodeName}，显隐无法控制（只报一次）");
+            }
+            return;
+        }
+        emptyMask = t.gameObject;
+    }
+
+    /// <summary>
+    /// 遮罩显隐：<paramref name="on"/> = true 露出（未解锁 / 空槽 / 未招募），false 收掉（槽里有佣兵）。
+    /// </summary>
+    public void SetEmptyMask(bool on)
+    {
+        EnsureEmptyMask();
+        if (emptyMask != null) emptyMask.SetActive(on);
+    }
+
+    /// <summary>先找直接子级再递归，避免抓到深层同名节点。</summary>
+    static Transform FindChildByName(Transform parent, string nodeName)
+    {
+        if (parent == null) return null;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var c = parent.GetChild(i);
+            if (c != null && string.Equals(c.name, nodeName, System.StringComparison.OrdinalIgnoreCase))
+                return c;
+        }
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var hit = FindChildByName(parent.GetChild(i), nodeName);
+            if (hit != null) return hit;
+        }
+        return null;
     }
 
     /// <summary>把已有 LockedOverlay 节点改造成「居中显示一把锁」。</summary>
@@ -744,6 +815,8 @@ public class CharacterSlotUI
     {
         EnsureLockedOverlay();
         if (lockedOverlay != null) lockedOverlay.SetActive(locked);
+        // 未招募（locked=true）露出遮罩；招募到（locked=false）收掉
+        SetEmptyMask(locked);
         ApplyDim(locked);
         if (root != null)
             root.SetActive(true);
@@ -785,6 +858,7 @@ public class CharacterSlotUI
         EnsureLockedOverlay();
         ApplyDim(true);
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
+        SetEmptyMask(true);             // 已解锁但没佣兵 = 这个位置没人 → 露出遮罩
         SetSkillBadge(null);
         SetJobIcon(null);               // 空槽不显示职业 icon
         ApplyUnhiredPortrait();         // 空槽（未雇佣）：头像位留白，不再点亮/置白占位盘
@@ -835,6 +909,7 @@ public class CharacterSlotUI
         EnsureLockedOverlay();
         ApplyDim(true);
         if (lockedOverlay != null) lockedOverlay.SetActive(true);
+        SetEmptyMask(true);             // 未解锁 = 这个位置没人 → 露出遮罩
         SetSkillBadge(null);
         SetJobIcon(null);               // 未解锁不显示职业 icon
         ApplyUnhiredPortrait();         // 未解锁（未雇佣）：头像位留白，不再点亮/置白占位盘
@@ -846,54 +921,59 @@ public class CharacterSlotUI
         if (UnhiredShowPlayerLook) KeepBarGraphicsVisible();   // 条本体保留，跟玩家槽同一套
     }
 
-    /// <summary>
-    /// 未招募「预览态」：整体压暗（灰掉）+ 佣兵头像 + 血条 + 稀有度头像框，<b>不显示锁图标</b>。
-    /// 2026-10-05 主人拍板：头像栏「跟现在一样灰掉，但应该有佣兵头像和血条，没有锁的图标，
-    /// 还有跟佣兵稀有度一样的头像框」。
-    /// 与 <see cref="ShowUnavailable"/> 的唯一区别：这里拿得到「这个槽将来站的是谁」，
-    /// 所以把人画出来，而不是留白 + 挂一把锁。拿不到人（普通局未解锁槽）仍旧走 ShowUnavailable。
-    /// </summary>
-    public void ShowLockedPreview(Sprite face, Sprite frame, string displayName, float hp, float maxHp)
-    {
-        if (root == null) return;
-        ApplyDim(false);          // 先还原，避免随后新设的颜色逃过压暗
-        SetEnergyEnabled(false);
-        root.SetActive(true);
-        EnsureLockedOverlay();
-        if (lockedOverlay != null) lockedOverlay.SetActive(false);   // 主人：不要锁的图标
-        SetPortrait(face);
-        SetFrame(frame);          // 头像框 = 佣兵稀有度（普通灰白 / 稀有蓝 / 传奇橙金）
-        SetSkillBadge(null);
-        SetJobIcon(null);
-        SetName(displayName);           // 2026-10-06 主人拍板：名字统一走 SetName（空名自动隐藏节点）
-        if (levelLabel != null)
-        {
-            levelLabel.gameObject.SetActive(false);
-            levelLabel.text = "";
-        }
-        if (hpText != null)
-        {
-            hpText.gameObject.SetActive(true);
-            hpText.text = $"{Mathf.RoundToInt(hp)}";
-        }
-        if (hpBarFill != null)
-        {
-            hpBarFill.enabled = true;
-            hpBarFill.fillAmount = maxHp > 0f ? Mathf.Clamp01(hp / maxHp) : 0f;
-        }
-        if (lanBarFill != null)
-        {
-            lanBarFill.enabled = true;
-            lanBarFill.fillAmount = 0f;
-        }
-        if (lanText != null)
-        {
-            lanText.text = "";
-            lanText.gameObject.SetActive(false);
-        }
-        HideShieldBar();
-        ApplyDim(true);           // 最后整体压暗：灰掉
-    }
+    // =====================================================================
+    // 【2026-10-08 主人拍板：先注释掉，不删】
+    // 未招募「预览态」：整体压暗（灰掉）+ 佣兵头像 + 血条 + 稀有度头像框，不显示锁图标。
+    // 2026-10-05 旧口径：头像栏「跟现在一样灰掉，但应该有佣兵头像和血条，没有锁的图标，
+    // 还有跟佣兵稀有度一样的头像框」。
+    // 与 ShowUnavailable 的唯一区别：这里拿得到「这个槽将来站的是谁」，
+    // 所以把人画出来，而不是留白 + 挂一把锁。拿不到人（普通局未解锁槽）仍旧走 ShowUnavailable。
+    //
+    // 停用原因：① 口径已改成「抽中入队之后才显示头像」，入队前露灰头像正好相反；
+    //          ② 唯一调用点 BattleUI.ApplyTutorialMercPreview（已同步注释掉）本来也没人调。
+    // 恢复办法：去掉下面的注释，并把 BattleUI.ApplyTutorialMercPreview 一起恢复。
+    // =====================================================================
+    // public void ShowLockedPreview(Sprite face, Sprite frame, string displayName, float hp, float maxHp)
+    // {
+    //     if (root == null) return;
+    //     ApplyDim(false);          // 先还原，避免随后新设的颜色逃过压暗
+    //     SetEnergyEnabled(false);
+    //     root.SetActive(true);
+    //     EnsureLockedOverlay();
+    //     if (lockedOverlay != null) lockedOverlay.SetActive(false);   // 主人：不要锁的图标
+    //     SetPortrait(face);
+    //     SetFrame(frame);          // 头像框 = 佣兵稀有度（普通灰白 / 稀有蓝 / 传奇橙金）
+    //     SetSkillBadge(null);
+    //     SetJobIcon(null);
+    //     SetName(displayName);     // 2026-10-06 主人拍板：名字统一走 SetName（空名自动隐藏节点）
+    //     if (levelLabel != null)
+    //     {
+    //         levelLabel.gameObject.SetActive(false);
+    //         levelLabel.text = "";
+    //     }
+    //     if (hpText != null)
+    //     {
+    //         hpText.gameObject.SetActive(true);
+    //         hpText.text = $"{Mathf.RoundToInt(hp)}";
+    //     }
+    //     if (hpBarFill != null)
+    //     {
+    //         hpBarFill.enabled = true;
+    //         hpBarFill.fillAmount = maxHp > 0f ? Mathf.Clamp01(hp / maxHp) : 0f;
+    //     }
+    //     if (lanBarFill != null)
+    //     {
+    //         lanBarFill.enabled = true;
+    //         lanBarFill.fillAmount = 0f;
+    //     }
+    //     if (lanText != null)
+    //     {
+    //         lanText.text = "";
+    //         lanText.gameObject.SetActive(false);
+    //     }
+    //     HideShieldBar();
+    //     ApplyDim(true);           // 最后整体压暗：灰掉
+    // }
 
     void ApplyLockedOverlayText(string text)
     {
