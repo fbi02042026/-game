@@ -149,3 +149,8 @@ Tools/_tmp_*.py
 # 2026-09-27：团结 GUI 打包默认输出到根目录 Apk/（大写 A），
 # 与上面 [Bb]uilds/ 的小写规则不是同一条，必须单列。
 /Apk/
+
+# ===== WorkBuddy 本地工具产物（不入库）=====
+# 这两项是本机运行期产物，`git add -A` 会把它们带上。
+.wbapp_*.genie
+Instance

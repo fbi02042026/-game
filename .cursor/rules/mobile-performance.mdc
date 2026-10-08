@@ -1,0 +1,40 @@
+---
+description: 移动端小游戏性能约束——改代码时必须考虑 CPU/GC/每帧开销
+alwaysApply: true
+---
+
+# 移动端小游戏：性能优先
+
+本项目目标平台是**移动端小游戏**，算力与内存都有限。写/改功能代码时必须优先考虑效率。
+
+## 必须遵守
+
+- **Update / LateUpdate / FixedUpdate**：避免每帧 `GetComponentsInChildren`、LINQ、`Resources.Load`、字符串拼接、`Debug.Log`、全量遍历列表；能事件驱动就不轮询。
+- **协程**：控制次数与时长；不要在高频动作（普攻、受击、刷怪）里连开多个协程或连跑多帧重逻辑。
+- **对象池 / 复用**：`OnEnable` 复进场景时，优先**增量修复**（只补被污染的状态），不要重复做完整初始化。
+- **UI**：少建临时 GameObject；静态引用缓存；动画用 `unscaledDeltaTime` 即可，避免多余 Canvas rebuild。
+- **换装 / SPUM**：缓存 `SpriteRenderer` 与期望 `Sprite`，攻击后只做**脏检查 + 贴图回填**，禁止每次攻击全量 `Clear + Refresh`。
+- **分配**：少 `new List`/临时数组；缓存查询结果；大循环里避免装箱与闭包捕获。
+
+## 禁止示例
+
+```csharp
+// ❌ 普攻每帧 8 次全量换装
+void LateUpdate() { costume.RefreshCostume(); }
+
+// ❌ 每次清武器都 GetComponentsInChildren
+void ClearWeapons() {
+    foreach (var sr in GetComponentsInChildren<SpriteRenderer>(true)) { ... }
+}
+
+// ✅ 启动时缓存挂点，攻击后只比对并回填
+if (sr.sprite != _expected) sr.sprite = _expected;
+```
+
+## 新增功能自检
+
+1. 会不会在战斗主循环里每帧跑？
+2. 会不会重复加载资源或全树搜索组件？
+3. 能不能缓存、节流、或改成事件一次执行？
+
+若有两种实现，**默认选更省 CPU/GC 的那种**，除非用户明确要求更重的效果。

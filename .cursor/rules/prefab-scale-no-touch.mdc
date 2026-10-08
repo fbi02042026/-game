@@ -1,0 +1,73 @@
+---
+description: 禁止未经用户同意在代码里放大/缩小用户手调预制体（VFX/UI/战斗等）
+alwaysApply: true
+---
+
+# 预制体尺寸与 UI 布局：禁止私自改尺寸
+
+**适用范围：项目中所有预制体**（`Assets/Resources/Prefabs/` 及今后新建），含 VFX、UI、战斗特效、场景物件等。  
+用户已在编辑器里调好的尺寸，**未经用户明确允许，不得在运行时或代码里私自放大、缩小或改写 transform / RectTransform**。
+
+详见 `Assets/Scripts/UI/UiLayoutConvention.md`（现有 + 今后 UI 均遵守）。
+
+## 必须遵守
+
+- **播放/实例化时**：使用预制体自身的 `localScale`（或资源里已定的 lossyScale），**不要**再乘 `2.5f`、`scaleMul` 等硬编码倍率，除非用户明确要求。
+- **刀光/技能/命中特效**：位置、朝向可以改；**大小以 prefab 为准**。
+- **UI 场景美术 `Background` / `BgArt`**（GuildHall、Battle 等）：**禁止** Stretch、`SetNativeSize`、改 `anchor/sizeDelta/offset`；只换 Sprite/显隐。
+- **UI 控件零件**：Toggle/Slider/Scrollbar 内的 `Background`、`Checkmark`、`Handle` 等 — **禁止**改 rect、禁止复制 Sprite 到父节点「放大热区」。
+- **禁止**根级 `Find("Background")` 无差别全屏拉伸（会误伤 Toggle 子节点、城镇/战斗固定底图）。
+- **已有用户规则仍有效**：未经用户同意不改 `*.prefab`；不换 Sprite/资源引用前先说明并等用户同意。
+- **Resources UI 切图（波次预告、弹窗 Banner 等）**：`preserveAspect` + `SetNativeSize` 即**原图比例终态（100%）**；**禁止**终态再乘 `localScale`、`EndScale`、`scaleMul`。入场统一走 **`UiBannerPopAnim`**：`sizeDelta` 从 native×**300%** 在 **0.3s** 缩到 native → **停 1s** → **淡出**；`localScale` 恒为 1。
+- **所有立绘/图标/切图**：禁止擅自拉伸缩放；详见 `.cursor/rules/no-image-stretch.mdc`。
+- **Sprite 导入**：`Resources` 立绘必须 `textureType=Sprite`、`nPOTScale=None`；禁止 ToNearest（会把非二次幂图拉变形）。同步用 `Tools/UI/同步佣兵头像立绘` / `修复佣兵立绘导入(防拉伸)`。
+
+## 允许的自适应（仅明确命名节点）
+
+通过 `UiLayoutStretch` 集中处理，不要各处复制 anchor 代码：
+
+| 节点名 | 操作 |
+|--------|------|
+| `BgStretch` / `Bg` | `ApplyBgStretch`（等比 EnvelopeParent，保持宽高比） |
+| `Dim` / `ModalDim` | `ApplyFillScreen` |
+| `map` / `MapRoot` | `ApplyStretchHorizontal`（高度不动） |
+| `Background` / `BgArt`（场景美术） | **Fixed**，用 `UiPrefabRectGuard` |
+| Toggle 内 `Background` 等 | **Fixed**，用 `UiPrefabRectGuard`；`UiLayoutStretch.IsWidgetPart` 自动跳过 |
+
+## 允许的其他情况
+
+- 仅按**朝向**翻转（如 `flipX`、X 轴 ±1），不改变视觉尺寸。
+- 弹窗 **Dim 遮罩**全屏（面板本体不动）。
+- 用户**明确口头要求**「放大/缩小到 X 倍」或「和某某对齐」时，按用户指定改，并在回复里说明改了什么。
+
+## 禁止示例
+
+```csharp
+// ❌ 把 GuildHall/Battle 的 Background 拉满屏
+var bg = transform.Find("Background");
+UiLayoutStretch.ApplyBgStretch(bg); // Fixed 节点
+
+// ❌ 放大 Toggle 勾选框「方便点击」
+toggleRt.sizeDelta = new Vector2(48, 48);
+toggleRoot.AddComponent<Image>().sprite = frameSprite;
+
+// ❌ 覆盖用户在 vfx_melee_hit 里调好的大小
+go.transform.localScale = prefab.transform.localScale * 2.5f;
+
+// ❌ SetNativeSize 后再乘 EndScale / localScale 当终态
+_rt.localScale = Vector3.one * 2f;
+image.SetNativeSize();
+
+// ✅ Banner 标准动效：300%→100% / 0.3s / 停1s / 淡出（UiBannerPopAnim）
+yield return UiBannerPopAnim.CoPlay(bannerImage, canvasGroup);
+
+// ✅ 登录全屏底图 BgStretch（等比）
+UiLayoutStretch.ApplyBgStretch(bgStretchRt, bgImage);
+
+// ✅ Toggle 框图保护预制体尺寸
+UiPrefabRectGuard.Attach(agreeToggle.Find("Background"));
+```
+
+## 若觉得尺寸不对
+
+先问用户是否改预制体或是否允许在代码里加倍率；**不要默认帮用户「调大看得清」**。
