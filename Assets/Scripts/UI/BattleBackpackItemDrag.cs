@@ -46,8 +46,7 @@ public class BattleBackpackItemDrag : MonoBehaviour, IBeginDragHandler, IDragHan
     void OnEquipStatClick()
     {
         if (Equip == null) return;          // 道具格：BackpackItemActionUI 的地盘，不抢
-        var ui = BattleUI.Instance;
-        if (ui == null) return;
+        // 2026-10-09 主人拍板：不再依赖 BattleUI.Instance，任意界面点装备都弹——父节点交给 Toggle 从 anchor 找 Canvas
         var anchor = GetComponent<RectTransform>();
         if (anchor == null) return;
         EquipStatTipUI.Toggle(Equip, anchor, Equip);

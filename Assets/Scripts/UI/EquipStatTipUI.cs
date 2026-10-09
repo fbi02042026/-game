@@ -58,6 +58,15 @@ public class EquipStatTipUI : MonoBehaviour
         _rootRt = GetComponent<RectTransform>();
         Stretch(_rootRt);   // 铺满 BattleUI：后续用 anchoredPosition 在它内部定位
 
+        // 2026-10-09 主人拍板：浮框挂到 anchor 所在 Canvas 根下，但默认继承父 Canvas 的 sortingOrder，
+        // 会被更高 sortingOrder 的面板（结算 990 / 替换确认 925 等）盖住。给根挂独立嵌套 Canvas，
+        // 自带 overrideSorting + 高 sortingOrder，确保永远压在最上层（不依赖 sibling 顺序，也不改预制体）。
+        var rootCanvas = gameObject.GetComponent<Canvas>();
+        if (rootCanvas == null) rootCanvas = gameObject.AddComponent<Canvas>();
+        rootCanvas.overrideSorting = true;
+        rootCanvas.sortingOrder = 1000;   // 高于 BattleSettlement(990)，低于 Toast(11000)/FullscreenFx(12000)
+        // 刻意不加 GraphicRaycaster：_panel 与文本都 raycastTarget=false，浮框不抢下层点击。
+
         _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
         _panel.transform.SetParent(transform, false);
         var pImg = _panel.GetComponent<Image>();
@@ -130,11 +139,18 @@ public class EquipStatTipUI : MonoBehaviour
     /// toggle 入口（2026-10-09 主人拍板）：开着就关、没开就开。
     /// key 传槽位/格子的标识（GameObject 或 EquipInstance 引用都行）。
     /// </summary>
-    public static void Toggle(EquipInstance eq, RectTransform anchor, object key)
+    public static void Toggle(EquipInstance eq, RectTransform anchor, object key, Transform parent = null)
     {
-        var ui = BattleUI.Instance;
-        if (ui == null) return;
-        var tip = Ensure(ui.transform);
+        // 2026-10-09 主人拍板：非战斗场景也要能弹——父节点优先用调用方给的，否则从 anchor 找 Canvas
+        if (parent == null && anchor != null)
+            parent = anchor.GetComponentInParent<Canvas>()?.transform;
+        if (parent == null)
+        {
+            // 2026-10-09 主人拍板：拿不到 Canvas 父节点要显式报错，不静默 return
+            Debug.LogError("[EquipStatTipUI] 找不到 Canvas 父节点，无法弹出装备属性浮框");
+            return;
+        }
+        var tip = Ensure(parent);
         if (tip == null) return;
         if (eq == null || anchor == null) { tip.Hide(); return; }
 

@@ -62,9 +62,9 @@ public class BattleRunStats
     public void AddEquipGain(EquipInstance eq)
     {
         if (eq == null) return;
-        Sprite icon = eq.icon;
-        if (icon == null && eq.template != null)
-            icon = EquipIcons.Get(eq.template.iconFileName);
+        // 2026-10-09 主人拍板：结算物品图标走装备取图唯一入口 EquipIcons.Resolve（模板→iconFileName→templateId 全链）。
+        // 旧写法只试 eq.icon 与 template.iconFileName，无模板的裂缝件必然拿不到图 → 结算格子露空。
+        Sprite icon = EquipIcons.Resolve(eq);
         EquipGains.Add(new EquipGainEntry
         {
             name = string.IsNullOrEmpty(eq.equipName) ? "装备" : eq.equipName,

@@ -6,6 +6,11 @@ using UnityEngine;
 /// </summary>
 public static class RiftEquipGenerator
 {
+    // 2026-10-09 主人拍板：「抽奖每次都出鞋」不是强制逻辑，是随机连着出同一槽。这里防连续同槽。
+    // 记住上一次抽到的防具槽位，本次候选里排除它（候选只剩 1 个时不排除），让随机看起来更大。
+    // 只在防具分支读写（武器分支不碰），所以抽到武器不会清掉它。状态放静态字段，跨抽奖调用保留。
+    static string _lastArmorSlotId;
+
     public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f)
     {
         RiftEquipTables.EnsureLoaded();
@@ -236,7 +241,20 @@ public static class RiftEquipGenerator
             }
         }
         if (pool.Count == 0) return null;
-        return pool[Random.Range(0, pool.Count)];
+
+        // 2026-10-09 主人拍板：防连续同槽。pool 全为防具部位时，排除上一次抽到的槽位，
+        // 让「每次都是鞋」不再连着出现；候选只剩 1 个时保持原样（不排除）。武器分支不受影响。
+        if (!pool[0].IsWeapon && pool.Count > 1 && !string.IsNullOrEmpty(_lastArmorSlotId))
+        {
+            for (int i = 0; i < pool.Count; i++)
+            {
+                if (pool[i].SlotId == _lastArmorSlotId) { pool.RemoveAt(i); break; }
+            }
+        }
+
+        var picked = pool[Random.Range(0, pool.Count)];
+        if (!picked.IsWeapon) _lastArmorSlotId = picked.SlotId;
+        return picked;
     }
 
     /// <summary>只从已落地词条里抽，未映射 ID 不占词条位、不进实例。

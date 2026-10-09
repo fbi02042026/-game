@@ -577,11 +577,22 @@ public class LevelUpDraftUI : MonoBehaviour
         Anchor(kindTag.rectTransform, 1f, 1f, 1f, 1f, 1f, 1f, -12f, -22f, 130f, 26f);
         kindTag.alignment = TextAnchor.MiddleRight;
 
-        // 图标块（无美术资源时用稀有度色块占位）
+        // 图标块（技能卡显示真图标；其余无美术资源时用稀有度色块 + 首字母占位）
+        // 2026-10-09 主人拍板：技能卡以前只画首字母占位、从没赋真图标 —— 这就是「抽到技能不显示图标」的根因。
         var icon = CreateImage("Icon", cardRoot.transform, new Color(rarityTint.r, rarityTint.g, rarityTint.b, 0.35f));
         Anchor(icon.rectTransform, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -92f, 92f, 92f);
-        var iconLabel = CreateText("IconLabel", icon.transform, Initial(card.Title), 40, rarityTint);
-        Stretch(iconLabel.rectTransform);
+        Sprite cardIcon = SkillCardIcon(card);
+        if (cardIcon != null)
+        {
+            icon.sprite = cardIcon;
+            icon.preserveAspect = true;
+            icon.color = Color.white;
+        }
+        else
+        {
+            var iconLabel = CreateText("IconLabel", icon.transform, Initial(card.Title), 40, rarityTint);
+            Stretch(iconLabel.rectTransform);
+        }
 
         // 标题
         var title = CreateText("Title", cardRoot.transform, card.Title, 24, Color.white);
@@ -608,6 +619,22 @@ public class LevelUpDraftUI : MonoBehaviour
         btn.colors = colors;
         var picked = card;
         btn.onClick.AddListener(() => Pick(picked));
+    }
+
+    /// <summary>
+    /// 技能卡的图标（2026-10-09 主人拍板）——<b>唯一出口</b>。
+    /// 只有「新技能 / 技能升星」两类卡要显示技能图标；其余类型（佣兵/装备/金币/强化）暂无卡面图标退回首字母占位。
+    /// 图直接复用 <see cref="BattleUI.LoadRunSkillIcon"/> 的加载口径（Resources/Icons/SkillIcon/{id}.png），
+    /// 不在这里另抄一份路径。缺图 fail closed 打 Error，不静默用占位糊过去。
+    /// </summary>
+    static Sprite SkillCardIcon(DraftCard card)
+    {
+        if (card.Kind != DraftCardKind.SkillNew && card.Kind != DraftCardKind.SkillUp) return null;
+        if (string.IsNullOrEmpty(card.Id)) return null;
+        var sp = BattleUI.LoadRunSkillIcon(card.Id);
+        if (sp == null)
+            Debug.LogError($"[LevelUpDraftUI] 技能卡缺图标：Resources/Icons/SkillIcon/{card.Id}.png");
+        return sp;
     }
 
     static string KindLabel(DraftCard card)

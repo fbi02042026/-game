@@ -73,8 +73,9 @@ public partial class BattleUI : MonoBehaviour
         return ((char)(0x2460 + index)).ToString();
     }
 
-    /// <summary>玩家技能图标：Resources 优先（打包可用），编辑器再兜 Art 源目录；与 SkillSelectUI 同路径口径。</summary>
-    static Sprite LoadRunSkillIcon(string skillId)
+    /// <summary>玩家技能图标：Resources 优先（打包可用），编辑器再兜 Art 源目录；与 SkillSelectUI 同路径口径。
+    /// <para>2026-10-09：技能卡（LevelUpDraftUI）也走这里取图 —— 同一语义只留这一个出口，别再抄一份路径。</para></summary>
+    public static Sprite LoadRunSkillIcon(string skillId)
     {
         if (string.IsNullOrEmpty(skillId)) return null;
         var sp = Resources.Load<Sprite>("Icons/SkillIcon/" + skillId);
@@ -122,6 +123,25 @@ public partial class BattleUI : MonoBehaviour
         Debug.Log("[BattleUI-技槽诊断] " + key);
     }
 
+    /// <summary>
+    /// 2026-10-09 主人拍板：佣兵技能槽 / 头像只服务「真正入队」的佣兵。
+    /// 引导局「塔克天降」的演出替身会 SpawnMercenary 进 MercenaryManager._activeMercs、
+    /// 并 SetupBattleSkills 挂上 MercSkillCaster，但此时玩家还没走第 2 抽把他招入队
+    /// （hireId 已写入却不在 RunLoadout.mercs 里）。若不过滤，玩家会在塔克入队前就看到
+    /// 他头像旁的技能槽并转 CD，与「没招募就不该出现」相悖。
+    /// 同一语义只此一处：是否「在队」= 当前局 RunLoadout 里有没有这条 hireId。
+    /// </summary>
+    static bool MercIsInParty(Mercenary m)
+    {
+        if (m == null) return false;
+        // 2026-10-09 复查修复：非局内（旧存档兜底路径，BattleManager 开局 SpawnMercenaries 分支）
+        // RunLoadout 未激活，不能恒判 false——否则该路径下头像栏照常显示佣兵、技能槽却整槽隐藏且不转 CD。
+        // 非局内回退旧判据：有 hireId 即视为在队（与 2026-09-17「没有佣兵不显示」口径一致）。
+        if (!RunLoadout.IsActive) return !string.IsNullOrEmpty(m.hireId);
+        if (string.IsNullOrEmpty(m.hireId)) return false;
+        return RunLoadout.HasMerc(m.hireId);
+    }
+
     /// <summary>刷新底部 5 个装备快捷槽：头 / 胸 / 脚 / 主手 / 副手（暂不做「手」和「披风」）。</summary>
     public void UpdateEquipQuickSlots()
     {
@@ -154,7 +174,8 @@ public partial class BattleUI : MonoBehaviour
 
             var m = (mercs != null && i < mercs.Count) ? mercs[i] : null;
             var caster = m != null ? m.SkillCaster : null;
-            bool has = caster != null && caster.HasActiveSkill;
+            // 2026-10-09 主人拍板：没入队的演出替身（如引导天降塔克）不显示技能槽
+            bool has = MercIsInParty(m) && caster != null && caster.HasActiveSkill;
             // 没有佣兵 / 该佣兵没配主动技：整槽隐藏，既不留空框也不留「空」字。
             // （2026-09-17 用户口径：没有佣兵时不用显示佣兵技能图标。）
             slot.root.SetActive(has);
@@ -205,6 +226,8 @@ public partial class BattleUI : MonoBehaviour
             var slot = mercSkillSlots[i];
             if (slot == null || slot.root == null || !slot.root.activeSelf) continue;
             var m = (mercs != null && i < mercs.Count) ? mercs[i] : null;
+            // 2026-10-09 主人拍板：没入队的演出替身不转 CD（与 UpdateMercSkillSlots 同一判据 MercIsInParty）
+            if (!MercIsInParty(m)) continue;
             var caster = m != null ? m.SkillCaster : null;
             if (caster == null) continue;
 

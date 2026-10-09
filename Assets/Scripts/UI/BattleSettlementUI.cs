@@ -356,14 +356,16 @@ public class BattleSettlementUI : MonoBehaviour
         var list = new List<SettlementRewardCell>();
         if (s == null) return list;
 
+        // 2026-10-09 主人拍板：结算物品图标改走项目现有口径 CommonIconSprites（Resources + 编辑器回退）。
+        // 旧写法 LoadUiIcon 只读 Resources/UI/Settlement/<key>，该目录不存在且无回退 → 每个物品格子都空图标。
         if (!s.IsDeath && s.GoldGained > 0)
-            list.Add(MakeCell("金币", (int)s.GoldGained, LoadUiIcon("gold"), new Color(0.85f, 0.7f, 0.25f)));
+            list.Add(MakeCell("金币", (int)s.GoldGained, CommonIconSprites.Load("icon_gold"), new Color(0.85f, 0.7f, 0.25f)));
         if (s.TalentGained > 0)
-            list.Add(MakeCell("天赋石", s.TalentGained, LoadUiIcon("talent"), new Color(0.55f, 0.4f, 0.75f)));
+            list.Add(MakeCell("天赋石", s.TalentGained, CommonIconSprites.Load("icon_talent_stone"), new Color(0.55f, 0.4f, 0.75f)));
         if (s.EnchantStoneDelta > 0)
-            list.Add(MakeCell("附魔石", s.EnchantStoneDelta, LoadUiIcon("enchant"), new Color(0.45f, 0.55f, 0.85f)));
+            list.Add(MakeCell("附魔石", s.EnchantStoneDelta, CommonIconSprites.Load("icon_enchant_stone"), new Color(0.45f, 0.55f, 0.85f)));
         if (s.DecomposeMatDelta > 0)
-            list.Add(MakeCell("强化材料", s.DecomposeMatDelta, LoadUiIcon("mat"), new Color(0.5f, 0.55f, 0.45f)));
+            list.Add(MakeCell("强化材料", s.DecomposeMatDelta, CommonIconSprites.Load("icon_decompose_mat"), new Color(0.5f, 0.55f, 0.45f)));
 
         // 本局实际获得的装备（弹出「恭喜获得」时记录），不再倒出整个背包
         if (s.EquipGains != null)
@@ -408,11 +410,8 @@ public class BattleSettlementUI : MonoBehaviour
         }
     }
 
-    static Sprite LoadUiIcon(string key)
-    {
-        // 可选 Resources；没有就空图标
-        return Resources.Load<Sprite>("UI/Settlement/" + key);
-    }
+    // 2026-10-09 主人拍板：删除 LoadUiIcon —— 它只读 Resources/UI/Settlement/<key>（目录不存在、无回退），
+    // 是结算物品格子空图标的根因。物品图标统一走 CommonIconSprites（唯一出口）。
 
     void SpawnRewardCell(SettlementRewardCell data)
     {
@@ -444,6 +443,8 @@ public class BattleSettlementUI : MonoBehaviour
             }
             else
             {
+                // 2026-10-09 主人拍板：缺图标不要静默留灰块，报出来让主人看见（不自己造图）
+                Debug.LogError($"[BattleSettlement] 奖励格「{data.label}」缺少图标，请检查资源/取图标口径");
                 icon.color = new Color(0.3f, 0.28f, 0.35f, 1f);
             }
             icon.preserveAspect = true;
@@ -552,7 +553,7 @@ public class BattleSettlementUI : MonoBehaviour
         gl.spacing = new Vector2(10f, 10f);
         gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
         gl.constraintCount = 6;
-        gl.childAlignment = TextAnchor.UpperCenter;
+        gl.childAlignment = TextAnchor.UpperLeft;   // 2026-10-09 主人拍板：物品从左往右排，第一个靠左而非居中
 
         var tmpl = CreateRewardCellRuntime(grid, new SettlementRewardCell { count = 0 });
         tmpl.name = "RewardCellTemplate";

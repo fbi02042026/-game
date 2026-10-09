@@ -8,7 +8,7 @@ import os
 import shutil
 import sys
 
-ROOT = r"Y:\PixelAdventureTown"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 2026-10-09 修正：原写死 Y:\PixelAdventureTown，换机就找不到文件
 SRC_DIR = os.path.join(ROOT, "Assets", "Data", "Source", "Tables")
 DST_DIR = os.path.join(ROOT, "Assets", "Resources", "Data", "Tables")
 BACKUP = os.path.join(ROOT, ".workbuddy", "backup", "20261009-equip-tables")

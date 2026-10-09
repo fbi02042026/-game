@@ -349,6 +349,12 @@ public class Hero : UnitBase
     float _acquireUntil;
     float _manualReleaseUntil;
 
+    // 2026-10-09 主人拍板：单帧最大步长钳制。抽奖励阶段 timeScale=0（战斗冻结），
+    // 玩家等待「继续」期间若窗口失焦/编辑器暂停，恢复瞬间首帧 Time.deltaTime 会异常暴涨，
+    // 直接乘进坐标 → 单帧位移过大即「瞬移很远」。钳到 0.1f（约 6 帧@60fps 上限）即可消除，
+    // 正常帧 dt≈0.016 不受影响，手感无感。
+    const float HERO_MAX_FRAME_DT = 0.1f;
+
     /// <summary>英雄追敌时启用车道对齐容错：不再严丝合缝站到敌人同一条水平线上（怪物/佣兵不受影响）。</summary>
     protected override bool UseLaneAlignTolerance => true;
 
@@ -398,6 +404,9 @@ public class Hero : UnitBase
         if (!_manualMove && TryHoldDuringDamaged())
             return;
 
+        // 2026-10-09 主人拍板：钳制单帧步长，防恢复瞬间 dt 暴涨导致瞬移（见 HERO_MAX_FRAME_DT）。
+        float dt = Mathf.Min(Time.deltaTime, HERO_MAX_FRAME_DT);
+
         // 摇杆优先：手动位移，期间不跑自动追敌（直接改坐标，避免 velocity 被 ApplyLaneY/SetWorldPosition 清掉）
         if (_manualMove)
         {
@@ -413,14 +422,14 @@ public class Hero : UnitBase
             // 车道：上下界由 map 下的 walk 框投影决定（BattleLaneBounds，不再是常量），纵向与横向同基础移速
             if (Mathf.Abs(_manualDir.y) > 0.08f)
             {
-                float lane = LaneY + _manualDir.y * spd * Time.deltaTime;
+                float lane = LaneY + _manualDir.y * spd * dt;
                 lane = BattleLaneBounds.ClampLaneOffset(lane);
                 SetLaneY(lane);
             }
 
             Vector3 p = transform.position;
-            p.x += vx * Time.deltaTime;
-            p.y = Mathf.MoveTowards(p.y, FootY, GameConfig.BATTLE_LANE_MOVE_SPEED * Time.deltaTime);
+            p.x += vx * dt;
+            p.y = Mathf.MoveTowards(p.y, FootY, GameConfig.BATTLE_LANE_MOVE_SPEED * dt);
             if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
             {
                 Camera cam = Camera.main;
@@ -478,7 +487,7 @@ public class Hero : UnitBase
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
             if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
                 ClampToScreen();
-            ApplyLaneY(Time.deltaTime);
+            ApplyLaneY(dt);
             return;
         }
 
@@ -517,8 +526,9 @@ public class Hero : UnitBase
             float stopDist = attackRange - LaneAlignBiasX;
             if (stopDist < 0f) stopDist = 0f;
             FaceToward(target);
-            if (melee || !alliesEngaged)
-                AdjustLaneTowardTarget(target, Time.deltaTime);
+            // 2026-10-09 主人拍板：已进入攻击范围则站桩不并道，抗怪跑动抖动
+            if (!ShouldHoldGround(target) && (melee || !alliesEngaged))
+                AdjustLaneTowardTarget(target, dt);
 
             if (IsInBasicAttackRange(target))
             {
@@ -555,7 +565,7 @@ public class Hero : UnitBase
             {
                 facingDir = 1;
                 ApplyFacing(facingDir);
-                AdjustFormationLane(Time.deltaTime);
+                AdjustFormationLane(dt);
                 if (rb != null)
                     rb.velocity = new Vector2(GetCombatMoveSpeed(), rb.velocity.y);
                 isMoving = true;
@@ -566,7 +576,7 @@ public class Hero : UnitBase
             unitAnim.SetMove(isMoving, facingDir);
         if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
             ClampToScreen();
-        ApplyLaneY(Time.deltaTime);
+        ApplyLaneY(dt);
     }
 
     protected override void Die(bool isCritKill = false)

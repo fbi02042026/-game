@@ -86,6 +86,8 @@ public class DialogueUI : MonoBehaviour
     StoryPortraitPresenter.LayoutSnapshot _rightPortraitLayout;
     RtLayout _leftPlateLayout;
     RtLayout _rightPlateLayout;
+    /// <summary>对话框体原始尺寸（预制体口径），放大 5% 时以此为基准，避免每句台词重复累乘。</summary>
+    Vector2 _dialogueBoxBaseSize;
 
     struct RtLayout
     {
@@ -552,6 +554,13 @@ public class DialogueUI : MonoBehaviour
         SetDialogueChromeVisible(true);
         ApplyDialogueBoxLift();
         FitDialogueBoxAspect(); // 只校正九宫格，不改框尺寸
+        // 2026-10-09 主人拍板：对话框体放大 5% —— 只放框体尺寸，不改字号/文字/锚点逻辑
+        if (dialogueBoxImage != null)
+        {
+            var drt = dialogueBoxImage.rectTransform;
+            if (_dialogueBoxBaseSize.sqrMagnitude <= 0f) _dialogueBoxBaseSize = drt.sizeDelta;
+            drt.sizeDelta = _dialogueBoxBaseSize * 1.05f;
+        }
 
         if (leftNameText != null) leftNameText.text = _initiatorName;
         if (rightNameText != null) rightNameText.text = _otherName;

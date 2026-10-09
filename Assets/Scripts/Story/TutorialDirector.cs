@@ -627,10 +627,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
             // 再砸「精英来袭」预告 —— 两句之间要能看清字，停留一律 ≥1.9s。
             yield return TalkBlock(bm, headTalk, restoreAct: false,
                 new TalkLine(Hero.Instance, "有个块头更大的！", 1.9f));
-            yield return BattleWaveAnnounceUI.CoPlay(BattleWaveAnnounceUI.Kind.Boss,
-                $"精英 ×{stepElite.eliteCount} 来袭");
+            // 2026-10-09 主人拍板：Boss 大图 wave_boss_incoming 本来就写着「首领来袭」，
+            // 这里再传副标题 = 上面图片 + 下面文字两个提示（主人口中的"上下 2 个首领来袭"）。
+            // 去掉文字，只留大图；Boss 波一律不叠副标题（与 BattleManager 2026-10-07 口径一致）。
+            yield return BattleWaveAnnounceUI.CoPlay(BattleWaveAnnounceUI.Kind.Boss);
         }
-        yield return EnsureTutorialStep(bm, 4);
+        // 2026-10-09 主人拍板：order=4 是 around 波，QueueTutorialStep 里 around 缺 forcedTarget
+        // 会直接 return（"跳过以免围空点"）→ 这波根本没排上，场上没有精英，主人才"没见到精英怪就结束了"。
+        // 这里补上围杀目标（英雄），让这波真正刷出、含 1 只放大精英（eliteCount=1）。
+        yield return EnsureTutorialStep(bm, 4, forcedTarget: Hero.Instance);
         if (bm != null) bm.UnitsCanAct = true;
         hint.Show("组队后佣兵会自动战斗。", null, 3f);
 

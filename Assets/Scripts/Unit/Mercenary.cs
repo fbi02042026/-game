@@ -665,7 +665,8 @@ public class Mercenary : UnitBase
             float attackRange = GetEffectiveAttackRange();
             bool melee = UsesMeleeBasicAttack();
             FaceToward(target);
-            if (melee)
+            // 2026-10-09 主人拍板：已进入攻击范围则站桩不并道，抗怪跑动抖动
+            if (!ShouldHoldGround(target) && melee)
                 AdjustLaneTowardTarget(target, Time.deltaTime);
 
             if (IsInBasicAttackRange(target))

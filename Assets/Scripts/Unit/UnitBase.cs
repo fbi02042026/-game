@@ -154,6 +154,8 @@ public abstract class UnitBase : MonoBehaviour
     }
     public float currentHp;
     protected float attackCd = 0;
+    // 2026-10-09 主人拍板：站桩保持计时，进入攻击范围后短时(0.5s)不再并道，抗怪跑动抖动
+    protected float _standHoldUntil = 0f;
     protected UnitBase target;
     /// <summary>当前战斗目标（只读，供技能 VFX 等外部查询）。</summary>
     public UnitBase CurrentTarget => target;
@@ -494,8 +496,8 @@ public abstract class UnitBase : MonoBehaviour
             float attackRange = GetEffectiveAttackRange();
             bool melee = UsesMeleeBasicAttack();
             FaceToward(target);
-            // 近战始终并道到目标水平对面；远程交战锁 Y 不追道
-            if (melee || !alliesEngaged)
+            // 2026-10-09 主人拍板：已进入攻击范围则站桩不并道，抗怪跑动抖动
+            if (!ShouldHoldGround(target) && (melee || !alliesEngaged))
                 AdjustLaneTowardTarget(target, Time.deltaTime);
 
             if (IsInBasicAttackRange(target))
@@ -844,6 +846,26 @@ public abstract class UnitBase : MonoBehaviour
         if (UsesMeleeBasicAttack() && !IsMeleeLaneAligned(other))
             return false;
         return true;
+    }
+
+    /// <summary>
+    /// 是否应「站桩」不并道。已能攻击到目标→站桩；怪跑动导致短暂脱离时用 0.5s 粘滞保持站桩，
+    /// 避免「打一下→挪一下→再打一下」抖动；粘滞结束后若仍脱靶则正常并道/追击（不会卡死）。
+    /// </summary>
+    // 2026-10-09 主人拍板：近战车道未对齐=根本打不到，禁止站桩/刷新粘滞，立即并道对齐。
+    public bool ShouldHoldGround(UnitBase other)
+    {
+        if (other == null) return false;
+        // 近战且车道未对齐：站桩毫无意义，直接放行让调用方并道
+        if (UsesMeleeBasicAttack() && !IsMeleeLaneAligned(other)) return false;
+        if (IsInBasicAttackRange(other))
+        {
+            // 在攻击范围内：每帧刷新粘滞窗口，静态目标可持续站桩
+            _standHoldUntil = Time.time + 0.5f;
+            return true;
+        }
+        // 已脱离但仍在粘滞窗口内：维持站桩，等待怪走回或窗口结束
+        return Time.time < _standHoldUntil;
     }
 
     /// <summary>索敌范围：与攻击射程无关，见 GameConfig.GetCombatDetectRange。</summary>
@@ -1438,7 +1460,12 @@ public abstract class UnitBase : MonoBehaviour
         if (isAlly && tutBm != null && tutBm.IsTutorialRun && finalDamage >= currentHp - 1f)
             finalDamage = Mathf.Max(0f, currentHp - 1f);
 
+        // 2026-10-09 主人拍板：结算「总伤害」只记实际打掉的量，不含溢出 —— 引导关塔克天降那一击
+        // 对每只 20 血小怪写死 999999 伤害（演出用），旧口径按 999999 全记，12 只就是千万级，
+        // 正是主人报的「总伤害不可能那么高」。钳到扣血前的剩余血量即可（hpBefore 为扣血前值）。
+        float hpBefore = currentHp;
         currentHp -= finalDamage;
+        float effectiveDamage = Mathf.Clamp(finalDamage, 0f, Mathf.Max(0f, hpBefore));
 
         // V6 词缀「吸血」：造成伤害的一方（精英/Boss）按比回血
         if (source is Monster && finalDamage > 0f)
@@ -1478,11 +1505,12 @@ public abstract class UnitBase : MonoBehaviour
         {
             if (this is Monster mon)
             {
-                bm.RecordDamageDealt(finalDamage, mon.IsBossUnit);
+                // 统计用 effectiveDamage（实际扣血），不用未钳制的 finalDamage
+                bm.RecordDamageDealt(effectiveDamage, mon.IsBossUnit);
                 if (isCrit) bm.RecordCrit();
                 if (source != null && source.isAlly)
                 {
-                    bm.RecordAllyDamage(source, finalDamage);
+                    bm.RecordAllyDamage(source, effectiveDamage);
                     // 技能能量不再靠出手/时间，只按下方法在受击时按伤害占比回充
                 }
             }

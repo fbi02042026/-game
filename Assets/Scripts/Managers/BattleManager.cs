@@ -3464,8 +3464,17 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     {
         if (u is Mercenary merc)
         {
+            // 2026-10-09 主人拍板：结算 MVP 必须显示花名册**真名**（塔克），不是战斗名签用的**花名**（重盾）。
+            // 只在这一个出口改优先级，不动 Mercenary.SetDisplayName 的全局口径（那会影响所有战斗名签）。
+            MercRosterDefs.Def def;
+            if (!string.IsNullOrEmpty(merc.hireId) && MercRosterDefs.TryGetByHireId(merc.hireId, out def)
+                && !string.IsNullOrEmpty(def.Name))
+                return def.Name;
+            if (!string.IsNullOrEmpty(merc.mercId) && MercRosterDefs.TryGetByAssetId(merc.mercId, out def)
+                && !string.IsNullOrEmpty(def.Name))
+                return def.Name;
             if (!string.IsNullOrEmpty(merc.DisplayName)) return merc.DisplayName;
-            if (!string.IsNullOrEmpty(merc.hireId) && MercRosterDefs.TryGetByHireId(merc.hireId, out var def)
+            if (!string.IsNullOrEmpty(merc.hireId) && MercRosterDefs.TryGetByHireId(merc.hireId, out def)
                 && !string.IsNullOrEmpty(def.Nickname))
                 return def.Nickname;
             return !string.IsNullOrEmpty(merc.mercId) ? merc.mercId : "佣兵";

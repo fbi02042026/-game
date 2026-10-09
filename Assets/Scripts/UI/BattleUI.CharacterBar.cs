@@ -114,8 +114,32 @@ public partial class BattleUI : MonoBehaviour
         }
 
         // 佣兵槽位（根据酒馆等级解锁 + 存档出战佣兵）
-        var mercIds = mm != null ? mm.GetActiveMercIds() : new List<string>();
-        var mercHireIds = mm != null ? mm.GetActiveMercHireIds() : new List<string>();
+        //
+        // 2026-10-09 主人拍板（根因修复）：「列表与槽索引错位」。
+        // 局内佣兵只存在于 RunLoadout（出战序即槽序），存档 hiredMercs 在局内是空的 ——
+        // 旧实现却拿存档列表 GetActiveMercIds()/GetActiveMercHireIds() 当槽位判据，
+        // 与 ResolveMercSlotCount（走 RunLoadout）的槽数不同源：抽到佣兵后 mercIds 仍为空，
+        // SetupMercSlot 里 `index < mercIds.Count` 恒 false → 槽位被判成「空」，头像永不显示
+        //（主人报的「第二次抽到塔克不显示」）。局内一律以 RunLoadout 为准；非局内（旧存档）才回退存档名册。
+        List<string> mercIds;
+        List<string> mercHireIds;
+        if (RunLoadout.IsActive)
+        {
+            var runMercs = RunLoadout.Mercs();
+            mercIds = new List<string>(runMercs.Count);
+            mercHireIds = new List<string>(runMercs.Count);
+            for (int i = 0; i < runMercs.Count; i++)
+            {
+                var e = runMercs[i];
+                mercIds.Add(e != null ? e.mercId : null);
+                mercHireIds.Add(e != null ? e.hireId : null);
+            }
+        }
+        else
+        {
+            mercIds = mm != null ? mm.GetActiveMercIds() : new List<string>();
+            mercHireIds = mm != null ? mm.GetActiveMercHireIds() : new List<string>();
+        }
         var activeMercs = mm != null ? mm.GetActiveMercs() : new List<Mercenary>();
         int maxSlots = ResolveMercSlotCount();
 

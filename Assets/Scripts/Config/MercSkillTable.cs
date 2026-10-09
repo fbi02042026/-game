@@ -375,6 +375,8 @@ public static class MercSkillTable
         if (sp != null) return sp;
         var all = Resources.LoadAll<Sprite>(path);
         if (all != null && all.Length > 0) return all[0];
+        // 2026-10-09 主人拍板：技能图标缺失要显式报错让主人看见，绝不静默兜底、不补资源。
+        Debug.LogError($"[MercSkillTable] 技能图标缺失：{path}（技能ID={skillId}）。请检查资源，不要运行时补图。");
         return null;
     }
 }
