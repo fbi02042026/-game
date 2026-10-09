@@ -84,6 +84,12 @@ public static class RiftEquipGenerator
         inst.slotType = slotType;
         inst.weaponType = visual != null ? visual.weaponType : (slot.IsWeapon ? WeaponType.OneHand : WeaponType.None);
         inst.weaponHand = visual != null ? visual.weaponHand : WeaponHandSlot.MainHand;
+        // 2026-10-09 主人拍板：掉落/抽奖实例必须带上武器伤害类型。
+        // 旧写法 inst.weaponAttackType 走枚举默认值（Physical），而 PickVisualTemplate 已按
+        // PlayerJobBaseStats.IsMagicJob 挑魔法武器模板 → 法师/牧师掉出来的武器 weaponAttackType 可能是物理。
+        inst.weaponAttackType = visual != null
+            ? visual.weaponAttackType
+            : (PlayerJobBaseStats.IsMagicJob(job) ? WeaponAttackType.Magic : WeaponAttackType.Physical);
         if (slot.IsWeapon && WeaponLoadoutRules.IsLoadoutItem(inst))
             inst.slotType = WeaponLoadoutRules.ResolveLogicalSlot(inst);
         inst.rarity = MapToEngineRarity(rarity.Id);
@@ -91,6 +97,39 @@ public static class RiftEquipGenerator
         inst.requireLevel = 1;
         inst.attrBonus = attrs;
         inst.baseAttrCount = attrs.Count > 0 ? 1 : 0;
+
+        // 2026-10-09 主人拍板：模板 globalBonus / 被动在掉落与抽奖路径也生效。
+        // 路径A（GenerateOne）原本只读模板外观、属性全来自 csv，于是 16 件传奇武器模板里
+        // 写好的 globalBonus / skillPassives 在副本掉落和抽奖里全部拿不到。
+        // 回灌进实例的两个字段（仅视觉模板存在时）：
+        //   - globalBonus：直接引用模板（与路径B GenerateFromTemplate 第66行一致）。
+        //     注意：globalBonus 由 EquipStatRollup.AppendEquipBonuses 并入局内属性汇总
+        //     （2026-10-09 主人拍板：装备上就在局内生效，出战斗清零），本处只需把模板值带进实例即可。
+        //   - skillPassives：必须显式深拷贝进 inst.skillPassives，不能只靠 inst.template = visual。
+        //     因为 EquipStatRollup.AppendSkillPassives 读的是 equip.skillPassives（实例字段，
+        //     见 Systems/EquipStatRollup.cs:83），并非 inst.template.skillPassives。
+        // ⚠ 绝不要把 globalBonus / skillPassives 塞进 inst.attrBonus：会破坏 baseAttrCount 与
+        //   词条数语义（WeaponAffixSystem 依赖它算词条数）。
+        if (visual != null)
+        {
+            inst.globalBonus = visual.globalBonus;
+            inst.skillPassives = new List<AttrBonusData>();
+            if (visual.skillPassives != null)
+            {
+                for (int i = 0; i < visual.skillPassives.Count; i++)
+                {
+                    var p = visual.skillPassives[i];
+                    if (p == null) continue;
+                    inst.skillPassives.Add(new AttrBonusData
+                    {
+                        attrType = p.attrType,
+                        value = p.value,
+                        isPercent = p.isPercent
+                    });
+                }
+            }
+        }
+
         inst.equipName = BuildName(rarity, slot, visual);
         return inst;
     }

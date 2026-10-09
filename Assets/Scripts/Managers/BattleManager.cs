@@ -1155,6 +1155,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         Time.timeScale = 1f;
         FocusMarkSystem.Ensure()?.ResetForBattle();
         BattleUI.Instance?.EnsureBattleControls();
+        // 2026-10-09 主人拍板：进战斗自动收起背包弹窗，避免带着弹窗开打。
+        BackpackPopupUI.Instance?.Hide();
         BattleUI.Instance?.EnsureRunSkillSlotsRepaired();
         // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
         // BattleJoystick.Instance?.SetVisible(true);
@@ -2120,7 +2122,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         HeroThunderUltimate.Instance?.OnMonsterKilled(m);
 
         // 连杀续杯（R2）：连杀≥阈值时回少量血，高连击回得更多，让"连"成为资源
-        if (_killCombo >= GameConfig.COMBO_HEAL_MIN_COMBO && Hero.Instance != null)
+        // 2026-10-09 主人拍板：连杀不再回血，总开关关掉（不是删逻辑，想恢复改开关即可）
+        if (GameConfig.COMBO_HEAL_ENABLED && _killCombo >= GameConfig.COMBO_HEAL_MIN_COMBO && Hero.Instance != null)
         {
             var hero = Hero.Instance;
             float maxHp = hero.attr != null ? hero.attr.GetAttr(AttrType.MaxHp) : 0f;
@@ -3222,6 +3225,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         MercenaryManager.Instance?.ClearAllMercs();
         MercHireSession.ClearHired();
         EndRunLoadout();
+        // 2026-10-09 主人拍板：通关回城也要清掉中断快照，否则通关落盘的金币会在崩溃恢复时被重复入账
+        // （金币已在 FinishStageAfterPortalReached → PersistBattleGold 落盘一次，快照不清 = 下次启动 SettleInterruptedRun 再追加一次）
+        BattleStateSaver.Instance?.ClearBattleState();
         GameSceneManager.Instance?.ReturnToTown();
     }
 

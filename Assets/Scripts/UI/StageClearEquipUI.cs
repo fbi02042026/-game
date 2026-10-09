@@ -349,8 +349,11 @@ public class StageClearEquipUI : MonoBehaviour
         {
             var a = eq.attrBonus[i];
             if (a == null) continue;
-            string v = a.isPercent ? $"{a.value * 100f:0.#}%" : a.value.ToString("0.#");
-            sb.Append(a.attrType).Append(" +").Append(v);
+            // 2026-10-09 主人拍板：比例属性按百分比显示 + 属性名用中文，
+            // 与 EquipStatTipUI / EquipDropPopupUI / DraftPool 统一走 EquipUiText，
+            // 否则 0.05 会被 0.# 四舍五入成「0.1」、还丢掉 % 号，英文枚举名也会直接露给玩家。
+            string v = EquipUiText.Value(a.attrType, a.value, a.isPercent);
+            sb.Append(EquipUiText.Attr(a.attrType)).Append(" +").Append(v);
             if (i < n - 1) sb.Append('\n');
         }
         return sb.ToString();

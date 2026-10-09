@@ -450,7 +450,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         AllowBattleSkillClick = false;
         WaitingEvacuate = false;
 
-        // —— 0) 教摇杆 + 自动技能（选职已在冒险页完成）——
+        // —— 0) 第一波进场 + 自动技能（选职已在冒险页完成）——
+        // 【2026-10-09】摇杆已于 2026-10-05 整条链路停用（BattleJoystick 永不创建，见 BattleUI.Backpack.cs:386），
+        //   这里只剩「刷第一波 + 借 3.2 秒读字时间让怪走进场」，不再有教走路这一步。
         if (bm != null) bm.UnitsCanAct = false;
         HaltUnit(Hero.Instance);
         yield return CoTeachControls(bm, hint, ui, preloadStep: 1);
@@ -497,136 +499,57 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 这一波（tutorial_battle.csv order=7）只给**数量**压迫：12 只、单体血 20~24
         // 比主流波 38~40 低，换装后一刀一只也清不完一轮，被围住自然就「要死了」。
         yield return EnsureTutorialStep(bm, 7);
-        yield return WaitFieldClear(strict: true);
-
-        // —— 1b) 第二拍：混编波 ——
-        // ⚠【2026-10-05 主人拍板删除】原本文案是「后面那个会射你，先冲上去解决它。」
-        //   现在是**自动攻击**，玩家没有「选择打谁」的操作，这条引导教了个不存在的动作 —— 删掉。
-        //   第二拍照常刷怪（tutorial_battle.csv order=2 的混编波），只是不再显示这条提示。
-        // 【2026-10-08】这一波现在是「抽完装备之后」的第一波 —— 换装效果就靠它来体现。
-        yield return EnsureTutorialStep(bm, 2);
-        yield return WaitFieldClear(strict: true);
-
-        // —— 2) 宝箱陷阱：发现 → 左右埋伏 → 清场 → 开箱拿剑 ——
-        hint.Hide();
-        var chestDir = StageClearRewardDirector.Instance;
-        if (chestDir == null)
-        {
-            var go = new GameObject("StageClearRewardDirector");
-            chestDir = go.AddComponent<StageClearRewardDirector>();
-        }
-        chestDir.CacheSceneRefs();
-
-        // 2026-10-05 主人拍板：宝箱不再掉装备（掉天赋石，见 GrantTutorialChestTalentStones），
-        // 装备由**第一波清场后那一抽**随机给（第一抽没有装备保底；2026-10-08 前已不是开局抽）。
-        // 开箱演出照旧，只是箱子里不再吐一件装备。
-        hint.Hide();
-        // 2026-09-27 主人拍板：清完上一波不要马上进宝箱剧情 —— 先让玩家往前走两步，
-        // 宝箱再「突然出现」。UnitsCanAct 保持 true（WaitFieldClear 结尾已放开，场上无怪 → 向右推图），
-        // 走够距离才冻结进剧情。只等，绝不改写 Hero 坐标（2026-09-18 教训）。
-        yield return CoWaitHeroAdvance(2.4f, 4f);
-        // 2026-09-28：最后一只怪的尸体彻底消失之后再让宝箱冒出来（等 deathAnimDuration 走完）
-        yield return CoWaitMonstersGone(bm);
-        if (bm != null) bm.UnitsCanAct = false;
-        yield return chestDir.CoTutorialPlaceChest(4f, waitForHeroApproach: false);
-        chestDir.SnapHeroBeforeChest();
-
-        yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "有个宝箱，真是好运！", 0.85f));
-
-        // 说完第一句 → 两边怪进场停稳 → 再「！」→ 开战
-        float chestX = chestDir.ChestWorldX;
-        if (bm != null)
-        {
-            bm.UnitsCanAct = false;
-            bm.AllowMonsterMapEnter = true; // 对白已结束：只放行怪走进，战斗仍冻
-        }
-        bm?.QueueTutorialStep(3, chestX);
-        {
-            int guard = 0;
-            while (bm != null && bm.GetAliveMonsterCount() <= 0 && guard < 8)
-            {
-                guard++;
-                yield return null;
-                yield return null;
-                if (bm.GetAliveMonsterCount() <= 0)
-                    bm.QueueTutorialStep(3, chestX);
-            }
-        }
+        // 【2026-10-09 主人拍板】这里**不等清场** —— 等的是「被围住快撑不住」这个时刻：
+        // 主人要的节奏是「十几只压上来 → 玩家觉得要死了 → 这时候塔克才登场」，
+        // 真等玩家把 12 只都打完（WaitFieldClear），塔克就变成「清完场才姗姗来迟」，整段演出废掉。
+        // ① 先等 12 只全部进场站定（波次是异步进场的，不能怪还没露面就开始吐槽）；
         yield return WaitMonstersFinishedEnter(bm);
-        if (bm != null)
-            bm.AllowMonsterMapEnter = false; // 「！」对白期间全部暂停
+        // ② 再复用埋伏拍那个「撑不住」的判定（掉血跌破阈值 / 打够时长 / 场上被打空，哪个先到算哪个），
+        //    复用而不是新建 —— CoWaitAmbushPressure 原本服务于已删除的埋伏拍，现在是孤儿，正好接手这份活。
+        // 【2026-10-09 主人拍板】② 这一步作废：主人原话「当所有怪出场后就出剧情，不要全都上来打了一会才触发」，
+        //    即 12 只全部进场站定（上面 ① 的判据）就立刻往下走触发塔克天降，不再等那 5 秒 / 掉血 62% 阈值。
+        //    CoWaitAmbushPressure 停用但**函数保留不删**（备用），故此处只注释不删。
+        // yield return CoWaitAmbushPressure(bm);
 
-        try
-        {
-            yield return TalkBlock(bm, headTalk, restoreAct: false,
-                new TalkLine(Hero.Instance, "糟了，是陷阱！", 2.0f));
-        }
-        finally
-        {
-            if (bm != null)
-                bm.AllowMonsterMapEnter = false;
-        }
-
-        if (bm != null)
-        {
-            bm.AllowMonsterMapEnter = false;
-            bm.UnitsCanAct = true;
-        }
-
-        // —— 3) 埋伏：故意让玩家扛不住 → 喊救命 → 塔克天降一击清场 ——
-        // 【2026-10-07 主人拍板】埋伏这一波改成 7 只纯近战（tutorial_battle.csv order=3，rangedCount=0），
-        // 玩家一个人顶不住。这里**不等清场**：等的是「撑不住」这个时刻（掉血阈值 / 打够时长 / 场上空了），
-        // 然后进「遭了，中埋伏了」的戏，再由每日登录那位稀有佣兵从屏幕外跳进来一刀清场 —— 爽感全在这一拍。
-        yield return CoWaitAmbushPressure(bm);
-
+        // —— 1e)【2026-10-09 主人拍板】第 4~9 步：十几只压上来 → 玩家躺平 → 塔克天降一趟清场 → 玩家看傻 ——
+        // 主人 10-08 口述：抽到武器以为能大展身手，结果十几只压上来；正当玩家觉得要死了的时候，佣兵闪亮登场。
+        // 这一段 Hero **只被冻结，绝不改写坐标**（只能等，不能推着英雄走 / 瞬移）。
+        // 【2026-10-09 主人拍板删除】压场波（order=7）后面原本还接着一条 order=2 混编波拍，
+        //   主人定稿的 14 步里这里是直接接塔克天降戏，中间没有「再打一波」的位置 —— 整段删掉；
+        //   正常波由后面的 order=5 那一段负责。
+        hint.Hide();
         if (bm != null)
         {
             bm.UnitsCanAct = false;
             HaltUnit(Hero.Instance);
         }
-
-        hint.Hide();
+        // 第 4 步：吐槽一句（搞笑档：下面这两句是唯一文案源，想改措辞改这里即可）
         yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "遭了，中埋伏了！这回……要死回城了。", 2.0f),
-            new TalkLine(Hero.Instance, "我刚抽的那把剑还没捂热呢，别啊！", 2.0f));
+            new TalkLine(Hero.Instance, "我才刚握上新武器……这就结束了？", 2.4f),
+            // 第 5 步：躺尸 —— Hero 没有倒地 / 躺下动画（只有死亡动画，不能用），
+            // 所以这一步只用「冻结 + 自暴自弃的台词 + 停顿」表达放弃挣扎，不变动画、不碰 transform。
+            new TalkLine(Hero.Instance, "算了，我躺一会儿——你们随意。", 2.4f));
+        headTalk?.HideNow();
+        yield return new WaitForSecondsRealtime(0.5f);
 
-        // 塔克天降 + 一击清场（他这一拍只是**演出替身**，抽到之后才正式入队）
-        Mercenary rescuer = null;
-        yield return CoTutorialRescueBeat(bm, m => rescuer = m);
-
-        yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(rescuer, "这里不适合你这种的新手。", 2.2f),
-            new TalkLine(rescuer, "我带你出去吧。", 2.2f),
-            new TalkLine(Hero.Instance, "等等——箱子还没开呢！", 1.9f),
-            new TalkLine(rescuer, "……", 1.6f));
-
-        yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "打开看看里面有什么。", 1.7f));
-        GameObject groundIcon = null;
-        // 2026-10-05 主人拍板：宝箱改掉**天赋石**，不再掉装备 → 这里传 null（箱子里不吐装备），
-        // 开箱演出与「清掉埋伏 → 开箱」的节拍原样保留。
-        yield return chestDir.CoTutorialOpenChestAndDropEquip(null, g => groundIcon = g);
-
-        GrantTutorialChestTalentStones();
-        // 【2026-10-06 主人反馈「宝箱获得的东西太快了，没看到是啥就没了」】
-        // 宝箱给的东西原来只有一条普通 toast，还紧跟着就被下一条引导气泡顶掉。
-        // 这里给足停留时间让玩家看清拿到了什么，再往下走（想再长就调这个秒数）。
-        yield return new WaitForSecondsRealtime(ChestRewardReadSec);
-
-        if (groundIcon != null)
-            Object.Destroy(groundIcon);
-
-        if (bm != null)
+        // 第 6~8 步：塔克天降 → 丢下「躲在我后面。」→ 一趟跑完全场，回原位后全体一起死。
+        // 这段之前必须把场上所有怪也冻住，否则它们会在塔克跑动时追着玩家改写坐标。
+        if (bm != null && bm.monsters != null)
         {
-            bm.UnitsCanAct = true;
-            bm.BeginTutorialPowerFantasy();
+            for (int i = 0; i < bm.monsters.Count; i++)
+                HaltUnit(bm.monsters[i]);
         }
-        BattleUI.Instance?.UpdateBackpackGrid();
-        Hero.Instance?.costumeManager?.RefreshCostume();
+        Mercenary rescuer = null;
+        // CoTutorialRescueBeat 内部：① 抛物线跳进来（原样保留）② 落地丢一句「躲在我后面。」
+        // ③ 逛一圈回原位再统一判死（见下面【改动 E】的改造）。
+        // ⚠ 第 7 步「躲在我后面。」放在清场**之前**（写在 CoTutorialRescueBeat 里、落地之后、起跑之前）：
+        //   主人定稿的顺序是「天降 → 丢话 → 清场」，先护住玩家再动手才顺 —— 所以这里**不再**重复说第二遍。
+        yield return CoTutorialRescueBeat(bm, m => rescuer = m, headTalk);
 
-        hint.Show("天赋石可以在城镇里点天赋。", null, 1.8f);
-        yield return new WaitForSecondsRealtime(1.8f);
+        // 第 9 步：玩家惊呆（这一句是唯一文案源，想改措辞改这里即可）
+        yield return TalkBlock(bm, headTalk, restoreAct: false,
+            new TalkLine(Hero.Instance, "……他刚才是不是把所有人打了一遍？", 2.4f));
+        headTalk?.HideNow();
 
         // —— 3b) 第二抽：抽中的就是刚才救场那位（塔克·重盾，稀有） ——
         // 【2026-10-07 主人拍板】天降那位 = 这一抽开出来的佣兵，抽完他正式入队。
@@ -741,40 +664,16 @@ public class TutorialDirector : Singleton<TutorialDirector>
         headTalk?.HideNow();
         hint.Hide();
 
-        // —— 压轴：夹击 + 2 精英，正常打不完 —— 把「撤离」教成玩家自己的判断 ——
-        yield return CoFinalPressureBeat(bm, hint, headTalk, merc);
-        headTalk?.HideNow();
-
-        // 撤离引导：冻住单位，和佣兵原地等玩家点撤离；超时自动撤
+        // —— 14)【2026-10-09 主人拍板】结局合并成一波：塔克说完「走吧。」直接回城结算 ——
+        // 原来这里还有一拍「压轴夹击 + 让玩家自己点撤离」的教学（tutorial_battle.csv order=6 的那一波），
+        // 主人拍板整段删掉 —— 引导的最后一波就是上面的精英宿敌波。
+        // 这里先停一下让最后两句台词读完，再自动触发撤离结算（走给引导用的那条 BattleSettlement 结算路线）。
+        yield return new WaitForSecondsRealtime(0.6f);
         if (bm != null)
-        {
-            bm.UnitsCanAct = false;
-            HaltUnit(Hero.Instance);
-            HaltUnit(merc);
-        }
+            bm.TriggerEvacuation();
+        else
+            Debug.LogError("[Tutorial] 引导收尾失败：BattleManager 为空，无法触发回城结算");
 
-        WaitingEvacuate = true;
-        RectTransform settingsRt = ui != null && ui.settingsButton != null
-            ? ui.settingsButton.GetComponent<RectTransform>() : null;
-        // 软引导：硬遮罩挖空容易对不齐设置钮，导致点不到、设置弹窗出不来
-        hint.Show("点「撤离」回城；若未看到设置，稍等会自动打开。", settingsRt, -1f);
-        yield return null;
-        ui?.OnOpenSettings();
-        if (TutorialHintUI.Instance != null && TutorialHintUI.Instance.IsVisible
-            && SettingsPopupUI.Instance != null && SettingsPopupUI.Instance.EvacuateButton != null)
-        {
-            hint.ShowHard("选择「撤离」，回城结算。",
-                SettingsPopupUI.Instance.EvacuateButton.GetComponent<RectTransform>());
-        }
-
-        while (WaitingEvacuate && BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun)
-        {
-            HaltUnit(Hero.Instance);
-            HaltUnit(merc);
-            yield return null;
-        }
-
-        hint.Hide();
         _battleTutorialFlowStarted = false;
         _flow = null;
     }
@@ -799,17 +698,20 @@ public class TutorialDirector : Singleton<TutorialDirector>
     const float RescueLandDist = 2.0f;
 
     /// <summary>
-    /// 埋伏拍：等「玩家撑不住」这个时刻 —— 掉血跌破阈值 / 打够时长 / 场上清了，哪个先到算哪个。
+    /// 等「玩家撑不住」这个时刻 —— 掉血跌破阈值 / 打够时长 / 场上清了，哪个先到算哪个。
+    ///
+    /// <para>现在由 12 只压场波（tutorial_battle.csv order=7）复用；原本服务的埋伏拍（order=3）已删除。</para>
     ///
     /// <para>为什么不等 <c>WaitFieldClear</c>：主人要的是「被围殴到喊救命」，
-    /// 让玩家自己打完就没有天降的理由了（7 只纯近战是照这个意图配的，见 tutorial_battle.csv order=3）。</para>
+    /// 让玩家自己打完就没有天降的理由了（12 只纯近战是照这个意图配的）。</para>
     /// </summary>
     IEnumerator CoWaitAmbushPressure(BattleManager bm)
     {
-        // 【2026-10-07 主人拍板「数据表不要为了引导改动」】埋伏波就用表里现成的 4 只（order=3），
-        // 不再为引导把数量加到 7 —— 塔克一击一个，几只都能秒，爽感不靠堆量。
+        // 【2026-10-09 主人拍板】这个等待原本服务于埋伏拍（order=3），埋伏拍删掉后由 12 只压场波（order=7）接手复用：
+        // 判定条件不变（掉血跌破阈值 / 撑满时长 / 场上打空，哪个先到算哪个），
+        // 目的还是「让玩家在被围殴的时候喊救命」，不是等他打完。
         // 所以这里等的是「玩家扛不住」的时刻，不是等清场：掉血阈值收紧、时长缩短，
-        // 保证天降那一刻场上还有怪可杀（玩家真把 4 只清完了才走 finally 那条分支）。
+        // 保证天降那一刻场上还有怪可杀（玩家真把怪清完了才走打空那条分支）。
         const float maxWait = 5f;
         const float bailHpRatio = 0.62f;
         float t = 0f;
@@ -837,7 +739,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
     ///
     /// <para>只改坐标做抛物线跳跃，不碰动画器、不改预制体（以主人预制体效果为准）。</para>
     /// </summary>
-    IEnumerator CoTutorialRescueBeat(BattleManager bm, System.Action<Mercenary> onSpawned)
+    IEnumerator CoTutorialRescueBeat(BattleManager bm, System.Action<Mercenary> onSpawned, BattleHeadTalkUI talk = null)
     {
         onSpawned?.Invoke(null);
         if (bm == null) yield break;
@@ -870,9 +772,18 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
         GameConfig.SetWorldPosition(merc.gameObject, new Vector3(toX, UnitBase.GROUND_Y, z));
 
-        // ② 落地一击：**一击一个**（主人口径「那个佣兵就能一击打死一个怪」）——
-        // 每只怪身上一道闪电 + 走正常受伤流程判死（尸体动画 / 掉落照旧），
-        // 逐只错开 0.07s，读起来是「一刀一个扫过去」，不是一坨同时消失。
+        // ②【2026-10-09 主人拍板改造】落地 → 丢一句「躲在我后面。」→ 一趟跑完全场 → 回原位 → 全体一起死。
+        //   主人原话：「玩家和怪都没动的情况下，几秒把所有怪打一遍，然后回到原地，然后所有怪一起死亡」。
+        //   所以不再是站在原地逐个判死，而是：冲刺到每只怪身侧 → 只落一道闪电（先不判死）→
+        //   全部走完跑回起始点 → 停 0.3 秒 → 统一 TakeDamage 判死（尸体动画 / 掉落照旧）。
+        //   ⚠ 全程只改塔克自己的世界坐标，其它单位一概不动（2026-09-18 教训：绝不推着英雄走 / 瞬移）。
+        //   第 7 步「躲在我后面。」就放在这里（落地之后、起跑之前）：主人定稿的顺序是
+        //   「天降 → 丢话 → 清场」，先护住玩家再动手才顺 —— 调用方那一段里不再重复这句。
+        if (talk != null)
+            yield return TalkBlock(bm, talk, restoreAct: false,
+                // 这句是唯一的护崽台词源，想改措辞改这里即可
+                new TalkLine(merc, "躲在我后面。", 2.2f));
+
         var vfx = BattleVFXSystem.Instance;
         var victims = new List<UnitBase>();
         for (int i = 0; i < bm.monsters.Count; i++)
@@ -880,18 +791,60 @@ public class TutorialDirector : Singleton<TutorialDirector>
             var m = bm.monsters[i];
             if (m != null && !m.isDead) victims.Add(m);
         }
+        // 按世界 X 从大到小排：塔克从右到左一趟扫过去，不折返。
+        victims.Sort((a, b) => UnitBase.GetCombatX(b).CompareTo(UnitBase.GetCombatX(a)));
+
+        // 起始点记下来：清完场要跑回这个点（主人原话「然后回到原地」）。
+        float homeX = UnitBase.GetCombatX(merc);
+        // 单段冲刺 / 停顿时长按怪数摊：12 只时全程约 2~3 秒，不拖到 5 秒以上。
+        int vc = victims.Count > 0 ? victims.Count : 1;
+        float dashDur = Mathf.Clamp(1.6f / vc, 0.09f, 0.20f);
+        float holdDur = Mathf.Clamp(0.6f / vc, 0.02f, 0.06f);
+
+        float curX = homeX;
         for (int i = 0; i < victims.Count; i++)
         {
             var m = victims[i];
             if (m == null || m.isDead) continue;
+            float targetX = UnitBase.GetCombatX(m) + 0.6f;
+            yield return CoMoveUnitTo(merc.gameObject, curX, targetX, z, dashDur);
+            curX = targetX;
+            // 到位只播一道闪电，**先不判死**（统一留到回原位之后）
             vfx?.PlayLightning(m.transform.position, VfxFaction.Ally);
-            m.TakeDamage(TutorialRescueDamage, true, true, true, 0, merc);
-            if (i < victims.Count - 1)
-                yield return new WaitForSecondsRealtime(0.07f);
+            yield return new WaitForSecondsRealtime(holdDur);
         }
-        Debug.Log($"[Tutorial] 塔克天降一击清场：{victims.Count} 只");
+
+        // 回原位（同样补间过去，不瞬移）→ 停 0.3 秒 → 全体一起死
+        yield return CoMoveUnitTo(merc.gameObject, curX, homeX, z, dashDur);
+        yield return new WaitForSecondsRealtime(0.3f);
+
+        for (int i = 0; i < victims.Count; i++)
+        {
+            var m = victims[i];
+            if (m == null || m.isDead) continue;
+            m.TakeDamage(TutorialRescueDamage, true, true, true, 0, merc);
+        }
+        Debug.Log($"[Tutorial] 塔克天降清场：{victims.Count} 只");
 
         yield return new WaitForSecondsRealtime(0.45f);
+    }
+
+    /// <summary>
+    /// 塔尔克演出用的位移补间：把指定单位在 <paramref name="dur"/> 秒内从 <paramref name="fromX"/> 挪到
+    /// <paramref name="toX"/>，逐帧 <c>yield return null</c>，<b>绝不瞬移</b>。
+    /// 只改这一个自己的世界坐标 —— 2026-09-18 教训：引导里任何"把英雄推过去/挪过去"的写法都禁止。
+    /// </summary>
+    static IEnumerator CoMoveUnitTo(GameObject go, float fromX, float toX, float z, float dur)
+    {
+        float t = 0f;
+        while (t < dur)
+        {
+            t += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(t / dur);
+            GameConfig.SetWorldPosition(go, new Vector3(Mathf.Lerp(fromX, toX, k), UnitBase.GROUND_Y, z));
+            yield return null;
+        }
+        GameConfig.SetWorldPosition(go, new Vector3(toX, UnitBase.GROUND_Y, z));
     }
 
     // ============================================================
@@ -1259,7 +1212,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
     }
 
-    /// <summary>进战后先教摇杆与自动技能。</summary>
+    /// <summary>
+    /// 进战后的开场：刷第一波并借技能提示的空档让怪走进场。
+    /// 【2026-10-09】原本这里还有一步「教摇杆」，摇杆已于 2026-10-05 停用，那一步不再存在。
+    /// </summary>
     /// <param name="preloadStep">&gt;0 时在技能提示之前先把这一波刷出来（让怪借读字时间进场）。</param>
     static IEnumerator CoTeachControls(BattleManager bm, TutorialHintUI hint, BattleUI ui, int preloadStep = 0)
     {

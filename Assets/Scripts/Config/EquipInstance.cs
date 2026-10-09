@@ -140,9 +140,14 @@ public class EquipInstance
         // 仅训练剑用普通档 70%；其它按稀有度掷 equip_attr_ranges
         bool isStarter = !string.IsNullOrEmpty(template.templateId)
             && template.templateId.IndexOf("training", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        // 2026-10-09 主人拍板：武器主攻击值按职业取表行。
+        // 旧写法 RollAttrFlat("ATK") 写死，导致法师/牧师的魔攻走 equip_attr_ranges.csv 的 ATK 行，
+        // 该表专为法系设的 MAGIC_ATK 行（区间 52~74）在「路径B：正式/回退武器」从未被读。
+        // 按当前职业分流：法系取 "MAGIC_ATK"，物理取 "ATK"（与下方 CurrentAttackAttr 写入的属性对齐）。
+        // 注：训练剑(isStarter)是引导用物理武器，CommonMid("ATK") 保持不动；仅正式/回退武器走职业分流。
         float tableAtk = isStarter
             ? RiftEquipTables.CommonMid("ATK", 0.7f)
-            : RiftEquipTables.RollAttrFlat("ATK", inst.rarity, 1f);
+            : RiftEquipTables.RollAttrFlat(PlayerJobBaseStats.CurrentAttackAttr() == AttrType.MagicAttack ? "MAGIC_ATK" : "ATK", inst.rarity, 1f);
         if (tableAtk <= 0.01f) return;
         if (inst.slotType == EquipSlotType.OffHand)
             tableAtk *= EquipStatRollup.OffHandAttackCapRatio;

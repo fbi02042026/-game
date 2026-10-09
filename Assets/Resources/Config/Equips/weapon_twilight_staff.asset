@@ -22,22 +22,17 @@ MonoBehaviour:
   baseRarity: 3
   minLevel: 1
   baseAttr:
-  - attrType: 5
-    value: 12
-    isPercent: 0
-  - attrType: 18
-    value: 0.12
-    isPercent: 1
-  - attrType: 13
-    value: 8
+  - attrType: 22
+    value: 9.57
     isPercent: 0
   - attrType: 6
-    value: 0.2
+    value: 0.05
     isPercent: 1
   globalBonus:
     attrType: 0
     value: 0
     isPercent: 0
+  skillPassives: []
   isLegendary: 0
   slotType: 5
   weaponType: 0

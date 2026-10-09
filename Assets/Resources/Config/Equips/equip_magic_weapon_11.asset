@@ -19,15 +19,25 @@ MonoBehaviour:
   gridWidth: 1
   gridHeight: 2
   tags: []
-  baseRarity: 1
+  baseRarity: 5
   minLevel: 1
   baseAttr:
-  - attrType: 5
-    value: 5
+  - attrType: 22
+    value: 55
     isPercent: 0
+  - attrType: 13
+    value: 0.15
+    isPercent: 1
+  - attrType: 6
+    value: 0.08
+    isPercent: 1
   globalBonus:
-    attrType: 0
-    value: 0
+    attrType: 22
+    value: 82
+    isPercent: 0
+  skillPassives:
+  - attrType: 20
+    value: 0.35
     isPercent: 0
   isLegendary: 0
   slotType: 5

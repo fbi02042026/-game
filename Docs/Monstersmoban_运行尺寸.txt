@@ -1,11 +1,11 @@
 怪物模板「运行尺寸」对照 —— 由 MonsterTemplateProbe 自动导出（只读，未改动任何节点）
-根节点=Visual  lossyScale=(2.956,2.956,2.956)  帧=1513
+根节点=Visual  lossyScale=(3.107,3.107,3.107)  帧=446
 
-- Visual  localScale=(1.000,1.000,1.000)  lossyScale=(2.956,2.956,2.956)  sizeDelta=(100.000,100.000)  anchoredPos=(0.000,0.000)  anchor=(0.500,0.500)~(0.500,0.500)
-  - shadow  localScale=(0.030,0.030,0.030)  lossyScale=(0.089,0.089,0.089)  [SR] order=0 layer=Default alpha=0.78 sprite=影子 enabled=True active=True
-  - Monsters  localScale=(1.000,1.000,1.000)  lossyScale=(2.956,2.956,2.956)  [SR] order=1 layer=Default alpha=1.00 sprite=forest_101 enabled=True active=True
-  - beattack  localScale=(1.000,1.000,1.000)  lossyScale=(2.956,2.956,2.956)
-  - fire  localScale=(2.000,2.000,2.000)  lossyScale=(5.913,5.913,5.913)
-  - HPBar  localScale=(0.150,0.300,0.200)  lossyScale=(0.443,0.887,0.591)
-    - HPBarBG  localScale=(1.000,1.000,1.000)  lossyScale=(0.443,0.887,0.591)  [SR] order=15 layer=Default alpha=1.00 sprite=血条底 enabled=True active=True
-    - HPBarFill  localScale=(1.000,1.000,1.000)  lossyScale=(0.443,0.887,0.591)  [SR] order=2 layer=Default alpha=1.00 sprite=敌人血条 enabled=True active=True
+- Visual  localScale=(1.000,1.000,1.000)  lossyScale=(3.107,3.107,3.107)  sizeDelta=(100.000,100.000)  anchoredPos=(0.000,0.000)  anchor=(0.500,0.500)~(0.500,0.500)
+  - shadow  localScale=(0.030,0.030,0.030)  lossyScale=(0.093,0.093,0.093)  [SR] order=0 layer=Default alpha=0.78 sprite=影子 enabled=True active=True
+  - Monsters  localScale=(1.000,1.000,1.000)  lossyScale=(3.107,3.107,3.107)  [SR] order=1 layer=Default alpha=1.00 sprite=forest_101 enabled=True active=True
+  - beattack  localScale=(1.000,1.000,1.000)  lossyScale=(3.107,3.107,3.107)
+  - fire  localScale=(2.000,2.000,2.000)  lossyScale=(6.215,6.215,6.215)
+  - HPBar  localScale=(0.150,0.300,0.200)  lossyScale=(0.466,0.932,0.621)
+    - HPBarBG  localScale=(1.000,1.000,1.000)  lossyScale=(0.466,0.932,0.621)  [SR] order=15 layer=Default alpha=1.00 sprite=血条底 enabled=True active=True
+    - HPBarFill  localScale=(1.000,1.000,1.000)  lossyScale=(0.466,0.932,0.621)  [SR] order=2 layer=Default alpha=1.00 sprite=敌人血条 enabled=True active=True

@@ -1,3 +1,11 @@
+# 【口径·2026-10-09】本表与 equip_attr_ranges 不是二选一，各管一段，别再误判成「冲突」：
+#   1) equip_attr_ranges = 掷骰种子，只有武器 ATK / MAGIC_ATK 走它（RiftEquipTables.RollAttrFlat）；
+#      防具 DEF / MaxHp 不读 ranges，读的是装备模板 asset 的 baseAttr。
+#   2) 装配流程：值 = 种子(或模板 baseAttr) × (1+0.1×星) × RarityBaseMul(普通1.0/稀有1.15/史诗1.32/传奇1.65)，
+#      最后被本表 ClampValue 封顶 → 本表是【最终上限】，所以传奇锚点 ≈ ranges 传奇上限 × 2 是对的，不是笔误
+#      （例：武器 ATK 40 × 1.65 × 1.2(3星) ≈ 79 → 锚点 80）。
+#   3) 防具模板 asset 的 baseAttr 若填错类型（大量头盔/胸甲/盾牌被填成 Attack 5 而非 Defense），
+#      本表写了上限也够不到 —— 改数值前先核对 asset，别只调表。
 # category ceilings aligned to equip_attr_ranges (starter=70% common mid~8)
 category,anchorTemplateId,rarity,attrType,value,isPercent,isAnchor
 MainHandWeapon,equip_sword_1,Common,Attack,12,0,1
@@ -15,7 +23,11 @@ TwoHandBow,equip_bow_1,Common,Attack,12,0,1
 TwoHandBow,equip_bow_1,Rare,Attack,40,0,1
 TwoHandBow,equip_bow_1,Legendary,Attack,80,0,1
 Head,equip_helmet_1,Common,Defense,12,0,1
+Head,equip_helmet_1,Rare,Defense,30,0,1
+Head,equip_helmet_1,Legendary,Defense,60,0,1
 Chest,equip_armor_1,Common,Defense,12,0,1
+Chest,equip_armor_1,Rare,Defense,30,0,1
+Chest,equip_armor_1,Legendary,Defense,60,0,1
 Hands,equip_hands_001,Common,MaxHp,80,0,1
 Feet,equip_feet_001,Common,MoveSpeed,0.06,1,1
 Cape,equip_cape_001,Common,MaxHp,80,0,1

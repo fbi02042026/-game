@@ -428,7 +428,7 @@ public static class PlayerJobDefs
         }
 
         var kit = GetJobWeaponKit(job);
-        bool granted = false;
+        bool granted = false;   // 暂时只记不发（不再用于提示），留着备用
         var jobKind = def.PrimaryWeapon;
 
         // 先发主手（会清对应槽）；再发副手
@@ -460,8 +460,11 @@ public static class PlayerJobDefs
         if (Hero.Instance != null && Hero.Instance.attr != null)
             Hero.Instance.currentHp = Hero.Instance.attr.GetAttr(AttrType.MaxHp);
         PlayerPassiveCombat.EnsureOn(Hero.Instance);
-        if (granted)
-            UIManager.Instance?.ShowToast($"已获得{def.DisplayName}武器");
+        // 【2026-10-09 主人拍板】职业起步武器每局开场自动重发一套，这是默认的、每局都会做的事；
+        // 主人确认「每局重置」就是预期行为，不需要再提示玩家，故取消这条 Toast。
+        // （先注释不删，发武器的逻辑一个字不动）
+        // if (granted)
+        //     UIManager.Instance?.ShowToast($"已获得{def.DisplayName}武器");
     }
 
     static EquipTemplate ResolveKitTemplate(string templateId, string spumFallback)

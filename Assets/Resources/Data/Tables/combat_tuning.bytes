@@ -21,8 +21,8 @@ PRESSURE_WAVE_CAP,2,加压上限：最多额外加几波
 PRESSURE_MERCY_ON_DEATH,1,上一关死亡过 → 下一关波数 −1（1=开 0=关）
 PRESSURE_HP_RATIO,0.70,判定「轻松通关」的血量线
 MODE_HANDICAP_BY_JOB,1,职业×模式矩阵标高时该关波数 −1（1=开 0=关）
-CHAPTER_COUNT_STEP,0.03,每章每波人数递增步长（第 1 章 1.00 → 第 8 章 1.21）
-STAGE_COUNT_STEP,0.05,章内每关每波人数递增步长（第 1 关 1.00 → 第 10 关 1.45）
+CHAPTER_COUNT_STEP,0.04,每章每波人数递增步长（第 1 章 1.00 → 第 8 章 1.28；2026-10-09 由 0.03 上调）
+STAGE_COUNT_STEP,0.07,章内每关每波人数递增步长（第 1 关 1.00 → 第 10 关 1.63；2026-10-09 由 0.05 上调，配合 stage_stat_scale 阶梯做「软卡」）
 COUNT_JITTER_MIN,0.85,每波人数随机浮动下限
 COUNT_JITTER_MAX,1.15,每波人数随机浮动上限
 # ---- Boss / 精英 TTK 与成长 ----

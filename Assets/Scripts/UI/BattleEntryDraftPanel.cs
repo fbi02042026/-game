@@ -306,6 +306,11 @@ public class BattleEntryDraftPanel : MonoBehaviour
     bool _built;
     /// <summary>抽奖阶段（此时抽奖按钮可用）；开战后为 false。</summary>
     bool _draftActive;
+    /// <summary>
+    /// 上一帧的 <c>BattleManager.UnitsCanAct</c> —— 开打自动收起背包做<b>边缘检测</b>要用，
+    /// 只有 false→true 那一跳才触发，绝不每帧强制收起（2026-10-09 主人拍板）。
+    /// </summary>
+    bool _prevUnitsCanAct;
 
     /// <summary>「普通」（随机）按钮的 RectTransform —— 引导关要圈住它做高亮。</summary>
     public RectTransform NormalButtonRect =>
@@ -402,7 +407,13 @@ public class BattleEntryDraftPanel : MonoBehaviour
     public static void Prewarm()
     {
         if (BattleUI.Instance == null) return;
-        Ensure();
+        // 【2026-10-09 主人拍板】这里必须补一次 Build()：Build 只在 Begin()（抽奖开始）里跑，
+        // 于是「还没抽奖的那段时间」面板一直停在预制体存的展开态（750 / zhuangshi +80），
+        // 且 BtnBackpack 的 onClick 还没绑 —— 就是主人报的「一上来背包是打开的」「点了关不掉」。
+        // Build() 末尾的 SetDraftVisible(false) + ApplyState(0f) 正好把面板拍回收起态，
+        // 只建不显示，与本方法「只建组件、不显示任何东西」的语义一致；它有 _built 守卫，重复调无害。
+        var pre = Ensure();
+        if (pre != null) pre.Build();
     }
 
     RectTransform ResolveMap()
@@ -544,6 +555,20 @@ public class BattleEntryDraftPanel : MonoBehaviour
     {
         // 倒计时每帧走：与本类两态动画、入场归位互不干涉，各自独立。
         TickContinueCountdown();
+
+        // 【2026-10-09 主人拍板】开打那一刻自动收起背包：只认 UnitsCanAct 的 false→true 跳变，
+        // 且必须是玩家手动点开的（抽屉开着、不在抽奖阶段 _draftActive）。
+        // ⚠ 绝不写成「战斗中每帧强制收起」——那会把主人 10-08 拍板保留的「战斗中点开背包查看」废掉。
+        // 用 InstanceQuiet 静默取实例，系统未就绪时不刷 Error。
+        // ⚠ 判据从 _expanded 换成 BattleUI.Instance.BagDrawerOpen：背包按钮现在开的是网格背包抽屉，
+        // 不再是 600↔750 两态（_expanded 只反映抽奖展开）。
+        var bm = BattleManager.InstanceQuiet;
+        bool canAct = bm != null && bm.UnitsCanAct;
+        if (_built && canAct && !_prevUnitsCanAct && !_draftActive
+            && BattleUI.Instance != null && BattleUI.Instance.BagDrawerOpen)
+            BattleUI.Instance?.CloseBagDrawer();
+        // 每帧无条件更新，不放在上面的早退之后
+        _prevUnitsCanAct = canAct;
 
         // 入场归位（_settleCo）在跑时也让路：同一时刻只有一处写 map。
         if (_mapRt == null || _animCo != null || _settleCo != null) return;
@@ -1028,10 +1053,12 @@ public class BattleEntryDraftPanel : MonoBehaviour
         _countdownText = t;
     }
 
-    /// <summary>「背包」按钮：任何时候都能点，切换展开/收起（抽奖阶段也能收起来看战斗画面）。</summary>
+    /// <summary>「背包」按钮：现在只切网格背包（BackpackPanel/GridContainer）的出现/收起。
+    /// 【2026-10-09 主人拍板】背包按钮不再走 600↔750 两态 —— 那一套 SetExpanded 只留给抽奖展开用。</summary>
     void OnBackpackClicked()
     {
-        SetExpanded(!_expanded);
+        // 【2026-10-09 主人拍板，先注释不删】原实现：SetExpanded(!_expanded);
+        BattleUI.Instance?.ToggleBagDrawer();
     }
 
     /// <summary>抽奖按钮容器 + 「继续」按钮的显隐。开战后彻底隐藏，战斗画面里不留抽奖入口。</summary>

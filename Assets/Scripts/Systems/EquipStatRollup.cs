@@ -40,6 +40,28 @@ public static class EquipStatRollup
 
     static void AppendEquipBonuses(List<AttrBonusData> list, EquipInstance equip, bool capOffAttack, float mainAttack)
     {
+        if (equip == null) return;
+
+        // 2026-10-09 主人拍板：装备上就在局内生效，出战斗清零。
+        // 把模板 globalBonus 并入本局战斗内的属性汇总。globalBonus 是模板固定值，
+        // 不乘 EquipEnhanceSystem.GetMultiplier(equip) 强化倍率（否则数值失控），
+        // 副手封顶与 attrBonus / enchants 保持一致。
+        // 放在最开头：某件装备可能无 attrBonus 却持有 globalBonus，不能被下方
+        // 「attrBonus == null」的提前 return 一起跳过。
+        if (equip.globalBonus != null)
+        {
+            var g = equip.globalBonus;
+            float v = g.value;
+            if (capOffAttack && IsAttackFlat(g.attrType, g.isPercent))
+                v = CapOffHandAttack(v, mainAttack);
+            list.Add(new AttrBonusData
+            {
+                attrType = g.attrType,
+                value = v,
+                isPercent = g.isPercent
+            });
+        }
+
         if (equip?.attrBonus == null) return;
         float enhanceMul = EquipEnhanceSystem.GetMultiplier(equip);
         int baseCount = Mathf.Clamp(equip.baseAttrCount, 0, equip.attrBonus.Count);

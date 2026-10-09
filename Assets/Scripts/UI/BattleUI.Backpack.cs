@@ -240,10 +240,53 @@ public partial class BattleUI : MonoBehaviour
         return maxY + 1;
     }
 
+    // ===== 背包抽屉（BackpackPanel/GridContainer 的显隐，2026-10-09 主人拍板）=====
+
+    /// <summary>玩家有没有手动点开过网格背包（点右上角「背包」按钮）。默认 false = 收起 ——
+    /// 主人原话「背包弹窗只有在点击背包按钮的时候才出现」，所以战斗里默认不显示。</summary>
+    bool _bagDrawerOpen;
+
+    /// <summary>网格背包节点缓存，别每次刷新都递归找一遍。</summary>
+    Transform _bagGridRoot;
+
+    /// <summary>抽屉当前是否开着（供 BattleEntryDraftPanel 判「开打要不要自动收」）。</summary>
+    public bool BagDrawerOpen => _bagDrawerOpen;
+
+    /// <summary>
+    /// 网格背包（GridContainer）显隐的<b>唯一出口</b>：玩家点开 或 整理阶段才显示。
+    /// <para>整理阶段（<see cref="BattleLootMode.Active"/>）必须<b>强制显示</b>：那一阶段玩家要拖
+    /// 格子里的装备，隐藏了就拖不了（见 BattleUI.Backpack.cs 的拾取/整理链路），这是硬约束。</para>
+    /// </summary>
+    void ApplyBagDrawerVisible()
+    {
+        // FindDeepChildIgnoreCase 是纯 Transform 递归，能找到 inactive 子节点 → 隐藏后仍取得到，安全。
+        if (_bagGridRoot == null) _bagGridRoot = FindDeepChildIgnoreCase(transform, "GridContainer");
+        if (_bagGridRoot == null) return;
+        bool want = _bagDrawerOpen || BattleLootMode.Active;
+        if (_bagGridRoot.gameObject.activeSelf != want) _bagGridRoot.gameObject.SetActive(want);
+    }
+
+    /// <summary>「背包」按钮：切换网格背包的出现/收起（2026-10-09 主人拍板）。</summary>
+    public void ToggleBagDrawer()
+    {
+        _bagDrawerOpen = !_bagDrawerOpen;
+        ApplyBagDrawerVisible();
+    }
+
+    /// <summary>收起网格背包 —— 开打那一刻由 BattleEntryDraftPanel 调（2026-10-09 主人拍板「战斗的时候自动关闭背包弹窗」）。</summary>
+    public void CloseBagDrawer()
+    {
+        _bagDrawerOpen = false;
+        ApplyBagDrawerVisible();
+    }
+
     /// <summary>刷新下方网格背包。预制体是 4×3=12 格；2026-09-21 起战斗内只开放前 2 行（8 格），
     /// 第 3 行起上锁（<see cref="GameConfig.BATTLE_BACKPACK_ROWS"/>）；城镇/角色页不受此限制。</summary>
     public void UpdateBackpackGrid()
     {
+        // 2026-10-09 主人拍板：每次刷新背包都顺带纠正一次显隐 —— 默认收起，整理阶段强制显示。
+        ApplyBagDrawerVisible();
+
         // 战斗中捡到装备时可能还没绑过格子，先补绑再判空
         if (gridCells == null || gridCells.Count == 0)
             EnsureGridCellsBound();
@@ -387,6 +430,10 @@ public partial class BattleUI : MonoBehaviour
         // 道具操作浮层挂在 BattleUI 下（保证在 Canvas 内且在最上层）
         BackpackItemActionUI.Ensure(transform);
         EnsureBattleMask();
+        // 2026-10-09 主人拍板：进关必是收起态（本方法由 BattleManager 进战斗时调），
+        // 上一局残留的「开着」不会带到下一局。
+        _bagDrawerOpen = false;
+        ApplyBagDrawerVisible();
         RefreshLootModeChrome();
     }
 

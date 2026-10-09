@@ -52,6 +52,9 @@ public static partial class GameConfig
     public const int MERC_GOLD_PER_BOSS = 2;
 
     // —— 连杀续杯（R2）：连杀窗口内击杀回血，让"连"成为可持续资源 ——
+    /// <summary>连杀回血总开关（2026-10-09 主人拍板关掉）。false = 连杀不再回血。
+    /// 想恢复：改回 true 即可，下面的数值不用动。</summary>
+    public static bool COMBO_HEAL_ENABLED = false;
     /// <summary>连杀达到该值才开始回血（避免单杀白嫖续航）。</summary>
     public const int COMBO_HEAL_MIN_COMBO = 3;
     /// <summary>每次合格连杀的基础回血量。</summary>

@@ -1319,7 +1319,8 @@ public abstract class UnitBase : MonoBehaviour
     }
 
     /// <summary>
-    /// 吸血：造成伤害的一方按「GameConfig.LIFESTEAL_RATIO(10%) + 装备词缀吸血比例」回血。
+    /// 吸血：基础吸血已归零（2026-10-09 主人拍板），只有带吸血词缀/技能的单位才回血。
+    /// 没带吸血就是 0，不回血（下面的 if (ratio &lt;= 0f) return; 天然覆盖该语义）。
     /// 只在我方（Hero / 佣兵）身上生效——装备词缀是玩家侧的东西；怪物侧回血仍走 V6 词缀「吸血」。
     /// </summary>
     static void ApplyLifesteal(UnitBase dealer, float finalDamage)

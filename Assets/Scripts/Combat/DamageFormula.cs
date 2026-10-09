@@ -9,6 +9,19 @@ public static class DamageFormula
     public const float MinDamage = 1f;
 
     /// <summary>
+    /// 乘法减伤公式的常数 K：reduction = def / (def + DefenseK)。
+    /// 2026-10-09 主人拍板：当前取 100（主人原话「为什么要加几百，先加100看看」）。
+    /// 想调平衡**只改这一个数**：调小 → 同样防御减伤更多；调大 → 减伤更少、更平缓。
+    /// </summary>
+    public const float DefenseK = 100f;
+
+    /// <summary>
+    /// 减伤率上限 0.75（最多减掉 75%，剩下 25% 的伤害必打进去）。
+    /// 2026-09-28 主人拍板定的口径，防御再高也不会免疫。
+    /// </summary>
+    public const float MaxReductionRatio = 0.75f;
+
+    /// <summary>
     /// 伤害结算错误码。2026-09-27 主人拍板：**不要静默兜底，有问题直接报错码**。
     /// 出现这些码说明配置/初始化缺真值，按码去补，不要改公式绕过去。
     /// </summary>
@@ -130,7 +143,12 @@ public static class DamageFormula
             def = defender.GetAttr(AttrType.Defense);
         }
 
-        return Mathf.Max(MinDamage, dmg - def);
+        // 2026-10-09 主人拍板：减法减伤改成**乘法减伤**（reduction = def / (def + DefenseK)），
+        // 解决「防御 ≥ 怪物伤害时一律保底掉 1 血」的问题。
+        // def 理论上非负，这里用 Max(0f, def) 兜住：负数会算出负减伤率，反而把伤害放大。
+        float defSafe = Mathf.Max(0f, def);
+        float reduction = Mathf.Min(MaxReductionRatio, defSafe / (defSafe + DefenseK));
+        return Mathf.Max(MinDamage, dmg * (1f - reduction));
     }
 
     /// <summary>主角特殊武器对目标的倍率（暮火之杖等）。</summary>

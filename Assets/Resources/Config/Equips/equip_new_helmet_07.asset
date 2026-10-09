@@ -19,16 +19,23 @@ MonoBehaviour:
   gridWidth: 1
   gridHeight: 1
   tags: []
-  baseRarity: 1
+  baseRarity: 4
   minLevel: 1
   baseAttr:
-  - attrType: 5
-    value: 5
+  - attrType: 10
+    value: 10.5
+    isPercent: 0
+  - attrType: 4
+    value: 52.5
+    isPercent: 0
+  - attrType: 23
+    value: 4.2
     isPercent: 0
   globalBonus:
     attrType: 0
     value: 0
     isPercent: 0
+  skillPassives: []
   isLegendary: 0
   slotType: 0
   weaponType: 3

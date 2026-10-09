@@ -742,6 +742,9 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         // 城镇角色页预览（无战斗 Hero 时）
         if (CharacterUI.Instance != null)
             TownHeroCostumePreview.EnsureOn(CharacterUI.Instance)?.RefreshCostume();
+        // 2026-10-09 主人拍板：换装（穿上/换下/替换）后本局战力会变（RunLoadout.TotalPower 已计入已穿戴装备），
+        // 必须通知头顶战力 HUD 重算，否则玩家拿到装备看不到战斗力变化。
+        PlayerPowerHud.NotifyPowerChanged();
     }
 
     public bool IsEquipped(EquipInstance equip)

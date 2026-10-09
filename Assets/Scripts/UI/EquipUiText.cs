@@ -99,8 +99,52 @@ public static class EquipUiText
             case AttrType.CooldownReduce: return "冷却缩减";
             case AttrType.MagicPower: return "魔法强度";
             case AttrType.PhyPower: return "物理强度";
+            case AttrType.EliteDamage: return "精英伤害";
+            // 2026-09-26 新增的中毒词缀也要给中文名，
+            // 否则装备被动面板会把枚举名 "Poison" 直接显示给玩家。
+            case AttrType.Poison: return "中毒";
             default: return t.ToString();
         }
+    }
+
+    /// <summary>
+    /// 比例属性集合（2026-10-09 主人拍板）：
+    /// 数据层对这些属性统一写成 <c>isPercent = false</c> + 小数值（0.05 = 5%），
+    /// 但 UI 必须按百分比显示，否则 0.05 会被 0.# 四舍五入成「0.1」、还丢掉 % 号。
+    /// 口径对齐 <see cref="RiftEquipGenerator"/> 的 IsRateAttr（CRIT_RATE / CRIT_DMG / ATK_SPD /
+    /// DMG_RED / DODGE / LIFE_STEAL / ELE_DMG / HEAL / HP_REGEN / CONTROL_RES / ANTI_CRIT）。
+    /// 攻速在 TryMapAttr 里被强制 isPercent = true（走 Value 的规则①），放进来只为口径一致。
+    /// </summary>
+    public static bool IsRateAttr(AttrType t)
+    {
+        switch (t)
+        {
+            case AttrType.CritRate:
+            case AttrType.CritDamage:
+            case AttrType.AttackSpeed:
+            case AttrType.Dodge:
+            case AttrType.LifeSteal:
+            case AttrType.FireDamage:
+            case AttrType.IceDamage:
+            case AttrType.EliteDamage:
+            case AttrType.Poison:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// 装备文案属性数值的统一渲染口径（2026-10-09 主人拍板：比例属性 isPercent=false + 小数值要按百分比显示）：
+    /// ① isPercent = true → value * 100 + "%"（保持原行为）；
+    /// ② isPercent = false 但属于比例属性集合 → value * 100 + "%"（本次新增，修 0.05 显示成「0.1」的缺陷）；
+    /// ③ 其它 → value.ToString("0.#")（保持原行为）。
+    /// 只改显示，绝不动任何 isPercent 赋值 / 模板 / csv / 战斗结算口径。
+    /// </summary>
+    public static string Value(AttrType t, float value, bool isPercent)
+    {
+        if (isPercent || IsRateAttr(t)) return (value * 100f).ToString("0.#") + "%";
+        return value.ToString("0.#");
     }
 
     /// <summary>装备标题：名称 + 强化等级。</summary>

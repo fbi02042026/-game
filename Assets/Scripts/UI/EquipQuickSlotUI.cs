@@ -21,11 +21,15 @@ public class EquipQuickSlotUI
     /// 节点按需运行时补建（不显示就不建，不往预制体里落东西）。
     /// </summary>
     [System.NonSerialized] public Text newBadge;
+    /// <summary>【2026-10-09 主人拍板】槽位上补的透明点击层按钮（运行时建，不落预制体）。</summary>
+    [System.NonSerialized] public Button statTipButton;
 
     public void Bind(EquipInstance item)
     {
         boundItem = item;
         if (root != null) root.SetActive(true);
+        // 【2026-10-09 主人拍板】装备槽可点：点开属性浮框，再点同一个关闭
+        WireStatTipClick();
 
         bool has = item != null;
         if (has)
@@ -67,6 +71,51 @@ public class EquipQuickSlotUI
         }
         newBadge.text = isNew ? "新" : "";
         newBadge.gameObject.SetActive(isNew);
+    }
+
+    /// <summary>
+    /// 【2026-10-09 主人拍板】给装备槽补一层透明点击层 + Button，点一下弹装备属性框、再点一下关掉。
+    /// 不碰预制体、不加美术：透明 Image 只负责接射线（槽位底图 raycastTarget 未必开着），
+    /// Button 挂在它上面，与槽里原有的图标 / 稀有度描边 / 「新」角标共存，不影响拖拽换装。
+    /// 幂等：已有就复用，只重绑 onClick。
+    /// </summary>
+    void WireStatTipClick()
+    {
+        if (root == null) return;
+        if (statTipButton == null)
+        {
+            var hit = new GameObject("EquipStatClick", typeof(RectTransform), typeof(Image));
+            hit.transform.SetParent(root.transform, false);
+            hit.transform.SetAsLastSibling();
+            var rt = hit.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            var img = hit.GetComponent<Image>();
+            img.color = new Color(0f, 0f, 0f, 0f);   // 全透明，纯接射线
+            img.raycastTarget = true;
+            statTipButton = hit.AddComponent<Button>();
+            statTipButton.transition = Selectable.Transition.None;
+            statTipButton.targetGraphic = img;
+        }
+        statTipButton.onClick.RemoveAllListeners();
+        statTipButton.onClick.AddListener(OnStatTipClick);
+    }
+
+    /// <summary>空槽不弹空框：没装备就把已开的浮框收掉。</summary>
+    void OnStatTipClick()
+    {
+        var ui = BattleUI.Instance;
+        if (ui == null) return;
+        var anchor = root != null ? root.GetComponent<RectTransform>() : null;
+        if (boundItem == null || anchor == null)
+        {
+            EquipStatTipUI.Ensure(ui.transform)?.Hide();
+            return;
+        }
+        EquipStatTipUI.Toggle(boundItem, anchor, root);
     }
 
     static Text EnsureNewBadge(Transform parent)

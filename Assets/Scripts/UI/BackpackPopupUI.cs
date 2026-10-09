@@ -145,6 +145,11 @@ public class BackpackPopupUI : MonoBehaviour
         BuildMatPage(content.transform);
 
         GameFonts.ApplyToHierarchy(transform);
+
+        // 2026-10-09 主人拍板：Ensure 只建不显，显隐归 Show/Hide（与 BackpackItemActionUI 同口径）。
+        // 建完默认隐藏，否则 new GameObject 默认 active，一进角色页弹窗就糊在屏幕上，
+        // 且此时没走 Show() 抬层级，会被 TownPageDim 暗色层盖住，点遮罩/关闭都吃不到点击。
+        gameObject.SetActive(false);
     }
 
     void BuildBagPage(Transform parent)

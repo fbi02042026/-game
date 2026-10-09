@@ -19,15 +19,12 @@ MonoBehaviour:
   gridWidth: 1
   gridHeight: 2
   tags: []
-  baseRarity: 2
+  baseRarity: 1
   minLevel: 1
   baseAttr:
   - attrType: 5
-    value: 4
+    value: 5
     isPercent: 0
-  - attrType: 8
-    value: 0.02
-    isPercent: 1
   globalBonus:
     attrType: 0
     value: 0

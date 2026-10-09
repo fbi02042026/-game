@@ -486,6 +486,21 @@ public static class DraftPool
               .Append(FormatAttrValue(eq.globalBonus));
             shown = 1;
         }
+        // 2026-10-09 主人拍板：传奇被动要在 UI 上看得见。
+        // skillPassives 的数值早就由 EquipStatRollup.AppendSkillPassives 生效了，这里只补文字。
+        // FormatEquipDesc 是「一句话描述」，所以按本地口径用全角空格续在后面、不换行；
+        // 没有被动就一个字都不加。数值渲染与 EquipStatTipUI / EquipDropPopupUI 同一套口径（2026-10-09 起统一走 EquipUiText.Value）。
+        if (eq.skillPassives != null)
+        {
+            for (int i = 0; i < eq.skillPassives.Count; i++)
+            {
+                var p = eq.skillPassives[i];
+                if (p == null) continue;
+                string pv = EquipUiText.Value(p.attrType, p.value, p.isPercent);
+                sb.Append("　【被动】").Append(EquipUiText.Attr(p.attrType)).Append(' ').Append(pv);
+                shown++;
+            }
+        }
         if (shown == 0) sb.Append("　无附加属性");
         if (eq.enhanceLevel > 0) sb.Append("　+").Append(eq.enhanceLevel);
         return sb.ToString();
@@ -494,6 +509,10 @@ public static class DraftPool
     static string FormatAttrValue(AttrBonusData a)
     {
         if (a == null) return "";
+        // 2026-10-09 主人拍板：比例属性（isPercent=false + 小数值）走百分比口径，
+        // 否则吸血 0.05 会被 Mathf.RoundToInt 抹成「+0」。百分号/整数分支保持原有取整口径不动。
+        if (!a.isPercent && EquipUiText.IsRateAttr(a.attrType))
+            return "+" + EquipUiText.Value(a.attrType, a.value, false);
         if (a.isPercent) return "+" + Mathf.RoundToInt(a.value * 100f) + "%";
         return "+" + Mathf.RoundToInt(a.value);
     }

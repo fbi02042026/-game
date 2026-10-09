@@ -837,18 +837,42 @@ public class EquipDropPopupUI : MonoBehaviour
 
     static string FormatAttrs(EquipInstance eq)
     {
-        if (eq?.attrBonus == null || eq.attrBonus.Count == 0) return "（无额外属性）";
+        // 2026-10-09 主人拍板：传奇被动要在 UI 上看得见（skillPassives 数值早已生效，这里只补文字）。
+        // 一件装备可能没有 attrBonus 却带着被动，所以「无额外属性」要连被动一起判。
+        bool hasPassive = eq != null && eq.skillPassives != null && eq.skillPassives.Count > 0;
+        if ((eq?.attrBonus == null || eq.attrBonus.Count == 0) && !hasPassive) return "（无额外属性）";
         var sb = new System.Text.StringBuilder();
-        int n = Mathf.Min(6, eq.attrBonus.Count);
+        int n = eq.attrBonus != null ? Mathf.Min(6, eq.attrBonus.Count) : 0;
         for (int i = 0; i < n; i++)
         {
             var a = eq.attrBonus[i];
             if (a == null) continue;
-            string v = a.isPercent ? $"{a.value * 100f:0.#}%" : a.value.ToString("0.#");
+            // 2026-10-09 主人拍板：比例属性（isPercent=false + 小数值）按百分比显示，统一走共享口径
+            string v = EquipUiText.Value(a.attrType, a.value, a.isPercent);
             sb.Append(EquipUiText.Attr(a.attrType)).Append(" +").Append(v);
             if (i < n - 1) sb.Append('\n');
         }
+        AppendPassiveLines(sb, eq);
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// 2026-10-09 主人拍板：传奇被动要在 UI 上看得见。
+    /// 把 skillPassives 逐条追加成「【被动】吸血 6.5%」；没有被动就一行都不加（不显示「【被动】无」）。
+    /// 数值渲染沿用本文件 attrBonus 的同一套口径 —— 2026-10-09 起统一走 EquipUiText.Value：
+    /// isPercent 乘 100 带 %；比例属性即便 isPercent=false（小数值）也按百分比显示；其余 flat 直接 0.#。
+    /// </summary>
+    static void AppendPassiveLines(System.Text.StringBuilder sb, EquipInstance eq)
+    {
+        if (sb == null || eq == null || eq.skillPassives == null) return;
+        for (int i = 0; i < eq.skillPassives.Count; i++)
+        {
+            var p = eq.skillPassives[i];
+            if (p == null) continue;
+            if (sb.Length > 0) sb.Append('\n');
+            string pv = EquipUiText.Value(p.attrType, p.value, p.isPercent);
+            sb.Append("【被动】").Append(EquipUiText.Attr(p.attrType)).Append(' ').Append(pv);
+        }
     }
 
     /// <summary>按 attrType 聚合同一装备的属性值（flat / percent 分开两张表，避免混加）。</summary>
@@ -920,20 +944,24 @@ public class EquipDropPopupUI : MonoBehaviour
     /// <summary>带「提升」高亮的属性文本：提升的属性用绿色 ↑ 标出（依赖 Text.supportRichText）。</summary>
     static string FormatAttrsWithDelta(EquipInstance eq, EquipInstance worn)
     {
-        if (eq?.attrBonus == null || eq.attrBonus.Count == 0) return "（无额外属性）";
+        // 2026-10-09 主人拍板：传奇被动要在 UI 上看得见（同 FormatAttrs，被动也进这张卡面）。
+        bool hasPassive = eq != null && eq.skillPassives != null && eq.skillPassives.Count > 0;
+        if ((eq?.attrBonus == null || eq.attrBonus.Count == 0) && !hasPassive) return "（无额外属性）";
         var sb = new System.Text.StringBuilder();
-        int n = Mathf.Min(6, eq.attrBonus.Count);
+        int n = eq.attrBonus != null ? Mathf.Min(6, eq.attrBonus.Count) : 0;
         for (int i = 0; i < n; i++)
         {
             var a = eq.attrBonus[i];
             if (a == null) continue;
-            string v = a.isPercent ? $"{a.value * 100f:0.#}%" : a.value.ToString("0.#");
+            // 2026-10-09 主人拍板：比例属性（isPercent=false + 小数值）按百分比显示，统一走共享口径
+            string v = EquipUiText.Value(a.attrType, a.value, a.isPercent);
             string line = EquipUiText.Attr(a.attrType) + " +" + v;
             if (IsAttrImproved(a, worn))
                 line = "<color=#66E06A>↑ " + line + "</color>";
             sb.Append(line);
             if (i < n - 1) sb.Append('\n');
         }
+        AppendPassiveLines(sb, eq);
         return sb.ToString();
     }
 

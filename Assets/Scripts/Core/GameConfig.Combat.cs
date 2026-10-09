@@ -177,10 +177,12 @@ public static partial class GameConfig
     public static float DefaultCritMultiplier => CRIT_MULTIPLIER;
 
     /// <summary>
-    /// 吸血（主人 2026-09-26 拍板）：造成伤害后按本比例给「造成伤害的一方」回血（10%）。
-    /// 装备词缀「吸血」（AttrType.LifeSteal，配表 0.02~0.05 的比例值）在其上叠加；没穿吸血装就是 10%。
+    /// 吸血：【2026-10-09 主人拍板】玩家/我方**不再自带吸血**，本基础比例归零。
+    /// 只有装备词缀 / 技能真的带「吸血」（AttrType.LifeSteal，配表 0.02~0.05 的比例值）时才回血；
+    /// 一点吸血都没带就是 0，不回血。
+    /// 想恢复旧行为（一上来人人 10% 吸血）：把这个常量改回 0.1f 即可。
     /// </summary>
-    public const float LIFESTEAL_RATIO = 0.1f;
+    public const float LIFESTEAL_RATIO = 0f;
 
     /// <summary>
     /// 魔法防御的**基础真源**：属性系统初始化时写入 AttrType.MagicDefense，之后由装备/词缀往上叠。

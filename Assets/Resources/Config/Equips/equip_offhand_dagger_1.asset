@@ -23,11 +23,8 @@ MonoBehaviour:
   minLevel: 1
   baseAttr:
   - attrType: 5
-    value: 2
+    value: 5
     isPercent: 0
-  - attrType: 7
-    value: 0.05
-    isPercent: 1
   globalBonus:
     attrType: 0
     value: 0

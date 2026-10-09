@@ -48,11 +48,18 @@ public abstract class BattleMode : IBattleMode
     }
 }
 
-/// <summary>主线冒险：正常章节推进，掉装备。</summary>
+/// <summary>主线冒险：正常章节推进，通关只发奖励道具（不掉装备）。</summary>
 public sealed class NormalBattleMode : BattleMode
 {
     public override BattleModeId Id => BattleModeId.Normal;
     public override string DisplayName => "主线冒险";
+
+    /// <summary>
+    /// 2026-10-09 主人拍板：关卡不再掉装备，通关只发奖励道具（金币 / 材料 / 抽奖币之类）；
+    /// 装备的唯一产出来源改为抽奖（<c>DraftPool</c>）。
+    /// 以后要开「武器副本」这类活动，就在那个模式里覆写 <c>DropsEquipment => true</c>，核心逻辑不用动。
+    /// </summary>
+    public override bool DropsEquipment => false;
 }
 
 /// <summary>

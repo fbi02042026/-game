@@ -23,12 +23,13 @@ MonoBehaviour:
   minLevel: 1
   baseAttr:
   - attrType: 10
-    value: 8
+    value: 9
     isPercent: 0
   globalBonus:
     attrType: 0
     value: 0
     isPercent: 0
+  skillPassives: []
   isLegendary: 0
   slotType: 1
   weaponType: 3
