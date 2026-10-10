@@ -31,8 +31,13 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// </summary>
     const float DefaultHold = 2.4f;
 
-    static readonly Vector2 BaseBubbleSize = new Vector2(200f, 107f);
-    const float PadX = 18f;
+    /// <summary>
+    /// 气泡基准尺寸。【2026-10-10 主人反馈「玩家头顶气泡字太挤」】宽 200 → 260：
+    /// 宽了才装得下一句完整台词（例：「算了，我躺一会儿——你们随意。」），高度交回等比放大去处理。
+    /// </summary>
+    static readonly Vector2 BaseBubbleSize = new Vector2(260f, 107f);
+    /// <summary>左右内边距：同步 18 → 22，气泡拉宽后留白要跟上，别让字贴边框。</summary>
+    const float PadX = 22f;
     const float PadTop = 14f;
     const float PadBottom = 22f;
     /// <summary>头顶气泡正文字号。2026-10-10 主人拍板：字太小看费劲，22→26，要再调改这一个常量。</summary>

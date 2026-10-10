@@ -126,6 +126,8 @@ public sealed class SkillCastService
         // 上膛：接下来 PLAYER_SKILL_GCD 秒内不再放下一个技能
         bm.ArmPlayerSkillGcd();
         TutorialDirector.Instance?.NotifyPlayerSkillUsed();
+        // 左侧技能释放通知：图标走本局技能 id（realId），名字取运行时技能名
+        SkillCastNotifyController.PushPlayerSkill(realId, skill.skillName);
         Debug.Log($"[BattleManager] 玩家技能释放: {skill.skillName} ({realId}) → {(healTarget != null ? healTarget.name : "default")}");
         return true;
     }
@@ -213,6 +215,8 @@ public sealed class SkillCastService
         SkillRegistry.Instance?.PlaySkillVfx(
             skill.skillId, vfxFrom, vfxTo, true, face, vfxAttach, merc.GetBasicAttackVfxKit());
 
+        // 左侧技能释放通知：佣兵与玩家共用一侧，图标走 merc_skills 表
+        SkillCastNotifyController.PushMercSkill(merc.mercId, merc.DisplayName, skill.skillId, skill.skillName);
         Debug.Log($"[BattleManager] 佣兵技能释放: {merc.mercId} → {skill.skillName} ({skill.skillId}) manual={manual}");
         return true;
     }

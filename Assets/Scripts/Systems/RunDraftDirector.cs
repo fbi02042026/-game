@@ -175,6 +175,14 @@ public class RunDraftDirector : MonoBehaviour
         string msg = ApplyCard(card);
         RunLoadout.Save();
         RunSkillBarUI.Refresh();
+        // 2026-10-10 主人反馈：抽中佣兵的 toast 弹出时，底部头像槽 / 佣兵技能槽还是空的。
+        // 根因是「先弹 toast、后刷 UI」—— 这里改成先刷底部 HUD，再弹 toast，玩家一眼能同时看到两处。
+        if (BattleUI.Instance != null)
+        {
+            BattleUI.Instance.UpdateCharacterSlots();
+            BattleUI.Instance.UpdateMercSkillSlots();
+            BattleUI.Instance.UpdateSkillAvatars();
+        }
         if (!string.IsNullOrEmpty(msg))
             GlobalToastUI.Show(msg, true);   // 2026-10-06 主人拍板：物品/技能/佣兵获得，force 弹出
     }
@@ -357,7 +365,8 @@ public class RunDraftDirector : MonoBehaviour
             if (hero != null) hero.RecalcAttr();
             // 【2026-10-06 主人拍板】换上的新装备打「新」标记，点「继续」才消失。
             NewLootMarks.Mark(NewLootMarks.KindEquip, eq.templateId);
-            done?.Invoke(true, $"获得装备：{NameOf(card, eq)}");
+            // 2026-10-10 主人拍板：装备到账文案统一「恭喜获得 XXX」（原「获得装备：XXX」）
+            done?.Invoke(true, $"恭喜获得 {NameOf(card, eq)}");
             yield break;
         }
 

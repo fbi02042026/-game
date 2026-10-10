@@ -1773,7 +1773,20 @@ public class Monster : UnitBase
         }
 
         SkillRegistry.Instance?.PlaySkillVfx(_skillId, hitPos, false, GetVfxFacingDir(), transform);
+        // 右侧镜像技能释放通知：与玩家侧同一模板，x 取反（不翻 scale.x，文字不镜像）
+        SkillCastNotifyController.PushEnemySkill(_skillId, SkillNotifyName());
         ApplySkillDamage(damage, radius, primaryTarget, hitPos.x);
+    }
+
+    /// <summary>技能通知上的敌人名：模板怪物名 → 模板 id → 节点名。</summary>
+    string SkillNotifyName()
+    {
+        if (config != null)
+        {
+            if (!string.IsNullOrEmpty(config.monsterName)) return config.monsterName;
+            if (!string.IsNullOrEmpty(config.id)) return config.id;
+        }
+        return name;
     }
 
     IEnumerator CoRangedSkillProjectile(

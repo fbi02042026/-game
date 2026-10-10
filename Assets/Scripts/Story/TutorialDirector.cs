@@ -525,7 +525,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
         // 第 4 步：吐槽一句（搞笑档：下面这两句是唯一文案源，想改措辞改这里即可）
         yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "我才刚握上新武器……这就结束了？", 2.4f),
+            new TalkLine(Hero.Instance, "我才刚握上新装备……这就结束了？", 2.4f),
             // 第 5 步：躺尸 —— Hero 没有倒地 / 躺下动画（只有死亡动画，不能用），
             // 所以这一步只用「冻结 + 自暴自弃的台词 + 停顿」表达放弃挣扎，不变动画、不碰 transform。
             new TalkLine(Hero.Instance, "算了，我躺一会儿——你们随意。", 2.4f));
@@ -699,8 +699,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
     /// <summary>天降起点：玩家左侧这么远 = 屏幕外（2026-10-10 主人拍板：塔克从左侧跳进来）。</summary>
     const float RescueEnterDist = 9.5f;
 
-    /// <summary>天降落点：玩家右前方这么远（站到玩家和怪之间）。</summary>
-    const float RescueLandDist = 2.0f;
+    /// <summary>
+    /// 天降落点：玩家右前方这么远（站到玩家和怪之间）。
+    /// 【2026-10-10 主人拍板】2.0 → 1.2（约一个身位）：原来落得太远，看着像跳进怪堆里。
+    /// </summary>
+    const float RescueLandDist = 1.2f;
 
     /// <summary>清场挥击的攻击动画倍速（2026-10-10 主人拍板：动作加快，不要只是位移）。</summary>
     const float RescueAttackAnimSpeed = 3f;
@@ -810,6 +813,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         float dashDur = Mathf.Clamp(1.6f / vc, 0.09f, 0.20f);
         float holdDur = Mathf.Clamp(0.6f / vc, 0.02f, 0.06f);
 
+        // 【2026-10-10 主人拍板】冲刺要有拖尾/残影：起跑前开，回原位后立刻停（到点自动收干净，不留永久对象）。
+        float trailDur = (victims.Count + 1) * dashDur + victims.Count * holdDur;
+        if (victims.Count > 0) TutorialRescueAfterimage.RunTrail(merc, trailDur);
+
         float curX = homeX;
         for (int i = 0; i < victims.Count; i++)
         {
@@ -828,6 +835,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         // 回原位（同样补间过去，不瞬移）→ 停 0.3 秒 → 全体一起死
         yield return CoMoveUnitTo(merc.gameObject, curX, homeX, z, dashDur);
+        TutorialRescueAfterimage.StopTrail();
         yield return new WaitForSecondsRealtime(0.3f);
 
         for (int i = 0; i < victims.Count; i++)

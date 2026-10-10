@@ -132,10 +132,24 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
     }
 
     /// <summary>
+    /// 我方打出的暴击飘字节流计数。
+    /// 【2026-10-10 主人反馈「暴击999 紫色太多」】我方暴击每 2 次只显示 1 次；
+    /// 普通伤害 / 我方受击（含敌方暴击我方）不受影响，照常显示。
+    /// </summary>
+    static int _critShowCounter;
+
+    /// <summary>
     /// 带元素色的伤害飘字：火 = 橙、冰 = 蓝。数字已含附加伤害（见 UnitBase.ResolveElementalBonus）。
     /// </summary>
     public void SpawnDamageText(Vector3 pos, int damage, bool isCrit, bool victimIsAlly, int hitVfxFacing, DamageElement element)
     {
+        // 只砍「我方打敌方」的紫色暴击：敌方暴击我方（victimIsAlly）仍然每次都弹，警示信息不能省。
+        if (isCrit && !victimIsAlly)
+        {
+            _critShowCounter++;
+            if (_critShowCounter % 2 != 0) return;
+        }
+
         TextKind kind = isCrit
             ? (victimIsAlly ? TextKind.InCrit : TextKind.OutCrit)
             : (victimIsAlly ? TextKind.InNormal : TextKind.OutNormal);

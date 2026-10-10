@@ -34,7 +34,8 @@ public static class SpeechBubbleFit
         Text text,
         string content,
         Vector2 baseSize,
-        float maxScale = 1.75f)
+        // 2026-10-10 主人拍板：1.75 → 2.0。等比放大上限放宽，超长句才不会被迫截断成「…」。
+        float maxScale = 2f)
     {
         if (bubbleRt == null || text == null)
             return content ?? "";

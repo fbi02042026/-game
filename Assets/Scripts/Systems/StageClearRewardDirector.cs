@@ -1094,9 +1094,12 @@ public class StageClearRewardDirector : MonoBehaviour
                 if (chosen.Kind == DraftCardKind.Equip)
                 {
                     // 与进关抽奖同口径：换不换要问玩家，换下来的旧件折强化石
+                    // 2026-10-10 主人反馈：通关奖励拿到装备却没弹提示 —— 成功也要弹（force=true，不被遮罩吞），
+                    // 只有失败才是普通提示。文案同进关抽奖，走 CoApplyEquipCard 的「恭喜获得 XXX」。
                     yield return dir.CoApplyEquipCard(chosen, (ok, msg) =>
                     {
-                        if (!ok && !string.IsNullOrEmpty(msg)) UIManager.Instance?.ShowToast(msg);
+                        if (string.IsNullOrEmpty(msg)) return;
+                        UIManager.Instance?.ShowToast(msg, ok);
                     });
                 }
                 else if (!dir.TryApplyCard(chosen, out string applyMsg))

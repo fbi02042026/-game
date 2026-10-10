@@ -599,13 +599,15 @@ public class TutorialHintUI : MonoBehaviour
     float MeasureBannerHeight(float bannerWidth)
     {
         const float minH = 100f;
-        const float maxH = 340f;
+        // 2026-10-10 主人反馈：多行文案仍溢出底框 —— 上限 340 → 420（写得再长也塞得下），
+        // 缓冲 28 → 48：28 只够抵消 HintText 上下边距（18+10），多行时行距还要再吃掉一截。
+        const float maxH = 420f;
         if (_label == null || string.IsNullOrEmpty(_label.text)) return minH;
         float textW = Mathf.Max(40f, bannerWidth - 56f);   // 与 HintText 左右 offsetMin/Max(28) 对应
         var settings = _label.GetGenerationSettings(new Vector2(textW, 9999f));
         float pref = _label.cachedTextGeneratorForLayout.GetPreferredHeight(_label.text, settings);
         if (pref <= 0f) return minH;
-        return Mathf.Clamp(Mathf.CeilToInt(pref) + 28f, minH, maxH);
+        return Mathf.Clamp(Mathf.CeilToInt(pref) + 48f, minH, maxH);
     }
 
     void BeginSwipeToTarget()
