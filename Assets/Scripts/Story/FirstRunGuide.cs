@@ -62,7 +62,10 @@ public class FirstRunGuide : MonoBehaviour
     const float MaskAlpha = 0.45f;
     const float TargetPad = 10f;
     const float RingWidth = 5f;
-    const float BubbleHeight = 140f;
+    /// <summary>气泡框高。2026-10-10 主人拍板：正文 26→32 后欢迎那段要占 5 行，140 装不下（会溢出底框），故 140→240。</summary>
+    const float BubbleHeight = 240f;
+    /// <summary>引导气泡正文字号。2026-10-10 主人拍板：字太小看费劲，26→32，要再调改这一个常量。</summary>
+    const int BubbleFontSize = 32;
     const float BubbleSideInset = 20f;
     const float RingPulseHz = 1.6f;
     /// <summary>气泡打字机速度（字/秒）。打完之前点屏幕不推进，防止玩家点太快看不到字。</summary>
@@ -704,7 +707,7 @@ public class FirstRunGuide : MonoBehaviour
         _bubbleRt.sizeDelta = new Vector2(0f, BubbleHeight);
         bg.gameObject.SetActive(false);
 
-        _bubbleText = NewText(_bubbleRt, "Text", string.Empty, 26, TextAnchor.MiddleLeft);
+        _bubbleText = NewText(_bubbleRt, "Text", string.Empty, BubbleFontSize, TextAnchor.MiddleLeft);
         _bubbleText.color = TextColor;
         _bubbleText.horizontalOverflow = HorizontalWrapMode.Wrap;
 

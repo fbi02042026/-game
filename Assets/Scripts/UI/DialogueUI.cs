@@ -95,7 +95,8 @@ public class DialogueUI : MonoBehaviour
         public Vector3 scale;
     }
 
-    const int DialogueBodyFontSize = 28;
+    /// <summary>剧情对白正文字号。2026-10-10 主人拍板：字太小看费劲，28→32，要再调改这一个常量。</summary>
+    const int DialogueBodyFontSize = 32;
     const float LocBlackInDur = 0.55f;
     const float LocHoldDur = 2.0f;
     const float LocTextFadeDur = 1.1f;

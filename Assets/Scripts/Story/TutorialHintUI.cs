@@ -38,6 +38,12 @@ public class TutorialHintUI : MonoBehaviour
     float _openT = 1f;
     const int DefaultSortOrder = GameConfig.UiSort.TutorialHint;
     const string PrefabResourcesPath = "Prefabs/UI/TutorialHintUI";
+    /// <summary>
+    /// 引导条文字字号。2026-10-10 主人要求「引导的字可以大点」：26 → 34。
+    /// 红线：不改预制体/场景，字号一律由代码统一指定 ——
+    /// Build()（代码搭 UI）与 TryBindFromHierarchy()（走预制体）两条路径都必须用这个值。
+    /// </summary>
+    const int HintFontSize = 34;
 
     public static TutorialHintUI Ensure()
     {
@@ -126,6 +132,12 @@ public class TutorialHintUI : MonoBehaviour
             if (hint != null) _label = hint.GetComponent<Text>();
             if (_label != null)
             {
+                // 红线：不改预制体，字号在代码里统一指定。走预制体路径时不会执行 Build()，
+                // 这里必须强制设一次，否则文字仍是预制体里的旧字号（改 Build() 对此路径无效）。
+                _label.fontSize = HintFontSize;
+                // 长的文案自动分两行：与 Build() 保持一致（预制体本身也是 Wrap/Overflow）
+                _label.horizontalOverflow = HorizontalWrapMode.Wrap;
+                _label.verticalOverflow = VerticalWrapMode.Overflow;
                 if (_label.font == null)
                     _label.font = GameFonts.GetChinese();
                 _label.color = new Color(0xFC / 255f, 0xFD / 255f, 0xBE / 255f, 1f);
@@ -197,7 +209,8 @@ public class TutorialHintUI : MonoBehaviour
         _bannerRt.anchoredPosition = Vector2.zero;
         _bannerRt.sizeDelta = new Vector2(0f, 100f);
 
-        _label = CreateText(banner.transform, "HintText", "", 26, TextAnchor.MiddleCenter);
+        // 红线：不改预制体，字号在代码里统一指定（与 TryBindFromHierarchy() 共用 HintFontSize）
+        _label = CreateText(banner.transform, "HintText", "", HintFontSize, TextAnchor.MiddleCenter);
         _label.font = GameFonts.GetChinese();
         _label.color = new Color(0xFC / 255f, 0xFD / 255f, 0xBE / 255f, 1f);
         var lrt = _label.rectTransform;

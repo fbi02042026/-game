@@ -13,7 +13,7 @@ public static class TalentDefs
     public enum AttrKind
     {
         Attack,          // 力量：物理攻击（固定值，只加 AttrType.Attack）
-        Intelligence,    // 智力：2026-09-29 新增 —— 法系攻击（固定值，只加 AttrType.MagicAttack）
+        Intelligence,    // 2026-10-10：左列第 4 槽已改走 AttrKind.Attack，本枚举项暂无节点使用，保留以防配表/后续复用
         Hp,
         Defense,
         CritRate,
@@ -552,20 +552,21 @@ public static class TalentDefs
     /// <summary>
     /// 2026-09-29 主人重排：左列改 **4 类 × 10 组 = 40 个节点**。
     /// 去掉「精准(暴击) / 敏捷(攻速)」（这两个右列已有 R_C3 精准 / R_C4 迅捷，左列重复），
-    /// 新增「智力」= 法系攻击，与「力量」= 物理攻击并列。
+    /// 2026-10-10 主人拍板：四个槽 = 生命 / 攻击 / 双防 / 攻击。
     /// <para>🔴 设计意图（主人原话）：**左列是跨局账号成长，玩家点满之后可以随时换职业** ——
-    /// 所以力量给物攻、智力给魔攻，**两条都给、不做职业过滤**，
-    /// 换个职业立刻就能用，不会出现「我只点了法系的，玩不了物理」。</para>
+    /// 两个攻击槽都同时增加 Attack 和 MagicAttack，不区分物理法系，
+    /// 换职业立刻就能用，不会出现废节点。</para>
     /// 对照：等级 +3 和装备 ATK 是**局内**成长（hero.level 不进存档、装备单局有效），
     /// 那两条仍按当前职业分流，只有天赋这条跨局的给全。
     /// </summary>
     static LeftNode[] BuildLeft()
     {
-        // 2026-09-29 主人定序：**体质 → 物攻 → 防御 → 魔攻**
-        string[] names = { "体质", "力量", "防御", "智力" };
+        // 2026-09-29 主人定序；2026-10-10 改序：**体质 → 攻击 → 防御 → 攻击**
+        // （第 4 槽原「智力 = 魔攻」，主人拍板「所有职业统一加攻击」，改成第二个攻击槽）
+        string[] names = { "体质", "力量", "防御", "攻击" };
         string[] romans = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
-        float[] atk = { 3, 4, 5, 6, 7, 8, 10, 12, 14, 16 };        // 力量：物攻，点满 +85
-        float[] mag = { 3, 4, 5, 6, 7, 8, 10, 12, 14, 16 };        // 智力：魔攻，点满 +85
+        float[] atk = { 3, 4, 5, 6, 7, 8, 10, 12, 14, 16 };        // 攻击：Attack + MagicAttack，点满 +85
+        float[] mag = { 3, 4, 5, 6, 7, 8, 10, 12, 14, 16 };        // 攻击：Attack + MagicAttack，点满 +85
         float[] hp = { 15, 20, 25, 32, 40, 50, 60, 72, 85, 100 };  // 体质：生命，点满 +499
         float[] def = { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };          // 防御：物防+魔防各 +65
         var list = new LeftNode[40];
@@ -578,10 +579,14 @@ public static class TalentDefs
             switch (slot)
             {
                 case 0: fx = Fx(AttrKind.Hp, hp[group], $"生命 +{hp[group]:0}"); break;
-                case 1: fx = Fx(AttrKind.Attack, atk[group], $"物攻 +{atk[group]:0}"); break;
+                // 2026-10-10：攻击天赋与防御同口径 —— Attack + MagicAttack **两侧都加**，
+                // 见 AttrSystem.ApplyTalentEffect（左右列走同一条路径，不再按列切分口径）。
+                // 右列的物攻 / 魔攻区分度在 PhysDamage / MagicDamage 专精节点上，与 AttrKind.Attack 无关。
+                // 文案写「攻击」才对得上实际效果 —— 写「物攻」会让法系玩家以为这条白点了。
+                case 1: fx = Fx(AttrKind.Attack, atk[group], $"攻击 +{atk[group]:0}"); break;
                 // 防御天赋是**物防 + 魔防两侧都加**，文案写「双防」才对得上实际效果
                 case 2: fx = Fx(AttrKind.Defense, def[group], $"双防 +{def[group]:0}"); break;
-                default: fx = Fx(AttrKind.Intelligence, mag[group], $"魔攻 +{mag[group]:0}"); break;
+                default: fx = Fx(AttrKind.Attack, mag[group], $"攻击 +{mag[group]:0}"); break;
             }
             list[i] = new LeftNode
             {
@@ -664,8 +669,12 @@ public static class TalentDefs
             case AttrKind.PhysDamage: return "物理伤害";
             case AttrKind.MagicDamage: return "魔法伤害";
             case AttrKind.WeaponSwordShield: return "职业伤害";
-            case AttrKind.Attack: return "物攻";
-            case AttrKind.Intelligence: return "魔攻";
+            // 2026-10-10：Attack 与 Defense 同口径 —— 物攻 / 魔攻**两侧都加**（见 AttrSystem.ApplyTalentEffect），
+            // 所以标签用中性的「攻击」而不是「物攻」；写「物攻」会让法系玩家以为这条白点了。
+            // （同理 Defense 写「防御」不写「物防」，因为它同时加 Defense 和 MagicDefense。）
+            // 调用链：EffectSummary → TalentSystem.AnnounceRightGain（Toast）+ TalentUI 选项弹层描述。
+            case AttrKind.Attack: return "攻击";
+            case AttrKind.Intelligence: return "智力";
             case AttrKind.Hp: return "生命";
             case AttrKind.Defense: return "防御";
             case AttrKind.CritRate: return "暴击率";

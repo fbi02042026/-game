@@ -201,10 +201,21 @@ public class AttrSystem
         // 力量→物理攻击。玩家职业表已含 ATK，不再叠力量×2（否则开局总攻虚高）
         if (!UsesPlayerJobTable)
             AddAttr(AttrType.Attack, str * 2f, false);
-        AddAttr(AttrType.PhyPower, str * 0.01f, true);
 
-        // 智力→魔法攻击
-        AddAttr(AttrType.MagicPower, intel * 0.01f, true);
+        // 2026-10-10 主人拍板：PhyPower / MagicPower 的语义是「**加成量**」（0 = 无加成），**不是倍率**。
+        // DamageFormula.BuildSkillBase 用的是 baseDamage + attack * mul * (1f + phy + mag)，
+        // 所以这两条必须**加算**（isPercent = false）从 0 往上叠，不能乘算。
+        // 原写法 isPercent = true 走 _attr[type] *= (1 + value)，而基础值恒为 0 → 0 × 1.85 = 0，整条派生是死代码。
+        // 🔴 也不要给 MagicPower 补基础值 1f：那会变成 (1 + 1 + 0.85) 伤害直接翻倍。
+        // 🔴 本次只分流这两条：其余派生（体质→MaxHp/Defense、敏捷→攻速/暴击、力量→Attack）是既有行为，
+        //    怪物一直在吃，不改、也不动系数（动系数会全局影响怪物血量 / 防御）。
+        if (ShouldApplyPowerDerived())
+        {
+            AddAttr(AttrType.PhyPower, str * 0.01f, false);
+
+            // 智力→魔法强度（+85 智力 → MagicPower = 0.85 → 魔法技能伤害 ×1.85）
+            AddAttr(AttrType.MagicPower, intel * 0.01f, false);
+        }
 
         // 敏捷→攻速+暴击
         AddAttr(AttrType.AttackSpeed, agi * 0.01f, true);
@@ -214,6 +225,17 @@ public class AttrSystem
         AddAttr(AttrType.MaxHp, vit * 10f, false);
         AddAttr(AttrType.Defense, vit * 1f, false);
     }
+
+    /// <summary>
+    /// 2026-10-10 主人拍板：PhyPower / MagicPower 派生按 OwnerKind 分流。
+    /// RecalcAllAttr / ApplyDerivedAttributes 是玩家 / 佣兵 / 怪物**三方共用**，
+    /// 而怪物和佣兵的 Strength / Intelligence 基底都是 GameConfig.BASE_STRENGTH = BASE_INTELLIGENCE = 5，
+    /// 不加闸的话派生复活后它们的技能伤害会被隐性调高 ×(1 + 0.05 + 0.05) = ×1.10。
+    /// 天赋（左列）和装备词缀目前都只有玩家有，所以**默认只给 Player**。
+    /// 若要让佣兵也吃，在这里加 <c>|| OwnerKind == AttrOwnerKind.Merc</c>。
+    /// </summary>
+    private bool ShouldApplyPowerDerived()
+        => OwnerKind == AttrOwnerKind.Player;
 
     void ApplyPlayerJobBaseIfAny()
     {
@@ -344,7 +366,10 @@ public class AttrSystem
         var opt = node.IsJobChoice ? node.ChosenOption(chosenJob)
                                    : (node.options != null && node.options.Length > 0 ? node.options[0] : null);
         if (opt == null) return;
-        // 复用左列已有的 Effect→Attr 映射（ApplyTalentEffect 已处理 %/绝对值）
+        // 复用左列已有的 Effect→Attr 映射（ApplyTalentEffect 已处理 %/绝对值）。
+        // 2026-10-10：右列的物攻 / 魔攻区分由 PhysDamage / MagicDamage 两个**专精**节点承担
+        //（玩家进局后主动选物理还是魔法，走 PhyPower / MagicPower，跨系按 CrossPathRatio 打折），
+        // 与 AttrKind.Attack（固定值攻击）无关 —— Attack 左右列同口径，都是物攻 / 魔攻两侧都加。
         ApplyTalentEffect(new TalentDefs.Effect { kind = opt.kind, value = node.EffectValue(level, chosenJob) });
     }
 
@@ -354,14 +379,24 @@ public class AttrSystem
         switch (fx.kind)
         {
             case TalentDefs.AttrKind.Attack:
-                // 2026-09-29：天赋是**跨局账号成长**，力量只加物攻、不做职业过滤。
-                // 玩家点满之后随时可以换职业，物攻那一栏换到物理职业立刻能用 ——
-                // 若按当前职业分流，换了职业就等于前面积累的一半全废。
+                // 2026-10-10：与 Defense 同口径 —— 攻击是**跨局账号成长**，物攻 / 魔攻**两侧都加**，
+                // 玩家随时换职业不吃亏（左列跨局、右列局内都一样，左右列同口径）。
+                // ⚠️ 不要把「右列保留区分度」理解成这里要切单加：右列的区分度在 PhysDamage / MagicDamage 专精节点上。
                 AddAttr(AttrType.Attack, fx.value, false);
+                AddAttr(AttrType.MagicAttack, fx.value, false);
                 break;
             case TalentDefs.AttrKind.Intelligence:
-                // 2026-09-29 新增：智力 → 法系攻击（与力量对称）。
-                AddAttr(AttrType.MagicAttack, fx.value, false);
+                // 2026-10-10：左列第 4 槽已改走 AttrKind.Attack，此分支暂无天赋节点使用；保留以防将来配表/节点复用。注意这里加的是基础属性 Intelligence，会走 ApplyDerivedAttributes 派生成 MagicPower，也会喂蓝条。
+                // 2026-10-10 主人拍板：口径唯一 = 只喂**基础属性 Intelligence**，系数 1.0。
+                // 原写法直接加 MagicAttack，问题有两个：
+                //   ① 蓝条现在能吃到 —— BattleManager.PlayerMpPool / PlayerMpRegen 是「曲线 + 攻击项 + 智力项」双叠加
+                //      （2026-10-10 追加澄清：池 = MpProfile.Pool + 攻击 × MP_POOL_PER_ATTACK + 智力 × MP_POOL_PER_INTELLIGENCE），
+                //      这里的 Intelligence 会走智力项喂蓝条，装备的智力词条照样生效；
+                //      天赋左列不再喂智力只是简化天赋侧，不等于砍掉智力的蓝条收益。
+                //   ② T1 把派生修好之后，法师的智力会被「派生 MagicPower」和「直接加 MagicAttack」算两遍。
+                // 现在只加 Intelligence：魔法强度走 ApplyDerivedAttributes 派生的 MagicPower，
+                // 点满（10 节点共 +85）→ 魔法强度 +85%。蓝条则是「攻击项 + 智力项」双叠加，这里的智力照旧进蓝池 / 回蓝。
+                AddAttr(AttrType.Intelligence, fx.value, false);
                 break;
             case TalentDefs.AttrKind.Hp:
                 AddAttr(AttrType.MaxHp, fx.value, false);
@@ -391,8 +426,11 @@ public class AttrSystem
                     bool wantPhys = fx.kind == TalentDefs.AttrKind.PhysDamage;
                     bool crossPath = wantPhys == IsMagicJobNow();
                     float ratio = crossPath ? GameConfig.TALENT_CROSS_PATH_RATIO : 1f;
+                    // 2026-10-10：isPercent true → false。PhyPower / MagicPower 是「加成量」（基础值恒为 0、从不登记），
+                    // 乘算走 _attr[type] *= (1 + value) → 0 × 1.6 = 0，右列「物理 / 魔法专精」满级 60% 点了完全没效果。
+                    // 改加算后与 ApplyDerivedAttributes 的派生口径一致，真正生效。
                     AddAttr(wantPhys ? AttrType.PhyPower : AttrType.MagicPower,
-                            fx.value * 0.01f * ratio, true);
+                            fx.value * 0.01f * ratio, false);
                 }
                 break;
             case TalentDefs.AttrKind.EliteDamage:
@@ -408,7 +446,8 @@ public class AttrSystem
                 // 武器专精：按<b>当前职业</b>落到对应的 Power。
                 // 旧代码无条件把剑盾/重装→PhyPower、远程法系→MagicPower，
                 // 于是法师点「剑盾伤害 +5%」拿到的是自己根本不用的 PhyPower —— 点了等于没点。
-                AddAttr(PrimaryPowerAttr(), fx.value * 0.01f, true);
+                // 2026-10-10：isPercent true → false —— 同 PhyPower / MagicPower 的加算口径（满级 20% 原先全废）。
+                AddAttr(PrimaryPowerAttr(), fx.value * 0.01f, false);
                 break;
             case TalentDefs.AttrKind.SkillCooldown:
                 AddAttr(AttrType.CooldownReduce, fx.value * 0.01f, false);

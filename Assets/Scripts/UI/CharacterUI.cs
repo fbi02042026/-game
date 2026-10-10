@@ -505,8 +505,10 @@ public class CharacterUI : MonoBehaviour, ITownPage
             if (e == null) continue;
             switch (e.kind)
             {
-                case TalentDefs.AttrKind.Attack: atk += e.value; break;
-                case TalentDefs.AttrKind.Intelligence: mag += e.value; break;
+                // 2026-10-10：左列第 4 槽已改走 Attack；攻击类节点同时增加 Attack 和 MagicAttack，
+                // 不再区分物理/法系，因此同一份天赋值要同时累加进 atk 与 mag。
+                // 面板两侧都显示 +N，保证与 AttrSystem 的实际加成一致。
+                case TalentDefs.AttrKind.Attack: atk += e.value; mag += e.value; break;
                 case TalentDefs.AttrKind.Hp: hp += e.value; break;
                 case TalentDefs.AttrKind.Defense: def += e.value; break;
                 case TalentDefs.AttrKind.CritRate: crit += e.value; break;
@@ -533,8 +535,10 @@ public class CharacterUI : MonoBehaviour, ITownPage
     {
         switch (kind)
         {
-            case TalentDefs.AttrKind.Attack: atk += value; break;
-            case TalentDefs.AttrKind.Intelligence: mag += value; break;
+            // 右列喂的是**战斗属性**；与 AttrSystem.ApplyTalentEffect 同口径：
+            // AttrKind.Attack 是「固定值攻击」，物攻 / 魔攻**两侧都加**（与 Defense 同口径，左右列一致）。
+            // 区分度在 PhysDamage / MagicDamage 专精节点上，不在 Attack。
+            case TalentDefs.AttrKind.Attack: atk += value; mag += value; break;
             case TalentDefs.AttrKind.Hp: hp += value; break;
             case TalentDefs.AttrKind.Defense: def += value; break;
             case TalentDefs.AttrKind.CritRate: crit += value; break;

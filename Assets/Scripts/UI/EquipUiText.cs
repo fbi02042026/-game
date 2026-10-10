@@ -128,6 +128,10 @@ public static class EquipUiText
             case AttrType.IceDamage:
             case AttrType.EliteDamage:
             case AttrType.Poison:
+            // 2026-10-10：PhyPower / MagicPower 的 isPercent 已统一改成 false（加算，小数值 0.12 = 12%）。
+            // 不进这个集合的话，装备面板会把「+12% 物理强度」显示成「+0.1」。
+            case AttrType.PhyPower:
+            case AttrType.MagicPower:
                 return true;
             default:
                 return false;

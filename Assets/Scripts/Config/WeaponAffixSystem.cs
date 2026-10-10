@@ -187,6 +187,11 @@ public static class WeaponAffixSystem
         inst.equipName = BuildName(kind, primary, inst.rarity, baseName);
     }
 
+    /// <summary>
+    /// 2026-10-10 主人拍板：PhyPower / MagicPower 从本表**移除**（即对它们返回 false = 加算）。
+    /// 这两条是「加成量」（基础值恒为 0、从不登记），isPercent = true 会走 _attr[type] *= (1 + value) → 0 × 1.12 = 0，
+    /// 武器的「物理强度 / 魔法强度」词缀在面板上显示 12%、实际生效 0。改加算后与派生口径一致，真正生效。
+    /// </summary>
     static bool IsPercentAttr(AttrType attr)
     {
         switch (attr)
@@ -195,8 +200,6 @@ public static class WeaponAffixSystem
             case AttrType.CritRate:
             case AttrType.Dodge:
             case AttrType.LifeSteal:
-            case AttrType.PhyPower:
-            case AttrType.MagicPower:
             case AttrType.CooldownReduce:
             case AttrType.ExpBonus:
             case AttrType.GoldBonus:

@@ -1843,6 +1843,12 @@ public class Monster : UnitBase
     /// </summary>
     private int _lastAppliedDir = 0;
 
+    public override Transform GetFlipRoot()
+    {
+        if (unitAnim != null && (unitAnim.IsProceduralAnim || unitAnim.UsesFlipXFacing)) return null;
+        return _visualRoot != null ? _visualRoot : transform;
+    }
+
     protected override void ApplyFacing(int dir)
     {
         if (dir == 0) return;

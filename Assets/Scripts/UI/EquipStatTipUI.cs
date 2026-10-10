@@ -16,10 +16,14 @@ public class EquipStatTipUI : MonoBehaviour
 {
     public static EquipStatTipUI Instance { get; private set; }
 
-    const float PanelWidth = 240f;
+    const float PanelWidth = 300f;
     const float HeadHeight = 44f;
-    const float LineHeight = 20f;
+    const float LineHeight = 28f;
     const float PadBottom = 12f;
+    /// <summary>属性行字号（2026-10-10 主人拍板：13 太小看费劲，提到 20；要再大改这一个常量即可）。</summary>
+    const int BodyFontSize = 20;
+    /// <summary>装备名标题字号（2026-10-10 主人拍板：16 太小看费劲，提到 18；要再大改这一个常量即可）。</summary>
+    const int TitleFontSize = 18;
     /// <summary>浮框底边离图标顶边的间距（像素）。</summary>
     const float GapAbove = 10f;
     const float EdgePad = 6f;
@@ -79,7 +83,7 @@ public class EquipStatTipUI : MonoBehaviour
         _panelRt.sizeDelta = new Vector2(PanelWidth, 120f);
 
         // 装备名（顶行）
-        _title = MakeText(_panel.transform, "Title", 16, TextAnchor.MiddleCenter, Color.white);
+        _title = MakeText(_panel.transform, "Title", TitleFontSize, TextAnchor.MiddleCenter, Color.white);
         var tRt = _title.GetComponent<RectTransform>();
         tRt.anchorMin = new Vector2(0f, 1f);
         tRt.anchorMax = new Vector2(1f, 1f);
@@ -88,7 +92,7 @@ public class EquipStatTipUI : MonoBehaviour
         tRt.sizeDelta = new Vector2(-24f, 26f);
 
         // 属性行（多行）
-        _body = MakeText(_panel.transform, "Body", 13, TextAnchor.UpperLeft, new Color(0.86f, 0.86f, 0.9f, 1f));
+        _body = MakeText(_panel.transform, "Body", BodyFontSize, TextAnchor.UpperLeft, new Color(0.86f, 0.86f, 0.9f, 1f));
         var bRt = _body.GetComponent<RectTransform>();
         bRt.anchorMin = Vector2.zero;
         bRt.anchorMax = Vector2.one;
@@ -111,6 +115,8 @@ public class EquipStatTipUI : MonoBehaviour
         var lines = BuildAttrLines(eq);
         _title.text = EquipUiText.EquipTitle(eq);
         _body.text = lines.Count > 0 ? string.Join("\n", lines.ToArray()) : "（无额外属性）";
+        // 2026-10-10 主人拍板：竖列排版；只有一条属性（或「无额外属性」兜底文案）时居中，多条仍左对齐保持整齐竖列
+        _body.alignment = lines.Count <= 1 ? TextAnchor.MiddleCenter : TextAnchor.UpperLeft;
         _panelRt.sizeDelta = new Vector2(PanelWidth, HeadHeight + Mathf.Max(1, lines.Count) * LineHeight + PadBottom);
 
         gameObject.SetActive(true);

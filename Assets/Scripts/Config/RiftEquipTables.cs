@@ -217,6 +217,12 @@ public static class RiftEquipTables
             // 2026-09-26 主人拍板：装备加魔攻/魔防属性（按职业走，法师|牧师）。数值制(点)，与 ATK/DEF 同量级。
             case "MAGIC_ATK": type = AttrType.MagicAttack; return true;
             case "MAGIC_DEF": type = AttrType.MagicDefense; return true;
+            // 2026-10-10 主人拍板：四大基础属性里的「智力 / 力量」进词缀白名单（手套 / 鞋主属性），数值制(点)。
+            // Intelligence 同时喂蓝池（BattleManager）和派生 MagicPower；Strength 走派生 PhyPower。
+            // ⚠️ 配表里一律写英文 ID：MapCnAttrToId 没有「智力」/「力量」的中文映射，
+            //    写中文会原样返回 → 在这里落到 default 分支返回 false，被静默丢弃。
+            case "INTELLIGENCE": type = AttrType.Intelligence; return true;
+            case "STRENGTH": type = AttrType.Strength; return true;
             default: return false;
         }
     }

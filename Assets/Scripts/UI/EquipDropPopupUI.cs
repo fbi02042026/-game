@@ -1045,8 +1045,8 @@ public class EquipDropPopupUI : MonoBehaviour
         var rt = card.rectTransform;
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
         rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2((index - 1) * 210f, -96f);
-        rt.sizeDelta = new Vector2(196f, 350f);
+        rt.anchoredPosition = new Vector2((index - 1) * 210f, -14f);
+        rt.sizeDelta = new Vector2(196f, 440f);
         card.gameObject.AddComponent<Button>().targetGraphic = card;
 
         // 选中高亮：子节点必然盖在卡片底图上，所以用半透明描边色，不要实心
@@ -1071,7 +1071,7 @@ public class EquipDropPopupUI : MonoBehaviour
 
         AnchorTop(CreateText(card.transform, "Name", "—", 22, TextAnchor.UpperCenter).rectTransform, -122f, 176f, 30f);
         AnchorTop(CreateText(card.transform, "Meta", "", 18, TextAnchor.UpperCenter).rectTransform, -156f, 176f, 26f);
-        AnchorTop(CreateText(card.transform, "Attrs", "", 18, TextAnchor.UpperLeft).rectTransform, -188f, 176f, 150f);
+        AnchorTop(CreateText(card.transform, "Attrs", "", 18, TextAnchor.UpperLeft).rectTransform, -188f, 176f, 240f); // 几何与 Prefabs/Battle/EquipDropPopup.prefab 保持一致（卡 440 高、Attrs 框 240 高）
 
         // 推荐角标：右上角绿色「推荐」小牌，由 RefreshCards 按「提升的属性」控制显隐
         var rec = CreateImage(card.transform, "RecommendMark", new Color(0.12f, 0.62f, 0.22f, 1f));

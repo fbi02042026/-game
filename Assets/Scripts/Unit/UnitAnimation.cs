@@ -38,6 +38,8 @@ public class UnitAnimation : MonoBehaviour
     private float _attackAnimDuration = 0.5f;
     /// <summary>普攻动作时长；放技能会临时拉长，普攻时要还原</summary>
     private float _baseAttackDuration = 0.5f;
+    /// <summary>攻击动画倍速（>1 时动画锁已同步压短）；攻击锁结束复位为 1，不影响常规攻击。</summary>
+    private float _attackSpeedMul = 1f;
 
     // ===== 程序化动画（怪物用）=====
     [Header("程序化动画参数（怪物自动启用）")]
@@ -364,6 +366,7 @@ public class UnitAnimation : MonoBehaviour
             _attackAnimLock -= Time.deltaTime;
             if (prev > 0f && _attackAnimLock <= 0f)
             {
+                _attackSpeedMul = 1f; // 加速攻击的倍率随锁结束复位
                 if (_monsterClipMode)
                     RestoreMonsterLocomotionClip();
                 else if (!_isDead)
@@ -673,6 +676,12 @@ public class UnitAnimation : MonoBehaviour
             ApplyAnimatorSpeed(GameConfig.DAMAGED_ANIM_SPEED);
             return;
         }
+        // 加速攻击演出期间（如引导塔克清场）：攻击锁内保持攻击倍率，不被站立/移动速率覆盖
+        if (_attackAnimLock > 0f && _attackSpeedMul > 1f)
+        {
+            ApplyAnimatorSpeed(_attackSpeedMul);
+            return;
+        }
         float spd = isMoving ? moveAnimSpeedScale : 1f;
         ApplyAnimatorSpeed(spd);
     }
@@ -824,16 +833,22 @@ public class UnitAnimation : MonoBehaviour
 
     /// <summary>
     /// 播放攻击动画。传入武器套装可选中 SPUM 里的弓/法术专用挥击。
+    /// speedMul>1 时加速播放并把动画锁同步压短（2026-10-10 引导演出用；默认 1 不改变任何现有行为）；
+    /// forceRestart 允许在攻击锁内打断重播（SPUM 同状态重触发需先从其它态过一遍）。
     /// </summary>
-    public void PlayAttack(AttackVfxKit kit = AttackVfxKit.MeleeSlash, bool isCritAmp = false, float lockCap = -1f)
+    public void PlayAttack(AttackVfxKit kit = AttackVfxKit.MeleeSlash, bool isCritAmp = false, float lockCap = -1f,
+        float speedMul = 1f, bool forceRestart = false)
     {
         if (_isDead) return;
         InterruptDamaged();
-        if (_attackAnimLock > 0) return; // 动画锁定中
+        if (_attackAnimLock > 0 && !forceRestart) return; // 动画锁定中
+        _attackSpeedMul = Mathf.Max(1f, speedMul);
         float lockDur = _baseAttackDuration;
         // 攻速表间隔短于默认 0.5s 锁时，钳锁时长，否则游侠 0.5s 间隔会被动画锁吃掉
         if (lockCap > 0.05f)
             lockDur = Mathf.Clamp(Mathf.Min(_baseAttackDuration, lockCap), 0.18f, _baseAttackDuration);
+        // 加速播放时锁同步压短：动画播完即解锁，不占后续节奏
+        lockDur /= _attackSpeedMul;
         _attackAnimDuration = lockDur;
         _attackAnimLock = lockDur;
         _procAttackKit = kit;
@@ -847,7 +862,10 @@ public class UnitAnimation : MonoBehaviour
             int atkIdx = ResolveSpumAttackIndex(kit);
             try
             {
-                _spum.PlayAnimation(PlayerState.ATTACK, atkIdx);
+                if (forceRestart)
+                    ForcePlaySpum(PlayerState.ATTACK, atkIdx); // 锁内重播：先从其它态过一遍，强触发 ATTACK
+                else
+                    _spum.PlayAnimation(PlayerState.ATTACK, atkIdx);
             }
             catch { }
             ResyncWeaponBeforeSpumAttack();
@@ -855,6 +873,8 @@ public class UnitAnimation : MonoBehaviour
             float clipLen = GetSpumAttackClipLength(atkIdx, _baseAttackDuration);
             if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
                 clipLen = Mathf.Max(clipLen, _baseAttackDuration * 1.35f);
+            // 加速播放：锁跟片段一起压短
+            clipLen /= _attackSpeedMul;
             _attackAnimDuration = clipLen;
             _attackAnimLock = clipLen;
         }
@@ -864,7 +884,7 @@ public class UnitAnimation : MonoBehaviour
             if (_monsterClipMode)
             {
                 PlayMonsterClip("attack");
-                _attackAnimDuration = GetMonsterClipLength("attack", _baseAttackDuration);
+                _attackAnimDuration = GetMonsterClipLength("attack", _baseAttackDuration) / _attackSpeedMul;
                 _attackAnimLock = _attackAnimDuration;
             }
             else

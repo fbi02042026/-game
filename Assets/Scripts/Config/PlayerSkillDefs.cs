@@ -751,6 +751,7 @@ public static class PlayerSkillDefs
     {
         _loaded = false;
         _all = null;
+        _idIndexBuilt = false;
         PlayerSkillTable.Reload();
         EnsureLoaded();
     }
@@ -780,7 +781,8 @@ public static class PlayerSkillDefs
             }
         }
 
-        // 2026-09-26 主人要求：技能 CD 延长 1 倍。表与 Fallback 只在这里统一乘一次，
+        // 表与 Fallback 只在这里统一乘一次（倍率见 GameConfig.SKILL_COOLDOWN_MUL，
+        // 2026-10-10 起为 1f = 配表值即实机值，不要再乘），
         // 战斗（PlayerSkillTable.BuildRuntimeConfig）与 UI 文案（FormatDetail）看到的是同一份冷却。
         if (_all != null)
         {
@@ -924,6 +926,53 @@ public static class PlayerSkillDefs
         if (PlayerSkillTable.TryGet(id, out var row)) return row.MpCost;
         var def = GetById(id);
         return def != null ? def.mpCost : -1f;
+    }
+
+    // 2026-10-10：运行时 id（ally_* 别名）→ 玩家真 id 的反查索引。
+    // 只在 EnsureLoaded 之后按 _all 惰性建一次，不重复解析 CSV。
+    static System.Collections.Generic.HashSet<string> _realIds;
+    static System.Collections.Generic.Dictionary<string, string> _aliasToReal;
+    static bool _idIndexBuilt;
+
+    /// <summary>
+    /// 运行时 id → 玩家真 id（2026-10-10 主人拍板：统一用玩家真 id，别名只在装配 SO 时用）。
+    /// <para>
+    /// 运行时 <c>ActiveSkill.skillId</c> 是 <see cref="PlayerSkillTable.BuildRuntimeConfig"/> 写进去的
+    /// allyConfigId 别名（SkillRegistry 按别名索引 VFX，这个不能改）；而 player_skills 表、
+    /// 触发条件表、冷却键都以<b>真 id</b> 为键。因此在按 id 查表 / 查触发 / 上冷却前必须先过这里。
+    /// </para>
+    /// 已是真 id → 原样返回；是已登记的 ally_* 别名 → 返回该 def 的 id；
+    /// 两者都不是（佣兵/怪物技能 id 等）→ 原样返回，<b>不兜底造假 id</b>。
+    /// </summary>
+    public static string ResolveRealSkillId(string runtimeId)
+    {
+        if (string.IsNullOrEmpty(runtimeId)) return runtimeId;
+        EnsureLoaded();
+        BuildIdIndex();
+        if (_realIds.Contains(runtimeId)) return runtimeId;
+        return _aliasToReal.TryGetValue(runtimeId, out string real) ? real : runtimeId;
+    }
+
+    static void BuildIdIndex()
+    {
+        if (_idIndexBuilt && _realIds != null && _aliasToReal != null) return;
+        _realIds = new System.Collections.Generic.HashSet<string>();
+        _aliasToReal = new System.Collections.Generic.Dictionary<string, string>();
+        if (_all != null)
+        {
+            for (int i = 0; i < _all.Length; i++)
+            {
+                var d = _all[i];
+                if (d == null || string.IsNullOrEmpty(d.id)) continue;
+                _realIds.Add(d.id);
+                if (string.IsNullOrEmpty(d.allyConfigId)) continue;
+                // 同一个别名被多个 def 登记时（ally_shield 同时挂在 holy_barrier 与 iron_wall 上）
+                // 先登记者胜 —— 与 GetByAllyConfigId 的线性扫描顺序一致，避免两处解析结果打架。
+                if (!_aliasToReal.ContainsKey(d.allyConfigId))
+                    _aliasToReal[d.allyConfigId] = d.id;
+            }
+        }
+        _idIndexBuilt = true;
     }
 
     /// <summary>未找到返回 -1。</summary>

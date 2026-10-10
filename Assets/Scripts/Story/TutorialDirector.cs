@@ -696,11 +696,14 @@ public class TutorialDirector : Singleton<TutorialDirector>
     /// <summary>天降那一击的伤害：直接判死，不走数值（演出用，不是战斗平衡）。</summary>
     const float TutorialRescueDamage = 999999f;
 
-    /// <summary>天降起点：玩家右侧这么远 = 屏幕外。</summary>
+    /// <summary>天降起点：玩家左侧这么远 = 屏幕外（2026-10-10 主人拍板：塔克从左侧跳进来）。</summary>
     const float RescueEnterDist = 9.5f;
 
     /// <summary>天降落点：玩家右前方这么远（站到玩家和怪之间）。</summary>
     const float RescueLandDist = 2.0f;
+
+    /// <summary>清场挥击的攻击动画倍速（2026-10-10 主人拍板：动作加快，不要只是位移）。</summary>
+    const float RescueAttackAnimSpeed = 3f;
 
     /// <summary>
     /// 等「玩家撑不住」这个时刻 —— 掉血跌破阈值 / 打够时长 / 场上清了，哪个先到算哪个。
@@ -759,7 +762,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         float heroX = Hero.Instance != null ? UnitBase.GetCombatX(Hero.Instance) : 0f;
         float z = bm.unitRoot != null ? bm.unitRoot.position.z : merc.transform.position.z;
-        float fromX = heroX + RescueEnterDist;
+        // 2026-10-10 主人拍板：从屏幕左侧跳进来（落点不变，仍站玩家右前方护住玩家）。
+        float fromX = heroX - RescueEnterDist;
         float toX = heroX + RescueLandDist;
 
         // ① 抛物线跳进来（0.55 秒）：只改世界坐标
@@ -814,6 +818,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
             float targetX = UnitBase.GetCombatX(m) + 0.6f;
             yield return CoMoveUnitTo(merc.gameObject, curX, targetX, z, dashDur);
             curX = targetX;
+            // 2026-10-10 主人拍板：到位先面向受害者挥一剑（加速攻击动画），再落闪电 —— 不要只是位移。
+            merc.Face(UnitBase.GetCombatX(m) >= UnitBase.GetCombatX(merc) ? 1 : -1);
+            merc.PlayAttackAnimOnly(AttackVfxKit.MeleeSlash, false, RescueAttackAnimSpeed, forceRestart: true);
             // 到位只播一道闪电，**先不判死**（统一留到回原位之后）
             vfx?.PlayLightning(m.transform.position, VfxFaction.Ally);
             yield return new WaitForSecondsRealtime(holdDur);

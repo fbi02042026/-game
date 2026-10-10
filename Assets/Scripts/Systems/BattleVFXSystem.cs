@@ -61,7 +61,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
 
     /// <summary>按套装+阵营播放。弓/球走飞行，刀光打在命中点。暴击只用飘字，不播暴击特效。</summary>
     public void PlayAttackKit(AttackVfxKit kit, VfxFaction faction,
-        Vector3 fromPos, Vector3 toPos, int facingDir = 1, Transform hitTarget = null, bool isCrit = false)
+        Vector3 fromPos, Vector3 toPos, int facingDir = 1, Transform hitTarget = null, bool isCrit = false,
+        UnitBase attacker = null)
     {
         switch (kit)
         {
@@ -75,7 +76,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
                         Debug.LogWarning($"[VFX] 缺少刀光: {faction}/{kit}/hit → 请放 Resources/VFX/Shared/Ally/MeleeSlash/vfx_ally_melee_hit（或旧名 vfx_melee_hit）");
                         return;
                     }
-                    PlaySlash(toPos, facingDir, faction, hit);
+                    PlaySlash(toPos, facingDir, faction, hit, attacker);
                 }
                 break;
             case AttackVfxKit.Bow:
@@ -149,7 +150,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
 
     #region 普攻套装
 
-    public void PlaySlash(Vector3 position, int facingDir = 1, VfxFaction faction = VfxFaction.Ally, GameObject prefabOverride = null)
+    public void PlaySlash(Vector3 position, int facingDir = 1, VfxFaction faction = VfxFaction.Ally,
+        GameObject prefabOverride = null, UnitBase attacker = null)
     {
         if (!_prefabsLoaded) AutoLoadPrefabs();
 
@@ -164,6 +166,9 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
             return;
         }
 
+        Transform flipRoot = attacker != null ? attacker.GetFlipRoot() : null;
+        bool attachedToFlipRoot = flipRoot != null;
+
         GameObject go = AcquireVfxInstance(prefab, position);
         if (go == null) return;
 
@@ -171,22 +176,55 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         Vector3 baseScale = prefab.transform.localScale;
         float mul = Mathf.Max(0.01f, sharedKitScale);
         if (faction == VfxFaction.Ally) mul *= 1.3f;
-        // 刀光原图凹面朝右。朝向靠根节点整体 x 取反（子节点随父级一起镜像），
-        // 不是"只把特效位置挪到左边"：向左攻击时 scale.x 为负，整棵特效树左右翻转。
-        // 旧方案用 Z 轴 180° 旋转代做镜像，那会额外上下颠倒（且是旋转不是镜像），已废弃。
-        float signedX = Mathf.Abs(baseScale.x) * mul * (facingDir < 0 ? -1f : 1f);
-        go.transform.localScale = new Vector3(signedX, baseScale.y * mul, baseScale.z * mul);
+        // 挂到翻转父级时，localScale.x 保持正值，只让父级镜像一次；
+        // proc/flipX 没有可挂节点时才保留 facingDir 符号翻转。
+        float scaleX = Mathf.Abs(baseScale.x) * mul;
+        if (!attachedToFlipRoot && facingDir < 0) scaleX = -scaleX;
+        go.transform.localScale = new Vector3(scaleX, baseScale.y * mul, baseScale.z * mul);
         // 复位成预制体自身旋转（池化实例会带走上一次的旋转，旧代码这里写死过 Z=180）
         go.transform.rotation = prefab.transform.rotation;
 
+        if (attachedToFlipRoot)
+            AttachSlashToFlipRoot(go, flipRoot);
+
         PrepareSlashParticles(go);
         ApplySlashLocalFacing(go);
+        ConfigureSlashSorting(go, attachedToFlipRoot);
+        // 2026-10-10 主人拍板：刀光用材质默认颜色，不做运行时改色，此处请勿再加着色/换材质逻辑。
 
         StretchSlashLifetime(go, 0.5f);
         ResetTintableColors(go);
         ApplyFactionLook(go, faction);
         PlayAllParticles(go);
         ScheduleRelease(go, defaultDuration);
+    }
+
+    static void AttachSlashToFlipRoot(GameObject go, Transform flipRoot)
+    {
+        if (go == null || flipRoot == null) return;
+
+        Vector3 worldScale = go.transform.lossyScale;
+        float ySign = go.transform.localScale.y < 0f ? -1f : 1f;
+        float zSign = go.transform.localScale.z < 0f ? -1f : 1f;
+        go.transform.SetParent(flipRoot, true);
+
+        Vector3 parentScale = flipRoot.lossyScale;
+        go.transform.localScale = new Vector3(
+            Mathf.Abs(worldScale.x) / Mathf.Max(0.0001f, Mathf.Abs(parentScale.x)),
+            ySign * Mathf.Abs(worldScale.y) / Mathf.Max(0.0001f, Mathf.Abs(parentScale.y)),
+            zSign * Mathf.Abs(worldScale.z) / Mathf.Max(0.0001f, Mathf.Abs(parentScale.z)));
+    }
+
+    static void ConfigureSlashSorting(GameObject go, bool nestedUnderUnit)
+    {
+        if (go == null) return;
+        var group = go.GetComponent<UnityEngine.Rendering.SortingGroup>();
+        if (group == null)
+            group = go.AddComponent<UnityEngine.Rendering.SortingGroup>();
+        group.enabled = true;
+        group.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        group.sortingOrder = GameConfig.SORT_VFX + 5;
+        group.sortAtRoot = nestedUnderUnit;
     }
 
     /// <summary>从池取出实例并摆到世界坐标，不提前 Play（刀光须先改缩放/材质）。</summary>
@@ -742,6 +780,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
     {
         yield return new WaitForSecondsRealtime(Mathf.Max(0.05f, lifetime));
         if (go == null) yield break;
+        go.transform.SetParent(transform, true);
         if (PoolManager.Instance != null)
             PoolManager.Instance.Release(go);
         else

@@ -652,6 +652,13 @@ public abstract class UnitBase : MonoBehaviour
         transform.localScale = scale;
     }
 
+    /// <summary>刀光可挂载的翻转父级；程序化/flipX 朝向没有可挂节点。</summary>
+    public virtual Transform GetFlipRoot()
+    {
+        bool usesSpriteFlip = unitAnim != null && (unitAnim.IsProcMode || unitAnim.UsesFlipXFacing);
+        return usesSpriteFlip ? null : transform;
+    }
+
     /// <summary>特效朝向：SPUM 用 scale.x；怪物 clip/flipX 用 flipX 判断。</summary>
     public virtual int GetVfxFacingDir()
     {
@@ -770,6 +777,19 @@ public abstract class UnitBase : MonoBehaviour
         int dir = dx > 0f ? 1 : -1;
         if (dir == facingDir) return;
         facingDir = dir;
+        ApplyFacing(facingDir);
+    }
+
+    /// <summary>
+    /// 出手那一刻强制转向目标（无死区）：只翻「翻转父级」这一个节点。
+    /// 人物身体由 ApplyFacing 写父级、刀光由 GetVfxFacingDir 读父级，两端同源；
+    /// 谁都不许再按目标向量单独算一遍，否则必然再次不同步。
+    /// 只在出手时调用一次，不做每帧逻辑（自动战斗下每帧转身会左右抖）。
+    /// </summary>
+    protected void FaceTowardOnAttack(UnitBase other)
+    {
+        if (other == null) return;
+        facingDir = GetCombatX(other) >= GetCombatX(this) ? 1 : -1;
         ApplyFacing(facingDir);
     }
 
@@ -907,11 +927,11 @@ public abstract class UnitBase : MonoBehaviour
         return Mathf.Sqrt(dx * dx + dy * dy);
     }
 
-    /// <summary>仅播攻击动画（奥义演出用，不带弹道/刀光）。</summary>
-    public void PlayAttackAnimOnly(AttackVfxKit kit, bool critAmp = false)
+    /// <summary>仅播攻击动画（奥义演出用，不带弹道/刀光）。speedMul>1 加速播放（演出用），forceRestart 允许打断上一段攻击动画重来。</summary>
+    public void PlayAttackAnimOnly(AttackVfxKit kit, bool critAmp = false, float speedMul = 1f, bool forceRestart = false)
     {
         if (unitAnim != null)
-            unitAnim.PlayAttack(kit, critAmp);
+            unitAnim.PlayAttack(kit, critAmp, -1f, speedMul, forceRestart);
     }
 
     protected virtual float GetFormationLaneOffset() => 0f;
@@ -1002,9 +1022,15 @@ public abstract class UnitBase : MonoBehaviour
         CombatJuice.Instance?.PlaySwingSfx();
 
         VfxFaction faction = isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
+        // 2026-10-10 主人拍板：朝哪边打就朝哪边挥剑 —— 出手这一刻把「翻转父级」转向目标（无死区）。
+        // 只翻这一个父级节点，人物身体与刀光随它一起翻；只在出手时翻一次，不做每帧，避免自动战斗下左右抖。
+        FaceTowardOnAttack(target);
         Vector3 firePos = GetFirePosition();
         Vector3 hitPos = target.GetHitPosition();
         Transform hitTf = target.transform;
+        // 2026-10-10 主人拍板：人物与刀光挂同一个翻转父级，朝向只由父级决定 —— 这里读父级当前朝向。
+        // 不许再按「攻击者→目标」向量单独算一遍：分开算必然再次出现人物朝一边、刀光朝另一边。
+        // 父级已在上面 FaceTowardOnAttack 转向目标，所以读出来必然指向被攻击者。
         int facingDir = GetVfxFacingDir();
 
         // 远程前摇：游侠（P004）用更大的 0.35，其他远程统一 0.2
@@ -1050,7 +1076,7 @@ public abstract class UnitBase : MonoBehaviour
         if (kit == AttackVfxKit.MeleeSlash)
             CombatJuice.Instance?.OnMeleeAttackLunge(this);
         if (BattleVFXSystem.Instance != null)
-            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
+            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit, this);
     }
 
     /// <summary>我方弓/法球普攻：点到点飞行，落地再结算（与敌方远程一致）。远程额外等出手延迟。</summary>
@@ -1180,7 +1206,7 @@ public abstract class UnitBase : MonoBehaviour
 
         ResolveBasicAttackHit(target, damage, isCrit, openingHit);
         if (BattleVFXSystem.Instance != null)
-            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit);
+            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit, this);
         if (killWindup)
             CombatJuice.Instance?.RevealKillCamBars();
     }
@@ -1219,6 +1245,8 @@ public abstract class UnitBase : MonoBehaviour
             return;
         }
 
+        // 2026-10-10 主人拍板：受击刀光与出手侧同源，也读「翻转父级」当前朝向（GetVfxFacingDir）。
+        // 出手前 FaceTowardOnAttack 已把父级转向目标，故它必然指向被攻击者，不可能与人物反着。
         int vfxDir = GetVfxFacingDir();
         if (this is Hero)
         {

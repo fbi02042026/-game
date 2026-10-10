@@ -264,7 +264,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             if (!PlayerSkillPassive.IsTriggerMet(s.skillId)) continue;
             // 2026-10-06 主人拍板：蓝不足 = 这一槽本轮不可释放，**顺位给下一个**（与触发条件不满足同一口径）。
             // 无蓝技能（耗蓝 0）永远过得去 = 地板节奏；耗蓝技能才吃稀缺窗口，见设计文档 §9。
-            float mpCost = PlayerSkillDefs.MpCostOf(s.skillId);
+            // 2026-10-10：s.skillId 是 ally_* 别名，MpCostOf 按真 id 查表（查不到返回 -1 = 不存在），
+            // 用别名查会恒得 -1 → 蓝不够也照样选中该槽，SkillCastService 里扣蓝失败整轮空转，
+            // 顺位在后面的无蓝技能（0 蓝）跟着一起被卡死。这里解析成真 id 再判定。
+            float mpCost = PlayerSkillDefs.MpCostOf(PlayerSkillDefs.ResolveRealSkillId(s.skillId));
             if (mpCost > 0f && _playerMp + 0.001f < mpCost) continue;
             return i;
         }
@@ -418,18 +421,80 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         return star;
     }
 
-    /// <summary>玩家 MP 池上限（本局没有耗蓝技能 → 0，蓝条不显示、不做闸门）。</summary>
+    /// <summary>
+    /// 实时读取当前职业使用的「攻击」：法系读 MagicAttack，其余职业读 Attack，真源就是 AttrSystem 那一份。
+    /// 每次算上限 / 每次回蓝都<b>现读一遍</b> → 局内升级和装备变化立刻生效，不必等下一关。
+    /// 城镇非战斗期可能拿不到 Hero / attr：记录错误后返回 0，保留原有 null 宽容度、不引入崩溃。
+    /// </summary>
+    static float PlayerAttackPower()
+    {
+        var hero = Hero.Instance;
+        if (hero == null)
+        {
+            Debug.LogError("[BattleManager] PlayerAttackPower 失败：找不到 Hero，攻击换算项按 0 处理");
+            return 0f;
+        }
+        if (hero.attr == null)
+        {
+            Debug.LogError("[BattleManager] PlayerAttackPower 失败：Hero.attr 为空，攻击换算项按 0 处理");
+            return 0f;
+        }
+        return hero.attr.GetAttr(PlayerJobBaseStats.CurrentAttackAttr());
+    }
+
+    /// <summary>
+    /// 实时读取「智力」基础属性：真源同样是 AttrSystem 那一份，与 PlayerAttackPower 同口径。
+    /// 【2026-10-10 追加澄清·恢复】装备的 INTELLIGENCE 词条仍然有效：既走 ApplyDerivedAttributes 派生魔攻，
+    /// 也通过 PlayerMpPool / PlayerMpRegen 喂蓝条（攻击项 + 智力项双叠加）。
+    /// 只是<b>天赋左列</b>不再加智力（改投 Attack / MagicAttack），所以这里的来源主要是基础值 / 等级 / 披风 / 装备词条。
+    /// 城镇非战斗期可能拿不到 Hero / attr：记录错误后返回 0，保留原有 null 宽容度、不引入崩溃。
+    /// </summary>
+    static float PlayerIntelligence()
+    {
+        var hero = Hero.Instance;
+        if (hero == null)
+        {
+            Debug.LogError("[BattleManager] PlayerIntelligence 失败：找不到 Hero，智力换算项按 0 处理");
+            return 0f;
+        }
+        if (hero.attr == null)
+        {
+            Debug.LogError("[BattleManager] PlayerIntelligence 失败：Hero.attr 为空，智力换算项按 0 处理");
+            return 0f;
+        }
+        return hero.attr.GetAttr(AttrType.Intelligence);
+    }
+
+    /// <summary>
+    /// 玩家 MP 池上限（本局没有耗蓝技能 → 0，蓝条不显示、不做闸门）。
+    /// 【2026-10-10 主人拍板】攻击项<b>叠加</b>在 MpProfile 的星级/等级曲线之上（不是替换）；
+    /// 【2026-10-10 追加澄清】智力项再叠加一层（装备智力词条续效）：
+    /// 完整公式 = MpProfile.Pool(Player, HeroLevel, PlayerMpStar())
+    ///          + 当前职业攻击 × MP_POOL_PER_ATTACK
+    ///          + 智力 × MP_POOL_PER_INTELLIGENCE。
+    /// </summary>
     public static float PlayerMpPool()
     {
         if (!PlayerHasMp()) return 0f;
-        return MpProfile.Pool(MpArchetype.Player, RunLoadout.HeroLevel, PlayerMpStar());
+        return MpProfile.Pool(MpArchetype.Player, RunLoadout.HeroLevel, PlayerMpStar())
+             + PlayerAttackPower() * GameConfig.MP_POOL_PER_ATTACK
+             + PlayerIntelligence() * GameConfig.MP_POOL_PER_INTELLIGENCE;
     }
 
-    /// <summary>玩家每秒自然回复（本局没有耗蓝技能 → 0）。</summary>
+    /// <summary>
+    /// 玩家每秒自然回复（本局没有耗蓝技能 → 0）。
+    /// 【2026-10-10 主人拍板】攻击项<b>叠加</b>在 MpProfile 的星级曲线之上（不是替换）；
+    /// 【2026-10-10 追加澄清】智力项再叠加一层（装备智力词条续效）：
+    /// 完整公式 = MpProfile.Regen(Player, PlayerMpStar())
+    ///          + 当前职业攻击 × MP_REGEN_PER_ATTACK
+    ///          + 智力 × MP_REGEN_PER_INTELLIGENCE。
+    /// </summary>
     public static float PlayerMpRegen()
     {
         if (!PlayerHasMp()) return 0f;
-        return MpProfile.Regen(MpArchetype.Player, PlayerMpStar());
+        return MpProfile.Regen(MpArchetype.Player, PlayerMpStar())
+             + PlayerAttackPower() * GameConfig.MP_REGEN_PER_ATTACK
+             + PlayerIntelligence() * GameConfig.MP_REGEN_PER_INTELLIGENCE;
     }
 
     /// <summary>玩家蓝够不够这一发（<b>只看不扣</b>；扣蓝唯一出口仍是 TrySpendPlayerMp）。</summary>
@@ -477,6 +542,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         {
             _playerMp = Mathf.Min(pool, _playerMp + PlayerMpRegen() * dt);
         }
+        // 上限（曲线 + 攻击项 + 智力项）随局内状态实时变化：万一上限回落（更换 / 卸下装备、攻击增益消失等），
+        // 当前蓝量 clamp 回上限内，别出现「当前蓝 > 上限」的显示（GetPlayerMp 的 Clamp01 也会跟着失真）。
+        if (_playerMp > pool) _playerMp = pool;
     }
 
     // === 传送门 ===

@@ -68,7 +68,9 @@ public static class SpecialWeapons
                 // 2026-09-29：暮火之杖是魔法武器（weaponAttackType=Magic），21 点基础攻击
                 // 之前挂在 Attack(物攻) 上 → 法师拿法杖一点魔攻都不涨。改挂 MagicAttack。
                 new AttrBonusData { attrType = AttrType.MagicAttack, value = 21f, isPercent = false },
-                new AttrBonusData { attrType = AttrType.MagicPower, value = 0.12f, isPercent = true },
+                // 2026-10-10：isPercent true → false。MagicPower 是「加成量」（基础值恒为 0、乘算恒等于 0），
+                // 暮火之杖这条 +12% 魔法强度原来完全无效。改加算后与派生口径一致。
+                new AttrBonusData { attrType = AttrType.MagicPower, value = 0.12f, isPercent = false },
                 new AttrBonusData { attrType = AttrType.FireDamage, value = 8f, isPercent = false },
                 new AttrBonusData { attrType = AttrType.AttackSpeed, value = 0.2f, isPercent = true },
             };

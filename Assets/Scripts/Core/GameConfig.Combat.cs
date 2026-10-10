@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 /// <summary>
 /// GameConfig 的 战斗数值 / 射程 / 怪物 / 难度 部分（2026-09-26 从 GameConfig.cs 按域拆出，partial 同类型）。
@@ -326,12 +326,22 @@ public static partial class GameConfig
     public const float SKILL_COOLDOWN_REDUCE_CAP = 0.5f;
 
     /// <summary>
-    /// 技能冷却总倍率（2026-09-26 主人要求：技能 CD 延长 1 倍；后又反馈「恢复还是太快」，再延长 1 倍 → ×4）。
-    /// 单点旋钮：玩家技能在 PlayerSkillDefs 装载完统一乘（表 / Fallback / UI 文案同源），
-    /// 佣兵技能在 MercSkillCaster.Bind 乘。要调回来只改这一个值。
+    /// 技能冷却总倍率。2026-10-10 主人拍板：<b>以配表 CD 为准 → 值为 1f，配表值即实机值，不要再乘</b>。
+    /// （历史：2026-09-26 曾要求 CD 延长 1 倍，后又反馈「恢复还是太快」再延长 1 倍 → ×4；现已回退到 ×1。）
+    /// 单点旋钮：玩家技能在 PlayerSkillDefs 装载完统一乘（表 / Fallback / UI 文案同源）。
+    /// ⚠️ 佣兵技能<b>不再</b>走本常量 —— 2026-10-10 起改走 <see cref="MERC_SKILL_COOLDOWN_MUL"/>（维持 ×4）。
     /// 决定「玩家/佣兵技能多久能再放一次」的就是它（叠加在 CSV/表的基础 CD 之上）。
     /// </summary>
-    public const float SKILL_COOLDOWN_MUL = 4f;
+    public const float SKILL_COOLDOWN_MUL = 1f;
+
+    /// <summary>
+    /// 佣兵技能冷却总倍率。<b>与 SKILL_COOLDOWN_MUL 已分家</b>：
+    /// 玩家技能 CD 以配表为准 → SKILL_COOLDOWN_MUL = 1f（表值即实机值，不要再乘）；
+    /// 佣兵技能 CD 维持历史 ×4 → 本常量 = 4f（表值 × 4），不跟随玩家侧回退。
+    /// 2026-10-10 主人拍板：玩家侧回退到 1f 后「佣兵 CD 不要减」，故拆出本常量单独保住 ×4。
+    /// 唯一消费点：MercSkillCaster.Bind 的 CooldownTotal。要调佣兵 CD 只改这一个值。
+    /// </summary>
+    public const float MERC_SKILL_COOLDOWN_MUL = 4f;
 
     // ============================================================
     // 蓝条（MP）数值 —— 2026-10-06 主人拍板
@@ -357,6 +367,50 @@ public static partial class GameConfig
 
     /// <summary>玩家每秒回复。</summary>
     public const float MP_REGEN_PLAYER = 1.8f;
+
+    /// <summary>
+    /// 【2026-10-10 主人拍板】玩家 MP 池随「攻击」成长的系数：每点攻击 +1 点上限。
+    /// 公式：玩家 MP 池上限 = MpProfile.Pool(星级, 等级) + 当前职业攻击 × MP_POOL_PER_ATTACK + 智力 × MP_POOL_PER_INTELLIGENCE。
+    /// <b>与智力项叠加（不是替换）</b>：攻击项与智力项各算一份，同时在最终池里生效。
+    /// 攻击属性键由 PlayerJobBaseStats.CurrentAttackAttr() 按职业决定，读法见 BattleManager.PlayerAttackPower。
+    /// 参考量级（曲线+攻击项）：★1 Lv1 攻击 25 → 325；★5 Lv40 攻击 346 → 1024。
+    /// ⚠️ 只对玩家生效：佣兵走 Heal / Magic 原型，仍吃 MP_GROWTH_PER_STAR，与本常量无关。
+    /// 叠加在 MpProfile 星级/等级曲线之上，不是替换：攻击项只是附加项，不得整体替换原曲线。
+    /// </summary>
+    public const float MP_POOL_PER_ATTACK = 1.0f;
+
+    /// <summary>
+    /// 【2026-10-10 主人拍板】玩家回蓝随「攻击」成长的系数：每点攻击 +0.015 点/秒。
+    /// 公式：玩家回蓝速度 = MpProfile.Regen(星级) + 当前职业攻击 × MP_REGEN_PER_ATTACK + 智力 × MP_REGEN_PER_INTELLIGENCE。
+    /// <b>与智力项叠加（不是替换）</b>：攻击项与智力项各算一份，同时在最终回蓝里生效。
+    /// 参考量级（曲线+攻击项）：★1 Lv1 攻击 25 → 2.18；★5 Lv40 攻击 346 → 7.85 点/秒。
+    /// ⚠️ 只对玩家生效：佣兵回蓝仍走 Heal / Magic 基值 × MP_GROWTH_PER_STAR，与本常量无关。
+    /// 叠加在 MpProfile 星级/等级曲线之上，不是替换：攻击项只是附加项；回复曲线当前只随星级成长。
+    /// </summary>
+    public const float MP_REGEN_PER_ATTACK = 0.015f;
+
+    /// <summary>
+    /// 【2026-10-10 追加澄清·恢复】玩家 MP 池随「智力」成长的系数：每点智力 +8 点上限。
+    /// 主人澄清：装备上的「智力」词条仍然有效，继续派生魔攻（AttrSystem.ApplyDerivedAttributes 里
+    /// MagicPower = intel × 0.01，本轮不动），<b>并且继续喂蓝条</b>；天赋左列简化成攻击只是天赋侧的口径变化。
+    /// 智力的来源 = 基础 5 + 每级 +1 + 披风(2 + rarity) + 装备 INTELLIGENCE 词条
+    /// （⚠️ 天赋左列自 2026-10-10 起已不再喂智力，改投 Attack / MagicAttack）。
+    /// <b>叠加项</b>：最终玩家 MP 池 = MpProfile.Pool(星级, 等级) + 攻击 × MP_POOL_PER_ATTACK + 智力 × 本常量，
+    /// 攻击项与智力项<b>各算一份</b>，谁也不替换谁，两者都不是 MpProfile 曲线的替代品。
+    /// </summary>
+    public const float MP_POOL_PER_INTELLIGENCE = 8f;
+
+    /// <summary>
+    /// 【2026-10-10 追加澄清·恢复】玩家回蓝随「智力」成长的系数：每点智力 +0.03 点/秒。
+    /// <b>叠加项</b>：最终玩家回蓝 = MpProfile.Regen(星级) + 攻击 × MP_REGEN_PER_ATTACK + 智力 × 本常量。
+    /// ⚠️ 为什么恢复时是 0.03 而<b>不是</b>原值 0.1：耗蓝事实（player_skills.csv「耗蓝」列）里 6 个玩家技能
+    /// 只有 2 个耗蓝 —— 治愈之泉 100（CD 12s）、天雷裁决 120（CD 25s），其余 4 个耗蓝为 0；
+    /// 两个都装时平均需求 ≈ (100+120)/25 = 8.8 蓝/秒。攻击项已经贡献了大部分回蓝，
+    /// 若智力仍按 0.1，Lv40★5 法系回蓝会到 ≈14.85/秒，远超 8.8/秒 的实际需求
+    /// → 蓝条彻底不再是瓶颈、CD 一好就能放。取 0.03 后 ≈9.95/秒，略高于需求，
+    /// 体感是「后期不卡蓝但不溢出」。（14.85 / 9.95 均含：曲线 + 攻击项 + 智力项）
+    /// </summary>
+    public const float MP_REGEN_PER_INTELLIGENCE = 0.03f;
 
     /// <summary>每升 1 级，MP 池 +这么多（回复不随等级涨）。</summary>
     public const float MP_POOL_PER_LEVEL = 6f;

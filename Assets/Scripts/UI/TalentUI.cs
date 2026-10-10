@@ -416,8 +416,9 @@ public class TalentUI : MonoBehaviour
                 var e = TalentDefs.Left[i].effect;
                 switch (e.kind)
                 {
-                    case TalentDefs.AttrKind.Attack: atk += e.value; break;
-                    case TalentDefs.AttrKind.Intelligence: mag += e.value; break;
+                    // 2026-10-10：左列第 4 槽已改走 Attack；攻击类节点同时增加 Attack 和 MagicAttack，
+                    // 与 CharacterUI 同口径：同一份天赋值同时累加进 atk 与 mag，面板两侧都显示 +N。
+                    case TalentDefs.AttrKind.Attack: atk += e.value; mag += e.value; break;
                     case TalentDefs.AttrKind.Hp: hp += e.value; break;
                     case TalentDefs.AttrKind.Defense: def += e.value; break;
                     case TalentDefs.AttrKind.CritRate: crit += e.value; break;
@@ -436,8 +437,10 @@ public class TalentUI : MonoBehaviour
                 if (opt == null) continue;
                 switch (opt.kind)
                 {
-                    case TalentDefs.AttrKind.Attack: atk += node.EffectValue(lv, job); break;
-                    case TalentDefs.AttrKind.Intelligence: mag += node.EffectValue(lv, job); break;
+                    // 右列喂**战斗属性**；与 CharacterUI 同口径、与 AttrSystem.ApplyTalentEffect 同口径：
+                    // AttrKind.Attack 是「固定值攻击」，物攻 / 魔攻**两侧都加**（与 Defense 同口径，左右列一致）。
+                    // 区分度在 PhysDamage / MagicDamage 专精节点上，不在 Attack。
+                    case TalentDefs.AttrKind.Attack: atk += node.EffectValue(lv, job); mag += node.EffectValue(lv, job); break;
                     case TalentDefs.AttrKind.Hp: hp += node.EffectValue(lv, job); break;
                     case TalentDefs.AttrKind.Defense: def += node.EffectValue(lv, job); break;
                     case TalentDefs.AttrKind.CritRate: crit += node.EffectValue(lv, job); break;
@@ -1608,8 +1611,9 @@ public class TalentUI : MonoBehaviour
         SetAnchored(label.rectTransform, new Vector2(0f, 1f), new Vector2(0.55f, 1f), new Vector2(0f, 1f),
             new Vector2(16f, -8f), new Vector2(0f, 28f));
 
-        // 2026-09-29：左列改「力量=物攻 / 智力=魔攻」后，汇总要能看到**两条攻击**。
-        // 5 格 → 6 格，间距 0.18→0.15（CreateSum 内宽度同步 0.16→0.145 防重叠）。
+        // 2026-09-29：左列要能看到**两条攻击**，故 5 格 → 6 格，间距 0.18→0.15（CreateSum 内宽度同步 0.16→0.145 防重叠）。
+        // 2026-10-10：左列第 4 槽「智力」已改成第二个「攻击」槽，且攻击天赋是**双攻**（Attack + MagicAttack 都加），
+        // 所以下面 SumAttack / SumMagic 两格现在**都会**被攻击类节点累加，不再是「力量只喂物攻、智力只喂魔攻」。
         CreateSum(footer.transform, "SumAttack", "+0", 0f);      // 力量 → 物攻
         CreateSum(footer.transform, "SumMagic", "+0", 0.15f);    // 智力 → 魔攻
         CreateSum(footer.transform, "SumHp", "+0", 0.30f);

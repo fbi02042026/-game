@@ -35,6 +35,8 @@ public class BattleHeadTalkUI : MonoBehaviour
     const float PadX = 18f;
     const float PadTop = 14f;
     const float PadBottom = 22f;
+    /// <summary>头顶气泡正文字号。2026-10-10 主人拍板：字太小看费劲，22→26，要再调改这一个常量。</summary>
+    const int BubbleFontSize = 26;
 
     public bool IsShowing => _root != null && _root.gameObject.activeSelf;
     public string CurrentLine => _text != null ? _text.text : "";
@@ -93,7 +95,7 @@ public class BattleHeadTalkUI : MonoBehaviour
         textGo.transform.SetParent(rootGo.transform, false);
         _text = textGo.AddComponent<Text>();
         _text.alignment = TextAnchor.MiddleCenter;
-        _text.fontSize = 22;
+        _text.fontSize = BubbleFontSize;
         _text.color = new Color(0.28f, 0.28f, 0.30f, 1f);
         _text.horizontalOverflow = HorizontalWrapMode.Wrap;
         _text.verticalOverflow = VerticalWrapMode.Overflow;

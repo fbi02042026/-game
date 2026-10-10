@@ -219,7 +219,9 @@ public class EquipInstance
                 break;
             case ArmorPrefix.Arcane:
                 inst.attrBonus.Add(new AttrBonusData { attrType = AttrType.Intelligence, value = 2 + (int)inst.rarity, isPercent = false });
-                inst.attrBonus.Add(new AttrBonusData { attrType = AttrType.MagicPower, value = 0.1f + (int)inst.rarity * 0.02f, isPercent = true });
+                // 2026-10-10：isPercent true → false。MagicPower 是「加成量」（基础值恒为 0、乘算恒等于 0），
+                // 防具前缀 Arcane（秘法）原来完全无效。改加算后与派生口径一致（+0.10 ~ +0.18）。
+                inst.attrBonus.Add(new AttrBonusData { attrType = AttrType.MagicPower, value = 0.1f + (int)inst.rarity * 0.02f, isPercent = false });
                 break;
             case ArmorPrefix.Holy:
                 inst.attrBonus.Add(new AttrBonusData { attrType = AttrType.Vitality, value = 2 + (int)inst.rarity, isPercent = false });

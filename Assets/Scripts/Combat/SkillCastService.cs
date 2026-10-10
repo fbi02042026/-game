@@ -50,12 +50,16 @@ public sealed class SkillCastService
         var skill = ResolvePlayerSkillAt(slot);
         if (skill == null) return false;
 
+        // 2026-10-10：运行时 skillId 是 ally_* 别名（SkillRegistry 按别名索引 VFX）。
+        // 查表（耗蓝/触发/冷却）一律用真 id，只有下面 PlaySkillVfx 继续用别名。
+        string realId = PlayerSkillDefs.ResolveRealSkillId(skill.skillId);
+
         // 2026-10-06 主人拍板：玩家侧也走蓝条（与佣兵同一套 MpProfile，4 个技能共用一条）。
         // 蓝不足 → 不放、CD 不重置、不排队。扣蓝唯一出口 bm.TrySpendPlayerMp。
-        float mpCost = PlayerSkillDefs.MpCostOf(skill.skillId);
+        float mpCost = PlayerSkillDefs.MpCostOf(realId);
         if (mpCost < 0f)
         {
-            Debug.LogError($"[SkillCast] 玩家技能 {skill.skillId} 在 player_skills 里查不到耗蓝 → 拒绝释放（fail closed）");
+            Debug.LogError($"[SkillCast] 玩家技能 {realId} 在 player_skills 里查不到耗蓝 → 拒绝释放（fail closed）");
             return false;
         }
         if (!bm.TrySpendPlayerMp(mpCost)) return false;
@@ -64,10 +68,24 @@ public sealed class SkillCastService
         bool isBuff = skill.skillType == SkillSystem.SkillType.Buff;
 
         // 2026-09-26 主人拍板：holy_barrier 改为「抵扣型护盾」——先扣盾、再扣血，不再走防御+35% buff 分支。
-        // 走团队护盾路径（玩家 + 佣兵同享一层，与旧团队防御 buff 同范围），ratio/duration 取自 GameConfig 常量。
-        if (skill.skillId == "holy_barrier")
+        // 走团队护盾路径（玩家 + 佣兵同享一层，与旧团队防御 buff 同范围）。
+        // 2026-10-10：ratio/duration 改读 player_skills 表（buffValue / duration），不再写死 GameConfig 常量
+        // ——写死时改 CSV 不生效，而且它是 6 个技能里唯一升星只减 CD、护盾量与时长纹丝不动的。
+        // 口径与其它增益技一致：优先用本局构筑算好的 skill.buffValue / skill.duration
+        // （RunDraftDirector.BuildRunSkill 已乘过 StarBuffMul / 星级流派亲和 / StarDurationMul），
+        // 取不到才回退表里原始值；连表都没有才回退 GameConfig 常量（仅作缺表兜底）。
+        if (realId == "holy_barrier")
         {
-            ApplyTeamShieldBuff(GameConfig.HOLY_BARRIER_SHIELD_RATIO, GameConfig.HOLY_BARRIER_SHIELD_DURATION);
+            var barrierDef = PlayerSkillDefs.GetById(realId);
+            if (barrierDef == null)
+                Debug.LogError($"[SkillCast] holy_barrier 在 player_skills 里查不到（id={realId}）→ 回退 GameConfig 常量");
+            float shieldRatio = skill.buffValue > 0f
+                ? skill.buffValue
+                : (barrierDef != null ? barrierDef.buffValue : GameConfig.HOLY_BARRIER_SHIELD_RATIO);
+            float shieldDuration = skill.duration > 0f
+                ? skill.duration
+                : (barrierDef != null ? barrierDef.duration : GameConfig.HOLY_BARRIER_SHIELD_DURATION);
+            ApplyTeamShieldBuff(shieldRatio, shieldDuration);
         }
         else if (isHeal)
         {
@@ -83,18 +101,20 @@ public sealed class SkillCastService
                 ExecuteAllySkillFallback(hero, skill);
         }
 
-        // Buff / 治疗类不走 SkillSystem.UseSkill，冷却在此补齐，避免随能量反复刷屏
+        // Buff / 治疗类不走 SkillSystem.UseSkill，冷却在此补齐，避免随能量反复刷屏。
+        // 2026-10-10：冷却键用真 id —— 与 SkillSystem / UI（BattleUI.Skills.cs）/ 触发条件同一套键。
         if ((isHeal || isBuff) && SkillSystem.Instance != null
-            && !SkillSystem.Instance.IsOnCooldown(skill.skillId))
-            SkillSystem.Instance.RegisterCooldown(skill.skillId, skill.cooldown);
+            && !SkillSystem.Instance.IsOnCooldown(realId))
+            SkillSystem.Instance.RegisterCooldown(realId, skill.cooldown);
 
         Vector3 vfxPos = healTarget != null ? healTarget.GetHitPosition() : hero.GetHitPosition();
         Transform vfxAttach = healTarget != null ? healTarget.transform : hero.transform;
+        // VFX 仍走别名：SkillRegistry 是按 SO 装配的 ally_* id 索引特效的，换成真 id 会丢特效。
         SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, hero.GetVfxFacingDir(), vfxAttach);
 
         // #region agent log
         DebugAgentLog.Log("H5", "BattleManager.TryUsePlayerSkill", "skill_vfx_facing",
-            $"{{\"facingDir\":{hero.facingDir},\"vfxDir\":{hero.GetVfxFacingDir()},\"scaleX\":{hero.transform.localScale.x:F3},\"skill\":\"{skill.skillId}\"}}");
+            $"{{\"facingDir\":{hero.facingDir},\"vfxDir\":{hero.GetVfxFacingDir()},\"scaleX\":{hero.transform.localScale.x:F3},\"skill\":\"{realId}\"}}");
         // #endregion
 
         // V6：只清这一个技能槽的能量，其它槽照保留（纯冷却制下这步不生效）
@@ -106,7 +126,7 @@ public sealed class SkillCastService
         // 上膛：接下来 PLAYER_SKILL_GCD 秒内不再放下一个技能
         bm.ArmPlayerSkillGcd();
         TutorialDirector.Instance?.NotifyPlayerSkillUsed();
-        Debug.Log($"[BattleManager] 玩家技能释放: {skill.skillName} ({skill.skillId}) → {(healTarget != null ? healTarget.name : "default")}");
+        Debug.Log($"[BattleManager] 玩家技能释放: {skill.skillName} ({realId}) → {(healTarget != null ? healTarget.name : "default")}");
         return true;
     }
 

@@ -80,11 +80,25 @@ public static class PlayerSkillPassive
         ["gale_stance"]     = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = NearbyRadius },
     };
 
+    /// <summary>已报过「未登记触发条件」的 id：本方法每帧都会被调用，同一个 id 只报一次，别刷屏。</summary>
+    static readonly HashSet<string> _missingTriggerLogged = new HashSet<string>();
+
     /// <summary>供 BattleManager.FindReadySkillSlot 调用：该技能此刻是否满足触发条件。</summary>
     public static bool IsTriggerMet(string skillId)
     {
         if (string.IsNullOrEmpty(skillId)) return true;
-        if (!Triggers.TryGetValue(skillId, out var t)) return true; // 未映射 → 默认放
+        // 2026-10-10：调用方（BattleManager.FindReadySkillSlot）传进来的是运行时 id，
+        // 即 PlayerSkillTable.BuildRuntimeConfig 写进去的 ally_* 别名；Triggers 以玩家真 id 为键。
+        // 不解析的话 6 个基础技能全部走「未映射 → 默认放」，血线 / 怪群条件形同虚设。
+        string realId = PlayerSkillDefs.ResolveRealSkillId(skillId);
+        if (!Triggers.TryGetValue(realId, out var t))
+        {
+            // 未映射 → 默认放（旧行为）。真 id 查不到说明这技能压根没登记触发条件，打 Error 让人补表，
+            // 不再静默放行到没人发现。
+            if (_missingTriggerLogged.Add(realId))
+                Debug.LogError($"[PlayerSkillPassive] 技能 id 未登记触发条件 → 按 Always 放行（runtimeId={skillId}, realId={realId}）");
+            return true;
+        }
         return t.IsSatisfied();
     }
 

@@ -84,7 +84,7 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
             return false;
         }
 
-        _cooldowns[skill.skillId] = ApplyCooldownReduce(skill.cooldown);
+        _cooldowns[CdKey(skill.skillId)] = ApplyCooldownReduce(skill.cooldown);
 
         switch (skill.skillType)
         {
@@ -428,8 +428,19 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
 
     public bool IsOnCooldown(string skillId)
     {
-        return _cooldowns.ContainsKey(skillId) && _cooldowns[skillId] > 0;
+        string key = CdKey(skillId);
+        return _cooldowns.ContainsKey(key) && _cooldowns[key] > 0;
     }
+
+    /// <summary>
+    /// 冷却键归一化（2026-10-10）：玩家技能的运行时 <c>ActiveSkill.skillId</c> 是 ally_* 别名
+    /// （<see cref="PlayerSkillTable.BuildRuntimeConfig"/> 写进去的，VFX 需要），
+    /// 而耗蓝表 / 触发条件 / 本类的冷却键统一用玩家<b>真 id</b>。
+    /// 这里归一化，保证「写入方（SkillCastService 传真 id）」与「读取方（UI / FindReadySkillSlot 传别名）」
+    /// 落在同一个键上 —— 否则 UI 转的圈和真实冷却是两套，或者干脆永远读不到冷却。
+    /// 佣兵 / 怪物技能 id 在 PlayerSkillDefs 里查不到 → 原样返回，行为不变。
+    /// </summary>
+    static string CdKey(string skillId) => PlayerSkillDefs.ResolveRealSkillId(skillId);
 
     /// <summary>
     /// 外部登记冷却。Buff/治疗类玩家技能不走 <see cref="UseSkill"/>（走 BattleManager 的兜底分支），
@@ -439,7 +450,7 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
     {
         if (string.IsNullOrEmpty(skillId) || seconds <= 0f) return;
         // 与 UseSkill 同样享受冷却缩减（Buff/治疗类走这条路，不进 UseSkill）
-        _cooldowns[skillId] = ApplyCooldownReduce(seconds);
+        _cooldowns[CdKey(skillId)] = ApplyCooldownReduce(seconds);
     }
 
     /// <summary>
@@ -461,7 +472,7 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
 
     public float GetCooldownRemaining(string skillId)
     {
-        return _cooldowns.TryGetValue(skillId, out var cd) ? Mathf.Max(0, cd) : 0;
+        return _cooldowns.TryGetValue(CdKey(skillId), out var cd) ? Mathf.Max(0, cd) : 0;
     }
 
     /// <summary>
@@ -493,7 +504,7 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         {
             var s = _playerSkills[i];
             if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
-            _cooldowns.Remove(s.skillId);
+            _cooldowns.Remove(CdKey(s.skillId));
         }
     }
 }
