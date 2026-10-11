@@ -135,7 +135,13 @@ public partial class BattleUI : MonoBehaviour
                 baseOrder = pc.sortingOrder;
         }
 
-        int target = baseOrder + 1;
+        // 【2026-10-11 主人「技能还是不显示」】实测数据：技槽 101 > 父链最高 100、屏幕矩形 (310,244)~(410,344)
+        // 在屏内、无同父兄弟覆盖、sprite/alpha/激活全正常 —— 但主人还是看不见。
+        // 真凶：主人抽奖时**抽奖面板(920)一直开着**（连抽循环不收起），920 > 101 → 技槽被面板整片压住，
+        // 只有面板重排那一瞬露一下 = 「闪一下又没了」。父链里没有 920（面板是独立 Canvas），
+        // 所以沿父链取最大永远够不着它 → 基准再加一条：至少抬到 BattlePopup(920) 之上（=921）。
+        // 替换确认(925)/概率公示(926)/结算(990)/装备提示(1000)/Toast 仍压得住技槽，不受影响。
+        int target = Mathf.Max(baseOrder + 1, GameConfig.UiSort.BattlePopup + 1);
         if (self.sortingOrder < target)
         {
             self.overrideSorting = true;

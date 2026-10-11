@@ -86,8 +86,12 @@ public partial class BattleUI : MonoBehaviour
         LogRunSkillDiagnostics(ids);
     }
 
-    /// <summary>技槽可见性体检只做一次（首次出现带技能的槽时），别每帧刷屏。</summary>
-    static bool _occlusionLogged;
+    // 2026-10-11 主人报「技能还是看不见」→ 加屏幕级遮挡诊断。
+    // 原来只打一次（首次出现带技能的槽），正好错过「抽中瞬间闪一下又没了」那一刻，
+    // 这里放宽到 8 次：技能列表每次变化打一条，够抓现行又不刷屏。
+    /// <summary>技槽体检最多打 8 次（技能列表每次变化打一次），别刷屏；原来只打一次抓不到「闪一下又没了」。</summary>
+    const int MaxOcclusionLogs = 8;
+    static int _occlusionLogCount;
 
     /// <summary>
     /// 技槽为什么看不见 —— 一次把量打全：自带 Canvas order / 父链最高 Canvas / 有没有同父兄弟盖在上面。
@@ -95,10 +99,10 @@ public partial class BattleUI : MonoBehaviour
     /// </summary>
     void LogSkillBarOcclusion()
     {
-        if (_occlusionLogged || skillSlotRoot == null) return;
+        if (_occlusionLogCount >= MaxOcclusionLogs || skillSlotRoot == null) return;
         var rt = skillSlotRoot as RectTransform;
         if (rt == null) return;
-        _occlusionLogged = true;
+        _occlusionLogCount++;
 
         var c = new Vector3[4];
         rt.GetWorldCorners(c);
@@ -136,6 +140,102 @@ public partial class BattleUI : MonoBehaviour
                 sb.Append(" ⚠被同父兄弟[").Append(sib.name).Append("]覆盖");
         }
         Debug.Log(sb.ToString());
+        // 2026-10-11 主人报「技能还是看不见」→ 加屏幕级遮挡诊断：上面那条只比 order 和同父兄弟，
+        // 看不出到底哪个画布压在技槽上面；这条按屏幕矩形求交，直接点名。
+        DumpScreenRectAndOccluders(rt);
+    }
+
+    /// <summary>
+    /// 2026-10-11 主人报「技能还是看不见」→ 加屏幕级遮挡诊断。
+    /// 把技槽换算成屏幕矩形，再把场景里所有 sortingOrder 更高（或 layer 更高）的画布也算成屏幕矩形，
+    /// 两者相交的就是「可能盖住技槽」的嫌疑对象 —— 一条日志点名，纯只读，不碰任何节点。
+    /// </summary>
+    void DumpScreenRectAndOccluders(RectTransform rt)
+    {
+        var rootCanvas = rt.GetComponentInParent<Canvas>();
+        Camera cam = null;
+        if (rootCanvas != null) cam = rootCanvas.worldCamera;
+        if (cam == null) cam = Camera.main;
+
+        var c = new Vector3[4];
+        rt.GetWorldCorners(c);
+        float sx0 = float.MaxValue, sy0 = float.MaxValue, sx1 = float.MinValue, sy1 = float.MinValue;
+        for (int i = 0; i < 4; i++)
+        {
+            // 相机拿不到时直接用世界坐标当屏幕坐标（正交 + 原点对齐的兜底），不抛异常。
+            Vector2 p = cam != null ? RectTransformUtility.WorldToScreenPoint(cam, c[i])
+                                    : new Vector2(c[i].x, c[i].y);
+            if (p.x < sx0) sx0 = p.x;
+            if (p.x > sx1) sx1 = p.x;
+            if (p.y < sy0) sy0 = p.y;
+            if (p.y > sy1) sy1 = p.y;
+        }
+
+        var sb2 = new System.Text.StringBuilder();
+        sb2.Append("[BattleUI-技槽屏幕] 屏幕=").Append(Screen.width).Append("x").Append(Screen.height)
+           .Append(" 技槽屏幕矩形=(").Append(sx0.ToString("F0")).Append(",").Append(sy0.ToString("F0"))
+           .Append(")~(").Append(sx1.ToString("F0")).Append(",").Append(sy1.ToString("F0")).Append(")");
+
+        var selfC = skillSlotRoot != null ? skillSlotRoot.GetComponent<Canvas>() : null;
+        int myOrder = selfC != null ? selfC.sortingOrder : 0;
+        int myLayer = selfC != null ? selfC.sortingLayerID : 0;
+        sb2.Append(" 自身Canvas=").Append(selfC != null ? myOrder.ToString() : "无")
+           .Append(" layer=").Append(myLayer);
+
+        var all = FindObjectsOfType<Canvas>();
+        var list = new List<Canvas>();
+        if (all != null)
+            for (int i = 0; i < all.Length; i++) list.Add(all[i]);
+        list.Sort((a, b) => (a != null ? a.sortingOrder : 0).CompareTo(b != null ? b.sortingOrder : 0));
+        list.Reverse();   // 从大到小
+
+        int found = 0;
+        for (int i = 0; i < list.Count && found < 5; i++)
+        {
+            var cv = list[i];
+            if (cv == null || cv == selfC) continue;
+            if (!cv.enabled) continue;
+            if (!(cv.transform is RectTransform)) continue;
+            // 只留「画在技槽之上」的：layer 更高，或同 layer 下 order 更高。
+            if (!(cv.sortingLayerID > myLayer
+                  || (cv.sortingLayerID == myLayer && cv.sortingOrder > myOrder))) continue;
+
+            var crt = cv.transform as RectTransform;
+            if (crt == null) continue;
+            var cc = new Vector3[4];
+            crt.GetWorldCorners(cc);
+            float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
+            for (int k = 0; k < 4; k++)
+            {
+                Vector2 p = cam != null ? RectTransformUtility.WorldToScreenPoint(cam, cc[k])
+                                        : new Vector2(cc[k].x, cc[k].y);
+                if (p.x < x0) x0 = p.x;
+                if (p.x > x1) x1 = p.x;
+                if (p.y < y0) y0 = p.y;
+                if (p.y > y1) y1 = p.y;
+            }
+            // 相交：两个轴都要有重叠
+            bool hitX = x0 < sx1 && x1 > sx0;
+            bool hitY = y0 < sy1 && y1 > sy0;
+            if (!hitX || !hitY) continue;
+
+            found++;
+            // 节点路径：从该节点往上拼 3 层名字
+            string path = cv.name;
+            if (cv.transform.parent != null)
+            {
+                path = cv.transform.parent.name + "/" + path;
+                if (cv.transform.parent.parent != null)
+                    path = cv.transform.parent.parent.name + "/" + path;
+            }
+            var img = cv.GetComponent<Image>();
+            sb2.Append(" ⚠上层[").Append(path).Append("] order=").Append(cv.sortingOrder)
+               .Append(" layer=").Append(cv.sortingLayerID)
+               .Append(" 矩形=(").Append(x0.ToString("F0")).Append(",").Append(y0.ToString("F0"))
+               .Append(")~(").Append(x1.ToString("F0")).Append(",").Append(y1.ToString("F0"))
+               .Append(") 自身Image颜色=").Append(img != null ? img.color.ToString() : "无Image");
+        }
+        Debug.Log(sb2.ToString());
     }
 
     /// <summary>技能槽序号文案：0→① … 9→⑩；再往后没有圈字符号，返回空串（底部只有 4 槽，走不到）。</summary>

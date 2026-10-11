@@ -387,7 +387,10 @@ public class NextStageRouletteUI : MonoBehaviour
         float runT = 0f;
         while (!_stopRequested && runT < AccelSeconds)
         {
-            float dt = Time.unscaledDeltaTime;
+            // 【2026-10-11 主人「正在停下还倒着转了」】unscaledDeltaTime 不受 maximumDeltaTime 封顶
+            // （编辑器暂停恢复 / 掉帧的那一帧会给"整段暂停时长"）→ 阶段2 的 Lerp 一次性跳老远，
+            // 看起来就是卡片猛地倒着蹿。这里把每帧 dt 钳到 ≤0.05s，两段同口径。
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
             runT += dt;
             _offset += SpeedMax * dt;
             LayoutCards();
@@ -422,15 +425,17 @@ public class NextStageRouletteUI : MonoBehaviour
 
         float from = _offset;
         float to = aligned;
-        // 若距离太短再加一整圈
-        if (to - from < MinDecelCards * Step)
+        // 【2026-10-11 主人「正在停下还倒着转了」】终点必须严格在前方：只许往前收，绝不允许倒退。
+        // 旧写法 `if (to - from < MinDecelCards*Step) to += n*Step` 只补一次，边界上仍可能只前进半格不到；
+        // 改成 while 一次补够，保证 to - from ≥ MinDecelCards*Step，Lerp 全程单调正转。
+        while (to - from < MinDecelCards * Step)
             to += n * Step;
 
         float decelT = 0f;
         int lastPulse = -1;
         while (decelT < DecelSeconds)
         {
-            float dt = Time.unscaledDeltaTime;
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
             decelT += dt;
             float u = Mathf.Clamp01(decelT / DecelSeconds);
             // 快→慢：前快后慢的 ease-out cubic

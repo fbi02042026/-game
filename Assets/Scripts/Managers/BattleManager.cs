@@ -554,7 +554,18 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     private bool _portalActive = false;
     private bool _rewardSequenceStarted = false;
     private Transform _chuanSongMen;
-    private bool _portalEnterVfxPlayed;
+
+    // 【2026-10-11 主人拍板】传送门改用主人新加的 chuansongmen 预制体（PortalGate，挂 BattleUI 下）。
+    // 场景里那个旧的 chuansongmen 节点不再参与通关流程（保留不删）。
+    private PortalGate _portalGate;
+    /// <summary>要走进门的队伍（开门那一刻定好：玩家 + 当时活着的佣兵），避免每帧重新取列表。</summary>
+    private readonly List<UnitBase> _portalParty = new List<UnitBase>();
+    private readonly HashSet<UnitBase> _portalEntered = new HashSet<UnitBase>();
+    private bool _heroEnteredPortal;
+    private float _heroEnteredAt;
+    private float _portalOpenedAt;
+    /// <summary>玩家进门后，最多再等佣兵这么久（秒）—— 超时也走结算，绝不把玩家锁在门口。</summary>
+    const float PortalMercWaitTimeout = 2.5f;
 
     /// <summary>
     /// 旧 endPoint 传送门路径（已弃用）。正式通关走 chuansongmen：StageClearRewardDirector → NotifyChuanSongMenOpened。
@@ -679,8 +690,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         _stageCleared = false;
         _portalActive = false;
         _rewardSequenceStarted = false;
-        _portalEnterVfxPlayed = false;
-        _chuanSongMen = null;
+        ResetPortalGateState();
         UnitsCanAct = false;
         AllowMonsterMapEnter = false;
         isAutoBattle = false;
@@ -1189,8 +1199,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         _stageCleared = false;
         _portalActive = false;
         _rewardSequenceStarted = false;
-        _portalEnterVfxPlayed = false;
-        _chuanSongMen = null;
+        ResetPortalGateState();
         _totalMonstersSpawnedThisStage = 0;
         // 【2026-10-05 波次排查】一局内连打多关时，任务金币只发第一关：
         // _stageQuestGoldGranted 原先只在 StartNewRun 复位，LoadStage 没复位，
@@ -1601,8 +1610,39 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             follow.ResumeFollowX();
 
         UnitsCanAct = true;
+        // 【2026-10-11 排查】主人报「开始战斗后玩家没有往前走 还上下移动了一下」：
+        // 出发后连采 6 次队伍状态（x / 速度 / 车道 / 最近怪距离），拿真值定位是「索敌不到」还是「进了射程就站桩」。
+        StartCoroutine(CoLogPartyAdvance());
         // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
         // BattleJoystick.Instance?.SetVisible(true);
+    }
+
+    /// <summary>
+    /// 【2026-10-11 排查用，定位后即删】出发后每 0.25s 采一次队伍状态。
+    /// 主人报「开始战斗后玩家没有往前走 还上下移动了一下」，这里把 x / 速度 / 车道 / 最近怪距离打到日志，
+    /// 好判断是「没索到敌」还是「一进射程就站桩」。
+    /// </summary>
+    IEnumerator CoLogPartyAdvance()
+    {
+        for (int i = 0; i < 6; i++)
+        {
+            yield return new WaitForSecondsRealtime(0.25f);
+            var h = hero;
+            if (h == null) yield break;
+            float hx = UnitBase.GetCombatX(h);
+            float best = float.MaxValue;
+            string nm = "无";
+            for (int k = 0; k < monsters.Count; k++)
+            {
+                var mo = monsters[k];
+                if (mo == null || mo.isDead) continue;
+                float d = Mathf.Abs(hx - UnitBase.GetCombatX(mo));
+                if (d < best) { best = d; nm = mo.name; }
+            }
+            Debug.Log($"[BattleManager] 出发采样#{i + 1} heroX={hx:F2} velX={(h.rb != null ? h.rb.velocity.x : 0f):F2} "
+                + $"laneY={h.LaneY:F2} 射程={h.GetEffectiveAttackRange():F2} 活怪={CountAliveMonsters()} "
+                + $"最近怪={nm} 距离={(best < float.MaxValue ? best.ToString("F2") : "-")}");
+        }
     }
 
     float GetPartyEnterX(float battleStartX)
@@ -2027,15 +2067,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             StartStageClearRewardSequence();
         }
 
-        // 通关：chuansongmen 已开且玩家走到传送门
-        if (_portalActive && hero != null && !hero.isDead && !_stageCleared && _chuanSongMen != null)
-        {
-            if (hero.transform.position.x >= _chuanSongMen.position.x - 0.6f)
-            {
-                PlayPortalEnterVfxOnce(_chuanSongMen.position);
-                FinishStageAfterPortalReached();
-            }
-        }
+        // 通关：门开了 → 玩家先走、佣兵隔一个身位跟着进（详见 TickPortalWalkIn）
+        if (_portalActive && !_stageCleared && _portalGate != null)
+            TickPortalWalkIn();
 
         // 跑图时镜头随英雄缓慢放宽
         if (hero != null)
@@ -2174,10 +2208,15 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 佣兵币产出（2026-10-07 主人拍板：「击杀精英1个 击杀Boss两个」）。
         // Boss 优先、不与精英叠加（Boss 波可能同时带精英标记，叠加会变成 3）。
         // 发放只走 ResourceWallet.GrantMercGold 这一个出口（铁律 15）。
-        if (m.IsBossUnit)
-            ResourceWallet.GrantMercGold(GameConfig.MERC_GOLD_PER_BOSS, "击杀Boss");
-        else if (m.IsEliteWave)
-            ResourceWallet.GrantMercGold(GameConfig.MERC_GOLD_PER_ELITE, "击杀精英");
+        // 【2026-10-11 主人拍板】「现在暂时先不用给佣兵币 等以后再说」→ 发放整条停掉。
+        // 开关在 GameConfig.MERC_GOLD_GRANT_ENABLED，改回 true 即恢复，下面两行的数值不用动。
+        if (GameConfig.MERC_GOLD_GRANT_ENABLED)
+        {
+            if (m.IsBossUnit)
+                ResourceWallet.GrantMercGold(GameConfig.MERC_GOLD_PER_BOSS, "击杀Boss");
+            else if (m.IsEliteWave)
+                ResourceWallet.GrantMercGold(GameConfig.MERC_GOLD_PER_ELITE, "击杀精英");
+        }
         // 2026-09-26 主人拍板：累计本关物理/魔法击杀数，用于掉落按类型分池（主导类型 = 数量多者）。
         if (m.IsMagicType) _magicKills++;
         else _physicalKills++;
@@ -2698,11 +2737,14 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
             // 正式关：**连抽仍然是玩法** —— 抽完回到面板，玩家想再抽就再抽；
             // 不想抽、或者币不够（按钮会自动置灰）时，点「继续」就继续战斗。
-            // ⚠ 不是「每抽一次就得点一次继续」：这里不锁按钮、不 break，只把冻住的倒计时松开继续走。
-            // 【2026-10-06 主人二次拍板】抽完<b>只解冻、不重置</b>：总预算就是面板弹出时那 30s，
-            // 抽完又给补满，正是主人报「抽完才开始计时」的那颗钉子。
+            // ⚠ 不是「每抽一次就得点一次继续」：这里不锁按钮、不 break。
+            //
+            // 【2026-10-11 主人拍板】抽一次重置一次计时：这一抽结算完，倒计时**补满重来**。
+            //   主人原话「时间是固定的 不是抽一次重置一次计时」。
+            //   ⚠ 与 2026-10-06 那份「总预算就是面板弹出时那 30s，抽完只解冻、不补满」口径相反 ——
+            //     以本次为准，旧口径作废（别再照旧注释改回去）。
             var entryPanel = BattleEntryDraftPanel.Instance;
-            if (entryPanel != null) entryPanel.SetCountdownPaused(false);
+            if (entryPanel != null) entryPanel.StartContinueCountdown();
 
             // 「再来一次」= **白送一次免费抽**，不是技能三选一。
             // 【2026-10-11 主人拍板】主人原话：「再来一次不是技能，是不用花费再抽一次，
@@ -3222,12 +3264,35 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         Debug.Log($"[BattleManager] 开始宝箱结算 type={currentStage.type} bonusGold={bonusGold} equips={rewards?.Count ?? 0}");
     }
 
-    public void NotifyChuanSongMenOpened(Transform portal)
+    /// <summary>
+    /// 门开了（<see cref="PortalGate"/> 已挂到 BattleUI 下）：把要进门的队伍记下来，全员朝右走进门。
+    /// <para>【2026-10-11 主人拍板】门是 UI 节点但代表世界位置：进门判定用 <c>PortalGate.WorldEnterX</c>，
+    /// 玩家先走、佣兵隔一个身位跟着进，每人进门各播一次传送特效（见 <see cref="TickPortalWalkIn"/>）。</para>
+    /// </summary>
+    public void NotifyChuanSongMenOpened(PortalGate gate)
     {
-        _chuanSongMen = portal;
-        _portalActive = true;
-        if (portal != null)
-            ExtendCameraMaxX(portal.position.x + 3f);
+        _portalGate = gate;
+        _chuanSongMen = null;          // 场景旧门不再参与流程
+        _portalActive = gate != null;
+        _heroEnteredPortal = false;
+        _heroEnteredAt = 0f;
+        _portalOpenedAt = Time.unscaledTime;
+        _portalEntered.Clear();
+        _portalParty.Clear();
+
+        if (_portalActive)
+        {
+            if (hero != null) _portalParty.Add(hero);
+            var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+            if (mercs != null)
+            {
+                for (int i = 0; i < mercs.Count; i++)
+                    if (mercs[i] != null) _portalParty.Add(mercs[i]);
+            }
+            float gateX = gate.WorldEnterX;
+            if (!float.IsNaN(gateX)) ExtendCameraMaxX(gateX + 3f);
+        }
+
         // 让英雄/佣兵继续向右走向传送门
         UnitsCanAct = true;
         isInBattle = true; // Update 里检测走近传送门需要跑
@@ -3241,22 +3306,96 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         }
     }
 
-    void PlayPortalEnterVfxOnce(Vector3 worldPos)
+    /// <summary>
+    /// 门开着的时候每帧看队伍走到哪了：谁跨过门中心 → 播一次传送特效 + 藏起来；
+    /// 玩家进了之后再等佣兵（最多 <see cref="PortalMercWaitTimeout"/> 秒）→ 全员进完走通关结算（黑屏 → 关卡界面）。
+    /// </summary>
+    void TickPortalWalkIn()
     {
-        if (_portalEnterVfxPlayed) return;
-        _portalEnterVfxPlayed = true;
-        var prefab = Resources.Load<GameObject>("VFX/other/world/传送");
-        if (prefab == null) return;
-        var go = Instantiate(prefab, worldPos + new Vector3(0f, 0.6f, 0f), Quaternion.identity);
-        go.name = "PortalEnterVfx";
-        Destroy(go, 3.5f);
+        float gateX = _portalGate.WorldEnterX;
+        if (float.IsNaN(gateX))
+        {
+            // 门挂不到 Canvas / 拿不到世界坐标时不能把玩家锁在门口：3s 后报错并直接结算。
+            if (Time.unscaledTime - _portalOpenedAt >= 3f)
+            {
+                Debug.LogError("[BattleManager] 传送门的世界坐标一直算不出来（门没挂上 Canvas？），3s 后直接走通关结算");
+                FinishStageAfterPortalReached();
+            }
+            return;
+        }
+
+        for (int i = 0; i < _portalParty.Count; i++)
+        {
+            var u = _portalParty[i];
+            if (u == null || u.isDead || _portalEntered.Contains(u)) continue;
+            if (UnitBase.GetCombatX(u) < gateX - PortalGate.EnterTolerance) continue;
+
+            _portalEntered.Add(u);
+            _portalGate.PlayEnterEffect(u.transform.position);
+            PortalGate.SetUnitVisible(u, false);
+            if (u == hero)
+            {
+                _heroEnteredPortal = true;
+                _heroEnteredAt = Time.unscaledTime;
+            }
+            Debug.Log($"[BattleManager] {u.name} 进门 x={UnitBase.GetCombatX(u):F2} 门X={gateX:F2}");
+        }
+
+        // 玩家阵亡 / 不在场时不可能进门 —— 别把流程卡死，按「已进」起算收尾计时。
+        if (!_heroEnteredPortal && (hero == null || hero.isDead))
+        {
+            _heroEnteredPortal = true;
+            _heroEnteredAt = Time.unscaledTime;
+        }
+
+        if (!_heroEnteredPortal) return;
+
+        bool allIn = true;
+        for (int i = 0; i < _portalParty.Count; i++)
+        {
+            var u = _portalParty[i];
+            if (u == null || u.isDead || u == hero) continue;
+            if (!_portalEntered.Contains(u)) { allIn = false; break; }
+        }
+
+        if (allIn || Time.unscaledTime - _heroEnteredAt >= PortalMercWaitTimeout)
+            FinishStageAfterPortalReached();
     }
+
+    /// <summary>
+    /// 新一局 / 新一关 / 通关结算：把传送门整体收掉，并把进过门的单位**重新显示出来**
+    /// （进门时只关了渲染，逻辑还在 —— 不还原的话下一关玩家和佣兵就是隐形的）。
+    /// </summary>
+    void ResetPortalGateState()
+    {
+        for (int i = 0; i < _portalParty.Count; i++)
+        {
+            var u = _portalParty[i];
+            if (u != null) PortalGate.SetUnitVisible(u, true);
+        }
+        if (_portalGate != null)
+        {
+            _portalGate.Close();
+            _portalGate = null;
+        }
+        _chuanSongMen = null;
+        _portalParty.Clear();
+        _portalEntered.Clear();
+        _heroEnteredPortal = false;
+        _heroEnteredAt = 0f;
+        _portalOpenedAt = 0f;
+    }
+
+    // 【2026-10-11】旧 PlayPortalEnterVfxOnce 已删：进门特效的唯一出口是 PortalGate.PlayEnterEffect
+    // （玩家 / 佣兵各播一次，原来那个「只播一次」的写法和主人「佣兵进也要播」的要求冲突）。
 
     /// <summary>走进 chuansongmen 后：写档 → 结算 → 选关/回城</summary>
     public void FinishStageAfterPortalReached()
     {
         if (_stageCleared) return;
         _stageCleared = true;
+        // 门收掉 + 进过门的单位重新显示（不还原的话下一关玩家/佣兵是隐形的）
+        ResetPortalGateState();
         // 2026-10-06 主人拍板：真正通关一关 → 阵亡过的佣兵养回 30% 血（防 20% 血进场的死亡螺旋）。
         // 挂在「通关」而不是「加载下一关」上：反复重打同一关不会白刷恢复。
         RunLoadout.TickFallenMercsStagePassed();
@@ -3666,9 +3805,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                 && !string.IsNullOrEmpty(def.Name))
                 return def.Name;
             if (!string.IsNullOrEmpty(merc.DisplayName)) return merc.DisplayName;
-            if (!string.IsNullOrEmpty(merc.hireId) && MercRosterDefs.TryGetByHireId(merc.hireId, out def)
-                && !string.IsNullOrEmpty(def.Nickname))
-                return def.Nickname;
+            // 【2026-10-11 主人拍板「佣兵名字要统一」】旧写法在这里还留了一条「退回昵称（重盾）」的兜底，
+            // 结果花名册没真名时结算 MVP 会写出第二个叫法 → 删掉；缺真名就退回编号，不拿昵称顶（铁律 14）。
             return !string.IsNullOrEmpty(merc.mercId) ? merc.mercId : "佣兵";
         }
         var save = SaveSystem.Instance?.Data;
@@ -3757,6 +3895,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
     void LoadRestStage()
     {
+        // 【2026-10-11 主人报「老虎机轮到恢复关卡后弹不出界面 卡到这了」】
+        // 进恢复关先打一条：主人下次卡住时，Editor.log 里有这行 = 已经进关、问题在弹窗本身；
+        // 没有这行 = 压根没进关（卡在关卡图/老虎机那一段），查 BattleStageMapUI。
+        Debug.Log("[BattleManager] 进入恢复关 → 准备弹 RestStagePopup");
         // 弹窗里已经回过 50% 血；关掉后继续推关
         UIManager.Instance.ShowRestUI(() =>
         {

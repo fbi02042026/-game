@@ -126,10 +126,32 @@ public class EquipStatTipUI : MonoBehaviour
         _panel.SetActive(true);
         PlaceAbove(anchor, _panelRt.sizeDelta.y);
         _openKey = key != null ? key : eq;
+
+        // 【2026-10-11 主人报「点开的装备信息 没有自动关闭」】到点自己收起。
+        // 再点同一个装备仍能立刻关（Toggle 走 Hide），不用等计时器。
+        if (_autoHide != null) StopCoroutine(_autoHide);
+        _autoHide = StartCoroutine(CoAutoHide());
+    }
+
+    /// <summary>【2026-10-11 主人拍板】浮框自动收起的等待时间（秒；用 unscaled，战斗暂停也照样收）。</summary>
+    const float AutoHideSeconds = 3f;
+    Coroutine _autoHide;
+
+    System.Collections.IEnumerator CoAutoHide()
+    {
+        float t = 0f;
+        while (t < AutoHideSeconds)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        _autoHide = null;
+        Hide();
     }
 
     public void Hide()
     {
+        if (_autoHide != null) { StopCoroutine(_autoHide); _autoHide = null; }
         _openKey = null;
         if (_panel != null) _panel.SetActive(false);
         gameObject.SetActive(false);

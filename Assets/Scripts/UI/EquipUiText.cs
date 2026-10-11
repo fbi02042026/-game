@@ -144,13 +144,19 @@ public static class EquipUiText
     /// 装备文案属性数值的统一渲染口径（2026-10-09 主人拍板：比例属性 isPercent=false + 小数值要按百分比显示）：
     /// ① isPercent = true → value * 100 + "%"（保持原行为）；
     /// ② isPercent = false 但属于比例属性集合 → value * 100 + "%"（本次新增，修 0.05 显示成「0.1」的缺陷）；
-    /// ③ 其它 → value.ToString("0.#")（保持原行为）。
+    /// ③ 其它 → <b>整数</b>（2026-10-11 主人拍板改）。
     /// 只改显示，绝不动任何 isPercent 赋值 / 模板 / csv / 战斗结算口径。
+    ///
+    /// <para>【2026-10-11 主人报「装备上的装备和武器都是小数 和获得的时候数值不统一」】
+    /// 旧写法③用 <c>ToString("0.#")</c> → 12.35 显示成「12.4」；而「获得时」那条路
+    /// （<c>DraftPool</c> 卡面 / 掉落文案）一直是 <c>Mathf.RoundToInt</c> 显示「12」，
+    /// 同一件装备两处数字对不上。现统一到整数，与获得时完全同口径。</para>
     /// </summary>
     public static string Value(AttrType t, float value, bool isPercent)
     {
-        if (isPercent || IsRateAttr(t)) return (value * 100f).ToString("0.#") + "%";
-        return value.ToString("0.#");
+        // 百分比也一并用 RoundToInt：旧写法 12.5% 会显示「12.5%」，而获得时显示「13%」。
+        if (isPercent || IsRateAttr(t)) return Mathf.RoundToInt(value * 100f) + "%";
+        return Mathf.RoundToInt(value).ToString();
     }
 
     /// <summary>装备标题：名称 + 强化等级。</summary>

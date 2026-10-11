@@ -305,11 +305,18 @@ public class Monster : UnitBase
     public bool EnterAtPauseStop => _enterAtPauseStop;
 
     /// <summary>从地图边缘缓步走向交战点；faceDir 为入场朝向（左进场朝右=1，右进场朝左=-1）</summary>
-    public void BeginMapEnter(Vector3 engagePos, float speed, int faceDir = -1)
+    public void BeginMapEnter(Vector3 engagePos, int faceDir = -1)
     {
-        _enterTargetPos = engagePos;
+        // 【2026-10-11 主人拍板】入场不再飞：速度挂钩自身 MoveSpeed（旧常量 MONSTER_ENTER_SPEED=1.0 是正常移速的 2.9 倍）。
+        float moveSpeed = attr.GetAttr(AttrType.MoveSpeed);
+        if (moveSpeed <= 0f)
+        {
+            Debug.LogError($"[Monster] {gameObject.name} MoveSpeed={moveSpeed}，入场无法推进。");
+            return;
+        }
         float enterMul = _isBossUnit ? 1f : Random.Range(0.9f, 1.15f);
-        _enterSpeed = Mathf.Max(0.4f, speed * enterMul);
+        _enterTargetPos = engagePos;
+        _enterSpeed = moveSpeed * GameConfig.MONSTER_ENTER_SPEED_MUL * enterMul;
         _isEnteringMap = true;
         if (_isBossUnit) BattleBossHpBar.PlayBossIntro(this); // BOSS 出场：血条入场演出，与走进场同时进行
         _enterAtPauseStop = false;
@@ -522,8 +529,8 @@ public class Monster : UnitBase
 
         if (melee)
         {
+            // 【2026-10-11 主人拍板】怪物不再向目标所在的车道并道，出场后按自己那条车道打完（旧行为会在站定后继续下沉/上浮一截）。
             FaceToward(target);
-            AdjustLaneTowardTarget(target, Time.deltaTime);
         }
 
         bool isMoving = false;

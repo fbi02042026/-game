@@ -231,7 +231,22 @@ public class BattleStageMapUI : MonoBehaviour
             if (p != null) picked = p;
             rolled = true;
         });
-        while (!rolled) yield return null;
+        // 【2026-10-11 主人报「老虎机轮到恢复关卡后弹不出界面 卡到这了」】
+        // 这个等待原来<b>没有出口</b>：老虎机只要没回调（面板没起来 / 「进入关卡」按钮没绑上 / 结果没出来），
+        // rolled 永远 false → _flow 一直不为 null → OnPedestalClicked 第一行就 return → 石墩全点不动 → 卡死。
+        // 现在加超时保险：超时打 Error（把真因留给日志），同时放开流程让玩家还能点石墩继续。
+        // 这是 fail closed，不是兜底：不假装转成功了，只是不再把玩家锁死在这一屏。
+        const float RollTimeout = 20f;
+        float waited = 0f;
+        while (!rolled && waited < RollTimeout)
+        {
+            waited += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (!rolled)
+            Debug.LogError($"[BattleStageMap] 老虎机 {RollTimeout}s 内没有回调"
+                + $"（本关类型={(_next != null ? _next.type.ToString() : "?")}）→ 已放开流程避免卡死。"
+                + "查 NextStageRouletteUI：结果「进入关卡」按钮是不是没弹出来 / enterButton 没绑上");
 
         _next = picked;
         RefreshPedestals(Phase.AfterRoll);
@@ -322,28 +337,27 @@ public class BattleStageMapUI : MonoBehaviour
             var hi = p.root.transform.Find("Highlight");
             if (hi != null) hi.gameObject.SetActive(false);
 
+            // 旗子只走 SetFlagNone / SetFlagTurned / SetFlagDefeated 三个出口，
+            // 下面任何分支都不许再直接 SetActive(banner/clearedMark)（2026-10-11 主人拍板）。
             if (phase == Phase.BranchSelect)
             {
                 if (cleared)
                 {
                     if (p.lockIcon != null) p.lockIcon.SetActive(false);
-                    SetFlag(p, false, false);
-                    if (p.clearedMark != null) p.clearedMark.SetActive(true);
+                    SetFlagDefeated(p);                 // 已打败 → Banner 暗旗 #646464
                     if (p.stone != null) p.stone.color = new Color(0.85f, 0.85f, 0.85f, 1f);
                     SetClickable(p, false, i);
                 }
                 else if (isCandidate)
                 {
                     if (p.lockIcon != null) p.lockIcon.SetActive(false);
-                    if (p.clearedMark != null) p.clearedMark.SetActive(false);
-                    SetFlag(p, false, false);
+                    SetFlagNone(p);                     // 候选关还没转老虎机 → 不显示旗子
                     if (p.stone != null) p.stone.color = Color.white;
                     SetClickable(p, true, i);
                 }
                 else
                 {
-                    SetFlag(p, false, false);
-                    if (p.clearedMark != null) p.clearedMark.SetActive(false);
+                    SetFlagNone(p);
                     if (p.lockIcon != null) p.lockIcon.SetActive(true);
                     if (p.stone != null) p.stone.color = new Color(0.55f, 0.55f, 0.55f, 0.95f);
                     SetClickable(p, false, i);
@@ -358,8 +372,7 @@ public class BattleStageMapUI : MonoBehaviour
                 if (phase == Phase.BeforeRoll)
                 {
                     bool showLock = nextIdx > 0;
-                    SetFlag(p, false, false);
-                    if (p.clearedMark != null) p.clearedMark.SetActive(false);
+                    SetFlagNone(p);                     // 没转老虎机 → 不显示旗子
                     if (p.lockIcon != null) p.lockIcon.SetActive(showLock);
                     if (p.stone != null) p.stone.color = Color.white;
                     SetClickable(p, false, i);
@@ -367,8 +380,7 @@ public class BattleStageMapUI : MonoBehaviour
                 else
                 {
                     if (p.lockIcon != null) p.lockIcon.SetActive(false);
-                    if (p.clearedMark != null) p.clearedMark.SetActive(false);
-                    SetFlag(p, true, false);
+                    SetFlagTurned(p);                   // 老虎机转到 → ClearedMark 旗（保留美术原色）
                     if (_next != null) ApplyTypeIcon(p, _next.type);
                     if (p.stone != null) p.stone.color = Color.white;
                     SetClickable(p, true, i);
@@ -377,15 +389,13 @@ public class BattleStageMapUI : MonoBehaviour
             else if (cleared)
             {
                 if (p.lockIcon != null) p.lockIcon.SetActive(false);
-                SetFlag(p, false, false);
-                if (p.clearedMark != null) p.clearedMark.SetActive(true);
+                SetFlagDefeated(p);                     // 已打败 → Banner 暗旗
                 if (p.stone != null) p.stone.color = new Color(0.85f, 0.85f, 0.85f, 1f);
                 SetClickable(p, false, i);
             }
             else
             {
-                SetFlag(p, false, false);
-                if (p.clearedMark != null) p.clearedMark.SetActive(false);
+                SetFlagNone(p);                         // 未解锁 → 不显示旗子
                 if (p.lockIcon != null) p.lockIcon.SetActive(true);
                 if (p.stone != null) p.stone.color = new Color(0.55f, 0.55f, 0.55f, 0.95f);
                 SetClickable(p, false, i);
@@ -393,16 +403,34 @@ public class BattleStageMapUI : MonoBehaviour
         }
     }
 
-    void SetFlag(PedestalRefs p, bool showBanner, bool gray)
+    // ===== 旗子三态唯一出口（2026-10-11 主人拍板）=====
+    // 旧口径（已通关=ClearedMark 灰旗 / 转到的下一关=Banner 白旗）作废。
+    // 主人原话：「没有老虎机时不显示旗子 转到后出现旗子用 ClearedMark 节点
+    //            打败后用 Banner 节点然后颜色调暗」（参考色 #646464）。
+
+    /// <summary>没转老虎机（下一关未定）→ 什么旗都不显示。</summary>
+    void SetFlagNone(PedestalRefs p)
     {
+        if (p.banner != null) p.banner.gameObject.SetActive(false);
+        if (p.clearedMark != null) p.clearedMark.SetActive(false);
+    }
+
+    /// <summary>老虎机转到后 → 显示 ClearedMark 节点（颜色用预制体里美术摆的，不改色）。</summary>
+    void SetFlagTurned(PedestalRefs p)
+    {
+        SetFlagNone(p);
+        if (p.clearedMark != null) p.clearedMark.SetActive(true);
+    }
+
+    /// <summary>打败后 → 显示 Banner 节点，颜色调暗到 #646464（100,100,100）。</summary>
+    void SetFlagDefeated(PedestalRefs p)
+    {
+        SetFlagNone(p);
         if (p.banner != null)
         {
-            p.banner.gameObject.SetActive(showBanner);
-            if (showBanner)
-                p.banner.color = gray ? new Color(0.45f, 0.45f, 0.45f, 1f) : Color.white;
+            p.banner.gameObject.SetActive(true);
+            p.banner.color = new Color(100f / 255f, 100f / 255f, 100f / 255f, 1f);
         }
-        if (p.icon != null)
-            p.icon.gameObject.SetActive(showBanner);
     }
 
     void SetClickable(PedestalRefs p, bool on, int index)
@@ -423,22 +451,45 @@ public class BattleStageMapUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 关卡类型图标 —— 【2026-10-11 主人：「石墩只有一个图没有类型 只有旗子有类型」】
+    /// 石墩（Stone）就一张底图、不带类型；类型只画在<b>旗子</b>上。
+    /// 预制体里旗子（ClearedMark / Banner）没有 Icon 子节点 → 代码在旗下补一个（不动预制体，铁律 3）。
+    /// 两面旗都挂：转到时看 ClearedMark，打败后看 Banner（暗旗），类型一路跟着走。
+    /// </summary>
     void ApplyTypeIcon(PedestalRefs p, StageType type)
     {
         Sprite sp = LoadStageIcon(type);
-        if (p.icon != null)
+        if (sp == null)
         {
-            if (sp != null)
-            {
-                p.icon.sprite = sp;
-                p.icon.color = Color.white;
-                p.icon.preserveAspect = true;
-            }
-            else
-                p.icon.color = StageRoller.Tint(type);
+            Debug.LogError($"[BattleStageMap] 关卡类型图取不到：Art/UI/关卡/{StageRoller.IconName(type)} —— 旗子上就没有类型了");
+            return;
         }
-        if (p.banner != null)
-            p.banner.color = Color.white;
+        ApplyTypeIconToFlag(p.clearedMark, sp);
+        ApplyTypeIconToFlag(p.banner != null ? p.banner.gameObject : null, sp);
+    }
+
+    static void ApplyTypeIconToFlag(GameObject flagGo, Sprite sp)
+    {
+        if (flagGo == null) return;
+        var exist = flagGo.transform.Find("TypeIcon");
+        Image img = exist != null ? exist.GetComponent<Image>() : null;
+        if (img == null)
+        {
+            var go = new GameObject("TypeIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(flagGo.transform, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(48f, 48f);
+            rt.anchoredPosition = new Vector2(0f, 6f);
+            img = go.GetComponent<Image>();
+            img.raycastTarget = false;
+        }
+        img.sprite = sp;
+        img.color = Color.white;
+        img.preserveAspect = true;
+        img.gameObject.SetActive(true);
     }
 
     void ApplyCurrentOutline(int index)

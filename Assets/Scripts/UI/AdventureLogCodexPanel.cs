@@ -560,7 +560,15 @@ public class AdventureLogCodexPanel
             ApplyMercFrameTint(go.transform, rarity);
         }
         ApplyPortrait(go.transform, AdventureCodex.LoadMercHead(e), revealed);
-        string display = string.IsNullOrEmpty(e.Nickname) ? e.Name : e.Nickname;
+        // 【2026-10-11 主人拍板「佣兵名字要统一」】图鉴格子只写**真名**（塔克），不再「有昵称就用昵称」
+        // （旧写法：图鉴写「小红」、头顶名签写「塔克」，两处对不上）。真名缺失才退回昵称，并报出来让主人看见。
+        string display = e.Name;
+        if (string.IsNullOrEmpty(display))
+        {
+            display = e.Nickname;
+            if (string.IsNullOrEmpty(display)) display = e.Id;
+            else Debug.LogError($"[Codex] 佣兵 {e.Id} 在花名册里没有真名 Name，图鉴退回昵称「{display}」 —— 去 merc_roster.csv 补真名");
+        }
         ApplyName(go.transform, revealed ? display : "？？？", revealed ? (MercRosterDefs.MercRarity?)rarity : null);
         ApplyBossTag(go.transform, legendary && revealed);
         var bossLabel = FindDeep(go.transform, "boss")?.GetComponentInChildren<Text>(true);

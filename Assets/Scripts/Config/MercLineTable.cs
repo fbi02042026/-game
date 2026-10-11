@@ -109,19 +109,42 @@ public static class MercLineTable
 
     static string Fallback(string hireId, Scene scene)
     {
-        string nick = hireId;
-        if (MercRosterDefs.TryGetByHireId(hireId, out var d) && !string.IsNullOrEmpty(d.Nickname))
-            nick = d.Nickname;
-        else if (MercRosterDefs.TryGetByAssetId(hireId, out var a) && !string.IsNullOrEmpty(a.Nickname))
-            nick = a.Nickname;
+        // 【2026-10-11 主人拍板「佣兵名字要统一」】台词前缀只认**真名**（塔克），不再用昵称（重盾 / 小红）。
+        // 旧写法取 Nickname → 头顶名签写「塔克」、同一句台词气泡却写「小红」，玩家会当成两个人。
+        string who = ResolveDisplayName(hireId);
         switch (scene)
         {
-            case Scene.TavernRefresh: return $"{nick}：有活吗？";
-            case Scene.HireSuccess: return $"{nick}：走一趟。";
-            case Scene.Mvp: return $"{nick}：这趟还行。";
-            case Scene.Death: return $"{nick}：先撤……";
-            default: return $"{nick}：上！";
+            case Scene.TavernRefresh: return $"{who}：有活吗？";
+            case Scene.HireSuccess: return $"{who}：走一趟。";
+            case Scene.Mvp: return $"{who}：这趟还行。";
+            case Scene.Death: return $"{who}：先撤……";
+            default: return $"{who}：上！";
         }
+    }
+
+    /// <summary>同一句台词只报一次「缺真名」，别刷屏。</summary>
+    static readonly HashSet<string> _missingNameWarned = new HashSet<string>();
+
+    /// <summary>
+    /// 台词前缀的名字 —— <b>唯一出口</b>：只认花名册真名（<c>MercRosterDefs.Def.Name</c>）。
+    /// <para>真源缺名字 → fail closed：LogError 报出来让主人看见，用 hireId 顶上（铁律 14），
+    /// 不拿昵称 / 职业名悄悄顶替。</para>
+    /// </summary>
+    static string ResolveDisplayName(string hireId)
+    {
+        MercRosterDefs.Def def;
+        if (!string.IsNullOrEmpty(hireId) && MercRosterDefs.TryGetByHireId(hireId, out def)
+            && !string.IsNullOrEmpty(def.Name))
+            return def.Name;
+        if (!string.IsNullOrEmpty(hireId) && MercRosterDefs.TryGetByAssetId(hireId, out def)
+            && !string.IsNullOrEmpty(def.Name))
+            return def.Name;
+
+        string key = string.IsNullOrEmpty(hireId) ? "(空)" : hireId;
+        if (_missingNameWarned.Add(key))
+            Debug.LogError($"[MercLineTable] 佣兵 {key} 在花名册里没有真名 Name，台词前缀退回 {key} —— "
+                + "去 merc_roster.csv 补真名，别拿昵称顶替");
+        return string.IsNullOrEmpty(hireId) ? "佣兵" : hireId;
     }
 
     static string[] SplitCsvLine(string line)

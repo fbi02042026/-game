@@ -133,6 +133,15 @@ public class SkillAvatarUI
         // 但没图时必须把颜色置透明 —— sprite 为空的 Image 会渲染成一块白片。
         avatarImage.color = icon != null ? Color.white : new Color(1f, 1f, 1f, 0f);
         avatarImage.gameObject.SetActive(true);
+        // 【2026-10-11 主人第三次报「技能图标还是不显示 / 闪一下又没了」→ 根因实锤】
+        // SetMpShortage(false) 会把颜色还原成它**首次调用时**抓的 _avatarBaseColor。
+        // 而首次调用几乎必然发生在空槽期：那时 SetAvatar(null) 刚把颜色置成 alpha=0 的全透明，
+        // base 就被记成了透明 —— 之后抽到技能，SetAvatar 设成白色（可见），
+        // 同一帧 TickRunSkillSlots 里的 SetMpShortage 又把它刷回全透明 → 图标「闪一下又没了」。
+        // 修法：谁改颜色谁刷新基准。SetAvatar 设完即同步缓存，
+        // SetMpShortage 只负责「压暗 / 还原」，不再持有可能过期的旧值。
+        _avatarBaseColor = avatarImage.color;
+        _avatarBaseCaptured = true;
         if (icon != null) EnsureIconRectVisible();
     }
 
@@ -202,6 +211,9 @@ public class SkillAvatarUI
     /// <summary>
     /// 蓝不够放这一发 → 头像压暗（灰度 ×0.45），够了还原（2026-10-06）。
     /// 只动<b>图标层</b>，与 SetEmptyDim 的底框压暗各管一层，互不打架。幂等，重复调用无副作用。
+    /// <para>⚠ 基准色 <c>_avatarBaseColor</c> 由 <see cref="SetAvatar"/> 每次设图时同步刷新，
+    /// 本方法<b>不再</b>自己「首次抓一次」——2026-10-11 正是那个「首次」抓到了空槽的全透明色，
+    /// 导致技能图标被刷成透明（主人报「闪一下又没了」）。改这里前先看 SetAvatar 里的注释。</para>
     /// </summary>
     public void SetMpShortage(bool shortage)
     {

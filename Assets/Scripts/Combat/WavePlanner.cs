@@ -316,7 +316,7 @@ public sealed class WavePlanner
         monster.SetLaneY(laneY);
         if (forcedTarget != null)
             monster.SetForcedTarget(forcedTarget);
-        monster.BeginMapEnter(engagePos, GameConfig.MONSTER_ENTER_SPEED, fromLeft ? 1 : -1);
+        monster.BeginMapEnter(engagePos, fromLeft ? 1 : -1);
         return monster;
     }
 
@@ -1852,7 +1852,7 @@ public sealed class WavePlanner
             monster.Init(fallbackCfg, 0, CurrentChapter, fallbackScale, fallbackSpriteOverride);
             ApplyTutorialMonsterTuning(monster);
             monster.SetLaneY(lane);
-            monster.BeginMapEnter(engage, GameConfig.MONSTER_ENTER_SPEED);
+            monster.BeginMapEnter(engage);
             monster.OnDead += OnMonsterDead;
             monsters.Add(monster);
             _totalMonstersSpawnedThisStage++;

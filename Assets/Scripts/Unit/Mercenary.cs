@@ -546,10 +546,16 @@ public class Mercenary : UnitBase
         return id;
     }
 
+    /// <summary>
+    /// 队形车道（相对玩家 0）。【2026-10-11 主人拍板】原值 -0.35 / +0.35：
+    /// 0 号站在最下面那条，被底部 UI（背包 / 技能条）挡住，主人原话「招募到的佣兵位置往上移点 现在在最下面被挡住了」。
+    /// 现在整体往上抬到 -0.15 / +0.45（仍在可行走区 -0.809 ~ 0.526 内，超出由 BattleLaneBounds 自己钳）。
+    /// 想再调只改这两个数，别在别处另写一套队形。
+    /// </summary>
     protected override float GetFormationLaneOffset()
     {
-        if (_partyIndex == 0) return -0.35f;
-        if (_partyIndex == 1) return 0.35f;
+        if (_partyIndex == 0) return -0.15f;
+        if (_partyIndex == 1) return 0.45f;
         return 0f;
     }
 

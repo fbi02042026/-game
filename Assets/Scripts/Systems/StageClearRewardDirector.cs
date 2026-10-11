@@ -995,26 +995,20 @@ public class StageClearRewardDirector : MonoBehaviour
         // （RefreshLootModeChrome 的确认按钮、SkillOrderChip 的拖拽开关等条件恒为 false）。
         // 是否整条删除待主人拍板，奴家先不动别的（铁律 9：改过没问题的不许再私自改）。
 
-        // —— 传送门 + 传送特效 ——
-        if (_chuansongmen != null)
+        // —— 传送门 ——
+        // 【2026-10-11 主人拍板】门改用主人新加的预制体 Resources/VFX/other/world/chuansongmen，
+        // 挂 BattleUI 下（门是 UI 节点，但 PortalGate 会把它钉在世界坐标上）。
+        // 播放顺序：先「传送」节点 → 0.3s 后 door + SpinPortalBlue 一起出来。
+        // 场景里那个旧的 chuansongmen 节点不再参与通关流程（不删，保留）。
+        var gate = PortalGate.Open(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
+        if (gate != null)
         {
-            // 【2026-10-11 主人拍板「可见性选 B」】门根放近一点：hero+4.5 → hero+3.2。
-            // door01 在根节点右侧 2.26，门的可视部分 = hero+5.46，稳稳落在镜头里（镜头右缘 hero+9）。
-            float portalX = bm != null && bm.hero != null
-                ? UnitBase.GetCombatX(bm.hero) + 3.2f
-                : spawn.x + 3f;
-            var p = _chuansongmen.position;
-            p.x = portalX;
-            p.y = UnitBase.GROUND_Y;
-            _chuansongmen.position = p;
-            _chuansongmen.gameObject.SetActive(true);
-            EnsurePortalFx(_chuansongmen);
-            PlayPortalOpenVfx(_chuansongmen.position);
-            bm?.NotifyChuanSongMenOpened(_chuansongmen);
+            bm?.NotifyChuanSongMenOpened(gate);
         }
         else
         {
-            Debug.LogWarning("[StageClearReward] 场景缺少 chuansongmen，跳过传送门直接结算");
+            // 门开不出来也不能把玩家锁死在这一屏：报错之后直接走通关结算。
+            Debug.LogError("[StageClearReward] 传送门没开出来（详见上面 PortalGate 的报错），直接走通关结算");
             bm?.FinishStageAfterPortalReached();
         }
 

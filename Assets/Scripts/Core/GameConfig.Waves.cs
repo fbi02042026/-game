@@ -46,6 +46,11 @@ public static partial class GameConfig
 
     // —— 佣兵币产出（2026-10-07 主人拍板：「佣兵币击杀精英1个 击杀Boss两个」）——
     // 唯一的发放点在 BattleManager.OnMonsterDead（按 Boss 优先、不与精英叠加）。
+    /// <summary>
+    /// 佣兵币产出总开关。【2026-10-11 主人拍板】主人原话「现在暂时先不用给佣兵币 等以后再说」→ 关掉。
+    /// false = 击杀精英 / Boss 都不再发佣兵币（已攒的不清）。要恢复：改回 true 即可，下面两个数值不用动。
+    /// </summary>
+    public static bool MERC_GOLD_GRANT_ENABLED = false;
     /// <summary>击杀 1 只精英发的佣兵币。</summary>
     public const int MERC_GOLD_PER_ELITE = 1;
     /// <summary>击杀 1 个 Boss 发的佣兵币。</summary>

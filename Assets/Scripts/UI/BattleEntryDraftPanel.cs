@@ -597,12 +597,11 @@ public class BattleEntryDraftPanel : MonoBehaviour
             SetExpanded(false);
             ApplyState(0f);   // 立刻归位到收起态（不等动画走完），下面展开才有「收 → 展」的观感
         }
-        // 【2026-10-06 主人二次拍板】这里是倒计时<b>唯一</b>的起表点：
-        // 面板一露头（= 抽奖环节开始）就开始走 30s，**不是抽完才开始**；
-        // 抽奖全程连续递减，抽完<b>不重置</b>（原来 CoStageEntryDraft 在抽完又起一次表，
-        // 玩家看到的就是「数字跳回 30 重新开始」—— 主人报「怎么还是抽完才开始计时」的根因）。
-        // 归零 = 玩家挂着没动 → 当作点了「继续」。
-        // 连抽中途回面板只是<b>解冻</b>（SetCountdownPaused(false)），不补满 —— 总预算就是这 30s。
+        // 这里是倒计时<b>首次</b>起表点：面板一露头（= 抽奖环节开始）就开始走，
+        // **不是抽完才开始**。归零 = 玩家挂着没动 → 当作点了「继续」。
+        // 【2026-10-11 主人拍板】每抽一次结算完会再调一次 StartContinueCountdown = 重置计时
+        // （主人原话「时间是固定的 不是抽一次重置一次计时」）——
+        // 下面这句 2026-10-06 的旧口径「抽完只解冻、不补满，总预算 30s」<b>已作废</b>，别再照它改回去。
         _drawLocked = false;
         StartContinueCountdown();
         _onPick = onPick;
@@ -963,12 +962,17 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// 普通 WaitForSeconds 会永远不走。</para>
     /// </summary>
     /// <summary>
-    /// 【2026-10-06 二次拍板】倒计时<b>唯一</b>起表口 —— 只在 <see cref="Begin"/> 调用。
+    /// 倒计时<b>唯一</b>起表 / 重置口（铁律 15：不多入口）。两个调用点：
+    /// <list type="bullet">
+    /// <item><see cref="Begin"/>：面板一露头就开始走（不是抽完才开始）。</item>
+    /// <item>【2026-10-11 主人拍板】每抽一次结算完由 <c>BattleManager.CoStageEntryDraft</c>
+    /// 再调一次 = <b>抽一次重置一次计时</b>（主人原话「时间是固定的 不是抽一次重置一次计时」）。
+    /// 这一条与 2026-10-06 那份「抽完只解冻、不补满」口径相反，以本次为准。</item>
+    /// </list>
     ///
     /// <para>为什么不用协程：协程会随 GameObject 显隐被掐断/延后，主人在外面看到的就是
-    /// 「计时好像没在走 / 抽完才开始跳」。现在改 <see cref="TickContinueCountdown"/> 每帧
-    /// 按 <c>Time.unscaledDeltaTime</c> 递减 —— 抽奖阶段 timeScale 冻住也不受影响，
-    /// 且一定是从面板出现那一刻起连续走。</para>
+    /// 「计时好像没在走」。现在改 <see cref="TickContinueCountdown"/> 每帧
+    /// 按 <c>Time.unscaledDeltaTime</c> 递减 —— 抽奖阶段 timeScale 冻住也不受影响。</para>
     /// </summary>
     public void StartContinueCountdown(float seconds = ContinueCountdownSec)
     {
@@ -978,7 +982,7 @@ public class BattleEntryDraftPanel : MonoBehaviour
         _countdownPaused = false;
         _countdownText.gameObject.SetActive(true);
         _countdownText.text = Mathf.CeilToInt(_countdownLeft).ToString();
-        Debug.Log($"[BattleEntryDraftPanel] 倒计时起表 {_countdownLeft:F0}s（面板出现即开始，抽奖全程连续，抽完不重置）");
+        Debug.Log($"[BattleEntryDraftPanel] 倒计时起表/重置 {_countdownLeft:F0}s（面板出现即开始，抽一次重置一次）");
     }
 
     /// <summary>
