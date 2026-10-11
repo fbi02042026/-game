@@ -1,8 +1,9 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 抽奖概率公示弹窗（2026-10-05 主人拍板）。
+/// 抽奖概率公示弹窗（2026-10-05 主人拍板；2026-10-11 改走<b>预制体</b>）。
 ///
 /// 主人原话：「保底这个不用写到明面上，但是概率需要告诉玩家……可以再（抽）按钮旁边加个感叹号之类的，
 /// 点击弹出弹窗上面写的概率」；「太复杂了 直接说佣兵技能装备分别占多少百分比 然后稀有和传奇的占多少就行」。
@@ -15,20 +16,40 @@ using UnityEngine.UI;
 /// 玩家解锁的技能变多、佣兵池变了，弹窗上的数字会跟着变，永远是真的。
 /// 保底定序一个字都不提（主人要求）。</para>
 ///
-/// <para>点「!」开、点「关闭」或遮罩关。全程运行时建树，不碰 prefab；
-/// 沿用项目惯例挂 BattleUI 下做子 Canvas（<see cref="GameConfig.SORT_POPUP"/> + GraphicRaycaster）。</para>
+/// <para><b>2026-10-11 主人拍板：「概率公示弹窗给我生成预制体」</b>。<br/>
+/// 外观<b>不再运行时用纯色块拼</b>，改为加载预制体
+/// <c>Resources/Prefabs/Battle/DraftOddsPopup</c>
+/// （由 <c>Assets/Editor/DraftOddsPopupPrefabBuilder.cs</c> 单点生成，美术全部取自项目现有资源：
+/// 撤离 / 替换装备弹窗同款 Panel 底图 + 天赋界面同款关闭按钮）。<br/>
+/// 本类只负责<b>克隆行模板 + 填数字</b>：字号 / 颜色 / 行高 / 间距都在预制体里，主人改预制体即生效。
+/// 概率行数是活的（随卡池变），所以预制体里放了两个<b>默认隐藏的模板</b>（RowTemplate / HeadTemplate），
+/// 运行时按它克隆 —— 这样连行的样式主人都能在编辑器里调。</para>
 /// </summary>
 public class DraftOddsPopupUI : MonoBehaviour
 {
-    const float PanelW = 620f;
-    const float PanelH = 560f;
+    /// <summary>
+    /// 预制体路径 —— 与 <c>DraftOddsPopupPrefabBuilder.PrefabPath</c> <b>必须同值</b>。
+    /// 改一边忘了另一边 = 运行时加载不到。
+    /// </summary>
+    public const string PrefabPath = "Prefabs/Battle/DraftOddsPopup";
 
-    const float RowH = 36f;
-    const float HeadH = 34f;
+    /// <summary>
+    /// 换段时的额外空档（「抽到什么」→「什么品质」之间）。
+    /// ⚠ 这是本类里**唯一**的排版数字：行高 / 字号 / 颜色 / 左右留白全在预制体模板里，
+    /// 只有「段与段之间多空多少」没法用模板表达，才留在这里。
+    /// </summary>
     const float SectionGap = 12f;
 
     static DraftOddsPopupUI _inst;
     GameObject _root;
+    Transform _listRoot;
+    RectTransform _rowTemplate;
+    RectTransform _headTemplate;
+    Button _closeBtn;
+    Button _dimBtn;
+
+    /// <summary>本次打开克隆出来的行，关掉时统一销毁（不销毁模板本身）。</summary>
+    readonly List<GameObject> _spawned = new List<GameObject>();
 
     public static void Toggle()
     {
@@ -36,12 +57,12 @@ public class DraftOddsPopupUI : MonoBehaviour
         if (ui == null) return;
         // ⚠ 必须调实例方法 Close：静态 Hide() 用实例点出来会报 CS0176
         if (ui._root != null && ui._root.activeSelf) ui.Close();
-        else ui.Build();
+        else ui.Open();
     }
 
     public static void Hide()
     {
-        if (_inst == null || _inst._root == null) return;
+        if (_inst == null) return;
         _inst.Close();
     }
 
@@ -49,91 +70,79 @@ public class DraftOddsPopupUI : MonoBehaviour
     {
         if (_inst != null) return _inst;
 
-        Transform parent = BattleUI.Instance != null ? BattleUI.Instance.transform : null;
-        if (parent == null)
+        var prefab = Resources.Load<GameObject>(PrefabPath);
+        if (prefab == null)
         {
-            var canvas = Object.FindObjectOfType<Canvas>();
-            parent = canvas != null ? canvas.transform : null;
-        }
-        if (parent == null)
-        {
-            Debug.LogError("[DraftOddsPopup] 找不到 UI 父节点");
+            // 不静默跳过（铁律 14）：没预制体就没得谈，报出来让主人看见
+            Debug.LogError($"[DraftOddsPopup] 找不到预制体 Resources/{PrefabPath}，" +
+                           "请先在团结菜单跑 Tools → UI → 生成抽奖概率公示弹窗预制体");
             return null;
         }
 
-        var go = new GameObject("DraftOddsPopup", typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        _inst = go.AddComponent<DraftOddsPopupUI>();
-        return _inst;
+        var go = Instantiate(prefab);
+        go.name = "DraftOddsPopup";
+        // 与 EvacuateConfirmPopup 同一套口径：自带 Overlay Canvas，不挂 BattleUI 下、不随场景销毁
+        DontDestroyOnLoad(go);
+        return go.GetComponent<DraftOddsPopupUI>() ?? go.AddComponent<DraftOddsPopupUI>();
     }
 
-    void Build()
+    void Awake()
     {
-        if (_root != null) Destroy(_root);
-        _root = new GameObject("Root", typeof(RectTransform));
-        _root.transform.SetParent(transform, false);
+        _inst = this;
+        BindRefs();
+        Wire();
+        if (_root != null) _root.SetActive(false);
+    }
 
-        var rootRt = _root.GetComponent<RectTransform>();
-        Stretch(rootRt);
-        var c = _root.AddComponent<Canvas>();
-        c.overrideSorting = true;
-        c.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        c.sortingOrder = GameConfig.SORT_POPUP;
-        if (_root.GetComponent<GraphicRaycaster>() == null)
-            _root.AddComponent<GraphicRaycaster>();
+    void OnDestroy()
+    {
+        if (_inst == this) _inst = null;
+    }
 
-        // 遮罩：点它就关（非模态，不逼玩家做决定）
-        var veilImg = CreateImage("Veil", _root.transform, new Color(0f, 0f, 0f, 0.55f));
-        Stretch(veilImg.rectTransform);
-        var veilBtn = veilImg.gameObject.AddComponent<Button>();
-        veilBtn.targetGraphic = veilImg;
-        // ⚠ 这里必须是实例方法 Close：静态 Hide() 与实例方法同名会被编译器判成 CS0111
-        veilBtn.onClick.AddListener(Close);
+    void BindRefs()
+    {
+        if (_root == null) _root = transform.Find("Root")?.gameObject ?? gameObject;
+        _listRoot = FindDeep(_root.transform, "List");
+        // ⚠ FindDeep 返回的是 Transform，RectTransform 字段必须显式取组件（CS0266）
+        _rowTemplate = FindDeep(_root.transform, "RowTemplate")?.GetComponent<RectTransform>();
+        _headTemplate = FindDeep(_root.transform, "HeadTemplate")?.GetComponent<RectTransform>();
+        _closeBtn = FindDeep(_root.transform, "BtnClose")?.GetComponent<Button>();
+        _dimBtn = FindDeep(_root.transform, "Dim")?.GetComponent<Button>();
+    }
 
-        // 【2026-10-11 主人拍板】面板换**项目现有美术**：替换装备确认弹窗 / 撤离弹窗同款底图
-        // （Art/UI/NavCharacter/角色_0002s_0010_图层-7，Sliced），不再纯色块。
-        var panel = CreateImage("Panel", _root.transform, new Color(1f, 1f, 1f, 0.98f));
-        var panelSp = Resources.Load<Sprite>("UI/NavCharacter/角色_0002s_0010_图层-7");
-        if (panelSp != null)
+    void Wire()
+    {
+        // 右上角关闭 + 点遮罩 = 同一个出口（非模态，不逼玩家做决定）
+        if (_closeBtn != null)
         {
-            panel.sprite = panelSp;
-            panel.type = Image.Type.Sliced;
+            _closeBtn.onClick.RemoveAllListeners();
+            _closeBtn.onClick.AddListener(Close);
         }
-        else
+        if (_dimBtn != null)
         {
-            panel.color = new Color(0.10f, 0.11f, 0.14f, 0.98f);   // 缺图先顶住，但必须报出来
-            Debug.LogWarning("[DraftOddsPopup] 缺面板底图 UI/NavCharacter/角色_0002s_0010_图层-7，暂用纯色");
+            _dimBtn.onClick.RemoveAllListeners();
+            _dimBtn.onClick.AddListener(Close);
         }
-        var prt = panel.rectTransform;
-        prt.anchorMin = new Vector2(0.5f, 0.5f);
-        prt.anchorMax = new Vector2(0.5f, 0.5f);
-        prt.pivot = new Vector2(0.5f, 0.5f);
-        prt.anchoredPosition = Vector2.zero;
-        prt.sizeDelta = new Vector2(PanelW, PanelH);
+    }
 
-        var title = CreateText("Title", panel.transform, "抽奖概率", 34, new Color(1f, 0.92f, 0.72f));
-        SetTop(title.rectTransform, -16f, new Vector2(PanelW - 40f, 44f));
-
-        var sub = CreateText("Sub", panel.transform, "下面是单次抽奖的真实比例，随当前卡池实时变化。",
-            20, new Color(0.74f, 0.74f, 0.78f));
-        SetTop(sub.rectTransform, -60f, new Vector2(PanelW - 40f, 34f));
-
-        var list = new GameObject("List", typeof(RectTransform));
-        list.transform.SetParent(panel.transform, false);
-        var lrt = list.GetComponent<RectTransform>();
-        lrt.anchorMin = new Vector2(0f, 0f);
-        lrt.anchorMax = new Vector2(1f, 1f);
-        lrt.offsetMin = new Vector2(34f, 96f);
-        lrt.offsetMax = new Vector2(-34f, -104f);
-        var listRoot = list.transform;
+    /// <summary>
+    /// 只<b>填数据 + 克隆行</b>，不碰排版：位置 / 字体 / 图片都是预制体里主人调好的。
+    /// </summary>
+    void Open()
+    {
+        // ⚠ 先清掉上一次克隆出来的行，再 BindRefs ——
+        //   否则 List 下会同时存在模板与一堆克隆体，查找时容易认错。
+        ClearSpawned();
+        BindRefs();
+        Wire();
+        if (_root == null) return;
 
         var rows = DraftPool.BuildOddsRows();
-        if (rows.Count == 0)
+        if (_listRoot != null && (_rowTemplate == null || _headTemplate == null))
         {
-            var empty = CreateText("Empty", listRoot, "当前卡池为空", 22, new Color(0.8f, 0.8f, 0.84f));
-            Stretch(empty.rectTransform);
+            Debug.LogError("[DraftOddsPopup] 预制体里缺 RowTemplate / HeadTemplate，无法列出概率行");
         }
-        else
+        else if (_listRoot != null)
         {
             float y = 0f;
             string lastSection = null;
@@ -145,75 +154,63 @@ public class DraftOddsPopupUI : MonoBehaviour
                 {
                     lastSection = r.Section;
                     if (y < 0f) y -= SectionGap;
-                    var head = CreateText("Head_" + i, listRoot,
-                        r.Section == DraftPool.SEC_TYPE ? "抽到什么" : "什么品质",
-                        22, new Color(0.95f, 0.86f, 0.62f));
-                    SetRow(head.rectTransform, y, HeadH);
-                    head.alignment = TextAnchor.MiddleLeft;
-                    y -= HeadH;
+                    var head = Clone(_headTemplate, y);
+                    if (head != null)
+                    {
+                        var ht = head.GetComponentInChildren<Text>();
+                        if (ht != null)
+                            ht.text = r.Section == DraftPool.SEC_TYPE ? "抽到什么" : "什么品质";
+                        y -= head.sizeDelta.y;
+                    }
                 }
-                AddRow(listRoot, i, r, y);
-                y -= RowH;
+                var row = Clone(_rowTemplate, y);
+                if (row != null)
+                {
+                    FillRow(row, r);
+                    y -= row.sizeDelta.y;
+                }
             }
         }
 
-        var foot = CreateText("Foot", panel.transform, "品质越高越稀有，好东西本来就该难抽。",
-            18, new Color(0.62f, 0.62f, 0.66f));
-        SetTop(foot.rectTransform, -PanelH + 70f, new Vector2(PanelW - 40f, 30f));
-
-        // 【2026-10-11 主人拍板】去掉底部「关闭」大按钮，改**右上角关闭**（天赋界面同款关闭图）。
-        var closeSp = Resources.Load<Sprite>("UI/Talent/天赋_0007_关闭");
-        Image closeImg;
-        if (closeSp != null)
-        {
-            closeImg = CreateImage("BtnClose", panel.transform, Color.white);
-            closeImg.sprite = closeSp;
-        }
-        else
-        {
-            closeImg = CreateImage("BtnClose", panel.transform, new Color(0.30f, 0.32f, 0.38f, 1f));
-            var fallback = CreateText("X", closeImg.transform, "×", 30, Color.white);
-            Stretch(fallback.rectTransform);
-            Debug.LogWarning("[DraftOddsPopup] 缺关闭按钮图 UI/Talent/天赋_0007_关闭，暂用纯色×顶住");
-        }
-        var closeBtn = closeImg.gameObject.AddComponent<Button>();
-        closeBtn.targetGraphic = closeImg;
-        closeBtn.onClick.AddListener(Close);
-        var crt = closeImg.rectTransform;
-        crt.anchorMin = new Vector2(1f, 1f);
-        crt.anchorMax = new Vector2(1f, 1f);
-        crt.pivot = new Vector2(0.5f, 0.5f);
-        // 64 的按钮半宽 32，中心往里 40 → 右边缘离面板边 8，不会探出面板外
-        crt.anchoredPosition = new Vector2(-40f, -40f);
-        crt.sizeDelta = new Vector2(64f, 64f);
-
-        GameFonts.ApplyToHierarchy(_root.transform);
         _root.SetActive(true);
     }
 
-    /// <summary>一行「名字 ……… 百分比」。左对齐名字、右对齐数字，中间空着，简单清爽。</summary>
-    static void AddRow(Transform parent, int index, DraftPool.OddsRow r, float y)
+    /// <summary>一行「名字 ……… 百分比」：左名字、右数字，颜色按品质走（字号/对齐在模板里）。</summary>
+    static void FillRow(RectTransform row, DraftPool.OddsRow r)
     {
-        var row = new GameObject("Row" + index, typeof(RectTransform));
-        row.transform.SetParent(parent, false);
-        var rrt = row.GetComponent<RectTransform>();
-        SetRow(rrt, y, RowH);
+        var name = FindDeep(row, "Name");
+        var pct = FindDeep(row, "Pct");
+        var nt = name != null ? name.GetComponent<Text>() : null;
+        var pt = pct != null ? pct.GetComponent<Text>() : null;
+        if (nt != null)
+        {
+            nt.text = r.Label;
+            nt.color = r.Color;
+        }
+        if (pt != null)
+        {
+            pt.text = $"{r.Percent:0.0}%";
+            pt.color = r.Color;
+        }
+    }
 
-        var name = CreateText("Name", row.transform, r.Label, 24, r.Color);
-        var nrt = name.rectTransform;
-        nrt.anchorMin = new Vector2(0f, 0f);
-        nrt.anchorMax = new Vector2(0.55f, 1f);
-        nrt.offsetMin = new Vector2(10f, 0f);
-        nrt.offsetMax = Vector2.zero;
-        name.alignment = TextAnchor.MiddleLeft;
+    /// <summary>克隆一个模板节点并挂到 List 下（y 为「父顶锚点」的偏移，往下为负）。</summary>
+    RectTransform Clone(RectTransform template, float y)
+    {
+        if (template == null) return null;
+        var go = Instantiate(template.gameObject, _listRoot);
+        go.SetActive(true);
+        _spawned.Add(go);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchoredPosition = new Vector2(0f, y);
+        return rt;
+    }
 
-        var pct = CreateText("Pct", row.transform, $"{r.Percent:0.0}%", 26, r.Color);
-        var prt = pct.rectTransform;
-        prt.anchorMin = new Vector2(0.55f, 0f);
-        prt.anchorMax = new Vector2(1f, 1f);
-        prt.offsetMin = Vector2.zero;
-        prt.offsetMax = new Vector2(-10f, 0f);
-        pct.alignment = TextAnchor.MiddleRight;
+    void ClearSpawned()
+    {
+        for (int i = 0; i < _spawned.Count; i++)
+            if (_spawned[i] != null) Destroy(_spawned[i]);
+        _spawned.Clear();
     }
 
     /// <summary>
@@ -222,78 +219,21 @@ public class DraftOddsPopupUI : MonoBehaviour
     /// </summary>
     void Close()
     {
-        if (_root != null)
+        if (_root == null) return;
+        _root.SetActive(false);
+        ClearSpawned();
+    }
+
+    /// <summary>深度优先找子节点（预制体里层级可能套一层，不能只找直属）。</summary>
+    static Transform FindDeep(Transform root, string name)
+    {
+        if (root == null) return null;
+        if (root.name == name) return root;
+        for (int i = 0; i < root.childCount; i++)
         {
-            Destroy(_root);
-            _root = null;
+            var found = FindDeep(root.GetChild(i), name);
+            if (found != null) return found;
         }
-    }
-
-    // ——— 与项目里其它运行时建 UI 的写法保持一致 ———
-
-    static Image CreateImage(string name, Transform parent, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        go.transform.SetParent(parent, false);
-        var img = go.GetComponent<Image>();
-        img.color = color;
-        return img;
-    }
-
-    static Text CreateText(string name, Transform parent, string text, int size, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        go.transform.SetParent(parent, false);
-        var t = go.GetComponent<Text>();
-        t.text = text;
-        t.fontSize = size;
-        t.color = color;
-        t.alignment = TextAnchor.MiddleCenter;
-        t.horizontalOverflow = HorizontalWrapMode.Wrap;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        t.raycastTarget = false;
-        var f = GameFonts.GetChinese();
-        if (f != null) t.font = f;
-        return t;
-    }
-
-    static RectTransform CreateButton(Transform parent, string name, string label, Color bg, UnityEngine.Events.UnityAction onClick)
-    {
-        var img = CreateImage(name, parent, bg);
-        var btn = img.gameObject.AddComponent<Button>();
-        btn.targetGraphic = img;
-        btn.onClick.AddListener(onClick);
-        var t = CreateText("Label", img.transform, label, 26, Color.white);
-        Stretch(t.rectTransform);
-        return img.rectTransform;
-    }
-
-    static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
-
-    /// <summary>统一用「父级顶部为基准」的上锚点，避免各处 y 正负号不一致。</summary>
-    static void SetTop(RectTransform rt, float y, Vector2 size)
-    {
-        rt.anchorMin = new Vector2(0.5f, 1f);
-        rt.anchorMax = new Vector2(0.5f, 1f);
-        rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, y);
-        rt.sizeDelta = size;
-    }
-
-    /// <summary>列表里的行：顶部左对齐往下排，宽度撑满父级。</summary>
-    static void SetRow(RectTransform rt, float y, float height)
-    {
-        rt.anchorMin = new Vector2(0f, 1f);
-        rt.anchorMax = new Vector2(1f, 1f);
-        rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, y);
-        rt.sizeDelta = new Vector2(0f, height);
+        return null;
     }
 }

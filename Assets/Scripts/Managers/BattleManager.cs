@@ -2846,6 +2846,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         }
 
         // ③ 先确认这张卡现在真能生效（槽位 / 星级 / 背包位 / 玩家肯不肯换装备），生效了才扣钱
+        // 【2026-10-11 主人拍板】抽了技能/佣兵要立刻涨战力：与免费老虎机同口径，
+        // 发奖前后各取一次真值算差（见下方 CoPickFromCategory 的既有写法），别漏这一拍。
+        int powerBefore = RunLoadout.TotalPower();
         bool ok;
         string msg;
         if (card.Kind == DraftCardKind.Equip)
@@ -2885,6 +2888,11 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             SlotMachineSystem.NoteDraw();      // 本局抽数 +1（跨关不清零）
         RunLoadout.Save();
         RunDraftDirector.RefreshSkillPower();
+        // 【2026-10-11 主人拍板】战力涨了 → 头顶飘「战力 +N」+ 三档称赞；没涨就只刷数字。
+        // 与 CoPickFromCategory（免费老虎机）同一口径，别两边写法分叉。
+        int powerDelta = RunLoadout.TotalPower() - powerBefore;
+        if (powerDelta > 0) PlayerPowerHud.NotifyGain(powerDelta);
+        else PlayerPowerHud.NotifyPowerChanged();
         // 2026-10-05：抽完必须重建技能栏，否则新技能不上 HUD（连带「拖动改顺序」的软引导也没机会弹）。
         RunSkillBarUI.Refresh();
         // 【2026-10-10 主人拍板】抽到技能要**立即**看到底部技槽图标（主人反馈「抽了技能后没有立即显示图标」）：

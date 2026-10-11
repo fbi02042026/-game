@@ -45,6 +45,11 @@ public static partial class GameConfig
         /// 必须高于 <see cref="BattlePopup"/>（抽奖面板那一层），否则宣布白拿的弹窗会被压在面板下面看不见。
         /// </summary>
         public const int EquipReplaceConfirm = 925;
+        /// <summary>
+        /// 【2026-10-11】抽奖概率公示弹窗（Resources/Prefabs/Battle/DraftOddsPopup）。
+        /// 从抽奖面板（BattlePopup 920）上的「!」按钮打开 → 必须高于 920，否则被面板压住看不见。
+        /// </summary>
+        public const int DraftOddsPopup = 926;
         public const int BattleLegacyPool = 940;
         public const int BattleHud = 950;
         public const int BattleLegacyChoose = 960;
