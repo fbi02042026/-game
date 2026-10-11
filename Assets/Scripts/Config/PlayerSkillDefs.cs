@@ -79,6 +79,19 @@ public static class PlayerSkillDefs
         public float damageMultiplier;
         public float baseDamage;
         public float aoeRadius;
+        /// <summary>
+        /// AOE / 连锁单次最多命中几个目标（**0 = 不限**，保持「半径内全体通吃」的旧行为）。
+        /// <para>【2026-10-11 主人拍板】天雷裁决要削弱：原来是无上限 AOE（半径 8 内全体吃 350%），
+        /// 怪一多就是全屏清场 → 改成本字段封顶 3 个、伤害降到 80%。
+        /// 真源在 player_skills.csv 末列 <c>aoeMaxTargets</c>，这里只是缺表时的 Fallback。</para>
+        /// <para>星级成长：只填** 1 星 **的值，运行时每多 1 星 +1（见 <c>RunDraftDirector.BuildRunSkill</c>）。</para>
+        /// </summary>
+        public int aoeMaxTargets;
+        /// <summary>
+        /// 本技能的星级伤害步长，覆盖全局 <c>SkillDraftMeta.StarDamageStep</c>（0.18）。
+        /// **0 = 用全局**；【2026-10-11 主人拍板】天雷裁决填 0.10（每星 +10%），别的技能留 0。
+        /// </summary>
+        public float starDamageStep;
         public int projectileCount;
         public float projectileSpeed;
         public AttrType buffAttr;
@@ -238,7 +251,8 @@ public static class PlayerSkillDefs
             displayName = "天雷裁决",
             kind = Kind.Aoe,
             desc = "召唤天雷轰击目标区域。",
-            numbers = "造成 300% 攻击的范围伤害",
+            // 【2026-10-11 主人拍板】削弱：350% → 80% 攻击，命中目标封顶 3 个（原来半径内全体）。
+            numbers = "造成 80% 攻击的范围伤害 每星多打 1 个目标",
             cooldown = 25f,
             duration = 0f,
             useHint = "怪群聚集或 Boss 虚弱时手动点击",
@@ -249,487 +263,14 @@ public static class PlayerSkillDefs
             tint = new Color(0.65f, 0.4f, 0.9f),
             skillType = SkillSystem.SkillType.AOE,
             attackKit = AttackVfxKit.None,
-            damageMultiplier = 3f,
-            aoeRadius = 8f,
+            // 【2026-10-11 主人拍板】3.5 → 0.8（80% 攻击）；与 player_skills.csv 同值。
+            damageMultiplier = 0.8f,
+            aoeRadius = 8f,       // 【2026-10-11 主人拍板】半径不变，永远是 8
+            aoeMaxTargets = 3,    // 1 星 3 个，每星 +1（2 星 4 个 …）
+            starDamageStep = 0.10f, // 每星 +10%（全局是 +18%，天雷削弱后单独压低）
             projectileCount = 1,
             projectileSpeed = 12f,
             buffAttr = AttrType.Attack,
-            energyCost = 1f,
-            hasCombat = true
-        },
-
-        // ================= 局内抽卡扩充池 =================
-        // 说明：这些技能不进城镇技能选择页（SkillSelectUI 只认前 6 格），
-        // 只在战斗内「升级三选一」出现。无 allyConfigId → VFX 走 attackKit 共用套，
-        // 不依赖 Resources/VFX/Skills/Ally 下的专属预制体。
-        new Def
-        {
-            id = "flame_burst",
-            mpCost = 120f,
-            displayName = "烈焰爆裂",
-            kind = Kind.Aoe,
-            desc = "以自身为中心引爆烈焰，灼烧周围敌人。",
-            numbers = "造成 260% 攻击的范围伤害",
-            cooldown = 20f,
-            duration = 0f,
-            useHint = "怪群聚集时自动释放",
-            unlockChapter = 3,
-            unlockSource = UnlockSource.Shop,
-            unlockTier = UnlockTier.Mid,
-            unlockPrice = 8000,
-            unlockCurrency = 0,
-            allyConfigId = "",
-            tint = new Color(0.98f, 0.45f, 0.24f),
-            skillType = SkillSystem.SkillType.AOE,
-            attackKit = AttackVfxKit.Orb,
-            damageMultiplier = 2.6f,
-            aoeRadius = 7f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "thunder_chain",
-            mpCost = 120f,
-            displayName = "连锁闪电",
-            kind = Kind.Aoe,
-            desc = "闪电在敌群中跳跃，逐个递减伤害。",
-            numbers = "连锁 5 段，首段 160% 攻击",
-            cooldown = 18f,
-            duration = 0f,
-            useHint = "敌人密集时收益最高",
-            unlockChapter = 4,
-            unlockSource = UnlockSource.Talent,
-            unlockTier = UnlockTier.Mid,
-            unlockParam = "talent_skill_thunder_chain",
-            allyConfigId = "",
-            tint = new Color(0.66f, 0.48f, 0.98f),
-            skillType = SkillSystem.SkillType.Chain,
-            attackKit = AttackVfxKit.Orb,
-            damageMultiplier = 1.6f,
-            aoeRadius = 8f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "wolf_volley",
-            displayName = "狼群箭雨",
-            kind = Kind.Aoe,
-            desc = "召唤狼群齐射，同时命中多个敌人。",
-            numbers = "对 3 个敌人各造成 120% 攻击",
-            cooldown = 16f,
-            duration = 0f,
-            useHint = "分散敌人也能稳住输出",
-            unlockChapter = 0,
-            unlockSource = UnlockSource.None,
-            unlockTier = UnlockTier.Early,
-            allyConfigId = "",
-            tint = new Color(0.40f, 0.82f, 0.52f),
-            skillType = SkillSystem.SkillType.Projectile,
-            attackKit = AttackVfxKit.Bow,
-            damageMultiplier = 1.2f,
-            aoeRadius = 10f,
-            projectileCount = 3,
-            projectileSpeed = 14f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "war_banner",
-            displayName = "战旗号令",
-            kind = Kind.AtkBuff,
-            desc = "竖起战旗，全队攻击大幅提升。",
-            numbers = "全队攻击 +35%，持续 10 秒",
-            cooldown = 24f,
-            duration = 10f,
-            useHint = "Boss 战开场立即释放",
-            unlockChapter = 5,
-            unlockSource = UnlockSource.Talent,
-            unlockTier = UnlockTier.Mid,
-            unlockParam = "talent_skill_war_banner",
-            allyConfigId = "",
-            tint = new Color(0.98f, 0.78f, 0.28f),
-            skillType = SkillSystem.SkillType.Buff,
-            attackKit = AttackVfxKit.None,
-            aoeRadius = 6f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            buffAttr = AttrType.Attack,
-            buffValue = 0.35f,
-            buffIsPercent = true,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "iron_wall",
-            displayName = "铁壁壁垒",
-            kind = Kind.Shield,
-            desc = "展开壁垒，大幅提升全队防御。",
-            numbers = "全队防御 +45%，持续 8 秒",
-            cooldown = 22f,
-            duration = 8f,
-            useHint = "被围或 Boss 蓄力时释放",
-            unlockChapter = 2,
-            unlockSource = UnlockSource.Chapter,
-            unlockTier = UnlockTier.Mid,
-            // V6：原来空着 → 走 attackKit 兜底套，玩家看不出这是护盾。
-            // 复用圣盾壁垒那套 ally_shield（Resources/VFX/Skills/Ally/ally_shield.prefab 已存在），
-            // 教程要让玩家「看见护盾放出来」，第二面护盾也必须一眼可辨。
-            allyConfigId = "ally_shield",
-            tint = new Color(0.42f, 0.72f, 0.94f),
-            skillType = SkillSystem.SkillType.Buff,
-            attackKit = AttackVfxKit.None,
-            aoeRadius = 5f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            buffAttr = AttrType.Defense,
-            buffValue = 0.45f,
-            buffIsPercent = true,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "frost_nova",
-            mpCost = 120f,
-            displayName = "霜华新星",
-            kind = Kind.Aoe,
-            desc = "冰霜自脚下炸开，覆盖极大范围。",
-            numbers = "造成 220% 攻击的超大范围伤害",
-            cooldown = 28f,
-            duration = 0f,
-            useHint = "清屏利器，冷却较长",
-            unlockChapter = 8,
-            unlockSource = UnlockSource.Chapter,
-            unlockTier = UnlockTier.Late,
-            allyConfigId = "",
-            tint = new Color(0.55f, 0.85f, 1f),
-            skillType = SkillSystem.SkillType.AOE,
-            attackKit = AttackVfxKit.Orb,
-            damageMultiplier = 2.2f,
-            aoeRadius = 9f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "blood_harvest",
-            displayName = "血之收割",
-            kind = Kind.Aoe,
-            desc = "以血为刃横扫战场，伤害极高。",
-            numbers = "造成 340% 攻击的范围伤害",
-            cooldown = 30f,
-            duration = 0f,
-            useHint = "收割残血群",
-            unlockChapter = 8,
-            unlockSource = UnlockSource.Achievement,
-            unlockTier = UnlockTier.Late,
-            unlockParam = "kill_total_1000",
-            allyConfigId = "",
-            tint = new Color(0.85f, 0.22f, 0.30f),
-            skillType = SkillSystem.SkillType.AOE,
-            attackKit = AttackVfxKit.MeleeSlash,
-            damageMultiplier = 3.4f,
-            aoeRadius = 6f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-
-        // ============ 2026-09-15 第二轮扩充（13 → 24）============
-        // 背景：技能从能量槽改成纯冷却制后，4 个技槽会持续轮转，13 个技能的重复度太高。
-        // 补齐方向：① 牧师只有 1 个技能 → 补治疗线；② 重甲只有 1 个 → 补近战线；
-        // ③ 召唤流只有 1 个 → 补到 3 个；④ 守护流补短 CD 与长 CD 两档，覆盖不同节奏。
-        new Def
-        {
-            id = "swift_mend",
-            mpCost = 90f,
-            displayName = "迅愈术",
-            kind = Kind.Heal,
-            desc = "快速缝合伤口，抬住血量最低的队友。",
-            numbers = "恢复目标 22% 最大生命 + 1.8 倍攻击",
-            cooldown = 9f,
-            duration = 0f,
-            useHint = "冷却短，适合持续续航",
-            unlockChapter = 0,
-            unlockSource = UnlockSource.None,
-            unlockTier = UnlockTier.Early,
-            allyConfigId = "",
-            tint = new Color(0.45f, 0.85f, 0.55f),
-            skillType = SkillSystem.SkillType.Buff,
-            attackKit = AttackVfxKit.Heal,
-            aoeRadius = 6f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            buffAttr = AttrType.MaxHp,
-            healPercentOfMax = 0.22f,
-            healAtkMul = 1.8f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "sacred_revival",
-            mpCost = 120f,
-            displayName = "圣愈术",
-            kind = Kind.Heal,
-            desc = "以圣光重塑血肉，瞬间拉回濒死的队友。",
-            numbers = "恢复目标 48% 最大生命 + 4.0 倍攻击",
-            cooldown = 22f,
-            duration = 0f,
-            useHint = "救命大治疗，冷却较长",
-            unlockChapter = 5,
-            unlockSource = UnlockSource.Chapter,
-            unlockTier = UnlockTier.Late,
-            allyConfigId = "",
-            tint = new Color(0.55f, 0.95f, 0.7f),
-            skillType = SkillSystem.SkillType.Buff,
-            attackKit = AttackVfxKit.Heal,
-            aoeRadius = 6f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            buffAttr = AttrType.MaxHp,
-            healPercentOfMax = 0.48f,
-            healAtkMul = 4.0f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "stone_skin",
-            displayName = "石肤术",
-            kind = Kind.Shield,
-            desc = "皮肤石化，全队防御小幅提升。",
-            numbers = "全队防御 +30%，持续 10 秒",
-            cooldown = 16f,
-            duration = 10f,
-            useHint = "短 CD 常驻减伤",
-            unlockChapter = 2,
-            unlockSource = UnlockSource.Chapter,
-            unlockTier = UnlockTier.Mid,
-            allyConfigId = "",
-            tint = new Color(0.62f, 0.58f, 0.50f),
-            skillType = SkillSystem.SkillType.Buff,
-            attackKit = AttackVfxKit.None,
-            aoeRadius = 6f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            buffAttr = AttrType.Defense,
-            buffValue = 0.30f,
-            buffIsPercent = true,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "aegis_oath",
-            displayName = "守护誓约",
-            kind = Kind.Shield,
-            desc = "立下誓约，全队防御大幅提升并持续更久。",
-            numbers = "全队防御 +55%，持续 12 秒",
-            cooldown = 26f,
-            duration = 12f,
-            useHint = "Boss 大招前的减伤窗口",
-            unlockChapter = 8,
-            unlockSource = UnlockSource.Chapter,
-            unlockTier = UnlockTier.Late,
-            allyConfigId = "",
-            tint = new Color(0.95f, 0.85f, 0.40f),
-            skillType = SkillSystem.SkillType.Buff,
-            attackKit = AttackVfxKit.None,
-            aoeRadius = 6f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            buffAttr = AttrType.Defense,
-            buffValue = 0.55f,
-            buffIsPercent = true,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "bull_rush",
-            displayName = "蛮牛冲锋",
-            kind = Kind.Aoe,
-            desc = "低头猛冲，撞飞前方一片敌人。",
-            numbers = "造成 200% 攻击的范围伤害",
-            cooldown = 14f,
-            duration = 0f,
-            useHint = "短 CD 清杂兵",
-            unlockChapter = 0,
-            unlockSource = UnlockSource.None,
-            unlockTier = UnlockTier.Early,
-            meleeOnly = true,
-            allyConfigId = "",
-            tint = new Color(0.80f, 0.55f, 0.28f),
-            skillType = SkillSystem.SkillType.AOE,
-            attackKit = AttackVfxKit.MeleeSlash,
-            damageMultiplier = 2.0f,
-            aoeRadius = 6f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "quake_slam",
-            displayName = "震地重击",
-            kind = Kind.Aoe,
-            desc = "砸裂地面，冲击波横扫大片敌人。",
-            numbers = "造成 300% 攻击的范围伤害",
-            cooldown = 21f,
-            duration = 0f,
-            useHint = "中 CD 高伤，范围较大",
-            unlockChapter = 3,
-            unlockSource = UnlockSource.Chapter,
-            unlockTier = UnlockTier.Mid,
-            meleeOnly = true,
-            allyConfigId = "",
-            tint = new Color(0.70f, 0.45f, 0.22f),
-            skillType = SkillSystem.SkillType.AOE,
-            attackKit = AttackVfxKit.MeleeSlash,
-            damageMultiplier = 3.0f,
-            aoeRadius = 8f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "hawk_eye",
-            displayName = "鹰眼",
-            kind = Kind.CritBuff,
-            desc = "锁定要害，全队暴击率提升。",
-            numbers = "暴击率 +35%，持续 10 秒",
-            cooldown = 20f,
-            duration = 10f,
-            useHint = "爆发窗口开暴击",
-            unlockChapter = 4,
-            unlockSource = UnlockSource.Shop,
-            unlockTier = UnlockTier.Mid,
-            unlockPrice = 3000,
-            unlockCurrency = 0,
-            allyConfigId = "",
-            tint = new Color(1f, 0.70f, 0.30f),
-            skillType = SkillSystem.SkillType.Buff,
-            attackKit = AttackVfxKit.None,
-            aoeRadius = 6f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            buffAttr = AttrType.CritRate,
-            buffValue = 0.35f,
-            buffIsPercent = true,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "arrow_storm",
-            displayName = "箭雨风暴",
-            kind = Kind.Aoe,
-            desc = "万箭齐落，覆盖全场敌人。",
-            numbers = "对 5 个敌人各造成 90% 攻击",
-            cooldown = 22f,
-            duration = 0f,
-            useHint = "敌人越多收益越高",
-            unlockChapter = 5,
-            unlockSource = UnlockSource.Chapter,
-            unlockTier = UnlockTier.Late,
-            allyConfigId = "",
-            tint = new Color(0.75f, 0.90f, 0.45f),
-            skillType = SkillSystem.SkillType.Projectile,
-            attackKit = AttackVfxKit.Bow,
-            damageMultiplier = 0.9f,
-            aoeRadius = 10f,
-            projectileCount = 5,
-            projectileSpeed = 14f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "spirit_wolf",
-            displayName = "灵狼突袭",
-            kind = Kind.Aoe,
-            desc = "唤出两头灵狼扑向敌群。",
-            numbers = "对 3 个敌人各造成 130% 攻击",
-            cooldown = 18f,
-            duration = 0f,
-            useHint = "召唤流核心，中距离多点爆发",
-            unlockChapter = 3,
-            unlockSource = UnlockSource.Chapter,
-            unlockTier = UnlockTier.Mid,
-            allyConfigId = "",
-            tint = new Color(0.50f, 0.90f, 0.65f),
-            skillType = SkillSystem.SkillType.Projectile,
-            attackKit = AttackVfxKit.Bow,
-            damageMultiplier = 1.3f,
-            aoeRadius = 10f,
-            projectileCount = 3,
-            projectileSpeed = 15f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "blade_storm",
-            displayName = "剑刃风暴",
-            kind = Kind.Aoe,
-            desc = "旋身斩击，剑气绞碎周身敌人。",
-            numbers = "造成 235% 攻击的范围伤害",
-            cooldown = 18f,
-            duration = 0f,
-            useHint = "被围时最有效",
-            unlockChapter = 0,
-            unlockSource = UnlockSource.None,
-            unlockTier = UnlockTier.Early,
-            meleeOnly = true,
-            allyConfigId = "",
-            tint = new Color(0.85f, 0.88f, 0.95f),
-            skillType = SkillSystem.SkillType.AOE,
-            attackKit = AttackVfxKit.MeleeSlash,
-            damageMultiplier = 2.35f,
-            aoeRadius = 7f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
-            energyCost = 1f,
-            hasCombat = true
-        },
-        new Def
-        {
-            id = "arcane_flame",
-            mpCost = 120f,
-            displayName = "秘法烈焰",
-            kind = Kind.Aoe,
-            desc = "引燃秘法之火，焚烧大片区域。",
-            numbers = "造成 310% 攻击的范围伤害",
-            cooldown = 26f,
-            duration = 0f,
-            useHint = "火系高伤，配合灼烧流派",
-            unlockChapter = 8,
-            unlockSource = UnlockSource.Achievement,
-            unlockTier = UnlockTier.Late,
-            unlockParam = "equip_collect_50",
-            allyConfigId = "",
-            tint = new Color(1f, 0.50f, 0.20f),
-            skillType = SkillSystem.SkillType.AOE,
-            attackKit = AttackVfxKit.Orb,
-            damageMultiplier = 3.1f,
-            aoeRadius = 8f,
-            projectileCount = 1,
-            projectileSpeed = 12f,
             energyCost = 1f,
             hasCombat = true
         }
@@ -828,6 +369,8 @@ public static class PlayerSkillDefs
             damageMultiplier = src.damageMultiplier,
             baseDamage = src.baseDamage,
             aoeRadius = src.aoeRadius,
+            aoeMaxTargets = src.aoeMaxTargets,
+            starDamageStep = src.starDamageStep,
             projectileCount = src.projectileCount,
             projectileSpeed = src.projectileSpeed,
             buffAttr = src.buffAttr,
@@ -860,6 +403,8 @@ public static class PlayerSkillDefs
             dest.damageMultiplier = row.DamageMultiplier;
             dest.baseDamage = row.BaseDamage;
             dest.aoeRadius = row.AoeRadius;
+            dest.aoeMaxTargets = row.AoeMaxTargets;
+            dest.starDamageStep = row.StarDamageStep;
             dest.projectileCount = row.ProjectileCount;
             dest.projectileSpeed = row.ProjectileSpeed;
             dest.buffAttr = row.BuffAttr;
@@ -966,7 +511,7 @@ public static class PlayerSkillDefs
                 if (d == null || string.IsNullOrEmpty(d.id)) continue;
                 _realIds.Add(d.id);
                 if (string.IsNullOrEmpty(d.allyConfigId)) continue;
-                // 同一个别名被多个 def 登记时（ally_shield 同时挂在 holy_barrier 与 iron_wall 上）
+                // 同一个别名被多个 def 登记时（2026-10-11 之前是 ally_shield 同时挂在 holy_barrier 与 iron_wall 上）
                 // 先登记者胜 —— 与 GetByAllyConfigId 的线性扫描顺序一致，避免两处解析结果打架。
                 if (!_aliasToReal.ContainsKey(d.allyConfigId))
                     _aliasToReal[d.allyConfigId] = d.id;

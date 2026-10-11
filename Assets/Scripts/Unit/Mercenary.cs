@@ -192,18 +192,26 @@ public class Mercenary : UnitBase
         hireId = id;
     }
 
-    public void SetDisplayName(string displayName, string nickname = null)
+    /// <summary>
+    /// 佣兵名字的<b>唯一出口</b>：只认真名（displayName）。
+    /// <para>【2026-10-11 主人拍板】旧实现是「有昵称就用昵称，没有就退回职业名」三级取用，
+    /// 于是同一个 H005 在<b>抽奖提示</b>写「米娅」、<b>场景头顶</b>写「小红」、<b>头像栏</b>写着「游侠」，
+    /// 主人反馈「佣兵的名字还是没有统一」—— 玩家会当成三个人。
+    /// 现在一律用真名；昵称（小红）只在<b>明确并排展示</b>的地方出现
+    /// （冒险日志 / 商店 / 抽卡卡面那种「米娅·小红」），不再顶替主名字。</para>
+    /// </summary>
+    public void SetDisplayName(string displayName)
     {
-        if (!string.IsNullOrEmpty(nickname))
-            DisplayName = nickname;
-        else if (!string.IsNullOrEmpty(displayName))
+        if (!string.IsNullOrEmpty(displayName))
+        {
             DisplayName = displayName;
+        }
         else
         {
-            string job = MercenaryManager.Instance != null
-                ? MercenaryManager.Instance.GetJobName(mercId)
-                : null;
-            DisplayName = string.IsNullOrEmpty(job) ? mercId : job;
+            // 真源缺名字 → fail closed：报出来让主人看见，不拿职业名 / 编号悄悄顶上（铁律 14）。
+            Debug.LogError($"[Mercenary] 佣兵 {mercId}（hireId={hireId}）没有 displayName，名字条留空" +
+                           "—— 去 MercRosterDefs / merc_roster.csv 补名字，别拿职业名顶替");
+            DisplayName = string.Empty;
         }
         RefreshNameLabel();
     }
@@ -807,7 +815,10 @@ public class Mercenary : UnitBase
     {
         facingDir = 1;
         ApplyFacing(facingDir);
-        AdjustFormationLane(Time.deltaTime);
+        // 2026-10-10 主人拍板：清场后不再换道归队（原 AdjustFormationLane 会把佣兵
+        // 立刻搬回队形车道，看着像「打完敌人又往上走一步」）。场上还有怪时照常归队站位。
+        if (HasAliveEnemyOnField())
+            AdjustFormationLane(Time.deltaTime);
 
         var hero = Hero.Instance;
         if (hero == null || hero.isDead)

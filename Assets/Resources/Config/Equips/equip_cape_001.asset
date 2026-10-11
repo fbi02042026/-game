@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_cape_001
   m_EditorClassIdentifier: 
   templateId: equip_cape_001
-  equipName: "\u666E\u901A\u62AB\u98CE"
+  equipName: "粗麻披风"
   icon: {fileID: 21300000, guid: 7de67e4ebb1d45299413b8b27a28b511, type: 3}
   iconFileName: Cloth_1
   gridWidth: 1

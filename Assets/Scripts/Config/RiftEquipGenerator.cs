@@ -205,6 +205,16 @@ public static class RiftEquipGenerator
         };
     }
 
+    /// <summary>副手掉落池的部位 id（equip_slot_pools.csv 的 WEAPON_OFFHAND 行）。</summary>
+    const string OffHandSlotId = "WEAPON_OFFHAND";
+
+    /// <summary>
+    /// 【2026-10-11 主人拍板】副手武器占武器掉落的比重。
+    /// 主人原话「抽奖的也可以抽到副手的武器」—— 副手是独立的一件，但主手仍是主流，
+    /// 所以给 30%：抽到副手是「赚到一件」，不至于抢掉主手的位置。
+    /// </summary>
+    const float OffHandWeaponChance = 0.30f;
+
     static RiftEquipTables.SlotPool PickSlot(bool wantWeapon, PlayerJobId job)
     {
         var slots = RiftEquipTables.Slots;
@@ -218,6 +228,8 @@ public static class RiftEquipGenerator
             if (wantWeapon)
             {
                 if (!s.IsWeapon) continue;
+                // 【2026-10-11】副手池单列，不跟职业武器池混在一起掷（见下面那段副手分支）。
+                if (s.SlotId == OffHandSlotId) continue;
                 if (s.JobFilter == jobName || s.JobFilter.Contains(jobName))
                     pool.Add(s);
             }
@@ -227,6 +239,19 @@ public static class RiftEquipGenerator
                 // 仅头胸手脚
                 if (s.SlotId == "HEAD" || s.SlotId == "CHEST" || s.SlotId == "HAND" || s.SlotId == "FOOT")
                     pool.Add(s);
+            }
+        }
+
+        // 【2026-10-11 主人拍板】副手武器也能抽到：命中就把候选整池换成副手池，
+        // 抽不中就还是走本职业武器池。副手只占 30%，主手仍是主流。
+        if (wantWeapon && Random.value < OffHandWeaponChance)
+        {
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (slots[i].SlotId != OffHandSlotId) continue;
+                pool.Clear();
+                pool.Add(slots[i]);
+                break;
             }
         }
 
@@ -365,6 +390,9 @@ public static class RiftEquipGenerator
             case "FOOT": return EquipSlotType.Feet;
             case "WEAPON_SWORD":
                 return EquipSlotType.MainHand;
+            // 【2026-10-11 主人拍板】副手武器独立成槽：抽到 / 掉到就是一件副手武器，不再挤进主手。
+            case "WEAPON_OFFHAND":
+                return EquipSlotType.OffHand;
             default:
                 return EquipSlotType.MainHand;
         }
@@ -380,15 +408,19 @@ public static class RiftEquipGenerator
         }
     }
 
+    /// <summary>
+    /// 2026-10-11 主人拍板「以后都统一这种命名规则，不管是什么」：
+    /// 裂隙装备不再用自己那套前缀词库（equip_rarity_rules.csv 的「传说的|远古的|神圣的|毁灭的」），
+    /// 一律改走全项目唯一出口 <see cref="WeaponAffixSystem.RarityPrefix"/>，
+    /// 与掉落 / 初始装 / 剧情武器同一个写法（普通无前缀、稀有「稀有·」、传奇「传奇·」）。
+    /// 旧词库列在 csv 里留着不动（数据列，不影响运行），但代码不再读它。
+    /// </summary>
     static string BuildName(RiftEquipTables.RarityRule rarity, RiftEquipTables.SlotPool slot, EquipTemplate visual)
     {
-        string prefix = "普通的";
-        if (rarity.Prefixes != null && rarity.Prefixes.Length > 0)
-            prefix = rarity.Prefixes[Random.Range(0, rarity.Prefixes.Length)];
         string body = slot != null ? slot.SlotName : "装备";
         if (visual != null && !string.IsNullOrEmpty(visual.equipName))
             body = visual.equipName;
-        return prefix + body;
+        return WeaponAffixSystem.RarityPrefix(MapToEngineRarity(rarity != null ? rarity.Id : null)) + body;
     }
 
     static EquipTemplate PickVisualTemplate(EquipSlotType slot, PlayerJobId job)
@@ -400,7 +432,11 @@ public static class RiftEquipGenerator
         for (int i = 0; i < templates.Length; i++)
         {
             var t = templates[i];
-            if (t == null || t.isAnchor) continue;
+            // 【2026-10-11 主人拍板】副手武器模板（equip_offhand_*）全是锚点装备（isAnchor=1），
+            // 旧口径一律跳过锚点 → 副手池永远是空的 → 「抽奖能抽到副手」根本落不了地。
+            // 只给副手槽放行锚点；主手 / 防具的锚点过滤一字未改。
+            if (t == null) continue;
+            if (t.isAnchor && slot != EquipSlotType.OffHand) continue;
             if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
             {
                 if (t.weaponType == WeaponType.None) continue;

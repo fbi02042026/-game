@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_steelshield1
   m_EditorClassIdentifier: 
   templateId: equip_steelshield1
-  equipName: "木制圆盾"
+  equipName: "钢制圆盾"
   icon: {fileID: 21300000, guid: 3566b43ecfd34b99bc4281bc3aa0c858, type: 3}
   iconFileName: SteelShield1
   gridWidth: 2

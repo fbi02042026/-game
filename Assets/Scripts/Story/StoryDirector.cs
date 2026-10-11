@@ -159,6 +159,19 @@ public class StoryDirector : Singleton<StoryDirector>
         PrepareCanvas(ui);
         ui.SetDialogueChromeVisible(false);
 
+        // 2026-10-10 修（主人报：起完名字后会长那句话背后是黑的）：
+        // 命名界面打开时会调 DialogueUI.Hide()，Hide() 里 SetSceneBackground(null) 把场景背景清掉了；
+        // 而送客那句的背景 ID 没变（还是会长办公室），下面「ID 相同就跳过」的分支不会重装背景，
+        // 于是露出底下的城镇/战场 —— 首次进游戏那会儿底下也是空的，看着就是一片黑。
+        // 场景没换，所以这里只补装画面，不重播地点揭示黑场。
+        if (!string.IsNullOrEmpty(_introducedBg) && !ui.HasSceneBackground())
+        {
+            ui.SetSceneBackground(StoryBackgrounds.Get(_introducedBg));
+            ui.SetRevealBlack(0f);
+            ui.SetBgDim(0.42f);
+            ui.SetSceneBackgroundAlpha(1f);
+        }
+
         for (int i = 0; i < beats.Count; i++)
         {
             var b = beats[i];

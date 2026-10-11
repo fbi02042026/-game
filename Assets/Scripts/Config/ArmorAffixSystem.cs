@@ -2,30 +2,13 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 防具/披风前缀命名与词条池（对齐《防具与饰品系统设计》；戒指项链槽位未开时披风走饰品倾向）。
+/// 防具/披风命名与词条池（对齐《防具与饰品系统设计》；戒指项链槽位未开时披风走饰品倾向）。
+///
+/// 2026-10-11 主人拍板「名字不要太长」：删除旧的随机词缀前缀表（铁壁之/厚甲之/流风之…）。
+/// 名字现在 = <see cref="WeaponAffixSystem.RarityPrefix"/> + 模板名，最长 7 字。
 /// </summary>
 public static class ArmorAffixSystem
 {
-    struct Prefix
-    {
-        public string Name;
-        public AttrType Attr;
-        public EquipSlotType[] Slots;
-    }
-
-    static readonly Prefix[] Prefixes =
-    {
-        new Prefix { Name = "铁壁之", Attr = AttrType.Defense, Slots = new[] { EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.OffHand } },
-        new Prefix { Name = "厚甲之", Attr = AttrType.MaxHp, Slots = new[] { EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.Hands, EquipSlotType.OffHand } },
-        new Prefix { Name = "磐石之", Attr = AttrType.Defense, Slots = new[] { EquipSlotType.Chest, EquipSlotType.OffHand } },
-        new Prefix { Name = "回春之", Attr = AttrType.LifeSteal, Slots = new[] { EquipSlotType.Chest, EquipSlotType.Cape } },
-        new Prefix { Name = "流风之", Attr = AttrType.MoveSpeed, Slots = new[] { EquipSlotType.Feet, EquipSlotType.Hands } },
-        new Prefix { Name = "影步之", Attr = AttrType.Dodge, Slots = new[] { EquipSlotType.Feet, EquipSlotType.Hands } },
-        new Prefix { Name = "灵能之", Attr = AttrType.CooldownReduce, Slots = new[] { EquipSlotType.Cape } },
-        new Prefix { Name = "炽焰之", Attr = AttrType.FireDamage, Slots = new[] { EquipSlotType.Cape } },
-        new Prefix { Name = "霜冻之", Attr = AttrType.IceDamage, Slots = new[] { EquipSlotType.Cape } },
-    };
-
     public static List<AttrType> GetRollableAttrs(EquipSlotType slot)
     {
         var list = new List<AttrType>();
@@ -64,27 +47,6 @@ public static class ArmorAffixSystem
             case EquipSlotType.Cape: return "披风";
             default: return "护甲";
         }
-    }
-
-    static Prefix PickPrefix(EquipSlotType slot, AttrType prefer)
-    {
-        var matched = new List<Prefix>();
-        for (int i = 0; i < Prefixes.Length; i++)
-        {
-            var p = Prefixes[i];
-            if (p.Slots == null) continue;
-            bool ok = false;
-            for (int s = 0; s < p.Slots.Length; s++)
-            {
-                if (p.Slots[s] == slot) { ok = true; break; }
-            }
-            if (!ok) continue;
-            if (p.Attr == prefer) return p;
-            matched.Add(p);
-        }
-        if (matched.Count > 0)
-            return matched[Random.Range(0, matched.Count)];
-        return new Prefix { Name = "厚甲之", Attr = AttrType.MaxHp, Slots = null };
     }
 
     static bool HasChinese(string s)
@@ -126,14 +88,12 @@ public static class ArmorAffixSystem
         FilterBaseAttrsByJob(pool);
         int count = WeaponAffixSystem.AffixCountForRarity(inst.rarity);
         float mul = WeaponAffixSystem.AffixValueMul(inst.rarity);
-        AttrType primary = pool.Count > 0 ? pool[0] : AttrType.MaxHp;
 
         for (int i = 0; i < count && pool.Count > 0; i++)
         {
             int idx = Random.Range(0, pool.Count);
             AttrType attr = pool[idx];
             pool.RemoveAt(idx);
-            if (i == 0) primary = attr;
             float value = RollValue(attr, mul);
             inst.attrBonus.Add(new AttrBonusData
             {
@@ -146,13 +106,10 @@ public static class ArmorAffixSystem
         string baseName = EquipNameGen.DisplayName(inst.template);
         if (!HasChinese(baseName) || baseName.Length <= 1)
             baseName = BaseName(inst.slotType);
-        if (HasChinese(baseName) && baseName.Contains("之"))
-        {
-            inst.equipName = baseName + WeaponAffixSystem.RaritySuffix(inst.rarity);
-            return;
-        }
-        var prefix = PickPrefix(inst.slotType, primary);
-        inst.equipName = prefix.Name + baseName + WeaponAffixSystem.RaritySuffix(inst.rarity);
+        // 名字 = 稀有度前缀 + 模板名，与武器同一个出口（WeaponAffixSystem.RarityPrefix）。
+        // 2026-10-11 主人拍板：① 名字前面要能一眼看出品质；②「名字不要太长」——
+        // 旧的随机词缀前缀（铁壁之/厚甲之/流风之…）整层删掉，最长 7 字。
+        inst.equipName = WeaponAffixSystem.RarityPrefix(inst.rarity) + baseName;
     }
 
     static bool IsPercent(AttrType attr)

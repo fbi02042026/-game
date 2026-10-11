@@ -12,9 +12,24 @@ public partial class BattleUI : MonoBehaviour
     /// 刷新底部 4 个技能槽：全部为被动技能，充能满后由 PlayerSkillPassive 自动释放，
     /// 头像/槽位不再接手动释放。
     /// </summary>
+    /// <summary>技能槽没绑上时只报一次，别每帧刷屏。</summary>
+    static bool _runSkillSlotsWarned;
+
     public void UpdateRunSkillSlots()
     {
-        if (runSkillSlots == null || runSkillSlots.Count == 0) return;
+        if (runSkillSlots == null || runSkillSlots.Count == 0)
+        {
+            // 2026-10-11：主人反馈「抽中了技能还是没有立即显示图标」。刷新链路
+            // （CoInstantPick → UpdateRunSkillSlots）本来就是通的，若槽位列表为空则**整条静默失效** ——
+            // 这里报一次，主人跑一把就能从日志判断是「没绑定」还是「别处没刷」。
+            if (!_runSkillSlotsWarned)
+            {
+                _runSkillSlotsWarned = true;
+                Debug.LogError("[BattleUI] runSkillSlots 未绑定或为空 → 底部技能槽不会显示任何图标，" +
+                               "抽到技能也看不见（查 BattleUI 预制体上的槽位绑定 / EnsureRunSkillSlotsRepaired）");
+            }
+            return;
+        }
 
         var job = PlayerJobDefs.GetSelected();
         var ids = RunLoadout.IsActive ? RunLoadout.SkillIds() : null;
@@ -63,7 +78,64 @@ public partial class BattleUI : MonoBehaviour
             slot.SetNewBadge(NewLootMarks.Has(NewLootMarks.KindSkill, id));
         }
 
+        // 【2026-10-11 主人报「刚抽出来就不显示，抽奖瞬间闪一下又没了」】
+        // 拖拽开关跟着技能数走：技能列表一变就重评，
+        // 别再等背包开合（旧唯一调用点）才刷新 —— 那正是「拖拽也不管用」的帮凶之一。
+        RefreshSkillSlotDragState();
+        LogSkillBarOcclusion();
         LogRunSkillDiagnostics(ids);
+    }
+
+    /// <summary>技槽可见性体检只做一次（首次出现带技能的槽时），别每帧刷屏。</summary>
+    static bool _occlusionLogged;
+
+    /// <summary>
+    /// 技槽为什么看不见 —— 一次把量打全：自带 Canvas order / 父链最高 Canvas / 有没有同父兄弟盖在上面。
+    /// 主症状「闪一下又没了」= 画上去了但被别的东西压住，只有这条日志能一次说清是谁压的。
+    /// </summary>
+    void LogSkillBarOcclusion()
+    {
+        if (_occlusionLogged || skillSlotRoot == null) return;
+        var rt = skillSlotRoot as RectTransform;
+        if (rt == null) return;
+        _occlusionLogged = true;
+
+        var c = new Vector3[4];
+        rt.GetWorldCorners(c);
+        Vector2 center = (c[0] + c[2]) * 0.5f;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("[BattleUI-技槽体检] 世界中心=").Append(center.x.ToString("F0")).Append(",").Append(center.y.ToString("F0"));
+
+        var self = skillSlotRoot.GetComponent<Canvas>();
+        sb.Append(" 自带Canvas=").Append(self != null
+            ? self.sortingOrder + (self.overrideSorting ? "(override)" : "")
+            : "无");
+
+        int maxOrder = -1;
+        string maxName = "-";
+        for (var p = skillSlotRoot.parent; p != null; p = p.parent)
+        {
+            var pc = p.GetComponent<Canvas>();
+            if (pc != null && pc.sortingOrder > maxOrder) { maxOrder = pc.sortingOrder; maxName = p.name; }
+        }
+        sb.Append(" 父链最高画布=").Append(maxName).Append("(").Append(maxOrder).Append(")");
+
+        var parent = skillSlotRoot.parent;
+        var c2 = new Vector3[4];
+        for (int i = skillSlotRoot.GetSiblingIndex() + 1; i < parent.childCount; i++)
+        {
+            var sib = parent.GetChild(i);
+            if (sib == null || !sib.gameObject.activeInHierarchy) continue;
+            var srt = sib as RectTransform;
+            if (srt == null) continue;
+            srt.GetWorldCorners(c2);
+            bool covers = center.x >= Mathf.Min(c2[0].x, c2[2].x) && center.x <= Mathf.Max(c2[0].x, c2[2].x)
+                       && center.y >= Mathf.Min(c2[0].y, c2[2].y) && center.y <= Mathf.Max(c2[0].y, c2[2].y);
+            if (covers)
+                sb.Append(" ⚠被同父兄弟[").Append(sib.name).Append("]覆盖");
+        }
+        Debug.Log(sb.ToString());
     }
 
     /// <summary>技能槽序号文案：0→① … 9→⑩；再往后没有圈字符号，返回空串（底部只有 4 槽，走不到）。</summary>
@@ -244,6 +316,9 @@ public partial class BattleUI : MonoBehaviour
 
     string _lastSkillKey = "\u0000";
 
+    /// <summary>「槽上有技能但图标是空」只报一次，别每帧刷屏（2026-10-11 主人报「图标显示一下又不见了」）。</summary>
+    static bool _iconLostWarned;
+
     /// <summary>逐帧（0.1s 节流）刷技能槽充能 / 冷却；技能列表变了就整槽重建。</summary>
     void TickRunSkillSlots()
     {
@@ -264,6 +339,24 @@ public partial class BattleUI : MonoBehaviour
             var slot = runSkillSlots[i];
             if (slot == null) continue;
             bool has = ids != null && i < ids.Count;
+
+            // 【2026-10-11 主人报「抽中时图标能显示一下 然后又不见了」】
+            // UpdateRunSkillSlots 明明设上了 sprite（日志实证 img=技能id），之后却看不到 ——
+            // 若此处发现「有技能但图标为空」，说明中途被谁清掉/换掉了图标层。只报一次，不兜底，
+            // 把节点信息打全（名字/父/激活/alpha）让主人下一把抓到现行。
+            if (has && !_iconLostWarned
+                && (slot.avatarImage == null || slot.avatarImage.sprite == null))
+            {
+                _iconLostWarned = true;
+                var img = slot.avatarImage;
+                Debug.LogError("[BattleUI] 技槽图标丢失现行：槽 #" + i + " 有技能 " +
+                               (ids != null ? ids[i] : "?") + " 但 sprite 为空" +
+                               " img=" + (img == null ? "NULL（图标层被删/换）" : img.name) +
+                               " 父=" + (img != null && img.transform.parent != null ? img.transform.parent.name : "?") +
+                               " 激活=" + (img != null && img.gameObject.activeInHierarchy) +
+                               " alpha=" + (img != null ? img.color.a : -1f));
+            }
+
             // 纯冷却制：能量条隐藏（PLAYER_SKILL_USE_ENERGY 置 true 可退回）
             slot.SetEnergyFillVisible(GameConfig.PLAYER_SKILL_USE_ENERGY);
             if (GameConfig.PLAYER_SKILL_USE_ENERGY)
@@ -418,15 +511,18 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 按「整理阶段」+「已拥有技能数」开/关技槽拖拽。
+    /// 按「已拥有技能数」开/关技槽拖拽。
     /// 只有 1 个技能时不可拖；2 个技能时只有前 2 个槽可拖（第 3、4 是空槽）。
+    /// 【2026-10-11 主人报「拖拽也不管用 调整不了顺序」→ 根因实锤】：
+    /// 旧判据 <c>BattleLootMode.Active</c> 的唯一 Enter 调用点（整理阶段）已于 2026-10-11 删除 →
+    /// Active 恒 false → 拖拽**永远禁用**。改为只要有 2 个以上技能就允许拖（战斗中也能调优先级）。
     /// </summary>
     public void RefreshSkillSlotDragState()
     {
         if (runSkillSlots == null) return;
         var ids = RunLoadout.SkillIds();
         int owned = ids != null ? ids.Count : 0;
-        bool allow = BattleLootMode.Active && owned >= 2;
+        bool allow = owned >= 2;
         for (int i = 0; i < runSkillSlots.Count; i++)
         {
             var av = runSkillSlots[i];

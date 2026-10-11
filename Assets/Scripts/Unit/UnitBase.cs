@@ -542,7 +542,9 @@ public abstract class UnitBase : MonoBehaviour
                     // 无怪：向右推图
                     facingDir = 1;
                     ApplyFacing(facingDir);
-                    AdjustFormationLane(Time.deltaTime);
+                    // 2026-10-10 主人拍板：清场后不再换道归队（原 AdjustFormationLane 会把我方
+                    // 立刻搬回队形车道，看着像「打完敌人又往上走一步」）。保持击杀时的车道继续推图，
+                    // 下一波索敌时由 AdjustLaneTowardTarget 自然并回。
                     if (rb != null)
                         rb.velocity = new Vector2(GetCombatMoveSpeed(), rb.velocity.y);
                     isMoving = true;
@@ -1318,9 +1320,12 @@ public abstract class UnitBase : MonoBehaviour
         float spd = attr != null ? attr.GetAttr(AttrType.MoveSpeed) : 1f;
         if (isAlly && BattleManager.Instance != null)
             spd *= BattleManager.Instance.KillComboSpeedMul;
-        // 2026-09-28 主人要求「玩家行走速度再加快 10%」：只加玩家，佣兵/怪物不动
-        if (this is Hero)
-            spd *= GameConfig.PLAYER_MOVE_SPEED_MUL;
+        // 【2026-10-11 主人拍板：删除玩家 10% 加速】原 2026-09-28「玩家行走速度再加快 10%」（只加玩家、佣兵不动）
+        // 已作废 —— 主人反馈「玩家的移动速度要和佣兵的一致」，这条补丁本身就是两边不一致的来源之一。
+        // 现在玩家 / 佣兵 / 怪物都只吃 attr.MoveSpeed 一个真源，谁快谁慢只看各自配表列，代码不再偷偷加成。
+        //   玩家：PlayerJobBaseStats → BASE_MOVE_SPEED × (player_job_base_stats.基础移速 / 100)
+        //   佣兵：MercRosterDefs    → BASE_MOVE_SPEED × (merc_roster.MoveSpeed / 3.5)
+        // ⚠ GameConfig.PLAYER_MOVE_SPEED_MUL 已无调用（死常量），留着只为旧引用不炸，确认无引用后可删。
         return spd;
     }
 

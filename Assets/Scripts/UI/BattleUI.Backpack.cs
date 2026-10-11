@@ -109,11 +109,16 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 把槽位容器自身的嵌套 Canvas 抬到「BackpackPanel 的 Canvas order + 1」。
-    /// 复发根源修复：原先按「最近一级父 Canvas」抬序，一旦 SkillBar 父链变化（父级不再带 Canvas）
-    /// 就只抬到 1，被 BackpackPanel(100) + zhezhao 遮罩盖住 → 4 槽消失。
-    /// 现直接以 BackpackPanel 的 Canvas 为基准，不依赖 SkillBar 自身父链查找；
-    /// 找不到 BackpackPanel Canvas 时退回「最近父 Canvas + 1」兜底。
+    /// 把槽位容器自身的嵌套 Canvas 抬到「父链里最高的 Canvas order + 1」。
+    ///
+    /// <para>【2026-10-11 主人报「抽出来就不显示，抽奖瞬间闪一下又没了」→ 根因】：
+    /// 旧口径只抬到 <c>BackpackPanel(100) + 1 = 101</c>。但嵌套 Canvas 的 sortingOrder 是
+    /// <b>全局比较</b>的，而 BattleUI 根 Canvas 是 <see cref="GameConfig.UiSort.BattleHud"/>(950) ——
+    /// 101 &lt; 950 → 整个根 Canvas 上的内容（底部面板 / HUD / 全屏层）都画在技槽<b>之上</b>，
+    /// 技槽只在面板重排的那一瞬露一下，随即被盖住 —— 与主人描述的现象完全吻合。</para>
+    ///
+    /// <para>现口径：沿父链取 <b>最大的</b> sortingOrder + 1（不再只认 BackpackPanel），
+    /// 保证技槽在所有祖先画布之上。</para>
     /// </summary>
     static void RaiseSlotCanvasAboveParent(Transform t)
     {
@@ -121,26 +126,13 @@ public partial class BattleUI : MonoBehaviour
         var self = t.GetComponent<Canvas>();
         if (self == null) return;
 
+        // 沿父链取最高 order：嵌套 Canvas 之间不按父子关系排序，只看 order 大小
         int baseOrder = 0;
-        bool foundBackpack = false;
-        // 向上查找 BackpackPanel 并取其 Canvas 的 order 作为基准（不依赖 t 自身父链）
         for (var p = t.parent; p != null; p = p.parent)
         {
-            if (p.name.IndexOf("BackpackPanel", System.StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                var bpCanvas = p.GetComponent<Canvas>();
-                if (bpCanvas != null) { baseOrder = bpCanvas.sortingOrder; foundBackpack = true; }
-                break;
-            }
-        }
-        if (!foundBackpack)
-        {
-            // 兜底：退回「最近父 Canvas + 1」
-            for (var p = t.parent; p != null; p = p.parent)
-            {
-                var pc = p.GetComponent<Canvas>();
-                if (pc != null) { baseOrder = pc.sortingOrder; break; }
-            }
+            var pc = p.GetComponent<Canvas>();
+            if (pc != null && pc.sortingOrder > baseOrder)
+                baseOrder = pc.sortingOrder;
         }
 
         int target = baseOrder + 1;
@@ -253,16 +245,19 @@ public partial class BattleUI : MonoBehaviour
     public bool BagDrawerOpen => _bagDrawerOpen;
 
     /// <summary>
-    /// 网格背包（GridContainer）显隐的<b>唯一出口</b>：玩家点开 或 整理阶段才显示。
-    /// <para>整理阶段（<see cref="BattleLootMode.Active"/>）必须<b>强制显示</b>：那一阶段玩家要拖
-    /// 格子里的装备，隐藏了就拖不了（见 BattleUI.Backpack.cs 的拾取/整理链路），这是硬约束。</para>
+    /// 网格背包（GridContainer）显隐的<b>唯一出口</b>：<b>只认玩家自己点开</b>。
+    /// <para>2026-10-11 主人拍板：整理阶段不再强制展开背包 —— 主人原话
+    /// 「打完一关获得了100金币，那个背包怎么自动开启了，而且还跑到了最上面」。
+    /// 旧实现把 <c>BattleLootMode.Active</c> 也算进 want，于是每关结算都把背包顶出来；
+    /// 而这一关宝箱的装备已经全部折金（<c>ScrapRewardEquips</c>），根本没新东西可整理，
+    /// 这一步对玩家纯属多余。想整理照样点右上角「背包」按钮（<see cref="ToggleBagDrawer"/>）。</para>
     /// </summary>
     void ApplyBagDrawerVisible()
     {
         // FindDeepChildIgnoreCase 是纯 Transform 递归，能找到 inactive 子节点 → 隐藏后仍取得到，安全。
         if (_bagGridRoot == null) _bagGridRoot = FindDeepChildIgnoreCase(transform, "GridContainer");
         if (_bagGridRoot == null) return;
-        bool want = _bagDrawerOpen || BattleLootMode.Active;
+        bool want = _bagDrawerOpen;
         if (_bagGridRoot.gameObject.activeSelf != want) _bagGridRoot.gameObject.SetActive(want);
     }
 
@@ -381,15 +376,31 @@ public partial class BattleUI : MonoBehaviour
         // 阶段切换时收掉可能还开着的道具操作浮层，避免浮在下一阶段界面上
         BackpackItemActionUI.Instance?.Hide();
 
+        if (BattleLootMode.Active && lootConfirmButton == null)
+        {
+            // 2026-10-11：整理阶段开了却没有确认按钮 = 玩家必卡在这一步（主人报「没有继续按钮、
+            // 也没出传送门」）。同上，打 Error 让主人一眼看到是按钮没建/没绑上。
+            Debug.LogError("[BattleUI] 整理阶段已开启，但 lootConfirmButton 为空 → 玩家无法确认，流程卡死");
+        }
+
         if (lootConfirmButton != null)
         {
             var txt = lootConfirmButton.GetComponentInChildren<Text>(true);
             if (txt != null)
-                txt.text = "确定";
+                txt.text = LootConfirmLabel;    // 唯一出口，与创建处同值
             // 整理功能已移除：这个按钮只在拾取模式出现
             lootConfirmButton.gameObject.SetActive(BattleLootMode.Active);
             // 竖屏适配会重锚/改高面板，创建时算好的落点会失效 → 每次显隐都按当前面板重摆。
-            if (BattleLootMode.Active) ReanchorLootConfirmButton();
+            if (BattleLootMode.Active)
+            {
+                ReanchorLootConfirmButton();
+                // 诊断：把按钮最终落点打出来，主人卡住时看日志就知道它跑到哪去了
+                // （旧实现按面板底边下方 60 算，面板贴底时按钮掉到屏幕外，就是这个症状）。
+                var rt = lootConfirmButton.transform as RectTransform;
+                if (rt != null)
+                    Debug.Log($"[BattleUI] 整理「{LootConfirmLabel}」落点 anchoredPosition={rt.anchoredPosition} " +
+                              $"父节点={rt.parent?.name}");
+            }
         }
         UpdateBackpackGrid();
         // 整理阶段才允许拖动技槽调序（战斗中不开放，避免误触改掉释放优先级）

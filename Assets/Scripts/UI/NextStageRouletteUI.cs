@@ -7,8 +7,8 @@ using UnityEngine.UI;
 /// <summary>
 /// 下一关随机滚动弹窗。
 ///
-/// 滚动节奏：
-/// 1) 前 5 秒由慢到快滚动，玩家可点「停止」；5 秒到了自动点
+/// 滚动节奏（2026-10-11 主人拍板改）：
+/// 1) 开场即最快转速滚 5 秒，玩家可点「停止」；5 秒到了自动点（不再慢→快，太费时间）
 /// 2) 点停之后由快到慢，最后停在中间格子 —— 那就是当前要打的关
 /// 3) 停稳后才出现「进入关卡」，没有返回按钮、没有星级、没有关卡编号
 ///
@@ -27,10 +27,11 @@ public class NextStageRouletteUI : MonoBehaviour
     const float Step = CardW + CardGap;
     const int LoopCardCount = 14;
 
-    /// <summary>加速阶段时长：慢→快，可手动停止</summary>
+    /// <summary>【2026-10-11 主人拍板】全速滚动窗口时长：面板一打开就是最快转速，不要慢→快（主人原话「刚打开的时候就是转的最快的时候 不要从慢再到快再停 这样太费时间了」）。窗口内可点「停止」，到点自动停。</summary>
     const float AccelSeconds = 5f;
     /// <summary>减速阶段时长：快→慢→停</summary>
     const float DecelSeconds = 2.4f;
+    /// <summary>2026-10-11 起转速恒为 SpeedMax，SpeedMin 已无调用（死常量，按铁律只报告不删）。</summary>
     const float SpeedMin = 180f;
     const float SpeedMax = 1400f;
     /// <summary>减速至少再滚过这么多格，避免一停就刹住</summary>
@@ -265,7 +266,7 @@ public class NextStageRouletteUI : MonoBehaviour
         if (titleText != null)
             titleText.text = GameConfig.GetChapterMapName(Mathf.Max(1, chapter));
         if (subTitleText != null)
-            subTitleText.text = "由慢到快滚动中…点停止或等 5 秒";
+            subTitleText.text = "滚动中…点停止或等 5 秒";
 
         FillReel();
         LayoutCards();
@@ -380,22 +381,19 @@ public class NextStageRouletteUI : MonoBehaviour
 
     IEnumerator SpinFlow()
     {
-        // —— 阶段1：慢→快，最多 5 秒，可手动停 ——
-        float accelT = 0f;
-        float speed = SpeedMin;
-        while (!_stopRequested && accelT < AccelSeconds)
+        // 【2026-10-11 主人拍板】阶段1：**开场即最快转速**，窗口内可手动停 ——
+        // 旧写法 SpeedMin→SpeedMax 慢慢爬（ease 二次曲线），主人原话「刚打开的时候就是转的最快的时候，
+        // 不要从慢再到快再停 这样太费时间了」。加速段整段删除，转速恒为 SpeedMax。
+        float runT = 0f;
+        while (!_stopRequested && runT < AccelSeconds)
         {
             float dt = Time.unscaledDeltaTime;
-            accelT += dt;
-            float u = Mathf.Clamp01(accelT / AccelSeconds);
-            // 前半段爬得慢一点，后半段冲上去
-            float ease = u * u;
-            speed = Mathf.Lerp(SpeedMin, SpeedMax, ease);
-            _offset += speed * dt;
+            runT += dt;
+            _offset += SpeedMax * dt;
             LayoutCards();
             PulseNearCenter();
             if (subTitleText != null)
-                subTitleText.text = $"滚动中… {Mathf.CeilToInt(Mathf.Max(0f, AccelSeconds - accelT))} 秒后自动停止";
+                subTitleText.text = $"滚动中… {Mathf.CeilToInt(Mathf.Max(0f, AccelSeconds - runT))} 秒后自动停止";
             yield return null;
         }
 
@@ -555,7 +553,12 @@ public class NextStageRouletteUI : MonoBehaviour
         }
         if (_flow != null) return; // 减速中不允许进关，等停稳
 
-        Time.timeScale = _prevTimeScale <= 0.01f ? 1f : _prevTimeScale;
+        // 2026-10-11：原样恢复进入前的时间流速，不再「≤0 就当成 1」。
+        // 老虎机是被 BattleStageMapUI（关卡图）调起的，而关卡图一开就把 Time.timeScale 压到 0
+        // 冻住底下的战斗场景；这里若擅自恢复成 1，玩家在关卡图上看旗子的那几秒
+        // 战斗场景又跑起来了。时间该由**把它压住的那个人**还原 ——
+        // 关卡图会在点石墩时（OnPedestalClicked）把 _prevTimeScale 还原回去。
+        Time.timeScale = _prevTimeScale;
         var stage = _stage;
         var cb = _onEnter;
         _onEnter = null;
@@ -641,29 +644,20 @@ public class NextStageRouletteUI : MonoBehaviour
         rt.anchoredPosition = Vector2.zero;
     }
 
+    /// <summary>
+    /// 【2026-10-11 主人「老虎机没有背景，背景应该是关卡界面」】
+    /// 背景真源 = Resources/Art/UI/关卡/层级调整组件_0007_背景.png，与关卡图（BattleStageMapUI）同一张。
+    /// 旧的三条 StageSelect 路径全库都没有对应资源，只会一路取到 null → 老虎机是纯色底，删掉不留第二入口。
+    /// </summary>
     static Sprite LoadBackground()
-    {
-        string[] paths =
-        {
-            "Art/UI/StageSelect/bg_stage_select",
-            "UI/StageSelect/bg_stage_select",
-            "Art/UI/bg_stage_select"
-        };
-        for (int i = 0; i < paths.Length; i++)
-        {
-            var sp = Resources.Load<Sprite>(paths[i]);
-            if (sp != null) return sp;
-        }
-        return null;
-    }
+        => Resources.Load<Sprite>("Art/UI/关卡/层级调整组件_0007_背景");
 
+    /// <summary>
+    /// 【2026-10-11 主人「老虎机没有关卡类型图标」】
+    /// 类型图标真源 = Resources/Art/UI/关卡/stage_*.png，与关卡图同一套、同一个出口。
+    /// </summary>
     static Sprite LoadStageIcon(StageType type)
-    {
-        string n = StageRoller.IconName(type);
-        var sp = Resources.Load<Sprite>($"Art/UI/StageIcons/{n}");
-        if (sp == null) sp = Resources.Load<Sprite>($"UI/StageIcons/{n}");
-        return sp;
-    }
+        => Resources.Load<Sprite>($"Art/UI/关卡/{StageRoller.IconName(type)}");
 
     static void EnsureEventSystem()
     {

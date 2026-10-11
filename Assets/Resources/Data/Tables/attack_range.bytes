@@ -12,7 +12,7 @@ job_P005,200,alias of job_mage
 job_priest,160,P006 牧师
 job_P006,160,alias of job_priest
 weapon_sword,96,单手剑
-weapon_greatsword,144,大剑
+weapon_greatsword,120,大剑/双手斧/双手锤；【2026-10-11 主人拍板】原 144 —— 主人实测狂战/重武「攻击范围有点远」，拍板统一压到 120（1.20 单位）。本档同时决定这两个近战职业的起步射程（PlayerJobDefs.Def.PrimaryWeapon=Greatsword）
 weapon_polearm,180,长柄
 weapon_staff,120,单手杖
 weapon_bow,300,弓箭

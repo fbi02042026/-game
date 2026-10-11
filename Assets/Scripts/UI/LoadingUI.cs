@@ -59,6 +59,61 @@ public class LoadingUI : MonoBehaviour
 
     public string CurrentTip => tipText != null ? tipText.text : "";
 
+    // =========================================================================
+    // 章节背景图（2026-10-11 主人拍板）
+    // 主人原话：「走进传送门后黑屏然后出现 loading 图，图我会给你每章一个，
+    // 每次打哪个副本就加载哪个背景图」→ 文件名约定 beijing01 / beijing02 …（01 = 第 1 章）。
+    // =========================================================================
+
+    /// <summary>章节背景图所在目录（Resources 下，<b>不带扩展名按路径加载</b>，不吃 guid）。</summary>
+    public const string ChapterBackdropDir = "UI/loading/";
+
+    /// <summary>第 N 章的背景图资源名（唯一出口，别的文件别自己拼这个串）。</summary>
+    public static string ChapterBackdropName(int chapter) => "beijing" + Mathf.Max(1, chapter).ToString("00");
+
+    /// <summary>
+    /// 某章还没配图时先顶谁的图。
+    /// 2026-10-11 主人：「以后会补上的，先用这个」→ 目前只有第 1 章的 beijing01，
+    /// 其余章先顶它，等补齐 beijing02… 后自动各归各位（不用再改代码）。
+    /// </summary>
+    public const int FallbackChapter = 1;
+
+    /// <summary>
+    /// 按章节换 Loading 背景图。
+    /// <para>该章还没配图 → <b>先顶 <see cref="FallbackChapter"/> 那张</b>（主人认可：其余章的图以后补，
+    /// 先用第 1 章这张）；只有连占位章的图都找不到，才<b>不换、沿用预制体默认图</b>并打 Warning。
+    /// 两种情况都会留日志，不静默顶替。</para>
+    /// <para>换图后必须重跑 <see cref="UiLayoutStretch.ApplyBgStretch"/>：Envelope 是按
+    /// <c>sprite.rect</c> 宽高比算的，图换了不重算就会按旧比例拉伸（铁律 5：整体等比缩放，绝不 stretch）。</para>
+    /// </summary>
+    public void SetChapterBackdrop(int chapter)
+    {
+        if (backgroundImage == null) AutoBind();
+        if (backgroundImage == null) return;
+        if (chapter < 1) return;
+
+        string path = ChapterBackdropDir + ChapterBackdropName(chapter);
+        var sp = Resources.Load<Sprite>(path);
+        if (sp == null && chapter != FallbackChapter)
+        {
+            // 2026-10-11 主人拍板：其余各章的图「以后会补上，先用这个」——
+            // 该章还没配图时先顶第 1 章那张，等美术补齐 beijing0N 后**自动**各归各位，不用再改代码。
+            // 这不是「出错兜底」，是主人认可的占位；仍打一条日志，别静默顶替。
+            Debug.Log($"[LoadingUI] 第{chapter}章背景图尚未配置（Resources/{path}），暂用第{FallbackChapter}章的图");
+            sp = Resources.Load<Sprite>(ChapterBackdropDir + ChapterBackdropName(FallbackChapter));
+        }
+        if (sp == null)
+        {
+            Debug.LogWarning($"[LoadingUI] 第{chapter}章背景图未配置，占位章（第{FallbackChapter}章）的图也缺失，" +
+                             "沿用预制体默认图");
+            return;
+        }
+        if (backgroundImage.sprite == sp) return;
+
+        backgroundImage.sprite = sp;
+        UiLayoutStretch.ApplyBgStretch(backgroundImage.rectTransform, backgroundImage);
+    }
+
     public void AutoBind()
     {
         if (backgroundImage == null)

@@ -152,16 +152,15 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// 主人原话：「在抽奖的按钮左侧加个货币的图标 金币就加金币的 佣兵就加佣兵的，
     /// 目前只有佣兵是佣兵币 其他的都是金币 等其他三个抽奖按钮开放了再说」。
     /// 哪天其余按钮要换币，只改这一个函数，别在调用处各写一遍。
-    /// <para>【2026-10-07 主人二次拍板】「<b>抽奖币默认金币</b>」—— 随机 / 装备 / 技能这几抽
-    /// 真扣的是抽奖币 <c>SlotCoin</c>，但按钮上就显示<b>金币</b>图标（主人的口径，不是不一致）。
-    /// 哪天要换成抽奖币自己的图，只改这一个函数。佣兵 = 佣兵币，与
-    /// <c>SlotMachineSystem.FocusCurrency</c> 必须同值。</para>
+    /// <para>【2026-10-10 主人拍板】抽奖统一花金币：随机 / 装备 / 技能 / **佣兵定向**都显示<b>金币</b>图标，
+    /// 因为真扣的就是局内金币 <c>BattleManager.currentGold</c>（不再有佣兵币 / 抽奖币）。
+    /// 与 <c>SlotMachineSystem.FocusCurrency</c> 必须同值 —— 显示与扣费不许是两套。</para>
     /// </summary>
     static ResourceWallet.ResourceType CurrencyOf(DraftCategory? cat)
     {
-        return cat.HasValue && cat.Value == DraftCategory.Merc
-            ? ResourceWallet.ResourceType.MercGold
-            : ResourceWallet.ResourceType.Gold;
+        // 【2026-10-10 主人拍板】抽奖统一花金币（佣兵定向也不再花佣兵币）——
+        // 与 `SlotMachineSystem.FocusCurrency` 必须同值，否则玩家看着金币图标、扣的却是别的币。
+        return ResourceWallet.ResourceType.Gold;
     }
 
     /// <summary>币种 → 图标资源路径（单一出口，别处不许再抄一遍路径）。</summary>
@@ -842,6 +841,14 @@ public class BattleEntryDraftPanel : MonoBehaviour
     }
 
     /// <summary>
+    /// 【2026-10-11 主人拍板】「再来一次」命中后<b>立刻</b>把按钮金额刷成免费，不重开面板。
+    /// 主人原话：「抽中再来一次时 抽奖按钮上的金额变成免费一次」。
+    /// 用 <see cref="Begin"/> 记下的同一组参数重刷，绝不在这里另算一套（与「抽完锁按钮」同一口径）。
+    /// </summary>
+    public void RefreshFreeLeft(long coins, int freeLeft)
+        => Refresh(_lastRandomPrice, _lastFocusPrice, _lastCats, coins, freeLeft);
+
+    /// <summary>
     /// 刷新价格与可用状态：池子空或币不够 → 置灰，绝不自动扣钱。
     /// <para>⚠ <paramref name="focusPrice"/> <b>已不再使用</b>（2026-10-07）：定向价改由循环里按
     /// <c>slot.Cat</c> 各自的币种算（佣兵 = 佣兵币价，装备 / 技能 = 抽奖币价），
@@ -877,8 +884,10 @@ public class BattleEntryDraftPanel : MonoBehaviour
             s.Btn.interactable = on;
             if (s.NameText != null) s.NameText.text = Name(s.Cat);
             if (s.CostText != null)
+                // 【2026-10-11 主人拍板】只剩一次免费时写「免费一次」（主人原话「金额变成免费一次」），
+                // 多于一次仍写「免费×N」，跟「还剩几次」说清楚。
                 s.CostText.text = !has ? "-"
-                               : free ? $"免费×{freeLeft}"
+                               : free ? (freeLeft > 1 ? $"免费×{freeLeft}" : "免费一次")
                                : price.ToString();
             // 免费抽不扣任何币 → 货币图标跟着一起隐（要改成「一直显示」只改这一处）。
             if (s.CoinIcon != null)

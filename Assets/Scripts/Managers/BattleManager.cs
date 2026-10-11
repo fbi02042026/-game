@@ -655,8 +655,12 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 新一局：清空「章内不重复」的关卡模式记录，重新洗牌（V3.0 起模式允许重复，此处仅清压力阀）
         StageModeTable.ResetRun();
         Planner?.ResetPressure();
-        currentGold = SaveSystem.Instance?.Data?.totalGold ?? 0;
-        _goldAtRunStart = currentGold;
+        // 【2026-10-10 主人拍板】战斗钱包局内化：**城镇金币不带进战斗**，开局只有本局启动金。
+        // 启动金由 RunDraftDirector.OnRunStart（非续关）走 SlotMachineSystem.GrantRunStarterGold 补 ——
+        // 那里才读得到「初始资金」天赋等级。这里先归零，_goldAtRunStart 会随那笔一起抬起来，
+        // 于是结算差额 = 本局净赚（抽奖花掉的钱也扣在里面），启动金既不会被白刷也不会被重复写回。
+        currentGold = 0;
+        _goldAtRunStart = 0;
         _runStageGoldPending = 0;
         var data = SaveSystem.Instance?.Data;
         _enchantAtRunStart = data != null ? data.enchantStones : 0;
@@ -885,7 +889,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                     : md.passiveSkillId;
                 merc.SetupBattleSkills(active, passive);
                 merc.SetPartyIndex(spawned);
-                merc.SetDisplayName(md.displayName, md.nickname);
+                merc.SetDisplayName(md.displayName);
                 if (!string.IsNullOrEmpty(md.hireId))
                     merc.SetHireId(md.hireId);
                 else
@@ -1108,7 +1112,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         }
         MercRosterDefs.GetSkillIds(useId, out string active, out string passive);
         merc.SetupBattleSkills(active, passive);
-        merc.SetDisplayName(StoryProgress.TutorialMercDisplayName, StoryProgress.TutorialMercNickname);
+        merc.SetDisplayName(StoryProgress.TutorialMercDisplayName);
         merc.SetHireId(StoryProgress.TutorialMercHireId);
         if (!allyUnits.Contains(merc))
             allyUnits.Add(merc);
@@ -1225,6 +1229,12 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         BattleUI.Instance?.EnsureBattleControls();
         // 2026-10-09 主人拍板：进战斗自动收起背包弹窗，避免带着弹窗开打。
         BackpackPopupUI.Instance?.Hide();
+        // 【2026-10-11 主人拍板】**点装备弹出来的那几层同样要自动关掉** ——
+        // 主人原话「点击装备出来的弹窗 开始战斗要自动关闭 跟背包一样」。
+        // BackpackItemActionUI = 点装备后浮出的「装备 / 分解 / 丢弃」操作层；
+        // EquipStatTipUI = 装备属性浮字。开打了还糊在屏幕上会挡住战斗 UI。
+        BackpackItemActionUI.Instance?.Hide();
+        EquipStatTipUI.Instance?.Hide();
         BattleUI.Instance?.EnsureRunSkillSlotsRepaired();
         // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
         // BattleJoystick.Instance?.SetVisible(true);
@@ -2029,7 +2039,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         // 跑图时镜头随英雄缓慢放宽
         if (hero != null)
-            ExtendCameraMaxX(UnitBase.GetCombatX(hero) + (_portalActive ? 6f : 12f));
+            // 【2026-10-11 主人拍板「可见性选 B」】传送门一开，镜头右缘放宽到 hero+9（原 +6）。
+            // 门的可视子物体 door01 挂在根节点右侧 2.26（场景里的偏移量），门根在 hero+3.2 →
+            // 门实际落在 hero+5.46；+6 那档太贴边，玩家还没看清就踩到触发线了。
+            ExtendCameraMaxX(UnitBase.GetCombatX(hero) + (_portalActive ? 9f : 12f));
 
         // 传送门开启后不再把英雄卡在镜头右缘，允许走向 chuansongmen
         if (!_portalActive)
@@ -2216,8 +2229,6 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 图鉴：击败解锁完整描述；未见过则顺带记遭遇并发里程
         if (m.config != null)
             AdventureCodex.MarkMonsterDefeated(m.config.id);
-
-        SpecialWeapons.TryFlavorToastOnKill();
 
         BattleUI.Instance?.UpdateSkillEnergy(0, PlayerSkillEnergyPeak);
         BattleUI.Instance?.UpdateSkillEnergy(1, GetMercMp(0));
@@ -2572,8 +2583,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
         // BattleJoystick.Instance?.SetVisible(false);   // 抽奖期间收起摇杆
-        int price = SlotMachineSystem.Price(SlotMachineSystem.RunStageIndex());
-        int focusPrice = SlotMachineSystem.FocusPrice(SlotMachineSystem.RunStageIndex());
+        // 【2026-10-10 主人拍板】价跟**本局已抽数**走（每抽 +10%），不再跟关卡走 ——
+        // 与 CoMidBattleDraft 同一出口（SlotMachineSystem.DrawPrice），别再写第二套算法。
+        // ⚠ 价必须**每轮重算**，见循环内（2026-10-11 修「连抽价格不涨」）。
 
         // 2026-10-05 主人拍板：金币本开局免费抽 N 次（额度写在模式上）。进关清零，一关一算。
         // ⚠ 这行已于 2026-10-07 上移到 CoStartBattle 的「引导 / 正式」分叉之前（唯一入口，见那里）；
@@ -2590,13 +2602,19 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         {
             DraftCategory? picked = null;
             int choice = 0;
+            // 【2026-10-11 修】价必须**每轮重算**：每抽一次本局抽数 +1，下一抽贵 10%
+            // （主人原话「每抽一次奖增加下一次抽奖花费的金币 每次+10%」）。
+            // 旧写法把 price / focusPrice 算在 while 外面，面板连抽 N 次都还是同一个价 ——
+            // 主人反馈「抽了一次奖后 花费没有增长」就是这个。
+            int price = SlotMachineSystem.DrawPrice();
+            int focusPrice = SlotMachineSystem.DrawFocusPrice();
             // 还有免费额度 → 这一抽 0 币（定向也免费），面板上显示「免费 ×剩余」
             int freeLeft = SlotMachineSystem.FreeDrawsLeft();
             int showPrice = freeLeft > 0 ? 0 : price;
             int showFocus = freeLeft > 0 ? 0 : focusPrice;
             // 2026-09-30 主人改版：抽奖按钮长在战斗 HUD 底部的 BackpackPanel 里
             //（BackpackPanel 收起 600 / 展开 750），不再弹居中面板 SlotOfferUI。
-            BattleEntryDraftPanel.Show(showPrice, showFocus, cats, SlotMachineSystem.Coins(),
+            BattleEntryDraftPanel.Show(showPrice, showFocus, cats, currentGold,
                 c => { picked = c; choice = 1; },
                 () => choice = 2, freeLeft);
 
@@ -2686,17 +2704,25 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             var entryPanel = BattleEntryDraftPanel.Instance;
             if (entryPanel != null) entryPanel.SetCountdownPaused(false);
 
-            // 「再来一次」= 免费老虎机 + 三选一，这是奖励，玩家在这里才做选择
+            // 「再来一次」= **白送一次免费抽**，不是技能三选一。
+            // 【2026-10-11 主人拍板】主人原话：「再来一次不是技能，是不用花费再抽一次，
+            // 注意这次抽不用涨费用」。
+            //   旧实现是「免费老虎机 + 该类型三选一」→ 会弹技能卡（主人看到的就是技能卡面），
+            //   而且那一抽照常推进抽数 → 下一抽价格 +10% → 玩家币不够 → 点了没反应。
+            //   现在改成：给一次免费额度，回到面板玩家自己点（面板显示「免费 ×N」），
+            //   且这一抽**不推进 DrawIndex**（见 CoInstantPick 的 bonusFree 分支）→ 下一抽不涨价。
             if (SlotMachineSystem.RollReroll())
             {
-                // 三选一期间不催：再把倒计时冻住，选完松开接着走（同样不重置）
                 if (entryPanel != null) entryPanel.SetCountdownPaused(true);
-                UIManager.Instance?.ShowToast("再来一次！免费老虎机");
+                SlotMachineSystem.GrantBonusFreeDraw();
+                // 按钮金额**当场**变成免费（不等面板下一轮重开），主人要求的就是这个瞬间的反馈
+                if (entryPanel != null)
+                    entryPanel.RefreshFreeLeft(currentGold, SlotMachineSystem.FreeDrawsLeft());
+                UIManager.Instance?.ShowToast("再来一次！这一抽免费");
                 // 【2026-10-06 主人拍板】左侧滑入 → 慢慢滑行 1 秒 → 快速向右滑走的大字横幅
                 SlotMachineAgainBanner.Show();
-                // 等横幅播完（0.30 滑入 + 1.00 滑行 + 0.22 滑出 ≈ 1.52s）再弹三选一
+                // 等横幅播完（0.30 滑入 + 1.00 滑行 + 0.22 滑出 ≈ 1.52s）再回面板
                 yield return new WaitForSecondsRealtime(1.55f);
-                yield return CoJackpot(cats);
                 if (entryPanel != null) entryPanel.SetCountdownPaused(false);
             }
         }
@@ -2708,17 +2734,49 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
     /// <summary>
     /// 抽奖「查余额」的<b>唯一出口</b>（只看不扣；真扣款在 <see cref="CoInstantPick"/> 里、
-    /// 确认结果能生效之后才做）。币种按目标类型选：佣兵 = 佣兵币，其余 = 抽奖币
-    /// （真源 <c>SlotMachineSystem.FocusCurrency</c>，与面板上的货币图标同口径）。
+    /// 确认结果能生效之后才做）。【2026-10-10 主人拍板】抽奖统一扣**战斗内金币**——
+    /// 不再分佣兵币 / 抽奖币，余额就是 HUD 上那个 currentGold。
     /// </summary>
-    /// <param name="shortBy">不够时回传币种显示名（「佣兵币」/「抽奖币」），给 toast 用。</param>
-    static bool CanAffordDraw(DraftCategory? picked, int cost, out string shortBy)
+    /// <param name="shortBy">不够时回传币种显示名（「金币」），给 toast 用。</param>
+    bool CanAffordDraw(DraftCategory? picked, int cost, out string shortBy)
     {
-        ResourceWallet.ResourceType cur = picked.HasValue
-            ? SlotMachineSystem.FocusCurrency(picked.Value)
-            : ResourceWallet.ResourceType.SlotCoin;
-        shortBy = ResourceWallet.DisplayName(cur);
-        return cost <= 0 || SlotMachineSystem.Balance(cur) >= cost;
+        shortBy = ResourceWallet.DisplayName(ResourceWallet.ResourceType.Gold);
+        return cost <= 0 || currentGold >= cost;
+    }
+
+    /// <summary>
+    /// 抽奖扣金币的<b>唯一出口</b>（2026-10-10 主人拍板「每抽一次奖增加下一次抽奖花费的金币」配套）：
+    /// 直接扣战斗内 currentGold（= 局外金币的战斗镜像，收尾经 <see cref="PersistBattleGold"/> 差额写回存档）。
+    /// 扣完立刻刷 HUD；余额不足返回 false（调用方已先用 <see cref="CanAffordDraw"/> 拦过，这里是保险）。
+    /// </summary>
+    public bool SpendBattleGold(int cost)
+    {
+        if (cost <= 0) return true;
+        if (currentGold < cost)
+        {
+            Debug.LogError($"[BattleManager] 抽奖扣金币失败：需 {cost}，现有 {currentGold}（不应走到这里，前置 CanAffordDraw 漏拦）");
+            return false;
+        }
+        currentGold -= cost;
+        BattleUI.Instance?.UpdateGold(currentGold);
+        return true;
+    }
+
+    /// <summary>
+    /// 局内进钱的<b>唯一出口</b>（2026-10-10 主人拍板「进战斗只带启动金」配套）：
+    /// 启动金 / 每关通关补贴 / 抽中的金币，三种都走这里进 <c>currentGold</c>。
+    /// </summary>
+    /// <param name="countsAsEarned">
+    /// true = 本局赚的钱（击杀掉落等），结算会写回存档；
+    /// false = <b>局内循环资源</b>（启动金 / 通关补贴 / 抽中金币）：抬高 <c>_goldAtRunStart</c>，
+    /// 于是结算差额不含它 —— 能抽，但带不出裂隙（跟「战斗内的都是局内的」同口径，也不会被白刷）。
+    /// </param>
+    public void AddRunGold(int n, bool countsAsEarned)
+    {
+        if (n <= 0) return;
+        currentGold += n;
+        if (!countsAsEarned) _goldAtRunStart += n;
+        BattleUI.Instance?.UpdateGold(currentGold);
     }
 
     /// <summary>
@@ -2742,17 +2800,18 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             yield break;
         }
 
-        // 【2026-10-07 主人拍板】佣兵定向「一次一枚佣兵币，有几率失败」：
-        // 花一枚币开一次口，未必说得动对方 —— 失败 = 币照花、人没来（设计好的赌，不是 bug）。
+        // 【2026-10-07 主人拍板】佣兵定向「一次一枚币，有几率失败」：
+        // 花一次钱开一次口，未必说得动对方 —— 失败 = 钱照花、人没来（设计好的赌，不是 bug）。
         // ⚠ 引导局的保底佣兵（塔克）绝不许失败，否则引导会断在半路 → 引导局整段跳过；
         // ⚠ 免费额度（金币本）那几次 cost = 0，也不参与失败判定。
+        // 【2026-10-10 主人拍板】扣的币统一为战斗内金币（SpendBattleGold 唯一出口）。
         if (cat == DraftCategory.Merc && cost > 0 && !IsTutorialRun)
         {
             float rate = SlotMachineDefs.MERC_FOCUS_SUCCESS_RATE;
             if (Random.value >= rate)
             {
-                SlotMachineSystem.TrySpendFocus(cat, cost);   // 失败也要把这一枚花掉
-                Debug.Log($"[BattleManager] 佣兵定向招募失败（成功率 {rate:P0}），扣 {cost} 枚佣兵币");
+                SpendBattleGold(cost);                        // 失败也要把这笔钱花掉
+                Debug.Log($"[BattleManager] 佣兵定向招募失败（成功率 {rate:P0}），扣 {cost} 金币");
                 UIManager.Instance?.ShowToast("招募失败：这一回没能说动对方。", true);
                 yield break;
             }
@@ -2760,9 +2819,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         // ① 保底：引导三拍的保底内容**只有这一处**编排，不许散成两处。
         DraftCard card = default;
-        // 本局第一次抽到技能 = 该职业的初始技能（正式规则，不是引导特例）
-        if (cat == DraftCategory.Skill)
-            card = SlotMachineSystem.BuildGuaranteedSkillCard();
+        // 【2026-10-11 主人拍板】技能类不再保底：原来的「本局第一次抽到技能 = 白送职业初始技能」
+        // （SlotMachineSystem.BuildGuaranteedSkillCard）已整条删除，技能一律走下面的随机池。
         // 2026-10-07 主人拍板：引导第 2 抽（佣兵）= 直接招募塔克本人入队（H003 剑盾卫士，稀有），
         // 碎片那条口径已作废（TutorialRules.MercDraftGivesFragment 整条删除）。
         if (cat == DraftCategory.Merc)
@@ -2809,19 +2867,33 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             yield break;
         }
 
-        // 免费抽（金币本开局送的那几次）：不扣币，只消耗免费额度。
+        // 免费抽（金币本开局送的那几次 / 「再来一次」送的那次）：不扣币，只消耗免费额度。
         // ⚠ 抽数序号照常推进 —— 引导局靠它一格一格走「装备→佣兵→技能」，
         //   不推进的话引导三拍会全落在同一类上，等于白教（正式关是纯随机，序号只作统计）。
+        // 【2026-10-10 主人拍板】付费抽统一扣战斗内金币（价格已按抽数 +10% 递增）。
+        // 【2026-10-11 主人拍板】例外：「再来一次」那一抽**不推进抽数** ——
+        //   主人原话「这次抽不用涨费用」，否则奖励反而把下一抽的价格顶上去，玩家点不动。
+        bool bonusFree = false;
         if (cost > 0)
-            // 按类型选币种扣（佣兵 = 佣兵币，装备 / 技能 = 抽奖币）—— 唯一扣费出口
-            SlotMachineSystem.TrySpendFocus(cat, cost);
+            SpendBattleGold(cost);
+        else if (SlotMachineSystem.ConsumeBonusFreeDraw())
+            bonusFree = true;
         else
             SlotMachineSystem.ConsumeFreeDraw();
-        SlotMachineSystem.NoteDraw();          // 本局抽数 +1（跨关不清零）
+
+        if (!bonusFree)
+            SlotMachineSystem.NoteDraw();      // 本局抽数 +1（跨关不清零）
         RunLoadout.Save();
         RunDraftDirector.RefreshSkillPower();
         // 2026-10-05：抽完必须重建技能栏，否则新技能不上 HUD（连带「拖动改顺序」的软引导也没机会弹）。
         RunSkillBarUI.Refresh();
+        // 【2026-10-10 主人拍板】抽到技能要**立即**看到底部技槽图标（主人反馈「抽了技能后没有立即显示图标」）：
+        // 左栏 Rebuild 不刷底部 4 槽，逐帧 tick 又要等下一帧比对 —— 这里主动刷一次，抽完当场亮出来。
+        BattleUI.Instance?.UpdateRunSkillSlots();
+        BattleUI.Instance?.UpdateMercSkillSlots();
+        // 【2026-10-10 主人反馈】抽到佣兵/技能后**头像栏**也要立即亮（UpdateCharacterSlots 内部自带
+        // ShowMercHud 推导，抽到第一个佣兵时整条头像栏都是靠它挂出来的）。
+        BattleUI.Instance?.UpdateCharacterSlots();
 
         string got = !string.IsNullOrEmpty(msg) ? msg
                    : !string.IsNullOrEmpty(card.Title) ? card.Title
@@ -2865,14 +2937,15 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
             // BattleJoystick.Instance?.SetVisible(false);
 
-            int price = SlotMachineSystem.Price(SlotMachineSystem.RunStageIndex());
-            int focusPrice = SlotMachineSystem.FocusPrice(SlotMachineSystem.RunStageIndex());
+            int price = SlotMachineSystem.DrawPrice();
+            int focusPrice = SlotMachineSystem.DrawFocusPrice();
 
             DraftCategory? picked = null;
             int choice = 0;
             int freeLeft = SlotMachineSystem.FreeDrawsLeft();
+            // 【2026-10-10 主人拍板】面板余额显示战斗内金币（抽奖真扣的就是它，不再是另一套抽奖币）
             BattleEntryDraftPanel.Show(freeLeft > 0 ? 0 : price, freeLeft > 0 ? 0 : focusPrice,
-                cats, SlotMachineSystem.Coins(),
+                cats, currentGold,
                 c => { picked = c; choice = 1; },
                 () => choice = 2, freeLeft);
 
@@ -2902,11 +2975,11 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             {
                 var autoTarget = SlotMachineSystem.ResolveCategory(cats);
                 int autoCost = freeLeft > 0 ? 0 : price;
-                if (SlotMachineSystem.Coins() < autoCost)
+                if (currentGold < autoCost)
                 {
                     // fail closed：不静默跳过，报出来让主人看见「引导三拍的钱不够了」
-                    Debug.LogError($"[BattleManager] 引导补抽失败：抽奖币不足" +
-                                   $"（需 {autoCost}，现有 {SlotMachineSystem.Coins()}），本拍定序不会推进");
+                    Debug.LogError($"[BattleManager] 引导补抽失败：局内金币不足" +
+                                   $"（需 {autoCost}，现有 {currentGold}），本拍定序不会推进");
                 }
                 else
                 {
@@ -3238,20 +3311,60 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         }
         else
         {
-            ShowVictorySettlementThen(() =>
-            {
-                var cm = ChapterManager.Instance;
-                var next = cm != null ? cm.availableNextStages : null;
-                // 只有一条路时不弹石墩选关界面，省掉一次没有选择余地的点击
-                if (next != null && next.Count == 1 && next[0] != null)
-                {
-                    Debug.Log("[BattleManager] 下一关只有一条路，跳过选关界面直接进关");
-                    cm.SelectStage(next[0]);
-                    return;
-                }
-                UIManager.Instance?.ShowStageSelectUI(next);
-            });
+            // 【2026-10-11 主人拍板 · 三】普通关通关**不再弹「本局结算面板」**。
+            // 主人原话：「怎么打完一关就结算了，我跟你说的打完一关进传送门，然后弹老虎机怎么没有了」。
+            // BattleSettlementUI 的语义是「**一局结束**」：MVP / 总伤害 / 本局累计金币 / 本局装备数，
+            // 每通一关都弹一次 = 玩家看到它就以为本局打完了，后面的关卡图 + 老虎机根本没人走到
+            // （Editor.log 实锤：结算面板弹出后玩家停了 130 秒直接退出，关卡图一次没起来）。
+            // 现在关间流程严格照主人给的那一条：
+            //   宝箱 → 传送门 → 走进去 → 过场 → 关卡图（石墩）→ 老虎机演下一关类型 → 落旗 → 点石墩进关。
+            // 结算面板只在**整局收尾**弹：章末 Boss（下面 isBoss 分支）/ 死亡 / 撤离 / 回城。
+            var cm = ChapterManager.Instance;
+            var stages = cm != null ? cm.availableNextStages : null;
+            int gateChapter = cm != null ? cm.currentChapter : 1;
+            GoChapterGate(gateChapter, stages);
         }
+    }
+
+    /// <summary>
+    /// 关间：过场（黑屏 + 本章背景图）→ 关卡选择界面（石墩图）。老虎机在关卡图里演，不在这里。
+    /// 普通关与「只有一条路」的关走的是同一条路，不存在跳过关卡图的分支。
+    /// </summary>
+    void GoChapterGate(int chapter, System.Collections.Generic.List<StageData> stages)
+    {
+        // 【2026-10-11 主人拍板 · 一】**无论几条路都走完整关卡图流程**
+        // （石墩图 → 老虎机演这一关的类型 → 落旗 → 点石墩进关）。
+        // 旧实现在「只有一条路」时直接 `cm.SelectStage(next[0])` 跳过整条 ——
+        // 于是玩家看不到老虎机，也就不知道下一关是普通/精英/恢复/Boss，
+        // 主人反馈「也没有弹出抽奖界面」指的就是这个。
+        // 而章节分支表里 **只有分支点才有 2 条路**，第 1 关及绝大多数关都是单路 →
+        // 旧逻辑等于「几乎每关都跳过」，老虎机基本播不出来。
+        //
+        // 【2026-10-11 主人拍板 · 二】进关卡选择界面（石墩图）**之前**先来一次
+        // 「黑屏 + 本章背景图」的 loading 过场。主人原话：
+        // 「走进传送门后黑屏然后出现 loading 图」「进入关卡选择界面时不用加载 loading 界面吗」。
+        // 关卡与关卡之间**不切场景**（LoadStage 只重置状态），本来不会有 loading，
+        // 所以这一层是专门为过场显式插的 —— 主人给的每章背景图就显示在这里。
+        StartCoroutine(CoChapterGateLoading(chapter, () => UIManager.Instance?.ShowStageSelectUI(stages)));
+    }
+
+    /// <summary>进关卡选择界面前那次 loading 过场停留多久（秒）。要调快慢只改这一个数。</summary>
+    public const float ChapterGateLoadingSeconds = 1.2f;
+
+    /// <summary>
+    /// 「黑屏 + 本章背景图」的 loading 过场（2026-10-11 主人拍板）。
+    /// 关卡之间不切场景，本来不会有 loading；主人要这个过场，所以在这里显式插一次。
+    /// 复用的就是切场景那套 <see cref="LoadingUI"/>（同源同款，不另造一套过场），
+    /// 背景图走 `Resources/UI/loading/beijing0N`。
+    /// </summary>
+    IEnumerator CoChapterGateLoading(int chapter, System.Action after)
+    {
+        BattleLoadingOverlay.Show(GameConfig.GetChapterMapName(chapter));
+        BattleLoadingOverlay.SetChapterBackdrop(chapter);
+        BattleLoadingOverlay.SetProgress(1f);
+        yield return new WaitForSecondsRealtime(ChapterGateLoadingSeconds);
+        BattleLoadingOverlay.Hide();
+        after?.Invoke();
     }
 
     /// <summary>
@@ -3259,15 +3372,15 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// 引导局走内存模式：整包丢掉，不动玩家真正的本局存档；
     /// 金币与天赋石已按阶段写回城镇存档，掉落装备本就不带出。
     ///
-    /// ⚠ **局内抽奖币的清零出口就在这里**（2026-10-05 主人拍板：「打完一章后清零，
+    /// ⚠ **局内钱包的作废出口就在这里**（2026-10-05 主人拍板：「打完一章后清零，
     /// 不过玩家可以选择是否进行下一章，这时不清零」）。
-    ///   · 回城（章末选「回城」）／阵亡／撤离 → 都走本方法 → **清零**；
+    ///   · 回城（章末选「回城」）／阵亡／撤离 → 都走本方法 → **局内钱作废**（currentGold 里的
+    ///     启动金 / 通关补贴 / 抽中金币都带不走，只有「本局真正赚到的」经 PersistBattleGold 写回）；
     ///   · 章末选「进下一章」→ <b>不走本方法</b>（`SettleNormalStageClear` 只切章，不收尾）→ **保留**。
-    ///   别在别处再写第二份清零。下一局进关由 `SlotMachineSystem.EnsureStarterCoins` 重新补启动币。
+    ///   别在别处再写第二份清零。下一局进关由 `SlotMachineSystem.GrantRunStarterGold` 重新补启动金。
     /// </summary>
     void EndRunLoadout()
     {
-        SlotMachineSystem.ClearRunCoins();   // 局内抽奖币是「局内的」，本局结束就作废
         if (Rules.Active)
         {
             if (Rules.EnableRunDraft)
@@ -3322,15 +3435,18 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (save == null) return;
         // 结算才发的局外金币：必须在算差额之前入账，否则写不回存档（钱就凭空少了）
         GrantPendingStageGold();
-        // 战斗内金币写回城镇：差额走 ResourceWallet，避免突破上限
-        long delta = currentGold - save.totalGold;
+        // 战斗内金币写回城镇：差额走 ResourceWallet，避免突破上限。
+        // 【2026-10-10 主人拍板】战斗钱包局内化后，基准不再是城镇金币而是**本局起点** _goldAtRunStart
+        // （它已含启动金 / 通关补贴 / 抽中金币这些「进得来带不走」的钱）→
+        // delta = 本局真正赚到的（击杀掉落 + 结算按关卡数发的那笔），抽奖花掉的已经扣在里面。
+        long delta = currentGold - _goldAtRunStart;
         if (delta > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.Gold, delta, save: true, notify: false);
         else if (delta < 0)
             ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, -delta, save: true, notify: false);
         else
             SaveSystem.Instance.Save();
-        currentGold = save.totalGold;
+        currentGold = _goldAtRunStart;
     }
 
     #endregion

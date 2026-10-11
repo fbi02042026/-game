@@ -175,7 +175,9 @@ public partial class BattleUI : MonoBehaviour
             // 应该就只有右边图标框的地方显示那个转圈冷却」。
             // 槽位根里除了图标框还有别的装饰（左边的「+」），铺满根 = 圆心被拉偏、还盖住加号。
             Transform cdNode = av.avatarImage != null ? av.avatarImage.transform : t;
-            av.cooldownText = EnsureChildText(cdNode, "SkillCd", 16);
+            // 【2026-10-11 主人拍板】冷却倒计时数字放大并在图标内居中（主人原话
+            // 「把技能的倒计时放大点 然后在图标中居中显示」）—— 不再用底部细条的 EnsureChildText。
+            av.cooldownText = EnsureCenteredCdText(cdNode, "SkillCd", 34);
             av.cooldownMask = EnsureChildMask(cdNode, "SkillCdMask");
             av.energyFill = EnsureChildBar(t, "SkillEnergy", new Color(0.98f, 0.78f, 0.28f, 1f));
             // 左上角释放顺序角标（① 最先放）：与整理阶段的拖拽调序同一口径，空槽由 SetOrderText("") 隐藏
@@ -348,11 +350,34 @@ public partial class BattleUI : MonoBehaviour
         if (art != null)
         {
             KillRedundantGeneratedIcon(slotRoot, art);
+            // 【2026-10-11 主人反馈「脚的部位里面有个脚的图标，就是两个套在一起了」】
+            // 实锤：BattleUI.prefab 的「脚」槽 —— 槽自身 Image 与子层 ItemIcon 挂的是**同一张**鞋子图
+            // （guid c2f8a55e855609a45bec7d4372fa8ffe），两层都画 → 图标套图标。
+            // 其余 5 个槽（主手 / 副手 / 头 / 手 / 胸）口径统一：槽自身 = 该部位占位图，ItemIcon = None（空槽不画）。
+            // 所以这里把脚槽 ItemIcon 那张重复的图清掉，与其余槽对齐；占位图仍由槽自身那层显示。
+            // ⚠ 不碰 prefab（铁律 3），只在运行时去重；美术哪天把脚槽 ItemIcon 清空，这段自动失效（图不同就不动）。
+            ClearDuplicateArtIcon(slotRoot, art);
             art.preserveAspect = true;
             art.raycastTarget = false;
             return art;
         }
         return EnsureChildIcon(slotRoot);
+    }
+
+    /// <summary>
+    /// 图标层与槽自身挂着同一张图（美术重复摆了一份）→ 清掉图标层那张，避免两张图叠着画。
+    /// 判据只有一条：<b>两张 sprite 是同一个对象</b>。底框 ≠ 占位图的正常槽不受影响。
+    /// </summary>
+    static void ClearDuplicateArtIcon(Transform slotRoot, Image art)
+    {
+        if (slotRoot == null || art == null || art.sprite == null) return;
+        var self = slotRoot.GetComponent<Image>();
+        if (self == null || self == art) return;
+        if (self.sprite != art.sprite) return;
+        Debug.LogWarning($"[BattleUI] 槽「{slotRoot.name}」的图标层与槽自身挂着同一张图（{art.sprite.name}），"
+            + "已清空图标层 —— 占位图由槽自身那层显示，与其余槽口径一致。"
+            + "要彻底修就把 prefab 里这个 ItemIcon 的 sprite 置空（改 prefab 需主人点头）。");
+        art.sprite = null;
     }
 
     /// <summary>代码补建的图标层固定叫 ItemIcon；若美术另有自己的节点，把代码那份关掉避免重叠。</summary>
@@ -385,6 +410,48 @@ public partial class BattleUI : MonoBehaviour
         img.preserveAspect = true;
         img.sprite = null;   // 无 sprite 时不绘制，靠 SetAvatar 显隐控制
         return img;
+    }
+
+    /// <summary>
+    /// 【2026-10-11 主人拍板】冷却倒计时数字：**铺满图标居中**（旧 EnsureChildText 锚在底部 14%~36% 的细条里，
+    /// 字小又偏下）。加黑描边保证压在冷却遮罩上仍可读。
+    /// </summary>
+    static Text EnsureCenteredCdText(Transform parent, string name, int fontSize)
+    {
+        var exist = FindDeepChildIgnoreCase(parent, name);
+        if (exist != null)
+        {
+            var e = exist.GetComponent<Text>();
+            if (e != null)
+            {
+                // 复用旧节点也要搬到居中锚点（防上一版本建过的节点还挂在老位置）
+                var ert = e.GetComponent<RectTransform>();
+                ert.anchorMin = new Vector2(0.08f, 0.08f);
+                ert.anchorMax = new Vector2(0.92f, 0.92f);
+                ert.offsetMin = Vector2.zero;
+                ert.offsetMax = Vector2.zero;
+                e.alignment = TextAnchor.MiddleCenter;
+                e.fontSize = fontSize;
+                return e;
+            }
+        }
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text), typeof(Outline));
+        go.transform.SetParent(parent, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.08f, 0.08f);
+        rt.anchorMax = new Vector2(0.92f, 0.92f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var txt = go.GetComponent<Text>();
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.fontSize = fontSize;
+        txt.color = new Color(1f, 0.96f, 0.86f);
+        txt.raycastTarget = false;
+        txt.fontStyle = FontStyle.Bold;
+        go.GetComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.85f);
+        var f = GameFonts.GetChinese();
+        if (f != null) txt.font = f;
+        return txt;
     }
 
     /// <summary>在槽位下补一行文字（星级 / 冷却）。</summary>

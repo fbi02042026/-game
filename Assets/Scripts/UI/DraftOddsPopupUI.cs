@@ -90,7 +90,20 @@ public class DraftOddsPopupUI : MonoBehaviour
         // ⚠ 这里必须是实例方法 Close：静态 Hide() 与实例方法同名会被编译器判成 CS0111
         veilBtn.onClick.AddListener(Close);
 
-        var panel = CreateImage("Panel", _root.transform, new Color(0.10f, 0.11f, 0.14f, 0.98f));
+        // 【2026-10-11 主人拍板】面板换**项目现有美术**：替换装备确认弹窗 / 撤离弹窗同款底图
+        // （Art/UI/NavCharacter/角色_0002s_0010_图层-7，Sliced），不再纯色块。
+        var panel = CreateImage("Panel", _root.transform, new Color(1f, 1f, 1f, 0.98f));
+        var panelSp = Resources.Load<Sprite>("UI/NavCharacter/角色_0002s_0010_图层-7");
+        if (panelSp != null)
+        {
+            panel.sprite = panelSp;
+            panel.type = Image.Type.Sliced;
+        }
+        else
+        {
+            panel.color = new Color(0.10f, 0.11f, 0.14f, 0.98f);   // 缺图先顶住，但必须报出来
+            Debug.LogWarning("[DraftOddsPopup] 缺面板底图 UI/NavCharacter/角色_0002s_0010_图层-7，暂用纯色");
+        }
         var prt = panel.rectTransform;
         prt.anchorMin = new Vector2(0.5f, 0.5f);
         prt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -148,13 +161,31 @@ public class DraftOddsPopupUI : MonoBehaviour
             18, new Color(0.62f, 0.62f, 0.66f));
         SetTop(foot.rectTransform, -PanelH + 70f, new Vector2(PanelW - 40f, 30f));
 
-        var close = CreateButton(panel.transform, "BtnClose", "关闭",
-            new Color(0.30f, 0.32f, 0.38f), Close);
-        close.anchorMin = new Vector2(0.5f, 0f);
-        close.anchorMax = new Vector2(0.5f, 0f);
-        close.pivot = new Vector2(0.5f, 0f);
-        close.anchoredPosition = new Vector2(0f, 22f);
-        close.sizeDelta = new Vector2(220f, 62f);
+        // 【2026-10-11 主人拍板】去掉底部「关闭」大按钮，改**右上角关闭**（天赋界面同款关闭图）。
+        var closeSp = Resources.Load<Sprite>("UI/Talent/天赋_0007_关闭");
+        Image closeImg;
+        if (closeSp != null)
+        {
+            closeImg = CreateImage("BtnClose", panel.transform, Color.white);
+            closeImg.sprite = closeSp;
+        }
+        else
+        {
+            closeImg = CreateImage("BtnClose", panel.transform, new Color(0.30f, 0.32f, 0.38f, 1f));
+            var fallback = CreateText("X", closeImg.transform, "×", 30, Color.white);
+            Stretch(fallback.rectTransform);
+            Debug.LogWarning("[DraftOddsPopup] 缺关闭按钮图 UI/Talent/天赋_0007_关闭，暂用纯色×顶住");
+        }
+        var closeBtn = closeImg.gameObject.AddComponent<Button>();
+        closeBtn.targetGraphic = closeImg;
+        closeBtn.onClick.AddListener(Close);
+        var crt = closeImg.rectTransform;
+        crt.anchorMin = new Vector2(1f, 1f);
+        crt.anchorMax = new Vector2(1f, 1f);
+        crt.pivot = new Vector2(0.5f, 0.5f);
+        // 64 的按钮半宽 32，中心往里 40 → 右边缘离面板边 8，不会探出面板外
+        crt.anchoredPosition = new Vector2(-40f, -40f);
+        crt.sizeDelta = new Vector2(64f, 64f);
 
         GameFonts.ApplyToHierarchy(_root.transform);
         _root.SetActive(true);

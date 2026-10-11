@@ -38,9 +38,9 @@ public interface IBattleMode
     int FreeEntryDraws { get; }
 
     /// <summary>
-    /// 本模式通关要不要发**局内抽奖币**（<c>SlotCoin</c>）。
-    /// <para>金币本 = false：它打完就直接结算回城、币随局清零（<c>SlotMachineSystem.ClearRunCoins</c>），
-    /// 通关再发一笔马上就被清掉的钱，只会让玩家看到一条「+100」然后归零的假收益。</para>
+    /// 本模式通关要不要发**局内金币**（进 <c>BattleManager.currentGold</c>）。
+    /// <para>金币本 = false：它打完就直接结算回城、局内钱随局作废（<c>BattleManager.EndRunLoadout</c>），
+    /// 通关再发一笔马上就作废的钱，只会让玩家看到一条「+100」然后归零的假收益。</para>
     /// </summary>
     bool GrantsRunCoins { get; }
 

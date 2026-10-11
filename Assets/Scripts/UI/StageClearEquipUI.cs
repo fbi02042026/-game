@@ -268,8 +268,19 @@ public class StageClearEquipUI : MonoBehaviour
             var name = card.transform.Find("Name")?.GetComponent<Text>();
             var meta = card.transform.Find("Meta")?.GetComponent<Text>();
             var body = card.transform.Find("Body")?.GetComponent<Text>();
-            if (name != null) name.text = eq.equipName ?? "装备";
-            if (meta != null) meta.text = $"{eq.slotType}  ★{eq.star}  {eq.rarity}";
+            if (name != null)
+            {
+                name.text = eq.equipName ?? "装备";
+                // 2026-10-11 主人拍板：字色跟稀有度一致
+                EquipUiText.ApplyRarityColor(name, eq.rarity);
+            }
+            if (meta != null)
+            {
+                // 旧写法把枚举名原样打出来（玩家会在卡片上看到 "Legendary" / "Epic" 这类英文），
+                // 2026-10-11 改成中文槽位 + 中文稀有度名，并跟名字用同一个色表。
+                meta.text = $"{EquipUiText.Slot(eq.slotType)}  ★{eq.star}  {EquipUiText.RarityName(eq.rarity)}";
+                EquipUiText.ApplyRarityColor(meta, eq.rarity);
+            }
             if (body != null) body.text = FormatAttrs(eq);
         }
     }

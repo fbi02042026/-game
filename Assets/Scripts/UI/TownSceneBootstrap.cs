@@ -46,6 +46,26 @@ public class TownSceneBootstrap : MonoBehaviour
             host.gameObject.AddComponent<TownSceneBootstrap>();
     }
 
+    // ——【2026-10-11 主人拍板】主线任务轮询驱动 ——
+    // 任务条（QuestHudBar）停用之前，MainQuestSystem.Tick() 的 0.5s 轮询**唯一**驱动点是
+    // QuestHudBar.Update（它每 0.5s 结算「雇人 / 点天赋」这类达标即结算的主线任务）。
+    // 任务条去掉后若没有替代驱动，这类主线会永远卡住不推进 → 驱动挪到这里。
+    // 条件沿用 QuestHudBar 原来的生效条件（城镇 + 引导已完成 + 存档已读）。
+    const float QuestTickInterval = 0.5f;
+    float _questTickTimer = QuestTickInterval;
+
+    void Update()
+    {
+        if (!GameSceneGate.IsTown) return;
+        if (!StoryProgress.TutorialDone) return;
+        if (SaveSystem.Instance == null || SaveSystem.Instance.Data == null) return;
+
+        _questTickTimer -= Time.unscaledDeltaTime;
+        if (_questTickTimer > 0f) return;
+        _questTickTimer = QuestTickInterval;
+        MainQuestSystem.Tick();
+    }
+
     void Start()
     {
         if (!GameSceneGate.IsTown) return;
@@ -120,14 +140,18 @@ public class TownSceneBootstrap : MonoBehaviour
         }
         TutorialDirector.Instance?.NotifyTownReady();
         // 主界面「当前目标」条：进 Town 就挂上，玩家不用点开冒险日志才知道干嘛
-        try
-        {
-            QuestHudBar.Ensure();
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning("[TownBootstrap] 任务条挂载异常: " + e.Message);
-        }
+        // 【2026-10-10 主人拍板】去掉 —— 任务条在天赋页等弹层上还顶着、点也关不掉（主人原话：
+        // 「天赋左上角还有任务框 而且也关不掉 先去掉吧 等后面在做」）。想恢复把这块注释打开即可。
+        // ⚠ 恢复时**不要**把 MainQuestSystem.Tick() 搬回 QuestHudBar：轮询驱动在本文件 Update（见上），
+        //   两处都 Tick 会出现「时机不一致 + 重复结算」，保持这一个出口。
+        // try
+        // {
+        //     QuestHudBar.Ensure();
+        // }
+        // catch (System.Exception e)
+        // {
+        //     Debug.LogWarning("[TownBootstrap] 任务条挂载异常: " + e.Message);
+        // }
     }
 
     static bool _loginCheckedThisTownVisit;
@@ -145,8 +169,10 @@ public class TownSceneBootstrap : MonoBehaviour
         _loginCheckedThisTownVisit = true;
 
         DailyLoginSystem.OnEnterGame();
+        // 【2026-10-10 主人要求】「当玩家返回主界面的时候再弹出每日登录」——
+        // 这里不再直接 Show（进 Town 就弹会盖在天赋页上），改成登记，回主界面才弹。
         if (DailyLoginSystem.HasClaimable())
-            DailyLoginUI.Show();
+            DailyLoginUI.RequestShowOnMainUi();
     }
 
     static bool _resumeChecked;

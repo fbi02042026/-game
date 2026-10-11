@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: equip_magic_weapon_09
   m_EditorClassIdentifier: 
   templateId: equip_magic_weapon_09
-  equipName: "黎明断钢·魔"
-  icon: {fileID: 21300000, guid: b68cd2358e294747980e093524f545fe, type: 3}
-  iconFileName: New_Weapon_09
+  equipName: "曦光法杖"
+  icon: {fileID: 21300000, guid: d47e9ab9029142e4bfd3ca80a083cb72, type: 3}
+  iconFileName: New_Weapon_03
   gridWidth: 1
   gridHeight: 2
   tags: []
@@ -46,4 +46,4 @@ MonoBehaviour:
   attackRange: 96
   weaponKindOverride: 3
   armorPrefix: 0
-  spumName: New_Weapon_09
+  spumName: New_Weapon_03

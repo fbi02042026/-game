@@ -54,6 +54,8 @@ public class GameSceneManager : Singleton<GameSceneManager>
     {
         if (_loadingTown) return;
         _loadingBattle = false;
+        // 【2026-10-10 主人拍板】回城后角色界面默认回到主角立绘（看板残留上次选的佣兵会顶掉主角）
+        CharacterUI.ResetBoardToPlayer();
         if (!isActiveAndEnabled)
         {
             UnityEngine.SceneManagement.SceneManager.LoadScene(TOWN_SCENE);
@@ -122,15 +124,19 @@ public class GameSceneManager : Singleton<GameSceneManager>
             StoryProgress.ResetTutorialRunInventoryIfNeeded();
         StoryDirector.Instance?.NotifySceneChanged();
         AutoGameInitializer.ResetForSceneLoad();
+        // 2026-10-11：本次进战斗的章号只算一次（唯一出口）—— loading 背景图与进战斗章节卡共用它。
+        // 原来章节卡自己算一份，现在两处同值，别再各算各的。
+        int battleChapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);
+        // 2026-10-11 主人拍板：loading 背景图按章取（Resources/UI/loading/beijing0N）。
+        BattleLoadingOverlay.SetChapterBackdrop(battleChapter);
         yield return null;
 
         // 进战斗前过场：章节卡在 Loading 期间演完再加载战斗场景（详见主人需求）。
-        // 章节号/isTutorial 同 BattleManager 原口径，但切场景那一刻 Rules 还没赋值，
+        // isTutorial 同 BattleManager 原口径，但切场景那一刻 Rules 还没赋值，
         // 必须用 StoryProgress 自己判断，不要读 BattleManager.Rules。
-        int splashChapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         bool splashTutorial = StoryProgress.ShouldStartTutorialBattle();
-        var splash = ChapterSplashOverlay.ShowBattleChapter(splashChapter, splashTutorial);
+        var splash = ChapterSplashOverlay.ShowBattleChapter(battleChapter, splashTutorial);
 
         // 战斗场景与章节卡并行加载（旧写法是「卡片演完才开始加载」，卡片淡出后 LoadingUI 还挂着，
         // 要等 AutoGameInitializer 报满 100% 才 Hide —— 于是 Loading 又冒出来一次）。

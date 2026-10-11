@@ -696,6 +696,8 @@ public class TalentUI : MonoBehaviour
         if (!TalentSystem.CanReset(out string reason))
         {
             Debug.Log("[TalentUI] " + reason);
+            // 2026-10-10 主人反馈「点击购买天赋，没有弹出toast」→ 洗点被拒也要弹，不然玩家以为按钮没反应
+            GlobalToastUI.Show(reason, true);
             return;
         }
         // 二次确认：先弹确认框，确认后才真正洗点（洗点逻辑本身不动）
@@ -707,10 +709,28 @@ public class TalentUI : MonoBehaviour
         if (!TalentSystem.TryUnlockLeft(index0 + 1, out string reason))
         {
             Debug.Log("[TalentUI] " + reason);
+            // 2026-10-10 主人反馈「点击购买天赋，没有弹出toast」→ 买不动必须把原因（金币不足等）弹出来
+            GlobalToastUI.Show(reason, true);
             return;
         }
         onLeftUnlockRequested?.Invoke(index0 + 1);
         RefreshAll();
+        // 同上：买成功也要有反馈，光是节点变色玩家不确定扣没扣钱
+        GlobalToastUI.Show("已激活：" + LeftNodeName(index0), true);
+    }
+
+    /// <summary>左列第 index0 个节点的显示名（越界返回占位，绝不返回空串把 toast 吞掉）。</summary>
+    static string LeftNodeName(int index0)
+    {
+        var arr = TalentDefs.Left;
+        if (arr == null || index0 < 0 || index0 >= arr.Length) return "天赋";
+        return string.IsNullOrEmpty(arr[index0].name) ? "天赋" : arr[index0].name;
+    }
+
+    /// <summary>右列节点显示名（同上：拿不到就给占位，不让 toast 变成空字符串）。</summary>
+    static string RightNodeName(TalentDefs.TalentRightNode node)
+    {
+        return node != null && !string.IsNullOrEmpty(node.name) ? node.name : "天赋";
     }
 
     /// <summary>
@@ -732,17 +752,30 @@ public class TalentUI : MonoBehaviour
             if (node.IsJobChoice)
                 OpenRightJobChoice(node);
             else if (TalentSystem.TryUnlockRightNode(node.id, 0, out string reason))
+            {
                 RefreshAll();
+                // 2026-10-10 主人反馈「点击购买天赋，没有弹出toast」→ 成功/失败都要给反馈
+                GlobalToastUI.Show("已激活：" + RightNodeName(node), true);
+            }
             else
+            {
                 Debug.Log("[TalentUI] " + reason);
+                GlobalToastUI.Show(reason, true);
+            }
         }
         else
         {
             // 已解锁：升级（JobChoice 沿用已选职业）
             if (TalentSystem.TryUpgradeRightNode(node.id, out string reason))
+            {
                 RefreshAll();
+                GlobalToastUI.Show("已升级：" + RightNodeName(node), true);
+            }
             else
+            {
                 Debug.Log("[TalentUI] " + reason);
+                GlobalToastUI.Show(reason, true);
+            }
         }
     }
 
@@ -847,11 +880,14 @@ public class TalentUI : MonoBehaviour
         if (!TalentSystem.TryUnlockRightNode(_pendingNode.id, chosenJob1Based, out string reason))
         {
             Debug.Log("[TalentUI] " + reason);
+            // 2026-10-10 主人反馈「点击购买天赋，没有弹出toast」
+            GlobalToastUI.Show(reason, true);
             return;
         }
         onRightChoiceRequested?.Invoke(_pendingNode.index, chosenJob1Based);
         CloseChoicePopup();
         RefreshAll();
+        GlobalToastUI.Show("已激活：" + RightNodeName(_pendingNode), true);
     }
 
     void CloseChoicePopup()

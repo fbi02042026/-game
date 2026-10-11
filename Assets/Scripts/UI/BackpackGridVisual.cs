@@ -149,7 +149,8 @@ public static class BackpackGridVisual
 
             if (!hasIcon)
                 AddNameFallback(go.transform,
-                    isItem ? (p.item.Name ?? "道具") : (EquipUiText.EquipTitleWithHand(p.equip) ?? "装备"));
+                    isItem ? (p.item.Name ?? "道具") : (EquipUiText.EquipTitleWithHand(p.equip) ?? "装备"),
+                    isItem ? (Rarity?)null : p.equip.rarity);
 
             if (isItem)
             {
@@ -297,7 +298,8 @@ public static class BackpackGridVisual
                && equip.gridWidth == 2 && equip.gridHeight == 2;
     }
 
-    static void AddNameFallback(Transform parent, string name)
+    /// <summary>没图标时兜底显示名字。<paramref name="rarity"/> 非空则字色跟稀有度走（2026-10-11 主人拍板）。</summary>
+    static void AddNameFallback(Transform parent, string name, Rarity? rarity = null)
     {
         var go = new GameObject("NameFallback", typeof(RectTransform));
         go.transform.SetParent(parent, false);
@@ -305,7 +307,7 @@ public static class BackpackGridVisual
         t.text = string.IsNullOrEmpty(name) ? "装备" : name;
         t.alignment = TextAnchor.MiddleCenter;
         t.fontSize = 14;
-        t.color = Color.white;
+        t.color = rarity.HasValue ? RarityPalette.Get(rarity.Value) : Color.white;
         t.raycastTarget = false;
         t.horizontalOverflow = HorizontalWrapMode.Wrap;
         t.verticalOverflow = VerticalWrapMode.Overflow;

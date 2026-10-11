@@ -114,6 +114,8 @@ public class EquipStatTipUI : MonoBehaviour
 
         var lines = BuildAttrLines(eq);
         _title.text = EquipUiText.EquipTitle(eq);
+        // 2026-10-11 主人拍板：字色跟稀有度一致
+        EquipUiText.ApplyRarityColor(_title, eq.rarity);
         _body.text = lines.Count > 0 ? string.Join("\n", lines.ToArray()) : "（无额外属性）";
         // 2026-10-10 主人拍板：竖列排版；只有一条属性（或「无额外属性」兜底文案）时居中，多条仍左对齐保持整齐竖列
         _body.alignment = lines.Count <= 1 ? TextAnchor.MiddleCenter : TextAnchor.UpperLeft;

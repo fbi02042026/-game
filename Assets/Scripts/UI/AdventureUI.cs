@@ -58,6 +58,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
     [Header("关卡详情面板")]
     public Text    stageNameLabel;    // "1-3  哥布林营地"
     public Text    stageDescLabel;
+    public Text    dropTitleLabel;    // "可能掉落"（字号对齐「敌人信息」）
     public Transform enemyIconContainer;
     public Transform dropIconContainer;
     public Text    staminaCostLabel;
@@ -117,6 +118,18 @@ public class AdventureUI : MonoBehaviour, ITownPage
     const float BOT_H    = 150f;
     const float LEFT_W   = 170f;
     const float DETAIL_H = 340f;
+
+    // ──【2026-10-11 主人拍板】关卡详情文字 ──
+    // ① 主人「这个关卡的信息的字再大一号」→ 章节名 25 → 27。
+    // ② 主人「敌人信息那右边不是还有空地吗 再往右拉伸一点」→ 介绍框宽 280 → 344（预制体 StageDesc 宽）；
+    //    拉宽后每行可容 16 字 → 第 1 章那段 31 字正好 2 行、不再溢出压住下面的「敌人信息」。
+    //    字号取 +1（20 → 21）：22 号在 344 宽下只能 15 字/行 → 又变 3 行溢出（实测推演，别再往上加）。
+    // ③ 主人「可能掉落 4 个字的字号跟敌人信息字号一致」→ 预制体 DropTitle 18 → 25（= 节点 direnxinxi 字号）。
+    // Build（代码建树）与 AutoBind（预制体绑定）两条路径都用这些常量，避免两套口径。
+    const int DetailNameFontSize = 27;
+    const int DetailDescFontSize = 21;
+    const float DetailDescWidth = 340f;
+    const int DetailSubTitleFontSize = 25;
 
     bool _built;
     bool _preloaded;
@@ -1024,13 +1037,13 @@ public class AdventureUI : MonoBehaviour, ITownPage
         float y = -14f;
 
         stageNameLabel = CreateTextGO(panel.transform, "StageName",
-            "1-3  哥布林营地", 24, TextAnchor.MiddleLeft,
+            "1-3  哥布林营地", DetailNameFontSize, TextAnchor.MiddleLeft,
             new Vector2(16, y - 12), new Vector2(400, 32));
         stageNameLabel.color = new Color(1f, 0.92f, 0.7f);
 
         stageDescLabel = CreateTextGO(panel.transform, "StageDesc",
             "哥布林们在山洞前搭建了营地，\n小心他们的埋伏和投掷的石块。",
-            18, TextAnchor.UpperLeft,
+            DetailDescFontSize, TextAnchor.UpperLeft,
             new Vector2(16, y - 52), new Vector2(280, 56));
         stageDescLabel.color = new Color(0.85f, 0.78f, 0.65f);
 
@@ -1059,11 +1072,11 @@ public class AdventureUI : MonoBehaviour, ITownPage
             }
         }
 
-        // 可能掉落标题
-        var dropTitle = CreateTextGO(panel.transform, "DropTitle",
-            "可能掉落", 18, TextAnchor.MiddleLeft,
+        // 可能掉落标题（字号与「敌人信息」一致，见 DetailSubTitleFontSize）
+        dropTitleLabel = CreateTextGO(panel.transform, "DropTitle",
+            "可能掉落", DetailSubTitleFontSize, TextAnchor.MiddleLeft,
             new Vector2(310, y - 14), new Vector2(100, 28));
-        dropTitle.color = new Color(0.85f, 0.78f, 0.65f);
+        dropTitleLabel.color = new Color(0.85f, 0.78f, 0.65f);
 
         // 掉落图标（占位：4个）
         var dropCont = new GameObject("DropIcons", typeof(RectTransform));
@@ -1125,6 +1138,9 @@ public class AdventureUI : MonoBehaviour, ITownPage
             new Vector2(0, btnY + 24), new Vector2(-240, 56), ColNormal);
         sweepBtn = BuildWideBtn(panel.transform, "SweepBtn", "▶▶  扫荡",
             new Vector2(0, btnY + 24), new Vector2(110, 56), ColHard);
+
+        // 字号 / 溢出与预制体绑定路径同一出口（见 ApplyDetailTextStyle）
+        ApplyDetailTextStyle();
     }
 
     void BuildIconSlot(Transform parent, int idx, float size)
@@ -1305,8 +1321,10 @@ public class AdventureUI : MonoBehaviour, ITownPage
             var btn = slot.GetComponent<Button>();
             if (btn == null) btn = slot.gameObject.AddComponent<Button>();
             int idx = ParseIconIndex(slot.name, i);
+            // 【2026-10-11】把被点的图标节点一起传下去 —— 弹窗要显示在这个敌人上面
+            var slotRt = slot as RectTransform;
             btn.onClick.RemoveAllListeners();
-            btn.onClick.AddListener(() => OnClickEnemyIcon(idx));
+            btn.onClick.AddListener(() => OnClickEnemyIcon(idx, slotRt));
         }
     }
 
@@ -1537,14 +1555,18 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
     void OnSweep() => Toast("扫荡（即将开放）");
 
-    void OnClickEnemyIcon(int idx)
+    /// <summary>
+    /// 点敌人图标 → 弹该怪信息。
+    /// 【2026-10-11 主人拍板】弹窗要显示在「当前点击的敌人上面」→ 把被点的图标节点带下去定位。
+    /// </summary>
+    void OnClickEnemyIcon(int idx, RectTransform icon = null)
     {
         if (idx < 0 || idx >= _previewMonsters.Count)
         {
             HideTip();
             return;
         }
-        ShowMonsterTip(_previewMonsters[idx]);
+        ShowMonsterTip(_previewMonsters[idx], icon);
     }
 
     // ────────────────────────────────────────────────────
@@ -1939,11 +1961,12 @@ public class AdventureUI : MonoBehaviour, ITownPage
         return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
     }
 
-    void ShowMonsterTip(MonsterConfig cfg)
+    void ShowMonsterTip(MonsterConfig cfg, RectTransform iconAnchor = null)
     {
         EnsureTip();
         if (_tipRoot == null || cfg == null) return;
         _tipRoot.SetActive(true);
+        PlaceTipAbove(iconAnchor);
         if (_tipTitle != null) _tipTitle.text = string.IsNullOrEmpty(cfg.monsterName) ? cfg.id : cfg.monsterName;
         int mch = GameConfig.GetMonsterChapter(_selectedChapter);
         var style = MonsterAttackStyleTable.Get(mch, cfg.spriteIndex);
@@ -1963,6 +1986,43 @@ public class AdventureUI : MonoBehaviour, ITownPage
         }
     }
 
+    /// <summary>弹窗下沿离图标中心的距离（图标 52 见方，一半 26 + 8 的呼吸空隙）。</summary>
+    const float TipRiseAboveIcon = 34f;
+
+    /// <summary>
+    /// 【2026-10-11 主人拍板】把怪物信息弹窗摆到「当前点击的敌人图标」正上方。
+    /// 图标与弹窗在同一棵 Canvas 树里，直接换算本地坐标，不去猜预制体的锚点/尺寸；
+    /// 再按界面矩形做一次钳制，免得靠边的那只怪把弹窗顶出屏幕。
+    /// </summary>
+    void PlaceTipAbove(RectTransform iconAnchor)
+    {
+        if (_tipRoot == null || iconAnchor == null) return;
+        var rootRt = transform as RectTransform;
+        var tipRt = _tipRoot.transform as RectTransform;
+        if (rootRt == null || tipRt == null) return;
+
+        Vector3 world = iconAnchor.TransformPoint(iconAnchor.rect.center);
+        Vector2 local = rootRt.InverseTransformPoint(world);
+        // anchor 取 (0,0) 时参考点是父左下角，而 InverseTransformPoint 以父 pivot 为原点 → 补回 pivot 偏移
+        Vector2 pivotOffset = new Vector2(rootRt.pivot.x * rootRt.rect.width,
+                                         rootRt.pivot.y * rootRt.rect.height);
+
+        tipRt.anchorMin = tipRt.anchorMax = Vector2.zero;
+        tipRt.pivot = new Vector2(0.5f, 0f);
+
+        float x = local.x + pivotOffset.x;
+        float y = local.y + pivotOffset.y + TipRiseAboveIcon;
+
+        float w = rootRt.rect.width;
+        float h = rootRt.rect.height;
+        float halfW = tipRt.sizeDelta.x * 0.5f;
+        float tipH = tipRt.sizeDelta.y;
+        if (w > halfW * 2f) x = Mathf.Clamp(x, halfW + 8f, w - halfW - 8f);
+        if (h > tipH) y = Mathf.Clamp(y, 8f, h - tipH - 8f);
+
+        tipRt.anchoredPosition = new Vector2(x, y);
+    }
+
     void HideTip()
     {
         if (_tipRoot != null) _tipRoot.SetActive(false);
@@ -1971,7 +2031,9 @@ public class AdventureUI : MonoBehaviour, ITownPage
     void EnsureTip()
     {
         if (_tipRoot != null) return;
-        var host = transform.Find("DetailPanel") ?? transform;
+        // 【2026-10-11 主人拍板】弹窗要显示在「当前点击的敌人上面」——位置会落在 DetailPanel 之外，
+        // 所以挂在界面根节点上（面板内会被面板边界/装饰压住）。页面整体隐藏时它会跟着隐藏。
+        var host = transform;
         var go = new GameObject("MonsterTip", typeof(RectTransform), typeof(Image));
         go.transform.SetParent(host, false);
         var rt = go.GetComponent<RectTransform>();
@@ -2153,6 +2215,9 @@ public class AdventureUI : MonoBehaviour, ITownPage
         for (int i = 0; i < slots.Count; i++)
         {
             bool on = i < showCount;
+            // 【2026-10-11 主人拍板】掉落图标缩小 10%（框 + 图都缩，名字挂框下不受影响 —— 见 ApplyDropIconShrink）
+            ApplyDropIconShrink(slots[i].kuang);
+            ApplyDropIconShrink(slots[i].icon);
             if (slots[i].kuang != null) slots[i].kuang.gameObject.SetActive(on);
             if (slots[i].icon != null) slots[i].icon.gameObject.SetActive(on);
             if (!on || slots[i].icon == null) continue;
@@ -2167,7 +2232,92 @@ public class AdventureUI : MonoBehaviour, ITownPage
             img.sprite = sp;
             img.color = Color.white;
             img.preserveAspect = true;
+
+            // 【2026-10-11 主人拍板】图标下方写上名字（主人：「可能掉落的物品…或者在物品下方写上名字」）
+            var tag = EnsureDropNameTag(slots[i].kuang != null ? slots[i].kuang : slots[i].icon);
+            if (tag != null) tag.text = DropDisplayName(_previewDrops[i]);
         }
+    }
+
+    /// <summary>
+    /// 可能掉落物品的显示名（图标下方那行小字）。叫法只在这一个出口维护。
+    /// 【2026-10-11 主人拍板】尽量短、能认出来就行（槽宽约 70 逻辑像素，2~3 字最稳）。
+    /// </summary>
+    static string DropDisplayName(PreviewDropKind kind)
+    {
+        switch (kind)
+        {
+            case PreviewDropKind.Gold:            return "金币";
+            case PreviewDropKind.TalentStone:     return "天赋石";
+            case PreviewDropKind.ScrollCommon:    return "普卷";
+            case PreviewDropKind.ScrollRare:      return "稀卷";
+            case PreviewDropKind.ScrollLegendary: return "传卷";
+            default:                              return "";
+        }
+    }
+
+    /// <summary>
+    /// 掉落名字字号（主人：「名字再大一号」→ 14 → 16）。
+    /// 颜色与详情面板其它文字一致（预制体「敌人信息 / 可能掉落」都是这个深棕）
+    /// —— 主人：「把掉落物品的名字的颜色改成和其他的字的颜色一致」。
+    /// </summary>
+    const int DropNameFontSize = 16;
+    static readonly Color DetailTextColor = new Color(0.151f, 0.109f, 0.032f);
+
+    /// <summary>掉落图标（框 + 图）整体缩放（主人：「可能掉落的图标缩小10%」）。</summary>
+    const float DropIconScale = 0.9f;
+
+    /// <summary>
+    /// 掉落图标/框的原始尺寸（每个节点第一次读到就记下）。
+    /// 缩小走 sizeDelta 而不是 localScale —— 名字是图标框的子节点，用 localScale 会把名字一起缩掉。
+    /// </summary>
+    readonly Dictionary<int, Vector2> _dropIconBaseSize = new Dictionary<int, Vector2>();
+
+    /// <summary>把掉落图标/框缩到 <see cref="DropIconScale"/>（按原始尺寸算，重复调用不会越缩越小）。</summary>
+    void ApplyDropIconShrink(Transform t)
+    {
+        if (t == null) return;
+        var rt = t as RectTransform;
+        if (rt == null) return;
+        int key = rt.GetInstanceID();
+        Vector2 baseSize;
+        if (!_dropIconBaseSize.TryGetValue(key, out baseSize))
+        {
+            baseSize = rt.sizeDelta;
+            _dropIconBaseSize[key] = baseSize;
+        }
+        rt.sizeDelta = baseSize * DropIconScale;
+    }
+
+    /// <summary>
+    /// 掉落图标下方那行名字：挂在图标框（IconkuangN）下，位置跟着框走，不必猜容器布局；
+    /// 节点运行时补建（预制体不动），重复调用复用同一个。
+    /// </summary>
+    static Text EnsureDropNameTag(Transform slot)
+    {
+        if (slot == null) return null;
+        var existing = slot.Find("DropName");
+        if (existing != null) return existing.GetComponent<Text>();
+
+        var go = new GameObject("DropName", typeof(RectTransform), typeof(Text));
+        go.transform.SetParent(slot, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot     = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, -1f);
+        rt.sizeDelta = new Vector2(80f, 18f);
+
+        var t = go.GetComponent<Text>();
+        t.font = GameFonts.GetChinese();
+        t.fontSize = DropNameFontSize;
+        t.alignment = TextAnchor.UpperCenter;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow   = VerticalWrapMode.Overflow;
+        t.raycastTarget = false;
+        t.color = DetailTextColor;   // 与面板其它文字同色（深棕）
+        t.text = "";
+        return t;
     }
 
     /// <summary>
@@ -2456,6 +2606,8 @@ public class AdventureUI : MonoBehaviour, ITownPage
         if (detail == null) return;
         stageNameLabel = detail.Find("StageName")?.GetComponent<Text>();
         stageDescLabel = detail.Find("StageDesc")?.GetComponent<Text>();
+        dropTitleLabel = detail.Find("DropTitle")?.GetComponent<Text>();
+        ApplyDetailTextStyle();
         enemyIconContainer = detail.Find("EnemyIcons");
         dropIconContainer = detail.Find("DropIcons");
         staminaCostLabel = detail.Find("StaminaCost")?.GetComponent<Text>();
@@ -2476,6 +2628,34 @@ public class AdventureUI : MonoBehaviour, ITownPage
             }
             if (difficultyButtons.Length > i) difficultyButtons[i] = d.GetComponent<Button>();
             if (difficultyLabels.Length > i) difficultyLabels[i] = d.Find("Lbl")?.GetComponent<Text>();
+        }
+    }
+
+    /// <summary>
+    /// 关卡详情文字样式（字号 / 宽度 / 溢出）的唯一出口 —— Build 与 AutoBind 两条路径都走这里。
+    /// 【2026-10-11 主人拍板】
+    /// ① 章节名 25 → 27；介绍 20 → 21（+1；22 号在拉宽后的框里仍会排成 3 行 → 溢出压住「敌人信息」）。
+    /// ② 介绍框往右拉伸 280 → 340（主人：「敌人信息那右边不是还有空地吗 再往右拉伸一点」）：
+    ///    每行可容 16 字 → 第 1 章那段 31 字正好 2 行、高度刚好落在框内，不再压到下面的「敌人信息」。
+    /// ③ 预制体里介绍框是「超出即截断（VerticalOverflow=Truncate）」→ 改为溢出可见，长句不再被吃掉后半截。
+    /// </summary>
+    void ApplyDetailTextStyle()
+    {
+        if (stageNameLabel != null)
+            stageNameLabel.fontSize = DetailNameFontSize;
+        if (stageDescLabel != null)
+        {
+            stageDescLabel.fontSize = DetailDescFontSize;
+            stageDescLabel.verticalOverflow = VerticalWrapMode.Overflow;
+            // 右边界 41+340=381 < 「可能掉落」标题左边界 386.7，不会撞上右侧那一块
+            var rt = stageDescLabel.rectTransform;
+            rt.sizeDelta = new Vector2(DetailDescWidth, rt.sizeDelta.y);
+        }
+        // 「可能掉落」字号对齐「敌人信息」；节点宽 100、4 字 25 号正好占满 → 关掉换行避免折成两行
+        if (dropTitleLabel != null)
+        {
+            dropTitleLabel.fontSize = DetailSubTitleFontSize;
+            dropTitleLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
         }
     }
 

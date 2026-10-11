@@ -140,14 +140,14 @@ public class QuestHudBar : MonoBehaviour
         return ui;
     }
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    static void HookSceneLoaded()
-    {
-        UnityEngine.SceneManagement.SceneManager.sceneLoaded += (scene, mode) =>
-        {
-            if (GameSceneGate.IsTown) Ensure();
-        };
-    }
+    // 【2026-10-11 主人拍板】任务条整体停用：原来「进 Town 自动挂载」的 HookSceneLoaded 已删除
+    // （原因见 TownSceneBootstrap.cs 任务条那段注释：顶在天赋页等弹层上、点也关不掉）。
+    // 恢复方式：① 把 TownSceneBootstrap.BootstrapRoutine 里 QuestHudBar.Ensure() 的注释打开；
+    //          ② 把下面这段也挂回来（它是场景加载后的自动入口）：
+    //             [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    //             static void HookSceneLoaded() { SceneManager.sceneLoaded += (s, m) => { if (GameSceneGate.IsTown) Ensure(); }; }
+    // ⚠ MainQuestSystem.Tick() 的 0.5s 轮询驱动已挪到 TownSceneBootstrap.Update，
+    //   这里不要再自己 Tick —— 两处驱动会导致结算时机不一致。
 
     void Awake()
     {
@@ -454,7 +454,8 @@ public class QuestHudBar : MonoBehaviour
         if (_timer > 0f) return;
         _timer = RefreshInterval;
 
-        MainQuestSystem.Tick();
+        // 【2026-10-11 主人拍板】MainQuestSystem.Tick() 的轮询已挪到 TownSceneBootstrap.Update 驱动：
+        // 任务条停用后本脚本不再常驻，轮询型主线（雇人 / 点天赋）若只靠这里会永远不结算。
         Refresh();
     }
 

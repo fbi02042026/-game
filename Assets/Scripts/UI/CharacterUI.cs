@@ -241,22 +241,31 @@ public class CharacterUI : MonoBehaviour, ITownPage
             portraitImage.enabled = true;
     }
 
-    /// <summary>当前看板 id：默认玩家自己（"player"），否则已选佣兵 HireId。持久化走 PlayerPrefs。</summary>
+    /// <summary>当前看板 id：默认玩家自己（"player"），否则已选佣兵 HireId。</summary>
     public string GetCurrentBoardId()
     {
-        return PlayerPrefs.GetString(BoardKey, "player");
+        return _boardId;
     }
 
     /// <summary>设为看板并立即刷新立绘；id 为空或 "player" 表示恢复默认（玩家自己）。</summary>
     public void ApplyBoardSelection(string id)
     {
-        if (string.IsNullOrEmpty(id)) id = "player";
-        PlayerPrefs.SetString(BoardKey, id);
-        PlayerPrefs.Save();
+        _boardId = string.IsNullOrEmpty(id) ? "player" : id;
         RefreshPlayerPortrait();
     }
 
-    static readonly string BoardKey = "CharBoardId";
+    // 【2026-10-10 主人拍板】看板选择不再落 PlayerPrefs（残留会导致回城后角色界面一直显示上次选的
+    // 佣兵立绘，主人要求「回城后的角色界面应该默认是主角立绘」）。改为只存内存：
+    // 会话内在城镇里切换看板保留，**每次回城**由 GameSceneManager.ResetBoardToPlayer 重置回主角。
+    static string _boardId = "player";
+
+    /// <summary>回城时调用：看板回主角立绘。实例未建好时只重置静态值，打开页面时自然生效。</summary>
+    public static void ResetBoardToPlayer()
+    {
+        _boardId = "player";
+        if (Instance != null)
+            Instance.RefreshPlayerPortrait();
+    }
 
     // 2026-09-25 主人明确 LeftSkillButton 已改名且暂时不要了，携带技能展示彻底废弃。
     // 保留方法签名以免其它引用处（如技能选择回调）编译报错，但不再动任何节点、不再 SetActive。

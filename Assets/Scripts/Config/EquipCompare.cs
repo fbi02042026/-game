@@ -29,12 +29,41 @@ public static class EquipCompare
         return Score(a).CompareTo(Score(b));
     }
 
+    /// <summary>
+    /// 主属性数值（attrBonus 第一条 = 弹窗「攻击+N」那行）。
+    /// 2026-10-11 主人反馈：普通★1 攻击+18 vs 普通★1 攻击+5，旧 Verdict 判「两件差不多」——
+    /// 因为 Score 只看 品质/星级/强化/词条数，**完全没看属性数值**，两件全同分。
+    /// </summary>
+    public static float PrimaryAttrValue(EquipInstance e)
+    {
+        if (e?.attrBonus == null || e.attrBonus.Count == 0) return 0f;
+        var a = e.attrBonus[0];
+        return a != null ? Mathf.Abs(a.value) : 0f;
+    }
+
+    /// <summary>主属性相对差 ≥ 这个比例才算「分得出高下」，否则算差不多。</summary>
+    const float VerdictDiffK = 0.15f;
+
+    /// <summary>新的那件是否真的更强（弹窗判定文案着色的唯一判据，与 Verdict 同一出口）。</summary>
+    public static bool NewBetter(EquipInstance newEq, EquipInstance oldEq)
+    {
+        int d = Compare(newEq, oldEq);
+        if (d != 0) return d > 0;
+        // 品质/星级/强化/词条数全同 → 按主属性数值分高下
+        float na = PrimaryAttrValue(newEq), oa = PrimaryAttrValue(oldEq);
+        if (na <= 0f || oa <= 0f) return false;
+        return na > oa * (1f + VerdictDiffK);
+    }
+
     /// <summary>给玩家看的一句话结论（弹窗顶部那行）。</summary>
     public static string Verdict(EquipInstance newEq, EquipInstance oldEq)
     {
-        int d = Compare(newEq, oldEq);
-        if (d > 0) return "新的更强";
-        if (d < 0) return "现在这件更好";
+        float na = PrimaryAttrValue(newEq), oa = PrimaryAttrValue(oldEq);
+        bool canJudgeByAttr = na > 0f && oa > 0f
+                              && Mathf.Abs(na - oa) / Mathf.Max(na, oa) >= VerdictDiffK;
+        // 品质/星级/强化/词条数有差距 → 直接按旧口径分；全同但主属性差得多 → 也分
+        if (Compare(newEq, oldEq) != 0 || canJudgeByAttr)
+            return NewBetter(newEq, oldEq) ? "新的更强" : "现在这件更好";
         return "两件差不多";
     }
 }

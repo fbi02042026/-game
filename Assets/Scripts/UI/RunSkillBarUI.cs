@@ -26,6 +26,8 @@ public class RunSkillBarUI : MonoBehaviour
         public Image CdFill;
         /// <summary>V6：本技能自己的充能条填充（技能能量改为每槽一条）。</summary>
         public Image EnergyFill;
+        /// <summary>【2026-10-11 主人拍板】本条的技能图标（左栏以前只有文字、从来没画过图标）。</summary>
+        public Image Icon;
         public Text Label;
         public string SkillId;
         public float Cooldown;
@@ -165,11 +167,14 @@ public class RunSkillBarUI : MonoBehaviour
             string label = $"{OrderMark(i)}{name} ★{star}";
             if (affinity) label += " ▲";
 
+            // 【2026-10-11 主人拍板】左栏也要看得见技能图标 —— 与底部 4 个技槽**同一个取图出口**
+            // （BattleUI.LoadRunSkillIcon），不另抄一份路径。6 个在池技能图标全齐。
             var chip = BuildChip(
                 label,
                 SkillRarityUtil.Tint(SkillDraftMeta.Rarity(id)),
                 SynergyTagUtil.Tint(tag),
-                active != null ? active.cooldown : 0f);
+                active != null ? active.cooldown : 0f,
+                BattleUI.LoadRunSkillIcon(id));
             chip.SkillId = active != null ? active.skillId : id;
             chip.Cooldown = active != null ? active.cooldown : 0f;
             chip.Index = i;
@@ -182,14 +187,14 @@ public class RunSkillBarUI : MonoBehaviour
             var m = mercs[i];
             if (m == null) continue;
             string label = $"{m.displayName} Lv{m.level} ★{m.star}";
-            var chip = BuildChip(label, new Color(0.42f, 0.72f, 0.94f), new Color(0.42f, 0.72f, 0.94f), 0f);
+            var chip = BuildChip(label, new Color(0.42f, 0.72f, 0.94f), new Color(0.42f, 0.72f, 0.94f), 0f, null);
             _mercChips.Add(chip);
         }
 
         UpdateLevelAndPower();
     }
 
-    Chip BuildChip(string label, Color rarityTint, Color tagTint, float cooldown)
+    Chip BuildChip(string label, Color rarityTint, Color tagTint, float cooldown, Sprite icon)
     {
         var chipRoot = MakeImage("Chip", _chipRoot, new Color(0.18f, 0.17f, 0.22f, 1f));
         chipRoot.rectTransform.sizeDelta = new Vector2(ChipW, ChipH);
@@ -212,7 +217,26 @@ public class RunSkillBarUI : MonoBehaviour
 
         var text = MakeText("Label", chipRoot.transform, label, 18, rarityTint);
         Stretch(text.rectTransform);
-        text.alignment = TextAnchor.MiddleCenter;
+        Image iconImage = null;
+        if (icon != null)
+        {
+            // 图标挂在最左侧，文字整体右移让位（图标 34 + 10 间距），别让字压在图上
+            iconImage = MakeImage("SkillIcon", chipRoot.transform, Color.white);
+            iconImage.sprite = icon;
+            iconImage.preserveAspect = true;
+            var irt = iconImage.rectTransform;
+            irt.anchorMin = new Vector2(0f, 0.5f);
+            irt.anchorMax = new Vector2(0f, 0.5f);
+            irt.pivot = new Vector2(0f, 0.5f);
+            irt.anchoredPosition = new Vector2(8f, 0f);
+            irt.sizeDelta = new Vector2(34f, 34f);
+            text.alignment = TextAnchor.MiddleLeft;
+            text.rectTransform.offsetMin = new Vector2(48f, 0f);
+        }
+        else
+        {
+            text.alignment = TextAnchor.MiddleCenter;
+        }
 
         // V6：本技能自己的能量条（底部细条）。2026-09-15 改纯冷却制后默认隐藏，只在建的时候设一次。
         var energyBg = MakeImage("EnergyBg", chipRoot.transform, new Color(0.08f, 0.08f, 0.12f, 0.95f));
@@ -227,7 +251,7 @@ public class RunSkillBarUI : MonoBehaviour
         var energyFill = MakeImage("EnergyFill", energyBg.transform, new Color(0.98f, 0.78f, 0.28f, 1f));
         Stretch(energyFill.rectTransform);
 
-        return new Chip { Bg = chipRoot, CdFill = cd, EnergyFill = energyFill, Label = text, Cooldown = cooldown };
+        return new Chip { Bg = chipRoot, CdFill = cd, EnergyFill = energyFill, Icon = iconImage, Label = text, Cooldown = cooldown };
     }
 
     void UpdateLevelAndPower()

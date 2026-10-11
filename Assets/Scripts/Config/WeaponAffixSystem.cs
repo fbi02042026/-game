@@ -2,33 +2,14 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 武器前缀命名 + 按 Kind 的词条池（对齐《武器系统设计》）。
+/// 武器命名（稀有度前缀）+ 按 Kind 的词条池（对齐《武器系统设计》）。
+///
+/// 2026-10-11 主人拍板「名字不要太长」：删除旧的随机词缀前缀表（裂隙之/疾风之/秘能之…）。
+/// 名字现在 = <see cref="RarityPrefix"/> + 模板名，最长 7 字。
+/// 词缀前缀表达的「主属性」在属性面板里本来就写着，不算丢信息。
 /// </summary>
 public static class WeaponAffixSystem
 {
-    struct Prefix
-    {
-        public string Name;
-        public AttrType Attr;
-        public WeaponCombatTable.WeaponKind[] Kinds;
-    }
-
-    static readonly Prefix[] Prefixes =
-    {
-        new Prefix { Name = "裂隙之", Attr = AttrType.Attack, Kinds = new[] { WeaponCombatTable.WeaponKind.Sword, WeaponCombatTable.WeaponKind.Greatsword, WeaponCombatTable.WeaponKind.Polearm } },
-        new Prefix { Name = "疾风之", Attr = AttrType.AttackSpeed, Kinds = new[] { WeaponCombatTable.WeaponKind.Bow, WeaponCombatTable.WeaponKind.Sword } },
-        new Prefix { Name = "鹰眼之", Attr = AttrType.CritRate, Kinds = new[] { WeaponCombatTable.WeaponKind.Bow } },
-        new Prefix { Name = "碎骨之", Attr = AttrType.PhyPower, Kinds = new[] { WeaponCombatTable.WeaponKind.Greatsword, WeaponCombatTable.WeaponKind.Sword } },
-        // 2026-09-29：法杖此前只有「秘法之」(MagicPower%)，没有对应物理武器「裂隙之」的固定值前缀 → 补一条
-        new Prefix { Name = "秘能之", Attr = AttrType.MagicAttack, Kinds = new[] { WeaponCombatTable.WeaponKind.Staff } },
-        new Prefix { Name = "秘法之", Attr = AttrType.MagicPower, Kinds = new[] { WeaponCombatTable.WeaponKind.Staff } },
-        new Prefix { Name = "炽焰之", Attr = AttrType.FireDamage, Kinds = new[] { WeaponCombatTable.WeaponKind.Staff, WeaponCombatTable.WeaponKind.Bow } },
-        new Prefix { Name = "霜冻之", Attr = AttrType.IceDamage, Kinds = new[] { WeaponCombatTable.WeaponKind.Staff, WeaponCombatTable.WeaponKind.Bow } },
-        new Prefix { Name = "腐蚀之", Attr = AttrType.LifeSteal, Kinds = new[] { WeaponCombatTable.WeaponKind.Sword } },
-        new Prefix { Name = "磐石之", Attr = AttrType.Defense, Kinds = new[] { WeaponCombatTable.WeaponKind.Shield } },
-        new Prefix { Name = "铁壁之", Attr = AttrType.MaxHp, Kinds = new[] { WeaponCombatTable.WeaponKind.Shield } },
-    };
-
     public static List<AttrType> GetRollableAttrs(WeaponCombatTable.WeaponKind kind)
     {
         var list = new List<AttrType>();
@@ -82,14 +63,25 @@ public static class WeaponAffixSystem
         }
     }
 
-    public static string RaritySuffix(Rarity rarity)
+    /// <summary>
+    /// 2026-10-11 主人拍板：传奇 / 稀有装备要在**名字最前面**带稀有度前缀 ——
+    /// 旧实现是名字末尾加后缀（「裂隙之黎明断钢·传说」），背包列表一截断就只看得到名字前半段，
+    /// 玩家扫一眼分不出品质，所以主人要求「传奇的武器名字前要加个辨识度高点的名字，稀有的也类似」。
+    ///
+    /// 文案唯一真源 = <see cref="EquipUiText.RarityName"/>（稀有/史诗/传奇），
+    /// 本函数只负责加「·」并决定哪几档要加 —— 别在这里抄第二份中文，改词只改 RarityName 一处。
+    /// 普通(Common)与优秀(Uncommon)不加：这两档占了全库大多数，加了前缀反而把高品质淹没。
+    /// </summary>
+    public static string RarityPrefix(Rarity rarity)
     {
         switch (rarity)
         {
-            case Rarity.Rare: return "·精良";
-            case Rarity.Epic: return "·卓越";
-            case Rarity.Legendary: return "·传说";
-            default: return "";
+            case Rarity.Rare:
+            case Rarity.Epic:
+            case Rarity.Legendary:
+                return EquipUiText.RarityName(rarity) + "·";
+            default:
+                return "";
         }
     }
 
@@ -106,37 +98,19 @@ public static class WeaponAffixSystem
         }
     }
 
-    static Prefix PickPrefix(WeaponCombatTable.WeaponKind kind, AttrType preferAttr)
+    /// <summary>
+    /// 2026-10-11 主人拍板「名字不要太长」：名字 = 稀有度前缀 + 模板名，**不再叠随机词缀前缀**。
+    /// 旧写法是「稀有度前缀 + 词缀前缀(裂隙之/疾风之…) + 模板名」，实测 10 个字
+    /// （「传奇·裂隙之黎明断钢」），背包卡片一行放不下。砍掉词缀层后最长 7 字（「传奇·黎明断钢」）。
+    /// 词缀前缀表达的「主属性」信息属性面板本来就有，不属于丢失；
+    /// 旧的 <c>PickPrefix</c> / <c>Prefixes</c> 表已整段删除，不留开关（主人要加回说一声即可）。
+    /// </summary>
+    public static string BuildName(WeaponCombatTable.WeaponKind kind, Rarity rarity, string templateBaseName)
     {
-        var matched = new List<Prefix>();
-        for (int i = 0; i < Prefixes.Length; i++)
-        {
-            var p = Prefixes[i];
-            if (p.Kinds == null) continue;
-            bool ok = false;
-            for (int k = 0; k < p.Kinds.Length; k++)
-            {
-                if (p.Kinds[k] == kind) { ok = true; break; }
-            }
-            if (!ok) continue;
-            if (p.Attr == preferAttr) return p;
-            matched.Add(p);
-        }
-        if (matched.Count > 0)
-            return matched[Random.Range(0, matched.Count)];
-        return new Prefix { Name = "裂隙之", Attr = AttrType.Attack, Kinds = null };
-    }
-
-    public static string BuildName(WeaponCombatTable.WeaponKind kind, AttrType primaryAttr, Rarity rarity, string templateBaseName)
-    {
-        var prefix = PickPrefix(kind, primaryAttr);
         string baseName = templateBaseName;
         if (string.IsNullOrEmpty(baseName) || !HasChinese(baseName) || baseName.Length <= 2)
             baseName = BaseTypeName(kind);
-        // 已带前缀的模板名不再叠前缀（如「暮火之杖」）
-        if (HasChinese(templateBaseName) && templateBaseName.Contains("之"))
-            return templateBaseName + RaritySuffix(rarity);
-        return prefix.Name + baseName + RaritySuffix(rarity);
+        return RarityPrefix(rarity) + baseName;
     }
 
     static bool HasChinese(string s)
@@ -158,7 +132,8 @@ public static class WeaponAffixSystem
             return;
         if (SpecialWeapons.IsTwilightStaff(inst))
         {
-            inst.equipName = SpecialWeapons.DisplayName;
+            // 2026-10-11 主人拍板：特殊武器也带稀有度前缀（「稀有·暮火之杖」），统一命名规则。
+            inst.equipName = SpecialWeapons.InstanceName;
             return;
         }
 
@@ -166,14 +141,12 @@ public static class WeaponAffixSystem
         var pool = GetRollableAttrs(kind);
         int count = AffixCountForRarity(inst.rarity);
         float mul = AffixValueMul(inst.rarity);
-        AttrType primary = pool.Count > 0 ? pool[0] : AttrType.Attack;
 
         for (int i = 0; i < count && pool.Count > 0; i++)
         {
             int idx = Random.Range(0, pool.Count);
             AttrType attr = pool[idx];
             pool.RemoveAt(idx);
-            if (i == 0) primary = attr;
             float value = RollAttrValue(attr, mul, inst);
             inst.attrBonus.Add(new AttrBonusData
             {
@@ -184,7 +157,7 @@ public static class WeaponAffixSystem
         }
 
         string baseName = EquipNameGen.DisplayName(inst.template);
-        inst.equipName = BuildName(kind, primary, inst.rarity, baseName);
+        inst.equipName = BuildName(kind, inst.rarity, baseName);
     }
 
     /// <summary>

@@ -21,8 +21,9 @@ public class ChapterSplashOverlay : MonoBehaviour
     /// 0.05 = 5%，落在主人给的 4%~6% 区间内；要再高/再低只改这一个数。
     /// 作用于 Title / Body / Quote 三段的共同父容器 Content —— 整体位移一次，
     /// 不动各段的字号、颜色、锚点，也不动淡入淡出时长与不透明底那套逻辑。
+    /// 2026-10-11 主人拍板：看截图仍是「整体偏下」，5% 不够 → 抬到 0.10（10%）。
     /// </summary>
-    public const float ContentLiftY = 0.05f;
+    public const float ContentLiftY = 0.10f;
 
     // =========================================================================
     // 2026-09-27 主人拍板（**不要改回逐字**）：章节文字不再「一个字一个字」出现。
@@ -174,6 +175,9 @@ public class ChapterSplashOverlay : MonoBehaviour
             bodyText.horizontalOverflow = HorizontalWrapMode.Wrap;
             bodyText.verticalOverflow = VerticalWrapMode.Overflow;
             bodyText.fontSize = 28;
+            // 2026-10-11 主人拍板：正文两行贴在一起看不出分行 → 套全项目统一行距下限。
+            // 与本局其它多行字同一个出口（GameFonts.MinLineSpacing），不在这里另立数值。
+            bodyText.lineSpacing = GameFonts.MinLineSpacing;
             bodyText.color = new Color(1f, 1f, 1f, 0.92f);
             bodyText.raycastTarget = false;
             bodyText.font = GameFonts.GetChinese();

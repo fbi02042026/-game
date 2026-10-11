@@ -24,6 +24,17 @@ public static class PlayerSkillTable
         public float DamageMultiplier;
         public float BaseDamage;
         public float AoeRadius;
+        /// <summary>
+        /// AOE / 连锁单次最多命中几个目标（**0 = 不限**）。
+        /// 【2026-10-11 主人拍板】为削弱天雷裁决新增：末列 <c>aoeMaxTargets</c>（索引 25），可缺省。
+        /// 缺省 / 0 = 保持「半径内全体通吃」的旧行为，其它技能不受影响。
+        /// </summary>
+        public int AoeMaxTargets;
+        /// <summary>
+        /// 本技能的星级伤害步长（覆盖全局 <c>SkillDraftMeta.StarDamageStep</c>）；0 或空 = 用全局 0.18。
+        /// 【2026-10-11 主人拍板】天雷裁决削弱后单独定成长：每星 +10%，别的技能不填。
+        /// </summary>
+        public float StarDamageStep;
         public int ProjectileCount;
         public float ProjectileSpeed;
         public AttrType BuffAttr;
@@ -170,6 +181,19 @@ public static class PlayerSkillTable
                     GameTableCsv.TryFloat(Col(c, 24), out float mpCost);
                     row.MpCost = mpCost;
                 }
+                // 第 26 列（索引 25）：AOE 命中目标上限，可缺省（2026-10-11 削弱天雷裁决）
+                // 缺省 / 0 = 不限，保持旧行为 —— 只影响显式填了值的行。
+                if (c.Length > 25)
+                {
+                    GameTableCsv.TryInt(Col(c, 25), out int aoeMax);
+                    row.AoeMaxTargets = aoeMax;
+                }
+                // 第 27 列（索引 26）：星级伤害步长，可缺省（2026-10-11 天雷单独定成长）
+                if (c.Length > 26)
+                {
+                    GameTableCsv.TryFloat(Col(c, 26), out float dmgStep);
+                    row.StarDamageStep = dmgStep;
+                }
             }
             _rows.Add(row);
             _byId[id] = row;
@@ -271,6 +295,8 @@ public static class PlayerSkillTable
         cfg.baseDamage = def.baseDamage;
         cfg.cooldown = def.cooldown;
         cfg.aoeRadius = def.aoeRadius;
+        cfg.aoeMaxTargets = def.aoeMaxTargets;
+        cfg.starDamageStep = def.starDamageStep;
         cfg.projectileCount = def.projectileCount > 0 ? def.projectileCount : 1;
         cfg.projectileSpeed = def.projectileSpeed;
         cfg.buffAttr = def.buffAttr;

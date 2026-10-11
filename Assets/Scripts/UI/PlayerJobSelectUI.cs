@@ -108,14 +108,15 @@ public class PlayerJobSelectUI : MonoBehaviour
         RefreshCardsVisual();
         UpdateEnterInteractable();
 
-        bool tut = opts.TutorialForceSwordFirst;
+        bool tut = opts.TutorialForceSwordFirst;   // 下面 ShowTutorialPickSword 还要用，别删
+
+        // 【2026-10-11 主人拍板】职业池收到 3 个（剑盾/法师/游侠）后，刷新只能换顺序、刷不出新东西
+        // → 刷新按钮**整颗隐藏**（主人原话「把那个刷新按钮隐藏」）。旧口径是引导局才隐藏。
         if (_refreshBtn != null)
         {
-            _refreshBtn.gameObject.SetActive(!tut);
-            _refreshBtn.interactable = !tut;
+            _refreshBtn.gameObject.SetActive(false);
+            _refreshBtn.interactable = false;
         }
-        if (_refreshLabel != null)
-            _refreshLabel.text = tut ? "引导中不可刷新" : "刷新 (1)";
 
         // 手做 prefab：绝不碰 Hint（字号/字体/文案），也不整树套字体
         if (!_fromPrefab)
@@ -432,24 +433,26 @@ public class PlayerJobSelectUI : MonoBehaviour
     void RollOffers(bool forceSwordFirst)
     {
         _offer.Clear();
+        // 【2026-10-11 主人拍板】只从**开放职业**里出牌（剑盾 / 法师 / 游侠），
+        // 不再从 PlayerJobDefs.All 全量池里随机 —— 单一出口：要开/关职业改 PlayerJobDefs.Playable。
         var pool = new List<PlayerJobId>();
-        for (int i = 0; i < PlayerJobDefs.All.Length; i++)
-            pool.Add(PlayerJobDefs.All[i].Id);
+        for (int i = 0; i < PlayerJobDefs.Playable.Length; i++)
+            pool.Add(PlayerJobDefs.Playable[i]);
 
+        int want = Mathf.Min(3, pool.Count);
         if (forceSwordFirst)
         {
             _offer.Add(PlayerJobId.SwordShield);
             pool.Remove(PlayerJobId.SwordShield);
             Shuffle(pool);
-            _offer.Add(pool[0]);
-            _offer.Add(pool[1]);
+            for (int i = 0; i < want - 1 && i < pool.Count; i++)
+                _offer.Add(pool[i]);
         }
         else
         {
             Shuffle(pool);
-            _offer.Add(pool[0]);
-            _offer.Add(pool[1]);
-            _offer.Add(pool[2]);
+            for (int i = 0; i < want && i < pool.Count; i++)
+                _offer.Add(pool[i]);
         }
         _selected = null;
     }

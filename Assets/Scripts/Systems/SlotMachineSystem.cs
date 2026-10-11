@@ -19,47 +19,63 @@ public static class SlotMachineSystem
         return Mathf.Max(1, n);
     }
 
-    /// <summary>本关抽奖价：越往后越贵，封顶 <see cref="SlotMachineDefs.PRICE_CAP"/>。</summary>
-    public static int Price(int runStageIndex)
+    // ⚠【2026-10-10 已删除】Price(int runStageIndex) —— 旧「按关卡进度涨价」口径。
+    //   抽奖价现在只跟**本局已抽数**走（每抽 ×1.1，主人拍板不封顶），唯一算式 =
+    //   `PriceAfterDraws(draws)`，对外出口 = `DrawPrice()` / `DrawFocusPrice()`。
+    //   留着就会变成第二套价格口径（面板一个价、扣费又一个价），所以删掉不留开关。
+
+    // ============================================================
+    // 【2026-10-10 主人拍板】抽奖价格真源（新）：按**本局已抽数**递增 ——
+    // 每抽一次，下一抽贵 10%（主人原话「每抽一次奖增加下一次抽奖花费的金币 每次+10%」）。
+    // 扣的币 = **战斗内金币**（currentGold，= 局外金币的战斗镜像，经 PersistBattleGold 差额写回）。
+    // 旧「按关卡进度涨价」口径（Price(int)）已删除；FocusPrice(DraftCategory) 保留，
+    // 但它现在直接返回 DrawFocusPrice()（同一种币、同一套价），不会再出现两套价格。
+    // ============================================================
+
+    /// <summary>每次抽奖后下一抽的涨价系数（+10%）。想调幅度改这一个常量。</summary>
+    public const float DRAW_PRICE_GROWTH = 1.1f;
+
+    /// <summary>已抽 draws 次之后，下一抽的价格（<b>价格曲线的唯一算式</b>，诊断 / 预估也走它）。</summary>
+    public static int PriceAfterDraws(int draws)
     {
-        int n = Mathf.Max(1, runStageIndex);
-        int p = SlotMachineDefs.BASE_PRICE + (n - 1) * SlotMachineDefs.PRICE_STEP;
-        return Mathf.Min(p, SlotMachineDefs.PRICE_CAP);
+        float p = SlotMachineDefs.BASE_PRICE * Mathf.Pow(DRAW_PRICE_GROWTH, Mathf.Max(0, draws));
+        return Mathf.Max(1, Mathf.RoundToInt(p));
+    }
+
+    /// <summary>已抽 draws 次之后，下一抽的定向价 = 随机价 × 精度税（同上，唯一算式）。</summary>
+    public static int FocusPriceAfterDraws(int draws)
+    {
+        return PriceAfterDraws(draws) * SlotMachineDefs.FOCUS_PRICE_MULT;
+    }
+
+    /// <summary>下一抽随机价（单一出口，面板与扣费都必须走这里）。</summary>
+    public static int DrawPrice()
+    {
+        return PriceAfterDraws(DrawIndex);
+    }
+
+    /// <summary>下一抽定向价 = 随机价 × <see cref="SlotMachineDefs.FOCUS_PRICE_MULT"/>（精度税，同一种币）。</summary>
+    public static int DrawFocusPrice()
+    {
+        return FocusPriceAfterDraws(DrawIndex);
     }
 
     /// <summary>
-    /// 定向抽奖价（指定佣兵 / 装备 / 技能）= 随机价 × <see cref="SlotMachineDefs.FOCUS_PRICE_MULT"/>。
-    /// 2026-09-29 主人拍板：面板常驻、有钱就能抽，不限次数；
-    /// 定向的 2 倍价是「精度税」而不是次数限制 —— 玩家用一半的抽奖次数换确定性。
-    /// </summary>
-    public static int FocusPrice(int runStageIndex)
-    {
-        return Price(runStageIndex) * SlotMachineDefs.FOCUS_PRICE_MULT;
-    }
-
-    /// <summary>
-    /// 某一类的定向抽奖用哪种币 —— <b>唯一出口</b>（2026-10-07 主人拍板）。
-    /// 佣兵 = <see cref="ResourceWallet.ResourceType.MercGold"/>（佣兵币），其余 = 抽奖币。
-    /// ⚠ 其余三类按钮开放后要换币，只改这一个函数；面板上的货币图标也查它
-    /// （<c>BattleEntryDraftPanel.CurrencyOf</c> 必须与这里同口径）。
+    /// 定向抽奖的币 —— <b>唯一出口</b>。【2026-10-10 主人拍板】全部统一为战斗内金币（Gold）：
+    /// 佣兵定向也不再花佣兵币（主人口径：抽奖花金币）。面板 <c>BattleEntryDraftPanel.CurrencyOf</c> 与这里同值。
     /// </summary>
     public static ResourceWallet.ResourceType FocusCurrency(DraftCategory cat)
     {
-        return cat == DraftCategory.Merc
-            ? ResourceWallet.ResourceType.MercGold
-            : ResourceWallet.ResourceType.SlotCoin;
+        return ResourceWallet.ResourceType.Gold;
     }
 
     /// <summary>
-    /// 某一类定向抽奖的价格（按各自的币种算）。
-    /// 佣兵 = <see cref="SlotMachineDefs.MERC_FOCUS_PRICE"/> 枚佣兵币；
-    /// 装备 / 技能 = 随机价 × <see cref="SlotMachineDefs.FOCUS_PRICE_MULT"/> 枚抽奖币。
+    /// 某一类定向抽奖的价格。【2026-10-10 主人拍板】统一金币后不再有佣兵币特例：
+    /// 全部 = 随机价 × <see cref="SlotMachineDefs.FOCUS_PRICE_MULT"/>。
     /// </summary>
     public static int FocusPrice(DraftCategory cat)
     {
-        return cat == DraftCategory.Merc
-            ? SlotMachineDefs.MERC_FOCUS_PRICE
-            : FocusPrice(RunStageIndex());
+        return DrawFocusPrice();
     }
 
     /// <summary>查某个币种的余额（面板判「买得起吗」用，与扣费同一套口径）。</summary>
@@ -69,30 +85,15 @@ public static class SlotMachineSystem
         return ResourceWallet.Get(data, type);
     }
 
-    /// <summary>
-    /// 扣某一类定向抽奖的币（按 <see cref="FocusCurrency"/> 选币种）。这是定向抽奖的<b>唯一扣费出口</b>。
-    /// </summary>
-    public static bool TrySpendFocus(DraftCategory cat, int price)
-    {
-        if (price <= 0) return true;
-        return ResourceWallet.TrySpend(FocusCurrency(cat), price, save: true, notify: false);
-    }
+    // ⚠【2026-10-10 已删除】TrySpendFocus / TrySpend —— 抽奖扣费现在**唯一出口**是
+    //   `BattleManager.SpendBattleGold`（扣局内金币 currentGold）。这两个扣的是另一套币（SlotCoin /
+    //   甚至可能扣到城镇 Gold），留着迟早被人误用成第二套扣费口径，所以删掉不留开关。
 
-    /// <summary>当前抽奖币。</summary>
+    /// <summary>当前抽奖币（存档字段 slotCoins）。【2026-10-10 起不再发放、不再消费，仅存档兼容留着。】</summary>
     public static long Coins()
     {
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         return data == null ? 0L : data.slotCoins;
-    }
-
-    /// <summary>
-    /// 扣本关**随机**抽奖的抽奖币（定向走 <see cref="TrySpendFocus"/>）。
-    /// 抽奖币直接存在存档里，不经过 <c>BattleManager.currentGold</c> 那套金币镜像，
-    /// 所以既不需要同步镜像，也不需要再调 PersistBattleGold（那是为金币对齐加的）。
-    /// </summary>
-    public static bool TrySpend(int price)
-    {
-        return ResourceWallet.TrySpend(ResourceWallet.ResourceType.SlotCoin, price, save: true, notify: false);
     }
 
     /// <summary>本关通关该发的抽奖币（类型基础值，不含进度增长）。</summary>
@@ -107,16 +108,18 @@ public static class SlotMachineSystem
     }
 
     /// <summary>
-    /// 本关通关实际发的抽奖币 = 类型基础值 × 进度增长倍率。
-    /// 倍率 = 1 + (本局第几关 - 1) × <see cref="SlotMachineDefs.COIN_GROWTH_PER_STAGE"/>，
+    /// 本关通关实际发的局内金币 = 类型基础值 × 进度增长倍率。
+    /// 倍率 = <b>(1 + <see cref="SlotMachineDefs.COIN_GROWTH_PER_STAGE"/>) ^ (本局第几关 - 1)</b>，
     /// 封顶 <see cref="SlotMachineDefs.COIN_GROWTH_CAP"/>。
-    /// 2026-09-29 主人拍板：抽奖币「前期少、后期逐渐增加」。
+    /// 2026-09-29 主人拍板：抽奖币「前期少、后期逐渐增加」；
+    /// 【2026-10-10 主人拍板】改成**复利**（每关比上一关多 40%，主人区间 40%~50%），
+    /// 因为抽奖价本身是每抽 ×1.1 的复利 —— 线性产出追不上指数价格，越往后反而越紧。
     /// </summary>
     public static int CoinsForStage(StageType stageType, int runStageIndex)
     {
         int baseCoins = CoinsForStage(stageType);
         int n = Mathf.Max(1, runStageIndex);
-        float mul = Mathf.Min(1f + (n - 1) * SlotMachineDefs.COIN_GROWTH_PER_STAGE,
+        float mul = Mathf.Min(Mathf.Pow(1f + SlotMachineDefs.COIN_GROWTH_PER_STAGE, n - 1),
                               SlotMachineDefs.COIN_GROWTH_CAP);
         int coins = Mathf.Max(1, Mathf.RoundToInt(baseCoins * mul));
         return coins;
@@ -132,29 +135,41 @@ public static class SlotMachineSystem
     //   它只被上面那条下限用，删了没有别的调用点（全仓已确认）。
 
     /// <summary>
-    /// 通关发**局内抽奖币**。
+    /// 通关发**局内金币**（进 <c>BattleManager.currentGold</c>）。
     /// <b>2026-10-05 主人最终口径：「战斗内的都是局内的，每局携带的也都是局内的，
-    /// 只有最后结算界面按通过的关卡数量给局外金币」</b>
-    /// → 通关这一笔发生在<b>战斗内</b>，所以是局内币，进 <c>ResourceWallet.ResourceType.SlotCoin</c>。
-    /// ⚠ 中途曾误改成 Gold 又改回来 —— <b>这里只能发 SlotCoin</b>。
-    /// 局外金币（Gold）唯一来源是<b>结算界面按通过关卡数发放</b>，见 <c>StageGoldDefs</c>。
+    /// 只有最后结算界面按通过的关卡数量给局外金币」</b> —— 这条仍然成立，只是「局内的」载体换了：
+    /// 【2026-10-10 主人拍板】抽奖与启动金统一成局内金币，这套币不再有第二套，
+    /// 所以通关补贴进 <c>currentGold</c>（局内可花），但 <c>countsAsEarned=false</c> →
+    /// 抬高本局起点、结算差额不含它，<b>带不出裂隙</b>。
+    /// 局外金币（Gold）来源：<b>结算界面按通过关卡数发放</b>（<c>StageGoldDefs</c>）＋ 局内真正赚到的部分。
     /// </summary>
     public static void GrantStageCoins(StageType stageType)
     {
         int n = CoinsForStage(stageType, RunStageIndex());
         if (n <= 0) return;
-        ResourceWallet.Add(ResourceWallet.ResourceType.SlotCoin, n, save: true, notify: true);
+        var bm = BattleManager.Instance;
+        if (bm == null)
+        {
+            Debug.LogError("[SlotMachine] 通关补贴发不出去：BattleManager.Instance 为空（不在战斗中）");
+            return;
+        }
+        // 通关补贴跟启动金同性质：局内可花（保证每关还抽得起），但带不出去（不算本局收益）。
+        // 局外金币仍然只有「结算按通过关卡数发放」那一笔。
+        bm.AddRunGold(n, false);
+        // 【2026-10-10】换进局内钱包后没有 ResourceWallet 那套 notify 了，玩家看不见「打完一关给了钱」
+        // → 按 2026-10-06 主人拍板「金币获得要 force 弹出」补一条 toast。
+        GlobalToastUI.Show($"通关奖励：金币 +{n}", true);
     }
 
     /// <summary>
-    /// 抽中「金币」这一档给多少**抽奖币**。
-    /// 主人 2026-10-05 拍板：「抽中的金币是当局抽奖用的」—— 给的是抽奖币，不是城镇那套通用金币。
-    /// 数额 = 本关一抽价格 × <see cref="SlotMachineDefs.GOLD_PRIZE_PRICE_MULT"/>（回血一半，不会变成无限抽）。
+    /// 抽中「金币」这一档给多少**局内金币**。
+    /// 主人 2026-10-05 拍板：「抽中的金币是当局抽奖用的」—— 给的是局内能继续抽的钱，带不出裂隙。
+    /// 数额 = 当前这一抽的价格 × <see cref="SlotMachineDefs.GOLD_PRIZE_PRICE_MULT"/>（回血一半，不会变成无限抽）。
+    /// 【2026-10-10】价改按已抽数走，所以这里也跟着走 <see cref="DrawPrice"/>（旧口径按关卡算的 Price 已删）。
     /// </summary>
     public static int GoldPrize()
     {
-        int n = RunStageIndex();
-        return Mathf.Max(1, Mathf.RoundToInt(Price(n) * SlotMachineDefs.GOLD_PRIZE_PRICE_MULT));
+        return Mathf.Max(1, Mathf.RoundToInt(DrawPrice() * SlotMachineDefs.GOLD_PRIZE_PRICE_MULT));
     }
 
     // ⚠【2026-10-05 已删除】MaterialPrize()：主人拍板「强化石不能抽奖得到」，
@@ -194,9 +209,9 @@ public static class SlotMachineSystem
     // ⚠【2026-10-05 已删除】GrantTutorialWaveBonus() + SlotMachineDefs.TUTORIAL_WAVE_BONUS_COINS。
     //   它是当年「开局只带 100 币」时的补丁：一抽 80 抽完剩 20，第二抽点不起，所以每两波补 100。
     //   开局抬到 STARTER_COINS = 240（= 正好 3 抽）之后，引导三拍本来就走得完 → 这 100 是白送，
-    //   而且是第二套给币口径（跟 COIN_PER_* / EnsureStarterCoins 抢同一件事）。
+    //   而且是第二套给币口径（跟 COIN_PER_* / GrantRunStarterGold 抢同一件事）。
     //   主人拍板「清零 + 不要总打补丁」→ 整条链路删掉，不是留个开关设 0。
-    //   引导三拍的币现在**只有一个来源**：开局 240（EnsureStarterCoins）。
+    //   引导三拍的币现在**只有一个来源**：开局启动金（GrantRunStarterGold，进局内钱包 currentGold）。
 
     // ============================================================
     // 免费抽（2026-10-05 主人拍板：金币本开局免费抽 N 次，不耗金币）
@@ -208,18 +223,26 @@ public static class SlotMachineSystem
 
     static int _freeDrawsUsed = 0;
 
+    /// <summary>
+    /// 【2026-10-11 主人拍板】「再来一次」送的免费抽次数。
+    /// 主人原话：「再来一次不是技能，是不用花费再抽一次，注意这次抽不用涨费用」。
+    /// 与模式给的免费额度（<c>_freeDrawsUsed</c> / <see cref="TotalFreeDraws"/>）分开记：
+    /// 奖励抽消耗的是这里，且**不推进 <see cref="DrawIndex"/>** —— 下一抽的价格不因此 +10%。
+    /// 同样是进关清零（见 <see cref="ResetStageFreeDraws"/>）。
+    /// </summary>
+    static int _bonusFreeDraws = 0;
+
     /// <summary>进关时清掉免费抽计数（唯一入口：BattleManager.CoStageEntryDraft）。</summary>
     public static void ResetStageFreeDraws()
     {
         _freeDrawsUsed = 0;
+        _bonusFreeDraws = 0;
     }
 
-    /// <summary>本关还剩几次免费抽。0 = 没有了（正常扣币）。</summary>
+    /// <summary>本关还剩几次免费抽（模式额度 + 「再来一次」送的）。0 = 没有了（正常扣币）。</summary>
     public static int FreeDrawsLeft()
     {
-        int total = TotalFreeDraws();
-        if (total <= 0) return 0;
-        return Mathf.Max(0, total - _freeDrawsUsed);
+        return Mathf.Max(0, TotalFreeDraws() - _freeDrawsUsed) + _bonusFreeDraws;
     }
 
     /// <summary>本模式给的免费抽总额度。0 = 该模式没有免费抽。</summary>
@@ -238,6 +261,24 @@ public static class SlotMachineSystem
     {
         _freeDrawsUsed++;
         Debug.Log($"[SlotMachineSystem] 免费抽已用 {_freeDrawsUsed}/{TotalFreeDraws()}（本次未扣抽奖币）");
+    }
+
+    /// <summary>【2026-10-11 主人拍板】「再来一次」命中：白送一次免费抽。</summary>
+    public static void GrantBonusFreeDraw()
+    {
+        _bonusFreeDraws++;
+        Debug.Log($"[SlotMachineSystem] 「再来一次」+1 次免费抽（待用 {_bonusFreeDraws}）");
+    }
+
+    /// <summary>
+    /// 【2026-10-11 主人拍板】用掉一次「再来一次」送的免费抽。
+    /// 返回 true = 这一抽走的是奖励额度（调用方据此**不推进抽数**，下一抽不涨价）。
+    /// </summary>
+    public static bool ConsumeBonusFreeDraw()
+    {
+        if (_bonusFreeDraws <= 0) return false;
+        _bonusFreeDraws--;
+        return true;
     }
 
     /// <summary>本局已抽奖次数（引导定序的序号；正式关只作统计）。没开局时是 0。</summary>
@@ -298,23 +339,12 @@ public static class SlotMachineSystem
         return IsTutorialRun && order != null && n >= 0 && n < order.Length;
     }
 
-    /// <summary>
-    /// 技能类的保底内容：本局<b>第一次</b>拿到技能时必给该职业的初始技能，其余时候返回无效卡（走正常随机池）。
-    /// 开局不带初始技能（见 <c>RunLoadout.BeginNew</c>），所以这一下一定是「拿到本命技能」的爽点，
-    /// 不会开出个跟职业八竿子打不着的技能。
-    /// <para>2026-10-05 改：以前挂在「本局第 3 抽」这个序号上（= 定序里 Skill 的下标）。
-    /// 正式关改成纯随机之后序号不再有意义（第 3 抽不一定是技能），
-    /// → 改成按「身上还没有技能」判定。引导局行为<b>完全不变</b>：
-    /// 三拍定序走到第 3 拍抽技能时，身上确实还没有技能。</para>
-    /// </summary>
-    public static DraftCard BuildGuaranteedSkillCard()
-    {
-        if (RunLoadout.HasAnySkill) return default;
-        // GetSelected() 给的是职业枚举，要再 Get(job) 才拿到带 DefaultSkillId 的职业定义
-        string id = PlayerJobDefs.Get(PlayerJobDefs.GetSelected()).DefaultSkillId;
-        if (string.IsNullOrEmpty(id) || RunLoadout.HasSkill(id)) return default;
-        return RunDraftDirector.BuildSkillCardById(id);
-    }
+    // 【2026-10-11 主人拍板】「职业白送初始技能」整条作废 ——
+    //   原 BuildGuaranteedSkillCard()：本局第一次抽到技能时**必给**该职业的 DefaultSkillId，
+    //   等于每个职业开局都白送一个（法师送的还是传说天雷裁决，主人反馈「这么容易抽到吗」）。
+    //   主人口径：**不管什么职业开局都不白送技能，大家的抽中概率一样**（一律按稀有度权重走随机池）。
+    //   → 函数本体连同 BattleManager.CoMidBattleDraft 里的调用一并删除，不留开关、不留空壳。
+    // ⚠ 别再往回加：技能只认 RunLoadout 的本局构筑，职业只决定**武器 / 属性 / 立绘**，不决定技能。
 
     /// <summary>
     /// 引导局：塔克（<see cref="StoryProgress.TutorialMercHireId"/>，H003 剑盾卫士）**已经抽到了吗**。
@@ -364,8 +394,13 @@ public static class SlotMachineSystem
             Kind = DraftCardKind.MercRecruit,
             Id = def.AssetId,
             HireId = def.HireId,
-            Title = $"{def.Name}·{def.Nickname}",
-            Desc = $"[{rarName}] {def.JobName}　Lv{level}　★{star}",
+            // 【2026-10-11 主人拍板】佣兵名字**只取真名**（马库斯 / 塔克 / 米娅…），
+            // 不写昵称、更不写职业名。旧写法 Title=「米娅·小红」、Desc=「[普通] 游侠 Lv1 ★1」，
+            // 于是同一位佣兵在抽卡卡面、场景头顶、头像栏显示成三个不同的名字
+            //（主人反馈「抽奖提示米娅 / 场景小红 / 头像游侠」）。
+            // 职业名（剑盾卫士 / 游侠…）是**职业**不是名字，别再拿来当名字用。
+            Title = def.Name,
+            Desc = $"[{rarName}]　Lv{level}　★{star}",
             Rarity = rar,
             Tag = SynergyTag.Summon,
             Star = star,
@@ -409,23 +444,39 @@ public static class SlotMachineSystem
     }
 
     /// <summary>
-    /// 开局启动抽奖币：不足才补到「基础 + 初始资金天赋加成」，已攒的币不会清零。
-    /// 每局进关时调一次，这样「初始资金」天赋在每一局都有效，而不只是新档那一次。
+    /// 【2026-10-10 主人拍板】开局启动金 = 基础 + 「初始资金」天赋每级加成，
+    /// 进**局内金币钱包**（<c>BattleManager.currentGold</c>），不再是另一套抽奖币。
+    /// 每局进关时调一次（续关不调），这样「初始资金」天赋每一局都有效，而不只是新档那一次。
+    /// ⚠ 这笔<b>不算本局收益</b>（countsAsEarned=false）→ 结算差额不把它当赚的钱写回存档，不能白刷。
     /// </summary>
-    public static void EnsureStarterCoins()
+    public static int RunStarterGold()
     {
-        int need = SlotMachineDefs.STARTER_COINS + SlotMachineDefs.COINS_PER_FUND_TALENT * FundTalentLevel();
-        long have = Coins();
-        if (have >= need) return;
-        ResourceWallet.Add(ResourceWallet.ResourceType.SlotCoin, need - (int)have, save: true, notify: false);
+        return SlotMachineDefs.STARTER_COINS + SlotMachineDefs.COINS_PER_FUND_TALENT * FundTalentLevel();
     }
 
     /// <summary>
-    /// **局末清零**抽奖币。
+    /// 把启动金发进局内钱包。<b>唯一调用点 = <c>RunDraftDirector.OnRunStart</c>（非续关那一局）。</b>
+    /// 不在战斗中 → LogError（铁律 14：fail closed，绝不静默跳过让开局没钱抽）。
+    /// </summary>
+    public static void GrantRunStarterGold()
+    {
+        var bm = BattleManager.Instance;
+        if (bm == null)
+        {
+            Debug.LogError("[SlotMachine] 启动金发不出去：BattleManager.Instance 为空（不在战斗中）");
+            return;
+        }
+        bm.AddRunGold(RunStarterGold(), false);
+    }
+
+    /// <summary>
+    /// **局末清零**抽奖币（存档字段 slotCoins）。
+    /// 【2026-10-10 主人拍板】局内钱包已统一成 <c>BattleManager.currentGold</c>，抽奖币不再发放也不再消费，
+    /// 这个清零现在只清老存档残留，留作存档兼容（不删是为了不动既有存档结构）。
     /// <para>2026-10-05 主人拍板：「打完一章后清零，不过玩家可以选择是否进行下一章，这时不清零」。</para>
     /// <para>唯一出口 = <c>BattleManager.EndRunLoadout()</c>（死亡 / 撤离 / 回城三条收尾都走它），
     /// 而「进下一章」那条分支<b>不</b>走它 → 币自然跟着带进下一章。<b>别在别处再写第二份清零。</b></para>
-    /// 下一局进关时由 <see cref="EnsureStarterCoins"/> 重新补到启动值，所以清零不会卡死玩家。
+    /// 下一局进关时由 <see cref="GrantRunStarterGold"/> 重新补启动金，所以清零不会卡死玩家。
     /// </summary>
     public static void ClearRunCoins()
     {
@@ -463,10 +514,12 @@ public static class SlotMachineSystem
 
         int stages = GameConfig.STAGES_PER_CHAPTER;
         int sumPrice = 0, sumFocus = 0, sumIncome = 0;
+        // 【2026-10-10】价不再跟关卡走，而是跟**本局已抽数**走（每抽 ×1.1）。
+        // 这里按「每关只抽一次」估：第 n 关那一抽 = 已抽 n-1 次。
         for (int n = 1; n <= stages; n++)
         {
-            int p = Price(n);
-            int f = FocusPrice(n);
+            int p = PriceAfterDraws(n - 1);
+            int f = FocusPriceAfterDraws(n - 1);
             sumPrice += p;
             sumFocus += f;
             int inc = n == stages ? CoinsForStage(StageType.Boss, n)
@@ -481,15 +534,15 @@ public static class SlotMachineSystem
         float fo = sumFocus > 0 ? sumIncome / (float)sumFocus * stages : 0f;
         sb.AppendLine($"[抽奖经济] 一章约能抽：随机 {r:0.0} 关次　定向 {fo:0.0} 关次（按每关抽一次估）");
         sb.AppendLine($"[抽奖经济] 开局 {SlotMachineDefs.STARTER_COINS} 币在第 1 关能连抽：" +
-                      $"随机 {SlotMachineDefs.STARTER_COINS / Mathf.Max(1, Price(1))} 次　" +
-                      $"定向 {SlotMachineDefs.STARTER_COINS / Mathf.Max(1, FocusPrice(1))} 次（面板常驻，币够就能一直抽）");
+                      $"随机 {SlotMachineDefs.STARTER_COINS / Mathf.Max(1, PriceAfterDraws(0))} 次　" +
+                      $"定向 {SlotMachineDefs.STARTER_COINS / Mathf.Max(1, FocusPriceAfterDraws(0))} 次（面板常驻，币够就能一直抽）");
         // 2026-10-05：启动币改成「每局一次」，每关靠产出；这里把「每关产出够不够下一关一抽」打出来自检
         sb.AppendLine("[抽奖经济] 启动币每局只补一次（EnableRunDraft 开新局那关）；每关产出已抬到 ≥ 下一关一抽：");
         for (int n = 1; n <= stages; n++)
         {
             StageType st = n == stages ? StageType.Boss : (n == 4 || n == 8) ? StageType.Elite : StageType.Normal;
             int inc = CoinsForStage(st, n);
-            int nextPrice = Price(n + 1);
+            int nextPrice = PriceAfterDraws(n);   // 通关这一关时已抽 n 次 → 下一抽的价
             sb.AppendLine($"  第{n}关通关 +{inc}　第{n + 1}关价 {nextPrice}　→ 能抽 {inc / Mathf.Max(1, nextPrice)} 次");
         }
         sb.AppendLine($"[抽奖经济] 再来一次概率 {(RerollChance() * 100f):0.0}%（含 R_LUCK {LuckTalentLevel()} 级）");

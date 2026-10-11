@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: equip_weapon_002
   m_EditorClassIdentifier: 
   templateId: equip_weapon_002
-  equipName: "符文短剑"
-  icon: {fileID: 21300000, guid: 399523ebacf24d44bc1a07c090932d7d, type: 3}
-  iconFileName: New_Weapon_06
+  equipName: "符文法杖"
+  icon: {fileID: 21300000, guid: d47e9ab9029142e4bfd3ca80a083cb72, type: 3}
+  iconFileName: New_Weapon_03
   gridWidth: 2
   gridHeight: 3
   tags: []
@@ -39,4 +39,4 @@ MonoBehaviour:
   weaponAttackType: 1
   attackRange: 120
   armorPrefix: 0
-  spumName: New_Weapon_06
+  spumName: New_Weapon_03

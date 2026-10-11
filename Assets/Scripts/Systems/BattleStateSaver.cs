@@ -237,9 +237,9 @@ public class BattleStateSaver : MonoBehaviour
 
         // 本局构筑 / 城镇雇佣一律清空
         RunLoadout.Clear();
-        // 局内抽奖币同属「局内的」，本局作废（2026-10-05 主人拍板）。
-        // ⚠ 不补这一行 = 杀进程就能把局内币囤到下一局（下局开局还有 240 启动金），是个白嫖口子。
-        //   清零出口统一走 SlotMachineSystem.ClearRunCoins，别另写一份。
+        // 局内的钱作废（2026-10-05 主人拍板「战斗内的都是局内的」）。
+        // 【2026-10-10 主人拍板】局内钱包已统一成 BattleManager.currentGold（启动金直接发进那里，
+        // 带不出去），不再有第二套抽奖币 → 这一行现在只清老存档里残留的 slotCoins 字段，留作存档兼容。
         SlotMachineSystem.ClearRunCoins();
         if (data.hiredMercs == null) data.hiredMercs = new System.Collections.Generic.List<MercenaryData>();
         data.hiredMercs.Clear();

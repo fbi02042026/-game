@@ -76,9 +76,12 @@ public static class EquipNameGen
 
     /// <summary>
     /// 随机名（教程掉落等）。**必须传模板**：不传就只知道槽位，弓也会被叫成剑（2026-09-27 修）。
+    ///
+    /// 2026-10-11：删掉只传槽位的重载 —— 全项目已无调用点，留着它就是下一个「弓叫成剑」的坑
+    /// （主人口径：旧实现能删就删，不留开关）。
+    /// 本函数只负责「取名字」，**不含稀有度前缀**；前缀一律由调用方加
+    /// <see cref="WeaponAffixSystem.RarityPrefix"/>（全项目唯一出口）。
     /// </summary>
-    public static string RandomWeaponName(EquipSlotType slot) => RandomWeaponName(null, slot);
-
     public static string RandomWeaponName(EquipTemplate tpl, EquipSlotType slot)
     {
         string[] pool = PoolForTemplate(tpl);
@@ -86,9 +89,6 @@ public static class EquipNameGen
             pool = IsArmorSlot(slot) ? Armor : Generic;
         return pool[Random.Range(0, pool.Length)];
     }
-
-    /// <summary>兼容旧调用（只有 id）。</summary>
-    public static string TempName(string equipId) => TempName(null, equipId);
 
     /// <summary>无中文模板名时的兜底：先按贴图类别取名，再按 id，最后中性名（不再一律判成剑）。</summary>
     public static string TempName(EquipTemplate tpl, string equipId = null)

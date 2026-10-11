@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_offhand_sword_1
   m_EditorClassIdentifier: 
   templateId: equip_offhand_sword_1
-  equipName: "狂战副手剑"
+  equipName: "副手短剑"
   icon: {fileID: 0}
   iconFileName: Sword_2
   gridWidth: 1

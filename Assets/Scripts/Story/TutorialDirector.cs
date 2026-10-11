@@ -371,7 +371,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         TownHubController.PendingOpenAdventure = false;
         TownHubController.Instance?.OpenGuild();
 
-        TutorialHintUI.Ensure().Show("装备和材料死亡也能带回，但本局金币死了会清零。", null, 6f);
+        // 【2026-10-10 主人拍板】原句「装备和材料死亡也能带回，但本局金币死了会清零」与实际机制相反：
+        // TriggerLegacyFlow 是 ClearRunEquipment（装备带不出裂隙）+ 金币/材料保留。文案按实际口径重写。
+        TutorialHintUI.Ensure().Show("局内拿到的装备带不出裂隙，金币和材料都能带回去。", null, 6f);
 
         // 收尾对话要用的立绘/背景先读进缓存，否则开场会卡一下才出画面
         StoryAssetLoader.Warmup(StoryAssetLoader.Backgrounds, StoryBackgrounds.GuildHall);
@@ -391,11 +393,24 @@ public class TutorialDirector : Singleton<TutorialDirector>
         {
             // 只有塔克一个人说话：不要摆玩家立绘，直接让他单人居中说
             //（约定：单人说台词一律用 Solo，别摆两个立绘站着不说话）
-            // 台词把钩子3串起来：①「成功撤离」正反馈（不再是「大难不死」的挫败感框架）
-            // ②「带回奖励」让撤离有获得感 ③「我等你回来」种次日留钩子
-            // ④「每日签到别落下」继续指向紧接着弹出的每日登录弹窗。
+            // 台词把钩子3串起来：①「成功撤离」正反馈 ②「带回奖励」获得感 ③「我等你回来」次日留钩子
+            // ④「每日签到别落下」指向紧接着弹的每日登录弹窗。
+            // 【2026-10-10 主人拍板】原来 41 字一口气一句，对话框里挤成一坨、后半句看不清（主人问
+            //「每日签到别落下那有我的 后面是什么」）—— 拆成两拍，签到钩子单独成句。
             StoryDirector.Solo(StoryProgress.TutorialMercDisplayName,
-                "成功撤离！带回来的奖励够你歇口气。明儿见——我等你回来。每日签到别落下，那儿有我的份。",
+                "成功撤离！带回来的奖励够你歇口气。明儿见——我等你回来。",
+                rescuerId)
+                .Bg(StoryBackgrounds.GuildHall)
+                .SkipReveal()
+        }, () => done = true);
+        while (!done) yield return null;
+
+        done = false;
+        StoryDirector.Ensure().Play(new List<StoryBeat>
+        {
+            StoryDirector.Solo(StoryProgress.TutorialMercDisplayName,
+                // 【2026-10-10 主人拍板】最后一句改成「咱们后会有期」（原「每日签到别落下——那儿有我的份」作废）
+                "咱们后会有期！",
                 rescuerId)
                 .Bg(StoryBackgrounds.GuildHall)
                 .SkipReveal()
@@ -504,12 +519,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 真等玩家把 12 只都打完（WaitFieldClear），塔克就变成「清完场才姗姗来迟」，整段演出废掉。
         // ① 先等 12 只全部进场站定（波次是异步进场的，不能怪还没露面就开始吐槽）；
         yield return WaitMonstersFinishedEnter(bm);
-        // ② 再复用埋伏拍那个「撑不住」的判定（掉血跌破阈值 / 打够时长 / 场上被打空，哪个先到算哪个），
-        //    复用而不是新建 —— CoWaitAmbushPressure 原本服务于已删除的埋伏拍，现在是孤儿，正好接手这份活。
-        // 【2026-10-09 主人拍板】② 这一步作废：主人原话「当所有怪出场后就出剧情，不要全都上来打了一会才触发」，
-        //    即 12 只全部进场站定（上面 ① 的判据）就立刻往下走触发塔克天降，不再等那 5 秒 / 掉血 62% 阈值。
-        //    CoWaitAmbushPressure 停用但**函数保留不删**（备用），故此处只注释不删。
-        // yield return CoWaitAmbushPressure(bm);
+        // ② 【2026-10-10 主人拍板】血掉到 50% 以下再触发这段「要死了」剧情 ——
+        //    不再是「12 只全进场就触发」，要玩家真被打疼了塔克才登场。
+        //    CoWaitAmbushPressure 阈值同步收紧 0.62 → 0.5；等不到就按超时/打空兜底往下走（流程不能卡死）。
+        yield return CoWaitAmbushPressure(bm);
 
         // —— 1e)【2026-10-09 主人拍板】第 4~9 步：十几只压上来 → 玩家躺平 → 塔克天降一趟清场 → 玩家看傻 ——
         // 主人 10-08 口述：抽到武器以为能大展身手，结果十几只压上来；正当玩家觉得要死了的时候，佣兵闪亮登场。
@@ -556,9 +569,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // ① 两波后（装备）→ ② 这里（按定序出佣兵）→ ③ 精英波清完（技能）。
         // 保底卡在 SlotMachineSystem.BuildGuaranteedMercCard（碎片那条口径已作废）。
         hint.Hide();
-        // 演出替身收掉再弹面板：正式入队走 RunDraftDirector.RecruitMerc，不收会变成两个塔克。
-        // 收的时机正好是抽奖面板盖上来的时候，玩家看不到空场。
-        if (rescuer != null) MercenaryManager.Instance?.DespawnMercenary(rescuer);
+        // 【2026-10-10 主人拍板】天降替身**不再收掉** —— 主人原话口径「第二次抽奖时塔克消失了但名字还在，
+        // 不要让塔克消失」。现在替身原地保留，第二抽招募时由 RunDraftDirector.SpawnRunMerc 把他**直接转正**
+        //（复用同一个实例重绑属性），全程塔克不消失、也不会出现两个塔克。
+        // if (rescuer != null) MercenaryManager.Instance?.DespawnMercenary(rescuer);
         if (bm != null)
             yield return bm.CoMidBattleDraft(TutorialDrawBeatText);
         ui?.UpdateCharacterSlots();
@@ -608,7 +622,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         // —— 第三次抽（技能）：走正式入口 CoMidBattleDraft ——
         // 2026-10-05 主人拍板「技能就是初始带的那个，只不过这回是抽奖给的」。
-        // 保底在正式系统里：本局第一次抽到技能 = 该职业的初始技能（SlotMachineSystem.BuildGuaranteedSkillCard）。
+        // 【2026-10-11 主人拍板·口径已改】不再有「本局第一次抽到技能 = 白送职业初始技能」的保底
+        //（原 SlotMachineSystem.BuildGuaranteedSkillCard 已删）—— 引导这一抽同样是**随机池**，
+        // 抽到什么就是什么，全职业一个概率。
         // ⚠ 原来这里的「固定三选一 + 拖拽定释放顺序」教学拍（CoTutorialSkillDraft）已被这一抽顶掉并删除。
         //   拖拽教学改由 SkillOrderGuide 做软引导：玩家凑够 2 个技能时弹一条会自己消失的气泡，不挡操作。
         // 第三抽的钱来自开局 240 的最后 80（240 − 80×3 = 0），中途没有任何补贴。
@@ -723,8 +739,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 目的还是「让玩家在被围殴的时候喊救命」，不是等他打完。
         // 所以这里等的是「玩家扛不住」的时刻，不是等清场：掉血阈值收紧、时长缩短，
         // 保证天降那一刻场上还有怪可杀（玩家真把怪清完了才走打空那条分支）。
-        const float maxWait = 5f;
-        const float bailHpRatio = 0.62f;
+        // 【2026-10-10 主人拍板】掉血阈值 = 50%：血掉到一半以下才算「撑不住」（主人原话口径：
+        // 「血掉50%以下再触发剧情说要死了」）。超时上限放宽到 15s，给玩家足够的掉血时间；
+        // 一直打得太顺（没掉到 50%）就按超时往下走，剧情不能永远不来。
+        const float maxWait = 15f;
+        const float bailHpRatio = 0.5f;
         float t = 0f;
         while (t < maxWait)
         {
@@ -783,6 +802,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return null;
         }
         GameConfig.SetWorldPosition(merc.gameObject, new Vector3(toX, UnitBase.GROUND_Y, z));
+
+        // 【2026-10-10 主人拍板】落地立刻面向玩家（-1 = 朝左，塔克落在玩家右前方）——
+        // 主人反馈「塔克上场后背对着玩家」：落地后巡逻/待机逻辑会把朝向翻回去，这里补一道保险。
+        merc.Face(-1);
 
         // ②【2026-10-09 主人拍板改造】落地 → 丢一句「躲在我后面。」→ 一趟跑完全场 → 回原位 → 全体一起死。
         //   主人原话：「玩家和怪都没动的情况下，几秒把所有怪打一遍，然后回到原地，然后所有怪一起死亡」。
@@ -1410,7 +1433,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 if (eq.icon == null) eq.icon = EquipIcons.Get(tpl.iconFileName);
                 AlignWeaponToHeroAttackHand(eq);
                 // 2026-09-27：传模板进去 —— 只给槽位的话，弓/斧也会被随机成剑名（名字和图对不上）。
-                eq.equipName = EquipNameGen.RandomWeaponName(tpl, eq.slotType);
+                // 2026-10-11 主人拍板「以后都统一这种命名规则」：随机名也要带稀有度前缀。
+                eq.equipName = WeaponAffixSystem.RarityPrefix(eq.rarity)
+                               + EquipNameGen.RandomWeaponName(tpl, eq.slotType);
                 return eq;
             }
         }
@@ -1428,7 +1453,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
             if (eq != null && WeaponLoadoutRules.IsLoadoutItem(eq))
                 AlignWeaponToHeroAttackHand(eq);
             if (eq != null && (string.IsNullOrEmpty(eq.equipName) || LooksLikeEnglishFileName(eq.equipName)))
-                eq.equipName = EquipNameGen.RandomWeaponName(eq.template, eq.slotType);
+                eq.equipName = WeaponAffixSystem.RarityPrefix(eq.rarity)
+                               + EquipNameGen.RandomWeaponName(eq.template, eq.slotType);
             return eq;
         }
         return null;

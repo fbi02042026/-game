@@ -595,7 +595,8 @@ public class LevelUpDraftUI : MonoBehaviour
         }
 
         // 标题
-        var title = CreateText("Title", cardRoot.transform, card.Title, 24, Color.white);
+        // 【2026-10-10 主人拍板】卡面名字颜色跟稀有度一致（顶带/角标同一套 rarityTint），不再一律白色。
+        var title = CreateText("Title", cardRoot.transform, card.Title, 24, rarityTint);
         Anchor(title.rectTransform, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -152f, CardW - 20f, 34f);
 
         // 描述

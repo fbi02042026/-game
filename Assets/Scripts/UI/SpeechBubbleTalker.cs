@@ -125,6 +125,10 @@ public class SpeechBubbleTalker : MonoBehaviour
             bubbleText.resizeTextForBestFit = false;
             bubbleText.alignByGeometry = false;
             bubbleText.alignment = TextAnchor.MiddleCenter;
+            // 【2026-10-11 主人拍板】气泡两行字挤在一起（截图「想打听情报？点我就行。」）→ 行距抬到统一下限。
+            // 气泡不在 GameFonts.ApplyToHierarchy 的调用链上，所以这里单独对齐同一口径（只增不减）。
+            if (bubbleText.lineSpacing < GameFonts.MinLineSpacing)
+                bubbleText.lineSpacing = GameFonts.MinLineSpacing;
         }
         if (receptionistButton == null)
         {

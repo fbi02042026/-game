@@ -1626,7 +1626,11 @@ public sealed class WavePlanner
             bool tutorialEliteSlot = Rules.UseTutorialSprites && _tutorialEliteCount > 0
                 && i >= wave.monsterCount - _tutorialEliteCount;
             if (tutorialEliteSlot)
+            {
                 monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;
+                // 【2026-10-10 主人拍板】引导精英不许是蘑菇：强制用本章精英专属精灵（Forest-07 树精）。
+                spriteIndexOverride = GameConfig.TUTORIAL_ELITE_SPRITE_ID;
+            }
 
             // 原型精英额度：占本波最后一个/几个名额（不是额外追加），与引导关同一套口径
             var arch = GetWaveArchetype(waveIndex);

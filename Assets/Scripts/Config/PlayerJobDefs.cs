@@ -108,6 +108,11 @@ public static class PlayerJobDefs
             Id = PlayerJobId.Mage,
             ConfigId = "P005",
             DisplayName = "法师",
+            // 【2026-10-11 主人拍板】职业**不再白送初始技能**：
+            // 原来本字段同时喂两条路 —— ① 本局首张技能卡保底（SlotMachineSystem.BuildGuaranteedSkillCard，已删）；
+            // ② SetSelected 写进存档 selectedPlayerSkillId。
+            // 现在 ① 没了，本字段只剩 ② —— 即局外技能选择界面（SkillSelectUI）的**预选项**，
+            // 不再进战斗、不再参与局内抽卡。战斗侧技能只认 RunLoadout 的本局构筑。
             DefaultSkillId = "thunder_verdict",
             PrimaryWeapon = WeaponCombatTable.WeaponKind.Staff,
             MercAssetId = "fashi101",
@@ -147,7 +152,15 @@ public static class PlayerJobDefs
             ConfigId = "P002",
             DisplayName = "重武者",
             DefaultSkillId = "gale_stance",
-            PrimaryWeapon = WeaponCombatTable.WeaponKind.Polearm,
+            // 【2026-10-11 主人拍板】重武者射程跟狂战一致，两档都压到 120px（1.20 单位）。
+            // 原话先是「重武者的攻击范围有点远 要跟狂战和剑盾一致」，随后拍板「狂战和重武改成120」。
+            // 旧值 Polearm=180px(1.80 单位) 是长柄档：比狂战远 25%、比剑盾 Sword=96px 远 87%，
+            // 而近战怪只有 82px(0.82 单位)，玩家会觉得「站老远就开始打」。
+            // 改 Greatsword 档后与狂战完全同档；攻速仍走大剑档 0.65（比长柄 0.75 更慢），保住「重武」手感。
+            // 具体数值真源在 attack_range 表 weapon_greatsword（已改 144 → 120），本字段只决定**用哪一档**。
+            // ⚠ 本字段同时是 ApplyForBattle 的 forceKind 与 CanDropForJob 的掉落过滤，
+            // 改动后重武者掉落/起步判定由「长柄」变「大剑・双手斧・双手锤」，两处同值不许再分家。
+            PrimaryWeapon = WeaponCombatTable.WeaponKind.Greatsword,
             MercAssetId = "zhongzhan101",
             Blurb = "近战控制，撞击眩晕",
             LongDesc = "近战控制型，移动撞击可眩晕敌人，擅长封锁路线和打断。",
@@ -248,6 +261,29 @@ public static class PlayerJobDefs
     }
 #endif
 
+    /// <summary>
+    /// 【2026-10-11 主人拍板】**当前开放给玩家选的职业**：剑盾卫士 / 法师 / 游侠。
+    ///
+    /// <para>⚠ 为什么不是从 <see cref="All"/> 里删掉另外三个：<c>Get(PlayerJobId)</c> 用
+    /// <c>(int)id</c> 直接当下标取 <c>All[i]</c>，删数组项会让**枚举值与下标错位**，
+    /// 存档里的 selectedPlayerJobId 也就全乱了。所以 All 原样保留 6 个（只是不进选择池），
+    /// 开 / 关职业只改这一处数组。</para>
+    /// </summary>
+    public static readonly PlayerJobId[] Playable =
+    {
+        PlayerJobId.SwordShield,
+        PlayerJobId.Mage,
+        PlayerJobId.Ranger
+    };
+
+    /// <summary>这个职业现在开不开放（选择池 / 存档回退的唯一判据）。</summary>
+    public static bool IsPlayable(PlayerJobId id)
+    {
+        for (int i = 0; i < Playable.Length; i++)
+            if (Playable[i] == id) return true;
+        return false;
+    }
+
     public static Def Get(PlayerJobId id)
     {
         int i = (int)id;
@@ -255,13 +291,27 @@ public static class PlayerJobDefs
         return All[i];
     }
 
+    /// <summary>存档里选了已下架的职业只报一次，别每次读档刷屏。</summary>
+    static bool _unplayableWarned;
+
     public static PlayerJobId GetSelected()
     {
         var data = SaveSystem.Instance?.Data;
         if (data == null) return PlayerJobId.SwordShield;
         int v = data.selectedPlayerJobId;
         if (v < 0 || v >= All.Length) return PlayerJobId.SwordShield;
-        return (PlayerJobId)v;
+        var id = (PlayerJobId)v;
+        // 存档里选了已下架的职业（如狂战 / 牧师 / 重武）→ 回退剑盾，并报出来让主人看见
+        if (!IsPlayable(id))
+        {
+            if (!_unplayableWarned)
+            {
+                _unplayableWarned = true;
+                Debug.LogWarning($"[PlayerJobDefs] 存档选的职业 {id} 已下架（当前只开放 剑盾/法师/游侠），已回退剑盾卫士");
+            }
+            return PlayerJobId.SwordShield;
+        }
+        return id;
     }
 
     /// <summary>

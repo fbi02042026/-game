@@ -984,20 +984,25 @@ public class StageClearRewardDirector : MonoBehaviour
         // —— 局内构筑进度落档（供「继续上一局」）。升级抽卡统一在升级时发生，这里不再额外出三选一 ——
         RunDraftDirector.Instance?.NoteStageProgress();
 
-        // —— 开箱整理：确定后再出传送门 / 摇杆 ——
-        {
-            bool lootDone = false;
-            BattleLootMode.Enter(() => lootDone = true);
-            UIManager.Instance?.ShowToast("整理装备后点「确定」");
-            while (!lootDone) yield return null;
-        }
+        // 【2026-10-11 主人拍板】**取消「整理装备 → 点确定」这一拍，宝箱结算完直接出传送门。**
+        // 主人原话：「还是没有传送门和继续按钮，我说过了直接出传送门」。
+        // 旧流程在这里 `BattleLootMode.Enter` 等玩家点「确定 · 继续」，而那个按钮一度掉到屏幕外
+        // （按背包面板底边下方 60 算，面板被竖屏适配贴底后 y≈-60）→ 玩家点不到 →
+        // `while (!lootDone)` 一直空转 → 表现为「没有继续按钮、也永远不出传送门」。
+        // 现在这一拍整个去掉：金币飞完、装备折金完，直接开门。
+        //
+        // ⚠ 连带：`BattleLootMode` 全库**已没有 Enter 调用点**，那条链路现在是无源死链
+        // （RefreshLootModeChrome 的确认按钮、SkillOrderChip 的拖拽开关等条件恒为 false）。
+        // 是否整条删除待主人拍板，奴家先不动别的（铁律 9：改过没问题的不许再私自改）。
 
         // —— 传送门 + 传送特效 ——
         if (_chuansongmen != null)
         {
+            // 【2026-10-11 主人拍板「可见性选 B」】门根放近一点：hero+4.5 → hero+3.2。
+            // door01 在根节点右侧 2.26，门的可视部分 = hero+5.46，稳稳落在镜头里（镜头右缘 hero+9）。
             float portalX = bm != null && bm.hero != null
-                ? UnitBase.GetCombatX(bm.hero) + 4.5f
-                : spawn.x + 4f;
+                ? UnitBase.GetCombatX(bm.hero) + 3.2f
+                : spawn.x + 3f;
             var p = _chuansongmen.position;
             p.x = portalX;
             p.y = UnitBase.GROUND_Y;

@@ -54,75 +54,14 @@ public static class ShopDefs
     /// <summary>手写货架：技能 / 碎片 / 抽卡 / 补给 / 材料。</summary>
     static readonly Item[] Fixed =
     {
-        // ================= 技能 · 普通（金币直购）=================
-        // 这四个都是「等 2~4 章才会白给」的技能，花钱提前 1~2 章拿到。
-        new Item {
-            id = "shop_skill_stone_skin", name = "石肤术", kind = Kind.Skill,
-            desc = "防御 +30%，持续 10 秒。冷却 16 秒。\n原本通关第 2 章解锁，买断可立即获得。",
-            currency = ResourceWallet.ResourceType.Gold, price = 2000, skillId = "stone_skin"
-        },
-        new Item {
-            id = "shop_skill_iron_wall", name = "铁壁壁垒", kind = Kind.Skill,
-            desc = "防御 +45%，持续 8 秒。冷却 22 秒。\n石肤术的上位版，减伤更猛但更短。",
-            currency = ResourceWallet.ResourceType.Gold, price = 2500, skillId = "iron_wall"
-        },
-        new Item {
-            id = "shop_skill_spirit_wolf", name = "灵狼突袭", kind = Kind.Skill,
-            desc = "3 × 130% 弹幕伤害。冷却 18 秒。\n原本通关第 3 章解锁。",
-            currency = ResourceWallet.ResourceType.Gold, price = 2000, skillId = "spirit_wolf"
-        },
-        new Item {
-            id = "shop_skill_hawk_eye", name = "鹰眼", kind = Kind.Skill,
-            desc = "全队暴击 +35%，持续 10 秒。冷却 20 秒。\n原本推进到第 4 章才解锁。",
-            currency = ResourceWallet.ResourceType.Gold, price = 2000, skillId = "hawk_eye"
-        },
-
-        // ================= 技能 · 稀有（金币 / 天赋石直购）=================
-        new Item {
-            id = "shop_skill_quake_slam", name = "震地重击", kind = Kind.Skill,
-            desc = "300% 范围伤害，半径 8。冷却 21 秒。\n近战专属——远程职业不会看到本条。",
-            currency = ResourceWallet.ResourceType.Gold, price = 6000, skillId = "quake_slam",
-            showFromChapter = 2
-        },
-        new Item {
-            id = "shop_skill_thunder_chain", name = "连锁闪电", kind = Kind.Skill,
-            desc = "160% 攻击连锁 4 段（合计 2.176 倍）。冷却 18 秒。\n原本走天赋树，这里用天赋石买断。",
-            currency = ResourceWallet.ResourceType.TalentPoint, price = 5, skillId = "thunder_chain",
-            showFromChapter = 2
-        },
-        new Item {
-            id = "shop_skill_war_banner", name = "战旗号令", kind = Kind.Skill,
-            desc = "全队攻击 +35%，持续 10 秒。冷却 24 秒。\n持续时间是同类增益里最长的。",
-            currency = ResourceWallet.ResourceType.TalentPoint, price = 7, skillId = "war_banner",
-            showFromChapter = 3
-        },
-
-        // ================= 技能 · 史诗（只卖碎片）=================
-        // 史诗不直购：攒 80 片合成，让顶级技能是「长期目标」而不是「一次大额消费」。
-        new Item {
-            id = "shop_frag_flame_burst", name = "烈焰爆裂残卷 ×5", kind = Kind.Fragment,
-            desc = "260% 攻击的范围伤害，半径 7。冷却 20 秒。\n合成需 80 片，本条一次给 5 片。",
-            currency = ResourceWallet.ResourceType.Gold, price = 800, skillId = "flame_burst",
-            fragmentCount = 5, dailyLimit = 2, showFromChapter = 2
-        },
-        new Item {
-            id = "shop_frag_sacred_revival", name = "圣愈术残卷 ×5", kind = Kind.Fragment,
-            desc = "48% 最大生命 + 4.0×攻击的治疗。冷却 22 秒。\n合成需 80 片。",
-            currency = ResourceWallet.ResourceType.Gold, price = 800, skillId = "sacred_revival",
-            fragmentCount = 5, dailyLimit = 2, showFromChapter = 3
-        },
-        new Item {
-            id = "shop_frag_arrow_storm", name = "箭雨风暴残卷 ×5", kind = Kind.Fragment,
-            desc = "5 × 90% 弹幕（合计 4.5 倍）。冷却 22 秒。\n合成需 80 片。",
-            currency = ResourceWallet.ResourceType.Gold, price = 800, skillId = "arrow_storm",
-            fragmentCount = 5, dailyLimit = 2, showFromChapter = 3
-        },
-        new Item {
-            id = "shop_frag_arcane_flame", name = "秘法烈焰残卷 ×5", kind = Kind.Fragment,
-            desc = "310% 范围伤害，半径 8。冷却 26 秒。\n火流派后期核心，合成需 80 片。",
-            currency = ResourceWallet.ResourceType.Gold, price = 800, skillId = "arcane_flame",
-            fragmentCount = 5, dailyLimit = 2, showFromChapter = 4
-        },
+        // ================= 技能 · 商店售卖 =================
+        // 【2026-10-11 主人拍板】技能缩减到「有图标的那 6 个」：
+        // 治愈之泉 / 圣盾壁垒 / 战意爆发 / 疾风架势 / 致命专注 / 天雷裁决。
+        // 原来这 11 条（石肤术、铁壁壁垒、灵狼突袭、鹰眼、震地重击、连锁闪电、战旗号令 +
+        // 烈焰爆裂 / 圣愈术 / 箭雨风暴 / 秘法烈焰残卷）卖的都是已经删掉的技能 → 整段下架，
+        // 留着就是「花了钱买一个不存在的技能」。
+        // 那 6 个技能本来就是全职业开局自带（player_skills.csv 六行 unlockChapter 全是 0），
+        // 不需要在商店里卖；商店继续卖抽卡券 / 金币袋 / 天赋石 / 装备。
 
         // ================= 抽卡券 =================
         // ⚠ 2026-09-18 重定价：当前版本**不做内购**，钻石是纯免费货币，

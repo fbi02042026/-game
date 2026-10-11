@@ -663,8 +663,13 @@ public static class DraftPool
                     Kind = DraftCardKind.MercRecruit,
                     Id = def.AssetId,
                     HireId = def.HireId,
-                    Title = $"{def.Name}·{def.Nickname}",
-                    Desc = $"[{rarName}] {def.JobName}　Lv{level}　★{star}",
+                    // 【2026-10-10 主人拍板】卡面只写真名（塔克），不带花名（重盾）——
+                    // 主人原话「佣兵的名字要用塔克不要用重盾」。
+                    Title = def.Name,
+                    // 【2026-10-11 主人拍板】同上（SlotMachineSystem.BuildGuaranteedMercCard 那一处）：
+                    // 佣兵名字只取真名，描述行也不再写职业名（旧写法会出现「[普通] 游侠」这种
+                    // 「名字栏写着职业」的错位，主人反馈「不要取职业名字 剑盾卫士什么的」）。
+                    Desc = $"[{rarName}]　Lv{level}　★{star}",
                     Rarity = rar,
                     Tag = SynergyTag.Summon,
                     Star = star,

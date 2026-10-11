@@ -66,7 +66,9 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         tpl.ResolveIcon();
         int lv = Hero.Instance != null ? Hero.Instance.level : 1;
         var eq = EquipInstance.GenerateFromTemplate(tpl, 0, lv, true, Rarity.Common);
-        eq.equipName = tpl.equipName;
+        // 2026-10-11：这行原是直接拿模板纯名覆盖，会把 GenerateFromTemplate 刚加上的稀有度前缀抹掉。
+        // 主人拍板「以后都统一这种命名规则，不管是什么」，所以这里也要走同一个前缀出口。
+        eq.equipName = WeaponAffixSystem.RarityPrefix(eq.rarity) + tpl.equipName;
         if (eq.icon == null) eq.icon = tpl.icon ?? EquipIcons.Get(tpl.iconFileName);
 
         if (!TryEquipDirect(eq))

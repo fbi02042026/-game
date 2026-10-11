@@ -29,22 +29,19 @@ public static class PlayerNameGen
         "背锅", "打拼", "划水", "咸鱼", "攒钱",
     };
 
+    // 2026-10-10 主人拍板：名字要像人名（艾伦 / 动漫译名那种），不要「景点感」的组词。
+    // 全表改成西幻译名，与佣兵名（马库斯 / 塔克 / 路加）同一套世界观。修饰词不动。
+    // 2026-10-10 主人拍板：不要女性名字 —— 女性与中性共用中性池，FemaleNames 整组删除。
     static readonly string[] MaleNames =
     {
-        "破晓", "断岳", "问天", "乘风", "猎空", "铸星", "焚河", "听雷", "饮雪", "踏歌",
-        "摘星", "逐月", "镇岳", "横刀", "挽弓", "执盾", "独行", "无锋", "狂歌", "啸天",
-    };
-
-    static readonly string[] FemaleNames =
-    {
-        "挽月", "听雪", "流萤", "灼华", "凝霜", "落霞", "逐星", "织梦", "吟风", "碎玉",
-        "青鸾", "红袖", "素问", "凌波", "寒烟", "倾城", "无忧", "清欢", "琉璃", "星落",
+        "艾伦", "雷恩", "凯尔", "罗兰", "诺亚", "亚瑟", "迪恩", "赛门", "伊恩", "柯尔",
+        "莱恩", "科林", "文森", "休斯", "加隆", "雷欧", "德恩", "巴德", "奥兰", "菲恩",
     };
 
     static readonly string[] NeutralNames =
     {
-        "逐风", "观澜", "衔烛", "枕云", "问心", "行远", "守一", "无涯", "无名", "自在",
-        "归鸿", "浮生", "长明", "孤舟", "旧梦",
+        "瑞恩", "艾迪", "罗宾", "琳恩", "凯尼", "希罗", "尤恩", "黎恩", "夏侬", "诺曼",
+        "艾利", "米凯", "桑德", "洛林", "艾恩",
     };
 
     const float MemeModifierChance = 0.25f;
@@ -71,10 +68,7 @@ public static class PlayerNameGen
                 return Random.value < 0.5f
                     ? MaleNames[Random.Range(0, MaleNames.Length)]
                     : NeutralNames[Random.Range(0, NeutralNames.Length)];
-            case Gender.Female:
-                return Random.value < 0.5f
-                    ? FemaleNames[Random.Range(0, FemaleNames.Length)]
-                    : NeutralNames[Random.Range(0, NeutralNames.Length)];
+            // 2026-10-10 主人拍板：不要女性名字，Female 与 Neutral 共用中性池
             default:
                 return NeutralNames[Random.Range(0, NeutralNames.Length)];
         }

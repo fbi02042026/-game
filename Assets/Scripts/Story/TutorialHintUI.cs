@@ -39,11 +39,29 @@ public class TutorialHintUI : MonoBehaviour
     const int DefaultSortOrder = GameConfig.UiSort.TutorialHint;
     const string PrefabResourcesPath = "Prefabs/UI/TutorialHintUI";
     /// <summary>
+    /// 引导横幅底框（Resources 副本，与 TutorialPointerArt 同款口径）。
+    /// 2026-10-10：底框原来只在编辑器按 Art 源目录加载，真机打包出来没有图、只剩一块纯色板，
+    /// 这里补一份 Resources 副本，运行时按路径加载 —— 不是兜底补图，是补齐真机本来就缺的资源。
+    /// </summary>
+    const string BannerPlateResourcesPath = "UI/Tutorial/引导底框";
+    /// <summary>
     /// 引导条文字字号。2026-10-10 主人要求「引导的字可以大点」：26 → 34。
     /// 红线：不改预制体/场景，字号一律由代码统一指定 ——
     /// Build()（代码搭 UI）与 TryBindFromHierarchy()（走预制体）两条路径都必须用这个值。
     /// </summary>
     const int HintFontSize = 34;
+    /// <summary>
+    /// 横幅内边距（文字四周留白）。2026-10-10 主人反馈「横幅要尽量大点，比字大，不要跟字一样大，看着不舒服」
+    /// +「字都超出了」：左右 28→56、上下 18/10→40，横幅比文字大一圈，多行也不再顶出框外。
+    /// 红线：Build() 与 TryBindFromHierarchy() 两条路径、以及 MeasureBannerHeight() 必须同值。
+    /// </summary>
+    const float BannerPadX = 56f;
+    const float BannerPadY = 40f;
+    /// <summary>
+    /// 引导横幅多行文案的行距（2026-10-10 主人：「多行字的时候字的上下间距拉开一点」）。
+    /// Unity 默认 1.0；要再松/再紧改这一个常量。Build() 与 TryBindFromHierarchy() 两条路径都必须设。
+    /// </summary>
+    const float HintLineSpacing = 1.3f;
 
     public static TutorialHintUI Ensure()
     {
@@ -138,6 +156,7 @@ public class TutorialHintUI : MonoBehaviour
                 // 长的文案自动分两行：与 Build() 保持一致（预制体本身也是 Wrap/Overflow）
                 _label.horizontalOverflow = HorizontalWrapMode.Wrap;
                 _label.verticalOverflow = VerticalWrapMode.Overflow;
+                _label.lineSpacing = HintLineSpacing;   // 2026-10-10 主人：多行时上下间距拉开一点
                 if (_label.font == null)
                     _label.font = GameFonts.GetChinese();
                 _label.color = new Color(0xFC / 255f, 0xFD / 255f, 0xBE / 255f, 1f);
@@ -146,8 +165,8 @@ public class TutorialHintUI : MonoBehaviour
                 lrt.anchorMin = Vector2.zero;
                 lrt.anchorMax = Vector2.one;
                 lrt.pivot = new Vector2(0.5f, 0.5f);
-                lrt.offsetMin = new Vector2(28f, 18f);
-                lrt.offsetMax = new Vector2(-28f, -10f);
+                lrt.offsetMin = new Vector2(BannerPadX, BannerPadY);
+                lrt.offsetMax = new Vector2(-BannerPadX, -BannerPadY);
             }
         }
 
@@ -207,7 +226,7 @@ public class TutorialHintUI : MonoBehaviour
         _bannerRt.anchorMax = new Vector2(0.98f, 0.58f);
         _bannerRt.pivot = new Vector2(0.5f, 0.5f);
         _bannerRt.anchoredPosition = Vector2.zero;
-        _bannerRt.sizeDelta = new Vector2(0f, 100f);
+        _bannerRt.sizeDelta = new Vector2(0f, 150f);
 
         // 红线：不改预制体，字号在代码里统一指定（与 TryBindFromHierarchy() 共用 HintFontSize）
         _label = CreateText(banner.transform, "HintText", "", HintFontSize, TextAnchor.MiddleCenter);
@@ -217,11 +236,11 @@ public class TutorialHintUI : MonoBehaviour
         lrt.anchorMin = Vector2.zero;
         lrt.anchorMax = Vector2.one;
         lrt.pivot = new Vector2(0.5f, 0.5f);
-        lrt.offsetMin = new Vector2(28f, 18f);
-        lrt.offsetMax = new Vector2(-28f, -10f); // Top=10
+        lrt.offsetMin = new Vector2(BannerPadX, BannerPadY);
+        lrt.offsetMax = new Vector2(-BannerPadX, -BannerPadY);
         _label.horizontalOverflow = HorizontalWrapMode.Wrap;
         _label.verticalOverflow = VerticalWrapMode.Overflow;
-
+        _label.lineSpacing = HintLineSpacing;   // 2026-10-10 主人：多行时上下间距拉开一点
         var pointerGo = new GameObject("PointerHand", typeof(RectTransform), typeof(Image));
         pointerGo.transform.SetParent(transform, false);
         _pointerRt = pointerGo.GetComponent<RectTransform>();
@@ -250,12 +269,31 @@ public class TutorialHintUI : MonoBehaviour
             if (sp != null)
             {
                 banner.sprite = sp;
-                banner.type = Image.Type.Simple;
+                // 2026-10-10：底框换暗黑奇幻框（四角星饰），横幅高度按字数自适应，
+                // 九宫格有效时走 Sliced 只拉中段，避免整张连星饰一起变形。
+                Vector4 bd = sp.border;
+                banner.type = (bd.x + bd.y + bd.z + bd.w) > 0.01f
+                    ? Image.Type.Sliced
+                    : Image.Type.Simple;
                 banner.color = Color.white;
                 return;
             }
         }
 #endif
+        // 2026-10-10：真机走 Resources 副本拿底框（编辑器若没开 EditorFallback 也走这条）
+        var rt = Resources.Load<Sprite>(BannerPlateResourcesPath);
+        if (rt != null)
+        {
+            banner.sprite = rt;
+            // 2026-10-10：底框换暗黑奇幻框（629×195，四角星饰），横幅高度 100~420 按字数自适应，
+            // Simple 会把整张图连星饰一起拉变形 → 九宫格有效时走 Sliced，只拉中段。
+            Vector4 bd = rt.border;
+            banner.type = (bd.x + bd.y + bd.z + bd.w) > 0.01f
+                ? Image.Type.Sliced
+                : Image.Type.Simple;
+            banner.color = Color.white;
+            return;
+        }
         banner.color = new Color(0.08f, 0.1f, 0.16f, 0.88f);
     }
 
@@ -569,8 +607,8 @@ public class TutorialHintUI : MonoBehaviour
         var root = transform as RectTransform;
         if (root == null) return;
 
-        // 左右各约 12px，避免两侧空一大截
-        float width = Mathf.Max(280f, root.rect.width - 24f);
+        // 左右各留 8px（2026-10-10 主人要横幅尽量大：原各 12px）
+        float width = Mathf.Max(280f, root.rect.width - 16f);
         // 2026-09-28 主人反馈：字多时溢出底框 —— 高度改为按文字实测行高自适应（原写死 100）。
         float bannerH = MeasureBannerHeight(width);
         _bannerRt.anchorMin = _bannerRt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -595,19 +633,20 @@ public class TutorialHintUI : MonoBehaviour
         _bannerRt.anchoredPosition = new Vector2(0f, y);
     }
 
-    /// <summary>按当前文案与横幅宽度量文字实际高度 + 上下留白（Top=10 / Bottom=18，与 HintText 边距一致）。</summary>
+    /// <summary>按当前文案与横幅宽度量文字实际高度 + 上下留白（与 HintText 的 BannerPadY 一致）。</summary>
     float MeasureBannerHeight(float bannerWidth)
     {
-        const float minH = 100f;
-        // 2026-10-10 主人反馈：多行文案仍溢出底框 —— 上限 340 → 420（写得再长也塞得下），
-        // 缓冲 28 → 48：28 只够抵消 HintText 上下边距（18+10），多行时行距还要再吃掉一截。
-        const float maxH = 420f;
+        // 2026-10-10 主人反馈：横幅要尽量大、字不能顶出框外 ——
+        // 下限 100→150（单行时框也够大，不贴着字），上限 420→460（长文案照样塞得下）。
+        const float minH = 150f;
+        const float maxH = 460f;
         if (_label == null || string.IsNullOrEmpty(_label.text)) return minH;
-        float textW = Mathf.Max(40f, bannerWidth - 56f);   // 与 HintText 左右 offsetMin/Max(28) 对应
+        float textW = Mathf.Max(40f, bannerWidth - BannerPadX * 2f); // 与 HintText 左右边距对应
         var settings = _label.GetGenerationSettings(new Vector2(textW, 9999f));
         float pref = _label.cachedTextGeneratorForLayout.GetPreferredHeight(_label.text, settings);
         if (pref <= 0f) return minH;
-        return Mathf.Clamp(Mathf.CeilToInt(pref) + 48f, minH, maxH);
+        // 上下各留 BannerPadY，再多给 8 抵消行距取整误差
+        return Mathf.Clamp(Mathf.CeilToInt(pref) + BannerPadY * 2f + 8f, minH, maxH);
     }
 
     void BeginSwipeToTarget()

@@ -8,7 +8,10 @@ public static partial class GameConfig
 {
     [Header("武器攻击范围(像素) — 对齐《像素冒险_数值表》武器属性表")]
     public const float RANGE_PX_SWORD = 96f;      // 单手剑
-    public const float RANGE_PX_GREATSWORD = 144f; // 大剑
+    // 【2026-10-11 主人拍板】原 144 → 120：主人实测狂战 / 重武「攻击范围有点远」，拍板统一压到 120。
+    // ⚠ 本常量只是**表读不到时的兜底**，真源是 attack_range 表的 weapon_greatsword —— 两边必须同值，
+    // 别让兜底和表各说一套（同 MONSTER_RANGED_RANGE_MUL 的口径）。
+    public const float RANGE_PX_GREATSWORD = 120f; // 大剑/双手斧/双手锤
     public const float RANGE_PX_POLEARM = 180f;   // 长柄
     public const float RANGE_PX_STAFF = 120f;     // 单手杖
     public const float RANGE_PX_BOW = 300f;       // 弓箭
@@ -73,9 +76,11 @@ public static partial class GameConfig
     public const float MONSTER_PREFAB_MONSTERS_SCALE = 1f;
     public const float MONSTER_ANCHOR_SCALE_FACTOR = 1f;
     // 2026-09-21：精英/Boss 体型倍率已迁 combat_tuning 表（可运行时调）。
-    // 原来把它们卡住的 ELITE_UNIT_SCALE / BOSS_UNIT_SCALE（const 派生）经查全工程零引用 = 死代码，已删。
-    public static float ELITE_SCALE_MULTIPLIER => CombatTuningTable.Get("ELITE_SCALE_MULTIPLIER", 1.3f);
-    public static float BOSS_SCALE_MULTIPLIER => CombatTuningTable.Get("BOSS_SCALE_MULTIPLIER", 1.6f);
+    // 【2026-10-10 主人拍板】精英 1.3 → 2.0（「精英的大小应该放大几倍」）；Boss 等比 1.6 → 2.6 保持 Boss > 精英。
+    public static float ELITE_SCALE_MULTIPLIER => CombatTuningTable.Get("ELITE_SCALE_MULTIPLIER", 2.0f);
+    public static float BOSS_SCALE_MULTIPLIER => CombatTuningTable.Get("BOSS_SCALE_MULTIPLIER", 2.6f);
+    /// <summary>引导关精英固定精灵编号（1 Forest 第 7 号 = 树精）。主人 2026-10-10 反馈精英不许是蘑菇，表可调。</summary>
+    public static int TUTORIAL_ELITE_SPRITE_ID => Mathf.RoundToInt(CombatTuningTable.Get("TUTORIAL_ELITE_SPRITE_ID", 7f));
     public const float MONSTER_BASE_SCALE = 4.125f;
     /// <summary>怪物血条脚下 Y（与预制体 Monstersmoban 本地坐标一致）</summary>
     public const float MONSTER_HP_BAR_FOOT_LOCAL_Y = -2.2f;

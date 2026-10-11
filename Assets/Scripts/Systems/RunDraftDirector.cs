@@ -53,18 +53,21 @@ public class RunDraftDirector : MonoBehaviour
         else
             resumed = RunLoadout.ResumeOrBegin(job);
 
-        // 开局启动抽奖币：**每局只补一次**（2026-10-05 主人拍板「开始金币是每局的，不是每关的」）。
+        // 开局启动金：**每局只补一次**（2026-10-05 主人拍板「开始金币是每局的，不是每关的」）。
         // 续关（resumed=true）不再补。
-        // ⚠ 2026-10-05 主人最终口径：**战斗内的都是局内的** —— 所以「每关通关 +100」发的也是
-        //   抽奖币 SlotCoin（见 SlotMachineSystem.GrantStageCoins），「每关都能抽」就是靠它。
-        //   局外金币 Gold **只有**结算界面按通过关卡数发（StageGoldDefs），跟抽奖无关。
-        //   抽奖币的全部来源（**就这三条，别处不再有第二个给币口径**）：
-        //     ① 每局携带 240（EnsureStarterCoins）+ 初始资金天赋每级 80
-        //     ② 每关通关 +100（GrantStageCoins，金币本不发 —— Mode.GrantsRunCoins=false）
+        // 【2026-10-10 主人拍板】不再发另一套抽奖币 —— 直接进局内金币钱包（BattleManager.currentGold），
+        // 「进战斗只带启动金」：城镇金币不带进战斗，HUD 上那个数就是本局能花的钱，抽一次立刻看得见在减。
+        // ⚠ 2026-10-05 主人最终口径：**战斗内的都是局内的** —— 所以下面几笔都是「进得来、带不走」的
+        //   局内金币（走 BattleManager.AddRunGold(n, false)，抬高本局起点 → 结算差额不含它们）。
+        //   局外金币 Gold **只有**结算界面按通过关卡数发（StageGoldDefs）＋ 局内真正赚到的那部分。
+        //   局内金币的全部来源（**就这三条，别处不再有第二个给币口径**）：
+        //     ① 每局启动金 240（GrantRunStarterGold）+ 初始资金天赋每级 80
+        //     ② 每关通关：100 起，**每关 ×1.4 递增**，单关封顶 600（GrantStageCoins，
+        //        金币本不发 —— Mode.GrantsRunCoins=false）
         //     ③ 抽中「金币」安慰奖（一抽价 × 0.5 = 40）
-        //   **局末清零**（回城 / 死亡 / 撤离）；章末选「进下一章」不清零，币带过去。
-        //   一章 10 关 ≈ 14 抽（3 + 1×9 + 安慰奖回血约 +1）；开局 240 = 3 抽。
-        if (!resumed) SlotMachineSystem.EnsureStarterCoins();
+        //   ⚠【2026-10-10 主人拍板】抽价每抽 ×1.1 不封顶、通关产出每关 ×1.4 复利 →
+        //     前期紧（开局 200 只够 2 抽）、后期松（第 7 关起每关 600，够抽 2 次）。
+        if (!resumed) SlotMachineSystem.GrantRunStarterGold();
 
         if (resumed) RestoreHeroProgress();
         SyncHeroLevel();
@@ -80,14 +83,13 @@ public class RunDraftDirector : MonoBehaviour
 
         if (resumed && RunLoadout.Data != null)
         {
-            GlobalToastUI.Show(
-                $"继续上一局：第{RunLoadout.Data.chapter}章　Lv{RunLoadout.HeroLevel}　" +
-                $"技能{RunLoadout.SkillIds().Count}　佣兵{RunLoadout.Mercs().Count}");
+            // 续关：只说「续到哪了」，不再罗列 Lv/技能数/佣兵数（2026-10-11 主人拍板：
+            // 主人原话「不要每次上来都写本次构筑什么什么的」—— 那些数字玩家看一眼就忘，还挡视线）。
+            GlobalToastUI.Show($"继续上一局 · 第{RunLoadout.Data.chapter}章");
         }
-        else
-        {
-            GlobalToastUI.Show($"本局构筑已生成：{PlayerJobDefs.Get(job).DisplayName} · 技能{RunLoadout.SkillIds().Count}");
-        }
+        // 新局：不再弹「本局构筑已生成：XX · 技能N」（同上，主人拍板去掉）。
+        // 开场氛围交给进战斗那张章节卡（ChapterSplashOverlay：章节标题 + 开场正文 + 引言），
+        // 已经有开场白了，别在这里再抄一份数据。
     }
 
     /// <summary>
@@ -279,9 +281,12 @@ public class RunDraftDirector : MonoBehaviour
 
             case DraftCardKind.Gold:
             {
-                // 主人拍板「抽中的金币是当局抽奖用的」→ 给的是抽奖币（SlotCoin），不是城镇那套通用金币
+                // 主人拍板「抽中的金币是当局抽奖用的」→ 进局内金币钱包（本局能继续抽），带不出裂隙。
+                // 【2026-10-10 主人拍板】抽奖与启动金统一成局内金币，不再有第二套抽奖币。
                 if (card.Amount <= 0) { msg = "金币奖励数值异常"; return false; }
-                ResourceWallet.Add(ResourceWallet.ResourceType.SlotCoin, card.Amount, save: true, notify: true);
+                var bm = BattleManager.Instance;
+                if (bm == null) { msg = "金币奖励发放失败：不在战斗中"; return false; }
+                bm.AddRunGold(card.Amount, false);
                 msg = $"获得金币 ×{card.Amount}";
                 return true;
             }
@@ -434,9 +439,9 @@ public class RunDraftDirector : MonoBehaviour
         string rarityName = MercRosterDefs.TryGetByHireId(entry.hireId, out var rd)
             ? SkillRarityUtil.DisplayName(SkillRarityUtil.FromMerc(rd.Rarity))
             : "";
-        string fullName = string.IsNullOrEmpty(entry.nickname)
-            ? entry.displayName
-            : $"{entry.displayName}·{entry.nickname}";
+        // 【2026-10-10 主人拍板】喜报只写真名（塔克），不带花名（重盾）。
+        string fullName = !string.IsNullOrEmpty(entry.displayName)
+            ? entry.displayName : entry.nickname;
         msg = string.IsNullOrEmpty(rarityName)
             ? $"恭喜抽中佣兵·{fullName}，实力大增！"
             : $"恭喜抽中{rarityName}佣兵·{fullName}，实力大增！";
@@ -499,7 +504,9 @@ public class RunDraftDirector : MonoBehaviour
 
         int star = RunLoadout.StarOf(skillId);
         var tag = SkillDraftMeta.Tag(skillId);
-        float dmgMul = SkillDraftMeta.StarDamageMul(star) * RunLoadout.ThemeDamageMul(tag);
+        // 【2026-10-11 主人拍板】星级伤害步长可 per-skill 覆盖（表列 starDamageStep）：
+        // 天雷裁决削弱后单独定成每星 +10%，其余技能不填 → 回退全局 +18%。
+        float dmgMul = SkillDraftMeta.StarDamageMul(star, active.starDamageStep) * RunLoadout.ThemeDamageMul(tag);
         float cdMul = SkillDraftMeta.StarCooldownMul(star);
         if (SkillDraftMeta.IsAffinity(skillId, job))
         {
@@ -510,6 +517,12 @@ public class RunDraftDirector : MonoBehaviour
         active.damageMultiplier *= dmgMul;
         active.baseDamage *= dmgMul;
         active.cooldown = Mathf.Max(0.6f, active.cooldown * cdMul);
+
+        // 【2026-10-11 主人拍板】AOE 命中数随星级涨：表里填的是 **1 星** 的值，每多 1 星 +1。
+        // 半径不变（aoeRadius 不参与星级）→ 变强的是「砸中几个」，不是「砸多大一片」。
+        // 0 = 不限的技能不受影响（继续保持半径内全体）。
+        if (active.aoeMaxTargets > 0)
+            active.aoeMaxTargets += Mathf.Max(0, star - 1);
 
         // 治疗 / 增益也吃星级：以前只涨冷却，治疗量与增益幅度永远停在 1 星数值。
         // 治疗 = 目标最大生命 × healPercentOfMax + 施法者攻击 × healAtkMul，两段一起涨。
@@ -584,7 +597,7 @@ public class RunDraftDirector : MonoBehaviour
         merc.Init(entry.mercId, Mathf.Max(1, entry.level));
         merc.mercStar = Mathf.Clamp(entry.star, 1, 5);   // 2026-10-06：MP 池/回复的星级真源
         merc.SetupBattleSkills(entry.skillId, entry.passiveSkillId);
-        merc.SetDisplayName(entry.displayName, entry.nickname);
+        merc.SetDisplayName(entry.displayName);
         if (!string.IsNullOrEmpty(entry.hireId)) merc.SetHireId(entry.hireId);
         if (!string.IsNullOrEmpty(entry.displayName))
             merc.gameObject.name = "Merc_" + entry.displayName;
@@ -596,6 +609,27 @@ public class RunDraftDirector : MonoBehaviour
         var bm = BattleManager.Instance;
         var mm = MercenaryManager.Instance;
         if (bm == null || mm == null || e == null || string.IsNullOrEmpty(e.mercId)) return;
+
+        // 【2026-10-10 主人拍板】引导局：场上天降的塔克替身**直接转正**，不再"收掉 → 重新生成"
+        // （主人反馈「第二次抽奖时塔克消失了但名字还在，不要让塔克消失」）。
+        // 判据 = 引导局 && 场上已有同 hireId 佣兵（引导局只此一位，正式局不受影响）。
+        if (bm.IsTutorialRun)
+        {
+            var actives = mm.GetActiveMercs();
+            Mercenary standIn = null;
+            for (int i = 0; i < actives.Count; i++)
+            {
+                var m = actives[i];
+                if (m != null && !string.IsNullOrEmpty(m.hireId) && m.hireId == e.hireId) { standIn = m; break; }
+            }
+            if (standIn != null)
+            {
+                int slot0 = Mathf.Max(0, actives.Count - 1);   // 替身已占一个 active 名额
+                PromoteMerc(standIn, e, slot0);
+                Debug.Log($"[RunDraft] 引导替身转正：{e.displayName}({e.hireId}) 原地入队，不重新生成");
+                return;
+            }
+        }
 
         var hero = bm.hero != null ? bm.hero : Hero.Instance;
         float baseX = hero != null ? UnitBase.GetCombatX(hero) + MercSpawnOffsetX : MercSpawnOffsetX;
@@ -621,7 +655,7 @@ public class RunDraftDirector : MonoBehaviour
 
         merc.SetupBattleSkills(e.skillId, e.passiveSkillId);
         merc.SetPartyIndex(slot);
-        merc.SetDisplayName(e.displayName, e.nickname);
+        merc.SetDisplayName(e.displayName);
         if (!string.IsNullOrEmpty(e.hireId))
             merc.SetHireId(e.hireId);
         if (!string.IsNullOrEmpty(e.displayName))
@@ -633,6 +667,32 @@ public class RunDraftDirector : MonoBehaviour
         merc.Face(1);
 
         Debug.Log($"[RunDraft] 局内佣兵出场：{e.displayName}({e.mercId}) Lv{e.level} ★{e.star}");
+    }
+
+    /// <summary>
+    /// 引导局专用：把天降演出替身**原地转正**为正式入队佣兵（2026-10-10 主人拍板「不要让塔克消失」）。
+    /// 只重绑局内数据（星级/技能/站位/名字），不重新生成实例 —— 全程塔克不消失。
+    /// </summary>
+    void PromoteMerc(Mercenary merc, RunMercEntry e, int slot)
+    {
+        var bm = BattleManager.Instance;
+        if (merc == null || e == null) return;
+        merc.mercStar = Mathf.Clamp(e.star, 1, 5);
+        merc.SetupBattleSkills(e.skillId, e.passiveSkillId);
+        merc.SetPartyIndex(slot);
+        merc.SetDisplayName(e.displayName);
+        if (!string.IsNullOrEmpty(e.hireId))
+            merc.SetHireId(e.hireId);
+        if (!string.IsNullOrEmpty(e.displayName))
+            merc.gameObject.name = "Merc_" + e.displayName;
+        if (bm != null)
+        {
+            if (!bm.allyUnits.Contains(merc))
+                bm.allyUnits.Add(merc);
+            merc.OnDead -= bm.OnMercenaryDead;   // 替身阶段已挂过一次，先摘再挂，防重复订阅
+            merc.OnDead += bm.OnMercenaryDead;
+        }
+        merc.Face(1);
     }
 
     // ============================================================

@@ -27,6 +27,10 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         public int projectileCount;     // 弹幕数量
         public float projectileSpeed;   // 弹幕速度
         public float aoeRadius;         // 范围伤害半径
+        /// <summary>AOE / 连锁单次最多命中几个目标；0 = 不限（2026-10-11 削弱天雷裁决：1 星 3 个，每星 +1）。</summary>
+        public int aoeMaxTargets;
+        /// <summary>本技能的星级伤害步长（覆盖全局 <c>SkillDraftMeta.StarDamageStep</c>）；&lt;=0 = 用全局。</summary>
+        public float starDamageStep;
         public Sprite icon;             // 技能图标
 
         // ===== 治疗 / 增益数值（2026-09-15 加入）=====
@@ -214,6 +218,18 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         // 近战职业落点仍在身边，远程职业可以隔着大半屏砸。
         Vector2 center = PickAoeCenter(caster, skill.aoeRadius);
         List<UnitBase> enemies = GetEnemiesInRangeAt(caster, center, skill.aoeRadius);
+
+        // 【2026-10-11 主人拍板】AOE 命中目标封顶：天雷裁决原本「半径 8 内全体通吃」，
+        // 怪一多就是全屏清场 → 改成最多 3 个（表末列 aoeMaxTargets）。
+        // 0 = 不限，保持旧行为（别的 AOE 技能填 0，不受影响）。
+        // 超额时取**离落点最近**的那几个 —— 让伤害集中在真正被砸中的那一坨，不是随机挑。
+        if (skill.aoeMaxTargets > 0 && enemies.Count > skill.aoeMaxTargets)
+        {
+            enemies.Sort((a, b) =>
+                Vector2.Distance(center, a.transform.position)
+                    .CompareTo(Vector2.Distance(center, b.transform.position)));
+            enemies.RemoveRange(skill.aoeMaxTargets, enemies.Count - skill.aoeMaxTargets);
+        }
 
         int vfxDir = caster.GetVfxFacingDir();
         foreach (var enemy in enemies)

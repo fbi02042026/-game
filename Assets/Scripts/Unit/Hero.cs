@@ -565,7 +565,9 @@ public class Hero : UnitBase
             {
                 facingDir = 1;
                 ApplyFacing(facingDir);
-                AdjustFormationLane(dt);
+                // 2026-10-10 主人拍板：清场后不再换道归队（原 AdjustFormationLane 会把玩家
+                // 立刻搬回队形车道，看着像「打完敌人又往上走一步」）。保持击杀时的车道继续推图，
+                // 下一波索敌时由 AdjustLaneTowardTarget 自然并回。
                 if (rb != null)
                     rb.velocity = new Vector2(GetCombatMoveSpeed(), rb.velocity.y);
                 isMoving = true;

@@ -9,6 +9,12 @@ using System.Collections.Generic;
 public partial class BattleUI : MonoBehaviour
 {
     /// <summary>
+    /// 整理阶段那个确认按钮的文案（<b>唯一出口</b>）：创建时与每次显隐都取这一个值，
+    /// 别在两处各写一份 —— 2026-10-11 之前就是两处都写「确定」，改文案漏一处就又对不上。
+    /// </summary>
+    public const string LootConfirmLabel = "确定 · 继续";
+
+    /// <summary>
     /// 美术尚未出拾取确定按钮（旧预制体叫「整理」，新预制体 BackpackPanel 下没有这个节点），
     /// 导致 lootConfirmButton 恒为 null、拾取模式无法确认。这里运行时补一个默认隐藏的按钮，
     /// 显隐仍由 UpdateBackpackGrid 按 BattleLootMode.Active 控制。
@@ -18,7 +24,15 @@ public partial class BattleUI : MonoBehaviour
         if (lootConfirmButton != null) return;
         Transform backpack = FindDeepChildIgnoreCase(transform, "BackpackPanel")
             ?? FindDeepChildIgnoreCase(transform, "Backpack");
-        if (backpack == null) return;
+        if (backpack == null)
+        {
+            // 2026-10-11：这里原来静默 return —— 按钮建不出来，整理阶段就永远点不到「确定」，
+            // `StageClearRewardDirector` 的 while(!lootDone) 一直空转 = 玩家看到的「卡死」。
+            // 铁律：出错必须让主人看见，所以这里打 Error 而不是悄悄过去。
+            Debug.LogError("[BattleUI] 整理阶段「确定」按钮建不出来：BattleUI 下既没有 BackpackPanel " +
+                           "也没有 Backpack 节点 → 玩家无法确认，传送门不会开");
+            return;
+        }
 
         var go = new GameObject("确定", typeof(RectTransform), typeof(Image));
         go.transform.SetParent(backpack, false);
@@ -27,7 +41,7 @@ public partial class BattleUI : MonoBehaviour
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.zero;
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(220f, 76f);
+        rt.sizeDelta = new Vector2(260f, 88f);
 
         var img = go.GetComponent<Image>();
         img.color = new Color(0.16f, 0.12f, 0.09f, 0.95f);
@@ -41,8 +55,10 @@ public partial class BattleUI : MonoBehaviour
         tr.offsetMax = Vector2.zero;
         var tx = tGo.GetComponent<Text>();
         tx.font = GameFonts.GetChinese();
-        tx.text = "确定";
-        tx.fontSize = 30;
+        // 2026-10-11 主人拍板：只写「确定」玩家不知道点了会怎样（主人反馈「到这一步卡死了」）。
+        // 文案写成「确定 · 继续」，说明点了就能往下走。
+        tx.text = LootConfirmLabel;
+        tx.fontSize = 32;
         tx.alignment = TextAnchor.MiddleCenter;
         tx.color = Color.white;
 
@@ -68,23 +84,30 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 把「确定」按<b>当前</b> BackpackPanel 的矩形重摆到面板底边下方 60（面板本地下方，
-    /// 拾取阶段面板收起、这里是空着的）。<b>不写死坐标</b>：竖屏适配（UiLayoutStretch /
-    /// BattleViewportFit）会在运行时把面板重锚成「贴底」、高度也随屏幕变，
-    /// 任何写死的 "BackpackPanel 中心往上 100" 都是预制体时代的坐标，屏一变就落到面板外看不见。
+    /// 把「确定」钉在<b>屏幕</b>（BattleUI 根）底边居中上方 ConfirmLiftY 处 —— 与 BackpackPanel
+    /// 怎么被竖屏适配重锚<b>无关</b>，任何屏型都在可视区内。
+    /// <para>2026-10-11 主人拍板（起因：正式关打完到这一步卡死）。旧实现按 BackpackPanel 的
+    /// 本地矩形算「面板底边再往下 60」，可竖屏适配（UiLayoutStretch / BattleViewportFit）会把面板
+    /// 重锚成贴底 —— 此时 r.yMin≈0，落点 y≈-60 直接掉到屏幕外，玩家根本看不到「确定」，
+    /// 于是 StageClearRewardDirector 那个 <c>while (!lootDone)</c> 永远等不到回调 = 卡死。</para>
     /// 幂等，可反复调用。
     /// </summary>
+    const float ConfirmLiftY = 90f;
+
     void ReanchorLootConfirmButton()
     {
         if (lootConfirmButton == null) return;
         var rt = lootConfirmButton.transform as RectTransform;
-        var parent = rt != null ? rt.parent as RectTransform : null;
-        if (rt == null || parent == null || parent.rect.height <= 1f) return;
-        Rect r = parent.rect;                              // 面板本地坐标（原点在锚点处）
-        rt.anchorMin = Vector2.zero;                       // 锚点锁左下角
-        rt.anchorMax = Vector2.zero;
+        var rootRt = transform as RectTransform;            // BattleUI 根 = 整块战斗 UI
+        if (rt == null || rootRt == null) return;
+
+        // 换父到根节点：不再受面板重锚/改高的影响（按钮自带 overrideSorting Canvas，层级不受影响）。
+        if (rt.parent != rootRt) rt.SetParent(rootRt, false);
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(0f, r.yMin - 60f);
+        rt.anchoredPosition = new Vector2(0f, ConfirmLiftY);
+        rt.SetAsLastSibling();                              // 压在所有同级节点之上，别被遮挡
     }
 
     /// <summary>按节点名自动补全未拖拽的引用</summary>

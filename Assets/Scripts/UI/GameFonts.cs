@@ -78,6 +78,15 @@ public static class GameFonts
     public static Font GetChineseSafe() => GetChinese();
 
     /// <summary>
+    /// 【2026-10-11 主人拍板】多行文本行距下限。
+    /// 主人反馈多处两行字挤成一坨、上下看不出分行（点名看板娘气泡等）→ 统一在本入口抬到下限。
+    /// **只增不减**：预制体里已调得比下限更大的行距保留原样，不会被这次统一压小。
+    /// 单行文本不受影响（lineSpacing 只作用在行与行之间）。
+    /// 这里是全项目「套字体」的唯一出口，所以行距口径也只有这一处，不再各界面各写一遍。
+    /// </summary>
+    public const float MinLineSpacing = 1.3f;
+
+    /// <summary>
     /// 给一整棵 UI 树套字体：数字类控件用 PixelFont，其余用 fusion-pixel。
     /// </summary>
     public static void ApplyToHierarchy(Transform root)
@@ -93,6 +102,8 @@ public static class GameFonts
             // 含中文的控件一律 fusion-pixel（即使名字像数值控件）
             bool useNum = IsNumberText(t) && !HasCjk(t.text);
             t.font = useNum ? num : cn;
+            // 多行行距统一抬到下限（见 MinLineSpacing 注释）
+            if (t.lineSpacing < MinLineSpacing) t.lineSpacing = MinLineSpacing;
         }
     }
 

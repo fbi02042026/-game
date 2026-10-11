@@ -17,9 +17,10 @@ using UnityEngine;
 ///             只有最后结算界面按通过的关卡数量给局外金币**」。
 ///   → 本文件管的就是那笔 **局外金币**：**唯一来源 = 结算界面按本局通过了几关发放**
 ///     （发放出口：`BattleManager.GrantPendingStageGold`，挂在 `PersistBattleGold` 里）。
-///   → 战斗内发的（每关通关的抽奖币 `SlotMachineSystem.GrantStageCoins`）是**局内**的，
-///     归 `SlotMachineDefs`，不归这儿。
-///   金币进商店 / 天赋 / 佣兵，抽奖币只进抽奖。
+///   → 战斗内发的（每关通关的局内金币 `SlotMachineSystem.GrantStageCoins`）是**局内**的，
+///     归 `SlotMachineDefs`，不归这儿。【2026-10-10】载体已换成局内钱包 `BattleManager.currentGold`，
+///     靠 `AddRunGold(n, false)` 保证它带不出去。
+///   局外金币进商店 / 天赋 / 佣兵；局内金币只进战斗（抽奖）。
 /// </summary>
 public static class StageGoldDefs
 {

@@ -101,7 +101,8 @@ public static class AttackRangeTable
         switch (kind)
         {
             case WeaponCombatTable.WeaponKind.Greatsword:
-                return GetPx("weapon_greatsword", 144f);
+                // 【2026-10-11 主人拍板】144 → 120（狂战/重武近战射程统一），与表 weapon_greatsword 同值
+                return GetPx("weapon_greatsword", 120f);
             case WeaponCombatTable.WeaponKind.Polearm:
                 return GetPx("weapon_polearm", 180f);
             case WeaponCombatTable.WeaponKind.Staff:

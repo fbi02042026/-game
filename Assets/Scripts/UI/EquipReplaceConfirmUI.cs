@@ -28,6 +28,13 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     const float TimeoutSec = 60f;
 
     /// <summary>
+    /// 多行文本的上下行距（2026-10-10 主人：「多行字的时候字的上下间距拉开一点」）。
+    /// Unity 默认 1.0，1.3 是明显松一档又不至于散；要再松/再紧改这一个常量。
+    /// 只作用在会折行的文本（Desc / Verdict），单行文本设了也看不出差别。
+    /// </summary>
+    const float MultiLineLineSpacing = 1.3f;
+
+    /// <summary>
     /// 预制体路径 —— 与 <c>EquipReplaceConfirmPrefabBuilder.PrefabPath</c> <b>必须同值</b>。
     /// 改一边忘了另一边 = 运行时加载不到。
     /// </summary>
@@ -148,11 +155,14 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
         if (_title != null) _title.text = "换上新装备吗？";
 
-        bool newBetter = EquipCompare.Compare(newEq, oldEq) > 0;
+        // 2026-10-11 主人拍板：着色判据与 Verdict 文案**同一出口**（EquipCompare.NewBetter）——
+        // 旧写法 newBetter 只看 Compare（品质/星级/强化分），会出现「文案说新的更强、颜色却是橙」的分裂。
+        bool newBetter = EquipCompare.NewBetter(newEq, oldEq);
         if (_verdict != null)
         {
             _verdict.text = EquipCompare.Verdict(newEq, oldEq);
             _verdict.color = newBetter ? new Color(0.55f, 0.95f, 0.60f) : new Color(0.95f, 0.72f, 0.45f);
+            _verdict.lineSpacing = MultiLineLineSpacing;   // 判定文案折行时同样拉开行距
         }
 
         FillColumn(_root.transform, "ColumnNew", newEq);
@@ -177,12 +187,37 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
         string name = eq != null && !string.IsNullOrEmpty(eq.equipName) ? eq.equipName : "（空）";
         SetText(col, "Name", name);
+        // 2026-10-11 主人拍板：稀有度文案走装备自己的真实档位（EquipUiText.RarityName），
+        // 旧写法走 SkillRarityUtil(DraftPool.MapRarity) 会把「史诗(紫)」说成「传说」——
+        // 名字按稀有度上色后就会变成「紫色的传说」，自相矛盾。
+        // 2026-10-11 主人拍板：强化等级为 0 时**不显示「+0」**（主人原话「如果没有加就不要显示+0」）
         SetText(col, "Info", eq == null ? "-"
-            : $"{RarityName(eq)}　★{Mathf.Max(1, eq.star)}　+{Mathf.Max(0, eq.enhanceLevel)}");
+            : eq.enhanceLevel > 0
+                ? $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}　+{eq.enhanceLevel}"
+                : $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}");
         SetText(col, "Desc", eq != null ? DraftPool.FormatEquipDesc(eq) : "");
 
         var infoText = Text_(FindDeep(col, "Info"));
-        if (infoText != null) infoText.color = RarityColor(eq);
+        if (infoText != null && eq != null) EquipUiText.ApplyRarityColor(infoText, eq.rarity);
+
+        // 2026-10-10 主人拍板：左右两列的属性居中显示、属性字放大 ——
+        // 预制体里 Desc 是 19 号左对齐（看着跟旁边居中的 Name/Info 不齐），运行时统一：
+        // Name/Info 24 居中，Desc（主手 / 攻击+N 等属性行）24 号 UpperCenter。不动预制体文件。
+        var nameT = Text_(FindDeep(col, "Name"));
+        if (nameT != null)
+        {
+            nameT.alignment = TextAnchor.MiddleCenter;
+            // 2026-10-11 主人拍板：装备名字的字色跟稀有度一致（与 Info 行同一个色表）
+            if (eq != null) EquipUiText.ApplyRarityColor(nameT, eq.rarity);
+        }
+        if (infoText != null) { infoText.alignment = TextAnchor.MiddleCenter; infoText.fontSize = 24; }
+        var descT = Text_(FindDeep(col, "Desc"));
+        if (descT != null)
+        {
+            descT.alignment = TextAnchor.UpperCenter;
+            descT.fontSize = 24;
+            descT.lineSpacing = MultiLineLineSpacing;   // 多行时行距拉开，别挤成一坨
+        }
 
         // 图标走项目唯一出口，不自己拼路径
         var icon = FindDeep(col, "Icon")?.GetComponent<Image>();
@@ -192,6 +227,69 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             icon.sprite = sp;
             icon.enabled = sp != null;
         }
+
+        // 2026-10-10 主人：新获得的装备图标右上角要有个「新」字 —— 只有 ColumnNew 有，ColumnOld 明确关掉
+        if (columnName == "ColumnNew")
+            EnsureNewBadge(col, icon);
+        else
+            HideNewBadge(col);
+    }
+
+    /// <summary>
+    /// 「新」角标：挂在 ColumnNew 的 Icon 下、骑在图标右上角。
+    /// 【2026-10-11 主人拍板】**不要红底**（主人原话「那个新字不要带红底了 只有一个新字」）→
+    /// 预制体已有 NewMark（红底 Image）就禁掉它的 Image 只留文字；运行时补建也不再建 Image，只建白字黑描边。
+    /// </summary>
+    void EnsureNewBadge(Transform col, Image icon)
+    {
+        if (col == null) return;
+        var exist = FindDeep(col, "NewMark");
+        GameObject mark;
+        if (exist != null)
+        {
+            mark = exist.gameObject;
+            // 预制体自带的红底：整张禁用，只留「新」字
+            var existImg = mark.GetComponent<Image>();
+            if (existImg != null) existImg.enabled = false;
+        }
+        else
+        {
+            if (icon == null) return;
+            var go = new GameObject("NewMark", typeof(RectTransform));
+            go.transform.SetParent(icon.transform, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);   // 图标右上角
+            rt.pivot = new Vector2(1f, 0.5f);
+            rt.anchoredPosition = new Vector2(10f, 8f);          // 骑在角上，略往外偏
+            rt.sizeDelta = new Vector2(51f, 45f);
+
+            var labelGo = new GameObject("Label", typeof(RectTransform), typeof(Text), typeof(Outline));
+            labelGo.transform.SetParent(go.transform, false);
+            var label = labelGo.GetComponent<Text>();
+            label.text = "新";
+            label.fontSize = 26;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = Color.white;
+            label.raycastTarget = false;
+            // 没了红底，白字直接压在图标上会看不清 → 补一圈黑描边（Outline 只描字，不是底）
+            labelGo.GetComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.9f);
+            label.font = GameFonts.GetChinese();
+            if (label.font == null) label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            var lrt = labelGo.GetComponent<RectTransform>();
+            lrt.anchorMin = Vector2.zero;
+            lrt.anchorMax = Vector2.one;
+            lrt.offsetMin = Vector2.zero;
+            lrt.offsetMax = Vector2.zero;
+            mark = go;
+        }
+        mark.SetActive(true);
+        mark.transform.SetAsLastSibling();
+    }
+
+    static void HideNewBadge(Transform col)
+    {
+        var old = FindDeep(col, "NewMark");
+        if (old != null) old.gameObject.SetActive(false);
     }
 
     void Answer(bool replace)
@@ -215,23 +313,10 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
     static Text Text_(Transform t) => t != null ? t.GetComponent<Text>() : null;
 
-    static string RarityName(EquipInstance eq)
-    {
-        if (eq == null) return "无";
-        return SkillRarityUtil.DisplayName(DraftPool.MapRarity(eq.rarity));
-    }
-
-    static Color RarityColor(EquipInstance eq)
-    {
-        if (eq == null) return new Color(0.6f, 0.6f, 0.6f);
-        switch (DraftPool.MapRarity(eq.rarity))
-        {
-            case SkillRarity.Legendary: return new Color(1f, 0.62f, 0.25f);
-            case SkillRarity.Epic: return new Color(0.80f, 0.55f, 1.00f);
-            case SkillRarity.Rare: return new Color(0.42f, 0.72f, 0.98f);
-            default: return new Color(0.85f, 0.85f, 0.88f);
-        }
-    }
+    // 2026-10-11 删除本地 RarityName / RarityColor：
+    // 两者都走 SkillRarityUtil(DraftPool.MapRarity)，把「史诗(紫)」归并显示成「传说」，
+    // 且自己抄了一份色值（与 RarityPalette 对不上）。现在稀有度文案 = EquipUiText.RarityName、
+    // 颜色 = EquipUiText.ApplyRarityColor，全项目一处改。旧实现不留（主人口径：不留开关）。
 
     static Transform FindDeep(Transform root, string name)
     {

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;   // 2026-10-11：ApplyRarityColor 用到 UnityEngine.UI.Text
 
 /// <summary>
 /// 装备弹窗/对比用中文显示（槽位、稀有度、属性名）。
@@ -56,18 +57,19 @@ public static class EquipUiText
         }
     }
 
-    /// <summary>装备弹窗稀有度字色：普通白、稀有蓝、传奇金。</summary>
-    public static Color RarityTextColor(Rarity r)
+    /// <summary>
+    /// 2026-10-11 主人拍板「字的颜色和稀有度一致」：装备名 / 稀有度标签的文字一律按品质着色。
+    ///
+    /// ⚠ 本函数是**装备文字上色的唯一出口**，色值只有一份 = <see cref="RarityPalette.Get(Rarity)"/>
+    /// （普通灰白 / 优秀绿 / 稀有蓝 / 史诗紫 / 传奇橙金）。
+    /// 旧的 <c>RarityTextColor</c> 自己抄了一份色值（稀有蓝 0.35,0.62,1 / 传奇金 1,0.82,0.28），
+    /// 与 RarityPalette 的 0.35,0.68,0.98 / 1,0.72,0.20 对不上 —— 同一件紫装在不同弹窗两个颜色，已删除。
+    /// 新增装备名显示点一律调这里，别再手写色值。
+    /// </summary>
+    public static void ApplyRarityColor(Text t, Rarity r)
     {
-        switch (r)
-        {
-            case global::Rarity.Rare:
-                return new Color(0.35f, 0.62f, 1f, 1f);
-            case global::Rarity.Legendary:
-                return new Color(1f, 0.82f, 0.28f, 1f);
-            default:
-                return Color.white;
-        }
+        if (t == null) return;
+        t.color = RarityPalette.Get(r);
     }
 
     public static string Attr(AttrType t)

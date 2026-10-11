@@ -118,6 +118,18 @@ public static class SkillDraftMeta
         return 1f + (s - 1) * StarDamageStep;
     }
 
+    /// <summary>
+    /// 星级 → 伤害倍率，**步长可覆盖**（1 星 = 1.0）。
+    /// <para>【2026-10-11 主人拍板】天雷裁决削弱后单独定成长曲线：每星只 +10%（表列 <c>starDamageStep</c>），
+    /// 比全局的 +18% 低 —— 别的技能不受影响。<c>step &lt;= 0</c> 时回退全局 <see cref="StarDamageStep"/>。</para>
+    /// </summary>
+    public static float StarDamageMul(int star, float step)
+    {
+        int s = star < 1 ? 1 : star;
+        float k = step > 0f ? step : StarDamageStep;
+        return 1f + (s - 1) * k;
+    }
+
     /// <summary>星级 → 冷却倍率（1 星 = 1.0，越高越短）。</summary>
     public static float StarCooldownMul(int star)
     {

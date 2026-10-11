@@ -178,7 +178,17 @@ public static class PlayerJobBaseStats
         // 物理职业写 0（键照样登记，表示「不会魔法伤害」），不是兜底。
         bool magicJob = IsMagicJob(job);
         W(AttrType.MagicAttack, magicJob ? Mathf.Max(1f, row.BaseAtk + GameConfig.HERO_BASE_ATTACK_OFFSET) : 0f);
-        float ms = GameConfig.BASE_MOVE_SPEED * (row.BaseMoveSpeed / 100f);
+        // 【2026-10-11 主人拍板】玩家移速换算对齐佣兵。
+        // 两边配表**量纲不同**：
+        //   玩家 player_job_base_stats.基础移速 = 40~60 的「百分比」量纲；
+        //   佣兵 merc_roster.MoveSpeed        = 2.8~4.3 的「设计单位」量纲（除 3.5 得倍率）。
+        // 旧换算 /100 → 玩家只有 0.38~0.58，而佣兵是 0.77~1.18 → **玩家只有佣兵的一半**，
+        // 推图时佣兵冲在前面（主人反馈「玩家的移动速度要和佣兵的一致」）。
+        // 改 /50 后玩家 0.77~1.15，与佣兵同区间；职业之间的快慢差异（重武慢 / 游侠快）仍留在配表里。
+        // ⚠ 要再调快慢只改这个除数（或改配表那列）—— 别在 UnitBase 里偷偷乘系数
+        //   （2026-09-28 那条 Hero ×1.1 已按主人这次拍板删掉）。
+        const float MoveSpeedDivisor = 50f;
+        float ms = GameConfig.BASE_MOVE_SPEED * (row.BaseMoveSpeed / MoveSpeedDivisor);
         W(AttrType.MoveSpeed, ms);
         W(AttrType.CritRate, row.CritRate);
         // 2026-09-26 主人拍板：暴击倍率统一 = 2，不再读本表「暴击伤害」列（原 150%~180%）。

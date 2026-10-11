@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -6,6 +7,13 @@ using UnityEngine.UI;
 /// 恢复关弹窗：回复生命（不是体力），一次回复最大生命的 50%。
 /// 预制体：Resources/Prefabs/Battle/RestStagePopup
 /// 结构按仙泉图搭好，你只换 Backdrop / Panel / Illustration / 按钮图即可。
+///
+/// <para>【2026-10-11 主人拍板】加效果 + 接主人自己的恢复美术：<br/>
+/// · 效果：整窗淡入 → 面板弹跳（0.78→1.12→1）→ 插画呼吸脉冲 → 生命数字从回血前滚到回血后；
+///   点「继续冒险 / ×」先淡出再回调（<b>关掉之后才接着走流程</b>，主人原话）。<br/>
+/// · 配图真源 = <c>Resources/Art/UI/关卡/恢复/</c>（恢复体力.png / 背景.png），
+///   与老虎机、关卡图同一个美术目录（主人「配图早就有了，在关卡文件夹里」）。<br/>
+/// · 时间：动画一律用 <c>Time.unscaledDeltaTime</c>（弹窗期间 timeScale=0，用 deltaTime 会整个卡住）。</para>
 /// </summary>
 public class RestStagePopupUI : MonoBehaviour
 {
@@ -31,6 +39,10 @@ public class RestStagePopupUI : MonoBehaviour
     Action _onContinue;
     float _prevTimeScale = 1f;
     bool _healed;
+    bool _open;
+    bool _closing;
+    CanvasGroup _group;
+    float _hpMax;
 
     public bool IsOpen => root != null && root.activeSelf;
 
@@ -149,10 +161,21 @@ public class RestStagePopupUI : MonoBehaviour
         _prevTimeScale = Time.timeScale;
         Time.timeScale = 0f;
 
+        float hpBefore = ReadHeroHp(out _hpMax);
         ApplyHeal();
         GrantRestMaterials();
         AdventureCodex.UnlockWorld("W005");
         RefreshTexts();
+        float hpAfter = ReadHeroHp(out _hpMax);
+
+        // —— 效果：淡入 + 面板弹跳 + 生命数字滚动（2026-10-11 主人要的「做下效果」）——
+        _open = true;
+        _closing = false;
+        StopAllCoroutines();
+        _group = root != null ? root.GetComponent<CanvasGroup>() : null;
+        if (_group == null && root != null) _group = root.AddComponent<CanvasGroup>();
+        if (_group != null) _group.alpha = 0f;
+        if (panel != null) panel.rectTransform.localScale = Vector3.one * 0.78f;
 
         if (closeButton != null)
         {
@@ -168,6 +191,76 @@ public class RestStagePopupUI : MonoBehaviour
         if (root != null) root.SetActive(true);
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
+
+        StartCoroutine(CoOpen());
+        if (hpAfter > hpBefore + 0.01f) StartCoroutine(CoHpRoll(hpBefore, hpAfter));
+    }
+
+    /// <summary>读英雄当前生命与上限（效果里的数字滚动用）。</summary>
+    static float ReadHeroHp(out float max)
+    {
+        max = 0f;
+        var hero = BattleManager.Instance != null ? BattleManager.Instance.hero : null;
+        if (hero == null || hero.attr == null) return 0f;
+        max = hero.attr.GetAttr(AttrType.MaxHp);
+        return hero.currentHp;
+    }
+
+    IEnumerator CoOpen()
+    {
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.unscaledDeltaTime / 0.28f;
+            if (_group != null) _group.alpha = Mathf.Clamp01(t);
+            yield return null;
+        }
+        if (_group != null) _group.alpha = 1f;
+
+        // 弹跳：0.78 → 1.12 → 1
+        float p = 0f;
+        while (p < 1f)
+        {
+            p += Time.unscaledDeltaTime / 0.34f;
+            float u = Mathf.Clamp01(p);
+            float s = 0.78f + 0.34f * Mathf.Sin(u * Mathf.PI * 0.5f);
+            if (u > 0.6f) s = Mathf.Lerp(1.12f, 1f, (u - 0.6f) / 0.4f);
+            if (panel != null) panel.rectTransform.localScale = Vector3.one * s;
+            yield return null;
+        }
+        if (panel != null) panel.rectTransform.localScale = Vector3.one;
+
+        StartCoroutine(CoPulse());
+    }
+
+    /// <summary>插画呼吸 + 状态图标脉冲（弹窗开着就一直跑）。</summary>
+    IEnumerator CoPulse()
+    {
+        while (_open && !_closing)
+        {
+            float k = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 2.4f);
+            if (illustration != null)
+                illustration.rectTransform.localScale = Vector3.one * (1f + k * 0.06f);
+            if (statusIcon != null)
+                statusIcon.rectTransform.localScale = Vector3.one * (0.94f + k * 0.14f);
+            yield return null;
+        }
+    }
+
+    /// <summary>生命数字从回血前滚到回血后，让「回了多少」看得见。</summary>
+    IEnumerator CoHpRoll(float from, float to)
+    {
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.unscaledDeltaTime / 0.6f;
+            float v = Mathf.Lerp(from, to, Mathf.Clamp01(t));
+            if (hpValueText != null)
+                hpValueText.text = $"{Mathf.CeilToInt(v)} / {Mathf.CeilToInt(_hpMax)}";
+            yield return null;
+        }
+        if (hpValueText != null)
+            hpValueText.text = $"{Mathf.CeilToInt(to)} / {Mathf.CeilToInt(_hpMax)}";
     }
 
     /// <summary>给英雄 + 所有存活佣兵各回 50% 最大生命。</summary>
@@ -229,8 +322,36 @@ public class RestStagePopupUI : MonoBehaviour
         if (continueLabel != null) continueLabel.text = "继续冒险";
     }
 
+    /// <summary>
+    /// 玩家点「继续冒险 / ×」：先播淡出，<b>播完才回调</b> ——
+    /// 【2026-10-11 主人拍板】「等玩家关闭回复界面弹窗后再开始走流程」，回调不能抢在动画前面。
+    /// </summary>
     void OnContinue()
     {
+        if (_closing) return;
+        _closing = true;
+        StartCoroutine(CoClose());
+    }
+
+    IEnumerator CoClose()
+    {
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.unscaledDeltaTime / 0.22f;
+            float u = Mathf.Clamp01(t);
+            if (_group != null) _group.alpha = 1f - u;
+            if (panel != null) panel.rectTransform.localScale = Vector3.one * (1f + u * 0.10f);
+            yield return null;
+        }
+
+        _open = false;
+        // 复原现场，免得下次打开带着上次的残影 / 缩放
+        if (_group != null) _group.alpha = 1f;
+        if (panel != null) panel.rectTransform.localScale = Vector3.one;
+        if (illustration != null) illustration.rectTransform.localScale = Vector3.one;
+        if (statusIcon != null) statusIcon.rectTransform.localScale = Vector3.one;
+
         Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
         if (root != null) root.SetActive(false);
         var cb = _onContinue;
@@ -289,11 +410,17 @@ public class RestStagePopupUI : MonoBehaviour
         prt.sizeDelta = new Vector2(620f, 920f);
         prt.anchoredPosition = Vector2.zero;
 
-        // 内衬
+        // 内衬（主人美术：Resources/Art/UI/关卡/恢复/背景.png，没图就保持深色衬底）
         var inner = NewImage(prt, "Inner", new Color(0.10f, 0.12f, 0.18f, 1f));
         Stretch(inner.rectTransform);
         inner.rectTransform.offsetMin = new Vector2(18f, 18f);
         inner.rectTransform.offsetMax = new Vector2(-18f, -18f);
+        var innerSp = Resources.Load<Sprite>("Art/UI/关卡/恢复/背景");
+        if (innerSp != null)
+        {
+            inner.sprite = innerSp;
+            inner.color = Color.white;
+        }
 
         // 关闭
         var closeImg = NewImage(prt, "CloseButton", new Color(0.45f, 0.22f, 0.2f, 1f));
@@ -344,8 +471,9 @@ public class RestStagePopupUI : MonoBehaviour
         illu.rectTransform.offsetMin = new Vector2(8f, 8f);
         illu.rectTransform.offsetMax = new Vector2(-8f, -8f);
         illu.preserveAspect = true;
-        // 可选：Resources 里有图就自动挂上
-        var sp = Resources.Load<Sprite>("Art/UI/RestStage/illustration");
+        // 【2026-10-11 主人「配图早就有了，在关卡文件夹里」】
+        // 恢复关插画真源 = Resources/Art/UI/关卡/恢复/恢复体力.png（旧的 RestStage/illustration 全库没有这张图）。
+        var sp = Resources.Load<Sprite>("Art/UI/关卡/恢复/恢复体力");
         if (sp != null)
         {
             illu.sprite = sp;

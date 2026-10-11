@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_hands_001
   m_EditorClassIdentifier: 
   templateId: equip_hands_001
-  equipName: "\u5E03\u8863"
+  equipName: "布制手套"
   icon: {fileID: 21300000, guid: d78577b088aa44c7bbd11db218de5abd, type: 3}
   iconFileName: New_Cloth_01
   gridWidth: 1

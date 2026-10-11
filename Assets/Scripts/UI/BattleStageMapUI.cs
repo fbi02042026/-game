@@ -88,6 +88,9 @@ public class BattleStageMapUI : MonoBehaviour
 
     public static BattleStageMapUI Ensure()
     {
+        // 【2026-10-11 主人拍板】关卡选择（关卡图 / 老虎机）放专用曲「战后小歇」。
+        // 放在这里 = 每次进关卡图都切一次，静音期间 GameBgm.Play 自己会拦（不抢写 pending），不用再加开关。
+        GameBgm.Play(GameBgm.Track.StageSelect);
         if (Instance != null) return Instance;
 
         var prefab = Resources.Load<GameObject>(PrefabPath);
@@ -409,6 +412,12 @@ public class BattleStageMapUI : MonoBehaviour
         p.button.interactable = on;
         if (on)
         {
+            // 【2026-10-11 主人拍板】石墩**不要跟着放大/缩放**（主人原话「点击石墩的时候旗子放大就行
+            // 石墩不要跟着放大」）→ 屏蔽通用按压反馈（UiButtonPressFeedback 会把按钮压到 0.94 再弹回）。
+            var f = p.button.GetComponent<UiButtonPressFeedback>();
+            if (f == null) f = p.button.gameObject.AddComponent<UiButtonPressFeedback>();
+            f.suppress = true;
+
             int capture = index;
             p.button.onClick.AddListener(() => OnPedestalClicked(capture));
         }
@@ -504,6 +513,36 @@ public class BattleStageMapUI : MonoBehaviour
 
         if (_next == null || index != _next.stageIndex) return;
 
+        // 【2026-10-11 主人拍板】点石墩 → **旗子弹跳放大**作为确认反馈，播完再进关（石墩本身不动）。
+        if (_flow != null) StopCoroutine(_flow);
+        _flow = StartCoroutine(CoPedestalAccept(index));
+    }
+
+    /// <summary>石墩被点中：旗子弹一下（1 → 1.28 → 1）→ 收图进关。期间 _flow 守卫挡重复点击。</summary>
+    IEnumerator CoPedestalAccept(int index)
+    {
+        var p = pedestals[index];
+        Transform flag = null;
+        if (p != null)
+        {
+            if (p.banner != null) flag = p.banner.transform;
+            else if (p.icon != null) flag = p.icon.transform;
+        }
+        if (flag != null)
+        {
+            Vector3 baseScale = flag.localScale;
+            float t = 0f;
+            const float dur = 0.34f;
+            while (t < 1f)
+            {
+                t += Time.unscaledDeltaTime / dur;
+                float k = Mathf.Sin(Mathf.Clamp01(t) * Mathf.PI);   // 0→1→0 的正弦包络
+                flag.localScale = baseScale * (1f + 0.28f * k);
+                yield return null;
+            }
+            flag.localScale = baseScale;
+        }
+
         StopBackdropPulse();
         ClearAllOutlines();
         Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
@@ -516,6 +555,7 @@ public class BattleStageMapUI : MonoBehaviour
         _branchSelectMode = false;
         _candidates.Clear();
         _candidateIndices.Clear();
+        _flow = null;
         cb?.Invoke(stage);
     }
 
@@ -554,21 +594,15 @@ public class BattleStageMapUI : MonoBehaviour
 
     IEnumerator CoBackdropPulse()
     {
-        // 颜色略变深再回来，不规则一点像火把抖动
+        // 【2026-10-11 主人拍板】主人原话「关卡地图闪的有点厉害 别闪了或者闪的慢点」→
+        // 折中：保留氛围但**大幅放慢（旧节奏 ×3~4）+ 减小变暗幅度**，并去掉 0.12~0.18s 的快速频闪。
         while (true)
         {
-            float deep = UnityEngine.Random.Range(0.72f, 0.88f);
-            float toDark = UnityEngine.Random.Range(0.35f, 0.7f);
-            float toLight = UnityEngine.Random.Range(0.4f, 0.9f);
+            float deep = UnityEngine.Random.Range(0.88f, 0.96f);          // 旧 0.72~0.88，暗得更轻
+            float toDark = UnityEngine.Random.Range(1.4f, 2.2f);          // 旧 0.35~0.7
+            float toLight = UnityEngine.Random.Range(1.6f, 2.8f);         // 旧 0.4~0.9
             yield return LerpBackdrop(_backdropBase, _backdropBase * deep, toDark);
             yield return LerpBackdrop(_backdropBase * deep, _backdropBase, toLight);
-            // 偶尔多顿一下
-            if (UnityEngine.Random.value < 0.35f)
-            {
-                float flick = UnityEngine.Random.Range(0.65f, 0.8f);
-                yield return LerpBackdrop(_backdropBase, _backdropBase * flick, 0.12f);
-                yield return LerpBackdrop(_backdropBase * flick, _backdropBase, 0.18f);
-            }
         }
     }
 
@@ -627,7 +661,24 @@ public class BattleStageMapUI : MonoBehaviour
         }
 
         if (pedestals == null) pedestals = new List<PedestalRefs>();
-        if (pedestals.Count < PedestalCount && pedestalRoot != null)
+        // 【2026-10-11 主人报「关卡界面石墩全锁、点不动」】
+        // 根因：BattleStageMap.prefab 里 pedestals 列表被手工填了 10 项，其中 9 项是 {fileID: 0} 空引用，
+        // 于是 pedestals.Count 已经 == PedestalCount(10)，旧判定「Count < 10」永远不成立 →
+        // 不再按 Pedestal_0~9 节点名重绑 → 10 个石墩一个都不认（全当锁死、不可点）。
+        // 修法：只要列表里有空项 / root 丢了，就按节点名重绑一次，别再只看数量。
+        bool needRebind = pedestals.Count < PedestalCount;
+        if (!needRebind)
+        {
+            for (int i = 0; i < pedestals.Count; i++)
+            {
+                if (pedestals[i] == null || pedestals[i].root == null)
+                {
+                    needRebind = true;
+                    break;
+                }
+            }
+        }
+        if (needRebind && pedestalRoot != null)
         {
             pedestals.Clear();
             for (int i = 0; i < PedestalCount; i++)
@@ -696,11 +747,11 @@ public class BattleStageMapUI : MonoBehaviour
 
     static Sprite LoadStageIcon(StageType type)
     {
+        // 【2026-10-11 主人「老虎机的配图早就有了，在关卡文件夹里」】
+        // 关卡类型图标真源 = Resources/Art/UI/关卡/stage_*.png（stage_normal / elite / rest / boss / forge / enchant）。
+        // 旧的两条 StageIcons 路径全库根本没有对应资源，只会取到 null → 界面上一片空，删掉不留第二入口。
         string n = StageRoller.IconName(type);
-        var sp = Resources.Load<Sprite>($"Art/UI/StageIcons/{n}");
-        if (sp == null) sp = Resources.Load<Sprite>($"UI/StageIcons/{n}");
-        if (sp == null) sp = Resources.Load<Sprite>($"Art/UI/关卡/{n}");
-        return sp;
+        return Resources.Load<Sprite>($"Art/UI/关卡/{n}");
     }
 
     // ===== 预制体结构（从下往上：0 在最底）=====
@@ -720,7 +771,9 @@ public class BattleStageMapUI : MonoBehaviour
 
         var bg = NewImage(rootGo.transform, "Backdrop", new Color(0.12f, 0.08f, 0.16f, 1f));
         Stretch(bg.rectTransform);
-        var mapSp = Resources.Load<Sprite>("Art/UI/StageSelect/bg_stage_select");
+        // 【2026-10-11 主人「老虎机没有背景，背景应该是关卡界面」】
+        // 关卡界面背景真源 = Resources/Art/UI/关卡/层级调整组件_0007_背景.png（主人美术目录里的那张）。
+        var mapSp = Resources.Load<Sprite>("Art/UI/关卡/层级调整组件_0007_背景");
         if (mapSp != null)
         {
             bg.sprite = mapSp;

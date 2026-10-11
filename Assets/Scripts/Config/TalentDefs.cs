@@ -494,8 +494,9 @@ public static class TalentDefs
         // optValues 与 SlotMachineDefs.REROLL_PER_TALENT 必须一致，改一处要同步另一处。
         list.Add(HNode(14, "R_LUCK", "幸运提升", RightNodeType.Attr, 30, 3, "",
             new[] { 20, 45, 80 }, AttrKind.Custom, new[] { 3f, 6f, 9f }, "luck", "幸运提升"));
-        // 2026-09-29 新增：R_FUND 初始资金 —— 每局开局的启动抽奖币 +4/级。
-        // 同 R_LUCK，kind=Custom 不走属性系统，由 SlotMachineSystem.EnsureStarterCoins 按等级读。
+        // 2026-09-29 新增：R_FUND 初始资金 —— 每局开局的启动金 +80/级。
+        // 同 R_LUCK，kind=Custom 不走属性系统，由 SlotMachineSystem.RunStarterGold 按等级读
+        // （【2026-10-10】发进局内钱包 currentGold，不再发抽奖币）。
         list.Add(HNode(15, "R_FUND", "初始资金", RightNodeType.Attr, 30, 3, "",
             new[] { 20, 45, 80 }, AttrKind.Custom, new[] { 4f, 8f, 12f }, "fund", "初始资金"));
         return list.ToArray();

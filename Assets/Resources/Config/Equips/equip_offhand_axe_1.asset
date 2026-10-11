@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_offhand_axe_1
   m_EditorClassIdentifier: 
   templateId: equip_offhand_axe_1
-  equipName: "狂战手斧"
+  equipName: "旧手斧"
   icon: {fileID: 0}
   iconFileName: AxeSmall1
   gridWidth: 1

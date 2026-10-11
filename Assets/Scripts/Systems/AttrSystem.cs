@@ -275,9 +275,9 @@ public class AttrSystem
     //   - 不碰任何既有消费点，GetAttr 读到的就是已加成的值
     // ============================================================
 
-    float _buffAtkMul = 1f, _buffAtkUntil = -1f;
-    float _buffDefMul = 1f, _buffDefUntil = -1f;
-    float _buffCritMul = 1f, _buffCritUntil = -1f;
+    float _buffAtkMul = 1f, _buffAtkUntil = -1f, _buffAtkTotal = -1f;
+    float _buffDefMul = 1f, _buffDefUntil = -1f, _buffDefTotal = -1f;
+    float _buffCritMul = 1f, _buffCritUntil = -1f, _buffCritTotal = -1f;
 
     /// <summary>施加一个定时增益。同类型已有生效中的会被覆盖（不叠加）。</summary>
     public void ApplyTimedBuff(AttrType type, float value, bool isPercent, float duration)
@@ -291,9 +291,9 @@ public class AttrSystem
 
         switch (type)
         {
-            case AttrType.Attack:   _buffAtkMul = mul;  _buffAtkUntil = until; break;
-            case AttrType.Defense:  _buffDefMul = mul;  _buffDefUntil = until; break;
-            case AttrType.CritRate: _buffCritMul = mul; _buffCritUntil = until; break;
+            case AttrType.Attack:   _buffAtkMul = mul;  _buffAtkUntil = until; _buffAtkTotal = duration; break;
+            case AttrType.Defense:  _buffDefMul = mul;  _buffDefUntil = until; _buffDefTotal = duration; break;
+            case AttrType.CritRate: _buffCritMul = mul; _buffCritUntil = until; _buffCritTotal = duration; break;
             default: return;   // 其它属性仍走调用方自己的处理（如攻速走 SkillCastService 计时）
         }
     }
@@ -304,6 +304,38 @@ public class AttrSystem
         _buffAtkUntil = -1f;
         _buffDefUntil = -1f;
         _buffCritUntil = -1f;
+        _buffAtkTotal = -1f;
+        _buffDefTotal = -1f;
+        _buffCritTotal = -1f;
+    }
+
+    /// <summary>一条生效中的定时 buff 的只读快照（给 BuffHudUI 画图标 / 倒计时用）。</summary>
+    public struct ActiveTimedBuff
+    {
+        public AttrType type;
+        /// <summary>剩余秒数。</summary>
+        public float remain;
+        /// <summary>本段 buff 的总时长（≤0 = 未知，UI 不画闪烁判定）。</summary>
+        public float total;
+        /// <summary>倍率（1.5 = +50%），给 tooltip / 文案用。</summary>
+        public float mul;
+    }
+
+    /// <summary>
+    /// 把当前生效中的定时 buff 填进 <paramref name="outBuffs"/>（列表由调用方复用，零稳态 GC）。
+    /// 【2026-10-11 主人拍板】buff 要在战斗力右侧挂图标 + 倒计时，数据唯一出口就是这里 ——
+    /// UI 不许自己读 _buffXxxUntil 私有字段另算一套。
+    /// </summary>
+    public void CollectActiveTimedBuffs(System.Collections.Generic.List<ActiveTimedBuff> outBuffs)
+    {
+        outBuffs.Clear();
+        float now = Time.time;
+        if (now < _buffAtkUntil)
+            outBuffs.Add(new ActiveTimedBuff { type = AttrType.Attack, remain = _buffAtkUntil - now, total = _buffAtkTotal, mul = _buffAtkMul });
+        if (now < _buffDefUntil)
+            outBuffs.Add(new ActiveTimedBuff { type = AttrType.Defense, remain = _buffDefUntil - now, total = _buffDefTotal, mul = _buffDefMul });
+        if (now < _buffCritUntil)
+            outBuffs.Add(new ActiveTimedBuff { type = AttrType.CritRate, remain = _buffCritUntil - now, total = _buffCritTotal, mul = _buffCritMul });
     }
 
     float ApplyTimedBuff(AttrType type, float raw)

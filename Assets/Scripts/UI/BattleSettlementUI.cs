@@ -36,6 +36,9 @@ public class BattleSettlementUI : MonoBehaviour
     readonly List<GameObject> _spawnedCells = new List<GameObject>();
     Action _onConfirm;
     BattleRunStats _stats;
+    // 【2026-10-10 主人拍板】MVP 台词不再走全屏 Toast：在立绘右侧放战斗里那个对话框（气泡同款图）。
+    RectTransform mvpSpeechRt;
+    Text mvpSpeechText;
 
     public static void Show(BattleRunStats stats, Action onConfirm)
     {
@@ -155,7 +158,6 @@ public class BattleSettlementUI : MonoBehaviour
         ApplyPortraitAndName();
         ApplyStatValues();
         PopulateRewards();
-        ShowMvpToast();
 
         if (confirmLabel != null)
             confirmLabel.text = "确定";
@@ -171,6 +173,8 @@ public class BattleSettlementUI : MonoBehaviour
             root.SetActive(true);
             transform.SetAsLastSibling();
         }
+        // MVP 台词气泡要在 root 激活、Canvas 布局生效后再定位（要读 PortraitHost 的世界角点）
+        ShowMvpSpeech();
         GameFonts.ApplyToHierarchy(transform);
     }
 
@@ -244,26 +248,105 @@ public class BattleSettlementUI : MonoBehaviour
         "本场最佳：记一笔，回酒馆吹。"
     };
 
-    void ShowMvpToast()
+    /// <summary>MVP 台词文案源：玩家 / 佣兵各一套口径，与气泡展示共用这一个出口。</summary>
+    string ResolveMvpLine()
     {
-        if (_stats == null) return;
+        if (_stats == null) return null;
         string mvpKey = string.IsNullOrEmpty(_stats.MvpKey)
             ? BattleRunStats.PlayerMvpKey
             : _stats.MvpKey;
-        string line;
         if (mvpKey == BattleRunStats.PlayerMvpKey)
+            return PlayerMvpLines[Mathf.Abs(_stats.Chapter) % PlayerMvpLines.Length];
+        return MercLineTable.Pick(mvpKey, MercLineTable.Scene.Mvp);
+    }
+
+    /// <summary>
+    /// 【2026-10-10 主人拍板】MVP 台词用**战斗里那个对话框**（StoryProps.SpeechBubble，与战斗头顶气泡同图），
+    /// 摆在结算立绘（头像）右侧 —— 不再走全屏 Toast 飘字。
+    /// </summary>
+    void ShowMvpSpeech()
+    {
+        string line = ResolveMvpLine();
+        if (string.IsNullOrEmpty(line)) return;
+
+        EnsureMvpSpeechNode();
+        if (mvpSpeechRt == null || mvpSpeechText == null)
         {
-            int idx = Mathf.Abs(_stats.Chapter) % PlayerMvpLines.Length;
-            line = PlayerMvpLines[idx];
+            // 不静默：面板结构对不上要让主人看见（不回退 Toast 旧路）
+            Debug.LogError("[BattleSettlement] MVP 台词气泡节点创建失败，本局结算不显示台词");
+            return;
+        }
+
+        // 自适应：与战斗气泡同一套 SpeechBubbleFit（字多等比放大，最多 2 倍）
+        SpeechBubbleFit.Apply(mvpSpeechRt, mvpSpeechText, line, new Vector2(240f, 107f));
+    }
+
+    /// <summary>找/建 MVP 台词气泡节点（挂在 Panel 下、立绘右缘外侧）。预制体没摆就运行时补，不回头改预制体。</summary>
+    void EnsureMvpSpeechNode()
+    {
+        if (mvpSpeechRt != null) return;
+        Transform panelTf = panel != null ? panel.transform
+            : (root != null ? FindDeep(root.transform, "Panel") : null);
+        if (panelTf == null) return;
+
+        var existing = FindDeep(panelTf, "MvpSpeech");
+        if (existing == null)
+        {
+            var go = new GameObject("MvpSpeech", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(panelTf, false);
+            var bg = go.GetComponent<Image>();
+            // 战斗里那个对话框的真源：StoryProps.SpeechBubble（Resources/Story/Props/speech_bubble）
+            bg.sprite = StoryProps.Get(StoryProps.SpeechBubble);
+            bg.raycastTarget = false;
+            if (bg.sprite == null)
+                bg.color = new Color(0.93f, 0.90f, 0.86f, 0.96f);   // 缺图兜底浅底，别让白字糊在暗面板上
+            bg.type = Image.Type.Simple;
+
+            var textGo = new GameObject("Text", typeof(RectTransform));
+            textGo.transform.SetParent(go.transform, false);
+            mvpSpeechText = textGo.AddComponent<Text>();
+            mvpSpeechText.font = GameFonts.GetChinese();
+            mvpSpeechText.fontSize = 22;
+            mvpSpeechText.color = new Color(0.28f, 0.28f, 0.30f, 1f);   // 气泡浅底 → 深色字（与战斗气泡一致）
+            mvpSpeechText.alignment = TextAnchor.MiddleCenter;
+            mvpSpeechText.horizontalOverflow = HorizontalWrapMode.Wrap;
+            mvpSpeechText.verticalOverflow = VerticalWrapMode.Overflow;
+            mvpSpeechText.raycastTarget = false;
+            var tr = mvpSpeechText.rectTransform;
+            tr.anchorMin = Vector2.zero;
+            tr.anchorMax = Vector2.one;
+            tr.offsetMin = new Vector2(24f, 20f);
+            tr.offsetMax = new Vector2(-24f, -14f);
+            existing = go.transform;
         }
         else
-            line = MercLineTable.Pick(mvpKey, MercLineTable.Scene.Mvp);
+        {
+            mvpSpeechText = existing.Find("Text")?.GetComponent<Text>();
+        }
 
-        if (string.IsNullOrEmpty(line)) return;
-        if (UIManager.Instance != null)
-            UIManager.Instance.ShowToast(line);
-        else
-            GlobalToastUI.Show(line);
+        mvpSpeechRt = existing as RectTransform;
+        if (mvpSpeechRt == null) return;
+
+        // 位置：立绘（头像）右缘外侧、顶部往下一点。
+        // 用 PortraitHost 的**世界角点**反解到 Panel 本地坐标，不猜真实预制体的 anchor/pivot（主人预制体为准）。
+        mvpSpeechRt.SetAsLastSibling();   // 压在统计面板之上
+        var panelRt = panelTf as RectTransform;
+        Transform portraitTf = portraitImage != null ? portraitImage.transform
+            : FindDeep(panelTf, "PortraitHost");
+        var prt = portraitTf as RectTransform;
+        if (prt != null && panelRt != null && prt != mvpSpeechRt)
+        {
+            var corners = new Vector3[4];
+            prt.GetWorldCorners(corners);          // 0左下 1左上 2右上 3右下
+            Vector2 rightTopLocal = panelRt.InverseTransformPoint(corners[2]);
+            mvpSpeechRt.anchorMin = mvpSpeechRt.anchorMax = new Vector2(0f, 1f);
+            mvpSpeechRt.pivot = new Vector2(0f, 1f);
+            // Panel 本地系里，锚(0,1)的参照点 = rect 左上角（rect.xMin, rect.yMax）
+            mvpSpeechRt.anchoredPosition = new Vector2(
+                rightTopLocal.x - panelRt.rect.xMin + 6f,
+                rightTopLocal.y - panelRt.rect.yMax - 24f);
+        }
+        mvpSpeechRt.sizeDelta = new Vector2(240f, 107f);
     }
 
     void ApplyPortraitAndName()

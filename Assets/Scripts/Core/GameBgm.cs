@@ -12,7 +12,8 @@ using UnityEngine;
 /// · Audio/BGM/bgm_boss     —— 首领战
 /// · Audio/BGM/bgm_special  —— 恢复/锻造/附魔关
 /// · Audio/BGM/bgm_intro    —— 开头引导剧情（城镇开场，与战斗内剧情曲分开）
-/// · Audio/BGM/bgm_story    —— 战斗内剧情对话
+/// · Audio/BGM/bgm_story    —— 战斗内剧情对话（2026-10-11 主人换成「战后余息.mp3」）
+/// · Audio/BGM/bgm_stage_select —— 关卡选择 / 关卡图 / 老虎机（2026-10-11 主人给的新曲「战后小歇.mp3」）
 /// Loading / 片头等演出期间强制静音；结束后再按当前场景/关卡切回来。
 /// </summary>
 public static class GameBgm
@@ -27,7 +28,9 @@ public static class GameBgm
         Boss,
         Special,
         Story,
-        Intro
+        Intro,
+        /// <summary>【2026-10-11 主人拍板】关卡选择（关卡图 / 老虎机）专用曲：战后小歇.mp3。</summary>
+        StageSelect
     }
 
     const string ResRoot = "Audio/BGM/";
@@ -43,7 +46,8 @@ public static class GameBgm
         { Track.Boss, "bgm_boss" },
         { Track.Special, "bgm_special" },
         { Track.Story, "bgm_story" },
-        { Track.Intro, "bgm_intro" }
+        { Track.Intro, "bgm_intro" },
+        { Track.StageSelect, "bgm_stage_select" }
     };
 
     static AudioSource _a;

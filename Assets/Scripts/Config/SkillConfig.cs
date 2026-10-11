@@ -23,6 +23,10 @@ public class SkillConfig : ScriptableObject
     public float baseDamage = 0f;
     public float cooldown = 0.1f;
     public float aoeRadius = 4f;
+    [Tooltip("AOE / 连锁单次最多命中几个目标。0 = 不限（半径内全体通吃，旧行为）")]
+    public int aoeMaxTargets = 0;
+    [Tooltip("星级伤害步长，覆盖全局 SkillDraftMeta.StarDamageStep（0.18）。<=0 = 用全局")]
+    public float starDamageStep = 0f;
     public int projectileCount = 1;
     public float projectileSpeed = 48f;
 
@@ -53,6 +57,8 @@ public class SkillConfig : ScriptableObject
             projectileCount = projectileCount,
             projectileSpeed = projectileSpeed,
             aoeRadius = aoeRadius,
+            aoeMaxTargets = aoeMaxTargets,
+            starDamageStep = starDamageStep,
             // 治疗/增益数值也要跟着走：星级乘数作用在这份拷贝上，不写回 SkillConfig 缓存
             healBase = healBase,
             healPercentOfMax = healPercentOfMax,

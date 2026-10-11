@@ -673,7 +673,55 @@ public class DailyLoginUI : MonoBehaviour
     public void Hide()
     {
         if (_root != null) _root.SetActive(false);
+        // 【2026-10-10 主人要求】「登录界面关了后应该回到主页 不应该还是天赋」——
+        // 关掉登录时若人还停在天赋页，顺手把天赋页收掉，让玩家回到城镇主界面。
+        if (TalentUI.Instance != null && TalentUI.Instance.IsOpen)
+            TalentUI.Instance.Hide();
     }
+
+    // ============================================================
+    // 【2026-10-10 主人要求】弹出时机：等玩家回到主界面再弹
+    // 主人原话「当玩家返回主界面的时候再弹出每日登录」。
+    // 以前是进 Town 就弹 —— 引导刚把玩家带进天赋页时，登录会盖在天赋页上，
+    // 关掉又还停在天赋页（主人原话「登录界面关了后应该回到主页 不应该还是天赋」）。
+    // 现在改为：只登记，等天赋页关了（= 回到主界面）才真正打开。
+    // ============================================================
+
+    static bool _pendingShow;
+    static bool _waitingIdle;
+
+    /// <summary>登记「有可领的每日登录」，回到主界面时再弹（不在这里直接开）。</summary>
+    public static void RequestShowOnMainUi()
+    {
+        var ui = Ensure();
+        if (ui == null) return;
+        _pendingShow = true;              // 静态字段：不能用实例引用访问（CS0176）
+        if (!_waitingIdle)
+        {
+            // 建好先收起：真正什么时候显示由 CoShowWhenMainUiIdle 决定（回到主界面才开）
+            if (ui._root != null) ui._root.SetActive(false);
+            ui.StartCoroutine(ui.CoShowWhenMainUiIdle());
+        }
+    }
+
+    System.Collections.IEnumerator CoShowWhenMainUiIdle()
+    {
+        _waitingIdle = true;
+        while (_pendingShow)
+        {
+            if (!TalentPageOpen())          // 天赋页关了 = 回到主界面
+            {
+                _pendingShow = false;
+                Open();
+                break;
+            }
+            yield return new WaitForSeconds(0.25f);
+        }
+        _waitingIdle = false;
+    }
+
+    /// <summary>天赋页是否还开着（挡着主界面）。只判这一种：主人反馈的场景就是天赋页。</summary>
+    static bool TalentPageOpen() => TalentUI.Instance != null && TalentUI.Instance.IsOpen;
 
     /// <summary>按面板实际宽度重排 8 格与三条横带（逻辑宽 576~720 浮动，必须运行时算）。</summary>
     void Layout()

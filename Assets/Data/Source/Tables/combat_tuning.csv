@@ -47,5 +47,9 @@ BOSS_ENRAGE_ATK_SPEED_MUL,1.5,狂暴攻速倍率（>1 更快，攻击间隔 ÷�
 MONSTER_NORMAL_SKILL_DAMAGE_MUL,0.55,普通远程小怪技能伤害折扣
 MONSTER_SKILL_PROJECTILE_SPEED_MUL,0.138,怪物技能弹道速度倍率（勿随意改快）
 # ---- 精英 / Boss 体型倍率 ----
-ELITE_SCALE_MULTIPLIER,1.3,精英体型倍率（相对普通怪）
-BOSS_SCALE_MULTIPLIER,1.6,Boss 体型倍率（相对普通怪）
+# 【2026-10-10 主人拍板】精英 1.3 → 2.0（主人原话「精英的大小应该放大几倍」）；Boss 等比 1.6 → 2.6，保持 Boss > 精英。
+ELITE_SCALE_MULTIPLIER,2.0,精英体型倍率（相对普通怪）
+BOSS_SCALE_MULTIPLIER,2.6,Boss 体型倍率（相对普通怪）
+# 【2026-10-10 主人拍板】引导关精英固定精灵：1 Forest 第 7 号 = 树精（近战大个子）。
+# 主人反馈「精英是个蘑菇，换个其他的怪」—— 不许再用蘑菇当精英。
+TUTORIAL_ELITE_SPRITE_ID,7,引导关精英固定精灵编号（Forest-07 树精）

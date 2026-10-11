@@ -36,6 +36,15 @@ public static class BattleLoadingOverlay
         _ui?.SetTip(tip);
     }
 
+    /// <summary>
+    /// 按章节给本次 Loading 换背景图（2026-10-11 主人拍板：每章一张，打哪章显示哪章）。
+    /// 必须在 <see cref="Show"/> 之后调 —— Show 每次都会重建实例，图会回到预制体默认那张。
+    /// </summary>
+    public static void SetChapterBackdrop(int chapter)
+    {
+        _ui?.SetChapterBackdrop(chapter);
+    }
+
     public static bool IsShowing => _ui != null && _ui.gameObject.activeSelf;
 
     public static string CurrentTip => _ui != null ? _ui.CurrentTip : "";

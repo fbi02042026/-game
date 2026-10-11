@@ -245,7 +245,8 @@ public static class AdventureLogMileage
         if (r.EnchantStone > 0) parts.Add($"附魔石×{r.EnchantStone}");
         if (r.TalentPoint > 0) parts.Add($"天赋石×{r.TalentPoint}");
         if (!string.IsNullOrEmpty(r.TitleId)) parts.Add("称号·传说记录者");
-        if (level == 2) parts.Add("暮火之杖");
+        // 2026-10-11：奖励预览的名字跟实际发到手上的装备同名（带「稀有·」前缀）
+        if (level == 2) parts.Add(SpecialWeapons.InstanceName);
         if (parts.Count == 0) return r.Label;
         return r.Label + "：" + string.Join("，", parts);
     }

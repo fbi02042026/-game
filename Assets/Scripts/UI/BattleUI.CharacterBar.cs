@@ -171,7 +171,9 @@ public partial class BattleUI : MonoBehaviour
         if (mercIcon == null && mercSlot1.portraitPlaceholder != null)
             mercSlot1.portraitPlaceholder.SetActive(false);
         float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-        string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercNickname;
+        // 2026-10-11 主人拍板：佣兵名字统一 —— 退路也走**真名**，不再退回昵称（小红），
+        // 否则头像栏与场景头顶名又各写一份（主人反馈「抽奖提示米娅 / 场景小红 / 头像游侠」）。
+        string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercDisplayName;
         mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
     }
 
@@ -209,7 +211,9 @@ public partial class BattleUI : MonoBehaviour
         if (mercs == null || mercs.Count == 0 || mercs[0] == null) return;
         var m = mercs[0];
         float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-        string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercNickname;
+        // 2026-10-11 主人拍板：佣兵名字统一 —— 退路也走**真名**，不再退回昵称（小红），
+        // 否则头像栏与场景头顶名又各写一份（主人反馈「抽奖提示米娅 / 场景小红 / 头像游侠」）。
+        string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercDisplayName;
         mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
         mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(0) : 0f);
     }
@@ -269,7 +273,25 @@ public partial class BattleUI : MonoBehaviour
             if (index < activeMercs.Count && activeMercs[index] != null && !string.IsNullOrEmpty(activeMercs[index].hireId))
                 hireId = activeMercs[index].hireId;
             Sprite icon = MercPortraitSprites.GetHead(hireId) ?? MercPortraitSprites.GetHead(id) ?? (mm != null ? mm.GetIcon(id) : null);
+            // 【只用于职业徽标】四分类徽标要的是职业（防御/恢复/法术/物攻），不是名字。
             string job = mm != null ? mm.GetJobName(id) : id;
+            // 2026-10-11 主人拍板：头像栏名字用**真名**（马库斯），不再显示职业名（剑盾卫士）。
+            // 主人反馈「佣兵的名字怎么还是没有统一」—— 场景头顶名显示真名、头像栏显示职业名，两边各写一份。
+            // 真源优先级：在场单位 DisplayName（与头顶名同一个出口）→ 花名册 Name（单位已阵亡/未生成时）。
+            // 真源缺名字 → fail closed：LogError 报出来，不拿职业名 / 编号悄悄顶上（铁律 14）。
+            string mercName = null;
+            if (index < activeMercs.Count && activeMercs[index] != null)
+                mercName = activeMercs[index].DisplayName;
+            if (string.IsNullOrEmpty(mercName)
+                && MercRosterDefs.TryGetByAssetId(id, out var rosterDef)
+                && !string.IsNullOrEmpty(rosterDef.Name))
+                mercName = rosterDef.Name;
+            if (string.IsNullOrEmpty(mercName))
+            {
+                Debug.LogError($"[BattleUI] 佣兵 {id}（hireId={hireId}）花名册没名字，头像栏名字留空"
+                               + "—— 去 merc_roster.csv 补 Name，别拿职业名顶替");
+                mercName = string.Empty;
+            }
             slot.SetPortrait(icon);
             // 头像框按本佣兵稀有度换（普通灰白 / 稀有蓝 / 传奇橙金）
             slot.SetFrame(MercHireSession.LoadPortraitFrame(ResolveMercRarity(id, hireId)));
@@ -282,14 +304,14 @@ public partial class BattleUI : MonoBehaviour
             {
                 var m = activeMercs[index];
                 float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-                slot.UpdateSlot(job, m.mercLevel, m.currentHp, maxHp);
+                slot.UpdateSlot(mercName, m.mercLevel, m.currentHp, maxHp);
             }
             else
             {
                 // 出战名单有占位但单位未生成（绝大多数就是<b>已阵亡</b>）：也不涨蓝条
                 // 【2026-10-07 主人拍板】阵亡不再 ShowEmpty 清成空框 —— 头像 / 职业 icon 保留，整槽压暗（变灰）。
                 slot.SetEnergyEnabled(false);
-                slot.UpdateSlot(job, 1, 0, 0);
+                slot.UpdateSlot(mercName, 1, 0, 0);
                 slot.SetFallen(true);
             }
         }

@@ -7,8 +7,17 @@ using UnityEngine;
 public static class SpecialWeapons
 {
     public const string TwilightStaffId = "weapon_twilight_staff";
+    /// <summary>模板纯名（不带稀有度前缀）。只用于给模板 / 贴图对齐用，**不要拿它当装备显示名**。</summary>
     public const string DisplayName = "暮火之杖";
     public const string GrantKey = "special:twilight_staff";
+
+    /// <summary>
+    /// 2026-10-11 主人拍板：「以后都统一这种命名规则，不管是什么」——
+    /// 剧情 / 特殊武器也一律 = 稀有度前缀 + 名字，暮火之杖不再例外。
+    /// 实例显示名走这里（<see cref="WeaponAffixSystem.RarityPrefix"/> 是全项目唯一出口），
+    /// 别再直接拿 <see cref="DisplayName"/>，否则背包里只有它一件没前缀、看着像低一档。
+    /// </summary>
+    public static string InstanceName => WeaponAffixSystem.RarityPrefix(Rarity.Rare) + DisplayName;
 
     /// <summary>第一章全体怪物伤害倍率。</summary>
     public const float Chapter1DamageMul = 1.4f;
@@ -93,7 +102,7 @@ public static class SpecialWeapons
         var tpl = EnsureTwilightTemplate();
         var inst = EquipInstance.GenerateFromTemplate(tpl, 0, Mathf.Max(1, heroLevel));
         inst.rarity = Rarity.Rare;
-        inst.equipName = DisplayName;
+        inst.equipName = InstanceName;
         inst.templateId = TwilightStaffId;
         return inst;
     }
@@ -117,14 +126,16 @@ public static class SpecialWeapons
         // 2026-09-15：装备不再进背包，直接穿上（换下来的自动分解）
         if (!GridBackpackSystem.Instance.TryEquipDirect(inst))
         {
+            // 2026-10-11：Toast 里的名字跟装备实际显示名保持一致（带「稀有·」前缀），
+            // 写死「暮火之杖」会出现「背包里叫稀有·暮火之杖、Toast 里叫暮火之杖」的错位。
             if (showToast)
-                UIManager.Instance?.ShowToast("无法装备「暮火之杖」");
+                UIManager.Instance?.ShowToast($"无法装备「{inst.equipName}」");
             return false;
         }
 
         data.logMileageGrantedKeys.Add(GrantKey);
         if (showToast)
-            UIManager.Instance?.ShowToast("获得过渡武器「暮火之杖」：第一章森林怪伤害提升");
+            UIManager.Instance?.ShowToast($"获得过渡武器「{inst.equipName}」：第一章森林怪伤害提升");
 
         SaveSystem.Instance.Save();
         RedDot.RefreshCommon();
@@ -150,17 +161,7 @@ public static class SpecialWeapons
         return IsTwilightStaffEquipped() ? FlatFireOnHit : 0f;
     }
 
-    static float _lastFlavorToastTime = -99f;
-
-    /// <summary>第一章装备暮火击杀：偶尔 Toast「暮火正旺！」。</summary>
-    public static void TryFlavorToastOnKill()
-    {
-        if (!IsTwilightStaffEquipped()) return;
-        int ch = BattleManager.Instance != null ? BattleManager.Instance.CurrentChapter : 0;
-        if (ch != 1) return;
-        if (Time.unscaledTime - _lastFlavorToastTime < 6f) return;
-        if (Random.value > 0.35f) return;
-        _lastFlavorToastTime = Time.unscaledTime;
-        UIManager.Instance?.ShowToast("暮火正旺！");
-    }
+    // 2026-10-11 主人拍板：删除击杀 Toast「暮火正旺！」——玩家看不懂（「暮火」是暮光之杖的设定词，
+    // 界面上没有任何地方告诉玩家这把杖叫暮火），击杀弹这句只会让人以为是 bug。
+    // 原 TryFlavorToastOnKill() 与调用点（BattleManager.cs 击杀处理）已整段删除，不留开关。
 }

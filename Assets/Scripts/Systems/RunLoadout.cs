@@ -329,9 +329,9 @@ public static class RunLoadout
 
     /// <summary>
     /// 本局身上**有没有**技能（一个都算没有）。
-    /// 真源 = 这一份；「本局第一次拿到技能要给本命技」的判定只认它
-    ///（见 <c>SlotMachineSystem.BuildGuaranteedSkillCard</c>）。
-    /// 2026-10-05：正式关改纯随机后，保底不再挂在「第几抽」这个序号上，改判这个。
+    /// 真源 = 这一份；「本局身上有没有技能」的判定只认它。
+    /// 【2026-10-11 主人拍板】原来挂在它上面的「第一次拿到技能 = 白送职业初始技能」保底已删除
+    ///（原 SlotMachineSystem.BuildGuaranteedSkillCard），现在它只用来判空 / 判满。
     /// </summary>
     public static bool HasAnySkill => _data?.skills != null && _data.skills.Count > 0;
 

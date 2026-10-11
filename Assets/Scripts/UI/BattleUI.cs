@@ -158,6 +158,8 @@ public partial class BattleUI : MonoBehaviour
         }
         RebindAfterSystemsReady();
         RefreshBattleHud();
+        // 【2026-10-11 主人拍板】buff 图标条挂到玩家头像「战斗力」右侧（数据出口 AttrSystem.CollectActiveTimedBuffs）
+        BuffHudUI.Ensure(playerSlot);
         GameFonts.ApplyToHierarchy(transform);
         // Canvas 尺寸这时才是最终值，越界判断必须放在这之后
         ClampCharacterBarInsideParent();
@@ -185,6 +187,7 @@ public partial class BattleUI : MonoBehaviour
         _liveBarTimer = 0f;
         TickRunSkillSlots();      // 玩家 4 个被动技槽
         TickMercSkillSlots();     // 佣兵自带技能槽（角色卡内 skill 节点）
+        BuffHudUI.Tick();         // 【2026-10-11 主人拍板】战斗力右侧 buff 条（倒计时 / 快到期闪烁）
         RefreshLiveBars();
         RefreshShieldBars();      // 蓝色盾条（有护盾时才显形）
     }
@@ -271,9 +274,10 @@ public partial class BattleUI : MonoBehaviour
             BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0);
         if (BattleManager.Instance != null && BattleManager.Instance.currentStage != null)
             stageIdx = BattleManager.Instance.currentStage.stageIndex;
+        // 【2026-10-10 主人拍板】战斗 HUD 显示的就是**局内钱包** currentGold，
+        // 城镇金币不带进战斗 → 这里绝不能拿 save.totalGold 顶上（开局 0 时顶成城镇老本，
+        // 玩家会以为带着几万块进战斗，抽奖扣的却是局内那点钱）。
         long gold = BattleManager.Instance != null ? BattleManager.Instance.currentGold : 0;
-        var save = SaveSystem.Instance?.Data;
-        if (save != null && gold <= 0) gold = save.totalGold;
 
         UpdateStageInfo(chapter, stageIdx, diff, gold);
         ApplySoloBattleHud();

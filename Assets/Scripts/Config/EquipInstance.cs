@@ -108,7 +108,10 @@ public class EquipInstance
             if (!template.isAnchor)
                 WeaponAffixSystem.ApplyWeaponRoll(inst);
             else
-                inst.equipName = EquipNameGen.DisplayName(template);
+                // 2026-10-11 主人拍板「以后都统一这种命名规则，不管是什么」：
+                // 锚点装备（初始装）不走词条命名，但稀有度前缀照样要加，不能成为唯一的例外。
+                inst.equipName = WeaponAffixSystem.RarityPrefix(inst.rarity)
+                                 + EquipNameGen.DisplayName(template);
             return inst;
         }
 
@@ -129,7 +132,8 @@ public class EquipInstance
         if (!template.isAnchor)
             ArmorAffixSystem.ApplyArmorRoll(inst);
         else
-            inst.equipName = EquipNameGen.DisplayName(template);
+            inst.equipName = WeaponAffixSystem.RarityPrefix(inst.rarity)
+                             + EquipNameGen.DisplayName(template);
         return inst;
     }
 

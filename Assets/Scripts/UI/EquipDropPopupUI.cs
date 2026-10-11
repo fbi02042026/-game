@@ -298,11 +298,16 @@ public class EquipDropPopupUI : MonoBehaviour
                 if (eq.icon == null)
                     Debug.LogWarning($"[EquipDropPopup] 卡片{i}无图标 name={eq.equipName} file={eq.template?.iconFileName}");
             }
-            if (c.name != null) c.name.text = EquipUiText.EquipTitleWithHand(eq);
+            // 2026-10-11 主人拍板：名字的字色跟稀有度走（唯一出口 EquipUiText.ApplyRarityColor）
+            if (c.name != null)
+            {
+                c.name.text = EquipUiText.EquipTitleWithHand(eq);
+                EquipUiText.ApplyRarityColor(c.name, eq.rarity);
+            }
             if (c.meta != null)
             {
                 c.meta.text = EquipUiText.RarityName(eq.rarity);
-                c.meta.color = EquipUiText.RarityTextColor(eq.rarity);
+                EquipUiText.ApplyRarityColor(c.meta, eq.rarity);
             }
             if (c.attrs != null)
             {
@@ -494,7 +499,7 @@ public class EquipDropPopupUI : MonoBehaviour
             string attrs = FormatAttrs(worn);
             // 不再用 “攻击 +1” 占位（会误导对比，看起来像真的加 1 攻击）；
             // 无附加属性时 FormatAttrs 已返回「（无额外属性）」，如实显示即可。
-            SetCompareContent(wornName, EquipUiText.RarityName(worn.rarity), attrs);
+            SetCompareContent(wornName, EquipUiText.RarityName(worn.rarity), attrs, worn.rarity);
             EnsureEquipIcon(worn);
             var compareIcon = FindCompareIcon(comparePanel);
             if (compareIcon != null)
@@ -542,10 +547,19 @@ public class EquipDropPopupUI : MonoBehaviour
         return null;
     }
 
-    void SetCompareContent(string nameOrBody, string meta, string attrs)
+    /// <param name="rarity">非空时对比区名字 / 稀有度行的字色跟稀有度走（2026-10-11 主人拍板）。</param>
+    void SetCompareContent(string nameOrBody, string meta, string attrs, Rarity? rarity = null)
     {
-        if (compareName != null) compareName.text = nameOrBody ?? "";
-        if (compareMeta != null) compareMeta.text = meta ?? "";
+        if (compareName != null)
+        {
+            compareName.text = nameOrBody ?? "";
+            if (rarity.HasValue) EquipUiText.ApplyRarityColor(compareName, rarity.Value);
+        }
+        if (compareMeta != null)
+        {
+            compareMeta.text = meta ?? "";
+            if (rarity.HasValue) EquipUiText.ApplyRarityColor(compareMeta, rarity.Value);
+        }
         if (compareAttrs != null)
             compareAttrs.text = attrs ?? "";
         // 仅当 CompareBody 是独立节点时写组合文案

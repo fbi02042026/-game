@@ -62,56 +62,32 @@ public static class LoadingFlavorText
     static int[] _bag;
     static int _cursor;
 
-    /// <summary>取一条杂记；一轮内不重复，走完自动重洗。</summary>
+    /// <summary>取一条杂记。【2026-10-10 主人拍板】纯随机（只避开与上一条相同）——
+    /// 原来的「一轮洗牌袋」有轮流感，反复进 Loading 会像按顺序背句子（主人原话：不要轮流播，随机播放）。</summary>
     public static string Next()
     {
         if (Lines == null || Lines.Length == 0) return "";
         if (Lines.Length == 1) return Lines[0];
 
-        if (_bag == null || _bag.Length != Lines.Length)
-            Reshuffle();
-
-        // 一轮走完（或上次洗牌的末尾刚好和这次开头撞上）→ 重洗，保证不连续重复
-        if (_cursor >= _bag.Length)
-            Reshuffle();
-
-        int idx = _bag[_cursor];
-        string s = Lines[idx];
-        _cursor++;
+        int idx = Random.Range(0, Lines.Length);
+        if (idx == _lastServed)
+            idx = (idx + 1) % Lines.Length;   // 只保证不连着两句一样
         _lastServed = idx;
-        return s;
+        return Lines[idx];
     }
 
-    /// <summary>重开一局 / 重新进 Loading 时调用，避免每次都从同一条开始。</summary>
+    /// <summary>重开一局 / 重新进 Loading 时调用（保留：清掉上局最后一条的记忆）。</summary>
     public static void Reset()
     {
         _bag = null;
         _cursor = 0;
+        _lastServed = -1;
     }
 
-    static void Reshuffle()
-    {
-        _bag = new int[Lines.Length];
-        for (int i = 0; i < _bag.Length; i++) _bag[i] = i;
-        // Fisher–Yates
-        for (int i = _bag.Length - 1; i > 0; i--)
-        {
-            int j = Random.Range(0, i + 1);
-            int tmp = _bag[i];
-            _bag[i] = _bag[j];
-            _bag[j] = tmp;
-        }
-        // 洗完若首条与上一条结尾重复（一轮刚结束时可能撞），把首条换到后面
-        if (_bag.Length > 1 && _lastServed >= 0 && _bag[0] == _lastServed)
-        {
-            int swap = Random.Range(1, _bag.Length);
-            int tmp = _bag[0];
-            _bag[0] = _bag[swap];
-            _bag[swap] = tmp;
-        }
-        _cursor = 0;
-    }
+    // ⚠【2026-10-10 已删除】洗牌袋（Reshuffle + 重复的 _bag/_cursor 定义）随「轮流播」口径一起删除。
+    //   旧实现是一轮洗牌按顺序发，反复进 Loading 会像按顺序背句子；现在 Next() 纯随机，
+    //   这两个字段只剩 Reset() 里清一下，别再照着旧注释把它们当成还在用的东西。
 
-    /// <summary>上一条已发出的杂记下标，供下次洗牌避开「一轮首尾撞车」。</summary>
+    /// <summary>上一条已发出的杂记下标，供下次避开「连着两句一样」。</summary>
     static int _lastServed = -1;
 }

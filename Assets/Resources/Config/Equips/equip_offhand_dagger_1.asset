@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: equip_offhand_dagger_1
   m_EditorClassIdentifier: 
   templateId: equip_offhand_dagger_1
-  equipName: "疾风短刃"
+  equipName: "旧短刃"
   icon: {fileID: 0}
   iconFileName: Sword_1
   gridWidth: 1

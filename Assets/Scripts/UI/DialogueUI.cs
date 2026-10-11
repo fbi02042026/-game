@@ -455,6 +455,22 @@ public class DialogueUI : MonoBehaviour
         _bgDim.color = new Color(0f, 0f, 0f, Mathf.Clamp01(a));
     }
 
+    /// <summary>
+    /// 当前是否还挂着场景背景（图在 + 节点活着）。
+    /// 2026-10-10 修：命名界面调 Hide() 会 SetSceneBackground(null) 清掉背景，
+    /// 后续台词若背景 ID 没变就不会重装 —— 靠这个查询判断要不要补装。
+    /// </summary>
+    public bool HasSceneBackground()
+    {
+        if (sceneBackgroundImage == null) return false;
+        if (sceneBackgroundImage.sprite == null) return false;
+        var host = sceneBackgroundImage.transform.parent != null
+            && sceneBackgroundImage.transform.parent != transform
+            ? sceneBackgroundImage.transform.parent
+            : sceneBackgroundImage.transform;
+        return host.gameObject.activeInHierarchy && sceneBackgroundImage.gameObject.activeInHierarchy;
+    }
+
     public void SetSceneBackgroundAlpha(float a)
     {
         if (sceneBackgroundImage == null) return;
@@ -560,7 +576,24 @@ public class DialogueUI : MonoBehaviour
         {
             var drt = dialogueBoxImage.rectTransform;
             if (_dialogueBoxBaseSize.sqrMagnitude <= 0f) _dialogueBoxBaseSize = drt.sizeDelta;
-            drt.sizeDelta = _dialogueBoxBaseSize * 1.05f;
+            // 2026-10-10 主人拍板：台词折成两行及以上时框体上下拉长 —— 每多一行加一行高，
+            // pivot 在底部（y=0），同时把框体下移一半补回来，保证是「上下」各长一半而不是只往上顶。
+            float extraH = 0f;
+            if (dialogueText != null)
+            {
+                Canvas.ForceUpdateCanvases();
+                int lines = CountDialogueLines(content ?? "", out float lineH);
+                if (lines > 1) extraH = (lines - 1) * lineH;
+            }
+            drt.sizeDelta = new Vector2(
+                _dialogueBoxBaseSize.x * 1.05f,
+                _dialogueBoxBaseSize.y * 1.05f + extraH);
+            if (extraH > 0.01f)
+            {
+                // ApplyDialogueBoxLift() 已在本句开头把 y 重设为 baseY + 抬升量，这里只在此基础上减一半
+                var p = drt.anchoredPosition;
+                drt.anchoredPosition = new Vector2(p.x, p.y - extraH * 0.5f);
+            }
         }
 
         if (leftNameText != null) leftNameText.text = _initiatorName;
@@ -662,6 +695,31 @@ public class DialogueUI : MonoBehaviour
         bool sliced = (border.x + border.y + border.z + border.w) > 0.01f;
         dialogueBoxImage.type = sliced ? Image.Type.Sliced : Image.Type.Simple;
         dialogueBoxImage.preserveAspect = !sliced;
+    }
+
+    /// <summary>
+    /// 按正文排版宽度算台词实际折几行（含显式 \n），顺带给出真实行距。
+    /// 供「两行及以上框体上下拉长」用（2026-10-10 主人拍板）。
+    /// </summary>
+    int CountDialogueLines(string text, out float lineH)
+    {
+        lineH = DialogueBodyFontSize * 1.5f;
+        if (dialogueText == null || string.IsNullOrEmpty(text)) return 1;
+        if (dialogueText.font == null) return 1;
+        float w = dialogueText.rectTransform.rect.width;
+        if (w < 8f && _textClip != null) w = _textClip.rect.width;
+        if (w < 8f) return 1;
+        var gen = dialogueText.cachedTextGeneratorForLayout;
+        var settings = dialogueText.GetGenerationSettings(new Vector2(w, 10000f));
+        gen.Populate(text, settings);
+        var lines = gen.lines;
+        if (lines != null && lines.Count >= 2)
+        {
+            // UILineInfo 只有 topY（行顶 y，向下为负），行距取上两行 topY 之差
+            float d = lines[0].topY - lines[1].topY;
+            if (d > 1f) lineH = d;
+        }
+        return Mathf.Max(1, lines != null ? lines.Count : 1);
     }
 
     void BeginTyping(string full)
