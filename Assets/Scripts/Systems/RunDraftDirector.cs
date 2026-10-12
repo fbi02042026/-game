@@ -445,18 +445,25 @@ public class RunDraftDirector : MonoBehaviour
         };
         if (!RunLoadout.TryAddMerc(entry)) { msg = "佣兵位已满"; return false; }
         SpawnRunMerc(entry);
-        // 【2026-10-06 主人拍板】佣兵技能一样要标「新」（主人点名：不管是佣兵技能还是装备）。
-        NewLootMarks.Mark(NewLootMarks.KindSkill, entry.skillId);
         // 【2026-10-07 主人拍板】抽中佣兵要**报喜**，不要干巴巴一句「佣兵加入：XXX」。
         // 主人原话：「显示恭喜抽中史诗佣兵 实力大增什么的」—— 引导第 2 抽开出来的就是这位。
         // 稀有度名字只有 SkillRarityUtil 一个真源（与 SlotMachineSystem.BuildGuaranteedMercCard 同款写法），
         // 不许在这里另写一套「Rare→稀有」的枚举映射。
-        string rarityName = MercRosterDefs.TryGetByHireId(entry.hireId, out var rd)
+        // 花名册查一次，喜报名与横幅稀有度共用同一结果（不多入口）
+        bool hasRoster = MercRosterDefs.TryGetByHireId(entry.hireId, out var rd);
+        string rarityName = hasRoster
             ? SkillRarityUtil.DisplayName(SkillRarityUtil.FromMerc(rd.Rarity))
             : "";
         // 【2026-10-10 主人拍板】喜报只写真名（塔克），不带花名（重盾）。
         string fullName = !string.IsNullOrEmpty(entry.displayName)
             ? entry.displayName : entry.nickname;
+        // 【2026-10-12 主人拍板】入队横幅：抽中瞬间从左侧划入 → 慢滑 → 快速右消失（同「再来一次」横幅）。
+        // 节点是主人在 BattleUI 预制体摆的「佣兵入队」（立绘 + 名字 + 「— 加入小队 —」），代码只驱动。
+        // 名字颜色按稀有度走 RarityPalette（主人：名字要和稀有度对齐）；不在战斗中时控制器自行 LogError。
+        MercJoinBannerUI.Show(entry.hireId, fullName,
+            hasRoster ? rd.Rarity : MercRosterDefs.MercRarity.Common);
+        // 【2026-10-06 主人拍板】佣兵技能一样要标「新」（主人点名：不管是佣兵技能还是装备）。
+        NewLootMarks.Mark(NewLootMarks.KindSkill, entry.skillId);
         msg = string.IsNullOrEmpty(rarityName)
             ? $"恭喜抽中佣兵·{fullName}，实力大增！"
             : $"恭喜抽中{rarityName}佣兵·{fullName}，实力大增！";

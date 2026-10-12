@@ -2708,6 +2708,33 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                 break;
             }
 
+            // 【2026-10-12 主人拍板】「再来一次」= **抽奖结果之一**，不再是抽完之后的额外赠送。
+            // 主人原话：「为什么抽中了技能还出现了再抽一次　再抽一次应该也算是抽中的东西」。
+            // 于是这一抽**先掷**「再来一次」：
+            //   · 命中 → 本次结果就是它：不出佣兵 / 技能 / 装备，**不扣币、不推进抽数**，
+            //     只送一次免费抽，回面板让玩家用这次免费额度再点（按钮金额当场变「免费」）；
+            //   · 未命中 → 才真的出类型奖品（往下走 CoInstantPick）。
+            // ⚠ 引导局不参与（那一拍只抽一次），判定沿用同一处 onceOnly，别在别处加第二个。
+            // ⚠ 旧的「抽完再掷、额外再送一次免费抽」（2026-10-11 口径）已删除，不留开关。
+            if (!onceOnly && SlotMachineSystem.RollReroll())
+            {
+                SlotMachineSystem.GrantBonusFreeDraw();
+                var rerollPanel = BattleEntryDraftPanel.Instance;
+                if (rerollPanel != null)
+                {
+                    rerollPanel.SetCountdownPaused(true);
+                    // 按钮金额**当场**变成免费（不等面板下一轮重开），主人要求的就是这个瞬间的反馈
+                    rerollPanel.RefreshFreeLeft(currentGold, SlotMachineSystem.FreeDrawsLeft());
+                }
+                UIManager.Instance?.ShowToast("再来一次！这一抽免费");
+                // 【2026-10-06 主人拍板】左侧滑入 → 慢慢滑行 1 秒 → 快速向右滑走的大字横幅
+                SlotMachineAgainBanner.Show();
+                // 等横幅播完（0.30 滑入 + 1.00 滑行 + 0.22 滑出 ≈ 1.52s）再回面板
+                yield return new WaitForSecondsRealtime(1.55f);
+                if (rerollPanel != null) rerollPanel.SetCountdownPaused(false);
+                continue;   // 这一抽的结果就是「再来一次」—— 回面板，让玩家点这次免费的
+            }
+
             // 买了就直接给结果，不走三选一。
             // 「这一抽到底生效没有」唯一真源 = 保底定序有没有往前走（生效才 NoteDraw）。
             int drawsBefore = SlotMachineSystem.DrawIndex;
@@ -2739,34 +2766,19 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             // 不想抽、或者币不够（按钮会自动置灰）时，点「继续」就继续战斗。
             // ⚠ 不是「每抽一次就得点一次继续」：这里不锁按钮、不 break。
             //
-            // 【2026-10-11 主人拍板】抽一次重置一次计时：这一抽结算完，倒计时**补满重来**。
-            //   主人原话「时间是固定的 不是抽一次重置一次计时」。
-            //   ⚠ 与 2026-10-06 那份「总预算就是面板弹出时那 30s，抽完只解冻、不补满」口径相反 ——
-            //     以本次为准，旧口径作废（别再照旧注释改回去）。
+            // ⚠【2026-10-12 纠正一处「记反了」的归因，主人当天又报了一次】
+            // 旧注释写的是「2026-10-11 主人拍板：抽一次重置一次计时」，但它**自己引用的主人原话**
+            // 是「时间是固定的 不是抽一次重置一次计时」—— 引文和结论正好相反，是当时的误记，
+            // 而且主人 2026-10-12 明确又强调了一遍（原话「不是说过倒计时不要抽一次重置一次吗」）。
+            // 按归因纪律纠正：主人从头到尾要的都是 **总预算固定 = 面板弹出时那 30s**。
+            // → 这一抽结算完只**解冻**（接着走剩下的秒数），**绝不补满重来**。
+            //   与 2026-10-06 那份口径一致，不存在「以 10-11 为准」这回事，别再改回 StartContinueCountdown。
             var entryPanel = BattleEntryDraftPanel.Instance;
-            if (entryPanel != null) entryPanel.StartContinueCountdown();
+            if (entryPanel != null) entryPanel.SetCountdownPaused(false);
 
-            // 「再来一次」= **白送一次免费抽**，不是技能三选一。
-            // 【2026-10-11 主人拍板】主人原话：「再来一次不是技能，是不用花费再抽一次，
-            // 注意这次抽不用涨费用」。
-            //   旧实现是「免费老虎机 + 该类型三选一」→ 会弹技能卡（主人看到的就是技能卡面），
-            //   而且那一抽照常推进抽数 → 下一抽价格 +10% → 玩家币不够 → 点了没反应。
-            //   现在改成：给一次免费额度，回到面板玩家自己点（面板显示「免费 ×N」），
-            //   且这一抽**不推进 DrawIndex**（见 CoInstantPick 的 bonusFree 分支）→ 下一抽不涨价。
-            if (SlotMachineSystem.RollReroll())
-            {
-                if (entryPanel != null) entryPanel.SetCountdownPaused(true);
-                SlotMachineSystem.GrantBonusFreeDraw();
-                // 按钮金额**当场**变成免费（不等面板下一轮重开），主人要求的就是这个瞬间的反馈
-                if (entryPanel != null)
-                    entryPanel.RefreshFreeLeft(currentGold, SlotMachineSystem.FreeDrawsLeft());
-                UIManager.Instance?.ShowToast("再来一次！这一抽免费");
-                // 【2026-10-06 主人拍板】左侧滑入 → 慢慢滑行 1 秒 → 快速向右滑走的大字横幅
-                SlotMachineAgainBanner.Show();
-                // 等横幅播完（0.30 滑入 + 1.00 滑行 + 0.22 滑出 ≈ 1.52s）再回面板
-                yield return new WaitForSecondsRealtime(1.55f);
-                if (entryPanel != null) entryPanel.SetCountdownPaused(false);
-            }
+            // ⚠【2026-10-12 已删】原来这里还有一段「抽完再掷 RollReroll → 额外再送一次免费抽」。
+            //   主人报「抽中了技能还出现了再抽一次」→ 判定挪到这一抽**开始之前**（见本循环上方），
+            //   「再来一次」从此是抽奖结果之一，不再与类型奖品叠加。别把这段加回来。
         }
 
         // 退出循环 = 要开战了：收起 BackpackPanel、隐藏抽奖按钮与「继续」，引导提示也关掉
@@ -2954,6 +2966,75 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 不再被 AnyBubbleShowing 吞掉；引导文案那份保留，等于屏幕浮字 + 引导框双保险。
         _lastDrawRewardMsg = $"【{SlotMachineSystem.CategoryName(cat)}】{got}";
         UIManager.Instance?.ShowToast(_lastDrawRewardMsg, true);
+        // 【2026-10-12 主人拍板】补「开奖」的仪式感：Toast 一闪就没了，玩家对抽奖没概念
+        // （主人原话「现在没有抽中奖的喜悦 玩家对抽奖这个没有概念 怎么优化一下」）。
+        ShowDrawPrizeCard(card, cat);
+    }
+
+    /// <summary>
+    /// 【2026-10-12 主人拍板】抽中生效后弹一张开奖卡（演出细节见 <see cref="DraftPrizePopupUI"/>）。
+    /// 这是开奖演出的<b>唯一出口</b>：文案 / 配色 / 稀有度档次都在这里定，别在别处再弹一份。
+    /// ⚠ 稀有度配色只能问 <see cref="RarityPalette"/>，不许在本文件里抄色值。
+    /// </summary>
+    void ShowDrawPrizeCard(DraftCard card, DraftCategory cat)
+    {
+        string title = card.Title;
+        string kind = SlotMachineSystem.CategoryName(cat);
+        Color tint = RarityPalette.Get(card.Rarity);
+        int tier = SkillRarityTier(card.Rarity);
+        Sprite icon = null;
+
+        if (card.Kind == DraftCardKind.Equip && card.Equip != null)
+        {
+            // 装备的稀有度在实例上（Rarity 枚举），不用卡片的 SkillRarity
+            tint = RarityPalette.Get(card.Equip.rarity);
+            tier = EquipRarityTier(card.Equip.rarity);
+            icon = card.Equip.icon ?? card.Equip.template?.icon;
+            kind = "获得装备";
+        }
+        else if (cat == DraftCategory.Skill)
+        {
+            icon = BattleUI.LoadRunSkillIcon(card.Id);
+            kind = card.Kind == DraftCardKind.SkillUp ? "技能升星" : "获得技能";
+        }
+        else if (cat == DraftCategory.Merc)
+        {
+            // 佣兵头像要按 AssetId 找，这里不另外加载 —— 没图就只显示名字（不兜底造图）
+            kind = card.Kind == DraftCardKind.MercRecruit ? "招募佣兵"
+                 : (card.Kind == DraftCardKind.MercStarUp ? "佣兵升星" : "佣兵升级");
+        }
+        else if (card.Kind == DraftCardKind.Gold)
+        {
+            kind = "获得金币";
+            title = "金币 +" + card.Amount;
+        }
+
+        if (string.IsNullOrEmpty(title)) title = kind;
+        DraftPrizePopupUI.Show(BattleUI.Instance != null ? BattleUI.Instance.transform : null,
+                               title, kind, tint, icon, tier);
+    }
+
+    static int SkillRarityTier(SkillRarity r)
+    {
+        switch (r)
+        {
+            case SkillRarity.Legendary: return DraftPrizePopupUI.TierLegend;
+            case SkillRarity.Epic: return DraftPrizePopupUI.TierEpic;
+            case SkillRarity.Rare: return DraftPrizePopupUI.TierRare;
+            default: return DraftPrizePopupUI.TierCommon;
+        }
+    }
+
+    static int EquipRarityTier(Rarity r)
+    {
+        switch (r)
+        {
+            case Rarity.Legendary: return DraftPrizePopupUI.TierLegend;
+            case Rarity.Epic: return DraftPrizePopupUI.TierEpic;
+            case Rarity.Rare: return DraftPrizePopupUI.TierRare;
+            case Rarity.Uncommon: return DraftPrizePopupUI.TierRare;   // 绿档与蓝档同档演出
+            default: return DraftPrizePopupUI.TierCommon;
+        }
     }
 
     /// <summary>

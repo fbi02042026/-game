@@ -186,8 +186,9 @@ public static class SlotMachineSystem
     }
 
     /// <summary>
-    /// 按 <see cref="SlotMachineDefs.CategoryWeight"/> **加权**随机一个类型（技能 5 / 装备 3 / 佣兵 2）。
-    /// <para>2026-10-05 主人拍板「佣兵的概率应该比装备低」—— 以前是三类等权（各 1/3），现在加权。</para>
+    /// 按 <see cref="SlotMachineDefs.CategoryWeight"/> **加权**随机一个类型（装备 70 / 技能 20 / 佣兵 10）。
+    /// <para>【2026-10-12 主人拍板】主人原话「装备权重改成70 技能20 佣兵10」—— 概率只认
+    /// <see cref="SlotMachineDefs"/> 那三个常量，这里不另写一份。</para>
     /// 结果在这里就定死，老虎机只负责把它演出来。
     /// </summary>
     public static DraftCategory RollCategory(List<DraftCategory> cats)
@@ -494,7 +495,8 @@ public static class SlotMachineSystem
         return lv > 0 ? lv : 0;
     }
 
-    /// <summary>是否触发「再来一次」（免费再转一轮，不再扣钱）。</summary>
+    /// <summary>【2026-10-12 主人拍板】这一抽的结果是不是「再来一次」——
+    /// 抽奖**开始前**掷（命中则本次不出类型奖品，只送一次免费抽，见 BattleManager.CoStageEntryDraft）。</summary>
     public static bool RollReroll() => Random.value < RerollChance();
 
     /// <summary>
