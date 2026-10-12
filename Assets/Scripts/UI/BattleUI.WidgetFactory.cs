@@ -197,6 +197,9 @@ public partial class BattleUI : MonoBehaviour
             chip.SlotStep = step;
             chip.DragEnabled = false;          // 由 RefreshSkillSlotDragState 按阶段打开
             chip.OnOrderChanged = OnSkillSlotReordered;
+
+            // 【2026-10-12 主人拍板「点击技能出现简单的介绍 可以是个弹窗」】
+            WireSkillInfoClick(av, i);
         }
     }
 

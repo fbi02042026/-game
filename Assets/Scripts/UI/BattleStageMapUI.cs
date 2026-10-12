@@ -149,6 +149,10 @@ public class BattleStageMapUI : MonoBehaviour
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
 
+        // 【2026-10-12 主人拍板】关卡图期间隐藏整个战斗 HUD —— 否则技槽（自带 Canvas 921）
+        // 比本图(880)高，会穿在图上面（主人报「技能跑到老虎机界面了」）。唯一出口见 BattleUI.SetHiddenForStageMap。
+        BattleUI.Instance?.SetHiddenForStageMap(true);
+
         StartBackdropPulse();
         if (_flow != null) StopCoroutine(_flow);
         _flow = StartCoroutine(CoFlow());
@@ -182,6 +186,9 @@ public class BattleStageMapUI : MonoBehaviour
         if (root != null) root.SetActive(true);
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
+
+        // 【2026-10-12 主人拍板】同上：分支选路也是关卡图，期间同样关掉战斗 HUD（防技槽穿层）。
+        BattleUI.Instance?.SetHiddenForStageMap(true);
 
         StartBackdropPulse();
         if (_flow != null) StopCoroutine(_flow);
@@ -345,6 +352,7 @@ public class BattleStageMapUI : MonoBehaviour
                 {
                     if (p.lockIcon != null) p.lockIcon.SetActive(false);
                     SetFlagDefeated(p);                 // 已打败 → Banner 暗旗 #646464
+                    SetFlagTypeLabel(p, TypeOfStage(i)); // 看得出这一关原来是什么类型
                     if (p.stone != null) p.stone.color = new Color(0.85f, 0.85f, 0.85f, 1f);
                     SetClickable(p, false, i);
                 }
@@ -381,7 +389,14 @@ public class BattleStageMapUI : MonoBehaviour
                 {
                     if (p.lockIcon != null) p.lockIcon.SetActive(false);
                     SetFlagTurned(p);                   // 老虎机转到 → ClearedMark 旗（保留美术原色）
-                    if (_next != null) ApplyTypeIcon(p, _next.type);
+                    // 【2026-10-12 主人拍板】这里**不再贴类型图标**（原 ApplyTypeIcon 调用已删）。
+                    // 原因：类型图标素材 Art/UI/关卡/stage_*.png 本身画的就是**一整面旗子**，
+                    // 贴到旗子中央 = 旗子里再套一面旗（主人原话「现在变成旗子里面有个旗子了」）。
+                    // 主人要的是「跟最下面的那个一样是个骷髅」= 所有旗子保持预制体原样。
+                    // ⚠ 要恢复「旗子上显示**类型图标**」，必须先有**纯标志图**（只有骷髅/图标、不含旗面），
+                    //   由美术出图后再接回 ApplyTypeIcon —— 现有 stage_* 一律不能当标志用。
+                    //   在那之前用文字标签顶着（SetFlagTypeLabel），保证精英/恢复/首领看得出来。
+                    SetFlagTypeLabel(p, _next != null ? _next.type : TypeOfStage(i));
                     if (p.stone != null) p.stone.color = Color.white;
                     SetClickable(p, true, i);
                 }
@@ -390,6 +405,7 @@ public class BattleStageMapUI : MonoBehaviour
             {
                 if (p.lockIcon != null) p.lockIcon.SetActive(false);
                 SetFlagDefeated(p);                     // 已打败 → Banner 暗旗
+                SetFlagTypeLabel(p, TypeOfStage(i));
                 if (p.stone != null) p.stone.color = new Color(0.85f, 0.85f, 0.85f, 1f);
                 SetClickable(p, false, i);
             }
@@ -407,6 +423,67 @@ public class BattleStageMapUI : MonoBehaviour
     // 旧口径（已通关=ClearedMark 灰旗 / 转到的下一关=Banner 白旗）作废。
     // 主人原话：「没有老虎机时不显示旗子 转到后出现旗子用 ClearedMark 节点
     //            打败后用 Banner 节点然后颜色调暗」（参考色 #646464）。
+
+    /// <summary>旗子上的「关卡类型」文字标签节点名（运行时补建，不落预制体）。</summary>
+    const string TypeLabelName = "StageTypeLabel";
+
+    /// <summary>
+    /// 【2026-10-12 主人拍板】旗子上必须看得出这一关是**什么类型**（主人原话「老虎机也会出现的精英关卡」）。
+    ///
+    /// <para>上一轮为了修「旗子里有个旗子」把类型**图标**整段去掉了 ——
+    /// <c>Art/UI/关卡/stage_*.png</c> 本身画的就是**一整面旗子**，贴到旗面中央等于叠了两面旗。
+    /// 但代价是：老虎机转出精英 / 恢复 / 首领关之后，旗子长得跟普通关一模一样，
+    /// 玩家（含主人）根本看不出转到了什么 —— 老虎机演出等于白演。</para>
+    ///
+    /// <para>这里改成**文字标签**：不依赖任何新美术，也不再往旗面上贴图，压在旗面中部即可。
+    /// 等美术给出**纯标志图**（只有骷髅 / 图标、不含旗面）再接回 <c>ApplyTypeIcon</c>，本方法随之删除。</para>
+    /// </summary>
+    void SetFlagTypeLabel(PedestalRefs p, StageType type)
+    {
+        // 挂到当前真正显示的那面旗下（转到=ClearedMark，已打败=Banner）
+        Transform host = null;
+        if (p.clearedMark != null && p.clearedMark.activeSelf) host = p.clearedMark.transform;
+        else if (p.banner != null && p.banner.gameObject.activeSelf) host = p.banner.transform;
+        if (host == null) return;
+
+        var exist = host.Find(TypeLabelName);
+        var t = exist != null ? exist.GetComponent<Text>() : null;
+        if (t == null)
+        {
+            var go = new GameObject(TypeLabelName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            go.transform.SetParent(host, false);
+            go.transform.SetAsLastSibling();
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 0.34f);
+            rt.anchorMax = new Vector2(1f, 0.86f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            t = go.GetComponent<Text>();
+            t.fontSize = 20;
+            t.alignment = TextAnchor.MiddleCenter;
+            t.raycastTarget = false;                       // 不吃射线，别抢旗子按钮的点击
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var f = GameFonts.GetChinese();
+            if (f != null) t.font = f;
+            var ol = go.AddComponent<Outline>();           // 描边：压在旗面上也看得清
+            ol.effectColor = new Color(0f, 0f, 0f, 0.9f);
+            ol.effectDistance = new Vector2(1f, -1f);
+        }
+        t.text = StageRoller.Label(type);
+        // 与老虎机结果名同款配色（Color.Lerp 到白 0.55）：精英紫 / 首领红 / 恢复绿 / 普通蓝
+        t.color = Color.Lerp(StageRoller.Tint(type), Color.white, 0.55f);
+        t.gameObject.SetActive(true);
+    }
+
+    /// <summary>取第 index 关在关卡表里的类型（取不到就按普通关，不另造一套真源）。</summary>
+    static StageType TypeOfStage(int index)
+    {
+        var cm = ChapterManager.Instance;
+        if (cm == null || cm.stageMap == null || index < 0 || index >= cm.stageMap.Count)
+            return StageType.Normal;
+        var s = cm.stageMap[index];
+        return s != null ? s.type : StageType.Normal;
+    }
 
     /// <summary>没转老虎机（下一关未定）→ 什么旗都不显示。</summary>
     void SetFlagNone(PedestalRefs p)
@@ -435,19 +512,49 @@ public class BattleStageMapUI : MonoBehaviour
 
     void SetClickable(PedestalRefs p, bool on, int index)
     {
-        if (p.button == null) return;
-        p.button.onClick.RemoveAllListeners();
-        p.button.interactable = on;
-        if (on)
+        // 【2026-10-12 主人报「点旗子无反应 只能点石墩」】
+        // 预制体里 Pedestal_i 根 / Banner / ClearedMark **各挂了一个 Button**，旧代码只给根那个绑监听，
+        // 而根 Button 的命中区 = 石墩那块（targetGraphic 是 Stone）→ 点到旗子（在石墩上方）就没反应。
+        // 现在把**旗子上的 Button 也一起绑上**，点石墩和点旗子等价。不动预制体（铁律 3）。
+        FlagButtons(p, _reusedBtnList);
+        if (_reusedBtnList.Count == 0) return;
+
+        int capture = index;
+        for (int i = 0; i < _reusedBtnList.Count; i++)
         {
+            var b = _reusedBtnList[i];
+            b.onClick.RemoveAllListeners();
+            b.interactable = on;
+            if (!on) continue;
+
             // 【2026-10-11 主人拍板】石墩**不要跟着放大/缩放**（主人原话「点击石墩的时候旗子放大就行
             // 石墩不要跟着放大」）→ 屏蔽通用按压反馈（UiButtonPressFeedback 会把按钮压到 0.94 再弹回）。
-            var f = p.button.GetComponent<UiButtonPressFeedback>();
-            if (f == null) f = p.button.gameObject.AddComponent<UiButtonPressFeedback>();
+            var f = b.GetComponent<UiButtonPressFeedback>();
+            if (f == null) f = b.gameObject.AddComponent<UiButtonPressFeedback>();
             f.suppress = true;
 
-            int capture = index;
-            p.button.onClick.AddListener(() => OnPedestalClicked(capture));
+            b.onClick.AddListener(() => OnPedestalClicked(capture));
+        }
+    }
+
+    /// <summary>复用列表，避免每次刷新都 new（SetClickable 每拍都跑）。</summary>
+    readonly List<Button> _reusedBtnList = new List<Button>();
+
+    /// <summary>收集这个石墩上**所有**能点的按钮：根 + 两面旗（转到的看 ClearedMark，打败后看 Banner）。</summary>
+    static void FlagButtons(PedestalRefs p, List<Button> dst)
+    {
+        dst.Clear();
+        if (p == null) return;
+        if (p.button != null) dst.Add(p.button);
+        if (p.banner != null)
+        {
+            var b = p.banner.GetComponent<Button>();
+            if (b != null) dst.Add(b);
+        }
+        if (p.clearedMark != null)
+        {
+            var b = p.clearedMark.GetComponent<Button>();
+            if (b != null) dst.Add(b);
         }
     }
 
@@ -456,6 +563,13 @@ public class BattleStageMapUI : MonoBehaviour
     /// 石墩（Stone）就一张底图、不带类型；类型只画在<b>旗子</b>上。
     /// 预制体里旗子（ClearedMark / Banner）没有 Icon 子节点 → 代码在旗下补一个（不动预制体，铁律 3）。
     /// 两面旗都挂：转到时看 ClearedMark，打败后看 Banner（暗旗），类型一路跟着走。
+    ///
+    /// <para>⚠【2026-10-12 已停用】唯一调用点（RefreshPedestals 转到分支）已删 ——
+    /// 本方法贴的是 <c>Art/UI/关卡/stage_*.png</c>，而那批图**本身就是一整面旗子**，
+    /// 贴到旗子中央就是「旗子里套一面旗」（主人报「现在变成旗子里面有个旗子了」）。
+    /// 主人要「跟最下面的那个一样是个骷髅」= 旗子保持预制体原样。
+    /// <b>要恢复旗子显示类型，必须先用纯标志图（不含旗面）替换 stage_*，再接回调用点</b>；
+    /// 方法本体留着是为了保留这段结论，不是要用它。别直接把它接回去。</para>
     /// </summary>
     void ApplyTypeIcon(PedestalRefs p, StageType type)
     {
@@ -599,6 +713,10 @@ public class BattleStageMapUI : MonoBehaviour
         Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
         if (root != null) root.SetActive(false);
 
+        // 【2026-10-12 主人拍板】收图进关 → 必须先恢复战斗 HUD，再回调进关，
+        // 否则下一关开打时 HUD（金币/技槽/角色栏）不显示。顺序不可调换。
+        BattleUI.Instance?.SetHiddenForStageMap(false);
+
         var stage = _next;
         var cb = _onPick;
         _onPick = null;
@@ -621,6 +739,9 @@ public class BattleStageMapUI : MonoBehaviour
         ClearAllOutlines();
         if (root != null) root.SetActive(false);
         Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
+
+        // 【2026-10-12 主人拍板】关图 → 恢复战斗 HUD（与开图时的隐藏配对，唯一出口）。
+        BattleUI.Instance?.SetHiddenForStageMap(false);
     }
 
     // ===== Backdrop 灯光昏暗抖动 =====

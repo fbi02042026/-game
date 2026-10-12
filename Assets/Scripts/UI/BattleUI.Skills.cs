@@ -265,6 +265,75 @@ public partial class BattleUI : MonoBehaviour
         return sp;
     }
 
+    // ============================================================
+    // 技槽点击 → 技能简介弹窗（2026-10-12 主人拍板）
+    // ============================================================
+
+    /// <summary>
+    /// 给技槽补一层透明点击层 + Button，点一下弹技能简介、再点一下关掉。
+    /// 与 <see cref="EquipQuickSlotUI.WireStatTipClick"/> 同一套做法：不碰预制体、不加美术，
+    /// 透明 Image 只负责接射线（槽位底图 raycastTarget 未必开着）；Button 挂在它上面，
+    /// 与槽里原有的图标 / 顺序角标 / 「新」角标共存。幂等：已有就复用，只重绑 onClick。
+    /// <para>⚠ 拖拽不受影响：拖拽事件会沿父链冒泡到槽根上的 <see cref="SkillOrderChip"/>，
+    /// 而拖动超过阈值后 Unity 不再派发 click —— 再叠一层 <c>chip.IsDragging</c> 双保险。</para>
+    /// </summary>
+    void WireSkillInfoClick(SkillAvatarUI av, int index)
+    {
+        if (av == null || av.root == null) return;
+
+        var node = FindDeepChildIgnoreCase(av.root.transform, "SkillInfoClick");
+        if (node == null)
+        {
+            var hit = new GameObject("SkillInfoClick", typeof(RectTransform), typeof(Image));
+            hit.transform.SetParent(av.root.transform, false);
+            hit.transform.SetAsLastSibling();
+            var rt = hit.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            var img = hit.GetComponent<Image>();
+            img.color = new Color(0f, 0f, 0f, 0f);   // 全透明，纯接射线
+            img.raycastTarget = true;
+            node = hit.transform;
+        }
+
+        var btn = node.GetComponent<Button>();
+        if (btn == null)
+        {
+            btn = node.gameObject.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+        }
+        btn.targetGraphic = node.GetComponent<Image>();
+        btn.onClick.RemoveAllListeners();
+        int capture = index;
+        btn.onClick.AddListener(() => OnSkillSlotInfoClick(capture, av.root));
+    }
+
+    /// <summary>
+    /// 技槽点击：按下标取本局技能 id（与 <see cref="UpdateRunSkillSlots"/> 同一取法），弹简介框。
+    /// 空槽点了就把已开的框收掉。
+    /// </summary>
+    void OnSkillSlotInfoClick(int index, GameObject slotRoot)
+    {
+        var anchor = slotRoot != null ? slotRoot.GetComponent<RectTransform>() : null;
+        if (anchor == null) return;
+
+        // 正在拖这个槽 = 调顺序，不是要看介绍
+        var chip = slotRoot.GetComponent<SkillOrderChip>();
+        if (chip != null && chip.IsDragging) return;
+
+        var ids = RunLoadout.IsActive ? RunLoadout.SkillIds() : null;
+        string id = ids != null && index < ids.Count ? ids[index] : null;
+        if (string.IsNullOrEmpty(id))
+        {
+            SkillInfoTipUI.Ensure(transform)?.Hide();
+            return;
+        }
+        SkillInfoTipUI.Toggle(id, anchor, slotRoot, transform);
+    }
+
     /// <summary>上次诊断输出的特征串，避免每次刷新都刷屏。</summary>
     string _lastSkillDiagKey = "\u0000";
 

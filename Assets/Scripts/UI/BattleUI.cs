@@ -11,6 +11,39 @@ public partial class BattleUI : MonoBehaviour
 {
     public static BattleUI Instance;
 
+    /// <summary>本次隐藏是不是被关卡图按下的（只有它按下的才由它恢复）。</summary>
+    bool _hiddenByStageMap;
+
+    /// <summary>
+    /// 【2026-10-12 主人拍板】关卡图 / 下一关转盘显示期间，隐藏整个战斗 HUD。
+    ///
+    /// <para>起因：技槽（BackpackPanel/SkillBar）自带嵌套 Canvas 被抬到 921 ——
+    /// 这是 2026-10-11 为压过战斗内抽奖面板（BattlePopup 920）加的；而关卡图 BattleStageMap(880)、
+    /// 下一关转盘 TownPopup(900) 都比 921 低 → 只有那一排技能槽穿到关卡图/转盘上面
+    /// （主人报「技能跑到老虎机界面了」）。HUD 根 Canvas 是 0，本来就被关卡图整片盖住，
+    /// 唯独技槽例外；整根 HUD 关掉最干净，也不用去动 UiSort 层值。</para>
+    ///
+    /// <para><b>唯一出口</b>：只由 <c>BattleStageMapUI</c> 在开图（StartFlow / StartBranchFlow）
+    /// 与关图（CoPedestalAccept / Hide）四个时机调用。别处一律不许改本节点的激活态。</para>
+    ///
+    /// <para>幂等且 fail closed：只恢复「自己按下去的那次」，本来就隐藏的对象绝不被强行点亮。</para>
+    /// </summary>
+    public void SetHiddenForStageMap(bool hidden)
+    {
+        if (hidden)
+        {
+            if (!gameObject.activeSelf) return;
+            _hiddenByStageMap = true;
+            gameObject.SetActive(false);
+        }
+        else
+        {
+            if (!_hiddenByStageMap) return;
+            _hiddenByStageMap = false;
+            gameObject.SetActive(true);
+        }
+    }
+
     [Header("=== 顶部状态栏 ===")]
     public Text stageLabel;         // 关卡标识：只显示地图名（暮影森林…），不再出现「第X章」
     public Text difficultyLabel;    // 难度标识 "普通"
