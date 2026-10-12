@@ -1279,8 +1279,14 @@ public class StageClearRewardDirector : MonoBehaviour
         }
     }
 
-    /// <summary>播放 Resources/VFX/other/world/传送（开启传送门时的出现特效）。</summary>
-    static void PlayPortalOpenVfx(Vector3 worldPos)
+    /// <summary>
+    /// 播放 Resources/VFX/other/world/传送（开启传送门时的出现特效）。
+    /// <para>【2026-10-12】改成 public：它原本是**死代码**（写了没人调用），而主人连报两次
+    /// 「还是没有出现传送门」——门预制体里那两个世界特效节点挂在 UI 父节点下、画到相机视野外了，
+    /// 所以这里按门的世界坐标另播一次正宗的世界特效。开门演出的唯一出口就是本方法，
+    /// 由 <see cref="PortalGate.CoOpen"/> 调用，别在别处再播一遍。</para>
+    /// </summary>
+    public static void PlayPortalOpenVfx(Vector3 worldPos)
     {
         var prefab = Resources.Load<GameObject>("VFX/other/world/传送")
                   ?? Resources.Load<GameObject>("VFX/other/world/portal_open");

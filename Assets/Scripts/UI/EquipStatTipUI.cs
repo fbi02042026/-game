@@ -16,7 +16,9 @@ public class EquipStatTipUI : MonoBehaviour
 {
     public static EquipStatTipUI Instance { get; private set; }
 
-    const float PanelWidth = 300f;
+    /// <summary>【2026-10-12 主人拍板】浮框宽度 300 → 150（原话「缩短一半　两边空余太多」）。
+    /// 只改宽度：字号 20（2026-10-10 定的）与行高 28 都不动，属性多了会按 Wrap 折行。</summary>
+    const float PanelWidth = 150f;
     const float HeadHeight = 44f;
     const float LineHeight = 28f;
     const float PadBottom = 12f;
@@ -111,6 +113,9 @@ public class EquipStatTipUI : MonoBehaviour
         // 与道具操作浮层互斥（2026-10-09 主人拍板）：点装备只出属性框
         if (BackpackItemActionUI.Instance != null)
             BackpackItemActionUI.Instance.Hide();
+        // 与技能简介浮框互斥（2026-10-12）：两个框都是浮在槽位上方，同时开会叠在一起
+        if (SkillInfoTipUI.Instance != null)
+            SkillInfoTipUI.Instance.Hide();
 
         var lines = BuildAttrLines(eq);
         _title.text = EquipUiText.EquipTitle(eq);

@@ -28,6 +28,9 @@ public class SkillOrderChip : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     /// <summary>玩家拖过一次就置 true，供引导判断「这一步是不是真的完成了」。</summary>
     public bool DraggedOnce { get; private set; }
 
+    /// <summary>此刻是不是正在被拖。技槽点击弹简介要据此排除「拖完顺带触发点击」。</summary>
+    public bool IsDragging => _dragging;
+
     /// <summary>
     /// 是否允许拖拽。战斗 UI 里只在「整理阶段」（BattleLootMode.Active）打开，
     /// 避免战斗中误触改掉释放顺序。
@@ -111,6 +114,11 @@ public class SkillOrderChip : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
             }
             // 位置不在这里还原：挂载方写完 RunLoadout 后会刷新技槽，届时按美术原位置重排
             _rt.anchoredPosition = _origPos;
+            // 【2026-10-12 主人报「能拖但不生效」】OnBeginDrag 的 SetAsLastSibling 只为拖拽时不被兄弟
+            // 盖住，但它把本槽的 sibling 下标**永久**顶到最后一位 → 槽位下标与技能顺序从此错位
+            // （下一次拖动 _beginIndex 就指错人）。这里放回原位；真生效时挂载方紧接着会刷新重建。
+            if (_beginIndex >= 0 && _beginIndex < _row.childCount)
+                _rt.SetSiblingIndex(_beginIndex);
         }
         _beginIndex = -1;
     }
@@ -129,6 +137,12 @@ public class SkillOrderChip : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         {
             var c = _row.GetChild(i) as RectTransform;
             if (c == null) continue;
+            // 【2026-10-12 主人报「能拖但不生效」→ 根因】必须排除**正在拖的这个**：
+            // OnDrag 已把它的 anchoredPosition 设成指针位置，它到指针的距离恒为 0 →
+            // 不排除的话「最近槽位」永远是它自己，而它又被 SetAsLastSibling 顶到最后一位，
+            // 于是 target 恒等于最后那个槽：2 个技能时 to=3 越界，OnSkillSlotReordered 直接 return
+            // —— 表现就是「能跟手拖，松手顺序不变」。
+            if (c == _rt) continue;
             float d = Mathf.Abs(c.anchoredPosition.x - localX);
             if (d < bestD)
             {

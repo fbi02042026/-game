@@ -11,8 +11,8 @@ using System.Collections.Generic;
 /// 图标下方带**数字倒计时**，到 0 消失；剩 20% 时间起**图标整体闪烁**提醒。</para>
 /// <para>② 常驻 buff（<c>BattleManager.tempBuffs</c>：局内强化卡加的 体/速/攻）：只亮牌、无倒计时。</para>
 ///
-/// <para>⚠ 图标资源：项目目前**没有 buff 美术图**，先用「色块 + 汉字（攻/防/暴/体/速）」顶位 ——
-/// 主人给了图后只换 <see cref="BuffStyle.Sprite"/>，其余逻辑不动。</para>
+/// <para>⚠ 图标资源：【2026-10-12 主人给了 buff 图标】七张图在 <c>Resources/UI/BuffIcons/</c>
+/// （物攻/魔攻/生命/防御/暴击/攻速/移速），按路径加载 —— 图缺失时才退回「色块 + 汉字」占位。</para>
 /// </summary>
 public class BuffHudUI : MonoBehaviour
 {
@@ -42,19 +42,83 @@ public class BuffHudUI : MonoBehaviour
     {
         public string Mark;
         public Color Color;
-        public Sprite Sprite;   // 主人补图后填这里；null = 色块 + 汉字
+        public Sprite Sprite;   // Resources/UI/BuffIcons/ 下的真图；null = 色块 + 汉字占位
+    }
+
+    /// <summary>buff 图标资源目录（按路径加载，不依赖 guid）。</summary>
+    const string IconResFolder = "UI/BuffIcons/";
+    /// <summary>图标加载缓存：一次加载，整局复用。</summary>
+    static readonly Dictionary<AttrType, Sprite> _spriteCache = new Dictionary<AttrType, Sprite>();
+
+    /// <summary>按属性取 buff 图标；缺图返回 null（走色块 + 汉字占位，不报错）。</summary>
+    static Sprite IconOf(AttrType t)
+    {
+        if (_spriteCache.TryGetValue(t, out var cached)) return cached;
+        string file;
+        switch (t)
+        {
+            case AttrType.Attack:      file = "物攻"; break;
+            case AttrType.MagicAttack: file = "魔攻"; break;
+            case AttrType.Defense:     file = "防御"; break;
+            case AttrType.CritRate:    file = "暴击"; break;
+            case AttrType.MaxHp:       file = "生命"; break;
+            case AttrType.AttackSpeed: file = "攻速"; break;
+            case AttrType.MoveSpeed:   file = "移速"; break;
+            default: _spriteCache[t] = null; return null;
+        }
+        var sp = LoadSpriteRobust(IconResFolder + file);
+        _spriteCache[t] = sp;
+        return sp;
+    }
+
+    /// <summary>
+    /// 取 Sprite 的稳妥读法（与 <see cref="JobIconResolver.LoadSprite"/> 同一套）：
+    /// 新导入的 png 若被团结按「默认贴图」导入（textureType=0），Resources.Load&lt;Sprite&gt; 会取不到，
+    /// 这里退一步读 Texture2D 现造 Sprite，不改 .meta 也能显示。
+    /// </summary>
+    static Sprite LoadSpriteRobust(string path)
+    {
+        var sp = Resources.Load<Sprite>(path);
+        if (sp != null) return sp;
+        var tex = Resources.Load<Texture2D>(path);
+        if (tex == null) return null;
+        return Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height),
+            new Vector2(0.5f, 0.5f), 100f);
     }
 
     static BuffStyle StyleOf(AttrType t)
     {
         switch (t)
         {
-            case AttrType.Attack:   return new BuffStyle { Mark = "攻", Color = new Color(0.85f, 0.32f, 0.28f), Sprite = null };
-            case AttrType.Defense:  return new BuffStyle { Mark = "防", Color = new Color(0.36f, 0.60f, 0.92f), Sprite = null };
-            case AttrType.CritRate: return new BuffStyle { Mark = "暴", Color = new Color(0.95f, 0.78f, 0.28f), Sprite = null };
-            case AttrType.MaxHp:    return new BuffStyle { Mark = "体", Color = new Color(0.36f, 0.80f, 0.48f), Sprite = null };
-            case AttrType.AttackSpeed: return new BuffStyle { Mark = "速", Color = new Color(0.36f, 0.78f, 0.78f), Sprite = null };
-            default:                return new BuffStyle { Mark = "益", Color = new Color(0.7f, 0.7f, 0.75f), Sprite = null };
+            case AttrType.Attack:      return new BuffStyle { Mark = "攻", Color = new Color(0.85f, 0.32f, 0.28f), Sprite = IconOf(t) };
+            case AttrType.Defense:     return new BuffStyle { Mark = "防", Color = new Color(0.36f, 0.60f, 0.92f), Sprite = IconOf(t) };
+            case AttrType.CritRate:    return new BuffStyle { Mark = "暴", Color = new Color(0.95f, 0.78f, 0.28f), Sprite = IconOf(t) };
+            case AttrType.MaxHp:       return new BuffStyle { Mark = "体", Color = new Color(0.36f, 0.80f, 0.48f), Sprite = IconOf(t) };
+            case AttrType.AttackSpeed: return new BuffStyle { Mark = "速", Color = new Color(0.36f, 0.78f, 0.78f), Sprite = IconOf(t) };
+            // 【2026-10-12】法师/牧师的加攻 buff 走 MagicAttack（SkillSystem.ExecuteBuff 按施法者分流）；
+            // 移速（诅咒 -30% 等）走 MoveSpeed。原先两者都掉进 default 的灰「益」，
+            // 现在各给一色，主人补图后照常只换 Sprite。
+            case AttrType.MagicAttack: return new BuffStyle { Mark = "魔", Color = new Color(0.68f, 0.40f, 0.88f), Sprite = IconOf(t) };
+            case AttrType.MoveSpeed:   return new BuffStyle { Mark = "移", Color = new Color(0.48f, 0.86f, 0.62f), Sprite = IconOf(t) };
+            default:                   return new BuffStyle { Mark = "益", Color = new Color(0.7f, 0.7f, 0.75f), Sprite = null };
+        }
+    }
+
+    /// <summary>把一张 buff 牌刷成「真图」或「色块 + 汉字占位」；计时/常驻两处共用，避免各写一套。</summary>
+    static void ApplyStyle(BuffIcon icon, BuffStyle st)
+    {
+        if (st.Sprite != null)
+        {
+            icon.Bg.sprite = st.Sprite;
+            icon.Bg.color = Color.white;            // 真图不叠 tint，避免把美术图染色
+            icon.Mark.gameObject.SetActive(false);  // 图上自带含义，汉字不再叠加
+        }
+        else
+        {
+            icon.Bg.sprite = null;
+            icon.Bg.color = st.Color;
+            icon.Mark.gameObject.SetActive(true);
+            icon.Mark.text = st.Mark;
         }
     }
 
@@ -74,12 +138,18 @@ public class BuffHudUI : MonoBehaviour
         var go = new GameObject("BuffHud", typeof(RectTransform));
         go.transform.SetParent(powerNode.parent, false);
         var rt = go.GetComponent<RectTransform>();
-        // 与战斗力同锚同参考，整体向右平移（战力节点宽的一半 + 60 的间隔，主人要「中间隔一段距离」）
+        // 与战斗力同锚同参考
         rt.anchorMin = powerNode.anchorMin;
         rt.anchorMax = powerNode.anchorMax;
-        rt.pivot = powerNode.pivot;
-        rt.anchoredPosition = powerNode.anchoredPosition
-                              + new Vector2(powerNode.rect.width * 0.5f + 60f, 0f);
+        // 【2026-10-12 主人「buff 要放到战斗力的右边 不要挡住战斗力」】
+        // 旧写法把 pivot 也照抄战斗力的（多半 0.5 居中），而本条宽 8 个图标 = 400 ——
+        // 居中锚下右移「战力半宽 + 60」后，左半边 200 反而横到战力数字上面 → **正好压住战力**。
+        // 现在 pivot.x 置 0（= 本条**左边缘**对齐起点），起点 = 战力右边缘 + 60，向右一路排开。
+        // 战力右边缘 = anchoredPosition.x + (1 - pivot.x) × 宽（pivot 不一定是 0.5，不能写死半宽）。
+        float powerRight = powerNode.anchoredPosition.x
+                           + (1f - powerNode.pivot.x) * powerNode.rect.width;
+        rt.pivot = new Vector2(0f, powerNode.pivot.y);
+        rt.anchoredPosition = new Vector2(powerRight + 60f, powerNode.anchoredPosition.y);
         rt.sizeDelta = new Vector2((IconSize + Gap) * 8f, IconSize);
 
         Instance = go.AddComponent<BuffHudUI>();
@@ -120,8 +190,7 @@ public class BuffHudUI : MonoBehaviour
                 var icon = GetIcon(idx++);
                 var st = StyleOf(b.type);
                 icon.Root.SetActive(true);
-                icon.Bg.color = st.Color;
-                icon.Mark.text = st.Mark;
+                ApplyStyle(icon, st);
                 icon.Cd.gameObject.SetActive(true);
                 icon.Cd.text = Mathf.CeilToInt(Mathf.Max(0f, b.remain)).ToString();
 
@@ -144,8 +213,7 @@ public class BuffHudUI : MonoBehaviour
                 var icon = GetIcon(idx++);
                 var st = StyleOf(b.attrType);
                 icon.Root.SetActive(true);
-                icon.Bg.color = st.Color;
-                icon.Mark.text = st.Mark;
+                ApplyStyle(icon, st);
                 icon.Cd.gameObject.SetActive(false);
                 icon.Cg.alpha = 1f;
             }

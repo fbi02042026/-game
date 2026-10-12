@@ -1,5 +1,7 @@
 using System.Collections;
+using System.Text;
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// 传送门 = 主人 2026-10-11 新加的预制体 <c>Resources/VFX/other/world/chuansongmen</c>（挂 BattleUI 下）。
@@ -20,6 +22,14 @@ public class PortalGate : MonoBehaviour
 
     /// <summary>门皮与旋转粒子比「传送」节点晚出来的时间（秒）。【2026-10-11 主人拍板 0.3s】</summary>
     public const float SecondWaveDelay = 0.3f;
+    /// <summary>
+    /// 门自带嵌套 Canvas 的 sortingOrder。
+    /// 【2026-10-12】门挂在 BattleUI 下，而战斗 HUD 里的子 Canvas（BackpackPanel/SkillBar 等）
+    /// 被 <c>AutoGameInitializer.EnsureNestedSortOrder</c> 抬到 100 / 921 —— 嵌套 Canvas 的 order 是
+    /// **全局**比的，门若只跟着 BattleUI 根 Canvas（order 0）走，会被这些 HUD 整块盖住。
+    /// 抬到 <see cref="GameConfig.UiSort.BattleHud"/> 同档，保证门压在所有战斗 HUD 之上。
+    /// </summary>
+    const int PortalCanvasOrder = GameConfig.UiSort.BattleHud + 1;
     /// <summary>进门的判定余量（世界单位）：走到门中心 ±这个值就算进去了。</summary>
     public const float EnterTolerance = 0.3f;
 
@@ -66,6 +76,13 @@ public class PortalGate : MonoBehaviour
         var go = Instantiate(prefab, uiParent, false);
         go.name = "PortalGate";
         var gate = go.GetComponent<PortalGate>() ?? go.AddComponent<PortalGate>();
+        // 【2026-10-12 主人连报两次「还是没有出现传送门」】门根自带一层嵌套 Canvas 并抬高 order，
+        // 免得被战斗 HUD（子 Canvas 100 / 921）整块盖住。见 <see cref="PortalCanvasOrder"/>。
+        var canvas = go.GetComponent<Canvas>();
+        if (canvas == null) canvas = go.AddComponent<Canvas>();
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = PortalCanvasOrder;
+        if (go.GetComponent<GraphicRaycaster>() == null) go.AddComponent<GraphicRaycaster>();   // 铁律 10
         gate.Bind();
         gate.PinToCurrentWorldPos();
         gate.StartCoroutine(gate.CoOpen());
@@ -89,6 +106,12 @@ public class PortalGate : MonoBehaviour
         SetNode(_teleportNode, false);
         SetNode(_doorNode, false);
         SetNode(_spinNode, false);
+
+        // 【2026-10-12】门是纯演出，不该吃点击：门皮 Image 的 raycastTarget 一律关掉。
+        // 否则加了 GraphicRaycaster（铁律 10）之后，门会挡住它覆盖范围内的按钮（如「继续」）。
+        var images = GetComponentsInChildren<UnityEngine.UI.Image>(true);
+        for (int i = 0; i < images.Length; i++)
+            if (images[i] != null) images[i].raycastTarget = false;
     }
 
     IEnumerator CoOpen()
@@ -98,6 +121,15 @@ public class PortalGate : MonoBehaviour
             Debug.LogError("[PortalGate] 预制体里找不到「传送」节点，门开不出来");
         else
             SetNode(_teleportNode, true);
+
+        // 【2026-10-12 主人连报两次「还是没有出现传送门」】
+        // 门预制体里「传送」「SpinPortalBlue」是从**世界 prefab** 拖进 UI 的 SpriteRenderer / 粒子：
+        // 它们不归 Canvas 管，画的是 transform.position（世界坐标）。而它们的父节点是 UI RectTransform，
+        // position 会被换算到屏幕像素量级（几百），正交相机只看得见几个世界单位 → **画在视野外**。
+        // 这就是「门逻辑上开好了（进门判定照常生效）但玩家一眼看不见」的根因方向。
+        // → 这里按门钉住的世界坐标，**另播一次正宗的世界特效**（Resources/VFX/other/world/传送），
+        //   让「传送门开了」这件事在战场上真的看得见。出口唯一：StageClearRewardDirector.PlayPortalOpenVfx。
+        StageClearRewardDirector.PlayPortalOpenVfx(new Vector3(_worldX, _worldY, 0f));
 
         // ② 0.3s 后门皮 + 旋转粒子一起出来
         yield return new WaitForSecondsRealtime(SecondWaveDelay);
@@ -114,6 +146,45 @@ public class PortalGate : MonoBehaviour
 
         Opened = true;
         Debug.Log($"[PortalGate] 传送门开好：世界X={_worldX:F2} 节点 传送/door/SpinPortalBlue 依次就位");
+        LogPortalDiagnostics();
+    }
+
+    /// <summary>
+    /// 【2026-10-12】门到底看得见看不见 —— 一次把量打全，别再靠猜：
+    /// 自身激活 / 屏幕坐标 / 父链 Canvas order / 三个子节点各自的**渲染组件类型**与世界坐标。
+    /// 主人下次报「没有传送门」时，Editor.log 里这一条就能一次说清是「没建出来」还是「画到了看不见的地方」。
+    /// </summary>
+    void LogPortalDiagnostics()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append("[PortalGate-体检] 激活=").Append(gameObject.activeInHierarchy)
+          .Append(" 父=").Append(transform.parent != null ? transform.parent.name : "null");
+        if (_rt != null)
+            sb.Append(" anchoredPos=").Append(_rt.anchoredPosition.x.ToString("F0")).Append(",")
+              .Append(_rt.anchoredPosition.y.ToString("F0"))
+              .Append(" 屏幕=").Append(RectTransformUtility.WorldToScreenPoint(UiCamera(), _rt.position).x.ToString("F0"))
+              .Append(",").Append(RectTransformUtility.WorldToScreenPoint(UiCamera(), _rt.position).y.ToString("F0"));
+        var self = GetComponent<Canvas>();
+        sb.Append(" 自带Canvas=").Append(self != null ? self.sortingOrder + (self.overrideSorting ? "(override)" : "") : "无");
+        sb.Append(" 世界X=").Append(_worldX.ToString("F2")).Append(" 世界Y=").Append(_worldY.ToString("F2"));
+
+        AppendNodeDiag(sb, "传送", _teleportNode);
+        AppendNodeDiag(sb, "door", _doorNode);
+        AppendNodeDiag(sb, "SpinPortalBlue", _spinNode);
+        Debug.Log(sb.ToString());
+    }
+
+    static void AppendNodeDiag(System.Text.StringBuilder sb, string label, GameObject node)
+    {
+        sb.Append(" | ").Append(label).Append("=");
+        if (node == null) { sb.Append("缺失"); return; }
+        sb.Append(node.activeInHierarchy ? "on" : "OFF");
+        var sr = node.GetComponentInChildren<SpriteRenderer>(true);
+        var img = node.GetComponentInChildren<UnityEngine.UI.Image>(true);
+        sb.Append(sr != null ? "SpriteRenderer" : (img != null ? "UI.Image" : "无渲染组件"));
+        var p = node.transform.position;
+        sb.Append(" pos=").Append(p.x.ToString("F1")).Append(",").Append(p.y.ToString("F1")).Append(",").Append(p.z.ToString("F1"));
+        sb.Append(" scale=").Append(node.transform.lossyScale.x.ToString("F2"));
     }
 
     static void SetNode(GameObject go, bool on)
