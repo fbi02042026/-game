@@ -70,7 +70,8 @@ public static class RiftEquipGenerator
         }
 
         EquipSlotType slotType = MapSlotType(slot.SlotId, job);
-        EquipTemplate visual = PickVisualTemplate(slotType, job, fixedForTutorial);
+        // 【2026-10-12 主人拍板】外观模板按稀有度取同档（传奇只挑传奇模板，稀有 / 普通不挑传奇模板）
+        EquipTemplate visual = PickVisualTemplate(slotType, job, fixedForTutorial, rarity.Id == "LEGEND");
         // 本职业没有可用武器模板 → 这件直接不掉，不拿别职业武器凑数
         if (visual == null && slot.IsWeapon) return null;
         // 2026-09-27 主人要求「副本掉的装备名字和图片也要对齐」——根因在这里：
@@ -411,9 +412,13 @@ public static class RiftEquipGenerator
 
     static bool IsRateAttr(string id)
     {
+        // 【2026-10-12 主人拍板】MS（移速）必须按百分比折算：装备移速基准是 0.96 世界单位/秒
+        // （GameConfig.BASE_MOVE_SPEED），表里 MS 区间 1.5~12.5 若按「点」直加到速度上
+        // 就是十几倍速（主人报「移速加12的鞋 走的跟飞一样快」）。×0.01 后 = 1.5%~12.5%，
+        // 与天赋移速（AttrSystem:494 同口径）一致。
         return id == "CRIT_RATE" || id == "CRIT_DMG" || id == "ATK_SPD" || id == "DMG_RED"
             || id == "DODGE" || id == "LIFE_STEAL" || id == "ELE_DMG" || id == "HEAL"
-            || id == "HP_REGEN" || id == "CONTROL_RES" || id == "ANTI_CRIT";
+            || id == "HP_REGEN" || id == "CONTROL_RES" || id == "ANTI_CRIT" || id == "MS";
     }
 
     /// <summary>
@@ -491,12 +496,35 @@ public static class RiftEquipGenerator
         return WeaponAffixSystem.RarityPrefix(MapToEngineRarity(rarity != null ? rarity.Id : null)) + body;
     }
 
-    static EquipTemplate PickVisualTemplate(EquipSlotType slot, PlayerJobId job, bool fixedForTutorial = false)
+    /// <summary>
+    /// 这件模板算不算「传奇档」—— 决定它能不能被传奇/非传奇品质抽到。
+    ///
+    /// <para>判据顺序：<c>isLegendary</c> 字段 → <c>globalBonus</c> → <c>skillPassives</c> 非空。
+    /// ⚠ 现网 16 件传奇武器模板的 <c>isLegendary</c> 实测仍是 0（历史遗留死字段，只报告未动），
+    /// 所以真正起作用的是后两条 —— 也正是「白送吸血被动」的那两条。
+    /// 将来若把 <c>isLegendary</c> 补成 1，这里自然以它为准，无需改调用方。</para>
+    /// </summary>
+    static bool IsLegendaryTemplate(EquipTemplate t)
+    {
+        if (t == null) return false;
+        if (t.isLegendary) return true;
+        if (t.globalBonus != null) return true;
+        return t.skillPassives != null && t.skillPassives.Count > 0;
+    }
+
+    static EquipTemplate PickVisualTemplate(EquipSlotType slot, PlayerJobId job, bool fixedForTutorial = false, bool wantLegendary = false)
     {
         var templates = Resources.LoadAll<EquipTemplate>(ContentPaths.Config.Equips);
         if (templates == null || templates.Length == 0) return null;
 
+        // 【2026-10-12 主人拍板】外观模板必须与稀有度**同档**：稀有 / 普通品质不得套传奇武器模板。
+        // 起因：主人抽到「稀有·誓约法杖」却带【被动】吸血 —— 根因就是这里不按稀有度筛模板，
+        // 稀有品质抽中了传奇武器模板，把它的 skillPassives / globalBonus 一起白送了
+        // （主人原话「怎么前期就能抽中这么好的　两个属性还有被动技能」）。
+        // tierMismatch = 档位不符的模板，**只在同档池为空时**兜底 —— 否则某些职业
+        // （典型是"武器模板全是传奇"）会挑不到任何外观 → 武器直接不掉、抽奖出不了卡。
         var pool = new List<EquipTemplate>();
+        var tierMismatch = new List<EquipTemplate>();
         for (int i = 0; i < templates.Length; i++)
         {
             var t = templates[i];
@@ -505,18 +533,21 @@ public static class RiftEquipGenerator
             // 只给副手槽放行锚点；主手 / 防具的锚点过滤一字未改。
             if (t == null) continue;
             if (t.isAnchor && slot != EquipSlotType.OffHand) continue;
+            var bucket = IsLegendaryTemplate(t) == wantLegendary ? pool : tierMismatch;
             if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
             {
                 if (t.weaponType == WeaponType.None) continue;
                 if (!PlayerJobDefs.TemplateMatchesJob(t, job)) continue;
-                pool.Add(t);
+                bucket.Add(t);
             }
             else
             {
                 if (t.slotType != slot) continue;
-                pool.Add(t);
+                bucket.Add(t);
             }
         }
+        if (pool.Count == 0 && tierMismatch.Count > 0)
+            pool = tierMismatch;   // 兜底：同档一件模板都没有 → 退回不限档（宁外观重复，不可没外观）
         // 2026-09-26 主人拍板：武器按职业伤害类型分池——魔法职业(法师/牧师)优先掉魔法武器，物理职业优先掉物理武器。
         // 判定走表（player_job_base_stats.伤害类型），不写死职业。
         // ⚠ 做成「优先」而非「强制」：优先池为空时回退到按职业过滤的池，避免某职业一件武器都不掉。

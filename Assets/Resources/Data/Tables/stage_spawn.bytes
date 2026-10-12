@@ -1,9 +1,14 @@
-# ⚠ 流程测试数据版（2026-09-23）：每关 1 只怪 / 1 波，只用来跑通流程，测完必须还原。
-# 正式版备份在 .workbuddy/backup/20260923_stage_test_data/stage_spawn.csv
-# 原表说明：monsterTotal=0 表示走 GameConfig.GetStageMonsterTotal 公式（含随机）；
-#           仅第一章首关 (1,0,Normal)=9 为固定总数，其余通配行保持 0 以免冻死手感。
+# 【2026-10-12 主人拍板「把关卡的怪物数量回复正常」】
+# 本表在 2026-09-23 被整表换成「流程测试数据版」（每关 1 只怪 / 1 波，只为跑通流程），
+# 表头自己写着「测完必须还原」，结果一直留到今天 —— 现按 git 历史里的正式版（4baa59f6）还原：
+#   第一章首关 (1,0,Normal) = 固定 9 只 / 4~6 波；其余走 GameConfig.GetStageMonsterTotal 公式。
+# ⚠ 同时保留 2026-09-26 之后新加的第 8 列 magicChance（本关魔法怪占比），正式版那会儿还没有这列。
+# ⚠ 同批测试开关 GameConfig.TEST_BOSS_SOLO / TEST_BOSS_HP 已在代码里整段删除，别再开回来。
+#
+# monsterTotal=0 表示走 GameConfig.GetStageMonsterTotal 公式（含随机）；正数 = 固定总数。
+# magicChance   = 本关魔法怪占比(0~1)；-1/空 = 未配置，回退 monster_attack_style.csv 单怪级判定。
 gameChapter,stageIndex,stageType,monsterTotal,waveCountMin,waveCountMax,eliteScaleMul,magicChance,note
-1,0,Normal,1,1,1,1.0,0.35,TEST首关也1只1波（原9只6波）；magicChance=魔法怪占比
-*,*,Normal,1,1,1,1.0,0.35,TEST普通关1只1波；magicChance=魔法怪占比
-*,*,Elite,1,1,1,1.5,0.35,TEST精英关1只1波；magicChance=魔法怪占比
-*,*,Boss,1,1,1,1.0,0.5,TEST Boss关：本行 monsterTotal 现=小怪数（WavePlanner.ResolveBossMinionTotal 读），正数才生效；0/空=回退GameConfig公式。测试期另有 GameConfig.TEST_BOSS_SOLO 直接归0。magicChance=Boss 魔法概率（主人定 0.5）
+1,0,Normal,9,4,6,1.0,0.35,第一章首关固定9只4-6波
+*,*,Normal,0,3,6,1.0,0.35,默认普通关公式
+*,*,Elite,0,3,6,1.5,0.35,精英关公式
+*,*,Boss,0,3,7,1.0,0.5,Boss小怪公式（magicChance=主人定0.5）

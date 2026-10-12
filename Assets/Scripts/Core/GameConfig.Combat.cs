@@ -614,13 +614,15 @@ public static partial class GameConfig
     public static float BOSS_ENRAGE_ATK_SPEED_MUL => CombatTuningTable.Get("BOSS_ENRAGE_ATK_SPEED_MUL", 1.5f);
 
     // =====================================================================
-    // ⚠⚠ 流程测试开关（2026-09-23 加）—— 测完必须整段注释掉 / 删掉 ⚠⚠
-    // 只影响 Boss 关，纯代码侧，不碰任何配表。
-    // ---------------------------------------------------------------------
-    /// <summary>Boss 关只出 Boss 本体，不出小怪波（小怪数按 0 处理）。</summary>
-    public const bool TEST_BOSS_SOLO = true;
-    /// <summary>Boss 血量压到固定值，方便一击通关验证流程。0 或负 = 关闭此开关。</summary>
-    public const int TEST_BOSS_HP = 1;
+    // ⚠【2026-10-12 整段删除·主人「把关卡的怪物数量回复正常」】
+    // 这里原本是 2026-09-23 加的**流程测试开关**，当时自己就写着「测完必须整段删掉」，
+    // 结果一直留到今天：`TEST_BOSS_SOLO = true`（Boss 关不出小怪波）+ `TEST_BOSS_HP = 1`
+    // （Boss 血量压到 1，一击通关）。它俩与 stage_spawn.csv 的「TEST 每关 1 只怪 1 波」
+    // 是同一批测试数据（后者已一并还原，见该文件）。
+    // 按铁律「不留 xxxEnabled 开关」，两个常量**连同调用点一起删干净**，不设为 false / 0 了事：
+    //   · TEST_BOSS_SOLO  → 原调用点在 WavePlanner（Boss 小怪数归 0）
+    //   · TEST_BOSS_HP    → 原调用点在 Monster.cs:756（Boss 血被设成 1）
+    // 之后 Boss 关照常出小怪波、血量走正式公式。
     // =====================================================================
 
     /// <summary>精英血厚档</summary>

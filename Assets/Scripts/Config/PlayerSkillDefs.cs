@@ -380,7 +380,10 @@ public static class PlayerSkillDefs
             healPercentOfMax = src.healPercentOfMax,
             healAtkMul = src.healAtkMul,
             energyCost = src.energyCost,
-            hasCombat = src.hasCombat
+            hasCombat = src.hasCombat,
+            // 【2026-10-12 补漏】原来这一行漏抄，Fallback 里写的 mpCost（治愈之泉 100 / 天雷裁决 120）
+            // 克隆后全变 0 —— 缺表时 MpCostOf 会退化成「人人无蓝」，与「表与 Fallback 两边同值」口径打架。
+            mpCost = src.mpCost
         };
     }
 

@@ -752,9 +752,11 @@ public class Monster : UnitBase
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * GameConfig.MONSTER_HP_GLOBAL_MUL);
-        // ⚠ 流程测试开关（2026-09-23，测完注释掉）：Boss 压成 1 滴血，一击通关好验证流程
-        if (GameConfig.TEST_BOSS_HP > 0 && bossUnit)
-            attr.SetAttr(AttrType.MaxHp, GameConfig.TEST_BOSS_HP);
+        // ⚠【2026-10-12 整段删除·主人「把关卡的怪物数量回复正常」】
+        // 这里原本是流程测试开关 `GameConfig.TEST_BOSS_HP`（Boss 压成 1 滴血，一击通关好验证流程）。
+        // 它和 stage_spawn.csv 的「TEST 每关 1 只怪 1 波」是同一批 2026-09-23 测试数据，
+        // 主人拍板还原正式数值 → 常量连同这一处唯一调用点一起删掉，不留开关。
+        // 之后 Boss 血量照常走上面的 `baseHp × hpScale × waveMul × MONSTER_HP_GLOBAL_MUL`。
         // Boss 原先只有血量 TTK 加成，攻击没有 —— 补上，否则后期 Boss 打人比自家远程杂兵还轻
         float atkTtkMul = bossUnit ? GameConfig.BOSS_TTK_ATK_MUL : 1f;
         // 2026-09-26 主人拍板：怪物只分物理 / 魔法，攻击与防御二选一、不混搭。

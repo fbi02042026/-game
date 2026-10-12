@@ -203,7 +203,7 @@ public static class RiftEquipTables
             case "ATK": type = AttrType.Attack; return true;
             case "DEF": type = AttrType.Defense; return true;
             case "HP": type = AttrType.MaxHp; return true;
-            case "MS": type = AttrType.MoveSpeed; return true;
+            case "MS": type = AttrType.MoveSpeed; isPercent = true; return true;
             case "CRIT_RATE": type = AttrType.CritRate; return true;
             case "ATK_SPD": type = AttrType.AttackSpeed; return true;
             case "RANGE": type = AttrType.AttackRange; return true;
