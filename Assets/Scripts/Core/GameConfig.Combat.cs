@@ -276,8 +276,11 @@ public static partial class GameConfig
     /// <summary>
     /// 仅敌方弓/法球普攻频率倍率（1=表值；0.5=再降一半）。
     /// 我方（玩家职业表 AttackInterval、佣兵花名册 AtkSpeed）不再叠这个，否则 0.5 秒间隔会变成 1 秒。
+    /// 【0.5 → 1.0】2026-10-12 主人报「一大波远程敌人攻速太慢，半天打不了一次」：
+    /// 叠满后远程怪实际 = 0.39 ÷0.6 ×0.5 ≈ 0.33 次/秒（3 秒一发）。改 1.0 = 撤掉这半档，
+    /// 远程回到 0.65 次/秒（约 1.5 秒一发），仍保留 9-28「全体降 40%」的口径。要再调只动这一个数。
     /// </summary>
-    public const float PROJECTILE_ATK_SPEED_MUL = 0.5f;
+    public const float PROJECTILE_ATK_SPEED_MUL = 1.0f;
 
     /// <summary>
     /// 玩家（Hero）攻击速度倍率，0.8 = 出手间隔变慢 20%。
@@ -643,9 +646,10 @@ public static partial class GameConfig
     /// DamageFormula.FinalHit 的减法结果长期 ≤ 0，被 MinDamage=1 钳成 1 —— 不是护盾没接，是根本没得可减。
     /// 【原值 1f → 3f】2026-09-26：第 1 章杂兵 raw 26~41，3f 下剑盾净伤 6~21。
     /// 【3f → 2f】2026-09-28 主人拍板：3f 连引导关都嫌痛，先降回 2f。
-    /// 这是唯一的全局旋钮（Monster.cs 攻击赋值处），Boss 同步放大，嫌狠就往下调。
+    /// 【2f → 2.1f】2026-10-12 主人拍板「怪物的伤害再高一点点」：+5%，全局生效（Boss 同步）。
+    /// 这是唯一的全局旋钮（Monster.cs 攻击赋值处），嫌狠就往下调。
     /// </summary>
-    public const float MONSTER_DAMAGE_MULTIPLIER = 2f;
+    public const float MONSTER_DAMAGE_MULTIPLIER = 2.1f;
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备
     public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手（已改为包内同部位唯一，无穿戴槽）

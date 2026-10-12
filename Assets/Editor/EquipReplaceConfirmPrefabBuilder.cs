@@ -34,8 +34,21 @@ public static class EquipReplaceConfirmPrefabBuilder
     const string CancelSpritePath = "Assets/Art/UI/Common/取消按钮.png";
     const string FontPath = "Assets/Resources/Fonts/fusion-pixel.ttf";
 
-    // ===== 排版真值（沿用撤离弹窗的锚点习惯） =====
-    // Panel：Root 中心锚点，size 560×490
+    // ===== 排版真值 =====
+    //
+    // 🔴🔴🔴 【2026-10-12 立】本生成器已过时，**禁止重跑「Tools/装备/生成替换装备确认弹窗预制体」** 🔴🔴🔴
+    //
+    // 核对发现预制体 Assets/Resources/Prefabs/Battle/EquipReplaceConfirmPopup.prefab
+    // 早被手工调整过，与下面的常量**完全对不上**：
+    //   · 实际 Panel 是 600×620（这里写的是 560×490）；Column 中心 y 实际 −272（这里 −18）
+    //   · Desc 中心 y 实际 −226（这里 −214）；Verdict/Hint/按钮 实际 −449/−479/−538（这里 −328/−368/−406）
+    //   · 预制体里还有 **biaoti / Tile / Icon (1) ×2** 四个本生成器根本不认识的手工节点
+    // → 一旦重跑，SaveAsPrefabAsset 会把这些手工成果**全部抹掉**、排版打回旧版，还可能重新签发 guid。
+    //
+    // 属性竖排（Panel 680 / 列 360 / Desc 高 182、字号 20、行距 1.3 / Info 字号 24 / 底部三行下移 60）
+    // 已于 2026-10-12 **直接改预制体 YAML** 落地，脚本 + 备份在
+    // .workbuddy/backup/20261012-equipreplace-prefab/。
+    // **排版真值现在在预制体里**：要再调就改 YAML，别跑这个菜单。
     const float PanelW = 560f;
     const float PanelH = 490f;
     /// <summary>标题底边离 Panel 顶边的间隙（标题整行在弹窗外面）。</summary>
@@ -174,11 +187,14 @@ public static class EquipReplaceConfirmPrefabBuilder
         nameText.resizeTextForBestFit = true;
         nameText.resizeTextMaxSize = 24;
 
+        // 品质/星级行。**这里的值已过时**（预制体现役是 24 号），原因同上：真值在预制体里。
         var info = Node("Info", col);
         TopAnchor(info, 0f, -182f, ColumnW - 14f, 28f);
         var infoText = MakeText(info.gameObject, font, 22, new Color(0.42f, 0.72f, 0.98f), TextAnchor.MiddleCenter);
         infoText.supportRichText = true;
 
+        // Desc = 装备属性行。**这里的值已过时**（预制体现役是 高 182 / 字号 20 / 行距 1.3），
+        // 只是留着不让它比真实值更离谱；要改请直接改预制体 YAML，别跑本菜单（见文件头红色警告）。
         var desc = Node("Desc", col);
         TopAnchor(desc, 0f, -214f, ColumnW - 14f, 80f);
         var descText = MakeText(desc.gameObject, font, 19, new Color(0.80f, 0.80f, 0.84f), TextAnchor.UpperLeft);

@@ -335,8 +335,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         var afterNaming = new List<StoryBeat>
         {
+            // 【2026-10-12 主人拍板】第一句带玩家名字（与会长送别句同一口径，起名后才播这段）
             StoryDirector.Solo("咨询台小姐",
-                "第一次下裂隙？三件事：\n1. 你只管走路，打架会自动打。\n2. 裂隙很危险，尽量组队进入。\n3. 见好就收，活着才有收益。",
+                $"{StoryProgress.GetPlayerName()}，第一次下裂隙？三件事：\n1. 你只管走路，打架会自动打。\n2. 裂隙很危险，尽量组队进入。\n3. 见好就收，活着才有收益。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)
         };
@@ -470,6 +471,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         //   这里只剩「刷第一波 + 借 3.2 秒读字时间让怪走进场」，不再有教走路这一步。
         if (bm != null) bm.UnitsCanAct = false;
         HaltUnit(Hero.Instance);
+        // 【2026-10-12 主人拍板】「先打一波」这句**提到玩家一出场就播** ——
+        //   主人原话「先打一波那个引导在玩家一出来就播」。
+        //   原位置在 CoTeachControls 之后（刷怪 + 3.2 秒进场走完才弹），玩家已经在场上站了 3 秒多才看到，
+        //   现在移到刷怪之前，出场即见；怪照常在下面那 3.2 秒里走上来。
+        hint.Show("先打一波热热身。靠近怪物会自动攻击。", null, 8f);
         yield return CoTeachControls(bm, hint, ui, preloadStep: 1);
 
         // —— 1) 首波清场后进入宝箱剧情（不再刷第二小波）——
@@ -478,9 +484,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 借「技能能量满会自动释放」那 3.2 秒读字时间走完进场，这里不再重复刷
         // （EnsureTutorialStep 不看是否已刷过，重复调用会多排一波）。
         TutorialBattleTable.EnsureLoaded();
-        // 【2026-10-08 主人拍板】第一波先给一句「热身」的引导，再教自动攻击 ——
-        // 主人原话「先打一波热热手什么的」；这句是唯一文案源，想改措辞改这里即可。
-        hint.Show("先打一波热热身。靠近怪物会自动攻击。", null, 8f);
+        // 【2026-10-08 主人拍板】第一波那句「热身」引导已于 2026-10-12 上移到 BattleRoutine 开场
+        //   （玩家一出场就播，见上方 hint.Show）。文案唯一源仍是那一处，想改措辞改那里即可。
         if (bm != null) bm.UnitsCanAct = true;
         yield return WaitFieldClear();
 
@@ -519,10 +524,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 真等玩家把 12 只都打完（WaitFieldClear），塔克就变成「清完场才姗姗来迟」，整段演出废掉。
         // ① 先等 12 只全部进场站定（波次是异步进场的，不能怪还没露面就开始吐槽）；
         yield return WaitMonstersFinishedEnter(bm);
-        // ② 【2026-10-10 主人拍板】血掉到 50% 以下再触发这段「要死了」剧情 ——
-        //    不再是「12 只全进场就触发」，要玩家真被打疼了塔克才登场。
-        //    CoWaitAmbushPressure 阈值同步收紧 0.62 → 0.5；等不到就按超时/打空兜底往下走（流程不能卡死）。
-        yield return CoWaitAmbushPressure(bm);
+        // ② 【2026-10-12 主人拍板】「出现一大波的时候不用打直接弹剧情」——
+        //    不再等掉血 50% / 15s 超时 / 打空，怪一站定就直接进躺尸剧情、塔克天降。
+        //    CoWaitAmbushPressure 自此停用（保留方法体，删调用即可恢复旧行为）。
 
         // —— 1e)【2026-10-09 主人拍板】第 4~9 步：十几只压上来 → 玩家躺平 → 塔克天降一趟清场 → 玩家看傻 ——
         // 主人 10-08 口述：抽到武器以为能大展身手，结果十几只压上来；正当玩家觉得要死了的时候，佣兵闪亮登场。
@@ -545,7 +549,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         headTalk?.HideNow();
         yield return new WaitForSecondsRealtime(0.5f);
 
-        // 第 6~8 步：塔克天降 → 丢下「躲在我后面。」→ 一趟跑完全场，回原位后全体一起死。
+        // 第 6~8 步：塔克天降 → 丢下「躲在我后面。」→ 一趟跑完全场，直接停在怪的身后，全体一起死。
         // 这段之前必须把场上所有怪也冻住，否则它们会在塔克跑动时追着玩家改写坐标。
         if (bm != null && bm.monsters != null)
         {
@@ -554,7 +558,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
         Mercenary rescuer = null;
         // CoTutorialRescueBeat 内部：① 抛物线跳进来（原样保留）② 落地丢一句「躲在我后面。」
-        // ③ 逛一圈回原位再统一判死（见下面【改动 E】的改造）。
+        // ③ 逛一圈扫完直接统一判死（2026-10-12 起不再回原位，见方法内注释）。
         // ⚠ 第 7 步「躲在我后面。」放在清场**之前**（写在 CoTutorialRescueBeat 里、落地之后、起跑之前）：
         //   主人定稿的顺序是「天降 → 丢话 → 清场」，先护住玩家再动手才顺 —— 所以这里**不再**重复说第二遍。
         yield return CoTutorialRescueBeat(bm, m => rescuer = m, headTalk);
@@ -593,6 +597,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 表上含 1 精英的 order=4 留给后面的宿敌戏（见下）。
         bm?.QueueTutorialStep(5);
 
+        // 【2026-10-12 主人报「第三波还是看不到敌人就弹对话框」】先等这波怪进场站定再弹提示
+        // （波次异步入场，原来 Queue 完立刻 hint.Show，玩家看到对话框时场上还没怪）。
+        yield return WaitMonstersFinishedEnter(bm);
+
         // 不冻结战斗：玩家可随时上前清怪。
         // 2026-09-18：这里原本会直接改写 Hero 坐标把玩家往前推（最高 18/秒），
         // 触发瞬间看起来就是「被瞬移」。只等待，绝不动画家坐标。
@@ -627,6 +635,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 抽到什么就是什么，全职业一个概率。
         // ⚠ 原来这里的「固定三选一 + 拖拽定释放顺序」教学拍（CoTutorialSkillDraft）已被这一抽顶掉并删除。
         //   拖拽教学改由 SkillOrderGuide 做软引导：玩家凑够 2 个技能时弹一条会自己消失的气泡，不挡操作。
+        // 【2026-10-12 主人拍板「每次引导战力一样」】引导局这一抽**固定发「治愈之泉」**
+        //   （SlotMachineDefs.TutorialFixedSkillId，见 DraftPool.CollectNewSkills 引导分支）；
+        //   正式关仍是随机池，全职业一个概率。
         // 第三抽的钱来自开局 240 的最后 80（240 − 80×3 = 0），中途没有任何补贴。
         if (bm != null)
             yield return bm.CoMidBattleDraft(TutorialDrawBeatText);
@@ -675,7 +686,13 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return CoWatchPlayerSkill(bm, hint);
 
         if (rival != null)
+        {
             yield return CoEliteLastWords(bm, headTalk, rival);
+            // 【2026-10-12 主人报「怎么精英一刀就被塔克干死了」】遗言说完直接冻场收头：
+            // 塔克冲过去一剑 + 闪电判死，不让普攻抢先，收头也看得清。
+            if (rival != null && !rival.isDead)
+                yield return CoTuckerFinishElite(bm, merc, rival);
+        }
 
         yield return WaitFieldClear(strict: true);
 
@@ -716,8 +733,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
     const float RescueEnterDist = 9.5f;
 
     /// <summary>
-    /// 天降落点：玩家右前方这么远（站到玩家和怪之间）。
-    /// 【2026-10-10 主人拍板】2.0 → 1.2（约一个身位）：原来落得太远，看着像跳进怪堆里。
+    /// 天降落点：玩家身边这么远（约一个身位）。
+    /// 【2026-10-10 主人拍板】2.0 → 1.2：原来落得太远，看着像跳进怪堆里。
+    /// 【2026-10-12 主人拍板】落点从「玩家右前方」改到<b>玩家同侧身边</b> ——
+    /// 旧行为是越过玩家头顶落到他右前方，主人判定为「调到玩家对面」，明确要求「调到玩家身边」。
     /// </summary>
     const float RescueLandDist = 1.2f;
 
@@ -732,6 +751,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
     /// <para>为什么不等 <c>WaitFieldClear</c>：主人要的是「被围殴到喊救命」，
     /// 让玩家自己打完就没有天降的理由了（12 只纯近战是照这个意图配的）。</para>
     /// </summary>
+    /// <para>【2026-10-12 起停用】压场波（order=7）改为「怪进场站定后直接弹剧情」，
+    /// 不再等玩家掉血 / 超时 / 打空 —— 主人原话「出现一大波的时候不用打直接弹剧情」。
+    /// 方法体保留：把调用点（原 :529 附近）加回来即可恢复旧行为。</para>
+    /// <para>历史判定（停用前）：掉血跌破 50% / 撑满 15s / 场上打空，哪个先到算哪个。</para>
     IEnumerator CoWaitAmbushPressure(BattleManager bm)
     {
         // 【2026-10-09 主人拍板】这个等待原本服务于埋伏拍（order=3），埋伏拍删掉后由 12 只压场波（order=7）接手复用：
@@ -774,7 +797,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         onSpawned?.Invoke(null);
         if (bm == null) yield break;
 
-        var merc = bm.SpawnTutorialMercAt(null, 1f, RescueEnterDist, stunned: false);
+        // 【2026-10-12 主人拍板】aheadDist 传<b>负值</b>：让塔克直接生在跳跃起点（玩家左侧场外），
+        // 而不是先落到玩家右侧 9.5 的「对面」再被瞬移回来。
+        // 顺带解决相机：SpawnTutorialMercAt 内部会 ExtendCameraMaxX(pos.x + 6f)，
+        // 旧写法会把相机 maxX 顶到 heroX+15.5（画面被往对面拉），改成起点后该值远小于当前上限、不再生效。
+        var merc = bm.SpawnTutorialMercAt(null, 1f, -RescueEnterDist, stunned: false);
         if (merc == null)
         {
             Debug.LogError("[Tutorial] 塔克天降失败：SpawnTutorialMercAt 返回空（救场演出整段跳过，流程继续）");
@@ -784,9 +811,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         float heroX = Hero.Instance != null ? UnitBase.GetCombatX(Hero.Instance) : 0f;
         float z = bm.unitRoot != null ? bm.unitRoot.position.z : merc.transform.position.z;
-        // 2026-10-10 主人拍板：从屏幕左侧跳进来（落点不变，仍站玩家右前方护住玩家）。
+        // 【2026-10-12 主人拍板】「从场外调到玩家身边就行，不要调到玩家对面」
+        // → 起点仍是屏幕左侧场外，落点改到玩家<b>同侧</b>（heroX − RescueLandDist），
+        //   不再越过玩家头顶飞到他右前方。
         float fromX = heroX - RescueEnterDist;
-        float toX = heroX + RescueLandDist;
+        float toX = heroX - RescueLandDist;
 
         // ① 抛物线跳进来（0.55 秒）：只改世界坐标
         const float jumpDur = 0.55f;
@@ -803,14 +832,19 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }
         GameConfig.SetWorldPosition(merc.gameObject, new Vector3(toX, UnitBase.GROUND_Y, z));
 
-        // 【2026-10-10 主人拍板】落地立刻面向玩家（-1 = 朝左，塔克落在玩家右前方）——
-        // 主人反馈「塔克上场后背对着玩家」：落地后巡逻/待机逻辑会把朝向翻回去，这里补一道保险。
-        merc.Face(-1);
+        // 【2026-10-12 主人拍板】「朝向和玩家一样」→ 取玩家当前朝向，不再写死 −1。
+        // 旧版写死 −1 是为了「塔克落在右前方时回头面向玩家」；落点已改到玩家同侧，
+        // 再回头就变成背对战场。跟玩家同向 = 并肩朝怪，而且 AI 自动寻敌也是同向，不会被翻回去。
+        // （Hero.facingDir 是 public，1 = 右 / −1 = 左，见 UnitBase.cs:163）
+        merc.Face(Hero.Instance != null ? Hero.Instance.facingDir : 1);
 
-        // ②【2026-10-09 主人拍板改造】落地 → 丢一句「躲在我后面。」→ 一趟跑完全场 → 回原位 → 全体一起死。
-        //   主人原话：「玩家和怪都没动的情况下，几秒把所有怪打一遍，然后回到原地，然后所有怪一起死亡」。
-        //   所以不再是站在原地逐个判死，而是：冲刺到每只怪身侧 → 只落一道闪电（先不判死）→
-        //   全部走完跑回起始点 → 停 0.3 秒 → 统一 TakeDamage 判死（尸体动画 / 掉落照旧）。
+        // ②【2026-10-09 主人拍板改造 / 2026-10-12 再改】落地 → 丢一句「躲在我后面。」→ 一趟跑完全场 → 全体一起死。
+        //   主人原话：「玩家和怪都没动的情况下，几秒把所有怪打一遍，然后所有怪一起死亡」。
+        //   所以不再是站在原地逐个判死，而是：冲刺到每只怪身侧 → 只落一道闪电（**先不判死**）→
+        //   全部走完 → 停 0.3 秒 → 统一 TakeDamage 判死（尸体动画 / 掉落照旧）。
+        //   【2026-10-12 主人拍板】「塔克打完后不用跳回，打完直接冲到怪的后面就行」：
+        //   冲刺时每只怪都落在其右侧 0.6（= 怪的背后），扫完塔克自然站在最后一只怪的身后，
+        //   原「跑回起始点」段已删。
         //   ⚠ 全程只改塔克自己的世界坐标，其它单位一概不动（2026-09-18 教训：绝不推着英雄走 / 瞬移）。
         //   第 7 步「躲在我后面。」就放在这里（落地之后、起跑之前）：主人定稿的顺序是
         //   「天降 → 丢话 → 清场」，先护住玩家再动手才顺 —— 调用方那一段里不再重复这句。
@@ -826,21 +860,23 @@ public class TutorialDirector : Singleton<TutorialDirector>
             var m = bm.monsters[i];
             if (m != null && !m.isDead) victims.Add(m);
         }
-        // 按世界 X 从大到小排：塔克从右到左一趟扫过去，不折返。
-        victims.Sort((a, b) => UnitBase.GetCombatX(b).CompareTo(UnitBase.GetCombatX(a)));
+        // 【2026-10-12 主人拍板】「不能从前面一直打到后面吗」→ 扫描方向反过来：
+        // 按世界 X 从小到大（从左到右），塔克从玩家左侧出发，先打最靠近玩家的「前面」，
+        // 一路往右打到最远的「后面」，扫完正好停在最后一只怪的身后（它的右侧 0.6）。
+        victims.Sort((a, b) => UnitBase.GetCombatX(a).CompareTo(UnitBase.GetCombatX(b)));
 
-        // 起始点记下来：清完场要跑回这个点（主人原话「然后回到原地」）。
-        float homeX = UnitBase.GetCombatX(merc);
         // 单段冲刺 / 停顿时长按怪数摊：12 只时全程约 2~3 秒，不拖到 5 秒以上。
         int vc = victims.Count > 0 ? victims.Count : 1;
         float dashDur = Mathf.Clamp(1.6f / vc, 0.09f, 0.20f);
         float holdDur = Mathf.Clamp(0.6f / vc, 0.02f, 0.06f);
 
-        // 【2026-10-10 主人拍板】冲刺要有拖尾/残影：起跑前开，回原位后立刻停（到点自动收干净，不留永久对象）。
-        float trailDur = (victims.Count + 1) * dashDur + victims.Count * holdDur;
+        // 【2026-10-10 主人拍板】冲刺要有拖尾/残影：起跑前开，扫完立刻停（到点自动收干净，不留永久对象）。
+        // 2026-10-12：不回原位了，拖尾时长不再给回程 +1 段。
+        float trailDur = victims.Count * (dashDur + holdDur);
         if (victims.Count > 0) TutorialRescueAfterimage.RunTrail(merc, trailDur);
 
-        float curX = homeX;
+        // 冲刺起点 = 塔克落点（homeX 随「回原位」段一并删除，2026-10-12）
+        float curX = toX;
         for (int i = 0; i < victims.Count; i++)
         {
             var m = victims[i];
@@ -851,13 +887,13 @@ public class TutorialDirector : Singleton<TutorialDirector>
             // 2026-10-10 主人拍板：到位先面向受害者挥一剑（加速攻击动画），再落闪电 —— 不要只是位移。
             merc.Face(UnitBase.GetCombatX(m) >= UnitBase.GetCombatX(merc) ? 1 : -1);
             merc.PlayAttackAnimOnly(AttackVfxKit.MeleeSlash, false, RescueAttackAnimSpeed, forceRestart: true);
-            // 到位只播一道闪电，**先不判死**（统一留到回原位之后）
+            // 到位只播一道闪电，**先不判死**（统一留到扫完之后）
             vfx?.PlayLightning(m.transform.position, VfxFaction.Ally);
             yield return new WaitForSecondsRealtime(holdDur);
         }
 
-        // 回原位（同样补间过去，不瞬移）→ 停 0.3 秒 → 全体一起死
-        yield return CoMoveUnitTo(merc.gameObject, curX, homeX, z, dashDur);
+        // 【2026-10-12 主人拍板】不跳回原位 —— 塔克就停在最后一只怪的身后（冲刺时每只怪都落在其右侧 0.6），
+        // 停 0.3 秒 → 全体一起死
         TutorialRescueAfterimage.StopTrail();
         yield return new WaitForSecondsRealtime(0.3f);
 
@@ -968,6 +1004,43 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return TalkBlock(bm, headTalk,
             new TalkLine(elite, "我不过是个小杂鱼……", 2.2f),
             new TalkLine(elite, "可你前面的路，将会是一片黑暗。", 2.6f));
+    }
+
+    /// <summary>
+    /// 【2026-10-12 主人拍板】精英遗言说完后的「塔克收头」演出：冻场 → 塔克冲到精英身侧
+    /// 挥一剑 + 落一道闪电 → 统一判死。替代原来的「遗言完谁普攻谁顺手收掉」
+    /// （主人报「怎么精英一刀就被塔克干死了」—— 收头要有演出，且不能让普攻抢先）。
+    /// 只改塔克自己与世界坐标，绝不推着英雄走 / 瞬移（2026-09-18 教训）。
+    /// </summary>
+    IEnumerator CoTuckerFinishElite(BattleManager bm, Mercenary merc, Monster elite)
+    {
+        if (bm == null || merc == null || elite == null || elite.isDead) yield break;
+
+        bool canActBefore = bm.UnitsCanAct;
+        bm.UnitsCanAct = false;
+        HaltUnit(Hero.Instance);
+        if (bm.monsters != null)
+        {
+            for (int i = 0; i < bm.monsters.Count; i++)
+                HaltUnit(bm.monsters[i]);
+        }
+
+        float z = bm.unitRoot != null ? bm.unitRoot.position.z : merc.transform.position.z;
+        float eliteX = UnitBase.GetCombatX(elite);
+        float targetX = eliteX + 0.6f;   // 停在精英右侧 = 它的身后，与清场演出同一定位口径
+        float fromX = UnitBase.GetCombatX(merc);
+        yield return CoMoveUnitTo(merc.gameObject, fromX, targetX, z, 0.25f);
+
+        merc.Face(eliteX >= UnitBase.GetCombatX(merc) ? 1 : -1);
+        merc.PlayAttackAnimOnly(AttackVfxKit.MeleeSlash, false, RescueAttackAnimSpeed, forceRestart: true);
+        BattleVFXSystem.Instance?.PlayLightning(elite.transform.position, VfxFaction.Ally);
+        yield return new WaitForSecondsRealtime(0.35f);
+
+        elite.TakeDamage(TutorialRescueDamage, true, true, true, 0, merc);
+        Debug.Log("[Tutorial] 塔克收头：精英宿敌");
+        yield return new WaitForSecondsRealtime(0.45f);
+
+        bm.UnitsCanAct = canActBefore;
     }
 
     /// <summary>
@@ -1398,63 +1471,33 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
     static EquipInstance CreateTutorialEquipDrop()
     {
-        // 宝箱只掉武器，避免误给防具
-        // 破旧木剑(equip_training_sword)走「起步武器 70% 普通档」，稀有度强制不生效，
-        // 玩家拿到手反而比初始武器弱，爽点会塌。引导宝箱改为优先给常规武器。
-        // 2026-09-26：教程宝箱按当前职业发 —— 第一优先读 player_job_base_stats 的「主手模板ID」，
-        // 拿到后仍过一遍 PlayerJobDefs.TemplateMatchesJob（按职业/武器类型过滤），
-        // 不再让法师、牧师开出剑、斧。
-        var job = PlayerJobDefs.GetSelected();
-        var prefer = new List<string>();
-        PlayerJobBaseStats.TryGet(job, out PlayerJobBaseStats.Row jobRow);
-        if (!string.IsNullOrEmpty(jobRow.StarterMainTemplateId))
-            prefer.Add(jobRow.StarterMainTemplateId);
-        prefer.Add("equip_sword_1");
-        prefer.Add("equip_axesmall1");
-        prefer.Add("equip_training_sword");
-        for (int i = 0; i < prefer.Count; i++)
-        {
-            EquipTemplate tpl = ConfigManager.Instance != null
-                ? ConfigManager.Instance.GetEquipTemplate(prefer[i])
-                : null;
-            if (tpl == null)
-                tpl = Resources.Load<EquipTemplate>(ContentPaths.Config.Equips + "/" + prefer[i]);
-            if (tpl == null) continue;
-            // 只发本职业能用（武器类型匹配 / 配表有映射）的武器
-            if (!PlayerJobDefs.TemplateMatchesJob(tpl, job)) continue;
-            tpl.ResolveIcon();
-            int lv = Hero.Instance != null ? Hero.Instance.level : 1;
-            // 强制稀有：初始武器是普通档(9~12)，稀有档(32~40)才撑得起「换装后 1~2 刀」的爽点
-            var eq = EquipInstance.GenerateFromTemplate(tpl, 0, lv, true, Rarity.Rare);
-            if (eq != null)
-            {
-                eq.requireLevel = 1;
-                if (eq.icon == null && tpl.icon != null) eq.icon = tpl.icon;
-                if (eq.icon == null) eq.icon = EquipIcons.Get(tpl.iconFileName);
-                AlignWeaponToHeroAttackHand(eq);
-                // 2026-09-27：传模板进去 —— 只给槽位的话，弓/斧也会被随机成剑名（名字和图对不上）。
-                // 2026-10-11 主人拍板「以后都统一这种命名规则」：随机名也要带稀有度前缀。
-                eq.equipName = WeaponAffixSystem.RarityPrefix(eq.rarity)
-                               + EquipNameGen.RandomWeaponName(tpl, eq.slotType);
-                return eq;
-            }
-        }
-
+        // 宝箱只掉武器（forceWeapon 强制主手武器分支），避免误给防具。
+        // 2026-10-12 主人拍板：引导宝箱不再「强制稀有」。
+        // 旧写法 GenerateFromTemplate(tpl, 0, lv, true, Rarity.Rare) 把武器钉死在稀有档
+        // （ATK 14~20 × 系数 ≈ 16~28，初始武器仅 4.5~6）→ 一抽就秒怪，体验崩。
+        // 现统一走掉落路径（GetRandomEquipInstances，带 RIFT_DROP_ATTR_BONUS +10）：
+        //   - 必为武器，且数值 > 初始武器（主人要求「初始武器最弱，随便一个都比它强」）；
+        //   - 稀有度由 hidden_level_rules.csv 曲线决定：隐藏等级 1 = 100% 普通，
+        //     随杀怪 / 通关慢慢提升稀有 / 传奇概率，前期普通为主。
+        // 2026-10-12 主人拍板「每次引导战力一样」：宝箱这件也走确定性生成（fixedForTutorial: true）
+        // —— 恒普通 / 必主手武器 / 属性取区间中值，与引导第一拍抽卡那件同口径。
         var list = ConfigManager.Instance != null
-            ? ConfigManager.Instance.GetRandomEquipInstances(1, 1, attrBonus: GameConfig.RIFT_DROP_ATTR_BONUS)
+            ? ConfigManager.Instance.GetRandomEquipInstances(1, 1, 0, StageType.Normal, GameConfig.RIFT_DROP_ATTR_BONUS, true, ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1, true)
             : null;
         if (list != null && list.Count > 0)
         {
             var eq = list[0];
-            if (eq != null) eq.requireLevel = 1;
-            eq?.template?.ResolveIcon();
-            if (eq != null && eq.icon == null && eq.template != null)
-                eq.icon = eq.template.icon;
-            if (eq != null && WeaponLoadoutRules.IsLoadoutItem(eq))
-                AlignWeaponToHeroAttackHand(eq);
-            if (eq != null && (string.IsNullOrEmpty(eq.equipName) || LooksLikeEnglishFileName(eq.equipName)))
-                eq.equipName = WeaponAffixSystem.RarityPrefix(eq.rarity)
-                               + EquipNameGen.RandomWeaponName(eq.template, eq.slotType);
+            if (eq != null)
+            {
+                eq.requireLevel = 1;
+                eq.template?.ResolveIcon();
+                if (eq.icon == null && eq.template != null) eq.icon = eq.template.icon;
+                if (WeaponLoadoutRules.IsLoadoutItem(eq))
+                    AlignWeaponToHeroAttackHand(eq);
+                if (string.IsNullOrEmpty(eq.equipName) || LooksLikeEnglishFileName(eq.equipName))
+                    eq.equipName = WeaponAffixSystem.RarityPrefix(eq.rarity)
+                                   + EquipNameGen.RandomWeaponName(eq.template, eq.slotType);
+            }
             return eq;
         }
         return null;

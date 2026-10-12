@@ -11,32 +11,44 @@ public static class RiftEquipGenerator
     // 只在防具分支读写（武器分支不碰），所以抽到武器不会清掉它。状态放静态字段，跨抽奖调用保留。
     static string _lastArmorSlotId;
 
-    public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f)
+    /// <param name="fixedForTutorial">
+    /// 2026-10-12 主人拍板「每次引导战力一样」：引导局（宝箱 / 第一拍抽卡）传 true，
+    /// 把所有随机点钉死 —— 稀有度恒普通、必为主手武器、部位/主属性/模板取序一定、
+    /// 属性值取区间中值。正式关不传（默认 false），概率曲线零影响。
+    /// </param>
+    public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false)
     {
         RiftEquipTables.EnsureLoaded();
         var list = new List<EquipInstance>();
         PlayerJobId job = PlayerJobDefs.GetSelected();
         for (int i = 0; i < count; i++)
         {
-            var inst = GenerateOne(stageType, job, blacksmithLevel, attrBonus);
+            var inst = GenerateOne(stageType, job, blacksmithLevel, attrBonus, forceWeapon, chapter, fixedForTutorial);
             if (inst != null) list.Add(inst);
         }
         return list;
     }
 
-    public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1, float attrBonus = 0f)
+    public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false)
     {
         RiftEquipTables.EnsureLoaded();
-        var rarity = RollRarity(stageType, blacksmithLevel);
-        bool wantWeapon = Random.value < 0.45f;
-        var slot = PickSlot(wantWeapon, job);
+        // 引导确定性化：稀有度恒 NORMAL（Ch1 20% 稀有曲线只影响正式关/非引导抽卡）。
+        var rarity = fixedForTutorial ? FindRarityRule("NORMAL") : RollRarity(chapter);
+        // forceWeapon 由引导宝箱传入：宝箱只掉武器，避免误给防具；否则保留默认 45% 武器概率。
+        // 引导确定性化：必为主手武器（引导第一拍定稿就是「一抽(武器)」）。
+        bool wantWeapon = forceWeapon || (fixedForTutorial ? true : Random.value < 0.45f);
+        var slot = PickSlot(wantWeapon, job, fixedForTutorial);
         if (slot == null) return null;
 
-        var main = PickWeightedLanded(slot.MainPool, job);
+        var main = PickWeightedLanded(slot.MainPool, job, null, fixedForTutorial);
         if (string.IsNullOrEmpty(main))
             main = slot.IsWeapon ? "ATK" : "HP";
 
-        float mainVal = ApplyDropBonus(main, RollAttrValue(main, rarity.Id, rarity.BaseMul, false), attrBonus);
+        // 2026-10-12 主人拍板：掉落数值随章节成长（复用怪物同款 ChapterStatScaleTable，
+        // Ch1 森林 0.88 → Ch8 冰川 2.12）——后期掉的传奇 > 前期掉的，
+        // 解决「前期掉落的装备到后期还是一样的数值」。词条 +10（RIFT_DROP_ATTR_BONUS）不变。
+        float chapterGrowth = ChapterStatScaleTable.Get(Mathf.Max(1, chapter));
+        float mainVal = ApplyDropBonus(main, RollAttrValue(main, rarity.Id, rarity.BaseMul, false, fixedForTutorial) * chapterGrowth, attrBonus);
         var attrs = new List<AttrBonusData>();
         if (TryMapAttr(main, mainVal, job, out var mainBonus))
             attrs.Add(mainBonus);
@@ -44,19 +56,21 @@ public static class RiftEquipGenerator
         int affixCount = rarity.AffixMin >= rarity.AffixMax
             ? rarity.AffixMin
             : Random.Range(rarity.AffixMin, rarity.AffixMax + 1);
+        // 引导确定性化：NORMAL 本就 0 词条；即便将来配表改了词条数，也按确定性走，不引入随机。
+        if (fixedForTutorial) affixCount = Mathf.Max(0, rarity.AffixMin);
         var used = new HashSet<string> { main };
         for (int a = 0; a < affixCount; a++)
         {
-            string id = PickWeightedLanded(slot.RandPool, job, used);
+            string id = PickWeightedLanded(slot.RandPool, job, used, fixedForTutorial);
             if (string.IsNullOrEmpty(id)) break;
             used.Add(id);
-            float v = ApplyDropBonus(id, RollAttrValue(id, rarity.Id, rarity.AffixMul, true), attrBonus);
+            float v = ApplyDropBonus(id, RollAttrValue(id, rarity.Id, rarity.AffixMul, true, fixedForTutorial) * chapterGrowth, attrBonus);
             if (TryMapAttr(id, v, job, out var bonus))
                 attrs.Add(bonus);
         }
 
         EquipSlotType slotType = MapSlotType(slot.SlotId, job);
-        EquipTemplate visual = PickVisualTemplate(slotType, job);
+        EquipTemplate visual = PickVisualTemplate(slotType, job, fixedForTutorial);
         // 本职业没有可用武器模板 → 这件直接不掉，不拿别职业武器凑数
         if (visual == null && slot.IsWeapon) return null;
         // 2026-09-27 主人要求「副本掉的装备名字和图片也要对齐」——根因在这里：
@@ -115,7 +129,10 @@ public static class RiftEquipGenerator
         //     见 Systems/EquipStatRollup.cs:83），并非 inst.template.skillPassives。
         // ⚠ 绝不要把 globalBonus / skillPassives 塞进 inst.attrBonus：会破坏 baseAttrCount 与
         //   词条数语义（WeaponAffixSystem 依赖它算词条数）。
-        if (visual != null)
+        // 【2026-10-12 主人拍板】引导确定性化武器 = 白板：模板被动/property 不灌进实例
+        // （主人报「为什么一个白色武器还有技能还有两个属性」—— 引导武器只留 主ATK + 名字/图标/SPUM）。
+        // 正式关掉落/抽奖不受影响（10-09 拍板原样生效）。
+        if (visual != null && !fixedForTutorial)
         {
             inst.globalBonus = visual.globalBonus;
             inst.skillPassives = new List<AttrBonusData>();
@@ -139,28 +156,54 @@ public static class RiftEquipGenerator
         return inst;
     }
 
-    static RiftEquipTables.RarityRule RollRarity(StageType stageType, int blacksmithLevel)
+    /// <summary>
+    /// 2026-10-12 主人拍板：掉落 / 抽奖稀有度权重按**章节**走，与隐藏等级彻底脱钩
+    /// （主人原话「我说的是整个章节的抽奖几率，跟等级无关」）。
+    /// 旧真源 HiddenLevelSystem.GetRarityWeights（hidden_level_rules.csv 等级轴）已废于此用途。
+    /// 【2026-10-12 稀有度梯度】主人原话「1，20% 2,25% 3,30% 4,35% 按这个概率走」，
+    ///   且「可以多一点少一点，不用非得是整 5 的倍数，35.5 / 46.3 这都可以」：
+    ///   Ch1 稀有 20% / Ch2 25% / Ch3 30% / Ch4 35%；Ch5 起沿曲线继续上浮（小数允许）。
+    ///   **传奇列不动**（0/1/2/3/3/6/8/10，Ch1 恒 0）。
+    /// 想调几率只改这一处（权重值，同章内三档自动归一）。
+    /// </summary>
+    static void ChapterRarityWeights(int chapter, out float wNormal, out float wRare, out float wLegend)
+    {
+        switch (Mathf.Clamp(chapter, 1, 8))
+        {
+            case 2: wNormal = 74f;   wRare = 25f;   wLegend = 1f;  break;
+            case 3: wNormal = 68f;   wRare = 30f;   wLegend = 2f;  break;
+            case 4: wNormal = 62f;   wRare = 35f;   wLegend = 3f;  break;
+            case 5: wNormal = 56.5f; wRare = 40.5f; wLegend = 3f;  break;
+            case 6: wNormal = 48.5f; wRare = 45.5f; wLegend = 6f;  break;
+            case 7: wNormal = 41.5f; wRare = 50.5f; wLegend = 8f;  break;
+            case 8: wNormal = 34.5f; wRare = 55.5f; wLegend = 10f; break;
+            default: wNormal = 80f; wRare = 20f; wLegend = 0f; break; // 第 1 章：稀有 20%，无传奇
+        }
+    }
+
+    static RiftEquipTables.RarityRule RollRarity(int chapter)
     {
         var rules = RiftEquipTables.Rarities;
         if (rules == null || rules.Count == 0)
             return FallbackRarity();
 
-        // 稀有度唯一真源：隐藏等级表。勿改用 WeightForStage（关卡段权重未启用）。
-        HiddenLevelSystem.GetRarityWeights(out int wN, out int wR, out int wL);
-        int total = 0;
-        var weights = new int[rules.Count];
+        // 稀有度唯一真源：章节曲线（ChapterRarityWeights）。勿改回隐藏等级或关卡段权重。
+        ChapterRarityWeights(chapter, out float wN, out float wR, out float wL);
+        float total = 0f;
+        var weights = new float[rules.Count];
         for (int i = 0; i < rules.Count; i++)
         {
-            int w = WeightForHidden(rules[i].Id, wN, wR, wL);
-            if (rules[i].Id == "LEGEND" && blacksmithLevel < 2 && stageType == StageType.Normal)
-                w = 0;
+            float w = WeightForRarity(rules[i].Id, wN, wR, wL);
+            // 第 1 章绝不掉传奇（双保险：Ch1 曲线权重本就为 0，防将来调曲线误给）。
+            if (rules[i].Id == "LEGEND" && Mathf.Max(1, chapter) <= 1)
+                w = 0f;
             weights[i] = w;
             total += w;
         }
-        if (total <= 0) return rules[0];
+        if (total <= 0f) return rules[0];
 
-        int roll = Random.Range(0, total);
-        int acc = 0;
+        float roll = Random.Range(0f, total);
+        float acc = 0f;
         for (int i = 0; i < rules.Count; i++)
         {
             acc += weights[i];
@@ -169,7 +212,8 @@ public static class RiftEquipGenerator
         return rules[rules.Count - 1];
     }
 
-    static int WeightForHidden(string rarityId, int wNormal, int wRare, int wLegend)
+    /// <summary>品质ID → 章节权重映射（2026-10-12 前叫 WeightForHidden，彼时真源是隐藏等级）。</summary>
+    static float WeightForRarity(string rarityId, float wNormal, float wRare, float wLegend)
     {
         switch (rarityId)
         {
@@ -179,7 +223,7 @@ public static class RiftEquipGenerator
         }
     }
 
-    [System.Obsolete("稀有度真源是 HiddenLevelSystem，不要接关卡段权重。")]
+    [System.Obsolete("稀有度真源是 ChapterRarityWeights 章节曲线，不要接关卡段权重。")]
     static int WeightForStage(RiftEquipTables.RarityRule r, StageType stageType)
     {
         switch (stageType)
@@ -215,7 +259,7 @@ public static class RiftEquipGenerator
     /// </summary>
     const float OffHandWeaponChance = 0.30f;
 
-    static RiftEquipTables.SlotPool PickSlot(bool wantWeapon, PlayerJobId job)
+    static RiftEquipTables.SlotPool PickSlot(bool wantWeapon, PlayerJobId job, bool fixedForTutorial = false)
     {
         var slots = RiftEquipTables.Slots;
         if (slots == null || slots.Count == 0) return null;
@@ -244,7 +288,8 @@ public static class RiftEquipGenerator
 
         // 【2026-10-11 主人拍板】副手武器也能抽到：命中就把候选整池换成副手池，
         // 抽不中就还是走本职业武器池。副手只占 30%，主手仍是主流。
-        if (wantWeapon && Random.value < OffHandWeaponChance)
+        // 引导确定性化：跳过这 30% 随机（固定走本职业主手武器池）。
+        if (wantWeapon && !fixedForTutorial && Random.value < OffHandWeaponChance)
         {
             for (int i = 0; i < slots.Count; i++)
             {
@@ -277,6 +322,9 @@ public static class RiftEquipGenerator
             }
         }
 
+        // 引导确定性化：固定取候选第一个（表顺序稳定，跨次运行一致），不掷随机。
+        if (fixedForTutorial) return pool[0];
+
         var picked = pool[Random.Range(0, pool.Count)];
         if (!picked.IsWeapon) _lastArmorSlotId = picked.SlotId;
         return picked;
@@ -284,7 +332,7 @@ public static class RiftEquipGenerator
 
     /// <summary>只从已落地词条里抽，未映射 ID 不占词条位、不进实例。
     /// 2026-09-26 主人拍板：毒伤只给游侠，职业白名单走表，不写死——非本职业白名单的词缀（如毒）直接不 roll。</summary>
-    static string PickWeightedLanded(List<RiftEquipTables.WeightedAttr> pool, PlayerJobId job, HashSet<string> exclude = null)
+    static string PickWeightedLanded(List<RiftEquipTables.WeightedAttr> pool, PlayerJobId job, HashSet<string> exclude = null, bool fixedForTutorial = false)
     {
         if (pool == null || pool.Count == 0) return null;
         int total = 0;
@@ -297,6 +345,24 @@ public static class RiftEquipGenerator
             total += Mathf.Max(0, pool[i].Weight);
         }
         if (total <= 0) return null;
+
+        // 引导确定性化：取权重最大的落地词条（并列取表序第一）—— 武器主池即 ATK，跨次运行一致。
+        if (fixedForTutorial)
+        {
+            int bestW = -1;
+            string bestId = null;
+            for (int i = 0; i < pool.Count; i++)
+            {
+                string id = pool[i].AttrId;
+                if (exclude != null && exclude.Contains(id)) continue;
+                if (!RiftEquipTables.IsCombatLanded(id)) continue;
+                if (!RiftEquipTables.IsAttrAllowedForJob(id, job)) continue;
+                int w = Mathf.Max(0, pool[i].Weight);
+                if (w > bestW) { bestW = w; bestId = id; }
+            }
+            return bestId;
+        }
+
         int roll = Random.Range(0, total);
         int acc = 0;
         for (int i = 0; i < pool.Count; i++)
@@ -311,10 +377,11 @@ public static class RiftEquipGenerator
         return null;
     }
 
-    static float RollAttrValue(string attrId, string rarityId, float mul, bool isAffix)
+    static float RollAttrValue(string attrId, string rarityId, float mul, bool isAffix, bool fixedForTutorial = false)
     {
         if (!RiftEquipTables.TryGetRange(attrId, out var range))
-            return (10f + Random.Range(0f, 20f)) * mul;
+            // 无表兜底区间同样确定性化：中值 20（原 10~30 随机）
+            return (fixedForTutorial ? 20f : 10f + Random.Range(0f, 20f)) * mul;
 
         float min, max;
         switch (rarityId)
@@ -333,7 +400,8 @@ public static class RiftEquipGenerator
                 break;
         }
         if (max < min) max = min;
-        float v = min + (max - min) * Random.value;
+        // 引导确定性化：区间中值（跨次运行一致）
+        float v = fixedForTutorial ? (min + max) * 0.5f : min + (max - min) * Random.value;
         v *= mul;
         // 百分比表内已是百分点数字（如 5 = 5%），运行时 CritRate 用 0~1
         if (IsRateAttr(attrId))
@@ -423,7 +491,7 @@ public static class RiftEquipGenerator
         return WeaponAffixSystem.RarityPrefix(MapToEngineRarity(rarity != null ? rarity.Id : null)) + body;
     }
 
-    static EquipTemplate PickVisualTemplate(EquipSlotType slot, PlayerJobId job)
+    static EquipTemplate PickVisualTemplate(EquipSlotType slot, PlayerJobId job, bool fixedForTutorial = false)
     {
         var templates = Resources.LoadAll<EquipTemplate>(ContentPaths.Config.Equips);
         if (templates == null || templates.Length == 0) return null;
@@ -483,8 +551,30 @@ public static class RiftEquipGenerator
             }
         }
         if (pool.Count == 0) return null;
+        // 引导确定性化：按 templateId 字典序取第一（Resources.LoadAll 顺序不稳，排序后才跨次运行一致）。
+        if (fixedForTutorial)
+        {
+            pool.Sort((a, b) => string.CompareOrdinal(a.templateId, b.templateId));
+            var fixedPick = pool[0];
+            fixedPick.ResolveIcon();
+            return fixedPick;
+        }
         var pick = pool[Random.Range(0, pool.Count)];
         pick.ResolveIcon();
         return pick;
+    }
+
+    /// <summary>按品质 ID 找稀有度规则（引导确定性化用，找不到回落 NORMAL 兜底规则）。</summary>
+    static RiftEquipTables.RarityRule FindRarityRule(string id)
+    {
+        var rules = RiftEquipTables.Rarities;
+        if (rules != null)
+        {
+            for (int i = 0; i < rules.Count; i++)
+            {
+                if (rules[i] != null && rules[i].Id == id) return rules[i];
+            }
+        }
+        return FallbackRarity();
     }
 }

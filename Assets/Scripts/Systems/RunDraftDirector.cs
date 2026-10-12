@@ -61,7 +61,7 @@ public class RunDraftDirector : MonoBehaviour
         //   局内金币（走 BattleManager.AddRunGold(n, false)，抬高本局起点 → 结算差额不含它们）。
         //   局外金币 Gold **只有**结算界面按通过关卡数发（StageGoldDefs）＋ 局内真正赚到的那部分。
         //   局内金币的全部来源（**就这三条，别处不再有第二个给币口径**）：
-        //     ① 每局启动金 240（GrantRunStarterGold）+ 初始资金天赋每级 80
+        //     ① 每局启动金 270（GrantRunStarterGold，2026-10-12 由 240 抬上来）+ 初始资金天赋每级 80
         //     ② 每关通关：100 起，**每关 ×1.4 递增**，单关封顶 600（GrantStageCoins，
         //        金币本不发 —— Mode.GrantsRunCoins=false）
         //     ③ 抽中「金币」安慰奖（一抽价 × 0.5 = 40）
@@ -214,7 +214,7 @@ public class RunDraftDirector : MonoBehaviour
             Tag = tag,
             Star = 1,
             IsAffinity = SkillDraftMeta.IsAffinity(id, PlayerJobDefs.GetSelected()),
-            PowerDelta = 90 + (int)rar * 90
+            PowerDelta = PowerCalc.SkillPowerDelta(rar, 1)
         };
     }
 
@@ -371,7 +371,9 @@ public class RunDraftDirector : MonoBehaviour
             // 【2026-10-06 主人拍板】换上的新装备打「新」标记，点「继续」才消失。
             NewLootMarks.Mark(NewLootMarks.KindEquip, eq.templateId);
             // 2026-10-10 主人拍板：装备到账文案统一「恭喜获得 XXX」（原「获得装备：XXX」）
-            done?.Invoke(true, $"恭喜获得 {NameOf(card, eq)}");
+            // 2026-10-12 主人拍板：装备名按稀有度上色（色值统一走 RarityPalette，别再抄）。
+            // 这条 msg 同时喂三处出口：战斗内抽奖 Toast + 「等玩家点继续」硬引导文案 + 通关结算 Toast。
+            done?.Invoke(true, $"恭喜获得 {ColoredName(card, eq)}");
             yield break;
         }
 
@@ -385,6 +387,19 @@ public class RunDraftDirector : MonoBehaviour
         if (!string.IsNullOrEmpty(card.Title)) return card.Title;
         if (eq != null && !string.IsNullOrEmpty(eq.equipName)) return eq.equipName;
         return "装备";
+    }
+
+    /// <summary>
+    /// 装备名按稀有度包富文本颜色（2026-10-12 主人：获得装备时名字颜色按稀有度来）。
+    /// 色值唯一来源 = <see cref="RarityPalette.Get(Rarity)"/>；eq 缺失时退回纯名字（不猜颜色）。
+    /// 出口（GlobalToastUI / TutorialHintUI）都是 UnityEngine.UI.Text，默认吃 <c>&lt;color&gt;</c> 富文本。
+    /// </summary>
+    static string ColoredName(DraftCard card, EquipInstance eq)
+    {
+        string name = NameOf(card, eq);
+        if (eq == null) return name;
+        Color c = RarityPalette.Get(eq.rarity);
+        return "<color=#" + ColorUtility.ToHtmlStringRGB(c) + ">" + name + "</color>";
     }
 
     string ApplyPowerUp(string id, string title)

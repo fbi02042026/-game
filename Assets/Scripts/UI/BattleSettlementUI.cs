@@ -279,6 +279,25 @@ public class BattleSettlementUI : MonoBehaviour
 
         // 自适应：与战斗气泡同一套 SpeechBubbleFit（字多等比放大，最多 2 倍）
         SpeechBubbleFit.Apply(mvpSpeechRt, mvpSpeechText, line, new Vector2(240f, 107f));
+        // 【2026-10-12 主人报「说的话跑到屏幕外了」】Fit 可能放大了气泡 → 用**实际尺寸**把气泡钳回 Panel 内
+        ClampMvpSpeechInsidePanel();
+    }
+
+    /// <summary>
+    /// 把 MVP 台词气泡钳回 Panel 右缘内（2026-10-12 主人报「台词跑到屏幕外」）。
+    /// Panel 已被 <see cref="FitPanelUniformScale"/> 整体缩进屏幕内，气泡不超出 Panel 就绝不出屏。
+    /// anchoredPosition 相对 anchor(0,1) 的参照点 = Panel 左上角，故 x 上限 = 面板宽 − 气泡宽 − 间距。
+    /// </summary>
+    void ClampMvpSpeechInsidePanel()
+    {
+        if (mvpSpeechRt == null || panel == null) return;
+        var panelRt = panel.rectTransform;
+        if (panelRt == null) return;
+        float w = Mathf.Max(1f, mvpSpeechRt.sizeDelta.x);
+        float maxOffX = panelRt.rect.width - w - 6f;
+        var pos = mvpSpeechRt.anchoredPosition;
+        pos.x = Mathf.Clamp(pos.x, 6f, Mathf.Max(6f, maxOffX));
+        mvpSpeechRt.anchoredPosition = pos;
     }
 
     /// <summary>找/建 MVP 台词气泡节点（挂在 Panel 下、立绘右缘外侧）。预制体没摆就运行时补，不回头改预制体。</summary>
@@ -306,7 +325,8 @@ public class BattleSettlementUI : MonoBehaviour
             textGo.transform.SetParent(go.transform, false);
             mvpSpeechText = textGo.AddComponent<Text>();
             mvpSpeechText.font = GameFonts.GetChinese();
-            mvpSpeechText.fontSize = 22;
+            // 【2026-10-12 主人报「有点小了」】22 → 26（气泡 240×107 起，Fit 会按需再等比放大）
+            mvpSpeechText.fontSize = 26;
             mvpSpeechText.color = new Color(0.28f, 0.28f, 0.30f, 1f);   // 气泡浅底 → 深色字（与战斗气泡一致）
             mvpSpeechText.alignment = TextAnchor.MiddleCenter;
             mvpSpeechText.horizontalOverflow = HorizontalWrapMode.Wrap;
@@ -537,6 +557,12 @@ public class BattleSettlementUI : MonoBehaviour
         var count = countTf != null ? countTf.GetComponent<Text>() : null;
         if (count != null)
             count.text = data.count > 1 ? data.count.ToString() : "";
+
+        // 【2026-10-12 主人拍板】物品格子下面加名字（预制体/运行时两种 cell 结构都有 Name 节点）
+        var nameTf = FindDeep(go.transform, "Name");
+        var nameText = nameTf != null ? nameTf.GetComponent<Text>() : null;
+        if (nameText != null)
+            nameText.text = string.IsNullOrEmpty(data.label) ? "" : data.label;
     }
 
     void ClearSpawnedCells()
@@ -630,12 +656,14 @@ public class BattleSettlementUI : MonoBehaviour
         grid.anchorMax = new Vector2(0.5f, 0f);
         grid.pivot = new Vector2(0.5f, 0f);
         grid.anchoredPosition = new Vector2(0f, 120f);
-        grid.sizeDelta = new Vector2(620f, 280f);
+        grid.sizeDelta = new Vector2(620f, 290f);
         var gl = grid.gameObject.AddComponent<GridLayoutGroup>();
-        gl.cellSize = new Vector2(88f, 88f);
+        // 【2026-10-12 主人拍板】图标 ×1.3 + 底部名字 → cell 88×88 → 114×130；
+        // 620 宽 5 列（5×114 + 4×10 = 610）放得下，列数 6→5。
+        gl.cellSize = new Vector2(114f, 130f);
         gl.spacing = new Vector2(10f, 10f);
         gl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
-        gl.constraintCount = 6;
+        gl.constraintCount = 5;
         gl.childAlignment = TextAnchor.UpperLeft;   // 2026-10-09 主人拍板：物品从左往右排，第一个靠左而非居中
 
         var tmpl = CreateRewardCellRuntime(grid, new SettlementRewardCell { count = 0 });
@@ -705,17 +733,31 @@ public class BattleSettlementUI : MonoBehaviour
     static GameObject CreateRewardCellRuntime(Transform parent, SettlementRewardCell data)
     {
         var cell = Mk(parent, "RewardCell");
-        cell.sizeDelta = new Vector2(88f, 88f);
+        // 【2026-10-12 主人拍板】物品图标放大 30%（格宽 88→114）+ 下面加名字（格高 88→130）
+        cell.sizeDelta = new Vector2(114f, 130f);
         var frame = cell.gameObject.AddComponent<Image>();
         frame.color = data != null ? data.frameColor : new Color(0.55f, 0.45f, 0.25f);
 
         var icon = Mk(cell, "Icon");
         Stretch(icon);
-        icon.offsetMin = new Vector2(8f, 16f);
-        icon.offsetMax = new Vector2(-8f, -8f);
+        // 图标区：左右各 10、底部留 34 给名字、顶部 10 → 94×86（原 72×64，约放大 30%）
+        icon.offsetMin = new Vector2(10f, 34f);
+        icon.offsetMax = new Vector2(-10f, -10f);
         var iconImg = icon.gameObject.AddComponent<Image>();
         iconImg.preserveAspect = true;
         iconImg.color = new Color(0.25f, 0.22f, 0.3f, 1f);
+
+        // 【2026-10-12 主人拍板】格子底部加物品名字（金色小字、居中、单行裁切不折行）
+        // 宽 76 居中 + Count 占右下 72：两块错开不叠（格子总宽 114）
+        Label(cell, "Name", data != null ? data.label : "", 15,
+            Vector2.zero, new Vector2(76f, 26f), TextAnchor.MiddleCenter);
+        var nameRt = FindDeep(cell, "Name") as RectTransform;
+        if (nameRt != null)
+        {
+            nameRt.anchorMin = nameRt.anchorMax = new Vector2(0.5f, 0f);
+            nameRt.pivot = new Vector2(0.5f, 0f);
+            nameRt.anchoredPosition = new Vector2(0f, 4f);
+        }
 
         Label(cell, "Count", data != null && data.count > 0 ? data.count.ToString() : "", 18,
             Vector2.zero, new Vector2(80f, 24f), TextAnchor.LowerRight);

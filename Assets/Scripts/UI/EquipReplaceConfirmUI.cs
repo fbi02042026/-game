@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -18,6 +19,13 @@ using UnityEngine.UI;
 /// 资源全部取自项目现有美术：撤离弹窗同款 Panel 底图 + 确定/取消按钮）；
 /// 标题「换上新装备吗？」在预制体里就挂在 <b>Panel 顶边之外</b>，不占面板内部空间、不挡内容。
 /// 本类只负责<b>填数据</b>与按钮回调，一行排版都不写。</para>
+///
+/// <para>🔴 <b>2026-10-12 立：排版真值在预制体里，且禁止重跑生成器菜单。</b>
+/// 该预制体已被手工调整（实际 600×680，还多了 biaoti / Tile / Icon (1) ×2 四个手工节点），
+/// <c>EquipReplaceConfirmPrefabBuilder</c> 的常量<b>早已过时</b>。重跑菜单会把手工节点抹掉、
+/// 排版打回旧版 —— 要调排版就<b>直接改预制体 YAML</b>（脚本与备份见
+/// <c>.workbuddy/backup/20261012-equipreplace-prefab/</c>）。
+/// 属性采用「一条一行」竖排：文本由 <c>DraftPool.FormatEquipDescLines</c> 逐条给出，这里用 <c>\n</c> 拼接。</para>
 ///
 /// <para>强弱判据只有 <see cref="EquipCompare"/> 一处，这里只负责显示。</para>
 /// <para>玩家一直不点时**默认「留着旧的」** —— 保守方向，绝不会弄丢玩家身上已有的装备。</para>
@@ -78,6 +86,13 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             yield return null;
         }
         bool result = ui._answered ? ui._answer : false;
+        // 【2026-10-12 主人报「点了换上新的，装备却没换上」】→ 三处诊断日志，下次一测就现形：
+        // 看这里是「玩家选择=…」还是「超时」—— 若主人点了按钮但这里打的是超时，说明 Answer 没被触发（点击被吃/绑定丢失）。
+        // ⚠️ 别把它写回跨行插值字符串：C# 9 报 CS8967（非逐字插值串里不能有换行）—— 拆成两个串再拼。
+        string how = ui._answered
+            ? "玩家选择=" + (result ? "换上新的" : "留着旧的")
+            : "超时 " + TimeoutSec + "s 未选择，按「留着旧的」处理";
+        Debug.Log($"[EquipReplaceConfirm] 弹窗结束：{how}｜新={newEq?.equipName} 旧={oldEq?.equipName}");
         ui.Hide();
         onDone?.Invoke(result);
     }
@@ -154,6 +169,7 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         Wire();
 
         if (_title != null) _title.text = "换上新装备吗？";
+        Debug.Log($"[EquipReplaceConfirm] 弹窗打开：新={newEq?.equipName}({newEq?.templateId})｜旧={oldEq?.equipName}({oldEq?.templateId})");
 
         // 2026-10-11 主人拍板：着色判据与 Verdict 文案**同一出口**（EquipCompare.NewBetter）——
         // 旧写法 newBetter 只看 Compare（品质/星级/强化分），会出现「文案说新的更强、颜色却是橙」的分裂。
@@ -195,28 +211,23 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             : eq.enhanceLevel > 0
                 ? $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}　+{eq.enhanceLevel}"
                 : $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}");
-        SetText(col, "Desc", eq != null ? DraftPool.FormatEquipDesc(eq) : "");
+        // 2026-10-12 主人拍板：属性「一条一行、竖着往下排」，不再挤成一长串靠自动折行。
+        // 条目内容与抽卡卡面同一处真源（DraftPool.FormatEquipDescLines），这里只换分隔符。
+        var descLines = eq != null ? DraftPool.FormatEquipDescLines(eq) : new List<string>();
+        SetText(col, "Desc", descLines.Count > 0 ? string.Join("\n", descLines.ToArray()) : "");
 
         var infoText = Text_(FindDeep(col, "Info"));
         if (infoText != null && eq != null) EquipUiText.ApplyRarityColor(infoText, eq.rarity);
 
-        // 2026-10-10 主人拍板：左右两列的属性居中显示、属性字放大 ——
-        // 预制体里 Desc 是 19 号左对齐（看着跟旁边居中的 Name/Info 不齐），运行时统一：
-        // Name/Info 24 居中，Desc（主手 / 攻击+N 等属性行）24 号 UpperCenter。不动预制体文件。
+        // 【2026-10-12 主人拍板】「不要代码动态修改，直接去改预制体」
+        // → Name / Info / Desc 的**字号、对齐、行距、高度全部写在 EquipReplaceConfirmPrefabBuilder 里**，
+        //   那个生成器是排版的唯一真源，本方法一行排版都不碰。要调排版：改 Builder → 重跑生成菜单。
+        // 运行时只做两件事：填文本（Desc 用 \n 一条一行）+ 按稀有度上色（颜色是数据，不是排版）。
         var nameT = Text_(FindDeep(col, "Name"));
         if (nameT != null)
         {
-            nameT.alignment = TextAnchor.MiddleCenter;
             // 2026-10-11 主人拍板：装备名字的字色跟稀有度一致（与 Info 行同一个色表）
             if (eq != null) EquipUiText.ApplyRarityColor(nameT, eq.rarity);
-        }
-        if (infoText != null) { infoText.alignment = TextAnchor.MiddleCenter; infoText.fontSize = 24; }
-        var descT = Text_(FindDeep(col, "Desc"));
-        if (descT != null)
-        {
-            descT.alignment = TextAnchor.UpperCenter;
-            descT.fontSize = 24;
-            descT.lineSpacing = MultiLineLineSpacing;   // 多行时行距拉开，别挤成一坨
         }
 
         // 图标走项目唯一出口，不自己拼路径
@@ -260,7 +271,8 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             var rt = go.GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);   // 图标右上角
             rt.pivot = new Vector2(1f, 0.5f);
-            rt.anchoredPosition = new Vector2(10f, 8f);          // 骑在角上，略往外偏
+            // 【2026-10-12 主人拍板】y 8 → 5：新字再往下挪 3 个像素
+            rt.anchoredPosition = new Vector2(10f, 5f);
             rt.sizeDelta = new Vector2(51f, 45f);
 
             var labelGo = new GameObject("Label", typeof(RectTransform), typeof(Text), typeof(Outline));
@@ -269,9 +281,10 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             label.text = "新";
             label.fontSize = 26;
             label.alignment = TextAnchor.MiddleCenter;
-            label.color = Color.white;
+            // 【2026-10-12 主人拍板】新字要用红色（此前 10-11 拍板是白字黑描边，主人现在点名要红）
+            label.color = new Color(0.92f, 0.15f, 0.15f);
             label.raycastTarget = false;
-            // 没了红底，白字直接压在图标上会看不清 → 补一圈黑描边（Outline 只描字，不是底）
+            // 红字压在图标上也要看得清，黑描边保留
             labelGo.GetComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.9f);
             label.font = GameFonts.GetChinese();
             if (label.font == null) label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
@@ -294,6 +307,7 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
     void Answer(bool replace)
     {
+        Debug.Log($"[EquipReplaceConfirm] 玩家点击：{(replace ? "换上新的" : "留着旧的 / 点空白")}");
         _answer = replace;
         _answered = true;
     }

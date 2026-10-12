@@ -144,14 +144,14 @@ public class ConfigManager : Singleton<ConfigManager>
         return GetRandomEquipInstances(count, blacksmithLevel, bonusStar, StageType.Normal, attrBonus);
     }
 
-    public List<EquipInstance> GetRandomEquipInstances(int count, int blacksmithLevel, int bonusStar, StageType stageType, float attrBonus = 0f)
+    public List<EquipInstance> GetRandomEquipInstances(int count, int blacksmithLevel, int bonusStar, StageType stageType, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false)
     {
         // 裂缝程序化掉落。稀有度真源 HiddenLevelSystem；本回退才走 EquipDropRules。
         try
         {
             RiftEquipTables.EnsureLoaded();
             if (RiftEquipTables.Slots != null && RiftEquipTables.Slots.Count > 0)
-                return RiftEquipGenerator.Generate(count, stageType, blacksmithLevel, attrBonus);
+                return RiftEquipGenerator.Generate(count, stageType, blacksmithLevel, attrBonus, forceWeapon, chapter, fixedForTutorial);
         }
         catch (System.Exception e)
         {

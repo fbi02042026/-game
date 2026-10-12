@@ -3249,7 +3249,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 多出的奖励件直接折金，三选一只展示 3 张
         int blacksmithLevel = TownSystem.Instance != null ? TownSystem.Instance.GetBuildingLevel(BuildingType.Blacksmith) : 1;
         List<EquipInstance> rewards = (DropsEquipment && ConfigManager.Instance != null)
-            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar, currentStage.type, GameConfig.RIFT_DROP_ATTR_BONUS)
+            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar, currentStage.type, GameConfig.RIFT_DROP_ATTR_BONUS, false, ch)
             : new List<EquipInstance>();
 
         if (rewards != null && rewards.Count > 3)
@@ -3652,6 +3652,15 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 结算前先快照；局内装备仍清（裂缝口径）
         GridBackpackSystem.Instance?.ClearRunEquipment();
         PersistBattleGold();
+        // 【2026-10-12 主人拍板「为什么没有获得金币，多少给点才能点天赋」】
+        // 引导三拍把启动金花得只剩几个币，局内净增 ≤ 0 → 结算不显示金币、回城点不起天赋第一节点。
+        // 通关固定发一笔（SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD），直接入账城镇钱包。
+        if (SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD > 0)
+        {
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD,
+                save: true, notify: false);
+            Debug.Log($"[BattleManager] 引导通关金币 +{SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD}");
+        }
         // 2026-09-19：天赋石不再由战斗内金币换算产出，改由冒险日志里程碑（首次/整章通关）发放。
         int talentGain = 0;
         StoryProgress.MarkTutorialBattleCleared();
@@ -3659,6 +3668,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         SaveSystem.Instance?.Save();
 
         FillSettlementSnapshot(isDeath: false, talentGain);
+        // 引导局 GoldGained 按局内净增算会被三拍抽花费冲成 0 → 结算「获得奖励」直接显示这笔通关金币
+        // （long 字段，不用 Mathf.Max——没有 long 重载会 CS0266）
+        long tutorialGold = SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD;
+        if (RunStats.GoldGained < tutorialGold) RunStats.GoldGained = tutorialGold;
         AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
         BattleSettlementUI.Show(RunStats, () =>
         {

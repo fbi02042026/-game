@@ -185,7 +185,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         go.transform.rotation = prefab.transform.rotation;
 
         if (attachedToFlipRoot)
-            AttachSlashToFlipRoot(go, flipRoot);
+            // 视觉朝向优先读攻击者自己（父级刚被 FaceTowardOnAttack 翻过），取不到才退回调用方给的 facingDir
+            AttachSlashToFlipRoot(go, flipRoot, attacker != null ? attacker.GetVfxFacingDir() : facingDir);
 
         PrepareSlashParticles(go);
         ApplySlashLocalFacing(go);
@@ -199,7 +200,20 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         ScheduleRelease(go, defaultDuration);
     }
 
-    static void AttachSlashToFlipRoot(GameObject go, Transform flipRoot)
+    /// <summary>
+    /// 把刀光挂到翻转父级下，并保证 <b>世界</b> scale.x 的符号 = 视觉朝向（+1 朝右 / −1 朝左）。
+    ///
+    /// 🔴 <b>2026-10-12 修「刀光还是反的」</b>（主人数次反馈，这次抓到真因）：
+    /// `Hero.cs:41` / `Mercenary.cs:56` / `Monster.cs:57` 的 <c>spriteDefaultFacesRight</c> 全是
+    /// <b>false</b>（SPUM 预制体默认朝<b>左</b>），所以 <c>ApplyFacing</c> 写出的父级 scale.x 与视觉朝向
+    /// <b>反相</b> —— 视觉朝右时父级是 −X、朝左时反而是 +X。
+    /// 旧公式 <c>Abs(worldScale.x) / Abs(parentScale.x)</c> 让 localScale.x <b>恒为正</b>，
+    /// 于是 worldScale.x 只能跟着父级反相 → <b>刀光永远朝反方向</b>。
+    /// 现在改成按「worldScale.x 符号 = 视觉朝向」反算 localScale.x，父级是不是反相都不怕。
+    /// 验算（spriteDefaultFacesRight=false）：朝右 vfxDir=+1、父级 −1 → local −W → world +W 朝右 ✓；
+    /// 朝左 vfxDir=−1、父级 +1 → local −W → world −W 朝左 ✓。
+    /// </summary>
+    static void AttachSlashToFlipRoot(GameObject go, Transform flipRoot, int vfxFacingDir)
     {
         if (go == null || flipRoot == null) return;
 
@@ -209,8 +223,11 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         go.transform.SetParent(flipRoot, true);
 
         Vector3 parentScale = flipRoot.lossyScale;
+        float px = parentScale.x;
+        if (Mathf.Abs(px) < 0.0001f) px = 1f;   // 父级 X 为 0 会让下面的除法炸掉，退回 1
+        float wantWorldX = (vfxFacingDir >= 0 ? 1f : -1f) * Mathf.Abs(worldScale.x);
         go.transform.localScale = new Vector3(
-            Mathf.Abs(worldScale.x) / Mathf.Max(0.0001f, Mathf.Abs(parentScale.x)),
+            wantWorldX / px,
             ySign * Mathf.Abs(worldScale.y) / Mathf.Max(0.0001f, Mathf.Abs(parentScale.y)),
             zSign * Mathf.Abs(worldScale.z) / Mathf.Max(0.0001f, Mathf.Abs(parentScale.z)));
     }

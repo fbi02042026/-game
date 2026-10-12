@@ -283,16 +283,19 @@ public static class SlotMachineDefs
     /// <summary>
     /// 开局启动金（进**局内钱包** <c>BattleManager.currentGold</c>，见 <c>SlotMachineSystem.GrantRunStarterGold</c>）。
     /// <b>2026-10-10 主人拍板：240</b>（中途改过 200，主人当天又拍回 240 —— 与 2026-10-05 那版同值）。
-    /// 一抽 80 → 开局够 2 抽（80+88=168），第三抽 97 能抽（余 71），第四抽 107 就差一点。
-    /// ⚠ 抽奖价每抽 ×1.1 不封顶（80 → 88 → 97 …），所以启动金只负责「开局紧一点」，
+    /// <b>2026-10-12 主人拍板：240 → 270</b> —— 主人报「第三次抽奖金额不够了」。
+    ///   根因：抽价每抽 ×1.1（80 → 88 → 97），引导三拍要 80+88+97 = <b>265</b>，而启动金只有 240，
+    ///   抽完前两拍剩 72，第三拍 97 直接「金币不足」（旧注释那句「第三抽 97 能抽（余 71）」是算错的）。
+    ///   270 → 三拍走完余 5，第四抽 106 依旧差一点（「前期紧」的口子没变）。
+    /// ⚠ 抽奖价每抽 ×1.1 不封顶（80 → 88 → 97 → 106 …），所以启动金只负责「开局紧一点」，
     ///   后面靠每关产出递增放宽（见 <see cref="COIN_GROWTH_PER_STAGE"/>）—— 主人要的正是「前期紧、后边松」。
     /// </summary>
-    public const int STARTER_COINS = 240;
+    public const int STARTER_COINS = 270;
 
     /// <summary>
     /// 天赋「初始资金」(R_FUND) 每级额外给的启动抽奖币。
     /// <b>2026-10-05 主人拍板：每级 80（= 正好一抽）</b>。
-    /// 3 级满 = +240 = 多 3 抽，跟开局 240 同量级 —— 天赋点满等于「开局多一套三连」，值这个价。
+    /// 3 级满 = +240 = 多 3 抽，跟开局 270 同量级 —— 天赋点满等于「开局多一套三连」，值这个价。
     /// ⚠ 与配表 `Assets/Data/Source/Tables/talent_right.csv` 第 16 行 R_FUND 的 optValues
     ///   **必须一致**（已同步为 80/160/240）。改这边就要改那边，否则两边对不上。
     /// </summary>
@@ -329,6 +332,22 @@ public static class SlotMachineDefs
         DraftCategory.Merc,
         DraftCategory.Skill
     };
+
+    /// <summary>
+    /// 【2026-10-12 主人拍板「每次引导战力一样」】引导局第三拍（技能）固定发这个技能 id。
+    /// 选 Common 档「治愈之泉」：全职业可用、非 meleeOnly、治疗向适合当第一技能、
+    /// Common 档战力加成低（SkillPowerDelta 140）不破坏前期平衡。
+    /// 取不到该技能定义时抽卡逻辑会 LogError 并回落随机池，不会卡流程。
+    /// </summary>
+    public const string TutorialFixedSkillId = "heal_spring";
+
+    /// <summary>
+    /// 【2026-10-12 主人拍板「多少给点才能点天赋」】引导通关固定发一笔金币。
+    /// 背景：引导三拍把启动金 270 花得只剩几个币，结算「获得金币」按局内净增算是 0，
+    /// 回城点不起天赋左列第一个节点（TalentDefs.BuildLeft：50 金币起，线性 +15）。
+    /// 150 = 第一节点 50 + 第二节点 65 后还剩 35，够主人把天赋那一步教下去。
+    /// </summary>
+    public const int TUTORIAL_SETTLEMENT_GOLD = 150;
 
     // 【2026-10-06 已删除】TUTORIAL_MERC_FRAG_COUNT（引导抽到佣兵发的本命碎片数）。
     //   主人当天拍板：第 2 抽 = **直接把引导佣兵招募入队**，碎片那条口径作废 → 常量连同

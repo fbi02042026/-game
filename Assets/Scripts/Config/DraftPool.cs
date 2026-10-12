@@ -401,32 +401,29 @@ public static class DraftPool
         // 2026-10-05：装备也走**加权**了（跟技能 / 佣兵同一把尺子），
         // 之前是「生成几件就直接全塞进去」，橙色跟白色一样常见 —— 主人要的
         // 「好的佣兵技能装备什么的都是低概率的」在装备这边根本没生效。
-        // 【钩子2·2026-10-07】引导局第一抽（DrawCount==0）装备必出蓝色及以上（reroll 白色）：
-        // 让玩家下一波立刻验证「变强」，喂首次留存（方案见 Docs/引导流程优化建议_2026-10-07.md）。
-        // reroll 上限 8 次：blacksmith 低时可能多白，出不来到保底不空池，用最后一次。
-        bool guaranteeRare = BattleManager.Instance != null
-            && BattleManager.Instance.IsTutorialRun
-            && RunLoadout.DrawCount == 0;
+        // 2026-10-12 主人拍板：删掉「引导首抽必出蓝色及以上」的保底 reroll（原 2026-10-07 钩子2）。
+        // 引导武器太强会直接秒怪，违反「前期普通装备概率大、慢慢加稀有 / 传奇」的初衷。
+        // 现首抽与所有抽奖共用 hidden_level_rules.csv 概率曲线（隐藏等级 1 = 100% 普通）。
+
+        // 2026-10-12 主人拍板「每次引导战力一样」：引导局装备卡走确定性生成
+        // （恒普通 / 必主手武器 / 部位·主属性·模板钉死 / 属性取区间中值），正式关不受影响。
+        bool tutorialFixed = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
 
         for (int i = 0; i < CardCount; i++)
         {
             EquipInstance eq = null;
-            int rareRoll = 0;
-            do
+            // 2026-10-12：传奇章节门槛 + 数值章节成长需要章节号；局内构筑时 ChapterManager 仍是当前章。
+            int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+            try
             {
-                try
-                {
-                    var one = ConfigManager.Instance.GetRandomEquipInstances(
-                        1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS);
-                    if (one != null && one.Count > 0) eq = one[0];
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogWarning("[DraftPool] 装备卡生成失败: " + e.Message);
-                }
-                if (eq == null) break;
-                rareRoll++;
-            } while (guaranteeRare && MapRarity(eq.rarity) == SkillRarity.Common && rareRoll < 8);
+                var one = ConfigManager.Instance.GetRandomEquipInstances(
+                    1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS, false, chapter, tutorialFixed);
+                if (one != null && one.Count > 0) eq = one[0];
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[DraftPool] 装备卡生成失败: " + e.Message);
+            }
             if (eq == null) break;
             BoostDraftWeaponAttack(eq);
 
@@ -442,8 +439,7 @@ public static class DraftPool
                     Rarity = rar,
                     Tag = SynergyTag.None,
                     Star = eq.star < 1 ? 1 : eq.star,
-                    PowerDelta = (int)eq.rarity * 60 + Mathf.Max(1, eq.star) * 80
-                                 + (eq.attrBonus != null ? eq.attrBonus.Count : 0) * 30,
+                    PowerDelta = PowerCalc.EquipPowerDelta(eq),
                     Equip = eq
                 },
                 // 好装备低概率：橙 1 / 紫 3 / 蓝 6 / 白 10，与技能、佣兵同一套权重
@@ -467,8 +463,21 @@ public static class DraftPool
     /// <summary>装备的一句话描述（部位 + 最多三条属性 + 强化等级）。替换确认弹窗复用，不另写一份。</summary>
     public static string FormatEquipDesc(EquipInstance eq)
     {
-        var sb = new StringBuilder();
-        sb.Append(EquipUiText.Slot(eq.slotType));
+        return string.Join("　", FormatEquipDescLines(eq).ToArray());
+    }
+
+    /// <summary>
+    /// 装备描述的<b>逐条</b>文本：部位 / 每条属性 / 每条传奇被动 / 强化等级，各占一个元素。
+    ///
+    /// 【2026-10-12 主人拍板】「装备的属性按一个属性一行，竖着往下排，不要混在一起看的不舒服」
+    /// → <see cref="EquipReplaceConfirmUI"/> 用 <c>"\n"</c> 拼接、一条一行竖排；
+    /// 抽卡卡面等「一句话」场景仍用全角空格拼接（<see cref="FormatEquipDesc"/>）。
+    /// <b>条目内容只有这一处真源，两处只差分隔符，不许各写各的。</b>
+    /// </summary>
+    public static List<string> FormatEquipDescLines(EquipInstance eq)
+    {
+        var lines = new List<string>();
+        lines.Add(EquipUiText.Slot(eq.slotType));
         int shown = 0;
         if (eq.attrBonus != null)
         {
@@ -476,20 +485,20 @@ public static class DraftPool
             {
                 var a = eq.attrBonus[i];
                 if (a == null) continue;
-                sb.Append("　").Append(EquipUiText.Attr(a.attrType)).Append(FormatAttrValue(a));
+                lines.Add(EquipUiText.Attr(a.attrType) + FormatAttrValue(a));
                 shown++;
             }
         }
         if (shown == 0 && eq.globalBonus != null)
         {
-            sb.Append("　").Append(EquipUiText.Attr(eq.globalBonus.attrType))
-              .Append(FormatAttrValue(eq.globalBonus));
+            lines.Add(EquipUiText.Attr(eq.globalBonus.attrType) + FormatAttrValue(eq.globalBonus));
             shown = 1;
         }
         // 2026-10-09 主人拍板：传奇被动要在 UI 上看得见。
         // skillPassives 的数值早就由 EquipStatRollup.AppendSkillPassives 生效了，这里只补文字。
-        // FormatEquipDesc 是「一句话描述」，所以按本地口径用全角空格续在后面、不换行；
-        // 没有被动就一个字都不加。数值渲染与 EquipStatTipUI / EquipDropPopupUI 同一套口径（2026-10-09 起统一走 EquipUiText.Value）。
+        // 没有被动就一个字都不加（不显示「【被动】无」）。
+        // 数值渲染与 EquipStatTipUI / EquipDropPopupUI 同一套口径（2026-10-09 起统一走 EquipUiText.Value）。
+        // 【2026-10-12】每条各占一个元素，由调用方决定分隔符：一句话场景全角空格、竖排场景换行。
         if (eq.skillPassives != null)
         {
             for (int i = 0; i < eq.skillPassives.Count; i++)
@@ -497,13 +506,13 @@ public static class DraftPool
                 var p = eq.skillPassives[i];
                 if (p == null) continue;
                 string pv = EquipUiText.Value(p.attrType, p.value, p.isPercent);
-                sb.Append("　【被动】").Append(EquipUiText.Attr(p.attrType)).Append(' ').Append(pv);
+                lines.Add("【被动】" + EquipUiText.Attr(p.attrType) + " " + pv);
                 shown++;
             }
         }
-        if (shown == 0) sb.Append("　无附加属性");
-        if (eq.enhanceLevel > 0) sb.Append("　+").Append(eq.enhanceLevel);
-        return sb.ToString();
+        if (shown == 0) lines.Add("无附加属性");
+        if (eq.enhanceLevel > 0) lines.Add("+" + eq.enhanceLevel);
+        return lines;
     }
 
     static string FormatAttrValue(AttrBonusData a)
@@ -571,6 +580,41 @@ public static class DraftPool
         var list = new List<WeightedCard>();
         if (RunLoadout.IsSkillFull) return list;
 
+        // 2026-10-12 主人拍板「每次引导战力一样」：引导局第三拍固定发 SlotMachineDefs.TutorialFixedSkillId
+        // （治愈之泉，Common 档）—— 否则随机技能的稀有度差会让引导战力每次不同。
+        // 取不到定义 / 不在抽卡池 → LogError 并回落下面的随机池（绝不静默、不卡流程）。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun)
+        {
+            var fixedDef = PlayerSkillDefs.GetById(SlotMachineDefs.TutorialFixedSkillId);
+            if (fixedDef != null && SkillDraftMeta.InDraftPool(fixedDef.id))
+            {
+                var fixedRar = SkillDraftMeta.Rarity(fixedDef.id);
+                var fixedTag = SkillDraftMeta.Tag(fixedDef.id);
+                string fixedTagName = SynergyTagUtil.DisplayName(fixedTag);
+                string fixedPrefix = string.IsNullOrEmpty(fixedTagName) ? "" : $"[{fixedTagName}] ";
+                string fixedBody = string.IsNullOrEmpty(fixedDef.numbers) ? fixedDef.desc : fixedDef.numbers;
+                list.Add(new WeightedCard
+                {
+                    Card = new DraftCard
+                    {
+                        Kind = DraftCardKind.SkillNew,
+                        Id = fixedDef.id,
+                        Title = fixedDef.displayName,
+                        Desc = fixedPrefix + fixedBody,
+                        Rarity = fixedRar,
+                        Tag = fixedTag,
+                        Star = 1,
+                        IsAffinity = SkillDraftMeta.IsAffinity(fixedDef.id, PlayerJobDefs.GetSelected()),
+                        PowerDelta = PowerCalc.SkillPowerDelta(fixedRar, 1)
+                    },
+                    Weight = 1,
+                    Key = "skill_" + fixedDef.id
+                });
+                return list;
+            }
+            Debug.LogError($"[DraftPool] 引导固定技能 {SlotMachineDefs.TutorialFixedSkillId} 取不到定义或不在抽卡池，回落随机技能池");
+        }
+
         var all = PlayerSkillDefs.All;
         if (all == null) return list;
 
@@ -606,7 +650,7 @@ public static class DraftPool
                     Tag = tag,
                     Star = 1,
                     IsAffinity = SkillDraftMeta.IsAffinity(def.id, PlayerJobDefs.GetSelected()),
-                    PowerDelta = 90 + (int)rar * 90
+                    PowerDelta = PowerCalc.SkillPowerDelta(rar, 1)
                 },
                 Weight = SkillRarityUtil.Weight(rar),
                 Key = "skill_" + def.id
@@ -675,7 +719,7 @@ public static class DraftPool
                     Star = star,
                     MercLevel = level,
                     IsAffinity = false,
-                    PowerDelta = level * 70 + star * 110
+                    PowerDelta = PowerCalc.MercPowerDelta(level, star)
                 },
                 Weight = weight,
                 Key = "merc_" + def.HireId
@@ -708,7 +752,9 @@ public static class DraftPool
                     Tag = SynergyTag.Summon,
                     Star = Mathf.Max(1, m.star),
                     MercLevel = next,
-                    PowerDelta = 70
+                    // 升 1 级的战力增量：用同一套 MercPowerDelta 求差，保证与 RunLoadout 入账口径一致
+                    PowerDelta = PowerCalc.MercPowerDelta(next, Mathf.Max(1, m.star))
+                              - PowerCalc.MercPowerDelta(Mathf.Max(1, m.level), Mathf.Max(1, m.star))
                 },
                 Weight = 8,
                 Key = "merc_lv_" + key
@@ -742,7 +788,9 @@ public static class DraftPool
                     Tag = SynergyTag.Summon,
                     Star = star + 1,
                     MercLevel = Mathf.Max(1, m.level) + 1,
-                    PowerDelta = 110 + 70
+                    // 升 1 星且升 1 级的战力增量：用同一套 MercPowerDelta 求差，保证与 RunLoadout 入账口径一致
+                    PowerDelta = PowerCalc.MercPowerDelta(Mathf.Max(1, m.level) + 1, star + 1)
+                              - PowerCalc.MercPowerDelta(Mathf.Max(1, m.level), star)
                 },
                 Weight = 4,
                 Key = "merc_star_" + key

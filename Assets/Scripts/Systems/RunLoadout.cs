@@ -626,12 +626,39 @@ public static class RunLoadout
         set { if (_data != null) _data.heroLevel = Mathf.Max(1, value); }
     }
 
-    /// <summary>本局战力：等级 + 技能星级/稀有度 + 佣兵等级/星级，越滚越大。</summary>
+    /// <summary>本局战力：玩家自身属性（纯输出口径） + 技能星级/稀有度 + 佣兵等级/星级 + 主题协同。</summary>
     public static int TotalPower()
     {
         if (_data == null) return 0;
         int power = 0;
-        power += Mathf.Max(1, _data.heroLevel) * 100;
+
+        // 口径：战力 = 对敌方造成伤害的系数（主人 2026-10-12 拍板）
+        //   DPS   = 当前攻击力 × (1 + 暴击率) × 每秒攻击次数
+        //   Power = POWER_BASE + POWER_PER_DPS × DPS
+        // 🔴 没有等级，底盘是纯常数；🔴 血量/防御/暴击伤害一律不计权重（主人要纯输出口径）
+        // 常量引自 PowerCalc（战力换算唯一真源，与抽卡卡面同一套字面量，不许两处各写）
+        const float POWER_BASE = PowerCalc.POWER_BASE;
+        const float POWER_PER_DPS = PowerCalc.POWER_PER_DPS;
+
+        var hero = Hero.Instance;
+        if (hero == null)
+        {
+            Debug.LogError("[RunLoadout] TotalPower 失败：找不到 Hero，玩家属性段按 0 处理");
+        }
+        else if (hero.attr == null)
+        {
+            Debug.LogError("[RunLoadout] TotalPower 失败：Hero.attr 为空，玩家属性段按 0 处理");
+        }
+        else
+        {
+            float attack = hero.attr.GetAttr(PlayerJobBaseStats.CurrentAttackAttr());
+            float critRate = hero.attr.GetAttr(AttrType.CritRate);
+            float attackSpeed = hero.attr.GetAttr(AttrType.AttackSpeed);
+            float dps = attack * (1f + critRate) * attackSpeed;
+            // 必须用四舍五入：底盘是 130.50 这类 .5 结尾的浮点，直接 (int) 截断会因浮点误差
+            // 把 299.99996… 截成 299（重武实测踩到），且会让狂战/剑盾挤成同一个数。
+            power += Mathf.RoundToInt(POWER_BASE + POWER_PER_DPS * dps);
+        }
 
         if (_data.skills != null)
         {
@@ -639,7 +666,7 @@ public static class RunLoadout
             {
                 var s = _data.skills[i];
                 if (s == null) continue;
-                power += (int)SkillDraftMeta.Rarity(s.id) * 90 + Mathf.Max(1, s.star) * 140;
+                power += PowerCalc.SkillPowerDelta(SkillDraftMeta.Rarity(s.id), s.star);
             }
         }
         if (_data.mercs != null)
@@ -648,34 +675,14 @@ public static class RunLoadout
             {
                 var m = _data.mercs[i];
                 if (m == null) continue;
-                power += Mathf.Max(1, m.level) * 70 + Mathf.Max(1, m.star) * 110;
+                power += PowerCalc.MercPowerDelta(m.level, m.star);
             }
         }
         foreach (var kv in _themeCache)
             power += kv.Value * 30;
 
-        // 【2026-10-06 主人拍板】本局战力要「算上所有的」—— 已穿戴装备也必须计入。
-        // 之前只算等级/技能/佣兵/主题协同，抽到装备战力纹丝不动，玩家看不到反馈。
-        // 口径与上面保持一致：稀有度 + 星级 + 强化等级，三项各自一个系数。
-        var bag = GridBackpackSystem.Instance;
-        if (bag != null)
-        {
-            for (int i = 0; i < PowerEquipSlots.Length; i++)
-            {
-                var eq = bag.GetEquippedInSlot(PowerEquipSlots[i]);
-                if (eq == null) continue;
-                power += (int)eq.rarity * 60 + Mathf.Max(1, eq.star) * 90 + Mathf.Max(0, eq.enhanceLevel) * 45;
-            }
-        }
         return power;
     }
-
-    /// <summary>计入战力的装备部位。写死数组避免 <c>Enum.GetValues</c> 每次装箱（战力刷新很频繁）。</summary>
-    static readonly EquipSlotType[] PowerEquipSlots =
-    {
-        EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.Hands, EquipSlotType.Feet,
-        EquipSlotType.Cape, EquipSlotType.MainHand, EquipSlotType.OffHand
-    };
 
     /// <summary>本局战力相对上一档的提升（UI 弹跳用），无则返回 0。</summary>
     public static int ConsumeLastDelta()
