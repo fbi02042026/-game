@@ -10,6 +10,9 @@ public class LoginUI : MonoBehaviour
 {
     const string AgreeTip = "请先阅读并同意用户协议与隐私政策";
 
+    // 用户协议与隐私政策合并页（腾讯文档过渡链接，长期请替换为自有官网域名 URL）
+    const string PrivacyPolicyUrl = "https://docs.qq.com/aio/DQWxJRWRoYkJ5SWZN";
+
     [Header("可替换贴图（预制体里拖）")]
     [Tooltip("全屏底图：预制体根节点命名为 BgStretch")]
     public Image backgroundImage;
@@ -343,6 +346,10 @@ public class LoginUI : MonoBehaviour
     {
         if (_wired) return;
         _wired = true;
+
+        // 用户协议 / 隐私政策按钮：打开同一份合并文档（腾讯文档过渡链接，长期请替换为自有官网域名）
+        onOpenPrivacyPolicy.AddListener(() => Application.OpenURL(PrivacyPolicyUrl));
+        onOpenUserAgreement.AddListener(() => Application.OpenURL(PrivacyPolicyUrl));
 
         Bind(startButton, OnClickStart);
         Bind(settingsButton, () => SettingsPopupUI.Ensure().Open(SettingsHost.Login));
