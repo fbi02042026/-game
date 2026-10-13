@@ -186,9 +186,10 @@ public static class SlotMachineSystem
     }
 
     /// <summary>
-    /// 按 <see cref="SlotMachineDefs.CategoryWeight"/> **加权**随机一个类型（装备 70 / 技能 20 / 佣兵 10）。
-    /// <para>【2026-10-12 主人拍板】主人原话「装备权重改成70 技能20 佣兵10」—— 概率只认
-    /// <see cref="SlotMachineDefs"/> 那三个常量，这里不另写一份。</para>
+    /// 按 <see cref="SlotMachineDefs.CategoryWeight"/> **加权**随机一个类型（装备 85 / 技能 10 / 佣兵 5）。
+    /// <para>【2026-10-12 主人拍板】主人原话「装备权重改成70 技能20 佣兵10」；
+    /// 【2026-10-13 主人拍板】主人反馈「佣兵和技能的机率太高了」→ 再压成 85/10/5。
+    /// 概率只认 <see cref="SlotMachineDefs"/> 那三个常量，这里不另写一份。</para>
     /// 结果在这里就定死，老虎机只负责把它演出来。
     /// </summary>
     public static DraftCategory RollCategory(List<DraftCategory> cats)
