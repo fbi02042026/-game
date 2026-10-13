@@ -161,13 +161,24 @@ public class SkillSelectUI : MonoBehaviour
             if (skillNames[i] != null)
                 skillNames[i].text = def.displayName;
             EnsureSkillIcon(i);
+            var sp = LoadSkillIcon(def.id);
+            if (sp == null)
+                Debug.LogError($"[SkillSelectUI] 技能 {def.id}（{def.displayName}）缺图标 Icons/SkillIcon/{def.id}，该格将显示为空");
             if (skillIcons[i] != null)
             {
-                var sp = LoadSkillIcon(def.id);
+                // 图标位 = 按钮自身的整格底图（没有 Icon 子节点时）。不再禁用 Image：
+                // 它同时是按钮的射线接收源，禁了格子就点不动。
                 skillIcons[i].sprite = sp;
-                skillIcons[i].enabled = sp != null;
                 skillIcons[i].preserveAspect = true;
                 skillIcons[i].color = Color.white;
+            }
+            // 选中高亮节点（Selected，带发光材质的那张 106×106）也必须换成同一个图标：
+            // 预制体里它自带一张（错位的）技能图标，不换的话选中时会看到两张不一样的图（2026-10-13 一起修）。
+            var markImg = GetSelectedMarkImage(i);
+            if (markImg != null)
+            {
+                markImg.sprite = sp;
+                markImg.enabled = sp != null;
             }
             ApplySlotTint(i, unlocked);
             if (skillButtons[i] != null)
@@ -176,6 +187,13 @@ public class SkillSelectUI : MonoBehaviour
         ApplySelectedMarks(_selected);
     }
 
+    /// <summary>
+    /// 绑定第 i 格的图标 Image。优先用预制体里的 Icon 子节点；
+    /// 没有 Icon 子节点时（当前预制体就是这样）**直接用按钮自身的 Image**（110×110 整格底图位）。
+    /// <para>【2026-10-13 主人报「图标里面有图标」】以前这里会在 52×52 再补一个小图标，
+    /// 叠在 Skill_N 自带的整格底图上 —— 看着就是大图标里套小图标。现在一格只显示一个图标：
+    /// 底图位直接换成该技能自己的图标（106×106 方图，Simple 拉伸到 110 不变形）。</para>
+    /// </summary>
     void EnsureSkillIcon(int i)
     {
         if (i < 0 || i >= MaxSkills || skillButtons[i] == null) return;
@@ -187,20 +205,16 @@ public class SkillSelectUI : MonoBehaviour
             skillIcons[i] = iconTf.GetComponent<Image>();
             if (skillIcons[i] != null) return;
         }
-        // Skill_0 等缺 Icon 子节点时运行时补
-        var go = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        go.transform.SetParent(t, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.55f);
-        rt.anchorMax = new Vector2(0.5f, 0.55f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(52f, 52f);
-        rt.anchoredPosition = new Vector2(0f, 4f);
-        skillIcons[i] = go.GetComponent<Image>();
-        skillIcons[i].raycastTarget = false;
-        skillIcons[i].preserveAspect = true;
-        var label = t.Find("Label");
-        if (label != null) label.SetAsLastSibling();
+        // 没有 Icon 子节点 → 用按钮自身的 Image 当图标位，绝不再补建 52×52 小图标（会叠成图标套图标）
+        skillIcons[i] = skillButtons[i].targetGraphic as Image
+                        ?? skillButtons[i].GetComponent<Image>();
+    }
+
+    /// <summary>第 i 格「选中」高亮节点的 Image（预制体里没有就返回 null）。</summary>
+    Image GetSelectedMarkImage(int i)
+    {
+        var mark = GetOrBindSelectedMark(i);
+        return mark != null ? mark.GetComponent<Image>() : null;
     }
 
     void ApplySlotTint(int i, bool unlocked)

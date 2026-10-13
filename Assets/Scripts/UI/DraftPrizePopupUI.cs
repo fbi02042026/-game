@@ -74,6 +74,15 @@ public class DraftPrizePopupUI : MonoBehaviour
     /// <summary>【2026-10-13 #9】上一次开奖时刻（unscaled），连抽 &lt;2.5s 时演出降一档（只降演出不降信息）。</summary>
     static float _lastShowTime = -10f;
 
+    /// <summary>
+    /// 卡框美术（2026-10-13 主人拍板：「获得装备什么的那个弹窗的底框用项目的素材 不要纯色块」）。
+    /// 用项目标配深色金框 —— 概率公示弹窗 / 装备掉落弹窗 / 替换确认弹窗都是这张（原在
+    /// Assets/Art/UI/NavCharacter/，为供运行时 Resources.Load 已按铁律4同名挪进
+    /// Resources/UI/NavCharacter/，guid 未动，5 个预制体引用不受影响）。
+    /// 九宫格（spriteBorder）已在导入设置里配好：Sliced 拉伸不变形。
+    /// </summary>
+    const string FrameArtRes = "UI/NavCharacter/角色_0002s_0010_图层-7";
+
     /// <summary>稀有度档次（0 普通 / 1 稀有 / 2 史诗 / 3 传说）—— 决定停留时长与光效。</summary>
     public const int TierCommon = 0;
     public const int TierRare = 1;
@@ -188,6 +197,14 @@ public class DraftPrizePopupUI : MonoBehaviour
         _frame = frameGo.GetComponent<Image>();
         _frame.raycastTarget = false;
         _frame.color = Color.white;
+        // 2026-10-13 主人拍板：卡框改用项目素材（深色金框），不再只有纯色块。
+        // 缺图只 LogError、不静默兜底（铁律：缺真值要喊出来）；Sliced 走导入设置里配好的九宫格。
+        _frame.sprite = Resources.Load<Sprite>(FrameArtRes);
+        if (_frame.sprite == null)
+            Debug.LogError("[DraftPrizePopup] 卡框素材缺失：" + FrameArtRes
+                           + "（应按铁律4从 Assets/Art/UI/NavCharacter/ 同名挪入 Resources/UI/NavCharacter/）");
+        else
+            _frame.type = Image.Type.Sliced;
 
         // 图标位（左）
         var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
@@ -207,7 +224,9 @@ public class DraftPrizePopupUI : MonoBehaviour
         _kindText = MakeText(_cardRt, "Kind", 20, TextAnchor.MiddleLeft, new Vector2(112f, 112f), new Vector2(-16f, -16f));
         _nameText = MakeText(_cardRt, "Name", 26, TextAnchor.MiddleLeft, new Vector2(112f, 48f), new Vector2(-16f, -46f));
         // 【2026-10-13 #2】第 3 行：品质词 · 战力 +N · 称赞词（24px，富文本分色在 Play 里拼）
-        _thirdText = MakeText(_cardRt, "Third", 24, TextAnchor.MiddleLeft, new Vector2(112f, 14f), new Vector2(-16f, -112f));
+        // 右内缩 -16 → -90（2026-10-13 换金框后）：卡框右下角有角饰带（右侧约 83px 宽），
+        // 第 3 行贴底最容易和它撞上，左边让到 x≤370；kind / name 在竖直中段，不撞角饰，仍 -16。
+        _thirdText = MakeText(_cardRt, "Third", 24, TextAnchor.MiddleLeft, new Vector2(112f, 14f), new Vector2(-90f, -112f));
 
         gameObject.SetActive(false);
     }
