@@ -77,6 +77,22 @@ public static class TownSharedChrome
     }
 
     /// <summary>
+    /// 【2026-10-13 主人拍板】主界面顶栏（金币 / 体力 / 邮件 / 设置那一条）整条显示或隐藏。
+    /// 用途：角色界面不该出现主界面那条顶栏（主人原话「主界面的顶条跑到角色界面了」）。
+    /// <para>⚠ 只切 activeSelf、不销毁：别的页 ShowPage 里 <see cref="RaiseSharedChrome"/> 会重新点亮，
+    /// 所以离页时不还原也不会漏（本方法仍成对调用，断其他路径）。</para>
+    /// ⚠ 节点真源与 <see cref="RaiseSharedChrome"/> **同一份缓存**（_cachedTop），别在别处再 Find 一个 TopBar。
+    /// </summary>
+    public static void SetTopBarVisible(Transform hallRoot, bool visible)
+    {
+        if (hallRoot == null) return;
+        EnsureChromeCache(hallRoot);
+        if (_cachedTop == null) return;
+        if (_cachedTop.gameObject.activeSelf != visible)
+            _cachedTop.gameObject.SetActive(visible);
+    }
+
+    /// <summary>
     /// 在独立界面根下确保有资源条：优先实例化 ResourceBar 预制体，否则从 sourceRoot 克隆 TopBar。
     /// </summary>
     public static Transform EnsureResourceBar(Transform host, Transform sourceRoot)

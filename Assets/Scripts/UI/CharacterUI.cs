@@ -183,6 +183,10 @@ public class CharacterUI : MonoBehaviour, ITownPage
 
         Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
+        // 2026-10-13 主人拍板：「主界面的顶条跑到角色界面了」→ 本页不显示主界面那条顶栏
+        //（金币 / 体力 / 邮件 / 设置）。底栏照旧保留 —— 本页要靠它切页（预制体已预留下方 150）。
+        // ⚠ 只切显隐、不销毁；HidePage 还原，别的页 ShowPage 里的 RaiseSharedChrome 也会重新点亮。
+        TownSharedChrome.SetTopBarVisible(hall, false);
 
         // 页可能比背包系统更早预载，Show 时再补订一次
         WireBagEvents();
@@ -200,6 +204,10 @@ public class CharacterUI : MonoBehaviour, ITownPage
         TownHeroCostumePreview.EnsureOn(this)?.Hide();
         if (!gameObject.activeSelf) return;
         gameObject.SetActive(false);
+        // 顶栏交还（与 ShowPage 的 SetTopBarVisible(false) 成对）：下一页 ShowPage 也会点亮，
+        // 这里还原是防「离开角色页后顶栏一直不见」的兜底路径。
+        Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : transform.root;
+        TownSharedChrome.SetTopBarVisible(hall, true);
         SetGuildOverlay(false);
     }
 

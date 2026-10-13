@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
@@ -103,7 +104,12 @@ public class TalentUI : MonoBehaviour
     TalentDefs.TalentRightNode _pendingNode;
     bool _wired;
     bool _listsBuilt;
-    bool _scrollSyncing;
+
+    // 右列「开通演出」（2026-10-13 主人拍板）：左列点数跨过门槛（10/20/30/40）时，
+    // 对应那批右列节点「暗→亮 + 放大缩小」提示玩家。⚠ 只在 OnClickLeft 里触发一次，
+    // 打开界面 / 重复刷新都不重播（RefreshRight 不碰这两个字段）。
+    Coroutine _rightUnlockFx;
+    readonly List<RightNodeView> _fxBatch = new List<RightNodeView>();
 
     // 洗点二次确认弹窗（运行时建树，不碰 prefab）
     GameObject _resetConfirmPopup;
@@ -122,6 +128,8 @@ public class TalentUI : MonoBehaviour
         public GameObject redDot;
         public GameObject upgradeButton;
         public Text upgradeCostText;
+        /// <summary>【2026-10-13 主人拍板】左列序号 L1…L40（贴在卡片左端，Iconbg 左边那块空位）。</summary>
+        public Text orderText;
     }
 
     class RightNodeView
@@ -133,7 +141,10 @@ public class TalentUI : MonoBehaviour
         public Text costText;
         public Image lockIcon;
         public Image diamond;
-        public Image line;
+        /// <summary>菱形**上方**那段连线（预制体 Line）——最上一行没得连，隐藏。</summary>
+        public Image lineUp;
+        /// <summary>【2026-10-13 主人拍板】菱形**下方**那段连线（预制体 Line (1)，主人手工复制）——最下一行隐藏。</summary>
+        public Image lineDown;
         public GameObject redDot;
         public Button button;
         /// <summary>2026-09-29：右上角红色「新」字（节点刚开通、还没点过才显示，点了就消失）。</summary>
@@ -155,10 +166,6 @@ public class TalentUI : MonoBehaviour
 
     void OnDestroy()
     {
-        if (leftScroll != null)
-            leftScroll.onValueChanged.RemoveListener(OnLeftScroll);
-        if (rightScroll != null)
-            rightScroll.onValueChanged.RemoveListener(OnRightScroll);
         if (Instance == this) Instance = null;
     }
 
@@ -190,9 +197,22 @@ public class TalentUI : MonoBehaviour
     public void Hide()
     {
         CloseChoicePopup();
+        StopRightUnlockFx(); // 演出中途关界面：别把半截缩放/半截灰度留在节点上
         gameObject.SetActive(false);
         TavernUI.SetGuildHallOverlayMode(false);
         onClosed?.Invoke();
+    }
+
+    /// <summary>停掉右列开通演出并把缩放还原（下一次 RefreshRight 会把灰度/锁按真值重刷）。</summary>
+    void StopRightUnlockFx()
+    {
+        if (_rightUnlockFx != null)
+        {
+            StopCoroutine(_rightUnlockFx);
+            _rightUnlockFx = null;
+        }
+        for (int i = 0; i < _rightViews.Count; i++)
+            if (_rightViews[i].root != null) _rightViews[i].root.transform.localScale = Vector3.one;
     }
 
     /// <summary>刷新货币、节点状态、底部加成（读档后可再调）</summary>
@@ -357,12 +377,21 @@ public class TalentUI : MonoBehaviour
         }
         if (v.diamond != null)
             ApplySprite(v.diamond, unlocked ? sprDiamondOn : sprDiamondOff, true);
-        if (v.line != null)
+        // 【2026-10-13 主人拍板】右列小圆点的连线要「连满」：每行两段（冲上 / 冲下），
+        // 最上一行没得连 → 隐藏冲上段；**最下一行**没得连 → 隐藏冲下段
+        //（主人原话「最下面的第一个不用有冲下的线」）。
+        // ⚠ 行序真源 = VerticalLayoutGroup.reverseArrangement（index 0 在**视觉最底**），别按「0 在最上」猜。
+        bool showUp = v.visualIndex < _rightViews.Count - 1;
+        bool showDown = v.visualIndex > 0;
+        if (v.lineUp != null)
         {
-            bool showLine = v.visualIndex < _rightViews.Count - 1;
-            v.line.gameObject.SetActive(showLine);
-            if (showLine)
-                ApplySprite(v.line, unlocked ? sprRightLinkOn : sprRightLinkOff, false);
+            v.lineUp.gameObject.SetActive(showUp);
+            if (showUp) ApplySprite(v.lineUp, unlocked ? sprRightLinkOn : sprRightLinkOff, false);
+        }
+        if (v.lineDown != null)
+        {
+            v.lineDown.gameObject.SetActive(showDown);
+            if (showDown) ApplySprite(v.lineDown, unlocked ? sprRightLinkOn : sprRightLinkOff, false);
         }
 
         if (v.root != null) v.root.SetActive(true);
@@ -706,6 +735,9 @@ public class TalentUI : MonoBehaviour
 
     void OnClickLeft(int index0)
     {
+        // 【2026-10-13 主人拍板】跨过 10/20/30/40 时右列要演「暗→亮 + 放大缩小」，
+        // 前后点数在这取（唯一触发点 = 玩家点了左列并真的买成功，打开界面/洗点都不演）。
+        int before = TalentDefs.LeftUnlockedCount(GetTalents());
         if (!TalentSystem.TryUnlockLeft(index0 + 1, out string reason))
         {
             Debug.Log("[TalentUI] " + reason);
@@ -713,10 +745,131 @@ public class TalentUI : MonoBehaviour
             GlobalToastUI.Show(reason, true);
             return;
         }
+        int after = TalentDefs.LeftUnlockedCount(GetTalents());
         onLeftUnlockRequested?.Invoke(index0 + 1);
         RefreshAll();
         // 同上：买成功也要有反馈，光是节点变色玩家不确定扣没扣钱
         GlobalToastUI.Show("已激活：" + LeftNodeName(index0), true);
+        if (after > before) PlayRightUnlockFx(before, after);
+    }
+
+    /// <summary>
+    /// 【2026-10-13 主人拍板】左列点数跨过某道门槛（真源 = <c>talent_right.csv</c> 的 unlockLeftIndex：10/20/30/40）
+    /// → 那一批右列节点「暗的节点变亮 + 放大缩小」提示玩家：右列又开了一行。
+    /// ⚠ 门槛从配表取，不在代码里写死 10/20/30/40。
+    /// </summary>
+    void PlayRightUnlockFx(int before, int after)
+    {
+        if (_rightViews.Count == 0) return;
+
+        // 门槛查询只有这一个出口（NextRightThreshold）：跨没跨过就看 next 是不是 ≤ after
+        int threshold = NextRightThreshold(before);
+        if (threshold <= 0 || threshold > after) return;
+
+        _fxBatch.Clear();
+        for (int i = 0; i < _rightViews.Count; i++)
+        {
+            var v = _rightViews[i];
+            if (v.node != null && v.node.unlockLeftIndex == threshold) _fxBatch.Add(v);
+        }
+        if (_fxBatch.Count == 0) return;
+        // 视觉自下而上（reverseArrangement：visualIndex 0 在最底），按从下往上逐个亮
+        _fxBatch.Sort((a, b) => a.visualIndex.CompareTo(b.visualIndex));
+
+        ScrollRightRowIntoView(_fxBatch[0]);
+        if (_rightUnlockFx != null) StopCoroutine(_rightUnlockFx);
+        _rightUnlockFx = StartCoroutine(RightUnlockFxRoutine());
+        Debug.Log("[TalentUI] 左列 L" + threshold + " 达成 → 右列 " + _fxBatch.Count + " 个节点开通演出");
+    }
+
+    IEnumerator RightUnlockFxRoutine()
+    {
+        // 演出期间照 _fxBatch 的快照跑（刷新不会改这个列表内容）
+        var batch = new List<RightNodeView>(_fxBatch);
+        const float per = 0.5f;     // 单个节点「放大→缩小」时长
+        const float stagger = 0.09f; // 同批节点依次亮起
+        float t = 0f;
+        float total = per + stagger * (batch.Count - 1);
+
+        while (t < total)
+        {
+            t += Time.unscaledDeltaTime;
+            for (int i = 0; i < batch.Count; i++)
+            {
+                var v = batch[i];
+                if (v.root == null) continue;
+                float k = Mathf.Clamp01((t - stagger * i) / per);
+                if (k <= 0f) continue;
+                // 两下脉冲（放大→缩回→放大→缩回），尾巴收住，参考 DraftPrizePopupUI 的写法
+                float pulse = Mathf.Abs(Mathf.Sin(k * Mathf.PI * 2f)) * (1f - k);
+                v.root.transform.localScale = Vector3.one * (1f + 0.18f * pulse);
+                // 暗 → 亮：从锁定灰 0.72 拉回 1（主人原话「暗的节点变亮」）
+                SetGraphicAlpha(v.root, Mathf.Lerp(0.72f, 1f, Mathf.Clamp01(k * 3f)));
+            }
+            yield return null;
+        }
+
+        for (int i = 0; i < batch.Count; i++)
+            if (batch[i].root != null) batch[i].root.transform.localScale = Vector3.one;
+
+        _rightUnlockFx = null;
+        // 收尾交给真值：锁/灰/连线/「新」标按当前存档重刷一遍（这里是唯一收尾出口）
+        RefreshRight();
+    }
+
+    /// <summary>把目标行滚进视野（那批新开通的行离屏的话，玩家根本看不见演出）。</summary>
+    void ScrollRightRowIntoView(RightNodeView v)
+    {
+        if (rightScroll == null || rightContent == null || v == null || v.root == null) return;
+        var vp = rightScroll.viewport;
+        if (vp == null) vp = rightContent.parent as RectTransform;
+        var row = v.root.transform as RectTransform;
+        if (vp == null || row == null) return;
+
+        Canvas.ForceUpdateCanvases();
+        float contentH = rightContent.rect.height;
+        float vpH = vp.rect.height;
+        if (contentH <= vpH + 1f) return;
+
+        // 目标行中心相对视口中心的偏移（视口局部系，y 向上为正；行在上方 → delta > 0）
+        float delta = vp.InverseTransformPoint(row.TransformPoint(row.rect.center)).y - vp.rect.center.y;
+        // Content 顶对齐（anchor y=1）：anchoredPosition.y ∈ [0, contentH-vpH]，0 = 滚到顶。
+        // 内容往下走 = 减小 anchoredPosition.y，于是减去 delta 正好把目标行拉到视口中心。
+        float maxY = contentH - vpH;
+        float want = Mathf.Clamp(rightContent.anchoredPosition.y - delta, 0f, maxY);
+        rightScroll.verticalNormalizedPosition = 1f - want / maxY;
+    }
+
+    /// <summary>
+    /// 下一道「开右列」门槛：比 leftUnlocked 大的最小 unlockLeftIndex（真源 = talent_right.csv）。
+    /// 没有更大门槛（全开完）返回 0。门槛查询只有这一个出口，别在别处另写一遍。
+    /// </summary>
+    static int NextRightThreshold(int leftUnlocked)
+    {
+        var arr = TalentDefs.RightNodes;
+        if (arr == null) return 0;
+        int best = 0;
+        for (int i = 0; i < arr.Length; i++)
+        {
+            var n = arr[i];
+            if (n == null) continue;
+            int t = n.unlockLeftIndex;
+            if (t > leftUnlocked && (best <= 0 || t < best)) best = t;
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// 左列序号是不是「开右列」的门槛（同上，真源 = 配表 unlockLeftIndex：10/20/30/40）。
+    /// 门槛行用金色、普通行用灰，玩家一眼看出「到 L 几会开右侧」。
+    /// </summary>
+    static bool IsLeftMilestone(int orderNo)
+    {
+        var arr = TalentDefs.RightNodes;
+        if (arr == null) return false;
+        for (int i = 0; i < arr.Length; i++)
+            if (arr[i] != null && arr[i].unlockLeftIndex == orderNo) return true;
+        return false;
     }
 
     /// <summary>左列第 index0 个节点的显示名（越界返回占位，绝不返回空串把 toast 吞掉）。</summary>
@@ -1069,7 +1222,7 @@ public class TalentUI : MonoBehaviour
 
         WireScroll(leftScroll, leftContent);
         WireScroll(rightScroll, rightContent);
-        WireScrollSync();
+        // 左右栏不再同步（2026-10-13 主人拍板「分开动」）—— 各自独立滚动，别再加回同步。
 
         _listsBuilt = true;
         WireClicks();
@@ -1150,32 +1303,10 @@ public class TalentUI : MonoBehaviour
         scroll.verticalNormalizedPosition = 0f;
     }
 
-    void WireScrollSync()
-    {
-        if (leftScroll == null || rightScroll == null) return;
-        leftScroll.onValueChanged.RemoveListener(OnLeftScroll);
-        rightScroll.onValueChanged.RemoveListener(OnRightScroll);
-        leftScroll.onValueChanged.AddListener(OnLeftScroll);
-        rightScroll.onValueChanged.AddListener(OnRightScroll);
-        leftScroll.verticalNormalizedPosition = 0f;
-        rightScroll.verticalNormalizedPosition = 0f;
-    }
-
-    void OnLeftScroll(Vector2 _)
-    {
-        if (_scrollSyncing || rightScroll == null || leftScroll == null) return;
-        _scrollSyncing = true;
-        rightScroll.verticalNormalizedPosition = leftScroll.verticalNormalizedPosition;
-        _scrollSyncing = false;
-    }
-
-    void OnRightScroll(Vector2 _)
-    {
-        if (_scrollSyncing || rightScroll == null || leftScroll == null) return;
-        _scrollSyncing = true;
-        leftScroll.verticalNormalizedPosition = rightScroll.verticalNormalizedPosition;
-        _scrollSyncing = false;
-    }
+    // 【2026-10-13 主人拍板】「这个天赋左侧和右侧分开动吧 别一起动了」→ 删除左右栏滚动同步：
+    // 原 WireScrollSync / OnLeftScroll / OnRightScroll / _scrollSyncing（把两栏位置互相镜像）整条删掉，
+    // 两栏各滑各的。各自起始位置仍由 WireScroll 设成 0（滚到底 = 最先解锁的在视野底部）。
+    // ⚠ 别再为了「对齐」把两栏重新锁在一起。
 
     /// <summary>右列缺 Lock 时按手做模板补一个右下角锁（不改已有坐标）。</summary>
     void EnsureRightLock(RightNodeView v)
@@ -1245,7 +1376,47 @@ public class TalentUI : MonoBehaviour
             if (sp != null) ApplySprite(v.icon, sp, true);
         }
         // 布局交给 Content 的 VerticalLayoutGroup；禁止再改本节点/子节点坐标
+        EnsureLeftOrderLabel(v, index0);
         return v;
+    }
+
+    /// <summary>
+    /// 【2026-10-13 主人拍板】左列每行左边加序号 L1…L40，玩家看得到「点到 L10 会开右侧」。
+    /// 位置：卡片左端（Iconbg 左边那块空位，预制体里 Iconbg 从 x=-36 起、卡片左边缘 -129），
+    /// 不改预制体，运行时建；门槛行（配表 unlockLeftIndex）用金色。
+    /// ⚠ 序号 = TalentDefs.Left 的次序 i+1；reverseArrangement 只影响视觉上下，不影响编号。
+    /// </summary>
+    void EnsureLeftOrderLabel(LeftNodeView v, int index0)
+    {
+        if (v == null || v.root == null) return;
+
+        if (v.orderText == null)
+        {
+            var exist = v.root.transform.Find("OrderText");
+            if (exist != null) v.orderText = exist.GetComponent<Text>();
+        }
+        if (v.orderText == null)
+            v.orderText = CreateText(v.root.transform, "OrderText", "", 26, Color.white);
+
+        if (v.orderText == null)
+        {
+            Debug.LogError("[TalentUI] 左列序号 Text 创建失败（OrderText），L" + (index0 + 1) + " 不显示编号");
+            return;
+        }
+
+        var rt = v.orderText.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.sizeDelta = new Vector2(76f, 44f);
+        rt.anchoredPosition = new Vector2(12f, 0f);
+        v.orderText.raycastTarget = false;
+        v.orderText.alignment = TextAnchor.MiddleLeft;
+
+        int no = index0 + 1;
+        v.orderText.text = "L" + no;
+        v.orderText.color = IsLeftMilestone(no)
+            ? new Color(1f, 0.84f, 0.3f)          // 门槛行：金色，给玩家盼头
+            : new Color(0.80f, 0.80f, 0.82f, 1f); // 普通行：灰
     }
 
     RightNodeView BindRightNode(GameObject go, int visualIndex0, TalentDefs.TalentRightNode node)
@@ -1260,7 +1431,10 @@ public class TalentUI : MonoBehaviour
         v.costText = go.transform.Find("CostText")?.GetComponent<Text>();
         v.lockIcon = go.transform.Find("Lock")?.GetComponent<Image>();
         v.diamond = go.transform.Find("Diamond")?.GetComponent<Image>();
-        v.line = go.transform.Find("Line")?.GetComponent<Image>();
+        // 【2026-10-13 主人拍板】右列一行两段连线：Line 在菱形上方（冲上）、Line (1) 在菱形下方（冲下）。
+        // Line (1) 是主人在预制体里手工复制出来的节点；显隐规则见 RefreshOneRightNode。
+        v.lineUp = go.transform.Find("Line")?.GetComponent<Image>();
+        v.lineDown = go.transform.Find("Line (1)")?.GetComponent<Image>();
         EnsureRightLock(v);
         if (v.titleText != null) v.titleText.text = node.name;
         if (v.costText != null) v.costText.text = "";
