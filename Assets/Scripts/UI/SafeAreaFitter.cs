@@ -177,12 +177,8 @@ public class SafeAreaFitter : MonoBehaviour
         float dy = 0f;
         if (enabledFit && (fitTop || fitBottom) && Screen.width > 0 && Screen.height > 0)
         {
-            float sf = ScaleFactorOf(rt);
-            Rect safe = Screen.safeArea;
-            float topPx = Mathf.Max(0f, Screen.height - (safe.y + safe.height));
-            float botPx = Mathf.Max(0f, safe.y);
-            if (fitTop) dy -= topPx / sf;     // 避上边 = 整体往下挪
-            if (fitBottom) dy += botPx / sf;  // 避下边 = 整体往上挪
+            if (fitTop) dy -= TopInsetUnits(rt);     // 避上边 = 整体往下挪
+            if (fitBottom) dy += BottomInsetUnits(rt); // 避下边 = 整体往上挪
         }
 
         bool anchorsChanged = !Mathf.Approximately(rt.anchorMin.y, _sigMinY)
@@ -223,6 +219,26 @@ public class SafeAreaFitter : MonoBehaviour
                 return c.scaleFactor;
         }
         return 1f;
+    }
+
+    /// <summary>
+    /// 安全区顶部内缩量（画布逻辑单位 = 屏幕像素 ÷ Canvas.scaleFactor）。
+    /// 供「自己写排版」的界面直接把这层 padding 加进布局（如登录页底部忠告），
+    /// 换算与 Offset 模式同源，全项目只此一份实现。
+    /// </summary>
+    public static float TopInsetUnits(RectTransform rt)
+    {
+        if (rt == null || Screen.width <= 0 || Screen.height <= 0) return 0f;
+        float px = Mathf.Max(0f, Screen.height - (Screen.safeArea.y + Screen.safeArea.height));
+        return px <= 0f ? 0f : px / Mathf.Max(0.01f, ScaleFactorOf(rt));
+    }
+
+    /// <summary>安全区底部内缩量（画布逻辑单位）。与 TopInsetUnits 同源。</summary>
+    public static float BottomInsetUnits(RectTransform rt)
+    {
+        if (rt == null || Screen.width <= 0 || Screen.height <= 0) return 0f;
+        float px = Mathf.Max(0f, Screen.safeArea.y);
+        return px <= 0f ? 0f : px / Mathf.Max(0.01f, ScaleFactorOf(rt));
     }
 
     /// <summary>纯工具：把节点矩形四边换算成父级本地坐标（原点=父级左下角）。</summary>

@@ -17,6 +17,7 @@ public class LoginLogoMotion : MonoBehaviour
     Vector2 _restPos;
     Vector3 _restScale;
     float _t;
+    float _safeTop;          // 已并入 _restPos 的安全区顶部内缩量（变化时自校正）
     bool _hasShine;
     Sparkle[] _sparkles;
 
@@ -38,6 +39,12 @@ public class LoginLogoMotion : MonoBehaviour
         if (_rt == null) return;
 
         _restPos = _rt.anchoredPosition;
+        // 2026-10-13 主人拍板：登录页刘海避让 —— 本组件每帧写 anchoredPosition，
+        // 挂 SafeAreaFitter 会互相覆盖，改为把安全区顶部内缩量并进入场基准位（往下挪）。
+        // 注意 Awake 时 Canvas 还没挂上（BootManager 后设），scaleFactor 取不到会算大，
+        // 首帧 Update 按真实值自校正（见 Update 里的 _safeTop 校正）。
+        _safeTop = SafeAreaFitter.TopInsetUnits(_rt);
+        _restPos -= new Vector2(0f, _safeTop);
         _restScale = _rt.localScale.sqrMagnitude < 0.0001f ? Vector3.one : _rt.localScale;
 
         _group = GetComponent<CanvasGroup>();
@@ -78,6 +85,16 @@ public class LoginLogoMotion : MonoBehaviour
     void Update()
     {
         if (_rt == null) return;
+        // 2026-10-13 主人拍板：登录页刘海避让 —— Awake 早于 Canvas 挂载（BootManager 后设），
+        // _safeTop 可能按 scaleFactor=1 算大；这里每帧比对真实内缩量，变了就把差值并进 _restPos
+        // （只挪基准位，不动锚点/尺寸；安全区与缩放不变时只有几次比较，不写任何东西）。
+        float curSafe = SafeAreaFitter.TopInsetUnits(_rt);
+        if (!Mathf.Approximately(curSafe, _safeTop))
+        {
+            _restPos -= new Vector2(0f, curSafe - _safeTop);
+            _safeTop = curSafe;
+        }
+
         float dt = Time.unscaledDeltaTime;
         _t += dt;
 

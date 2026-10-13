@@ -83,6 +83,7 @@ public class LoginUI : MonoBehaviour
         EnsureLogoMotion();
         WireClicks();
         EnsureDebugClearSaveButton();
+        EnsureSafeArea();
         EnsureTapLoginRow();
     }
 
@@ -94,13 +95,30 @@ public class LoginUI : MonoBehaviour
         EnsureLogoMotion();
         WireClicks();
         EnsureDebugClearSaveButton();
+        EnsureSafeArea();
         EnsureTapLoginRow();
         GameBgm.Play(GameBgm.Track.Login);
     }
 
     /// <summary>
-    /// TapTap 登录按钮 + 游客继续（2026-10-13 接入 TapTap 平台）。
-    /// 走LoginTapRowBuilder 运行时构建，不动预制体排版。
+    /// 刘海 / 挖孔 / 底部手势条避让（2026-10-13 主人拍板「要1」：登录页接 SafeArea）。
+    /// 顶侧：RightMenu（设置等）走 SafeAreaFitter.Offset 只挪 anchoredPosition，锚点/尺寸不动；
+    ///   「清除存档」按钮在 EnsureDebugClearSaveButton 里同样挂 Offset。
+    /// Logo：LoginLogoMotion 每帧写 anchoredPosition，挂 fitter 会互相覆盖，
+    ///   改为把顶部内缩量并进入场基准位（见 LoginLogoMotion.Awake）。
+    /// 底侧：忠告 + 适龄图标在 ApplyBottomFooterLayout 里把 bottomPad 加上底部内缩量。
+    /// ActionPanel（距底 136）/ LegalBar 手势条盖不到，不动。
+    /// 幂等：EnsureTopOffset 已挂就复用，可重复调。
+    /// </summary>
+    void EnsureSafeArea()
+    {
+        SafeAreaFitter.EnsureTopOffset(transform.Find("RightMenu") as RectTransform);
+    }
+
+    /// <summary>
+    /// TapTap 登录按钮（2026-10-13 接入 TapTap 平台）。
+    /// 【2026-10-13 主人拍板】按钮节点 = 预制体 ActionPanel/TapLoginButton（主人手动添加，原名 StartButton (1)），
+    /// 代码只绑点击、排版贴图全权归预制体；游客继续按钮已整条删除（与「开始冒险」语义重复）。
     /// </summary>
     void EnsureTapLoginRow()
     {
@@ -110,7 +128,7 @@ public class LoginUI : MonoBehaviour
             Debug.LogError("[LoginUI] 未找到 ActionPanel，TapTap 登录按钮无法挂载");
             return;
         }
-        LoginTapRowBuilder.Ensure(panel, OnClickTapLogin, OnClickGuestContinue);
+        LoginTapRowBuilder.Ensure(panel, OnClickTapLogin);
     }
 
     void OnClickTapLogin()
@@ -128,15 +146,6 @@ public class LoginUI : MonoBehaviour
                 ShowTip($"TapTap 登录失败：{msg}");
             }
         });
-    }
-
-    /// <summary>游客继续：本地 UUID 作身份，不调 SDK，数据照样上报。</summary>
-    void OnClickGuestContinue()
-    {
-        if (!EnsureAgreed()) return;
-        TapTapBootstrap.Ensure();
-        GameAnalytics.ReportAppLaunch();
-        ShowTip("游客模式：数据仅用于玩法调优，不会上传账号信息");
     }
 
     void OnRectTransformDimensionsChange()
@@ -336,7 +345,11 @@ public class LoginUI : MonoBehaviour
         if (ageRatingImage == null || _healthNoticeRt == null)
             return;
 
-        const float bottomPad = 20f;
+        var rootRt = transform as RectTransform;
+
+        // 2026-10-13 主人拍板：底部 padding 加上安全区（手势条）内缩量，忠告/适龄图标不被遮挡。
+        // 换算与 SafeAreaFitter.Offset 同源（屏幕像素 ÷ Canvas.scaleFactor），编辑器无安全区时为 0、外观不变。
+        float bottomPad = 20f + SafeAreaFitter.BottomInsetUnits(rootRt);
         const float sidePad = 18f;
         const float gap = 12f;
         const float ageW = 70f;
@@ -344,7 +357,6 @@ public class LoginUI : MonoBehaviour
         const float noticeHeight = 78f;
         const float maxNoticeWidth = 550f;
 
-        var rootRt = transform as RectTransform;
         float canvasW = rootRt != null ? rootRt.rect.width : 720f;
         float textW = Mathf.Min(maxNoticeWidth, canvasW - sidePad * 2f - ageW - gap);
 
@@ -447,6 +459,8 @@ public class LoginUI : MonoBehaviour
         if (existing != null)
         {
             existing.SetAsLastSibling();
+            // 2026-10-13 主人拍板：刘海避让（Offset 只挪位置，幂等）
+            SafeAreaFitter.EnsureTopOffset(existing as RectTransform);
             return;
         }
 
@@ -483,6 +497,8 @@ public class LoginUI : MonoBehaviour
         btn.onClick.AddListener(OnClickClearSave);
         go.transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(go.transform);
+        // 2026-10-13 主人拍板：刘海避让（Offset 只挪位置，幂等）
+        SafeAreaFitter.EnsureTopOffset(rt);
     }
 
     void OnClickClearSave()
