@@ -10,8 +10,12 @@ public class LoginUI : MonoBehaviour
 {
     const string AgreeTip = "请先阅读并同意用户协议与隐私政策";
 
-    // 用户协议与隐私政策合并页（腾讯文档过渡链接，长期请替换为自有官网域名 URL）
-    const string PrivacyPolicyUrl = "https://docs.qq.com/aio/DQWxJRWRoYkJ5SWZN";
+    // 用户协议与隐私政策合并页。
+    // 【当前启用】TapTap 渠道强制要求：上架时必须展示渠道自己的隐私协议页。
+    const string PrivacyPolicyUrl = "https://www.taptap.cn/app/959893/common-privacy";
+    // 【备用·已注释】自有隐私政策（腾讯文档过渡链接）。
+    // 后期换成自己的正式域名后，把下面这行的常量名改回 PrivacyPolicyUrl 并注释掉上面 TapTap 那行即可。
+    // const string PrivacyPolicyUrl = "https://docs.qq.com/aio/DQWxJRWRoYkJ5SWZN";
 
     [Header("可替换贴图（预制体里拖）")]
     [Tooltip("全屏底图：预制体根节点命名为 BgStretch")]
@@ -79,6 +83,7 @@ public class LoginUI : MonoBehaviour
         EnsureLogoMotion();
         WireClicks();
         EnsureDebugClearSaveButton();
+        EnsureTapLoginRow();
     }
 
     void OnEnable()
@@ -89,7 +94,49 @@ public class LoginUI : MonoBehaviour
         EnsureLogoMotion();
         WireClicks();
         EnsureDebugClearSaveButton();
+        EnsureTapLoginRow();
         GameBgm.Play(GameBgm.Track.Login);
+    }
+
+    /// <summary>
+    /// TapTap 登录按钮 + 游客继续（2026-10-13 接入 TapTap 平台）。
+    /// 走LoginTapRowBuilder 运行时构建，不动预制体排版。
+    /// </summary>
+    void EnsureTapLoginRow()
+    {
+        var panel = transform.Find("ActionPanel") as RectTransform;
+        if (panel == null)
+        {
+            Debug.LogError("[LoginUI] 未找到 ActionPanel，TapTap 登录按钮无法挂载");
+            return;
+        }
+        LoginTapRowBuilder.Ensure(panel, OnClickTapLogin, OnClickGuestContinue);
+    }
+
+    void OnClickTapLogin()
+    {
+        if (!EnsureAgreed()) return;
+        TapTapBootstrap.Ensure().TapLogin((ok, msg) =>
+        {
+            if (ok)
+            {
+                GameAnalytics.ReportAppLaunch();
+                ShowTip($"欢迎回来，{TapTapBootstrap.Instance.Nickname}");
+            }
+            else
+            {
+                ShowTip($"TapTap 登录失败：{msg}");
+            }
+        });
+    }
+
+    /// <summary>游客继续：本地 UUID 作身份，不调 SDK，数据照样上报。</summary>
+    void OnClickGuestContinue()
+    {
+        if (!EnsureAgreed()) return;
+        TapTapBootstrap.Ensure();
+        GameAnalytics.ReportAppLaunch();
+        ShowTip("游客模式：数据仅用于玩法调优，不会上传账号信息");
     }
 
     void OnRectTransformDimensionsChange()
@@ -380,6 +427,9 @@ public class LoginUI : MonoBehaviour
     void OnClickStart()
     {
         if (!EnsureAgreed()) return;
+        // 2026-10-13：TapTap 接入后，游客也视为已选择身份（本地 UUID），
+        // TapTapBootstrap.Ensure() 幂等，未初始化时在此兜一次初始化。
+        TapTapBootstrap.Ensure();
         GlobalToastUI.Hide();
         // 2026-10-04 主人拍板：从点「开始游戏」这一刻起就停登录 BGM，不等 Loading 出现才静音。
         // 用 Stop（只淡出、不置 _loadingMuted）—— 若走 GameSceneManager 那条

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 7dde939f8c3a4d147828744774c7be9b
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 239875
+  packageName: Flipbook VFX - URP
+  packageVersion: 1.0.22
+  assetPath: Assets/Vefects/Flipbook VFX URP/Elements 2D/Explosion/Materials/M_VFX_2D_URP_Explosion_01_Pixelated_8_Bit.mat
+  uploadId: 766199

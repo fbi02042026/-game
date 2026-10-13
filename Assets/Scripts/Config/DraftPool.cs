@@ -200,13 +200,14 @@ public static class DraftPool
     /// ② 品质段：抽到 普通 / 稀有 / 传说 / 金币 各占多少（先按类型权重分层，类内再按品质权重，两层相乘）。</para>
     ///
     /// <para>2026-10-05：安慰奖带不带，跟 <c>PickOne</c> 这一次抽<b>用同一个口径</b>
-    ///（<c>SlotMachineSystem.InGuaranteeWindow()</c>）—— 引导局那几抽不带安慰奖，公示里也就不能出现金币；
+    ///（<c>SlotMachineSystem.ConsolationAllowed()</c>，2026-10-13 #3 起的唯一出口）——
+    /// 引导局那几抽、正式关第 1 抽都不带安慰奖，公示里也就不能出现金币；
     /// 否则「公示的概率」跟「实际抽到的概率」对不上，就是假数。</para>
     /// </summary>
     public static List<OddsRow> BuildOddsRows()
     {
         var rows = new List<OddsRow>();
-        bool consolation = !SlotMachineSystem.InGuaranteeWindow();
+        bool consolation = SlotMachineSystem.ConsolationAllowed();
         var cats = BuildCategories();
         if (cats.Count == 0) return rows;
 
@@ -311,7 +312,8 @@ public static class DraftPool
 
     static Color QualityColor(DraftCard card)
     {
-        if (card.Kind == DraftCardKind.Gold) return new Color(1f, 0.85f, 0.35f);
+        // 2026-10-13 #4：金币色转发 RarityPalette.Gold（与开奖卡金币分支同源，别再抄一份）
+        if (card.Kind == DraftCardKind.Gold) return RarityPalette.Gold;
         switch (card.Rarity)
         {
             case SkillRarity.Legendary: return new Color(1f, 0.62f, 0.25f);
@@ -328,7 +330,12 @@ public static class DraftPool
         pool.Add(CollectGoldCard());
     }
 
-    /// <summary>安慰奖一：金币（= 抽奖币，本局抽奖用的那套）。</summary>
+    /// <summary>
+    /// 安慰奖一：金币（= 抽奖币，本局抽奖用的那套）。
+    /// 【2026-10-13 #4】改「折扣」语义：Title「金币 +N」/ Desc「回血 N」——
+    /// 只留一个数字（「下一抽再补 N」交给面板小位，不重复出现两次）。
+    /// Desc 同时是开奖卡第 3 行的文案（BattleManager.ShowDrawPrizeCard 金币分支直接取用，不另写一份）。
+    /// </summary>
     static WeightedCard CollectGoldCard()
     {
         int amount = SlotMachineSystem.GoldPrize();
@@ -338,8 +345,8 @@ public static class DraftPool
             {
                 Kind = DraftCardKind.Gold,
                 Id = "gold",
-                Title = $"金币 ×{amount}",
-                Desc = "抽奖币回血 —— 接着抽！",
+                Title = $"金币 +{amount}",
+                Desc = $"回血 {amount}",
                 Rarity = SkillRarity.Common,
                 Tag = SynergyTag.None,
                 Star = 1,
@@ -474,24 +481,41 @@ public static class DraftPool
     /// 抽卡卡面等「一句话」场景仍用全角空格拼接（<see cref="FormatEquipDesc"/>）。
     /// <b>条目内容只有这一处真源，两处只差分隔符，不许各写各的。</b>
     /// </summary>
-    public static List<string> FormatEquipDescLines(EquipInstance eq)
+    /// <summary>
+    /// 装备描述的<b>逐条</b>文本：部位 / 每条属性 / 每条传奇被动 / 强化等级，各占一个元素。
+    /// <paramref name="oldForCompare"/> 非空时（替换确认弹窗「新装备」栏）：同属性前加 ▲/▼ 对比箭头。
+    /// 其它调用方（抽卡卡面、装备掉落弹窗）保持原样——不传即不加箭头。
+    /// </summary>
+    public static List<string> FormatEquipDescLines(EquipInstance eq, EquipInstance oldForCompare = null)
     {
         var lines = new List<string>();
         lines.Add(EquipUiText.Slot(eq.slotType));
         int shown = 0;
+
+        // 旧件属性表（attrType → 数值），仅用于新装备同属性对比箭头
+        var oldByType = new System.Collections.Generic.Dictionary<AttrType, AttrBonusData>();
+        if (oldForCompare != null)
+        {
+            if (oldForCompare.attrBonus != null)
+                foreach (var o in oldForCompare.attrBonus)
+                    if (o != null && !oldByType.ContainsKey(o.attrType)) oldByType[o.attrType] = o;
+            if (oldForCompare.globalBonus != null && !oldByType.ContainsKey(oldForCompare.globalBonus.attrType))
+                oldByType[oldForCompare.globalBonus.attrType] = oldForCompare.globalBonus;
+        }
+
         if (eq.attrBonus != null)
         {
             for (int i = 0; i < eq.attrBonus.Count && shown < 3; i++)
             {
                 var a = eq.attrBonus[i];
                 if (a == null) continue;
-                lines.Add(EquipUiText.Attr(a.attrType) + FormatAttrValue(a));
+                lines.Add(CompareAttrLine(a, oldByType));
                 shown++;
             }
         }
         if (shown == 0 && eq.globalBonus != null)
         {
-            lines.Add(EquipUiText.Attr(eq.globalBonus.attrType) + FormatAttrValue(eq.globalBonus));
+            lines.Add(CompareAttrLine(eq.globalBonus, oldByType));
             shown = 1;
         }
         // 2026-10-09 主人拍板：传奇被动要在 UI 上看得见。
@@ -513,6 +537,23 @@ public static class DraftPool
         if (shown == 0) lines.Add("无附加属性");
         if (eq.enhanceLevel > 0) lines.Add("+" + eq.enhanceLevel);
         return lines;
+    }
+
+    /// <summary>
+    /// 单条属性文案：若旧件有<b>同属性</b>且口径一致（是否百分比相同），按数值涨跌前缀
+    /// ▲（增长，绿）/▼（降低，红）；持平或无法对比则不加箭头。颜色用固定绿/红，不依赖外部调色板。
+    /// </summary>
+    static string CompareAttrLine(AttrBonusData a, System.Collections.Generic.Dictionary<AttrType, AttrBonusData> oldByType)
+    {
+        string arrow = "";
+        if (a != null && oldByType.TryGetValue(a.attrType, out var oa) && a.isPercent == oa.isPercent)
+        {
+            if (a.value > oa.value + 1e-4f)
+                arrow = "<color=#3FD66B>▲</color> ";
+            else if (a.value < oa.value - 1e-4f)
+                arrow = "<color=#FF6B6B>▼</color> ";
+        }
+        return arrow + EquipUiText.Attr(a.attrType) + FormatAttrValue(a);
     }
 
     static string FormatAttrValue(AttrBonusData a)
@@ -681,6 +722,8 @@ public static class DraftPool
         foreach (string hireId in data.unlockedMercIds)
         {
             if (string.IsNullOrEmpty(hireId)) continue;
+            // 【2026-10-13 主人拍板】佣兵抽奖池：在酒馆勾过池子就只从勾选的里面出（空池 = 不筛选，维持全池加权）
+            if (!data.IsMercInDrawPool(hireId)) continue;
             if (!MercRosterDefs.TryGetByHireId(hireId, out var def)) continue;
             if (string.IsNullOrEmpty(def.AssetId)) continue;
             if (RunLoadout.HasMerc(def.HireId) || RunLoadout.HasMerc(def.AssetId)) continue;

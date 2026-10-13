@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
@@ -129,9 +130,40 @@ public partial class BattleUI : MonoBehaviour
     /// <summary>
     /// 更新金币显示
     /// </summary>
+    long _lastGoldShown = -1;
+    Coroutine _goldPulseCo;
+    Color _goldBaseColor;
+    bool _goldBaseColorCached;
+
     public void UpdateGold(long gold)
     {
-        if (goldText != null) goldText.text = gold.ToString();
+        if (goldText == null) return;
+        // 数字没变就不碰（频繁刷新也不闪），只在「钱变了」时跳动一次。
+        if (gold == _lastGoldShown) return;
+        _lastGoldShown = gold;
+        goldText.text = gold.ToString();
+        if (!_goldBaseColorCached) { _goldBaseColor = goldText.color; _goldBaseColorCached = true; }
+        if (_goldPulseCo != null) StopCoroutine(_goldPulseCo);
+        _goldPulseCo = StartCoroutine(CoGoldPulse());
+    }
+
+    /// <summary>【2026-10-13 #9】金币变化时 scale 1→1.18→1（180ms）+ 短暂变 #FFB833，让「钱在涨」被看见。</summary>
+    IEnumerator CoGoldPulse()
+    {
+        if (goldText == null) { _goldPulseCo = null; yield break; }
+        Color baseCol = _goldBaseColorCached ? _goldBaseColor : goldText.color;
+        goldText.color = new Color(1f, 0.72f, 0.2f); // #FFB833
+        float t = 0f;
+        while (t < 0.18f)
+        {
+            t += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(t / 0.18f);
+            goldText.transform.localScale = Vector3.one * (1f + 0.18f * Mathf.Sin(k * Mathf.PI));
+            yield return null;
+        }
+        goldText.transform.localScale = Vector3.one;
+        goldText.color = baseCol;
+        _goldPulseCo = null;
     }
 
     /// <summary>

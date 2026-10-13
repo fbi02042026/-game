@@ -112,8 +112,8 @@ TextureImporter:
   assetBundleVariant: 
 AssetOrigin:
   serializedVersion: 1
-  productId: 308259
-  packageName: Pixel Craft VFX - URP
-  packageVersion: 1.0.02
-  assetPath: Assets/Vefects/Pixel Craft VFX URP/Demo/Resources/Scene/Textures/T_VFX_Metrics_Grid_Normal.tga
-  uploadId: 771196
+  productId: 239875
+  packageName: Flipbook VFX - URP
+  packageVersion: 1.0.22
+  assetPath: Assets/Vefects/Flipbook VFX URP/Demo/Resources/Environment/Textures/T_VFX_Metrics_Grid_Normal.tga
+  uploadId: 766199

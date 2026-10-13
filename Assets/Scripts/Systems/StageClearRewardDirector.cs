@@ -1106,9 +1106,13 @@ public class StageClearRewardDirector : MonoBehaviour
                     Debug.LogError($"[StageClearReward] 战斗结束三选一结果无法生效：{applyMsg}");
                     UIManager.Instance?.ShowToast(applyMsg);
                 }
-                else if (!string.IsNullOrEmpty(applyMsg))
+                else
                 {
-                    UIManager.Instance?.ShowToast(applyMsg, true);   // 2026-10-06 主人拍板：抽卡获得 force 弹
+                    // 【2026-10-13 主人拍板】详情弹窗（点任意位置关）在前，Toast 延后，防剧透
+                    if (DraftRewardDetailUI.NeedsDetail(chosen))
+                        yield return DraftRewardDetailUI.CoShow(chosen);
+                    if (!string.IsNullOrEmpty(applyMsg))
+                        UIManager.Instance?.ShowToast(applyMsg, true);   // 2026-10-06 主人拍板：抽卡获得 force 弹
                 }
                 RunLoadout.Save();
             }

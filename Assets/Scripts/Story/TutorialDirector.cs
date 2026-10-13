@@ -743,6 +743,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
     /// <summary>清场挥击的攻击动画倍速（2026-10-10 主人拍板：动作加快，不要只是位移）。</summary>
     const float RescueAttackAnimSpeed = 3f;
 
+    /// <summary>【2026-10-13 主人拍板】玩家「！」气泡停留时长（秒）。</summary>
+    const float RescueExclaimHold = 0.7f;
+
+    /// <summary>【2026-10-13 主人拍板】一道幻影的滑行时长（秒）：残影划过，真身同时落位。</summary>
+    const float RescueGhostSlideDur = 0.25f;
+
+    /// <summary>【2026-10-13 主人拍板】全场刀光齐出后到判死的停顿（秒）。</summary>
+    const float RescueSlashHold = 0.15f;
+
     /// <summary>
     /// 等「玩家撑不住」这个时刻 —— 掉血跌破阈值 / 打够时长 / 场上清了，哪个先到算哪个。
     ///
@@ -838,15 +847,18 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // （Hero.facingDir 是 public，1 = 右 / −1 = 左，见 UnitBase.cs:163）
         merc.Face(Hero.Instance != null ? Hero.Instance.facingDir : 1);
 
-        // ②【2026-10-09 主人拍板改造 / 2026-10-12 再改】落地 → 丢一句「躲在我后面。」→ 一趟跑完全场 → 全体一起死。
-        //   主人原话：「玩家和怪都没动的情况下，几秒把所有怪打一遍，然后所有怪一起死亡」。
-        //   所以不再是站在原地逐个判死，而是：冲刺到每只怪身侧 → 只落一道闪电（**先不判死**）→
-        //   全部走完 → 停 0.3 秒 → 统一 TakeDamage 判死（尸体动画 / 掉落照旧）。
-        //   【2026-10-12 主人拍板】「塔克打完后不用跳回，打完直接冲到怪的后面就行」：
-        //   冲刺时每只怪都落在其右侧 0.6（= 怪的背后），扫完塔克自然站在最后一只怪的身后，
-        //   原「跑回起始点」段已删。
+        // ②【2026-10-13 主人拍板再改】落地 → 「躲在我后面。」→ 玩家「！」→ 塔克一道幻影闪到最后一只怪身后
+        //   （朝向不变）→ 全场同时刀光 → 全体一起死。
+        //   主人原话：「不要让塔克一个一个打了 直接让他从场上的位置直接一道幻影移到最后一个怪的后面
+        //   朝向不要变 然后玩家出现一个！瞬间所有的怪都出现刀光后死亡」。
         //   ⚠ 全程只改塔克自己的世界坐标，其它单位一概不动（2026-09-18 教训：绝不推着英雄走 / 瞬移）。
-        //   第 7 步「躲在我后面。」就放在这里（落地之后、起跑之前）：主人定稿的顺序是
+        //   ⚠ 判死三件套：不飘字（suppressDamageText，去掉那一大片紫色暴击大数字）/
+        //     不出受击闪光（showHitVfx=false，刀光已经够亮）/ 不记暴击（isCrit=false）。
+        //     正式关走常规 TakeDamage 路径，这三个开关默认值零影响。
+        //   ⚠ 朝向：全程只有落地那一次 Face(玩家朝向)（2026-10-12 口径），此后一次都不翻 ——
+        //     判死后到抽奖面板全程 UnitsCanAct=false，AI 在 Mercenary.cs:628 直接 return，
+        //     不会被待机逻辑（FollowHeroOrIdle 的 facingDir=1）翻向玩家。
+        //   第 7 步「躲在我后面。」就放在这里（落地之后、起手之前）：主人定稿的顺序是
         //   「天降 → 丢话 → 清场」，先护住玩家再动手才顺 —— 调用方那一段里不再重复这句。
         if (talk != null)
             yield return TalkBlock(bm, talk, restoreAct: false,
@@ -860,50 +872,53 @@ public class TutorialDirector : Singleton<TutorialDirector>
             var m = bm.monsters[i];
             if (m != null && !m.isDead) victims.Add(m);
         }
-        // 【2026-10-12 主人拍板】「不能从前面一直打到后面吗」→ 扫描方向反过来：
-        // 按世界 X 从小到大（从左到右），塔克从玩家左侧出发，先打最靠近玩家的「前面」，
-        // 一路往右打到最远的「后面」，扫完正好停在最后一只怪的身后（它的右侧 0.6）。
-        victims.Sort((a, b) => UnitBase.GetCombatX(a).CompareTo(UnitBase.GetCombatX(b)));
+        if (victims.Count == 0)
+        {
+            // 场上已经没怪（玩家自己清完了）：演出直接收尾，别硬演
+            Debug.LogWarning("[Tutorial] 塔克清场演出：场上已无存活怪，跳过幻影/刀光");
+            yield return new WaitForSecondsRealtime(0.3f);
+            yield break;
+        }
 
-        // 单段冲刺 / 停顿时长按怪数摊：12 只时全程约 2~3 秒，不拖到 5 秒以上。
-        int vc = victims.Count > 0 ? victims.Count : 1;
-        float dashDur = Mathf.Clamp(1.6f / vc, 0.09f, 0.20f);
-        float holdDur = Mathf.Clamp(0.6f / vc, 0.02f, 0.06f);
+        // 「最后一个怪」= 世界 X 最大的存活怪；落点 = 其右侧 0.6（= 怪的身后，与精英宿敌拍同一定位口径）
+        float lastX = float.NegativeInfinity;
+        for (int i = 0; i < victims.Count; i++)
+        {
+            float x = UnitBase.GetCombatX(victims[i]);
+            if (x > lastX) lastX = x;
+        }
+        float landX = lastX + 0.6f;
 
-        // 【2026-10-10 主人拍板】冲刺要有拖尾/残影：起跑前开，扫完立刻停（到点自动收干净，不留永久对象）。
-        // 2026-10-12：不回原位了，拖尾时长不再给回程 +1 段。
-        float trailDur = victims.Count * (dashDur + holdDur);
-        if (victims.Count > 0) TutorialRescueAfterimage.RunTrail(merc, trailDur);
+        // ③ 玩家头顶「！」（既有头顶气泡 BattleHeadTalkUI，单字没有打字机延迟）
+        if (talk != null)
+            yield return TalkBlock(bm, talk, restoreAct: false,
+                new TalkLine(Hero.Instance, "！", RescueExclaimHold));
 
-        // 冲刺起点 = 塔克落点（homeX 随「回原位」段一并删除，2026-10-12）
-        float curX = toX;
+        // ④ 一道幻影滑到怪身后 + 真身同时落位（朝向不变，此后不再调 Face）
+        TutorialRescueAfterimage.SlideGhost(merc, landX, z, RescueGhostSlideDur);
+        GameConfig.SetWorldPosition(merc.gameObject, new Vector3(landX, UnitBase.GROUND_Y, z));
+        yield return new WaitForSecondsRealtime(RescueGhostSlideDur);
+
+        // ⑤ 瞬间：全场同时出刀光（Ally MeleeSlash；attacker=塔克 → 走翻转根挂载 + 排序盖住敌人）
         for (int i = 0; i < victims.Count; i++)
         {
             var m = victims[i];
             if (m == null || m.isDead) continue;
-            float targetX = UnitBase.GetCombatX(m) + 0.6f;
-            yield return CoMoveUnitTo(merc.gameObject, curX, targetX, z, dashDur);
-            curX = targetX;
-            // 2026-10-10 主人拍板：到位先面向受害者挥一剑（加速攻击动画），再落闪电 —— 不要只是位移。
-            merc.Face(UnitBase.GetCombatX(m) >= UnitBase.GetCombatX(merc) ? 1 : -1);
-            merc.PlayAttackAnimOnly(AttackVfxKit.MeleeSlash, false, RescueAttackAnimSpeed, forceRestart: true);
-            // 到位只播一道闪电，**先不判死**（统一留到扫完之后）
-            vfx?.PlayLightning(m.transform.position, VfxFaction.Ally);
-            yield return new WaitForSecondsRealtime(holdDur);
+            // 刀光从怪面对的方向劈过来（与 UnitBase.cs:1526 受击朝向同口径）
+            int slashDir = -m.GetVfxFacingDir();
+            if (slashDir == 0) slashDir = 1;
+            vfx?.PlaySlash(m.transform.position, slashDir, VfxFaction.Ally, null, merc);
         }
+        yield return new WaitForSecondsRealtime(RescueSlashHold);
 
-        // 【2026-10-12 主人拍板】不跳回原位 —— 塔克就停在最后一只怪的身后（冲刺时每只怪都落在其右侧 0.6），
-        // 停 0.3 秒 → 全体一起死
-        TutorialRescueAfterimage.StopTrail();
-        yield return new WaitForSecondsRealtime(0.3f);
-
+        // ⑥ 全体一起死（不飘字 / 不出受击闪光 / 不记暴击）
         for (int i = 0; i < victims.Count; i++)
         {
             var m = victims[i];
             if (m == null || m.isDead) continue;
-            m.TakeDamage(TutorialRescueDamage, true, true, true, 0, merc);
+            m.TakeDamage(TutorialRescueDamage, false, true, false, 0, merc, suppressDamageText: true);
         }
-        Debug.Log($"[Tutorial] 塔克天降清场：{victims.Count} 只");
+        Debug.Log($"[Tutorial] 塔克幻影清场：{victims.Count} 只（同时刀光，统一判死，无飘字）");
 
         yield return new WaitForSecondsRealtime(0.45f);
     }
@@ -1036,7 +1051,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         BattleVFXSystem.Instance?.PlayLightning(elite.transform.position, VfxFaction.Ally);
         yield return new WaitForSecondsRealtime(0.35f);
 
-        elite.TakeDamage(TutorialRescueDamage, true, true, true, 0, merc);
+        // 【2026-10-13 主人拍板】同清场拍口径：不飘紫色暴击大数字
+        //（主人原话「像这种一大群 还都一次性全死 弹出所有的这种不要 体验不好」）
+        elite.TakeDamage(TutorialRescueDamage, false, true, true, 0, merc, suppressDamageText: true);
         Debug.Log("[Tutorial] 塔克收头：精英宿敌");
         yield return new WaitForSecondsRealtime(0.45f);
 

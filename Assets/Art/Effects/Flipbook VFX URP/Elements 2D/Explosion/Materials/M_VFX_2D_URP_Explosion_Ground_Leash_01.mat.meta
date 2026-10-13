@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 6f4139814f7c4d14385e40f4ba34a146
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 239875
+  packageName: Flipbook VFX - URP
+  packageVersion: 1.0.22
+  assetPath: Assets/Vefects/Flipbook VFX URP/Elements 2D/Explosion/Materials/M_VFX_2D_URP_Explosion_Ground_Leash_01.mat
+  uploadId: 766199

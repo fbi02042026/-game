@@ -1,5 +1,28 @@
 {
   "dependencies": {
+    "com.google.external-dependency-manager": {
+      "version": "1.2.179",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://package.openupm.com"
+    },
+    "com.taptap.sdk.core": {
+      "version": "https://github.com/taptap/tapsdk-unity-dist.git?path=/Core#4.10.9",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "76c005a30afb885763b94f72a8ad80df99787b9e"
+    },
+    "com.taptap.sdk.login": {
+      "version": "https://github.com/taptap/tapsdk-unity-dist.git?path=/Login#4.10.9",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {
+        "com.taptap.sdk.core": "4.10.9"
+      },
+      "hash": "76c005a30afb885763b94f72a8ad80df99787b9e"
+    },
     "com.unity.2d.animation": {
       "version": "9.2.0",
       "depth": 1,
@@ -140,6 +163,13 @@
     "com.unity.mathematics": {
       "version": "1.3.2",
       "depth": 1,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://packages.tuanjie.cn"
+    },
+    "com.unity.nuget.newtonsoft-json": {
+      "version": "3.2.1",
+      "depth": 0,
       "source": "registry",
       "dependencies": {},
       "url": "https://packages.tuanjie.cn"

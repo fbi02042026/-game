@@ -1457,7 +1457,7 @@ public abstract class UnitBase : MonoBehaviour
     /// <summary>子类可重写：当前是否处于无敌（如 Hero 闪避无敌帧）。默认 false。</summary>
     protected virtual bool IsInvincibleNow() => false;
 
-    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null)
+    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null, bool suppressDamageText = false)
     {
         if (_isDying) return;
         // 闪避无敌帧：仅免疫敌方伤害，关卡机制（source 为 null 或友方）仍生效
@@ -1513,7 +1513,10 @@ public abstract class UnitBase : MonoBehaviour
 
         // 怪物受击飘字：传受害者面向，由 DamageTextSystem 固定往其后方滑
         int textFacing = isAlly ? hitVfxFacing : GetVfxFacingDir();
-        DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit, isAlly, textFacing, element);
+        // 【2026-10-13 主人拍板】suppressDamageText：引导演出的判死不飘字
+        // （999999 演出伤害会炸出一大片紫色暴击大字，主人原话「那一大块看的不舒服」；正式关照常飘）。
+        if (!suppressDamageText)
+            DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage), isCrit, isAlly, textFacing, element);
 
         if (showHitVfx && finalDamage > 0f && BattleVFXSystem.Instance != null
             && Time.time - _lastHitVfxTime >= HitVfxCooldown)

@@ -7,3 +7,10 @@ ShaderImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 239875
+  packageName: Flipbook VFX - URP
+  packageVersion: 1.0.22
+  assetPath: Assets/Vefects/Flipbook VFX URP/_ Extra/Shaders/SH_Vefects_Extra_Billboard_01.shader
+  uploadId: 766199

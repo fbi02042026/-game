@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: eed4d722af50ded48a0a1970cf651bfc
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 239875
+  packageName: Flipbook VFX - URP
+  packageVersion: 1.0.22
+  assetPath: Assets/Vefects/Flipbook VFX URP/Elements 2D/Blood/Materials/M_VFX_2D_URP_Blood_splashes.mat
+  uploadId: 766199

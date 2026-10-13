@@ -2586,7 +2586,17 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
 
         if (lockDraw) panel.SetDrawLocked(true);
         if (!string.IsNullOrEmpty(guideText))
-            TutorialHintUI.Ensure().ShowHard(guideText, panel.ContinueButtonRect);
+        {
+            // 【2026-10-13 修「引导三拍中途抽，点继续卡死」】
+            // 引导局倒计时被冻住、只靠玩家点「继续」推进；若硬遮罩与「继续」按钮存在坐标偏移，
+            // 按钮会被暗带盖住、点击被吞 → 永久卡（只能干等 300s 兜底）。
+            // 引导局的「继续」引导改用<b>软引导</b>（不挡点击）：手指照常指向「继续」，
+            // 但按钮始终可直接点，杜绝卡死。正式关仍走硬遮罩 + 倒计时自动继续（不受影响）。
+            if (IsTutorialRun)
+                TutorialHintUI.Ensure().Show(guideText, panel.ContinueButtonRect, -1f);
+            else
+                TutorialHintUI.Ensure().ShowHard(guideText, panel.ContinueButtonRect);
+        }
         // 【2026-10-06 主人二次拍板】这里<b>不再起表</b> —— 倒计时早在面板弹出（Begin）那一刻就开走了，
         // 抽奖/结算期间被冻住，到这里只是<b>解冻接着走剩下的秒数</b>。
         // 原写法在这里 StartContinueCountdown() = 抽完又把 30s 补满，玩家看到的正是
@@ -2886,9 +2896,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // ② 其余走正常卡池随机：按权重从整池里抽 1 张（概率与公示弹窗一致）
         if (!card.IsValid)
         {
-            // 引导局定序那几抽不带安慰奖（金币）：主人拍板引导三拍必须是 装备→佣兵→技能。
-            // 正式关 InGuaranteeWindow 恒为 false → 安慰奖从第 1 抽起就在池里（纯随机）。
-            card = DraftPool.PickOne(cat, !SlotMachineSystem.InGuaranteeWindow());
+            // 要不要带安慰奖（金币）唯一出口 = SlotMachineSystem.ConsolationAllowed()：
+            // 引导定序窗口内不带（主人拍板引导三拍必须是 装备→佣兵→技能）；
+            // 正式关第 1 抽也不带（2026-10-13 #3：防「开局花 80 抽回 40」的开局挫败），第 2 抽起恢复纯随机。
+            card = DraftPool.PickOne(cat, SlotMachineSystem.ConsolationAllowed());
         }
 
         if (!card.IsValid)
@@ -2964,11 +2975,32 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 存一份给后面的「等玩家点继续」硬引导用 —— 引导文案里会带这份内容。
         // 【2026-10-06 主人二次拍板：物品变动都要弹，不管对话/遮罩在不在】→ Toast 走 force=true，
         // 不再被 AnyBubbleShowing 吞掉；引导文案那份保留，等于屏幕浮字 + 引导框双保险。
+        // ⚠ 这行赋值不动：RewardTip()（「等玩家点继续」硬引导文案）还读它。
         _lastDrawRewardMsg = $"【{SlotMachineSystem.CategoryName(cat)}】{got}";
-        UIManager.Instance?.ShowToast(_lastDrawRewardMsg, true);
-        // 【2026-10-12 主人拍板】补「开奖」的仪式感：Toast 一闪就没了，玩家对抽奖没概念
-        // （主人原话「现在没有抽中奖的喜悦 玩家对抽奖这个没有概念 怎么优化一下」）。
-        ShowDrawPrizeCard(card, cat);
+        // 【2026-10-13 抽奖优化 #1】Toast 与开奖卡顺序对调（修「文字先剧透」）：
+        // 真东西（装备/技能/佣兵）先弹卡，Toast 延后到开奖卡演出结束的**唯一通知**再弹
+        // （DraftPrizePopupUI 的 onFinished，与停留时长常量同源，不写死等待秒数）；
+        // 金币安慰奖维持 Toast 先弹（卡的价值低，无所谓剧透）。
+        if (card.Kind == DraftCardKind.Gold)
+        {
+            UIManager.Instance?.ShowToast(_lastDrawRewardMsg, true);
+            // 【2026-10-12 主人拍板】补「开奖」的仪式感：Toast 一闪就没了，玩家对抽奖没概念
+            // （主人原话「现在没有抽中奖的喜悦 玩家对抽奖这个没有概念 怎么优化一下」）。
+            ShowDrawPrizeCard(card, cat, powerDelta);
+        }
+        else
+        {
+            // 闭包捕获本地副本：别让下一抽改写了 _lastDrawRewardMsg 字段后 Toast 内容串台
+            string toastMsg = _lastDrawRewardMsg;
+            // 【2026-10-13 主人拍板】开奖卡演完 → 详情弹窗（点任意位置关）→ 关掉才弹 Toast，防剧透
+            ShowDrawPrizeCard(card, cat, powerDelta, () =>
+            {
+                if (DraftRewardDetailUI.NeedsDetail(card))
+                    StartCoroutine(DraftRewardDetailUI.CoShow(card, () => UIManager.Instance?.ShowToast(toastMsg, true)));
+                else
+                    UIManager.Instance?.ShowToast(toastMsg, true);
+            });
+        }
     }
 
     /// <summary>
@@ -2976,42 +3008,68 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// 这是开奖演出的<b>唯一出口</b>：文案 / 配色 / 稀有度档次都在这里定，别在别处再弹一份。
     /// ⚠ 稀有度配色只能问 <see cref="RarityPalette"/>，不许在本文件里抄色值。
     /// </summary>
-    void ShowDrawPrizeCard(DraftCard card, DraftCategory cat)
+    /// <param name="powerDelta">【2026-10-13 #2·裁定1】发奖后<b>实际生效</b>的战力增量（L2947 那个差），
+    /// 不用 <see cref="DraftCard.PowerDelta"/> 预估值 —— 与头顶飘字同源，两屏不打架。</param>
+    /// <param name="onCardFinished">【2026-10-13 #1】开奖卡演出结束的唯一通知；非空 = Toast 等它再弹（真东西）。</param>
+    void ShowDrawPrizeCard(DraftCard card, DraftCategory cat, int powerDelta, System.Action onCardFinished = null)
     {
         string title = card.Title;
         string kind = SlotMachineSystem.CategoryName(cat);
         Color tint = RarityPalette.Get(card.Rarity);
         int tier = SkillRarityTier(card.Rarity);
         Sprite icon = null;
+        // 【2026-10-13 #2】第 3 行两件套：品质词（色 = 卡面 tint）+ 特例文案（note）
+        string rarityLabel = null;
+        string note = null;
 
-        if (card.Kind == DraftCardKind.Equip && card.Equip != null)
+        // 【2026-10-13 #4】金币安慰奖分支<b>提到最前</b>：安慰奖是按类别混进各类池子的，
+        // card.Kind==Gold 时 cat 仍可能是技能/佣兵 —— 旧写法排在 cat 分支后面，
+        // 定向技能/佣兵抽到金币会被错标成「获得技能 / 佣兵升级」。
+        if (card.Kind == DraftCardKind.Gold)
+        {
+            // 「折扣」语义：金色卡 + icon_gold + 第 1 行「获得金币」+ 无光晕/无全屏闪/停 0.60s（tier=普通档）。
+            // 特判金色，不走 RarityPalette.Get(card.Rarity)（否则白灰 = 视觉最差档）。
+            kind = "获得金币";
+            title = "金币 +" + card.Amount;
+            tint = RarityPalette.Gold;
+            icon = CommonIconSprites.Load("icon_gold");
+            // 第 3 行只显示「回血 N」—— 直接用卡池给的 Desc（CollectGoldCard 已改成这句，不另写一份）
+            note = card.Desc;
+        }
+        else if (card.Kind == DraftCardKind.Equip && card.Equip != null)
         {
             // 装备的稀有度在实例上（Rarity 枚举），不用卡片的 SkillRarity
             tint = RarityPalette.Get(card.Equip.rarity);
             tier = EquipRarityTier(card.Equip.rarity);
             icon = card.Equip.icon ?? card.Equip.template?.icon;
             kind = "获得装备";
+            // 品质词：装备先过 DraftPool.MapRarity（唯一映射，不写第二份），词色跟卡框同色
+            rarityLabel = SkillRarityUtil.DisplayName(DraftPool.MapRarity(card.Equip.rarity));
+            // 【2026-10-13 #2·裁定1】实际增量为 0 = 玩家留着旧的、新件已拆成强化石 → 不显示「战力 +0」
+            if (powerDelta <= 0) note = "已拆成强化石";
         }
         else if (cat == DraftCategory.Skill)
         {
             icon = BattleUI.LoadRunSkillIcon(card.Id);
-            kind = card.Kind == DraftCardKind.SkillUp ? "技能升星" : "获得技能";
+            // 槽位参照系（2026-10-13 #2）：槽没满 → 「获得技能 n/4」；槽满走「技能升星」分支，不显示 4/4
+            kind = card.Kind == DraftCardKind.SkillUp || RunLoadout.IsSkillFull
+                 ? "技能升星"
+                 : $"获得技能 {RunLoadout.SkillIds().Count}/{RunLoadout.MaxSkillSlots}";
+            rarityLabel = SkillRarityUtil.DisplayName(card.Rarity);
         }
         else if (cat == DraftCategory.Merc)
         {
             // 佣兵头像要按 AssetId 找，这里不另外加载 —— 没图就只显示名字（不兜底造图）
-            kind = card.Kind == DraftCardKind.MercRecruit ? "招募佣兵"
+            // 槽位参照系（2026-10-13 #2）：「招募佣兵 n/2」，n = 入队后计数（与 CategoryHint 同一口径）
+            kind = card.Kind == DraftCardKind.MercRecruit
+                 ? $"招募佣兵 {RunLoadout.Mercs().Count}/{RunLoadout.MaxRunMercs}"
                  : (card.Kind == DraftCardKind.MercStarUp ? "佣兵升星" : "佣兵升级");
-        }
-        else if (card.Kind == DraftCardKind.Gold)
-        {
-            kind = "获得金币";
-            title = "金币 +" + card.Amount;
+            rarityLabel = SkillRarityUtil.DisplayName(card.Rarity);
         }
 
         if (string.IsNullOrEmpty(title)) title = kind;
         DraftPrizePopupUI.Show(BattleUI.Instance != null ? BattleUI.Instance.transform : null,
-                               title, kind, tint, icon, tier);
+                               title, kind, tint, icon, tier, powerDelta, rarityLabel, note, onCardFinished);
     }
 
     static int SkillRarityTier(SkillRarity r)
@@ -3230,6 +3288,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
                 // 与「买了就出结果」同口径：分不清成功失败就会把「槽位已满」当成获奖弹给玩家
                 landed = dir.TryApplyCard(chosen, out msg);
 
+            // 【2026-10-13 主人拍板】免费抽同口径：详情弹窗（点任意位置关）在前，Toast 延后，防剧透
+            if (landed && DraftRewardDetailUI.NeedsDetail(chosen))
+                yield return DraftRewardDetailUI.CoShow(chosen);
             if (!string.IsNullOrEmpty(msg)) UIManager.Instance?.ShowToast(msg);
             if (landed)
             {
@@ -3841,6 +3902,35 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         else
             RunStats.StageTitle = GameConfig.GetChapterMapName(RunStats.Chapter);
         RunStats.ResolveMvp();
+
+        // 2026-10-13：数据埋点（TapTap 数据分析）。全部取自上面已算好的结算快照，不额外采集。
+        ReportRunEndAnalytics();
+    }
+
+    /// <summary>把结算快照转为一条 #run_end 埋点。失败不阻塞结算流程。</summary>
+    void ReportRunEndAnalytics()
+    {
+        try
+        {
+            GameAnalytics.ReportRunEnd(
+                isDeath: RunStats.IsDeath,
+                isVictory: RunStats.IsVictory,
+                chapter: RunStats.Chapter,
+                stageId: currentStage != null ? currentStage.stageIndex : 0,
+                goldGained: RunStats.GoldGained,
+                talentGained: RunStats.TalentGained,
+                equipCount: RunStats.EquipCount,
+                stoneDelta: RunStats.EnchantStoneDelta,
+                decomposeDelta: RunStats.DecomposeMatDelta,
+                mvp: RunStats.MvpKey,
+                durationSec: RunStats.BattleTimeSec);
+            GameAnalytics.AddRunCount();
+            if (RunStats.IsDeath) GameAnalytics.AddDeathCount();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[BattleManager] #run_end 埋点失败：{e.Message}");
+        }
     }
 
     /// <summary>通关后弹结算，再执行后续选关/回城。</summary>

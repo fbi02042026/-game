@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 749c75f5dd4d38448807f5bed054d15a
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 239875
+  packageName: Flipbook VFX - URP
+  packageVersion: 1.0.22
+  assetPath: Assets/Vefects/Flipbook VFX URP/Elements 2D/Muzzle Flash/Materials/M_VFX_2D_URP_Muzzle_Flash_02.mat
+  uploadId: 766199

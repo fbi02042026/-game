@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: db4b69cb09003974f8840ac168e6bc86
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 239875
+  packageName: Flipbook VFX - URP
+  packageVersion: 1.0.22
+  assetPath: Assets/Vefects/Flipbook VFX URP/Elements 2D/Blood/Materials/M_VFX_2D_URP_Blood_Orb_BG_Drops_Glow_02.mat
+  uploadId: 766199

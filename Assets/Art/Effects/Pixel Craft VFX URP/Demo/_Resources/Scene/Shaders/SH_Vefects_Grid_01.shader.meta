@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: d6e6869f525f49246abc134c941edcdd
+guid: ecfb07d71109a1d48b71d4677e100016
 ShaderImporter:
   externalObjects: {}
   defaultTextures:
@@ -10,3 +10,10 @@ ShaderImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 239875
+  packageName: Flipbook VFX - URP
+  packageVersion: 1.0.22
+  assetPath: Assets/Vefects/Flipbook VFX URP/Demo/Resources/Environment/Shaders/SH_Vefects_Grid_01.shader
+  uploadId: 766199

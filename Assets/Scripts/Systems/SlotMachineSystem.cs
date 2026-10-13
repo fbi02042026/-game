@@ -340,6 +340,20 @@ public static class SlotMachineSystem
         return IsTutorialRun && order != null && n >= 0 && n < order.Length;
     }
 
+    /// <summary>
+    /// 这一抽能不能出金币安慰奖 —— 【2026-10-13 抽奖优化 #3】**唯一出口**。
+    /// <para>口径 = <c>!InGuaranteeWindow() &amp;&amp; DrawIndex &gt; 0</c>：引导定序窗口内不安慰
+    /// （沿用 <see cref="InGuaranteeWindow"/> 既有语义，它本身不动，还被 <see cref="ResolveCategory"/> 用）；
+    /// 正式关<b>第 1 抽永不安慰</b> —— 防「开局花 80 抽回 40」的开局挫败，第 2 抽起恢复纯随机。</para>
+    /// <para>两处调用点（抽取与概率公示）都改问这里，公示与实际自动同源：
+    /// <c>BattleManager.CoInstantPick</c> 的 <c>DraftPool.PickOne</c>、<c>DraftPool.BuildOddsRows</c>。
+    /// ⚠ 免费老虎机三选一（<c>DraftPool.BuildCards(cat)</c>）按现有意图硬编码带安慰奖，不归这里管。</para>
+    /// </summary>
+    public static bool ConsolationAllowed()
+    {
+        return !InGuaranteeWindow() && DrawIndex > 0;
+    }
+
     // 【2026-10-11 主人拍板】「职业白送初始技能」整条作废 ——
     //   原 BuildGuaranteedSkillCard()：本局第一次抽到技能时**必给**该职业的 DefaultSkillId，
     //   等于每个职业开局都白送一个（法师送的还是传说天雷裁决，主人反馈「这么容易抽到吗」）。

@@ -1,5 +1,9 @@
 {
   "dependencies": {
+    "com.taptap.sdk.core": "https://github.com/taptap/tapsdk-unity-dist.git?path=/Core#4.10.9",
+    "com.taptap.sdk.login": "https://github.com/taptap/tapsdk-unity-dist.git?path=/Login#4.10.9",
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.google.external-dependency-manager": "1.2.179",
     "com.unity.feature.2d": "2.0.1",
     "com.unity.render-pipelines.universal": "14.2.0-t1",
     "com.unity.ugui": "1.0.0",
@@ -34,5 +38,21 @@
     "com.unity.modules.vr": "1.0.0",
     "com.unity.modules.wind": "1.0.0",
     "com.unity.modules.xr": "1.0.0"
-  }
+  },
+  "scopedRegistries": [
+    {
+      "name": "NPMJS",
+      "url": "https://registry.npmjs.org/",
+      "scopes": [
+        "com.taptap"
+      ]
+    },
+    {
+      "name": "package.openupm.com",
+      "url": "https://package.openupm.com",
+      "scopes": [
+        "com.google.external-dependency-manager"
+      ]
+    }
+  ]
 }

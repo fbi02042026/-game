@@ -210,11 +210,18 @@ public class SaveData
     public List<StringIdEntry> viewedMercEntries = new List<StringIdEntry>();
     /// <summary>已在酒馆解锁的佣兵（HireId）—— 只有解锁的才会进战斗内「佣兵三选一」随机池</summary>
     public List<StringIdEntry> unlockedMercEntries = new List<StringIdEntry>();
+    /// <summary>【2026-10-13 主人拍板】佣兵抽奖池（HireId）：战斗内招募只从池子里的出。格子制，见 <see cref="DrawPoolMaxSlots"/>。</summary>
+    public List<StringIdEntry> mercDrawPoolEntries = new List<StringIdEntry>();
+    /// <summary>初期开放的抽奖池格数（总容量 6，见 <see cref="DrawPoolMaxSlots"/>；开放进度见 <see cref="DrawPoolSlots"/>）。</summary>
+    public const int DrawPoolDefaultSlots = 4;
+    /// <summary>抽奖池总容量（UI 画 6 格，后期逐格开放）。</summary>
+    public const int DrawPoolMaxSlots = 6;
     [NonSerialized] public HashSet<string> seenMonsterIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> viewedMonsterIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> seenMercIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> viewedMercIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> unlockedMercIds = new HashSet<string>();
+    [NonSerialized] public HashSet<string> mercDrawPool = new HashSet<string>();
     public List<StringIdEntry> claimedCodexRewardEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> claimedCodexRewardIds = new HashSet<string>();
 
@@ -456,6 +463,7 @@ public class SaveData
         seenMercIds = ToIdSet(seenMercEntries);
         viewedMercIds = ToIdSet(viewedMercEntries);
         unlockedMercIds = ToIdSet(unlockedMercEntries);
+        mercDrawPool = ToIdSet(mercDrawPoolEntries);
         claimedCodexRewardIds = ToIdSet(claimedCodexRewardEntries);
         defeatedMonsterIds = ToIdSet(defeatedMonsterEntries);
         unlockedWorldIds = ToIdSet(unlockedWorldEntries);
@@ -535,6 +543,8 @@ public class SaveData
         MigrateClearedChapters();
         if (unlockedMercIds.Count == 0)
             SeedDefaultUnlockedMercs();
+        // 【2026-10-13 主人拍板】塔克补发 + 抽奖池播种：老档第一次进新版也走（幂等，配过池子的不打扰）
+        SeedDrawPoolIfEmpty();
     }
 
     /// <summary>
@@ -561,17 +571,115 @@ public class SaveData
             clearedChapterEntries = FromIntIdSet(clearedChapterIds);
     }
 
-    /// <summary>新档/空集合兜底：默认解锁 3 名基础佣兵，保证第一局就有佣兵卡可抽。</summary>
+    /// <summary>新档/空集合兜底：默认解锁基础佣兵，保证第一局就有佣兵卡可抽。</summary>
     void SeedDefaultUnlockedMercs()
     {
         unlockedMercIds ??= new HashSet<string>();
         foreach (string id in DefaultUnlockedMercIds)
             unlockedMercIds.Add(id);
         unlockedMercEntries = FromIdSet(unlockedMercIds);
+        // 【2026-10-13 主人拍板】抽奖池同步播种：默认名单进池（初期 4 格正好坐满）
+        SeedDrawPoolIfEmpty();
     }
 
-    /// <summary>默认解锁：H001 马库斯（剑盾/坦）· H005 米娅（游侠/远程）· H019 艾琳（法师/法系）</summary>
-    public static readonly string[] DefaultUnlockedMercIds = { "H001", "H005", "H019" };
+    /// <summary>
+    /// 【2026-10-13 主人拍板】抽奖池播种 + 塔克补发（幂等，新档 / 老档第一次进新版都走）：
+    /// ① 塔克（H003）无条件补进永久解锁 —— 引导第 2 抽保底入队是**局内**的，老档解锁列表里没有他，
+    ///    这里兑现「第一天登录开放」；② 池子不满开放格数就走 <see cref="EnsurePoolFilled"/> 自动补满
+    ///    （主人拍板「池子最少要补全 会自动补全」，玩家点开酒馆时池子已经是满的）。
+    /// </summary>
+    void SeedDrawPoolIfEmpty()
+    {
+        mercDrawPool ??= new HashSet<string>();
+        if (unlockedMercIds != null && !unlockedMercIds.Contains("H003"))
+        {
+            unlockedMercIds.Add("H003");
+            unlockedMercEntries = FromIdSet(unlockedMercIds);
+        }
+        EnsurePoolFilled();
+    }
+
+    /// <summary>
+    /// 【2026-10-13 主人拍板】池子自动补全：不足开放格数时，从未上架的已解锁佣兵按
+    /// 稀有度（传说 → 稀有 → 普通）+ 花名册表序补满；候选耗尽（已获得全在池里）才留空格。
+    /// 下架（<see cref="RemoveFromDrawPool"/>）后系统立即调它 —— 玩家点开酒馆看到的池子永远是满的。
+    /// </summary>
+    public bool EnsurePoolFilled()
+    {
+        if (mercDrawPool == null) mercDrawPool = new HashSet<string>();
+        if (unlockedMercIds == null) return false;
+        int slots = DrawPoolSlots;
+        bool changed = false;
+        IReadOnlyList<MercRosterDefs.Def> all = MercRosterDefs.All;
+        // 稀有度从高到低三段扫（不猜枚举数值，显式按档位过）
+        for (int pass = 0; pass < 3 && mercDrawPool.Count < slots; pass++)
+        {
+            var tier = pass == 0 ? MercRosterDefs.MercRarity.Legendary
+                : pass == 1 ? MercRosterDefs.MercRarity.Rare
+                : MercRosterDefs.MercRarity.Common;
+            for (int i = 0; i < all.Count && mercDrawPool.Count < slots; i++)
+            {
+                var d = all[i];
+                if (d.Rarity != tier) continue;
+                if (!unlockedMercIds.Contains(d.HireId)) continue;
+                if (mercDrawPool.Add(d.HireId)) changed = true;
+            }
+        }
+        if (changed) mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        return changed;
+    }
+
+    /// <summary>
+    /// 【2026-10-13 主人拍板】上架进池（酒馆点已获得佣兵）。池满返回 false（UI 走替换弹窗流）。
+    /// 返回是否变化。
+    /// </summary>
+    public bool AddToDrawPool(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return false;
+        if (unlockedMercIds == null || !unlockedMercIds.Contains(hireId)) return false;
+        if (mercDrawPool == null) mercDrawPool = new HashSet<string>();
+        if (mercDrawPool.Contains(hireId)) return false;
+        if (mercDrawPool.Count >= DrawPoolSlots) return false;
+        mercDrawPool.Add(hireId);
+        mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        return true;
+    }
+
+    /// <summary>
+    /// 【2026-10-13 主人拍板】从池里移除并立即自动补全（池格右上角红「−」的下架流）。
+    /// 候选耗尽（已获得全在池里）才留空格。返回是否变化。
+    /// </summary>
+    public bool RemoveFromDrawPool(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return false;
+        if (mercDrawPool == null || !mercDrawPool.Remove(hireId)) return false;
+        EnsurePoolFilled();
+        mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        return true;
+    }
+
+    /// <summary>
+    /// 【2026-10-13 主人拍板】池满时点已获得佣兵 → 弹替换弹窗 → 换入换出（一次成对操作）。
+    /// 两者都须已解锁、被换的须在池里。返回是否变化。
+    /// </summary>
+    public bool SwapInDrawPool(string inHireId, string outHireId)
+    {
+        if (string.IsNullOrEmpty(inHireId) || string.IsNullOrEmpty(outHireId)) return false;
+        if (inHireId == outHireId) return false;
+        if (unlockedMercIds == null || !unlockedMercIds.Contains(inHireId)) return false;
+        if (mercDrawPool == null || !mercDrawPool.Contains(outHireId)) return false;
+        if (!mercDrawPool.Remove(outHireId)) return false;
+        mercDrawPool.Add(inHireId);
+        mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        return true;
+    }
+
+    /// <summary>
+    /// 默认解锁（2026-10-13 主人拍板「初期三个白色佣兵：一个牧师一个剑盾一个游侠」＋「登录给的塔克」）：
+    /// H011 路加（牧师）· H001 马库斯（剑盾）· H005 米娅（游侠）＋ H003 塔克（剑盾 / 稀有）。
+    /// 原第三席 H019 艾琳（法师）移出初期名单，仍可在酒馆金币解锁 / 图鉴获取。
+    /// </summary>
+    public static readonly string[] DefaultUnlockedMercIds = { "H011", "H001", "H005", "H003" };
 
     /// <summary>该佣兵是否已在酒馆解锁（进战斗三选一池的必要条件）。</summary>
     public bool IsMercUnlocked(string hireId)
@@ -589,6 +697,72 @@ public class SaveData
         if (!unlockedMercIds.Add(hireId)) return false;
         unlockedMercEntries = FromIdSet(unlockedMercIds);
         return true;
+    }
+
+    /// <summary>
+    /// 【2026-10-13 主人拍板】该佣兵是否在抽奖池里。池子是**格子制**（酒馆 6 格、初期开放 4 格）：
+    /// 格子里有谁才抽谁；**空池 = 本局抽不到新佣兵**（升级 / 升星卡照常出，不会弹「没能出结果」）。
+    /// </summary>
+    public bool IsMercInDrawPool(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return false;
+        if (mercDrawPool == null) mercDrawPool = new HashSet<string>();
+        return mercDrawPool.Contains(hireId);
+    }
+
+    /// <summary>
+    /// 【2026-10-13 主人拍板】整池替换抽奖池（酒馆「佣兵抽奖池」弹窗确定时调用）。
+    /// 只保留已解锁的 hireId（下架的不该变成暗池）；超出开放格数按花名册表序截断（UI 层已拦，这里防御）；
+    /// 返回是否真的变了（没变就不重写 entries）。
+    /// </summary>
+    public bool SetMercDrawPool(HashSet<string> ids)
+    {
+        var next = ids != null ? new HashSet<string>(ids) : new HashSet<string>();
+        if (unlockedMercIds != null)
+            next.RemoveWhere(id => !unlockedMercIds.Contains(id));
+        int slots = DrawPoolSlots;
+        if (next.Count > slots)
+        {
+            // HashSet 无序，截断必须走花名册表序，否则随机砍配置
+            var keep = new HashSet<string>();
+            IReadOnlyList<MercRosterDefs.Def> all = MercRosterDefs.All;
+            for (int i = 0; i < all.Count && keep.Count < slots; i++)
+                if (next.Contains(all[i].HireId)) keep.Add(all[i].HireId);
+            next = keep;
+        }
+        if (mercDrawPool == null) mercDrawPool = new HashSet<string>();
+        bool same = mercDrawPool.Count == next.Count;
+        if (same)
+        {
+            foreach (string id in next)
+            {
+                if (!mercDrawPool.Contains(id)) { same = false; break; }
+            }
+        }
+        if (same) return false;
+        mercDrawPool = next;
+        mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        return true;
+    }
+
+    /// <summary>
+    /// 抽奖池当前开放格数（2026-10-13 主人拍板「剩下的格子当玩家通关第一章后面的章节开放」）：
+    /// 初期 4 格；**通关第 2 章开第 5 格、通关第 3 章开第 6 格**（条件要改就动这里，一行一处）。
+    /// </summary>
+    public int DrawPoolSlots
+    {
+        get
+        {
+            int s = DrawPoolDefaultSlots;
+            if (clearedChapterIds != null)
+            {
+                if (clearedChapterIds.Contains(2)) s++;
+                if (clearedChapterIds.Contains(3)) s++;
+            }
+            // 本文件是纯数据层，不依赖 UnityEngine，故用 System.Math.Min 而非 Mathf.Min
+            s = System.Math.Min(s, DrawPoolMaxSlots);
+            return s;
+        }
     }
 
     /// <summary>标记章节通关；通关第 8 章时把 chosenBranch 归零，允许下一周目换支线。</summary>
@@ -693,6 +867,7 @@ public class SaveData
         seenMercIds ??= new HashSet<string>();
         viewedMercIds ??= new HashSet<string>();
         unlockedMercIds ??= new HashSet<string>();
+        mercDrawPool ??= new HashSet<string>();
         clearedChapterIds ??= new HashSet<int>();
         claimedCodexRewardIds ??= new HashSet<string>();
         defeatedMonsterIds ??= new HashSet<string>();
@@ -755,6 +930,7 @@ public class SaveData
         seenMercEntries = FromIdSet(seenMercIds);
         viewedMercEntries = FromIdSet(viewedMercIds);
         unlockedMercEntries = FromIdSet(unlockedMercIds);
+        mercDrawPoolEntries = FromIdSet(mercDrawPool);
         clearedChapterEntries = FromIntIdSet(clearedChapterIds);
         claimedCodexRewardEntries = FromIdSet(claimedCodexRewardIds);
         defeatedMonsterEntries = FromIdSet(defeatedMonsterIds);

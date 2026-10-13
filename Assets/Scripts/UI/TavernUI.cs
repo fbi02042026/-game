@@ -302,7 +302,15 @@ public class TavernUI : MonoBehaviour, ITownPage
             trustButton.onClick.AddListener(OpenInformantTreat);
             RetitleCard(trustButton.transform, "请他喝一杯", "请独眼喝一杯，换一份情报");
         }
-        if (questButton != null) questButton.gameObject.SetActive(false);
+        if (questButton != null)
+        {
+            // 【2026-10-13 主人拍板】原隐藏的「酒馆任务」卡位复用为「佣兵抽奖池」入口：
+            // 勾选下场想抽到的佣兵，局内招募只从勾选的里面出（空池 = 不筛选）。
+            questButton.gameObject.SetActive(true);
+            questButton.onClick.RemoveAllListeners();
+            questButton.onClick.AddListener(() => MercDrawPoolUI.Show());
+            RetitleCard(questButton.transform, "佣兵抽奖池", "配置下场抽奖的佣兵池");
+        }
         if (intelButton != null)
         {
             intelButton.gameObject.SetActive(true);
@@ -394,7 +402,7 @@ public class TavernUI : MonoBehaviour, ITownPage
             new Vector2(-160f, 85f), new Color(0.55f, 0.42f, 0.28f));
         trustButton = CreateFeatureCard(grid.transform, "Trust", "信任交流", "提升信任解锁故事与事件",
             new Vector2(160f, 85f), new Color(0.65f, 0.32f, 0.35f));
-        questButton = CreateFeatureCard(grid.transform, "Quest", "酒馆任务", "完成委托获取丰厚奖励",
+        questButton = CreateFeatureCard(grid.transform, "Quest", "佣兵抽奖池", "配置下场抽奖的佣兵池",
             new Vector2(-160f, -95f), new Color(0.4f, 0.45f, 0.55f));
         intelButton = CreateFeatureCard(grid.transform, "Intel", "佣兵情报", "查看佣兵资料与背景故事",
             new Vector2(160f, -95f), new Color(0.35f, 0.4f, 0.5f));

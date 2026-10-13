@@ -176,13 +176,20 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         bool newBetter = EquipCompare.NewBetter(newEq, oldEq);
         if (_verdict != null)
         {
+            // 【2026-10-13 改版】底部判定行不再塞「战力 ±N」（主人原话「不要在下面」「有点挤」）。
+            // 战力差改放进「新装备」栏内（见 FillColumn 的 ColumnNew 分支）。这里只留强弱结论 + 颜色。
             _verdict.text = EquipCompare.Verdict(newEq, oldEq);
             _verdict.color = newBetter ? new Color(0.55f, 0.95f, 0.60f) : new Color(0.95f, 0.72f, 0.45f);
-            _verdict.lineSpacing = MultiLineLineSpacing;   // 判定文案折行时同样拉开行距
         }
 
-        FillColumn(_root.transform, "ColumnNew", newEq);
-        FillColumn(_root.transform, "ColumnOld", oldEq);
+        // 战力 ±N（新 - 旧），准备塞进「新装备」栏（主人拍板：不要在底部判定行）
+        int d = PowerCalc.EquipPowerDelta(newEq) - PowerCalc.EquipPowerDelta(oldEq);
+        string powerLine = d >= 0
+            ? "<color=#" + ColorUtility.ToHtmlStringRGB(RarityPalette.PowerGain) + ">战力 +" + d + "</color>"
+            : "<color=#" + ColorUtility.ToHtmlStringRGB(RarityPalette.PowerLoss) + ">战力 -" + (-d) + "</color>";
+
+        FillColumn(_root.transform, "ColumnNew", newEq, oldEq, powerLine);
+        FillColumn(_root.transform, "ColumnOld", oldEq, null, null);
 
         GameFonts.ApplyToHierarchy(_root.transform);
         if (_root != null)
@@ -192,7 +199,7 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         }
     }
 
-    void FillColumn(Transform scope, string columnName, EquipInstance eq)
+    void FillColumn(Transform scope, string columnName, EquipInstance eq, EquipInstance compareTo, string powerLine)
     {
         var col = FindDeep(scope, columnName);
         if (col == null)
@@ -213,7 +220,13 @@ public class EquipReplaceConfirmUI : MonoBehaviour
                 : $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}");
         // 2026-10-12 主人拍板：属性「一条一行、竖着往下排」，不再挤成一长串靠自动折行。
         // 条目内容与抽卡卡面同一处真源（DraftPool.FormatEquipDescLines），这里只换分隔符。
-        var descLines = eq != null ? DraftPool.FormatEquipDescLines(eq) : new List<string>();
+        // 【2026-10-13 改版】ColumnNew 传 compareTo=旧装备 → 同属性自动加 ▲/▼ 对比箭头。
+        var descLines = eq != null
+            ? DraftPool.FormatEquipDescLines(eq, columnName == "ColumnNew" ? compareTo : null)
+            : new List<string>();
+        // 【2026-10-13 改版】战力 ±N 作为「新装备」栏最后一行（主人拍板：不要在底部判定行）
+        if (columnName == "ColumnNew" && !string.IsNullOrEmpty(powerLine))
+            descLines.Add(powerLine);
         SetText(col, "Desc", descLines.Count > 0 ? string.Join("\n", descLines.ToArray()) : "");
 
         var infoText = Text_(FindDeep(col, "Info"));

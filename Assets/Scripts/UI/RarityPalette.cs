@@ -51,6 +51,17 @@ public static class RarityPalette
     /// <summary>名牌 / 文字描边色（所有稀有度共用，保证对比度一致）。</summary>
     public static readonly Color Outline = new Color(0.10f, 0.10f, 0.10f, 1f);
 
+    // ===== 语义色（非稀有度，但同样只此一处，别在业务文件里抄 hex）=====
+    /// <summary>
+    /// 【2026-10-13 抽奖优化 #4】金币安慰奖专属金（#FFD959）—— 概率弹窗 QualityColor 与开奖卡金币分支都转发到它。
+    /// 与 <see cref="Legendary"/>（传说橙金）故意接近：靠文字「获得金币」+ icon_gold + 无光晕三通道区分。
+    /// </summary>
+    public static readonly Color Gold = new Color(1f, 0.85f, 0.35f, 1f);
+    /// <summary>【2026-10-13 #2/#5】战力增量固定绿（#7CE07C）：开奖卡第 3 行「战力 +N」与替换弹窗「战力 +N」同色。</summary>
+    public static readonly Color PowerGain = new Color(124f / 255f, 224f / 255f, 124f / 255f, 1f);
+    /// <summary>【2026-10-13 #5】战力减量固定红（#FF6B6B）：替换弹窗「战力 -N」。</summary>
+    public static readonly Color PowerLoss = new Color(1f, 107f / 255f, 107f / 255f, 1f);
+
     /// <summary>暗档系数。见类注释：这个值是还原既有弹窗配色反推出来的，不要随意改。</summary>
     public const float DeepMul = 0.55f;
 

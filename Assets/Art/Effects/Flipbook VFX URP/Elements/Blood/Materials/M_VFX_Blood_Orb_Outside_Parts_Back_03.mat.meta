@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: e8e6f11f7099503459264486c56c6629
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 239875
+  packageName: Flipbook VFX - URP
+  packageVersion: 1.0.22
+  assetPath: Assets/Vefects/Flipbook VFX URP/Elements/Blood/Materials/M_VFX_Blood_Orb_Outside_Parts_Back_03.mat
+  uploadId: 766199

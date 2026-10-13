@@ -7,8 +7,8 @@ PrefabImporter:
   assetBundleVariant: 
 AssetOrigin:
   serializedVersion: 1
-  productId: 308259
-  packageName: Pixel Craft VFX - URP
-  packageVersion: 1.0.02
-  assetPath: Assets/Vefects/Pixel Craft VFX URP/Demo/Resources/Scene/Meshes/SM_VFX_Background_Plate_01.prefab
-  uploadId: 771196
+  productId: 239875
+  packageName: Flipbook VFX - URP
+  packageVersion: 1.0.22
+  assetPath: Assets/Vefects/Flipbook VFX URP/Demo/Resources/Environment/Meshes/SM_VFX_Background_Plate_01.prefab
+  uploadId: 766199

@@ -141,6 +141,10 @@ public class BattleEntryDraftPanel : MonoBehaviour
         public DraftCategory? Cat;
         /// <summary>按钮左侧的货币图标（运行时建在 Cost 左外侧，见 BuildCoinIcon）。</summary>
         public Image CoinIcon;
+        /// <summary>【2026-10-13 #7】币不够时价格数字变红，缓存主人调好的原色，够了再恢复（不永久覆盖美术）。</summary>
+        public Color? CostColorDefault;
+        /// <summary>【2026-10-13 #7】价格下方的「还差 N」红字（仅币不够时显示）。</summary>
+        public Text ShortfallText;
     }
 
     /// <summary>币种图标缓存：别每次 Refresh 都 Resources.Load。</summary>
@@ -261,6 +265,13 @@ public class BattleEntryDraftPanel : MonoBehaviour
     Button _backpackBtn;
     /// <summary>概率公示的「!」按钮（运行时建，见 BuildOddsButton）。</summary>
     Button _oddsBtn;
+    /// <summary>【2026-10-13 #6】「!」按钮下方的品质占比小字（现算）。</summary>
+    Text _oddsHintText;
+    /// <summary>【2026-10-13 #9】连抽计数（每次开面板清零，每点一次抽奖 +1）。</summary>
+    int _comboCount;
+    /// <summary>【2026-10-13 #9】「已连抽 ×N」提示（≥2 显示），挂在抽奖容器上方。</summary>
+    Text _comboText;
+    Coroutine _comboFlashCo;
 
     // ===== 抽完后「等玩家点继续」的两件套（2026-10-06 主人拍板）=====
 
@@ -285,10 +296,10 @@ public class BattleEntryDraftPanel : MonoBehaviour
     public const float ContinueCountdownSec = 30f;
 
     /// <summary>
-    /// 倒计时数字字号。【2026-10-06 主人校准】摆到 map 正中间后要「放大点」才显眼。
+    /// 倒计时数字字号。【2026-10-13 #7】120 → 56：不再压屏幕正中，把视觉焦点还给抽奖区。
     /// 要大小只改这一个数。
     /// </summary>
-    const int CountdownFontSize = 120;
+    const int CountdownFontSize = 56;
 
     /// <summary>倒计时剩余秒数。&gt;0 表示在跑；0 表示没在跑。</summary>
     float _countdownLeft;
@@ -609,10 +620,12 @@ public class BattleEntryDraftPanel : MonoBehaviour
         _onPick = onPick;
         _onFight = onFight;
         _draftActive = true;
+        _comboCount = 0;   // 【2026-10-13 #9】每次开面板重置连抽计数
 
         SetDraftVisible(true);
         SetExpanded(true);
         Refresh(randomPrice, focusPrice, cats, coins, freeLeft);
+        RefreshCombo();    // 【2026-10-13 #9】重置后同步连抽提示（隐藏）
         LogState("Begin");
     }
 
@@ -670,6 +683,8 @@ public class BattleEntryDraftPanel : MonoBehaviour
 
             // 概率公示的「!」（见 BuildOddsButton 注释）
             BuildOddsButton();
+            // 【2026-10-13 #9】连抽提示（见 BuildComboText 注释）
+            BuildComboText();
         }
 
         var cont = FindDeep(_panel, NodeContinue);
@@ -750,6 +765,29 @@ public class BattleEntryDraftPanel : MonoBehaviour
         var costNode = FindDeep(t, NodeCost);
         if (costNode != null) slot.CostText = costNode.GetComponent<Text>();
 
+        // 【2026-10-13 #7】价格下方的「还差 N」红字（币不够才显示），挂在 Cost 节点下方，不动主人调好的美术。
+        if (costNode != null)
+        {
+            var sf = new GameObject("Shortfall", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            sf.transform.SetParent(costNode, false);
+            var sfrt = sf.GetComponent<RectTransform>();
+            sfrt.anchorMin = new Vector2(0.5f, 0f);
+            sfrt.anchorMax = new Vector2(0.5f, 0f);
+            sfrt.pivot = new Vector2(0.5f, 1f);
+            sfrt.anchoredPosition = new Vector2(0f, -2f);
+            sfrt.sizeDelta = new Vector2(160f, 24f);
+            var sft = sf.GetComponent<Text>();
+            sft.fontSize = 16;
+            sft.color = new Color(1f, 0.42f, 0.42f);   // #FF6B6B
+            sft.alignment = TextAnchor.UpperCenter;
+            sft.raycastTarget = false;
+            sft.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var sff = GameFonts.GetChinese();
+            if (sff != null) sft.font = sff;
+            slot.ShortfallText = sft;
+            sf.SetActive(false);
+        }
+
         // 按钮左侧的货币图标（2026-10-07 主人拍板）：建在 Cost 左外侧，不动主人调好的美术。
         if (costNode != null) BuildCoinIcon(slot, costNode);
         else Debug.LogError("[BattleEntryDraftPanel] 抽奖按钮 " + nodeName + " 找不到价格节点 " + NodeCost + "，货币图标没地方挂");
@@ -785,18 +823,23 @@ public class BattleEntryDraftPanel : MonoBehaviour
         rt.anchorMin = new Vector2(0.5f, 0.5f);
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(58f, 58f);
+        // 【2026-10-13 #6】58 → 88：顺手修触摸目标不达标（美术规格 §5.5）。
+        rt.sizeDelta = new Vector2(88f, 88f);
         // 用世界角点换成容器本地坐标，抽奖按钮是什么锚点都不影响（直接读 anchoredPosition 会被锚点坑）。
-        // 落点 = 抽奖按钮中心 + 半个按钮宽 + 38，跟抽奖按钮同高。
         var corners = new Vector3[4];
         normal.GetWorldCorners(corners);
         Vector2 center = _draftRt.InverseTransformPoint((corners[0] + corners[2]) * 0.5f);
         Vector2 right = _draftRt.InverseTransformPoint(corners[2]);
         float halfW = Mathf.Abs(right.x - center.x);
-        rt.anchoredPosition = new Vector2(center.x + halfW + 38f, center.y);
+        // 【2026-10-13 #6】按钮更宽，间隙从 38 拉到 60，免得贴着普通按钮。
+        rt.anchoredPosition = new Vector2(center.x + halfW + 60f, center.y);
 
         var img = go.GetComponent<Image>();
         img.color = new Color(0.14f, 0.15f, 0.20f, 0.92f);
+        // 【2026-10-13 #6】2px #FFB833 金边（Outline，不新建美术节点、不改预制体）。
+        var edge = go.AddComponent<Outline>();
+        edge.effectColor = new Color(1f, 0.72f, 0.2f, 1f);
+        edge.effectDistance = new Vector2(2f, -2f);
         var btn = go.GetComponent<Button>();
         btn.targetGraphic = img;
         btn.onClick.AddListener(() => DraftOddsPopupUI.Toggle());
@@ -817,7 +860,100 @@ public class BattleEntryDraftPanel : MonoBehaviour
         var f = GameFonts.GetChinese();
         if (f != null) t.font = f;
 
+        // 【2026-10-13 #6】按钮下方 14px 小字：现算品质段前两行（传说 / 稀有占比），与概率弹窗同源 BuildOddsRows。
+        var hint = new GameObject("Hint", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        hint.transform.SetParent(go.transform, false);
+        var hrt = hint.GetComponent<RectTransform>();
+        hrt.anchorMin = new Vector2(0.5f, 0f);
+        hrt.anchorMax = new Vector2(0.5f, 0f);
+        hrt.pivot = new Vector2(0.5f, 1f);
+        hrt.anchoredPosition = new Vector2(0f, -6f);
+        hrt.sizeDelta = new Vector2(220f, 36f);
+        var ht = hint.GetComponent<Text>();
+        ht.fontSize = 14;
+        ht.color = new Color(0.85f, 0.88f, 0.95f, 1f);
+        ht.alignment = TextAnchor.UpperCenter;
+        ht.raycastTarget = false;
+        ht.horizontalOverflow = HorizontalWrapMode.Overflow;
+        var hf = GameFonts.GetChinese();
+        if (hf != null) ht.font = hf;
+        _oddsHintText = ht;
+        RefreshOddsHint();
+
         _oddsBtn = btn;
+    }
+
+    /// <summary>【2026-10-13 #6】现算传说/稀有占比写进「!」按钮下方小字；与概率弹窗同源 <see cref="DraftPool.BuildOddsRows"/>，绝不写死。</summary>
+    void RefreshOddsHint()
+    {
+        if (_oddsHintText == null) return;
+        var rows = DraftPool.BuildOddsRows();
+        float leg = 0f, rare = 0f;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Section != DraftPool.SEC_QUALITY) continue;
+            if (rows[i].Label == "传说") leg = rows[i].Percent;
+            else if (rows[i].Label == "稀有") rare = rows[i].Percent;
+        }
+        _oddsHintText.text = $"传说 {leg:F1}% · 稀有 {rare:F1}%";
+    }
+
+    /// <summary>【2026-10-13 #9】「已连抽 ×N」提示：挂在抽奖容器上方，≥2 才显示（不新建美术节点）。</summary>
+    void BuildComboText()
+    {
+        if (_draftRt == null || _comboText != null) return;
+        var go = new GameObject("ComboHint", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(_draftRt, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 1f);
+        rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(0f, 120f);   // 抽奖按钮上方
+        rt.sizeDelta = new Vector2(260f, 28f);
+        var t = go.GetComponent<Text>();
+        t.fontSize = 16;
+        t.color = new Color(1f, 0.72f, 0.2f);   // #FFB833
+        t.alignment = TextAnchor.MiddleCenter;
+        t.raycastTarget = false;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        var f = GameFonts.GetChinese();
+        if (f != null) t.font = f;
+        go.SetActive(false);
+        _comboText = t;
+    }
+
+    /// <summary>【2026-10-13 #9】刷新连抽提示：≥2 显示「已连抽 ×N」；达到 3/5/8 连抽闪一次金。</summary>
+    void RefreshCombo()
+    {
+        if (_comboText == null) return;
+        bool show = _comboCount >= 2;
+        _comboText.gameObject.SetActive(show);
+        if (show) _comboText.text = $"已连抽 ×{_comboCount}";
+        if (_comboCount == 3 || _comboCount == 5 || _comboCount == 8)
+        {
+            if (_comboFlashCo != null) StopCoroutine(_comboFlashCo);
+            _comboFlashCo = StartCoroutine(CoComboFlash());
+        }
+    }
+
+    /// <summary>【2026-10-13 #9】连抽里程碑（3/5/8）金闪三次；保守实现为闪提示本身，不碰按钮 icon 美术。</summary>
+    IEnumerator CoComboFlash()
+    {
+        if (_comboText == null) { _comboFlashCo = null; yield break; }
+        Color gold = new Color(1f, 0.72f, 0.2f);
+        Color dim = new Color(0.85f, 0.88f, 0.95f);
+        for (int i = 0; i < 3; i++)
+        {
+            _comboText.color = gold;
+            _comboText.transform.localScale = Vector3.one * 1.15f;
+            yield return new WaitForSecondsRealtime(0.06f);
+            _comboText.color = dim;
+            _comboText.transform.localScale = Vector3.one;
+            yield return new WaitForSecondsRealtime(0.06f);
+        }
+        _comboText.color = gold;                 // 还原基准金色
+        _comboText.transform.localScale = Vector3.one;
+        _comboFlashCo = null;
     }
 
     /// <summary>
@@ -884,12 +1020,25 @@ public class BattleEntryDraftPanel : MonoBehaviour
             // 不去改 name/金额 的文字颜色，那是主人调好的美术。
             s.Btn.interactable = on;
             if (s.NameText != null) s.NameText.text = Name(s.Cat);
+            bool insufficient = !free && wallet < price;
             if (s.CostText != null)
+            {
                 // 【2026-10-11 主人拍板】只剩一次免费时写「免费一次」（主人原话「金额变成免费一次」），
                 // 多于一次仍写「免费×N」，跟「还剩几次」说清楚。
                 s.CostText.text = !has ? "-"
                                : free ? (freeLeft > 1 ? $"免费×{freeLeft}" : "免费一次")
                                : price.ToString();
+                // 【2026-10-13 #7】币不够：价格数字变红；够了恢复主人调好的原色（懒缓存，不永久覆盖）。
+                if (!s.CostColorDefault.HasValue) s.CostColorDefault = s.CostText.color;
+                s.CostText.color = insufficient ? new Color(1f, 0.42f, 0.42f) : s.CostColorDefault.Value;
+            }
+            // 【2026-10-13 #7】币不够：价格下方红字「还差 N」（与价格数字三态互斥思路一致）。
+            if (s.ShortfallText != null)
+            {
+                bool showSf = insufficient && has;
+                s.ShortfallText.gameObject.SetActive(showSf);
+                if (showSf) s.ShortfallText.text = $"还差 {price - wallet}";
+            }
             // 免费抽不扣任何币 → 货币图标跟着一起隐（要改成「一直显示」只改这一处）。
             if (s.CoinIcon != null)
             {
@@ -898,11 +1047,14 @@ public class BattleEntryDraftPanel : MonoBehaviour
                     s.CoinIcon.gameObject.SetActive(showIcon);
             }
         }
+        RefreshOddsHint();   // 【2026-10-13 #6】每次刷新同步按钮下方品质占比（章节/池子变 → 数字跟着变）
     }
 
     void OnDraftClicked(int idx)
     {
         if (!_draftActive || idx < 0 || idx >= _slots.Count) return;
+        _comboCount++;            // 【2026-10-13 #9】每点一次抽奖 +1
+        RefreshCombo();
         var cb = _onPick;
         var cat = _slots[idx].Cat;
         cb?.Invoke(cat);
@@ -1017,27 +1169,39 @@ public class BattleEntryDraftPanel : MonoBehaviour
             return;
         }
         if (_countdownText != null)
+        {
             _countdownText.text = Mathf.CeilToInt(_countdownLeft).ToString();
+            // 【2026-10-13 #7】最后 5 秒：变红 + 放大到 84 + 每秒一次 1.15 缩放脉冲（紧迫感，非惩罚）。
+            if (_countdownLeft <= 5f)
+            {
+                _countdownText.color = new Color(1f, 0.42f, 0.42f); // #FF6B6B
+                _countdownText.fontSize = 84;
+                float pulse = 1f + 0.15f * Mathf.Abs(Mathf.Sin(Mathf.PI * (5f - _countdownLeft)));
+                _countdownText.transform.localScale = Vector3.one * pulse;
+            }
+            else
+            {
+                _countdownText.color = new Color(0.66f, 0.68f, 0.74f); // #A8AEBC 常态灰
+                _countdownText.fontSize = CountdownFontSize;            // 56
+                _countdownText.transform.localScale = Vector3.one;
+            }
+        }
     }
 
     /// <summary>
-    /// 倒计时数字：挂在<b>本组件自己的节点</b>下（不是美术的 BackpackPanel 子节点），
-    /// 摆在「继续」按钮正上方 —— 不新建美术节点、不改预制体（铁律 3）。
+    /// 倒计时数字：挂在<b>面板节点</b>右上角（2026-10-13 #7 从 map 正中挪开，把视觉焦点还给抽奖区），
+    /// 不新建美术节点、不改预制体（铁律 3）。
     /// </summary>
     void EnsureCountdownText()
     {
         if (_countdownText != null) return;
 
-        // 【2026-10-06 主人二次校准】倒计时挪到 <b>map 节点的正中间</b>并放大 ——
-        // 之前挂「继续」按钮上方太小、不显眼；中间的大数字玩家一眼躲不开。
-        //
-        // ⚠ 宿主为什么不用「继续」按钮了：按钮会被 <c>SetDraftVisible(false)</c> 整块藏掉，
-        // 且 600↔750 两态动画会带着它跑，位置判定反而在变。map 一直常驻在屏幕中间，
-        // 挂它下面既稳定又醒目。
-        var host = _mapRt;
+        // 【2026-10-13 #7】倒计时挪到面板右上角（锚点 1,1 偏移 -24,-24），不再压屏幕正中。
+        // 宿主用面板自身：它常驻全屏高度，右上角即屏幕右上角，位置稳定醒目。
+        var host = _panel;
         if (host == null)
         {
-            Debug.LogError("[BattleEntryDraftPanel] 找不到 map 节点，倒计时无处可挂");
+            Debug.LogError("[BattleEntryDraftPanel] 找不到 BackpackPanel 节点，倒计时无处可挂");
             return;
         }
 
@@ -1045,17 +1209,16 @@ public class BattleEntryDraftPanel : MonoBehaviour
         go.transform.SetParent(host, false);
 
         var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = Vector2.zero;
-        rt.sizeDelta = new Vector2(420f, 200f);
-        rt.SetAsLastSibling();
+        rt.anchorMin = new Vector2(1f, 1f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.anchoredPosition = new Vector2(-24f, -24f);
+        rt.sizeDelta = new Vector2(300f, 120f);
 
         var t = go.GetComponent<Text>();
         t.text = "";
-        t.fontSize = CountdownFontSize;
-        t.color = new Color(1f, 0.88f, 0.45f);
+        t.fontSize = CountdownFontSize;           // 56（常态）
+        t.color = new Color(0.66f, 0.68f, 0.74f); // #A8AEBC 常态灰
         t.alignment = TextAnchor.MiddleCenter;
         t.raycastTarget = false;
         t.horizontalOverflow = HorizontalWrapMode.Overflow;

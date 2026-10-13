@@ -120,14 +120,16 @@ public class Mercenary : UnitBase
         return false;
     }
 
-    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null)
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null, bool suppressDamageText = false)
     {
         if (TutorialStunned)
         {
             float defense = ignoreDefense ? 0f : attr.GetAttr(AttrType.Defense);
             float finalDamage = Mathf.Max(1f, damage - defense);
             currentHp = Mathf.Max(1f, currentHp - finalDamage * 0.35f);
-            DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage * 0.35f), isCrit, true, hitVfxFacing);
+            // 与 UnitBase 同口径： suppressDamageText 时不飘字（引导演出判死专用，正式关默认 false）
+            if (!suppressDamageText)
+                DamageTextSystem.Instance?.SpawnDamageText(GetHitPosition(), Mathf.RoundToInt(finalDamage * 0.35f), isCrit, true, hitVfxFacing);
             PlayHitReaction();
             _stunAnimTimer = 0.35f;
             return;
@@ -137,7 +139,7 @@ public class Mercenary : UnitBase
             damage = PassiveRunner.ModifyIncomingDamage(damage);
 
         float before = currentHp;
-        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source);
+        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source, suppressDamageText);
         if (PassiveRunner != null && !Mathf.Approximately(before, currentHp))
             PassiveRunner.OnHpChanged();
     }
