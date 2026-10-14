@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -261,46 +262,48 @@ public class BattleSettlementUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 【2026-10-10 主人拍板】MVP 台词用**战斗里那个对话框**（StoryProps.SpeechBubble，与战斗头顶气泡同图），
-    /// 摆在结算立绘（头像）右侧 —— 不再走全屏 Toast 飘字。
+    /// 【2026-10-14 主人拍板】MVP 台词改用主人在结算预制体里摆好的 <c>duihuakuang</c> 节点（主人原话
+    /// 「我在结算界面加了个duihuakuang节点 这个就是对话框」）——位置/底图/字号全以预制体为准，代码只填字。
+    /// 弹出结算界面后出现 MVP 说的话，**4 秒后消失**。旧的「运行时建 MvpSpeech 挂立绘右上」整段废弃删除
+    ///（那就是主人报的「对话框位置不对」——压在战斗统计上）。
     /// </summary>
+    const float MvpSpeechVisibleSec = 4f;
+    Coroutine _mvpSpeechCo;
+
     void ShowMvpSpeech()
     {
         string line = ResolveMvpLine();
-        if (string.IsNullOrEmpty(line)) return;
+        if (string.IsNullOrEmpty(line))
+        {
+            EnsureMvpSpeechNode();
+            if (mvpSpeechRt != null) mvpSpeechRt.gameObject.SetActive(false);   // 没台词不露空框
+            return;
+        }
 
         EnsureMvpSpeechNode();
         if (mvpSpeechRt == null || mvpSpeechText == null)
         {
-            // 不静默：面板结构对不上要让主人看见（不回退 Toast 旧路）
-            Debug.LogError("[BattleSettlement] MVP 台词气泡节点创建失败，本局结算不显示台词");
+            // 不静默：预制体里找不到 duihuakuang 要让主人看见
+            Debug.LogError("[BattleSettlement] 预制体里找不到 duihuakuang 节点，MVP 台词不显示");
             return;
         }
 
-        // 自适应：与战斗气泡同一套 SpeechBubbleFit（字多等比放大，最多 2 倍）
-        SpeechBubbleFit.Apply(mvpSpeechRt, mvpSpeechText, line, new Vector2(240f, 107f));
-        // 【2026-10-12 主人报「说的话跑到屏幕外了」】Fit 可能放大了气泡 → 用**实际尺寸**把气泡钳回 Panel 内
-        ClampMvpSpeechInsidePanel();
+        mvpSpeechRt.gameObject.SetActive(true);
+        mvpSpeechText.text = line;
+
+        // 4 秒后消失（重复调用先停旧协程，不会提前熄灭）
+        if (_mvpSpeechCo != null) StopCoroutine(_mvpSpeechCo);
+        _mvpSpeechCo = StartCoroutine(CoHideMvpSpeech());
     }
 
-    /// <summary>
-    /// 把 MVP 台词气泡钳回 Panel 右缘内（2026-10-12 主人报「台词跑到屏幕外」）。
-    /// Panel 已被 <see cref="FitPanelUniformScale"/> 整体缩进屏幕内，气泡不超出 Panel 就绝不出屏。
-    /// anchoredPosition 相对 anchor(0,1) 的参照点 = Panel 左上角，故 x 上限 = 面板宽 − 气泡宽 − 间距。
-    /// </summary>
-    void ClampMvpSpeechInsidePanel()
+    IEnumerator CoHideMvpSpeech()
     {
-        if (mvpSpeechRt == null || panel == null) return;
-        var panelRt = panel.rectTransform;
-        if (panelRt == null) return;
-        float w = Mathf.Max(1f, mvpSpeechRt.sizeDelta.x);
-        float maxOffX = panelRt.rect.width - w - 6f;
-        var pos = mvpSpeechRt.anchoredPosition;
-        pos.x = Mathf.Clamp(pos.x, 6f, Mathf.Max(6f, maxOffX));
-        mvpSpeechRt.anchoredPosition = pos;
+        yield return new WaitForSecondsRealtime(MvpSpeechVisibleSec);
+        if (mvpSpeechRt != null) mvpSpeechRt.gameObject.SetActive(false);
+        _mvpSpeechCo = null;
     }
 
-    /// <summary>找/建 MVP 台词气泡节点（挂在 Panel 下、立绘右缘外侧）。预制体没摆就运行时补，不回头改预制体。</summary>
+    /// <summary>找主人预制体里摆好的 duihuakuang（框图 + 子 Text）；找不到报错，不运行时造节点。</summary>
     void EnsureMvpSpeechNode()
     {
         if (mvpSpeechRt != null) return;
@@ -308,65 +311,11 @@ public class BattleSettlementUI : MonoBehaviour
             : (root != null ? FindDeep(root.transform, "Panel") : null);
         if (panelTf == null) return;
 
-        var existing = FindDeep(panelTf, "MvpSpeech");
-        if (existing == null)
-        {
-            var go = new GameObject("MvpSpeech", typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(panelTf, false);
-            var bg = go.GetComponent<Image>();
-            // 战斗里那个对话框的真源：StoryProps.SpeechBubble（Resources/Story/Props/speech_bubble）
-            bg.sprite = StoryProps.Get(StoryProps.SpeechBubble);
-            bg.raycastTarget = false;
-            if (bg.sprite == null)
-                bg.color = new Color(0.93f, 0.90f, 0.86f, 0.96f);   // 缺图兜底浅底，别让白字糊在暗面板上
-            bg.type = Image.Type.Simple;
+        var node = FindDeep(panelTf, "duihuakuang");
+        if (node == null) return;
 
-            var textGo = new GameObject("Text", typeof(RectTransform));
-            textGo.transform.SetParent(go.transform, false);
-            mvpSpeechText = textGo.AddComponent<Text>();
-            mvpSpeechText.font = GameFonts.GetChinese();
-            // 【2026-10-12 主人报「有点小了」】22 → 26（气泡 240×107 起，Fit 会按需再等比放大）
-            mvpSpeechText.fontSize = 26;
-            mvpSpeechText.color = new Color(0.28f, 0.28f, 0.30f, 1f);   // 气泡浅底 → 深色字（与战斗气泡一致）
-            mvpSpeechText.alignment = TextAnchor.MiddleCenter;
-            mvpSpeechText.horizontalOverflow = HorizontalWrapMode.Wrap;
-            mvpSpeechText.verticalOverflow = VerticalWrapMode.Overflow;
-            mvpSpeechText.raycastTarget = false;
-            var tr = mvpSpeechText.rectTransform;
-            tr.anchorMin = Vector2.zero;
-            tr.anchorMax = Vector2.one;
-            tr.offsetMin = new Vector2(24f, 20f);
-            tr.offsetMax = new Vector2(-24f, -14f);
-            existing = go.transform;
-        }
-        else
-        {
-            mvpSpeechText = existing.Find("Text")?.GetComponent<Text>();
-        }
-
-        mvpSpeechRt = existing as RectTransform;
-        if (mvpSpeechRt == null) return;
-
-        // 位置：立绘（头像）右缘外侧、顶部往下一点。
-        // 用 PortraitHost 的**世界角点**反解到 Panel 本地坐标，不猜真实预制体的 anchor/pivot（主人预制体为准）。
-        mvpSpeechRt.SetAsLastSibling();   // 压在统计面板之上
-        var panelRt = panelTf as RectTransform;
-        Transform portraitTf = portraitImage != null ? portraitImage.transform
-            : FindDeep(panelTf, "PortraitHost");
-        var prt = portraitTf as RectTransform;
-        if (prt != null && panelRt != null && prt != mvpSpeechRt)
-        {
-            var corners = new Vector3[4];
-            prt.GetWorldCorners(corners);          // 0左下 1左上 2右上 3右下
-            Vector2 rightTopLocal = panelRt.InverseTransformPoint(corners[2]);
-            mvpSpeechRt.anchorMin = mvpSpeechRt.anchorMax = new Vector2(0f, 1f);
-            mvpSpeechRt.pivot = new Vector2(0f, 1f);
-            // Panel 本地系里，锚(0,1)的参照点 = rect 左上角（rect.xMin, rect.yMax）
-            mvpSpeechRt.anchoredPosition = new Vector2(
-                rightTopLocal.x - panelRt.rect.xMin + 6f,
-                rightTopLocal.y - panelRt.rect.yMax - 24f);
-        }
-        mvpSpeechRt.sizeDelta = new Vector2(240f, 107f);
+        mvpSpeechRt = node as RectTransform;
+        mvpSpeechText = node.Find("Text")?.GetComponent<Text>();
     }
 
     void ApplyPortraitAndName()
@@ -556,7 +505,22 @@ public class BattleSettlementUI : MonoBehaviour
         var countTf = FindDeep(go.transform, "Count");
         var count = countTf != null ? countTf.GetComponent<Text>() : null;
         if (count != null)
+        {
             count.text = data.count > 1 ? data.count.ToString() : "";
+            // 【2026-10-14 主人拍板】数量放图标**下方**，不要叠在图标里。
+            // 以 Icon 为参照：Count 挂到 Icon 底边中点下方（不回改预制体）。
+            var iconRt = iconTf as RectTransform;
+            var countRt = countTf as RectTransform;
+            if (iconRt != null && countRt != null)
+            {
+                if (!countTf.IsChildOf(iconTf))
+                    countRt.SetParent(iconRt, false);
+                countRt.anchorMin = countRt.anchorMax = new Vector2(0.5f, 0f);
+                countRt.pivot = new Vector2(0.5f, 1f);
+                countRt.anchoredPosition = new Vector2(0f, -2f);
+                count.alignment = TextAnchor.MiddleCenter;
+            }
+        }
 
         // 【2026-10-12 主人拍板】物品格子下面加名字（预制体/运行时两种 cell 结构都有 Name 节点）
         var nameTf = FindDeep(go.transform, "Name");

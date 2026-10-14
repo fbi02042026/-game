@@ -17,7 +17,7 @@ public class TalentUI : MonoBehaviour
     // 设计真值（TalentUI.prefab）：Columns 宽 648（stretch -72），左右列各 -4。
     // Columns 是横向 stretch，宽随 aspect 漂；节点宽取模板自身设计宽，不跟着列宽被拉/压。
     const float DesignColumnsW = 648f;
-    const float LeftNodeH = 108f;
+    const float LeftNodeH = 96f;      // 【2026-10-14 主人拍板】天赋条缩小：108 → 96
     const float RightRowH = 126f;
     const float LeftNodeW = 258.6f;   // 模板 stretch 到 720 根下的原始宽
     const float RightRowW = 269.2f;
@@ -1190,8 +1190,8 @@ public class TalentUI : MonoBehaviour
         FitColumnsScale();
 
         // 列表只用 LayoutGroup 排，禁止手写改每个框的坐标/宽高
-        EnsureScrollContentLayout(leftContent);
-        EnsureScrollContentLayout(rightContent);
+        EnsureScrollContentLayout(leftContent, 4f);    // 【2026-10-14 主人拍板】左列天赋条缩小，行距 8 → 4
+        EnsureScrollContentLayout(rightContent, 8f);   // 右列不动
 
         for (int i = 0; i < TalentDefs.Left.Length; i++)
         {
@@ -1228,14 +1228,14 @@ public class TalentUI : MonoBehaviour
         WireClicks();
     }
 
-    /// <summary>Content 用 VerticalLayoutGroup 排布；不拉伸子项宽高。</summary>
-    static void EnsureScrollContentLayout(RectTransform content)
+    /// <summary>Content 用 VerticalLayoutGroup 排布；不拉伸子项宽高。spacing 由调用方按列给（左右列可不同）。</summary>
+    static void EnsureScrollContentLayout(RectTransform content, float spacing)
     {
         if (content == null) return;
         var vlg = content.GetComponent<VerticalLayoutGroup>();
         if (vlg == null) vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
         vlg.padding = new RectOffset(0, 0, 4, 4);
-        vlg.spacing = 8f;
+        vlg.spacing = spacing;
         vlg.childAlignment = TextAnchor.UpperCenter;
         vlg.childControlWidth = false;
         vlg.childControlHeight = false;
@@ -1382,8 +1382,10 @@ public class TalentUI : MonoBehaviour
 
     /// <summary>
     /// 【2026-10-13 主人拍板】左列每行左边加序号 L1…L40，玩家看得到「点到 L10 会开右侧」。
-    /// 位置：卡片左端（Iconbg 左边那块空位，预制体里 Iconbg 从 x=-36 起、卡片左边缘 -129），
-    /// 不改预制体，运行时建；门槛行（配表 unlockLeftIndex）用金色。
+    /// 【2026-10-14 主人拍板】序号改用**主人在模板里摆好的 Number 节点**（主人原话「我在天赋界面的
+    /// 左列加了个Number节点 把每行的数字加上」）——位置/字号/颜色底全按预制体，代码只填文本；
+    /// 旧的运行时建 OrderText + 手调坐标那套（21:51 那版）整段删除。
+    /// 门槛行（配表 unlockLeftIndex）金色、普通行灰的配色规则保留（10-13 口径）。
     /// ⚠ 序号 = TalentDefs.Left 的次序 i+1；reverseArrangement 只影响视觉上下，不影响编号。
     /// </summary>
     void EnsureLeftOrderLabel(LeftNodeView v, int index0)
@@ -1392,25 +1394,14 @@ public class TalentUI : MonoBehaviour
 
         if (v.orderText == null)
         {
-            var exist = v.root.transform.Find("OrderText");
-            if (exist != null) v.orderText = exist.GetComponent<Text>();
+            var node = FindDeepNamed(v.root.transform, "Number");
+            v.orderText = node != null ? node.GetComponent<Text>() : null;
         }
-        if (v.orderText == null)
-            v.orderText = CreateText(v.root.transform, "OrderText", "", 26, Color.white);
-
         if (v.orderText == null)
         {
-            Debug.LogError("[TalentUI] 左列序号 Text 创建失败（OrderText），L" + (index0 + 1) + " 不显示编号");
+            Debug.LogError("[TalentUI] 左列模板缺 Number 节点，L" + (index0 + 1) + " 不显示编号");
             return;
         }
-
-        var rt = v.orderText.rectTransform;
-        rt.anchorMin = rt.anchorMax = new Vector2(0f, 0.5f);
-        rt.pivot = new Vector2(0f, 0.5f);
-        rt.sizeDelta = new Vector2(76f, 44f);
-        rt.anchoredPosition = new Vector2(12f, 0f);
-        v.orderText.raycastTarget = false;
-        v.orderText.alignment = TextAnchor.MiddleLeft;
 
         int no = index0 + 1;
         v.orderText.text = "L" + no;

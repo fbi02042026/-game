@@ -43,6 +43,8 @@ public class MercObtainPopupUI : MonoBehaviour
     Image _icon;
     Text _nameText;
     GameObject[] _stars;
+    /// <summary>满星布局的原始位置（Fill 首次记录，重开弹窗从这里重算，不累积偏移）。</summary>
+    Vector2[] _starBasePos;
 
     // 七对属性（Root 整行 GameObject + 值 Text；Label 静态文本不碰）
     GameObject _attrHpRoot; Text _attrHp;
@@ -157,6 +159,15 @@ public class MercObtainPopupUI : MonoBehaviour
             _stars[0] = rating.Find("满星1")?.gameObject;
             _stars[1] = rating.Find("满星2")?.gameObject;
             _stars[2] = rating.Find("满星3")?.gameObject;
+
+            // 【2026-10-14 主人拍板】星级要 1 颗 / 2 颗 / 3 颗都居中 —— 记下满星布局原始位置，
+            // Fill 时按激活数量整组平移（见 CenterActiveStars）。
+            _starBasePos = new Vector2[MaxStarNodes];
+            for (int i = 0; i < MaxStarNodes; i++)
+            {
+                var srt = _stars[i] != null ? _stars[i].GetComponent<RectTransform>() : null;
+                if (srt != null) _starBasePos[i] = srt.anchoredPosition;
+            }
         }
 
         // 七对属性（Root 整行 + 值 Text；Label 静态文本不碰）
@@ -246,6 +257,41 @@ public class MercObtainPopupUI : MonoBehaviour
     // 内容填充（只填数据，不碰排版）
     // ============================================================
 
+    /// <summary>
+    /// 【2026-10-14 主人拍板】亮 1 / 2 / 3 颗星都让整组居中：
+    /// 以「满星 3 颗」的包围盒中心为基准（预制体的设计居中态），
+    /// 亮 star 颗时把整组从原始位置平移 (基准中心 − star 颗组中心)。
+    /// 每次都从 _starBasePos 出发重算，反复开弹窗不会累积偏移。
+    /// </summary>
+    void CenterActiveStars(int star)
+    {
+        if (_stars == null || _starBasePos == null) return;
+        for (int i = 0; i < MaxStarNodes; i++)
+            if (_stars[i] == null || _stars[i].GetComponent<RectTransform>() == null) return; // 结构缺失就不动，交给上面的 LogError
+
+        Vector2 bMin = _starBasePos[0], bMax = _starBasePos[0];
+        for (int i = 1; i < MaxStarNodes; i++)
+        {
+            bMin = Vector2.Min(bMin, _starBasePos[i]);
+            bMax = Vector2.Max(bMax, _starBasePos[i]);
+        }
+        Vector2 baseCenter = (bMin + bMax) * 0.5f;
+
+        Vector2 cMin = _starBasePos[0], cMax = _starBasePos[0];
+        for (int i = 1; i < star; i++)
+        {
+            cMin = Vector2.Min(cMin, _starBasePos[i]);
+            cMax = Vector2.Max(cMax, _starBasePos[i]);
+        }
+        Vector2 delta = baseCenter - (cMin + cMax) * 0.5f;
+
+        for (int i = 0; i < MaxStarNodes; i++)
+        {
+            var rt = _stars[i].GetComponent<RectTransform>();
+            rt.anchoredPosition = _starBasePos[i] + delta;
+        }
+    }
+
     bool Fill(DraftCard card)
     {
         if (_root == null)
@@ -309,6 +355,7 @@ public class MercObtainPopupUI : MonoBehaviour
             Debug.LogError("[MercObtainPopup] 星级 " + card.Star + " 超出预制体满星节点数 3——需主人补 满星4/满星5（结构变更待批准）");
         for (int i = 0; i < _stars.Length; i++)
             if (_stars[i] != null) _stars[i].SetActive(i < star);
+        CenterActiveStars(star);
 
         // 6) 技能：没有主动技就空着（主人拍板）；有则填名字/简介/图标
         string skillId = def.ActiveSkillId;
