@@ -328,7 +328,11 @@ public class Monster : UnitBase
         _enterTargetPos = engagePos;
         _enterSpeed = moveSpeed * GameConfig.MONSTER_ENTER_SPEED_MUL * enterMul;
         _isEnteringMap = true;
-        if (_isBossUnit) BattleBossHpBar.PlayBossIntro(this); // BOSS 出场：血条入场演出，与走进场同时进行
+        if (_isBossUnit)
+            BattleBossHpBar.PlayBossIntro(this); // BOSS 出场：血条入场演出，与走进场同时进行
+        else if (_eliteWave)
+            BattleBossHpBar.RefreshFromField();  // 【2026-10-14 主人拍板】精英出场也弹屏幕血条
+                                                 //（原来要等第一次受击才刷新出来，引导宿敌战一直没血条）
         _enterAtPauseStop = false;
         facingDir = faceDir > 0 ? 1 : -1;
         ApplyFacing(facingDir);

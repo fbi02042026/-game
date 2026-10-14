@@ -213,7 +213,8 @@ public static class SlotMachineSystem
     //   开局抬到 STARTER_COINS = 240（= 正好 3 抽）之后，引导三拍本来就走得完 → 这 100 是白送，
     //   而且是第二套给币口径（跟 COIN_PER_* / GrantRunStarterGold 抢同一件事）。
     //   主人拍板「清零 + 不要总打补丁」→ 整条链路删掉，不是留个开关设 0。
-    //   引导三拍的币现在**只有一个来源**：开局启动金（GrantRunStarterGold，进局内钱包 currentGold）。
+    //   引导三拍的币现在**只有一个来源**：开局启动金（GrantRunStarterGold，进局内钱包 currentGold；
+    //   2026-10-14 主人拍板引导局 270、三拍照常扣钱，见 SlotMachineDefs.TUTORIAL_STARTER_COINS）。
 
     // ============================================================
     // 免费抽（2026-10-05 主人拍板：金币本开局免费抽 N 次，不耗金币）
@@ -463,18 +464,22 @@ public static class SlotMachineSystem
     /// 【2026-10-10 主人拍板】开局启动金 = 基础 + 「初始资金」天赋每级加成，
     /// 进**局内金币钱包**（<c>BattleManager.currentGold</c>），不再是另一套抽奖币。
     /// 每局进关时调一次（续关不调），这样「初始资金」天赋每一局都有效，而不只是新档那一次。
+    /// <para>【2026-10-14 主人拍板】基础值分两档：**正式关 200**（<see cref="SlotMachineDefs.STARTER_COINS"/>）、
+    /// **引导局 270**（<see cref="SlotMachineDefs.TUTORIAL_STARTER_COINS"/>，兜住引导三拍扣费 265）。</para>
     /// ⚠ 这笔<b>不算本局收益</b>（countsAsEarned=false）→ 结算差额不把它当赚的钱写回存档，不能白刷。
     /// </summary>
-    public static int RunStarterGold()
+    public static int RunStarterGold(bool tutorial)
     {
-        return SlotMachineDefs.STARTER_COINS + SlotMachineDefs.COINS_PER_FUND_TALENT * FundTalentLevel();
+        int baseGold = tutorial ? SlotMachineDefs.TUTORIAL_STARTER_COINS : SlotMachineDefs.STARTER_COINS;
+        return baseGold + SlotMachineDefs.COINS_PER_FUND_TALENT * FundTalentLevel();
     }
 
     /// <summary>
     /// 把启动金发进局内钱包。<b>唯一调用点 = <c>RunDraftDirector.OnRunStart</c>（非续关那一局）。</b>
+    /// <paramref name="tutorial"/> = 本局是否引导局（决定启动金 270 / 200 档位）。
     /// 不在战斗中 → LogError（铁律 14：fail closed，绝不静默跳过让开局没钱抽）。
     /// </summary>
-    public static void GrantRunStarterGold()
+    public static void GrantRunStarterGold(bool tutorial)
     {
         var bm = BattleManager.Instance;
         if (bm == null)
@@ -482,7 +487,7 @@ public static class SlotMachineSystem
             Debug.LogError("[SlotMachine] 启动金发不出去：BattleManager.Instance 为空（不在战斗中）");
             return;
         }
-        bm.AddRunGold(RunStarterGold(), false);
+        bm.AddRunGold(RunStarterGold(tutorial), false);
     }
 
     /// <summary>

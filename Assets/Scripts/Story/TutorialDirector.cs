@@ -372,16 +372,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
         TownHubController.PendingOpenAdventure = false;
         TownHubController.Instance?.OpenGuild();
 
-        // 【2026-10-10 主人拍板】原句「装备和材料死亡也能带回，但本局金币死了会清零」与实际机制相反：
-        // TriggerLegacyFlow 是 ClearRunEquipment（装备带不出裂隙）+ 金币/材料保留。文案按实际口径重写。
-        TutorialHintUI.Ensure().Show("局内拿到的装备带不出裂隙，金币和材料都能带回去。", null, 6f);
-
         // 收尾对话要用的立绘/背景先读进缓存，否则开场会卡一下才出画面
         StoryAssetLoader.Warmup(StoryAssetLoader.Backgrounds, StoryBackgrounds.GuildHall);
         yield return null;
         StoryPortraits.Warmup(
             StoryPortraits.Player, StoryProgress.TutorialMercHireId, StoryPortraits.Receptionist);
         yield return null;
+
+        // 【2026-10-14 主人拍板】「局内装备带不出裂隙」这条引导字挪到**塔克剧情之后**——
+        // 主人原话「回城后立即播放塔克剧情 不要先弹引导再弹塔克剧情」（原位置在剧情前，抢了戏）。
 
         yield return new WaitForSecondsRealtime(2.2f);
 
@@ -428,6 +427,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 .SkipReveal()
         }, () => done = true);
         while (!done) yield return null;
+
+        // 【2026-10-14 主人拍板】塔克/咨询台剧情播完才弹这条机制提示（原来抢在剧情前面）
+        TutorialHintUI.Ensure().Show("局内拿到的装备带不出裂隙，金币和材料都能带回去。", null, 6f);
 
         // —— V6 P4：回城引导点一次天赋（金币不够会自己跳过）——
         yield return CoGuideTalentUpgrade();
@@ -524,9 +526,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 真等玩家把 12 只都打完（WaitFieldClear），塔克就变成「清完场才姗姗来迟」，整段演出废掉。
         // ① 先等 12 只全部进场站定（波次是异步进场的，不能怪还没露面就开始吐槽）；
         yield return WaitMonstersFinishedEnter(bm);
-        // ② 【2026-10-12 主人拍板】「出现一大波的时候不用打直接弹剧情」——
-        //    不再等掉血 50% / 15s 超时 / 打空，怪一站定就直接进躺尸剧情、塔克天降。
-        //    CoWaitAmbushPressure 自此停用（保留方法体，删调用即可恢复旧行为）。
+        // ② 【2026-10-14 主人拍板·恢复压力等待】「让玩家的血再掉少点再出现剧情」（主人原话
+        //    「不是打的太狠 是打的再狠点」）—— 怪围殴把玩家血打到 **20% 左右**才进躺尸剧情，
+        //    「要死了」的感觉才够。10-12 曾拍板「不用打直接弹剧情」作废；
+        //    阈值/超时真源在 CoWaitAmbushPressure（50% → 20% 那一版），要调只调那里。
+        yield return CoWaitAmbushPressure(bm);
 
         // —— 1e)【2026-10-09 主人拍板】第 4~9 步：十几只压上来 → 玩家躺平 → 塔克天降一趟清场 → 玩家看傻 ——
         // 主人 10-08 口述：抽到武器以为能大展身手，结果十几只压上来；正当玩家觉得要死了的时候，佣兵闪亮登场。
@@ -705,10 +709,17 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (rival != null)
         {
             yield return CoEliteLastWords(bm, headTalk, rival);
-            // 【2026-10-12 主人报「怎么精英一刀就被塔克干死了」】遗言说完直接冻场收头：
-            // 塔克冲过去一剑 + 闪电判死，不让普攻抢先，收头也看得清。
+            // 【2026-10-14 主人拍板】遗言播完**立即播死亡动画**，塔克不再冲上来补一刀 ——
+            // 原「塔克收头」演出（CoTuckerFinishElite：冻场 → 冲身侧 → 挥剑+闪电 → 判死）整段删除。
+            // 现在遗言说完直接判死，精英走自己的死亡动画。
             if (rival != null && !rival.isDead)
-                yield return CoTuckerFinishElite(bm, merc, rival);
+            {
+                bool canActBefore = bm.UnitsCanAct;
+                bm.UnitsCanAct = false;
+                rival.TakeDamage(TutorialRescueDamage, false, true, true, 0, merc, suppressDamageText: true);
+                Debug.Log("[Tutorial] 精英宿敌：遗言完直接判死（不演塔克收头）");
+                bm.UnitsCanAct = canActBefore;
+            }
         }
 
         yield return WaitFieldClear(strict: true);
@@ -1058,43 +1069,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
     }
 
     /// <summary>
-    /// 【2026-10-12 主人拍板】精英遗言说完后的「塔克收头」演出：冻场 → 塔克冲到精英身侧
-    /// 挥一剑 + 落一道闪电 → 统一判死。替代原来的「遗言完谁普攻谁顺手收掉」
-    /// （主人报「怎么精英一刀就被塔克干死了」—— 收头要有演出，且不能让普攻抢先）。
-    /// 只改塔克自己与世界坐标，绝不推着英雄走 / 瞬移（2026-09-18 教训）。
+    /// 【2026-10-14 已删】原「塔克收头」演出（遗言后冲身侧挥剑判死）—— 主人拍板
+    /// 「精英播放完剧情后立即播放死亡动画 不要让塔克再打一下」，遗言后直接判死（见调用处）。
     /// </summary>
-    IEnumerator CoTuckerFinishElite(BattleManager bm, Mercenary merc, Monster elite)
-    {
-        if (bm == null || merc == null || elite == null || elite.isDead) yield break;
-
-        bool canActBefore = bm.UnitsCanAct;
-        bm.UnitsCanAct = false;
-        HaltUnit(Hero.Instance);
-        if (bm.monsters != null)
-        {
-            for (int i = 0; i < bm.monsters.Count; i++)
-                HaltUnit(bm.monsters[i]);
-        }
-
-        float z = bm.unitRoot != null ? bm.unitRoot.position.z : merc.transform.position.z;
-        float eliteX = UnitBase.GetCombatX(elite);
-        float targetX = eliteX + 0.6f;   // 停在精英右侧 = 它的身后，与清场演出同一定位口径
-        float fromX = UnitBase.GetCombatX(merc);
-        yield return CoMoveUnitTo(merc.gameObject, fromX, targetX, z, 0.25f);
-
-        merc.Face(eliteX >= UnitBase.GetCombatX(merc) ? 1 : -1);
-        merc.PlayAttackAnimOnly(AttackVfxKit.MeleeSlash, false, RescueAttackAnimSpeed, forceRestart: true);
-        BattleVFXSystem.Instance?.PlayLightning(elite.transform.position, VfxFaction.Ally);
-        yield return new WaitForSecondsRealtime(0.35f);
-
-        // 【2026-10-13 主人拍板】同清场拍口径：不飘紫色暴击大数字
-        //（主人原话「像这种一大群 还都一次性全死 弹出所有的这种不要 体验不好」）
-        elite.TakeDamage(TutorialRescueDamage, false, true, true, 0, merc, suppressDamageText: true);
-        Debug.Log("[Tutorial] 塔克收头：精英宿敌");
-        yield return new WaitForSecondsRealtime(0.45f);
-
-        bm.UnitsCanAct = canActBefore;
-    }
 
     /// <summary>
     /// P3：最后一波把所有技能充满，让玩家亲眼看到技能自动放出去。
@@ -1103,6 +1080,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
     IEnumerator CoWatchPlayerSkill(BattleManager bm, TutorialHintUI hint)
     {
         if (bm == null) yield break;
+
+        // 【2026-10-14 主人拍板】玩家**获得两个技能**才弹这条「自动释放/顺序」引导 ——
+        // 主人原话「为什么没有获得两个技能就弹这个引导了」。引导局只抽 1 个技能 → 不弹；
+        // 技能数口径 = RunLoadout.SkillIds()（开局不带初始技能，列表全是本局获得的）。
+        var ownedSkills = RunLoadout.SkillIds();
+        if (ownedSkills == null || ownedSkills.Count < 2) yield break;
 
         _sawPlayerSkillCast = false;
         bm.FillPlayerSkillEnergy();

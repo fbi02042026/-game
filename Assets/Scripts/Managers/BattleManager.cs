@@ -2990,25 +2990,45 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         }
         else
         {
+            // 【2026-10-14 主人拍板】佣兵/技能**不再弹开奖卡**（主人原话「最开始那个不要了 只要我做的这个」）
+            //   —— 抽中直接弹主人摆的预制体弹窗（huodeyongbing / huodejineng），关掉才 Toast。
+            //   开奖卡只留给金币安慰奖。弹窗要等玩家点「确认」关掉，后面的「点继续」引导字才出现
+            //   （原时序弹窗还开着引导字就盖上来挡住弹窗内容），等待循环在本方法尾部。
+            bool rewardPopupClosed = !(card.Kind == DraftCardKind.MercRecruit
+                || card.Kind == DraftCardKind.SkillNew || card.Kind == DraftCardKind.SkillUp);
             // 闭包捕获本地副本：别让下一抽改写了 _lastDrawRewardMsg 字段后 Toast 内容串台
             string toastMsg = _lastDrawRewardMsg;
-            // 【2026-10-13 主人拍板】开奖卡演完 → 详情弹窗（点任意位置关）→ 关掉才弹 Toast，防剧透
-            // 【2026-10-14 主人拍板】装备类**不再弹详情大卡**（DraftRewardDetailUI 全屏暗带+大卡糊屏，
-            //   主人原话「我要的不是这个弹窗」）——装备的确认/展示已由替换装备弹窗（EquipReplaceConfirmUI）
-            //   在 CoApplyEquipCard 里承担（无旧件也弹、右侧栏显示「无」），这里直接 Toast 收尾。
-            ShowDrawPrizeCard(card, cat, powerDelta, () =>
-            {
-                // 【2026-10-14 主人拍板】抽中佣兵/技能改弹预制体弹窗（huodeyongbing / huodejineng），
-                // 装备不走详情卡（替换确认弹窗已承担）；佣兵升级/升星拍暂无新预制体，维持原详情弹窗。
-                if (card.Kind == DraftCardKind.MercRecruit)
-                    StartCoroutine(MercObtainPopupUI.CoShow(card, () => UIManager.Instance?.ShowToast(toastMsg, true)));
-                else if (card.Kind == DraftCardKind.SkillNew || card.Kind == DraftCardKind.SkillUp)
-                    StartCoroutine(SkillObtainPopupUI.CoShow(card, () => UIManager.Instance?.ShowToast(toastMsg, true)));
-                else if (card.Kind != DraftCardKind.Equip && DraftRewardDetailUI.NeedsDetail(card))
-                    StartCoroutine(DraftRewardDetailUI.CoShow(card, () => UIManager.Instance?.ShowToast(toastMsg, true)));
-                else
+            if (card.Kind == DraftCardKind.MercRecruit)
+                StartCoroutine(MercObtainPopupUI.CoShow(card, () =>
+                {
                     UIManager.Instance?.ShowToast(toastMsg, true);
-            });
+                    rewardPopupClosed = true;
+                }));
+            else if (card.Kind == DraftCardKind.SkillNew || card.Kind == DraftCardKind.SkillUp)
+                StartCoroutine(SkillObtainPopupUI.CoShow(card, () =>
+                {
+                    UIManager.Instance?.ShowToast(toastMsg, true);
+                    rewardPopupClosed = true;
+                }));
+            else if (card.Kind != DraftCardKind.Equip && DraftRewardDetailUI.NeedsDetail(card))
+            {
+                // 佣兵升级/升星拍暂无新预制体：维持「开奖卡 → 详情弹窗」原样（主人没点名改）。
+                ShowDrawPrizeCard(card, cat, powerDelta, () =>
+                    StartCoroutine(DraftRewardDetailUI.CoShow(card, () => UIManager.Instance?.ShowToast(toastMsg, true))));
+            }
+            else
+                UIManager.Instance?.ShowToast(toastMsg, true);
+
+            // 等获得弹窗关闭（玩家点「确认」；CoShow 内部 while(!root.activeSelf) 等到关才结束，
+            // 异常路径 Root 缺失也会当场回调 onClosed，不会死等）。超时只是异常兜底，放行不卡死。
+            float popupGuard = 0f;
+            while (!rewardPopupClosed && popupGuard < 300f)
+            {
+                popupGuard += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (popupGuard >= 300f)
+                Debug.LogWarning("[BattleManager] 等获得弹窗关闭超时（300s），放行继续流程");
         }
     }
 

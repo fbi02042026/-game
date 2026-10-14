@@ -34,6 +34,15 @@ public static class StoryBackgrounds
     /// <summary>N7 · 裂隙最深处无底深渊边缘的悬空石台（三选一前）。</summary>
     public const string AbyssChoice = "abyss_choice";
 
+    /// <summary>快节奏场景：地名大字显示时间 ×此系数（2026-10-14 主人拍板：会长办公室/公会大厅的地名大字时间减 30%）。</summary>
+    public const float FastTextTimeScale = 0.7f;
+
+    /// <summary>该背景切换时的地名大字是否走快节奏（会长办公室 / 公会大厅）。判定真源唯一在此。</summary>
+    public static bool IsFastTextScene(string id)
+    {
+        return id == GuildOffice || id == GuildHall;
+    }
+
     public static string DisplayName(string id)
     {
         if (id == GuildOffice) return "会长办公室";

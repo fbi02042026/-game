@@ -61,22 +61,21 @@ public class RunDraftDirector : MonoBehaviour
         //   局内金币（走 BattleManager.AddRunGold(n, false)，抬高本局起点 → 结算差额不含它们）。
         //   局外金币 Gold **只有**结算界面按通过关卡数发（StageGoldDefs）＋ 局内真正赚到的那部分。
         //   局内金币的全部来源（**就这三条，别处不再有第二个给币口径**）：
-        //     ① 每局启动金 200（GrantRunStarterGold，2026-10-13 主人拍板由 270 降下）+ 初始资金天赋每级 80
+        //     ① 每局启动金：**正式关 200 / 引导局 270**（GrantRunStarterGold，2026-10-14 主人拍板）+ 初始资金天赋每级 80
         //     ② 每关通关：50 起，**每关 ×1.4 递增**，单关封顶 200（GrantStageCoins，
         //        金币本不发 —— Mode.GrantsRunCoins=false）
         //     ③ 抽中「金币」安慰奖（一抽价 × 0.5 = 40）
         //   ⚠【2026-10-10 主人拍板】抽价每抽 ×1.1 不封顶、通关产出每关 ×1.4 复利 →
         //     前期紧、后期松（单关产出第 6 关起触顶 200，之后每关都够抽 1~2 次）。
         //   ⚠【2026-10-13 主人拍板】启动金 270 → 200（「正式关的金币改成200 / 抽的太容易了」），
-        //     开局只够 2 抽、第 2 关进关差一抽 —— 前期更紧是主人要的口径；引导三拍改走
-        //     TUTORIAL_FREE_DRAWS 免费额度，不靠抬高启动金兜（见 SlotMachineDefs 三·补③）。
+        //     开局只够 2 抽、第 2 关进关差一抽 —— 前期更紧是主人要的口径。
+        //   ⚠【2026-10-14 主人拍板】引导局启动金保持 270，三拍照常**扣钱**、不送免费抽（旧免费额度已删）。
         if (!resumed)
         {
-            // 免费抽额度每局重算（2026-10-13 补）：ResetStageFreeDraws 此前全库没有调用点，
-            // _freeDrawsUsed 跨局不清 → 引导阵亡重打（RestartTutorialBattle 再进本方法）时
-            // 第二轮三拍没有免费额度，第三拍又会「金币不足」。续关不清（行为同从前）。
+            // 金币本免费抽额度每局重算（ResetStageFreeDraws，金币本 FreeEntryDraws=5）：
+            // _freeDrawsUsed 跨局不清会串到下一局 → 每局进关统一清一次（续关不清，行为同从前）。
             SlotMachineSystem.ResetStageFreeDraws();
-            SlotMachineSystem.GrantRunStarterGold();
+            SlotMachineSystem.GrantRunStarterGold(tutorial);
         }
 
         if (resumed) RestoreHeroProgress();

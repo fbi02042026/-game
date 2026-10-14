@@ -300,8 +300,11 @@ public class DialogueUI : MonoBehaviour
 
     /// <summary>
     /// 换场景：先亮背景 + 地点名，字淡出，背景压暗，再出立绘和对话框。
+    /// <para><paramref name="textTimeScale"/> = 地名大字（停留 + 淡出）的时间缩放。
+    /// 【2026-10-14 主人拍板】会长办公室/公会大厅传 0.7（字的时间减 30%），
+    /// 判定真源 <see cref="StoryBackgrounds.IsFastTextScene"/>；其他场景传 1（默认）。</para>
     /// </summary>
-    public IEnumerator PlayLocationReveal(string title)
+    public IEnumerator PlayLocationReveal(string title, float textTimeScale = 1f)
     {
         _revealing = true;
         _skipReveal = false;
@@ -326,12 +329,14 @@ public class DialogueUI : MonoBehaviour
             SetRevealBlack(1f);
             RaiseLocationCaption();
             SetLocationCaption(title, 1f);
-            yield return WaitUnscaled(LocHoldDur);
+            float holdDur = LocHoldDur * textTimeScale;
+            yield return WaitUnscaled(holdDur);
+            float textFadeDur = LocTextFadeDur * textTimeScale;
             float fadeT = 0f;
-            while (fadeT < LocTextFadeDur && !_skipReveal)
+            while (fadeT < textFadeDur && !_skipReveal)
             {
                 fadeT += Time.unscaledDeltaTime;
-                SetLocationCaption(title, 1f - Mathf.Clamp01(fadeT / LocTextFadeDur));
+                SetLocationCaption(title, 1f - Mathf.Clamp01(fadeT / textFadeDur));
                 yield return null;
             }
         }

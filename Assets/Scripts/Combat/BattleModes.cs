@@ -125,15 +125,9 @@ public sealed class TutorialBattleMode : BattleMode
     public override string DisplayName => "新手引导";
     public override TutorialRules Rules => TutorialRules.Tutorial;
 
-    /// <summary>
-    /// 【2026-10-13 主人拍板】引导三拍各送一次免费抽（不扣局内金币）。
-    /// 背景：启动金降到 200 后，三拍抽价 80+88+97 = 265 ＞ 200，第三拍会「金币不足」
-    /// 把引导卡死（主人 2026-10-12 报过的坑，那回靠抬启动金到 270 绕过）。
-    /// 免费额度只覆盖引导三拍（TutorialDirector 调 CoMidBattleDraft 正好三次），
-    /// 正式关（NormalBattleMode）不送 —— 基类默认 0，这里只覆写引导。
-    /// ⚠ 次数真源 = <see cref="SlotMachineDefs.TUTORIAL_FREE_DRAWS"/>，改次数只改那一处。
-    /// </summary>
-    public override int FreeEntryDraws => SlotMachineDefs.TUTORIAL_FREE_DRAWS;
+    // 【2026-10-14 主人拍板】不覆写 FreeEntryDraws（保持基类 0）：引导三拍照常**扣钱**，
+    // 钱由引导启动金 270 兜住（80+88+97=265，见 SlotMachineDefs.TUTORIAL_STARTER_COINS）。
+    // 10-13 那版「引导三拍免费抽」已删，不留开关。
 }
 
 /// <summary>

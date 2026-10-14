@@ -196,7 +196,11 @@ public class StoryDirector : Singleton<StoryDirector>
                 {
                     string loc = StoryBackgrounds.DisplayName(b.backgroundId);
                     if (!string.IsNullOrEmpty(loc))
-                        yield return ui.PlayLocationReveal(loc);
+                    {
+                        // 2026-10-14 主人拍板：会长办公室/公会大厅的地名大字时间减 30%（缩放真源在 StoryBackgrounds）
+                        yield return ui.PlayLocationReveal(loc,
+                            StoryBackgrounds.IsFastTextScene(b.backgroundId) ? StoryBackgrounds.FastTextTimeScale : 1f);
+                    }
                     else
                         yield return ui.PlayLocationReveal("");
                 }
