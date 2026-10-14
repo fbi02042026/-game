@@ -685,8 +685,27 @@ public sealed class WavePlanner
             perWave = GameConfig.DistributeMonstersToWaves(total, waveCount);
         }
 
+        // 精英关本波精英追加额（2026-10-14 主人拍板口径，见下方 elite 段）
+        int eliteWaveBonus = 0;
         for (int i = 0; i < waveCount; i++)
         {
+            if (elite)
+            {
+                // 【2026-10-14 主人拍板】精英关每波 = 普通怪 + 2~4 只精英，不再是整波全精英：
+                //   ① 每波下限抬到 3 只，保证「2 精英 + 1 普通」成立；
+                //   ② 总精英数在 2~4 里摇（多点少点随缘，不固定），原型自带精英（A06/A07 的 elite=1）
+                //      算在这个总盘子里，不叠加；
+                //   ③ 真正「哪些槽位是精英」仍走 CoSpawnWaveMonsters 的 eliteQuota 一处真源。
+                perWave[i] = Mathf.Max(3, perWave[i]);
+                int archElite = 0;
+                if (archIds != null && i < archIds.Count)
+                {
+                    var a0 = WaveArchetypeTable.Get(archIds[i]);
+                    if (a0 != null) archElite = a0.elite;
+                }
+                int wantElite = Mathf.Clamp(UnityEngine.Random.Range(2, 5), 1, perWave[i] - 1);
+                eliteWaveBonus = Mathf.Max(0, wantElite - archElite);
+            }
             Transform anchor = (usable.Count > 0) ? usable[Mathf.Min(i, usable.Count - 1)] : null;
             float triggerX;
             if (anchor != null)
@@ -705,7 +724,8 @@ public sealed class WavePlanner
             };
             // 原型接管进场方向 / 出怪间隔 / 人数上限 / 近远编成 / 精英额度
             ApplyArchetypeToWave(wave, archIds != null ? archIds[i] : "");
-            if (elite) wave.eliteBonus = 1; // 精英关：每波在原型额度之上再 +1 精英
+            // 【2026-10-14 主人拍板】精英关每波 2~4 只精英（旧值固定 +1，且 SpawnWave 曾整波乘精英缩放）
+            if (elite) wave.eliteBonus = eliteWaveBonus;
             _waves.Add(wave);
         }
 
@@ -713,6 +733,13 @@ public sealed class WavePlanner
         _totalWaves = _waves.Count;
         string tag = elite ? "精英关" : "普通关";
         string modeTag = string.IsNullOrEmpty(_stageModeName) ? "无模式(旧逻辑)" : $"模式={_stageModeName}[{_stageModeTelegraph}]";
+        if (elite)
+        {
+            // 每波下限抬到 3 只后重算总怪量，保持日志与实际刷怪一致
+            int sum = 0;
+            for (int i = 0; i < perWave.Length; i++) sum += perWave[i];
+            total = sum;
+        }
         GamePerf.Log($"[BattleManager] {tag} stage={stageIdx + 1} {modeTag} 总怪={total} → {_totalWaves}波 [{string.Join(",", perWave)}] 刷怪点={usable.Count} 起点={startX:F1}");
         for (int i = 0; i < _waves.Count; i++)
         {
@@ -726,7 +753,8 @@ public sealed class WavePlanner
                 string enter = a != null ? a.enter.ToString() : "?";
                 archTag = $" 原型={w.archetypeId}/{enter}/stagger={w.staggerOverride:F2}";
             }
-            GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}{archTag}");
+            string eliteTag = w.eliteBonus > 0 ? $" 精英追加={w.eliteBonus}" : "";
+            GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}{archTag}{eliteTag}");
         }
     }
 
@@ -1532,12 +1560,11 @@ public sealed class WavePlanner
             return;
         }
 
-        bool isElite = currentStage != null && currentStage.type == StageType.Elite;
+        // 【2026-10-14 主人拍板】精英关不再整波乘 ELITE_SCALE（那会让全波都变精英）：
+        // 只有每波末尾 2~4 个精英槽位在 CoSpawnWaveMonsters 里单独乘，其余保持普通怪体型/血量。
         float waveScaleMultiplier = 1f;
         if (wave.isBossWave)
             waveScaleMultiplier = GameConfig.BOSS_SCALE_MULTIPLIER;
-        else if (isElite)
-            waveScaleMultiplier = GameConfig.ELITE_SCALE_MULTIPLIER;
 
         var availableSprites = ConfigManager.Instance.GetAvailableSpriteIndices(chapter, stageIdx, wave.isBossWave);
         if (!wave.isBossWave)

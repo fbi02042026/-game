@@ -23,8 +23,9 @@ public class WaveData
     /// <summary>&lt;0 用规则包默认间隔；0=同一帧出齐（埋伏）。</summary>
     public float staggerOverride = -1f;
     /// <summary>
-    /// V3.0：在原型自带精英额度之外追加的精英只数（精英关每波 +1）。
-    /// 占本波最后 N 个名额，不是额外追加。
+    /// V3.0：在原型自带精英额度之外追加的精英只数。
+    /// 【2026-10-14 主人拍板】精英关每波总精英数 = 随机 2~4（原型 elite + 本字段，不叠加超盘），
+    /// 且每波至少留 1 只普通怪；占本波最后 N 个名额，不是额外追加。
     /// </summary>
     public int eliteBonus;
     /// <summary>
