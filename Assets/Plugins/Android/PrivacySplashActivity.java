@@ -147,9 +147,13 @@ public class PrivacySplashActivity extends Activity {
     }
 
     private void enterGame() {
-        // 用 setClassName 而非 .class，避免 Plugins/Android 编译期依赖引擎类
+        // 用 setClassName 而非 .class，避免 Plugins/Android 编译期依赖引擎类。
+        // ⚠️ 第一个参数必须是【应用包名（applicationId）】，即 getPackageName()
+        //    （= com.PixelAdventure.RiftBlade）；之前硬编码 "com.unity3d.player" 只是
+        //    UnityPlayerActivity 的 Java 包名，设备上不存在该应用 → startActivity
+        //    抛 ActivityNotFoundException 闪退（2026-10-14 真机「点已同意也退出」的根因）。
         Intent intent = new Intent();
-        intent.setClassName("com.unity3d.player", "com.unity3d.player.UnityPlayerActivity");
+        intent.setClassName(getPackageName(), "com.unity3d.player.UnityPlayerActivity");
         startActivity(intent);
         finish();
     }

@@ -143,8 +143,13 @@ public class DraftPrizePopupUI : MonoBehaviour
         Stretch(rootRt);
 
         // 与 EquipStatTipUI / SkillInfoTipUI 同口径：自带嵌套 Canvas 抬到 1000，压在所有战斗层之上。
+        // 【2026-10-14 主人铁律：所有界面 Canvas 走摄像机模式】裸 Overlay 会恒盖最上层、随主相机不重绑 → 糊屏，
+        // 改成 ScreenSpaceCamera 绑定 UI 相机（不调 ApplyPopup：它强塞 GraphicRaycaster + 跑竖向重锚，会挡住连抽按钮/挪卡）。
         var canvas = gameObject.GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceCamera;
+        canvas.worldCamera = UICanvasSetup.ResolveUiCamera();
+        canvas.planeDistance = GameConfig.UI_PLANE_DISTANCE;
         canvas.overrideSorting = true;
         canvas.sortingOrder = 1000;
         // 刻意不加 GraphicRaycaster：卡是纯演出，不吃射线，别挡住连抽按钮。

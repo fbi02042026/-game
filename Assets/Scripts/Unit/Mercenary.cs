@@ -424,6 +424,18 @@ public class Mercenary : UnitBase
         return true;
     }
 
+    /// <summary>
+    /// 该佣兵是否用法术攻击（魔攻）。hireId / assetId 都吃。
+    /// <para>「获得佣兵」弹窗属性行二选一（攻击/魔攻、防御/魔防）的<b>唯一判据</b>——
+    /// 与 <see cref="GetAttackType"/> 同源，UI 侧不许自己复制前缀表。</para>
+    /// </summary>
+    public static bool UsesMagicAttack(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return false;
+        if (IsMeleeRoleId(id)) return false;                     // 近战 = 物攻
+        return !ResolveAssetId(id).StartsWith("gongshou");       // 非近战里弓手 = 物攻，其余（法师/牧师）= 魔攻
+    }
+
     static bool IsMeleeMercId(string id) => IsMeleeRoleId(id);
 
     void ApplyMeleeRangeVsPlayer()
@@ -515,16 +527,7 @@ public class Mercenary : UnitBase
     }
 
     protected override WeaponAttackType GetAttackType()
-    {
-        if (!IsMeleeRoleId(mercId))
-        {
-            string asset = ResolveAssetId(mercId);
-            if (asset.StartsWith("gongshou"))
-                return WeaponAttackType.Physical;
-            return WeaponAttackType.Magic;
-        }
-        return WeaponAttackType.Physical;
-    }
+        => UsesMagicAttack(mercId) ? WeaponAttackType.Magic : WeaponAttackType.Physical;
 
     protected override AttackVfxKit GetAttackVfxKit()
     {

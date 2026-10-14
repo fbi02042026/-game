@@ -35,8 +35,15 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// 气泡基准尺寸。【2026-10-10 主人反馈「玩家头顶气泡字太挤」】宽 200 → 260。
     /// 【2026-10-12 主人再报「我不是让你放大一点吗，看着太挤了」】→ 字号 26 → 32（与 FirstRunGuide 同档），
     /// 基准宽高 260×107 → 320×132 等比放大；具体尺寸仍由 SpeechBubbleFit 按文本适配，这里只抬基准。
+    /// 【2026-10-14 主人「只把对话框放大一点」】320×132 → 360×152 再抬一档（宽高比不变，仍等比缩放）。
     /// </summary>
-    static readonly Vector2 BaseBubbleSize = new Vector2(320f, 132f);
+    static readonly Vector2 BaseBubbleSize = new Vector2(360f, 152f);
+    /// <summary>
+    /// 【2026-10-14 主人「根据字的多少要实时的调整对话框大小」】最小等比缩小倍数。
+    /// 0.8 = 短句最多收到基准的 80%，长句照旧最多放大到 200%（SpeechBubbleFit 的 maxScale 默认值）。
+    /// 字号不跟着缩 —— 只缩框，文字始终 32。
+    /// </summary>
+    const float BubbleMinScale = 0.8f;
     /// <summary>左右内边距：同步 18 → 22，气泡拉宽后留白要跟上，别让字贴边框。</summary>
     const float PadX = 22f;
     const float PadTop = 14f;
@@ -152,7 +159,8 @@ public class BattleHeadTalkUI : MonoBehaviour
         if (_group != null) _group.alpha = 1f;
         GlobalToastUI.PushBubble();
         TutorialHintUI.Instance?.Hide();
-        string display = SpeechBubbleFit.Apply(_root, _text, raw, BaseBubbleSize);
+        string display = SpeechBubbleFit.Apply(_root, _text, raw, BaseBubbleSize,
+            maxScale: 2f, minScale: BubbleMinScale);
         if (_text != null) _text.text = "";
         RefreshFollowPosition();
         AcquireStoryBgm();

@@ -564,8 +564,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return CoTutorialRescueBeat(bm, m => rescuer = m, headTalk);
 
         // 第 9 步：玩家惊呆（这一句是唯一文案源，想改措辞改这里即可）
+        // 【2026-10-14 主人补拍板】演出已改成「幻影一击全清」（不再挨个打），旧词
+        //「他刚才是不是把所有人打了一遍？」与画面矛盾 —— 换成没看清出手的落差感。
         yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "……他刚才是不是把所有人打了一遍？", 2.4f));
+            new TalkLine(Hero.Instance, "……他什么时候出的手？", 2.4f));
         headTalk?.HideNow();
 
         // —— 3b) 第二抽：抽中的就是刚才救场那位（塔克·重盾，稀有） ——
@@ -579,6 +581,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // if (rescuer != null) MercenaryManager.Instance?.DespawnMercenary(rescuer);
         if (bm != null)
             yield return bm.CoMidBattleDraft(TutorialDrawBeatText);
+        // 【2026-10-14 主人报「第二次抽奖继续后玩家和佣兵都不动，按说应该继续往前走才对」】
+        // 根因：救援戏（本方法上方 :538-542）把 UnitsCanAct 冻在 false 后再没恢复；第二抽的
+        // CoMidBattleDraft finally 还原的是它进入时的 false → 点完「继续」人/佣兵/怪全冻着，
+        // 只能干等 WaitMonstersFinishedEnter 10s 超时（Editor.log:73601「等待怪进场超时」实锤）。
+        // 与第三抽后的既有处理（本方法下方 CoMidBattleDraft 之后的同款一行）一致：抽完立刻恢复战斗。
+        if (bm != null) bm.UnitsCanAct = true;
         ui?.UpdateCharacterSlots();
 
         // —— 4) 第三波：塔克已在队，跟着一起打 ——
@@ -601,6 +609,16 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // （波次异步入场，原来 Queue 完立刻 hint.Show，玩家看到对话框时场上还没怪）。
         yield return WaitMonstersFinishedEnter(bm);
 
+        // 【2026-10-14 主人拍板·方案 A】「跟紧我，别走散。」从「整波清完之后」**提到这里** ——
+        //   原位置排在 WaitFieldClear + 30s 清场守卫之后，玩家得先把这一波怪全打完才看到这句，
+        //   主人原话「打完之后才弹剧情跟紧我」。现在怪一进场站定就说。
+        //   【2026-10-14 二次修正】解冻已提前到第二抽 CoMidBattleDraft 结束（本方法上方新增的那行）：
+        //   主人报「继续后玩家和佣兵都不动，按说应该继续往前走」。现在点完继续人就恢复战斗，
+        //   怪也能正常进场（不再干等 10s 超时）；本对话播的时候 TalkBlock 自行短暂冻结、播完即恢复。
+        // 【2026-10-07 主人反馈「佣兵说的话太快了，没看到」】停留 0.75 → 1.9。
+        yield return TalkBlock(bm, headTalk,
+            new TalkLine(merc, "跟紧我，别走散。", 1.9f));
+
         // 不冻结战斗：玩家可随时上前清怪。
         // 2026-09-18：这里原本会直接改写 Hero 坐标把玩家往前推（最高 18/秒），
         // 触发瞬间看起来就是「被瞬移」。只等待，绝不动画家坐标。
@@ -622,9 +640,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         AllowBattleSkillClick = false;
 
-        // 【2026-10-07 主人反馈「佣兵说的话太快了，没看到」】0.75 → 1.9（同上：气泡停留拉长）。
-        yield return TalkBlock(bm, headTalk,
-            new TalkLine(merc, "跟紧我，别走散。", 1.9f));
+        // 【2026-10-14 主人拍板·方案 A】「跟紧我，别走散。」已提到上面 WaitMonstersFinishedEnter 之后，
+        //   这里不再重复播 —— 原位置在清场守卫之后，玩家要打完一整波才看到这句话。
         headTalk?.HideNow();
         hint.Hide();
 
@@ -771,11 +788,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 目的还是「让玩家在被围殴的时候喊救命」，不是等他打完。
         // 所以这里等的是「玩家扛不住」的时刻，不是等清场：掉血阈值收紧、时长缩短，
         // 保证天降那一刻场上还有怪可杀（玩家真把怪清完了才走打空那条分支）。
-        // 【2026-10-10 主人拍板】掉血阈值 = 50%：血掉到一半以下才算「撑不住」（主人原话口径：
-        // 「血掉50%以下再触发剧情说要死了」）。超时上限放宽到 15s，给玩家足够的掉血时间；
-        // 一直打得太顺（没掉到 50%）就按超时往下走，剧情不能永远不来。
+        // 【2026-10-14 主人拍板】掉血阈值 50% → **20%**（主人原话「打的玩家血再少点，20%左右再弹剧情」）：
+        // 打得更狠、掉得更多，才喊救命；1.0 表示满血，0.2 = 只剩两成血。
         const float maxWait = 15f;
-        const float bailHpRatio = 0.5f;
+        const float bailHpRatio = 0.2f;
         float t = 0f;
         while (t < maxWait)
         {
@@ -864,6 +880,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
             yield return TalkBlock(bm, talk, restoreAct: false,
                 // 这句是唯一的护崽台词源，想改措辞改这里即可
                 new TalkLine(merc, "躲在我后面。", 2.2f));
+
+        // 【2026-10-14 主人拍板】加一句把「他是不是把每个人都打了一遍」改成「一击全清」的落差感。
+        // 措辞按主人原话的意图优化：短、有对比、不解释，留给玩家自己品。
+        if (talk != null)
+            yield return TalkBlock(bm, talk, restoreAct: false,
+                new TalkLine(merc, "一个都别想跑。", 1.5f));
 
         var vfx = BattleVFXSystem.Instance;
         var victims = new List<UnitBase>();
@@ -978,6 +1000,20 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 if (m == null || m.isDead) continue;
                 float maxHp = m.attr != null ? m.attr.GetAttr(AttrType.MaxHp) : 0f;
                 if (maxHp > best) { best = maxHp; elite = m; }
+            }
+        }
+
+        // 【2026-10-14 主人报「精英还没出来就先出现对话框了」】波次是异步进场的，对象刷出 ≠ 人到了。
+        // 找到精英后必须等他**进场走完**（IsEnteringMap=false）再回调弹宿敌对白，
+        // 否则对白弹在半路上、精英还堵在屏外，观感就是「小怪先出、精英磨蹭、对话框抢跑」。
+        // 上限 15s 防卡死（超时放行，不拖死流程）。
+        if (elite != null)
+        {
+            float enterWait = 0f;
+            while (enterWait < 15f && !elite.isDead && elite.IsEnteringMap)
+            {
+                enterWait += Time.unscaledDeltaTime;
+                yield return null;
             }
         }
 

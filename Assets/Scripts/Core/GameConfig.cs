@@ -26,15 +26,15 @@ public static partial class GameConfig
     /// <summary>近战出手允许的车道 Y 误差：走到目标水平对面，上下可略偏，避免错位砍刀光发飘。</summary>
     public const float MELEE_LANE_ALIGN_TOL = 0.22f;
     /// <summary>
-    /// 敌方近战「换道追击」的最大幅度（世界单位，Y 方向）。
-    /// 2026-09-28 主人反馈「最上面的敌人能打到最下面的玩家」：根因不是出手闸门太松
-    /// （MELEE_LANE_ALIGN_TOL 一直拦着隔排砍），而是换道没有上限 —— 怪每帧朝玩家那一排滑，
-    /// 只要时间够就能从最上排一路滑到最下排，滑到同排后闸门自然放行。
-    /// 这里给敌方换道加个锚点范围：以「锁定目标那一刻自己所在的车道」为中心，上下最多挪这么多。
-    /// 0.6 ≈ 两排的间距，够追隔壁一排的玩家，但够不到屏幕另一头。
-    /// 只作用于敌方（!isAlly）；我方佣兵/玩家照旧自由并道，否则会打不到人。
+    /// 敌方近战「换道追击」的最大幅度（世界单位，Y 方向）。**0 = 不设上限（2026-10-14 生效）**。
+    /// 2026-09-28 曾设 0.6（当时主人反馈「最上面的敌人能打到最下面的玩家」）；
+    /// 2026-10-14 主人报「第一波上面那个小怪走到一半就等玩家」——根因就是这条：怪锁定目标那一刻
+    /// 记锚点（UnitBase.AdjustLaneTowardTarget），之后并道被夹在锚点 ±0.6，上路的怪沉 0.6 就被钳死，
+    /// X 走到玩家正上方后近战车道对齐（dy≤0.22）永远不满足 → 站住干等。与 10-14 拍板的
+    /// 「怪一出来就朝玩家/佣兵前进」直接冲突，故归零停用；并道仍受 BattleLaneBounds 车道边界约束。
+    /// 只作用于敌方（!isAlly）；我方佣兵/玩家从来不受限。
     /// </summary>
-    public const float MONSTER_LANE_CHASE_MAX = 0.6f;
+    public const float MONSTER_LANE_CHASE_MAX = 0f;
 
     /// <summary>追敌车道对齐容错开关：true=不严格站到与目标同一条水平线（留随机偏移）；false=完全回退原行为。</summary>
     public const bool ENABLE_LANE_ALIGN_TOLERANCE = true;
@@ -52,6 +52,20 @@ public static partial class GameConfig
     public const float LANE_ALIGN_TOLERANCE_X = 0.08f;
     /// <summary>车道对齐速度倍率（乘在换道速度上）。1=不改手感；调小更缓更"稳"，调大更快"贴脸"。</summary>
     public const float LANE_ALIGN_SPEED_MUL = 1f;
+
+    /// <summary>
+    /// 【2026-10-14 主人拍板】怪物索敌多策略：出场时抽「挑血少的打」（LowHp）的怪占比（0~1）。
+    /// 其余按近远程分：近战=按距离（旧行为），远程=先打脆皮职业（法师/牧师/游侠及佣兵奶法牧弓）。
+    /// 改这里即可整体调比例；要按怪种逐只配置再加表列。
+    /// </summary>
+    public const float MONSTER_LOW_HP_TARGET_RATIO = 0.25f;
+
+    /// <summary>
+    /// 【2026-10-14 主人拍板】Boss 多段切换索敌策略的间隔（秒）：每隔这么久按
+    /// Distance → SquishyJob → LowHp 轮换一种；目标真变了就在新目标头顶弹红色「锁」提示
+    /// （BossTargetMark）。改这里调 Boss 换目标的节奏。
+    /// </summary>
+    public const float BOSS_TARGET_SHIFT_INTERVAL = 10f;
 
     /// <summary>像素 → 世界单位（对齐数值表「攻击范围(像素)」）</summary>
     public static float PixelsToUnits(float pixels) => pixels / PIXEL_PER_UNIT;

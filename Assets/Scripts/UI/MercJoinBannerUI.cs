@@ -137,6 +137,11 @@ public class MercJoinBannerUI : MonoBehaviour
         }
 
         if (_co != null) StopCoroutine(_co);
+        // 【2026-10-14 修】必须在 StartCoroutine **之前**把节点点亮：
+        // Bind() 里 rt.gameObject.SetActive(false)，而 Unity 的 StartCoroutine 要求宿主 GameObject 是激活的，
+        // 否则报 "Coroutine couldn't be started because the game object '佣兵入队' is inactive!"
+        // → 横幅一次都没播过（2026-10-14 Editor.log:19525 实锤），主人看到的是「该出横幅却干等」。
+        _rt.gameObject.SetActive(true);
         _co = StartCoroutine(CoPlay());
     }
 
@@ -201,7 +206,7 @@ public class MercJoinBannerUI : MonoBehaviour
     /// 取佣兵立绘。Sprite 取不到（png 被按默认贴图导入）时读 Texture2D 现造，
     /// 与 <see cref="JobIconResolver.LoadSprite"/> / SlotMachineAgainBanner 同一套；都失败返回 null（调用方 LogError）。
     /// </summary>
-    static Sprite LoadPortrait(string hireId)
+    public static Sprite LoadPortrait(string hireId)
     {
         if (string.IsNullOrEmpty(hireId)) return null;
         string path = PortraitFolder + PortraitPrefix + hireId;

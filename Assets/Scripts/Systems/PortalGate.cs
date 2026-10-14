@@ -78,8 +78,14 @@ public class PortalGate : MonoBehaviour
         var gate = go.GetComponent<PortalGate>() ?? go.AddComponent<PortalGate>();
         // 【2026-10-12 主人连报两次「还是没有出现传送门」】门根自带一层嵌套 Canvas 并抬高 order，
         // 免得被战斗 HUD（子 Canvas 100 / 921）整块盖住。见 <see cref="PortalCanvasOrder"/>。
+        // 【2026-10-14 主人铁律：所有界面 Canvas 走摄像机模式】裸 Overlay 会恒盖最上层、随主相机不重绑 → 糊屏，
+        // 改成 ScreenSpaceCamera 绑定 UI 相机。钉点数学在 UiCamera()/LateUpdate 里读的是「父级 Canvas」的
+        // worldCamera，与门自身 Canvas 的 renderMode 无关，转换不影响世界钉点定位。
         var canvas = go.GetComponent<Canvas>();
         if (canvas == null) canvas = go.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceCamera;
+        canvas.worldCamera = UICanvasSetup.ResolveUiCamera();
+        canvas.planeDistance = GameConfig.UI_PLANE_DISTANCE;
         canvas.overrideSorting = true;
         canvas.sortingOrder = PortalCanvasOrder;
         if (go.GetComponent<GraphicRaycaster>() == null) go.AddComponent<GraphicRaycaster>();   // 铁律 10

@@ -254,10 +254,14 @@ public class StoryDirector : Singleton<StoryDirector>
         }
 
         ui.ClearEndBlackLine();
-        if (_keepSceneArt)
+ if (_keepSceneArt)
         {
             ui.SetDialogueChromeVisible(false);
             ui.SetStoryProp(null);
+            // 【2026-10-14 主人报「回到城后剧情立绘不消失，一直挡住主界面」】
+            // keepSceneArt 保留了场景美术（背景/道具），立绘也一并留着就一直挡在主界面前面。
+            // 背景要留、立绘不留 —— 这里只清立绘与名牌，其余走上面两行。
+            ui.ClearPortraits();
         }
         else
             ui.Hide();

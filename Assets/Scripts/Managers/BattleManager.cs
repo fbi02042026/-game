@@ -2993,9 +2993,18 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             // 闭包捕获本地副本：别让下一抽改写了 _lastDrawRewardMsg 字段后 Toast 内容串台
             string toastMsg = _lastDrawRewardMsg;
             // 【2026-10-13 主人拍板】开奖卡演完 → 详情弹窗（点任意位置关）→ 关掉才弹 Toast，防剧透
+            // 【2026-10-14 主人拍板】装备类**不再弹详情大卡**（DraftRewardDetailUI 全屏暗带+大卡糊屏，
+            //   主人原话「我要的不是这个弹窗」）——装备的确认/展示已由替换装备弹窗（EquipReplaceConfirmUI）
+            //   在 CoApplyEquipCard 里承担（无旧件也弹、右侧栏显示「无」），这里直接 Toast 收尾。
             ShowDrawPrizeCard(card, cat, powerDelta, () =>
             {
-                if (DraftRewardDetailUI.NeedsDetail(card))
+                // 【2026-10-14 主人拍板】抽中佣兵/技能改弹预制体弹窗（huodeyongbing / huodejineng），
+                // 装备不走详情卡（替换确认弹窗已承担）；佣兵升级/升星拍暂无新预制体，维持原详情弹窗。
+                if (card.Kind == DraftCardKind.MercRecruit)
+                    StartCoroutine(MercObtainPopupUI.CoShow(card, () => UIManager.Instance?.ShowToast(toastMsg, true)));
+                else if (card.Kind == DraftCardKind.SkillNew || card.Kind == DraftCardKind.SkillUp)
+                    StartCoroutine(SkillObtainPopupUI.CoShow(card, () => UIManager.Instance?.ShowToast(toastMsg, true)));
+                else if (card.Kind != DraftCardKind.Equip && DraftRewardDetailUI.NeedsDetail(card))
                     StartCoroutine(DraftRewardDetailUI.CoShow(card, () => UIManager.Instance?.ShowToast(toastMsg, true)));
                 else
                     UIManager.Instance?.ShowToast(toastMsg, true);

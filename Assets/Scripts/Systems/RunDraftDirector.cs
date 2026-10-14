@@ -330,7 +330,7 @@ public class RunDraftDirector : MonoBehaviour
     /// <item>换上新的 → 新件入包，旧件由 <see cref="GridBackpackSystem.TryEquipFromReward"/> 折成强化石；</item>
     /// <item>留着旧的 → 新件同样折成强化石（不占背包，也不白抽）。</item>
     /// </list>
-    /// 同部位没有旧件时不弹窗，直接入包。
+    /// 【2026-10-14 主人拍板】同部位没有旧件时**也弹窗**（右侧栏显示「无」），不再直接入包。
     /// </summary>
     /// <param name="done">(是否生效, 给玩家看的文案)。</param>
     public IEnumerator CoApplyEquipCard(DraftCard card, System.Action<bool, string> done)
@@ -352,7 +352,11 @@ public class RunDraftDirector : MonoBehaviour
         // 谁会被顶掉 —— 判据只有 GridBackpackSystem.FindSameSlotEquip 一处
         var old = bag.FindSameSlotEquip(eq);
         bool replace = true;
-        if (old != null && old != eq)
+        // 【2026-10-14 主人拍板】抽中装备**一律弹替换确认**（原「同部位没有旧件时不弹窗、直接入包」作废）：
+        // 没有旧件也要弹，右侧栏（ColumnOld）显示「无」，玩家点「换上新的」才穿；
+        // 点「留着旧的」→ 新件折强化石，与有旧件时的口径一致（玩家自选自担）。
+        // old == eq 防同实例重入的语义保留。
+        if (old != eq)
         {
             bool chose = false;
             yield return EquipReplaceConfirmUI.CoShow(eq, old, r => chose = r);
@@ -472,11 +476,16 @@ public class RunDraftDirector : MonoBehaviour
         // 名字颜色按稀有度走 RarityPalette（主人：名字要和稀有度对齐）；不在战斗中时控制器自行 LogError。
         MercJoinBannerUI.Show(entry.hireId, fullName,
             hasRoster ? rd.Rarity : MercRosterDefs.MercRarity.Common);
-        // 【2026-10-06 主人拍板】佣兵技能一样要标「新」（主人点名：不管是佣兵技能还是装备）。
+        // 【2026-06 主人拍板】佣兵技能一样要标「新」（主人点名：不管是佣兵技能还是装备）。
         NewLootMarks.Mark(NewLootMarks.KindSkill, entry.skillId);
+        // 【2026-10-14 主人拍板】喜报里佣兵名字按稀有度上色（富文本包住名字，其它字不变色）。
+        // 颜色走 RarityPalette 真源，与横幅名字、入队弹窗名字同一张色表，不另写一套映射。
+        string coloredName = "<color=#" + ColorUtility.ToHtmlStringRGB(
+            RarityPalette.Get(hasRoster ? rd.Rarity : MercRosterDefs.MercRarity.Common))
+            + ">" + fullName + "</color>";
         msg = string.IsNullOrEmpty(rarityName)
-            ? $"恭喜抽中佣兵·{fullName}，实力大增！"
-            : $"恭喜抽中{rarityName}佣兵·{fullName}，实力大增！";
+            ? $"恭喜抽中佣兵·{coloredName}，实力大增！"
+            : $"恭喜抽中{rarityName}佣兵·{coloredName}，实力大增！";
         return true;
     }
 

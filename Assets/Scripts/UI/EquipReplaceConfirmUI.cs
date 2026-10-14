@@ -112,7 +112,12 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
         var go = Instantiate(prefab);
         go.name = "EquipReplaceConfirmPopup";
-        // 与 EvacuateConfirmPopup 同一套口径：自带 Overlay Canvas，不挂在 BattleUI 下、不随场景销毁
+        // 【2026-10-14 主人拍板「以后的界面都要走摄像机模式」】prefab 自带的 Overlay Canvas
+        // 实例化后套全项目统一规范（Screen Space - Camera + 925 层 + 根铺满），
+        // 与 EvacuateConfirmPopupUI 同口径——不再裸 Overlay。DDOL 相机重绑已有场景钩子兜住。
+        var canvas = go.GetComponent<Canvas>() ?? go.AddComponent<Canvas>();
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.EquipReplaceConfirm);
+        // 与 EvacuateConfirmPopup 同一套口径：不挂在 BattleUI 下、不随场景销毁
         DontDestroyOnLoad(go);
         return go.GetComponent<EquipReplaceConfirmUI>() ?? go.AddComponent<EquipReplaceConfirmUI>();
     }
@@ -208,13 +213,15 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             return;
         }
 
-        string name = eq != null && !string.IsNullOrEmpty(eq.equipName) ? eq.equipName : "（空）";
+        // 【2026-10-14 主人拍板】该部位没有旧装备时，右侧栏（ColumnOld）写「无」
+        //（原「（空）」），不静默空白也不开天窗。
+        string name = eq != null && !string.IsNullOrEmpty(eq.equipName) ? eq.equipName : "无";
         SetText(col, "Name", name);
         // 2026-10-11 主人拍板：稀有度文案走装备自己的真实档位（EquipUiText.RarityName），
         // 旧写法走 SkillRarityUtil(DraftPool.MapRarity) 会把「史诗(紫)」说成「传说」——
         // 名字按稀有度上色后就会变成「紫色的传说」，自相矛盾。
         // 2026-10-11 主人拍板：强化等级为 0 时**不显示「+0」**（主人原话「如果没有加就不要显示+0」）
-        SetText(col, "Info", eq == null ? "-"
+        SetText(col, "Info", eq == null ? ""
             : eq.enhanceLevel > 0
                 ? $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}　+{eq.enhanceLevel}"
                 : $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}");
@@ -224,9 +231,6 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         var descLines = eq != null
             ? DraftPool.FormatEquipDescLines(eq, columnName == "ColumnNew" ? compareTo : null)
             : new List<string>();
-        // 【2026-10-13 改版】战力 ±N 作为「新装备」栏最后一行（主人拍板：不要在底部判定行）
-        if (columnName == "ColumnNew" && !string.IsNullOrEmpty(powerLine))
-            descLines.Add(powerLine);
         SetText(col, "Desc", descLines.Count > 0 ? string.Join("\n", descLines.ToArray()) : "");
 
         var infoText = Text_(FindDeep(col, "Info"));
@@ -252,11 +256,99 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             icon.enabled = sp != null;
         }
 
+        // 2026-10-14 主人拍板：Iconbg（装备格子框）按装备稀有度换图，三色三档。
+        // 白=普通 / 蓝=稀有（绿蓝紫都归它）/ 橙金=只有传奇。
+        ApplyIconBg(col, eq);
+
+        // 【2026-10-14 主人拍板】战力 ±N 移到 Iconbg 框里最下方的新节点 zhanli，
+        // 只有「新获得装备」那栏有（旧装备栏不给）。不再塞进 Desc 文本末尾。
+        ApplyPowerLine(col, columnName == "ColumnNew" ? powerLine : null);
+
         // 2026-10-10 主人：新获得的装备图标右上角要有个「新」字 —— 只有 ColumnNew 有，ColumnOld 明确关掉
         if (columnName == "ColumnNew")
             EnsureNewBadge(col, icon);
         else
             HideNewBadge(col);
+    }
+
+    /// <summary>
+    /// 装备格子框（Iconbg）按稀有度换图 —— 三色三档，2026-10-14 主人拍板。
+    ///
+    /// <para>素材位置：<c>Assets/Resources/UI/Battle/zhaungbeitihuan/</c>（主人已放好，textureType=8 Sprite）。
+    /// 白=普通 / 蓝=稀有 / 橙金=传奇。<b>只有传奇是橙金</b>（主人原话）；五档枚举里
+    /// 绿/蓝/紫都归蓝框 —— 与战斗 HUD 头像框（<c>MercHireSession.LoadPortraitFrame</c>）
+    /// 同一套三档思路，两套框图别混用。</para>
+    ///
+    /// <para>取不到资源只报 LogError 不兜底（铁律 12/14：不让缺资源的弹窗开天窗）。</para>
+    /// </summary>
+    const string IconBgDir = "UI/Battle/zhaungbeitihuan/";
+
+    static void ApplyIconBg(Transform col, EquipInstance eq)
+    {
+        var bg = FindDeep(col, "Iconbg")?.GetComponent<Image>();
+        if (bg == null) return;
+
+        if (eq == null)
+        {
+            // 没有装备时不上框，避免留一张白底空框
+            bg.sprite = null;
+            bg.enabled = false;
+            return;
+        }
+
+        bg.enabled = true;
+        bg.sprite = LoadIconBg(eq.rarity);
+    }
+
+    /// <summary>
+    /// 战力 ±N 写进 Iconbg 框里最下方的 <c>zhanli</c> 节点（2026-10-14 主人拍板：
+    /// 「放到 Iconbg 框里最下方，我已经放好位置了，只有新获得装备有」）。
+    /// <para><paramref name="powerLine"/> 为 null/空（旧装备栏、或没得算）→ 隐藏该节点，不留空行。
+    /// 颜色沿用既有的绿涨红跌（<c>RarityPalette.PowerGain / PowerLoss</c>），文案格式不变。
+    /// 排版（字号/对齐/位置）在预制体里，代码一行不碰。</para>
+    /// </summary>
+    static void ApplyPowerLine(Transform col, string powerLine)
+    {
+        var tf = FindDeep(col, "zhanli");
+        if (tf == null)
+        {
+            Debug.LogError("[EquipReplaceConfirm] 预制体里缺少节点 zhanli（战力行），请确认已放进 Iconbg 框内");
+            return;
+        }
+
+        bool has = !string.IsNullOrEmpty(powerLine);
+        tf.gameObject.SetActive(has);
+        if (!has) return;
+
+        var text = Text_(tf);
+        if (text != null) text.text = powerLine;
+    }
+
+    static Sprite LoadIconBg(Rarity r)
+    {
+        string name;
+        switch (r)
+        {
+            case Rarity.Legendary:
+                name = "zhuangbeijin"; // 只有传奇 → 橙金
+                break;
+            case Rarity.Epic:
+            case Rarity.Rare:
+            case Rarity.Uncommon:
+                name = "zhuangbeilan"; // 紫 / 蓝 / 绿 → 蓝
+                break;
+            default:
+                name = "zhuangbeibai"; // 普通 → 白
+                break;
+        }
+
+        var path = IconBgDir + name;
+        var sp = Resources.Load<Sprite>(path);
+        if (sp == null)
+        {
+            Debug.LogError($"[EquipReplaceConfirm] 找不到装备格子框 {path}，请确认素材已放进 Resources");
+        }
+        return sp;
     }
 
     /// <summary>

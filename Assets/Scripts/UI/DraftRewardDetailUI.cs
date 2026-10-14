@@ -85,11 +85,23 @@ public class DraftRewardDetailUI : MonoBehaviour
 
     static DraftRewardDetailUI Ensure()
     {
-        if (_instance != null) return _instance;
-        var go = new GameObject("DraftRewardDetailUI");
-        DontDestroyOnLoad(go);
-        _instance = go.AddComponent<DraftRewardDetailUI>();
-        _instance.Build();
+        // 【2026-10-14 修】上次 Build 若中途炸过（Canvas 异常），_instance 活着但 _root 没建——
+        // 直接复用半成品会让 Fill 必 NRE。这里检测残缺并原地补 Build（五坑③自带清旧 Root）。
+        if (_instance != null && _instance._root == null)
+            _instance.Build();
+        else if (_instance == null)
+        {
+            var go = new GameObject("DraftRewardDetailUI");
+            DontDestroyOnLoad(go);
+            _instance = go.AddComponent<DraftRewardDetailUI>();
+            _instance.Build();
+        }
+        // Build 失败（Canvas 挂不上）→ 返回 null，CoShow 走 onClosed 优雅收尾，绝不带病 NRE
+        if (_instance == null || _instance._root == null)
+        {
+            Debug.LogError("[DraftRewardDetailUI] 建树不完整，本次奖励详情跳过（onClosed 已回调，不卡面板）");
+            return null;
+        }
         return _instance;
     }
 
@@ -152,9 +164,22 @@ public class DraftRewardDetailUI : MonoBehaviour
             if (old != null && old.name == "Root") Destroy(old.gameObject);
         }
 
-        var canvas = gameObject.GetComponent<Canvas>() ?? gameObject.AddComponent<Canvas>();
-        canvas.overrideSorting = true;
-        canvas.sortingOrder = 1000;   // 与开奖卡同层级：压在所有战斗层之上
+        // 【2026-10-14 修】C# 的 ?? 对 UnityEngine.Object 不可靠：组件处于 fake null（已销毁残留）
+        // 时 ?? 不会走右侧，canvas 拿着假引用 → overrideSorting 直接抛 MissingComponentException
+        // → CoShow 协程中断 → 奖品详情永远弹不出（Editor.log:47567/50953 实锤，主人报「塔克入队卡一会」）。
+        // 改显式 Unity 判空：fake null 会被 == null 识别并重新 AddComponent。
+        var canvas = GetComponent<Canvas>();
+        if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
+        if (canvas == null)
+        {
+            // AddComponent 都拿不到（异常环境）→ fail closed：报出来、中止 Build，绝不带病继续
+            Debug.LogError("[DraftRewardDetailUI] Canvas 挂不上，奖励详情弹窗不可用");
+            return;
+        }
+        // 【2026-10-14 主人拍板「以后的界面都要走摄像机模式」】套用全项目统一规范：
+        // Screen Space - Camera + 720×1280 竖版 + 根铺满 + 场景切换自动重绑相机（DDOL 已有钩子）。
+        // 原来的裸 Overlay（不随主相机、恒盖在最上）就是「整个糊住屏幕」的根源之一。
+        UICanvasSetup.ApplyPopup(canvas, 1000);   // 与开奖卡同层级：压在所有战斗层之上
         if (gameObject.GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
 

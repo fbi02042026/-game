@@ -853,6 +853,30 @@ public class DialogueUI : MonoBehaviour
         SetNamePlateIconVisible(rightNameIcon, false);
     }
 
+    /// <summary>
+    /// 清掉左右立绘与名牌（sprite 置空 + 隐藏）。
+    /// 【2026-10-14 主人报「回到城后剧情立绘不消失，一直挡住主界面」】
+    /// 走 <c>keepSceneArt</c> 分支收尾时，<see cref="Hide"/> 不会被调用（那是整个对话层的隐藏），
+    /// 立绘就留在场景上挡住主界面 —— 这里给收尾流程一个专清立绘的出口。
+    /// </summary>
+    public void ClearPortraits()
+    {
+        if (leftPortraitImage != null)
+        {
+            leftPortraitImage.sprite = null;
+            leftPortraitImage.gameObject.SetActive(false);
+        }
+        if (rightPortraitImage != null)
+        {
+            rightPortraitImage.sprite = null;
+            rightPortraitImage.gameObject.SetActive(false);
+        }
+        if (leftNamePlateImage != null) leftNamePlateImage.gameObject.SetActive(false);
+        if (rightNamePlateImage != null) rightNamePlateImage.gameObject.SetActive(false);
+        SetNamePlateIconVisible(leftNameIcon, false);
+        SetNamePlateIconVisible(rightNameIcon, false);
+    }
+
     StoryPortraitPresenter.Context BuildPortraitContext()
     {
         return new StoryPortraitPresenter.Context

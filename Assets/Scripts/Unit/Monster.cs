@@ -274,6 +274,16 @@ public class Monster : UnitBase
     private float _skillEnergy = 0f;
     private float _skillCooldown = 0f;
     private MonsterAttackStyle _attackStyle = MonsterAttackStyle.Melee;
+
+    // 【2026-10-14 主人拍板】索敌多策略：近战按距离 / 远程先打脆皮职业 / 部分怪挑血少的打。
+    // 策略在 Init 里 style 定稿后抽一次；评分与选择在 MonsterTargeting.Pick。
+    MonsterTargetingPolicy _targetingPolicy = MonsterTargetingPolicy.Distance;
+    public MonsterTargetingPolicy TargetingPolicy => _targetingPolicy;
+
+    // 【2026-10-14 主人拍板】Boss 多段切换索敌策略：每隔 BOSS_TARGET_SHIFT_INTERVAL 按
+    // Distance→SquishyJob→LowHp 轮换；目标真变了就在新目标头顶弹红色「锁」（BossTargetMark）。
+    float _bossTargetShiftCd;
+    UnitBase _lastBossMarkTarget;
     private MonsterAttackStyle _swingStyle = MonsterAttackStyle.Melee;
     private int _spriteIndex;
     private bool _isBossUnit;
@@ -421,6 +431,19 @@ public class Monster : UnitBase
             return;
         }
 
+        // 【2026-10-14 主人拍板】Boss 多段切换索敌策略：定时轮换（Distance→SquishyJob→LowHp）。
+        // 换完不在这里直接选人——下一帧 FindNearestEnemyOnField 按新策略重选，
+        // 目标真的变了由下面「换目标弹锁」检测统一提示。入场/剧情暂停/技能预警期间不计时。
+        if (_isBossUnit)
+        {
+            _bossTargetShiftCd -= Time.deltaTime;
+            if (_bossTargetShiftCd <= 0f)
+            {
+                _bossTargetShiftCd = GameConfig.BOSS_TARGET_SHIFT_INTERVAL;
+                _targetingPolicy = NextBossPolicy(_targetingPolicy);
+            }
+        }
+
         if (_skillTelegraphing || _bossPhaseShiftBusy)
         {
             if (rb != null) rb.velocity = Vector2.zero;
@@ -457,35 +480,41 @@ public class Monster : UnitBase
             return;
         }
 
+        // 【2026-10-14 主人拍板】Boss 换目标提示：目标变更（策略轮换 / 原目标死亡）→ 头顶弹「锁」
+        if (_isBossUnit && target != _lastBossMarkTarget)
+        {
+            _lastBossMarkTarget = target;
+            BossTargetMark.Show(target, this);
+        }
+
         RunForcedCombat();
     }
 
-    /// <summary>场上最近友军（交战寻敌）。距离用二维（X+Y），与 UnitBase 索敌同尺（2026-09-28）。</summary>
+    /// <summary>场上最近友军（交战寻敌）。距离用二维（X+Y），与 UnitBase 索敌同尺（2026-09-28）。
+    /// 【2026-10-14 主人拍板】改为按本单位策略选目标（近战距离/远程脆皮/部分怪挑血少的）；
+    /// Distance 策略与旧「取最近」逐字节等价（同过滤、同 GetCombatDist）。</summary>
     public override UnitBase FindNearestEnemyOnField()
     {
         if (BattleManager.Instance == null) return null;
-        UnitBase nearest = null;
-        float minDist = float.MaxValue;
         var allies = BattleManager.Instance.allyUnits;
         if (allies == null) return null;
-        for (int i = 0; i < allies.Count; i++)
-        {
-            var enemy = allies[i];
-            if (enemy == null || enemy.isDead) continue;
-            if (!GameConfig.IsInCombatViewport(enemy)) continue;
-            float dist = GetCombatDist(this, enemy);
-            if (dist < minDist)
-            {
-                minDist = dist;
-                nearest = enemy;
-            }
-        }
-        return nearest;
+        return MonsterTargeting.Pick(this, allies);
     }
 
     protected override bool UsesMeleeBasicAttack()
     {
         return !MonsterAttackStyleTable.IsRanged(_attackStyle);
+    }
+
+    /// <summary>Boss 策略轮换顺序：按距离 → 打脆皮 → 收割残血 → 回到按距离，循环可被玩家学习。</summary>
+    MonsterTargetingPolicy NextBossPolicy(MonsterTargetingPolicy cur)
+    {
+        switch (cur)
+        {
+            case MonsterTargetingPolicy.SquishyJob: return MonsterTargetingPolicy.LowHp;
+            case MonsterTargetingPolicy.LowHp: return MonsterTargetingPolicy.Distance;
+            default: return MonsterTargetingPolicy.SquishyJob;
+        }
     }
 
     /// <summary>攻击风格是否为远程（弓/法球）。教程关按「近战厚 / 远程脆」分档配血用。</summary>
@@ -529,8 +558,13 @@ public class Monster : UnitBase
 
         if (melee)
         {
-            // 【2026-10-11 主人拍板】怪物不再向目标所在的车道并道，出场后按自己那条车道打完（旧行为会在站定后继续下沉/上浮一截）。
+            // 【2026-10-14 修复】上面的怪不下来找玩家：未贴脸时恢复并道——追击阶段一边沿 X 追
+            // 一边沉到目标车道，并到同排后站桩开打。敌方仍受 MONSTER_LANE_CHASE_MAX 上限约束。
+            // 2026-10-11 拍板的「站定后继续下沉/上浮」不会复发：inHoldRange（已能开打）时跳过并道，
+            // 站桩期间 Y 一动不动。
             FaceToward(target);
+            if (!inHoldRange)
+                AdjustLaneTowardTarget(target, Time.deltaTime);
         }
 
         bool isMoving = false;
@@ -784,6 +818,14 @@ public class Monster : UnitBase
         // 放在 style 定稿之后、写 attr 之前，魔法型（已强制 Ranged）也一起吃到。Boss 不吃。
         if (!_isBossUnit && MonsterAttackStyleTable.IsRanged(_attackStyle))
             baseAtk *= GameConfig.MONSTER_RANGED_ATK_MUL;
+        // 【2026-10-14】style 已定稿（含魔法型强制 Ranged），此处抽索敌策略：近战按距离、
+        // 远程先打脆皮职业、按 MONSTER_LOW_HP_TARGET_RATIO 比例抽出「挑血少的打」。
+        _targetingPolicy = MonsterTargeting.RollPolicy(MonsterAttackStyleTable.IsRanged(_attackStyle));
+        if (_isBossUnit)
+        {
+            _bossTargetShiftCd = GameConfig.BOSS_TARGET_SHIFT_INTERVAL;
+            _lastBossMarkTarget = null;   // 怪体复用/重开时清掉上一局的标记目标
+        }
         if (isMagicType)
         {
             attr.SetAttr(AttrType.Attack, 0f);

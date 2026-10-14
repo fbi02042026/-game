@@ -541,7 +541,10 @@ public static class UiLayoutStretch
     /// <summary>已迁移到界面自己文件里做适配的界面名；通用规则必须整块跳过，避免二次改动破坏已调好的效果。</summary>
     static readonly System.Collections.Generic.HashSet<string> IndividuallyFitted =
         // RewardPopup：排版全部在 RewardPopupUI.cs 里单独做（以主人预制体几何为准），通用规则必须跳过
-        new System.Collections.Generic.HashSet<string> { "AdventureUI", "DailyLoginUI", "RewardPopup" };
+        // GlobalToastUI（2026-10-14）：DDOL 常驻 Toast，根板锚 (0.5,0.55)（偏移恰好=居中保护阈值，
+        // 保护判不进）→ ApplyVerticalSplit 把它重锚贴顶，而 CoPlay/CoFlythrough 每次弹都把
+        // anchoredPosition 归零 → Toast 顶到屏幕上沿不居中。动画坐标自管理，通用规则整块跳过。
+        new System.Collections.Generic.HashSet<string> { "AdventureUI", "DailyLoginUI", "RewardPopup", "GlobalToastUI" };
 
     /// <summary>
     /// 判断 root 是否属于「已单独适配」的界面：按 root 自身名字、或 root 上挂载的组件类型名，

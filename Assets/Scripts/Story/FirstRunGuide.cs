@@ -121,6 +121,15 @@ public class FirstRunGuide : MonoBehaviour
     bool _typing;
     Coroutine _typeCo;
 
+    // —— 2026-10-14 修复：塔克收尾剧情开播时遮罩必须让位 ——
+    /// <summary>CoPoint 等待期间因剧情/对话开播而隐藏过遮罩；剧情播完后要重新弹回。</summary>
+    bool _hiddenByStory;
+
+    /// <summary>剧情/对话此刻是否占着屏幕（遮罩必须让位，否则会吞掉对话的推进点击）。</summary>
+    static bool StoryBusy() =>
+        (StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)
+        || (DialogueUI.Instance != null && DialogueUI.Instance.IsVisible);
+
     // ============================================================
     // 生命周期 / 对外入口
     // ============================================================
@@ -451,6 +460,7 @@ public class FirstRunGuide : MonoBehaviour
         bool tapToAdvance, float timeout, float bindTimeoutOverride = BindTimeout)
     {
         _pointOk = false;
+        _hiddenByStory = false;   // 上一步可能残留（完成/超时/切场景路径不会走到恢复分支）
 
         // 条件已经满足（比如目标页这会儿就是开着的）→ 不用再指一遍
         if (!tapToAdvance && Safe(isDone))
@@ -494,6 +504,22 @@ public class FirstRunGuide : MonoBehaviour
         float t = 0f;
         while (true)
         {
+            // 【2026-10-14 修复】塔克收尾剧情开播时收遮罩让位：遮罩(620)会盖住 DialogueUI(500)
+            // 的 AdvanceClick，剧情点不动、TownAfterBattleRoutine 的 while(!done) 死等 → 全屏卡死。
+            // 让位期间本步骤不推进、不计时；剧情播完重新弹回继续等玩家。
+            if (StoryBusy())
+            {
+                if (_visible) { Hide(); _hiddenByStory = true; }
+                yield return null;
+                continue;
+            }
+            if (_hiddenByStory)
+            {
+                // 剧情播完了：把遮罩弹回来（Show 内部会清 _tapDone / 重开打字机 / 重新定位）
+                _hiddenByStory = false;
+                Show(follow, text, tapToAdvance);
+            }
+
             // 切页会把整页内容重建，旧引用会失效：每帧重新定位，丢的那几帧沿用上一次量到的矩形
             if (needTarget) SetTarget(Safe(target));
 
@@ -886,7 +912,8 @@ public class FirstRunGuide : MonoBehaviour
 
         // 2026-09-22：点任意处进入下一步（只对原本用「继续」按钮的步骤生效）。
         // 打字机没播完时点击**无效**——防止玩家点太快字还没看完就翻页。
-        if (_tapAdv && !_typing && ScreenTapped())
+        // 【2026-10-14】剧情/对话在播时不吃点击：玩家点的是剧情推进，不该顺带推掉引导步骤。
+        if (_tapAdv && !_typing && !StoryBusy() && ScreenTapped())
             _tapDone = true;
 
         RefreshLayout();

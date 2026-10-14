@@ -28,6 +28,11 @@ public static class SpeechBubbleFit
 
     /// <param name="baseSize">预制体/默认气泡尺寸（宽高比以此为准）</param>
     /// <param name="maxScale">相对 baseSize 的最大等比放大倍数</param>
+    /// <param name="minScale">
+    /// 相对 baseSize 的最小等比缩小倍数。
+    /// 【2026-10-14 新增】默认 1f = 只放大不缩小，**旧调用方行为一字未变**；
+    /// 传 &lt; 1（例如 0.72f）才开启「按字数双向自适应」：短句收小、长句放大，全程等比不拉扁。
+    /// </param>
     /// <returns>实际写入的文案（极端超长时可能带省略号）</returns>
     public static string Apply(
         RectTransform bubbleRt,
@@ -35,7 +40,9 @@ public static class SpeechBubbleFit
         string content,
         Vector2 baseSize,
         // 2026-10-10 主人拍板：1.75 → 2.0。等比放大上限放宽，超长句才不会被迫截断成「…」。
-        float maxScale = 2f)
+        float maxScale = 2f,
+        // 2026-10-14 主人拍板「根据字的多少实时调整对话框大小」：新开口，默认 1 = 不缩小。
+        float minScale = 1f)
     {
         if (bubbleRt == null || text == null)
             return content ?? "";
@@ -67,10 +74,32 @@ public static class SpeechBubbleFit
         float needH = _gen.GetPreferredHeight(fitted, settings);
 
         float scale = 1f;
-        if (needH > availH + 0.5f)
-            scale = Mathf.Clamp(needH / availH, 1f, Mathf.Max(1f, maxScale));
 
-        if (scale > 1.001f)
+        // 【2026-10-14 新增·仅 minScale < 1 时生效，默认 1 时整段跳过 → 旧调用方行为一字未变】
+        // 主人要求「根据字的多少实时调整对话框大小」：短句收小、长句放大。
+        // 收小判据 —— 把整句按「不换行」量一次天然宽度，只要单行就塞得进基准框，
+        // 就按内容等比缩小气泡（**字号不变**，只缩框，短句不再挂着一个大气泡）。
+        if (minScale < 0.999f)
+        {
+            float oneLineW = MeasureUnwrapped(text, fitted, preferWidth: true);
+            if (oneLineW > 0f)
+            {
+                // +4 余量：量出来的宽度与实际 Wrap 判定有整数取整误差，卡死线上会被迫折行。
+                float tightW = oneLineW + padL + padR + 4f;
+                if (tightW <= baseSize.x)
+                {
+                    float oneLineH = MeasureUnwrapped(text, fitted, preferWidth: false);
+                    float tightH = oneLineH + padT + padB + 2f;
+                    float tight = Mathf.Max(tightW / baseSize.x, tightH / baseSize.y);
+                    scale = Mathf.Clamp(tight, minScale, 1f);
+                }
+            }
+        }
+
+        if (needH > availH + 0.5f)
+            scale = Mathf.Clamp(Mathf.Max(scale, needH / availH), 1f, Mathf.Max(1f, maxScale));
+
+        if (Mathf.Abs(scale - 1f) > 0.001f)
         {
             Vector2 sized = baseSize * scale;
             bubbleRt.sizeDelta = sized;
@@ -113,6 +142,24 @@ public static class SpeechBubbleFit
         if (baseSize.x > 1f && baseSize.y > 1f)
             bubbleRt.sizeDelta = baseSize;
         RestoreBubbleBgs(bubbleRt);
+    }
+
+    /// <summary>
+    /// 【2026-10-14 新增】按「不换行、不缩放」的排版量一句字的自然尺寸 ——
+    /// 用来判断「这句话单行能不能塞进基准气泡」，进而决定气泡要不要收小。
+    /// preferWidth=true 量宽，false 量高（高 = 整句单行高度）。
+    /// </summary>
+    static float MeasureUnwrapped(Text text, string content, bool preferWidth)
+    {
+        if (_gen == null) _gen = new TextGenerator();
+        var s = text.GetGenerationSettings(new Vector2(99999f, 99999f));
+        s.horizontalOverflow = HorizontalWrapMode.Overflow;
+        s.verticalOverflow = VerticalWrapMode.Overflow;
+        s.resizeTextForBestFit = false;
+        _gen.Populate(content, s);
+        return preferWidth
+            ? _gen.GetPreferredWidth(content, s)
+            : _gen.GetPreferredHeight(content, s);
     }
 
     static void ApplyBubbleBgScale(RectTransform bubbleRt, RectTransform textRt, float scale)
