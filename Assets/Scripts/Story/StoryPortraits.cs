@@ -22,7 +22,7 @@ public static class StoryPortraits
     public const string Melissa = "melissa";
     /// <summary>裂缝意志：第 8 章 HAPPY 结局出场。已定案不出正式立绘，长期用占位图。</summary>
     public const string RiftWill = "riftwill";
-    /// <summary>老板娘：酒馆 NPC。立绘复用前台小姐（MercPortraitSprites 已 alias 到 receptionist）。</summary>
+    /// <summary>老板娘：酒馆 NPC。2026-10-15 起用专属立绘（酒吧老板娘.png，经 MercPortraitSprites landlady 通道）。</summary>
     public const string Innkeeper = "innkeeper";
 
     /// <summary>

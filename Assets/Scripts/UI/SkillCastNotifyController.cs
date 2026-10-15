@@ -243,6 +243,10 @@ public class SkillCastNotifyController : MonoBehaviour
         Text lb;
         if (!BindVisual(rt, out bg, out ic, out lb)) return;
 
+        // 【2026-10-15 主人报「放技能头像没出现」根因】模板在 Awake 里 SetActive(false) 作克隆源，
+        // Instantiate 会继承禁用状态；池里回收件也是禁用态 —— 不重新激活，横条永远不可见。
+        rt.gameObject.SetActive(true);
+
         float finalX = isEnemy ? -_tplFinalPos.x : _tplFinalPos.x;
         finalX = ClampToSafeArea(finalX);
         float startX = isEnemy ? -StartOffsetX : StartOffsetX;

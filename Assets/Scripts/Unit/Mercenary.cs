@@ -144,14 +144,15 @@ public class Mercenary : UnitBase
             PassiveRunner.OnHpChanged();
     }
 
-    /// <summary>站立播受击动画；走路只闪白。出手由 PlayAttack→InterruptDamaged 打断。</summary>
+    /// <summary>
+    /// 受击一律播 DAMAGED 动画 + 白闪（2026-10-15：原先走路只闪白、站立才播，现统一播放）。
+    /// 轮到攻击时攻击动画立即打断 DAMAGED（PlayAttack→InterruptDamaged）。
+    /// </summary>
     protected override void PlayHitReaction()
     {
         if (unitAnim == null) return;
-        bool playAnim = !unitAnim.IsMoving;
-        unitAnim.PlayDamaged(playHitAnim: playAnim);
-        if (playAnim)
-            _stunAnimTimer = 0.35f;
+        unitAnim.PlayDamaged(playHitAnim: true);
+        _stunAnimTimer = 0.35f;
     }
 
     void WirePassiveOnAttack()
@@ -691,8 +692,8 @@ public class Mercenary : UnitBase
             if (IsInBasicAttackRange(target))
             {
                 if (rb != null) rb.velocity = Vector2.zero;
+                // 受击动画不挡出手：轮到攻击时 PlayAttack 立即打断 DAMAGED
                 if (attackCd <= 0f
-                    && (unitAnim == null || !unitAnim.InDamagedRecovery())
                     && (unitAnim == null || !unitAnim.InAttackLock))
                 {
                     Attack(target);

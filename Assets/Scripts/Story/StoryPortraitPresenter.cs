@@ -80,12 +80,13 @@ public static class StoryPortraitPresenter
         Sprite leftSp, Sprite rightSp,
         LayoutSnapshot leftLay, LayoutSnapshot rightLay,
         StoryPortraitLayout.Profile profile,
-        Context ctx)
+        Context ctx,
+        string leftPortraitId, string rightPortraitId)
     {
         ResetHost(left, leftLay);
         ResetHost(right, rightLay);
-        ApplySlot(left, leftSp, Slot.Left, profile, ctx);
-        ApplySlot(right, rightSp, Slot.Right, profile, ctx);
+        ApplySlot(left, leftSp, Slot.Left, profile, ctx, leftPortraitId);
+        ApplySlot(right, rightSp, Slot.Right, profile, ctx, rightPortraitId);
     }
 
     public static void ApplySolo(
@@ -93,16 +94,17 @@ public static class StoryPortraitPresenter
         Sprite sp,
         LayoutSnapshot centerLay, LayoutSnapshot hideLay,
         StoryPortraitLayout.Profile profile,
-        Context ctx)
+        Context ctx,
+        string portraitId)
     {
         ResetHost(center, centerLay);
         ResetHost(hideSide, hideLay);
         if (hideSide != null)
             hideSide.gameObject.SetActive(false);
-        ApplySlot(center, sp, Slot.Center, profile, ctx);
+        ApplySlot(center, sp, Slot.Center, profile, ctx, portraitId);
     }
 
-    static void ApplySlot(Image img, Sprite sp, Slot slot, StoryPortraitLayout.Profile profile, Context ctx)
+    static void ApplySlot(Image img, Sprite sp, Slot slot, StoryPortraitLayout.Profile profile, Context ctx, string portraitId)
     {
         if (img == null) return;
         img.sprite = sp;
@@ -125,12 +127,15 @@ public static class StoryPortraitPresenter
         // 立绘等比放大，标准屏保持原效果；系数下限 1，**只放大不缩小**（修「大分辨率机上立绘偏小」）。
         float scale = ResolvePortraitScale(ctx);
         ApplyNativePixelSize(img, scale, out float w, out float h);
-        EnsureClipMask(img, profile.clipHeightFrac, w, h);
+        EnsureClipMask(img, StoryPortraitLayout.GetClipHeightFrac(portraitId), w, h);
 
         var hostRt = GetHostRt(img);
         hostRt.pivot = new Vector2(0.5f, 0f);
         hostRt.anchorMin = hostRt.anchorMax = new Vector2(anchorX, 0f);
-        hostRt.anchoredPosition = new Vector2(0f, ResolveBottomY(hostRt, profile, ctx));
+        // 【2026-10-15 主人】引导局坐姿立绘（会长/前台小姐）再上抬 80；其他人物不在名单、恒 0，位置照旧
+        float bottomY = ResolveBottomY(hostRt, profile, ctx, portraitId);
+        bottomY += StoryPortraitLayout.GetTutorialDeskLiftPx(portraitId);
+        hostRt.anchoredPosition = new Vector2(0f, bottomY);
         ctx.PlaceBehindDialogueBox?.Invoke(hostRt);
         ClampInsideCanvas(hostRt, ctx.CanvasRt);
     }
@@ -171,7 +176,7 @@ public static class StoryPortraitPresenter
         img.rectTransform.sizeDelta = new Vector2(w * scale, h * scale);
     }
 
-    static float ResolveBottomY(RectTransform hostRt, StoryPortraitLayout.Profile profile, Context ctx)
+    static float ResolveBottomY(RectTransform hostRt, StoryPortraitLayout.Profile profile, Context ctx, string portraitId)
     {
         float canvasH = ctx.CanvasRt != null ? ctx.CanvasRt.rect.height : GameConfig.DESIGN_HEIGHT;
         if (canvasH < 64f) canvasH = GameConfig.DESIGN_HEIGHT;
@@ -185,10 +190,26 @@ public static class StoryPortraitPresenter
             desired = Mathf.Max(desired, boxTop + profile.dialogueTopGapPx);
         }
         desired += profile.bottomOffsetPx;
+        desired += StoryPortraitLayout.GetBottomOffsetPx(portraitId);
+
+        // 【2026-10-15 主人立规矩：遮罩永远不要动，动的只是立绘的上下】
+        // 下移补偿只保留给裁切窗=整图的坐姿立绘（会长/前台小姐）：不补则 0.72 基准的可见顶边
+        // 整体上浮（522 高 ≈146px）。站立立绘裁切窗已在 0.72 原位（切线一直藏在对话框后面，
+        // 脚从来是遮罩在框后裁掉的=审定机制），不再做任何补偿——主人报「脚露出来」，
+        // 救法是遮罩回原位，禁止钳窗底/挪遮罩（上一版那么修已被主人否掉）。
+        float hostH = hostRt != null ? hostRt.sizeDelta.y : 0f;
+        float maskFrac = Mathf.Clamp(StoryPortraitLayout.GetClipHeightFrac(portraitId), 0.01f, 1f);
+        if (hostH > 1f && maskFrac >= 0.99f && profile.clipHeightFrac > 0.01f && profile.clipHeightFrac < 1f)
+        {
+            float fullH = hostH / maskFrac;
+            desired -= fullH * (1f - profile.clipHeightFrac);
+        }
 
         float top = canvasH - 24f;
         float maxY = top - hostRt.sizeDelta.y;
-        return Mathf.Clamp(desired, 0f, Mathf.Max(0f, maxY));
+        // 只封顶（顶边不入屏顶 24px 安全区），放开 0 下限：整图高度可超画布，
+        // 底部允许垂到画布外/对话框后面；保留 0 下限会把超高立绘整体压到 y=0、顶边反被屏幕裁掉。
+        return Mathf.Min(desired, maxY);
     }
 
     public static RectTransform GetHostRtPublic(Image portrait) => GetHostRt(portrait);

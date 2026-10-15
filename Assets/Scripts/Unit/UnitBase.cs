@@ -504,8 +504,8 @@ public abstract class UnitBase : MonoBehaviour
             {
                 // 攻击范围内停步输出，避免贴到目标中心导致双方朝向来回抖
                 if (rb != null) rb.velocity = Vector2.zero;
-                if (attackCd <= 0 && (unitAnim == null || !unitAnim.InDamagedRecovery())
-                    && (unitAnim == null || !unitAnim.InAttackLock))
+                // 受击动画不挡出手：轮到攻击时 PlayAttack 立即打断 DAMAGED（TryHoldDuringDamaged 同步放行）
+                if (attackCd <= 0 && (unitAnim == null || !unitAnim.InAttackLock))
                 {
                     Attack(target);
                     attackCd = GetAttackCooldown();
@@ -591,10 +591,17 @@ public abstract class UnitBase : MonoBehaviour
         return true;
     }
 
-    /// <summary>受击硬直：清零速度并停移动动画，避免前进滑步。</summary>
+    /// <summary>
+    /// 受击硬直：清零速度并停移动动画，避免前进滑步。
+    /// 但「轮到攻击」（攻击 CD 已好、目标就在射程内、当前不在出手中）时不硬直——
+    /// 立即放行给下方攻击判定，Attack→PlayAttack 会打断 DAMAGED 改播攻击动画。
+    /// </summary>
     protected bool TryHoldDuringDamaged()
     {
         if (unitAnim == null || !unitAnim.InDamagedRecovery()) return false;
+
+        if (AttackDueDuringDamaged())
+            return false;
 
         if (rb != null) rb.velocity = Vector2.zero;
         unitAnim.SetMove(false, facingDir);
@@ -602,6 +609,20 @@ public abstract class UnitBase : MonoBehaviour
             ClampToScreen();
         ApplyLaneY(Time.deltaTime);
         return true;
+    }
+
+    /// <summary>
+    /// 受击动画播放中是否「轮到攻击」：CD 已好、当前锁定目标有效且就在普攻射程内、没在另一击出手锁中。
+    /// 命中即放行，由 PlayAttack 立即打断 DAMAGED。
+    /// </summary>
+    protected bool AttackDueDuringDamaged()
+    {
+        return attackCd <= 0f
+            && unitAnim != null && !unitAnim.InAttackLock
+            && target != null && !target.isDead
+            && target.gameObject.activeInHierarchy
+            && target.isAlly != isAlly
+            && IsInBasicAttackRange(target);
     }
 
     protected static bool HasAliveEnemyOnField()

@@ -122,7 +122,8 @@ public static class PlayerSkillDefs
             kind = Kind.Heal,
             desc = "给当前生命比例最低的我方单位回血（玩家或佣兵）。",
             numbers = "恢复目标 30% 最大生命",
-            cooldown = 12f,
+            // 【2026-10-15 主人拍板】CD 12 → 24（主人：太快了，再变慢一倍）；与 player_skills.csv 同值。
+            cooldown = 24f,
             duration = 0f,
             useHint = "血量危险时手动点击",
             unlockChapter = 0,

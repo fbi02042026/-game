@@ -559,7 +559,9 @@ public class DialogueUI : MonoBehaviour
         bool speakerIsInitiator = true,
         Action onAdvance = null,
         Action onSkip = null,
-        bool soloCentered = false)
+        bool soloCentered = false,
+        string initiatorPortraitId = null,
+        string otherPortraitId = null)
     {
         _initiatorName = initiatorName ?? "";
         _otherName = otherName ?? "";
@@ -640,10 +642,11 @@ public class DialogueUI : MonoBehaviour
                 }
                 else
                 {
+                    string soloPortraitId = !string.IsNullOrEmpty(otherPortraitId) ? otherPortraitId : initiatorPortraitId;
                     StoryPortraitPresenter.ApplySolo(
                         rightPortraitImage, leftPortraitImage, sp,
                         _rightPortraitLayout, _leftPortraitLayout,
-                        _portraitProfile, ctx);
+                        _portraitProfile, ctx, soloPortraitId);
                 }
                 ApplySoloNamePlate(sp != null);
             }
@@ -656,7 +659,7 @@ public class DialogueUI : MonoBehaviour
                     leftPortraitImage, rightPortraitImage,
                     initiatorPortrait, otherPortrait,
                     _leftPortraitLayout, _rightPortraitLayout,
-                    _portraitProfile, ctx);
+                    _portraitProfile, ctx, initiatorPortraitId, otherPortraitId);
                 SetNamePlateIconVisible(leftNameIcon, false);
                 SetNamePlateIconVisible(rightNameIcon, false);
             }

@@ -41,6 +41,12 @@ public class UnitAnimation : MonoBehaviour
     /// <summary>攻击动画倍速（>1 时动画锁已同步压短）；攻击锁结束复位为 1，不影响常规攻击。</summary>
     private float _attackSpeedMul = 1f;
 
+    // 受击动画锁（DAMAGED）：播放期间禁止 SetMove 切走动画；自然播完恢复 IDLE/MOVE；
+    // 轮到攻击时 PlayAttack/PlaySkillCast → InterruptDamaged 立即清锁并切 ATTACK。
+    private float _hitAnimLock;
+    private float _hitAnimDuration = HitAnimFallbackDuration;
+    private const float HitAnimFallbackDuration = 0.34f;
+
     // ===== 程序化动画（怪物用）=====
     [Header("程序化动画参数（怪物自动启用）")]
     [Tooltip("站立呼吸速度")]
@@ -378,6 +384,18 @@ public class UnitAnimation : MonoBehaviour
             }
         }
 
+        // 受击动画锁递减：自然播完（没被攻击打断）后按当前移动状态接回 IDLE/MOVE
+        if (_hitAnimLock > 0f)
+        {
+            float prevHit = _hitAnimLock;
+            _hitAnimLock -= Time.deltaTime;
+            if (prevHit > 0f && _hitAnimLock <= 0f && !_isDead)
+            {
+                if (_isMoving) ForceResumeMoveAnim();
+                else ForceResumeIdleAnim();
+            }
+        }
+
         // 程序化动画更新
         if (_procMode)
             UpdateProcedural();
@@ -560,6 +578,14 @@ public class UnitAnimation : MonoBehaviour
             return;
         }
 
+        // 受击动画期间不切 MOVE/IDLE，避免 DAMAGED 被立刻盖掉；
+        // 自然播完由 _hitAnimLock 结束逻辑接回，轮到攻击则被 ATTACK 打断
+        if (_hitAnimLock > 0f)
+        {
+            ApplyMoveAnimSpeed(isMoving);
+            return;
+        }
+
         // SPUM模式
         if (_spum != null && _spum.OverrideController != null)
         {
@@ -670,8 +696,8 @@ public class UnitAnimation : MonoBehaviour
 
     void ApplyMoveAnimSpeed(bool isMoving)
     {
-        // 受击 recovery 期间保持 DAMAGED 专用速率，不被移动倍率压慢
-        if (InDamagedRecovery())
+        // 受击 recovery / DAMAGED 动画期间保持受击专用速率，不被移动倍率压慢
+        if (InDamagedRecovery() || _hitAnimLock > 0f)
         {
             ApplyAnimatorSpeed(GameConfig.DAMAGED_ANIM_SPEED);
             return;
@@ -702,7 +728,7 @@ public class UnitAnimation : MonoBehaviour
         ApplyHitSquash();
 
         // 受击中每帧锁住 DAMAGED 速率；移动中锁移动倍率（SPUM PlayAnimation 可能把 speed 打回 1）
-        if (!_isDead && InDamagedRecovery())
+        if (!_isDead && (InDamagedRecovery() || _hitAnimLock > 0f))
             ApplyAnimatorSpeed(GameConfig.DAMAGED_ANIM_SPEED);
         else if (_isMoving && !_isDead)
             ApplyMoveAnimSpeed(true);
@@ -820,10 +846,12 @@ public class UnitAnimation : MonoBehaviour
     /// <summary>攻击动画锁定中（出手未结束，AI 不得换目标/滑步）。</summary>
     public bool InAttackLock => _attackAnimLock > 0f;
 
-    /// <summary>攻击出手时打断受击白闪与 recovery。</summary>
+    /// <summary>攻击出手时打断受击白闪、recovery 与 DAMAGED 动画（轮到攻击立即切攻击动作）。</summary>
     public void InterruptDamaged()
     {
         _damagedRecoveryUntil = 0f;
+        // 直接清 0：攻击动画立刻接管，不触发 Update 里「受击锁自然结束 → 回 IDLE」的恢复
+        _hitAnimLock = 0f;
         _spumFlashGen++;
         _hitFlashRunning = false;
         RestoreSpumFlashColors();
@@ -923,6 +951,9 @@ public class UnitAnimation : MonoBehaviour
     {
         if (_isDead) return;
 
+        // 技能出手同样要立即打断 DAMAGED（与普攻 PlayAttack 同口径）
+        InterruptDamaged();
+
         _attackAnimDuration = Mathf.Max(0.2f, procSkillDuration);
         _attackAnimLock = _attackAnimDuration;
         _procAttackKit = kit;
@@ -1015,6 +1046,8 @@ public class UnitAnimation : MonoBehaviour
     {
         _isDead = true;
         _isMoving = false;
+        _hitAnimLock = 0f;
+        _damagedRecoveryUntil = 0f;
         _procDeathTime = 0f;
         _procDeathCritKill = isCritKill;
         if (facingDir != 0) _lastFacingDir = facingDir;
@@ -1093,11 +1126,16 @@ public class UnitAnimation : MonoBehaviour
     }
 
     /// <summary>
-    /// 播放受伤。playHitAnim=false 时只闪白不播 DAMAGED 动画（玩家 / 佣兵走路）。
+    /// 播放受伤。playHitAnim=false 时只闪白不播 DAMAGED 动画。
+    /// DAMAGED 播放期间轮到攻击：PlayAttack/PlaySkillCast 会立即打断它改播攻击动画。
     /// </summary>
     public void PlayDamaged(bool playHitAnim = true)
     {
         if (_isDead) return;
+
+        // 正在出手（攻击动画锁内）受击：只闪白，绝不反向打断攻击动画
+        if (playHitAnim && _attackAnimLock > 0f)
+            playHitAnim = false;
 
         // 播受击动画、或站立仅闪白：短硬直防滑步；走路仅闪白不锁移动
         bool lockRecovery = playHitAnim || !_isMoving;
@@ -1111,21 +1149,36 @@ public class UnitAnimation : MonoBehaviour
 
         if (playHitAnim)
         {
-            // SPUM模式
+            bool clipPlayed = false;
+            float hitLen = HitAnimFallbackDuration;
+            // SPUM模式（玩家、佣兵）
             if (_spum != null && _spum.OverrideController != null)
             {
+                var damagedList = _spum.DAMAGED_List;
                 try
                 {
                     _spum.PlayAnimation(PlayerState.DAMAGED, 0);
+                    clipPlayed = damagedList != null && damagedList.Count > 0 && damagedList[0] != null;
+                    if (clipPlayed && damagedList[0].length > 0.05f)
+                        hitLen = damagedList[0].length;
                 }
-                catch { }
+                catch { clipPlayed = false; }
             }
-            // 原生Animator模式
+            // 原生Animator模式（触发器对怪物片段控制器是安全空操作，保持旧行为照刷）
             else if (_animator != null)
             {
                 SetTriggerSafe("Damaged");
                 SetTriggerSafe("4_Damaged");
                 SetTriggerSafe("Hit");
+                // 怪物片段控制器没有 DAMAGED 状态：不武装受击动画锁，只保留旧的提速/闪白
+                clipPlayed = !_monsterClipMode;
+            }
+
+            if (clipPlayed)
+            {
+                // 动画锁与受击速率（1.2 倍速）对齐：播完前不许 SetMove 切走，自然播完自动接回 IDLE/MOVE
+                _hitAnimDuration = hitLen / Mathf.Max(0.01f, GameConfig.DAMAGED_ANIM_SPEED);
+                _hitAnimLock = _hitAnimDuration;
             }
             ApplyAnimatorSpeed(GameConfig.DAMAGED_ANIM_SPEED);
         }
@@ -1359,6 +1412,8 @@ public class UnitAnimation : MonoBehaviour
         _isDead = false;
         _isMoving = false;
         _attackAnimLock = 0;
+        _hitAnimLock = 0f;
+        _damagedRecoveryUntil = 0f;
         _procDeathTime = 0f;
         _procDeathCritKill = false;
 

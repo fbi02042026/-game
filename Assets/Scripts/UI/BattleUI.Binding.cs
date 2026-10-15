@@ -197,6 +197,8 @@ public partial class BattleUI : MonoBehaviour
         BindCharacterSlot(ref playerSlot, "PlayerSlot", true);
         BindCharacterSlot(ref mercSlot1, "MercSlot1", false);
         BindCharacterSlot(ref mercSlot2, "MercSlot2", false);
+        // 【2026-10-15 主人拍板】佣兵头像点击 = 查看「获得佣兵」详情（入口已从抽中默认弹出迁来）
+        EnsureMercAvatarClick();
 
         BindSkillAvatar(ref playerSkillAvatar, "SkillBtn1", "PlayerSkill");
         BindSkillAvatar(ref merc1SkillAvatar, "SkillBtn2", "MercSkill1");

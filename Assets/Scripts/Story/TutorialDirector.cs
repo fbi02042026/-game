@@ -77,6 +77,11 @@ public class TutorialDirector : Singleton<TutorialDirector>
         //（自身负责高亮圈 + 半透明遮罩 + 气泡；已完成 / 已跳过则什么也不做）
         FirstRunGuide.NotifyTownReady();
 
+        // 【2026-10-15 主人拍板】主界面闲置软引导起嗓子：玩家在大厅停留超过阈值 →
+        // 弹一条「没点过的底栏入口」软引导，真实点过一次该入口就永久关闭（TownIdleNudge 文档）。
+        // 强引导没走完时它整条让位，不会和上面这层打架。
+        TownIdleNudge.Ensure();
+
         if (StoryProgress.TutorialOutroPending && StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)
             StoryDirector.Instance.StopPlaying();
         else if (StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)
@@ -165,9 +170,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
     /// <summary>
     /// 首次强制软引导（FirstRunGuide）是否还在负责这一步。
-    /// 负责时这里的旧「弱提示 / 硬提示」一律让位，不然同一个位置会叠两层指引。
+    /// 负责时旧的「弱提示 / 硬提示」一律让位，不然同一个位置会叠两层指引
+    /// （2026-10-15 主人报「上面一个引导 下面一个引导」后，PlayerJobSelectUI 的硬提示也改挂这个闸门）。
     /// </summary>
-    static bool GuideCovers(FirstRunGuide.GuideStep step)
+    public static bool GuideCovers(FirstRunGuide.GuideStep step)
     {
         var guide = FirstRunGuide.Instance;
         return guide != null && !guide.IsFinished && !guide.IsStepDone(step);
@@ -593,6 +599,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (bm != null) bm.UnitsCanAct = true;
         ui?.UpdateCharacterSlots();
 
+        // —— 3c)【2026-10-15 主人拍板】引导新一步：点佣兵头像看新伙伴 ——
+        // 获得佣兵弹窗已不随抽奖默认弹出（改点头像弹，见 BattleUI.OnMercAvatarClicked），
+        // 这里高亮佣兵头像教玩家点一次：点了弹详情，关掉后继续；60s 没点也放行不卡流程。
+        yield return CoWaitMercAvatarTap(hint, ui);
+        hint.Hide();
+
         // —— 4) 第三波：塔克已在队，跟着一起打 ——
         // 2026-10-07 主人拍板：塔克第 2 抽就招募入队了，原来这段
         //「牧师在前方眩晕被围殴 → 清场 → 三段对白 → 入队」**整段删除**，第 4 拍改成普通波次。
@@ -602,7 +614,23 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         // 塔克已经在队里了：这里只从佣兵管理器取场上那个单位（精英宿敌对白 / 压轴 / 撤离要用）
         var activeMercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-        var merc = (activeMercs != null && activeMercs.Count > 0) ? activeMercs[0] : null;
+        // 【2026-10-15 主人拍板】「跟紧我，别走散」必须**塔克**说：按引导佣兵 hireId（H003）
+        // 从在场佣兵里点名，不再按槽位 [0] 取（防以后在场顺序变化把台词安到别人头上）。
+        // 找不到 hireId 精确命中时退第一只（引导局在场的本来就是塔克）；一只都没有 → 报出来，台词由 TalkBlock 跳过。
+        var merc = (Mercenary)null;
+        if (activeMercs != null)
+        {
+            string tutHireId = StoryProgress.TutorialMercHireId;
+            for (int i = 0; i < activeMercs.Count; i++)
+            {
+                var m0 = activeMercs[i];
+                if (m0 == null) continue;
+                if (merc == null) merc = m0;
+                if (!string.IsNullOrEmpty(tutHireId) && m0.hireId == tutHireId) { merc = m0; break; }
+            }
+        }
+        if (merc == null)
+            Debug.LogError("[Tutorial] 「跟紧我，别走散」找不到在场塔克（引导佣兵没在场），台词会被跳过");
 
         // 【2026-10-07 主人拍板「数据表最好不要为了引导改动」】
         // 这一拍直接用表里现成的 **order=5 普通波**（4 只，含 1 远程），一个数字都不改；
@@ -730,18 +758,47 @@ public class TutorialDirector : Singleton<TutorialDirector>
         headTalk?.HideNow();
         hint.Hide();
 
-        // —— 14)【2026-10-09 主人拍板】结局合并成一波：塔克说完「走吧。」直接回城结算 ——
-        // 原来这里还有一拍「压轴夹击 + 让玩家自己点撤离」的教学（tutorial_battle.csv order=6 的那一波），
-        // 主人拍板整段删掉 —— 引导的最后一波就是上面的精英宿敌波。
-        // 这里先停一下让最后两句台词读完，再自动触发撤离结算（走给引导用的那条 BattleSettlement 结算路线）。
+        // —— 14)【2026-10-15 主人拍板】引导结尾也走传送门：「所有打完一关后都出现传送门，
+        // 进传送门的步骤」照旧（玩家先走、佣兵隔一个身位跟着进，各播一次传送特效）。
+        // 全员进完经 BattleManager 的引导分支接撤离结算（BattleSettlement → 回城）。
+        // 【2026-10-09 旧口径】塔克说完「走吧。」直接回城结算、没有门——已被上面 10-15 拍板覆盖。
+        // 这里先停一下让最后两句台词读完，再开门。
         yield return new WaitForSecondsRealtime(0.6f);
         if (bm != null)
-            bm.TriggerEvacuation();
+            bm.BeginTutorialPortalExit();
         else
-            Debug.LogError("[Tutorial] 引导收尾失败：BattleManager 为空，无法触发回城结算");
+            Debug.LogError("[Tutorial] 引导收尾失败：BattleManager 为空，无法触发传送门出口");
 
         _battleTutorialFlowStarted = false;
         _flow = null;
+    }
+
+    // ============================================================
+    // 【2026-10-15 主人拍板】引导新一步：点佣兵头像看新伙伴
+    // 获得佣兵弹窗改为点头像弹出（不再抽中默认弹，见 BattleUI.OnMercAvatarClicked /
+    // MercObtainPopupUI.ShowFromEntry）。引导局在二抽（塔克入队）后高亮佣兵头像，
+    // 等玩家点一次；BattleUI.OnMercAvatarClicked 点到人后回调 NotifyMercAvatarTapped()。
+    // 60s 没点也放行（与引导既有超时口径一致），绝不卡死流程。
+    // ============================================================
+    bool _mercAvatarTapped;
+
+    /// <summary>BattleUI.OnMercAvatarClicked 点佣兵头像后回调（引导这一步等的就是这一下）。</summary>
+    public void NotifyMercAvatarTapped() => _mercAvatarTapped = true;
+
+    IEnumerator CoWaitMercAvatarTap(TutorialHintUI hint, BattleUI ui, float timeoutSec = 60f)
+    {
+        _mercAvatarTapped = false;
+        var slotRt = (ui != null && ui.mercSlot1 != null && ui.mercSlot1.root != null)
+            ? ui.mercSlot1.root.transform as RectTransform : null;
+        hint.ShowHard("点一点新伙伴的头像，看看他的底细。", slotRt);
+        float t = 0f;
+        while (!_mercAvatarTapped && t < timeoutSec)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (!_mercAvatarTapped)
+            Debug.LogWarning("[Tutorial] 等玩家点佣兵头像超时（60s），放行继续流程");
     }
 
     static void HaltUnit(UnitBase u)

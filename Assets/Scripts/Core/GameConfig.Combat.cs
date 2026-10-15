@@ -52,6 +52,12 @@ public static partial class GameConfig
         public const int DraftOddsPopup = 926;
         public const int BattleLegacyPool = 940;
         public const int BattleHud = 950;
+        /// <summary>
+        /// 进关抽奖面板 / 老虎机（SlotOfferUI / SlotMachineUI）：2026-10-15 改摄像机模式后，
+        /// 层级须高于 <see cref="BattleHud"/>(950) 才盖得住 HUD（2026-09-30 主人实测「看不见抽奖按钮」），
+        /// 低于 BattleMilestone(970)。
+        /// </summary>
+        public const int SlotOffer = 965;
         public const int BattleLegacyChoose = 960;
         public const int BattleMilestone = 970;
         public const int BattleEvacuate = 980;

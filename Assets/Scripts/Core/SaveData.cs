@@ -212,10 +212,10 @@ public class SaveData
     public List<StringIdEntry> unlockedMercEntries = new List<StringIdEntry>();
     /// <summary>【2026-10-13 主人拍板】佣兵抽奖池（HireId）：战斗内招募只从池子里的出。格子制，见 <see cref="DrawPoolMaxSlots"/>。</summary>
     public List<StringIdEntry> mercDrawPoolEntries = new List<StringIdEntry>();
-    /// <summary>初期开放的抽奖池格数（总容量 6，见 <see cref="DrawPoolMaxSlots"/>；开放进度见 <see cref="DrawPoolSlots"/>）。</summary>
-    public const int DrawPoolDefaultSlots = 4;
-    /// <summary>抽奖池总容量（UI 画 6 格，后期逐格开放）。</summary>
-    public const int DrawPoolMaxSlots = 6;
+    /// <summary>初期开放的抽奖池格数（总容量 5，见 <see cref="DrawPoolMaxSlots"/>；开放进度见 <see cref="DrawPoolSlots"/>）。</summary>
+    public const int DrawPoolDefaultSlots = 3;
+    /// <summary>抽奖池总容量（UI 画 5 格，后期逐格开放）。</summary>
+    public const int DrawPoolMaxSlots = 5;
     [NonSerialized] public HashSet<string> seenMonsterIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> viewedMonsterIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> seenMercIds = new HashSet<string>();

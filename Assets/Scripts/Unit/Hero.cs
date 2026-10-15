@@ -56,11 +56,14 @@ public class Hero : UnitBase
             Instance = null;
     }
 
-    /// <summary>玩家受击：只闪白，不播 DAMAGED 动画。</summary>
+    /// <summary>
+    /// 玩家受击：播 DAMAGED 受击动画 + 白闪（含移动中；摇杆手动走位只不做脚步硬直）。
+    /// 轮到攻击时攻击动画立即打断 DAMAGED（PlayAttack→InterruptDamaged）。
+    /// </summary>
     protected override void PlayHitReaction()
     {
         if (unitAnim != null)
-            unitAnim.PlayDamaged(playHitAnim: false);
+            unitAnim.PlayDamaged(playHitAnim: true);
     }
 
     public void InitNewRun()
@@ -400,7 +403,7 @@ public class Hero : UnitBase
 
         if (!_manualMove && TryHoldDuringAttack())
             return;
-        // 手动移动时不受击硬直打断走步（仍白闪）
+        // 手动移动时不做受击脚步硬直（继续走位；DAMAGED 动画照播，UnitAnimation 内部保证播完/被攻击打断）
         if (!_manualMove && TryHoldDuringDamaged())
             return;
 
@@ -450,7 +453,6 @@ public class Hero : UnitBase
             target = near;
             if (near != null && IsInBasicAttackRange(near)
                 && attackCd <= 0f
-                && (unitAnim == null || !unitAnim.InDamagedRecovery())
                 && (unitAnim == null || !unitAnim.InAttackLock))
             {
                 if (Mathf.Abs(_manualDir.x) <= 0.05f)
@@ -477,7 +479,6 @@ public class Hero : UnitBase
             target = nearHold;
             if (nearHold != null && IsInBasicAttackRange(nearHold)
                 && attackCd <= 0f
-                && (unitAnim == null || !unitAnim.InDamagedRecovery())
                 && (unitAnim == null || !unitAnim.InAttackLock))
             {
                 FaceToward(nearHold);
@@ -533,8 +534,8 @@ public class Hero : UnitBase
             if (IsInBasicAttackRange(target))
             {
                 if (rb != null) rb.velocity = Vector2.zero;
-                if (attackCd <= 0 && (unitAnim == null || !unitAnim.InDamagedRecovery())
-                    && (unitAnim == null || !unitAnim.InAttackLock))
+                // 受击动画不挡出手：轮到攻击时 PlayAttack 立即打断 DAMAGED
+                if (attackCd <= 0 && (unitAnim == null || !unitAnim.InAttackLock))
                 {
                     Attack(target);
                     attackCd = GetAttackCooldown();

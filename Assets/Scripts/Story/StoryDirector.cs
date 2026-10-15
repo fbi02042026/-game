@@ -233,7 +233,9 @@ public class StoryDirector : Singleton<StoryDirector>
                     advanced = true;
                     skipRest = true;
                 },
-                soloCentered: b.soloCentered);
+                soloCentered: b.soloCentered,
+                initiatorPortraitId: b.leftPortraitId,
+                otherPortraitId: b.rightPortraitId);
             if (b.speaker == 0)
                 ui.SetSpeakerHighlight(0);
 

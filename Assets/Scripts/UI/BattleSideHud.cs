@@ -20,12 +20,13 @@ public class BattleSideHud : MonoBehaviour
     Text _waveHint;
     CanvasGroup _waveGroup;
 
-    // 击破缩放：1 → 弹到 1.5 → 慢收到 0.8 → 再隐藏（不边缩边淡）
+    // 击破缩放：【2026-10-15 主人拍板】每杀一次「字和数字」放大一下 → 立马缩回原大 → 短暂停留后消失。
+    // （旧版是弹到 1.5 后用 3 秒慢慢缩到 0.8，主人嫌拖沓）
     const float ComboScalePop = 1.5f;
-    const float ComboScaleEnd = 0.8f;
-    const float ComboPopDur = 0.08f;
-    const float ComboShrinkDur = 3f;
-    const float ComboHideAfterShrink = 0.12f;
+    const float ComboScaleEnd = 1f;      // 缩回原大（不再缩到 0.8）
+    const float ComboPopDur = 0.08f;     // 放大
+    const float ComboShrinkDur = 0.18f;  // 立马缩回
+    const float ComboHideAfterShrink = 0.6f;  // 缩回后再看 0.6s 才消失
 
     enum ComboAnimPhase { Hidden, Pop, Shrink, Hold, Gone }
     ComboAnimPhase _comboPhase = ComboAnimPhase.Hidden;
@@ -73,7 +74,9 @@ public class BattleSideHud : MonoBehaviour
         root.anchorMax = new Vector2(1f, 1f);
         root.pivot = new Vector2(1f, 1f);
         root.sizeDelta = new Vector2(200f, 250f);
-        root.anchoredPosition = new Vector2(-12f, -200f);
+        // 【2026-10-15 主人拍板】连杀挪到战斗场景**右上角**（原 y=-200 挂在右半腰）。
+        // 距顶 140：让开 TopBar / 右上角设置按钮那一带；想再挪只改这一个数。
+        root.anchoredPosition = new Vector2(-12f, -140f);
 
         // —— 击破（无圆环倒计时）——
         var comboGo = CreatePanel("ComboPanel", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
@@ -216,8 +219,7 @@ public class BattleSideHud : MonoBehaviour
                 _comboAnimT = 0f;
                 _comboScale = ComboScaleEnd;
             }
-        }
-        else if (_comboPhase == ComboAnimPhase.Hold)
+        }        else if (_comboPhase == ComboAnimPhase.Hold)
         {
             _comboScale = ComboScaleEnd;
             _comboGroup.alpha = 1f;

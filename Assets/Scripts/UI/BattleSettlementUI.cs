@@ -507,19 +507,10 @@ public class BattleSettlementUI : MonoBehaviour
         if (count != null)
         {
             count.text = data.count > 1 ? data.count.ToString() : "";
-            // 【2026-10-14 主人拍板】数量放图标**下方**，不要叠在图标里。
-            // 以 Icon 为参照：Count 挂到 Icon 底边中点下方（不回改预制体）。
-            var iconRt = iconTf as RectTransform;
-            var countRt = countTf as RectTransform;
-            if (iconRt != null && countRt != null)
-            {
-                if (!countTf.IsChildOf(iconTf))
-                    countRt.SetParent(iconRt, false);
-                countRt.anchorMin = countRt.anchorMax = new Vector2(0.5f, 0f);
-                countRt.pivot = new Vector2(0.5f, 1f);
-                countRt.anchoredPosition = new Vector2(0f, -2f);
-                count.alignment = TextAnchor.MiddleCenter;
-            }
+            // 【2026-10-15 主人拍板】数量位置以**预制体**为准（铁律 9）：RewardCellTemplate/Count
+            // 本就锚在格子右下角（锚(1,0)/pos(-4,-2.1)/pivot(1,0)），运行时候补路径（CreateRewardCellRuntime）
+            // 也是右下角。2026-10-14 那段「Count 强制 reparent 到 Icon 下方居中」的运行时覆盖已按主人
+            // 指示删除（实测还是不对）—— 代码不再动 Count 的父子/锚点/对齐，预制体摆哪就哪。
         }
 
         // 【2026-10-12 主人拍板】物品格子下面加名字（预制体/运行时两种 cell 结构都有 Name 节点）

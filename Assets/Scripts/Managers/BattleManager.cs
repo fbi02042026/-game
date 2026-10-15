@@ -564,6 +564,11 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     private bool _heroEnteredPortal;
     private float _heroEnteredAt;
     private float _portalOpenedAt;
+    /// <summary>
+    /// 【2026-10-15 主人拍板】引导结尾也走传送门（「所有打完一关后都出现传送门」）：
+    /// true = 这个门是引导局的出口，全员进门后不走正常关清场链，直接接引导撤离结算（settlement → 回城）。
+    /// </summary>
+    private bool _tutorialPortalPending;
     /// <summary>玩家进门后，最多再等佣兵这么久（秒）—— 超时也走结算，绝不把玩家锁在门口。</summary>
     const float PortalMercWaitTimeout = 2.5f;
 
@@ -2991,19 +2996,15 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         else
         {
             // 【2026-10-14 主人拍板】佣兵/技能**不再弹开奖卡**（主人原话「最开始那个不要了 只要我做的这个」）
-            //   —— 抽中直接弹主人摆的预制体弹窗（huodeyongbing / huodejineng），关掉才 Toast。
-            //   开奖卡只留给金币安慰奖。弹窗要等玩家点「确认」关掉，后面的「点继续」引导字才出现
-            //   （原时序弹窗还开着引导字就盖上来挡住弹窗内容），等待循环在本方法尾部。
-            bool rewardPopupClosed = !(card.Kind == DraftCardKind.MercRecruit
-                || card.Kind == DraftCardKind.SkillNew || card.Kind == DraftCardKind.SkillUp);
+            //   —— 开奖卡只留给金币安慰奖。
+            // 【2026-10-15 主人拍板】获得佣兵弹窗（huodeyongbing）**不再随抽中默认弹出** ——
+            //   入口移到战斗头像栏：点佣兵头像才弹（BattleUI.OnMercAvatarClicked → ShowFromEntry），
+            //   抽中当场只流入队横幅（MercJoinBannerUI 照旧报喜）+ Toast；引导局在二抽后教这一步。
+            bool rewardPopupClosed = !(card.Kind == DraftCardKind.SkillNew || card.Kind == DraftCardKind.SkillUp);
             // 闭包捕获本地副本：别让下一抽改写了 _lastDrawRewardMsg 字段后 Toast 内容串台
             string toastMsg = _lastDrawRewardMsg;
             if (card.Kind == DraftCardKind.MercRecruit)
-                StartCoroutine(MercObtainPopupUI.CoShow(card, () =>
-                {
-                    UIManager.Instance?.ShowToast(toastMsg, true);
-                    rewardPopupClosed = true;
-                }));
+                UIManager.Instance?.ShowToast(toastMsg, true);
             else if (card.Kind == DraftCardKind.SkillNew || card.Kind == DraftCardKind.SkillUp)
                 StartCoroutine(SkillObtainPopupUI.CoShow(card, () =>
                 {
@@ -3565,6 +3566,19 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     {
         if (_stageCleared) return;
         _stageCleared = true;
+        // 【2026-10-15 主人拍板】引导局传送门出口：全员进门 → 引导撤离结算（BattleSettlement → 回城），
+        // 不进下面的正常关清场链（不发关卡奖励 / 不推进章节 / 不演选关）。
+        if (_tutorialPortalPending)
+        {
+            _tutorialPortalPending = false;
+            ResetPortalGateState();
+            isInBattle = false;
+            UnitsCanAct = false;
+            if (hero != null && hero.rb != null) hero.rb.velocity = Vector2.zero;
+            ClearAllMonsters();
+            TriggerTutorialEvacuateWithSettlement();
+            return;
+        }
         // 门收掉 + 进过门的单位重新显示（不还原的话下一关玩家/佣兵是隐形的）
         ResetPortalGateState();
         // 2026-10-06 主人拍板：真正通关一关 → 阵亡过的佣兵养回 30% 血（防 20% 血进场的死亡螺旋）。
@@ -3848,6 +3862,27 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         {
             GameSceneManager.Instance?.LoadTownScene();
         });
+    }
+
+    /// <summary>
+    /// 【2026-10-15 主人拍板】引导结尾传送门出口：「所有打完一关后都出现传送门，进传送门的步骤」照旧 ——
+    /// 玩家先走、佣兵隔一个身位跟着进，每人进门各播一次传送特效（见 <see cref="TickPortalWalkIn"/>）；
+    /// 全员进完（或超时）经 <see cref="FinishStageAfterPortalReached"/> 的引导分支接撤离结算 → 回城。
+    /// 门开不出来也不锁死玩家：LogError 后直接走撤离结算。
+    /// </summary>
+    public void BeginTutorialPortalExit()
+    {
+        if (_tutorialPortalPending) return;
+        _tutorialPortalPending = true;
+        var gate = PortalGate.Open(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
+        if (gate != null)
+        {
+            NotifyChuanSongMenOpened(gate);
+            return;
+        }
+        Debug.LogError("[BattleManager] 引导结尾传送门没开出来（PortalGate.Open 返回空，详见其上一条报错），直接走撤离结算");
+        _tutorialPortalPending = false;
+        TriggerTutorialEvacuateWithSettlement();
     }
 
     /// <summary>

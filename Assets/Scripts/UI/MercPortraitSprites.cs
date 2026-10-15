@@ -34,10 +34,10 @@ public static class MercPortraitSprites
         { "hunter", "C004" },
         { "duyan", "C004" },
         { "npc_duyan", "C004" },
-        // 酒馆老板娘沿用前台立绘（美术已确认复用，不另出图）
-        { "landlady", "receptionist" },
-        { "boss_niang", "receptionist" },
-        { "innkeeper", "receptionist" },
+        // 老板娘专属立绘（2026-10-15 接上，不再复用前台小姐）：Resources/Art/UI/Tavern/酒吧老板娘.png
+        { "landlady", "landlady" },
+        { "boss_niang", "landlady" },
+        { "innkeeper", "landlady" },
     };
 
     public static string NormalizeHireId(string hireIdOrAlias)
@@ -110,10 +110,15 @@ public static class MercPortraitSprites
         if (DeviceParity.EditorFallbackEnabled)
             sp = LoadEditorStand(hireId);
 #endif
+        // 老板娘专属立绘在 Resources/Art/UI/Tavern/，不在 MercStand 目录（2026-10-15 接上）
+        if (sp == null && hireId == "landlady")
+            sp = LoadFromResources("Art/UI/Tavern", "酒吧老板娘");
         if (sp == null)
             sp = LoadFromResources(ContentPaths.Icons.MercStand, hireId);
         if (sp == null)
-            DeviceParity.ReportMissing(ContentPaths.Icons.MercStand + "/" + hireId, "佣兵立绘");
+            DeviceParity.ReportMissing(
+                hireId == "landlady" ? "Art/UI/Tavern/酒吧老板娘" : ContentPaths.Icons.MercStand + "/" + hireId,
+                "佣兵立绘");
         if (sp != null)
             StandCache[hireId] = sp;
         return sp;
@@ -160,6 +165,9 @@ public static class MercPortraitSprites
     {
         if (hireId == "player")
             return LoadEditorSprite(ArtStandDir + "/佣兵立绘_玩家.png");
+        // 老板娘专属立绘（2026-10-15）：只在 Resources/Art/UI/Tavern/，不复制进美术源目录
+        if (hireId == "landlady")
+            return LoadEditorSprite("Assets/Resources/Art/UI/Tavern/酒吧老板娘.png");
         if (hireId == "receptionist")
             return LoadEditorSprite(ArtStandDir + "/前台小姐.png");
         if (hireId == "guildmaster")

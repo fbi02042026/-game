@@ -152,6 +152,9 @@ public class PlayerJobSelectUI : MonoBehaviour
 
     void ShowTutorialPickSword()
     {
+        // 【2026-10-15 主人报「上面一个引导 下面一个引导」】首次强制软引导（FirstRunGuide.FirstBattle）
+        // 还在指同一个按钮时，这条旧硬提示让位——同一个位置只准一层指引。
+        if (TutorialDirector.GuideCovers(FirstRunGuide.GuideStep.FirstBattle)) return;
         RectTransform target = null;
         if (_cards.Count > 0 && _cards[0].Button != null)
             target = _cards[0].Button.transform as RectTransform;
@@ -161,6 +164,8 @@ public class PlayerJobSelectUI : MonoBehaviour
 
     void ShowTutorialEnterRift()
     {
+        // 同上：FirstRunGuide 还在管 FirstBattle 这一步时让位，别两层指引叠一起。
+        if (TutorialDirector.GuideCovers(FirstRunGuide.GuideStep.FirstBattle)) return;
         if (_enterBtn == null) return;
         var target = _enterBtn.transform as RectTransform;
         if (target == null) return;

@@ -6,6 +6,10 @@ using UnityEngine.UI;
 /// 「获得佣兵」弹窗（2026-10-14 主人拍板）：抽中佣兵入队时弹出，取代
 /// <see cref="DraftRewardDetailUI"/> 的佣兵分支（MercRecruit）。
 ///
+/// <para>【2026-10-15 改】不再随抽中默认弹出 —— 入口移到战斗头像栏：
+/// 点佣兵头像弹（<see cref="ShowFromEntry"/>，BattleUI.OnMercAvatarClicked），
+/// 抽中当场只流入队横幅 + Toast；引导局在二抽（塔克入队）后教这一步。</para>
+///
 /// <para>预制体已由主人在编辑器摆好：<c>Resources/Prefabs/Battle/huodeyongbing</c>
 /// （立绘 + 名字 + 三星 + 七对属性 + 技能一栏 + 确认按钮）。
 /// 本类<b>只驱动、不建树</b>：实例化预制体后只绑定节点 + 填数据，
@@ -41,6 +45,8 @@ public class MercObtainPopupUI : MonoBehaviour
     Button _dimBtn;
     Button _keepBtn;
     Image _icon;
+    /// <summary>四分类类型图标位（Panel/Role，预制体已有节点）。</summary>
+    Image _role;
     Text _nameText;
     GameObject[] _stars;
     /// <summary>满星布局的原始位置（Fill 首次记录，重开弹窗从这里重算，不累积偏移）。</summary>
@@ -86,6 +92,30 @@ public class MercObtainPopupUI : MonoBehaviour
         ui.StopAutoClose();
         ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
         while (ui._root != null && ui._root.activeSelf) yield return null;
+    }
+
+    /// <summary>
+    /// 【2026-10-15 主人拍板】点战斗头像栏的佣兵头像查看详情：弹窗不再抽中默认弹出
+    /// （抽中当场只流入队横幅 MercJoinBannerUI + Toast，引导局在二抽后教这一步）。
+    /// 数据从局内佣兵条目来（hireId / AssetId / 等级 / 星级），填充、开关、无操作自动关
+    /// 与抽中路径完全同一套，不另写第二份。
+    /// </summary>
+    public static void ShowFromEntry(string hireId, string assetId, int level, int star)
+    {
+        var ui = Ensure();
+        if (ui == null) return;
+        var card = new DraftCard
+        {
+            Kind = DraftCardKind.MercRecruit,
+            Id = assetId,
+            HireId = hireId,
+            MercLevel = Mathf.Max(1, level),
+            Star = Mathf.Clamp(star < 1 ? 1 : star, 1, 5)
+        };
+        if (!ui.Fill(card)) { ui.Close(); return; }
+        ui.OpenRoot();
+        ui.StopAutoClose();
+        ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
     }
 
     static MercObtainPopupUI Ensure()
@@ -148,6 +178,7 @@ public class MercObtainPopupUI : MonoBehaviour
         _keepBtn = _root.transform.Find("Panel/KeepButton")?.GetComponent<Button>();
         _icon = _root.transform.Find("Panel/zuo/Iconmask/Icon")?.GetComponent<Image>();
         _nameText = _root.transform.Find("Panel/zuo/namebg/Name")?.GetComponent<Text>();
+        _role = _root.transform.Find("Panel/Role")?.GetComponent<Image>();
 
         // 满星节点：预制体只摆了 3 个（满星1/满星2/满星3）
         _stars = new GameObject[MaxStarNodes];
@@ -325,6 +356,16 @@ public class MercObtainPopupUI : MonoBehaviour
         if (string.IsNullOrEmpty(mercName))
             Debug.LogError("[MercObtainPopup] 佣兵名字为空：HireId=" + def.HireId);
         SetText(_nameText, "Panel/zuo/namebg/Name", mercName);
+
+        // 3.5) Role 四分类图标：CombatBadge（自带 WarnOnce），取不到隐藏节点（T6）
+        if (_role == null)
+            Debug.LogError("[MercObtainPopup] 缺少节点 Panel/Role（四分类图标不显示）");
+        else
+        {
+            var roleSp = JobIconResolver.CombatBadge(def.JobName);
+            _role.sprite = roleSp;
+            _role.enabled = roleSp != null;
+        }
 
         // 4) 数值：生命/攻击/防御走 ApplyCombatStats（只随等级）
         MercRosterDefs.ApplyCombatStats(def.AssetId, Mathf.Max(1, card.MercLevel),

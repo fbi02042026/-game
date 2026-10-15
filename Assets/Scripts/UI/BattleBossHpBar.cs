@@ -18,6 +18,7 @@ public class BattleBossHpBar : MonoBehaviour
     Monster _bound;
     bool _killCamHidden;
     bool _wantVisible;
+    Monster _lastLoggedPick;   // 【2026-10-15】排查日志去重用
     Transform _progressBar;
     Transform _questMap;
     bool _chromeCached;
@@ -48,6 +49,10 @@ public class BattleBossHpBar : MonoBehaviour
             var ui = BattleUI.Instance != null ? BattleUI.Instance.transform : null;
             Ensure(ui);
         }
+        // 【2026-10-15 排查日志】主人报血条仍不出现 —— 先让链路说话：
+        // 看不到这行 = 出场路径根本没调进来（ eliteWave 旗标/调用点问题）；
+        // 看到这行但没有「锁定目标」那行 = PickTarget 挑失败；都有还看不见 = 视觉被盖/位置问题。
+        Debug.Log("[BattleBossHpBar] RefreshFromField 触发（精英/Boss 出场）");
         _inst?.Refresh();
     }
 
@@ -84,17 +89,33 @@ public class BattleBossHpBar : MonoBehaviour
     {
         if (searchRoot == null && BattleUI.Instance != null)
             searchRoot = BattleUI.Instance.transform;
-        if (searchRoot == null) return;
+        if (searchRoot == null)
+        {
+            Debug.LogError("[BattleBossHpBar] 绑定失败：BattleUI 未就绪，找不到挂点（BossBar 血条不显示）");
+            return;
+        }
 
         _root = FindDeep(searchRoot, "BossBar");
-        if (_root == null) return;
+        if (_root == null)
+        {
+            Debug.LogError("[BattleBossHpBar] 绑定失败：BattleUI 下找不到节点 BossBar（Boss/精英血条不显示）");
+            return;
+        }
 
         var fillT = FindDeep(_root, "血条");
-        if (fillT == null) return;
+        if (fillT == null)
+        {
+            Debug.LogError("[BattleBossHpBar] 绑定失败：BossBar 下找不到子节点 血条（Boss/精英血条不显示）");
+            return;
+        }
 
         _fillRt = fillT as RectTransform ?? fillT.GetComponent<RectTransform>();
         _fillImg = fillT.GetComponent<Image>();
-        if (_fillRt == null) return;
+        if (_fillRt == null)
+        {
+            Debug.LogError("[BattleBossHpBar] 绑定失败：血条 节点不是 RectTransform（Boss/精英血条不显示）");
+            return;
+        }
 
         EnsureLeftAligned(_fillRt);
         _fullWidth = Mathf.Max(1f, _fillRt.sizeDelta.x);
@@ -135,6 +156,13 @@ public class BattleBossHpBar : MonoBehaviour
 
     void LateUpdate()
     {
+        // 【2026-10-15 主人报「预制体里血条没隐藏，运行时却被藏了」】自愈：
+        // 血条此刻是藏的、又不是击杀镜头在藏 → 重挑目标并重放可见性。
+        // 覆盖「漏刷新 / 被别处 SetActive(false) / 绑定晚了」等一切静默失败，绝不无声赖着。
+        // 击杀镜头藏血条期间（_killCamHidden）不抢，命中了再自然解藏。
+        if (_root != null && !_root.gameObject.activeSelf && !_killCamHidden)
+            Refresh();
+
         // 目标没了（BOSS 被秒 / 切场景）：复位入场标志，否则下次 BOSS 出场会因 _introPlaying 残留而不播
         if (_bound == null || _bound.isDead)
         {
@@ -183,6 +211,13 @@ public class BattleBossHpBar : MonoBehaviour
         _bound = pick;
         _wantVisible = true;
         ApplyVisibility();
+        // 【2026-10-15 排查日志】只在锁定目标变化时打一条，不刷屏
+        if (_lastLoggedPick != pick)
+        {
+            _lastLoggedPick = pick;
+            float pickMaxHp = pick.attr != null ? pick.attr.GetAttr(AttrType.MaxHp) : -1f;
+            Debug.Log($"[BattleBossHpBar] 锁定目标 {pick.name} maxHp={pickMaxHp:0} → 显示屏幕血条");
+        }
         if (!_introPlaying)
             SyncRatioFromBound();   // 入场动画播放中不打真实值，避免开场瞬间被覆盖
         UpdateAffixText();
@@ -267,6 +302,12 @@ public class BattleBossHpBar : MonoBehaviour
         bool showBoss = _wantVisible && !_killCamHidden;
         if (_root.gameObject.activeSelf != showBoss)
             _root.gameObject.SetActive(showBoss);
+
+        if (showBoss)
+        {
+            // 【2026-10-15】显示时抬到 Canvas 内容的最后：防被后画的兄弟节点（透明全屏图元等）盖住
+            _root.SetAsLastSibling();
+        }
 
         // Boss 血条出现时让出顶部：藏进度条与任务图
         CacheChrome(BattleUI.Instance != null ? BattleUI.Instance.transform : null);

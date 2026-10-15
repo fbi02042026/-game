@@ -147,6 +147,46 @@ public partial class BattleUI : MonoBehaviour
         SetupMercSlot(mercSlot2, 1, mercIds, mercHireIds, activeMercs, maxSlots, mm);
     }
 
+    // ============================================================
+    // 【2026-10-15 主人拍板】点佣兵头像 → 弹「获得佣兵」详情
+    // 获得佣兵弹窗已不再抽中默认弹出（BattleManager 佣兵分支只发 Toast），入口移到这里：
+    // 点 MercSlot1 / MercSlot2 整卡任意处，弹该佣兵的详情（MercObtainPopupUI.ShowFromEntry）。
+    // 数据源 = 本局出战名单 RunLoadout（入队顺序即槽序，与 SetupMercSlot 同源）；
+    // 槽里还没入队人 = 正常状态（还没抽到），静默不弹，不算错误。
+    // 点击接收靠事件冒泡：点中槽内任意 raycast 图元（头像/框/血条）都会冒泡到 root 的 Button。
+    // ============================================================
+    void EnsureMercAvatarClick()
+    {
+        WireMercAvatarClick(mercSlot1, 0);
+        WireMercAvatarClick(mercSlot2, 1);
+    }
+
+    void WireMercAvatarClick(CharacterSlotUI slot, int index)
+    {
+        if (slot == null || slot.root == null)
+        {
+            Debug.LogError("[BattleUI] 佣兵槽 " + (index + 1) + " 没绑到 root，头像点击弹窗挂不上");
+            return;
+        }
+        var btn = slot.root.GetComponent<Button>();
+        if (btn == null) btn = slot.root.AddComponent<Button>();
+        btn.transition = Selectable.Transition.None;   // 只收点击，不要按下变色的反馈
+        btn.onClick.RemoveAllListeners();
+        int captured = index;
+        btn.onClick.AddListener(() => OnMercAvatarClicked(captured));
+    }
+
+    void OnMercAvatarClicked(int index)
+    {
+        if (!RunLoadout.IsActive) return;              // 不在局内（旧存档战斗）：没有出战名单可看
+        var mercs = RunLoadout.Mercs();
+        if (mercs == null || index >= mercs.Count || mercs[index] == null) return;   // 槽还没抽到人：正常态
+        var e = mercs[index];
+        MercObtainPopupUI.ShowFromEntry(e.hireId, e.mercId, e.level, e.star);
+        // 引导（TutorialDirector 二抽后那一步）在等这一下
+        TutorialDirector.Instance?.NotifyMercAvatarTapped();
+    }
+
     void RefreshTutorialMercSlot(MercenaryManager mm)
     {
         if (mercSlot1 == null || mm == null) return;

@@ -105,16 +105,16 @@ public class SlotOfferUI : MonoBehaviour
     /// 2026-09-30：面板必须自带 Canvas 抬排序层。
     /// 项目已知坑：嵌套 Canvas 下 SetSiblingIndex 会失效，抽奖面板会被战斗 HUD 盖住
     ///（主人实测「看不见抽奖按钮」）。同时必须补 GraphicRaycaster，否则按钮点不动。
+    /// 2026-10-15 主人拍板「所有界面一律摄像机模式」：由裸 Canvas(Overlay) 改走
+    /// UICanvasSetup.ApplyPopup —— Screen Space - Camera + 720×1280 + 根铺满 + GraphicRaycaster。
+    /// 层级用 UiSort.SlotOffer(965) 高于 BattleHud(950)，保证盖得住 HUD（同 Default 层比 order）。
     /// </summary>
     void EnsureSortCanvas()
     {
         var c = GetComponent<Canvas>();
         if (c == null) c = gameObject.AddComponent<Canvas>();
-        c.overrideSorting = true;
+        UICanvasSetup.ApplyPopup(c, GameConfig.UiSort.SlotOffer);
         c.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        c.sortingOrder = 300;
-        if (GetComponent<GraphicRaycaster>() == null)
-            gameObject.AddComponent<GraphicRaycaster>();
     }
 
     void Awake()

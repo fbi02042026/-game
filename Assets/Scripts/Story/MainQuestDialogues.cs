@@ -7,7 +7,7 @@ using System.Collections.Generic;
 /// 老板娘按章节分 5 档递进，剧情段 5 条；结构（说话人 / 立绘 / 句数）保持稳定，
 /// 后续要改只需替换引号内的字符串。
 ///
-/// 立绘：老板娘复用前台小姐（StoryPortraits.Innkeeper，美术已确认，不另出图）。
+/// 立绘：老板娘用专属立绘（StoryPortraits.Innkeeper → MercPortraitSprites landlady → 酒吧老板娘.png，2026-10-15 接上）。
 /// 播法：交给 StoryDirector，与开章/战后剧情同一套表现，不另做一套对话 UI。
 /// </summary>
 public static class MainQuestDialogues
