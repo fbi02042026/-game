@@ -102,6 +102,45 @@ public static class StoryPortraitLayout
         return DeskPortraitBottomOffsetPx.ContainsKey(portraitId) ? 1f : 0.72f;
     }
 
+    /// <summary>
+    /// 情报对话立绘归一化：角色「内容包围盒」相对整图的比例（PNG 像素实测，非估算）。
+    /// 立绘显示尺寸原本 = 整张 sprite 像素 × 屏幕系数，但各图透明留白量差很多 ——
+    /// 留白多的图角色实际就看着偏小、偏下。这就是「人物大小不一致 / 玩家偏小偏下」的根因。
+    /// 实测：
+    ///   独眼 C004   687×1035，角色 y[25..993]  → 角色高 968，脚下留白 42
+    ///   玩家 player 1171×1345，角色 y[213..1277] → 角色高 1064，脚下留白 68，头顶留白 213
+    ///   酒吧老板娘  440×1143，整张不透明（无留白，角色即全图）
+    /// 2026-10-15 主人报「人物现在大小不一致」「玩家的形象偏小偏下」。
+    /// </summary>
+    public struct PortraitContentFit
+    {
+        /// <summary>角色内容高 / 整图高。</summary>
+        public float charHeightFrac;
+        /// <summary>角色脚底以下的留白 / 整图高（用于脚底对齐）。</summary>
+        public float belowFrac;
+    }
+
+    /// <summary>归一化后角色统一像素高（设计基准 1280 屏）。取独眼实测 968 —— 情报商原尺寸不动，其余向他看齐。</summary>
+    public const float PortraitTargetCharHeightPx = 968f;
+
+    /// <summary>脚底对齐基准：角色脚底距图底的统一像素 = 独眼实测 42px。</summary>
+    public const float PortraitFootBaselinePx = 42f;
+
+    public static readonly Dictionary<string, PortraitContentFit> PortraitContentFits = new Dictionary<string, PortraitContentFit>
+    {
+        { "npc_duyan", new PortraitContentFit { charHeightFrac = 968f / 1035f, belowFrac = 42f / 1035f } },
+        { "landlady", new PortraitContentFit { charHeightFrac = 1f, belowFrac = 0f } },
+        { "player", new PortraitContentFit { charHeightFrac = 1064f / 1345f, belowFrac = 68f / 1345f } },
+    };
+
+    /// <summary>查某个立绘 ID 的内容包围盒比例；不在表内返回 false（该立绘不做归一化）。</summary>
+    public static bool TryGetContentFit(string portraitId, out PortraitContentFit fit)
+    {
+        fit = default;
+        if (string.IsNullOrEmpty(portraitId)) return false;
+        return PortraitContentFits.TryGetValue(portraitId, out fit);
+    }
+
     /// <summary>兼容旧引用。</summary>
     public static Profile Standard => Unified;
 

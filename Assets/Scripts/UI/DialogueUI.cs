@@ -80,6 +80,8 @@ public class DialogueUI : MonoBehaviour
     Image _revealBlack;
     Text _locationCaption;
     RectTransform _textClip;
+    /// <summary>对话正文手动回看用的滚动容器（打字播完且文本溢出时才启用）。</summary>
+    ScrollRect _dialogueScrollRect;
     string _initiatorName;
     string _otherName;
     StoryPortraitPresenter.LayoutSnapshot _leftPortraitLayout;
@@ -561,7 +563,8 @@ public class DialogueUI : MonoBehaviour
         Action onSkip = null,
         bool soloCentered = false,
         string initiatorPortraitId = null,
-        string otherPortraitId = null)
+        string otherPortraitId = null,
+        bool normalizePortraitSize = false)
     {
         _initiatorName = initiatorName ?? "";
         _otherName = otherName ?? "";
@@ -621,6 +624,7 @@ public class DialogueUI : MonoBehaviour
         if (propSprite == null && (newPortraits || soloCentered))
         {
             var ctx = BuildPortraitContext();
+            ctx.NormalizeSize = normalizePortraitSize;
             CacheLayoutsIfNeeded();
             if (soloCentered)
             {
@@ -742,6 +746,7 @@ public class DialogueUI : MonoBehaviour
         _typing = true;
         HideNextArrow();
         EnsureTextClip();
+        RefreshDialogueScrollable(); // 打字开始：关掉回看，点击全部用于「迅速说完」
         _typeCo = StartCoroutine(TypeLineRoutine(_fullLineText));
     }
 
@@ -764,6 +769,8 @@ public class DialogueUI : MonoBehaviour
         _typing = false;
         _typeComplete = true;
         _typeCo = null;
+        ScrollDialogueText();
+        RefreshDialogueScrollable(); // 播完：文本溢出就放开上下滑动回看
         ShowNextArrowBounce();
     }
 
@@ -779,6 +786,7 @@ public class DialogueUI : MonoBehaviour
         if (dialogueText != null)
             dialogueText.text = _fullLineText ?? "";
         ScrollDialogueText();
+        RefreshDialogueScrollable(); // 「点击迅速说完」后同样要能上下滑动回看
         ShowNextArrowBounce();
     }
 
@@ -847,8 +855,47 @@ public class DialogueUI : MonoBehaviour
         float pref = Mathf.Max(viewH, dialogueText.preferredHeight);
         var rt = dialogueText.rectTransform;
         rt.sizeDelta = new Vector2(0f, pref);
+        // 手动回看模式下位置由 ScrollRect 接管，这里不再抢 anchoredPosition（否则滑动会被拽回底部）
+        if (_dialogueScrollRect != null && _dialogueScrollRect.enabled) return;
         float overflow = pref - viewH;
         rt.anchoredPosition = overflow > 1f ? new Vector2(0f, overflow) : Vector2.zero;
+    }
+
+    /// <summary>
+    /// 【2026-10-15 主人】对话能上下滑动回看：正文超出对话框时，打字播完后放开手动拖拽。
+    /// 打字期间必须关掉 —— 那时「点击迅速说完」优先，不能被滑动手势吞掉点击。
+    /// </summary>
+    void EnsureDialogueScrollRect()
+    {
+        if (_dialogueScrollRect != null) return;
+        if (_textClip == null || dialogueText == null) return;
+        _dialogueScrollRect = _textClip.GetComponent<ScrollRect>();
+        if (_dialogueScrollRect != null) return;
+        var sr = _textClip.gameObject.AddComponent<ScrollRect>();
+        sr.content = dialogueText.rectTransform;
+        sr.viewport = _textClip;
+        sr.horizontal = false;
+        sr.vertical = true;
+        sr.movementType = ScrollRect.MovementType.Clamped;
+        sr.inertia = true;
+        sr.scrollSensitivity = 24f;
+        sr.enabled = false;
+        _dialogueScrollRect = sr;
+    }
+
+    void RefreshDialogueScrollable()
+    {
+        EnsureTextClip();
+        EnsureDialogueScrollRect();
+        if (_dialogueScrollRect == null || dialogueText == null || _textClip == null) return;
+        bool overflow = dialogueText.preferredHeight > _textClip.rect.height + 1f;
+        bool on = _typeComplete && !_typing && overflow;
+        if (_dialogueScrollRect.enabled != on)
+            _dialogueScrollRect.enabled = on;
+        // 回看时正文要能接到拖拽手势；打字期间关掉，点击一律落到 AdvanceClick 上推进
+        dialogueText.raycastTarget = on;
+        if (on)
+            _dialogueScrollRect.verticalNormalizedPosition = 0f; // 0 = 贴底，停在最新一句
     }
 
     void HidePortraitsForStoryProp()

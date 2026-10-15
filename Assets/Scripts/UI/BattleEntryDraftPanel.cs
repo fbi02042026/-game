@@ -263,10 +263,8 @@ public class BattleEntryDraftPanel : MonoBehaviour
     float _animK;
     Button _continueBtn;
     Button _backpackBtn;
-    /// <summary>概率公示的「!」按钮（运行时建，见 BuildOddsButton）。</summary>
+    /// <summary>概率公示按钮（美术图，运行时建，见 BuildOddsButton）。</summary>
     Button _oddsBtn;
-    /// <summary>【2026-10-13 #6】「!」按钮下方的品质占比小字（现算）。</summary>
-    Text _oddsHintText;
     /// <summary>【2026-10-13 #9】连抽计数（每次开面板清零，每点一次抽奖 +1）。</summary>
     int _comboCount;
     /// <summary>【2026-10-13 #9】「已连抽 ×N」提示（≥2 显示），挂在抽奖容器上方。</summary>
@@ -681,7 +679,7 @@ public class BattleEntryDraftPanel : MonoBehaviour
             AddSlot("BtnEquip", DraftCategory.Equip);
             AddSlot("BtnSkill", DraftCategory.Skill);
 
-            // 概率公示的「!」（见 BuildOddsButton 注释）
+            // 概率公示按钮（见 BuildOddsButton 注释）
             BuildOddsButton();
             // 【2026-10-13 #9】连抽提示（见 BuildComboText 注释）
             BuildComboText();
@@ -801,14 +799,14 @@ public class BattleEntryDraftPanel : MonoBehaviour
     }
 
     /// <summary>
-    /// 概率公示的「!」按钮：贴在「普通抽奖」按钮右边，点了弹 <see cref="DraftOddsPopupUI"/>。
+    /// 概率公示按钮（美术图「提示」金币问号）：贴在「普通抽奖」按钮右边，点了弹 <see cref="DraftOddsPopupUI"/>。
     ///
     /// 2026-10-05 主人拍板：「概率需要告诉玩家……可以再（抽）按钮旁边加个感叹号之类的，
     /// 点击弹出弹窗上面写的概率」「可以加到 DraftRoot 节点里」。预制体里没有这个节点
     ///（主人没摆，也不许我们改 prefab），所以运行时建一个挂到 <c>DraftRoot</c> 下 ——
     /// 跟抽奖按钮<b>同层</b>，抽奖按钮自己被置灰 / 缩放 / 换锚点都不会带着「!」一起跑。
     ///
-    /// ⚠ 只做「一个圆底 + 一个 ! 字」，不碰主人在预制体里调好的任何美术。
+    /// ⚠ 2026-10-15 主人拍板换成美术图（Resources.Load 路径加载，原图 80x72 非正方开 preserveAspect），不碰主人在预制体里调好的任何美术。
     /// </summary>
     void BuildOddsButton()
     {
@@ -835,67 +833,19 @@ public class BattleEntryDraftPanel : MonoBehaviour
         rt.anchoredPosition = new Vector2(center.x + halfW + 60f, center.y);
 
         var img = go.GetComponent<Image>();
-        img.color = new Color(0.14f, 0.15f, 0.20f, 0.92f);
-        // 【2026-10-13 #6】2px #FFB833 金边（Outline，不新建美术节点、不改预制体）。
-        var edge = go.AddComponent<Outline>();
-        edge.effectColor = new Color(1f, 0.72f, 0.2f, 1f);
-        edge.effectDistance = new Vector2(2f, -2f);
+        // 2026-10-15 主人拍板：概率按钮换成美术图 Art/UI/Common/提示（金币问号），
+        // 不再用「深色圆底 + ! 文本」；取不到图 LogError，不兜底造图。
+        var iconSp = Resources.Load<Sprite>("Art/UI/Common/提示");
+        if (iconSp == null)
+            Debug.LogError("[BattleEntryDraftPanel] 缺少美术图 Art/UI/Common/提示（概率按钮图标不显示）");
+        img.sprite = iconSp;
+        img.preserveAspect = true; // 原图 80x72 非正方，防拉变形
+        img.color = Color.white;
         var btn = go.GetComponent<Button>();
         btn.targetGraphic = img;
         btn.onClick.AddListener(() => DraftOddsPopupUI.Toggle());
 
-        var txt = new GameObject("Txt", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        txt.transform.SetParent(go.transform, false);
-        var trt = txt.GetComponent<RectTransform>();
-        trt.anchorMin = Vector2.zero;
-        trt.anchorMax = Vector2.one;
-        trt.offsetMin = Vector2.zero;
-        trt.offsetMax = Vector2.zero;
-        var t = txt.GetComponent<Text>();
-        t.text = "!";
-        t.fontSize = 38;
-        t.color = new Color(1f, 0.88f, 0.45f);
-        t.alignment = TextAnchor.MiddleCenter;
-        t.raycastTarget = false;
-        var f = GameFonts.GetChinese();
-        if (f != null) t.font = f;
-
-        // 【2026-10-13 #6】按钮下方 14px 小字：现算品质段前两行（传说 / 稀有占比），与概率弹窗同源 BuildOddsRows。
-        var hint = new GameObject("Hint", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        hint.transform.SetParent(go.transform, false);
-        var hrt = hint.GetComponent<RectTransform>();
-        hrt.anchorMin = new Vector2(0.5f, 0f);
-        hrt.anchorMax = new Vector2(0.5f, 0f);
-        hrt.pivot = new Vector2(0.5f, 1f);
-        hrt.anchoredPosition = new Vector2(0f, -6f);
-        hrt.sizeDelta = new Vector2(220f, 36f);
-        var ht = hint.GetComponent<Text>();
-        ht.fontSize = 14;
-        ht.color = new Color(0.85f, 0.88f, 0.95f, 1f);
-        ht.alignment = TextAnchor.UpperCenter;
-        ht.raycastTarget = false;
-        ht.horizontalOverflow = HorizontalWrapMode.Overflow;
-        var hf = GameFonts.GetChinese();
-        if (hf != null) ht.font = hf;
-        _oddsHintText = ht;
-        RefreshOddsHint();
-
         _oddsBtn = btn;
-    }
-
-    /// <summary>【2026-10-13 #6】现算传说/稀有占比写进「!」按钮下方小字；与概率弹窗同源 <see cref="DraftPool.BuildOddsRows"/>，绝不写死。</summary>
-    void RefreshOddsHint()
-    {
-        if (_oddsHintText == null) return;
-        var rows = DraftPool.BuildOddsRows();
-        float leg = 0f, rare = 0f;
-        for (int i = 0; i < rows.Count; i++)
-        {
-            if (rows[i].Section != DraftPool.SEC_QUALITY) continue;
-            if (rows[i].Label == "传说") leg = rows[i].Percent;
-            else if (rows[i].Label == "稀有") rare = rows[i].Percent;
-        }
-        _oddsHintText.text = $"传说 {leg:F1}% · 稀有 {rare:F1}%";
     }
 
     /// <summary>【2026-10-13 #9】「已连抽 ×N」提示：挂在抽奖容器上方，≥2 才显示（不新建美术节点）。</summary>
@@ -1047,7 +997,6 @@ public class BattleEntryDraftPanel : MonoBehaviour
                     s.CoinIcon.gameObject.SetActive(showIcon);
             }
         }
-        RefreshOddsHint();   // 【2026-10-13 #6】每次刷新同步按钮下方品质占比（章节/池子变 → 数字跟着变）
     }
 
     void OnDraftClicked(int idx)

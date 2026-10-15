@@ -27,6 +27,11 @@ public static class StoryPortraitPresenter
         public Image DialogueBox;
         public float MobileLiftY;
         public Action<Transform> PlaceBehindDialogueBox;
+        /// <summary>
+        /// 立绘内容归一化开关（2026-10-15 主人）：把「角色内容」缩放到统一高、脚底对齐，
+        /// 抵消各图透明留白差异。默认 false —— 只有情报对话开启，主线剧情排版完全不受影响。
+        /// </summary>
+        public bool NormalizeSize;
     }
 
     public static LayoutSnapshot Capture(Image img)
@@ -127,6 +132,22 @@ public static class StoryPortraitPresenter
         // 立绘等比放大，标准屏保持原效果；系数下限 1，**只放大不缩小**（修「大分辨率机上立绘偏小」）。
         float scale = ResolvePortraitScale(ctx);
         ApplyNativePixelSize(img, scale, out float w, out float h);
+
+        // 【2026-10-15 主人报「人物现在大小不一致」「玩家的形象偏小偏下」】
+        // 上面按「整张 sprite 像素」定尺寸，但各图透明留白不同：留白多的图角色就偏小、偏下。
+        // 这里按实测内容包围盒把角色高统一到 PortraitTargetCharHeightPx，并把脚底对齐到同一基准线。
+        // 仅 ctx.NormalizeSize 开启时生效（情报对话），主线剧情一律走原逻辑。
+        float footAdjustPx = 0f;
+        if (ctx.NormalizeSize && StoryPortraitLayout.TryGetContentFit(portraitId, out var fit))
+        {
+            float rawH = sp.rect.height;
+            float k = StoryPortraitLayout.PortraitTargetCharHeightPx / Mathf.Max(1f, rawH * fit.charHeightFrac);
+            w *= k;
+            h *= k;
+            img.rectTransform.sizeDelta = new Vector2(w, h);
+            footAdjustPx = StoryPortraitLayout.PortraitFootBaselinePx * scale - fit.belowFrac * h;
+        }
+
         EnsureClipMask(img, StoryPortraitLayout.GetClipHeightFrac(portraitId), w, h);
 
         var hostRt = GetHostRt(img);
@@ -135,6 +156,7 @@ public static class StoryPortraitPresenter
         // 【2026-10-15 主人】引导局坐姿立绘（会长/前台小姐）再上抬 80；其他人物不在名单、恒 0，位置照旧
         float bottomY = ResolveBottomY(hostRt, profile, ctx, portraitId);
         bottomY += StoryPortraitLayout.GetTutorialDeskLiftPx(portraitId);
+        bottomY += footAdjustPx;
         hostRt.anchoredPosition = new Vector2(0f, bottomY);
         ctx.PlaceBehindDialogueBox?.Invoke(hostRt);
         ClampInsideCanvas(hostRt, ctx.CanvasRt);

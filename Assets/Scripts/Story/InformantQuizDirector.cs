@@ -10,6 +10,18 @@ public class InformantQuizDirector : MonoBehaviour
     const string PrefBoostMerc = "intel_quiz_boost_merc";
     const string PrefBoostLeft = "intel_quiz_boost_left";
 
+    // 立绘归一化用的真源 ID（内容包围盒表在 StoryPortraitLayout.PortraitContentFits）
+    const string InformantPortraitId = "npc_duyan";
+    const string LandladyPortraitId = "landlady";
+
+    /// <summary>
+    /// 酒馆底图（2026-10-15 主人：佣兵情报的背景用酒馆背景、变暗，跟引导/剧情一个模式）。
+    /// 800×1424 满屏高的那张，走 Resources 路径加载。
+    /// </summary>
+    const string TavernBackgroundPath = "Art/UI/Tavern/酒馆_0007_图层-4";
+    /// <summary>暗化值与 StoryDirector 换背景时一致（0.42）。</summary>
+    const float TavernBgDim = 0.42f;
+
     static InformantQuizDirector _inst;
     bool _busy;
 
@@ -107,17 +119,17 @@ public class InformantQuizDirector : MonoBehaviour
         }
 
         ui.PrepareForStoryBeat();
+        ApplyTavernBackdrop(ui);
         Sprite informant = ResolveInformantPortrait();
         Sprite landlady = ResolveLandladyPortrait();
-        Sprite player = StoryPortraits.Get(StoryPortraits.Player);
 
-        yield return CoSpeak(ui, "独眼", entry.InformantLine, informant, player, true);
+        yield return CoSpeak(ui, "独眼", entry.InformantLine, informant, InformantPortraitId);
 
         bool showLady = entry.ShowLandlady
             || entry.Type == IntelDailyTable.IntelType.Flirt
             || !string.IsNullOrEmpty(entry.LandladyLine);
         if (showLady && !string.IsNullOrEmpty(entry.LandladyLine))
-            yield return CoSpeak(ui, "老板娘", entry.LandladyLine, landlady, player, true);
+            yield return CoSpeak(ui, "老板娘", entry.LandladyLine, landlady, LandladyPortraitId);
 
         bool wantQuiz = !IsQuizDoneToday()
             && (entry.Type == IntelDailyTable.IntelType.TimedQuiz || entry.CanTriggerQuiz);
@@ -141,26 +153,50 @@ public class InformantQuizDirector : MonoBehaviour
         _busy = false;
     }
 
+    /// <summary>
+    /// 情报流程里玩家只点选项、从不开口，所以不铺玩家立绘、也不挂右侧名牌
+    /// （2026-10-15 主人：「如果没有玩家的对话 就不用显示玩家形象 只显示独眼和老板娘的就行」）。
+    /// 右侧那块 0.55 透明的玩家名牌就是「非发言方压暗」造成的，玩家立绘一隐藏它也不复存在。
+    /// </summary>
     static IEnumerator CoSpeak(
         DialogueUI ui, string speaker, string line,
-        Sprite speakerSp, Sprite playerSp, bool speakerLeft)
+        Sprite speakerSp, string speakerPortraitId)
     {
         bool done = false;
         ui.ShowLine(
-            speakerLeft ? speaker : StoryProgress.GetPlayerName(),
-            speakerLeft ? StoryProgress.GetPlayerName() : speaker,
+            speaker,
+            "",
             line,
-            speakerLeft ? speakerSp : playerSp,
-            speakerLeft ? playerSp : speakerSp,
+            speakerSp,
             null,
-            speakerIsInitiator: speakerLeft,
+            null,
+            speakerIsInitiator: true,
             onAdvance: () => { done = true; },
             onSkip: () => { done = true; },
-            soloCentered: false);
+            soloCentered: false,
+            initiatorPortraitId: speakerPortraitId,
+            otherPortraitId: null,
+            normalizePortraitSize: true);
         while (!ui.IsTypeComplete)
             yield return null;
         while (!done)
             yield return null;
+    }
+
+    /// <summary>铺酒馆背景 + 暗化，与剧情/引导同一套表现（2026-10-15 主人）。</summary>
+    static void ApplyTavernBackdrop(DialogueUI ui)
+    {
+        if (ui == null) return;
+        var bg = Resources.Load<Sprite>(TavernBackgroundPath);
+        if (bg == null)
+        {
+            Debug.LogError("[InformantQuiz] 酒馆背景缺失：Resources/" + TavernBackgroundPath);
+            return;
+        }
+        ui.SetSceneBackground(bg);
+        ui.SetRevealBlack(0f); // 情报不播「地点揭示」黑场，直接出画面
+        ui.SetBgDim(TavernBgDim);
+        ui.SetSceneBackgroundAlpha(1f);
     }
 
     static DialogueUI EnsureDialogueUi()
@@ -198,8 +234,8 @@ public class InformantQuizDirector : MonoBehaviour
         }
 
         ui.PrepareForStoryBeat();
+        ApplyTavernBackdrop(ui);
         Sprite informant = ResolveInformantPortrait();
-        Sprite player = StoryPortraits.Get(StoryPortraits.Player);
 
         bool failed = false;
         int boostTurns = 3;
@@ -212,15 +248,18 @@ public class InformantQuizDirector : MonoBehaviour
 
             ui.ShowLine(
                 "独眼",
-                StoryProgress.GetPlayerName(),
+                "",
                 round.Question,
                 informant,
-                player,
+                null,
                 null,
                 speakerIsInitiator: true,
                 onAdvance: null,
                 onSkip: null,
-                soloCentered: false);
+                soloCentered: false,
+                initiatorPortraitId: InformantPortraitId,
+                otherPortraitId: null,
+                normalizePortraitSize: true);
 
             while (!ui.IsTypeComplete)
                 yield return null;
@@ -239,15 +278,18 @@ public class InformantQuizDirector : MonoBehaviour
                     bool replyDone = false;
                     ui.ShowLine(
                         "独眼",
-                        StoryProgress.GetPlayerName(),
+                        "",
                         reply,
                         informant,
-                        player,
+                        null,
                         null,
                         speakerIsInitiator: true,
                         onAdvance: () => { replyDone = true; },
                         onSkip: () => { replyDone = true; },
-                        soloCentered: false);
+                        soloCentered: false,
+                        initiatorPortraitId: InformantPortraitId,
+                        otherPortraitId: null,
+                        normalizePortraitSize: true);
                     while (!replyDone)
                         yield return null;
                 }
@@ -262,15 +304,18 @@ public class InformantQuizDirector : MonoBehaviour
             bool done = false;
             ui.ShowLine(
                 "独眼",
-                StoryProgress.GetPlayerName(),
+                "",
                 quizReply,
                 informant,
-                player,
+                null,
                 null,
                 speakerIsInitiator: true,
                 onAdvance: () => { done = true; },
                 onSkip: () => { done = true; },
-                soloCentered: false);
+                soloCentered: false,
+                initiatorPortraitId: InformantPortraitId,
+                otherPortraitId: null,
+                normalizePortraitSize: true);
             while (!done)
                 yield return null;
 

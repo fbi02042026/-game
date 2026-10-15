@@ -38,6 +38,7 @@ public class PlayerJobSelectUI : MonoBehaviour
     GameObject _root;
     Button _refreshBtn;
     Button _enterBtn;
+    Button _closeBtn;
     Text _hint;
     Text _refreshLabel;
     Text _title;
@@ -104,6 +105,9 @@ public class PlayerJobSelectUI : MonoBehaviour
         _selected = null;
         _refreshUsed = false;
         BuildIfNeeded();
+        // 2026-10-15 主人拍板 每次开界面都补一次右上角关闭按钮 —— 机理：预制体路径和运行时白模路径都在 BuildIfNeeded 之后汇合到这一行，
+        // 所以无论走哪条构建路线都一定有关闭按钮。
+        EnsureCloseButton(FindDeep(transform, "Panel") ?? transform);
         RollOffers(forceSwordFirst: opts.TutorialForceSwordFirst);
         RefreshCardsVisual();
         UpdateEnterInteractable();
@@ -170,6 +174,51 @@ public class PlayerJobSelectUI : MonoBehaviour
         var target = _enterBtn.transform as RectTransform;
         if (target == null) return;
         TutorialHintUI.Ensure().ShowHard("再点「进入裂隙」。", target);
+    }
+
+    /// <summary>
+    /// 右上角关闭按钮：点一下等于 <see cref="Hide"/>，整个选择职业界面收掉。
+    /// </summary>
+    void EnsureCloseButton(Transform panel)
+    {
+        // 2026-10-15 主人拍板 预制体/层级里已经有 CloseBtn 就复用那颗，没有才由代码现场建 ——
+        // 机理：美术摆好的节点优先，跑的是「缺了就自己生一个」，不是拿 null 兜底一条链。
+        var closeGo = FindDeep(panel, "CloseBtn");
+        if (closeGo == null)
+            closeGo = CreateUi("CloseBtn", panel.transform, typeof(Image), typeof(Button)).transform;
+
+        // 2026-10-15 主人拍板 右上角定位：锚点和轴心都钉在右上，sizeDelta 定死 72×72，再往左下各缩 16 ——
+        // 机理：锚在角上，面板怎么拉伸它都死死贴住右上角，不会被职业卡挤走。
+        var rt = closeGo.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.sizeDelta = new Vector2(72f, 72f);
+        rt.anchoredPosition = new Vector2(-16f, -16f);
+
+        // 2026-10-15 主人拍板 底图跟 RefreshBtn 同一套紫褐色 —— 机理：同色系读起来是一组界面控件，不抢中间职业卡的视觉重心。
+        closeGo.GetComponent<Image>().color = new Color(0.35f, 0.28f, 0.42f, 1f);
+
+        // 2026-10-15 主人拍板 复用节点底下已经有 Label 就不再建 —— 机理：重复建会是两个「×」叠印糊成一坨黑。
+        if (FindText(closeGo, "Label") == null)
+        {
+            var label = CreateText(closeGo, "Label", "×", 34, TextAnchor.MiddleCenter);
+            Stretch(label.rectTransform);
+        }
+
+        // 2026-10-15 主人拍板 先把旧监听清干净再挂 —— 机理：每次 Open 都会走到这里，不去重就会一次点击触发多次 Hide。
+        _closeBtn = closeGo.GetComponent<Button>() ?? closeGo.gameObject.AddComponent<Button>();
+        _closeBtn.onClick.RemoveAllListeners();
+        _closeBtn.onClick.AddListener(Hide);
+
+        // 2026-10-15 主人拍板 排到最后画 —— 机理：挂在面板最上层，遮不住也点得到（不会被职业卡盖在下面失效）。
+        closeGo.SetAsLastSibling();
+
+        // 2026-10-15 主人拍板 引导局（强制先选剑盾那次）不显示这颗按钮 ——
+        // 机理：引导局必须选了职业才能往下走，此时关掉界面会把引导卡死在中途，所以引导局直接不让它出现。
+        if (_opts.TutorialForceSwordFirst)
+            closeGo.gameObject.SetActive(false);
+        else
+            closeGo.gameObject.SetActive(true);
     }
 
     void BuildIfNeeded()

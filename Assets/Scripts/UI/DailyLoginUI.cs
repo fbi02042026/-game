@@ -659,6 +659,7 @@ public class DailyLoginUI : MonoBehaviour
     {
         if (_root == null) Build();
         _root.SetActive(true);
+        ShowVisuals();   // 2026-10-15 主人拍板：等待期/关闭期只收画面（HideVisuals）不停宿主；这里放回来
         Canvas.ForceUpdateCanvases();
         Layout();
         Refresh();
@@ -672,7 +673,10 @@ public class DailyLoginUI : MonoBehaviour
 
     public void Hide()
     {
-        if (_root != null) _root.SetActive(false);
+        // 2026-10-15 主人拍板：只收画面、不停宿主 GO——宿主一 SetActive(false)，其上的协程当场停
+        // （等主界面的 CoShowWhenMainUiIdle 死在第一个 yield），且下次请求重新激活宿主时
+        // 已激活的子节点会闪一帧。显隐统一走 HideVisuals / ShowVisuals。
+        HideVisuals();
         // 【2026-10-10 主人要求】「登录界面关了后应该回到主页 不应该还是天赋」——
         // 关掉登录时若人还停在天赋页，顺手把天赋页收掉，让玩家回到城镇主界面。
         if (TalentUI.Instance != null && TalentUI.Instance.IsOpen)
@@ -690,23 +694,65 @@ public class DailyLoginUI : MonoBehaviour
     static bool _pendingShow;
     static bool _waitingIdle;
 
+    // 2026-10-15 主人拍板「领取后就不用再弹了」：进程级标志，领过任意一笔登录奖励后本次进程不再自动弹，
+    // 重启游戏后自动清零，新的一天有可领时照常弹。
+    static bool _autoPopConsumed;
+
+    /// <summary>登记「领过一笔」——同一语义只留这一个出口，四个回调领奖成功后统一调它。</summary>
+    static void MarkClaimConsumed() { _autoPopConsumed = true; }
+
     /// <summary>登记「有可领的每日登录」，回到主界面时再弹（不在这里直接开）。</summary>
     public static void RequestShowOnMainUi()
     {
         var ui = Ensure();
         if (ui == null) return;
+        // 2026-10-15 主人拍板「领取后就不用再弹了」：领过就停；
+        // 没领就关掉的情况仍会保留提醒（符合主人「领取后不再弹」的字面口径）。
+        if (_autoPopConsumed) return;
         _pendingShow = true;              // 静态字段：不能用实例引用访问（CS0176）
         if (!_waitingIdle)
         {
-            // 建好先收起：真正什么时候显示由 CoShowWhenMainUiIdle 决定（回到主界面才开）
-            if (ui._root != null) ui._root.SetActive(false);
+            // 【2026-10-15 主人拍板】宿主 GO 必须全程保持激活：Unity 规则——GO 一 SetActive(false)，
+            // 其上的协程当场停。完整预制体路径下 _root 就是 gameObject 本身（TryBindFullPrefab :304），
+            // 以前在协程里收 _root = 收整层 = 协程死在第一个 yield（天赋页开着等主界面时永远回不来），
+            // 且 _waitingIdle 永远卡 true → 整个会话每日登录都弹不出来。
+            // 现在：宿主激活不动，画面改由 HideVisuals 收直接子节点（同帧执行，首帧渲染前已收起，不闪）。
+            ui.gameObject.SetActive(true);
+            ui.HideVisuals();
             ui.StartCoroutine(ui.CoShowWhenMainUiIdle());
+        }
+    }
+
+    /// <summary>
+    /// 只收画面、不停宿主 GO（宿主停了协程就再也起不来）。
+    /// 完整预制体路径下 _root == gameObject，收 _root 就是收整层；改为收全部直接子节点
+    /// （Bg_Full / InfoBar / CloseButton / Image / CellsPanel / Title），渲染与射线一起没。
+    /// </summary>
+    void HideVisuals()
+    {
+        if (_root != null && _root != gameObject) { _root.SetActive(false); return; }
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            var c = transform.GetChild(i);
+            if (c != null) c.gameObject.SetActive(false);
+        }
+    }
+
+    /// <summary>放回画面（Open 前调；与 HideVisuals 严格对称）。</summary>
+    void ShowVisuals()
+    {
+        if (_root != null && _root != gameObject) { _root.SetActive(true); return; }
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            var c = transform.GetChild(i);
+            if (c != null) c.gameObject.SetActive(true);
         }
     }
 
     System.Collections.IEnumerator CoShowWhenMainUiIdle()
     {
         _waitingIdle = true;
+        // 画面在 RequestShowOnMainUi 里已由 HideVisuals 收起（同帧、不闪）；这里只等回主界面
         while (_pendingShow)
         {
             if (!TalentPageOpen())          // 天赋页关了 = 回到主界面
@@ -997,7 +1043,7 @@ public class DailyLoginUI : MonoBehaviour
             }
             else if (reached)
             {
-                // 今天可领：原样（金圈由下方 ApplyGlow 处理）；关开关则强行还原 base
+                // 今天可领：原样；关开关则强行还原 base
                 if (EnableCellDim) { cell.bg.color = bgBase; cell.dayText.color = dayBase; }
                 ApplyCellDim(cell, 1f);
             }
@@ -1007,13 +1053,9 @@ public class DailyLoginUI : MonoBehaviour
                 float t = EnableCellDim ? 0.45f : 0f;
                 cell.bg.color = Color.Lerp(bgBase, new Color(0.30f, 0.30f, 0.30f, bgBase.a), t);
                 cell.dayText.color = Color.Lerp(dayBase, new Color(0.30f, 0.30f, 0.30f, dayBase.a), t);
-                // 未解锁格主人没提，保持原样（底框/天数照旧暗，其余还原 base），要一起暗就把这里改成 DIM_CLAIMED_K
-                ApplyCellDim(cell, 1f);
+                // 2026-10-15 主人拍板：不能领取的天「框和里面的奖励都要灰显」——底框/天数之外的元素（奖励名/图标/角标/碎片卡）一起压暗
+                ApplyCellDim(cell, EnableCellDim ? DIM_CLAIMED_K : 1f);
             }
-
-            // ★ 2026-09-23 主人要求：当天可领的那一格套光圈，点它就能领（其余按已领/未到区分）
-            bool isToday = reached && !claimed && day == days;
-            ApplyGlow(cell.bg, isToday);
 
             cell.btn.interactable = canPress;
         }
@@ -1147,19 +1189,7 @@ public class DailyLoginUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 给「当天可领」的格子套一圈金色光圈（用 Outline 描边实现，沿贴图轮廓走）。
-    /// 美术后面要换成真正的光圈图时：在 Cell 下加一个 Glow 子节点（Image），这里改成开关它的 active 即可。
-    /// </summary>
-    static void ApplyGlow(Image bg, bool on)
-    {
-        var old = bg.GetComponent<Outline>();
-        if (old != null) UnityEngine.Object.Destroy(old);
-        if (!on) return;
-        var outline = bg.gameObject.AddComponent<Outline>();
-        outline.effectColor = ColGold;
-        outline.effectDistance = new Vector2(5f, -5f);   // 比原来粗，远看像一圈光
-    }
+    // 2026-10-15 主人拍板：可领取的天保持亮即可、不要描边——原 Outline 金圈（ApplyGlow）整条删除。
 
     /// <summary>
     /// 2026-09-25：格子按压反馈同步（主人要求：不可领的天点了不能有任何视觉反馈）。
@@ -1240,7 +1270,8 @@ public class DailyLoginUI : MonoBehaviour
         if (c == null) return;
         // C1: 碎片格用稀有度色当「原色」，其余格用预制体原色；k=1 即还原到该原色
         if (c.rewardText != null) c.rewardText.color = MulColor(RewardBase(c), k);
-        if (c.markText != null) c.markText.color = MulColor(c.baseMarkColor, k);
+        // 2026-10-15 主人拍板：「已领」二字不灰显，恒用原色
+        if (c.markText != null) c.markText.color = c.baseMarkColor;
 
         // 图标：没 sprite 时 SetIcon 已把它调成透明（避免露白块），这里必须保持透明，绝不能把白块还原出来
         if (c.icon != null && c.icon.enabled)
@@ -1519,6 +1550,8 @@ public class DailyLoginUI : MonoBehaviour
         GlobalToastUI.Show(msg);
         if (ok)
         {
+            // 2026-10-15 主人拍板「领取后就不用再弹了」：天数奖领到手，本次进程关掉后不再自动弹
+            MarkClaimConsumed();
             Debug.Log($"[DailyLogin] {msg}");
             // B12: 领完弹「获得奖励」弹窗（主人反馈：领了没弹窗，不知道拿到啥）。
             // 必须按**实发**构造：TryClaimStarter 内部对 X2 双倍日做了 Doubled，这里同样复算一遍
@@ -1539,6 +1572,8 @@ public class DailyLoginUI : MonoBehaviour
         GlobalToastUI.Show(msg);
         if (ok)
         {
+            // 2026-10-15 主人拍板「领取后就不用再弹了」：循环奖领到手，本次进程关掉后不再自动弹
+            MarkClaimConsumed();
             Debug.Log($"[DailyLogin] {msg}");
             ShowRewardPopup(DailyLoginDefs.Cycle[idx], 1);
         }
@@ -1553,6 +1588,8 @@ public class DailyLoginUI : MonoBehaviour
         GlobalToastUI.Show(msg);
         if (ok)
         {
+            // 2026-10-15 主人拍板「领取后就不用再弹了」：连签奖领到手，本次进程关掉后不再自动弹
+            MarkClaimConsumed();
             Debug.Log($"[DailyLogin] {msg}");
             if (def != null) ShowRewardPopup(def.Value.reward, 1);
         }
@@ -1570,6 +1607,8 @@ public class DailyLoginUI : MonoBehaviour
         GlobalToastUI.Show(msg);
         if (ok)
         {
+            // 2026-10-15 主人拍板「领取后就不用再弹了」：累计大奖领到手，本次进程关掉后不再自动弹
+            MarkClaimConsumed();
             Debug.Log($"[DailyLogin] {msg}");
             // B12: 累计大奖同样弹「获得奖励」弹窗（主人反馈：领了没弹窗）
             ShowRewardPopup(DailyLoginDefs.AccumReward, 1);

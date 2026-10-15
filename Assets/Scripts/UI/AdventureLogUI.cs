@@ -70,6 +70,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     const float FrameTopReserveLogOpen = 8f;
     const float FrameBottomReserve = 150f;
     const float FrameSidePad = 16f;
+    // 列表首行章节头向上溢出约 52px，Content 顶部至少留这么多，否则被 Viewport 裁
+    const int ListTopPadding = 56;
 
     public void PreloadOnce()
     {
@@ -374,6 +376,17 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         le.preferredHeight = h;
         le.flexibleWidth = 1f;
 
+        // 首行章节头（di 牌 + DoneHeader 文案，scale 1.5）挂在行顶并向上溢出约 52px，
+        // 而 Content 顶部 padding 只有 6：列表归顶时章节头上半截被 Viewport Mask 裁掉。
+        // 运行时给 Content 补足表头留白，不改预制体文件。
+        if (_listContent != null)
+        {
+            var vlg = _listContent.GetComponent<VerticalLayoutGroup>();
+            if (vlg != null && vlg.padding.top < ListTopPadding)
+                vlg.padding = new RectOffset(
+                    vlg.padding.left, vlg.padding.right, ListTopPadding, vlg.padding.bottom);
+        }
+
         _rowTemplate = done.gameObject;
         _rowTemplate.SetActive(false);
 
@@ -490,7 +503,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     /// 侧栏布局兜底（不改预制体文件）：
     /// 预制体的标题横幅(biaotou)和 Tab 锚点是按旧 Frame 尺寸摆的，Frame 被运行时拉满后
     /// 横幅漂进标签区、把第一个「主线」标签顶出屏外。这里显式重排：
-    /// 横幅钉在 Frame 左上角，Tab0~5 从横幅下方开始等距排到 Emblem 之上，任何分辨率都不重叠。
+    /// 横幅钉在 Frame 左上角，Tab0~5 在 Sidebar 实际宽度内水平居中、从横幅下方等距排到
+    /// Emblem 之上，任何分辨率/横竖屏都不重叠、不会滑进 Paper 底下。
     /// </summary>
     void EnsureSidebarLayout()
     {
@@ -502,12 +516,16 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         float frameH = frame.rect.height;
         if (frameH < 400f) return;
 
-        // Tabs：占 Sidebar 左侧 300 宽、全高
+        // Tabs：铺满整个 Sidebar 宽、全高。
+        // 旧写法固定 300 宽：Sidebar 只占 Frame 的 26%（竖屏 1080 宽时约 272px），
+        // 标签中心钉在 x=150 会让 162 宽的标签跨到 Sidebar 右缘之外，被不透明的
+        // Paper 整个盖住——竖屏下表现为「左侧标签全没了」。改为跟随实际宽度居中。
         tabs.anchorMin = new Vector2(0f, 0f);
-        tabs.anchorMax = new Vector2(0f, 1f);
-        tabs.pivot = new Vector2(0f, 0.5f);
-        tabs.offsetMin = new Vector2(0f, 0f);
-        tabs.offsetMax = new Vector2(300f, 0f);
+        tabs.anchorMax = new Vector2(1f, 1f);
+        tabs.pivot = new Vector2(0.5f, 0.5f);
+        tabs.offsetMin = Vector2.zero;
+        tabs.offsetMax = Vector2.zero;
+        float sidebarW = sidebar.rect.width;
 
         // 标题横幅：钉在 Frame 左上（bg 291×103，biaotou 中心对 bg 中心）
         float headerH = 103f, headerTopPad = 10f;
@@ -527,6 +545,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         float minStep = 62f;
         float step = Mathf.Max(minStep, availH / TabNames.Length);
 
+        // 标签在 Sidebar 内水平居中，窄于 174px 时收窄防溢出
+        float tabW = Mathf.Min(162f, Mathf.Max(120f, sidebarW - 12f));
         for (int i = 0; i < TabNames.Length; i++)
         {
             var tab = tabs.Find("Tab" + i) as RectTransform;
@@ -534,9 +554,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             tab.anchorMin = tab.anchorMax = new Vector2(0.5f, 1f);
             tab.pivot = new Vector2(0.5f, 1f);
             const float h = 65f; // 预制体 Tab 统一 162×65
-            tab.sizeDelta = new Vector2(162f, h);
-            // 每个标签在自己的 step 槽位里垂直居中
-            tab.anchoredPosition = new Vector2(150f, -(top + step * i + (step - h) * 0.5f));
+            tab.sizeDelta = new Vector2(tabW, h);
+            // 每个标签在自己的 step 槽位里垂直居中；x=0 即在 Sidebar 水平正中
+            tab.anchoredPosition = new Vector2(0f, -(top + step * i + (step - h) * 0.5f));
         }
     }
 

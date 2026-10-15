@@ -64,6 +64,9 @@ public class RewardPopupUI : MonoBehaviour
     const float ROW_GAP = 4f;       // 行间距：主人要「上下拉伸」，不留大缝
     const float COL_GAP = 12f;      // 列间距
 
+    /// <summary>2026-10-15 主人拍板：获得弹窗内的「物品图标和字」放大 30%。格子/面板几何不动，只放大内容。</summary>
+    const float CellContentScale = 1.3f;
+
     /// <summary>
     /// 兜底（无预制体）时用的几何值 —— 与主人预制体一一对应，保证兜底和预制体走同一套排版，
     /// 不出现「两套互相打架的常量」。
@@ -157,6 +160,7 @@ public class RewardPopupUI : MonoBehaviour
         public Geo Cell;
         public Geo Icon;
         public Geo Label;
+        public int LabelFont;   // 2026-10-15 主人拍板：CellTemplate/Label 的预制体原始字号，放大 30% 的基准
     }
 
     GameObject _panel;
@@ -519,9 +523,17 @@ public class RewardPopupUI : MonoBehaviour
             Cell = Geo.Capture(_cellTemplate),
             Icon = Geo.Capture(_cellTemplate != null ? FindChild(_cellTemplate, "Icon") as RectTransform : null),
             Label = Geo.Capture(_cellTemplate != null ? FindChild(_cellTemplate, "Label") as RectTransform : null),
+            LabelFont = GetLabelFont(_cellTemplate),
         };
         _base = b;
         _baseCaptured = true;
+    }
+
+    /// <summary>2026-10-15 主人拍板：取 CellTemplate/Label 的预制体原始字号（放大基准；取不到返回 0 表示不放大）。</summary>
+    static int GetLabelFont(RectTransform cellTemplate)
+    {
+        var t = cellTemplate != null ? FindChild(cellTemplate, "Label")?.GetComponent<Text>() : null;
+        return t != null ? t.fontSize : 0;
     }
 
     /// <summary>清空旧格子 → 按数量生成 → 面板九宫格拉伸到合适高度（全部相对 base 重算）。</summary>
@@ -608,12 +620,22 @@ public class RewardPopupUI : MonoBehaviour
     {
         var iconT = FindChild(cell, "Icon");
         var iconImg = iconT != null ? iconT.GetComponent<Image>() : null;
+        // 2026-10-15 主人拍板：获得弹窗「物品图标和字放大 30%」——只放 Icon 的 sizeDelta 与 Label 的 fontSize，
+        // 位置/锚点/格子/面板几何一律不动（从预制体 base 重算，不累积偏移）。
+        var iconRt = iconT as RectTransform;
+        if (iconRt != null && _base.Icon.Has)
+            iconRt.sizeDelta = _base.Icon.SizeDelta * CellContentScale;
 
         var lblT = FindChild(cell, "Label");
         if (lblT != null)
         {
             var t = lblT.GetComponent<Text>();
-            if (t != null) t.text = e.label ?? "";
+            if (t != null)
+            {
+                t.text = e.label ?? "";
+                // 2026-10-15 主人拍板：文字放大 30%（以预制体原始字号为基准，不改 sizeDelta/位置）
+                if (_base.LabelFont > 0) t.fontSize = Mathf.RoundToInt(_base.LabelFont * CellContentScale);
+            }
             // 文字只做展示：关掉射线，避免它压在确定按钮上方时把点击吃掉
             var lg = lblT.GetComponent<Graphic>();
             if (lg != null) lg.raycastTarget = false;
@@ -630,6 +652,9 @@ public class RewardPopupUI : MonoBehaviour
             {
                 // 卡片是纯展示层，关掉射线，保证确定按钮永远点得到
                 SetRaycastOff(card.Root != null ? card.Root.transform : null, true);
+                // 2026-10-15 主人拍板：弹窗内「物品图标和字放大 30%」——碎片卡同属物品图标，整体 localScale ×1.3。
+                // （覆盖 2026-09-23「碎片卡大小不要再变」的旧口径，以主人本次要求为准；只缩放实例，不碰预制体。）
+                if (card.Root != null) card.Root.transform.localScale = Vector3.one * CellContentScale;
             }
             else if (iconImg != null)
             {

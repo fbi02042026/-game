@@ -134,6 +134,11 @@ public class TownSceneBootstrap : MonoBehaviour
         bool settled = SettleInterruptedRunOnce();
         if (!settled)
         {
+            // 2026-10-15 主人拍板：登录检查改成「每次进主界面都查」——_loginCheckedThisTownVisit 以前
+            // 只置 true 从不重置，实际变成「整个进程只查一次」：引导途中首次进镇时天赋页开着，
+            // 等主界面的协程死在等待里，之后进镇再也不查 → 每日登录弹不出来。
+            // BootstrapRoutine 每次跑（= 每次回主界面）先重置，配合 DailyLoginUI 的等待机制照常工作。
+            _loginCheckedThisTownVisit = false;
             // 2026-09-20 主人要求：离线金币暂停，等重新设计后再启用（进城镇不再自动结算/弹窗）。
             // TryClaimTownOfflineReward();
             TryDailyLoginOnce();

@@ -286,21 +286,22 @@ public class TavernUI : MonoBehaviour, ITownPage
 
     void WireClicks()
     {
-        // 2026-09-14 改版：酒馆只做「解锁」，招募挪进战斗内三选一
         if (recruitButton != null)
         {
+            // 【2026-10-15 主人拍板】下排「佣兵招募」卡锁住：点击只提示功能即将开放
+            // （主人在预制体里调过卡位，按下排两张锁；原「佣兵名册/TavernUnlockUI」入口撤掉，
+            //   解锁佣兵仍走任务跳转 QuestJumpRouter 那条路）
             recruitButton.onClick.RemoveAllListeners();
             recruitButton.gameObject.SetActive(true);
-            recruitButton.onClick.AddListener(() => TavernUnlockUI.Show());
-            RetitleRecruitCard("佣兵名册", "解锁佣兵，让其进入战斗三选一池");
+            recruitButton.onClick.AddListener(() => GlobalToastUI.Show("功能即将开放"));
         }
         if (trustButton != null)
         {
-            // 2026-09-17 批次 B：这个卡位改成「请他喝一杯」，接 TavernLore 的独眼请酒
+            // 【2026-10-15 主人拍板】下排「信任交流」卡锁住：点击只提示功能即将开放
+            // （原「请他喝一杯/TavernLore」入口撤掉）
             trustButton.gameObject.SetActive(true);
             trustButton.onClick.RemoveAllListeners();
-            trustButton.onClick.AddListener(OpenInformantTreat);
-            RetitleCard(trustButton.transform, "请他喝一杯", "请独眼喝一杯，换一份情报");
+            trustButton.onClick.AddListener(() => GlobalToastUI.Show("功能即将开放"));
         }
         if (questButton != null)
         {
@@ -317,24 +318,6 @@ public class TavernUI : MonoBehaviour, ITownPage
             intelButton.onClick.RemoveAllListeners();
             intelButton.onClick.AddListener(() => InformantIntelDirector.StartDaily());
         }
-    }
-
-    /// <summary>请独眼喝一杯：发一份 Tier-2/3 线索页，并出一段按进度推进的台词。</summary>
-    void OpenInformantTreat()
-    {
-        bool granted = TavernLore.TreatInformant();
-        string line = TavernLore.InformantLine();
-        string lore = granted
-            ? "他把杯子推回来，顺手塞给你一张纸条。"
-            : "他只是点了点头——这份情报你已经拿过了。";
-        CodexInfoPopupUI.Show("请他喝一杯", "酒馆角落 · 独眼", line, lore,
-            MercPortraitSprites.GetStand("duyan"));
-    }
-
-    /// <summary>把「招募」卡改成「名册/解锁」卡（预制体上已有同名节点时改文案）。</summary>
-    void RetitleRecruitCard(string title, string desc)
-    {
-        RetitleCard(recruitButton != null ? recruitButton.transform : null, title, desc);
     }
 
     static void RetitleCard(Transform card, string title, string desc)

@@ -318,10 +318,11 @@ public class GuildHallUI : MonoBehaviour
         SetBtnHidden(noticeBoardButton); // 公告栏
         SetBtnHidden(armoryButton);      // 武器库（遗产浏览）
         SetBtnHidden(licenseHallButton); // 执照厅
-        // 商店 2026-09-15 已接通（ShopUI），保留显示
+        // 2026-10-15 主人拍板：商城按钮隐藏（ShopUI 代码与 wiring 保留，入口先藏；要恢复删这行即可）
+        SetBtnHidden(shopButton);
         // 按节点名再兜底（引用丢失时仍能藏）
         HideNamed("NoticeButton", "RankButton", "MailButton", "ActivityButton",
-            "NoticeBoard", "Armory", "LicenseHall");
+            "NoticeBoard", "Armory", "LicenseHall", "ShopButton");
         // 保留：底栏五入口、设置、咨询台、金币/体力加号
     }
 
