@@ -271,7 +271,13 @@ public class FirstRunGuide : MonoBehaviour
                 case GuideStep.Adventure: yield return CoAdventure(); break;
                 case GuideStep.FirstBattle: yield return CoFirstBattle(); break;
                 case GuideStep.Talent: yield return CoTalent(); break;
-                case GuideStep.Tavern: yield return CoTavern(); break;
+                case GuideStep.Tavern:
+                    // 【2026-10-16 主人拍板】酒馆步骤取消：到这一槽位直接跳过推进游标。
+                    // 覆盖两条路径——新玩家（天赋收尾后游标走到这）和存量档（guideStep 停在
+                    // Tavern 的玩家重进游戏），后者若只是 CanRun 拦住会死循环卡游标。
+                    // CoTavern/CoPlayLandlady 原样保留不删，以后想恢复酒馆步骤再说。
+                    SkipStep(GuideStep.Tavern, "酒馆步骤已取消（2026-10-16 主人拍板）");
+                    break;
                 default: yield break;
             }
 
@@ -314,9 +320,10 @@ public class FirstRunGuide : MonoBehaviour
 
     IEnumerator CoWelcome()
     {
+        // 【2026-10-16 主人拍板】末句换更有劲的说法（文案调性：有趣、流行、适合年轻人）
         const string text = "欢迎来到《像素冒险：裂隙之刃》。\n"
                           + "裂隙每隔一阵就会裂开一道口子，怪物从里面涌出来。\n"
-                          + "你是刚签完委托书的新人——跟着我走一遍就懂了。";
+                          + "你是刚签完委托书的新人——放心，跟我走，3 分钟出师。";
 
         yield return CoPoint(text, null, null, true, TapStepTimeout);
         FinishStep(GuideStep.Welcome, "欢迎页");
@@ -382,6 +389,15 @@ public class FirstRunGuide : MonoBehaviour
         {
             Advance(GuideStep.Talent, null);
             UIManager.Instance?.ShowToast("天赋已生效，属性已更新");
+
+            // 【2026-10-16 主人拍板】引导到天赋就到头了：给一步「关闭引导」收尾——
+            // 先收掉还开着的天赋面板（让玩家看着主界面），再弹收尾气泡等玩家点一下；
+            // 点完 CoTalent 返回，Drive 下一轮走到 Tavern 槽位 → 按当日拍板直接跳过 → Done
+            // 收引导。之后 TownFlow 才弹登录、关登录才提示新邮件，三件事严格串行不交叉。
+            var talentUi = TalentUI.Instance;
+            if (talentUi != null && talentUi.IsOpen) talentUi.Hide();
+            yield return CoPoint("出师啦！点一下任意位置，关闭引导回主界面。",
+                null, null, true, TapStepTimeout);
         }
         else
         {

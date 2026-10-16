@@ -310,7 +310,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 "你把这个签了后就可以出去了。",
                 StoryPortraits.GuildMaster)
                 .Bg(StoryBackgrounds.GuildOffice),
-            StoryDirector.Narration("桌上摊着那份委托书还没有署名，会长催促着赶紧签了就可以出去了。")
+            // 【2026-10-16 主人拍板】旁白去重复、去拗口（原句与会长台词撞内容）
+            StoryDirector.Narration("桌上的委托书还没署名，会长不耐烦地敲着桌子。")
                 .Prop(StoryProps.QuestPaper),
         };
         bool done = false;
@@ -368,6 +369,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
     IEnumerator TownAfterBattleRoutine()
     {
         _townFlowBusy = true;
+        // 【2026-10-16 主人拍板「回城后直接出 不要出现主界面」】按住回城 Loading 不放：
+        // 场景就绪、公会页打开、立绘预热的全过程都被 Loading 盖住，等塔克剧情真正弹出再收。
+        BattleLoadingOverlay.KeepVisible = true;
         yield return null;
         yield return WaitNotLoading();
 
@@ -388,7 +392,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 【2026-10-14 主人拍板】「局内装备带不出裂隙」这条引导字挪到**塔克剧情之后**——
         // 主人原话「回城后立即播放塔克剧情 不要先弹引导再弹塔克剧情」（原位置在剧情前，抢了戏）。
 
-        yield return new WaitForSecondsRealtime(2.2f);
+        // 【2026-10-16 主人拍板·二次提速】「回城后直接出 不要出现主界面」——
+        // 硬等 2.2s → 1.0s → 彻底删掉：WaitNotLoading 场景就绪 + 资源预热两帧后立刻弹塔克剧情，
+        // 主界面在对话底下自己展开，不再让玩家先盯着主界面等。
 
         bool done = false;
         DialogueUI.Instance?.PrepareForStoryBeat();
@@ -411,6 +417,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 .Bg(StoryBackgrounds.GuildHall)
                 .SkipReveal()
         }, () => done = true);
+        // Loading 还盖着 → 对话已同步弹出 → 渲染一帧后放行收 Loading，露出来的直接是塔克剧情
+        yield return null;
+        BattleLoadingOverlay.KeepVisible = false;
+        BattleLoadingOverlay.Hide();
         while (!done) yield return null;
 
         done = false;
@@ -463,10 +473,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 引导关撤离走的是 SkipMercHireClearOnEvacuate=true（不清雇佣），所以必须在这里主动清。
         ClearTutorialMerc();
 
-        // 【2026-10-07 主人拍板】引导收尾 → 立刻弹每日登录，把「刚才救场的塔克」和
+        // 【2026-10-07 主人拍板】引导收尾 → 弹每日登录，把「刚才救场的塔克」和
         //「签到才能领到塔克」串成一条线（主人原话：回城剧情完了后出现每日登录弹窗，这样能连起来）。
         // 入口只有一个 TownSceneBootstrap.TryDailyLoginOnce：进 Town 本来也走它，
         // 只是那时 StoryProgress.TutorialDone 还是 false 会跳过，这里 MarkTutorialDone 之后补一次。
+        // 【2026-10-16 主人拍板】流程串行：先等首次引导真正收完（玩家点完「关闭引导」收尾气泡、
+        // 游标到 Done）再弹登录；玩家关掉登录后才提示「您有新的邮件」（DailyLoginUI.Hide 冲刷）。
+        // 收尾气泡自带 60s 超时放行，这里不会死等。
+        while (FirstRunGuide.Instance != null && !FirstRunGuide.Instance.IsFinished)
+            yield return new WaitForSeconds(0.25f);
         TownSceneBootstrap.TryDailyLoginOnce();
 
         _townFlowBusy = false;
@@ -492,7 +507,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         //   主人原话「先打一波那个引导在玩家一出来就播」。
         //   原位置在 CoTeachControls 之后（刷怪 + 3.2 秒进场走完才弹），玩家已经在场上站了 3 秒多才看到，
         //   现在移到刷怪之前，出场即见；怪照常在下面那 3.2 秒里走上来。
-        hint.Show("先打一波热热身。靠近怪物会自动攻击。", null, 8f);
+        // 【2026-10-16 主人拍板】后半句去说明书腔（文案调性：有趣、流行、适合年轻人）
+        hint.Show("先打一波热热身——你负责逛街，打架交给系统。", null, 8f);
         yield return CoTeachControls(bm, hint, ui, preloadStep: 1);
 
         // —— 1) 首波清场后进入宝箱剧情（不再刷第二小波）——
@@ -509,7 +525,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         yield return WaitFieldClear(strict: true);
         if (bm != null && bm.GetAliveMonsterCount() > 0)
         {
-            hint.Show("先把剩下的怪清掉。", null, 3f);
+            hint.Show("还有几只漏网之鱼，补个刀。", null, 3f); // 【2026-10-16 主人拍板】换更有味的说法
             yield return WaitFieldClear(strict: true);
         }
 
@@ -542,9 +558,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // ① 先等 12 只全部进场站定（波次是异步进场的，不能怪还没露面就开始吐槽）；
         yield return WaitMonstersFinishedEnter(bm);
         // ② 【2026-10-14 主人拍板·恢复压力等待】「让玩家的血再掉少点再出现剧情」（主人原话
-        //    「不是打的太狠 是打的再狠点」）—— 怪围殴把玩家血打到 **20% 左右**才进躺尸剧情，
+        //    「不是打的太狠 是打的再狠点」）—— 怪围殴把玩家血打到阈值才进躺尸剧情，
         //    「要死了」的感觉才够。10-12 曾拍板「不用打直接弹剧情」作废；
-        //    阈值/超时真源在 CoWaitAmbushPressure（50% → 20% 那一版），要调只调那里。
+        //    阈值/超时真源在 CoWaitAmbushPressure，要调只调那里。
+        //    【2026-10-16 主人拍板】阈值 20% → 40%（原话「把玩家打到40%的血塔克出现」）。
         yield return CoWaitAmbushPressure(bm);
 
         // —— 1e)【2026-10-09 主人拍板】第 4~9 步：十几只压上来 → 玩家躺平 → 塔克天降一趟清场 → 玩家看傻 ——
@@ -585,8 +602,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 第 9 步：玩家惊呆（这一句是唯一文案源，想改措辞改这里即可）
         // 【2026-10-14 主人补拍板】演出已改成「幻影一击全清」（不再挨个打），旧词
         //「他刚才是不是把所有人打了一遍？」与画面矛盾 —— 换成没看清出手的落差感。
+        // 【2026-10-16 主人拍板】换成「我勒个豆」流行梗，主打崇拜+惊讶。
         yield return TalkBlock(bm, headTalk, restoreAct: false,
-            new TalkLine(Hero.Instance, "……他什么时候出的手？", 2.4f));
+            new TalkLine(Hero.Instance, "我勒个豆？！", 2.4f));
         headTalk?.HideNow();
 
         // —— 3b) 第二抽：抽中的就是刚才救场那位（塔克·重盾，稀有） ——
@@ -665,7 +683,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 触发瞬间看起来就是「被瞬移」。只等待，绝不动画家坐标。
         if (bm != null) bm.UnitsCanAct = true;
         bm.RetargetAllMonsters(Hero.Instance);
-        hint.Show("怪物冲过来了，靠近它们会自动攻击。", null, 5f);
+        // 【2026-10-16 主人拍板】删与开场重复的「自动攻击」教学，顺接塔克「跟紧我」（第三波已组队）
+        hint.Show("又来一波！这回有塔克搭把手，凑近就开打。", null, 5f);
         yield return WaitFieldClear(strict: true);
         // 清场兜底：WaitFieldClear 靠「存活数 + 未刷出波次」连读 0.45s 判定已清，
         // 遇到刷怪空窗 / 存活数同帧缓存会提前返回。
@@ -711,7 +730,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
             // 【2026-10-07 主人反馈「玩家说的 boss 那句话也没看到」】先让玩家自己喊一句，
             // 再砸「精英来袭」预告 —— 两句之间要能看清字，停留一律 ≥1.9s。
             yield return TalkBlock(bm, headTalk, restoreAct: false,
-                new TalkLine(Hero.Instance, "有个块头更大的！", 1.9f));
+                new TalkLine(Hero.Instance, "好家伙，来了个更大的？！", 1.9f)); // 【2026-10-16 主人拍板】换流行语气（「我勒个豆」已给惊呆句，这里避开不撞）
             // 2026-10-09 主人拍板：Boss 大图 wave_boss_incoming 本来就写着「首领来袭」，
             // 这里再传副标题 = 上面图片 + 下面文字两个提示（主人口中的"上下 2 个首领来袭"）。
             // 去掉文字，只留大图；Boss 波一律不叠副标题（与 BattleManager 2026-10-07 口径一致）。
@@ -867,8 +886,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 保证天降那一刻场上还有怪可杀（玩家真把怪清完了才走打空那条分支）。
         // 【2026-10-14 主人拍板】掉血阈值 50% → **20%**（主人原话「打的玩家血再少点，20%左右再弹剧情」）：
         // 打得更狠、掉得更多，才喊救命；1.0 表示满血，0.2 = 只剩两成血。
+        // 【2026-10-16 主人拍板】20% → **40%**（主人原话「把玩家打到40%的血塔克出现」）——
+        // 20% 太极限，玩家经常撑不到就超时/打空，塔克迟迟不来。
         const float maxWait = 15f;
-        const float bailHpRatio = 0.2f;
+        const float bailHpRatio = 0.4f;
         float t = 0f;
         while (t < maxWait)
         {
@@ -1226,7 +1247,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
         hint.Hide();
         yield return TalkBlock(bm, headTalk,
             new TalkLine(Hero.Instance, "撑不住了，先撤？", 1.2f),
-            new TalkLine(merc, "嗯，回城我给你疗个痛快。", 1.2f));
+            new TalkLine(merc, "嗯，回城包扎管够。", 1.2f)); // 【2026-10-16 主人拍板】「疗个痛快」→「包扎管够」
     }
 
     /// <summary>
@@ -1460,7 +1481,7 @@ public class TutorialDirector : Singleton<TutorialDirector>
 
         // 2026-09-28 主人反馈「第一波的敌人出来的还是晚，再早点」：
         // 把第 1 波的刷怪提到技能提示之前，利用这 3.2 秒读字时间让怪走进场，
-        // 等下面「靠近怪物会自动攻击」这句出来时，怪已经站在脸上了。
+        // 等下面开场那句提示（BattleRoutine 开头 hint.Show）出来时，怪已经站在脸上了。
         if (preloadStep > 0)
             yield return EnsureTutorialStep(bm, preloadStep);
 
@@ -1555,7 +1576,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
     /// 主人原话「不是说过不要说这次抽的是佣兵吗，要给玩家惊喜」——抽到什么自己开出来才有惊喜感。</para>
     /// <para>② <b>三拍同一句</b>：文案只有这一个出口，别在三处各写一份（铁律「不多入口」）。</para>
     /// </summary>
-    const string TutorialDrawBeatText = "清场！奖励你抽一次 —— 开出什么全看手气。";
+    // 【2026-10-16 主人拍板】「奖励你抽一次」→「奖励一抽」，前半加一句夸（三拍仍同一句出口）
+    const string TutorialDrawBeatText = "清得漂亮！奖励一抽 —— 开出什么全看手气。";
 
     static void GrantTutorialChestTalentStones()
     {

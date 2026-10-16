@@ -173,7 +173,10 @@ public static class StoryProgress
         AdventureCodex.UnlockWorld("W003");
         AdventureLogAchievements.OnTutorialDone();
         SpecialWeapons.TryGrantTwilightStaff(showToast: true);
-        MailSystem.EnsureWelcomeMail();   // 🆕 玩完新手引导发放欢迎信（200 金币 + 莉娜 + 致谢/加群），并弹「您有新的邮件」
+        // 【2026-10-16 主人拍板】欢迎信照发，但**不在这里弹**「您有新的邮件」——
+        // 提示改挂在玩家关闭每日登录之后（DailyLoginUI.Hide → NewMailToast.FlushPending），
+        // 引导收尾 / 登录弹窗 / 邮件提示三件事严格串行，不再交叉。
+        MailSystem.EnsureWelcomeMail(notifyToast: false);
     }
 
     public static void MarkChapter1IntroDone()

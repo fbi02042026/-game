@@ -554,11 +554,12 @@ public class Monster : UnitBase
         float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));
         float attackRange = GetEffectiveAttackRange();
         bool melee = UsesMeleeBasicAttack();
-        // 远程：进入后加离开迟滞，避免玩家微移就追着滑步
-        const float rangedLeaveSlack = 0.4f;
-        bool inHoldRange = melee
-            ? IsInBasicAttackRange(target)
-            : distance <= attackRange + rangedLeaveSlack;
+        // 【2026-10-16 主人拍板】停走只认一条线：够得着（IsInBasicAttackRange = range+0.12）才站定，
+        // 够不着就一直走进去打 —— 任何情况都不允许「停下来却出不了手」的站桩死区。
+        // 旧版远程把站定线画在 range+0.4、出手线却只有 range+0.12（UnitBase.Attack 的进距闸），
+        // 从远处走来的怪停在 2.7 永远够不着 2.42，只能干站着（引导大波最后两只远程即此）。
+        // 代价：玩家微移时远程会跟着小幅挪步 —— 主人拍板「会去找着打」优先于「防滑步」。
+        bool inHoldRange = IsInBasicAttackRange(target);
 
         if (melee)
         {
@@ -577,8 +578,7 @@ public class Monster : UnitBase
             if (rb != null) rb.velocity = Vector2.zero;
             if (!melee)
                 FaceToward(target);
-            if (attackCd <= 0 && (unitAnim == null || !unitAnim.InAttackLock)
-                && (melee || IsInBasicAttackRange(target) || distance <= attackRange))
+            if (attackCd <= 0 && (unitAnim == null || !unitAnim.InAttackLock))
             {
                 Attack(target);
                 attackCd = GetAttackCooldown();
@@ -656,13 +656,6 @@ public class Monster : UnitBase
         _chapter = chapter;
         config = template;
         gameObject.name = "Visual";
-
-        // 【2026-10-07 E-13 诊断】③ 出场：看是不是「上一命还死着就被复用」，以及出场时的世界 Y。
-        // 只读日志，不改任何行为；定位后删除。
-        if (_e13Log < 40)
-            Debug.Log($"[E13] ③出场 id={gameObject.GetInstanceID()} 模板={template?.id}" +
-                      $" y={transform.position.y:F2} parent={ParentName(transform)}" +
-                      $" 上一条命仍在死亡中={_isDying} active={gameObject.activeSelf} 日志#{++_e13Log}");
 
         ResetForReuse();
         EnsureBodyRoot();
@@ -945,7 +938,6 @@ public class Monster : UnitBase
             : 0f;
         _skillCooldown = _canUseActiveSkill && !strong ? (rangedSkill ? 0f : 3f) : 0f;
 
-        Debug.Log($"[Monster:{(template != null ? template.id : "fallback")}] Init | mCh={monsterChapter} sprite={_spriteIndex} style={_attackStyle} kit={MonsterAttackStyleTable.GetVfxKit(_attackStyle)} boss={_isBossUnit} range={atkRange:F1} skill={_skillId} vfxSys={(BattleVFXSystem.Instance != null)}");
         BattleBossHpBar.RefreshFromField();
     }
 
@@ -1456,23 +1448,6 @@ public class Monster : UnitBase
             shadowSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
             shadowSr.sortingOrder = -20;
         }
-
-        // 【2026-10-06 诊断】只打前 3 条，之后静默：主人报「给敌人都加了 shadow 节点，为什么没看到」。
-        // 只报不改 —— 节点一个不删，值一个不调，主人拿这条日志对账就知道影子去哪了。
-        if (_shadowLogCount < 3)
-        {
-            _shadowLogCount++;
-            bool visible = shadowSr.gameObject.activeInHierarchy && shadowSr.enabled;
-            Debug.Log($"[Monster] 脚底阴影#{_shadowLogCount} 单位={name}" +
-                      (prefabAlpha >= 0f
-                          ? $" 来源=预制体节点「{existing.name}」预制体alpha={prefabAlpha:F2} 预制体可见={prefabActive}" +
-                            $"（⚠ 代码会把它统一成 alpha 0.35 + SPUM 椭圆图，主人调的透明度会被覆盖）"
-                          : " 来源=代码新建 FootShadow（预制体里没找到任何 shadow 节点）") +
-                      $" | 挂在={host.name} 最终alpha={shadowSr.color.a:F2}" +
-                      $" layer={shadowSr.sortingLayerName} order={shadowSr.sortingOrder}" +
-                      $" scale=({shadowSr.transform.localScale.x:F3},{shadowSr.transform.localScale.y:F3})" +
-                      $" 可见={visible}");
-        }
     }
 
     static Transform FindFootShadowNode(Transform root)
@@ -1487,9 +1462,6 @@ public class Monster : UnitBase
         }
         return null;
     }
-
-    /// <summary>脚底阴影诊断日志只打前几条（每只怪都打会刷屏）。2026-10-06 主人报「敌人 shadow 看不到」。</summary>
-    static int _shadowLogCount;
 
     static Material _footShadowMat;
 
@@ -1691,9 +1663,15 @@ public class Monster : UnitBase
         GameObject disc = MonsterAttackStyleTable.IsRanged(_swingStyle)
             ? CreateTelegraphDisc(center, radius)
             : CreateTelegraphFan(new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z), radius, GetVfxFacingDir());
+        // 【2026-10-16 主人报「引导对白中精英还攻击了一次」】根因：预警协程一旦启动不感知冻场，
+        // TalkBlock 冻场后照样倒数、到点直接结算。修法：冻场（UnitsCanAct=false）期间不计时，
+        // warn 计满仍冻着就继续等，解冻瞬间才砸 —— 与普攻入口（Attack 的 UnitsCanAct 检查）口径一致。
+        // 顺带（2026-10-16 主人要求「是个圈+扩散效果」）：预警期加呼吸脉冲，砸下瞬间加波纹扩散。
+        Vector3 baseScale = disc != null ? disc.transform.localScale : Vector3.one;
         float t = 0f;
+        float pulseT = 0f;
         float warn = Mathf.Max(0.5f, telegraphSec);
-        while (t < warn)
+        while (t < warn || (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct))
         {
             if (isDead || this == null)
             {
@@ -1701,22 +1679,40 @@ public class Monster : UnitBase
                 _skillTelegraphing = false;
                 yield break;
             }
-            t += Time.deltaTime;
+            // 冻场不倒数（红圈原地呼吸等待），解冻才继续计时
+            if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
+                t += Time.deltaTime;
+            // 呼吸脉冲：基准 scale 上叠 ±5% 正弦脉动（不受冻场影响，fan 的 x 带符号乘法安全）
+            pulseT += Time.deltaTime;
+            if (disc != null)
+            {
+                float pulse = 1f + 0.05f * Mathf.Sin(pulseT * 7f);
+                disc.transform.localScale = new Vector3(baseScale.x * pulse, baseScale.y * pulse, 1f);
+            }
             yield return null;
         }
         if (disc != null) Destroy(disc);
 
         if (!isDead && gameObject.activeInHierarchy)
         {
+            // 砸下瞬间：红圈位置一圈波纹快速外扩、渐隐
+            StartCoroutine(CoTelegraphBurst(center, radius * 2f));
             // 预警结束、技能真正释放瞬间触发一次震屏（仅首次释放；Boss 阶段2 连砸不再震）
             CombatJuice.Shake(
                 _isBossUnit ? GameConfig.BOSS_SKILL_RELEASE_SHAKE_AMP : GameConfig.ELITE_SKILL_RELEASE_SHAKE_AMP,
                 _isBossUnit ? GameConfig.BOSS_SKILL_RELEASE_SHAKE_DUR : GameConfig.ELITE_SKILL_RELEASE_SHAKE_DUR);
             ExecuteActiveSkillNow(primaryTarget, damage, radius, kit);
-            // Boss 阶段 2：连砸第二下
+            // Boss 阶段 2：连砸第二下（0.35s 间隙同样感知冻场，防演出中插刀）
             if (_isBossUnit && GetBossPhase() >= 2 && !MonsterAttackStyleTable.IsRanged(_swingStyle))
             {
-                yield return new WaitForSeconds(0.35f);
+                float t2 = 0f;
+                while (t2 < 0.35f)
+                {
+                    if (isDead || this == null) break;
+                    if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
+                        t2 += Time.deltaTime;
+                    yield return null;
+                }
                 if (!isDead)
                     ExecuteActiveSkillNow(primaryTarget, damage * 0.75f, radius * 0.85f, kit);
             }
@@ -1812,6 +1808,54 @@ public class Monster : UnitBase
         int sign = facingDir >= 0 ? 1 : -1;
         go.transform.localScale = new Vector3(radius * sign, radius * 0.35f, 1f);
         return go;
+    }
+
+    /// <summary>预警砸下瞬间的一圈波纹：从中心快速外扩、渐隐（2026-10-16 主人要求「扩散效果」）。</summary>
+    IEnumerator CoTelegraphBurst(Vector3 center, float dia)
+    {
+        var go = new GameObject("SkillTelegraphBurst");
+        go.transform.position = center;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = MakeRingSprite();
+        sr.color = new Color(0.95f, 0.12f, 0.1f, 0.85f);
+        sr.sortingOrder = GameConfig.SORT_UNIT - 1;
+        const float dur = 0.35f;
+        float t = 0f;
+        while (t < dur && sr != null)
+        {
+            float k = Mathf.Clamp01(t / dur);
+            float s = dia * (0.35f + 0.85f * k);
+            go.transform.localScale = new Vector3(s, s * 0.35f, 1f);
+            var c = sr.color;
+            c.a = 0.85f * (1f - k);
+            sr.color = c;
+            t += Time.deltaTime;
+            yield return null;
+        }
+        if (go != null) Destroy(go);
+    }
+
+    static Sprite _ringSprite;
+    static Sprite MakeRingSprite()
+    {
+        if (_ringSprite != null) return _ringSprite;
+        const int s = 96;
+        var tex = new Texture2D(s, s, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        float c = (s - 1) * 0.5f;
+        for (int y = 0; y < s; y++)
+        for (int x = 0; x < s; x++)
+        {
+            float dx = (x - c) / c;
+            float dy = (y - c) / c;
+            float d = Mathf.Sqrt(dx * dx + dy * dy);
+            // 环带中心 0.82、半宽 0.16，两侧软边（ppu=s → 贴图世界尺寸 1×1，scale=dia 即世界直径）
+            float a = d <= 1f ? Mathf.Clamp01(1f - Mathf.Abs(d - 0.82f) / 0.16f) : 0f;
+            tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+        }
+        tex.Apply();
+        _ringSprite = Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), s);
+        return _ringSprite;
     }
 
     void ExecuteActiveSkillNow(UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit)
@@ -1989,15 +2033,6 @@ public class Monster : UnitBase
 
     protected override void Die(bool isCritKill = false)
     {
-        // 【2026-10-07 E-13 诊断 · 主人确认「是同一只又从下面出现」】
-        // 只读日志，**不改任何行为**。三处联打印实例 ID + 世界 Y + 父节点：
-        // ① 死亡瞬间 ② 真正回收进池 ③ 下次出场（含「上一条命是否还是死亡中」）。
-        // 下次跑一遍看 ID 与 Y 就能判定：ID 相同 = 尸体被复用；Init 的 Y 与 Die 的 Y 差很多 = 出场坐标算错。
-        // ⚠ 定位后整段删除（上限 40 条，防止刷屏）。
-        if (_e13Log < 40)
-            Debug.Log($"[E13] ①死亡 id={gameObject.GetInstanceID()} name={name}" +
-                      $" y={transform.position.y:F2} parent={ParentName(transform)} 日志#{++_e13Log}");
-
         if (_hpBarRoot != null)
             _hpBarRoot.gameObject.SetActive(false);
         if (_worldHpBar != null)
@@ -2006,21 +2041,6 @@ public class Monster : UnitBase
         HideStackLabel();
         base.Die(isCritKill);
         BattleBossHpBar.RefreshFromField();
-    }
-
-    /// <summary>E-13 诊断日志计数（上限 40 条）。定位后连同三处日志一起删除。</summary>
-    static int _e13Log;
-
-    static string ParentName(Transform t) => t != null && t.parent != null ? t.parent.name : "(null)";
-
-    /// <summary>【2026-10-07 E-13 诊断】② 真正回收进池的那一刻（只读日志，行为与基类完全一致）。</summary>
-    protected override void OnDeathRelease()
-    {
-        if (_e13Log < 40)
-            Debug.Log($"[E13] ②回收 id={gameObject.GetInstanceID()} name={name}" +
-                      $" y={transform.position.y:F2} parent={ParentName(transform)}" +
-                      $" active={gameObject.activeSelf} 日志#{++_e13Log}");
-        base.OnDeathRelease();
     }
 
     public override void ResetForReuse()

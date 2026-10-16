@@ -17,9 +17,11 @@ public class NewMailToast : MonoBehaviour
     const float SlideInTime = 0.30f;    // 快速滑入
     const float HoldTime = 5.0f;        // 停留 5 秒
     const float SlideOutTime = 0.35f;   // 向右滑出
-    const float PanelW = 400f;
-    const float PanelH = 100f;
-    const float MarginRight = 24f;
+    // 【2026-10-16 主人拍板】底框不再比字大：宽高按文字 Preferred 尺寸 + 内边距自适应。
+    const float PadX = 18f;             // 左右内边距
+    const float PadY = 10f;             // 上下内边距
+    const int FontSize = 24;            // 主人要求：30 → 24（减 20%）
+    const float MarginRight = 0f;       // 主人要求：右缘贴住屏幕右缘（原 24 缝去掉）；框小了，进屏自然不多
     const float YPos = 300f;            // 右上区域（canvas 高 1280，中心 0，故 +300 在偏上）
     const float OffX = 720f;            // 屏幕外右侧（设计宽 720，half=360，+720 必在屏外）
     const int SortOrder = 950;
@@ -27,6 +29,7 @@ public class NewMailToast : MonoBehaviour
     enum Phase { In, Hold, Out, Done }
 
     static NewMailToast _inst;
+    static bool _pendingNotify;
 
     Canvas _canvas;
     RectTransform _panel;
@@ -41,6 +44,21 @@ public class NewMailToast : MonoBehaviour
         if (_inst == null) return;                 // 相机未就绪等场景下静默跳过，不崩
         if (_inst._phase != Phase.Done) return;   // 已有提示在显示，忽略新请求（邮件本就低频）
         _inst.Begin();
+    }
+
+    /// <summary>
+    /// 【2026-10-16 主人拍板】登记「稍后再弹」：引导收尾链里欢迎信发出时先不弹提示，
+    /// 等玩家关闭每日登录界面后再冲刷（DailyLoginUI.Hide → FlushPending）。
+    /// 标记是进程级的：玩家中途杀游戏就丢一次提示，邮件红点仍在，不兜底。
+    /// </summary>
+    public static void NotifyLater() => _pendingNotify = true;
+
+    /// <summary>冲刷待弹提示：有登记就立刻弹一次（目前唯一调用方：每日登录界面关闭时）。</summary>
+    public static void FlushPending()
+    {
+        if (!_pendingNotify) return;
+        _pendingNotify = false;
+        Notify();
     }
 
     static void EnsureInstance()
@@ -94,14 +112,11 @@ public class NewMailToast : MonoBehaviour
 
     void BuildPanel()
     {
-        _xFinal = (GameConfig.DESIGN_WIDTH * 0.5f) - (PanelW * 0.5f) - MarginRight;
-
         var panel = new GameObject("Panel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         panel.transform.SetParent(transform, false);
         _panel = panel.transform as RectTransform;
         _panel.anchorMin = _panel.anchorMax = new Vector2(0.5f, 0.5f);
         _panel.pivot = new Vector2(0.5f, 0.5f);
-        _panel.sizeDelta = new Vector2(PanelW, PanelH);
         _panel.anchoredPosition = new Vector2(OffX, YPos);
         var img = panel.GetComponent<Image>();
         img.color = new Color(0f, 0f, 0f, 0.85f);
@@ -117,11 +132,21 @@ public class NewMailToast : MonoBehaviour
         _label = labelGo.GetComponent<Text>();
         _label.font = GameFonts.GetChinese();
         _label.text = "您有新的邮件";
-        _label.fontSize = 30;
+        _label.fontSize = FontSize;
         _label.alignment = TextAnchor.MiddleCenter;
         _label.color = Color.white;
         _label.supportRichText = false;
         _label.raycastTarget = false;
+        // 不换行不裁剪，保证 PreferredWidth/Height 是纯文本尺寸（底框贴合文字的前提）
+        _label.horizontalOverflow = HorizontalWrapMode.Overflow;
+        _label.verticalOverflow = VerticalWrapMode.Overflow;
+
+        // 【2026-10-16 主人拍板】底框按文字自适应（不再 400×100 比字大一圈），
+        // 右缘贴住屏幕右缘（MarginRight=0），框小了伸进屏幕的部分自然也少。
+        float w = _label.preferredWidth + PadX * 2f;
+        float h = _label.preferredHeight + PadY * 2f;
+        _panel.sizeDelta = new Vector2(w, h);
+        _xFinal = (GameConfig.DESIGN_WIDTH * 0.5f) - (w * 0.5f) - MarginRight;
     }
 
     void Begin()

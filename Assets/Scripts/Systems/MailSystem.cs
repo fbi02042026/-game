@@ -128,8 +128,10 @@ public static class MailSystem
 
     // ── 2026-10-16 邮件 UI 改造新增（T2）─────────────────────────────────
 
-    /// <summary>富邮件入队（调用方自行构造 MailEntry：sender/type/detailImagePath/attachments）。</summary>
-    public static void Enqueue(MailEntry mail)
+    /// <summary>富邮件入队（调用方自行构造 MailEntry：sender/type/detailImagePath/attachments）。
+    /// 【2026-10-16 主人拍板】notifyToast=false 时只入邮不弹提示，由调用方择机弹
+    /// （引导收尾链：欢迎信 → 弹登录 → 玩家关登录 → DailyLoginUI.Hide 里才冲刷提示）。</summary>
+    public static void Enqueue(MailEntry mail, bool notifyToast = true)
     {
         if (mail == null) return;
         if (string.IsNullOrEmpty(mail.id)) mail.id = Guid.NewGuid().ToString("N");
@@ -139,15 +141,19 @@ public static class MailSystem
         SaveSystem.Instance.Save();
         Debug.Log($"[Mail] 富邮件入邮 {mail.title}，未领={UnclaimedCount()}");
         RedDot.RefreshCommon();
-        NewMailToast.Notify();   // 🆕 新邮件：右侧滑入黑底白字提示
+        if (notifyToast)
+            NewMailToast.Notify();   // 🆕 新邮件：右侧滑入黑底白字提示
+        else
+            NewMailToast.NotifyLater();   // 只入邮不弹：登记待弹，等登录界面关闭时冲刷
     }
 
     /// <summary>
     /// 首登欢迎邮件（给玩家的正式/测试信）：含 200 金币 + 1 位伙伴「莉娜(H017)」+ 致谢与加群邀请。
     /// 用固定 id 去重，整份存档只发一次；要重新发放（改文案/加奖励）只需把 id 升版（welcome_2026_v2）。
-    /// 触发点：① 玩完新手引导（StoryProgress.MarkTutorialDone）；② 已通关老玩家回主界面补发（TownSceneBootstrap，幂等）。
+    /// 触发点：① 玩完新手引导（StoryProgress.MarkTutorialDone，notifyToast=false：提示延后到关登录时）；
+    /// ② 已通关老玩家回主界面补发（TownSceneBootstrap，幂等）。
     /// </summary>
-    public static void EnsureWelcomeMail()
+    public static void EnsureWelcomeMail(bool notifyToast = true)
     {
         Ensure();
         const string WelcomeId = "welcome_2026_v1";
@@ -179,7 +185,7 @@ public static class MailSystem
                     iconOverride = ContentPaths.Icons.MercHead + "/H017",
                 },
             },
-        });
+        }, notifyToast);
     }
 
     /// <summary>打开详情即记已读（只标记，不动领取状态）。</summary>

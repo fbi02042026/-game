@@ -685,6 +685,9 @@ public class DailyLoginUI : MonoBehaviour
         // 关掉登录时若人还停在天赋页，顺手把天赋页收掉，让玩家回到城镇主界面。
         if (TalentUI.Instance != null && TalentUI.Instance.IsOpen)
             TalentUI.Instance.Hide();
+        // 【2026-10-16 主人拍板】玩家关掉登录界面，这时才提示「您有新的邮件」——
+        // 引导收尾串行链的最后一环（欢迎信在 MarkTutorialDone 时已入邮，只登记未弹）。
+        NewMailToast.FlushPending();
     }
 
     // ============================================================
@@ -777,7 +780,9 @@ public class DailyLoginUI : MonoBehaviour
         // 画面在 RequestShowOnMainUi 里已由 HideVisuals 收起（同帧、不闪）；这里只等回主界面
         while (_pendingShow)
         {
-            if (!TalentPageOpen())          // 天赋页关了 = 回到主界面
+            // 【2026-10-16 主人拍板】回主界面的判定加严：天赋页关了 **且** 首次引导收完了才弹，
+            // 防止引导遮罩/收尾气泡还挂着时登录弹进来交叉。
+            if (!TalentPageOpen() && !GuideStillBusy())
             {
                 _pendingShow = false;
                 Open();
@@ -790,6 +795,17 @@ public class DailyLoginUI : MonoBehaviour
 
     /// <summary>天赋页是否还开着（挡着主界面）。只判这一种：主人反馈的场景就是天赋页。</summary>
     static bool TalentPageOpen() => TalentUI.Instance != null && TalentUI.Instance.IsOpen;
+
+    /// <summary>
+    /// 首次引导（FirstRunGuide）是否还在跑。2026-10-16 串行化新增：
+    /// 引导没收完（游标未到 Done）就不算回到主界面，登录弹窗继续等。
+    /// 引导不存在 / 已完成的玩家恒为 false，不影响老档。
+    /// </summary>
+    static bool GuideStillBusy()
+    {
+        var g = FirstRunGuide.Instance;
+        return g != null && !g.IsFinished;
+    }
 
     /// <summary>按面板实际宽度重排 8 格与三条横带（逻辑宽 576~720 浮动，必须运行时算）。</summary>
     void Layout()

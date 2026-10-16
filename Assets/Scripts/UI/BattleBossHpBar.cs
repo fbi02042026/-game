@@ -21,7 +21,9 @@ public class BattleBossHpBar : MonoBehaviour
     Monster _lastLoggedPick;   // 【2026-10-15】排查日志去重用
     Transform _progressBar;
     Transform _questMap;
+    Transform _topBar;         // 【2026-10-16】顶栏也随血条联动隐藏（主人「map 那里的其他 UI」口径）
     bool _chromeCached;
+    bool _lastShowLogged;      // 【2026-10-16】显示诊断日志去重：由藏变显才 dump 一次运行时状态
 
     // BOSS 出场血条入场演出状态（1.2 秒从 0 填充到满）
     bool _introPlaying;
@@ -121,6 +123,15 @@ public class BattleBossHpBar : MonoBehaviour
         _fullWidth = Mathf.Max(1f, _fillRt.sizeDelta.x);
         _fullHeight = _fillRt.sizeDelta.y;
 
+        // 【2026-10-16 血条「显示了却看不见」根因】AutoGameInitializer 给 TopBar/ProgressBar/QuestPanel/
+        // BackpackPanel 等顶部 HUD 挂了 overrideSorting=100 的嵌套 Canvas、map=SORT_MAPROOT，
+        // 而血条只在根 Canvas（SORT_BATTLE_UI 低层）里 —— SetAsLastSibling 只在根层内有效，
+        // 血条永远压不过这些 HUD（嵌套 Canvas 让 SetSiblingIndex 失效的深坑）。
+        // → 给血条根挂 overrideSorting Canvas 抬到 BattleHud(950)：战斗 HUD 之上、弹窗/Toast 之下。
+        var bossCanvas = _root.GetComponent<Canvas>() ?? _root.gameObject.AddComponent<Canvas>();
+        bossCanvas.overrideSorting = true;
+        bossCanvas.sortingOrder = GameConfig.UiSort.BattleHud;
+
         _root.gameObject.SetActive(false);
         _wantVisible = false;
         CacheChrome(searchRoot);
@@ -134,8 +145,11 @@ public class BattleBossHpBar : MonoBehaviour
             uiRoot = BattleUI.Instance.transform;
         if (uiRoot == null) return;
         _progressBar = FindDeep(uiRoot, "ProgressBar");
-        _questMap = FindDeep(uiRoot, "QuestMap");
-        _chromeCached = _progressBar != null || _questMap != null;
+        // 【2026-10-16 主人拍板「boss血条显示时把map那里的其他UI隐藏」】旧引用 "QuestMap" 在 prefab 里
+        // 根本不存在（死引用，血条显示时 map 从来没被藏过）——顶部实际叫 map，另有 TopBar 顶栏一并联动。
+        _questMap = FindDeep(uiRoot, "map");
+        _topBar = FindDeep(uiRoot, "TopBar");
+        _chromeCached = _progressBar != null || _questMap != null || _topBar != null;
     }
 
     static void EnsureLeftAligned(RectTransform rt)
@@ -307,13 +321,38 @@ public class BattleBossHpBar : MonoBehaviour
         {
             // 【2026-10-15】显示时抬到 Canvas 内容的最后：防被后画的兄弟节点（透明全屏图元等）盖住
             _root.SetAsLastSibling();
+            // 【2026-10-16 排查日志】显示链路代码已证实跑通（日志有「锁定目标→显示屏幕血条」）但主人屏幕上看不见，
+            // 静态排查（prefab 三图 guid / 父级 active / 几何位置 / 同层 Canvas 覆盖）全部通过 → 只剩运行时视觉层未知。
+            // 由藏变显时 dump 一次运行时状态：父级链是否 active、四角世界坐标（在不在屏内）、缩放（有没有被压扁）、Canvas 模式。
+            if (!_lastShowLogged)
+            {
+                _lastShowLogged = true;
+                var rtShow = _root as RectTransform;
+                if (rtShow != null)
+                {
+                    var corners = new Vector3[4];
+                    rtShow.GetWorldCorners(corners);
+                    var cv = rtShow.GetComponentInParent<Canvas>();
+                    string mode = cv != null ? cv.renderMode.ToString() : "NoCanvas";
+                    Debug.Log($"[BattleBossHpBar] 显示执行：activeInHierarchy={_root.gameObject.activeInHierarchy} " +
+                              $"worldBL={corners[0]} worldTR={corners[2]} lossyScale={rtShow.lossyScale} " +
+                              $"rect={rtShow.rect.size} canvas={mode}");
+                }
+            }
+        }
+        else
+        {
+            _lastShowLogged = false;   // 收起后，下次再显示重新 dump
         }
 
         // Boss 血条出现时让出顶部：藏进度条与任务图
+        // 【2026-10-16 主人口令】引导战进度条整场要藏——BossHpBar 收起时不得把进度条重新打开。
         CacheChrome(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
         bool hideChrome = _wantVisible; // 只要在打 Boss/精英目标就藏，KillCam 期间也保持藏
-        SetChromeActive(_progressBar, !hideChrome);
+        bool hideForTutorial = TutorialDirector.IsTutorialBattle;
+        SetChromeActive(_progressBar, !hideChrome && !hideForTutorial);
         SetChromeActive(_questMap, !hideChrome);
+        SetChromeActive(_topBar, !hideChrome);
     }
 
     static void SetChromeActive(Transform t, bool active)

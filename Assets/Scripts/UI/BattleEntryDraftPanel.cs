@@ -822,7 +822,8 @@ public class BattleEntryDraftPanel : MonoBehaviour
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         // 【2026-10-13 #6】58 → 88：顺手修触摸目标不达标（美术规格 §5.5）。
-        rt.sizeDelta = new Vector2(88f, 88f);
+        // 【2026-10-16 主人口令】图标有点大 → 缩小 30%（88 → 61.6）。
+        rt.sizeDelta = new Vector2(61.6f, 61.6f);
         // 用世界角点换成容器本地坐标，抽奖按钮是什么锚点都不影响（直接读 anchoredPosition 会被锚点坑）。
         var corners = new Vector3[4];
         normal.GetWorldCorners(corners);
@@ -830,7 +831,8 @@ public class BattleEntryDraftPanel : MonoBehaviour
         Vector2 right = _draftRt.InverseTransformPoint(corners[2]);
         float halfW = Mathf.Abs(right.x - center.x);
         // 【2026-10-13 #6】按钮更宽，间隙从 38 拉到 60，免得贴着普通按钮。
-        rt.anchoredPosition = new Vector2(center.x + halfW + 60f, center.y);
+        // 【2026-10-16 主人口令】往上移 10 像素。
+        rt.anchoredPosition = new Vector2(center.x + halfW + 60f, center.y + 10f);
 
         var img = go.GetComponent<Image>();
         // 2026-10-15 主人拍板：概率按钮换成美术图 Art/UI/Common/提示（金币问号），

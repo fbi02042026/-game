@@ -181,6 +181,12 @@ public partial class BattleUI : MonoBehaviour
         if (progressContainer == null) BindProgressBar();
         if (playerMarker == null) return;
 
+        // 【2026-10-16 主人口令】引导战整条藏掉顶部进度条，正式关再开。
+        // 每次更新进度都校正一次显隐，避免被 BossHpBar 让顶逻辑误开。
+        bool showBar = !TutorialDirector.IsTutorialBattle;
+        if (progressContainer.gameObject.activeSelf != showBar)
+            progressContainer.gameObject.SetActive(showBar);
+
         RectTransform markerRT = playerMarker.rectTransform;
         if (atEndFlag && endFlag != null)
         {

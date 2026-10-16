@@ -149,7 +149,10 @@ public static class SceneLoadingCoordinator
                     // 若这里是 1.000 且 Hide 后 overlayShowing=false，说明 BGM 放行时机是对的，声音另有来源。
                     Debug.Log($"[LoadDiag] Hide+Unmute display={_displayProgress:F3} " +
                               $"overlayShowing(beforeHide)={BattleLoadingOverlay.IsShowing} bgmMuted={GameBgm.IsLoadingMuted}");
-                    BattleLoadingOverlay.Hide();
+                    // 【2026-10-16 主人拍板】回城收尾流程（TownAfterBattleRoutine）用 KeepVisible 按住 Loading：
+                    // 等塔克剧情真正弹出后才收，主界面全程被盖住。BGM/音效解禁照常走，不跟 Hide 绑死。
+                    if (!BattleLoadingOverlay.KeepVisible)
+                        BattleLoadingOverlay.Hide();
                     GameBgm.UnmuteAfterLoading();
                     GameAudio.UnmuteAfterLoading();
                     // 片头还没播时留下黑幕，避免 Loading 关掉后先闪一帧公会大厅。

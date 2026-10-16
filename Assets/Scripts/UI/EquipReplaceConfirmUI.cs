@@ -310,13 +310,18 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     static void ApplyPowerLine(Transform col, string powerLine)
     {
         var tf = FindDeep(col, "zhanli");
+
+        bool has = !string.IsNullOrEmpty(powerLine);
         if (tf == null)
         {
-            Debug.LogError("[EquipReplaceConfirm] 预制体里缺少节点 zhanli（战力行），请确认已放进 Iconbg 框内");
+            // 【2026-10-16 主人拍板「找得到就不要报错」】zhanli 只挂在 ColumnNew 下（旧装备栏
+            // 本来就没有这个节点），旧栏走过来 powerLine=null，找不到属正常，静默 return；
+            // 只有「真要显示战力行却找不到节点」才是预制体真缺件，保留 LogError 不兜底。
+            if (has)
+                Debug.LogError("[EquipReplaceConfirm] 预制体里缺少节点 zhanli（战力行），请确认已放进 Iconbg 框内");
             return;
         }
 
-        bool has = !string.IsNullOrEmpty(powerLine);
         tf.gameObject.SetActive(has);
         if (!has) return;
 

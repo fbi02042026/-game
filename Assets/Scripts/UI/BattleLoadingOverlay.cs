@@ -9,10 +9,19 @@ public static class BattleLoadingOverlay
 {
     static LoadingUI _ui;
 
+    /// <summary>
+    /// 【2026-10-16 主人拍板「回城后直接出塔克剧情 不要出现主界面」】
+    /// 置 true 时 SceneLoadingCoordinator 的自动 Hide 被按住（Loading 停在满格），
+    /// 由回城收尾流程在塔克剧情真正弹出后再放行收掉 —— 主界面全程被 Loading 盖住不闪帧。
+    /// 用完必须复位（正常路径在 TownAfterBattleRoutine 收尾；域重载由 ResetStatics 兜底）。
+    /// </summary>
+    public static bool KeepVisible = false;
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     static void ResetStatics()
     {
         _ui = null;
+        KeepVisible = false;
     }
 
     public static void Show(string tip = null)
@@ -51,6 +60,8 @@ public static class BattleLoadingOverlay
 
     public static void Hide()
     {
+        // 【2026-10-16】回城过渡期间被 KeepVisible 按住：Loading 由收尾流程自己收，这里不销毁。
+        if (KeepVisible) return;
         if (_ui == null) return;
         Object.Destroy(_ui.gameObject);
         _ui = null;
