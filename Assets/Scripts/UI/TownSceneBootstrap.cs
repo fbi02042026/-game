@@ -170,14 +170,21 @@ public class TownSceneBootstrap : MonoBehaviour
         if (_loginCheckedThisTownVisit) return;
         // 引导未完成不弹，避免半透明遮罩挡「点冒险」
         if (!StoryProgress.TutorialDone) return;
-        if (SaveSystem.Instance?.Data == null) return;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
         _loginCheckedThisTownVisit = true;
 
+        MailSystem.EnsureWelcomeMail();   // 🆕 已通关老玩家回主界面补发欢迎信（幂等：已发过不再入邮、不再弹提示）
         DailyLoginSystem.OnEnterGame();
-        // 【2026-10-10 主人要求】「当玩家返回主界面的时候再弹出每日登录」——
-        // 这里不再直接 Show（进 Town 就弹会盖在天赋页上），改成登记，回主界面才弹。
-        if (DailyLoginSystem.HasClaimable())
+        // 【2026-10-16 主人拍板】「已经领过每日登录的就不要每次再弹」：
+        // 一天最多自动弹一次——今天弹过（或领过）就不再自动弹，避免回主界面反复弹；
+        // 手动入口（主界面每日登录按钮）仍可随时打开。
+        if (DailyLoginSystem.HasClaimable() && data.loginPopupShownDay != ShopDefs.TodayKey())
+        {
+            data.loginPopupShownDay = ShopDefs.TodayKey();
+            SaveSystem.Instance.Save();
             DailyLoginUI.RequestShowOnMainUi();
+        }
     }
 
     static bool _resumeChecked;

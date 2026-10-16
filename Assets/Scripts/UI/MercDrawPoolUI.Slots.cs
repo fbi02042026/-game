@@ -18,8 +18,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 预制体池格填充（2026-10-15 主人重做预制体后）：不销毁子节点，按状态填
-    /// 头像 / 名字 / Role / quxiao / suo + 稀有度框；空格与锁格清空卡面。
+    /// 预制体池格填充（2026-10-15 主人重做预制体后）：不销毁子节点，按状态只填
+    /// 头像 / 名字 / quxiao / suo（框与尺寸保持预制体原样，2026-10-16 主人拍板）；空格与锁格清空卡面。
     /// </summary>
     void RefreshPrefabPoolSlot(GameObject slot, bool open, string hireId)
     {
@@ -47,8 +47,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
         }
 
         MercRosterDefs.TryGetByHireId(hireId, out var def);
-        var sp = MercPortraitSprites.GetHead(hireId);
-        if (sp == null && !string.IsNullOrEmpty(def.AssetId)) sp = MercPortraitSprites.GetHead(def.AssetId);
+        // 【2026-10-16 主人纠正】池格放全身立绘（GetStand），不是头像；取景是主人调好的，只换图
+        var sp = MercPortraitSprites.GetStand(hireId);
+        if (sp == null && !string.IsNullOrEmpty(def.AssetId)) sp = MercPortraitSprites.GetStand(def.AssetId);
         if (icon != null)
         {
             icon.sprite = sp;
@@ -56,8 +57,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
             icon.color = Color.white;
         }
         if (nameT != null) nameT.text = def.Name;
-        ApplyRoleIcon(slot.transform, def, true);
-        ApplyRarityFrames(slot, def);
+        // 【2026-10-16 主人拍板】池格只换头像和名字，框/尺寸/节点一律保持预制体原样：
+        // 稀有度框图比例(204x248=0.82)与卡槽(200x300=0.67)不一致，运行时换 Sliced 图会把框拉扁拉大。
         if (qxTr != null) qxTr.gameObject.SetActive(true);
         if (suoTr != null) suoTr.gameObject.SetActive(false);
     }

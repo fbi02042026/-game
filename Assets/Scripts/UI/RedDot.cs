@@ -35,6 +35,8 @@ public static class RedDot
     /// <summary>2026-09-29：天赋入口红点 —— 左列推到某个右列门槛时点亮（TalentSystem.BuildRightUnlockHint），
     /// 玩家打开一次天赋页就清掉（TalentUI.Show）。</summary>
     public const string Talent = "nav.talent";
+    /// <summary>2026-10-16：每日登录入口红点 —— 有可领的登录奖励时亮起。</summary>
+    public const string DailyLogin = "dailylogin";
 
     public static Sprite Sprite
     {
@@ -162,6 +164,7 @@ public static class RedDot
         // 挂在这里是为了**登录 / 回城就亮**，不用等玩家先打开一次天赋页。
         var data = SaveSystem.Instance?.Data;
         Set(Talent, data != null && TalentDefs.AnyNewlyOpen(data.talents));
+        Set(DailyLogin, DailyLoginSystem.HasClaimable());
         AdventureCodex.RefreshRedDots();
     }
 }

@@ -2,208 +2,203 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>佣兵抽奖池 UI · 大滚动收编与段排版（RestructureMasterScroll 一条大滚动路线）。</summary>
-public partial class MercDrawPoolUI : MonoBehaviour
+/// <summary>
+/// 佣兵抽奖池 UI · 列表结构（2026-10-16 主人原话口径二次修正）：
+/// 「最上面的top节点是不动的 佣兵池是不动的 只有下面的已获得和未获得是个大的滑动列表」
+/// <para>① top 招募池（ScrollIco/PoolHead/PoolCount/PoolGrid 五槽）<b>固定不动</b>，代码只填头像/名字；</para>
+/// <para>② top 以下整块 = <b>唯一一条大滚动</b>（center/OwnedScroll 视口顶扩到招募池底），Content 内依次：
+///    已获得段头（yiyongyou/OwnedHead/jiantou/PoolCount1 收进 Content，跟随滚动）→ 已获得卡
+///    → 未获得段头（down 的 weiyongyou/LockedHead 收进 Content）→ 未获得卡；</para>
+/// <para>③ center/down/LockedScroll 停用、分割线隐藏（合并后不再需要）。</para>
+/// </summary>
+public partial class MercDrawPoolUI
 {
-    // ============================================================
-    // 一条大滚动（2026-10-15 主人拍板：top 池区的字和装饰、已拥有、未获得 全在同一滚动里；
-    // 底框背景不滚；down/LockedScroll 停用。只挪父节点和落位，不改任何预制体节点的宽高/字号）
-    // ============================================================
+    class FlowNode
+    {
+        public RectTransform rt;
+        public float centerX;     // 相对 Content 中心的 x（局部）
+        public float topOffset;   // 相对本簇顶边的纵向偏移（局部，向下为正）
+        public float h;
+    }
 
-    class FlowNode { public RectTransform rt; public float x; public float topOffset; public float h; }
+    // —— 大滚动视口矩形（center 局部；center 是 100×100 壳、pivot 0.5，与 Panel 中心同轴，数值即面板坐标）——
+    // 顶不写死：搭列表时量招募池五槽（含名字牌下垂）最低沿，再留 PoolToListGap；底沿用预制体原 LockedScroll 底。
+    const float ListViewBottomY = -485f;
+    const float ListViewWidth = 634f;
+    const float PoolToListGap = 12f;     // 招募池最低沿与滚动列表顶的间隙
+
+    readonly List<FlowNode> _flowOwnedHeadNodes = new List<FlowNode>();
+    readonly List<FlowNode> _flowLockedHeadNodes = new List<FlowNode>();
+    RectTransform _masterContent;
+    ScrollRect _masterScroll;
+    Transform _restructurePanel;
+    bool _masterReady;
+    float _flowLockedCardsY;
+    float _hOwnedHead;
+    float _hLockedHead;
+    const float GapSection = 24f;        // 已获得段与未获得段的间隔
+    const float HeadToCardsGap = 8f;     // 段头与其下卡片区的间隔
 
     /// <summary>
-    /// 收编成一条大滚动：OwnedScroll 视口扩到 Header 以下整块内容区，
-    /// Content 依次收 top 池区 → 已拥有头 → (已拥有卡) → 未获得头 → (未获得卡)。
-    /// 只改父节点和落位（两段式世界坐标校正），不改任何节点的宽高/字号。
+    /// 一次性搭好列表结构。【调用前提】Root 已激活（Open 先 SetActive(true)），否则放弃下次重试。
+    /// 只做：扩视口 / 隐藏分割线 / 停旧滚动 / 把两段头收进 Content。top 招募池一律不碰。
     /// </summary>
-    void RestructureMasterScroll(Transform panel)
+    void SetupMasterList(Transform panel)
     {
-        // 布局先跑一遍：刚实例化/刚改锚点的节点，世界矩形要等 Canvas 更新才是真的
-        Canvas.ForceUpdateCanvases();
+        if (_root == null || !_root.activeInHierarchy)
+        {
+            Debug.LogError("[MercDrawPoolUI] 列表搭建时 Root 未激活 → 本次放弃，下次打开重试");
+            return;
+        }
 
         var center = panel.Find("center") as RectTransform;
-        var scrollTr = center != null ? center.Find("OwnedScroll") : null;
         var down = center != null ? center.Find("down") : null;
-        var top = panel.Find("top") as RectTransform;
-        if (center == null || scrollTr == null || down == null || top == null)
+        var viewport = center != null ? center.Find("OwnedScroll") as RectTransform : null;
+        var content = viewport != null ? viewport.Find("Content") as RectTransform : null;
+        if (center == null || down == null || viewport == null || content == null)
         {
-            Debug.LogError("[MercDrawPoolUI] 一条大滚动缺节点 center/OwnedScroll/top/down → 保持原两段滚动");
-            return;
-        }
-        var viewport = scrollTr as RectTransform;
-        var content = scrollTr.Find("Content") as RectTransform;
-        var prt = panel as RectTransform;
-        var header = panel.Find("Header") as RectTransform;
-        if (viewport == null || content == null || prt == null)
-        {
-            Debug.LogError("[MercDrawPoolUI] OwnedScroll/Content 缺失 → 保持原两段滚动");
+            Debug.LogError("[MercDrawPoolUI] 列表缺节点 center/OwnedScroll/Content/down → 保持预制体原样");
             return;
         }
 
-        // 1) 先量：面板矩形 / Header 底（世界坐标），再挪视口
-        var pc = new Vector3[4];
-        prt.GetWorldCorners(pc);
-        float headerBottomWorld = pc[1].y;
-        if (header != null)
-        {
-            var hc = new Vector3[4];
-            header.GetWorldCorners(hc);
-            headerBottomWorld = hc[0].y;
-        }
-        float ky = prt.lossyScale.y;
-        float headerHLocal = ky > 0.0001f ? (pc[1].y - headerBottomWorld) / ky : 0f;
+        Canvas.ForceUpdateCanvases();
 
-        // 2) 视口挪到 Panel 下、插到 center 原位（ReplacePanel 仍在其上），顶格 Header 以下；
-        //    自身 Image 置透明（Mask 仍生效），不再画底
-        viewport.SetParent(panel, false);
-        // 2026-10-15 主人拍板：视口必须排在 center 【之后】——center 里还留着 底框（紫色 a≈0.33）与 分割线，
-        // 排在它们前面 = 这俩盖在整条滚动内容之上（预制体原设计 底框 是 center 第一个子节点＝OwnedScroll 的背景）。
-        viewport.SetSiblingIndex(center.GetSiblingIndex() + 1);
-        // 2026-10-15 主人拍板：anchorMin.y 必须是 0（底锚）——写成 1（顶锚）时 offsetMin.y=+16 会量出负高度矩形，
-        // RectMask2D 判定 validRect=false 把整条收编内容 cull 掉（不渲染也不响应射线 = 佣兵卡全空），
-        // 且透明视口图（raycastTarget=1）的包围盒会盖住右上角 X 关闭按钮 = 点了没反应。
-        // (0,0)+(1,1) 才是「底边=面板底+16、顶边=Header 底-8」的正确语义。
-        viewport.anchorMin = new Vector2(0f, 0f);
-        viewport.anchorMax = new Vector2(1f, 1f);
-        viewport.pivot = new Vector2(0.5f, 1f);
-        viewport.offsetMin = new Vector2(ScrollSidePad, ScrollBottomPad);
-        viewport.offsetMax = new Vector2(-ScrollSidePad, -(headerHLocal + 8f));
-        var vimg = viewport.GetComponent<Image>();
-        if (vimg != null)
-        {
-            vimg.sprite = null;
-            var vc = vimg.color;
-            vimg.color = new Color(vc.r, vc.g, vc.b, 0f);
-            vimg.raycastTarget = true;
-        }
+        // 1) 视口顶=招募池五槽最低沿（含名字牌）再留 12 间隙（top 以下整块都给大滚动）；底=原 LockedScroll 底。
+        //    不挪父、不改锚点族（保持 center 下 0.5/0.5 中心锚）、不碰 Mask 底图（Stencil 靠它，alpha 也不能动）。
+        float topY = PoolLowestY(center) - PoolToListGap;
+        viewport.anchoredPosition = new Vector2(0f, (topY + ListViewBottomY) * 0.5f);
+        viewport.sizeDelta = new Vector2(ListViewWidth, topY - ListViewBottomY);
+        _masterScroll = viewport.GetComponent<ScrollRect>();
 
-        // 3) Content 归一成顶拉伸（宽随视口，顶边=视口顶）
-        content.anchorMin = new Vector2(0f, 1f);
-        content.anchorMax = new Vector2(1f, 1f);
-        content.pivot = new Vector2(0.5f, 1f);
-        content.offsetMin = new Vector2(0f, 0f);
-        content.offsetMax = new Vector2(0f, 0f);
-        content.anchoredPosition = new Vector2(0f, 0f);
-        Canvas.ForceUpdateCanvases();   // 让视口/Content 的新矩形先落定，再量世界坐标收编
-
-        // 4) 收编各段（先记原世界矩形再挪，簇内相对摆法原样保留）
+        // 2) Content 预制体已是顶拉伸（anchor 0,1→1,1、pivot 0.5,1），确保 offset 归零即可
+        content.offsetMin = Vector2.zero;
+        content.offsetMax = Vector2.zero;
+        content.anchoredPosition = Vector2.zero;
         _masterContent = content;
-        // 2026-10-15 主人拍板：top 是 100×100 的空壳容器（面板正中），PoolGrid/PoolHead/PoolCount/ScrollIco
-        // 全飘在壳子上方 100~450px —— 收编【壳子】会把整个池区摆到视口顶上方约 430px，被 RectMask2D 裁没。
-        // 改收编 top 的直接子节点（各自有真矩形），簇高按子节点并集算，池区正好贴在 Header 下方。
-        var topChildren = new List<RectTransform>();
-        for (int i = 0; i < top.childCount; i++)
-            if (top.GetChild(i) is RectTransform ch) topChildren.Add(ch);
-        _hTop = CollectCluster(topChildren.ToArray(), content, _flowTopNodes, 0f);
-        PlaceFlowCluster(_flowTopNodes, 0f);
-        float yCur = _hTop + GapSection;
-        _hOwnedHead = CollectCluster(new[]
+
+        // 3) 合并后旧分隔物处理：分割线隐藏；旧第二段滚动停用
+        var divider = center.Find("分割线");
+        if (divider != null) divider.gameObject.SetActive(false);
+        var lockedScroll = down.Find("LockedScroll");
+        if (lockedScroll != null) lockedScroll.gameObject.SetActive(false);
+
+        // 4) 两段头收进 Content 跟随滚动（此刻 Root 已激活、量得准）；缺节点报错不静默
+        CollectCluster(new[]
         {
             center.Find("yiyongyou") as RectTransform,
             center.Find("OwnedHead") as RectTransform,
             center.Find("jiantou") as RectTransform,
             center.Find("PoolCount1") as RectTransform,
-        }, content, _flowOwnedHeadNodes, yCur);
-        PlaceFlowCluster(_flowOwnedHeadNodes, yCur);
-        _flowOwnedCardsY = yCur + _hOwnedHead + HeadToCardsGap;
-        float lockedHeadY0 = _flowOwnedCardsY;             // 初始估位；真实位随已拥有卡数每刷重算
-        _hLockedHead = CollectCluster(new[]
+        }, new[] { "center/yiyongyou", "center/OwnedHead", "center/jiantou", "center/PoolCount1" },
+            content, _flowOwnedHeadNodes, out _hOwnedHead, "已获得段头");
+        CollectCluster(new[]
         {
             down.Find("weiyongyou") as RectTransform,
             down.Find("LockedHead") as RectTransform,
-        }, content, _flowLockedHeadNodes, lockedHeadY0);
-        PlaceFlowCluster(_flowLockedHeadNodes, lockedHeadY0);
-        _flowLockedCardsY = lockedHeadY0 + _hLockedHead + HeadToCardsGap;
+        }, new[] { "down/weiyongyou", "down/LockedHead" },
+            content, _flowLockedHeadNodes, out _hLockedHead, "未获得段头");
 
-        // 5) 旧的第二段滚动整个停用
-        var lockedScroll = down.Find("LockedScroll");
-        if (lockedScroll != null) lockedScroll.gameObject.SetActive(false);
-        Canvas.ForceUpdateCanvases();   // 收编完再刷一遍，后面 BuildTemplateCards 量的才是最终位置
+        Canvas.ForceUpdateCanvases();
         _masterReady = true;
+        if (_masterScroll != null) _masterScroll.verticalNormalizedPosition = 1f;
+
+#if UNITY_EDITOR
+        _flowChecked = false;
+#endif
+    }
+
+    /// <summary>招募池五槽的最低沿（center 局部 y，含名字牌下垂；量不到退回 69 = 预制体原段头顶沿）。</summary>
+    float PoolLowestY(Transform center)
+    {
+        float lowest = float.MaxValue;
+        bool any = false;
+        for (int i = 0; i < _poolSlots.Count; i++)
+        {
+            var rt = _poolSlots[i] != null ? _poolSlots[i].transform as RectTransform : null;
+            if (rt == null) continue;
+            EatBottom(rt, center, ref lowest, ref any);
+            var namebg = rt.Find("namebg") as RectTransform;
+            if (namebg != null) EatBottom(namebg, center, ref lowest, ref any);
+        }
+        return any ? lowest : 69f;
+    }
+
+    static void EatBottom(RectTransform rt, Transform center, ref float lowest, ref bool any)
+    {
+        var c = new Vector3[4];
+        rt.GetWorldCorners(c);
+        var local = center.InverseTransformPoint((c[0] + c[3]) * 0.5f);  // 底边中点
+        if (local.y < lowest) lowest = local.y;
+        any = true;
     }
 
     /// <summary>
-    /// 把一串节点收编进 Content：先记原世界矩形，挪父后用两段式世界校正落位，
-    /// 簇内相对摆法（x、上下相对距离）原样保留。返回簇高（Content 局部）。
+    /// 把一段头（图标/标题/计数等）收进 Content：激活状态量 Content 局部矩形，挪父后记录相对布局。
+    /// 只量这一次；每刷用 PlaceCluster 摆位。缺节点打 Error 报名字（不静默）。
     /// </summary>
-    float CollectCluster(RectTransform[] nodes, RectTransform content, List<FlowNode> sink, float clusterFlowY)
+    void CollectCluster(RectTransform[] nodes, string[] names, RectTransform content, List<FlowNode> into, out float clusterH, string label)
     {
-        sink.Clear();
-        var cc = new Vector3[4];
-        content.GetWorldCorners(cc);
-        float contentLeftX = cc[0].x, contentTopY = cc[1].y;
-        float kx = content.lossyScale.x, ky = content.lossyScale.y;
-        if (kx < 0.0001f || ky < 0.0001f) return 0f;
-
-        var recs = new List<(RectTransform rt, float leftX, float topY, float h, float w)>();
-        float clusterTopWorld = float.MaxValue;
+        into.Clear();
+        clusterH = 0f;
+        var list = new List<RectTransform>(nodes.Length);
+        var missing = new List<string>();
         for (int i = 0; i < nodes.Length; i++)
         {
-            var rt = nodes[i];
-            if (rt == null) continue;
-            var c = new Vector3[4];
-            rt.GetWorldCorners(c);
-            recs.Add((rt, c[0].x, c[1].y, (c[1].y - c[0].y) / ky, (c[2].x - c[0].x) / kx));
-            if (c[1].y < clusterTopWorld) clusterTopWorld = c[1].y;
+            if (nodes[i] != null) list.Add(nodes[i]);
+            else missing.Add(i < names.Length ? names[i] : ("第" + (i + 1) + "个节点"));
         }
-        if (recs.Count == 0) return 0f;
-        float clusterTopLocal = (contentTopY - clusterTopWorld) / ky;
+        if (missing.Count > 0)
+            Debug.LogError("[MercDrawPoolUI] " + label + "缺节点: " + string.Join(", ", missing.ToArray()) + " → 按剩余节点搭建");
+        if (list.Count == 0) return;
+
+        var cc = new Vector3[4];
+        content.GetWorldCorners(cc);
+        float contentCx = (cc[0].x + cc[2].x) * 0.5f;
+        float contentTopY = cc[1].y;
+        float kx = content.lossyScale.x, ky = content.lossyScale.y;
+        if (kx < 0.0001f || ky < 0.0001f) return;
+
+        var recs = new List<(RectTransform rt, float cx, float topLocal, float w, float h)>();
+        float clusterTop = float.MaxValue;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var c = new Vector3[4];
+            list[i].GetWorldCorners(c);
+            float cxw = ((c[0].x + c[2].x) * 0.5f - contentCx) / kx;
+            float topLocal = (contentTopY - c[1].y) / ky;
+            float w = (c[2].x - c[0].x) / kx;
+            float h = (c[1].y - c[0].y) / ky;
+            recs.Add((list[i], cxw, topLocal, w, h));
+            if (topLocal < clusterTop) clusterTop = topLocal;
+        }
 
         for (int i = 0; i < recs.Count; i++)
         {
-            var rt = recs[i].rt;
-            rt.SetParent(content, false);
-            rt.anchorMin = new Vector2(0f, 1f);
-            rt.anchorMax = new Vector2(0f, 1f);
-            // 【关键】拉伸锚点节点的 sizeDelta 是「偏移量」不是尺寸（可能是负数），
-            // 挂点锚前必须把刚量到的世界尺寸烘成 sizeDelta，否则节点塌成负宽高直接消失。
-            // 烘的是实测值，视觉宽高一分不变，不碰主人的排版参数。
-            rt.sizeDelta = new Vector2(recs[i].w, recs[i].h);
-            rt.anchoredPosition = Vector2.zero;            // provisional，下面按世界差校正
-            var c = new Vector3[4];
-            rt.GetWorldCorners(c);
-            float targetXLocal = (recs[i].leftX - contentLeftX) / kx;
-            float targetTopLocal = clusterFlowY + (contentTopY - recs[i].topY) / ky - clusterTopLocal;
-            var worldDelta = new Vector2(cc[0].x + targetXLocal * kx - c[0].x,
-                (cc[1].y - targetTopLocal * ky) - c[1].y);
-            rt.anchoredPosition += (Vector2)content.InverseTransformVector(worldDelta);
-            sink.Add(new FlowNode
-            {
-                rt = rt,
-                x = targetXLocal,
-                topOffset = targetTopLocal - clusterFlowY,
-                h = recs[i].h,
-            });
+            var r = recs[i];
+            r.rt.SetParent(content, false);
+            r.rt.anchorMin = new Vector2(0.5f, 1f);
+            r.rt.anchorMax = new Vector2(0.5f, 1f);
+            r.rt.pivot = new Vector2(0.5f, 1f);
+            r.rt.sizeDelta = new Vector2(r.w, r.h);
+            float topOffset = r.topLocal - clusterTop;
+            into.Add(new FlowNode { rt = r.rt, centerX = r.cx, topOffset = topOffset, h = r.h });
+            clusterH = Mathf.Max(clusterH, topOffset + r.h);
         }
-        float h = 0f;
-        for (int i = 0; i < sink.Count; i++)
-            h = Mathf.Max(h, sink[i].topOffset + sink[i].h);
-        return h;
     }
 
-    /// <summary>每刷重摆一簇（x 与簇内偏移首次已记录，这里只更新落位 y）。</summary>
-    void PlaceFlowCluster(List<FlowNode> nodes, float clusterFlowY)
+    /// <summary>每刷把一簇段头摆到指定流位置（flowY = 簇顶相对 Content 顶的距离）。</summary>
+    void PlaceCluster(List<FlowNode> nodes, float flowY)
     {
-        if (!_masterReady || nodes.Count == 0 || _masterContent == null) return;
-        var cc = new Vector3[4];
-        _masterContent.GetWorldCorners(cc);
-        float kx = _masterContent.lossyScale.x, ky = _masterContent.lossyScale.y;
-        if (kx < 0.0001f || ky < 0.0001f) return;
+        if (_masterContent == null) return;
         for (int i = 0; i < nodes.Count; i++)
         {
             var n = nodes[i];
-            if (n.rt == null) continue;
-            var c = new Vector3[4];
-            n.rt.GetWorldCorners(c);
-            float targetTopLocal = clusterFlowY + n.topOffset;
-            var worldDelta = new Vector2(cc[0].x + n.x * kx - c[0].x,
-                (cc[1].y - targetTopLocal * ky) - c[1].y);
-            n.rt.anchoredPosition += (Vector2)_masterContent.InverseTransformVector(worldDelta);
+            if (n?.rt == null) continue;
+            n.rt.anchoredPosition = new Vector2(n.centerX, -(flowY + n.topOffset));
         }
     }
 
-    /// <summary>按占用高度算 content 高。</summary>
+    /// <summary>按占用高度算 content 高（至少撑满视口）。</summary>
     static void LayoutContent(RectTransform content, float used)
     {
         if (content == null) return;
@@ -213,11 +208,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
 
 #if UNITY_EDITOR
     static bool _flowChecked;
-    /// <summary>
-    /// 布局自检（每次进游戏只跑一次，2026-10-15 主人拍板加保险）：把收编节点 + 全部卡片的世界矩形取并集，
-    /// 与滚动视口比对。整体无交集 = RectMask2D 把内容全裁掉（渲染必空），当场 LogError 给出数字定位，
-    /// 不许静默空白。
-    /// </summary>
+    /// <summary>布局自检（每次打开跑一次）：卡片+段头世界矩形与滚动视口无交集 = 渲染必空，当场报错给数字。</summary>
     void CheckFlowLayout()
     {
         if (_flowChecked || !_masterReady || _masterContent == null) return;
@@ -238,24 +229,24 @@ public partial class MercDrawPoolUI : MonoBehaviour
             minX = Mathf.Min(minX, c[0].x); maxX = Mathf.Max(maxX, c[2].x);
             minY = Mathf.Min(minY, c[0].y); maxY = Mathf.Max(maxY, c[1].y);
         }
-        foreach (var n in _flowTopNodes) Eat(n.rt);
         foreach (var n in _flowOwnedHeadNodes) Eat(n.rt);
         foreach (var n in _flowLockedHeadNodes) Eat(n.rt);
         for (int i = 0; i < _ownedCards.Count; i++) Eat(_ownedCards[i] != null ? _ownedCards[i].transform : null);
         for (int i = 0; i < _lockedCards.Count; i++) Eat(_lockedCards[i] != null ? _lockedCards[i].transform : null);
         if (!any)
         {
-            Debug.LogError("[MercDrawPoolUI] 大滚动收编后没有任何内容节点（簇与卡全空）");
+            Debug.LogError("[MercDrawPoolUI] 列表里没有任何卡（已获得/未获得全空）");
             return;
         }
-        bool inside = minY < vc[1].y && maxY > vc[0].y && minX < vc[2].x && maxX > vc[0].x;
+        // 列表允许滚出视口（内容比视口高），只拦截「整张内容横向全在视口外」这类整体错位
+        bool xOverlap = minX < vc[2].x && maxX > vc[0].x;
         Debug.Log("[MercDrawPoolUI] 布局自检：内容世界矩形 x[" + minX.ToString("F0") + "," + maxX.ToString("F0")
             + "] y[" + minY.ToString("F0") + "," + maxY.ToString("F0")
             + "]，视口 x[" + vc[0].x.ToString("F0") + "," + vc[2].x.ToString("F0")
             + "] y[" + vc[0].y.ToString("F0") + "," + vc[1].y.ToString("F0") + "]"
-            + (inside ? "（有交集，正常）" : " ←【无交集：内容整体在视口外，显示必空】"));
-        if (!inside)
-            Debug.LogError("[MercDrawPoolUI] 收编内容整体在视口外 → 整条滚动渲染必空，按上面数字定位");
+            + (xOverlap ? "（横向有交集，正常）" : " ←【横向无交集：卡全在视口侧外，显示必错】"));
+        if (!xOverlap)
+            Debug.LogError("[MercDrawPoolUI] 卡片整体在视口侧外 → 按上面数字定位");
     }
 #endif
 }

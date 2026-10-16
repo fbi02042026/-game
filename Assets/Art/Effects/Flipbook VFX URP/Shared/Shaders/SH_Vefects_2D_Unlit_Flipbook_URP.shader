@@ -111,7 +111,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 
 			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/SurfaceData2D.hlsl"
 			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Debug/Debugging2D.hlsl"
-#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/DebugMipmapStreamingMacros.hlsl"
+// 团结URP14.2.0-t1 无此文件，注释掉以避免编译报错(原路径: Packages/com.unity.render-pipelines.core/ShaderLibrary/DebugMipmapStreamingMacros.hlsl)
 
 			#define ASE_NEEDS_FRAG_COLOR
 			#pragma shader_feature_local _PIXELATE_ON
@@ -125,7 +125,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 				float4 uv0 : TEXCOORD0;
 				float4 color : COLOR;
 				
-				UNITY_SKINNED_VERTEX_INPUTS
+				// 团结URP14.2.0-t1 无此宏(骨架精灵支持已移除)，注释掉确保编译通过
 				UNITY_VERTEX_INPUT_INSTANCE_ID
 			};
 
@@ -188,7 +188,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 				UNITY_SETUP_INSTANCE_ID(v);
 				UNITY_TRANSFER_INSTANCE_ID(v, o);
 				UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-				UNITY_SKINNED_VERTEX_COMPUTE(v);
+				// 团结URP14.2.0-t1 无 UNITY_SKINNED_VERTEX_COMPUTE 宏，注释掉(骨架精灵支持已移除)
 
 				v.positionOS = UnityFlipSprite( v.positionOS, unity_SpriteProps.xy );
 
@@ -371,7 +371,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 				float4 tangent : TANGENT;
 				float4 ase_texcoord : TEXCOORD0;
 				float4 ase_color : COLOR;
-				UNITY_SKINNED_VERTEX_INPUTS
+				// 团结URP14.2.0-t1 无此宏(骨架精灵支持已移除)，注释掉确保编译通过
 				UNITY_VERTEX_INPUT_INSTANCE_ID
 			};
 
@@ -401,7 +401,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 				UNITY_SETUP_INSTANCE_ID(v);
 				UNITY_TRANSFER_INSTANCE_ID(v, o);
 				UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-				UNITY_SKINNED_VERTEX_COMPUTE(v);
+				// 团结URP14.2.0-t1 无 UNITY_SKINNED_VERTEX_COMPUTE 宏，注释掉(骨架精灵支持已移除)
 
 				v.positionOS = UnityFlipSprite( v.positionOS, unity_SpriteProps.xy );
 
@@ -562,7 +562,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 				float4 tangent : TANGENT;
 				float4 ase_texcoord : TEXCOORD0;
 				float4 ase_color : COLOR;
-				UNITY_SKINNED_VERTEX_INPUTS
+				// 团结URP14.2.0-t1 无此宏(骨架精灵支持已移除)，注释掉确保编译通过
 				UNITY_VERTEX_INPUT_INSTANCE_ID
 			};
 
@@ -593,7 +593,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 				UNITY_TRANSFER_INSTANCE_ID(v, o);
 				UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
 
-				UNITY_SKINNED_VERTEX_COMPUTE(v);
+				// 团结URP14.2.0-t1 无 UNITY_SKINNED_VERTEX_COMPUTE 宏，注释掉(骨架精灵支持已移除)
 
 				v.positionOS = UnityFlipSprite( v.positionOS, unity_SpriteProps.xy );
 
@@ -753,7 +753,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 				float4 tangent : TANGENT;
 				float4 ase_texcoord : TEXCOORD0;
 				float4 ase_color : COLOR;
-				UNITY_SKINNED_VERTEX_INPUTS
+				// 团结URP14.2.0-t1 无此宏(骨架精灵支持已移除)，注释掉确保编译通过
 				UNITY_VERTEX_INPUT_INSTANCE_ID
 			};
 
@@ -782,7 +782,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 				UNITY_SETUP_INSTANCE_ID(v);
 				UNITY_TRANSFER_INSTANCE_ID(v, o);
 				UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-				UNITY_SKINNED_VERTEX_COMPUTE(v);
+				// 团结URP14.2.0-t1 无 UNITY_SKINNED_VERTEX_COMPUTE 宏，注释掉(骨架精灵支持已移除)
 
 				v.positionOS = UnityFlipSprite( v.positionOS, unity_SpriteProps.xy );
 
@@ -902,7 +902,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 
 			#include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/SurfaceData2D.hlsl"
 			#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Debug/Debugging2D.hlsl"
-#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/DebugMipmapStreamingMacros.hlsl"
+// 团结URP14.2.0-t1 无此文件，注释掉以避免编译报错(原路径: Packages/com.unity.render-pipelines.core/ShaderLibrary/DebugMipmapStreamingMacros.hlsl)
 
 			#define ASE_NEEDS_FRAG_COLOR
 			#pragma shader_feature_local _PIXELATE_ON
@@ -948,7 +948,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 				float4 uv0 : TEXCOORD0;
 				float4 color : COLOR;
 				
-				UNITY_SKINNED_VERTEX_INPUTS
+				// 团结URP14.2.0-t1 无此宏(骨架精灵支持已移除)，注释掉确保编译通过
 				UNITY_VERTEX_INPUT_INSTANCE_ID
 			};
 
@@ -979,7 +979,7 @@ Shader "Vefects/SH_Vefects_2D_Unlit_Flipbook_URP"
 				UNITY_SETUP_INSTANCE_ID(v);
 				UNITY_TRANSFER_INSTANCE_ID(v, o);
 				UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-				UNITY_SKINNED_VERTEX_COMPUTE(v);
+				// 团结URP14.2.0-t1 无 UNITY_SKINNED_VERTEX_COMPUTE 宏，注释掉(骨架精灵支持已移除)
 
 				v.positionOS = UnityFlipSprite( v.positionOS, unity_SpriteProps.xy );
 

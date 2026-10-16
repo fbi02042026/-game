@@ -102,6 +102,8 @@ public class SaveData
     public string loginLastDay = "";
     /// <summary>上次领取每日循环奖励的 yyyyMMdd。</summary>
     public string loginCycleDay = "";
+    /// <summary>上次自动弹出每日登录面板的 yyyyMMdd；用于「一天最多自动弹一次」，避免回主界面反复弹。</summary>
+    public string loginPopupShownDay = "";
 
     // === 遗产装备 ===
     public List<EquipmentData> legacyEquipPool = new List<EquipmentData>();

@@ -403,8 +403,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
             // ④「每日签到别落下」指向紧接着弹的每日登录弹窗。
             // 【2026-10-10 主人拍板】原来 41 字一口气一句，对话框里挤成一坨、后半句看不清（主人问
             //「每日签到别落下那有我的 后面是什么」）—— 拆成两拍，签到钩子单独成句。
+            // 【2026-10-16 主人拍板】原句「成功撤离！带回来的奖励够你歇口气。明儿见——我等你回来。」
+            // 作废，改成塔克交代去向：他还要去找其他线索，让玩家有事去酒馆找他（指向酒馆招募佣兵入口）。
             StoryDirector.Solo(StoryProgress.TutorialMercDisplayName,
-                "成功撤离！带回来的奖励够你歇口气。明儿见——我等你回来。",
+                "我还要去找其他线索，有事可以去酒馆找我。",
                 rescuerId)
                 .Bg(StoryBackgrounds.GuildHall)
                 .SkipReveal()
@@ -446,8 +448,15 @@ public class TutorialDirector : Singleton<TutorialDirector>
             highlight = nav.characterButton.GetComponent<RectTransform>();
         // 软引导：指 BottomNav 角色入口。引导还在管这一步时让位，别两层一起指同一个按钮。
         if (!GuideCovers(FirstRunGuide.GuideStep.Talent))
+        {
+            // 【2026-10-16 主人拍板】CoGuideTalentUpgrade 走完时玩家刚在天赋面板里点完节点，
+            // 面板还开着——先只收天赋面板（角色页不动），让 BottomNav 角色按钮露出来再发这条软引导；
+            // 否则面板+Dim 盖住底栏，提示指个看不见的按钮（主人实测「被天赋界面挡住」）。
+            var talentUi = TalentUI.Instance;
+            if (talentUi != null && talentUi.IsOpen) talentUi.Hide();
             TutorialHintUI.Ensure().Show("可以去角色界面查看属性",
                 highlight, 12f);
+        }
 
         StoryProgress.MarkTutorialDone();
         // 2026-09-29 主人拍板：引导一结束就把塔克清掉，不让他跟到正式关卡。

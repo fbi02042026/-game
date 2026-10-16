@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -21,8 +22,20 @@ public class GuildHallUI : MonoBehaviour
 
     [Header("左侧")]
     public Button mailButton;
+    public Button dailyLoginButton;   // 主界面右列的 DailyLoginButton 节点（预制体引用），点击打开每日登录面板
     public Button noticeButton;
     public Button activityButton;
+
+    [Header("看板人物（后期替换人物用，大小不动）")]
+    [Tooltip("看板节点下 show 子节点的 Image，预留替换接口。后期只换 sprite，不动尺寸/位置。")]
+    public Image boardCharacterImage;
+    [Range(0f, 0.08f)] public float boardBreathAmount = 0.01f;   // 呼吸幅度（复用剧情立绘同款 PortraitIdleMotion），0=不呼吸
+    // 2026-10-16 主人拍板：看板立绘去掉上下浮动(boardBobPixels)/微倾(boardTiltDegrees)，只留底部为轴的呼吸
+
+    [Header("看板切换动画（Turn 按钮，旧退新进的过场）")]
+    [Range(0.05f, 0.5f)] public float turnSwapOutSeconds = 0.16f; // 旧立绘缩小淡出时长
+    [Range(0.05f, 0.8f)] public float turnSwapInSeconds = 0.24f;  // 新立绘放大淡入时长
+    [Range(0.1f, 0.9f)] public float turnSwapShrink = 0.7f;       // 退出缩到基准的倍数（0.7 = 向后变小 0.3 倍）
 
     [Header("右侧")]
     public Button rankButton;
@@ -56,6 +69,9 @@ public class GuildHallUI : MonoBehaviour
     Coroutine _blinkCo;
     Vector3 _eyesBaseScale = Vector3.one;
     CanvasGroup _introCover;
+    Button _turnButton;
+    string _turnBoardId;   // 主界面看板当前显示的人物 id（"player" 或佣兵 HireId）；null = 预制体默认图
+    Coroutine _turnSwapCo; // 看板切换过场动画协程（播完置 null；未播完时忽略连点）
 
     /// <summary>首次引导未完成前隐藏大厅，避免片头/剧情前闪一下主界面。</summary>
     public static bool ShouldHideTownForIntro => !StoryProgress.TutorialIntroDone;
@@ -205,6 +221,7 @@ public class GuildHallUI : MonoBehaviour
     void BindRedDots()
     {
         if (mailButton != null) RedDot.Bind(mailButton.transform, RedDot.Mail);
+        if (dailyLoginButton != null) RedDot.Bind(dailyLoginButton.transform, RedDot.DailyLogin);
         if (noticeButton != null) RedDot.Bind(noticeButton.transform, RedDot.Notice);
         if (activityButton != null) RedDot.Bind(activityButton.transform, RedDot.Activity);
         if (shopButton != null) RedDot.Bind(shopButton.transform, RedDot.Shop);
@@ -313,7 +330,7 @@ public class GuildHallUI : MonoBehaviour
         // 未接通或半成品：运行时隐藏，不改预制体；清单见 Docs/软著后开发备忘.md「主界面暂隐入口」
         SetBtnHidden(noticeButton);
         SetBtnHidden(rankButton);
-        SetBtnHidden(mailButton);        // 无收件箱 UI，仅一键领完
+        // 2026-10-16 主人拍板：信件按钮放出来（OnMailClicked 一键领完所有未领邮件）
         SetBtnHidden(activityButton);    // 名义活动，实际开里程页，易误导
         SetBtnHidden(noticeBoardButton); // 公告栏
         SetBtnHidden(armoryButton);      // 武器库（遗产浏览）
@@ -321,7 +338,7 @@ public class GuildHallUI : MonoBehaviour
         // 2026-10-15 主人拍板：商城按钮隐藏（ShopUI 代码与 wiring 保留，入口先藏；要恢复删这行即可）
         SetBtnHidden(shopButton);
         // 按节点名再兜底（引用丢失时仍能藏）
-        HideNamed("NoticeButton", "RankButton", "MailButton", "ActivityButton",
+        HideNamed("NoticeButton", "RankButton", "ActivityButton",
             "NoticeBoard", "Armory", "LicenseHall", "ShopButton");
         // 保留：底栏五入口、设置、咨询台、金币/体力加号
     }
@@ -329,6 +346,18 @@ public class GuildHallUI : MonoBehaviour
     void ResolveHallButtonRefs()
     {
         if (mailButton == null) mailButton = FindBtn("MailButton");
+        if (dailyLoginButton == null) dailyLoginButton = FindBtn("DailyLoginButton");
+        // 看板人物：预留替换接口——绑「看板/show」的 Image（无则按节点名兜底；大小不动）
+        if (boardCharacterImage == null)
+        {
+            var boardNode = FindDeepChild(transform, "看板");
+            var showT = boardNode != null ? boardNode.Find("show") : null;
+            if (showT != null) boardCharacterImage = showT.GetComponent<Image>();
+        }
+        // 看板人物：复用剧情立绘同款待机——只保留以底部为轴的呼吸缩放
+        // （主人 2026-10-16：不要上下浮动/微倾，脚来回飘看着怪，tavernSway 关掉）
+        if (boardCharacterImage != null)
+            PortraitIdleMotion.EnsureOn(boardCharacterImage.rectTransform, 0.3f, tavernSway: false, breathAmount: boardBreathAmount);
         if (noticeButton == null) noticeButton = FindBtn("NoticeButton");
         if (activityButton == null) activityButton = FindBtn("ActivityButton");
         if (rankButton == null) rankButton = FindBtn("RankButton");
@@ -362,6 +391,16 @@ public class GuildHallUI : MonoBehaviour
 
         if (settingsButton != null)
             settingsButton.onClick.AddListener(() => BattleSettingsPanel.Ensure().Open(SettingsHost.Town));
+        // 2026-10-16 主人拍板：信件按钮放出来——点击一键领完所有未领邮件
+        if (mailButton != null)
+        {
+            mailButton.onClick.RemoveAllListeners();
+            mailButton.onClick.AddListener(OnMailClicked);
+        }
+        // 每日登录按钮：使用主界面预制体右列的 DailyLoginButton 节点（主人 2026-10-16 加的），点击打开每日登录面板
+        EnsureDailyLoginButton();
+        // 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的），点击随机换看板人物
+        EnsureTurnButton();
         // 商店：2026-09-15 接通，技能解锁 / 抽卡券 / 资源补给 / 材料 四个货架
         if (shopButton != null)
         {
@@ -398,6 +437,157 @@ public class GuildHallUI : MonoBehaviour
         }
     }
 
+    /// <summary>每日登录按钮：使用主界面预制体右列的 DailyLoginButton 节点（不运行时生成）。点击打开每日登录面板。</summary>
+    void EnsureDailyLoginButton()
+    {
+        if (dailyLoginButton == null)
+        {
+            Debug.LogError("[GuildHall] 未找到每日登录按钮节点 DailyLoginButton（应在主界面预制体右列）");
+            return;
+        }
+        dailyLoginButton.onClick.RemoveAllListeners();
+        dailyLoginButton.onClick.AddListener(() => DailyLoginUI.Show());
+    }
+
+    /// <summary>
+    /// 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的，只摆了 Image+Shadow）。
+    /// 运行时补 Button（不改预制体）+ 呼吸挂 PortraitIdleMotion（剧情同款，底部为轴，幅度 0.1）；
+    /// 点击在「玩家 + 已拥有佣兵」里随机换看板人物。
+    /// </summary>
+    void EnsureTurnButton()
+    {
+        if (_turnButton == null)
+        {
+            Transform t = FindDeepChild(transform, "Turn");
+            if (t == null)
+            {
+                Debug.LogError("[GuildHall] 未找到切换人物按钮节点 Turn（应在主界面预制体 HallScene 下）");
+                return;
+            }
+            _turnButton = t.GetComponent<Button>();
+            if (_turnButton == null)
+            {
+                _turnButton = t.gameObject.AddComponent<Button>();
+                _turnButton.transition = Selectable.Transition.None;   // 不改美术颜色反馈
+            }
+            // 呼吸跟剧情立绘同款（PortraitIdleMotion）：底部为轴、XY 等比、3.2s 周期；幅度主人定 0.05（2026-10-16 由 0.1 减半）
+            PortraitIdleMotion.EnsureOn(t as RectTransform, 0.7f, tavernSway: false, breathAmount: 0.05f);
+        }
+        _turnButton.onClick.RemoveAllListeners();
+        _turnButton.onClick.AddListener(OnTurnClicked);
+    }
+
+    /// <summary>点 Turn：随机选一个「玩家自己 + 已拥有佣兵」的看板形象（保证与当前不同），走「旧退新进」过场。</summary>
+    void OnTurnClicked()
+    {
+        if (_turnSwapCo != null) return;   // 上一次过场没播完，忽略连点
+        if (boardCharacterImage == null)
+        {
+            Debug.LogError("[GuildHall] boardCharacterImage 未绑定（看板/show 节点缺失），无法切换看板");
+            return;
+        }
+
+        var pool = new List<string> { "player" };
+        var unlocked = SaveSystem.Instance?.Data?.unlockedMercIds;
+        if (unlocked != null)
+            foreach (string id in unlocked)
+                if (!string.IsNullOrEmpty(id)) pool.Add(id);
+
+        // 排除当前显示的，保证点一次必换人（首点 _turnBoardId 为空 = 预制体默认图，不排除）
+        if (!string.IsNullOrEmpty(_turnBoardId) && pool.Count > 1)
+            pool.Remove(_turnBoardId);
+        if (pool.Count == 0) return;
+
+        string pick = pool[Random.Range(0, pool.Count)];
+        Sprite sp = MercPortraitSprites.GetStand(pick) ?? MercPortraitSprites.GetHead(pick);
+        if (sp == null)
+        {
+            Debug.LogError($"[GuildHall] 看板切换失败：{pick} 的立绘与头像都取不到（Resources/Icons/MercStand|MercHead/{pick}），保持当前人物");
+            return;
+        }
+        _turnBoardId = pick;
+        _turnSwapCo = StartCoroutine(TurnSwapRoutine(sp));
+    }
+
+    /// <summary>
+    /// 看板切换过场（主人口径 2026-10-16）：旧立绘向后变小（缩到基准的 turnSwapShrink 倍）并淡出，
+    /// 换图后新立绘从同一倍数放大回基准并淡入。全程以底部为轴（人物原地退去/走回，不往中间缩），
+    /// 与 PortraitIdleMotion 呼吸同款位移补偿公式。动画期间停看板呼吸，播完恢复（OnEnable 自动复位基准与相位）。
+    /// </summary>
+    IEnumerator TurnSwapRoutine(Sprite next)
+    {
+        var rt = boardCharacterImage.rectTransform;
+        var cg = EnsureTurnSwapCanvasGroup();
+        var motion = boardCharacterImage.GetComponent<PortraitIdleMotion>();
+        if (motion != null) motion.enabled = false;   // 动画期间停呼吸，别和协程抢写 scale/位置
+
+        Vector3 baseScale = rt.localScale;
+        Vector2 basePos = rt.anchoredPosition;
+        float h = Mathf.Abs(rt.rect.height);   // 底部为轴补偿用（与 PortraitIdleMotion 同款公式）
+        float pivotY = rt.pivot.y;
+
+        // ① 旧立绘：缩小到 shrink 倍 + 淡出（加速退去）
+        float t = 0f;
+        while (t < turnSwapOutSeconds)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / Mathf.Max(0.01f, turnSwapOutSeconds));
+            float k = Mathf.Lerp(1f, turnSwapShrink, u * u);
+            rt.localScale = baseScale * k;
+            cg.alpha = 1f - u;
+            rt.anchoredPosition = basePos + new Vector2(0f, h * pivotY * baseScale.y * (k - 1f));
+            yield return null;
+        }
+        rt.localScale = baseScale * turnSwapShrink;
+        cg.alpha = 0f;
+
+        // ② 换图（SetBoardCharacter 里保比例 + 重采基准）
+        SetBoardCharacter(next);
+
+        // ③ 新立绘：从 shrink 倍放大回基准 + 淡入（减速落位）
+        t = 0f;
+        while (t < turnSwapInSeconds)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / Mathf.Max(0.01f, turnSwapInSeconds));
+            float ease = 1f - (1f - u) * (1f - u);
+            float k = Mathf.Lerp(turnSwapShrink, 1f, ease);
+            rt.localScale = baseScale * k;
+            cg.alpha = ease;
+            rt.anchoredPosition = basePos + new Vector2(0f, h * pivotY * baseScale.y * (k - 1f));
+            yield return null;
+        }
+        rt.localScale = baseScale;
+        cg.alpha = 1f;
+        rt.anchoredPosition = basePos;
+
+        if (motion != null) motion.enabled = true;   // 恢复呼吸（OnEnable 会重采基准、相位归零，无跳变）
+        _turnSwapCo = null;
+    }
+
+    /// <summary>看板淡入淡出用的 CanvasGroup，挂 show 节点上，首次切换时补建（不改预制体）。</summary>
+    CanvasGroup EnsureTurnSwapCanvasGroup()
+    {
+        var cg = boardCharacterImage.GetComponent<CanvasGroup>();
+        return cg != null ? cg : boardCharacterImage.gameObject.AddComponent<CanvasGroup>();
+    }
+
+    /// <summary>
+    /// 【预留接口】替换看板人物。后期接人物 / 时装数据后调用本方法即可：只换 sprite，不动节点尺寸与位置（满足「大小不用调」）。
+    /// 人物来源、轮换 / 解锁等具体逻辑后期再说，本方法只负责把图贴到「看板/show」节点上。
+    /// </summary>
+    public void SetBoardCharacter(Sprite sprite)
+    {
+        if (boardCharacterImage == null)
+        {
+            Debug.LogError("[GuildHall] boardCharacterImage 未绑定（看板/show 节点缺失）");
+            return;
+        }
+        boardCharacterImage.sprite = sprite;   // 仅替换人物图，rect / size 保持预制体原样
+        boardCharacterImage.preserveAspect = true;   // 各佣兵立绘长宽比不同，保比例防拉变形（预制体 show 默认未开）
+        boardCharacterImage.GetComponent<PortraitIdleMotion>()?.RefreshBase();   // 重采基准，呼吸基准随新图刷新
+    }
+
     // 2026-09-20 主人要求：离线金币（含城镇主动入口 + 钻石翻倍）已暂停，相关代码已移除，待重设计后重新实现。
 
     static void SetBtnHidden(Button btn)
@@ -418,30 +608,8 @@ public class GuildHallUI : MonoBehaviour
 
     void OnMailClicked()
     {
-        int n = MailSystem.UnclaimedCount();
-        if (n <= 0)
-        {
-            UIManager.Instance?.ShowToast("暂无未读邮件");
-            Debug.Log("[GuildHall] 邮件箱空");
-            return;
-        }
-
-        var inbox = MailSystem.GetInbox();
-        int claimed = 0;
-        for (int i = 0; i < inbox.Count; i++)
-        {
-            var m = inbox[i];
-            if (m == null || m.claimed) continue;
-            if (MailSystem.TryClaim(m.id, notify: false))
-                claimed++;
-        }
-        RefreshAllHud();
-        RedDot.RefreshCommon();
-        if (claimed > 0)
-            UIManager.Instance?.ShowToast($"已领取 {claimed} 封邮件");
-        else
-            UIManager.Instance?.ShowToast($"有 {n} 封邮件，资源仍达上限无法领取");
-        Debug.Log($"[GuildHall] 邮件领取 claimed={claimed} remain={MailSystem.UnclaimedCount()}");
+        // 2026-10-16 邮件 UI 改造（T8）：点信件按钮打开邮件列表窗（列表/详情/单领/一键领取/删除已读见 MailListUI / MailDetailUI）
+        MailListUI.Show();
     }
 
     public void RefreshGold()

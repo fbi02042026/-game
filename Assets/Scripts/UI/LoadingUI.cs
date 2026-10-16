@@ -51,10 +51,27 @@ public class LoadingUI : MonoBehaviour
             percentText.text = Mathf.RoundToInt(p * 100f) + "%";
     }
 
+    // —— 提示换字限速（2026-10-16 主人反馈：Loading 提示换太快、条数太多）——
+    // 进镇预热（TownHubController.CoWarmupPages + StartupPreloader.Run）每步一帧就报一条文案，
+    // 一次 Loading 连闪十几条、一秒内闪完。主人拍板「一次出现2-3条就行」：
+    // 首条必显，之后两条之间至少隔 MinTipIntervalSeconds 秒，单个实例最多显示 MaxTipLines 条，
+    // 超额的换字请求直接忽略。场景切换 Loading 每次都是新实例、只设一条，不受影响。
+    const float MinTipIntervalSeconds = 1.5f;
+    const int MaxTipLines = 3;
+    float _lastTipShownAt;
+    int _tipShownCount;
+
     public void SetTip(string tip)
     {
-        if (tipText != null && !string.IsNullOrEmpty(tip))
-            tipText.text = tip;
+        if (tipText == null || string.IsNullOrEmpty(tip)) return;
+        if (_tipShownCount > 0)
+        {
+            if (_tipShownCount >= MaxTipLines) return;                        // 一次最多 3 条
+            if (Time.unscaledTime - _lastTipShownAt < MinTipIntervalSeconds) return; // 换太快就忽略
+        }
+        _lastTipShownAt = Time.unscaledTime;
+        _tipShownCount++;
+        tipText.text = tip;
     }
 
     public string CurrentTip => tipText != null ? tipText.text : "";

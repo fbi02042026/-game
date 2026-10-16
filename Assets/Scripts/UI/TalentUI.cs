@@ -14,12 +14,13 @@ public class TalentUI : MonoBehaviour
 {
     public static TalentUI Instance { get; private set; }
 
-    // 设计真值（TalentUI.prefab）：Columns 宽 648（stretch -72），左右列各 -4。
-    // Columns 是横向 stretch，宽随 aspect 漂；节点宽取模板自身设计宽，不跟着列宽被拉/压。
-    const float DesignColumnsW = 648f;
-    const float LeftNodeH = 96f;      // 【2026-10-14 主人拍板】天赋条缩小：108 → 96
-    const float RightRowH = 126f;
-    const float LeftNodeW = 258.6f;   // 模板 stretch 到 720 根下的原始宽
+    // 设计真值（TalentUI.prefab，2026-10-16 实测）：Panel 700×1100 → Columns 宽 628（stretch -72），
+    // 左右列各 -4，左列视口约 302。节点宽取模板自身设计宽，不跟着列宽被拉/压。
+    // 🔴 2026-10-16 主人拍板「以预制体的表现为准」：删掉旧 FitColumnsScale——它按 648 设计宽
+    //    把 628 的列永久缩到 96.9%，运行时从来没和预制体一致过；现在一律按预制体原尺寸渲染，不缩放。
+    const float LeftNodeH = 96f;      // 兜底行高：模板 sizeDelta.y>8 时以模板为准（当前左模板 100）
+    const float RightRowH = 126f;     // 兜底行高：同上（当前右模板 150）
+    const float LeftNodeW = 258.6f;   // 模板 stretch 到 720 根下的原始宽（720-461.405）
     const float RightRowW = 269.2f;
 
     [Header("壳")]
@@ -167,6 +168,26 @@ public class TalentUI : MonoBehaviour
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
+    }
+
+    /// <summary>
+    /// 预热（T1，治「首次点击天赋卡顿」）：
+    /// 进城镇空闲 / Loading 遮罩期间提前 Instantiate 并隐藏常驻，把同步重活
+    /// （LoadArtSprites 22 个精灵 + EnsureLists 实例化全部节点 + 强制布局重建 +
+    /// RefreshAll 首帧全量刷新，含红点 / 新标签 / 锁精灵的创建与加载）从「点击瞬间」
+    /// 挪到「进城镇时」。点击时 Instance 已非 null，Show 仅走轻量刷新路径。
+    /// </summary>
+    public static void Prewarm()
+    {
+        if (Instance != null) return;
+        var prefab = Resources.Load<GameObject>("Prefabs/Talent/TalentUI");
+        if (prefab == null) return;
+        var go = Instantiate(prefab);
+        go.name = "TalentUI";
+        // Instantiate 后物体 active：先跑重活（active 态下布局重建才正确），再隐藏常驻。
+        Instance.EnsureLists();
+        Instance.RefreshAll();
+        go.SetActive(false);
     }
 
     public void Show()
@@ -1186,9 +1207,6 @@ public class TalentUI : MonoBehaviour
         rightRowTemplate.SetActive(false);
         if (rightExtraRowTemplate != null) rightExtraRowTemplate.SetActive(false);
 
-        // 屏幕比设计稿更瘦时 Columns 被压窄 → 左列会被裁；整列等比缩小，不裁也不拉伸
-        FitColumnsScale();
-
         // 列表只用 LayoutGroup 排，禁止手写改每个框的坐标/宽高
         EnsureScrollContentLayout(leftContent, 4f);    // 【2026-10-14 主人拍板】左列天赋条缩小，行距 8 → 4
         EnsureScrollContentLayout(rightContent, 8f);   // 右列不动
@@ -1220,6 +1238,9 @@ public class TalentUI : MonoBehaviour
         LayoutRebuilder.ForceRebuildLayoutImmediate(leftContent);
         LayoutRebuilder.ForceRebuildLayoutImmediate(rightContent);
 
+        // 以预制体表现为准：左列模板的序号/图标按预制体探出卡片左界，让出同量空间防被视口裁
+        FitLeftContentToPrefabOverhang(leftContent, _leftViews);
+
         WireScroll(leftScroll, leftContent);
         WireScroll(rightScroll, rightContent);
         // 左右栏不再同步（2026-10-13 主人拍板「分开动」）—— 各自独立滚动，别再加回同步。
@@ -1250,24 +1271,65 @@ public class TalentUI : MonoBehaviour
     }
 
     /// <summary>
-    /// Columns 是横向 stretch（sizeDelta.x = -72），屏幕比设计稿瘦时会被压窄，
-    /// 左列内容因此被裁。这里整列等比缩小：宽屏不放大（只留白），窄屏缩到放得下。
+    /// 【2026-10-16 主人拍板「以预制体的表现为准」】左列模板按预制体排版，序号(Number)与
+    /// 图标(Iconbg)探出卡片左界（预制体实测 anchoredPosition.x≈-50.2 / -36）。原先整列
+    /// UpperCenter 居中，这截探出会被 ScrollRect 视口的 RectMask2D 裁掉——表现就是
+    /// 「L1 L2 只露出来一点」。这里按预制体序列化数据（anchors/anchoredPosition/pivot/
+    /// sizeDelta）实测左探出量，给 leftContent 加同量左内边距并改左对齐：整行左缘顶到视口
+    /// 左缘，与预制体表现一致（不缩放、不裁切）。探出量随预制体改动自动适配，改模板不用改代码。
+    /// 纯数据推算、不读 rect/世界坐标，隐藏态（Prewarm 预热实例）也算得准。
     /// </summary>
-    void FitColumnsScale()
+    static void FitLeftContentToPrefabOverhang(RectTransform content, List<LeftNodeView> views)
     {
-        var columns = FindAncestorNamed(leftContent, "Columns");
-        if (columns == null) return;
-        float w = columns.rect.width;
-        if (w <= 1f) return;
-        float s = Mathf.Min(1f, w / DesignColumnsW);
-        columns.localScale = new Vector3(s, s, 1f);
-    }
+        if (content == null || views == null || views.Count == 0) return;
+        var vlg = content.GetComponent<VerticalLayoutGroup>();
+        if (vlg == null) return;
 
-    static RectTransform FindAncestorNamed(RectTransform from, string name)
-    {
-        for (var p = from; p != null; p = p.parent as RectTransform)
-            if (p.name == name) return p;
-        return null;
+        var chain = new List<RectTransform>();
+        float overhang = 0f;
+        for (int i = 0; i < views.Count; i++)
+        {
+            var cardGo = views[i] != null ? views[i].root : null;
+            var card = cardGo != null ? cardGo.transform as RectTransform : null;
+            if (card == null) continue;
+            float cardW = card.sizeDelta.x;   // PrepareListItemUnderContent 已烘焙的设计宽
+            if (cardW <= 0f) continue;
+            var kids = card.GetComponentsInChildren<RectTransform>(true);
+            for (int k = 0; k < kids.Length; k++)
+            {
+                var rt = kids[k];
+                if (rt == null || rt == card) continue;
+                // 收集 card → rt 的链（rt 自己收尾）
+                chain.Clear();
+                for (var p = rt; p != null && p != card; p = p.parent as RectTransform)
+                    chain.Add(p);
+                if (chain.Count == 0) continue;
+                chain.Reverse();   // 变成 card 的子 → … → rt
+                float x = 0f;      // 当前节点本地原点(pivot)在 card 本地的 x
+                float parentW = cardW;
+                float minLeft = 0f;
+                for (int c = 0; c < chain.Count; c++)
+                {
+                    var node = chain[c];
+                    x += node.anchorMin.x * parentW + node.anchoredPosition.x;
+                    float w = (node.anchorMax.x - node.anchorMin.x) * parentW + node.sizeDelta.x;
+                    float left = x - node.pivot.x * w;   // 本节点左缘在 card 本地的 x
+                    if (c == 0) minLeft = left;
+                    else if (left < minLeft) minLeft = left;
+                    parentW = w;
+                }
+                if (-minLeft > overhang) overhang = -minLeft;
+            }
+        }
+        if (overhang <= 0.5f) return;   // 模板没探出：保持原居中排版，不动
+        vlg.childAlignment = TextAnchor.UpperLeft;
+        int padLeft = Mathf.CeilToInt(overhang);
+        var pad = vlg.padding;
+        if (pad.left != padLeft)
+        {
+            vlg.padding = new RectOffset(padLeft, pad.right, pad.top, pad.bottom);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(content);   // 当场落位，别等下一帧画布重建
+        }
     }
 
     /// <summary>

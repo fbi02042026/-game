@@ -15,9 +15,9 @@ using UnityEngine.UI;
 ///
 /// <para>所有改动<b>即时生效</b>（下架 / 上架 / 替换当场写存档），无「确定」步骤。</para>
 ///
-/// <para>实现约定：运行时建树、不落预制体；头像 / 稀有度头像框 / 职业徽记全部复用现成素材
-/// （<see cref="MercPortraitSprites.GetHead"/> / <see cref="MercHireSession.LoadPortraitFrame"/> /
-/// <see cref="MercGrowSprites.LoadJobBadge"/>）；图鉴详情复用 <see cref="CodexInfoPopupUI"/>。</para>
+/// <para>实现约定：运行时建树、不落预制体；全身立绘 / 稀有度头像框 / 职业徽记全部复用现成素材
+/// （<see cref="MercPortraitSprites.GetStand"/> / <see cref="MercHireSession.LoadPortraitFrame"/> /
+/// <see cref="MercGrowSprites.LoadJobBadge"/>）；佣兵详情复用战斗的 <see cref="MercObtainPopupUI"/>（信息最全）。</para>
 /// </summary>
 public partial class MercDrawPoolUI : MonoBehaviour
 {
@@ -29,7 +29,6 @@ public partial class MercDrawPoolUI : MonoBehaviour
     /// <summary>每格当前佣兵 HireId（Refresh 时记录；quxiao 下架钮按格取用）。</summary>
     string[] _slotHireIds;
     RectTransform _ownedContent;
-    RectTransform _lockedContent;
     readonly List<GameObject> _ownedCards = new List<GameObject>();
     readonly List<GameObject> _lockedCards = new List<GameObject>();
 
@@ -105,13 +104,27 @@ public partial class MercDrawPoolUI : MonoBehaviour
     void Open()
     {
         TownSaveAlign.AlignAll();
-        ReloadPicked();
-        Refresh();
+
+        // 【2026-10-16 重写时序】必须先激活、再收编、最后填数据：
+        // 旧版先 Refresh（触发大滚动收编）后 SetActive(true)，未激活节点不参与布局，
+        // 收编量到的世界矩形全错 → 内容被 RectMask2D 整体裁光（弹窗只剩标题/分割线）。
         if (_root != null)
         {
             _root.SetActive(true);
             _root.transform.SetAsLastSibling();
         }
+
+        if (!_masterReady && _restructurePanel != null)
+        {
+            SetupMasterList(_restructurePanel);
+            // 成功才清；失败（缺节点/未激活）保留，下次 Open 再试
+            if (_masterReady) _restructurePanel = null;
+        }
+
+        ReloadPicked();
+        Refresh();
+        // 每次打开回到顶部（收编当帧收编流程里也设了一次；这里兜重开场景）
+        if (_masterScroll != null) _masterScroll.verticalNormalizedPosition = 1f;
         GameFonts.ApplyToHierarchy(transform);
     }
 
@@ -166,7 +179,6 @@ public partial class MercDrawPoolUI : MonoBehaviour
         _slotHireIds = new string[_poolSlots.Count];
 
         _ownedContent = panel != null ? panel.Find("center/OwnedScroll/Content")?.GetComponent<RectTransform>() : null;
-        _lockedContent = panel != null ? panel.Find("center/down/LockedScroll/Content")?.GetComponent<RectTransform>() : null;
 
         _replacePanel = panel != null ? panel.Find("ReplacePanel")?.gameObject : null;
         if (_replacePanel != null)
@@ -176,9 +188,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
             _replaceContent = box != null ? box.Find("RViewport/RContent")?.GetComponent<RectTransform>() : null;
         }
 
-        // 一条大滚动（2026-10-15 主人拍板）：top 池区的字和装饰、已拥有、未获得 全在同一滚动里。
-        // 【教训】不能在实例化当帧收编 —— Canvas 布局还没跑，世界坐标量出来全是错的，
-        // 整条列表会被摆飞裁没（主人实测「什么也没有了」）。推迟到首次 Refresh 再收编。
+        // 列表结构（2026-10-16 主人拍板）：top 招募池固定不动；OwnedScroll 是唯一大滚动，
+        // 已获得段头/已获得卡/未获得段头/未获得卡全在它的 Content 里。搭建必须等 Root 激活后（见 Open）。
         _restructurePanel = panel;
 
         WireClicks();
@@ -206,6 +217,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             closeBtn.onClick.AddListener(Close);
         }
 
+        int qxCount = 0;
         for (int i = 0; i < _poolSlots.Count; i++)
         {
             // 预制体 SlotN 只有 Image（无 Button），运行时补：点格 = 看图鉴 / 锁格提示
@@ -222,6 +234,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             var qx = _poolSlots[i].transform.Find("quxiao");
             if (qx != null)
             {
+                qxCount++;
                 var qImg = qx.GetComponent<Image>();
                 if (qImg != null) qImg.raycastTarget = true;
                 var qBtn = qx.GetComponent<Button>();
@@ -235,6 +248,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 });
             }
         }
+        Debug.Log("[MercDrawPoolUI] 事件重绑：池格=" + _poolSlots.Count + " quxiao=" + qxCount
+            + " 关闭钮=" + (closeBtn != null) + " 暗区钮=" + (dimBtn != null)
+            + " 替换弹窗=" + (_replacePanel != null));
 
         if (_replacePanel != null)
         {
@@ -259,21 +275,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
         }
     }
 
-    readonly List<FlowNode> _flowTopNodes = new List<FlowNode>();
-    readonly List<FlowNode> _flowOwnedHeadNodes = new List<FlowNode>();
-    readonly List<FlowNode> _flowLockedHeadNodes = new List<FlowNode>();
-    RectTransform _masterContent;
-    Transform _restructurePanel;     // 待收编的 Panel（推迟到首次 Refresh，等布局跑过）
-    bool _masterReady;
-    float _flowOwnedCardsY;
-    float _flowLockedCardsY;
-    float _hTop;
-    float _hOwnedHead;
-    float _hLockedHead;
-    const float GapSection = 24f;        // 大滚动里段与段的间隔
-    const float HeadToCardsGap = 8f;     // 段头与其下卡片区的间隔
-    const float ScrollSidePad = 16f;     // 滚动视口左右内缩（要调贴边改这里）
-    const float ScrollBottomPad = 16f;   // 滚动视口底部内缩
+    // 列表结构字段（_restructurePanel/_masterReady/_masterContent/_masterScroll/
+    // _flowLockedHeadNodes/_flowLockedCardsY/_hLockedHead 等）统一在 MercDrawPoolUI.Flow.cs
 
     // ============================================================
     // 刷新
@@ -281,13 +284,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
 
     void Refresh()
     {
-        // 首次刷新才收编大滚动（此时至少跑过一次 Canvas 布局，世界坐标才可信）
-        if (!_masterReady && _restructurePanel != null)
-        {
-            RestructureMasterScroll(_restructurePanel);
-            _restructurePanel = null;
-        }
-
+        // 大滚动收编已移到 Open()：先激活 Root，再收编，再首次 Refresh（见 Open 注释）。
         var data = SaveSystem.Instance?.Data;
         int slots = data != null ? data.DrawPoolSlots : SaveData.DrawPoolDefaultSlots;
 
@@ -319,18 +316,23 @@ public partial class MercDrawPoolUI : MonoBehaviour
     {
         ClearCards(_ownedCards);
         var data = SaveSystem.Instance?.Data;
-        if (data?.unlockedMercIds == null) return;
+        var content = _masterContent != null ? _masterContent : _ownedContent;
 
-        // 按稀有度排序（传说 → 稀有 → 普通），不再插组头（2026-10-15 主人拍板）
-        var ordered = SortByRarity(data.unlockedMercIds);
-        float end = BuildTemplateCards(_masterContent != null ? _masterContent : _ownedContent,
-            ordered, true, _flowOwnedCardsY);
-        // 一条大滚动：未获得段头跟着已拥有卡的结束位置往下挪（卡数变化每刷重摆）
-        if (_masterReady)
+        // 已获得段头 = 大滚动第一个元素（跟随滚动，2026-10-16 主人拍板：top 以下整块都是大列表）
+        PlaceCluster(_flowOwnedHeadNodes, 0f);
+        float ownedEnd = _hOwnedHead;
+
+        // 已获得卡紧跟段头之下
+        if (data?.unlockedMercIds != null)
         {
-            PlaceFlowCluster(_flowLockedHeadNodes, end + GapSection);
-            _flowLockedCardsY = end + GapSection + _hLockedHead + HeadToCardsGap;
+            var ordered = SortByRarity(data.unlockedMercIds);
+            if (ordered.Count > 0)
+                ownedEnd = BuildTemplateCards(content, ordered, true, _hOwnedHead + HeadToCardsGap);
         }
+
+        // 未获得段头跟着已获得段结束位置（卡数变化每刷重摆）
+        PlaceCluster(_flowLockedHeadNodes, ownedEnd + GapSection);
+        _flowLockedCardsY = ownedEnd + GapSection + _hLockedHead + HeadToCardsGap;
     }
 
     void RefreshLocked()
@@ -350,9 +352,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
         }
 
         var ordered = SortByRarity(new HashSet<string>(ids));
-        float end = BuildTemplateCards(_masterContent != null ? _masterContent : _lockedContent,
-            ordered, false, _flowLockedCardsY);
-        LayoutContent(_masterContent != null ? _masterContent : _lockedContent, end);
+        var content = _masterContent != null ? _masterContent : _ownedContent;
+        float end = BuildTemplateCards(content, ordered, false, _flowLockedCardsY);
+        LayoutContent(content, end);
     }
 
     // ============================================================
@@ -364,6 +366,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     {
         var data = SaveSystem.Instance?.Data;
         int slots = data != null ? data.DrawPoolSlots : SaveData.DrawPoolDefaultSlots;
+        Debug.Log("[MercDrawPoolUI] 点击池格 " + index + "（开放格数=" + slots + "）");
         if (index >= slots)
         {
             UIManager.Instance?.ShowToast(LockHintOf(index) + "后开启");
@@ -372,12 +375,13 @@ public partial class MercDrawPoolUI : MonoBehaviour
         var ordered = SortByRarity(_picked);
         if (index >= ordered.Count) return;
         if (MercRosterDefs.TryGetByHireId(ordered[index], out var def))
-            ShowMercCodex(ordered[index], def);
+            ShowMercDetail(ordered[index], def);
     }
 
     /// <summary>红「−」= 下架 → 系统立即自动补位（主人拍板「池子最少要补全 会自动补全」）。</summary>
     void OnRemoveClick(string hireId)
     {
+        Debug.Log("[MercDrawPoolUI] 点击下架 " + hireId);
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
         if (data.RemoveFromDrawPool(hireId))
@@ -386,11 +390,16 @@ public partial class MercDrawPoolUI : MonoBehaviour
             UIManager.Instance?.ShowToast("已下架 " + def.Name + "，系统自动补位");
             Commit();
         }
+        else
+        {
+            Debug.LogError("[MercDrawPoolUI] 下架失败：" + hireId + "（存档池里没有这个 id，池=" + string.Join(",", new List<string>(_picked)) + "）");
+        }
     }
 
     /// <summary>点已获得卡 = 上架；池满 → 弹替换弹窗（主人拍板「点佣兵弹出替换按钮」，不做拖拽）。</summary>
     void OnOwnedCardClick(string hireId)
     {
+        Debug.Log("[MercDrawPoolUI] 点击已获得 " + hireId + "（在池=" + _picked.Contains(hireId) + "）");
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
         if (_picked.Contains(hireId))
@@ -405,7 +414,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
             Commit();
             return;
         }
-        if (_picked.Count >= data.DrawPoolSlots)
+        bool full = _picked.Count >= data.DrawPoolSlots;
+        Debug.Log("[MercDrawPoolUI] 上架未成：池 " + _picked.Count + "/" + data.DrawPoolSlots + (full ? " → 弹替换弹窗" : " → 未弹替换（未满，查 AddToDrawPool 返回 false 的原因）"));
+        if (full)
         {
             // 池满：弹替换弹窗，点选池中谁换下
             _replacingInId = hireId;
@@ -418,6 +429,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 _replacePanel.SetActive(true);
                 _replacePanel.transform.SetAsLastSibling();
             }
+            else Debug.LogError("[MercDrawPoolUI] 替换弹窗节点没绑上（Panel/ReplacePanel），弹不出来");
         }
     }
 
@@ -479,36 +491,29 @@ public partial class MercDrawPoolUI : MonoBehaviour
         _replaceContent.sizeDelta = new Vector2(0f, Mathf.Max(h, viewH));
     }
 
-    /// <summary>图鉴详情（未获得的 meta 里带获取途径）。</summary>
-    static void ShowMercCodex(string hireId, MercRosterDefs.Def def)
+    /// <summary>
+    /// 佣兵详情：直接用战斗里的「获得佣兵」弹窗（huodeyongbing，信息最全，2026-10-16 主人拍板）。
+    /// 已拥有的佣兵带存档里的等级/星级；未获得的按 1 级 1 星展示，缺数据时弹窗自己 Close，不另写第二份。
+    /// </summary>
+    static void ShowMercDetail(string hireId, MercRosterDefs.Def def)
     {
-        var stand = MercPortraitSprites.GetHead(hireId);
-        if (stand == null && !string.IsNullOrEmpty(def.AssetId)) stand = MercPortraitSprites.GetHead(def.AssetId);
-        bool unlocked = SaveSystem.Instance != null && SaveSystem.Instance.Data != null
-            && SaveSystem.Instance.Data.unlockedMercIds != null
-            && SaveSystem.Instance.Data.unlockedMercIds.Contains(hireId);
-        string meta = def.JobName + " · "
-            + SkillRarityUtil.DisplayName(SkillRarityUtil.FromMerc(def.Rarity))
-            + (unlocked ? " · 已解锁" : " · 未获得");
-        string lore = unlocked ? "" : MercUnlockWayOf(def);
-        string desc;
-        // 图鉴条目按 catalogId 找：AssetId → catalogId
-        string catalogId = !string.IsNullOrEmpty(def.AssetId) ? AdventureCodex.ResolveMercId(def.AssetId) : hireId;
-        if (!string.IsNullOrEmpty(catalogId) && AdventureLogCatalog.TryFindMerc(catalogId, out var entry))
-            desc = entry.Desc;
-        else
-            desc = "冒险日志里还没有这位的详细记录。";
-        CodexInfoPopupUI.Show(def.Name, meta, desc, lore, stand);
-    }
-
-    static string MercUnlockWayOf(MercRosterDefs.Def def)
-    {
-        var tier = GameConfig.GetMercTier(def.AssetId);
-        if (tier == MercTier.Advanced)
-            return "获取途径：酒馆解锁，需要公会等级 " + GameConfig.ADVANCED_MERC_GUILD_LEVEL + "。";
-        if (def.RecruitGold > 0)
-            return "获取途径：酒馆解锁，需要 " + def.RecruitGold + " 金币。";
-        return "获取途径：酒馆解锁。";
+        int level = 1, star = 1;
+        var data = SaveSystem.Instance?.Data;
+        if (data?.permanentMercs != null)
+        {
+            for (int i = 0; i < data.permanentMercs.Count; i++)
+            {
+                var m = data.permanentMercs[i];
+                if (m == null) continue;
+                if (m.mercId == hireId || m.mercId == def.AssetId)
+                {
+                    level = Mathf.Max(1, m.level);
+                    star = Mathf.Clamp(m.star < 1 ? 1 : m.star, 1, 5);
+                    break;
+                }
+            }
+        }
+        MercObtainPopupUI.ShowFromEntry(hireId, def.AssetId, level, star);
     }
 
     // ============================================================

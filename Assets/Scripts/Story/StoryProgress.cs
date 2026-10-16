@@ -173,6 +173,7 @@ public static class StoryProgress
         AdventureCodex.UnlockWorld("W003");
         AdventureLogAchievements.OnTutorialDone();
         SpecialWeapons.TryGrantTwilightStaff(showToast: true);
+        MailSystem.EnsureWelcomeMail();   // 🆕 玩完新手引导发放欢迎信（200 金币 + 莉娜 + 致谢/加群），并弹「您有新的邮件」
     }
 
     public static void MarkChapter1IntroDone()

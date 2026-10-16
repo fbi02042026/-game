@@ -8,7 +8,8 @@ using UnityEngine;
 public class PortraitIdleMotion : MonoBehaviour
 {
     [Header("呼吸（底部为轴）")]
-    [Range(0f, 0.08f)] public float breathAmount = 0.016f;
+    // 上限 0.15：主界面 Turn 切换按钮（2026-10-16 减半后）用 0.05，曾用 0.1 超出旧上限 0.08
+    [Range(0f, 0.15f)] public float breathAmount = 0.016f;
     [Min(0.1f)] public float breathPeriod = 3.2f;
     [Range(0f, 1f)] public float breathPhase;
 

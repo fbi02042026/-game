@@ -112,6 +112,7 @@ public class DailyLoginUI : MonoBehaviour
         public GameObject x2Badge;
         public GameObject rareBadge;
         public Text markText;   // ★ 45°「已领」斜字（claimed 状态才显示）
+        public GameObject selectedNode;   // ★ 当天可领的天（reached&&!claimed）才显示的「选中」图片节点
         public Button btn;
         public int day;
         // B5: 绑定时刻记录的预制体原色（底框 / 天数文字），压暗一律从 base 重算，绝不写死颜色覆盖美术底图
@@ -269,6 +270,9 @@ public class DailyLoginUI : MonoBehaviour
             c.rareBadge = rare != null ? rare.gameObject : null;
             var mark = FindChildDeep(t, "Mark");
             c.markText = mark != null ? mark.GetComponent<Text>() : null;
+            // ★ 选中图片节点：按名字「选中」绑定；仅在 Refresh 里对当天可领的天 SetActive(true)
+            var sel = FindChildDeep(t, "选中");
+            c.selectedNode = sel != null ? sel.gameObject : null;
 
             c.btn = t.GetComponent<Button>();
             if (c.btn == null) c.btn = t.gameObject.AddComponent<Button>();
@@ -698,8 +702,26 @@ public class DailyLoginUI : MonoBehaviour
     // 重启游戏后自动清零，新的一天有可领时照常弹。
     static bool _autoPopConsumed;
 
-    /// <summary>登记「领过一笔」——同一语义只留这一个出口，四个回调领奖成功后统一调它。</summary>
-    static void MarkClaimConsumed() { _autoPopConsumed = true; }
+    /// <summary>
+    /// 登记「领过一笔」——同一语义只留这一个出口，四个回调领奖成功后统一调它。
+    /// 2026-10-16 修：领过就要抑制今天的自动弹出，且必须落盘。原因：
+    ///   · 旧实现只在 TownSceneBootstrap 的「自动弹出」分支写 loginPopupShownDay；
+    ///     走手动入口（主界面每日登录按钮）领取时该字段从不记录。重新进游戏后
+    ///     static 的 _autoPopConsumed 被重置，HasClaimable() 仍为 true 且
+    ///     loginPopupShownDay 为空/非今天 → 又会自动弹（即本次报的 bug）。
+    ///   · 把"领过"也写入持久化的 loginPopupShownDay，保证无论自动/手动领取、
+    ///     是否重启，当天都不再自动弹（手动按钮与红点提醒不受影响，仍可随时打开面板）。
+    /// </summary>
+    static void MarkClaimConsumed()
+    {
+        _autoPopConsumed = true;
+        var d = SaveSystem.Instance?.Data;
+        if (d != null && d.loginPopupShownDay != ShopDefs.TodayKey())
+        {
+            d.loginPopupShownDay = ShopDefs.TodayKey();
+            SaveSystem.Instance.Save();
+        }
+    }
 
     /// <summary>登记「有可领的每日登录」，回到主界面时再弹（不在这里直接开）。</summary>
     public static void RequestShowOnMainUi()
@@ -1058,6 +1080,8 @@ public class DailyLoginUI : MonoBehaviour
             }
 
             cell.btn.interactable = canPress;
+            // ★ 选中图片：仅当天可领的天（reached && !claimed）显示，其余状态（已领/未解锁）一律隐藏
+            if (cell.selectedNode != null) cell.selectedNode.SetActive(canPress);
         }
 
         // ---- 每日循环 ----

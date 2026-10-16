@@ -123,13 +123,17 @@ public class InformantQuizDirector : MonoBehaviour
         Sprite informant = ResolveInformantPortrait();
         Sprite landlady = ResolveLandladyPortrait();
 
-        yield return CoSpeak(ui, "独眼", entry.InformantLine, informant, InformantPortraitId);
-
+        // 2026-10-16 主人拍板：独眼先说话 → 独眼固定左槽（发起方）、老板娘固定右槽（对方）；
+        // 两人都在（纯对话）时两边站人；只有独眼（无老板娘台词）时站中间。
+        // showLady 必须提前算——独眼第一句就要按它决定右槽铺不铺人。
         bool showLady = entry.ShowLandlady
             || entry.Type == IntelDailyTable.IntelType.Flirt
             || !string.IsNullOrEmpty(entry.LandladyLine);
+
+        yield return CoSpeak(ui, entry.InformantLine, informant, landlady, showLady, landladySpeaking: false);
+
         if (showLady && !string.IsNullOrEmpty(entry.LandladyLine))
-            yield return CoSpeak(ui, "老板娘", entry.LandladyLine, landlady, LandladyPortraitId);
+            yield return CoSpeak(ui, entry.LandladyLine, informant, landlady, ladyOnStage: true, landladySpeaking: true);
 
         bool wantQuiz = !IsQuizDoneToday()
             && (entry.Type == IntelDailyTable.IntelType.TimedQuiz || entry.CanTriggerQuiz);
@@ -154,28 +158,33 @@ public class InformantQuizDirector : MonoBehaviour
     }
 
     /// <summary>
-    /// 情报流程里玩家只点选项、从不开口，所以不铺玩家立绘、也不挂右侧名牌
-    /// （2026-10-15 主人：「如果没有玩家的对话 就不用显示玩家形象 只显示独眼和老板娘的就行」）。
-    /// 右侧那块 0.55 透明的玩家名牌就是「非发言方压暗」造成的，玩家立绘一隐藏它也不复存在。
+    /// 情报对话一句的立绘摆法（2026-10-16 主人拍板）：
+    /// 独眼先说话 → 独眼固定左槽（发起方，面朝右），老板娘固定右槽（对方，面朝左）；
+    /// 两人都在（纯对话）时两边站人；只有独眼（单人句）时站中间（soloCentered）。
+    /// 老板娘开口时 speakerIsInitiator=false，高亮/压暗自动切到右侧（DialogueUI.SetSpeakerHighlight 既有机制）。
+    /// 玩家只点选项、从不开口，全程不铺玩家立绘（2026-10-15 主人口径不变）。
     /// </summary>
     static IEnumerator CoSpeak(
-        DialogueUI ui, string speaker, string line,
-        Sprite speakerSp, string speakerPortraitId)
+        DialogueUI ui, string line,
+        Sprite informantSp, Sprite landladySp,
+        bool ladyOnStage, bool landladySpeaking)
     {
+        // 老板娘能开口就一定在台上；双保险，防调用方漏传 ladyOnStage
+        bool dual = ladyOnStage || landladySpeaking;
         bool done = false;
         ui.ShowLine(
-            speaker,
-            "",
+            "独眼",
+            dual ? "老板娘" : "",
             line,
-            speakerSp,
+            informantSp,
+            dual ? landladySp : null,
             null,
-            null,
-            speakerIsInitiator: true,
+            speakerIsInitiator: !landladySpeaking,
             onAdvance: () => { done = true; },
             onSkip: () => { done = true; },
-            soloCentered: false,
-            initiatorPortraitId: speakerPortraitId,
-            otherPortraitId: null,
+            soloCentered: !dual,
+            initiatorPortraitId: InformantPortraitId,
+            otherPortraitId: dual ? LandladyPortraitId : null,
             normalizePortraitSize: true);
         while (!ui.IsTypeComplete)
             yield return null;
@@ -256,7 +265,7 @@ public class InformantQuizDirector : MonoBehaviour
                 speakerIsInitiator: true,
                 onAdvance: null,
                 onSkip: null,
-                soloCentered: false,
+                soloCentered: true,
                 initiatorPortraitId: InformantPortraitId,
                 otherPortraitId: null,
                 normalizePortraitSize: true);
@@ -286,7 +295,7 @@ public class InformantQuizDirector : MonoBehaviour
                         speakerIsInitiator: true,
                         onAdvance: () => { replyDone = true; },
                         onSkip: () => { replyDone = true; },
-                        soloCentered: false,
+                        soloCentered: true,
                         initiatorPortraitId: InformantPortraitId,
                         otherPortraitId: null,
                         normalizePortraitSize: true);
@@ -312,7 +321,7 @@ public class InformantQuizDirector : MonoBehaviour
                 speakerIsInitiator: true,
                 onAdvance: () => { done = true; },
                 onSkip: () => { done = true; },
-                soloCentered: false,
+                soloCentered: true,
                 initiatorPortraitId: InformantPortraitId,
                 otherPortraitId: null,
                 normalizePortraitSize: true);

@@ -50,11 +50,15 @@ public class TownSceneManager : MonoBehaviour
                 hall.AddComponent<TownSceneBootstrap>();
             StartCoroutine(CoNotifyStoryReady());
             Debug.Log("[TownScene] 已加载 GuildHallUI 预制体（统一 Canvas 720×1280 Match Height）");
-            return;
+        }
+        else
+        {
+            Debug.LogWarning("[TownScene] 未找到 GuildHallUI，使用简易菜单。请运行 Tools/生成公会大厅预制体");
+            CreateTownUI();
         }
 
-        Debug.LogWarning("[TownScene] 未找到 GuildHallUI，使用简易菜单。请运行 Tools/生成公会大厅预制体");
-        CreateTownUI();
+        // T1：进城镇时趁 Loading 遮罩盖住提前预热天赋页，消除首次点击卡顿
+        StartCoroutine(CoPrewarmTalent());
     }
 
     IEnumerator CoNotifyStoryReady()
@@ -70,6 +74,15 @@ public class TownSceneManager : MonoBehaviour
         yield return null;
         Debug.Log("[TownScene] 通知剧情：大厅已就绪");
         TutorialDirector.Instance?.NotifyTownReady();
+    }
+
+    IEnumerator CoPrewarmTalent()
+    {
+        // 延迟几帧：避开与 GuildHallUI 同帧实例化，趁 Loading 遮罩盖住时完成预热，用户无感。
+        yield return null;
+        yield return null;
+        yield return null;
+        TalentUI.Prewarm();
     }
 
     void CreateTownUI()
