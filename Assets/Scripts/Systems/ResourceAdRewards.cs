@@ -10,11 +10,13 @@ using UnityEngine;
 /// </summary>
 public static class ResourceAdRewards
 {
-    public const int StaminaPerAd = 30;
+    /// <summary>体力补给一次的数量（2026-10-17 主人拍板：30→20）。</summary>
+    public const int StaminaPerAd = 20;
     public const int StaminaAdsPerDay = 5;
     /// <summary>每日免费体力补给次数（2026-09-20 钻石经济调整：前 N 次不扣钻，日总上限 StaminaAdsPerDay 不变）。</summary>
     public const int StaminaFreePerDay = 2;
-    public const int GoldPerAd = 40;
+    /// <summary>金币补给一次的数量（2026-10-17 主人拍板：40→60）。</summary>
+    public const int GoldPerAd = 60;
     public const int GoldAdsPerDay = 10;
     /// <summary>每日免费金币补给次数（2026-09-20 钻石经济调整：前 N 次不扣钻，日总上限 GoldAdsPerDay 不变）。</summary>
     public const int GoldFreePerDay = 2;
@@ -81,9 +83,16 @@ public static class ResourceAdRewards
         //     return;
         // }
 
+        // 【2026-10-17 主人拍板】钻石购买先注释掉，只保留每日免费 StaminaFreePerDay 次（=2）。
+        // 恢复钻石购买时：解开下面被注释的扣钻行，删掉免费用尽的提示分支即可。
         // 2026-09-20 钻石经济调整：每日前 StaminaFreePerDay 次免费，超出才扣钻（日总上限 StaminaAdsPerDay 不变）
         bool freeStamina = data.adStaminaClaimCount < StaminaFreePerDay;
-        if (!freeStamina && !TryPayDiamond(StaminaDiamondPrice, "体力补给")) return;
+        //if (!freeStamina && !TryPayDiamond(StaminaDiamondPrice, "体力补给")) return;
+        if (!freeStamina)
+        {
+            UIManager.Instance?.ShowToast($"今日免费体力补给已用完（{StaminaFreePerDay}/{StaminaFreePerDay}），明天再来");
+            return;
+        }
 
         data.adStaminaClaimCount++;
         var r = ResourceWallet.Add(ResourceWallet.ResourceType.Stamina, StaminaPerAd, save: true, notify: false);
@@ -148,9 +157,16 @@ public static class ResourceAdRewards
         //     return;
         // }
 
+        // 【2026-10-17 主人拍板】钻石购买先注释掉，只保留每日免费 GoldFreePerDay 次（=2）。
+        // 恢复钻石购买时：解开下面被注释的扣钻行，删掉免费用尽的提示分支即可。
         // 2026-09-20 钻石经济调整：每日前 GoldFreePerDay 次免费，超出才扣钻（日总上限 GoldAdsPerDay 不变）
         bool freeGold = data.adGoldClaimCount < GoldFreePerDay;
-        if (!freeGold && !TryPayDiamond(GoldDiamondPrice, "金币补给")) return;
+        //if (!freeGold && !TryPayDiamond(GoldDiamondPrice, "金币补给")) return;
+        if (!freeGold)
+        {
+            UIManager.Instance?.ShowToast($"今日免费金币补给已用完（{GoldFreePerDay}/{GoldFreePerDay}），明天再来");
+            return;
+        }
 
         data.adGoldClaimCount++;
         var r = ResourceWallet.Add(ResourceWallet.ResourceType.Gold, GoldPerAd, save: true, notify: false);

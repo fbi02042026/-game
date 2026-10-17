@@ -118,12 +118,18 @@ public static class MercHireSession
         return MercSkillMapping.StarToRarity(offer.star);
     }
 
+    /// <summary>
+    /// 卷轴口径（2026-10-17 主人拍板）：普通佣兵只走金币；
+    /// 稀有佣兵用【普通卷轴】（mercScrollCommon），卷不足可用金币；
+    /// 传奇佣兵用【高级招募卷轴】（mercScrollLegendary，字段语义由旧「传奇卷」升级，老档自动兼容），
+    /// 只能卷轴、不可金币。旧「稀有招募卷」（mercScrollRare）废弃，存档加载时已折算进普通卷轴。
+    /// </summary>
     public static bool HasScrollFor(MercRosterDefs.MercRarity rarity)
     {
         var data = SaveSystem.Instance?.Data;
         if (data == null) return false;
         if (rarity == MercRosterDefs.MercRarity.Legendary) return data.mercScrollLegendary > 0;
-        if (rarity == MercRosterDefs.MercRarity.Rare) return data.mercScrollRare > 0;
+        if (rarity == MercRosterDefs.MercRarity.Rare) return data.mercScrollCommon > 0;
         return false;
     }
 
@@ -139,8 +145,8 @@ public static class MercHireSession
         }
         if (rarity == MercRosterDefs.MercRarity.Rare)
         {
-            if (data.mercScrollRare <= 0) return false;
-            data.mercScrollRare--;
+            if (data.mercScrollCommon <= 0) return false;
+            data.mercScrollCommon--;
             return true;
         }
         return false;
@@ -238,6 +244,37 @@ public static class MercHireSession
         var sp = Resources.Load<Sprite>("UI/Recruit/" + name);
         if (sp != null) return sp;
         var all = Resources.LoadAll<Sprite>("UI/Recruit/" + name);
+        return all != null && all.Length > 0 ? all[0] : null;
+    }
+
+    /// <summary>
+    /// 酒馆卡组「卡框」三档（2026-10-16 主人拍板：抽奖池列表卡与池格同框）：传奇金 / 稀有蓝 / 普通银。
+    /// 真源 Resources/Art/UI/Tavern/酒馆头像/（204×248，池格预制体序列化的就是这套，走路径加载）。
+    /// ⚠️ 别混用 <see cref="LoadRarityFrame"/>——那是三选一高卡（219×789 插画卡底），压到 200×300 卡上会变形。
+    /// </summary>
+    public const string TavernCardFrameDir = "Art/UI/Tavern/酒馆头像";
+
+    public static Sprite LoadTavernCardFrame(MercRosterDefs.MercRarity rarity)
+    {
+        string name = rarity == MercRosterDefs.MercRarity.Legendary ? "传奇头像框"
+            : rarity == MercRosterDefs.MercRarity.Rare ? "稀有头像框" : "普通头像框";
+        var sp = Resources.Load<Sprite>(TavernCardFrameDir + "/" + name);
+        if (sp != null) return sp;
+        var all = Resources.LoadAll<Sprite>(TavernCardFrameDir + "/" + name);
+        return all != null && all.Length > 0 ? all[0] : null;
+    }
+
+    /// <summary>
+    /// 酒馆卡组「名字底牌」三档（2026-10-16 主人拍板：名字跟稀有度走，换图不代码改色）：
+    /// 传奇名字框 / 稀有名字框 / 普通名字框，同目录 <see cref="TavernCardFrameDir"/>。
+    /// </summary>
+    public static Sprite LoadTavernNamePlate(MercRosterDefs.MercRarity rarity)
+    {
+        string name = rarity == MercRosterDefs.MercRarity.Legendary ? "传奇名字框"
+            : rarity == MercRosterDefs.MercRarity.Rare ? "稀有名字框" : "普通名字框";
+        var sp = Resources.Load<Sprite>(TavernCardFrameDir + "/" + name);
+        if (sp != null) return sp;
+        var all = Resources.LoadAll<Sprite>(TavernCardFrameDir + "/" + name);
         return all != null && all.Length > 0 ? all[0] : null;
     }
 

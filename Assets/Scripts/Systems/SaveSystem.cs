@@ -123,6 +123,7 @@ public class SaveSystem : Singleton<SaveSystem>
         if (data.lastStaminaUtc <= 0)
             data.lastStaminaUtc = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         ResourceAdRewards.EnsureDay(data);
+        EndlessRiftRules.EnsureDay(data);   // 无限裂隙每日次数跨天重置兜底
         StaminaSystem.Tick(save: false);
         MercSkillMigrate.SyncAutoCastPrefsFromSave();
     }

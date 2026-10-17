@@ -626,19 +626,21 @@ public static class RunLoadout
         set { if (_data != null) _data.heroLevel = Mathf.Max(1, value); }
     }
 
-    /// <summary>本局战力：玩家自身属性（纯输出口径） + 技能星级/稀有度 + 佣兵等级/星级 + 主题协同。</summary>
+    /// <summary>本局战力：玩家自身属性（输出段 + 血量/防御生存段） + 技能星级/稀有度 + 佣兵等级/星级 + 主题协同。</summary>
     public static int TotalPower()
     {
         if (_data == null) return 0;
         int power = 0;
 
-        // 口径：战力 = 对敌方造成伤害的系数（主人 2026-10-12 拍板）
+        // 口径：DPS 段（主人 2026-10-12 拍板）+ 血量/防御生存段（2026-10-17 拍板：涨的少也要涨）
         //   DPS   = 当前攻击力 × (1 + 暴击率) × 每秒攻击次数
-        //   Power = POWER_BASE + POWER_PER_DPS × DPS
-        // 🔴 没有等级，底盘是纯常数；🔴 血量/防御/暴击伤害一律不计权重（主人要纯输出口径）
+        //   Power = POWER_BASE + POWER_PER_DPS × DPS + POWER_PER_HP × 血量 + POWER_PER_DEF × (物防+魔防)
+        // 🔴 没有等级，底盘是纯常数；🔴 暴击伤害/移速等其余属性不计权重
         // 常量引自 PowerCalc（战力换算唯一真源，与抽卡卡面同一套字面量，不许两处各写）
         const float POWER_BASE = PowerCalc.POWER_BASE;
         const float POWER_PER_DPS = PowerCalc.POWER_PER_DPS;
+        const float POWER_PER_HP = PowerCalc.POWER_PER_HP;
+        const float POWER_PER_DEF = PowerCalc.POWER_PER_DEF;
 
         var hero = Hero.Instance;
         if (hero == null)
@@ -655,9 +657,11 @@ public static class RunLoadout
             float critRate = hero.attr.GetAttr(AttrType.CritRate);
             float attackSpeed = hero.attr.GetAttr(AttrType.AttackSpeed);
             float dps = attack * (1f + critRate) * attackSpeed;
+            float defTotal = hero.attr.GetAttr(AttrType.Defense) + hero.attr.GetAttr(AttrType.MagicDefense);
             // 必须用四舍五入：底盘是 130.50 这类 .5 结尾的浮点，直接 (int) 截断会因浮点误差
             // 把 299.99996… 截成 299（重武实测踩到），且会让狂战/剑盾挤成同一个数。
-            power += Mathf.RoundToInt(POWER_BASE + POWER_PER_DPS * dps);
+            power += Mathf.RoundToInt(POWER_BASE + POWER_PER_DPS * dps
+                + POWER_PER_HP * hero.attr.GetAttr(AttrType.MaxHp) + POWER_PER_DEF * defTotal);
         }
 
         if (_data.skills != null)

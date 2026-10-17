@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -31,6 +32,14 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
     GameObject _infoRoot;
 
+    // —— 佣兵台词气泡（2026-10-17 主人拍板：三选一里佣兵说话用气泡框，不再走顶部 Toast）——
+    // 样式对齐看板娘 SpeechBubbleTalker：speech_bubble 底图 + 打字机 + SpeechBubbleFit 文字自适应。
+    GameObject _mercBubbleRoot;
+    Text _mercBubbleText;
+    Coroutine _mercBubbleCo;
+    Coroutine _refreshCountdownCo;
+    static readonly Vector2 MercBubbleBaseSize = new Vector2(180f, 107f);
+
     [System.Serializable]
     public class CardView
     {
@@ -51,8 +60,10 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         public Button scrollButton;
         public Text goldLabel;
         public Text scrollLabel1;
-        public GameObject orLabel;
         public Image scrollButtonImage;
+        public Image goldIcon;            // ConfirmButton/icon（主人在预制体里已摆好）
+        public Image scrollIcon;          // ConfirmButton1/icon（主人在预制体里已摆好）
+        [System.NonSerialized] public Sprite scrollIconDefault; // 主人摆的卷轴图快照：金币价分支切金币图后要还原
     }
 
     List<MercenaryData> _offers = new List<MercenaryData>();
@@ -108,6 +119,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     {
         AutoBind();
         EnsureCanvas();
+        FitPanelScale();
         TownSaveAlign.AlignAll();
         MercHireSession.EnsureDailyOfferRefresh();
         var data = SaveSystem.Instance?.Data;
@@ -122,11 +134,13 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         }
         RefreshAll();
         WireOnce();
+        PlaceRefreshCostAboveButton();
         if (root != null) root.SetActive(true);
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
         MaybeToastAppearBanter(force: false, avoidLast: false);
         ScheduleNextIdleBanter();
+        StartRefreshCountdown();
     }
 
     void RerollOffers()
@@ -146,7 +160,22 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         if (autoRefreshText != null)
             autoRefreshText.text = "每日 0 点自动刷新";
 
+        UpdateRefreshCostText();   // 含按钮灰显/点亮与顶上倒计时文字
+
+        for (int i = 0; i < cards.Length; i++)
+            RefreshCard(i);
+    }
+
+    /// <summary>
+    /// 刷新按钮顶上的冷却提示（2026-10-17 主人拍板）：可刷新时不显示文字；
+    /// 冷却中按钮灰显、按钮顶上显示 mm:ss 倒计时，由 CoRefreshCountdown 每秒驱动，
+    /// 冷却走完这一秒顺带把按钮点亮（不必等下次 RefreshAll）。
+    /// </summary>
+    void UpdateRefreshCostText()
+    {
         bool canRefresh = MercHireSession.CanManualRefresh(out int remainSec);
+        if (refreshCostText != null)
+            refreshCostText.text = canRefresh ? "" : $"{remainSec / 60}:{remainSec % 60:00}";
         if (refreshButton != null)
         {
             refreshButton.interactable = canRefresh;
@@ -154,11 +183,42 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
             if (img != null)
                 img.color = canRefresh ? Color.white : new Color(0.45f, 0.45f, 0.45f, 1f);
         }
-        if (refreshCostText != null)
-            refreshCostText.text = canRefresh ? "可刷新" : $"冷却 {remainSec / 60}分{remainSec % 60}秒";
+    }
 
-        for (int i = 0; i < cards.Length; i++)
-            RefreshCard(i);
+    /// <summary>把 RefreshCost 文字挪到刷新按钮顶边上方（按钮内原位会跟按钮文字打架）。幂等。</summary>
+    void PlaceRefreshCostAboveButton()
+    {
+        if (refreshCostText == null || refreshButton == null) return;
+        var rt = refreshCostText.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 4f);
+        rt.sizeDelta = new Vector2(200f, 30f);
+    }
+
+    void StartRefreshCountdown()
+    {
+        if (_refreshCountdownCo != null) StopCoroutine(_refreshCountdownCo);
+        _refreshCountdownCo = StartCoroutine(CoRefreshCountdown());
+    }
+
+    void StopRefreshCountdown()
+    {
+        if (_refreshCountdownCo != null)
+        {
+            StopCoroutine(_refreshCountdownCo);
+            _refreshCountdownCo = null;
+        }
+    }
+
+    IEnumerator CoRefreshCountdown()
+    {
+        var wait = new WaitForSeconds(1f);
+        while (true)
+        {
+            UpdateRefreshCostText();
+            yield return wait;
+        }
     }
 
     void RefreshCard(int i)
@@ -235,20 +295,23 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         bool canHireMore = MercHireSession.CanHireMore();
         bool hasGold = ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.Gold) >= gold;
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
+        bool isLegendary = rarity == MercRosterDefs.MercRarity.Legendary;
         bool hasScroll = !isCommon && MercHireSession.HasScrollFor(rarity);
 
-        // ConfirmButton：金币
+        // ConfirmButton：金币。三张卡都显示（主人摆的双按钮布局）；
+        // 传奇只能卷轴 → 金币按钮常置灰不可点（2026-10-17 主人拍板：传奇不可金币）
         if (c.goldButton != null)
         {
             c.goldButton.gameObject.SetActive(true);
-            bool goldOk = !alreadyHired && canHireMore && hasGold;
+            bool goldOk = !isLegendary && !alreadyHired && canHireMore && hasGold;
             c.goldButton.interactable = goldOk;
             SetButtonGray(c.goldButton, !goldOk);
         }
         if (c.goldLabel != null)
             c.goldLabel.text = gold.ToString();
 
-        // ConfirmButton1：稀有/传奇卷；普通隐藏；无卷时显示金币价
+        // ConfirmButton1：卷轴。普通佣兵隐藏；稀有=普通卷轴（无卷时显示金币价、icon 切金币图）；
+        // 传奇=高级招募卷轴（无卷时按钮置灰显示高级卷×1，不可金币）
         if (c.scrollButton != null)
         {
             if (isCommon)
@@ -267,16 +330,30 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
                 if (hasScroll)
                 {
                     if (c.scrollLabel1 != null)
-                        c.scrollLabel1.text = rarity == MercRosterDefs.MercRarity.Legendary ? "传奇卷×1" : "稀有卷×1";
+                        c.scrollLabel1.text = isLegendary ? "高级卷×1" : "普通卷×1";
+                    if (c.scrollIcon != null && c.scrollIconDefault != null)
+                        c.scrollIcon.sprite = c.scrollIconDefault;   // 还原主人摆的卷轴图
                     bool scrollOk = !alreadyHired && canHireMore;
                     c.scrollButton.interactable = scrollOk;
                     SetButtonGray(c.scrollButton, !scrollOk);
                 }
+                else if (isLegendary)
+                {
+                    // 传奇无高级卷：只能等卷，不开放金币兜底
+                    if (c.scrollLabel1 != null)
+                        c.scrollLabel1.text = "高级卷×1";
+                    if (c.scrollIcon != null && c.scrollIconDefault != null)
+                        c.scrollIcon.sprite = c.scrollIconDefault;
+                    c.scrollButton.interactable = false;
+                    SetButtonGray(c.scrollButton, true);
+                }
                 else
                 {
-                    // 无卷：按钮位改显示金币价，可点则扣金币
+                    // 稀有无普通卷：按钮位改显示金币价，icon 同步切成金币图，可点则扣金币
                     if (c.scrollLabel1 != null)
                         c.scrollLabel1.text = gold.ToString();
+                    if (c.scrollIcon != null)
+                        c.scrollIcon.sprite = c.goldIcon != null ? c.goldIcon.sprite : c.scrollIconDefault;
                     bool goldOk = !alreadyHired && canHireMore && hasGold;
                     c.scrollButton.interactable = goldOk;
                     SetButtonGray(c.scrollButton, !goldOk);
@@ -285,9 +362,6 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
                 }
             }
         }
-
-        if (c.orLabel != null)
-            c.orLabel.SetActive(!isCommon);
     }
 
     static void BindSkillTexts(CardView c, MercenaryData offer)
@@ -367,34 +441,34 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         if (_offers == null || _offers.Count == 0) return false;
         if (!force && UnityEngine.Random.value >= AppearBanterChance) return false;
 
-        var pool = new List<MercenaryData>();
+        var pool = new List<int>();
         for (int i = 0; i < _offers.Count; i++)
         {
             if (_offers[i] == null) continue;
             if (MercHireSession.IsAlreadyHired(_offers[i])) continue;
-            pool.Add(_offers[i]);
+            pool.Add(i);
         }
         if (pool.Count == 0) return false;
 
         if (avoidLast && !string.IsNullOrEmpty(_lastBanterKey) && pool.Count > 1)
         {
-            var others = new List<MercenaryData>();
+            var others = new List<int>();
             for (int i = 0; i < pool.Count; i++)
             {
-                string k = OfferBanterKey(pool[i]);
+                string k = OfferBanterKey(_offers[pool[i]]);
                 if (k != _lastBanterKey) others.Add(pool[i]);
             }
             if (others.Count > 0) pool = others;
         }
 
-        var offer = pool[UnityEngine.Random.Range(0, pool.Count)];
+        int pick = pool[UnityEngine.Random.Range(0, pool.Count)];
+        var offer = _offers[pick];
         string key = OfferBanterKey(offer);
         string line = MercLineTable.Pick(key, MercLineTable.Scene.TavernRefresh);
         if (string.IsNullOrEmpty(line)) return false;
 
-        string name = !string.IsNullOrEmpty(offer.nickname) ? offer.nickname
-            : (!string.IsNullOrEmpty(offer.displayName) ? offer.displayName : "佣兵");
-        UIManager.Instance?.ShowToast($"{name}：「{line}」");
+        // 【2026-10-17 主人拍板】佣兵说话改走该佣兵卡上方的气泡框，不再占顶部 Toast。
+        ShowMercBubble(pick, line);
         _lastBanterKey = key;
         return true;
     }
@@ -403,6 +477,90 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     {
         if (offer == null) return "";
         return !string.IsNullOrEmpty(offer.hireId) ? offer.hireId : (offer.mercId ?? "");
+    }
+
+    // ==========================================================================
+    // 佣兵台词气泡：气泡挂在该佣兵的卡上方，样式与看板娘同款
+    // （Resources/Story/Props/speech_bubble.png + SpeechBubbleFit.Apply + 打字机）。
+    // ==========================================================================
+
+    /// <summary>在指定佣兵卡上方弹气泡说 line；上一条气泡（若有）立即打断。</summary>
+    void ShowMercBubble(int cardIndex, string line)
+    {
+        if (string.IsNullOrEmpty(line)) return;
+        var cardRoot = (cardIndex >= 0 && cardIndex < cards.Length && cards[cardIndex] != null)
+            ? cards[cardIndex].root : null;
+        if (cardRoot == null) return;
+        EnsureMercBubble(cardRoot.transform);
+        if (_mercBubbleRoot == null || _mercBubbleText == null) return;
+        if (_mercBubbleCo != null) StopCoroutine(_mercBubbleCo);
+        _mercBubbleCo = StartCoroutine(CoMercBubble(line));
+    }
+
+    void EnsureMercBubble(Transform cardRoot)
+    {
+        if (_mercBubbleRoot != null)
+        {
+            if (_mercBubbleRoot.transform.parent != cardRoot)
+                _mercBubbleRoot.transform.SetParent(cardRoot, false);
+            return;
+        }
+        var cardRt = cardRoot as RectTransform;
+        if (cardRt == null) return;
+
+        var go = new GameObject("MercBubble", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(cardRoot, false);
+        var img = go.GetComponent<Image>();
+        img.sprite = Resources.Load<Sprite>("Story/Props/speech_bubble");
+        img.raycastTarget = false;
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0f);   // 气泡底尖贴卡顶
+        rt.sizeDelta = MercBubbleBaseSize;
+        rt.anchoredPosition = new Vector2(0f, cardRt.sizeDelta.y * 0.5f + 4f);
+
+        var txtGo = new GameObject("BubbleText", typeof(RectTransform), typeof(Text));
+        txtGo.transform.SetParent(go.transform, false);
+        var t = txtGo.GetComponent<Text>();
+        t.font = GameFonts.GetChinese();
+        t.fontSize = 20;
+        t.color = new Color(0.16f, 0.12f, 0.09f);
+        t.alignment = TextAnchor.MiddleCenter;
+        t.raycastTarget = false;
+        var trt = txtGo.GetComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = new Vector2(14f, 10f);
+        trt.offsetMax = new Vector2(-14f, -16f);
+
+        _mercBubbleRoot = go;
+        _mercBubbleText = t;
+        go.SetActive(false);
+    }
+
+    IEnumerator CoMercBubble(string line)
+    {
+        _mercBubbleRoot.SetActive(true);
+        var rt = _mercBubbleRoot.transform as RectTransform;
+        string display = SpeechBubbleFit.Apply(rt, _mercBubbleText, line, MercBubbleBaseSize);
+        _mercBubbleText.text = "";
+        float delay = 1f / Mathf.Max(1f, 18f);
+        for (int i = 1; i <= display.Length; i++)
+        {
+            _mercBubbleText.text = display.Substring(0, i);
+            yield return new WaitForSeconds(delay);
+        }
+        _mercBubbleText.text = display;
+        yield return new WaitForSeconds(2.8f);
+        HideMercBubble();
+        _mercBubbleCo = null;
+    }
+
+    void HideMercBubble()
+    {
+        if (_mercBubbleCo != null) { StopCoroutine(_mercBubbleCo); _mercBubbleCo = null; }
+        if (_mercBubbleRoot != null) _mercBubbleRoot.SetActive(false);
+        if (_mercBubbleText != null) _mercBubbleText.text = "";
     }
 
     static void ApplyHiredVisual(CardView c, bool hired)
@@ -553,6 +711,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         var rarity = MercHireSession.OfferRarity(offer);
         int gold = MercHireSession.GoldCost(offer);
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
+        bool isLegendary = rarity == MercRosterDefs.MercRarity.Legendary;
         bool hasScroll = !isCommon && MercHireSession.HasScrollFor(rarity);
 
         if (preferScroll && hasScroll)
@@ -565,6 +724,12 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         }
         else
         {
+            // 传奇只能用高级招募卷轴，金币路径一律拦下（2026-10-17 主人拍板）
+            if (isLegendary)
+            {
+                UIManager.Instance?.ShowToast("高级招募卷轴不足，无法招募传奇佣兵");
+                return;
+            }
             // 金币：ConfirmButton，或 ConfirmButton1 无卷时
             if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, gold, save: false, notify: true))
             {
@@ -577,12 +742,9 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         MercHireSession.AddHired(picked);
         string name = !string.IsNullOrEmpty(picked.displayName) ? picked.displayName
             : (!string.IsNullOrEmpty(picked.nickname) ? picked.nickname : "佣兵");
-        string hireKey = !string.IsNullOrEmpty(picked.hireId) ? picked.hireId : OfferBanterKey(picked);
-        string hireLine = MercLineTable.Pick(hireKey, MercLineTable.Scene.HireSuccess);
-        if (!string.IsNullOrEmpty(hireLine))
-            UIManager.Instance?.ShowToast($"{name}加入队伍！「{hireLine}」");
-        else
-            UIManager.Instance?.ShowToast($"{name}加入队伍！");
+        // 【2026-10-17 主人拍板】入队报喜 Toast 只留「加入队伍」；佣兵台词改走该卡上方气泡框。
+        UIManager.Instance?.ShowToast($"{name}加入队伍！");
+        ShowMercBubble(index, MercLineTable.Pick(OfferBanterKey(picked), MercLineTable.Scene.HireSuccess));
         RefreshAll();
         ScheduleNextIdleBanter();
     }
@@ -653,6 +815,8 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     void Close()
     {
         if (_infoRoot != null) _infoRoot.SetActive(false);
+        HideMercBubble();
+        StopRefreshCountdown();
         if (root != null) root.SetActive(false);
     }
 
@@ -661,6 +825,31 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
+    }
+
+    /// <summary>
+    /// 【2026-10-17 主人拍板】按预制体布局整体缩放：不逐节点改坐标，把 Panel 连同全部子节点
+    /// 等比缩到当前画布的可用区内（顶部资源条 + 底部导航各留出空间）。
+    /// 预制体 Panel 714×1133 在瘦屏（match=0 时画布高可达 1364+）几乎占满全屏并压住顶栏/底栏，
+    /// 只缩 Panel 的 localScale，预制体内部布局一个像素不动。
+    /// </summary>
+    void FitPanelScale()
+    {
+        var canvasRt = transform as RectTransform;
+        if (canvasRt == null || canvasRt.rect.width <= 0f || canvasRt.rect.height <= 0f) return;
+        var panelTf = root != null ? root.transform.Find("Panel") : null;
+        if (panelTf == null) panelTf = transform.Find("Panel");
+        var prt = panelTf as RectTransform;
+        if (prt == null) return;
+
+        // 预留：顶部资源条 ~120 + 底部五入口 ~150 + 余量 30 = 300；左右各留 20。
+        float availW = canvasRt.rect.width - 40f;
+        float availH = canvasRt.rect.height - 300f;
+        float w = prt.sizeDelta.x;
+        float h = prt.sizeDelta.y;
+        if (w <= 0f || h <= 0f) return;
+        float s = Mathf.Min(1f, Mathf.Min(availW / w, availH / h));
+        prt.localScale = new Vector3(s, s, 1f);
     }
 
     void AutoBind()
@@ -715,17 +904,19 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
                 c.scrollButtonImage = c.scrollButton.GetComponent<Image>();
             if (c.goldLabel == null && c.goldButton != null)
             {
-                var g = FindDeep(c.goldButton.transform, "Label")
-                    ?? FindDeep(cardTf, "金币");
+                var g = FindDeep(c.goldButton.transform, "Label");
                 if (g != null) c.goldLabel = g.GetComponent<Text>();
             }
+            // 卷轴按钮文字：节点名就是 Label（与金币按钮同名，各自按钮下查找）
             if (c.scrollLabel1 == null && c.scrollButton != null)
-                c.scrollLabel1 = FindDeep(c.scrollButton.transform, "Label1")?.GetComponent<Text>();
-            if (c.orLabel == null)
-            {
-                var orTf = FindDeep(cardTf, "或");
-                if (orTf != null) c.orLabel = orTf.gameObject;
-            }
+                c.scrollLabel1 = FindDeep(c.scrollButton.transform, "Label")?.GetComponent<Text>();
+            // 按钮内 icon 槽（主人在预制体里已摆好图，代码只按状态切换、不重设默认图）
+            if (c.goldIcon == null && c.goldButton != null)
+                c.goldIcon = FindDeep(c.goldButton.transform, "icon")?.GetComponent<Image>();
+            if (c.scrollIcon == null && c.scrollButton != null)
+                c.scrollIcon = FindDeep(c.scrollButton.transform, "icon")?.GetComponent<Image>();
+            if (c.scrollIcon != null && c.scrollIconDefault == null)
+                c.scrollIconDefault = c.scrollIcon.sprite;
         }
     }
 

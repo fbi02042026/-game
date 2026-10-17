@@ -288,6 +288,9 @@ public class Monster : UnitBase
     private int _spriteIndex;
     private bool _isBossUnit;
     private bool _eliteWave;
+    // 【2026-10-16 主人摆的 JY 节点】精英/Boss 脚下光环标识（Monstersmoban 预制体直接子节点）。
+    // 缓存一次即可：Visual 进对象池时节点跟着走，不会销毁。
+    Transform _eliteRing;
     // 2026-09-26 主人拍板：本怪物是魔法型(true)还是物理型(false)，攻击/防御二选一不混搭。
     // 该值在 Init 时按 monster_attack_style.csv 的 magicChance 掷骰一次后固定，终身不变。
     private bool _isMagicType;
@@ -726,7 +729,12 @@ public class Monster : UnitBase
         // → 总倍率 = 章倍率 × 章内倍率，**唯一出口是 GameConfig.GetStatScale(章, 章内第几关)**，
         //   绝不在这里自己把两个数乘一遍（那是第二处口径，改表时会漏）。
         int stageIdx0 = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
-        float statScale = GameConfig.GetStatScale(chapter, stageIdx0);
+        // 无限裂隙（2026-10-17）：强度只随绝对层数走（+7%/层，缓冲关 9 折），
+        // 不用循环映射章的曲线 —— 映射章会 1→8 循环，直接套会出现「第 40 层比第 36 层弱」的跳水。
+        bool endlessRift = BattleManager.Instance != null && BattleManager.Instance.IsEndlessRift;
+        float statScale = endlessRift
+            ? GameConfig.EndlessDifficultyMul(BattleManager.Instance.EndlessRiftStage)
+            : GameConfig.GetStatScale(chapter, stageIdx0);
         float guildScale = 1f + GameConfig.GUILD_SCALE_PER * guildLv;
         float diffScale = BattleManager.Instance != null ? BattleManager.Instance.DifficultyStatScale : 1f;
         float scale = statScale * guildScale * diffScale;
@@ -777,9 +785,13 @@ public class Monster : UnitBase
         }
 
         float waveMul = 1f + waveNum * 0.05f;
-        float ttkMul = (bossUnit || eliteWave)
-            ? WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit, stageIdx0)
-            : GameConfig.GetStatScale(chapter, stageIdx0);
+        float ttkMul;
+        if (endlessRift)
+            ttkMul = GameConfig.EndlessDifficultyMul(BattleManager.Instance.EndlessRiftStage);
+        else if (bossUnit || eliteWave)
+            ttkMul = WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit, stageIdx0);
+        else
+            ttkMul = GameConfig.GetStatScale(chapter, stageIdx0);
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * GameConfig.MONSTER_HP_GLOBAL_MUL);
@@ -938,7 +950,25 @@ public class Monster : UnitBase
             : 0f;
         _skillCooldown = _canUseActiveSkill && !strong ? (rangedSkill ? 0f : 3f) : 0f;
 
+        // 【2026-10-16 主人摆的 JY 脚下光环】精英/Boss 出场显示，普通怪隐藏。
+        // 光环是 Visual 子节点，精英/Boss 的 rootScale 放大时**自动跟着变大**，代码不碰它的 scale/贴图/位置（铁律 2）。
+        ApplyEliteRingVisible(_isBossUnit || _eliteWave);
+
         BattleBossHpBar.RefreshFromField();
+    }
+
+    /// <summary>
+    /// JY 节点显隐唯一出口（主人 2026-10-16 在 Monstersmoban 摆的精英/Boss 脚下光环标识）：
+    /// 精英/Boss 出场显示、普通怪隐藏、回收时关闭。
+    /// 只切 active，不动主人在预制体里调好的贴图/缩放/位置/透明度（铁律 2）；
+    /// 预制体里没摆 JY 就静默跳过（不兜底造）。
+    /// </summary>
+    void ApplyEliteRingVisible(bool on)
+    {
+        if (_eliteRing == null) _eliteRing = transform.Find("JY");
+        if (_eliteRing == null) return;
+        if (_eliteRing.gameObject.activeSelf != on)
+            _eliteRing.gameObject.SetActive(on);
     }
 
     /// <summary>??????? footprint??????AABB?????????????/summary>
@@ -1358,7 +1388,10 @@ public class Monster : UnitBase
 
         EnsureFootShadow();
         // 2026-10-06 主人要求：把「运行中的真实尺寸」抄一份给他对照调预制体（只读，每局只做一次）
+        // 2026-10-17 上线稳定优先：一次性探针已完成使命，真机不再执行，仅编辑器保留
+#if UNITY_EDITOR
         MonsterTemplateProbe.DumpOnce(transform);
+#endif
     }
 
     /// <summary>
@@ -2055,6 +2088,8 @@ public class Monster : UnitBase
         _forcedTarget = null;
         _worldHpBar = null;
         HideStackLabel();
+        // 【2026-10-16】回池关掉精英光环：下一只从池里复用的可能是普通怪（显隐唯一出口见 ApplyEliteRingVisible）
+        ApplyEliteRingVisible(false);
     }
 
     /// <summary>??MonsterBody ??????RB ??Body???? Visual ?????????/summary>

@@ -128,7 +128,10 @@ public class MailListUI : MonoBehaviour
         var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
 
-        if (transform.Find("Window") != null)
+        // 2026-10-16 修：MailPrefabBuilder 生成的树是 根 → Root → Window，
+        // 以前 transform.Find("Window") 只找根的直接子节点，永远找不到 → 恒走代码兜底分支，
+        // 主人在预制体里摆的「未领取/已领取」行模板全部没绑上（运行时报「行模板缺失」、列表恒空）。
+        if (FindPrefabWindow() != null)
         {
             BindFromPrefab();   // 预制体分支：几何以预制体为准，只按名绑定（MailPrefabBuilder 生成的树）
         }
@@ -149,10 +152,18 @@ public class MailListUI : MonoBehaviour
         gameObject.SetActive(false);
     }
 
+    /// <summary>找预制体窗体根：Root/Window 优先（MailPrefabBuilder 生成结构），裸 Window 兼容旧结构。</summary>
+    Transform FindPrefabWindow()
+    {
+        Transform t = transform.Find("Root/Window");
+        if (t != null) return t;
+        return transform.Find("Window");
+    }
+
     /// <summary>预制体分支：按节点名绑定（与 MailPrefabBuilder 生成的树一一对应；缺节点 LogError 不兜底建）。</summary>
     void BindFromPrefab()
     {
-        Transform window = transform.Find("Window");
+        Transform window = FindPrefabWindow();
 
         Transform content = FindDeep(window, "Content");
         _listContent = content as RectTransform;
@@ -173,6 +184,34 @@ public class MailListUI : MonoBehaviour
             Debug.LogError("[MailList] 预制体缺 Window/已领取 行模板，已领行无法生成");
         if (_tplUnclaimed != null) _tplUnclaimed.gameObject.SetActive(false);
         if (_tplClaimed != null) _tplClaimed.gameObject.SetActive(false);
+
+        // 【2026-10-17 修·主人报「删除已读/一键领取/关闭点击无反应」】根因：预制体分支只摆了节点没挂监听，
+        // 监听只存在于代码兜底分支 BuildWindow 里。现按名补绑（节点由 MailPrefabBuilder 生成、自带 Button）。
+        // ⚠️ 关闭按钮预制体里叫 BtnClose（不是 CloseButton）；Dim 遮罩按 builder 注释口径「点它关闭」一并绑。
+        BindPrefabButton(window, "ClaimAllButton", OnClaimAll, "一键领取");
+        BindPrefabButton(window, "DeleteReadButton", OnDeleteRead, "删除已读");
+        BindPrefabButton(window, "BtnClose", Close, "关闭");
+        if (window.parent != null)
+            BindPrefabButton(window.parent, "Dim", Close, "遮罩关闭");
+    }
+
+    /// <summary>预制体分支按钮绑定：按名找节点挂监听；缺节点/缺 Button 只报错不兜底建（与 LoginTapRowBuilder 同口径）。</summary>
+    void BindPrefabButton(Transform window, string name, UnityEngine.Events.UnityAction onClick, string label)
+    {
+        var t = FindDeep(window, name);
+        if (t == null)
+        {
+            Debug.LogError($"[MailList] 预制体缺 {name}（{label}）按钮节点");
+            return;
+        }
+        var btn = t.GetComponent<Button>();
+        if (btn == null)
+        {
+            Debug.LogError($"[MailList] 预制体 {name} 缺 Button 组件，无法绑定点击");
+            return;
+        }
+        btn.onClick.RemoveListener(onClick);   // 防重复叠加
+        btn.onClick.AddListener(onClick);
     }
 
     static Transform FindDeep(Transform parent, string name)
@@ -336,6 +375,13 @@ public class MailListUI : MonoBehaviour
 
     void RebuildRows()
     {
+        // 2026-10-16 加固：模板本体只作克隆源——重建前再强制隐藏一次，
+        // 防止 Play 模式中改预制体等操作把「未领取/已领取」两条模板复活、叠在窗体中央
+        if (_tplUnclaimed != null && _tplUnclaimed.gameObject.activeSelf)
+            _tplUnclaimed.gameObject.SetActive(false);
+        if (_tplClaimed != null && _tplClaimed.gameObject.activeSelf)
+            _tplClaimed.gameObject.SetActive(false);
+
         for (int i = 0; i < _rows.Count; i++)
         {
             var r = _rows[i];
@@ -379,6 +425,8 @@ public class MailListUI : MonoBehaviour
         go.SetActive(true);   // 模板本体是隐藏的，克隆体要显式打开
 
         var rt = (RectTransform)go.transform;
+        rt.localScale = Vector3.one;
+        rt.localRotation = Quaternion.identity;
         rt.anchorMin = new Vector2(0f, 1f);
         rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot = new Vector2(0.5f, 1f);
@@ -463,6 +511,27 @@ public class MailListUI : MonoBehaviour
         }
     }
 
+#if UNITY_EDITOR
+    void Update()
+    {
+        // 【2026-10-17 调试辅助·主人要求】邮件列表开着时按 F9，直接弹第一封信的详情窗，
+        // 免去逐封点开对布局（配图/附件格/领取按钮位置）。仅编辑器生效，真机包不含此代码。
+        if (Input.GetKeyDown(KeyCode.F9))
+        {
+            var inbox = MailSystem.GetInbox();
+            if (inbox != null && inbox.Count > 0)
+            {
+                Debug.Log($"[MailList] F9 预览第一封信：{inbox[0].title}（id={inbox[0].id}）");
+                MailDetailUI.Show(inbox[0].id);
+            }
+            else
+            {
+                Debug.LogWarning("[MailList] 收件箱为空，F9 没有信可预览");
+            }
+        }
+    }
+#endif
+
     void OnRowClicked(string mailId)
     {
         MailSystem.MarkAsRead(mailId);
@@ -529,14 +598,15 @@ public class MailListUI : MonoBehaviour
 
         MailSystem.Enqueue(new MailEntry
         {
-            title = "附魔石到货通知",
+            // 【2026-10-17 主人拍板】强化石/附魔石暂无用途 → 演示邮件的附魔石附件改成天赋石
+            title = "天赋石到货通知",
             sender = "铁匠铺老板",
-            body = "你订的附魔石到货了，[sticker:调皮] 记得来拿。",
+            body = "你订的天赋石到货了，[sticker:调皮] 记得来拿。",
             createTime = now - 7200,
             type = MailType.Reward,
             attachments = new List<MailAttachment>
             {
-                new MailAttachment { type = "enchant", amount = 5 },
+                new MailAttachment { type = "talent", amount = 5 },
                 new MailAttachment { type = "diamond", amount = 10 }
             }
         });

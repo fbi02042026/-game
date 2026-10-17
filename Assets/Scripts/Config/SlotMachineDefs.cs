@@ -414,6 +414,12 @@ public static class SlotMachineDefs
     /// </summary>
     public const int GOLD_DUNGEON_FREE_DRAWS = 5;
 
+    /// <summary>
+    /// 无限裂隙进场送几次**免费**抽奖（不扣抽奖币）。2026-10-17 主人拍板：5。
+    /// 与金币本同一套免费额度框架（IBattleMode.FreeEntryDraws），每次进局清零。
+    /// </summary>
+    public const int ENDLESS_RIFT_FREE_DRAWS = 5;
+
     // 【2026-10-14 主人拍板】10-13 那版「引导三拍免费抽」（TUTORIAL_FREE_DRAWS = 3）已整条删除，
     // 不留开关 —— 引导三拍照常扣钱，由引导启动金 270 兜住（见 TUTORIAL_STARTER_COINS）。
 

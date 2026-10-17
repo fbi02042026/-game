@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
@@ -446,8 +446,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         }, () => done = true);
         while (!done) yield return null;
 
-        // 【2026-10-14 主人拍板】塔克/咨询台剧情播完才弹这条机制提示（原来抢在剧情前面）
-        TutorialHintUI.Ensure().Show("局内拿到的装备带不出裂隙，金币和材料都能带回去。", null, 6f);
+        // 【2026-10-17 主人拍板】「局内装备带不出裂隙」提示不再紧跟剧情弹出——
+        // 此时首次引导（FirstRunGuide.Talent）正指着底栏角色按钮，提示横幅停在屏幕上方，
+        // 两层同时抢屏玩家不知道看哪个。挪到引导收完之后再弹（见下方 MarkTutorialDone 之后）。
 
         // —— V6 P4：回城引导点一次天赋（金币不够会自己跳过）——
         yield return CoGuideTalentUpgrade();
@@ -482,6 +483,12 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 收尾气泡自带 60s 超时放行，这里不会死等。
         while (FirstRunGuide.Instance != null && !FirstRunGuide.Instance.IsFinished)
             yield return new WaitForSeconds(0.25f);
+
+        // 【2026-10-17 主人拍板】引导收完、登录弹窗之前，补弹刚才让位的装备机制提示——
+        // 先等它自己消失（6s 自动收）再开每日登录，屏幕上始终只有一件事；
+        // 引导早已收完的存档（老玩家）这里就是紧跟着剧情后弹，行为与原节奏一致。
+        TutorialHintUI.Ensure().Show("局内拿到的装备带不出裂隙，金币和材料都能带回去。", null, 6f);
+        yield return new WaitForSecondsRealtime(6.5f);
         TownSceneBootstrap.TryDailyLoginOnce();
 
         _townFlowBusy = false;
@@ -631,6 +638,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 这里高亮佣兵头像教玩家点一次：点了弹详情，关掉后继续；60s 没点也放行不卡流程。
         yield return CoWaitMercAvatarTap(hint, ui);
         hint.Hide();
+        // 【2026-10-16 主人拍板】「组队后佣兵会自动战斗」这句从精英波开头**提前到塔克入队后**——
+        // 主人原话「佣兵进度后会自动那句有点靠后了 应该在塔克入队后就说」。点完头像这一步
+        // （入队教学拍）收尾即说，别再压到精英波预告之后。
+        hint.Show("组队后佣兵会自动战斗。", null, 3f);
 
         // —— 4) 第三波：塔克已在队，跟着一起打 ——
         // 2026-10-07 主人拍板：塔克第 2 抽就招募入队了，原来这段
@@ -741,7 +752,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 这里补上围杀目标（英雄），让这波真正刷出、含 1 只放大精英（eliteCount=1）。
         yield return EnsureTutorialStep(bm, 4, forcedTarget: Hero.Instance);
         if (bm != null) bm.UnitsCanAct = true;
-        hint.Show("组队后佣兵会自动战斗。", null, 3f);
+        // 【2026-10-16】「组队后佣兵会自动战斗」已提前到塔克入队后（本方法上方二抽头像步收尾处），
+        // 这里不再重复 Show —— 原位置压在精英波预告之后，主人报「有点靠后了」。
 
         Monster rival = null;
         yield return CoFindWaveElite(bm, m => rival = m);
@@ -1105,11 +1117,20 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 找到精英后必须等他**进场走完**（IsEnteringMap=false）再回调弹宿敌对白，
         // 否则对白弹在半路上、精英还堵在屏外，观感就是「小怪先出、精英磨蹭、对话框抢跑」。
         // 上限 15s 防卡死（超时放行，不拖死流程）。
+        // 【2026-10-16 主人又报「精英还没出来又先出现对话了」】光等 IsEnteringMap 挡不住抢跑：
+        // Monster.Update 有「进场途中贴近英雄 → 提前结束进场并开打」的分支，会把 IsEnteringMap
+        // 提前翻 false —— 对白就在精英还堵在屏外时弹了。真值 = **精英整个人进到镜头里**：
+        // X 落在可视范围内才算「出来」，人没露面绝不弹对白（15s 超时放行防卡死）。
         if (elite != null)
         {
             float enterWait = 0f;
-            while (enterWait < 15f && !elite.isDead && elite.IsEnteringMap)
+            while (enterWait < 15f && !elite.isDead)
             {
+                BattleManager.GetBattleVisibleX(out float vMin, out float vMax, 0.35f);
+                // Visual 与 MonsterBody 同 X（Init 里 localPosition 归零），直接读 transform 即可
+                float ex = elite.transform.position.x;
+                bool onScreen = ex >= vMin && ex <= vMax;
+                if (!elite.IsEnteringMap && onScreen) break;
                 enterWait += Time.unscaledDeltaTime;
                 yield return null;
             }

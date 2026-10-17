@@ -6,6 +6,8 @@ using UnityEngine.UI;
 /// <summary>
 /// 信件详情窗（2026-10-16 邮件 UI 改造 T7）：羊皮纸风格，两级弹窗的第二级，叠在 <see cref="MailListUI"/> 之上。
 /// 显示 标题 / 发件人 / 正文（[sticker:xxx] 标签解析为正文下方横排贴纸）/ 可选配图 / 附件清单；
+/// 附件（2026-10-16 主人要求「给的奖励都要有图标」）：flat 货币 + 结构化附件统一克隆 RewardCellTemplate 物品格，
+/// 全部带图标 + 名称 + 数量，文本只留「附件：」表头；已领取整格变灰盖印章。
 /// 底部单按钮：公告类只「确定」；奖励类未领「领取」、已领变灰并盖「已领取」印章。
 /// 纯运行时 Build（底图用 Art/UI/邮件/ 已就位美术）；布局常量集中本文件顶部，真机对位偏差在这里调。
 /// </summary>
@@ -49,6 +51,7 @@ public class MailDetailUI : MonoBehaviour
     Text _claimLabel;
     Image _claimBtnImg;
     Transform _rewardCellTemplate;          // RewardCellTemplate：物品格原型，运行时当模板
+    Transform _rewardCellTemplateMerc;      // RewardCellTemplate (1)：佣兵头像格原型（2026-10-16 主人拆分）
     List<GameObject> _rewardCells = new List<GameObject>();
     Sprite _spPaper, _spClose, _spStamp;
     bool _spritesResolved;
@@ -126,7 +129,10 @@ public class MailDetailUI : MonoBehaviour
         var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
 
-        if (transform.Find("PaperWindow") != null)
+        // 2026-10-16 修：MailPrefabBuilder 生成的树是 根 → Root → PaperWindow，
+        // 以前 transform.Find("PaperWindow") 只找根的直接子节点，永远找不到 → 恒走代码兜底分支，
+        // 主人在预制体里摆的 lingqu / RewardCellTemplate 等节点全部没绑上。
+        if (FindPrefabPaper() != null)
         {
             BindFromPrefab();   // 预制体分支：几何以预制体为准，只按名绑定（MailPrefabBuilder 生成的树）
         }
@@ -147,10 +153,18 @@ public class MailDetailUI : MonoBehaviour
         gameObject.SetActive(false);
     }
 
+    /// <summary>找预制体羊皮纸窗：Root/PaperWindow 优先（MailPrefabBuilder 生成结构），裸 PaperWindow 兼容旧结构。</summary>
+    Transform FindPrefabPaper()
+    {
+        Transform t = transform.Find("Root/PaperWindow");
+        if (t != null) return t;
+        return transform.Find("PaperWindow");
+    }
+
     /// <summary>预制体分支：按节点名绑定（与 MailPrefabBuilder 生成的树一一对应；缺节点 LogError 不兜底建）。</summary>
     void BindFromPrefab()
     {
-        Transform paper = transform.Find("PaperWindow");
+        Transform paper = FindPrefabPaper();
 
         _title = BindText(paper, "TitleText");
         _sender = BindText(paper, "SenderText");
@@ -197,6 +211,16 @@ public class MailDetailUI : MonoBehaviour
         else
             _rewardCellTemplate.gameObject.SetActive(false);
 
+        // 2026-10-16 主人拆分：RewardCellTemplate (1) = 佣兵头像格
+        _rewardCellTemplateMerc = FindDeep(paper, "RewardCellTemplate (1)");
+        if (_rewardCellTemplateMerc == null)
+        {
+            Debug.LogError("[MailDetail] 预制体缺 PaperWindow/RewardCellTemplate (1)（佣兵头像格），佣兵附件暂用物品格");
+            _rewardCellTemplateMerc = _rewardCellTemplate;
+        }
+        else
+            _rewardCellTemplateMerc.gameObject.SetActive(false);
+
         // 关键修复：预制体绑定后补按钮监听（先 RemoveAll 防持久化调用重复）
         if (_actionBtn != null)
         {
@@ -207,6 +231,39 @@ public class MailDetailUI : MonoBehaviour
         {
             _claimBtn.onClick.RemoveAllListeners();
             _claimBtn.onClick.AddListener(OnClaimClicked); // 领取=领取
+        }
+
+        // 【2026-10-17 修·主人报「满体力邮件领取不了也关不掉」】预制体分支漏绑 BtnClose/Dim：
+        // 领取被上限卡住时（如体力满、部分奖励留在邮件）claimed 恒为 false → lingqu 常驻、
+        // ActionButton 永不出现，窗上没有任何可点的关闭途径 → 补绑右上 X 与遮罩关闭（与 MailListUI 同口径）。
+        var closeT = FindDeep(paper, "BtnClose");
+        if (closeT == null)
+            Debug.LogError("[MailDetail] 预制体缺 PaperWindow/BtnClose，无法绑定关闭");
+        else
+        {
+            var closeBtn = closeT.GetComponent<Button>();
+            if (closeBtn == null)
+                Debug.LogError("[MailDetail] 预制体 BtnClose 缺 Button 组件，无法绑定关闭");
+            else
+            {
+                closeBtn.onClick.RemoveAllListeners();
+                closeBtn.onClick.AddListener(Close);
+            }
+        }
+
+        var dimT = paper.parent != null ? paper.parent.Find("Dim") : null;   // builder 口径：Dim 在 Root 下
+        if (dimT == null)
+            Debug.LogError("[MailDetail] 预制体缺 Root/Dim，无法绑定遮罩关闭");
+        else
+        {
+            var dimBtn = dimT.GetComponent<Button>();
+            if (dimBtn == null)
+                Debug.LogError("[MailDetail] 预制体 Dim 缺 Button 组件，无法绑定遮罩关闭");
+            else
+            {
+                dimBtn.onClick.RemoveAllListeners();
+                dimBtn.onClick.AddListener(Close);
+            }
         }
     }
 
@@ -309,12 +366,12 @@ public class MailDetailUI : MonoBehaviour
         _detailImage.preserveAspect = true;
         _detailImage.gameObject.SetActive(false);
 
-        // 附件清单（文本）
-        _rewardText = NewText(go.transform, "RewardText", string.Empty, 22, TextAnchor.UpperLeft, ColInk);
+        // 附件表头（「附件：」与预制体同值；具体奖励在 y -330 一排物品格，表头抬到其上方）
+        _rewardText = NewText(go.transform, "RewardText", "附件：", 22, TextAnchor.UpperLeft, ColInk);
         var rrt = (RectTransform)_rewardText.transform;
         rrt.anchorMin = rrt.anchorMax = new Vector2(0.5f, 0.5f);
-        rrt.anchoredPosition = new Vector2(0f, -330f);
-        rrt.sizeDelta = new Vector2(620f, 120f);
+        rrt.anchoredPosition = new Vector2(-290f, -262f);
+        rrt.sizeDelta = new Vector2(200f, 40f);
 
         // 底部双按钮（兜底分支）：ActionButton=确定(关闭) / lingqu=领取
         _actionBtn = NewTextButton(go.transform, "ActionButton", "确定", 28, new Vector2(220f, 70f), Close);
@@ -334,6 +391,7 @@ public class MailDetailUI : MonoBehaviour
 
         // 🆕 物品格模板占位（兜底分支；prefab 分支以预制体为准）
         _rewardCellTemplate = BuildRewardCellTemplate(go.transform);
+        _rewardCellTemplateMerc = _rewardCellTemplate; // 兜底没有独立佣兵格，复用同一模板
 
         // 关闭按钮（_0005_ 自带 X，右上装饰区旁）
         var closeGo = NewIconButton(go.transform, "CloseButton", _spClose, new Vector2(64f, 65f), Close);
@@ -397,16 +455,14 @@ public class MailDetailUI : MonoBehaviour
             _detailImage.gameObject.SetActive(false);
         }
 
-        // 附件文本（仅货币行；附件物品改由物品格显示）
-        List<string> currencyLines = BuildRewardLines(m);
-        bool hasRewardCurrency = currencyLines.Count > 0;
-        _rewardText.gameObject.SetActive(hasRewardCurrency);
-        if (hasRewardCurrency) _rewardText.text = "附件：\n" + string.Join("\n", currencyLines.ToArray());
-
-        // 底部双按钮互斥显隐：有奖励且未领→领(lingqu)；否则→确定(ActionButton)
+        // 2026-10-16 主人要求「给的奖励都要有图标」：flat 货币不再走文本行，统一进下方物品格带图标渲染；
+        // RewardText 只当「附件：」表头用（字面在预制体里摆好），有奖励才显示。
         bool hasReward = m.gold > 0 || m.diamond > 0 || m.stamina > 0 || m.enchantStones > 0
                          || m.decomposeMats > 0 || m.talentPoints > 0
                          || (m.attachments != null && m.attachments.Exists(a => a != null && a.amount > 0));
+        if (_rewardText != null) _rewardText.gameObject.SetActive(hasReward);
+
+        // 底部双按钮互斥显隐：有奖励且未领→领(lingqu)；否则→确定(ActionButton)
         bool showClaim = hasReward && !m.claimed;
         if (_claimBtn != null) _claimBtn.gameObject.SetActive(showClaim);
         if (_actionBtn != null)
@@ -447,7 +503,16 @@ public class MailDetailUI : MonoBehaviour
         }
     }
 
-    /// <summary>按附件数量克隆物品格（RewardCellTemplate 当模板），已领取则整格变灰盖印章。</summary>
+    /// <summary>奖励条目（2026-10-16 主人要求「给的奖励都要有图标」）：flat 货币与结构化附件统一走物品格。</summary>
+    struct RewardItem
+    {
+        public Sprite icon;
+        public string name;
+        public long amount;
+        public bool isMerc; // 2026-10-16 主人拆分：佣兵附件走 RewardCellTemplate (1) 头像格
+    }
+
+    /// <summary>按奖励清单克隆物品格（RewardCellTemplate 当模板），已领取则整格变灰盖印章。</summary>
     void RebuildRewardCells(MailEntry m)
     {
         // 销毁旧克隆
@@ -455,29 +520,33 @@ public class MailDetailUI : MonoBehaviour
             Destroy(_rewardCells[i]);
         _rewardCells.Clear();
 
-        if (_rewardCellTemplate == null || m.attachments == null) return;
+        if (_rewardCellTemplate == null) return;
+
+        List<RewardItem> items = new List<RewardItem>();
+        AppendFlatRewardItems(m, items);
+        AppendAttachmentRewardItems(m, items);
 
         int cellW = 96;
-        int cellY = -330;
+        // 【2026-10-17 修·主人报「附件图标和领取按钮重叠」】cellY 原硬编码 -330，没跟预制体附件区走：
+        // 主人把 RewardText/lingqu 在预制体里上移后，格子仍停在 -330，正好压在领取按钮上。
+        // 改为取预制体 RewardText 的 y（附件区以主人预制体摆位为准），绑定缺失才退回 -330。
+        int cellY = _rewardText != null ? Mathf.RoundToInt(_rewardText.rectTransform.anchoredPosition.y) : -330;
 
-        int validCount = 0;   // 仅统计 amount>0 的实际格数，用于居中
-        for (int i = 0; i < m.attachments.Count; i++)
-            if (m.attachments[i] != null && m.attachments[i].amount > 0) validCount++;
-
-        int startX = -((cellW * validCount) - 8) / 2;   // 居中横排
-        int idx = 0;
-        for (int i = 0; i < m.attachments.Count; i++)
+        int startX = -((cellW * items.Count) - 8) / 2;   // 居中横排
+        for (int i = 0; i < items.Count; i++)
         {
-            var att = m.attachments[i];
-            if (att == null || att.amount <= 0) continue;
+            var item = items[i];
 
-            var cell = UnityEngine.Object.Instantiate(_rewardCellTemplate.gameObject, _rewardCellTemplate.parent);
+            // 2026-10-16 主人拆分：佣兵附件走 RewardCellTemplate (1)，其余走 RewardCellTemplate
+            Transform tmpl = item.isMerc ? _rewardCellTemplateMerc : _rewardCellTemplate;
+            if (tmpl == null) tmpl = _rewardCellTemplate;
+            if (tmpl == null) return;
+            var cell = UnityEngine.Object.Instantiate(tmpl.gameObject, tmpl.parent);
             var crt = (RectTransform)cell.transform;
             crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
             crt.pivot = new Vector2(0.5f, 0.5f);
-            crt.anchoredPosition = new Vector2(startX + idx * cellW, cellY);
+            crt.anchoredPosition = new Vector2(startX + i * cellW, cellY);
             crt.sizeDelta = new Vector2(88f, 88f);
-            idx++;
 
             var icon = FindDeep(cell.transform, "Icon");
             var name = FindDeep(cell.transform, "Name");
@@ -492,19 +561,15 @@ public class MailDetailUI : MonoBehaviour
             // 图标
             if (iconImg != null)
             {
-                var sp = Resources.Load<Sprite>(att.iconOverride);
-                if (sp == null) Debug.LogError("[MailDetail] 物品格缺图标: " + (att.iconOverride ?? "null"));
-                iconImg.sprite = sp;
+                if (item.icon == null) Debug.LogError("[MailDetail] 物品格缺图标: " + item.name);
+                iconImg.sprite = item.icon;
                 iconImg.raycastTarget = false;
                 iconImg.preserveAspect = true;
             }
 
             // 名称 / 数量
-            if (nameTxt != null)
-                nameTxt.text = att.type == "merc" && !string.IsNullOrEmpty(att.hireId)
-                    ? MercDisplayName(att.hireId)
-                    : RewardTypeName(att.type);
-            if (countTxt != null) countTxt.text = "x " + att.amount;
+            if (nameTxt != null) nameTxt.text = item.name;
+            if (countTxt != null) countTxt.text = "x " + item.amount;
 
             // 已领取：整格变灰 + 盖章
             if (m.claimed)
@@ -529,6 +594,38 @@ public class MailDetailUI : MonoBehaviour
 
             cell.SetActive(true);
             _rewardCells.Add(cell);
+        }
+    }
+
+    /// <summary>flat 货币 → 物品格清单。图标同 DailyLoginUI 口径：Common 目录（金币/钻石/天赋石/强化石/分解材料），体力走 UI/Icons/Stamina。</summary>
+    static void AppendFlatRewardItems(MailEntry m, List<RewardItem> items)
+    {
+        if (m.gold > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_gold"), name = "金币", amount = m.gold });
+        if (m.diamond > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_diamond_blue"), name = "钻石", amount = m.diamond });
+        if (m.stamina > 0) items.Add(new RewardItem { icon = Resources.Load<Sprite>("UI/Icons/Stamina"), name = "体力", amount = m.stamina });
+        if (m.enchantStones > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_enchant_stone"), name = "附魔石", amount = m.enchantStones });
+        if (m.decomposeMats > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_decompose_mat"), name = "分解材料", amount = m.decomposeMats });
+        if (m.talentPoints > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_talent_stone"), name = "天赋石", amount = m.talentPoints });
+    }
+
+    /// <summary>结构化附件 → 物品格清单（佣兵走花名册真名 + 头像，物品走 iconOverride）。</summary>
+    static void AppendAttachmentRewardItems(MailEntry m, List<RewardItem> items)
+    {
+        if (m.attachments == null) return;
+        for (int i = 0; i < m.attachments.Count; i++)
+        {
+            var att = m.attachments[i];
+            if (att == null || att.amount <= 0) continue;
+            string attName = att.type == "merc" && !string.IsNullOrEmpty(att.hireId)
+                ? MercDisplayName(att.hireId)
+                : RewardTypeName(att.type);
+            items.Add(new RewardItem
+            {
+                icon = Resources.Load<Sprite>(att.iconOverride),
+                name = attName,
+                amount = att.amount,
+                isMerc = att.type == "merc",
+            });
         }
     }
 
@@ -557,19 +654,6 @@ public class MailDetailUI : MonoBehaviour
         return null;
     }
 
-    static List<string> BuildRewardLines(MailEntry m)
-    {
-        var lines = new List<string>();
-        if (m.gold > 0) lines.Add("金币 x " + m.gold);
-        if (m.diamond > 0) lines.Add("钻石 x " + m.diamond);
-        if (m.stamina > 0) lines.Add("体力 x " + m.stamina);
-        if (m.enchantStones > 0) lines.Add("附魔石 x " + m.enchantStones);
-        if (m.decomposeMats > 0) lines.Add("分解材料 x " + m.decomposeMats);
-        if (m.talentPoints > 0) lines.Add("天赋点 x " + m.talentPoints);
-        // 注意：附件(物品格)不再进文本，改由 RebuildRewardCells 渲染
-        return lines;
-    }
-
     static string FirstIconOverride(MailEntry m)
     {
         if (m.attachments == null) return null;
@@ -590,7 +674,7 @@ public class MailDetailUI : MonoBehaviour
             case "stamina": return "体力";
             case "enchant": return "附魔石";
             case "mat": return "分解材料";
-            case "talent": return "天赋点";
+            case "talent": return "天赋石";
             default: return key;
         }
     }

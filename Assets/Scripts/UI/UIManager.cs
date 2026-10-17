@@ -104,6 +104,16 @@ public class UIManager : Singleton<UIManager>
     }
 
     public void ShowChapterClearChoice(Action onReturnTown, Action onNextChapter)
+        => ShowChoicePanel("章节结算", "选择回城休整，或继续下一章冒险", "回城", "下一章", onReturnTown, onNextChapter);
+
+    /// <summary>
+    /// 无限裂隙记录点双选（2026-10-17）：BOSS 记录点层通关后弹「撤离结算 / 继续深入」。
+    /// 与章节结算同一套面板，只换标题 / 提示 / 按钮文案。
+    /// </summary>
+    public void ShowRiftCheckpointChoice(Action onEvacuate, Action onContinue)
+        => ShowChoicePanel("裂隙记录点", "本层记录点已保存：撤离带走奖励，或继续深入", "撤离结算", "继续深入", onEvacuate, onContinue);
+
+    void ShowChoicePanel(string titleText, string tipText, string leftLabel, string rightLabel, Action onLeft, Action onRight)
     {
         if (_chapterChoicePanel != null)
             Destroy(_chapterChoicePanel);
@@ -111,8 +121,8 @@ public class UIManager : Singleton<UIManager>
         Canvas canvas = FindObjectOfType<Canvas>();
         if (canvas == null)
         {
-            Debug.LogWarning("[UIManager] 无 Canvas，直接回城");
-            onReturnTown?.Invoke();
+            Debug.LogWarning("[UIManager] 无 Canvas，直接执行左侧回调");
+            onLeft?.Invoke();
             return;
         }
 
@@ -131,14 +141,14 @@ public class UIManager : Singleton<UIManager>
         prt.sizeDelta = new Vector2(520f, 280f);
         prt.anchoredPosition = Vector2.zero;
 
-        var title = CreateUiText(panel.transform, "Title", "章节结算", 36, TextAnchor.MiddleCenter);
+        var title = CreateUiText(panel.transform, "Title", titleText, 36, TextAnchor.MiddleCenter);
         var trt = title.rectTransform;
         trt.anchorMin = new Vector2(0.5f, 1f);
         trt.anchorMax = new Vector2(0.5f, 1f);
         trt.anchoredPosition = new Vector2(0f, -48f);
         trt.sizeDelta = new Vector2(480f, 50f);
 
-        var tip = CreateUiText(panel.transform, "Tip", "选择回城休整，或继续下一章冒险", 22, TextAnchor.MiddleCenter);
+        var tip = CreateUiText(panel.transform, "Tip", tipText, 22, TextAnchor.MiddleCenter);
         tip.color = new Color(0.85f, 0.8f, 0.7f);
         var tipRt = tip.rectTransform;
         tipRt.anchorMin = new Vector2(0.5f, 0.5f);
@@ -146,17 +156,17 @@ public class UIManager : Singleton<UIManager>
         tipRt.anchoredPosition = new Vector2(0f, 20f);
         tipRt.sizeDelta = new Vector2(460f, 40f);
 
-        CreateChoiceButton(panel.transform, "回城", new Vector2(-120f, -70f), () =>
+        CreateChoiceButton(panel.transform, leftLabel, new Vector2(-120f, -70f), () =>
         {
             Destroy(_chapterChoicePanel);
             _chapterChoicePanel = null;
-            onReturnTown?.Invoke();
+            onLeft?.Invoke();
         });
-        CreateChoiceButton(panel.transform, "下一章", new Vector2(120f, -70f), () =>
+        CreateChoiceButton(panel.transform, rightLabel, new Vector2(120f, -70f), () =>
         {
             Destroy(_chapterChoicePanel);
             _chapterChoicePanel = null;
-            onNextChapter?.Invoke();
+            onRight?.Invoke();
         });
 
         Time.timeScale = 0f;

@@ -718,6 +718,9 @@ public static class DraftPool
 
         int guild = data.guildLevel;
         int heroLv = RunLoadout.HeroLevel;
+        // 【2026-10-17 主人拍板】队列非空 = 每个上架佣兵单独等概率（权重全 1，不再按稀有度加权）；
+        // 空池回落全池时维持稀有度加权（普通8 / 稀有5 / 传奇2）。
+        bool queueActive = data.mercDrawPool != null && data.mercDrawPool.Count > 0;
 
         foreach (string hireId in data.unlockedMercIds)
         {
@@ -736,7 +739,10 @@ public static class DraftPool
             int star = def.Rarity == MercRosterDefs.MercRarity.Legendary ? 3
                 : def.Rarity == MercRosterDefs.MercRarity.Rare ? 2 : 1;
             int level = Mathf.Max(1, 1 + heroLv / 2);
-            int weight = def.Rarity == MercRosterDefs.MercRarity.Legendary ? 2
+            // 【2026-10-17 主人拍板】队列非空时每个上架佣兵单独等概率（权重全 1）；
+            // 空池全池加权维持普通8 / 稀有5 / 传奇2。
+            int weight = queueActive ? 1
+                : def.Rarity == MercRosterDefs.MercRarity.Legendary ? 2
                 : def.Rarity == MercRosterDefs.MercRarity.Rare ? 5 : 8;
             // 2026-09-17 稀有度映射统一走 SkillRarityUtil（三档对三档，佣兵不出「史诗」），
             // 卡面文字也随之统一，别再各写一份三目。

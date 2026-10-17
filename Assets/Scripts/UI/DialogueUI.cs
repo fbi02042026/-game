@@ -97,8 +97,9 @@ public class DialogueUI : MonoBehaviour
         public Vector3 scale;
     }
 
-    /// <summary>剧情对白正文字号。2026-10-10 主人拍板：字太小看费劲，28→32，要再调改这一个常量。</summary>
-    const int DialogueBodyFontSize = 32;
+    /// <summary>剧情对白正文字号。2026-10-10 主人拍板：字太小看费劲，28→32；
+    /// 【2026-10-16 主人「剧情对话框里的字小1号」】32→31。要再调改这一个常量。</summary>
+    const int DialogueBodyFontSize = 31;
     const float LocBlackInDur = 0.55f;
     const float LocHoldDur = 2.0f;
     const float LocTextFadeDur = 1.1f;
@@ -582,28 +583,15 @@ public class DialogueUI : MonoBehaviour
         ApplyDialogueBoxLift();
         FitDialogueBoxAspect(); // 只校正九宫格，不改框尺寸
         // 2026-10-09 主人拍板：对话框体放大 5% —— 只放框体尺寸，不改字号/文字/锚点逻辑
+        // 【2026-10-16 主人拍板：字超出不再往外扩框】去掉「多行时上下拉长」逻辑，框体固定基准尺寸；
+        // 超长台词由正文区 RectMask2D 裁剪遮挡，打字播完后自动放开上下滑动回看（RefreshDialogueScrollable）。
         if (dialogueBoxImage != null)
         {
             var drt = dialogueBoxImage.rectTransform;
             if (_dialogueBoxBaseSize.sqrMagnitude <= 0f) _dialogueBoxBaseSize = drt.sizeDelta;
-            // 2026-10-10 主人拍板：台词折成两行及以上时框体上下拉长 —— 每多一行加一行高，
-            // pivot 在底部（y=0），同时把框体下移一半补回来，保证是「上下」各长一半而不是只往上顶。
-            float extraH = 0f;
-            if (dialogueText != null)
-            {
-                Canvas.ForceUpdateCanvases();
-                int lines = CountDialogueLines(content ?? "", out float lineH);
-                if (lines > 1) extraH = (lines - 1) * lineH;
-            }
             drt.sizeDelta = new Vector2(
                 _dialogueBoxBaseSize.x * 1.05f,
-                _dialogueBoxBaseSize.y * 1.05f + extraH);
-            if (extraH > 0.01f)
-            {
-                // ApplyDialogueBoxLift() 已在本句开头把 y 重设为 baseY + 抬升量，这里只在此基础上减一半
-                var p = drt.anchoredPosition;
-                drt.anchoredPosition = new Vector2(p.x, p.y - extraH * 0.5f);
-            }
+                _dialogueBoxBaseSize.y * 1.05f);
         }
 
         if (leftNameText != null) leftNameText.text = _initiatorName;
@@ -707,31 +695,6 @@ public class DialogueUI : MonoBehaviour
         bool sliced = (border.x + border.y + border.z + border.w) > 0.01f;
         dialogueBoxImage.type = sliced ? Image.Type.Sliced : Image.Type.Simple;
         dialogueBoxImage.preserveAspect = !sliced;
-    }
-
-    /// <summary>
-    /// 按正文排版宽度算台词实际折几行（含显式 \n），顺带给出真实行距。
-    /// 供「两行及以上框体上下拉长」用（2026-10-10 主人拍板）。
-    /// </summary>
-    int CountDialogueLines(string text, out float lineH)
-    {
-        lineH = DialogueBodyFontSize * 1.5f;
-        if (dialogueText == null || string.IsNullOrEmpty(text)) return 1;
-        if (dialogueText.font == null) return 1;
-        float w = dialogueText.rectTransform.rect.width;
-        if (w < 8f && _textClip != null) w = _textClip.rect.width;
-        if (w < 8f) return 1;
-        var gen = dialogueText.cachedTextGeneratorForLayout;
-        var settings = dialogueText.GetGenerationSettings(new Vector2(w, 10000f));
-        gen.Populate(text, settings);
-        var lines = gen.lines;
-        if (lines != null && lines.Count >= 2)
-        {
-            // UILineInfo 只有 topY（行顶 y，向下为负），行距取上两行 topY 之差
-            float d = lines[0].topY - lines[1].topY;
-            if (d > 1f) lineH = d;
-        }
-        return Mathf.Max(1, lines != null ? lines.Count : 1);
     }
 
     void BeginTyping(string full)

@@ -457,32 +457,6 @@ public partial class BattleUI : MonoBehaviour
         return txt;
     }
 
-    /// <summary>在槽位下补一行文字（星级 / 冷却）。</summary>
-    static Text EnsureChildText(Transform parent, string name, int fontSize)
-    {
-        var exist = FindDeepChildIgnoreCase(parent, name);
-        if (exist != null)
-        {
-            var e = exist.GetComponent<Text>();
-            if (e != null) return e;
-        }
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        go.transform.SetParent(parent, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0f, 0.14f);
-        rt.anchorMax = new Vector2(1f, 0.36f);
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-        var txt = go.GetComponent<Text>();
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.fontSize = fontSize;
-        txt.color = new Color(1f, 0.92f, 0.72f);
-        txt.raycastTarget = false;
-        var f = GameFonts.GetChinese();
-        if (f != null) txt.font = f;
-        return txt;
-    }
-
     /// <summary>
     /// 在槽位右下角补一行小字（等级/星级）。锚在角上，只占一小块，不碰任何图片节点的尺寸。
     /// </summary>
@@ -736,7 +710,8 @@ public partial class BattleUI : MonoBehaviour
         av.energyFill = EnsureChildBar(t, "MercSkillEnergy", new Color(0.55f, 0.85f, 1f, 1f));
         // 同上（2026-10-07 主人拍板）：冷却只画在图标框上，不铺满整个 skill 容器。
         Transform mercCdNode = av.avatarImage != null ? av.avatarImage.transform : t;
-        av.cooldownText = EnsureChildText(mercCdNode, "MercSkillCd", 14);
+        // 【2026-10-17 主人拍板】数字倒计时去掉：角色卡右上角只留技能图标 + 转圈遮罩，
+        // 不再建 MercSkillCd 数字节点（cooldownText 保持 null，各处判空调用均安全）。
         av.cooldownMask = EnsureChildMask(mercCdNode, "MercSkillCdMask");
         // 【2026-10-06 主人拍板】佣兵技能同样要「新」角标（主人点名：不管是佣兵技能还是装备）。
         // 建出来先隐藏，点亮由 UpdateMercSkillSlots 按 NewLootMarks.Has 决定。

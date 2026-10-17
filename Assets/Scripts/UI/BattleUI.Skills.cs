@@ -478,8 +478,8 @@ public partial class BattleUI : MonoBehaviour
             float cd = caster.CooldownRemain;
             float total = caster.CooldownTotal;
             slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
-            // 同上（2026-10-07 主人拍板）：佣兵技能也给数字倒计时，口径与玩家技能一致。
-            slot.SetCooldownText(cd > 0.05f ? Mathf.CeilToInt(cd).ToString() : "");
+            // 【2026-10-17 主人拍板】数字倒计时去掉（原 2026-10-07「佣兵技能也给数字倒计时」口径作废）：
+            // 手机端角色卡右上角只留技能图标 + 转圈冷却遮罩，不再显示数字。
         }
     }
 

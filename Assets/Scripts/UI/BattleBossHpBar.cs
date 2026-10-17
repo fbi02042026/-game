@@ -20,10 +20,10 @@ public class BattleBossHpBar : MonoBehaviour
     bool _wantVisible;
     Monster _lastLoggedPick;   // 【2026-10-15】排查日志去重用
     Transform _progressBar;
-    Transform _questMap;
-    Transform _topBar;         // 【2026-10-16】顶栏也随血条联动隐藏（主人「map 那里的其他 UI」口径）
+    Transform _questMap;       // 【2026-10-16 改】= QuestPanel（左上任务面板）；旧引用 "map" 是场景底图根节点，绝不能藏
     bool _chromeCached;
     bool _lastShowLogged;      // 【2026-10-16】显示诊断日志去重：由藏变显才 dump 一次运行时状态
+    bool _canvasLifted;        // 【2026-10-16】抬层 Canvas 幂等标记
 
     // BOSS 出场血条入场演出状态（1.2 秒从 0 填充到满）
     bool _introPlaying;
@@ -126,15 +126,32 @@ public class BattleBossHpBar : MonoBehaviour
         // 【2026-10-16 血条「显示了却看不见」根因】AutoGameInitializer 给 TopBar/ProgressBar/QuestPanel/
         // BackpackPanel 等顶部 HUD 挂了 overrideSorting=100 的嵌套 Canvas、map=SORT_MAPROOT，
         // 而血条只在根 Canvas（SORT_BATTLE_UI 低层）里 —— SetAsLastSibling 只在根层内有效，
-        // 血条永远压不过这些 HUD（嵌套 Canvas 让 SetSiblingIndex 失效的深坑）。
-        // → 给血条根挂 overrideSorting Canvas 抬到 BattleHud(950)：战斗 HUD 之上、弹窗/Toast 之下。
-        var bossCanvas = _root.GetComponent<Canvas>() ?? _root.gameObject.AddComponent<Canvas>();
-        bossCanvas.overrideSorting = true;
-        bossCanvas.sortingOrder = GameConfig.UiSort.BattleHud;
-
+        // 血条永远压不过这些 HUD（嵌套 Canvas 让 SetSiblingIndex 处理不了的深坑）。
+        // → 给血条根挂 overrideSorting Canvas 抬到 BattleHud(950)。
+        // 【2026-10-16 二修·血条「又不见了」根因（Editor.log 实锤）】这个抬层**不能在这里挂**：
+        // BindUi 走 BattleUI.Awake，此刻 BossBar 常常整棵还没激活（预制体实例化时未激活），
+        // 未激活对象上 AddComponent<Canvas> 的 native 侧没建好 → set_overrideSorting 抛
+        // MissingComponentException（日志 4 次），BindUi 半路夭折 + BattleUI.Awake 后半段
+        //（EnsureBattleControls / ViewportFit / 按钮绑定）全被跳过，血条退回 0 层被 HUD 盖住。
+        // → 挪到 <see cref="EnsureOverheadCanvas"/>，在显示时（对象已激活）幂等补挂。
         _root.gameObject.SetActive(false);
         _wantVisible = false;
         CacheChrome(searchRoot);
+    }
+
+    /// <summary>
+    /// 血条抬层 Canvas 的唯一出口：显示时（BossBar 已激活）幂等挂 overrideSorting=BattleHud(950)。
+    /// 为什么不放 BindUi：见 BindUi 内【2026-10-16 二修】注释 —— Awake 期对象未激活，挂 Canvas 会炸。
+    /// </summary>
+    void EnsureOverheadCanvas()
+    {
+        if (_canvasLifted || _root == null) return;
+        if (!_root.gameObject.activeInHierarchy) return;
+        var bossCanvas = _root.GetComponent<Canvas>() ?? _root.gameObject.AddComponent<Canvas>();
+        if (bossCanvas == null) return;
+        bossCanvas.overrideSorting = true;
+        bossCanvas.sortingOrder = GameConfig.UiSort.BattleHud;
+        _canvasLifted = true;
     }
 
     void CacheChrome(Transform searchRoot)
@@ -145,27 +162,48 @@ public class BattleBossHpBar : MonoBehaviour
             uiRoot = BattleUI.Instance.transform;
         if (uiRoot == null) return;
         _progressBar = FindDeep(uiRoot, "ProgressBar");
-        // 【2026-10-16 主人拍板「boss血条显示时把map那里的其他UI隐藏」】旧引用 "QuestMap" 在 prefab 里
-        // 根本不存在（死引用，血条显示时 map 从来没被藏过）——顶部实际叫 map，另有 TopBar 顶栏一并联动。
-        _questMap = FindDeep(uiRoot, "map");
-        _topBar = FindDeep(uiRoot, "TopBar");
-        _chromeCached = _progressBar != null || _questMap != null || _topBar != null;
+        // 【2026-10-16 主人报「血条出来了但背景没了，打完精英又出现」根因】旧改动把 FindDeep(uiRoot, "map")
+        // 当成「map 那里的其他 UI」在血条显示时藏掉 —— 但 "map" 是战斗场景的底图/可行走区根节点
+        //（与 BattleLaneBounds.MapNodeName 同一个节点，里面还挂着 walk），血条一出来整个背景就被藏了。
+        // → map 一律不藏；要藏的「map 前面这些」= 左上任务面板 QuestPanel + 顶部进度条 ProgressBar。
+        // 【2026-10-17 主人口径】TopBar（副本名字/难度/右侧资源条）不藏，血条出现时保持常显。
+        _questMap = FindDeep(uiRoot, "QuestPanel");
+        _chromeCached = _progressBar != null || _questMap != null;
     }
 
     static void EnsureLeftAligned(RectTransform rt)
     {
         float w = rt.sizeDelta.x;
         float h = rt.sizeDelta.y;
+        // 【2026-10-17 主人报「血条左侧出来一截」根因】pivot→左缘的距离必须乘节点自身缩放：
+        // 预制体里「血条」localScale=0.7，旧算法漏乘，anchoredPosition 多退了
+        // (1-0.7)×半宽 ≈ 106 单位 → 红色填充从条框左端探出一截。
+        float sx = Mathf.Abs(rt.localScale.x) < 0.0001f ? 1f : Mathf.Abs(rt.localScale.x);
         Vector2 pivot = rt.pivot;
         Vector2 pos = rt.anchoredPosition;
-        // 换左 pivot 时保持左边缘世界位置不变
-        float leftX = pos.x - pivot.x * w;
+        float anchorXBefore = rt.anchorMin.x;
+
+        // 左边缘在父本地坐标的落点：锚点参考线 + 锚点偏移 − pivot 到左缘距离（含缩放）
+        float leftEdge = AnchorRefX(rt.parent as RectTransform, anchorXBefore)
+                         + pos.x - pivot.x * w * sx;
 
         rt.anchorMin = new Vector2(0f, rt.anchorMin.y);
         rt.anchorMax = new Vector2(0f, rt.anchorMax.y);
         rt.pivot = new Vector2(0f, pivot.y);
-        rt.anchoredPosition = new Vector2(leftX, pos.y);
+
+        // 锚点参考线若从 anchorXBefore 挪到 0，把这段差补回，保证左边缘纹丝不动
+        float parentRefAfter = AnchorRefX(rt.parent as RectTransform, 0f);
+        rt.anchoredPosition = new Vector2(leftEdge - parentRefAfter, pos.y);
         rt.sizeDelta = new Vector2(w, h);
+    }
+
+    /// <summary>点锚 anchorX 在父 rect（父本地坐标）上的参考线 x。</summary>
+    static float AnchorRefX(RectTransform parent, float anchorX)
+    {
+        if (parent == null) return 0f;
+        float xMin = -parent.pivot.x * parent.rect.width;
+        float xMax = (1f - parent.pivot.x) * parent.rect.width;
+        return Mathf.Lerp(xMin, xMax, anchorX);
     }
 
     void LateUpdate()
@@ -242,6 +280,7 @@ public class BattleBossHpBar : MonoBehaviour
     // ============================================================
 
     Text _affixText;
+    Transform _nameBg;   // 【2026-10-17】名牌底板 Namebg（BossBar 下）：名字整块藏/显走这里
 
     void EnsureAffixText()
     {
@@ -252,7 +291,12 @@ public class BattleBossHpBar : MonoBehaviour
         if (existing != null)
         {
             var t0 = existing.GetComponent<Text>();
-            if (t0 != null) { _affixText = t0; return; }
+            if (t0 != null)
+            {
+                _affixText = t0;
+                _nameBg = FindDeep(_root, "Namebg");   // Namebg（底板）里找不到就为 null，不兜底
+                return;
+            }
         }
 
         var go = new GameObject("AffixText", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
@@ -274,26 +318,33 @@ public class BattleBossHpBar : MonoBehaviour
         _affixText = t;
     }
 
-    /// <summary>只有挂了词缀的精英/Boss 才显示，普通目标保持原来的干净外观。</summary>
+    /// <summary>
+    /// 名牌（2026-10-17 主人加的 Namebg/Name）：Name 常显当前锁定的 Boss/精英名字，
+    /// 挂了词缀就拼在后缀后（「森林守卫·狂暴」）；名字取不到且无词缀时整块藏 Namebg，避免空底板悬着。
+    /// </summary>
     void UpdateAffixText()
     {
+        string name = _bound != null && _bound.config != null && !string.IsNullOrEmpty(_bound.config.monsterName)
+            ? _bound.config.monsterName
+            : "";
         var af = _bound != null ? MonsterAffix.Get(_bound) : null;
         string suffix = af != null ? af.Suffix : "";
-        if (string.IsNullOrEmpty(suffix))
+        string full = name + suffix;
+
+        if (string.IsNullOrEmpty(full))
         {
-            if (_affixText != null && _affixText.gameObject.activeSelf)
-                _affixText.gameObject.SetActive(false);
+            if (_nameBg != null && _nameBg.gameObject.activeSelf)
+                _nameBg.gameObject.SetActive(false);
             return;
         }
 
         EnsureAffixText();
         if (_affixText == null) return;
 
-        string name = _bound != null && _bound.config != null && !string.IsNullOrEmpty(_bound.config.monsterName)
-            ? _bound.config.monsterName
-            : "";
+        if (_nameBg != null && !_nameBg.gameObject.activeSelf)
+            _nameBg.gameObject.SetActive(true);
         if (!_affixText.gameObject.activeSelf) _affixText.gameObject.SetActive(true);
-        _affixText.text = name + suffix;
+        _affixText.text = full;
     }
 
     void SyncRatioFromBound()
@@ -319,6 +370,8 @@ public class BattleBossHpBar : MonoBehaviour
 
         if (showBoss)
         {
+            // 【2026-10-16 二修】显示时对象已激活，这里才是挂抬层 Canvas 的安全时机（幂等）
+            EnsureOverheadCanvas();
             // 【2026-10-15】显示时抬到 Canvas 内容的最后：防被后画的兄弟节点（透明全屏图元等）盖住
             _root.SetAsLastSibling();
             // 【2026-10-16 排查日志】显示链路代码已证实跑通（日志有「锁定目标→显示屏幕血条」）但主人屏幕上看不见，
@@ -345,14 +398,15 @@ public class BattleBossHpBar : MonoBehaviour
             _lastShowLogged = false;   // 收起后，下次再显示重新 dump
         }
 
-        // Boss 血条出现时让出顶部：藏进度条与任务图
+        // Boss 血条出现时让出顶部：藏进度条与任务面板
         // 【2026-10-16 主人口令】引导战进度条整场要藏——BossHpBar 收起时不得把进度条重新打开。
+        // 【2026-10-17 主人口径】TopBar（副本名字/难度/右侧资源条）不用藏，只有飘在 map 前面的
+        // QuestPanel / ProgressBar 随血条联动。
         CacheChrome(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
         bool hideChrome = _wantVisible; // 只要在打 Boss/精英目标就藏，KillCam 期间也保持藏
         bool hideForTutorial = TutorialDirector.IsTutorialBattle;
         SetChromeActive(_progressBar, !hideChrome && !hideForTutorial);
         SetChromeActive(_questMap, !hideChrome);
-        SetChromeActive(_topBar, !hideChrome);
     }
 
     static void SetChromeActive(Transform t, bool active)

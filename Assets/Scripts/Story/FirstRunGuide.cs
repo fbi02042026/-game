@@ -99,6 +99,11 @@ public class FirstRunGuide : MonoBehaviour
     RectTransform _bubbleRt;
     Text _bubbleText;
     Button _okBtn;
+    // 2026-10-16 主人拍板：正文超出引导框不再撑大/改边距——跟剧情对话框同款：
+    // TextClip(RectMask2D) 裁剪隐藏 + 打字贴底滚动 + 播完放开上下拖回看
+    RectTransform _bubbleTextClip;
+    ScrollRect _bubbleScrollRect;
+    bool _bubbleTypeDone;
 
     /// <summary>游标：下一个要跑的步骤下标（= 已完成步骤数）。</summary>
     int _stepIndex;
@@ -178,6 +183,29 @@ public class FirstRunGuide : MonoBehaviour
             }
             step = data.guideStep;
             done = data.guideDone;
+        }
+
+        // 【2026-10-16 修·主人报「引导到点天赋那块出现每日登录」】引导档与新手教程必须同生共死：
+        // 删档重打教程时，本地 PlayerPrefs 残留（PA.FirstGuide.Done=1）会被上面的迁移搬进新存档，
+        // 变成 guideDone=true 但教程还没出师 → 引导全程静默（「出师啦」收尾气泡不出），
+        // 教程一点完天赋每日登录立刻补弹（串行等待秒过）。真值判别：教程未出师 **且**
+        // 开场剧情都还没标记完成（= 教程正从头重打，此时引导必在 Awake 这里先于开场剧情创建）
+        // → 引导档清零，跟着教程一起重跑。正常老玩家（教程已出师）与教程中途退出的续跑
+        // （intro 已标记）都不命中，不受影响。
+        if (!StoryProgress.TutorialDone && !StoryProgress.TutorialIntroDone && (done || step > 0))
+        {
+            step = 0;
+            done = false;
+            PlayerPrefs.DeleteKey(PrefStep);
+            PlayerPrefs.DeleteKey(PrefDone);
+            PlayerPrefs.Save();
+            if (data != null)
+            {
+                data.guideStep = 0;
+                data.guideDone = false;
+                SaveSystem.Instance.Save();
+            }
+            Debug.Log("[Guide] 教程重打（未出师但引导档已完成）→ 引导档清零，跟教程一起重跑");
         }
 
         _stepIndex = step;
@@ -267,7 +295,12 @@ public class FirstRunGuide : MonoBehaviour
             switch (step)
             {
                 case GuideStep.Welcome: yield return CoWelcome(); break;
-                case GuideStep.QuestBar: yield return CoQuestBar(); break;
+                case GuideStep.QuestBar:
+                    // 【2026-10-17 主人拍板】任务条说明步骤取消：到这一槽位直接跳过推进游标。
+                    // 同酒馆步骤口径——覆盖存量档（guideStep 停在 QuestBar 的玩家重进游戏不死循环）。
+                    // CoQuestBar 原样保留不删，以后想恢复再说。
+                    SkipStep(GuideStep.QuestBar, "任务条说明已取消（2026-10-17 主人拍板）");
+                    break;
                 case GuideStep.Adventure: yield return CoAdventure(); break;
                 case GuideStep.FirstBattle: yield return CoFirstBattle(); break;
                 case GuideStep.Talent: yield return CoTalent(); break;
@@ -320,10 +353,8 @@ public class FirstRunGuide : MonoBehaviour
 
     IEnumerator CoWelcome()
     {
-        // 【2026-10-16 主人拍板】末句换更有劲的说法（文案调性：有趣、流行、适合年轻人）
-        const string text = "欢迎来到《像素冒险：裂隙之刃》。\n"
-                          + "裂隙每隔一阵就会裂开一道口子，怪物从里面涌出来。\n"
-                          + "你是刚签完委托书的新人——放心，跟我走，3 分钟出师。";
+        // 【2026-10-17 主人拍板】开头白砍到一句：欢迎 + 出师承诺，别繁琐
+        const string text = "欢迎来到《像素冒险：裂隙之刃》——跟我走，3 分钟出师。";
 
         yield return CoPoint(text, null, null, true, TapStepTimeout);
         FinishStep(GuideStep.Welcome, "欢迎页");
@@ -805,10 +836,9 @@ public class FirstRunGuide : MonoBehaviour
 
         if (_bubbleText != null)
         {
-            var lrt = _bubbleText.rectTransform;
-            Stretch(lrt);
-            lrt.offsetMin = new Vector2(24f, 20f);
-            lrt.offsetMax = new Vector2(-24f, -20f);
+            // 跟剧情对话框同款：Text 包进固定 580×150 @(0,-7) 的 RectMask2D 裁剪窗，
+            // 字顶部对齐，装不下的隐藏，播完可上滑回看
+            EnsureBubbleTextClip();
         }
 
         if (_group != null)
@@ -822,7 +852,8 @@ public class FirstRunGuide : MonoBehaviour
         RefreshLayout();
     }
 
-    void Hide()
+    /// <summary>只收视觉不碰步骤状态：Drive 协程继续等完成条件，下一步 CoPoint 会重新弹气泡。</summary>
+    public void Hide()
     {
         _visible = false;
         _target = null;
@@ -841,6 +872,17 @@ public class FirstRunGuide : MonoBehaviour
         if (_holeRt != null) _holeRt.gameObject.SetActive(false);
         if (_bubbleRt != null) _bubbleRt.gameObject.SetActive(false);
         if (_canvas != null) _canvas.sortingOrder = SortOrder;
+    }
+
+    /// <summary>
+    /// 下一帧把当前步骤气泡重新弹回（2026-10-17 加）。
+    /// 用途：职业选择界面取消关闭时，把 Open() 暂收掉的「点开始冒险」气泡请回来——
+    /// CoPoint 协程还在等完成条件，扳 _hiddenByStory 开关即可，文案/目标由协程局部参数恢复。
+    /// </summary>
+    public void NudgeReshow()
+    {
+        if (_drive == null || IsFinished) return;
+        _hiddenByStory = true;
     }
 
     void OnHoleClicked()
@@ -870,6 +912,12 @@ public class FirstRunGuide : MonoBehaviour
         }
         _fullGuideText = full ?? string.Empty;
         _typing = true;
+        _bubbleTypeDone = false;
+        if (_bubbleScrollRect != null && _bubbleScrollRect.enabled)
+        {
+            _bubbleScrollRect.enabled = false; // 打字期间关掉回看，点击全部用于推进
+            _bubbleText.raycastTarget = false;
+        }
         if (_bubbleText != null) _bubbleText.text = string.Empty;
         _typeCo = StartCoroutine(CoType(_fullGuideText));
     }
@@ -887,6 +935,7 @@ public class FirstRunGuide : MonoBehaviour
         for (int i = 1; i <= full.Length; i++)
         {
             _bubbleText.text = full.Substring(0, i);
+            ScrollBubbleText();
             float t = 0f;
             while (t < delay)
             {
@@ -897,6 +946,9 @@ public class FirstRunGuide : MonoBehaviour
         _bubbleText.text = full;
         _typing = false;
         _typeCo = null;
+        _bubbleTypeDone = true;
+        ScrollBubbleText();
+        RefreshBubbleScrollable(); // 播完：正文溢出就放开上下滑动回看
     }
 
     void StopTyping()
@@ -907,6 +959,96 @@ public class FirstRunGuide : MonoBehaviour
             _typeCo = null;
         }
         _typing = false;
+        if (_bubbleScrollRect != null && _bubbleScrollRect.enabled)
+        {
+            _bubbleScrollRect.enabled = false;
+            if (_bubbleText != null) _bubbleText.raycastTarget = false;
+        }
+    }
+
+    // ============================================================
+    // 正文裁剪 + 上滑回看（2026-10-16 主人拍板：跟剧情对话框 DialogueUI 同款）
+    // 气泡尺寸 / text 内边距都不动：Text 包进 RectMask2D 裁剪窗，
+    // 字顶部对齐，装不下的隐藏；打字时贴底滚，播完溢出才放开上下拖回看。
+    // ============================================================
+
+    void EnsureBubbleTextClip()
+    {
+        if (_bubbleText == null || _bubbleTextClip != null) return;
+        var src = _bubbleText.rectTransform;
+        if (src.parent != null && src.parent.GetComponent<RectMask2D>() != null)
+        {
+            _bubbleTextClip = src.parent as RectTransform;
+            PrepareBubbleTextForClip();
+            return;
+        }
+        var go = new GameObject("TextClip", typeof(RectTransform), typeof(RectMask2D));
+        go.transform.SetParent(src.parent, false);
+        _bubbleTextClip = go.GetComponent<RectTransform>();
+        // 【2026-10-16 主人给参】裁剪窗固定 580×150、中心 (0, -7)，不再拉伸继承气泡
+        _bubbleTextClip.anchorMin = new Vector2(0.5f, 0.5f);
+        _bubbleTextClip.anchorMax = new Vector2(0.5f, 0.5f);
+        _bubbleTextClip.pivot = new Vector2(0.5f, 0.5f);
+        _bubbleTextClip.anchoredPosition = new Vector2(0f, -7f);
+        _bubbleTextClip.sizeDelta = new Vector2(580f, 150f);
+        _bubbleTextClip.SetSiblingIndex(src.GetSiblingIndex());
+        _bubbleText.transform.SetParent(_bubbleTextClip, false);
+        PrepareBubbleTextForClip();
+    }
+
+    void PrepareBubbleTextForClip()
+    {
+        if (_bubbleText == null || _bubbleTextClip == null) return;
+        _bubbleText.horizontalOverflow = HorizontalWrapMode.Wrap;
+        _bubbleText.verticalOverflow = VerticalWrapMode.Overflow;
+        _bubbleText.resizeTextForBestFit = false;
+        var rt = _bubbleText.rectTransform;
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = Vector2.zero;
+        float h = Mathf.Max(1f, _bubbleTextClip.rect.height);
+        rt.sizeDelta = new Vector2(0f, h);
+    }
+
+    void ScrollBubbleText()
+    {
+        EnsureBubbleTextClip();
+        if (_bubbleText == null || _bubbleTextClip == null) return;
+        float viewH = Mathf.Max(1f, _bubbleTextClip.rect.height);
+        float pref = Mathf.Max(viewH, _bubbleText.preferredHeight);
+        var rt = _bubbleText.rectTransform;
+        rt.sizeDelta = new Vector2(0f, pref);
+        // 手动回看模式下位置交给 ScrollRect 拖拽，这里不再抢
+        if (_bubbleScrollRect != null && _bubbleScrollRect.enabled) return;
+        float overflow = pref - viewH;
+        rt.anchoredPosition = overflow > 1f ? new Vector2(0f, overflow) : Vector2.zero;
+    }
+
+    void RefreshBubbleScrollable()
+    {
+        EnsureBubbleTextClip();
+        if (_bubbleTextClip == null || _bubbleText == null) return;
+        if (_bubbleScrollRect == null)
+        {
+            var sr = _bubbleTextClip.gameObject.AddComponent<ScrollRect>();
+            sr.content = _bubbleText.rectTransform;
+            sr.viewport = _bubbleTextClip;
+            sr.horizontal = false;
+            sr.vertical = true;
+            sr.movementType = ScrollRect.MovementType.Clamped;
+            sr.inertia = true;
+            sr.scrollSensitivity = 24f;
+            sr.enabled = false;
+            _bubbleScrollRect = sr;
+        }
+        bool overflow = _bubbleText.preferredHeight > _bubbleTextClip.rect.height + 1f;
+        bool on = _bubbleTypeDone && overflow;
+        if (_bubbleScrollRect.enabled != on)
+            _bubbleScrollRect.enabled = on;
+        _bubbleText.raycastTarget = on; // 回看时正文接拖拽手势；平时不挡全屏点击推进
+        if (on)
+            _bubbleScrollRect.verticalNormalizedPosition = 0f; // 贴底停在最新内容
     }
 
     static bool ScreenTapped()

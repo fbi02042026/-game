@@ -354,6 +354,9 @@ public class MercenaryManager : Singleton<MercenaryManager>
 
     public void ClearAllMercs()
     {
+        // 【2026-10-17 诊断日志】清场是佣兵退场出口之一，与 OnMercenaryDead（阵亡）日志配对：
+        // 复现「佣兵消失」时，两条日志都没有 → 另有路径，再深挖。
+        Debug.LogWarning($"[MercenaryManager] ClearAllMercs：清掉 {GetActiveMercs().Count} 个在场佣兵");
         foreach (var m in _activeMercs)
         {
             if (m != null) Destroy(m.gameObject);

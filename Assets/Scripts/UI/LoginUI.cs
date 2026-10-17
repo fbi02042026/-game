@@ -139,7 +139,13 @@ public class LoginUI : MonoBehaviour
             if (ok)
             {
                 GameAnalytics.ReportAppLaunch();
-                ShowTip($"欢迎回来，{TapTapBootstrap.Instance.Nickname}");
+                // 【2026-10-17 主人拍板】登录成功后按钮互换：TapTap 登录按钮消失、「开始冒险」出现，
+                // 两个按钮任何时刻不同时出现；进游戏仍走「开始冒险」（OnClickStart）这一条路。
+                SetActivePath($"ActionPanel/{LoginTapRowBuilder.TapButtonName}", false);
+                if (startButton != null) startButton.gameObject.SetActive(true);
+                else SetActivePath("ActionPanel/StartButton", true);
+                ShowTip($"欢迎回来，{TapTapBootstrap.Instance.Nickname}，点「开始冒险」进入游戏");
+                Debug.Log("[LoginUI] TapTap 登录成功，已换出「开始冒险」按钮");
             }
             else
             {
@@ -167,6 +173,14 @@ public class LoginUI : MonoBehaviour
         SetActivePath("RightMenu/NoticeButton", false);
         SetActivePath("RightMenu", true);
         SetActivePath("RightMenu/SettingsButton", true);
+
+        // 【2026-10-17 主人拍板】真机包只留 TapTap 登录：「开始冒险」是游客入口
+        // （LoginTapRowBuilder 头注：TapTap 大陆区要求无游客模式入口），编辑器保留便于调试。
+        if (!Application.isEditor)
+        {
+            SetActivePath("ActionPanel/StartButton", false);
+            if (startButton != null) startButton.gameObject.SetActive(false);
+        }
 
         if (guestButton != null) guestButton.gameObject.SetActive(false);
         if (userCenterButton != null) userCenterButton.gameObject.SetActive(false);
@@ -455,6 +469,9 @@ public class LoginUI : MonoBehaviour
 
     void EnsureDebugClearSaveButton()
     {
+        // 【2026-10-17 主人拍板】真机包不放「清除存档」调试按钮，只留 TapTap 登录；编辑器保留。
+        if (!Application.isEditor) return;
+
         var existing = transform.Find("DebugClearSaveButton");
         if (existing != null)
         {

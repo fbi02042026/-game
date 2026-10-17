@@ -23,13 +23,22 @@ public class PortalGate : MonoBehaviour
     /// <summary>门皮与旋转粒子比「传送」节点晚出来的时间（秒）。【2026-10-11 主人拍板 0.3s】</summary>
     public const float SecondWaveDelay = 0.3f;
     /// <summary>
-    /// 门自带嵌套 Canvas 的 sortingOrder。
-    /// 【2026-10-12】门挂在 BattleUI 下，而战斗 HUD 里的子 Canvas（BackpackPanel/SkillBar 等）
-    /// 被 <c>AutoGameInitializer.EnsureNestedSortOrder</c> 抬到 100 / 921 —— 嵌套 Canvas 的 order 是
-    /// **全局**比的，门若只跟着 BattleUI 根 Canvas（order 0）走，会被这些 HUD 整块盖住。
-    /// 抬到 <see cref="GameConfig.UiSort.BattleHud"/> 同档，保证门压在所有战斗 HUD 之上。
+    /// 门皮（UI.Image）所在嵌套 Canvas 的 sortingOrder。
+    /// 【2026-10-16 主人报「层级不对跑到玩家前面了」根因】旧值 BattleHud+1(951) —— 门皮整块压在
+    /// 玩家（单位层 SORT_UNIT=15）前面，玩家走不进「门里」。门是战场里的实体，应压在
+    /// 地图（SORT_MAPROOT=10）之上、单位（15）之下 → 抬层 Canvas 只给 12。
+    /// 【2026-10-12 旧口径「抬到 BattleHud 同档防 HUD 盖住」作废】门在战场中央，与顶/底 HUD
+    /// 屏幕区域基本不重叠；为救层级把门抬到 951 反而盖住玩家，捡芝麻丢西瓜。
     /// </summary>
-    const int PortalCanvasOrder = GameConfig.UiSort.BattleHud + 1;
+    const int PortalCanvasOrder = GameConfig.SORT_MAPROOT + 2;   // 12：地图(10) < 门皮(12) < 粒子(13) < 单位(15)
+    /// <summary>
+    /// 门自带粒子（传送 / SpinPortalBlue / MagicDust / PortalDust / PortalGlow）的排序。
+    /// 【2026-10-16 主人报「chuansongmen 没有特效」根因（Editor.log 体检行实锤）】粒子节点位置
+    /// 其实是对的（pos=门的世界坐标），但预制体里 ParticleSystemRenderer 的 sortingOrder=1，
+    /// 被地图 Canvas（SORT_MAPROOT=10）整个压在背后 → 特效「播了但看不见」。
+    /// → 统一抬到 13：门皮(12) 之上、单位(15) 之下 —— 旋涡在门皮前、玩家身后。
+    /// </summary>
+    const int PortalParticleOrder = GameConfig.SORT_MAPROOT + 3; // 13
     /// <summary>进门的判定余量（世界单位）：走到门中心 ±这个值就算进去了。</summary>
     public const float EnterTolerance = 0.3f;
 
@@ -76,8 +85,11 @@ public class PortalGate : MonoBehaviour
         var go = Instantiate(prefab, uiParent, false);
         go.name = "PortalGate";
         var gate = go.GetComponent<PortalGate>() ?? go.AddComponent<PortalGate>();
-        // 【2026-10-12 主人连报两次「还是没有出现传送门」】门根自带一层嵌套 Canvas 并抬高 order，
-        // 免得被战斗 HUD（子 Canvas 100 / 921）整块盖住。见 <see cref="PortalCanvasOrder"/>。
+        // 【2026-10-12 起】门根自带一层嵌套 Canvas（overrideSorting，走摄像机模式）：
+        // 【2026-10-14 主人铁律：所有界面 Canvas 走摄像机模式】裸 Overlay 会恒盖最上层、随主相机不重绑 → 糊屏，
+        // 改成 ScreenSpaceCamera 绑定 UI 相机。钉点数学在 UiCamera()/LateUpdate 里读的是「父级 Canvas」的
+        // worldCamera，与门自身 Canvas 的 renderMode 无关，转换不影响世界钉点定位。
+        // order 见 <see cref="PortalCanvasOrder"/>（12：压地图、被玩家盖）。
         // 【2026-10-14 主人铁律：所有界面 Canvas 走摄像机模式】裸 Overlay 会恒盖最上层、随主相机不重绑 → 糊屏，
         // 改成 ScreenSpaceCamera 绑定 UI 相机。钉点数学在 UiCamera()/LateUpdate 里读的是「父级 Canvas」的
         // worldCamera，与门自身 Canvas 的 renderMode 无关，转换不影响世界钉点定位。
@@ -113,6 +125,11 @@ public class PortalGate : MonoBehaviour
         SetNode(_doorNode, false);
         SetNode(_spinNode, false);
 
+        // 【2026-10-16】粒子抬层：预制体里 ParticleSystemRenderer 默认 order=1，被地图(10)压住看不见。
+        // 统一抬到 <see cref="PortalParticleOrder"/>(13)，层归 BATTLE_SORTING_LAYER（Default）。
+        ApplyNodeSorting(_teleportNode);
+        ApplyNodeSorting(_spinNode);
+
         // 【2026-10-12】门是纯演出，不该吃点击：门皮 Image 的 raycastTarget 一律关掉。
         // 否则加了 GraphicRaycaster（铁律 10）之后，门会挡住它覆盖范围内的按钮（如「继续」）。
         var images = GetComponentsInChildren<UnityEngine.UI.Image>(true);
@@ -126,16 +143,17 @@ public class PortalGate : MonoBehaviour
         if (_teleportNode == null)
             Debug.LogError("[PortalGate] 预制体里找不到「传送」节点，门开不出来");
         else
+        {
             SetNode(_teleportNode, true);
+            // 【2026-10-16 主人原话】chuansongmen 预制体里自带的特效也要播放：
+            // 门出现那一刻，把「传送」节点的粒子显式从头播一遍（playOnAwake 只在激活瞬间触发，重播必须显式 Play）。
+            PlayNodeParticles(_teleportNode);
+        }
 
-        // 【2026-10-12 主人连报两次「还是没有出现传送门」】
-        // 门预制体里「传送」「SpinPortalBlue」是从**世界 prefab** 拖进 UI 的 SpriteRenderer / 粒子：
-        // 它们不归 Canvas 管，画的是 transform.position（世界坐标）。而它们的父节点是 UI RectTransform，
-        // position 会被换算到屏幕像素量级（几百），正交相机只看得见几个世界单位 → **画在视野外**。
-        // 这就是「门逻辑上开好了（进门判定照常生效）但玩家一眼看不见」的根因方向。
-        // → 这里按门钉住的世界坐标，**另播一次正宗的世界特效**（Resources/VFX/other/world/传送），
-        //   让「传送门开了」这件事在战场上真的看得见。出口唯一：StageClearRewardDirector.PlayPortalOpenVfx。
-        StageClearRewardDirector.PlayPortalOpenVfx(new Vector3(_worldX, _worldY, 0f));
+        // 【2026-10-12 排查记录（修正）】门预制体里「传送」「SpinPortalBlue」是从世界 prefab 拖进 UI 的
+        // 粒子节点 —— 位置实测与门钉住的世界坐标一致（Editor.log 体检行 pos=10.6,0.6），无需搬家；
+        // 真正看不见的原因是粒子 sortingOrder=1 被地图(10)压住，已在 Bind() 里统一抬层修复。
+        // 旧 workaround「另播一次 PlayPortalOpenVfx」已随误诊删除（会跟门自带特效叠播两遍）。
 
         // ② 0.3s 后门皮 + 旋转粒子一起出来
         yield return new WaitForSecondsRealtime(SecondWaveDelay);
@@ -143,12 +161,19 @@ public class PortalGate : MonoBehaviour
         if (_doorNode == null)
             Debug.LogError("[PortalGate] 预制体里找不到 door 节点");
         else
+        {
             SetNode(_doorNode, true);
+            PlayNodeParticles(_doorNode);
+        }
 
         if (_spinNode == null)
             Debug.LogError("[PortalGate] 预制体里找不到 SpinPortalBlue 节点");
         else
+        {
             SetNode(_spinNode, true);
+            // SpinPortalBlue 自身 + PortalDust + PortalGlow 三套粒子一起从头播（门出现时播一次）。
+            PlayNodeParticles(_spinNode);
+        }
 
         Opened = true;
         Debug.Log($"[PortalGate] 传送门开好：世界X={_worldX:F2} 节点 传送/door/SpinPortalBlue 依次就位");
@@ -198,6 +223,42 @@ public class PortalGate : MonoBehaviour
         if (go != null) go.SetActive(on);
     }
 
+    /// <summary>
+    /// 把某个门节点（含所有子孙）的粒子系统从头播一遍。
+    /// 【2026-10-16 主人原话】「chuansongmen 预制体里的特效也要播放」——
+    /// 显式 Play 而不是只靠 playOnAwake，保证节点重新激活 / 已激活状态下都能重播。
+    /// </summary>
+    void PlayNodeParticles(GameObject node)
+    {
+        if (node == null) return;
+        var systems = node.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < systems.Length; i++)
+            if (systems[i] != null) systems[i].Play(true);
+    }
+
+    /// <summary>
+    /// 把门节点（含所有子孙）的粒子/精灵渲染器统一抬到 <see cref="PortalParticleOrder"/>、
+    /// 层归 BATTLE_SORTING_LAYER。唯一出口 = Bind()（门开一次抬一次，幂等）。
+    /// </summary>
+    void ApplyNodeSorting(GameObject node)
+    {
+        if (node == null) return;
+        var prs = node.GetComponentsInChildren<ParticleSystemRenderer>(true);
+        for (int i = 0; i < prs.Length; i++)
+        {
+            if (prs[i] == null) continue;
+            prs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            prs[i].sortingOrder = PortalParticleOrder;
+        }
+        var srs = node.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+        {
+            if (srs[i] == null) continue;
+            srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            srs[i].sortingOrder = PortalParticleOrder;
+        }
+    }
+
     // ============================================================
     // 把「屏幕上的一个门」钉到世界坐标
     // ============================================================
@@ -245,6 +306,9 @@ public class PortalGate : MonoBehaviour
     /// <summary>单位走进门：在它脚下播一次传送特效（主人：佣兵进也要播）。</summary>
     public void PlayEnterEffect(Vector3 worldPos)
     {
+        // 【2026-10-16 主人原话】有人进到门的中心点时，预制体里「传送」节点自带的特效也要再播一次。
+        PlayNodeParticles(_teleportNode);
+
         var prefab = Resources.Load<GameObject>(EnterVfxPath);
         if (prefab == null)
         {
@@ -253,6 +317,22 @@ public class PortalGate : MonoBehaviour
         }
         var go = Instantiate(prefab, worldPos + new Vector3(0f, 0.6f, 0f), Quaternion.identity);
         go.name = "PortalEnterVfx";
+        // 【2026-10-16】进门特效也要抬层：prefab 里渲染器默认低 order，会被地图压住看不见。
+        // 归战斗特效层（SORT_VFX=50），进门瞬间盖在单位之上，与攻击特效同档。
+        var prs = go.GetComponentsInChildren<ParticleSystemRenderer>(true);
+        for (int i = 0; i < prs.Length; i++)
+        {
+            if (prs[i] == null) continue;
+            prs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            prs[i].sortingOrder = GameConfig.SORT_VFX;
+        }
+        var srs = go.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+        {
+            if (srs[i] == null) continue;
+            srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            srs[i].sortingOrder = GameConfig.SORT_VFX;
+        }
         Destroy(go, 3.5f);
     }
 

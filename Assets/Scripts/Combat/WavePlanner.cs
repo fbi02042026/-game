@@ -622,6 +622,10 @@ public sealed class WavePlanner
 
     void BuildCombatWaves(int stageIdx, bool elite)
     {
+        // 无限裂隙：怪量随绝对层数涨（映射进主线怪量曲线输入域），关内序号恒 0 不能反映层数
+        if (BattleManager.Instance != null && BattleManager.Instance.IsEndlessRift)
+            stageIdx = GameConfig.EndlessMonsterCountStageIdx(BattleManager.Instance.EndlessRiftStage);
+
         _lastWaveSprites.Clear();
         float startX = GetStageStartX();
         var points = GetSpawnPointsSortedByX();

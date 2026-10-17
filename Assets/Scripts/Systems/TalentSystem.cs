@@ -181,8 +181,10 @@ public static class TalentSystem
         }
 
         // 任务3：分批开放——未达左列门槛不可解锁
+        // 2026-10-17 主人要求：门槛提示要说人话，「左列 L10 解锁」玩家看不懂，
+        // 改成「左列开到第10个后开启」（点击锁定的右列节点时弹这条）。
         int leftN = TalentDefs.LeftUnlockedCount(data.talents);
-        if (leftN < node.unlockLeftIndex) { reason = $"左列 L{node.unlockLeftIndex} 解锁"; return false; }
+        if (leftN < node.unlockLeftIndex) { reason = $"左列开到第{node.unlockLeftIndex}个后开启"; return false; }
 
         if (node.costByLevel == null || node.costByLevel.Length < 1) { reason = "配置错误"; return false; }
         if (data.talentPoints < node.costByLevel[0]) { reason = "天赋石不足"; return false; }

@@ -321,6 +321,9 @@ public class SettingsPopupUI : MonoBehaviour
         // #endregion
         Time.timeScale = 1f;
         if (root != null) root.SetActive(false);
+        // 【2026-10-17】撤离也可能从关卡图右上角暂停按钮发起：
+        // 先把关卡图收掉（恢复战斗 HUD / timeScale），否则结算界面底下还压着一层关卡图。
+        BattleStageMapUI.Instance?.Hide();
         var tutorial = TutorialDirector.Instance;
         if (tutorial != null && tutorial.WaitingEvacuate)
             tutorial.WaitingEvacuate = false;

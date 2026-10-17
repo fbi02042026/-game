@@ -567,6 +567,8 @@ public class Mercenary : UnitBase
 
     protected override void OnDeathRelease()
     {
+        // 【2026-10-17 诊断日志】死亡动画播完 → Destroy 的最终退场时刻，与 OnMercenaryDead 配对
+        Debug.LogWarning($"[Mercenary] 退场销毁：{DisplayName}({mercId}) 死亡动画已播完");
         HideNameLabel();
         Destroy(gameObject);
     }

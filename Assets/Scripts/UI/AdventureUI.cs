@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -21,7 +22,7 @@ using UnityEditor;
 /// 资源条和底部五入口均通过 TownSharedChrome 复用，本页不自建。
 /// 资源图片（地图背景、副本图标、关卡节点等）留白格占位，你去替换 Sprite。
 /// </summary>
-public class AdventureUI : MonoBehaviour, ITownPage
+public class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, IDragHandler, IEndDragHandler
 {
     public static AdventureUI Instance { get; private set; }
     public MainNavTab Tab => MainNavTab.Adventure;
@@ -30,6 +31,11 @@ public class AdventureUI : MonoBehaviour, ITownPage
     public static int PendingBattleChapter;
     public static int PendingBattleDifficulty;
     public static bool PendingGoldDungeon;
+    /// <summary>
+    /// 无限裂隙进本标记（2026-10-17）。TryEnterBattle 每次按所选模式**重设**（非裂隙恒 false，防上一次残留污染）；
+    /// BattleManager.StartNewRunInternal 读完即清。体力确认弹窗也读它区分消耗 10/20。
+    /// </summary>
+    public static bool PendingEndlessRift;
 
     [Header("可替换资源")]
     public Sprite mapBackgroundSprite;
@@ -74,7 +80,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
     public Button sweepBtn;
 
     // ── 内部状态 ──
-    static readonly string[] ModeNames  = { "主线冒险", "每日副本", "迷宫探索", "BOSS挑战", "活动副本" };
+    static readonly string[] ModeNames  = { "主线冒险", "每日副本", "无限裂隙", "BOSS挑战", "活动副本" };
     // 2026-09-17：删除「地狱」——它与噩梦共用同一数值分支，是空壳。现在只有 普通 / 困难 / 噩梦 三档。
     // 2026-10-06：难度名一份拷贝都不留，全部改走 GameConfig.GetDifficultyName（战斗内 HUD 也读它）。
     static readonly Color    ColNormal  = new Color(0.30f, 0.55f, 0.22f, 1f);
@@ -278,6 +284,8 @@ public class AdventureUI : MonoBehaviour, ITownPage
                 if (right != null) RestoreAdventureBase(right);
                 if (mapRoot != null) RestoreAdventureBase(mapRoot);
                 if (detail != null) RestoreAdventureBase(detail);
+                if (mapBg != null) RestoreAdventureBase(mapBg.rectTransform);
+                RestoreAdventureSidebarOrder(right);
                 return;
             }
 
@@ -298,6 +306,12 @@ public class AdventureUI : MonoBehaviour, ITownPage
                 // 量不到导航节点（独立打开 / 组件未就绪）时用兜底常量，不能退回 0 让面板贴到屏幕最下
                 detailBottomGap = gap > 0f ? gap : DETAIL_PANEL_BOTTOM_GAP_FALLBACK;
             }
+
+            // 改动 5 必须最先：要在 RightContent / MapRoot 动锚点之前量世界坐标（见方法注释）。
+            FitAdventureMapBgCoverSidebar(rootRt);
+            // 改动 5 配套：预制体里 LeftSidebar 排在 RightContent 前面（下层），
+            // 地图图左扩后会盖住「主线冒险」按钮 → 把左侧栏抬到 RightContent 之上、DetailPanel 之下。
+            FitAdventureSidebarAboveMap(right);
 
             if (right != null)
             {
@@ -474,6 +488,77 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
         b.applied = true;
         _adventureUiBase[rt.GetInstanceID()] = b;
+    }
+
+    /// <summary>
+    /// 改动 5 — MapBg 左扩吃掉左侧栏大空隙（仅瘦屏）。
+    /// 病根（主人 2026-10-17 真机截图）：左侧栏 5 个副本入口只开放「主线冒险」一颗（其余未开放被隐藏），
+    /// 长比例屏上内容区变高后，按钮以下到详情面板之间是一整块空底，屏越长空得越多。
+    /// 治法：把地图背景图（MapBg）的左边缘外扩到页面左缘，章节景色垫到「主线冒险」按钮底下，
+    /// 空隙由图填掉；MapRoot 本体 / TitleBar / 关卡节点 / DetailPanel 一概不动。
+    /// 细节：右边现在留了多少内缩，左边对称留同样宽度，视觉两边一致。
+    /// 时序：必须在改动 1/2 动 RightContent / MapRoot 锚点之前调用 —— 本方法量的是世界坐标，
+    /// 先量后改才能拿到预制体原始摆位；幂等靠 base：已外扩量从当前 offsetMin 减回 base 再重算，不累积。
+    /// 标准屏 / 关开关 → ApplyAdventureFit 顶部的 RestoreAdventureBase(mapBg) 还原。
+    /// </summary>
+    void FitAdventureMapBgCoverSidebar(RectTransform pageRoot)
+    {
+        var bgTf = mapBg != null
+            ? mapBg.rectTransform
+            : transform.Find("RightContent/MapRoot/MapBg") as RectTransform;
+        if (bgTf == null || pageRoot == null) return;
+        var b = CaptureAdventureBase(bgTf);
+
+        var corners = new Vector3[4];
+        var rootCorners = new Vector3[4];
+        bgTf.GetWorldCorners(corners);
+        pageRoot.GetWorldCorners(rootCorners);
+        float scaleX = bgTf.lossyScale.x;
+        if (scaleX <= 1e-4f) return;
+
+        // 把「已外扩量」减掉，还原出 base 状态的左边缘世界 x（幂等关键：重复调用从 base 重算）。
+        float dApplied = (bgTf.offsetMin.x - b.offsetMin.x) * scaleX;
+        float baseLeftX = corners[0].x - dApplied;
+
+        // 右内缩对称：右边缘离页面右缘多少，左边缘就离页面左缘多少（内缩为负时按 0 处理，直接贴边）。
+        float rightInset = rootCorners[2].x - corners[2].x;
+        float targetLeftX = rootCorners[0].x + Mathf.Max(0f, rightInset);
+
+        bgTf.offsetMin = new Vector2(
+            b.offsetMin.x + (targetLeftX - baseLeftX) / scaleX,
+            b.offsetMin.y);
+
+        b.applied = true;
+        _adventureUiBase[bgTf.GetInstanceID()] = b;
+    }
+
+    /// <summary>左侧栏原始兄弟序（-1 = 本会话还没动过）；改动 5 抬层后标准屏按它还原。</summary>
+    int _leftSidebarBaseSibling = -1;
+
+    /// <summary>
+    /// 改动 5 配套 — 左侧栏抬层：预制体根节点下 LeftSidebar 排在 RightContent 之前（先渲染 = 下层），
+    /// 地图背景左扩后会把它压在图下面（按钮看不见也点不到）。这里把 LeftSidebar 挪到 RightContent
+    /// 之上、DetailPanel 之下（DetailPanel 是全宽面板，必须保持压住左侧栏底部）。
+    /// 只在瘦屏适配路径调用；记录原始兄弟序，标准屏 / 关开关时由 RestoreAdventureSidebarOrder 还原。
+    /// </summary>
+    void FitAdventureSidebarAboveMap(RectTransform right)
+    {
+        var left = transform.Find("LeftSidebar");
+        if (left == null || right == null) return;
+        if (_leftSidebarBaseSibling < 0)
+            _leftSidebarBaseSibling = left.GetSiblingIndex();
+        int target = right.GetSiblingIndex() + 1;
+        if (left.GetSiblingIndex() < target)
+            left.SetSiblingIndex(target);
+    }
+
+    /// <summary>改动 5 配套回退：把 LeftSidebar 放回预制体原始兄弟序（没抬过层则 no-op）。</summary>
+    void RestoreAdventureSidebarOrder(RectTransform right)
+    {
+        if (_leftSidebarBaseSibling < 0) return;
+        var left = transform.Find("LeftSidebar");
+        if (left != null) left.SetSiblingIndex(_leftSidebarBaseSibling);
+        _leftSidebarBaseSibling = -1;
     }
 
     /// <summary>
@@ -1442,6 +1527,47 @@ public class AdventureUI : MonoBehaviour, ITownPage
         RefreshAll();
     }
 
+    // ────────────────────────────────────────────────────
+    // 滑动翻章（2026-10-17 主人要求）：在地图区横向拖拽切上一章/下一章
+    // 事件冒泡到根：按下点在 RightContent/MapRoot 子树内才响应，其他区域忽略。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>滑动翻章触发阈值（屏幕像素）；不足视为轻点/误触，不翻页。</summary>
+    const float ChapterSwipeThresholdPx = 100f;
+
+    bool _chapterSwipeActive;
+    float _chapterSwipeDx;
+
+    /// <summary>拖拽起点是否落在地图区（RightContent/MapRoot 子树）内。</summary>
+    bool IsMapDragStart(PointerEventData eventData)
+    {
+        var hit = eventData.pointerPressRaycast.gameObject;
+        if (hit == null) return false;
+        var right = transform.Find("RightContent");
+        var mapRoot = right != null ? right.Find("MapRoot") : transform.Find("MapRoot");
+        return mapRoot != null && hit.transform.IsChildOf(mapRoot);
+    }
+
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        _chapterSwipeActive = IsMapDragStart(eventData);
+        _chapterSwipeDx = 0f;
+    }
+
+    public void OnDrag(PointerEventData eventData)
+    {
+        if (_chapterSwipeActive) _chapterSwipeDx += eventData.delta.x;
+    }
+
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        if (!_chapterSwipeActive) return;
+        _chapterSwipeActive = false;
+        if (Mathf.Abs(_chapterSwipeDx) < ChapterSwipeThresholdPx) return;
+        if (_chapterSwipeDx < 0f) OnNextChapter();  // 向左滑 → 下一章
+        else OnPrevChapter();                       // 向右滑 → 上一章
+    }
+
     void OnChapterReward() => Toast("章节奖励（即将开放）");
     void OnAdventureLog()
     {
@@ -1487,15 +1613,28 @@ public class AdventureUI : MonoBehaviour, ITownPage
         // 兜底清掉中断存档（正常情况下启动阶段就已结算完毕）
         BattleStateSaver.ClearInterruptedSave();
 
-        if (StaminaSystem.Current < StaminaSystem.ADVENTURE_COST)
-        {
-            Toast("体力不足");
-            return;
-        }
-
+        // 无限裂隙：进本标记每次重设（防上次残留污染）；先查每日次数，再查体力（20/关）
         bool tutorialRun = !StoryProgress.TutorialDone
             && !StoryProgress.TutorialBattleCleared
             && StoryProgress.TutorialIntroDone;
+
+        // 引导期一律走引导局，不让裂隙跟引导抢流程
+        bool endless = IsEndlessMode(_selectedMode) && !tutorialRun;
+        int enterCost = endless ? StaminaSystem.ENDLESS_RIFT_COST : StaminaSystem.ADVENTURE_COST;
+        PendingEndlessRift = endless;
+        if (endless && EndlessRiftRules.TriesLeft(SaveSystem.Instance?.Data) <= 0)
+        {
+            Toast($"今天的裂隙挑战次数已用完（{GameConfig.ENDLESS_DAILY_TRIES}/{GameConfig.ENDLESS_DAILY_TRIES}）");
+            PendingEndlessRift = false;
+            return;
+        }
+
+        if (StaminaSystem.Current < enterCost)
+        {
+            Toast("体力不足");
+            PendingEndlessRift = false;
+            return;
+        }
 
         TutorialHintUI.Ensure().Hide();
 
@@ -1510,7 +1649,20 @@ public class AdventureUI : MonoBehaviour, ITownPage
         // 先选职业，确认「进入裂隙」再扣体力进场景（引导也只在此弹一次）
         PlayerJobSelectUI.Show(() =>
         {
-            if (!StaminaSystem.TrySpendForAdventure())
+            // 无限裂隙：次数 + 20 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
+            if (endless)
+            {
+                if (!EndlessRiftRules.TryConsumeEnter())
+                {
+                    PendingEndlessRift = false;
+                    return;
+                }
+                PendingBattleChapter = 0;
+                PendingBattleDifficulty = 0;
+                PendingGoldDungeon = false;
+                // 不调 SetChapter：裂隙章节状态由 StartEndlessRift 全权负责
+            }
+            else if (!StaminaSystem.TrySpendForAdventure())
             {
                 Toast("体力不足");
                 return;
@@ -1525,7 +1677,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
                 PendingGoldDungeon = false;
                 ChapterManager.Instance?.SetChapter(1);
             }
-            else
+            else if (!endless)
             {
                 PendingBattleChapter = _selectedChapter;
                 PendingBattleDifficulty = _selectedDiff;
@@ -1754,11 +1906,13 @@ public class AdventureUI : MonoBehaviour, ITownPage
     {
         bool main = _selectedMode == 0;
         bool activity = IsActivityMode(_selectedMode);
-        bool playable = main || activity;
+        bool endless = IsEndlessMode(_selectedMode);
+        bool playable = main || activity || endless;
         string title = GameConfig.GetChapterMapName(_selectedChapter);
         if (stageNameLabel != null)
         {
             if (activity) stageNameLabel.text = "金币副本";
+            else if (endless) stageNameLabel.text = "无限裂隙";
             else if (main) stageNameLabel.text = title;
             else stageNameLabel.text = ModeLabel(_selectedMode);
         }
@@ -1769,6 +1923,14 @@ public class AdventureUI : MonoBehaviour, ITownPage
                 int gold = GameConfig.GetGoldDungeonClearGold(_selectedChapter, _selectedDiff);
                 stageDescLabel.text = $"怪物只掉金币。通关获得 {gold} 金币。困难需通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图，噩梦需在困难难度下通关第 8 章。";
             }
+            else if (endless)
+            {
+                // 无限裂隙详情：剩余次数 / 记录点 / 下次起始层（2026-10-17 主人拍板）
+                var data = SaveSystem.Instance?.Data;
+                int left = EndlessRiftRules.TriesLeft(data);
+                int checkpoint = EndlessRiftRules.CheckpointOf(data?.endlessRiftClearedStage ?? 0);
+                stageDescLabel.text = $"无限爬塔：越打越难，打到撤离或阵亡为止。每天 {GameConfig.ENDLESS_DAILY_TRIES} 次，每次消耗 {StaminaSystem.ENDLESS_RIFT_COST} 体力，进场免费抽 {SlotMachineDefs.ENDLESS_RIFT_FREE_DRAWS} 次。\n今日剩余 {left}/{GameConfig.ENDLESS_DAILY_TRIES} 次 · 记录点第 {checkpoint} 层 · 下次从第 {checkpoint + 1} 层开始。首通奖励只发一次，宝箱每次都掉。";
+            }
             else if (main)
                 stageDescLabel.text = GetChapterIntro(_selectedChapter);
             else
@@ -1777,7 +1939,7 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
         if (staminaCostLabel != null)
         {
-            string cost = StaminaSystem.ADVENTURE_COST.ToString();
+            string cost = (endless ? StaminaSystem.ENDLESS_RIFT_COST : StaminaSystem.ADVENTURE_COST).ToString();
             string t = staminaCostLabel.text;
             if (!string.IsNullOrEmpty(t) && t.IndexOf("体力", System.StringComparison.Ordinal) >= 0)
             {
@@ -2135,6 +2297,9 @@ public class AdventureUI : MonoBehaviour, ITownPage
     /// </summary>
     bool IsActivityMode(int mode) => BattleModes.FromSlot(mode).Id == BattleModeId.GoldDungeon;
 
+    /// <summary>是否无限裂隙（下标 2，2026-10-17 开放）</summary>
+    bool IsEndlessMode(int mode) => BattleModes.FromSlot(mode).Id == BattleModeId.Endless;
+
     static int GetClearedChapterCount()
     {
         // 章节分叉后 maxUnlockedChapter-1 不再等于通关数，一律读权威集合
@@ -2334,8 +2499,9 @@ public class AdventureUI : MonoBehaviour, ITownPage
         }
         outList.Add(PreviewDropKind.Gold);
         outList.Add(PreviewDropKind.TalentStone);
+        // 2026-10-17 卷轴改版：第 3 章起预览普通卷轴（招稀有佣兵）、第 7 章起预览高级招募卷轴（招传奇佣兵）；
+        // 旧稀有招募卷已废弃，不再预览
         if (_selectedChapter >= 3) outList.Add(PreviewDropKind.ScrollCommon);
-        if (_selectedChapter >= 5) outList.Add(PreviewDropKind.ScrollRare);
         if (_selectedChapter >= 7) outList.Add(PreviewDropKind.ScrollLegendary);
     }
 
@@ -2446,11 +2612,13 @@ public class AdventureUI : MonoBehaviour, ITownPage
 
     Sprite LoadScrollDropSprite(MercRosterDefs.MercRarity rarity)
     {
-        // Common 目录仅一张雇佣卷轴，各稀有度共用
+        // Common 目录仅一张雇佣卷轴，各稀有度共用；传奇（高级招募卷轴）优先用主人 2026-10-17 放入的新图
         if (rarity == MercRosterDefs.MercRarity.Legendary)
         {
             if (_scrollLegendarySprite != null) return _scrollLegendarySprite;
-            return _scrollLegendarySprite = LoadCommonDropIcon("icon_hire_scroll");
+            // 主人 2026-10-17 放入的高级招募卷轴新图（在 Resources/Art/ 下，路径不同，直接加载）
+            var adv = Resources.Load<Sprite>("Art/UI/Icons/Common/高级招募卷轴");
+            return _scrollLegendarySprite = adv != null ? adv : LoadCommonDropIcon("icon_hire_scroll");
         }
         if (rarity == MercRosterDefs.MercRarity.Rare)
         {

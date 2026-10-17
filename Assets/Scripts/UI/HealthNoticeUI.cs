@@ -81,8 +81,8 @@ public class HealthNoticeUI : MonoBehaviour
         ui.titleText = CreateText(root.transform, "Title", "健康游戏忠告", 42, TextAnchor.MiddleCenter, font);
         ui.titleText.color = new Color(1f, 0.92f, 0.55f, 1f);
         var titleRt = ui.titleText.rectTransform;
-        titleRt.anchorMin = new Vector2(0.08f, 0.62f);
-        titleRt.anchorMax = new Vector2(0.92f, 0.76f);
+        titleRt.anchorMin = new Vector2(0.08f, 0.56f);
+        titleRt.anchorMax = new Vector2(0.92f, 0.70f);
         titleRt.offsetMin = titleRt.offsetMax = Vector2.zero;
 
         ui.bodyText = CreateText(root.transform, "Body",
@@ -94,8 +94,8 @@ public class HealthNoticeUI : MonoBehaviour
         ui.bodyText.lineSpacing = 1.45f;
         ui.bodyText.color = new Color(0.92f, 0.9f, 0.86f, 1f);
         var bodyRt = ui.bodyText.rectTransform;
-        bodyRt.anchorMin = new Vector2(0.08f, 0.28f);
-        bodyRt.anchorMax = new Vector2(0.92f, 0.58f);
+        bodyRt.anchorMin = new Vector2(0.08f, 0.36f);
+        bodyRt.anchorMax = new Vector2(0.92f, 0.66f);
         bodyRt.offsetMin = bodyRt.offsetMax = Vector2.zero;
 
         return root;

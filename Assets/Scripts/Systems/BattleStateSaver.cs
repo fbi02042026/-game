@@ -46,6 +46,8 @@ public class BattleStateSaver : MonoBehaviour
         public string stageType;          // 关卡类型
         public int difficulty;            // 难度 0/1/2
         public bool isGoldDungeon;        // 是否金币副本
+        public bool isEndlessRift;        // 是否无限裂隙（2026-10-17）
+        public int endlessRiftStage;      // 无限裂隙被中断时的当前层（结算提示用，进度真源在存档）
         public long currentGold;          // 战斗内钱包快照（含城镇底金）
         public long goldAtRunStart;       // 本局开始时的金币基线（算净赚用）
         // 2026-10-05：局外金币改成「结算界面才发」后，通关但还没发的那一笔存在这里。
@@ -121,6 +123,8 @@ public class BattleStateSaver : MonoBehaviour
             stageType = bm.currentStage != null ? bm.currentStage.type.ToString() : StageType.Normal.ToString(),
             difficulty = bm.BattleDifficulty,
             isGoldDungeon = bm.IsGoldDungeon,
+            isEndlessRift = bm.IsEndlessRift,
+            endlessRiftStage = bm.EndlessRiftStage,
             currentGold = bm.currentGold,
             goldAtRunStart = bm.GoldAtRunStart,
             pendingStageGold = bm.RunStageGoldPending,
@@ -222,7 +226,9 @@ public class BattleStateSaver : MonoBehaviour
 
         int chapter = d.chapterId < 1 ? 1 : d.chapterId;
         int stageIdx = d.stageId < 0 ? 0 : d.stageId;
-        string stageLabel = d.isGoldDungeon ? "金币副本" : $"{GameConfig.GetChapterMapName(chapter)} 第{stageIdx + 1}关";
+        string stageLabel = d.isEndlessRift ? $"无限裂隙 第{Mathf.Max(1, d.endlessRiftStage)}层"
+                         : d.isGoldDungeon ? "金币副本"
+                         : $"{GameConfig.GetChapterMapName(chapter)} 第{stageIdx + 1}关";
 
         // === 结算：与撤离同经济（金币保留 + 天赋石照发；构筑清空；体力不退）===
         // 注意：Mathf.Max 没有 long 重载，别用

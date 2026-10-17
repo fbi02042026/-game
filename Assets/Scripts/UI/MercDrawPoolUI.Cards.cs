@@ -2,20 +2,15 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>佣兵抽奖池 UI · 卡组模板克隆建卡（top/PoolGrid/Slot0 为模板）与角色图标。</summary>
+/// <summary>佣兵雇佣队列 UI · 列表卡克隆建卡（Panel/Slot 为模板，自带「查看/替换」双钮）与角色图标。</summary>
 public partial class MercDrawPoolUI : MonoBehaviour
 {
     // ============================================================
     // 模板克隆建卡（2026-10-15 主人拍板：已拥有/未拥有直接复制 top 卡组模板）
     // ============================================================
 
-    /// <summary>卡组模板（top/PoolGrid/Slot0，按名找不到就取第一格）。</summary>
-    GameObject CardTemplate()
-    {
-        for (int i = 0; i < _poolSlots.Count; i++)
-            if (_poolSlots[i] != null && _poolSlots[i].name == "Slot0") return _poolSlots[i];
-        return _poolSlots.Count > 0 ? _poolSlots[0] : null;
-    }
+    /// <summary>列表卡模板（Panel/Slot，BindFromHierarchy 绑定时已隐藏；缺失由 BuildTemplateCards 报错）。</summary>
+    GameObject CardTemplate() => _listTemplate;
 
     /// <summary>
     /// 卡的【视觉尺寸】= 模板 sizeDelta × 模板 localScale，全部取局部序列化值，不做世界测量推算。
@@ -75,9 +70,10 @@ public partial class MercDrawPoolUI : MonoBehaviour
         var tmpl = tmplGo != null ? tmplGo.GetComponent<RectTransform>() : null;
         if (tmpl == null || tmplGo.transform.Find("Iconmask") == null)
         {
-            Debug.LogError("[MercDrawPoolUI] 找不到卡组模板 top/PoolGrid/Slot0（含 Iconmask），列表无法建卡");
+            Debug.LogError("[MercDrawPoolUI] 找不到列表卡模板 Panel/Slot（含 Iconmask），列表无法建卡");
             return startY;
         }
+        tmplGo.SetActive(false);   // 模板本体强制隐藏（每次重建前再按一遍，防开窗时亮着演示位）
 
         Vector2 visual = TemplateVisualSize(tmpl);
         float nameDrop = TemplateNameDrop(tmplGo, content);
@@ -95,8 +91,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
         {
             int col = i % cols;
             int row = i / cols;
-            MercRosterDefs.TryGetByHireId(orderedIds[i], out var def);
+            bool hasDef = MercRosterDefs.TryGetByHireId(orderedIds[i], out var def);
             var card = Object.Instantiate(tmplGo);
+            card.SetActive(true);   // 模板是隐藏的，克隆体默认也是灰的，必须手动点亮
             card.name = owned ? "OwnedCard" : "LockedCard";
             card.transform.SetParent(content, false);
             var crt = card.GetComponent<RectTransform>();
@@ -110,7 +107,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             crt.anchoredPosition = new Vector2(
                 -cw * 0.5f + x0 + col * pitchX + halfW,
                 -(startY + row * rowPitch + halfH));
-            FillTemplateCard(card, orderedIds[i], def, owned);
+            FillTemplateCard(card, orderedIds[i], def, hasDef, owned);
             if (owned) _ownedCards.Add(card);
             else _lockedCards.Add(card);
         }
@@ -119,16 +116,45 @@ public partial class MercDrawPoolUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 模板克隆卡填数据（【2026-10-16 主人拍板】只复制 Slot0，只替换头像和名字，
+    /// 模板克隆卡填数据（【2026-10-16 主人拍板】只复制 Slot，只替换头像和名字，
     /// 不换框、不换职业徽记、不改任何尺寸）：隐藏池专用 quxiao / suo；
-    /// 立绘（GetStand 全身，null 则不显示，不造图）、名字、点击事件（已拥有=上架/替换，未获得=看图鉴）。
+    /// 立绘（GetStand 全身，null 则不显示，不造图）、名字、点击事件（已拥有=亮卡上双钮，未获得=看图鉴）。
     /// </summary>
-    void FillTemplateCard(GameObject card, string hireId, MercRosterDefs.Def def, bool owned)
+    /// <param name="hasDef">花名册是否查到该佣兵（Def 是 struct，用 TryGet 返回值判断，不能比 null）。</param>
+    void FillTemplateCard(GameObject card, string hireId, MercRosterDefs.Def def, bool hasDef, bool owned)
     {
         var qx = card.transform.Find("quxiao");
         if (qx != null) qx.gameObject.SetActive(false);
         var suo = card.transform.Find("suo");
         if (suo != null) suo.gameObject.SetActive(false);
+
+        // 【2026-10-16 主人拍板】列表卡边框按稀有度换三档卡框（传奇金 / 稀有蓝 / 普通银，
+        // 与池格同款：Resources/Art/UI/Tavern/酒馆头像/，唯一入口 MercHireSession.LoadTavernCardFrame）。
+        // 模板根图就是卡框（Sliced）；首版误用三选一高卡插画底（frame_common 等，219×789），
+        // 压到 200×300 上半身像下面会空一行——主人 22:56 截图指出，已换同款框。
+        // 【2026-10-17 主人拍板】已上阵（已在雇佣队列）的已获得卡灰显；未入队的正常亮
+        bool inQueue = owned && _picked.Contains(hireId);
+
+        var cardImg = card.GetComponent<Image>();
+        if (cardImg != null)
+        {
+            var frameSp = hasDef ? MercHireSession.LoadTavernCardFrame(def.Rarity) : null;
+            if (frameSp != null)
+            {
+                cardImg.sprite = frameSp;
+                cardImg.type = Image.Type.Sliced;
+                cardImg.color = Color.white;
+            }
+            else
+            {
+                Debug.LogError("[MercDrawPoolUI] 列表卡换稀有度框失败：hireId=" + hireId
+                    + "（hasDef=" + hasDef + "，酒馆卡框图加载为空）");
+            }
+        }
+
+        // 已上阵的卡框整体压灰一档（稀有度框图不变，只调色；与未入队的已获得卡区分）
+        if (inQueue && cardImg != null)
+            cardImg.color = new Color(0.72f, 0.72f, 0.72f, 1f);
 
         var icon = card.transform.Find("Iconmask/Icon")?.GetComponent<Image>();
         // 【2026-10-16 主人纠正】卡上放全身立绘（GetStand），不是头像；尺寸/取景保持模板原样
@@ -138,14 +164,33 @@ public partial class MercDrawPoolUI : MonoBehaviour
         {
             icon.sprite = sp;
             icon.enabled = sp != null;
-            icon.color = owned ? Color.white : new Color(0.40f, 0.40f, 0.40f, 0.9f);
+            // 未获得=灰立绘；已上阵=立绘压灰一档；未入队的已获得=正常亮（2026-10-17 主人拍板）
+            icon.color = !owned ? new Color(0.40f, 0.40f, 0.40f, 0.9f)
+                : inQueue ? new Color(0.45f, 0.45f, 0.45f, 1f)
+                : Color.white;
             // 【2026-10-16 主人拍板】只替换形象，尺寸/取景一律保持模板原样（主人已调好），不做适配
         }
 
         var nameT = card.transform.Find("namebg/Name")?.GetComponent<Text>();
         if (nameT != null) nameT.text = owned ? def.Name : "未获得";
 
-        // 2026-10-16 主人拍板：已获得里在池的佣兵，右上角绿「已上架」标（借用列表卡上隐藏的 quxiao 角标位）
+        // 【2026-10-16 主人拍板】名字底牌也按稀有度换三档图（传奇/稀有/普通名字框，与卡框同目录），
+        // 只换图不代码改色；取不到报错不静默。
+        var nameBgImg = card.transform.Find("namebg")?.GetComponent<Image>();
+        var namePlate = hasDef ? MercHireSession.LoadTavernNamePlate(def.Rarity) : null;
+        if (nameBgImg != null && namePlate != null)
+        {
+            nameBgImg.sprite = namePlate;
+            nameBgImg.type = Image.Type.Sliced;
+            nameBgImg.color = Color.white;
+        }
+        else if (hasDef)
+        {
+            Debug.LogError("[MercDrawPoolUI] 列表卡换稀有度名字底牌失败：hireId=" + hireId
+                + "（namebg 图加载为空）");
+        }
+
+        // 2026-10-16 主人拍板：已获得里在队的佣兵，右上角绿「已入队」标（原「已上架」，2026-10-17 改名）
         if (owned && _picked.Contains(hireId))
         {
             var tag = NewImage(card.transform, "OnShelfTag", new Color(0.16f, 0.62f, 0.28f, 0.95f));
@@ -155,10 +200,10 @@ public partial class MercDrawPoolUI : MonoBehaviour
             trt.pivot = new Vector2(1f, 1f);
             trt.anchoredPosition = new Vector2(-4f, -4f);
             trt.sizeDelta = new Vector2(110f, 36f);
-            MakeText(tag.transform, "Label", "已上架", 21);   // Label 铺满角标、不拦点击
+            MakeText(tag.transform, "Label", "已入队", 21);   // Label 铺满角标、不拦点击
         }
 
-        // 模板本身没有 Button（Slot 只有 Image），克隆后运行时补，口径沿用：已拥有 = 上架/替换，未获得 = 看图鉴
+        // 模板本身没有 Button（Slot 只有 Image），克隆后运行时补，口径沿用：已拥有 = 亮双钮，未获得 = 看图鉴
         var img = card.GetComponent<Image>();
         if (img != null) img.raycastTarget = true;
         var btn = card.GetComponent<Button>();
@@ -166,8 +211,37 @@ public partial class MercDrawPoolUI : MonoBehaviour
         if (btn.targetGraphic == null && img != null) btn.targetGraphic = img;
         btn.onClick.RemoveAllListeners();
         string hid = hireId;
-        if (owned) btn.onClick.AddListener(() => OnOwnedCardClick(hid));
+        if (owned) btn.onClick.AddListener(() => OnOwnedCardClick(hid, card));
         else btn.onClick.AddListener(() => ShowMercDetail(hid, def));
+
+        // 【2026-10-17 主人拍板】模板自带「查看/替换」双钮（预制体只有 Image，运行时补 Button）：
+        // 默认整对隐藏；点未入队的已获得卡就地亮出（同一时刻只有一张卡亮着）。
+        // 查看 = 佣兵详情；替换 = 池有空位直接入队，池满进入点选态、直接点上方队列格子换下谁
+        // （OnCardSwap；2026-10-17 二次拍板：不再弹替换面板）。
+        var viewBtn = WireTemplateButton(card.transform, "查看", () => ShowMercDetail(hid, def));
+        var swapBtn = WireTemplateButton(card.transform, "替换", () => OnCardSwap(hid));
+        if (viewBtn == null || swapBtn == null)
+            Debug.LogError("[MercDrawPoolUI] 列表卡模板缺「查看/替换」钮节点：hireId=" + hireId);
+        else
+        {
+            viewBtn.gameObject.SetActive(false);
+            swapBtn.gameObject.SetActive(false);
+        }
+    }
+
+    /// <summary>模板钮（查看/替换）补 Button：预制体只有 Image；缺节点返回 null（调用方报错，不静默）。</summary>
+    static Button WireTemplateButton(Transform card, string nodeName, UnityEngine.Events.UnityAction onClick)
+    {
+        var node = card.Find(nodeName);
+        if (node == null) return null;
+        var bimg = node.GetComponent<Image>();
+        if (bimg != null) bimg.raycastTarget = true;
+        var nbtn = node.GetComponent<Button>();
+        if (nbtn == null) nbtn = node.gameObject.AddComponent<Button>();
+        if (nbtn.targetGraphic == null && bimg != null) nbtn.targetGraphic = bimg;
+        nbtn.onClick.RemoveAllListeners();
+        nbtn.onClick.AddListener(onClick);
+        return nbtn;
     }
 
     /// <summary>隐藏 Role 节点（空格/锁格用，不留上一张的图）。</summary>

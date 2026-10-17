@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /// <summary>
@@ -131,15 +132,113 @@ public sealed class TutorialBattleMode : BattleMode
 }
 
 /// <summary>
-/// 无限关卡（UI「迷宫探索」）。主人已定位这条路是无限关卡，玩法待实现。
-/// 现在只做一件事：占住位置 + 锁住入口，不让它漏进战斗核心。
-/// 实现时改这里：IsPlayable → true，并覆写波次来源 / 结算。
+/// 无限裂隙（UI「无限裂隙」，冒险界面下标 2，原占位名「迷宫探索」）。
+/// 玩法（2026-10-17 主人拍板）：每天 2 次 × 20 体力；进场免费抽 5 次；
+/// 无限层推进，难度每层 +7%（缓冲关 9 折）；每 5 层一个 BOSS 记录点；
+/// 首通奖励（金币+天赋石）一次性、宝箱掉落每次都发；死亡/撤离当层不发、已通层保留；
+/// 下次从记录点 +1 层开打；每 5 层换一套场景背景（轮换现有 8 章资源）。
+/// 施工文档：Docs/无限裂隙副本_待办任务清单.md
 /// </summary>
 public sealed class EndlessBattleMode : BattleMode
 {
     public override BattleModeId Id => BattleModeId.Endless;
-    public override string DisplayName => "迷宫探索";
-    public override bool IsPlayable => false;
+    public override string DisplayName => "无限裂隙";
+    public override bool IsPlayable => true;
+
+    /// <summary>进场免费抽 5 次（走战斗内老虎机既有免费额度框架，价格≤0 时 UI 显示「本次免费」）</summary>
+    public override int FreeEntryDraws => SlotMachineDefs.ENDLESS_RIFT_FREE_DRAWS;
+
+    /// <summary>局内金币照发：免费抽完后玩家用局内金币继续抽构筑</summary>
+    public override bool GrantsRunCoins => true;
+
+    public override void BuildChapter(ChapterManager cm, int chapter)
+    {
+        if (cm == null)
+        {
+            Debug.LogError("[BattleMode] 无限裂隙 BuildChapter 失败：ChapterManager 为空");
+            return;
+        }
+        // chapter 参数对无限裂隙无意义：起始层由存档进度（记录点+1）决定
+        cm.StartEndlessRift(EndlessRiftRules.StartStage());
+    }
+
+    /// <summary>每层通关 → 无限裂隙专属结算（首通/宝箱/续层/记录点双选），核心不动</summary>
+    public override void SettleStageClear(BattleManager bm)
+    {
+        if (bm == null)
+        {
+            Debug.LogError("[BattleMode] 无限裂隙 SettleStageClear 失败：BattleManager 为空");
+            return;
+        }
+        bm.SettleEndlessStageClear();
+    }
+}
+
+/// <summary>
+/// 无限裂隙规则：每日次数、进度读写、层数推导。纯静态，不碰战斗核心。
+/// 进度真源 = SaveData.endlessRiftClearedStage（已首通最高层）；记录点 = 本值 / 5 × 5。
+/// </summary>
+public static class EndlessRiftRules
+{
+    /// <summary>跨天清零每日次数（照 ResourceAdRewards.EnsureDay 的 dayKey 模式）</summary>
+    public static void EnsureDay(SaveData data)
+    {
+        if (data == null) return;
+        string today = DateTime.UtcNow.ToString("yyyyMMdd");
+        if (data.endlessRiftDayKey != today)
+        {
+            data.endlessRiftDayKey = today;
+            data.endlessRiftTriesToday = 0;
+        }
+    }
+
+    /// <summary>今日剩余进入次数</summary>
+    public static int TriesLeft(SaveData data)
+    {
+        EnsureDay(data);
+        return Mathf.Max(0, GameConfig.ENDLESS_DAILY_TRIES - (data?.endlessRiftTriesToday ?? 0));
+    }
+
+    /// <summary>
+    /// 进本：次数 + 体力一起扣，成功计数落盘。任何一步不满足都返回 false 并弹对应提示。
+    /// </summary>
+    public static bool TryConsumeEnter()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        EnsureDay(data);
+        if (data.endlessRiftTriesToday >= GameConfig.ENDLESS_DAILY_TRIES)
+        {
+            GlobalToastUI.Show("今天的裂隙挑战次数已用完（2/2）", true);
+            return false;
+        }
+        if (!StaminaSystem.TrySpendForEndlessRift())
+            return false;   // 体力不足：ResourceWallet.TrySpend 内已弹「体力不足」
+        data.endlessRiftTriesToday++;
+        SaveSystem.Instance?.Save();
+        return true;
+    }
+
+    /// <summary>本次进本的起始层 = 记录点 + 1（主人拍板：不重打记录层）</summary>
+    public static int StartStage()
+    {
+        var data = SaveSystem.Instance?.Data;
+        return CheckpointOf(data?.endlessRiftClearedStage ?? 0) + 1;
+    }
+
+    /// <summary>记录点 = 已首通最高层向下取整到 5 的倍数，只进不退</summary>
+    public static int CheckpointOf(int clearedStage) => Mathf.Max(0, clearedStage) / GameConfig.ENDLESS_CHECKPOINT_INTERVAL * GameConfig.ENDLESS_CHECKPOINT_INTERVAL;
+
+    /// <summary>标记该层首通完成并落盘；返回是否真的推进了进度（= 是否本次首通）</summary>
+    public static bool MarkCleared(int riftStage)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        if (riftStage <= data.endlessRiftClearedStage) return false;
+        data.endlessRiftClearedStage = riftStage;
+        SaveSystem.Instance?.Save();
+        return true;
+    }
 }
 
 /// <summary>

@@ -28,7 +28,8 @@ using UnityEngine.UI;
 /// 属性采用「一条一行」竖排：文本由 <c>DraftPool.FormatEquipDescLines</c> 逐条给出，这里用 <c>\n</c> 拼接。</para>
 ///
 /// <para>强弱判据只有 <see cref="EquipCompare"/> 一处，这里只负责显示。</para>
-/// <para>玩家一直不点时**默认「留着旧的」** —— 保守方向，绝不会弄丢玩家身上已有的装备。</para>
+/// <para>【2026-10-16 主人原话「如果玩家没点按钮 自动替换成战力高的」】玩家一直不点（超时）时
+/// 改按战力自动选强的一件（<see cref="AutoPickByPower"/>）；点空白处仍是「留着旧的」（明确动作不代选）。</para>
 /// </summary>
 public class EquipReplaceConfirmUI : MonoBehaviour
 {
@@ -85,16 +86,28 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             t += Time.unscaledDeltaTime;
             yield return null;
         }
-        bool result = ui._answered ? ui._answer : false;
+        bool result = ui._answered ? ui._answer : AutoPickByPower(newEq, oldEq);
         // 【2026-10-12 主人报「点了换上新的，装备却没换上」】→ 三处诊断日志，下次一测就现形：
         // 看这里是「玩家选择=…」还是「超时」—— 若主人点了按钮但这里打的是超时，说明 Answer 没被触发（点击被吃/绑定丢失）。
         // ⚠️ 别把它写回跨行插值字符串：C# 9 报 CS8967（非逐字插值串里不能有换行）—— 拆成两个串再拼。
         string how = ui._answered
             ? "玩家选择=" + (result ? "换上新的" : "留着旧的")
-            : "超时 " + TimeoutSec + "s 未选择，按「留着旧的」处理";
+            : "超时 " + TimeoutSec + "s 未选择，按战力自动选=" + (result ? "换上新的" : "留着旧的");
         Debug.Log($"[EquipReplaceConfirm] 弹窗结束：{how}｜新={newEq?.equipName} 旧={oldEq?.equipName}");
         ui.Hide();
         onDone?.Invoke(result);
+    }
+
+    /// <summary>
+    /// 【2026-10-16 主人原话「如果玩家没点按钮 自动替换成战力高的」】超时/未选择时的兜底方向：
+    /// 不再一刀切「留着旧的」，改按战力自动选强的一件 —— 新件战力更高才换，打平或更低仍留旧的（保守不变）。
+    /// 判据与弹窗里「战力 ±N」同一真源 <see cref="PowerCalc.EquipPowerDelta"/>；旧件为空 → 新件直接穿。
+    /// </summary>
+    static bool AutoPickByPower(EquipInstance newEq, EquipInstance oldEq)
+    {
+        float np = PowerCalc.EquipPowerDelta(newEq);
+        float op = oldEq != null ? PowerCalc.EquipPowerDelta(oldEq) : float.NegativeInfinity;
+        return np > op;
     }
 
     static EquipReplaceConfirmUI Ensure()
@@ -188,9 +201,10 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         }
 
         // 战力 ±N（新 - 旧），准备塞进「新装备」栏（主人拍板：不要在底部判定行）
+        // 【2026-10-16 主人拍板】涨改成亮黄（RarityPalette.Gold #FFD959，原绿 PowerGain）；减仍红。
         int d = PowerCalc.EquipPowerDelta(newEq) - PowerCalc.EquipPowerDelta(oldEq);
         string powerLine = d >= 0
-            ? "<color=#" + ColorUtility.ToHtmlStringRGB(RarityPalette.PowerGain) + ">战力 +" + d + "</color>"
+            ? "<color=#" + ColorUtility.ToHtmlStringRGB(RarityPalette.Gold) + ">战力 +" + d + "</color>"
             : "<color=#" + ColorUtility.ToHtmlStringRGB(RarityPalette.PowerLoss) + ">战力 -" + (-d) + "</color>";
 
         FillColumn(_root.transform, "ColumnNew", newEq, oldEq, powerLine);
@@ -304,7 +318,7 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     /// 战力 ±N 写进 Iconbg 框里最下方的 <c>zhanli</c> 节点（2026-10-14 主人拍板：
     /// 「放到 Iconbg 框里最下方，我已经放好位置了，只有新获得装备有」）。
     /// <para><paramref name="powerLine"/> 为 null/空（旧装备栏、或没得算）→ 隐藏该节点，不留空行。
-    /// 颜色沿用既有的绿涨红跌（<c>RarityPalette.PowerGain / PowerLoss</c>），文案格式不变。
+    /// 【2026-10-16 主人拍板】涨 = 亮黄（<see cref="RarityPalette.Gold"/>），跌仍红（PowerLoss）。
     /// 排版（字号/对齐/位置）在预制体里，代码一行不碰。</para>
     /// </summary>
     static void ApplyPowerLine(Transform col, string powerLine)

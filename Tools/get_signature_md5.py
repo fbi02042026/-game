@@ -79,8 +79,34 @@ def from_keystore(path: Path, alias: str | None) -> str:
             out.unlink()
 
 
+def extract_x509_der(pkcs7: bytes) -> bytes:
+    """从 PKCS#7（META-INF/*.RSA）里剥出第一张 X.509 证书的 DER。
+    ⚠️ 后台要的是「证书本身」的 MD5；直接 hash CERT.RSA 整块会得到错值（2026-10-17 实锤翻车）。"""
+    def tlv(buf, off):
+        tag = buf[off]; i = off + 1
+        ln = buf[i]; i += 1
+        if ln & 0x80:
+            n = ln & 0x7F
+            ln = int.from_bytes(buf[i:i + n], 'big'); i += n
+        return tag, i, i + ln
+
+    t, vs, ve = tlv(pkcs7, 0)
+    assert t == 0x30, "ContentInfo 不是 SEQUENCE"
+    t, _, e = tlv(pkcs7, vs); assert t == 0x06, "缺 contentType OID"
+    t, s, e = tlv(pkcs7, e);  assert t == 0xA0, "缺 [0] content"
+    t, s, e = tlv(pkcs7, s);  assert t == 0x30, "缺 SignedData SEQUENCE"
+    off = s
+    t, _, off = tlv(pkcs7, off); assert t == 0x02, "缺 version"
+    t, _, off = tlv(pkcs7, off); assert t == 0x31, "缺 digestAlgorithms"
+    t, _, off = tlv(pkcs7, off); assert t == 0x30, "缺 contentInfo"
+    t, s, e = tlv(pkcs7, off);   assert t == 0xA0, "SignedData 里没有证书段"
+    t, cs, ce = tlv(pkcs7, s)
+    assert t == 0x30, "证书不是 SEQUENCE"
+    return pkcs7[s:ce]
+
+
 def from_apk(path: Path) -> str:
-    """从 APK 里挖 META-INF/*.RSA(DSA/EC) 证书算 MD5，无需密码。"""
+    """从 APK 里挖 META-INF/*.RSA(DSA/EC)，剥出证书后算 MD5，无需密码。"""
     import zipfile
     with zipfile.ZipFile(path) as z:
         certs = [n for n in z.namelist()
@@ -89,7 +115,7 @@ def from_apk(path: Path) -> str:
         if not certs:
             sys.exit("[错误] APK 内未找到签名证书（META-INF/*.RSA）。APK 可能是未签名的。")
         print("APK 内证书：", ", ".join(certs))
-        return hashlib.md5(z.read(certs[0])).hexdigest()
+        return hashlib.md5(extract_x509_der(z.read(certs[0]))).hexdigest()
 
 
 def main():
@@ -100,9 +126,9 @@ def main():
     ap.add_argument("--alias", default=None, help="keystore 别名（不给则交互选择）")
     args = ap.parse_args()
 
-    if not args.keystore.exists():
+    if args.keystore is not None and not args.keystore.exists():
         sys.exit(f"[错误] 文件不存在：{args.keystore}")
-    if not args.apk.exists():
+    if args.apk is not None and not args.apk.exists():
         sys.exit(f"[错误] 文件不存在：{args.apk}")
 
     md5 = from_keystore(args.keystore, args.alias) if args.keystore else from_apk(args.apk)

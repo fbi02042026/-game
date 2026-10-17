@@ -16,7 +16,6 @@ public static class AdventureLogMileage
     {
         public int Gold;
         public int Diamond;
-        public int EnchantStone;
         public int TalentPoint;
         public string TitleId;
         public string Label;
@@ -27,7 +26,8 @@ public static class AdventureLogMileage
     {
         new LevelReward { Label = "见习记载", Gold = 0 },
         new LevelReward { Label = "森林行者", Gold = 50, Diamond = 1 },
-        new LevelReward { Label = "探索者", Gold = 100, EnchantStone = 3 },
+        // 【2026-10-17 主人拍板】强化石暂无用途 → 原 Lv3 的附魔石×3 改成天赋石×3（1:1 换资源名，数量不动）
+        new LevelReward { Label = "探索者", Gold = 100, TalentPoint = 3 },
         new LevelReward { Label = "裂隙行者", Gold = 200, Diamond = 3 },
         new LevelReward { Label = "日志学者", Gold = 300, TalentPoint = 2 },
         new LevelReward { Label = "传说记录者", Gold = 500, Diamond = 5, TalentPoint = 3, TitleId = "log_chronicler" }
@@ -116,8 +116,6 @@ public static class AdventureLogMileage
             ResourceWallet.Add(ResourceWallet.ResourceType.Gold, reward.Gold, save: false, notify: true);
         if (reward.Diamond > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, reward.Diamond, save: false, notify: true);
-        if (reward.EnchantStone > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.EnchantStone, reward.EnchantStone, save: false, notify: true);
         if (reward.TalentPoint > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, reward.TalentPoint, save: false, notify: true);
         if (!string.IsNullOrEmpty(reward.TitleId))
@@ -242,7 +240,6 @@ public static class AdventureLogMileage
         var parts = new List<string>();
         if (r.Gold > 0) parts.Add($"金币×{r.Gold}");
         if (r.Diamond > 0) parts.Add($"钻石×{r.Diamond}");
-        if (r.EnchantStone > 0) parts.Add($"附魔石×{r.EnchantStone}");
         if (r.TalentPoint > 0) parts.Add($"天赋石×{r.TalentPoint}");
         if (!string.IsNullOrEmpty(r.TitleId)) parts.Add("称号·传说记录者");
         // 2026-10-11：奖励预览的名字跟实际发到手上的装备同名（带「稀有·」前缀）

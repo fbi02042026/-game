@@ -3,22 +3,32 @@ using UnityEngine;
 /// <summary>
 /// 战力换算唯一真源：抽卡卡面显示的「+N 战力」与本局实际入账（RunLoadout.TotalPower）
 /// 必须共用同一套函数，禁止各写各的。
-/// <para>口径（主人 2026-10-12 拍板）：战力 = 对敌方造成伤害的能力系数。
-/// DPS = 攻击 × (1 + 暴击率) × 每秒攻击次数；Power = POWER_BASE + POWER_PER_DPS × DPS。
-/// 底盘 POWER_BASE 是纯常数（无等级）；血量/防御/暴击伤害一律不计权重（纯输出口径）。</para>
+/// <para>口径（主人 2026-10-12 拍板，2026-10-17 修订）：
+/// DPS = 攻击 × (1 + 暴击率) × 每秒攻击次数；
+/// Power = POWER_BASE + POWER_PER_DPS × DPS + POWER_PER_HP × 血量 + POWER_PER_DEF × (物防+魔防)。
+/// 底盘 POWER_BASE 是纯常数（无等级）；血量/防御 2026-10-17 起计入权重（主人：涨的少不能不涨），
+/// 暴击伤害/移速等其余属性仍不计。</para>
 /// </summary>
 public static class PowerCalc
 {
     /// <summary>战力系数：1 点 DPS 折合多少战力。与 RunLoadout.TotalPower 共用同一份字面量，不许两处各写。</summary>
     public const float POWER_PER_DPS = 4.42267f;
 
+    /// <summary>战力系数：1 点生命上限折合多少战力（2026-10-17 主人拍板：血量计入战力）。</summary>
+    public const float POWER_PER_HP = 0.15f;
+
+    /// <summary>战力系数：1 点防御（物防/魔防同系数）折合多少战力（2026-10-17 主人拍板）。</summary>
+    public const float POWER_PER_DEF = 2.5f;
+
     /// <summary>战力底盘（纯常数，无等级）。与 RunLoadout.TotalPower 共用同一份字面量。</summary>
     public const float POWER_BASE = 130.50f;
 
-    // 只统计这四类输出属性，其余（血量/防御/移速/元素伤害等）不影响输出，一律不计。
-    static bool IsOutputAttr(AttrType t)
+    // 统计的属性：四类输出属性 + 血量/防御生存属性（2026-10-17 起血防计入）；其余（移速/元素伤害等）不计。
+    static bool IsCountedAttr(AttrType t)
         => t == AttrType.Attack || t == AttrType.MagicAttack
-        || t == AttrType.CritRate || t == AttrType.AttackSpeed;
+        || t == AttrType.CritRate || t == AttrType.AttackSpeed
+        || t == AttrType.MaxHp || t == AttrType.Defense || t == AttrType.MagicDefense
+        || t == AttrType.Vitality; // 体质派生 +10 血 +1 防（AttrSystem.ApplyDerivedAttributes），按增量折算计入
 
     /// <summary>
     /// 一件装备带来的战力增量（不含底盘 POWER_BASE，底盘是固定的，涨跌只算 ΔDPS 部分）。
@@ -42,15 +52,20 @@ public static class PowerCalc
         float flatA = 0f, pctA = 0f;
         float flatCr = 0f, pctCr = 0f;
         float flatS = 0f, pctS = 0f;
+        float flatHp = 0f, pctHp = 0f;
+        float flatDef = 0f, pctDef = 0f;
+        float flatVit = 0f;
 
-        Accumulate(eq.globalBonus, isOffHand, ref flatA, ref pctA, ref flatCr, ref pctCr, ref flatS, ref pctS);
+        Accumulate(eq.globalBonus, isOffHand, ref flatA, ref pctA, ref flatCr, ref pctCr, ref flatS, ref pctS,
+            ref flatHp, ref pctHp, ref flatDef, ref pctDef, ref flatVit);
         if (eq.attrBonus != null)
         {
             for (int i = 0; i < eq.attrBonus.Count; i++)
-                Accumulate(eq.attrBonus[i], isOffHand, ref flatA, ref pctA, ref flatCr, ref pctCr, ref flatS, ref pctS);
+                Accumulate(eq.attrBonus[i], isOffHand, ref flatA, ref pctA, ref flatCr, ref pctCr, ref flatS, ref pctS,
+                    ref flatHp, ref pctHp, ref flatDef, ref pctDef, ref flatVit);
         }
 
-        float A, Cr, S;
+        float A, Cr, S, HP, DF;
         var hero = Hero.Instance;
         if (hero != null && hero.attr != null)
         {
@@ -58,6 +73,8 @@ public static class PowerCalc
             A = hero.attr.GetAttr(PlayerJobBaseStats.CurrentAttackAttr());
             Cr = hero.attr.GetAttr(AttrType.CritRate);
             S = hero.attr.GetAttr(AttrType.AttackSpeed);
+            HP = hero.attr.GetAttr(AttrType.MaxHp);
+            DF = hero.attr.GetAttr(AttrType.Defense) + hero.attr.GetAttr(AttrType.MagicDefense);
         }
         else
         {
@@ -68,11 +85,13 @@ public static class PowerCalc
                 A = Mathf.Max(1f, row.BaseAtk + GameConfig.HERO_BASE_ATTACK_OFFSET);
                 Cr = row.CritRate;
                 S = row.AttackInterval > 0.05f ? 1f / row.AttackInterval : GameConfig.BASE_ATTACK_SPEED;
+                HP = row.BaseHp;
+                DF = row.BaseDef + row.BaseMagicDef;
             }
             else
             {
                 // 表都没加载（极端情况）：给一个不崩的保守估计，仍不 LogError（非异常分支）。
-                A = 1f; Cr = 0f; S = 1f;
+                A = 1f; Cr = 0f; S = 1f; HP = 0f; DF = 0f;
             }
         }
 
@@ -80,11 +99,14 @@ public static class PowerCalc
         float dA = flatA + pctA * A;
         float dCr = flatCr + pctCr * Cr;
         float dS = flatS + pctS * S;
+        // 血量/防御增量（2026-10-17 起计入战力）；体质平量按派生口径折算（+10 血 +1 防）
+        float dHp = flatHp + pctHp * HP + flatVit * 10f;
+        float dDef = flatDef + pctDef * DF + flatVit * 1f;
 
         float dpsBefore = A * (1f + Cr) * S;
         float dpsAfter = (A + dA) * (1f + Cr + dCr) * (S + dS);
         float dDps = dpsAfter - dpsBefore;
-        return Mathf.RoundToInt(POWER_PER_DPS * dDps);
+        return Mathf.RoundToInt(POWER_PER_DPS * dDps + POWER_PER_HP * dHp + POWER_PER_DEF * dDef);
     }
 
     /// <summary>
@@ -101,21 +123,27 @@ public static class PowerCalc
         => Mathf.Max(1, level) * 70 + Mathf.Max(1, star) * 110;
 
     static void Accumulate(AttrBonusData b, bool isOffHand,
-        ref float flatA, ref float pctA, ref float flatCr, ref float pctCr, ref float flatS, ref float pctS)
+        ref float flatA, ref float pctA, ref float flatCr, ref float pctCr, ref float flatS, ref float pctS,
+        ref float flatHp, ref float pctHp, ref float flatDef, ref float pctDef, ref float flatVit)
     {
-        if (b == null || !IsOutputAttr(b.attrType)) return;
+        if (b == null || !IsCountedAttr(b.attrType)) return;
         bool isAttack = b.attrType == AttrType.Attack || b.attrType == AttrType.MagicAttack;
         if (b.isPercent)
         {
             if (isAttack) pctA += b.value;
             else if (b.attrType == AttrType.CritRate) pctCr += b.value;
             else if (b.attrType == AttrType.AttackSpeed) pctS += b.value;
+            else if (b.attrType == AttrType.MaxHp) pctHp += b.value;
+            else if (b.attrType == AttrType.Defense || b.attrType == AttrType.MagicDefense) pctDef += b.value;
         }
         else
         {
             if (isAttack) flatA += b.value;
             else if (b.attrType == AttrType.CritRate) flatCr += b.value;
             else if (b.attrType == AttrType.AttackSpeed) flatS += b.value;
+            else if (b.attrType == AttrType.MaxHp) flatHp += b.value;
+            else if (b.attrType == AttrType.Defense || b.attrType == AttrType.MagicDefense) flatDef += b.value;
+            else if (b.attrType == AttrType.Vitality) flatVit += b.value;
         }
     }
 }

@@ -32,12 +32,14 @@ public static class AdventureLogAchievements
         {
             case "A001": return new AchReward { Gold = 10, Label = "金币×10" };
             case "A002": return new AchReward { Gold = 5, Label = "金币×5" };
-            case "A003": return new AchReward { Mats = 5, Label = "强化石×5" };
+            // 【2026-10-17 主人拍板】强化石暂无用途：A003/A008 原本实际发的是分解材料、文案却写强化石，
+            // 现统一改成天赋石（发与文案一致，走下方 r.Talent 发放分支）。
+            case "A003": return new AchReward { Talent = 3, Label = "天赋石×3" };
             case "A004": return new AchReward { Gold = 20, Label = "金币×20" };
             case "A005": return new AchReward { Gold = 10, Label = "金币×10" };
             case "A006": return new AchReward { Talent = 3, Label = "天赋石×3" };
             case "A007": return new AchReward { BackpackSlots = 1, Label = "背包扩容+1" };
-            case "A008": return new AchReward { Mats = 10, Label = "强化石×10" };
+            case "A008": return new AchReward { Talent = 5, Label = "天赋石×5" };
             case "A009": return new AchReward { Gold = 15, Label = "金币×15" };
             case "A010": return new AchReward { StaminaMax = 1, Label = "体力上限+1" };
             case "A011": return new AchReward { Gold = 50, Label = "金币×50" };

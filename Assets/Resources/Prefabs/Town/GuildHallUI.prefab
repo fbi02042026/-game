@@ -2742,8 +2742,8 @@ RectTransform:
   - {fileID: 4838834098199001604}
   - {fileID: 142937630274215185}
   - {fileID: 7751906329682441893}
-  - {fileID: 3917622238357736195}
   - {fileID: 352735006115198579}
+  - {fileID: 3917622238357736195}
   - {fileID: 8772572354285385350}
   m_Father: {fileID: 696533033390913261}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -3290,8 +3290,9 @@ MonoBehaviour:
   activityButton: {fileID: 2306772402097957891}
   boardCharacterImage: {fileID: 0}
   boardBreathAmount: 0.01
-  boardBobPixels: 6
-  boardTiltDegrees: 0.8
+  turnSwapOutSeconds: 0.16
+  turnSwapInSeconds: 0.24
+  turnSwapShrink: 0.7
   rankButton: {fileID: 3114712639156589014}
   shopButton: {fileID: 8798685482606626988}
   settingsButton: {fileID: 2497944397115292426}
@@ -3414,7 +3415,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 58, y: 76}
+  m_AnchoredPosition: {x: 147, y: 332}
   m_SizeDelta: {x: 180, y: 107.2284}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &4216351635745547446

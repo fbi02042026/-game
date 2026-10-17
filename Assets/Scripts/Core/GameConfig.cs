@@ -39,8 +39,8 @@ public static partial class GameConfig
     /// <summary>追敌车道对齐容错开关：true=不严格站到与目标同一条水平线（留随机偏移）；false=完全回退原行为。</summary>
     public const bool ENABLE_LANE_ALIGN_TOLERANCE = true;
 
-    /// <summary>酒馆功能开关（2026-09-26 主人拍板：佣兵功能待调好再开，点击酒馆先显示"未开放"）。调好后改成 true。</summary>
-    public const bool TAVERN_ENABLED = false;
+    /// <summary>酒馆功能开关（2026-10-17 主人拍板：开启佣兵招募入口验证三选一功能）。</summary>
+    public const bool TAVERN_ENABLED = true;
     /// <summary>车道对齐容错带（世界单位，Y 方向）：站位最多保留这么多上下偏移，不再收敛到严丝合缝。
     /// 取值依据：车道全高 MAX-MIN≈1.24，角色身高约 1.2 单位，0.12≈身高 10%（肉眼能看出错位、又不散）；
     /// 且恒小于近战出手闸门 MELEE_LANE_ALIGN_TOL(0.22)，绝不会挡住普攻。</summary>

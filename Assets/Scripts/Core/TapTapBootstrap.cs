@@ -57,6 +57,11 @@ public sealed class TapTapBootstrap : MonoBehaviour
     event Action<bool, string> _onInitCompleted;
     event Action<bool, string> _onLoginCompleted;
 
+    /// <summary>初始化终态：null=进行中，true=成功，false=失败。TapLogin 必须等成功后再发起登录。</summary>
+    bool? _initOk;
+    string _initError = string.Empty;
+    bool _loginWaitingInit;
+
     // ==================== 生命周期 ====================
 
     void Awake()
@@ -95,6 +100,8 @@ public sealed class TapTapBootstrap : MonoBehaviour
         {
             Debug.LogError("[TapTap] ClientId 未配置，数据分析不可用。请在TapTapBootstrap 顶部填入后台申请值。");
             BindGuestId();
+            _initOk = false;
+            _initError = "ClientId 未配置";
             _onInitCompleted?.Invoke(false, "ClientId 未配置");
             return;
         }
@@ -130,6 +137,8 @@ public sealed class TapTapBootstrap : MonoBehaviour
         {
             Debug.LogError($"[TapTap] SDK 初始化抛异常：{e.Message}");
             BindGuestId();
+            _initOk = false;
+            _initError = e.Message;
             _onInitCompleted?.Invoke(false, e.Message);
             return;
         }
@@ -139,6 +148,8 @@ public sealed class TapTapBootstrap : MonoBehaviour
 #else
         Debug.Log("[TapTap] 未定义 TAPSDK_ENABLED，跳过 SDK 初始化（依赖未安装或非 Android 包）。");
         BindGuestId();
+        _initOk = false;
+        _initError = "TAPSDK_ENABLED 未定义";
         _onInitCompleted?.Invoke(false, "TAPSDK_ENABLED 未定义");
 #endif
     }
@@ -146,6 +157,8 @@ public sealed class TapTapBootstrap : MonoBehaviour
     /// <summary>在初始化回调里绑定身份：已有 Tap 账号则用它，否则落到游客 UUID。</summary>
     void HandleInitResult(bool ok, string errMsg)
     {
+        _initOk = ok;
+        _initError = errMsg ?? string.Empty;
         if (!ok)
         {
             Debug.LogError($"[TapTap] SDK 初始化失败：{errMsg}");
@@ -236,15 +249,46 @@ public sealed class TapTapBootstrap : MonoBehaviour
         _onInitCompleted += cb;
     }
 
-    /// <summary>TapTap 一键登录（官方按钮）。失败/取消均走 onLoginCompleted(false, msg)。</summary>
+    /// <summary>
+    /// TapTap 一键登录（官方按钮）。失败/取消均走 onLoginCompleted(false, msg)。
+    /// 【2026-10-17 修复首次点击必失败】SDK Init 是异步的，以前不等初始化完成就发登录，
+    /// 冷启动第一次点击必报 "SDK not initialized"。现在等初始化回调成功后再发登录。
+    /// </summary>
     public void TapLogin(Action<bool, string> onDone)
     {
         if (onDone != null) _onLoginCompleted += onDone;
         Init();
 
 #if TAPSDK_ENABLED
-        // Unity 的 await 会自动回到主线程，不需要额外的线程泵
-        _ = TapLoginAsync();
+        if (_initOk == true)
+        {
+            // Unity 的 await 会自动回到主线程，不需要额外的线程泵
+            _ = TapLoginAsync();
+            return;
+        }
+        if (_initOk == false)
+        {
+            // 初始化已失败（终态，如 1001 包名/签名不符），直接报失败，不再空等
+            Debug.LogError($"[TapTap] 登录前检查：SDK 初始化已失败：{_initError}");
+            _onLoginCompleted?.Invoke(false, "SDK 初始化失败：" + _initError);
+            _onLoginCompleted = null;
+            return;
+        }
+        // 初始化进行中：挂到初始化回调上，成功后再发登录（修首次点击竞态）
+        if (_loginWaitingInit) return;
+        _loginWaitingInit = true;
+        _onInitCompleted += (ok, err) =>
+        {
+            _loginWaitingInit = false;
+            if (ok)
+            {
+                _ = TapLoginAsync();
+                return;
+            }
+            Debug.LogError($"[TapTap] 登录前 SDK 初始化失败：{err}");
+            _onLoginCompleted?.Invoke(false, "SDK 初始化失败：" + err);
+            _onLoginCompleted = null;
+        };
 #else
         Debug.LogError("[TapTap] 未定义 TAPSDK_ENABLED，TapTap 登录不可用。请检查依赖是否安装。");
         _onLoginCompleted?.Invoke(false, "TAPSDK_ENABLED 未定义");

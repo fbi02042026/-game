@@ -286,7 +286,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     // 背包已满时自动让位：与「替换/丢掉直接分解」是同一套，统一走 ScrapEquip
     void ScrapBagEquip(EquipInstance equip) => ScrapEquip(equip);
 
-    /// <summary>同部位替换折强化石：按当前职业给一点口吻。</summary>
+    /// <summary>同部位替换折分解材料（实际发的是 DecomposeMat，文案别再写强化石——2026-10-17）：按当前职业给一点口吻。</summary>
     static string BuildScrapToast(EquipInstance equip, int mats)
     {
         string name = equip != null && !string.IsNullOrEmpty(equip.equipName) ? equip.equipName : "旧装备";
@@ -294,19 +294,19 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         switch (PlayerJobDefs.GetSelected())
         {
             case PlayerJobId.SwordShield:
-                return $"盾墙换防！{name} 拆成强化石{matsTxt}";
+                return $"盾墙换防！{name} 拆成分解材料{matsTxt}";
             case PlayerJobId.Heavy:
-                return $"沉甸甸的不要了——{name} 砸成强化石{matsTxt}";
+                return $"沉甸甸的不要了——{name} 砸成分解材料{matsTxt}";
             case PlayerJobId.Berserker:
-                return $"旧货碍手！{name} 撕成强化石{matsTxt}";
+                return $"旧货碍手！{name} 撕成分解材料{matsTxt}";
             case PlayerJobId.Ranger:
-                return $"换新的更好射——{name} 拆成强化石{matsTxt}";
+                return $"换新的更好射——{name} 拆成分解材料{matsTxt}";
             case PlayerJobId.Mage:
-                return $"魔力重组：{name} → 强化石{matsTxt}";
+                return $"魔力重组：{name} → 分解材料{matsTxt}";
             case PlayerJobId.Priest:
-                return $"旧物归尘，化为强化石{matsTxt}（原：{name}）";
+                return $"旧物归尘，化为分解材料{matsTxt}（原：{name}）";
             default:
-                return $"{name} 已变为强化石{matsTxt}";
+                return $"{name} 已变为分解材料{matsTxt}";
         }
     }
 

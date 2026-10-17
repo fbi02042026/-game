@@ -59,6 +59,8 @@ public class BattleStageMapUI : MonoBehaviour
     Color _backdropBase = Color.white;
     Material _btn06;
     readonly Dictionary<Image, Material> _savedMats = new Dictionary<Image, Material>();
+    /// <summary>右上角暂停按钮（运行时补建，不落预制体）。</summary>
+    GameObject _pauseBtn;
 
     /// <summary>进关卡图并跑完整流程（解锁 → 滚盘 → 落旗 → 等点击）。</summary>
     public static void BeginFlow(StageData next, Action<StageData> onPick)
@@ -125,6 +127,61 @@ public class BattleStageMapUI : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    void Update()
+    {
+        if (root == null || !root.activeSelf) return;
+
+        // 【2026-10-17 主人要求加暂停】图开着期间战斗必须保持冻结：
+        // 设置弹窗 Close() 会把 timeScale 恢复成 1（它记的 _prevTimeScale 是开图时的 0），
+        // 这里按帧压回 0；图一收（CoPedestalAccept / Hide）本守卫即失效，不影响正常恢复。
+        if (Time.timeScale != 0f)
+            Time.timeScale = 0f;
+
+        // 暂停按钮只在「等玩家点石墩」的静置期出现：滚盘 / 解锁 / 确认动画期间藏起，
+        // 也顺带杜绝「老虎机没转完就开弹窗撤离」这种半路状态组合。
+        if (_pauseBtn != null)
+            _pauseBtn.SetActive(_flow == null);
+    }
+
+    /// <summary>
+    /// 【2026-10-17 主人要求】右上角暂停按钮：运行时补建（不动预制体，铁律 3），
+    /// 复用战斗右上角设置同款图（Resources/Art/UI/battle/设置.png）。
+    /// 点击打开 SettingsPopupUI（Battle 宿主）＝战斗内暂停同款弹窗：继续 / 音乐音效 / 撤离。
+    /// </summary>
+    void EnsurePauseButton()
+    {
+        if (_pauseBtn != null) return;
+
+        var host = root != null ? root.transform : transform;
+        var go = new GameObject("PauseButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+        go.transform.SetParent(host, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.anchoredPosition = new Vector2(-40f, -40f);
+        rt.sizeDelta = new Vector2(110f, 110f);
+
+        var img = go.GetComponent<Image>();
+        var sp = Resources.Load<Sprite>("Art/UI/battle/设置");
+        if (sp != null)
+        {
+            img.sprite = sp;
+            img.preserveAspect = true;
+        }
+        var btn = go.GetComponent<Button>();
+        btn.targetGraphic = img;
+        btn.onClick.AddListener(OnOpenPause);
+        _pauseBtn = go;
+
+        // 刘海 / 挖孔避让：只挪 anchoredPosition，锚点语义不动
+        SafeAreaFitter.ApplyTopOffset(transform, "PauseButton");
+    }
+
+    void OnOpenPause()
+    {
+        SettingsPopupUI.Ensure().Open(SettingsHost.Battle);
+    }
+
     void StartFlow(StageData next, Action<StageData> onPick)
     {
         BindRefs();
@@ -146,6 +203,7 @@ public class BattleStageMapUI : MonoBehaviour
         RefreshPedestals(Phase.BeforeRoll);
 
         if (root != null) root.SetActive(true);
+        EnsurePauseButton();
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
 
@@ -184,6 +242,7 @@ public class BattleStageMapUI : MonoBehaviour
         RefreshPedestals(Phase.BranchSelect);
 
         if (root != null) root.SetActive(true);
+        EnsurePauseButton();
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
 
@@ -435,8 +494,9 @@ public class BattleStageMapUI : MonoBehaviour
     /// 但代价是：老虎机转出精英 / 恢复 / 首领关之后，旗子长得跟普通关一模一样，
     /// 玩家（含主人）根本看不出转到了什么 —— 老虎机演出等于白演。</para>
     ///
-    /// <para>这里改成**文字标签**：不依赖任何新美术，也不再往旗面上贴图，压在旗面中部即可。
-    /// 等美术给出**纯标志图**（只有骷髅 / 图标、不含旗面）再接回 <c>ApplyTypeIcon</c>，本方法随之删除。</para>
+    /// <para>这里改成**文字标签**：不依赖任何新美术，也不再往旗面上贴图。
+    /// 【2026-10-17 主人要求】字不再压在旗面上，挪到**旗子正上方**（贴旗顶居中悬浮），
+    /// 旗面恢复干净原样。等美术给出**纯标志图**（只有骷髅 / 图标、不含旗面）再接回 <c>ApplyTypeIcon</c>，本方法随之删除。</para>
     /// </summary>
     void SetFlagTypeLabel(PedestalRefs p, StageType type)
     {
@@ -453,11 +513,6 @@ public class BattleStageMapUI : MonoBehaviour
             var go = new GameObject(TypeLabelName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
             go.transform.SetParent(host, false);
             go.transform.SetAsLastSibling();
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, 0.34f);
-            rt.anchorMax = new Vector2(1f, 0.86f);
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
             t = go.GetComponent<Text>();
             t.fontSize = 20;
             t.alignment = TextAnchor.MiddleCenter;
@@ -465,14 +520,27 @@ public class BattleStageMapUI : MonoBehaviour
             t.horizontalOverflow = HorizontalWrapMode.Overflow;
             var f = GameFonts.GetChinese();
             if (f != null) t.font = f;
-            var ol = go.AddComponent<Outline>();           // 描边：压在旗面上也看得清
+            var ol = go.AddComponent<Outline>();           // 描边：悬在空中也看得清
             ol.effectColor = new Color(0f, 0f, 0f, 0.9f);
             ol.effectDistance = new Vector2(1f, -1f);
         }
+        // 【2026-10-17 主人要求】每次都重摆矩形：关卡图 DontDestroyOnLoad，
+        // 同一场对局里按旧锚点（压旗面）建出来的节点也能被校正到旗顶上方。
+        ApplyTypeLabelRect(t.rectTransform);
         t.text = StageRoller.Label(type);
         // 与老虎机结果名同款配色（Color.Lerp 到白 0.55）：精英紫 / 首领红 / 恢复绿 / 普通蓝
         t.color = Color.Lerp(StageRoller.Tint(type), Color.white, 0.55f);
         t.gameObject.SetActive(true);
+    }
+
+    /// <summary>类型标签矩形：贴旗顶（anchor 0.5,1）居中悬浮在旗子正上方，宽度放宽 + 不换行。</summary>
+    static void ApplyTypeLabelRect(RectTransform rt)
+    {
+        if (rt == null) return;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 2f);
+        rt.sizeDelta = new Vector2(220f, 32f);
     }
 
     /// <summary>取第 index 关在关卡表里的类型（取不到就按普通关，不另造一套真源）。</summary>

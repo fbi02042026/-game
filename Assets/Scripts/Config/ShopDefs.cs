@@ -109,12 +109,14 @@ public static class ShopDefs
         },
 
         // ================= 材料 =================
+        // 【2026-10-17 主人拍板】强化石暂无用途 → 原「强化石×5/600金」改成「天赋石×1/1000金」
+        // （天赋石本来只收钻石，这里给金币开一个换天赋石的口子；id 不动，老存档限购计数照旧）。
         new Item {
-            id = "shop_enchant_5", name = "强化石 ×5", kind = Kind.Material,
-            desc = "装备强化材料。",
-            currency = ResourceWallet.ResourceType.Gold, price = 600,
-            grantType = ResourceWallet.ResourceType.EnchantStone, grantAmount = 5,
-            dailyLimit = 5
+            id = "shop_enchant_5", name = "天赋石 ×1", kind = Kind.Resource,
+            desc = "天赋树与技能解锁的通用货币。",
+            currency = ResourceWallet.ResourceType.Gold, price = 1000,
+            grantType = ResourceWallet.ResourceType.TalentPoint, grantAmount = 1,
+            dailyLimit = 3
         },
         new Item {
             id = "shop_decompose_10", name = "分解材料 ×10", kind = Kind.Material,

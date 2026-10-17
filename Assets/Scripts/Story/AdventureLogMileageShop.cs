@@ -13,6 +13,7 @@ public static class AdventureLogMileageShop
     {
         Gold,
         Mats,
+        Talent,
         Stamina,
         ScrollCommon,
         ScrollRare,
@@ -32,11 +33,13 @@ public static class AdventureLogMileageShop
     public static readonly ShopItem[] Items =
     {
         new ShopItem { Id = "gold_bag", Name = "金币袋", CostPoints = 20, WeeklyLimit = 5, Kind = RewardKind.Gold, Amount = 50 },
-        new ShopItem { Id = "mats_3", Name = "强化石×3", CostPoints = 25, WeeklyLimit = 5, Kind = RewardKind.Mats, Amount = 3 },
+        // 【2026-10-17 主人拍板】强化石暂无用途 → 原「强化石×3」改成「天赋石×3」（id 不动，周限购计数照旧）
+        new ShopItem { Id = "mats_3", Name = "天赋石×3", CostPoints = 25, WeeklyLimit = 5, Kind = RewardKind.Talent, Amount = 3 },
         new ShopItem { Id = "stamina_1", Name = "体力药", CostPoints = 15, WeeklyLimit = 3, Kind = RewardKind.Stamina, Amount = 1 },
-        new ShopItem { Id = "scroll_c", Name = "普通招募卷", CostPoints = 30, WeeklyLimit = 3, Kind = RewardKind.ScrollCommon, Amount = 1 },
-        new ShopItem { Id = "scroll_r", Name = "稀有招募卷", CostPoints = 80, WeeklyLimit = 2, Kind = RewardKind.ScrollRare, Amount = 1 },
-        new ShopItem { Id = "scroll_l", Name = "传奇招募卷", CostPoints = 200, WeeklyLimit = 1, Kind = RewardKind.ScrollLegendary, Amount = 1 },
+        new ShopItem { Id = "scroll_c", Name = "普通卷轴（招募稀有佣兵）", CostPoints = 30, WeeklyLimit = 3, Kind = RewardKind.ScrollCommon, Amount = 1 },
+        // 【2026-10-17 主人拍板】卷轴改版：旧「稀有招募卷」失去用途下架（存量已在存档加载时折算进普通卷轴）；
+        // 「传奇招募卷」语义升级为「高级招募卷轴」（招募传奇佣兵专用，id 不动，周限购计数照旧）
+        new ShopItem { Id = "scroll_l", Name = "高级招募卷轴（招募传奇佣兵）", CostPoints = 200, WeeklyLimit = 1, Kind = RewardKind.ScrollLegendary, Amount = 1 },
     };
 
     public static string CurrentWeekKey()
@@ -129,6 +132,9 @@ public static class AdventureLogMileageShop
             case RewardKind.Mats:
                 ResourceWallet.Add(ResourceWallet.ResourceType.DecomposeMat, item.Amount, save: false, notify: true);
                 break;
+            case RewardKind.Talent:
+                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, item.Amount, save: false, notify: true);
+                break;
             case RewardKind.Stamina:
                 ResourceWallet.Add(ResourceWallet.ResourceType.Stamina, item.Amount, save: false, notify: true);
                 break;
@@ -146,8 +152,8 @@ public static class AdventureLogMileageShop
         SaveSystem.Instance.Save();
         RedDot.RefreshCommon();
         msg = $"兑换成功：{item.Name}";
-        if (item.Kind == RewardKind.ScrollCommon || item.Kind == RewardKind.ScrollRare || item.Kind == RewardKind.ScrollLegendary)
-            msg += $"（卷轴库存 普{data.mercScrollCommon}/稀{data.mercScrollRare}/传{data.mercScrollLegendary}）";
+        if (item.Kind == RewardKind.ScrollCommon || item.Kind == RewardKind.ScrollLegendary)
+            msg += $"（卷轴库存 普通{data.mercScrollCommon}/高级{data.mercScrollLegendary}）";
         return true;
     }
 

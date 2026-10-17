@@ -225,6 +225,17 @@ public partial class BattleUI : MonoBehaviour
         RefreshShieldBars();      // 蓝色盾条（有护盾时才显形）
     }
 
+    /// <summary>
+    /// 【2026-10-16 主人报「受击掉血要过一会才显示」】受击/治疗当场把血条刷出来，不等 0.1s 节流。
+    /// RefreshLiveBars 自带变化检测，没变化时是空转，推着刷不会重复排版。
+    /// 唯一调用点 = UnitBase.TakeDamage 我方受击分支；治疗类要跟进时也走这里，不要另写第二份。
+    /// </summary>
+    public void ForceRefreshLiveBars()
+    {
+        RefreshLiveBars();
+        RefreshShieldBars();
+    }
+
     void RefreshLiveBars()
     {
         var hero = Hero.Instance;

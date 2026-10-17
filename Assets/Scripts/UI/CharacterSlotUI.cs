@@ -548,9 +548,16 @@ public class CharacterSlotUI
         float e = Mathf.Clamp01(energy);
 
         if (lanBarFill != null)
+        {
+            // 蓝条控件与 SetUltCharge 共用：奥义关闭态会把它们藏掉，这里补回显
+            lanBarFill.gameObject.SetActive(true);
             lanBarFill.fillAmount = e;
+        }
         if (lanText != null)
+        {
+            lanText.gameObject.SetActive(true);
             lanText.text = e <= 0.001f ? "" : $"{Mathf.RoundToInt(e * 100)}%";
+        }
         // 不用头像框/头像当进度条
         if (energyRing != null)
             energyRing.fillAmount = 0f;
@@ -578,11 +585,27 @@ public class CharacterSlotUI
     /// <summary>
     /// 玩家头像下第二条 = 雷击奥义充能（HeroThunderUltimate）。
     /// 与佣兵的技能能量是两套语义，**不要复用 SetEnergy**——两者只是共用 lanBarFill / lanText
-    /// 这两个显示控件。按需求：即使 GameConfig.THUNDER_ULT_ENABLED 关闭也显示空条与 0/N，不隐藏。
-    /// 不改动条的颜色与光边（那套是技能能量就绪的表现，奥义不参与）。
+    /// 这两个显示控件。
+    /// 【2026-10-16 主人拍板「0/10 没用就去掉」】功能关闭（THUNDER_ULT_ENABLED=false）时整条隐藏，
+    /// 旧口径「关闭也显示空条与 0/N，不隐藏」作废。不改动条的颜色与光边（那套是技能能量就绪的表现，奥义不参与）。
     /// </summary>
     public void SetUltCharge(float ratio, int cur, int need, bool casting)
     {
+        // 【2026-10-16 主人拍板「0/10 没用就去掉」】雷击奥义当前整条关（GameConfig.THUNDER_ULT_ENABLED=false，
+        // 等后期装备技能再开），这条充能就是死显示 —— 功能关 → 整条隐藏。
+        // 旧口径「关闭也显示空条与 0/N」作废。蓝条控件与 SetEnergy 共用，SetEnergy 已补回显，
+        // 以后功能重开这里自然恢复显示。
+        if (!GameConfig.THUNDER_ULT_ENABLED)
+        {
+            if (lanBarFill != null) lanBarFill.gameObject.SetActive(false);
+            if (lanText != null)
+            {
+                lanText.text = "";
+                lanText.gameObject.SetActive(false);
+            }
+            return;
+        }
+
         float r = Mathf.Clamp01(ratio);
         if (lanBarFill != null)
         {

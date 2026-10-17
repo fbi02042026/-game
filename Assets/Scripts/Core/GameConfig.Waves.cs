@@ -56,6 +56,11 @@ public static partial class GameConfig
     /// <summary>击杀 1 个 Boss 发的佣兵币。</summary>
     public const int MERC_GOLD_PER_BOSS = 2;
 
+    // —— 精英掉天赋石（2026-10-17 主人拍板：强化石停掉后，精英的击杀奖励改挂天赋石）——
+    /// <summary>击杀 1 只精英掉的天赋石。引导里的宿敌精英同样带精英标记，走同一条发放；
+    /// 通关结算的天赋石（ChapterManager）照常，两者不冲突。要调整产量改这里即可。</summary>
+    public const int TALENT_PER_ELITE_KILL = 1;
+
     // —— 连杀续杯（R2）：连杀窗口内击杀回血，让"连"成为可持续资源 ——
     /// <summary>连杀回血总开关（2026-10-09 主人拍板关掉）。false = 连杀不再回血。
     /// 想恢复：改回 true 即可，下面的数值不用动。</summary>
@@ -247,6 +252,71 @@ public static partial class GameConfig
     /// <summary>精英关总怪数（同随机曲线）</summary>
     public static int GetEliteStageMonsterTotal(int stageIndex0Based)
         => GetStageMonsterTotal(stageIndex0Based);
+
+    // ============================================================
+    // 无限裂隙（2026-10-17 主人拍板）——难度与奖励数值唯一真源
+    // ============================================================
+
+    /// <summary>
+    /// 无限裂隙强度倍率：每层固定 +7%，记录点后第一层（缓冲关）打 9 折。
+    /// 层数 1 → 1.00；层 6（缓冲）→ 1.275；层 40 → 3.43。只随层数单调涨，与循环映射章解耦。
+    /// </summary>
+    public static float EndlessDifficultyMul(int riftStage)
+    {
+        int stage = Mathf.Max(1, riftStage);
+        float mul = 1f + ENDLESS_DIFFICULTY_STEP_PER_STAGE * (stage - 1);
+        if (IsEndlessBufferStage(stage)) mul *= ENDLESS_BUFFER_DISCOUNT;
+        return mul;
+    }
+
+    /// <summary>每层强度递增步长（占位基准，手感不对只改这里）</summary>
+    public const float ENDLESS_DIFFICULTY_STEP_PER_STAGE = 0.07f;
+    /// <summary>缓冲关（记录点后第一层）强度折扣</summary>
+    public const float ENDLESS_BUFFER_DISCOUNT = 0.9f;
+    /// <summary>每天进入次数</summary>
+    public const int ENDLESS_DAILY_TRIES = 2;
+
+    /// <summary>记录点间隔：每 5 层一个（第 5/10/15…层 = BOSS 记录点）</summary>
+    public const int ENDLESS_CHECKPOINT_INTERVAL = 5;
+
+    /// <summary>该层是否 BOSS 记录点层</summary>
+    public static bool IsEndlessBossStage(int riftStage) => Mathf.Max(1, riftStage) % ENDLESS_CHECKPOINT_INTERVAL == 0;
+
+    /// <summary>该层是否缓冲关（记录点后第一层，第 6/11/16…层；第 1 层不算）</summary>
+    public static bool IsEndlessBufferStage(int riftStage)
+    {
+        int stage = Mathf.Max(1, riftStage);
+        return stage > 1 && stage % ENDLESS_CHECKPOINT_INTERVAL == 1;
+    }
+
+    /// <summary>
+    /// 无限裂隙怪量映射：绝对层数 → 主线怪量公式的输入域（0..STAGES_PER_CHAPTER-1）。
+    /// 每 4 层走满一档，40 层走满整条 10→28 曲线后封顶，怪量只涨不跌。
+    /// </summary>
+    public static int EndlessMonsterCountStageIdx(int riftStage)
+        => Mathf.Min(STAGES_PER_CHAPTER - 1, Mathf.Max(0, (Mathf.Max(1, riftStage) - 1) / 4));
+
+    /// <summary>层 → 背景章映射（每 5 层换一套：第 1-5 层森林 → 6-10 墓园 → … → 40 层后循环）</summary>
+    public static int EndlessChapterForStage(int riftStage)
+        => ((Mathf.Max(1, riftStage) - 1) / ENDLESS_CHECKPOINT_INTERVAL) % ChapterMonsterFolders.Length + 1;
+
+    // —— 首通奖励（一次性；金币走局内钱包、天赋石直进钱包）——
+    /// <summary>普通层首通金币 = 60 + 25×层</summary>
+    public static int EndlessFirstClearGold(int riftStage) => 60 + 25 * Mathf.Max(1, riftStage);
+    /// <summary>普通层首通天赋石 = 2 + 层/10（整除）</summary>
+    public static int EndlessFirstClearTalent(int riftStage) => 2 + Mathf.Max(1, riftStage) / 10;
+    /// <summary>BOSS 记录点层首通额外倍率（金币与天赋石同乘）</summary>
+    public const int ENDLESS_BOSS_FIRSTCLEAR_MUL = 3;
+    /// <summary>宝箱掉落（每次通关都发，可重复小额金币）= 15 + 8×层</summary>
+    public static int EndlessChestGold(int riftStage) => 15 + 8 * Mathf.Max(1, riftStage);
+
+    // —— Boss 掉落卷轴（2026-10-17 主人拍板：Boss 有几率掉卷轴，高级卷轴几率很低）——
+    /// <summary>Boss 击杀掉「普通卷轴」的几率（招募稀有佣兵用）</summary>
+    public const float BOSS_SCROLL_DROP_RATE = 0.10f;
+    /// <summary>Boss 击杀掉「高级招募卷轴」的几率（招募传奇佣兵用，几率很低）</summary>
+    public const float BOSS_ADV_SCROLL_DROP_RATE = 0.02f;
+    /// <summary>无限裂隙每 10 层固定宝箱加发的卷轴数量</summary>
+    public const int ENDLESS_CHEST_SCROLL_INTERVAL = 10;
 
     /// <summary>BOSS 本体数量</summary>
     public static int GetBossStageMonsterTotal() => 1;

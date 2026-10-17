@@ -45,6 +45,8 @@ public class ParallaxBackground : MonoBehaviour
     bool _baseScaleCaptured;
     float _killCamZoomMul = 1f;
     float _viewportZoomMul = 1f;
+    // 【2026-10-17 主人报「长比例手机 map 和下面的 UI 有空隙」】条带比视差图高时 Y 向补齐的系数（只动 Y）。
+    float _verticalCoverMul = 1f;
 
     public void SetLayerRoot(Transform root)
     {
@@ -408,15 +410,46 @@ public class ParallaxBackground : MonoBehaviour
     void ApplyCombinedScale()
     {
         if (_layerRoot == null) return;
-        if (!_baseScaleCaptured)
-        {
-            _layerRootBaseScale = _layerRoot.localScale;
-            _baseScaleCaptured = true;
-        }
+        EnsureBaseScaleCaptured();
         float inv = 1f / Mathf.Max(0.0001f, _killCamZoomMul);
         _layerRoot.localScale = new Vector3(
             _layerRootBaseScale.x * inv * _viewportZoomMul,
-            _layerRootBaseScale.y * inv * _viewportZoomMul,
+            _layerRootBaseScale.y * inv * _viewportZoomMul * _verticalCoverMul,
             _layerRootBaseScale.z);
+    }
+
+    void EnsureBaseScaleCaptured()
+    {
+        if (_baseScaleCaptured) return;
+        _layerRootBaseScale = _layerRoot.localScale;
+        _baseScaleCaptured = true;
+    }
+
+    // ===== 长屏补缝（2026-10-17）=====
+
+    /// <summary>
+    /// 长比例屏幕上 map 条带（顶栏底 ~ 背包顶）比视差图高 → Y 向再放大一档，让图正好盖满条带。
+    /// 只乘在 Y 上：图与 walk 同在层根下一起缩放，地面线相对关系不变；X 向仍走视口缩放。
+    /// 分母用「不含 cover 的基础渲染高」（设计高 × KillCam/视口基础缩放），所以重复调用幂等，
+    /// 条带变矮时系数自动回落；&lt;=1 视为不需要补（宽屏时图本来就比条带高）。
+    /// </summary>
+    public void ApplyVerticalCoverToBand(float bandHeight)
+    {
+        if (bandHeight <= 1f) return;
+        // 无条件幂等建层：首次适配（AutoInit 里 Apply 跑在本组件 Start 之前）也要有图高可量，
+        // 否则第一场战斗就漏补，得等分辨率变化才会再算。
+        EnsureLayers();
+        if (_layerRoot == null) return;
+        var tile = frontLayer.tiles != null && frontLayer.tiles.Length > 0 ? frontLayer.tiles[0] : null;
+        if (tile == null) return;
+        float artH = tile.rect.height;   // 前景层单片设计高（本地值，未含任何缩放）
+        if (artH <= 1f) return;
+
+        EnsureBaseScaleCaptured();
+        float inv = 1f / Mathf.Max(0.0001f, _killCamZoomMul);
+        float baseScaleY = _layerRootBaseScale.y * inv * _viewportZoomMul;
+        float renderedNoCover = artH * Mathf.Max(0.0001f, baseScaleY);
+        _verticalCoverMul = Mathf.Max(1f, bandHeight / renderedNoCover);
+        ApplyCombinedScale();
     }
 }

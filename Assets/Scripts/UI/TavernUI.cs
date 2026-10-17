@@ -288,29 +288,31 @@ public class TavernUI : MonoBehaviour, ITownPage
     {
         if (recruitButton != null)
         {
-            // 【2026-10-15 主人拍板】下排「佣兵招募」卡锁住：点击只提示功能即将开放
-            // （主人在预制体里调过卡位，按下排两张锁；原「佣兵名册/TavernUnlockUI」入口撤掉，
-            //   解锁佣兵仍走任务跳转 QuestJumpRouter 那条路）
+            // 【2026-10-17 主人拍板】开启佣兵招募入口：下排「佣兵招募」卡直接打开三选一招募弹窗。
+            // （2026-10-15 的锁卡口径作废；三选一弹窗 = MercenaryRecruitPopupUI，含金币/招募卷双支付、
+            //   手动刷新 30 分钟冷却、每日 0 点自动刷新）
             recruitButton.onClick.RemoveAllListeners();
             recruitButton.gameObject.SetActive(true);
-            recruitButton.onClick.AddListener(() => GlobalToastUI.Show("功能即将开放"));
+            recruitButton.onClick.AddListener(() => MercenaryRecruitPopupUI.Show());
         }
         if (trustButton != null)
         {
             // 【2026-10-15 主人拍板】下排「信任交流」卡锁住：点击只提示功能即将开放
-            // （原「请他喝一杯/TavernLore」入口撤掉）
+            // （原「请他喝一杯/TavernLore」入口撤掉）；force 出口同上。
             trustButton.gameObject.SetActive(true);
             trustButton.onClick.RemoveAllListeners();
-            trustButton.onClick.AddListener(() => GlobalToastUI.Show("功能即将开放"));
+            trustButton.onClick.AddListener(() =>
+                UIManager.Instance?.ShowToast("功能即将开放", true));
         }
         if (questButton != null)
         {
             // 【2026-10-13 主人拍板】原隐藏的「酒馆任务」卡位复用为「佣兵抽奖池」入口：
             // 勾选下场想抽到的佣兵，局内招募只从勾选的里面出（空池 = 不筛选）。
+            // 【2026-10-17 主人拍板】改名「佣兵雇佣队列」，与酒馆「佣兵招募」（三选一抽全池）错开叫法。
             questButton.gameObject.SetActive(true);
             questButton.onClick.RemoveAllListeners();
             questButton.onClick.AddListener(() => MercDrawPoolUI.Show());
-            RetitleCard(questButton.transform, "佣兵抽奖池", "配置下场抽奖的佣兵池");
+            RetitleCard(questButton.transform, "佣兵雇佣队列", "配置下场战斗可雇佣的佣兵");
         }
         if (intelButton != null)
         {
@@ -385,7 +387,7 @@ public class TavernUI : MonoBehaviour, ITownPage
             new Vector2(-160f, 85f), new Color(0.55f, 0.42f, 0.28f));
         trustButton = CreateFeatureCard(grid.transform, "Trust", "信任交流", "提升信任解锁故事与事件",
             new Vector2(160f, 85f), new Color(0.65f, 0.32f, 0.35f));
-        questButton = CreateFeatureCard(grid.transform, "Quest", "佣兵抽奖池", "配置下场抽奖的佣兵池",
+        questButton = CreateFeatureCard(grid.transform, "Quest", "佣兵雇佣队列", "配置下场战斗可雇佣的佣兵",
             new Vector2(-160f, -95f), new Color(0.4f, 0.45f, 0.55f));
         intelButton = CreateFeatureCard(grid.transform, "Intel", "佣兵情报", "查看佣兵资料与背景故事",
             new Vector2(160f, -95f), new Color(0.35f, 0.4f, 0.5f));

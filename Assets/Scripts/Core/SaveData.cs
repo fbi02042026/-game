@@ -60,6 +60,15 @@ public class SaveData
     public int adStaminaClaimCount = 0;
     /// <summary>当日已领金币广告次数</summary>
     public int adGoldClaimCount = 0;
+
+    // === 无限裂隙（2026-10-17 主人拍板）===
+    /// <summary>无限裂隙每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday</summary>
+    public string endlessRiftDayKey = "";
+    /// <summary>今日已用进入次数（每天 2 次）</summary>
+    public int endlessRiftTriesToday = 0;
+    /// <summary>已首通的最高层（首通奖励一次性真源；记录点 = 本值 / 5 * 5，只进不退）</summary>
+    public int endlessRiftClearedStage = 0;
+
     /// <summary>邮件箱（资源溢出等）</summary>
     public List<MailEntry> mailInbox = new List<MailEntry>();
 
@@ -543,6 +552,7 @@ public class SaveData
         }
 
         MigrateClearedChapters();
+        MigrateMercScrolls();
         if (unlockedMercIds.Count == 0)
             SeedDefaultUnlockedMercs();
         // 【2026-10-13 主人拍板】塔克补发 + 抽奖池播种：老档第一次进新版也走（幂等，配过池子的不打扰）
@@ -571,6 +581,19 @@ public class SaveData
         }
         if (clearedChapterIds.Count > 0)
             clearedChapterEntries = FromIntIdSet(clearedChapterIds);
+    }
+
+    /// <summary>
+    /// 卷轴体系改版迁移（2026-10-17 主人拍板）：稀有用「普通卷轴」、传奇用「高级招募卷轴」招募后，
+    /// 旧「稀有招募卷」（mercScrollRare）失去用途——一次性折算进普通卷轴并清零（幂等：清零后不再触发）。
+    /// </summary>
+    void MigrateMercScrolls()
+    {
+        if (mercScrollRare > 0)
+        {
+            mercScrollCommon += mercScrollRare;
+            mercScrollRare = 0;
+        }
     }
 
     /// <summary>新档/空集合兜底：默认解锁基础佣兵，保证第一局就有佣兵卡可抽。</summary>

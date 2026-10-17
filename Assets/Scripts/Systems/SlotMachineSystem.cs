@@ -315,6 +315,11 @@ public static class SlotMachineSystem
     /// <b>正式关</b>：从第一抽起就等权随机 —— 2026-10-05 主人拍板
     ///「正式关的时候是不是应该都是随机的了，按我设定的来」。</para>
     /// <para>定序的那一类当前取不到内容（池空）时自动落回随机 —— 绝不返回一个出不了卡的类型。</para>
+    /// <para>【2026-10-17 主人拍板「开局卡关」】正式关保底佣兵：本局一只佣兵都没有时，第 3 抽起
+    /// 强制出佣兵方向 —— 佣兵方向权重只有 5%（85/10/5），启动金只够 2 抽，新档大概率开局
+    /// 0 佣兵、单人硬扛第一关（佣兵普通档攻击约玩家两倍，是前期战力主来源）。
+    /// 佣兵池取不到内容时照旧落回随机（沿用上面「取不到内容自动落回随机」口径）；
+    /// 引导局有自己的定序，不叠加。</para>
     /// </summary>
     public static DraftCategory ResolveCategory(List<DraftCategory> cats)
     {
@@ -324,6 +329,15 @@ public static class SlotMachineSystem
         {
             var want = order[n];
             if (cats.Contains(want)) return want;
+        }
+        // 正式关保底佣兵：n 是当前这抽的 0 基序号（NoteDraw 在抽完后才推进），n>=2 = 第 3 抽起
+        if (!IsTutorialRun
+            && n >= 2
+            && RunLoadout.Mercs().Count == 0
+            && cats != null && cats.Contains(DraftCategory.Merc)
+            && DraftPool.BuildCards(DraftCategory.Merc).Count > 0)
+        {
+            return DraftCategory.Merc;
         }
         return RollCategory(cats);
     }

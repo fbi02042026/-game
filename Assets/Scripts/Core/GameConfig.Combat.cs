@@ -38,6 +38,11 @@ public static partial class GameConfig
         public const int TownPopup = 900;
         /// 通用「获得奖励」弹窗：必须高于 TownPopup(900)——否则与每日登录界面同为 900 时排序不定、会被盖住；低于 BattlePopup(920) 与 Toast(11000)。
         public const int RewardPopup = 905;
+        /// <summary>
+        /// 【2026-10-17 主人要求】进裂隙前的体力消耗确认弹窗（运行时白模 StaminaConfirmPopupUI）。
+        /// 须高于 TownPopup(900) 盖住职业选择界面，低于 BattlePopup(920)。
+        /// </summary>
+        public const int StaminaConfirm = 908;
         public const int BattleStageMap = 880;
         public const int BattlePopup = 920;
         /// <summary>
@@ -656,8 +661,10 @@ public static partial class GameConfig
     /// 【3f → 2f】2026-09-28 主人拍板：3f 连引导关都嫌痛，先降回 2f。
     /// 【2f → 2.1f】2026-10-12 主人拍板「怪物的伤害再高一点点」：+5%，全局生效（Boss 同步）。
     /// 这是唯一的全局旋钮（Monster.cs 攻击赋值处），嫌狠就往下调。
+    /// 【2.1f → 1.8f】2026-10-17 主人拍板「开局卡关」回调：10-10 玩家全职业血×0.8 与 10-12 怪伤+5%
+    /// 叠加后，新档无佣兵单挑第一关被围约 9 秒倒（玩家反馈「刚开局就卡关」）→ 回调到 1.8（-14%）。
     /// </summary>
-    public const float MONSTER_DAMAGE_MULTIPLIER = 2.1f;
+    public const float MONSTER_DAMAGE_MULTIPLIER = 1.8f;
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备
     public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手（已改为包内同部位唯一，无穿戴槽）

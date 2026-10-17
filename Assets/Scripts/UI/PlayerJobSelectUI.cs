@@ -105,6 +105,13 @@ public class PlayerJobSelectUI : MonoBehaviour
         _selected = null;
         _refreshUsed = false;
         BuildIfNeeded();
+        // 【2026-10-17 主人报「弹窗有几率变大」】画布参数（绑定相机 + CanvasScaler）只在创建时套过一次，
+        // 场景切换的 RefreshDdolCanvases 只换 worldCamera 不重套缩放，城镇/战斗相机来回切后
+        // 弹窗会带着烙死的旧映射渲染整块变大。按 UICanvasSetup.RefreshPopup 的既有口径
+        // （「DDOL 弹窗每次 Show/Open 时调用」）每次开界面重套一遍，与 BattleSettlementUI 等一致。
+        var popupCanvas = GetComponent<Canvas>();
+        if (popupCanvas != null)
+            UICanvasSetup.RefreshPopup(popupCanvas, GameConfig.UiSort.TownPopup);
         // 2026-10-15 主人拍板 每次开界面都补一次右上角关闭按钮 —— 机理：预制体路径和运行时白模路径都在 BuildIfNeeded 之后汇合到这一行，
         // 所以无论走哪条构建路线都一定有关闭按钮。
         EnsureCloseButton(FindDeep(transform, "Panel") ?? transform);
@@ -142,6 +149,12 @@ public class PlayerJobSelectUI : MonoBehaviour
             GameFonts.ApplyToHierarchy(transform);
         TownPageDim.Ensure(transform);
 
+        // 【2026-10-17 主人拍板】引导局强制选剑盾的硬提示必须弹出——
+        // 先把 FirstRunGuide 还盖着的「开始冒险」气泡暂收（FirstBattle 步骤未完成，
+        // 协程继续等进战斗，之后 CoTalent 会重新弹气泡），否则让位逻辑会把硬提示吞掉
+        if (tut && FirstRunGuide.Instance != null && !FirstRunGuide.Instance.IsFinished)
+            FirstRunGuide.Instance.Hide();
+
         if (tut)
             ShowTutorialPickSword();
     }
@@ -149,7 +162,15 @@ public class PlayerJobSelectUI : MonoBehaviour
     public void Hide()
     {
         if (_opts.TutorialForceSwordFirst)
+        {
             TutorialHintUI.Instance?.Hide();
+            // 【2026-10-17】取消路径（没进裂隙就关掉界面）把 FirstRunGuide 气泡请回来：
+            // Open 时暂收的是「点开始冒险」气泡，FirstBattle 步骤还在等进战斗，
+            // 不请回的话玩家关掉界面就失去指引。进裂隙路径 OnEnterRift 已先摘回调，不会走到这。
+            if (_onEnterRift != null && FirstRunGuide.Instance != null
+                && !FirstRunGuide.Instance.IsFinished)
+                FirstRunGuide.Instance.NudgeReshow();
+        }
         if (_root != null) _root.SetActive(false);
         else gameObject.SetActive(false);
     }
@@ -157,8 +178,10 @@ public class PlayerJobSelectUI : MonoBehaviour
     void ShowTutorialPickSword()
     {
         // 【2026-10-15 主人报「上面一个引导 下面一个引导」】首次强制软引导（FirstRunGuide.FirstBattle）
-        // 还在指同一个按钮时，这条旧硬提示让位——同一个位置只准一层指引。
-        if (TutorialDirector.GuideCovers(FirstRunGuide.GuideStep.FirstBattle)) return;
+        // 的气泡实际显示在屏上时，这条旧硬提示让位——同一个位置只准一层指引。
+        // 【2026-10-17 主人拍板】判断从「步骤未完成」改成「气泡实际可见」：职业选择弹出时
+        // Open() 已把气泡暂收，步骤虽然没完成，但屏上没有别的指引了，硬提示必须弹出来。
+        if (FirstRunGuide.Instance != null && FirstRunGuide.Instance.IsOverlayVisible) return;
         RectTransform target = null;
         if (_cards.Count > 0 && _cards[0].Button != null)
             target = _cards[0].Button.transform as RectTransform;
@@ -168,8 +191,9 @@ public class PlayerJobSelectUI : MonoBehaviour
 
     void ShowTutorialEnterRift()
     {
-        // 同上：FirstRunGuide 还在管 FirstBattle 这一步时让位，别两层指引叠一起。
-        if (TutorialDirector.GuideCovers(FirstRunGuide.GuideStep.FirstBattle)) return;
+        // 同上（2026-10-17 口径）：FirstRunGuide 气泡实际显示在屏上时才让位，
+        // 只判「步骤未完成」会把引导局的硬提示整个吞掉（FirstBattle 到进战斗才算完成）。
+        if (FirstRunGuide.Instance != null && FirstRunGuide.Instance.IsOverlayVisible) return;
         if (_enterBtn == null) return;
         var target = _enterBtn.transform as RectTransform;
         if (target == null) return;
@@ -183,26 +207,33 @@ public class PlayerJobSelectUI : MonoBehaviour
     {
         // 2026-10-15 主人拍板 预制体/层级里已经有 CloseBtn 就复用那颗，没有才由代码现场建 ——
         // 机理：美术摆好的节点优先，跑的是「缺了就自己生一个」，不是拿 null 兜底一条链。
+        // 【2026-10-17】主人已在预制体里亲手摆好 CloseBtn（自带图标 / 缩放 0.3 / 自定位置）——
+        // 手摆的只绑点击 + 引导局显隐，位置 / 尺寸 / 颜色 / 「×」字一概不碰；
+        // 旧逻辑会把美术资源改坏：挪回右上角缩成 72×72（再乘手摆的 0.3 缩放只剩 ~22 像素）、
+        // Image 染成紫褐底、图标上再叠印一个「×」。样式只由代码白模路径负责。
         var closeGo = FindDeep(panel, "CloseBtn");
+        bool handPlaced = closeGo != null;
         if (closeGo == null)
+        {
             closeGo = CreateUi("CloseBtn", panel.transform, typeof(Image), typeof(Button)).transform;
 
-        // 2026-10-15 主人拍板 右上角定位：锚点和轴心都钉在右上，sizeDelta 定死 72×72，再往左下各缩 16 ——
-        // 机理：锚在角上，面板怎么拉伸它都死死贴住右上角，不会被职业卡挤走。
-        var rt = closeGo.GetComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
-        rt.pivot = new Vector2(1f, 1f);
-        rt.sizeDelta = new Vector2(72f, 72f);
-        rt.anchoredPosition = new Vector2(-16f, -16f);
+            // 2026-10-15 主人拍板 右上角定位：锚点和轴心都钉在右上，sizeDelta 定死 72×72，再往左下各缩 16 ——
+            // 机理：锚在角上，面板怎么拉伸它都死死贴住右上角，不会被职业卡挤走。
+            var rt = closeGo.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(1f, 1f);
+            rt.sizeDelta = new Vector2(72f, 72f);
+            rt.anchoredPosition = new Vector2(-16f, -16f);
 
-        // 2026-10-15 主人拍板 底图跟 RefreshBtn 同一套紫褐色 —— 机理：同色系读起来是一组界面控件，不抢中间职业卡的视觉重心。
-        closeGo.GetComponent<Image>().color = new Color(0.35f, 0.28f, 0.42f, 1f);
+            // 2026-10-15 主人拍板 底图跟 RefreshBtn 同一套紫褐色 —— 机理：同色系读起来是一组界面控件，不抢中间职业卡的视觉重心。
+            closeGo.GetComponent<Image>().color = new Color(0.35f, 0.28f, 0.42f, 1f);
 
-        // 2026-10-15 主人拍板 复用节点底下已经有 Label 就不再建 —— 机理：重复建会是两个「×」叠印糊成一坨黑。
-        if (FindText(closeGo, "Label") == null)
-        {
-            var label = CreateText(closeGo, "Label", "×", 34, TextAnchor.MiddleCenter);
-            Stretch(label.rectTransform);
+            // 2026-10-15 主人拍板 复用节点底下已经有 Label 就不再建 —— 机理：重复建会是两个「×」叠印糊成一坨黑。
+            if (FindText(closeGo, "Label") == null)
+            {
+                var label = CreateText(closeGo, "Label", "×", 34, TextAnchor.MiddleCenter);
+                Stretch(label.rectTransform);
+            }
         }
 
         // 2026-10-15 主人拍板 先把旧监听清干净再挂 —— 机理：每次 Open 都会走到这里，不去重就会一次点击触发多次 Hide。
@@ -211,7 +242,9 @@ public class PlayerJobSelectUI : MonoBehaviour
         _closeBtn.onClick.AddListener(Hide);
 
         // 2026-10-15 主人拍板 排到最后画 —— 机理：挂在面板最上层，遮不住也点得到（不会被职业卡盖在下面失效）。
-        closeGo.SetAsLastSibling();
+        // 【2026-10-17】只对代码现建的生效；手摆的尊重预制体里的顺序，不乱动层级。
+        if (!handPlaced)
+            closeGo.SetAsLastSibling();
 
         // 2026-10-15 主人拍板 引导局（强制先选剑盾那次）不显示这颗按钮 ——
         // 机理：引导局必须选了职业才能往下走，此时关掉界面会把引导卡死在中途，所以引导局直接不让它出现。
@@ -708,13 +741,30 @@ public class PlayerJobSelectUI : MonoBehaviour
             UIManager.Instance?.ShowToast("请先选择剑盾卫士");
             return;
         }
-        PlayerJobDefs.SetSelected(_selected.Value);
+
+        // 【2026-10-17 主人要求】点「进入裂隙」先弹体力消耗确认（与 StaminaSystem 实时挂钩：
+        // 显示当前体力与恢复倒计时，不足时确认按钮置灰），玩家点「进入裂隙」确认后才走
+        // 原「定职业 → 收界面 → 回调里扣体力进裂隙」；取消则留在本界面可换职业重选。
+        PlayerJobId job = _selected.Value;
         if (_opts.TutorialForceSwordFirst)
-            TutorialHintUI.Instance?.Hide();
-        Hide();
-        var cb = _onEnterRift;
-        _onEnterRift = null;
-        cb?.Invoke();
+            TutorialHintUI.Instance?.Hide();   // 确认弹窗盖着「进入裂隙」按钮，旧硬提示先收
+        StaminaConfirmPopupUI.Show(confirmed =>
+        {
+            if (!confirmed)
+            {
+                // 取消回到职业选择：引导局把「再点进入裂隙」硬提示重新指上（内部有让位判断）
+                if (_opts.TutorialForceSwordFirst)
+                    ShowTutorialEnterRift();
+                return;
+            }
+            PlayerJobDefs.SetSelected(job);
+            if (_opts.TutorialForceSwordFirst)
+                TutorialHintUI.Instance?.Hide();
+            var cb = _onEnterRift;
+            _onEnterRift = null;   // 【2026-10-17】先摘回调再收界面：Hide 的气泡回弹只服务取消路径
+            Hide();
+            cb?.Invoke();
+        });
     }
 
     static Transform FindDeep(Transform root, string name)

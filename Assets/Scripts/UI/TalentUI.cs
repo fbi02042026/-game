@@ -421,7 +421,9 @@ public class TalentUI : MonoBehaviour
         // 2026-09-29 主人要求：新开通且还没点过的节点右上角标红「新」；玩家一点就消失。
         // 判定统一走 TalentDefs.IsNewlyOpen（与入口红点同一口径），不要在这里另写一套条件。
         SetRowNewTag(v.root, ref v.newTag, TalentDefs.IsNewlyOpen(node, talents, leftUnlocked));
-        if (v.button != null) v.button.interactable = !locked;
+        // 【2026-10-17 主人要求】锁定行也保持可点：点了弹具体开启条件（左列开到第几个 / 互斥），
+        // 不再「点不动又没说法」。灰态与锁图标照旧 —— 灰度走 CanvasGroup，不依赖按钮禁用色。
+        if (v.button != null) v.button.interactable = true;
     }
 
     void ApplyLockSprite(Image img)
@@ -922,6 +924,13 @@ public class TalentUI : MonoBehaviour
 
         if (level <= 0)
         {
+            // 【2026-10-17 主人要求】锁定的节点点了要有说法：先弹具体开启条件
+            //（左列开到第几个 / 互斥已选其它流派 / 双修前置 / 天赋石不足），再谈解锁。
+            if (!TalentSystem.CanUnlockRightNode(node.id, out string lockReason))
+            {
+                GlobalToastUI.Show(lockReason, true);
+                return;
+            }
             // 任务4：JobChoice 必须先选职业
             if (node.IsJobChoice)
                 OpenRightJobChoice(node);

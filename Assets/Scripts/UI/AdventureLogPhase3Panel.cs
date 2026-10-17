@@ -144,9 +144,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         {
             _title.text = "里程商店";
             _body.text = AdventureLogMileage.FormatStatusLine() + "\n本周：" + AdventureLogMileageShop.CurrentWeekKey()
-                         + $"\n招募卷 普{SaveSystem.Instance?.Data?.mercScrollCommon ?? 0}"
-                         + $"/稀{SaveSystem.Instance?.Data?.mercScrollRare ?? 0}"
-                         + $"/传{SaveSystem.Instance?.Data?.mercScrollLegendary ?? 0}";
+                         + $"\n卷轴 普通{SaveSystem.Instance?.Data?.mercScrollCommon ?? 0}"
+                         + $"/高级{SaveSystem.Instance?.Data?.mercScrollLegendary ?? 0}";
             for (int i = 0; i < 6; i++)
             {
                 bool on = i < AdventureLogMileageShop.Items.Length;

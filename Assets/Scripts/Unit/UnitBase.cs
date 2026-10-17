@@ -1521,6 +1521,12 @@ public abstract class UnitBase : MonoBehaviour
         currentHp -= finalDamage;
         float effectiveDamage = Mathf.Clamp(finalDamage, 0f, Mathf.Max(0f, hpBefore));
 
+        // 【2026-10-16 主人确认「受击掉血要过一会才显示」】根因 = HUD 血条走 0.1s 节流刷新
+        //（BattleUI.Update 的 LiveBarInterval），观感就是「打中了血条半天不动」。
+        // 我方受击当场推一次刷新，不等节拍；RefreshLiveBars 自带变化检测，没变化时是空转，推着刷不亏。
+        if (isAlly)
+            BattleUI.Instance?.ForceRefreshLiveBars();
+
         // V6 词缀「吸血」：造成伤害的一方（精英/Boss）按比回血
         if (source is Monster && finalDamage > 0f)
         {

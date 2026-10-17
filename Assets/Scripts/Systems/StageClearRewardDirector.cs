@@ -1283,41 +1283,10 @@ public class StageClearRewardDirector : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 播放 Resources/VFX/other/world/传送（开启传送门时的出现特效）。
-    /// <para>【2026-10-12】改成 public：它原本是**死代码**（写了没人调用），而主人连报两次
-    /// 「还是没有出现传送门」——门预制体里那两个世界特效节点挂在 UI 父节点下、画到相机视野外了，
-    /// 所以这里按门的世界坐标另播一次正宗的世界特效。开门演出的唯一出口就是本方法，
-    /// 由 <see cref="PortalGate.CoOpen"/> 调用，别在别处再播一遍。</para>
-    /// </summary>
-    public static void PlayPortalOpenVfx(Vector3 worldPos)
-    {
-        var prefab = Resources.Load<GameObject>("VFX/other/world/传送")
-                  ?? Resources.Load<GameObject>("VFX/other/world/portal_open");
-        if (prefab == null)
-        {
-            Debug.LogWarning("[StageClearReward] 未找到特效 Resources/VFX/other/world/传送");
-            return;
-        }
-        var go = Object.Instantiate(prefab, worldPos + new Vector3(0f, 0.15f, 0f), Quaternion.identity);
-        go.name = "PortalOpenVfx";
-        // 抬到战斗 VFX 层，避免被地图/单位挡住
-        var srs = go.GetComponentsInChildren<SpriteRenderer>(true);
-        for (int i = 0; i < srs.Length; i++)
-        {
-            if (srs[i] == null) continue;
-            srs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            srs[i].sortingOrder = GameConfig.SORT_VFX;
-        }
-        var prs = go.GetComponentsInChildren<ParticleSystemRenderer>(true);
-        for (int i = 0; i < prs.Length; i++)
-        {
-            if (prs[i] == null) continue;
-            prs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-            prs[i].sortingOrder = GameConfig.SORT_VFX;
-        }
-        Object.Destroy(go, 4.5f);
-    }
+    // 【2026-10-16 已删除】PlayPortalOpenVfx：开门时「另播一次世界特效」的旧 workaround。
+    // 它是 10-12 误诊（以为门预制体粒子画到视野外）的补丁——Editor.log 体检行实测粒子位置一直是对的，
+    // 看不见的真因是粒子 sortingOrder=1 被地图 Canvas 压住（已在 PortalGate.Bind 统一抬层根治）。
+    // 旧补丁留着会跟门自带特效叠播两遍（铁律 15：同一语义只留一个出口），随调用点一起删除。
 
     static Transform FindChildIgnoreCase(Transform root, string name)
     {

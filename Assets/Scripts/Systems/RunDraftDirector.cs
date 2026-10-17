@@ -390,9 +390,9 @@ public class RunDraftDirector : MonoBehaviour
             yield break;
         }
 
-        // 玩家选择留着旧的：新件拆成强化石（ScrapEquip 自带提示与发料）
+        // 玩家选择留着旧的：新件折成分解材料（ScrapEquip 自带提示与发料；实发 DecomposeMat，文案别写强化石——2026-10-17）
         bag.ScrapEquip(eq);
-        done?.Invoke(true, $"{NameOf(card, eq)} 已拆成强化石");
+        done?.Invoke(true, $"{NameOf(card, eq)} 已折成分解材料");
     }
 
     static string NameOf(DraftCard card, EquipInstance eq)

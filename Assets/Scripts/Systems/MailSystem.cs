@@ -148,15 +148,16 @@ public static class MailSystem
     }
 
     /// <summary>
-    /// 首登欢迎邮件（给玩家的正式/测试信）：含 200 金币 + 1 位伙伴「莉娜(H017)」+ 致谢与加群邀请。
-    /// 用固定 id 去重，整份存档只发一次；要重新发放（改文案/加奖励）只需把 id 升版（welcome_2026_v2）。
+    /// 首登欢迎邮件（给玩家的正式/测试信）：含 200 金币 + 一位伙伴「莉娜(H017)」+ 致谢与加群邀请。
+    /// 配图走表情包「高兴」（2026-10-16 主人原话：「表情用表情包里的图片 用高兴的那个」——不用佣兵头像顶表情位）。
+    /// 用固定 id 去重，整份存档只发一次；要重新发放（改文案/加奖励/换配图）只需把 id 升版（如 welcome_2026_v3）。
     /// 触发点：① 玩完新手引导（StoryProgress.MarkTutorialDone，notifyToast=false：提示延后到关登录时）；
     /// ② 已通关老玩家回主界面补发（TownSceneBootstrap，幂等）。
     /// </summary>
     public static void EnsureWelcomeMail(bool notifyToast = true)
     {
         Ensure();
-        const string WelcomeId = "welcome_2026_v1";
+        const string WelcomeId = "welcome_2026_v2";
         var list = SaveSystem.Instance.Data.mailInbox;
         for (int i = 0; i < list.Count; i++)
             if (list[i] != null && list[i].id == WelcomeId) return;   // 已发过，不重复
@@ -174,6 +175,7 @@ public static class MailSystem
                    "—— 像素冒险制作组",
             createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             type = MailType.Reward,
+            detailImagePath = "Art/UI/Stickers/高兴",   // 详情页表情：表情包「高兴」（2026-10-16 主人拍板，路径同 MailDetailUI.StickerDir 口径）
             gold = 200,
             attachments = new List<MailAttachment>
             {

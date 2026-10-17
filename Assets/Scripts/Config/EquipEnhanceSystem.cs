@@ -82,7 +82,7 @@ public static class EquipEnhanceSystem
 
         if (ResourceWallet.Get(data, ResourceWallet.ResourceType.DecomposeMat) < mats)
         {
-            msg = $"强化石不足（需{mats}）";
+            msg = $"分解材料不足（需{mats}）";   // 实扣 DecomposeMat，文案别再写强化石（2026-10-17）
             return false;
         }
         if (gold > 0 && ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold) < gold)
@@ -93,7 +93,7 @@ public static class EquipEnhanceSystem
 
         if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.DecomposeMat, mats, save: false, notify: false))
         {
-            msg = $"强化石不足（需{mats}）";
+            msg = $"分解材料不足（需{mats}）";
             return false;
         }
         if (gold > 0 && !ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, gold, save: false, notify: false))

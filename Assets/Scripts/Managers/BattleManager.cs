@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -34,6 +34,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     long _runStageGoldPending = 0;
     /// <summary>本局待发的局外金币（中断存档要写它，杀进程才不会吞掉这笔钱）。</summary>
     public long RunStageGoldPending => _runStageGoldPending;
+    /// <summary>本局已通关关卡数（撤离补偿用：每关 +1 天赋石，2026-10-17 主人拍板）。</summary>
+    int _runStagesCleared;
     /// <summary>开战时城镇金币快照；死亡时本局增量清零用</summary>
     long _goldAtRunStart;
     /// <summary>本局开始时的金币基线（中断存档要写它，撤离开局才知道净赚多少）</summary>
@@ -162,6 +164,12 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     /// </summary>
     public bool IsGoldDungeon => Mode != null && Mode.Id == BattleModeId.GoldDungeon;
 
+    /// <summary>当前局是否无限裂隙（2026-10-17 新玩法，见 EndlessBattleMode）</summary>
+    public bool IsEndlessRift => Mode != null && Mode.Id == BattleModeId.Endless;
+
+    /// <summary>无限裂隙当前层数（绝对层，1 起；进本 = 记录点+1，续层 ++）</summary>
+    public int EndlessRiftStage { get; private set; }
+
     /// <summary>
     /// 本模式掉不掉装备。由 <see cref="Mode"/> 自己声明（金币本 false，主线/引导 true）。
     /// 结算只看这个，不再判「是不是金币本」—— 以后「武器副本」这类活动也能自然掉装。
@@ -191,6 +199,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     internal int _activeWaveIndex = -1;
     private bool _waveAnnounceRunning;
     Coroutine _waveAnnounceCo;
+    // 【2026-10-17 主人报「切屏回来战斗卡住，人物站着不动」】波次闸门看门狗计时（真实时间）
+    float _waveGateStuckSec;
     /// <summary>连杀计数</summary>
     private int _killCombo;
     private float _lastKillTime;
@@ -661,6 +671,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 在这里按「当前开放的是哪一个活动」返回对应模式即可。
         if (AdventureUI.PendingGoldDungeon) return BattleModes.GoldDungeon;
 
+        // 无限裂隙（冒险界面下标 2）
+        if (AdventureUI.PendingEndlessRift) return BattleModes.Endless;
+
         return BattleModes.Normal;
     }
 
@@ -678,6 +691,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         currentGold = 0;
         _goldAtRunStart = 0;
         _runStageGoldPending = 0;
+        _runStagesCleared = 0;
         var data = SaveSystem.Instance?.Data;
         _enchantAtRunStart = data != null ? data.enchantStones : 0;
         _matsAtRunStart = data != null ? data.decomposeMats : 0;
@@ -787,6 +801,14 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         AdventureUI.PendingBattleChapter = 0;
         AdventureUI.PendingBattleDifficulty = 0;
         AdventureUI.PendingGoldDungeon = false;
+
+        // 无限裂隙：起始层 = 记录点 + 1（读完即清，防污染）；普通章号参数对它无意义
+        if (AdventureUI.PendingEndlessRift)
+        {
+            EndlessRiftStage = EndlessRiftRules.StartStage();
+            AdventureUI.PendingEndlessRift = false;
+            targetChapter = GameConfig.EndlessChapterForStage(EndlessRiftStage);
+        }
 
         if (ChapterManager.Instance == null)
         {
@@ -929,11 +951,88 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         Debug.Log($"[BattleManager] 已生成佣兵 {spawned} 个 (tavern槽={max})");
     }
 
+    /// <summary>
+    /// 【2026-10-17】阵亡佣兵下一关复活 —— 兑现 2026-10-06 拍板「阵亡下一关按 20% 血复活（每过一关养回 30%）」。
+    /// <para>旧实现只有开新一局才 <see cref="SpawnMercenaries"/>，同一局内阵亡的佣兵永远回不来
+    /// （玩家报「佣兵打着打着就消失了」）。进下一关时扫 <see cref="RunLoadout"/>：
+    /// fallen=true 且场上没有实例的，按 <see cref="RunLoadout.MercReviveHpRatio"/> 的血量重新生成
+    /// （血量 = 20% + 30%×已过关数，封顶 100%）。</para>
+    /// <para>生成参数与 <see cref="RunDraftDirector.RecruitMerc"/> 对齐：星级 / 技能 / 名字 / hireId /
+    /// OnDead 订阅一个不少，保证它再阵亡时走同一条死亡链路。</para>
+    /// </summary>
+    void ReviveFallenMercsForStage()
+    {
+        var mm = MercenaryManager.Instance;
+        if (mm == null || !RunLoadout.IsActive) return;
+
+        var onField = mm.GetActiveMercs();
+        var mercs = RunLoadout.Mercs();
+        for (int i = 0; i < mercs.Count; i++)
+        {
+            var e = mercs[i];
+            if (e == null || !e.fallen) continue;
+            string key = !string.IsNullOrEmpty(e.hireId) ? e.hireId : e.mercId;
+
+            // 场上已有同 id 实例就不补（理论上 fallen=true 时实例已 Destroy，这里只防手抖双生成）
+            bool alreadyOnField = false;
+            for (int k = 0; k < onField.Count; k++)
+            {
+                var m = onField[k];
+                if (m == null) continue;
+                string mKey = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+                if (mKey == key) { alreadyOnField = true; break; }
+            }
+            if (alreadyOnField) continue;
+
+            var heroRef = hero != null ? hero : Hero.Instance;
+            int slot = mm.GetActiveMercs().Count;
+            Vector3 pos;
+            if (heroRef != null)
+                pos = new Vector3(UnitCrowd.GetMercDesiredCombatX(heroRef, null, slot), UnitBase.GROUND_Y,
+                    unitRoot != null ? unitRoot.position.z : 0f);
+            else
+                pos = new Vector3(transform.position.x + MERC_FRONT_SPACING * (slot + 1), UnitBase.GROUND_Y, 0f);
+
+            var merc = mm.SpawnMercenary(e.mercId, pos, Mathf.Max(1, e.level));
+            if (merc == null)
+            {
+                Debug.LogError($"[BattleManager] 阵亡佣兵复活失败：预制体缺失 mercId={e.mercId}");
+                continue;
+            }
+            merc.mercStar = Mathf.Clamp(e.star, 1, 5);
+            // SpawnMercenary → Init 会重置满血，惩罚必须在这里补砍回去（与 RunDraftDirector 同口径）
+            float reviveRatio = RunLoadout.MercReviveHpRatio(e);
+            if (reviveRatio < 1f && merc.attr != null)
+            {
+                float maxHp = merc.attr.GetAttr(AttrType.MaxHp);
+                merc.currentHp = Mathf.Max(1f, maxHp * reviveRatio);
+            }
+            merc.SetupBattleSkills(e.skillId, e.passiveSkillId);
+            merc.SetPartyIndex(slot);
+            merc.SetDisplayName(e.displayName);
+            if (!string.IsNullOrEmpty(e.hireId))
+                merc.SetHireId(e.hireId);
+            if (!string.IsNullOrEmpty(e.displayName))
+                merc.gameObject.name = "Merc_" + e.displayName;
+            if (!allyUnits.Contains(merc))
+                allyUnits.Add(merc);
+            merc.OnDead += OnMercenaryDead;
+            merc.Face(1);
+            Debug.Log($"[BattleManager] 阵亡佣兵复活：{e.displayName}({e.mercId}) 血量 {reviveRatio * 100f:0.}%（fallenStages={e.fallenStages}）");
+        }
+    }
+
     #endregion
     #region 战斗查询与增益
     public void OnMercenaryDead(UnitBase merc)
     {
         allyUnits.Remove(merc);
+        // 【2026-10-17 诊断日志】玩家报「佣兵没死就消失」——佣兵平时没血条，真机大伤害秒杀看不出来。
+        // 这里把阵亡实锤打出来：谁、多少血死的、死在哪，下次复现直接对日志。
+        if (merc is Mercenary md)
+            Debug.LogWarning($"[BattleManager] 佣兵阵亡：{md.DisplayName}({md.mercId}) 血量={md.currentHp:0.}/max={md.attr?.GetAttr(AttrType.MaxHp) ?? 0f:0.} pos={merc.transform.position:F1}");
+        else
+            Debug.LogWarning($"[BattleManager] 佣兵阵亡：{merc.name}");
         // 2026-10-06 主人拍板：阵亡不再零成本 —— 记进本局构筑，下一关按 20% 血复活（每过一关养回 30%）。
         if (merc is Mercenary m)
             RunLoadout.MarkMercFallen(!string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId);
@@ -1230,6 +1329,9 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         GameConfig.AttachToUnitRoot(hero.transform);
         Vector3 mercBasePos = new Vector3(startX, UnitBase.GROUND_Y, z);
         MercenaryManager.Instance?.ResetMercenaries(mercBasePos);
+        // 【2026-10-17】阵亡佣兵下一关复活（兑现 2026-10-06 拍板；只在新一关生效，反复重打同一关不白刷
+        // —— fallenStages 由「通关」TickFallenMercsStagePassed 推进）
+        ReviveFallenMercsForStage();
         // 镜头先对齐；偏左显示
         var follow = Camera.main != null ? Camera.main.GetComponent<CameraFollow>() : null;
         if (follow != null)
@@ -1813,21 +1915,30 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         if (_waveAnnounceRunning || _stageCleared || _portalActive) yield break;
         if (FindNextUnspawnedWaveIndex() < 0) yield break;
 
-        _waveAnnounceRunning = true;
-        int nextIdx = FindNextUnspawnedWaveIndex();
-        bool boss = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
-                    && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
-        var kind = boss ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
-        // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样
-        // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样。
-        // 【2026-10-07 主人拍板】Boss 波已经有「首领来袭」大图，下面不再叠一行字。
-        string announce = (boss || Planner == null) ? "" : Planner.WaveAnnounceText(nextIdx);
+        // 【2026-10-17 主人报「切屏回来战斗卡住，人物站着不动」】_waveAnnounceRunning / _waveAnnounceCo
+        // 是「有借有还」闸门：预告协程若在播放中被中断（协程被停 / 播放链抛异常 / 切后台恢复首帧异常），
+        // 标志没人清 → Update 里 `if (_waveAnnounceCo != null) return` 永远进不去，
+        // 下一波永远不刷，英雄干站着没怪可打。与 2026-10-05 中途抽奖 UnitsCanAct 卡死同形态，
+        // 同样用 try/finally 兜住归还。
+        try
+        {
+            _waveAnnounceRunning = true;
+            int nextIdx = FindNextUnspawnedWaveIndex();
+            bool boss = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
+                        && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
+            var kind = boss ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
+            // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样。
+            // 【2026-10-07 主人拍板】Boss 波已经有「首领来袭」大图，下面不再叠一行字。
+            string announce = (boss || Planner == null) ? "" : Planner.WaveAnnounceText(nextIdx);
 
-        yield return BattleWaveAnnounceUI.CoPlay(kind, announce);
-
-        _waveAnnounceRunning = false;
-        _waveAnnounceCo = null;
-        StopWaveCountdown();
+            yield return BattleWaveAnnounceUI.CoPlay(kind, announce);
+        }
+        finally
+        {
+            _waveAnnounceRunning = false;
+            _waveAnnounceCo = null;
+            StopWaveCountdown();
+        }
 
         if (!_stageCleared && !_portalActive && CountAliveMonsters() <= 0)
             SpawnNextPendingWave();
@@ -2053,6 +2164,30 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             BeginNextWaveCountdown();
         }
 
+        // 【2026-10-17 主人报「切屏回来战斗卡住，人物站着不动」】波次闸门看门狗：
+        // 「可行动 + 没怪 + 还有波没刷 + 预告闸门挂着 + timeScale 正常」连续 5 秒（真实时间）
+        // 即判定预告协程卡死（切后台 / 中断后标志没归还）。报错让主人看见，并按玩家
+        // 「加速出兵」同一出口强制放行（StopWaveAnnounce + SpawnNextPendingWave），
+        // 正常预告播完约 2~3 秒就会离开这个分支重新计时，不会误伤。
+        if (UnitsCanAct && !_stageCleared && !_portalActive && Time.timeScale > 0.01f
+            && CountAliveMonsters() == 0 && FindNextUnspawnedWaveIndex() >= 0
+            && _waveAnnounceRunning)
+        {
+            _waveGateStuckSec += Time.unscaledDeltaTime;
+            if (_waveGateStuckSec >= 5f)
+            {
+                _waveGateStuckSec = 0f;
+                Debug.LogError("[BattleManager] 波次预告闸门卡死超过 5 秒（疑似切后台/协程中断后标志未归还），强制放行下一波");
+                StopWaveAnnounce();
+                StopWaveCountdown();
+                SpawnNextPendingWave();
+            }
+        }
+        else
+        {
+            _waveGateStuckSec = 0f;
+        }
+
         bool allSpawned = true;
         if (_waves != null)
         {
@@ -2222,6 +2357,10 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             else if (m.IsEliteWave)
                 ResourceWallet.GrantMercGold(GameConfig.MERC_GOLD_PER_ELITE, "击杀精英");
         }
+        // 【2026-10-17 主人拍板】击杀精英掉天赋石（原强化石停掉后的替代奖励）：
+        // 引导中的宿敌精英也带精英标记，走同一条发放，一并生效；通关结算的天赋石照常不冲突。
+        if (m.IsEliteWave)
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, GameConfig.TALENT_PER_ELITE_KILL, save: false, notify: true);
         // 2026-09-26 主人拍板：累计本关物理/魔法击杀数，用于掉落按类型分池（主导类型 = 数量多者）。
         if (m.IsMagicType) _magicKills++;
         else _physicalKills++;
@@ -2433,6 +2572,31 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         int got = MercGrowInventory.GrantStageDrops(CurrentChapter, stageType, firstClear, dropBias);
         if (got > 0)
             GlobalToastUI.Show("获得养成掉落 ×" + got, true);   // 2026-10-06 主人拍板：物品/掉落获得，force 弹出
+
+        // —— Boss 掉落卷轴（2026-10-17 主人拍板）：普通卷轴几率掉，高级招募卷轴几率很低 ——
+        if (currentStage.type == StageType.Boss)
+        {
+            var data = SaveSystem.Instance?.Data;
+            if (data != null)
+            {
+                string scrollMsg = null;
+                if (Random.value < GameConfig.BOSS_SCROLL_DROP_RATE)
+                {
+                    data.mercScrollCommon++;
+                    scrollMsg = "普通卷轴×1";
+                }
+                if (Random.value < GameConfig.BOSS_ADV_SCROLL_DROP_RATE)
+                {
+                    data.mercScrollLegendary++;
+                    scrollMsg = scrollMsg == null ? "高级招募卷轴×1" : scrollMsg + "、高级招募卷轴×1";
+                }
+                if (scrollMsg != null)
+                {
+                    GlobalToastUI.Show("Boss 掉落 " + scrollMsg, true);
+                    SaveSystem.Instance?.Save();
+                }
+            }
+        }
     }
 
     bool ShouldPlayChapter1Ending()
@@ -3075,8 +3239,8 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
             kind = "获得装备";
             // 品质词：装备先过 DraftPool.MapRarity（唯一映射，不写第二份），词色跟卡框同色
             rarityLabel = SkillRarityUtil.DisplayName(DraftPool.MapRarity(card.Equip.rarity));
-            // 【2026-10-13 #2·裁定1】实际增量为 0 = 玩家留着旧的、新件已拆成强化石 → 不显示「战力 +0」
-            if (powerDelta <= 0) note = "已拆成强化石";
+            // 【2026-10-13 #2·裁定1】实际增量为 0 = 玩家留着旧的、新件已折成分解材料 → 不显示「战力 +0」
+            if (powerDelta <= 0) note = "已折成分解材料";
         }
         else if (cat == DraftCategory.Skill)
         {
@@ -3386,6 +3550,7 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         int stageGold = StageGoldDefs.CurrentStageGold();
         if (stageGold > 0)
             _runStageGoldPending += stageGold;
+        _runStagesCleared++; // 撤离补偿计数：本局已通关关数（2026-10-17）
 
         bool isBoss = currentStage.type == StageType.Boss;
         if (isBoss)
@@ -3659,6 +3824,92 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
     }
 
     /// <summary>
+    /// 无限裂隙每层通关结算（由 EndlessBattleMode.SettleStageClear 调，2026-10-17 主人拍板）：
+    ///   · 宝箱金币每层都发（可重复小额）；
+    ///   · 首通奖励（金币+天赋石）只在该层是本次首通时发，记录点层 ×3；
+    ///   · 记录点层（5 的倍数）弹「撤离结算 / 继续深入」双选，普通层过场后自动进下一层；
+    ///   · 死亡 / 撤离不走这里（走死亡撤离链）——当层什么都不发，已通层奖励已逐层即时发放。
+    /// </summary>
+    public void SettleEndlessStageClear()
+    {
+        int stage = Mathf.Max(1, EndlessRiftStage);
+        bool isBoss = GameConfig.IsEndlessBossStage(stage);
+
+        // —— 宝箱掉落：每次通关都发 ——
+        int chestGold = Mathf.RoundToInt(GameConfig.EndlessChestGold(stage) * GoldGainMul);
+        if (chestGold > 0)
+        {
+            currentGold += chestGold;
+            BattleUI.Instance?.UpdateGold(currentGold);
+            GlobalToastUI.Show($"宝箱开启，金币 +{chestGold}", true);
+        }
+
+        // —— 每 10 层固定宝箱加发普通卷轴（2026-10-17 主人拍板）——
+        if (stage % GameConfig.ENDLESS_CHEST_SCROLL_INTERVAL == 0)
+        {
+            var data = SaveSystem.Instance?.Data;
+            if (data != null)
+            {
+                data.mercScrollCommon++;
+                GlobalToastUI.Show($"第 {stage} 层固定宝箱：普通卷轴×1", true);
+                SaveSystem.Instance?.Save();
+            }
+        }
+
+        // —— 首通奖励：只在真正推进进度（本次首通）时发 ——
+        if (EndlessRiftRules.MarkCleared(stage))
+        {
+            int mul = isBoss ? GameConfig.ENDLESS_BOSS_FIRSTCLEAR_MUL : 1;
+            int gold = Mathf.RoundToInt(GameConfig.EndlessFirstClearGold(stage) * mul * GoldGainMul);
+            int talent = GameConfig.EndlessFirstClearTalent(stage) * mul;
+            if (gold > 0)
+            {
+                currentGold += gold;
+                BattleUI.Instance?.UpdateGold(currentGold);
+            }
+            if (talent > 0)
+                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talent, save: false, notify: true);
+            GlobalToastUI.Show(isBoss
+                ? $"首通第 {stage} 层记录点！金币 +{gold}，天赋石 +{talent}"
+                : $"首通第 {stage} 层：金币 +{gold}，天赋石 +{talent}", true);
+            SaveSystem.Instance?.Save();
+        }
+
+        // —— 续层 / 记录点双选 ——
+        if (isBoss)
+        {
+            UIManager.Instance?.ShowRiftCheckpointChoice(
+                onEvacuate: EndRunAndReturnToTown,
+                onContinue: AdvanceEndlessRiftStage);
+            return;
+        }
+        AdvanceEndlessRiftStage();
+    }
+
+    /// <summary>
+    /// 无限裂隙续层：过场（黑屏 + 本层映射章背景图，正好呈现换景）后重建下一层并进战。
+    /// 不打关卡图（石墩）——无限裂隙的关间流程就是「打完一层 → 宝箱 → 下一层」。
+    /// </summary>
+    void AdvanceEndlessRiftStage()
+    {
+        EndlessRiftStage++;
+        var cm = ChapterManager.Instance;
+        if (cm == null)
+        {
+            Debug.LogError("[BattleManager] 无限裂隙续层失败：ChapterManager 为空，回城收尾");
+            EndRunAndReturnToTown();
+            return;
+        }
+        int nextStage = EndlessRiftStage;
+        StartCoroutine(CoChapterGateLoading(GameConfig.EndlessChapterForStage(nextStage), () =>
+        {
+            cm.StartEndlessRift(nextStage);
+            if (cm.stageMap != null && cm.stageMap.Count > 0)
+                cm.SelectStage(cm.stageMap[0]);
+        }));
+    }
+
+    /// <summary>
     /// 关间：过场（黑屏 + 本章背景图）→ 关卡选择界面（石墩图）。老虎机在关卡图里演，不在这里。
     /// 普通关与「只有一条路」的关走的是同一条路，不存在跳过关卡图的分支。
     /// </summary>
@@ -3771,11 +4022,12 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         // 【2026-10-10 主人拍板】战斗钱包局内化后，基准不再是城镇金币而是**本局起点** _goldAtRunStart
         // （它已含启动金 / 通关补贴 / 抽中金币这些「进得来带不走」的钱）→
         // delta = 本局真正赚到的（击杀掉落 + 结算按关卡数发的那笔），抽奖花掉的已经扣在里面。
+        // 【2026-10-17 主人拍板】只加不减：delta < 0 意味着「启动金等局内循环资源被花掉且没赚回来」
+        // —— 抽奖有 CanAffordDraw 拦着，亏的只可能是「进得来带不走」的钱，花光就花光，
+        // 绝不倒扣城镇钱包（否则玩家打一趟本城镇金币反而变少）。
         long delta = currentGold - _goldAtRunStart;
         if (delta > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.Gold, delta, save: true, notify: false);
-        else if (delta < 0)
-            ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, -delta, save: true, notify: false);
         else
             SaveSystem.Instance.Save();
         currentGold = _goldAtRunStart;
@@ -3926,6 +4178,17 @@ public class BattleManager : Singleton<BattleManager>, ICombatBoundSingleton
         int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
         if (talentGain > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
+
+        // 【2026-10-17 主人拍板】撤离补偿（替代已停掉的精英事件强化石）：
+        // 强化石现已不再掉落，撤离按本局已通关关数每关 +1 天赋石，中途撤离不空手。
+        // 只在主动撤离（isDeath=false）发；死亡不发；引导局不走本方法（另有固定通关金币）。
+        // 并入 talentGain，让结算界面「天赋石 +N」包含这笔；落盘由下方 Save() 统一做。
+        if (!isDeath && _runStagesCleared > 0)
+        {
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, _runStagesCleared, save: false, notify: true);
+            Debug.Log($"[BattleManager] 撤离补偿：本局已通关 {_runStagesCleared} 关 → 天赋石 +{_runStagesCleared}");
+            talentGain += _runStagesCleared;
+        }
 
         SaveSystem.Instance?.Save();
         BattleStateSaver.Instance?.ClearBattleState();

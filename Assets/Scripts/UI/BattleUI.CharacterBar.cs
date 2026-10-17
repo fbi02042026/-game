@@ -27,7 +27,8 @@ public partial class BattleUI : MonoBehaviour
     {
         if (playerSlot == null) return;
         var ult = HeroThunderUltimate.Instance;
-        // 组件还没建（或功能关闭）时也照常显示「0/10」——按需求第二条不隐藏
+        // 【2026-10-16 主人拍板「0/10 没用就去掉」】奥义关闭时 SetUltCharge 内部整条隐藏，
+        // 不再按旧口径显示「0/10」。
         if (ult == null)
             playerSlot.SetUltCharge(0f, 0, GameConfig.THUNDER_ULT_NEED_MIN, false);
         else

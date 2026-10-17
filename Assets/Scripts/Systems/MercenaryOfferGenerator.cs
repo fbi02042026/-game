@@ -79,8 +79,11 @@ public static class MercenaryOfferGenerator
 
     static MercenaryData RollOne()
     {
-        int star = Random.Range(1, 6);
-        var rarity = MercSkillMapping.StarToRarity(star);
+        // 【2026-10-17 主人拍板】酒馆三选一改用战斗内三选一同款稀有度概率
+        // （普通 8 / 稀有 5 / 传奇 2，见 DraftPool.CollectRecruitMercs），
+        // 不再按星级 1-5 均匀掷（旧口径 = 普通40% / 稀有40% / 传奇20%）。
+        var rarity = RollRarityByBattleWeight();
+        int star = MercSkillMapping.RarityToStar(rarity);
         if (!MercSkillMapping.TryPickHireId(rarity, out var mapRow))
             return RollFallback(star);
 
@@ -108,6 +111,15 @@ public static class MercenaryOfferGenerator
             skillId = mapRow.ActiveSkillId,
             passiveSkillId = mapRow.PassiveSkillId
         };
+    }
+
+    /// <summary>战斗内三选一同款稀有度权重：普通 8 / 稀有 5 / 传奇 2（总和 15 ≈ 53% / 33% / 13%）。</summary>
+    static MercRosterDefs.MercRarity RollRarityByBattleWeight()
+    {
+        int roll = Random.Range(0, 15);
+        if (roll < 8) return MercRosterDefs.MercRarity.Common;
+        if (roll < 13) return MercRosterDefs.MercRarity.Rare;
+        return MercRosterDefs.MercRarity.Legendary;
     }
 
     static int CountAssetUsers(string assetId)

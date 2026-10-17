@@ -6,9 +6,12 @@ using UnityEngine;
 /// </summary>
 public static class StaminaSystem
 {
-    /// <summary>回复 1 点所需秒数（可调）</summary>
-    public const int REGEN_SECONDS_PER_POINT = 60;
+    /// <summary>回复 1 点所需秒数（可调）。
+    /// 2026-10-17 主人拍板：60 → 300（5 分钟 1 点），全局生效，主线同步变慢（主人已知情）。</summary>
+    public const int REGEN_SECONDS_PER_POINT = 300;
     public const int ADVENTURE_COST = 10;
+    /// <summary>无限裂隙单次进入消耗（2026-10-17 主人拍板：每天 2 次 × 20 体力）</summary>
+    public const int ENDLESS_RIFT_COST = 20;
 
     public static int Current
     {
@@ -46,6 +49,24 @@ public static class StaminaSystem
             int remainCurrent = REGEN_SECONDS_PER_POINT - into;
             if (remainCurrent >= REGEN_SECONDS_PER_POINT) remainCurrent = REGEN_SECONDS_PER_POINT;
             return (missing - 1) * REGEN_SECONDS_PER_POINT + remainCurrent;
+        }
+    }
+
+    /// <summary>距下一次回复 1 点的秒数；已满为 0（与 Tick 同一恢复时钟）</summary>
+    public static int SecondsToNextPoint
+    {
+        get
+        {
+            Tick();
+            var data = SaveSystem.Instance?.Data;
+            if (data == null) return 0;
+            if (data.stamina >= Max) return 0;
+            long now = Now();
+            long elapsed = Math.Max(0, now - data.lastStaminaUtc);
+            int into = (int)(elapsed % REGEN_SECONDS_PER_POINT);
+            int remain = REGEN_SECONDS_PER_POINT - into;
+            if (remain >= REGEN_SECONDS_PER_POINT) remain = REGEN_SECONDS_PER_POINT;
+            return remain;
         }
     }
 
@@ -94,8 +115,20 @@ public static class StaminaSystem
 
     public static bool TrySpendForAdventure()
     {
+        return TrySpend(ADVENTURE_COST);
+    }
+
+    /// <summary>无限裂隙进本扣体力（每天 2 次 × 20 体力，2026-10-17 主人拍板）</summary>
+    public static bool TrySpendForEndlessRift()
+    {
+        return TrySpend(ENDLESS_RIFT_COST);
+    }
+
+    /// <summary>按指定数额扣体力（主线 10 / 无限裂隙 20 共用一条链路）</summary>
+    static bool TrySpend(int cost)
+    {
         Tick(save: true);
-        if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Stamina, ADVENTURE_COST, save: true, notify: true))
+        if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Stamina, cost, save: true, notify: true))
             return false;
         // 开始不满回复计时
         var data = SaveSystem.Instance?.Data;

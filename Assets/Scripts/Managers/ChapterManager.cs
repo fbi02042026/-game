@@ -91,6 +91,32 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
+    /// 无限裂隙（2026-10-17 主人拍板）：按绝对层数建**单层**关。
+    /// 背景章 = 每 5 层轮换现有 8 章资源（怪物文件夹同源，自动跟切）；
+    /// 层类型：5 的倍数 = Boss 记录点层，层号 %5==3 = 精英层，其余普通层。
+    /// </summary>
+    public void StartEndlessRift(int riftStage)
+    {
+        int stage = Mathf.Max(1, riftStage);
+        currentChapter = GameConfig.EndlessChapterForStage(stage);
+        currentStageIndex = 0;
+        stageMap.Clear();
+        availableNextStages.Clear();
+        var type = GameConfig.IsEndlessBossStage(stage) ? StageType.Boss
+                 : stage % GameConfig.ENDLESS_CHECKPOINT_INTERVAL == 3 ? StageType.Elite
+                 : StageType.Normal;
+        var sd = new StageData
+        {
+            stageIndex = 0,
+            type = type,
+            nextStages = new List<int>()
+        };
+        stageMap.Add(sd);
+        availableNextStages.Add(sd);
+        Debug.Log($"[ChapterManager] 无限裂隙 第{stage}层（背景章{currentChapter}，类型{type}）");
+    }
+
+    /// <summary>
     /// 分配关卡类型占位：第1关普通、末关 Boss；中间类型由 StageRoller 每关现抽覆盖。
     /// （旧版预排商人/诅咒等已被轮盘规则取代，避免双轨不一致。）
     /// </summary>
@@ -228,6 +254,9 @@ public class ChapterManager : Singleton<ChapterManager>
     public void OnStageComplete()
     {
         if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
+            return;
+        // 无限裂隙：不发主线首通石/章通关奖励，进度与奖励全走自己的结算链（SettleEndlessStageClear）
+        if (BattleManager.Instance != null && BattleManager.Instance.IsEndlessRift)
             return;
 
         // 先把刚打完的关卡记进抽取状态，下一关的概率要用到

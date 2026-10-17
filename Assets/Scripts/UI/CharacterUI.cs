@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
@@ -563,18 +563,11 @@ public class CharacterUI : MonoBehaviour, ITownPage
         }
     }
 
-    /// <summary>总数已含天赋时：显示 base+bonus（如 120+3）；无加成只显示总数。</summary>
+    /// <summary>总数已含天赋：直接显示最终属性值，不再拆「基础+加成」（2026-10-17 主人拍板）。</summary>
     static string FormatAttrWithTalent(float total, float talentBonus, bool roundInt, string decimals = "0")
     {
-        if (Mathf.Abs(talentBonus) < 0.0001f)
-        {
-            if (roundInt) return Mathf.RoundToInt(total).ToString("N0");
-            return total.ToString(decimals);
-        }
-        float baseVal = total - talentBonus;
-        if (roundInt)
-            return Mathf.RoundToInt(baseVal).ToString("N0") + "+" + Mathf.RoundToInt(talentBonus).ToString();
-        return baseVal.ToString(decimals) + "+" + talentBonus.ToString(decimals);
+        if (roundInt) return Mathf.RoundToInt(total).ToString("N0");
+        return total.ToString(decimals);
     }
 
     void RefreshBag()
@@ -1117,11 +1110,8 @@ public class CharacterUI : MonoBehaviour, ITownPage
     }
 
     /// <summary>
-    /// 「看板」入口：预制体优先。
-    /// 2026-09-25 起主人在 Content/Stage/RightButtons/立绘 里摆好了按钮（AutoBind 已绑到 boardEntryButton），
-    /// 此时直接复用，不再运行时生成 BoardButton，避免出现第二个看板按钮；
-    /// 只有预制体里真的没有时才在天赋按钮同父节点（右侧按钮列）下用 BuildSideBtn 兜底。
-    /// 点击统一在这里绑一次（RemoveAllListeners 保证不会重复监听），打开看板选择弹窗。
+    /// 「看板」入口（2026-10-17 主人拍板：角色界面去掉切换人物立绘功能，入口停用）。
+    /// 预制体里主人手摆的 BoardButton 不删，运行时解绑点击并整体隐藏；开关删掉即自动还原旧功能。
     /// </summary>
     void EnsureBoardEntry()
     {
@@ -1138,7 +1128,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
         if (boardEntryButton != null)
         {
             boardEntryButton.onClick.RemoveAllListeners();
-            boardEntryButton.onClick.AddListener(OpenBoard);
+            boardEntryButton.gameObject.SetActive(false);
         }
     }
 

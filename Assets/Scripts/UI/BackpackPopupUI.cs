@@ -361,10 +361,9 @@ public class BackpackPopupUI : MonoBehaviour
         else
             AddRow("日志碎片", "0", dim: true);
 
-        // 5) 佣兵招募卷（普通 / 稀有 / 传说）
-        AddRow("佣兵招募卷·普通", data.mercScrollCommon.ToString());
-        AddRow("佣兵招募卷·稀有", data.mercScrollRare.ToString());
-        AddRow("佣兵招募卷·传说", data.mercScrollLegendary.ToString());
+        // 5) 招募卷轴（2026-10-17 改版：普通卷轴→稀有佣兵；高级招募卷轴→传奇佣兵；旧稀有卷已折算进普通）
+        AddRow("普通卷轴（招稀有佣兵）", data.mercScrollCommon.ToString());
+        AddRow("高级招募卷轴（招传奇佣兵）", data.mercScrollLegendary.ToString());
 
         // 6) 佣兵养成道具（徽记等，排除 frag: 本命碎片）
         bool growShown = false;

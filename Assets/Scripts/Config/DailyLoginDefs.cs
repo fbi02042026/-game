@@ -184,7 +184,8 @@ public static class DailyLoginDefs
         Res("金币 ×250",          ResourceWallet.ResourceType.Gold,         250), // D2
         Frag("塔克碎片 ×3",       STARTER_MERC_ID,                            3), // D3
         Res("天赋石 ×3",          ResourceWallet.ResourceType.TalentPoint,    3), // D4 每日登录保底 3 石
-        Res("强化石 ×2",          ResourceWallet.ResourceType.EnchantStone,   2), // D5
+        // 【2026-10-17 主人拍板】强化石暂无用途 → D5 原「强化石×2」按商店汇率（1石=120金）折成金币×240（表 daily_login 同步改）
+        Res("金币 ×240",          ResourceWallet.ResourceType.Gold,          240), // D5
         Res("分解材料 ×8",        ResourceWallet.ResourceType.DecomposeMat,   8), // D6
         Pack(Res("钻石 ×60",      ResourceWallet.ResourceType.Diamond,       60),
              LegendFrag("传说碎片 ×2", 2)),                                      // D7 周峰值
