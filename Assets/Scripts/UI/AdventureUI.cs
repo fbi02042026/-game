@@ -258,6 +258,12 @@ public class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, IDragHan
     const float NAV_GAP_PAD = 8f;
     /// <summary>MapRoot 底边与 DetailPanel 顶边之间的间隙；瘦屏拉伸填满中间时作用于此。</summary>
     const float MAP_BOTTOM_GAP = 16f;
+    /// <summary>
+    /// 瘦屏多余高度的分配比例（2026-10-17 主人「高屏有很大空隙，尽量保持原始比例」）：
+    /// 地图不拉伸、保持原始高度，多余高度 = 地图上方留白 × 此比例 + 下方 × (1-此比例)。
+    /// 0.5 = 上下均分（地图在顶栏~详情面板带内垂直居中）；0 = 全给下方（原行为，一大块空隙）。
+    /// </summary>
+    const float MAP_EXTRA_TOP_SHARE = 0.5f;
 
     /// <summary>
     /// AdventureUI 专用竖屏适配（主人点名要求的三条改动统一入口）。
@@ -285,6 +291,8 @@ public class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, IDragHan
                 if (mapRoot != null) RestoreAdventureBase(mapRoot);
                 if (detail != null) RestoreAdventureBase(detail);
                 if (mapBg != null) RestoreAdventureBase(mapBg.rectTransform);
+                var wmBtnRestore = right != null ? right.Find("WorldMapBtn") as RectTransform : null;
+                if (wmBtnRestore != null) RestoreAdventureBase(wmBtnRestore);
                 RestoreAdventureSidebarOrder(right);
                 return;
             }
@@ -319,16 +327,36 @@ public class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, IDragHan
                 if (mapRoot != null) FitAdventureMapRootRight(mapRoot);
             }
             if (detail != null) FitAdventureDetailPanel(detail, detailBottomGap);
-            // 改动 4 必须最后：依赖 RightContent 顶边与 DetailPanel 的最终位置，顺序不能反。
+            // 改动 4（拉伸填满）保留但默认关——主人否了「背景框放大」的效果（EnableAdventureMapStretch=false）。
             if (mapRoot != null && right != null && detail != null && EnableAdventureMapStretch)
                 FitAdventureMapRootStretch(mapRoot, right, detail, navReserved);
+            // 2026-10-17 主人「高屏有很大空隙，尽量保持原始比例」：地图不拉伸、保持预制体原始高度，
+            // 多余高度按 MAP_EXTRA_TOP_SHARE 上下分配（地图在顶栏~详情面板带内垂直居中）。
+            // 必须在 DetailPanel 定位之后跑（要拿它的最终顶边）。
+            if (mapRoot != null && right != null && detail != null)
+                FitAdventureMapRootCentered(mapRoot, right, detail);
+            // 世界地图按钮是 RightContent 居中锚点，屏越高越往上漂（相对地图的位置随屏高变化）；
+            // 钉回设计屏（1280 高）时与地图底边的相对几何，x 不动。
+            var worldMapBtn = right != null ? right.Find("WorldMapBtn") as RectTransform : null;
+            if (worldMapBtn != null && mapRoot != null && right != null)
+                FitWorldMapBtnToMap(worldMapBtn, right, mapRoot);
 
             // 2026-09-28 主人反馈真机「下面空了大片黑底」：排版不敢盲改，先打一行诊断数据，
             // 真机跑一次把这条 log 发回来，用真实数字定根因（导航预留量大了？还是面板没沉底？）。
             if (detail != null && rootRt != null)
+            {
+                float mapTopLog = -1f, mapBotLog = -1f;
+                if (mapRoot != null && right != null)
+                {
+                    float rcTopLog = rootRt.rect.height + right.offsetMax.y;
+                    mapTopLog = rcTopLog + mapRoot.offsetMax.y;
+                    mapBotLog = rcTopLog + mapRoot.offsetMin.y;
+                }
                 Debug.Log($"[AdventureFit] rootH={rootRt.rect.height:F0} navReserved={navReserved:F0} " +
                           $"detailBottomGap={detailBottomGap:F0} detailBottom={detail.offsetMin.y:F0} " +
-                          $"detailTop={detail.offsetMax.y:F0} screenW={Screen.width} screenH={Screen.height}");
+                          $"detailTop={detail.offsetMax.y:F0} mapTop={mapTopLog:F0} mapBottom={mapBotLog:F0} " +
+                          $"screenW={Screen.width} screenH={Screen.height}");
+            }
         }
         finally
         {
@@ -648,6 +676,86 @@ public class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, IDragHan
 
         b.applied = true;
         _adventureUiBase[mapRoot.GetInstanceID()] = b;
+    }
+
+    /// <summary>
+    /// 瘦屏空隙治理（主人 2026-10-17「高屏有很大空隙，尽量保持原始比例」）：
+    /// MapRoot 保持预制体原始高度不变，把「地图顶边 ~ 详情面板顶边」带内的多余高度
+    /// 按 MAP_EXTRA_TOP_SHARE 上下分配 —— 地图整体在带内垂直居中，只平移、零缩放，
+    /// MapBg 背景框 / 关卡立绘 / 标题栏全部保持原始尺寸与比例（改动 4 拉伸方案主人已否，不启用）。
+    /// 幂等：drop 始终从 base 重算，不累积；标准屏 / 关开关由 ApplyAdventureFit 的 RestoreAdventureBase 还原。
+    /// 依赖顺序：必须在 FitAdventureDetailPanel 之后调用（要拿详情面板最终顶边）。
+    /// </summary>
+    void FitAdventureMapRootCentered(RectTransform mapRoot, RectTransform right, RectTransform detail)
+    {
+        var b = CaptureAdventureBase(mapRoot);
+        var rightBase = CaptureAdventureBase(right);
+        var detailBase = CaptureAdventureBase(detail);
+
+        // 逻辑高 H：RightContent 的父即 AdventureUI 根（stretch 全屏），取其 rect.height。
+        var rootRt = right.parent as RectTransform;
+        float H = rootRt != null && rootRt.rect.height > 0f ? rootRt.rect.height : GameConfig.DESIGN_HEIGHT;
+
+        // 地图顶边（bottom-origin，root 帧）：RightContent 顶(H + rightBase.offsetMax.y) + MapRoot 顶溢出(b.offsetMax.y)。
+        float mapTopBase = H + rightBase.offsetMax.y + b.offsetMax.y;
+        float mapH = b.offsetMax.y - b.offsetMin.y;   // 预制体原始高度（654），保持不变
+        // 详情面板顶边（底部锚定后，root 帧）：底距 + 原始高度。
+        float origDetailH = detailBase.offsetMax.y - detailBase.offsetMin.y;
+        float detailTop = detail.offsetMin.y + origDetailH;
+
+        // 带内多余高度 → 按比例上下分配（drop = 地图整体下移量，地图上留 drop、下留 extra-drop）。
+        float bandH = mapTopBase - (detailTop + MAP_BOTTOM_GAP);
+        float extra = bandH - mapH;
+        float drop = extra > 0f ? extra * MAP_EXTRA_TOP_SHARE : 0f;
+
+        // MapRoot 锚 y=(1,1) 单点贴 RC 顶：offset 都是相对 RC 顶边，同时减 drop = 整体下移、高度不变。
+        mapRoot.offsetMax = new Vector2(MAP_RIGHT_INSET, b.offsetMax.y - drop);
+        mapRoot.offsetMin = new Vector2(b.offsetMin.x, b.offsetMin.y - drop);
+
+        b.applied = true;
+        _adventureUiBase[mapRoot.GetInstanceID()] = b;
+    }
+
+    /// <summary>
+    /// WorldMapBtn 竖屏跟随（2026-10-17）：按钮是 RightContent 居中锚点，逻辑高变大时
+    /// 它的绝对位置随屏心漂移，和地图的相对关系会变（设计屏上压在地图底边左下角，高屏会飘进空隙）。
+    /// 这里按 base 锚点在设计屏高（1280）下反推「按钮中心 − 地图底边」的相对量，
+    /// 再把按钮中心钉到「当前地图底边 + 该相对量」，只平移 y、x 不动，尺寸不变。
+    /// 幂等：始终从 base 重算；标准屏 / 关开关由 RestoreAdventureBase 还原。
+    /// </summary>
+    void FitWorldMapBtnToMap(RectTransform btn, RectTransform right, RectTransform mapRoot)
+    {
+        var btnBase = CaptureAdventureBase(btn);
+        var rightBase = CaptureAdventureBase(right);
+        var mapBase = CaptureAdventureBase(mapRoot);
+
+        var rootRt = right.parent as RectTransform;
+        float H = rootRt != null && rootRt.rect.height > 0f ? rootRt.rect.height : GameConfig.DESIGN_HEIGHT;
+
+        // 设计屏高下的几何（bottom-origin，root 帧）：反推「按钮中心在地图底边上方多少」。
+        float designH = GameConfig.DESIGN_HEIGHT;
+        float rcMinDesign = rightBase.offsetMin.y;
+        float rcMaxDesign = designH + rightBase.offsetMax.y;
+        float btnMinDesign = Mathf.Lerp(rcMinDesign, rcMaxDesign, btnBase.anchorMin.y) + btnBase.offsetMin.y;
+        float btnMaxDesign = Mathf.Lerp(rcMinDesign, rcMaxDesign, btnBase.anchorMax.y) + btnBase.offsetMax.y;
+        float btnCenterDesign = (btnMinDesign + btnMaxDesign) * 0.5f;
+        float mapBottomDesign = rcMaxDesign + mapBase.offsetMin.y;
+        float offsetAboveMapBottom = btnCenterDesign - mapBottomDesign;   // ≈146（设计屏：按钮中心在地图底边上方146）
+
+        // 运行时：地图底边（已含居中下移）→ 目标按钮中心 → 反推按钮 offset（x 保持 base）。
+        float rcMaxNow = H + rightBase.offsetMax.y;
+        float mapBottomNow = rcMaxNow + mapRoot.offsetMin.y;
+        float btnCenterNow = mapBottomNow + offsetAboveMapBottom;
+        float anchorYNow = Mathf.Lerp(rightBase.offsetMin.y, rcMaxNow, btnBase.anchorMin.y);
+        float halfSumNow = btnCenterNow - anchorYNow;                        // (offsetMin.y+offsetMax.y)/2 的目标值
+        float halfSumBase = (btnBase.offsetMin.y + btnBase.offsetMax.y) * 0.5f;
+        float d = halfSumNow - halfSumBase;
+
+        btn.offsetMin = new Vector2(btnBase.offsetMin.x, btnBase.offsetMin.y + d);
+        btn.offsetMax = new Vector2(btnBase.offsetMax.x, btnBase.offsetMax.y + d);
+
+        btnBase.applied = true;
+        _adventureUiBase[btn.GetInstanceID()] = btnBase;
     }
 
     /// <summary>世界地图选完区域后的回调（传送门 WorldMapPortal 走这里开战）。</summary>
@@ -1525,6 +1633,8 @@ public class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, IDragHan
         idx = (idx + 1) % _availableChapters.Count;
         _selectedChapter = _availableChapters[idx];
         RefreshAll();
+        // 成功滑到后续章节 → 「左滑引导」永久关闭
+        if (_selectedChapter > 1) MarkSwipeGuideDone();
     }
 
     // ────────────────────────────────────────────────────
@@ -1826,6 +1936,208 @@ public class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, IDragHan
         SoftenMapBgOverHall();
 
         RefreshMapLayers();
+        EnsureWorldMapEntry();
+        RefreshChapterSwipeGuide();
+    }
+
+    // ────────────────────────────────────────────────────
+    // 世界地图入口 + 滑动翻章引导（2026-10-17 主人拍板：章末不再弹「回城/下一章」二选一，
+    // 下一章由世界地图第二地块或本页左滑进入）
+    // ────────────────────────────────────────────────────
+
+    Button _worldMapBtn;
+    bool _worldMapBtnWired;
+    RectTransform _swipeGuide;
+    Coroutine _swipeGuideAnim;
+    /// <summary>「左滑前往下一章」引导只提示一次，成功滑到后续章节即永久关闭。</summary>
+    const string SwipeGuideDoneKey = "adventure.guide.ch2swipe.done";
+
+    // 顶部体力面板（主人 2026-10-17 在预制体 Top 下加的 体力Panel，结构同大厅金币控件）
+    Transform _staminaPanelTf;
+    Text _staminaText;
+    Text _staminaRegenText;
+    bool _staminaWired;
+    float _staminaHudTimer;
+
+    void Update()
+    {
+        // 体力倒计时每 0.5s 刷一次；面板未绑上时顺带重试绑定
+        _staminaHudTimer -= Time.unscaledDeltaTime;
+        if (_staminaHudTimer > 0f) return;
+        _staminaHudTimer = 0.5f;
+        RefreshStaminaHud();
+    }
+
+    /// <summary>顶部体力面板：数值只显示当前值（与大厅同口径），未满时下方挂「回满倒计时」，加号走看广告领体力。</summary>
+    void RefreshStaminaHud()
+    {
+        if (_staminaPanelTf == null)
+            _staminaPanelTf = transform.Find("Top/体力Panel");
+        if (_staminaPanelTf == null) return;
+        if (_staminaText == null)
+            _staminaText = _staminaPanelTf.Find("GoldText")?.GetComponent<Text>();
+        if (!_staminaWired)
+        {
+            var plus = _staminaPanelTf.Find("PlusButton")?.GetComponent<Button>();
+            if (plus != null)
+            {
+                _staminaWired = true;
+                plus.onClick.AddListener(ResourceAdRewards.TryClaimStamina);
+            }
+        }
+        if (_staminaRegenText == null) _staminaRegenText = BuildStaminaRegenLabel(_staminaPanelTf);
+
+        StaminaSystem.Tick(save: false);
+        int cur = StaminaSystem.Current;
+        if (_staminaText != null)
+            _staminaText.text = $"{cur}/{StaminaSystem.Max}";
+        if (_staminaRegenText != null)
+        {
+            if (StaminaSystem.IsFull)
+            {
+                if (_staminaRegenText.gameObject.activeSelf)
+                    _staminaRegenText.gameObject.SetActive(false);
+            }
+            else
+            {
+                if (!_staminaRegenText.gameObject.activeSelf)
+                    _staminaRegenText.gameObject.SetActive(true);
+                _staminaRegenText.text = "回满 " + StaminaSystem.FormatCountdown(StaminaSystem.SecondsToFull);
+            }
+        }
+    }
+
+    /// <summary>回满倒计时标签（口径同 GuildHallUI.EnsureStaminaRegenLabel）。</summary>
+    Text BuildStaminaRegenLabel(Transform staminaPanel)
+    {
+        var exist = staminaPanel.Find("RegenTimer");
+        if (exist != null) return exist.GetComponent<Text>();
+        var go = new GameObject("RegenTimer", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(staminaPanel, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, -2f);
+        rt.sizeDelta = new Vector2(0f, 28f);
+        var text = go.GetComponent<Text>();
+        text.font = GameFonts.GetChinese();
+        text.fontSize = 20;
+        text.alignment = TextAnchor.UpperCenter;
+        text.color = new Color(0.95f, 0.9f, 0.55f, 1f);
+        text.raycastTarget = false;
+        text.text = "";
+        return text;
+    }
+
+    /// <summary>「世界地图」入口：优先用主人在 RightContent 下摆的 WorldMapBtn（2026-10-17，
+    /// 预制体只有 Image，运行时补 Button），没有才回退到标题栏代码生成；
+    /// 通关第 1 章后才显示，点击弹出世界地图选区域开战。</summary>
+    void EnsureWorldMapEntry()
+    {
+        var pre = transform.Find("RightContent/WorldMapBtn");
+        if (pre != null)
+        {
+            var btn = pre.GetComponent<Button>();
+            if (btn == null) btn = pre.gameObject.AddComponent<Button>();
+            if (!_worldMapBtnWired)
+            {
+                _worldMapBtnWired = true;
+                btn.onClick.AddListener(OnOpenWorldMap);
+            }
+            _worldMapBtn = btn;
+            bool show = WorldMapPortal.ShouldAppear();
+            if (pre.gameObject.activeSelf != show)
+                pre.gameObject.SetActive(show);
+            return;
+        }
+        var barTf = chapterTitle != null ? chapterTitle.transform.parent : null;
+        if (barTf == null) return;
+        if (_worldMapBtn == null)
+            _worldMapBtn = barTf.Find("WorldMapBtn")?.GetComponent<Button>();
+        if (_worldMapBtn == null)
+        {
+            _worldMapBtn = CreateIconBtn(barTf, "WorldMapBtn", "世界地图", new Vector2(-96, -27), 34f);
+            var wrt = _worldMapBtn.transform as RectTransform;
+            wrt.sizeDelta = new Vector2(108f, 34f);
+            var lbl = _worldMapBtn.GetComponentInChildren<Text>();
+            if (lbl != null) lbl.fontSize = 20;
+            _worldMapBtn.onClick.AddListener(OnOpenWorldMap);
+        }
+        bool show2 = WorldMapPortal.ShouldAppear();
+        if (_worldMapBtn.gameObject.activeSelf != show2)
+            _worldMapBtn.gameObject.SetActive(show2);
+    }
+
+    void OnOpenWorldMap()
+    {
+        WorldMapPopup.Show(OnWorldMapEnter);
+    }
+
+    /// <summary>通关第 1 章后，在地图区底部提示左滑翻章；引导完成后永久隐藏。</summary>
+    void RefreshChapterSwipeGuide()
+    {
+        bool need = _selectedChapter <= 1
+            && SaveSystem.Instance != null && SaveSystem.Instance.Data != null
+            && SaveSystem.Instance.Data.HasClearedChapter(1)
+            && !PlayerPrefs.HasKey(SwipeGuideDoneKey);
+        if (!need)
+        {
+            if (_swipeGuide != null) _swipeGuide.gameObject.SetActive(false);
+            return;
+        }
+        if (_swipeGuide == null) _swipeGuide = BuildSwipeGuideNode();
+        if (_swipeGuide == null) return;
+        _swipeGuide.gameObject.SetActive(true);
+        if (_swipeGuideAnim != null) StopCoroutine(_swipeGuideAnim);
+        _swipeGuideAnim = StartCoroutine(CoSwipeGuidePulse());
+    }
+
+    RectTransform BuildSwipeGuideNode()
+    {
+        var right = transform.Find("RightContent");
+        var mapRoot = right != null ? right.Find("MapRoot") : transform.Find("MapRoot");
+        if (mapRoot == null) return null;
+        var go = new GameObject("ChapterSwipeGuide", typeof(RectTransform), typeof(Text));
+        go.transform.SetParent(mapRoot, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 40f);
+        rt.sizeDelta = new Vector2(420f, 48f);
+        var t = go.GetComponent<Text>();
+        t.text = "←  左滑前往下一章";
+        t.fontSize = 30;
+        t.alignment = TextAnchor.MiddleCenter;
+        t.color = new Color(1f, 0.92f, 0.6f, 1f);
+        return rt;
+    }
+
+    IEnumerator CoSwipeGuidePulse()
+    {
+        while (_swipeGuide != null && _swipeGuide.gameObject.activeSelf)
+        {
+            var t = _swipeGuide.GetComponent<Text>();
+            if (t != null)
+            {
+                float a = 0.55f + 0.45f * Mathf.Sin(Time.unscaledTime * 4f);
+                var c = t.color; c.a = a; t.color = c;
+            }
+            yield return null;
+        }
+        _swipeGuideAnim = null;
+    }
+
+    void MarkSwipeGuideDone()
+    {
+        if (!PlayerPrefs.HasKey(SwipeGuideDoneKey))
+        {
+            PlayerPrefs.SetInt(SwipeGuideDoneKey, 1);
+            PlayerPrefs.Save();
+        }
+        if (_swipeGuide != null && _swipeGuide.gameObject.activeSelf)
+            _swipeGuide.gameObject.SetActive(false);
     }
 
     /// <summary>大厅当底时：MapBg 不做全屏偏左 Envelope；仅内容区等比居中。</summary>
@@ -2647,7 +2959,8 @@ public class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, IDragHan
                 }
             }
         }
-        _staminaIconSprite = Resources.Load<Sprite>("UI/Icons/Stamina");
+        // 主人 2026-10-17 放入的体力新图（Resources/Art/ 下，路径与 Art 源不同）
+        _staminaIconSprite = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina");
         return _staminaIconSprite;
     }
 

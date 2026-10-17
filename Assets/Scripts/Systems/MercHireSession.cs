@@ -10,7 +10,7 @@ using UnityEngine;
 /// </summary>
 public static class MercHireSession
 {
-    public const int RefreshCooldownSeconds = 30 * 60;
+    public const int RefreshCooldownSeconds = 3 * 60 * 60;   // 2026-10-17 主人拍板：手动刷新冷却 30 分钟 → 3 小时
 
     public static List<MercenaryData> GetHired()
     {

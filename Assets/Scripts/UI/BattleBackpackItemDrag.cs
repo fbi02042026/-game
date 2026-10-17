@@ -24,7 +24,7 @@ public class BattleBackpackItemDrag : MonoBehaviour, IBeginDragHandler, IDragHan
     void Awake()
     {
         _rt = GetComponent<RectTransform>();
-        // 【2026-10-09 主人拍板】装备格也要能看属性，所以照 BackpackPopupUI.WireGridClicks 的做法
+        // 【2026-10-09 主人拍板】装备格也要能看属性，所以照背包格子点击的通用做法
         // 额外补一个 Button 挂 onClick，与上面的拖拽 / OnPointerClick 共存、互不干扰。
         // 这里**不**加 BattleLootMode.Active 判据 —— 普通战斗中点装备也要能看属性。
         WireEquipStatClick();

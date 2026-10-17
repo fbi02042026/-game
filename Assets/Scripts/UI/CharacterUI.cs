@@ -176,6 +176,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
     {
         if (!_preloaded) PreloadOnce();
         EnsureVisibleTransform();
+        ApplyBgEnvelopeForThinScreen();
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
         SetGuildOverlay(true);
@@ -684,16 +685,22 @@ public class CharacterUI : MonoBehaviour, ITownPage
     }
 
     /// <summary>
-    /// 「背包」按钮：切换界面内的 Content/BackpackPanel（展开/收起），不再弹独立弹窗。
+    /// 「背包」按钮：切换界面内的 Content/BackpackPanel（展开/收起）。
     /// 展开时把 SkillSelectUI 收掉，两个面板互斥，避免叠在一起。
-    /// 只有预制体里真的没有 BackpackPanel 时才回退到独立弹窗 BackpackPopupUI。
+    /// 【2026-10-17 主人拍板】独立背包弹窗 BackpackPopupUI 已删，背包只用预制体里的面板。
     /// </summary>
     public void OpenBackpack()
     {
         if (bagPanelRoot == null)
             bagPanelRoot = transform.Find("Content/BackpackPanel") ?? FindDeep(transform, "BackpackPanel");
 
-        if (bagPanelRoot != null)
+        if (bagPanelRoot == null)
+        {
+            // 预制体里连面板都没有 = 预制体被改坏了，报错可见（不兜底）
+            Debug.LogError("[CharacterUI] 预制体里找不到 Content/BackpackPanel，背包无法打开");
+            return;
+        }
+
         {
             bool open = !bagPanelRoot.gameObject.activeSelf;
             if (!open)
@@ -709,17 +716,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
             HideSkillSelect();
             RefreshBag();
             ApplyBackpackPanelFit();     // 面板打开后做一次瘦屏防溢出 / 防裁切
-            return;
         }
-
-        // 兜底：没有界面内面板时才走原来的独立背包弹窗（复用 TownBackpackGrid / BackpackItemActionUI）
-        var popup = BackpackPopupUI.Ensure(transform);
-        if (popup == null)
-        {
-            UIManager.Instance?.ShowToast("背包未就绪");
-            return;
-        }
-        popup.Show();
     }
 
     /// <summary>
@@ -1042,7 +1039,7 @@ public class CharacterUI : MonoBehaviour, ITownPage
     /// 背包有效页数：只数「至少有一格未锁」的页。
     /// 角色页 32 格（8 列 × 4 显示行，一个显示行折 2 个逻辑行）一页就铺到 8 个逻辑行，
     /// 已经 ≥ BACKPACK_HEIGHT_MAX(4) → 16 个逻辑格一页全显示完，第 2 页起全是越界锁格 → 只有 1 页。
-    /// BackpackPopupUI 走基类（4 列、page 恒为 0）时返回值仍 >= 1，**绝不返回 0**。
+    /// 返回值始终 >= 1，**绝不返回 0**。
     /// </summary>
     int BagPageCount()
     {
@@ -1130,18 +1127,6 @@ public class CharacterUI : MonoBehaviour, ITownPage
             boardEntryButton.onClick.RemoveAllListeners();
             boardEntryButton.gameObject.SetActive(false);
         }
-    }
-
-    /// <summary>打开看板选择弹窗（列出已解锁佣兵，可设为看板或恢复默认）。</summary>
-    public void OpenBoard()
-    {
-        var popup = BoardSelectPopupUI.Ensure(transform);
-        if (popup == null)
-        {
-            UIManager.Instance?.ShowToast("看板未就绪");
-            return;
-        }
-        popup.Show();
     }
 
     void FlipPortrait()
@@ -1254,7 +1239,55 @@ public class CharacterUI : MonoBehaviour, ITownPage
         // 之后就没人铺页根了 ⇒ 整页缩成 0×0、子节点全挤到原点（主人反馈「角色界面整体跑偏」）。
         // 这里自己补一次拉伸：只定页根的边框，不碰任何子节点坐标，删掉本行即可一键回退。
         UICanvasSetup.EnsureRootStretch(transform as RectTransform);
+        ApplyBgEnvelopeForThinScreen();
         _canvasConfigured = true;
+    }
+
+    RectTransform _bgEnvelopeRt;
+    bool _bgEnvelopeBaseCaptured;
+    bool _bgEnvelopeOn;
+    Vector2 _bgBaseAnchorMin, _bgBaseAnchorMax, _bgBaseOffsetMin, _bgBaseOffsetMax, _bgBasePivot;
+
+    /// <summary>
+    /// 角色页底图（bg，800×1421 固定出血图）瘦屏适配（2026-10-17 主人「其他界面高屏也别露底」）：
+    /// 高瘦屏（逻辑高>1280）上底图上下各露 ~90px 底，等比 Envelope 放大盖住 —— 比例不变、只裁两侧出血，
+    /// 与 GuildHall Background / Tavern 用同一套 ApplyEnvelopeImage 机制；
+    /// 标准 9:16 屏一个像素不动（比 GuildHall 的无条件 envelope 更保守），从瘦屏切回标准屏时还原预制体原始锚点。
+    /// </summary>
+    void ApplyBgEnvelopeForThinScreen()
+    {
+        if (_bgEnvelopeRt == null)
+        {
+            var bg = transform.Find("bg");
+            _bgEnvelopeRt = bg as RectTransform;
+            if (_bgEnvelopeRt == null) return;
+        }
+        if (!_bgEnvelopeBaseCaptured)
+        {
+            _bgBaseAnchorMin = _bgEnvelopeRt.anchorMin;
+            _bgBaseAnchorMax = _bgEnvelopeRt.anchorMax;
+            _bgBaseOffsetMin = _bgEnvelopeRt.offsetMin;
+            _bgBaseOffsetMax = _bgEnvelopeRt.offsetMax;
+            _bgBasePivot = _bgEnvelopeRt.pivot;
+            _bgEnvelopeBaseCaptured = true;
+        }
+        if (UiLayoutStretch.IsThinnerScreen())
+        {
+            UiLayoutStretch.ApplyEnvelopeImage(_bgEnvelopeRt);
+            _bgEnvelopeOn = true;
+        }
+        else if (_bgEnvelopeOn)
+        {
+            // 从瘦屏切回标准屏（编辑器改 Game 分辨率）：还原预制体原始锚点/尺寸，摘掉 Envelope。
+            _bgEnvelopeRt.anchorMin = _bgBaseAnchorMin;
+            _bgEnvelopeRt.anchorMax = _bgBaseAnchorMax;
+            _bgEnvelopeRt.offsetMin = _bgBaseOffsetMin;
+            _bgEnvelopeRt.offsetMax = _bgBaseOffsetMax;
+            _bgEnvelopeRt.pivot = _bgBasePivot;
+            var fitter = _bgEnvelopeRt.GetComponent<AspectRatioFitter>();
+            if (fitter != null) Destroy(fitter);
+            _bgEnvelopeOn = false;
+        }
     }
 
     static void SetGuildOverlay(bool characterOpen)

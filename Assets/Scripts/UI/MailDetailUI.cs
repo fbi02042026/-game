@@ -597,12 +597,12 @@ public class MailDetailUI : MonoBehaviour
         }
     }
 
-    /// <summary>flat 货币 → 物品格清单。图标同 DailyLoginUI 口径：Common 目录（金币/钻石/天赋石/强化石/分解材料），体力走 UI/Icons/Stamina。</summary>
+    /// <summary>flat 货币 → 物品格清单。图标同 DailyLoginUI 口径：Common 目录（金币/钻石/天赋石/强化石/分解材料），体力奖励格用体力药水图（2026-10-17 主人拍板）。</summary>
     static void AppendFlatRewardItems(MailEntry m, List<RewardItem> items)
     {
         if (m.gold > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_gold"), name = "金币", amount = m.gold });
         if (m.diamond > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_diamond_blue"), name = "钻石", amount = m.diamond });
-        if (m.stamina > 0) items.Add(new RewardItem { icon = Resources.Load<Sprite>("UI/Icons/Stamina"), name = "体力", amount = m.stamina });
+        if (m.stamina > 0) items.Add(new RewardItem { icon = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina_potion"), name = "体力", amount = m.stamina });
         if (m.enchantStones > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_enchant_stone"), name = "附魔石", amount = m.enchantStones });
         if (m.decomposeMats > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_decompose_mat"), name = "分解材料", amount = m.decomposeMats });
         if (m.talentPoints > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_talent_stone"), name = "天赋石", amount = m.talentPoints });
@@ -675,6 +675,8 @@ public class MailDetailUI : MonoBehaviour
             case "enchant": return "附魔石";
             case "mat": return "分解材料";
             case "talent": return "天赋石";
+            case "scrollCommon": return "普通招募卷轴";
+            case "scrollLegendary": return "高级招募卷轴";
             default: return key;
         }
     }

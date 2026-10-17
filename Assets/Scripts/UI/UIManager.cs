@@ -91,18 +91,6 @@ public class UIManager : Singleton<UIManager>
         }
     }
 
-    public void ShowStageClearUI(List<EquipInstance> rewards, int bonusGold, System.Action<EquipInstance> onSelect)
-    {
-        // 兼容旧回调：新 UI 走 StageClearEquipUI（装备/丢弃）
-        StageClearEquipUI.Show(rewards, bonusGold, (picked, equipOrReplace) =>
-        {
-            if (equipOrReplace)
-                onSelect?.Invoke(picked);
-            else
-                onSelect?.Invoke(null);
-        });
-    }
-
     public void ShowChapterClearChoice(Action onReturnTown, Action onNextChapter)
         => ShowChoicePanel("章节结算", "选择回城休整，或继续下一章冒险", "回城", "下一章", onReturnTown, onNextChapter);
 

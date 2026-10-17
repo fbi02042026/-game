@@ -654,7 +654,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         _wired = true;
         if (closeButton != null) closeButton.onClick.AddListener(Close);
         if (refreshButton != null) refreshButton.onClick.AddListener(OnRefresh);
-        if (infoButton != null) infoButton.onClick.AddListener(ShowInfo);
+        if (infoButton != null) infoButton.onClick.AddListener(ShowRecruitOdds);   // 2026-10-17：info 改弹概率公示（口径与实际随机一致）；旧规则面板 ShowInfo 保留未删
 
         for (int i = 0; i < cards.Length; i++)
         {
@@ -764,6 +764,47 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
             passiveSkillId = src.passiveSkillId,
             favorLevel = 1
         };
+    }
+
+    /// <summary>
+    /// info 按钮弹出招募概率公示（2026-10-17 主人拍板：info 节点 → 概率弹窗）。
+    /// 口径与 MercenaryOfferGenerator 实际掷点完全一致（常量直引，不会公示假数）：
+    /// 佣兵 100%；品质 普通 8/15 ≈ 53.3% / 稀有 5/15 ≈ 33.3% / 传奇 2/15 ≈ 13.3%。
+    /// </summary>
+    void ShowRecruitOdds()
+    {
+        var rows = new List<DraftPool.OddsRow>
+        {
+            new DraftPool.OddsRow
+            {
+                Section = DraftPool.SEC_TYPE,
+                Label = "佣兵",
+                Percent = 100f,
+                Color = RarityPalette.Common,
+            },
+            new DraftPool.OddsRow
+            {
+                Section = DraftPool.SEC_QUALITY,
+                Label = "传奇",
+                Percent = MercenaryOfferGenerator.LegendaryWeight * 100f / MercenaryOfferGenerator.RollTotal,
+                Color = RarityPalette.Legendary,
+            },
+            new DraftPool.OddsRow
+            {
+                Section = DraftPool.SEC_QUALITY,
+                Label = "稀有",
+                Percent = MercenaryOfferGenerator.RareWeight * 100f / MercenaryOfferGenerator.RollTotal,
+                Color = RarityPalette.Rare,
+            },
+            new DraftPool.OddsRow
+            {
+                Section = DraftPool.SEC_QUALITY,
+                Label = "普通",
+                Percent = MercenaryOfferGenerator.CommonWeight * 100f / MercenaryOfferGenerator.RollTotal,
+                Color = RarityPalette.Common,
+            },
+        };
+        DraftOddsPopupUI.ToggleWith(rows);
     }
 
     void ShowInfo()

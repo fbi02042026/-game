@@ -78,8 +78,6 @@ public static class SoftCopyrightUiProbe
 
     public static NextStageRouletteUI Roulette => NextStageRouletteUI.Instance;
 
-    public static OfflineRewardPopup OfflinePopup => OfflineRewardPopup.Instance;
-
     public static TavernRosterPanel TavernRecruit => TavernRosterPanel.Instance;
 
     public static bool IsTalentVisible =>

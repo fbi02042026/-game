@@ -37,6 +37,8 @@ public class NewMailToast : MonoBehaviour
     Phase _phase = Phase.Done;
     float _timer;
     float _xFinal;
+    /// <summary>实际停留高度：YPos 基础上上移 2 个自身框高（2026-10-17 主人要求）。</summary>
+    float _yFinal;
 
     public static void Notify()
     {
@@ -147,6 +149,8 @@ public class NewMailToast : MonoBehaviour
         float h = _label.preferredHeight + PadY * 2f;
         _panel.sizeDelta = new Vector2(w, h);
         _xFinal = (GameConfig.DESIGN_WIDTH * 0.5f) - (w * 0.5f) - MarginRight;
+        // 【2026-10-17 主人要求】提示往上移 2 个自身框高
+        _yFinal = YPos + h * 2f;
     }
 
     void Begin()
@@ -158,7 +162,7 @@ public class NewMailToast : MonoBehaviour
         _phase = Phase.In;
         _timer = 0f;
         gameObject.SetActive(true);
-        _panel.anchoredPosition = new Vector2(OffX, YPos);
+        _panel.anchoredPosition = new Vector2(OffX, _yFinal);
     }
 
     void Update()
@@ -171,12 +175,12 @@ public class NewMailToast : MonoBehaviour
         {
             float k = Mathf.Clamp01(_timer / SlideInTime);
             float e = 1f - (1f - k) * (1f - k);   // EaseOutQuad：快进慢出
-            _panel.anchoredPosition = new Vector2(Mathf.Lerp(OffX, _xFinal, e), YPos);
+            _panel.anchoredPosition = new Vector2(Mathf.Lerp(OffX, _xFinal, e), _yFinal);
             if (_timer >= SlideInTime)
             {
                 _phase = Phase.Hold;
                 _timer = 0f;
-                _panel.anchoredPosition = new Vector2(_xFinal, YPos);
+                _panel.anchoredPosition = new Vector2(_xFinal, _yFinal);
             }
         }
         else if (_phase == Phase.Hold)
@@ -191,7 +195,7 @@ public class NewMailToast : MonoBehaviour
         {
             float k = Mathf.Clamp01(_timer / SlideOutTime);
             float e = k * k;                       // EaseInQuad：慢起快出，向右滑走
-            _panel.anchoredPosition = new Vector2(Mathf.Lerp(_xFinal, OffX, e), YPos);
+            _panel.anchoredPosition = new Vector2(Mathf.Lerp(_xFinal, OffX, e), _yFinal);
             if (_timer >= SlideOutTime)
             {
                 _phase = Phase.Done;

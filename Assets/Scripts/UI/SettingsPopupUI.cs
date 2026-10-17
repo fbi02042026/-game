@@ -158,6 +158,10 @@ public class SettingsPopupUI : MonoBehaviour
         DebugAgentLog.Log("H11", "SettingsPopupUI.Open", "settings_open",
             $"{{\"host\":\"{CurrentHost}\",\"sort\":{ResolvePopupSort(CurrentHost)},\"rootActive\":{(root != null && root.activeSelf ? "true" : "false")}}}");
         // #endregion
+
+        // 临时打点（2026-10-17 B1）：「确定」按钮屏幕位置漂移排查，连开 5 次对比 logcat；定位后移除本段及 LogConfirmLayout
+        LogConfirmLayout("open");
+        StartCoroutine(CoLogConfirmLayoutNextFrame());
     }
 
     static int ResolvePopupSort(SettingsHost host)
@@ -233,6 +237,59 @@ public class SettingsPopupUI : MonoBehaviour
         var p = rt.anchoredPosition;
         rt.anchoredPosition = new Vector2(p.x, y);
     }
+
+    // ===== 临时打点（2026-10-17 B1）：设置面板「确定」按钮屏幕位置漂移排查，定位后整段移除 =====
+    System.Collections.IEnumerator CoLogConfirmLayoutNextFrame()
+    {
+        yield return null;
+        LogConfirmLayout("open+1f");
+    }
+
+    /// <summary>强制刷一遍画布布局后输出 Canvas/Panel/确定按钮坐标快照（Debug.Log → logcat tag=Tuanjie）。
+    /// screen 坐标已换算成 adb 口径（左上原点，y 向下），可与 input tap 坐标直接对比。</summary>
+    void LogConfirmLayout(string phase)
+    {
+        try
+        {
+            var canvas = GetComponent<Canvas>();
+            if (canvas != null) Canvas.ForceUpdateCanvases();
+            var cam = canvas != null ? canvas.worldCamera : null;
+            var panel = FindDeep(transform, "Panel") as RectTransform;
+            var sb = new System.Text.StringBuilder(512);
+            sb.Append("[B1] settings ").Append(phase)
+              .Append(" screen=").Append(Screen.width).Append('x').Append(Screen.height);
+            if (canvas != null)
+            {
+                var crt = canvas.transform as RectTransform;
+                sb.Append(" canvas.rect=").Append(crt != null ? crt.rect.size.ToString("F1") : "null")
+                  .Append(" scaleFactor=").Append(canvas.scaleFactor.ToString("F3"))
+                  .Append(" cam=").Append(cam != null ? cam.name : "null");
+            }
+            sb.Append(' ').Append(DumpRect("panel", panel, cam));
+            sb.Append(' ').Append(DumpRect("confirm", confirmButton != null ? confirmButton.transform as RectTransform : null, cam));
+            Debug.Log(sb.ToString(), this);
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning("[B1] settings layout dump failed: " + ex.Message);
+        }
+    }
+
+    static string DumpRect(string name, RectTransform rt, Camera cam)
+    {
+        if (rt == null) return name + "=null";
+        var sp = RectTransformUtility.WorldToScreenPoint(cam, rt.position);
+        var sb = new System.Text.StringBuilder(256);
+        sb.Append(name).Append("={anchored=").Append(rt.anchoredPosition.ToString("F1"))
+          .Append(" size=").Append(rt.rect.width.ToString("F1")).Append('x').Append(rt.rect.height.ToString("F1"))
+          .Append(" aMin=").Append(rt.anchorMin.ToString("F2"))
+          .Append(" aMax=").Append(rt.anchorMax.ToString("F2"))
+          .Append(" pivot=").Append(rt.pivot.ToString("F2"))
+          .Append(" scale=").Append(rt.lossyScale.ToString("F2"))
+          .Append(" screen=(").Append(sp.x.ToString("F0")).Append(',').Append((Screen.height - sp.y).ToString("F0")).Append(")}");
+        return sb.ToString();
+    }
+    // ===== 临时打点结束（B1）=====
 
     void ApplyExtraToggleVisibility()
     {
@@ -433,7 +490,9 @@ public class SettingsPopupUI : MonoBehaviour
 
     static Sprite LoadSettingsSprite(string fileName)
     {
-        var fromRes = Resources.Load<Sprite>("UI/Settings/" + fileName);
+        // 2026-10-17 A1 修复：图一直在 Resources/Art/UI/设置/（父节点 Toggle 引用「开」，子节点 Knob 引用「关」），
+        // 原路径 UI/Settings/ 目录不存在导致永远加载失败、旋钮贴图不切换。
+        var fromRes = Resources.Load<Sprite>("Art/UI/设置/" + fileName);
         if (fromRes != null) return fromRes;
 #if UNITY_EDITOR
         // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。

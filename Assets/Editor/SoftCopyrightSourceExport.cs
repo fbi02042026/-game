@@ -44,7 +44,6 @@ public static class SoftCopyrightSourceExport
         "Assets/Scripts/UI/AdventureLogUI.cs",
         "Assets/Scripts/UI/CharacterUI.cs",
         "Assets/Scripts/UI/BattleStageMapUI.cs",
-        "Assets/Scripts/UI/OfflineRewardPopup.cs",
         "Assets/Scripts/Combat/DamageFormula.cs",
         "Assets/Scripts/Platform/CloudSaveBridge.cs",
         "Assets/Scripts/Platform/RewardedAdBridge.cs",

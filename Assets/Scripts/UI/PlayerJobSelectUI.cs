@@ -48,6 +48,7 @@ public class PlayerJobSelectUI : MonoBehaviour
     bool _refreshUsed;
     bool _built;
     bool _fromPrefab;
+    bool _entering;   // 「进入裂隙」飘字期间防连点（协程 finally 归还）
 
     public static void Show(Action onEnterRift, Options opts = default)
     {
@@ -104,6 +105,7 @@ public class PlayerJobSelectUI : MonoBehaviour
         _opts = opts;
         _selected = null;
         _refreshUsed = false;
+        _entering = false;
         BuildIfNeeded();
         // 【2026-10-17 主人报「弹窗有几率变大」】画布参数（绑定相机 + CanvasScaler）只在创建时套过一次，
         // 场景切换的 RefreshDdolCanvases 只换 worldCamera 不重套缩放，城镇/战斗相机来回切后
@@ -742,29 +744,114 @@ public class PlayerJobSelectUI : MonoBehaviour
             return;
         }
 
-        // 【2026-10-17 主人要求】点「进入裂隙」先弹体力消耗确认（与 StaminaSystem 实时挂钩：
-        // 显示当前体力与恢复倒计时，不足时确认按钮置灰），玩家点「进入裂隙」确认后才走
-        // 原「定职业 → 收界面 → 回调里扣体力进裂隙」；取消则留在本界面可换职业重选。
+        // 【2026-10-17 主人拍板】不再弹体力确认弹窗：体力够 → 按钮上方飘「体力图标-消耗数」
+        // 上浮渐隐后直接走原「定职业 → 收界面 → 回调里扣体力进裂隙」；
+        // 体力不足 → 不进，只出提示字（含回复倒计时）。
+        int cost = AdventureUI.PendingEndlessRift
+            ? StaminaSystem.ENDLESS_RIFT_COST
+            : StaminaSystem.ADVENTURE_COST;
+        if (StaminaSystem.Current < cost)
+        {
+            UIManager.Instance?.ShowToast(
+                "体力不足，" + StaminaSystem.FormatCountdown(StaminaSystem.SecondsToNextPoint) + " 后回复 1 点");
+            return;
+        }
+
         PlayerJobId job = _selected.Value;
         if (_opts.TutorialForceSwordFirst)
-            TutorialHintUI.Instance?.Hide();   // 确认弹窗盖着「进入裂隙」按钮，旧硬提示先收
-        StaminaConfirmPopupUI.Show(confirmed =>
+            TutorialHintUI.Instance?.Hide();   // 马上就进了，旧硬提示先收
+        StartCoroutine(CoFloatStaminaThenEnter(job, cost));
+    }
+
+    /// <summary>
+    /// 「进入裂隙」按钮上方飘一下「体力图标 -消耗数」（上浮渐隐约 0.8 秒），飘完走原进本流程。
+    /// 飘字期间 _entering 防连点；中途界面被关掉时协程被打断，finally 归还标志位且不进裂隙（等同取消）。
+    /// </summary>
+    System.Collections.IEnumerator CoFloatStaminaThenEnter(PlayerJobId job, int cost)
+    {
+        if (_entering) yield break;
+        _entering = true;
+        try
         {
-            if (!confirmed)
+            GameObject floatGo = BuildStaminaCostFloat(cost);
+            var group = floatGo != null ? floatGo.GetComponent<CanvasGroup>() : null;
+            var rt = floatGo != null ? (RectTransform)floatGo.transform : null;
+            const float Life = 0.8f;   // 飘字时长（秒）
+            const float Rise = 30f;    // 上浮距离（像素）
+            float baseY = rt != null ? rt.anchoredPosition.y : 0f;
+            for (float t = 0f; t < Life; t += Time.unscaledDeltaTime)
             {
-                // 取消回到职业选择：引导局把「再点进入裂隙」硬提示重新指上（内部有让位判断）
-                if (_opts.TutorialForceSwordFirst)
-                    ShowTutorialEnterRift();
-                return;
+                float k = Mathf.Clamp01(t / Life);
+                if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, baseY + Rise * k);
+                if (group != null) group.alpha = 1f - k;
+                yield return null;
             }
-            PlayerJobDefs.SetSelected(job);
-            if (_opts.TutorialForceSwordFirst)
-                TutorialHintUI.Instance?.Hide();
-            var cb = _onEnterRift;
-            _onEnterRift = null;   // 【2026-10-17】先摘回调再收界面：Hide 的气泡回弹只服务取消路径
-            Hide();
-            cb?.Invoke();
-        });
+            if (floatGo != null) Destroy(floatGo);
+        }
+        finally
+        {
+            _entering = false;
+        }
+
+        PlayerJobDefs.SetSelected(job);
+        var cb = _onEnterRift;
+        _onEnterRift = null;   // 先摘回调再收界面：Hide 的气泡回弹只服务取消路径
+        Hide();
+        cb?.Invoke();
+    }
+
+    /// <summary>
+    /// 在「进入裂隙」按钮顶边上方挂一个临时飘字（体力图标 + "-N"），纯运行时白模、用完即毁。
+    /// 挂在按钮自身下面锚顶边，预制体 / 白模两种按钮布局都不用改坐标。
+    /// </summary>
+    GameObject BuildStaminaCostFloat(int cost)
+    {
+        if (_enterBtn == null) return null;
+        var btnRt = _enterBtn.transform as RectTransform;
+        if (btnRt == null) return null;
+
+        // 上次协程被打断可能留了残影，先清掉再建新的
+        var old = btnRt.Find("StaminaCostFloat");
+        if (old != null) Destroy(old.gameObject);
+
+        var go = new GameObject("StaminaCostFloat", typeof(RectTransform), typeof(CanvasGroup));
+        go.transform.SetParent(btnRt, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 10f);
+        rt.sizeDelta = new Vector2(150f, 40f);
+
+        var icon = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+        icon.transform.SetParent(go.transform, false);
+        var irt = (RectTransform)icon.transform;
+        irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
+        irt.pivot = new Vector2(0.5f, 0.5f);
+        irt.sizeDelta = new Vector2(34f, 34f);
+        irt.anchoredPosition = new Vector2(-36f, 0f);
+        var img = icon.GetComponent<Image>();
+        // 主人 2026-10-17 放入的体力新图（与资源条同一图标；邮件/每日登录体力格用的是药水图）
+        img.sprite = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina");
+        img.raycastTarget = false;
+        bool hasIcon = img.sprite != null;
+        icon.SetActive(hasIcon);
+
+        var labelGo = new GameObject("Num", typeof(RectTransform));
+        labelGo.transform.SetParent(go.transform, false);
+        var lrt = (RectTransform)labelGo.transform;
+        lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f);
+        lrt.pivot = new Vector2(0.5f, 0.5f);
+        lrt.sizeDelta = new Vector2(90f, 40f);
+        lrt.anchoredPosition = new Vector2(hasIcon ? 20f : 0f, 0f);
+        var t = labelGo.AddComponent<Text>();
+        t.font = GameFonts.GetChinese();
+        t.fontSize = 30;
+        t.fontStyle = FontStyle.Bold;
+        t.color = new Color(1f, 0.9f, 0.45f, 1f);
+        t.alignment = hasIcon ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
+        t.text = "-" + cost;
+        t.raycastTarget = false;
+        return go;
     }
 
     static Transform FindDeep(Transform root, string name)

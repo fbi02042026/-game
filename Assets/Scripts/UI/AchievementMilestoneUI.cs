@@ -3,14 +3,29 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 日志里程等级展示与领取（代码 UI）。对齐设计 Lv1–6。
+/// 日志里程等级展示与领取弹窗。对齐设计 Lv1–6。
+///
+/// <para>【2026-10-17 主人拍板】预制体化：优先实例化 <see cref="PrefabResourcePath"/>
+/// （由 Tools/UI/生成日志里程弹窗预制体 菜单生成，外观全归预制体，脚本只填数据）；
+/// 预制体缺失时回退运行时代码搭建（结构 / 坐标 / 配色与生成器完全一致，仅作过渡）。</para>
+///
+/// <para>节点命名两套路径统一：Root / Dim / Panel / Title / Close / Body / Claim，
+/// 绑定与事件挂接共用同一套 Find 逻辑。</para>
 /// </summary>
 public class AchievementMilestoneUI : MonoBehaviour
 {
+    public const string PrefabResourcePath = "Prefabs/UI/AchievementMilestoneUI";
+
     public static AchievementMilestoneUI Instance { get; private set; }
 
     GameObject _root;
     Text _body;
+    Button _dimBtn;
+    Button _closeBtn;
+    Button _claimBtn;
+    bool _fromPrefab;      // 走了预制体实例化路径（字体已由生成器指定，运行时不再整树套字体）
+    bool _popupApplied;    // 画布参数只套一次，之后每次 Open 只 RefreshPopup（防切换场景后弹窗变大）
+    bool _wired;           // 按钮事件只挂一次（预制体实例跨多次开关复用）
 
     public static void Show()
     {
@@ -26,9 +41,19 @@ public class AchievementMilestoneUI : MonoBehaviour
     static AchievementMilestoneUI Ensure()
     {
         if (Instance != null) return Instance;
-        var go = new GameObject("AchievementMilestoneUI");
-        DontDestroyOnLoad(go);
-        return go.AddComponent<AchievementMilestoneUI>();
+
+        // 预制体优先
+        var prefab = Resources.Load<GameObject>(PrefabResourcePath);
+        if (prefab != null)
+        {
+            var go = Object.Instantiate(prefab);
+            DontDestroyOnLoad(go);
+            return go.GetComponent<AchievementMilestoneUI>() ?? go.AddComponent<AchievementMilestoneUI>();
+        }
+
+        var fb = new GameObject("AchievementMilestoneUI");
+        DontDestroyOnLoad(fb);
+        return fb.AddComponent<AchievementMilestoneUI>();
     }
 
     void Awake() => Instance = this;
@@ -40,14 +65,42 @@ public class AchievementMilestoneUI : MonoBehaviour
 
     void Open()
     {
-        BuildIfNeeded();
+        EnsureHierarchy();
+        BindRefs();
+        Wire();
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.BattleMilestone);
         RefreshBody();
         if (_root != null)
         {
             _root.SetActive(true);
             _root.transform.SetAsLastSibling();
         }
-        GameFonts.ApplyToHierarchy(transform);
+        if (!_fromPrefab)
+            GameFonts.ApplyToHierarchy(transform);
+    }
+
+    /// <summary>决定界面来源：预制体已有 Root 就直接用；没有才走代码白模。</summary>
+    void EnsureHierarchy()
+    {
+        if (_root != null) return;
+
+        var rootTf = transform.Find("Root");
+        if (rootTf != null)
+        {
+            _root = rootTf.gameObject;
+            _fromPrefab = true;
+            var canvas = GetComponent<Canvas>();
+            if (canvas != null && !_popupApplied)
+            {
+                UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleMilestone);
+                _popupApplied = true;
+            }
+            return;
+        }
+
+        BuildIfNeeded();   // 白模（内含 ApplyPopup）
     }
 
     void RefreshBody()
@@ -85,13 +138,47 @@ public class AchievementMilestoneUI : MonoBehaviour
         if (_root != null) _root.SetActive(false);
     }
 
+    void BindRefs()
+    {
+        if (_body != null && _claimBtn != null) return;
+        var rootTf = _root != null ? _root.transform : transform;
+        var panelTf = FindDeep(rootTf, "Panel") ?? rootTf;
+        if (_body == null) _body = FindText(panelTf, "Body") ?? FindText(rootTf, "Body");
+        if (_dimBtn == null) _dimBtn = FindDeep(rootTf, "Dim")?.GetComponent<Button>();
+        if (_closeBtn == null) _closeBtn = FindDeep(rootTf, "Close")?.GetComponent<Button>();
+        if (_claimBtn == null) _claimBtn = FindDeep(rootTf, "Claim")?.GetComponent<Button>();
+    }
+
+    void Wire()
+    {
+        if (_wired) return;
+        if (_dimBtn != null)
+        {
+            _dimBtn.onClick.RemoveAllListeners();
+            _dimBtn.onClick.AddListener(Close);
+        }
+        if (_closeBtn != null)
+        {
+            _closeBtn.onClick.RemoveAllListeners();
+            _closeBtn.onClick.AddListener(Close);
+        }
+        if (_claimBtn != null)
+        {
+            _claimBtn.onClick.RemoveAllListeners();
+            _claimBtn.onClick.AddListener(OnClaimAll);
+        }
+        _wired = true;
+    }
+
+    // ——— 代码白模（预制体缺失时的过渡路径，结构与生成器保持一致） ———
+
     void BuildIfNeeded()
     {
-        if (_root != null) return;
         var canvas = gameObject.GetComponent<Canvas>() ?? gameObject.AddComponent<Canvas>();
         if (gameObject.GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleMilestone);
+        _popupApplied = true;
 
         _root = new GameObject("Root", typeof(RectTransform));
         _root.transform.SetParent(transform, false);
@@ -104,7 +191,6 @@ public class AchievementMilestoneUI : MonoBehaviour
         dim.transform.SetParent(_root.transform, false);
         Stretch(dim.GetComponent<RectTransform>());
         dim.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.55f);
-        dim.GetComponent<Button>().onClick.AddListener(Close);
 
         var panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
         panel.transform.SetParent(_root.transform, false);
@@ -113,7 +199,7 @@ public class AchievementMilestoneUI : MonoBehaviour
         prt.sizeDelta = new Vector2(520f, 560f);
         panel.GetComponent<Image>().color = new Color(0.12f, 0.1f, 0.14f, 0.97f);
 
-        var title = CreateText(panel.transform, "日志里程", 28);
+        var title = CreateText(panel.transform, "Title", "日志里程", 28);
         var trt = title.rectTransform;
         trt.anchorMin = new Vector2(0f, 1f);
         trt.anchorMax = new Vector2(1f, 1f);
@@ -130,12 +216,11 @@ public class AchievementMilestoneUI : MonoBehaviour
         closeRt.anchoredPosition = new Vector2(-12f, -12f);
         closeRt.sizeDelta = new Vector2(40f, 40f);
         closeBtn.GetComponent<Image>().color = new Color(0.35f, 0.25f, 0.18f, 1f);
-        closeBtn.GetComponent<Button>().onClick.AddListener(Close);
-        var closeTx = CreateText(closeBtn.transform, "×", 28);
+        var closeTx = CreateText(closeBtn.transform, "Label", "×", 28);
         Stretch(closeTx.rectTransform);
         closeTx.alignment = TextAnchor.MiddleCenter;
 
-        _body = CreateText(panel.transform, "", 18);
+        _body = CreateText(panel.transform, "Body", "", 18);
         _body.alignment = TextAnchor.UpperLeft;
         var brt = _body.rectTransform;
         brt.anchorMin = new Vector2(0f, 0f);
@@ -152,15 +237,14 @@ public class AchievementMilestoneUI : MonoBehaviour
         crt.anchoredPosition = new Vector2(0f, 16f);
         crt.sizeDelta = new Vector2(220f, 44f);
         claim.GetComponent<Image>().color = new Color(0.45f, 0.32f, 0.18f, 1f);
-        claim.GetComponent<Button>().onClick.AddListener(OnClaimAll);
-        var claimTx = CreateText(claim.transform, "一键领取", 22);
+        var claimTx = CreateText(claim.transform, "Label", "一键领取", 22);
         Stretch(claimTx.rectTransform);
         claimTx.alignment = TextAnchor.MiddleCenter;
     }
 
-    static Text CreateText(Transform parent, string msg, int size)
+    static Text CreateText(Transform parent, string name, string msg, int size)
     {
-        var go = new GameObject("Text", typeof(RectTransform));
+        var go = new GameObject(name, typeof(RectTransform));
         go.transform.SetParent(parent, false);
         var t = go.AddComponent<Text>();
         t.font = GameFonts.GetChinese();
@@ -177,5 +261,23 @@ public class AchievementMilestoneUI : MonoBehaviour
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = rt.offsetMax = Vector2.zero;
+    }
+
+    static Transform FindDeep(Transform rootTf, string name)
+    {
+        if (rootTf == null) return null;
+        if (rootTf.name == name) return rootTf;
+        for (int i = 0; i < rootTf.childCount; i++)
+        {
+            var f = FindDeep(rootTf.GetChild(i), name);
+            if (f != null) return f;
+        }
+        return null;
+    }
+
+    static Text FindText(Transform rootTf, string name)
+    {
+        var t = FindDeep(rootTf, name);
+        return t != null ? t.GetComponent<Text>() : null;
     }
 }

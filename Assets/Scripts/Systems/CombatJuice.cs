@@ -345,7 +345,7 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
             {
                 _comboToastShown.Add("5");
                 DamageTextSystem.SetNextTextScaleMul(1.2f);
-                GlobalToastUI.ShowFlythrough("连杀 x5");
+                // 【2026-10-17 主人拍板】连杀不再横条飞字，右上角击破计数（BattleSideHud）常驻即可
                 if (GameConfig.COMBAT_JUICE_HIT_STOP)
                     RequestHitStop(GameConfig.HIT_STOP_COMBO_ANNOUNCE);
             }
@@ -356,7 +356,6 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
             _comboToastShown.Add("10");
             DamageTextSystem.SetNextTextScaleMul(1.35f);
             GetCameraFollow()?.AddShake(0.1f, 0.18f);
-            GlobalToastUI.ShowFlythrough("连杀 x10");
             if (GameConfig.COMBAT_JUICE_HIT_STOP)
                 RequestHitStop(GameConfig.HIT_STOP_COMBO_ANNOUNCE);
         }
@@ -366,7 +365,6 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
             _comboToastShown.Add("20");
             DamageTextSystem.SetNextTextScaleMul(1.5f);
             GetCameraFollow()?.AddShake(0.14f, 0.22f);
-            GlobalToastUI.ShowFlythrough("连杀 x20");
             if (GameConfig.COMBAT_JUICE_HIT_STOP)
                 RequestHitStop(GameConfig.HIT_STOP_COMBO_ANNOUNCE);
         }

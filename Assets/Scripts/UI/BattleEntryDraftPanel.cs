@@ -173,7 +173,8 @@ public class BattleEntryDraftPanel : MonoBehaviour
         switch (t)
         {
             case ResourceWallet.ResourceType.MercGold: return "UI/Icons/Common/icon_yongbinggold";
-            case ResourceWallet.ResourceType.Gold: return "UI/Icons/Common/icon_gold";
+            // 主人 2026-10-17 放入的抽奖货币新图（Resources/Art/ 下，路径与 Art 源不同）
+            case ResourceWallet.ResourceType.Gold: return "Art/UI/Icons/Common/icon_draft_coin";
             default: return null;
         }
     }

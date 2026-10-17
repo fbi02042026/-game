@@ -114,11 +114,18 @@ public static class MercenaryOfferGenerator
     }
 
     /// <summary>战斗内三选一同款稀有度权重：普通 8 / 稀有 5 / 传奇 2（总和 15 ≈ 53% / 33% / 13%）。</summary>
+    // —— 稀有度掷点权重（2026-10-17 主人拍板 = 战斗内三选一同款）——
+    // 公示弹窗（MercenaryRecruitPopupUI.ShowRecruitOdds）引用这组常量，改这里公示数字自动跟
+    public const int RollTotal = 15;
+    public const int CommonWeight = 8;
+    public const int RareWeight = 5;
+    public const int LegendaryWeight = 2;
+
     static MercRosterDefs.MercRarity RollRarityByBattleWeight()
     {
-        int roll = Random.Range(0, 15);
-        if (roll < 8) return MercRosterDefs.MercRarity.Common;
-        if (roll < 13) return MercRosterDefs.MercRarity.Rare;
+        int roll = Random.Range(0, RollTotal);
+        if (roll < CommonWeight) return MercRosterDefs.MercRarity.Common;
+        if (roll < CommonWeight + RareWeight) return MercRosterDefs.MercRarity.Rare;
         return MercRosterDefs.MercRarity.Legendary;
     }
 

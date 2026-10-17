@@ -78,6 +78,16 @@ public static class MailSystem
                     att.amount = 0;
                     continue;
                 }
+                // 🆕 招募卷轴奖励（2026-10-17）：无上限概念，直接入账
+                if (att.type == "scrollCommon" || att.type == "scrollLegendary")
+                {
+                    var d = SaveSystem.Instance.Data;
+                    if (att.type == "scrollCommon") d.mercScrollCommon += (int)att.amount;
+                    else d.mercScrollLegendary += (int)att.amount;
+                    Debug.Log($"[Mail] 邮件发放卷轴 {att.type} x{att.amount}");
+                    att.amount = 0;
+                    continue;
+                }
                 var rt = AttachmentResourceType(att.type);
                 if (rt == null) continue;   // 未知类型不吞不报，留给 UI 展示
                 att.amount = ClaimOne(rt.Value, att.amount);
@@ -185,6 +195,46 @@ public static class MailSystem
                     amount = 1,
                     hireId = "H017",
                     iconOverride = ContentPaths.Icons.MercHead + "/H017",
+                },
+            },
+        }, notifyToast);
+    }
+
+    /// <summary>
+    /// 全服补偿邮件（2026-10-17）：500 金币 + 普通招募卷轴×2。
+    /// 固定 id 去重，整份存档只发一次；要调整奖励/文案只改 id 升版（如 compensation_2026_10_v2）。
+    /// 触发点：TownSceneBootstrap 回主界面补发（幂等，与欢迎信同链路）。
+    /// </summary>
+    public static void EnsureCompensationMail(bool notifyToast = true)
+    {
+        Ensure();
+        const string CompId = "compensation_2026_10_v1";
+        var list = SaveSystem.Instance.Data.mailInbox;
+        for (int i = 0; i < list.Count; i++)
+            if (list[i] != null && list[i].id == CompId) return;   // 已发过，不重复
+
+        Enqueue(new MailEntry
+        {
+            id = CompId,
+            title = "致玩家的补偿礼包",
+            sender = "制作组",
+            body = "亲爱的冒险者：\n\n" +
+                   "近期我们修复了游戏中的若干问题，感谢大家在试玩过程中的耐心与反馈。\n\n" +
+                   "为表歉意，特送上补偿礼包：500 金币、普通招募卷轴×2，请收下。\n\n" +
+                   "普通招募卷轴可在酒馆招募稀有佣兵。\n" +
+                   "如有任何建议，欢迎加入玩家交流群（QQ 群号 1126152907）告诉我们。\n\n" +
+                   "—— 像素冒险制作组",
+            createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            type = MailType.Reward,
+            detailImagePath = "Art/UI/Icons/表情包/爱心",   // 详情页表情：表情包「爱心」（2026-10-17 主人拍板，图在 Icons/表情包/ 目录）
+            gold = 500,
+            attachments = new List<MailAttachment>
+            {
+                new MailAttachment
+                {
+                    type = "scrollCommon",
+                    amount = 2,
+                    iconOverride = "Art/UI/Icons/Common/icon_hire_scroll",
                 },
             },
         }, notifyToast);

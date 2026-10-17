@@ -31,7 +31,6 @@ using UnityEngine;
 ///   酒馆解锁              UI/TavernUnlockUI.cs
 ///   背包 / 装备格边框     UI/GridCellUI.cs
 ///   装备三选一弹窗卡片底  UI/EquipDropPopupUI.cs
-///   关卡结算装备卡底      UI/StageClearEquipUI.cs
 ///   技能稀有度（转发）    Config/SkillEnums.cs → SkillRarityUtil.Tint
 ///   商店 / 三选一 / 技槽  走 SkillRarityUtil.Tint，无需再改
 /// </summary>

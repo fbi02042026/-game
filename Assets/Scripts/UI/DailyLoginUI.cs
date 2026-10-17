@@ -1537,13 +1537,14 @@ public class DailyLoginUI : MonoBehaviour
         return sp;
     }
 
-    /// <summary>资源类奖励图标统一走 Common 目录（金币/钻石/天赋石/强化石/分解材料）；体力沿用原路径。</summary>
+    /// <summary>资源类奖励图标统一走 Common 目录（金币/钻石/天赋石/强化石/分解材料）；体力奖励格用体力药水图（2026-10-17 主人拍板）。</summary>
     static Sprite LoadResourceIcon(ResourceWallet.ResourceType type)
     {
         switch (type)
         {
             case ResourceWallet.ResourceType.Stamina:
-                return Resources.Load<Sprite>("UI/Icons/Stamina");
+                // 主人 2026-10-17 放入的体力药水新图（Resources/Art/ 下，路径与 Art 源不同）
+                return Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina_potion");
             case ResourceWallet.ResourceType.Gold:
                 return CommonIconSprites.Load("icon_gold");
             case ResourceWallet.ResourceType.Diamond:

@@ -38,11 +38,6 @@ public static partial class GameConfig
         public const int TownPopup = 900;
         /// 通用「获得奖励」弹窗：必须高于 TownPopup(900)——否则与每日登录界面同为 900 时排序不定、会被盖住；低于 BattlePopup(920) 与 Toast(11000)。
         public const int RewardPopup = 905;
-        /// <summary>
-        /// 【2026-10-17 主人要求】进裂隙前的体力消耗确认弹窗（运行时白模 StaminaConfirmPopupUI）。
-        /// 须高于 TownPopup(900) 盖住职业选择界面，低于 BattlePopup(920)。
-        /// </summary>
-        public const int StaminaConfirm = 908;
         public const int BattleStageMap = 880;
         public const int BattlePopup = 920;
         /// <summary>
@@ -58,9 +53,9 @@ public static partial class GameConfig
         public const int BattleLegacyPool = 940;
         public const int BattleHud = 950;
         /// <summary>
-        /// 进关抽奖面板 / 老虎机（SlotOfferUI / SlotMachineUI）：2026-10-15 改摄像机模式后，
+        /// 进关抽奖面板 / 老虎机（BattleEntryDraftPanel / SlotMachineUI）：2026-10-15 改摄像机模式后，
         /// 层级须高于 <see cref="BattleHud"/>(950) 才盖得住 HUD（2026-09-30 主人实测「看不见抽奖按钮」），
-        /// 低于 BattleMilestone(970)。
+        /// 低于 BattleMilestone(970)。常量名沿用旧面板 SlotOfferUI（2026-10-17 已删）。
         /// </summary>
         public const int SlotOffer = 965;
         public const int BattleLegacyChoose = 960;
@@ -648,6 +643,20 @@ public static partial class GameConfig
     public static float ELITE_SKILL_RELEASE_SHAKE_AMP => CombatTuningTable.Get("ELITE_SKILL_RELEASE_SHAKE_AMP", 0.12f);
     /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：精英震屏时长</summary>
     public static float ELITE_SKILL_RELEASE_SHAKE_DUR => CombatTuningTable.Get("ELITE_SKILL_RELEASE_SHAKE_DUR", 0.20f);
+
+    // ---- 精英蓄力跳演出（2026-10-17 主人拍板：蓄力压扁→高跳快落→红圈半透放大→玩家影子降透明）----
+    /// <summary>蓄力末身体 Y 压到原高的该比例（1=不压）。主人原话「慢慢缩小Y轴」。</summary>
+    public static float ELITE_LEAP_SQUASH => CombatTuningTable.Get("ELITE_LEAP_SQUASH", 0.72f);
+    /// <summary>跳起高度（世界单位）。精英体型大，跳高点。</summary>
+    public static float ELITE_LEAP_HEIGHT => CombatTuningTable.Get("ELITE_LEAP_HEIGHT", 3.2f);
+    /// <summary>起跳上升到最高点用时（秒）。</summary>
+    public static float ELITE_LEAP_RISE_SEC => CombatTuningTable.Get("ELITE_LEAP_RISE_SEC", 0.22f);
+    /// <summary>最高点砸落到地面用时（秒）——比上升短，主人原话「落得迅速点」。</summary>
+    public static float ELITE_LEAP_FALL_SEC => CombatTuningTable.Get("ELITE_LEAP_FALL_SEC", 0.15f);
+    /// <summary>红圈起始缩放比例（相对全尺寸），预警期从该值线性放大到 1。</summary>
+    public static float ELITE_TELEGRAPH_GROW_FROM => CombatTuningTable.Get("ELITE_TELEGRAPH_GROW_FROM", 0.35f);
+    /// <summary>蓄力期间玩家影子 alpha 乘的系数（降 20% → ×0.8，落地还原）。</summary>
+    public const float PLAYER_SHADOW_CHARGE_DIM = 0.8f;
     /// <summary>公会等级系数：0.02×公会等级</summary>
     public static float GUILD_SCALE_PER => CombatTuningTable.Get("GUILD_SCALE_PER", 0.02f);
 

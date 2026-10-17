@@ -71,6 +71,69 @@ public static class UnitShadowAlpha
         return false;
     }
 
+    // ============================================================
+    // 临时降影（2026-10-17 主人拍板：精英蓄力期玩家影子透明降 20%，落地还原）
+    // 与上面 ApplyPlayer 的「一次性 ×0.9」互不干扰：这里按渲染器存基值，还原时精确写回。
+    // ============================================================
+
+    /// <summary>降影期间每个 shadow 渲染器的原始 alpha（按 instanceID 记账）。</summary>
+    static readonly System.Collections.Generic.Dictionary<int, float> _dimSaved =
+        new System.Collections.Generic.Dictionary<int, float>();
+
+    /// <summary>
+    /// 把玩家单位下所有 Shadow 渲染器 alpha 临时 ×<see cref="GameConfig.PLAYER_SHADOW_CHARGE_DIM"/>。
+    /// 幂等：已处于降影状态时不重复乘（基值只存第一次）。找不到 shadow 节点沿用 fail closed 报错。
+    /// </summary>
+    public static void SetPlayerShadowDim(Transform unitRoot)
+    {
+        if (unitRoot == null) return;
+
+        var srs = unitRoot.GetComponentsInChildren<SpriteRenderer>(true);
+        bool hit = false;
+
+        for (int i = 0; i < srs.Length; i++)
+        {
+            var sr = srs[i];
+            if (sr == null) continue;
+            if (!IsShadowNode(sr.transform)) continue;
+
+            int id = sr.GetInstanceID();
+            if (_dimSaved.ContainsKey(id)) continue;   // 已在降影中：不重复存基值、不重复乘
+            _dimSaved[id] = sr.color.a;
+
+            var c = sr.color;
+            c.a = Mathf.Clamp01(c.a * GameConfig.PLAYER_SHADOW_CHARGE_DIM);
+            sr.color = c;
+            hit = true;
+        }
+
+        if (!hit) WarnNoShadow(unitRoot);
+    }
+
+    /// <summary>把降影前的 alpha 精确写回（没降过影则什么都不做）。</summary>
+    public static void RestorePlayerShadowDim(Transform unitRoot)
+    {
+        if (unitRoot == null || _dimSaved.Count == 0) return;
+
+        var srs = unitRoot.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < srs.Length; i++)
+        {
+            var sr = srs[i];
+            if (sr == null) continue;
+
+            int id = sr.GetInstanceID();
+            if (!_dimSaved.TryGetValue(id, out float saved)) continue;
+
+            var c = sr.color;
+            c.a = saved;
+            sr.color = c;
+            _dimSaved.Remove(id);
+        }
+
+        // 渲染器可能已被销毁/重建（换装、重进战斗）：残账直接丢弃，不留悬空记录
+        _dimSaved.Clear();
+    }
+
     static void WarnNoShadow(Transform unitRoot)
     {
         if (_warned) return;

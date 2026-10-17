@@ -60,6 +60,21 @@ public class DraftOddsPopupUI : MonoBehaviour
         else ui.Open();
     }
 
+    /// <summary>
+    /// 外部口径入口（2026-10-17 酒馆招募公示）：调用方自己构建<b>真实</b>概率行
+    /// （口径必须与实际随机逻辑一致，公示假数违反合规初衷），弹同一预制体。
+    /// 行结构同 <see cref="DraftPool.BuildOddsRows"/>：先 Section=<see cref="DraftPool.SEC_TYPE"/>
+    /// 段（抽到什么），再 Section=<see cref="DraftPool.SEC_QUALITY"/> 段（什么品质）。
+    /// </summary>
+    public static void ToggleWith(List<DraftPool.OddsRow> rows)
+    {
+        if (rows == null || rows.Count == 0) return;
+        var ui = Ensure();
+        if (ui == null) return;
+        if (ui._root != null && ui._root.activeSelf) ui.Close();
+        ui.OpenWith(rows);
+    }
+
     public static void Hide()
     {
         if (_inst == null) return;
@@ -137,7 +152,28 @@ public class DraftOddsPopupUI : MonoBehaviour
         Wire();
         if (_root == null) return;
 
-        var rows = DraftPool.BuildOddsRows();
+        FillRows(DraftPool.BuildOddsRows());
+
+        _root.SetActive(true);
+    }
+
+    /// <summary>外部口径打开（酒馆招募公示）：同一预制体，行数据由调用方传入。</summary>
+    void OpenWith(List<DraftPool.OddsRow> rows)
+    {
+        ClearSpawned();
+        BindRefs();
+        Wire();
+        if (_root == null) return;
+
+        FillRows(rows);
+
+        _root.SetActive(true);
+    }
+
+    /// <summary>克隆模板行并填概率数字（Open / OpenWith 共用；段标题文案写死「抽到什么/什么品质」两段）。</summary>
+    void FillRows(List<DraftPool.OddsRow> rows)
+    {
+        if (rows == null) return;
         if (_listRoot != null && (_rowTemplate == null || _headTemplate == null))
         {
             Debug.LogError("[DraftOddsPopup] 预制体里缺 RowTemplate / HeadTemplate，无法列出概率行");
@@ -171,8 +207,6 @@ public class DraftOddsPopupUI : MonoBehaviour
                 }
             }
         }
-
-        _root.SetActive(true);
     }
 
     /// <summary>一行「名字 ……… 百分比」：左名字、右数字，颜色按品质走（字号/对齐在模板里）。</summary>

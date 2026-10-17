@@ -128,7 +128,6 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (StoryDirector.Instance == null || !StoryDirector.Instance.IsPlaying)
             DialogueUI.Instance?.Hide();
         TutorialHintUI.Ensure().Hide();
-        OfflineRewardPopup.HideIfOpen();
     }
 
     public void NotifyTownTab(MainNavTab tab)
@@ -693,7 +692,9 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 2026-09-18：这里原本会直接改写 Hero 坐标把玩家往前推（最高 18/秒），
         // 触发瞬间看起来就是「被瞬移」。只等待，绝不动画家坐标。
         if (bm != null) bm.UnitsCanAct = true;
-        bm.RetargetAllMonsters(Hero.Instance);
+        // 【2026-10-17 主人拍板】敌人按距离打所有我方单位（玩家/佣兵），不再全程锁英雄。
+        // 波刷出时已带 hero 锁（flank 波自动 target=hero），战斗恢复前解锁，塔克也会被怪打。
+        bm.ClearMonsterForcedTargets();
         // 【2026-10-16 主人拍板】删与开场重复的「自动攻击」教学，顺接塔克「跟紧我」（第三波已组队）
         hint.Show("又来一波！这回有塔克搭把手，凑近就开打。", null, 5f);
         yield return WaitFieldClear(strict: true);
@@ -750,7 +751,10 @@ public class TutorialDirector : Singleton<TutorialDirector>
         // 2026-10-09 主人拍板：order=4 是 around 波，QueueTutorialStep 里 around 缺 forcedTarget
         // 会直接 return（"跳过以免围空点"）→ 这波根本没排上，场上没有精英，主人才"没见到精英怪就结束了"。
         // 这里补上围杀目标（英雄），让这波真正刷出、含 1 只放大精英（eliteCount=1）。
+        // 【2026-10-17 主人拍板】forcedTarget 只当 around 波的定位锚点用，刷出后立即解锁 ——
+        // 精英和小怪都按距离打玩家/塔克，不再全程锁英雄。
         yield return EnsureTutorialStep(bm, 4, forcedTarget: Hero.Instance);
+        bm.ClearMonsterForcedTargets();
         if (bm != null) bm.UnitsCanAct = true;
         // 【2026-10-16】「组队后佣兵会自动战斗」已提前到塔克入队后（本方法上方二抽头像步收尾处），
         // 这里不再重复 Show —— 原位置压在精英波预告之后，主人报「有点靠后了」。
@@ -1236,6 +1240,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
         if (bm == null) yield break;
 
         yield return EnsureTutorialStep(bm, 6);
+        // 【2026-10-17 主人拍板】压轴波同样解锁：按距离打玩家/塔克，不全程锁英雄。
+        bm.ClearMonsterForcedTargets();
         hint.Show("撑不住就撤——活着才能把东西带回去。", null, 4f);
 
         const float maxHold = 20f;
@@ -1257,6 +1263,8 @@ public class TutorialDirector : Singleton<TutorialDirector>
                 {
                     reinforced = true;
                     yield return EnsureTutorialStep(bm, 6);
+                    // 【2026-10-17 主人拍板】援军同样按距离索敌，不锁英雄。
+                    bm.ClearMonsterForcedTargets();
                 }
                 else break;
             }

@@ -175,6 +175,7 @@ public class TownSceneBootstrap : MonoBehaviour
         _loginCheckedThisTownVisit = true;
 
         MailSystem.EnsureWelcomeMail();   // 🆕 已通关老玩家回主界面补发欢迎信（幂等：已发过不再入邮、不再弹提示）
+        MailSystem.EnsureCompensationMail();   // 🆕 全服补偿邮件（2026-10-17：500金币+卷轴，幂等同欢迎信链路）
         DailyLoginSystem.OnEnterGame();
         // 【2026-10-16 主人拍板】「已经领过每日登录的就不要每次再弹」：
         // 一天最多自动弹一次——今天弹过（或领过）就不再自动弹，避免回主界面反复弹；

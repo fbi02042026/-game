@@ -100,6 +100,7 @@ Shader "Sprite Shaders Ultimate/Standard/Effect/Shine"
 			uniform float _TimeFrequency;
 			uniform float _TimeRange;
 			uniform float _TimeValue;
+			uniform float _UnscaledTime;
 			uniform float _ShineSpeed;
 			uniform float _ShineScale;
 			uniform float _PixelsPerUnit;
@@ -187,22 +188,22 @@ Shader "Sprite Shaders Ultimate/Standard/Effect/Shine"
 				float3 lerpResult92_g74 = lerp( temp_cast_1 , temp_output_57_0_g74 , _ShineSaturation);
 				float3 saferPower83_g74 = max( lerpResult92_g74 , 0.0001 );
 				float3 temp_cast_2 = (max( _ShineContrast , 0.001 )).xxx;
-				float mulTime5_g387 = _Time.y * _TimeScale;
-				float mulTime7_g387 = _Time.y * _TimeFrequency;
+				float mulTime5_g387 = _UnscaledTime * _TimeScale;
+				float mulTime7_g387 = _UnscaledTime * _TimeFrequency;
 				#if defined(_TIMESETTINGS_LINEAR_DEFAULT)
-				float staticSwitch1_g387 = _Time.y;
+				float staticSwitch1_g387 = _UnscaledTime;
 				#elif defined(_TIMESETTINGS_LINEAR_SCALED)
 				float staticSwitch1_g387 = mulTime5_g387;
 				#elif defined(_TIMESETTINGS_LINEAR_FPS)
-				float staticSwitch1_g387 = ( _TimeScale * ( floor( ( _Time.y * _TimeFPS ) ) / _TimeFPS ) );
+				float staticSwitch1_g387 = ( _TimeScale * ( floor( ( _UnscaledTime * _TimeFPS ) ) / _TimeFPS ) );
 				#elif defined(_TIMESETTINGS_FREQUENCY)
 				float staticSwitch1_g387 = ( ( sin( mulTime7_g387 ) * _TimeRange ) + 100.0 );
 				#elif defined(_TIMESETTINGS_FREQUENCY_FPS)
-				float staticSwitch1_g387 = ( ( _TimeRange * sin( ( _TimeFrequency * ( floor( ( _TimeFPS * _Time.y ) ) / _TimeFPS ) ) ) ) + 100.0 );
+				float staticSwitch1_g387 = ( ( _TimeRange * sin( ( _TimeFrequency * ( floor( ( _TimeFPS * _UnscaledTime ) ) / _TimeFPS ) ) ) ) + 100.0 );
 				#elif defined(_TIMESETTINGS_CUSTOM_VALUE)
 				float staticSwitch1_g387 = _TimeValue;
 				#else
-				float staticSwitch1_g387 = _Time.y;
+				float staticSwitch1_g387 = _UnscaledTime;
 				#endif
 				float2 texCoord2_g376 = IN.texcoord.xy * float2( 1,1 ) + float2( 0,0 );
 				float2 texCoord22_g376 = IN.texcoord.xy * float2( 1,1 ) + float2( 0,0 );

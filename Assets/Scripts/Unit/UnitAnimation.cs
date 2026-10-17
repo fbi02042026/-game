@@ -193,7 +193,7 @@ public class UnitAnimation : MonoBehaviour
         return _monsterClipController;
     }
 
-    /// <summary>拷贝 ani 片段并去掉空事件；仅钉 z=0（scale/xy 以用户录制的 scale=1 为准）。</summary>
+    /// <summary>拷贝 ani 片段并去掉空事件；z 钳制由 .anim 内烘焙的常 0 曲线 + LateUpdate 的 StabilizeMonsterBodyTransform 兜底。</summary>
     static RuntimeAnimatorController LoadSanitizedMonsterClipController()
     {
         if (_sanitizedMonsterClipController != null && _monsterSanitizeVersionApplied == MonsterSanitizeVersion)
@@ -220,11 +220,9 @@ public class UnitAnimation : MonoBehaviour
     {
         if (source == null) return null;
 
+        // 运行时 SetCurve 对非 Legacy 片段无效（只会刷报错）；z=0 已由 .anim 内烘焙曲线保证
         var clip = UnityEngine.Object.Instantiate(source);
         clip.name = source.name;
-        float len = Mathf.Max(0.05f, clip.length);
-        const string path = "Monsters";
-        clip.SetCurve(path, typeof(Transform), "localPosition.z", AnimationCurve.Constant(0f, len, 0f));
         StripEmptyAnimationEvents(clip);
         return clip;
     }

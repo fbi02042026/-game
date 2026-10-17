@@ -74,7 +74,7 @@ public class SlotMachineUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 同 <c>SlotOfferUI.EnsureSortCanvas</c>：嵌套 Canvas 下必须自带 Canvas 抬排序层，
+    /// 嵌套 Canvas 下必须自带 Canvas 抬排序层，
     /// 否则老虎机会被战斗 HUD 盖住；补 GraphicRaycaster 保证交互正常。
     /// 2026-10-15 主人拍板「所有界面一律摄像机模式」：由裸 Canvas(Overlay) 改走
     /// UICanvasSetup.ApplyPopup，层级用 UiSort.SlotOffer(965) 高于 BattleHud(950)。
