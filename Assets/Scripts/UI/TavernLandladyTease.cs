@@ -169,8 +169,10 @@ public class TavernLandladyTease : MonoBehaviour
         _clicks++;
         RequestShake();
 
+        // 【2026-10-18 修·主人报「点老板娘不弹对话了」】警示语是玩家主动交互的直接反馈，
+        // 改走 force=true：不再被酒馆/看板娘气泡压制吞掉（现象就是「点了没反应」）。
         int lineIdx = Mathf.Clamp(_clicks - 1, 0, WarnLines.Length - 1);
-        UIManager.Instance?.ShowToast(WarnLines[lineIdx]);
+        UIManager.Instance?.ShowToast(WarnLines[lineIdx], force: true);
 
         if (_clicks >= DimFromClick)
         {

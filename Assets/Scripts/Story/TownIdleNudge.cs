@@ -37,10 +37,10 @@ public static class TownIdleNudge
     /// </summary>
     public static readonly (MainNavTab tab, string text)[] Entries =
     {
-        (MainNavTab.Adventure, "点「冒险」去裂隙，打怪赚金币和材料。"),
-        (MainNavTab.Character, "点「角色」查看属性，用金币点天赋变强。"),
-        (MainNavTab.Tavern,    "点「酒馆」招募佣兵。"),
-        (MainNavTab.Log,       "点「日志」查看冒险记录和成就。"),
+        (MainNavTab.Adventure, "点「冒险」去裂隙吧，打怪能赚金币和材料哟～"),
+        (MainNavTab.Character, "点「角色」看看属性，用金币点天赋就会变强啦～"),
+        (MainNavTab.Tavern,    "点「酒馆」招募佣兵吧～"),
+        (MainNavTab.Log,       "点「日志」看看你的冒险记录和成就哟～"),
     };
 
     static TownIdleNudgeDriver _driver;

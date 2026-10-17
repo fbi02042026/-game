@@ -298,8 +298,12 @@ public class TalentUI : MonoBehaviour
             }
             if (v.upgradeButton != null)
             {
-                v.upgradeButton.SetActive(can);
-                if (can && v.upgradeCostText != null && nextCost > 0 && i == unlocked)
+                // 【2026-10-18 修·主人报「到第10个节点不显示按钮」】金币不足时 can=false 把按钮整个藏了。
+                // 改为：下一个待解锁节点（i == unlocked）按钮始终显示并始终标花费；
+                // 金币不足时点击有 OnClickLeft 的「金币不足」提示兜底，不需要靠藏按钮表达。
+                bool showBtn = can || i == unlocked;
+                v.upgradeButton.SetActive(showBtn);
+                if (showBtn && v.upgradeCostText != null && nextCost > 0 && i == unlocked)
                     v.upgradeCostText.text = nextCost.ToString();
             }
             if (v.button != null) v.button.interactable = can;

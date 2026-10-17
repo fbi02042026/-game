@@ -125,6 +125,16 @@ public class SkillCastNotifyController : MonoBehaviour
             return;
         }
 
+        // 【2026-10-18】SkillUI 在 order=0 的 BattleUI 根下，Boss血条(950)/侧边HUD(105)等嵌套 Canvas 会盖住通知条。
+        // 抬嵌套 Canvas 到 BattleHud 之上（955）。AddComponent 会重置 RectTransform，先缓存再还原。
+        var liftCv = _root.GetComponent<Canvas>() ?? _root.gameObject.AddComponent<Canvas>();
+        Vector2 ap = _root.anchoredPosition, sd = _root.sizeDelta;
+        Vector2 aMin = _root.anchorMin, aMax = _root.anchorMax, pv = _root.pivot, ls = _root.localScale;
+        _root.anchoredPosition = ap; _root.sizeDelta = sd;
+        _root.anchorMin = aMin; _root.anchorMax = aMax; _root.pivot = pv; _root.localScale = ls;
+        liftCv.overrideSorting = true;
+        liftCv.sortingOrder = 955;
+
         var tplTf = transform.Find("skill");
         if (tplTf == null)
         {
@@ -271,6 +281,13 @@ public class SkillCastNotifyController : MonoBehaviour
         // 最新一条插到队首（占模板原位），旧条目 index 变大后平滑下移
         list.Insert(0, entry);
         entry.rt.anchoredPosition = entry.startPos;
+
+        // 【临时打点·查技能通知不显示】定位后删除
+        var rt0 = (RectTransform)transform;
+        var cv0 = GetComponentInParent<Canvas>();
+        Debug.Log($"[SkillCastNotify·打点] Push {label} tplPos={_tplFinalPos} finalX={finalX} halfW={HalfWidth()} " +
+                  $"startPos={entry.startPos} activeInHierarchy={rt0.gameObject.activeInHierarchy} " +
+                  $"canvas={(cv0 != null ? $"{cv0.renderMode} cam={cv0.worldCamera} order={cv0.sortingOrder}" : "无")}");
     }
 
     void TickList(List<NotifyEntry> list, float dt)

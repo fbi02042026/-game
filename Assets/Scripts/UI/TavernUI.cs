@@ -286,6 +286,7 @@ public class TavernUI : MonoBehaviour, ITownPage
 
     void WireClicks()
     {
+        ApplyFeatureCardLayout();
         if (recruitButton != null)
         {
             // 【2026-10-17 主人拍板】开启佣兵招募入口：下排「佣兵招募」卡直接打开三选一招募弹窗。
@@ -312,7 +313,7 @@ public class TavernUI : MonoBehaviour, ITownPage
             questButton.gameObject.SetActive(true);
             questButton.onClick.RemoveAllListeners();
             questButton.onClick.AddListener(() => MercDrawPoolUI.Show());
-            RetitleCard(questButton.transform, "佣兵雇佣队列", "配置下场战斗可雇佣的佣兵");
+            RetitleCard(questButton.transform, "佣兵队列", "配置下场战斗可雇佣的佣兵");   // 2026-10-18 主人拍板改名
         }
         if (intelButton != null)
         {
@@ -320,6 +321,50 @@ public class TavernUI : MonoBehaviour, ITownPage
             intelButton.onClick.RemoveAllListeners();
             intelButton.onClick.AddListener(() => InformantIntelDirector.StartDaily());
         }
+    }
+
+    /// <summary>
+    /// 功能卡对调（2026-10-18 主人拍板）：上排 佣兵招募 | 佣兵队列，下排 佣兵情报 | 信任交流(未开放)。
+    /// 不改预制体：按现场四卡的 x/y 分布识别「上左/上右/下左/下右」四个槽位，再按目标布局落位
+    /// （预制体与代码兜底的初始摆位不同，按分布识别两种都成立；已在目标位的卡赋同值无副作用）。
+    /// </summary>
+    void ApplyFeatureCardLayout()
+    {
+        var r = recruitButton != null ? recruitButton.transform as RectTransform : null;
+        var q = questButton != null ? questButton.transform as RectTransform : null;
+        var i = intelButton != null ? intelButton.transform as RectTransform : null;
+        var t = trustButton != null ? trustButton.transform as RectTransform : null;
+        if (r == null || q == null || i == null || t == null) return;
+
+        var cards = new[] { r, q, i, t };
+        float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+        for (int k = 0; k < cards.Length; k++)
+        {
+            var p = cards[k].anchoredPosition;
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
+        }
+        float midX = (minX + maxX) * 0.5f;
+        float midY = (minY + maxY) * 0.5f;
+
+        Vector2 topLeft = Vector2.zero, topRight = Vector2.zero, botLeft = Vector2.zero, botRight = Vector2.zero;
+        for (int k = 0; k < cards.Length; k++)
+        {
+            var p = cards[k].anchoredPosition;
+            bool left = p.x < midX;
+            bool top = p.y >= midY;
+            if (left && top) topLeft = p;
+            else if (!left && top) topRight = p;
+            else if (left) botLeft = p;
+            else botRight = p;
+        }
+
+        r.anchoredPosition = topLeft;     // 佣兵招募 → 上左
+        q.anchoredPosition = topRight;    // 佣兵队列 → 上右
+        i.anchoredPosition = botLeft;     // 佣兵情报 → 下左
+        t.anchoredPosition = botRight;    // 信任交流 → 下右
     }
 
     static void RetitleCard(Transform card, string title, string desc)
@@ -383,12 +428,12 @@ public class TavernUI : MonoBehaviour, ITownPage
         SetAnchored(grid, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
             new Vector2(0f, bottomNavReserve + 210f), new Vector2(640f, 360f));
 
-        recruitButton = CreateFeatureCard(grid.transform, "Recruit", "佣兵名册", "解锁佣兵，让其进入战斗三选一池",
-            new Vector2(-160f, 85f), new Color(0.55f, 0.42f, 0.28f));
+        recruitButton = CreateFeatureCard(grid.transform, "Recruit", "佣兵招募", "解锁佣兵，让其进入战斗三选一池",
+            new Vector2(-160f, 85f), new Color(0.55f, 0.42f, 0.28f));   // 2026-10-18 主人拍板：标题与预制体统一叫「佣兵招募」
         trustButton = CreateFeatureCard(grid.transform, "Trust", "信任交流", "提升信任解锁故事与事件",
             new Vector2(160f, 85f), new Color(0.65f, 0.32f, 0.35f));
-        questButton = CreateFeatureCard(grid.transform, "Quest", "佣兵雇佣队列", "配置下场战斗可雇佣的佣兵",
-            new Vector2(-160f, -95f), new Color(0.4f, 0.45f, 0.55f));
+        questButton = CreateFeatureCard(grid.transform, "Quest", "佣兵队列", "配置下场战斗可雇佣的佣兵",
+            new Vector2(-160f, -95f), new Color(0.4f, 0.45f, 0.55f));   // 2026-10-18 主人拍板改名；位置由 ApplyFeatureCardLayout 统一对调
         intelButton = CreateFeatureCard(grid.transform, "Intel", "佣兵情报", "查看佣兵资料与背景故事",
             new Vector2(160f, -95f), new Color(0.35f, 0.4f, 0.5f));
 

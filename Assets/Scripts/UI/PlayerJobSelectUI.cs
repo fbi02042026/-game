@@ -820,15 +820,27 @@ public class PlayerJobSelectUI : MonoBehaviour
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
         rt.pivot = new Vector2(0.5f, 0f);
         rt.anchoredPosition = new Vector2(0f, 10f);
-        rt.sizeDelta = new Vector2(150f, 40f);
+        rt.sizeDelta = new Vector2(170f, 58f);
+
+        // 深色半透明底板（同 GlobalToastUI 口径），浅色按钮上也看得清
+        var bg = new GameObject("Bg", typeof(RectTransform), typeof(Image));
+        bg.transform.SetParent(go.transform, false);
+        var brt = (RectTransform)bg.transform;
+        brt.anchorMin = Vector2.zero;
+        brt.anchorMax = Vector2.one;
+        brt.offsetMin = Vector2.zero;
+        brt.offsetMax = Vector2.zero;
+        var bimg = bg.GetComponent<Image>();
+        bimg.color = new Color(0.08f, 0.07f, 0.1f, 0.62f);
+        bimg.raycastTarget = false;
 
         var icon = new GameObject("Icon", typeof(RectTransform), typeof(Image));
         icon.transform.SetParent(go.transform, false);
         var irt = (RectTransform)icon.transform;
         irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
         irt.pivot = new Vector2(0.5f, 0.5f);
-        irt.sizeDelta = new Vector2(34f, 34f);
-        irt.anchoredPosition = new Vector2(-36f, 0f);
+        irt.sizeDelta = new Vector2(44f, 44f);
+        irt.anchoredPosition = new Vector2(-40f, 0f);
         var img = icon.GetComponent<Image>();
         // 主人 2026-10-17 放入的体力新图（与资源条同一图标；邮件/每日登录体力格用的是药水图）
         img.sprite = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina");
@@ -841,11 +853,11 @@ public class PlayerJobSelectUI : MonoBehaviour
         var lrt = (RectTransform)labelGo.transform;
         lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f);
         lrt.pivot = new Vector2(0.5f, 0.5f);
-        lrt.sizeDelta = new Vector2(90f, 40f);
-        lrt.anchoredPosition = new Vector2(hasIcon ? 20f : 0f, 0f);
+        lrt.sizeDelta = new Vector2(92f, 58f);
+        lrt.anchoredPosition = new Vector2(hasIcon ? 28f : 0f, 0f);
         var t = labelGo.AddComponent<Text>();
         t.font = GameFonts.GetChinese();
-        t.fontSize = 30;
+        t.fontSize = 40;
         t.fontStyle = FontStyle.Bold;
         t.color = new Color(1f, 0.9f, 0.45f, 1f);
         t.alignment = hasIcon ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;

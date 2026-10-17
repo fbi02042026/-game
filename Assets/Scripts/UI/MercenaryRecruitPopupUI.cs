@@ -32,6 +32,10 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
     GameObject _infoRoot;
 
+    // 左下角两种卷轴数量 Label（2026-10-18 主人要求绑数据）：招募卷/1=普通卷轴，招募卷/2=高级招募卷轴
+    Text _scrollCommonCountText;
+    Text _scrollLegendaryCountText;
+
     // —— 佣兵台词气泡（2026-10-17 主人拍板：三选一里佣兵说话用气泡框，不再走顶部 Toast）——
     // 样式对齐看板娘 SpeechBubbleTalker：speech_bubble 底图 + 打字机 + SpeechBubbleFit 文字自适应。
     GameObject _mercBubbleRoot;
@@ -160,6 +164,13 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         if (autoRefreshText != null)
             autoRefreshText.text = "每日 0 点自动刷新";
 
+        // 左下角两种卷轴数量绑存档（2026-10-18 主人拍板）：沿用静态文案的「X{数量}」格式
+        var data = SaveSystem.Instance?.Data;
+        if (_scrollCommonCountText != null)
+            _scrollCommonCountText.text = "X" + (data != null ? data.mercScrollCommon : 0);
+        if (_scrollLegendaryCountText != null)
+            _scrollLegendaryCountText.text = "X" + (data != null ? data.mercScrollLegendary : 0);
+
         UpdateRefreshCostText();   // 含按钮灰显/点亮与顶上倒计时文字
 
         for (int i = 0; i < cards.Length; i++)
@@ -168,14 +179,14 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
     /// <summary>
     /// 刷新按钮顶上的冷却提示（2026-10-17 主人拍板）：可刷新时不显示文字；
-    /// 冷却中按钮灰显、按钮顶上显示 mm:ss 倒计时，由 CoRefreshCountdown 每秒驱动，
-    /// 冷却走完这一秒顺带把按钮点亮（不必等下次 RefreshAll）。
+    /// 冷却中按钮灰显、按钮顶上显示倒计时（2026-10-18 主人要求改 HH:MM:SS 时分秒格式），
+    /// 由 CoRefreshCountdown 每秒驱动，冷却走完这一秒顺带把按钮点亮（不必等下次 RefreshAll）。
     /// </summary>
     void UpdateRefreshCostText()
     {
         bool canRefresh = MercHireSession.CanManualRefresh(out int remainSec);
         if (refreshCostText != null)
-            refreshCostText.text = canRefresh ? "" : $"{remainSec / 60}:{remainSec % 60:00}";
+            refreshCostText.text = canRefresh ? "" : $"{remainSec / 3600:D2}:{remainSec / 60 % 60:D2}:{remainSec % 60:D2}";
         if (refreshButton != null)
         {
             refreshButton.interactable = canRefresh;
@@ -298,19 +309,24 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         bool isLegendary = rarity == MercRosterDefs.MercRarity.Legendary;
         bool hasScroll = !isCommon && MercHireSession.HasScrollFor(rarity);
 
-        // ConfirmButton：金币。三张卡都显示（主人摆的双按钮布局）；
-        // 传奇只能卷轴 → 金币按钮常置灰不可点（2026-10-17 主人拍板：传奇不可金币）
+        // 【2026-10-18 修·主人报「卷轴抽奖按钮半透明=两按钮重叠」】ConfirmButton 与 ConfirmButton1
+        // 在预制体里同一坐标叠画。改为同一时刻每卡只亮一个按钮，支付规则不变：
+        // 普通=金币按钮；稀有/传奇=只显示卷轴槽按钮（稀有无卷时该槽自动切金币价+金币图，仍可用金币雇）。
         if (c.goldButton != null)
         {
-            c.goldButton.gameObject.SetActive(true);
-            bool goldOk = !isLegendary && !alreadyHired && canHireMore && hasGold;
-            c.goldButton.interactable = goldOk;
-            SetButtonGray(c.goldButton, !goldOk);
+            bool showGold = isCommon;
+            c.goldButton.gameObject.SetActive(showGold);
+            if (showGold)
+            {
+                bool goldOk = !alreadyHired && canHireMore && hasGold;
+                c.goldButton.interactable = goldOk;
+                SetButtonGray(c.goldButton, !goldOk);
+            }
         }
         if (c.goldLabel != null)
             c.goldLabel.text = gold.ToString();
 
-        // ConfirmButton1：卷轴。普通佣兵隐藏；稀有=普通卷轴（无卷时显示金币价、icon 切金币图）；
+        // ConfirmButton1：卷轴槽。普通佣兵隐藏；稀有=普通卷轴（无卷时显示金币价、icon 切金币图）；
         // 传奇=高级招募卷轴（无卷时按钮置灰显示高级卷×1，不可金币）
         if (c.scrollButton != null)
         {
@@ -678,7 +694,8 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     {
         if (!MercHireSession.CanManualRefresh(out int remain))
         {
-            UIManager.Instance?.ShowToast($"刷新冷却中（{remain / 60}分{remain % 60}秒）");
+            // 冷却提示与按钮顶上倒计时统一时分秒口径（2026-10-18 主人拍板）
+            UIManager.Instance?.ShowToast($"刷新冷却中（{remain / 3600}:{remain / 60 % 60:D2}:{remain % 60:D2}）", force: true);
             return;
         }
         RerollOffers();
@@ -907,9 +924,23 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         if (refreshButton == null) refreshButton = FindBtn("RefreshButton");
         if (refreshCostText == null) refreshCostText = FindTxt("RefreshCost");
         if (autoRefreshText == null) autoRefreshText = FindTxt("AutoRefresh");
+        if (_scrollCommonCountText == null || _scrollLegendaryCountText == null)
+        {
+            // 左下角卷轴数量：预制体「招募卷」下「1」=普通卷、「2」=高级卷，各自子 Label 静态文案「X10000」
+            var scrollRow = FindDeep(transform, "招募卷");
+            if (scrollRow != null)
+            {
+                if (_scrollCommonCountText == null)
+                    _scrollCommonCountText = scrollRow.Find("1/Label")?.GetComponent<Text>();
+                if (_scrollLegendaryCountText == null)
+                    _scrollLegendaryCountText = scrollRow.Find("2/Label")?.GetComponent<Text>();
+            }
+        }
         if (infoButton == null)
         {
-            var infoTf = FindDeep(transform, "信息");
+            // 【2026-10-18 修·主人报「info 按钮不弹概率弹窗」】预制体节点名是「info」不是「信息」，
+            // 以前只按「信息」找永远绑不上。两个名字都兼容（代码兜底壳建的节点叫「信息」）。
+            var infoTf = FindDeep(transform, "info") ?? FindDeep(transform, "信息");
             if (infoTf != null) infoButton = infoTf.GetComponent<Button>() ?? infoTf.gameObject.AddComponent<Button>();
         }
 

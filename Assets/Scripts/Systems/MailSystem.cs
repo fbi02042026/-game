@@ -107,10 +107,12 @@ public static class MailSystem
         if (empty)
         {
             mail.claimed = true;
-            if (notify) UIManager.Instance?.ShowToast("邮件已领取");
+            // 【2026-10-18 修·主人报「领补偿礼包没提示」】领取=物品变动，按 2026-10-06 口径走 force=true，
+            // 不被看板娘气泡/对话压制；与登录页协议提示同一套 GlobalToastUI 深色底板样式。
+            if (notify) UIManager.Instance?.ShowToast("邮件已领取", force: true);
         }
         else if (notify)
-            UIManager.Instance?.ShowToast("部分资源仍达上限，已留在邮件");
+            UIManager.Instance?.ShowToast("部分资源仍达上限，已留在邮件", force: true);
 
         SaveSystem.Instance.Save();
         RedDot.RefreshCommon();

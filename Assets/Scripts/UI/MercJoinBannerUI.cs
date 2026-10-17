@@ -32,8 +32,8 @@ public class MercJoinBannerUI : MonoBehaviour
     const string PortraitFolder = "UI/Icons/佣兵立绘/";
     const string PortraitPrefix = "佣兵立绘_";
 
-    /// <summary>BattleUI 下主人摆好的节点名。</summary>
-    const string NodeName = "佣兵入队";
+    /// <summary>BattleUI 下主人摆好的节点名（2026-10-18 由「佣兵入队」改英文：中文节点名在预制体 YAML 里被转义，排查易误判）。</summary>
+    const string NodeName = "MercJoinBanner";
 
     static MercJoinBannerUI _inst;
 
@@ -96,6 +96,16 @@ public class MercJoinBannerUI : MonoBehaviour
         _bound = true;
         _rt = rt;
 
+        // 【2026-10-18】BattleUI 根 Canvas order=0，抽卡面板(965)/结算(990)全在其上 → 横幅被整片盖住。
+        // 抬嵌套 Canvas 到结算之上（995），AddComponent 会重置 RectTransform，先缓存再还原。
+        var cv = rt.GetComponent<Canvas>() ?? rt.gameObject.AddComponent<Canvas>();
+        Vector2 ap = rt.anchoredPosition, sd = rt.sizeDelta;
+        Vector2 aMin = rt.anchorMin, aMax = rt.anchorMax, pv = rt.pivot, ls = rt.localScale;
+        rt.anchoredPosition = ap; rt.sizeDelta = sd;
+        rt.anchorMin = aMin; rt.anchorMax = aMax; rt.pivot = pv; rt.localScale = ls;
+        cv.overrideSorting = true;
+        cv.sortingOrder = 995;
+
         var iconTf = rt.Find("mask/icon");
         if (iconTf == null) Debug.LogError("[MercJoinBanner] 「" + NodeName + "」下找不到 mask/icon，立绘位置会空");
         else
@@ -126,6 +136,12 @@ public class MercJoinBannerUI : MonoBehaviour
     void Play(string hireId, string displayName, MercRosterDefs.MercRarity rarity)
     {
         if (!_bound) return;
+
+        // 【临时打点·查横条不显示】确认节点实况，定位后删除
+        var canvas = GetComponentInParent<Canvas>();
+        Debug.Log($"[MercJoinBanner·打点] Play hireId={hireId} pos={_rt.anchoredPosition} size={_rt.rect.size} " +
+                  $"activeInHierarchy={_rt.gameObject.activeInHierarchy} " +
+                  $"canvas={(canvas != null ? $"{canvas.renderMode} cam={canvas.worldCamera} order={canvas.sortingOrder}" : "无")}");
 
         var portrait = LoadPortrait(hireId);
         if (_icon != null) _icon.sprite = portrait;

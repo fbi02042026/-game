@@ -1592,6 +1592,7 @@ public class DailyLoginUI : MonoBehaviour
         {
             // 2026-10-15 主人拍板「领取后就不用再弹了」：天数奖领到手，本次进程关掉后不再自动弹
             MarkClaimConsumed();
+            RedDot.RefreshCommon();   // 【2026-10-18 修·主人报「领完红点不灭」】领取后立即同步红点
             Debug.Log($"[DailyLogin] {msg}");
             // B12: 领完弹「获得奖励」弹窗（主人反馈：领了没弹窗，不知道拿到啥）。
             // 必须按**实发**构造：TryClaimStarter 内部对 X2 双倍日做了 Doubled，这里同样复算一遍
@@ -1614,6 +1615,7 @@ public class DailyLoginUI : MonoBehaviour
         {
             // 2026-10-15 主人拍板「领取后就不用再弹了」：循环奖领到手，本次进程关掉后不再自动弹
             MarkClaimConsumed();
+            RedDot.RefreshCommon();   // 【2026-10-18 修】领取后立即同步红点
             Debug.Log($"[DailyLogin] {msg}");
             ShowRewardPopup(DailyLoginDefs.Cycle[idx], 1);
         }
@@ -1630,6 +1632,7 @@ public class DailyLoginUI : MonoBehaviour
         {
             // 2026-10-15 主人拍板「领取后就不用再弹了」：连签奖领到手，本次进程关掉后不再自动弹
             MarkClaimConsumed();
+            RedDot.RefreshCommon();   // 【2026-10-18 修】领取后立即同步红点
             Debug.Log($"[DailyLogin] {msg}");
             if (def != null) ShowRewardPopup(def.Value.reward, 1);
         }
@@ -1649,6 +1652,7 @@ public class DailyLoginUI : MonoBehaviour
         {
             // 2026-10-15 主人拍板「领取后就不用再弹了」：累计大奖领到手，本次进程关掉后不再自动弹
             MarkClaimConsumed();
+            RedDot.RefreshCommon();   // 【2026-10-18 修】领取后立即同步红点
             Debug.Log($"[DailyLogin] {msg}");
             // B12: 累计大奖同样弹「获得奖励」弹窗（主人反馈：领了没弹窗）
             ShowRewardPopup(DailyLoginDefs.AccumReward, 1);

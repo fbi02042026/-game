@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
@@ -27,12 +28,15 @@ public static class SkillOrderGuide
     /// 【2026-10-07 主人要求】把原来开局就弹的「技能冷却好会自动释放，无需点击；顺序看左上角 ①②③④。」
     /// 并到这一条里 —— 那句话要在**抽中技能、能调顺序**的那一拍才出现，不是一进战斗就出来。
     /// </summary>
-    public const string Text = "技能冷却好会自动释放，无需点击；拖动技能可改释放顺序，① 最先放。";
+    public const string Text = "技能冷却好会自动释放，不用点哦；拖动技能可以改释放顺序，① 最先放～";
 
     const float ShowSeconds = 5f;
 
     /// <summary>已经教过了（换局也不再弹）。</summary>
     public static bool Shown => PlayerPrefs.GetInt(PrefsKey, 0) != 0;
+
+    /// <summary>延迟等待协程是否在跑（防 Refresh 多次触发开多条协程）。</summary>
+    static bool _delayRunning;
 
     /// <summary>调试用：清掉标记，下次凑够两个技能会再弹一次。</summary>
     public static void ResetForDebug()
@@ -54,6 +58,46 @@ public static class SkillOrderGuide
 
         var hint = TutorialHintUI.Instance;
         if (hint == null) return;                   // UI 还没建好：这次不算，下次再试
+
+        // 【2026-10-18 时机优化·主人问「软引导别和引导冲突」】引导局里三抽技能紧贴精英波对白，
+        // TalkBlock 每句开播都会 Hide 提示——台词占屏时这一拍不弹、不记标记，
+        // 开协程等台词收了再弹（最多等 20s），别让软引导刚露头就被吞。
+        if (BattleHeadTalkUI.Instance != null && BattleHeadTalkUI.Instance.IsShowing)
+        {
+            if (!_delayRunning)
+            {
+                _delayRunning = true;
+                hint.StartCoroutine(CoWaitTalkThenShow());
+            }
+            return;
+        }
+
+        DoShow();
+    }
+
+    /// <summary>等战斗台词播完再弹（协程宿主 = TutorialHintUI 实例）。</summary>
+    static IEnumerator CoWaitTalkThenShow()
+    {
+        float t = 0f;
+        while (t < 20f)
+        {
+            if (Shown) { _delayRunning = false; yield break; }        // 已经弹过了：放弃
+            if (!GameSceneGate.IsBattle) { _delayRunning = false; yield break; }  // 离开战斗：不弹了
+            var h = TutorialHintUI.Instance;
+            if (h == null) { _delayRunning = false; yield break; }
+            var talk = BattleHeadTalkUI.Instance;
+            if (talk == null || !talk.IsShowing) break;               // 台词收了：可以弹
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        _delayRunning = false;
+        DoShow();
+    }
+
+    static void DoShow()
+    {
+        var hint = TutorialHintUI.Instance;
+        if (hint == null) return;
 
         // 真正能拖的是技能槽那一排（BattleUI.skillSlotRoot），不是战力条
         RectTransform target = null;

@@ -80,6 +80,29 @@ public class WorldMapPopup : MonoBehaviour
     bool _entering;
 
     // ============================================================
+    // 地图拖拽 / 缩放（单指拖动、双指捏合、鼠标滚轮）
+    // ============================================================
+
+    [Header("地图缩放范围（1 = 原始大小，稍微放大即可）")]
+    public float mapMinZoom = 1f;
+    public float mapMaxZoom = 1.5f;
+
+    /// <summary>运行时容器：包住地图背景 + 地块根，整体平移/缩放；预制体结构不动。</summary>
+    RectTransform _mapContent;
+    float _mapZoom = 1f;
+    Vector2 _panLast;
+    bool _panLastValid;
+    float _panMoved;
+    bool _pinchActive;
+    float _pinchPrevDist;
+    Vector2 _pinchPrevMid;
+    float _lastPanTime = -10f;
+    /// <summary>拖动/捏合后的短时间内吞掉地块点击，避免拖完地图误选区域。</summary>
+    const float PanClickSuppressSeconds = 0.2f;
+    /// <summary>手指移动超过该像素才认定为拖动（过滤点击时的抖动）。</summary>
+    const float PanStartPixels = 12f;
+
+    // ============================================================
     // 公共 API
     // ============================================================
 
@@ -173,11 +196,50 @@ public class WorldMapPopup : MonoBehaviour
     {
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
+        EnsureMapViewContent();
+        ResetMapView();
         _selectedChapter = 0;
         _entering = false;
         if (enterButton != null)
             enterButton.gameObject.SetActive(false);
         RefreshRegions();
+    }
+
+    /// <summary>每次打开恢复原始缩放和位置，避免上次的拖动/缩放状态残留。</summary>
+    void ResetMapView()
+    {
+        if (_mapContent == null) return;
+        _mapZoom = 1f;
+        _mapContent.localScale = Vector3.one;
+        _mapContent.anchoredPosition = Vector2.zero;
+        _pinchActive = false;
+        _panLastValid = false;
+        _panMoved = 0f;
+    }
+
+    /// <summary>
+    /// 建一个运行时容器，把地图背景和地块根包进去整体拖拽/缩放。
+    /// 只动层级不动预制体资产，标题/描述仍留在弹窗根节点上不跟着动。
+    /// </summary>
+    void EnsureMapViewContent()
+    {
+        if (_mapContent != null) return;
+        var rootRt = transform as RectTransform;
+        var go = new GameObject("MapViewContent", typeof(RectTransform));
+        var rt = go.transform as RectTransform;
+        rt.SetParent(rootRt, false);
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.localScale = Vector3.one;
+        // 占住地图背景原来的层级位置，保证标题/描述仍压在地图上面
+        int index = mapBackground != null ? mapBackground.transform.GetSiblingIndex() : 0;
+        rt.SetSiblingIndex(index);
+        if (mapBackground != null) mapBackground.transform.SetParent(rt, false);
+        if (regionRoot != null) regionRoot.SetParent(rt, false);
+        _mapContent = rt;
     }
 
     public void Hide()
@@ -289,6 +351,7 @@ public class WorldMapPopup : MonoBehaviour
     void OnRegionClicked(int index)
     {
         if (_entering) return;
+        if (IsRecentPan()) return; // 刚拖完地图，吞掉这次误触
         if (_slots == null || index < 0 || index >= _slots.Length) return;
         var slot = _slots[index];
         if (!IsUnlocked(slot.chapterId)) return;
@@ -317,6 +380,7 @@ public class WorldMapPopup : MonoBehaviour
     void OnEnterClicked()
     {
         if (_entering) return;
+        if (IsRecentPan()) return; // 刚拖完地图松手压在按钮上，不算点击
         if (_selectedChapter < 1) return;
         _entering = true;
 
@@ -324,6 +388,174 @@ public class WorldMapPopup : MonoBehaviour
         // 这里先隐藏弹窗并回调，保证玩家不会在选职业/Loading 时仍看到地图
         Hide();
         _onEnterChapter?.Invoke(_selectedChapter);
+    }
+
+    // ============================================================
+    // 地图拖拽 / 缩放实现
+    // ============================================================
+
+    bool IsRecentPan()
+    {
+        return Time.realtimeSinceStartup - _lastPanTime < PanClickSuppressSeconds;
+    }
+
+    void Update()
+    {
+        if (_entering || _mapContent == null) return;
+        if (Input.touchCount >= 2) HandlePinch();
+        else if (Input.touchCount == 1) HandleSingleTouch();
+        else HandleMouse();
+    }
+
+    void HandleSingleTouch()
+    {
+        var t = Input.GetTouch(0);
+        if (t.phase == TouchPhase.Began)
+        {
+            _panLast = t.position;
+            _panLastValid = true;
+            _panMoved = 0f;
+            return;
+        }
+        if (t.phase == TouchPhase.Ended || t.phase == TouchPhase.Canceled)
+        {
+            _panLastValid = false;
+            return;
+        }
+        // Moved / Stationary：捏合切回单指时 _panLastValid 为 false，先重新定位避免跳变
+        if (!_panLastValid)
+        {
+            _panLast = t.position;
+            _panLastValid = true;
+            return;
+        }
+        var delta = (Vector2)t.position - _panLast;
+        _panLast = t.position;
+        FeedPanDelta(delta);
+    }
+
+    void HandleMouse()
+    {
+        // 编辑器/PC 用滚轮缩放，以鼠标位置为中心
+        float wheel = Input.mouseScrollDelta.y;
+        if (!Mathf.Approximately(wheel, 0f))
+            ZoomBy(1f + wheel * 0.15f, Input.mousePosition);
+
+        if (Input.GetMouseButtonDown(0))
+        {
+            _panLast = Input.mousePosition;
+            _panLastValid = true;
+            _panMoved = 0f;
+        }
+        else if (Input.GetMouseButton(0) && _panLastValid)
+        {
+            var delta = (Vector2)Input.mousePosition - _panLast;
+            _panLast = Input.mousePosition;
+            FeedPanDelta(delta);
+        }
+        else if (Input.GetMouseButtonUp(0))
+        {
+            _panLastValid = false;
+        }
+    }
+
+    void HandlePinch()
+    {
+        var t0 = Input.GetTouch(0);
+        var t1 = Input.GetTouch(1);
+        float dist = Vector2.Distance(t0.position, t1.position);
+        Vector2 mid = (t0.position + t1.position) * 0.5f;
+        bool begin = !_pinchActive || t0.phase == TouchPhase.Began || t1.phase == TouchPhase.Began;
+        if (begin)
+        {
+            _pinchActive = true;
+            _pinchPrevDist = dist;
+            _pinchPrevMid = mid;
+            _panLastValid = false; // 切回单指时重新定位，避免跳变
+            return;
+        }
+        if (dist > 1f && _pinchPrevDist > 1f)
+            ZoomBy(dist / _pinchPrevDist, mid);
+        var midDelta = mid - _pinchPrevMid;
+        if (midDelta.sqrMagnitude > 0f)
+        {
+            _lastPanTime = Time.realtimeSinceStartup;
+            PanByScreenDelta(midDelta);
+        }
+        _pinchPrevDist = dist;
+        _pinchPrevMid = mid;
+    }
+
+    void FeedPanDelta(Vector2 screenDelta)
+    {
+        if (screenDelta.sqrMagnitude <= 0f) return;
+        _panMoved += screenDelta.magnitude;
+        if (_panMoved < PanStartPixels) return; // 点击抖动不拖图
+        _lastPanTime = Time.realtimeSinceStartup;
+        PanByScreenDelta(screenDelta);
+    }
+
+    void ZoomBy(float factor, Vector2 screenPivot)
+    {
+        float target = Mathf.Clamp(_mapZoom * factor, mapMinZoom, mapMaxZoom);
+        if (Mathf.Approximately(target, _mapZoom)) return;
+        float k = target / _mapZoom;
+
+        var rootRt = transform as RectTransform;
+        if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(rootRt, screenPivot, GetPopupCamera(), out var pivotWorld))
+            return;
+        // 以手指/滚轮位置为锚点缩放：让锚点压住的地图点保持不动
+        Vector3 deltaWorld = (pivotWorld - _mapContent.position) * (1f - k);
+        deltaWorld.z = 0f;
+        _mapContent.anchoredPosition += (Vector2)rootRt.InverseTransformVector(deltaWorld);
+        _mapContent.localScale = Vector3.one * target;
+        _mapZoom = target;
+        ClampMapOffset();
+    }
+
+    void PanByScreenDelta(Vector2 screenDelta)
+    {
+        var rootRt = transform as RectTransform;
+        var cam = GetPopupCamera();
+        if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(rootRt, Vector2.zero, cam, out var w0)) return;
+        if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(rootRt, screenDelta, cam, out var w1)) return;
+        Vector3 deltaWorld = w1 - w0;
+        deltaWorld.z = 0f;
+        _mapContent.anchoredPosition += (Vector2)rootRt.InverseTransformVector(deltaWorld);
+        ClampMapOffset();
+    }
+
+    void ClampMapOffset()
+    {
+        var max = CalcMaxPanOffset();
+        var p = _mapContent.anchoredPosition;
+        p.x = Mathf.Clamp(p.x, -max.x, max.x);
+        p.y = Mathf.Clamp(p.y, -max.y, max.y);
+        _mapContent.anchoredPosition = p;
+    }
+
+    /// <summary>
+    /// 允许的平移范围：地图出画余量的一半，外加保底小幅余量（不缩放也能上下左右挪一点），
+    /// 拖多了边缘会露出底图，属正常效果。
+    /// </summary>
+    Vector2 CalcMaxPanOffset()
+    {
+        var rootRt = transform as RectTransform;
+        Vector2 view = rootRt.rect.size;
+        float baseSlack = 40f * _mapZoom; // 保底小幅拖动余量
+        if (mapBackground == null)
+            return new Vector2(baseSlack, baseSlack);
+        var bgRt = mapBackground.transform as RectTransform;
+        float allowX = (bgRt.rect.size.x * _mapZoom - view.x) * 0.5f;
+        float allowY = (bgRt.rect.size.y * _mapZoom - view.y) * 0.5f;
+        return new Vector2(Mathf.Max(allowX, baseSlack), Mathf.Max(allowY, baseSlack));
+    }
+
+    Camera GetPopupCamera()
+    {
+        var canvas = GetComponent<Canvas>();
+        if (canvas == null) canvas = GetComponentInChildren<Canvas>(true);
+        return canvas != null ? canvas.worldCamera : null;
     }
 
     // ============================================================

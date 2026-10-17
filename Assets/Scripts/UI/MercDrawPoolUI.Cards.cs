@@ -218,7 +218,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
         // 默认整对隐藏；点未入队的已获得卡就地亮出（同一时刻只有一张卡亮着）。
         // 查看 = 佣兵详情；替换 = 池有空位直接入队，池满进入点选态、直接点上方队列格子换下谁
         // （OnCardSwap；2026-10-17 二次拍板：不再弹替换面板）。
-        var viewBtn = WireTemplateButton(card.transform, "查看", () => ShowMercDetail(hid, def));
+        // 【2026-10-18 修·主人拍板】点「查看」先把本卡双钮收起：详情关闭后按钮不留着，
+        // 否则弹窗关掉卡上「查看/替换」还亮着（主人原话「关闭弹窗后那个卡上的两个按钮要消失」）。
+        var viewBtn = WireTemplateButton(card.transform, "查看", () => { HideActionButtons(); ShowMercDetail(hid, def); });
         var swapBtn = WireTemplateButton(card.transform, "替换", () => OnCardSwap(hid));
         if (viewBtn == null || swapBtn == null)
             Debug.LogError("[MercDrawPoolUI] 列表卡模板缺「查看/替换」钮节点：hireId=" + hireId);

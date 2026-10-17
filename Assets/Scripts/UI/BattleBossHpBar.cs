@@ -147,8 +147,22 @@ public class BattleBossHpBar : MonoBehaviour
     {
         if (_canvasLifted || _root == null) return;
         if (!_root.gameObject.activeInHierarchy) return;
+        // 【2026-10-18 修血条不可见真因】运行时 AddComponent<Canvas> 会把 RectTransform 重置成
+        // 100×100 中心锚点（10-16 dump 里 rect=(100,100)、屏幕中央小点实锤），必须缓存还原。
+        var rt = _root as RectTransform;
+        Vector2 ap = default, sd = default, aMin = default, aMax = default, pv = default, ls = default;
+        if (rt != null)
+        {
+            ap = rt.anchoredPosition; sd = rt.sizeDelta;
+            aMin = rt.anchorMin; aMax = rt.anchorMax; pv = rt.pivot; ls = rt.localScale;
+        }
         var bossCanvas = _root.GetComponent<Canvas>() ?? _root.gameObject.AddComponent<Canvas>();
         if (bossCanvas == null) return;
+        if (rt != null)
+        {
+            rt.anchoredPosition = ap; rt.sizeDelta = sd;
+            rt.anchorMin = aMin; rt.anchorMax = aMax; rt.pivot = pv; rt.localScale = ls;
+        }
         bossCanvas.overrideSorting = true;
         bossCanvas.sortingOrder = GameConfig.UiSort.BattleHud;
         _canvasLifted = true;

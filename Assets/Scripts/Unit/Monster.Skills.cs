@@ -280,7 +280,8 @@ public partial class Monster
         go.transform.position = center;
         var sr = go.AddComponent<SpriteRenderer>();
         sr.sprite = MakeCircleSprite();
-        sr.color = new Color(0.95f, 0.12f, 0.1f, 0.42f);
+        // 【2026-10-18 主人反馈红圈太浅看不清】alpha 0.42→0.68，颜色再饱和一档
+        sr.color = new Color(0.9f, 0.07f, 0.06f, 0.68f);
         sr.sortingOrder = GameConfig.SORT_UNIT - 2;
         float dia = Mathf.Max(1.2f, radius * 2f);
         go.transform.localScale = new Vector3(dia, dia * 0.35f, 1f);
@@ -353,7 +354,8 @@ public partial class Monster
         go.transform.position = origin;
         var sr = go.AddComponent<SpriteRenderer>();
         sr.sprite = MakeFanSprite();
-        sr.color = new Color(0.95f, 0.12f, 0.1f, 0.42f);
+        // 【2026-10-18 主人反馈红圈太浅看不清】alpha 0.42→0.68，颜色再饱和一档
+        sr.color = new Color(0.9f, 0.07f, 0.06f, 0.68f);
         sr.sortingOrder = GameConfig.SORT_UNIT - 2;
         // 锚点(左中)：扇形从施法者脚下朝外展开；朝左时 localScale.x 取负实现 X 翻转。
         // 贴图 128x256 / ppu=128 → 世界尺寸 (1,2)，故 radius 即 scale.x；Y 压缩比与红圈一致 0.35。

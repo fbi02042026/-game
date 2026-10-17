@@ -49,6 +49,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     // 点选态动态效果：队列已上阵格子左右晃（2026-10-17 主人拍板），退出点选态必须还原坐标
     Coroutine _swapSwayCo;
     readonly Dictionary<GameObject, Vector2> _swapSwayBase = new Dictionary<GameObject, Vector2>();
+    readonly Dictionary<GameObject, float> _swapSwayPhase = new Dictionary<GameObject, float>();   // 每卡独立相位（2026-10-18）
     const float SwapSwayAmp = 12f;    // 晃动幅度（槽位局部单位，槽宽 200）
     const float SwapSwaySpeed = 6f;   // 晃动角速度（弧度/秒，周期约 1 秒）
 
@@ -482,6 +483,27 @@ public partial class MercDrawPoolUI : MonoBehaviour
     }
 
     /// <summary>
+    /// 【2026-10-18 主人拍板】点双钮卡片以外的任意位置 → 收起该卡的「查看/替换」。
+    /// 按在卡矩形内（含卡上双钮、本卡的收起点击）不算「别处」；点其它卡时先收，
+    /// 随后那张卡的 onClick 走 OnOwnedCardClick 正常亮出自己的双钮。
+    /// </summary>
+    void Update()
+    {
+        if (_activeActionCard == null) return;
+        bool touchDown = Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began;
+        if (!Input.GetMouseButtonDown(0) && !touchDown) return;
+
+        Vector2 pos = touchDown ? (Vector2)Input.GetTouch(0).position : (Vector2)Input.mousePosition;
+        var cardRt = _activeActionCard.transform as RectTransform;
+        if (cardRt == null) { HideActionButtons(); return; }
+
+        var canvas = GetComponentInParent<Canvas>();
+        Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+        if (RectTransformUtility.RectangleContainsScreenPoint(cardRt, pos, cam)) return;
+        HideActionButtons();
+    }
+
+    /// <summary>
     /// 卡上「替换」钮：池有空位直接入队；池满【2026-10-17 二次拍板】不弹替换面板——进入点选态，
     /// 上方队列已上阵格子亮「换下」，直接点要换下的那个（同一张卡再点「替换」= 取消）。
     /// </summary>
@@ -593,7 +615,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
 
     // ---- 点选态晃动动画（左右晃，主人 2026-10-17 拍板）----
 
-    /// <summary>开始晃队列已上阵格子；重复调用先还原再重采基准坐标（切换替换目标时会带着偏移二次进入）。</summary>
+    /// <summary>开始晃队列已上阵格子；重复调用先还原再重采基准坐标（切换替换目标时会带着偏移二次进入）。
+    /// 2026-10-18 主人拍板：每张卡独立晃（各自相位），不再整排同摆。</summary>
     void StartSwapSway()
     {
         StopSwapSway();
@@ -608,6 +631,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             var rt = go.GetComponent<RectTransform>();
             if (rt == null) continue;
             _swapSwayBase[go] = rt.anchoredPosition;   // 基准 = 预制体摆的槽位坐标
+            _swapSwayPhase[go] = i * 1.7f + 0.6f;      // 每卡错开相位（不整除 2π，避免肉眼同步）
             targets.Add(go);
         }
         if (targets.Count == 0) return;
@@ -629,24 +653,26 @@ public partial class MercDrawPoolUI : MonoBehaviour
             if (rt != null) rt.anchoredPosition = kv.Value;
         }
         _swapSwayBase.Clear();
+        _swapSwayPhase.Clear();
     }
 
-    /// <summary>左右晃协程：正弦摆 anchoredPosition.x，仅在点选态运行；用 unscaled 时间防 timescale 异常卡死。</summary>
+    /// <summary>左右晃协程：每格绕自身中心正弦摆 anchoredPosition.x，相位独立（2026-10-18 主人拍板）；
+    /// 仅在点选态运行；用 unscaled 时间防 timescale 异常卡死。</summary>
     System.Collections.IEnumerator CoSwapSway(List<GameObject> targets)
     {
         float t = 0f;
         while (_swapSelecting)
         {
             t += Time.unscaledDeltaTime * SwapSwaySpeed;
-            float off = Mathf.Sin(t) * SwapSwayAmp;
             for (int i = 0; i < targets.Count; i++)
             {
                 var go = targets[i];
                 if (go == null || !_swapSwayBase.TryGetValue(go, out var basePos)) continue;
                 var rt = go.GetComponent<RectTransform>();
                 if (rt == null) continue;
+                float phase = _swapSwayPhase.TryGetValue(go, out float ph) ? ph : 0f;
                 var p = basePos;
-                p.x += off;
+                p.x += Mathf.Sin(t + phase) * SwapSwayAmp;
                 rt.anchoredPosition = p;
             }
             yield return null;

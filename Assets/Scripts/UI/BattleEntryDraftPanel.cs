@@ -121,6 +121,15 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// <summary>按钮下的价格 Text 节点。</summary>
     const string NodeCost = "Cost";
 
+    // ── 5 秒无操作软引导（2026-10-18 主人拍板）────────────────────────────
+    // 抽奖面板弹出后玩家 5 秒没任何动作 → 软引导手指指向抽奖按钮（没抽过）
+    // 或「继续」按钮（抽过还没继续）；玩家一有动作计时重置，引导期间点了就切换目标。
+    // 引导局（IsTutorialRun）已有脚本化硬引导，不走这套。
+    const float IdleGuideSec = 5f;
+    Coroutine _idleGuideCo;
+    bool _hasDrawnThisPanel;    // 本次抽奖环节玩家有没有抽过（决定引导指向谁）
+    bool _idleGuideShown;       // 引导手指当前是否已亮出（亮着时玩家抽奖=切目标，不重亮）
+
     // 按钮底色与文字颜色一律不动：icon 的图、name/金额 的字体和颜色都是主人在预制体里调好的，
     // 代码只负责改 text 和 interactable（置灰由 Button 的 disabledColor 作用在 icon 上）。
 
@@ -620,6 +629,7 @@ public class BattleEntryDraftPanel : MonoBehaviour
         _onFight = onFight;
         _draftActive = true;
         _comboCount = 0;   // 【2026-10-13 #9】每次开面板重置连抽计数
+        RestartIdleGuide();   // 【2026-10-18 主人拍板】面板弹出 = 5 秒无操作计时开始（引导局内部自动跳过）
 
         SetDraftVisible(true);
         SetExpanded(true);
@@ -632,6 +642,7 @@ public class BattleEntryDraftPanel : MonoBehaviour
     {
         // 面板收了，倒计时也得停 —— 不然协程还挂在已经隐藏的面板上，归零会再触发一次「继续」
         StopContinueCountdown();
+        StopIdleGuide();   // 5 秒无操作引导一并收掉（面板都没了不该留手指）
         _onPick = null;
         _onFight = null;
         _draftActive = false;
@@ -639,6 +650,69 @@ public class BattleEntryDraftPanel : MonoBehaviour
         SetExpanded(false);
         // 面板收了，概率弹窗也得跟着收 —— 不然战斗画面里会留一个孤儿弹窗
         DraftOddsPopupUI.Hide();
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // 5 秒无操作软引导（2026-10-18 主人拍板）：进战斗 5 秒没行动 →
+    // 手指指向抽奖按钮（没抽过）或「继续」（抽过还没继续）；软引导不挡点击。
+    // ────────────────────────────────────────────────────────────────────
+
+    /// <summary>启动/重置 5 秒计时；引导局直接不启（TutorialDirector 已有脚本化硬引导，别叠第二套）。</summary>
+    void RestartIdleGuide()
+    {
+        StopIdleGuide();
+        _hasDrawnThisPanel = false;
+        var bm = BattleManager.Instance;
+        if (bm != null && bm.IsTutorialRun) return;
+        _idleGuideCo = StartCoroutine(CoIdleGuide());
+    }
+
+    /// <summary>停计时并收掉引导手指（幂等）。</summary>
+    void StopIdleGuide()
+    {
+        if (_idleGuideCo != null)
+        {
+            StopCoroutine(_idleGuideCo);
+            _idleGuideCo = null;
+        }
+        if (_idleGuideShown)
+        {
+            TutorialHintUI.Instance?.Hide();
+            _idleGuideShown = false;
+        }
+    }
+
+    /// <summary>5 秒无操作 → 按玩家进度亮软引导：没抽过指抽奖按钮，抽过指「继续」。</summary>
+    IEnumerator CoIdleGuide()
+    {
+        float t = 0f;
+        while (t < IdleGuideSec && _draftActive)
+        {
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        _idleGuideCo = null;
+        if (!_draftActive) yield break;
+        ShowIdleGuideNow();
+    }
+
+    void ShowIdleGuideNow()
+    {
+        if (_hasDrawnThisPanel)
+        {
+            // 抽过没继续 → 指「继续」
+            var contRt = ContinueButtonRect;
+            if (contRt == null) return;
+            TutorialHintUI.Ensure().Show("抽好了，点这里开始战斗", contRt, -1f);
+        }
+        else
+        {
+            // 没抽过 → 指第一个抽奖按钮（普通/随机）
+            var drawRt = _slots.Count > 0 && _slots[0].Root != null ? _slots[0].Root : null;
+            if (drawRt == null) return;
+            TutorialHintUI.Ensure().Show("点这里抽一次奖", drawRt, -1f);
+        }
+        _idleGuideShown = true;
     }
 
     /// <summary>
@@ -1007,9 +1081,33 @@ public class BattleEntryDraftPanel : MonoBehaviour
         if (!_draftActive || idx < 0 || idx >= _slots.Count) return;
         _comboCount++;            // 【2026-10-13 #9】每点一次抽奖 +1
         RefreshCombo();
+        // 【2026-10-18 主人拍板】玩家行动了：标记抽过；
+        // 引导已亮 → 目标切到「继续」（抽完该开战了）；引导没亮 → 重置 5 秒计时（抽完挂着 5 秒再引导继续）。
+        _hasDrawnThisPanel = true;
+        if (_idleGuideShown)
+        {
+            var contRt = ContinueButtonRect;
+            if (contRt != null)
+                TutorialHintUI.Ensure().Show("抽好了，点这里开始战斗", contRt, -1f);
+        }
+        else if (_idleGuideCo != null)
+        {
+            RestartIdleTimerKeepState();
+        }
         var cb = _onPick;
         var cat = _slots[idx].Cat;
         cb?.Invoke(cat);
+    }
+
+    /// <summary>玩家抽了但引导还没亮：停掉当前计时重走 5 秒（引导亮出后目标是「继续」），不清 _hasDrawnThisPanel。</summary>
+    void RestartIdleTimerKeepState()
+    {
+        if (_idleGuideCo != null)
+        {
+            StopCoroutine(_idleGuideCo);
+            _idleGuideCo = null;
+        }
+        _idleGuideCo = StartCoroutine(CoIdleGuide());
     }
 
     void OnContinueClicked()
