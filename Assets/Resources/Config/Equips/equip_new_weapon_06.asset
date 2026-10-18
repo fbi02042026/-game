@@ -32,7 +32,7 @@ MonoBehaviour:
   skillPassives: []
   isLegendary: 0
   slotType: 5
-  weaponType: 1
+  weaponType: 0
   weaponAttackType: 0
   attackRange: 96
   armorPrefix: 0

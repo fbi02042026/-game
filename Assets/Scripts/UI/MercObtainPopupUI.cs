@@ -13,7 +13,9 @@ using UnityEngine.UI;
 /// <para>预制体已由主人在编辑器摆好：<c>Resources/Prefabs/Battle/huodeyongbing</c>
 /// （立绘 + 名字 + 三星 + 七对属性 + 技能一栏 + 确认按钮）。
 /// 本类<b>只驱动、不建树</b>：实例化预制体后只绑定节点 + 填数据，
-/// 排版（位置/字号/颜色/静态文本）一行不碰。</para>
+/// 排版（位置/字号/颜色/静态文本）一行不碰。
+/// 【2026-10-18 主人拍板】两处例外：① 名字底牌 namebg 按稀有度换三档图（同佣兵池列表卡口径）；
+/// ② 右下「替换」按钮纯代码生成（佣兵池点未入队的已获得佣兵进详情时显示，其余入口隐藏）。</para>
 ///
 /// <para>组织范式照抄 <see cref="DraftRewardDetailUI"/>：static _instance + Ensure + CoShow
 /// + 唯一关闭出口 <see cref="Close"/> + 无操作自动关兜底协程；实例化范式照抄
@@ -44,9 +46,13 @@ public class MercObtainPopupUI : MonoBehaviour
     GameObject _root;
     Button _dimBtn;
     Button _keepBtn;
+    /// <summary>右下「替换」按钮（纯代码生成，见 BuildReplaceButton；仅佣兵池详情入口显示）。</summary>
+    Button _replaceBtn;
     Image _icon;
     /// <summary>四分类类型图标位（Panel/Role，预制体已有节点）。</summary>
     Image _role;
+    /// <summary>名字底牌（Panel/zuo/namebg，2026-10-18 起按稀有度换三档图）。</summary>
+    Image _nameBg;
     Text _nameText;
     GameObject[] _stars;
     /// <summary>满星布局的原始位置（Fill 首次记录，重开弹窗从这里重算，不累积偏移）。</summary>
@@ -67,6 +73,8 @@ public class MercObtainPopupUI : MonoBehaviour
     Image _skillIcon;
 
     System.Action _onClosed;
+    /// <summary>「替换」按钮回调（佣兵池 ShowOwnedDetail 传入；Close 时消费一次）。</summary>
+    System.Action _onReplace;
     bool _closeReq;
     Coroutine _autoCo;
 
@@ -88,6 +96,8 @@ public class MercObtainPopupUI : MonoBehaviour
         ui._onClosed = onClosed;
         ui._closeReq = false;
         if (!ui.Fill(card)) { ui.Close(); yield break; }
+        ui._onReplace = null;
+        ui.ApplyReplaceButton(false);   // 抽中路径永远不带替换钮（替换只在佣兵池详情入口）
         ui.OpenRoot();
         ui.StopAutoClose();
         ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
@@ -99,8 +109,11 @@ public class MercObtainPopupUI : MonoBehaviour
     /// （抽中当场只流入队横幅 MercJoinBannerUI + Toast，引导局在二抽后教这一步）。
     /// 数据从局内佣兵条目来（hireId / AssetId / 等级 / 星级），填充、开关、无操作自动关
     /// 与抽中路径完全同一套，不另写第二份。
+    /// 【2026-10-18 主人拍板】showReplace=true 时右下显示「替换」钮，点击关弹窗并回调 onReplace
+    /// （仅佣兵池点未入队的已获得佣兵时传；战斗头像入口/未获得详情走默认值 false，行为不变）。
     /// </summary>
-    public static void ShowFromEntry(string hireId, string assetId, int level, int star)
+    public static void ShowFromEntry(string hireId, string assetId, int level, int star,
+        bool showReplace = false, System.Action onReplace = null)
     {
         var ui = Ensure();
         if (ui == null) return;
@@ -113,6 +126,8 @@ public class MercObtainPopupUI : MonoBehaviour
             Star = Mathf.Clamp(star < 1 ? 1 : star, 1, 5)
         };
         if (!ui.Fill(card)) { ui.Close(); return; }
+        ui._onReplace = onReplace;
+        ui.ApplyReplaceButton(showReplace);
         ui.OpenRoot();
         ui.StopAutoClose();
         ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
@@ -152,6 +167,7 @@ public class MercObtainPopupUI : MonoBehaviour
     {
         _instance = this;
         Bind();
+        BuildReplaceButton();   // 先造按钮再 Wire，替换钮的点击事件才能绑上
         Wire();
         if (_root != null) _root.SetActive(false);
     }
@@ -178,6 +194,7 @@ public class MercObtainPopupUI : MonoBehaviour
         _keepBtn = _root.transform.Find("Panel/KeepButton")?.GetComponent<Button>();
         _icon = _root.transform.Find("Panel/zuo/Iconmask/Icon")?.GetComponent<Image>();
         _nameText = _root.transform.Find("Panel/zuo/namebg/Name")?.GetComponent<Text>();
+        _nameBg = _root.transform.Find("Panel/zuo/namebg")?.GetComponent<Image>();
         _role = _root.transform.Find("Panel/Role")?.GetComponent<Image>();
 
         // 满星节点：预制体只摆了 3 个（满星1/满星2/满星3）
@@ -236,6 +253,87 @@ public class MercObtainPopupUI : MonoBehaviour
             _dimBtn.onClick.RemoveAllListeners();
             _dimBtn.onClick.AddListener(Close);
         }
+        if (_replaceBtn != null)
+        {
+            _replaceBtn.onClick.RemoveAllListeners();
+            _replaceBtn.onClick.AddListener(OnReplaceClicked);
+        }
+    }
+
+    // ============================================================
+    // 右下「替换」按钮（2026-10-18 主人拍板，纯代码生成）
+    // ============================================================
+
+    /// <summary>
+    /// 生成「替换」按钮：完全复刻 KeepButton 的锚点/pivot/尺寸/缩放/钮图，向右平移一个钮位
+    /// （Panel 600 宽，确认钮居中 200×62 @ (0,-496)，替换钮 x=+220 右缘正好贴 Panel 边）；
+    /// 文案样式拷确认钮的子文本。点它 = 关弹窗并回调 _onReplace（MercDrawPoolUI.OnCardSwap）。
+    /// </summary>
+    void BuildReplaceButton()
+    {
+        if (_keepBtn == null)
+        {
+            Debug.LogError("[MercObtainPopup] 缺少确认按钮 Panel/KeepButton，「替换」按钮不生成");
+            return;
+        }
+        var keepRt = _keepBtn.transform as RectTransform;
+        var keepImg = _keepBtn.image;
+        var go = new GameObject("ReplaceButton", typeof(RectTransform), typeof(Image), typeof(Button));
+        go.transform.SetParent(_keepBtn.transform.parent, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = keepRt.anchorMin;
+        rt.anchorMax = keepRt.anchorMax;
+        rt.pivot = keepRt.pivot;
+        rt.localScale = keepRt.localScale;
+        rt.sizeDelta = keepRt.sizeDelta;
+        rt.anchoredPosition = keepRt.anchoredPosition + new Vector2(keepRt.sizeDelta.x + 20f, 0f);
+        var img = go.GetComponent<Image>();
+        if (keepImg != null && keepImg.sprite != null)
+        {
+            img.sprite = keepImg.sprite;
+            img.type = keepImg.type;
+        }
+        img.raycastTarget = true;
+        _replaceBtn = go.GetComponent<Button>();
+        _replaceBtn.targetGraphic = img;
+        _replaceBtn.gameObject.SetActive(false);   // 默认隐藏，ApplyReplaceButton 决定显隐
+
+        // 子 Label：拷确认钮文本的字体/字号/颜色；确认钮没文本就用中文兜底字体
+        var keepLabel = _keepBtn.GetComponentInChildren<Text>();
+        var lgo = new GameObject("Label", typeof(RectTransform));
+        lgo.transform.SetParent(go.transform, false);
+        var lrt = lgo.GetComponent<RectTransform>();
+        lrt.anchorMin = Vector2.zero;
+        lrt.anchorMax = Vector2.one;
+        lrt.offsetMin = Vector2.zero;
+        lrt.offsetMax = Vector2.zero;
+        var lt = lgo.AddComponent<Text>();
+        lt.text = "替换";
+        lt.alignment = TextAnchor.MiddleCenter;
+        lt.raycastTarget = false;
+        if (keepLabel != null)
+        {
+            lt.font = keepLabel.font;
+            lt.fontSize = keepLabel.fontSize;
+            lt.color = keepLabel.color;
+        }
+        if (lt.font == null) lt.font = GameFonts.GetChinese();
+        if (lt.font == null) lt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+    }
+
+    /// <summary>点「替换」：先关弹窗再回调（回调里 MercDrawPoolUI 会入队/进点选态并刷新列表）。</summary>
+    void OnReplaceClicked()
+    {
+        var cb = _onReplace;
+        _onReplace = null;
+        Close();
+        cb?.Invoke();
+    }
+
+    /// <summary>显隐「替换」按钮（抽中路径/战斗头像入口/未获得详情一律隐藏）。</summary>
+    void ApplyReplaceButton(bool on)
+    {
+        if (_replaceBtn != null) _replaceBtn.gameObject.SetActive(on);
     }
 
     // ============================================================
@@ -356,6 +454,24 @@ public class MercObtainPopupUI : MonoBehaviour
         if (string.IsNullOrEmpty(mercName))
             Debug.LogError("[MercObtainPopup] 佣兵名字为空：HireId=" + def.HireId);
         SetText(_nameText, "Panel/zuo/namebg/Name", mercName);
+
+        // 3.2)【2026-10-18 主人拍板】名字底牌按稀有度换三档图（与佣兵池列表卡同口径，
+        // 唯一入口 MercHireSession.LoadTavernNamePlate；取不到报错不静默）
+        if (_nameBg == null)
+            Debug.LogError("[MercObtainPopup] 缺少节点 Panel/zuo/namebg（名字底牌不随稀有度变化）");
+        else
+        {
+            var plate = MercHireSession.LoadTavernNamePlate(def.Rarity);
+            if (plate != null)
+            {
+                _nameBg.sprite = plate;
+                _nameBg.type = Image.Type.Sliced;
+                _nameBg.color = Color.white;
+            }
+            else
+                Debug.LogError("[MercObtainPopup] 取不到稀有度名字底牌图：HireId=" + def.HireId
+                    + " Rarity=" + def.Rarity);
+        }
 
         // 3.5) Role 四分类图标：CombatBadge（自带 WarnOnce），取不到隐藏节点（T6）
         if (_role == null)

@@ -25,6 +25,10 @@ public class BattleRunStats
     public int MaxKillCombo;
     public float HealingReceived;
     public long GoldGained;
+    /// <summary>【2026-10-18 主人反馈「通关没给金币」】本局毛收入记账：任务金/宝箱/首通/装备折金/拆分币
+    /// 等所有进账都记一笔（不扣抽奖花费）。【2026-10-18 双钱包拆分】顶部 HUD 与结算「金币」栏都显示它，
+    /// 写回城镇的也是它 —— 抽奖花的是抽奖币池（currentGold），碰不到这本账。</summary>
+    public long GoldEarned;
     public int TalentGained;
     public int EquipCount;
     public int EnchantStoneDelta;
@@ -86,6 +90,7 @@ public class BattleRunStats
         MaxKillCombo = 0;
         HealingReceived = 0f;
         GoldGained = 0;
+        GoldEarned = 0;
         TalentGained = 0;
         EquipCount = 0;
         EnchantStoneDelta = 0;

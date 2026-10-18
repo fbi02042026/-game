@@ -172,7 +172,8 @@ public static class StoryProgress
         AdventureCodex.UnlockWorld("W007");
         AdventureCodex.UnlockWorld("W003");
         AdventureLogAchievements.OnTutorialDone();
-        SpecialWeapons.TryGrantTwilightStaff(showToast: true);
+        // 【2026-10-18 主人拍板】引导完成后不再送「稀有·暮火之杖」——提示和发放整段删掉，
+        // 玩家继续用职业初始武器；里程等级奖励里的领取口子（AdventureLogMileage）保留。
         // 【2026-10-16 主人拍板】欢迎信照发，但**不在这里弹**「您有新的邮件」——
         // 提示改挂在玩家关闭每日登录之后（DailyLoginUI.Hide → NewMailToast.FlushPending），
         // 引导收尾 / 登录弹窗 / 邮件提示三件事严格串行，不再交叉。

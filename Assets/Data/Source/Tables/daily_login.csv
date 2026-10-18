@@ -18,8 +18,8 @@ cycle_1,cycle,1,体力 ×15,resource,stamina,15,,,,,
 cycle_2,cycle,2,金币 ×250,resource,gold,250,,,,,,
 cycle_3,cycle,3,塔克碎片 ×3,mercfrag,H003,3,,,,,,
 cycle_4,cycle,4,天赋石 ×3,resource,talent,3,,,,,每日登录保底3石
-cycle_5,cycle,5,强化石 ×2,resource,enchant,2,,,,,,
-cycle_6,cycle,6,分解材料 ×8,resource,decompose,8,,,,,
+cycle_5,cycle,5,金币 ×240,resource,gold,240,,,,,
+cycle_6,cycle,6,金币 ×240,resource,gold,240,,,,,
 cycle_7,cycle,7,钻石 ×60,resource,diamond,60,传说碎片 ×2,legendfrag,,2,周峰值
 streak_3,streak,3,体力 ×10,resource,stamina,10,,,,,,
 streak_7,streak,7,塔克碎片 ×5,mercfrag,H003,5,,,,,

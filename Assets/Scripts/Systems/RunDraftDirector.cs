@@ -292,11 +292,11 @@ public class RunDraftDirector : MonoBehaviour
             {
                 // 主人拍板「抽中的金币是当局抽奖用的」→ 进局内金币钱包（本局能继续抽），带不出裂隙。
                 // 【2026-10-10 主人拍板】抽奖与启动金统一成局内金币，不再有第二套抽奖币。
-                if (card.Amount <= 0) { msg = "金币奖励数值异常"; return false; }
+                if (card.Amount <= 0) { msg = "抽奖币奖励数值异常"; return false; }
                 var bm = BattleManager.Instance;
-                if (bm == null) { msg = "金币奖励发放失败：不在战斗中"; return false; }
+                if (bm == null) { msg = "抽奖币奖励发放失败：不在战斗中"; return false; }
                 bm.AddRunGold(card.Amount, false);
-                msg = $"获得金币 ×{card.Amount}";
+                msg = $"获得抽奖币 ×{card.Amount}";
                 return true;
             }
 
@@ -373,7 +373,8 @@ public class RunDraftDirector : MonoBehaviour
             //
             // 真正「穿上」的出口是 <c>TryEquipDirect</c>：走 <c>EquipItem</c> → 写穿戴槽 +
             // <c>NotifyCostumeChanged()</c>（内含 <c>HeroCostumeManager.RefreshCostume</c> 刷 SPUM 时装），
-            // 顺带把顶下来的旧件 <c>ScrapEquip</c> 成强化石 —— 正好就是主人定的「低级的变成材料」。
+            // 顺带把顶下来的旧件 <c>ScrapEquip</c> 折成局内币（2026-10-18 拆分改币，不再发材料）——
+            // 正好就是主人定的「低级的变成钱」。
             if (!bag.TryEquipDirect(eq))
             {
                 done?.Invoke(false, $"{NameOf(card, eq)} 穿戴失败");
@@ -390,9 +391,10 @@ public class RunDraftDirector : MonoBehaviour
             yield break;
         }
 
-        // 玩家选择留着旧的：新件折成分解材料（ScrapEquip 自带提示与发料；实发 DecomposeMat，文案别写强化石——2026-10-17）
+        // 玩家选择留着旧的：新件折成局内币（【2026-10-18 主人拍板】拆分改币，ScrapEquip → GrantScrapGold
+        // 自带提示与发币；不再发 DecomposeMat）
         bag.ScrapEquip(eq);
-        done?.Invoke(true, $"{NameOf(card, eq)} 已折成分解材料");
+        done?.Invoke(true, $"{NameOf(card, eq)} 已折合金币");   // 【2026-10-18 双钱包拆分】折金进「本局获得金币」
     }
 
     static string NameOf(DraftCard card, EquipInstance eq)

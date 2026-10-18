@@ -47,6 +47,8 @@ public class DraftOddsPopupUI : MonoBehaviour
     RectTransform _headTemplate;
     Button _closeBtn;
     Button _dimBtn;
+    RectTransform _panel;
+    RectTransform _foot;
 
     /// <summary>本次打开克隆出来的行，关掉时统一销毁（不销毁模板本身）。</summary>
     readonly List<GameObject> _spawned = new List<GameObject>();
@@ -123,6 +125,8 @@ public class DraftOddsPopupUI : MonoBehaviour
         _headTemplate = FindDeep(_root.transform, "HeadTemplate")?.GetComponent<RectTransform>();
         _closeBtn = FindDeep(_root.transform, "BtnClose")?.GetComponent<Button>();
         _dimBtn = FindDeep(_root.transform, "Dim")?.GetComponent<Button>();
+        _panel = FindDeep(_root.transform, "Panel")?.GetComponent<RectTransform>();
+        _foot = FindDeep(_root.transform, "Foot")?.GetComponent<RectTransform>();
     }
 
     void Wire()
@@ -152,7 +156,7 @@ public class DraftOddsPopupUI : MonoBehaviour
         Wire();
         if (_root == null) return;
 
-        FillRows(DraftPool.BuildOddsRows());
+        FitPanelHeight(FillRows(DraftPool.BuildOddsRows()));
 
         _root.SetActive(true);
     }
@@ -165,47 +169,75 @@ public class DraftOddsPopupUI : MonoBehaviour
         Wire();
         if (_root == null) return;
 
-        FillRows(rows);
+        FitPanelHeight(FillRows(rows));
 
         _root.SetActive(true);
     }
 
-    /// <summary>克隆模板行并填概率数字（Open / OpenWith 共用；段标题文案写死「抽到什么/什么品质」两段）。</summary>
-    void FillRows(List<DraftPool.OddsRow> rows)
+    /// <summary>克隆模板行并填概率数字（Open / OpenWith 共用；段标题文案写死「抽到什么/什么品质」两段）。
+    /// 返回克隆出来的内容总高，供 <see cref="FitPanelHeight"/> 收面板高度用。</summary>
+    float FillRows(List<DraftPool.OddsRow> rows)
     {
-        if (rows == null) return;
+        if (rows == null) return 0f;
         if (_listRoot != null && (_rowTemplate == null || _headTemplate == null))
         {
             Debug.LogError("[DraftOddsPopup] 预制体里缺 RowTemplate / HeadTemplate，无法列出概率行");
+            return 0f;
         }
-        else if (_listRoot != null)
+        if (_listRoot == null) return 0f;
+
+        float y = 0f;
+        string lastSection = null;
+        for (int i = 0; i < rows.Count; i++)
         {
-            float y = 0f;
-            string lastSection = null;
-            for (int i = 0; i < rows.Count; i++)
+            var r = rows[i];
+            // 换段就插一个小标题：玩家一眼分清「抽到什么」和「什么品质」
+            if (r.Section != lastSection)
             {
-                var r = rows[i];
-                // 换段就插一个小标题：玩家一眼分清「抽到什么」和「什么品质」
-                if (r.Section != lastSection)
+                lastSection = r.Section;
+                if (y < 0f) y -= SectionGap;
+                var head = Clone(_headTemplate, y);
+                if (head != null)
                 {
-                    lastSection = r.Section;
-                    if (y < 0f) y -= SectionGap;
-                    var head = Clone(_headTemplate, y);
-                    if (head != null)
-                    {
-                        var ht = head.GetComponentInChildren<Text>();
-                        if (ht != null)
-                            ht.text = r.Section == DraftPool.SEC_TYPE ? "抽到什么" : "什么品质";
-                        y -= head.sizeDelta.y;
-                    }
-                }
-                var row = Clone(_rowTemplate, y);
-                if (row != null)
-                {
-                    FillRow(row, r);
-                    y -= row.sizeDelta.y;
+                    var ht = head.GetComponentInChildren<Text>();
+                    if (ht != null)
+                        ht.text = r.Section == DraftPool.SEC_TYPE ? "抽到什么" : "什么品质";
+                    y -= head.sizeDelta.y;
                 }
             }
+            var row = Clone(_rowTemplate, y);
+            if (row != null)
+            {
+                FillRow(row, r);
+                y -= row.sizeDelta.y;
+            }
+        }
+        return -y;
+    }
+
+    /// <summary>
+    /// 按内容收面板高度（2026-10-18 主人反馈「弹窗有点大 东西不多 空间很大」）：
+    /// 行数是活的（酒馆招募只有几行，战斗卡池行更多），固定高度必然有一头留大空腔。
+    /// 宽度 / 字号 / 上下留白仍归预制体管 —— 这里只把 Panel 高度收到「上下留白 + 内容」，
+    /// 页脚贴底距离保持不变；<b>只缩不涨</b>（内容比预制体原高还高时维持原高，行为与旧版一致）。
+    /// </summary>
+    void FitPanelHeight(float contentH)
+    {
+        var list = _listRoot as RectTransform;
+        if (_panel == null || list == null) return;
+
+        float padTop = -list.offsetMax.y;    // 列表顶部留白（标题 / 副标题占位）
+        float padBottom = list.offsetMin.y;  // 列表底部留白（页脚占位）
+        float oldH = _panel.sizeDelta.y;
+        float newH = Mathf.Clamp(padTop + Mathf.Max(0f, contentH) + padBottom, 240f, oldH);
+        if (Mathf.Approximately(newH, oldH)) return;
+
+        _panel.sizeDelta = new Vector2(_panel.sizeDelta.x, newH);
+        if (_foot != null)
+        {
+            // 页脚原本离底边多远，就还离多远（预制体里调了页脚位置这里自动跟上）
+            float footFromBottom = oldH + _foot.anchoredPosition.y;
+            _foot.anchoredPosition = new Vector2(_foot.anchoredPosition.x, -(newH - footFromBottom));
         }
     }
 

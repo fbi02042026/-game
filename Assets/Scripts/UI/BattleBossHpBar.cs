@@ -420,7 +420,8 @@ public class BattleBossHpBar : MonoBehaviour
         bool hideChrome = _wantVisible; // 只要在打 Boss/精英目标就藏，KillCam 期间也保持藏
         bool hideForTutorial = TutorialDirector.IsTutorialBattle;
         SetChromeActive(_progressBar, !hideChrome && !hideForTutorial);
-        SetChromeActive(_questMap, !hideChrome);
+        // 【2026-10-18 主人拍板】任务面板与结算「击杀敌人」口径不一致已整体隐藏，血条联动不再把它点亮
+        SetChromeActive(_questMap, false);
     }
 
     static void SetChromeActive(Transform t, bool active)

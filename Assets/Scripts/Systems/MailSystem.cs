@@ -57,15 +57,18 @@ public static class MailSystem
         }
         if (mail == null || mail.claimed) return false;
 
-        // 领取时仍走上限：装不下的继续留在邮件
-        long leftGold = ClaimOne(ResourceWallet.ResourceType.Gold, mail.gold);
-        long leftDiamond = ClaimOne(ResourceWallet.ResourceType.Diamond, mail.diamond);
-        long leftStamina = ClaimOne(ResourceWallet.ResourceType.Stamina, mail.stamina);
-        long leftEnchant = ClaimOne(ResourceWallet.ResourceType.EnchantStone, mail.enchantStones);
-        long leftMats = ClaimOne(ResourceWallet.ResourceType.DecomposeMat, mail.decomposeMats);
-        long leftTalent = ClaimOne(ResourceWallet.ResourceType.TalentPoint, mail.talentPoints);
+        // 【2026-10-18 修·主人报「体力溢出领取不了也关不掉」】领取口径改为：装得下的入账，装不下的随领取作废，
+        // 整封邮件标已领。旧口径「装不下的留在邮件」在满体力时一笔都进不来 → 邮件永远领不完、红点消不掉；
+        // 邮件文案口径本就是「领取后仍受上限限制」，与领取即清空的预期一致。
+        // （实际只有体力有真实上限，金币等上限 9999999 打不满，此改动无副作用面）
+        ClaimOne(ResourceWallet.ResourceType.Gold, mail.gold);
+        ClaimOne(ResourceWallet.ResourceType.Diamond, mail.diamond);
+        ClaimOne(ResourceWallet.ResourceType.Stamina, mail.stamina);
+        ClaimOne(ResourceWallet.ResourceType.EnchantStone, mail.enchantStones);
+        ClaimOne(ResourceWallet.ResourceType.DecomposeMat, mail.decomposeMats);
+        ClaimOne(ResourceWallet.ResourceType.TalentPoint, mail.talentPoints);
 
-        // 结构化附件（2026-10-16 邮件 UI 改造）：同样走上限，装不下的留在附件
+        // 结构化附件（2026-10-16 邮件 UI 改造）：资源类同样先装后弃；佣兵/卷轴不占上限直接发放
         if (mail.attachments != null)
         {
             for (int i = 0; i < mail.attachments.Count; i++)
@@ -90,33 +93,24 @@ public static class MailSystem
                 }
                 var rt = AttachmentResourceType(att.type);
                 if (rt == null) continue;   // 未知类型不吞不报，留给 UI 展示
-                att.amount = ClaimOne(rt.Value, att.amount);
+                ClaimOne(rt.Value, att.amount);
+                att.amount = 0;
             }
         }
 
-        mail.gold = leftGold;
-        mail.diamond = (int)leftDiamond;
-        mail.stamina = (int)leftStamina;
-        mail.enchantStones = (int)leftEnchant;
-        mail.decomposeMats = (int)leftMats;
-        mail.talentPoints = (int)leftTalent;
+        mail.gold = 0;
+        mail.diamond = 0;
+        mail.stamina = 0;
+        mail.enchantStones = 0;
+        mail.decomposeMats = 0;
+        mail.talentPoints = 0;
+        mail.claimed = true;
 
-        bool flatEmpty = mail.gold <= 0 && mail.diamond <= 0 && mail.stamina <= 0
-                     && mail.enchantStones <= 0 && mail.decomposeMats <= 0 && mail.talentPoints <= 0;
-        bool empty = flatEmpty && AttachmentsEmpty(mail);
-        if (empty)
-        {
-            mail.claimed = true;
-            // 【2026-10-18 修·主人报「领补偿礼包没提示」】领取=物品变动，按 2026-10-06 口径走 force=true，
-            // 不被看板娘气泡/对话压制；与登录页协议提示同一套 GlobalToastUI 深色底板样式。
-            if (notify) UIManager.Instance?.ShowToast("邮件已领取", force: true);
-        }
-        else if (notify)
-            UIManager.Instance?.ShowToast("部分资源仍达上限，已留在邮件", force: true);
+        if (notify) UIManager.Instance?.ShowToast("邮件已领取", force: true);
 
         SaveSystem.Instance.Save();
         RedDot.RefreshCommon();
-        return empty;
+        return true;
     }
 
     static long ClaimOne(ResourceWallet.ResourceType type, long amount)
@@ -125,6 +119,53 @@ public static class MailSystem
         // 领取不重复入邮，避免死循环
         var r = ResourceWallet.Add(type, amount, save: false, notify: false, overflowToMail: false);
         return amount - r.added;
+    }
+
+    // ── 体力浪费预检（2026-10-18 主人拍板：领取会超出上限先弹确认「多余的会浪费」）──
+
+    /// <summary>领取这封邮件会浪费多少点体力（含结构化附件里的体力，不真正入账）；不超上限返回 0。</summary>
+    public static int GetStaminaWasteOnClaim(MailEntry mail)
+    {
+        if (mail == null) return 0;
+        long stamina = mail.stamina;
+        if (mail.attachments != null)
+        {
+            for (int i = 0; i < mail.attachments.Count; i++)
+            {
+                var att = mail.attachments[i];
+                if (att != null && att.amount > 0 && att.type == "stamina") stamina += att.amount;
+            }
+        }
+        if (stamina <= 0) return 0;
+        long max = ResourceWallet.GetMax(ResourceWallet.ResourceType.Stamina);
+        long waste = StaminaSystem.Current + stamina - max;
+        return waste > 0 ? (int)waste : 0;
+    }
+
+    /// <summary>一键领取：所有未领邮件的体力一起算，会浪费多少点（逐封装满再算下一封，结果与逐封领取一致）；不超上限返回 0。</summary>
+    public static int GetStaminaWasteOnClaimAll()
+    {
+        Ensure();
+        long total = 0;
+        var list = SaveSystem.Instance.Data.mailInbox;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var m = list[i];
+            if (m == null || m.claimed) continue;
+            total += m.stamina;
+            if (m.attachments != null)
+            {
+                for (int j = 0; j < m.attachments.Count; j++)
+                {
+                    var att = m.attachments[j];
+                    if (att != null && att.amount > 0 && att.type == "stamina") total += att.amount;
+                }
+            }
+        }
+        if (total <= 0) return 0;
+        long max = ResourceWallet.GetMax(ResourceWallet.ResourceType.Stamina);
+        long waste = StaminaSystem.Current + total - max;
+        return waste > 0 ? (int)waste : 0;
     }
 
     /// <summary>🆕 发放佣兵奖励（type=="merc"）：解锁到花名册并尽量补进战斗抽奖池，保证玩家可招募；不占资源上限。</summary>
@@ -313,15 +354,6 @@ public static class MailSystem
             case "talent": return ResourceWallet.ResourceType.TalentPoint;
             default: return null;
         }
-    }
-
-    /// <summary>附件是否已全部领空（null/空列表视为空）。</summary>
-    static bool AttachmentsEmpty(MailEntry mail)
-    {
-        if (mail.attachments == null) return true;
-        for (int i = 0; i < mail.attachments.Count; i++)
-            if (mail.attachments[i] != null && mail.attachments[i].amount > 0) return false;
-        return true;
     }
 
     static void ApplyAmount(MailEntry mail, ResourceWallet.ResourceType type, long amount)

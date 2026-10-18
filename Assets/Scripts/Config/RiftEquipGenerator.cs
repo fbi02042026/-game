@@ -44,11 +44,35 @@ public static class RiftEquipGenerator
         if (string.IsNullOrEmpty(main))
             main = slot.IsWeapon ? "ATK" : "HP";
 
+        EquipSlotType slotType = MapSlotType(slot.SlotId, job);
+        // 【2026-10-12 主人拍板】外观模板按稀有度取同档（传奇只挑传奇模板，稀有 / 普通不挑传奇模板）
+        // 【2026-10-18 方案A 主人拍板】武器数值锚定模板 → 模板挑选前置（主属性 roll 要用模板攻击值）
+        EquipTemplate visual = PickVisualTemplate(slotType, job, fixedForTutorial, rarity.Id == "LEGEND", rarity.Id);
+        // 本职业没有可用武器模板 → 这件直接不掉，不拿别职业武器凑数
+        if (visual == null && slot.IsWeapon) return null;
+
         // 2026-10-12 主人拍板：掉落数值随章节成长（复用怪物同款 ChapterStatScaleTable，
         // Ch1 森林 0.88 → Ch8 冰川 2.12）——后期掉的传奇 > 前期掉的，
         // 解决「前期掉落的装备到后期还是一样的数值」。词条 +10（RIFT_DROP_ATTR_BONUS）不变。
-        float chapterGrowth = ChapterStatScaleTable.Get(Mathf.Max(1, chapter));
-        float mainVal = ApplyDropBonus(main, RollAttrValue(main, rarity.Id, rarity.BaseMul, false, fixedForTutorial) * chapterGrowth, attrBonus);
+        // 【2026-10-18 主人拍板】武器数值要有区间、随关卡慢慢涨：
+        //   ① 再乘章内关卡爬坡（stage_stat_scale 1.00→1.50），同一章里后打的关掉的装备更好；
+        //   ② 主属性**不再吃** RIFT_DROP_ATTR_BONUS(+10)——那是随机词条的加成，
+        //      误加到主属性上导致普通武器凭空多 10 点攻击（实锤：旧短刃 普通=区间4.5~6×0.9×0.88≈4，却显示+15）。
+        // 【2026-10-18 方案A 主人拍板「怎么一上来抽的武器还不如初始的」根因修复】
+        //   旧链：武器主属性 = ATK 区间 roll（普通 4.5~6 × BaseMul0.9 × growth0.88 ≈ 3.6~4.8，
+        //   抽奖再 ×1.18 ≈ 4.2~5.6）< 初始武器模板值 6.6 → 怎么抽都不如初始；
+        //   且模板自带 ATK（6.6~55，含主人调的 18/19/20=42/45/48）完全不参与数值，只当外观 —— 55 攻外观出 4 点面板。
+        //   新链：武器主属性 = 模板攻击值 × roll(1.0~1.1) × chapterGrowth（抽奖路径再 ×DraftWeaponAttackMul 1.18）。
+        //   模板分档与品质对齐见 PickVisualTemplate（普通≤15 / 稀有≤25 / 传奇不限）；roll 下限 1.0 = 不低于模板标注。
+        //   防具与引导确定性化路径不变（引导数值单独调过，仍走区间中值）。
+        int stageIdx0 = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
+        float chapterGrowth = ChapterStatScaleTable.Get(Mathf.Max(1, chapter)) * GameConfig.GetStageStatScale(stageIdx0);
+        float tplAtk = 0f;   // 先赋值：&& 短路时 TryGetTemplateAttack 可能不执行，out 变量需明确赋值
+        bool anchorToTemplate = slot.IsWeapon && !fixedForTutorial && visual != null
+                                && TryGetTemplateAttack(visual, main == "MAGIC_ATK", out tplAtk);
+        float mainVal = anchorToTemplate
+            ? tplAtk * Random.Range(1.0f, 1.1f) * chapterGrowth
+            : RollAttrValue(main, rarity.Id, rarity.BaseMul, false, fixedForTutorial) * chapterGrowth;
         var attrs = new List<AttrBonusData>();
         if (TryMapAttr(main, mainVal, job, out var mainBonus))
             attrs.Add(mainBonus);
@@ -69,11 +93,7 @@ public static class RiftEquipGenerator
                 attrs.Add(bonus);
         }
 
-        EquipSlotType slotType = MapSlotType(slot.SlotId, job);
-        // 【2026-10-12 主人拍板】外观模板按稀有度取同档（传奇只挑传奇模板，稀有 / 普通不挑传奇模板）
-        EquipTemplate visual = PickVisualTemplate(slotType, job, fixedForTutorial, rarity.Id == "LEGEND");
-        // 本职业没有可用武器模板 → 这件直接不掉，不拿别职业武器凑数
-        if (visual == null && slot.IsWeapon) return null;
+        // （slotType / visual 已上移到主属性 roll 之前 —— 方案A 武器锚模板需要先拿到模板）
         // 2026-09-27 主人要求「副本掉的装备名字和图片也要对齐」——根因在这里：
         // 旧写法先按职业/魔法分池挑出正确的模板 visual（名字、图标、spum 三者一致），
         // 紧接着又用「按部位纯随机」的外观表 id 盖掉 spumName —— 于是名字来自模板、
@@ -133,7 +153,10 @@ public static class RiftEquipGenerator
         // 【2026-10-12 主人拍板】引导确定性化武器 = 白板：模板被动/property 不灌进实例
         // （主人报「为什么一个白色武器还有技能还有两个属性」—— 引导武器只留 主ATK + 名字/图标/SPUM）。
         // 正式关掉落/抽奖不受影响（10-09 拍板原样生效）。
-        if (visual != null && !fixedForTutorial)
+        // 【2026-10-18 主人拍板】模板 globalBonus / skillPassives 是**传奇专属待遇**（见 equip_rarity_rules：
+        // 「传奇再挂一条被动」）。稀有/普通品质兜底套了传奇外观模板时不得全额白送
+        // —— 否则前期抽到「稀有·王庭礼剑」= 攻击+64、吸血7% 一步登天（一箭一个的元凶）。
+        if (visual != null && !fixedForTutorial && rarity.Id == "LEGEND")
         {
             inst.globalBonus = visual.globalBonus;
             inst.skillPassives = new List<AttrBonusData>();
@@ -499,20 +522,58 @@ public static class RiftEquipGenerator
     /// <summary>
     /// 这件模板算不算「传奇档」—— 决定它能不能被传奇/非传奇品质抽到。
     ///
-    /// <para>判据顺序：<c>isLegendary</c> 字段 → <c>globalBonus</c> → <c>skillPassives</c> 非空。
+    /// <para>判据顺序：<c>isLegendary</c> 字段 → <c>globalBonus</c> 有真实数值 → <c>skillPassives</c> 非空。
     /// ⚠ 现网 16 件传奇武器模板的 <c>isLegendary</c> 实测仍是 0（历史遗留死字段，只报告未动），
     /// 所以真正起作用的是后两条 —— 也正是「白送吸血被动」的那两条。
     /// 将来若把 <c>isLegendary</c> 补成 1，这里自然以它为准，无需改调用方。</para>
+    /// <para>【2026-10-18 主人拍板】globalBonus 判定必须带 value != 0：
+    /// Unity 会把 YAML 里的占位零值（attrType:0 value:0，见见习短剑等普通模板）反序列化成非空对象，
+    /// 旧写法 t.globalBonus != null 因此把**全部 61 个模板**都判成传奇档 → 同档池永远为空 →
+    /// 「稀有/普通不套传奇模板」的 10-12 拍板完全失效，第一章就抽到「稀有·王庭礼剑」白送攻击+64 和吸血7%。
+    /// 吸血被动是极稀有词条，只允许传奇品质掉落。</para>
     /// </summary>
     static bool IsLegendaryTemplate(EquipTemplate t)
     {
         if (t == null) return false;
         if (t.isLegendary) return true;
-        if (t.globalBonus != null) return true;
+        if (t.globalBonus != null && t.globalBonus.value != 0) return true;
         return t.skillPassives != null && t.skillPassives.Count > 0;
     }
 
-    static EquipTemplate PickVisualTemplate(EquipSlotType slot, PlayerJobId job, bool fixedForTutorial = false, bool wantLegendary = false)
+    /// <summary>
+    /// 模板自带的攻击类数值（baseAttr 里 Attack / MagicAttack 的非百分比项）。
+    /// 【2026-10-18 方案A】武器主属性数值锚 —— 旧路径模板数值完全不参与实例，55 攻外观出 4 点面板。
+    /// preferMagic：魔法职业武器优先取 MagicAttack，物理取 Attack；模板没配该类时回退另一种攻击值，
+    /// 都没有（旧模板/盾/防具）返回 false → 调用方走旧区间 roll 兜底。
+    /// </summary>
+    static bool TryGetTemplateAttack(EquipTemplate t, bool preferMagic, out float atk)
+    {
+        atk = 0f;
+        if (t == null || t.baseAttr == null) return false;
+        var primary = preferMagic ? AttrType.MagicAttack : AttrType.Attack;
+        var fallback = preferMagic ? AttrType.Attack : AttrType.MagicAttack;
+        float fb = -1f;
+        for (int i = 0; i < t.baseAttr.Count; i++)
+        {
+            var b = t.baseAttr[i];
+            if (b == null || b.isPercent) continue;
+            if (b.attrType == primary)
+            {
+                if (b.value > 0f) { atk = b.value; return true; }
+                return false;
+            }
+            if (b.attrType == fallback && b.value > 0f && fb < 0f) fb = b.value;
+        }
+        if (fb > 0f) { atk = fb; return true; }
+        return false;
+    }
+
+    /// <summary>武器模板品质分档阈值（方案A）：普通档只出 ATK≤此值的模板。</summary>
+    const float TemplateTierNormalMax = 15f;
+    /// <summary>武器模板品质分档阈值（方案A）：稀有档只出 ATK≤此值的模板，更高档留给传奇。</summary>
+    const float TemplateTierRareMax = 25f;
+
+    static EquipTemplate PickVisualTemplate(EquipSlotType slot, PlayerJobId job, bool fixedForTutorial = false, bool wantLegendary = false, string rarityId = null)
     {
         var templates = Resources.LoadAll<EquipTemplate>(ContentPaths.Config.Equips);
         if (templates == null || templates.Length == 0) return null;
@@ -534,9 +595,37 @@ public static class RiftEquipGenerator
             if (t == null) continue;
             if (t.isAnchor && slot != EquipSlotType.OffHand) continue;
             var bucket = IsLegendaryTemplate(t) == wantLegendary ? pool : tierMismatch;
-            if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
+            if (slot == EquipSlotType.MainHand)
             {
                 if (t.weaponType == WeaponType.None) continue;
+                if (!PlayerJobDefs.TemplateMatchesJob(t, job)) continue;
+                // 【2026-10-18 方案A 主人拍板】武器模板按 ATK 分档与品质对齐：
+                // 普通 ≤15（sword_1/06/12/01/02/axe/bow 等低档）、稀有 15~25（03/04/05/07/08/sword_3~5 等）、
+                // 传奇不限（30~55 高档 + 带被动模板）。档不符进 tierMismatch（同档空时兜底，宁越档不可没外观）。
+                // 起因：旧逻辑普通品质能抽到 42~55 攻的高档外观模板，面板却是 4~5 点 roll —— 「抽的还不如初始的」。
+                // 盾/防具不走此分支；引导确定性化不分档（固定模板序列不能变）。
+                if (!fixedForTutorial && !string.IsNullOrEmpty(rarityId)
+                    && TryGetTemplateAttack(t, PlayerJobBaseStats.IsMagicJob(job), out float tAtk))
+                {
+                    bool tierMismatchByAtk =
+                        (rarityId == "NORMAL" && tAtk > TemplateTierNormalMax)
+                        || (rarityId == "RARE" && (tAtk > TemplateTierRareMax || tAtk <= TemplateTierNormalMax));
+                    if (tierMismatchByAtk)
+                    {
+                        // t 可能已因 IsLegendaryTemplate 分进 tierMismatch —— 防重复 Add（重复会让选中概率翻倍）
+                        if (!tierMismatch.Contains(t)) tierMismatch.Add(t);
+                        pool.Remove(t);
+                        continue;
+                    }
+                }
+                bucket.Add(t);
+            }
+            else if (slot == EquipSlotType.OffHand)
+            {
+                // 【2026-10-18 主人拍板】副手槽只给盾牌：offhand 剑/匕/斧这类「副手武器」不再进抽奖池，
+                // 选剑盾只能获得剑与盾，副手替换弹窗只会盾对盾。盾是否匹配职业走 TemplateMatchesJob（盾仅剑盾）。
+                // 2026-10-11「放行锚点让副手武器能抽到」随狂战下架作废；以后双持职业回归再在此放开。
+                if (t.weaponType != WeaponType.None) continue;           // 副手武器（非盾）一律排除
                 if (!PlayerJobDefs.TemplateMatchesJob(t, job)) continue;
                 bucket.Add(t);
             }

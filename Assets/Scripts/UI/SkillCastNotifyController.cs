@@ -257,9 +257,12 @@ public class SkillCastNotifyController : MonoBehaviour
         // Instantiate 会继承禁用状态；池里回收件也是禁用态 —— 不重新激活，横条永远不可见。
         rt.gameObject.SetActive(true);
 
-        float finalX = isEnemy ? -_tplFinalPos.x : _tplFinalPos.x;
-        finalX = ClampToSafeArea(finalX);
-        float startX = isEnemy ? -StartOffsetX : StartOffsetX;
+        // 【2026-10-18 修「飘字被屏幕左边缘裁切」】SkillUI 不在画布正中（根下 x=-219），
+        // 旧逻辑把模板偏移当「相对屏幕中心」用，且钳制取的是 SkillUI 自身宽度(100) → 形同虚设，
+        // 终点落在根画布 x=-219、条宽 300 → 左缘 -369 出屏（画布半宽仅 360）。
+        // 改为统一在根画布空间求终点，按「画布半宽 − 安全边距 − 条半宽」钳制；敌人侧按设计镜像到右侧。
+        float finalX = ResolveFinalX(isEnemy);
+        float startX = finalX + (isEnemy ? -StartOffsetX : StartOffsetX);
 
         var entry = new NotifyEntry
         {
@@ -281,13 +284,6 @@ public class SkillCastNotifyController : MonoBehaviour
         // 最新一条插到队首（占模板原位），旧条目 index 变大后平滑下移
         list.Insert(0, entry);
         entry.rt.anchoredPosition = entry.startPos;
-
-        // 【临时打点·查技能通知不显示】定位后删除
-        var rt0 = (RectTransform)transform;
-        var cv0 = GetComponentInParent<Canvas>();
-        Debug.Log($"[SkillCastNotify·打点] Push {label} tplPos={_tplFinalPos} finalX={finalX} halfW={HalfWidth()} " +
-                  $"startPos={entry.startPos} activeInHierarchy={rt0.gameObject.activeInHierarchy} " +
-                  $"canvas={(cv0 != null ? $"{cv0.renderMode} cam={cv0.worldCamera} order={cv0.sortingOrder}" : "无")}");
     }
 
     void TickList(List<NotifyEntry> list, float dt)
@@ -410,26 +406,37 @@ public class SkillCastNotifyController : MonoBehaviour
         return c;
     }
 
-    /// <summary>finalPos.x 收进安全边距内，避开刘海 / 打孔。</summary>
-    float ClampToSafeArea(float x)
+    /// <summary>
+    /// 求终点 x（SkillUI 局部坐标）：先换算到根画布空间，再按
+    /// 「画布半宽 − SafeMargin − 条半宽」钳制；敌人侧按屏幕中心镜像（右侧）。
+    /// </summary>
+    float ResolveFinalX(bool isEnemy)
     {
-        float half = HalfWidth();
-        float lim = Mathf.Max(0f, half - SafeMargin);
-        return Mathf.Clamp(x, -lim, lim);
+        var rootRt = RootRect();
+        float skillUiX = 0f;
+        float rootHalf = Screen.width * 0.5f;   // 兜底：取不到根画布时退回屏幕像素
+        if (rootRt != null)
+        {
+            if (rootRt.rect.width > 1f) rootHalf = rootRt.rect.width * 0.5f;
+            if (_root != null)
+                skillUiX = rootRt.InverseTransformPoint(_root.position).x;
+        }
+
+        float barHalf = _template != null && _template.rect.width > 1f ? _template.rect.width * 0.5f : 0f;
+        float lim = Mathf.Max(0f, rootHalf - SafeMargin - barHalf);
+
+        float desiredRootX = skillUiX + _tplFinalPos.x;
+        if (isEnemy) desiredRootX = -desiredRootX;   // 敌人从右侧镜像（以画布中心为轴）
+        float clampedRootX = Mathf.Clamp(desiredRootX, -lim, lim);
+        return clampedRootX - skillUiX;   // 换回 SkillUI 局部坐标
     }
 
-    /// <summary>画布半宽：优先 SkillUI 自身矩形，其次父 Canvas，最后退回屏幕像素。</summary>
-    float HalfWidth()
+    /// <summary>根画布的 RectTransform（SkillUI 自带的嵌套 Canvas 之上那一层）。</summary>
+    RectTransform RootRect()
     {
-        if (_root != null && _root.rect.width > 1f)
-            return _root.rect.width * 0.5f;
-
-        var canvas = GetComponentInParent<Canvas>();
-        var crt = canvas != null ? canvas.transform as RectTransform : null;
-        if (crt != null && crt.rect.width > 1f)
-            return crt.rect.width * 0.5f;
-
-        return Screen.width * 0.5f;
+        var cv = GetComponentInParent<Canvas>();
+        var rootCv = cv != null ? cv.rootCanvas : null;
+        return rootCv != null ? rootCv.transform as RectTransform : null;
     }
 
     // ============================================================

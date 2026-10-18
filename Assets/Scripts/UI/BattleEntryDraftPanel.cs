@@ -122,13 +122,13 @@ public class BattleEntryDraftPanel : MonoBehaviour
     const string NodeCost = "Cost";
 
     // ── 5 秒无操作软引导（2026-10-18 主人拍板）────────────────────────────
-    // 抽奖面板弹出后玩家 5 秒没任何动作 → 软引导手指指向抽奖按钮（没抽过）
-    // 或「继续」按钮（抽过还没继续）；玩家一有动作计时重置，引导期间点了就切换目标。
-    // 引导局（IsTutorialRun）已有脚本化硬引导，不走这套。
+    // 正式战斗中：面板弹出后玩家 5 秒没任何动作 → 手指指抽奖按钮；
+    // 【2026-10-18 二次拍板】抽完后又间隔 5 秒无操作 → 再指引点「继续」（每次抽奖都重走 5 秒）。
+    // 引导局（IsTutorialRun）不走这套，新手引导还是原来的脚本化硬引导。
     const float IdleGuideSec = 5f;
     Coroutine _idleGuideCo;
-    bool _hasDrawnThisPanel;    // 本次抽奖环节玩家有没有抽过（决定引导指向谁）
-    bool _idleGuideShown;       // 引导手指当前是否已亮出（亮着时玩家抽奖=切目标，不重亮）
+    bool _hasDrawnThisPanel;    // 本次抽奖环节玩家有没有抽过（决定手指指抽奖按钮还是指「继续」）
+    bool _idleGuideShown;       // 引导手指当前是否已亮出
 
     // 按钮底色与文字颜色一律不动：icon 的图、name/金额 的字体和颜色都是主人在预制体里调好的，
     // 代码只负责改 text 和 interactable（置灰由 Button 的 disabledColor 作用在 icon 上）。
@@ -280,6 +280,12 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// <summary>【2026-10-13 #9】「已连抽 ×N」提示（≥2 显示），挂在抽奖容器上方。</summary>
     Text _comboText;
     Coroutine _comboFlashCo;
+    /// <summary>
+    /// 【2026-10-18 主人拍板「在抽奖旁边加个抽奖币和数量」】抽奖币池计数（icon_draft_coin + 数字）。
+    /// 顶栏改显「本局获得金币」后，抽奖能花的那本账（BattleManager.currentGold）在这里显示。
+    /// 运行时建，挂 DraftRoot 下（跟抽完收起/展开一起走），见 BuildPoolChip。
+    /// </summary>
+    Text _poolChipText;
 
     // ===== 抽完后「等玩家点继续」的两件套（2026-10-06 主人拍板）=====
 
@@ -653,8 +659,8 @@ public class BattleEntryDraftPanel : MonoBehaviour
     }
 
     // ────────────────────────────────────────────────────────────────────
-    // 5 秒无操作软引导（2026-10-18 主人拍板）：进战斗 5 秒没行动 →
-    // 手指指向抽奖按钮（没抽过）或「继续」（抽过还没继续）；软引导不挡点击。
+    // 5 秒无操作软引导（2026-10-18 主人拍板）：正式战斗中 5 秒没行动 →
+    // 手指指抽奖按钮（没抽过）；抽完后又间隔 5 秒无操作 → 指「继续」；软引导不挡点击。
     // ────────────────────────────────────────────────────────────────────
 
     /// <summary>启动/重置 5 秒计时；引导局直接不启（TutorialDirector 已有脚本化硬引导，别叠第二套）。</summary>
@@ -700,7 +706,7 @@ public class BattleEntryDraftPanel : MonoBehaviour
     {
         if (_hasDrawnThisPanel)
         {
-            // 抽过没继续 → 指「继续」
+            // 【2026-10-18 二次拍板】抽完后又间隔 5 秒无操作 → 指「继续」
             var contRt = ContinueButtonRect;
             if (contRt == null) return;
             TutorialHintUI.Ensure().Show("抽好了，点这里开始战斗", contRt, -1f);
@@ -758,6 +764,8 @@ public class BattleEntryDraftPanel : MonoBehaviour
             BuildOddsButton();
             // 【2026-10-13 #9】连抽提示（见 BuildComboText 注释）
             BuildComboText();
+            // 【2026-10-18 主人拍板】抽奖币池计数（icon_draft_coin + 数字，见 BuildPoolChip 注释）
+            BuildPoolChip();
         }
 
         var cont = FindDeep(_panel, NodeContinue);
@@ -984,6 +992,77 @@ public class BattleEntryDraftPanel : MonoBehaviour
     }
 
     /// <summary>
+    /// 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币，然后在抽奖旁边加个抽奖币和数量」】
+    /// 抽奖币池计数：icon_draft_coin + 数字，挂在 DraftRoot 下、抽奖按钮上方居中
+    ///（连抽提示再往上一层，互不遮挡）。运行时建，不改预制体；随 DraftRoot 一起收起/隐藏。
+    /// 显示真源 = <see cref="BattleManager.currentGold"/>（抽奖唯一能花的那本账，
+    /// 启动金 / 通关补贴 / 抽中金币）；刷新出口 = <see cref="Refresh"/> 与
+    /// <see cref="NotifyPoolGoldChanged"/>，别处不许直接改文本。
+    /// </summary>
+    void BuildPoolChip()
+    {
+        if (_draftRt == null || _poolChipText != null) return;
+        var go = new GameObject("DraftPoolChip", typeof(RectTransform), typeof(CanvasRenderer),
+                                 typeof(HorizontalLayoutGroup));
+        go.transform.SetParent(_draftRt, false);
+        var rt = go.GetComponent<RectTransform>();
+        // 与 ComboHint 同锚（DraftRoot 顶边），位置更低一档：正好落在按钮行上方、连抽提示下方
+        rt.anchorMin = new Vector2(0.5f, 1f);
+        rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(0f, 86f);
+        rt.sizeDelta = new Vector2(220f, 32f);
+        var hlg = go.GetComponent<HorizontalLayoutGroup>();
+        hlg.spacing = 8f;
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+        hlg.childControlWidth = false;
+        hlg.childControlHeight = false;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = false;
+
+        // 图标：抽奖币（icon_draft_coin，与抽奖按钮价格旁同图）
+        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        iconGo.transform.SetParent(go.transform, false);
+        var iconRt = iconGo.GetComponent<RectTransform>();
+        iconRt.sizeDelta = new Vector2(28f, 28f);
+        var icon = iconGo.GetComponent<Image>();
+        icon.raycastTarget = false;
+        icon.preserveAspect = true;
+        icon.sprite = GetCurrencyIcon(ResourceWallet.ResourceType.Gold);
+        if (icon.sprite == null)
+            Debug.LogError("[BattleEntryDraftPanel] 抽奖币图标取不到 —— 池子计数只显示数字");
+
+        // 数字：局内抽奖币池余额（BattleManager.currentGold）
+        var txtGo = new GameObject("Count", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        txtGo.transform.SetParent(go.transform, false);
+        var txtRt = txtGo.GetComponent<RectTransform>();
+        txtRt.sizeDelta = new Vector2(170f, 32f);
+        var t = txtGo.GetComponent<Text>();
+        t.fontSize = 26;
+        t.color = new Color(1f, 0.72f, 0.2f);   // #FFB833，与连抽提示同金色
+        t.alignment = TextAnchor.MiddleLeft;
+        t.raycastTarget = false;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        var f = GameFonts.GetChinese();
+        if (f != null) t.font = f;
+        t.text = BattleManager.Instance != null ? BattleManager.Instance.currentGold.ToString() : "0";
+        _poolChipText = t;
+    }
+
+    /// <summary>
+    /// 抽奖币池变化的轻量刷新出口（<see cref="BattleManager.AddRunGold"/> / SpendBattleGold 调）：
+    /// 只改池子数字，不动按钮置灰 —— 按钮口径仍由 <see cref="Refresh"/> 在面板各刷新点统一算。
+    /// 面板不存在（未建/已销毁）时静默跳过，下次 Show 自然带上最新值。
+    /// </summary>
+    public static void NotifyPoolGoldChanged(long coins)
+    {
+        // 【2026-10-18 主人摆的顶栏 DraftDisplay 抽奖币条】与下方池子计数同源同刻
+        BattleUI.Instance?.UpdateDraftCoin(coins);
+        if (Instance != null && Instance._poolChipText != null)
+            Instance._poolChipText.text = coins.ToString();
+    }
+
+    /// <summary>
     /// 给已有节点补 Button，让它能点。
     /// 优先用节点自己的 Image 做点击反馈；本体没有 Image 时（抽奖按钮就是这种，
     /// 图在子节点 icon 上）用 icon 的 Image —— <b>绝不在本体上硬加 Image</b>，
@@ -1026,6 +1105,9 @@ public class BattleEntryDraftPanel : MonoBehaviour
         _lastFreeLeft = freeLeft;
         _lastCoins = coins;
         _lastCats = cats;
+
+        // 【2026-10-18 主人拍板】抽奖币池计数跟着同一组余额走（顶栏那本账是「本局获得金币」，不在这显示）
+        if (_poolChipText != null) _poolChipText.text = coins.ToString();
 
         // 2026-10-05：金币本开局送的免费抽 —— 还有额度时按钮上写「免费 ×N」，不看余额也能点。
         bool free = freeLeft > 0;
@@ -1081,32 +1163,24 @@ public class BattleEntryDraftPanel : MonoBehaviour
         if (!_draftActive || idx < 0 || idx >= _slots.Count) return;
         _comboCount++;            // 【2026-10-13 #9】每点一次抽奖 +1
         RefreshCombo();
-        // 【2026-10-18 主人拍板】玩家行动了：标记抽过；
-        // 引导已亮 → 目标切到「继续」（抽完该开战了）；引导没亮 → 重置 5 秒计时（抽完挂着 5 秒再引导继续）。
+        // 【2026-10-18 二次拍板】玩家抽了：收掉当前手指（可能还指着抽奖按钮）、重走 5 秒计时——
+        // 抽完后又间隔 5 秒无操作，才再指引点「继续」；不是抽完立刻切目标。
         _hasDrawnThisPanel = true;
-        if (_idleGuideShown)
-        {
-            var contRt = ContinueButtonRect;
-            if (contRt != null)
-                TutorialHintUI.Ensure().Show("抽好了，点这里开始战斗", contRt, -1f);
-        }
-        else if (_idleGuideCo != null)
-        {
-            RestartIdleTimerKeepState();
-        }
+        RestartIdleTimerKeepState();
         var cb = _onPick;
         var cat = _slots[idx].Cat;
         cb?.Invoke(cat);
     }
 
-    /// <summary>玩家抽了但引导还没亮：停掉当前计时重走 5 秒（引导亮出后目标是「继续」），不清 _hasDrawnThisPanel。</summary>
+    /// <summary>
+    /// 玩家抽了：收掉当前手指、重走 5 秒计时（不清 _hasDrawnThisPanel，归零后按「抽过」口径指「继续」）。
+    /// 引导局不启这套（新手引导还是原来的设计，与 RestartIdleGuide 同一口径）。
+    /// </summary>
     void RestartIdleTimerKeepState()
     {
-        if (_idleGuideCo != null)
-        {
-            StopCoroutine(_idleGuideCo);
-            _idleGuideCo = null;
-        }
+        var bm = BattleManager.Instance;
+        if (bm != null && bm.IsTutorialRun) return;
+        StopIdleGuide();
         _idleGuideCo = StartCoroutine(CoIdleGuide());
     }
 

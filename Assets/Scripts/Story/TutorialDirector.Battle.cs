@@ -58,23 +58,39 @@ public partial class TutorialDirector
         AllowBattleSkillClick = false;
         WaitingEvacuate = false;
 
-        // —— 0) 第一波进场 + 自动技能（选职已在冒险页完成）——
-        // 【2026-10-09】摇杆已于 2026-10-05 整条链路停用（BattleJoystick 永不创建，见 BattleUI.Backpack.cs:386），
-        //   这里只剩「刷第一波 + 借 3.2 秒读字时间让怪走进场」，不再有教走路这一步。
+        // —— 0) 进关先明示启动金（2026-10-18 主人拍板；同日二次拍板：并入引导步骤播）——
+        // 玩家对账懵的根因：城镇金币不带入战斗，进关发启动金（引导局 270），HUD 从 500 跳 270
+        // 像「被扣了 230」；三拍扣的 80/88/97 花的又全是启动金——其实城镇存款一分没动。
+        // 原来走 GlobalToastUI 飘过即逝，现在改成引导第 0 步气泡：先把第一波刷出来站好，
+        // 启动金说明压 3 秒让玩家读完，再接「先打一波」——读字时不打架；怪的进场走位
+        // 仍由 CoTeachControls 的 3.2 秒空档负责（「先打一波」到首波接战的相对时机不变）。
+        // 停留 3 秒想调就调这一处。
         if (bm != null) bm.UnitsCanAct = false;
         HaltUnit(Hero.Instance);
+        yield return EnsureTutorialStep(bm, 1);
+        hint.Show(
+            "本局启动金 " + SlotMachineSystem.RunStarterGold(true) + " 抽奖币（自带金币不带入战斗）· 抽价每抽涨 10%，花完为止",
+            null, 3f);
+        yield return new WaitForSecondsRealtime(3f);
+
+        // —— 0) 第一波进场 + 自动技能（选职已在冒险页完成）——
+        // 【2026-10-09】摇杆已于 2026-10-05 整条链路停用（BattleJoystick 永不创建，见 BattleUI.Backpack.cs:386），
+        //   这里只剩「借 3.2 秒读字时间让怪走进场」，不再有教走路这一步（第一波已在上一步刷）。
+        //   冻结已提到上方「启动金说明」步骤开头，此处不再重复。
         // 【2026-10-12 主人拍板】「先打一波」这句**提到玩家一出场就播** ——
         //   主人原话「先打一波那个引导在玩家一出来就播」。
         //   原位置在 CoTeachControls 之后（刷怪 + 3.2 秒进场走完才弹），玩家已经在场上站了 3 秒多才看到，
         //   现在移到刷怪之前，出场即见；怪照常在下面那 3.2 秒里走上来。
         // 【2026-10-16 主人拍板】后半句去说明书腔（文案调性：有趣、流行、适合年轻人）
         hint.Show("先打一波热热身～你负责逛街，打架的事交给系统就好啦！", null, 8f);
-        yield return CoTeachControls(bm, hint, ui, preloadStep: 1);
+        // 第一波已在上方「启动金说明」步骤里刷（EnsureTutorialStep 不看是否已刷过，
+        // 重复调用会多排一波），这里 preloadStep 传 0，只保留 3.2 秒进场空档。
+        yield return CoTeachControls(bm, hint, ui, preloadStep: 0);
 
         // —— 1) 首波清场后进入宝箱剧情（不再刷第二小波）——
         // 2026-09-27 主人反馈「引导到自动攻击时怪还没出来」→ **先刷怪、再弹提示**。
-        // 2026-09-28 再提前：第 1 波已在 CoTeachControls 里刷（preloadStep:1），
-        // 借「技能能量满会自动释放」那 3.2 秒读字时间走完进场，这里不再重复刷
+        // 2026-09-28 再提前：第 1 波已在开场「启动金说明」步骤里刷（见上方 EnsureTutorialStep），
+        // 借读字 + 3.2 秒空档走完进场，这里不再重复刷
         // （EnsureTutorialStep 不看是否已刷过，重复调用会多排一波）。
         TutorialBattleTable.EnsureLoaded();
         // 【2026-10-08 主人拍板】第一波那句「热身」引导已于 2026-10-12 上移到 BattleRoutine 开场
@@ -105,6 +121,12 @@ public partial class TutorialDirector
         // 2026-10-06 主人拍板：招募完立刻刷一次头像栏，否则要等下一次全量刷新才亮出来
         // （ShowMercHud 由本局抽数推导，抽数已在 CoInstantPick 里 +1）。
         ui?.UpdateCharacterSlots();
+
+        // —— 1c+) 肉鸽口径说明（2026-10-18 主人拍板：「肉鸽玩法每次进都是从头获取」）——
+        // 放在第一抽刚开完这里趁热讲：玩家刚体验过「抽 → 穿上」，构筑概念最具体的一刻。
+        // 不硬等流程（下一拍就是压场波，要保住「大展身手 → 被围」的节奏），气泡 6 秒自动消失。
+        hint.Show("抽到的装备、技能、伙伴都是本局构筑哟～出了战斗会清空，说不定下回的你会更强！",
+            null, 6f);
 
         // —— 1d) 【2026-10-08 主人拍板】抽中武器以为能大展身手，结果十几只小怪压上来 ——
         // 主人原话：「抽中一个武器 以为大展身手的时候到了 结果来了十几个小怪

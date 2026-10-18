@@ -27,12 +27,19 @@ public class BattleSideHud : MonoBehaviour
     const float ComboPopDur = 0.08f;     // 放大
     const float ComboShrinkDur = 0.18f;  // 立马缩回
     const float ComboHideAfterShrink = 0.6f;  // 缩回后再看 0.6s 才消失
+    // 【2026-10-18 主人拍板】出场/退场不做位移，直接渐显/渐隐；
+    // 连杀数字从旧值逐个跳到新值，每跳一格重播一次「放大缩小」。
+    const float ComboFadeInDur = 0.1f;   // 渐显
+    const float ComboFadeOutDur = 0.1f;  // 渐隐
+    const float ComboRollStep = 0.05f;   // 数字每跳一格的间隔
 
-    enum ComboAnimPhase { Hidden, Pop, Shrink, Hold, Gone }
+    enum ComboAnimPhase { Hidden, FadeIn, Pop, Shrink, Hold, FadeOut, Gone }
     ComboAnimPhase _comboPhase = ComboAnimPhase.Hidden;
     float _comboAnimT;
     float _comboScale = 1f;
     int _comboShown;
+    int _displayCombo;      // 数字滚动：当前逐字显示到的值
+    float _rollTimer;       // 数字滚动：距下一次跳格
 
     public static BattleSideHud EnsureOn(Transform battleUiRoot)
     {
@@ -196,7 +203,34 @@ public class BattleSideHud : MonoBehaviour
         float dt = Time.unscaledDeltaTime;
         _comboAnimT += dt;
 
-        if (_comboPhase == ComboAnimPhase.Pop)
+        // 数字逐个跳变：每跳一格重播一次放大缩小（Pop→Shrink 原节奏）
+        if (_displayCombo < _comboShown)
+        {
+            _rollTimer -= dt;
+            if (_rollTimer <= 0f)
+            {
+                _displayCombo++;
+                ApplyComboText(_displayCombo);
+                _rollTimer = ComboRollStep;
+                _comboGroup.alpha = 1f;
+                _comboPhase = ComboAnimPhase.Pop;
+                _comboAnimT = 0f;
+                _comboScale = 1f;
+            }
+        }
+
+        if (_comboPhase == ComboAnimPhase.FadeIn)
+        {
+            float u = Mathf.Clamp01(_comboAnimT / ComboFadeInDur);
+            _comboGroup.alpha = u;
+            if (u >= 1f)
+            {
+                _comboPhase = ComboAnimPhase.Pop;
+                _comboAnimT = 0f;
+                _comboScale = 1f;
+            }
+        }
+        else if (_comboPhase == ComboAnimPhase.Pop)
         {
             float u = Mathf.Clamp01(_comboAnimT / ComboPopDur);
             _comboScale = Mathf.Lerp(1f, ComboScalePop, u);
@@ -211,7 +245,6 @@ public class BattleSideHud : MonoBehaviour
         {
             float u = Mathf.Clamp01(_comboAnimT / ComboShrinkDur);
             _comboScale = Mathf.Lerp(ComboScalePop, ComboScaleEnd, u);
-            // 全程不淡出
             _comboGroup.alpha = 1f;
             if (u >= 1f)
             {
@@ -219,11 +252,22 @@ public class BattleSideHud : MonoBehaviour
                 _comboAnimT = 0f;
                 _comboScale = ComboScaleEnd;
             }
-        }        else if (_comboPhase == ComboAnimPhase.Hold)
+        }
+        else if (_comboPhase == ComboAnimPhase.Hold)
         {
             _comboScale = ComboScaleEnd;
             _comboGroup.alpha = 1f;
             if (_comboAnimT >= ComboHideAfterShrink)
+            {
+                _comboPhase = ComboAnimPhase.FadeOut;
+                _comboAnimT = 0f;
+            }
+        }
+        else if (_comboPhase == ComboAnimPhase.FadeOut)
+        {
+            float u = Mathf.Clamp01(_comboAnimT / ComboFadeOutDur);
+            _comboGroup.alpha = 1f - u;
+            if (u >= 1f)
             {
                 _comboGroup.alpha = 0f;
                 _comboPhase = ComboAnimPhase.Gone;
@@ -234,28 +278,8 @@ public class BattleSideHud : MonoBehaviour
         _comboScaleRoot.localScale = Vector3.one * _comboScale;
     }
 
-    public void SetCombo(int combo)
+    void ApplyComboText(int combo)
     {
-        if (_comboGroup == null) return;
-
-        // 引导战不显示连杀「击破」
-        if (TutorialRules.Current.HideKillComboHud)
-            combo = 0;
-
-        if (combo <= 0)
-        {
-            _comboGroup.alpha = 0f;
-            _comboPhase = ComboAnimPhase.Hidden;
-            _comboShown = 0;
-            if (_comboValue != null) _comboValue.text = "";
-            if (_comboScaleRoot != null) _comboScaleRoot.localScale = Vector3.one;
-            _comboScale = 1f;
-            return;
-        }
-
-        _comboShown = combo;
-        _comboGroup.alpha = 1f;
-        if (_comboTitle != null) _comboTitle.text = "击破";
         if (_comboValue != null)
         {
             _comboValue.text = "x" + combo;
@@ -263,13 +287,50 @@ public class BattleSideHud : MonoBehaviour
                 ? new Color(1f, 0.55f, 0.2f, 1f)
                 : new Color(1f, 0.85f, 0.25f, 1f);
         }
+    }
 
-        // 再杀：立刻弹回 1.5 重播（消失前可继续计数）
-        _comboPhase = ComboAnimPhase.Pop;
-        _comboAnimT = 0f;
-        _comboScale = 1f;
-        if (_comboScaleRoot != null)
-            _comboScaleRoot.localScale = Vector3.one;
+    public void SetCombo(int combo)
+    {
+        if (_comboGroup == null) return;
+
+        // 【2026-10-18 删除】引导战强隐连杀的旧判断（TutorialRules.HideKillComboHud）已整条删除：
+        // 主人 10-15 拍板连杀挪右上角、10-17 拍板「右上角击破计数常驻」，引导局同样显示。
+        if (combo <= 0)
+        {
+            _comboGroup.alpha = 0f;
+            _comboPhase = ComboAnimPhase.Hidden;
+            _comboShown = 0;
+            _displayCombo = 0;
+            _rollTimer = 0f;
+            if (_comboValue != null) _comboValue.text = "";
+            if (_comboScaleRoot != null) _comboScaleRoot.localScale = Vector3.one;
+            _comboScale = 1f;
+            return;
+        }
+
+        bool wasHidden = _comboPhase == ComboAnimPhase.Hidden || _comboPhase == ComboAnimPhase.Gone;
+        _comboShown = combo;
+        _comboGroup.alpha = 1f;
+        if (_comboTitle != null) _comboTitle.text = "击破";
+
+        if (wasHidden)
+        {
+            // 首杀：直接渐显 + 显示目标值，随后走放大缩小；不滚动数字
+            _displayCombo = combo;
+            ApplyComboText(combo);
+            _rollTimer = 0f;
+            _comboGroup.alpha = 0f;   // 从 FadeIn 起步
+            _comboPhase = ComboAnimPhase.FadeIn;
+            _comboAnimT = 0f;
+            _comboScale = 1f;
+            if (_comboScaleRoot != null)
+                _comboScaleRoot.localScale = Vector3.one;
+            return;
+        }
+
+        // 连杀：数字从当前显示值逐个跳到新值（每跳一格重播放大缩小），渐隐中也会被打断拉回
+        if (_displayCombo < combo)
+            _rollTimer = 0f;   // 立刻跳第一格
     }
 
     public void ResetCombo()

@@ -11,9 +11,9 @@ public partial class BattleUI : MonoBehaviour
 {
     static Sprite _questGoldSprite;
 
-    // 2026-09-15 产出去零：任务奖励金真实值来自 battle_quest.csv（普通关 3+章节，Boss 关 20~200），
-    // 默认值同步降一档，避免首帧显示一个已经被砍掉的量级。
-    int _questRewardGold = 10;
+    // 2026-10-18 任务奖励金真实值来自 battle_quest.csv（普通关 40+5×章节，Boss 关 60~400，主人拍板提额），
+    // 默认值同步同档，避免首帧显示一个过期的量级。
+    int _questRewardGold = 45;
 
     /// <summary>任务奖励区：金币图标 + 数量（预制体默认是宝箱图）。</summary>
     public void RefreshQuestReward(int goldAmount = -1)
@@ -38,14 +38,15 @@ public partial class BattleUI : MonoBehaviour
     static Sprite LoadQuestGoldSprite()
     {
         if (_questGoldSprite != null) return _questGoldSprite;
+        // 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】任务奖励金进「本局获得金币」那本账
+        //（GrantRunGold → 顶栏），图标跟随顶栏用金币图（icon_gold）；
+        // 抽奖币池（icon_draft_coin）另有显示位（抽奖面板旁），两本账不混图。
+        // 缺图时返回 null（保持预制体原图并报错，不静默拿别的图顶）。
         if (Instance == null) return null;
-        Transform goldIcon = FindDeepChildIgnoreCase(Instance.transform, "GoldIcon");
-        if (goldIcon != null)
-        {
-            var img = goldIcon.GetComponent<Image>();
-            if (img != null && img.sprite != null)
-                _questGoldSprite = img.sprite;
-        }
+        var sp = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_gold");
+        if (sp == null)
+            Debug.LogError("[BattleUI] 金币图标取不到：Art/UI/Icons/Common/icon_gold —— 任务奖励维持原图");
+        _questGoldSprite = sp;
         return _questGoldSprite;
     }
 
@@ -66,6 +67,8 @@ public partial class BattleUI : MonoBehaviour
         {
             ShowLabelWithFrame(stageLabel);
             stageLabel.text = GameConfig.GetChapterMapName(chapter);
+            // 【2026-10-18 主人反馈】左上角地区名/难度字偏大，运行时收一档（不动预制体）
+            stageLabel.fontSize = 19;
         }
         if (difficultyLabel != null)
         {
@@ -73,6 +76,7 @@ public partial class BattleUI : MonoBehaviour
             difficultyLabel.text = string.IsNullOrEmpty(difficulty)
                 ? GameConfig.DifficultyNames[0]
                 : difficulty;
+            difficultyLabel.fontSize = 16;
         }
         UpdateGold(gold);
         UpdateTopBarResources();
@@ -164,6 +168,18 @@ public partial class BattleUI : MonoBehaviour
         goldText.transform.localScale = Vector3.one;
         goldText.color = baseCol;
         _goldPulseCo = null;
+    }
+
+    /// <summary>
+    /// 顶栏 DraftDisplay 抽奖币资源条（主人 2026-10-18 摆的节点）：数字 = BattleManager.currentGold
+    ///（抽奖唯一能花的那本账，启动金/补贴/抽中金币，带不出本局）。
+    /// 变化统一走 BattleEntryDraftPanel.NotifyPoolGoldChanged（AddRunGold/SpendBattleGold 调），
+    /// 别处不许直接改文本。没做跳动特效 —— 抽奖扣钱/进钱都在抽奖面板上有完整反馈，这里只对数。
+    /// </summary>
+    public void UpdateDraftCoin(long coins)
+    {
+        if (draftCoinText == null) return;
+        draftCoinText.text = coins.ToString();
     }
 
     /// <summary>

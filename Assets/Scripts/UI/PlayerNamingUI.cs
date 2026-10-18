@@ -105,6 +105,7 @@ public class PlayerNamingUI : MonoBehaviour
         DialogueUI.Instance?.Hide();
         DisableDialogueRaycasts();
         _input.text = PlayerNameGen.Roll();
+        LockInput();
         ClearInputSelection();
         contentRoot.SetActive(true);
         EnsureCanvasShell();
@@ -341,6 +342,15 @@ public class PlayerNamingUI : MonoBehaviour
         ClearInputSelection();
     }
 
+    /// <summary>禁止玩家手输名字（含真机软键盘），只允许骰子取库内随机名。</summary>
+    void LockInput()
+    {
+        if (nameInput == null) return;
+        nameInput.readOnly = true;
+        nameInput.transition = UnityEngine.UI.Selectable.Transition.None;
+        nameInput.enabled = false;
+    }
+
     /// <summary>填入随机名后取消全选，避免 InputField 白底高亮。</summary>
     void ClearInputSelection()
     {
@@ -356,6 +366,13 @@ public class PlayerNamingUI : MonoBehaviour
         if (!PlayerNameGen.TryValidate(raw, out string cleaned, out string error))
         {
             UIManager.Instance?.ShowToast(error);
+            return;
+        }
+        if (!PlayerNameGen.IsFromLibrary(cleaned))
+        {
+            // 正常流程到不了这里（输入框已锁死、每次打开都填随机名）；兜住预制体残留旧文本等异常
+            UIManager.Instance?.ShowToast("请使用随机名字");
+            OnRoll();
             return;
         }
 

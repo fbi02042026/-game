@@ -45,6 +45,7 @@ public class PlayerJobSelectUI : MonoBehaviour
     readonly List<CardBind> _cards = new List<CardBind>();
     readonly List<PlayerJobId> _offer = new List<PlayerJobId>();
     PlayerJobId? _selected;
+    PlayerJobId? _lastPick;   // 【2026-10-18 主人拍板】上次出战的职业（「上次选择」角标用，不随本次点选变化）
     bool _refreshUsed;
     bool _built;
     bool _fromPrefab;
@@ -118,6 +119,19 @@ public class PlayerJobSelectUI : MonoBehaviour
         // 所以无论走哪条构建路线都一定有关闭按钮。
         EnsureCloseButton(FindDeep(transform, "Panel") ?? transform);
         RollOffers(forceSwordFirst: opts.TutorialForceSwordFirst);
+
+        // 【2026-10-18 主人拍板】默认勾选上次职业：每次出战都重新三选一再点「进入裂隙」太重复，
+        // 非引导局自动选中存档里的上次职业，玩家直接点「进入裂隙」就行；引导局不动（必须亲手选剑盾）。
+        if (!opts.TutorialForceSwordFirst)
+        {
+            var last = PlayerJobDefs.GetSelected();
+            if ((!_opts.RequireSwordShield || last == PlayerJobId.SwordShield)
+                && _offer.Contains(last))
+            {
+                _selected = last;
+                _lastPick = last;
+            }
+        }
         RefreshCardsVisual();
         UpdateEnterInteractable();
 
@@ -638,6 +652,48 @@ public class PlayerJobSelectUI : MonoBehaviour
             bool sel = hasSel && _selected.Value == _offer[i];
             ApplyCardSelectVisual(c, sel, hasSel);
         }
+        UpdateLastPickBadges();
+    }
+
+    /// <summary>
+    /// 「上次选择」角标（2026-10-18 主人拍板）：上次出战职业的卡片右上角挂「上次选择」四个字。
+    /// 运行时创建、不动预制体；角标只标记「上次用的」，不随本次点选变化；引导局不显示。
+    /// </summary>
+    void UpdateLastPickBadges()
+    {
+        bool showBadge = !_opts.TutorialForceSwordFirst && _lastPick.HasValue;
+        for (int i = 0; i < _cards.Count; i++)
+        {
+            if (i >= _offer.Count) continue;
+            var cardTf = _cards[i].Button != null ? _cards[i].Button.transform : null;
+            if (cardTf == null) continue;
+            bool want = showBadge && _offer[i] == _lastPick.Value;
+            var badge = FindDeep(cardTf, "LastPickBadge");
+            if (badge == null && want)
+                badge = CreateLastPickBadge(cardTf);
+            if (badge != null)
+                badge.gameObject.SetActive(want);
+        }
+    }
+
+    /// <summary>建一颗右上角「上次选择」小角标：深色半透底 + 浅金字，锚死卡片右上角。</summary>
+    static Transform CreateLastPickBadge(Transform card)
+    {
+        var go = new GameObject("LastPickBadge", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(card, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.anchoredPosition = new Vector2(-2f, -2f);
+        rt.sizeDelta = new Vector2(112f, 36f);
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0.08f, 0.07f, 0.1f, 0.72f);
+        img.raycastTarget = false;
+
+        var t = CreateText(go.transform, "Label", "上次选择", 19, TextAnchor.MiddleCenter);
+        Stretch(t.rectTransform);
+        t.color = new Color(1f, 0.9f, 0.45f, 1f);
+        return go.transform;
     }
 
     static void EnsureCardSelectFx(ref CardBind bind, Transform cardTf)

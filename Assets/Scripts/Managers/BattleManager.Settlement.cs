@@ -31,15 +31,29 @@ public partial class BattleManager
             TryGrantStageQuestGold();
     }
 
+    /// <summary>
+    /// 「本局获得金币」进账唯一出口（只加不减，抽奖花不到它）：
+    /// 任务金 / 宝箱 / 装备折金 / 按关结算金……全部记进 <see cref="BattleRunStats.GoldEarned"/>，
+    /// 顶部 HUD 显示的就是它，死亡 / 撤离 / 通关经 <see cref="PersistBattleGold"/> 按增量写回城镇
+    /// —— 顶部看到多少，落袋就是多少。
+    /// 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】不再进 <c>currentGold</c>：
+    /// 那是抽奖币池（启动金 / 通关补贴 / 抽中金币，见 <see cref="AddRunGold"/>），带不出本局。
+    /// </summary>
+    public void GrantRunGold(long amount)
+    {
+        if (amount <= 0) return;
+        RunStats.GoldEarned += amount;
+        BattleUI.Instance?.UpdateGold(RunEarnedGold);
+    }
+
     void TryGrantStageQuestGold()
     {
         if (_stageQuestGoldGranted || StageQuestClearGold <= 0) return;
         int grant = Mathf.RoundToInt(StageQuestClearGold * GoldGainMul);
         if (grant <= 0) return;
         _stageQuestGoldGranted = true;
-        currentGold += grant;
-        BattleUI.Instance?.UpdateGold(currentGold);
-        GlobalToastUI.Show($"获得任务金币 +{grant}", true);   // 2026-10-06 主人拍板：物品/金币获得，force 弹出
+        GrantRunGold(grant);
+        GlobalToastUI.Show($"获得任务奖励 金币 +{grant}", true);   // 2026-10-18 主人拍板：任务金进「本局获得金币」（顶部那本账），叫金币
         // #region agent log
         DebugAgentLog.Log("H9", "BattleManager.TryGrantStageQuestGold", "quest_gold_granted",
             $"{{\"grant\":{grant},\"currentGold\":{currentGold}}}");
@@ -363,6 +377,23 @@ public partial class BattleManager
                 c => { picked = c; choice = 1; },
                 () => choice = 2, freeLeft);
 
+            // 【防卡死兜底】面板构建失败（缺节点 / 缺图）时不会展开 —— 玩家看到的就是
+            // 「画面冻住、卡牌没加载出来」，只能退游戏白扣体力（2026-10-18 玩家反馈）。
+            // Begin 内 SetExpanded 是同步置位，健康路径当帧就开；3 秒还没开就不再冻场干等 300 秒，
+            // 报错 + 提示后直接开战（与 Show 自身「拿不到面板就直接开战」同一口径）。
+            float openGuard = 0f;
+            while (!BattleEntryDraftPanel.IsLotteryOpen && openGuard < 3f)
+            {
+                openGuard += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (!BattleEntryDraftPanel.IsLotteryOpen)
+            {
+                Debug.LogError("[BattleManager] 进关抽奖面板 3 秒内没弹出来（构建失败），跳过抽奖直接开战，不再冻场");
+                UIManager.Instance?.ShowToast("抽奖面板没加载出来，已跳过这次抽奖");
+                break;
+            }
+
             // 同上（CoMidBattleDraft 那份）：引导局不催，面板一弹出就冻住倒计时。
             // 现在引导局已跳过进关抽奖，这行是给「以后引导又走这条路」兜的同一道保险。
             if (IsTutorialRun)
@@ -494,20 +525,20 @@ public partial class BattleManager
 
     /// <summary>
     /// 抽奖「查余额」的<b>唯一出口</b>（只看不扣；真扣款在 <see cref="CoInstantPick"/> 里、
-    /// 确认结果能生效之后才做）。【2026-10-10 主人拍板】抽奖统一扣**战斗内金币**——
-    /// 不再分佣兵币 / 抽奖币，余额就是 HUD 上那个 currentGold。
+    /// 确认结果能生效之后才做）。【2026-10-18 双钱包拆分】抽奖只扣<b>抽奖币池</b> currentGold
+    ///（启动金 / 通关补贴 / 抽中金币），花不到「本局获得金币」那本账。
     /// </summary>
-    /// <param name="shortBy">不够时回传币种显示名（「金币」），给 toast 用。</param>
+    /// <param name="shortBy">不够时回传币种显示名（「抽奖币」），给 toast 用。</param>
     bool CanAffordDraw(DraftCategory? picked, int cost, out string shortBy)
     {
-        shortBy = ResourceWallet.DisplayName(ResourceWallet.ResourceType.Gold);
+        shortBy = "抽奖币";
         return cost <= 0 || currentGold >= cost;
     }
 
     /// <summary>
-    /// 抽奖扣金币的<b>唯一出口</b>（2026-10-10 主人拍板「每抽一次奖增加下一次抽奖花费的金币」配套）：
-    /// 直接扣战斗内 currentGold（= 局外金币的战斗镜像，收尾经 <see cref="PersistBattleGold"/> 差额写回存档）。
-    /// 扣完立刻刷 HUD；余额不足返回 false（调用方已先用 <see cref="CanAffordDraw"/> 拦过，这里是保险）。
+    /// 抽奖扣抽奖币的<b>唯一出口</b>：直接扣战斗内抽奖币池 <c>currentGold</c>
+    ///（启动金 / 通关补贴 / 抽中金币，带不出本局；【2026-10-18 双钱包拆分】花不到「本局获得金币」）。
+    /// 扣完立刻刷抽奖面板旁的池子计数；余额不足返回 false（调用方已先用 <see cref="CanAffordDraw"/> 拦过，这里是保险）。
     /// </summary>
     public bool SpendBattleGold(int cost)
     {
@@ -518,25 +549,26 @@ public partial class BattleManager
             return false;
         }
         currentGold -= cost;
-        BattleUI.Instance?.UpdateGold(currentGold);
+        BattleEntryDraftPanel.NotifyPoolGoldChanged(currentGold);
         return true;
     }
 
     /// <summary>
-    /// 局内进钱的<b>唯一出口</b>（2026-10-10 主人拍板「进战斗只带启动金」配套）：
+    /// 抽奖币池进钱的<b>唯一出口</b>（2026-10-10 主人拍板「进战斗只带启动金」配套）：
     /// 启动金 / 每关通关补贴 / 抽中的金币，三种都走这里进 <c>currentGold</c>。
     /// </summary>
     /// <param name="countsAsEarned">
-    /// true = 本局赚的钱（击杀掉落等），结算会写回存档；
     /// false = <b>局内循环资源</b>（启动金 / 通关补贴 / 抽中金币）：抬高 <c>_goldAtRunStart</c>，
-    /// 于是结算差额不含它 —— 能抽，但带不出裂隙（跟「战斗内的都是局内的」同口径，也不会被白刷）。
+    /// 带不出本局（跟「战斗内的都是局内的」同口径，也不会被白刷）；
+    /// true = 本局赚的钱（目前无调用方）：记进 <see cref="BattleRunStats.GoldEarned"/>，结算写回。
     /// </param>
     public void AddRunGold(int n, bool countsAsEarned)
     {
         if (n <= 0) return;
         currentGold += n;
         if (!countsAsEarned) _goldAtRunStart += n;
-        BattleUI.Instance?.UpdateGold(currentGold);
+        else { RunStats.GoldEarned += n; BattleUI.Instance?.UpdateGold(RunEarnedGold); }
+        BattleEntryDraftPanel.NotifyPoolGoldChanged(currentGold);   // 【2026-10-18 双钱包拆分】池子计数：抽奖面板旁 + 顶栏 DraftDisplay 两处同步
     }
 
     /// <summary>
@@ -748,12 +780,13 @@ public partial class BattleManager
         // 定向技能/佣兵抽到金币会被错标成「获得技能 / 佣兵升级」。
         if (card.Kind == DraftCardKind.Gold)
         {
-            // 「折扣」语义：金色卡 + icon_gold + 第 1 行「获得金币」+ 无光晕/无全屏闪/停 0.60s（tier=普通档）。
-            // 特判金色，不走 RarityPalette.Get(card.Rarity)（否则白灰 = 视觉最差档）。
-            kind = "获得金币";
-            title = "金币 +" + card.Amount;
+            // 「折扣」语义：金色卡 + 抽奖币图 + 第 1 行「获得抽奖币」+ 无光晕/无全屏闪/停 0.60s（tier=普通档）。
+            // 2026-10-18 主人拍板：战斗内的钱统一叫「抽奖币」（icon_draft_coin），金币是城镇那笔，不混说。
+            // 特判金色 tint 不变（RarityPalette.Gold），不走 RarityPalette.Get(card.Rarity)（否则白灰 = 视觉最差档）。
+            kind = "获得抽奖币";
+            title = "抽奖币 +" + card.Amount;
             tint = RarityPalette.Gold;
-            icon = CommonIconSprites.Load("icon_gold");
+            icon = CommonIconSprites.Load("icon_draft_coin");
             // 第 3 行只显示「回血 N」—— 直接用卡池给的 Desc（CollectGoldCard 已改成这句，不另写一份）
             note = card.Desc;
         }
@@ -858,6 +891,23 @@ public partial class BattleManager
                 cats, currentGold,
                 c => { picked = c; choice = 1; },
                 () => choice = 2, freeLeft);
+
+            // 【防卡死兜底】面板构建失败（缺节点 / 缺图）时不会展开 —— 玩家看到的就是
+            // 「画面冻住、卡牌没加载出来」，只能退游戏白扣体力（2026-10-18 玩家反馈）。
+            // 3 秒还没开就不再冻场干等 300 秒：报错 + 提示，跳过这一拍
+            //（yield break 走 finally：收面板 + 还原 UnitsCanAct，战斗恢复）。
+            float openGuard = 0f;
+            while (!BattleEntryDraftPanel.IsLotteryOpen && openGuard < 3f)
+            {
+                openGuard += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (!BattleEntryDraftPanel.IsLotteryOpen)
+            {
+                Debug.LogError("[BattleManager] 中途抽奖面板 3 秒内没弹出来（构建失败），跳过本拍抽奖，不再冻场");
+                UIManager.Instance?.ShowToast("抽奖面板没加载出来，已跳过这次抽奖");
+                yield break;
+            }
 
             // 【2026-10-08 主人拍板】引导局**不催**：面板一弹出就把倒计时冻住（引导三拍都走这里），
             // 玩家看清楚自己抽到了什么再点「继续」。正式关照常跑那 30s 总预算。
@@ -1351,8 +1401,7 @@ public partial class BattleManager
         int chestGold = Mathf.RoundToInt(GameConfig.EndlessChestGold(stage) * GoldGainMul);
         if (chestGold > 0)
         {
-            currentGold += chestGold;
-            BattleUI.Instance?.UpdateGold(currentGold);
+            GrantRunGold(chestGold);
             GlobalToastUI.Show($"宝箱开启，金币 +{chestGold}", true);
         }
 
@@ -1376,8 +1425,7 @@ public partial class BattleManager
             int talent = GameConfig.EndlessFirstClearTalent(stage) * mul;
             if (gold > 0)
             {
-                currentGold += gold;
-                BattleUI.Instance?.UpdateGold(currentGold);
+                GrantRunGold(gold);
             }
             if (talent > 0)
                 ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talent, save: false, notify: true);
@@ -1519,29 +1567,31 @@ public partial class BattleManager
         if (_runStageGoldPending <= 0) return;
         long gold = _runStageGoldPending;
         _runStageGoldPending = 0;
-        currentGold += gold;
-        BattleUI.Instance?.UpdateGold(currentGold);
-        Debug.Log($"[BattleManager] 结算发放局外金币 +{gold}（本局通过关卡累计）");
+        GrantRunGold(gold);   // 2026-10-18：走进账唯一出口（本局获得金币），结算「金币」栏同账
+        Debug.Log($"[BattleManager] 结算发放通关奖励 金币 +{gold}（本局通过关卡累计）");
     }
 
+    /// <summary>
+    /// 「本局获得金币」写回城镇的<b>唯一出口</b>（每关通关 / 死亡 / 撤离 / 通关回城都会走）。
+    /// 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】双钱包拆分后的口径：
+    ///   · 写回的是 <see cref="BattleRunStats.GoldEarned"/>（顶部 HUD 那个数）按 <c>_earnedPaidGold</c>
+    ///     水位取增量 —— 逐关写回不重复入账，死亡结算时顶部看到多少城镇就多多少；
+    ///   · <c>currentGold</c> 只是抽奖币池（启动金 / 通关补贴 / 抽中金币），**带不出本局**，
+    ///     每次写回后重置回基线（原行为保留：局内循环资源，花光就花光）。
+    /// </summary>
     void PersistBattleGold()
     {
         var save = SaveSystem.Instance?.Data;
         if (save == null) return;
-        // 结算才发的局外金币：必须在算差额之前入账，否则写不回存档（钱就凭空少了）
+        // 结算才发的按关金币：必须先入账（进 GoldEarned），否则这一关的钱写不回存档
         GrantPendingStageGold();
-        // 战斗内金币写回城镇：差额走 ResourceWallet，避免突破上限。
-        // 【2026-10-10 主人拍板】战斗钱包局内化后，基准不再是城镇金币而是**本局起点** _goldAtRunStart
-        // （它已含启动金 / 通关补贴 / 抽中金币这些「进得来带不走」的钱）→
-        // delta = 本局真正赚到的（击杀掉落 + 结算按关卡数发的那笔），抽奖花掉的已经扣在里面。
-        // 【2026-10-17 主人拍板】只加不减：delta < 0 意味着「启动金等局内循环资源被花掉且没赚回来」
-        // —— 抽奖有 CanAffordDraw 拦着，亏的只可能是「进得来带不走」的钱，花光就花光，
-        // 绝不倒扣城镇钱包（否则玩家打一趟本城镇金币反而变少）。
-        long delta = currentGold - _goldAtRunStart;
-        if (delta > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, delta, save: true, notify: false);
+        long owed = RunStats.GoldEarned - _earnedPaidGold;
+        if (owed > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, owed, save: true, notify: false);
         else
-            SaveSystem.Instance.Save();
+            SaveSystem.Instance.Save();   // 与原实现同款：没有增量也落一次盘，别丢其它待存改动
+        _earnedPaidGold = RunStats.GoldEarned;
+        // 抽奖币池重置回基线（局内循环资源不跨关结转 —— 与原「currentGold = _goldAtRunStart」同一行为）
         currentGold = _goldAtRunStart;
     }
 

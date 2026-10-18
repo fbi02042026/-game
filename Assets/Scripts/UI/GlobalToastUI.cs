@@ -170,6 +170,15 @@ public class GlobalToastUI : MonoBehaviour
     IEnumerator CoPlay(string msg)
     {
         _label.text = msg;
+        // 【2026-10-18 修「登录欢迎语换行别扭」】底板原固定 72 高，两行文案会上下溢出底板。
+        // 宽度不变，按文字实际高度自动加高底板；单行提示 preferredHeight+16 不足 72，维持原样。
+        if (_rootRt != null)
+        {
+            var sd = _rootRt.sizeDelta;
+            // 钳到 400 封顶：防首帧画布矩形未就绪时 preferredHeight 算出天量值
+            sd.y = Mathf.Clamp(_label.preferredHeight + 16f, 72f, 400f);
+            _rootRt.sizeDelta = sd;
+        }
         var plate = _root.GetComponent<Image>();
         if (plate != null)
             plate.color = new Color(0.08f, 0.07f, 0.1f, 0.6f);

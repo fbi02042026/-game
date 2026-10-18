@@ -81,7 +81,7 @@ public partial class BattleManager
         // （long 字段，不用 Mathf.Max——没有 long 重载会 CS0266）
         long tutorialGold = SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD;
         if (RunStats.GoldGained < tutorialGold) RunStats.GoldGained = tutorialGold;
-        AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
+        AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
         BattleSettlementUI.Show(RunStats, () =>
         {
             GameSceneManager.Instance?.LoadTownScene();
@@ -121,7 +121,8 @@ public partial class BattleManager
         if (TutorialDirector.Instance != null)
             TutorialDirector.Instance.WaitingEvacuate = false;
         GridBackpackSystem.Instance?.ClearRunEquipment();
-        // currentGold 含城镇底金，必须走差额写回，禁止整额 Add
+        // 【2026-10-18 双钱包拆分】currentGold 只是抽奖币池（带不出）；写回走 PersistBattleGold
+        // 的「获得金币 − 已付水位」增量，不存在整额 Add 路径
         PersistBattleGold();
         BattleStateSaver.Instance?.ClearBattleState();
         SaveSystem.Instance?.Save();
@@ -167,7 +168,7 @@ public partial class BattleManager
 
         FillSettlementSnapshot(isDeath, talentGain);
         if (!isDeath)
-            AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
+            AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
         TownHubController.PendingOpenAdventure = true;
         BattleSettlementUI.Show(RunStats, () =>
         {
@@ -180,7 +181,10 @@ public partial class BattleManager
     {
         RunStats.IsDeath = isDeath;
         RunStats.IsVictory = isVictory && !isDeath;
-        RunStats.GoldGained = Mathf.Max(0, (int)(currentGold - _goldAtRunStart));   // 死亡也保留金币，结算照常显示
+        // 【2026-10-18 主人反馈「打完一关没有给金币」】结算「金币」改毛收入口径（GoldEarned）：
+        // 任务金/宝箱/首通/装备折金/拆分币/通关金全记账，不再被抽奖花费抵成 0（净额口径废弃）。
+        // 死亡也照常显示本局赚到的钱。
+        RunStats.GoldGained = RunStats.GoldEarned;
         RunStats.TalentGained = talentGain;
         RunStats.EquipCount = GridBackpackSystem.Instance != null
             ? GridBackpackSystem.Instance.GetAllItemsForLegacy().Count
@@ -238,7 +242,7 @@ public partial class BattleManager
         // 金币已在通关时 PersistBattleGold 写回；天赋石改由冒险日志里程碑发放，此处不再按金币补发。
         int talentGain = 0;
         FillSettlementSnapshot(isDeath: false, talentGain, isVictory: true);
-        AdventureLogAchievements.OnRunGoldPeak(currentGold - _goldAtRunStart);
+        AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
         BattleSettlementUI.Show(RunStats, afterConfirm);
     }
 

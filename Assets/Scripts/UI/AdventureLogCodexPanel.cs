@@ -119,9 +119,10 @@ public class AdventureLogCodexPanel
         var scrollRt = _scroll.transform as RectTransform;
         if (scrollRt != null)
         {
-            // 顶边提到 0.94：纸的视觉顶边更高，0.86 会在第一个章节条上方留一截空白
+            // 【2026-10-18 修「小标题被章节横幅遮挡一半」】页标题 OngoingHeader 占纸顶部 0.90~0.98，
+            // 顶边 0.94 会把第一个章节横幅顶进标题下半截 → 收到 0.88，标题完整露出（比 0.86 只多一点点空白）。
             scrollRt.anchorMin = new Vector2(0.04f, 0.10f);
-            scrollRt.anchorMax = new Vector2(0.96f, 0.94f);
+            scrollRt.anchorMax = new Vector2(0.96f, 0.88f);
             scrollRt.offsetMin = Vector2.zero;
             scrollRt.offsetMax = Vector2.zero;
             scrollRt.anchoredPosition = Vector2.zero;

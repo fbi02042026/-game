@@ -48,6 +48,10 @@ public partial class BattleUI : MonoBehaviour
     public Text stageLabel;         // 关卡标识：只显示地图名（暮影森林…），不再出现「第X章」
     public Text difficultyLabel;    // 难度标识 "普通"
     public Text goldText;           // 金币
+    /// <summary>顶栏 DraftDisplay 抽奖币资源条（主人 2026-10-18 摆的节点，子节点 DraftCoinIcon/DraftCoinText，
+    /// 原名 GoldIcon/GoldText 与金币区重名已改）：
+    /// 数字 = BattleManager.currentGold（抽奖唯一能花的那本账），与抽奖面板旁池子计数同源同刻。</summary>
+    public Text draftCoinText;      // 抽奖币（DraftDisplay/DraftCoinText）
     public Text talentStoneText;    // 天赋石
     public Text enchantStoneText;   // 旧布局的第三个资源位；新顶栏用它显示天赋石，附魔石不再单列
     public Text decomposeMatText;   // 材料
@@ -173,7 +177,47 @@ public partial class BattleUI : MonoBehaviour
             lootConfirmButton.onClick.RemoveListener(OnLootConfirm);
             lootConfirmButton.onClick.AddListener(OnLootConfirm);
         }
+
+        // 【临时打点·查B10战斗右上黑板】定位后删除：输出战斗内全部 Canvas + BattleUI 子树矩形/颜色
+        StartCoroutine(CoDumpUiRectsForB10());
     }
+
+    // ==================== 【临时打点·查B10战斗右上黑板】定位后整段删除 ====================
+    System.Collections.IEnumerator CoDumpUiRectsForB10()
+    {
+        yield return new WaitForSecondsRealtime(3f);
+        DumpUiRectsForB10("T+3s");
+        yield return new WaitForSecondsRealtime(7f);
+        DumpUiRectsForB10("T+10s");
+    }
+
+    void DumpUiRectsForB10(string tag)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"[B10打点·{tag}] 战斗内全部 Canvas：");
+        foreach (var cv in FindObjectsOfType<Canvas>())
+        {
+            var crt = cv.transform as RectTransform;
+            sb.AppendLine($"  Canvas order={cv.sortingOrder} {(cv.isRootCanvas ? "根" : "嵌套")} {cv.name} rect={(crt != null ? crt.rect.ToString() : "-")} pos={(crt != null ? crt.anchoredPosition.ToString() : "-")} active={cv.gameObject.activeInHierarchy}");
+        }
+        sb.AppendLine($"[B10打点·{tag}] BattleUI 子树清单（宽≥200且高≥300 标★）：");
+        DumpRectForB10(transform as RectTransform, 0, sb);
+        Debug.Log(sb.ToString());
+    }
+
+    void DumpRectForB10(RectTransform rt, int depth, System.Text.StringBuilder sb)
+    {
+        if (rt == null) return;
+        var img = rt.GetComponent<Image>();
+        string sprite = img == null ? "-" : (img.sprite != null ? img.sprite.name : "无图");
+        string color = img == null ? "-" : ((Color32)img.color).ToString();
+        float w = rt.rect.width, h = rt.rect.height;
+        bool star = w >= 200f && h >= 300f;
+        sb.AppendLine($"{(star ? "★" : " ")}{new string(' ', depth * 2)}{rt.name} sz=({w:F0}x{h:F0}) pos={rt.anchoredPosition} anch=({rt.anchorMin.x:F2},{rt.anchorMin.y:F2})~({rt.anchorMax.x:F2},{rt.anchorMax.y:F2}) act={rt.gameObject.activeInHierarchy} img=({sprite},{color})");
+        for (int i = 0; i < rt.childCount; i++)
+            DumpRectForB10(rt.GetChild(i) as RectTransform, depth + 1, sb);
+    }
+    // ==================== 临时打点结束 ====================
 
     void Start()
     {
@@ -318,12 +362,15 @@ public partial class BattleUI : MonoBehaviour
             BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0);
         if (BattleManager.Instance != null && BattleManager.Instance.currentStage != null)
             stageIdx = BattleManager.Instance.currentStage.stageIndex;
-        // 【2026-10-10 主人拍板】战斗 HUD 显示的就是**局内钱包** currentGold，
-        // 城镇金币不带进战斗 → 这里绝不能拿 save.totalGold 顶上（开局 0 时顶成城镇老本，
-        // 玩家会以为带着几万块进战斗，抽奖扣的却是局内那点钱）。
-        long gold = BattleManager.Instance != null ? BattleManager.Instance.currentGold : 0;
+        // 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】顶栏 = 本局获得金币（RunEarnedGold，
+        // 真源 BattleRunStats.GoldEarned + 待发按关结算金），死亡/撤离写回城镇的就是这个数；
+        // 抽奖币池（currentGold，启动金/补贴/抽中金，带不出本局）另走顶栏 DraftDisplay 条 +
+        // 抽奖面板旁的池子计数，不上「本局获得金币」那一格 —— 绝不能拿 save.totalGold 或 currentGold 顶上。
+        long gold = BattleManager.Instance != null ? BattleManager.Instance.RunEarnedGold : 0;
 
         UpdateStageInfo(chapter, stageIdx, diff, gold);
+        // 【2026-10-18 主人摆的 DraftDisplay 抽奖币条】全量刷新时同步初值（进战斗 = 启动金）
+        UpdateDraftCoin(BattleManager.Instance != null ? BattleManager.Instance.currentGold : 0);
         ApplySoloBattleHud();
         UpdateCharacterSlots();
         UpdateSkillAvatars();
@@ -335,9 +382,10 @@ public partial class BattleUI : MonoBehaviour
         UpdateRunSkillSlots();
         UpdateEquipQuickSlots();
 
-        // QuestText 任务默认文案（波次刷新后由 BattleManager 再改）
-        if (questPanel != null && !questPanel.activeSelf)
-            questPanel.SetActive(true);
+        // 【2026-10-18 主人拍板】任务面板击杀计数与结算「击杀敌人」口径不一致，先整体隐藏；
+        // 只藏 UI，UpdateQuest / 奖励逻辑不动（BossHpBar 的联动同步改掉，否则会被重新点亮）。
+        if (questPanel != null && questPanel.activeSelf)
+            questPanel.SetActive(false);
         if (questDesc != null && string.IsNullOrEmpty(questDesc.text))
             UpdateQuest("击败所有敌人", 0, 3);
         RefreshQuestReward();

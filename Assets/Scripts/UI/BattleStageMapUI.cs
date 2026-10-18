@@ -317,7 +317,79 @@ public class BattleStageMapUI : MonoBehaviour
         _next = picked;
         RefreshPedestals(Phase.AfterRoll);
         ApplyCurrentOutline(nextIdx);
+        // 【2026-10-18 主人要求】老虎机转到关卡类型后，地图上当前关卡的旗子
+        // 从大到小「砸地」落下（下坠 + 落地压扁回弹），演出转到哪关就落在哪。
+        yield return CoFlagSlamAnim(nextIdx);
         _flow = null;
+
+        // 【2026-10-18 临时诊断·B7】流程跑完进入「等点击」态时拍一张环境快照，定位后整段删
+        var esNow = UnityEngine.EventSystems.EventSystem.current;
+        var mapCanvas = GetComponent<Canvas>();
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"[BattleStageMap][诊断] 进入待点击态：next={(_next != null ? _next.stageIndex.ToString() : "null")}");
+        sb.Append($", EventSystem={(esNow != null ? esNow.name : "null!")}");
+        sb.Append($", canvasSort={(mapCanvas != null ? mapCanvas.sortingOrder : -1)}");
+        sb.Append($", camera={(mapCanvas != null && mapCanvas.worldCamera != null ? mapCanvas.worldCamera.name : "null")}");
+        if (_next != null && _next.stageIndex >= 0 && _next.stageIndex < pedestals.Count)
+        {
+            var np = pedestals[_next.stageIndex];
+            FlagButtons(np, _reusedBtnList);
+            for (int bi = 0; bi < _reusedBtnList.Count; bi++)
+            {
+                var b = _reusedBtnList[bi];
+                sb.Append($"\n  按钮[{bi}]={b.name} active={b.isActiveAndEnabled} interactable={b.interactable}");
+            }
+        }
+        Debug.Log(sb.ToString());
+    }
+
+    /// <summary>
+    /// 【2026-10-18 主人要求】当前关卡旗子的砸地动画：
+    /// ① 下坠 0.22s：2.6 倍 → 基准（ease-in 越掉越快）；
+    /// ② 砸地 0.16s：横向微鼓 + 纵向微压（压扁感）再弹回基准。
+    /// unscaled 时间（关卡图把 timeScale 压 0）；基准 scale 取旗子当前 localScale
+    /// （预制体里 ClearedMark 不一定是 1，不写死）。播完必须精确还原基准 scale。
+    /// 只在老虎机停稳后播这一处，分支选路 / 已打败旗不播。
+    /// </summary>
+    IEnumerator CoFlagSlamAnim(int index)
+    {
+        if (index < 0 || index >= pedestals.Count) yield break;
+        var p = pedestals[index];
+        if (p == null || p.clearedMark == null) yield break;
+        Transform flag = p.clearedMark.transform;
+
+        Vector3 baseScale = flag.localScale;
+
+        // finally 还原：协程中途被 StopCoroutine 打断时，旗子不许卡在放大/压扁的中间态
+        //（旧教训：协程改状态必须保证中断时归还，否则闸门/状态永久错）
+        try
+        {
+            const float DropDur = 0.22f;
+            float t = 0f;
+            while (t < DropDur)
+            {
+                t += Time.unscaledDeltaTime;
+                float k = Mathf.Clamp01(t / DropDur);
+                float e = k * k;                               // ease-in：越掉越快
+                flag.localScale = baseScale * (2.6f - 1.6f * e);
+                yield return null;
+            }
+
+            const float SquashDur = 0.16f;
+            t = 0f;
+            while (t < SquashDur)
+            {
+                t += Time.unscaledDeltaTime;
+                float k = Mathf.Clamp01(t / SquashDur);
+                float w = Mathf.Sin(k * Mathf.PI);             // 0 → 1 → 0
+                flag.localScale = Vector3.Scale(baseScale, new Vector3(1f + 0.14f * w, 1f - 0.12f * w, 1f));
+                yield return null;
+            }
+        }
+        finally
+        {
+            flag.localScale = baseScale;
+        }
     }
 
     IEnumerator PlayUnlockAnim(int index)
@@ -588,12 +660,16 @@ public class BattleStageMapUI : MonoBehaviour
         if (_reusedBtnList.Count == 0) return;
 
         int capture = index;
+        int count = 0;
+        _btnNames.Clear();
         for (int i = 0; i < _reusedBtnList.Count; i++)
         {
             var b = _reusedBtnList[i];
             b.onClick.RemoveAllListeners();
             b.interactable = on;
             if (!on) continue;
+            count++;
+            _btnNames.Add(b.name);
 
             // 【2026-10-11 主人拍板】石墩**不要跟着放大/缩放**（主人原话「点击石墩的时候旗子放大就行
             // 石墩不要跟着放大」）→ 屏蔽通用按压反馈（UiButtonPressFeedback 会把按钮压到 0.94 再弹回）。
@@ -603,10 +679,14 @@ public class BattleStageMapUI : MonoBehaviour
 
             b.onClick.AddListener(() => OnPedestalClicked(capture));
         }
+        // 【2026-10-18 临时诊断·B7】绑定清单，定位后删
+        if (on)
+            Debug.Log($"[BattleStageMap][诊断] SetClickable idx={index} 绑定按钮 {count} 个：{string.Join("/", _btnNames)}");
     }
 
-    /// <summary>复用列表，避免每次刷新都 new（SetClickable 每拍都跑）。</summary>
+    /// <summary>【2026-10-18 临时诊断·B7】复用列表，避免每次刷新都 new（SetClickable 每拍都跑）。</summary>
     readonly List<Button> _reusedBtnList = new List<Button>();
+    static readonly List<string> _btnNames = new List<string>();
 
     /// <summary>收集这个石墩上**所有**能点的按钮：根 + 两面旗（转到的看 ClearedMark，打败后看 Banner）。</summary>
     static void FlagButtons(PedestalRefs p, List<Button> dst)
@@ -716,6 +796,10 @@ public class BattleStageMapUI : MonoBehaviour
 
     void OnPedestalClicked(int index)
     {
+        // 【2026-10-18 临时诊断·B7】有这条日志＝点击到达了按钮；没有＝射线/事件层就没到。定位后删
+        Debug.Log($"[BattleStageMap][诊断] OnPedestalClicked idx={index} flow={(_flow != null)}"
+            + $" next={(_next != null ? _next.stageIndex.ToString() : "null")}"
+            + $" branch={_branchSelectMode} candidates=[{string.Join(",", _candidateIndices)}]");
         if (_flow != null) return;
 
         if (_branchSelectMode && _next == null)
@@ -973,6 +1057,10 @@ public class BattleStageMapUI : MonoBehaviour
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleStageMap);
         if (GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
+        // 【2026-10-18 临时诊断·B7】画布级探针：记录到达本画布、但没被任何按钮吃掉的点击。
+        // 点石墩既没有 OnPedestalClicked 日志也没有 Probe 日志 = 点击根本没进本画布（被上层挡/无事件系统）。定位后删
+        if (GetComponent<StageMapClickProbe>() == null)
+            gameObject.AddComponent<StageMapClickProbe>();
         EnsureEventSystem();
     }
 
@@ -1143,6 +1231,14 @@ public class BattleStageMapUI : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// 【2026-10-18 临时诊断·B7】挂在关卡图根节点：凡到达本画布、但没被更近的按钮消费的点击都会落到这里。
+    /// 用途：区分「点击没进画布」（Probe 与 OnPedestalClicked 都无日志）和「进了画布但没命中按钮」
+    /// （Probe 有日志、无 OnPedestalClicked）。定位后随其它打点一起删除。
+    /// 类本体在文件末尾（顶层类，避免嵌套 MonoBehaviour 的 AddComponent 兼容问题）。
+    /// </summary>
+
+
     static void Stretch(RectTransform rt)
     {
         rt.anchorMin = Vector2.zero;
@@ -1175,5 +1271,30 @@ public class BattleStageMapUI : MonoBehaviour
         t.horizontalOverflow = HorizontalWrapMode.Overflow;
         t.verticalOverflow = VerticalWrapMode.Overflow;
         return t;
+    }
+}
+
+/// <summary>
+/// 【2026-10-18 临时诊断·B7】挂在关卡图根节点：凡到达本画布、但没被更近的按钮消费的点击都会落到这里。
+/// 用途：区分「点击没进画布」（Probe 与 OnPedestalClicked 都无日志）和「进了画布但没命中按钮」
+/// （Probe 有日志、无 OnPedestalClicked）。定位后随其它打点一起删除。
+/// </summary>
+public class StageMapClickProbe : MonoBehaviour, UnityEngine.EventSystems.IPointerClickHandler
+{
+    public void OnPointerClick(UnityEngine.EventSystems.PointerEventData e)
+    {
+        var hit = e.pointerCurrentRaycast.gameObject;
+        Debug.Log($"[BattleStageMap][诊断/Probe] 点击落到本画布：hit={(hit != null ? HitPath(hit.transform) : "null")}");
+    }
+
+    static string HitPath(Transform t)
+    {
+        var sb = new System.Text.StringBuilder(t.name);
+        while (t.parent != null)
+        {
+            t = t.parent;
+            sb.Insert(0, t.name + "/");
+        }
+        return sb.ToString();
     }
 }

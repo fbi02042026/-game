@@ -382,17 +382,19 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
     static void BindSkillTexts(CardView c, MercenaryData offer)
     {
+        // 【2026-10-18】空槽不再用另一槽回填（实测 B9：只带被动的佣兵两个槽显示同一技能）。
+        // 主动槽只显示主动，被动槽只显示被动，空槽显示「—」。
         string active = offer.skillId;
         string passive = offer.passiveSkillId;
 
         if (c.skill1Name != null)
             c.skill1Name.text = string.IsNullOrEmpty(active)
-                ? MercenaryOfferGenerator.SkillDisplayName(passive)
+                ? "—"
                 : MercenaryOfferGenerator.SkillDisplayName(active);
         if (c.skill1Desc != null)
         {
-            string id = !string.IsNullOrEmpty(active) ? active : passive;
-            c.skill1Desc.text = MercSkillTable.TryGet(id, out var row) ? row.RecruitDesc : "";
+            c.skill1Desc.text = !string.IsNullOrEmpty(active)
+                && MercSkillTable.TryGet(active, out var rowA) ? rowA.RecruitDesc : "";
         }
         if (c.skill2Name != null)
             c.skill2Name.text = string.IsNullOrEmpty(passive)
@@ -400,12 +402,12 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
                 : MercenaryOfferGenerator.SkillDisplayName(passive);
         if (c.skill2Desc != null)
         {
-            c.skill2Desc.text = MercSkillTable.TryGet(passive, out var row) ? row.RecruitDesc : "";
+            c.skill2Desc.text = !string.IsNullOrEmpty(passive)
+                && MercSkillTable.TryGet(passive, out var rowP) ? rowP.RecruitDesc : "";
         }
         if (c.skill1Icon != null)
         {
-            string id = !string.IsNullOrEmpty(active) ? active : passive;
-            var sp = MercSkillTable.LoadIcon(id);
+            var sp = MercSkillTable.LoadIcon(active);
             c.skill1Icon.sprite = sp;
             c.skill1Icon.enabled = sp != null;
             c.skill1Icon.preserveAspect = true;
@@ -496,11 +498,12 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     }
 
     // ==========================================================================
-    // 佣兵台词气泡：气泡挂在该佣兵的卡上方，样式与看板娘同款
+    // 佣兵台词气泡：【2026-10-18 主人拍板】台词放进说话佣兵的卡片内部（立绘胸口位置），
+    // 不再浮在卡顶上方压住面板提示行。样式仍与看板娘同款
     // （Resources/Story/Props/speech_bubble.png + SpeechBubbleFit.Apply + 打字机）。
     // ==========================================================================
 
-    /// <summary>在指定佣兵卡上方弹气泡说 line；上一条气泡（若有）立即打断。</summary>
+    /// <summary>在指定佣兵卡内弹气泡说 line；上一条气泡（若有）立即打断。</summary>
     void ShowMercBubble(int cardIndex, string line)
     {
         if (string.IsNullOrEmpty(line)) return;
@@ -531,9 +534,11 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         img.raycastTarget = false;
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0f);   // 气泡底尖贴卡顶
+        rt.pivot = new Vector2(0.5f, 0.5f);   // 居中锚定：长句等比放大时围绕中心向四周扩
         rt.sizeDelta = MercBubbleBaseSize;
-        rt.anchoredPosition = new Vector2(0f, cardRt.sizeDelta.y * 0.5f + 4f);
+        // 卡内立绘胸口位置（卡 789 高：名字行到 ~320，脸在 ~235 以上，稀有横幅在 ~-130），
+        // 基准 180×107 竖向占 -24~84，不挡脸也不压技能/按钮；写死卡内坐标，与卡尺寸解耦。
+        rt.anchoredPosition = new Vector2(0f, 30f);
 
         var txtGo = new GameObject("BubbleText", typeof(RectTransform), typeof(Text));
         txtGo.transform.SetParent(go.transform, false);

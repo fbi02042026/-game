@@ -176,6 +176,18 @@ public static class StageRoller
         return Mathf.Max(1, Mathf.RoundToInt(baseAmount * chapterMul));
     }
 
+    /// <summary>1 个分解材料的折金价 —— 与商店货架（300 金/10 个）和 DailyLoginDefs 价值锚一致。</summary>
+    public const int DECOMPOSE_MAT_GOLD = 30;
+
+    /// <summary>
+    /// 【2026-10-18 主人拍板：材料产出全部改发抽奖币，等需要材料的时候再说】
+    /// 恢复关 / 锻造关原本发分解材料的奖励，按锚价折成局内币（数量口径不变，走 RestMaterialReward）。
+    /// </summary>
+    public static int RestRewardGold(int stageIndex, int chapter)
+    {
+        return RestMaterialReward(stageIndex, chapter) * DECOMPOSE_MAT_GOLD;
+    }
+
     public static string Label(StageType t)
     {
         switch (NormalizeDisplayType(t))

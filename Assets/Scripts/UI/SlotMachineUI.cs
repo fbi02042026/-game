@@ -127,7 +127,7 @@ public class SlotMachineUI : MonoBehaviour
         _onRolled = onRolled;
         gameObject.SetActive(true);
         BuildBoxes();
-        _title.text = price > 0 ? $"本关抽奖　花费 {price} 金币" : "幸运老虎机　本次免费";
+        _title.text = price > 0 ? $"本关抽奖　花费 {price} 抽奖币" : "幸运老虎机　本次免费";
         StopAllCoroutines();
         StartCoroutine(CoRoll(target));
     }

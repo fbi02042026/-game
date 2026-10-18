@@ -231,9 +231,23 @@ public class Hero : UnitBase
         }
 
         List<AttrBonusData> allBonus = EquipStatRollup.BuildBonusList(bag);
+        int equipCount = allBonus.Count;
         if (BattleManager.Instance != null && BattleManager.Instance.tempBuffs != null)
             allBonus.AddRange(BattleManager.Instance.tempBuffs);
         attr.RecalcAllAttr(allBonus);
+
+        // 【临时打点 2026-10-18】排查攻击虚高：打印 tempBuffs 明细（谁在往攻击上叠），定位后删除
+        var bmDbg = BattleManager.Instance;
+        if (bmDbg != null && bmDbg.tempBuffs != null && bmDbg.tempBuffs.Count > 0)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < bmDbg.tempBuffs.Count; i++)
+            {
+                var b = bmDbg.tempBuffs[i];
+                sb.Append($"{b.attrType}={b.value:0.##}{(b.isPercent ? "%" : "+")} ");
+            }
+            Debug.Log($"[BuffDebug] RecalcAttr 装备条目={equipCount} tempBuffs x{bmDbg.tempBuffs.Count}: {sb}");
+        }
 
         // 主手优先，无主手则读副手（教程默认左手剑）
         float weaponRange = AttackRangeTable.GetJobWorld(PlayerJobDefs.GetSelected());

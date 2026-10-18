@@ -1,0 +1,176 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Events;
+using UnityEngine.UI;
+
+// 天赋界面 partial —— 2026-10-18 由 TalentUI.cs 纯位移拆出（无逻辑改动）
+// 职责：层级绑定与查找（AutoBindFromHierarchy、货币绑定、Find 系列工具）
+public partial class TalentUI
+{
+
+    void EnsureVisibleTransform()
+    {
+        if (transform.localScale.sqrMagnitude < 0.0001f)
+            transform.localScale = Vector3.one;
+    }
+
+    public void AutoBindFromHierarchy()
+    {
+        panelImage = FindImg("Panel");
+        closeButton = transform.Find("Panel/TitleBar/CloseButton")?.GetComponent<Button>()
+                      ?? transform.Find("Panel/CloseButton")?.GetComponent<Button>();
+        titleText = FindTxt("Panel/TitleBar/TitleText");
+        BindCurrencyTexts();
+        stonePlusButton = transform.Find("Panel/ResourceRow/StonePlus")?.GetComponent<Button>()
+                          ?? transform.Find("Panel/ResourceRow/GoldPanel/PlusButton")?.GetComponent<Button>();
+
+        leftScroll = transform.Find("Panel/Columns/LeftColumn/LeftScroll")?.GetComponent<ScrollRect>();
+        leftContent = transform.Find("Panel/Columns/LeftColumn/LeftScroll/Viewport/Content") as RectTransform;
+        leftTipText = FindTxt("Panel/Columns/LeftColumn/LeftTip");
+        leftNodeTemplate = transform.Find("LeftNodeTemplate")?.gameObject;
+
+        rightScroll = transform.Find("Panel/Columns/RightColumn/RightScroll")?.GetComponent<ScrollRect>();
+        rightContent = transform.Find("Panel/Columns/RightColumn/RightScroll/Viewport/Content") as RectTransform;
+        rightTipText = FindTxt("Panel/Columns/RightColumn/RightTip");
+        rightCostValueText = FindTxt("Panel/Columns/RightColumn/RightCostText")
+                             ?? FindTxt("Panel/Columns/RightColumn/StoneBar/RightCostText");
+        rightRowTemplate = transform.Find("RightRowTemplate")?.gameObject;
+        rightExtraRowTemplate = transform.Find("RightRowTemplate (1)")?.gameObject;
+
+        sumAttackText = FindTxt("Panel/Footer/SumAttack");
+        sumMagicText = FindTxt("Panel/Footer/SumMagic");
+        sumHpText = FindTxt("Panel/Footer/SumHp");
+        sumDefText = FindTxt("Panel/Footer/SumDef");
+        sumCritText = FindTxt("Panel/Footer/SumCrit");
+        sumAtkSpdText = FindTxt("Panel/Footer/SumAtkSpd");
+        resetButton = transform.Find("Panel/Footer/ResetButton")?.GetComponent<Button>();
+        resetButtonGray = transform.Find("Panel/Footer/ResetButton灰")?.GetComponent<Button>()
+                          ?? transform.Find("Panel/Footer/ResetButtonGray")?.GetComponent<Button>();
+
+        choicePopup = transform.Find("ChoicePopup")?.gameObject;
+        choiceTitleText = FindTxt("ChoicePopup/Title")
+                          ?? FindTxt("ChoicePopup/标头/Title");
+        choiceDescText = FindTxt("ChoicePopup/Choice_0/Label");
+        choiceCancelButton = transform.Find("ChoicePopup/Cancel")?.GetComponent<Button>();
+        choiceConfirmButton = transform.Find("ChoicePopup/确定")?.GetComponent<Button>()
+                              ?? transform.Find("ChoicePopup/Confirm")?.GetComponent<Button>();
+        choiceOptionTemplate = transform.Find("ChoicePopup/Choice_0")?.gameObject;
+        choiceButtons = new Button[3];
+        choiceLabels = new Text[3];
+        choiceIcons = new Image[3];
+        for (int i = 0; i < 3; i++)
+        {
+            choiceButtons[i] = transform.Find($"ChoicePopup/Choice_{i}")?.GetComponent<Button>();
+            if (choiceButtons[i] != null)
+            {
+                choiceLabels[i] = choiceButtons[i].GetComponentInChildren<Text>(true);
+                var iconT = choiceButtons[i].transform.Find("Icon") ?? choiceButtons[i].transform.Find("icon");
+                choiceIcons[i] = iconT != null ? iconT.GetComponent<Image>() : null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// panelImage 已序列化时 Awake 会跳过 AutoBind，导致手做 GoldPanel 文案未挂上。
+    /// </summary>
+    void EnsureCurrencyBindings()
+    {
+        BindCurrencyTexts();
+        WireGoldPlusIfNeeded();
+    }
+
+    void BindCurrencyTexts()
+    {
+        // 手做：ResourceRow/GoldText 常为隐藏白模；真金显示在 GoldPanel/GoldText
+        if (goldText == null || !goldText.gameObject.activeInHierarchy)
+        {
+            goldText = FindTxt("Panel/ResourceRow/GoldPanel/GoldText")
+                       ?? FindTxt("Panel/ResourceRow/GoldText")
+                       ?? goldText;
+        }
+        if (stoneText == null || !stoneText.gameObject.activeInHierarchy)
+        {
+            stoneText = FindDeepTextByParentName("天赋石Panel", "GoldText")
+                        ?? FindTxt("Panel/ResourceRow/StoneText")
+                        ?? stoneText;
+        }
+        if (leftCostText == null)
+        {
+            leftCostText = FindTxt("Panel/Columns/LeftColumn/LeftCostText")
+                           ?? FindTxt("Panel/Columns/LeftColumn/GoldBar/LeftCostText")
+                           ?? FindTxt("Panel/ResourceRow/GoldPanel/LeftCostText");
+        }
+        rightCostValueText = rightCostValueText
+                             ?? FindTxt("Panel/Columns/RightColumn/RightCostText")
+                             ?? FindTxt("Panel/Columns/RightColumn/StoneBar/RightCostText");
+    }
+
+    void WireGoldPlusIfNeeded()
+    {
+        var plus = transform.Find("Panel/ResourceRow/GoldPanel/PlusButton")?.GetComponent<Button>();
+        if (plus == null) return;
+        plus.onClick.RemoveAllListeners();
+        plus.onClick.AddListener(OnClickGoldPlusUpgrade);
+    }
+
+    void OnClickGoldPlusUpgrade()
+    {
+        var talents = GetTalents();
+        int unlocked = TalentDefs.LeftUnlockedCount(talents);
+        if (unlocked >= TalentDefs.Left.Length) return;
+        OnClickLeft(unlocked);
+    }
+
+    Image FindImg(string path)
+    {
+        var t = transform.Find(path);
+        return t != null ? t.GetComponent<Image>() : null;
+    }
+
+    Text FindTxt(string path)
+    {
+        var t = transform.Find(path);
+        return t != null ? t.GetComponent<Text>() : null;
+    }
+
+    Text FindDeepTextByParentName(string parentName, string childName)
+    {
+        if (string.IsNullOrEmpty(parentName)) return null;
+        var parent = FindDeepNamed(transform, parentName);
+        if (parent == null) return null;
+        var child = parent.Find(childName);
+        return child != null ? child.GetComponent<Text>() : null;
+    }
+
+    static Transform FindDeepNamed(Transform root, string name)
+    {
+        if (root == null) return null;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var c = root.GetChild(i);
+            if (c.name == name) return c;
+            var nested = FindDeepNamed(c, name);
+            if (nested != null) return nested;
+        }
+        return null;
+    }
+
+    static Image FindDeepImage(Transform root, string name)
+    {
+        if (root == null) return null;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var c = root.GetChild(i);
+            if (c.name == name)
+            {
+                var img = c.GetComponent<Image>();
+                if (img != null) return img;
+            }
+            var nested = FindDeepImage(c, name);
+            if (nested != null) return nested;
+        }
+        return null;
+    }
+}

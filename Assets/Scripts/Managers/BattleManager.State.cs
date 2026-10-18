@@ -24,6 +24,18 @@ public partial class BattleManager
     long _goldAtRunStart;
     /// <summary>本局开始时的金币基线（中断存档要写它，撤离开局才知道净赚多少）</summary>
     public long GoldAtRunStart => _goldAtRunStart;
+    /// <summary>
+    /// 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】已写回城镇的获得金币水位。
+    /// PersistBattleGold 每关都会走一次，写回的是「获得总额 − 已付水位」的增量；
+    /// 这个水位保证逐关写回不重复入账。开局归零。
+    /// </summary>
+    long _earnedPaidGold;
+    /// <summary>
+    /// 本局获得的金币（顶部 HUD 真源）= 真正赚到的（任务金/宝箱/装备折金/通关结算金等，
+    /// 全部记进 <see cref="BattleRunStats.GoldEarned"/>）＋ 还没发的按关结算金。
+    /// 死亡 / 撤离 / 通关写回城镇的就是这个数 —— 顶部看到多少，落袋就是多少，抽奖花的是另一本账。
+    /// </summary>
+    public long RunEarnedGold => RunStats.GoldEarned + _runStageGoldPending;
     int _enchantAtRunStart;
     int _matsAtRunStart;
     public BattleRunStats RunStats { get; private set; } = new BattleRunStats();

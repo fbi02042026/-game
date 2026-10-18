@@ -9,7 +9,7 @@ public static class Chapter1Story
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Solo("咨询台小姐",
+            StoryDirector.Solo("赛琳",
                 "森林层是新人练手的好地方。最近有一支正式小队路过这里，你应该不会遇到太强的敌人。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall),
@@ -26,7 +26,9 @@ public static class Chapter1Story
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("击败 Boss 后，你在地上发现一道新鲜的剑痕。"),
+            // 【2026-10-18 主人报「剧情没有背景」】这段原先整段没挂 .Bg，露出底下战斗场景；
+            // 复用 abyss_choice（裂隙石台）顶上，后续台词与选完选项后的剧情自动沿用同一张。
+            StoryDirector.Narration("击败 Boss 后，你在地上发现一道新鲜的剑痕。").Bg(StoryBackgrounds.AbyssChoice),
             StoryDirector.Solo("你",
                 "有人比我早到一步。这剑痕……有点眼熟。",
                 StoryPortraits.Player),
@@ -93,9 +95,10 @@ public static class Chapter1Story
         };
         StoryDirector.Ensure().Play(beats, () =>
         {
+            // 【2026-10-18 主人拍板：材料产出全部改发抽奖币】原「分解材料×3」按锚价（1材料=30金）折成金币×90
             ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 20, save: false, notify: true);
-            ResourceWallet.Add(ResourceWallet.ResourceType.DecomposeMat, 3, save: true, notify: true);
-            UIManager.Instance?.ShowToast("获得 圣盾壁垒、金币200、分解材料×3");
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 90, save: true, notify: true);
+            UIManager.Instance?.ShowToast("获得 圣盾壁垒、金币290");
             StoryProgress.QueueChapter1TownReturn();
             onDone?.Invoke();
         });
@@ -110,7 +113,7 @@ public static class Chapter1Story
         }
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Solo("咨询台小姐",
+            StoryDirector.Solo("赛琳",
                 "裂隙内偶尔会出现其他小队的痕迹，不要过度调查。那是其他部门的工作。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall),

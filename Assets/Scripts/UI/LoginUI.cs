@@ -144,7 +144,8 @@ public class LoginUI : MonoBehaviour
                 SetActivePath($"ActionPanel/{LoginTapRowBuilder.TapButtonName}", false);
                 if (startButton != null) startButton.gameObject.SetActive(true);
                 else SetActivePath("ActionPanel/StartButton", true);
-                ShowTip($"欢迎回来，{TapTapBootstrap.Instance.Nickname}，点「开始冒险」进入游戏");
+                // 【2026-10-18 修「欢迎语换行别扭」】昵称后显式换行，避免 Toast 按宽度硬折行截断「开始冒险」
+                ShowTip($"欢迎回来，{TapTapBootstrap.Instance.Nickname}，\n点「开始冒险」进入游戏");
                 Debug.Log("[LoginUI] TapTap 登录成功，已换出「开始冒险」按钮");
             }
             else

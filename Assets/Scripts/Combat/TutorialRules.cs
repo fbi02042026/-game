@@ -31,7 +31,9 @@ public sealed class TutorialRules
     public bool SkipMercDeathBanter { get; private set; }
     public bool SkipLaodunAchievement { get; private set; }
     public bool SkipStarterWeaponFallback { get; private set; }
-    public bool HideKillComboHud { get; private set; }
+    // 【2026-10-18 删除】HideKillComboHud（引导战不显示连杀「击破」）：09-12 Phase4 合流时带进来的
+    // 旧行为，无主人拍板记录；主人 10-15 拍板连杀挪右上角、10-17 拍板「右上角击破计数常驻」，
+    // 引导局也要显示 → 整条删除（BattleSideHud.SetCombo 的同款判断一并删），不留死开关。
     public bool SkipMercHireClearOnEvacuate { get; private set; }
     public bool SkipPendingAdventureOnEvacuate { get; private set; }
     public bool SkipMercBanter { get; private set; }
@@ -141,7 +143,6 @@ public sealed class TutorialRules
             SkipMercDeathBanter = true,
             SkipLaodunAchievement = true,
             SkipStarterWeaponFallback = true,
-            HideKillComboHud = true,
             SkipMercHireClearOnEvacuate = true,
             SkipPendingAdventureOnEvacuate = true,
             SkipMercBanter = true,

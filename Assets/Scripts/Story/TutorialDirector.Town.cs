@@ -97,7 +97,7 @@ public partial class TutorialDirector
         if (tab != MainNavTab.Tavern && tab != MainNavTab.Character) return;
         if (_extraHintShown) return;
         _extraHintShown = true;
-        var beat = StoryDirector.Solo("咨询台小姐",
+        var beat = StoryDirector.Solo("赛琳",
             "等回来再逛这些也来得及。",
             StoryPortraits.Receptionist)
             .Bg(StoryBackgrounds.GuildHall);
@@ -252,7 +252,7 @@ public partial class TutorialDirector
         var afterNaming = new List<StoryBeat>
         {
             // 【2026-10-12 主人拍板】第一句带玩家名字（与会长送别句同一口径，起名后才播这段）
-            StoryDirector.Solo("咨询台小姐",
+            StoryDirector.Solo("赛琳",
                 $"{StoryProgress.GetPlayerName()}，第一次下裂隙？三件事：\n1. 你只管走路，打架会自动打。\n2. 裂隙很危险，尽量组队进入。\n3. 见好就收，活着才有收益。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)
@@ -347,7 +347,7 @@ public partial class TutorialDirector
         done = false;
         StoryDirector.Ensure().Play(new List<StoryBeat>
         {
-            StoryDirector.Solo("咨询台小姐",
+            StoryDirector.Solo("赛琳",
                 "回来了？人物界面可以查看属性，酒馆能招募佣兵。\n先熟悉下公会大厅，之后再慢慢变强。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)

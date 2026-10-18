@@ -62,7 +62,16 @@ public static class WeaponCombatTable
 
         string spum = !string.IsNullOrEmpty(spumNameHint) ? spumNameHint : tpl.spumName;
         if (TryKindFromSpum(spum, out var fromSpum))
+        {
+            // 【2026-10-18 修「抽到双手武器、盾牌又没了」】斧/锤资源路径（/2_axe/ /8_mace/）统一判
+            // Sword 是给「单手斧/锤按剑档」用的，但 weaponType=TwoHand 的双手斧/锤（axelong1 /
+            // f_sr_hammer）也跟着被判成 Sword —— 混进剑盾的武器池（抽到即「双手」、装备即清盾），
+            // 狂战的大剑池反而收不到它。双手一律归 Greatsword：剑盾抽不到、狂战正常掉、
+            // 攻距/攻速/词条（Greatsword 档）全链路对齐。真双手剑模板当前不存在（sword 系全单手），无误伤。
+            if (fromSpum == WeaponKind.Sword && tpl != null && tpl.weaponType == WeaponType.TwoHand)
+                fromSpum = WeaponKind.Greatsword;
             return fromSpum;
+        }
 
         string hint = ((spum ?? "") + " " + (tpl.equipName ?? "") + " " + (tpl.name ?? "") + " " + (tpl.templateId ?? "")).ToLowerInvariant();
         if (hint.Contains("bow") || hint.Contains("arrow") || hint.Contains("弓") || hint.Contains("弩"))

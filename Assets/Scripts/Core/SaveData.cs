@@ -327,6 +327,9 @@ public class SaveData
     public int mercScrollRare = 0;
     public int mercScrollLegendary = 0;
 
+    // === 体力药水（2026-10-18 主人拍板：药水改道具入背包，背包里手动使用，使用时超出上限会提示浪费）===
+    public int staminaPotions = 0;
+
     // === 佣兵养成道具（2026-09-18 新增：徽记 + 本命碎片）===
     // id 口径：徽记 "badge:{职业key}:{档位}"（如 badge:剑盾:传奇）；本命碎片 "frag:{hireId}"（如 frag:H001）
     public List<StringIntEntry> mercGrowItemEntries = new List<StringIntEntry>();

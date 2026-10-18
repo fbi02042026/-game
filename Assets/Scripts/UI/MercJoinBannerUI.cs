@@ -42,6 +42,8 @@ public class MercJoinBannerUI : MonoBehaviour
     Text _nameText;           // name（佣兵名称）
     Coroutine _co;
     bool _bound;
+    /// <summary>抬层 Canvas 是否已幂等挂好（见 <see cref="EnsureOverheadCanvas"/>）。</summary>
+    bool _canvasLifted;
 
     // ============================================================
     // 对外接口
@@ -96,15 +98,12 @@ public class MercJoinBannerUI : MonoBehaviour
         _bound = true;
         _rt = rt;
 
-        // 【2026-10-18】BattleUI 根 Canvas order=0，抽卡面板(965)/结算(990)全在其上 → 横幅被整片盖住。
-        // 抬嵌套 Canvas 到结算之上（995），AddComponent 会重置 RectTransform，先缓存再还原。
-        var cv = rt.GetComponent<Canvas>() ?? rt.gameObject.AddComponent<Canvas>();
-        Vector2 ap = rt.anchoredPosition, sd = rt.sizeDelta;
-        Vector2 aMin = rt.anchorMin, aMax = rt.anchorMax, pv = rt.pivot, ls = rt.localScale;
-        rt.anchoredPosition = ap; rt.sizeDelta = sd;
-        rt.anchorMin = aMin; rt.anchorMax = aMax; rt.pivot = pv; rt.localScale = ls;
-        cv.overrideSorting = true;
-        cv.sortingOrder = 995;
+        // 【2026-10-18 修】抬层 Canvas 不在这里挂，挪到 <see cref="EnsureOverheadCanvas"/>（播放前、节点已点亮时）。
+        // 根因（Editor.log 2026-10-18 实锤）：Bind 跑在 Ensure 里、节点那一刻没进激活层级 →
+        // 未激活对象上 AddComponent<Canvas> 的 native 侧没建好 → set_overrideSorting 当场抛
+        // MissingComponentException（同 BattleBossHpBar.cs:131-136 记载的 10-16 同款事故），
+        // 异常顺 RecruitMerc → TryApplyCard → CoInstantPick 把抽奖协程整条炸死
+        // = 主人看到的「引导第二次抽奖没有抽出」（佣兵其实已入队，但横幅/Toast/扣钱/定序全断）。
 
         var iconTf = rt.Find("mask/icon");
         if (iconTf == null) Debug.LogError("[MercJoinBanner] 「" + NodeName + "」下找不到 mask/icon，立绘位置会空");
@@ -137,12 +136,6 @@ public class MercJoinBannerUI : MonoBehaviour
     {
         if (!_bound) return;
 
-        // 【临时打点·查横条不显示】确认节点实况，定位后删除
-        var canvas = GetComponentInParent<Canvas>();
-        Debug.Log($"[MercJoinBanner·打点] Play hireId={hireId} pos={_rt.anchoredPosition} size={_rt.rect.size} " +
-                  $"activeInHierarchy={_rt.gameObject.activeInHierarchy} " +
-                  $"canvas={(canvas != null ? $"{canvas.renderMode} cam={canvas.worldCamera} order={canvas.sortingOrder}" : "无")}");
-
         var portrait = LoadPortrait(hireId);
         if (_icon != null) _icon.sprite = portrait;
 
@@ -158,14 +151,48 @@ public class MercJoinBannerUI : MonoBehaviour
         // 否则报 "Coroutine couldn't be started because the game object '佣兵入队' is inactive!"
         // → 横幅一次都没播过（2026-10-14 Editor.log:19525 实锤），主人看到的是「该出横幅却干等」。
         _rt.gameObject.SetActive(true);
+        // 节点已点亮，这里才是挂抬层 Canvas 的安全时机（幂等，见方法注释）
+        EnsureOverheadCanvas();
         _co = StartCoroutine(CoPlay());
+    }
+
+    /// <summary>
+    /// 横幅抬层 Canvas 的唯一出口：播放前（节点已 activeInHierarchy）幂等挂
+    /// overrideSorting 嵌套 Canvas 到 <see cref="GameConfig.UiSort.MercJoinBanner"/>(995)。
+    /// 为什么不放 <see cref="Bind"/>：见 Bind 内【2026-10-18 修】注释 ——
+    /// Ensure 期对象未激活，未激活对象上 AddComponent&lt;Canvas&gt; 的 native 侧没建好，
+    /// set_overrideSorting 当场抛 MissingComponentException（BattleBossHpBar.cs:131-136 同款实录）。
+    /// </summary>
+    void EnsureOverheadCanvas()
+    {
+        if (_canvasLifted || _rt == null) return;
+        if (!_rt.gameObject.activeInHierarchy) return;   // 未激活时不挂：等下次 Play 再幂等补
+        var rt = _rt;
+        // AddComponent<Canvas> 会把 RectTransform 重置成 100×100 中心锚点，先缓存再还原
+        Vector2 ap = rt.anchoredPosition, sd = rt.sizeDelta;
+        Vector2 aMin = rt.anchorMin, aMax = rt.anchorMax, pv = rt.pivot, ls = rt.localScale;
+        var cv = rt.GetComponent<Canvas>() ?? rt.gameObject.AddComponent<Canvas>();
+        if (cv == null) return;
+        rt.anchoredPosition = ap; rt.sizeDelta = sd;
+        rt.anchorMin = aMin; rt.anchorMax = aMax; rt.pivot = pv; rt.localScale = ls;
+        cv.overrideSorting = true;
+        cv.sortingOrder = GameConfig.UiSort.MercJoinBanner;
+        // 铁律：每加一个 Canvas 必补 GraphicRaycaster（横幅图元 raycastTarget 全 false，不会挡点击）
+        if (rt.GetComponent<GraphicRaycaster>() == null) rt.gameObject.AddComponent<GraphicRaycaster>();
+        _canvasLifted = true;
     }
 
     IEnumerator CoPlay()
     {
-        var canvasRt = GetComponentInParent<Canvas>() != null
-            ? (RectTransform)GetComponentInParent<Canvas>().transform
-            : null;
+        // 【2026-10-18 修】必须取**父级**Canvas：横幅自己挂了抬层 Canvas 后，
+        // GetComponentInParent<Canvas>() 会先取到自己（rect.width=横幅自身 517），
+        // 屏宽/滑行距离全错 → 从 parent 往上找，拿到 BattleUI 根 Canvas 的真屏宽。
+        RectTransform canvasRt = null;
+        if (_rt.parent != null)
+        {
+            var parentCanvas = _rt.parent.GetComponentInParent<Canvas>();
+            if (parentCanvas != null) canvasRt = parentCanvas.transform as RectTransform;
+        }
         float canvasW = canvasRt != null ? canvasRt.rect.width : Screen.width;
         float half = canvasW * 0.5f;
         float offscreen = half + _rt.rect.width;      // 整块完全在屏外

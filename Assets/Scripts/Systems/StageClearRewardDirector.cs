@@ -1028,9 +1028,8 @@ public class StageClearRewardDirector : MonoBehaviour
             total += ScrapGold(rewards[i]);
         if (total <= 0) return;
 
-        bm.currentGold += total;
-        BattleUI.Instance?.UpdateGold(bm.currentGold);
-        UIManager.Instance?.ShowToast($"宝箱装备折金 +{total}", true);   // 2026-10-06 主人拍板：装备折金（消失+获得）force 弹
+        bm.GrantRunGold(total);   // 2026-10-18：走进账唯一出口（结算「金币」栏同账）
+        UIManager.Instance?.ShowToast($"宝箱装备折算 金币 +{total}", true);   // 2026-10-06 主人拍板：装备折金（消失+获得）force 弹；【2026-10-18 双钱包拆分】折金进「本局获得金币」
     }
 
     /// <summary>
@@ -1092,7 +1091,7 @@ public class StageClearRewardDirector : MonoBehaviour
             {
                 if (chosen.Kind == DraftCardKind.Equip)
                 {
-                    // 与进关抽奖同口径：换不换要问玩家，换下来的旧件折强化石
+                    // 与进关抽奖同口径：换不换要问玩家，换下来的旧件折局内币（2026-10-18 拆分改币）
                     // 2026-10-10 主人反馈：通关奖励拿到装备却没弹提示 —— 成功也要弹（force=true，不被遮罩吞），
                     // 只有失败才是普通提示。文案同进关抽奖，走 CoApplyEquipCard 的「恭喜获得 XXX」。
                     yield return dir.CoApplyEquipCard(chosen, (ok, msg) =>
@@ -1157,17 +1156,15 @@ public class StageClearRewardDirector : MonoBehaviour
             else
             {
                 int g = ScrapGold(picked);
-                bm.currentGold += g;
-                BattleUI.Instance?.UpdateGold(bm.currentGold);
-                UIManager.Instance?.ShowToast($"穿装失败，折合金币 +{g}", true);   // 2026-10-06 主人拍板：装备折金 force 弹
+                bm.GrantRunGold(g);
+                UIManager.Instance?.ShowToast($"穿装失败，折合金币 +{g}", true);   // 2026-10-06 主人拍板：装备折金 force 弹；【2026-10-18 双钱包拆分】折金进「本局获得金币」
             }
         }
         else if (picked != null)
         {
             int g = ScrapGold(picked);
-            bm.currentGold += g;
-            BattleUI.Instance?.UpdateGold(bm.currentGold);
-            UIManager.Instance?.ShowToast($"已丢弃，折合金币 +{g}", true);   // 2026-10-06 主人拍板：装备丢弃（消失）force 弹
+            bm.GrantRunGold(g);
+            UIManager.Instance?.ShowToast($"已丢弃，折合金币 +{g}", true);   // 2026-10-06 主人拍板：装备丢弃（消失）force 弹；【2026-10-18 双钱包拆分】折金进「本局获得金币」
         }
 
         if (show != null)
@@ -1181,9 +1178,8 @@ public class StageClearRewardDirector : MonoBehaviour
             }
             if (scrapTotal > 0)
             {
-                bm.currentGold += scrapTotal;
-                BattleUI.Instance?.UpdateGold(bm.currentGold);
-                UIManager.Instance?.ShowToast($"其余折合金币 +{scrapTotal}", true);   // 2026-10-06 主人拍板：装备折金 force 弹
+                bm.GrantRunGold(scrapTotal);
+                UIManager.Instance?.ShowToast($"其余折合金币 +{scrapTotal}", true);   // 2026-10-06 主人拍板：装备折金 force 弹；【2026-10-18 双钱包拆分】折金进「本局获得金币」
             }
         }
     }
@@ -1242,8 +1238,7 @@ public class StageClearRewardDirector : MonoBehaviour
         Destroy(coin);
         if (BattleManager.Instance != null)
         {
-            BattleManager.Instance.currentGold += goldAdd;
-            BattleUI.Instance?.UpdateGold(BattleManager.Instance.currentGold);
+            BattleManager.Instance.GrantRunGold(goldAdd);
         }
     }
 

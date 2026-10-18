@@ -355,7 +355,7 @@ public class FirstRunGuide : MonoBehaviour
     {
         // 【2026-10-17 主人拍板】开头白砍到一句：欢迎 + 出师承诺，别繁琐
         // 【2026-10-18 主人拍板】引导全程换前台小姐口吻（可爱版），文案照旧一句
-        const string text = "欢迎来到《像素冒险：裂隙之刃》～我是前台小姐姐，第一次来也没关系，人家会手把手教你的哟！";
+        const string text = "欢迎来到《像素冒险：裂隙之刃》～我是赛琳，第一次来也没关系，人家会手把手教你的哟！";
 
         yield return CoPoint(text, null, null, true, TapStepTimeout);
         FinishStep(GuideStep.Welcome, "欢迎页");

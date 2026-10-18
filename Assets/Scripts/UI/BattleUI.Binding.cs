@@ -115,7 +115,13 @@ public partial class BattleUI : MonoBehaviour
     {
         if (stageLabel == null) stageLabel = FindUIText("StageLabel");
         if (difficultyLabel == null) difficultyLabel = FindUIText("DifficultyLabel");
-        if (goldText == null) goldText = FindUIText("GoldText");
+        // 【2026-10-18】DraftDisplay 子节点已改名 DraftCoinIcon/DraftCoinText（不再与金币区重名）；
+        // 下面的排除逻辑保留当防呆：以后美术若再摆同名节点，顶栏金币也不会被串绑。
+        if (goldText == null)
+        {
+            var t = FindDeepExcluding(transform, "GoldText", FindDeepChildIgnoreCase(transform, "DraftDisplay"));
+            if (t != null) goldText = t.GetComponent<Text>();
+        }
         if (talentStoneText == null)
             talentStoneText = FindUIText("TalentText") ?? FindUIText("TalentStoneText") ?? FindUIText("DiamondText");
         if (enchantStoneText == null) enchantStoneText = FindUIText("EnchantText");
@@ -214,7 +220,87 @@ public partial class BattleUI : MonoBehaviour
         // MercenaryManager 可能尚未创建，系统就绪后再 Wire / Configure
         WireSlotSkillClicks();
         ApplySoloBattleHud();
+        // 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】顶栏货币 = 本局获得金币 → 用金币图；
+        // （10-18 早前「顶栏统一抽奖币图」的口径被本条取代 —— 抽奖币挪到抽奖面板旁单独显示）
+        EnsureTopBarGoldIcon();
+        // 【2026-10-18 主人摆的 DraftDisplay 抽奖币条】绑数字 + 换抽奖币图
+        EnsureDraftDisplayBindings();
         ReportBindingStatus();
+    }
+
+    /// <summary>
+    /// 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】顶栏货币图标用金币图（icon_gold）：
+    /// 顶栏显示的是「本局获得金币」（会写回城镇那笔），抽奖币池另有自己的图（icon_draft_coin，
+    /// 显示在抽奖面板旁）。显式加载保证不受预制体默认图影响；数字口径见 BattleUI.RefreshBattleHud。
+    /// 缺图时 LogError 保持原图（fail closed，不静默拿别的图顶）。
+    /// </summary>
+    void EnsureTopBarGoldIcon()
+    {
+        // DraftDisplay 子树排除（防呆）：其子节点已改名 DraftCoinIcon，本处排除只是保险，防美术再摆同名
+        Transform t = FindDeepExcluding(transform, "GoldIcon", FindDeepChildIgnoreCase(transform, "DraftDisplay"));
+        if (t == null) return;
+        var img = t.GetComponent<Image>();
+        if (img == null) return;
+        var sp = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_gold");
+        if (sp == null)
+        {
+            Debug.LogError("[BattleUI] 金币图标取不到：Art/UI/Icons/Common/icon_gold —— 顶栏维持原图");
+            return;
+        }
+        img.sprite = sp;
+        img.preserveAspect = true;
+    }
+
+    /// <summary>
+    /// 【2026-10-18 主人在 TopBar 下摆了 DraftDisplay 抽奖币资源条，子节点已改名 DraftCoinIcon/DraftCoinText
+    ///（原叫 GoldIcon/GoldText，与顶栏金币区重名，主人拍板改名防混）】
+    /// 绑定数字（<see cref="BattleUI.draftCoinText"/>）+ 显式设抽奖币图（icon_draft_coin）。
+    /// 数字真源 = BattleManager.currentGold；后续变化由 BattleEntryDraftPanel.NotifyPoolGoldChanged
+    /// → BattleUI.UpdateDraftCoin 同步，这里只负责绑引用 + 初值。
+    /// 缺图时 LogError 保持原图（fail closed，不静默拿别的图顶）。
+    /// </summary>
+    void EnsureDraftDisplayBindings()
+    {
+        Transform dd = FindDeepChildIgnoreCase(transform, "DraftDisplay");
+        if (dd == null) return;
+        if (draftCoinText == null)
+        {
+            Transform t = FindDeepChildIgnoreCase(dd, "DraftCoinText");
+            if (t != null) draftCoinText = t.GetComponent<Text>();
+        }
+        Transform iconT = FindDeepChildIgnoreCase(dd, "DraftCoinIcon");
+        if (iconT != null)
+        {
+            var img = iconT.GetComponent<Image>();
+            if (img != null)
+            {
+                var sp = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_draft_coin");
+                if (sp != null) { img.sprite = sp; img.preserveAspect = true; }
+                else Debug.LogError("[BattleUI] 抽奖币图标取不到：Art/UI/Icons/Common/icon_draft_coin —— DraftDisplay 维持原图");
+            }
+        }
+        // 初值：BattleManager 未装配时先写 0，RefreshBattleHud / NotifyPoolGoldChanged 会补上
+        if (draftCoinText != null)
+            draftCoinText.text = BattleManager.Instance != null
+                ? BattleManager.Instance.currentGold.ToString() : "0";
+    }
+
+    /// <summary>DFS 找指定名节点，但整个跳过 exclude 子树（含 exclude 自己）；exclude 为空时同 FindDeepChildIgnoreCase。</summary>
+    static Transform FindDeepExcluding(Transform root, string name, Transform exclude)
+    {
+        if (root == null || string.IsNullOrEmpty(name)) return null;
+        if (exclude != null)
+        {
+            for (var n = root; n != null; n = n.parent)
+                if (n == exclude) return null;
+        }
+        if (string.Equals(root.name, name, System.StringComparison.OrdinalIgnoreCase)) return root;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var r = FindDeepExcluding(root.GetChild(i), name, exclude);
+            if (r != null) return r;
+        }
+        return null;
     }
 
     /// <summary>
@@ -229,6 +315,7 @@ public partial class BattleUI : MonoBehaviour
         Add("StageLabel", stageLabel != null);
         Add("DifficultyLabel", difficultyLabel != null);
         Add("GoldText", goldText != null);
+        Add("DraftDisplay.GoldText(抽奖币条)", draftCoinText != null);
         Add("天赋石文本", talentStoneText != null || enchantStoneText != null);
         Add("DecomposeText", decomposeMatText != null);
         Add("SettingsButton(右上角)", settingsButton != null);

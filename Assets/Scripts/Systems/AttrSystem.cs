@@ -9,6 +9,8 @@ public class AttrSystem
 {
     private Dictionary<AttrType, float> _attr = new Dictionary<AttrType, float>();
     private Dictionary<AttrType, float> _baseAttr = new Dictionary<AttrType, float>();
+    // 【2026-10-18】利刃 R_C1「最终攻击 +X%」的临时累计量：天赋段累加、RecalcAllAttr 5b 段消费后随重算清零
+    private float _talentAtkPct;
 
     public AttrOwnerKind OwnerKind { get; private set; }
 
@@ -107,6 +109,7 @@ public class AttrSystem
     public void RecalcAllAttr(List<AttrBonusData> extraBonus = null)
     {
         _attr.Clear();
+        _talentAtkPct = 0f;   // 【2026-10-18】利刃改百分比：每次重算从零重放，防叠加
 
         // 1. 基础属性
         foreach (var pair in _baseAttr)
@@ -173,6 +176,17 @@ public class AttrSystem
         {
             foreach (var bonus in extraBonus)
                 AddAttr(bonus.attrType, bonus.value, bonus.isPercent);
+        }
+
+        // 5b. 【2026-10-18 主人拍板】利刃 R_C1 改「最终攻击 +5/10/15%」：
+        // 天赋在 3 段先于装备应用，直接乘算只会乘到基础攻击 6（≈+0.3，等于没点）；
+        // 因此在天赋段只记录总量，装备结算完在这里统一乘 —— 口径 = 含装备的最终攻击，物魔两侧都吃（与 Attack 天赋同口径）。
+        if (_talentAtkPct != 0f)
+        {
+            if (_attr.ContainsKey(AttrType.Attack))
+                _attr[AttrType.Attack] *= 1f + _talentAtkPct;
+            if (_attr.ContainsKey(AttrType.MagicAttack))
+                _attr[AttrType.MagicAttack] *= 1f + _talentAtkPct;
         }
 
         // 6. 四大基础属性 → 派生战斗属性
@@ -416,6 +430,11 @@ public class AttrSystem
                 // ⚠️ 不要把「右列保留区分度」理解成这里要切单加：右列的区分度在 PhysDamage / MagicDamage 专精节点上。
                 AddAttr(AttrType.Attack, fx.value, false);
                 AddAttr(AttrType.MagicAttack, fx.value, false);
+                break;
+            case TalentDefs.AttrKind.AttackPercent:
+                // 【2026-10-18 主人拍板】利刃改「最终攻击 +X%」：天赋段只记录，
+                // RecalcAllAttr 5b 段在装备结算后统一乘（那里才是含装备的最终攻击）。
+                _talentAtkPct += fx.value * 0.01f;
                 break;
             case TalentDefs.AttrKind.Intelligence:
                 // 2026-10-10：左列第 4 槽已改走 AttrKind.Attack，此分支暂无天赋节点使用；保留以防将来配表/节点复用。注意这里加的是基础属性 Intelligence，会走 ApplyDerivedAttributes 派生成 MagicPower，也会喂蓝条。

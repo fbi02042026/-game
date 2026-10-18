@@ -163,8 +163,18 @@ public static class ShopSystem
             }
             default:
             {
-                ResourceWallet.Add(item.grantType, item.grantAmount, save: false, notify: false);
-                result.message = $"获得 {ShopDefs.CurrencyName(item.grantType)} ×{item.grantAmount}";
+                // 【2026-10-18 主人拍板】体力药水改为道具：购买入背包，背包里手动使用
+                // （使用时若超出体力上限会先弹确认，多余部分作废）；其他资源照旧直接入账。
+                if (item.grantType == ResourceWallet.ResourceType.Stamina)
+                {
+                    data.staminaPotions += 1;
+                    result.message = "体力药水 ×1 已放入背包";
+                }
+                else
+                {
+                    ResourceWallet.Add(item.grantType, item.grantAmount, save: false, notify: false);
+                    result.message = $"获得 {ShopDefs.CurrencyName(item.grantType)} ×{item.grantAmount}";
+                }
                 break;
             }
         }

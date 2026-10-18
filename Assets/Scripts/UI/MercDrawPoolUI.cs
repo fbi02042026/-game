@@ -7,14 +7,14 @@ using UnityEngine.UI;
 /// 按主人设计图 v3）：
 /// 上区 = 雇佣队列 6 格（初期 4 格，通关第 2/3 章各开 1 格），在队头像右上角红「−」= 出队（系统自动补位）；
 /// 中区 = 已获得佣兵（**统一用头像**，按稀有度分组，在队的头像右上角绿「已入队」标）；
-/// 下区 = 未获得佣兵（灰头像 + 「未获得」，点卡看获取途径）。
+/// 下区 = 未获得佣兵（灰头像 + 真名，2026-10-18 主人拍板：不再显示「未获得」三个字），点卡直接弹详情。
 ///
-/// <para>交互（主人原话口径）：队列<b>最少要补全、会自动补全</b>——出队后系统立即从未入队的
-/// 已解锁佣兵按稀有度补满（<see cref="SaveData.RemoveFromDrawPool"/>）；玩家入队走两条路：
-/// 点未入队的已获得卡就地亮出卡上「查看/替换」双钮（2026-10-17 主人拍板：双钮做在列表卡模板
-/// Panel/Slot 里，同一时刻只有一张卡亮着），<b>点「替换」池未满直接入队、池满不弹窗</b>——
-/// 直接点上方队列里要换下的佣兵完成替换（2026-10-17 二次拍板：废除替换弹窗；不做拖拽）。
-/// 已上阵（在队列）的已获得卡灰显 + 绿「已入队」标（2026-10-17 二次拍板）。
+/// <para>交互（2026-10-18 主人拍板）：队列<b>最少要补全、会自动补全</b>——出队后系统立即从未入队的
+/// 已解锁佣兵按稀有度补满（<see cref="SaveData.RemoveFromDrawPool"/>）；玩家入队走一条路：
+/// 点列表卡（已获得/未获得都是）一次直接弹「获得佣兵」详情弹窗，未入队的已获得佣兵
+/// 弹窗右下带「替换」钮 —— 点「替换」池未满直接入队、池满不弹窗：直接点上方队列里要换下的
+/// 佣兵完成替换（2026-10-17 二次拍板：废除替换弹窗；不做拖拽）。
+/// 已上阵（在队列）的已获得卡灰显 + 绿「已入队」标，弹窗不带替换钮。
 /// <b>不能预入队</b>（主人否了点子）。队列内容按稀有度自动排列。</para>
 ///
 /// <para>所有改动<b>即时生效</b>（出队 / 入队 / 替换当场写存档），无「确定」步骤。</para>
@@ -53,11 +53,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
     const float SwapSwayAmp = 12f;    // 晃动幅度（槽位局部单位，槽宽 200）
     const float SwapSwaySpeed = 6f;   // 晃动角速度（弧度/秒，周期约 1 秒）
 
-    // 列表卡模板 + 卡上「查看/替换」双钮（2026-10-17 主人拍板：预制体 Panel/Slot 自带双钮，
-    // 点未入队卡就地亮出，同一时刻只有一张卡亮着；废除独立选择弹窗）
+    // 列表卡模板（预制体 Panel/Slot；2026-10-18 主人拍板：点卡一次直接弹详情弹窗，
+    // 卡上自带的「查看/替换」双钮不再接线、仅保持隐藏，见 Cards.cs FillTemplateCard）
     GameObject _listTemplate;
-    GameObject _activeActionCard;
-    string _activeActionHireId;
 
     /// <summary>本地编辑态（每次操作后从存档重读，改动即时写盘）。</summary>
     readonly HashSet<string> _picked = new HashSet<string>();
@@ -177,7 +175,6 @@ public partial class MercDrawPoolUI : MonoBehaviour
     {
         if (_replacePanel != null) _replacePanel.SetActive(false);
         ExitSwapSelecting();   // 替换点选态跟窗口一起收
-        HideActionButtons();   // 卡上双钮跟着窗口收，避免重开时亮着旧状态
         if (_root != null) _root.SetActive(false);
     }
 
@@ -319,7 +316,6 @@ public partial class MercDrawPoolUI : MonoBehaviour
 
     void Refresh()
     {
-        HideActionButtons();   // 重建列表前先收双钮（卡会被重建，别留死引用）
         // 大滚动收编已移到 Open()：先激活 Root，再收编，再首次 Refresh（见 Open 注释）。
         var data = SaveSystem.Instance?.Data;
         int slots = data != null ? data.DrawPoolSlots : SaveData.DrawPoolDefaultSlots;
@@ -443,64 +439,15 @@ public partial class MercDrawPoolUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 点已获得卡：在队的不做事（出队走池格红「−」）；未入队的就地亮出/收起卡上「查看/替换」双钮
-    /// （2026-10-17 主人拍板：双钮做在列表卡模板 Panel/Slot 里，同一时刻只有一张卡亮着，废除独立选择弹窗）。
+    /// 【2026-10-18 主人拍板】点已获得卡 = 直接弹「获得佣兵」详情弹窗；未入队的佣兵弹窗右下带
+    /// 「替换」钮（回调 <see cref="OnCardSwap"/>：池有空位直接入队，池满进入点选态点队列格子换下谁）。
+    /// 在队（已入队）的只看详情，不带替换钮。
     /// </summary>
-    void OnOwnedCardClick(string hireId, GameObject cardGo)
+    void ShowOwnedDetail(string hireId)
     {
-        if (_picked.Contains(hireId))
-        {
-            // 在队的卡点了不做事（出队走池格红「−」），避免误触把人摘下来
-            return;
-        }
-        if (_activeActionCard == cardGo)
-        {
-            HideActionButtons();   // 再点同一张 = 收起
-            return;
-        }
-        HideActionButtons();
-        _activeActionCard = cardGo;
-        _activeActionHireId = hireId;
-        SetCardButtons(cardGo, true);
-    }
-
-    /// <summary>亮/收一张列表卡上的「查看/替换」双钮（模板自带节点，缺了不报——FillTemplateCard 已报过）。</summary>
-    static void SetCardButtons(GameObject cardGo, bool on)
-    {
-        if (cardGo == null) return;
-        var view = cardGo.transform.Find("查看");
-        if (view != null) view.gameObject.SetActive(on);
-        var swap = cardGo.transform.Find("替换");
-        if (swap != null) swap.gameObject.SetActive(on);
-    }
-
-    /// <summary>收起卡上双钮（关窗 / 刷新 / 打开替换面板前都收，防亮着旧状态或留死引用）。</summary>
-    void HideActionButtons()
-    {
-        if (_activeActionCard != null) SetCardButtons(_activeActionCard, false);
-        _activeActionCard = null;
-        _activeActionHireId = null;
-    }
-
-    /// <summary>
-    /// 【2026-10-18 主人拍板】点双钮卡片以外的任意位置 → 收起该卡的「查看/替换」。
-    /// 按在卡矩形内（含卡上双钮、本卡的收起点击）不算「别处」；点其它卡时先收，
-    /// 随后那张卡的 onClick 走 OnOwnedCardClick 正常亮出自己的双钮。
-    /// </summary>
-    void Update()
-    {
-        if (_activeActionCard == null) return;
-        bool touchDown = Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began;
-        if (!Input.GetMouseButtonDown(0) && !touchDown) return;
-
-        Vector2 pos = touchDown ? (Vector2)Input.GetTouch(0).position : (Vector2)Input.mousePosition;
-        var cardRt = _activeActionCard.transform as RectTransform;
-        if (cardRt == null) { HideActionButtons(); return; }
-
-        var canvas = GetComponentInParent<Canvas>();
-        Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
-        if (RectTransformUtility.RectangleContainsScreenPoint(cardRt, pos, cam)) return;
-        HideActionButtons();
+        if (!MercRosterDefs.TryGetByHireId(hireId, out var def)) return;
+        bool inQueue = _picked.Contains(hireId);
+        ShowMercDetail(hireId, def, !inQueue, inQueue ? null : (System.Action)(() => OnCardSwap(hireId)));
     }
 
     /// <summary>
@@ -509,7 +456,6 @@ public partial class MercDrawPoolUI : MonoBehaviour
     /// </summary>
     void OnCardSwap(string hireId)
     {
-        HideActionButtons();
         if (string.IsNullOrEmpty(hireId)) return;
         var data = SaveSystem.Instance?.Data;
         if (data == null)
@@ -740,8 +686,10 @@ public partial class MercDrawPoolUI : MonoBehaviour
     /// <summary>
     /// 佣兵详情：直接用战斗里的「获得佣兵」弹窗（huodeyongbing，信息最全，2026-10-16 主人拍板）。
     /// 已拥有的佣兵带存档里的等级/星级；未获得的按 1 级 1 星展示，缺数据时弹窗自己 Close，不另写第二份。
+    /// 【2026-10-18 主人拍板】showReplace=true 时弹窗右下显示「替换」钮（仅佣兵池的未入队已获得佣兵用）。
     /// </summary>
-    static void ShowMercDetail(string hireId, MercRosterDefs.Def def)
+    static void ShowMercDetail(string hireId, MercRosterDefs.Def def,
+        bool showReplace = false, System.Action onReplace = null)
     {
         int level = 1, star = 1;
         var data = SaveSystem.Instance?.Data;
@@ -759,7 +707,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 }
             }
         }
-        MercObtainPopupUI.ShowFromEntry(hireId, def.AssetId, level, star);
+        MercObtainPopupUI.ShowFromEntry(hireId, def.AssetId, level, star, showReplace, onReplace);
     }
 
     // ============================================================

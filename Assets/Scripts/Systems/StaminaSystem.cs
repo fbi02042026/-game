@@ -118,6 +118,45 @@ public static class StaminaSystem
         return TrySpend(ADVENTURE_COST);
     }
 
+    // ── 体力药水（2026-10-18 主人拍板：药水改道具入背包，使用时才恢复；超出上限先确认、多余作废）──
+
+    /// <summary>单瓶恢复量（2026-10-18 主人拍板：30 → 20；商店 shop_stamina_30 同口径）。</summary>
+    public const int POTION_RESTORE = 20;
+
+    /// <summary>背包里的体力药水数量。</summary>
+    public static int PotionCount => SaveSystem.Instance?.Data?.staminaPotions ?? 0;
+
+    /// <summary>使用一瓶药水会浪费多少点（不真正消耗）；不超上限返回 0。给确认弹窗预检用。</summary>
+    public static int GetPotionWaste()
+    {
+        long max = ResourceWallet.GetMax(ResourceWallet.ResourceType.Stamina);
+        long cur = Current;   // 先 Tick 回复再算
+        long waste = cur + POTION_RESTORE - max;
+        return waste > 0 ? (int)waste : 0;
+    }
+
+    /// <summary>从背包消耗一瓶体力药水：恢复量按上限截断，超出部分作废（调用方负责先弹确认）。</summary>
+    public static bool UsePotion(out string msg)
+    {
+        msg = null;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) { msg = "存档未就绪"; return false; }
+        if (data.staminaPotions <= 0) { msg = "没有体力药水"; return false; }
+
+        Tick(save: true);
+        long max = ResourceWallet.GetMax(ResourceWallet.ResourceType.Stamina);
+        long cur = data.stamina;
+        long add = Math.Min(POTION_RESTORE, Math.Max(0L, max - cur));
+        data.stamina = (int)Math.Min(int.MaxValue, cur + add);
+        data.staminaPotions -= 1;
+        if (data.stamina >= Max)
+            data.lastStaminaUtc = Now();   // 回满即重置恢复时钟（与 Tick 同一口径）
+        SaveSystem.Instance.Save();
+        GuildHallUI.RefreshAllHudStatic();
+        msg = add >= POTION_RESTORE ? $"体力 +{add}" : $"体力 +{add}，{POTION_RESTORE - add} 点超出上限浪费";
+        return true;
+    }
+
     /// <summary>无限裂隙进本扣体力（每天 2 次 × 20 体力，2026-10-17 主人拍板）</summary>
     public static bool TrySpendForEndlessRift()
     {

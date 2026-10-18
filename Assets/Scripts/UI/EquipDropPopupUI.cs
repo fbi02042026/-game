@@ -686,7 +686,7 @@ public class EquipDropPopupUI : MonoBehaviour
         var sel = GetSelected();
         var bag = GridBackpackSystem.Instance;
 
-        // 装备不进背包（2026-09-15）：不穿 = 直接分解换强化石，不做二次确认
+        // 装备不进背包（2026-09-15）：不穿 = 直接分解折局内币（2026-10-18 拆分改币），不做二次确认
         if (sel != null && bag != null)
         {
             bag.ScrapEquip(sel);

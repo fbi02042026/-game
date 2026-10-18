@@ -167,6 +167,12 @@ public class TownIdleNudgeDriver : MonoBehaviour
         var hint = TutorialHintUI.Instance;
         if (hint != null && hint.IsVisible && _showing == null) return false;
 
+        // 【2026-10-18 主人拍板】邮件窗口开着时不弹闲置引导：「点酒馆」气泡会盖住邮件底部
+        // 的「一键领取」催玩家走。玩家关掉邮件重新闲置 15 秒后才轮到这条软引导——
+        // 即引导顺序排到邮件领取之后。列表窗 / 详情窗任一开着都让位。
+        if (MailListUI.Instance != null && MailListUI.Instance.gameObject.activeInHierarchy) return false;
+        if (MailDetailUI.Instance != null && MailDetailUI.Instance.gameObject.activeInHierarchy) return false;
+
         return true;
     }
 

@@ -637,7 +637,7 @@ public class GuildHallUI : MonoBehaviour
             {
                 if (!staminaRegenText.gameObject.activeSelf)
                     staminaRegenText.gameObject.SetActive(true);
-                staminaRegenText.text = "回满 " + StaminaSystem.FormatCountdown(StaminaSystem.SecondsToFull);
+                staminaRegenText.text = StaminaSystem.FormatCountdown(StaminaSystem.SecondsToFull);
             }
         }
     }

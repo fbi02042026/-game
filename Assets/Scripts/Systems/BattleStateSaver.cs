@@ -48,11 +48,14 @@ public class BattleStateSaver : MonoBehaviour
         public bool isGoldDungeon;        // 是否金币副本
         public bool isEndlessRift;        // 是否无限裂隙（2026-10-17）
         public int endlessRiftStage;      // 无限裂隙被中断时的当前层（结算提示用，进度真源在存档）
-        public long currentGold;          // 战斗内钱包快照（含城镇底金）
+        public long currentGold;          // 抽奖币池快照（启动金/补贴/抽中金，带不出本局；【2026-10-18 双钱包拆分】不再含获得金币）
         public long goldAtRunStart;       // 本局开始时的金币基线（算净赚用）
         // 2026-10-05：局外金币改成「结算界面才发」后，通关但还没发的那一笔存在这里。
         // 不写进快照 = 杀进程/切后台被判撤离时这笔钱凭空消失（玩家白打几关）。
         public long pendingStageGold;
+        // 【2026-10-18 双钱包拆分】「本局获得金币」快照（顶部 HUD 那本账）。
+        // 旧档没有这个字段 → 反序列化得 0，恢复公式仍正确（老档的 currentGold 里含这笔）。
+        public long earnedGold;
         public float heroCurrentHp;       // 仅记录，不用于恢复
         public int heroLevel;             // 等级系统已停用，仅占位
         public int currentExp;            // 仅记录
@@ -128,6 +131,7 @@ public class BattleStateSaver : MonoBehaviour
             currentGold = bm.currentGold,
             goldAtRunStart = bm.GoldAtRunStart,
             pendingStageGold = bm.RunStageGoldPending,
+            earnedGold = st != null ? st.GoldEarned : 0,
             heroCurrentHp = hero != null ? hero.currentHp : 0f,
             heroLevel = hero != null ? hero.level : 1,
             currentExp = hero != null ? hero.currentExp : 0,
@@ -233,7 +237,9 @@ public class BattleStateSaver : MonoBehaviour
         // === 结算：与撤离同经济（金币保留 + 天赋石照发；构筑清空；体力不退）===
         // 注意：Mathf.Max 没有 long 重载，别用
         // 2026-10-05：局外金币是「结算才发」，中断时那笔还没进 currentGold，要另加回来。
-        long delta = (d.currentGold + d.pendingStageGold) - d.goldAtRunStart;
+        // 【2026-10-18 双钱包拆分】获得金币也不再进 currentGold → 快照 earnedGold 另加回来。
+        // 老档没有 earnedGold 字段（=0），那时 currentGold 里含这笔，公式照样成立，不会双发。
+        long delta = (d.currentGold + d.pendingStageGold + d.earnedGold) - d.goldAtRunStart;
         if (delta < 0) delta = 0;
         if (delta > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.Gold, delta, save: false, notify: false);

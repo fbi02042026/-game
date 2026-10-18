@@ -158,7 +158,7 @@ public static class SlotMachineSystem
         bm.AddRunGold(n, false);
         // 【2026-10-10】换进局内钱包后没有 ResourceWallet 那套 notify 了，玩家看不见「打完一关给了钱」
         // → 按 2026-10-06 主人拍板「金币获得要 force 弹出」补一条 toast。
-        GlobalToastUI.Show($"通关奖励：金币 +{n}", true);
+        GlobalToastUI.Show($"通关奖励：抽奖币 +{n}", true);
     }
 
     /// <summary>

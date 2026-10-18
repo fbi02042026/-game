@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -58,7 +58,9 @@ public static class MercRosterDefs
         D("H002", "洛恩", "铁皮", "dunbing102", "剑盾卫士", MercRarity.Rare, 1.15f, 424.3f,50.1f,56.7f, 0.95f, 3.15f, "SK007", null, 1500, true),
         D("H003", "塔克", "重盾", "dunbing201", "剑盾卫士", MercRarity.Rare, 1.15f, 424.3f,50.1f,56.7f, 0.80f, 3.15f, "SK008", null, 1800, false),
         D("H004", "维克", "钢盾", "dunbing202", "剑盾卫士", MercRarity.Legendary, 1.30f, 563.1f,59.1f,66.9f, 1.00f, 3.15f, "SK010", "SK009", 5000, false, false),
-        D("H005", "米娅", "小红", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.50f, 4.2f, null, "SK002", 500, true, true),
+        // 【2026-10-18 主人拍板】「小红/小蓝」这类占位昵称改成知名角色名；真名与其余昵称一律不动，
+        // 显示处均带真名前缀（米娅·小樱）。CSV + .bytes + 本数组三处同值。
+        D("H005", "米娅", "小樱", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.50f, 4.2f, null, "SK002", 500, true, true),
         D("H006", "希尔", "鹰眼", "gongshou201", "游侠", MercRarity.Rare, 1.15f, 309.6f,49.8f,34.6f, 1.40f, 4.2f, "SK001", null, 2000, false, false),
         D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 269.5f,34f,24.7f, 1.00f, 4.03f, null, "SK002", 600, true, true),
         D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 0.95f, 4.03f, "SK003", null, 1600, true),
@@ -71,7 +73,7 @@ public static class MercRosterDefs
         // 他是完成新手引导后可在酒馆招募的牧师，名字要好记、好认；头像框 / 对白 / 日志现在都显示同一个名字。
         // 【2026-10-08 补记】引导局的那位佣兵已换成 H003 塔克，H011 不再自动入队，只走酒馆招募。
         D("H011", "路加", "路加", "naima101", "牧师", MercRarity.Common, 1.00f, 302.5f,34.4f,25.7f, 1.20f, 3.5f, "SK004", "SK011", 500, true, true),
-        D("H012", "塞拉", "小蓝", "naima102", "水系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK004", null, 1700, false),
+        D("H012", "塞拉", "艾莎", "naima102", "水系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK004", null, 1700, false),
         D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK013", null, 2000, false, false),
         D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 355.4f,62.8f,38.5f, 1.20f, 3.5f, "SK020", "SK019", 8000, false, false),
         D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.60f, 4.2f, null, "SK002", 500, true, true),

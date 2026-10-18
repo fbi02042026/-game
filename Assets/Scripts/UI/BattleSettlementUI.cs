@@ -324,9 +324,9 @@ public class BattleSettlementUI : MonoBehaviour
         string display = !string.IsNullOrEmpty(_stats.MvpDisplayName)
             ? _stats.MvpDisplayName
             : "冒险者";
-        int ch = _stats.Chapter > 0 ? _stats.Chapter : 1;
+        // 【2026-10-18 主人拍板】MVP 铭牌只显示名字，不再拼「地图名 · 名字」前缀
         if (nameText != null)
-            nameText.text = $"{GameConfig.GetChapterMapName(ch)} · {display}";
+            nameText.text = display;
 
         if (portraitImage == null)
             portraitImage = ResolvePortraitImage(root != null ? root.transform : transform);
@@ -410,7 +410,10 @@ public class BattleSettlementUI : MonoBehaviour
 
         // 2026-10-09 主人拍板：结算物品图标改走项目现有口径 CommonIconSprites（Resources + 编辑器回退）。
         // 旧写法 LoadUiIcon 只读 Resources/UI/Settlement/<key>，该目录不存在且无回退 → 每个物品格子都空图标。
-        if (!s.IsDeath && s.GoldGained > 0)
+        if (s.GoldGained > 0)   // 【2026-10-18】去掉 !s.IsDeath：死亡也照常显示本局赚到的钱（FillSettlementSnapshot 同日拍板口径，原 Gate 是残留）
+            // 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】结算「金币」= GoldEarned
+            //（顶部 HUD 同款毛额），与写回城镇的数额同账 → 叫「金币」配 icon_gold；
+            // 抽奖币池带不出本局，不上结算。
             list.Add(MakeCell("金币", (int)s.GoldGained, CommonIconSprites.Load("icon_gold"), new Color(0.85f, 0.7f, 0.25f)));
         if (s.TalentGained > 0)
             list.Add(MakeCell("天赋石", s.TalentGained, CommonIconSprites.Load("icon_talent_stone"), new Color(0.55f, 0.4f, 0.75f)));

@@ -41,10 +41,10 @@ public static partial class GameConfig
     [Header("资源上限")]
     /// <summary>通用资源软上限（金币/钻石等）；超出不累加，进邮件</summary>
     public const long RESOURCE_MAX = ResourceWallet.DEFAULT_MAX;
-    /// <summary>体力特殊上限</summary>
-    public const int STAMINA_MAX = 100;
+    /// <summary>体力特殊上限（2026-10-18 主人拍板：100 → 60）</summary>
+    public const int STAMINA_MAX = 60;
     /// <summary>新号初始体力</summary>
-    public const int STAMINA_START = 100;
+    public const int STAMINA_START = 60;
     /// <summary>每次点「冒险」消耗体力</summary>
     public const int STAMINA_ADVENTURE_COST = StaminaSystem.ADVENTURE_COST;
     /// <summary>回复 1 点体力所需秒数</summary>

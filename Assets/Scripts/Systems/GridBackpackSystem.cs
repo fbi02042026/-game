@@ -286,27 +286,28 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     // 背包已满时自动让位：与「替换/丢掉直接分解」是同一套，统一走 ScrapEquip
     void ScrapBagEquip(EquipInstance equip) => ScrapEquip(equip);
 
-    /// <summary>同部位替换折分解材料（实际发的是 DecomposeMat，文案别再写强化石——2026-10-17）：按当前职业给一点口吻。</summary>
-    static string BuildScrapToast(EquipInstance equip, int mats)
+    /// <summary>同部位替换折金（【2026-10-18 主人拍板】拆分旧武器改发局内币，不再发分解材料）：按当前职业给一点口吻。
+    /// 【2026-10-18 双钱包拆分】折金走 GrantRunGold →「本局获得金币」那本账，文案叫金币。</summary>
+    static string BuildScrapToast(EquipInstance equip, int gold)
     {
         string name = equip != null && !string.IsNullOrEmpty(equip.equipName) ? equip.equipName : "旧装备";
-        string matsTxt = mats > 0 ? $" ×{mats}" : "";
+        string goldTxt = gold > 0 ? $" +{gold}" : "";
         switch (PlayerJobDefs.GetSelected())
         {
             case PlayerJobId.SwordShield:
-                return $"盾墙换防！{name} 拆成分解材料{matsTxt}";
+                return $"盾墙换防！{name} 折合金币{goldTxt}";
             case PlayerJobId.Heavy:
-                return $"沉甸甸的不要了——{name} 砸成分解材料{matsTxt}";
+                return $"沉甸甸的不要了——{name} 折合金币{goldTxt}";
             case PlayerJobId.Berserker:
-                return $"旧货碍手！{name} 撕成分解材料{matsTxt}";
+                return $"旧货碍手！{name} 折合金币{goldTxt}";
             case PlayerJobId.Ranger:
-                return $"换新的更好射——{name} 拆成分解材料{matsTxt}";
+                return $"换新的更好射——{name} 折合金币{goldTxt}";
             case PlayerJobId.Mage:
-                return $"魔力重组：{name} → 分解材料{matsTxt}";
+                return $"魔力重组：{name} → 金币{goldTxt}";
             case PlayerJobId.Priest:
-                return $"旧物归尘，化为分解材料{matsTxt}（原：{name}）";
+                return $"旧物归尘，化为金币{goldTxt}（原：{name}）";
             default:
-                return $"{name} 已变为分解材料{matsTxt}";
+                return $"{name} 折合金币{goldTxt}";
         }
     }
 
@@ -388,9 +389,9 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
             _equippedBySlot.Remove(wearSlot);
         }
 
-        int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
-        WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
-        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats), true);
+        // 【2026-10-18 主人拍板】拆分旧武器改发局内币（不再发分解材料）
+        int gold = WeaponLoadoutRules.GrantScrapGold(equip, save: false);
+        UIManager.Instance?.ShowToast(BuildScrapToast(equip, gold), true);
         Hero.Instance?.RecalcAttr();
     }
 
@@ -649,7 +650,8 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
 
     /// <summary>
     /// 直接分解一件装备，**不要求它在背包里**（替换下来的旧件、没穿的掉落件都走这里）。
-    /// 给强化石；不会回流背包。分解即消失，不做二次确认（2026-09-15 需求）。
+    /// 【2026-10-18 主人拍板】产出 = 局内币（GrantScrapGold 统一出口）；不会回流背包。
+    /// 分解即消失，不做二次确认（2026-09-15 需求）。
     /// </summary>
     public void ScrapEquip(EquipInstance equip)
     {
@@ -670,9 +672,9 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
                 _equippedBySlot.Remove(keys[i]);
         }
 
-        int mats = WeaponLoadoutRules.CalcDecomposeMats(equip);
-        WeaponLoadoutRules.GrantDecomposeMats(equip, save: false);
-        UIManager.Instance?.ShowToast(BuildScrapToast(equip, mats), true);
+        // 【2026-10-18 主人拍板】拆分旧武器改发局内币（不再发分解材料）
+        int gold = WeaponLoadoutRules.GrantScrapGold(equip, save: false);
+        UIManager.Instance?.ShowToast(BuildScrapToast(equip, gold), true);
         OnBackpackChanged?.Invoke();
     }
 
@@ -852,8 +854,15 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         if (item?.equip != null && IsEquipped(item.equip))
             UnequipItem(item.equip.slotType);
         int gold = GameConfig.EquipScrapGold(item.equip.rarity, item.equip.star);
-        BattleManager.Instance.currentGold += gold;
+        if (BattleManager.Instance != null)
+            BattleManager.Instance.GrantRunGold(gold);   // 2026-10-18：走进账唯一出口（结算毛额同账）
+        else
+        {
+            // 城镇分解：发局外金币
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: false, notify: true);
+        }
         DropItem(item);
+        // 【2026-10-18 双钱包拆分】战斗内分解走 GrantRunGold →「本局获得金币」，与城镇分解同叫金币
         UIManager.Instance?.ShowToast($"分解{item.equip.equipName}获得{gold}金币", true);
     }
 

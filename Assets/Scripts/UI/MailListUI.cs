@@ -548,6 +548,21 @@ public class MailListUI : MonoBehaviour
 
     void OnClaimAll()
     {
+        // 【2026-10-18 主人拍板】一键领取含体力且会超出上限：先确认「多余的会浪费」，确认后才领
+        int waste = MailSystem.GetStaminaWasteOnClaimAll();
+        if (waste > 0)
+        {
+            StaminaConfirmPopup.Show(
+                $"有体力邮件领取后将超出上限，多余的 {waste} 点体力会浪费。\n是否仍要一键领取？",
+                "仍要领取",
+                DoClaimAll);
+            return;
+        }
+        DoClaimAll();
+    }
+
+    void DoClaimAll()
+    {
         int claimed = MailSystem.ClaimAll();
         if (claimed > 0)
             UIManager.Instance?.ShowToast($"已领取 {claimed} 封邮件");

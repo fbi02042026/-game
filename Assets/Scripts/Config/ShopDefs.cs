@@ -88,9 +88,9 @@ public static class ShopDefs
         // ================= 资源补给 =================
         new Item {
             id = "shop_stamina_30", name = "体力药水", kind = Kind.Resource,
-            desc = "立即恢复 30 点体力（一次冒险消耗 10 点）。",
+            desc = "使用后恢复 20 点体力（一次冒险消耗 10 点）。\n购买后放入背包，在角色页背包中使用。",
             currency = ResourceWallet.ResourceType.Gold, price = 400,
-            grantType = ResourceWallet.ResourceType.Stamina, grantAmount = 30,
+            grantType = ResourceWallet.ResourceType.Stamina, grantAmount = 20,
             dailyLimit = 3
         },
         new Item {

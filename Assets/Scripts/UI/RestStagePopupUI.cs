@@ -283,13 +283,17 @@ public class RestStagePopupUI : MonoBehaviour
 
     void GrantRestMaterials()
     {
+        // 【2026-10-18 主人拍板：材料产出全部改发抽奖币】原发强化材料 → 按锚价折成抽奖币（结算「抽奖币」栏同账）
         var bm = BattleManager.Instance;
         int stageIdx = bm != null && bm.currentStage != null ? bm.currentStage.stageIndex : 0;
         int chapter = bm != null ? bm.CurrentChapter : 1;
-        int mats = StageRoller.RestMaterialReward(stageIdx, chapter);
-        if (mats <= 0) return;
-        ResourceWallet.Add(ResourceWallet.ResourceType.DecomposeMat, mats, save: true, notify: true);
-        UIManager.Instance?.ShowToast($"休息补给：强化材料 ×{mats}");
+        int gold = StageRoller.RestRewardGold(stageIdx, chapter);
+        if (gold <= 0) return;
+        if (bm != null)
+            bm.GrantRunGold(gold);
+        else
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: true, notify: true);
+        UIManager.Instance?.ShowToast($"休息补给：金币 +{gold}");   // 【2026-10-18 双钱包拆分】休息关折金进「本局获得金币」（顶部那本账）
     }
 
     static void HealUnit(UnitBase u)

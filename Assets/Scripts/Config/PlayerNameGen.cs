@@ -103,6 +103,21 @@ public static class PlayerNameGen
         return true;
     }
 
+    /// <summary>名字是否为库内组合（修饰词+的+名字）。用于禁止玩家自造名字，只允许骰子随机名。</summary>
+    public static bool IsFromLibrary(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        int idx = name.IndexOf('\u7684');
+        if (idx <= 0 || idx == name.Length - 1) return false;
+        string mod = name.Substring(0, idx);
+        string given = name.Substring(idx + 1);
+        bool modOk = System.Array.IndexOf(Modifiers, mod) >= 0
+            || System.Array.IndexOf(MemeModifiers, mod) >= 0;
+        bool givenOk = System.Array.IndexOf(MaleNames, given) >= 0
+            || System.Array.IndexOf(NeutralNames, given) >= 0;
+        return modOk && givenOk;
+    }
+
     public static string Sanitize(string raw)
     {
         if (string.IsNullOrEmpty(raw)) return "";

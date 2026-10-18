@@ -13,6 +13,13 @@ public static class TalentSystem
         Right
     }
 
+    /// <summary>
+    /// 【2026-10-18 主人拍板】右列「天赋石不足」的统一原因串：
+    /// UI 侧见此原因时**不再干巴巴 toast**，而是照样弹费用确认窗让玩家看到「需要多少」。
+    /// 字面量统一引这里，防止文案漂移导致 UI 判断失灵。
+    /// </summary>
+    public const string ReasonNoStones = "天赋石不足";
+
     // ===== 左列（金币，保持不变）=====
     public static bool CanUnlockLeft(int index1Based, out string reason)
     {
@@ -187,7 +194,7 @@ public static class TalentSystem
         if (leftN < node.unlockLeftIndex) { reason = $"左列开到第{node.unlockLeftIndex}个后开启"; return false; }
 
         if (node.costByLevel == null || node.costByLevel.Length < 1) { reason = "配置错误"; return false; }
-        if (data.talentPoints < node.costByLevel[0]) { reason = "天赋石不足"; return false; }
+        if (data.talentPoints < node.costByLevel[0]) { reason = ReasonNoStones; return false; }
         return true;
     }
 
@@ -205,7 +212,7 @@ public static class TalentSystem
         }
 
         if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.TalentPoint, node.costByLevel[0], save: false, notify: true))
-        { reason = "天赋石不足"; return false; }
+        { reason = ReasonNoStones; return false; }
 
         data.talents[id] = 1;
         SyncBackpackRows(data);   // R_BAG 解锁 → SaveData.backpackRows 按等级 +行
@@ -236,7 +243,7 @@ public static class TalentSystem
         if (level >= cap) { reason = $"左列等级不足（上限 Lv{cap}）"; return false; }
 
         if (node.costByLevel == null || level >= node.costByLevel.Length) { reason = "配置错误"; return false; }
-        if (data.talentPoints < node.costByLevel[level]) { reason = "天赋石不足"; return false; }
+        if (data.talentPoints < node.costByLevel[level]) { reason = ReasonNoStones; return false; }
         return true;
     }
 
@@ -248,7 +255,7 @@ public static class TalentSystem
         int level = TalentDefs.GetRightNodeLevel(data.talents, id);
 
         if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.TalentPoint, node.costByLevel[level], save: false, notify: true))
-        { reason = "天赋石不足"; return false; }
+        { reason = ReasonNoStones; return false; }
 
         data.talents[id] = level + 1;
         SyncBackpackRows(data);

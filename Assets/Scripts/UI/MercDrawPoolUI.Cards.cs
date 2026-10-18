@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>佣兵雇佣队列 UI · 列表卡克隆建卡（Panel/Slot 为模板，自带「查看/替换」双钮）与角色图标。</summary>
+/// <summary>佣兵雇佣队列 UI · 列表卡克隆建卡（Panel/Slot 为模板，点卡一次直接弹详情弹窗）与角色图标。</summary>
 public partial class MercDrawPoolUI : MonoBehaviour
 {
     // ============================================================
@@ -118,7 +118,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     /// <summary>
     /// 模板克隆卡填数据（【2026-10-16 主人拍板】只复制 Slot，只替换头像和名字，
     /// 不换框、不换职业徽记、不改任何尺寸）：隐藏池专用 quxiao / suo；
-    /// 立绘（GetStand 全身，null 则不显示，不造图）、名字、点击事件（已拥有=亮卡上双钮，未获得=看图鉴）。
+    /// 立绘（GetStand 全身，null 则不显示，不造图）、名字、点击事件（点卡一次直接弹详情弹窗）。
     /// </summary>
     /// <param name="hasDef">花名册是否查到该佣兵（Def 是 struct，用 TryGet 返回值判断，不能比 null）。</param>
     void FillTemplateCard(GameObject card, string hireId, MercRosterDefs.Def def, bool hasDef, bool owned)
@@ -172,7 +172,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
         }
 
         var nameT = card.transform.Find("namebg/Name")?.GetComponent<Text>();
-        if (nameT != null) nameT.text = owned ? def.Name : "未获得";
+        // 【2026-10-18 主人拍板】未获得也显示佣兵名字（真名），缺数据才回落「未获得」
+        if (nameT != null)
+            nameT.text = hasDef && !string.IsNullOrEmpty(def.Name) ? def.Name : "未获得";
 
         // 【2026-10-16 主人拍板】名字底牌也按稀有度换三档图（传奇/稀有/普通名字框，与卡框同目录），
         // 只换图不代码改色；取不到报错不静默。
@@ -203,7 +205,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
             MakeText(tag.transform, "Label", "已入队", 21);   // Label 铺满角标、不拦点击
         }
 
-        // 模板本身没有 Button（Slot 只有 Image），克隆后运行时补，口径沿用：已拥有 = 亮双钮，未获得 = 看图鉴
+        // 模板本身没有 Button（Slot 只有 Image），克隆后运行时补：
+        // 【2026-10-18 主人拍板】已获得/未获得都是点卡一次直接弹「获得佣兵」详情弹窗
+        // （未入队的已获得佣兵弹窗右下带「替换」钮，见 ShowOwnedDetail / MercObtainPopupUI）。
         var img = card.GetComponent<Image>();
         if (img != null) img.raycastTarget = true;
         var btn = card.GetComponent<Button>();
@@ -211,39 +215,15 @@ public partial class MercDrawPoolUI : MonoBehaviour
         if (btn.targetGraphic == null && img != null) btn.targetGraphic = img;
         btn.onClick.RemoveAllListeners();
         string hid = hireId;
-        if (owned) btn.onClick.AddListener(() => OnOwnedCardClick(hid, card));
+        if (owned) btn.onClick.AddListener(() => ShowOwnedDetail(hid));
         else btn.onClick.AddListener(() => ShowMercDetail(hid, def));
 
-        // 【2026-10-17 主人拍板】模板自带「查看/替换」双钮（预制体只有 Image，运行时补 Button）：
-        // 默认整对隐藏；点未入队的已获得卡就地亮出（同一时刻只有一张卡亮着）。
-        // 查看 = 佣兵详情；替换 = 池有空位直接入队，池满进入点选态、直接点上方队列格子换下谁
-        // （OnCardSwap；2026-10-17 二次拍板：不再弹替换面板）。
-        // 【2026-10-18 修·主人拍板】点「查看」先把本卡双钮收起：详情关闭后按钮不留着，
-        // 否则弹窗关掉卡上「查看/替换」还亮着（主人原话「关闭弹窗后那个卡上的两个按钮要消失」）。
-        var viewBtn = WireTemplateButton(card.transform, "查看", () => { HideActionButtons(); ShowMercDetail(hid, def); });
-        var swapBtn = WireTemplateButton(card.transform, "替换", () => OnCardSwap(hid));
-        if (viewBtn == null || swapBtn == null)
-            Debug.LogError("[MercDrawPoolUI] 列表卡模板缺「查看/替换」钮节点：hireId=" + hireId);
-        else
-        {
-            viewBtn.gameObject.SetActive(false);
-            swapBtn.gameObject.SetActive(false);
-        }
-    }
-
-    /// <summary>模板钮（查看/替换）补 Button：预制体只有 Image；缺节点返回 null（调用方报错，不静默）。</summary>
-    static Button WireTemplateButton(Transform card, string nodeName, UnityEngine.Events.UnityAction onClick)
-    {
-        var node = card.Find(nodeName);
-        if (node == null) return null;
-        var bimg = node.GetComponent<Image>();
-        if (bimg != null) bimg.raycastTarget = true;
-        var nbtn = node.GetComponent<Button>();
-        if (nbtn == null) nbtn = node.gameObject.AddComponent<Button>();
-        if (nbtn.targetGraphic == null && bimg != null) nbtn.targetGraphic = bimg;
-        nbtn.onClick.RemoveAllListeners();
-        nbtn.onClick.AddListener(onClick);
-        return nbtn;
+        // 模板自带的「查看/替换」双钮：入口已改到详情弹窗（上条拍板），不再接线，只保持隐藏
+        // （预制体节点不删；克隆体可能继承模板的激活态，这里显式压一遍防残留）。
+        var viewNode = card.transform.Find("查看");
+        if (viewNode != null) viewNode.gameObject.SetActive(false);
+        var swapNode = card.transform.Find("替换");
+        if (swapNode != null) swapNode.gameObject.SetActive(false);
     }
 
     /// <summary>隐藏 Role 节点（空格/锁格用，不留上一张的图）。</summary>

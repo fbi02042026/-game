@@ -119,15 +119,18 @@ public class CraftStagePopupUI : MonoBehaviour
         if (continueLabel != null)
             continueLabel.text = "继续冒险";
 
-        // 锻造关：发强化材料 + 尝试升星一件
+        // 锻造关：【2026-10-18 主人拍板】原发强化材料 → 改发抽奖币（按材料锚价折算，结算「抽奖币」栏同账）+ 尝试升星一件
         if (kind == Kind.Forge)
         {
             var bm = BattleManager.Instance;
             int stageIdx = bm != null && bm.currentStage != null ? bm.currentStage.stageIndex : 0;
             int chapter = bm != null ? bm.CurrentChapter : 1;
-            int mats = StageRoller.RestMaterialReward(stageIdx, chapter);
-            ResourceWallet.Add(ResourceWallet.ResourceType.DecomposeMat, mats, save: true, notify: true);
-            UIManager.Instance?.ShowToast($"获得强化材料 ×{mats}");
+            int gold = StageRoller.RestRewardGold(stageIdx, chapter);
+            if (bm != null)
+                bm.GrantRunGold(gold);
+            else
+                ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: true, notify: true);
+            UIManager.Instance?.ShowToast($"获得金币 +{gold}");   // 【2026-10-18 双钱包拆分】锻造关折金进「本局获得金币」（顶部那本账）
             if (CraftStageApply.TryForgeUpgrade(out string forgeMsg))
                 UIManager.Instance?.ShowToast(forgeMsg);
             else if (!string.IsNullOrEmpty(forgeMsg))

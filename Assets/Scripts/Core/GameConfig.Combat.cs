@@ -62,6 +62,12 @@ public static partial class GameConfig
         public const int BattleMilestone = 970;
         public const int BattleEvacuate = 980;
         public const int BattleSettlement = 990;
+        /// <summary>
+        /// 「佣兵入队」横幅（MercJoinBannerUI，2026-10-12 新增）：抽中佣兵瞬间播一次，
+        /// 须盖住抽奖面板(965)/结算(990)等一切 → 抬嵌套 Canvas 到结算之上。
+        /// 【2026-10-18】原写死 995 魔数，收敛为常量（铁律：不许魔数）。
+        /// </summary>
+        public const int MercJoinBanner = 995;
         public const int Loading = 10000;
         public const int Toast = 11000;
         public const int FullscreenFx = 12000;

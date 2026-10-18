@@ -38,7 +38,8 @@ public static class TalentDefs
         PhysPen,
         MoveSpeed,
         Custom,
-        EliteDamage      // 对精英 / Boss 的伤害加成（百分点，8 = +8%）
+        EliteDamage,     // 对精英 / Boss 的伤害加成（百分点，8 = +8%）
+        AttackPercent    // 【2026-10-18 主人拍板】利刃改百分比：最终攻击（含装备）+5/10/15%，结算在装备之后
     }
 
     public enum Side
@@ -460,7 +461,7 @@ public static class TalentDefs
         list.Add(HNode(2, "R_F2", "流派·魔法专精", RightNodeType.Mutex, 10, 5, "path",
             new[] { 5, 12, 22, 38, 60 }, AttrKind.MagicDamage, new[] { 5f, 10f, 15f, 20f, 25f }, "magic", "魔法专精"));
         list.Add(HNode(3, "R_C1", "利刃", RightNodeType.Attr, 20, 3, "",
-            new[] { 6, 14, 26 }, AttrKind.Attack, new[] { 3f, 6f, 10f }, "atk", "利刃"));
+            new[] { 6, 14, 26 }, AttrKind.AttackPercent, new[] { 5f, 10f, 15f }, "AttackPercent", "利刃"));
         list.Add(HNode(4, "R_C2", "体魄", RightNodeType.Attr, 20, 3, "",
             new[] { 6, 14, 26 }, AttrKind.Hp, new[] { 40f, 80f, 140f }, "hp", "体魄"));
         list.Add(HNode(5, "R_C3", "精准", RightNodeType.Attr, 20, 3, "",
@@ -566,8 +567,12 @@ public static class TalentDefs
         // （第 4 槽原「智力 = 魔攻」，主人拍板「所有职业统一加攻击」，改成第二个攻击槽）
         string[] names = { "体质", "力量", "防御", "攻击" };
         string[] romans = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
-        float[] atk = { 3, 4, 5, 6, 7, 8, 10, 12, 14, 16 };        // 攻击：Attack + MagicAttack，点满 +85
-        float[] mag = { 3, 4, 5, 6, 7, 8, 10, 12, 14, 16 };        // 攻击：Attack + MagicAttack，点满 +85
+        // 【2026-10-18 主人拍板】左列攻击槽**前固定后百分比交叉**：
+        // 旧每节点 +3~16 固定、点满 +85 —— 新武器数值（普通 3.6~4.8）下等于白送 20 把武器。
+        // 纯百分比前期又没感（基础攻击 6 × 5% ≈ 0.3）。定案：前 5 节点固定 +3（前期立竿见影），
+        // 后 5 节点最终攻击 +4~8%（后期跟装备一起放大）。AttrSystem 两条 case 都已存在，直接按 group 切。
+        const float AtkFlat = 3f;                       // 前 5 节点（I~V）：固定攻击 +3
+        float[] atkPct = { 4f, 5f, 6f, 7f, 8f };        // 后 5 节点（VI~X）：最终攻击 +4%~8%
         float[] hp = { 15, 20, 25, 32, 40, 50, 60, 72, 85, 100 };  // 体质：生命，点满 +499
         float[] def = { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };          // 防御：物防+魔防各 +65
         var list = new LeftNode[40];
@@ -584,10 +589,19 @@ public static class TalentDefs
                 // 见 AttrSystem.ApplyTalentEffect（左右列走同一条路径，不再按列切分口径）。
                 // 右列的物攻 / 魔攻区分度在 PhysDamage / MagicDamage 专精节点上，与 AttrKind.Attack 无关。
                 // 文案写「攻击」才对得上实际效果 —— 写「物攻」会让法系玩家以为这条白点了。
-                case 1: fx = Fx(AttrKind.Attack, atk[group], $"攻击 +{atk[group]:0}"); break;
+                // 【2026-10-18】前 5 节点固定、后 5 节点百分比：攻击百分比在装备结算后乘（含装备总值）。
+                case 1:
+                    fx = group < 5
+                        ? Fx(AttrKind.Attack, AtkFlat, $"攻击 +{AtkFlat:0}")
+                        : Fx(AttrKind.AttackPercent, atkPct[group - 5], $"攻击 +{atkPct[group - 5]:0}%");
+                    break;
                 // 防御天赋是**物防 + 魔防两侧都加**，文案写「双防」才对得上实际效果
                 case 2: fx = Fx(AttrKind.Defense, def[group], $"双防 +{def[group]:0}"); break;
-                default: fx = Fx(AttrKind.Attack, mag[group], $"攻击 +{mag[group]:0}"); break;
+                default:
+                    fx = group < 5
+                        ? Fx(AttrKind.Attack, AtkFlat, $"攻击 +{AtkFlat:0}")
+                        : Fx(AttrKind.AttackPercent, atkPct[group - 5], $"攻击 +{atkPct[group - 5]:0}%");
+                    break;
             }
             list[i] = new LeftNode
             {
@@ -675,6 +689,7 @@ public static class TalentDefs
             // （同理 Defense 写「防御」不写「物防」，因为它同时加 Defense 和 MagicDefense。）
             // 调用链：EffectSummary → TalentSystem.AnnounceRightGain（Toast）+ TalentUI 选项弹层描述。
             case AttrKind.Attack: return "攻击";
+            case AttrKind.AttackPercent: return "攻击";
             case AttrKind.Intelligence: return "智力";
             case AttrKind.Hp: return "生命";
             case AttrKind.Defense: return "防御";

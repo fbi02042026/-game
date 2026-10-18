@@ -118,17 +118,26 @@ public static class WeaponLoadoutRules
         return WeaponHandSlot.MainHand;
     }
 
-    public static int CalcDecomposeMats(EquipInstance equip)
+    /// <summary>
+    /// 拆分/替换旧装备的产出（唯一出口）。【2026-10-18 主人拍板：拆分旧的武器先换成局内币】——
+    /// 不再发分解材料（DecomposeMat），折算金额统一走 GameConfig.EquipScrapGold（装备折金唯一口径，
+    /// 与宝箱折算/穿装失败折算/丢弃折算同价）。战斗内发抽奖币（GrantRunGold，结算「抽奖币」栏可见）；
+    /// 战斗外（城镇拆分）发城镇金币钱包。返回实发金额（0 = 没发），调用方拿去拼提示文案。
+    /// </summary>
+    public static int GrantScrapGold(EquipInstance equip, bool save = false)
     {
         if (equip == null) return 0;
-        int baseVal = (int)equip.rarity * (1 + Mathf.Max(0, equip.star));
-        return Mathf.Max(1, baseVal);
-    }
-
-    public static void GrantDecomposeMats(EquipInstance equip, bool save = false)
-    {
-        int mats = CalcDecomposeMats(equip);
-        if (mats <= 0) return;
-        ResourceWallet.Add(ResourceWallet.ResourceType.DecomposeMat, mats, save: save, notify: true);
+        int g = GameConfig.EquipScrapGold(equip.rarity, equip.star);
+        if (g <= 0) return 0;
+        var bm = BattleManager.Instance;
+        if (bm != null)
+        {
+            bm.GrantRunGold(g);
+        }
+        else
+        {
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, g, save: save, notify: true);
+        }
+        return g;
     }
 }

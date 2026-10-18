@@ -567,9 +567,9 @@ public class MailDetailUI : MonoBehaviour
                 iconImg.preserveAspect = true;
             }
 
-            // 名称 / 数量
+            // 名称 / 数量（2026-10-18 主人拍板：去掉「x」，只显示数量）
             if (nameTxt != null) nameTxt.text = item.name;
-            if (countTxt != null) countTxt.text = "x " + item.amount;
+            if (countTxt != null) countTxt.text = item.amount.ToString();
 
             // 已领取：整格变灰 + 盖章
             if (m.claimed)
@@ -633,6 +633,23 @@ public class MailDetailUI : MonoBehaviour
     {
         if (_mail == null) { Close(); return; }
         if (_mail.claimed) return;          // 公告/已领时领取按钮不显示，仅走领取分支
+
+        // 【2026-10-18 主人拍板】领取体力会超出上限：先确认「多余的会浪费」，确认后才领（多余部分作废）
+        int waste = MailSystem.GetStaminaWasteOnClaim(_mail);
+        if (waste > 0)
+        {
+            StaminaConfirmPopup.Show(
+                $"体力将超出上限，多余的 {waste} 点会浪费。\n是否仍要领取？",
+                "仍要领取",
+                () =>
+                {
+                    MailSystem.TryClaim(_mail != null ? _mail.id : null);   // notify=true：内部自动 toast
+                    GuildHallUI.RefreshAllHudStatic();
+                    if (_mail != null) RefreshAll();
+                });
+            return;
+        }
+
         MailSystem.TryClaim(_mail.id);      // notify=true：内部自动 toast + 刷新红点
         GuildHallUI.RefreshAllHudStatic();
         RefreshAll();
