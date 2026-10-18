@@ -978,6 +978,25 @@ public class BattleStageMapUI : MonoBehaviour
             var t = FindDeep(root.transform, "Title");
             if (t != null) titleText = t.GetComponent<Text>();
         }
+        // 【2026-10-18 主人报「关卡标题上没有字」】
+        // 根因：黄卷轴横幅 bg 在预制体里是**中心锚点**（0.5,0.5）+ y=562，按 720×1280 设计屏摆的
+        //（1280 高时横幅中心距顶 78，恰与 Title 对齐）。高瘦屏走 MatchWidth（DesignAspectLetterbox.
+        // ResolveUiMatch 返回 0）后画布逻辑高度 > 1280，中心锚点整体下坠 → 横幅掉到 Tip 下方，
+        // 而 Title（顶锚点）留在最顶上的刘海/胶囊暗区（近黑字配黑底）→ 横幅空着、标题看不见。
+        // 修法：运行时把 bg 重锚到顶部，横幅中心对齐 Title 中心（Title y=-43、高 50、pivot 顶 → 中心 -68）。
+        // 不动预制体（铁律 3），幂等，每次 BindRefs 都校正。
+        var bannerBg = root.transform.Find("bg");
+        if (bannerBg != null)
+        {
+            var bgRt = bannerBg.GetComponent<RectTransform>();
+            if (bgRt != null)
+            {
+                bgRt.anchorMin = new Vector2(0.5f, 1f);
+                bgRt.anchorMax = new Vector2(0.5f, 1f);
+                bgRt.pivot = new Vector2(0.5f, 0.5f);
+                bgRt.anchoredPosition = new Vector2(0f, -68f);
+            }
+        }
         if (pedestalRoot == null)
         {
             var t = root.transform.Find("Pedestals");

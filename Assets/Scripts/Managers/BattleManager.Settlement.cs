@@ -327,8 +327,9 @@ public partial class BattleManager
             panel.SetCountdownPaused(false);
 
         // 300s 只是异常兜底（倒计时本身会先归零走 DoContinue）
+        // 【2026-10-18】局已收尾（撤离/死亡）→ 当场退场，不再等（面板收起后 choice 永远不会变）
         float guard = 0f;
-        while (!isDone() && guard < 300f)
+        while (!isDone() && guard < 300f && !_runClosed)
         {
             guard += Time.unscaledDeltaTime;
             yield return null;
@@ -432,8 +433,11 @@ public partial class BattleManager
             }
 
             // 面板常驻，给足看构筑的时间；不点就一直不开战（上限 5 分钟防卡死）
+            // 【2026-10-18 主人报「撤离结算下面还能点抽奖」】面板常驻期间玩家可从暂停菜单撤离，
+            // isInBattle 此时还是 false（首波没刷，不能当退场判据）—— 用 _runClosed 当场退场：
+            // 不再等满 300s，也不再走后面的扣币/出货/开战流程。
         float offerGuard = 0f;
-        while (choice == 0 && offerGuard < 300f)
+        while (choice == 0 && offerGuard < 300f && !_runClosed)
         {
             offerGuard += Time.unscaledDeltaTime;
             yield return null;
@@ -1564,6 +1568,7 @@ public partial class BattleManager
     /// </summary>
     public void EndRunAndReturnToTown()
     {
+        _runClosed = true;   // 记录点「撤离结算」也收尾（与 TriggerEvacuation 同口径）
         GridBackpackSystem.Instance?.ClearRunEquipment();
         MercenaryManager.Instance?.ClearAllMercs();
         MercHireSession.ClearHired();

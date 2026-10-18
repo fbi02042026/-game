@@ -40,6 +40,14 @@ public partial class BattleManager
     int _matsAtRunStart;
     public BattleRunStats RunStats { get; private set; } = new BattleRunStats();
     public bool isInBattle = false;
+    /// <summary>
+    /// 本局已收尾（撤离 / 死亡 / 回城）【2026-10-18 主人报「撤离结算下面还能点抽奖」】：
+    /// 进关抽奖面板常驻期间玩家可以从暂停菜单撤离 —— isInBattle 此时还是 false（首波没刷），
+    /// 不能当退场判据。撤离/死亡置位本标志，让挂起的抽奖等待协程当场退出，
+    /// 不再走「开战」后续（StartPartyAdvance / 刷首波），也避免回城后旧协程串台新一局。
+    /// 每局开始（BattleStartSequenceCoroutine 开头）复位。
+    /// </summary>
+    public bool _runClosed = false;
     /// <summary>自动战斗未开放：UI 已隐藏，战斗逻辑不读取。勿在本阶段接线 AI。</summary>
     public bool isAutoBattle = false;
     public List<AttrBonusData> tempBuffs = new List<AttrBonusData>();

@@ -43,6 +43,12 @@ public class BattleSettlementUI : MonoBehaviour
 
     public static void Show(BattleRunStats stats, Action onConfirm)
     {
+        // 【2026-10-18 主人报「撤离结算下面还能点抽奖」】进关抽奖面板是常驻的，玩家可以在
+        // 面板开着时从暂停菜单撤离 —— 结算界面弹出时若不收，抽奖按钮和「点这里抽一次奖」
+        // 引导气泡会叠在结算界面下面还能点。这里统一收（死亡/撤离/通关三条路都走 Show）：
+        // Hide 内部会一并停倒计时、收引导手指和概率弹窗；幂等，面板没开时是空操作。
+        BattleEntryDraftPanel.Hide();
+        TutorialHintUI.Instance?.Hide();
         Ensure().Open(stats, onConfirm);
     }
 

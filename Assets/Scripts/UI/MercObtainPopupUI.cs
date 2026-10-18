@@ -14,8 +14,9 @@ using UnityEngine.UI;
 /// （立绘 + 名字 + 三星 + 七对属性 + 技能一栏 + 确认按钮）。
 /// 本类<b>只驱动、不建树</b>：实例化预制体后只绑定节点 + 填数据，
 /// 排版（位置/字号/颜色/静态文本）一行不碰。
-/// 【2026-10-18 主人拍板】两处例外：① 名字底牌 namebg 按稀有度换三档图（同佣兵池列表卡口径）；
-/// ② 右下「替换」按钮纯代码生成（佣兵池点未入队的已获得佣兵进详情时显示，其余入口隐藏）。</para>
+/// <para>【2026-10-18 主人拍板】两处例外：① 名字底牌 namebg 按稀有度换三档图（同佣兵池列表卡口径）；
+/// ② 预制体自带的「替换」钮（tihaunButton，主人摆的）由本类控制显隐：
+/// 仅佣兵池点未入队的已获得佣兵进详情时显示（酒馆招募双钮），战斗头像/抽中入口一律隐藏（单确认钮）。</para>
 ///
 /// <para>组织范式照抄 <see cref="DraftRewardDetailUI"/>：static _instance + Ensure + CoShow
 /// + 唯一关闭出口 <see cref="Close"/> + 无操作自动关兜底协程；实例化范式照抄
@@ -50,7 +51,7 @@ public class MercObtainPopupUI : MonoBehaviour
     RectTransform _keepRt;
     /// <summary>确认按钮在预制体里的原始位置（并排态；只留确认钮时 x 归 0 居中）。</summary>
     Vector2 _keepBasePos;
-    /// <summary>右下「替换」按钮（纯代码生成，见 BuildReplaceButton；仅佣兵池详情入口显示）。</summary>
+    /// <summary>右下「替换」按钮（预制体自带节点 Panel/tihaunButton，主人摆的；仅佣兵池未入队详情入口显示）。</summary>
     Button _replaceBtn;
     Image _icon;
     /// <summary>四分类类型图标位（Panel/Role，预制体已有节点）。</summary>
@@ -177,7 +178,6 @@ public class MercObtainPopupUI : MonoBehaviour
     {
         _instance = this;
         Bind();
-        BuildReplaceButton();   // 先造按钮再 Wire，替换钮的点击事件才能绑上
         Wire();
         if (_root != null) _root.SetActive(false);
     }
@@ -208,6 +208,11 @@ public class MercObtainPopupUI : MonoBehaviour
             if (_keepRt != null) _keepBasePos = _keepRt.anchoredPosition;   // 预制体并排态原位（x=-122）
             else Debug.LogError("[MercObtainPopup] KeepButton 不是 RectTransform，查看模式无法居中");
         }
+        // 【2026-10-18 主人拍板】「替换」钮 = 预制体自带节点（主人摆的 tihaunButton），
+        // 只绑不改：显隐走 ApplyReplaceButton（酒馆招募双钮 / 其余入口单确认钮），点击回调在 Wire 里接。
+        _replaceBtn = _root.transform.Find("Panel/tihaunButton")?.GetComponent<Button>();
+        if (_replaceBtn == null)
+            Debug.LogError("[MercObtainPopup] 缺少节点 Panel/tihaunButton（酒馆招募的「替换」钮不显示也不可点）");
         _icon = _root.transform.Find("Panel/zuo/Iconmask/Icon")?.GetComponent<Image>();
         _nameText = _root.transform.Find("Panel/zuo/namebg/Name")?.GetComponent<Text>();
         _nameBg = _root.transform.Find("Panel/zuo/namebg")?.GetComponent<Image>();
@@ -278,66 +283,8 @@ public class MercObtainPopupUI : MonoBehaviour
     }
 
     // ============================================================
-    // 右下「替换」按钮（2026-10-18 主人拍板，纯代码生成）
+    // 右下「替换」按钮（2026-10-18 主人拍板）
     // ============================================================
-
-    /// <summary>
-    /// 生成「替换」按钮：完全复刻 KeepButton 的锚点/pivot/尺寸/缩放/钮图，向右平移一个钮位
-    /// （预制体确认钮并排态 200×62 @ (-122,-496)，替换钮 x=+98 右缘正好贴 Panel 边；
-    /// 查看模式确认钮会临时居中，见 ApplyReplaceButton，不影响这里 Build 时取到的并排原位）；
-    /// 文案样式拷确认钮的子文本。点它 = 关弹窗并回调 _onReplace（MercDrawPoolUI.OnCardSwap）。
-    /// </summary>
-    void BuildReplaceButton()
-    {
-        if (_keepBtn == null)
-        {
-            Debug.LogError("[MercObtainPopup] 缺少确认按钮 Panel/KeepButton，「替换」按钮不生成");
-            return;
-        }
-        var keepRt = _keepBtn.transform as RectTransform;
-        var keepImg = _keepBtn.image;
-        var go = new GameObject("ReplaceButton", typeof(RectTransform), typeof(Image), typeof(Button));
-        go.transform.SetParent(_keepBtn.transform.parent, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = keepRt.anchorMin;
-        rt.anchorMax = keepRt.anchorMax;
-        rt.pivot = keepRt.pivot;
-        rt.localScale = keepRt.localScale;
-        rt.sizeDelta = keepRt.sizeDelta;
-        rt.anchoredPosition = keepRt.anchoredPosition + new Vector2(keepRt.sizeDelta.x + 20f, 0f);
-        var img = go.GetComponent<Image>();
-        if (keepImg != null && keepImg.sprite != null)
-        {
-            img.sprite = keepImg.sprite;
-            img.type = keepImg.type;
-        }
-        img.raycastTarget = true;
-        _replaceBtn = go.GetComponent<Button>();
-        _replaceBtn.targetGraphic = img;
-        _replaceBtn.gameObject.SetActive(false);   // 默认隐藏，ApplyReplaceButton 决定显隐
-
-        // 子 Label：拷确认钮文本的字体/字号/颜色；确认钮没文本就用中文兜底字体
-        var keepLabel = _keepBtn.GetComponentInChildren<Text>();
-        var lgo = new GameObject("Label", typeof(RectTransform));
-        lgo.transform.SetParent(go.transform, false);
-        var lrt = lgo.GetComponent<RectTransform>();
-        lrt.anchorMin = Vector2.zero;
-        lrt.anchorMax = Vector2.one;
-        lrt.offsetMin = Vector2.zero;
-        lrt.offsetMax = Vector2.zero;
-        var lt = lgo.AddComponent<Text>();
-        lt.text = "替换";
-        lt.alignment = TextAnchor.MiddleCenter;
-        lt.raycastTarget = false;
-        if (keepLabel != null)
-        {
-            lt.font = keepLabel.font;
-            lt.fontSize = keepLabel.fontSize;
-            lt.color = keepLabel.color;
-        }
-        if (lt.font == null) lt.font = GameFonts.GetChinese();
-        if (lt.font == null) lt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-    }
 
     /// <summary>点「替换」：先关弹窗再回调（回调里 MercDrawPoolUI 会入队/进点选态并刷新列表）。</summary>
     void OnReplaceClicked()

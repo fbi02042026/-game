@@ -322,7 +322,9 @@ public partial class BattleUI : MonoBehaviour
             {
                 _lastMerc1Hp = m.currentHp;
                 _lastMerc1Energy = energy;
-                mercSlot1.UpdateSlot(mm.GetJobName(m.mercId), m.mercLevel, m.currentHp, maxHp);
+                // 2026-10-11 拍板：头像栏名字一律真名（与 SetupMercSlot / 场景头顶名同源 DisplayName），
+                // 旧写法 GetJobName 每帧把名字覆盖回职业名（如「水系法师」），已纠正。
+                mercSlot1.UpdateSlot(m.DisplayName, m.mercLevel, m.currentHp, maxHp);
                 mercSlot1.SetEnergy(energy);
             }
         }
@@ -335,7 +337,8 @@ public partial class BattleUI : MonoBehaviour
             {
                 _lastMerc2Hp = m.currentHp;
                 _lastMerc2Energy = energy;
-                mercSlot2.UpdateSlot(mm.GetJobName(m.mercId), m.mercLevel, m.currentHp, maxHp);
+                // 同上：真名，不再用职业名覆盖
+                mercSlot2.UpdateSlot(m.DisplayName, m.mercLevel, m.currentHp, maxHp);
                 mercSlot2.SetEnergy(energy);
             }
         }

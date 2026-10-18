@@ -46,11 +46,11 @@ public partial class MercDrawPoolUI : MonoBehaviour
     /// <summary>【2026-10-17 二次拍板】替换点选态：true = 等玩家点上方队列格子换下谁（不弹任何窗体）。</summary>
     bool _swapSelecting;
 
-    // 点选态动态效果：队列已上阵格子左右晃（2026-10-17 主人拍板），退出点选态必须还原坐标
+    // 点选态动态效果：队列已上阵格子绕中心左右旋转（2026-10-18 主人拍板：不再左右位移），退出点选态必须还原角度
     Coroutine _swapSwayCo;
-    readonly Dictionary<GameObject, Vector2> _swapSwayBase = new Dictionary<GameObject, Vector2>();
+    readonly Dictionary<GameObject, float> _swapSwayBase = new Dictionary<GameObject, float>();    // 基准 = 格子自身旋转 Z
     readonly Dictionary<GameObject, float> _swapSwayPhase = new Dictionary<GameObject, float>();   // 每卡独立相位（2026-10-18）
-    const float SwapSwayAmp = 12f;    // 晃动幅度（槽位局部单位，槽宽 200）
+    const float SwapSwayAmpDeg = 6f;  // 晃动角度幅度（度，绕格子中心左右摆）
     const float SwapSwaySpeed = 6f;   // 晃动角速度（弧度/秒，周期约 1 秒）
 
     // 列表卡模板（预制体 Panel/Slot；2026-10-18 主人拍板：点卡一次直接弹详情弹窗，
@@ -517,7 +517,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             UIManager.Instance?.ShowToast("替换成功");
             _swapSelecting = false;
             _replacingInId = null;
-            StopSwapSway();   // 先还原格子坐标再刷新
+            StopSwapSway();   // 先还原格子角度再刷新
             Commit();   // 刷新时点选态已退，SwapSel 标记由 RefreshPrefabPoolSlot 清掉
         }
         else
@@ -559,10 +559,10 @@ public partial class MercDrawPoolUI : MonoBehaviour
         Refresh();
     }
 
-    // ---- 点选态晃动动画（左右晃，主人 2026-10-17 拍板）----
+    // ---- 点选态晃动动画（绕中心左右旋转，主人 2026-10-18 拍板：不要位移）----
 
-    /// <summary>开始晃队列已上阵格子；重复调用先还原再重采基准坐标（切换替换目标时会带着偏移二次进入）。
-    /// 2026-10-18 主人拍板：每张卡独立晃（各自相位），不再整排同摆。</summary>
+    /// <summary>开始晃队列已上阵格子；重复调用先还原再重采基准角度（切换替换目标时会带着偏转二次进入）。
+    /// 2026-10-18 主人拍板：每张卡独立晃（各自相位），不再整排同摆；绕各自中心左右旋转、不位移。</summary>
     void StartSwapSway()
     {
         StopSwapSway();
@@ -576,7 +576,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             if (go == null) continue;
             var rt = go.GetComponent<RectTransform>();
             if (rt == null) continue;
-            _swapSwayBase[go] = rt.anchoredPosition;   // 基准 = 预制体摆的槽位坐标
+            _swapSwayBase[go] = rt.localEulerAngles.z;   // 基准 = 格子自身旋转 Z（预制体摆的角度）
             _swapSwayPhase[go] = i * 1.7f + 0.6f;      // 每卡错开相位（不整除 2π，避免肉眼同步）
             targets.Add(go);
         }
@@ -584,7 +584,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
         _swapSwayCo = StartCoroutine(CoSwapSway(targets));
     }
 
-    /// <summary>停晃动并把格子坐标还原到基准（幂等：没在晃时调用只清缓存）。</summary>
+    /// <summary>停晃动并把格子旋转还原到基准（幂等：没在晃时调用只清缓存）。</summary>
     void StopSwapSway()
     {
         if (_swapSwayCo != null)
@@ -596,13 +596,13 @@ public partial class MercDrawPoolUI : MonoBehaviour
         {
             if (kv.Key == null) continue;
             var rt = kv.Key.GetComponent<RectTransform>();
-            if (rt != null) rt.anchoredPosition = kv.Value;
+            if (rt != null) rt.localRotation = Quaternion.Euler(0f, 0f, kv.Value);
         }
         _swapSwayBase.Clear();
         _swapSwayPhase.Clear();
     }
 
-    /// <summary>左右晃协程：每格绕自身中心正弦摆 anchoredPosition.x，相位独立（2026-10-18 主人拍板）；
+    /// <summary>左右旋转协程：每格绕自身中心正弦摆旋转 Z（不位移），相位独立（2026-10-18 主人拍板）；
     /// 仅在点选态运行；用 unscaled 时间防 timescale 异常卡死。</summary>
     System.Collections.IEnumerator CoSwapSway(List<GameObject> targets)
     {
@@ -613,13 +613,11 @@ public partial class MercDrawPoolUI : MonoBehaviour
             for (int i = 0; i < targets.Count; i++)
             {
                 var go = targets[i];
-                if (go == null || !_swapSwayBase.TryGetValue(go, out var basePos)) continue;
+                if (go == null || !_swapSwayBase.TryGetValue(go, out var baseZ)) continue;
                 var rt = go.GetComponent<RectTransform>();
                 if (rt == null) continue;
                 float phase = _swapSwayPhase.TryGetValue(go, out float ph) ? ph : 0f;
-                var p = basePos;
-                p.x += Mathf.Sin(t + phase) * SwapSwayAmp;
-                rt.anchoredPosition = p;
+                rt.localRotation = Quaternion.Euler(0f, 0f, baseZ + Mathf.Sin(t + phase) * SwapSwayAmpDeg);
             }
             yield return null;
         }

@@ -315,6 +315,7 @@ public partial class BattleManager
         UnitsCanAct = false;
         _battleIntroFinished = false;
         PartyIntroWalking = false;
+        _runClosed = false;   // 新一局开始：清掉上一局的收尾标志（撤离/死亡置位，见字段注释）
 
         float startX = GetStageStartX();
         float z = hero != null ? hero.transform.position.z
@@ -355,6 +356,10 @@ public partial class BattleManager
             // 时序：过场卡→队伍进场→战前剧情→抽奖→首波。
             // 协程内部已包含“剧情不可用则直接放行首波”的兜底逻辑。
             yield return CoPreBattleStoryThenFirstWave();
+
+        // 【2026-10-18 主人报「撤离结算下面还能点抽奖」】抽奖等待期间撤离/死亡 → 上游协程当场退场：
+        // 不再 StartPartyAdvance（结算界面后面队伍乱跑），也不再走开战日志分支。
+        if (_runClosed) yield break;
 
         // 2026-09-30：抽完奖才出发 —— 抽奖期间队伍在开战位原地静止（见 FinishBattleIntro）
         StartPartyAdvance(follow);

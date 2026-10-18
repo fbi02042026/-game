@@ -123,7 +123,10 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
         GetCameraFollow()?.BeginKillCamZoom(mul, inDur);
         BattleUI.ApplyKillCamHudCompensation(mul);
         MonsterHealthBar.SetKillCamHidden(true);
-        BattleBossHpBar.SetKillCamHidden(true);
+        // 【2026-10-18 主人报「血条还有一节就死了」根因】屏幕 Boss 血条在这里被提前藏掉，
+        // 致死一击的扣血过程完全不可见 —— 玩家看到的最后状态是「还剩一节」→ 血条凭空消失 → Boss 倒地。
+        // → 屏幕血条不再随击杀镜头藏：致死一击当场扣到零，走 BattleBossHpBar 自身的
+        //   「归零展示 0.8 秒再收起」（2026-10-18 拍板），头顶小血条（MonsterHealthBar）照旧藏。
     }
 
     /// <summary>下劈/命中瞬间：还原 timeScale + 玩家缩放 + 镜头瞬间弹回。血条等命中后再解藏。</summary>

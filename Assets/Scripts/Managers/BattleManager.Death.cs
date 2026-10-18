@@ -11,6 +11,7 @@ public partial class BattleManager
     {
         Planner?.NotifyStageResult(true, 0f); // V3.0 压力阀：死过 → 下一关减一波
         isInBattle = false;
+        _runClosed = true;   // 局已收尾：挂起的抽奖等待协程当场退场（见字段注释）
         Analytics.StageEnd(CurrentChapter, currentStage != null ? currentStage.stageIndex : 0, false,
             (double)(Time.unscaledTime - _battleStartTime)); // 埋点：关卡结束（阵亡/失败）
         MercenaryManager.Instance?.ClearAllMercs();
@@ -29,6 +30,8 @@ public partial class BattleManager
     {
         TryGrantStageQuestGoldIfQuestComplete();
         isInBattle = false;
+        _runClosed = true;   // 【2026-10-18 主人报「撤离结算下面还能点抽奖」】局已收尾：
+                             // 抽奖面板常驻期间撤离，挂起的抽奖等待协程靠本标志当场退场
         Analytics.StageEnd(CurrentChapter, currentStage != null ? currentStage.stageIndex : 0, false,
             (double)(Time.unscaledTime - _battleStartTime)); // 埋点：关卡结束（主动撤离）
         ClearAllMonsters();
