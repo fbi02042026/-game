@@ -64,14 +64,15 @@ public static class RiftEquipGenerator
         //   且模板自带 ATK（6.6~55，含主人调的 18/19/20=42/45/48）完全不参与数值，只当外观 —— 55 攻外观出 4 点面板。
         //   新链：武器主属性 = 模板攻击值 × roll(1.0~1.1) × chapterGrowth（抽奖路径再 ×DraftWeaponAttackMul 1.18）。
         //   模板分档与品质对齐见 PickVisualTemplate（普通≤15 / 稀有≤25 / 传奇不限）；roll 下限 1.0 = 不低于模板标注。
-        //   防具与引导确定性化路径不变（引导数值单独调过，仍走区间中值）。
+        //   防具路径不变；引导也走模板锚定，但 roll 钉死 1.0（确定性），保证首抽 ≥ 初始武器（主人拍板）。
         int stageIdx0 = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
         float chapterGrowth = ChapterStatScaleTable.Get(Mathf.Max(1, chapter)) * GameConfig.GetStageStatScale(stageIdx0);
         float tplAtk = 0f;   // 先赋值：&& 短路时 TryGetTemplateAttack 可能不执行，out 变量需明确赋值
-        bool anchorToTemplate = slot.IsWeapon && !fixedForTutorial && visual != null
+        bool anchorToTemplate = slot.IsWeapon && visual != null
                                 && TryGetTemplateAttack(visual, main == "MAGIC_ATK", out tplAtk);
+        float anchorRoll = fixedForTutorial ? 1.0f : Random.Range(1.0f, 1.1f);
         float mainVal = anchorToTemplate
-            ? tplAtk * Random.Range(1.0f, 1.1f) * chapterGrowth
+            ? tplAtk * anchorRoll * chapterGrowth
             : RollAttrValue(main, rarity.Id, rarity.BaseMul, false, fixedForTutorial) * chapterGrowth;
         var attrs = new List<AttrBonusData>();
         if (TryMapAttr(main, mainVal, job, out var mainBonus))

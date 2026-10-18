@@ -5171,7 +5171,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: "\u8FF7\u5BAB\u63A2\u7D22"
+  m_Text: "\u65E0\u9650\u88C2\u9699"
 --- !u!1 &502852162078080437
 GameObject:
   m_ObjectHideFlags: 0
@@ -8468,10 +8468,10 @@ RectTransform:
   - {fileID: 2535667288636352879}
   - {fileID: 6651290754065767047}
   m_Father: {fileID: 1012}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, w: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 0, y: 1}
-  m_AnchoredPosition: {x: 0, y: -283}
+  m_AnchoredPosition: {x: 0, y: -173}
   m_SizeDelta: {x: 203, y: 92}
   m_Pivot: {x: 0, y: 0.5}
 --- !u!222 &3294735152900303128

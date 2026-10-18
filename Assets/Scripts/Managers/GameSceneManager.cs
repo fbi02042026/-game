@@ -136,7 +136,11 @@ public class GameSceneManager : Singleton<GameSceneManager>
         // isTutorial 同 BattleManager 原口径，但切场景那一刻 Rules 还没赋值，
         // 必须用 StoryProgress 自己判断，不要读 BattleManager.Rules。
         bool splashTutorial = StoryProgress.ShouldStartTutorialBattle();
-        var splash = ChapterSplashOverlay.ShowBattleChapter(battleChapter, splashTutorial);
+        // 【2026-10-18 主人拍板】无限裂隙不演正式关的章节剧情卡 —— 刷图玩法直接进战斗。
+        // PendingEndlessRift 在本帧还没被 BattleManager 消费（StartNewRunInternal 里才清零），用它判断是准的。
+        var splash = AdventureUI.PendingEndlessRift
+            ? null
+            : ChapterSplashOverlay.ShowBattleChapter(battleChapter, splashTutorial);
 
         // 战斗场景与章节卡并行加载（旧写法是「卡片演完才开始加载」，卡片淡出后 LoadingUI 还挂着，
         // 要等 AutoGameInitializer 报满 100% 才 Hide —— 于是 Loading 又冒出来一次）。

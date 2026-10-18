@@ -439,9 +439,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 【2026-10-18 主人拍板】点已获得卡 = 直接弹「获得佣兵」详情弹窗；未入队的佣兵弹窗右下带
-    /// 「替换」钮（回调 <see cref="OnCardSwap"/>：池有空位直接入队，池满进入点选态点队列格子换下谁）。
-    /// 在队（已入队）的只看详情，不带替换钮。
+    /// 【2026-10-18 主人拍板】点已获得卡 = 直接弹「获得佣兵」详情弹窗：
+    /// 未入队的佣兵 = 「替换雇佣队列」场景，弹窗右下带「替换」钮（回调 <see cref="OnCardSwap"/>：
+    /// 池有空位直接入队，池满进入点选态点队列格子换下谁）；已上阵（在队列）的只看详情，只带确认钮。
     /// </summary>
     void ShowOwnedDetail(string hireId)
     {

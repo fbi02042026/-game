@@ -40,6 +40,11 @@ public static class MailSystem
         SaveSystem.Instance.Save();
         Debug.Log($"[Mail] 溢出入邮 {type}+{amount}，未领={UnclaimedCount()}");
         RedDot.RefreshCommon();
+        // 【2026-10-18 主人反馈「邮件关了再开才多一封」】溢出邮件原来是静默入箱（比如体力满时领
+        // 每日登录奖励）——玩家完全不知情，只看到收件箱数莫名多一封。现与普通邮件同口径：
+        // 弹「您有新的邮件」提示 + 邮箱开着就实时刷新列表。
+        NewMailToast.Notify();
+        MailListUI.NotifyInboxChanged();
     }
 
     public static bool TryClaim(string mailId, bool notify = true)
@@ -194,6 +199,7 @@ public static class MailSystem
         SaveSystem.Instance.Save();
         Debug.Log($"[Mail] 富邮件入邮 {mail.title}，未领={UnclaimedCount()}");
         RedDot.RefreshCommon();
+        MailListUI.NotifyInboxChanged();   // 🆕 邮箱开着时收到新邮件 → 实时刷新，不用关了重开
         if (notifyToast)
             NewMailToast.Notify();   // 🆕 新邮件：右侧滑入黑底白字提示
         else

@@ -142,6 +142,7 @@ public partial class BattleManager
 
     bool ShouldPlayChapter1Ending()
     {
+        if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：Boss 记录点层直接发奖励
         if (Rules.SkipChapter1Ending) return false;
         if (!StoryProgress.TutorialDone || StoryProgress.Chapter1ChoiceDone) return false;
         if (CurrentChapter > 1) return false;
@@ -160,6 +161,7 @@ public partial class BattleManager
     /// <summary>叙事 V2.0：第 2–8 章 Boss 后的关键对话节点（含第 7 章转折点与第 8 章结局）。</summary>
     bool ShouldPlayChapterStory()
     {
+        if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：记录点层只弹「撤离/继续」双选
         if (Rules.SkipChapter1Ending) return false;
         if (CurrentChapter < 2) return false;
         if (!StoryProgress.TutorialDone || !StoryProgress.Chapter1ChoiceDone) return false;
@@ -189,6 +191,7 @@ public partial class BattleManager
     /// </summary>
     bool ShouldPlayPreBattleStory()
     {
+        if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：进层直接开抽奖
         if (Rules.SkipChapter1Ending) return false;
         if (Rules.UseTutorialSplash) return false;   // 新手教学关有自己的引导节奏
         if (Rules.SkipFirstWaveAuto) return false;   // 教程关刷怪归 TutorialDirector
@@ -265,6 +268,12 @@ public partial class BattleManager
     /// <para>为什么不能只靠 Toast：Toast 会被硬引导遮罩盖住 / 一闪而过，等于没提示。</para>
     /// </summary>
     string _lastDrawRewardMsg;
+
+    /// <summary>
+    /// 【2026-10-18 主人拍板】无限裂隙进场的「免费抽 N 次」提示，每局只弹一次。
+    /// 续层不走这段（免费额度是每局一次，续层不再送），StartNewRunInternal 里清零。
+    /// </summary>
+    bool _endlessEntryHintShown;
 
     /// <summary>
     /// 【2026-10-06 主人拍板】抽完奖励<b>不许自动继续</b> —— 引导局 / 正式关一律等玩家点「继续」。
@@ -356,6 +365,16 @@ public partial class BattleManager
         int beatRetry = 0;
         // 引导硬提示只弹一次（重试那一圈不再重复弹遮罩）
         bool guideHintShown = false;
+
+        // 【2026-10-18 主人拍板】无限裂隙进场引导：告诉玩家本次进场免费抽几次（每局只提示一次）。
+        // 抽奖面板弹出时 Toast 一句，玩家低头就能对上面板上「免费 ×N」的按钮。
+        if (IsEndlessRift && !_endlessEntryHintShown)
+        {
+            _endlessEntryHintShown = true;
+            int freeTotal = SlotMachineSystem.TotalFreeDraws();
+            if (freeTotal > 0)
+                GlobalToastUI.Show($"本次进场免费抽 {freeTotal} 次，抽完再开打！", true);
+        }
 
         while (true)
         {

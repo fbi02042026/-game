@@ -4734,6 +4734,8 @@ GameObject:
   - component: {fileID: 586531459009276011}
   - component: {fileID: 2006702273778085253}
   - component: {fileID: 1156646492030635009}
+  - component: {fileID: 6900000000000000003}
+  - component: {fileID: 6900000000000000004}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: MercJoinBanner
@@ -4741,7 +4743,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &586531459009276011
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4803,6 +4805,47 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!223 &6900000000000000003
+Canvas:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2946917502227672557}
+  m_Enabled: 1
+  serializedVersion: 4
+  m_RenderMode: 2
+  m_Camera: {fileID: 0}
+  m_PlaneDistance: 100
+  m_PixelPerfect: 0
+  m_ReceivesEvents: 1
+  m_OverrideSorting: 1
+  m_OverridePixelPerfect: 0
+  m_SortingBucketNormalizedSize: 0
+  m_VertexColorAlwaysGammaSpace: 0
+  m_AlwaysInGammaSpace: 0
+  m_AdditionalShaderChannelsFlag: 0
+  m_UpdateRectTransformForStandalone: 0
+  m_SortingLayerID: 0
+  m_SortingOrder: 995
+  m_TargetDisplay: 0
+--- !u!114 &6900000000000000004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2946917502227672557}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dc42784cf147c0c48a680349fa168899, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_IgnoreReversedGraphics: 1
+  m_BlockingObjects: 0
+  m_BlockingMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
 --- !u!1 &2958333539599746701
 GameObject:
   m_ObjectHideFlags: 0
@@ -17040,6 +17083,7 @@ GameObject:
   serializedVersion: 7
   m_Component:
   - component: {fileID: 7392311261816301562}
+  - component: {fileID: 6900000000000000001}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: BossBar
@@ -17071,6 +17115,30 @@ RectTransform:
   m_AnchoredPosition: {x: -16, y: 477}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!223 &6900000000000000001
+Canvas:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4521237837982678346}
+  m_Enabled: 1
+  serializedVersion: 4
+  m_RenderMode: 2
+  m_Camera: {fileID: 0}
+  m_PlaneDistance: 100
+  m_PixelPerfect: 0
+  m_ReceivesEvents: 1
+  m_OverrideSorting: 1
+  m_OverridePixelPerfect: 0
+  m_SortingBucketNormalizedSize: 0
+  m_VertexColorAlwaysGammaSpace: 0
+  m_AlwaysInGammaSpace: 0
+  m_AdditionalShaderChannelsFlag: 0
+  m_UpdateRectTransformForStandalone: 0
+  m_SortingLayerID: 0
+  m_SortingOrder: 950
+  m_TargetDisplay: 0
 --- !u!1 &4609358030359298092
 GameObject:
   m_ObjectHideFlags: 0
@@ -18912,6 +18980,7 @@ MonoBehaviour:
   stageLabel: {fileID: 8043822761398296790}
   difficultyLabel: {fileID: 443578855979322244}
   goldText: {fileID: 8871246375857178292}
+  draftCoinText: {fileID: 0}
   talentStoneText: {fileID: 0}
   enchantStoneText: {fileID: 0}
   decomposeMatText: {fileID: 0}
@@ -25148,6 +25217,7 @@ GameObject:
   serializedVersion: 7
   m_Component:
   - component: {fileID: 6482398887711713968}
+  - component: {fileID: 6900000000000000002}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: SkillUI
@@ -25155,7 +25225,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &6482398887711713968
 RectTransform:
   m_ObjectHideFlags: 0
@@ -25176,6 +25246,30 @@ RectTransform:
   m_AnchoredPosition: {x: -219, y: 317}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!223 &6900000000000000002
+Canvas:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8169802388403321213}
+  m_Enabled: 1
+  serializedVersion: 4
+  m_RenderMode: 2
+  m_Camera: {fileID: 0}
+  m_PlaneDistance: 100
+  m_PixelPerfect: 0
+  m_ReceivesEvents: 1
+  m_OverrideSorting: 1
+  m_OverridePixelPerfect: 0
+  m_SortingBucketNormalizedSize: 0
+  m_VertexColorAlwaysGammaSpace: 0
+  m_AlwaysInGammaSpace: 0
+  m_AdditionalShaderChannelsFlag: 0
+  m_UpdateRectTransformForStandalone: 0
+  m_SortingLayerID: 0
+  m_SortingOrder: 955
+  m_TargetDisplay: 0
 --- !u!1 &8212449817844204416
 GameObject:
   m_ObjectHideFlags: 0

@@ -125,13 +125,17 @@ public class SkillCastNotifyController : MonoBehaviour
             return;
         }
 
-        // 【2026-10-18】SkillUI 在 order=0 的 BattleUI 根下，Boss血条(950)/侧边HUD(105)等嵌套 Canvas 会盖住通知条。
-        // 抬嵌套 Canvas 到 BattleHud 之上（955）。AddComponent 会重置 RectTransform，先缓存再还原。
-        var liftCv = _root.GetComponent<Canvas>() ?? _root.gameObject.AddComponent<Canvas>();
-        Vector2 ap = _root.anchoredPosition, sd = _root.sizeDelta;
-        Vector2 aMin = _root.anchorMin, aMax = _root.anchorMax, pv = _root.pivot, ls = _root.localScale;
-        _root.anchoredPosition = ap; _root.sizeDelta = sd;
-        _root.anchorMin = aMin; _root.anchorMax = aMax; _root.pivot = pv; _root.localScale = ls;
+        // 【2026-10-18 二修】Canvas 已预置进 BattleUI 预制体（SkillUI 节点，overrideSorting=955）。
+        // 旧写法运行时 AddComponent<Canvas> 在团结引擎下原生侧未建好 → 访问 overrideSorting 当场抛
+        // MissingComponentException（Editor.log 122347 实锤），Awake 中断 → 模板永远绑不上 → 释放技能条静默失效。
+        // 现在只取预制体画布设值（幂等），缺失就报错，绝不再 AddComponent。
+        var liftCv = _root.GetComponent<Canvas>();
+        if (liftCv == null)
+        {
+            Debug.LogError("[SkillCastNotify] SkillUI 节点缺少预置 Canvas（预制体应带 overrideSorting=955 的画布），通知条不抬层");
+            enabled = false;
+            return;
+        }
         liftCv.overrideSorting = true;
         liftCv.sortingOrder = 955;
 

@@ -73,9 +73,22 @@ public partial class BattleUI : MonoBehaviour
         if (difficultyLabel != null)
         {
             ShowLabelWithFrame(difficultyLabel);
-            difficultyLabel.text = string.IsNullOrEmpty(difficulty)
-                ? GameConfig.DifficultyNames[0]
-                : difficulty;
+            // 【2026-10-18 主人拍板】无限裂隙：左上角难度格改显「当前层数」，每打一层自动更新
+            // （本方法由每层 LoadStage → RefreshBattleHud 驱动）。裂隙没有难度选择（恒普通），
+            // 这格显示难度没信息量，拿来显示层数正好。普通关仍显难度名，不受影响。
+            var bm = BattleManager.Instance;
+            if (bm != null && bm.IsEndlessRift)
+            {
+                difficultyLabel.text = $"第{Mathf.Max(1, bm.EndlessRiftStage)}层";
+                // 预制体这格宽 64 是按难度名（2~3 字）摆的；层数打到三位数别换行裁字，放开横向溢出
+                difficultyLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            }
+            else
+            {
+                difficultyLabel.text = string.IsNullOrEmpty(difficulty)
+                    ? GameConfig.DifficultyNames[0]
+                    : difficulty;
+            }
             difficultyLabel.fontSize = 16;
         }
         UpdateGold(gold);

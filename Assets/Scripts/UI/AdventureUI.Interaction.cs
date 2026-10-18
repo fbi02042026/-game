@@ -290,7 +290,9 @@ public partial class AdventureUI
             return;
         }
 
-        if (StoryProgress.TutorialDone && !StoryProgress.Chapter1IntroDone && _selectedChapter <= 1)
+        // 无限裂隙不播剧情（2026-10-18 主人拍板）：大厅开场剧情只挂在主线冒险入口
+        if (StoryProgress.TutorialDone && !StoryProgress.Chapter1IntroDone
+            && _selectedChapter <= 1 && !IsEndlessMode(_selectedMode))
         {
             Chapter1Story.PlayHallIntro(TryEnterBattle);
             return;
@@ -346,7 +348,7 @@ public partial class AdventureUI
             : default;
 
         // 先选职业，确认「进入裂隙」再扣体力进场景（引导也只在此弹一次）
-        PlayerJobSelectUI.Show(() =>
+        void EnterAfterJobSelect()
         {
             // 无限裂隙：次数 + 20 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
             if (endless)
@@ -386,7 +388,14 @@ public partial class AdventureUI
             }
             HidePage();
             GameSceneManager.Instance?.LoadBattleScene();
-        }, opts);
+        }
+
+        // 【2026-10-18 主人拍板】无限裂隙不弹职业选择、不限制职业 —— 刷图玩法用当前职业直接进本；
+        // 职业三选一是引导局 / 正式关的仪式感，裂隙每次都弹一遍太拖节奏。
+        if (endless)
+            EnterAfterJobSelect();
+        else
+            PlayerJobSelectUI.Show(EnterAfterJobSelect, opts);
     }
 
     /// <summary>

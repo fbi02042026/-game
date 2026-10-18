@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -16,6 +17,13 @@ public class BattleBossHpBar : MonoBehaviour
     float _fullWidth;
     float _fullHeight;
     Monster _bound;
+    // 【2026-10-18 主人拍板】绑定目标集：Boss + 场上全部存活精英，血条显示 ∑当前血/∑最大血；
+    // _bound 只当名牌目标用（取血量上限最高的一只）
+    readonly List<Monster> _boundList = new List<Monster>();
+    readonly List<Monster> _pickScratch = new List<Monster>();
+    // 【2026-10-18 主人拍板】最后一只死亡时血条先归零展示一小段再收起（旧表现是带着血整条消失）
+    float _deathZeroHold;
+    const float BOSS_DEATH_ZERO_HOLD = 0.8f;
     bool _killCamHidden;
     bool _wantVisible;
     Monster _lastLoggedPick;   // 【2026-10-15】排查日志去重用
@@ -78,6 +86,9 @@ public class BattleBossHpBar : MonoBehaviour
         if (_inst._root == null || _inst._fillRt == null) return; // 战斗 UI 还没建好，静默返回（不打日志）
 
         _inst._bound = boss;
+        _inst._deathZeroHold = 0f;
+        _inst._boundList.Clear();
+        _inst._boundList.Add(boss);
         _inst._wantVisible = true;
         _inst.ApplyVisibility();              // BossBar 显示、ProgressBar/QuestMap 隐藏
         _inst._introPlaying = true;
@@ -140,28 +151,20 @@ public class BattleBossHpBar : MonoBehaviour
     }
 
     /// <summary>
-    /// 血条抬层 Canvas 的唯一出口：显示时（BossBar 已激活）幂等挂 overrideSorting=BattleHud(950)。
-    /// 为什么不放 BindUi：见 BindUi 内【2026-10-16 二修】注释 —— Awake 期对象未激活，挂 Canvas 会炸。
+    /// 血条抬层 Canvas 的唯一出口：显示时（BossBar 已激活）幂等设 overrideSorting=BattleHud(950)。
+    /// 【2026-10-18 二修】Canvas 已预置进 BattleUI 预制体（BossBar 节点，overrideSorting=950）。
+    /// 旧写法运行时 AddComponent<Canvas> 在团结引擎下会产出「僵尸画布」（原生侧未建好，
+    /// 不抛异常但整棵子树不渲染）—— 血条显示链路全通却看不见的元凶。现在只取预制体画布设值。
     /// </summary>
     void EnsureOverheadCanvas()
     {
         if (_canvasLifted || _root == null) return;
         if (!_root.gameObject.activeInHierarchy) return;
-        // 【2026-10-18 修血条不可见真因】运行时 AddComponent<Canvas> 会把 RectTransform 重置成
-        // 100×100 中心锚点（10-16 dump 里 rect=(100,100)、屏幕中央小点实锤），必须缓存还原。
-        var rt = _root as RectTransform;
-        Vector2 ap = default, sd = default, aMin = default, aMax = default, pv = default, ls = default;
-        if (rt != null)
+        var bossCanvas = _root.GetComponent<Canvas>();
+        if (bossCanvas == null)
         {
-            ap = rt.anchoredPosition; sd = rt.sizeDelta;
-            aMin = rt.anchorMin; aMax = rt.anchorMax; pv = rt.pivot; ls = rt.localScale;
-        }
-        var bossCanvas = _root.GetComponent<Canvas>() ?? _root.gameObject.AddComponent<Canvas>();
-        if (bossCanvas == null) return;
-        if (rt != null)
-        {
-            rt.anchoredPosition = ap; rt.sizeDelta = sd;
-            rt.anchorMin = aMin; rt.anchorMax = aMax; rt.pivot = pv; rt.localScale = ls;
+            Debug.LogError("[BattleBossHpBar] BossBar 节点缺少预置 Canvas（预制体应带 overrideSorting=950 的画布），血条不抬层");
+            return;
         }
         bossCanvas.overrideSorting = true;
         bossCanvas.sortingOrder = GameConfig.UiSort.BattleHud;
@@ -229,8 +232,25 @@ public class BattleBossHpBar : MonoBehaviour
         if (_root != null && !_root.gameObject.activeSelf && !_killCamHidden)
             Refresh();
 
-        // 目标没了（BOSS 被秒 / 切场景）：复位入场标志，否则下次 BOSS 出场会因 _introPlaying 残留而不播
-        if (_bound == null || _bound.isDead)
+        // 【2026-10-18 主人拍板】死亡归零展示期：血条已归零，倒数结束再收起。
+        // 击杀镜头藏血条期间暂停倒数，保证解藏后玩家仍能看到「空条」再消失。
+        if (_deathZeroHold > 0f)
+        {
+            if (!_killCamHidden)
+                _deathZeroHold -= Time.unscaledDeltaTime;
+            if (_deathZeroHold <= 0f)
+            {
+                _deathZeroHold = 0f;
+                _bound = null;
+                _boundList.Clear();
+                _wantVisible = false;
+                ApplyVisibility();
+            }
+            return;
+        }
+
+        // 目标全没了/全死了：复位入场标志（死亡归零展示由 Refresh 在最后一次死亡时触发）
+        if (!AnyBoundAlive())
         {
             _introPlaying = false;
             return;
@@ -264,25 +284,39 @@ public class BattleBossHpBar : MonoBehaviour
             BindUi(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
         if (_root == null || _fillRt == null) return;
 
-        Monster pick = PickTarget();
-        if (pick == null)
+        PickTargets(_pickScratch);
+        if (_pickScratch.Count == 0)
         {
+            // 【2026-10-18 主人拍板】最后一只绑定的 Boss/精英刚死：血条先归零展示一小段再收起，
+            // 不再「还挂着大半截血就整条消失」（观感＝还有血就显示死亡）。
+            if (_wantVisible && _deathZeroHold <= 0f && _boundList.Count > 0 && !AnyBoundAlive())
+            {
+                _introPlaying = false;
+                _deathZeroHold = BOSS_DEATH_ZERO_HOLD;
+                SetRatio(0f);
+                _lastLoggedPick = null;
+                return;   // _bound/_boundList 先留着（名牌不闪没），由 LateUpdate 倒计时后收起
+            }
+            if (_deathZeroHold > 0f) return;   // 归零展示期中再次刷新且无新目标：保持现状等倒数结束
             _bound = null;
+            _boundList.Clear();
             _introPlaying = false;   // 场上无 Boss/精英：复位入场标志，避免残留导致下次出场不播
             _wantVisible = false;
             ApplyVisibility();
             return;
         }
 
-        _bound = pick;
+        _deathZeroHold = 0f;   // 有新目标（多精英打死一只后还剩别的）：取消归零展示，改绑续显
+        _boundList.Clear();
+        _boundList.AddRange(_pickScratch);
+        _bound = PickNameTarget();   // 名牌取血量上限最高的一只
         _wantVisible = true;
         ApplyVisibility();
         // 【2026-10-15 排查日志】只在锁定目标变化时打一条，不刷屏
-        if (_lastLoggedPick != pick)
+        if (_lastLoggedPick != _bound)
         {
-            _lastLoggedPick = pick;
-            float pickMaxHp = pick.attr != null ? pick.attr.GetAttr(AttrType.MaxHp) : -1f;
-            Debug.Log($"[BattleBossHpBar] 锁定目标 {pick.name} maxHp={pickMaxHp:0} → 显示屏幕血条");
+            _lastLoggedPick = _bound;
+            Debug.Log($"[BattleBossHpBar] 锁定目标 ×{_boundList.Count}（名牌={(_bound != null ? _bound.name : "null")}）→ 显示屏幕血条");
         }
         if (!_introPlaying)
             SyncRatioFromBound();   // 入场动画播放中不打真实值，避免开场瞬间被覆盖
@@ -363,10 +397,18 @@ public class BattleBossHpBar : MonoBehaviour
 
     void SyncRatioFromBound()
     {
-        if (_bound == null || _bound.attr == null || _fillRt == null) return;
-        float maxHp = _bound.attr.GetAttr(AttrType.MaxHp);
-        float ratio = maxHp > 0f ? Mathf.Clamp01(_bound.currentHp / maxHp) : 0f;
-        SetRatio(ratio);
+        if (_fillRt == null) return;
+        // 【2026-10-18 主人拍板】多个精英把血条数值加到一起：∑当前血 / ∑最大血
+        float cur = 0f, max = 0f;
+        for (int i = 0; i < _boundList.Count; i++)
+        {
+            var m = _boundList[i];
+            if (m == null || m.isDead || m.attr == null) continue;
+            cur += m.currentHp;
+            max += m.attr.GetAttr(AttrType.MaxHp);
+        }
+        if (max <= 0f) return;
+        SetRatio(Mathf.Clamp01(cur / max));
     }
 
     void SetRatio(float hp01)
@@ -431,42 +473,53 @@ public class BattleBossHpBar : MonoBehaviour
             t.gameObject.SetActive(active);
     }
 
-    static Monster PickTarget()
-    {
-        var bm = BattleManager.Instance;
-        if (bm == null || bm.monsters == null) return null;
+    // ============================================================
+    // 【2026-10-18 主人拍板】目标集挑选：Boss + 全部存活精英都绑进血条（血量求和）；
+    // 名牌只显示血量上限最高的一只。旧版只绑「血最多的一只」，多精英时另外几只
+    // 掉血/死亡血条纹丝不动，真 Boss 先死就出现「还有血就显示死亡」。
+    // ============================================================
 
-        Monster bestBoss = null;
-        Monster bestElite = null;
-        float bestBossHp = -1f;
-        float bestEliteHp = -1f;
+    static void PickTargets(List<Monster> result)
+    {
+        result.Clear();
+        var bm = BattleManager.Instance;
+        if (bm == null || bm.monsters == null) return;
 
         for (int i = 0; i < bm.monsters.Count; i++)
         {
             var m = bm.monsters[i] as Monster;
             if (m == null || m.isDead) continue;
+            if (m.IsBossUnit || m.IsEliteWave) result.Add(m);
+        }
+    }
 
-            float maxHp = m.attr != null ? m.attr.GetAttr(AttrType.MaxHp) : 0f;
-            if (m.IsBossUnit)
+    /// <summary>名牌目标：绑定集里血量上限最高的一只。</summary>
+    Monster PickNameTarget()
+    {
+        Monster best = null;
+        float bestMax = -1f;
+        for (int i = 0; i < _boundList.Count; i++)
+        {
+            var m = _boundList[i];
+            if (m == null || m.attr == null) continue;
+            float mh = m.attr.GetAttr(AttrType.MaxHp);
+            if (mh > bestMax)
             {
-                if (maxHp > bestBossHp)
-                {
-                    bestBossHp = maxHp;
-                    bestBoss = m;
-                }
-            }
-            // 2026-09-28 主人要求：精英也给血条（去掉「仅精英关」限制）——取血最多的那只精英
-            else if (m.IsEliteWave)
-            {
-                if (maxHp > bestEliteHp)
-                {
-                    bestEliteHp = maxHp;
-                    bestElite = m;
-                }
+                bestMax = mh;
+                best = m;
             }
         }
+        return best;
+    }
 
-        return bestBoss != null ? bestBoss : bestElite;
+    bool AnyBoundAlive()
+    {
+        for (int i = 0; i < _boundList.Count; i++)
+        {
+            var m = _boundList[i];
+            if (m != null && !m.isDead) return true;
+        }
+        return false;
     }
 
     static Transform FindDeep(Transform root, string name)

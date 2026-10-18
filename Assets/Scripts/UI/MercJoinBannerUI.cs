@@ -8,9 +8,12 @@ using UnityEngine.UI;
 /// <para>节点：主人已在 BattleUI 预制体里摆好「佣兵入队」（根 Image 提示框 +
 /// mask/icon 佣兵立绘 + name 佣兵名称 + Text1「— 加入小队 —」），代码只驱动不改预制体。</para>
 ///
-/// <para>动画（主人原话「出现的和以前方式一样」= 复刻 <see cref="SlotMachineAgainBanner"/>）：
-/// 抽中瞬间从左侧屏外**瞬间划入**到中间（0.30s）→ 慢慢向右滑行 1s → 快速向右消失（0.22s）。
-/// 全程 unscaled 时间（抽奖阶段战斗冻住，timeScale 可能为 0）。</para>
+/// <para>动画：抽中瞬间从左侧屏外**瞬间划入**到中间（0.30s）→ 停在中间不动（1.2s）
+/// → 原地渐隐消失（0.8s，不向右滑走）。
+/// 【2026-10-18 主人改口】横幅到中间后要「变慢然后消失，不要一下直接过去了」，
+/// 故弃用旧 SlotMachineAgainBanner 的滑行离场，改为停顿+淡出。</para>
+///
+/// <para>全程 unscaled 时间（抽奖阶段战斗冻住，timeScale 可能为 0）。</para>
 ///
 /// <para>立绘：<c>Resources/UI/Icons/佣兵立绘/佣兵立绘_{hireId}.png</c>（Art 同名图复制入 Resources）。
 /// 名字颜色按稀有度走 <see cref="RarityPalette"/>（主人：名字要和稀有度对齐）。</para>
@@ -20,13 +23,11 @@ using UnityEngine.UI;
 public class MercJoinBannerUI : MonoBehaviour
 {
     // ============================================================
-    // 动画时长（与 SlotMachineAgainBanner 同款，主人拍板的「以前方式」）
+    // 动画时长（2026-10-18 主人改口：到中间后停住+淡出，别一下滑过去）
     // ============================================================
     const float SlideInSec = 0.30f;    // 左侧屏外 → 中间
-    const float CruiseSec = 1.00f;     // 中间慢慢向右滑 1 秒
-    const float SlideOutSec = 0.22f;   // 快速向右滑走
-    /// <summary>慢滑阶段走过的屏宽比例（同 SlotMachineAgainBanner）。</summary>
-    const float CruiseScreenRatio = 0.12f;
+    const float HoldSec = 1.20f;       // 停在中间不动
+    const float FadeOutSec = 0.80f;    // 原地渐隐消失
 
     /// <summary>立绘资源目录：按路径加载，不依赖 guid。</summary>
     const string PortraitFolder = "UI/Icons/佣兵立绘/";
@@ -168,17 +169,20 @@ public class MercJoinBannerUI : MonoBehaviour
         if (_canvasLifted || _rt == null) return;
         if (!_rt.gameObject.activeInHierarchy) return;   // 未激活时不挂：等下次 Play 再幂等补
         var rt = _rt;
-        // AddComponent<Canvas> 会把 RectTransform 重置成 100×100 中心锚点，先缓存再还原
-        Vector2 ap = rt.anchoredPosition, sd = rt.sizeDelta;
-        Vector2 aMin = rt.anchorMin, aMax = rt.anchorMax, pv = rt.pivot, ls = rt.localScale;
-        var cv = rt.GetComponent<Canvas>() ?? rt.gameObject.AddComponent<Canvas>();
-        if (cv == null) return;
-        rt.anchoredPosition = ap; rt.sizeDelta = sd;
-        rt.anchorMin = aMin; rt.anchorMax = aMax; rt.pivot = pv; rt.localScale = ls;
+        // 【2026-10-18 二修】Canvas 已预置进 BattleUI 预制体（MercJoinBanner 节点，overrideSorting=995
+        // + GraphicRaycaster）。旧写法运行时 AddComponent<Canvas> 在团结引擎下原生侧未建好 →
+        // set_overrideSorting 抛 MissingComponentException（Editor.log 31344 实锤），抽奖协程被整条炸死。
+        // 现在只取预制体画布设值（幂等），缺失就报错，绝不再 AddComponent。
+        var cv = rt.GetComponent<Canvas>();
+        if (cv == null)
+        {
+            Debug.LogError("[MercJoinBanner] 节点缺少预置 Canvas（预制体应带 overrideSorting=995 的画布），横幅不抬层");
+            return;
+        }
         cv.overrideSorting = true;
         cv.sortingOrder = GameConfig.UiSort.MercJoinBanner;
-        // 铁律：每加一个 Canvas 必补 GraphicRaycaster（横幅图元 raycastTarget 全 false，不会挡点击）
-        if (rt.GetComponent<GraphicRaycaster>() == null) rt.gameObject.AddComponent<GraphicRaycaster>();
+        if (rt.GetComponent<GraphicRaycaster>() == null)
+            Debug.LogError("[MercJoinBanner] 节点缺少预置 GraphicRaycaster（预制体应一并带上）");
         _canvasLifted = true;
     }
 
@@ -196,10 +200,14 @@ public class MercJoinBannerUI : MonoBehaviour
         float canvasW = canvasRt != null ? canvasRt.rect.width : Screen.width;
         float half = canvasW * 0.5f;
         float offscreen = half + _rt.rect.width;      // 整块完全在屏外
-        float cruiseTo = canvasW * CruiseScreenRatio;
 
         Vector2 basePos = _rt.anchoredPosition;       // 预制体摆好的中间位置（x=0）
         _rt.gameObject.SetActive(true);
+
+        // 渐隐用 CanvasGroup（运行时挂，不改预制体）；每次播放先复位不透明度
+        var cg = _rt.GetComponent<CanvasGroup>();
+        if (cg == null) cg = _rt.gameObject.AddComponent<CanvasGroup>();
+        cg.alpha = 1f;
 
         // ① 左侧屏外 → 中间（起步快、末端收住）
         float t = 0f;
@@ -211,25 +219,23 @@ public class MercJoinBannerUI : MonoBehaviour
             yield return null;
         }
 
-        // ② 慢慢向右滑 1 秒（匀速）
+        // ② 停在中间不动（2026-10-18 主人：在中间变慢，别一下直接滑过去）
         t = 0f;
         while (t < 1f)
         {
-            t += Time.unscaledDeltaTime / CruiseSec;
-            _rt.anchoredPosition = new Vector2(Mathf.Lerp(basePos.x, basePos.x + cruiseTo, Mathf.Clamp01(t)), basePos.y);
+            t += Time.unscaledDeltaTime / HoldSec;
             yield return null;
         }
 
-        // ③ 快速向右滑走（越走越快）
+        // ③ 原地渐隐消失（不再向右滑走）
         t = 0f;
         while (t < 1f)
         {
-            t += Time.unscaledDeltaTime / SlideOutSec;
-            float e = Mathf.Clamp01(t) * Mathf.Clamp01(t);
-            _rt.anchoredPosition = new Vector2(
-                Mathf.Lerp(basePos.x + cruiseTo, basePos.x + offscreen, e), basePos.y);
+            t += Time.unscaledDeltaTime / FadeOutSec;
+            cg.alpha = 1f - Mathf.Clamp01(t);
             yield return null;
         }
+        cg.alpha = 1f;   // 复位，避免下次播放半透明
 
         _rt.anchoredPosition = basePos;
         _rt.gameObject.SetActive(false);

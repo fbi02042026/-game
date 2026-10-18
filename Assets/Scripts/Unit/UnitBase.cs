@@ -81,7 +81,12 @@ public abstract class UnitBase : MonoBehaviour
 
     public void SetLaneY(float offset)
     {
-        LaneY = BattleLaneBounds.ClampLaneOffset(offset);
+        float clamped = BattleLaneBounds.ClampLaneOffset(offset);
+        // 【临时打点 2026-10-18】排查「打死怪换下一个目标时闪现到对方车道」：
+        // 我方 LaneY 单次调用跳变>0.3 属异常（正常并道每帧最多 0.85×移速×dt），打栈定位来源，定位后删除
+        if (isAlly && !float.IsNaN(LaneY) && Mathf.Abs(clamped - LaneY) > 0.3f)
+            Debug.LogWarning($"[LaneJumpDebug] {name} LaneY 跳变 {LaneY:F3}→{clamped:F3}（raw={offset:F3}）\n{System.Environment.StackTrace}");
+        LaneY = clamped;
     }
 
     /// <summary>把 LaneY 同步成当前脚底相对站立线的偏移（入场中断 / 刷怪纠偏）。</summary>
@@ -104,14 +109,30 @@ public abstract class UnitBase : MonoBehaviour
 
     protected virtual Transform LaneMoveTransform => transform;
 
+    // 【临时打点 2026-10-18】排查「打死怪换目标闪现到对方车道」：记录上次 ApplyLaneY 落点，定位后随打点一起删
+    float _dbgLastLaneWorldY = float.NaN;
+
     protected void ApplyLaneY(float dt)
     {
         var t = LaneMoveTransform;
         if (t == null) return;
         var p = t.position;
+        // 【临时打点 2026-10-18】帧间世界Y位移超出「合法步长+容差」= 有别的代码在搬单位；
+        // dt>0.15 抓卡顿帧（攻击锁/受击硬直路径传的是未钳制的原始 Time.deltaTime，卡一帧就会大步瞬移），定位后删除
+        if (isAlly && !float.IsNaN(_dbgLastLaneWorldY))
+        {
+            float jumped = p.y - _dbgLastLaneWorldY;
+            float legal = GameConfig.BATTLE_LANE_MOVE_SPEED * Time.deltaTime + 0.05f;
+            if (Mathf.Abs(jumped) > legal)
+                Debug.LogWarning($"[LaneJumpDebug] {name} 世界Y异常位移 {jumped:F3}（合法≤{legal:F3}）" +
+                                 $"worldY={p.y:F3} LaneY={LaneY:F3} FootY={FootY:F3} dt={Time.deltaTime:F3}\n{System.Environment.StackTrace}");
+            else if (Time.deltaTime > 0.15f)
+                Debug.LogWarning($"[LaneJumpDebug] {name} 帧间隔暴涨 dt={Time.deltaTime:F3} worldY={p.y:F3} FootY={FootY:F3}");
+        }
         float target = FootY;
         if (Mathf.Abs(p.y - target) < 0.002f)
         {
+            _dbgLastLaneWorldY = p.y;
             RefreshDepthSort();
             return;
         }
@@ -121,6 +142,7 @@ public abstract class UnitBase : MonoBehaviour
         GameConfig.SetWorldPosition(t, p);
         if (rb != null)
             rb.velocity = new Vector2(keepVx, 0f);
+        _dbgLastLaneWorldY = t.position.y;
 
         // 2026-09-27 主人反馈：「打完后又滑步到场景中间车道」。
         // 归道（击杀后回中间车道）时 X 速度为 0，AIUpdate 判定 isMoving=false 播的是站立，

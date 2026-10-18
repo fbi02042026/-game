@@ -634,7 +634,12 @@ public class RewardPopupUI : MonoBehaviour
             {
                 t.text = e.label ?? "";
                 // 2026-10-15 主人拍板：文字放大 30%（以预制体原始字号为基准，不改 sizeDelta/位置）
-                if (_base.LabelFont > 0) t.fontSize = Mathf.RoundToInt(_base.LabelFont * CellContentScale);
+                // 2026-10-18 主人拍板：金币等标签字再放大 2 号
+                if (_base.LabelFont > 0) t.fontSize = Mathf.RoundToInt(_base.LabelFont * CellContentScale) + 2;
+                // 2026-10-18 修复：字号放大后「金币 ×500」等三位数文案超出预制体 130×30 的文字框，
+                // 换行+截断导致整行被裁没（弹窗只见图标不见数字）。改为不换行/不截断，超框照常居中显示。
+                t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                t.verticalOverflow = VerticalWrapMode.Overflow;
             }
             // 文字只做展示：关掉射线，避免它压在确定按钮上方时把点击吃掉
             var lg = lblT.GetComponent<Graphic>();

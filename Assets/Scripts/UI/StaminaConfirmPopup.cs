@@ -5,121 +5,106 @@ using UnityEngine.UI;
 /// <summary>
 /// 体力通用确认弹窗（2026-10-18 主人拍板）：邮件领取体力 / 背包使用体力药水 共用。
 /// 场景：体力将超出上限时，提示「多余的会浪费」，玩家确认后才执行。
-/// 运行时建树不碰 prefab，观感与天赋费用确认窗同一套（羊皮纸底 + 取消/确认双按钮）；
-/// 层级 TownPopup(900)，高于邮件详情窗(610)，摄像机模式与 DDOL 口径同其他弹窗。
+///
+/// 【2026-10-18 主人拍板「EvacuateConfirmPopup 设置成默认的弹窗形式，类似窗体都用它」】
+/// → 本弹窗弃用旧的纯色块运行时建树，改挂全项目默认弹窗预制体
+/// <see cref="EvacuateConfirmPopupUI.PrefabPath"/>（Root/Dim/Panel/Title/Body/双按钮 同一套美术）。
+/// 与战斗撤离弹窗的两点差别：① 不动 Time.timeScale（体力确认在城镇流程里，撤离才定格战斗）；
+/// ② 层级走 TownPopup(900)（邮件详情窗 610 之上）。标题钉死「体力提示」，正文/确认键文案由调用方传。
 /// </summary>
 public static class StaminaConfirmPopup
 {
-    static GameObject _root;
+    static GameObject _host;
+    static GameObject _rootPanel;
+    static Text _title;
     static Text _body;
     static Text _okLabel;
+    static Text _cancelLabel;
+    static Button _okBtn;
+    static Button _cancelBtn;
+    static Button _dimBtn;
     static Action _onOk;
 
     /// <summary>弹确认框：body 提示文案（含会浪费多少点），okLabel 确认键文字，onConfirm 点确认后回调。</summary>
     public static void Show(string body, string okLabel, Action onConfirm)
     {
         Ensure();
-        if (_root == null) return;
-        if (_body != null) _body.text = body;
-        if (_okLabel != null) _okLabel.text = okLabel;
+        if (_rootPanel == null) return;
+        if (_title != null) _title.text = "体力提示";
+        if (_body != null) _body.text = body ?? "";
+        if (_okLabel != null) _okLabel.text = okLabel ?? "确认";
+        if (_cancelLabel != null) _cancelLabel.text = "取消";
         _onOk = onConfirm;
-        _root.SetActive(true);
-        _root.transform.SetAsLastSibling();
-        var canvas = _root.GetComponent<Canvas>();
+        _rootPanel.SetActive(true);
+        _host.transform.SetAsLastSibling();
+        var canvas = _host.GetComponent<Canvas>();
         if (canvas != null)
             UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.TownPopup);
     }
 
     public static void Close()
     {
-        if (_root != null) _root.SetActive(false);
+        if (_rootPanel != null) _rootPanel.SetActive(false);
         _onOk = null;
     }
 
     static void Ensure()
     {
-        // Unity 假 null：场景切换/域重载后 _root 被销毁会走重建
-        if (_root != null) return;
+        // Unity 假 null：场景切换/域重载后 _host 被销毁会走重建
+        if (_host != null) return;
 
-        var go = new GameObject("StaminaConfirmPopup", typeof(RectTransform));
-        UnityEngine.Object.DontDestroyOnLoad(go);
-        var canvas = go.AddComponent<Canvas>();
+        var prefab = Resources.Load<GameObject>(EvacuateConfirmPopupUI.PrefabPath);
+        if (prefab == null)
+        {
+            // 不静默跳过（铁律 14）：缺默认弹窗预制体必须喊出来
+            Debug.LogError("[StaminaConfirm] 找不到默认弹窗预制体 Resources/" +
+                           EvacuateConfirmPopupUI.PrefabPath + "，体力确认弹窗不可用");
+            return;
+        }
+
+        _host = UnityEngine.Object.Instantiate(prefab);
+        _host.name = "StaminaConfirmPopup";
+        UnityEngine.Object.DontDestroyOnLoad(_host);
+        var canvas = _host.GetComponent<Canvas>();
+        if (canvas == null) canvas = _host.AddComponent<Canvas>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup, UICanvasSetup.ResolveUiCamera());
-        go.AddComponent<GraphicRaycaster>();
-        Build(go);
-        go.SetActive(false);
-        _root = go;
+
+        Bind();
+        Wire();
+        if (_rootPanel != null) _rootPanel.SetActive(false);
     }
 
-    static void Build(GameObject host)
+    static void Bind()
     {
-        // 遮罩（点击=取消）
-        var dim = NewRect(host.transform, "Dim");
-        Stretch(dim);
-        var dimImg = dim.gameObject.AddComponent<Image>();
-        dimImg.color = new Color(0f, 0f, 0f, 0.62f);
-        dimImg.raycastTarget = true;
-        var dimBtn = dim.gameObject.AddComponent<Button>();
-        dimBtn.targetGraphic = dimImg;
-        dimBtn.transition = Selectable.Transition.None;
-        dimBtn.onClick.AddListener(Close);
+        var rootT = _host.transform.Find("Root")?.gameObject;
+        _rootPanel = rootT != null ? rootT : _host;
+        _title = FindDeep(_rootPanel.transform, "Title")?.GetComponent<Text>();
+        _body = FindDeep(_rootPanel.transform, "Body")?.GetComponent<Text>();
+        _okBtn = FindDeep(_rootPanel.transform, "EvacuateButton")?.GetComponent<Button>();
+        _cancelBtn = FindDeep(_rootPanel.transform, "ContinueButton")?.GetComponent<Button>();
+        _dimBtn = FindDeep(_rootPanel.transform, "Dim")?.GetComponent<Button>();
+        _okLabel = FindDeep(_rootPanel.transform, "EvacuateButton")?.Find("Label")?.GetComponent<Text>();
+        _cancelLabel = FindDeep(_rootPanel.transform, "ContinueButton")?.Find("Label")?.GetComponent<Text>();
+    }
 
-        // 羊皮纸底盒（同天赋费用确认窗 560×420）
-        var box = NewRect(host.transform, "Box");
-        box.anchorMin = box.anchorMax = new Vector2(0.5f, 0.5f);
-        box.pivot = new Vector2(0.5f, 0.5f);
-        box.anchoredPosition = Vector2.zero;
-        box.sizeDelta = new Vector2(560f, 420f);
-        var boxImg = box.gameObject.AddComponent<Image>();
-        boxImg.color = new Color(0.93f, 0.88f, 0.78f, 1f);
-        boxImg.raycastTarget = true;
-
-        var title = NewText(box, "Title", "体力提示", 30, new Color(0.25f, 0.15f, 0.1f, 1f));
-        var trt = (RectTransform)title.transform;
-        trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 1f);
-        trt.pivot = new Vector2(0.5f, 0.5f);
-        trt.anchoredPosition = new Vector2(0f, -24f);
-        trt.sizeDelta = new Vector2(480f, 44f);
-        title.fontStyle = FontStyle.Bold;
-
-        var body = NewText(box, "Body", string.Empty, 22, new Color(0.2f, 0.12f, 0.08f, 1f));
-        body.alignment = TextAnchor.UpperLeft;
-        var brt = (RectTransform)body.transform;
-        brt.anchorMin = brt.anchorMax = new Vector2(0.5f, 0.5f);
-        brt.pivot = new Vector2(0.5f, 0.5f);
-        brt.anchoredPosition = new Vector2(0f, 8f);
-        brt.sizeDelta = new Vector2(500f, 240f);
-        _body = body;
-
-        // 取消（左）/ 确认（右），同天赋费用确认窗 200×56
-        var cancel = NewRect(box, "Cancel");
-        cancel.anchorMin = cancel.anchorMax = new Vector2(0.5f, 0f);
-        cancel.pivot = new Vector2(0.5f, 0.5f);
-        cancel.anchoredPosition = new Vector2(-110f, 28f);
-        cancel.sizeDelta = new Vector2(200f, 56f);
-        var cancelImg = cancel.gameObject.AddComponent<Image>();
-        cancelImg.color = new Color(0.45f, 0.3f, 0.2f, 1f);
-        var cancelBtn = cancel.gameObject.AddComponent<Button>();
-        cancelBtn.targetGraphic = cancelImg;
-        cancelBtn.onClick.AddListener(Close);
-        var cancelTxt = NewText(cancel, "Label", "取消", 26, Color.white);
-        Stretch(cancelTxt.rectTransform);
-
-        var ok = NewRect(box, "Confirm");
-        ok.anchorMin = ok.anchorMax = new Vector2(0.5f, 0f);
-        ok.pivot = new Vector2(0.5f, 0.5f);
-        ok.anchoredPosition = new Vector2(110f, 28f);
-        ok.sizeDelta = new Vector2(200f, 56f);
-        var okImg = ok.gameObject.AddComponent<Image>();
-        okImg.color = new Color(0.55f, 0.35f, 0.2f, 1f);
-        var okBtn = ok.gameObject.AddComponent<Button>();
-        okBtn.targetGraphic = okImg;
-        okBtn.onClick.AddListener(OnOkClicked);
-        var okTxt = NewText(ok, "Label", "确认", 26, Color.white);
-        Stretch(okTxt.rectTransform);
-        _okLabel = okTxt;
-
-        GameFonts.ApplyToHierarchy(host.transform);
+    static void Wire()
+    {
+        // 每次重建/重开都重绑一次，防止监听丢失（与 EvacuateConfirmPopupUI.Wire 同口径）
+        if (_okBtn != null)
+        {
+            _okBtn.onClick.RemoveAllListeners();
+            _okBtn.onClick.AddListener(OnOkClicked);
+        }
+        if (_cancelBtn != null)
+        {
+            _cancelBtn.onClick.RemoveAllListeners();
+            _cancelBtn.onClick.AddListener(Close);
+        }
+        if (_dimBtn != null)
+        {
+            _dimBtn.onClick.RemoveAllListeners();
+            _dimBtn.onClick.AddListener(Close);
+        }
     }
 
     static void OnOkClicked()
@@ -129,33 +114,15 @@ public static class StaminaConfirmPopup
         act?.Invoke();
     }
 
-    static RectTransform NewRect(Transform parent, string name)
+    static Transform FindDeep(Transform root, string name)
     {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer));
-        go.transform.SetParent(parent, false);
-        return (RectTransform)go.transform;
-    }
-
-    static Text NewText(Transform parent, string name, string content, int size, Color color)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        go.transform.SetParent(parent, false);
-        var t = go.GetComponent<Text>();
-        t.font = GameFonts.GetChinese();
-        t.text = content;
-        t.fontSize = size;
-        t.color = color;
-        t.alignment = TextAnchor.MiddleCenter;
-        t.supportRichText = false;
-        t.raycastTarget = false;
-        return t;
-    }
-
-    static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
+        if (root == null) return null;
+        if (root.name == name) return root;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var f = FindDeep(root.GetChild(i), name);
+            if (f != null) return f;
+        }
+        return null;
     }
 }

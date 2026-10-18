@@ -46,6 +46,10 @@ public class MercObtainPopupUI : MonoBehaviour
     GameObject _root;
     Button _dimBtn;
     Button _keepBtn;
+    /// <summary>确认按钮 RectTransform（查看模式居中用，见 ApplyReplaceButton）。</summary>
+    RectTransform _keepRt;
+    /// <summary>确认按钮在预制体里的原始位置（并排态；只留确认钮时 x 归 0 居中）。</summary>
+    Vector2 _keepBasePos;
     /// <summary>右下「替换」按钮（纯代码生成，见 BuildReplaceButton；仅佣兵池详情入口显示）。</summary>
     Button _replaceBtn;
     Image _icon;
@@ -53,6 +57,8 @@ public class MercObtainPopupUI : MonoBehaviour
     Image _role;
     /// <summary>名字底牌（Panel/zuo/namebg，2026-10-18 起按稀有度换三档图）。</summary>
     Image _nameBg;
+    /// <summary>立绘卡框（Panel/zuo 整卡底图，2026-10-18 起随稀有度换三档图，与名字底牌同一套）。</summary>
+    Image _zuoImg;
     Text _nameText;
     GameObject[] _stars;
     /// <summary>满星布局的原始位置（Fill 首次记录，重开弹窗从这里重算，不累积偏移）。</summary>
@@ -98,6 +104,8 @@ public class MercObtainPopupUI : MonoBehaviour
         if (!ui.Fill(card)) { ui.Close(); yield break; }
         ui._onReplace = null;
         ui.ApplyReplaceButton(false);   // 抽中路径永远不带替换钮（替换只在佣兵池详情入口）
+        // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗
+        SkillObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
         ui.StopAutoClose();
         ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
@@ -128,6 +136,8 @@ public class MercObtainPopupUI : MonoBehaviour
         if (!ui.Fill(card)) { ui.Close(); return; }
         ui._onReplace = onReplace;
         ui.ApplyReplaceButton(showReplace);
+        // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗
+        SkillObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
         ui.StopAutoClose();
         ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
@@ -192,9 +202,16 @@ public class MercObtainPopupUI : MonoBehaviour
 
         _dimBtn = _root.transform.Find("Dim")?.GetComponent<Button>();
         _keepBtn = _root.transform.Find("Panel/KeepButton")?.GetComponent<Button>();
+        if (_keepBtn != null)
+        {
+            _keepRt = _keepBtn.transform as RectTransform;
+            if (_keepRt != null) _keepBasePos = _keepRt.anchoredPosition;   // 预制体并排态原位（x=-122）
+            else Debug.LogError("[MercObtainPopup] KeepButton 不是 RectTransform，查看模式无法居中");
+        }
         _icon = _root.transform.Find("Panel/zuo/Iconmask/Icon")?.GetComponent<Image>();
         _nameText = _root.transform.Find("Panel/zuo/namebg/Name")?.GetComponent<Text>();
         _nameBg = _root.transform.Find("Panel/zuo/namebg")?.GetComponent<Image>();
+        _zuoImg = _root.transform.Find("Panel/zuo")?.GetComponent<Image>();
         _role = _root.transform.Find("Panel/Role")?.GetComponent<Image>();
 
         // 满星节点：预制体只摆了 3 个（满星1/满星2/满星3）
@@ -266,7 +283,8 @@ public class MercObtainPopupUI : MonoBehaviour
 
     /// <summary>
     /// 生成「替换」按钮：完全复刻 KeepButton 的锚点/pivot/尺寸/缩放/钮图，向右平移一个钮位
-    /// （Panel 600 宽，确认钮居中 200×62 @ (0,-496)，替换钮 x=+220 右缘正好贴 Panel 边）；
+    /// （预制体确认钮并排态 200×62 @ (-122,-496)，替换钮 x=+98 右缘正好贴 Panel 边；
+    /// 查看模式确认钮会临时居中，见 ApplyReplaceButton，不影响这里 Build 时取到的并排原位）；
     /// 文案样式拷确认钮的子文本。点它 = 关弹窗并回调 _onReplace（MercDrawPoolUI.OnCardSwap）。
     /// </summary>
     void BuildReplaceButton()
@@ -330,10 +348,31 @@ public class MercObtainPopupUI : MonoBehaviour
         cb?.Invoke();
     }
 
-    /// <summary>显隐「替换」按钮（抽中路径/战斗头像入口/未获得详情一律隐藏）。</summary>
+    /// <summary>
+    /// 显隐「替换」按钮（抽中路径/战斗头像入口/未获得详情一律隐藏）。
+    /// 【2026-10-18 主人拍板】只留确认按钮时把它居中（预制体现摆 x=-122 是并排态、给右侧替换钮让位），
+    /// 显示替换钮时还原原位；只调 x，y 不动。每次开关弹窗都经这里重设，不累积偏移。
+    /// </summary>
     void ApplyReplaceButton(bool on)
     {
         if (_replaceBtn != null) _replaceBtn.gameObject.SetActive(on);
+        if (_keepRt != null)
+        {
+            var pos = _keepBasePos;
+            pos.x = on ? _keepBasePos.x : 0f;
+            _keepRt.anchoredPosition = pos;
+        }
+    }
+
+    /// <summary>
+    /// 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗开着时若技能弹窗要开，先把它关掉，别叠在一起。
+    /// 两个获得弹窗同层 925、互不感知，玩家点佣兵头像看着详情时又抽中技能就会叠 —— 统一「后来的关先前的」。
+    /// Close() 只发一次 onClosed（本入口 _onClosed 本就为 null），自动关协程见 _closeReq 自行退出，无残留。
+    /// </summary>
+    public static void CloseIfOpen()
+    {
+        if (_instance != null && _instance._root != null && _instance._root.activeSelf)
+            _instance.Close();
     }
 
     // ============================================================
@@ -470,6 +509,25 @@ public class MercObtainPopupUI : MonoBehaviour
             }
             else
                 Debug.LogError("[MercObtainPopup] 取不到稀有度名字底牌图：HireId=" + def.HireId
+                    + " Rarity=" + def.Rarity);
+        }
+
+        // 3.3)【2026-10-18 主人拍板】立绘卡框（头像框）也随稀有度换三档图 —— 与名字底牌同一套
+        // （同目录 Art/UI/Tavern/酒馆头像/，同佣兵池列表卡口径 LoadTavernCardFrame）。
+        // 旧态只有名字底牌换、卡框是静态图 → 稀有佣兵「蓝名字框 + 灰卡框」不一致（主人报）。
+        if (_zuoImg == null)
+            Debug.LogError("[MercObtainPopup] 缺少节点 Panel/zuo（立绘卡框不随稀有度变化）");
+        else
+        {
+            var cardFrame = MercHireSession.LoadTavernCardFrame(def.Rarity);
+            if (cardFrame != null)
+            {
+                _zuoImg.sprite = cardFrame;
+                _zuoImg.type = Image.Type.Sliced;
+                _zuoImg.color = Color.white;
+            }
+            else
+                Debug.LogError("[MercObtainPopup] 取不到稀有度卡框图：HireId=" + def.HireId
                     + " Rarity=" + def.Rarity);
         }
 

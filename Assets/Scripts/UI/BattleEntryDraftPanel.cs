@@ -152,6 +152,8 @@ public class BattleEntryDraftPanel : MonoBehaviour
         public Image CoinIcon;
         /// <summary>【2026-10-13 #7】币不够时价格数字变红，缓存主人调好的原色，够了再恢复（不永久覆盖美术）。</summary>
         public Color? CostColorDefault;
+        /// <summary>【2026-10-18 主人拍板】「免费」两字要居中：缓存预制体原对齐，非免费时恢复，不永久覆盖美术。</summary>
+        public TextAnchor? CostAlignDefault;
         /// <summary>【2026-10-13 #7】价格下方的「还差 N」红字（仅币不够时显示）。</summary>
         public Text ShortfallText;
     }
@@ -306,8 +308,10 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// 【2026-10-06 二次拍板】「继续」倒计时总时长（秒）。
     /// 起表点<b>只有 <see cref="Begin"/> 一处</b> —— 面板一露头就开始走，
     /// 抽奖全程连续递减；<b>抽完不重置</b>（主人：「不是说过抽奖的时候就开始计时吗」）。
+    /// 【2026-10-18 主人拍板】30 → 60：自动开始前的倒计时放宽到 1 分钟，
+    /// 给玩家足够的看构筑 / 考虑时间，到点才自动开打。
     /// </summary>
-    public const float ContinueCountdownSec = 30f;
+    public const float ContinueCountdownSec = 60f;
 
     /// <summary>
     /// 倒计时数字字号。【2026-10-13 #7】120 → 56：不再压屏幕正中，把视觉焦点还给抽奖区。
@@ -627,7 +631,7 @@ public class BattleEntryDraftPanel : MonoBehaviour
         // ⚠【2026-10-12 纠正误记】旧注释写「2026-10-11 主人拍板：每抽一次结算完再起一次表 = 重置计时」，
         // 但它引用的主人原话是「时间是固定的 不是抽一次重置一次计时」—— 引文与结论正好相反，是误记；
         // 主人 2026-10-12 又强调了一遍。按归因纪律纠正回 2026-10-06 那份口径：
-        // **总预算就是面板弹出时这 30s，抽完只解冻、不补满**，StartContinueCountdown 在本类里
+        // **总预算就是面板弹出时这 60s，抽完只解冻、不补满**，StartContinueCountdown 在本类里
         // 只剩「面板首次弹出」这一个调用点（铁律 15：不多入口）。
         _drawLocked = false;
         StartContinueCountdown();
@@ -1132,11 +1136,14 @@ public class BattleEntryDraftPanel : MonoBehaviour
             bool insufficient = !free && wallet < price;
             if (s.CostText != null)
             {
-                // 【2026-10-11 主人拍板】只剩一次免费时写「免费一次」（主人原话「金额变成免费一次」），
-                // 多于一次仍写「免费×N」，跟「还剩几次」说清楚。
+                // 【2026-10-18 主人拍板】免费抽按钮只写「免费」两字：后面不带次数（×N / 一次都不要），
+                // 且「免费」要居中显示（见下方对齐处理）；有价数字仍按原样显示。
                 s.CostText.text = !has ? "-"
-                               : free ? (freeLeft > 1 ? $"免费×{freeLeft}" : "免费一次")
+                               : free ? "免费"
                                : price.ToString();
+                // 【2026-10-18 主人拍板】「免费」居中；非免费恢复预制体原对齐（懒缓存，不永久覆盖美术）。
+                if (!s.CostAlignDefault.HasValue) s.CostAlignDefault = s.CostText.alignment;
+                s.CostText.alignment = free ? TextAnchor.MiddleCenter : s.CostAlignDefault.Value;
                 // 【2026-10-13 #7】币不够：价格数字变红；够了恢复主人调好的原色（懒缓存，不永久覆盖）。
                 if (!s.CostColorDefault.HasValue) s.CostColorDefault = s.CostText.color;
                 s.CostText.color = insufficient ? new Color(1f, 0.42f, 0.42f) : s.CostColorDefault.Value;
@@ -1248,7 +1255,7 @@ public class BattleEntryDraftPanel : MonoBehaviour
     /// <c>BattleManager.CoStageEntryDraft</c> 再调一次 = 抽一次重置一次计时」——
     /// 那是 2026-10-11 的**误记**：它引用的主人原话恰恰是「时间是固定的 不是抽一次重置一次计时」，
     /// 引文与结论相反。主人 2026-10-12 又强调了一遍，该调用点已改成 <c>SetCountdownPaused(false)</c>
-    /// （只解冻、不补满）。<b>总预算就是面板弹出时这 30s</b>，别再把第二个调用点加回来。
+    /// （只解冻、不补满）。<b>总预算就是面板弹出时这 60s</b>，别再把第二个调用点加回来。
     ///
     /// <para>为什么不用协程：协程会随 GameObject 显隐被掐断/延后，主人在外面看到的就是
     /// 「计时好像没在走」。现在改 <see cref="TickContinueCountdown"/> 每帧

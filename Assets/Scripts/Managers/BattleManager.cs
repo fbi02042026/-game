@@ -70,6 +70,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         _runStageGoldPending = 0;
         _runStagesCleared = 0;
         _earnedPaidGold = 0;   // 【2026-10-18 双钱包拆分】已付水位同步归零
+        _endlessEntryHintShown = false;   // 无限裂隙进场免费抽提示：每局重弹一次
         var data = SaveSystem.Instance?.Data;
         _enchantAtRunStart = data != null ? data.enchantStones : 0;
         _matsAtRunStart = data != null ? data.decomposeMats : 0;

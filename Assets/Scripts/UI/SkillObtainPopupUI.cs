@@ -62,6 +62,9 @@ public class SkillObtainPopupUI : MonoBehaviour
         ui._onClosed = onClosed;
         ui._closeReq = false;
         if (!ui.Fill(card)) { ui.Close(); yield break; }
+        // 【2026-10-18 主人拍板】获得类弹窗互斥：技能弹窗要开了，先把开着的佣兵详情弹窗关掉，
+        // 别两个叠在一起（玩家点佣兵头像看详情时又抽中技能就会叠，主人报）。
+        MercObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
         ui.StopAutoClose();
         ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
@@ -191,6 +194,16 @@ public class SkillObtainPopupUI : MonoBehaviour
         var cb = _onClosed;
         _onClosed = null;
         cb?.Invoke();
+    }
+
+    /// <summary>
+    /// 【2026-10-18 主人拍板】获得类弹窗互斥（反方向）：本弹窗开着时若佣兵详情弹窗要开，先关掉自己。
+    /// 提前关等价于玩家点了确认：onClosed 照常回调（只弹 Toast），抽奖协程不会卡。
+    /// </summary>
+    public static void CloseIfOpen()
+    {
+        if (_instance != null && _instance._root != null && _instance._root.activeSelf)
+            _instance.Close();
     }
 
     // ============================================================

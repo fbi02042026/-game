@@ -436,7 +436,8 @@ public class FirstRunGuide : MonoBehaviour
                 () => MainBottomNav.Instance != null
                     && MainBottomNav.Instance.Current == MainNavTab.Guild,
                 false, TapStepTimeout);
-            yield return CoPoint("教完啦，你真棒！点一下任意位置，关闭引导吧～有事随时来咨询台找我哟！",
+            // 【2026-10-18 主人拍板】结束语不再说「点一下任意位置，关闭引导吧」——只留夸奖+咨询台指引
+            yield return CoPoint("教完啦，你真棒！有事随时来咨询台找我哟！",
                 null, null, true, TapStepTimeout);
         }
         else

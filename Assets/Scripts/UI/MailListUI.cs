@@ -64,6 +64,18 @@ public class MailListUI : MonoBehaviour
 
     public static void Show() => Ensure().Open();
 
+    /// <summary>
+    /// 🆕 2026-10-18 主人反馈「关了再开才看到新邮件」：新邮件入箱时调用本方法——
+    /// 邮箱正开着就立刻重建列表，不用关掉重开。关着时 no-op（下次 Open 本就会全量刷新）。
+    /// 调用方：MailSystem.Enqueue / EnqueueResourceOverflow。
+    /// </summary>
+    public static void NotifyInboxChanged()
+    {
+        if (Instance == null) return;
+        if (!Instance.gameObject.activeInHierarchy) return;
+        Instance.Refresh();
+    }
+
     static MailListUI Ensure()
     {
         if (Instance != null) return Instance;

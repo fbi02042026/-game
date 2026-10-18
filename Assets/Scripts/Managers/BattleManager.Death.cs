@@ -60,16 +60,16 @@ public partial class BattleManager
 
         // 结算前先快照；局内装备仍清（裂缝口径）
         GridBackpackSystem.Instance?.ClearRunEquipment();
-        PersistBattleGold();
-        // 【2026-10-12 主人拍板「为什么没有获得金币，多少给点才能点天赋」】
-        // 引导三拍把启动金花得只剩几个币，局内净增 ≤ 0 → 结算不显示金币、回城点不起天赋第一节点。
-        // 通关固定发一笔（SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD），直接入账城镇钱包。
+        // 【2026-10-18 主人反馈「结算金币和局内获得的不一致」】引导通关金币（SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD
+        // = 150）原来绕过账本直接塞城镇钱包，结算却把显示值硬抬到 150 —— 局内顶栏 / 结算 / 城镇实收三个数对不上。
+        // 现改为：进账唯一出口 GrantRunGold 并入「本局获得金币」，再随 PersistBattleGold 一起写回，
+        // 顶栏、结算、城镇三处同一个数。
         if (SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD > 0)
         {
-            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD,
-                save: true, notify: false);
-            Debug.Log($"[BattleManager] 引导通关金币 +{SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD}");
+            GrantRunGold(SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD);
+            Debug.Log($"[BattleManager] 引导通关金币 +{SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD} 并入本局获得账");
         }
+        PersistBattleGold();
         // 2026-09-19：天赋石不再由战斗内金币换算产出，改由冒险日志里程碑（首次/整章通关）发放。
         int talentGain = 0;
         StoryProgress.MarkTutorialBattleCleared();
@@ -77,10 +77,6 @@ public partial class BattleManager
         SaveSystem.Instance?.Save();
 
         FillSettlementSnapshot(isDeath: false, talentGain);
-        // 引导局 GoldGained 按局内净增算会被三拍抽花费冲成 0 → 结算「获得奖励」直接显示这笔通关金币
-        // （long 字段，不用 Mathf.Max——没有 long 重载会 CS0266）
-        long tutorialGold = SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD;
-        if (RunStats.GoldGained < tutorialGold) RunStats.GoldGained = tutorialGold;
         AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
         BattleSettlementUI.Show(RunStats, () =>
         {
