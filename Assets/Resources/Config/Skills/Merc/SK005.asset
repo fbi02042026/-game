@@ -15,12 +15,12 @@ MonoBehaviour:
   id: SK005
   skillName: 烈焰斩
   desc: 对目标造成高额火焰伤害并溅射
-  skillType: 0
+  skillType: 2
   attackKit: 0
   damageMultiplier: 2.2
   baseDamage: 0
   cooldown: 12.0
-  aoeRadius: 0
+  aoeRadius: 2.5
   projectileCount: 1
   projectileSpeed: 48
   buffAttr: 4

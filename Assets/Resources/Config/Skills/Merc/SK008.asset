@@ -15,18 +15,18 @@ MonoBehaviour:
   id: SK008
   skillName: 圣光庇护
   desc: 为我方全体附加护盾
-  skillType: 2
+  skillType: 3
   attackKit: 0
   damageMultiplier: 1.5
   baseDamage: 0
   cooldown: 20.0
-  aoeRadius: 6
+  aoeRadius: 8
   projectileCount: 1
   projectileSpeed: 48
   buffAttr: 4
-  buffValue: 0
-  buffIsPercent: 0
-  duration: 0
+  buffValue: 0.1
+  buffIsPercent: 1
+  duration: 6
   healBase: 0
   healPercentOfMax: 0
   vfxPrefab: {fileID: 0}

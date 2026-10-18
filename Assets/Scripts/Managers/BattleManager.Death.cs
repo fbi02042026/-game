@@ -142,6 +142,11 @@ public partial class BattleManager
     /// </summary>
     void TriggerLegacyFlow(bool isDeath)
     {
+        // 【2026-10-18 彩蛋批次】连败安慰计数：非引导局死亡 +1 / 主动撤离清零；
+        // 连败≥3 回城后由前台小姐姐说句安慰（TownHubController.CoDefeatComfort 消费）
+        if (isDeath) TavernEggState.RegisterDeath();
+        else TavernEggState.RegisterEvacuate();
+
         // 裂缝口径：局内装备/武器退出清空，不带出城镇
         GridBackpackSystem.Instance?.ClearRunEquipment();
 

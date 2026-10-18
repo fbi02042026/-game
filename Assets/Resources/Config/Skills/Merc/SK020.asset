@@ -13,9 +13,9 @@ MonoBehaviour:
   m_Name: SK020
   m_EditorClassIdentifier: 
   id: SK020
-  skillName: 死亡诅咒
+  skillName: 凋零印记
   desc: 对目标造成持续伤害，死亡时爆炸
-  skillType: 0
+  skillType: 2
   attackKit: 1
   damageMultiplier: 0.6
   baseDamage: 0
@@ -26,7 +26,7 @@ MonoBehaviour:
   buffAttr: 4
   buffValue: 0
   buffIsPercent: 0
-  duration: 0
+  duration: 5
   healBase: 0
   healPercentOfMax: 0
   vfxPrefab: {fileID: 0}

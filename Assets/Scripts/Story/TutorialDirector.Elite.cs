@@ -138,7 +138,7 @@ public partial class TutorialDirector
         // 2026-10-06 主人拍板：说清「顺序＝优先级」。
         // 【2026-10-18】左栏「本局构筑」面板已整体下线（主人拍板「把这个都去掉」），
         // 提示不再锚它，改为无目标居中气泡；①②③④ 口径与底部技能槽 / SkillOrderGuide 一致。
-        hint.Show("技能各自倒计时，冷却好了自动释放，顺序看技能槽 ①②③④。", null, 8f);
+        hint.Show("技能各自倒计时，冷却好了自动放。顺序看技能槽 ①②③④——懒得记也没关系。", null, 8f);
 
         float t = 0f;
         const float wait = 8f;
@@ -153,7 +153,7 @@ public partial class TutorialDirector
 
         if (_sawPlayerSkillCast)
         {
-            hint.Show("就是这样：技能按顺序自动放，你只管走位。", null, 3f);
+            hint.Show("就是这样。技能自动放，你只管走位——这点小事，难不倒你吧？", null, 3f);
             yield return new WaitForSecondsRealtime(1.2f);
         }
         hint.Hide();
@@ -173,7 +173,7 @@ public partial class TutorialDirector
         yield return EnsureTutorialStep(bm, 6);
         // 【2026-10-17 主人拍板】压轴波同样解锁：按距离打玩家/塔克，不全程锁英雄。
         bm.ClearMonsterForcedTargets();
-        hint.Show("撑不住就撤——活着才能把东西带回去。", null, 4f);
+        hint.Show("撑不住就撤。活着，才能把东西带回去——这是命令。", null, 4f);
 
         const float maxHold = 20f;
         const float hpBailRatio = 0.4f;

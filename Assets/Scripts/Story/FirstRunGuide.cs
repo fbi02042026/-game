@@ -354,8 +354,8 @@ public class FirstRunGuide : MonoBehaviour
     IEnumerator CoWelcome()
     {
         // 【2026-10-17 主人拍板】开头白砍到一句：欢迎 + 出师承诺，别繁琐
-        // 【2026-10-18 主人拍板】引导全程换前台小姐口吻（可爱版），文案照旧一句
-        const string text = "欢迎来到《像素冒险：裂隙之刃》～我是赛琳，第一次来也没关系，人家会手把手教你的哟！";
+        // 【2026-10-18 主人拍板】引导全程换前台小姐口吻；【同日再拍板】人设定稿＝御姐傲娇（原可爱版口径作废）
+        const string text = "欢迎来到《像素冒险：裂隙之刃》。我是赛琳——第一次来？没关系，跟着本小姐走就行。";
 
         yield return CoPoint(text, null, null, true, TapStepTimeout);
         FinishStep(GuideStep.Welcome, "欢迎页");
@@ -366,7 +366,7 @@ public class FirstRunGuide : MonoBehaviour
     IEnumerator CoAdventure()
     {
         TryFallbackNav(MainNavTab.Adventure);
-        yield return CoPoint("先点下面的「冒险」去裂隙地图吧～第一关很短的，跟着我走就好啦！",
+        yield return CoPoint("点下面的「冒险」。第一关很短……有我在，放心走。",
             () => NavRect(MainNavTab.Adventure),
             AdventurePageOpen,
             false, NavTimeout);
@@ -377,7 +377,7 @@ public class FirstRunGuide : MonoBehaviour
 
     IEnumerator CoFirstBattle()
     {
-        yield return CoPoint("选个喜欢的职业，点「开始冒险」～进了裂隙，这一步就算完成啦！",
+        yield return CoPoint("选个顺眼的职业，点「开始冒险」。进了裂隙，这步就算你过关了。",
             () => AdventurePageOpen() ? ButtonRect(AdventureStartBtn()) : NavRect(MainNavTab.Adventure),
             InBattleOrLeaving,
             false, 90f,
@@ -396,21 +396,21 @@ public class FirstRunGuide : MonoBehaviour
         {
             TryFallbackNav(MainNavTab.Character);
             // ① 底栏「角色」
-            yield return CoPoint("第一关就打完啦？好厉害！来变强：点「角色」，用金币点亮一个天赋节点～",
+            yield return CoPoint("第一关就打完了？哼，还算凑合。来变强：点「角色」，用金币点亮一个天赋节点。",
                 () => NavRect(MainNavTab.Character), CharacterPageOpen, false, NavTimeout);
         }
 
         if (TalentUI.Instance == null || !TalentUI.Instance.IsOpen)
         {
             // ② 角色页里的「天赋」按钮
-            yield return CoPoint("点「天赋」，进去点亮一个属性节点，属性马上就生效哟～",
+            yield return CoPoint("点「天赋」。属性点上去马上生效——想变强就别磨蹭。",
                 TalentButtonRect, TalentPageOpen, false, NavTimeout);
         }
 
         if (TalentUI.Instance != null && TalentUI.Instance.IsOpen)
         {
             // ③ 具体的天赋节点
-            yield return CoPoint("戳这个亮晶晶的节点！金币够的话，属性立刻就加上去啦～",
+            yield return CoPoint("戳这个节点。金币够的话立刻生效……我看着你点。",
                 () => TalentNodeRect(before),
                 () => TalentUI.LeftUnlockedCount() > before,
                 false, NodeTimeout);
@@ -420,7 +420,7 @@ public class FirstRunGuide : MonoBehaviour
         if (TalentUI.LeftUnlockedCount() > before)
         {
             Advance(GuideStep.Talent, null);
-            UIManager.Instance?.ShowToast("天赋点亮啦，属性已更新～");
+            UIManager.Instance?.ShowToast("天赋点亮了，属性已更新。不错嘛。");
 
             // 【2026-10-16 主人拍板】引导到天赋就到头了：给一步「关闭引导」收尾——
             // 先收掉还开着的天赋面板（让玩家看着主界面），再弹收尾气泡等玩家点一下；
@@ -431,13 +431,13 @@ public class FirstRunGuide : MonoBehaviour
             // 【2026-10-18 主人拍板】收尾拆两拍：① 先指引玩家点左下角「公会」回主界面；
             // ② 回到主界面后再弹「教完啦你真棒」夸奖气泡，点任意位置关闭引导。
             // （60s 没点超时放行，夸奖照弹，绝不卡流程。）
-            yield return CoPoint("最后点左下角的「公会」，回主界面吧～",
+            yield return CoPoint("最后点左下角的「公会」，回主界面——别走丢。",
                 () => NavRect(MainNavTab.Guild),
                 () => MainBottomNav.Instance != null
                     && MainBottomNav.Instance.Current == MainNavTab.Guild,
                 false, TapStepTimeout);
             // 【2026-10-18 主人拍板】结束语不再说「点一下任意位置，关闭引导吧」——只留夸奖+咨询台指引
-            yield return CoPoint("教完啦，你真棒！有事随时来咨询台找我哟！",
+            yield return CoPoint("教完了，表现……勉强合格。有事来咨询台找我，本小姐一般都在。",
                 null, null, true, TapStepTimeout);
         }
         else
@@ -453,7 +453,7 @@ public class FirstRunGuide : MonoBehaviour
         // 方案 B：此时任务条（QuestHudBar）因显示条件 TutorialDone 还未挂出，不做实物高亮，
         // 也不去查找它的 Rect（找不到会 null）。只弹一行纯文字气泡讲清「顶部任务条」的用途。
         // target 传 null → CoPoint 走「无目标」分支：全屏半透遮罩 + 居中气泡，代码可容忍 null，不会空引用崩。
-        yield return CoPoint("屏幕顶部会出现一条「任务条」，写着你现在该做什么——点一下就能直接跳过去，超方便的～",
+        yield return CoPoint("屏幕顶部会出现一条「任务条」，写着你现在该做什么——点一下就能直接跳过去。记住了？",
             null, null, true, TapStepTimeout);
         FinishStep(GuideStep.QuestBar, "任务条说明");
     }
@@ -464,7 +464,7 @@ public class FirstRunGuide : MonoBehaviour
     {
         if (TavernUI.Instance == null || !IsVisibleHierarchy(TavernUI.Instance.gameObject))
         {
-            yield return CoPoint("最后一站是酒馆哟～去和老板娘聊两句吧，招募佣兵也在这里哦。",
+            yield return CoPoint("最后一站，酒馆。去见见老板娘——招募佣兵也在那儿。",
                 () => NavRect(MainNavTab.Tavern), TavernPageOpen, false, TavernTimeout);
         }
 

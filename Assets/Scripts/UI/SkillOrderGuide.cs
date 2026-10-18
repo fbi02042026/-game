@@ -28,7 +28,7 @@ public static class SkillOrderGuide
     /// 【2026-10-07 主人要求】把原来开局就弹的「技能冷却好会自动释放，无需点击；顺序看左上角 ①②③④。」
     /// 并到这一条里 —— 那句话要在**抽中技能、能调顺序**的那一拍才出现，不是一进战斗就出来。
     /// </summary>
-    public const string Text = "技能冷却好会自动释放，不用点哦；拖动技能可以改释放顺序，① 最先放～";
+    public const string Text = "技能冷却好会自动放，不用手点。拖动可以改顺序，① 最先放——记不住就多看两眼。";
 
     const float ShowSeconds = 5f;
 

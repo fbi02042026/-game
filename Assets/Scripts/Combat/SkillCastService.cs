@@ -62,10 +62,19 @@ public sealed class SkillCastService
             Debug.LogError($"[SkillCast] 玩家技能 {realId} 在 player_skills 里查不到耗蓝 → 拒绝释放（fail closed）");
             return false;
         }
-        if (!bm.TrySpendPlayerMp(mpCost)) return false;
         UnitBase healTarget = null;
         bool isHeal = IsHealSkill(skill);
         bool isBuff = skill.skillType == SkillSystem.SkillType.Buff;
+
+        // 2026-10-18 主人拍板：攻击技在场上没有目标时不释放 ——
+        // 不扣蓝、不进冷却、不播特效；治疗/增益/圣盾护盾类目标是自己人，不受此限。
+        // 判空用 FindNearestEnemy（带索敌范围/屏幕过滤），与 SkillSystem 结算时的索敌同口径，屏外怪不算目标。
+        if (!isHeal && !isBuff && realId != "holy_barrier" && hero.FindNearestEnemy() == null)
+        {
+            Debug.Log($"[SkillCast] 场上无目标，攻击技 {skill.skillName} ({realId}) 不释放（不扣蓝不进冷却）");
+            return false;
+        }
+        if (!bm.TrySpendPlayerMp(mpCost)) return false;
 
         // 2026-09-26 主人拍板：holy_barrier 改为「抵扣型护盾」——先扣盾、再扣血，不再走防御+35% buff 分支。
         // 走团队护盾路径（玩家 + 佣兵同享一层，与旧团队防御 buff 同范围）。
@@ -194,7 +203,12 @@ public sealed class SkillCastService
             UnitBase t = merc.FindNearestEnemy();
             if (t != null && merc.PassiveRunner != null)
                 merc.PassiveRunner.ApplyFearDebuff(t, MercSkillExecutor.FearDuration(skillId));
-            ExecuteAllySkillFallback(merc, skill);
+            // 2026-10-18 数值走表：SK018 威慑凝视同步为纯减益（Buff 型 + 负 buffValue）后，
+            // 不能再落 ExecuteAllySkillFallback —— Buff 型在 fallback 里 buffValue<=0 不生效，
+            // 会穿到伤害段变「全场 AOE」（aoeRadius=0 不过滤距离），与表文案「单体减攻」相悖。
+            bool pureDebuff = skill.skillType == SkillSystem.SkillType.Buff && skill.buffValue < 0f;
+            if (!pureDebuff)
+                ExecuteAllySkillFallback(merc, skill);
         }
         else if (skill.skillType == SkillSystem.SkillType.Buff)
             ExecuteAllySkillFallback(merc, skill);

@@ -117,7 +117,8 @@ public static class PlayerSkillDefs
         new Def
         {
             id = "heal_spring",
-            mpCost = 100f,
+            // 【2026-10-18 主人拍板】去蓝改纯 CD（与 player_skills.csv 同值）。
+            mpCost = 0f,
             displayName = "治愈之泉",
             kind = Kind.Heal,
             desc = "给当前生命比例最低的我方单位回血（玩家或佣兵）。",
@@ -248,7 +249,8 @@ public static class PlayerSkillDefs
         new Def
         {
             id = "thunder_verdict",
-            mpCost = 120f,
+            // 【2026-10-18 主人拍板】去蓝改纯 CD（与 player_skills.csv 同值）。
+            mpCost = 0f,
             displayName = "天雷裁决",
             kind = Kind.Aoe,
             desc = "召唤天雷轰击目标区域。",
@@ -382,8 +384,8 @@ public static class PlayerSkillDefs
             healAtkMul = src.healAtkMul,
             energyCost = src.energyCost,
             hasCombat = src.hasCombat,
-            // 【2026-10-12 补漏】原来这一行漏抄，Fallback 里写的 mpCost（治愈之泉 100 / 天雷裁决 120）
-            // 克隆后全变 0 —— 缺表时 MpCostOf 会退化成「人人无蓝」，与「表与 Fallback 两边同值」口径打架。
+            // 【2026-10-12 补漏】原来这一行漏抄，缺表时 MpCostOf 会退化成「人人无蓝」，与「表与 Fallback 两边同值」口径打架。
+            // 【2026-10-18 主人拍板】全表 0 耗蓝（治愈之泉/天雷裁决也已去蓝改纯 CD），克隆链路保留以防回改。
             mpCost = src.mpCost
         };
     }

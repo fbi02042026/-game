@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -73,6 +74,23 @@ public class TownHubController : MonoBehaviour
             PreloadAllPages();
         ConsumePendingAdventure();
         StartCoroutine(CoWarmupPages());
+        StartCoroutine(CoDefeatComfort());
+    }
+
+    /// <summary>
+    /// 【2026-10-18 彩蛋批次】连败≥3 回城：等看板娘就位后由前台小姐姐说句安慰；
+    /// 最多等 10 秒，等不到就降级为 toast。
+    /// </summary>
+    IEnumerator CoDefeatComfort()
+    {
+        string line = TavernEggState.ConsumePendingComfort();
+        if (line == null) yield break;
+        for (int i = 0; i < 600; i++)
+        {
+            if (SpeechBubbleTalker.SayFromReceptionist(line)) yield break;
+            yield return null;
+        }
+        UIManager.Instance?.ShowToast(line, true);
     }
 
     /// <summary>

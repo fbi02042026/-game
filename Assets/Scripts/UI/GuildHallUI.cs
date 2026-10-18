@@ -71,6 +71,9 @@ public class GuildHallUI : MonoBehaviour
     CanvasGroup _introCover;
     Button _turnButton;
     string _turnBoardId;   // 主界面看板当前显示的人物 id（"player" 或佣兵 HireId）；null = 预制体默认图
+
+    /// <summary>看板当前是否默认图（=前台小姐）。false = 玩家点 Turn 换成了佣兵立绘，前台表情彩蛋此时不生效。</summary>
+    public bool BoardIsDefaultReceptionist => string.IsNullOrEmpty(_turnBoardId);
     Coroutine _turnSwapCo; // 看板切换过场动画协程（播完置 null；未播完时忽略连点）
 
     /// <summary>首次引导未完成前隐藏大厅，避免片头/剧情前闪一下主界面。</summary>

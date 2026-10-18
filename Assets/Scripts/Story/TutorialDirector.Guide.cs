@@ -30,7 +30,7 @@ public partial class TutorialDirector
         if (!TalentSystem.CanUnlockLeft(before + 1, out string reason))
         {
             Debug.Log($"[Tutorial] 跳过天赋引导：{reason}");
-            hint.Show("金币攒够后，记得来天赋页把属性节点点满哦～", null, 5f);
+            hint.Show("金币攒够了，记得回天赋页把节点点满。别让本小姐等太久。", null, 5f);
             yield return new WaitForSecondsRealtime(1.5f);
             hint.Hide();
             yield break;
@@ -48,7 +48,7 @@ public partial class TutorialDirector
             var ch = CharacterUI.Instance;
             if (ch != null && ch.gameObject.activeInHierarchy) break;
             if (charRt != null)
-                hint.ShowHard("先点下面的「角色」，再点「天赋」哟～", charRt);
+                hint.ShowHard("先点下面的「角色」，再点「天赋」。跟着走，不难。", charRt);
             bind += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
             yield return null;
         }
@@ -71,7 +71,7 @@ public partial class TutorialDirector
             var talent = TalentUI.Instance;
             if (talent != null && talent.IsOpen) break;
             if (talentRt != null)
-                hint.ShowHard("点「天赋」，用金币点亮一个属性节点吧～", talentRt);
+                hint.ShowHard("点「天赋」，用金币点亮一个属性节点——就当是见面礼。", talentRt);
             t += Time.unscaledDeltaTime;
             yield return null;
         }
@@ -101,7 +101,7 @@ public partial class TutorialDirector
 
             var rt = TalentUI.Instance.GetLeftNode(before);
             if (rt != null)
-                hint.ShowHard("戳这个节点！属性立刻就生效啦～", rt);
+                hint.ShowHard("戳这个节点。属性立刻生效……看到了？", rt);
 
             t2 += Time.unscaledDeltaTime;
             yield return null;
@@ -109,7 +109,7 @@ public partial class TutorialDirector
 
         hint.Hide();
         if (TalentUI.LeftUnlockedCount() > before)
-            UIManager.Instance?.ShowToast("天赋点亮啦，属性已更新～");
+            UIManager.Instance?.ShowToast("天赋点亮了，属性已更新。不错嘛。");
     }
 
     // 【2026-10-06 已删除】CoRefreshMercHudNextFrame：只被「救援入队」那一段调用，

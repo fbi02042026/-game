@@ -916,7 +916,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     /// <summary>
     /// info 按钮弹出招募概率公示（2026-10-17 主人拍板：info 节点 → 概率弹窗）。
     /// 口径与 MercenaryOfferGenerator 实际掷点完全一致（常量直引，不会公示假数）：
-    /// 佣兵 100%；品质 普通 8/15 ≈ 53.3% / 稀有 5/15 ≈ 33.3% / 传奇 2/15 ≈ 13.3%。
+    /// 佣兵 100%；品质 普通 62/100 = 62% / 稀有 33/100 = 33% / 传奇 5/100 = 5%（2026-10-19 主人拍板）。
     /// 卡面美术随佣兵稀有度实时切换（Card0/1/2 三套稀有度卡牌）。
     /// </summary>
     void ShowRecruitOdds()

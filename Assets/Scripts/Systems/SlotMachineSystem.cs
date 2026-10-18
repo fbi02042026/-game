@@ -330,10 +330,12 @@ public static class SlotMachineSystem
             var want = order[n];
             if (cats.Contains(want)) return want;
         }
-        // 正式关保底佣兵：n 是当前这抽的 0 基序号（NoteDraw 在抽完后才推进），n>=2 = 第 3 抽起
-        if (!IsTutorialRun
-            && n >= 2
-            && RunLoadout.Mercs().Count == 0
+        // 正式关保底佣兵：触发条件唯一出口 = MercGuaranteeActive()（n 是当前这抽的 0 基序号，
+        // NoteDraw 在抽完后才推进，n>=2 = 第 3 抽起）。窗口内安慰奖由 ConsolationAllowed 同步挡掉 ——
+        // 保底必须真的给佣兵，不能让玩家花钱抽回币（2026-10-18 主人报「抽奖 3 次全是抽奖币」）。
+        // 佣兵池取不到内容时照旧落回随机（沿用上面「取不到内容自动落回随机」口径）；
+        // 引导局有自己的定序，不叠加。
+        if (MercGuaranteeActive()
             && cats != null && cats.Contains(DraftCategory.Merc)
             && DraftPool.BuildCards(DraftCategory.Merc).Count > 0)
         {
@@ -361,13 +363,37 @@ public static class SlotMachineSystem
     /// <para>口径 = <c>!InGuaranteeWindow() &amp;&amp; DrawIndex &gt; 0</c>：引导定序窗口内不安慰
     /// （沿用 <see cref="InGuaranteeWindow"/> 既有语义，它本身不动，还被 <see cref="ResolveCategory"/> 用）；
     /// 正式关<b>第 1 抽永不安慰</b> —— 防「开局花 80 抽回 40」的开局挫败，第 2 抽起恢复纯随机。</para>
+    /// <para>【2026-10-18 主人报「第二关抽奖 3 次全是抽奖币」】新增第二道窗口：<see cref="MercGuaranteeActive"/>。
+    /// 保底佣兵窗口内（非引导、已抽 ≥2 次、本局没佣兵）这一抽会被 <see cref="ResolveCategory"/>
+    /// 强制成佣兵方向 —— 若池里还混着金币（权重 6），而酒馆上架队列每名佣兵权重只有 1
+    /// （2026-10-19 拍板「上架等概率」），金币就以 6:3 盖过全体佣兵，保底变成「三分之二概率抽回币」。
+    /// → 窗口内保底必须真的给佣兵，安慰奖整抽不发；佣兵抽到手窗口自动关闭，安慰奖恢复。
+    /// 与「佣兵确有内容可给」同源判定（<see cref="AvailableCategories"/> 含 Merc 才挡），
+    /// 真没佣兵可给时维持原口径，不扩大化。</para>
     /// <para>两处调用点（抽取与概率公示）都改问这里，公示与实际自动同源：
     /// <c>BattleManager.CoInstantPick</c> 的 <c>DraftPool.PickOne</c>、<c>DraftPool.BuildOddsRows</c>。
     /// ⚠ 免费老虎机三选一（<c>DraftPool.BuildCards(cat)</c>）按现有意图硬编码带安慰奖，不归这里管。</para>
     /// </summary>
     public static bool ConsolationAllowed()
     {
-        return !InGuaranteeWindow() && DrawIndex > 0;
+        if (InGuaranteeWindow()) return false;
+        if (MercGuaranteeActive() && AvailableCategories().Contains(DraftCategory.Merc))
+            return false;
+        return DrawIndex > 0;
+    }
+
+    /// <summary>
+    /// 【2026-10-17 主人拍板「开局卡关」】正式关保底佣兵的**触发条件**（唯一出口）：
+    /// 非引导局、本局已抽 ≥2 次（第 3 抽起）、且本局一只佣兵都没有。
+    /// <see cref="ResolveCategory"/> 据此强制佣兵方向；<see cref="ConsolationAllowed"/>
+    /// 据此把金币安慰奖挡在保底窗口外（2026-10-18 主人报「抽奖 3 次全是抽奖币」的根因修复）。
+    /// ⚠ 是否真的强制还要看佣兵方向**有内容可给**（cats 含 Merc），那道可用性判定留在 <see cref="ResolveCategory"/>。
+    /// </summary>
+    public static bool MercGuaranteeActive()
+    {
+        return !IsTutorialRun
+            && DrawIndex >= 2
+            && RunLoadout.Mercs().Count == 0;
     }
 
     // 【2026-10-11 主人拍板】「职业白送初始技能」整条作废 ——

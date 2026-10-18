@@ -58,27 +58,83 @@ public class SpeechBubbleTalker : MonoBehaviour
         return false;
     }
 
+    // 【2026-10-18 主人拍板】看板娘（前台小姐姐）人设＝御姐、傲娇：轮播提示也带从容毒舌，功能信息不变
     static readonly string[] DefaultLines =
     {
-        "欢迎来到" + GameConfig.GUILD_NAME + "！",
-        "今日体力记得留着打冒险哦。",
-        "点下方「冒险」就能出发。",
-        "邮件满了会进邮箱，别忘领。",
-        "佣兵可在酒馆招募哦。",
-        "有问题随时来咨询台找我。",
-        "清完一波怪再往前，会刷下一波。",
-        "打完本关走传送门选下一关。",
-        "今日还能：冒险、看邮件、逛酒馆。",
-        "小知识：暴击能打出更高伤害！",
-        "体力不足时等一会会自动回。",
-        "角色页能看成长，装备会实时换装。",
-        "商城以后会开放更多内容。",
-        "想打听情报？点我就行。",
+        "欢迎光临。想好今天做什么了吗？",
+        "体力可是有限的，别乱挥霍。",
+        "「冒险」就在下面，想清楚了再去。",
+        "邮箱快满了？……真是的，自己去领。",
+        "酒馆有新佣兵……想见见吗？",
+        "有事就来咨询台，本小姐一般都有空。",
+        "打完一波还有一波，别急着冲。",
+        "过了关就走传送门，别在原地发呆。",
+        "今天还有精力的话——冒险、邮件、酒馆，随你挑。",
+        "小知识：会暴击的冒险者，活得比较久。",
+        "体力没了？等着，会自己回来的。",
+        "装备穿上了会直接显示在身上，好好挑。",
+        "商城以后会有更多好东西……等着吧。",
+        "想打听情报？点我就行，偶尔。",
     };
 
     readonly List<string> _lines = new List<string>();
     Coroutine _loop;
     bool _busy;
+
+    // —— 前台表情立绘（2026-10-18 主人补图：Resources/UI/Icons/佣兵立绘/前台小姐害羞/生气.png）——
+    // 显示节点是 GuildHallUI 的看板（看板/show 的 Image）；仅当看板还是默认前台图时生效，
+    // 玩家点 Turn 换成佣兵立绘后不套前台表情（防止张冠李戴）。
+    const string FaceShyPath = "UI/Icons/佣兵立绘/前台小姐害羞";
+    const string FaceAngryPath = "UI/Icons/佣兵立绘/前台小姐生气";
+    const float FaceHoldSeconds = 1.2f;
+    const int PokeAngryClicks = 5;          // 5 秒内连点 5 次 → 生气脸 + 专属台词
+    const float PokeWindowSeconds = 5f;
+    Sprite _faceShy;
+    Sprite _faceAngry;
+    Sprite _faceRestore;    // 表情恢复目标（切换瞬间的看板图）
+    Coroutine _faceCo;
+    bool _facesReady;
+    int _pokeClicks;
+    float _lastPokeTime;
+
+    void EnsureFaces()
+    {
+        if (_facesReady) return;
+        _facesReady = true;
+        _faceShy = Resources.Load<Sprite>(FaceShyPath);
+        _faceAngry = Resources.Load<Sprite>(FaceAngryPath);
+    }
+
+    /// <summary>换看板表情并维持 duration 秒（unscaled）后回原脸；重复触发刷新计时。</summary>
+    void ShowBoardFace(Sprite face, float duration = FaceHoldSeconds)
+    {
+        if (face == null) return;
+        var hall = GuildHallUI.Instance;
+        var img = hall != null ? hall.boardCharacterImage : null;
+        if (img == null || !hall.BoardIsDefaultReceptionist) return;
+        if (_faceCo != null) StopCoroutine(_faceCo);
+        _faceRestore = img.sprite;
+        img.sprite = face;
+        _faceCo = StartCoroutine(CoRestoreBoardFace(duration));
+    }
+
+    IEnumerator CoRestoreBoardFace(float duration)
+    {
+        yield return new WaitForSecondsRealtime(duration);
+        _faceCo = null;
+        RestoreBoardFace();
+    }
+
+    void RestoreBoardFace()
+    {
+        if (_faceCo != null) { StopCoroutine(_faceCo); _faceCo = null; }
+        var img = GuildHallUI.Instance != null ? GuildHallUI.Instance.boardCharacterImage : null;
+        if (img == null || _faceRestore == null) return;
+        // 看板图中途被 Turn 换掉时（sprite 已不是表情图）不还原，避免盖掉玩家选的人物
+        if (img.sprite == _faceShy || img.sprite == _faceAngry)
+            img.sprite = _faceRestore;
+        _faceRestore = null;
+    }
 
     void Awake()
     {
@@ -101,6 +157,8 @@ public class SpeechBubbleTalker : MonoBehaviour
         _alive.Remove(this);
         if (_loop != null) StopCoroutine(_loop);
         _loop = null;
+        _faceCo = null;   // 场景切换会停协程：句柄清掉，表情恢复目标一并作废（看板图由 GuildHallUI 自管）
+        _faceRestore = null;
         HideBubble();
     }
 
@@ -144,20 +202,92 @@ public class SpeechBubbleTalker : MonoBehaviour
             _lines.Add(DefaultLines[i]);
     }
 
-    /// <summary>咨询台：优先说「今日可做 / 功能介绍」</summary>
+    /// <summary>咨询台：优先说「今日可做 / 功能介绍」；【2026-10-18 彩蛋批次】加情境分支与稀有台词。</summary>
     void OnReceptionistClicked()
     {
-        if (_busy || _suppressed) return;
-        string[] tips =
+        EnsureFaces();
+
+        // 连戳计数要在 _busy 拦截之前统计：打字期间狂点若全被吞，永远凑不齐 5 次
+        if (Time.unscaledTime - _lastPokeTime <= PokeWindowSeconds) _pokeClicks++;
+        else _pokeClicks = 1;
+        _lastPokeTime = Time.unscaledTime;
+
+        bool angry = _pokeClicks >= PokeAngryClicks;
+        if (_suppressed) return;
+        if (_busy && !angry) return;   // 上一句还在说：只记连戳，不插话；凑满 5 次的生气句必须插播
+
+        string line;
+        if (angry)
         {
-            "今日可做：点「冒险」消耗体力出发。",
-            "邮件：溢出资源会存在这里。",
-            "酒馆：招募佣兵加入队伍。",
-            "角色：查看成长，装备实时换装。",
-            "有问题也可以来找我哦。",
-        };
-        StopAllCoroutines();
-        _loop = StartCoroutine(SpeakOnceThenResume(tips[Random.Range(0, tips.Length)]));
+            _pokeClicks = 0;
+            line = "……手，收回去。本小姐生气的时候，可不温柔哦。";
+            ShowBoardFace(_faceAngry, 1.5f);
+        }
+        else
+        {
+            line = PickReceptionistLine();
+            ShowBoardFace(_faceShy);   // 单次招呼＝害羞脸
+        }
+
+        // 只停说话链路（TalkLoop/SpeakOnceThenResume 内联执行，停外层即全停）；
+        // 不能用 StopAllCoroutines——会把表情还原协程一起杀掉，表情卡住不回原脸
+        if (_loop != null) StopCoroutine(_loop);
+        _busy = false;
+        _loop = StartCoroutine(SpeakOnceThenResume(line));
+    }
+
+    /// <summary>点击咨询台的台词：深夜 / 连败安慰 / 稀有（3%）/ 常规池。
+    /// 【2026-10-18 主人拍板】前台小姐姐人设＝御姐、傲娇：从容慵懒、口嫌体正直、偶尔毒舌。</summary>
+    string PickReceptionistLine()
+    {
+        if (TavernEggState.IsLateNight)
+            return "这么晚还不休息？……嗯，本小姐也还没困。";
+        if (TavernEggState.DefeatStreak >= TavernEggState.ComfortStreakThreshold)
+            return "又输了？……过来坐下，缓口气再走，谁让你难过了。";
+        if (Random.value < 0.03f)
+            return RareLines[Random.Range(0, RareLines.Length)];
+        return Tips[Random.Range(0, Tips.Length)];
+    }
+
+    // 御姐口吻：功能性信息也带着从容和一点点居高临下的关照
+    static readonly string[] Tips =
+    {
+        "今日行程？点「冒险」就好，其他交给本小姐。",
+        "邮件都替你收好了，不看可会后悔哦。",
+        "佣兵？酒馆里那群粗人，本小姐帮你盯着呢。",
+        "想看自己长进了多少？角色页自己看。",
+        "有事来找我——不过，最好是有意思的事。",
+        // —— 2026-10-18 彩蛋批次扩充 ——
+        "老板娘那张嘴啊，心比谁都软，哼。",
+        "摸老板娘的头会长好感……啧，谁告诉你的？",
+        "裂隙的情报嘛……想知道？表现好一点。",
+        "累了就回来坐坐，本小姐这里永远有位子。",
+        "佣兵们私下叫我小百通——呵，只叫对了名字而已。",
+    };
+
+    static readonly string[] RareLines =
+    {
+        "老板娘的酒？一半出自我的手哦。嘘，这可是机密。",
+        "会长年轻时也是冒险者……想知道细节？以后说给你听。",
+    };
+
+    /// <summary>
+    /// 【2026-10-18 彩蛋批次】外部触发前台小姐姐说一句话（连败回城安慰等）。
+    /// 找当前存活实例插播；正在播的内容会被打断并复位状态。没有实例返回 false。
+    /// </summary>
+    public static bool SayFromReceptionist(string line)
+    {
+        if (string.IsNullOrEmpty(line) || _suppressed) return false;
+        for (int i = _alive.Count - 1; i >= 0; i--)
+        {
+            var t = _alive[i];
+            if (t == null) { _alive.RemoveAt(i); continue; }
+            if (t._loop != null) t.StopCoroutine(t._loop);
+            t._busy = false;   // 打断 SpeakLine 时 _busy 可能残留，强制复位
+            t._loop = t.StartCoroutine(t.SpeakOnceThenResume(line));
+            return true;
+        }
+        return false;
     }
 
     IEnumerator SpeakOnceThenResume(string line)

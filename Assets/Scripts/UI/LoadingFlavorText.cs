@@ -59,6 +59,17 @@ public static class LoadingFlavorText
         "老佣兵的忠告：看得见的怪好打，看不见的才算敌人。",
     };
 
+    /// <summary>
+    /// 【2026-10-18 彩蛋批次】稀有杂记：0.5% 概率单独抽出（平均约 200 次 Loading 见一次）。
+    /// </summary>
+    static readonly string[] RareLines =
+    {
+        "老板娘的围裙口袋里，据说藏着第一杯酒的配方。",
+        "传说摸老板娘的头会长好运——老板娘说：那是真的。",
+    };
+
+    const float RareChance = 0.005f;
+
     static int[] _bag;
     static int _cursor;
 
@@ -66,6 +77,9 @@ public static class LoadingFlavorText
     /// 原来的「一轮洗牌袋」有轮流感，反复进 Loading 会像按顺序背句子（主人原话：不要轮流播，随机播放）。</summary>
     public static string Next()
     {
+        if (RareLines != null && RareLines.Length > 0 && Random.value < RareChance)
+            return RareLines[Random.Range(0, RareLines.Length)];
+
         if (Lines == null || Lines.Length == 0) return "";
         if (Lines.Length == 1) return Lines[0];
 

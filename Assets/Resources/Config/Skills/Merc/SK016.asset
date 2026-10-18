@@ -20,7 +20,7 @@ MonoBehaviour:
   damageMultiplier: 1.0
   baseDamage: 0
   cooldown: 12.0
-  aoeRadius: 6
+  aoeRadius: 8
   projectileCount: 1
   projectileSpeed: 48
   buffAttr: 4

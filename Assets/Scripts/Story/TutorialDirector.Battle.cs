@@ -82,7 +82,7 @@ public partial class TutorialDirector
         //   原位置在 CoTeachControls 之后（刷怪 + 3.2 秒进场走完才弹），玩家已经在场上站了 3 秒多才看到，
         //   现在移到刷怪之前，出场即见；怪照常在下面那 3.2 秒里走上来。
         // 【2026-10-16 主人拍板】后半句去说明书腔（文案调性：有趣、流行、适合年轻人）
-        hint.Show("先打一波热热身～你负责逛街，打架的事交给系统就好啦！", null, 8f);
+        hint.Show("先打一波热热身。你负责逛街，打架的事交给系统——省心吧？", null, 8f);
         // 第一波已在上方「启动金说明」步骤里刷（EnsureTutorialStep 不看是否已刷过，
         // 重复调用会多排一波），这里 preloadStep 传 0，只保留 3.2 秒进场空档。
         yield return CoTeachControls(bm, hint, ui, preloadStep: 0);
@@ -101,7 +101,7 @@ public partial class TutorialDirector
         yield return WaitFieldClear(strict: true);
         if (bm != null && bm.GetAliveMonsterCount() > 0)
         {
-            hint.Show("还有几只漏网之鱼，补个刀呀～", null, 3f); // 【2026-10-16 主人拍板】换更有味的说法
+            hint.Show("还有几只漏网之鱼。补个刀，别偷懒。", null, 3f); // 【2026-10-16 主人拍板】换更有味的说法
             yield return WaitFieldClear(strict: true);
         }
 
@@ -125,7 +125,7 @@ public partial class TutorialDirector
         // —— 1c+) 肉鸽口径说明（2026-10-18 主人拍板：「肉鸽玩法每次进都是从头获取」）——
         // 放在第一抽刚开完这里趁热讲：玩家刚体验过「抽 → 穿上」，构筑概念最具体的一刻。
         // 不硬等流程（下一拍就是压场波，要保住「大展身手 → 被围」的节奏），气泡 6 秒自动消失。
-        hint.Show("抽到的装备、技能、伙伴都是本局构筑哟～出了战斗会清空，说不定下回的你会更强！",
+        hint.Show("抽到的装备、技能、伙伴都是本局构筑，出了战斗会清空……下次的你，说不定更强。",
             null, 6f);
 
         // —— 1d) 【2026-10-08 主人拍板】抽中武器以为能大展身手，结果十几只小怪压上来 ——
@@ -216,7 +216,7 @@ public partial class TutorialDirector
         // 【2026-10-16 主人拍板】「组队后佣兵会自动战斗」这句从精英波开头**提前到塔克入队后**——
         // 主人原话「佣兵进度后会自动那句有点靠后了 应该在塔克入队后就说」。点完头像这一步
         // （入队教学拍）收尾即说，别再压到精英波预告之后。
-        hint.Show("组队之后，佣兵会自动帮你打架哟～", null, 3f);
+        hint.Show("组队之后，佣兵会自动帮你打架。看好了，不用你动手。", null, 3f);
 
         // —— 4) 第三波：塔克已在队，跟着一起打 ——
         // 2026-10-07 主人拍板：塔克第 2 抽就招募入队了，原来这段
@@ -272,7 +272,7 @@ public partial class TutorialDirector
         // 波刷出时已带 hero 锁（flank 波自动 target=hero），战斗恢复前解锁，塔克也会被怪打。
         bm.ClearMonsterForcedTargets();
         // 【2026-10-16 主人拍板】删与开场重复的「自动攻击」教学，顺接塔克「跟紧我」（第三波已组队）
-        hint.Show("又来一波！这回有塔克搭把手，凑近就开打呀～", null, 5f);
+        hint.Show("又来一波。这回有塔克搭把手——凑近就开打，别掉队。", null, 5f);
         yield return WaitFieldClear(strict: true);
         // 清场兜底：WaitFieldClear 靠「存活数 + 未刷出波次」连读 0.45s 判定已清，
         // 遇到刷怪空窗 / 存活数同帧缓存会提前返回。
@@ -410,7 +410,7 @@ public partial class TutorialDirector
         _mercAvatarTapped = false;
         var slotRt = (ui != null && ui.mercSlot1 != null && ui.mercSlot1.root != null)
             ? ui.mercSlot1.root.transform as RectTransform : null;
-        hint.ShowHard("点一点新伙伴的头像，看看他的底细吧～", slotRt);
+        hint.ShowHard("点一点新伙伴的头像。什么底细，本小姐可都替你打听好了。", slotRt);
         float t = 0f;
         while (!_mercAvatarTapped && t < timeoutSec)
         {
@@ -577,6 +577,6 @@ public partial class TutorialDirector
     /// <para>② <b>三拍同一句</b>：文案只有这一个出口，别在三处各写一份（铁律「不多入口」）。</para>
     /// </summary>
     // 【2026-10-16 主人拍板】「奖励你抽一次」→「奖励一抽」，前半加一句夸（三拍仍同一句出口）
-    // 【2026-10-18 主人拍板】引导全程换前台小姐口吻（可爱版）
-    const string TutorialDrawBeatText = "清得漂亮！奖励你抽一抽～开出什么全看手气哟！";
+    // 【2026-10-18 主人拍板】引导全程换前台小姐口吻；同日人设定稿＝御姐傲娇（原可爱版口径作废）
+    const string TutorialDrawBeatText = "清得漂亮。奖励一抽——开出什么全看手气。";
 }

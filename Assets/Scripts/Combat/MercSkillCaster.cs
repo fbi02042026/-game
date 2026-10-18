@@ -85,6 +85,10 @@ public class MercSkillCaster : MonoBehaviour
         if (_cooldownRemain > 0f) return false;
         if (BattleManager.Instance == null) return false;
         if (_mpBlocked) return false;
+        // 2026-10-18 主人拍板：攻击技在场上没有目标（无活怪）时不释放 ——
+        // 不扣蓝、不进冷却，出怪后下一帧自动补发；治疗/增益/护盾类目标是自己人，不受此限。
+        // 闸必须放在扣蓝之前：放后面的话没目标时返回 false，蓝已扣、CD 不重置，会每帧空扣蓝。
+        if (MercSkillNeedsTarget(_activeSkillId) && _merc.FindNearestEnemy() == null) return false;
         // 2026-10-06 主人拍板：蓝不足不能释放。MP 闸在施法之前，扣不到蓝就不放 —— CD 也不重置。
         if (_mpType != MpArchetype.None && !BattleManager.Instance.TrySpendMercMp(_merc, _mpCost)) return false;
         bool ok = BattleManager.Instance.TryCastMercActiveSkill(_merc, _activeSkillId, manual: false);
@@ -97,5 +101,26 @@ public class MercSkillCaster : MonoBehaviour
     public void ResetCooldown()
     {
         _cooldownRemain = 0f;
+    }
+
+    /// <summary>
+    /// 攻击类主动技（作用对象是敌人）才要求场上先有目标；治疗/增益/护盾类目标是自己人，不受此限。
+    /// 分类口径与 SkillCastService.TryCastMercActiveSkill 的分派分支一致。
+    /// </summary>
+    static bool MercSkillNeedsTarget(string skillId)
+    {
+        var kind = MercSkillExecutor.Resolve(skillId);
+        if (kind == MercSkillExecutor.Kind.HealSingle
+            || kind == MercSkillExecutor.Kind.HealTeam
+            || kind == MercSkillExecutor.Kind.SelfDefBuff
+            || kind == MercSkillExecutor.Kind.TeamShield
+            || kind == MercSkillExecutor.Kind.TeamHealAtk)
+            return false;
+        // 减益类（SK018 威慑凝视）作用对象是敌人，必须有目标 —— 不看 skillType
+        //（2026-10-18 数值走表后它是 Buff 型，但照样不能在没怪时空放扣蓝）。
+        if (kind == MercSkillExecutor.Kind.FearThenFallback)
+            return true;
+        var cfg = SkillRegistry.Instance != null ? SkillRegistry.Instance.Get(skillId) : null;
+        return cfg == null || cfg.skillType != SkillSystem.SkillType.Buff;
     }
 }

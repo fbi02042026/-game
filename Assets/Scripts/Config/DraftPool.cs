@@ -188,7 +188,8 @@ public static class DraftPool
     public const string SEC_QUALITY = "品质";
 
     // 品质段的固定行序：好东西排前面，玩家一眼看到「传说有多稀有」（2026-10-05 主人要的极简口径）
-    static readonly string[] QualityOrder = { "传说", "稀有", "普通", "金币" };
+    // 【2026-10-18 叫法口径】末档是「抽奖币」（安慰奖进局内抽奖币池），不写「金币」。
+    static readonly string[] QualityOrder = { "传说", "稀有", "普通", "抽奖币" };
 
     /// <summary>
     /// 概率公示弹窗的表：按**当前真实卡池现算**，不是写死的文案。
@@ -290,10 +291,11 @@ public static class DraftPool
         }
     }
 
-    /// <summary>品质段把卡片归到哪个桶（同一桶的概率会累加）—— 只有四档，没有「史诗」。</summary>
+    /// <summary>品质段把卡片归到哪个桶（同一桶的概率会累加）—— 只有四档，没有「史诗」。
+    /// 【2026-10-18 叫法口径】钱卡这档叫「抽奖币」（与 QualityOrder 末档同串，改一处必改另一处）。</summary>
     static string QualityBucket(DraftCard card)
     {
-        if (card.Kind == DraftCardKind.Gold) return "金币";
+        if (card.Kind == DraftCardKind.Gold) return "抽奖币";
         return RarityBucket(card.Rarity);
     }
 
@@ -331,10 +333,12 @@ public static class DraftPool
     }
 
     /// <summary>
-    /// 安慰奖一：金币（= 抽奖币，本局抽奖用的那套）。
-    /// 【2026-10-13 #4】改「折扣」语义：Title「金币 +N」/ Desc「回血 N」——
+    /// 安慰奖一：抽奖币（本局抽奖用的那套，进局内抽奖币池，带不出裂隙）。
+    /// 【2026-10-13 #4】改「折扣」语义：Title「抽奖币 +N」/ Desc「回血 N」——
     /// 只留一个数字（「下一抽再补 N」交给面板小位，不重复出现两次）。
     /// Desc 同时是开奖卡第 3 行的文案（BattleManager.ShowDrawPrizeCard 金币分支直接取用，不另写一份）。
+    /// 【2026-10-18 双钱包拆分 + 叫法口径】战斗内抽卡钱卡的玩家可见文案一律「抽奖币」，
+    /// 禁止写「金币」（金币 = 城镇那笔；这笔进的是局内抽奖币池 currentGold，Title 旧写「金币」是漏改）。
     /// </summary>
     static WeightedCard CollectGoldCard()
     {
@@ -345,7 +349,7 @@ public static class DraftPool
             {
                 Kind = DraftCardKind.Gold,
                 Id = "gold",
-                Title = $"金币 +{amount}",
+                Title = $"抽奖币 +{amount}",
                 Desc = $"回血 {amount}",
                 Rarity = SkillRarity.Common,
                 Tag = SynergyTag.None,
@@ -719,7 +723,7 @@ public static class DraftPool
         int guild = data.guildLevel;
         int heroLv = RunLoadout.HeroLevel;
         // 【2026-10-17 主人拍板】队列非空 = 每个上架佣兵单独等概率（权重全 1，不再按稀有度加权）；
-        // 空池回落全池时维持稀有度加权（普通8 / 稀有5 / 传奇2）。
+        // 空池回落全池时维持稀有度加权（普通62 / 稀有33 / 传奇5）。
         bool queueActive = data.mercDrawPool != null && data.mercDrawPool.Count > 0;
 
         foreach (string hireId in data.unlockedMercIds)
@@ -739,11 +743,11 @@ public static class DraftPool
             int star = def.Rarity == MercRosterDefs.MercRarity.Legendary ? 3
                 : def.Rarity == MercRosterDefs.MercRarity.Rare ? 2 : 1;
             int level = Mathf.Max(1, 1 + heroLv / 2);
-            // 【2026-10-17 主人拍板】队列非空时每个上架佣兵单独等概率（权重全 1）；
-            // 空池全池加权维持普通8 / 稀有5 / 传奇2。
+            // 【2026-10-19 主人拍板】队列非空时每个上架佣兵单独等概率（权重全 1）；
+            // 空池全池加权维持普通62 / 稀有33 / 传奇5（传奇压到5%，剩下的加回普通）。
             int weight = queueActive ? 1
-                : def.Rarity == MercRosterDefs.MercRarity.Legendary ? 2
-                : def.Rarity == MercRosterDefs.MercRarity.Rare ? 5 : 8;
+                : def.Rarity == MercRosterDefs.MercRarity.Legendary ? 5
+                : def.Rarity == MercRosterDefs.MercRarity.Rare ? 33 : 62;
             // 2026-09-17 稀有度映射统一走 SkillRarityUtil（三档对三档，佣兵不出「史诗」），
             // 卡面文字也随之统一，别再各写一份三目。
             SkillRarity rar = SkillRarityUtil.FromMerc(def.Rarity);

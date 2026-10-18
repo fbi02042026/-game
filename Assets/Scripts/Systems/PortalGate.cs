@@ -11,16 +11,19 @@ using UnityEngine.UI;
 ///
 /// <para>预制体三个子节点：<c>传送</c>（先出）／<c>door</c>（门皮）／<c>SpinPortalBlue</c>（旋转粒子，后两个一起出）。</para>
 ///
-/// <para>⚠ 门是 <b>UI 节点</b>（RectTransform），但它代表的是世界里的一个位置：
-/// 开门那一刻把它的屏幕位置换算成世界 X 并<b>钉死</b>，之后镜头再跟英雄走，门也钉在那儿不动
-/// （不钉的话门跟着屏幕漂，英雄永远追不上）。</para>
+/// <para>⚠ 门是 <b>UI 节点</b>（RectTransform），但它代表的是战场里的一个位置：
+/// 【2026-10-18 主人拍板】门<b>贴着视差前景层（map 的「1」节点）同速移动</b>——地图滑多少门就滑多少，
+/// 不再独自钉死世界点随镜头 1:1 平移（那样相对地图会「像玩家一样」往前滑）。
+/// 进门判定 <see cref="WorldEnterX"/> 随之按 (1-视差系数) 倍随英雄前漂，人正好走到门上才消失。</para>
 /// </summary>
 public class PortalGate : MonoBehaviour
 {
     public const string PrefabPath = "VFX/other/world/chuansongmen";
     const string EnterVfxPath = "VFX/other/world/传送";
 
-    /// <summary>门皮与旋转粒子比「传送」节点晚出来的时间（秒）。【2026-10-11 主人拍板 0.3s】</summary>
+    /// <summary>
+    /// 门皮与旋转粒子比「传送」节点晚出来的时间（秒）。【2026-10-11 主人拍板 0.3s】
+    /// </summary>
     public const float SecondWaveDelay = 0.3f;
     /// <summary>
     /// 门皮（UI.Image）所在嵌套 Canvas 的 sortingOrder。
@@ -29,6 +32,7 @@ public class PortalGate : MonoBehaviour
     /// 地图（SORT_MAPROOT=10）之上、单位（15）之下 → 抬层 Canvas 只给 12。
     /// 【2026-10-12 旧口径「抬到 BattleHud 同档防 HUD 盖住」作废】门在战场中央，与顶/底 HUD
     /// 屏幕区域基本不重叠；为救层级把门抬到 951 反而盖住玩家，捡芝麻丢西瓜。
+    /// 【2026-10-18 主人再确认口径：门在 map 前、佣兵和玩家后】即 10 &lt; 12 &lt; 15，维持不变。
     /// </summary>
     const int PortalCanvasOrder = GameConfig.SORT_MAPROOT + 2;   // 12：地图(10) < 门皮(12) < 粒子(13) < 单位(15)
     /// <summary>
@@ -51,16 +55,32 @@ public class PortalGate : MonoBehaviour
     float _worldX;
     float _worldY;
 
+    // 【2026-10-18 主人拍板】门贴着视差前景层（map 的「1」节点）同速移动：
+    // 开门那一刻记快照（门的 UI X + 前景层已滑像素 + 英雄世界 X），之后每帧按层滑过的差值挪门。
+    ParallaxBackground _parallax;
+    bool _glueReady;
+    float _glueUiX0;        // 开门那一刻门的 UI X
+    float _glueLayerOff0;   // 开门那一刻前景层已滑过的像素
+    float _heroXAtOpen;     // 开门那一刻英雄世界 X（算门世界 X 的漂移）
+
     /// <summary>门是否已经完整出来（传送 + 门皮 + 粒子）。</summary>
     public bool Opened { get; private set; }
 
-    /// <summary>门中心的世界 X —— 单位走到这个 X 就算进门。没钉住时会再试一次（镜头晚一帧就绪的情况）。</summary>
+    /// <summary>
+    /// 门中心的世界 X —— 单位走到这个 X 就算进门。没钉住时会再试一次（镜头晚一帧就绪的情况）。
+    /// 【2026-10-18】门贴着地图「1」层走：层滑 factor、镜头跟人 1:1 → 门的世界 X 以 (1-factor) 倍
+    /// 随英雄前漂。进门判定必须跟着门走，否则人会没走到门上就提前消失。
+    /// </summary>
     public float WorldEnterX
     {
         get
         {
             if (!_pinned) PinToCurrentWorldPos();
-            return _pinned ? _worldX : float.NaN;
+            if (!_pinned) return float.NaN;
+            if (_glueReady && _parallax != null && Hero.Instance != null)
+                return _worldX + (Hero.Instance.transform.position.x - _heroXAtOpen)
+                                 * (1f - _parallax.FrontParallaxFactor);
+            return _worldX;
         }
     }
 
@@ -176,7 +196,10 @@ public class PortalGate : MonoBehaviour
         }
 
         Opened = true;
-        Debug.Log($"[PortalGate] 传送门开好：世界X={_worldX:F2} 节点 传送/door/SpinPortalBlue 依次就位");
+        string glueState = _glueReady
+            ? $"开(随map节点1同速, factor={_parallax.FrontParallaxFactor:F2})"
+            : "关(钉世界点)";
+        Debug.Log($"[PortalGate] 传送门开好：世界X={_worldX:F2} 贴层联动={glueState} 节点 传送/door/SpinPortalBlue 依次就位");
         LogPortalDiagnostics();
     }
 
@@ -276,11 +299,40 @@ public class PortalGate : MonoBehaviour
         _worldX = w.x;
         _worldY = w.y;
         _pinned = true;
+        CaptureGlueAnchor();
+    }
+
+    /// <summary>
+    /// 开门那一刻给「贴层联动」记基准：门的 UI X + 前景层已滑像素 + 英雄世界 X。
+    /// 之后 <see cref="LateUpdate"/> 每帧取前景层滑过的差值同步挪门（与 map「1」节点同速）。
+    /// </summary>
+    void CaptureGlueAnchor()
+    {
+        if (_glueReady) return;
+        _parallax = FindObjectOfType<ParallaxBackground>();
+        if (_parallax == null || _rt == null) return;
+        _glueUiX0 = _rt.anchoredPosition.x;
+        _glueLayerOff0 = _parallax.FrontLayerOffsetPx;
+        _heroXAtOpen = Hero.Instance != null ? Hero.Instance.transform.position.x : _worldX;
+        _glueReady = true;
     }
 
     void LateUpdate()
     {
         if (!_pinned || _rt == null) return;
+
+        // 【2026-10-18 主人拍板】门贴着 map 的「1」节点（视差前景层）一起移动：
+        // 开门后地图滑过多少像素，门就跟着滑多少，不再独自钉世界点随镜头 1:1 平移。
+        if (_glueReady && _parallax != null)
+        {
+            float dx = _parallax.FrontLayerOffsetPx - _glueLayerOff0;
+            var ap = _rt.anchoredPosition;
+            ap.x = _glueUiX0 - dx;
+            _rt.anchoredPosition = ap;
+            return;
+        }
+
+        // 没拿到视差层时退回旧逻辑：世界 X 钉死 → 屏幕位置随镜头反算
         var cam = Camera.main;
         if (cam == null) return;
         var parent = transform.parent as RectTransform;

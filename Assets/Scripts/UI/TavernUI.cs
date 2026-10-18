@@ -89,6 +89,13 @@ public class TavernUI : MonoBehaviour, ITownPage
             if (tease != null)
                 StartCoroutine(tease.CoWelcomeBackDrunk());
         }
+        else
+        {
+            // 【2026-10-18 彩蛋批次】今日首次进酒馆：老板娘打招呼（深夜 0~5 点走专属台词）
+            string greet = TavernEggState.ConsumeDailyGreeting();
+            if (!string.IsNullOrEmpty(greet))
+                UIManager.Instance?.ShowToast(greet, true);
+        }
     }
 
     /// <summary>解禁后下一次进酒馆播「酒醒欢迎」。</summary>
@@ -300,10 +307,12 @@ public class TavernUI : MonoBehaviour, ITownPage
         {
             // 【2026-10-15 主人拍板】下排「信任交流」卡锁住：点击只提示功能即将开放
             // （原「请他喝一杯/TavernLore」入口撤掉）；force 出口同上。
+            // 【2026-10-18 彩蛋批次】顺手把摸头攒的好感度展示出来，给玩家一个看数值的入口。
             trustButton.gameObject.SetActive(true);
             trustButton.onClick.RemoveAllListeners();
             trustButton.onClick.AddListener(() =>
-                UIManager.Instance?.ShowToast("功能即将开放", true));
+                UIManager.Instance?.ShowToast(
+                    $"信赖：{TavernEggState.FavorStageName}（{TavernEggState.Favor}）　功能即将开放", true));
         }
         if (questButton != null)
         {

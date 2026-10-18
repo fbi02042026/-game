@@ -248,6 +248,25 @@ public class ParallaxBackground : MonoBehaviour
         }
     }
 
+    /// <summary>前景层（map 的「1」节点）视差系数，供传送门等「贴层联动」演出读取。</summary>
+    public float FrontParallaxFactor => frontLayer.parallaxFactor;
+
+    /// <summary>
+    /// 前景层（map 的「1」节点）当前的连续滚动偏移（像素；值越大 = 层在屏幕上越往左）。
+    /// 与 MoveLayer 完全同源（同一 heroDelta / 系数 / ppu），传送门贴层联动用：
+    /// 开门时记一份快照，之后每帧取差值同步挪门，即可与「1」层保持同速。
+    /// </summary>
+    public float FrontLayerOffsetPx
+    {
+        get
+        {
+            if (!_layersInited) EnsureLayers();
+            if (!_ready) TryBindHeroOrigin();
+            if (!_ready || Hero.Instance == null) return 0f;
+            return (Hero.Instance.transform.position.x - _initialHeroX) * frontLayer.parallaxFactor * _ppu;
+        }
+    }
+
     public void ResetHeroOrigin()
     {
         EnsureLayers();
