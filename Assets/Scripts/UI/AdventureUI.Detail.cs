@@ -41,7 +41,7 @@ public partial class AdventureUI
                 var data = SaveSystem.Instance?.Data;
                 int left = EndlessRiftRules.TriesLeft(data);
                 int checkpoint = EndlessRiftRules.CheckpointOf(data?.endlessRiftClearedStage ?? 0);
-                stageDescLabel.text = $"无限爬塔：越打越难，打到撤离或阵亡为止。每天 {GameConfig.ENDLESS_DAILY_TRIES} 次，每次消耗 {StaminaSystem.ENDLESS_RIFT_COST} 体力，进场免费抽 {SlotMachineDefs.ENDLESS_RIFT_FREE_DRAWS} 次。\n今日剩余 {left}/{GameConfig.ENDLESS_DAILY_TRIES} 次 · 记录点第 {checkpoint} 层 · 下次从第 {checkpoint + 1} 层开始。首通奖励只发一次，宝箱每次都掉。";
+                stageDescLabel.text = $"今日剩余 {left}/{GameConfig.ENDLESS_DAILY_TRIES} 次，记录点第 {checkpoint} 层，下次从第 {checkpoint + 1} 层开始。";
             }
             else if (main)
                 stageDescLabel.text = GetChapterIntro(_selectedChapter);

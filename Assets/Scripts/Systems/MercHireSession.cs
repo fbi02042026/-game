@@ -101,6 +101,22 @@ public static class MercHireSession
         return false;
     }
 
+    /// <summary>
+    /// 该招募候选对应的佣兵是否已永久解锁（进「已拥有」）。
+    /// 【2026-10-19 主人拍板】酒馆招募购买口径 = 永久解锁进已拥有，与雇佣队列 / 临时出战名单无关；
+    /// 已拥有的候选不再可买（点击只提示）。
+    /// </summary>
+    public static bool IsMercOwned(MercenaryData offer)
+    {
+        if (offer == null) return false;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        string hid = offer.hireId;
+        if (string.IsNullOrEmpty(hid) && MercRosterDefs.TryGetByAssetId(offer.mercId, out var def))
+            hid = def.HireId;
+        return !string.IsNullOrEmpty(hid) && data.IsMercUnlocked(hid);
+    }
+
     public static int GoldCost(MercenaryData offer)
     {
         if (offer == null) return 500;
@@ -119,10 +135,8 @@ public static class MercHireSession
     }
 
     /// <summary>
-    /// 卷轴口径（2026-10-17 主人拍板）：普通佣兵只走金币；
-    /// 稀有佣兵用【普通卷轴】（mercScrollCommon），卷不足可用金币；
-    /// 传奇佣兵用【高级招募卷轴】（mercScrollLegendary，字段语义由旧「传奇卷」升级，老档自动兼容），
-    /// 只能卷轴、不可金币。旧「稀有招募卷」（mercScrollRare）废弃，存档加载时已折算进普通卷轴。
+    /// 卷轴口径（2026-10-19 主人拍板）：普通佣兵=金币雇佣（不走卷）；
+    /// 稀有佣兵用【普通卷轴】（mercScrollCommon）；传奇佣兵用【稀有卷轴】（存档字段 mercScrollLegendary）。
     /// </summary>
     public static bool HasScrollFor(MercRosterDefs.MercRarity rarity)
     {

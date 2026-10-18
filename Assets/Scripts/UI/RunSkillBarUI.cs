@@ -138,60 +138,10 @@ public class RunSkillBarUI : MonoBehaviour
     void Rebuild()
     {
         if (_chipRoot == null) return;
-        // V6：教程局也要显示 —— 教程里有「拖拽调整释放顺序」这一步，看不到技能槽就没法学。
-        if (!RunLoadout.IsActive)
-        {
-            gameObject.SetActive(false);
-            return;
-        }
-        gameObject.SetActive(true);
-
-        for (int i = _chipRoot.childCount - 1; i >= 0; i--)
-            Destroy(_chipRoot.GetChild(i).gameObject);
-        _skillChips.Clear();
-        _mercChips.Clear();
-
-        var job = PlayerJobDefs.GetSelected();
-        var ids = RunLoadout.SkillIds();
-        for (int i = 0; i < ids.Count; i++)
-        {
-            string id = ids[i];
-            var def = PlayerSkillDefs.GetById(id);
-            var active = RunDraftDirector.BuildRunSkill(id, job);
-            int star = RunLoadout.StarOf(id);
-            bool affinity = SkillDraftMeta.IsAffinity(id, job);
-            var tag = SkillDraftMeta.Tag(id);
-
-            string name = def != null ? def.displayName : id;
-            // V6：序号即自动释放优先级（多个技能同时就绪时，① 先放）
-            string label = $"{OrderMark(i)}{name} ★{star}";
-            if (affinity) label += " ▲";
-
-            // 【2026-10-11 主人拍板】左栏也要看得见技能图标 —— 与底部 4 个技槽**同一个取图出口**
-            // （BattleUI.LoadRunSkillIcon），不另抄一份路径。6 个在池技能图标全齐。
-            var chip = BuildChip(
-                label,
-                SkillRarityUtil.Tint(SkillDraftMeta.Rarity(id)),
-                SynergyTagUtil.Tint(tag),
-                active != null ? active.cooldown : 0f,
-                BattleUI.LoadRunSkillIcon(id));
-            chip.SkillId = active != null ? active.skillId : id;
-            chip.Cooldown = active != null ? active.cooldown : 0f;
-            chip.Index = i;
-            _skillChips.Add(chip);
-        }
-
-        var mercs = RunLoadout.Mercs();
-        for (int i = 0; i < mercs.Count; i++)
-        {
-            var m = mercs[i];
-            if (m == null) continue;
-            string label = $"{m.displayName} Lv{m.level} ★{m.star}";
-            var chip = BuildChip(label, new Color(0.42f, 0.72f, 0.94f), new Color(0.42f, 0.72f, 0.94f), 0f, null);
-            _mercChips.Add(chip);
-        }
-
-        UpdateLevelAndPower();
+        // 【2026-10-18 主人拍板「把这个都去掉」】左栏「本局构筑」面板整体下线：
+        // 深色底板 + 技能/佣兵条 + 冷却遮罩一律不再显示。Refresh 入口保留，
+        // SkillOrderGuide 的排序软引导仍从这里触发（指向底部技能槽，不受影响）。
+        gameObject.SetActive(false);
     }
 
     Chip BuildChip(string label, Color rarityTint, Color tagTint, float cooldown, Sprite icon)

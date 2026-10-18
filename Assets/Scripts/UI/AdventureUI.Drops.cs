@@ -65,6 +65,7 @@ public partial class AdventureUI
         switch (kind)
         {
             case PreviewDropKind.Gold:            return "金币";
+            case PreviewDropKind.DraftCoin:       return "抽奖币";
             case PreviewDropKind.TalentStone:     return "天赋石";
             case PreviewDropKind.ScrollCommon:    return "普卷";
             case PreviewDropKind.ScrollRare:      return "稀卷";
@@ -149,6 +150,14 @@ public partial class AdventureUI
             outList.Add(PreviewDropKind.Gold);
             return;
         }
+        // 无限裂隙：宝箱金/首通金都是战斗内抽奖币（2026-10-18 货币口径），首通发天赋石，每 10 层固定宝箱发普通卷轴
+        if (IsEndlessMode(_selectedMode))
+        {
+            outList.Add(PreviewDropKind.DraftCoin);
+            outList.Add(PreviewDropKind.TalentStone);
+            outList.Add(PreviewDropKind.ScrollCommon);
+            return;
+        }
         outList.Add(PreviewDropKind.Gold);
         outList.Add(PreviewDropKind.TalentStone);
         // 2026-10-17 卷轴改版：第 3 章起预览普通卷轴（招稀有佣兵）、第 7 章起预览高级招募卷轴（招传奇佣兵）；
@@ -163,6 +172,8 @@ public partial class AdventureUI
         {
             case PreviewDropKind.Gold:
                 return LoadGoldDropSprite();
+            case PreviewDropKind.DraftCoin:
+                return LoadDraftCoinDropSprite();
             case PreviewDropKind.TalentStone:
                 return LoadTalentDropSprite();
             case PreviewDropKind.ScrollCommon:
@@ -254,6 +265,12 @@ public partial class AdventureUI
     {
         if (_goldDropSprite != null) return _goldDropSprite;
         return _goldDropSprite = LoadCommonDropIcon("icon_gold");
+    }
+
+    Sprite LoadDraftCoinDropSprite()
+    {
+        if (_draftCoinDropSprite != null) return _draftCoinDropSprite;
+        return _draftCoinDropSprite = LoadCommonDropIcon("icon_draft_coin");
     }
 
     Sprite LoadTalentDropSprite()

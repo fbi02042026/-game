@@ -102,6 +102,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     RectTransform _floatToastRt;
     Coroutine _floatToastCo;
     Sprite _goldDropSprite;
+    Sprite _draftCoinDropSprite;
     Sprite _talentDropSprite;
     Sprite _scrollCommonSprite;
     Sprite _scrollRareSprite;
@@ -112,6 +113,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     enum PreviewDropKind
     {
         Gold,
+        DraftCoin,
         TalentStone,
         ScrollCommon,
         ScrollRare,

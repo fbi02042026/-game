@@ -135,11 +135,10 @@ public partial class TutorialDirector
         bm.FillPlayerSkillEnergy();
         RunSkillBarUI.Refresh();
 
-        var bar = RunSkillBarUI.Instance;
-        // 2026-10-06 主人拍板：说清「顺序＝优先级」，与底部槽左上角 ①②③④ 和
-        // SkillOrderGuide 的「拖动技能可改释放顺序：① 最先放。」同一口径。
-        hint.Show("技能各自倒计时，冷却好了自动释放，顺序看左上角 ①②③④。",
-            bar != null ? bar.GetComponent<RectTransform>() : null, 8f);
+        // 2026-10-06 主人拍板：说清「顺序＝优先级」。
+        // 【2026-10-18】左栏「本局构筑」面板已整体下线（主人拍板「把这个都去掉」），
+        // 提示不再锚它，改为无目标居中气泡；①②③④ 口径与底部技能槽 / SkillOrderGuide 一致。
+        hint.Show("技能各自倒计时，冷却好了自动释放，顺序看技能槽 ①②③④。", null, 8f);
 
         float t = 0f;
         const float wait = 8f;

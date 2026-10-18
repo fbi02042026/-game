@@ -85,6 +85,17 @@ public class MercObtainPopupUI : MonoBehaviour
     bool _closeReq;
     Coroutine _autoCo;
 
+    // —— 招募购买模式（2026-10-19 主人拍板：酒馆点卡进详情，按钮换成 购买/取消）——
+    bool _recruitMode;
+    /// <summary>招募界面传入的成交回调：扣卷/扣金币 + 入队 + 刷新；返回 true 才关弹窗。</summary>
+    System.Func<bool> _tryBuy;
+    Text _keepLabel;
+    Text _replaceLabel;
+    Text _titleText;
+    string _keepLabelText0 = "确认";
+    string _replaceLabelText0 = "替换";
+    string _titleText0 = "获得佣兵";
+
     public static MercObtainPopupUI Instance => _instance;
 
     // ============================================================
@@ -100,6 +111,7 @@ public class MercObtainPopupUI : MonoBehaviour
         var ui = Ensure();
         // DraftCard 是 struct，判空走 IsValid（default 卡 Id 为空即不合法）
         if (ui == null || !card.IsValid) { onClosed?.Invoke(); yield break; }
+        ui.ExitRecruitMode();           // 防串味：任何非招募入口先退出招募模式（还原按钮/标题文案）
         ui._onClosed = onClosed;
         ui._closeReq = false;
         if (!ui.Fill(card)) { ui.Close(); yield break; }
@@ -126,6 +138,7 @@ public class MercObtainPopupUI : MonoBehaviour
     {
         var ui = Ensure();
         if (ui == null) return;
+        ui.ExitRecruitMode();           // 防串味：任何非招募入口先退出招募模式（还原按钮/标题文案）
         var card = new DraftCard
         {
             Kind = DraftCardKind.MercRecruit,
@@ -213,6 +226,15 @@ public class MercObtainPopupUI : MonoBehaviour
         _replaceBtn = _root.transform.Find("Panel/tihaunButton")?.GetComponent<Button>();
         if (_replaceBtn == null)
             Debug.LogError("[MercObtainPopup] 缺少节点 Panel/tihaunButton（酒馆招募的「替换」钮不显示也不可点）");
+
+        // 招募购买模式要改文案的三个节点（2026-10-19 主人拍板：按钮换成 购买/取消、标题改佣兵信息）
+        _keepLabel = _root.transform.Find("Panel/KeepButton/Label")?.GetComponent<Text>();
+        _replaceLabel = _root.transform.Find("Panel/tihaunButton/Label")?.GetComponent<Text>();
+        _titleText = _root.transform.Find("Panel/biaoti")?.GetComponent<Text>();
+        if (_keepLabel != null && !string.IsNullOrEmpty(_keepLabel.text)) _keepLabelText0 = _keepLabel.text;
+        if (_replaceLabel != null && !string.IsNullOrEmpty(_replaceLabel.text)) _replaceLabelText0 = _replaceLabel.text;
+        if (_titleText != null && !string.IsNullOrEmpty(_titleText.text)) _titleText0 = _titleText.text;
+
         _icon = _root.transform.Find("Panel/zuo/Iconmask/Icon")?.GetComponent<Image>();
         _nameText = _root.transform.Find("Panel/zuo/namebg/Name")?.GetComponent<Text>();
         _nameBg = _root.transform.Find("Panel/zuo/namebg")?.GetComponent<Image>();
@@ -264,12 +286,13 @@ public class MercObtainPopupUI : MonoBehaviour
 
     void Wire()
     {
-        // 点确认 / 点暗带都关（预制体本身带了 Dim Button）
+        // 确认钮：普通模式=关弹窗；招募模式=购买（2026-10-19 主人拍板：按钮换成 购买/取消）
         if (_keepBtn != null)
         {
             _keepBtn.onClick.RemoveAllListeners();
-            _keepBtn.onClick.AddListener(Close);
+            _keepBtn.onClick.AddListener(OnKeepClicked);
         }
+        // 点暗带都关（预制体本身带了 Dim Button）
         if (_dimBtn != null)
         {
             _dimBtn.onClick.RemoveAllListeners();
@@ -282,13 +305,34 @@ public class MercObtainPopupUI : MonoBehaviour
         }
     }
 
+    /// <summary>确认钮：招募模式下是「购买」，其余模式是「确认=关」。</summary>
+    void OnKeepClicked()
+    {
+        if (_recruitMode) { OnBuyClicked(); return; }
+        Close();
+    }
+
+    /// <summary>招募模式点「购买」：回调招募界面扣款入队；成功才关弹窗，失败留在弹窗（Toast 已提示）。</summary>
+    void OnBuyClicked()
+    {
+        var buy = _tryBuy;
+        if (buy == null) { Close(); return; }
+        if (buy())
+        {
+            _tryBuy = null;
+            Close();
+        }
+    }
+
     // ============================================================
     // 右下「替换」按钮（2026-10-18 主人拍板）
     // ============================================================
 
-    /// <summary>点「替换」：先关弹窗再回调（回调里 MercDrawPoolUI 会入队/进点选态并刷新列表）。</summary>
+    /// <summary>点「替换」：招募模式下该钮是「取消」= 直接关；其余模式先关弹窗再回调
+    /// （回调里 MercDrawPoolUI 会入队/进点选态并刷新列表）。</summary>
     void OnReplaceClicked()
     {
+        if (_recruitMode) { Close(); return; }
         var cb = _onReplace;
         _onReplace = null;
         Close();
@@ -358,14 +402,23 @@ public class MercObtainPopupUI : MonoBehaviour
         Close();
     }
 
-    /// <summary>唯一关闭出口：点确认 / 点暗带 / 自动兜底都走这；回调只发一次。</summary>
+    /// <summary>唯一关闭出口：点确认/购买/取消 / 点暗带 / 自动兜底都走这；回调只发一次。</summary>
     void Close()
     {
         _closeReq = true;
+        if (_recruitMode) ExitRecruitMode();   // 还原按钮/标题文案（确认/替换/获得佣兵），下次普通入口不串味
         if (_root != null) _root.SetActive(false);
         var cb = _onClosed;
         _onClosed = null;
         cb?.Invoke();
+    }
+
+    /// <summary>退出招募购买模式：清回调 + 还原预制体原文案与按钮布局。</summary>
+    void ExitRecruitMode()
+    {
+        _recruitMode = false;
+        _tryBuy = null;
+        ApplyRecruitButtons(false, null);
     }
 
     // ============================================================
@@ -486,6 +539,13 @@ public class MercObtainPopupUI : MonoBehaviour
             var roleSp = JobIconResolver.CombatBadge(def.JobName);
             _role.sprite = roleSp;
             _role.enabled = roleSp != null;
+            // 【2026-10-19 主人拍板】职业徽章素材原生 42×50，显示不许改变图片大小：
+            // 节点尺寸跟随精灵原生宽高，不开 preserveAspect（那会按节点框改显示尺寸）
+            if (roleSp != null)
+            {
+                _role.rectTransform.sizeDelta = new Vector2(roleSp.rect.width, roleSp.rect.height);
+                _role.preserveAspect = false;
+            }
         }
 
         // 4) 数值：生命/攻击/防御走 ApplyCombatStats（只随等级）
@@ -520,14 +580,24 @@ public class MercObtainPopupUI : MonoBehaviour
         CenterActiveStars(star);
 
         // 6) 技能：没有主动技就空着（主人拍板）；有则填名字/简介/图标
-        string skillId = def.ActiveSkillId;
+        FillSkill(def.ActiveSkillId);
+
+        return true;
+    }
+
+    /// <summary>
+    /// 技能栏填充（Fill 与酒馆招募入口共用）：skillId 为空或表里查不到时整栏隐藏，有则填名字/简介/图标。
+    /// </summary>
+    void FillSkill(string skillId)
+    {
         if (string.IsNullOrEmpty(skillId))
         {
             if (_skillRoot == null)
                 Debug.LogError("[MercObtainPopup] 缺少节点 Panel/you/Skill（该佣兵无主动技，整栏不显示）");
             else _skillRoot.SetActive(false);
+            return;
         }
-        else if (MercSkillTable.TryGet(skillId, out var row))
+        if (MercSkillTable.TryGet(skillId, out var row))
         {
             SetActive(_skillRoot, "Panel/you/Skill", true);
             SetText(_skillName, "Panel/you/Skill/SkillName", row.DisplayName ?? "");
@@ -547,8 +617,79 @@ public class MercObtainPopupUI : MonoBehaviour
             Debug.LogError("[MercObtainPopup] 佣兵技能表查不到 " + skillId);
             SetActive(_skillRoot, "Panel/you/Skill", false);
         }
+    }
 
-        return true;
+    // ============================================================
+    // 酒馆招募购买模式（2026-10-19 主人拍板）
+    // ============================================================
+
+    /// <summary>
+    /// 酒馆招募卡点进来的「佣兵信息」弹窗：标题改佣兵信息，两钮换成 购买（带价格两行）/取消。
+    /// <paramref name="tryBuy"/> 由招募界面传入（扣卷/扣金币 + 入队 + 刷新 + Toast），
+    /// 返回 true 才关弹窗；失败留在弹窗由玩家改点取消。买不起时招募界面只弹字提示、不会进到这里，
+    /// 弹窗内再点购买若失败（如中途金币变动）也只 Toast 不关弹窗。
+    /// </summary>
+    public static void ShowForRecruit(MercenaryData offer, System.Func<bool> tryBuy)
+    {
+        var ui = Ensure();
+        if (ui == null || offer == null) return;
+        var card = new DraftCard
+        {
+            Kind = DraftCardKind.MercRecruit,
+            Id = offer.mercId,
+            HireId = offer.hireId,
+            MercLevel = Mathf.Max(1, offer.level),
+            // 预制体只摆了 3 个满星节点，超出按 3 显示（结构变更待主人批准，不静默加节点）
+            Star = Mathf.Clamp(offer.star < 1 ? 1 : offer.star, 1, MaxStarNodes)
+        };
+        if (!ui.Fill(card)) { ui.Close(); return; }
+        ui._recruitMode = true;
+        ui._tryBuy = tryBuy;
+        ui._onReplace = null;
+        ui.ApplyRecruitFill(offer);
+        // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗
+        SkillObtainPopupUI.CloseIfOpen();
+        ui.OpenRoot();
+        ui.StopAutoClose();
+        // 不启动自动关兜底：这是带购买按钮的交互弹窗，8 秒强关会打断购买
+    }
+
+    /// <summary>招募模式内容覆盖：标题/名字用招募卡口径（displayName），技能用 offer 的（主动优先、无主动上被动）。</summary>
+    void ApplyRecruitFill(MercenaryData offer)
+    {
+        // 名字兜底链与 Fill 同口径：HireId 查不到走 AssetId（Fill 已保证两者必有一个能查到）
+        if (!MercRosterDefs.TryGetByHireId(offer.hireId, out var def))
+            MercRosterDefs.TryGetByAssetId(offer.mercId, out def);
+        string shown = !string.IsNullOrEmpty(offer.displayName) ? offer.displayName
+            : (!string.IsNullOrEmpty(def.Name) ? def.Name : offer.mercId);
+        SetText(_nameText, "Panel/zuo/namebg/Name", shown);
+
+        string skillId = !string.IsNullOrEmpty(offer.skillId) ? offer.skillId : offer.passiveSkillId;
+        FillSkill(skillId);
+
+        ApplyRecruitButtons(true, BuildBuyLabel(offer));
+    }
+
+    /// <summary>购买钮文案（【2026-10-19 主人拍板】货币跟稀有度走）：
+    /// 普通佣兵=「600金币」；稀有佣兵=「普通卷×1」；传奇佣兵=「稀有卷×1」；
+    /// 已拥有的候选=「已拥有」，不可重复购买。</summary>
+    string BuildBuyLabel(MercenaryData offer)
+    {
+        var rarity = MercHireSession.OfferRarity(offer);
+        if (MercHireSession.IsMercOwned(offer)) return "已拥有";
+        if (rarity == MercRosterDefs.MercRarity.Common)
+            return MercHireSession.GoldCost(offer) + "金币";
+        return rarity == MercRosterDefs.MercRarity.Legendary ? "稀有卷×1" : "普通卷×1";
+    }
+
+    /// <summary>招募模式按钮/标题文案切换：on=true 双钮并排（购买/取消）+ 标题「佣兵信息」；
+    /// on=false 还原预制体原文案（确认/替换/获得佣兵），布局复用 ApplyReplaceButton。</summary>
+    void ApplyRecruitButtons(bool on, string buyLabel)
+    {
+        if (_keepLabel != null) _keepLabel.text = on ? (buyLabel ?? "购买") : _keepLabelText0;
+        if (_replaceLabel != null) _replaceLabel.text = on ? "取消" : _replaceLabelText0;
+        if (_titleText != null) _titleText.text = on ? "佣兵信息" : _titleText0;
+        ApplyReplaceButton(on);
     }
 
     // ============================================================

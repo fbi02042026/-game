@@ -5,8 +5,10 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 招募佣兵弹窗：绑定手做 Prefab（Card0/1/2）。
-/// 每卡双按钮：ConfirmButton=金币；ConfirmButton1=招募卷（稀有/传奇），无卷时显示金币价。
-/// 雇佣写入 hiredMercs（下本结束离队）；图鉴 MarkMercSeen。
+/// 每卡货币钮：ConfirmButton/ConfirmButton1 二选一显示（2026-10-19 主人拍板：普通=金币、
+/// 稀有=普通卷、传奇=稀有卷；Card0 没摆卷钮节点时由金币钮节点顶位显示卷轴）。
+/// 已拥有的候选不显示货币钮、灰显带「已拥有」标。
+/// 雇佣 = 永久解锁进已拥有（2026-10-19 主人拍板）；图鉴 MarkMercSeen。
 /// </summary>
 public class MercenaryRecruitPopupUI : MonoBehaviour
 {
@@ -35,6 +37,17 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     // 左下角两种卷轴数量 Label（2026-10-18 主人要求绑数据）：招募卷/1=普通卷轴，招募卷/2=高级招募卷轴
     Text _scrollCommonCountText;
     Text _scrollLegendaryCountText;
+
+    // 卡上卷钮的卷轴图快照（2026-10-19 修「普通卷图标用错」）：招募卷/1/icon=普通卷、招募卷/2/icon=高级卷
+    Sprite _commonScrollIcon;
+    Sprite _legendaryScrollIcon;
+
+    // —— 货币钮外观快照（2026-10-19 主人报「按钮还不一样」）——
+    // 金币钮(ConfirmButton)与卷钮(ConfirmButton1)是两套预制体节点：底图/颜色/Label颜色/尺寸都不同。
+    // 绑定时各拍一份快照，填充时按货币套用对应外观 —— 三张卡的货币钮看起来完全一致。
+    Sprite _goldBtnSprite; Color _goldBtnColor; Color _goldLabelColor; Vector2 _goldBtnSize;
+    Sprite _scrollBtnSprite; Color _scrollBtnColor; Color _scrollLabelColor; Vector2 _scrollBtnSize;
+    bool _btnLooksCaptured;
 
     // —— 佣兵台词气泡（2026-10-17 主人拍板：三选一里佣兵说话用气泡框，不再走顶部 Toast）——
     // 样式对齐看板娘 SpeechBubbleTalker：speech_bubble 底图 + 打字机 + SpeechBubbleFit 文字自适应。
@@ -66,10 +79,18 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         public Image scrollButtonImage;
         public Image goldIcon;            // ConfirmButton/icon（主人在预制体里已摆好）
         public Image scrollIcon;          // ConfirmButton1/icon（主人在预制体里已摆好）
-        [System.NonSerialized] public Sprite scrollIconDefault; // 主人摆的卷轴图快照：金币价分支切金币图后要还原
+        [System.NonSerialized] public Sprite scrollIconDefault; // 主人摆的卷轴图快照：切图后要还原
+        [System.NonSerialized] public Sprite goldIconDefault;   // 金币图快照：金币钮顶卷钮位切卷图后要还原
     }
 
     List<MercenaryData> _offers = new List<MercenaryData>();
+    /// <summary>
+    /// 稀有度 → 卡牌底图（【2026-10-19 主人拍板】预制体 Card0/1/2 是普通/稀有/传奇三种稀有度卡牌，
+    /// 三套美术就用预制体自己的三张底图：首刷前按底图名归档缓存，RefreshCard 按佣兵稀有度取用）。
+    /// </summary>
+    readonly Dictionary<MercRosterDefs.MercRarity, Sprite> _cardFrameByRarity =
+        new Dictionary<MercRosterDefs.MercRarity, Sprite>();
+    bool _cardFramesMapped;
     bool _wired;
     string _lastBanterKey;
     float _nextIdleBanterUnscaled;
@@ -151,11 +172,40 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
     void RerollOffers()
     {
+        // 【2026-10-19 主人拍板】三名候选全部随机；卡面（普通/稀有/传奇三套卡牌美术）
+        // 由 RefreshCard 按佣兵稀有度实时切换（见 _cardFrameByRarity）。
         _offers = MercenaryOfferGenerator.GenerateOffers();
+    }
+
+    /// <summary>
+    /// 首刷前把三张卡的预制体底图按稀有度归档（Card0/1/2 是三种稀有度卡牌，底图名带
+    /// frame_common/rare/legendary 后缀）。必须在任何换框发生前调用，晚了底图已被覆盖。
+    /// 识别不出不打扰：留空走 LoadRarityFrame 兜底。
+    /// </summary>
+    void MapCardFrames()
+    {
+        if (_cardFramesMapped) return;
+        _cardFramesMapped = true;
+        if (cards == null) return;
+        for (int i = 0; i < cards.Length; i++)
+        {
+            var c = cards[i];
+            if (c == null || c.root == null) continue;
+            var img = c.root.GetComponent<Image>();
+            var sp = img != null ? img.sprite : null;
+            if (sp == null) continue;
+            MercRosterDefs.MercRarity? r = null;
+            if (sp.name.Contains("legendary")) r = MercRosterDefs.MercRarity.Legendary;
+            else if (sp.name.Contains("rare")) r = MercRosterDefs.MercRarity.Rare;
+            else if (sp.name.Contains("common")) r = MercRosterDefs.MercRarity.Common;
+            if (r.HasValue && !_cardFrameByRarity.ContainsKey(r.Value))
+                _cardFrameByRarity[r.Value] = sp;
+        }
     }
 
     void RefreshAll()
     {
+        MapCardFrames();   // 必须先归档三套卡面，再做任何换框
         int hired = MercHireSession.HiredCount();
         int max = MercenaryManager.Instance != null
             ? Mathf.Max(1, MercenaryManager.Instance.GetMaxMercSlots())
@@ -265,8 +315,14 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
             var sp = JobIconResolver.CombatBadge(job);
             c.roleIcon.sprite = sp;
             c.roleIcon.enabled = sp != null;
-            c.roleIcon.preserveAspect = true;
             c.roleIcon.color = Color.white;
+            // 【2026-10-19 主人拍板】职业徽章素材原生 42×50，显示不许改变图片大小：
+            // 节点尺寸跟随精灵原生宽高，且不开 preserveAspect（那会按节点框改显示尺寸）
+            if (sp != null)
+            {
+                c.roleIcon.rectTransform.sizeDelta = new Vector2(sp.rect.width, sp.rect.height);
+                c.roleIcon.preserveAspect = false;
+            }
         }
 
         if (c.portrait != null)
@@ -289,7 +345,13 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
         if (c.background != null)
         {
-            var frame = MercHireSession.LoadRarityFrame(rarity);
+            // 【2026-10-19 主人拍板】Card0/1/2 是三种稀有度卡牌：卡面随佣兵稀有度切到对应档的
+            // 卡牌美术 —— 优先用预制体自己的三张底图（MapCardFrames 归档），取不到再退 LoadRarityFrame
+            Sprite frame = null;
+            if (_cardFrameByRarity.TryGetValue(rarity, out var own) && own != null)
+                frame = own;
+            else
+                frame = MercHireSession.LoadRarityFrame(rarity);
             if (frame != null)
             {
                 c.background.sprite = frame;
@@ -299,127 +361,132 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
         BindSkillTexts(c, offer);
 
-        bool alreadyHired = MercHireSession.IsAlreadyHired(offer);
-        ApplyHiredVisual(c, alreadyHired);
+        // 【2026-10-19 主人拍板】已拥有的候选灰显 + 黄字「已拥有」标（不可重复购买）
+        bool owned = MercHireSession.IsMercOwned(offer);
+        ApplyHiredVisual(c, owned);
 
         RefreshGrowBadge(c, offer, rarity);
 
+        // 【2026-10-19 主人拍板】已拥有的候选：灰显 + 「已拥有」标，货币钮整个不显示
+        // （图标/价格数字都不显示），只保留灰卡本体。
+        if (MercHireSession.IsMercOwned(offer))
+        {
+            if (c.goldButton != null) c.goldButton.gameObject.SetActive(false);
+            if (c.scrollButton != null) c.scrollButton.gameObject.SetActive(false);
+            return;
+        }
+
         int gold = MercHireSession.GoldCost(offer);
-        bool canHireMore = MercHireSession.CanHireMore();
-        bool hasGold = ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.Gold) >= gold;
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
         bool isLegendary = rarity == MercRosterDefs.MercRarity.Legendary;
-        bool hasScroll = !isCommon && MercHireSession.HasScrollFor(rarity);
 
-        // 【2026-10-18 修·主人报「卷轴抽奖按钮半透明=两按钮重叠」】ConfirmButton 与 ConfirmButton1
-        // 在预制体里同一坐标叠画。改为同一时刻每卡只亮一个按钮，支付规则不变：
-        // 普通=金币按钮；稀有/传奇=只显示卷轴槽按钮（稀有无卷时该槽自动切金币价+金币图，仍可用金币雇）。
+        // 【2026-10-19 主人拍板】一卡一钮，货币跟稀有度走：普通=金币；稀有=普通卷；传奇=稀有卷（高级卷）。
+        // 两钮显隐每次显式设置（旧版漏关卷钮 → 同一张卡同时出现金币+卷轴两种购买方式，主人报过）。
+        // 卡上没摆卷钮节点的（Card0）由金币钮节点顶位显示卷轴。
+        bool useScrollNode = !isCommon && c.scrollButton != null;
         if (c.goldButton != null)
-        {
-            bool showGold = isCommon;
-            c.goldButton.gameObject.SetActive(showGold);
-            if (showGold)
-            {
-                bool goldOk = !alreadyHired && canHireMore && hasGold;
-                c.goldButton.interactable = goldOk;
-                SetButtonGray(c.goldButton, !goldOk);
-            }
-        }
-        if (c.goldLabel != null)
-            c.goldLabel.text = gold.ToString();
-
-        // ConfirmButton1：卷轴槽。普通佣兵隐藏；稀有=普通卷轴（无卷时显示金币价、icon 切金币图）；
-        // 传奇=高级招募卷轴（无卷时按钮置灰显示高级卷×1，不可金币）
+            c.goldButton.gameObject.SetActive(!useScrollNode);
         if (c.scrollButton != null)
+            c.scrollButton.gameObject.SetActive(useScrollNode);
+        if (useScrollNode)
         {
+            FillCurrencyButton(c.scrollButtonImage, c.scrollIcon, c.scrollLabel1,
+                c.scrollIconDefault, isCommon, isLegendary, gold);
+        }
+        else if (c.goldButton != null)
+        {
+            FillCurrencyButton(c.goldButton.GetComponent<Image>(), c.goldIcon, c.goldLabel,
+                c.goldIconDefault, isCommon, isLegendary, gold);
+        }
+    }
+
+    /// <summary>
+    /// 货币钮统一填充：普通=金币钮「600金币」（金币图）；稀有=「普通卷×1」；传奇=「稀有卷×1」（卷图）。
+    /// 外观按快照统一（金币一种样子、卷轴一种样子）：底图/颜色/尺寸/Label颜色都从快照套用，
+    /// 字号统一 13（预制体金币钮 Label 16 / 卷钮 Label 11 不一致，主人报「按钮的字大小不一致」）。
+    /// </summary>
+    void FillCurrencyButton(Image btnImg, Image icon, Text label, Sprite iconDefault,
+        bool isCommon, bool isLegendary, int gold)
+    {
+        if (btnImg != null)
+        {
+            var matRarity = isLegendary ? MercRosterDefs.MercRarity.Legendary : MercRosterDefs.MercRarity.Rare;
+            btnImg.material = !isCommon ? MercHireSession.LoadScrollButtonMaterial(matRarity) : null;
+
+            // 外观快照套用： whichever 节点顶位，都长成对应货币的标准样子
+            var lookSp = isCommon ? _goldBtnSprite : _scrollBtnSprite;
+            if (lookSp != null) btnImg.sprite = lookSp;
+            var lookSize = isCommon ? _goldBtnSize : _scrollBtnSize;
+            var rt = btnImg.transform as RectTransform;
+            if (rt != null && lookSize.x > 0f) rt.sizeDelta = lookSize;
             if (isCommon)
             {
-                c.scrollButton.gameObject.SetActive(false);
+                if (_goldBtnSprite != null) btnImg.color = _goldBtnColor;
+            }
+            else if (_scrollBtnSprite != null) btnImg.color = _scrollBtnColor;
+        }
+
+        if (icon != null)
+        {
+            Sprite sp;
+            if (isCommon)
+                sp = iconDefault;   // 金币图（预制体摆的）
+            else
+            {
+                var scrollSp = isLegendary ? _legendaryScrollIcon : _commonScrollIcon;
+                sp = scrollSp != null ? scrollSp : iconDefault;
+            }
+            icon.sprite = sp;
+            icon.enabled = sp != null;
+        }
+        if (label != null)
+        {
+            label.fontSize = 13;
+            if (isCommon)
+            {
+                if (_goldBtnSprite != null) label.color = _goldLabelColor;
+                label.text = gold + "金币";
             }
             else
             {
-                c.scrollButton.gameObject.SetActive(true);
-                if (c.scrollButtonImage != null)
-                {
-                    var mat = MercHireSession.LoadScrollButtonMaterial(rarity);
-                    c.scrollButtonImage.material = mat;
-                }
-
-                if (hasScroll)
-                {
-                    if (c.scrollLabel1 != null)
-                        c.scrollLabel1.text = isLegendary ? "高级卷×1" : "普通卷×1";
-                    if (c.scrollIcon != null && c.scrollIconDefault != null)
-                        c.scrollIcon.sprite = c.scrollIconDefault;   // 还原主人摆的卷轴图
-                    bool scrollOk = !alreadyHired && canHireMore;
-                    c.scrollButton.interactable = scrollOk;
-                    SetButtonGray(c.scrollButton, !scrollOk);
-                }
-                else if (isLegendary)
-                {
-                    // 传奇无高级卷：只能等卷，不开放金币兜底
-                    if (c.scrollLabel1 != null)
-                        c.scrollLabel1.text = "高级卷×1";
-                    if (c.scrollIcon != null && c.scrollIconDefault != null)
-                        c.scrollIcon.sprite = c.scrollIconDefault;
-                    c.scrollButton.interactable = false;
-                    SetButtonGray(c.scrollButton, true);
-                }
-                else
-                {
-                    // 稀有无普通卷：按钮位改显示金币价，icon 同步切成金币图，可点则扣金币
-                    if (c.scrollLabel1 != null)
-                        c.scrollLabel1.text = gold.ToString();
-                    if (c.scrollIcon != null)
-                        c.scrollIcon.sprite = c.goldIcon != null ? c.goldIcon.sprite : c.scrollIconDefault;
-                    bool goldOk = !alreadyHired && canHireMore && hasGold;
-                    c.scrollButton.interactable = goldOk;
-                    SetButtonGray(c.scrollButton, !goldOk);
-                    if (c.scrollButtonImage != null)
-                        c.scrollButtonImage.material = null;
-                }
+                if (_scrollBtnSprite != null) label.color = _scrollLabelColor;
+                label.text = isLegendary ? "稀有卷×1" : "普通卷×1";
             }
         }
     }
 
     static void BindSkillTexts(CardView c, MercenaryData offer)
     {
-        // 【2026-10-18】空槽不再用另一槽回填（实测 B9：只带被动的佣兵两个槽显示同一技能）。
-        // 主动槽只显示主动，被动槽只显示被动，空槽显示「—」。
+        // 【2026-10-19 主人拍板】卡上按实有技能数展示：有两个显示两个、只有一个显示一个、
+        // 全没有显示「无技能」。取代 2026-10-18「主动槽只显示主动」的固定槽位口径（B9 修的
+        // 「两槽显示同一技能」由槽2留白天然规避，不会复发）。
         string active = offer.skillId;
         string passive = offer.passiveSkillId;
+        bool hasActive = !string.IsNullOrEmpty(active);
+        bool hasPassive = !string.IsNullOrEmpty(passive);
 
-        if (c.skill1Name != null)
-            c.skill1Name.text = string.IsNullOrEmpty(active)
-                ? "—"
-                : MercenaryOfferGenerator.SkillDisplayName(active);
-        if (c.skill1Desc != null)
+        // 槽1 = 第一个实有技能（主动优先）；一个都没有 → 「无技能」
+        FillSkillSlot(c.skill1Name, c.skill1Desc, c.skill1Icon,
+            hasActive ? active : hasPassive ? passive : null, "无技能");
+        // 槽2 = 第二个实有技能；只有一个技能时槽2整槽留白
+        FillSkillSlot(c.skill2Name, c.skill2Desc, c.skill2Icon,
+            hasActive && hasPassive ? passive : null, "");
+    }
+
+    /// <summary>单个技能槽填充：skillId 为空显示 emptyLabel、描述与图标清空（留白，不占位报错）。</summary>
+    static void FillSkillSlot(Text name, Text desc, Image icon, string skillId, string emptyLabel)
+    {
+        bool has = !string.IsNullOrEmpty(skillId);
+        if (name != null)
+            name.text = has ? MercenaryOfferGenerator.SkillDisplayName(skillId) : emptyLabel;
+        if (desc != null)
+            desc.text = has && MercSkillTable.TryGet(skillId, out var row) ? row.RecruitDesc : "";
+        if (icon != null)
         {
-            c.skill1Desc.text = !string.IsNullOrEmpty(active)
-                && MercSkillTable.TryGet(active, out var rowA) ? rowA.RecruitDesc : "";
-        }
-        if (c.skill2Name != null)
-            c.skill2Name.text = string.IsNullOrEmpty(passive)
-                ? "—"
-                : MercenaryOfferGenerator.SkillDisplayName(passive);
-        if (c.skill2Desc != null)
-        {
-            c.skill2Desc.text = !string.IsNullOrEmpty(passive)
-                && MercSkillTable.TryGet(passive, out var rowP) ? rowP.RecruitDesc : "";
-        }
-        if (c.skill1Icon != null)
-        {
-            var sp = MercSkillTable.LoadIcon(active);
-            c.skill1Icon.sprite = sp;
-            c.skill1Icon.enabled = sp != null;
-            c.skill1Icon.preserveAspect = true;
-        }
-        if (c.skill2Icon != null)
-        {
-            var sp = MercSkillTable.LoadIcon(passive);
-            c.skill2Icon.sprite = sp;
-            c.skill2Icon.enabled = sp != null;
-            c.skill2Icon.preserveAspect = true;
+            var sp = has ? MercSkillTable.LoadIcon(skillId) : null;
+            icon.sprite = sp;
+            icon.enabled = sp != null;
+            icon.preserveAspect = true;
         }
     }
 
@@ -616,7 +683,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         Text t = existing != null ? existing.GetComponent<Text>() : null;
         if (t != null) return t;
 
-        t = CreateTxt(cardRoot, "HiredBadge", "佣兵已雇佣", 22, TextAnchor.MiddleCenter);
+        t = CreateTxt(cardRoot, "HiredBadge", "已拥有", 22, TextAnchor.MiddleCenter);
         t.color = new Color(1f, 0.86f, 0.42f, 1f);
         var rt = t.rectTransform;
         rt.anchorMin = new Vector2(0.5f, 0.5f);
@@ -692,18 +759,78 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         {
             int idx = i;
             var c = cards[i];
-            if (c == null) continue;
+            if (c == null || c.root == null) continue;
+            // 【2026-10-19 主人拍板】卡上按钮不隐藏，点击必给反馈：
+            // 金币钮/卷钮 → 买得起弹「佣兵信息」确认弹窗（购买/取消），不够弹字提示；
+            // 点卡其余区域 → 直接看「佣兵信息」弹窗（购买在弹窗里走同一确认口径）。
             if (c.goldButton != null)
             {
                 c.goldButton.onClick.RemoveAllListeners();
-                c.goldButton.onClick.AddListener(() => OnHire(idx, preferScroll: false));
+                c.goldButton.onClick.AddListener(() => OnBuyButtonClicked(idx));
             }
             if (c.scrollButton != null)
             {
                 c.scrollButton.onClick.RemoveAllListeners();
-                c.scrollButton.onClick.AddListener(() => OnHire(idx, preferScroll: true));
+                c.scrollButton.onClick.AddListener(() => OnBuyButtonClicked(idx));
+            }
+            var rootBtn = c.root.GetComponent<Button>();
+            if (rootBtn == null) rootBtn = c.root.AddComponent<Button>();
+            rootBtn.onClick.RemoveAllListeners();
+            rootBtn.onClick.AddListener(() => OnCardClicked(idx));
+        }
+    }
+
+    /// <summary>
+    /// 卡上购买钮点击（2026-10-19 主人拍板）：先按货币口径查够不够 ——
+    /// 普通=金币（不够弹「金币不足」）；稀有=普通卷、传奇=稀有卷（不够弹「道具不足」）；
+    /// 够才弹「佣兵信息」确认弹窗（是否购买）。购买 = 永久解锁进「已拥有」；
+    /// 已拥有的候选不可重复购买（点击只提示）。
+    /// </summary>
+    void OnBuyButtonClicked(int index)
+    {
+        if (index < 0 || index >= _offers.Count || _offers[index] == null)
+        {
+            UIManager.Instance?.ShowToast("无效的佣兵");
+            return;
+        }
+        var offer = _offers[index];
+        if (MercHireSession.IsMercOwned(offer))
+        {
+            UIManager.Instance?.ShowToast("该佣兵已拥有");
+            return;
+        }
+        var rarity = MercHireSession.OfferRarity(offer);
+        bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
+        if (isCommon)
+        {
+            if (!HasEnoughGold(offer))
+            {
+                UIManager.Instance?.ShowToast("金币不足");
+                return;
             }
         }
+        else if (!MercHireSession.HasScrollFor(rarity))
+        {
+            UIManager.Instance?.ShowToast("道具不足");
+            return;
+        }
+
+        // 买得起 → 弹确认（佣兵信息 + 购买/取消，购买钮带货币价格）
+        MercObtainPopupUI.ShowForRecruit(offer, () => TryHireOffer(offer, index));
+    }
+
+    static bool HasEnoughGold(MercenaryData offer)
+    {
+        return ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.Gold)
+            >= MercHireSession.GoldCost(offer);
+    }
+
+    /// <summary>点招募卡：弹佣兵信息弹窗（MercObtainPopupUI），弹窗内「购买」回调 TryHireOffer。</summary>
+    void OnCardClicked(int index)
+    {
+        if (index < 0 || index >= _offers.Count || _offers[index] == null) return;
+        var offer = _offers[index];
+        MercObtainPopupUI.ShowForRecruit(offer, () => TryHireOffer(offer, index));
     }
 
     void OnRefresh()
@@ -722,87 +849,75 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         ScheduleNextIdleBanter();
     }
 
-    void OnHire(int index, bool preferScroll)
+    /// <summary>
+    /// 购买一名招募候选（2026-10-19 起由「佣兵信息」弹窗的购买钮触发，返回是否成交）。
+    /// 【2026-10-19 主人拍板】购买 = 永久解锁进「已拥有」——与雇佣队列、战斗内抽奖队列、
+    /// 临时出战名单都无关，不再走 MercHireSession.AddHired。
+    /// 支付口径：普通=金币；稀有=普通卷；传奇=稀有卷（高级卷）。
+    /// 失败时 Toast 提示并返回 false（弹窗不关，玩家可改点取消）。
+    /// </summary>
+    bool TryHireOffer(MercenaryData offer, int index)
     {
-        if (index < 0 || index >= _offers.Count || _offers[index] == null)
+        if (offer == null)
         {
             UIManager.Instance?.ShowToast("无效的佣兵");
-            return;
+            return false;
         }
-        var offer = _offers[index];
-        if (MercHireSession.IsAlreadyHired(offer))
+        if (MercHireSession.IsMercOwned(offer))
         {
-            UIManager.Instance?.ShowToast("佣兵已雇佣");
-            return;
-        }
-        if (!MercHireSession.CanHireMore())
-        {
-            UIManager.Instance?.ShowToast("本局雇佣已满，下本结束会离队");
-            return;
+            UIManager.Instance?.ShowToast("该佣兵已拥有");
+            return false;
         }
 
         var rarity = MercHireSession.OfferRarity(offer);
-        int gold = MercHireSession.GoldCost(offer);
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
-        bool isLegendary = rarity == MercRosterDefs.MercRarity.Legendary;
-        bool hasScroll = !isCommon && MercHireSession.HasScrollFor(rarity);
-
-        if (preferScroll && hasScroll)
+        if (isCommon)
         {
-            if (!MercHireSession.TrySpendScroll(rarity))
-            {
-                UIManager.Instance?.ShowToast("招募卷不足");
-                return;
-            }
-        }
-        else
-        {
-            // 传奇只能用高级招募卷轴，金币路径一律拦下（2026-10-17 主人拍板）
-            if (isLegendary)
-            {
-                UIManager.Instance?.ShowToast("高级招募卷轴不足，无法招募传奇佣兵");
-                return;
-            }
-            // 金币：ConfirmButton，或 ConfirmButton1 无卷时
+            int gold = MercHireSession.GoldCost(offer);
             if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, gold, save: false, notify: true))
             {
                 UIManager.Instance?.ShowToast("金币不足");
-                return;
+                return false;
             }
         }
+        else if (!MercHireSession.TrySpendScroll(rarity))
+        {
+            UIManager.Instance?.ShowToast("道具不足");
+            return false;
+        }
 
-        var picked = CloneOffer(offer);
-        MercHireSession.AddHired(picked);
-        string name = !string.IsNullOrEmpty(picked.displayName) ? picked.displayName
-            : (!string.IsNullOrEmpty(picked.nickname) ? picked.nickname : "佣兵");
-        // 【2026-10-17 主人拍板】入队报喜 Toast 只留「加入队伍」；佣兵台词改走该卡上方气泡框。
-        UIManager.Instance?.ShowToast($"{name}加入队伍！");
-        ShowMercBubble(index, MercLineTable.Pick(OfferBanterKey(picked), MercLineTable.Scene.HireSuccess));
+        // 永久解锁（进「已拥有」，下次开酒馆自动按既有口径补进三选一池资格）
+        var data = SaveSystem.Instance?.Data;
+        string hid = offer.hireId;
+        if (string.IsNullOrEmpty(hid) && MercRosterDefs.TryGetByAssetId(offer.mercId, out var def0))
+            hid = def0.HireId;
+        if (data == null || string.IsNullOrEmpty(hid) || !data.UnlockMerc(hid))
+        {
+            Debug.LogError("[MercRecruit] 解锁佣兵失败：hireId=" + hid
+                + "（data=" + (data != null) + "，钱已扣，需主人确认是否补发）");
+            UIManager.Instance?.ShowToast("购买失败");
+            return false;
+        }
+        AdventureCodex.MarkMercSeen(hid);
+        SaveSystem.Instance.Save();
+
+        string name = !string.IsNullOrEmpty(offer.displayName) ? offer.displayName
+            : (!string.IsNullOrEmpty(offer.nickname) ? offer.nickname
+            : (MercRosterDefs.TryGetByHireId(hid, out var def1) ? def1.Name : "佣兵"));
+        // 【2026-10-19 主人拍板】购买报喜文案 = 恭喜获得XXX实力大增；佣兵台词仍走该卡上方气泡框。
+        // force:true —— 购买结果不允许被闲聊气泡压制（主人报「购买后没有提示获得信息」的根因）
+        UIManager.Instance?.ShowToast($"恭喜获得{name}实力大增", force: true);
+        ShowMercBubble(index, MercLineTable.Pick(OfferBanterKey(offer), MercLineTable.Scene.HireSuccess));
         RefreshAll();
         ScheduleNextIdleBanter();
-    }
-
-    static MercenaryData CloneOffer(MercenaryData src)
-    {
-        return new MercenaryData
-        {
-            mercId = src.mercId,
-            displayName = src.displayName,
-            nickname = src.nickname,
-            hireId = src.hireId,
-            uid = System.Guid.NewGuid().ToString("N"),
-            level = src.level,
-            star = src.star,
-            skillId = src.skillId,
-            passiveSkillId = src.passiveSkillId,
-            favorLevel = 1
-        };
+        return true;
     }
 
     /// <summary>
     /// info 按钮弹出招募概率公示（2026-10-17 主人拍板：info 节点 → 概率弹窗）。
     /// 口径与 MercenaryOfferGenerator 实际掷点完全一致（常量直引，不会公示假数）：
     /// 佣兵 100%；品质 普通 8/15 ≈ 53.3% / 稀有 5/15 ≈ 33.3% / 传奇 2/15 ≈ 13.3%。
+    /// 卡面美术随佣兵稀有度实时切换（Card0/1/2 三套稀有度卡牌）。
     /// </summary>
     void ShowRecruitOdds()
     {
@@ -869,14 +984,12 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         title.color = new Color(1f, 0.86f, 0.42f);
 
         string body =
-            "· 每次展示 3 名候选佣兵，可分别用金币或招募卷雇佣。\n" +
-            "· 普通佣兵仅金币雇佣；稀有可用稀有招募卷，传奇可用传奇招募卷。\n" +
-            "· 有招募卷时优先用卷；没有卷时稀有/传奇条可改用金币价雇佣。\n" +
+            "· 每次展示 3 名候选佣兵，货币跟稀有度走。\n" +
+            "· 普通佣兵用金币雇佣；稀有佣兵用普通卷轴×1；传奇佣兵用稀有卷轴×1。\n" +
+            "· 金币/卷轴不足时点购买会提示。\n" +
             "· 招募卷可在冒险日志里程商店兑换；关卡掉落后续开放。\n" +
-            "· 雇佣的佣兵只跟随本次下本，回城或撤离后离队。\n" +
-            "· 曾雇佣过的佣兵会记入冒险日志图鉴。\n" +
-            "· 候选列表每日 0 点自动刷新；手动刷新有 30 分钟冷却。\n" +
-            "· 出战人数受酒馆槽位限制。";
+            "· 购买 = 永久解锁该佣兵进「已拥有」。\n" +
+            "· 候选列表每日 0 点自动刷新；手动刷新有 3 小时冷却。\n";
         var text = CreateTxt(panel.transform, "Body", body, 18, TextAnchor.UpperLeft);
         SetRect(text.rectTransform, 0.5f, 0.48f, 0f, 0f, 500f, 520f);
         text.alignment = TextAnchor.UpperLeft;
@@ -952,6 +1065,11 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
                     _scrollLegendaryCountText = scrollRow.Find("2/Label")?.GetComponent<Text>();
             }
         }
+        // 卡上卷钮图标源：普通卷/高级卷各取主人摆的展示位（2026-10-19 修「普通卷图标用错」）
+        if (_commonScrollIcon == null)
+            _commonScrollIcon = FindDeep(transform, "招募卷")?.Find("1/icon")?.GetComponent<Image>()?.sprite;
+        if (_legendaryScrollIcon == null)
+            _legendaryScrollIcon = FindDeep(transform, "招募卷")?.Find("2/icon")?.GetComponent<Image>()?.sprite;
         if (infoButton == null)
         {
             // 【2026-10-18 修·主人报「info 按钮不弹概率弹窗」】预制体节点名是「info」不是「信息」，
@@ -1005,6 +1123,51 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
                 c.scrollIcon = FindDeep(c.scrollButton.transform, "icon")?.GetComponent<Image>();
             if (c.scrollIcon != null && c.scrollIconDefault == null)
                 c.scrollIconDefault = c.scrollIcon.sprite;
+            // 金币钮图标快照（金币钮顶卷钮位切卷图后要还原金币图，2026-10-19）
+            if (c.goldIcon != null && c.goldIconDefault == null)
+                c.goldIconDefault = c.goldIcon.sprite;
+        }
+        CaptureButtonLooks();
+    }
+
+    /// <summary>
+    /// 货币钮外观快照（绑定后、任何填充前调用）：金币钮(ConfirmButton)与卷钮(ConfirmButton1)
+    /// 是两套预制体节点，底图/颜色/Label颜色/尺寸都不同 —— 各拍一份，填充时按货币套用，
+    /// 保证「金币一种样子、卷轴一种样子」，三张卡看起来完全一致。
+    /// </summary>
+    void CaptureButtonLooks()
+    {
+        if (_btnLooksCaptured) return;
+        _btnLooksCaptured = true;
+        if (cards == null) return;
+        for (int i = 0; i < cards.Length; i++)
+        {
+            var c = cards[i];
+            if (c == null) continue;
+            if (c.goldButton != null && _goldBtnSprite == null)
+            {
+                var img = c.goldButton.GetComponent<Image>();
+                if (img != null)
+                {
+                    _goldBtnSprite = img.sprite;
+                    _goldBtnColor = img.color;
+                    var rt = c.goldButton.transform as RectTransform;
+                    if (rt != null) _goldBtnSize = rt.sizeDelta;
+                }
+                if (c.goldLabel != null) _goldLabelColor = c.goldLabel.color;
+            }
+            if (c.scrollButton != null && _scrollBtnSprite == null)
+            {
+                var img = c.scrollButtonImage != null ? c.scrollButtonImage : c.scrollButton.GetComponent<Image>();
+                if (img != null)
+                {
+                    _scrollBtnSprite = img.sprite;
+                    _scrollBtnColor = img.color;
+                    var rt = c.scrollButton.transform as RectTransform;
+                    if (rt != null) _scrollBtnSize = rt.sizeDelta;
+                }
+                if (c.scrollLabel1 != null) _scrollLabelColor = c.scrollLabel1.color;
+            }
         }
     }
 

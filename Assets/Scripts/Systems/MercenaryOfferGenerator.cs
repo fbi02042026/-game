@@ -27,6 +27,8 @@ public static class MercenaryOfferGenerator
 
     public static List<MercenaryData> GenerateOffers()
     {
+        // 【2026-10-19 主人拍板】三名候选全部随机（战斗内三选一同款稀有度权重），
+        // 卡面稀有度由招募界面按佣兵稀有度实时换卡，与卡位顺序无关。
         var offers = new List<MercenaryData>(OfferCount);
         var usedSignatures = new HashSet<string>();
 
@@ -60,7 +62,7 @@ public static class MercenaryOfferGenerator
             clash = false;
             for (int i = 0; i < existing.Count; i++)
             {
-                if (existing[i] != null && existing[i].displayName == offer.displayName)
+                if (existing[i] != null && existing[i] != offer && existing[i].displayName == offer.displayName)
                 {
                     clash = true;
                     offer.displayName = NamePool[Random.Range(0, NamePool.Length)] + Random.Range(1, 99);
@@ -80,8 +82,7 @@ public static class MercenaryOfferGenerator
     static MercenaryData RollOne()
     {
         // 【2026-10-17 主人拍板】酒馆三选一改用战斗内三选一同款稀有度概率
-        // （普通 8 / 稀有 5 / 传奇 2，见 DraftPool.CollectRecruitMercs），
-        // 不再按星级 1-5 均匀掷（旧口径 = 普通40% / 稀有40% / 传奇20%）。
+        // （普通 8 / 稀有 5 / 传奇 2），不再按星级 1-5 均匀掷。
         var rarity = RollRarityByBattleWeight();
         int star = MercSkillMapping.RarityToStar(rarity);
         if (!MercSkillMapping.TryPickHireId(rarity, out var mapRow))
