@@ -221,12 +221,14 @@ public class SkillCastNotifyController : MonoBehaviour
         c.Push(MercSkillTable.LoadIcon(skillId), LabelOf(skillName, skillId, displayName), false);
     }
 
-    /// <summary>敌人技能释放通知（右侧镜像）。</summary>
-    public static void PushEnemySkill(string skillId, string enemyName)
+    /// <summary>敌人技能释放通知（右侧镜像）。
+    /// 图标用敌人自身形象（怪物 SpriteRenderer 当前 sprite）；怪物技能 id 在玩家图标表里没图，传 skillId 只会白框。</summary>
+    public static void PushEnemySkill(string skillId, string enemyName, Sprite enemySprite = null)
     {
         var c = Instance;
         if (c == null) return;
-        c.Push(BattleUI.LoadRunSkillIcon(skillId), LabelOf(enemyName, skillId), true);
+        var icon = enemySprite != null ? enemySprite : BattleUI.LoadRunSkillIcon(skillId);
+        c.Push(icon, LabelOf(enemyName, skillId), true);
     }
 
     /// <summary>名字优先取显示名，空则退回 skillId（再空则退回 displayName）。</summary>
@@ -281,7 +283,12 @@ public class SkillCastNotifyController : MonoBehaviour
             displayY = _tplFinalPos.y,
         };
 
-        if (entry.icon != null) entry.icon.sprite = icon;
+        if (entry.icon != null)
+        {
+            entry.icon.sprite = icon;
+            // 敌人条现在放怪物全身图（非正方形），保持比例不拉伸；玩家方形技能图不受影响
+            entry.icon.preserveAspect = true;
+        }
         if (entry.label != null) entry.label.text = label ?? "";
         SetAlpha(entry, 1f);
 

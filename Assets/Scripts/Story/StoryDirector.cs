@@ -91,6 +91,11 @@ public class StoryDirector : Singleton<StoryDirector>
         ResumeGame();
         SpeechBubbleTalker.SetSuppressed(false);
         GameBgm.EndBattleStory();
+        // 【2026-10-19 修复】强制终止剧情必须把对话窗收干净：此前只停协程不 Hide，
+        // DialogueUI.IsVisible（activeSelf）常驻 true → FirstRunGuide.StoryBusy 误判「剧情在播」
+        // → 引导让位分支无超时，在「点角色」等步骤静默卡死（切出回来触发城镇流程重入最易踩）。
+        var ui = _ui != null ? _ui : DialogueUI.Instance;
+        if (ui != null) ui.Hide();
     }
 
     DialogueUI EnsureUi()

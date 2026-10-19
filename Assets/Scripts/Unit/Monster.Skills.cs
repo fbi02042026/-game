@@ -270,7 +270,9 @@ public partial class Monster
         // 【2026-10-18 主人反馈红圈太浅看不清】alpha 0.42→0.68，颜色再饱和一档
         // 【2026-10-19 主人反馈还要再显眼】alpha 0.68→0.85，配 ±10% 呼吸脉动（见 CoSkillTelegraphThenCast）
         sr.color = new Color(0.9f, 0.07f, 0.06f, 0.85f);
-        sr.sortingOrder = GameConfig.SORT_UNIT - 2;
+        // 【2026-10-19 主人拍板】红圈不挡玩家：地图(10) 上面一级、所有单位(15+) 下面 → 固定 11
+        sr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        sr.sortingOrder = GameConfig.SORT_MAPROOT + 1;
         float dia = Mathf.Max(1.2f, radius * 2f);
         go.transform.localScale = new Vector3(dia, dia * 0.35f, 1f);
         return go;
@@ -305,7 +307,9 @@ public partial class Monster
         var sr = go.AddComponent<SpriteRenderer>();
         sr.sprite = MakeRingSprite();
         sr.color = new Color(0.95f, 0.12f, 0.1f, 0.85f);
-        sr.sortingOrder = GameConfig.SORT_UNIT - 1;
+        // 【2026-10-19 主人拍板】波纹与红圈同属预警演出，同样不挡单位：红圈(11) 之上、单位(15+) 之下 → 12
+        sr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        sr.sortingOrder = GameConfig.SORT_MAPROOT + 2;
         const float dur = 0.35f;
         float t = 0f;
         while (t < dur && sr != null)
@@ -362,7 +366,8 @@ public partial class Monster
 
         SkillRegistry.Instance?.PlaySkillVfx(_skillId, hitPos, false, GetVfxFacingDir(), transform);
         // 右侧镜像技能释放通知：与玩家侧同一模板，x 取反（不翻 scale.x，文字不镜像）
-        SkillCastNotifyController.PushEnemySkill(_skillId, SkillNotifyName());
+        // 【2026-10-19 主人报白框】怪物技能 id 在玩家图标表里没图 → 白框；改传怪物自身 sprite 当图标
+        SkillCastNotifyController.PushEnemySkill(_skillId, SkillNotifyName(), sr != null ? sr.sprite : null);
         ApplySkillDamage(damage, radius, primaryTarget, hitPos.x);
     }
 

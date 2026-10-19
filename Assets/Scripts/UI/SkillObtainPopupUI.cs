@@ -251,6 +251,10 @@ public class SkillObtainPopupUI : MonoBehaviour
         if (string.IsNullOrEmpty(name))
             Debug.LogError("[SkillObtainPopup] 技能名字为空：" + skillId);
         SetText(_skillName, "Panel/Skill/SkillName", name);
+        // 【2026-10-19 主人拍板】技能名颜色与角色界面技能弹窗（SkillSelectUI）统一：
+        // 预制体里是写死的黄色，这里按统一色表刷色，查不到的 id 回退白色。
+        if (_skillName != null)
+            _skillName.color = SkillSelectUI.NameColorOf(PlayerSkillDefs.IndexOf(skillId));
 
         // 简介：desc 为空回退 numbers（与 DraftRewardDetailUI.SkillDescOf 同源）
         string desc = string.IsNullOrEmpty(def.desc) ? def.numbers : def.desc;
