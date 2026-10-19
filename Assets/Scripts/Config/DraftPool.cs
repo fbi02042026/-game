@@ -95,16 +95,14 @@ public static class DraftPool
     // ============================================================
 
     /// <summary>
-    /// 该类的三选一（含安慰奖）。
+    /// 该类的三选一（含兜底）。
     /// </summary>
     public static List<DraftCard> BuildCards(DraftCategory c) => BuildCards(c, true);
 
     /// <param name="consolation">
-    /// 要不要把「金币」安慰奖放进池子。（2026-10-05：强化石那档主人拍板删了，只剩金币一档）
-    /// 2026-10-05：<b>引导局定序那几抽必须传 false</b> —— 主人拍板「第一次装备、第二次佣兵、第三次技能」，
-    /// 若安慰奖混进去，玩家花第一抽的钱抽到一堆币，教学就白教了（保底不用写出来，但得真的给到）。
-    /// 正式关恒传 true —— 主人拍板「正式关应该都是随机的」，安慰奖从第 1 抽起就在池里。
-    /// 免费老虎机、通关三选一这类「白送的」继续带安慰奖。
+    /// ⚠【2026-10-19 主人拍板后已失效】抽奖币改成**独立方向**（<see cref="DraftCategory.Gold"/>，
+    /// 与佣兵同概率），不再混进任何类的池子 → 本参数不再往池里塞金币卡（见 <see cref="AddConsolation"/>）。
+    /// 保留签名是为了不动六处调用点；<see cref="SlotMachineSystem.GoldAllowed"/> 才是「这一抽出不出金币方向」的唯一出口。
     /// </param>
     public static List<DraftCard> BuildCards(DraftCategory c, bool consolation)
     {
@@ -112,6 +110,7 @@ public static class DraftPool
         {
             case DraftCategory.Merc: return BuildMercCards(consolation);
             case DraftCategory.Equip: return BuildEquipCards(consolation);
+            case DraftCategory.Gold: return new List<DraftCard>(1) { CollectGoldCard().Card };
             default: return BuildSkillCards(consolation);
         }
     }
@@ -135,6 +134,8 @@ public static class DraftPool
     /// <summary>
     /// 该类卡池的**完整加权候选**（三选一和「直接抽 1 张」共用同一份，概率公示也从这里算 ——
     /// 只此一处，弹窗上写的概率就永远是真数，不会跟实际抽取对不上）。
+    /// ⚠【2026-10-19 主人拍板】金币不再混池 —— 三类池子里只有真货；
+    /// 抽奖币是独立方向（<see cref="DraftCategory.Gold"/>），只在 <see cref="PickOne"/> 的 Gold 分支出卡。
     /// </summary>
     static List<WeightedCard> BuildWeightedPool(DraftCategory c, bool consolation)
     {
@@ -148,6 +149,9 @@ public static class DraftPool
                 break;
             case DraftCategory.Equip:
                 pool.AddRange(CollectEquipCards());
+                break;
+            case DraftCategory.Gold:
+                pool.Add(CollectGoldCard());   // 防御：公示 / 三选一真问到 Gold 也不崩（正常抽取不走这）
                 break;
             default:
                 pool.AddRange(CollectNewSkills());
@@ -164,14 +168,22 @@ public static class DraftPool
     /// 之前是「先造 3 张再等权选 1」，那 3 张是无放回抽的，实际概率跟权重并不相等，
     /// 公示出来就成了假数。
     /// 池子空时回落强化卡，保持「永不空手」。
+    /// <para>【2026-10-19 主人拍板】Gold 方向直接出金币卡（不走加权池；
+    /// 这一次抽要不要「可能」出金币方向由 <see cref="SlotMachineSystem.GoldAllowed"/> 在 RollCategory 里判）。</para>
     /// </summary>
     public static DraftCard PickOne(DraftCategory c, bool consolation)
     {
+        if (c == DraftCategory.Gold) return CollectGoldCard().Card;
         var pool = BuildWeightedPool(c, consolation);
         var picked = new HashSet<string>();
         var one = new List<DraftCard>(1);
         if (pool.Count > 0 && TryPickWeighted(pool, 1, picked, one) && one.Count > 0)
-            return one[0];
+        {
+            var p = one[0];
+            Debug.Log($"[DraftPool诊断] PickOne({c}) 池={pool.Count}张 → 抽到 Kind={p.Kind} Id={p.Id} HireId={p.HireId} Title={p.Title}");
+            return p;
+        }
+        Debug.LogWarning($"[DraftPool诊断] PickOne({c}) 池空({pool.Count})，回落PowerUp");
         return BuildPowerUpCard(0);
     }
 
@@ -196,26 +208,32 @@ public static class DraftPool
     /// 玩家解锁的技能变多、佣兵池变了，这里会跟着变 —— 玩家看到的就是真概率。
     ///
     /// <para>只给两段，主人拍板「简单点方便玩家理解」：<br/>
-    /// ① 类型段：抽到 技能 / 佣兵 / 装备 各占多少（权重真源 <c>SlotMachineDefs.CategoryWeight</c>，
+    /// ① 类型段：抽到 技能 / 佣兵 / 装备 / 抽奖币 各占多少（权重真源 <c>SlotMachineDefs.CategoryWeight</c>，
     ///    与 <c>SlotMachineSystem.RollCategory</c> 同一份 —— 改权重两边一起变，不会各说一套）；<br/>
-    /// ② 品质段：抽到 普通 / 稀有 / 传说 / 金币 各占多少（先按类型权重分层，类内再按品质权重，两层相乘）。</para>
+    /// ② 品质段：抽到 普通 / 稀有 / 传说 各占多少（先按类型权重分层，类内再按品质权重，两层相乘）。
+    ///    【2026-10-19 主人拍板】抽奖币升格为独立方向后只在类型段出现，品质段不再有「抽奖币」行
+    ///    （三类池子里已无金币卡）。</para>
     ///
-    /// <para>2026-10-05：安慰奖带不带，跟 <c>PickOne</c> 这一次抽<b>用同一个口径</b>
-    ///（<c>SlotMachineSystem.ConsolationAllowed()</c>，2026-10-13 #3 起的唯一出口）——
-    /// 引导局那几抽、正式关第 1 抽都不带安慰奖，公示里也就不能出现金币；
+    /// <para>「这一抽带不带金币方向」跟实际抽取<b>用同一个口径</b>
+    ///（<see cref="SlotMachineSystem.GoldAllowed"/>，唯一出口）——
+    /// 引导定序窗口、保底佣兵窗口、第 1 抽、次数超限都不带，公示里也就不出现金币行；
     /// 否则「公示的概率」跟「实际抽到的概率」对不上，就是假数。</para>
     /// </summary>
     public static List<OddsRow> BuildOddsRows()
     {
         var rows = new List<OddsRow>();
-        bool consolation = SlotMachineSystem.ConsolationAllowed();
+        // 这一次抽的随机候选里带不带「抽奖币」方向（第 1 抽 / 引导定序 / 保底佣兵窗口 / 次数超限都不带）
+        bool goldDir = SlotMachineSystem.GoldAllowed();
         var cats = BuildCategories();
         if (cats.Count == 0) return rows;
 
         int catTotal = 0;
         for (int i = 0; i < cats.Count; i++)
             catTotal += Mathf.Max(1, SlotMachineDefs.CategoryWeight(cats[i]));
-        if (catTotal <= 0) return rows;
+        // 【2026-10-19 主人拍板】抽奖币是第 4 个方向（与佣兵同权重），公示分母必须把它算进去
+        int goldW = goldDir ? Mathf.Max(1, SlotMachineDefs.CategoryWeight(DraftCategory.Gold)) : 0;
+        int grandTotal = catTotal + goldW;
+        if (grandTotal <= 0) return rows;
 
         // —— 第一段：抽到哪一类 ——
         for (int i = 0; i < cats.Count; i++)
@@ -226,8 +244,18 @@ public static class DraftPool
             {
                 Section = SEC_TYPE,
                 Label = CategoryName(c),
-                Percent = w / (float)catTotal * 100f,
+                Percent = w / (float)grandTotal * 100f,
                 Color = CategoryColor(c)
+            });
+        }
+        if (goldDir)
+        {
+            rows.Add(new OddsRow
+            {
+                Section = SEC_TYPE,
+                Label = "抽奖币",
+                Percent = goldW / (float)grandTotal * 100f,
+                Color = CategoryColor(DraftCategory.Gold)
             });
         }
 
@@ -237,8 +265,8 @@ public static class DraftPool
         for (int i = 0; i < cats.Count; i++)
         {
             var c = cats[i];
-            float catP = Mathf.Max(1, SlotMachineDefs.CategoryWeight(c)) / (float)catTotal;
-            var pool = BuildWeightedPool(c, consolation);
+            float catP = Mathf.Max(1, SlotMachineDefs.CategoryWeight(c)) / (float)grandTotal;
+            var pool = BuildWeightedPool(c, goldDir);
             int total = 0;
             for (int j = 0; j < pool.Count; j++)
                 if (pool[j].Card.IsValid) total += Mathf.Max(1, pool[j].Weight);
@@ -287,6 +315,7 @@ public static class DraftPool
         {
             case DraftCategory.Merc: return new Color(0.55f, 0.90f, 0.70f);
             case DraftCategory.Equip: return new Color(0.98f, 0.78f, 0.42f);
+            case DraftCategory.Gold: return RarityPalette.Gold;
             default: return new Color(0.62f, 0.82f, 1f);
         }
     }
@@ -325,11 +354,16 @@ public static class DraftPool
         }
     }
 
-    /// <summary>往池子里塞安慰奖（只有金币一档）。权重见 <see cref="SlotMachineDefs"/>。</summary>
+    /// <summary>
+    /// 【2026-10-19 主人拍板后已停用】往池子里塞安慰奖（只有金币一档）。
+    /// 抽奖币已升格为**独立方向**（<see cref="DraftCategory.Gold"/>，与佣兵同概率，
+    /// 见 <see cref="SlotMachineDefs.CATEGORY_WEIGHT_GOLD"/>），不再混进任何类的池子 →
+    /// 本函数不再做任何事（参数与调用点保留是为了不动六处签名）。
+    /// 「这一抽出不出金币方向」唯一出口 = <see cref="SlotMachineSystem.GoldAllowed"/>。
+    /// </summary>
     static void AddConsolation(List<WeightedCard> pool, bool consolation)
     {
-        if (!consolation) return;
-        pool.Add(CollectGoldCard());
+        // 2026-10-19：金币不进池子。想恢复旧「安慰奖混池」口径在这里把 CollectGoldCard 加回 pool。
     }
 
     /// <summary>
@@ -357,7 +391,8 @@ public static class DraftPool
                 Amount = amount,
                 PowerDelta = 0
             },
-            Weight = SlotMachineDefs.WEIGHT_GOLD,
+            // 2026-10-19 起金币不参与池内加权（独立方向直接出卡），这权重只为满足 struct 字段，给 1 即可
+            Weight = 1,
             Key = "gold"
         };
     }
@@ -568,7 +603,10 @@ public static class DraftPool
         if (!a.isPercent && EquipUiText.IsRateAttr(a.attrType))
             return "+" + EquipUiText.Value(a.attrType, a.value, false);
         if (a.isPercent) return "+" + Mathf.RoundToInt(a.value * 100f) + "%";
-        return "+" + Mathf.RoundToInt(a.value);
+        // 【2026-10-19 主人拍板】整数/小数兜底改走 EquipUiText.Value 统一口径：
+        // 输出与旧 RoundToInt 完全一致，但火/冰（点口径）在这里拿到专属显示「+8.4%」，
+        // 不再被 RoundToInt 抹成「+8」丢掉百分号。
+        return "+" + EquipUiText.Value(a.attrType, a.value, false);
     }
 
     // ============================================================
@@ -715,39 +753,45 @@ public static class DraftPool
 
         SaveData data = SaveSystem.Instance?.Data;
 
-        // 2026-09-14 改版：招募池 = 酒馆已解锁的佣兵，不再是全量花名册。
-        // 酒馆只负责解锁，真正的招募挪进战斗内三选一。
-        if (data == null || data.unlockedMercIds == null || data.unlockedMercIds.Count == 0)
+        // 【2026-10-19 主人拍板「战斗里招募的佣兵只能抽出酒馆上架队列里的」】
+        // 队列空 = 没有招募卡（不回落全池，覆盖 2026-10-13「空池不筛选」口径）。
+        // 空池实际只会发生在「还没解锁任何佣兵」（解锁即 EnsurePoolFilled 自动补满队列，
+        // 见 SaveData.EnsurePoolFilled / MailSystem）→ 全池同样为空，行为等价，不会卡死新手。
+        if (data == null || data.mercDrawPool == null || data.mercDrawPool.Count == 0)
             return list;
 
         int guild = data.guildLevel;
         int heroLv = RunLoadout.HeroLevel;
-        // 【2026-10-17 主人拍板】队列非空 = 每个上架佣兵单独等概率（权重全 1，不再按稀有度加权）；
-        // 空池回落全池时维持稀有度加权（普通62 / 稀有33 / 传奇5）。
-        bool queueActive = data.mercDrawPool != null && data.mercDrawPool.Count > 0;
+        // 【2026-10-17 主人拍板 + 2026-10-19 只从队列出】队列内每个上架佣兵单独等概率（权重全 1），
+        // 旧的「空池回落全池按稀有度加权」已随空池回落一起作废（见上方「队列空 = 没有招募卡」注释）。
+
+        // 【2026-10-19 诊断】玩家报「战斗里只能抽出队列中第一个佣兵」，打出池子实际内容定位是「池里只剩一个」还是「随机没生效」
+        var dbgQueue = new System.Text.StringBuilder();
+        foreach (string q in data.mercDrawPool) { if (dbgQueue.Length > 0) dbgQueue.Append(','); dbgQueue.Append(q); }
+        var dbgUnlocked = new System.Text.StringBuilder();
+        foreach (string u in data.unlockedMercIds) { if (dbgUnlocked.Length > 0) dbgUnlocked.Append(','); dbgUnlocked.Append(u); }
+        Debug.Log($"[DraftPool诊断] 队列={dbgQueue} 解锁={dbgUnlocked} 公会Lv={guild} 英雄Lv={heroLv} 队列槽={data.DrawPoolSlots}");
 
         foreach (string hireId in data.unlockedMercIds)
         {
             if (string.IsNullOrEmpty(hireId)) continue;
             // 【2026-10-13 主人拍板】佣兵抽奖池：在酒馆勾过池子就只从勾选的里面出（空池 = 不筛选，维持全池加权）
-            if (!data.IsMercInDrawPool(hireId)) continue;
-            if (!MercRosterDefs.TryGetByHireId(hireId, out var def)) continue;
-            if (string.IsNullOrEmpty(def.AssetId)) continue;
-            if (RunLoadout.HasMerc(def.HireId) || RunLoadout.HasMerc(def.AssetId)) continue;
+            if (!data.IsMercInDrawPool(hireId)) { Debug.Log($"[DraftPool诊断] {hireId} 不在队列，跳过"); continue; }
+            if (!MercRosterDefs.TryGetByHireId(hireId, out var def)) { Debug.Log($"[DraftPool诊断] {hireId} 花名册查不到，跳过"); continue; }
+            if (string.IsNullOrEmpty(def.AssetId)) { Debug.Log($"[DraftPool诊断] {hireId} 无AssetId，跳过"); continue; }
+            if (RunLoadout.HasMerc(def.HireId) || RunLoadout.HasMerc(def.AssetId)) { Debug.Log($"[DraftPool诊断] {hireId} 已在本局，跳过"); continue; }
 
             MercTier tier = GameConfig.GetMercTier(def.AssetId);
-            if (tier == MercTier.Npc) continue;
+            if (tier == MercTier.Npc) { Debug.Log($"[DraftPool诊断] {hireId} 是NPC，跳过"); continue; }
             // 高级佣兵要公会等级，局内同理（不联网也保留成长动机）
-            if (tier == MercTier.Advanced && guild < GameConfig.ADVANCED_MERC_GUILD_LEVEL) continue;
+            if (tier == MercTier.Advanced && guild < GameConfig.ADVANCED_MERC_GUILD_LEVEL) { Debug.Log($"[DraftPool诊断] {hireId} 高级佣兵(公会Lv不足{guild}<{GameConfig.ADVANCED_MERC_GUILD_LEVEL})，跳过"); continue; }
 
             int star = def.Rarity == MercRosterDefs.MercRarity.Legendary ? 3
                 : def.Rarity == MercRosterDefs.MercRarity.Rare ? 2 : 1;
             int level = Mathf.Max(1, 1 + heroLv / 2);
-            // 【2026-10-19 主人拍板】队列非空时每个上架佣兵单独等概率（权重全 1）；
-            // 空池全池加权维持普通62 / 稀有33 / 传奇5（传奇压到5%，剩下的加回普通）。
-            int weight = queueActive ? 1
-                : def.Rarity == MercRosterDefs.MercRarity.Legendary ? 5
-                : def.Rarity == MercRosterDefs.MercRarity.Rare ? 33 : 62;
+            // 【2026-10-19 主人拍板】只能从上架队列出 → 每名上架佣兵单独等概率（权重全 1），
+            // 旧的「空池全池按稀有度加权（普通62/稀有33/传奇5）」随空池回落一起作废。
+            int weight = 1;
             // 2026-09-17 稀有度映射统一走 SkillRarityUtil（三档对三档，佣兵不出「史诗」），
             // 卡面文字也随之统一，别再各写一份三目。
             SkillRarity rar = SkillRarityUtil.FromMerc(def.Rarity);
@@ -777,7 +821,11 @@ public static class DraftPool
                 Weight = weight,
                 Key = "merc_" + def.HireId
             });
+            Debug.Log($"[DraftPool诊断] {hireId}({def.Name}) 入池，权重={weight}");
         }
+        var dbgPool = new System.Text.StringBuilder();
+        for (int i = 0; i < list.Count; i++) { if (dbgPool.Length > 0) dbgPool.Append(','); dbgPool.Append(list[i].Key); }
+        Debug.Log($"[DraftPool诊断] 招募池最终={list.Count}个 [{dbgPool}]");
         return list;
     }
 
@@ -950,6 +998,14 @@ public static class DraftPool
         if (total <= 0) return false;
 
         int roll = Random.Range(0, total);
+        var dbgItems = new System.Text.StringBuilder();
+        for (int i = 0; i < pool.Count; i++)
+        {
+            if (!pool[i].Card.IsValid || picked.Contains(pool[i].Key)) continue;
+            if (dbgItems.Length > 0) dbgItems.Append(',');
+            dbgItems.Append($"{pool[i].Key}(w{Mathf.Max(1, pool[i].Weight * mul)})");
+        }
+        Debug.Log($"[DraftPool诊断] TryPickWeighted total={total} roll={roll} 候选=[{dbgItems}]");
         for (int i = 0; i < pool.Count; i++)
         {
             if (picked.Contains(pool[i].Key)) continue;
@@ -957,6 +1013,7 @@ public static class DraftPool
             roll -= Mathf.Max(1, pool[i].Weight * mul);
             if (roll < 0)
             {
+                Debug.Log($"[DraftPool诊断] 命中 #{i} {pool[i].Key}");
                 picked.Add(pool[i].Key);
                 outCards.Add(pool[i].Card);
                 return true;
@@ -967,6 +1024,7 @@ public static class DraftPool
         {
             if (picked.Contains(pool[i].Key)) continue;
             if (!pool[i].Card.IsValid) continue;
+            Debug.LogWarning($"[DraftPool诊断] roll边界兜底，取第一个未抽中 #{i} {pool[i].Key}");
             picked.Add(pool[i].Key);
             outCards.Add(pool[i].Card);
             return true;

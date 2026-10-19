@@ -55,6 +55,116 @@ public partial class DialogueUI
         return t != null ? t.GetComponent<Text>() : null;
     }
 
+    // ---------- 自动播放（AUTO）按钮 ----------
+    // 【2026-10-19 主人拍板】剧情自动播放：黑底白字圆角，放右上「跳过」左边。
+    // 开启时底色变亮绿做明显高亮；状态记在 StoryDirector.AutoPlay（会话内记住）。
+
+    /// <summary>创建/复用 AUTO 按钮（幂等，Awake 与编辑器建树都可调）。</summary>
+    void EnsureAutoButton()
+    {
+        if (_autoButton != null) return;
+        var existing = transform.Find("AutoButton");
+        if (existing != null)
+        {
+            _autoButton = existing.GetComponent<Button>();
+            _autoImage = existing.GetComponent<Image>();
+            _autoLabel = existing.GetComponentInChildren<Text>();
+            if (_autoButton != null) return;
+        }
+
+        var go = new GameObject("AutoButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(transform, false);
+        var rt = go.GetComponent<RectTransform>();
+        // 位置以 SkipButton 实际口径为基准：贴其左侧留 12px，同锚系同高 —— 不写死坐标，prefab 怎么手调都跟得住
+        var srt = skipButton != null ? skipButton.GetComponent<RectTransform>() : null;
+        if (srt != null)
+        {
+            rt.anchorMin = srt.anchorMin;
+            rt.anchorMax = srt.anchorMax;
+            rt.pivot = srt.pivot;
+            Vector2 size = srt.sizeDelta;
+            size.x *= 0.92f;
+            rt.sizeDelta = size;
+            rt.anchoredPosition = srt.anchoredPosition
+                + new Vector2(-((size.x + srt.sizeDelta.x) * 0.5f + 12f), 0f);
+        }
+        else
+        {
+            SetAnchored(rt, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-160f, -36f), new Vector2(110f, 48f));
+        }
+        _autoImage = go.GetComponent<Image>();
+        _autoImage.sprite = RoundedButtonSprite();
+        _autoImage.type = Image.Type.Sliced;
+        _autoButton = go.AddComponent<Button>();
+        _autoButton.targetGraphic = _autoImage;
+        _autoButton.transition = Selectable.Transition.ColorTint;
+        var label = CreateText(go.transform, "Label", "AUTO", 24, Color.white);
+        Stretch(label.rectTransform);
+        _autoLabel = label;
+        go.transform.SetAsLastSibling();
+        // 这里也绑一次（幂等）：BuildHierarchyForPrefab 重建路径不会重跑 WireClicks（有 _wired 守卫）
+        _autoButton.onClick.RemoveListener(ToggleAuto);
+        _autoButton.onClick.AddListener(ToggleAuto);
+        RefreshAutoButton();
+    }
+
+    /// <summary>按当前 AutoPlay 状态刷新按钮外观：关=黑底白字，开=亮绿高亮。</summary>
+    void RefreshAutoButton()
+    {
+        if (_autoImage != null)
+            _autoImage.color = StoryDirector.AutoPlay
+                ? new Color(0.13f, 0.55f, 0.30f, 0.95f)
+                : new Color(0f, 0f, 0f, 0.85f);
+        if (_autoLabel != null)
+        {
+            _autoLabel.text = StoryDirector.AutoPlay ? "AUTO·开" : "AUTO";
+            _autoLabel.color = Color.white;
+        }
+    }
+
+    void ToggleAuto()
+    {
+        StoryDirector.AutoPlay = !StoryDirector.AutoPlay;
+        RefreshAutoButton();
+        Debug.Log("[DialogueUI] 剧情自动播放 = " + StoryDirector.AutoPlay);
+    }
+
+    /// <summary>
+    /// 程序生成的圆角矩形（白 alpha 蒙版 + 九宫格 border），配纯色 Image 就是黑底圆角按钮；
+    /// 静态缓存一份，所有 DialogueUI 实例共用。
+    /// </summary>
+    static Sprite _roundedBtnSprite;
+    static Sprite RoundedButtonSprite()
+    {
+        if (_roundedBtnSprite != null) return _roundedBtnSprite;
+        const int size = 64;
+        const float radius = 18f;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = Mathf.Min(x, size - 1 - x);
+                float dy = Mathf.Min(y, size - 1 - y);
+                float a;
+                if (dx >= radius || dy >= radius)
+                    a = 1f;
+                else
+                {
+                    float ex = radius - dx;
+                    float ey = radius - dy;
+                    a = Mathf.Clamp01(radius - Mathf.Sqrt(ex * ex + ey * ey));
+                }
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        }
+        tex.Apply();
+        _roundedBtnSprite = Sprite.Create(tex, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f),
+            100f, 0, SpriteMeshType.FullRect, new Vector4(radius, radius, radius, radius));
+        return _roundedBtnSprite;
+    }
+
     void EnsureStoryProp()
     {
         if (storyPropImage != null) return;
@@ -177,6 +287,8 @@ public partial class DialogueUI
 
         AutoBindFromHierarchy();
         FaceEachOther();
+        // 上面的清空重建会把 Awake 里建好的 AUTO 按钮删掉，这里补建回来（_autoButton 已是假 null，会重走创建分支）
+        EnsureAutoButton();
         GameFonts.ApplyToHierarchy(transform);
     }
 

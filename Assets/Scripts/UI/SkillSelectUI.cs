@@ -132,6 +132,27 @@ public class SkillSelectUI : MonoBehaviour
 
     static readonly Color LockedTint = new Color(0.42f, 0.42f, 0.42f, 1f);
 
+    // 【2026-10-19 主人拍板】技能名颜色的唯一真源：CharacterUI.prefab 里 Skill_0..Skill_5 的
+    // Label 是主人手涂的 6 种颜色，运行时曾被 ApplySlotTint 刷白覆盖；现在恢复手涂色，
+    // 并通过 NameColorOf 开放给战斗技槽（BattleUI.Skills）共用，保证两处颜色一致。
+    // 下标 = PlayerSkillDefs.All[N]（TownSelectCount=6，顺序稳定）。
+    static readonly Color[] SkillNameColors =
+    {
+        new Color(1f, 1f, 1f),                    // 0 治愈之泉 白
+        new Color(0.55899715f, 1f, 0.3726415f),   // 1 圣盾壁垒 浅绿
+        new Color(0f, 0.60335493f, 1f),           // 2 战意爆发 蓝
+        new Color(0.6794996f, 0f, 1f),            // 3 疾风架势 紫
+        new Color(0.64063966f, 1f, 0f),           // 4 致命专注 绿
+        new Color(1f, 0.1503219f, 0f),            // 5 天雷裁决 红
+    };
+
+    /// <summary>第 index 个技能的名字颜色（角色界面弹窗与战斗技槽共用，越界回退白）。</summary>
+    public static Color NameColorOf(int index)
+    {
+        if (index < 0 || index >= SkillNameColors.Length) return Color.white;
+        return SkillNameColors[index];
+    }
+
     static Sprite LoadSkillIcon(string skillId)
     {
         if (string.IsNullOrEmpty(skillId)) return null;
@@ -229,7 +250,7 @@ public class SkillSelectUI : MonoBehaviour
         if (skillIcons[i] != null)
             skillIcons[i].color = tint;
         if (skillNames[i] != null)
-            skillNames[i].color = unlocked ? Color.white : LockedTint;
+            skillNames[i].color = unlocked ? NameColorOf(i) : LockedTint;
     }
 
     void ApplySelectedMarks(int index)

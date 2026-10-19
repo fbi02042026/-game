@@ -81,8 +81,8 @@ public static class MercenaryOfferGenerator
 
     static MercenaryData RollOne()
     {
-        // 【2026-10-17 主人拍板】酒馆三选一改用战斗内三选一同款稀有度概率，不再按星级 1-5 均匀掷。
-        // 【2026-10-19 主人拍板】传奇压到 5% 左右，剩下的加回普通：普通 62 / 稀有 33 / 传奇 5。
+        // 【2026-10-17 主人拍板】酒馆三选一改用稀有度概率掷点（初版沿用战斗内权重，现独立调参），不再按星级 1-5 均匀掷。
+        // 【2026-10-19 主人拍板】传奇压到 0.5%，省下的加回普通：普通 66.5% / 稀有 33% / 传奇 0.5%。
         var rarity = RollRarityByBattleWeight();
         int star = MercSkillMapping.RarityToStar(rarity);
         if (!MercSkillMapping.TryPickHireId(rarity, out var mapRow))
@@ -114,13 +114,13 @@ public static class MercenaryOfferGenerator
         };
     }
 
-    /// <summary>战斗内三选一同款稀有度权重：普通 62 / 稀有 33 / 传奇 5（总和 100 = 62% / 33% / 5%）。</summary>
-    // —— 稀有度掷点权重（2026-10-19 主人拍板：传奇压到 5%，剩下的加回普通）——
+    /// <summary>酒馆三选一稀有度权重：普通 133 / 稀有 66 / 传奇 1（总和 200 = 66.5% / 33% / 0.5%）。</summary>
+    // —— 稀有度掷点权重（2026-10-19 主人拍板：传奇 5% → 0.5%，省下的加回普通；总和提 200 才能表示 0.5%）——
     // 公示弹窗（MercenaryRecruitPopupUI.ShowRecruitOdds）引用这组常量，改这里公示数字自动跟
-    public const int RollTotal = 100;
-    public const int CommonWeight = 62;
-    public const int RareWeight = 33;
-    public const int LegendaryWeight = 5;
+    public const int RollTotal = 200;
+    public const int CommonWeight = 133;
+    public const int RareWeight = 66;
+    public const int LegendaryWeight = 1;
 
     static MercRosterDefs.MercRarity RollRarityByBattleWeight()
     {

@@ -42,7 +42,12 @@ public partial class WavePlanner
         // 只有每波末尾 2~4 个精英槽位在 CoSpawnWaveMonsters 里单独乘，其余保持普通怪体型/血量。
         float waveScaleMultiplier = 1f;
         if (wave.isBossWave)
-            waveScaleMultiplier = GameConfig.BOSS_SCALE_MULTIPLIER;
+        {
+            // 【2026-10-19 主人拍板】无限裂隙 10 的倍数层 = 大 BOSS：在小 BOSS 体型上再放大一档
+            waveScaleMultiplier = GameConfig.IsEndlessBigBossStage(BattleManager.Instance.EndlessRiftStage)
+                ? GameConfig.BOSS_SCALE_MULTIPLIER * GameConfig.ENDLESS_BIGBOSS_SCALE_EXTRA
+                : GameConfig.BOSS_SCALE_MULTIPLIER;
+        }
 
         var availableSprites = ConfigManager.Instance.GetAvailableSpriteIndices(chapter, stageIdx, wave.isBossWave);
         if (!wave.isBossWave)

@@ -80,7 +80,12 @@ public partial class Monster : UnitBase
     /// 主人明确「不止小怪，精英和 Boss 也是魔法伤害的单位」。
     /// </summary>
     // 2026-09-26 主人拍板：伤害类型随「随机判定出的物理/魔法类型」走（与属性路由一致），不再看 style。
-    public override bool IsMagicDamageDealer() => _isMagicType;
+    // 【2026-10-19 主人拍板「Boss 只许一种攻击方式」】贴脸挥砍兜底已删，_swingStyle 恒等于表 style，
+    // 魔法型必然是远程，不存在「挥砍刀光配魔法型」的情况，原 修C 的 Boss 物理结算例外随之删除。
+    public override bool IsMagicDamageDealer()
+    {
+        return _isMagicType;
+    }
 
     /// <summary>2026-09-26 主人拍板：魔法型取魔攻、物理型取物攻（技能 / 阶段技结算用，避免魔法怪 Attack=0 导致技能打不出伤害）。</summary>
     float GetMainAttackStat()
@@ -255,7 +260,6 @@ public partial class Monster : UnitBase
         _lastAppliedDir = 0;
         _isEnteringMap = false;
         _enterAtPauseStop = false;
-        _bossSwingIndex = 0;
         _enraged = false;
         _forcedTarget = null;
         _worldHpBar = null;

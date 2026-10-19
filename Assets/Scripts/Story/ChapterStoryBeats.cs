@@ -54,6 +54,34 @@ public static class ChapterStoryBeats
 
     // ---------- 战前剧情｜第 1–8 章：每章 2–4 句，首波前弹出 ----------
 
+    /// <summary>
+    /// 【2026-10-19 防卡死】进关时把本章战前/战后剧情会用到的立绘与背景提前读进缓存
+    /// （StoryAssetLoader 有缓存，重复调无害；同步加载几张图，毫秒级）。
+    /// 缺图不中断：StoryPortraits / StoryBackgrounds 自带占位图降级 + LogWarning。
+    /// </summary>
+    public static void WarmupChapterAssets(int chapter)
+    {
+        // 立绘：全章固定阵容（player/xiaomei 全章，melissa 第 3/8 章，guildmaster 第 8 章结局）
+        StoryPortraits.Warmup(
+            StoryPortraits.Player, StoryPortraits.Xiaomei,
+            StoryPortraits.Melissa, StoryPortraits.GuildMaster);
+        string[] bgs;
+        switch (chapter)
+        {
+            case 2: bgs = new[] { StoryBackgrounds.GraveSeven }; break;
+            case 3: bgs = new[] { StoryBackgrounds.MelissaCamp }; break;
+            case 4: bgs = new[] { StoryBackgrounds.Windmill }; break;
+            case 5: bgs = new[] { StoryBackgrounds.WreckShip }; break;
+            case 6: bgs = new[] { StoryBackgrounds.ThroneSeat }; break;
+            case 7: bgs = new[] { StoryBackgrounds.AbyssChoice }; break;
+            case 8: bgs = new[] { StoryBackgrounds.EndHappy, StoryBackgrounds.EndBadHome, StoryBackgrounds.EndBadGate, StoryBackgrounds.EndTrue }; break;
+            default: bgs = null; break;
+        }
+        if (bgs == null) return;
+        for (int i = 0; i < bgs.Length; i++)
+            StoryBackgrounds.Get(bgs[i]);
+    }
+
     static void PlayPre1(Action onDone)
     {
         var beats = new List<StoryBeat>

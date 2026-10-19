@@ -34,13 +34,15 @@ public partial class BattleEntryDraftPanel
         // 【2026-10-18 主人拍板】抽奖币池计数跟着同一组余额走（顶栏那本账是「本局获得金币」，不在这显示）
         if (_poolChipText != null) _poolChipText.text = coins.ToString();
 
-        // 2026-10-05：金币本开局送的免费抽 —— 还有额度时按钮上写「免费 ×N」，不看余额也能点。
+        // 2026-10-05：金币本开局送的免费抽 —— 还有额度时「普通」按钮上写「免费」，不看余额也能点。
+        // 【2026-10-19 主人拍板】免费次数只惠及普通随机抽；三个定向（佣兵/装备/技能）永远按价扣币。
         bool free = freeLeft > 0;
         for (int i = 0; i < _slots.Count; i++)
         {
             var s = _slots[i];
             if (s.Btn == null) continue;
             bool isRandom = !s.Cat.HasValue;
+            bool slotFree = free && isRandom;
             bool has = isRandom || (cats != null && cats.Contains(s.Cat.Value));
             // 价格与余额都按<b>各自币种</b>算（真源 SlotMachineSystem，单出口）：
             // 佣兵定向 = 佣兵币的价与余额；装备/技能定向 = 抽奖币的价与余额。
@@ -49,22 +51,22 @@ public partial class BattleEntryDraftPanel
                 ? coins
                 : SlotMachineSystem.Balance(SlotMachineSystem.FocusCurrency(s.Cat.Value));
             // 2026-10-06：本拍已抽完（引导局一次一抽）→ 全部置灰，玩家只剩「继续」可点。
-            bool on = !_drawLocked && has && (free || wallet >= price);
+            bool on = !_drawLocked && has && (slotFree || wallet >= price);
             // 置灰交给 Button.interactable —— 它会按 disabledColor 作用在 icon 上；
             // 不去改 name/金额 的文字颜色，那是主人调好的美术。
             s.Btn.interactable = on;
             if (s.NameText != null) s.NameText.text = Name(s.Cat);
-            bool insufficient = !free && wallet < price;
+            bool insufficient = !slotFree && wallet < price;
             if (s.CostText != null)
             {
                 // 【2026-10-18 主人拍板】免费抽按钮只写「免费」两字：后面不带次数（×N / 一次都不要），
                 // 且「免费」要居中显示（见下方对齐处理）；有价数字仍按原样显示。
                 s.CostText.text = !has ? "-"
-                               : free ? "免费"
+                               : slotFree ? "免费"
                                : price.ToString();
                 // 【2026-10-18 主人拍板】「免费」居中；非免费恢复预制体原对齐（懒缓存，不永久覆盖美术）。
                 if (!s.CostAlignDefault.HasValue) s.CostAlignDefault = s.CostText.alignment;
-                s.CostText.alignment = free ? TextAnchor.MiddleCenter : s.CostAlignDefault.Value;
+                s.CostText.alignment = slotFree ? TextAnchor.MiddleCenter : s.CostAlignDefault.Value;
                 // 【2026-10-13 #7】币不够：价格数字变红；够了恢复主人调好的原色（懒缓存，不永久覆盖）。
                 if (!s.CostColorDefault.HasValue) s.CostColorDefault = s.CostText.color;
                 s.CostText.color = insufficient ? new Color(1f, 0.42f, 0.42f) : s.CostColorDefault.Value;
@@ -79,7 +81,7 @@ public partial class BattleEntryDraftPanel
             // 免费抽不扣任何币 → 货币图标跟着一起隐（要改成「一直显示」只改这一处）。
             if (s.CoinIcon != null)
             {
-                bool showIcon = has && !free && s.CoinIcon.sprite != null;
+                bool showIcon = has && !slotFree && s.CoinIcon.sprite != null;
                 if (s.CoinIcon.gameObject.activeSelf != showIcon)
                     s.CoinIcon.gameObject.SetActive(showIcon);
             }

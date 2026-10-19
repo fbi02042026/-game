@@ -197,6 +197,37 @@ public sealed class SkillCastService
         {
             float atk = merc.attr != null ? merc.attr.GetAttr(AttrType.Attack) : 0f;
             ApplyHealToTeam(atk * MercSkillExecutor.TeamHealAtkMul(skillId), merc);
+            // 【2026-10-19 主人拍板】SK010 神圣庇佑补齐表里的「全体无敌 1.5 秒」段：时长读表 duration
+            //（缺表回退 1.5s）。只免疫敌方伤害（基类 TakeDamage 入口统一拦截，关卡机制不免疫）。
+            float invuln = MercSkillExecutor.InvulnDuration(skillId);
+            Hero.Instance?.ApplyInvulnerability(invuln);
+            var blessed = MercenaryManager.Instance?.GetActiveMercs();
+            if (blessed != null)
+            {
+                for (int i = 0; i < blessed.Count; i++)
+                {
+                    var b = blessed[i];
+                    if (b == null || b.isDead) continue;
+                    b.ApplyInvulnerability(invuln);
+                }
+            }
+            // 圣光效果：治疗光效在每位受祝福队友（玩家+佣兵）身上各放一份，
+            // 复用技能现走的治疗特效链（GetSkillVfxPrefab → 共享治疗 kit），不新增美术。
+            var vfx = SkillRegistry.Instance;
+            if (vfx != null)
+            {
+                if (Hero.Instance != null && !Hero.Instance.isDead)
+                    vfx.PlaySkillVfx(skillId, Hero.Instance.GetHitPosition(), true, 1, Hero.Instance.transform);
+                if (blessed != null)
+                {
+                    for (int i = 0; i < blessed.Count; i++)
+                    {
+                        var b = blessed[i];
+                        if (b == null || b.isDead) continue;
+                        vfx.PlaySkillVfx(skillId, b.GetHitPosition(), true, 1, b.transform);
+                    }
+                }
+            }
         }
         else if (kind == MercSkillExecutor.Kind.FearThenFallback)
         {
@@ -212,8 +243,15 @@ public sealed class SkillCastService
         }
         else if (skill.skillType == SkillSystem.SkillType.Buff)
             ExecuteAllySkillFallback(merc, skill);
-        else if (!(SkillSystem.Instance != null && SkillSystem.Instance.UseSkill(skill, merc)))
-            ExecuteAllySkillFallback(merc, skill);
+        else
+        {
+            // 【2026-10-19 深挖补漏】SK003 横扫千军表写「最多 3 个敌人」但 merc 表无目标数列：
+            // 扇形技能统一补 3 上限，由 SkillSystem 主路径的 aoeMaxTargets 消费（与天雷同口径）。
+            if (MercSkillExecutor.IsFrontalAoe(skillId) && skill.aoeMaxTargets <= 0)
+                skill.aoeMaxTargets = 3;
+            if (!(SkillSystem.Instance != null && SkillSystem.Instance.UseSkill(skill, merc)))
+                ExecuteAllySkillFallback(merc, skill);
+        }
 
         Vector3 vfxFrom = merc.GetFirePosition();
         Vector3 vfxTo = healTarget != null
@@ -365,12 +403,17 @@ public sealed class SkillCastService
         }
         else
         {
+            // 【2026-10-19】兜底 AOE 也尊重目标数上限（与 SkillSystem 主路径同口径，cap<=0 不限）
+            int cap = skill.aoeMaxTargets;
+            int hitCount = 0;
             for (int i = monsters.Count - 1; i >= 0; i--)
             {
                 if (monsters[i] == null || monsters[i].isDead) continue;
                 float dist = Mathf.Abs(monsters[i].transform.position.x - caster.transform.position.x);
                 if (skill.aoeRadius > 0 && dist > skill.aoeRadius) continue;
+                if (cap > 0 && hitCount >= cap) break;
                 monsters[i].TakeDamage(damage, false, false, true, vfxDir, caster);
+                hitCount++;
             }
         }
     }

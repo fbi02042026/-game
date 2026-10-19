@@ -359,7 +359,9 @@ public static class PlayerJobDefs
         return false;
     }
 
-    static bool IsShieldTemplate(EquipTemplate t)
+    /// <summary>是否真盾牌模板。【2026-10-19 改 public】副手抽奖池要靠它挡防具
+    /// （防具 weaponType 也是 None，只挡武器挡不住），RiftEquipGenerator 副手分支复用本判定。</summary>
+    public static bool IsShieldTemplate(EquipTemplate t)
     {
         if (t == null) return false;
         if (t.slotType == EquipSlotType.OffHand && t.weaponType == WeaponType.None) return true;

@@ -190,13 +190,22 @@ public static class SlotMachineSystem
     /// <para>【2026-10-12 主人拍板】主人原话「装备权重改成70 技能20 佣兵10」；
     /// 【2026-10-13 主人拍板】主人反馈「佣兵和技能的机率太高了」→ 再压成 85/10/5。
     /// 概率只认 <see cref="SlotMachineDefs"/> 那三个常量，这里不另写一份。</para>
+    /// <para>【2026-10-19 主人拍板】抽奖币升格为**第 4 个方向**（与佣兵同权重 5，
+    /// 见 <see cref="SlotMachineDefs.CATEGORY_WEIGHT_GOLD"/>）：<paramref name="allowGold"/> = true 时
+    /// 候选里会带上它（能不能出由 <see cref="GoldAllowed"/> 决定：第 1 抽 / 保底佣兵窗口 /
+    /// 本局次数超限都不出）。老虎机免费三选一（CoJackpot 调用方）传 false 排除 ——
+    /// 白送的奖励还抽回币没有意义，与「第 1 抽不安慰」同一精神。</para>
     /// 结果在这里就定死，老虎机只负责把它演出来。
     /// </summary>
-    public static DraftCategory RollCategory(List<DraftCategory> cats)
+    public static DraftCategory RollCategory(List<DraftCategory> cats, bool allowGold = true)
     {
         if (cats == null || cats.Count == 0) return DraftCategory.Skill;
 
-        int total = 0;
+        // 抽奖币方向：不占「有内容可抽」的坑（它永远有内容），按 allowGold / GoldAllowed 决定进不进候选
+        bool withGold = allowGold && GoldAllowed();
+        int goldW = withGold ? Mathf.Max(1, SlotMachineDefs.CategoryWeight(DraftCategory.Gold)) : 0;
+
+        int total = goldW;
         for (int i = 0; i < cats.Count; i++)
             total += Mathf.Max(1, SlotMachineDefs.CategoryWeight(cats[i]));
         int roll = Random.Range(0, total);
@@ -205,6 +214,8 @@ public static class SlotMachineSystem
             roll -= Mathf.Max(1, SlotMachineDefs.CategoryWeight(cats[i]));
             if (roll < 0) return cats[i];
         }
+        // 落到三类权重总和之后 = 抽中金币方向（withGold 时 goldW 占了尾段）
+        if (withGold) return DraftCategory.Gold;
         return cats[cats.Count - 1];
     }
 
@@ -331,7 +342,8 @@ public static class SlotMachineSystem
             if (cats.Contains(want)) return want;
         }
         // 正式关保底佣兵：触发条件唯一出口 = MercGuaranteeActive()（n 是当前这抽的 0 基序号，
-        // NoteDraw 在抽完后才推进，n>=2 = 第 3 抽起）。窗口内安慰奖由 ConsolationAllowed 同步挡掉 ——
+        // NoteDraw 在抽完后才推进，n>=3 = 第 4 抽起，2026-10-19 主人拍板「保底佣兵改成3次」）。
+        // 窗口内金币方向由 GoldAllowed 同步挡掉 ——
         // 保底必须真的给佣兵，不能让玩家花钱抽回币（2026-10-18 主人报「抽奖 3 次全是抽奖币」）。
         // 佣兵池取不到内容时照旧落回随机（沿用上面「取不到内容自动落回随机」口径）；
         // 引导局有自己的定序，不叠加。
@@ -359,40 +371,57 @@ public static class SlotMachineSystem
     }
 
     /// <summary>
-    /// 这一抽能不能出金币安慰奖 —— 【2026-10-13 抽奖优化 #3】**唯一出口**。
-    /// <para>口径 = <c>!InGuaranteeWindow() &amp;&amp; DrawIndex &gt; 0</c>：引导定序窗口内不安慰
-    /// （沿用 <see cref="InGuaranteeWindow"/> 既有语义，它本身不动，还被 <see cref="ResolveCategory"/> 用）；
-    /// 正式关<b>第 1 抽永不安慰</b> —— 防「开局花 80 抽回 40」的开局挫败，第 2 抽起恢复纯随机。</para>
-    /// <para>【2026-10-18 主人报「第二关抽奖 3 次全是抽奖币」】新增第二道窗口：<see cref="MercGuaranteeActive"/>。
-    /// 保底佣兵窗口内（非引导、已抽 ≥2 次、本局没佣兵）这一抽会被 <see cref="ResolveCategory"/>
-    /// 强制成佣兵方向 —— 若池里还混着金币（权重 6），而酒馆上架队列每名佣兵权重只有 1
-    /// （2026-10-19 拍板「上架等概率」），金币就以 6:3 盖过全体佣兵，保底变成「三分之二概率抽回币」。
-    /// → 窗口内保底必须真的给佣兵，安慰奖整抽不发；佣兵抽到手窗口自动关闭，安慰奖恢复。
-    /// 与「佣兵确有内容可给」同源判定（<see cref="AvailableCategories"/> 含 Merc 才挡），
-    /// 真没佣兵可给时维持原口径，不扩大化。</para>
-    /// <para>两处调用点（抽取与概率公示）都改问这里，公示与实际自动同源：
-    /// <c>BattleManager.CoInstantPick</c> 的 <c>DraftPool.PickOne</c>、<c>DraftPool.BuildOddsRows</c>。
-    /// ⚠ 免费老虎机三选一（<c>DraftPool.BuildCards(cat)</c>）按现有意图硬编码带安慰奖，不归这里管。</para>
+    /// 这一抽能不能出「抽奖币」方向 —— 【2026-10-19 主人拍板】**唯一出口**。
+    /// <para>【口径升级】抽奖币不再是混在三类池子里的安慰奖，而是**第 4 个方向**
+    ///（与佣兵同概率，见 <see cref="SlotMachineDefs.CATEGORY_WEIGHT_GOLD"/>），
+    /// 本函数改判「这一抽的随机候选里带不带金币方向」：</para>
+    /// <para>① <see cref="InGuaranteeWindow"/>：引导定序窗口内不出（引导三拍必须是 装备→佣兵→技能）；<br/>
+    /// ② <see cref="MercGuaranteeActive"/> 且佣兵确有内容：保底佣兵窗口内不出 ——
+    ///    保底必须真的给佣兵，不能让金币方向抢走保底概率（2026-10-18 主人报「抽奖 3 次全是抽奖币」）；<br/>
+    /// ③ 本局已生效的抽奖币 ≥ <see cref="SlotMachineDefs.MAX_GOLD_PRIZE_PER_RUN"/>：次数到顶不出
+    ///    （2026-10-19 主人拍板「抽中抽奖币的次数也做下限制 比如2-4次」）；<br/>
+    /// ④ <c>DrawIndex &gt; 0</c>：正式关第 1 抽永不安慰（2026-10-13 #3，防「开局花 80 抽回 40」）。</para>
+    /// <para>调用点：抽取（<c>BattleManager.CoStageEntryDraft</c> → RollCategory）、
+    /// 概率公示（<c>DraftPool.BuildOddsRows</c>）——公示与实际自动同源。</para>
     /// </summary>
-    public static bool ConsolationAllowed()
+    public static bool GoldAllowed()
     {
         if (InGuaranteeWindow()) return false;
         if (MercGuaranteeActive() && AvailableCategories().Contains(DraftCategory.Merc))
             return false;
+        if (_goldPrizesThisRun >= SlotMachineDefs.MAX_GOLD_PRIZE_PER_RUN) return false;
         return DrawIndex > 0;
     }
 
+    // ============================================================
+    // 【2026-10-19 主人拍板】本局抽中抽奖币的次数（次数上限的真源）。
+    // 只在抽奖币卡**生效**时 +1（RunDraftDirector.ApplyCard 的 Gold 分支，唯一生效出口），
+    // 每局开始清零（RunDraftDirector.OnRunStart → <see cref="ResetRunGoldPrizeCount"/>）。
+    // ============================================================
+
+    static int _goldPrizesThisRun = 0;
+
+    /// <summary>本局已抽中几次抽奖币（上限判定用，见 <see cref="SlotMachineDefs.MAX_GOLD_PRIZE_PER_RUN"/>）。</summary>
+    public static int GoldPrizesThisRun => _goldPrizesThisRun;
+
+    /// <summary>每局开始清零（唯一调用点 = RunDraftDirector.OnRunStart，续关不清，行为同免费抽额度）。</summary>
+    public static void ResetRunGoldPrizeCount() => _goldPrizesThisRun = 0;
+
+    /// <summary>记一次抽奖币到手（唯一调用点 = RunDraftDirector.ApplyCard 的 Gold 分支，生效才算）。</summary>
+    public static void NoteGoldPrize() => _goldPrizesThisRun++;
+
     /// <summary>
     /// 【2026-10-17 主人拍板「开局卡关」】正式关保底佣兵的**触发条件**（唯一出口）：
-    /// 非引导局、本局已抽 ≥2 次（第 3 抽起）、且本局一只佣兵都没有。
-    /// <see cref="ResolveCategory"/> 据此强制佣兵方向；<see cref="ConsolationAllowed"/>
-    /// 据此把金币安慰奖挡在保底窗口外（2026-10-18 主人报「抽奖 3 次全是抽奖币」的根因修复）。
+    /// 非引导局、本局已抽 ≥3 次（第 4 抽起，【2026-10-19 主人拍板「保底佣兵改成3次」】由 ≥2 改来）、
+    /// 且本局一只佣兵都没有。
+    /// <see cref="ResolveCategory"/> 据此强制佣兵方向；<see cref="GoldAllowed"/>
+    /// 据此把金币方向挡在保底窗口外（2026-10-18 主人报「抽奖 3 次全是抽奖币」的根因修复）。
     /// ⚠ 是否真的强制还要看佣兵方向**有内容可给**（cats 含 Merc），那道可用性判定留在 <see cref="ResolveCategory"/>。
     /// </summary>
     public static bool MercGuaranteeActive()
     {
         return !IsTutorialRun
-            && DrawIndex >= 2
+            && DrawIndex >= 3
             && RunLoadout.Mercs().Count == 0;
     }
 
@@ -477,6 +506,7 @@ public static class SlotMachineSystem
         {
             case DraftCategory.Skill: return "技能";
             case DraftCategory.Merc: return "佣兵";
+            case DraftCategory.Gold: return "抽奖币";
             default: return "装备";
         }
     }
@@ -556,7 +586,8 @@ public static class SlotMachineSystem
     }
 
     /// <summary>【2026-10-12 主人拍板】这一抽的结果是不是「再来一次」——
-    /// 抽奖**开始前**掷（命中则本次不出类型奖品，只送一次免费抽，见 BattleManager.CoStageEntryDraft）。</summary>
+    /// 抽奖**开始前**掷（命中则本次不出类型奖品，只送一次免费抽，见 BattleManager.CoStageEntryDraft）。
+    /// 【2026-10-19 主人拍板】只对**随机抽**掷（picked == null）；三个定向不吃 reroll，掷点由调用方过滤。</summary>
     public static bool RollReroll() => Random.value < RerollChance();
 
     /// <summary>

@@ -49,6 +49,11 @@ public partial class DialogueUI : MonoBehaviour
     public UnityEvent onSkip;
     public ChoiceEvent onChoiceSelected;
 
+    // —— 自动播放（AUTO）按钮：代码建，预制体里没有（2026-10-19 主人拍板加剧情自动播放）——
+    Button _autoButton;
+    Image _autoImage;
+    Text _autoLabel;
+
     [Serializable]
     public class ChoiceEvent : UnityEvent<int> { }
 
@@ -118,6 +123,7 @@ public partial class DialogueUI : MonoBehaviour
         EnsureTextClip();
         if (nextArrowImage != null)
             _arrowBasePos = nextArrowImage.rectTransform.anchoredPosition;
+        EnsureAutoButton();
         WireClicks();
         HideChoices();
     }

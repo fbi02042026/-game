@@ -198,8 +198,12 @@ public partial class BattleUI : MonoBehaviour
             chip.DragEnabled = false;          // 由 RefreshSkillSlotDragState 按阶段打开
             chip.OnOrderChanged = OnSkillSlotReordered;
 
-            // 【2026-10-12 主人拍板「点击技能出现简单的介绍 可以是个弹窗」】
-            WireSkillInfoClick(av, i);
+            // 【2026-10-19 主人拍板「点击后弹出获得技能那个弹窗 统一一下」】
+            // 点技槽弹「获得技能」弹窗（SkillObtainPopupUI.ShowFromId，与抽中技能同一套），
+            // 与佣兵头像点弹详情（WireMercAvatarClick）同一范式。拖拽调序不受影响
+            // （拖动超过阈值后 Unity 不再派发 click + IsDragging 双保险）。
+            // 点击仍然不施放：技能由 PlayerSkillPassive / MercSkillCaster 自动释放。
+            WireSkillSlotClick(av, i);
         }
     }
 

@@ -203,6 +203,7 @@ public class WorldMapPopup : MonoBehaviour
         if (enterButton != null)
             enterButton.gameObject.SetActive(false);
         RefreshRegions();
+        PlayNewUnlockFxIfNeeded();
     }
 
     /// <summary>每次打开恢复原始缩放和位置，避免上次的拖动/缩放状态残留。</summary>
@@ -276,6 +277,60 @@ public class WorldMapPopup : MonoBehaviour
             if (e != null && e.chapter == chapterId && e.clearCount > 0) return true;
         }
         return false;
+    }
+
+    // ============================================================
+    // 新区域解锁动效（2026-10-19 主人要求）
+    // ============================================================
+
+    /// <summary>已播过解锁动效的最大章节号（PlayerPrefs 记档），避免每次打开地图都重复播。</summary>
+    const string SeenUnlockKey = "worldmap.seen.maxchapter";
+
+    /// <summary>
+    /// 打开世界地图时，若有比"已播过"更新的解锁地块：对其脉冲放大一下 + 飘字提示，
+    /// 然后记档，下次打开不再播。典型场景：通关第一章后第一次开图，幽冥墓园亮起。
+    /// </summary>
+    void PlayNewUnlockFxIfNeeded()
+    {
+        int seen = PlayerPrefs.GetInt(SeenUnlockKey, 1);
+        int maxSeen = seen;
+        var newNames = new List<string>();
+        for (int i = 0; i < _slots.Length; i++)
+        {
+            var slot = _slots[i];
+            if (slot == null || slot.root == null) continue;
+            if (!IsUnlocked(slot.chapterId)) continue;
+            if (slot.chapterId <= seen) continue;
+            if (slot.chapterId > maxSeen) maxSeen = slot.chapterId;
+            var rt = slot.root.transform as RectTransform;
+            if (rt != null) StartCoroutine(CoUnlockPulse(rt));
+            newNames.Add(slot.def != null && !string.IsNullOrEmpty(slot.def.displayName)
+                ? slot.def.displayName
+                : GameConfig.GetChapterMapName(slot.chapterId));
+        }
+        if (newNames.Count > 0)
+            UIManager.Instance?.ShowToast("解锁新区域：" + string.Join("、", newNames.ToArray()));
+        if (maxSeen > seen)
+        {
+            PlayerPrefs.SetInt(SeenUnlockKey, maxSeen);
+            PlayerPrefs.Save();
+        }
+    }
+
+    System.Collections.IEnumerator CoUnlockPulse(Transform t)
+    {
+        if (t == null) yield break;
+        Vector3 baseScale = t.localScale;
+        float dur = 0.45f;
+        float elapsed = 0f;
+        while (elapsed < dur)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float k = 1f + Mathf.Sin((elapsed / dur) * Mathf.PI) * 0.25f;
+            t.localScale = baseScale * k;
+            yield return null;
+        }
+        t.localScale = baseScale;
     }
 
     // ============================================================

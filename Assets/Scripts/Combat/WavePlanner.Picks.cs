@@ -207,12 +207,17 @@ public partial class WavePlanner
         spriteIndexOverride = 1;
         if (ConfigManager.Instance == null) return false;
 
-        var pool = ConfigManager.Instance.GetWaveMonsterPool(CurrentChapter, stageIdx);
-        if (pool == null || pool.Count == 0) return false;
-
         bool wantBoss = isBossWave && !forceNonBoss;
 
-        var availableSprites = ConfigManager.Instance.GetAvailableSpriteIndices(CurrentChapter, stageIdx, wantBoss);
+        // 【2026-10-19 修A】无限裂隙每层 stageIndex 恒为 0（ChapterManager.StartEndlessRift），
+        // 按 stageIdx 过滤会把 minWave=9 的真 Boss 行全滤掉，Boss 波只能拿普通怪模板走 800/55 兜底。
+        // Boss 波取池按本章末关（STAGES_PER_CHAPTER-1）取，真 Boss 行必入池；
+        // 主线 Boss 关 stageIdx 本来就是末关，行为不变。小怪波（wantBoss=false）仍按原 stageIdx。
+        int poolIdx = wantBoss ? GameConfig.STAGES_PER_CHAPTER - 1 : stageIdx;
+        var pool = ConfigManager.Instance.GetWaveMonsterPool(CurrentChapter, poolIdx);
+        if (pool == null || pool.Count == 0) return false;
+
+        var availableSprites = ConfigManager.Instance.GetAvailableSpriteIndices(CurrentChapter, poolIdx, wantBoss);
         if (!wantBoss)
         {
             var nonBossSprites = pool.Where(m => !m.isBoss && m.spriteIndex > 0)

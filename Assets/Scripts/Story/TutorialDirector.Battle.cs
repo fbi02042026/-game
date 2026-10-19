@@ -336,7 +336,14 @@ public partial class TutorialDirector
         // 这里不再重复 Show —— 原位置压在精英波预告之后，主人报「有点靠后了」。
 
         Monster rival = null;
-        yield return CoFindWaveElite(bm, m => rival = m);
+        // 【2026-10-19 主人拍板「血条到底再弹遗言」】宿敌一找到就挂「死亡门」（holdAtDeathDoor）：
+        // 血量被打到底不判死（钳在 1 点、血条到底），遗言说完解除后由下方判死收尾 ——
+        // 遗言永远不会被玩家抢先打死而跳过，且弹出时机必然是血条到底那一刻。
+        yield return CoFindWaveElite(bm, m =>
+        {
+            rival = m;
+            if (rival != null) rival.holdAtDeathDoor = true;
+        });
 
         if (rival != null && !rival.isDead)
         {
@@ -362,6 +369,7 @@ public partial class TutorialDirector
             // 现在遗言说完直接判死，精英走自己的死亡动画。
             if (rival != null && !rival.isDead)
             {
+                // 死亡门已在 CoEliteLastWords 的 finally 里解除，这刀演出伤害能正常判死
                 bool canActBefore = bm.UnitsCanAct;
                 bm.UnitsCanAct = false;
                 rival.TakeDamage(TutorialRescueDamage, false, true, true, 0, merc, suppressDamageText: true);

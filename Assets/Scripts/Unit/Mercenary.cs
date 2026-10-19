@@ -693,13 +693,35 @@ public class Mercenary : UnitBase
 
             if (IsInBasicAttackRange(target))
             {
-                if (rb != null) rb.velocity = Vector2.zero;
-                // 受击动画不挡出手：轮到攻击时 PlayAttack 立即打断 DAMAGED
-                if (attackCd <= 0f
-                    && (unitAnim == null || !unitAnim.InAttackLock))
+                // 【2026-10-19 主人拍板】交战跟随上限：离玩家超过 MERC_STICK_RADIUS 就「边打边跟」——
+                // 朝玩家方向移动（攻距内照常按 CD 开火），保证佣兵始终聚在玩家身边；
+                // 半径内仍维持站桩不并道（2026-10-09 拍板不变）。
+                var stickHero = Hero.Instance;
+                bool mustStickBack = stickHero != null && !stickHero.isDead
+                    && Mathf.Abs(GetCombatX(this) - GetCombatX(stickHero)) > GameConfig.MERC_STICK_RADIUS;
+                if (mustStickBack)
                 {
-                    Attack(target);
-                    attackCd = GetAttackCooldown();
+                    int backDir = GetCombatX(stickHero) > GetCombatX(this) ? 1 : -1;
+                    if (rb != null)
+                        rb.velocity = new Vector2(backDir * GetCombatMoveSpeed(), rb.velocity.y);
+                    isMoving = true;
+                    if (attackCd <= 0f
+                        && (unitAnim == null || !unitAnim.InAttackLock))
+                    {
+                        Attack(target);
+                        attackCd = GetAttackCooldown();
+                    }
+                }
+                else
+                {
+                    if (rb != null) rb.velocity = Vector2.zero;
+                    // 受击动画不挡出手：轮到攻击时 PlayAttack 立即打断 DAMAGED
+                    if (attackCd <= 0f
+                        && (unitAnim == null || !unitAnim.InAttackLock))
+                    {
+                        Attack(target);
+                        attackCd = GetAttackCooldown();
+                    }
                 }
             }
             else if (melee && distance <= attackRange)
@@ -847,8 +869,14 @@ public class Mercenary : UnitBase
         if (Mathf.Abs(dx) > 0.22f)
         {
             int moveDir = dx > 0f ? 1 : -1;
+            // 【2026-10-19 主人拍板】追赶加速：落后编队位超过起步距离 → 比玩家快一档追回来。
+            // 同速追赶永远追不上（见 GameConfig.MERC_CATCHUP_SPEED_MUL 注释），
+            // 不加这条佣兵只会越掉越远。回队（拴绳触发）也走这里，一并享受加速。
+            float speed = GetCombatMoveSpeed();
+            if (Mathf.Abs(dx) > GameConfig.MERC_CATCHUP_ENTER_DIST)
+                speed *= GameConfig.MERC_CATCHUP_SPEED_MUL;
             if (rb != null)
-                rb.velocity = new Vector2(moveDir * GetCombatMoveSpeed(), rb.velocity.y);
+                rb.velocity = new Vector2(moveDir * speed, rb.velocity.y);
             isMoving = true;
         }
         else if (!HasAliveEnemyOnField())

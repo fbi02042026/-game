@@ -177,6 +177,17 @@ public class CharacterSlotUI
     }
 
     /// <summary>
+    /// 【2026-10-19 主人拍板「佣兵的名字应该随稀有度」】名字上色出口：只佣兵槽调用，
+    /// 色值走 RarityPalette（普通灰白 / 稀有蓝 / 传奇橙金），与头顶名签同一张色表。
+    /// 玩家槽不调，保持预制体原色。nameText 缺失静默跳过（SetName 已报过错，这里不重复刷屏）。
+    /// </summary>
+    public void SetNameColor(Color c)
+    {
+        if (nameText == null) return;
+        nameText.color = c;
+    }
+
+    /// <summary>
     /// 设置头像图片（只换图，不动排版）。
     /// 预制体里美术摆的是 sizeDelta 200×200 + localScale 0.7，头像资源本身也是 200×200 —— 直接换图即可，
     /// 不要再改 preserveAspect / 加 AspectRatioFitter / 抹 localScale，否则头像会比预制体明显大一圈。

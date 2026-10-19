@@ -130,7 +130,8 @@ public class Hero : UnitBase
     }
 
     // —— 闪避系统（D2）：独立按钮 + 无敌帧 + 飘字，不新增美术 ——
-    protected override bool IsInvincibleNow() => Time.time < invincibleUntil;
+    // 与技能型无敌（基类 _skillInvulnUntil，SK010 神圣庇佑）叠加：任一生效即无敌
+    protected override bool IsInvincibleNow() => Time.time < invincibleUntil || base.IsInvincibleNow();
 
     // —— 残血加成（R1）：HP 低于阈值时攻速/普攻暴击提升，制造残血反扑 ——
     private bool IsLowHp()

@@ -44,6 +44,14 @@ public class GameSceneManager : Singleton<GameSceneManager>
 
     public void GoMainHub() => LoadTownSceneAsync();
 
+    /// <summary>清档后回登录界面（Boot 场景）：玩家从「开始冒险」重新开始游戏。
+    /// Boot 重入安全（BootManager 幂等），持久系统挂在 DontDestroyOnLoad 不受影响。</summary>
+    public void GoLogin()
+    {
+        StoryDirector.Instance?.NotifySceneChanged();
+        UnityEngine.SceneManagement.SceneManager.LoadScene(BOOT_SCENE);
+    }
+
     /// <summary>Battle → Town，异步避免主线程假死</summary>
     public void ReturnToTown()
     {

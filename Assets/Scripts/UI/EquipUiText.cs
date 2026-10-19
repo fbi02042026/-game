@@ -114,7 +114,9 @@ public static class EquipUiText
     /// 数据层对这些属性统一写成 <c>isPercent = false</c> + 小数值（0.05 = 5%），
     /// 但 UI 必须按百分比显示，否则 0.05 会被 0.# 四舍五入成「0.1」、还丢掉 % 号。
     /// 口径对齐 <see cref="RiftEquipGenerator"/> 的 IsRateAttr（CRIT_RATE / CRIT_DMG / ATK_SPD /
-    /// DMG_RED / DODGE / LIFE_STEAL / ELE_DMG / HEAL / HP_REGEN / CONTROL_RES / ANTI_CRIT）。
+    /// DMG_RED / DODGE / LIFE_STEAL / POISON / HEAL / HP_REGEN / CONTROL_RES / ANTI_CRIT）。
+    /// 【2026-10-19 主人拍板】FireDamage / IceDamage 已移出本集合：火冰改「点」口径（5 = +5%），
+    /// 显示走 <see cref="Value"/> 里的专属分支，不再 ×100。
     /// 攻速在 TryMapAttr 里被强制 isPercent = true（走 Value 的规则①），放进来只为口径一致。
     /// </summary>
     public static bool IsRateAttr(AttrType t)
@@ -126,8 +128,6 @@ public static class EquipUiText
             case AttrType.AttackSpeed:
             case AttrType.Dodge:
             case AttrType.LifeSteal:
-            case AttrType.FireDamage:
-            case AttrType.IceDamage:
             case AttrType.EliteDamage:
             case AttrType.Poison:
             // 2026-10-10：PhyPower / MagicPower 的 isPercent 已统一改成 false（加算，小数值 0.12 = 12%）。
@@ -154,6 +154,11 @@ public static class EquipUiText
     /// </summary>
     public static string Value(AttrType t, float value, bool isPercent)
     {
+        // 【2026-10-19 主人拍板】火/冰改「点」口径：结算侧一直是 词缀值 ×0.01（UnitBase.Combat
+        // FIRE/ICE_BONUS_PER_POINT，09-26 拍板「词缀值 5 = +5%」），三个来源（掉落 ELE_DMG /
+        // 抽奖词缀 / 模板）现在都按点存。显示直接 = 点值 + %，不再走 IsRateAttr ×100
+        //（旧口径把 5 点显示成「+500%」，虚标 100 倍）。
+        if (t == AttrType.FireDamage || t == AttrType.IceDamage) return value.ToString("0.#") + "%";
         // 百分比也一并用 RoundToInt：旧写法 12.5% 会显示「12.5%」，而获得时显示「13%」。
         if (isPercent || IsRateAttr(t)) return Mathf.RoundToInt(value * 100f) + "%";
         return Mathf.RoundToInt(value).ToString();

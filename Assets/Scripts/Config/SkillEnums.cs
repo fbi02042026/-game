@@ -153,7 +153,11 @@ public enum DraftCategory
 {
     Skill = 0,   // 技能：新技能 / 升星
     Merc = 1,    // 佣兵：招募 / 升级 / 升星
-    Equip = 2    // 装备：本局掉落三选一（不带出）
+    Equip = 2,   // 装备：本局掉落三选一（不带出）
+    // 【2026-10-19 主人拍板】抽奖币从「混在各类池子里的安慰奖」改成**独立方向**：
+    // 抽中它 = 直接得抽奖币（当抽价 × 0.5），概率与佣兵相同（见 SlotMachineDefs.CATEGORY_WEIGHT_GOLD）。
+    // 只会从「随机抽」里出（定向按钮没有它；「再来一次」老虎机也排除它）。
+    Gold = 3     // 抽奖币方向
 }
 
 public static class DraftCategoryUtil
@@ -164,6 +168,7 @@ public static class DraftCategoryUtil
         {
             case DraftCategory.Merc: return "佣兵";
             case DraftCategory.Equip: return "装备";
+            case DraftCategory.Gold: return "抽奖币";
             default: return "技能";
         }
     }
@@ -175,6 +180,7 @@ public static class DraftCategoryUtil
         {
             case DraftCategory.Merc: return "兵";
             case DraftCategory.Equip: return "装";
+            case DraftCategory.Gold: return "币";
             default: return "技";
         }
     }
@@ -185,6 +191,7 @@ public static class DraftCategoryUtil
         {
             case DraftCategory.Merc: return new Color(0.42f, 0.72f, 0.94f);
             case DraftCategory.Equip: return new Color(0.98f, 0.72f, 0.30f);
+            case DraftCategory.Gold: return RarityPalette.Gold;
             default: return new Color(0.72f, 0.52f, 0.98f);
         }
     }

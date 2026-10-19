@@ -200,11 +200,14 @@ public class SkillAvatarUI
         if (labelText != null) labelText.gameObject.SetActive(visible);
     }
 
-    /// <summary>把底字换成技能名；没名字时退回占位文案。</summary>
-    public void SetSkillName(string name, string fallback = "被动")
+    /// <summary>把底字换成技能名；没名字时退回占位文案。
+    /// 【2026-10-19 主人拍板】nameColor 有值时同步刷名字颜色（战斗技槽传
+    /// <see cref="SkillSelectUI.NameColorOf"/>，与角色界面技能弹窗同色）；不传则不动颜色。</summary>
+    public void SetSkillName(string name, string fallback = "被动", Color? nameColor = null)
     {
         if (labelText == null) return;
         labelText.text = string.IsNullOrEmpty(name) ? fallback : name;
+        if (nameColor.HasValue) labelText.color = nameColor.Value;
         labelText.gameObject.SetActive(true);
     }
 

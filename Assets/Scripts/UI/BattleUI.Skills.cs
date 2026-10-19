@@ -66,8 +66,12 @@ public partial class BattleUI : MonoBehaviour
             slot.SetAvatar(icon);
             // 已装备技能：底框还原原始色，不压暗
             slot.SetEmptyDim(false);
-            // 底字不再写死「被动」：有技能就显示技能名
-            slot.SetSkillName(active != null ? active.skillName : id);
+            // 底字不再写死「被动」：有技能就显示技能名。
+            // 【2026-10-19 主人拍板】名字颜色 = 角色界面技能弹窗（SkillSelectUI）的手涂色：
+            // 技槽 id 是运行时 id（可能带后缀），先 ResolveRealSkillId 归一，再 IndexOf 定位；
+            // 查不到（-1）时 NameColorOf 回退白色。
+            slot.SetSkillName(active != null ? active.skillName : id,
+                nameColor: SkillSelectUI.NameColorOf(PlayerSkillDefs.IndexOf(PlayerSkillDefs.ResolveRealSkillId(id))));
             // 右下角等级：2026-09-22 主人要求——战斗内技能只升级，右下角只显示**数字**，
             // 不要再拼「★」前缀（数字节点用预制体里美术摆的 level，见 BindRunSkillSlots）
             slot.SetLevelText(star > 0 ? star.ToString() : "");
@@ -266,25 +270,28 @@ public partial class BattleUI : MonoBehaviour
     }
 
     // ============================================================
-    // 技槽点击 → 技能简介弹窗（2026-10-12 主人拍板）
+    // 技槽点击 → 「获得技能」弹窗（2026-10-19 主人拍板「点击后弹出获得技能那个弹出 统一一下」）
     // ============================================================
 
+    // 前身是 2026-10-12 的「技能简介小浮框」（WireSkillInfoClick），2026-10-19 按主人口径下线，
+    // 统一改弹 <see cref="SkillObtainPopupUI"/>（与抽中技能、佣兵头像点弹详情同一套获得类弹窗）。
+
     /// <summary>
-    /// 给技槽补一层透明点击层 + Button，点一下弹技能简介、再点一下关掉。
-    /// 与 <see cref="EquipQuickSlotUI.WireStatTipClick"/> 同一套做法：不碰预制体、不加美术，
+    /// 给技槽补一层透明点击层 + Button，点一下弹「获得技能」弹窗。
+    /// 与佣兵头像点弹详情（WireMercAvatarClick）同一范式：不碰预制体、不加美术，
     /// 透明 Image 只负责接射线（槽位底图 raycastTarget 未必开着）；Button 挂在它上面，
     /// 与槽里原有的图标 / 顺序角标 / 「新」角标共存。幂等：已有就复用，只重绑 onClick。
     /// <para>⚠ 拖拽不受影响：拖拽事件会沿父链冒泡到槽根上的 <see cref="SkillOrderChip"/>，
     /// 而拖动超过阈值后 Unity 不再派发 click —— 再叠一层 <c>chip.IsDragging</c> 双保险。</para>
     /// </summary>
-    void WireSkillInfoClick(SkillAvatarUI av, int index)
+    void WireSkillSlotClick(SkillAvatarUI av, int index)
     {
         if (av == null || av.root == null) return;
 
-        var node = FindDeepChildIgnoreCase(av.root.transform, "SkillInfoClick");
+        var node = FindDeepChildIgnoreCase(av.root.transform, "SkillSlotClick");
         if (node == null)
         {
-            var hit = new GameObject("SkillInfoClick", typeof(RectTransform), typeof(Image));
+            var hit = new GameObject("SkillSlotClick", typeof(RectTransform), typeof(Image));
             hit.transform.SetParent(av.root.transform, false);
             hit.transform.SetAsLastSibling();
             var rt = hit.GetComponent<RectTransform>();
@@ -308,30 +315,24 @@ public partial class BattleUI : MonoBehaviour
         btn.targetGraphic = node.GetComponent<Image>();
         btn.onClick.RemoveAllListeners();
         int capture = index;
-        btn.onClick.AddListener(() => OnSkillSlotInfoClick(capture, av.root));
+        btn.onClick.AddListener(() => OnSkillSlotClick(capture, av.root));
     }
 
     /// <summary>
-    /// 技槽点击：按下标取本局技能 id（与 <see cref="UpdateRunSkillSlots"/> 同一取法），弹简介框。
-    /// 空槽点了就把已开的框收掉。
+    /// 技槽点击：按下标取本局技能 id（与 <see cref="UpdateRunSkillSlots"/> 同一取法），
+    /// 弹「获得技能」弹窗（<see cref="SkillObtainPopupUI.ShowFromId"/>）。空槽不弹。
+    /// 点击<b>不会施放</b>技能：玩家技全由 PlayerSkillPassive 自动释放，这里纯查看。
     /// </summary>
-    void OnSkillSlotInfoClick(int index, GameObject slotRoot)
+    void OnSkillSlotClick(int index, GameObject slotRoot)
     {
-        var anchor = slotRoot != null ? slotRoot.GetComponent<RectTransform>() : null;
-        if (anchor == null) return;
-
-        // 正在拖这个槽 = 调顺序，不是要看介绍
-        var chip = slotRoot.GetComponent<SkillOrderChip>();
+        // 正在拖这个槽 = 调顺序，不是要看详情
+        var chip = slotRoot != null ? slotRoot.GetComponent<SkillOrderChip>() : null;
         if (chip != null && chip.IsDragging) return;
 
         var ids = RunLoadout.IsActive ? RunLoadout.SkillIds() : null;
         string id = ids != null && index < ids.Count ? ids[index] : null;
-        if (string.IsNullOrEmpty(id))
-        {
-            SkillInfoTipUI.Ensure(transform)?.Hide();
-            return;
-        }
-        SkillInfoTipUI.Toggle(id, anchor, slotRoot, transform);
+        if (string.IsNullOrEmpty(id)) return;
+        SkillObtainPopupUI.ShowFromId(id);
     }
 
     /// <summary>上次诊断输出的特征串，避免每次刷新都刷屏。</summary>

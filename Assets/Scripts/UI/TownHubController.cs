@@ -138,6 +138,9 @@ public class TownHubController : MonoBehaviour
             var mb = page as MonoBehaviour;
             if (page == null || mb == null) continue;
             if (mb.gameObject.activeSelf) continue;
+            // 【2026-10-19 修复】预热点亮不是真实进店：酒馆页跳过老板娘问候，
+            // 否则新进游戏人在公会大厅就弹「又去裂隙了？」，且当天真进酒馆反而没问候。
+            if (page is TavernUI warmTavern) warmTavern.SuppressEggOnce = true;
             if (loading != null)
             {
                 loading.SetTip(LoadingFlavorText.Next());

@@ -226,41 +226,41 @@ public partial class AdventureUI
                               ?? FindDeepChild(pageRoot, "MainBottomNav");
             if (found != null) nav = found as RectTransform;
         }
-        if (nav == null) return 0f;
+        if (nav == null || pageRoot == null) return 0f;
 
-        // 导航栏本体 + BottomNavBG（它比栏本体高、会往下溢出）取并集，别只算根节点
-        float top = TopEdgeY(nav);
-        float bottom = BottomEdgeY(nav);
+        // 2026-10-19 修「详情面板下面大片空隙」：旧实现拿 nav 父级局部坐标的 y 当
+        // 「页面根底边以上的高度」用。nav 实际挂在共享底栏层级（GuildHallUI/Hub），
+        // 父级原点/轴心跟 AdventureUI 页面根不一致；且 nav 根节点被 SafeAreaFitter
+        // 重锚成全拉伸后 rect 高度还可能带陈旧基准漂移，量出来偏大（真机 ≈334，视觉 ≈140），
+        // 详情面板被顶高一大截。改成：世界四角 → InverseTransformPoint 进 pageRoot 本地，
+        // 只量「看得见的栏体」（BottomNav / BottomNavBG 子节点）顶边，坐标系恒正确。
+        float rootBottomY = pageRoot.rect.min.y;
+        float topAboveBottom = float.NegativeInfinity;
+        int visualNodes = 0;
         for (int i = 0; i < nav.childCount; i++)
         {
             var child = nav.GetChild(i) as RectTransform;
             if (child == null) continue;
             if (child.name != "BottomNavBG" && child.name != "BottomNav") continue;
-            top = Mathf.Max(top, TopEdgeY(child));
-            bottom = Mathf.Min(bottom, BottomEdgeY(child));
+            topAboveBottom = Mathf.Max(topAboveBottom,
+                TopEdgeAbovePageBottom(child, pageRoot, rootBottomY));
+            visualNodes++;
         }
+        if (visualNodes == 0)   // 栏体子节点缺失时退回量根节点
+            topAboveBottom = TopEdgeAbovePageBottom(nav, pageRoot, rootBottomY);
 
-        float reserved = top - Mathf.Max(0f, bottom);   // 屏幕底以上真正被占住的高度
-        if (reserved <= 0f) reserved = nav.rect.height; // 量不出来就退回节点自身高度
-        return reserved;
+        if (topAboveBottom <= 0f)
+            return 0f;   // 量不到交回调用方走兜底常量；别拿可能漂移的 rect.height 充数
+        return topAboveBottom;
     }
 
-    /// <summary>节点底边在父矩形局部坐标里的 Y（父底边为 0）。</summary>
-    static float BottomEdgeY(RectTransform rt)
+    /// <summary>节点视觉顶边（世界四角实测）换算进 pageRoot 本地后，高过页面根底边多少。不受父级轴心/缩放影响。</summary>
+    static float TopEdgeAbovePageBottom(RectTransform rt, RectTransform pageRoot, float rootBottomY)
     {
-        var parent = rt.parent as RectTransform;
-        Vector2 pMin = parent != null ? parent.rect.min : Vector2.zero;
-        Vector2 pMax = parent != null ? parent.rect.max : Vector2.zero;
-        return AnchorPointInParent(pMin, pMax, rt.anchorMin).y + rt.offsetMin.y;
-    }
-
-    /// <summary>节点顶边在父矩形局部坐标里的 Y（父底边为 0）。</summary>
-    static float TopEdgeY(RectTransform rt)
-    {
-        var parent = rt.parent as RectTransform;
-        Vector2 pMin = parent != null ? parent.rect.min : Vector2.zero;
-        Vector2 pMax = parent != null ? parent.rect.max : Vector2.zero;
-        return AnchorPointInParent(pMin, pMax, rt.anchorMax).y + rt.offsetMax.y;
+        if (rt == null || pageRoot == null) return float.NegativeInfinity;
+        var corners = new Vector3[4];
+        rt.GetWorldCorners(corners);
+        return pageRoot.InverseTransformPoint(corners[1]).y - rootBottomY;   // corners[1] = 左上角
     }
 
     /// <summary>按名字深找子孙节点（含自身）。</summary>

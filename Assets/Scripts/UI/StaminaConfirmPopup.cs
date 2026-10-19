@@ -10,7 +10,8 @@ using UnityEngine.UI;
 /// → 本弹窗弃用旧的纯色块运行时建树，改挂全项目默认弹窗预制体
 /// <see cref="EvacuateConfirmPopupUI.PrefabPath"/>（Root/Dim/Panel/Title/Body/双按钮 同一套美术）。
 /// 与战斗撤离弹窗的两点差别：① 不动 Time.timeScale（体力确认在城镇流程里，撤离才定格战斗）；
-/// ② 层级走 TownPopup(900)（邮件详情窗 610 之上）。标题钉死「体力提示」，正文/确认键文案由调用方传。
+/// ② 层级走 TownConfirm(910)——严格高于 TownPopup(900)/RewardPopup(905)，否则从设置弹窗（900）里打开时
+/// 排序不定、点击被设置弹窗全屏 Dim 吃掉（2026-10-19 清除数据确认框点不动事故）。标题钉死「体力提示」，正文/确认键文案由调用方传。
 /// </summary>
 public static class StaminaConfirmPopup
 {
@@ -25,12 +26,18 @@ public static class StaminaConfirmPopup
     static Button _dimBtn;
     static Action _onOk;
 
-    /// <summary>弹确认框：body 提示文案（含会浪费多少点），okLabel 确认键文字，onConfirm 点确认后回调。</summary>
+    /// <summary>弹确认框：body 提示文案（含会浪费多少点），okLabel 确认键文字，onConfirm 点确认后回调。
+    /// 标题沿用「体力提示」。</summary>
     public static void Show(string body, string okLabel, Action onConfirm)
+        => Show("体力提示", body, okLabel, onConfirm);
+
+    /// <summary>带标题版本（2026-10-19）：设置弹窗「清除数据」等通用确认复用同一套默认弹窗预制体，
+    /// 体力线三个调用点走上面的旧签名不受影响。</summary>
+    public static void Show(string title, string body, string okLabel, Action onConfirm)
     {
         Ensure();
         if (_rootPanel == null) return;
-        if (_title != null) _title.text = "体力提示";
+        if (_title != null) _title.text = title ?? "体力提示";
         if (_body != null) _body.text = body ?? "";
         if (_okLabel != null) _okLabel.text = okLabel ?? "确认";
         if (_cancelLabel != null) _cancelLabel.text = "取消";
@@ -39,7 +46,7 @@ public static class StaminaConfirmPopup
         _host.transform.SetAsLastSibling();
         var canvas = _host.GetComponent<Canvas>();
         if (canvas != null)
-            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.TownPopup);
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.TownConfirm);
     }
 
     public static void Close()
@@ -67,7 +74,7 @@ public static class StaminaConfirmPopup
         UnityEngine.Object.DontDestroyOnLoad(_host);
         var canvas = _host.GetComponent<Canvas>();
         if (canvas == null) canvas = _host.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup, UICanvasSetup.ResolveUiCamera());
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownConfirm, UICanvasSetup.ResolveUiCamera());
 
         Bind();
         Wire();

@@ -29,6 +29,13 @@ public class TavernUI : MonoBehaviour, ITownPage
     bool _preloaded;
     bool _playWelcomeBack;
 
+    /// <summary>
+    /// 【2026-10-19 修复】进镇预热会「点亮一遍」本页（CoWarmupPages 逐页 ShowPage 再藏回），
+    /// 置 true 后下一次 ShowPage 只建 UI、不发老板娘问候/欢迎彩蛋、不消耗当日问候——
+    /// 问候只属于玩家真实进酒馆，否则人还在公会大厅就弹酒馆台词（主人报「又去裂隙了」跑出来）。
+    /// </summary>
+    public bool SuppressEggOnce;
+
     void Awake()
     {
         Instance = this;
@@ -80,7 +87,12 @@ public class TavernUI : MonoBehaviour, ITownPage
         TownSharedChrome.RaiseSharedChrome(hall);
 
         EnsurePortraitMotion();
-        if (_playWelcomeBack)
+        if (SuppressEggOnce)
+        {
+            // 预热点亮：只建 UI，问候/欢迎彩蛋全部跳过且不消耗（真实进店才发）
+            SuppressEggOnce = false;
+        }
+        else if (_playWelcomeBack)
         {
             _playWelcomeBack = false;
             var tease = portraitRoot != null

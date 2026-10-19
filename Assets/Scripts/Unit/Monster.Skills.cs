@@ -11,13 +11,11 @@ public partial class Monster
     private float _skillEnergy = 0f;
     private float _skillCooldown = 0f;
     private MonsterAttackStyle _swingStyle = MonsterAttackStyle.Melee;
-    private int _bossSwingIndex;
     bool _skillTelegraphing;
     /// <summary>【2026-10-17 主人拍板】精英蓄力跳滞空中：AI 提前返回时跳过归道（ApplyLaneY），
     /// 否则身体 Y 每帧被拉回 FootY、跳跃演出起不来。置位/复位只在 CoSkillTelegraphThenCast 内。</summary>
     bool _leaping;
     static Sprite _circleSprite;
-    static Sprite _fanSprite;
     static Sprite _ringSprite;
     const float SkillProjectileScale = 1.6f;
     // 2026-09-21：MONSTER_SKILL_PROJECTILE_SPEED_MUL 已迁 combat_tuning 表（运行时读），
@@ -26,19 +24,9 @@ public partial class Monster
 
     MonsterAttackStyle ResolveSwingStyle(UnitBase target)
     {
-        if (!_isBossUnit)
-            return _attackStyle;
-
-        // Boss??????????????????????
-        float dist = target != null
-            ? Mathf.Abs(transform.position.x - target.transform.position.x)
-            : 99f;
-        const float meleeReach = 1.8f;
-        MonsterAttackStyle byDist = dist <= meleeReach ? MonsterAttackStyle.Melee : MonsterAttackStyle.Ranged;
-        _bossSwingIndex++;
-        if (_bossSwingIndex % 3 == 0)
-            return byDist == MonsterAttackStyle.Melee ? MonsterAttackStyle.Ranged : MonsterAttackStyle.Melee;
-        return byDist;
+        // 【2026-10-19 主人拍板】Boss 只允许一种攻击方式：表上是远程就全程远程（贴脸也射），
+        // 近战就全程近战 —— 不做「贴脸临时改挥砍」的兜底，杜绝又远程又近战的混用。
+        return _attackStyle;
     }
 
     /// <summary>?????Boss ??????????</summary>
@@ -54,7 +42,7 @@ public partial class Monster
     {
         _skillEnergy = 0f;
         _skillCooldown = (_isBossUnit || _eliteWave) ? 2.5f + 3f : 5f;
-        // Attack() 已 ResolveSwingStyle；此处复用，避免 _bossSwingIndex 双跳
+        // Attack() 已 ResolveSwingStyle；此处复用（Boss _swingStyle = 表 style，全程一种攻击方式）
 
         var skill = SkillRegistry.Instance?.GetActiveSkill(_skillId);
         float mult = skill != null ? skill.damageMultiplier : 2.2f;
@@ -69,9 +57,9 @@ public partial class Monster
             damage *= GameConfig.BOSS_PHASE2_DAMAGE_MUL;
             radius *= GameConfig.BOSS_PHASE2_RADIUS_MUL;
             telegraph = GameConfig.BOSS_PHASE2_TELEGRAPH;
-            // 阶段 2：更偏向近身砸击节奏
-            if (!MonsterAttackStyleTable.IsRanged(_attackStyle))
-                _swingStyle = MonsterAttackStyle.Melee;
+            // 【2026-10-19 修B】原「阶段 2 强制近战」是无效代码：这里改的 _swingStyle
+            // 会被下次 Attack() 开头重新 ResolveSwingStyle 覆盖，等于没写，已删。
+            // 阶段 2 的近远节奏由表 style 统一决定（一种攻击方式），不再单独干预。
         }
         else if (_eliteWave)
         {
@@ -106,11 +94,9 @@ public partial class Monster
             ? new Vector3(primaryTarget.transform.position.x, GROUND_Y + 0.02f, primaryTarget.transform.position.z)
             : new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
 
-        // 精英：要跳到目标点砸 → 预警红圈统一画在目标点（不再用脚下扇形，主人原话「目标的地点有个红圈」）；
-        // Boss 仍按攻击风格走原有 圆盘/扇形。
-        GameObject disc = (!eliteLeap && !MonsterAttackStyleTable.IsRanged(_swingStyle))
-            ? CreateTelegraphFan(new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z), radius, GetVfxFacingDir())
-            : CreateTelegraphDisc(center, radius);
+        // 【2026-10-19 主人拍板「圆心锁定+统一红圈」】精英/Boss 预警一律画目标点红圈（取消脚下扇形）：
+        // 伤害圆心 = 本红圈位置，预警期跑出圈即真躲开 —— 演出与判定同位（修复「躲了照样挨打」）。
+        GameObject disc = CreateTelegraphDisc(center, radius);
         // 【2026-10-16 主人报「引导对白中精英还攻击了一次」】根因：预警协程一旦启动不感知冻场，
         // TalkBlock 冻场后照样倒数、到点直接结算。修法：冻场（UnitsCanAct=false）期间不计时，
         // warn 计满仍冻着就继续等，解冻瞬间才砸 —— 与普攻入口（Attack 的 UnitsCanAct 检查）口径一致。
@@ -141,14 +127,15 @@ public partial class Monster
                     if (eliteLeap)
                     {
                         // 主人原话「红圈慢慢放大 有半透效果」：从 35% 线性放大到全尺寸
-                        // （半透走 CreateTelegraphDisc 自带的 alpha 0.42，不另改颜色）
+                        // （半透走 CreateTelegraphDisc 自带的 alpha 0.85，不另改颜色）
                         float grow = Mathf.Lerp(GameConfig.ELITE_TELEGRAPH_GROW_FROM, 1f, Mathf.Clamp01(t / warn));
                         disc.transform.localScale = new Vector3(baseScale.x * grow, baseScale.y * grow, 1f);
                     }
                     else
                     {
-                        // 呼吸脉冲：基准 scale 上叠 ±5% 正弦脉动（不受冻场影响，fan 的 x 带符号乘法安全）
-                        float pulse = 1f + 0.05f * Mathf.Sin(pulseT * 7f);
+                        // 呼吸脉冲：基准 scale 上叠 ±10% 正弦脉动（不受冻场影响；disc 为正缩放，直接乘安全）
+                        // 【2026-10-19 主人反馈红圈要更显眼】±5% → ±10%
+                        float pulse = 1f + 0.10f * Mathf.Sin(pulseT * 7f);
                         disc.transform.localScale = new Vector3(baseScale.x * pulse, baseScale.y * pulse, 1f);
                     }
                 }
@@ -181,7 +168,7 @@ public partial class Monster
                     _isBossUnit ? GameConfig.BOSS_SKILL_RELEASE_SHAKE_DUR : GameConfig.ELITE_SKILL_RELEASE_SHAKE_DUR);
                 // 落地还原玩家影子（主人拍板：蓄力期降 20%，落地恢复）
                 UnitShadowAlpha.RestorePlayerShadowDim(shadowRoot);
-                ExecuteActiveSkillNow(primaryTarget, damage, radius, kit);
+                ExecuteActiveSkillNow(primaryTarget, damage, radius, kit, center);
                 // Boss 阶段 2：连砸第二下（0.35s 间隙同样感知冻场，防演出中插刀）
                 if (_isBossUnit && GetBossPhase() >= 2 && !MonsterAttackStyleTable.IsRanged(_swingStyle))
                 {
@@ -194,7 +181,7 @@ public partial class Monster
                         yield return null;
                     }
                     if (!isDead)
-                        ExecuteActiveSkillNow(primaryTarget, damage * 0.75f, radius * 0.85f, kit);
+                        ExecuteActiveSkillNow(primaryTarget, damage * 0.75f, radius * 0.85f, kit, center);
                 }
             }
         }
@@ -281,7 +268,8 @@ public partial class Monster
         var sr = go.AddComponent<SpriteRenderer>();
         sr.sprite = MakeCircleSprite();
         // 【2026-10-18 主人反馈红圈太浅看不清】alpha 0.42→0.68，颜色再饱和一档
-        sr.color = new Color(0.9f, 0.07f, 0.06f, 0.68f);
+        // 【2026-10-19 主人反馈还要再显眼】alpha 0.68→0.85，配 ±10% 呼吸脉动（见 CoSkillTelegraphThenCast）
+        sr.color = new Color(0.9f, 0.07f, 0.06f, 0.85f);
         sr.sortingOrder = GameConfig.SORT_UNIT - 2;
         float dia = Mathf.Max(1.2f, radius * 2f);
         go.transform.localScale = new Vector3(dia, dia * 0.35f, 1f);
@@ -307,61 +295,6 @@ public partial class Monster
         tex.Apply();
         _circleSprite = Sprite.Create(tex, new Rect(0, 0, s, s), new Vector2(0.5f, 0.5f), s);
         return _circleSprite;
-    }
-
-    static Sprite MakeFanSprite()
-    {
-        if (_fanSprite != null) return _fanSprite;
-        // 贴图宽 w、高 h=2w：锚点(左中)即扇形顶点，贴图右半为一张 90° 扇形（朝 +X）。
-        const int w = 128;
-        const int h = 256;
-        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
-        tex.filterMode = FilterMode.Bilinear;
-        float c = (h - 1) * 0.5f;   // 顶点(左中)对应像素 y
-        float maxR = w;             // 扇形最大半径(像素，沿 +X)
-        float half = Mathf.PI * 0.25f; // 半角 45°（总 90°，-45°~+45°）
-        for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
-        {
-            float dx = x;
-            float dy = y - c;
-            float radial = Mathf.Sqrt(dx * dx + dy * dy);
-            if (radial > maxR || dx < 0f)
-            {
-                tex.SetPixel(x, y, new Color(1f, 1f, 1f, 0f));
-                continue;
-            }
-            float ang = Mathf.Atan2(dy, dx); // 以 +X 为 0
-            if (Mathf.Abs(ang) > half)
-            {
-                tex.SetPixel(x, y, new Color(1f, 1f, 1f, 0f));
-                continue;
-            }
-            // 半径方向软边衰减
-            float aR = 1f - Mathf.SmoothStep(0.82f, 1f, radial / maxR);
-            // 角度两侧软边
-            float aA = 1f - Mathf.SmoothStep(half * 0.9f, half, Mathf.Abs(ang));
-            tex.SetPixel(x, y, new Color(1f, 1f, 1f, aR * aA));
-        }
-        tex.Apply();
-        _fanSprite = Sprite.Create(tex, new Rect(0f, 0f, w, h), new Vector2(0f, 0.5f), w);
-        return _fanSprite;
-    }
-
-    static GameObject CreateTelegraphFan(Vector3 origin, float radius, int facingDir)
-    {
-        var go = new GameObject("SkillTelegraphFan");
-        go.transform.position = origin;
-        var sr = go.AddComponent<SpriteRenderer>();
-        sr.sprite = MakeFanSprite();
-        // 【2026-10-18 主人反馈红圈太浅看不清】alpha 0.42→0.68，颜色再饱和一档
-        sr.color = new Color(0.9f, 0.07f, 0.06f, 0.68f);
-        sr.sortingOrder = GameConfig.SORT_UNIT - 2;
-        // 锚点(左中)：扇形从施法者脚下朝外展开；朝左时 localScale.x 取负实现 X 翻转。
-        // 贴图 128x256 / ppu=128 → 世界尺寸 (1,2)，故 radius 即 scale.x；Y 压缩比与红圈一致 0.35。
-        int sign = facingDir >= 0 ? 1 : -1;
-        go.transform.localScale = new Vector3(radius * sign, radius * 0.35f, 1f);
-        return go;
     }
 
     /// <summary>预警砸下瞬间的一圈波纹：从中心快速外扩、渐隐（2026-10-16 主人要求「扩散效果」）。</summary>
@@ -411,16 +344,19 @@ public partial class Monster
         return _ringSprite;
     }
 
-    void ExecuteActiveSkillNow(UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit)
+    void ExecuteActiveSkillNow(UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit, Vector3? lockedCenter = null)
     {
-        Vector3 hitPos = primaryTarget != null ? primaryTarget.GetHitPosition() : GetFirePosition();
+        // 【2026-10-19 圆心锁定】预警技能（Boss/精英）传入红圈锁定点：伤害/VFX/弹道全部落在红圈位置，
+        // 不再取目标「砸下瞬间」的当前位置 —— 预警期跑出圈即真躲开。瞬发技能不传参，保持旧行为。
+        Vector3 hitPos = lockedCenter
+            ?? (primaryTarget != null ? primaryTarget.GetHitPosition() : GetFirePosition());
 
         if (unitAnim != null)
             unitAnim.PlaySkillCast(kit, (_isBossUnit || _eliteWave) ? 1.15f : 1f);
 
         if (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb)
         {
-            StartCoroutine(CoRangedSkillProjectile(primaryTarget, damage, radius, kit));
+            StartCoroutine(CoRangedSkillProjectile(primaryTarget, damage, radius, kit, lockedCenter));
             return;
         }
 
@@ -442,7 +378,7 @@ public partial class Monster
     }
 
     IEnumerator CoRangedSkillProjectile(
-        UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit)
+        UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit, Vector3? lockedCenter = null)
     {
         float delay = GameConfig.RANGED_FIRE_RELEASE_DELAY;
         if (delay > 0.001f)
@@ -450,9 +386,10 @@ public partial class Monster
         if (this == null || isDead)
             yield break;
 
+        // 【2026-10-19 圆心锁定】弹道飞向红圈锁定点并原地爆炸；瞬发（无锁定）保持旧行为。
         Vector3 firePos = GetFirePosition();
-        Vector3 hitPos = primaryTarget != null && !primaryTarget.isDead
-            ? primaryTarget.GetHitPosition() : firePos;
+        Vector3 hitPos = lockedCenter ?? (primaryTarget != null && !primaryTarget.isDead
+            ? primaryTarget.GetHitPosition() : firePos);
         GameObject impact = SkillRegistry.Instance?.GetSkillVfxPrefab(_skillId);
         Transform targetTf = primaryTarget != null ? primaryTarget.transform : null;
         float impactX = hitPos.x;
@@ -468,7 +405,8 @@ public partial class Monster
     }
 
     /// <summary>
-    /// 技能结算：AoE 圆心用开火/落点固定 X，不跟目标当前 X（可躲开）。
+    /// 技能结算：AoE 圆心由调用方锁定 —— 预警技能（Boss/精英）= 红圈位置，跑出圈即躲开；
+    /// 瞬发技能 = 出手瞬间目标点（2026-10-19 主人拍板「圆心锁定+统一红圈」）。
     /// </summary>
     void ApplySkillDamage(float damage, float radius, UnitBase primaryTarget, float centerX)
     {

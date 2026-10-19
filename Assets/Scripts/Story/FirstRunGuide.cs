@@ -156,6 +156,19 @@ public class FirstRunGuide : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    /// <summary>
+    /// 【2026-10-19 诊断】主人报「切出再切回点高亮位没反应」：切回前台时打一条状态快照，
+    /// 配合 OnHoleClicked 的日志即可定位断点（点击没进洞 / 洞进了但目标失效 / 下游没切页）。
+    /// </summary>
+    void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus) return;
+        Debug.Log($"[Guide] 回前台快照：step={_stepIndex} visible={_visible} "
+                  + $"target={(_target != null ? _target.name : "null")} "
+                  + $"blocksRaycasts={(_group != null && _group.blocksRaycasts)} "
+                  + $"hiddenByStory={_hiddenByStory} tapAdv={_tapAdv} typing={_typing}");
+    }
+
     public static FirstRunGuide Ensure()
     {
         if (Instance != null) return Instance;
@@ -391,12 +404,13 @@ public class FirstRunGuide : MonoBehaviour
     {
         int before = TalentUI.LeftUnlockedCount();
 
-        var character = CharacterUI.Instance;
-        if (character == null || !IsVisibleHierarchy(character.gameObject))
+        // 【2026-10-19 修复】门槛改用带防抖的 CharacterPageOpen：预热闪现一帧不再被误判
+        // 「已在角色页」而跳过①步（玩家反馈：引导到点角色时没有抠图和手指）
+        if (!CharacterPageOpen())
         {
             TryFallbackNav(MainNavTab.Character);
             // ① 底栏「角色」
-            yield return CoPoint("第一关就打完了？哼，还算凑合。来变强：点「角色」，用金币点亮一个天赋节点。",
+            yield return CoPoint("这么快就结束了？哼，还算凑合。来变强：点「角色」，用金币点亮一个天赋节点。",
                 () => NavRect(MainNavTab.Character), CharacterPageOpen, false, NavTimeout);
         }
 
@@ -499,7 +513,8 @@ public class FirstRunGuide : MonoBehaviour
         float t = 0f;
         while (!done && t < 30f)
         {
-            t += Time.unscaledDeltaTime;
+            // 【2026-10-19 修复】切后台回来一帧烧穿 30s 守卫 → 剧情没播完就放行推进
+            t += Mathf.Min(Time.unscaledDeltaTime, 0.1f);
             yield return null;
         }
     }
@@ -535,7 +550,9 @@ public class FirstRunGuide : MonoBehaviour
             follow = Safe(target);
             if (follow == null)
             {
-                bind += Time.unscaledDeltaTime;
+                // 【2026-10-19 修复】切后台回来第一帧 unscaledDeltaTime＝整个后台时长，
+                // 不加钳制会把 8s 绑定窗一帧烧穿 → 目标绑定静默跳过（玩家：切出再回来引导就乱）
+                bind += Mathf.Min(Time.unscaledDeltaTime, 0.1f);
                 yield return null;
                 continue;
             }
@@ -559,6 +576,7 @@ public class FirstRunGuide : MonoBehaviour
         Show(follow, text, tapToAdvance);
 
         float t = 0f;
+        float lostAccum = 0f;   // 目标连续丢失计时（自愈用，超过 2s 收遮罩放行点击）
         while (true)
         {
             // 【2026-10-14 修复】塔克收尾剧情开播时收遮罩让位：遮罩(620)会盖住 DialogueUI(500)
@@ -572,13 +590,47 @@ public class FirstRunGuide : MonoBehaviour
             }
             if (_hiddenByStory)
             {
-                // 剧情播完了：把遮罩弹回来（Show 内部会清 _tapDone / 重开打字机 / 重新定位）
+                // 剧情播完了：把遮罩弹回来（Show 内部会清 _tapDone / 重开打字机 / 重新定位）。
+                // 【2026-10-19 修复】弹回前重新解析目标：旧 follow 可能已随切页/藏页失效，
+                // 带失效目标 Show 会落进「无目标分支」（全屏遮罩无洞）→ 全屏锁点卡死。
                 _hiddenByStory = false;
-                Show(follow, text, tapToAdvance);
+                if (needTarget)
+                {
+                    follow = Safe(target);
+                    if (follow != null) Show(follow, text, tapToAdvance);
+                    // 目标暂不可用就先不弹，交给下方「目标丢失自愈」在恢复时重新弹出
+                }
+                else
+                {
+                    Show(follow, text, tapToAdvance);
+                }
             }
 
             // 切页会把整页内容重建，旧引用会失效：每帧重新定位，丢的那几帧沿用上一次量到的矩形
-            if (needTarget) SetTarget(Safe(target));
+            RectTransform liveTarget = needTarget ? Safe(target) : null;
+            if (needTarget) SetTarget(liveTarget);
+
+            // 【2026-10-19 修复】目标丢失自愈：目标连续 2s 拿不到（藏页/切页/重建失败），
+            // 收掉遮罩放开点击——玩家可以自己把页面点回来，目标恢复后引导自动重新弹出。
+            // 不再停在「全屏遮罩+无洞」的锁死态干等超时（玩家截图的卡死态）。
+            if (needTarget && liveTarget == null)
+            {
+                lostAccum += Mathf.Min(Time.unscaledDeltaTime, 0.1f);
+                if (lostAccum > 2f && _visible) Hide();
+            }
+            else
+            {
+                // 【2026-10-19 修复】选职弹窗（TownPopup 900）开着时不复弹：气泡在 620 层被弹窗盖住，
+                // 玩家看不见但 _visible 会翻回 true → 选完剑盾后 ShowTutorialEnterRift 的
+                // IsOverlayVisible 让位检查误判，「再点进入裂隙」提示弹不出来，卡在已选中的卡上。
+                if (needTarget && liveTarget != null && !_visible && !_hiddenByStory
+                    && !PlayerJobSelectUI.IsOpen)
+                {
+                    follow = liveTarget;
+                    Show(follow, text, tapToAdvance);
+                }
+                lostAccum = 0f;
+            }
 
             bool done = tapToAdvance ? _tapDone : Safe(isDone);
             if (done)
@@ -596,7 +648,8 @@ public class FirstRunGuide : MonoBehaviour
                 yield break;
             }
 
-            t += Time.unscaledDeltaTime;
+            // 【2026-10-19 修复】同绑定窗：切后台一帧会烧穿 45s 超时 → 回前台步骤被瞬间跳过
+            t += Mathf.Min(Time.unscaledDeltaTime, 0.1f);
             if (t >= timeout)
             {
                 Hide();
@@ -645,7 +698,17 @@ public class FirstRunGuide : MonoBehaviour
 
     static bool AdventurePageOpen() => IsVisibleHierarchy(AdventureUI.Instance?.gameObject);
 
-    static bool CharacterPageOpen() => IsVisibleHierarchy(CharacterUI.Instance?.gameObject);
+    // 【2026-10-19 修复】单帧可见判定会被进镇预热「点亮一帧再藏」骗到（TownHubController.CoWarmupPages
+    // 每次进镇都把角色页闪现一帧）：角色步骤被假完成/跳过 → 玩家看不到「角色」高亮（没有抠图和手指）。
+    // 改为连续可见 0.5s 才算开页；切后台恢复/重启重进时的时序抖动也不再误判。
+    static float _charOpenSince = -1f;
+    static bool CharacterPageOpen()
+    {
+        var go = CharacterUI.Instance?.gameObject;
+        if (go == null || !IsVisibleHierarchy(go)) { _charOpenSince = -1f; return false; }
+        if (_charOpenSince < 0f) { _charOpenSince = Time.unscaledTime; return false; }
+        return Time.unscaledTime - _charOpenSince >= 0.5f;
+    }
 
     static bool TavernPageOpen() => IsVisibleHierarchy(TavernUI.Instance?.gameObject);
 
@@ -898,6 +961,8 @@ public class FirstRunGuide : MonoBehaviour
 
     void OnHoleClicked()
     {
+        // 【2026-10-19 诊断】主人报「切出再切回点高亮位没反应」：先分清点击有没有到达洞
+        Debug.Log($"[Guide] 洞点击：visible={_visible} target={(_target != null ? _target.name : "null")}");
         if (!_visible || _target == null) return;
         var btn = _target.GetComponent<Button>();
         if (btn == null) btn = _target.GetComponentInParent<Button>();
@@ -1127,9 +1192,15 @@ public class FirstRunGuide : MonoBehaviour
             if (_holeRt != null) _holeRt.gameObject.SetActive(false);
             SetAllActive(_maskRt, false);
             PlaceStrip(_maskRt[0], root.rect.xMin, root.rect.xMax, root.rect.yMin, root.rect.yMax);
+            // 【2026-10-19 修复】需要点目标的步骤落到无目标分支时，遮罩不再挡点击：
+            // 原先「全屏遮罩+无洞+blocksRaycasts」= 全屏锁点，玩家连底栏都点不了 → 卡死态。
+            // tapToAdvance 步骤（欢迎/收尾）保持原样，靠全屏点击推进。
+            if (_group != null) _group.blocksRaycasts = _tapAdv;
             PlaceBubbleCenter(root);
             return;
         }
+        // 有目标（或沿用上次量到的矩形）：恢复遮罩挡点击（Show 里设过 true，这里兜底还原）
+        if (_group != null) _group.blocksRaycasts = true;
 
         float pad = TargetPad;
         float x0 = minX - pad;

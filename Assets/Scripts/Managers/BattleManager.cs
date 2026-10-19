@@ -77,6 +77,8 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         _stageQuestGoldGranted = false;
         _defeatedMonsterKills = 0;
         RunStats.Reset();
+        // 「击败」计数新一局清零归位（右上角常驻计数隐藏）
+        BattleSideHud.Instance?.ResetKillTotal();
         RunStats.Chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         {
             var save = SaveSystem.Instance?.Data;

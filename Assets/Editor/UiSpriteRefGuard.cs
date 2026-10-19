@@ -210,9 +210,23 @@ public static class UiSpriteRefGuard
 /// <summary>
 /// 保存/导入 prefab 或 scene 时立刻检查那一个文件并报错。
 /// 只查被动到的文件，低频、不刷屏；不修改任何资源。
+/// 第三方素材包/SDK 目录跳过（主人 2026-10-19 拍板：以后不再刷屏）——
+/// SPUM 素材包的模板 prefab 引用着官方另售素材包的图，从入库第一天起就解析不到，属已知噪音；
+/// 但 Assets/SPUM/Resources/ 下的自家角色预制体不算第三方，照常守护。
 /// </summary>
 public class UiSpriteRefGuardPost : AssetPostprocessor
 {
+    static bool IsThirdPartyNoise(string assetPath)
+    {
+        string p = assetPath.Replace('\\', '/');
+        if (p.StartsWith("Assets/SPUM/", StringComparison.Ordinal) &&
+            !p.StartsWith("Assets/SPUM/Resources/", StringComparison.Ordinal))
+            return true;
+        if (p.StartsWith("Assets/TapSDK/", StringComparison.Ordinal)) return true;
+        if (p.StartsWith("Assets/Plugins/", StringComparison.Ordinal)) return true;
+        return false;
+    }
+
     static void OnPostprocessAllAssets(string[] importedAssets, string[] deletedAssets,
                                        string[] movedAssets, string[] movedFromAssetPaths)
     {
@@ -220,6 +234,7 @@ public class UiSpriteRefGuardPost : AssetPostprocessor
         foreach (var p in importedAssets)
         {
             if (p == null) continue;
+            if (IsThirdPartyNoise(p)) continue;
             if (!p.EndsWith(".prefab", StringComparison.Ordinal) &&
                 !p.EndsWith(".unity", StringComparison.Ordinal)) continue;
             UiSpriteRefGuard.CheckFile(p);

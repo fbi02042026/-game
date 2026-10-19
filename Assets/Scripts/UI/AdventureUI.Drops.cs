@@ -19,7 +19,9 @@ public partial class AdventureUI
         if (dropIconContainer == null) return;
 
         var slots = new List<DropSlot>();
-        for (int i = 0; i < 4; i++)
+        // 【2026-10-19 主人拍板】预制体掉落槽扩到 8 个（Iconkuang0..7 / Icon0..7），扫描跟着扩，
+        // 多出来的槽没有对应掉落种类时仍会隐藏
+        for (int i = 0; i < 8; i++)
         {
             var kuang = dropIconContainer.Find($"Iconkuang{i}");
             var icon = dropIconContainer.Find($"Icon{i}");

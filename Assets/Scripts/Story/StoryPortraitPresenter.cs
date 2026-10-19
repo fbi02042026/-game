@@ -166,12 +166,16 @@ public static class StoryPortraitPresenter
     /// 立绘屏幕系数：逻辑画布高 / 设计高（720×1280 为基准）。
     /// 标准屏=1（维持美术定稿效果）；更瘦屏（如 1240×2772 逻辑高≈1610）≈1.26 等比放大；
     /// 更宽/更矮屏钳回 1，只放大不缩小。裁切窗用缩放后的尺寸，比例关系不变。
+    /// 瘦屏再叠一层自适应放大（StoryPortraitLayout.TallScreenScaleBoost，按 k-1 线性，
+    /// 2026-10-19 主人：大分辨率手机立绘偏下 → 放大+上移试试水）；标准屏 k=1 该层恒为 0。
     /// </summary>
     static float ResolvePortraitScale(Context ctx)
     {
         float canvasH = ctx.CanvasRt != null ? ctx.CanvasRt.rect.height : 0f;
         if (canvasH < 64f) canvasH = GameConfig.DESIGN_HEIGHT;
         float k = canvasH / Mathf.Max(1f, GameConfig.DESIGN_HEIGHT);
+        if (k > 1f)
+            k *= 1f + (k - 1f) * StoryPortraitLayout.TallScreenScaleBoost;
         return Mathf.Max(1f, k);
     }
 
@@ -228,6 +232,15 @@ public static class StoryPortraitPresenter
         }
 
         float top = canvasH - 24f;
+        // 【2026-10-19 主人：大分辨率手机立绘偏下 → 放大+上移试试水】
+        // 瘦屏（逻辑高>1280）按 k-1 线性自适应上移；顶部封顶线同步放宽——
+        // 否则立绘顶贴着 24px 安全线，上移量会被下方 maxY 钳制原封吃掉。
+        // 放宽量封顶 TallScreenTopMaxLiftPx（防独眼等头顶留白小的图裁发梢）。
+        // 标准屏 k=1 时 lift 恒 0，封顶线照旧，效果与现在完全一致。
+        float kLift = canvasH / Mathf.Max(1f, GameConfig.DESIGN_HEIGHT);
+        float lift = kLift > 1f ? (kLift - 1f) * StoryPortraitLayout.TallScreenLiftPx : 0f;
+        desired += lift;
+        top += Mathf.Min(lift, StoryPortraitLayout.TallScreenTopMaxLiftPx);
         float maxY = top - hostRt.sizeDelta.y;
         // 只封顶（顶边不入屏顶 24px 安全区），放开 0 下限：整图高度可超画布，
         // 底部允许垂到画布外/对话框后面；保留 0 下限会把超高立绘整体压到 y=0、顶边反被屏幕裁掉。

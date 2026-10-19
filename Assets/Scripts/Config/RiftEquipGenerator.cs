@@ -68,7 +68,14 @@ public static class RiftEquipGenerator
         int stageIdx0 = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
         float chapterGrowth = ChapterStatScaleTable.Get(Mathf.Max(1, chapter)) * GameConfig.GetStageStatScale(stageIdx0);
         float tplAtk = 0f;   // 先赋值：&& 短路时 TryGetTemplateAttack 可能不执行，out 变量需明确赋值
-        bool anchorToTemplate = slot.IsWeapon && visual != null
+        // 【2026-10-19 主人拍板·方案A】模板锚定只适用于攻击类主属性（ATK / MAGIC_ATK）。
+        // 根因：WEAPON_OFFHAND 主属性池 = 攻击:70|攻速:30，卷出「攻速」时旧代码照样把模板攻击值
+        // （如丝纹袖 ATK=7）×roll×chapterGrowth 塞给攻速 → 7×1.04×1.04≈7.59 存成百分比 →
+        // 「攻速 +759%」、实战攻速 ×8.6、战力虚胖 +1863（锚定分支绕过了 RollAttrValue 里的 ×0.01 保护）。
+        // 同类隐患：WEAPON_MACE 卷出「生命」主属性也会被塞攻击值。现在非攻击类主属性一律走
+        // RollAttrValue 正常通道（攻速 → 5~12 点 ×0.01 = +5%~12%，生命 → HP 区间），锚定行为不变。
+        bool mainIsAttack = main == "ATK" || main == "MAGIC_ATK";
+        bool anchorToTemplate = slot.IsWeapon && mainIsAttack && visual != null
                                 && TryGetTemplateAttack(visual, main == "MAGIC_ATK", out tplAtk);
         float anchorRoll = fixedForTutorial ? 1.0f : Random.Range(1.0f, 1.1f);
         float mainVal = anchorToTemplate
@@ -314,7 +321,11 @@ public static class RiftEquipGenerator
         // 【2026-10-11 主人拍板】副手武器也能抽到：命中就把候选整池换成副手池，
         // 抽不中就还是走本职业武器池。副手只占 30%，主手仍是主流。
         // 引导确定性化：跳过这 30% 随机（固定走本职业主手武器池）。
-        if (wantWeapon && !fixedForTutorial && Random.value < OffHandWeaponChance)
+        // 【2026-10-19 主人拍板】副手池 10-18 起只出盾，盾仅剑盾卫士能装（TemplateMatchesJob）——
+        //   非剑盾职业命中这 30% 只会抽空少一件（修复前更是抽出一堆防具外观占盾位）。
+        //   现在非剑盾职业直接不进副手池，这 30% 落回本职业主手武器池，武器掉率结构不变。
+        if (wantWeapon && !fixedForTutorial && job == PlayerJobId.SwordShield
+            && Random.value < OffHandWeaponChance)
         {
             for (int i = 0; i < slots.Count; i++)
             {
@@ -440,8 +451,15 @@ public static class RiftEquipGenerator
         // （GameConfig.BASE_MOVE_SPEED），表里 MS 区间 1.5~12.5 若按「点」直加到速度上
         // 就是十几倍速（主人报「移速加12的鞋 走的跟飞一样快」）。×0.01 后 = 1.5%~12.5%，
         // 与天赋移速（AttrSystem:494 同口径）一致。
+        // 【2026-10-19 主人拍板】POISON 进名单：游侠弓随机池「中毒:10」此前卷出 5~10 未除 100，
+        // 且 isPercent=true 进 AttrSystem 走乘算（基础毒 0 ×(1+7)=0）→ 词条实战零效果、面板虚标 +700%。
+        // ÷100 后 0.05~0.10（0.10 = 10%，AttrType.Poison 注释口径），TryMapAttr 同时强制改加算。
+        // 【2026-10-19 主人拍板】ELE_DMG 出名单：火/冰结算一直按「点」×0.01（UnitBase.Combat
+        // FIRE/ICE_BONUS_PER_POINT，09-26 拍板「词缀值 5 = +5%」），÷100 会让掉落火伤存 0.08 再进
+        // 乘算 → 0×1.08=0 完全无效。现在掉落存点值 3~30（CSV 百分比 = 点值）→ TryMapAttr 强制加算
+        // → 实战 +3%~30%，与抽奖词缀（3~9 点）、林语法杖模板（8.4 点）三处口径统一。
         return id == "CRIT_RATE" || id == "CRIT_DMG" || id == "ATK_SPD" || id == "DMG_RED"
-            || id == "DODGE" || id == "LIFE_STEAL" || id == "ELE_DMG" || id == "HEAL"
+            || id == "DODGE" || id == "LIFE_STEAL" || id == "POISON" || id == "HEAL"
             || id == "HP_REGEN" || id == "CONTROL_RES" || id == "ANTI_CRIT" || id == "MS";
     }
 
@@ -469,7 +487,12 @@ public static class RiftEquipGenerator
             return false;
         if (attrId == "RANGE")
             value = GameConfig.PixelsToUnits(Mathf.Max(1f, value));
-        if (type == AttrType.CritRate || type == AttrType.CritDamage || type == AttrType.Dodge || type == AttrType.LifeSteal)
+        // 【2026-10-19 主人拍板】Poison / FireDamage 与暴击系同口径强制改加算：
+        // 两者基础值都是 0（加成量属性），isPercent=true 会走 AttrSystem 乘算 0×(1+v)=0 —— 词条直接失效
+        //（WeaponAffixSystem.cs 10-10 注释里 PhyPower / MagicPower 踩过同一个坑）。
+        // Poison 存小数（0.10 = 10%）、FireDamage 存点值（5 = +5%），加算后各自与结算口径一致。
+        if (type == AttrType.CritRate || type == AttrType.CritDamage || type == AttrType.Dodge || type == AttrType.LifeSteal
+            || type == AttrType.Poison || type == AttrType.FireDamage)
             isPercent = false;
         if (type == AttrType.AttackSpeed)
             isPercent = true;
@@ -626,8 +649,13 @@ public static class RiftEquipGenerator
                 // 【2026-10-18 主人拍板】副手槽只给盾牌：offhand 剑/匕/斧这类「副手武器」不再进抽奖池，
                 // 选剑盾只能获得剑与盾，副手替换弹窗只会盾对盾。盾是否匹配职业走 TemplateMatchesJob（盾仅剑盾）。
                 // 2026-10-11「放行锚点让副手武器能抽到」随狂战下架作废；以后双持职业回归再在此放开。
+                // 【2026-10-19 主人报「抽到旅人外套却跟盾牌替换」根因修复】只挡武器挡不住防具：
+                //   防具模板（外套/帽子/手套…）weaponType 也是 None，而 TemplateMatchesJob 对防具
+                //   一律「通用可掉」放行 → 全套防具漏进副手池，抽到的槽位是副手、名字图标却是外套。
+                //   副手只认真盾牌模板（判定与职业过滤同源 PlayerJobDefs.IsShieldTemplate，不另抄一份）。
                 if (t.weaponType != WeaponType.None) continue;           // 副手武器（非盾）一律排除
-                if (!PlayerJobDefs.TemplateMatchesJob(t, job)) continue;
+                if (!PlayerJobDefs.IsShieldTemplate(t)) continue;        // 防具一律排除，只留盾
+                if (!PlayerJobDefs.TemplateMatchesJob(t, job)) continue; // 盾仅剑盾（原有判定不变）
                 bucket.Add(t);
             }
             else

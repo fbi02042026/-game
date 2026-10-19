@@ -6,8 +6,20 @@ using System.Collections;
 // 职责：承伤与死亡（无敌帧、TakeDamage 全流程、死亡动画与回收、ResetForReuse、事件）
 public partial class UnitBase
 {
-    /// <summary>子类可重写：当前是否处于无敌（如 Hero 闪避无敌帧）。默认 false。</summary>
-    protected virtual bool IsInvincibleNow() => false;
+    /// <summary>子类可重写：当前是否处于无敌（如 Hero 闪避无敌帧）。默认走技能型无敌计时。</summary>
+    // 技能型无敌（SK010 神圣庇佑「全体无敌 1.5 秒」）：到期前免疫敌方伤害（source 为敌方才拦，
+    // 与闪避无敌帧同口径——关卡机制伤害不免疫）。仅免疫敌方伤害，与子类无敌叠加时各算各的。
+    float _skillInvulnUntil = -1f;
+
+    /// <summary>授予一段技能型无敌（重复授予取更晚到期时间）。</summary>
+    public void ApplyInvulnerability(float duration)
+        => _skillInvulnUntil = Mathf.Max(_skillInvulnUntil, Time.time + Mathf.Max(0f, duration));
+
+    protected virtual bool IsInvincibleNow() => Time.time < _skillInvulnUntil;
+
+    /// <summary>【引导演出专用】血量被打到底时先不判死（血钳到 1 点，站着把遗言说完），
+    /// 剧情侧（TutorialDirector）说完后解除再手动判死。默认 false，正式关完全不经过该分支。</summary>
+    public bool holdAtDeathDoor;
 
     public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null, bool suppressDamageText = false)
     {
@@ -129,7 +141,14 @@ public partial class UnitBase
             PlayHitReaction();
 
         if (currentHp <= 0)
-            Die(isCrit && finalDamage > 0f);
+        {
+            // 【引导演出专用】死亡门：血条到底先拦住不判死（血钳到 1 点），
+            // 遗言由剧情侧接管，说完解除后手动判死。默认 false 走原判死。
+            if (holdAtDeathDoor)
+                currentHp = 1f;
+            else
+                Die(isCrit && finalDamage > 0f);
+        }
     }
 
     /// <summary>受击表现：默认播受击动画+闪白；玩家/佣兵可覆盖。</summary>
@@ -183,6 +202,7 @@ public partial class UnitBase
     public virtual void ResetForReuse()
     {
         _isDying = false;
+        holdAtDeathDoor = false;
         attackCd = 0;
         target = null;
         OnDead = null;

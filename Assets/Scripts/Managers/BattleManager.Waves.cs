@@ -239,7 +239,7 @@ public partial class BattleManager
         _firstWaveSpawned = false;
         _battleIntroFinished = false;
         _battleStartTime = Time.unscaledTime;
-        BattleSideHud.Instance?.ResetCombo();
+        // 【2026-10-19 主人拍板】「击败」累计计数跨关卡不重置（原 ResetCombo 已删），新一局才在 StartNewRun 归零
         BattleSideHud.Instance?.SetWaveCountdown(false, 0f, false);
     }
     /// <summary>波次为空时强制补一波（兜底）</summary>
@@ -915,12 +915,11 @@ public partial class BattleManager
 
         UnitCrowd.TickMonsterOverlapStacks();
 
-        // 连杀超时清零显示
+        // 连杀超时清零（只清加成数值；【2026-10-19】「击败」常驻计数不再跟随隐藏）
         if (_killCombo > 0 && Time.time - _lastKillTime > GameConfig.COMBO_WINDOW)
         {
             _killCombo = 0;
             SyncKillComboHaste();
-            BattleSideHud.Instance?.ResetCombo();
         }
 
         // 首波已刷完且场上清空：由「下一波来袭」推进下一波（不在此 Emergency）

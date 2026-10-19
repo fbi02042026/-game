@@ -93,7 +93,8 @@ public class ChapterManager : Singleton<ChapterManager>
     /// <summary>
     /// 无限裂隙（2026-10-17 主人拍板）：按绝对层数建**单层**关。
     /// 背景章 = 每 5 层轮换现有 8 章资源（怪物文件夹同源，自动跟切）；
-    /// 层类型：5 的倍数 = Boss 记录点层，层号 %5==3 = 精英层，其余普通层。
+    /// 层类型（2026-10-19 主人拍板）：5 的倍数 = BOSS 层（10 的倍数是大 BOSS），
+    /// 精英层每 10 层随机 2~4 个（GameConfig.IsEndlessEliteStage，越深越多），其余普通层。
     /// </summary>
     public void StartEndlessRift(int riftStage)
     {
@@ -103,7 +104,7 @@ public class ChapterManager : Singleton<ChapterManager>
         stageMap.Clear();
         availableNextStages.Clear();
         var type = GameConfig.IsEndlessBossStage(stage) ? StageType.Boss
-                 : stage % GameConfig.ENDLESS_CHECKPOINT_INTERVAL == 3 ? StageType.Elite
+                 : GameConfig.IsEndlessEliteStage(stage) ? StageType.Elite
                  : StageType.Normal;
         var sd = new StageData
         {
@@ -135,43 +136,21 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
-    /// 生成分支连接：一分二，有的分有的合
+    /// 生成关卡连接。
+    /// 【2026-10-19 主人拍板】关卡图按顺序一关一关解锁，一次只开一把锁，
+    /// 每关类型由老虎机现抽 —— 不做分支/跳关选路。
+    /// 旧的 ChapterBranchTable 主边 / 固定跳关 / 随机跳关整段停用：
+    /// nextStages 永远只有 i+1 一条 → availableNextStages 恒为单候选
+    /// → BattleStageMapUI 只走单路流程，分支选路 UI（StartBranchFlow）不再触发。
     /// </summary>
     void GenerateBranches()
     {
         for (int i = 0; i < stageMap.Count; i++)
             stageMap[i].nextStages.Clear();
 
-        ChapterBranchTable.EnsureLoaded();
-        var mainEdges = ChapterBranchTable.GetMainEdges(currentChapter);
-        if (mainEdges.Count > 0)
-        {
-            for (int i = 0; i < mainEdges.Count; i++)
-            {
-                var e = mainEdges[i];
-                if (e.fromIndex >= 0 && e.fromIndex < stageMap.Count
-                    && e.toIndex >= 0 && e.toIndex < stageMap.Count
-                    && !stageMap[e.fromIndex].nextStages.Contains(e.toIndex))
-                    stageMap[e.fromIndex].nextStages.Add(e.toIndex);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < GameConfig.STAGES_PER_CHAPTER - 1; i++)
-                stageMap[i].nextStages.Add(i + 1);
-        }
-
-        var fixedSkips = ChapterBranchTable.GetFixedSkipEdges(currentChapter);
-        for (int i = 0; i < fixedSkips.Count; i++)
-        {
-            var e = fixedSkips[i];
-            if (e.fromIndex >= 0 && e.fromIndex < stageMap.Count
-                && e.toIndex >= 0 && e.toIndex < stageMap.Count
-                && !stageMap[e.fromIndex].nextStages.Contains(e.toIndex))
-                stageMap[e.fromIndex].nextStages.Add(e.toIndex);
-        }
-
-        ApplyRandomSkipBranches();
+        // 每关的下一关固定为 i+1（线性顺序）
+        for (int i = 0; i < GameConfig.STAGES_PER_CHAPTER - 1; i++)
+            stageMap[i].nextStages.Add(i + 1);
 
         LogBranchInfo();
     }

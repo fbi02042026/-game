@@ -35,6 +35,10 @@ public class KillComboAfterimage : MonoBehaviour
         // 残影只与攻速技能绑定：攻速增益（gale_stance）生效期间才出现，连杀不再单独触发。
         // 门控与 UnitBase.GetAttackSpeed 用同一个标志，保证「有残影 = 正在吃攻速 buff」。
         if (!SkillCastService.IsTeamAttackSpeedBuffActive) return;
+        // 【2026-10-19 主人反馈「前进时出现幻影」排查】残影设计是「移动残影」：
+        // 站桩输出时不该刷 —— 原地每 0.12s 叠一层淡影，看着像人物在闪白蓝。
+        // 只在真正位移时刷（0.2 u/s 以下视为没在动）。
+        if (_unit.rb == null || _unit.rb.velocity.sqrMagnitude < 0.04f) return;
         if (_aliveGhosts >= GameConfig.COMBO_AFTERIMAGE_MAX_PER_UNIT) return;
 
         _spawnCd -= Time.deltaTime;

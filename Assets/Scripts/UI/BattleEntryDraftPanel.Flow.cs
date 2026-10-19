@@ -81,7 +81,16 @@ public partial class BattleEntryDraftPanel
     /// </summary>
     public static void Prewarm()
     {
-        if (BattleUI.Instance == null) return;
+        if (BattleUI.Instance == null)
+        {
+            // 【2026-10-19 防卡死】原来这里静默 return：面板没人拍回收起态，会停在预制体展开态
+            // （4 个黑金按钮），剧情一播就被盖住、点击全被吃 → 全场定格（第 2 章事故链一环）。
+            // 改成：告警让问题看得见 + 挂一个重试器，BattleUI 就绪后补拍收起态。
+            Debug.LogWarning("[BattleEntryDraftPanel] Prewarm 时 BattleUI 未就绪，0.5 秒后重试");
+            var host = new GameObject("BattleEntryDraftPanel.PrewarmRetry");
+            host.AddComponent<PrewarmRetry>();
+            return;
+        }
         // 【2026-10-09 主人拍板】这里必须补一次 Build()：Build 只在 Begin()（抽奖开始）里跑，
         // 于是「还没抽奖的那段时间」面板一直停在预制体存的展开态（750 / zhuangshi +80），
         // 且 BtnBackpack 的 onClick 还没绑 —— 就是主人报的「一上来背包是打开的」「点了关不掉」。
@@ -89,6 +98,32 @@ public partial class BattleEntryDraftPanel
         // 只建不显示，与本方法「只建组件、不显示任何东西」的语义一致；它有 _built 守卫，重复调无害。
         var pre = Ensure();
         if (pre != null) pre.Build();
+    }
+
+    /// <summary>Prewarm 的重试器：每 0.5 秒看一眼 BattleUI 就绪没有，最多重试 20 次（10 秒），成败都自毁。</summary>
+    class PrewarmRetry : MonoBehaviour
+    {
+        float _timer;
+        int _tries;
+
+        void Update()
+        {
+            _timer += Time.unscaledDeltaTime;
+            if (_timer < 0.5f) return;
+            _timer = 0f;
+            if (BattleUI.Instance != null)
+            {
+                Prewarm();
+                Destroy(gameObject);
+                return;
+            }
+            if (++_tries >= 20)
+            {
+                Debug.LogError("[BattleEntryDraftPanel] 重试 10 秒后 BattleUI 仍未就绪，放弃 Prewarm" +
+                               "（抽奖面板将停留展开态，可能盖住剧情，请截图上报）");
+                Destroy(gameObject);
+            }
+        }
     }
 
     RectTransform ResolveMap()

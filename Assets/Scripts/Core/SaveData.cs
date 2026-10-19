@@ -139,6 +139,11 @@ public class SaveData
     public long mercOfferRefreshUtc = 0;
     /// <summary>日切后需重抽候选</summary>
     public bool mercOfferDirty = true;
+    /// <summary>
+    /// 酒馆三选一当前批次（2026-10-19 主人拍板：招募候选只认 0 点和手动刷新，App 重启也不许换批）。
+    /// 首掷/重掷后写回，冷启动弹窗先读这里恢复同一批。
+    /// </summary>
+    public List<MercenaryData> mercOffers = new List<MercenaryData>();
 
     // === 玩家基础属性 ===
     /// <summary>玩家冒险者显示名（引导签名后设定）</summary>
@@ -188,6 +193,11 @@ public class SaveData
     // —— 叙事 V2.0 ——
     /// <summary>第 7 章转折点：0=未选，1=A，2=B，3=C。同一周目不可更改。</summary>
     public int endingChoice = 0;
+    /// <summary>
+    /// 战前剧情「看过即不重播」位标记（2026-10-19 主人拍板）：bit0=第1章 … bit7=第8章。
+    /// 每章战前剧情开播过一次就置位，之后进关不再重播（治「每次进都卡剧情」）。
+    /// </summary>
+    public int preStorySeenMask = 0;
     public List<StringIdEntry> seenClueEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> seenClueIds = new HashSet<string>();
     public List<StringIdEntry> seenEndingEntries = new List<StringIdEntry>();

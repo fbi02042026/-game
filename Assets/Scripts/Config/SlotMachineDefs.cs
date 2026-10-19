@@ -225,8 +225,20 @@ public static class SlotMachineDefs
     //   强化石**不能抽奖得到**（走铁匠铺 / 休息关 / 商店），所以安慰奖只剩金币一档。
     // ============================================================
 
-    /// <summary>「金币」卡在池子里的权重（越大越常见）。</summary>
-    public const int WEIGHT_GOLD = 6;
+    /// <summary>
+    /// 【2026-10-19 主人拍板】抽奖币改成**独立方向**后的权重 —— 主人原话「把抽奖币也算到
+    /// 抽中的方向中 和佣兵一个概率」→ 与 <see cref="CATEGORY_WEIGHT_MERC"/> 同为 5。
+    /// 抽中它 = 直接得抽奖币（当抽价 × 0.5，见 <see cref="GOLD_PRIZE_PRICE_MULT"/>），不再混进三类池子。
+    /// 本局最多出 <see cref="MAX_GOLD_PRIZE_PER_RUN"/> 次，超过后这个方向不进候选。
+    /// </summary>
+    public const int CATEGORY_WEIGHT_GOLD = 5;
+
+    /// <summary>
+    /// 【2026-10-19 主人拍板「把抽中抽奖币的次数也做下限制 比如2-4次」】本局最多抽中几次抽奖币
+    /// （主人给的区间 2~4，取中值 3）。达到上限后「抽奖币」方向不再进随机候选（不是变灰，是直接不出）。
+    /// 计数 = 本局**生效**的抽奖币卡张数（<see cref="SlotMachineSystem.NoteGoldPrize"/>，随本局清零）。
+    /// </summary>
+    public const int MAX_GOLD_PRIZE_PER_RUN = 3;
 
     /// <summary>
     /// 抽中「金币」给多少抽奖币 = 本关一抽价格 × 这个倍率。
@@ -271,6 +283,7 @@ public static class SlotMachineDefs
         {
             case DraftCategory.Merc: return CATEGORY_WEIGHT_MERC;
             case DraftCategory.Equip: return CATEGORY_WEIGHT_EQUIP;
+            case DraftCategory.Gold: return CATEGORY_WEIGHT_GOLD;
             default: return CATEGORY_WEIGHT_SKILL;
         }
     }

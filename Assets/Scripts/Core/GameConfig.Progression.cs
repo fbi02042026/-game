@@ -13,6 +13,15 @@ public static partial class GameConfig
     public const float MERC_REJOIN_RADIUS = 2.5f;
     public const float MERC_SOFT_AWAY_RADIUS = 2.8f;
     public const float MERC_AWAY_FIGHT_SEC = 2.8f;
+    // 【2026-10-19 主人拍板】交战跟随上限：离玩家超过此距离就「边打边跟」（朝玩家移动，攻距内照常开火），
+    // 保证佣兵始终聚在玩家身边。取值介于软回队(2.8)与拴绳强拉(4.2)之间。
+    public const float MERC_STICK_RADIUS = 3.0f;
+
+    // 【2026-10-19 主人拍板】佣兵追赶加速：佣兵与玩家同速（10-11 统一移速真源），
+    // 同速追赶永远追不上——站桩输出掉一次队，距离差就一直保持，越滚越大
+    //（远程佣兵射程长、几乎全程站桩，掉队最明显，主人原话「一会就剩玩家自己在前面打」）。
+    public const float MERC_CATCHUP_SPEED_MUL = 1.35f;   // 掉队后追赶速度 = 玩家移速 × 此倍率
+    public const float MERC_CATCHUP_ENTER_DIST = 0.8f;   // 落后编队位超过此距离才加速，否则同速跟（防顶着玩家跑）
 
     public const int ADVANCED_MERC_GUILD_LEVEL = 5; // 优秀=公会5；稀有10/传奇20 另见 MercQuality
 

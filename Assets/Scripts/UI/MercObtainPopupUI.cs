@@ -493,6 +493,9 @@ public class MercObtainPopupUI : MonoBehaviour
         if (string.IsNullOrEmpty(mercName))
             Debug.LogError("[MercObtainPopup] 佣兵名字为空：HireId=" + def.HireId);
         SetText(_nameText, "Panel/zuo/namebg/Name", mercName);
+        // 【2026-10-19 主人拍板】名字颜色随稀有度（RarityPalette 唯一配色表）：
+        // 与下方名字底牌/卡框同一 def.Rarity 口径，色档与底牌图档同源不穿帮
+        if (_nameText != null) _nameText.color = RarityPalette.Get(def.Rarity);
 
         // 3.2)【2026-10-18 主人拍板】名字底牌按稀有度换三档图（与佣兵池列表卡同口径，
         // 唯一入口 MercHireSession.LoadTavernNamePlate；取不到报错不静默）
@@ -663,6 +666,9 @@ public class MercObtainPopupUI : MonoBehaviour
         string shown = !string.IsNullOrEmpty(offer.displayName) ? offer.displayName
             : (!string.IsNullOrEmpty(def.Name) ? def.Name : offer.mercId);
         SetText(_nameText, "Panel/zuo/namebg/Name", shown);
+        // 【2026-10-19 主人拍板】招募模式名字颜色同 Fill：随 def.Rarity（与名字底牌/卡框同源）
+        // Def 是结构体不做 null 比较（上面 def.Name 已直接解引用，口径一致）
+        if (_nameText != null) _nameText.color = RarityPalette.Get(def.Rarity);
 
         string skillId = !string.IsNullOrEmpty(offer.skillId) ? offer.skillId : offer.passiveSkillId;
         FillSkill(skillId);

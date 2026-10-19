@@ -13,8 +13,9 @@ public partial class TutorialDirector
     // 精英宿敌拍（2026-10-07 主人拍板）
     // ============================================================
 
-    /// <summary>精英血量跌到这个比例就说遗言（说完好让塔克收掉他）。</summary>
-    const float EliteLastWordsHpRatio = 0.30f;
+    /// <summary>【2026-10-19 主人拍板「血条到底再弹遗言」】降到 5% —— 死亡门把血钳到 1 点后
+    /// 1/maxHp 必然 ≤5%，遗言必定在血条到底那一刻才触发。</summary>
+    const float EliteLastWordsHpRatio = 0.05f;
 
     /// <summary>
     /// 等精英真刷出来（波次是异步进场的），找到就回调出去。
@@ -87,29 +88,40 @@ public partial class TutorialDirector
     }
 
     /// <summary>
-    /// 精英残血遗言：血跌到 <see cref="EliteLastWordsHpRatio"/> 就冻场让他把话说完再死。
-    /// 已经死了 / 超时没打到残血 → 直接返回，不拖流程（不倒回来补台词）。
+    /// 精英遗言：【2026-10-19 主人拍板】血条<b>到底</b>才开口 —— 宿敌挂着死亡门（holdAtDeathDoor），
+    /// 血被打到底只会钳在 1 点不死；这里等血条到底（≤5% 或被钳到 1 点）就冻场让他说完，
+    /// 返回前解除死亡门，交调用方判死收尾。超时没打到底 → 同样解除后直接返回，不拖流程。
     /// </summary>
     IEnumerator CoEliteLastWords(BattleManager bm, BattleHeadTalkUI headTalk, Monster elite)
     {
-        if (bm == null || elite == null || elite.isDead) yield break;
+        float maxHp = 0f;
+        if (bm != null && elite != null && !elite.isDead && elite.attr != null)
+            maxHp = elite.attr.GetAttr(AttrType.MaxHp);
 
-        float maxHp = elite.attr != null ? elite.attr.GetAttr(AttrType.MaxHp) : 0f;
-        if (maxHp <= 0f) yield break;
-
-        float t = 0f;
-        while (t < 25f)
+        try
         {
-            if (elite == null || elite.isDead) yield break;
-            if (elite.currentHp / maxHp <= EliteLastWordsHpRatio) break;
-            t += Time.unscaledDeltaTime;
-            yield return null;
-        }
-        if (elite == null || elite.isDead) yield break;
+            if (maxHp <= 0f) yield break;
 
-        yield return TalkBlock(bm, headTalk,
-            new TalkLine(elite, "我不过是个小杂鱼……", 2.2f),
-            new TalkLine(elite, "可你前面的路，将会是一片黑暗。", 2.6f));
+            float t = 0f;
+            while (t < 25f)
+            {
+                if (elite == null || elite.isDead) yield break;
+                // currentHp ≤1.5 = 被死亡门钳住（血条到底）；≤5% = 自然打到残血 —— 两种都算「到底」
+                if (elite.currentHp <= 1.5f || elite.currentHp / maxHp <= EliteLastWordsHpRatio) break;
+                t += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (elite == null || elite.isDead) yield break;
+
+            yield return TalkBlock(bm, headTalk,
+                new TalkLine(elite, "我不过是个小杂鱼……", 2.2f),
+                new TalkLine(elite, "可你前面的路，将会是一片黑暗。", 2.6f));
+        }
+        finally
+        {
+            // 任何出口都解除死亡门：遗言说完交给调用方判死；超时/异常也不能把引导怪留成不死身
+            if (elite != null) elite.holdAtDeathDoor = false;
+        }
     }
 
     /// <summary>

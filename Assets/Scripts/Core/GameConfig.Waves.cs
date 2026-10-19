@@ -198,10 +198,11 @@ public static partial class GameConfig
 
     /// <summary>连杀加速幻影：倍率超过此值才刷残影。</summary>
     public const float COMBO_AFTERIMAGE_MUL_MIN = 1.02f;
-    public const float COMBO_AFTERIMAGE_INTERVAL_SLOW = 0.12f;
+    // 【2026-10-19 主人反馈残影再明显点】间隔 0.12→0.10、寿命 0.24→0.32、透明度 0.45→0.62
+    public const float COMBO_AFTERIMAGE_INTERVAL_SLOW = 0.10f;
     public const float COMBO_AFTERIMAGE_INTERVAL_FAST = 0.05f;
-    public const float COMBO_AFTERIMAGE_LIFE = 0.24f;
-    public const float COMBO_AFTERIMAGE_ALPHA = 0.45f;
+    public const float COMBO_AFTERIMAGE_LIFE = 0.32f;
+    public const float COMBO_AFTERIMAGE_ALPHA = 0.62f;
     public const int COMBO_AFTERIMAGE_MAX_PER_UNIT = 10;
     public const float COMBO_AFTERIMAGE_MOVE_EPS = 0.08f;
 
@@ -281,6 +282,55 @@ public static partial class GameConfig
 
     /// <summary>该层是否 BOSS 记录点层</summary>
     public static bool IsEndlessBossStage(int riftStage) => Mathf.Max(1, riftStage) % ENDLESS_CHECKPOINT_INTERVAL == 0;
+
+    // —— 层类型排布（2026-10-19 主人拍板）——
+    // 每 5 层小 BOSS、每 10 层大 BOSS；精英层每 10 层随机 2~4 个，越深越偏多。
+    // 排布只由层号决定（种子哈希），同一层号永远同一结果，重进/换机不翻脸。
+
+    /// <summary>该层是否大 BOSS 层（10 的倍数；小 BOSS 是 5 的倍数但非 10 的倍数）</summary>
+    public static bool IsEndlessBigBossStage(int riftStage) => Mathf.Max(1, riftStage) % (ENDLESS_CHECKPOINT_INTERVAL * 2) == 0;
+
+    /// <summary>大 BOSS 体型：小 BOSS 基础上再乘的系数（手感不对只改这里）</summary>
+    public const float ENDLESS_BIGBOSS_SCALE_EXTRA = 1.15f;
+    /// <summary>大 BOSS 血量：小 BOSS 基础上再乘的系数（手感不对只改这里）</summary>
+    public const float ENDLESS_BIGBOSS_HP_MUL = 1.6f;
+
+    /// <summary>
+    /// 每 10 层块内的精英层数（2~4）。块序号越深，摇到 3/4 的概率越大：
+    /// 第 1 块基本 2 个，10 块以后大概率 3~4 个。
+    /// </summary>
+    public static int EndlessEliteCountInBlock(int blockIndex)
+    {
+        var rng = new System.Random((int)(blockIndex * 73856093L + 19349663L));
+        int extra = 0;
+        if ((float)rng.NextDouble() < Mathf.Min(0.9f, 0.25f + blockIndex * 0.05f)) extra++;
+        if ((float)rng.NextDouble() < Mathf.Min(0.9f, 0.05f + blockIndex * 0.04f)) extra++;
+        return 2 + Mathf.Min(2, extra);
+    }
+
+    /// <summary>
+    /// 该层是否精英层：块内（每 10 层一块）从 8 个非 BOSS 槽位里随机抽 2~4 个，
+    /// 同一块内洗牌结果固定（种子只跟块号走），同一层号永远同一结果。
+    /// </summary>
+    public static bool IsEndlessEliteStage(int riftStage)
+    {
+        int stage = Mathf.Max(1, riftStage);
+        if (IsEndlessBossStage(stage)) return false; // 5/10 的倍数是 BOSS，不当精英
+        int block = (stage - 1) / 10;
+        int slot = (stage - 1) % 10;
+        // 块内非 BOSS 槽位（4、9 是小/大 BOSS，排除）
+        var candidates = new System.Collections.Generic.List<int> { 0, 1, 2, 3, 5, 6, 7, 8 };
+        var rng = new System.Random((int)(block * 83492791L + 297121507L));
+        for (int i = candidates.Count - 1; i > 0; i--) // Fisher-Yates 洗牌
+        {
+            int j = rng.Next(i + 1);
+            (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
+        }
+        int count = EndlessEliteCountInBlock(block);
+        for (int i = 0; i < count && i < candidates.Count; i++)
+            if (candidates[i] == slot) return true;
+        return false;
+    }
 
     /// <summary>该层是否缓冲关（记录点后第一层，第 6/11/16…层；第 1 层不算）</summary>
     public static bool IsEndlessBufferStage(int riftStage)

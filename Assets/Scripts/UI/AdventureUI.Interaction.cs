@@ -176,7 +176,11 @@ public partial class AdventureUI
         if (!ChapterRouteTable.CanEnter(chapter, SaveSystem.Instance?.Data)) return;
 
         _selectedChapter = chapter;
-        if (_built && gameObject.activeInHierarchy) RefreshAll();
+        if (_built && gameObject.activeInHierarchy)
+        {
+            PlayChapterFadeIn();
+            RefreshAll();
+        }
     }
 
     void OnSelectDiff(int idx)
@@ -208,6 +212,7 @@ public partial class AdventureUI
         int idx = AvailableIndex();
         idx = (idx - 1 + _availableChapters.Count) % _availableChapters.Count;
         _selectedChapter = _availableChapters[idx];
+        PlayChapterFadeIn();
         RefreshAll();
     }
 
@@ -219,11 +224,66 @@ public partial class AdventureUI
             return;
         }
         int idx = AvailableIndex();
-        idx = (idx + 1) % _availableChapters.Count;
-        _selectedChapter = _availableChapters[idx];
+        // 【2026-10-19 主人拍板 B】最后一章不再循环回第 1 章，提示后留在原地
+        if (idx >= _availableChapters.Count - 1)
+        {
+            Toast("已经是最后一章");
+            return;
+        }
+        _selectedChapter = _availableChapters[idx + 1];
+        PlayChapterFadeIn();
         RefreshAll();
         // 成功滑到后续章节 → 「左滑引导」永久关闭
         if (_selectedChapter > 1) MarkSwipeGuideDone();
+    }
+
+    // ────────────────────────────────────────────────────
+    // 翻章过渡动效（2026-10-19 主人拍板 A）：切章后新地图淡入 0.18s
+    // 只动 StageNodes 的 CanvasGroup 透明度（运行时补挂，不改预制体）；
+    // 连续切章会重启动画，页面隐藏时复原，不会停在半透明。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>新地图淡入时长（秒）。</summary>
+    const float ChapterFadeInDur = 0.18f;
+
+    Coroutine _chapterFadeRoutine;
+
+    void PlayChapterFadeIn()
+    {
+        if (stageNodeContainer == null || !gameObject.activeInHierarchy) return;
+        var cg = stageNodeContainer.GetComponent<CanvasGroup>();
+        if (cg == null) cg = stageNodeContainer.gameObject.AddComponent<CanvasGroup>();
+        if (_chapterFadeRoutine != null) StopCoroutine(_chapterFadeRoutine);
+        cg.alpha = 0f;
+        _chapterFadeRoutine = StartCoroutine(CoChapterFadeIn(cg));
+    }
+
+    IEnumerator CoChapterFadeIn(CanvasGroup cg)
+    {
+        float t = 0f;
+        while (t < ChapterFadeInDur)
+        {
+            t += Time.unscaledDeltaTime;
+            cg.alpha = Mathf.Clamp01(t / ChapterFadeInDur);
+            yield return null;
+        }
+        cg.alpha = 1f;
+        _chapterFadeRoutine = null;
+    }
+
+    void OnDisable()
+    {
+        // 页面隐藏时停掉淡入并复原透明度，避免下次打开停在半透明
+        if (_chapterFadeRoutine != null)
+        {
+            StopCoroutine(_chapterFadeRoutine);
+            _chapterFadeRoutine = null;
+        }
+        if (stageNodeContainer != null)
+        {
+            var cg = stageNodeContainer.GetComponent<CanvasGroup>();
+            if (cg != null) cg.alpha = 1f;
+        }
     }
 
     // ────────────────────────────────────────────────────

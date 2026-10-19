@@ -129,14 +129,13 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
 
     // ──【2026-10-11 主人拍板】关卡详情文字 ──
     // ① 主人「这个关卡的信息的字再大一号」→ 章节名 25 → 27。
-    // ② 主人「敌人信息那右边不是还有空地吗 再往右拉伸一点」→ 介绍框宽 280 → 344（预制体 StageDesc 宽）；
-    //    拉宽后每行可容 16 字 → 第 1 章那段 31 字正好 2 行、不再溢出压住下面的「敌人信息」。
-    //    字号取 +1（20 → 21）：22 号在 344 宽下只能 15 字/行 → 又变 3 行溢出（实测推演，别再往上加）。
+    // ② 介绍框宽度【2026-10-19 主人改排版】起**跟随预制体**（信息框边界已拉大），
+    //    代码不再运行时改宽（原 280 → 340 的强制逻辑已删）。
+    //    字号 21：22 号在旧 344 宽下只能 15 字/行 → 溢出（实测推演，别再往上加）。
     // ③ 主人「可能掉落 4 个字的字号跟敌人信息字号一致」→ 预制体 DropTitle 18 → 25（= 节点 direnxinxi 字号）。
     // Build（代码建树）与 AutoBind（预制体绑定）两条路径都用这些常量，避免两套口径。
     const int DetailNameFontSize = 27;
     const int DetailDescFontSize = 21;
-    const float DetailDescWidth = 340f;
     const int DetailSubTitleFontSize = 25;
 
     bool _built;

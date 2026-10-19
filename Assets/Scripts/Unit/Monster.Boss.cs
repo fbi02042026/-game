@@ -42,8 +42,9 @@ public partial class Monster
             yield return null;
         }
         if (disc != null) Destroy(disc);
+        // 【2026-10-19 圆心锁定】伤害圆心 = 红圈位置（预警开始时锁定），不取砸下瞬间 Boss 当前位置
         if (!isDead)
-            ApplySkillDamage(GetMainAttackStat() * 0.85f, 4.5f, null, transform.position.x);
+            ApplySkillDamage(GetMainAttackStat() * 0.85f, 4.5f, null, center.x);
         _bossPhaseShiftBusy = false;
     }
 

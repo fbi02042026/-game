@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 /// <summary>
 /// GameConfig 的 战斗数值 / 射程 / 怪物 / 难度 部分（2026-09-26 从 GameConfig.cs 按域拆出，partial 同类型）。
@@ -32,12 +32,24 @@ public static partial class GameConfig
         public const int TownPage = 5;
         public const int TownBootstrap = 100;
         public const int TownVeil = 200;
-        public const int StoryDialogue = 500;
+        /// <summary>
+        /// 【2026-10-19 主人报：第 2 章剧情被进关抽奖面板 4 个按钮盖住且点不动 → timeScale=0 全场定格，只能退出重进】
+        /// 剧情窗 500 → 1500：战斗内最高的硬编码层是 1000（装备属性/技能详情/抽奖结果详情），
+        /// 950（BackpackPanel 嵌套 Canvas，抽奖 4 按钮挂其下）从此压不住剧情；
+        /// Toast(11000)/Loading(10000)/FullscreenFx(12000) 仍在剧情之上，不受影响。
+        /// </summary>
+        public const int StoryDialogue = 1500;
         public const int StoryNaming = 560;
         public const int TutorialHint = 600;
         public const int TownPopup = 900;
         /// 通用「获得奖励」弹窗：必须高于 TownPopup(900)——否则与每日登录界面同为 900 时排序不定、会被盖住；低于 BattlePopup(920) 与 Toast(11000)。
         public const int RewardPopup = 905;
+        /// <summary>
+        /// 【2026-10-19 主人报：设置弹窗点「清除数据」后确认框看得见点不动】
+        /// 通用确认弹窗（清除数据 / 体力领取等，StaminaConfirmPopup）：必须严格高于 TownPopup(900) 与 RewardPopup(905)——
+        /// 从设置弹窗（同为 900）里打开时排序不定，点击射线被设置弹窗全屏 Dim 吃掉；低于 BattlePopup(920)。
+        /// </summary>
+        public const int TownConfirm = 910;
         public const int BattleStageMap = 880;
         public const int BattlePopup = 920;
         /// <summary>

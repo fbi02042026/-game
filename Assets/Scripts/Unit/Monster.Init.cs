@@ -167,7 +167,6 @@ public partial class Monster
         _attackStyle = MonsterAttackStyleTable.Get(monsterChapter, Mathf.Max(1, effectiveSpriteIndex));
         _isBossUnit = bossUnit || effectiveSpriteIndex >= GameConfig.BOSS_SPRITE_START;
         _swingStyle = _attackStyle;
-        _bossSwingIndex = 0;
 
         // ??????????????????/????
         attr.ResetToBase();
@@ -234,7 +233,12 @@ public partial class Monster
         float waveMul = 1f + waveNum * 0.05f;
         float ttkMul;
         if (endlessRift)
+        {
             ttkMul = GameConfig.EndlessDifficultyMul(BattleManager.Instance.EndlessRiftStage);
+            // 【2026-10-19 主人拍板】大 BOSS（10 的倍数层）在小 BOSS 基础上再叠一档血量系数
+            if (bossUnit && GameConfig.IsEndlessBigBossStage(BattleManager.Instance.EndlessRiftStage))
+                ttkMul *= GameConfig.ENDLESS_BIGBOSS_HP_MUL;
+        }
         else if (bossUnit || eliteWave)
             ttkMul = WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit, stageIdx0);
         else

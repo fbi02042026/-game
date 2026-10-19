@@ -31,5 +31,8 @@ e53c359d0f207e043ae6be067e7900d0   # DailyLoginFull.prefab ×1；引擎内置材
 7e208e861ed01e246a52a6faaf9f3111   # BattleUI.prefab ×2；已确认战斗 HUD 上无空图/粉块
 4d7a11b6dde989549a760fe47391f96e   # BattleUI.prefab ×1；已确认战斗 HUD 上无空图/粉块
 
+# ===== 表情贴纸类（1 条 · 主人 2026-10-19 拍板不管）=====
+e72524dade4520349b4d5956b2fc7b9b   # DialogueUI.prefab LeftPortrait ×1；指向表情贴纸的旧 guid（10-16 入库定稿时该图 guid 已变），剧情立绘运行时走佣兵资源动态替换，静态占位丢失不影响显示
+
 # ===== 场景实例引用（1 条）=====
 429795ccaa0c615408a6c4b24a06711d   # Battle.unity：Monster 预制体实例的 m_SourcePrefab / m_CorrespondingSourceObject，属实例化残留

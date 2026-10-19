@@ -153,11 +153,23 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         bool dayRefresh = data != null && data.mercOfferDirty;
         if (dayRefresh || _offers == null || _offers.Count == 0)
         {
-            RerollOffers();
-            if (dayRefresh)
-                MercHireSession.MarkRefreshed();
-            else if (data != null)
+            // 【2026-10-19 主人拍板】招募候选只认 0 点和手动刷新，App 重启也不许换批：
+            // 非日切、且存档里有当前批次 → 原样恢复（不算刷新）；否则重掷并写回存档。
+            if (!dayRefresh && data != null && TryLoadOffersFromSave(data))
+            {
                 data.mercOfferDirty = false;
+            }
+            else
+            {
+                RerollOffers();
+                if (dayRefresh)
+                    MercHireSession.MarkRefreshed();
+                else if (data != null)
+                {
+                    data.mercOfferDirty = false;
+                    SaveSystem.Instance.Save();   // 首掷批次立刻落盘，杀进程也不丢
+                }
+            }
         }
         RefreshAll();
         WireOnce();
@@ -175,6 +187,36 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         // 【2026-10-19 主人拍板】三名候选全部随机；卡面（普通/稀有/传奇三套卡牌美术）
         // 由 RefreshCard 按佣兵稀有度实时切换（见 _cardFrameByRarity）。
         _offers = MercenaryOfferGenerator.GenerateOffers();
+        PersistOffers(SaveSystem.Instance?.Data);
+    }
+
+    /// <summary>
+    /// 候选批次写回存档（2026-10-19 主人拍板：只认 0 点和手动刷新，重启不许换批）。
+    /// 只写内存字段；落盘由调用方的 Save()/MarkRefreshed 负责。
+    /// </summary>
+    void PersistOffers(SaveData data)
+    {
+        if (data == null || _offers == null) return;
+        data.mercOffers ??= new List<MercenaryData>();
+        data.mercOffers.Clear();
+        for (int i = 0; i < _offers.Count; i++)
+            data.mercOffers.Add(_offers[i]);
+    }
+
+    /// <summary>
+    /// 从存档恢复当前批次（重启后弹窗首开用）。批次缺卡或佣兵数据无效视为存档损坏，
+    /// 返回 false 走重掷，绝不开天窗。
+    /// </summary>
+    bool TryLoadOffersFromSave(SaveData data)
+    {
+        var saved = data?.mercOffers;
+        if (saved == null || saved.Count != MercenaryOfferGenerator.OfferCount) return false;
+        for (int i = 0; i < saved.Count; i++)
+        {
+            if (saved[i] == null || string.IsNullOrEmpty(saved[i].mercId)) return false;
+        }
+        _offers = new List<MercenaryData>(saved);
+        return true;
     }
 
     /// <summary>
@@ -673,7 +715,11 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
         var badge = EnsureHiredBadge(c.root.transform);
         if (badge != null)
+        {
+            // 【2026-10-19 主人拍板】显示时压到卡内最上层，防被后创建的构件（MG_Badge 等）盖住
+            if (hired) badge.transform.SetAsLastSibling();
             badge.gameObject.SetActive(hired);
+        }
     }
 
     static Text EnsureHiredBadge(Transform cardRoot)
@@ -683,14 +729,17 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         Text t = existing != null ? existing.GetComponent<Text>() : null;
         if (t != null) return t;
 
-        t = CreateTxt(cardRoot, "HiredBadge", "已拥有", 22, TextAnchor.MiddleCenter);
+        // 【2026-10-19 主人拍板】「已拥有」加大加粗、摆在卡面正中（原来是 22 号细字缩在中心偏下，
+        // 被下方技能区/按钮区压住看不清）
+        t = CreateTxt(cardRoot, "HiredBadge", "已拥有", 34, TextAnchor.MiddleCenter);
         t.color = new Color(1f, 0.86f, 0.42f, 1f);
+        t.fontStyle = FontStyle.Bold;
         var rt = t.rectTransform;
         rt.anchorMin = new Vector2(0.5f, 0.5f);
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(0f, -40f);
-        rt.sizeDelta = new Vector2(280f, 40f);
+        rt.anchoredPosition = new Vector2(0f, 0f);
+        rt.sizeDelta = new Vector2(320f, 60f);
         t.gameObject.SetActive(false);
         return t;
     }
@@ -916,7 +965,7 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     /// <summary>
     /// info 按钮弹出招募概率公示（2026-10-17 主人拍板：info 节点 → 概率弹窗）。
     /// 口径与 MercenaryOfferGenerator 实际掷点完全一致（常量直引，不会公示假数）：
-    /// 佣兵 100%；品质 普通 62/100 = 62% / 稀有 33/100 = 33% / 传奇 5/100 = 5%（2026-10-19 主人拍板）。
+    /// 佣兵 100%；品质 普通 133/200 = 66.5% / 稀有 66/200 = 33% / 传奇 1/200 = 0.5%（2026-10-19 主人拍板）。
     /// 卡面美术随佣兵稀有度实时切换（Card0/1/2 三套稀有度卡牌）。
     /// </summary>
     void ShowRecruitOdds()

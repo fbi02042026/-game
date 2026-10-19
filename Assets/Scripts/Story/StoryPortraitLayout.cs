@@ -126,6 +126,29 @@ public static class StoryPortraitLayout
     /// <summary>脚底对齐基准：角色脚底距图底的统一像素 = 独眼实测 42px。</summary>
     public const float PortraitFootBaselinePx = 42f;
 
+    /// <summary>
+    /// 瘦屏立绘自适应放大（2026-10-19 主人：大分辨率手机立绘偏下，放大+上移试试水）。
+    /// 只对逻辑高 &gt; 1280 的瘦屏生效（matchWidthOrHeight=0 按宽匹配后逻辑高被拉长）：
+    /// 实际 scale = k × (1 + (k-1) × 此值)，k = 逻辑高/1280。
+    /// 0.5 → 20:9 屏（k=1.25）额外放大 12.5%；标准 9:16 屏 k=1 恒乘 1，效果与现在完全一致。
+    /// 调参只改这一个数。
+    /// </summary>
+    public const float TallScreenScaleBoost = 0.5f;
+
+    /// <summary>
+    /// 瘦屏立绘自适应上移（设计 1280 基准像素）：bottomY += (k-1) × 此值。
+    /// 440 → 20:9 屏（k=1.25）上移 110px。标准屏 k=1 恒 0。调参只改这一个数。
+    /// </summary>
+    public const float TallScreenLiftPx = 440f;
+
+    /// <summary>
+    /// 瘦屏顶部封顶线放宽上限（防裁头，2026-10-19）：立绘顶边最多出屏 24px。
+    /// 瘦屏上立绘顶边基本都贴着封顶线，「再往上移」实际由封顶线放宽量决定；
+    /// 但独眼这类头顶透明留白小的图（原始留白约 25px）放宽过大必裁发梢，故封顶。
+    /// 48 → 顶边最多到 canvasH - 24 + 48，即出屏 24px &lt; 独眼放大后留白约 35px，头发不裁伤。
+    /// </summary>
+    public const float TallScreenTopMaxLiftPx = 48f;
+
     public static readonly Dictionary<string, PortraitContentFit> PortraitContentFits = new Dictionary<string, PortraitContentFit>
     {
         { "npc_duyan", new PortraitContentFit { charHeightFrac = 968f / 1035f, belowFrac = 42f / 1035f } },

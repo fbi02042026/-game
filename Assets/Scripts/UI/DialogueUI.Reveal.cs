@@ -176,6 +176,7 @@ public partial class DialogueUI
         if (leftNamePlateImage != null) leftNamePlateImage.gameObject.SetActive(on && !string.IsNullOrEmpty(_initiatorName));
         if (rightNamePlateImage != null) rightNamePlateImage.gameObject.SetActive(on && !string.IsNullOrEmpty(_otherName));
         if (skipButton != null) skipButton.gameObject.SetActive(on);
+        if (_autoButton != null) _autoButton.gameObject.SetActive(on);
         if (nextArrowImage != null) nextArrowImage.gameObject.SetActive(on);
         if (advanceButton != null)
         {

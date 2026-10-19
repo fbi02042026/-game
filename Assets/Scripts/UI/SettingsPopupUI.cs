@@ -48,6 +48,7 @@ public class SettingsPopupUI : MonoBehaviour
     public Button evacuateButton;
     public Button primaryButton;
     public Button confirmButton;
+    public Button clearDataButton;
     public Text primaryLabel;
     public Transform toggleList;
 
@@ -204,6 +205,9 @@ public class SettingsPopupUI : MonoBehaviour
             evacuateButton.gameObject.SetActive(battle);
         if (primaryButton != null)
             primaryButton.gameObject.SetActive(battle);
+        // 清除数据：只在登录 / 城镇设置里出，战斗设置不放（主人 2026-10-19 口径）
+        if (clearDataButton != null)
+            clearDataButton.gameObject.SetActive(!battle);
 
         ApplyPanelAndButtonLayout();
         ApplyExtraToggleVisibility();
@@ -390,6 +394,40 @@ public class SettingsPopupUI : MonoBehaviour
         BattleManager.Instance?.TriggerEvacuation();
     }
 
+    /// <summary>「清除数据」按钮：预制体没有就挂在 Panel 底部（确定键下方），
+    /// 样式复用撤离键红色底图，暗示危险操作。二次 Bind 走 FindButton 命中已有节点，不重复建。</summary>
+    Button EnsureClearDataButton()
+    {
+        var panel = FindDeep(transform, "Panel") as RectTransform;
+        if (panel == null) return null;
+        return CreateActionButton(panel, "ClearDataButton", "清除数据", "撤离",
+            new Vector2(0.5f, 0f), new Vector2(0f, 32f), new Vector2(500f, 64f),
+            new Color(0.55f, 0.18f, 0.16f, 1f));
+    }
+
+    void OnClearDataClicked()
+    {
+        StaminaConfirmPopup.Show("清除数据",
+            "清除数据将删除本地存档，游戏将从新档重新开始，是否同意？",
+            "同意", OnClearDataConfirmed);
+    }
+
+    void OnClearDataConfirmed()
+    {
+        // #region agent log
+        DebugAgentLog.Log("H11", "SettingsPopupUI.OnClearDataConfirmed", "clear_data_confirmed",
+            $"{{\"host\":\"{CurrentHost}\"}}");
+        // #endregion
+        SaveSystem.Instance?.DeleteLocalSaveAndReset();
+        // 2026-10-19 主人拍板：清档后回登录界面重新开始游戏，不重启 App；
+        // 登录界面清档原地提示即可（本来就在登录界面）
+        Close();
+        GlobalToastUI.Show("本地存档已清除，游戏将重新开始");
+        if (CurrentHost == SettingsHost.Login)
+            return;
+        GameSceneManager.Instance?.GoLogin();
+    }
+
     void OnToggleAudio()
     {
         GameAudio.AudioEnabled = !GameAudio.AudioEnabled;
@@ -532,6 +570,9 @@ public class SettingsPopupUI : MonoBehaviour
         confirmButton = FindButton("ConfirmButton") ?? FindButton("确定Button") ?? confirmButton;
         evacuateButton = FindButton("EvacuateButton") ?? evacuateButton;
         primaryButton = FindButton("PrimaryButton") ?? FindButton("ResumeButton") ?? primaryButton;
+        // 清除数据按钮：预制体没有就运行时补一个（幂等，二次 Bind 走 FindButton 命中已有节点）
+        // 2026-10-19：主人在预制体里手摆了一个「删除数据」按钮，优先按名字接上，避免运行时重复生成
+        clearDataButton = FindButton("ClearDataButton") ?? FindButton("删除数据") ?? EnsureClearDataButton();
         if (primaryLabel == null && primaryButton != null)
             primaryLabel = primaryButton.GetComponentInChildren<Text>(true);
 
@@ -617,6 +658,7 @@ public class SettingsPopupUI : MonoBehaviour
         WireOnce(primaryButton, Close);
         WireOnce(audioToggleButton, OnToggleAudio);
         WireOnce(evacuateButton, OnEvacuate);
+        WireOnce(clearDataButton, OnClearDataClicked);
         WireExtraToggles();
     }
 

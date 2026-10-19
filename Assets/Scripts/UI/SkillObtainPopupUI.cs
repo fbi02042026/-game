@@ -61,7 +61,7 @@ public class SkillObtainPopupUI : MonoBehaviour
         if (ui == null || !card.IsValid) { onClosed?.Invoke(); yield break; }
         ui._onClosed = onClosed;
         ui._closeReq = false;
-        if (!ui.Fill(card)) { ui.Close(); yield break; }
+        if (!ui.Fill(card.Id, card.Title)) { ui.Close(); yield break; }
         // 【2026-10-18 主人拍板】获得类弹窗互斥：技能弹窗要开了，先把开着的佣兵详情弹窗关掉，
         // 别两个叠在一起（玩家点佣兵头像看详情时又抽中技能就会叠，主人报）。
         MercObtainPopupUI.CloseIfOpen();
@@ -69,6 +69,26 @@ public class SkillObtainPopupUI : MonoBehaviour
         ui.StopAutoClose();
         ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
         while (ui._root != null && ui._root.activeSelf) yield return null;
+    }
+
+    /// <summary>
+    /// 【2026-10-19 主人拍板「点击后弹出获得技能那个弹窗 统一一下」】战斗技槽点击入口：
+    /// 点底部技能槽 → 弹<b>同一个</b>「获得技能」弹窗（同一预制体 / 填充 / 8 秒自动关，
+    /// 与抽中技能、佣兵头像点弹详情完全一套口径，不另写第二份）。
+    /// 互斥同款：开之前先关掉开着的 <see cref="MercObtainPopupUI"/>。
+    /// </summary>
+    public static void ShowFromId(string skillId)
+    {
+        if (string.IsNullOrEmpty(skillId)) return;
+        var ui = Ensure();
+        if (ui == null) return;
+        ui._onClosed = null;
+        ui._closeReq = false;
+        if (!ui.Fill(skillId, null)) { ui.Close(); return; }
+        MercObtainPopupUI.CloseIfOpen();
+        ui.OpenRoot();
+        ui.StopAutoClose();
+        ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
     }
 
     static SkillObtainPopupUI Ensure()
@@ -210,7 +230,8 @@ public class SkillObtainPopupUI : MonoBehaviour
     // 内容填充（只填数据，不碰排版）
     // ============================================================
 
-    bool Fill(DraftCard card)
+    /// <param name="titleFallback">简介名字回退（抽中路径传卡面 Title；技槽点击路径无卡面传 null）。</param>
+    bool Fill(string skillId, string titleFallback)
     {
         if (_root == null)
         {
@@ -218,17 +239,17 @@ public class SkillObtainPopupUI : MonoBehaviour
             return false;
         }
 
-        var def = PlayerSkillDefs.GetById(card.Id);
+        var def = PlayerSkillDefs.GetById(skillId);
         if (def == null)
         {
-            Debug.LogError("[SkillObtainPopup] 技能数据缺失：" + card.Id);
+            Debug.LogError("[SkillObtainPopup] 技能数据缺失：" + skillId);
             return false;
         }
 
         // 名字：displayName 为空回退卡面 Title；仍为空 → 报出来，不静默显示空白
-        string name = string.IsNullOrEmpty(def.displayName) ? (card.Title ?? "") : def.displayName;
+        string name = string.IsNullOrEmpty(def.displayName) ? (titleFallback ?? "") : def.displayName;
         if (string.IsNullOrEmpty(name))
-            Debug.LogError("[SkillObtainPopup] 技能名字为空：" + card.Id);
+            Debug.LogError("[SkillObtainPopup] 技能名字为空：" + skillId);
         SetText(_skillName, "Panel/Skill/SkillName", name);
 
         // 简介：desc 为空回退 numbers（与 DraftRewardDetailUI.SkillDescOf 同源）
@@ -236,7 +257,7 @@ public class SkillObtainPopupUI : MonoBehaviour
         SetText(_skillInfo, "Panel/Skill/Skillxinxi", desc);
 
         // 图标：全项目唯一出口（Resources 优先，编辑器兜 Art 源目录）
-        var sp = BattleUI.LoadRunSkillIcon(card.Id);
+        var sp = BattleUI.LoadRunSkillIcon(skillId);
         if (_skillIcon == null)
             Debug.LogError("[SkillObtainPopup] 缺少节点 Panel/Skill/SkillIcon（技能图标不显示）");
         else
@@ -244,7 +265,7 @@ public class SkillObtainPopupUI : MonoBehaviour
             _skillIcon.sprite = sp;             // sp 为 null 时清掉，不留上一次的图
             _skillIcon.enabled = sp != null;
         }
-        if (sp == null) Debug.LogError("[SkillObtainPopup] 取不到技能图标 " + card.Id);
+        if (sp == null) Debug.LogError("[SkillObtainPopup] 取不到技能图标 " + skillId);
 
         return true;
     }

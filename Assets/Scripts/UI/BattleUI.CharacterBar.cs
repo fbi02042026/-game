@@ -216,6 +216,8 @@ public partial class BattleUI : MonoBehaviour
         // 否则头像栏与场景头顶名又各写一份（主人反馈「抽奖提示米娅 / 场景小红 / 头像游侠」）。
         string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercDisplayName;
         mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
+        // 【2026-10-19 主人拍板】教程佣兵名字同样随稀有度上色（塔克=稀有蓝）
+        mercSlot1.SetNameColor(RarityPalette.Get(ResolveMercRarity(m.mercId, m.hireId)));
     }
 
     // =====================================================================
@@ -256,6 +258,8 @@ public partial class BattleUI : MonoBehaviour
         // 否则头像栏与场景头顶名又各写一份（主人反馈「抽奖提示米娅 / 场景小红 / 头像游侠」）。
         string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercDisplayName;
         mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
+        // 【2026-10-19 主人拍板】教程佣兵名字同样随稀有度上色（塔克=稀有蓝）
+        mercSlot1.SetNameColor(RarityPalette.Get(ResolveMercRarity(m.mercId, m.hireId)));
         mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(0) : 0f);
     }
 
@@ -336,6 +340,8 @@ public partial class BattleUI : MonoBehaviour
             slot.SetPortrait(icon);
             // 头像框按本佣兵稀有度换（普通灰白 / 稀有蓝 / 传奇橙金）
             slot.SetFrame(MercHireSession.LoadPortraitFrame(ResolveMercRarity(id, hireId)));
+            // 【2026-10-19 主人拍板「佣兵的名字应该随稀有度」】名字同色：与头像框、头顶名签同一张 RarityPalette
+            slot.SetNameColor(RarityPalette.Get(ResolveMercRarity(id, hireId)));
             // 职业 icon：按佣兵职业名取四分类（防御/恢复/法术/物攻），唯一入口 JobIconResolver.CombatBadge
             slot.SetJobIcon(JobIconResolver.CombatBadge(job));
             // 右上角小图标=该佣兵的技能：2026-10-06 主人拍板 → 佣兵技能角标全部隐藏（技能自动释放，不用手点）

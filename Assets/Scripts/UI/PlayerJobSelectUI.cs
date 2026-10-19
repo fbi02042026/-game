@@ -12,6 +12,9 @@ public class PlayerJobSelectUI : MonoBehaviour
 
     public static PlayerJobSelectUI Instance { get; private set; }
 
+    /// <summary>选职界面当前是否开着（FirstRunGuide 复弹气泡的闸门：弹窗开着时不许把气泡弹回屏上）。</summary>
+    public static bool IsOpen { get; private set; }
+
     public struct Options
     {
         public bool TutorialForceSwordFirst;
@@ -89,6 +92,7 @@ public class PlayerJobSelectUI : MonoBehaviour
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
+        IsOpen = false;
     }
 
     /// <summary>Editor 白模生成器用：搭建完整层级（含本组件挂在根上）。</summary>
@@ -160,6 +164,7 @@ public class PlayerJobSelectUI : MonoBehaviour
             _root.transform.SetAsLastSibling();
         }
         gameObject.SetActive(true);
+        IsOpen = true;
         transform.SetAsLastSibling();
         if (!_fromPrefab)
             GameFonts.ApplyToHierarchy(transform);
@@ -177,6 +182,7 @@ public class PlayerJobSelectUI : MonoBehaviour
 
     public void Hide()
     {
+        IsOpen = false;
         if (_opts.TutorialForceSwordFirst)
         {
             TutorialHintUI.Instance?.Hide();

@@ -73,7 +73,7 @@ public static class MercRosterDefs
         // 他是完成新手引导后可在酒馆招募的牧师，名字要好记、好认；头像框 / 对白 / 日志现在都显示同一个名字。
         // 【2026-10-08 补记】引导局的那位佣兵已换成 H003 塔克，H011 不再自动入队，只走酒馆招募。
         D("H011", "路加", "路加", "naima101", "牧师", MercRarity.Common, 1.00f, 302.5f,34.4f,25.7f, 1.20f, 3.5f, "SK004", "SK011", 500, true, true),
-        D("H012", "塞拉", "艾莎", "naima102", "水系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK004", null, 1700, false),
+        D("H012", "塞拉", "蓝之泪", "naima102", "水系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK004", null, 1700, false),
         D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK013", null, 2000, false, false),
         D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 355.4f,62.8f,38.5f, 1.20f, 3.5f, "SK020", "SK019", 8000, false, false),
         D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.60f, 4.2f, null, "SK002", 500, true, true),

@@ -235,6 +235,8 @@ public partial class BattleUI : MonoBehaviour
         }
         RebindAfterSystemsReady();
         RefreshBattleHud();
+        // 「击败」计数开场同步：断点续战恢复的累计击杀数直接亮出来
+        BattleSideHud.Instance?.SyncKillTotalFromRunStats();
         // 【2026-10-11 主人拍板】buff 图标条挂到玩家头像「战斗力」右侧（数据出口 AttrSystem.CollectActiveTimedBuffs）
         BuffHudUI.Ensure(playerSlot);
         GameFonts.ApplyToHierarchy(transform);

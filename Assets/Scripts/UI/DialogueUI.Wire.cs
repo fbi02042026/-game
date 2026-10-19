@@ -24,6 +24,11 @@ public partial class DialogueUI
             skipButton.onClick.RemoveListener(OnClickSkip);
             skipButton.onClick.AddListener(OnClickSkip);
         }
+        if (_autoButton != null)
+        {
+            _autoButton.onClick.RemoveListener(ToggleAuto);
+            _autoButton.onClick.AddListener(ToggleAuto);
+        }
         for (int i = 0; i < MaxChoices; i++)
         {
             int idx = i;

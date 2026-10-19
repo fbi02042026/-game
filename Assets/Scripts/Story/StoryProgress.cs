@@ -198,6 +198,28 @@ public static class StoryProgress
         SaveSystem.Instance.Save();
     }
 
+    // —— 战前剧情「看过即不重播」（2026-10-19 主人拍板）——
+    // 位标记存 SaveData.preStorySeenMask：bit0=第1章 … bit7=第8章。
+    // 开播即置位（不是播完）：中途退出也算看过，避免每次进关都被同一段开场拖住 —— 这正是主人主诉的痛点。
+
+    /// <summary>本章战前剧情是否已经播过（播过就不再重播）。</summary>
+    public static bool PreStorySeen(int chapter)
+    {
+        if (chapter < 1 || chapter > 8) return false;
+        return ((Save()?.preStorySeenMask ?? 0) & (1 << (chapter - 1))) != 0;
+    }
+
+    /// <summary>标记本章战前剧情已播（开播时调用，落盘）。</summary>
+    public static void MarkPreStorySeen(int chapter)
+    {
+        if (chapter < 1 || chapter > 8) return;
+        var data = Save();
+        if (data == null) return;
+        data.preStorySeenMask |= 1 << (chapter - 1);
+        SaveSystem.Instance.Save();
+        Debug.Log($"[Story] 第 {chapter} 章战前剧情已标记看过，之后不再重播");
+    }
+
     public static int GetBond(string npcId)
     {
         var data = Save();

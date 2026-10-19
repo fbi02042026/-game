@@ -56,6 +56,23 @@ public class StoryDirector : Singleton<StoryDirector>
 
     public bool IsPlaying { get; private set; }
 
+    /// <summary>
+    /// 剧情自动播放（AUTO，2026-10-19 主人拍板）：会话内记住，DialogueUI 右上按钮切换。
+    /// 开启后每句打字播完停 <see cref="AutoAdvanceDelaySec"/> 秒自动下一句，末句播完自动收窗。
+    /// 遇到选项仍停下等玩家点 —— 不替玩家做不可逆决定（第 7 章三选一决定结局）；
+    /// 但选项等超 <see cref="ChoiceWatchdogSec"/> 秒会自动选第一项放行（见 PlayRoutine，防点击被吞卡死）。
+    /// </summary>
+    public static bool AutoPlay { get; set; }
+
+    /// <summary>AUTO：打字播完后每句停留时长（unscaled）。</summary>
+    const float AutoAdvanceDelaySec = 1.5f;
+    /// <summary>AUTO：黑屏字幕行停留时长（unscaled）。</summary>
+    const float AutoBlackHoldSec = 2.5f;
+    /// <summary>安全网（任何模式）：单行 30 秒无进展强制推进 —— 防点击被异常吞掉时全场定格（主人主诉：卡剧情只能退出重进、体力白扣）。</summary>
+    const float LineWatchdogSec = 30f;
+    /// <summary>安全网（任何模式）：选项 60 秒无输入自动选第一项放行并告警。</summary>
+    const float ChoiceWatchdogSec = 60f;
+
     public static StoryDirector Ensure()
     {
         _ = Instance;
@@ -214,7 +231,24 @@ public class StoryDirector : Singleton<StoryDirector>
                 // 终幕黑屏：不铺背景、不出立绘，只有黑底 + 一行字幕
                 bool blackAdvanced = false;
                 ui.ShowEndBlackLine(b.text, () => blackAdvanced = true);
-                while (!blackAdvanced) yield return null;
+                // AUTO：停留几秒自动放行；任何模式 30 秒无进展强制放行（黑屏也点不动时不能定格全场）
+                float blackT = 0f, blackAutoT = 0f;
+                while (!blackAdvanced)
+                {
+                    float dt = Time.unscaledDeltaTime;
+                    blackT += dt;
+                    if (AutoPlay)
+                    {
+                        blackAutoT += dt;
+                        if (blackAutoT >= AutoBlackHoldSec) break;
+                    }
+                    if (blackT >= LineWatchdogSec)
+                    {
+                        Debug.LogWarning("[StoryDirector] 黑屏字幕 30 秒无进展，强制放行（点击可能被异常吞掉）");
+                        break;
+                    }
+                    yield return null;
+                }
                 continue;
             }
 
@@ -243,7 +277,20 @@ public class StoryDirector : Singleton<StoryDirector>
             {
                 int picked = -1;
                 ui.ShowChoices(b.choices, idx => { picked = idx; });
-                while (picked < 0) yield return null;
+                // AUTO 也不自动选：选项是玩家互动时刻（第 7 章三选一决定结局，不能替玩家拍板）。
+                // 但 60 秒无输入视为点击被异常吞掉 → 自动选第一项放行并告警，绝不把战斗永久定格。
+                float pickT = 0f;
+                while (picked < 0)
+                {
+                    pickT += Time.unscaledDeltaTime;
+                    if (pickT >= ChoiceWatchdogSec)
+                    {
+                        Debug.LogWarning("[StoryDirector] 选项 60 秒无输入，自动选第一项放行（点击可能被异常吞掉）");
+                        picked = 0;
+                        break;
+                    }
+                    yield return null;
+                }
                 ui.Hide();
                 IsPlaying = false;
                 _play = null;
@@ -255,7 +302,29 @@ public class StoryDirector : Singleton<StoryDirector>
                 yield break;
             }
 
-            while (!advanced) yield return null;
+            // 等待推进：AUTO = 打字播完停 1.5s 自动下一句；任何模式 30 秒无进展强制推进（安全网）。
+            float lineT = 0f, autoT = 0f;
+            while (!advanced)
+            {
+                float dt = Time.unscaledDeltaTime;
+                lineT += dt;
+                if (AutoPlay && ui.IsTypeComplete)
+                {
+                    autoT += dt;
+                    if (autoT >= AutoAdvanceDelaySec)
+                    {
+                        advanced = true;
+                        break;
+                    }
+                }
+                if (lineT >= LineWatchdogSec)
+                {
+                    Debug.LogWarning("[StoryDirector] 单行 30 秒无进展，强制推进下一句（点击可能被异常吞掉）");
+                    advanced = true;
+                    break;
+                }
+                yield return null;
+            }
             if (skipRest) break;
         }
 

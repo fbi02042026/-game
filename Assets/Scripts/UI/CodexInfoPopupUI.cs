@@ -27,6 +27,8 @@ public class CodexInfoPopupUI : MonoBehaviour
     public Text unlockButtonLabel;
 
     Action _onUnlock;
+    int _baseDescSize;   // Desc/Lore 基准字号（首次打开时记录，降档排版后用于恢复）
+    int _baseLoreSize;
 
     public bool IsOpen => root != null && root.activeSelf;
 
@@ -240,11 +242,86 @@ public class CodexInfoPopupUI : MonoBehaviour
             transform.SetAsLastSibling();
         }
         GameFonts.ApplyToHierarchy(transform);
+        LayoutContent();
     }
 
     public void Close()
     {
         if (root != null) root.SetActive(false);
+    }
+
+    /// <summary>
+    /// 【2026-10-19 排版优化】Desc/Lore 改为按实际文本高度流式排列（只调运行时布局，不动预制体）。
+    /// 之前 Lore 固定在 y=-520：Desc 只有一两行时中间空出一大块；且文本框 500 宽几乎顶到羊皮纸花纹边框。
+    /// 现在：文本宽收窄留安全边距、Desc 紧贴 Meta 底、Lore 紧跟 Desc 实际高度下方，
+    /// 超长文案（如塞拉）逐档降字号并压缩间距，保证不压底部「关闭/解锁」按钮。
+    /// </summary>
+    void LayoutContent()
+    {
+        if (panel == null || descText == null || loreText == null) return;
+        var panelRt = panel.transform as RectTransform;
+        var descRt = descText.rectTransform;
+        var loreRt = loreText.rectTransform;
+        if (panelRt == null || descRt == null || loreRt == null) return;
+
+        const float sideMargin = 50f;   // 左右安全边距，避开羊皮纸花纹边框
+        const float metaGap = 6f;       // Meta 与 Desc 的间距
+        float loreGap = 16f;            // Desc 与 Lore 的间距（超长时自动压缩）
+
+        float width = panelRt.rect.width - sideMargin * 2f;
+        if (width < 200f) width = 200f;
+
+        // 顶部起点 = Meta 框底 + 间距（预制体原值 -360 与 Meta 框底 -366 有 6px 重叠）
+        float top = -372f;
+        var metaRt = metaText != null ? metaText.rectTransform : null;
+        if (metaRt != null)
+            top = metaRt.anchoredPosition.y - metaRt.sizeDelta.y - metaGap;
+
+        // 底部红线：关闭按钮（y=28 + 高 52）上方留 12px；有解锁按钮时抬高红线
+        float bottomLimit = -panelRt.rect.height + 92f;
+        if (unlockButton != null && unlockButton.gameObject.activeSelf)
+            bottomLimit = -panelRt.rect.height + 164f;
+
+        // 首次记录基准字号；之后每次先恢复，避免上一次降档残留
+        if (_baseDescSize <= 0)
+        {
+            _baseDescSize = descText.fontSize;
+            _baseLoreSize = loreText.fontSize;
+        }
+        else
+        {
+            descText.fontSize = _baseDescSize;
+            loreText.fontSize = _baseLoreSize;
+        }
+
+        // 先定宽，再按新宽度取实际文本高度
+        descRt.sizeDelta = new Vector2(width, 0f);
+        loreRt.sizeDelta = new Vector2(width, 0f);
+        float descH = descText.preferredHeight;
+        float loreH = loreText.preferredHeight;
+
+        float avail = top - bottomLimit;
+        if (descH + loreGap + loreH > avail)
+        {
+            int[] ds = { 19, 17, 16 };
+            int[] ls = { 18, 16, 15 };
+            for (int i = 0; i < ds.Length; i++)
+            {
+                descText.fontSize = ds[i];
+                loreText.fontSize = ls[i];
+                descH = descText.preferredHeight;
+                loreH = loreText.preferredHeight;
+                if (descH + loreGap + loreH <= avail) break;
+            }
+            if (descH + loreGap + loreH > avail)
+                loreGap = Mathf.Max(4f, avail - descH - loreH);
+        }
+
+        descRt.anchoredPosition = new Vector2(descRt.anchoredPosition.x, top);
+        descRt.sizeDelta = new Vector2(width, descH);
+
+        loreRt.anchoredPosition = new Vector2(loreRt.anchoredPosition.x, top - descH - loreGap);
+        loreRt.sizeDelta = new Vector2(width, loreH);
     }
 
     /// <summary>编辑器生成 / 运行时兜底共用。</summary>

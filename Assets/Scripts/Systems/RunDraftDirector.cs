@@ -75,6 +75,8 @@ public class RunDraftDirector : MonoBehaviour
             // 金币本免费抽额度每局重算（ResetStageFreeDraws，金币本 FreeEntryDraws=5）：
             // _freeDrawsUsed 跨局不清会串到下一局 → 每局进关统一清一次（续关不清，行为同从前）。
             SlotMachineSystem.ResetStageFreeDraws();
+            // 【2026-10-19 主人拍板】本局抽中抽奖币的次数也每局清零（上限见 SlotMachineDefs.MAX_GOLD_PRIZE_PER_RUN）。
+            SlotMachineSystem.ResetRunGoldPrizeCount();
             SlotMachineSystem.GrantRunStarterGold(tutorial);
         }
 
@@ -292,10 +294,13 @@ public class RunDraftDirector : MonoBehaviour
             {
                 // 主人拍板「抽中的金币是当局抽奖用的」→ 进局内金币钱包（本局能继续抽），带不出裂隙。
                 // 【2026-10-10 主人拍板】抽奖与启动金统一成局内金币，不再有第二套抽奖币。
+                // 【2026-10-19 主人拍板】生效才计数（本局抽中次数上限的唯一记账点，
+                // 见 SlotMachineDefs.MAX_GOLD_PRIZE_PER_RUN / SlotMachineSystem.GoldAllowed）。
                 if (card.Amount <= 0) { msg = "抽奖币奖励数值异常"; return false; }
                 var bm = BattleManager.Instance;
                 if (bm == null) { msg = "抽奖币奖励发放失败：不在战斗中"; return false; }
                 bm.AddRunGold(card.Amount, false);
+                SlotMachineSystem.NoteGoldPrize();
                 msg = $"获得抽奖币 ×{card.Amount}";
                 return true;
             }

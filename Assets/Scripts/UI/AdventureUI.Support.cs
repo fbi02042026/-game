@@ -283,12 +283,10 @@ public partial class AdventureUI
     }
 
     /// <summary>
-    /// 关卡详情文字样式（字号 / 宽度 / 溢出）的唯一出口 —— Build 与 AutoBind 两条路径都走这里。
-    /// 【2026-10-11 主人拍板】
-    /// ① 章节名 25 → 27；介绍 20 → 21（+1；22 号在拉宽后的框里仍会排成 3 行 → 溢出压住「敌人信息」）。
-    /// ② 介绍框往右拉伸 280 → 340（主人：「敌人信息那右边不是还有空地吗 再往右拉伸一点」）：
-    ///    每行可容 16 字 → 第 1 章那段 31 字正好 2 行、高度刚好落在框内，不再压到下面的「敌人信息」。
-    /// ③ 预制体里介绍框是「超出即截断（VerticalOverflow=Truncate）」→ 改为溢出可见，长句不再被吃掉后半截。
+    /// 关卡详情文字样式（字号 / 溢出）的唯一出口 —— Build 与 AutoBind 两条路径都走这里。
+    /// 【2026-10-11 主人拍板】章节名 27 / 介绍 21 / 小标题 25；介绍框溢出改为可见，长句不再被吃掉后半截。
+    /// 【2026-10-19 主人改排版】介绍框宽度**跟随预制体**（主人已把信息框边界拉大），
+    /// 不再在运行时把宽度压回 340 —— 代码只管字号和溢出，排版以预制体为准。
     /// </summary>
     void ApplyDetailTextStyle()
     {
@@ -298,11 +296,8 @@ public partial class AdventureUI
         {
             stageDescLabel.fontSize = DetailDescFontSize;
             stageDescLabel.verticalOverflow = VerticalWrapMode.Overflow;
-            // 右边界 41+340=381 < 「可能掉落」标题左边界 386.7，不会撞上右侧那一块
-            var rt = stageDescLabel.rectTransform;
-            rt.sizeDelta = new Vector2(DetailDescWidth, rt.sizeDelta.y);
         }
-        // 「可能掉落」字号对齐「敌人信息」；节点宽 100、4 字 25 号正好占满 → 关掉换行避免折成两行
+        // 「可能掉落」字号对齐「敌人信息」；关掉换行避免折成两行
         if (dropTitleLabel != null)
         {
             dropTitleLabel.fontSize = DetailSubTitleFontSize;

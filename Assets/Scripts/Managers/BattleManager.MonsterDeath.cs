@@ -60,7 +60,9 @@ public partial class BattleManager
         SyncKillComboHaste();
         if (_killCombo > RunStats.MaxKillCombo)
             RunStats.MaxKillCombo = _killCombo;
-        BattleSideHud.Instance?.SetCombo(_killCombo);
+        // 【2026-10-19 主人拍板】右上角「击败」改成常驻累计计数（总数、不消失、跨关卡累计），
+        // 不再显示连杀数；连杀本身的速度加成/金币奖励逻辑不动（_killCombo 照旧）。
+        BattleSideHud.Instance?.SetKillTotal(RunStats.KillCount);
         CombatJuice.Instance?.OnKillCombo(_killCombo);
         CombatJuice.Instance?.OnKillFinisher(m);
         HeroThunderUltimate.Instance?.OnMonsterKilled(m);

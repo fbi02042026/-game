@@ -84,6 +84,14 @@ public static class MercSkillExecutor
         return 0.5f;
     }
 
+    /// <summary>SK010 全体无敌时长。现网 1.5 秒；表 duration=1.5（2026-10-19 主人拍板补齐实现）。</summary>
+    public static float InvulnDuration(string skillId)
+    {
+        if (MercSkillTable.TryGet(skillId, out var row) && row.Duration > 0f)
+            return row.Duration;
+        return 1.5f;
+    }
+
     /// <summary>SK018 现网 8 秒；表 duration=8。</summary>
     public static float FearDuration(string skillId)
     {
@@ -91,6 +99,12 @@ public static class MercSkillExecutor
             return row.Duration;
         return 8f;
     }
+
+    /// <summary>扇形 AOE（SK003 横扫千军）：表写「最多 3 个敌人」，merc 表没有目标数列，代码补默认上限。</summary>
+    public static bool IsFrontalAoe(string skillId)
+        => MercSkillTable.TryGet(skillId, out var row)
+           && !string.IsNullOrEmpty(row.RangeDesc)
+           && row.RangeDesc.Contains("扇形");
 
     static bool IsTeam(MercSkillTable.Row row)
     {
