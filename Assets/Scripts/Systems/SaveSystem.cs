@@ -12,12 +12,63 @@ public class SaveSystem : Singleton<SaveSystem>
     private SaveData _data;
     public SaveData Data => _data;
 
+    /// <summary>
+    /// 版本清档标记键（2026-10-20 主人要求「下载新版本删除本地数据」）：
+    /// 记录上次启动时的 Application.version，与当前不一致即清除本地数据。
+    /// </summary>
+    const string VersionWipePrefKey = "save_wipe_app_version";
+
+    /// <summary>
+    /// 「下载新版本删除本地数据」总开关（2026-10-20 主人拍板）：**默认关**。
+    /// 主人说开的时候改成 true 再出包；关闭状态下不比对、不清档、不写版本标记。
+    /// </summary>
+    public const bool WipeLocalDataOnNewVersion = false;
+
     protected override void Awake()
     {
         base.Awake();
         savePath = Path.Combine(Application.persistentDataPath, "player.dat");
         backupPath = Path.Combine(Application.persistentDataPath, "player.bak");
+        if (WipeLocalDataOnNewVersion)
+            WipeLocalDataIfNewVersion();
         Load();
+    }
+
+    /// <summary>
+    /// 下载新版本后自动清除本地数据：比对 Application.version 与本地记录的版本号，
+    /// 不一致（覆盖安装新版；首次安装无记录也走一遍，等效空操作）即删除存档文件 +
+    /// 清空全部 PlayerPrefs（战斗中断档、引导进度、音频开关等一并清），再记录当前版本。
+    /// TapTap 游客标识（与 TapTapBootstrap.GuestIdPrefKey 同键）属账号身份不属游戏数据，保留。
+    /// </summary>
+    void WipeLocalDataIfNewVersion()
+    {
+        string current = Application.version;
+        string stored = PlayerPrefs.GetString(VersionWipePrefKey, "");
+        if (stored == current) return;
+
+        string guestId = PlayerPrefs.GetString("TapTapGuestId", "");
+        PlayerPrefs.DeleteAll();
+        if (!string.IsNullOrEmpty(guestId))
+            PlayerPrefs.SetString("TapTapGuestId", guestId);
+        PlayerPrefs.SetString(VersionWipePrefKey, current);
+        PlayerPrefs.Save();
+
+        try
+        {
+            if (File.Exists(savePath)) File.Delete(savePath);
+            if (File.Exists(backupPath)) File.Delete(backupPath);
+            string legacy = Path.Combine(Application.persistentDataPath, "save.json");
+            string legacyBak = Path.Combine(Application.persistentDataPath, "save_backup.json");
+            if (File.Exists(legacy)) File.Delete(legacy);
+            if (File.Exists(legacyBak)) File.Delete(legacyBak);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("[SaveSystem] 版本更新清档：删除存档文件失败：" + e.Message);
+        }
+
+        StoryProgress.ResetRuntimeFlags();
+        Debug.Log($"[SaveSystem] 检测到版本变化（{stored} → {current}），本地数据已清除，从新档开始");
     }
 
     string ReadSaveJson(string path)

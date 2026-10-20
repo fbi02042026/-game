@@ -616,24 +616,21 @@ public class SaveData
         foreach (string id in DefaultUnlockedMercIds)
             unlockedMercIds.Add(id);
         unlockedMercEntries = FromIdSet(unlockedMercIds);
-        // 【2026-10-13 主人拍板】抽奖池同步播种：默认名单进池（初期 4 格正好坐满）
+        // 【2026-10-13 主人拍板】抽奖池同步播种：默认名单进池
+        // （2026-10-20 塔克移出默认名单后初期 3 白占 3 格，第 4 格由 D1 领塔克后 EnsurePoolFilled 补上）
         SeedDrawPoolIfEmpty();
     }
 
     /// <summary>
-    /// 【2026-10-13 主人拍板】抽奖池播种 + 塔克补发（幂等，新档 / 老档第一次进新版都走）：
-    /// ① 塔克（H003）无条件补进永久解锁 —— 引导第 2 抽保底入队是**局内**的，老档解锁列表里没有他，
-    ///    这里兑现「第一天登录开放」；② 池子不满开放格数就走 <see cref="EnsurePoolFilled"/> 自动补满
-    ///    （主人拍板「池子最少要补全 会自动补全」，玩家点开酒馆时池子已经是满的）。
+    /// 【2026-10-13 主人拍板】抽奖池播种（幂等，新档 / 老档第一次进新版都走）：
+    /// 池子不满开放格数就走 <see cref="EnsurePoolFilled"/> 自动补满
+    /// （主人拍板「池子最少要补全 会自动补全」，玩家点开酒馆时池子已经是满的）。
+    /// 【2026-10-20 二次拍板】塔克不再在此无条件补进解锁——改由每日登录 D1 真发本体，
+    /// GrantOne 解锁佣兵后自动 EnsurePoolFilled 补进池子（照 MailSystem 先例）。
     /// </summary>
     void SeedDrawPoolIfEmpty()
     {
         mercDrawPool ??= new HashSet<string>();
-        if (unlockedMercIds != null && !unlockedMercIds.Contains("H003"))
-        {
-            unlockedMercIds.Add("H003");
-            unlockedMercEntries = FromIdSet(unlockedMercIds);
-        }
         EnsurePoolFilled();
     }
 
@@ -713,11 +710,12 @@ public class SaveData
     }
 
     /// <summary>
-    /// 默认解锁（2026-10-13 主人拍板「初期三个白色佣兵：一个牧师一个剑盾一个游侠」＋「登录给的塔克」）：
-    /// H011 路加（牧师）· H001 马库斯（剑盾）· H005 米娅（游侠）＋ H003 塔克（剑盾 / 稀有）。
-    /// 原第三席 H019 艾琳（法师）移出初期名单，仍可在酒馆金币解锁 / 图鉴获取。
+    /// 默认解锁（2026-10-13 主人拍板「初期三个白色佣兵：一个牧师一个剑盾一个游侠」）：
+    /// H011 路加（牧师）· H001 马库斯（剑盾）· H005 米娅（游侠）。
+    /// 【2026-10-20 二次拍板】塔克（H003）移出默认名单——改由每日登录 D1 真发佣兵本体，
+    /// 领取时报喜「恭喜获得稀有佣兵·塔克，实力大增！」（与三选一抽中报喜统一）。
     /// </summary>
-    public static readonly string[] DefaultUnlockedMercIds = { "H011", "H001", "H005", "H003" };
+    public static readonly string[] DefaultUnlockedMercIds = { "H011", "H001", "H005" };
 
     /// <summary>该佣兵是否已在酒馆解锁（进战斗三选一池的必要条件）。</summary>
     public bool IsMercUnlocked(string hireId)

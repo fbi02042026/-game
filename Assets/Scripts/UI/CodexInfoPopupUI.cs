@@ -22,6 +22,8 @@ public class CodexInfoPopupUI : MonoBehaviour
     public Text loreText;
     public Button closeButton;
     public Button dimButton;
+    /// <summary>top 节点下的小图标：图鉴入口按怪物/佣兵换 guaiwuicon/yongbingicon。</summary>
+    public Image topIcon;
     /// <summary>可选「解锁」按钮：预制体里没有时运行时补一个，节点名固定 UnlockButton。</summary>
     public Button unlockButton;
     public Text unlockButtonLabel;
@@ -29,12 +31,25 @@ public class CodexInfoPopupUI : MonoBehaviour
     Action _onUnlock;
     int _baseDescSize;   // Desc/Lore 基准字号（首次打开时记录，降档排版后用于恢复）
     int _baseLoreSize;
+    /// <summary>可选大图（佣兵全身立绘）：非空时点弹窗头像放大查看，点任意处关闭（2026-10-20）。</summary>
+    Sprite _zoomSprite;
+    RectTransform _zoomRoot;
+    Image _zoomImg;
 
     public bool IsOpen => root != null && root.activeSelf;
 
-    public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite)
+    public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite, bool? codexKind = null)
     {
-        Ensure().Open(title, meta, desc, lore, portraitSprite, null, null);
+        Ensure().Open(title, meta, desc, lore, portraitSprite, null, null, codexKind: codexKind);
+    }
+
+    /// <summary>
+    /// 带大图的重载（2026-10-20 用户拍板）：zoomSprite 非空时点弹窗头像可放大查看，
+    /// 深色遮罩铺满、点任意处关闭；传 null 则头像不可点。
+    /// </summary>
+    public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite, Sprite zoomSprite, bool? codexKind = null)
+    {
+        Ensure().Open(title, meta, desc, lore, portraitSprite, null, null, zoomSprite, codexKind);
     }
 
     /// <summary>
@@ -86,7 +101,8 @@ public class CodexInfoPopupUI : MonoBehaviour
     /// <summary>
     /// 用项目里的现成素材给程序搭的壳“换皮”（2026-09-18 用户要求：程序生成的先在项目里找素材拼）。
     /// 走 UiKeyedBackgrounds 运行时替换，找不到素材时保持原样，不动预制体文件。
-    /// 面板 = Frames/内容底（羊皮纸），头像框/关闭钮 = Frames/图层 1，解锁钮 = Frames/字底；
+    /// 面板 = Frames/内容底（羊皮纸），关闭钮 = Frames/图层 1，解锁钮 = Frames/字底；
+    /// 头像框保持预制体原样，不再换成「图层 1」（2026-10-20 用户要求：头像里去掉紫色板背景）。
     /// 纸底上白字看不清，正文统一改深棕。
     /// </summary>
     void ApplyProjectArt()
@@ -100,10 +116,6 @@ public class CodexInfoPopupUI : MonoBehaviour
             if (descText != null) descText.color = dark;
             if (loreText != null) loreText.color = new Color(0.32f, 0.21f, 0.12f, 1f);
         }
-
-        var frameImg = FindDeep(root != null ? root.transform : transform, "PortraitFrame")?.GetComponent<Image>();
-        if (frameImg != null)
-            UiKeyedBackgrounds.ApplyLogFrame(frameImg, "图层 1", preserveAspect: false);
 
         var closeImg = closeButton != null ? closeButton.GetComponent<Image>() : null;
         if (closeImg != null)
@@ -142,6 +154,8 @@ public class CodexInfoPopupUI : MonoBehaviour
             closeButton = FindDeep(root.transform, "CloseButton")?.GetComponent<Button>();
         if (dimButton == null)
             dimButton = FindDeep(root.transform, "Dim")?.GetComponent<Button>();
+        if (topIcon == null)
+            topIcon = FindDeep(root.transform, "icon")?.GetComponent<Image>();
     }
 
     void Wire()
@@ -201,7 +215,7 @@ public class CodexInfoPopupUI : MonoBehaviour
     }
 
     void Open(string title, string meta, string desc, string lore, Sprite portraitSprite,
-        string unlockText, Action onUnlock)
+        string unlockText, Action onUnlock, Sprite zoomSprite = null, bool? codexKind = null)
     {
         BindRefs();
         Wire();
@@ -220,6 +234,17 @@ public class CodexInfoPopupUI : MonoBehaviour
             }
         }
         if (titleText != null) titleText.text = title ?? "";
+        // 图鉴入口（2026-10-20 主人拍板）：按怪物/佣兵换 top/icon 图标，标题同步换成「怪物图鉴/佣兵图鉴」；
+        // 其他调用方（酒馆解锁等）不传 codexKind，保持原样
+        if (codexKind.HasValue)
+        {
+            if (titleText != null)
+                titleText.text = codexKind.Value ? "佣兵图鉴" : "怪物图鉴";
+            if (topIcon != null)
+                topIcon.sprite = Resources.Load<Sprite>(codexKind.Value
+                    ? "Art/UI/冒险日志/yongbingicon"
+                    : "Art/UI/冒险日志/guaiwuicon");
+        }
         if (metaText != null) metaText.text = meta ?? "";
         if (descText != null) descText.text = desc ?? "";
         if (loreText != null) loreText.text = lore ?? "";
@@ -235,6 +260,21 @@ public class CodexInfoPopupUI : MonoBehaviour
                 var idle = portrait.GetComponent<PortraitIdleMotion>();
                 if (idle != null) idle.enabled = false;
             }
+
+            // 点头像放大查看大图：有大图才可点（怪物弹窗不传大图，保持不可点）
+            _zoomSprite = (zoomSprite != null && portraitSprite != null) ? zoomSprite : null;
+            var zoomBtn = portrait.GetComponent<Button>();
+            if (zoomBtn == null && _zoomSprite != null)
+            {
+                zoomBtn = portrait.gameObject.AddComponent<Button>();
+                zoomBtn.transition = Selectable.Transition.None;
+            }
+            if (zoomBtn != null)
+            {
+                zoomBtn.onClick.RemoveAllListeners();
+                zoomBtn.onClick.AddListener(ShowZoom);
+                zoomBtn.enabled = _zoomSprite != null;
+            }
         }
         if (root != null)
         {
@@ -247,7 +287,54 @@ public class CodexInfoPopupUI : MonoBehaviour
 
     public void Close()
     {
+        HideZoom();
         if (root != null) root.SetActive(false);
+    }
+
+    /// <summary>点任意处关闭大图（整层遮罩就是一个按钮）。</summary>
+    public void HideZoom()
+    {
+        if (_zoomRoot != null && _zoomRoot.gameObject.activeSelf) _zoomRoot.gameObject.SetActive(false);
+    }
+
+    void ShowZoom()
+    {
+        if (_zoomSprite == null) return;
+        EnsureZoomLayer();
+        if (_zoomImg != null)
+        {
+            _zoomImg.sprite = _zoomSprite;
+            _zoomImg.preserveAspect = true;
+        }
+        if (_zoomRoot != null)
+        {
+            _zoomRoot.gameObject.SetActive(true);
+            _zoomRoot.SetAsLastSibling();
+        }
+    }
+
+    /// <summary>
+    /// 大图层：深色遮罩铺满 + 居中立绘（保持比例）。运行时按需补建一次，不动预制体；
+    /// 立绘自身 raycastTarget 关掉，点哪里都算点遮罩 → 任意处关闭。
+    /// </summary>
+    void EnsureZoomLayer()
+    {
+        if (_zoomRoot != null) return;
+        var host = root != null ? root.transform : transform;
+        _zoomRoot = CreateUi(host, "ZoomLayer", true);
+        Stretch(_zoomRoot);
+        var maskImg = _zoomRoot.gameObject.AddComponent<Image>();
+        maskImg.color = new Color(0f, 0f, 0f, 0.88f);
+        var btn = _zoomRoot.gameObject.AddComponent<Button>();
+        btn.transition = Selectable.Transition.None;
+        btn.onClick.AddListener(HideZoom);
+
+        var picRt = CreateUi(_zoomRoot, "ZoomPic", true);
+        Stretch(picRt);
+        picRt.offsetMin = new Vector2(60f, 80f);    // 四周留边，preserveAspect 自动居中适配
+        picRt.offsetMax = new Vector2(-60f, -80f);
+        _zoomImg = picRt.gameObject.AddComponent<Image>();
+        _zoomImg.raycastTarget = false;
     }
 
     /// <summary>

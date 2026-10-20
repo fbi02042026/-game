@@ -1,0 +1,241 @@
+using System.Collections;
+using UnityEngine;
+using UnityEngine.UI;
+
+/// <summary>
+/// 「获得佣兵」全屏演出（2026-10-20 主人拍板）：
+/// 背景淡入 → 立绘冲击登场（大→过冲→落定）→ 立绘呼吸浮动 → 脚下名字淡入上移 → 点击任意处关闭。
+///
+/// 预制体：Assets/Resources/Prefabs/Town/MercGainCinematic（Tools → 生成获得佣兵演出预制体 生成/重建）。
+/// 节点：BG（全屏底）/ Stand（立绘，pivot 底部中心）/ NamePlate（脚下名字）。
+/// 【位置以预制体为准】动画只改 alpha / scale / 相对偏移，落定值 = 预制体里摆的值，
+/// 主人挪完节点代码不会掰回去；名字颜色由代码按稀有度刷（RarityPalette 真源），预制体里改色无效。
+/// </summary>
+public class MercGainCinematicUI : MonoBehaviour
+{
+    const string PrefabPath = "Prefabs/Town/MercGainCinematic";
+
+    const float BgFadeIn = 0.25f;      // 背景淡入
+    const float StandPop = 0.45f;      // 立绘冲击登场时长
+    const float NameDelay = 0.15f;     // 立绘落定后名字延迟
+    const float NameRise = 0.3f;       // 名字上移淡入时长
+    const float IdleFloatAmp = 10f;    // 立绘呼吸浮动幅度（相对预制体位置）
+    const float IdleFloatPeriod = 2.2f;
+    const float AutoCloseAfter = 8f;   // 无点击兜底自动关（防卡流程）
+
+    Transform _stand;
+    Text _name;
+    CanvasGroup _bgCg, _standCg, _nameCg;
+    ParticleSystem[] _bgFx;   // 主人在 BG 节点下摆的特效，界面出现时一起播放
+    Vector2 _standBasePos;
+    Vector3 _standBaseScale;
+    Vector2 _nameBasePos;
+    float _bgTargetAlpha;
+    Coroutine _co;
+    System.Action _onClosed;
+    bool _closing;
+
+    /// <summary>播一场获得佣兵演出；关闭（点击 / 超时）后回调 onClosed。预制体缺失时直接回调不阻塞流程。
+    /// subtitle 非空时在名字下方显示副标题（引导入队用「已加入小队」；领取场景不传）。
+    /// 【2026-10-20 主人拍板】默认发放的 3 白（路加/马库斯/米娅）**永远不弹演出**——他们开局就在队，
+    /// 没有"获得"仪式；此闸加在入口，任何接线点都不会误弹。</summary>
+    public static void Show(string hireId, System.Action onClosed, string subtitle = null)
+    {
+        string resolved = MercPortraitSprites.ResolveHireId(hireId) ?? hireId;
+        if (System.Array.IndexOf(SaveData.DefaultUnlockedMercIds, resolved) >= 0)
+        {
+            onClosed?.Invoke();
+            return;
+        }
+        var prefab = Resources.Load<GameObject>(PrefabPath);
+        if (prefab == null)
+        {
+            Debug.LogError($"[MercGainCinematic] 找不到预制体 {PrefabPath}——先跑 Tools → 生成获得佣兵演出预制体");
+            onClosed?.Invoke();
+            return;
+        }
+        var go = Object.Instantiate(prefab);
+        var ui = go.GetComponent<MercGainCinematicUI>() ?? go.AddComponent<MercGainCinematicUI>();
+        ui.Play(hireId, onClosed, subtitle);
+    }
+
+    void Play(string hireId, System.Action onClosed, string subtitle = null)
+    {
+        _onClosed = onClosed;
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.MercGainCinematic);
+
+        var bg = transform.Find("BG");
+        _stand = transform.Find("Stand");
+        var nameTr = transform.Find("NamePlate");
+        if (bg == null || _stand == null || nameTr == null)
+        {
+            Debug.LogError("[MercGainCinematic] 预制体缺 BG/Stand/NamePlate 节点，演出跳过");
+            Done();
+            return;
+        }
+
+        // 副标题（可选）：挂在 NamePlate 子节点，随名字一起淡入上移；null / 空 → 隐藏
+        var subTr = nameTr.Find("SubTitle");
+        if (subTr != null)
+        {
+            var subTxt = subTr.GetComponent<Text>();
+            bool hasSub = !string.IsNullOrEmpty(subtitle);
+            if (subTxt != null) subTxt.text = subtitle;
+            subTr.gameObject.SetActive(hasSub);
+        }
+
+        _bgCg = EnsureGroup(bg.gameObject, out _bgTargetAlpha);
+        _standCg = EnsureGroup(_stand.gameObject, out _);
+        _nameCg = EnsureGroup(nameTr.gameObject, out _);
+
+        // BG 下特效：关掉 Play On Awake、清空残留，等 CoPlay 开场统一播（2026-10-20 主人拍板）
+        _bgFx = bg.GetComponentsInChildren<ParticleSystem>(true);
+        foreach (var ps in _bgFx)
+        {
+            var m = ps.main;
+            m.playOnAwake = false;
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        _standBasePos = _stand.GetComponent<RectTransform>().anchoredPosition;
+        _standBaseScale = _stand.localScale;
+        _name = nameTr.GetComponent<Text>();
+        _nameBasePos = nameTr.GetComponent<RectTransform>().anchoredPosition;
+
+        ApplyName(hireId);
+
+        var btn = bg.GetComponent<Button>() ?? bg.gameObject.AddComponent<Button>();
+        btn.transition = Selectable.Transition.None;
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(Close);
+
+        _co = StartCoroutine(CoPlay());
+    }
+
+    void ApplyName(string hireId)
+    {
+        if (_name == null) return;
+        bool hasRoster = MercRosterDefs.TryGetByHireId(hireId, out var rd);
+        string fullName = hasRoster && !string.IsNullOrEmpty(rd.Name) ? rd.Name : hireId;
+        _name.text = fullName;
+        var rarity = hasRoster ? rd.Rarity : MercRosterDefs.MercRarity.Common;
+        var c = RarityPalette.Get(rarity);
+        c.a = 1f;
+        _name.color = c;
+    }
+
+    static CanvasGroup EnsureGroup(GameObject go, out float targetAlpha)
+    {
+        var img = go.GetComponent<Image>();
+        targetAlpha = img != null ? img.color.a : 1f;
+        var cg = go.GetComponent<CanvasGroup>() ?? go.AddComponent<CanvasGroup>();
+        cg.alpha = 0f;
+        return cg;
+    }
+
+    IEnumerator CoPlay()
+    {
+        float t = 0f;
+        // ⓪ BG 特效随界面出现一起播放
+        foreach (var ps in _bgFx)
+            if (ps != null && ps.gameObject.activeInHierarchy)
+                ps.Play(true);
+        // ① 背景先出现
+        while (t < BgFadeIn) { t += Time.unscaledDeltaTime; _bgCg.alpha = _bgTargetAlpha * Mathf.Clamp01(t / BgFadeIn); yield return null; }
+        _bgCg.alpha = _bgTargetAlpha;
+
+        // ② 立绘冲击登场：alpha 闪现 + scale 从大到过冲落定（EaseOutBack，pivot 在脚下 → 从天上砸下来）
+        _standCg.alpha = 1f;
+        yield return StartCoroutine(CoStandPop());
+
+        // ③ 名字从脚下淡入上移
+        yield return new WaitForSecondsRealtime(NameDelay);
+        yield return StartCoroutine(CoNameIn());
+
+        // ④ 呼吸浮动 + 等点击 / 超时
+        float wait = 0f;
+        while (!_closing && wait < AutoCloseAfter)
+        {
+            float dt = Time.unscaledDeltaTime;
+            wait += dt;
+            float phase = Mathf.Sin((wait / IdleFloatPeriod) * Mathf.PI * 2f);
+            _stand.localPosition = new Vector3(
+                _standBasePos.x, _standBasePos.y + phase * IdleFloatAmp, _stand.localPosition.z);
+            float breathe = 1f + 0.012f * Mathf.Sin((wait / IdleFloatPeriod) * Mathf.PI * 2f);
+            _stand.localScale = _standBaseScale * breathe;
+            yield return null;
+        }
+        if (!_closing) Close();
+    }
+
+    IEnumerator CoStandPop()
+    {
+        // 2.2 → 1.3（过冲）→ 1.0，前段快后段弹；alpha 前 1/3 闪现
+        var curve = AnimationCurve.EaseInOut(0f, 2.2f, 1f, 1f);
+        curve.AddKey(0.7f, 0.94f);
+        float t = 0f;
+        while (t < StandPop)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / StandPop);
+            _standCg.alpha = Mathf.Clamp01(u / 0.33f);
+            _stand.localScale = _standBaseScale * curve.Evaluate(u);
+            yield return null;
+        }
+        _stand.localScale = _standBaseScale;
+        _standCg.alpha = 1f;
+    }
+
+    IEnumerator CoNameIn()
+    {
+        float t = 0f;
+        while (t < NameRise)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / NameRise);
+            float ease = 1f - (1f - u) * (1f - u);
+            _nameCg.alpha = ease;
+            var rt = _name.transform.GetComponent<RectTransform>();
+            rt.anchoredPosition = _nameBasePos + new Vector2(0f, (1f - ease) * 26f);
+            yield return null;
+        }
+        _nameCg.alpha = 1f;
+        _name.transform.GetComponent<RectTransform>().anchoredPosition = _nameBasePos;
+    }
+
+    /// <summary>点击任意处 / 超时 → 全体快速淡出 → 回调。</summary>
+    public void Close()
+    {
+        if (_closing) return;
+        _closing = true;
+        if (_co != null) { StopCoroutine(_co); _co = null; }
+        StartCoroutine(CoClose());
+    }
+
+    IEnumerator CoClose()
+    {
+        float t = 0f;
+        const float dur = 0.2f;
+        float bg0 = _bgCg != null ? _bgCg.alpha : 0f;
+        while (t < dur)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = 1f - Mathf.Clamp01(t / dur);
+            if (_bgCg != null) _bgCg.alpha = bg0 * u;
+            if (_standCg != null) _standCg.alpha = u;
+            if (_nameCg != null) _nameCg.alpha = u;
+            yield return null;
+        }
+        Done();
+    }
+
+    void Done()
+    {
+        var cb = _onClosed;
+        _onClosed = null;
+        Destroy(gameObject);
+        cb?.Invoke();
+    }
+}

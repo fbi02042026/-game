@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -8,6 +9,9 @@ using UnityEngine;
 /// Power = POWER_BASE + POWER_PER_DPS × DPS + POWER_PER_HP × 血量 + POWER_PER_DEF × (物防+魔防)。
 /// 底盘 POWER_BASE 是纯常数（无等级）；血量/防御 2026-10-17 起计入权重（主人：涨的少不能不涨），
 /// 暴击伤害/移速等其余属性仍不计。</para>
+/// <para>2026-10-20 方案 B：装备类提示值升级为换装真值 <see cref="EquipSwapPowerDelta"/>
+/// （副本 AttrSystem 全链路模拟，与头顶飘字/TotalPower 同源）；<see cref="EquipPowerDelta"/>
+/// 保留为城镇等非战斗环境的卡面预估分支与技能/佣兵权重的底座。</para>
 /// </summary>
 public static class PowerCalc
 {
@@ -121,6 +125,86 @@ public static class PowerCalc
     /// </summary>
     public static int MercPowerDelta(int level, int star)
         => Mathf.Max(1, level) * 70 + Mathf.Max(1, star) * 110;
+
+    // ============================================================
+    // 战力真值（2026-10-20 主人拍板「提示增加的战力必须与实际一致」）
+    // ============================================================
+
+    /// <summary>
+    /// 穿上 newEq（顶掉同槽旧件）后的战力差 —— <b>与头顶飘字 / RunLoadout.TotalPower 同一真值</b>。
+    /// 用一次性 <see cref="AttrSystem"/> 副本按 Hero.RecalcAttr 完整链路重算：
+    /// 职业表 + 天赋 + 传说武器 + 装备表（强化倍率/副手封顶/技能被动）+ tempBuffs + 武器类型攻速乘区，
+    /// 玩家段与 RunLoadout.TotalPower 同式同取整。副本算完即弃，不碰 Hero / 背包本体状态
+    /// （这是抽卡/弹窗时的确定性模拟，不是运行时兜底）。
+    /// <para>非战斗环境（城镇等取不到 Hero/背包）回退卡面预估 <see cref="EquipPowerDelta"/>
+    /// —— 正常设计分支，非异常。</para>
+    /// <para>已知残余差异：玩家头顶挂着定时攻击 buff 时，飘字读数含 buff 缩放，本函数给的是
+    /// 去 buff 真值；buff 过期后两者一致。</para>
+    /// </summary>
+    public static int EquipSwapPowerDelta(EquipInstance newEq)
+    {
+        if (newEq == null) return 0;
+        var bag = GridBackpackSystem.Instance;
+        var hero = Hero.Instance;
+        if (bag == null || hero == null || hero.attr == null)
+            return EquipPowerDelta(newEq);   // 城镇等非战斗场景：卡面预估分支（正常设计，不是异常）
+
+        int segAfter = SimPlayerSegment(bag, newEq);    // 换上新件（快照内部顶掉同槽旧件）
+        int segBefore = SimPlayerSegment(bag, null);    // 当前穿戴（同一模拟器，口径自洽）
+        return segAfter - segBefore;
+    }
+
+    /// <summary>
+    /// 用副本 AttrSystem 重算给定换装方案下的玩家属性段战力。
+    /// 链路必须与 Hero.RecalcAttr 逐项对齐：BuildBonusListForSet（装备表）→ tempBuffs →
+    /// RecalcAllAttr → 武器类型攻速乘区。两侧都用副本，天然剔除定时 buff 层的随机干扰。
+    /// </summary>
+    static int SimPlayerSegment(GridBackpackSystem bag, EquipInstance newEq)
+    {
+        var set = bag.SnapshotEquippedAfterSwap(newEq, out _);
+        var bonus = EquipStatRollup.BuildBonusListForSet(set);
+        var bm = BattleManager.Instance;
+        if (bm != null && bm.tempBuffs != null)
+            bonus.AddRange(bm.tempBuffs);               // 与 Hero.RecalcAttr 同链路（强化卡参与重算）
+
+        var replica = new AttrSystem(AttrOwnerKind.Player);
+        replica.RecalcAllAttr(bonus);
+        ApplyWeaponAttackSpeedMul(replica, set);
+        return PlayerPowerSegment(replica);
+    }
+
+    /// <summary>玩家属性段战力：与 RunLoadout.TotalPower 玩家段同式同取整（底盘 + DPS + 血 + 双防）。</summary>
+    static int PlayerPowerSegment(AttrSystem a)
+    {
+        float attack = a.GetAttr(PlayerJobBaseStats.CurrentAttackAttr());
+        float critRate = a.GetAttr(AttrType.CritRate);
+        float attackSpeed = a.GetAttr(AttrType.AttackSpeed);
+        float dps = attack * (1f + critRate) * attackSpeed;
+        float defTotal = a.GetAttr(AttrType.Defense) + a.GetAttr(AttrType.MagicDefense);
+        return Mathf.RoundToInt(POWER_BASE + POWER_PER_DPS * dps
+            + POWER_PER_HP * a.GetAttr(AttrType.MaxHp) + POWER_PER_DEF * defTotal);
+    }
+
+    /// <summary>复刻 Hero.RecalcAttr 的武器类型攻速乘区（SetAttr 覆盖，Hero.cs L259-265），模拟侧必须同样打上。</summary>
+    static void ApplyWeaponAttackSpeedMul(AttrSystem attr, List<EquipInstance> set)
+    {
+        var weapon = TryWeaponInSet(set);
+        if (weapon?.template == null) return;
+        float swordSpd = WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.WeaponKind.Sword);
+        float kindSpd = WeaponCombatTable.GetBaseAttackSpeed(WeaponCombatTable.ResolveKind(weapon));
+        float mul = swordSpd > 0.01f ? kindSpd / swordSpd : 1f;
+        attr.SetAttr(AttrType.AttackSpeed, Mathf.Max(0.2f, attr.GetAttr(AttrType.AttackSpeed) * mul));
+    }
+
+    /// <summary>复刻 Hero.TryGetEquippedWeaponInstance 的挑武器规则（主手优先、副手兜底），作用在模拟穿戴集上。</summary>
+    static EquipInstance TryWeaponInSet(List<EquipInstance> set)
+    {
+        EquipStatRollup.PickLogicalWeapons(set, out var main, out var off);
+        if (main?.template != null && (main.weaponType != WeaponType.None || main.slotType == EquipSlotType.MainHand))
+            return main;
+        if (off?.template != null && off.weaponType != WeaponType.None) return off;
+        return null;
+    }
 
     static void Accumulate(AttrBonusData b, bool isOffHand,
         ref float flatA, ref float pctA, ref float flatCr, ref float pctCr, ref float flatS, ref float pctS,

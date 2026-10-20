@@ -177,6 +177,10 @@ public class TownSceneBootstrap : MonoBehaviour
         MailSystem.EnsureWelcomeMail();   // 🆕 已通关老玩家回主界面补发欢迎信（幂等：已发过不再入邮、不再弹提示）
         MailSystem.EnsureCompensationMail();   // 🆕 全服补偿邮件（2026-10-17：500金币+卷轴，幂等同欢迎信链路）
         DailyLoginSystem.OnEnterGame();
+        // 【2026-10-20 修】OnEnterGame 跨天累加 LoginDays 后必须立刻同步红点：
+        // GuildHallUI.Awake 的 RefreshCommon 跑在本协程之前，按的是昨天的天数；
+        // 不补这一行的话，跨天当次进镇新格子已解锁但主界面红点要等下次刷新才亮。
+        RedDot.RefreshCommon();
         // 【2026-10-16 主人拍板】「已经领过每日登录的就不要每次再弹」：
         // 一天最多自动弹一次——今天弹过（或领过）就不再自动弹，避免回主界面反复弹；
         // 手动入口（主界面每日登录按钮）仍可随时打开。

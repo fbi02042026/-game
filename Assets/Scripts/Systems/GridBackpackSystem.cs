@@ -783,6 +783,47 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     }
 
     /// <summary>
+    /// 换装模拟专用（<see cref="PowerCalc.EquipSwapPowerDelta"/> 战力真值模拟）：
+    /// <b>只读快照</b>，不改背包任何状态。镜像 TryEquipDirect → EquipItem → ScrapEquip 的真实结果：
+    /// 直接穿戴段在前（新件占旧件键位；空槽新穿插在直接穿戴段尾，与 EquipItem 写字典顺序一致），
+    /// 背包生效段在后（被顶旧件若是背包件，随真实 ScrapEquip 一样移出生效集）。
+    /// replacedOld = 被顶掉的旧件（与 <see cref="FindSameSlotEquip"/> 同一判据，唯一出口）。
+    /// </summary>
+    public List<EquipInstance> SnapshotEquippedAfterSwap(EquipInstance newEq, out EquipInstance replacedOld)
+    {
+        replacedOld = newEq != null ? FindSameSlotEquip(newEq) : null;
+        var ordered = new List<EquipInstance>();
+        var seen = new HashSet<EquipInstance>();
+        bool swapped = false;
+        // 1) 直接穿戴段：新件顶旧件键位（字典替换值不改键序，与真实 EquipItem 行为一致）
+        foreach (var kv in _equippedBySlot)
+        {
+            var e = kv.Value;
+            if (e == null || !seen.Add(e)) continue;
+            if (!swapped && replacedOld != null && e == replacedOld)
+            {
+                ordered.Add(newEq);
+                swapped = true;
+            }
+            else
+            {
+                ordered.Add(e);
+            }
+        }
+        if (newEq != null && !swapped)
+            ordered.Add(newEq);   // 空槽新穿 / 旧件在背包段：新键追加在直接穿戴段尾（与 EquipItem 写新键同序）
+        // 2) 背包内生效装备：原样接在后面（真实顺序 = GetEquippedItems 的第二段）；
+        //    被顶旧件若来自背包，真实流程 ScrapEquip 会把它移出 _items，这里同样跳过
+        for (int i = 0; i < _items.Count; i++)
+        {
+            var e = _items[i]?.equip;
+            if (e == null || e == replacedOld || !seen.Add(e)) continue;
+            ordered.Add(e);
+        }
+        return ordered;
+    }
+
+    /// <summary>
     /// 获取指定槽位的装备。优先读穿戴字典，再兜底查背包。
     /// </summary>
     /// <summary>

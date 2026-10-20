@@ -19,13 +19,14 @@ public class SkillCastNotifyController : MonoBehaviour
     /// <summary>单条总生命周期（秒）。</summary>
     const float LifeTime = 2.0f;
 
-    /// <summary>第一段：飞到 finalPos 的 <see cref="FlyReachRatio"/> 处，EaseOutQuad。</summary>
+    /// <summary>第一段：飞到飞入终点（见 <see cref="FlyReachRatio"/> 与 ResolveMidX），EaseOutQuad。</summary>
     const float FlyTime = 0.5f;
 
-    /// <summary>第一段结束时走完 finalPos 行程的比例。</summary>
+    /// <summary>第一段（飞入）最少走完 finalPos 行程的比例；实际取「此值」与「整条刚好完全进屏点」中更远者
+    /// —— 保证变慢发生在整条进屏之后【2026-10-20】。</summary>
     const float FlyReachRatio = 0.75f;
 
-    /// <summary>第二段：从 75% 点慢移到 finalPos，EaseInQuad，时长 LifeTime - FlyTime。</summary>
+    /// <summary>第二段：从飞入终点（≥ 整条进屏点）慢移到 finalPos，EaseInQuad，时长 LifeTime - FlyTime。</summary>
     const float SettleTime = LifeTime - FlyTime;   // 1.5s
 
     /// <summary>开始淡出的时刻，之后 LifeTime - FadeStartTime 秒内 alpha 1→0。</summary>
@@ -58,6 +59,7 @@ public class SkillCastNotifyController : MonoBehaviour
         public Text label;
         public float timer;
         public Vector2 startPos;
+        public Vector2 midPos;      // 第一段（飞入）终点：至少整条完全进屏后才在这变慢
         public Vector2 finalPos;
         public bool isEnemy;
 
@@ -230,6 +232,11 @@ public class SkillCastNotifyController : MonoBehaviour
         var c = Instance;
         if (c == null) return;
         var icon = enemySprite != null ? enemySprite : BattleUI.LoadRunSkillIcon(skillId);
+        // 【2026-10-20 主人报「敌人条没有头像」】静态链路查不到活怪 sr.sprite 为空的路径，
+        // 先把漏网场景打出来（怪物名 + sprite 状态 + 技能 id），复现即定位，不做兜底。
+        if (icon == null)
+            Debug.LogWarning($"[SkillCastNotify] 敌人技能条无头像：enemy={enemyName} skillId={skillId} " +
+                             $"enemySprite={(enemySprite == null ? "null" : "有")}，图标表也无该技能图");
         c.Push(icon, LabelOf(enemyName, skillId), true);
     }
 
@@ -279,6 +286,12 @@ public class SkillCastNotifyController : MonoBehaviour
         float finalX = ResolveFinalX(isEnemy);
         float startX = finalX + (isEnemy ? -StartOffsetX : StartOffsetX);
 
+        // 【2026-10-20 主人报「变慢的地方条一半还在屏外」】旧固定 75% 行程就变慢：敌人条行程 700、
+        // 条宽 300，75% 点条右缘仍出屏约 135（近半条身），之后 1.5s 才慢慢挪进屏。
+        // 改为第一段终点动态前推：至少飞到「整条刚好完全进屏」的位置（可能比 75% 远）才开始变慢，
+        // 之后 1.5s 慢移贴到最终位 → 进屏 → 变慢 → 停住 → 淡出。
+        var midPos = new Vector2(ResolveMidX(startX, finalX, isEnemy), _tplFinalPos.y);
+
         var entry = new NotifyEntry
         {
             rt = rt,
@@ -287,6 +300,7 @@ public class SkillCastNotifyController : MonoBehaviour
             label = lb,
             timer = 0f,
             startPos = new Vector2(startX, _tplFinalPos.y),
+            midPos = midPos,
             finalPos = new Vector2(finalX, _tplFinalPos.y),
             isEnemy = isEnemy,
             displayY = _tplFinalPos.y,
@@ -326,13 +340,12 @@ public class SkillCastNotifyController : MonoBehaviour
             if (e.timer <= FlyTime)
             {
                 float k = EaseOutQuad(e.timer / FlyTime);
-                p = e.startPos + (e.finalPos - e.startPos) * (FlyReachRatio * k);
+                p = e.startPos + (e.midPos - e.startPos) * k;
             }
             else
             {
                 float k = EaseInQuad(Mathf.Clamp01((e.timer - FlyTime) / SettleTime));
-                Vector2 p75 = e.startPos + (e.finalPos - e.startPos) * FlyReachRatio;
-                p = Vector2.Lerp(p75, e.finalPos, k);
+                p = Vector2.Lerp(e.midPos, e.finalPos, k);
             }
 
             if (e.rt != null)
@@ -432,23 +445,61 @@ public class SkillCastNotifyController : MonoBehaviour
     /// </summary>
     float ResolveFinalX(bool isEnemy)
     {
-        var rootRt = RootRect();
-        float skillUiX = 0f;
-        float rootHalf = Screen.width * 0.5f;   // 兜底：取不到根画布时退回屏幕像素
-        if (rootRt != null)
-        {
-            if (rootRt.rect.width > 1f) rootHalf = rootRt.rect.width * 0.5f;
-            if (_root != null)
-                skillUiX = rootRt.InverseTransformPoint(_root.position).x;
-        }
-
-        float barHalf = _template != null && _template.rect.width > 1f ? _template.rect.width * 0.5f : 0f;
+        float skillUiX = SkillUiXInRoot();
+        float rootHalf = RootHalfOrScreenFallback();
+        float barHalf = TemplateBarHalf();
         float lim = Mathf.Max(0f, rootHalf - SafeMargin - barHalf);
 
         float desiredRootX = skillUiX + _tplFinalPos.x;
         if (isEnemy) desiredRootX = -desiredRootX;   // 敌人从右侧镜像（以画布中心为轴）
         float clampedRootX = Mathf.Clamp(desiredRootX, -lim, lim);
         return clampedRootX - skillUiX;   // 换回 SkillUI 局部坐标
+    }
+
+    /// <summary>
+    /// 求第一段（飞入）终点 x（SkillUI 局部坐标）【2026-10-20】：
+    /// 取「原 75% 点」与「整条刚好完全进屏点」中更靠行程前方的一个 —— 保证变慢发生在整条进屏之后。
+    /// </summary>
+    float ResolveMidX(float startX, float finalX, bool isEnemy)
+    {
+        float span = Mathf.Abs(StartOffsetX);
+        if (span < 1f) return finalX;
+        float inScreenX = InScreenCenterX(isEnemy);
+        float fullRatio = Mathf.Abs(startX - inScreenX) / span;
+        float reach = Mathf.Clamp(Mathf.Max(FlyReachRatio, fullRatio), 0f, 1f);
+        return startX + (finalX - startX) * reach;
+    }
+
+    /// <summary>条「刚好完全进入屏幕」时中心所在 x（SkillUI 局部坐标）：敌人右缘贴右屏缘，玩家左缘贴左屏缘。</summary>
+    float InScreenCenterX(bool isEnemy)
+    {
+        float rootHalf = RootHalfOrScreenFallback();
+        float barHalf = TemplateBarHalf();
+        float edgeHalf = Mathf.Max(0f, rootHalf - barHalf);
+        float rootX = (isEnemy ? 1f : -1f) * edgeHalf;
+        return rootX - SkillUiXInRoot();   // 换回 SkillUI 局部坐标
+    }
+
+    /// <summary>根画布半宽；取不到根画布时退回屏幕像素（与旧兜底口径一致）。</summary>
+    float RootHalfOrScreenFallback()
+    {
+        var rootRt = RootRect();
+        if (rootRt != null && rootRt.rect.width > 1f) return rootRt.rect.width * 0.5f;
+        return Screen.width * 0.5f;
+    }
+
+    /// <summary>SkillUI 在根画布空间中的 x；取不到时按 0（画布中心系）处理。</summary>
+    float SkillUiXInRoot()
+    {
+        var rootRt = RootRect();
+        if (rootRt == null || _root == null) return 0f;
+        return rootRt.InverseTransformPoint(_root.position).x;
+    }
+
+    /// <summary>条半宽（模板宽 / 2）；模板异常时按 0。</summary>
+    float TemplateBarHalf()
+    {
+        return _template != null && _template.rect.width > 1f ? _template.rect.width * 0.5f : 0f;
     }
 
     /// <summary>根画布的 RectTransform（SkillUI 自带的嵌套 Canvas 之上那一层）。</summary>

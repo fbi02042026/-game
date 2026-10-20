@@ -485,7 +485,9 @@ public static class DraftPool
                     Rarity = rar,
                     Tag = SynergyTag.None,
                     Star = eq.star < 1 ? 1 : eq.star,
-                    PowerDelta = PowerCalc.EquipPowerDelta(eq),
+                    // 【2026-10-20 方案 B】卡面战力 = 换装真值（副本 AttrSystem 按 Hero.RecalcAttr 全链路模拟，
+                    // 顶掉同槽旧件的净差）；城镇等非战斗环境内部自动回退卡面预估 EquipPowerDelta。
+                    PowerDelta = PowerCalc.EquipSwapPowerDelta(eq),
                     Equip = eq
                 },
                 // 好装备低概率：橙 1 / 紫 3 / 蓝 6 / 白 10，与技能、佣兵同一套权重

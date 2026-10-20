@@ -51,6 +51,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     Text _activeProg;
     Transform _listContent;
     GameObject _claim;
+    // 领取按钮置灰（2026-10-20 主人要求）：无可领成就时按钮变灰不可点。
+    // 缓存「领取」文字原色，禁用时乘灰、恢复时原样还原；红点子节点不在此列（只处理 Text）。
+    readonly Dictionary<int, Color> _claimTextBaseColors = new Dictionary<int, Color>();
+    static readonly Color ClaimGrayMultiplier = new Color(0.45f, 0.45f, 0.45f, 0.9f);
     GameObject _rowTemplate;
     string _probeBody;
     readonly List<GameObject> _tabSelectGems = new List<GameObject>();
@@ -624,6 +628,50 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 TownHubController.Instance?.OpenGuild();
             });
         }
+
+        // 侧栏 Emblem 徽记 → 里程商店入口（2026-10-20 主人拍板，图/排版以预制体为准）
+        var emblem = transform.Find("Root/Frame/Sidebar/Emblem");
+        if (emblem != null)
+        {
+            var ebtn = emblem.GetComponent<Button>();
+            if (ebtn == null) ebtn = emblem.gameObject.AddComponent<Button>();
+            ebtn.transition = Selectable.Transition.None;
+            ebtn.onClick.RemoveAllListeners();
+            ebtn.onClick.AddListener(OpenMileageShop);
+        }
+        else
+            Debug.LogError("[AdventureLogUI] 预制体缺 Root/Frame/Sidebar/Emblem，里程商店入口接不上");
+    }
+
+    void OpenMileageShop()
+    {
+        _phase3 = AdventureLogPhase3Panel.Ensure(this);
+        _phase3?.OpenShopPanel();
+    }
+
+    /// <summary>
+    /// 领取按钮置灰：没有可领成就时 Button.interactable=false（走预制体自带
+    /// ColorTint 的 DisabledColor 半透明灰），「领取」文字同步乘灰；
+    /// 有可领时恢复 interactable 并还原文字原色。只动颜色，不改图/文案/字号。
+    /// </summary>
+    void UpdateClaimButtonState()
+    {
+        if (_claim == null) return;
+        bool has = AdventureLogAchievements.HasUnclaimed();
+        var btn = _claim.GetComponent<Button>();
+        if (btn != null) btn.interactable = has;
+        for (int i = 0; i < _claim.transform.childCount; i++)
+        {
+            var txt = _claim.transform.GetChild(i).GetComponent<Text>();
+            if (txt == null) continue;   // 红点等 Image 子节点不动
+            int id = txt.GetInstanceID();
+            if (!_claimTextBaseColors.TryGetValue(id, out var baseColor))
+            {
+                baseColor = txt.color;   // 首次见到时记原色（此时必为预制体原样）
+                _claimTextBaseColors[id] = baseColor;
+            }
+            txt.color = has ? baseColor : baseColor * ClaimGrayMultiplier;
+        }
     }
 
     void BindRewardRedDots()
@@ -703,6 +751,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
         if (_scroll != null)
             _scroll.verticalNormalizedPosition = 1f;
+
+        // 成就领取按钮灰/亮随可领状态走（按钮只在成就页显示，其他页顺手刷新无害）
+        UpdateClaimButtonState();
     }
 
     void FillMain(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)

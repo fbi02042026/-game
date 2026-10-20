@@ -402,6 +402,7 @@ public class AdventureLogCodexPanel
         for (int i = 0; i < list.Length; i++)
         {
             var e = list[i];
+            if (e.HideInCodex) continue; // 酒馆 NPC（独眼）不是佣兵，不进图鉴
             if (AdventureCodex.GetMercRarity(e) != rarity) continue;
             if (col == 0) rowTop = y;
             float x = originX + col * (cellW + CellGapX) + cellW * 0.5f;
@@ -532,7 +533,7 @@ public class AdventureLogCodexPanel
                 ? e.Lore
                 : "（已遭遇：趣闻已解锁；击败后解锁完整描述）";
             string meta = string.IsNullOrEmpty(e.Kind) ? e.Place : e.Kind + "  ·  " + e.Place;
-            CodexInfoPopupUI.Show(e.Name, meta, body, tip, AdventureCodex.LoadMonsterSprite(e));
+            CodexInfoPopupUI.Show(e.Name, meta, body, tip, AdventureCodex.LoadMonsterSprite(e), codexKind: false);
         });
         _spawned.Add(go);
     }
@@ -587,7 +588,9 @@ public class AdventureLogCodexPanel
             AdventureCodex.MarkMercViewed(e.Id);
             ApplyRedDot(go.transform, false);
             string meta = string.IsNullOrEmpty(e.Role) ? e.Place : e.Role + "  ·  " + e.Place;
-            CodexInfoPopupUI.Show(display, meta, e.Desc, e.Lore, AdventureCodex.LoadMercStand(e));
+            // 佣兵弹窗显示头像；点头像可放大看全身立绘（2026-10-20 用户拍板）
+            CodexInfoPopupUI.Show(display, meta, e.Desc, e.Lore,
+                AdventureCodex.LoadMercHead(e), AdventureCodex.LoadMercStand(e), codexKind: true);
         });
         _spawned.Add(go);
     }

@@ -480,8 +480,27 @@ public class RunDraftDirector : MonoBehaviour
         // 【2026-10-12 主人拍板】入队横幅：抽中瞬间从左侧划入 → 慢滑 → 快速右消失（同「再来一次」横幅）。
         // 节点是主人在 BattleUI 预制体摆的「佣兵入队」（立绘 + 名字 + 「— 加入小队 —」），代码只驱动。
         // 名字颜色按稀有度走 RarityPalette（主人：名字要和稀有度对齐）；不在战斗中时控制器自行 LogError。
-        MercJoinBannerUI.Show(entry.hireId, fullName,
-            hasRoster ? rd.Rarity : MercRosterDefs.MercRarity.Common);
+        // 【2026-10-20 主人拍板】拥有状态口径（主人明确别搞错）：
+        // ① 引导战斗**临时入队 ≠ 已拥有**——只进本局队伍，不写永久解锁；回城后每日登录 D1 点领取才是真正拥有；
+        // ② 普通三选一**购买完成 = 已拥有**——首次抽到该佣兵：写永久解锁 + 自动补池 + 弹「获得佣兵」演出（取代横幅）；
+        //    已拥有的佣兵再抽到只算本局入队，照旧横幅，不弹"第二次获得"。
+        bool inTutorial = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
+        bool newlyOwned = false;
+        if (!inTutorial)
+        {
+            var d = SaveSystem.Instance?.Data;
+            if (d != null && d.UnlockMerc(entry.hireId))
+            {
+                d.EnsurePoolFilled();        // 照 MailSystem 先例：解锁后自动补全抽奖池
+                SaveSystem.Instance.Save();
+                newlyOwned = true;
+            }
+        }
+        if (newlyOwned)
+            MercGainCinematicUI.Show(entry.hireId, null);
+        else
+            MercJoinBannerUI.Show(entry.hireId, fullName,
+                hasRoster ? rd.Rarity : MercRosterDefs.MercRarity.Common);
         // 【2026-06 主人拍板】佣兵技能一样要标「新」（主人点名：不管是佣兵技能还是装备）。
         NewLootMarks.Mark(NewLootMarks.KindSkill, entry.skillId);
         // 【2026-10-14 主人拍板】喜报里佣兵名字按稀有度上色（富文本包住名字，其它字不变色）。

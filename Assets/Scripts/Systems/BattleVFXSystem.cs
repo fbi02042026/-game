@@ -431,6 +431,92 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
             scaleMul, speedMul, onImpact));
     }
 
+    /// <summary>
+    /// 追踪弹：每帧朝目标当前受击点飞（实时跟人），飞到即结算（onImpact）。
+    /// 目标中途死亡则飞向其最后已知位置落地消散（onImpact 内部自行判目标存亡）。
+    /// 【2026-10-20 主人拍板】远程精英/Boss「追踪弹幕」专用飞行链路。
+    /// </summary>
+    public void PlayHomingProjectile(VfxFaction faction, Vector3 fromPos, UnitBase target, AttackVfxKit kit,
+        float scaleMul = 1f, float speedMul = 1f, System.Action onImpact = null)
+    {
+        if (kit != AttackVfxKit.Bow && kit != AttackVfxKit.Orb)
+            kit = AttackVfxKit.Orb;
+
+        GameObject fly = LoadSharedKit(kit, faction, "fly");
+        GameObject impact = LoadSharedKit(kit, faction, "hit");
+        if (fly == null)
+        {
+            Debug.LogError($"[VFX] 追踪弹缺少飞行体: {faction}/{kit}/fly，伤害直接结算");
+            onImpact?.Invoke();
+            return;
+        }
+        StartCoroutine(HomingProjectileCoroutine(fly, impact, fromPos, target, faction, scaleMul, speedMul, onImpact));
+    }
+
+    IEnumerator HomingProjectileCoroutine(GameObject projectilePrefab, GameObject impactPrefab,
+        Vector3 fromPos, UnitBase target, VfxFaction faction, float scaleMul, float speedMul, System.Action onImpact)
+    {
+        float battleZ = fromPos.z;
+        if (BattleManager.Instance != null && BattleManager.Instance.unitRoot != null)
+            battleZ = BattleManager.Instance.unitRoot.position.z + 0.02f;
+        fromPos.z = battleZ;
+        float speed = Mathf.Max(0.1f, projectileSpeed * Mathf.Max(0.05f, speedMul)
+                                      * GameConfig.PROJECTILE_SPEED_GLOBAL_MUL);
+
+        GameObject projectile = Instantiate(projectilePrefab, fromPos, Quaternion.identity);
+        projectile.transform.SetParent(null, true);
+        projectile.transform.position = fromPos;
+        projectile.transform.localScale = projectilePrefab.transform.lossyScale
+            * Mathf.Max(0.05f, scaleMul);
+
+        ResetTintableColors(projectile);
+        PrepareSlashParticles(projectile);
+        ApplySlashLocalFacing(projectile);
+        int initialFacing = target != null && target.transform.position.x >= fromPos.x ? 1 : -1;
+        ApplyVfxFacing(projectile, initialFacing);
+        SetVFXSortingLayer(projectile.transform);
+        EnsureSlashParticleVisible(projectile);
+        EnsureProjectileSpriteVisible(projectile);
+        PlayAllParticles(projectile);
+
+        var sr = projectile.GetComponentInChildren<SpriteRenderer>();
+        if (sr != null) sr.flipX = false;
+
+        // 追踪：每帧重取目标受击点（目标死亡则飞向其最后已知位置）；兜底寿命 10s 防极端泄漏
+        Vector3 lastAim = fromPos;
+        float life = 10f;
+        while (life > 0f)
+        {
+            life -= Time.deltaTime;
+            Vector3 pos = projectile.transform.position;
+            Vector3 aim = target != null && !target.isDead ? target.GetHitPosition() : lastAim;
+            aim.z = battleZ;
+            lastAim = aim;
+            Vector3 to = aim - pos;
+            float step = speed * Time.deltaTime;
+            if (to.magnitude <= step + 0.08f)
+            {
+                projectile.transform.position = aim;
+                break;
+            }
+            projectile.transform.position = pos + to.normalized * step;
+            AlignProjectileToward(projectile.transform, to);
+            yield return null;
+        }
+
+        Vector3 endPos = projectile.transform.position;
+        if (impactPrefab != null)
+        {
+            GameObject hitFx = PlayPreparedVfx(impactPrefab, endPos, initialFacing, defaultDuration, 1f, prepareParticles: true);
+            if (hitFx != null)
+                ApplyFactionLook(hitFx, faction);
+        }
+        Destroy(projectile);
+
+        // 命中结算；受击特效由 TakeDamage → PlayVictimHit 统一播放
+        onImpact?.Invoke();
+    }
+
     IEnumerator ProjectileFlightCoroutine(GameObject projectilePrefab, GameObject impactPrefab,
         Vector3 fromPos, Vector3 toPos, int facingDir, Transform target, VfxFaction faction,
         float scaleMul = 1f, float speedMul = 1f, System.Action onImpact = null)

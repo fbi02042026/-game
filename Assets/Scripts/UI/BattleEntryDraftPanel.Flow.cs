@@ -28,6 +28,15 @@ public partial class BattleEntryDraftPanel
             onFight?.Invoke();
             return;
         }
+        // 【2026-10-20 玩家反馈修复】复用路径的第二道守卫：Instance 是上一关留下的，
+        // 若此刻宿主父链未激活（背包抽屉被隐藏 / BattleUI 未就绪），Begin 里的 StartCoroutine
+        // 同样会炸并把开战协程带死 → 站原地 + 没按钮。按同一口径直接开战，不冻场。
+        if (!ui.gameObject.activeInHierarchy)
+        {
+            Debug.LogError("[BattleEntryDraftPanel] 复用面板失败：宿主父链未激活，本次跳过抽奖直接开战");
+            onFight?.Invoke();
+            return;
+        }
         ui.Begin(randomPrice, focusPrice, cats, coins, onPick, onFight, freeLeft);
     }
 
@@ -55,6 +64,18 @@ public partial class BattleEntryDraftPanel
         }
         var go = new GameObject("BattleEntryDraftPanel", typeof(RectTransform));
         go.transform.SetParent(panel, false);
+        // 【2026-10-20 玩家反馈修复】挂载后必须校验宿主整条父链已激活：BackpackPanel / BattleUI
+        // 若还处于未激活（战斗 UI 异步初始化没走完），下面的 Begin → SetExpanded → StartCoroutine
+        // 会直接抛 "game object is inactive" → Show 同步炸 → 开战协程整条死 →
+        // 玩家看到的就是「英雄站原地、抽奖按钮永不出现」（过完引导第一场正式战斗高发，
+        // 因为引导局不走进关抽奖，这一关是玩家第一次踩这条链）。
+        // 这里 fail closed：报 Error 后返回 null，Show 按既有口径直接开战，绝不冻场。
+        if (!go.activeInHierarchy)
+        {
+            Debug.LogError("[BattleEntryDraftPanel] 挂载失败：BackpackPanel 所在父链未激活（BattleUI 未就绪），本次跳过抽奖直接开战");
+            UnityEngine.Object.Destroy(go);
+            return null;
+        }
         var c = go.AddComponent<BattleEntryDraftPanel>();
         c._panel = panel as RectTransform;
         // 必须在任何一次 ApplyState 之前：此时 UI 适配已跑完、面板还没被本类动过，

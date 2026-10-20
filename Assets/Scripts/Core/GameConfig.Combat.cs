@@ -85,6 +85,8 @@ public static partial class GameConfig
         public const int MercJoinBanner = 995;
         public const int Loading = 10000;
         public const int Toast = 11000;
+        /// <summary>「获得佣兵」全屏演出（2026-10-20 主人拍板）：盖过 Toast 与奖励弹窗，低于剧情(Effects 层 13000)。</summary>
+        public const int MercGainCinematic = 11500;
         public const int FullscreenFx = 12000;
     }
 
@@ -696,6 +698,30 @@ public static partial class GameConfig
     public static float MONSTER_BLINK_RESTORE_SEC => CombatTuningTable.Get("MONSTER_BLINK_RESTORE_SEC", 0.35f);
     /// <summary>复原后的收势停顿（秒）：停稳才恢复行动，主人要求节奏别太快。</summary>
     public static float MONSTER_BLINK_SETTLE_SEC => CombatTuningTable.Get("MONSTER_BLINK_SETTLE_SEC", 0.10f);
+
+    // ==================== 【2026-10-20 主人拍板】远程精英/Boss 双弹幕技 ====================
+    /// <summary>扇形弹幕冷却（秒）。</summary>
+    public static float MONSTER_FAN_VOLLEY_COOLDOWN => CombatTuningTable.Get("MONSTER_FAN_VOLLEY_COOLDOWN", 20f);
+    /// <summary>扇形弹幕一次齐射的弹道数。</summary>
+    public static int MONSTER_FAN_VOLLEY_COUNT => Mathf.Max(2, Mathf.RoundToInt(CombatTuningTable.Get("MONSTER_FAN_VOLLEY_COUNT", 5f)));
+    /// <summary>扇形弹幕相邻弹道夹角（度）。5 发 × 9° → 总扇面 ±18°。</summary>
+    public static float MONSTER_FAN_VOLLEY_ANGLE_STEP => CombatTuningTable.Get("MONSTER_FAN_VOLLEY_ANGLE_STEP", 9f);
+    /// <summary>扇形弹幕弹道飞行距离（世界单位），飞满即在终点爆开结算。</summary>
+    public static float MONSTER_FAN_VOLLEY_RANGE => CombatTuningTable.Get("MONSTER_FAN_VOLLEY_RANGE", 11f);
+    /// <summary>扇形弹幕单发命中判定半径（世界单位），走位出爆点即躲开。</summary>
+    public static float MONSTER_FAN_VOLLEY_HIT_RADIUS => CombatTuningTable.Get("MONSTER_FAN_VOLLEY_HIT_RADIUS", 1.4f);
+    /// <summary>弹幕单发伤害 = 普攻 raw × 此系数（主人定 80%）。</summary>
+    public const float MONSTER_VOLLEY_DAMAGE_MUL = 0.8f;
+    /// <summary>追踪弹幕冷却（秒）。</summary>
+    public static float MONSTER_HOMING_BARRAGE_COOLDOWN => CombatTuningTable.Get("MONSTER_HOMING_BARRAGE_COOLDOWN", 20f);
+    /// <summary>追踪弹幕连发条数下限（主人定 3，与上限之间随机）。</summary>
+    public const int MONSTER_HOMING_BARRAGE_MIN = 3;
+    /// <summary>追踪弹幕连发条数上限（主人定 5）。</summary>
+    public const int MONSTER_HOMING_BARRAGE_MAX = 5;
+    /// <summary>追踪弹幕相邻两发间隔（秒），感知冻场。</summary>
+    public static float MONSTER_HOMING_BARRAGE_GAP => CombatTuningTable.Get("MONSTER_HOMING_BARRAGE_GAP", 0.22f);
+    /// <summary>追踪弹幕飞行速度倍率（乘 projectileSpeed 全局链路；要能追上走位的单位）。</summary>
+    public static float MONSTER_HOMING_BARRAGE_SPEED_MUL => CombatTuningTable.Get("MONSTER_HOMING_BARRAGE_SPEED_MUL", 0.45f);
 
     /// <summary>公会等级系数：0.02×公会等级</summary>
     public static float GUILD_SCALE_PER => CombatTuningTable.Get("GUILD_SCALE_PER", 0.02f);

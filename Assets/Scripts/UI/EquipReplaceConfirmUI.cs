@@ -112,13 +112,13 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     /// <summary>
     /// 【2026-10-16 主人原话「如果玩家没点按钮 自动替换成战力高的」】超时/未选择时的兜底方向：
     /// 不再一刀切「留着旧的」，改按战力自动选强的一件 —— 新件战力更高才换，打平或更低仍留旧的（保守不变）。
-    /// 判据与弹窗里「战力 ±N」同一真源 <see cref="PowerCalc.EquipPowerDelta"/>；旧件为空 → 新件直接穿。
+    /// 【2026-10-20 方案 B】判据与弹窗「战力 ±N」、头顶飘字同一真值 <see cref="PowerCalc.EquipSwapPowerDelta"/>
+    /// （换装净差，含顶掉旧件）；旧件为空 → 新件直接穿。
     /// </summary>
     static bool AutoPickByPower(EquipInstance newEq, EquipInstance oldEq)
     {
-        float np = PowerCalc.EquipPowerDelta(newEq);
-        float op = oldEq != null ? PowerCalc.EquipPowerDelta(oldEq) : float.NegativeInfinity;
-        return np > op;
+        if (oldEq == null) return true;
+        return PowerCalc.EquipSwapPowerDelta(newEq) > 0;
     }
 
     static EquipReplaceConfirmUI Ensure()
@@ -211,9 +211,10 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             _verdict.color = newBetter ? new Color(0.55f, 0.95f, 0.60f) : new Color(0.95f, 0.72f, 0.45f);
         }
 
-        // 战力 ±N（新 - 旧），准备塞进「新装备」栏（主人拍板：不要在底部判定行）
+        // 战力 ±N，准备塞进「新装备」栏（主人拍板：不要在底部判定行）
         // 【2026-10-16 主人拍板】涨改成亮黄（RarityPalette.Gold #FFD959，原绿 PowerGain）；减仍红。
-        int d = PowerCalc.EquipPowerDelta(newEq) - PowerCalc.EquipPowerDelta(oldEq);
+        // 【2026-10-20 方案 B】换成换装真值 EquipSwapPowerDelta（含顶掉旧件的净差），与头顶飘字/TotalPower 同源。
+        int d = PowerCalc.EquipSwapPowerDelta(newEq);
         string powerLine = d >= 0
             ? "<color=#" + ColorUtility.ToHtmlStringRGB(RarityPalette.Gold) + ">战力 +" + d + "</color>"
             : "<color=#" + ColorUtility.ToHtmlStringRGB(RarityPalette.PowerLoss) + ">战力 -" + (-d) + "</color>";

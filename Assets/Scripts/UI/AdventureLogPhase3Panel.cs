@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -5,9 +6,12 @@ using UnityEngine.UI;
 /// 冒险日志三期运行时面板：碎片合成 / 里程商店。
 /// 2026-10-19 正式化：木质描边弹窗 + 全屏遮罩 + 右上角关闭，
 /// 修复旧版行数溢出面板、关闭按钮落在面板外的问题。
-/// 2026-10-19 预制体化：层级由 Tools → UI → 生成三期面板预制体 烘焙到
-/// Resources/Prefabs/Town/AdventureLogPhase3Panel.prefab；运行时只实例化预制体并按节点名绑定，
-/// 缺预制体直接报错（不做代码兜底，出错要能看见）。
+/// 2026-10-19 预制体化：运行时只实例化预制体并按节点名绑定，缺预制体直接报错
+/// （不做代码兜底，出错要能看见）。
+/// 2026-10-20 主人手工改版商品行：Row_i 下 = Icon（物品图标）/ 兑换（点击兑换的按钮）/
+/// 兑换/次数（可领次数/总次数，领完或点数不足置灰），Label 只写名称+点数。
+/// 2026-10-20 主人拍板：8 个 UI 预制体一键生成脚本全部删除，本预制体以磁盘手工版为唯一真源，
+/// 改版直接改 Assets/Resources/Prefabs/Town/AdventureLogPhase3Panel.prefab。
 /// </summary>
 public class AdventureLogPhase3Panel : MonoBehaviour
 {
@@ -26,6 +30,9 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     public const string CraftBtnName = "Btn_Craft";
     public const string ShopBtnName = "Btn_Shop";
     public const string CloseXName = "CloseX";
+    public const string IconName = "Icon";
+    public const string ExchangeName = "ExchangeBtn";
+    public const string CountName = "CountText";
     public static string RowName(int i) => "Row_" + i;
 
     AdventureLogUI _host;
@@ -35,28 +42,27 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     Text _title;
     Text _body;
     Mode _mode;
-    readonly Button[] _actionBtns = new Button[6];
-    readonly Text[] _actionLabels = new Text[6];
+    readonly GameObject[] _rows = new GameObject[6];
+    readonly Button[] _exchangeBtns = new Button[6];   // 兑换按钮（挂在兑换节点上，点击才兑换）
+    readonly Text[] _actionLabels = new Text[6];       // Label：只写名称 + 消耗点数
+    readonly Text[] _countTexts = new Text[6];         // 次数：本周可领次数/总次数
+    readonly Image[] _icons = new Image[6];            // Icon：物品图标
+    readonly Color[] _countBaseColors = new Color[6];  // 次数文字原色（置灰后恢复用）
+    RectTransform _listContent;                        // 行滑动列表的 Content（运行时动态套 ScrollRect，不动预制体）
     bool _missingLogged;
 
-    // ===== 正式化配色（暖木 + 羊皮金，与冒险日志整体一致） =====
-    static readonly Color FrameColor = new Color(0.38f, 0.27f, 0.16f, 1f);      // 木质外框
-    static readonly Color PanelColor = new Color(0.145f, 0.105f, 0.072f, 0.985f); // 面板内衬
-    static readonly Color RowBorderColor = new Color(0.27f, 0.19f, 0.115f, 1f);  // 行外框
-    static readonly Color RowInnerColor = new Color(0.185f, 0.13f, 0.082f, 1f);  // 行内衬
-    static readonly Color GoldColor = new Color(1f, 0.85f, 0.55f, 1f);          // 标题金
+    // ===== 配色（RefreshPanel 运行时用；构建用常量已随一键生成脚本删除） =====
     static readonly Color CreamColor = new Color(0.93f, 0.87f, 0.72f, 1f);      // 正文米白
-    static readonly Color DividerColor = new Color(0.79f, 0.63f, 0.36f, 0.55f); // 分隔线
     static readonly Color PriceColorHex = new Color32(232, 200, 134, 255);      // 价格亮金
-    static readonly Color SubColorHex = new Color32(184, 169, 140, 255);        // 限购次级字
     static readonly Color DisabledColor = new Color(0.55f, 0.50f, 0.44f, 1f);   // 置灰
 
-    const float PanelW = 560f;
-    const float PanelH = 880f;
-    const float RowW = 500f;
-    const float RowH = 42f;
-    const float RowStep = 48f;
-    const float RowTopY = -158f;
+    // ===== 手工预制体行几何（与磁盘预制体实测对齐，勿按旧构建常量猜） =====
+    // 行宽 414 / 行高 83 / 步距 70；Row_0 顶边 Inner 本地 y=-37.5，Inner 底边 -460
+    const float HandRowH = 83f;
+    const float HandRowStep = 70f;
+    const float ListViewportTopY = -37.5f;
+    const float ListViewportBottomY = -460f;
+    const float ListViewportW = 424f;
 
     public static AdventureLogPhase3Panel Ensure(AdventureLogUI host)
     {
@@ -77,7 +83,9 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     public void SetVisibleForTab(bool worldOrAch)
     {
         EnsureUi();
-        if (_bar != null) _bar.SetActive(worldOrAch);
+        // 2026-10-20 主人拍板：底部入口条整条撤掉，里程商店唯一入口 = 侧栏左下角 Emblem。
+        // 节点留着不删，之后要恢复直接开激活即可。
+        if (_bar != null) _bar.SetActive(false);
         if (!worldOrAch && _panel != null)
         {
             _mode = Mode.None;
@@ -125,6 +133,11 @@ public class AdventureLogPhase3Panel : MonoBehaviour
 
         BindButton(_bar.transform, CraftBtnName, OpenCraft);
         BindButton(_bar.transform, ShopBtnName, OpenShop);
+        // 2026-10-20 主人拍板：碎片合成入口先撤，只留里程商店（Emblem 徽记另接商店入口）。
+        // 节点留着不删，之后要恢复直接开激活即可。
+        var craftBtn = _bar.transform.Find(CraftBtnName);
+        if (craftBtn != null)
+            craftBtn.gameObject.SetActive(false);
 
         var dimBtn = _dim.GetComponent<Button>();
         if (dimBtn != null)
@@ -147,14 +160,111 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                 Debug.LogError($"[Phase3Panel] 预制体缺节点 {PanelName}/{InnerName}/{RowName(i)}");
                 continue;
             }
-            _actionBtns[i] = row.GetComponent<Button>();
-            _actionLabels[i] = row.GetComponentInChildren<Text>();
-            if (_actionBtns[i] == null || _actionLabels[i] == null)
-                Debug.LogError($"[Phase3Panel] 节点 {RowName(i)} 缺 Button 或 Label Text");
+            _rows[i] = row.gameObject;
+            _actionLabels[i] = row.Find("Label")?.GetComponent<Text>();
+            _icons[i] = row.Find(IconName)?.GetComponent<Image>();
+            if (_actionLabels[i] == null)
+                Debug.LogError($"[Phase3Panel] 节点 {RowName(i)} 缺子节点 Label（Text）");
+
+            // 兑换节点：点击兑换的按钮（预制体若没挂 Button，运行时补一个并指向自身底图）
+            var ex = row.Find(ExchangeName);
+            if (ex == null)
+            {
+                Debug.LogError($"[Phase3Panel] 节点 {RowName(i)} 缺子节点 {ExchangeName}");
+                continue;
+            }
+            var exImg = ex.GetComponent<Image>();
+            if (exImg != null) exImg.raycastTarget = true;
+            var exBtn = ex.GetComponent<Button>();
+            if (exBtn == null)
+            {
+                exBtn = ex.gameObject.AddComponent<Button>();
+                exBtn.targetGraphic = exImg;
+            }
+            exBtn.onClick.RemoveAllListeners();
+            _exchangeBtns[i] = exBtn;
+
+            var cnt = ex.Find(CountName);
+            _countTexts[i] = cnt != null ? cnt.GetComponent<Text>() : null;
+            if (_countTexts[i] != null)
+                _countBaseColors[i] = _countTexts[i].color;
+            else
+                Debug.LogError($"[Phase3Panel] 节点 {RowName(i)}/{ExchangeName} 缺子节点 {CountName}（Text）");
+
+            // 行根旧 Button 不再承担兑换（兑换只在兑换节点上），清掉残留监听防误触
+            var rowBtn = row.GetComponent<Button>();
+            if (rowBtn != null) rowBtn.onClick.RemoveAllListeners();
         }
 
         BindButton(inner, CloseXName, ClosePanel);
+        BuildRowScroll(inner);
         GameFonts.ApplyToHierarchy(root);
+    }
+
+    /// <summary>
+    /// 行滑动列表（2026-10-20 主人拍板）：运行时给 6 条商品行套 ScrollRect，不动手工预制体。
+    /// Viewport 覆盖行区（Body 下沿到 Inner 底边），Content 顶对齐、行按预制体原步距 70 排布；
+    /// 行从 Inner 直挂改挂 Content，屏幕位置与原手工布局完全一致。
+    /// </summary>
+    void BuildRowScroll(Transform inner)
+    {
+        if (_listContent != null || inner == null) return;
+
+        var scroll = new GameObject("RowScroll", typeof(RectTransform), typeof(ScrollRect));
+        scroll.transform.SetParent(inner, false);
+        var srt = scroll.GetComponent<RectTransform>();
+        srt.anchorMin = srt.anchorMax = new Vector2(0.5f, 0.5f);
+        srt.anchoredPosition = new Vector2(0f, (ListViewportTopY + ListViewportBottomY) / 2f);
+        srt.sizeDelta = new Vector2(ListViewportW, ListViewportTopY - ListViewportBottomY);
+
+        var vp = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
+        vp.transform.SetParent(srt, false);
+        var vrt = vp.GetComponent<RectTransform>();
+        vrt.anchorMin = Vector2.zero;
+        vrt.anchorMax = Vector2.one;
+        vrt.offsetMin = Vector2.zero;
+        vrt.offsetMax = Vector2.zero;
+
+        var content = new GameObject("Content", typeof(RectTransform));
+        content.transform.SetParent(vrt, false);
+        var crt = content.GetComponent<RectTransform>();
+        crt.anchorMin = new Vector2(0f, 1f);
+        crt.anchorMax = new Vector2(1f, 1f);
+        crt.pivot = new Vector2(0.5f, 1f);
+        crt.anchoredPosition = Vector2.zero;
+        crt.sizeDelta = new Vector2(0f, srt.sizeDelta.y);
+
+        var sr = scroll.GetComponent<ScrollRect>();
+        sr.content = crt;
+        sr.viewport = vrt;
+        sr.horizontal = false;
+        sr.vertical = true;
+        sr.movementType = ScrollRect.MovementType.Clamped;
+        sr.scrollSensitivity = 15f;
+
+        for (int i = 0; i < _rows.Length; i++)
+        {
+            if (_rows[i] == null) continue;
+            var rt = _rows[i].GetComponent<RectTransform>();
+            rt.SetParent(crt, false);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(0f, -(HandRowH / 2f + i * HandRowStep));
+        }
+        _listContent = crt;
+
+        // RowScroll 成为 Inner 最后一个子节点后，行渲染在 CloseX 之上会盖住重叠角 → 关闭钮置顶
+        var closeX = inner.Find(CloseXName);
+        if (closeX != null) closeX.SetAsLastSibling();
+    }
+
+    /// <summary>Content 高度随显示行数伸缩：不足一屏不滚，超出一屏可滚。</summary>
+    void UpdateContentHeight(int shownRows)
+    {
+        if (_listContent == null) return;
+        float vpH = ListViewportTopY - ListViewportBottomY;
+        float need = (Mathf.Max(1, shownRows) - 1) * HandRowStep + HandRowH;
+        _listContent.sizeDelta = new Vector2(0f, Mathf.Max(vpH, need));
     }
 
     static GameObject FindReq(Transform root, string name)
@@ -190,6 +300,12 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     }
 
     void OpenShop()
+    {
+        OpenShopPanel();
+    }
+
+    /// <summary>外部入口（侧栏 Emblem 徽记）直接打开里程商店。</summary>
+    public void OpenShopPanel()
     {
         _mode = Mode.Shop;
         AdventureLogMileageShop.EnsureWeek();
@@ -227,31 +343,39 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             if (_body != null) _body.text = AdventureLogFragments.FormatInventory();
             for (int i = 0; i < 6; i++)
             {
-                if (_actionBtns[i] == null) continue;
+                if (_rows[i] == null) continue;
                 bool on = i < AdventureLogFragments.Recipes.Length;
-                _actionBtns[i].gameObject.SetActive(on);
+                _rows[i].SetActive(on);
                 if (!on) continue;
                 int idx = i;
                 bool can = AdventureLogFragments.CanCraft(idx);
                 if (_actionLabels[i] != null)
                 {
-                    _actionLabels[i].text = can
-                        ? AdventureLogFragments.FormatRecipeLine(idx)
-                        : $"<color=#{ColorUtility.ToHtmlStringRGB(DisabledColor)}>{AdventureLogFragments.FormatRecipeLine(idx)}</color>";
+                    _actionLabels[i].text = AdventureLogFragments.FormatRecipeLine(idx);
                     _actionLabels[i].color = can ? CreamColor : DisabledColor;
                 }
-                _actionBtns[i].interactable = can;
-                _actionBtns[i].onClick.RemoveAllListeners();
-                _actionBtns[i].onClick.AddListener(() =>
+                if (_countTexts[i] != null)
                 {
-                    if (AdventureLogFragments.TryCraft(idx, out string msg))
-                        UIManager.Instance?.ShowToast(msg);
-                    else
-                        UIManager.Instance?.ShowToast(msg ?? "无法合成");
-                    RefreshPanel();
-                    _host?.RefreshAfterPhase3();
-                });
+                    _countTexts[i].text = "";
+                    _countTexts[i].color = _countBaseColors[i];
+                }
+                if (_icons[i] != null) _icons[i].sprite = LoadResIcon("Icons/Item/icon_log_fragment");
+                if (_exchangeBtns[i] != null)
+                {
+                    _exchangeBtns[i].interactable = can;
+                    _exchangeBtns[i].onClick.RemoveAllListeners();
+                    _exchangeBtns[i].onClick.AddListener(() =>
+                    {
+                        if (AdventureLogFragments.TryCraft(idx, out string msg))
+                            UIManager.Instance?.ShowToast(msg);
+                        else
+                            UIManager.Instance?.ShowToast(msg ?? "无法合成");
+                        RefreshPanel();
+                        _host?.RefreshAfterPhase3();
+                    });
+                }
             }
+            UpdateContentHeight(AdventureLogFragments.Recipes.Length);
         }
         else
         {
@@ -262,233 +386,150 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                              + $"\n卷轴库存 普通{SaveSystem.Instance?.Data?.mercScrollCommon ?? 0}"
                              + $"/高级{SaveSystem.Instance?.Data?.mercScrollLegendary ?? 0}";
             }
-            for (int i = 0; i < 6; i++)
+
+            // 2026-10-20 主人拍板：稀有·暮火之杖（里程 Lv2 等级奖励）放第一；
+            // 已领取的杖 / 本周兑完的商品沉到列表底部，未领完的保持原序在上。
+            var normal = new List<ShopEntry>();
+            var sunk = new List<ShopEntry>();
+            var staff = new ShopEntry { IsStaff = true };
+            (AdventureLogMileage.IsLevelClaimed(2) ? sunk : normal).Add(staff);
+            for (int i = 0; i < AdventureLogMileageShop.Items.Length; i++)
             {
-                if (_actionBtns[i] == null) continue;
-                bool on = i < AdventureLogMileageShop.Items.Length;
-                _actionBtns[i].gameObject.SetActive(on);
-                if (!on) continue;
-                int idx = i;
-                bool can = AdventureLogMileageShop.CanBuy(idx, out _);
-                if (_actionLabels[i] != null)
+                var e = new ShopEntry { IsStaff = false, ItemIndex = i };
+                bool done = AdventureLogMileageShop.RemainThisWeek(AdventureLogMileageShop.Items[i]) <= 0;
+                (done ? sunk : normal).Add(e);
+            }
+
+            int row = 0;
+            foreach (var e in normal) { FillShopRow(row, e); row++; }
+            foreach (var e in sunk) { FillShopRow(row, e); row++; }
+            for (; row < 6; row++)
+            {
+                if (_rows[row] != null) _rows[row].SetActive(false);
+            }
+            UpdateContentHeight(row);
+        }
+    }
+
+    /// <summary>商店条目：IsStaff=里程 Lv2 等级奖励（暮火之杖），否则为商店商品（ItemIndex）。</summary>
+    struct ShopEntry
+    {
+        public bool IsStaff;
+        public int ItemIndex;
+    }
+
+    /// <summary>填充第 rowIdx 行（杖条目或商品条目），行必激活。</summary>
+    void FillShopRow(int rowIdx, ShopEntry e)
+    {
+        if (rowIdx < 0 || rowIdx >= 6 || _rows[rowIdx] == null) return;
+        _rows[rowIdx].SetActive(true);
+
+        if (e.IsStaff)
+        {
+            bool claimed = AdventureLogMileage.IsLevelClaimed(2);
+            bool can = AdventureLogMileage.CanClaimLevel(2);
+            string priceTag = $"<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>Lv2里程奖励</color>";
+
+            if (_actionLabels[rowIdx] != null)
+                _actionLabels[rowIdx].text = $"{SpecialWeapons.InstanceName}　{priceTag}";
+
+            if (_countTexts[rowIdx] != null)
+            {
+                _countTexts[rowIdx].text = claimed ? "已领取"
+                    : can ? "可领取"
+                    : $"需{AdventureLogMileage.LevelThresholds[1]}点";
+                _countTexts[rowIdx].color = can ? _countBaseColors[rowIdx] : DisabledColor;
+            }
+
+            if (_icons[rowIdx] != null)
+            {
+                var tpl = SpecialWeapons.EnsureTwilightTemplate();
+                var sp = tpl != null ? tpl.icon : null;
+                if (sp == null) Debug.LogError("[Phase3Panel] 暮火之杖图标缺失（iconFileName=New_Weapon_03）");
+                _icons[rowIdx].sprite = sp;
+            }
+
+            if (_exchangeBtns[rowIdx] != null)
+            {
+                _exchangeBtns[rowIdx].interactable = can;
+                _exchangeBtns[rowIdx].onClick.RemoveAllListeners();
+                _exchangeBtns[rowIdx].onClick.AddListener(() =>
                 {
-                    _actionLabels[i].text = ShopLine(idx, can);
-                    _actionLabels[i].color = can ? CreamColor : DisabledColor;
-                }
-                _actionBtns[i].interactable = can;
-                _actionBtns[i].onClick.RemoveAllListeners();
-                _actionBtns[i].onClick.AddListener(() =>
-                {
-                    if (AdventureLogMileageShop.TryBuy(idx, out string msg))
-                        UIManager.Instance?.ShowToast(msg);
-                    else
-                        UIManager.Instance?.ShowToast(msg ?? "无法兑换");
+                    // ClaimLevel 内部：发金币/钻石 → 领取即写入存档 → 弹「获得稀有·暮火之杖」确认窗
+                    if (!AdventureLogMileage.ClaimLevel(2))
+                    {
+                        UIManager.Instance?.ShowToast("暂不可领取");
+                        return;
+                    }
+                    UIManager.Instance?.ShowToast($"已领取 Lv2 里程奖励");
                     RefreshPanel();
+                    _host?.RefreshAfterPhase3();
                 });
             }
+            return;
         }
-    }
 
-    /// <summary>商品行文本：名称左对齐，价格亮金、限购灰金靠语义分段。</summary>
-    static string ShopLine(int idx, bool can)
-    {
+        int idx = e.ItemIndex;
         var item = AdventureLogMileageShop.Items[idx];
-        int left = AdventureLogMileageShop.RemainThisWeek(item);
-        if (!can)
-            return $"{item.Name}　{item.CostPoints}点　本周余{left}/{item.WeeklyLimit}";
-        return $"{item.Name}　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{item.CostPoints}点</color>"
-             + $"<color=#{ColorUtility.ToHtmlStringRGB(SubColorHex)}>　本周余{left}/{item.WeeklyLimit}</color>";
-    }
+        bool canBuy = AdventureLogMileageShop.CanBuy(idx, out _);
+        int remain = AdventureLogMileageShop.RemainThisWeek(item);
 
-    // =====================================================================
-    // 层级构建（Editor 烘焙专用）：Tools → UI → 生成三期面板预制体 调用；
-    // 运行时不走这里，只加载烘焙好的预制体（单一来源，改这里后需重新生成预制体）。
-    // =====================================================================
-    public static void BuildHierarchy(RectTransform canvasRoot)
-    {
-        // 统一画布（组件配置对齐 CodexInfoPopup.prefab：Canvas + CanvasScaler + GraphicRaycaster）
-        var canvas = canvasRoot.GetComponent<Canvas>();
-        if (canvas == null) canvas = canvasRoot.gameObject.AddComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceCamera;
-        canvas.planeDistance = GameConfig.UI_PLANE_DISTANCE;
-        canvas.sortingOrder = GameConfig.UiSort.TownPopup;
-        var scaler = canvasRoot.GetComponent<CanvasScaler>();
-        if (scaler == null) scaler = canvasRoot.gameObject.AddComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.referenceResolution = new Vector2(GameConfig.DESIGN_WIDTH, GameConfig.DESIGN_HEIGHT);
-        scaler.matchWidthOrHeight = 1f;
-        if (canvasRoot.GetComponent<GraphicRaycaster>() == null)
-            canvasRoot.gameObject.AddComponent<GraphicRaycaster>();
+        // Label：只写名称 + 消耗点数，不含限购次数
+        if (_actionLabels[rowIdx] != null)
+            _actionLabels[rowIdx].text = $"{item.Name}　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{item.CostPoints}点</color>";
 
-        // 底部入口条：碎片合成 / 里程商店
-        var bar = new GameObject(BarName, typeof(RectTransform));
-        bar.transform.SetParent(canvasRoot, false);
-        var barRt = bar.GetComponent<RectTransform>();
-        barRt.anchorMin = new Vector2(0.5f, 0f);
-        barRt.anchorMax = new Vector2(0.5f, 0f);
-        barRt.pivot = new Vector2(0.5f, 0f);
-        barRt.anchoredPosition = new Vector2(0f, 118f);
-        barRt.sizeDelta = new Vector2(420f, 44f);
-        MakeWoodButton(bar.transform, CraftBtnName, "碎片合成", new Vector2(-110f, 0f), null, 200f, 44f, 17);
-        MakeWoodButton(bar.transform, ShopBtnName, "里程商店", new Vector2(110f, 0f), null, 200f, 44f, 17);
-
-        // 全屏遮罩：压暗日志页并拦截点击；点遮罩直接关闭
-        var dim = new GameObject(DimName, typeof(RectTransform), typeof(Image), typeof(Button));
-        dim.transform.SetParent(canvasRoot, false);
-        var dimRt = dim.GetComponent<RectTransform>();
-        dimRt.anchorMin = Vector2.zero;
-        dimRt.anchorMax = Vector2.one;
-        dimRt.offsetMin = Vector2.zero;
-        dimRt.offsetMax = Vector2.zero;
-        dim.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.62f);
-        var dimBtn = dim.GetComponent<Button>();
-        dimBtn.transition = Selectable.Transition.None;
-
-        // 弹窗面板：外层图当木质描边，内衬再铺深色底
-        var panel = new GameObject(PanelName, typeof(RectTransform), typeof(Image));
-        panel.transform.SetParent(canvasRoot, false);
-        var prt = panel.GetComponent<RectTransform>();
-        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
-        prt.sizeDelta = new Vector2(PanelW, PanelH);
-        prt.anchoredPosition = Vector2.zero;
-        panel.GetComponent<Image>().color = FrameColor;
-
-        var inner = new GameObject(InnerName, typeof(RectTransform), typeof(Image));
-        inner.transform.SetParent(panel.transform, false);
-        var irt = inner.GetComponent<RectTransform>();
-        irt.anchorMin = Vector2.zero;
-        irt.anchorMax = Vector2.one;
-        irt.offsetMin = new Vector2(6f, 6f);
-        irt.offsetMax = new Vector2(-6f, -6f);
-        inner.GetComponent<Image>().color = PanelColor;
-        inner.GetComponent<Image>().raycastTarget = false;
-
-        // 标题 + 分隔线
-        var title = MakeText(inner.transform, TitleName, 23, TextAnchor.MiddleCenter, new Vector2(0f, -40f), new Vector2(PanelW - 120f, 36f));
-        title.color = GoldColor;
-        title.fontStyle = FontStyle.Bold;
-        var outline = title.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(0.16f, 0.09f, 0.04f, 1f);
-        outline.effectDistance = new Vector2(1.5f, -1.5f);
-
-        var divider = new GameObject("Divider", typeof(RectTransform), typeof(Image));
-        divider.transform.SetParent(inner.transform, false);
-        var drt = divider.GetComponent<RectTransform>();
-        drt.anchorMin = drt.anchorMax = new Vector2(0.5f, 0.5f);
-        drt.anchoredPosition = new Vector2(0f, -68f);
-        drt.sizeDelta = new Vector2(500f, 2f);
-        divider.GetComponent<Image>().color = DividerColor;
-        divider.GetComponent<Image>().raycastTarget = false;
-
-        // 里程状态 / 说明
-        var body = MakeText(inner.transform, BodyName, 15, TextAnchor.UpperLeft, new Vector2(0f, -106f), new Vector2(500f, 64f));
-        body.color = CreamColor;
-
-        // 商品 / 合成行（6 槽，按模式显隐）
-        for (int i = 0; i < 6; i++)
+        // 次数：本周可领/总次数；每周领完或点数不足 → 置灰
+        if (_countTexts[rowIdx] != null)
         {
-            float y = RowTopY - i * RowStep;
-            MakeShopRow(inner.transform, RowName(i), new Vector2(0f, y));
+            _countTexts[rowIdx].text = $"{remain}/{item.WeeklyLimit}";
+            _countTexts[rowIdx].color = canBuy ? _countBaseColors[rowIdx] : DisabledColor;
         }
 
-        // 右上角关闭：两根旋转细条拼 X，不依赖字体字形
-        var close = new GameObject(CloseXName, typeof(RectTransform), typeof(Image), typeof(Button));
-        close.transform.SetParent(inner.transform, false);
-        var crt = close.GetComponent<RectTransform>();
-        crt.anchorMin = crt.anchorMax = new Vector2(0.5f, 0.5f);
-        crt.anchoredPosition = new Vector2(PanelW / 2f - 42f, -40f);
-        crt.sizeDelta = new Vector2(46f, 46f);
-        close.GetComponent<Image>().color = FrameColor;
-        MakeXMark(close.transform);
+        // Icon：物品图标
+        if (_icons[rowIdx] != null) _icons[rowIdx].sprite = ShopIconFor(item.Id);
 
-        GameFonts.ApplyToHierarchy(canvasRoot);
-    }
-
-    /// <summary>商品/合成行：木质外框 + 内衬按钮。</summary>
-    static GameObject MakeShopRow(Transform parent, string name, Vector2 pos)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-        go.transform.SetParent(parent, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = pos;
-        rt.sizeDelta = new Vector2(RowW, RowH);
-        go.GetComponent<Image>().color = RowBorderColor;
-
-        var inner = new GameObject(InnerName, typeof(RectTransform), typeof(Image));
-        inner.transform.SetParent(go.transform, false);
-        var irt = inner.GetComponent<RectTransform>();
-        irt.anchorMin = Vector2.zero;
-        irt.anchorMax = Vector2.one;
-        irt.offsetMin = new Vector2(3f, 3f);
-        irt.offsetMax = new Vector2(-3f, -3f);
-        inner.GetComponent<Image>().color = RowInnerColor;
-        inner.GetComponent<Image>().raycastTarget = false;
-
-        var tx = MakeText(go.transform, "Label", 15, TextAnchor.MiddleLeft, new Vector2(0f, 0f), new Vector2(RowW - 30f, RowH - 8f));
-        return go;
-    }
-
-    /// <summary>木质按钮：底栏入口/通用。</summary>
-    static GameObject MakeWoodButton(Transform parent, string name, string label, Vector2 pos, UnityEngine.Events.UnityAction onClick, float w, float h, int fontSize)
-    {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
-        go.transform.SetParent(parent, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = pos;
-        rt.sizeDelta = new Vector2(w, h);
-        go.GetComponent<Image>().color = RowBorderColor;
-        if (onClick != null) go.GetComponent<Button>().onClick.AddListener(onClick);
-
-        var inner = new GameObject(InnerName, typeof(RectTransform), typeof(Image));
-        inner.transform.SetParent(go.transform, false);
-        var irt = inner.GetComponent<RectTransform>();
-        irt.anchorMin = Vector2.zero;
-        irt.anchorMax = Vector2.one;
-        irt.offsetMin = new Vector2(3f, 3f);
-        irt.offsetMax = new Vector2(-3f, -3f);
-        inner.GetComponent<Image>().color = RowInnerColor;
-        inner.GetComponent<Image>().raycastTarget = false;
-
-        var tx = MakeText(go.transform, "Label", fontSize, TextAnchor.MiddleCenter, Vector2.zero, new Vector2(w - 8f, h - 4f));
-        tx.color = CreamColor;
-        tx.text = label;
-        return go;
-    }
-
-    static void MakeXMark(Transform parent)
-    {
-        for (int i = 0; i < 2; i++)
+        // 兑换按钮：可领可付才可点，否则整钮置灰
+        if (_exchangeBtns[rowIdx] != null)
         {
-            var bar = new GameObject("X" + i, typeof(RectTransform), typeof(Image));
-            bar.transform.SetParent(parent, false);
-            var rt = bar.GetComponent<RectTransform>();
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(18f, 3f);
-            rt.localEulerAngles = new Vector3(0f, 0f, i == 0 ? 45f : -45f);
-            var img = bar.GetComponent<Image>();
-            img.color = GoldColor;
-            img.raycastTarget = false;
+            _exchangeBtns[rowIdx].interactable = canBuy;
+            _exchangeBtns[rowIdx].onClick.RemoveAllListeners();
+            _exchangeBtns[rowIdx].onClick.AddListener(() =>
+            {
+                if (AdventureLogMileageShop.TryBuy(idx, out string msg))
+                    UIManager.Instance?.ShowToast(msg);
+                else
+                    UIManager.Instance?.ShowToast(msg ?? "无法兑换");
+                RefreshPanel();
+            });
         }
     }
 
-    static Text MakeText(Transform parent, string name, int size, TextAnchor anchor, Vector2 pos, Vector2 sizeDelta)
+    /// <summary>商品图标：按商品 Id 取项目通用图标（取不到报错，不兜底图）。</summary>
+    static Sprite ShopIconFor(string id)
     {
-        var go = new GameObject(name, typeof(RectTransform), typeof(Text));
-        go.transform.SetParent(parent, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = pos;
-        rt.sizeDelta = sizeDelta;
-        var t = go.GetComponent<Text>();
-        t.font = GameFonts.GetChinese();
-        t.fontSize = size;
-        t.color = Color.white;
-        t.alignment = anchor;
-        t.horizontalOverflow = HorizontalWrapMode.Wrap;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        return t;
+        switch (id)
+        {
+            case "gold_bag": return CommonIconSprites.Load("icon_gold");
+            case "mats_3": return CommonIconSprites.Load("icon_talent_stone");
+            case "stamina_1": return LoadResIcon("Art/UI/Icons/Common/icon_stamina_potion");
+            case "scroll_c": return CommonIconSprites.Load("icon_hire_scroll");
+            // 高级招募卷轴：主人 2026-10-17 新图（与战斗掉落同图），缺了回退普通雇佣卷轴
+            case "scroll_l":
+                var adv = Resources.Load<Sprite>("Art/UI/Icons/Common/高级招募卷轴");
+                return adv != null ? adv : CommonIconSprites.Load("icon_hire_scroll");
+            default: return null;
+        }
     }
+
+    static Sprite LoadResIcon(string resPath)
+    {
+        var sp = Resources.Load<Sprite>(resPath);
+        if (sp == null) Debug.LogError($"[Phase3Panel] 缺图标 Resources/{resPath}");
+        return sp;
+    }
+
+    // =====================================================================
+    // 2026-10-20 主人拍板：8 个 UI 预制体一键生成脚本全部删除（含本面板的
+    // Phase3PanelPrefabBuilder 与 BuildHierarchy 构建段），预制体以磁盘手工版为唯一真源。
+    // =====================================================================
 }

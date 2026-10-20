@@ -23,11 +23,18 @@ public partial class DailyLoginUI
             RedDot.RefreshCommon();   // 【2026-10-18 修·主人报「领完红点不灭」】领取后立即同步红点
             Debug.Log($"[DailyLogin] {msg}");
             // B12: 领完弹「获得奖励」弹窗（主人反馈：领了没弹窗，不知道拿到啥）。
-            // 必须按**实发**构造：TryClaimStarter 内部对 X2 双倍日做了 Doubled，这里同样复算一遍
-            // （不改 DailyLoginSystem 接口，UI 侧自算），保证弹窗数量 = 实际到账数量。
-            var r = DailyLoginSystem.EffectiveStarterReward(day);
+            // 【2026-10-20】用 TryClaimStarter 记下的基础奖励（LastStarterBaseReward）——
+            // 领取动作可能解锁佣兵（D1 塔克），此时再取 EffectiveStarterReward 会二次折算成碎片，与实发不符。
+            // X2 双倍日的数量翻倍照旧由 dbl 参数表达（LastStarterBaseReward 是 Doubled 前的基础量）。
+            var r = DailyLoginSystem.LastStarterBaseReward.grant != DailyLoginDefs.Grant.None
+                ? DailyLoginSystem.LastStarterBaseReward
+                : DailyLoginSystem.EffectiveStarterReward(day);
             bool dbl = DailyLoginDefs.IsStarterDouble(day);
-            ShowRewardPopup(r, dbl ? 2 : 1);
+            // 【2026-10-20 主人拍板】实发佣兵本体 → 先播「获得佣兵」全屏演出，关闭后再弹奖励弹窗
+            if (DailyLoginSystem.LastGrantedMercHireId != null)
+                MercGainCinematicUI.Show(DailyLoginSystem.LastGrantedMercHireId, () => ShowRewardPopup(r, dbl ? 2 : 1));
+            else
+                ShowRewardPopup(r, dbl ? 2 : 1);
         }
         Refresh();
     }
@@ -45,7 +52,11 @@ public partial class DailyLoginUI
             MarkClaimConsumed();
             RedDot.RefreshCommon();   // 【2026-10-18 修】领取后立即同步红点
             Debug.Log($"[DailyLogin] {msg}");
-            ShowRewardPopup(DailyLoginDefs.Cycle[idx], 1);
+            // 实发佣兵本体 → 先播「获得佣兵」演出（同新手格口径）
+            if (DailyLoginSystem.LastGrantedMercHireId != null)
+                MercGainCinematicUI.Show(DailyLoginSystem.LastGrantedMercHireId, () => ShowRewardPopup(DailyLoginDefs.Cycle[idx], 1));
+            else
+                ShowRewardPopup(DailyLoginDefs.Cycle[idx], 1);
         }
         Refresh();
     }
@@ -62,7 +73,11 @@ public partial class DailyLoginUI
             MarkClaimConsumed();
             RedDot.RefreshCommon();   // 【2026-10-18 修】领取后立即同步红点
             Debug.Log($"[DailyLogin] {msg}");
-            if (def != null) ShowRewardPopup(def.Value.reward, 1);
+            // 实发佣兵本体 → 先播「获得佣兵」演出（同新手格口径）
+            if (def != null && DailyLoginSystem.LastGrantedMercHireId != null)
+                MercGainCinematicUI.Show(DailyLoginSystem.LastGrantedMercHireId, () => ShowRewardPopup(def.Value.reward, 1));
+            else if (def != null)
+                ShowRewardPopup(def.Value.reward, 1);
         }
         Refresh();
     }
@@ -83,7 +98,11 @@ public partial class DailyLoginUI
             RedDot.RefreshCommon();   // 【2026-10-18 修】领取后立即同步红点
             Debug.Log($"[DailyLogin] {msg}");
             // B12: 累计大奖同样弹「获得奖励」弹窗（主人反馈：领了没弹窗）
-            ShowRewardPopup(DailyLoginDefs.AccumReward, 1);
+            // 实发佣兵本体 → 先播「获得佣兵」演出（同新手格口径）
+            if (DailyLoginSystem.LastGrantedMercHireId != null)
+                MercGainCinematicUI.Show(DailyLoginSystem.LastGrantedMercHireId, () => ShowRewardPopup(DailyLoginDefs.AccumReward, 1));
+            else
+                ShowRewardPopup(DailyLoginDefs.AccumReward, 1);
         }
         Refresh();
     }

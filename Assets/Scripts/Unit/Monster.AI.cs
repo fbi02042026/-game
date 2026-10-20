@@ -67,6 +67,12 @@ public partial class Monster
         if (_blinkCd > 0f)
             _blinkCd = Mathf.Max(0f, _blinkCd - Time.deltaTime);
 
+        // 【2026-10-20 主人拍板】远程精英/Boss 双弹幕技（扇形/追踪）冷却倒计时：与瞬移同口径
+        if (_fanVolleyCd > 0f)
+            _fanVolleyCd = Mathf.Max(0f, _fanVolleyCd - Time.deltaTime);
+        if (_homingBarrageCd > 0f)
+            _homingBarrageCd = Mathf.Max(0f, _homingBarrageCd - Time.deltaTime);
+
         // 入场：默认剧情冻结时暂停；仅 AllowMonsterMapEnter 窗口可继续走进
         var bmEnter = BattleManager.Instance;
         bool preFightPause = bmEnter != null && bmEnter.AllowMonsterMapEnter && !bmEnter.UnitsCanAct;
@@ -276,8 +282,12 @@ public partial class Monster
             return;
 
         // 【2026-10-20 主人拍板】远程专属反应技「瞬移遁走」：被玩家/佣兵贴脸时压扁消失、
-        // 远处复原（所有远程怪携带，冷却控频；近战怪无此技）。判定与演出在 Monster.Skills.cs。
+        // 远处复原（仅远程精英/Boss 携带，冷却控频；近战怪与远程小怪均无此技）。判定与演出在 Monster.Skills.cs。
         if (TryBlinkAwayIfCrowded())
+            return;
+
+        // 【2026-10-20 主人拍板】远程精英/Boss 双弹幕技：扇形弹幕 / 追踪弹幕（各 20s 冷却，进射程才放）
+        if (TryCastRangedVolleySkill(target))
             return;
 
         float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));

@@ -30,6 +30,8 @@ public static class AdventureLogCatalog
         public string Desc;
         public string Lore;
         public bool StoryNpc;
+        /// <summary>true = 不进佣兵图鉴（如酒馆 NPC 独眼：不是佣兵，只在酒馆出现）。</summary>
+        public bool HideInCodex;
         /// <summary>剧情 NPC 等无花名册时的稀有度；Hire 佣兵以 MercRosterDefs 为准。</summary>
         public MercRosterDefs.MercRarity Rarity;
     }
@@ -312,9 +314,11 @@ public static class AdventureLogCatalog
         Npc("C003", "格雷", "", "老猎人",
             "头发花白、披着旧斗篷的老练猎人，艾丽娅小队成员。",
             "据说他闻一口空气就能判断附近有没有精英怪。也能判断食堂今天有没有肉。"),
+        // 2026-10-20 主人拍板：独眼不是佣兵，只在酒馆出现，不进佣兵图鉴
         Npc("C004", "独眼", "npc_duyan", "酒馆情报商",
             "戴眼罩的中年男子，常在酒馆角落低声交换情报。",
-            "他知道公会很多事，但只换酒，不换金币。赛琳看见他会假装没看见。"),
+            "他知道公会很多事，但只换酒，不换金币。赛琳看见他会假装没看见。",
+            hideInCodex: true),
 
         Hire("H001", "马库斯", "老盾", "dunbing101", "剑盾卫士", "新手引导自动入队", "暮影森林·教学关",
             "手持大盾、全身重甲的中年佣兵，被玩家从怪物包围中救出。擅长挡刀和吐槽。",
@@ -848,12 +852,13 @@ public static class AdventureLogCatalog
     }
 
     static MercEntry Npc(string id, string name, string asset, string role, string desc, string lore,
-        MercRosterDefs.MercRarity rarity = MercRosterDefs.MercRarity.Common)
+        MercRosterDefs.MercRarity rarity = MercRosterDefs.MercRarity.Common, bool hideInCodex = false)
     {
         return new MercEntry
         {
             Id = id, Name = name, Nickname = "", AssetId = asset, Role = role, Unlock = "主线推进",
-            Place = "剧情", Desc = desc, Lore = lore, StoryNpc = true, Rarity = rarity
+            Place = "剧情", Desc = desc, Lore = lore, StoryNpc = true, Rarity = rarity,
+            HideInCodex = hideInCodex
         };
     }
 

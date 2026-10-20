@@ -95,7 +95,8 @@ public static class DailyLoginSystem
         Grant(r);
         SetFlag(KEY_ACCUM, 1);
         SaveSystem.Instance.Save();
-        msg = "已领取：" + r.DisplayName.Replace("\n", "、");
+        msg = GrantedMercHireId != null ? CongratsMsg(GrantedMercHireId)
+            : "已领取：" + r.DisplayName.Replace("\n", "、");
         return true;
     }
 
@@ -131,7 +132,7 @@ public static class DailyLoginSystem
         return (System.DateTime.Now.Date - prev.Date).TotalDays == 1.0;
     }
 
-    /// <summary>还有没领的东西吗（新手或每日循环）。</summary>
+    /// <summary>还有没领的东西吗（只算界面实际能领的：新手 8 日格 + 累计大奖）。</summary>
     public static bool HasClaimable()
     {
         if (Data == null) return false;
@@ -143,14 +144,13 @@ public static class DailyLoginSystem
             int day = round * len + i + 1;
             if (LoginDays >= day && !IsStarterClaimed(day)) return true;
         }
-        for (int i = 0; i < DailyLoginDefs.Streak.Length; i++)
-        {
-            int need = DailyLoginDefs.Streak[i].days;
-            if (StreakDays >= need && !IsStreakClaimed(need)) return true;
-        }
-        // 累计登录领限定佣兵：达到天数且未领取，也算“有得领”，让底部信息条亮起（在 streak 之后、cycle 之前判断）。
+        // 【2026-10-20 修·主人报「领完红点不灭」】
+        // 2026-09-23 主人拍板：每日循环条 / 连击加成条已从弹窗 UI 移除（连击改双倍日），
+        // 完整预制体 DailyLoginFull 没有 CycleBar/StreakBar 节点，循环奖与连击档实际无从领取；
+        // 这两项不能再计入「有可领」，否则主界面每日登录红点永远不灭（HasClaimable 恒真）。
+        // 累计大奖走底部 InfoBar 点击领取，入口还在，保留判定。
         if (IsAccumReached() && !IsAccumClaimed()) return true;
-        return !CycleClaimedToday;
+        return false;
     }
 
     /// <summary>
@@ -172,13 +172,19 @@ public static class DailyLoginSystem
         // 2026-09-23 轮回：day 是**累计天数**（可以 >8），奖励按 8 天一轮回取；
         // 佣兵已解锁的佣兵日自动换碎片（EffectiveStarterReward），不会再发空气。
         var r = EffectiveStarterReward(day);
+        // 【2026-10-20】记下基础奖励（Doubled 前）：UI「获得奖励」弹窗要用它——
+        // 若等 Grant 解锁塔克后再取 EffectiveStarterReward，会二次折算成碎片，与实发本体不符。
+        LastStarterBaseReward = r;
         // 2026-09-22：X2 双倍日——角标之外**实发也翻倍**（佣兵类不翻，见 Doubled）
         bool dbl = DailyLoginDefs.IsStarterDouble(day);
         if (dbl) r = DailyLoginDefs.Doubled(r);
         Grant(r);
         SetFlag(StarterKeyPrefix + day, 1);
         SaveSystem.Instance.Save();
-        msg = "已领取：" + r.DisplayName.Replace("\n", "、") + (dbl ? "（X2 双倍日，数量已翻倍）" : "");
+        // 2026-10-20 主人拍板：实发佣兵本体时统一报喜（与三选一抽中报喜同款）；佣兵类不参与 X2 翻倍
+        msg = GrantedMercHireId != null
+            ? CongratsMsg(GrantedMercHireId)
+            : "已领取：" + r.DisplayName.Replace("\n", "、") + (dbl ? "（X2 双倍日，数量已翻倍）" : "");
         return true;
     }
 
@@ -196,7 +202,8 @@ public static class DailyLoginSystem
         d.loginCycleDay = ShopDefs.TodayKey();
         SetFlag(KEY_CYCLE, (idx + 1) % DailyLoginDefs.CycleLength);
         SaveSystem.Instance.Save();
-        msg = "已领取：" + r.DisplayName.Replace("\n", "、");
+        msg = GrantedMercHireId != null ? CongratsMsg(GrantedMercHireId)
+            : "已领取：" + r.DisplayName.Replace("\n", "、");
         return true;
     }
 
@@ -215,18 +222,56 @@ public static class DailyLoginSystem
         Grant(r);
         SetFlag(StreakKeyPrefix + days, 1);
         SaveSystem.Instance.Save();
-        msg = "已领取：" + r.DisplayName.Replace("\n", "、");
+        msg = GrantedMercHireId != null ? CongratsMsg(GrantedMercHireId)
+            : "已领取：" + r.DisplayName.Replace("\n", "、");
         return true;
     }
 
     static void Grant(DailyLoginDefs.Reward r)
     {
-        GrantOne(r.grant, r.type, r.amount, r.hireId);
+        GrantedMercHireId = GrantOne(r.grant, r.type, r.amount, r.hireId);
         if (r.HasSecond)
-            GrantOne(r.grant2, r.type2, r.amount2, r.hireId2);
+        {
+            string second = GrantOne(r.grant2, r.type2, r.amount2, r.hireId2);
+            if (string.IsNullOrEmpty(GrantedMercHireId)) GrantedMercHireId = second;
+        }
     }
 
-    static void GrantOne(DailyLoginDefs.Grant grant, ResourceWallet.ResourceType type, int amount, string hireId)
+    /// <summary>Grant() 每次实发佣兵 hireId 的暂存（非佣兵奖 = null），供 LastGrantedMercHireId 对外读。</summary>
+    static string GrantedMercHireId;
+
+    /// <summary>本次 Grant 实发**佣兵本体**（真解锁）时的 hireId；碎片 / 已拥有空发 / 非佣兵奖 = null。
+    /// UI 读取它决定要不要播「获得佣兵」演出（MercGainCinematicUI）。</summary>
+    public static string LastGrantedMercHireId => GrantedMercHireId;
+
+    /// <summary>
+    /// 最近一次 TryClaimStarter 的**基础奖励**（Doubled 前）。UI 弹「获得奖励」弹窗用这个，
+    /// 不许再调 EffectiveStarterReward——领取动作本身可能解锁佣兵（D1 塔克），重取会二次折算失真。
+    /// grant == None 表示本次进程还没领取过。
+    /// </summary>
+    public static DailyLoginDefs.Reward LastStarterBaseReward;
+
+    /// <summary>
+    /// 佣兵本体报喜文案（2026-10-20 主人拍板：登录领取佣兵要报喜，与三选一抽中报喜统一）。
+    /// 结构与 RunDraftDirector 同款：稀有度名 + 真名（只写真名不带花名）+ 名字按稀有度上色（RarityPalette 真源）。
+    /// </summary>
+    static string CongratsMsg(string hireId)
+    {
+        bool hasRoster = MercRosterDefs.TryGetByHireId(hireId, out var rd);
+        string fullName = hasRoster && !string.IsNullOrEmpty(rd.Name) ? rd.Name : hireId;
+        string coloredName = "<color=#" + ColorUtility.ToHtmlStringRGB(
+            RarityPalette.Get(hasRoster ? rd.Rarity : MercRosterDefs.MercRarity.Common))
+            + ">" + fullName + "</color>";
+        string rarityName = hasRoster
+            ? SkillRarityUtil.DisplayName(SkillRarityUtil.FromMerc(rd.Rarity))
+            : "";
+        return string.IsNullOrEmpty(rarityName)
+            ? $"恭喜获得佣兵·{coloredName}，实力大增！"
+            : $"恭喜获得{rarityName}佣兵·{coloredName}，实力大增！";
+    }
+
+    /// <summary>返回本次真解锁的佣兵 hireId（无则 null）。</summary>
+    static string GrantOne(DailyLoginDefs.Grant grant, ResourceWallet.ResourceType type, int amount, string hireId)
     {
         switch (grant)
         {
@@ -240,8 +285,10 @@ public static class DailyLoginSystem
                 if (d == null || string.IsNullOrEmpty(hireId)) break;
                 if (d.IsMercUnlocked(hireId)) break; // 已解锁就不重复写，避免刷日志
                 d.UnlockMerc(hireId);
+                // 照 MailSystem 先例：解锁佣兵后自动补全抽奖池（主人拍板「池子最少要补全」）
+                d.EnsurePoolFilled();
                 Debug.Log($"[DailyLogin] 解锁佣兵 {hireId}");
-                break;
+                return hireId;
             }
 
             case DailyLoginDefs.Grant.MercFragment:
@@ -256,6 +303,7 @@ public static class DailyLoginSystem
                 break;
             }
         }
+        return null;
     }
 
     /// <summary>

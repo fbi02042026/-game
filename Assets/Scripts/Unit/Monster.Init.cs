@@ -401,6 +401,15 @@ public partial class Monster
             : 0f;
         _skillCooldown = _canUseActiveSkill && !strong ? (rangedSkill ? 0f : 3f) : 0f;
 
+        // 【2026-10-20 主人拍板】远程精英/Boss 弹幕技：首发错开 2.5s / 5s，避免开打瞬间齐射。
+        // 携带规则：远程 Boss 两种全带（但追踪弹幕要血量降到二阶段线 70% 才解锁，判定在触发把关里）；
+        // 远程精英只随机带一种（扇形/追踪五五开，不受阶段限制）。近战怪与远程小怪不带。
+        bool volleyOwner = strong && MonsterAttackStyleTable.IsRanged(_attackStyle);
+        _fanVolleyOwned = volleyOwner && (!_eliteWave || Random.value < 0.5f);
+        _homingBarrageOwned = volleyOwner && (!_eliteWave || !_fanVolleyOwned);
+        _fanVolleyCd = _fanVolleyOwned ? 2.5f : 0f;
+        _homingBarrageCd = _homingBarrageOwned ? 5f : 0f;
+
         // 【2026-10-16 主人摆的 JY 脚下光环】精英/Boss 出场显示，普通怪隐藏。
         // 光环是 Visual 子节点，精英/Boss 的 rootScale 放大时**自动跟着变大**，代码不碰它的 scale/贴图/位置（铁律 2）。
         ApplyEliteRingVisible(_isBossUnit || _eliteWave);

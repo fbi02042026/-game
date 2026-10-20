@@ -28,6 +28,16 @@ public partial class BattleEntryDraftPanel
         LogMapBaseOnce();
         float to = expanded ? 1f : 0f;
         if (_animCo != null) StopCoroutine(_animCo);
+        // 【2026-10-20 玩家反馈修复】宿主父链未激活时 StartCoroutine 会直接抛异常
+        //（"game object is inactive"），把调用方协程一起带死。这里不走动画、
+        // 直接 ApplyState 同步落位：两态数值一步到位，面板照样出来/收起，只是没有过渡。
+        if (!gameObject.activeInHierarchy)
+        {
+            Debug.LogWarning("[BattleEntryDraftPanel] 两态切换时宿主未激活，跳过动画直接落位");
+            _animCo = null;
+            ApplyState(to);
+            return;
+        }
         _animCo = StartCoroutine(CoAnimState(to));
     }
 

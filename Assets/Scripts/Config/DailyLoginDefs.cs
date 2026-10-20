@@ -33,7 +33,8 @@ public static class DailyLoginDefs
     /// 选它的理由：稀有档里最硬的前排（防 20 为稀有最高），坦克定位不挑流派，
     /// 中后期第 6/7 章的数值墙依然靠得住；且 InInitialPool=false ，玩家自己拿不到，
     /// 登录送才有"专属"价值。换人只改这里（后续碎片会跟着走）。
-    /// 落点：主人口径第 4 天给佣兵（daily_login.csv 的 starter_4），D8 起给其碎片。
+    /// 落点：【2026-10-20 主人拍板】第 1 天给佣兵（daily_login.csv 的 starter_1；
+    /// 塔克已默认解锁 → 实际自动折算碎片×10），D4 起给碎片。
     /// </summary>
     public const string STARTER_MERC_ID = "H003";
 
@@ -103,19 +104,22 @@ public static class DailyLoginDefs
     /// <summary>
     /// 新手 8 日【硬编码兜底】：表 daily_login.csv（starter 段）有数据时被整段覆盖。
     /// 【2026-10-07 主人拍板】口径 = **第 4 天直接送稀有佣兵塔克（H003）本体，后面（D6/D8 与累计段）给碎片**。
-    /// 已拥有塔克的玩家在第 4 天会由 <see cref="EffectiveStarterReward"/> 自动折成碎片 ×10（不会白点）。
+    /// 【2026-10-20 主人拍板】佣兵本体挪到 **D1**，D4 改塔克碎片×10（与 daily_login.csv 同步改）。
+    /// 【2026-10-20 二次拍板】塔克移出默认解锁名单 → D1 **真发本体**，领取时报喜
+    /// 「恭喜获得稀有佣兵·塔克，实力大增！」（与三选一抽中报喜统一）；
+    /// 领过塔克后的轮回佣兵日仍由 <see cref="EffectiveStarterReward"/> 自动折成碎片 ×10（不会白点）。
     /// —— 表优先、缺表 / 空表 / 该行缺失回退本数组（"缺表回退，不让登录奖励开不起来"）。
-    /// 节奏目标：塔克（稀有）满级要 **75 本命碎片**，D4 给佣兵、D6/D8 起每轮补碎片，
+    /// 节奏目标：塔克（稀有）满级要 **75 本命碎片**，D1 给佣兵、D4/D6/D8 起每轮补碎片，
     /// 叠加「每轮第 3、6 格双倍」→ 30 天全勤 ≈ 满级。体力给上限一半（50）；强化石/天赋石已停用。
     /// 老存档已领标记按天记，兼容。注意：本数组是兜底，运行时真正生效看表（见 EnsureTableApplied）。
     /// </summary>
     public static Reward[] Starter = new Reward[]
     {
-        Res("金币 ×500",         ResourceWallet.ResourceType.Gold,         500), // D1
+        MercGrant("塔克·重盾",   STARTER_MERC_ID),                                // D1 稀有佣兵本体（2026-10-20 挪到首日；塔克移出默认名单后真发本体，领过才折碎片）
         Res("体力 ×50",          ResourceWallet.ResourceType.Stamina,       50), // D2（体力上限一半）
         Res("钻石 ×30",          ResourceWallet.ResourceType.Diamond,       30), // D3
-        MercGrant("塔克·重盾",   STARTER_MERC_ID),                                // D4 稀有佣兵本体（已拥有 → 自动折碎片×10）
-        Res("金币 ×800",         ResourceWallet.ResourceType.Gold,         800), // D5
+        Frag("塔克碎片 ×10",     STARTER_MERC_ID,                           10), // D4（2026-10-20 改：本体挪 D1 后本格改碎片×10）
+        Res("金币 ×800",         ResourceWallet.ResourceType.Gold,          800), // D5
         Frag("塔克碎片 ×10",     STARTER_MERC_ID,                           10), // D6（第 6 格是双倍格，实发 20 片）
         Res("钻石 ×50",          ResourceWallet.ResourceType.Diamond,       50), // D7
         Frag("塔克碎片 ×15",     STARTER_MERC_ID,                           15), // D8 起每轮补碎片

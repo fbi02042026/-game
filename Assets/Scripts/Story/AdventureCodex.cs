@@ -277,11 +277,15 @@ public static class AdventureCodex
         return e.Rarity;
     }
 
-    /// <summary>已遭遇或已招募才亮彩色头像；否则剪影。不含「初始池已开放」。</summary>
+    /// <summary>已遭遇、已招募或酒馆已解锁才亮彩色头像；否则剪影。
+    /// 2026-10-20 主人拍板：默认发放的佣兵（路加/马库斯/米娅/塔克）算已拥有，图鉴要点亮。</summary>
     public static bool IsMercRevealed(AdventureLogCatalog.MercEntry e)
     {
         if (string.IsNullOrEmpty(e.Id)) return false;
         if (IsSeenMerc(e.Id)) return true;
+        // 酒馆已解锁 = 已拥有（含默认发放 / 登录补发 / 金币卷轴解锁），图鉴直接点亮
+        var data = SaveSystem.Instance?.Data;
+        if (data != null && data.IsMercUnlocked(e.Id)) return true;
         if (!string.IsNullOrEmpty(e.AssetId) && AdventureLogCatalog.HasMerc(e.AssetId))
             return true;
         if (MercRosterDefs.TryGetByHireId(e.Id, out var def)

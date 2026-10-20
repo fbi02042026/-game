@@ -31,6 +31,55 @@ public static class EquipStatRollup
     }
 
     /// <summary>
+    /// 换装模拟专用（<see cref="PowerCalc.EquipSwapPowerDelta"/>）：按给定穿戴集构建加成表，
+    /// 条目逻辑（globalBonus / 强化倍率 / 副手封顶 / 技能被动）与 <see cref="BuildBonusList"/> 完全同一套，
+    /// 主/副手判定用 <see cref="WeaponLoadoutRules"/>（与 GridBackpackSystem.MatchesLogicalWeaponSlot 同口径）。
+    /// 传入集合的顺序即产出条目顺序 —— 调用方用 SnapshotEquippedAfterSwap 保证与真实重算顺序一致。
+    /// </summary>
+    public static List<AttrBonusData> BuildBonusListForSet(List<EquipInstance> equipped)
+    {
+        var list = new List<AttrBonusData>();
+        if (equipped == null) return list;
+
+        PickLogicalWeapons(equipped, out var main, out var off);
+        float mainAttack = SumEquipAttack(main);
+
+        var seen = new HashSet<EquipInstance>();
+        foreach (var equip in equipped)
+        {
+            if (equip == null || !seen.Add(equip)) continue;
+            bool capOffAttack = equip == off && off != null && off != main;
+            AppendEquipBonuses(list, equip, capOffAttack, mainAttack);
+            AppendSkillPassives(list, equip);
+        }
+
+        return list;
+    }
+
+    /// <summary>从穿戴集中挑逻辑主/副手（供换装模拟共用；与 MatchesLogicalWeaponSlot 同一口径）。</summary>
+    public static void PickLogicalWeapons(List<EquipInstance> equipped, out EquipInstance main, out EquipInstance off)
+    {
+        main = null;
+        off = null;
+        if (equipped == null) return;
+        foreach (var e in equipped)
+        {
+            if (e == null) continue;
+            if (main == null && MatchesLogicalWeaponSlot(e, EquipSlotType.MainHand)) main = e;
+            else if (off == null && MatchesLogicalWeaponSlot(e, EquipSlotType.OffHand)) off = e;
+        }
+    }
+
+    /// <summary>与 GridBackpackSystem.MatchesLogicalWeaponSlot 同口径的逻辑主/副手判定（模拟侧只读副本）。</summary>
+    static bool MatchesLogicalWeaponSlot(EquipInstance eq, EquipSlotType logicalSlot)
+    {
+        if (eq == null || !WeaponLoadoutRules.IsLoadoutItem(eq)) return false;
+        if (logicalSlot != EquipSlotType.MainHand && logicalSlot != EquipSlotType.OffHand) return false;
+        bool offHandRole = WeaponLoadoutRules.IsShield(eq) || WeaponLoadoutRules.IsOffHandWeapon(eq);
+        return logicalSlot == EquipSlotType.OffHand ? offHandRole : !offHandRole;
+    }
+
+    /// <summary>
     /// 2026-09-29：攻击力已拆成物理(<see cref="AttrType.Attack"/>) / 魔法(<see cref="AttrType.MagicAttack"/>)，
     /// 「固定值攻击条目」的判定必须两侧都认 —— 否则法师副手法杖吃不到副手上限、
     /// 装备攻击力汇总也少算一整条。
