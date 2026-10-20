@@ -42,7 +42,11 @@ public static class SpeechBubbleFit
         // 2026-10-10 主人拍板：1.75 → 2.0。等比放大上限放宽，超长句才不会被迫截断成「…」。
         float maxScale = 2f,
         // 2026-10-14 主人拍板「根据字的多少实时调整对话框大小」：新开口，默认 1 = 不缩小。
-        float minScale = 1f)
+        float minScale = 1f,
+        // 【2026-10-21 主人原话「框的大小根据字的多少来决定的，不要很长一行把框拉那么宽」】
+        // false（默认）= 旧行为：放不下就宽高等比放大；true = 宽度锁死在 baseSize.x，
+        // 长句只往「高」长（多折几行），绝不把框横向拉成一条长条。
+        bool growHeightOnly = false)
     {
         if (bubbleRt == null || text == null)
             return content ?? "";
@@ -97,19 +101,40 @@ public static class SpeechBubbleFit
         }
 
         if (needH > availH + 0.5f)
-            scale = Mathf.Clamp(Mathf.Max(scale, needH / availH), 1f, Mathf.Max(1f, maxScale));
-
-        if (Mathf.Abs(scale - 1f) > 0.001f)
         {
-            Vector2 sized = baseSize * scale;
-            bubbleRt.sizeDelta = sized;
-            wrapW = Mathf.Max(40f, sized.x - padL - padR);
-            availH = Mathf.Max(20f, sized.y - padT - padB);
-            settings = text.GetGenerationSettings(new Vector2(wrapW, 0f));
-            settings.horizontalOverflow = HorizontalWrapMode.Wrap;
-            settings.verticalOverflow = VerticalWrapMode.Overflow;
-            _gen.Populate(fitted, settings);
-            needH = _gen.GetPreferredHeight(fitted, settings);
+            if (growHeightOnly)
+            {
+                // 【2026-10-21】只长高：宽度锁在 baseSize.x（若上方判过短句收小，则锁在收小后的宽度），
+                // 行数变多就把高度补上，横向绝不放大 → 框不会再变成「一条很长很宽的横条」。
+                float maxH = Mathf.Max(baseSize.y, baseSize.y * Mathf.Max(1f, maxScale));
+                float targetH = Mathf.Clamp(needH + padT + padB, baseSize.y * Mathf.Max(scale, minScale), maxH);
+                Vector2 sizedH = new Vector2(baseSize.x * scale, targetH);
+                bubbleRt.sizeDelta = sizedH;
+                wrapW = Mathf.Max(40f, sizedH.x - padL - padR);
+                availH = Mathf.Max(20f, sizedH.y - padT - padB);
+                settings = text.GetGenerationSettings(new Vector2(wrapW, 0f));
+                settings.horizontalOverflow = HorizontalWrapMode.Wrap;
+                settings.verticalOverflow = VerticalWrapMode.Overflow;
+                _gen.Populate(fitted, settings);
+                needH = _gen.GetPreferredHeight(fitted, settings);
+            }
+            else
+            {
+                scale = Mathf.Clamp(Mathf.Max(scale, needH / availH), 1f, Mathf.Max(1f, maxScale));
+
+                if (Mathf.Abs(scale - 1f) > 0.001f)
+                {
+                    Vector2 sized = baseSize * scale;
+                    bubbleRt.sizeDelta = sized;
+                    wrapW = Mathf.Max(40f, sized.x - padL - padR);
+                    availH = Mathf.Max(20f, sized.y - padT - padB);
+                    settings = text.GetGenerationSettings(new Vector2(wrapW, 0f));
+                    settings.horizontalOverflow = HorizontalWrapMode.Wrap;
+                    settings.verticalOverflow = VerticalWrapMode.Overflow;
+                    _gen.Populate(fitted, settings);
+                    needH = _gen.GetPreferredHeight(fitted, settings);
+                }
+            }
         }
 
         // 选择方案 A：只同步底图尺寸，保留现有字号与自动换行观感；若缩放根节点会连文字一起放大。

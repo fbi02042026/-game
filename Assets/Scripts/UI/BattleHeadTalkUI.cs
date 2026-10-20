@@ -35,20 +35,25 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// 【2026-10-12 主人再报「我不是让你放大一点吗，看着太挤了」】→ 字号 26 → 32（与 FirstRunGuide 同档），
     /// 基准宽高 260×107 → 320×132 等比放大；具体尺寸仍由 SpeechBubbleFit 按文本适配，这里只抬基准。
     /// 【2026-10-14 主人「只把对话框放大一点」】320×132 → 360×152 再抬一档（宽高比不变，仍等比缩放）。
+    /// 【2026-10-21 主人「战斗里的对话框不小不要给我改 给我还原…不要很长一行把框拉那么宽」】
+    /// → 回到贴图原始像素 260×136：360 宽时贴图被横向拉伸 1.38 倍，框显得又宽又扁。
+    /// 现在宽度锁死不再横向拉伸，长句只往上长高（配 SpeechBubbleFit 的 growHeightOnly）。
     /// </summary>
-    static readonly Vector2 BaseBubbleSize = new Vector2(360f, 152f);
+    static readonly Vector2 BaseBubbleSize = new Vector2(260f, 136f);
     /// <summary>
     /// 【2026-10-14 主人「根据字的多少要实时的调整对话框大小」】最小等比缩小倍数。
     /// 0.8 = 短句最多收到基准的 80%，长句照旧最多放大到 200%（SpeechBubbleFit 的 maxScale 默认值）。
-    /// 字号不跟着缩 —— 只缩框，文字始终 32。
+    /// 字号不跟着缩 —— 只缩框，文字始终 26。
     /// </summary>
     const float BubbleMinScale = 0.8f;
     /// <summary>左右内边距：同步 18 → 22，气泡拉宽后留白要跟上，别让字贴边框。</summary>
     const float PadX = 22f;
     const float PadTop = 14f;
     const float PadBottom = 22f;
-    /// <summary>头顶气泡正文字号。2026-10-10 主人拍板 22→26；2026-10-12 主人再报太挤 → 26→32。要再调改这一个常量。</summary>
-    const int BubbleFontSize = 32;
+    /// <summary>头顶气泡正文字号。2026-10-10 主人拍板 22→26；2026-10-12 主人再报太挤 → 26→32。
+    /// 【2026-10-21 还原窄框】框宽退回 260 后，32 号字一行只放得下 6 个字（长句要折 4 行、框变得又高又窄），
+    /// 一并退回 26（同 10-10 那版），一行 8 个字，两句即收。要再调只改这一个常量。</summary>
+    const int BubbleFontSize = 26;
     /// <summary>
     /// 气泡锚点离说话人的抬高（世界单位，脚下原点起算）。【2026-10-20 主人「能不能离得近点」】1.55 → 1.35：
     /// 气泡 pivot 在底部中点，锚点越低气泡越贴头；要再近/再远改这一个常量（低于 1.2 会压到头顶）。
@@ -164,7 +169,7 @@ public class BattleHeadTalkUI : MonoBehaviour
         GlobalToastUI.PushBubble();
         TutorialHintUI.Instance?.Hide();
         string display = SpeechBubbleFit.Apply(_root, _text, raw, BaseBubbleSize,
-            maxScale: 2f, minScale: BubbleMinScale);
+            maxScale: 2f, minScale: BubbleMinScale, growHeightOnly: true);
         if (_text != null) _text.text = "";
         RefreshFollowPosition();
         // 【2026-10-20 主人拍板「战斗中佣兵的吐槽什么的不要算剧情对话」】
