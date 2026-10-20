@@ -121,9 +121,12 @@ public static class AdventureLogMileage
         if (!string.IsNullOrEmpty(reward.TitleId))
             data.logMileageTitleId = reward.TitleId;
 
-        // 设计：里程 Lv2「森林行者」可领暮火之杖（与教程发放共用防重 key）
-        if (level == 2)
-            SpecialWeapons.TryGrantTwilightStaff(showToast: true);
+        // 设计：里程 Lv2「森林行者」可领暮火之杖（与教程发放共用防重 key）。
+        // 【2026-10-20 主人拍板】领取即写入（防弹窗期间杀进程丢杖），随后弹确认窗告知
+        // 「获得稀有·暮火之杖 + 将替换法师职业初始武器」，玩家点确认关闭；
+        // 法师开局替换见 PlayerJobDefs.ApplyForBattle（HasTwilightStaffOwned 判定）。
+        if (level == 2 && SpecialWeapons.TryGrantTwilightStaff(showToast: false))
+            UIManager.Instance?.ShowTwilightStaffConfirm();
 
         SaveSystem.Instance.Save();
         RedDot.RefreshCommon();

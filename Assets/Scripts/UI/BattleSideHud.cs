@@ -281,7 +281,7 @@ public class BattleSideHud : MonoBehaviour
     const float KillDigitGap = -4f;  // 数字间距（收紧，轻微重叠更紧凑）
     const float KillLabelW = 124f;   // 「击败」标签显示宽（原图 200x68 等比）
     const float KillLabelH = 42f;
-    const float KillLabelGap = -2f;  // 标签与数字的间距（收紧）
+    const float KillLabelGap = -10f; // 标签与数字的间距（收紧，2026-10-20 主人要求再拉近）
 
     void LoadKillSprites()
     {

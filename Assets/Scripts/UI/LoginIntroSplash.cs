@@ -24,6 +24,33 @@ public class LoginIntroSplash : MonoBehaviour
     RenderTexture _renderTexture;
     AspectRatioFitter _aspectFitter;
 
+    // 黑屏优化：后台预热的播放器（APIOnly 不渲染），Present 时整体接管
+    static VideoPlayer _prewarmPlayer;
+    static GameObject _prewarmRoot;
+
+    /// <summary>
+    /// 提前建播放器后台 Prepare，把 Prepare 耗时藏进厂标/健康忠告的展示时间里，
+    /// 消除点掉忠告后等视频出画面的纯黑秒数。
+    /// </summary>
+    public static void Prewarm()
+    {
+        if (_prewarmPlayer != null) return;
+        var clip = Resources.Load<VideoClip>(VideoResourcesPath);
+        if (clip == null) return;
+        _prewarmRoot = new GameObject("LoginIntroPrewarm");
+        DontDestroyOnLoad(_prewarmRoot);
+        var player = _prewarmRoot.AddComponent<VideoPlayer>();
+        player.playOnAwake = false;
+        player.renderMode = VideoRenderMode.APIOnly;
+        player.source = VideoSource.VideoClip;
+        player.clip = clip;
+        player.isLooping = false;
+        player.skipOnDrop = true;
+        player.Stop();
+        player.Prepare();
+        _prewarmPlayer = player;
+    }
+
     public static void Present(Action onFinished)
     {
         var existing = FindObjectOfType<LoginIntroSplash>();
@@ -33,23 +60,30 @@ public class LoginIntroSplash : MonoBehaviour
             return;
         }
 
-        var clip = Resources.Load<VideoClip>(VideoResourcesPath);
+        // 接管预热播放器（Prepare 已在后台跑完/跑着，视频即刻出画面）
+        VideoPlayer adopted = _prewarmPlayer;
+        _prewarmPlayer = null;
+        _prewarmRoot = null;
+
+        var clip = adopted != null ? adopted.clip : Resources.Load<VideoClip>(VideoResourcesPath);
         if (clip == null)
         {
             Debug.LogWarning("[LoginIntro] 未找到视频 Resources/" + VideoResourcesPath + "，直接进登录");
+            if (adopted != null) Destroy(adopted.gameObject);
             onFinished?.Invoke();
             return;
         }
 
-        var go = new GameObject("LoginIntroSplash");
+        GameObject go = adopted != null ? adopted.gameObject : new GameObject("LoginIntroSplash");
+        go.name = "LoginIntroSplash";
         var splash = go.AddComponent<LoginIntroSplash>();
         splash._onFinished = onFinished;
-        splash.Build(clip);
+        splash.Build(clip, adopted);
         splash.BeginCutsceneMute();
         splash.StartCoroutine(splash.RunRoutine());
     }
 
-    void Build(VideoClip clip)
+    void Build(VideoClip clip, VideoPlayer adopted)
     {
         var canvas = gameObject.AddComponent<Canvas>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.FullscreenFx, UICanvasSetup.ResolveUiCamera());
@@ -85,14 +119,24 @@ public class LoginIntroSplash : MonoBehaviour
         int rh = clip != null && clip.height > 0 ? (int)clip.height : 1280;
         RecreateRenderTexture(rw, rh);
 
-        _videoPlayer = gameObject.AddComponent<VideoPlayer>();
-        _videoPlayer.playOnAwake = false;
-        _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
-        _videoPlayer.targetTexture = _renderTexture;
-        _videoPlayer.source = VideoSource.VideoClip;
-        _videoPlayer.clip = clip;
-        _videoPlayer.isLooping = false;
-        _videoPlayer.skipOnDrop = true;
+        if (adopted != null)
+        {
+            // 复用后台已 Prepare 的播放器，只把渲染目标接上
+            _videoPlayer = adopted;
+            _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
+            _videoPlayer.targetTexture = _renderTexture;
+        }
+        else
+        {
+            _videoPlayer = gameObject.AddComponent<VideoPlayer>();
+            _videoPlayer.playOnAwake = false;
+            _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
+            _videoPlayer.targetTexture = _renderTexture;
+            _videoPlayer.source = VideoSource.VideoClip;
+            _videoPlayer.clip = clip;
+            _videoPlayer.isLooping = false;
+            _videoPlayer.skipOnDrop = true;
+        }
 
         _videoAudio = gameObject.AddComponent<AudioSource>();
         _videoAudio.playOnAwake = false;

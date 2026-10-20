@@ -26,6 +26,16 @@ public partial class TutorialDirector
         return Path.Combine(Application.dataPath, OpeningIntroRelativePath);
     }
 
+    /// <summary>
+    /// 黑屏优化：进城镇 Loading 期间后台 Prepare 首次片头，消除片头前的纯黑等待。
+    /// 只在片头还没播过时预热，老玩家零开销；BootManager.EnterTown 调用。
+    /// </summary>
+    public static void PrewarmOpeningIntro()
+    {
+        if (StoryProgress.OpeningIntroPlayed) return;
+        OpeningIntroOverlay.Prewarm(ResolveOpeningIntroPath());
+    }
+
     public void NotifyTownReady()
     {
         if (_townFlowBusy) return;

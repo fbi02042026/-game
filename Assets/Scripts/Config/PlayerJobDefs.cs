@@ -483,8 +483,20 @@ public static class PlayerJobDefs
         bool granted = false;   // 暂时只记不发（不再用于提示），留着备用
         var jobKind = def.PrimaryWeapon;
 
-        // 先发主手（会清对应槽）；再发副手
-        if (!string.IsNullOrEmpty(kit.MainTemplateId) || !string.IsNullOrEmpty(kit.MainSpumOverride))
+        // 先发主手（会清对应槽）；再发副手。
+        // 【2026-10-20 主人拍板】已获得稀有·暮火之杖 → 法师初始武器永久替换为稀有版：
+        // 每局开局直接发「稀有·暮火之杖」（随机特性随局重掷），旧初始白杖不再出现；
+        // 装备失败只报错不回退旧杖（不兜底，出错要看得见）。
+        bool twilightStartReplaced = job == PlayerJobId.Mage && SpecialWeapons.HasTwilightStaffOwned();
+        if (twilightStartReplaced)
+        {
+            int lv = Hero.Instance != null ? Hero.Instance.level : 1;
+            if (bag.TryEquipDirect(SpecialWeapons.CreateTwilightStaff(lv)))
+                granted = true;
+            else
+                Debug.LogError("[PlayerJobDefs] 稀有·暮火之杖开局装备失败，本局主手为空（不回退旧初始武器）");
+        }
+        else if (!string.IsNullOrEmpty(kit.MainTemplateId) || !string.IsNullOrEmpty(kit.MainSpumOverride))
         {
             var mainTpl = ResolveKitTemplate(kit.MainTemplateId, kit.MainSpumOverride);
             if (mainTpl != null)

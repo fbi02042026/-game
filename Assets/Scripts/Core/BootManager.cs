@@ -52,6 +52,7 @@ public class BootManager : MonoBehaviour
         WeChatMiniGameConfig.EnsureDesignResolution();
         Analytics.Init(); // 埋点：会话开始（内部记 session_start）
         if (!GameSceneGate.IsBoot) return;
+        LoginIntroSplash.Prewarm(); // 黑屏优化：厂标+健康忠告展示期间后台 Prepare 登录视频，点掉忠告即刻出画面
         StudioLogoSplash.Present(() =>
             HealthNoticeUI.Present(() =>
                 LoginIntroSplash.Present(ShowLogin)));
@@ -119,6 +120,7 @@ public class BootManager : MonoBehaviour
         if (_enteringTown) return;
         _enteringTown = true;
         GamePerf.Log("[Boot] 登录完成 → 进入主界面 Town");
+        TutorialDirector.PrewarmOpeningIntro(); // 黑屏优化：进城镇 Loading 期间后台 Prepare 首次片头
 
         if (_login != null)
         {

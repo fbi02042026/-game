@@ -661,29 +661,35 @@ public static class RiftEquipGenerator
             else
             {
                 if (t.slotType != slot) continue;
+                // 【2026-10-20 主人拍板「其他部位也不要混」】头/胸/手/脚池双保险：
+                // 武器（wt≠None）与盾（OffHand）即使将来模板 slotType 配错也绝不混进防具池。
+                // 当前 120+ 模板扫描零交叉（武器全 slot=5、盾全 slot=6、防具 0~3），此行只防新增配错。
+                if (t.weaponType != WeaponType.None) continue;
+                if (t.slotType == EquipSlotType.OffHand) continue;
                 bucket.Add(t);
             }
         }
         if (pool.Count == 0 && tierMismatch.Count > 0)
             pool = tierMismatch;   // 兜底：同档一件模板都没有 → 退回不限档（宁外观重复，不可没外观）
-        // 2026-09-26 主人拍板：武器按职业伤害类型分池——魔法职业(法师/牧师)优先掉魔法武器，物理职业优先掉物理武器。
+        // 2026-09-26 主人拍板：武器按职业伤害类型分池——魔法职业(法师/牧师)只掉魔法武器，物理职业只掉物理武器。
         // 判定走表（player_job_base_stats.伤害类型），不写死职业。
-        // ⚠ 做成「优先」而非「强制」：优先池为空时回退到按职业过滤的池，避免某职业一件武器都不掉。
-        //    2026-09-26 补了 6 个魔法武器模板（equip_magic_weapon_01/03/05/09/11/16），
-        //    加上原有的 weapon_twilight_staff / equip_weapon_002，魔法池共 8 个。
-        //    若主人要改成「强制」，删掉下面 prefer.Count > 0 的回退分支即可。
+        // 【2026-10-20 主人拍板「物理不掉法术、法术不掉物理」】优先改**强制**：伤害类型不符的武器
+        // 绝不进池（旧「优先池空回退职业池」分支删除 —— 9-26 注释预留的开关正式启用）。
+        // 池空时宁可这件不掉（走下方 return null 兜底），实测当前各职业同型池均非空：
+        // 魔法 Staff 8 件（magic_weapon×7 + 符文法杖 + 暮火之杖），物理 Sword/Bow/Greatsword 足量。
+        // ⚠ 青锋法杖(equip_new_weapon_03) 名为杖但 weaponAttackType=Physical，强制化后法系再也抽不到它。
         if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
         {
             bool wantMagic = PlayerJobBaseStats.IsMagicJob(job);
-            var prefer = new List<EquipTemplate>();
+            var forced = new List<EquipTemplate>();
             for (int i = 0; i < pool.Count; i++)
             {
                 var t = pool[i];
                 if (t == null) continue;
                 bool isMagicWeapon = t.weaponAttackType == WeaponAttackType.Magic;
-                if (isMagicWeapon == wantMagic) prefer.Add(t);
+                if (isMagicWeapon == wantMagic) forced.Add(t);
             }
-            if (prefer.Count > 0) pool = prefer;
+            pool = forced;
         }
 
         if (pool.Count == 0)

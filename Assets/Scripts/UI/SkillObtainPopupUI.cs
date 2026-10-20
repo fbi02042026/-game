@@ -253,8 +253,12 @@ public class SkillObtainPopupUI : MonoBehaviour
         SetText(_skillName, "Panel/Skill/SkillName", name);
         // 【2026-10-19 主人拍板】技能名颜色与角色界面技能弹窗（SkillSelectUI）统一：
         // 预制体里是写死的黄色，这里按统一色表刷色，查不到的 id 回退白色。
+        // 【2026-10-20 修复】传入 id 可能是运行时别名（ally_*，如技槽点击路径），
+        // 必须先 ResolveRealSkillId 归一再 IndexOf，否则查不到回退白色，
+        // 与战斗技槽（BattleUI.Skills 技槽名字）同口径。
         if (_skillName != null)
-            _skillName.color = SkillSelectUI.NameColorOf(PlayerSkillDefs.IndexOf(skillId));
+            _skillName.color = SkillSelectUI.NameColorOf(
+                PlayerSkillDefs.IndexOf(PlayerSkillDefs.ResolveRealSkillId(skillId)));
 
         // 简介：desc 为空回退 numbers（与 DraftRewardDetailUI.SkillDescOf 同源）
         string desc = string.IsNullOrEmpty(def.desc) ? def.numbers : def.desc;

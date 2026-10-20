@@ -189,6 +189,123 @@ public class UIManager : Singleton<UIManager>
         rt.offsetMax = Vector2.zero;
     }
 
+    // ---------------------------------------------------------------------
+    // 稀有·暮火之杖领取确认窗（2026-10-20 主人拍板）：单按钮告知型弹窗。
+    // 领取动作已在 AdventureLogMileage.ClaimLevel 内完成（防弹窗期间杀进程丢杖），
+    // 本窗只做「获得告知 + 替换法师初始武器说明 + 确认」；不动 timeScale（城镇场景）。
+    // ---------------------------------------------------------------------
+    GameObject _twilightConfirmPanel;
+    static Sprite _twilightRoundedSprite;
+
+    public void ShowTwilightStaffConfirm()
+    {
+        if (_twilightConfirmPanel != null)
+            Destroy(_twilightConfirmPanel);
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            Debug.LogWarning("[UIManager] 无 Canvas，暮火之杖确认窗降级为 Toast");
+            ShowToast($"获得{SpecialWeapons.InstanceName}：法师初始武器已替换");
+            return;
+        }
+
+        // 嵌套 Canvas 抬到最上层，盖过冒险日志 / 酒馆等一切城镇弹窗
+        var panelGo = new GameObject("TwilightStaffConfirm", typeof(RectTransform), typeof(Canvas));
+        panelGo.transform.SetParent(canvas.transform, false);
+        var nested = panelGo.GetComponent<Canvas>();
+        nested.overrideSorting = true;
+        nested.sortingOrder = 3000;
+        _twilightConfirmPanel = panelGo;
+        StretchFull(panelGo.GetComponent<RectTransform>());
+
+        var dim = CreateUiImage(panelGo.transform, "Dim", new Color(0f, 0f, 0f, 0.7f));
+        StretchFull(dim.rectTransform);
+
+        var panel = CreateUiImage(panelGo.transform, "Panel", new Color(0.12f, 0.1f, 0.08f, 0.96f));
+        panel.sprite = TwilightRoundedSprite();
+        panel.type = Image.Type.Sliced;
+        var prt = panel.rectTransform;
+        prt.anchorMin = prt.anchorMax = new Vector2(0.5f, 0.5f);
+        prt.sizeDelta = new Vector2(560f, 300f);
+        prt.anchoredPosition = Vector2.zero;
+
+        var title = CreateUiText(panel.transform, "Title", "恭喜！获得法师限定初始武器", 32, TextAnchor.MiddleCenter);
+        var trt = title.rectTransform;
+        trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 1f);
+        trt.anchoredPosition = new Vector2(0f, -50f);
+        trt.sizeDelta = new Vector2(520f, 50f);
+
+        var trait = CreateUiText(panel.transform, "Trait",
+            $"「{SpecialWeapons.InstanceName}」 随机特性："
+            + (string.IsNullOrEmpty(SpecialWeapons.LastGrantedTraitText) ? "见装备详情" : SpecialWeapons.LastGrantedTraitText),
+            24, TextAnchor.MiddleCenter);
+        trait.color = new Color(1f, 0.82f, 0.45f);
+        var grt = trait.rectTransform;
+        grt.anchorMin = grt.anchorMax = new Vector2(0.5f, 0.5f);
+        grt.anchoredPosition = new Vector2(0f, 28f);
+        grt.sizeDelta = new Vector2(520f, 36f);
+
+        var desc = CreateUiText(panel.transform, "Desc",
+            "实力大增，是时候深入裂隙大显身手了！\n此后法师每局开局自动装备它，原初始法杖不再出现。", 21, TextAnchor.MiddleCenter);
+        desc.color = new Color(0.85f, 0.8f, 0.7f);
+        var drt = desc.rectTransform;
+        drt.anchorMin = drt.anchorMax = new Vector2(0.5f, 0.5f);
+        drt.anchoredPosition = new Vector2(0f, -26f);
+        drt.sizeDelta = new Vector2(500f, 70f);
+
+        // 确认按钮：黑底白字圆角（主人指定风格，同剧情 AUTO 按钮）
+        var btnImg = CreateUiImage(panel.transform, "BtnConfirm", new Color(0f, 0f, 0f, 0.88f));
+        btnImg.sprite = TwilightRoundedSprite();
+        btnImg.type = Image.Type.Sliced;
+        var brt = btnImg.rectTransform;
+        brt.anchorMin = brt.anchorMax = new Vector2(0.5f, 0.5f);
+        brt.anchoredPosition = new Vector2(0f, -104f);
+        brt.sizeDelta = new Vector2(220f, 56f);
+        var btn = btnImg.gameObject.AddComponent<Button>();
+        btn.targetGraphic = btnImg;
+        btn.transition = Selectable.Transition.ColorTint;
+        btn.onClick.AddListener(() =>
+        {
+            Destroy(_twilightConfirmPanel);
+            _twilightConfirmPanel = null;
+            ShowToast("法师初始武器已替换：稀有·暮火之杖");
+        });
+        var btnLabel = CreateUiText(btnImg.transform, "Label", "确认", 26, TextAnchor.MiddleCenter);
+        StretchFull(btnLabel.rectTransform);
+    }
+
+    /// <summary>程序生成圆角矩形（白 alpha 蒙版 + 九宫格 border），确认窗面板与按钮共用。</summary>
+    static Sprite TwilightRoundedSprite()
+    {
+        if (_twilightRoundedSprite != null) return _twilightRoundedSprite;
+        const int size = 64;
+        const float radius = 18f;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = Mathf.Min(x, size - 1 - x);
+                float dy = Mathf.Min(y, size - 1 - y);
+                float a;
+                if (dx >= radius || dy >= radius)
+                    a = 1f;
+                else
+                {
+                    float ex = radius - dx;
+                    float ey = radius - dy;
+                    a = Mathf.Clamp01(radius - Mathf.Sqrt(ex * ex + ey * ey));
+                }
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        }
+        tex.Apply();
+        _twilightRoundedSprite = Sprite.Create(tex, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f),
+            100f, 0, SpriteMeshType.FullRect, new Vector4(radius, radius, radius, radius));
+        return _twilightRoundedSprite;
+    }
+
     Image CreateUiImage(Transform parent, string name, Color color)
     {
         var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));

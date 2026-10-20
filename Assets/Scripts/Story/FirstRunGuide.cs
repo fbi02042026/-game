@@ -68,7 +68,8 @@ public class FirstRunGuide : MonoBehaviour
     const int BubbleFontSize = 32;
     const float BubbleSideInset = 20f;
     const float RingPulseHz = 1.6f;
-    /// <summary>气泡打字机速度（字/秒）。打完之前点屏幕不推进，防止玩家点太快看不到字。</summary>
+    /// <summary>气泡打字机速度（字/秒）。2026-10-20 主人拍板：打字期间点一下＝全文立刻出完（不推进），
+    /// 再点一下才推进——与剧情对话框（DialogueUI）同款手感。</summary>
     const float TypeCharsPerSecond = 28f;
 
     // ============================================================
@@ -964,6 +965,13 @@ public class FirstRunGuide : MonoBehaviour
         // 【2026-10-19 诊断】主人报「切出再切回点高亮位没反应」：先分清点击有没有到达洞
         Debug.Log($"[Guide] 洞点击：visible={_visible} target={(_target != null ? _target.name : "null")}");
         if (!_visible || _target == null) return;
+        // 【2026-10-20 主人拍板】打字没播完时点高亮按钮＝先把全文出完，不触发目标——
+        // 防止「点一下按钮就把引导对话整个跳过去」；再点一下才真正作用到目标按钮。
+        if (_typing)
+        {
+            CompleteGuideTyping();
+            return;
+        }
         var btn = _target.GetComponent<Button>();
         if (btn == null) btn = _target.GetComponentInParent<Button>();
         if (btn != null && btn.interactable)
@@ -1040,6 +1048,21 @@ public class FirstRunGuide : MonoBehaviour
             _bubbleScrollRect.enabled = false;
             if (_bubbleText != null) _bubbleText.raycastTarget = false;
         }
+    }
+
+    /// <summary>点击迅速说完：全文立刻出完但不推进（下一次点击才走推进），与剧情对话框 CompleteTyping 同款。</summary>
+    void CompleteGuideTyping()
+    {
+        if (_typeCo != null)
+        {
+            StopCoroutine(_typeCo);
+            _typeCo = null;
+        }
+        _typing = false;
+        _bubbleTypeDone = true;
+        if (_bubbleText != null) _bubbleText.text = _fullGuideText;
+        ScrollBubbleText();
+        RefreshBubbleScrollable(); // 出完：正文溢出才放开上下滑动回看
     }
 
     // ============================================================
@@ -1145,10 +1168,14 @@ public class FirstRunGuide : MonoBehaviour
         }
 
         // 2026-09-22：点任意处进入下一步（只对原本用「继续」按钮的步骤生效）。
-        // 打字机没播完时点击**无效**——防止玩家点太快字还没看完就翻页。
+        // 【2026-10-20 主人拍板】打字机没播完时点一下＝全文立刻出完（不推进），
+        // 再点一下才推进/关闭——与剧情对话框同款手感，不再「点了没反应」。
         // 【2026-10-14】剧情/对话在播时不吃点击：玩家点的是剧情推进，不该顺带推掉引导步骤。
-        if (_tapAdv && !_typing && !StoryBusy() && ScreenTapped())
-            _tapDone = true;
+        if (_tapAdv && !StoryBusy() && ScreenTapped())
+        {
+            if (_typing) CompleteGuideTyping(); // 第一击：全文出完，不推进
+            else _tapDone = true;               // 第二击：才推进/关闭
+        }
 
         RefreshLayout();
         PulseRing();

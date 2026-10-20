@@ -55,6 +55,8 @@ public static class SpecialWeapons
 
         if (_twilightTpl == null)
         {
+            // ⚠ 仅 asset 丢失时的最后防线，正常情况下不执行（asset 一直在）。
+            // 这 4 条特性已改为「获得时随机附带 1 条」，真身见 CreateTwilightStaff 的 TwilightTraitPool。
             _twilightTpl = ScriptableObject.CreateInstance<EquipTemplate>();
             _twilightTpl.templateId = TwilightStaffId;
             _twilightTpl.equipName = DisplayName;
@@ -104,7 +106,50 @@ public static class SpecialWeapons
         inst.rarity = Rarity.Rare;
         inst.equipName = InstanceName;
         inst.templateId = TwilightStaffId;
+        // 【2026-10-20 主人拍板】稀有版获得时从特性池随机附带 1 条（不要 4 条全带）；
+        // 玩家对随机结果不满意可删档重玩、重新领取再随机。数值口径与模板 baseAttr 一致：
+        // 乘 星级系数×稀有度系数（与 GenerateFromTemplate 内部同款公式）。
+        var trait = CreateRandomTwilightTrait(inst);
+        inst.attrBonus.Add(trait);
+        LastGrantedTraitText = EquipUiText.Attr(trait.attrType) + " " + EquipUiText.Value(trait.attrType, trait.value, trait.isPercent);
+        // requireLevel 随机区间是 英雄等级-3~+1，抽到 +1 会被装备等级校验挡下；
+        // 本杖所有发放路径（Lv2 领取 / 法师开局重发）都要求必穿，统一在此钳到生成等级。
+        inst.requireLevel = Mathf.Min(inst.requireLevel, Mathf.Max(1, heroLevel));
         return inst;
+    }
+
+    /// <summary>最近一次生成稀有杖随机到的特性文案（弹窗展示用，形如「火焰伤害 9」）。</summary>
+    public static string LastGrantedTraitText { get; private set; }
+
+    /// <summary>是否已获得稀有·暮火之杖（领取时写入；法师开局据此替换初始武器）。</summary>
+    public static bool HasTwilightStaffOwned()
+    {
+        var keys = SaveSystem.Instance?.Data?.logMileageGrantedKeys;
+        return keys != null && keys.Contains(GrantKey);
+    }
+
+    /// <summary>稀有·暮火之杖特性池：获得时随机附带其中 1 条（原兜底模板那 4 条移到这里随机发）。
+    /// 【2026-10-20 主人拍板再平衡】魔攻 21→10（初始武器很快被掉落装替换，固定魔攻给高没意义）；
+    /// 魔法强度 0.12→0.25（百分比乘区保值，魔攻越高越值钱）。</summary>
+    static readonly AttrBonusData[] TwilightTraitPool =
+    {
+        new AttrBonusData { attrType = AttrType.MagicAttack, value = 10f, isPercent = false },
+        // MagicPower 走加算口径（2026-10-10 主人拍板「+12% 魔法强度」改加算 0.12）
+        new AttrBonusData { attrType = AttrType.MagicPower, value = 0.25f, isPercent = false },
+        new AttrBonusData { attrType = AttrType.FireDamage, value = 8f, isPercent = false },
+        new AttrBonusData { attrType = AttrType.AttackSpeed, value = 0.2f, isPercent = true },
+    };
+
+    static AttrBonusData CreateRandomTwilightTrait(EquipInstance inst)
+    {
+        var trait = TwilightTraitPool[UnityEngine.Random.Range(0, TwilightTraitPool.Length)];
+        float mul = (1 + inst.star * 0.1f) * EquipDropRules.RarityBaseMul(inst.rarity);
+        return new AttrBonusData
+        {
+            attrType = trait.attrType,
+            value = trait.value * mul,
+            isPercent = trait.isPercent
+        };
     }
 
     /// <summary>教程结束 / 里程 Lv2：各路径可调，内部防重发。</summary>
@@ -122,7 +167,7 @@ public static class SpecialWeapons
         }
 
         int lv = Hero.Instance != null ? Hero.Instance.level : 1;
-        var inst = CreateTwilightStaff(lv);
+        var inst = CreateTwilightStaff(lv);   // requireLevel 已在 CreateTwilightStaff 内钳制，领取必能穿上
         // 2026-09-15：装备不再进背包，直接穿上（换下来的自动分解）
         if (!GridBackpackSystem.Instance.TryEquipDirect(inst))
         {

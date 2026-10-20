@@ -783,8 +783,11 @@ public static class DraftPool
 
             MercTier tier = GameConfig.GetMercTier(def.AssetId);
             if (tier == MercTier.Npc) { Debug.Log($"[DraftPool诊断] {hireId} 是NPC，跳过"); continue; }
-            // 高级佣兵要公会等级，局内同理（不联网也保留成长动机）
-            if (tier == MercTier.Advanced && guild < GameConfig.ADVANCED_MERC_GUILD_LEVEL) { Debug.Log($"[DraftPool诊断] {hireId} 高级佣兵(公会Lv不足{guild}<{GameConfig.ADVANCED_MERC_GUILD_LEVEL})，跳过"); continue; }
+            // 【2026-10-20 主人拍板】只要在队列中的佣兵，无条件进战斗抽奖池，差别只有抽中概率 ——
+            // 原「高级佣兵要公会Lv5」的门槛整行删除。它就是「战斗里只能抽出队列第一两个」的主因：
+            // 塔克 H003 的 AssetId 是 dunbing201（尾号2开头=高级档），公会不满5级时被这道门
+            // 永久拦在池外；再叠加「已在本局」过滤把已招募的逐个剔除，池子中期就只剩一两个，
+            // 看起来就像「永远抽中队列第一个」。（城镇出战队伍的 IsMercAvailable 门槛不受影响，那是另一条规则。）
 
             int star = def.Rarity == MercRosterDefs.MercRarity.Legendary ? 3
                 : def.Rarity == MercRosterDefs.MercRarity.Rare ? 2 : 1;

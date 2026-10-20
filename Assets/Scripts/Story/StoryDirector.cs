@@ -53,6 +53,9 @@ public class StoryDirector : Singleton<StoryDirector>
     bool _pausedTime;
     string _introducedBg;
     bool _keepSceneArt;
+    // 【2026-10-20 主人报】剧情播放时战斗底部 4 个技能框挤在对话窗下面 —— 开播藏掉、收窗还原。
+    GameObject _battleSkillBar;
+    bool _battleSkillBarWasActive;
 
     public bool IsPlaying { get; private set; }
 
@@ -89,6 +92,7 @@ public class StoryDirector : Singleton<StoryDirector>
         }
         IsPlaying = false;
         ResumeGame();
+        RestoreBattleSkillBar();
         SpeechBubbleTalker.SetSuppressed(false);
         GameBgm.EndBattleStory();
         // 【2026-10-19 修复】强制终止剧情必须把对话窗收干净：此前只停协程不 Hide，
@@ -133,6 +137,9 @@ public class StoryDirector : Singleton<StoryDirector>
         var canvas = go.GetComponent<Canvas>();
         if (canvas == null) canvas = go.AddComponent<Canvas>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue, UICanvasSetup.ResolveUiCamera());
+        // 【2026-10-20 主人拍板「剧情永远置顶」】ApplyPopup 只改 order 不改 layer，剧情窗一直留在 Default 层，
+        // 被同层高 order 的东西压（实测技能槽 955 挡住剧情）。挪进全项目最高层 Effects，整层压过一切 Default UI。
+        canvas.sortingLayerName = GameConfig.UiSort.TopLayer;
         canvas.pixelPerfect = false;
         canvas.enabled = true;
 
@@ -171,6 +178,7 @@ public class StoryDirector : Singleton<StoryDirector>
             GameBgm.BeginBattleStory();
         SpeechBubbleTalker.SetSuppressed(true);
         PauseGame();
+        HideBattleSkillBar();
         var ui = EnsureUi();
         if (ui == null || beats == null || beats.Count == 0)
         {
@@ -369,10 +377,46 @@ public class StoryDirector : Singleton<StoryDirector>
         IsPlaying = false;
         _play = null;
         ResumeGame();
+        RestoreBattleSkillBar();
         SpeechBubbleTalker.SetSuppressed(false);
         if (battleStoryBgm)
             GameBgm.EndBattleStory();
         onDone?.Invoke();
+    }
+
+    // —— 剧情期间藏/还原战斗底部技能槽（SkillUI）——
+    // 城镇剧情没有 BattleUI：静默跳过。恢复时节点可能已随战斗场景销毁（Unity 假 null），直接放过。
+    void HideBattleSkillBar()
+    {
+        var ui = BattleUI.Instance;
+        if (ui == null) return;
+        var t = FindChildDeep(ui.transform, "SkillUI");
+        if (t == null) return;
+        // 已记录过就不再覆盖原状态：剧情被打断重播（Play 里只停旧协程、不走 Finish）时，
+        // 若把「已隐藏」记成原状态，播完还原就会把技能槽永远留在隐藏态。
+        if (_battleSkillBar != null) return;
+        _battleSkillBar = t.gameObject;
+        _battleSkillBarWasActive = _battleSkillBar.activeSelf;
+        if (_battleSkillBarWasActive) _battleSkillBar.SetActive(false);
+    }
+
+    void RestoreBattleSkillBar()
+    {
+        if (_battleSkillBar == null) return;
+        _battleSkillBar.SetActive(_battleSkillBarWasActive);
+        _battleSkillBar = null;
+    }
+
+    static Transform FindChildDeep(Transform parent, string name)
+    {
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var c = parent.GetChild(i);
+            if (c.name == name) return c;
+            var r = FindChildDeep(c, name);
+            if (r != null) return r;
+        }
+        return null;
     }
 
     public static StoryBeat Line(string left, string right, string text, string leftId, string rightId, int speaker)

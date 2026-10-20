@@ -34,11 +34,14 @@ public static partial class GameConfig
         public const int TownVeil = 200;
         /// <summary>
         /// 【2026-10-19 主人报：第 2 章剧情被进关抽奖面板 4 个按钮盖住且点不动 → timeScale=0 全场定格，只能退出重进】
-        /// 剧情窗 500 → 1500：战斗内最高的硬编码层是 1000（装备属性/技能详情/抽奖结果详情），
-        /// 950（BackpackPanel 嵌套 Canvas，抽奖 4 按钮挂其下）从此压不住剧情；
-        /// Toast(11000)/Loading(10000)/FullscreenFx(12000) 仍在剧情之上，不受影响。
+        /// 【2026-10-20 主人拍板「剧情永远置顶」：1500 实测仍被技能槽(955)挡 —— 不纠结同层 order，
+        /// 直接挪进全项目最高 sorting layer「Effects」+ order 13000（高于 FullscreenFx 12000），
+        /// 整层压过 Default 层的一切（战斗 HUD/技能槽/抽奖面板/Toast/Loading 全在 Default）。
+        /// 配套：剧情期间战斗底部技能槽由 StoryDirector 隐藏、收窗还原。】
         /// </summary>
-        public const int StoryDialogue = 1500;
+        public const int StoryDialogue = 13000;
+        /// <summary>全项目最高 sorting layer（TagManager 顺序：Default &lt; Background &lt; Ground &lt; Monster &lt; Player &lt; Effects）。剧情窗专用。</summary>
+        public const string TopLayer = "Effects";
         public const int StoryNaming = 560;
         public const int TutorialHint = 600;
         public const int TownPopup = 900;

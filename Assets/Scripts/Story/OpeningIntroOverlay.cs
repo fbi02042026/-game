@@ -25,6 +25,34 @@ public class OpeningIntroOverlay : MonoBehaviour
     bool _skipRequested;
     bool _bgmMutedForCutscene;
 
+    // 黑屏优化：后台预热的播放器（APIOnly 不渲染），Show 时整体接管
+    static VideoPlayer _prewarmPlayer;
+    static GameObject _prewarmRoot;
+
+    /// <summary>
+    /// 提前建播放器后台 Prepare，把 Prepare 耗时藏进进城镇 Loading 的时间里，
+    /// 消除首次进城镇片头前的纯黑秒数。路径不合法直接不动。
+    /// </summary>
+    public static void Prewarm(string videoPath)
+    {
+        if (_prewarmPlayer != null) return;
+        bool pathOk = !string.IsNullOrEmpty(videoPath)
+                      && (videoPath.Contains("://") || File.Exists(videoPath));
+        if (!pathOk) return;
+        _prewarmRoot = new GameObject("OpeningIntroPrewarm");
+        DontDestroyOnLoad(_prewarmRoot);
+        var player = _prewarmRoot.AddComponent<VideoPlayer>();
+        player.playOnAwake = false;
+        player.renderMode = VideoRenderMode.APIOnly;
+        player.source = VideoSource.Url;
+        player.url = videoPath;
+        player.isLooping = false;
+        player.skipOnDrop = true;
+        player.Stop();
+        player.Prepare();
+        _prewarmPlayer = player;
+    }
+
     public static OpeningIntroOverlay Show(string videoPath)
     {
         // 2026-09-28：Android 的 StreamingAssets 是 jar:// URL，File.Exists 对 URL 恒 false，
@@ -44,9 +72,20 @@ public class OpeningIntroOverlay : MonoBehaviour
                 Object.Destroy(leftovers[i].gameObject);
         }
 
-        var root = new GameObject("OpeningIntroOverlay");
+        // 接管预热播放器；URL 对不上就废弃预热走老路
+        VideoPlayer adopted = _prewarmPlayer;
+        _prewarmPlayer = null;
+        _prewarmRoot = null;
+        if (adopted != null && adopted.url != videoPath)
+        {
+            Destroy(adopted.gameObject);
+            adopted = null;
+        }
+
+        GameObject root = adopted != null ? adopted.gameObject : new GameObject("OpeningIntroOverlay");
+        root.name = "OpeningIntroOverlay";
         var driver = root.AddComponent<OpeningIntroOverlay>();
-        driver.Build(videoPath);
+        driver.Build(videoPath, adopted);
         driver.BeginCutsceneMute();
         driver.StartCoroutine(driver.RunRoutine());
         return driver;
@@ -66,7 +105,7 @@ public class OpeningIntroOverlay : MonoBehaviour
         GameBgm.UnmuteAfterCutscene(0.55f);
     }
 
-    void Build(string videoPath)
+    void Build(string videoPath, VideoPlayer adopted)
     {
         Instance = this;
         var canvas = gameObject.AddComponent<Canvas>();
@@ -106,14 +145,24 @@ public class OpeningIntroOverlay : MonoBehaviour
 
         RecreateRenderTexture(720, 1280);
 
-        _videoPlayer = gameObject.AddComponent<VideoPlayer>();
-        _videoPlayer.playOnAwake = false;
-        _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
-        _videoPlayer.targetTexture = _renderTexture;
-        _videoPlayer.source = VideoSource.Url;
-        _videoPlayer.url = videoPath;
-        _videoPlayer.isLooping = false;
-        _videoPlayer.skipOnDrop = true;
+        if (adopted != null)
+        {
+            // 复用后台已 Prepare 的播放器，只把渲染目标接上
+            _videoPlayer = adopted;
+            _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
+            _videoPlayer.targetTexture = _renderTexture;
+        }
+        else
+        {
+            _videoPlayer = gameObject.AddComponent<VideoPlayer>();
+            _videoPlayer.playOnAwake = false;
+            _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
+            _videoPlayer.targetTexture = _renderTexture;
+            _videoPlayer.source = VideoSource.Url;
+            _videoPlayer.url = videoPath;
+            _videoPlayer.isLooping = false;
+            _videoPlayer.skipOnDrop = true;
+        }
 
         _videoAudio = gameObject.AddComponent<AudioSource>();
         _videoAudio.playOnAwake = false;
