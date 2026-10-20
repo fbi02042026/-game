@@ -156,16 +156,13 @@ public partial class BattleManager
         if (talentGain > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
 
-        // 【2026-10-17 主人拍板】撤离补偿（替代已停掉的精英事件强化石）：
-        // 强化石现已不再掉落，撤离按本局已通关关数每关 +1 天赋石，中途撤离不空手。
-        // 只在主动撤离（isDeath=false）发；死亡不发；引导局不走本方法（另有固定通关金币）。
-        // 并入 talentGain，让结算界面「天赋石 +N」包含这笔；落盘由下方 Save() 统一做。
-        if (!isDeath && _runStagesCleared > 0)
-        {
-            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, _runStagesCleared, save: false, notify: true);
-            Debug.Log($"[BattleManager] 撤离补偿：本局已通关 {_runStagesCleared} 关 → 天赋石 +{_runStagesCleared}");
-            talentGain += _runStagesCleared;
-        }
+        // 【2026-10-20 主人拍板】撤离补偿（按已通关数每关 +1 天赋石）停发：天赋石改为精英/Boss 击杀概率掉落。
+        // if (!isDeath && _runStagesCleared > 0)
+        // {
+        //     ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, _runStagesCleared, save: false, notify: true);
+        //     Debug.Log($"[BattleManager] 撤离补偿：本局已通关 {_runStagesCleared} 关 → 天赋石 +{_runStagesCleared}");
+        //     talentGain += _runStagesCleared;
+        // }
 
         SaveSystem.Instance?.Save();
         BattleStateSaver.Instance?.ClearBattleState();

@@ -156,6 +156,9 @@ public class EquipStatTipUI : MonoBehaviour
 
     public void Hide()
     {
+        // 重开战斗会销毁旧 BattleUI，静态 Instance 仍挂着已销毁的旧对象；
+        // 调用方用 ?. 只判托管 null，进到这里必须先挡销毁态，否则 SetActive 抛 MissingReferenceException
+        if (this == null) return;
         if (_autoHide != null) { StopCoroutine(_autoHide); _autoHide = null; }
         _openKey = null;
         if (_panel != null) _panel.SetActive(false);
@@ -196,18 +199,19 @@ public class EquipStatTipUI : MonoBehaviour
     // ===== 属性文本 =====
 
     /// <summary>
-    /// 取装备<b>基础属性</b>行。项目口径（<see cref="EquipStatRollup"/> / GridBackpackSystem 同款）：
-    /// attrBonus 中<b>前 baseAttrCount 条</b>是基础属性（吃强化/稀有度系数），其后是随机词条；
-    /// 这里只列基础属性（外加模板的 globalBonus），不列词条/附魔。
+    /// 取装备属性行。【2026-10-20 主人报「有多个的没显示第二个」】attrBonus <b>全列</b>：
+    /// 基础属性 + 随机词条都显示（旧口径只列前 baseAttrCount 条，而裂缝掉落/抽奖装备
+    /// baseAttrCount 恒为 1，主属性之外的第二条永远看不见）。同型属性（同 AttrType 且
+    /// 同固定/百分比）合并为一行，另加模板 globalBonus 与传奇被动；附魔仍不列。
     /// </summary>
     static List<string> BuildAttrLines(EquipInstance eq)
     {
         var flat = new Dictionary<AttrType, float>();
         var pct = new Dictionary<AttrType, float>();
 
-        int baseCount = Mathf.Clamp(eq.baseAttrCount, 0, eq.attrBonus != null ? eq.attrBonus.Count : 0);
-        for (int i = 0; i < baseCount; i++)
-            AddAttr(flat, pct, eq.attrBonus[i]);
+        if (eq.attrBonus != null)
+            for (int i = 0; i < eq.attrBonus.Count; i++)
+                AddAttr(flat, pct, eq.attrBonus[i]);
         // 模板全局加成也算这件装备给的属性（与 EquipDropPopupUI 统计攻击时同口径）
         AddAttr(flat, pct, eq.globalBonus);
 

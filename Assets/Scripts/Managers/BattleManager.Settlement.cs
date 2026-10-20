@@ -741,7 +741,7 @@ public partial class BattleManager
             if (!card.IsValid)
             {
                 // 这一抽出不出「抽奖币」方向唯一出口 = SlotMachineSystem.GoldAllowed()：
-                // 【2026-10-19 主人拍板】金币升格为第 4 个方向（与佣兵同概率），不再混在三类池子里；
+                // 【2026-10-19 主人拍板】金币升格为第 4 个方向（独立权重 5，不再随佣兵联动），不再混在三类池子里；
                 // 引导定序窗口内不出（主人拍板引导三拍必须是 装备→佣兵→技能）；
                 // 保底佣兵窗口内不出（保底必须真的给佣兵）；本局抽中满 3 次后不再出；正式关第 1 抽也不出。
                 card = DraftPool.PickOne(cat, SlotMachineSystem.GoldAllowed());
@@ -1455,7 +1455,9 @@ public partial class BattleManager
 
         if (hero != null && hero.rb != null) hero.rb.velocity = Vector2.zero;
 
-        PersistBattleGold();
+        // 每关通关只写回「本局获得金币」，抽奖币池按现值结转下一关（不重置回基线）——
+        // 否则本关抽奖花销被退回，下一关的钱凭空变多（2026-10-20 主人反馈修复）
+        PersistBattleGold(resetPool: false);
         ChapterManager.Instance?.OnStageComplete();
 
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : CurrentChapter;
@@ -1688,13 +1690,17 @@ public partial class BattleManager
 
     /// <summary>
     /// 「本局获得金币」写回城镇的<b>唯一出口</b>（每关通关 / 死亡 / 撤离 / 通关回城都会走）。
+    /// <paramref name="resetPool"/>：是否把抽奖币池重置回基线 _goldAtRunStart。
+    /// 只有<b>局末清账</b>（死亡 / 撤离 / 回城）才重置（「带不出本局」口径）；
+    /// 每关通关传 false —— 否则基线只加不减（启动金 / 补贴入基线，抽奖花销不扣基线），
+    /// 重置等于把本关花掉的抽奖币全额退回，下一关的钱凭空变多（2026-10-20 主人反馈修复）。
     /// 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】双钱包拆分后的口径：
     ///   · 写回的是 <see cref="BattleRunStats.GoldEarned"/>（顶部 HUD 那个数）按 <c>_earnedPaidGold</c>
     ///     水位取增量 —— 逐关写回不重复入账，死亡结算时顶部看到多少城镇就多多少；
     ///   · <c>currentGold</c> 只是抽奖币池（启动金 / 通关补贴 / 抽中金币），**带不出本局**，
-    ///     每次写回后重置回基线（原行为保留：局内循环资源，花光就花光）。
+    ///     局末清账（resetPool=true）时重置回基线，通关进下一关则按现值结转。
     /// </summary>
-    void PersistBattleGold()
+    void PersistBattleGold(bool resetPool = true)
     {
         var save = SaveSystem.Instance?.Data;
         if (save == null) return;
@@ -1706,8 +1712,10 @@ public partial class BattleManager
         else
             SaveSystem.Instance.Save();   // 与原实现同款：没有增量也落一次盘，别丢其它待存改动
         _earnedPaidGold = RunStats.GoldEarned;
-        // 抽奖币池重置回基线（局内循环资源不跨关结转 —— 与原「currentGold = _goldAtRunStart」同一行为）
-        currentGold = _goldAtRunStart;
+        // 抽奖币池重置回基线 —— 仅局末清账（resetPool=true）执行，「带不出本局」口径；
+        // 每关通关（resetPool=false）按现值结转下一关，否则本关抽奖花销会被基线全额退回。
+        if (resetPool)
+            currentGold = _goldAtRunStart;
     }
 
     #endregion

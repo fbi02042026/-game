@@ -408,12 +408,38 @@ public partial class TutorialDirector
         while (FirstRunGuide.Instance != null && !FirstRunGuide.Instance.IsFinished)
             yield return new WaitForSeconds(0.25f);
 
-        // 【2026-10-17 主人拍板】引导收完、登录弹窗之前，补弹刚才让位的装备机制提示——
-        // 先等它自己消失（6s 自动收）再开每日登录，屏幕上始终只有一件事；
-        // 引导早已收完的存档（老玩家）这里就是紧跟着剧情后弹，行为与原节奏一致。
-        TutorialHintUI.Ensure().Show("小提示：裂隙里捡的装备带不出来，金币和材料都可以带回去哦～", null, 6f);
-        yield return new WaitForSecondsRealtime(6.5f);
+        // 【2026-10-20 主人拍板】引导收完直接弹每日登录；装备小提示挪到整个收尾链最后（见下）。
         TownSceneBootstrap.TryDailyLoginOnce();
+
+        // 等登录弹窗真正弹出：弹窗是异步登记、等主界面空闲才开（CoShowWhenMainUiIdle 0.25s 一查），
+        // 引导已收完、天赋页已关，正常 1s 内弹出，给 3s 富余；没弹＝今天无可领/已领过，不卡直接过。
+        float appearGuard = 0f;
+        while (!DailyLoginUI.PopupVisible && appearGuard < 3f)
+        {
+            appearGuard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        // 等玩家关掉登录弹窗（600s 宽限，挂着不点也不影响别的）
+        float closeGuard = 0f;
+        while (DailyLoginUI.PopupVisible && closeGuard < 600f)
+        {
+            closeGuard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        // 【2026-10-20 主人拍板】「教完了」夸奖气泡：登录弹窗关掉后才弹，点任意处关闭。
+        // 只对本会话刚出师的新玩家弹（PlayOutro 内部以 FinishedThisSession 判定），老玩家 no-op。
+        FirstRunGuide.Instance?.PlayOutro("教完了，表现……勉强合格。有事来咨询台找我，本小姐一般都在。");
+
+        // 等夸奖气泡被点掉（120s 宽限）再弹装备小提示——收尾链压轴，屏幕上始终只有一件事。
+        // 老玩家 / 没弹气泡时这里直接过，行为＝紧跟着登录后弹，与原节奏一致。
+        float outroGuard = 0f;
+        while (FirstRunGuide.Instance != null && FirstRunGuide.Instance.IsOverlayVisible && outroGuard < 120f)
+        {
+            outroGuard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        TutorialHintUI.Ensure().Show("小提示：裂隙里捡的装备带不出来，金币和材料都可以带回去哦～", null, 6f);
 
         _townFlowBusy = false;
         _flow = null;

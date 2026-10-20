@@ -104,6 +104,9 @@ public partial class WavePlanner
     {
         if (Rules.UseTutorialSprites)
             _tutorialWaveMonsterCount = wave != null ? wave.monsterCount : 0;
+        // 【2026-10-20 主人拍板】读入本波随机编成（全近战/混合/全远程），供 PickWaveSpriteIndex 分流；
+        // 引导波 compositionStyle 恒 0，走 tutorial_battle 表编成不受影响。
+        _activeWaveComposition = wave != null ? wave.compositionStyle : 0;
         float waveSpacing = GetMonsterWaveSpacing();
         var usedSpritesThisWave = new System.Collections.Generic.HashSet<int>();
         var usedLanes = new System.Collections.Generic.List<float>();
@@ -208,6 +211,7 @@ public partial class WavePlanner
         // 记账：这一波用到过哪些精灵，下一波优先换一批（只影响外观）
         _lastWaveSprites.Clear();
         _lastWaveSprites.UnionWith(usedSpritesThisWave);
+        _activeWaveComposition = 0;
 
         GamePerf.Log($"[BattleManager] wave {waveIndex + 1} spawned {wave.monsterCount} @x={engageBaseX:F1}");
 

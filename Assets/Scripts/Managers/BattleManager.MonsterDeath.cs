@@ -37,10 +37,18 @@ public partial class BattleManager
             else if (m.IsEliteWave)
                 ResourceWallet.GrantMercGold(GameConfig.MERC_GOLD_PER_ELITE, "击杀精英");
         }
-        // 【2026-10-17 主人拍板】击杀精英掉天赋石（原强化石停掉后的替代奖励）：
-        // 引导中的宿敌精英也带精英标记，走同一条发放，一并生效；通关结算的天赋石照常不冲突。
-        if (m.IsEliteWave)
-            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, GameConfig.TALENT_PER_ELITE_KILL, save: false, notify: true);
+        // 【2026-10-20 主人拍板】天赋石不再每关首通发放，改精英/Boss 击杀概率掉落：
+        // 精英 30%×1、Boss 60%×2（Boss 优先、不与精英叠加，与佣兵币同口径）。
+        // 引导中的宿敌精英也带精英标记，走同一条判定；掉了走 ResourceWallet 弹「获得天赋石」提示。
+        if (m.IsBossUnit)
+        {
+            if (Random.value < GameConfig.BOSS_TALENT_DROP_CHANCE)
+                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, GameConfig.BOSS_TALENT_DROP_AMOUNT, save: false, notify: true);
+        }
+        else if (m.IsEliteWave && Random.value < GameConfig.ELITE_TALENT_DROP_CHANCE)
+        {
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, GameConfig.ELITE_TALENT_DROP_AMOUNT, save: false, notify: true);
+        }
         // 2026-09-26 主人拍板：累计本关物理/魔法击杀数，用于掉落按类型分池（主导类型 = 数量多者）。
         if (m.IsMagicType) _magicKills++;
         else _physicalKills++;

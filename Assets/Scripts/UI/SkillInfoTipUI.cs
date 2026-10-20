@@ -162,6 +162,8 @@ public class SkillInfoTipUI : MonoBehaviour
 
     public void Hide()
     {
+        // 同 EquipStatTipUI：?. 调用方可能拿着已销毁的旧 Instance，先挡销毁态
+        if (this == null) return;
         if (_autoHide != null) { StopCoroutine(_autoHide); _autoHide = null; }
         _openKey = null;
         if (_panel != null) _panel.SetActive(false);

@@ -181,6 +181,99 @@ public class GuildHallUI : MonoBehaviour
         if (Instance != null) Instance.RefreshAllHud();
     }
 
+    // ── 体力加号购买成功飘字（2026-10-20 主人要求：点体力加号购买体力要弹字提示「体力+XX」）──
+
+    /// <summary>
+    /// 体力加号领取/购买成功后，在加号上方飘「体力图标 + 体力+XX」（上浮渐隐约 0.9 秒）。
+    /// 纯运行时白模、用完即毁，不动预制体；样式与 PlayerJobSelectUI 的体力消耗飘字同口径。
+    /// </summary>
+    public static void FloatStaminaGain(int amount)
+    {
+        if (Instance == null || !Instance.isActiveAndEnabled) return;
+        if (Instance.staminaPlusButton == null || amount <= 0) return;
+        Instance.StartCoroutine(Instance.CoStaminaGainFloat(amount));
+    }
+
+    IEnumerator CoStaminaGainFloat(int amount)
+    {
+        GameObject floatGo = BuildStaminaGainFloat(amount);
+        var group = floatGo != null ? floatGo.GetComponent<CanvasGroup>() : null;
+        var rt = floatGo != null ? (RectTransform)floatGo.transform : null;
+        const float Life = 0.9f;   // 飘字时长（秒）
+        const float Rise = 34f;    // 上浮距离（像素）
+        float baseY = rt != null ? rt.anchoredPosition.y : 0f;
+        for (float t = 0f; t < Life; t += Time.unscaledDeltaTime)
+        {
+            float k = Mathf.Clamp01(t / Life);
+            if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, baseY + Rise * k);
+            if (group != null) group.alpha = 1f - k;
+            yield return null;
+        }
+        if (floatGo != null) Destroy(floatGo);
+    }
+
+    /// <summary>在体力加号顶边上方挂临时飘字（体力图标 + "体力+N"），纯运行时白模、用完即毁。</summary>
+    GameObject BuildStaminaGainFloat(int amount)
+    {
+        var btnRt = staminaPlusButton.transform as RectTransform;
+        if (btnRt == null) return null;
+
+        // 上次协程被打断可能留了残影，先清掉再建新的
+        var old = btnRt.Find("StaminaGainFloat");
+        if (old != null) Destroy(old.gameObject);
+
+        var go = new GameObject("StaminaGainFloat", typeof(RectTransform), typeof(CanvasGroup));
+        go.transform.SetParent(btnRt, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 10f);
+        rt.sizeDelta = new Vector2(200f, 58f);
+
+        // 深色半透明底板（同 PlayerJobSelectUI 体力飘字口径）
+        var bg = new GameObject("Bg", typeof(RectTransform), typeof(Image));
+        bg.transform.SetParent(go.transform, false);
+        var brt = (RectTransform)bg.transform;
+        brt.anchorMin = Vector2.zero;
+        brt.anchorMax = Vector2.one;
+        brt.offsetMin = Vector2.zero;
+        brt.offsetMax = Vector2.zero;
+        var bimg = bg.GetComponent<Image>();
+        bimg.color = new Color(0.08f, 0.07f, 0.1f, 0.62f);
+        bimg.raycastTarget = false;
+
+        var icon = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+        icon.transform.SetParent(go.transform, false);
+        var irt = (RectTransform)icon.transform;
+        irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
+        irt.pivot = new Vector2(0.5f, 0.5f);
+        irt.sizeDelta = new Vector2(44f, 44f);
+        irt.anchoredPosition = new Vector2(-56f, 0f);
+        var img = icon.GetComponent<Image>();
+        // 与资源条同一体力图标（邮件/每日登录体力格用的是药水图，不混用）
+        img.sprite = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina");
+        img.raycastTarget = false;
+        bool hasIcon = img.sprite != null;
+        icon.SetActive(hasIcon);
+
+        var labelGo = new GameObject("Num", typeof(RectTransform));
+        labelGo.transform.SetParent(go.transform, false);
+        var lrt = (RectTransform)labelGo.transform;
+        lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f);
+        lrt.pivot = new Vector2(0.5f, 0.5f);
+        lrt.sizeDelta = new Vector2(140f, 58f);
+        lrt.anchoredPosition = new Vector2(hasIcon ? 20f : 0f, 0f);
+        var t = labelGo.AddComponent<Text>();
+        t.font = GameFonts.GetChinese();
+        t.fontSize = 38;
+        t.fontStyle = FontStyle.Bold;
+        t.color = new Color(1f, 0.78f, 0.30f, 1f);   // 同 PlayerPowerHud 获得类飘字的暖金色
+        t.alignment = TextAnchor.MiddleCenter;
+        t.text = $"体力+{amount}";
+        t.raycastTarget = false;
+        return go;
+    }
+
     public void RefreshAllHud()
     {
         RefreshGold();

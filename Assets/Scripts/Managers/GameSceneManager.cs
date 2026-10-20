@@ -117,8 +117,21 @@ public class GameSceneManager : Singleton<GameSceneManager>
     public void LoadBattleScene()
     {
         if (_loadingBattle) return;
+        // 【2026-10-20 主人拍板】进战斗必须先见 Loading：单例组件若未激活（异常场景兜底）就
+        // 就地拉起，保证所有入口都走同一条异步链路（Loading → 场景+初始化就绪 → Loading 收 → 章节卡 → 开打），
+        // 不再有无 Loading 的同步直切。
         if (!isActiveAndEnabled)
         {
+            if (!gameObject.activeInHierarchy) gameObject.SetActive(true);
+            if (!enabled) enabled = true;
+        }
+        if (!isActiveAndEnabled)
+        {
+            // 仍然拉不起来（理论不可达）：至少先把 Loading 盖上再同步切场景，
+            // 进场景后 AutoGameInitializer 会自己上报 45~100% 并 Finish 收掉 Loading。
+            int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+            SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);
+            BattleLoadingOverlay.SetChapterBackdrop(chapter);
             UnityEngine.SceneManagement.SceneManager.LoadScene(BATTLE_SCENE);
             return;
         }

@@ -186,11 +186,11 @@ public static class SlotMachineSystem
     }
 
     /// <summary>
-    /// 按 <see cref="SlotMachineDefs.CategoryWeight"/> **加权**随机一个类型（装备 85 / 技能 10 / 佣兵 5）。
-    /// <para>【2026-10-12 主人拍板】主人原话「装备权重改成70 技能20 佣兵10」；
-    /// 【2026-10-13 主人拍板】主人反馈「佣兵和技能的机率太高了」→ 再压成 85/10/5。
+    /// 按 <see cref="SlotMachineDefs.CategoryWeight"/> **加权**随机一个类型（装备 55 / 技能 20 / 佣兵 20）。
+    /// <para>【2026-10-13 主人拍板】主人反馈「佣兵和技能的机率太高了」→ 再压成 85/10/5；
+    /// 【2026-10-20 主人拍板】主人要求「佣兵提到20% 技能20%」→ 改成 55/20/20（抽奖币维持 5 不联动）。
     /// 概率只认 <see cref="SlotMachineDefs"/> 那三个常量，这里不另写一份。</para>
-    /// <para>【2026-10-19 主人拍板】抽奖币升格为**第 4 个方向**（与佣兵同权重 5，
+    /// <para>【2026-10-19 主人拍板】抽奖币升格为**第 4 个方向**（权重 <see cref="SlotMachineDefs.CATEGORY_WEIGHT_GOLD"/> = 5，
     /// 见 <see cref="SlotMachineDefs.CATEGORY_WEIGHT_GOLD"/>）：<paramref name="allowGold"/> = true 时
     /// 候选里会带上它（能不能出由 <see cref="GoldAllowed"/> 决定：第 1 抽 / 保底佣兵窗口 /
     /// 本局次数超限都不出）。老虎机免费三选一（CoJackpot 调用方）传 false 排除 ——
@@ -327,7 +327,8 @@ public static class SlotMachineSystem
     ///「正式关的时候是不是应该都是随机的了，按我设定的来」。</para>
     /// <para>定序的那一类当前取不到内容（池空）时自动落回随机 —— 绝不返回一个出不了卡的类型。</para>
     /// <para>【2026-10-17 主人拍板「开局卡关」】正式关保底佣兵：本局一只佣兵都没有时，第 3 抽起
-    /// 强制出佣兵方向 —— 佣兵方向权重只有 5%（85/10/5），启动金只够 2 抽，新档大概率开局
+    /// 强制出佣兵方向 —— 佣兵方向权重只有 20%（55/20/20，2026-10-20 主人拍板；此前 85/10/5 时代只有 5%），
+    /// 启动金只够 2 抽，新档大概率开局
     /// 0 佣兵、单人硬扛第一关（佣兵普通档攻击约玩家两倍，是前期战力主来源）。
     /// 佣兵池取不到内容时照旧落回随机（沿用上面「取不到内容自动落回随机」口径）；
     /// 引导局有自己的定序，不叠加。</para>
@@ -373,7 +374,7 @@ public static class SlotMachineSystem
     /// <summary>
     /// 这一抽能不能出「抽奖币」方向 —— 【2026-10-19 主人拍板】**唯一出口**。
     /// <para>【口径升级】抽奖币不再是混在三类池子里的安慰奖，而是**第 4 个方向**
-    ///（与佣兵同概率，见 <see cref="SlotMachineDefs.CATEGORY_WEIGHT_GOLD"/>），
+    ///（独立方向，权重见 <see cref="SlotMachineDefs.CATEGORY_WEIGHT_GOLD"/>），
     /// 本函数改判「这一抽的随机候选里带不带金币方向」：</para>
     /// <para>① <see cref="InGuaranteeWindow"/>：引导定序窗口内不出（引导三拍必须是 装备→佣兵→技能）；<br/>
     /// ② <see cref="MercGuaranteeActive"/> 且佣兵确有内容：保底佣兵窗口内不出 ——

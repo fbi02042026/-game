@@ -184,6 +184,31 @@ public partial class WavePlanner
         return counts;
     }
 
+    /// <summary>
+    /// 【2026-10-20 主人拍板】摇本波近远编成：全近战 / 混合 / 全远程。
+    /// 概率真源 = GameConfig.WAVE_COMP_ALL_MELEE_P / WAVE_COMP_ALL_RANGED_P，其余为混合。
+    /// 返回值直接写入 WaveData.compositionStyle（1=全近战 2=混合 3=全远程）。
+    /// </summary>
+    static int RollWaveComposition()
+    {
+        float r = UnityEngine.Random.value;
+        if (r < GameConfig.WAVE_COMP_ALL_MELEE_P) return 1;
+        if (r < GameConfig.WAVE_COMP_ALL_MELEE_P + GameConfig.WAVE_COMP_ALL_RANGED_P) return 3;
+        return 2;
+    }
+
+    /// <summary>编成日志 tag（铺波日志用）：空 = 未摇（走旧逻辑）。</summary>
+    static string CompositionTag(int compositionStyle)
+    {
+        switch (compositionStyle)
+        {
+            case 1: return " 全近战";
+            case 2: return " 混合";
+            case 3: return " 全远程";
+            default: return "";
+        }
+    }
+
     List<Transform> GetSpawnPointsSortedByX()
     {
         var list = new List<Transform>();

@@ -279,11 +279,13 @@ public class RunDraftDirector : MonoBehaviour
                 return true;
             }
 
-            case DraftCardKind.MercStarUp:
-                if (!RunLoadout.TryUpgradeMercStar(card.Id)) { msg = $"{card.Title} 已满星"; return false; }
-                RefreshMercUnit(card.Id);
-                msg = $"{card.Title} 升至 ★{card.Star}（Lv 同时 +1）";
-                return true;
+            // 【2026-10-20 主人拍板】战斗佣兵升星暂时注释：不会抽取一样的佣兵，升星卡已不进池（DraftPool.BuildWeightedPool），
+            // 此分支自然不可达。恢复时连同 DraftPool 两处注释放开即可。
+            //case DraftCardKind.MercStarUp:
+            //    if (!RunLoadout.TryUpgradeMercStar(card.Id)) { msg = $"{card.Title} 已满星"; return false; }
+            //    RefreshMercUnit(card.Id);
+            //    msg = $"{card.Title} 升至 ★{card.Star}（Lv 同时 +1）";
+            //    return true;
 
             case DraftCardKind.Equip:
                 // 2026-10-05 主人拍板：装备替换必须弹窗问玩家，不能直接塞进去。

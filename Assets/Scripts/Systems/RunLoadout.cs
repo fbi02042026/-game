@@ -449,14 +449,15 @@ public static class RunLoadout
             _data.mercs.Add(entry);
             return true;
         }
-        // 2026-10-06 主人拍板：位子满了但**有人阵亡** → 新人直接顶掉阵亡那个（满血满蓝进，按卡面星级）。
-        // 旧实现是「位满就 return false」，导致阵亡佣兵永久占坑、玩家抽到新佣兵却加不进来。
-        int fallenAt = IndexOfFallenMerc();
-        if (fallenAt < 0) return false;
-        _data.mercs[fallenAt] = entry;
-        _data.mercs[fallenAt].fallen = false;
-        _data.mercs[fallenAt].fallenStages = 0;
-        return true;
+        // 【2026-10-20 主人拍板：顶人替换功能注销】位满即拒绝，阵亡佣兵继续占坑养伤复活。
+        // 旧替换逻辑（2026-10-06 拍板：满员有人阵亡 → 新人顶掉阵亡那个）保留备查，需要时再恢复：
+        // int fallenAt = IndexOfFallenMerc();
+        // if (fallenAt < 0) return false;
+        // _data.mercs[fallenAt] = entry;
+        // _data.mercs[fallenAt].fallen = false;
+        // _data.mercs[fallenAt].fallenStages = 0;
+        // return true;
+        return false;
     }
 
     /// <summary>第一个「已阵亡」佣兵的下标；没有返回 -1。</summary>

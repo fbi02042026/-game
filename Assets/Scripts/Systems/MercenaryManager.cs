@@ -345,7 +345,10 @@ public class MercenaryManager : Singleton<MercenaryManager>
                 : basePosition.x + 0.85f * (i + 1);
             GameConfig.SetWorldPosition(mercs[i].gameObject, new Vector3(x, UnitBase.GROUND_Y, basePosition.z));
             mercs[i].SetPartyIndex(i);
-            mercs[i].currentHp = mercs[i].attr.GetAttr(AttrType.MaxHp);
+            // 【2026-10-20 主人拍板·方案C】进关不再满血：与英雄同口径基础回复 30%（GameConfig.STAGE_ENTRY_HEAL_PCT），
+            // 血量跨关延续。阵亡佣兵复活比例由 BattleManager.ReviveFallenMercsForStage 在本步之后单独补砍，不受影响。
+            float mMaxHp = mercs[i].attr.GetAttr(AttrType.MaxHp);
+            mercs[i].currentHp = Mathf.Min(mMaxHp, mercs[i].currentHp + mMaxHp * GameConfig.STAGE_ENTRY_HEAL_PCT);
             mercs[i].gameObject.SetActive(true);
             mercs[i].ResetForReuse();
             mercs[i].Face(1);

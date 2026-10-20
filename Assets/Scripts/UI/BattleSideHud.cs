@@ -94,9 +94,9 @@ public class BattleSideHud : MonoBehaviour
 
         // —— 击败累计计数（常驻；图源 Resources/Icons/击败，位置样式按主人 2026-10-19 截图）——
         LoadKillSprites();
-        // 【2026-10-20 主人拍板】「击败」字+数字整体下移 30 像素（10+10+10，只动这块，下一波倒计时不动）
+        // 【2026-10-20 主人拍板】「击败」字+数字整体下移 50 像素（10+10+10+20，只动这块，下一波倒计时不动）
         var comboGo = CreatePanel("ComboPanel", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(250f, 70f), transparent: true);
+            new Vector2(0.5f, 1f), new Vector2(0f, -50f), new Vector2(250f, 70f), transparent: true);
         _comboGroup = comboGo.AddComponent<CanvasGroup>();
         _comboGroup.alpha = 0f;
         _comboScaleRoot = comboGo.GetComponent<RectTransform>();

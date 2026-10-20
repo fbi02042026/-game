@@ -131,6 +131,12 @@ public class FirstRunGuide : MonoBehaviour
     /// <summary>CoPoint 等待期间因剧情/对话开播而隐藏过遮罩；剧情播完后要重新弹回。</summary>
     bool _hiddenByStory;
 
+    // —— 2026-10-20 修复：点中目标后气泡立刻收场，不等防抖确认 ——
+    /// <summary>玩家已通过引导洞成功触发了目标按钮：本步骤立刻收起遮罩气泡、只等完成条件确认，
+    /// 确认前不重弹。起因：角色页 CharacterPageOpen 有 0.5s 防抖，玩家点完「角色」后
+    /// 旧气泡/遮罩会多挂半秒才收（主人报「点了角色界面后还在显示了一下」）。</summary>
+    bool _holeTriggered;
+
     /// <summary>剧情/对话此刻是否占着屏幕（遮罩必须让位，否则会吞掉对话的推进点击）。</summary>
     static bool StoryBusy() =>
         (StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)
@@ -445,23 +451,19 @@ public class FirstRunGuide : MonoBehaviour
             Advance(GuideStep.Talent, null);
             UIManager.Instance?.ShowToast("天赋点亮了，属性已更新。不错嘛。");
 
-            // 【2026-10-16 主人拍板】引导到天赋就到头了：给一步「关闭引导」收尾——
-            // 先收掉还开着的天赋面板（让玩家看着主界面），再弹收尾气泡等玩家点一下；
-            // 点完 CoTalent 返回，Drive 下一轮走到 Tavern 槽位 → 按当日拍板直接跳过 → Done
-            // 收引导。之后 TownFlow 才弹登录、关登录才提示新邮件，三件事严格串行不交叉。
+            // 【2026-10-16 主人拍板】引导到天赋就到头了：先收掉还开着的天赋面板（让玩家看着主界面）。
+            // 点完 CoTalent 返回，Drive 下一轮走到 Tavern 槽位 → 按当日拍板直接跳过 → Done 收引导。
+            // 之后 TownFlow 才弹登录、关登录才提示新邮件，三件事严格串行不交叉。
             var talentUi = TalentUI.Instance;
             if (talentUi != null && talentUi.IsOpen) talentUi.Hide();
-            // 【2026-10-18 主人拍板】收尾拆两拍：① 先指引玩家点左下角「公会」回主界面；
-            // ② 回到主界面后再弹「教完啦你真棒」夸奖气泡，点任意位置关闭引导。
-            // （60s 没点超时放行，夸奖照弹，绝不卡流程。）
+            // 【2026-10-18 主人拍板】收尾先指引玩家点左下角「公会」回主界面。
+            // 【2026-10-20 主人拍板】回主界面后不再弹「教完了」收尾气泡——引导直接收场（Done），
+            // TownFlow 立刻弹每日登录，别让那句话挡在登录前面。
             yield return CoPoint("最后点左下角的「公会」，回主界面——别走丢。",
                 () => NavRect(MainNavTab.Guild),
                 () => MainBottomNav.Instance != null
                     && MainBottomNav.Instance.Current == MainNavTab.Guild,
                 false, TapStepTimeout);
-            // 【2026-10-18 主人拍板】结束语不再说「点一下任意位置，关闭引导吧」——只留夸奖+咨询台指引
-            yield return CoPoint("教完了，表现……勉强合格。有事来咨询台找我，本小姐一般都在。",
-                null, null, true, TapStepTimeout);
         }
         else
         {
@@ -542,6 +544,7 @@ public class FirstRunGuide : MonoBehaviour
     {
         _pointOk = false;
         _hiddenByStory = false;   // 上一步可能残留（完成/超时/切场景路径不会走到恢复分支）
+        _holeTriggered = false;   // 2026-10-20：洞点击信号只对当前步骤有效，每步重置
 
         // 条件已经满足（比如目标页这会儿就是开着的）→ 不用再指一遍
         if (!tapToAdvance && Safe(isDone))
@@ -615,6 +618,10 @@ public class FirstRunGuide : MonoBehaviour
                 }
             }
 
+            // 【2026-10-20 修复】玩家已通过洞点中目标按钮：立刻收掉遮罩气泡让玩家看打开的界面，
+            // 只等完成条件确认（如角色页 CharacterPageOpen 的 0.5s 防抖）；done/超时仍走下方统一判定。
+            if (_holeTriggered && _visible) Hide();
+
             // 切页会把整页内容重建，旧引用会失效：每帧重新定位，丢的那几帧沿用上一次量到的矩形
             RectTransform liveTarget = needTarget ? Safe(target) : null;
             if (needTarget) SetTarget(liveTarget);
@@ -632,8 +639,10 @@ public class FirstRunGuide : MonoBehaviour
                 // 【2026-10-19 修复】选职弹窗（TownPopup 900）开着时不复弹：气泡在 620 层被弹窗盖住，
                 // 玩家看不见但 _visible 会翻回 true → 选完剑盾后 ShowTutorialEnterRift 的
                 // IsOverlayVisible 让位检查误判，「再点进入裂隙」提示弹不出来，卡在已选中的卡上。
+                // 【2026-10-20 修复】_holeTriggered（玩家已点中目标）期间也不重弹：
+                // 否则遮罩刚收掉又被这行弹回来，防抖确认的半秒里气泡反复挂屏。
                 if (needTarget && liveTarget != null && !_visible && !_hiddenByStory
-                    && !PlayerJobSelectUI.IsOpen)
+                    && !PlayerJobSelectUI.IsOpen && !_holeTriggered)
                 {
                     follow = liveTarget;
                     Show(follow, text, tapToAdvance);
@@ -968,6 +977,24 @@ public class FirstRunGuide : MonoBehaviour
         _hiddenByStory = true;
     }
 
+    bool _outroPlayed;
+
+    /// <summary>
+    /// 收尾单发气泡（2026-10-20 主人拍板）：每日登录弹窗关掉之后才弹「教完了」夸奖，
+    /// 点任意处关闭。只对**本会话刚出师**（FinishedThisSession，Drive 收场置位）的新玩家弹——
+    /// 老玩家重启后 TownFlow 也会走到这里，不弹；一大会话最多弹一次（_outroPlayed）。
+    /// 不走步骤驱动、不动存档游标，只借 Show/Hide 展示一层；
+    /// 打字机/点两下收场复用 Update 既有逻辑（_drive==null 分支直接 Hide）。
+    /// </summary>
+    public void PlayOutro(string text)
+    {
+        if (_outroPlayed) return;
+        if (_drive != null) return;        // 引导还没收完别抢屏（正常时序不会发生）
+        if (!FinishedThisSession) return;  // 老玩家/异常态：收尾话跟着引导一起消失，不单独弹
+        _outroPlayed = true;
+        Show(null, text, true);
+    }
+
     void OnHoleClicked()
     {
         // 【2026-10-19 诊断】主人报「切出再切回点高亮位没反应」：先分清点击有没有到达洞
@@ -983,7 +1010,10 @@ public class FirstRunGuide : MonoBehaviour
         var btn = _target.GetComponent<Button>();
         if (btn == null) btn = _target.GetComponentInParent<Button>();
         if (btn != null && btn.interactable)
+        {
+            _holeTriggered = true;   // 2026-10-20：玩家已点中目标，遮罩立刻收场（见 CoPoint 循环）
             btn.onClick.Invoke();
+        }
     }
 
     void OnOkClicked()
@@ -1181,8 +1211,9 @@ public class FirstRunGuide : MonoBehaviour
         // 【2026-10-14】剧情/对话在播时不吃点击：玩家点的是剧情推进，不该顺带推掉引导步骤。
         if (_tapAdv && !StoryBusy() && ScreenTapped())
         {
-            if (_typing) CompleteGuideTyping(); // 第一击：全文出完，不推进
-            else _tapDone = true;               // 第二击：才推进/关闭
+            if (_typing) CompleteGuideTyping();         // 第一击：全文出完，不推进
+            else if (_drive != null) _tapDone = true;   // 第二击：才推进/关闭（步骤内由 CoPoint 消费）
+            else Hide();                                // 收尾单发气泡（PlayOutro）：点任意处直接关闭
         }
 
         RefreshLayout();

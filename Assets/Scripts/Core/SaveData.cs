@@ -248,7 +248,8 @@ public class SaveData
     [NonSerialized] public HashSet<string> seenMercIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> viewedMercIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> unlockedMercIds = new HashSet<string>();
-    [NonSerialized] public HashSet<string> mercDrawPool = new HashSet<string>();
+    /// <summary>【2026-10-20 主人拍板】雇佣队列改为保序 List：玩家上架顺序即存储顺序，不再按稀有度重排。</summary>
+    [NonSerialized] public List<string> mercDrawPool = new List<string>();
     public List<StringIdEntry> claimedCodexRewardEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> claimedCodexRewardIds = new HashSet<string>();
 
@@ -493,7 +494,7 @@ public class SaveData
         seenMercIds = ToIdSet(seenMercEntries);
         viewedMercIds = ToIdSet(viewedMercEntries);
         unlockedMercIds = ToIdSet(unlockedMercEntries);
-        mercDrawPool = ToIdSet(mercDrawPoolEntries);
+        mercDrawPool = ToIdList(mercDrawPoolEntries);
         claimedCodexRewardIds = ToIdSet(claimedCodexRewardEntries);
         defeatedMonsterIds = ToIdSet(defeatedMonsterEntries);
         unlockedWorldIds = ToIdSet(unlockedWorldEntries);
@@ -640,7 +641,7 @@ public class SaveData
     /// </summary>
     void SeedDrawPoolIfEmpty()
     {
-        mercDrawPool ??= new HashSet<string>();
+        mercDrawPool ??= new List<string>();
         EnsurePoolFilled();
     }
 
@@ -651,7 +652,7 @@ public class SaveData
     /// </summary>
     public bool EnsurePoolFilled()
     {
-        if (mercDrawPool == null) mercDrawPool = new HashSet<string>();
+        if (mercDrawPool == null) mercDrawPool = new List<string>();
         if (unlockedMercIds == null) return false;
         int slots = DrawPoolSlots;
         bool changed = false;
@@ -667,10 +668,10 @@ public class SaveData
                 var d = all[i];
                 if (d.Rarity != tier) continue;
                 if (!unlockedMercIds.Contains(d.HireId)) continue;
-                if (mercDrawPool.Add(d.HireId)) changed = true;
+                if (!mercDrawPool.Contains(d.HireId)) { mercDrawPool.Add(d.HireId); changed = true; }
             }
         }
-        if (changed) mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        if (changed) mercDrawPoolEntries = FromIdList(mercDrawPool);
         return changed;
     }
 
@@ -682,11 +683,11 @@ public class SaveData
     {
         if (string.IsNullOrEmpty(hireId)) return false;
         if (unlockedMercIds == null || !unlockedMercIds.Contains(hireId)) return false;
-        if (mercDrawPool == null) mercDrawPool = new HashSet<string>();
+        if (mercDrawPool == null) mercDrawPool = new List<string>();
         if (mercDrawPool.Contains(hireId)) return false;
         if (mercDrawPool.Count >= DrawPoolSlots) return false;
         mercDrawPool.Add(hireId);
-        mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        mercDrawPoolEntries = FromIdList(mercDrawPool);
         return true;
     }
 
@@ -699,23 +700,25 @@ public class SaveData
         if (string.IsNullOrEmpty(hireId)) return false;
         if (mercDrawPool == null || !mercDrawPool.Remove(hireId)) return false;
         EnsurePoolFilled();
-        mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        mercDrawPoolEntries = FromIdList(mercDrawPool);
         return true;
     }
 
     /// <summary>
     /// 【2026-10-13 主人拍板】池满时点已获得佣兵 → 弹替换弹窗 → 换入换出（一次成对操作）。
     /// 两者都须已解锁、被换的须在池里。返回是否变化。
+    /// 【2026-10-20 主人拍板】换上的原地顶替被换下的那个位置（按位置来，不追加队尾不排序）。
     /// </summary>
     public bool SwapInDrawPool(string inHireId, string outHireId)
     {
         if (string.IsNullOrEmpty(inHireId) || string.IsNullOrEmpty(outHireId)) return false;
         if (inHireId == outHireId) return false;
         if (unlockedMercIds == null || !unlockedMercIds.Contains(inHireId)) return false;
-        if (mercDrawPool == null || !mercDrawPool.Contains(outHireId)) return false;
-        if (!mercDrawPool.Remove(outHireId)) return false;
-        mercDrawPool.Add(inHireId);
-        mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        if (mercDrawPool == null || !mercDrawPool.Contains(outHireId) || mercDrawPool.Contains(inHireId)) return false;
+        int idx = mercDrawPool.IndexOf(outHireId);
+        if (idx < 0) return false;
+        mercDrawPool[idx] = inHireId;
+        mercDrawPoolEntries = FromIdList(mercDrawPool);
         return true;
     }
 
@@ -763,7 +766,7 @@ public class SaveData
     public bool IsMercInDrawPool(string hireId)
     {
         if (string.IsNullOrEmpty(hireId)) return false;
-        if (mercDrawPool == null) mercDrawPool = new HashSet<string>();
+        if (mercDrawPool == null) mercDrawPool = new List<string>();
         return mercDrawPool.Contains(hireId);
     }
 
@@ -787,7 +790,7 @@ public class SaveData
                 if (next.Contains(all[i].HireId)) keep.Add(all[i].HireId);
             next = keep;
         }
-        if (mercDrawPool == null) mercDrawPool = new HashSet<string>();
+        if (mercDrawPool == null) mercDrawPool = new List<string>();
         bool same = mercDrawPool.Count == next.Count;
         if (same)
         {
@@ -797,8 +800,8 @@ public class SaveData
             }
         }
         if (same) return false;
-        mercDrawPool = next;
-        mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        mercDrawPool = new List<string>(next);
+        mercDrawPoolEntries = FromIdList(mercDrawPool);
         return true;
     }
 
@@ -909,6 +912,20 @@ public class SaveData
         return set;
     }
 
+    /// <summary>带序版 ToIdSet：雇佣队列专用（2026-10-20 主人拍板），按落盘顺序还原，去空去重。</summary>
+    static List<string> ToIdList(List<StringIdEntry> list)
+    {
+        var l = new List<string>();
+        if (list == null) return l;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var e = list[i];
+            if (e == null || string.IsNullOrEmpty(e.id) || l.Contains(e.id)) continue;
+            l.Add(e.id);
+        }
+        return l;
+    }
+
     /// <summary>写入 JSON 前调用：运行时 Dictionary/HashSet → List。</summary>
     public void SyncListsFromRuntime()
     {
@@ -924,7 +941,7 @@ public class SaveData
         seenMercIds ??= new HashSet<string>();
         viewedMercIds ??= new HashSet<string>();
         unlockedMercIds ??= new HashSet<string>();
-        mercDrawPool ??= new HashSet<string>();
+        mercDrawPool ??= new List<string>();
         clearedChapterIds ??= new HashSet<int>();
         claimedCodexRewardIds ??= new HashSet<string>();
         defeatedMonsterIds ??= new HashSet<string>();
@@ -987,7 +1004,7 @@ public class SaveData
         seenMercEntries = FromIdSet(seenMercIds);
         viewedMercEntries = FromIdSet(viewedMercIds);
         unlockedMercEntries = FromIdSet(unlockedMercIds);
-        mercDrawPoolEntries = FromIdSet(mercDrawPool);
+        mercDrawPoolEntries = FromIdList(mercDrawPool);
         clearedChapterEntries = FromIntIdSet(clearedChapterIds);
         claimedCodexRewardEntries = FromIdSet(claimedCodexRewardIds);
         defeatedMonsterEntries = FromIdSet(defeatedMonsterIds);
@@ -1042,6 +1059,16 @@ public class SaveData
         if (set == null) return list;
         foreach (string id in set)
             list.Add(new StringIdEntry { id = id });
+        return list;
+    }
+
+    /// <summary>带序版 FromIdSet：雇佣队列专用（2026-10-20 主人拍板），直接按列表顺序落盘，玩家上架顺序不丢。</summary>
+    static List<StringIdEntry> FromIdList(List<string> ids)
+    {
+        var list = new List<StringIdEntry>(ids != null ? ids.Count : 0);
+        if (ids == null) return list;
+        for (int i = 0; i < ids.Count; i++)
+            list.Add(new StringIdEntry { id = ids[i] });
         return list;
     }
 }

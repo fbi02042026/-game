@@ -269,6 +269,10 @@ public partial class Monster
                 monsterChapter, Mathf.Max(1, effectiveSpriteIndex), gChapter, gStageType)
             : MonsterAttackTypeResolver.IsMagicMonster(monsterChapter, Mathf.Max(1, effectiveSpriteIndex));
         _isMagicType = isMagicType;
+        // 【2026-10-20 主人拍板「前期敌人的攻击再降30%」】第 1~2 章（新手期，口径同 WavePlanner 的
+        // CurrentChapter<=2）全体敌人攻击/魔攻再 ×0.7；只压攻击，血防不动；无尽裂隙强度只随层数走，不参与。
+        float earlyAtkMul = (!endlessRift && gChapter >= 1 && gChapter <= GameConfig.EARLY_GAME_ATK_CHAPTER_MAX)
+            ? GameConfig.EARLY_GAME_ATK_MUL : 1f;
         // 魔法型强制改法球弹道(Ranged)→视觉与伤害类型(魔法)一致；物理型保持表内 style。
         // 普通小怪的魔法型本就等于「表里是法师」，这里赋值与表内原值一致；
         // 只有精英/Boss 掷骰命中魔法时，这里才会真的把 Melee/Bow 改成法球。
@@ -297,12 +301,12 @@ public partial class Monster
             float baseMagDef = (template != null && template.baseMagicDefense > 0f)
                 ? template.baseMagicDefense
                 : baseDef * GameConfig.MONSTER_MAGIC_DEF_RATIO;
-            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul);
+            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul);
             attr.SetAttr(AttrType.MagicDefense, baseMagDef * scale);
         }
         else
         {
-            attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul);
+            attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul);
             attr.SetAttr(AttrType.Defense, baseDef * scale);
             attr.SetAttr(AttrType.MagicAttack, 0f);
             attr.SetAttr(AttrType.MagicDefense, 0f);

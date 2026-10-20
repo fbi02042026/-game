@@ -61,6 +61,12 @@ public class WaveData
     public float bossPressureInterval;
     /// <summary>TIMED：涌怪总数上限。</summary>
     public int bossPressureCap;
+    /// <summary>
+    /// 【2026-10-20 主人拍板】本波近远编成（铺波时摇定）：
+    /// 0=未摇走旧奇偶回退（引导波 / Boss 本体波 / 精英原型波），1=全近战，2=混合（每槽独立掷），3=全远程。
+    /// 只对正式轨普通小怪波生效；原型接管编成（箭雨全远程等）优先级更高。
+    /// </summary>
+    public int compositionStyle;
     public bool HasEngageAnchor => engageAnchorX > -900f;
 
     /// <summary>本波原型；未接管时为 null。</summary>

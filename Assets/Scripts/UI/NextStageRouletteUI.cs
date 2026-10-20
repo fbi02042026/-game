@@ -36,6 +36,8 @@ public class NextStageRouletteUI : MonoBehaviour
     const float SpeedMax = 1400f;
     /// <summary>减速至少再滚过这么多格，避免一停就刹住</summary>
     const int MinDecelCards = 10;
+    /// <summary>【2026-10-20 主人拍板】随到恢复关：停稳后到自动弹恢复窗的停顿，让「命运已定」的结果看清一拍</summary>
+    const float RestAutoEnterDelay = 1f;
 
     [Header("可绑预制体节点（空则代码查找）")]
     public RectTransform viewport;
@@ -519,6 +521,17 @@ public class NextStageRouletteUI : MonoBehaviour
         if (subTitleText != null)
             subTitleText.text = "命运已定";
         if (_stopGo != null) _stopGo.SetActive(false);
+
+        // 【2026-10-20 主人拍板】恢复关：随到立即弹恢复窗，不走「进入关卡」按钮——
+        // 停稳稍停一拍（让结果被看清）后自动交还关卡数据，
+        // 关卡图收到回调直接弹「生命恢复」窗，全程不进战斗。
+        if (_stage.type == StageType.Rest)
+        {
+            StartCoroutine(CoAutoEnterForRest());
+            StartCoroutine(PopCenterCard());
+            return;
+        }
+
         if (_enterGo != null) _enterGo.SetActive(true);
 
         StartCoroutine(PopCenterCard());
@@ -558,17 +571,32 @@ public class NextStageRouletteUI : MonoBehaviour
         }
         if (_flow != null) return; // 减速中不允许进关，等停稳
 
-        // 2026-10-11：原样恢复进入前的时间流速，不再「≤0 就当成 1」。
-        // 老虎机是被 BattleStageMapUI（关卡图）调起的，而关卡图一开就把 Time.timeScale 压到 0
-        // 冻住底下的战斗场景；这里若擅自恢复成 1，玩家在关卡图上看旗子的那几秒
-        // 战斗场景又跑起来了。时间该由**把它压住的那个人**还原 ——
-        // 关卡图会在点石墩时（OnPedestalClicked）把 _prevTimeScale 还原回去。
+        FinishAndReturnStage();
+    }
+
+    /// <summary>
+    /// 还原时间流速 → 自毁 → 回调交还关卡数据（「进入关卡」按钮与恢复关自动进入共用出口）。
+    /// 2026-10-11：原样恢复进入前的时间流速，不再「≤0 就当成 1」。
+    /// 老虎机是被 BattleStageMapUI（关卡图）调起的，而关卡图一开就把 Time.timeScale 压到 0
+    /// 冻住底下的战斗场景；这里若擅自恢复成 1，玩家在关卡图上看旗子的那几秒
+    /// 战斗场景又跑起来了。时间该由**把它压住的那个人**还原 ——
+    /// 关卡图会在点石墩时（OnPedestalClicked）把 _prevTimeScale 还原回去。
+    /// </summary>
+    void FinishAndReturnStage()
+    {
         Time.timeScale = _prevTimeScale;
         var stage = _stage;
         var cb = _onEnter;
         _onEnter = null;
         Destroy(gameObject);
         cb?.Invoke(stage);
+    }
+
+    /// <summary>恢复关专用（2026-10-20 主人拍板）：停稳后稍停一拍自动「进入」，不弹按钮不等人。</summary>
+    IEnumerator CoAutoEnterForRest()
+    {
+        yield return new WaitForSecondsRealtime(RestAutoEnterDelay);
+        FinishAndReturnStage();
     }
 
     static RectTransform BuildCardVisual(Transform parent, StageType type, int index)

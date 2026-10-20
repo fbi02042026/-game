@@ -619,14 +619,11 @@ public static class AdventureLogCatalog
         return SaveSystem.Instance?.Data?.ClearedStageCountInChapter(chapter) ?? 0;
     }
 
-    /// <summary>某章累计已发天赋石（首次通关石×已通数 + 整章通关额外石（若已通章））。</summary>
+    /// <summary>某章累计已发天赋石。【2026-10-20 主人拍板】每关首通石/整章首通石均停发，
+    /// 天赋石只从精英/Boss 击杀概率掉落（战斗内即时入账，不在章节里程碑记账），固定返回 0。</summary>
     public static int MilestoneIssuedStones(int chapter)
     {
-        int cleared = MilestoneStageProgress(chapter);
-        int stones = cleared * TalentDefs.TalentStoneRewards.FirstClearStone(chapter);
-        if (SaveSystem.Instance?.Data?.HasClearedChapter(chapter) == true)
-            stones += TalentDefs.TalentStoneRewards.ChapterClearStone(chapter);
-        return stones;
+        return 0;
     }
 
     public static bool ChapterCleared(int chapter)

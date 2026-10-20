@@ -184,12 +184,13 @@ public partial class DailyLoginUI
     // ============================================================
     // 弹窗内新手指路（2026-10-20 主人拍板）：
     // 新手引导不加「领取每日登录」步骤（登录弹窗 TownPopup=900 会盖住引导遮罩 620，无法并轨），
-    // 改成弹窗内自带一次指路：金框圈住每日循环条的「领取」按钮 + 赛琳口吻气泡，
+    // 改成弹窗内自带一次指路：金框圈住第一格「今天可领」的签到格子 + 赛琳口吻气泡
+    // （2026-09-23 拍板后弹窗预制体已无 CycleBar/ClaimBtn，领取入口就是格子本身），
     // 只有「首次引导本会话刚出师」的新玩家能看到；领到任意一笔立刻撤、本进程不再出现。
     // ============================================================
 
     /// <summary>指路气泡文案（赛琳口吻，与 FirstRunGuide 收尾语气一致）。</summary>
-    const string LoginGuideText = "点「领取」，今天的签到奖励就到手了。以后每天都来，别偷懒。";
+    const string LoginGuideText = "点这个亮着的格子，今天的签到奖励就到手了。以后每天都来，别偷懒。";
     const float LoginGuideRingWidth = 5f;
     const float LoginGuideFontSize = 32f;
     static readonly Color LoginGuideRingColor = new Color(1f, 0.84f, 0.42f, 1f);
@@ -208,10 +209,21 @@ public partial class DailyLoginUI
         if (!DailyLoginSystem.HasClaimable()) return;     // 没东西可领就不指
         if (_guideLayer != null) return;
 
-        // 目标 = 每日循环条的「领取」按钮（名字契约见 Build.BindBars）；拿不到就不挂，绝不新建按钮
-        if (_cycleBtn == null) return;
-        var claimRt = _cycleBtn.GetComponent<RectTransform>();
-        if (claimRt == null || !claimRt.gameObject.activeInHierarchy) return;
+        // 目标 = 8 日格里第一格「今天可领」的格子（弹窗预制体 2026-09-23 起就没有 CycleBar/ClaimBtn，
+        // 领取入口是格子本身；Open() 里 Refresh 已跑完，cell.day 是轮回后的真实累计天数）。
+        // 找不到可领格子就不挂，绝不新建按钮。
+        RectTransform claimRt = null;
+        int loginDays = DailyLoginSystem.LoginDays;
+        for (int i = 0; i < _starterCells.Count; i++)
+        {
+            var c = _starterCells[i];
+            if (c?.bg == null) continue;
+            if (loginDays < c.day || DailyLoginSystem.IsStarterClaimed(c.day)) continue;
+            if (!c.bg.gameObject.activeInHierarchy) continue;
+            claimRt = c.bg.rectTransform;
+            break;
+        }
+        if (claimRt == null) return;
 
         var rootRt = transform as RectTransform;
         if (rootRt == null || rootRt.rect.width <= 0f) return;
@@ -220,7 +232,7 @@ public partial class DailyLoginUI
             ? canvas.worldCamera : UICanvasSetup.ResolveUiCamera();
         if (cam == null) return;
 
-        // ClaimBtn 四角 → 弹窗根局部坐标（弹窗与按钮同一个 Canvas，Open 时布局已回流，
+        // 可领格子四角 → 弹窗根局部坐标（弹窗与格子同一个 Canvas，Open 时布局已回流，
         // 一次换算即可，不需要每帧跟随）
         var corners = new Vector3[4];
         claimRt.GetWorldCorners(corners);

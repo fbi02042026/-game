@@ -32,6 +32,21 @@ public static partial class GameConfig
     /// <summary>无刷怪点时，波与波之间的世界距离（兼容旧逻辑）</summary>
     public const float VIRTUAL_WAVE_SPACING = 4.2f;
 
+    // —— 波次近远编成随机化（2026-10-20 主人拍板：有时全近战，有时远近配合，有时全远程）——
+    /// <summary>单波摇成「全近战」的概率（正式轨普通小怪波）。</summary>
+    public const float WAVE_COMP_ALL_MELEE_P = 0.3f;
+    /// <summary>单波摇成「全远程」的概率；剩余概率 = 混合（每槽独立掷近/远）。</summary>
+    public const float WAVE_COMP_ALL_RANGED_P = 0.3f;
+
+    // —— 进关血量（2026-10-20 主人拍板·方案C）——
+    /// <summary>
+    /// 进关基础回复（占最大生命 30%）。血量跨关延续、不再进关满血，
+    /// 恢复关回血 / 抽奖「回血N」卡 / 老虎机回血才有意义。
+    /// 只作用于 LoadStage 进关瞬间（英雄 + 在场佣兵）；阵亡佣兵复活比例
+    /// （RunLoadout.MercReviveHpRatio）单独结算，不受此常量影响。
+    /// </summary>
+    public const float STAGE_ENTRY_HEAL_PCT = 0.3f;
+
     /// <summary>清完一波后，下一波倒计时秒数</summary>
     public const float WAVE_SPAWN_INTERVAL = 4f;
     /// <summary>第一章第一关：波间隔（已减半）</summary>
@@ -56,10 +71,16 @@ public static partial class GameConfig
     /// <summary>击杀 1 个 Boss 发的佣兵币。</summary>
     public const int MERC_GOLD_PER_BOSS = 2;
 
-    // —— 精英掉天赋石（2026-10-17 主人拍板：强化石停掉后，精英的击杀奖励改挂天赋石）——
-    /// <summary>击杀 1 只精英掉的天赋石。引导里的宿敌精英同样带精英标记，走同一条发放；
-    /// 通关结算的天赋石（ChapterManager）照常，两者不冲突。要调整产量改这里即可。</summary>
-    public const int TALENT_PER_ELITE_KILL = 1;
+    // —— 精英/Boss 概率掉天赋石（2026-10-20 主人拍板：天赋石不再每关首通发放，
+    // 改为精英/Boss 击杀有几率掉落：精英 30%×1、Boss 60%×2）——
+    /// <summary>击杀精英掉天赋石的几率（0~1）。引导里的宿敌精英同样带精英标记，走同一条判定。</summary>
+    public const float ELITE_TALENT_DROP_CHANCE = 0.30f;
+    /// <summary>精英一次掉落的天赋石数量。</summary>
+    public const int ELITE_TALENT_DROP_AMOUNT = 1;
+    /// <summary>击杀 Boss 掉天赋石的几率（0~1）。Boss 波可能同时带精英标记，判定 Boss 优先、不与精英叠加。</summary>
+    public const float BOSS_TALENT_DROP_CHANCE = 0.60f;
+    /// <summary>Boss 一次掉落的天赋石数量。</summary>
+    public const int BOSS_TALENT_DROP_AMOUNT = 2;
 
     // —— 连杀续杯（R2）：连杀窗口内击杀回血，让"连"成为可持续资源 ——
     /// <summary>连杀回血总开关（2026-10-09 主人拍板关掉）。false = 连杀不再回血。

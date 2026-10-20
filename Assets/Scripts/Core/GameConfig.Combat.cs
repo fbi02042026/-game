@@ -56,6 +56,13 @@ public static partial class GameConfig
         public const int BattleStageMap = 880;
         public const int BattlePopup = 920;
         /// <summary>
+        /// 【2026-10-20 主人报「技能槽怎么又跑到前面来了」】恢复关「生命恢复」弹窗。
+        /// 技槽嵌套 Canvas 固定抬在 BattlePopup 之上（=921），弹窗用 920 会被技槽穿到前面；
+        /// 且恢复关已改为在关卡界面上直接弹（不进战斗），须同时盖住关卡图(880)与老虎机(900)。
+        /// 取 930：高于技槽(921)与 EquipReplaceConfirm(925)，仍属弹窗段。
+        /// </summary>
+        public const int RestStagePopup = 930;
+        /// <summary>
         /// 【2026-10-06 主人拍板】替换装备确认弹窗（Resources/Prefabs/Battle/EquipReplaceConfirmPopup）。
         /// 必须高于 <see cref="BattlePopup"/>（抽奖面板那一层），否则宣布白拿的弹窗会被压在面板下面看不见。
         /// </summary>
@@ -740,6 +747,15 @@ public static partial class GameConfig
     /// 叠加后，新档无佣兵单挑第一关被围约 9 秒倒（玩家反馈「刚开局就卡关」）→ 回调到 1.8（-14%）。
     /// </summary>
     public const float MONSTER_DAMAGE_MULTIPLIER = 1.8f;
+    /// <summary>
+    /// 【2026-10-20 主人拍板「前期敌人的攻击再降30%」】前期章节敌人的攻击/魔攻额外倍率。
+    /// 0.7 = 在 MONSTER_DAMAGE_MULTIPLIER 之上再降 30%；只压攻击，血量/防御不动。
+    /// 覆盖到第几章见 <see cref="EARLY_GAME_ATK_CHAPTER_MAX"/>；无尽裂隙强度只随层数走，不参与。
+    /// 前期还嫌痛往下调，后期嫌软往 1 调（唯一入口 Monster.Init.cs 攻击赋值处）。
+    /// </summary>
+    public const float EARLY_GAME_ATK_MUL = 0.7f;
+    /// <summary>前期攻击减免覆盖的最后一章（含）。第 1~2 章 = 新手期，口径同 WavePlanner 的 CurrentChapter&lt;=2。</summary>
+    public const int EARLY_GAME_ATK_CHAPTER_MAX = 2;
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备
     public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手（已改为包内同部位唯一，无穿戴槽）

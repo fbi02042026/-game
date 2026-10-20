@@ -130,6 +130,9 @@ public partial class WavePlanner
             };
             // 原型接管进场方向 / 出怪间隔 / 人数上限 / 近远编成 / 精英额度
             ApplyArchetypeToWave(wave, archIds != null ? archIds[i] : "");
+            // 【2026-10-20 主人拍板】普通小怪波近远编成随机摇定（全近战/混合/全远程）；
+            // 精英波不摇 —— 精英关编成由模式原型接管（箭雨全远程等），保持既有拍板。
+            if (!elite) wave.compositionStyle = RollWaveComposition();
             // 【2026-10-14 主人拍板】精英关每波 2~4 只精英（旧值固定 +1，且 SpawnWave 曾整波乘精英缩放）
             if (elite) wave.eliteBonus = eliteWaveBonus;
             _waves.Add(wave);
@@ -160,7 +163,8 @@ public partial class WavePlanner
                 archTag = $" 原型={w.archetypeId}/{enter}/stagger={w.staggerOverride:F2}";
             }
             string eliteTag = w.eliteBonus > 0 ? $" 精英追加={w.eliteBonus}" : "";
-            GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}{archTag}{eliteTag}");
+            string compTag = CompositionTag(w.compositionStyle);
+            GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}{archTag}{eliteTag}{compTag}");
         }
     }
 
@@ -399,6 +403,8 @@ public partial class WavePlanner
                 aliveCount = 0
             };
             if (archIds != null) ApplyArchetypeToWave(wave, archIds[i]);
+            // 【2026-10-20 主人拍板】Boss 关小怪波同样随机摇编成（Boss 本体波不摇，保持 0）
+            wave.compositionStyle = RollWaveComposition();
             _waves.Add(wave);
         }
 

@@ -950,6 +950,10 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
         AdventureCodex.MarkMercSeen(hid);
         SaveSystem.Instance.Save();
 
+        // 【2026-10-20 主人拍板】酒馆三选一购买完成 = 已拥有 → 弹「获得佣兵」全屏演出（同战斗三选一口径）。
+        // 酒馆能买成功的必是首次获得（已拥有灰显不可买）；演出层 11500 盖过 Toast，点任意处关闭回到招募界面。
+        MercGainCinematicUI.Show(hid, null);
+
         string name = !string.IsNullOrEmpty(offer.displayName) ? offer.displayName
             : (!string.IsNullOrEmpty(offer.nickname) ? offer.nickname
             : (MercRosterDefs.TryGetByHireId(hid, out var def1) ? def1.Name : "佣兵"));

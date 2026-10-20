@@ -96,6 +96,8 @@ public static class ResourceAdRewards
 
         data.adStaminaClaimCount++;
         var r = ResourceWallet.Add(ResourceWallet.ResourceType.Stamina, StaminaPerAd, save: true, notify: false);
+        if (r.added > 0)
+            GuildHallUI.FloatStaminaGain((int)r.added);   // 体力加号上方弹「体力+XX」飘字（2026-10-20 主人要求）
         UIManager.Instance?.ShowToast(r.added > 0
             ? (freeStamina
                 ? $"今日免费体力补给 {data.adStaminaClaimCount}/{StaminaFreePerDay}（体力 +{r.added}）"

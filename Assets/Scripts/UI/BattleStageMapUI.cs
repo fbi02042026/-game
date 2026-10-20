@@ -315,6 +315,16 @@ public class BattleStageMapUI : MonoBehaviour
                 + "查 NextStageRouletteUI：结果「进入关卡」按钮是不是没弹出来 / enterButton 没绑上");
 
         _next = picked;
+
+        // 【2026-10-20 主人拍板】恢复关不进战斗：老虎机随到后在关卡界面立即弹「生命恢复」窗，
+        // 点恢复按钮回血、关窗后直接重开关卡图滚下一关；石墩点击 / LoadStage 全部跳过。
+        // 单路滚动与分支选路都汇入本协程，此处是恢复关的唯一分流点。
+        if (picked != null && picked.type == StageType.Rest)
+        {
+            yield return CoRestStageFlow(picked);
+            yield break;
+        }
+
         RefreshPedestals(Phase.AfterRoll);
         ApplyCurrentOutline(nextIdx);
         // 【2026-10-18 主人要求】老虎机转到关卡类型后，地图上当前关卡的旗子
@@ -341,6 +351,28 @@ public class BattleStageMapUI : MonoBehaviour
             }
         }
         Debug.Log(sb.ToString());
+    }
+
+    /// <summary>
+    /// 恢复关专用流程（2026-10-20 主人拍板）：老虎机随到恢复关后立即在关卡界面弹「生命恢复」窗，
+    /// 玩家点恢复按钮回血、关窗后通关恢复关并重开关卡图滚下一关——全程不重新进战斗。
+    /// 弹窗关闭回调里 ShowStageSelectUI → StartFlow 会重新接管 _flow，故本协程结束后保持
+    /// _flow 引用不置空：继续挡住石墩点击、暂停按钮也不露出，直到下一轮流程接手。
+    /// </summary>
+    IEnumerator CoRestStageFlow(StageData rest)
+    {
+        // 停一拍：让「命运已定」的恢复关结果看清，再弹窗
+        yield return WaitUnscaled(0.6f);
+
+        // 只推进进度指针到恢复关；绝不走 SelectStage —— 那条会 LoadStage 重新进战斗（主人明确不要）
+        ChapterManager.Instance?.SelectRestStage(rest);
+
+        RestStagePopupUI.Show(() =>
+        {
+            // 关窗 = 通关恢复关 → 回关卡界面，老虎机随下一关
+            ChapterManager.Instance?.OnStageComplete();
+            UIManager.Instance?.ShowStageSelectUI(ChapterManager.Instance?.availableNextStages);
+        });
     }
 
     /// <summary>

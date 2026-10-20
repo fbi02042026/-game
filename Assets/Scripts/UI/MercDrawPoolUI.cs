@@ -57,8 +57,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
     // 卡上自带的「查看/替换」双钮不再接线、仅保持隐藏，见 Cards.cs FillTemplateCard）
     GameObject _listTemplate;
 
-    /// <summary>本地编辑态（每次操作后从存档重读，改动即时写盘）。</summary>
-    readonly HashSet<string> _picked = new HashSet<string>();
+    /// <summary>本地编辑态（每次操作后从存档重读，改动即时写盘）。
+    /// 【2026-10-20 主人拍板】保序 List：队列按玩家放置顺序展示，不再按稀有度自动排序。</summary>
+    readonly List<string> _picked = new List<string>();
 
     const int GridCols = 5;
     const float CardW = 200f;
@@ -160,7 +161,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
         var data = SaveSystem.Instance?.Data;
         if (data?.mercDrawPool == null) return;
         foreach (string hireId in data.mercDrawPool)
-            if (!string.IsNullOrEmpty(hireId)) _picked.Add(hireId);
+            if (!string.IsNullOrEmpty(hireId) && !_picked.Contains(hireId)) _picked.Add(hireId);
     }
 
     /// <summary>单次改动落盘 + 重读 + 全量刷新（改动即时生效，无「确定」步骤）。</summary>
@@ -324,8 +325,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
             // 2026-10-15 主人拍板：文案用词与预制体手写演示文本统一（当前可配置 X/5 佣兵）
             _poolCountText.text = "当前可配置" + _picked.Count + "/" + SaveData.DrawPoolMaxSlots + "佣兵";
 
-        // 池子按稀有度自动排列（主人拍板）：传说 → 稀有 → 普通，同档按花名册表序
-        var ordered = SortByRarity(_picked);
+        // 队列不自动排序：按玩家放置顺序展示（2026-10-20 主人拍板，覆盖早前「按稀有度自动排列」口径）
+        var ordered = _picked;
 
         if (_slotHireIds == null || _slotHireIds.Length != _poolSlots.Count)
             _slotHireIds = new string[_poolSlots.Count];
@@ -414,7 +415,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             UIManager.Instance?.ShowToast(LockHintOf(index) + "后开启");
             return;
         }
-        var ordered = SortByRarity(_picked);
+        var ordered = _picked;
         if (index >= ordered.Count) return;
         if (MercRosterDefs.TryGetByHireId(ordered[index], out var def))
             ShowMercDetail(ordered[index], def);
@@ -505,7 +506,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             UIManager.Instance?.ShowToast("这一格还没开启，点已上阵的佣兵");
             return;
         }
-        var ordered = SortByRarity(_picked);
+        var ordered = _picked;
         if (index >= ordered.Count)
         {
             UIManager.Instance?.ShowToast("这是空格，点要换下的佣兵");
@@ -534,7 +535,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     {
         var data = SaveSystem.Instance?.Data;
         int slots = data != null ? data.DrawPoolSlots : SaveData.DrawPoolDefaultSlots;
-        var ordered = SortByRarity(_picked);
+        var ordered = _picked;
         for (int i = 0; i < _poolSlots.Count; i++)
         {
             if (_poolSlots[i] == null) continue;
@@ -568,7 +569,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
         StopSwapSway();
         var data = SaveSystem.Instance?.Data;
         int slots = data != null ? data.DrawPoolSlots : SaveData.DrawPoolDefaultSlots;
-        var ordered = SortByRarity(_picked);
+        var ordered = _picked;
         var targets = new List<GameObject>();
         for (int i = 0; i < _poolSlots.Count && i < slots && i < ordered.Count; i++)
         {
@@ -629,7 +630,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             if (_replaceCards[i] != null) Destroy(_replaceCards[i]);
         _replaceCards.Clear();
 
-        var ordered = SortByRarity(_picked);
+        var ordered = _picked;
         for (int i = 0; i < ordered.Count; i++)
         {
             string outId = ordered[i];
@@ -743,7 +744,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
     /// <summary>
     /// 稀有度降序（传说 → 稀有 → 普通），同档双重排序【2026-10-20 主人拍板】：
     /// 第二键 = 获得顺序（<see cref="SaveData.mercUnlockOrder"/>，早获得在前）；
-    /// 无获得记录的（旧档存量 / 未获得列表）按花名册表序排在该档末尾。队列与列表共用本方法。
+    /// 无获得记录的（旧档存量 / 未获得列表）按花名册表序排在该档末尾。
+    /// 仅用于下方图鉴列表（已获得/未获得段）；雇佣队列【2026-10-20 主人拍板】不再走本方法，
+    /// 改为按玩家放置顺序（SaveData.mercDrawPool 保序 List）展示。
     /// </summary>
     static List<string> SortByRarity(HashSet<string> ids)
     {

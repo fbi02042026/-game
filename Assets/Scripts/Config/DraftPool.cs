@@ -70,7 +70,10 @@ public static class DraftPool
     {
         if (!RunLoadout.IsMercFull && CollectRecruitMercs().Count > 0) return true;
         if (CollectMercLevelCards().Count > 0) return true;
-        return CollectMercStarCards().Count > 0;
+        // 【2026-10-20 主人拍板】战斗佣兵升星暂时注释：升星卡已不进池，这里也不能再把它算作有效内容，
+        // 否则会出现「判定佣兵类有货、实际池子为空」的空转。恢复时把这行注释放开、删掉 return false。
+        //return CollectMercStarCards().Count > 0;
+        return false;
     }
 
     public static bool HasEquipContent() => ConfigManager.Instance != null;
@@ -101,7 +104,7 @@ public static class DraftPool
 
     /// <param name="consolation">
     /// ⚠【2026-10-19 主人拍板后已失效】抽奖币改成**独立方向**（<see cref="DraftCategory.Gold"/>，
-    /// 与佣兵同概率），不再混进任何类的池子 → 本参数不再往池里塞金币卡（见 <see cref="AddConsolation"/>）。
+    /// 独立方向，权重 5 不随佣兵联动），不再混进任何类的池子 → 本参数不再往池里塞金币卡（见 <see cref="AddConsolation"/>）。
     /// 保留签名是为了不动六处调用点；<see cref="SlotMachineSystem.GoldAllowed"/> 才是「这一抽出不出金币方向」的唯一出口。
     /// </param>
     public static List<DraftCard> BuildCards(DraftCategory c, bool consolation)
@@ -145,7 +148,9 @@ public static class DraftPool
             case DraftCategory.Merc:
                 pool.AddRange(CollectRecruitMercs());
                 pool.AddRange(CollectMercLevelCards());
-                pool.AddRange(CollectMercStarCards());
+                // 【2026-10-20 主人拍板】战斗佣兵升星暂时注释：不会抽取一样的佣兵（已在本局的招募卡直接跳过），
+                // 升星卡没有来源口径，先下架不再进池。恢复时把下面这行注释放开即可。
+                //pool.AddRange(CollectMercStarCards());
                 break;
             case DraftCategory.Equip:
                 pool.AddRange(CollectEquipCards());
@@ -356,7 +361,7 @@ public static class DraftPool
 
     /// <summary>
     /// 【2026-10-19 主人拍板后已停用】往池子里塞安慰奖（只有金币一档）。
-    /// 抽奖币已升格为**独立方向**（<see cref="DraftCategory.Gold"/>，与佣兵同概率，
+    /// 抽奖币已升格为**独立方向**（<see cref="DraftCategory.Gold"/>，权重 5 不随佣兵联动，
     /// 见 <see cref="SlotMachineDefs.CATEGORY_WEIGHT_GOLD"/>），不再混进任何类的池子 →
     /// 本函数不再做任何事（参数与调用点保留是为了不动六处签名）。
     /// 「这一抽出不出金币方向」唯一出口 = <see cref="SlotMachineSystem.GoldAllowed"/>。

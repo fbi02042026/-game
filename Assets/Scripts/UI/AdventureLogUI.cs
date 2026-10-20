@@ -394,9 +394,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         _rowTemplate = done.gameObject;
         _rowTemplate.SetActive(false);
 
-        // 「已完成/已记录」状态字兜底：预制体 Progress 框宽仅 8px 且锚出行右缘，
-        // 文字靠溢出渲染，右半被 Scroll Viewport 的 Mask 裁掉。
-        // 运行时把框收进行内右端并加 BestFit，不改预制体文件。
+        // 2026-10-20 主人拍板：标题 Objective 的运行时改写已删，行内排版以预制体为准。
+        // 仅保留 Progress 状态字兜底：预制体状态框按"0/1"这类短字设计，
+        // 支线/成就页右侧放的是长解锁条件（十几个字），窄框放不下会换行挤成一团，
+        // 这里把框收进行内右端加宽到 264 并开 BestFit，只动这一项。
         var prog = done.Find("Progress");
         if (prog != null)
         {
@@ -404,7 +405,6 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             prt.anchorMin = new Vector2(1f, 0.5f);
             prt.anchorMax = new Vector2(1f, 0.5f);
             prt.pivot = new Vector2(1f, 0.5f);
-            // y 略偏下（相对行中心 −10）：状态字在行内靠下时不容易被上边缘压住，整行都能露出来
             prt.anchoredPosition = new Vector2(-16f, -10f);
             prt.sizeDelta = new Vector2(264f, 44f);
             var pt = prog.GetComponent<Text>();
@@ -416,26 +416,6 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 pt.resizeTextMinSize = 16;
                 int baseSize = Mathf.RoundToInt(pt.fontSize);
                 pt.resizeTextMaxSize = Mathf.Clamp(baseSize, 20, 64);
-            }
-        }
-
-        // 行标题同样兜底：预制体框是跨行全宽（还超出行左缘），长标题会横向溢出被 Mask 裁。
-        // 左右分区：Objective 只占左段，右侧整段留给 Progress，互不覆盖。
-        var obj = done.Find("Objective");
-        if (obj != null)
-        {
-            var ort = (RectTransform)obj;
-            ort.anchorMin = new Vector2(0f, 0.5f);
-            ort.anchorMax = new Vector2(1f, 0.5f);
-            ort.pivot = new Vector2(0.5f, 0.5f);
-            ort.offsetMin = new Vector2(16f, 0f);
-            ort.offsetMax = new Vector2(-300f, 0f);
-            ort.anchoredPosition = Vector2.zero;
-            var ot = obj.GetComponent<Text>();
-            if (ot != null)
-            {
-                ot.alignment = TextAnchor.MiddleLeft;
-                ot.horizontalOverflow = HorizontalWrapMode.Wrap;
             }
         }
     }

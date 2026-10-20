@@ -113,9 +113,22 @@ public class LowHpScreenEdgeFlash : MonoBehaviour
         return rt;
     }
 
+    /// <summary>老虎机 / 关卡轮盘任一在场时不亮红边。</summary>
+    static bool IsBlockedByPanel()
+    {
+        var slot = SlotMachineUI.Instance;
+        if (slot != null && slot.gameObject.activeInHierarchy) return true;
+        var roulette = NextStageRouletteUI.Instance;
+        if (roulette != null && roulette.gameObject.activeInHierarchy) return true;
+        return false;
+    }
+
     /// <summary>与人物低血同相位脉冲。</summary>
     public void Tick(bool lowHp)
     {
+        // 2026-10-20 主人拍板：老虎机 / 关卡轮盘界面不显示残血红边，关掉后残血仍会恢复显示
+        if (IsBlockedByPanel()) lowHp = false;
+
         _want = lowHp;
         if (!_want)
         {

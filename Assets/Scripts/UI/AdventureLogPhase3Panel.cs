@@ -362,7 +362,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         if (_dim != null)
         {
             _dim.SetActive(true);
-            _dim.transform.SetAsLastSibling();
+            // 层级以预制体为准，不再把 bg 提到最末（否则会压到 renwu 装饰人物之上）；
+            // 整个 Phase3Root 在下方已 SetAsLastSibling 置顶，遮罩效果不受影响
         }
         _panel.SetActive(true);
         if (_renwu != null) _renwu.SetActive(true);

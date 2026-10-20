@@ -367,7 +367,9 @@ public class RestStagePopupUI : MonoBehaviour
     {
         var canvas = GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattlePopup);
+        // 【2026-10-20】层级抬到技槽(921)之上（RestStagePopup=930）：弹窗用 BattlePopup(920) 时，
+        // 技槽嵌套 Canvas 会穿到弹窗前面（主人报「技能槽怎么又跑到前面来了」）。
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.RestStagePopup);
         if (GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
         EnsureEventSystem();

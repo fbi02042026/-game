@@ -92,7 +92,10 @@ public partial class BattleManager
         float z = unitRoot != null ? unitRoot.position.z : 0f;
         // 只摆玩家/佣兵，不要改写用户的 SpawnPoint 坐标
         GameConfig.SetWorldPosition(hero.gameObject, new Vector3(startX, UnitBase.GROUND_Y, z));
-        hero.currentHp = hero.attr.GetAttr(AttrType.MaxHp);
+        // 【2026-10-20 主人拍板·方案C】进关不再满血：血量跨关延续 + 基础回复 30%（STAGE_ENTRY_HEAL_PCT），
+        // 恢复关回血 / 抽奖「回血N」卡 / 老虎机回血才有意义。开局满血由 Hero.InitNewRun 保证，此处对满血无副作用。
+        float heroMaxHp = hero.attr.GetAttr(AttrType.MaxHp);
+        hero.currentHp = Mathf.Min(heroMaxHp, hero.currentHp + heroMaxHp * GameConfig.STAGE_ENTRY_HEAL_PCT);
         GameConfig.AttachToUnitRoot(hero.transform);
         Vector3 mercBasePos = new Vector3(startX, UnitBase.GROUND_Y, z);
         MercenaryManager.Instance?.ResetMercenaries(mercBasePos);

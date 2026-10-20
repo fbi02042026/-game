@@ -101,6 +101,16 @@ public partial class WavePlanner
             return PickSpriteByStyle(availableSprites, chapter, archRanged, usedThisWave, slotIndex, stageIdx);
         }
 
+        // —— 【2026-10-20 主人拍板】波次近远编成随机化：铺波时每波摇定（全近战/混合/全远程），
+        // 覆盖 wave_slot 的奇偶近远表；混合波每槽独立掷近/远。
+        // 池内没有对应风格怪时 PickSpriteByStyle 自带回落原池，不会空刷。
+        if (_activeWaveComposition == 1 || _activeWaveComposition == 2 || _activeWaveComposition == 3)
+        {
+            bool slotWantRanged = _activeWaveComposition == 3
+                || (_activeWaveComposition == 2 && Random.value < 0.5f);
+            return PickSpriteByStyle(availableSprites, chapter, slotWantRanged, usedThisWave, slotIndex, stageIdx);
+        }
+
         WaveSlotTable.EnsureLoaded();
         if (WaveSlotTable.TryGetSlot(chapter, stageIdx, stageType, waveIndex, slotIndex, out var slotRule))
         {

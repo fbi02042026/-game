@@ -228,6 +228,18 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
+    /// 恢复关专用（2026-10-20 主人拍板）：恢复关不进战斗，只把进度指针推进到该关，
+    /// 让 OnStageComplete 按「刚通关恢复关」记账（RecordCleared / 下一关候选池）。
+    /// 与 SelectStage 的唯一区别：绝不调 BattleManager.LoadStage。
+    /// </summary>
+    public void SelectRestStage(StageData stage)
+    {
+        if (stage == null) return;
+        currentStageIndex = stage.stageIndex;
+        OnStageSelected?.Invoke(stage);
+    }
+
+    /// <summary>
     /// 当前关卡通关，更新可选下一关
     /// </summary>
     public void OnStageComplete()
@@ -253,9 +265,12 @@ public class ChapterManager : Singleton<ChapterManager>
             string stageClearKey = currentChapter + "_" + currentStageIndex;
             bool isStageFirstClear = milestoneData.clearedStages == null || !milestoneData.clearedStages.Contains(stageClearKey);
 
-            int stageTalent = milestoneData.GrantTalentForStageFirstClear(currentChapter, currentStageIndex);
-            if (stageTalent > 0)
-                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, stageTalent, save: false, notify: true);
+            // 【2026-10-20 主人拍板】每关首通天赋石停发（天赋石改为精英/Boss 击杀概率掉落）。
+            // GrantTalentForStageFirstClear 只保留首通记录（clearedStages，冒险日志里程碑进度要用），返回的石不再发放。
+            milestoneData.GrantTalentForStageFirstClear(currentChapter, currentStageIndex);
+            // int stageTalent = milestoneData.GrantTalentForStageFirstClear(currentChapter, currentStageIndex);
+            // if (stageTalent > 0)
+            //     ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, stageTalent, save: false, notify: true);
             // if (isStageFirstClear)
             //     ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, 3, save: true, notify: true);
 
@@ -290,9 +305,10 @@ public class ChapterManager : Singleton<ChapterManager>
                 int clearDiff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : -1;
                 data.MarkChapterCleared(currentChapter, clearDiff);
 
-                int chapterTalent = TalentDefs.TalentStoneRewards.ChapterClearStone(currentChapter);
-                if (firstChapterClear && chapterTalent > 0)
-                    ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, chapterTalent, save: false, notify: true);
+                // 【2026-10-20 主人拍板】整章首通额外天赋石停发（天赋石改为精英/Boss 击杀概率掉落）。
+                // int chapterTalent = TalentDefs.TalentStoneRewards.ChapterClearStone(currentChapter);
+                // if (firstChapterClear && chapterTalent > 0)
+                //     ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, chapterTalent, save: false, notify: true);
                 // C.2 每章首通 +30 钻：firstChapterClear 在 MarkChapterCleared 之前判定，顺序正确
                 // 【2026-10-20 主人拍板】钻石停发，注释保留
                 // if (firstChapterClear)

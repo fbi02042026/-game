@@ -62,6 +62,13 @@ public sealed partial class WavePlanner
     /// <summary>Boss 关变体「裂隙涌动」的增援协程；换关 / 通关时随事件层一起清掉。</summary>
     Coroutine _bossPressureCo;
 
+    /// <summary>
+    /// 【2026-10-20 主人拍板】当前正在刷的波的近远编成（CoSpawnWaveMonsters 开头从
+    /// WaveData.compositionStyle 读入，读点仅限本协程内的 PickWaveSpriteIndex）。
+    /// 0=旧奇偶回退；1=全近战；2=混合；3=全远程。
+    /// </summary>
+    int _activeWaveComposition;
+
     float GetStageStartX() => bm.GetStageStartX();
     int CountAliveMonsters() => bm.CountAliveMonsters();
     int GetAliveMonsterCount() => bm.GetAliveMonsterCount();
