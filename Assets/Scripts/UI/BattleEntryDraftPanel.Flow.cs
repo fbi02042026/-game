@@ -420,6 +420,16 @@ public partial class BattleEntryDraftPanel
         }
         else
         {
+            // 【2026-10-20 主人拍板】抽奖币不够（所有抽奖按钮都置灰）时，长时间没动
+            // 不再弹「点这里抽一次奖」的指引——指着一个点不了的按钮只会误导玩家。
+            // 可点与否的唯一真源 = Refresh 刷出来的 Btn.interactable。
+            bool anyClickable = false;
+            for (int i = 0; i < _slots.Count; i++)
+            {
+                if (_slots[i].Btn != null && _slots[i].Btn.interactable) { anyClickable = true; break; }
+            }
+            if (!anyClickable) return;
+
             // 没抽过 → 指第一个抽奖按钮（普通/随机）
             var drawRt = _slots.Count > 0 && _slots[0].Root != null ? _slots[0].Root : null;
             if (drawRt == null) return;

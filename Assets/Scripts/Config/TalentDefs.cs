@@ -472,10 +472,8 @@ public static class TalentDefs
             new[] { 25, 50, 85 }, AttrKind.MoveSpeed, new[] { 3f, 6f, 10f }, "move", "疾行"));
         list.Add(HNode(8, "R_C6", "凝神", RightNodeType.Attr, 30, 3, "",
             new[] { 25, 50, 85 }, AttrKind.SkillCooldown, new[] { 4f, 8f, 13f }, "cd", "凝神"));
-        // R_JOB：6 选 1 + 可升级（职业伤害 +4%×等级，满 +20%）
-        list.Add(HJob(9, "R_JOB", "职业专精", 30, 5, "job",
-            new[] { 15, 32, 55, 85, 125 }, new[] { 4f, 8f, 12f, 16f, 20f },
-            new[] { "剑盾卫士", "狂战士", "游侠", "法师", "牧师", "重装" }));
+        // R_JOB（职业专精 6选1）已按主人 2026-10-20 拍板移除：CSV 与硬编码兜底同步删行，
+        // 右列不再出现职业专精；JobChoice 相关代码为数据驱动，无此节点即不会触发，保留不动。
         // R_BAG 2026-09-29 主人拍板：改 **3 级、每级 +1 行背包**（只针对角色界面的背包 ——
         // 装备不带出副本，里头放的是道具 / 碎片这类）。kind=Custom 无数值效果，靠等级查行数。
         list.Add(HNode(10, "R_BAG", "背包扩容", RightNodeType.Attr, 30, 3, "",
@@ -521,32 +519,6 @@ public static class TalentDefs
             {
                 new TalentRightOption { key = optKey, name = optName, kind = kind, valueByLevel = vals }
             }
-        };
-    }
-
-    static TalentRightNode HJob(int index, string id, string name, int unlock, int max, string mutex,
-        int[] cost, float[] vals, string[] jobNames)
-    {
-        var opts = new TalentRightOption[jobNames.Length];
-        for (int o = 0; o < jobNames.Length; o++)
-            opts[o] = new TalentRightOption
-            {
-                key = "job" + o,
-                name = jobNames[o],
-                kind = AttrKind.WeaponSwordShield,
-                valueByLevel = (float[])vals.Clone()
-            };
-        return new TalentRightNode
-        {
-            index = index,
-            id = id,
-            name = name,
-            type = RightNodeType.JobChoice,
-            unlockLeftIndex = unlock,
-            maxLevel = max,
-            mutexGroup = mutex,
-            costByLevel = cost,
-            options = opts
         };
     }
 

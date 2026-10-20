@@ -59,10 +59,11 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     static readonly Color DisabledColor = new Color(0.55f, 0.50f, 0.44f, 1f);   // 置灰
 
     // ===== 手工预制体行几何（与磁盘预制体实测对齐，勿按旧构建常量猜） =====
-    // 行宽 414 / 行高 83 / 步距 70；Row_0 顶边 Inner 本地 y=-37.5，Inner 底边 -460
+    // 行宽 414 / 行高 83 / 步距 70；Row_0 顶边 Inner 本地 y=-7.5（2026-10-20 主人拍板：商品行累计上移 30），
+    // Inner 底边 -460（视口底边不动，6 行全量 433 < 视口高 452.5，最后一行底框不再被裁）
     const float HandRowH = 83f;
     const float HandRowStep = 70f;
-    const float ListViewportTopY = -37.5f;
+    const float ListViewportTopY = -7.5f;
     const float ListViewportBottomY = -460f;
     const float ListViewportW = 424f;
 
