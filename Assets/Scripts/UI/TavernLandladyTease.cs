@@ -45,11 +45,9 @@ public class TavernLandladyTease : MonoBehaviour,
 
     RectTransform _rt;
     Image _img;
-    PortraitIdleMotion _idle;
+    // 【2026-10-20 主人拍板】动作队列抽成共用组件 PortraitMotion（前台小姐戳一戳复用），本类只持有并转发
+    PortraitMotion _portraitMotion;
     CanvasGroup _dim;
-    Coroutine _motionCo;
-    int _pendingShakes;
-    int _pendingPats;
     Coroutine _pressCo;
     bool _suppressClick;
     float _idleTimer;
@@ -134,10 +132,8 @@ public class TavernLandladyTease : MonoBehaviour,
     void OnDisable()
     {
         // 页面关闭会停掉所有协程：句柄必须一并清掉，否则下次 Enable 后动画队列不再启动
-        _motionCo = null;
+        // （动作队列的句柄现在由 PortraitMotion 自己清，本类只清自己的）
         _pressCo = null;
-        _pendingShakes = 0;
-        _pendingPats = 0;
         _faceCo = null;
     }
 
@@ -152,7 +148,7 @@ public class TavernLandladyTease : MonoBehaviour,
         var oldBtn = GetComponent<Button>();
         if (oldBtn != null) Destroy(oldBtn);
 
-        _idle = GetComponent<PortraitIdleMotion>();
+        _portraitMotion = PortraitMotion.EnsureOn(_rt);
         EnsureDim();
         EnsureFaces();
     }
@@ -252,7 +248,7 @@ public class TavernLandladyTease : MonoBehaviour,
 
     void OnHeadPat()
     {
-        RequestPat();
+        _portraitMotion?.RequestPat();
         ShowFace(_shyFace);
         bool granted = TavernEggState.AddFavor(1, out bool leveledUp);
         string line = granted
@@ -277,7 +273,7 @@ public class TavernLandladyTease : MonoBehaviour,
         if (_kicking) return;
 
         _clicks++;
-        RequestShake();
+        _portraitMotion?.RequestShake();
         ShowFace(_angryFace);
 
         // 【2026-10-18 修·主人报「点老板娘不弹对话了」】警示语是玩家主动交互的直接反馈，
@@ -320,87 +316,6 @@ public class TavernLandladyTease : MonoBehaviour,
         ApplyDim(0f);
     }
 
-    // ———— 动作队列：哆嗦（警示/长按）与摸头轻浮共用一条协程，避免并发互抢 anchoredPosition ————
-
-    void RequestShake() => EnqueueMotion(1, 0);
-
-    void RequestPat() => EnqueueMotion(0, 1);
-
-    /// <summary>长按触发「抖得更狠」：连排两轮哆嗦。</summary>
-    void RequestBigShake() => EnqueueMotion(2, 0);
-
-    void EnqueueMotion(int shakes, int pats)
-    {
-        _pendingShakes += shakes;
-        _pendingPats += pats;
-        if (_motionCo == null) _motionCo = StartCoroutine(CoMotion());
-    }
-
-    IEnumerator CoMotion()
-    {
-        while (_pendingShakes > 0 || _pendingPats > 0)
-        {
-            if (_idle != null) _idle.enabled = false;
-
-            Vector2 basePos = _rt != null ? _rt.anchoredPosition : Vector2.zero;
-            Vector3 baseEuler = transform.localEulerAngles;
-
-            if (_pendingPats > 0)
-            {
-                _pendingPats = 0;
-                // 摸头：上下轻浮两下，幅度小、节奏柔（与乱摸的左右躲闪区分）
-                float dur = 0.18f, amp = 3.5f;
-                for (int i = 0; i < 2; i++)
-                {
-                    float t = 0f;
-                    while (t < dur)
-                    {
-                        t += Time.unscaledDeltaTime;
-                        if (_rt != null)
-                            _rt.anchoredPosition = basePos + new Vector2(0f, amp * Mathf.Sin(t / dur * Mathf.PI));
-                        yield return null;
-                    }
-                    if (_rt != null) _rt.anchoredPosition = basePos;
-                }
-            }
-
-            while (_pendingShakes > 0)
-            {
-                _pendingShakes--;
-                // 乱摸/长按：左右躲闪两下（原有行为原样保留）
-                float dodgeAmp = 6f;
-                float dodgeDur = 0.12f;
-                int dodges = 2;
-                for (int d = 0; d < dodges; d++)
-                {
-                    float side = (d % 2 == 0) ? -1f : 1f;
-                    float t = 0f;
-                    while (t < dodgeDur)
-                    {
-                        t += Time.unscaledDeltaTime;
-                        float u = t / dodgeDur;
-                        float ease = Mathf.Sin(u * Mathf.PI);
-                        if (_rt != null)
-                            _rt.anchoredPosition = basePos + new Vector2(side * dodgeAmp * ease, 0f);
-                        yield return null;
-                    }
-                    if (_rt != null) _rt.anchoredPosition = basePos;
-                    if (d < dodges - 1)
-                        yield return new WaitForSecondsRealtime(0.08f);
-                }
-                if (_pendingShakes > 0)
-                    yield return new WaitForSecondsRealtime(0.1f);
-            }
-
-            yield return new WaitForSecondsRealtime(0.1f);
-            if (_rt != null) _rt.anchoredPosition = basePos;
-            transform.localEulerAngles = baseEuler;
-            if (_idle != null) _idle.enabled = true;
-        }
-
-        _motionCo = null;
-    }
-
     // ———— 长按立绘（1.5 秒）：专属台词 + 抖得更狠 ————
 
     public void OnPointerDown(PointerEventData ev)
@@ -428,7 +343,7 @@ public class TavernLandladyTease : MonoBehaviour,
         var lines = TavernEggState.LongPressLines;
         UIManager.Instance?.ShowToast(lines[UnityEngine.Random.Range(0, lines.Length)], force: true);
         ShowFace(_angryFace);
-        RequestBigShake();
+        _portraitMotion?.RequestBigShake();
     }
 
     // ———— 挂机彩蛋：酒馆页打开 60 秒无任何输入，老板娘打哈欠 ————
@@ -445,7 +360,7 @@ public class TavernLandladyTease : MonoBehaviour,
         _idleTimer = 0f;
         var lines = TavernEggState.IdleLines;
         UIManager.Instance?.ShowToast(lines[UnityEngine.Random.Range(0, lines.Length)], force: true);
-        RequestPat();
+        _portraitMotion?.RequestPat();
     }
 
     void ApplyDim(float alpha)
@@ -460,7 +375,7 @@ public class TavernLandladyTease : MonoBehaviour,
     {
         EnsureDim();
         if (_dim != null) _dim.alpha = 0.2f;
-        RequestShake();
+        _portraitMotion?.RequestShake();
         UIManager.Instance?.ShowToast("酒醒了？进来进来！这次可给我老实点。");
         float t = 0f;
         while (t < 0.6f)

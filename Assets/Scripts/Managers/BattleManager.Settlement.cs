@@ -556,7 +556,12 @@ public partial class BattleManager
             if (!CanAffordDraw(picked, cost, out string shortBy))
             {
                 UIManager.Instance?.ShowToast(shortBy + "不足");
-                break;
+                // 【2026-10-20 修·主人报「抽奖金币不足 直接就开始了 不让选择了」】
+                // 旧写法这里 break = 没收面板直接开战，玩家连「继续」都点不着。
+                // 改成回面板重来一轮：按钮按真实余额置灰（红字「还差 N」），
+                // 玩家自己点「继续」才开打。这不是成功抽取的那条 10-12 固定预算链路
+                //（没扣币、定序没动），面板重开补一次倒计时是失败重试，不算违反「不补满」。
+                continue;
             }
 
             // 【2026-10-12 主人拍板】「再来一次」= **抽奖结果之一**，不再是抽完之后的额外赠送。

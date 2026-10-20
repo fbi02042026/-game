@@ -3,12 +3,13 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 /// <summary>
-/// 世界地图弹窗：强制选择、无关闭按钮。
-/// 点击地块后在该地块上显示「进入」按钮；点击进入后淡出并通知外部开战。
+/// 世界地图弹窗：点击地块后在该地块上显示「进入」按钮；点击进入后淡出并通知外部开战。
+/// 点击地图四周空白处（未命中地块/地图区域）直接关闭弹窗（2026-10-20 主人要求）。
 /// </summary>
-public class WorldMapPopup : MonoBehaviour
+public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDownHandler, UnityEngine.EventSystems.IPointerUpHandler
 {
     [System.Serializable]
     public class RegionDef
@@ -89,6 +90,11 @@ public class WorldMapPopup : MonoBehaviour
 
     /// <summary>运行时容器：包住地图背景 + 地块根，整体平移/缩放；预制体结构不动。</summary>
     RectTransform _mapContent;
+    /// <summary>底部「点击四周空白处关闭」提示（运行时生成，不进预制体）。</summary>
+    Text _closeHint;
+    /// <summary>根节点按下位置（点空白关闭用）：按下/抬起没移动才算一次「点四周」。</summary>
+    Vector2 _pressPos;
+    bool _pressValid;
     float _mapZoom = 1f;
     Vector2 _panLast;
     bool _panLastValid;
@@ -196,10 +202,14 @@ public class WorldMapPopup : MonoBehaviour
     {
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
+        ResolveRegionRoot();
+        ResolveStaticRefs();
         EnsureMapViewContent();
+        EnsureCloseHint();
         ResetMapView();
         _selectedChapter = 0;
         _entering = false;
+        _pressValid = false;
         if (enterButton != null)
             enterButton.gameObject.SetActive(false);
         RefreshRegions();
@@ -216,6 +226,64 @@ public class WorldMapPopup : MonoBehaviour
         _pinchActive = false;
         _panLastValid = false;
         _panMoved = 0f;
+    }
+
+    /// <summary>
+    /// 地块根（regionRoot）唯一出口。
+    /// 2026-10-20：实测预制体根节点上的 WorldMapPopup 组件已被引擎清掉（历史 56 字符 guid 修复后
+    /// 判为 Missing Script），运行时只能 AddComponent 补一个字段全空的组件 → regionRoot 为 null →
+    /// BuildRegionSlots 直接 return、_slots 保持 null → RefreshRegions 抛 NRE。
+    /// 这里按名字把预制体里现成的 Regions 节点找回来，找不到就 LogError（fail closed，不静默）。
+    /// 必须在 EnsureMapViewContent 之前执行，否则地块不会被收进可拖动/缩放的 MapViewContent。
+    /// </summary>
+    void ResolveRegionRoot()
+    {
+        if (regionRoot != null) return;
+        var found = FindChildRecursive(transform, "Regions");
+        if (found == null)
+        {
+            Debug.LogError("[WorldMapPopup] 找不到地块根节点 Regions：请给预制体根节点补挂 WorldMapPopup 组件，"
+                + "并把 Region Root 拖到 Regions 节点上。", this);
+            return;
+        }
+        regionRoot = found;
+    }
+
+    /// <summary>
+    /// 静态引用（地图背景/标题/描述）唯一出口：预制体没挂 WorldMapPopup 组件时按名字找回。
+    /// 2026-10-20 主人截图实证：mapBackground 不绑的话，EnsureMapViewContent 会把 MapViewContent
+    /// 插到 index 0，背景留在根节点压在它上面 → 8 个地块全被背景盖住（地图只见背景不见地块）。
+    /// </summary>
+    void ResolveStaticRefs()
+    {
+        if (mapBackground == null)
+        {
+            var bg = FindChildRecursive(transform, "MapBackground");
+            if (bg != null) mapBackground = bg.GetComponent<Image>();
+            else Debug.LogError("[WorldMapPopup] 找不到 MapBackground 节点，地块会被背景盖住。", this);
+        }
+        if (titleText == null)
+        {
+            var t = FindChildRecursive(transform, "Title");
+            if (t != null) titleText = t.GetComponent<Text>();
+        }
+        if (descText == null)
+        {
+            var d = FindChildRecursive(transform, "Desc");
+            if (d != null) descText = d.GetComponent<Text>();
+        }
+    }
+
+    static Transform FindChildRecursive(Transform parent, string name)
+    {
+        var direct = parent.Find(name);
+        if (direct != null) return direct;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var hit = FindChildRecursive(parent.GetChild(i), name);
+            if (hit != null) return hit;
+        }
+        return null;
     }
 
     /// <summary>
@@ -241,6 +309,70 @@ public class WorldMapPopup : MonoBehaviour
         if (mapBackground != null) mapBackground.transform.SetParent(rt, false);
         if (regionRoot != null) regionRoot.SetParent(rt, false);
         _mapContent = rt;
+    }
+
+    // ============================================================
+    // 点四周空白关闭（2026-10-20 主人要求）
+    // 原理：MapBackground 全屏铺满但本身没有任何事件处理器，射线命中后会
+    // 一路冒泡到弹窗根节点；地块 / 进入按钮带 Button（自带处理器）会拦住事件，
+    // 不会冒泡到根。所以根节点收到的点击 = 没点中任何地块 = 点四周 → 关闭。
+    // ============================================================
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        _pressPos = eventData.position;
+        _pressValid = true;
+    }
+
+    /// <summary>底部关闭提示（2026-10-20 主人要求）：运行时生成，挂弹窗根节点不跟地图拖动。</summary>
+    void EnsureCloseHint()
+    {
+        if (_closeHint != null) return;
+        var go = new GameObject("CloseHint", typeof(RectTransform), typeof(Text));
+        var rt = go.transform as RectTransform;
+        rt.SetParent(transform, false);
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, 12f);
+        rt.sizeDelta = new Vector2(420f, 34f);
+        _closeHint = go.GetComponent<Text>();
+        _closeHint.text = "点击四周空白处关闭";
+        _closeHint.alignment = TextAnchor.MiddleCenter;
+        _closeHint.fontSize = 22;
+        _closeHint.color = new Color(1f, 0.95f, 0.85f, 0.6f);
+        _closeHint.raycastTarget = false; // 不吃射线：点在提示文字上照样走「点四周关闭」
+        GameFonts.ApplyToHierarchy(go.transform);
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        if (!_pressValid) return;
+        _pressValid = false;
+        if (_entering) return;
+        // 按下和抬起位置差超过点击抖动阈值 → 是拖图/缩放松手，不关闭
+        if (((Vector2)eventData.position - _pressPos).sqrMagnitude >
+            PanStartPixels * PanStartPixels) return;
+        if (IsRecentPan()) return; // 刚拖完地图松手，吞掉这次误触
+        if (IsPressInsideAnyRegion(_pressPos)) return; // 点在地块 bounding box 内不关
+        Hide();
+    }
+
+    /// <summary>按下点是否落在任一地块的矩形内（地块上的名字/锁图标没有 Button，
+    /// 点击会冒泡到根节点，靠这里挡住，避免点地块文字误关地图）。</summary>
+    bool IsPressInsideAnyRegion(Vector2 screenPos)
+    {
+        if (_slots == null) return false;
+        var cam = GetPopupCamera();
+        for (int i = 0; i < _slots.Length; i++)
+        {
+            var slot = _slots[i];
+            if (slot == null || slot.root == null) continue;
+            var rt = slot.root.transform as RectTransform;
+            if (rt != null && RectTransformUtility.RectangleContainsScreenPoint(rt, screenPos, cam))
+                return true;
+        }
+        return false;
     }
 
     public void Hide()
@@ -340,6 +472,11 @@ public class WorldMapPopup : MonoBehaviour
     void RefreshRegions()
     {
         if (_slots == null || _slots.Length == 0) BindOrBuildSlots();
+        if (_slots == null)
+        {
+            Debug.LogError("[WorldMapPopup] 地块槽位生成失败（regionRoot 为空？），地图本次不刷新。", this);
+            return;
+        }
         bool sharedEnterUsed = false;
         for (int i = 0; i < _slots.Length; i++)
         {
@@ -361,6 +498,13 @@ public class WorldMapPopup : MonoBehaviour
                 else img.color = slot.def.normalColor;
             }
 
+            // 解锁态由代码切（美术存的是「Region_1 解锁 / 其余锁定」的快照）：
+            // 解锁 → 显示地块本体 + 名字底框、收掉锁图标；未解锁 → 反过来。
+            // 代码自建的槽（BuildRegionSlots）本体就是 root 自己，不参与这套切换（灰显靠颜色）。
+            if (slot.visual != null && slot.visual != slot.root)
+                slot.visual.SetActive(unlocked);
+            if (slot.nameRoot != null)
+                slot.nameRoot.SetActive(unlocked);
             if (slot.lockRoot != null)
                 slot.lockRoot.SetActive(!unlocked);
             if (slot.highlight != null)
@@ -707,6 +851,24 @@ public class WorldMapPopup : MonoBehaviour
         BuildRegionSlots();
 
         // 进入按钮（默认隐藏，选中地块后挂载到该地块下）
+        EnsureSharedEnterButton();
+
+        GameFonts.ApplyToHierarchy(transform);
+    }
+
+    /// <summary>
+    /// 共享「进入」按钮的唯一出口：根节点下没有 EnterButton 就按现有样式建一颗。
+    /// 2026-10-20：预制体只在 Region_2~8 下各放了一颗，Region_1（第一章）没有，
+    /// 不补这颗的话选中第一章点不出「进入」按钮。
+    /// </summary>
+    void EnsureSharedEnterButton()
+    {
+        if (enterButton == null)
+        {
+            var found = transform.Find("EnterButton");
+            if (found != null) enterButton = found.GetComponent<Button>();
+        }
+
         if (enterButton == null)
         {
             var eGo = new GameObject("EnterButton", typeof(RectTransform), typeof(Image), typeof(Button));
@@ -726,23 +888,32 @@ public class WorldMapPopup : MonoBehaviour
             lrt.anchorMin = Vector2.zero;
             lrt.anchorMax = Vector2.one;
             lrt.offsetMin = lrt.offsetMax = Vector2.zero;
-            enterButtonText = lblGo.GetComponent<Text>();
-            enterButtonText.text = "进入";
-            enterButtonText.alignment = TextAnchor.MiddleCenter;
-            enterButtonText.fontSize = 24;
-            enterButtonText.color = Color.white;
+            var lbl = lblGo.GetComponent<Text>();
+            lbl.text = "进入";
+            lbl.alignment = TextAnchor.MiddleCenter;
+            lbl.fontSize = 24;
+            lbl.color = Color.white;
         }
 
+        if (enterButton == null) return;
+        enterButtonText = enterButton.GetComponentInChildren<Text>();
         enterButton.gameObject.SetActive(false);
         enterButton.onClick.RemoveAllListeners();
         enterButton.onClick.AddListener(OnEnterClicked);
-
-        GameFonts.ApplyToHierarchy(transform);
     }
 
     void BuildRegionSlots()
     {
-        if (regionRoot == null) return;
+        if (regionRoot == null)
+        {
+            Debug.LogError("[WorldMapPopup] regionRoot 为空，无法生成地块：请给预制体根节点补挂 WorldMapPopup 组件，"
+                + "并把 Region Root 拖到 Regions 节点上。", this);
+            return;
+        }
+        // 保险：共享「进入」按钮可能正挂在某个地块下，重建地块前先收回弹窗根节点，免得被一起 Destroy
+        if (enterButton != null && enterButton.transform.IsChildOf(regionRoot))
+            enterButton.transform.SetParent(transform, false);
+
         for (int i = regionRoot.childCount - 1; i >= 0; i--)
             DestroyImmediate(regionRoot.GetChild(i).gameObject);
 
@@ -846,13 +1017,14 @@ public class WorldMapPopup : MonoBehaviour
                 var lockT = t.Find("Lock");
 
                 // 外层 Region_X 可能只是空容器，真正的 Image/Button 在同名的内层子节点上。
-                // 先找内层同名节点，没有就用外层自己。
+                // 地块本体（Image + Button）预制体里统一放在内层同名节点上；外层只是容器。
+                // 实测 Region_1 内层 m_IsActive=1（已解锁态），Region_2~8 内层 m_IsActive=0（美术存的是
+                // 未解锁态：只留 Lock 锁图标）。所以这里按「谁带 Image」挑本体层，不管它当前开没开，
+                // 显隐交给 RefreshRegions 按解锁状态切 —— 否则解锁了的章节也看不见、点不到。
                 var visualT = t;
-                if (t.GetComponent<Image>() == null)
-                {
-                    var inner = t.Find(t.name);
-                    if (inner != null && inner.GetComponent<Image>() != null) visualT = inner;
-                }
+                var inner = t.Find(t.name);
+                if (t.GetComponent<Image>() == null && inner != null && inner.GetComponent<Image>() != null)
+                    visualT = inner;
 
                 var slot = new RegionSlot
                 {
@@ -861,6 +1033,7 @@ public class WorldMapPopup : MonoBehaviour
                     visual = visualT.gameObject,
                     highlight = hiT != null ? hiT.gameObject : null,
                     lockRoot = lockT != null ? lockT.gameObject : null,
+                    nameRoot = FindChildByName(t, "bg"),
                     def = FindDef(ch)
                 };
 
@@ -903,20 +1076,7 @@ public class WorldMapPopup : MonoBehaviour
             BuildRegionSlots();
         }
 
-        if (enterButton == null)
-        {
-            var found = transform.Find("EnterButton");
-            if (found != null)
-            {
-                enterButton = found.GetComponent<Button>();
-                enterButtonText = found.GetComponentInChildren<Text>();
-            }
-        }
-        if (enterButton != null)
-        {
-            enterButton.onClick.RemoveAllListeners();
-            enterButton.onClick.AddListener(OnEnterClicked);
-        }
+        EnsureSharedEnterButton();
     }
 
     RegionDef FindDef(int chapterId)
@@ -924,6 +1084,12 @@ public class WorldMapPopup : MonoBehaviour
         for (int i = 0; i < regions.Length; i++)
             if (regions[i].chapterId == chapterId) return regions[i];
         return null;
+    }
+
+    static GameObject FindChildByName(Transform t, string name)
+    {
+        var f = t.Find(name);
+        return f != null ? f.gameObject : null;
     }
 
     static int ParseChapterFromName(string name)
@@ -947,6 +1113,8 @@ public class WorldMapPopup : MonoBehaviour
         public GameObject visual;
         public GameObject highlight;
         public GameObject lockRoot;
+        /// <summary>名字底框（预制体里叫 bg），解锁才显示。</summary>
+        public GameObject nameRoot;
         /// <summary>该地块自己的「进入」按钮（美术在每个 Region_X 下各放了一个）。为空则回退到共享按钮。</summary>
         public Button enterButton;
     }

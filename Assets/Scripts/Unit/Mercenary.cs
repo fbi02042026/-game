@@ -30,6 +30,8 @@ public class Mercenary : UnitBase
     bool _recallingToHero;
     /// <summary>相对玩家偏远时持续交战计时。</summary>
     float _awayFightTimer;
+    /// <summary>【2026-10-20】牧师「站住等自动奶」已定身时长，超过 MERC_HEAL_WAIT_MAX_SEC 强制恢复跟队。</summary>
+    float _healWaitTimer;
     /// <summary>引导：原地眩晕，不跑 AI，受击不死。</summary>
     public bool TutorialStunned { get; private set; }
     float _stunAnimTimer;
@@ -188,6 +190,7 @@ public class Mercenary : UnitBase
     {
         base.ResetForReuse();
         _acquireLock = null;
+        _healWaitTimer = 0f;
     }
 
     public void SetHireId(string id)
@@ -655,14 +658,36 @@ public class Mercenary : UnitBase
 
         EnsureAiPolicy();
 
-        // 牧师：有伤员且治疗技可放时，站住等自动奶
+        // 牧师：有伤员且治疗技可放时，站住等自动奶。
+        // 【2026-10-20 主人拍板】原实现无条件定身 return，两条路会脱队/死锁：
+        // ① 定住时不过拴绳、不走 10-19 的「边打边跟」，玩家往前跑牧师钉在原地；
+        // ② 施法失败（蓝不足回蓝慢 / merc_skills 表缺耗蓝 fail closed）时 CooldownRemain 一直 <= 0
+        //    而 AllyNeedsHeal() 战斗中几乎恒真（任一队友含自己 < 92% 血）→ 无限站桩。
+        // 现加两道保险：离玩家超过 MERC_STICK_RADIUS 不许定住；定住超过 MERC_HEAL_WAIT_MAX_SEC 强制跟队。
+        // 治疗是 MercSkillCaster.Update 自动放的，不要求站着 —— 边走边奶成立，本分支只保留「奶人时站着」的表现。
         if (SkillCaster != null && SkillCaster.HasActiveSkill && SkillCaster.CooldownRemain <= 0f
             && AllyNeedsHeal())
         {
-            if (rb != null) rb.velocity = Vector2.zero;
-            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
-            ApplyLaneY(Time.deltaTime);
-            return;
+            var waitHero = Hero.Instance;
+            bool tooFarFromHero = waitHero != null && !waitHero.isDead
+                && Mathf.Abs(GetCombatX(this) - GetCombatX(waitHero)) > GameConfig.MERC_STICK_RADIUS;
+            _healWaitTimer += Time.deltaTime;
+            if (tooFarFromHero || _healWaitTimer > GameConfig.MERC_HEAL_WAIT_MAX_SEC)
+            {
+                _healWaitTimer = 0f;
+                // 不定住，落到底部正常 AI（跟队 / 粘跟随），治疗照常自动放
+            }
+            else
+            {
+                if (rb != null) rb.velocity = Vector2.zero;
+                if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+                ApplyLaneY(Time.deltaTime);
+                return;
+            }
+        }
+        else
+        {
+            _healWaitTimer = 0f;
         }
 
         // 拴绳：离玩家太远 / 偏远交战过久 → 清目标回队

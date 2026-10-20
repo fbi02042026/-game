@@ -22,6 +22,7 @@ public class MercGainCinematicUI : MonoBehaviour
 
     Transform _stand;
     Text _name;
+    RectTransform _bgRt;
     CanvasGroup _bgCg, _standCg, _nameCg;
     ParticleSystem[] _bgFx;   // 主人在 BG 节点下摆的特效，界面出现时一起播放
     Vector2 _nameBasePos;
@@ -70,6 +71,7 @@ public class MercGainCinematicUI : MonoBehaviour
             Done();
             return;
         }
+        _bgRt = bg as RectTransform;
 
         // 副标题（可选）：挂在 NamePlate 子节点，随名字一起淡入上移；null / 空 → 隐藏
         var subTr = nameTr.Find("SubTitle");
@@ -93,6 +95,10 @@ public class MercGainCinematicUI : MonoBehaviour
             m.playOnAwake = false;
             ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
+
+        // 2026-10-20 主人报「背景拉伸后人物离开台子」：先把立绘/名字/BG 特效贴回背景台子，
+        // 再取 _nameBasePos（名字动画基准要取贴台后的位置）
+        FitStageAlignment(nameTr);
 
         _name = nameTr.GetComponent<Text>();
         _nameBasePos = nameTr.GetComponent<RectTransform>().anchoredPosition;
@@ -141,6 +147,43 @@ public class MercGainCinematicUI : MonoBehaviour
                            "（Resources/Icons/MercStand/ 下缺图，需主人补图）");
         img.sprite = sp;
         img.enabled = sp != null;
+    }
+
+    /// <summary>
+    /// 2026-10-20 主人报「随着背景拉伸，人物离开背景上台子位置了」的贴台适配（本界面专属）：
+    /// BG 是拉伸铺满（锚点 0~1 + Simple 拉伸），瘦屏逻辑高会超过 1280，背景图里的台子随拉伸
+    /// 上下移动；而 Stand（脚底 -337）/ NamePlate（-437）/ BG 下特效（台子光圈 -292、光线 134）
+    /// 都是固定坐标 → 人物飘离台子。
+    /// 修法：这些元素的 y 一律乘「BG 实际高 ÷ 设计高 1280」——归一化后钉在背景图同一个点上。
+    /// 720×1280 设计分辨率下因子=1，预制体摆的值一个像素不动；只有被拉伸时才补偿。x 居中不动。
+    /// </summary>
+    void FitStageAlignment(Transform nameTr)
+    {
+        if (_bgRt == null) return;
+        Canvas.ForceUpdateCanvases();
+        float h = _bgRt.rect.height;
+        if (h <= 0f) h = (transform as RectTransform).rect.height;   // 兜底读根画布
+        if (h <= 0f) return;
+        float k = h / GameConfig.DESIGN_HEIGHT;
+        if (Mathf.Approximately(k, 1f)) return;
+
+        // ① 立绘：pivot 底部中心，脚底 y 随台子等比移动
+        var srt = _stand as RectTransform;
+        if (srt != null)
+            srt.anchoredPosition = new Vector2(srt.anchoredPosition.x, srt.anchoredPosition.y * k);
+
+        // ② 名字：跟脚走（必须在取 _nameBasePos 之前调，见 Play 里的顺序）
+        var nrt = nameTr as RectTransform;
+        if (nrt != null)
+            nrt.anchoredPosition = new Vector2(nrt.anchoredPosition.x, nrt.anchoredPosition.y * k);
+
+        // ③ BG 下特效（台子光圈 BasicZoneYellow / 光线 TreasureChestGlowRays）跟着背景里的位置走
+        for (int i = 0; i < _bgRt.childCount; i++)
+        {
+            var child = _bgRt.GetChild(i);
+            var p = child.localPosition;
+            child.localPosition = new Vector3(p.x, p.y * k, p.z);
+        }
     }
 
     static CanvasGroup EnsureGroup(GameObject go, out float targetAlpha)

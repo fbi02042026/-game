@@ -29,7 +29,8 @@ using UnityEngine.UI;
 ///
 /// <para>强弱判据只有 <see cref="EquipCompare"/> 一处，这里只负责显示。</para>
 /// <para>【2026-10-16 主人原话「如果玩家没点按钮 自动替换成战力高的」】玩家一直不点（超时）时
-/// 改按战力自动选强的一件（<see cref="AutoPickByPower"/>）；点空白处仍是「留着旧的」（明确动作不代选）。</para>
+/// 改按战力自动选强的一件（<see cref="AutoPickByPower"/>）。
+/// 【2026-10-20 主人原话「不要给玩家关闭」】点空白处不再关闭弹窗，玩家必须二选一。</para>
 /// </summary>
 public class EquipReplaceConfirmUI : MonoBehaviour
 {
@@ -181,12 +182,10 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             _keepBtn.onClick.RemoveAllListeners();
             _keepBtn.onClick.AddListener(() => Answer(false));
         }
-        // 点空白处＝不冒险，按「留着旧的」处理（与超时同一个保守方向）
-        if (_dimBtn != null)
-        {
-            _dimBtn.onClick.RemoveAllListeners();
-            _dimBtn.onClick.AddListener(() => Answer(false));
-        }
+        // 【2026-10-20 主人原话「出现替换装备那个窗口时不要给玩家关闭」】
+        // 点空白处不再当「留着旧的」关弹窗 —— 玩家必须点「换上新的」或「留着旧的」二选一。
+        // Dim 节点保留（它还要挡住点击穿透到底下面板），只是不再绑关闭回调。
+        // 60 秒超时按战力自动选是 2026-10-16 的既有拍板，不受本条影响。
     }
 
     /// <summary>
@@ -443,7 +442,7 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
     void Answer(bool replace)
     {
-        Debug.Log($"[EquipReplaceConfirm] 玩家点击：{(replace ? "换上新的" : "留着旧的 / 点空白")}");
+        Debug.Log($"[EquipReplaceConfirm] 玩家点击：{(replace ? "换上新的" : "留着旧的")}");
         _answer = replace;
         _answered = true;
     }

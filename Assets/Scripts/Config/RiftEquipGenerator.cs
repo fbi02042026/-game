@@ -472,7 +472,7 @@ public static class RiftEquipGenerator
         if (bonus == 0f) return value;
         if (string.IsNullOrEmpty(attrId)) return value;
         if (IsRateAttr(attrId)) return value;
-        if (attrId == "RANGE") return value; // 射程走像素→世界单位换算，不适合直接加
+        if (attrId == "RANGE") return value; // 【2026-10-20】射程已是身位小数（0.15~0.8），掉落加成（+10 级别）不能往上叠
         return value + bonus;
     }
 
@@ -485,8 +485,9 @@ public static class RiftEquipGenerator
         bonus = null;
         if (!RiftEquipTables.TryResolveCombatAttr(attrId, job, out AttrType type, out bool isPercent))
             return false;
-        if (attrId == "RANGE")
-            value = GameConfig.PixelsToUnits(Mathf.Max(1f, value));
+        // 【2026-10-20 主人拍板】RANGE 改「身位」口径：equip_attr_ranges.csv 的区间
+        // 现在直接存世界单位（普通 0.15~0.3 / 传奇 0.5~0.8），不再 ÷100 像素换算
+        //（旧写法把表值当像素 ÷100，5 点 → 0.05 世界单位，穿上无感、面板显示「射程+0」）。
         // 【2026-10-19 主人拍板】Poison / FireDamage 与暴击系同口径强制改加算：
         // 两者基础值都是 0（加成量属性），isPercent=true 会走 AttrSystem 乘算 0×(1+v)=0 —— 词条直接失效
         //（WeaponAffixSystem.cs 10-10 注释里 PhyPower / MagicPower 踩过同一个坑）。

@@ -473,7 +473,10 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         PrepareSlashParticles(projectile);
         ApplySlashLocalFacing(projectile);
         int initialFacing = target != null && target.transform.position.x >= fromPos.x ? 1 : -1;
-        ApplyVfxFacing(projectile, initialFacing);
+        // 【2026-10-20 主人报：Boss 从左往右放弹道，子弹是反的】同直线弹道协程：
+        // 弹体镜像按阵营定死（Ally 尖端朝右/Enemy 尖端朝左），方向全靠每帧 AlignProjectileToward 旋转；
+        // initialFacing 只留给命中特效用，不再参与弹体镜像。
+        ApplyVfxFacing(projectile, faction == VfxFaction.Ally ? 1 : -1);
         SetVFXSortingLayer(projectile.transform);
         EnsureSlashParticleVisible(projectile);
         EnsureProjectileSpriteVisible(projectile);
@@ -551,7 +554,11 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         ResetTintableColors(projectile);
         PrepareSlashParticles(projectile);
         ApplySlashLocalFacing(projectile);
-        ApplyVfxFacing(projectile, facingDir);
+        // 【2026-10-20 主人报：Boss 从左往右放弹道，子弹是反的】
+        // 指向已由下方 AlignProjectileToward 按真实飞行方向旋转负责；镜像不能再跟 facingDir 走，
+        // 否则「贴图尖端朝左的敌弹」朝右飞时双重翻转 180°（尖端朝后）。改为按阵营定死基准朝向：
+        // Ally 弹贴图尖端朝右(+1)，Enemy 弹贴图尖端朝左(-1)，左右飞行全靠旋转对准。
+        ApplyVfxFacing(projectile, faction == VfxFaction.Ally ? 1 : -1);
         SetVFXSortingLayer(projectile.transform);
         EnsureSlashParticleVisible(projectile);
         EnsureProjectileSpriteVisible(projectile);

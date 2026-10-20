@@ -44,12 +44,15 @@ public partial class BattleEntryDraftPanel
             bool isRandom = !s.Cat.HasValue;
             bool slotFree = free && isRandom;
             bool has = isRandom || (cats != null && cats.Contains(s.Cat.Value));
-            // 价格与余额都按<b>各自币种</b>算（真源 SlotMachineSystem，单出口）：
+            // 价格与余额都按<b>各自币种</b>算：
             // 佣兵定向 = 佣兵币的价与余额；装备/技能定向 = 抽奖币的价与余额。
             int price = isRandom ? randomPrice : SlotMachineSystem.FocusPrice(s.Cat.Value);
-            long wallet = isRandom
-                ? coins
-                : SlotMachineSystem.Balance(SlotMachineSystem.FocusCurrency(s.Cat.Value));
+            // 【2026-10-20 修·主人报「抽奖金币不足 直接就开始了」】余额一律用调用方传进来的
+            // coins（= BattleManager.currentGold 局内抽奖币池）—— 真扣费唯一出口是
+            // SpendBattleGold(currentGold)，面板判「买得起吗」必须跟它同一本账。
+            // 旧写法走 SlotMachineSystem.Balance(FocusCurrency(cat)) = 局外存档金币，
+            // 局外有钱 → 定向按钮没置灰，玩家一点 → BattleManager 查局内不够 → toast 后面板被收、直接开战。
+            long wallet = coins;
             // 2026-10-06：本拍已抽完（引导局一次一抽）→ 全部置灰，玩家只剩「继续」可点。
             bool on = !_drawLocked && has && (slotFree || wallet >= price);
             // 置灰交给 Button.interactable —— 它会按 disabledColor 作用在 icon 上；

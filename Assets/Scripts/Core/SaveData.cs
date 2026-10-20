@@ -259,6 +259,10 @@ public class SaveData
 
     // === 冒险日志里程（收集驱动，与战斗成就点数分离）===
     public int logMileagePoints = 0;
+    /// <summary>【2026-10-20 主人拍板】累计获得点数（等级唯一依据）。
+    /// logMileagePoints 是可消费钱包，商店花钱只扣它不扣这里，消费不掉级。
+    /// 老存档迁移：加载时取 Max(旧值, 当前钱包) 兜底。</summary>
+    public int logMileageTotalEarned = 0;
     public List<IntIdEntry> claimedLogMileageLevelEntries = new List<IntIdEntry>();
     [NonSerialized] public HashSet<int> claimedLogMileageLevels = new HashSet<int>();
     public List<StringIdEntry> logMileageGrantEntries = new List<StringIdEntry>();
@@ -385,6 +389,9 @@ public class SaveData
         defeatedMonsterEntries ??= new List<StringIdEntry>();
         claimedLogMileageLevelEntries ??= new List<IntIdEntry>();
         logMileageGrantEntries ??= new List<StringIdEntry>();
+        // 老存档迁移：累计获得点数至少不低于当前钱包（历史玩家不因新字段掉级）
+        if (logMileageTotalEarned < logMileagePoints)
+            logMileageTotalEarned = logMileagePoints;
         unlockedWorldEntries ??= new List<StringIdEntry>();
         completedMainEntries ??= new List<StringIdEntry>();
         completedSideEntries ??= new List<StringIdEntry>();

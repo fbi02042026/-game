@@ -1,7 +1,9 @@
 # clearCountMin达到后可用精灵上限
-# 【2026-10-20 主人拍板】stageIndexBonus 2→7：第1关起即开放1~7号普通怪（8/9/10号仍按通关次数解锁）；
+# 【2026-10-20 主人拍板·原话「前两关就前两种 然后每两关加1种」】
+# stageIndexBonus 回 2，关卡序号在 ConfigManager 里改按 stageIndex/2 递增：
+# 第1~2关只出1~2号怪 → 之后每两关多1种；8/9/10号仍按通关次数解锁。
 # 4号（minWave=9 末关排面怪）不受本表影响，照旧只在各章末关出。
 clearCountMin,spriteIndexMax,stageIndexBonus,note
-0,7,7,首次通关
-2,8,7,
-4,10,7,
+0,7,2,首次通关
+2,8,2,
+4,10,2,

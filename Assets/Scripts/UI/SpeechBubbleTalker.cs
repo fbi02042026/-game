@@ -96,6 +96,7 @@ public class SpeechBubbleTalker : MonoBehaviour
     bool _facesReady;
     int _pokeClicks;
     float _lastPokeTime;
+    string _lastPokeLine;   // 上一句戳一戳台词，用于尽量不重复
 
     void EnsureFaces()
     {
@@ -220,13 +221,16 @@ public class SpeechBubbleTalker : MonoBehaviour
         if (angry)
         {
             _pokeClicks = 0;
-            line = "……手，收回去。本小姐生气的时候，可不温柔哦。";
+            // 【2026-10-20 主人拍板】连点生气句改为从 AngryPokeLines 随机取（原来固定一句）
+            line = AngryPokeLines[Random.Range(0, AngryPokeLines.Length)];
             ShowBoardFace(_faceAngry, 1.5f);
+            PokeMotion(true);          // 生气＝左右躲闪
         }
         else
         {
             line = PickReceptionistLine();
             ShowBoardFace(_faceShy);   // 单次招呼＝害羞脸
+            PokeMotion(false);         // 常规＝上下轻浮
         }
 
         // 只停说话链路（TalkLoop/SpeakOnceThenResume 内联执行，停外层即全停）；
@@ -244,9 +248,38 @@ public class SpeechBubbleTalker : MonoBehaviour
             return "这么晚还不休息？……嗯，本小姐也还没困。";
         if (TavernEggState.DefeatStreak >= TavernEggState.ComfortStreakThreshold)
             return "又输了？……过来坐下，缓口气再走，谁让你难过了。";
+        // 【2026-10-20 主人拍板】点击回退池从 Tips 换成「戳一戳」专属 PokeLines（Tips 留给轮播）
         if (Random.value < 0.03f)
-            return RareLines[Random.Range(0, RareLines.Length)];
-        return Tips[Random.Range(0, Tips.Length)];
+            return PickPokeLine(PokeRareLines);
+        return PickPokeLine(PokeLines);
+    }
+
+    /// <summary>从池里取一句，尽量不与上一句重复（最多重试 4 次）；顺手记进 _lastPokeLine。</summary>
+    string PickPokeLine(string[] pool)
+    {
+        if (pool == null || pool.Length == 0) return null;
+        string line = pool[Random.Range(0, pool.Length)];
+        for (int i = 0; i < 4 && pool.Length > 1 && line == _lastPokeLine; i++)
+            line = pool[Random.Range(0, pool.Length)];
+        _lastPokeLine = line;
+        return line;
+    }
+
+    /// <summary>
+    /// 【2026-10-20 主人拍板】戳一戳轻动作：常规 RequestPat，生气 RequestShake。
+    /// 守卫与 ShowBoardFace 一致 —— 看板被 Turn 换成佣兵立绘时（BoardIsDefaultReceptionist=false）绝不动。
+    /// 动作期间 PortraitMotion 自己会停掉同节点的 PortraitIdleMotion 呼吸，播完复位并恢复。
+    /// </summary>
+    void PokeMotion(bool angry)
+    {
+        var hall = GuildHallUI.Instance;
+        if (hall == null || !hall.BoardIsDefaultReceptionist) return;
+        var img = hall.boardCharacterImage;
+        if (img == null) return;
+        var motion = PortraitMotion.EnsureOn(img.rectTransform);
+        if (motion == null) return;
+        if (angry) motion.RequestShake();
+        else motion.RequestPat();
     }
 
     // 御姐口吻：功能性信息也带着从容和一点点居高临下的关照
@@ -269,6 +302,40 @@ public class SpeechBubbleTalker : MonoBehaviour
     {
         "老板娘的酒？一半出自我的手哦。嘘，这可是机密。",
         "会长年轻时也是冒险者……想知道细节？以后说给你听。",
+    };
+
+    // 【2026-10-20 主人拍板】「戳一戳」专属台词池：只供玩家点击前台小姐时用，
+    // 与上面的 Tips / RareLines 分开 —— 那两个是 TalkLoop 自动轮播的功能提示池，不许混用、不许删。
+    // 人设沿用 :61 口径：前台小姐姐＝御姐、傲娇（从容慵懒、口嫌体正直、偶尔毒舌）。
+    static readonly string[] PokeLines =
+    {
+        "……手拿开。本小姐可不是摆设。",
+        "有事说事，动手动脚的，扣你委托金哦。",
+        "哼，胆子不小。看在你还算顺眼的份上。",
+        "再戳，今天的推荐委托就没你的份了。",
+        "本小姐很忙的——……不过，也不是不能理你。",
+        "啧，黏人的猫。算了，让你戳一下。",
+        "这么闲？裂隙那边可不等人哦。",
+        "手，收回去。……三秒，我数着呢。",
+        "你倒是熟得快。才认识几天？",
+        "别闹。被人看见，本小姐的威严还要不要了。",
+        "……行了行了，戳够了没？再戳我可要记仇了。",
+        "想引起我注意？直说就好，本小姐又不是不通人情。",
+    };
+
+    // 连点 PokeAngryClicks 次的生气句（第 1 条为原有那句，保留）
+    static readonly string[] AngryPokeLines =
+    {
+        "……手，收回去。本小姐生气的时候，可不温柔哦。",
+        "第三次了。你是真的不怕死呢。",
+        "好啊——今天的委托，你自己去跑。",
+    };
+
+    // 3% 稀有句
+    static readonly string[] PokeRareLines =
+    {
+        "……其实，也不讨厌啦。别告诉别人。",
+        "戳够了吗？……那，轮到我戳回去了。",
     };
 
     /// <summary>

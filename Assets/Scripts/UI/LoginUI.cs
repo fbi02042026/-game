@@ -62,6 +62,7 @@ public class LoginUI : MonoBehaviour
     RectTransform _healthNoticeRt;
     Graphic _agreeCheckGraphic;
     Transform _agreeCheckTf;
+    Text _versionLabel;
 
     /// <summary>Boot 等入口绑定：开始游戏进城镇</summary>
     public void BindEnterTown(System.Action enterTown)
@@ -85,6 +86,7 @@ public class LoginUI : MonoBehaviour
         EnsureLogoMotion();
         WireClicks();
         EnsureDebugClearSaveButton();
+        EnsureVersionLabel();
         EnsureSafeArea();
         EnsureTapLoginRow();
     }
@@ -97,6 +99,7 @@ public class LoginUI : MonoBehaviour
         EnsureLogoMotion();
         WireClicks();
         EnsureDebugClearSaveButton();
+        EnsureVersionLabel();
         EnsureSafeArea();
         EnsureTapLoginRow();
         EnsureAutoNotice();
@@ -124,19 +127,65 @@ public class LoginUI : MonoBehaviour
 
     /// <summary>
     /// 刘海 / 挖孔 / 底部手势条避让（2026-10-13 主人拍板「要1」：登录页接 SafeArea）。
-    /// 顶侧：RightMenu（设置等）走 SafeAreaFitter.Offset 只挪 anchoredPosition，锚点/尺寸不动；
+    /// 顶侧：RightMenu（公告/设置竖列）走 ApplyRightMenuLayout 统一排版（见该方法注释）；
     ///   「清除存档」按钮在 EnsureDebugClearSaveButton 里同样挂 Offset。
-    ///   RightMenu 是 Offset 的父容器，NoticeButton / SettingsButton 作为子节点整体跟随，
+    ///   NoticeButton / SettingsButton 作为 RightMenu 子节点整体跟随，
     ///   公告按钮与设置按钮拿到的是同一份避让，**不要在 NoticeButton 上再挂 fitter**（会双重下推）。
     /// Logo：LoginLogoMotion 每帧写 anchoredPosition，挂 fitter 会互相覆盖，
     ///   改为把顶部内缩量并进入场基准位（见 LoginLogoMotion.Awake）。
     /// 底侧：忠告 + 适龄图标在 ApplyBottomFooterLayout 里把 bottomPad 加上底部内缩量。
     /// ActionPanel（距底 136）/ LegalBar 手势条盖不到，不动。
-    /// 幂等：EnsureTopOffset 已挂就复用，可重复调。
+    /// 幂等：可重复调。
     /// </summary>
     void EnsureSafeArea()
     {
-        SafeAreaFitter.EnsureTopOffset(transform.Find("RightMenu") as RectTransform);
+        // RightMenu 不再挂 SafeAreaFitter：排版收口到 ApplyRightMenuLayout 单一出口
+        // （同一节点两个写入口会互相覆盖，见 ApplyRightMenuLayout 注释）。
+        ApplyRightMenuLayout();
+    }
+
+    // ── RightMenu（公告/设置按钮竖列）排版：单一出口 ──
+    // 预制体真源：LoginUI.prefab RightMenu anchor/pivot=(1,1)、anchoredPosition=(-10,-153)
+    // （git 全历史恒为此值）。2026-10-20 主人真机截图实证：包内 RightMenu 被多挪了
+    // 左 ≈118 / 下 ≈168 逻辑单位，量值正好等于 safeArea 的左内缩+顶内缩 ——
+    // 即有环节把 safeArea.left 也算进了位移；项目口径是「左右永不缩」（竖屏设计宽锁死）。
+    // 因此这里运行时强制：X 恒等于预制体基准（绝不吃左右内缩），Y = 基准 - 顶部安全区；
+    // LateUpdate 按帧守卫（值没变不写），任何别的写入口挪走后下一帧都会被压回贴角位。
+    RectTransform _rightMenuRt;
+    Vector2 _rightMenuBase;
+    bool _rightMenuBaseCaptured;
+
+    void ApplyRightMenuLayout()
+    {
+        if (_rightMenuRt == null)
+        {
+            _rightMenuRt = transform.Find("RightMenu") as RectTransform;
+            if (_rightMenuRt == null)
+            {
+                Debug.LogError("[LoginUI] 未找到 RightMenu，公告/设置按钮无法排版");
+                return;
+            }
+        }
+        if (!_rightMenuBaseCaptured)
+        {
+            _rightMenuBase = _rightMenuRt.anchoredPosition;
+            _rightMenuBaseCaptured = true;
+            // 基准应为 (-10,-153)；若日志里偏离，说明出包用的预制体和仓库不一致，先对齐仓库再排查
+            Debug.Log($"[LoginUI] RightMenu 预制体基准 anchoredPosition={_rightMenuBase}");
+        }
+        _rightMenuRt.anchorMin = new Vector2(1f, 1f);
+        _rightMenuRt.anchorMax = new Vector2(1f, 1f);
+        _rightMenuRt.pivot = new Vector2(1f, 1f);
+        var want = new Vector2(_rightMenuBase.x, _rightMenuBase.y - SafeAreaFitter.TopInsetUnits(_rightMenuRt));
+        if (_rightMenuRt.anchoredPosition != want)
+            _rightMenuRt.anchoredPosition = want;
+    }
+
+    void LateUpdate()
+    {
+        // 保险：真机上 RightMenu 位置被其它环节挪走过；每帧守卫（只是几次比较，不变不写），
+        // 谁挪了都在当帧末尾被压回贴角位。
+        ApplyRightMenuLayout();
     }
 
     /// <summary>
@@ -182,6 +231,7 @@ public class LoginUI : MonoBehaviour
     void OnRectTransformDimensionsChange()
     {
         ApplyBottomFooterLayout();
+        ApplyRightMenuLayout();
         if (backgroundImage != null)
             UiLayoutStretch.ApplyBgStretch(backgroundImage.rectTransform, backgroundImage);
     }
@@ -544,6 +594,55 @@ public class LoginUI : MonoBehaviour
         GameFonts.ApplyToHierarchy(go.transform);
         // 2026-10-13 主人拍板：刘海避让（Offset 只挪位置，幂等）
         SafeAreaFitter.EnsureTopOffset(rt);
+    }
+
+    /// <summary>
+    /// 【2026-10-20 主人要求：登录页左上角显示版本号】
+    /// 运行时补节点（项目口径「UI 用运行时补节点，别改预制体」）。
+    /// 版本号真源 = Application.version（ProjectSettings.bundleVersion，出包改号自动跟随），不写死字符串。
+    /// 位置：左上角贴角；编辑器里 DebugClearSaveButton 也占左上角，版本号排到它下方避让（真机无此按钮，不受影响）。
+    /// 刘海避让走 SafeAreaFitter.EnsureTopOffset（Offset 模式只挪 anchoredPosition，与全页口径一致）。
+    /// 幂等：可重复调。
+    /// </summary>
+    void EnsureVersionLabel()
+    {
+        if (_versionLabel == null)
+        {
+            var existing = transform.Find("VersionLabel");
+            _versionLabel = existing != null ? existing.GetComponent<Text>() : null;
+            if (_versionLabel == null)
+            {
+                var go = new GameObject("VersionLabel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+                go.transform.SetParent(transform, false);
+                _versionLabel = go.GetComponent<Text>();
+            }
+
+            var rt = _versionLabel.rectTransform;
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0f, 1f);
+            rt.sizeDelta = new Vector2(200f, 36f);
+
+            // 编辑器：排在「清除存档」调试按钮下方避让（该方法已先跑，位置含刘海内缩后的现值）
+            float topY = -8f;
+            if (Application.isEditor)
+            {
+                var dbg = transform.Find("DebugClearSaveButton") as RectTransform;
+                if (dbg != null)
+                    topY = dbg.anchoredPosition.y - dbg.sizeDelta.y - 6f;
+            }
+            rt.anchoredPosition = new Vector2(16f, topY);
+
+            _versionLabel.font = GameFonts.GetChinese();
+            _versionLabel.fontSize = 24;
+            _versionLabel.fontStyle = FontStyle.Bold;
+            _versionLabel.alignment = TextAnchor.UpperLeft;
+            _versionLabel.color = new Color(1f, 1f, 1f, 0.9f);
+            _versionLabel.raycastTarget = false;
+            _versionLabel.text = "v" + Application.version;
+            // 2026-10-20：左上角属于刘海高发区，接 Offset 避让（只挪位置，幂等）
+            SafeAreaFitter.EnsureTopOffset(rt);
+        }
     }
 
     void OnClickClearSave()

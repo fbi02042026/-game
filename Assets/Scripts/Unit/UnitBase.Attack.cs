@@ -210,10 +210,9 @@ public partial class UnitBase
         AttackVfxKit kit = GetAttackVfxKit();
         bool allyMelee = isAlly && kit == AttackVfxKit.MeleeSlash;
         bool allyRanged = isAlly && (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb);
-        bool killWindup = isAlly && ShouldUseKillWindup(target, damage, isCrit, openingHit);
         float atkCd = GetAttackCooldown();
         if (unitAnim != null)
-            unitAnim.PlayAttack(kit, allyMelee && (isCrit || killWindup), atkCd);
+            unitAnim.PlayAttack(kit, allyMelee && isCrit, atkCd);
         CombatJuice.Instance?.PlaySwingSfx();
 
         VfxFaction faction = isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
@@ -248,13 +247,6 @@ public partial class UnitBase
         if (allyMelee)
         {
             StartCoroutine(CoAllyMeleeAttack(
-                target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf, killWindup));
-            return;
-        }
-
-        if (allyRanged && killWindup)
-        {
-            StartCoroutine(CoAllyRangedKillWindup(
                 target, damage, isCrit, openingHit, kit, faction, firePos, hitPos, facingDir, hitTf));
             return;
         }
@@ -347,89 +339,26 @@ public partial class UnitBase
         return damage;
     }
 
-    bool ShouldUseKillWindup(UnitBase target, float damage, bool isCrit, bool openingHit)
-    {
-        if (target == null || target.isDead || target.attr == null) return false;
-        // Boss/精英：仅预测致死的最后一击才慢放+放大（平时暴击不触发）
-        if (target is Monster m && (m.IsBossUnit || m.IsEliteWave))
-        {
-            // 引导宿敌挂死亡门：血到底不判死（钳1点等遗言），致死预测必然落空，
-            // 慢放会演出成「慢下来又没死」。死亡门挂着期间不进击杀前摇。
-            if (m.holdAtDeathDoor) return false;
-            return target.currentHp <= PredictBasicAttackDamage(target, damage, openingHit);
-        }
-        return false;
-    }
-
-    float PredictBasicAttackDamage(UnitBase target, float damage, bool openingHit)
-    {
-        float d = damage;
-        if (this is Hero)
-        {
-            d *= SpecialWeapons.GetDamageMultiplier(target);
-            float fire = SpecialWeapons.GetFlatFireBonus();
-            if (fire > 0f && target != null && !target.isDead)
-                d += DamageFormula.FinalHit(fire, target.attr, false);
-        }
-        return DamageFormula.FinalHit(d, target.attr, false);
-    }
-
     IEnumerator CoAllyMeleeAttack(
-        UnitBase target, float damage, bool isCrit, bool openingHit,
-        AttackVfxKit kit, VfxFaction faction,
-        Vector3 firePos, Vector3 hitPos, int facingDir, Transform hitTf, bool killWindup)
-    {
-        float delay;
-        if (killWindup)
-        {
-            CombatJuice.Instance?.BeginKillWindupJuice(true, this, target);
-            delay = GameConfig.CRIT_WINDUP_UNSCALED;
-        }
-        else
-        {
-            delay = unitAnim != null
-                ? unitAnim.GetAllyMeleeHitDelay()
-                : GameConfig.ALLY_MELEE_HIT_NORM * 0.5f;
-        }
-
-        yield return new WaitForSecondsRealtime(delay);
-
-        if (killWindup)
-            CombatJuice.Instance?.EndKillWindupJuice();
-
-        if (this == null || isDead || target == null || target.isDead)
-        {
-            if (killWindup)
-                CombatJuice.Instance?.RevealKillCamBars();
-            yield break;
-        }
-
-        ResolveBasicAttackHit(target, damage, isCrit, openingHit);
-        if (BattleVFXSystem.Instance != null)
-            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit, this);
-        if (killWindup)
-            CombatJuice.Instance?.RevealKillCamBars();
-    }
-
-    IEnumerator CoAllyRangedKillWindup(
         UnitBase target, float damage, bool isCrit, bool openingHit,
         AttackVfxKit kit, VfxFaction faction,
         Vector3 firePos, Vector3 hitPos, int facingDir, Transform hitTf)
     {
-        CombatJuice.Instance?.BeginKillWindupJuice(false, this);
-        yield return new WaitForSecondsRealtime(GameConfig.KILL_CAM_RANGED_WINDUP);
-        CombatJuice.Instance?.EndKillWindupJuice();
+        // 【2026-10-20 主人拍板「不要这个了」】精英/Boss 致死一击的慢放前摇整套摘除：
+        // 旧版这里会 BeginKillWindupJuice（timeScale 压 0.1 慢放 0.5s）再结算，玩家看着一卡一卡。
+        // 现在致死一击与普通攻击同一条路：正常出手延迟 → 直接结算。
+        float delay = unitAnim != null
+            ? unitAnim.GetAllyMeleeHitDelay()
+            : GameConfig.ALLY_MELEE_HIT_NORM * 0.5f;
+
+        yield return new WaitForSecondsRealtime(delay);
 
         if (this == null || isDead || target == null || target.isDead)
-        {
-            CombatJuice.Instance?.RevealKillCamBars();
             yield break;
-        }
 
-        // 击杀前摇已等过；此处不再叠放箭延迟，立刻出弹
-        FireAllyRangedBasicProjectile(
-            target, damage, isCrit, openingHit, kit, faction, facingDir, 0f);
-        CombatJuice.Instance?.RevealKillCamBars();
+        ResolveBasicAttackHit(target, damage, isCrit, openingHit);
+        if (BattleVFXSystem.Instance != null)
+            BattleVFXSystem.Instance.PlayAttackKit(kit, faction, firePos, hitPos, facingDir, hitTf, isCrit, this);
     }
 
     void ResolveBasicAttackHit(UnitBase target, float damage, bool isCrit, bool openingHit)

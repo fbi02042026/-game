@@ -199,7 +199,9 @@ public static class WeaponAffixSystem
             case AttrType.LifeSteal: v = (0.02f + Random.Range(0.01f, 0.03f)) * mul; break;
             case AttrType.Defense: v = (2f + Random.Range(1f, 4f)) * mul; break;
             case AttrType.MaxHp: v = (10f + Random.Range(5f, 20f)) * mul; break;
-            case AttrType.AttackRange: v = (0.1f + Random.Range(0.05f, 0.2f)) * mul; break;
+            // 【2026-10-20 主人拍板】射程改「身位」口径，与 equip_attr_ranges.csv RANGE 行同区间
+            //（普通 0.15~0.3）：旧 0.1~0.3 偏小，且掉落路径旧口径 ÷100 后面板显示「射程+0」。
+            case AttrType.AttackRange: v = (0.15f + Random.Range(0f, 0.2f)) * mul; break;
             case AttrType.CooldownReduce: v = (0.03f + Random.Range(0.01f, 0.05f)) * mul; break;
             case AttrType.Dodge: v = (0.02f + Random.Range(0.01f, 0.03f)) * mul; break;
             default: v = 1f * mul; break;

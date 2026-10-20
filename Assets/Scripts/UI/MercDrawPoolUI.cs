@@ -412,7 +412,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
         Debug.Log("[MercDrawPoolUI] 点击池格 " + index + "（开放格数=" + slots + "）");
         if (index >= slots)
         {
-            UIManager.Instance?.ShowToast(LockHintOf(index) + "后开启");
+            // 【2026-10-20 主人拍板】点锁格必须弹提示 —— force 弹，防被酒馆气泡/对话压制吞掉
+            UIManager.Instance?.ShowToast(LockHintOf(index) + "后开启", true);
             return;
         }
         var ordered = _picked;

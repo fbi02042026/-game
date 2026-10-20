@@ -23,6 +23,11 @@ public static partial class GameConfig
     public const float MERC_CATCHUP_SPEED_MUL = 1.35f;   // 掉队后追赶速度 = 玩家移速 × 此倍率
     public const float MERC_CATCHUP_ENTER_DIST = 0.8f;   // 落后编队位超过此距离才加速，否则同速跟（防顶着玩家跑）
 
+    // 【2026-10-20 主人拍板】牧师「站住等自动奶」的最长定身时长：
+    // 施法失败（蓝不够回蓝慢 / merc_skills 表缺耗蓝 fail closed）时 CooldownRemain 一直 <= 0，
+    // 原实现会无限站桩脱队 → 超此时限强制恢复跟队（治疗由 MercSkillCaster.Update 自动放，不要求站着）。
+    public const float MERC_HEAL_WAIT_MAX_SEC = 1.5f;
+
     public const int ADVANCED_MERC_GUILD_LEVEL = 5; // 优秀=公会5；稀有10/传奇20 另见 MercQuality
 
     [Header("隐藏经验等级")]

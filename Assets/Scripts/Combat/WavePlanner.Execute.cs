@@ -108,6 +108,9 @@ public partial class WavePlanner
         // 引导波 compositionStyle 恒 0，走 tutorial_battle 表编成不受影响。
         _activeWaveComposition = wave != null ? wave.compositionStyle : 0;
         float waveSpacing = GetMonsterWaveSpacing();
+        // 【2026-10-20 主人拍板】本波的出生点候选池（车道×深度档，已洗牌），逐只随机取用；
+        // 随机只落在车道与深度上，进场侧恒为右侧。
+        var spawnPool = BuildSpawnPointPool();
         var usedSpritesThisWave = new System.Collections.Generic.HashSet<int>();
         var usedLanes = new System.Collections.Generic.List<float>();
         float stagger = wave != null && wave.staggerOverride >= 0f
@@ -158,6 +161,9 @@ public partial class WavePlanner
             GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
             bool fromLeft = false;
             float preferEngageX;
+            // 普通波：出生点随机抽出来的车道 / 深度（池空兜底时才在下面补算）
+            float pooledLane = 0f;
+            float pooledDepth = 0f;
             if (wave.aroundAnchor)
             {
                 float ox = AroundEngageOffsets[i % AroundEngageOffsets.Length] + Random.Range(-0.45f, 0.45f);
@@ -173,13 +179,29 @@ public partial class WavePlanner
             }
             else
             {
-                fromLeft = false;
+                // X 方向保留原有等距队列 + 抖动（ResolveEngageXForEnterSide 会把交战点钳到进场同侧）
                 preferEngageX = engageBaseX + i * waveSpacing + Random.Range(-0.22f, 0.22f);
+                SpawnPointSlot sp;
+                if (TryTakeSpawnPoint(spawnPool, usedLanes, out sp))
+                {
+                    pooledLane = sp.laneY;
+                    pooledDepth = sp.depth;
+                    usedLanes.Add(sp.laneY);
+                }
+                else
+                {
+                    // 池空（可行走区读不到 / 候选取尽）→ 退回原行为，不许静默
+                    Debug.LogWarning($"[WavePlanner] 出生点池已空，第 {i + 1}/{wave.monsterCount} 只退回等距车道兜底");
+                    fromLeft = false;
+                    pooledLane = BattleLaneBounds.LaneSlot(i, wave.monsterCount);
+                    pooledDepth = i * GameConfig.MONSTER_ENTER_DEPTH_STEP;
+                    usedLanes.Add(pooledLane);
+                }
             }
 
             float lane = (wave.aroundAnchor || wave.bilateralEnter)
                 ? BattleLaneBounds.PickSpreadLane(usedLanes)
-                : BattleLaneBounds.LaneSlot(i, wave.monsterCount);
+                : pooledLane;
             if (wave.aroundAnchor || wave.bilateralEnter)
                 usedLanes.Add(lane);
             if (wave.spawnAnchor != null)
@@ -191,12 +213,13 @@ public partial class WavePlanner
             bool eliteUnit = monsterScale >= GameConfig.ELITE_SCALE_MULTIPLIER - 0.05f;
             bool hasBias = arch != null && !string.IsNullOrEmpty(arch.affixBias) && eliteUnit;
             if (hasBias) MonsterAffixDefs.SetPendingBias(arch.affixBias);
-            // 【2026-10-05 主人拍板「多点出生点」】普通波按序号把入场起点往外错开，
-            // 一整波从远近不同位置一起涌进来（观感「成群压过来」，也不再需要靠长 stagger 排队）。
-            // 围攻/夹击波本来就是同帧同时到场的设计，保持 offset=0 不动。
+            // 【2026-10-05 主人拍板「多点出生点」】一整波从远近不同的位置一起涌进来，
+            // 观感是「成群压过来」，不再需要靠长 stagger 排队。
+            // 【2026-10-20 主人拍板】普通波的深度档不再按序号累加，改由出生点池随机抽取
+            // （见 GameConfig.MONSTER_SPAWN_DEPTH_TIERS）；围攻/夹击波保持 offset=0 不动。
             float enterDepth = (wave.aroundAnchor || wave.bilateralEnter)
                 ? 0f
-                : i * GameConfig.MONSTER_ENTER_DEPTH_STEP;
+                : pooledDepth;
             Monster m = SpawnMonsterOffscreenEnter(
                 engagePos, lane, monsterScale, template, stageIdx, spriteIndexOverride,
                 wave.forcedTarget, fromLeft, enterDepth);

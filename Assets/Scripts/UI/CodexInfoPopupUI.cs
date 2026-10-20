@@ -24,6 +24,8 @@ public class CodexInfoPopupUI : MonoBehaviour
     public Button dimButton;
     /// <summary>top 节点下的小图标：图鉴入口按怪物/佣兵换 guaiwuicon/yongbingicon。</summary>
     public Image topIcon;
+    /// <summary>top 节点下的头条文字（预制体文案「怪物信息」）：图鉴入口按怪物/佣兵换成「怪物图鉴/佣兵图鉴」（2026-10-20）。</summary>
+    public Text topTitleText;
     /// <summary>可选「解锁」按钮：预制体里没有时运行时补一个，节点名固定 UnlockButton。</summary>
     public Button unlockButton;
     public Text unlockButtonLabel;
@@ -109,7 +111,9 @@ public class CodexInfoPopupUI : MonoBehaviour
     {
         if (panel != null && UiKeyedBackgrounds.ApplyLogFrame(panel, "内容底", preserveAspect: false))
         {
-            panel.type = Image.Type.Simple;
+            // 【2026-10-21 主人拍板】换图可以，图的显示方式不许代码改 —— 之前这里强制
+            // panel.type = Simple，把主人做好的九宫格「内容底」压成整图拉伸（边框被拉粗、
+            // 中间可写区被吃掉），正是文字骑到框上的根因。现在只换图，不动 type。
             var dark = new Color(0.24f, 0.15f, 0.08f, 1f);
             if (titleText != null) titleText.color = dark;
             if (metaText != null) metaText.color = new Color(0.35f, 0.24f, 0.14f, 1f);
@@ -156,6 +160,8 @@ public class CodexInfoPopupUI : MonoBehaviour
             dimButton = FindDeep(root.transform, "Dim")?.GetComponent<Button>();
         if (topIcon == null)
             topIcon = FindDeep(root.transform, "icon")?.GetComponent<Image>();
+        if (topTitleText == null)
+            topTitleText = FindDeep(root.transform, "Name")?.GetComponent<Text>();
     }
 
     void Wire()
@@ -233,13 +239,13 @@ public class CodexInfoPopupUI : MonoBehaviour
                 if (unlockButtonLabel != null) unlockButtonLabel.text = unlockText;
             }
         }
-        if (titleText != null) titleText.text = title ?? "";
-        // 图鉴入口（2026-10-20 主人拍板）：按怪物/佣兵换 top/icon 图标，标题同步换成「怪物图鉴/佣兵图鉴」；
+        if (titleText != null) titleText.text = title ?? "";   // 这里是怪物/佣兵名字，任何情况都不覆盖（2026-10-20 主人纠正：之前被错改成「怪物图鉴」）
+        // 图鉴入口（2026-10-20 主人拍板）：按怪物/佣兵换 top/icon 图标，顶部头条（top/Name，预制体文案「怪物信息」）同步换成「怪物图鉴/佣兵图鉴」；
         // 其他调用方（酒馆解锁等）不传 codexKind，保持原样
         if (codexKind.HasValue)
         {
-            if (titleText != null)
-                titleText.text = codexKind.Value ? "佣兵图鉴" : "怪物图鉴";
+            if (topTitleText != null)
+                topTitleText.text = codexKind.Value ? "佣兵图鉴" : "怪物图鉴";
             if (topIcon != null)
                 topIcon.sprite = Resources.Load<Sprite>(codexKind.Value
                     ? "Art/UI/冒险日志/yongbingicon"
@@ -338,10 +344,12 @@ public class CodexInfoPopupUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 【2026-10-19 排版优化】Desc/Lore 改为按实际文本高度流式排列（只调运行时布局，不动预制体）。
-    /// 之前 Lore 固定在 y=-520：Desc 只有一两行时中间空出一大块；且文本框 500 宽几乎顶到羊皮纸花纹边框。
-    /// 现在：文本宽收窄留安全边距、Desc 紧贴 Meta 底、Lore 紧跟 Desc 实际高度下方，
-    /// 超长文案（如塞拉）逐档降字号并压缩间距，保证不压底部「关闭/解锁」按钮。
+    /// 【2026-10-19 排版优化】Desc/Lore 按实际文本高度流式排列。
+    /// 【2026-10-21 主人拍板】图 / 字可以换，**字的宽度不许代码改**。
+    /// 所以这里只写纵向：Desc 紧贴 Meta 底、Lore 紧跟 Desc 实际高度下方；
+    /// Desc/Lore 的 Width、x、sizeDelta 全部以预制体为准，代码一笔都不碰
+    /// （旧写法把 sizeDelta 读出来再原样写回，仍是代码在动预制体的值，且拉伸锚点下会算错宽度）。
+    /// 文本长度超出可用区时才降字号，避免压到底部「关闭/解锁」按钮。
     /// </summary>
     void LayoutContent()
     {
@@ -351,12 +359,8 @@ public class CodexInfoPopupUI : MonoBehaviour
         var loreRt = loreText.rectTransform;
         if (panelRt == null || descRt == null || loreRt == null) return;
 
-        const float sideMargin = 50f;   // 左右安全边距，避开羊皮纸花纹边框
-        const float metaGap = 6f;       // Meta 与 Desc 的间距
         float loreGap = 16f;            // Desc 与 Lore 的间距（超长时自动压缩）
-
-        float width = panelRt.rect.width - sideMargin * 2f;
-        if (width < 200f) width = 200f;
+        const float metaGap = 6f;       // Meta 与 Desc 的间距
 
         // 顶部起点 = Meta 框底 + 间距（预制体原值 -360 与 Meta 框底 -366 有 6px 重叠）
         float top = -372f;
@@ -381,9 +385,7 @@ public class CodexInfoPopupUI : MonoBehaviour
             loreText.fontSize = _baseLoreSize;
         }
 
-        // 先定宽，再按新宽度取实际文本高度
-        descRt.sizeDelta = new Vector2(width, 0f);
-        loreRt.sizeDelta = new Vector2(width, 0f);
+        // 文本高度按预制体给的宽度算（preferredHeight 自动取 rect 宽，代码不写宽度）
         float descH = descText.preferredHeight;
         float loreH = loreText.preferredHeight;
 
@@ -404,11 +406,9 @@ public class CodexInfoPopupUI : MonoBehaviour
                 loreGap = Mathf.Max(4f, avail - descH - loreH);
         }
 
+        // 只动 y：宽度、x、sizeDelta 一律保留预制体原值
         descRt.anchoredPosition = new Vector2(descRt.anchoredPosition.x, top);
-        descRt.sizeDelta = new Vector2(width, descH);
-
         loreRt.anchoredPosition = new Vector2(loreRt.anchoredPosition.x, top - descH - loreGap);
-        loreRt.sizeDelta = new Vector2(width, loreH);
     }
 
     /// <summary>编辑器生成 / 运行时兜底共用。</summary>

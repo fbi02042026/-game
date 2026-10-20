@@ -584,7 +584,12 @@ public class NextStageRouletteUI : MonoBehaviour
     /// </summary>
     void FinishAndReturnStage()
     {
-        Time.timeScale = _prevTimeScale;
+        // 【2026-10-20 保险】本面板只被关卡图调起，_prevTimeScale 正常只会是关卡图压下的 0（原样还原，
+        // 2026-10-11 口径不变）。这里只收口一种时序交错：混进了受击顿帧的瞬态 0.01（没人会替它还原，
+        // 还原回去 = 全场永久 1% 速僵直）→ 收敛成 1。0 与正常值一律原样还原。
+        Time.timeScale = (Mathf.Approximately(_prevTimeScale, 0f) || _prevTimeScale > 0.015f)
+            ? _prevTimeScale
+            : 1f;
         var stage = _stage;
         var cb = _onEnter;
         _onEnter = null;

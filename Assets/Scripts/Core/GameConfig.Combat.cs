@@ -107,9 +107,12 @@ public static partial class GameConfig
     /// <summary>小怪整体缩小 30%（主人 2026-09-26 定）：在原有 MIN/MAX 之上乘 0.7，不写死新数值。
     /// 精英仍乘 ELITE_SCALE_MULTIPLIER（Normal : Elite 保持 1 : 1.3）；Boss 除外，见下。</summary>
     public const float MONSTER_SMALL_SHRINK = 0.7f;
-    /// <summary>Boss 是否参与 MONSTER_SMALL_SHRINK 缩小（主人 2026-09-26 拍板：Boss 先不缩，只缩小怪）。
-    /// false = Boss 保持原尺寸，在 Monster 设置根缩放时把 0.7 除回去。</summary>
-    public const bool MONSTER_BOSS_APPLY_SMALL_SHRINK = false;
+    /// <summary>Boss 是否参与 MONSTER_SMALL_SHRINK 缩小。
+    /// 【2026-10-20 主人拍板「boss有点大 锁小30%」】打开此开关 = Boss 与小怪同吃 ×0.7（覆盖
+    /// 2026-09-26「Boss 先不缩」的旧口径）。true = 不再把 0.7 除回去，Boss 视觉体型整体缩 30%。
+    /// 只动这一处：BOSS_SCALE_MULTIPLIER（表值 2.6）保持不动 —— 它还兼作 Monster.Init 判
+    /// Boss/精英档位的阈值，改表值会把精英误判成 Boss。</summary>
+    public const bool MONSTER_BOSS_APPLY_SMALL_SHRINK = true;
     public const float MONSTER_SCALE_MIN = 3.75f * MONSTER_SMALL_SHRINK;
     public const float MONSTER_SCALE_MAX = 4.5f * MONSTER_SMALL_SHRINK;
     public const float MONSTER_CHILD_REF_SCALE = 1f;
@@ -195,6 +198,30 @@ public static partial class GameConfig
     public const float MONSTER_ENTER_DEPTH_STEP = 0.18f;
     /// <summary>入场起点比交战点再远多少（世界单位）；过大容易出场「往前窜」</summary>
     public const float MONSTER_ENTER_DISTANCE = 1.2f;
+    /// <summary>
+    /// 【2026-10-20 主人拍板「多出生点随机抽」】出生点池的车道槽数：把 walk 可行走区切成这么多格。
+    /// 取 5 是<b>槽密度与贴边风险的取舍</b>：walk 框实测只有 1.335 高，上下各内缩
+    /// `MONSTER_SPAWN_LANE_EDGE_PAD`(0.18) 后可用高度只剩 0.975 —— 切 9 槽每槽仅 0.108，
+    /// 怪挤成一坨且仍然贴边；切 5 槽每槽 0.195，既不贴边也不会全叠在一起。
+    /// 槽数不再等于一波人数上限（同槽靠 `TryTakeSpawnPoint` 的间距校验兜底）。
+    /// <b>调车道密度只改这一个出口。</b>
+    /// </summary>
+    public const int MONSTER_SPAWN_LANE_SLOTS = 5;
+    /// <summary>
+    /// 【2026-10-20 主人拍板「多出生点随机抽」】车道槽上下各往里收多少（世界单位）：
+    /// 用来防止最上 / 最下槽贴到 walk 框的上下边，导致怪站到地面外面（主人实测「有的怪跑到上面去了」）。
+    /// 走 `BattleLaneBounds.GetLaneSlots` 生效；不内缩时最上槽中心的世界 Y 约 1.082，已顶到框顶 1.156。
+    /// <b>调上下留白只改这一个出口。</b>
+    /// </summary>
+    public const float MONSTER_SPAWN_LANE_EDGE_PAD = 0.18f;
+    /// <summary>
+    /// 【2026-10-20 主人拍板「多出生点随机抽」】进场深度三档：近 / 中 / 远（世界单位，累加在
+    /// `SpawnMonsterOffscreenEnter` 的屏外余量之上）。
+    /// 故意比原 `MONSTER_ENTER_DEPTH_STEP`(0.18) × 8 = 1.44 更近：最远只到 0.9，是<b>刻意保守</b>，
+    /// 保证最远那只也不会明显晚到，不破坏「一波压过来」的观感。
+    /// <b>调远近只改这一个出口。</b>
+    /// </summary>
+    public static readonly float[] MONSTER_SPAWN_DEPTH_TIERS = { 0f, 0.45f, 0.9f };
     /// <summary>玩家出生相对 SpawnPoint 再往左偏（世界单位）</summary>
     public const float SPAWN_X_LEFT_BIAS = -0.5f;
     /// <summary>SPUM 移动动画播放速率（再 +20%）</summary>

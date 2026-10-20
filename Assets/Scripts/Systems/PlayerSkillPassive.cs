@@ -24,6 +24,7 @@ public static class PlayerSkillPassive
     {
         Always,                 // 冷却好就放（默认；未映射的技能走这个）
         HpBelow,               // 自身血量比例 <= hpRatio 才放
+        AnyAllyHpBelow,        // 我方任意单位（玩家或佣兵）血量比例 <= hpRatio 才放
         NearbyMonstersAtLeast   // 自身半径内怪物 >= monsterCount 才放
     }
 
@@ -42,12 +43,20 @@ public static class PlayerSkillPassive
                 case TriggerKind.Always:
                     return true;
                 case TriggerKind.HpBelow:
+                    return IsUnitHpBelow(Hero.Instance, hpRatio);
+                case TriggerKind.AnyAllyHpBelow:
                 {
-                    var hero = Hero.Instance;
-                    if (hero == null || hero.attr == null) return false;
-                    float max = hero.attr.GetAttr(AttrType.MaxHp);
-                    if (max <= 0f) return false;
-                    return hero.currentHp / max <= hpRatio;
+                    // 2026-10-20 主人拍板「治愈之泉触发改成全队血线」：玩家报「回复技能不能给佣兵用」——
+                    // 旧触发只读玩家血（Hero.Instance），佣兵掉血、玩家满血时技能永不自动释放。
+                    // 现口径：玩家或任一在场佣兵 ≤ hpRatio 都触发；治疗目标仍由
+                    // SkillCastService.FindPreferredHealTarget 选血量比例最低者（本就含佣兵）。
+                    if (IsUnitHpBelow(Hero.Instance, hpRatio)) return true;
+                    var mercs = MercenaryManager.Instance != null
+                        ? MercenaryManager.Instance.GetActiveMercs() : null;
+                    if (mercs == null) return false;
+                    for (int i = 0; i < mercs.Count; i++)
+                        if (IsUnitHpBelow(mercs[i], hpRatio)) return true;
+                    return false;
                 }
                 case TriggerKind.NearbyMonstersAtLeast:
                     return CountNearbyMonsters(radius) >= monsterCount;
@@ -57,13 +66,22 @@ public static class PlayerSkillPassive
         }
     }
 
+    /// <summary>单个单位的血量比例是否 ≤ ratio（死亡 / 无属性 / 无上限 → false）。</summary>
+    static bool IsUnitHpBelow(UnitBase u, float ratio)
+    {
+        if (u == null || u.isDead || u.attr == null) return false;
+        float max = u.attr.GetAttr(AttrType.MaxHp);
+        if (max <= 0f) return false;
+        return u.currentHp / max <= ratio;
+    }
+
     /// <summary>身边「近」的半径（世界单位），与 AOE 半径（8）同一量级。</summary>
     const float NearbyRadius = 9f;
 
     /// <summary>
     /// 各玩家技能触发条件（按 skillId，与 player_skills.csv 的 useHint 对应）：
     ///  holy_barrier    圣盾壁垒(护盾)   → 血 <= 80% 开
-    ///  heal_spring     治愈之泉(加血)   → 血 <= 80% 开
+    ///  heal_spring     治愈之泉(加血)   → 全队(玩家或佣兵)血 ≤ 80% 开（2026-10-20 主人拍板）
     ///  thunder_verdict 天雷裁决(AOE/箭雨类) → 身边 >= 3 怪 开
     ///  battle_surge    战意爆发(攻buff)  → 身边 >= 2 怪 开
     ///  deadly_focus    致命专注(暴击buff) → 身边 >= 1 怪 开
@@ -73,7 +91,7 @@ public static class PlayerSkillPassive
     static readonly Dictionary<string, Trigger> Triggers = new Dictionary<string, Trigger>
     {
         ["holy_barrier"]    = new Trigger { kind = TriggerKind.HpBelow,               hpRatio = 0.8f },
-        ["heal_spring"]     = new Trigger { kind = TriggerKind.HpBelow,               hpRatio = 0.8f },
+        ["heal_spring"]     = new Trigger { kind = TriggerKind.AnyAllyHpBelow,          hpRatio = 0.8f },
         ["thunder_verdict"] = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 3, radius = NearbyRadius },
         ["battle_surge"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 2, radius = NearbyRadius },
         ["deadly_focus"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = NearbyRadius },

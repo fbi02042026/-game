@@ -35,9 +35,15 @@ public static class AdventureLogMileage
 
     public static int Points => SaveSystem.Instance?.Data?.logMileagePoints ?? 0;
 
+    /// <summary>
+    /// 【2026-10-20 主人拍板】累计获得点数 = 等级唯一依据。
+    /// Points 是可消费钱包（商店花钱只扣它）；等级/进度一律看这里，消费不掉级、不锁已达标等级奖。
+    /// </summary>
+    public static int TotalEarned => SaveSystem.Instance?.Data?.logMileageTotalEarned ?? 0;
+
     public static int GetLevel()
     {
-        int pts = Points;
+        int pts = TotalEarned;
         int lv = 1;
         for (int i = 1; i < LevelThresholds.Length; i++)
         {
@@ -58,7 +64,7 @@ public static class AdventureLogMileage
 
     public static int PointsIntoCurrentSpan(out int spanNeed)
     {
-        int pts = Points;
+        int pts = TotalEarned;   // 等级进度按累计算，消费不影响（2026-10-20 主人拍板）
         int lv = GetLevel();
         if (lv >= MaxLevel)
         {
@@ -108,6 +114,18 @@ public static class AdventureLogMileage
         var data = SaveSystem.Instance?.Data;
         if (data == null) return false;
 
+        // 【2026-10-20 主人报玩家反馈「里程商店法杖领取不了、没有兑换成功提示」→ 修】
+        // 旧顺序：先把 Lv2 记为已领 → 再发杖 → 发放失败（背包未就绪 / 穿戴失败）被静默吞掉
+        //（TryGrantTwilightStaff 内 showToast:false 压掉了失败 Toast，背包未就绪只 LogWarning），
+        // 且 claimed 已写入并 Save → 玩家永久丢杖、界面无任何成功提示。
+        // 改为「先发货、后记账」：发放失败不入账、不保存，玩家可重试；失败必须可见（LogError + Toast）。
+        if (level == 2 && !SpecialWeapons.TryGrantTwilightStaff(showToast: false))
+        {
+            Debug.LogError("[Mileage] Lv2 暮火之杖发放失败（背包未就绪或穿戴失败），本次领取不入账，玩家可重试");
+            UIManager.Instance?.ShowToast("奖励发放失败，请稍后重试");
+            return false;
+        }
+
         data.claimedLogMileageLevels ??= new HashSet<int>();
         if (!data.claimedLogMileageLevels.Add(level)) return false;
 
@@ -122,11 +140,36 @@ public static class AdventureLogMileage
             data.logMileageTitleId = reward.TitleId;
 
         // 设计：里程 Lv2「森林行者」可领暮火之杖（与教程发放共用防重 key）。
-        // 【2026-10-20 主人拍板】领取即写入（防弹窗期间杀进程丢杖），随后弹确认窗告知
+        // 领取即写入存档（防弹窗期间杀进程丢杖，杖已在上方发放成功），随后弹告知窗
         // 「获得稀有·暮火之杖 + 将替换法师职业初始武器」，玩家点确认关闭；
         // 法师开局替换见 PlayerJobDefs.ApplyForBattle（HasTwilightStaffOwned 判定）。
-        if (level == 2 && SpecialWeapons.TryGrantTwilightStaff(showToast: false))
-            UIManager.Instance?.ShowTwilightStaffConfirm();
+        // 【2026-10-20 主人拍板「这个界面用通用弹窗，并且这个界面点确认无反应」】
+        // 旧实现在 UIManager.ShowTwilightStaffConfirm 里手搓（自建嵌套 Canvas 没补 GraphicRaycaster
+        // → EventSystem 射线收不到这个 Canvas 下的图形，点确认毫无反应；外观也是自己画的圆角块）。
+        // 已整段删除，改走全项目默认弹窗皮（EvacuateConfirmPopup 预制体）+ 单按钮告知模式。
+        if (level == 2)
+        {
+            string trait = string.IsNullOrEmpty(SpecialWeapons.LastGrantedTraitText)
+                ? "见装备详情"
+                : SpecialWeapons.LastGrantedTraitText;
+            // 【2026-10-21 主人拍板：这个弹窗重新排版】旧版正文 = 一整段左对齐长文案（25 号 / 行距 1.0），
+            // 武器名埋在第一行、和后面的说明挤成六行、底边几乎贴确认键。改成分层富文本：
+            // ① 武器名单独一行、放大 + 品质蓝（稀有度色唯一出口 RarityPalette，现算 hex，不手抄色值）；
+            // ② 随机特性独立一行；③ 空一行；④ 两行补充说明降为灰白，弱化。
+            // 弹窗皮本身的居中 / 行距 1.2 / 标题金色由 StaminaConfirmPopup.ApplyNoticeStyle 统一切（关窗还原）。
+            string rareHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Get(Rarity.Rare));
+            string noticeBody =
+                $"<size=30><color=#{rareHex}>「{SpecialWeapons.InstanceName}」</color></size>\n"
+                + $"<size=22>随机特性：{trait}</size>\n"
+                + "\n"
+                + "<size=21><color=#CFCFCF>实力大增，是时候深入裂隙大显身手了！\n"
+                + "此后法师每局开局自动装备它，原初始法杖不再出现。</color></size>";
+            StaminaConfirmPopup.ShowNotice(
+                "恭喜！获得法师限定初始武器",
+                noticeBody,
+                "确认",
+                () => UIManager.Instance?.ShowToast($"法师初始武器已替换：{SpecialWeapons.InstanceName}"));
+        }
 
         SaveSystem.Instance.Save();
         RedDot.RefreshCommon();
@@ -152,6 +195,8 @@ public static class AdventureLogMileage
         data.logMileageGrantedKeys ??= new HashSet<string>();
         if (!data.logMileageGrantedKeys.Add(sourceKey)) return 0;
         data.logMileagePoints = Mathf.Max(0, data.logMileagePoints + points);
+        // 累计获得同步上涨（等级依据），消费不扣这里（2026-10-20 主人拍板：消费不掉级）
+        data.logMileageTotalEarned = Mathf.Max(0, data.logMileageTotalEarned + points);
         if (save) SaveSystem.Instance.Save();
         RedDot.RefreshCommon();
         return points;
@@ -228,7 +273,7 @@ public static class AdventureLogMileage
     public static string FormatStatusLine()
     {
         int lv = GetLevel();
-        int pts = Points;
+        int pts = TotalEarned;   // 等级行展示累计进度，不随商店消费回落（2026-10-20 主人拍板）
         string name = LevelRewards[lv - 1].Label;
         if (lv >= MaxLevel)
             return $"日志里程 Lv{lv} {name}  {pts}点（满级）";

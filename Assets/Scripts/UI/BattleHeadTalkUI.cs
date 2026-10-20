@@ -17,7 +17,6 @@ public class BattleHeadTalkUI : MonoBehaviour
     Coroutine _co;
     bool _skipTyping;
     bool _advance;
-    bool _storyBgmHeld;
     bool _typingDone;
     /// <summary>
     /// 打字机速度（字/秒）。【2026-10-07 主人拍板】36 → 18（慢一倍）：
@@ -50,6 +49,11 @@ public class BattleHeadTalkUI : MonoBehaviour
     const float PadBottom = 22f;
     /// <summary>头顶气泡正文字号。2026-10-10 主人拍板 22→26；2026-10-12 主人再报太挤 → 26→32。要再调改这一个常量。</summary>
     const int BubbleFontSize = 32;
+    /// <summary>
+    /// 气泡锚点离说话人的抬高（世界单位，脚下原点起算）。【2026-10-20 主人「能不能离得近点」】1.55 → 1.35：
+    /// 气泡 pivot 在底部中点，锚点越低气泡越贴头；要再近/再远改这一个常量（低于 1.2 会压到头顶）。
+    /// </summary>
+    const float HeadOffsetY = 1.35f;
 
     public bool IsShowing => _root != null && _root.gameObject.activeSelf;
     public string CurrentLine => _text != null ? _text.text : "";
@@ -163,7 +167,9 @@ public class BattleHeadTalkUI : MonoBehaviour
             maxScale: 2f, minScale: BubbleMinScale);
         if (_text != null) _text.text = "";
         RefreshFollowPosition();
-        AcquireStoryBgm();
+        // 【2026-10-20 主人拍板「战斗中佣兵的吐槽什么的不要算剧情对话」】
+        // 头顶气泡只是碎碎念，不再抢占 BGM（原来每次台词都会切到剧情曲、台词一完战斗曲又从头播）。
+        // 真正的战斗剧情对话仍由 StoryDirector 走 GameBgm.BeginBattleStory/EndBattleStory。
 
         // 打字机：只改字，不再每字重算布局
         if (!string.IsNullOrEmpty(display))
@@ -231,7 +237,7 @@ public class BattleHeadTalkUI : MonoBehaviour
         if (_root == null || !_root.gameObject.activeSelf || _follow == null) return;
         var uiCam = ResolveUiCamera();
         if (uiCam == null) return;
-        Vector3 world = _follow.transform.position + new Vector3(0f, 1.55f, 0f);
+        Vector3 world = _follow.transform.position + new Vector3(0f, HeadOffsetY, 0f);
         Vector3 screen = uiCam.WorldToScreenPoint(world);
         if (screen.z <= 0f)
         {
@@ -271,20 +277,5 @@ public class BattleHeadTalkUI : MonoBehaviour
             _root.gameObject.SetActive(false);
         }
         GlobalToastUI.PopBubble();
-        ReleaseStoryBgm();
-    }
-
-    void AcquireStoryBgm()
-    {
-        if (_storyBgmHeld) return;
-        _storyBgmHeld = true;
-        GameBgm.BeginBattleStory();
-    }
-
-    void ReleaseStoryBgm()
-    {
-        if (!_storyBgmHeld) return;
-        _storyBgmHeld = false;
-        GameBgm.EndBattleStory();
     }
 }

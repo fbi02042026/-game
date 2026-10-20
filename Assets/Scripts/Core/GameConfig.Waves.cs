@@ -144,26 +144,13 @@ public static partial class GameConfig
     public const float COMBAT_KNOCKBACK_CRIT = 0.12f;
     public const float COMBAT_KNOCKBACK_CRIT_KILL = 0.17f;
 
-    /// <summary>暴击前摇慢放：timeScale 与真实等待秒数（暴击 / Boss·精英致死前摇）</summary>
-    public const float CRIT_WINDUP_TIME_SCALE = 0.1f;
-    public const float CRIT_WINDUP_UNSCALED = 0.5f;
-    /// <summary>暴击前摇跳起时玩家根节点统一放大倍率，下落/命中瞬间还原。</summary>
-    public const float CRIT_WINDUP_HERO_SCALE = 1.5f;
     /// <summary>暴击击杀死亡后倒视觉滑动（世界单位，仅程序化死亡 tween）</summary>
     public const float CRIT_KILL_DEATH_SLIDE = 0.15f;
     /// <summary>普通击杀死亡后倒滑动（短于暴击）</summary>
     public const float DEATH_SLIDE_NORMAL = 0.06f;
-    /// <summary>精英/Boss 击杀全屏压暗时长（unscaled）</summary>
-    public const float KILL_FINISHER_DIM_DUR = 0.25f;
-    public const float KILL_FINISHER_DIM_ALPHA = 0.55f;
-
-    /// <summary>击杀镜头拉近（orthoSize 倍率，&lt;1 拉近）；独立开关 COMBAT_JUICE_KILL_CAM</summary>
-    public const float KILL_CAM_ZOOM_MUL = 0.82f;
-    public const float KILL_CAM_ZOOM_IN = 2.0f;
-    public const float KILL_CAM_ZOOM_OUT = 0.07f;
-    /// <summary>远程（弓/法球）击杀短前摇真实秒数</summary>
-    public const float KILL_CAM_RANGED_WINDUP = 0.14f;
-    public static bool COMBAT_JUICE_KILL_CAM = false;
+    // 【2026-10-20 主人拍板「不要这个了」】精英/Boss 致死前摇慢放（CRIT_WINDUP_*）、
+    // 击杀镜头（KILL_CAM_*、COMBAT_JUICE_KILL_CAM）、处决压暗（KILL_FINISHER_DIM_*）
+    // 常量随整套演出删除 —— 玩家看着一卡一卡，最后一击改为与普通击杀一致。
 
     /// <summary>击杀收刀顿帧/微震（独立于 COMBAT_JUICE_CAMERA_SHAKE 全局开关）</summary>
     public const float KILL_FINISHER_HIT_STOP = 0.04f;

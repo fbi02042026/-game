@@ -128,7 +128,8 @@ public partial class Monster : UnitBase
         }
 
         BattleBossHpBar.RefreshFromField();
-        TryBeginBossPhase2();
+        // 【2026-10-20】二阶段触发挪到 Update 每帧重查（TryBeginEnrage 同口径）：
+        // 血量跨线时若正在放技能预警，旧版当场置位却不起手会永久丢切换；现在预警结束的下一帧自动补起手
         TryBeginEnrage();
     }
 
@@ -136,6 +137,8 @@ public partial class Monster : UnitBase
     {
         // 狂暴重判定：存档恢复后本帧按当前血量立即进入（不持久化，重建即重置）
         if (!isDead && _isBossUnit) TryBeginEnrage();
+        // 【2026-10-20 修复「Boss 打到一半僵直」】二阶段切换每帧重查：预警中跨线不置位、解警后补起手
+        if (!isDead && _isBossUnit) TryBeginBossPhase2();
         if (!isDead && _canUseActiveSkill)
         {
             _skillCooldown -= Time.deltaTime;

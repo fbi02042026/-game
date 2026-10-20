@@ -22,30 +22,62 @@ public partial class Monster
     {
         if (!_isBossUnit || _bossPhase2Started || isDead) return;
         if (GetBossPhase() < 2) return;
+        // 【2026-10-20 修复「Boss 打到一半僵直」】旧版先置 _bossPhase2Started 再判断能不能起手：
+        // 血量跨过 70% 那一刻若正在放技能预警（_skillTelegraphing=true），标志已被置 true
+        // 但协程没启动 → 二阶段切换永久丢失。改为：本轮起不了手就不置位，
+        // 由 Monster.Update 每帧重查（与 TryBeginEnrage 同口径），预警结束的下一帧补起手。
+        if (_skillTelegraphing || _bossPhaseShiftBusy) return;
         _bossPhase2Started = true;
-        if (!_skillTelegraphing && !_bossPhaseShiftBusy)
-            StartCoroutine(CoBossPhaseShift());
+        StartCoroutine(CoBossPhaseShift());
     }
 
     IEnumerator CoBossPhaseShift()
     {
         _bossPhaseShiftBusy = true;
-        if (rb != null) rb.velocity = Vector2.zero;
-        UIManager.Instance?.ShowToast("Boss 进入狂暴阶段！");
-        Vector3 center = new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
-        GameObject disc = CreateTelegraphDisc(center, 4.5f);
-        float t = 0f;
-        while (t < GameConfig.BOSS_PHASE_SHIFT_TELEGRAPH)
+        GameObject disc = null;
+        try
         {
-            if (isDead) break;
-            t += Time.deltaTime;
-            yield return null;
+            if (rb != null) rb.velocity = Vector2.zero;
+            UIManager.Instance?.ShowToast("Boss 进入狂暴阶段！");
+            Vector3 center = new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
+            disc = CreateTelegraphDisc(center, 4.5f);
+            float t = 0f;
+            float frozenReal = 0f;   // 【2026-10-20 保险】连续冻场真实时间累计
+            // 冻场感知与技能预警同口径（2026-10-16）：UnitsCanAct=false 期间不倒数，
+            // 红圈原地等，解冻才继续 —— 也修掉「对白冻场中照样倒数、到点隔着对白砸人」。
+            while (t < GameConfig.BOSS_PHASE_SHIFT_TELEGRAPH
+                   || (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct))
+            {
+                if (isDead || this == null) yield break;   // 收尾统一走 finally
+                if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
+                {
+                    t += Time.deltaTime;
+                    frozenReal = 0f;
+                }
+                else
+                {
+                    // 【保险】冻场超上限：放弃本次阶段切换（走 finally 清标志+销毁红圈），不砸地
+                    frozenReal += Time.unscaledDeltaTime;
+                    if (frozenReal >= SkillFrozenBailoutSec)
+                    {
+                        Debug.LogWarning($"[Monster.Boss] 阶段切换冻场超 {SkillFrozenBailoutSec}s，保险中断（放弃本次砸地）");
+                        yield break;
+                    }
+                }
+                yield return null;
+            }
+            if (disc != null) { Destroy(disc); disc = null; }
+            // 【2026-10-19 圆心锁定】伤害圆心 = 红圈位置（预警开始时锁定），不取砸下瞬间 Boss 当前位置
+            if (!isDead)
+                ApplySkillDamage(GetMainAttackStat() * 0.85f, 4.5f, null, center.x);
         }
-        if (disc != null) Destroy(disc);
-        // 【2026-10-19 圆心锁定】伤害圆心 = 红圈位置（预警开始时锁定），不取砸下瞬间 Boss 当前位置
-        if (!isDead)
-            ApplySkillDamage(GetMainAttackStat() * 0.85f, 4.5f, null, center.x);
-        _bossPhaseShiftBusy = false;
+        finally
+        {
+            // 【2026-10-20 保险】协程任何路径退出（冻场中被杀/被停协程/正常收尾）都清标志+销毁红圈，
+            // 绝不让 _bossPhaseShiftBusy 卡死成永久站桩（参照 2026-10-17 波次闸门 try/finally 教训）
+            if (disc != null) Destroy(disc);
+            _bossPhaseShiftBusy = false;
+        }
     }
 
     /// <summary>?????????????????????????/summary>

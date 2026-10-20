@@ -110,8 +110,54 @@ public static class BattleLaneBounds
         return ClampLaneOffset(Mathf.Lerp(min, max, t) + stagger + Random.Range(-jitter, jitter));
     }
 
+    /// <summary>
+    /// 【2026-10-20 主人拍板】出生点池用的车道槽：把可行走区切成 <paramref name="count"/> 个等宽槽，
+    /// 取每槽中心。与 <see cref="LaneSlot"/> 的区别：不做「按序号线性均分 + 交错」，
+    /// 只提供一组稳定的候选车道 Y，由调用方自己洗牌随机取，避免每波都是同一条等距斜线。
+    /// <para><paramref name="outSlots"/> 由调用方传入并复用（进来先 Clear）。</para>
+    /// <para>fail closed：可行走区无效（<c>max - min &lt; 0.001f</c>）→ 清空 <paramref name="outSlots"/>
+    /// 并 LogError，直接返回，绝不静默沿用常量。</para>
+    /// <para><paramref name="edgePad"/>：上下边各往里收这么多，防止最上/最下槽贴到 walk 框边
+    /// （怪会站到地面外）。内缩后高度不足时<b>退化</b>为不内缩并 LogWarning —— 宁可贴边也要刷出怪，
+    /// 绝不返回空表。</para>
+    /// </summary>
+    public static void GetLaneSlots(int count, System.Collections.Generic.List<float> outSlots, float edgePad)
+    {
+        if (outSlots == null) return;
+        outSlots.Clear();
+
+        GetLaneOffsetRange(out float min, out float max);
+        if (max - min < 0.001f)
+        {
+            Debug.LogError("[BattleLaneBounds] walk 可行走区无效，车道槽按空处理");
+            return;
+        }
+
+        float lo = min + edgePad;
+        float hi = max - edgePad;
+        if (hi - lo < 0.001f)
+        {
+            // 框太矮，内缩后没空间了：退回不内缩，仍然切满 count 个槽（不刷怪比贴边更糟）
+            Debug.LogWarning("[BattleLaneBounds] 可行走区过窄，车道槽内缩退化");
+            lo = min;
+            hi = max;
+        }
+
+        int n = count < 1 ? 1 : count;
+        float width = (hi - lo) / n;
+        for (int i = 0; i < n; i++)
+            outSlots.Add(ClampLaneOffset(lo + (i + 0.5f) * width));
+    }
+
+    /// <summary>
+    /// 车道最小间距真源（世界单位）：两只怪的车道 Y 至少差这么多才不叠。
+    /// <b>出生点池（WavePlanner 的 TryTakeSpawnPoint）与 <see cref="PickSpreadLane"/> 共用这一个出口</b>，
+    /// 别处不许再写同义常量。
+    /// </summary>
+    public const float MinLaneGap = 0.32f;
+
     /// <summary>在已占用车道中挑间距最大的候选，尽量不叠。</summary>
-    public static float PickSpreadLane(System.Collections.Generic.IList<float> usedLanes, float minGap = 0.32f)
+    public static float PickSpreadLane(System.Collections.Generic.IList<float> usedLanes, float minGap = MinLaneGap)
     {
         GetLaneOffsetRange(out float min, out float max);
         float best = Random.Range(min, max);

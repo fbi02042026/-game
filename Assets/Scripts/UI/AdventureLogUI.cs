@@ -638,6 +638,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     {
         if (_claim == null) return;
         bool has = AdventureLogAchievements.HasUnclaimed();
+        // 按钮红点与置灰同口径同出口：只看成就可领，不再被里程/碎片宽口径撑亮（2026-10-20 主人报）
+        RedDot.Set(RedDot.AchClaim, has);
         var btn = _claim.GetComponent<Button>();
         if (btn != null) btn.interactable = has;
         for (int i = 0; i < _claim.transform.childCount; i++)
@@ -666,7 +668,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (mercTab != null)
             RedDot.Bind(mercTab, RedDot.LogMerc);
         if (_claim != null)
-            RedDot.Bind(_claim.transform, RedDot.Achievement, new Vector2(-8f, -8f));
+            RedDot.Bind(_claim.transform, RedDot.AchClaim, new Vector2(-8f, -8f));
     }
 
     void SelectTab(LogTab tab, bool force = false)

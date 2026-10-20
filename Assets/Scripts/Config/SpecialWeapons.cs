@@ -187,6 +187,22 @@ public static class SpecialWeapons
         return true;
     }
 
+    /// <summary>
+    /// 【2026-10-20 主人拍板加补偿】修「里程 Lv2 已领但没拿到杖」的存量玩家。
+    /// 背景：旧版 ClaimLevel 先记账后发杖，发放失败被静默吞掉 → 存档里 Lv2 已标已领、
+    /// GrantKey 没写入，玩家永久拿不到杖。命中条件（Lv2 已领 且 无 GrantKey）就补发一次：
+    /// TryGrantTwilightStaff 成功才写 GrantKey → 天然幂等；失败不写任何标记，下次进镇自动重试。
+    /// 唯一入口 = TownSceneBootstrap.BootstrapRoutine（每次进主界面查一次）。
+    /// </summary>
+    public static void RepairMissingLv2Staff()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+        if (data.claimedLogMileageLevels == null || !data.claimedLogMileageLevels.Contains(2)) return;
+        if (HasTwilightStaffOwned()) return;   // GrantKey 已写 = 杖已到手，无需补偿
+        TryGrantTwilightStaff(showToast: true);
+    }
+
     /// <summary>对目标的伤害倍率（仅主角装备暮火时）。</summary>
     public static float GetDamageMultiplier(UnitBase target)
     {

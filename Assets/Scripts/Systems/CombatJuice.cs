@@ -15,14 +15,6 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
     Coroutine _hitStopCo;
     float _hitStopSavedScale = 1f;
 
-    float _critWindupSavedScale = 1f;
-    bool _critWindupActive;
-
-    UnitBase _critScaleUnit;
-    float _critScaleBaseAbsX = 1f;
-    float _critScaleBaseY = 1f;
-    Coroutine _critScaleCo;
-
     float _lastSfxTime = -999f;
     string _lastSfxKey;
 
@@ -104,127 +96,15 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
             victim.GetComponent<UnitAnimation>()?.PunchHitSquash();
     }
 
-    /// <summary>击杀前摇：慢放 + 玩家跳起放大（近战 fullWindup=true；远程短版 false）。
-    /// victim 用于把「镜头拉近」限制为精英/Boss，普通杂兵击杀只保留慢放与英雄放大，避免眩晕。</summary>
-    public void BeginKillWindupJuice(bool fullWindup = true, UnitBase attacker = null, UnitBase victim = null)
-    {
-        BeginCritWindupSlowMo();
-        // 2026-09-17 用户口径：打精英/Boss 最后一下不要玩家放大演出，显得怪。
-        // 普通杂兵击杀保留放大；精英/Boss 只留慢放（镜头拉近本来也只对精英/Boss，且开关默认关）。
-        bool eliteOrBoss = victim is Monster mv && (mv.IsBossUnit || mv.IsEliteWave);
-        if (!eliteOrBoss)
-            BeginCritHeroScalePop(attacker != null ? attacker : Hero.Instance);
-        if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
-        // 镜头拉近仅对精英/Boss：普通杂兵击杀只走慢放，降低晕眩
-        if (!(victim is Monster mon) || (!mon.IsBossUnit && !mon.IsEliteWave)) return;
-        float inDur = fullWindup ? GameConfig.KILL_CAM_ZOOM_IN : GameConfig.KILL_CAM_RANGED_WINDUP;
-        float mul = GameConfig.KILL_CAM_ZOOM_MUL;
-        // 只缩 ortho：场景/单位同一相机一起拉近；勿再缩放视差层（会与 ortho 不同步）
-        GetCameraFollow()?.BeginKillCamZoom(mul, inDur);
-        BattleUI.ApplyKillCamHudCompensation(mul);
-        MonsterHealthBar.SetKillCamHidden(true);
-        // 【2026-10-18 主人报「血条还有一节就死了」根因】屏幕 Boss 血条在这里被提前藏掉，
-        // 致死一击的扣血过程完全不可见 —— 玩家看到的最后状态是「还剩一节」→ 血条凭空消失 → Boss 倒地。
-        // → 屏幕血条不再随击杀镜头藏：致死一击当场扣到零，走 BattleBossHpBar 自身的
-        //   「归零展示 0.8 秒再收起」（2026-10-18 拍板），头顶小血条（MonsterHealthBar）照旧藏。
-    }
-
-    /// <summary>下劈/命中瞬间：还原 timeScale + 玩家缩放 + 镜头瞬间弹回。血条等命中后再解藏。</summary>
-    public void EndKillWindupJuice()
-    {
-        EndCritWindupSlowMo();
-        EndCritHeroScalePop();
-        if (!GameConfig.COMBAT_JUICE_KILL_CAM) return;
-        GetCameraFollow()?.ForceResetKillCamZoom();
-        ResetKillCamScene();
-    }
-
-    void BeginCritHeroScalePop(UnitBase attacker)
-    {
-        EndCritHeroScalePop();
-        if (attacker == null || attacker.isDead || !attacker.isAlly) return;
-        _critScaleUnit = attacker;
-        var t = attacker.transform;
-        _critScaleBaseAbsX = Mathf.Max(0.01f, Mathf.Abs(t.localScale.x));
-        _critScaleBaseY = Mathf.Max(0.01f, Mathf.Abs(t.localScale.y));
-        if (_critScaleCo != null) StopCoroutine(_critScaleCo);
-        _critScaleCo = StartCoroutine(CoCritHeroScalePop());
-    }
-
-    IEnumerator CoCritHeroScalePop()
-    {
-        float targetMul = GameConfig.CRIT_WINDUP_HERO_SCALE;
-        float dur = 0.12f;
-        float elapsed = 0f;
-        while (elapsed < dur && _critScaleUnit != null)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            float k = Mathf.Clamp01(elapsed / dur);
-            // 跳起感：前半更快抬到满倍率
-            float ease = 1f - (1f - k) * (1f - k);
-            ApplyCritHeroScaleMul(Mathf.Lerp(1f, targetMul, ease));
-            yield return null;
-        }
-        ApplyCritHeroScaleMul(targetMul);
-        _critScaleCo = null;
-    }
-
-    void ApplyCritHeroScaleMul(float mul)
-    {
-        if (_critScaleUnit == null) return;
-        var t = _critScaleUnit.transform;
-        float sign = t.localScale.x >= 0f ? 1f : -1f;
-        float sx = _critScaleBaseAbsX * mul;
-        float sy = _critScaleBaseY * mul;
-        t.localScale = new Vector3(sign * sx, sy, t.localScale.z);
-    }
-
-    void EndCritHeroScalePop()
-    {
-        if (_critScaleCo != null)
-        {
-            StopCoroutine(_critScaleCo);
-            _critScaleCo = null;
-        }
-        if (_critScaleUnit != null)
-        {
-            ApplyCritHeroScaleMul(1f);
-            _critScaleUnit = null;
-        }
-    }
-
-    /// <summary>击杀镜头结束后再显示血条，避免解藏当帧又闪一下。</summary>
-    public void RevealKillCamBars()
-    {
-        MonsterHealthBar.SetKillCamHidden(false);
-        BattleBossHpBar.SetKillCamHidden(false);
-    }
-
-    void ResetKillCamScene()
-    {
-        Object.FindObjectOfType<ParallaxBackground>()?.ResetKillCamZoom();
-        BattleUI.ResetKillCamHudCompensation();
-    }
-
-    /// <summary>暴击前摇全屏慢放（BeginKillWindupJuice 内部调用）。</summary>
-    public void BeginCritWindupSlowMo()
-    {
-        if (Time.timeScale <= 0.01f) return;
-        if (_critWindupActive) return;
-        _critWindupSavedScale = Time.timeScale;
-        if (_critWindupSavedScale < 0.01f) _critWindupSavedScale = 1f;
-        Time.timeScale = GameConfig.CRIT_WINDUP_TIME_SCALE;
-        _critWindupActive = true;
-        if (GameConfig.COMBAT_JUICE_SFX)
-            TryPlaySfx(_sfxCrit, "crit_windup", 0.35f);
-    }
-
-    public void EndCritWindupSlowMo()
-    {
-        if (!_critWindupActive) return;
-        Time.timeScale = _critWindupSavedScale > 0.01f ? _critWindupSavedScale : 1f;
-        _critWindupActive = false;
-    }
+    // 【2026-10-20 主人拍板「不要这个了 玩家玩的时候看的一卡一卡的」】
+    // 精英/Boss 致死一击的整套特殊演出已删除：
+    //   BeginKillWindupJuice / EndKillWindupJuice（致死前摇慢放 timeScale 0.1×0.5s）
+    //   BeginCritWindupSlowMo / EndCritWindupSlowMo、玩家跳起放大（CoCritHeroScalePop）
+    //   击杀镜头拉近（KILL_CAM）与血条藏显（SetKillCamHidden 调用方）
+    //   精英/Boss 处决压暗（PlayFinisherDim / CoFinisherDim）
+    // 现在致死一击只走 OnHit + OnKillFinisher，与普通击杀一致。
+    // （CameraFollow/ParallaxBackground/BattleUI/BattleBossHpBar/MonsterHealthBar 上的
+    //   KillCam* 辅助方法随之闲置，按死代码口径只报告不清理。）
 
     /// <summary>击杀收刀：Boss 略长顿帧 + 击杀帧轻震（不依赖全局 shake 开关）。</summary>
     public void OnKillFinisher(Monster victim = null)
@@ -241,10 +121,6 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
 
         if (GameConfig.COMBAT_JUICE_CAMERA_SHAKE)
             GetCameraFollow()?.AddShake(0.12f, 0.18f);
-
-        // 精英/Boss 处决一瞬压暗
-        if (victim != null && (victim.IsBossUnit || victim.IsEliteWave))
-            PlayFinisherDim();
     }
 
     /// <summary>近战/远程出手破空音（命中音仍走 OnHit）。</summary>
@@ -271,61 +147,6 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
             if (cam != null)
                 cam.AddShake(0.03f, 0.1f);
         }
-    }
-
-    void PlayFinisherDim()
-    {
-        if (_finisherDimCo != null)
-            StopCoroutine(_finisherDimCo);
-        _finisherDimCo = StartCoroutine(CoFinisherDim());
-    }
-
-    Coroutine _finisherDimCo;
-    static CanvasGroup _finisherDimCg;
-
-    IEnumerator CoFinisherDim()
-    {
-        var cg = EnsureFinisherDim();
-        if (cg == null) yield break;
-        cg.gameObject.SetActive(true);
-        cg.alpha = GameConfig.KILL_FINISHER_DIM_ALPHA;
-        float t = 0f;
-        float dur = Mathf.Max(0.05f, GameConfig.KILL_FINISHER_DIM_DUR);
-        while (t < dur)
-        {
-            t += Time.unscaledDeltaTime;
-            cg.alpha = Mathf.Lerp(GameConfig.KILL_FINISHER_DIM_ALPHA, 0f, Mathf.Clamp01(t / dur));
-            yield return null;
-        }
-        cg.alpha = 0f;
-        cg.gameObject.SetActive(false);
-        _finisherDimCo = null;
-    }
-
-    static CanvasGroup EnsureFinisherDim()
-    {
-        if (_finisherDimCg != null) return _finisherDimCg;
-        var go = new GameObject("KillFinisherDim");
-        Object.DontDestroyOnLoad(go);
-        var canvas = go.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.FullscreenFx);
-        go.AddComponent<UnityEngine.UI.GraphicRaycaster>().enabled = false;
-        var imgGo = new GameObject("Dim", typeof(RectTransform));
-        imgGo.transform.SetParent(go.transform, false);
-        var rt = imgGo.GetComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-        var img = imgGo.AddComponent<UnityEngine.UI.Image>();
-        img.color = Color.black;
-        img.raycastTarget = false;
-        _finisherDimCg = go.AddComponent<CanvasGroup>();
-        _finisherDimCg.alpha = 0f;
-        _finisherDimCg.blocksRaycasts = false;
-        _finisherDimCg.interactable = false;
-        go.SetActive(false);
-        return _finisherDimCg;
     }
 
     public void OnKillCombo(int combo)

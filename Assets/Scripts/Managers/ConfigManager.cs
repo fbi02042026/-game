@@ -346,10 +346,10 @@ public class ConfigManager : Singleton<ConfigManager>
     /// - 通关4+次: 精灵1-10可用（新增2-3种）
     /// - 精灵11-12: 始终是BOSS，不会出现在普通池中
     ///
-    /// 关卡内渐进规则：
-    /// - 第1关: 精灵1,2
-    /// - 第2关: 精灵1,2,3
-    /// - 第3关+: 精灵1-(3+stageIndex)，但不超过通关次数上限
+    /// 关卡内渐进规则（2026-10-20 主人拍板「前两关就前两种 然后每两关加1种」）：
+    /// - 第1~2关: 精灵1,2
+    /// - 第3~4关: 精灵1,2,3
+    /// - 之后每两关多1种，但不超过通关次数上限
     /// </summary>
     public List<int> GetAvailableSpriteIndices(int gameChapter, int stageIndex, bool isBossWave)
     {
@@ -361,8 +361,11 @@ public class ConfigManager : Singleton<ConfigManager>
         int tierMax = MonsterUnlockTierTable.GetSpriteIndexMax(clearCount);
 
         // 2. 根据关卡索引确定本关可用编号上限
+        // 【2026-10-20 主人拍板·原话「前两关就前两种 然后每两关加1种」】
+        // stageIndex(0起) 改按每两关 +1：第1~2关=stageBonus(2)种 → 第3~4关3种 → 第5~6关4种……
+        // 仍封顶通关次数档 tierMax（0次→7 / 2次→8 / 4次→10）。
         int stageBonus = MonsterUnlockTierTable.GetStageIndexBonus();
-        int stageMax = Mathf.Min(stageBonus + stageIndex, tierMax);
+        int stageMax = Mathf.Min(stageBonus + stageIndex / 2, tierMax);
 
         // 3. BOSS波次返回BOSS编号
         if (isBossWave)

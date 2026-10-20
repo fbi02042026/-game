@@ -129,7 +129,6 @@ public partial class AdventureUI
     // ────────────────────────────────────────────────────
 
     Button _worldMapBtn;
-    bool _worldMapBtnWired;
     RectTransform _swipeGuide;
     Coroutine _swipeGuideAnim;
     /// <summary>「左滑前往下一章」引导只提示一次，成功滑到后续章节即永久关闭。</summary>
@@ -138,43 +137,19 @@ public partial class AdventureUI
     // 顶部体力面板已删（2026-10-18 主人拍板：与大厅共享顶栏的「回满」倒计时重叠，
     // 冒险页不再自建一份，统一走 GuildHallUI 刷新的大厅 TopBar 那份）
 
-    /// <summary>「世界地图」入口：优先用主人在 RightContent 下摆的 WorldMapBtn（2026-10-17，
-    /// 预制体只有 Image，运行时补 Button），没有才回退到标题栏代码生成；
-    /// 通关第 1 章后才显示，点击弹出世界地图选区域开战。</summary>
+    /// <summary>
+    /// 【2026-10-21 主人拍板】世界地图入口暂停显示（地块状态/点击链路未理顺前先不露出来）。
+    /// 隐藏是唯一出口：预制体 RightContent/WorldMapBtn 与标题栏代码生成那颗，两个入口一律关掉。
+    /// 恢复显示时改回读 WorldMapPortal.ShouldAppear() 即可（点击回调 OnOpenWorldMap 原样保留）。
+    /// </summary>
     void EnsureWorldMapEntry()
     {
         var pre = transform.Find("RightContent/WorldMapBtn");
-        if (pre != null)
-        {
-            var btn = pre.GetComponent<Button>();
-            if (btn == null) btn = pre.gameObject.AddComponent<Button>();
-            if (!_worldMapBtnWired)
-            {
-                _worldMapBtnWired = true;
-                btn.onClick.AddListener(OnOpenWorldMap);
-            }
-            _worldMapBtn = btn;
-            bool show = WorldMapPortal.ShouldAppear();
-            if (pre.gameObject.activeSelf != show)
-                pre.gameObject.SetActive(show);
-            return;
-        }
-        var barTf = chapterTitle != null ? chapterTitle.transform.parent : null;
-        if (barTf == null) return;
-        if (_worldMapBtn == null)
-            _worldMapBtn = barTf.Find("WorldMapBtn")?.GetComponent<Button>();
-        if (_worldMapBtn == null)
-        {
-            _worldMapBtn = CreateIconBtn(barTf, "WorldMapBtn", "世界地图", new Vector2(-96, -27), 34f);
-            var wrt = _worldMapBtn.transform as RectTransform;
-            wrt.sizeDelta = new Vector2(108f, 34f);
-            var lbl = _worldMapBtn.GetComponentInChildren<Text>();
-            if (lbl != null) lbl.fontSize = 20;
-            _worldMapBtn.onClick.AddListener(OnOpenWorldMap);
-        }
-        bool show2 = WorldMapPortal.ShouldAppear();
-        if (_worldMapBtn.gameObject.activeSelf != show2)
-            _worldMapBtn.gameObject.SetActive(show2);
+        if (pre != null && pre.gameObject.activeSelf)
+            pre.gameObject.SetActive(false);
+
+        if (_worldMapBtn != null && _worldMapBtn.gameObject.activeSelf)
+            _worldMapBtn.gameObject.SetActive(false);
     }
 
     void OnOpenWorldMap()

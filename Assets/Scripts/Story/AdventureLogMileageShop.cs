@@ -32,15 +32,20 @@ public static class AdventureLogMileageShop
 
     public static readonly ShopItem[] Items =
     {
-        new ShopItem { Id = "gold_bag", Name = "金币袋", CostPoints = 20, WeeklyLimit = 5, Kind = RewardKind.Gold, Amount = 50 },
+        // 【2026-10-20 主人拍板】里程商店价格 ×10
+        new ShopItem { Id = "gold_bag", Name = "金币袋", CostPoints = 200, WeeklyLimit = 5, Kind = RewardKind.Gold, Amount = 50 },
+        // 【2026-10-20 主人拍板】里程商店价格 ×10
         // 【2026-10-17 主人拍板】强化石暂无用途 → 原「强化石×3」改成「天赋石×3」（id 不动，周限购计数照旧）
-        new ShopItem { Id = "mats_3", Name = "天赋石×3", CostPoints = 25, WeeklyLimit = 5, Kind = RewardKind.Talent, Amount = 3 },
+        new ShopItem { Id = "mats_3", Name = "天赋石×3", CostPoints = 250, WeeklyLimit = 5, Kind = RewardKind.Talent, Amount = 3 },
+        // 【2026-10-20 主人拍板】里程商店价格 ×10
         // 【2026-10-20 主人拍板】体力药改 20点=10体力（一次冒险的量），原 15点=1体力不够一次冒险基本无用
-        new ShopItem { Id = "stamina_1", Name = "体力药", CostPoints = 20, WeeklyLimit = 3, Kind = RewardKind.Stamina, Amount = 10 },
-        new ShopItem { Id = "scroll_c", Name = "普通卷轴（招募稀有佣兵）", CostPoints = 30, WeeklyLimit = 3, Kind = RewardKind.ScrollCommon, Amount = 1 },
+        new ShopItem { Id = "stamina_1", Name = "体力药", CostPoints = 200, WeeklyLimit = 3, Kind = RewardKind.Stamina, Amount = 10 },
+        // 【2026-10-20 主人拍板】里程商店价格 ×10
+        new ShopItem { Id = "scroll_c", Name = "普通卷轴（招募稀有佣兵）", CostPoints = 300, WeeklyLimit = 3, Kind = RewardKind.ScrollCommon, Amount = 1 },
+        // 【2026-10-20 主人拍板】里程商店价格 ×10
         // 【2026-10-17 主人拍板】卷轴改版：旧「稀有招募卷」失去用途下架（存量已在存档加载时折算进普通卷轴）；
         // 「传奇招募卷」语义升级为「高级招募卷轴」（招募传奇佣兵专用，id 不动，周限购计数照旧）
-        new ShopItem { Id = "scroll_l", Name = "高级招募卷轴（招募传奇佣兵）", CostPoints = 200, WeeklyLimit = 1, Kind = RewardKind.ScrollLegendary, Amount = 1 },
+        new ShopItem { Id = "scroll_l", Name = "高级招募卷轴（招募传奇佣兵）", CostPoints = 2000, WeeklyLimit = 1, Kind = RewardKind.ScrollLegendary, Amount = 1 },
     };
 
     public static string CurrentWeekKey()

@@ -159,6 +159,9 @@ public static class EquipUiText
         // 抽奖词缀 / 模板）现在都按点存。显示直接 = 点值 + %，不再走 IsRateAttr ×100
         //（旧口径把 5 点显示成「+500%」，虚标 100 倍）。
         if (t == AttrType.FireDamage || t == AttrType.IceDamage) return value.ToString("0.#") + "%";
+        // 【2026-10-20 主人拍板】射程改「身位」口径：存的是世界单位小数（0.15~0.8），
+        // 走整数取整会被抹成「射程+0」。这里单独保留最多两位小数（0.25 → 「+0.25」）。
+        if (t == AttrType.AttackRange) return value.ToString("0.##");
         // 百分比也一并用 RoundToInt：旧写法 12.5% 会显示「12.5%」，而获得时显示「13%」。
         if (isPercent || IsRateAttr(t)) return Mathf.RoundToInt(value * 100f) + "%";
         return Mathf.RoundToInt(value).ToString();

@@ -2413,6 +2413,7 @@ GameObject:
   - component: {fileID: 1779213794565534077}
   - component: {fileID: 1291344015723303006}
   - component: {fileID: 1362703348845295642}
+  - component: {fileID: 6008471868983001696}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: WorldMapPopup
@@ -6117,3 +6118,90 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &6008471868983001696
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3261693433372323098}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e9e10dcbb2606c6e1dd882af410e805, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  mapBackground: {fileID: 5247502537392319735}
+  titleText: {fileID: 5869082144868926356}
+  descText: {fileID: 9176290107046780703}
+  defaultMapSprite: {fileID: 0}
+  regions:
+  - chapterId: 1
+    displayName: "\u66ae\u5f71\u68ee\u6797"
+    normalizedPosition: {x: 0.5, y: 0.22}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
+  - chapterId: 2
+    displayName: "\u5e7d\u51a5\u5893\u56ed"
+    normalizedPosition: {x: 0.72, y: 0.42}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
+  - chapterId: 3
+    displayName: "\u7fe1\u7fe0\u79d8\u5883"
+    normalizedPosition: {x: 0.3, y: 0.38}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
+  - chapterId: 4
+    displayName: "\u6668\u66e6\u8349\u539f"
+    normalizedPosition: {x: 0.52, y: 0.52}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
+  - chapterId: 5
+    displayName: "\u6d77\u5c9b\u9057\u8ff9"
+    normalizedPosition: {x: 0.18, y: 0.48}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
+  - chapterId: 6
+    displayName: "\u5de8\u5ca9\u6df1\u7a9f"
+    normalizedPosition: {x: 0.25, y: 0.65}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
+  - chapterId: 7
+    displayName: "\u8d64\u7130\u70bc\u72f1"
+    normalizedPosition: {x: 0.55, y: 0.74}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
+  - chapterId: 8
+    displayName: "\u6c38\u971c\u96ea\u5883"
+    normalizedPosition: {x: 0.5, y: 0.9}
+    icon: {fileID: 0}
+    normalColor: {r: 0.2, g: 0.24, b: 0.3, a: 0.82}
+    selectedColor: {r: 0.35, g: 0.55, b: 0.35, a: 0.95}
+    clearedColor: {r: 0.13, g: 0.14, b: 0.17, a: 0.72}
+    lockedColor: {r: 0.32, g: 0.32, b: 0.32, a: 0.55}
+  enterButton: {fileID: 0}
+  enterButtonText: {fileID: 0}
+  highlightMaterial: {fileID: 0}
+  regionRoot: {fileID: 187442375143839283}
+  mapMinZoom: 1
+  mapMaxZoom: 1.5

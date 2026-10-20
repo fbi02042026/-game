@@ -25,10 +25,15 @@ public class BattleSideHud : MonoBehaviour
     Text _waveHint;
     CanvasGroup _waveGroup;
 
-    // 击败计数位置：【2026-10-19 主人截图定位置】贴 Boss 血条右端下方、靠右缘——
-    // 右缩 48、距顶 114；想微调只改这两个数。
+    // 击败计数横向位置：【2026-10-19 主人定位置】靠右缘、右缩 48（逻辑宽恒 720，横向不随屏漂）。
     const float KillCounterRightInset = 48f;
-    const float KillCounterTopOffset = 114f;
+    // 【2026-10-20 主人报「有的手机上击败跑到别处了」】纵向改为跟随 BossBar/血条 的实际位置。
+    // 根因：BossBar 在预制体里是画布中心锚点（y=477），屏比越瘦逻辑画布越高、血条离屏顶越远；
+    // 原写死「距顶 114」只在 720×1280 设计屏成立，瘦屏上计数飘到血条上方、9:16 矮屏上压到血条上。
+    // 现口径：HUD 根顶 = 血条底边上方 54.4（在 720×1280 上与原「距顶 114」分毫不差，其它屏比贴着血条走）。
+    const float KillCounterRootGapAboveBarBottom = 54.4f;
+    // BossBar/血条 绑定失败时的落点（= 设计屏 720×1280 摆位；会 LogError，不静默换值）。
+    const float KillCounterDesignTopOffset = 114f;
     // 击杀反馈：每杀一次「数字」放大一下 → 立马缩回原大（【2026-10-20 主人拍板】「击败」标签不缩放）。
     // 【2026-10-19 主人拍板】放大效果保留但节奏加快（原 0.08/0.18 偏拖）。
     const float ComboScalePop = 1.5f;
@@ -47,6 +52,12 @@ public class BattleSideHud : MonoBehaviour
     int _comboShown;
     int _displayCombo;      // 数字滚动：当前逐字显示到的值
     float _rollTimer;       // 数字滚动：距下一次跳格
+
+    // —— 纵向跟随 BossBar（2026-10-20 修正「有的手机上击败跑到别处了」）——
+    RectTransform _bossBarNode;    // BossBar（预制体里锚在画布中心）
+    RectTransform _bossBarFill;    // BossBar/血条（红条；与 BattleBossHpBar 绑的是同一个节点名）
+    int _layoutHDone = -1;         // 上次完成纵向布局时的画布逻辑高（四舍五入，变了才重算）
+    bool _bossBarMissingLogged;    // 绑定失败只报一次错
 
     public static BattleSideHud EnsureOn(Transform battleUiRoot)
     {
@@ -88,9 +99,10 @@ public class BattleSideHud : MonoBehaviour
         root.anchorMax = new Vector2(1f, 1f);
         root.pivot = new Vector2(1f, 1f);
         root.sizeDelta = new Vector2(210f, 250f);
-        // 【2026-10-19 主人截图定位置】右上角，贴 Boss 血条右端下方：右缩 48、距顶 114。
-        // （原 10-15 拍板的 -12,-140 与新位置重叠才改；微调只动上面两个常量）
-        root.anchoredPosition = new Vector2(-KillCounterRightInset, -KillCounterTopOffset);
+        // 初始先落设计屏（720×1280）摆位；随后 Update 里按 BossBar/血条 实际位置重算
+        //（见 RelayoutKillCounter，2026-10-20 主人报「有的手机上击败跑到别处了」的修正）。
+        root.anchoredPosition = new Vector2(-KillCounterRightInset, -KillCounterDesignTopOffset);
+        _layoutHDone = -1;   // 强制下一帧按画布实际高度重算
 
         // —— 击败累计计数（常驻；图源 Resources/Icons/击败，位置样式按主人 2026-10-19 截图）——
         LoadKillSprites();
@@ -220,6 +232,7 @@ public class BattleSideHud : MonoBehaviour
     void Update()
     {
         if (_comboScaleRoot == null || _comboGroup == null) return;
+        TickKillCounterLayout();   // 画布逻辑高变了就按 BossBar 实际位置重摆（见 2026-10-20 修正注释）
         if (_comboPhase == ComboAnimPhase.Hidden || _comboPhase == ComboAnimPhase.Gone)
             return;
 
@@ -287,6 +300,64 @@ public class BattleSideHud : MonoBehaviour
     }
 
     // ────── 击败计数：图片拼数字（图源 Resources/Icons/击败）──────
+
+    /// <summary>
+    /// 画布逻辑高变化时按 BossBar/血条 实际位置重摆纵向（横向恒右缩 48 不随屏漂）。
+    /// 口径：HUD 根顶 = 血条底边上方 54.4 —— 720×1280 上正好还原「距顶 114」的拍板位，
+    /// 瘦屏（逻辑画布更高）上血条下移多少、计数就跟着下移多少，永远贴着血条右端。
+    /// </summary>
+    void TickKillCounterLayout()
+    {
+        var parent = transform.parent as RectTransform;
+        if (parent == null) return;
+        float h = parent.rect.height;
+        if (h <= 0f) return;   // 画布还没量好尺寸，等下一帧
+        if (Mathf.RoundToInt(h) == _layoutHDone) return;   // 没变不干活
+        RelayoutKillCounter(parent, h);
+    }
+
+    void RelayoutKillCounter(RectTransform parent, float canvasH)
+    {
+        _layoutHDone = Mathf.RoundToInt(canvasH);
+        if (_bossBarFill == null && !TryBindBossBar(parent))
+        {
+            if (!_bossBarMissingLogged)
+            {
+                _bossBarMissingLogged = true;
+                Debug.LogError("[BattleSideHud] BattleUI 下找不到 BossBar/血条 —— 击败计数保持设计屏摆位（距顶 114）");
+            }
+            return;   // 不静默换值：保持 Build 时的设计屏摆位（铁律：缺真值要让我看见）
+        }
+        // 血条底边（BossBar 本地，向上为正）= 中心 y − 显示半高；
+        // 含自身缩放（预制体里血条 localScale=0.7），算法与 BattleBossHpBar.EnsureLeftAligned 同款。
+        float barBottomLocal = _bossBarFill.anchoredPosition.y
+                             - _bossBarFill.sizeDelta.y * Mathf.Abs(_bossBarFill.localScale.y) * _bossBarFill.pivot.y;
+        // BossBar 锚在画布中心 → 血条底边折算成「画布中心上方高度」
+        float barBottomAboveCenter = _bossBarNode.anchoredPosition.y + barBottomLocal;
+        // HUD 根（锚画布右上、pivot 右上）的 y：根顶在血条底边上方 54.4
+        float y = barBottomAboveCenter + KillCounterRootGapAboveBarBottom - canvasH * 0.5f;
+        ((RectTransform)transform).anchoredPosition = new Vector2(-KillCounterRightInset, y);
+    }
+
+    bool TryBindBossBar(RectTransform parent)
+    {
+        _bossBarNode = FindChildRecursive(parent, "BossBar") as RectTransform;
+        if (_bossBarNode == null) return false;
+        _bossBarFill = FindChildRecursive(_bossBarNode, "血条") as RectTransform;
+        return _bossBarFill != null;
+    }
+
+    static Transform FindChildRecursive(Transform root, string name)
+    {
+        if (root == null || string.IsNullOrEmpty(name)) return null;
+        if (root.name == name) return root;
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var hit = FindChildRecursive(root.GetChild(i), name);
+            if (hit != null) return hit;
+        }
+        return null;
+    }
 
     const string KillIconPath = "Icons/击败";
     // 【2026-10-20 主人拍板】「击败」标签和数字整体放大 30%（38→49.4、124/42→161.2/54.6），间距不动

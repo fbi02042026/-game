@@ -179,4 +179,114 @@ public partial class WavePlanner
                   $"elite={monster.IsEliteWave} rolled={rolled} MUL={GameConfig.MONSTER_HP_GLOBAL_MUL} " +
                   $"finalMaxHp={hp:F1}");
     }
+
+    // ============================================================
+    // 【2026-10-20 主人拍板】多出生点随机抽
+    // 车道(MONSTER_SPAWN_LANE_SLOTS=5) × 深度档(3) = 15 个候选，洗牌后逐只取用，
+    // 替掉原来「按序号等距铺车道」的死板排布。进场侧【2026-10-20 主人拍板】恒为右侧，不再左右随机。
+    // ============================================================
+
+    /// <summary>
+    /// 【2026-10-20 主人拍板】「车道过密放宽间距」警告的节流标记：<b>每波只打一条</b>。
+    /// 一波最多 5 只怪、可行走区才 0.975 高，几乎每波都会触发，不节流会刷屏。
+    /// 在 <see cref="BuildSpawnPointPool"/> 里重置。
+    /// </summary>
+    bool _spawnLaneWarned;
+
+    /// <summary>一个候选出生点：车道 Y + 进场深度档（进场侧恒为右侧，不再逐点带）。</summary>
+    struct SpawnPointSlot
+    {
+        public float laneY;
+        public float depth;
+    }
+
+    /// <summary>
+    /// 生成本波的出生点候选池并洗牌（Fisher-Yates）。
+    /// 车道 Y 一律来自 <see cref="BattleLaneBounds.GetLaneSlots"/>（可行走区唯一出口）。
+    /// </summary>
+    List<SpawnPointSlot> BuildSpawnPointPool()
+    {
+        _spawnLaneWarned = false;
+        var lanes = new List<float>(GameConfig.MONSTER_SPAWN_LANE_SLOTS);
+        BattleLaneBounds.GetLaneSlots(GameConfig.MONSTER_SPAWN_LANE_SLOTS, lanes,
+            GameConfig.MONSTER_SPAWN_LANE_EDGE_PAD);
+
+        var tiers = GameConfig.MONSTER_SPAWN_DEPTH_TIERS;
+        var pool = new List<SpawnPointSlot>(lanes.Count * (tiers != null ? tiers.Length : 1));
+        if (tiers == null) return pool;
+
+        for (int l = 0; l < lanes.Count; l++)
+        {
+            for (int d = 0; d < tiers.Length; d++)
+            {
+                pool.Add(new SpawnPointSlot
+                {
+                    laneY = lanes[l],
+                    depth = tiers[d],
+                });
+            }
+        }
+
+        // Fisher-Yates 洗牌（UnityEngine.Random.Range(int,int) 上界不含）
+        for (int i = pool.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            var tmp = pool[i];
+            pool[i] = pool[j];
+            pool[j] = tmp;
+        }
+        return pool;
+    }
+
+    /// <summary>
+    /// 从候选池里取一个出生点并移出池子。要求车道与 <paramref name="usedLanes"/> 里
+    /// 每一条已用车道的距离都 ≥ <see cref="BattleLaneBounds.MinLaneGap"/>。
+    /// <para>两遍扫描：第一遍严格校验；找不到说明剩余候选全挤在已用车道附近，
+    /// 第二遍放宽间距直接取用（宁可轻微重叠也不能不刷怪），并打一条 LogWarning（每波一条）。</para>
+    /// <para>池空 → 返回 false（调用方兜底）。</para>
+    /// </summary>
+    bool TryTakeSpawnPoint(List<SpawnPointSlot> pool,
+                           System.Collections.Generic.IList<float> usedLanes, out SpawnPointSlot sp)
+    {
+        if (pool != null)
+        {
+            // 第一遍：车道间距满足
+            for (int i = 0; i < pool.Count; i++)
+            {
+                var cand = pool[i];
+                bool farEnough = true;
+                if (usedLanes != null)
+                {
+                    for (int k = 0; k < usedLanes.Count; k++)
+                    {
+                        if (Mathf.Abs(cand.laneY - usedLanes[k]) < BattleLaneBounds.MinLaneGap)
+                        {
+                            farEnough = false;
+                            break;
+                        }
+                    }
+                }
+                if (!farEnough) continue;
+                pool.RemoveAt(i);
+                sp = cand;
+                return true;
+            }
+
+            // 第二遍：剩余候选车道过密，放宽间距直接取用（不刷怪比轻微重叠更糟）
+            for (int i = 0; i < pool.Count; i++)
+            {
+                var cand = pool[i];
+                if (!_spawnLaneWarned)
+                {
+                    _spawnLaneWarned = true;
+                    Debug.LogWarning($"[WavePlanner] 出生点池剩余候选车道过密，放宽间距（laneY={cand.laneY:F2}）");
+                }
+                pool.RemoveAt(i);
+                sp = cand;
+                return true;
+            }
+        }
+        sp = default;
+        return false;
+    }
 }

@@ -132,6 +132,9 @@ public class TownSceneBootstrap : MonoBehaviour
         // 2026-09-22 起中断结算改为静默（不弹面板），所以这里恒为 false，
         // 登录奖励等本轮弹窗照常走（保留返回值的判断，将来恢复弹窗时不用改调用方）。
         bool settled = SettleInterruptedRunOnce();
+        // 【2026-10-20 补偿】「Lv2 已领但没拿到暮火之杖」的存量玩家进镇自动补发
+        //（幂等：GrantKey 已写就跳过；失败不写标记，下次进镇重试）。
+        SpecialWeapons.RepairMissingLv2Staff();
         if (!settled)
         {
             // 2026-10-15 主人拍板：登录检查改成「每次进主界面都查」——_loginCheckedThisTownVisit 以前

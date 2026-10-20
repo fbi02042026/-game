@@ -50,6 +50,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     readonly Text[] _countTexts = new Text[6];         // 次数：本周可领次数/总次数
     readonly Image[] _icons = new Image[6];            // Icon：物品图标
     readonly Color[] _countBaseColors = new Color[6];  // 次数文字原色（置灰后恢复用）
+    readonly Image[] _exchangeImgs = new Image[6];     // 兑换钮底图（2026-10-20 主人拍板：点数不足/限购完显式置灰用）
+    readonly Color[] _exchangeBaseColors = new Color[6]; // 兑换钮底图原色（置灰后恢复用）
     RectTransform _listContent;                        // 行滑动列表的 Content（运行时动态套 ScrollRect，不动预制体）
     bool _missingLogged;
 
@@ -191,6 +193,16 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                 exBtn = ex.gameObject.AddComponent<Button>();
                 exBtn.targetGraphic = exImg;
             }
+            // 2026-10-20 主人拍板：兑换钮不可用时要「明确变灰」——Unity 默认禁用色是半透明变淡，
+            // 不够直观。改为：禁用态不叠 tint（disabledColor 白），由代码给底图上实心灰（SetExchangeState）。
+            var exColors = exBtn.colors;
+            exColors.disabledColor = Color.white;
+            exBtn.colors = exColors;
+            if (exImg != null)
+            {
+                _exchangeImgs[i] = exImg;
+                _exchangeBaseColors[i] = exImg.color;
+            }
             exBtn.onClick.RemoveAllListeners();
             _exchangeBtns[i] = exBtn;
 
@@ -201,9 +213,36 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             else
                 Debug.LogError($"[Phase3Panel] 节点 {RowName(i)}/{ExchangeName} 缺子节点 {CountName}（Text）");
 
-            // 行根旧 Button 不再承担兑换（兑换只在兑换节点上），清掉残留监听防误触
+            // 2026-10-20 主人报里程商店点击无反应 · 修 Label 遮挡吃掉兑换点击。
+            // 成因：Label 宽 470 大于行宽 414，把 70×35 的兑换钮几乎整块盖住；Label 又是行内 sibling
+            // 最靠后的 Graphic（depth 最大），GraphicRaycaster 先命中它 → 冒泡到行根 Button（无监听）→
+            // 只整行变色、兑换永不触发。修法：行内除「行底图」与「兑换钮子树」外的 Graphic 一律不吃射线
+            // （Icon / Label），命中唯一落在 ExchangeBtn 上。
+            // ⚠ 行底图必须继续吃射线：它没有点击处理器，正好把点击挡在行内，
+            //   否则点商品名/图标会穿透到全屏遮罩 bg → 误关面板。
+            var rowGraphics = row.GetComponentsInChildren<Graphic>(true);
+            for (int g = 0; g < rowGraphics.Length; g++)
+            {
+                var rg = rowGraphics[g];
+                if (rg == null) continue;
+                if (rg.transform == row) continue;   // 行底图：保留，挡穿透
+                if (rg.transform != ex && !rg.transform.IsChildOf(ex))
+                    rg.raycastTarget = false;   // Icon / Label 等：不吃射线
+            }
+            if (cnt != null)
+            {
+                var cntGraphics = cnt.GetComponentsInChildren<Graphic>(true);
+                for (int g = 0; g < cntGraphics.Length; g++)
+                {
+                    if (cntGraphics[g] != null)
+                        cntGraphics[g].raycastTarget = false;   // 次数文字（Text/Outline/Shadow）：不吃射线
+                }
+            }
+
+            // 行根旧 Button 不再承担兑换：兑换唯一入口 = ExchangeBtn（2026-10-20 主人拍板）。
+            // 直接禁用组件：点击不再被它吃掉，也不会再有整行变色的假反馈。
             var rowBtn = row.GetComponent<Button>();
-            if (rowBtn != null) rowBtn.onClick.RemoveAllListeners();
+            if (rowBtn != null) rowBtn.enabled = false;
         }
 
         BindButton(inner, CloseXName, ClosePanel);
@@ -304,6 +343,19 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         return t != null ? t.gameObject : null;
     }
 
+    /// <summary>
+    /// 兑换钮统一出口（2026-10-20 主人拍板「点数不足就变灰」）：
+    /// 可用 = 恢复底图原色；不可用（点数不足 / 本周限购完 / 未达领取条件）= 底图实心灰 DisabledColor。
+    /// 状态标记只走这一个函数，合成 / 暮火之杖 / 商店三处共用，不许各自另写。
+    /// </summary>
+    void SetExchangeState(int i, bool on)
+    {
+        if (i < 0 || i >= 6) return;
+        if (_exchangeBtns[i] != null) _exchangeBtns[i].interactable = on;
+        if (_exchangeImgs[i] != null)
+            _exchangeImgs[i].color = on ? _exchangeBaseColors[i] : DisabledColor;
+    }
+
     static void BindButton(Transform parent, string name, UnityEngine.Events.UnityAction onClick)
     {
         if (parent == null) return;
@@ -398,7 +450,7 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                 if (_icons[i] != null) _icons[i].sprite = LoadResIcon("Icons/Item/icon_log_fragment");
                 if (_exchangeBtns[i] != null)
                 {
-                    _exchangeBtns[i].interactable = can;
+                    SetExchangeState(i, can);
                     _exchangeBtns[i].onClick.RemoveAllListeners();
                     _exchangeBtns[i].onClick.AddListener(() =>
                     {
@@ -418,9 +470,22 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             if (_title != null) _title.text = "里程商店";
             if (_body != null)
             {
-                _body.text = AdventureLogMileage.FormatStatusLine() + "\n本周：" + AdventureLogMileageShop.CurrentWeekKey()
-                             + $"\n卷轴库存 普通{SaveSystem.Instance?.Data?.mercScrollCommon ?? 0}"
-                             + $"/高级{SaveSystem.Instance?.Data?.mercScrollLegendary ?? 0}";
+                // 【2026-10-20 主人拍板】去掉「本周：周key」行；按主人给的样式：点数行 + 等级（称号）行 + 卷轴库存行，
+                // 数字统一用面板已有的价格亮金（PriceColorHex）做颜色，方便玩家看
+                string gold = ColorUtility.ToHtmlStringRGB(PriceColorHex);
+                int pts = AdventureLogMileage.Points;           // 可消费钱包（点数行展示）
+                int earned = AdventureLogMileage.TotalEarned;   // 累计获得 = 等级进度（2026-10-20 主人拍板：消费不掉级）
+                int lv = AdventureLogMileage.GetLevel();
+                string titleName = AdventureLogMileage.LevelRewards[lv - 1].Label;
+                string levelLine = lv >= AdventureLogMileage.MaxLevel
+                    ? $"日志里程等级：{titleName} <color=#{gold}>{earned}点（满级）</color>"
+                    : $"日志里程等级：{titleName} <color=#{gold}>{earned}/{AdventureLogMileage.NextThreshold()}</color>";
+                int scrollCommon = SaveSystem.Instance?.Data?.mercScrollCommon ?? 0;
+                int scrollLegendary = SaveSystem.Instance?.Data?.mercScrollLegendary ?? 0;
+                _body.text = $"日志里程点数：<color=#{gold}>{pts}</color>"
+                             + $"\n{levelLine}"
+                             + $"\n卷轴库存 普通<color=#{gold}>{scrollCommon}</color>"
+                             + $"/高级<color=#{gold}>{scrollLegendary}</color>";
             }
 
             // 2026-10-20 主人拍板：稀有·暮火之杖（里程 Lv2 等级奖励）放第一；
@@ -487,14 +552,17 @@ public class AdventureLogPhase3Panel : MonoBehaviour
 
             if (_exchangeBtns[rowIdx] != null)
             {
-                _exchangeBtns[rowIdx].interactable = can;
+                SetExchangeState(rowIdx, can);
                 _exchangeBtns[rowIdx].onClick.RemoveAllListeners();
                 _exchangeBtns[rowIdx].onClick.AddListener(() =>
                 {
-                    // ClaimLevel 内部：发金币/钻石 → 领取即写入存档 → 弹「获得稀有·暮火之杖」确认窗
+                    // ClaimLevel 内部：先发杖 → 发放成功才记账入存档 → 弹「获得稀有·暮火之杖」确认窗
+                    //（2026-10-20 修「法杖领取不了」：发放失败时 ClaimLevel 内已弹失败 Toast 并可重试，
+                    // 这里只在「真的不可领」时补「暂不可领取」，避免失败场景双重弹字）
                     if (!AdventureLogMileage.ClaimLevel(2))
                     {
-                        UIManager.Instance?.ShowToast("暂不可领取");
+                        if (!AdventureLogMileage.CanClaimLevel(2))
+                            UIManager.Instance?.ShowToast("暂不可领取");
                         return;
                     }
                     UIManager.Instance?.ShowToast($"已领取 Lv2 里程奖励");
@@ -524,10 +592,10 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         // Icon：物品图标
         if (_icons[rowIdx] != null) _icons[rowIdx].sprite = ShopIconFor(item.Id);
 
-        // 兑换按钮：可领可付才可点，否则整钮置灰
+        // 兑换按钮：可领可付才可点，否则整钮置灰（点数不足 / 本周限购完都走同一出口）
         if (_exchangeBtns[rowIdx] != null)
         {
-            _exchangeBtns[rowIdx].interactable = canBuy;
+            SetExchangeState(rowIdx, canBuy);
             _exchangeBtns[rowIdx].onClick.RemoveAllListeners();
             _exchangeBtns[rowIdx].onClick.AddListener(() =>
             {

@@ -90,13 +90,29 @@ public partial class BattleEntryDraftPanel
     /// <summary>
     /// 倒计时数字：挂在<b>面板节点</b>右上角（2026-10-13 #7 从 map 正中挪开，把视觉焦点还给抽奖区），
     /// 不新建美术节点、不改预制体（铁律 3）。
+    /// <para>【2026-10-20 修·主人报「1分钟倒计时没显示出来」】BackpackPanel 自带
+    /// overrideSorting Canvas（预制体里 sortingOrder=20），**整个面板子树都压在关卡图(880)下面**。
+    /// 面板是贴底 730×600/750（不是全屏高度），倒计时在面板右上角 = 面板本地 y≈606~726，
+    /// 正好落在地图覆盖区间（日志实测 mapBottom=300~mapTop=1150）里 → 被地图美术盖死。
+    /// 抽奖按钮在本地 30~220（地图底边以下）所以一直看得见，唯独倒计时被吞。
+    /// 修法 = 给倒计时单独挂 overrideSorting 嵌套 Canvas，抬到抽奖面板层
+    /// <see cref="GameConfig.UiSort.SlotOffer"/>(965)：与「确定」按钮 / DraftOddsPopup
+    /// 同一思路（嵌套 Canvas + 显式 order），不改预制体、不动父级层级。</para>
     /// </summary>
     void EnsureCountdownText()
     {
         if (_countdownText != null) return;
 
+        // 【2026-10-20 修·主人报「1分钟倒计时没显示出来」】见方法注释：单独抬层，否则被地图(880)盖住
+        var go = new GameObject("ContinueCountdown", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        var cv = go.AddComponent<Canvas>();
+        cv.overrideSorting = true;
+        cv.sortingOrder = GameConfig.UiSort.SlotOffer;   // 965：高于关卡图(880)/HUD(950)
+        // 铁律 10：每加一个 Canvas 必补 GraphicRaycaster
+        go.AddComponent<GraphicRaycaster>();
+
         // 【2026-10-13 #7】倒计时挪到面板右上角（锚点 1,1 偏移 -24,-24），不再压屏幕正中。
-        // 宿主用面板自身：它常驻全屏高度，右上角即屏幕右上角，位置稳定醒目。
+        // 宿主用面板自身：位置随面板贴底，屏型变化时锚点自动跟随。
         var host = _panel;
         if (host == null)
         {
@@ -104,7 +120,6 @@ public partial class BattleEntryDraftPanel
             return;
         }
 
-        var go = new GameObject("ContinueCountdown", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
         go.transform.SetParent(host, false);
 
         var rt = go.GetComponent<RectTransform>();

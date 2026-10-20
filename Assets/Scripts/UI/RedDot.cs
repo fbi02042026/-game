@@ -28,6 +28,10 @@ public static class RedDot
     public const string Tavern = "nav.tavern";
     public const string Log = "nav.log";
     public const string Achievement = "log.achievement";
+    /// <summary>2026-10-20 主人报「成就领完了按钮红点不灭」：成就页「领取」按钮专属红点键。
+    /// 只跟成就可领走（AdventureLogAchievements.HasUnclaimed），与按钮置灰同口径；
+    /// 共享键 Achievement 含里程/碎片宽口径，只留给侧栏 Tab 用。</summary>
+    public const string AchClaim = "log.ach.claim";
     public const string LogMonster = "log.monster";
     public const string LogMerc = "log.merc";
     public const string Guild = "nav.guild";
