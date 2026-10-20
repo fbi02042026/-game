@@ -343,80 +343,25 @@ public partial class TalentUI
         }
     }
 
-    /// <summary>任务4 / R_JOB 6选1：打开职业选择弹层（最多 6 个职业）。</summary>
+    /// <summary>
+    /// 任务4 / R_JOB 6选1：打开职业选择弹层（最多 6 个职业）。
+    /// 【2026-10-20 修】改用运行时建树的 JobChoicePopup（带确定按钮 + 费用行）：
+    /// 手工版预制体 ChoicePopup 只有 1 张卡、没有「确定」，旧克隆布局卡重叠飞出 Box，玩家没法选没法确认。
+    /// </summary>
     void OpenRightJobChoice(TalentDefs.TalentRightNode node)
     {
-        EnsureChoicePopupBindings();
-        WireChoiceConfirmIfNeeded();
+        EnsureJobChoicePopup();
+        if (_jobChoicePopup == null) return;
 
         _pendingNode = node;
         _pendingRowIndex = node.index - 1;
         _pendingSelectedOpt = -1;
 
-        if (choicePopup != null) choicePopup.SetActive(true);
-        if (choiceTitleText != null) choiceTitleText.text = node.name;
+        FillJobChoiceCards(node);
+        SelectChoicePopupOption(0);   // 默认选第 1 个职业，费用行同步刷新
 
-        var opts = node.options ?? new TalentDefs.TalentRightOption[0];
-        EnsureChoicePopupOptions(opts.Length);
-        for (int i = 0; i < choiceButtons.Length; i++)
-        {
-            bool on = i < opts.Length;
-            if (choiceButtons[i] != null) choiceButtons[i].gameObject.SetActive(on);
-            if (!on) continue;
-            if (choiceLabels[i] != null) choiceLabels[i].text = opts[i].name;
-            if (choiceIcons[i] != null)
-            {
-                var sp = TalentIcons.GetTalent(opts[i].name);
-                if (sp != null) ApplySprite(choiceIcons[i], sp, true);
-            }
-        }
-        SelectChoicePopupOption(0);
-    }
-
-    /// <summary>弹层选项数量可能超过 3（如 6 职业）；按需克隆按钮并保留原有 Click 绑定。</summary>
-    void EnsureChoicePopupOptions(int count)
-    {
-        if (choiceOptionTemplate == null && choiceButtons != null && choiceButtons.Length > 0 && choiceButtons[0] != null)
-            choiceOptionTemplate = choiceButtons[0].gameObject;
-
-        // 数组扩到 count（默认只有 3 个，6 职业需扩容）
-        if (choiceButtons == null || choiceButtons.Length < count)
-        {
-            int n = count;
-            var nb = new Button[n];
-            var nl = new Text[n];
-            var ni = new Image[n];
-            int copy = choiceButtons != null ? System.Math.Min(choiceButtons.Length, n) : 0;
-            for (int i = 0; i < copy; i++)
-            {
-                nb[i] = choiceButtons[i];
-                nl[i] = choiceLabels != null ? choiceLabels[i] : null;
-                ni[i] = choiceIcons != null ? choiceIcons[i] : null;
-            }
-            choiceButtons = nb;
-            choiceLabels = nl;
-            choiceIcons = ni;
-        }
-
-        for (int i = 0; i < count; i++)
-        {
-            if (choiceButtons[i] == null)
-            {
-                if (choiceOptionTemplate == null) break;
-                var clone = Instantiate(choiceOptionTemplate, choicePopup.transform);
-                clone.name = "Choice_" + i;
-                float xOff = -120f + i * 120f;
-                var rt = clone.GetComponent<RectTransform>();
-                if (rt != null) rt.anchoredPosition = new Vector2(xOff, 104f);
-                choiceButtons[i] = clone.GetComponent<Button>();
-                choiceLabels[i] = clone.GetComponentInChildren<Text>(true);
-                var iconT = clone.transform.Find("Icon") ?? clone.transform.Find("icon");
-                choiceIcons[i] = iconT != null ? iconT.GetComponent<Image>() : null;
-                int opt = i;
-                choiceButtons[i].onClick.RemoveAllListeners();
-                choiceButtons[i].onClick.AddListener(() => SelectChoicePopupOption(opt));
-            }
-        }
+        _jobChoicePopup.SetActive(true);
+        _jobChoicePopup.transform.SetAsLastSibling();
     }
 
     void SelectChoicePopupOption(int optIndex0)
@@ -426,15 +371,22 @@ public partial class TalentUI
         var opts = _pendingNode.options;
         if (opts == null || optIndex0 >= opts.Length) return;
 
-        // 弹层文案显示该职业 1 级效果（JobChoice 各职业 +4%×等级）
-        if (choiceDescText != null)
-            choiceDescText.text = _pendingNode.EffectSummary(1, optIndex0 + 1);
-
-        for (int i = 0; i < choiceButtons.Length; i++)
+        // 费用行：选中职业的 1 级效果（JobChoice 各职业 +4%×等级）+ 消耗（持有不足追加提醒）
+        if (_jobChoiceCost != null)
         {
-            if (choiceButtons[i] == null || !choiceButtons[i].gameObject.activeSelf) continue;
-            SetGraphicAlpha(choiceButtons[i].gameObject, i == optIndex0 ? 1f : 0.55f);
+            int cost = _pendingNode.costByLevel != null && _pendingNode.costByLevel.Length > 0
+                ? _pendingNode.costByLevel[0] : 0;
+            int have = SaveSystem.Instance?.Data?.talentPoints ?? 0;
+            _jobChoiceCost.text = "选中【" + opts[optIndex0].name + "】：" + _pendingNode.EffectSummary(1, optIndex0 + 1)
+                + "\n消耗天赋石：" + cost
+                + (have >= cost ? "（持有 " + have + "）" : "（持有 " + have + "，天赋石不足）");
         }
+
+        // 选中高亮：亮 / 半透明（与二选一弹窗同口径）
+        if (_jobOptCards != null)
+            for (int i = 0; i < _jobOptCards.Length; i++)
+                if (_jobOptCards[i] != null && _jobOptCards[i].activeSelf)
+                    SetGraphicAlpha(_jobOptCards[i], i == optIndex0 ? 1f : 0.55f);
     }
 
     void ConfirmChoicePopup()
@@ -456,6 +408,7 @@ public partial class TalentUI
 
     void CloseChoicePopup()
     {
+        if (_jobChoicePopup != null) _jobChoicePopup.SetActive(false);
         if (choicePopup != null) choicePopup.SetActive(false);
         _pendingNode = null;
         _pendingRowIndex = -1;

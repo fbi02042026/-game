@@ -435,6 +435,27 @@ public static class DraftPool
         }
     }
 
+    // ============================================================
+    // 【2026-10-20 主人拍板「抽奖两次抽出同一个武器 数值都一样」】本局已抽中装备指纹。
+    // 抽奖给出的装备在生效时记一笔（NoteDrawnEquip，唯一生效出口 = RunDraftDirector.CoApplyEquipCard），
+    // 后续抽奖生成候选时避开同模板重掷洗开 —— 根因是武器模板按职业+品质档+伤害类型过滤后
+    // 低章节普通档池子只有一两把，且普通品质 0 词条、主属性取整后撞车，两次抽出完全一样的武器。
+    // 每局开始清零（ResetDrawnEquipTemplates，唯一调用点 = RunDraftDirector.OnRunStart 新局分支）；
+    // 续关不清 —— 续关还是同一局，避开延续。
+    // ============================================================
+
+    static readonly HashSet<string> _drawnEquipTemplateIds = new HashSet<string>();
+
+    /// <summary>每局开始清零（续关不清，同一局延续避开）。</summary>
+    public static void ResetDrawnEquipTemplates() => _drawnEquipTemplateIds.Clear();
+
+    /// <summary>装备奖励生效时记一笔（唯一调用点 = RunDraftDirector.CoApplyEquipCard）。</summary>
+    public static void NoteDrawnEquip(EquipInstance eq)
+    {
+        if (eq == null || string.IsNullOrEmpty(eq.templateId)) return;
+        _drawnEquipTemplateIds.Add(eq.templateId);
+    }
+
     /// <summary>装备类的加权候选。生成逻辑只此一处（BuildWeightedPool 与概率公示都走它）。</summary>
     static List<WeightedCard> CollectEquipCards()
     {
@@ -455,6 +476,10 @@ public static class DraftPool
         // （恒普通 / 必主手武器 / 部位·主属性·模板钉死 / 属性取区间中值），正式关不受影响。
         bool tutorialFixed = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
 
+        // 【2026-10-20 主人拍板】本批三张互不重名；同时避开本局已抽中的装备模板
+        //（连续两次抽奖不再出「同一个武器数值都一样」，见 NoteDrawnEquip / ResetDrawnEquipTemplates）。
+        var batchSeen = new HashSet<string>(_drawnEquipTemplateIds);
+
         for (int i = 0; i < CardCount; i++)
         {
             EquipInstance eq = null;
@@ -462,9 +487,16 @@ public static class DraftPool
             int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
             try
             {
-                var one = ConfigManager.Instance.GetRandomEquipInstances(
-                    1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS, false, chapter, tutorialFixed);
-                if (one != null && one.Count > 0) eq = one[0];
+                // 撞同模板就重掷洗开；池子只剩同一把时最后一次强收 —— 宁可重复也不减卡、不卡流程。
+                for (int attempt = 0; attempt < 5; attempt++)
+                {
+                    var one = ConfigManager.Instance.GetRandomEquipInstances(
+                        1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS, false, chapter, tutorialFixed);
+                    if (one == null || one.Count == 0 || one[0] == null) { eq = null; break; }
+                    eq = one[0];
+                    bool fresh = batchSeen.Add(eq.templateId);
+                    if (fresh || attempt >= 4) break;
+                }
             }
             catch (System.Exception e)
             {

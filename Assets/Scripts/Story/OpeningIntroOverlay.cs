@@ -24,6 +24,9 @@ public class OpeningIntroOverlay : MonoBehaviour
     AspectRatioFitter _aspectFitter;
     bool _skipRequested;
     bool _bgmMutedForCutscene;
+    bool _fpsBoosted;
+    int _prevTargetFps;
+    int _prevVSync;
 
     // 黑屏优化：后台预热的播放器（APIOnly 不渲染），Show 时整体接管
     static VideoPlayer _prewarmPlayer;
@@ -108,6 +111,8 @@ public class OpeningIntroOverlay : MonoBehaviour
     void Build(string videoPath, VideoPlayer adopted)
     {
         Instance = this;
+        BoostFramePaceForVideo();
+
         var canvas = gameObject.AddComponent<Canvas>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.FullscreenFx);
 
@@ -204,6 +209,39 @@ public class OpeningIntroOverlay : MonoBehaviour
             _rawImage.texture = _videoPlayer.texture;
 
         _videoPlayer.Play();
+
+        // 起播预滚（卡顿修复）：头 0.6 秒是解码器预热 + 城镇首帧渲染/弹窗初始化重活的高发期，
+        // 直接出画面就会一顿一顿。先藏画面并静音，让纯黑垫住预滚窗口，窗口过后画面、声音一起出，
+        // 音视频时钟不受影响。窗口内点按仍可跳过（跳过直接收尾，不再走淡出）。
+        if (!_skipRequested)
+        {
+            Color vidCol = _rawImage != null ? _rawImage.color : Color.white;
+            if (_rawImage != null)
+                _rawImage.color = new Color(vidCol.r, vidCol.g, vidCol.b, 0f);
+            if (_videoAudio != null)
+                _videoAudio.mute = true;
+
+            float settle = 0.6f;
+            float st = 0f;
+            while (st < settle && !_skipRequested && _videoPlayer.isPlaying)
+            {
+                st += Time.unscaledDeltaTime;
+                if (Clicked()) _skipRequested = true;
+                yield return null;
+            }
+
+            if (_videoAudio != null)
+                _videoAudio.mute = !GameAudio.AudioEnabled; // 还原音频开关状态
+            if (_rawImage != null && !_skipRequested)
+                _rawImage.color = vidCol;
+
+            if (_skipRequested)
+            {
+                FinishNow();
+                yield break;
+            }
+        }
+
         while (_videoPlayer.isPlaying && !_skipRequested)
         {
             if (Clicked()) _skipRequested = true;
@@ -282,7 +320,8 @@ public class OpeningIntroOverlay : MonoBehaviour
             _aspectFitter.aspectRatio = ar;
         if (_rawImage != null)
             UiLayoutStretch.ApplyEnvelopeRawImage(_rawImage.rectTransform, ar);
-        RecreateRenderTexture((int)w, (int)h);
+        if (_renderTexture == null || _renderTexture.width != (int)w || _renderTexture.height != (int)h)
+            RecreateRenderTexture((int)w, (int)h); // 尺寸没变就不重建，消掉起播第一下顿卡
     }
 
     void RecreateRenderTexture(int width, int height)
@@ -318,8 +357,32 @@ public class OpeningIntroOverlay : MonoBehaviour
         rt.offsetMax = Vector2.zero;
     }
 
+    /// <summary>
+    /// 卡顿修复：全局锁 30fps 且关垂直同步时，主循环帧间隔抖动，视频播放会一顿一顿。
+    /// 播放期间临时提速帧节奏（编辑器下 vSync 锁显示器刷新，真机下走 60fps 目标），播完在 OnDestroy 还原。
+    /// 只影响片头这几秒，全局 30fps 性能锁不动。
+    /// </summary>
+    void BoostFramePaceForVideo()
+    {
+        if (_fpsBoosted) return;
+        _fpsBoosted = true;
+        _prevTargetFps = Application.targetFrameRate;
+        _prevVSync = QualitySettings.vSyncCount;
+        Application.targetFrameRate = 60;
+        QualitySettings.vSyncCount = 1;
+    }
+
+    void RestoreFramePace()
+    {
+        if (!_fpsBoosted) return;
+        _fpsBoosted = false;
+        Application.targetFrameRate = _prevTargetFps;
+        QualitySettings.vSyncCount = _prevVSync;
+    }
+
     void OnDestroy()
     {
+        RestoreFramePace();
         if (Instance == this) Instance = null;
         ReleaseCutsceneMute();
         if (_videoPlayer != null)

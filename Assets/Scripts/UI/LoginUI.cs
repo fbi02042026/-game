@@ -4,7 +4,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 登录界面。资源请在预制体里直接替换 Sprite，不要用生成器覆盖。
-/// 当前：开始游戏 + 设置（共用 SettingsPopup）；协议默认不勾选；用户中心/公告/快捷登录仍隐藏。
+/// 当前：开始游戏 + 公告 + 设置（共用 SettingsPopup）；协议默认不勾选；用户中心/快捷登录仍隐藏。
+/// 公告（2026-10-20）：右侧「公告」按钮打开 LoginNoticePopupUI，首次登录按期号自动弹一次。
 /// </summary>
 public class LoginUI : MonoBehaviour
 {
@@ -56,6 +57,7 @@ public class LoginUI : MonoBehaviour
     bool _agreeSetup;
     bool _presentationApplied;
     bool _footerLayoutReady;
+    bool _autoNoticeStarted;
     System.Action _enterTown;
     RectTransform _healthNoticeRt;
     Graphic _agreeCheckGraphic;
@@ -97,13 +99,35 @@ public class LoginUI : MonoBehaviour
         EnsureDebugClearSaveButton();
         EnsureSafeArea();
         EnsureTapLoginRow();
+        EnsureAutoNotice();
         GameBgm.Play(GameBgm.Track.Login);
+    }
+
+    /// <summary>
+    /// 首次登录自动弹公告（2026-10-20 主人拍板「首次登录自动弹」）。
+    /// 等两帧：登录界面刚显示，Canvas 尺寸与 SafeArea 偏移还没算完，抢跑会让公告板在刘海屏上偏一帧。
+    /// 幂等：_autoNoticeStarted 保证本次会话只触发一次；弹不弹由 LoginNoticePopupUI 的已读期号决定。
+    /// </summary>
+    void EnsureAutoNotice()
+    {
+        if (_autoNoticeStarted) return;
+        _autoNoticeStarted = true;
+        StartCoroutine(AutoNoticeRoutine());
+    }
+
+    System.Collections.IEnumerator AutoNoticeRoutine()
+    {
+        yield return null;
+        yield return null;
+        LoginNoticePopupUI.TryAutoShow();
     }
 
     /// <summary>
     /// 刘海 / 挖孔 / 底部手势条避让（2026-10-13 主人拍板「要1」：登录页接 SafeArea）。
     /// 顶侧：RightMenu（设置等）走 SafeAreaFitter.Offset 只挪 anchoredPosition，锚点/尺寸不动；
     ///   「清除存档」按钮在 EnsureDebugClearSaveButton 里同样挂 Offset。
+    ///   RightMenu 是 Offset 的父容器，NoticeButton / SettingsButton 作为子节点整体跟随，
+    ///   公告按钮与设置按钮拿到的是同一份避让，**不要在 NoticeButton 上再挂 fitter**（会双重下推）。
     /// Logo：LoginLogoMotion 每帧写 anchoredPosition，挂 fitter 会互相覆盖，
     ///   改为把顶部内缩量并进入场基准位（见 LoginLogoMotion.Awake）。
     /// 底侧：忠告 + 适龄图标在 ApplyBottomFooterLayout 里把 bottomPad 加上底部内缩量。
@@ -164,6 +188,8 @@ public class LoginUI : MonoBehaviour
 
     /// <summary>
     /// 隐藏暂未使用的入口；协议默认不勾选（仅首次）；设置按钮已开放。
+    /// 公告按钮同步开放（2026-10-20）：与设置按钮同在 RightMenu 竖列，美术与引用预制体里都有，
+    /// 只是此前被这里显式关掉；开放后随 RightMenu 一起做刘海避让（见 EnsureSafeArea）。
     /// </summary>
     void ApplyPresentation()
     {
@@ -171,7 +197,7 @@ public class LoginUI : MonoBehaviour
         SetActivePath("ActionPanel/OtherLoginLabel", false);
         SetActivePath("ActionPanel/SocialRow", false);
         SetActivePath("RightMenu/UserCenterButton", false);
-        SetActivePath("RightMenu/NoticeButton", false);
+        SetActivePath("RightMenu/NoticeButton", true);
         SetActivePath("RightMenu", true);
         SetActivePath("RightMenu/SettingsButton", true);
 
@@ -185,7 +211,7 @@ public class LoginUI : MonoBehaviour
 
         if (guestButton != null) guestButton.gameObject.SetActive(false);
         if (userCenterButton != null) userCenterButton.gameObject.SetActive(false);
-        if (noticeButton != null) noticeButton.gameObject.SetActive(false);
+        if (noticeButton != null) noticeButton.gameObject.SetActive(true);
         if (settingsButton != null) settingsButton.gameObject.SetActive(true);
         if (wechatButton != null) wechatButton.gameObject.SetActive(false);
         if (qqButton != null) qqButton.gameObject.SetActive(false);
@@ -427,6 +453,7 @@ public class LoginUI : MonoBehaviour
 
         Bind(startButton, OnClickStart);
         Bind(settingsButton, () => SettingsPopupUI.Ensure().Open(SettingsHost.Login));
+        Bind(noticeButton, () => LoginNoticePopupUI.Open());
         Bind(userAgreementButton, () => onOpenUserAgreement?.Invoke());
         Bind(privacyPolicyButton, () => onOpenPrivacyPolicy?.Invoke());
     }

@@ -489,7 +489,11 @@ public partial class TutorialDirector
         finally
         {
             talk.HideNow();
-            if (bm != null) bm.UnitsCanAct = restoreAct && prev;
+            // 【2026-10-20 保险】只解自己冻的场：进场时场已被冻（prev=false）说明冻场归别人管，
+            // 结束后不接管——否则若对白期间第三方已解冻，这里会把场重新压死成永久冻结
+            // （精英残血站桩、流程停摆的成因）。正常路径（prev=true）行为完全不变。
+            if (bm != null && prev)
+                bm.UnitsCanAct = restoreAct;
         }
     }
 

@@ -352,7 +352,12 @@ public partial class UnitBase
         if (target == null || target.isDead || target.attr == null) return false;
         // Boss/精英：仅预测致死的最后一击才慢放+放大（平时暴击不触发）
         if (target is Monster m && (m.IsBossUnit || m.IsEliteWave))
+        {
+            // 引导宿敌挂死亡门：血到底不判死（钳1点等遗言），致死预测必然落空，
+            // 慢放会演出成「慢下来又没死」。死亡门挂着期间不进击杀前摇。
+            if (m.holdAtDeathDoor) return false;
             return target.currentHp <= PredictBasicAttackDamage(target, damage, openingHit);
+        }
         return false;
     }
 

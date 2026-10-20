@@ -94,8 +94,9 @@ public class BattleSideHud : MonoBehaviour
 
         // —— 击败累计计数（常驻；图源 Resources/Icons/击败，位置样式按主人 2026-10-19 截图）——
         LoadKillSprites();
+        // 【2026-10-20 主人拍板】「击败」字+数字整体下移 30 像素（10+10+10，只动这块，下一波倒计时不动）
         var comboGo = CreatePanel("ComboPanel", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(250f, 70f), transparent: true);
+            new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(250f, 70f), transparent: true);
         _comboGroup = comboGo.AddComponent<CanvasGroup>();
         _comboGroup.alpha = 0f;
         _comboScaleRoot = comboGo.GetComponent<RectTransform>();
@@ -288,12 +289,13 @@ public class BattleSideHud : MonoBehaviour
     // ────── 击败计数：图片拼数字（图源 Resources/Icons/击败）──────
 
     const string KillIconPath = "Icons/击败";
-    const float KillDigitW = 38f;    // 数字图显示宽（原图 48x50，等比略缩）
-    const float KillDigitH = 38f;
-    const float KillDigitGap = -4f;  // 数字间距（收紧，轻微重叠更紧凑）
-    const float KillLabelW = 124f;   // 「击败」标签显示宽（原图 200x68 等比）
-    const float KillLabelH = 42f;
-    const float KillLabelGap = -36f; // 标签与数字的间距（-22 仍嫌大，2026-10-20 主人要求再收紧）
+    // 【2026-10-20 主人拍板】「击败」标签和数字整体放大 30%（38→49.4、124/42→161.2/54.6），间距不动
+    const float KillDigitW = 49.4f;  // 数字图显示宽（原图 48x50，等比略缩）
+    const float KillDigitH = 49.4f;
+    const float KillDigitGap = -12f; // 数字间距（2026-10-20 主人要求数字之间间隔再小点，-12 更紧凑）
+    const float KillLabelW = 161.2f; // 「击败」标签显示宽（原图 200x68 等比）
+    const float KillLabelH = 54.6f;
+    const float KillLabelGap = -26f; // 标签与数字的间距（2026-10-20 主人要求数字离「击败」离开点，-36 收太紧放回 -26）
 
     void LoadKillSprites()
     {

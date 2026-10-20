@@ -331,7 +331,9 @@ public static class AdventureCodex
         if (!data.claimedCodexRewardIds.Add(catalogId)) return false;
 
         diamond = CodexRewardDiamond(bossOrLegendary);
-        ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, diamond, save: true, notify: false);
+        // 【2026-10-20 主人拍板】钻石停发：只记领取标记（防重），不发钻；diamond 返回 0，UI 提示自动跳过
+        // ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, diamond, save: true, notify: false);
+        diamond = 0;
         if (SaveSystem.Instance != null)
             SaveSystem.Instance.Save();
         return true;

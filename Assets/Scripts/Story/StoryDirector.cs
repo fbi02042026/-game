@@ -368,7 +368,11 @@ public class StoryDirector : Singleton<StoryDirector>
     void ResumeGame()
     {
         if (!_pausedTime) return;
-        Time.timeScale = _savedTimeScale;
+        // 【2026-10-20 卡顿修复】剧情若在击杀顿帧(0.01)/击杀前摇慢放(0.1)窗口内启动，
+        // PauseGame 会把 0.01/0.1 误存进来（保存端的 <0.01f 恰好放行 0.01），恢复后全场
+        // timeScale=0.01 → 「打完怪/进图后一卡一卡基本不动」。剧情恢复后战斗只应回全速：
+        // 低于 1 一律按 1 恢复，顿帧/慢放由 CombatJuice 自己的协程收尾，剧情不代管。
+        Time.timeScale = _savedTimeScale >= 1f ? _savedTimeScale : 1f;
         _pausedTime = false;
     }
 

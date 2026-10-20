@@ -447,7 +447,10 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
         while (Time.unscaledTime < _hitStopUntil)
             yield return null;
 
-        if (Time.timeScale <= 0.01f)
+        // 【2026-10-20 卡顿修复】只在 timeScale 仍是本协程压下的 0.01 时才恢复；
+        // 若期间被剧情/弹窗压成 0（或被别的系统改动），恢复责任归压 0 的一方 ——
+        // 旧写法 `<= 0.01f` 会把剧情的定格 0 顶成 1，造成时序交错。
+        if (Mathf.Approximately(Time.timeScale, 0.01f))
             Time.timeScale = _hitStopSavedScale > 0.01f ? _hitStopSavedScale : 1f;
 
         _hitStopUntil = 0f;

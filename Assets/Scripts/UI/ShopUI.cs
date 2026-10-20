@@ -276,10 +276,10 @@ public class ShopUI : MonoBehaviour
         if (data == null) return;
 
         long gold = ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold);
-        long diamond = ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond);
         long stone = ResourceWallet.Get(data, ResourceWallet.ResourceType.TalentPoint);
+        // 【2026-10-20 主人拍板】钻石停发停展示，钱包栏不再显示钻石段
         if (_walletText != null)
-            _walletText.text = $"金币 {gold}　钻石 {diamond}　天赋石 {stone}";
+            _walletText.text = $"金币 {gold}　天赋石 {stone}";
 
         for (int i = 0; i < _tabButtons.Count; i++)
         {

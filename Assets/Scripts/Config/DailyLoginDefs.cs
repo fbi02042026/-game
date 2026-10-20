@@ -117,11 +117,12 @@ public static class DailyLoginDefs
     {
         MercGrant("塔克·重盾",   STARTER_MERC_ID),                                // D1 稀有佣兵本体（2026-10-20 挪到首日；塔克移出默认名单后真发本体，领过才折碎片）
         Res("体力 ×50",          ResourceWallet.ResourceType.Stamina,       50), // D2（体力上限一半）
-        Res("钻石 ×30",          ResourceWallet.ResourceType.Diamond,       30), // D3
+        // 【2026-10-20 主人拍板】钻石停发：原钻石×30 按商店汇率（1钻=4金）折金币×120
+        Res("金币 ×120",         ResourceWallet.ResourceType.Gold,         120), // D3（原钻石×30）
         Frag("塔克碎片 ×10",     STARTER_MERC_ID,                           10), // D4（2026-10-20 改：本体挪 D1 后本格改碎片×10）
         Res("金币 ×800",         ResourceWallet.ResourceType.Gold,          800), // D5
         Frag("塔克碎片 ×10",     STARTER_MERC_ID,                           10), // D6（第 6 格是双倍格，实发 20 片）
-        Res("钻石 ×50",          ResourceWallet.ResourceType.Diamond,       50), // D7
+        Res("金币 ×200",         ResourceWallet.ResourceType.Gold,          200), // D7（2026-10-20 钻石停发：原钻石×50 折金币×200）
         Frag("塔克碎片 ×15",     STARTER_MERC_ID,                           15), // D8 起每轮补碎片
     };
 
@@ -180,7 +181,7 @@ public static class DailyLoginDefs
     /// <summary>
     /// 每日循环（7 天一轮，可无限循环）。【硬编码兜底，表 daily_login.csv（cycle 段）优先覆盖】
     /// D3 给塔克碎片——把"送出去的佣兵"变成长期养成目标，玩家会为了升星回来。
-    /// D7 是周峰值：钻石 + 传说碎片，两者都是要攒的。
+    /// D7 是周峰值：【2026-10-20 钻石停发】原「钻石+传说碎片」→「金币+传说碎片」（1钻=4金折算）。
     /// </summary>
     public static Reward[] Cycle = new Reward[]
     {
@@ -192,8 +193,8 @@ public static class DailyLoginDefs
         Res("金币 ×240",          ResourceWallet.ResourceType.Gold,          240), // D5
         // 【2026-10-18 主人拍板：材料产出全部改发抽奖币】D6 原「分解材料×8」按商店汇率（1材料=30金）折成金币×240（表 daily_login 同步改）
         Res("金币 ×240",          ResourceWallet.ResourceType.Gold,          240), // D6
-        Pack(Res("钻石 ×60",      ResourceWallet.ResourceType.Diamond,       60),
-             LegendFrag("传说碎片 ×2", 2)),                                      // D7 周峰值
+        Pack(Res("金币 ×240",     ResourceWallet.ResourceType.Gold,         240),  // D7 周峰值（2026-10-20 钻石停发：原钻石×60 折金币×240）
+             LegendFrag("传说碎片 ×2", 2)),
     };
 
     public struct StreakReward
@@ -212,9 +213,10 @@ public static class DailyLoginDefs
     {
         new StreakReward { days = 3,  reward = Res("体力 ×10", ResourceWallet.ResourceType.Stamina, 10) },
         new StreakReward { days = 7,  reward = Frag("塔克碎片 ×5", STARTER_MERC_ID, 5) },
-        new StreakReward { days = 14, reward = Pack(Res("钻石 ×30", ResourceWallet.ResourceType.Diamond, 30),
+        // 2026-10-20 钻石停发：14/30 天档原「钻石+传说碎片」→「金币+传说碎片」（1钻=4金折算）
+        new StreakReward { days = 14, reward = Pack(Res("金币 ×120", ResourceWallet.ResourceType.Gold, 120),
                                                     LegendFrag("传说碎片 ×3", 3)) },
-        new StreakReward { days = 30, reward = Pack(Res("钻石 ×100", ResourceWallet.ResourceType.Diamond, 100),
+        new StreakReward { days = 30, reward = Pack(Res("金币 ×400", ResourceWallet.ResourceType.Gold, 400),
                                                     LegendFrag("传说碎片 ×15", 15)) },
     };
 

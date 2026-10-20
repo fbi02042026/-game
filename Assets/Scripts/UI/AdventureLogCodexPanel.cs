@@ -521,11 +521,13 @@ public class AdventureLogCodexPanel
             ApplyRedDot(go.transform, false);
 
             // 2026-09-18 用户拍板：图鉴首次记录发钻石（普通 10 / 首领 30），带文字提示
-            if (AdventureCodex.TryClaimCodexReward(e.Id, isBoss, out int dia) && dia > 0)
-            {
-                string tag = isBoss ? "（首领）" : "";
-                UIManager.Instance?.ShowToast($"图鉴首次记录：{e.Name}{tag}　钻石 +{dia}");
-            }
+            // 【2026-10-20 主人拍板】钻石停发停提示，整段注释保留
+            // if (AdventureCodex.TryClaimCodexReward(e.Id, isBoss, out int dia) && dia > 0)
+            // {
+            //     string tag = isBoss ? "（首领）" : "";
+            //     UIManager.Instance?.ShowToast($"图鉴首次记录：{e.Name}{tag}　钻石 +{dia}");
+            // }
+            AdventureCodex.TryClaimCodexReward(e.Id, isBoss, out _);   // 只记领取标记，不再发钻
 
             bool defeated = AdventureCodex.IsDefeatedMonster(e.Id);
             string body = defeated ? e.Desc : e.Lore;

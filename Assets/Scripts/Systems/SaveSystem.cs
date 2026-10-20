@@ -19,10 +19,13 @@ public class SaveSystem : Singleton<SaveSystem>
     const string VersionWipePrefKey = "save_wipe_app_version";
 
     /// <summary>
-    /// 「下载新版本删除本地数据」总开关（2026-10-20 主人拍板）：**默认关**。
-    /// 主人说开的时候改成 true 再出包；关闭状态下不比对、不清档、不写版本标记。
+    /// 「下载新版本删除本地数据」总开关。
+    /// 【2026-10-20 14:50 主人拍板：打开】配合登录页公告（「老玩家的存档已自动清空」）。
+    /// 只清一次的保证：PlayerPrefs 记 Application.version，每次启动比对，一致即 return；
+    /// 版本标记在删存档文件【之前】写入并 Save，即使删档失败也不会下次重复清。
+    /// ⚠ 只对 bundleVersion（Application.version）变化生效——正式出包必须递增版本号才触发。
     /// </summary>
-    public const bool WipeLocalDataOnNewVersion = false;
+    public const bool WipeLocalDataOnNewVersion = true;
 
     protected override void Awake()
     {

@@ -10,6 +10,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
     // 预制体原图首次刷新留档，空格/锁格还原，不污染预制体序列化值。
     readonly Dictionary<GameObject, Sprite> _slotDefaultFrames = new Dictionary<GameObject, Sprite>();
     readonly Dictionary<GameObject, Sprite> _slotDefaultNamePlates = new Dictionary<GameObject, Sprite>();
+    /// <summary>【2026-10-20 主人拍板】名字字色按稀有度走；空格/锁格还原预制体原色（同框图留档模式）。</summary>
+    readonly Dictionary<GameObject, Color> _slotDefaultNameColors = new Dictionary<GameObject, Color>();
 
     void RefreshPoolSlot(GameObject slot, int index, bool open, string hireId)
     {
@@ -66,6 +68,10 @@ public partial class MercDrawPoolUI : MonoBehaviour
             }
         }
 
+        // 名字字色留档（同框图模式）：格子复用，空格还原原色，防残留上一任佣兵的稀有度色
+        if (nameT != null && !_slotDefaultNameColors.ContainsKey(slot))
+            _slotDefaultNameColors[slot] = nameT.color;
+
         bool filled = open && !string.IsNullOrEmpty(hireId);
         if (!filled)
         {
@@ -75,7 +81,12 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 icon.enabled = false;
                 icon.color = Color.white;
             }
-            if (nameT != null) nameT.text = open ? "空格" : "暂未开启";
+            if (nameT != null)
+            {
+                nameT.text = open ? "空格" : "暂未开启";
+                if (_slotDefaultNameColors.TryGetValue(slot, out var defColor))
+                    nameT.color = defColor;
+            }
             // 空格/锁格还原预制体原框/原名字底牌
             if (slotImg != null) slotImg.sprite = defaultFrame;
             if (nameBgImg != null) nameBgImg.sprite = defaultNamePlate;
@@ -95,7 +106,12 @@ public partial class MercDrawPoolUI : MonoBehaviour
             icon.enabled = sp != null;
             icon.color = Color.white;
         }
-        if (nameT != null) nameT.text = def.Name;
+        // 【2026-10-20 主人拍板】名字颜色与稀有度对齐（RarityPalette），与下方已拥有/未拥有列表卡同口径
+        if (nameT != null)
+        {
+            nameT.text = def.Name;
+            if (hasDef) nameT.color = RarityPalette.Get(def.Rarity);
+        }
         // 卡框 + 名字底牌按稀有度换图（传奇/稀有/普通三档都是现成美术，主人拍板不代码改色）；取不到报错不静默
         var cardFrame = hasDef ? MercHireSession.LoadTavernCardFrame(def.Rarity) : null;
         var namePlate = hasDef ? MercHireSession.LoadTavernNamePlate(def.Rarity) : null;

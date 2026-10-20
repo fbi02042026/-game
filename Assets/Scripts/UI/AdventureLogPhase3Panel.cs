@@ -22,7 +22,7 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     // ===== 节点名（预制体与代码按名字对齐；改 prefab 节点名会断绑定，Console 会报缺哪个） =====
     public const string RootName = "Phase3Root";
     public const string BarName = "Phase3Bar";
-    public const string DimName = "Phase3Dim";
+    public const string DimName = "bg";   // 2026-10-20 主人手工改版：原 Phase3Dim 改名 bg
     public const string PanelName = "Phase3Panel";
     public const string InnerName = "Inner";
     public const string TitleName = "Title";
@@ -33,12 +33,14 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     public const string IconName = "Icon";
     public const string ExchangeName = "ExchangeBtn";
     public const string CountName = "CountText";
+    public const string RenwuName = "renwu";
     public static string RowName(int i) => "Row_" + i;
 
     AdventureLogUI _host;
     GameObject _bar;
     GameObject _dim;
     GameObject _panel;
+    GameObject _renwu;   // 预制体根下的装饰人物，跟着面板一起显隐（不接管就会常驻盖住日志标签）
     Text _title;
     Text _body;
     Mode _mode;
@@ -84,20 +86,21 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     {
         EnsureUi();
         // 2026-10-20 主人拍板：底部入口条整条撤掉，里程商店唯一入口 = 侧栏左下角 Emblem。
-        // 节点留着不删，之后要恢复直接开激活即可。
+        // 手工改版预制体已物理删除该节点，代码仅在节点存在时兜底隐藏（兼容旧版预制体）。
         if (_bar != null) _bar.SetActive(false);
         if (!worldOrAch && _panel != null)
         {
             _mode = Mode.None;
             _panel.SetActive(false);
             if (_dim != null) _dim.SetActive(false);
+            if (_renwu != null) _renwu.SetActive(false);
         }
     }
 
     /// <summary>运行时：只从预制体实例化，不代码构建（唯一路径）。</summary>
     void EnsureUi()
     {
-        if (_bar != null) return;
+        if (_panel != null) return;   // 已实例化过（Phase3Bar 可选可空，不能用它做构建标记）
         var prefab = Resources.Load<GameObject>(PrefabResPath);
         if (prefab == null)
         {
@@ -119,25 +122,31 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         else
             Debug.LogError("[Phase3Panel] 预制体根缺 Canvas 组件，请重新生成预制体");
         WireRefs(root.transform);
-        _bar.SetActive(false);
+        if (_bar != null) _bar.SetActive(false);
         _dim.SetActive(false);
         _panel.SetActive(false);
+        if (_renwu != null) _renwu.SetActive(false);
     }
 
     void WireRefs(Transform root)
     {
-        _bar = FindReq(root, BarName);
+        // 2026-10-20 手工改版预制体已把底部入口条 Phase3Bar（含 Btn_Craft/Btn_Shop）整条删掉，
+        // 里程商店唯一入口 = 侧栏左下角 Emblem。这里改为可选查找，缺节点不再报错。
+        _bar = root.Find(BarName)?.gameObject;
         _dim = FindReq(root, DimName);
         _panel = FindReq(root, PanelName);
-        if (_bar == null || _dim == null || _panel == null) return;
+        _renwu = root.Find(RenwuName)?.gameObject;   // 装饰人物，可选节点
+        if (_dim == null || _panel == null) return;
 
-        BindButton(_bar.transform, CraftBtnName, OpenCraft);
-        BindButton(_bar.transform, ShopBtnName, OpenShop);
-        // 2026-10-20 主人拍板：碎片合成入口先撤，只留里程商店（Emblem 徽记另接商店入口）。
-        // 节点留着不删，之后要恢复直接开激活即可。
-        var craftBtn = _bar.transform.Find(CraftBtnName);
-        if (craftBtn != null)
-            craftBtn.gameObject.SetActive(false);
+        if (_bar != null)
+        {
+            BindButton(_bar.transform, CraftBtnName, OpenCraft);
+            BindButton(_bar.transform, ShopBtnName, OpenShop);
+            // 2026-10-20 主人拍板：碎片合成入口先撤，只留里程商店（Emblem 徽记另接商店入口）。
+            var craftBtn = _bar.transform.Find(CraftBtnName);
+            if (craftBtn != null)
+                craftBtn.gameObject.SetActive(false);
+        }
 
         var dimBtn = _dim.GetComponent<Button>();
         if (dimBtn != null)
@@ -199,6 +208,26 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         BindButton(inner, CloseXName, ClosePanel);
         BuildRowScroll(inner);
         GameFonts.ApplyToHierarchy(root);
+        ForcePanelOpaque();   // 2026-10-20 主人拍板：打开必须全不透明，实例化时先拉一遍
+    }
+
+    /// <summary>
+    /// 2026-10-20 主人拍板：里程商店打开必须全部实色显示，不要半透效果（以预制体效果为准）。
+    /// 把 Phase3Panel 子树所有 Graphic（Image/Text）的 alpha 强制拉满；
+    /// Phase3Dim 是背景遮罩、不在 _panel 子树内，不受影响（遮罩半透是设计）。
+    /// 实例化和每次打开各拉一遍，防止任何环节把 alpha 压下去。
+    /// </summary>
+    void ForcePanelOpaque()
+    {
+        if (_panel == null) return;
+        var graphics = _panel.GetComponentsInChildren<Graphic>(true);
+        for (int i = 0; i < graphics.Length; i++)
+        {
+            var g = graphics[i];
+            var c = g.color;
+            if (c.a < 0.999f)
+                g.color = new Color(c.r, c.g, c.b, 1f);
+        }
     }
 
     /// <summary>
@@ -317,6 +346,7 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         _mode = Mode.None;
         if (_panel != null) _panel.SetActive(false);
         if (_dim != null) _dim.SetActive(false);
+        if (_renwu != null) _renwu.SetActive(false);
     }
 
     void RefreshPanel()
@@ -335,7 +365,11 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             _dim.transform.SetAsLastSibling();
         }
         _panel.SetActive(true);
+        if (_renwu != null) _renwu.SetActive(true);
         _panel.transform.SetAsLastSibling();
+        // 2026-10-20 主人拍板：每次打开都强制全不透明 + 弹窗根提到日志内容之上
+        ForcePanelOpaque();
+        (_panel.transform.parent as RectTransform)?.SetAsLastSibling();
 
         if (_mode == Mode.Craft)
         {

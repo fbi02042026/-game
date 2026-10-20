@@ -255,6 +255,132 @@ public partial class TalentUI
         _pendingMutexSelected = -1;
     }
 
+    // ===== 【2026-10-20 修·玩家报「职业专精点不了」】R_JOB 6选1 职业弹窗（运行时建树）=====
+    // 根因：手工版预制体的 ChoicePopup 只有 1 张 Choice_0 卡（视觉宽 415，Box 480 根本排不下 6 张），
+    // 且没有「确定」按钮——旧代码克隆布局让卡重叠+飞出 Box，玩家点了没法选、选了没法确认。
+    // 口径对齐 EnsureMutexChoicePopup：TownPopup(900)、软引导 + 选项卡 + 费用行 + 取消/确定。
+    // 6 卡 2 列 × 3 行，图标/名字走 TalentIcons.GetTalent（剑盾卫士→剑盾专精 等既有映射）。
+
+    /// <summary>懒建职业 6选1 弹窗。独立 Canvas 层级 TownPopup(900)，与二选一弹窗同层。</summary>
+    void EnsureJobChoicePopup()
+    {
+        // 防重影：与洗点/二选一弹窗同口径，先探测旧节点销毁再重建
+        var existing = transform.Find("JobChoicePopup");
+        if (existing != null)
+        {
+            for (int i = existing.childCount - 1; i >= 0; i--)
+                Destroy(existing.GetChild(i).gameObject);
+            Destroy(existing.gameObject);
+            _jobChoicePopup = null;
+        }
+        if (_jobChoicePopup != null) return;
+
+        var root = CreateRect(transform, "JobChoicePopup");
+        Stretch(root.GetComponent<RectTransform>());
+
+        var canvas = root.AddComponent<Canvas>();
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup, UICanvasSetup.ResolveUiCamera());
+        root.AddComponent<GraphicRaycaster>();
+
+        var dim = CreateImage(root.transform, "Dim", new Color(0f, 0f, 0f, 0.62f));
+        Stretch(dim.rectTransform);
+
+        var box = CreateImage(root.transform, "Box", new Color(0.93f, 0.88f, 0.78f, 1f));
+        SetAnchored(box.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            Vector2.zero, new Vector2(620f, 680f));
+
+        var title = CreateText(box.transform, "Title", "职业专精", 30, new Color(0.25f, 0.15f, 0.1f));
+        SetAnchored(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -26f), new Vector2(520f, 44f));
+
+        // 软引导：说清「6选1 只是给所选职业加伤，不锁其它职业」
+        var desc = CreateText(box.transform, "Desc",
+            "选择一名职业作为专属专精（6选1）。\n" +
+            "· 所选职业造成的伤害 +4%×专精等级，满级 +20%；\n" +
+            "· 不影响你使用其它职业，想更换可洗点后重选。",
+            20, new Color(0.2f, 0.12f, 0.08f));
+        desc.alignment = TextAnchor.UpperLeft;
+        SetAnchored(desc.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, 216f), new Vector2(560f, 76f));
+
+        // 6 张职业卡：2 列 × 3 行（x=±145，y=122/10/-102），卡 260×96
+        const int jobSlotCount = 6;
+        _jobOptCards = new GameObject[jobSlotCount];
+        _jobOptLabels = new Text[jobSlotCount];
+        _jobOptIcons = new Image[jobSlotCount];
+        for (int o = 0; o < jobSlotCount; o++)
+        {
+            var card = CreateImage(box.transform, "JobOpt_" + o, new Color(0.85f, 0.78f, 0.97f, 1f));
+            float cx = (o % 2 == 0) ? -145f : 145f;
+            float cy = 122f - (o / 2) * 112f;
+            SetAnchored(card.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(cx, cy), new Vector2(260f, 96f));
+            var cardBtn = card.gameObject.AddComponent<Button>();
+            cardBtn.targetGraphic = card;
+            int opt0 = o;
+            cardBtn.onClick.AddListener(() => SelectChoicePopupOption(opt0));
+            _jobOptCards[o] = card.gameObject;
+
+            var icon = CreateImage(card.transform, "Icon", Color.white);
+            SetAnchored(icon.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -34f), new Vector2(52f, 52f));
+            icon.raycastTarget = false;
+            _jobOptIcons[o] = icon;
+
+            var label = CreateText(card.transform, "Label", "", 22, new Color(0.22f, 0.13f, 0.08f));
+            SetAnchored(label.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 10f), new Vector2(240f, 30f));
+            _jobOptLabels[o] = label;
+        }
+
+        // 选中职业的效果 + 费用行（选中时刷新）
+        var cost = CreateText(box.transform, "CostLine", "", 20, new Color(0.25f, 0.15f, 0.1f));
+        SetAnchored(cost.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+            new Vector2(0f, -192f), new Vector2(560f, 56f));
+        _jobChoiceCost = cost;
+
+        var cancel = CreateImage(box.transform, "Cancel", new Color(0.45f, 0.3f, 0.2f, 1f));
+        SetAnchored(cancel.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0.5f),
+            new Vector2(-110f, -254f), new Vector2(200f, 56f));
+        var cancelBtn = cancel.gameObject.AddComponent<Button>();
+        cancelBtn.targetGraphic = cancel;
+        cancelBtn.onClick.AddListener(CloseChoicePopup);
+        var cancelTxt = CreateText(cancel.transform, "Label", "取消", 26, Color.white);
+        Stretch(cancelTxt.rectTransform);
+
+        var ok = CreateImage(box.transform, "Confirm", new Color(0.55f, 0.35f, 0.2f, 1f));
+        SetAnchored(ok.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0.5f),
+            new Vector2(110f, -254f), new Vector2(200f, 56f));
+        var okBtn = ok.gameObject.AddComponent<Button>();
+        okBtn.targetGraphic = ok;
+        okBtn.onClick.AddListener(ConfirmChoicePopup);
+        var okTxt = CreateText(ok.transform, "Label", "确定解锁", 26, Color.white);
+        Stretch(okTxt.rectTransform);
+
+        _jobChoicePopup = root;
+        root.SetActive(false);
+    }
+
+    /// <summary>把职业卡内容填进 6选1 弹窗（数量按配表，激活/隐藏多余槽）。</summary>
+    void FillJobChoiceCards(TalentDefs.TalentRightNode node)
+    {
+        var opts = node.options ?? new TalentDefs.TalentRightOption[0];
+        if (_jobOptCards == null) return;
+        for (int i = 0; i < _jobOptCards.Length; i++)
+        {
+            bool on = i < opts.Length;
+            if (_jobOptCards[i] != null) _jobOptCards[i].SetActive(on);
+            if (!on) continue;
+            if (_jobOptLabels != null && i < _jobOptLabels.Length && _jobOptLabels[i] != null)
+                _jobOptLabels[i].text = opts[i].name;
+            if (_jobOptIcons != null && i < _jobOptIcons.Length && _jobOptIcons[i] != null)
+            {
+                var sp = TalentIcons.GetTalent(opts[i].name);
+                if (sp != null) ApplySprite(_jobOptIcons[i], sp, true);
+            }
+        }
+    }
+
     // ===== 【2026-10-18 主人拍板】解锁/升级费用确认弹窗（运行时建树，不碰 prefab）=====
 
     /// <summary>

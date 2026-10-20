@@ -16,19 +16,14 @@ public class MercGainCinematicUI : MonoBehaviour
     const string PrefabPath = "Prefabs/Town/MercGainCinematic";
 
     const float BgFadeIn = 0.25f;      // 背景淡入
-    const float StandPop = 0.45f;      // 立绘冲击登场时长
     const float NameDelay = 0.15f;     // 立绘落定后名字延迟
     const float NameRise = 0.3f;       // 名字上移淡入时长
-    const float IdleFloatAmp = 10f;    // 立绘呼吸浮动幅度（相对预制体位置）
-    const float IdleFloatPeriod = 2.2f;
     const float AutoCloseAfter = 8f;   // 无点击兜底自动关（防卡流程）
 
     Transform _stand;
     Text _name;
     CanvasGroup _bgCg, _standCg, _nameCg;
     ParticleSystem[] _bgFx;   // 主人在 BG 节点下摆的特效，界面出现时一起播放
-    Vector2 _standBasePos;
-    Vector3 _standBaseScale;
     Vector2 _nameBasePos;
     float _bgTargetAlpha;
     Coroutine _co;
@@ -99,11 +94,10 @@ public class MercGainCinematicUI : MonoBehaviour
             ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
 
-        _standBasePos = _stand.GetComponent<RectTransform>().anchoredPosition;
-        _standBaseScale = _stand.localScale;
         _name = nameTr.GetComponent<Text>();
         _nameBasePos = nameTr.GetComponent<RectTransform>().anchoredPosition;
 
+        ApplyPortrait(hireId);
         ApplyName(hireId);
 
         var btn = bg.GetComponent<Button>() ?? bg.gameObject.AddComponent<Button>();
@@ -126,6 +120,29 @@ public class MercGainCinematicUI : MonoBehaviour
         _name.color = c;
     }
 
+    /// <summary>
+    /// 立绘按 hireId 刷（2026-10-20 修·主人报「人物立绘不对」）：预制体 Stand 摆的是 H011
+    /// 路加的静态图，此前代码只刷名字从不换图 → 获得谁都显示路加。统一入口
+    /// MercPortraitSprites.GetStand（与酒馆招募卡/图鉴同源，预制体摆的 H011 也是这套）；
+    /// 只换 sprite 不动排版。取不到 LogError 并清空，不留上一次的图（同 MercObtainPopupUI 口径）。
+    /// </summary>
+    void ApplyPortrait(string hireId)
+    {
+        if (_stand == null) return;
+        var img = _stand.GetComponent<Image>();
+        if (img == null)
+        {
+            Debug.LogError("[MercGainCinematic] Stand 节点上没有 Image，立绘不显示");
+            return;
+        }
+        var sp = MercPortraitSprites.GetStand(hireId);
+        if (sp == null)
+            Debug.LogError("[MercGainCinematic] 取不到佣兵立绘 " + hireId +
+                           "（Resources/Icons/MercStand/ 下缺图，需主人补图）");
+        img.sprite = sp;
+        img.enabled = sp != null;
+    }
+
     static CanvasGroup EnsureGroup(GameObject go, out float targetAlpha)
     {
         var img = go.GetComponent<Image>();
@@ -146,46 +163,21 @@ public class MercGainCinematicUI : MonoBehaviour
         while (t < BgFadeIn) { t += Time.unscaledDeltaTime; _bgCg.alpha = _bgTargetAlpha * Mathf.Clamp01(t / BgFadeIn); yield return null; }
         _bgCg.alpha = _bgTargetAlpha;
 
-        // ② 立绘冲击登场：alpha 闪现 + scale 从大到过冲落定（EaseOutBack，pivot 在脚下 → 从天上砸下来）
+        // ② 立绘直接静止显示（2026-10-20 主人拍板：立绘不要动态，不再播冲击登场/呼吸浮动）
         _standCg.alpha = 1f;
-        yield return StartCoroutine(CoStandPop());
 
         // ③ 名字从脚下淡入上移
         yield return new WaitForSecondsRealtime(NameDelay);
         yield return StartCoroutine(CoNameIn());
 
-        // ④ 呼吸浮动 + 等点击 / 超时
+        // ④ 等点击 / 超时
         float wait = 0f;
         while (!_closing && wait < AutoCloseAfter)
         {
-            float dt = Time.unscaledDeltaTime;
-            wait += dt;
-            float phase = Mathf.Sin((wait / IdleFloatPeriod) * Mathf.PI * 2f);
-            _stand.localPosition = new Vector3(
-                _standBasePos.x, _standBasePos.y + phase * IdleFloatAmp, _stand.localPosition.z);
-            float breathe = 1f + 0.012f * Mathf.Sin((wait / IdleFloatPeriod) * Mathf.PI * 2f);
-            _stand.localScale = _standBaseScale * breathe;
+            wait += Time.unscaledDeltaTime;
             yield return null;
         }
         if (!_closing) Close();
-    }
-
-    IEnumerator CoStandPop()
-    {
-        // 2.2 → 1.3（过冲）→ 1.0，前段快后段弹；alpha 前 1/3 闪现
-        var curve = AnimationCurve.EaseInOut(0f, 2.2f, 1f, 1f);
-        curve.AddKey(0.7f, 0.94f);
-        float t = 0f;
-        while (t < StandPop)
-        {
-            t += Time.unscaledDeltaTime;
-            float u = Mathf.Clamp01(t / StandPop);
-            _standCg.alpha = Mathf.Clamp01(u / 0.33f);
-            _stand.localScale = _standBaseScale * curve.Evaluate(u);
-            yield return null;
-        }
-        _stand.localScale = _standBaseScale;
-        _standCg.alpha = 1f;
     }
 
     IEnumerator CoNameIn()

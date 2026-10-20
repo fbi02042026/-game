@@ -336,7 +336,26 @@ public partial class BattleManager
         var parallax = FindObjectOfType<ParallaxBackground>();
         if (parallax != null) parallax.ResetHeroOrigin();
 
-        // 章节开场卡已在进战斗前（Loading 期间）演完，见 GameSceneManager.LoadBattleAsync。
+        // 【2026-10-20 主人拍板】进战斗顺序 = Loading 装载完 → 章节卡演完 → 队伍进场开打。
+        // 本协程在场景激活帧就启动（AutoGameInitializer.Awake 同步 StartNewRun），
+        // 而章节卡要等 Loading 关闭后才 Show（见 GameSceneManager.LoadBattleAsync）——
+        // 必须在这里等它结束，否则走场 / 战前剧情 / 抽奖 / 首波全会在黑卡底下抢跑。
+        // 超时兜底（15s）防卡死：章节卡正常 hold+fade ≈ 4s，宽裕够用。
+        float splashGuard = 0f;
+        while (ChapterSplashOverlay.BattleSplashPending && splashGuard < 15f)
+        {
+            splashGuard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+            yield return null;
+        }
+        var battleSplash = ChapterSplashOverlay.Current;
+        splashGuard = 0f;
+        while (battleSplash != null && !battleSplash.IsFinished && splashGuard < 15f)
+        {
+            splashGuard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+            yield return null;
+        }
+
+        // 章节开场卡已由 GameSceneManager 在 Loading 关闭后演出完毕（2026-10-20 起顺序：Loading → 章节卡 → 开打）。
         yield return CoPartyWalkInFromLeft(startX, z);
 
         FinishBattleIntro(follow);

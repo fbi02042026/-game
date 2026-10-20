@@ -740,9 +740,24 @@ public partial class MercDrawPoolUI : MonoBehaviour
         img.color = Color.white;
     }
 
-    /// <summary>稀有度降序（传说 → 稀有 → 普通），同档按花名册表序。</summary>
+    /// <summary>
+    /// 稀有度降序（传说 → 稀有 → 普通），同档双重排序【2026-10-20 主人拍板】：
+    /// 第二键 = 获得顺序（<see cref="SaveData.mercUnlockOrder"/>，早获得在前）；
+    /// 无获得记录的（旧档存量 / 未获得列表）按花名册表序排在该档末尾。队列与列表共用本方法。
+    /// </summary>
     static List<string> SortByRarity(HashSet<string> ids)
     {
+        // 获得顺序表：HireId → 首次下标（越早越小）；重复条目取最小下标（幂等记录不会重复，防御）
+        var orderMap = new Dictionary<string, int>();
+        var order = SaveSystem.Instance?.Data?.mercUnlockOrder;
+        if (order != null)
+            for (int i = 0; i < order.Count; i++)
+            {
+                var e = order[i];
+                if (e == null || string.IsNullOrEmpty(e.id)) continue;
+                if (!orderMap.TryGetValue(e.id, out int prev) || i < prev) orderMap[e.id] = i;
+            }
+
         var result = new List<string>();
         IReadOnlyList<MercRosterDefs.Def> all = MercRosterDefs.All;
         for (int pass = 0; pass < 3; pass++)
@@ -750,9 +765,18 @@ public partial class MercDrawPoolUI : MonoBehaviour
             var tier = pass == 0 ? MercRosterDefs.MercRarity.Legendary
                 : pass == 1 ? MercRosterDefs.MercRarity.Rare
                 : MercRosterDefs.MercRarity.Common;
+            // 同档键：有获得记录用记录下标；无记录 = 大数偏移保持表序（i 越大键越大，稳定垫底不互相乱序）
+            var keyed = new List<KeyValuePair<string, long>>();
             for (int i = 0; i < all.Count; i++)
-                if (all[i].Rarity == tier && ids.Contains(all[i].HireId))
-                    result.Add(all[i].HireId);
+            {
+                if (all[i].Rarity != tier || !ids.Contains(all[i].HireId)) continue;
+                long key = orderMap.TryGetValue(all[i].HireId, out int idx)
+                    ? idx
+                    : long.MaxValue - (all.Count - i);
+                keyed.Add(new KeyValuePair<string, long>(all[i].HireId, key));
+            }
+            keyed.Sort((a, b) => a.Value.CompareTo(b.Value));
+            for (int i = 0; i < keyed.Count; i++) result.Add(keyed[i].Key);
         }
         return result;
     }

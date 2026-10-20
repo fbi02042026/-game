@@ -10,6 +10,23 @@ public class ChapterSplashOverlay : MonoBehaviour
 {
     public bool IsFinished { get; private set; }
 
+    /// <summary>当前活跃的章节卡实例（全项目唯一）；战斗侧用它等「章节卡演完」。</summary>
+    public static ChapterSplashOverlay Current { get; private set; }
+
+    /// <summary>
+    /// 【2026-10-20 主人拍板】进战斗顺序改为「Loading 装载完 → 章节卡 → 开打」：
+    /// GameSceneManager 在 Loading 关闭前置 true（本章要演卡），章节卡 Show 出来后置 false。
+    /// 战斗侧（BattleStartSequenceCoroutine）等它归 false 且 Current 演完，才让队伍进场/开刷。
+    /// </summary>
+    public static bool BattleSplashPending;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatics()
+    {
+        Current = null;
+        BattleSplashPending = false;
+    }
+
     public const float HoldSeconds = 2.5f;
     public const float FadeSeconds = 1.5f;
     /// <summary>新手教学关：标题多留一会儿让玩家读完。</summary>
@@ -73,6 +90,7 @@ public class ChapterSplashOverlay : MonoBehaviour
             if (leftovers[i] != null)
                 Object.Destroy(leftovers[i].gameObject);
         }
+        Current = null;
 
         GameObject root = new GameObject("ChapterSplash");
         DontDestroyOnLoad(root);
@@ -81,11 +99,13 @@ public class ChapterSplashOverlay : MonoBehaviour
         driver._waitLoadingBeforeHold = waitLoadingBeforeHold;
         driver._opaqueBackdrop = opaqueBackdrop;
         driver.Build(title, body);
+        Current = driver;
         driver.StartCoroutine(driver.RunRoutine());
         return driver;
     }
 
-    /// <summary>战斗开场章节卡：与 BattleManager 原逻辑同款文案，供进战斗前（Loading 期间）调用。</summary>
+    /// <summary>战斗开场章节卡：与 BattleManager 原逻辑同款文案。
+    /// 【2026-10-20 主人拍板】由 GameSceneManager 在 Loading 关闭后调用（顺序：Loading → 章节卡 → 开打）。</summary>
     public static ChapterSplashOverlay ShowBattleChapter(int chapter, bool isTutorial)
     {
         string title = ChapterStoryBeats.IntroTitle(chapter) ?? GameConfig.GetChapterMapName(chapter);
@@ -93,11 +113,10 @@ public class ChapterSplashOverlay : MonoBehaviour
             ? "阳光还能照进来，怪物也不算太强。\n正好适合一个新人进去摸摸路。"
             : ChapterStoryBeats.OpeningLine(chapter);
         if (isTutorial) title = "森林区域，第一层";
-        // 不等 Loading：卡片自己就是进战斗前的过场，演完再加载战斗场景。
-        // 底要全不透明：卡片排在 LoadingUI 之上，半透会把「加载中 x%」透出来和章节文字叠在一起。
+        // 底要全不透明：万一套在 Loading 上（兜底时序），半透会把「加载中 x%」和章节文字叠在一起。
         var card = Show(title, body, isTutorial, waitLoadingBeforeHold: false, opaqueBackdrop: true);
-        // 演完先别淡出：等 Loading 关掉再淡出，直接露出战斗场景，
-        // 否则卡片一淡出底下的 LoadingUI 就又冒出来（2026-09-26 主人反馈的 bug）。
+        // 保留盖板语义：万一 Loading 因异常没收（5s 兜底超时后仍挂着），卡片演完仍等它关掉再淡出，
+        // 不把「加载中 x%」漏给玩家。正常时序下 Loading 已关，这段等待立即通过。
         if (card != null) card._coverUntilLoadingGone = true;
         return card;
     }
@@ -366,5 +385,6 @@ public class ChapterSplashOverlay : MonoBehaviour
     void OnDestroy()
     {
         IsFinished = true;
+        if (Current == this) Current = null;
     }
 }

@@ -274,6 +274,11 @@ public partial class TutorialDirector
 
     IEnumerator PlayOpeningIntroIfNeeded()
     {
+        // 卡顿修复：Loading 刚收、城镇首帧渲染的重活压在最前几帧上，
+        // 多等 2 帧让它们落在 TownIntroVeil 纯黑上，别撞进片头起播。
+        yield return null;
+        yield return null;
+
         string fullPath = ResolveOpeningIntroPath();
         var overlay = OpeningIntroOverlay.Show(fullPath);
         if (overlay == null)

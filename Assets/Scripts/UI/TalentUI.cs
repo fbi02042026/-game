@@ -132,6 +132,16 @@ public partial class TalentUI : MonoBehaviour
     Text _costConfirmOkLabel;
     System.Action _costConfirmAction;
 
+    // 【2026-10-20 修·玩家报「职业专精点不了」】R_JOB 6选1 职业弹窗改运行时建树：
+    // 手工版预制体的 ChoicePopup 只有 1 张选项卡且没有「确定」按钮，旧克隆布局
+    //（x=-120+i×120）还会让卡两两重叠、飞出 Box——玩家点了弹不出能用的弹窗。
+    // 口径与二选一/费用确认弹窗一致（TownPopup 900，运行时建树，不碰 prefab）。
+    GameObject _jobChoicePopup;
+    GameObject[] _jobOptCards;
+    Text[] _jobOptLabels;
+    Image[] _jobOptIcons;
+    Text _jobChoiceCost;
+
     class LeftNodeView
     {
         public int index;

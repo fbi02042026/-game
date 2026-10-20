@@ -138,60 +138,66 @@ public class GameSceneManager : Singleton<GameSceneManager>
         SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);
         // 2026-10-11 主人拍板：loading 背景图按章取（Resources/UI/loading/beijing0N）。
         BattleLoadingOverlay.SetChapterBackdrop(battleChapter);
+        // 【2026-10-20 主人拍板】进战斗顺序改为「Loading 装载完 → 章节文字 → 开打」：
+        // 章节卡挪到 Loading 关闭之后演（不再盖在 Loading 上面靠层级遮）。
+        // 无限裂隙照旧不演正式关的章节剧情卡 —— 刷图玩法直接进战斗。
+        ChapterSplashOverlay.BattleSplashPending = !AdventureUI.PendingEndlessRift;
         yield return null;
 
-        // 进战斗前过场：章节卡在 Loading 期间演完再加载战斗场景（详见主人需求）。
-        // isTutorial 同 BattleManager 原口径，但切场景那一刻 Rules 还没赋值，
-        // 必须用 StoryProgress 自己判断，不要读 BattleManager.Rules。
-        bool splashTutorial = StoryProgress.ShouldStartTutorialBattle();
-        // 【2026-10-18 主人拍板】无限裂隙不演正式关的章节剧情卡 —— 刷图玩法直接进战斗。
-        // PendingEndlessRift 在本帧还没被 BattleManager 消费（StartNewRunInternal 里才清零），用它判断是准的。
-        var splash = AdventureUI.PendingEndlessRift
-            ? null
-            : ChapterSplashOverlay.ShowBattleChapter(battleChapter, splashTutorial);
-
-        // 战斗场景与章节卡并行加载（旧写法是「卡片演完才开始加载」，卡片淡出后 LoadingUI 还挂着，
-        // 要等 AutoGameInitializer 报满 100% 才 Hide —— 于是 Loading 又冒出来一次）。
-        // 现在卡片全程盖住 Loading，并自己等 Loading 关掉才淡出，淡出即见战斗。
+        // 战斗场景先在 Loading 底下静默加载（allowSceneActivation=false 时 progress 停在 0.9，到位即放行）。
         var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(BATTLE_SCENE);
-        if (op == null)
+        if (op != null)
         {
-            UnityEngine.SceneManagement.SceneManager.LoadScene(BATTLE_SCENE);
-            _loadingBattle = false;
-            yield return WaitForBattleInitComplete();
-            yield break;
-        }
-
-        // 先不自动激活：等章节卡把字显完再放行，免得战斗在黑卡背后偷偷开打。
-        op.allowSceneActivation = false;
-        {
-            float revealGuard = 0f;
-            const float revealTimeout = 8f;
-            while (splash != null && !splash.IsRevealed && revealGuard < revealTimeout)
+            op.allowSceneActivation = false;
+            // 加载就绪等待；超时强放（放行后激活可能掉帧，但卡死等待更糟）
+            float loadGuard = 0f;
+            while (op.progress < 0.89f && loadGuard < 30f)
             {
-                revealGuard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+                loadGuard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+                SceneLoadingCoordinator.ReportSceneAsync(op);
+                yield return null;
+            }
+            op.allowSceneActivation = true;
+            while (!op.isDone)
+            {
                 SceneLoadingCoordinator.ReportSceneAsync(op);
                 yield return null;
             }
         }
-        op.allowSceneActivation = true;
-
-        while (!op.isDone)
+        else
         {
-            SceneLoadingCoordinator.ReportSceneAsync(op);
-            yield return null;
+            UnityEngine.SceneManagement.SceneManager.LoadScene(BATTLE_SCENE);
         }
 
         SceneLoadingCoordinator.ReportSceneLoaded();
         // 进场景后的初始化由 AutoGameInitializer 上报 45~100% 并 Finish
         yield return WaitForBattleInitComplete();
 
-        // 卡片自己会等 Loading 关掉后淡出并自毁，这里不再管它（硬关会把淡出切掉）。
-        // 兜底：万一卡片还活着（等待超时等异常），直接清掉进战斗。
-        if (splash != null && !splash.IsFinished)
+        // 等 Loading 真正关掉（100% 停留 0.4s 后 Hide）再演章节文字 —— 顺序：Loading → 章节卡。
+        // 万一 Coordinator 异常没收，超时兜底照样往下走：章节卡是不透明黑底，会盖住残留的 Loading。
+        {
+            float hideGuard = 0f;
+            while ((SceneLoadingCoordinator.IsActive || BattleLoadingOverlay.IsShowing) && hideGuard < 5f)
+            {
+                hideGuard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+                yield return null;
+            }
+        }
+
+        // Loading 关了才出章节文字；战斗侧 BattleStartSequenceCoroutine 会等它演完才让队伍进场开刷。
+        ChapterSplashOverlay.BattleSplashPending = false;
+        bool splashTutorial = StoryProgress.ShouldStartTutorialBattle();
+        // isTutorial 同 BattleManager 原口径，但切场景那一刻 Rules 还没赋值，
+        // 必须用 StoryProgress 自己判断，不要读 BattleManager.Rules。
+        var splash = AdventureUI.PendingEndlessRift
+            ? null
+            : ChapterSplashOverlay.ShowBattleChapter(battleChapter, splashTutorial);
+
+        // 等章节卡演完（点击可跳过）。超时强杀兜底，别把玩家闷死在黑卡里。
+        if (splash != null)
         {
             float waitGuard = 0f;
-            const float splashTimeout = 8f;
+            const float splashTimeout = 12f;
             while (splash != null && !splash.IsFinished && waitGuard < splashTimeout)
             {
                 waitGuard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;

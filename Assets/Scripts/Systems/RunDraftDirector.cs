@@ -77,6 +77,8 @@ public class RunDraftDirector : MonoBehaviour
             SlotMachineSystem.ResetStageFreeDraws();
             // 【2026-10-19 主人拍板】本局抽中抽奖币的次数也每局清零（上限见 SlotMachineDefs.MAX_GOLD_PRIZE_PER_RUN）。
             SlotMachineSystem.ResetRunGoldPrizeCount();
+            // 【2026-10-20 主人拍板】本局已抽中装备指纹清零（抽奖不再重复出同一把武器；续关不清）。
+            DraftPool.ResetDrawnEquipTemplates();
             SlotMachineSystem.GrantRunStarterGold(tutorial);
         }
 
@@ -345,6 +347,10 @@ public class RunDraftDirector : MonoBehaviour
             done?.Invoke(false, "装备数据缺失");
             yield break;
         }
+
+        // 【2026-10-20 主人拍板】抽奖给出的装备记一笔：本局后续抽奖避开同模板，
+        // 不再出现「两次抽出同一个武器、数值还一模一样」（见 DraftPool.NoteDrawnEquip）。
+        DraftPool.NoteDrawnEquip(eq);
 
         var bag = GridBackpackSystem.Instance;
         if (bag == null)

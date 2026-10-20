@@ -12,6 +12,12 @@ public partial class Monster
     private float _skillCooldown = 0f;
     private MonsterAttackStyle _swingStyle = MonsterAttackStyle.Melee;
     bool _skillTelegraphing;
+    /// <summary>【2026-10-20 保险】演出协程冻场等待上限（真实秒）：连续冻结超过该时长视为冻场异常，
+    /// 放弃本次技能演出并走 finally 清理标志，绝不让 _skillTelegraphing/_leaping 卡死成永久站桩。
+    /// 正常对白冻场只有几秒，永不触发；正常路径行为零变化。</summary>
+    const float SkillFrozenBailoutSec = 10f;
+    /// <summary>【2026-10-20 保险】蓄力跳被冻场保险中断时置位：外层据此跳过砸地结算（防冻场中越权出伤害）。</summary>
+    bool _leapAborted;
     /// <summary>【2026-10-17 主人拍板】精英蓄力跳滞空中：AI 提前返回时跳过归道（ApplyLaneY），
     /// 否则身体 Y 每帧被拉回 FootY、跳跃演出起不来。置位/复位只在 CoSkillTelegraphThenCast 内。</summary>
     bool _leaping;
@@ -139,6 +145,7 @@ public partial class Monster
         float t = 0f;
         float pulseT = 0f;
         float warn = Mathf.Max(0.5f, telegraphSec);
+        float frozenReal = 0f;   // 【保险】连续冻场真实时间累计
         try
         {
             while (t < warn || (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct))
@@ -146,7 +153,20 @@ public partial class Monster
                 if (isDead || this == null) yield break;   // 收尾统一走 finally
                 // 冻场不倒数（红圈原地等待），解冻才继续计时
                 if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
+                {
                     t += Time.deltaTime;
+                    frozenReal = 0f;
+                }
+                else
+                {
+                    // 【保险】冻场超上限：放弃本次技能（走 finally 销毁红圈、还原标志），不砸地不越权
+                    frozenReal += Time.unscaledDeltaTime;
+                    if (frozenReal >= SkillFrozenBailoutSec)
+                    {
+                        Debug.LogWarning($"[Monster.Skills] 冻场超 {SkillFrozenBailoutSec}s，预警协程保险中断（放弃本次技能）");
+                        yield break;
+                    }
+                }
                 pulseT += Time.deltaTime;
                 if (disc != null)
                 {
@@ -184,7 +204,10 @@ public partial class Monster
                     _leaping = true;
                     if (rb != null) rb.velocity = Vector2.zero;
                     if (MoveRoot != null) MoveRoot.localScale = bodyScale0;
+                    _leapAborted = false;
                     yield return CoEliteLeapArc(center);
+                    // 【保险】跳跃被冻场保险中断：不砸地不结算（防冻场中越权出伤害），走 finally 清理
+                    if (_leapAborted) yield break;
                 }
                 // 砸下瞬间：红圈位置一圈波纹快速外扩、渐隐
                 StartCoroutine(CoTelegraphBurst(center, radius * 2f));
@@ -250,6 +273,7 @@ public partial class Monster
 
         float rise = Mathf.Max(0.05f, GameConfig.ELITE_LEAP_RISE_SEC);
         float fall = Mathf.Max(0.05f, GameConfig.ELITE_LEAP_FALL_SEC);
+        float frozenReal = 0f;   // 【保险】连续冻场真实时间累计
 
         // ① 上升：EaseOut（起步猛、到顶收住），顶点高 = 落点上方 ELITE_LEAP_HEIGHT。
         // 冻场感知与预警同口径：UnitsCanAct=false 期间原地悬停不前移，解冻才继续跳。
@@ -260,11 +284,20 @@ public partial class Monster
             if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
             {
                 t += Time.deltaTime;
+                frozenReal = 0f;
                 float k = Mathf.Clamp01(t / rise);
                 float e = 1f - (1f - k) * (1f - k);
                 float x = Mathf.Lerp(from.x, toX, k);
                 float y = Mathf.Lerp(from.y, toY, k) + Mathf.Sin(e * Mathf.PI * 0.5f) * GameConfig.ELITE_LEAP_HEIGHT;
                 GameConfig.SetWorldPosition(body, new Vector3(x, y, z));
+            }
+            else if ((frozenReal += Time.unscaledDeltaTime) >= SkillFrozenBailoutSec)
+            {
+                // 【保险】冻场超上限：直接落到落点收尾，置 _leapAborted 让外层跳过砸地（不越权出伤害）
+                _leapAborted = true;
+                GameConfig.SetWorldPosition(body, new Vector3(toX, toY, z));
+                Debug.LogWarning("[Monster.Skills] 蓄力跳升段冻场超上限，保险中断（直接落地、跳过砸地）");
+                yield break;
             }
             yield return null;
         }
@@ -278,9 +311,18 @@ public partial class Monster
             if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
             {
                 t += Time.deltaTime;
+                frozenReal = 0f;
                 float k = Mathf.Clamp01(t / fall);
                 float y = Mathf.Lerp(topY, toY, k * k);
                 GameConfig.SetWorldPosition(body, new Vector3(toX, y, z));
+            }
+            else if ((frozenReal += Time.unscaledDeltaTime) >= SkillFrozenBailoutSec)
+            {
+                // 【保险】同升段：直接落到落点收尾，外层跳过砸地
+                _leapAborted = true;
+                GameConfig.SetWorldPosition(body, new Vector3(toX, toY, z));
+                Debug.LogWarning("[Monster.Skills] 蓄力跳降段冻场超上限，保险中断（直接落地、跳过砸地）");
+                yield break;
             }
             yield return null;
         }

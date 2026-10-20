@@ -21,16 +21,16 @@ public static class AdventureLogMileage
         public string Label;
     }
 
-    /// <summary>Lv2–6 可领；Lv1 为起点无奖。</summary>
+    /// <summary>Lv2–6 可领；Lv1 为起点无奖。【2026-10-20 主人拍板】钻石停发：Diamond 字段保留但一律 0，预览/发放自动跳过。</summary>
     public static readonly LevelReward[] LevelRewards =
     {
         new LevelReward { Label = "见习记载", Gold = 0 },
-        new LevelReward { Label = "森林行者", Gold = 50, Diamond = 1 },
+        new LevelReward { Label = "森林行者", Gold = 50, Diamond = 0 },   // 原 Diamond = 1
         // 【2026-10-17 主人拍板】强化石暂无用途 → 原 Lv3 的附魔石×3 改成天赋石×3（1:1 换资源名，数量不动）
         new LevelReward { Label = "探索者", Gold = 100, TalentPoint = 3 },
-        new LevelReward { Label = "裂隙行者", Gold = 200, Diamond = 3 },
+        new LevelReward { Label = "裂隙行者", Gold = 200, Diamond = 0 },  // 原 Diamond = 3
         new LevelReward { Label = "日志学者", Gold = 300, TalentPoint = 2 },
-        new LevelReward { Label = "传说记录者", Gold = 500, Diamond = 5, TalentPoint = 3, TitleId = "log_chronicler" }
+        new LevelReward { Label = "传说记录者", Gold = 500, Diamond = 0, TalentPoint = 3, TitleId = "log_chronicler" }  // 原 Diamond = 5
     };
 
     public static int Points => SaveSystem.Instance?.Data?.logMileagePoints ?? 0;

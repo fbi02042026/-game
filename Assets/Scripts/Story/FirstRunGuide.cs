@@ -277,6 +277,13 @@ public class FirstRunGuide : MonoBehaviour
 
     public bool IsFinished => _stepIndex >= (int)GuideStep.Done;
 
+    /// <summary>
+    /// 本会话内首次引导是否「从运行中」走到了 Done（2026-10-20 加）。
+    /// 老玩家重启时 guideStep 已是 Done、Drive 不再跑，不会置位——
+    /// DailyLoginUI 弹窗内的新手指路气泡以此判定，只对真正刚出师的新玩家出现。
+    /// </summary>
+    public static bool FinishedThisSession { get; private set; }
+
     /// <summary>该步骤是否已经走完（已完成或已跳过都算「不用再管」）。</summary>
     public bool IsStepDone(GuideStep step) => _stepIndex > (int)step;
 
@@ -333,6 +340,7 @@ public class FirstRunGuide : MonoBehaviour
 
         Hide();
         MarkDone();
+        FinishedThisSession = true;   // 2026-10-20：弹窗内新手指路（DailyLoginUI）以此判定只对新玩家出现
         Debug.Log("[Guide] 首次引导全部完成，之后不再出现");
         _drive = null;
     }
@@ -876,8 +884,8 @@ public class FirstRunGuide : MonoBehaviour
         okImg.gameObject.SetActive(false);
     }
 
-    /// <summary>从 TutorialHintUI 的 prefab 上借「引导底框」sprite（只借引用，实例立刻销毁）。</summary>
-    static Sprite LoadGuidePlateSprite()
+    /// <summary>从 TutorialHintUI 的 prefab 上借「引导底框」sprite（只借引用，实例立刻销毁）。2026-10-20 起 DailyLoginUI 弹窗内指路气泡也借同一张。</summary>
+    public static Sprite LoadGuidePlateSprite()
     {
         var prefab = Resources.Load<GameObject>("Prefabs/UI/TutorialHintUI");
         if (prefab == null) return null;

@@ -416,7 +416,10 @@ public class BattleSettlementUI : MonoBehaviour
 
         // 2026-10-09 主人拍板：结算物品图标改走项目现有口径 CommonIconSprites（Resources + 编辑器回退）。
         // 旧写法 LoadUiIcon 只读 Resources/UI/Settlement/<key>，该目录不存在且无回退 → 每个物品格子都空图标。
-        if (s.GoldGained > 0)   // 【2026-10-18】去掉 !s.IsDeath：死亡也照常显示本局赚到的钱（FillSettlementSnapshot 同日拍板口径，原 Gate 是残留）
+        // 【2026-10-20 主人拍板「没有获得金币就不要显示了」】金币 >=2 才上格：
+        // 数量规则是 >1 才显数字，金币=1 时格子只有「金币」两字、数字空白，看着像没给钱；
+        // =0 原本就不显示。1 个金币视为没获得，干脆不上格。
+        if (s.GoldGained >= 2)   // 【2026-10-18】去掉 !s.IsDeath：死亡也照常显示本局赚到的钱（FillSettlementSnapshot 同日拍板口径，原 Gate 是残留）
             // 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】结算「金币」= GoldEarned
             //（顶部 HUD 同款毛额），与写回城镇的数额同账 → 叫「金币」配 icon_gold；
             // 抽奖币池带不出本局，不上结算。

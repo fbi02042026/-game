@@ -25,10 +25,12 @@ public partial class DailyLoginUI
         ApplyFit();
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
+        EnsureLoginGuide();
     }
 
     public void Hide()
     {
+        RemoveLoginGuide();   // 【2026-10-20】没领就关窗：只撤画面不置位，下次打开弹窗还指
         // 2026-10-15 主人拍板：只收画面、不停宿主 GO——宿主一 SetActive(false)，其上的协程当场停
         // （等主界面的 CoShowWhenMainUiIdle 死在第一个 yield），且下次请求重新激活宿主时
         // 已激活的子节点会闪一帧。显隐统一走 HideVisuals / ShowVisuals。
@@ -70,6 +72,9 @@ public partial class DailyLoginUI
     static void MarkClaimConsumed()
     {
         _autoPopConsumed = true;
+        // 【2026-10-20 弹窗内新手指路】领到任意一笔就算教完：气泡立刻撤、本进程不再出现
+        _guideConsumed = true;
+        Instance?.RemoveLoginGuide();
         var d = SaveSystem.Instance?.Data;
         if (d != null && d.loginPopupShownDay != ShopDefs.TodayKey())
         {
@@ -97,6 +102,23 @@ public partial class DailyLoginUI
             ui.gameObject.SetActive(true);
             ui.HideVisuals();
             ui.StartCoroutine(ui.CoShowWhenMainUiIdle());
+        }
+    }
+
+    /// <summary>
+    /// 弹窗画面此刻是否在屏上（2026-10-20 加）。宿主 GO 常驻激活（协程挂上面），显隐只动
+    /// 子节点：完整预制体路径 HideVisuals 收全部直接子节点、兜底路径收 _root——所以
+    /// 「有任一活着的直接子节点」＝画面在屏，两条路径都成立。TownIdleNudge 等闲置引导据此让位。
+    /// </summary>
+    public static bool PopupVisible
+    {
+        get
+        {
+            var ui = Instance;
+            if (ui == null) return false;
+            for (int i = 0; i < ui.transform.childCount; i++)
+                if (ui.transform.GetChild(i).gameObject.activeInHierarchy) return true;
+            return false;
         }
     }
 
@@ -157,6 +179,158 @@ public partial class DailyLoginUI
     {
         var g = FirstRunGuide.Instance;
         return g != null && !g.IsFinished;
+    }
+
+    // ============================================================
+    // 弹窗内新手指路（2026-10-20 主人拍板）：
+    // 新手引导不加「领取每日登录」步骤（登录弹窗 TownPopup=900 会盖住引导遮罩 620，无法并轨），
+    // 改成弹窗内自带一次指路：金框圈住每日循环条的「领取」按钮 + 赛琳口吻气泡，
+    // 只有「首次引导本会话刚出师」的新玩家能看到；领到任意一笔立刻撤、本进程不再出现。
+    // ============================================================
+
+    /// <summary>指路气泡文案（赛琳口吻，与 FirstRunGuide 收尾语气一致）。</summary>
+    const string LoginGuideText = "点「领取」，今天的签到奖励就到手了。以后每天都来，别偷懒。";
+    const float LoginGuideRingWidth = 5f;
+    const float LoginGuideFontSize = 32f;
+    static readonly Color LoginGuideRingColor = new Color(1f, 0.84f, 0.42f, 1f);
+    static readonly Color LoginGuideBubbleColor = new Color(0.08f, 0.09f, 0.14f, 0.92f);
+    static readonly Color LoginGuideTextColor = new Color(0.99f, 0.95f, 0.85f, 1f);
+
+    RectTransform _guideLayer;
+    /// <summary>本进程已指路过（领过任意一笔即置位），之后重开弹窗不再出现。</summary>
+    static bool _guideConsumed;
+
+    /// <summary>Open() 末尾调：满足「新玩家刚出师 + 还有可领奖励 + 本进程没指路过」才挂一次指路气泡。</summary>
+    void EnsureLoginGuide()
+    {
+        if (_guideConsumed) return;
+        if (!FirstRunGuide.FinishedThisSession) return;   // 老玩家/重启后的玩家不打扰
+        if (!DailyLoginSystem.HasClaimable()) return;     // 没东西可领就不指
+        if (_guideLayer != null) return;
+
+        // 目标 = 每日循环条的「领取」按钮（名字契约见 Build.BindBars）；拿不到就不挂，绝不新建按钮
+        if (_cycleBtn == null) return;
+        var claimRt = _cycleBtn.GetComponent<RectTransform>();
+        if (claimRt == null || !claimRt.gameObject.activeInHierarchy) return;
+
+        var rootRt = transform as RectTransform;
+        if (rootRt == null || rootRt.rect.width <= 0f) return;
+        var canvas = GetComponent<Canvas>();
+        Camera cam = canvas != null && canvas.worldCamera != null
+            ? canvas.worldCamera : UICanvasSetup.ResolveUiCamera();
+        if (cam == null) return;
+
+        // ClaimBtn 四角 → 弹窗根局部坐标（弹窗与按钮同一个 Canvas，Open 时布局已回流，
+        // 一次换算即可，不需要每帧跟随）
+        var corners = new Vector3[4];
+        claimRt.GetWorldCorners(corners);
+        float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+        for (int i = 0; i < 4; i++)
+        {
+            Vector2 local;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    rootRt, RectTransformUtility.WorldToScreenPoint(cam, corners[i]), cam, out local))
+                return;
+            minX = Mathf.Min(minX, local.x); maxX = Mathf.Max(maxX, local.x);
+            minY = Mathf.Min(minY, local.y); maxY = Mathf.Max(maxY, local.y);
+        }
+
+        // 引导层：铺满根、置于弹窗最上层、所有元素不接射线（不挡玩家点领取/关闭）
+        var layerGo = new GameObject("DailyLoginGuide", typeof(RectTransform));
+        layerGo.transform.SetParent(transform, false);
+        layerGo.layer = 5;
+        _guideLayer = layerGo.GetComponent<RectTransform>();
+        Stretch(_guideLayer);
+        layerGo.transform.SetAsLastSibling();
+
+        const float pad = 10f;
+        float x0 = minX - pad, x1 = maxX + pad, y0 = minY - pad, y1 = maxY + pad;
+        PlaceGuideStrip(NewGuideImage("RingTop"), x0 - LoginGuideRingWidth, x1 + LoginGuideRingWidth, y1, y1 + LoginGuideRingWidth);
+        PlaceGuideStrip(NewGuideImage("RingBottom"), x0 - LoginGuideRingWidth, x1 + LoginGuideRingWidth, y0 - LoginGuideRingWidth, y0);
+        PlaceGuideStrip(NewGuideImage("RingLeft"), x0 - LoginGuideRingWidth, x0, y0, y1);
+        PlaceGuideStrip(NewGuideImage("RingRight"), x1, x1 + LoginGuideRingWidth, y0, y1);
+
+        // 气泡：借 FirstRunGuide 同款「引导底框」图（取不到退深色块）；贴高亮框上方，顶部放不下翻下方，最后夹进屏幕
+        var bubble = NewGuideImage("Bubble");
+        var plate = FirstRunGuide.LoadGuidePlateSprite();
+        if (plate != null)
+        {
+            bubble.sprite = plate;
+            bubble.type = Image.Type.Simple;
+            bubble.color = Color.white;
+        }
+        else
+        {
+            bubble.color = LoginGuideBubbleColor;
+        }
+        var brt = bubble.rectTransform;
+        brt.anchorMin = brt.anchorMax = new Vector2(0.5f, 0.5f);
+        brt.pivot = new Vector2(0.5f, 0.5f);
+        float halfH = 52f;
+        float halfW = Mathf.Max(320f, rootRt.rect.width - 40f) * 0.5f;
+        float bx = Mathf.Clamp((x0 + x1) * 0.5f, rootRt.rect.xMin + halfW + 8f, rootRt.rect.xMax - halfW - 8f);
+        float by = y1 + 24f + halfH;
+        if (by + halfH > rootRt.rect.yMax - 8f)
+            by = y0 - 24f - halfH;
+        by = Mathf.Clamp(by, rootRt.rect.yMin + halfH + 8f, rootRt.rect.yMax - halfH - 8f);
+        brt.anchoredPosition = new Vector2(bx, by);
+        brt.sizeDelta = new Vector2(halfW * 2f, halfH * 2f);
+
+        var txt = NewGuideText(brt, "Text", LoginGuideText);
+        var trt = txt.rectTransform;
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = new Vector2(26f, 8f);
+        trt.offsetMax = new Vector2(-26f, -8f);
+
+        GameFonts.ApplyToHierarchy(layerGo.transform);
+    }
+
+    /// <summary>撤指路层：领取成功（MarkClaimConsumed）与关窗（Hide）都调，幂等。</summary>
+    void RemoveLoginGuide()
+    {
+        if (_guideLayer != null)
+        {
+            Destroy(_guideLayer.gameObject);
+            _guideLayer = null;
+        }
+    }
+
+    Image NewGuideImage(string name)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(_guideLayer, false);
+        go.layer = 5;
+        var img = go.GetComponent<Image>();
+        img.raycastTarget = false;
+        return img;
+    }
+
+    Text NewGuideText(Transform parent, string name, string content)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(parent, false);
+        go.layer = 5;
+        var t = go.GetComponent<Text>();
+        t.text = content;
+        t.fontSize = (int)LoginGuideFontSize;
+        t.alignment = TextAnchor.MiddleLeft;
+        t.color = LoginGuideTextColor;
+        t.raycastTarget = false;
+        t.horizontalOverflow = HorizontalWrapMode.Wrap;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        t.font = GameFonts.GetChinese();
+        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        return t;
+    }
+
+    void PlaceGuideStrip(Image img, float xmin, float xmax, float ymin, float ymax)
+    {
+        var rt = img.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2((xmin + xmax) * 0.5f, (ymin + ymax) * 0.5f);
+        rt.sizeDelta = new Vector2(Mathf.Max(0f, xmax - xmin), Mathf.Max(0f, ymax - ymin));
     }
 
     /// <summary>按面板实际宽度重排 8 格与三条横带（逻辑宽 576~720 浮动，必须运行时算）。</summary>

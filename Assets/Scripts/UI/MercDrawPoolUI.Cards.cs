@@ -173,8 +173,13 @@ public partial class MercDrawPoolUI : MonoBehaviour
 
         var nameT = card.transform.Find("namebg/Name")?.GetComponent<Text>();
         // 【2026-10-18 主人拍板】未获得也显示佣兵名字（真名），缺数据才回落「未获得」
+        // 【2026-10-20 主人拍板】名字颜色与稀有度对齐（全局唯一色表 RarityPalette），
+        // 与上方队列上阵格同口径——不再吃模板序列化色（模板是紫的，上阵格是白的，两边不一致）
         if (nameT != null)
+        {
             nameT.text = hasDef && !string.IsNullOrEmpty(def.Name) ? def.Name : "未获得";
+            if (hasDef) nameT.color = RarityPalette.Get(def.Rarity);
+        }
 
         // 【2026-10-16 主人拍板】名字底牌也按稀有度换三档图（传奇/稀有/普通名字框，与卡框同目录），
         // 只换图不代码改色；取不到报错不静默。

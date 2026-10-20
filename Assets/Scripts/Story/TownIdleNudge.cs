@@ -173,6 +173,12 @@ public class TownIdleNudgeDriver : MonoBehaviour
         if (MailListUI.Instance != null && MailListUI.Instance.gameObject.activeInHierarchy) return false;
         if (MailDetailUI.Instance != null && MailDetailUI.Instance.gameObject.activeInHierarchy) return false;
 
+        // 【2026-10-20 主人报】每日登录弹窗 / 获得奖励弹窗开着时同样让位：登录弹窗（TownPopup 900）
+        // 盖着主界面时导航仍停在公会页、也没剧情在播，闲置计时照跑，15s 后「点酒馆」气泡
+        // 弹出来压在弹窗底部。与邮件窗口同口径：关掉弹窗重新闲置 15 秒后才轮到。
+        if (DailyLoginUI.PopupVisible) return false;
+        if (RewardPopupUI.Instance != null && RewardPopupUI.Instance.gameObject.activeInHierarchy) return false;
+
         return true;
     }
 

@@ -231,6 +231,12 @@ public class SaveData
     public List<StringIdEntry> viewedMercEntries = new List<StringIdEntry>();
     /// <summary>已在酒馆解锁的佣兵（HireId）—— 只有解锁的才会进战斗内「佣兵三选一」随机池</summary>
     public List<StringIdEntry> unlockedMercEntries = new List<StringIdEntry>();
+    /// <summary>
+    /// 【2026-10-20 主人拍板】佣兵获得顺序（HireId，只追加不删）：列表下标即获得先后（越早越靠前），
+    /// 给酒馆雇佣队列 / 已拥有列表的「稀有度 → 获得时间」双重排序当第二排序键。
+    /// 旧档没有记录的佣兵查不到键，排序时按花名册表序垫底，不影响老档。
+    /// </summary>
+    public List<StringIdEntry> mercUnlockOrder = new List<StringIdEntry>();
     /// <summary>【2026-10-13 主人拍板】佣兵抽奖池（HireId）：战斗内招募只从池子里的出。格子制，见 <see cref="DrawPoolMaxSlots"/>。</summary>
     public List<StringIdEntry> mercDrawPoolEntries = new List<StringIdEntry>();
     /// <summary>初期开放的抽奖池格数（总容量 5，见 <see cref="DrawPoolMaxSlots"/>；开放进度见 <see cref="DrawPoolSlots"/>）。</summary>
@@ -614,7 +620,11 @@ public class SaveData
     {
         unlockedMercIds ??= new HashSet<string>();
         foreach (string id in DefaultUnlockedMercIds)
+        {
             unlockedMercIds.Add(id);
+            // 【2026-10-20 主人拍板】默认名单也记获得顺序（幂等），初始三白按名单序排最前
+            RecordMercUnlockOrder(id);
+        }
         unlockedMercEntries = FromIdSet(unlockedMercIds);
         // 【2026-10-13 主人拍板】抽奖池同步播种：默认名单进池
         // （2026-10-20 塔克移出默认名单后初期 3 白占 3 格，第 4 格由 D1 领塔克后 EnsurePoolFilled 补上）
@@ -732,7 +742,18 @@ public class SaveData
         if (unlockedMercIds == null) unlockedMercIds = new HashSet<string>();
         if (!unlockedMercIds.Add(hireId)) return false;
         unlockedMercEntries = FromIdSet(unlockedMercIds);
+        // 【2026-10-20 主人拍板】记获得顺序（只追加不删，下标即获得先后），供队列/列表双重排序
+        RecordMercUnlockOrder(hireId);
         return true;
+    }
+
+    /// <summary>获得顺序追加一条（幂等：同一佣兵只记首次；旧档/默认名单兜底播种共用）。</summary>
+    void RecordMercUnlockOrder(string hireId)
+    {
+        mercUnlockOrder ??= new List<StringIdEntry>();
+        for (int i = 0; i < mercUnlockOrder.Count; i++)
+            if (mercUnlockOrder[i] != null && mercUnlockOrder[i].id == hireId) return;
+        mercUnlockOrder.Add(new StringIdEntry { id = hireId });
     }
 
     /// <summary>
