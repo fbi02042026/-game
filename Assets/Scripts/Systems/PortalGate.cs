@@ -361,6 +361,16 @@ public class PortalGate : MonoBehaviour
         // 【2026-10-16 主人原话】有人进到门的中心点时，预制体里「传送」节点自带的特效也要再播一次。
         PlayNodeParticles(_teleportNode);
 
+        PlayTeleportVfx(worldPos);
+    }
+
+    /// <summary>
+    /// 在世界坐标播一次「传送」特效（Resources/VFX/other/world/传送），抬到战斗特效层（SORT_VFX）。
+    /// 【2026-10-20 主人拍板】怪物瞬移遁走复用此特效（消失一次、出现一次）—— 抽成静态方法供外部调用，
+    /// 门自身的粒子重播逻辑（PlayNodeParticles）仍留在 PlayEnterEffect，不进这里。
+    /// </summary>
+    public static void PlayTeleportVfx(Vector3 worldPos)
+    {
         var prefab = Resources.Load<GameObject>(EnterVfxPath);
         if (prefab == null)
         {

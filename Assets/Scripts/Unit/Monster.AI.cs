@@ -63,6 +63,10 @@ public partial class Monster
 
     protected override void AIUpdate()
     {
+        // 【2026-10-20 主人拍板】瞬移遁走冷却倒计时：放最开头，入场/冻场/演出各分支都照常流动
+        if (_blinkCd > 0f)
+            _blinkCd = Mathf.Max(0f, _blinkCd - Time.deltaTime);
+
         // 入场：默认剧情冻结时暂停；仅 AllowMonsterMapEnter 窗口可继续走进
         var bmEnter = BattleManager.Instance;
         bool preFightPause = bmEnter != null && bmEnter.AllowMonsterMapEnter && !bmEnter.UnitsCanAct;
@@ -165,12 +169,13 @@ public partial class Monster
             }
         }
 
-        if (_skillTelegraphing || _bossPhaseShiftBusy || _leaping)
+        if (_skillTelegraphing || _bossPhaseShiftBusy || _leaping || _teleporting)
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
             // 【2026-10-17】精英蓄力跳滞空期间不走归道：ApplyLaneY 每帧把 Y 拉回 FootY，跳不起来。
-            if (!_leaping)
+            // 【2026-10-20】瞬移遁走演出期间同样跳过归道（Y 保持 FootY 原样，不被拉扯）。
+            if (!_leaping && !_teleporting)
                 ApplyLaneY(Time.deltaTime);
             return;
         }
@@ -268,6 +273,11 @@ public partial class Monster
         }
 
         if (TryHoldDuringAttack())
+            return;
+
+        // 【2026-10-20 主人拍板】远程专属反应技「瞬移遁走」：被玩家/佣兵贴脸时压扁消失、
+        // 远处复原（所有远程怪携带，冷却控频；近战怪无此技）。判定与演出在 Monster.Skills.cs。
+        if (TryBlinkAwayIfCrowded())
             return;
 
         float distance = Mathf.Abs(GetCombatX(this) - GetCombatX(target));

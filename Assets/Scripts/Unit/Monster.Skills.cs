@@ -15,6 +15,11 @@ public partial class Monster
     /// <summary>【2026-10-17 主人拍板】精英蓄力跳滞空中：AI 提前返回时跳过归道（ApplyLaneY），
     /// 否则身体 Y 每帧被拉回 FootY、跳跃演出起不来。置位/复位只在 CoSkillTelegraphThenCast 内。</summary>
     bool _leaping;
+    /// <summary>【2026-10-20 主人拍板】远程专属反应技「瞬移遁走」演出中：AI 提前返回（不追人、
+    /// 不归道、不普攻），置位在触发判定、复位只在 CoMonsterBlinkAway 的 finally。</summary>
+    bool _teleporting;
+    /// <summary>瞬移冷却倒计时（秒），AIUpdate 每帧递减；触发时置满，放弃落点时清零允许下帧重试。</summary>
+    float _blinkCd;
     static Sprite _circleSprite;
     static Sprite _ringSprite;
     const float SkillProjectileScale = 1.6f;
@@ -73,6 +78,12 @@ public partial class Monster
             var skillCfg = SkillRegistry.Instance?.Get(_skillId);
             if (skillCfg != null && skillCfg.attackKit != AttackVfxKit.None)
                 kit = skillCfg.attackKit;
+            // 【2026-10-20 主人拍板「砸地与远程互斥」】Boss 技能形态必须与攻击风格同边：
+            // 近战 Boss 的砸地绝不放远程弹道 —— 表配 Bow/Orb 也不采用，回退近战刀光；
+            // 远程 Boss 全程弹道（本就不跳不砸地）。治疗套与互斥无关，不纠偏。
+            bool styleRanged = MonsterAttackStyleTable.IsRanged(_swingStyle);
+            if (kit != AttackVfxKit.Heal && SkillNaming.IsRangedKit(kit) != styleRanged)
+                kit = MonsterAttackStyleTable.GetVfxKit(_swingStyle);
         }
 
         // 精英 / Boss：地面红色警示后再结算
@@ -89,7 +100,10 @@ public partial class Monster
     {
         _skillTelegraphing = true;
         // 【2026-10-17 主人拍板】只有精英加「蓄力压扁 → 高跳快落」演出；Boss 节奏一律不动。
-        bool eliteLeap = _eliteWave && !_isBossUnit;
+        // 【2026-10-20 主人拍板「砸地与远程互斥」】跳跃砸地是近战专属：远程风格精英不跳
+        // （原地红圈呼吸脉冲预警 + 落地弹道结算）；近战精英才跳，落地直接砸地近战结算
+        // （kit 同为近战刀光，绝不出弹道）—— 修复引导精英「跳到最高下落还放远程、落点拖沓」。
+        bool eliteLeap = _eliteWave && !_isBossUnit && !MonsterAttackStyleTable.IsRanged(_attackStyle);
         Vector3 center = primaryTarget != null
             ? new Vector3(primaryTarget.transform.position.x, GROUND_Y + 0.02f, primaryTarget.transform.position.z)
             : new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
@@ -259,6 +273,171 @@ public partial class Monster
             yield return null;
         }
         GameConfig.SetWorldPosition(body, new Vector3(toX, toY, z));
+    }
+
+    // ==================== 远程专属反应技「瞬移遁走」（2026-10-20 主人拍板） ====================
+    // 被玩家/佣兵贴脸 → 竖向压扁消失（scale.y→0）→ 远离威胁者的落点原地复原（scale.y→1）。
+    // 纯位移演出，不出伤害不出弹道，与「砸地与远程互斥」不冲突（近战靠砸地，远程靠拉开距离）。
+    // 所有远程风格怪（Bow/Ranged）携带，靠冷却控频；近战怪无此技。
+
+    /// <summary>场上最近的威胁者（玩家或佣兵，按战斗距离）。无存活我方单位返回 null。</summary>
+    UnitBase FindNearestThreat()
+    {
+        UnitBase nearest = null;
+        float nd = float.MaxValue;
+        var allies = BattleManager.Instance != null ? BattleManager.Instance.allyUnits : null;
+        if (allies != null)
+        {
+            for (int i = 0; i < allies.Count; i++)
+            {
+                var u = allies[i];
+                if (u == null || u.isDead) continue;
+                float d = GetCombatDist(this, u);
+                if (d < nd) { nd = d; nearest = u; }
+            }
+        }
+        return nearest;
+    }
+
+    /// <summary>
+    /// 远程被贴脸时尝试触发瞬移遁走。返回 true = 已启动协程，调用方本帧直接返回。
+    /// 触发线/冷却/互斥（冻场、主动技能预警、跳跃、普攻出手锁）都在这里把关。
+    /// </summary>
+    bool TryBlinkAwayIfCrowded()
+    {
+        // 远程专属：近战怪靠贴脸砍，永不遁走（2026-10-20 主人拍板）
+        if (!MonsterAttackStyleTable.IsRanged(_attackStyle)) return false;
+        if (_blinkCd > 0f) return false;
+        if (_teleporting || _skillTelegraphing || _leaping || _bossPhaseShiftBusy) return false;
+        if (unitAnim != null && unitAnim.InAttackLock) return false;
+        if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct) return false;
+
+        UnitBase threat = FindNearestThreat();
+        if (threat == null) return false;
+        if (GetCombatDist(this, threat) > GameConfig.MONSTER_BLINK_TRIGGER_DIST) return false;
+
+        _blinkCd = GameConfig.MONSTER_BLINK_COOLDOWN;
+        _teleporting = true;
+        StartCoroutine(CoMonsterBlinkAway(threat));
+        return true;
+    }
+
+    /// <summary>
+    /// 瞬移遁走三段演出（节奏刻意放缓）：① 压扁遁地 0.30s（scale.y 1→0，EaseIn）
+    /// → ② 隐形挪移 0.10s（完全消失，中点换位）→ ③ 原地复原 0.35s（scale.y 0→1，EaseOut）
+    /// → 收势停顿 0.10s 才恢复行动。落点 = 远离威胁者随机位移，钳回战场可视范围，
+    /// 一边贴墙换另一边，两边都挤不出最小位移则放弃（清冷却下帧重试）。
+    /// 车道 Y 不变（= FootY，不串排）；精英 ×2.0 根缩放按比例压（记 bodyScale0 不写死）。
+    /// 全程感知冻场：UnitsCanAct=false 时画面定住不推进。
+    /// </summary>
+    IEnumerator CoMonsterBlinkAway(UnitBase threat)
+    {
+        var body = MoveRoot;
+        float toX;
+        Vector3 bodyScale0 = body != null ? body.localScale : Vector3.one;
+        try
+        {
+            if (body == null || threat == null) yield break;
+
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+
+            // 落点：沿远离威胁者的 X 方向随机位移；钳回可视范围，贴墙换向，双向都挤不出就放弃
+            float fromX = body.position.x;
+            float dir = GetCombatX(this) >= GetCombatX(threat) ? 1f : -1f;
+            float hop = Random.Range(GameConfig.MONSTER_BLINK_MIN_DIST, GameConfig.MONSTER_BLINK_MAX_DIST);
+            BattleManager.GetBattleVisibleX(out float vMin, out float vMax);
+            toX = Mathf.Clamp(fromX + dir * hop, vMin, vMax);
+            if (Mathf.Abs(toX - fromX) < GameConfig.MONSTER_BLINK_MIN_DIST)
+            {
+                toX = Mathf.Clamp(fromX - dir * hop, vMin, vMax);
+                if (Mathf.Abs(toX - fromX) < GameConfig.MONSTER_BLINK_MIN_DIST)
+                {
+                    _blinkCd = 0f;   // 两边都出不去，放弃本次，下帧可重试
+                    yield break;
+                }
+            }
+
+            float toY = FootY;
+            float z = body.position.z;
+            // 遁走朝向：面向落点；复原后打谁的转身由 AI FaceToward 接管
+            ApplyFacing(toX >= fromX ? 1 : -1);
+
+            // ① 压扁遁地：scale.y → 0（EaseIn 越压越快），X/Z 不动
+            float t = 0f;
+            while (t < GameConfig.MONSTER_BLINK_SQUASH_SEC)
+            {
+                if (isDead || this == null) yield break;
+                if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
+                {
+                    t += Time.deltaTime;
+                    float k = Mathf.Clamp01(t / GameConfig.MONSTER_BLINK_SQUASH_SEC);
+                    float sy = Mathf.Lerp(1f, 0f, k * k);
+                    body.localScale = new Vector3(bodyScale0.x, bodyScale0.y * sy, bodyScale0.z);
+                }
+                yield return null;
+            }
+            body.localScale = new Vector3(bodyScale0.x, 0f, bodyScale0.z);
+            // 【2026-10-20 主人拍板】复用传送门的「传送」特效：原地消失时放一次
+            PortalGate.PlayTeleportVfx(body.position);
+
+            // ② 隐形挪移：完全消失的空窗，中点把 X 直接改到落点（瞬移本体）
+            t = 0f;
+            bool moved = false;
+            while (t < GameConfig.MONSTER_BLINK_HIDE_SEC)
+            {
+                if (isDead || this == null) yield break;
+                if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
+                {
+                    t += Time.deltaTime;
+                    if (!moved && t >= GameConfig.MONSTER_BLINK_HIDE_SEC * 0.5f)
+                    {
+                        moved = true;
+                        GameConfig.SetWorldPosition(body, new Vector3(toX, toY, z));
+                        // 复用传送特效：新位置出现时再放一次
+                        PortalGate.PlayTeleportVfx(new Vector3(toX, toY, z));
+                        // 【2026-10-20 主人拍板】传送后的方向始终对着敌人：换位瞬间即转身，
+                        // 复原冒出来时已面向威胁者（压扁遁地阶段仍面向遁走方向）
+                        ApplyFacing(GetCombatX(threat) >= toX ? 1 : -1);
+                    }
+                }
+                yield return null;
+            }
+
+            // ③ 原地复原：scale.y 0 → 1（EaseOut 先快后慢弹出）
+            t = 0f;
+            while (t < GameConfig.MONSTER_BLINK_RESTORE_SEC)
+            {
+                if (isDead || this == null) yield break;
+                if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
+                {
+                    t += Time.deltaTime;
+                    float k = Mathf.Clamp01(t / GameConfig.MONSTER_BLINK_RESTORE_SEC);
+                    float e = 1f - (1f - k) * (1f - k);
+                    float sy = Mathf.Lerp(0f, 1f, e);
+                    body.localScale = new Vector3(bodyScale0.x, bodyScale0.y * sy, bodyScale0.z);
+                }
+                yield return null;
+            }
+
+            // 收势停顿：停稳才恢复行动
+            t = 0f;
+            while (t < GameConfig.MONSTER_BLINK_SETTLE_SEC)
+            {
+                if (isDead || this == null) yield break;
+                if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
+                    t += Time.deltaTime;
+                yield return null;
+            }
+        }
+        finally
+        {
+            // 协程任何路径退出（冻场中被杀/被停协程/正常收尾）都还原缩放与标志位，
+            // 标志位绝不许卡死（参照 2026-10-17 波次闸门 try/finally 教训）
+            if (this != null && MoveRoot != null)
+                MoveRoot.localScale = bodyScale0;
+            _teleporting = false;
+        }
     }
 
     static GameObject CreateTelegraphDisc(Vector3 center, float radius)

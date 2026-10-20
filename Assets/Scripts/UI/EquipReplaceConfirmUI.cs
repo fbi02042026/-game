@@ -80,12 +80,23 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         ui._answer = false;
         ui.Fill(newEq, oldEq);
 
+        // 【2026-10-20 主人拍板】引导局抽到装备：替换确认弹窗也带引导 —— 圈住「换上新的」按钮，
+        // 教玩家把新武器装上，点了才继续。非引导局不受影响（不弹提示）。
+        TutorialHintUI guideHint = null;
+        if (BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun
+            && ui._replaceBtn != null)
+        {
+            guideHint = TutorialHintUI.Ensure();
+            guideHint.ShowHard("点「换上新的」，把这件新武器装上！", ui._replaceBtn.GetComponent<RectTransform>());
+        }
+
         float t = 0f;
         while (!ui._answered && t < TimeoutSec)
         {
             t += Time.unscaledDeltaTime;
             yield return null;
         }
+        if (guideHint != null) guideHint.Hide();
         bool result = ui._answered ? ui._answer : AutoPickByPower(newEq, oldEq);
         // 【2026-10-12 主人报「点了换上新的，装备却没换上」】→ 三处诊断日志，下次一测就现形：
         // 看这里是「玩家选择=…」还是「超时」—— 若主人点了按钮但这里打的是超时，说明 Answer 没被触发（点击被吃/绑定丢失）。

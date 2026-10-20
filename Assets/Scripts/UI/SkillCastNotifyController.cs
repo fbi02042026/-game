@@ -3,7 +3,9 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 
 /// <summary>
-/// 战斗内「技能释放通知」横条：玩家 / 佣兵从左侧飞入，敌人从右侧镜像飞入。
+/// 战斗内「技能释放通知」横条：玩家 / 佣兵从左侧飞入，敌人从右侧飞入。
+/// 敌人条整体镜像（scale.x=-1，底图/图标随条翻），名字文字反向二连翻保持方向可读
+/// 【2026-10-20 主人拍板：镜像位置，字只有位置变、方向不变】。
 /// 模板直接取自 BattleUI 下的 SkillUI/skill（含子节点 Icon / name），
 /// 运行时 Instantiate + 对象池复用；预制体结构不改（只把原模板隐藏）。
 /// 纯代码插值，不依赖 DOTween / LeanTween。
@@ -263,6 +265,13 @@ public class SkillCastNotifyController : MonoBehaviour
         // Instantiate 会继承禁用状态；池里回收件也是禁用态 —— 不重新激活，横条永远不可见。
         rt.gameObject.SetActive(true);
 
+        // 【2026-10-20 主人拍板「敌人条整体镜像」】敌人侧 scale.x=-1 把整条翻成镜像（底图/怪物图标
+        // 随条一起翻到右侧镜像位），名字文字再反向 -1 二连翻（-1×-1=+1）保持方向可读 ——
+        // 字只有位置变（挪到条左侧），方向不变。池子跨阵营复用，每次 Push 都按 isEnemy 重设。
+        rt.localScale = isEnemy ? new Vector3(-1f, 1f, 1f) : Vector3.one;
+        if (lb != null)
+            lb.rectTransform.localScale = isEnemy ? new Vector3(-1f, 1f, 1f) : Vector3.one;
+
         // 【2026-10-18 修「飘字被屏幕左边缘裁切」】SkillUI 不在画布正中（根下 x=-219），
         // 旧逻辑把模板偏移当「相对屏幕中心」用，且钳制取的是 SkillUI 自身宽度(100) → 形同虚设，
         // 终点落在根画布 x=-219、条宽 300 → 左缘 -369 出屏（画布半宽仅 360）。
@@ -363,7 +372,7 @@ public class SkillCastNotifyController : MonoBehaviour
 
         var go = Instantiate(_template.gameObject, _root, false);
         go.name = "skill_notify";
-        go.transform.localScale = Vector3.one;   // 不靠 scale.x=-1 做镜像，保证文字不镜像
+        go.transform.localScale = Vector3.one;   // 初始正向；敌人侧镜像在 Push 里按 isEnemy 设置
         return go.transform as RectTransform;
     }
 

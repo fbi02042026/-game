@@ -17,6 +17,7 @@ public class BattleSideHud : MonoBehaviour
 
     CanvasGroup _comboGroup;
     RectTransform _comboScaleRoot;
+    RectTransform _digitRoot;      // 数字独立缩放根：弹跳缩放只作用于数字，「击败」标签不缩放
 
     Button _waveBtn;
     Text _waveTitle;
@@ -28,7 +29,7 @@ public class BattleSideHud : MonoBehaviour
     // 右缩 48、距顶 114；想微调只改这两个数。
     const float KillCounterRightInset = 48f;
     const float KillCounterTopOffset = 114f;
-    // 击杀反馈：每杀一次「字和数字」放大一下 → 立马缩回原大。
+    // 击杀反馈：每杀一次「数字」放大一下 → 立马缩回原大（【2026-10-20 主人拍板】「击败」标签不缩放）。
     // 【2026-10-19 主人拍板】放大效果保留但节奏加快（原 0.08/0.18 偏拖）。
     const float ComboScalePop = 1.5f;
     const float ComboScaleEnd = 1f;      // 缩回原大（不再缩到 0.8）
@@ -99,6 +100,17 @@ public class BattleSideHud : MonoBehaviour
         _comboGroup.alpha = 0f;
         _comboScaleRoot = comboGo.GetComponent<RectTransform>();
         _comboScaleRoot.localScale = Vector3.one;
+
+        // 数字独立缩放根：弹跳缩放只作用于数字，「击败」标签留在外层不缩放。
+        // 锚在面板右缘中点、绕右缘缩放——数字向左弹出，不会越过右屏边。
+        var digitRootGo = new GameObject("DigitRoot", typeof(RectTransform));
+        _digitRoot = (RectTransform)digitRootGo.transform;
+        _digitRoot.SetParent(_comboScaleRoot, false);
+        _digitRoot.anchorMin = new Vector2(1f, 0.5f);
+        _digitRoot.anchorMax = new Vector2(1f, 0.5f);
+        _digitRoot.pivot = new Vector2(1f, 0.5f);
+        _digitRoot.anchoredPosition = Vector2.zero;
+        _digitRoot.sizeDelta = Vector2.zero;
 
         if (!_killSpritesMissing)
         {
@@ -270,7 +282,7 @@ public class BattleSideHud : MonoBehaviour
             _comboGroup.alpha = 1f;
         }
 
-        _comboScaleRoot.localScale = Vector3.one * _comboScale;
+        if (_digitRoot != null) _digitRoot.localScale = Vector3.one * _comboScale;   // 只缩数字，「击败」标签不动
     }
 
     // ────── 击败计数：图片拼数字（图源 Resources/Icons/击败）──────
@@ -281,7 +293,7 @@ public class BattleSideHud : MonoBehaviour
     const float KillDigitGap = -4f;  // 数字间距（收紧，轻微重叠更紧凑）
     const float KillLabelW = 124f;   // 「击败」标签显示宽（原图 200x68 等比）
     const float KillLabelH = 42f;
-    const float KillLabelGap = -10f; // 标签与数字的间距（收紧，2026-10-20 主人要求再拉近）
+    const float KillLabelGap = -36f; // 标签与数字的间距（-22 仍嫌大，2026-10-20 主人要求再收紧）
 
     void LoadKillSprites()
     {
@@ -304,7 +316,7 @@ public class BattleSideHud : MonoBehaviour
         while (_killDigits.Count < count)
         {
             var go = new GameObject("KillDigit" + _killDigits.Count, typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(_comboScaleRoot, false);
+            go.transform.SetParent(_digitRoot, false);
             var img = go.GetComponent<Image>();
             img.raycastTarget = false;
             img.preserveAspect = true;
@@ -317,11 +329,11 @@ public class BattleSideHud : MonoBehaviour
         }
     }
 
-    /// <summary>按数值点亮数字图（三位补零 001/033；超过 999 自动加位），标签贴在数字左侧。</summary>
+    /// <summary>按数值点亮数字图（【2026-10-20 主人拍板】不补零：1 显示 1 位、10 起两位，以此类推），标签贴在数字左侧。</summary>
     void ApplyKillDigits(int value)
     {
         if (_killSpritesMissing || _killLabel == null) return;
-        string s = value > 0 ? value.ToString("D3") : "000";
+        string s = Mathf.Max(0, value).ToString();
         EnsureKillDigits(s.Length);
         for (int i = 0; i < s.Length; i++)
             _killDigits[i].sprite = _digitSprites[s[i] - '0'];
@@ -367,7 +379,7 @@ public class BattleSideHud : MonoBehaviour
             _comboShown = 0;
             _displayCombo = 0;
             _rollTimer = 0f;
-            if (_comboScaleRoot != null) _comboScaleRoot.localScale = Vector3.one;
+            if (_digitRoot != null) _digitRoot.localScale = Vector3.one;
             _comboScale = 1f;
             return;
         }
@@ -385,8 +397,8 @@ public class BattleSideHud : MonoBehaviour
             _comboPhase = ComboAnimPhase.FadeIn;
             _comboAnimT = 0f;
             _comboScale = 1f;
-            if (_comboScaleRoot != null)
-                _comboScaleRoot.localScale = Vector3.one;
+            if (_digitRoot != null)
+                _digitRoot.localScale = Vector3.one;
             return;
         }
 

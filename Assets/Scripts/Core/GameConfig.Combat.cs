@@ -678,6 +678,25 @@ public static partial class GameConfig
     public static float ELITE_TELEGRAPH_GROW_FROM => CombatTuningTable.Get("ELITE_TELEGRAPH_GROW_FROM", 0.35f);
     /// <summary>蓄力期间玩家影子 alpha 乘的系数（降 20% → ×0.8，落地还原）。</summary>
     public const float PLAYER_SHADOW_CHARGE_DIM = 0.8f;
+
+    // ---- 远程专属反应技「瞬移遁走」（2026-10-20 主人拍板：被贴脸→竖向压扁消失→远处原地复原）----
+    /// <summary>触发线：最近威胁者（玩家/佣兵）战斗距离 ≤ 该值触发瞬移（世界单位）。</summary>
+    public static float MONSTER_BLINK_TRIGGER_DIST => CombatTuningTable.Get("MONSTER_BLINK_TRIGGER_DIST", 1.8f);
+    /// <summary>瞬移冷却（秒）。冷却内被贴脸就硬扛着继续射（Boss「贴脸也射」不受影响）。</summary>
+    public static float MONSTER_BLINK_COOLDOWN => CombatTuningTable.Get("MONSTER_BLINK_COOLDOWN", 7f);
+    /// <summary>遁走位移下限（世界单位）。</summary>
+    public static float MONSTER_BLINK_MIN_DIST => CombatTuningTable.Get("MONSTER_BLINK_MIN_DIST", 3.0f);
+    /// <summary>遁走位移上限（世界单位）。实际取 [MIN, MAX] 随机，落点再钳回战场可视范围。</summary>
+    public static float MONSTER_BLINK_MAX_DIST => CombatTuningTable.Get("MONSTER_BLINK_MAX_DIST", 4.5f);
+    /// <summary>压扁遁地用时（秒）：scale.y 1→0，EaseIn 越压越快。</summary>
+    public static float MONSTER_BLINK_SQUASH_SEC => CombatTuningTable.Get("MONSTER_BLINK_SQUASH_SEC", 0.30f);
+    /// <summary>隐形挪移空窗（秒）：完全消失，中点换位。</summary>
+    public static float MONSTER_BLINK_HIDE_SEC => CombatTuningTable.Get("MONSTER_BLINK_HIDE_SEC", 0.10f);
+    /// <summary>原地复原用时（秒）：scale.y 0→1，EaseOut 先快后慢弹出。</summary>
+    public static float MONSTER_BLINK_RESTORE_SEC => CombatTuningTable.Get("MONSTER_BLINK_RESTORE_SEC", 0.35f);
+    /// <summary>复原后的收势停顿（秒）：停稳才恢复行动，主人要求节奏别太快。</summary>
+    public static float MONSTER_BLINK_SETTLE_SEC => CombatTuningTable.Get("MONSTER_BLINK_SETTLE_SEC", 0.10f);
+
     /// <summary>公会等级系数：0.02×公会等级</summary>
     public static float GUILD_SCALE_PER => CombatTuningTable.Get("GUILD_SCALE_PER", 0.02f);
 
