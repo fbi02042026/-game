@@ -426,8 +426,161 @@ public partial class BattleManager
         TutorialHintUI.Instance?.Hide();
     }
 
+    // ===== 关卡商店（2026-10-21 主人需求：临时界面，后续正式化再出美术/预制体）=====
+    // 时机 = 每关进关抽奖之前（引导关不弹）。商品：重生护符 50% 占一格，其余出随机武器/装备。
+    // 货币 = 战斗内抽奖币池 currentGold（玩家口中的「抽奖卷」，扣款走 SpendBattleGold 唯一出口）。
+    // 要调价格 / 概率，改下面三个常量即可。
+    const int StageShopCharmPrice = 100;
+    const int StageShopEquipPrice = 80;
+    const float StageShopCharmChance = 0.5f;
+
+    static readonly EquipSlotType[] AllEquipSlots =
+    {
+        EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.Hands, EquipSlotType.Feet,
+        EquipSlotType.Cape, EquipSlotType.MainHand, EquipSlotType.OffHand
+    };
+
+    IEnumerator CoStageShop()
+    {
+        if (IsTutorialRun) yield break;   // 引导关不打扰（与进关抽奖同口径）
+        var items = BuildStageShopItems();
+        if (items == null || items.Count == 0) yield break;
+
+        bool closed = false;
+        StageShopPopupUI.Show(items, (int)currentGold, () => closed = true);   // currentGold 是 long（BattleManager.State.cs:10），币池规模远小于 int 上限，此处显式收窄
+
+        // 防卡死口径与进关抽奖一致：300s 上限；撤离/局收尾（_runClosed）随时放行
+        float guard = 0f;
+        while (!closed && guard < 300f && !_runClosed)
+        {
+            guard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (!closed) StageShopPopupUI.Hide();   // 超时/退场强收（Close 内会触发 closed 回调）
+    }
+
+    List<StageShopPopupUI.ShopItem> BuildStageShopItems()
+    {
+        var list = new List<StageShopPopupUI.ShopItem>();
+
+        // ① 重生护符：50% 概率上架，占一格
+        bool charm = Random.value < StageShopCharmChance;
+        if (charm)
+        {
+            list.Add(new StageShopPopupUI.ShopItem
+            {
+                title = "重生护符",
+                info = "佣兵阵亡时，点击其变灰的头像消耗 1 枚原地满血复活。",
+                icon = ItemDefs.LoadIcon("item_revive_charm"),
+                price = StageShopCharmPrice,
+                rarity = null,
+                onBuy = () =>
+                {
+                    var d = SaveSystem.Instance?.Data;
+                    if (d == null) return false;
+                    if (!SpendBattleGold(StageShopCharmPrice)) return false;
+                    d.reviveCharms++;
+                    SaveSystem.Instance?.Save();                 // 买了就落盘，别白嫖
+                    BattleUI.Instance?.UpdateCharacterSlots();   // 已有阵亡槽的话，护符闪烁立刻补上
+                    return true;
+                }
+            });
+        }
+
+        // ② 随机武器/装备：占满剩余格子，稀有度保底 ≥ 玩家当前已穿最高一档（「比玩家当前的装备好」）
+        int wantCount = 3 - (charm ? 1 : 0);
+        var equips = RollStageShopEquips(wantCount);
+        foreach (var eq in equips)
+        {
+            var captured = eq;
+            list.Add(new StageShopPopupUI.ShopItem
+            {
+                title = EquipUiText.EquipTitleWithHand(captured) ?? "装备",
+                info = "买下立即穿上，替换下来的旧件自动折成强化石。",
+                icon = ResolveStageShopEquipIcon(captured),
+                price = StageShopEquipPrice,
+                rarity = captured.rarity,
+                onBuy = () =>
+                {
+                    var bag = GridBackpackSystem.Instance;
+                    if (bag == null) return false;
+                    if (!SpendBattleGold(StageShopEquipPrice)) return false;
+                    if (!bag.TryEquipDirect(captured))
+                    {
+                        // 穿不上退币，不能白扣
+                        currentGold += StageShopEquipPrice;
+                        BattleEntryDraftPanel.NotifyPoolGoldChanged(currentGold);
+                        UIManager.Instance?.ShowToast("这件穿不上，已退款。");
+                        return false;
+                    }
+                    return true;
+                }
+            });
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// 生成商店装备：多 roll 几件候选，优先稀有度<b>高于玩家当前已穿最高档</b>的，
+    /// 部位尽量不重复；凑不齐才放宽同槽补位。
+    /// </summary>
+    List<EquipInstance> RollStageShopEquips(int count)
+    {
+        var result = new List<EquipInstance>();
+        if (count <= 0) return result;
+
+        Rarity bestWorn = Rarity.Common;
+        var bag = GridBackpackSystem.Instance;
+        if (bag != null)
+        {
+            for (int i = 0; i < AllEquipSlots.Length; i++)
+            {
+                var w = bag.GetEquippedInSlot(AllEquipSlots[i]);
+                if (w != null && w.rarity > bestWorn) bestWorn = w.rarity;
+            }
+        }
+
+        PlayerJobId job = PlayerJobDefs.GetSelected();
+        int chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        var candidates = new List<EquipInstance>();
+        for (int i = 0; i < 10 && candidates.Count < count + 4; i++)
+        {
+            var eq = RiftEquipGenerator.GenerateOne(StageType.Normal, job, chapter: chapter);
+            if (eq != null) candidates.Add(eq);
+        }
+
+        // 稀有度降序，先挑「比当前好」的、部位不重复的
+        candidates.Sort((a, b) => b.rarity.CompareTo(a.rarity));
+        var usedSlots = new HashSet<EquipSlotType>();
+        foreach (var c in candidates)
+        {
+            if (result.Count >= count) break;
+            if (usedSlots.Contains(c.slotType)) continue;
+            usedSlots.Add(c.slotType);
+            result.Add(c);
+        }
+        foreach (var c in candidates)   // 不够就放宽同槽补齐
+        {
+            if (result.Count >= count) break;
+            if (!result.Contains(c)) result.Add(c);
+        }
+        return result;
+    }
+
+    static Sprite ResolveStageShopEquipIcon(EquipInstance eq)
+    {
+        if (eq == null) return null;
+        EquipIcons.Resolve(eq);
+        return eq.icon;
+    }
+
     IEnumerator CoStageEntryDraft()
     {
+        // 【2026-10-21 主人拍板：关卡商店暂时注释，等想好再开。】
+        // 重新开启时口径已改：**不是每关都弹，是随机出现**（掷概率，概率主人定）——
+        // 实现（CoStageShop / BuildStageShopItems / RollStageShopEquips / StageShopPopupUI）都在，取消下面注释即可接入。
+        //yield return CoStageShop();
+
         // ⚠ 启动抽奖币**不在这里补**（2026-10-05 主人拍板：「开始金币是每局的，不是每关的」）。
         // 原来挂在这里 = 每关进关都补一次，成了「每关地板」，通关产出的取舍就失效了。
         // 现在挪到 RunDraftDirector.OnRunStart，只有开新局（resumed=false）那一关才补。

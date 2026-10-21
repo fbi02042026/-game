@@ -89,6 +89,15 @@ public class MercObtainPopupUI : MonoBehaviour
     bool _recruitMode;
     /// <summary>招募界面传入的成交回调：扣卷/扣金币 + 入队 + 刷新；返回 true 才关弹窗。</summary>
     System.Func<bool> _tryBuy;
+
+    // —— 阵亡复活模式（2026-10-21 主人拍板：点阵亡佣兵头像弹信息框，确定钮换成「复活」+「取消」）——
+    bool _fallenMode;
+    /// <summary>复活回调：扣重生护符 + 原地复活；返回 true 才关弹窗（没护符 Toast 留在弹窗）。</summary>
+    System.Func<bool> _tryRevive;
+    /// <summary>复活按钮上方的提示行：护符 icon + 拥有数量（2026-10-21 主人需求；运行时补节点，不碰预制体）。</summary>
+    GameObject _reviveCharmHint;
+    Text _reviveCharmCount;
+    Color _keepLabelColor0 = Color.white;
     Text _keepLabel;
     Text _replaceLabel;
     Text _titleText;
@@ -139,6 +148,7 @@ public class MercObtainPopupUI : MonoBehaviour
         var ui = Ensure();
         if (ui == null) return;
         ui.ExitRecruitMode();           // 防串味：任何非招募入口先退出招募模式（还原按钮/标题文案）
+        ui.ExitFallenMode();            // 同上：先退阵亡复活模式（「复活/取消」双钮别串到普通详情）
         var card = new DraftCard
         {
             Kind = DraftCardKind.MercRecruit,
@@ -151,6 +161,38 @@ public class MercObtainPopupUI : MonoBehaviour
         ui._onReplace = onReplace;
         ui.ApplyReplaceButton(showReplace);
         // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗
+        SkillObtainPopupUI.CloseIfOpen();
+        ui.OpenRoot();
+        ui.StopAutoClose();
+        ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
+    }
+
+    /// <summary>
+    /// 【2026-10-21 主人拍板】阵亡佣兵信息框：点变灰头像弹出，确认钮换成「复活」、右下「取消」，
+    /// 标题「佣兵信息」（复用招募模式的双钮布局与文案切换，见 ApplyRecruitButtons）。
+    /// <para><paramref name="tryRevive"/> 返回 true（有护符、扣款生效、复活成功）才关弹窗；
+    /// 返回 false（没护符等）Toast 已提示，留在弹窗里继续看信息。</para>
+    /// </summary>
+    public static void ShowFallenFromEntry(string hireId, string assetId, int level, int star,
+        System.Func<bool> tryRevive)
+    {
+        var ui = Ensure();
+        if (ui == null) return;
+        ui.ExitRecruitMode();           // 防串味：任何非招募入口先退出招募模式
+        var card = new DraftCard
+        {
+            Kind = DraftCardKind.MercRecruit,
+            Id = assetId,
+            HireId = hireId,
+            MercLevel = Mathf.Max(1, level),
+            Star = Mathf.Clamp(star < 1 ? 1 : star, 1, 5)
+        };
+        if (!ui.Fill(card)) { ui.Close(); return; }
+        ui._fallenMode = true;
+        ui._tryRevive = tryRevive;
+        // 复用招募模式的全套切换：双钮并排 + KeepButton→「复活」/ tihaunButton→「取消」+ 标题「佣兵信息」
+        ui.ApplyRecruitButtons(true, "复活");
+        ui.ApplyFallenCharm();   // 复活钮上方「护符 icon + ×N」提示行；没护符时复活钮字变红
         SkillObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
         ui.StopAutoClose();
@@ -234,6 +276,10 @@ public class MercObtainPopupUI : MonoBehaviour
         if (_keepLabel != null && !string.IsNullOrEmpty(_keepLabel.text)) _keepLabelText0 = _keepLabel.text;
         if (_replaceLabel != null && !string.IsNullOrEmpty(_replaceLabel.text)) _replaceLabelText0 = _replaceLabel.text;
         if (_titleText != null && !string.IsNullOrEmpty(_titleText.text)) _titleText0 = _titleText.text;
+        _keepLabelColor0 = _keepLabel != null ? _keepLabel.color : Color.white;
+
+        // 阵亡复活模式的「护符 icon + 拥有数量」提示行（复活按钮上方；运行时补节点，预制体不动）
+        EnsureReviveCharmHint();
 
         _icon = _root.transform.Find("Panel/zuo/Iconmask/Icon")?.GetComponent<Image>();
         _nameText = _root.transform.Find("Panel/zuo/namebg/Name")?.GetComponent<Text>();
@@ -305,11 +351,24 @@ public class MercObtainPopupUI : MonoBehaviour
         }
     }
 
-    /// <summary>确认钮：招募模式下是「购买」，其余模式是「确认=关」。</summary>
+    /// <summary>确认钮：招募模式下是「购买」，阵亡复活模式下是「复活」，其余模式是「确认=关」。</summary>
     void OnKeepClicked()
     {
         if (_recruitMode) { OnBuyClicked(); return; }
+        if (_fallenMode) { OnReviveClicked(); return; }
         Close();
+    }
+
+    /// <summary>阵亡复活模式点「复活」：回调扣护符 + 原地复活；成功才关弹窗，失败留在弹窗（Toast 已提示）。</summary>
+    void OnReviveClicked()
+    {
+        var revive = _tryRevive;
+        if (revive == null) { Close(); return; }
+        if (revive())
+        {
+            _tryRevive = null;
+            Close();
+        }
     }
 
     /// <summary>招募模式点「购买」：回调招募界面扣款入队；成功才关弹窗，失败留在弹窗（Toast 已提示）。</summary>
@@ -328,11 +387,11 @@ public class MercObtainPopupUI : MonoBehaviour
     // 右下「替换」按钮（2026-10-18 主人拍板）
     // ============================================================
 
-    /// <summary>点「替换」：招募模式下该钮是「取消」= 直接关；其余模式先关弹窗再回调
+    /// <summary>点「替换」：招募/阵亡复活模式下该钮是「取消」= 直接关；其余模式先关弹窗再回调
     /// （回调里 MercDrawPoolUI 会入队/进点选态并刷新列表）。</summary>
     void OnReplaceClicked()
     {
-        if (_recruitMode) { Close(); return; }
+        if (_recruitMode || _fallenMode) { Close(); return; }
         var cb = _onReplace;
         _onReplace = null;
         Close();
@@ -407,6 +466,7 @@ public class MercObtainPopupUI : MonoBehaviour
     {
         _closeReq = true;
         if (_recruitMode) ExitRecruitMode();   // 还原按钮/标题文案（确认/替换/获得佣兵），下次普通入口不串味
+        if (_fallenMode) ExitFallenMode();     // 同上：还原「复活/取消」双钮，下次普通入口不串味
         if (_root != null) _root.SetActive(false);
         var cb = _onClosed;
         _onClosed = null;
@@ -419,6 +479,97 @@ public class MercObtainPopupUI : MonoBehaviour
         _recruitMode = false;
         _tryBuy = null;
         ApplyRecruitButtons(false, null);
+    }
+
+    /// <summary>退出阵亡复活模式：清回调 + 还原预制体原文案与按钮布局（与招募模式同一套还原）。</summary>
+    void ExitFallenMode()
+    {
+        _fallenMode = false;
+        _tryRevive = null;
+        ApplyRecruitButtons(false, null);
+        // 提示行收掉 + 复活钮颜色还原，普通详情/招募入口不残留
+        if (_reviveCharmHint != null) _reviveCharmHint.SetActive(false);
+        if (_keepLabel != null) _keepLabel.color = _keepLabelColor0;
+    }
+
+    // ============================================================
+    // 阵亡复活模式 · 「护符 icon + 拥有数量」提示行（2026-10-21 主人需求）
+    // 挂在复活按钮正上方：icon + ×N。运行时补建（预制体没有这个节点），只认 Panel/ReviveCharmHint。
+    // ============================================================
+    const string ReviveCharmHintNode = "ReviveCharmHint";
+    const string ReviveCharmItemIdForHint = "item_revive_charm";
+
+    void EnsureReviveCharmHint()
+    {
+        if (_root == null) return;
+        _reviveCharmHint = _root.transform.Find("Panel/" + ReviveCharmHintNode)?.gameObject;
+        if (_reviveCharmHint != null) return;
+
+        var panel = _root.transform.Find("Panel");
+        if (panel == null || _keepRt == null)
+        {
+            Debug.LogError("[MercObtainPopup] 缺 Panel 或 KeepButton，复活护符提示行挂不上（不影响其它功能）");
+            return;
+        }
+
+        _reviveCharmHint = new GameObject(ReviveCharmHintNode, typeof(RectTransform));
+        _reviveCharmHint.transform.SetParent(panel, false);
+        var rt = _reviveCharmHint.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        // 跟着复活钮的锚位走：正上方 ≈ 一个按钮高 + 间距（暂 95px，效果不对再调）
+        rt.anchoredPosition = new Vector2(_keepBasePos.x, _keepBasePos.y + 95f);
+        rt.sizeDelta = new Vector2(220f, 44f);
+
+        // 护符 icon
+        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+        iconGo.transform.SetParent(_reviveCharmHint.transform, false);
+        var iRt = iconGo.GetComponent<RectTransform>();
+        iRt.anchorMin = new Vector2(0f, 0.5f); iRt.anchorMax = new Vector2(0f, 0.5f);
+        iRt.pivot = new Vector2(0f, 0.5f);
+        iRt.anchoredPosition = new Vector2(0f, 0f);
+        iRt.sizeDelta = new Vector2(40f, 40f);
+        var iImg = iconGo.GetComponent<Image>();
+        iImg.raycastTarget = false;
+        iImg.preserveAspect = true;
+        var iconSp = ItemDefs.LoadIcon(ReviveCharmItemIdForHint);
+        if (iconSp == null)
+            Debug.LogError("[MercObtainPopup] 重生护符图标加载失败（item_defs icon 路径或 Resources 图缺失）");
+        iImg.sprite = iconSp;
+        iImg.enabled = iconSp != null;
+
+        // ×N 数量
+        var txtGo = new GameObject("Count", typeof(RectTransform));
+        txtGo.transform.SetParent(_reviveCharmHint.transform, false);
+        var t = txtGo.AddComponent<Text>();
+        t.font = GameFonts.GetChinese();
+        t.fontSize = 30;
+        t.alignment = TextAnchor.MiddleLeft;
+        t.color = Color.white;
+        t.raycastTarget = false;
+        var tRt = txtGo.GetComponent<RectTransform>();
+        tRt.anchorMin = new Vector2(0f, 0f); tRt.anchorMax = new Vector2(0f, 1f);
+        tRt.pivot = new Vector2(0f, 0.5f);
+        tRt.anchoredPosition = new Vector2(48f, 0f);
+        tRt.sizeDelta = new Vector2(170f, 44f);
+        _reviveCharmCount = t;
+
+        _reviveCharmHint.SetActive(false);   // 只有阵亡复活模式显示
+    }
+
+    /// <summary>阵亡复活模式开窗时刷提示行与复活钮颜色：有护符正常色，没护符字变红（点了 Toast 道具不足）。</summary>
+    void ApplyFallenCharm()
+    {
+        int charms = 0;
+        var data = SaveSystem.Instance?.Data;
+        if (data != null) charms = data.reviveCharms;
+
+        if (_reviveCharmHint != null)
+        {
+            _reviveCharmHint.SetActive(true);
+            if (_reviveCharmCount != null) _reviveCharmCount.text = "×" + charms;
+        }
+        if (_keepLabel != null)
+            _keepLabel.color = charms > 0 ? _keepLabelColor0 : new Color(1f, 0.4f, 0.4f);
     }
 
     // ============================================================
@@ -636,6 +787,7 @@ public class MercObtainPopupUI : MonoBehaviour
     {
         var ui = Ensure();
         if (ui == null || offer == null) return;
+        ui.ExitFallenMode();            // 防串味：先退阵亡复活模式（「复活/取消」双钮别串进招募购买）
         var card = new DraftCard
         {
             Kind = DraftCardKind.MercRecruit,

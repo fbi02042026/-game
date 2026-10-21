@@ -362,6 +362,10 @@ public class SaveData
     public List<StringIntEntry> townBagItemEntries = new List<StringIntEntry>();
     [NonSerialized] public Dictionary<string, int> townBagItems = new Dictionary<string, int>();
 
+    // === 重生护符（2026-10-21 新增）：佣兵阵亡时点击其变灰头像消耗 1 枚原地复活 ===
+    // 获取来源只有战斗内关卡商店（50% 概率上架）；治疗药水已随本需求移除，护符接替「战斗内救急资源」生态位。
+    public int reviveCharms = 0;
+
     /// <summary>城镇背包道具持有数（townBagItems 统一读口，拿不到返回 0）。</summary>
     public int TownBagCount(string id)
     {

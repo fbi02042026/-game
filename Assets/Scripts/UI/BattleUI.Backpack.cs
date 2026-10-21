@@ -438,6 +438,17 @@ public partial class BattleUI : MonoBehaviour
                 "本局击杀精英 / Boss 掉落的天赋石。\n回城后在天赋页点亮、升级节点。",
                 CommonIconSprites.Load("icon_talent_stone"), (int)stones);
         }
+
+        // 4) 重生护符（当前持有，2026-10-21 主人需求：商店买的救命道具，玩家关心还剩几枚，不按本局增量算）
+        var saveData = SaveSystem.Instance?.Data;
+        int charms = saveData != null ? saveData.reviveCharms : 0;
+        if (charms > 0)
+        {
+            TryPlaceDisplay(occupied, width, unlockedRows, placements,
+                "重生护符",
+                "佣兵阵亡时，点击其变灰的头像消耗 1 枚原地满血复活。\n战斗内关卡商店有售（50% 概率上架）。",
+                ItemDefs.LoadIcon("item_revive_charm"), charms);
+        }
     }
 
     /// <summary>在已占用集合中找第一个空格塞一个 1×1 展示位；放不下就 LogWarning（不静默吞）。</summary>

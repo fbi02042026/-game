@@ -169,13 +169,13 @@ public static class WeaponAffixSystem
     {
         switch (attr)
         {
+            // 2026-10-21 主人拍板：CritRate/Dodge/LifeSteal/CooldownReduce 改加算（与掉落路径 TryMapAttr、消费端口径一致）。
+            // 这四条消费端是扁平分数（暴率概率 / 闪避概率 / 吸血比例 / 冷却缩减比例），基础多为 0，
+            // 旧口径 isPercent=true 走乘算 0×(1+v)=0 → 词条完全失效；CritRate 基础 0.05 也仅 +0.25% 却面板显示「+5%」。
+            // 攻速(AttackSpeed)是唯一真·乘算（攻击间隔=1/AttackSpeed），保留。
+            // ExpBonus/GoldBonus（修复 A，2026-10-21）：消费端均为加算口径（GoldBonus 见 BattleManager.State.cs:121；
+            // ExpBonus 当前无消费点/无天赋节点，纯死字段），故从乘算分支移除，与消费端口径一致。
             case AttrType.AttackSpeed:
-            case AttrType.CritRate:
-            case AttrType.Dodge:
-            case AttrType.LifeSteal:
-            case AttrType.CooldownReduce:
-            case AttrType.ExpBonus:
-            case AttrType.GoldBonus:
                 return true;
             default:
                 return false;

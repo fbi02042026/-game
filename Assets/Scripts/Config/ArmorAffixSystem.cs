@@ -116,10 +116,10 @@ public static class ArmorAffixSystem
     {
         switch (attr)
         {
+            // 2026-10-21 主人拍板：Dodge/LifeSteal/CooldownReduce 改加算（与掉落路径、消费端口径一致）。
+            // 旧 isPercent=true 乘算 → 基础 0 时 0×(1+v)=0 完全失效。MoveSpeed 是乘算（移速速率）保留；
+            // PhyPower/MagicPower 不在防具词条池（见 GetRollableAttrs 注释），此处保持原样不碰。
             case AttrType.MoveSpeed:
-            case AttrType.Dodge:
-            case AttrType.LifeSteal:
-            case AttrType.CooldownReduce:
             case AttrType.PhyPower:
             case AttrType.MagicPower:
                 return true;

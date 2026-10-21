@@ -332,6 +332,9 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         Debug.Log($"[BattleManager] 已生成佣兵 {spawned} 个 (tavern槽={max})");
     }
 
+    /// <summary>重生护符复活血比例（2026-10-21 主人拍板「护符给 80 的血」）。</summary>
+    const float ReviveCharmHpRatio = 0.8f;
+
     /// <summary>
     /// 【2026-10-17】阵亡佣兵下一关复活 —— 兑现 2026-10-06 拍板「阵亡下一关按 20% 血复活（每过一关养回 30%）」。
     /// <para>旧实现只有开新一局才 <see cref="SpawnMercenaries"/>，同一局内阵亡的佣兵永远回不来
@@ -401,6 +404,94 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             merc.Face(1);
             Debug.Log($"[BattleManager] 阵亡佣兵复活：{e.displayName}({e.mercId}) 血量 {reviveRatio * 100f:0.}%（fallenStages={e.fallenStages}）");
         }
+    }
+
+    /// <summary>
+    /// 【2026-10-21 主人需求】重生护符复活：战斗中佣兵阵亡时，在佣兵信息框点「复活」消耗 1 枚重生护符，
+    /// <b>原地按 80% 血复活</b>（主人拍板「护符给 80 的血」）。
+    /// <para>与 <see cref="ReviveFallenMercsForStage"/>（下一关惩罚性 20% 起步复活）并存；
+    /// spawn 参数照抄该方法（星级/技能/名字/OnDead 订阅一个不少），血量在满血生成后补砍到 80%。</para>
+    /// <para>返回 false（没护符/状态不对）时 Toast 已提示、信息框留在原处（主人拍板的「复活/取消」双钮）。</para>
+    /// </summary>
+    public bool TryReviveMercWithCharm(int loadoutIndex)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || !RunLoadout.IsActive) return false;
+        var mercs = RunLoadout.Mercs();
+        if (mercs == null || loadoutIndex < 0 || loadoutIndex >= mercs.Count) return false;
+        var e = mercs[loadoutIndex];
+        if (e == null || !e.fallen) return false;
+
+        var mm = MercenaryManager.Instance;
+        if (mm == null) return false;
+
+        string key = !string.IsNullOrEmpty(e.hireId) ? e.hireId : e.mercId;
+
+        // 场上已有同 id 实例就不补（防连点双生成）
+        var onField = mm.GetActiveMercs();
+        for (int k = 0; k < onField.Count; k++)
+        {
+            var m = onField[k];
+            if (m == null) continue;
+            string mKey = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+            if (mKey == key) return false;
+        }
+
+        if (data.reviveCharms <= 0)
+        {
+            // 【2026-10-21 主人拍板】没护符点复活 = 提示道具不足（信息框留在原处继续看）
+            UIManager.Instance?.ShowToast("道具不足：没有重生护符（关卡商店有售）。");
+            return false;
+        }
+        data.reviveCharms--;
+        e.fallen = false;
+        e.fallenStages = 0;
+
+        // ---- spawn 段与 ReviveFallenMercsForStage 同款；血量按护符口径补砍到 80% ----
+        var heroRef = hero != null ? hero : Hero.Instance;
+        int slot = mm.GetActiveMercs().Count;
+        Vector3 pos;
+        if (heroRef != null)
+            pos = new Vector3(UnitCrowd.GetMercDesiredCombatX(heroRef, null, slot), UnitBase.GROUND_Y,
+                unitRoot != null ? unitRoot.position.z : 0f);
+        else
+            pos = new Vector3(transform.position.x + MERC_FRONT_SPACING * (slot + 1), UnitBase.GROUND_Y, 0f);
+
+        var merc = mm.SpawnMercenary(e.mercId, pos, Mathf.Max(1, e.level));
+        if (merc == null)
+        {
+            // 复活失败要把护符与 fallen 记账退回去，不能白扣
+            data.reviveCharms++;
+            e.fallen = true;
+            e.fallenStages = 0;
+            Debug.LogError($"[BattleManager] 重生护符复活失败：预制体缺失 mercId={e.mercId}（护符已退还）");
+            UIManager.Instance?.ShowToast("复活失败（佣兵预制体缺失），护符已退还。");
+            return false;
+        }
+        merc.mercStar = Mathf.Clamp(e.star, 1, 5);
+        // SpawnMercenary → Init 会重置满血，护符复活按主人拍板补砍到 80%
+        if (merc.attr != null && ReviveCharmHpRatio < 1f)
+        {
+            float maxHp = merc.attr.GetAttr(AttrType.MaxHp);
+            merc.currentHp = Mathf.Max(1f, maxHp * ReviveCharmHpRatio);
+        }
+        merc.SetupBattleSkills(e.skillId, e.passiveSkillId);
+        merc.SetPartyIndex(slot);
+        merc.SetDisplayName(e.displayName);
+        if (!string.IsNullOrEmpty(e.hireId))
+            merc.SetHireId(e.hireId);
+        if (!string.IsNullOrEmpty(e.displayName))
+            merc.gameObject.name = "Merc_" + e.displayName;
+        if (!allyUnits.Contains(merc))
+            allyUnits.Add(merc);
+        merc.OnDead += OnMercenaryDead;
+        merc.Face(1);
+
+        SaveSystem.Instance?.Save();   // 护符扣了就落盘，中途杀进程别白嫖
+        UIManager.Instance?.ShowToast($"重生护符发动，「{e.displayName}」原地复活！");
+        BattleUI.Instance?.UpdateCharacterSlots();   // 槽亮回来 + 护符图标自动收掉
+        Debug.Log($"[BattleManager] 重生护符复活：{e.displayName}({e.mercId}) 血量 {ReviveCharmHpRatio * 100f:0.}%（剩余护符 {data.reviveCharms}）");
+        return true;
     }
 
     #endregion

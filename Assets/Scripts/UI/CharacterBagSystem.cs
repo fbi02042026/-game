@@ -128,6 +128,14 @@ public static class CharacterBagSystem
                 "用于城镇天赋页点亮、升级节点。\n击杀精英 / Boss、通关里程碑都会掉落。",
                 CommonIconSprites.Load("icon_talent_stone"), (int)stones);
         }
+
+        // ④ 重生护符（当前持有，2026-10-21 主人需求：战斗内关卡商店买的救命道具，出战斗也看得到存量）
+        if (data.reviveCharms > 0)
+        {
+            TryAddDisplay(result, occupied, rows, "重生护符",
+                "佣兵阵亡时，点击其变灰的头像消耗 1 枚原地满血复活。\n战斗内关卡商店有售（50% 概率上架）。",
+                ItemDefs.LoadIcon("item_revive_charm"), data.reviveCharms);
+        }
     }
 
     /// <summary>在已占用网格里找第一个空格塞 1×1 展示位；满则 LogWarning 并返回 false。</summary>

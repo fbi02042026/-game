@@ -523,7 +523,10 @@ public class AttrSystem
                 AddAttr(AttrType.MoveSpeed, fx.value * 0.01f, true);
                 break;
             case TalentDefs.AttrKind.GoldDrop:
-                AddAttr(AttrType.GoldBonus, fx.value * 0.01f, true);
+                // 2026-10-21 修复 A：GoldBonus 消费端（BattleManager.State.cs:121）= runGoldGainMul * (1 + bonus) 是**加算**，
+                // 旧口径 isPercent=true 走 _attr *= (1 + v) 与消费端乘算×加算错位，导致金币加成被二次放大/错位。
+                // 改为 false（加算）与消费端口径对齐。
+                AddAttr(AttrType.GoldBonus, fx.value * 0.01f, false);
                 break;
             default:
                 // 吞掉的类型：体力恢复 / 商店折扣 / 材料掉落 / 天赋石掉落 / 撤离保留金币。

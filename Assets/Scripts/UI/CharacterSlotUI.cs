@@ -912,6 +912,7 @@ public class CharacterSlotUI
         SetJobIcon(null);               // 空槽不显示职业 icon
         ApplyUnhiredPortrait();         // 空槽（未雇佣）：头像位留白，不再点亮/置白占位盘
         SetName(null);                  // 2026-10-06 主人拍板：空槽下面不许残留名字
+        HideReviveCharm();
         if (levelLabel != null) levelLabel.text = "";
         ClearNumericDisplays();
         if (UnhiredShowPlayerLook) KeepBarGraphicsVisible();   // 条本体保留，跟玩家槽同一套
@@ -931,6 +932,7 @@ public class CharacterSlotUI
             lockedOverlay.SetActive(true);
         SetName(null);                  // 2026-10-06 主人拍板：未解锁槽保留美术布局，但清掉占位名字
         ClearNumericDisplays();
+        HideReviveCharm();              // 未解锁/占位态收掉护符残留（防上一局阵亡槽的图标留到新局）
     }
 
     bool _lockedLabelSized;
@@ -948,6 +950,75 @@ public class CharacterSlotUI
         if (root != null) root.SetActive(true);
         if (lockedOverlay != null) lockedOverlay.SetActive(false);
         ApplyDim(fallen);
+        // 【2026-10-21 主人需求】阵亡且持有重生护符 → 头像上叠护符图标，一闪一闪；
+        // 点击整个槽（root Button，OnMercAvatarClicked）= 消耗护符原地复活。
+        UpdateReviveCharm(fallen);
+    }
+
+    // ============================================================
+    // 重生护符闪烁图标（2026-10-21 主人需求「变灰的佣兵头像上面放一个这个道具的图标 一闪一闪的」）
+    // 运行时建树挂在 root 下（不动预制体）；raycast 关闭 —— 点击穿透到 root Button 走复活，
+    // 不单挂 Button（否则与 root 的「点头像弹详情」冒泡打架，一次点击弹两个东西）。
+    // ============================================================
+    const string ReviveCharmNodeName = "ReviveCharmIcon";
+    const string ReviveCharmItemId = "item_revive_charm";
+    GameObject _reviveCharmGo;
+    Image _reviveCharmImg;
+    static bool _reviveCharmIconMissingLogged;
+
+    void UpdateReviveCharm(bool fallen)
+    {
+        bool want = fallen
+            && SaveSystem.Instance != null
+            && SaveSystem.Instance.Data != null
+            && SaveSystem.Instance.Data.reviveCharms > 0;
+
+        if (!want)
+        {
+            if (_reviveCharmGo != null) _reviveCharmGo.SetActive(false);
+            return;
+        }
+
+        if (_reviveCharmGo == null)
+        {
+            if (root == null) return;
+            _reviveCharmGo = new GameObject(ReviveCharmNodeName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            _reviveCharmGo.transform.SetParent(root.transform, false);
+            var rt = _reviveCharmGo.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(0f, 8f);      // 头像中上部，别盖住血条
+            rt.sizeDelta = new Vector2(72f, 72f);
+            _reviveCharmImg = _reviveCharmGo.GetComponent<Image>();
+            _reviveCharmImg.raycastTarget = false;
+            _reviveCharmGo.AddComponent<ReviveCharmBlink>().Bind(_reviveCharmImg);
+            _reviveCharmGo.transform.SetAsLastSibling();    // 压在头像 / 框之上
+        }
+
+        if (_reviveCharmImg.sprite == null)
+        {
+            var sp = ItemDefs.LoadIcon(ReviveCharmItemId);
+            if (sp == null)
+            {
+                if (!_reviveCharmIconMissingLogged)
+                {
+                    _reviveCharmIconMissingLogged = true;
+                    Debug.LogError("[CharacterSlotUI] 重生护符图标加载失败（item_defs 的 icon 路径或 Resources 图缺失）");
+                }
+                _reviveCharmGo.SetActive(false);
+                return;
+            }
+            _reviveCharmImg.sprite = sp;
+        }
+        _reviveCharmGo.SetActive(true);
+    }
+
+    /// <summary>非阵亡态（空槽 / 未解锁 / 保留占位）一律收掉护符图标，防上一局的残留。</summary>
+    void HideReviveCharm()
+    {
+        if (_reviveCharmGo != null && _reviveCharmGo.activeSelf)
+            _reviveCharmGo.SetActive(false);
     }
 
     public void ShowUnavailable(string label = "未解锁")
@@ -963,6 +1034,7 @@ public class CharacterSlotUI
         SetJobIcon(null);               // 未解锁不显示职业 icon
         ApplyUnhiredPortrait();         // 未解锁（未雇佣）：头像位留白，不再点亮/置白占位盘
         ApplyLockedOverlayText(label ?? "未解锁");
+        HideReviveCharm();
         SetName(null);                  // 2026-10-06 主人拍板：未解锁槽下面不许残留名字
         if (levelLabel != null)
             levelLabel.text = "";
