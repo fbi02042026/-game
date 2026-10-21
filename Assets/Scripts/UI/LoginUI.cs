@@ -621,7 +621,9 @@ public class LoginUI : MonoBehaviour
             rt.anchorMin = new Vector2(0f, 1f);
             rt.anchorMax = new Vector2(0f, 1f);
             rt.pivot = new Vector2(0f, 1f);
-            rt.sizeDelta = new Vector2(200f, 36f);
+            // 2026-10-21 主人要求：字号调大 + 自适应——文本框尺寸只作基准，
+            // Overflow 模式下宽度随内容自动延伸、不被裁剪；整体大小随 Canvas Scaler 按屏幕等比缩放。
+            rt.sizeDelta = new Vector2(320f, 44f);
 
             // 编辑器：排在「清除存档」调试按钮下方避让（该方法已先跑，位置含刘海内缩后的现值）
             float topY = -8f;
@@ -634,9 +636,12 @@ public class LoginUI : MonoBehaviour
             rt.anchoredPosition = new Vector2(16f, topY);
 
             _versionLabel.font = GameFonts.GetChinese();
-            _versionLabel.fontSize = 24;
+            _versionLabel.fontSize = 30; // 原 24，2026-10-21 调大
             _versionLabel.fontStyle = FontStyle.Bold;
             _versionLabel.alignment = TextAnchor.UpperLeft;
+            // 自适应：不换行不裁剪，版本号串再长也完整显示
+            _versionLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _versionLabel.verticalOverflow = VerticalWrapMode.Overflow;
             _versionLabel.color = new Color(1f, 1f, 1f, 0.9f);
             _versionLabel.raycastTarget = false;
             _versionLabel.text = "v" + Application.version;

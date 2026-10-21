@@ -32,8 +32,11 @@ public partial class AdventureUI
     /// <summary>按路线表重算可选章节，并把 _selectedChapter 修正到集合内。</summary>
     void RefreshAvailableChapters()
     {
-        _availableChapters.Clear();
+        // 【2026-10-21 拍板】老存档补掷入口：chosenBranch==0 且已通关第 1 章 → 首次进冒险页补掷一次
+        // （EnsureForkRoll 内部幂等，绝不重复掷；data 取不到传 null 由函数内部兜底）。
         var data = SaveSystem.Instance?.Data;
+        ChapterRouteTable.EnsureForkRoll(data);
+        _availableChapters.Clear();
         var list = ChapterRouteTable.AvailableChapters(data);
         if (list != null)
         {
@@ -43,8 +46,10 @@ public partial class AdventureUI
         if (_availableChapters.Count == 0)
             _availableChapters.Add(1);
 
+        // 当前选择不在可选集合内（例如刚通关了最末章、或选中了一支未派定的支线）→
+        // 落到「应推进的章节」：可选里第一个未通关，全通关回最后一章（详见 ChapterRouteTable.CurrentChapterToAdvance）。
         if (!_availableChapters.Contains(_selectedChapter))
-            _selectedChapter = _availableChapters[_availableChapters.Count - 1];
+            _selectedChapter = ChapterRouteTable.CurrentChapterToAdvance(data);
     }
 
     /// <summary>分叉点提示：支线可选时列出地图名（不露章节号）。</summary>
@@ -138,18 +143,18 @@ public partial class AdventureUI
     // 冒险页不再自建一份，统一走 GuildHallUI 刷新的大厅 TopBar 那份）
 
     /// <summary>
-    /// 【2026-10-21 主人拍板】世界地图入口暂停显示（地块状态/点击链路未理顺前先不露出来）。
-    /// 隐藏是唯一出口：预制体 RightContent/WorldMapBtn 与标题栏代码生成那颗，两个入口一律关掉。
-    /// 恢复显示时改回读 WorldMapPortal.ShouldAppear() 即可（点击回调 OnOpenWorldMap 原样保留）。
+    /// 世界地图入口显隐：按 WorldMapPortal.ShouldAppear()（已通关第 1 章）控制。
+    /// 两个入口（预制体 RightContent/WorldMapBtn 与标题栏代码生成那颗）一并处理；
+    /// 点击回调 OnOpenWorldMap（WorldMapPopup.Show(OnWorldMapEnter)）原样保留。
     /// </summary>
     void EnsureWorldMapEntry()
     {
+        bool show = SaveSystem.Instance != null && SaveSystem.Instance.Data != null
+                    && SaveSystem.Instance.Data.HasClearedChapter(1);
         var pre = transform.Find("RightContent/WorldMapBtn");
-        if (pre != null && pre.gameObject.activeSelf)
-            pre.gameObject.SetActive(false);
+        if (pre != null) pre.gameObject.SetActive(show);
 
-        if (_worldMapBtn != null && _worldMapBtn.gameObject.activeSelf)
-            _worldMapBtn.gameObject.SetActive(false);
+        if (_worldMapBtn != null) _worldMapBtn.gameObject.SetActive(show);
     }
 
     void OnOpenWorldMap()

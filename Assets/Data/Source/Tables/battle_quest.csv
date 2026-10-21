@@ -1,13 +1,13 @@
-# gameChapter/stageType/isGoldDungeon: * 为通配；clearGold=0 走公式（2026-10-18 主人拍板：任务金整体提额，普通 base 40+5ch≈半次抽奖价，Boss 关同步上调）
+# gameChapter/stageType/isGoldDungeon: * 为通配；clearGold=0 走公式（2026-10-21 主人拍板回调 10-18 提额：任务金恢复产出去零口径 3+1ch / Boss 20~200，原因：提额叠在 StageGoldDefs 固定额度上致左列 2 小时加满，详见 Docs/《天赋左列2小时加满》_待办任务清单.md）
 gameChapter,stageType,isGoldDungeon,objective,clearGold,normalBase,normalChapterAdd,eliteGoldMul,note
-1,Boss,0,击败 Boss 森之守护者,60,,,,第1章Boss
-2,Boss,0,击败 Boss 墓园守卫,80,,,,第2章Boss
-3,Boss,0,击败 Boss 雨林巨蛛,100,,,,第3章Boss
-4,Boss,0,击败 Boss 海妖蟹,120,,,,第4章Boss
-5,Boss,0,击败 Boss 时之风车精灵,140,,,,第5章Boss
-6,Boss,0,击败 Boss 晶石巨像,160,,,,第6章Boss
-7,Boss,0,击败 Boss 裂隙化身 · 艾丽娅,180,,,,第7章Boss
-8,Boss,0,击败 Boss 裂缝意志,400,,,,第8章Boss
-*,Normal,0,击败所有敌人,0,40,5,,普通关公式
-*,Elite,0,击败所有敌人,0,40,5,1.5,精英+50%
+1,Boss,0,击败 Boss 森之守护者,20,,,,第1章Boss
+2,Boss,0,击败 Boss 墓园守卫,30,,,,第2章Boss
+3,Boss,0,击败 Boss 雨林巨蛛,40,,,,第3章Boss
+4,Boss,0,击败 Boss 海妖蟹,50,,,,第4章Boss
+5,Boss,0,击败 Boss 时之风车精灵,60,,,,第5章Boss
+6,Boss,0,击败 Boss 晶石巨像,70,,,,第6章Boss
+7,Boss,0,击败 Boss 裂隙化身 · 艾丽娅,80,,,,第7章Boss
+8,Boss,0,击败 Boss 裂缝意志,200,,,,第8章Boss
+*,Normal,0,击败所有敌人,0,3,1,,普通关公式
+*,Elite,0,击败所有敌人,0,3,1,1.5,精英+50%
 *,*,1,清剿金币副本敌人,0,,,,金数走GameConfig

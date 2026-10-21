@@ -459,18 +459,18 @@ public partial class AdventureUI
     }
 
     /// <summary>
-    /// 在分叉点（第 2/3/4 章）第一次开打时锁定本周目路线，锁上后另外两条支线进不去，
-    /// 直到通关第 8 章由 SaveData.MarkChapterCleared 归零，下一周目可重选。
+    /// 【2026-10-21 拍板】支线已改为通关第 1 章后由 ChapterRouteTable.EnsureForkRoll 随机派定，
+    /// 本方法不再承担派定职责，仅留作保险丝：异常情况下（派定丢失）进 2/3/4 时兜底补写一次。
     /// </summary>
     void NoteChosenBranch(int chapter)
     {
         if (chapter < 2 || chapter > 4) return;
         var data = SaveSystem.Instance?.Data;
         if (data == null || data.chosenBranch == chapter) return;
-        if (data.chosenBranch != 0) return;   // 已经选过，不覆盖
+        if (data.chosenBranch != 0) return;   // 已经派定过，不覆盖
         data.chosenBranch = chapter;
         SaveSystem.Instance.Save();
-        Debug.Log($"[AdventureUI] 本周目选定支线：{GameConfig.GetChapterMapName(chapter)}（内部第{chapter}章）");
+        Debug.Log($"[AdventureUI] 保险丝兜底派定支线：{GameConfig.GetChapterMapName(chapter)}（内部第{chapter}章）");
     }
 
     void OnSweep() => Toast("扫荡（即将开放）");

@@ -305,6 +305,10 @@ public class ChapterManager : Singleton<ChapterManager>
                 int clearDiff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : -1;
                 data.MarkChapterCleared(currentChapter, clearDiff);
 
+                // 【2026-10-21 拍板】通关第 1 章后随机派定本周目支线（洗牌袋，见 ChapterRouteTable.EnsureForkRoll）。
+                // 只判 currentChapter == 1：第 8 章通关时 chosenBranch 刚归零，无条件调会把下周目支线提前掷掉。
+                if (currentChapter == 1) ChapterRouteTable.EnsureForkRoll(data);
+
                 // 【2026-10-20 主人拍板】整章首通额外天赋石停发（天赋石改为精英/Boss 击杀概率掉落）。
                 // int chapterTalent = TalentDefs.TalentStoneRewards.ChapterClearStone(currentChapter);
                 // if (firstChapterClear && chapterTalent > 0)

@@ -17,7 +17,8 @@ public static class AdventureLogMileageShop
         Stamina,
         ScrollCommon,
         ScrollRare,
-        ScrollLegendary
+        ScrollLegendary,
+        Item
     }
 
     public struct ShopItem
@@ -28,6 +29,8 @@ public static class AdventureLogMileageShop
         public int WeeklyLimit;
         public RewardKind Kind;
         public int Amount;
+        /// <summary>item_defs.csv 的道具 id（仅 RewardKind.Item 用；非 Item 类商品留空）。</summary>
+        public string DefId;
     }
 
     public static readonly ShopItem[] Items =
@@ -46,6 +49,8 @@ public static class AdventureLogMileageShop
         // 【2026-10-17 主人拍板】卷轴改版：旧「稀有招募卷」失去用途下架（存量已在存档加载时折算进普通卷轴）；
         // 「传奇招募卷」语义升级为「高级招募卷轴」（招募传奇佣兵专用，id 不动，周限购计数照旧）
         new ShopItem { Id = "scroll_l", Name = "高级招募卷轴（招募传奇佣兵）", CostPoints = 2000, WeeklyLimit = 1, Kind = RewardKind.ScrollLegendary, Amount = 1 },
+        // 【2026-10-21 主人拍板】遗忘药水：洗天赋消耗道具，500 点/周限 1；发放口 = townBagItems（角色页可见）
+        new ShopItem { Id = "forget_potion", Name = "遗忘药水", CostPoints = 500, WeeklyLimit = 1, Kind = RewardKind.Item, Amount = 1, DefId = "item_forget_potion" },
     };
 
     public static string CurrentWeekKey()
@@ -91,6 +96,11 @@ public static class AdventureLogMileageShop
             return false;
         }
         var item = Items[index];
+        if (item.Kind == RewardKind.Item && string.IsNullOrEmpty(item.DefId))
+        {
+            reason = "配置错误";
+            return false;
+        }
         if (RemainThisWeek(item) <= 0)
         {
             reason = "本周已达限购";
@@ -153,6 +163,9 @@ public static class AdventureLogMileageShop
             case RewardKind.ScrollLegendary:
                 data.mercScrollLegendary += item.Amount;
                 break;
+            case RewardKind.Item:
+                data.TownBagAdd(item.DefId, item.Amount);
+                break;
         }
 
         SaveSystem.Instance.Save();
@@ -160,6 +173,8 @@ public static class AdventureLogMileageShop
         msg = $"兑换成功：{item.Name}";
         if (item.Kind == RewardKind.ScrollCommon || item.Kind == RewardKind.ScrollLegendary)
             msg += $"（卷轴库存 普通{data.mercScrollCommon}/高级{data.mercScrollLegendary}）";
+        if (item.Kind == RewardKind.Item)
+            msg += $"（持有 {data.TownBagCount(item.DefId)}）";
         return true;
     }
 

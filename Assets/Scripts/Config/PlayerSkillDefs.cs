@@ -586,7 +586,12 @@ public static class PlayerSkillDefs
     public static string FormatDetail(Def def)
     {
         if (def == null) return "";
-        return $"{def.numbers}。冷却 {def.cooldown:0} 秒。{def.useHint}。";
+        // 2026-10-21 主人拍板：释放条件写进技能弹窗。精确条件以 PlayerSkillPassive.Triggers 为唯一真源，
+        // 查不到（未登记触发条件的技能）才回退表里的 useHint。
+        string trigger = PlayerSkillPassive.TriggerText(def.id);
+        string tail = !string.IsNullOrEmpty(trigger) ? trigger : def.useHint;
+        if (string.IsNullOrEmpty(tail)) return $"{def.numbers}。冷却 {def.cooldown:0} 秒。";
+        return $"{def.numbers}。冷却 {def.cooldown:0} 秒。{tail}。";
     }
 
     public static string FormatUnlockHint(Def def)

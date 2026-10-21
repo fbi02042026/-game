@@ -51,8 +51,8 @@ public partial class BattleEntryDraftPanel
             BuildOddsButton();
             // 【2026-10-13 #9】连抽提示（见 BuildComboText 注释）
             BuildComboText();
-            // 【2026-10-18 主人拍板】抽奖币池计数（icon_draft_coin + 数字，见 BuildPoolChip 注释）
-            BuildPoolChip();
+            // 【2026-10-21 主人拍板「抽奖数都在顶部」】原 BuildPoolChip（按钮上方抽奖币计数）已拆，
+            // 余额只走顶栏 DraftDisplay 抽奖币条（BattleUI.UpdateDraftCoin）。
         }
 
         var cont = FindDeep(_panel, NodeContinue);
@@ -279,74 +279,15 @@ public partial class BattleEntryDraftPanel
     }
 
     /// <summary>
-    /// 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币，然后在抽奖旁边加个抽奖币和数量」】
-    /// 抽奖币池计数：icon_draft_coin + 数字，挂在 DraftRoot 下、抽奖按钮上方居中
-    ///（连抽提示再往上一层，互不遮挡）。运行时建，不改预制体；随 DraftRoot 一起收起/隐藏。
-    /// 显示真源 = <see cref="BattleManager.currentGold"/>（抽奖唯一能花的那本账，
-    /// 启动金 / 通关补贴 / 抽中金币）；刷新出口 = <see cref="Refresh"/> 与
-    /// <see cref="NotifyPoolGoldChanged"/>，别处不许直接改文本。
-    /// </summary>
-    void BuildPoolChip()
-    {
-        if (_draftRt == null || _poolChipText != null) return;
-        var go = new GameObject("DraftPoolChip", typeof(RectTransform), typeof(CanvasRenderer),
-                                 typeof(HorizontalLayoutGroup));
-        go.transform.SetParent(_draftRt, false);
-        var rt = go.GetComponent<RectTransform>();
-        // 与 ComboHint 同锚（DraftRoot 顶边），位置更低一档：正好落在按钮行上方、连抽提示下方
-        rt.anchorMin = new Vector2(0.5f, 1f);
-        rt.anchorMax = new Vector2(0.5f, 1f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(0f, 86f);
-        rt.sizeDelta = new Vector2(220f, 32f);
-        var hlg = go.GetComponent<HorizontalLayoutGroup>();
-        hlg.spacing = 8f;
-        hlg.childAlignment = TextAnchor.MiddleCenter;
-        hlg.childControlWidth = false;
-        hlg.childControlHeight = false;
-        hlg.childForceExpandWidth = false;
-        hlg.childForceExpandHeight = false;
-
-        // 图标：抽奖币（icon_draft_coin，与抽奖按钮价格旁同图）
-        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        iconGo.transform.SetParent(go.transform, false);
-        var iconRt = iconGo.GetComponent<RectTransform>();
-        iconRt.sizeDelta = new Vector2(28f, 28f);
-        var icon = iconGo.GetComponent<Image>();
-        icon.raycastTarget = false;
-        icon.preserveAspect = true;
-        icon.sprite = GetCurrencyIcon(ResourceWallet.ResourceType.Gold);
-        if (icon.sprite == null)
-            Debug.LogError("[BattleEntryDraftPanel] 抽奖币图标取不到 —— 池子计数只显示数字");
-
-        // 数字：局内抽奖币池余额（BattleManager.currentGold）
-        var txtGo = new GameObject("Count", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        txtGo.transform.SetParent(go.transform, false);
-        var txtRt = txtGo.GetComponent<RectTransform>();
-        txtRt.sizeDelta = new Vector2(170f, 32f);
-        var t = txtGo.GetComponent<Text>();
-        t.fontSize = 26;
-        t.color = new Color(1f, 0.72f, 0.2f);   // #FFB833，与连抽提示同金色
-        t.alignment = TextAnchor.MiddleLeft;
-        t.raycastTarget = false;
-        t.horizontalOverflow = HorizontalWrapMode.Overflow;
-        var f = GameFonts.GetChinese();
-        if (f != null) t.font = f;
-        t.text = BattleManager.Instance != null ? BattleManager.Instance.currentGold.ToString() : "0";
-        _poolChipText = t;
-    }
-
-    /// <summary>
     /// 抽奖币池变化的轻量刷新出口（<see cref="BattleManager.AddRunGold"/> / SpendBattleGold 调）：
-    /// 只改池子数字，不动按钮置灰 —— 按钮口径仍由 <see cref="Refresh"/> 在面板各刷新点统一算。
+    /// 【2026-10-21 主人拍板「抽奖数都在顶部」】原按钮上方 DraftPoolChip 计数已拆，
+    /// 现在只刷顶栏 DraftDisplay 抽奖币条（BattleUI.UpdateDraftCoin）。
     /// 面板不存在（未建/已销毁）时静默跳过，下次 Show 自然带上最新值。
     /// </summary>
     public static void NotifyPoolGoldChanged(long coins)
     {
-        // 【2026-10-18 主人摆的顶栏 DraftDisplay 抽奖币条】与下方池子计数同源同刻
+        // 顶栏 DraftDisplay 抽奖币条（2026-10-18 主人摆的节点）—— 余额唯一显示处
         BattleUI.Instance?.UpdateDraftCoin(coins);
-        if (Instance != null && Instance._poolChipText != null)
-            Instance._poolChipText.text = coins.ToString();
     }
 
     /// <summary>

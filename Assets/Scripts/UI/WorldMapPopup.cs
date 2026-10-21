@@ -386,6 +386,9 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
 
     void RefreshAvailability()
     {
+        // 【2026-10-21 拍板】老存档补掷入口：开世界地图时若 chosenBranch==0 且已通关第 1 章，补掷一次
+        // （EnsureForkRoll 内部幂等，绝不重复掷；取不到 data 传 null 由函数内部兜底）。
+        ChapterRouteTable.EnsureForkRoll(SaveSystem.Instance?.Data);
         _availableChapters = ChapterRouteTable.AvailableChapters(SaveSystem.Instance?.Data);
         if (_availableChapters == null) _availableChapters = new List<int>();
         if (_availableChapters.Count == 0) _availableChapters.Add(1);
@@ -489,22 +492,10 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
             var btn = (slot.visual != null ? slot.visual : slot.root).GetComponent<Button>();
             if (btn != null) btn.interactable = unlocked && !cleared;
 
-            var img = (slot.visual != null ? slot.visual : slot.root).GetComponent<Image>();
-            if (img != null && slot.def != null)
-            {
-                if (!unlocked) img.color = slot.def.lockedColor;        // 没解锁 → 灰显
-                else if (selected) img.color = slot.def.selectedColor;  // 选中 → 高亮
-                else if (cleared) img.color = slot.def.clearedColor;    // 打完 → 暗掉
-                else img.color = slot.def.normalColor;
-            }
-
-            // 解锁态由代码切（美术存的是「Region_1 解锁 / 其余锁定」的快照）：
-            // 解锁 → 显示地块本体 + 名字底框、收掉锁图标；未解锁 → 反过来。
-            // 代码自建的槽（BuildRegionSlots）本体就是 root 自己，不参与这套切换（灰显靠颜色）。
-            if (slot.visual != null && slot.visual != slot.root)
-                slot.visual.SetActive(unlocked);
+            // 地块本体（visual）与名字底框由美术在预制体做好表面，代码不再染色/隐藏：未解锁=暗显。
+            // 仅状态指示器由代码驱动：锁图标（未解锁显示）、选中高亮、进入按钮（选中且未通关）。
             if (slot.nameRoot != null)
-                slot.nameRoot.SetActive(unlocked);
+                slot.nameRoot.SetActive(true);
             if (slot.lockRoot != null)
                 slot.lockRoot.SetActive(!unlocked);
             if (slot.highlight != null)
@@ -528,7 +519,7 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
         if (titleText != null)
         {
             if (_selectedChapter > 0)
-                titleText.text = GameConfig.GetChapterTitleText(_selectedChapter);
+                titleText.text = GameConfig.GetChapterMapName(_selectedChapter);
             else
                 titleText.text = "选择冒险区域";
         }

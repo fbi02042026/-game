@@ -1,4 +1,4 @@
-﻿# 道具定义表
+# 道具定义表
 # 2026-09-15：背包 12 格已改为**只装道具**。装备不再入包——掉落即穿，替换下来的自动分解。
 # 本轮先把接口与表结构备好，具体道具等内容定稿后再往下面加行。
 #
@@ -35,3 +35,6 @@ item_fragment_skill,技能残卷,Icons/Item/icon_skill_scroll,Material,999,0,1,,
 item_fragment_log,日志碎片,Icons/Item/icon_log_fragment,Material,999,0,1,,Self,冒险日志碎片，可合成完整条目。,0
 item_merc_grow,佣兵养成道具,Icons/Item/icon_merc_grow,Material,999,0,1,,Self,用于佣兵养成。,1
 item_potion_hp,治疗药水,Icons/Item/icon_potion_hp,Consumable,20,1,1,heal_hp:30,Self,回复 30 点生命。,1
+# 2026-10-21 主人拍板：洗天赋改为消耗道具。图标 = 主人新供图 Resources/Art/UI/Icons/Common/yiwangyaoshui.png
+# （useEffect 留空：不走背包「使用」按钮，洗点在天赋页确认时扣；角色页只做展示位）
+item_forget_potion,遗忘药水,Art/UI/Icons/Common/yiwangyaoshui,Consumable,99,0,1,,Self,重置右侧天赋时消耗 1 个（里程商店 500 点/周限 1）。,2

@@ -138,17 +138,20 @@ public static class MainQuestSystem
     // 章节
     // ============================================================
 
-    /// <summary>玩家当前所在的章节（取已解锁的最大章）。</summary>
+    /// <summary>玩家当前应推进的章节：可选章节里第一个未通关的（全通关返回最后一章）。</summary>
     public static int CurrentChapter()
     {
         var d = Data;
         if (d == null) return 1;
 
-        int ch = d.maxUnlockedChapter > 0 ? d.maxUnlockedChapter : 1;
         var avail = ChapterRouteTable.AvailableChapters(d);
         if (avail != null && avail.Count > 0)
-            ch = avail[avail.Count - 1];
-        return ch > 0 ? ch : 1;
+        {
+            foreach (int c in avail)
+                if (!d.HasClearedChapter(c)) return c;
+            return avail[avail.Count - 1]; // 全通关返回最后一章
+        }
+        return 1;
     }
 
     /// <summary>本章已首次通关的关卡数（长线牵引："快到头了"）。</summary>

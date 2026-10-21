@@ -22,6 +22,13 @@ public static class DamageFormula
     public const float MaxReductionRatio = 0.75f;
 
     /// <summary>
+    /// 总减伤上限 0.85（2026-10-21 主人拍板「要封顶」）：物/魔防减伤与装备减伤（AttrType.DamageReduce）
+    /// 乘叠后的总减伤率封顶，至少 15% 的伤害必打进去，防止高防+多件减伤装叠到逆天。
+    /// 想调平衡只改这一个数。
+    /// </summary>
+    public const float MaxTotalReductionRatio = 0.85f;
+
+    /// <summary>
     /// 伤害结算错误码。2026-09-27 主人拍板：**不要静默兜底，有问题直接报错码**。
     /// 出现这些码说明配置/初始化缺真值，按码去补，不要改公式绕过去。
     /// </summary>
@@ -147,8 +154,13 @@ public static class DamageFormula
         // 解决「防御 ≥ 怪物伤害时一律保底掉 1 血」的问题。
         // def 理论上非负，这里用 Max(0f, def) 兜住：负数会算出负减伤率，反而把伤害放大。
         float defSafe = Mathf.Max(0f, def);
-        float reduction = Mathf.Min(MaxReductionRatio, defSafe / (defSafe + DefenseK));
-        return Mathf.Max(MinDamage, dmg * (1f - reduction));
+        float defRed = Mathf.Min(MaxReductionRatio, defSafe / (defSafe + DefenseK));
+        // 2026-10-21 主人拍板：装备「减伤」词条（AttrType.DamageReduce，0.08 = 减伤 8%）作为**最终减伤**
+        // 与物/魔防减伤乘叠，物魔两侧都吃；总减伤封顶 MaxTotalReductionRatio。
+        // 旧口径把 DMG_RED 错接成 Defense 百分比（物防×1.08），名义 8% 在 80 防时实际只减 3.4%、对魔伤零效果，已废弃。
+        float gearRed = Mathf.Clamp01(defender.GetAttr(AttrType.DamageReduce));
+        float totalRed = Mathf.Min(MaxTotalReductionRatio, 1f - (1f - defRed) * (1f - gearRed));
+        return Mathf.Max(MinDamage, dmg * (1f - totalRed));
     }
 
     /// <summary>主角特殊武器对目标的倍率（暮火之杖等）。</summary>

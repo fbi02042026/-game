@@ -201,9 +201,10 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         TownSharedChrome.RaiseSharedChrome(hall);
         EnsureStandaloneChrome(hall);
 
-        int max = GetMaxUnlockedChapter();
-        if (_selectedChapter < 1 || _selectedChapter > max)
-            _selectedChapter = max;
+        // 越界（<1 或 >8）时落到「应推进的章节」：可选里第一个未通关，全通关回最后一章。
+        // 仍在 1~8 范围内的有效选择（含已通关可重打的章）原样保留，由 RefreshAvailableChapters 兜底修正。
+        if (_selectedChapter < 1 || _selectedChapter > 8)
+            _selectedChapter = ChapterRouteTable.CurrentChapterToAdvance(SaveSystem.Instance?.Data);
         HideUnfinishedEntries();
         RefreshAll();
 

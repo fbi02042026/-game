@@ -22,7 +22,17 @@ public static class BackpackGridVisual
         public ItemInstance item;
         public bool equipped;
 
+        /// <summary>通用展示位（2026-10-21）：日志碎片 / 天赋石 / 城镇道具等<b>非背包实体</b>的纯展示条目，
+        /// 只占一格画图标+数量，点击弹通用告知框看说明；与 item/equip 互斥。</summary>
+        public string displayName;
+        /// <summary>点击展示位时弹告知框的正文（配方 / 说明等）。</summary>
+        public string displayInfo;
+        public int displayCount;
+        /// <summary>展示位图标（由收集方加载好塞进来）；null 时走名字兜底。</summary>
+        public Sprite displayIcon;
+
         public bool IsItem => item != null;
+        public bool IsDisplay => !string.IsNullOrEmpty(displayName);
     }
 
     // ===== 背包美术图：与战斗侧预制体同一批 =====
@@ -36,6 +46,23 @@ public static class BackpackGridVisual
     static Sprite _cellBgSprite;
     static Sprite _panelBgSprite;
     static Sprite _gridBgSprite;
+
+    // ===== 日志碎片图标（2026-10-21 碎片进背包展示用，收集方调这里）=====
+    // 三种日志碎片（森林残页/公会密函/裂隙碎片）暂共用这一张现成的日志碎片图，
+    // 以后美术出分图后各自替换即可。取不到资源按纪律直接 LogError，不做兜底。
+    const string FragmentIconRes = "Icons/Item/icon_log_fragment";
+    static Sprite _fragmentIcon;
+
+    public static Sprite LogFragmentIcon()
+    {
+        if (_fragmentIcon == null)
+        {
+            _fragmentIcon = Resources.Load<Sprite>(FragmentIconRes);
+            if (_fragmentIcon == null)
+                Debug.LogError("[BackpackGridVisual] 日志碎片图标加载失败：Resources/" + FragmentIconRes);
+        }
+        return _fragmentIcon;
+    }
 
     /// <summary>格子底图：与战斗预制体 GridContainer/Cell_x_y/CellBg 同款（装备格.png）。</summary>
     public static Sprite CellBgSprite()
@@ -90,7 +117,7 @@ public static class BackpackGridVisual
             var p = items[i];
             bool isItem = p.item != null;
             if (p.w < 1 || p.h < 1) continue;
-            if (!isItem && p.equip == null) continue;
+            if (!isItem && p.equip == null && !p.IsDisplay) continue;
 
             var go = new GameObject($"Item_{p.x}_{p.y}", typeof(RectTransform));
             go.transform.SetParent(layer, false);
@@ -115,7 +142,8 @@ public static class BackpackGridVisual
             }
 
             Sprite sprite;
-            if (isItem) sprite = ItemDefs.LoadIcon(p.item.defId);
+            if (p.IsDisplay) sprite = p.displayIcon;
+            else if (isItem) sprite = ItemDefs.LoadIcon(p.item.defId);
             else { EquipIcons.Resolve(p.equip); sprite = p.equip.icon; }
 
             bool hasIcon = sprite != null;
@@ -130,7 +158,7 @@ public static class BackpackGridVisual
             img.enabled = true;
             PlaceIconInHost(rt, iconRt, img, sprite, p.h, isItem ? null : p.equip);
 
-            if (isItem)
+            if (isItem || p.IsDisplay)
             {
                 img.color = Color.white;
             }
@@ -144,15 +172,21 @@ public static class BackpackGridVisual
                     : (p.equipped ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white);
             }
 
-            // 稀有度描边：只有装备有稀有度，道具不画。压在图标之上、角标之下（所以放在角标之前）。
-            EquipRarityRim.Apply(go.transform, isItem ? (Rarity?)null : p.equip.rarity);
+            // 稀有度描边：只有装备有稀有度，道具/展示位不画。压在图标之上、角标之下（所以放在角标之前）。
+            EquipRarityRim.Apply(go.transform, (isItem || p.IsDisplay) ? (Rarity?)null : p.equip.rarity);
 
             if (!hasIcon)
                 AddNameFallback(go.transform,
-                    isItem ? (p.item.Name ?? "道具") : (EquipUiText.EquipTitleWithHand(p.equip) ?? "装备"),
+                    p.IsDisplay ? p.displayName
+                        : isItem ? (p.item.Name ?? "道具") : (EquipUiText.EquipTitleWithHand(p.equip) ?? "装备"),
                     isItem ? (Rarity?)null : p.equip.rarity);
 
-            if (isItem)
+            if (p.IsDisplay)
+            {
+                // 展示位恒显数量（×1 也显示，进度是玩家关心的）
+                AddCountBadge(go.transform, p.displayCount);
+            }
+            else if (isItem)
             {
                 // 可叠加道具显示右下角数量
                 if (p.item.count > 1) AddCountBadge(go.transform, p.item.count);
@@ -166,8 +200,9 @@ public static class BackpackGridVisual
                     AddEquippedBadge(go.transform, p.h);
             }
 
-            // 道具恒开射线（要点开「使用/丢弃」浮层）；拖拽本身仍只在开箱整理阶段生效
-            bool interactive = enableDrag || isItem;
+            // 道具恒开射线（要点开「使用/丢弃」浮层）；展示位开射线但只弹告知（不可使用/丢弃/拖拽）；
+            // 拖拽本身仍只在开箱整理阶段生效
+            bool interactive = enableDrag || isItem || p.IsDisplay;
             if (interactive)
             {
                 img.raycastTarget = true;
@@ -178,14 +213,30 @@ public static class BackpackGridVisual
                     hostImg.color = new Color(1f, 1f, 1f, 0.01f);
                 }
                 hostImg.raycastTarget = true;
-                var drag = go.GetComponent<BattleBackpackItemDrag>();
-                if (drag == null) drag = go.AddComponent<BattleBackpackItemDrag>();
-                drag.Equip = isItem ? null : p.equip;
-                drag.Item = isItem ? p.item : null;
-                drag.GridX = p.x;
-                drag.GridY = p.y;
-                drag.Width = p.w;
-                drag.Height = p.h;
+
+                if (p.IsDisplay)
+                {
+                    // 【2026-10-21 主人需求「可以查看但是不能使用」】展示位只弹通用告知框看说明，
+                    // 不挂 BattleBackpackItemDrag → 没有拖拽、没有使用/丢弃浮层，天然不可用。
+                    var btn = go.GetComponent<Button>();
+                    if (btn == null) btn = go.AddComponent<Button>();
+                    btn.transition = Selectable.Transition.None;
+                    btn.onClick.RemoveAllListeners();
+                    string dispTitle = p.displayName, dispInfo = p.displayInfo;
+                    btn.onClick.AddListener(() =>
+                        StaminaConfirmPopup.ShowNotice(dispTitle, dispInfo, "知道了", null));
+                }
+                else
+                {
+                    var drag = go.GetComponent<BattleBackpackItemDrag>();
+                    if (drag == null) drag = go.AddComponent<BattleBackpackItemDrag>();
+                    drag.Equip = isItem ? null : p.equip;
+                    drag.Item = isItem ? p.item : null;
+                    drag.GridX = p.x;
+                    drag.GridY = p.y;
+                    drag.Width = p.w;
+                    drag.Height = p.h;
+                }
             }
         }
     }

@@ -20,6 +20,9 @@ public static class TalentSystem
     /// </summary>
     public const string ReasonNoStones = "天赋石不足";
 
+    /// <summary>遗忘药水道具 id（item_defs.csv；2026-10-21 主人拍板：洗天赋改为消耗 1 个）。</summary>
+    public const string ItemForgetPotion = "item_forget_potion";
+
     // ===== 左列（金币，保持不变）=====
     public static bool CanUnlockLeft(int index1Based, out string reason)
     {
@@ -283,6 +286,17 @@ public static class TalentSystem
         return false;
     }
 
+    /// <summary>有没有遗忘药水（2026-10-21 主人拍板：洗点消耗 1 个）。</summary>
+    public static bool HasForgetPotion(out string reason)
+    {
+        reason = null;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) { reason = "无存档"; return false; }
+        if (data.TownBagCount(ItemForgetPotion) > 0) return true;
+        reason = "需要遗忘药水（里程商店 500 点兑换，每周限购 1）";
+        return false;
+    }
+
     /// <summary>
     /// 洗右列：清除所有右列节点的等级（含 JobChoice 的已选职业），退还已投入天赋石的 80%（向下取整）。
     /// 左列不可洗。respecCount 由另一子代理负责写入，这里不引用该字段。
@@ -291,6 +305,13 @@ public static class TalentSystem
     {
         if (!CanRespecRight(out reason)) return false;
         var data = SaveSystem.Instance.Data;
+
+        if (!HasForgetPotion(out reason)) return false;
+        if (!data.TownBagTryConsume(ItemForgetPotion, 1))
+        {
+            reason = "遗忘药水扣除失败";
+            return false;
+        }
 
         int totalSpent = 0;
         for (int i = 0; i < TalentDefs.RightNodes.Length; i++)

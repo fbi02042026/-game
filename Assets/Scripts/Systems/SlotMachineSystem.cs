@@ -103,6 +103,7 @@ public static class SlotMachineSystem
         {
             case StageType.Boss: return SlotMachineDefs.COIN_PER_BOSS;
             case StageType.Elite: return SlotMachineDefs.COIN_PER_ELITE;
+            case StageType.Rest: return SlotMachineDefs.COIN_PER_REST; // 【2026-10-21】回复关最少，此前掉 default 拿普通关的 100
             default: return SlotMachineDefs.COIN_PER_NORMAL;
         }
     }

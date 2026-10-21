@@ -101,7 +101,8 @@ public static class SkillDraftMeta
     /// 2026-09-15 由 +28% 下调：技能从能量制改纯 CD 制后释放频率大增，原曲线会滚雪球。</summary>
     public const float StarDamageStep = 0.18f;
 
-    /// <summary>每星冷却缩减：线性 -6%/星（1 星 = 1.0，越高越短）。</summary>
+    /// <summary>每星冷却缩减：线性 -6%/星（1 星 = 1.0，越高越短）。
+    /// 【2026-10-21 主人拍板】已停用：星级不再减 CD，见 <see cref="StarCooldownMul"/> 仅供回退。</summary>
     public const float StarCooldownStep = 0.06f;
 
     /// <summary>每星增益幅度：线性 +18%/星，与伤害同曲线（1 星 = 1.0）。
@@ -130,7 +131,11 @@ public static class SkillDraftMeta
         return 1f + (s - 1) * k;
     }
 
-    /// <summary>星级 → 冷却倍率（1 星 = 1.0，越高越短）。</summary>
+    /// <summary>
+    /// 星级 → 冷却倍率（1 星 = 1.0，越高越短）。
+    /// 【2026-10-21 主人拍板】星级不再减 CD —— <c>RunDraftDirector.BuildRunSkill</c> 与
+    /// <c>DraftRewardDetailUI</c> 已摘调用，本方法仅供回退，别再接新调用点。
+    /// </summary>
     public static float StarCooldownMul(int star)
     {
         int s = star < 1 ? 1 : star;

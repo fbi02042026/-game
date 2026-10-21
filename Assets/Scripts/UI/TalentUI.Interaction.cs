@@ -126,6 +126,13 @@ public partial class TalentUI
             GlobalToastUI.Show(reason, true);
             return;
         }
+        // 2026-10-21 主人拍板：洗点消耗遗忘药水。有得洗但没药水 → 说清楚去哪买，不堵死按钮
+        if (!TalentSystem.HasForgetPotion(out string potionReason))
+        {
+            Debug.Log("[TalentUI] " + potionReason);
+            GlobalToastUI.Show(potionReason, true);
+            return;
+        }
         // 二次确认：先弹确认框，确认后才真正洗点（洗点逻辑本身不动）
         OpenResetConfirm();
     }

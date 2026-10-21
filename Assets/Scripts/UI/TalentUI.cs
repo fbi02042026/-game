@@ -112,12 +112,8 @@ public partial class TalentUI : MonoBehaviour
     Coroutine _rightUnlockFx;
     readonly List<RightNodeView> _fxBatch = new List<RightNodeView>();
 
-    // 洗点二次确认弹窗（运行时建树，不碰 prefab）
-    GameObject _resetConfirmPopup;
-    Text _resetConfirmDesc;
-
-    // 【2026-10-18 主人拍板】二选一弹窗（物理/魔法专精解锁入口，带软引导）+ 费用确认弹窗
-    //（解锁/升级前看效果与消耗；天赋石不足也照弹，能看到「需要多少」）。均运行时建树，不碰 prefab。
+    // 【2026-10-18 主人拍板】二选一弹窗（物理/魔法专精解锁入口，带软引导）。
+    // 注：解锁/升级「费用确认」弹窗 2026-10-21 起已改走通用弹出 StaminaConfirmPopup（见 Popups.cs），不再运行时建树。
     GameObject _mutexChoicePopup;
     Text _mutexChoiceCost;
     GameObject[] _mutexOptCards;
@@ -127,15 +123,10 @@ public partial class TalentUI : MonoBehaviour
     TalentDefs.TalentRightNode _pendingMutexB;
     int _pendingMutexSelected = -1;
 
-    GameObject _costConfirmPopup;
-    Text _costConfirmDesc;
-    Text _costConfirmOkLabel;
-    System.Action _costConfirmAction;
-
     // 【2026-10-20 修·玩家报「职业专精点不了」】R_JOB 6选1 职业弹窗改运行时建树：
     // 手工版预制体的 ChoicePopup 只有 1 张选项卡且没有「确定」按钮，旧克隆布局
     //（x=-120+i×120）还会让卡两两重叠、飞出 Box——玩家点了弹不出能用的弹窗。
-    // 口径与二选一/费用确认弹窗一致（TownPopup 900，运行时建树，不碰 prefab）。
+    // 口径：TownPopup(900) 运行时建树，不碰 prefab（6 卡 2 列×3 行，通用确认弹窗塞不下可选卡）。
     GameObject _jobChoicePopup;
     GameObject[] _jobOptCards;
     Text[] _jobOptLabels;
@@ -228,9 +219,9 @@ public partial class TalentUI : MonoBehaviour
         EnsureCurrencyBindings();
         EnsureChoicePopupBindings();
         CloseChoicePopup(); // 预制体 ChoicePopup 默认可能为 active，打开时强制关
-        CloseResetConfirm(); // 顺手关掉可能残留的洗点确认框
-        CloseMutexChoice();  // 顺手关掉可能残留的二选一/费用确认弹窗
-        CloseCostConfirm();
+        CloseResetConfirm(); // 顺手关掉可能残留的洗点确认框（通用弹出 StaminaConfirmPopup）
+        CloseMutexChoice();  // 顺手关掉可能残留的二选一弹窗
+        CloseCostConfirm();  // 费用确认也走通用弹出，与上面两行同归一个 Close
         LoadArtSprites();
         if (!_wired) WireClicks();
         else WireChoiceConfirmIfNeeded();

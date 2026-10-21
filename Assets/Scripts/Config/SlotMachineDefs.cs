@@ -160,12 +160,19 @@ public static class SlotMachineDefs
     /// 推演（每关产出 50×1.4^(n-1)，单关封顶 200）：开局 200 只够 2 抽 → 关2 进关差一抽
     /// → 关3 起约 1 抽/关 → **一章约 8~9 抽**（原 17）—— 前期更紧，正是主人要的口径。
     /// <para>【2026-10-20 主人拍板】50 → <b>100</b>（主人原话「打完一关给的抽奖币改成100
-    /// 随着关卡往后加20% 一直到200上限」），精英 / Boss 同步同值（不分档）。</para>
+    /// 随着关卡往后加20% 一直到200上限」）。
+    /// 【2026-10-21 主人拍板】三档拉开：普通关维持 100 做<b>中间档</b>，
+    /// 精英 150 最多 / 回复 50 最少（见 <see cref="COIN_PER_ELITE"/> / <see cref="COIN_PER_REST"/>）。</para>
     /// </summary>
     public const int COIN_PER_NORMAL = 100;
 
-    /// <summary>每关通关产出的**局内抽奖币**（精英关）。<b>主人拍板：与普通关同值（不分档）</b>。【2026-10-20】50 → 100。</summary>
-    public const int COIN_PER_ELITE = 100;
+    /// <summary>每关通关产出的**局内抽奖币**（精英关）。【2026-10-20】50 → 100（曾与普通关同值）。
+    /// 【2026-10-21 主人拍板】100 → <b>150</b>：精英关给得最多（普通 100 / 回复 50）。</summary>
+    public const int COIN_PER_ELITE = 150;
+
+    /// <summary>每关通关产出的**局内抽奖币**（回复关 = <see cref="StageType.Rest"/>，回血/分解）。
+    /// 【2026-10-21 主人拍板】新增：<b>50</b>，三档里最少（此前没有 Rest 分支，掉进 default 拿普通关的 100）。</summary>
+    public const int COIN_PER_REST = 50;
 
     /// <summary>每关通关产出的**局内抽奖币**（Boss 关）。<b>主人拍板：与普通关同值（不分档）</b>。【2026-10-20】50 → 100。</summary>
     public const int COIN_PER_BOSS = 100;

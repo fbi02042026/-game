@@ -61,7 +61,34 @@ public static class AdventureLogFragments
         if (Random.value > chance) return;
         string id = chapter <= 2 ? "frag_forest" : (chapter <= 4 ? "frag_guild" : "frag_rift");
         Add(id, 1);
+        AddRunGain(id, 1);   // 战斗背包「本局获得」口径同步累计
         UIManager.Instance?.ShowToast("获得日志碎片「" + DisplayName(id) + "」×1");
+    }
+
+    // ===== 本局获得追踪（2026-10-21 主人需求：战斗背包只显示当前战斗里获得的东西）=====
+    // 每次开新局由 GridBackpackSystem.InitNewRun 清零；TryDropOnStageClear 掉落时累计。
+    static Dictionary<string, int> _runGained;
+
+    /// <summary>开新局：清空「本局获得碎片」计数（战斗背包口径）。</summary>
+    public static void ResetRunGains()
+    {
+        if (_runGained == null) _runGained = new Dictionary<string, int>();
+        else _runGained.Clear();
+    }
+
+    /// <summary>本局获得的某碎片数量（0 = 本局没掉过）。</summary>
+    public static int GetRunGained(string fragmentId)
+    {
+        if (string.IsNullOrEmpty(fragmentId) || _runGained == null) return 0;
+        return _runGained.TryGetValue(fragmentId, out int n) ? n : 0;
+    }
+
+    static void AddRunGain(string fragmentId, int amount)
+    {
+        if (string.IsNullOrEmpty(fragmentId) || amount <= 0) return;
+        _runGained ??= new Dictionary<string, int>();
+        _runGained.TryGetValue(fragmentId, out int cur);
+        _runGained[fragmentId] = cur + amount;
     }
 
     public static bool IsCrafted(int recipeIndex)

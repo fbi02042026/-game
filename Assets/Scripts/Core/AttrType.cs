@@ -34,5 +34,9 @@ public enum AttrType
         MagicAttack,     // 魔法攻击力：2026-09-27 起魔法职业/法球怪的**真源**（由职业表/怪物 Init 写入），不是 Attack 的别名
         MagicDefense,    // 魔法防御：2026-09-27 起**独立属性**，与 Defense 无关、不再互相换算（表/初始化里没写就是 0）
         // 2026-09-26 主人拍板：落地「中毒」装备词缀（游侠武器专属，百分比制），供 PoisonDotRunner 消费
-        Poison           // 中毒：装备词缀值（如 0.10 = 10%）；每跳伤害系数见 GameConfig.POISON_DPS_RATIO
+        Poison,          // 中毒：装备词缀值（如 0.10 = 10%）；每跳伤害系数见 GameConfig.POISON_DPS_RATIO
+        // 2026-10-21 主人拍板：装备「减伤」词条真源 = 最终减伤（0.08 = 减伤 8%）。
+        // 旧口径把 DMG_RED 错接成 Defense 百分比（物防×1.08），名义 8% 在 80 防时实际只减 3.4% 且对魔伤零效果。
+        // 不登记基础值（恒 0），装备词条加算叠加；消费点 DamageFormula.FinalHit。
+        DamageReduce
 }

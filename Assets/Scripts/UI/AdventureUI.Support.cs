@@ -14,14 +14,6 @@ using UnityEditor;
 public partial class AdventureUI
 {
 
-    static int GetMaxUnlockedChapter()
-    {
-        int max = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
-        if (max < 1) max = 1;
-        if (max > 8) max = 8;
-        return max;
-    }
-
     string ModeLabel(int i)
     {
         if (modeButtonLabels != null && i >= 0 && i < modeButtonLabels.Length && modeButtonLabels[i] != null

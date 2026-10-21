@@ -74,6 +74,18 @@ public sealed class SkillCastService
             Debug.Log($"[SkillCast] 场上无目标，攻击技 {skill.skillName} ({realId}) 不释放（不扣蓝不进冷却）");
             return false;
         }
+        // 2026-10-21 主人拍板：治疗技也给玩家上残血闸 —— 全员血量 ≥92% 且没有待救的引导眩晕
+        // 佣兵时不放：不扣蓝、不进冷却、不播特效（与佣兵治疗 :174 的 0.92 闸同口径）。
+        // 必须放在 TrySpendPlayerMp 之前，挡住时一分蓝都不动。
+        if (isHeal)
+        {
+            var stunMerc = FindPreferredHealTarget() as Mercenary;
+            if ((stunMerc == null || !stunMerc.TutorialStunned) && !AllyBelowHpRatio(0.92f))
+            {
+                Debug.Log($"[SkillCast] 全员接近满血，治疗技 {skill.skillName} ({realId}) 不释放（不扣蓝不进冷却）");
+                return false;
+            }
+        }
         if (!bm.TrySpendPlayerMp(mpCost)) return false;
 
         // 2026-09-26 主人拍板：holy_barrier 改为「抵扣型护盾」——先扣盾、再扣血，不再走防御+35% buff 分支。
@@ -483,7 +495,13 @@ public sealed class SkillCastService
             void ApplyTimed(UnitBase u)
             {
                 if (u == null || u.isDead || u.attr == null) return;
-                u.attr.ApplyTimedBuff(buffAttr, buffValue, isPercent, duration);
+                // 2026-10-21 主人拍板：攻击增益按承受者自己的伤害类型分流——法系吃 MagicAttack，
+                // 否则法师的战意爆发打在物攻上 = 白加（AttrSystem 已补 MagicAttack 计时层，
+                // DamageFormula.BuildAttackRaw 对魔法单位读的就是 GetAttr(MagicAttack)）。
+                AttrType effAttr = buffAttr == AttrType.Attack && u.IsMagicDamageDealer()
+                    ? AttrType.MagicAttack
+                    : buffAttr;
+                u.attr.ApplyTimedBuff(effAttr, buffValue, isPercent, duration);
             }
             ApplyTimed(hero);
             var team = MercenaryManager.Instance?.GetActiveMercs();

@@ -400,7 +400,8 @@ public class DraftRewardDetailUI : MonoBehaviour
         };
         var tag = SkillDraftMeta.Tag(skillId);
         float dmgMul = SkillDraftMeta.StarDamageMul(star, active.starDamageStep) * RunLoadout.ThemeDamageMul(tag);
-        float cdMul = SkillDraftMeta.StarCooldownMul(star);
+        // 【2026-10-21 主人拍板】星级不再减 CD（与 RunDraftDirector.BuildRunSkill 同口径）。
+        float cdMul = 1f;
         if (SkillDraftMeta.IsAffinity(skillId, job))
         {
             dmgMul *= SkillDraftMeta.AffinityDamageMul;

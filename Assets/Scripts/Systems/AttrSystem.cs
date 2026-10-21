@@ -287,11 +287,15 @@ public class AttrSystem
     //   - 同类 Buff 后放的直接覆盖先放的，永不叠加
     //   - 不参与 RecalcAttr，换装/升级重算基底不会把 Buff 弄丢或算重
     //   - 不碰任何既有消费点，GetAttr 读到的就是已加成的值
+    // 2026-10-21 补 MagicAttack 档：攻击增益按承受者伤害类型分流（法系战意爆发吃这档），
+    // 五个属性成对维护（Attack/Defense/CritRate/MagicAttack + 攻速在 SkillCastService 单独计时）。
     // ============================================================
 
     float _buffAtkMul = 1f, _buffAtkUntil = -1f, _buffAtkTotal = -1f;
     float _buffDefMul = 1f, _buffDefUntil = -1f, _buffDefTotal = -1f;
     float _buffCritMul = 1f, _buffCritUntil = -1f, _buffCritTotal = -1f;
+    // 2026-10-21 主人拍板：攻击增益按承受者伤害类型分流，法系吃 MagicAttack（战意爆发打物攻 = 白加）。
+    float _buffMagicAtkMul = 1f, _buffMagicAtkUntil = -1f, _buffMagicAtkTotal = -1f;
 
     /// <summary>施加一个定时增益。同类型已有生效中的会被覆盖（不叠加）。</summary>
     public void ApplyTimedBuff(AttrType type, float value, bool isPercent, float duration)
@@ -308,6 +312,7 @@ public class AttrSystem
             case AttrType.Attack:   _buffAtkMul = mul;  _buffAtkUntil = until; _buffAtkTotal = duration; break;
             case AttrType.Defense:  _buffDefMul = mul;  _buffDefUntil = until; _buffDefTotal = duration; break;
             case AttrType.CritRate: _buffCritMul = mul; _buffCritUntil = until; _buffCritTotal = duration; break;
+            case AttrType.MagicAttack: _buffMagicAtkMul = mul; _buffMagicAtkUntil = until; _buffMagicAtkTotal = duration; break;
             default: return;   // 其它属性仍走调用方自己的处理（如攻速走 SkillCastService 计时）
         }
     }
@@ -318,9 +323,11 @@ public class AttrSystem
         _buffAtkUntil = -1f;
         _buffDefUntil = -1f;
         _buffCritUntil = -1f;
+        _buffMagicAtkUntil = -1f;
         _buffAtkTotal = -1f;
         _buffDefTotal = -1f;
         _buffCritTotal = -1f;
+        _buffMagicAtkTotal = -1f;
     }
 
     /// <summary>一条生效中的定时 buff 的只读快照（给 BuffHudUI 画图标 / 倒计时用）。</summary>
@@ -350,6 +357,8 @@ public class AttrSystem
             outBuffs.Add(new ActiveTimedBuff { type = AttrType.Defense, remain = _buffDefUntil - now, total = _buffDefTotal, mul = _buffDefMul });
         if (now < _buffCritUntil)
             outBuffs.Add(new ActiveTimedBuff { type = AttrType.CritRate, remain = _buffCritUntil - now, total = _buffCritTotal, mul = _buffCritMul });
+        if (now < _buffMagicAtkUntil)
+            outBuffs.Add(new ActiveTimedBuff { type = AttrType.MagicAttack, remain = _buffMagicAtkUntil - now, total = _buffMagicAtkTotal, mul = _buffMagicAtkMul });
     }
 
     float ApplyTimedBuff(AttrType type, float raw)
@@ -359,6 +368,7 @@ public class AttrSystem
             case AttrType.Attack:   return Time.time < _buffAtkUntil ? raw * _buffAtkMul : raw;
             case AttrType.Defense:  return Time.time < _buffDefUntil ? raw * _buffDefMul : raw;
             case AttrType.CritRate: return Time.time < _buffCritUntil ? raw * _buffCritMul : raw;
+            case AttrType.MagicAttack: return Time.time < _buffMagicAtkUntil ? raw * _buffMagicAtkMul : raw;
             default: return raw;
         }
     }

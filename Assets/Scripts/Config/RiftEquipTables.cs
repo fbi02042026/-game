@@ -211,7 +211,9 @@ public static class RiftEquipTables
             case "LIFE_STEAL": type = AttrType.LifeSteal; return true;
             case "ELE_DMG": type = AttrType.FireDamage; isPercent = true; return true;
             case "CRIT_DMG": type = AttrType.CritDamage; return true;
-            case "DMG_RED": type = AttrType.Defense; isPercent = true; return true;
+            // 2026-10-21 主人拍板：减伤改成真·最终减伤（AttrType.DamageReduce，FinalHit 内乘算、物魔两侧都吃）。
+            // 旧口径错接 Defense 百分比（物防×1.08）：名义 8% 在 80 防时实际只减 3.4%，且不加魔防 → 打法系怪零效果。
+            case "DMG_RED": type = AttrType.DamageReduce; isPercent = false; return true;
             // 2026-09-26 主人拍板：放行「中毒」词缀（游侠武器，百分比制），先有 AttrType.Poison + 结算(PoisonDotRunner) 再放行
             case "POISON": type = AttrType.Poison; isPercent = true; return true;
             // 2026-09-26 主人拍板：装备加魔攻/魔防属性（按职业走，法师|牧师）。数值制(点)，与 ATK/DEF 同量级。

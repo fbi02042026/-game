@@ -18,8 +18,10 @@ public static class ChapterStoryBeats
         switch (chapter)
         {
             case 2: PlayN2(onDone); return true;
-            case 3: PlayN3(onDone); return true;
-            case 4: PlayN4(onDone); return true;
+            // 【2026-10-21 拍板】N3/N4 按周目分流：NG+（已通关第 8 章）放完整版；首周支线是随机派定的，
+            // 梅莉莎 / 风车刻名的完整揭示留到 NG+，首周走旁白平替版（不剧透）。
+            case 3: if (SaveSystem.Instance?.Data?.HasClearedChapter(8) == true) PlayN3(onDone); else PlayN3Alt(onDone); return true;
+            case 4: if (SaveSystem.Instance?.Data?.HasClearedChapter(8) == true) PlayN4(onDone); else PlayN4Alt(onDone); return true;
             case 5: PlayN5(onDone); return true;
             case 6: PlayN6(onDone); return true;
             case 7: PlayN7(onDone); return true;
@@ -187,7 +189,7 @@ public static class ChapterStoryBeats
         StoryDirector.Ensure().Play(beats, onDone);
     }
 
-    // ---------- N3｜第 3 章（分支 B · 生者之径，二周目）：遇到梅莉莎 ----------
+    // ---------- N3｜第 3 章（分支 B · 生者之径）：遇到梅莉莎（NG+ 完整版；首周走 PlayN3Alt 平替） ----------
 
     static void PlayN3(Action onDone)
     {
@@ -211,7 +213,23 @@ public static class ChapterStoryBeats
         });
     }
 
-    // ---------- N4｜第 4 章（分支 C · 计时之径，二周目）：你的名字也在表上 ----------
+    /// <summary>
+    /// 【2026-10-21 拍板】N3 首周平替版（旁白版）：翡翠秘境的战后只留氛围与悬念——
+    /// 不出现梅莉莎、不用 MelissaCamp 背景 / Melissa 立绘、不加 StoryProgress.AddBond、不挂 .Bg()。
+    /// 完整版（遇到梅莉莎、M 是装箱的人）留到 NG+（已通关第 8 章）才放，见 PlayN3。
+    /// </summary>
+    static void PlayN3Alt(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("遗迹深处的藤蔓后面，居然有一处收拾干净的营地。篝火还热着。"),
+            StoryDirector.Narration("地上是按年份摞的纸条，最新的一张墨都没干：「别停下。往前走，别回头。」"),
+            StoryDirector.Narration("你数了数脚印。至少五个人的，全部朝向更深处。没有一个往回走。"),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    // ---------- N4｜第 4 章（分支 C · 计时之径）：你的名字也在表上（NG+ 完整版；首周走 PlayN4Alt 平替） ----------
 
     static void PlayN4(Action onDone)
     {
@@ -223,6 +241,23 @@ public static class ChapterStoryBeats
             StoryDirector.Narration("轴上还有一列没刻完的名字。最后两个是空的。再往下，有一道新的划痕——"),
             StoryDirector.Solo("你", "……这是三个月前刻的。", StoryPortraits.Player),
             StoryDirector.Narration("你沿着刻度往上数。第七格的位置上，有一个名字你认得：你自己。"),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    /// <summary>
+    /// 【2026-10-21 拍板】N4 首周平替版：晨曦草原的战后不揭「你认得：你自己」，
+    /// 只留风车停住 / 刻度一圈三年 / 名字刻到一半的悬念，不挂 .Bg()；
+    /// 完整版留到 NG+（已通关第 8 章）才放，见 PlayN4。
+    /// </summary>
+    static void PlayN4Alt(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("风车停住了。不是坏了——它的叶片正对着某个位置，像是被谁按下暂停键。"),
+            StoryDirector.Narration("齿轮上刻的不是图腾，是刻度。一圈三年。"),
+            StoryDirector.Solo("你", "这不是用来稳定裂缝的设备。", StoryPortraits.Player),
+            StoryDirector.Narration("轴上的名字刻到一半就停了，最后一道划痕很新。你没敢去数那是第几格。"),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -365,7 +400,7 @@ public static class ChapterStoryBeats
 
         StoryDirector.Ensure().Play(beats, () =>
         {
-            // 通关第 8 章：清空本周目分叉锁定，二周目可重选第 3/4 章
+            // 通关第 8 章：本周目支线派定归零；下一周目重通第 1 章后由 EnsureForkRoll 重新随机派定（2026-10-21 拍板）
             if (data != null) data.chosenBranch = 0;
             SaveSystem.Instance?.Save();
             onDone?.Invoke();

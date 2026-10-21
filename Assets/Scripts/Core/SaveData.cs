@@ -219,8 +219,9 @@ public class SaveData
     /// </summary>
     public bool hardCleared = false;
     /// <summary>
-    /// 本周目在分叉点（第 2/3/4 章）选定的路线；0 = 未选。
-    /// 通关第 8 章后归零，允许下一周目换一条支线。
+    /// 本周目支线：0 = 未派定。通关第 1 章后由 ChapterRouteTable.EnsureForkRoll 随机派定
+    /// （洗牌袋，只掷未通关过的；三条都通关后重置回全量）。
+    /// 通关第 8 章后归零，下一周目重通第 1 章后再派。
     /// </summary>
     public int chosenBranch = 0;
 
@@ -355,6 +356,36 @@ public class SaveData
     // id 口径：徽记 "badge:{职业key}:{档位}"（如 badge:剑盾:传奇）；本命碎片 "frag:{hireId}"（如 frag:H001）
     public List<StringIntEntry> mercGrowItemEntries = new List<StringIntEntry>();
     [NonSerialized] public Dictionary<string, int> mercGrowItems = new Dictionary<string, int>();
+
+    // === 城镇背包道具（2026-10-21 新增：战斗局内获得的道具，出战斗结算时从局内背包转入这里，角色页可见）===
+    // key = item_defs.csv 的道具 id（如 item_potion_hp），value = 持有数量
+    public List<StringIntEntry> townBagItemEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> townBagItems = new Dictionary<string, int>();
+
+    /// <summary>城镇背包道具持有数（townBagItems 统一读口，拿不到返回 0）。</summary>
+    public int TownBagCount(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return 0;
+        return townBagItems != null && townBagItems.TryGetValue(id, out int n) ? n : 0;
+    }
+
+    /// <summary>加城镇道具。不自动存档、不弹 toast——由各发放口自行决定（参照 MoveItemsToTownBag 的口径）。</summary>
+    public void TownBagAdd(string id, int n)
+    {
+        if (string.IsNullOrEmpty(id) || n <= 0) return;
+        townBagItems ??= new Dictionary<string, int>();
+        townBagItems.TryGetValue(id, out int cur);
+        townBagItems[id] = cur + n;
+    }
+
+    /// <summary>扣城镇道具；不够扣返回 false 且不动数据。</summary>
+    public bool TownBagTryConsume(string id, int n)
+    {
+        if (string.IsNullOrEmpty(id) || n <= 0) return false;
+        if (townBagItems == null || !townBagItems.TryGetValue(id, out int cur) || cur < n) return false;
+        townBagItems[id] = cur - n;
+        return true;
+    }
 
     // === 时间戳 ===
     public long lastSaveTime = 0;
@@ -567,6 +598,17 @@ public class SaveData
                 var e = mercGrowItemEntries[i];
                 if (e == null || string.IsNullOrEmpty(e.id)) continue;
                 mercGrowItems[e.id] = e.value;
+            }
+        }
+
+        townBagItems = new Dictionary<string, int>();
+        if (townBagItemEntries != null)
+        {
+            for (int i = 0; i < townBagItemEntries.Count; i++)
+            {
+                var e = townBagItemEntries[i];
+                if (e == null || string.IsNullOrEmpty(e.id)) continue;
+                townBagItems[e.id] = e.value;
             }
         }
 
@@ -1058,6 +1100,10 @@ public class SaveData
         mercGrowItemEntries = new List<StringIntEntry>(mercGrowItems.Count);
         foreach (var kv in mercGrowItems)
             mercGrowItemEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        townBagItemEntries = new List<StringIntEntry>(townBagItems.Count);
+        foreach (var kv in townBagItems)
+            townBagItemEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
     }
 
     static List<StringIdEntry> FromIdSet(HashSet<string> set)

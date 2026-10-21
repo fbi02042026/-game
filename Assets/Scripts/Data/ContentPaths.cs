@@ -20,7 +20,7 @@ public static class ContentPaths
         public const string ConfigFingerprint = "Data/Tables/config_fingerprint";
         public const string MonsterStats = "Data/Tables/monster_stats";
         public const string ChapterThemeMap = "Data/Tables/chapter_theme_map";
-        /// <summary>章节路线：主线 1→2→5→6→7→8，第 3/4 章是通关第 8 章后开放的支线。</summary>
+        /// <summary>章节路线：主线 1→(2/3/4 通关第1章后随机派定一条)→5→6→7→8</summary>
         public const string ChapterRoute = "Data/Tables/chapter_route";
         /// <summary>章节属性倍率（章基准，与旧 CHAPTER_STAT_SCALE 同源）。</summary>
         public const string ChapterStatScale = "Data/Tables/chapter_stat_scale";

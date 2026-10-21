@@ -6,8 +6,9 @@ using UnityEngine;
 /// ------------------------------------------------------------------
 /// 玩家看到的不是一条线性 1→2→3→4→5→6→7→8，而是：
 ///     第1章 →（第2章 / 第3章 / 第4章 三选一）→ 第5章 → 第6章 → 第7章 → 第8章
-/// · 前期只解锁第 2 章；第 3、4 章是支线，**通关第 8 章后**才开放。
-/// · 一次周目只能走 2/3/4 中的一条（chosenBranch 锁定），通关第 8 章后归零可重选。
+/// · 【2026-10-21 拍板】通关第 1 章后系统随机派定 2/3/4 中的一条（洗牌袋：只从「从未通关过的
+///   支线」里掷，三条都通关后重置回全量）；派定即放行，本周目锁定，不再由玩家手选。
+/// · 通关第 8 章后 chosenBranch 归零；下一周目重通一次第 1 章后再重新派定。
 ///
 /// 注意：内部 chapterId 语义完全不变——怪物素材 / 战斗背景 / 数值 / 成就
 /// 仍按 chapterId 取值。本表只决定「下一章是谁」和「哪些章能进」。
@@ -95,8 +96,38 @@ public static class ChapterRouteTable
 
     /// <summary>主线默认序列</summary>
     static readonly int[] FallbackMain = { 1, 2, 5, 6, 7, 8 };
-    /// <summary>通关第 8 章后才开放的支线</summary>
+    /// <summary>支线章节（第 3/4 章）：通关第 1 章后随机派定一条，见 EnsureForkRoll</summary>
     static readonly int[] FallbackBranch = { 3, 4 };
+
+    // ============================================================
+    // 支线随机派定（2026-10-21 拍板）—— 掷点唯一出口
+    // ============================================================
+
+    /// <summary>
+    /// 【2026-10-21 拍板】三条支线（第 2/3/4 章）改为「通关第 1 章后系统随机派定一条」：
+    /// 洗牌袋 —— 只从「从未通关过的支线」里掷；三条都通关后重置回全量 {2,3,4}。
+    /// 幂等：chosenBranch != 0 或未通关第 1 章时直接返回，绝不重复掷。
+    /// 调用点仅限：通关第 1 章（ChapterManager.OnStageComplete）与老存档补掷入口
+    /// （AdventureUI.RefreshAvailableChapters / WorldMapPopup.RefreshAvailability）。
+    /// 🔴 掷点逻辑严禁出现在 CanEnter / NextChapter / AvailableChapters / BranchChoices
+    /// 等查询函数里（它们被循环调用，会重复掷）。
+    /// </summary>
+    public static void EnsureForkRoll(SaveData data)
+    {
+        if (data == null || data.chosenBranch != 0) return;
+        if (!data.HasClearedChapter(1)) return;
+
+        var cands = new List<int>();
+        var cleared = data.clearedChapterIds; // 可能为 null，按空集合处理
+        for (int ch = 2; ch <= 4; ch++)
+            if (cleared == null || !cleared.Contains(ch)) cands.Add(ch);
+        if (cands.Count == 0) cands.AddRange(new[] { 2, 3, 4 }); // 三条都通关过 → 重置回全量
+
+        int pick = cands[UnityEngine.Random.Range(0, cands.Count)];
+        data.chosenBranch = pick;
+        SaveSystem.Instance.Save();
+        Debug.Log($"[ChapterRoute] 通关第 1 章后随机派定支线：{GameConfig.GetChapterMapName(pick)}（内部第{pick}章）");
+    }
 
     // ============================================================
     // 查询
@@ -192,21 +223,23 @@ public static class ChapterRouteTable
                     if (cleared(row.reqCleared[i])) { any = true; break; }
                 if (!any) return false;
             }
-            if (row.needCh8Clear && !cleared(8)) return false;
-            // 支线互斥：本周目已选了另一条支线就进不去
-            if (row.needCh8Clear && data != null && data.chosenBranch > 0 && data.chosenBranch != chapter)
-                return false;
+            // 【2026-10-21 拍板】第 2/3/4 章改为「通关第 1 章后随机派定一条」（洗牌袋，见 EnsureForkRoll）：
+            // 派定即放行 —— chosenBranch 只可能在 Ch1 通关后写入，隐含 reqCleared=1。
+            // 原 needCh8Clear 门 + 支线互斥随之移除（chapter_route.csv 已将 2/3/4 行改为 needCh8Clear=0，
+            // 代码不再依赖该标志；其余章的判定不变）。
+            if (chapter >= 2 && chapter <= 4)
+            {
+                if (data == null || data.chosenBranch != chapter) return false;
+                return true;
+            }
             return true;
         }
 
-        // 兜底
-        if (chapter == 2) return cleared(1);
-        if (chapter == 3 || chapter == 4)
-        {
-            if (!cleared(1) || !cleared(8)) return false;
-            if (data != null && data.chosenBranch > 0 && data.chosenBranch != chapter) return false;
-            return true;
-        }
+        // 兜底（与表路径同口径）
+        // 【2026-10-21 拍板】2/3/4 章：通关第 1 章后随机派定一条（见 EnsureForkRoll），派定即放行；
+        // 不再要求通关第 8 章，也不再手选互斥。FallbackMain 主线序列不动。
+        if (chapter == 2 || chapter == 3 || chapter == 4)
+            return data != null && data.chosenBranch == chapter;
         if (chapter == 5) return cleared(2) || cleared(3) || cleared(4);
         if (chapter == 6) return cleared(5);
         if (chapter == 7) return cleared(6);
@@ -233,5 +266,26 @@ public static class ChapterRouteTable
             if (CanEnter(ch, data)) list.Add(ch);
         list.Sort();
         return list;
+    }
+
+    // ============================================================
+    // 继续 / 当前应推进的章节（2026-10-21 续）
+    // ============================================================
+
+    /// <summary>
+    /// 【2026-10-21 续】玩家当前应推进的章节：在「可选章节（CanEnter 通过的集合）」里取
+    /// 第一个未通关的；若全部通关（本周目路径已走完）则返回可选集合的最后一章（= 第 8 章，用于 NG+ 重打）。
+    /// · 纯查询，严禁触发掷点 / 写存档（不要在这里调 EnsureForkRoll / SaveSystem.Save）。
+    /// · 只从 ChapterRouteTable 自身与 SaveData 读，不依赖 UI 状态。
+    /// </summary>
+    public static int CurrentChapterToAdvance(SaveData data)
+    {
+        var avail = AvailableChapters(data);
+        if (avail == null || avail.Count == 0) return 1;
+        bool cleared(int ch) => data != null && data.HasClearedChapter(ch);
+        for (int i = 0; i < avail.Count; i++)
+            if (!cleared(avail[i]))
+                return avail[i];
+        return avail[avail.Count - 1]; // 全通关 → 最后一章（第 8 章，NG+ 重打入口）
     }
 }

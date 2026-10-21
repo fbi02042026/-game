@@ -60,6 +60,11 @@ public static class CharacterBagSystem
                     x = px, y = py, w = w, h = h, equip = eq, equipped = equipped
                 });
             }
+
+            // 2026-10-21 主人需求：出战斗后在角色页也要能看到「战斗里获得的」东西——
+            // 城镇道具（局内道具结算时转入 SaveData.townBagItems）+ 日志碎片（存档总持有）+ 天赋石（钱包总持有）。
+            // 全为纯展示位：图标 + 数量角标，点击弹告知框，不可使用/丢弃/拖拽。
+            AppendTownDisplays(result, occupied, rows);
         }
         catch (Exception e)
         {
@@ -67,6 +72,81 @@ public static class CharacterBagSystem
             return new List<BackpackGridVisual.ItemPlacement>();
         }
         return result;
+    }
+
+    /// <summary>
+    /// 在角色页背包追加纯展示位（出战斗后也能看到战斗里获得的）：
+    /// ① 城镇道具（局内道具结算转入 SaveData.townBagItems）② 日志碎片（存档总持有）
+    /// ③ 天赋石（钱包总持有）。全部占 1×1，图标 + 数量角标，点开弹告知框。
+    /// 容量 = rows × Columns，放不下就 LogWarning 跳过（不静默吞，也不超框）。
+    /// </summary>
+    static void AppendTownDisplays(List<BackpackGridVisual.ItemPlacement> result, bool[,] occupied, int rows)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+
+        // ① 城镇道具
+        if (data.townBagItems != null)
+        {
+            foreach (var kv in data.townBagItems)
+            {
+                if (string.IsNullOrEmpty(kv.Key) || kv.Value <= 0) continue;
+                var def = ItemDefs.Get(kv.Key);
+                if (def == null)
+                {
+                    Debug.LogWarning("[CharacterBagSystem] 城镇道具不在 item_defs 表里，跳过：" + kv.Key);
+                    continue;
+                }
+                string info = (string.IsNullOrEmpty(def.desc) ? "" : def.desc + "\n") + "持有 ×" + kv.Value;
+                if (!TryAddDisplay(result, occupied, rows, def.name ?? kv.Key, info,
+                        ItemDefs.LoadIcon(kv.Key), kv.Value))
+                    return; // 满了，后面的不用再试
+            }
+        }
+
+        // ② 日志碎片（存档总持有，点开看配方进度）
+        var recipes = AdventureLogFragments.Recipes;
+        if (recipes != null)
+        {
+            for (int i = 0; i < recipes.Length; i++)
+            {
+                var r = recipes[i];
+                int have = AdventureLogFragments.GetCount(r.FragmentId);
+                if (have <= 0) continue;
+                if (!TryAddDisplay(result, occupied, rows, AdventureLogFragments.DisplayName(r.FragmentId),
+                        "材料类碎片，不能直接使用。\n" + AdventureLogFragments.FormatRecipeLine(i),
+                        BackpackGridVisual.LogFragmentIcon(), have))
+                    return;
+            }
+        }
+
+        // ③ 天赋石（钱包总持有）
+        long stones = ResourceWallet.Get(data, ResourceWallet.ResourceType.TalentPoint);
+        if (stones > 0)
+        {
+            TryAddDisplay(result, occupied, rows, "天赋石",
+                "用于城镇天赋页点亮、升级节点。\n击杀精英 / Boss、通关里程碑都会掉落。",
+                CommonIconSprites.Load("icon_talent_stone"), (int)stones);
+        }
+    }
+
+    /// <summary>在已占用网格里找第一个空格塞 1×1 展示位；满则 LogWarning 并返回 false。</summary>
+    static bool TryAddDisplay(List<BackpackGridVisual.ItemPlacement> result, bool[,] occupied, int rows,
+        string name, string info, Sprite icon, int count)
+    {
+        int px = 0, py = 0;
+        if (!TryFindSlot(occupied, rows, 1, 1, out px, out py))
+        {
+            Debug.LogWarning("[CharacterBagSystem] 角色页背包已满，「" + name + "」没有空格可展示");
+            return false;
+        }
+        MarkOccupied(occupied, px, py, 1, 1, true);
+        result.Add(new BackpackGridVisual.ItemPlacement
+        {
+            x = px, y = py, w = 1, h = 1,
+            displayName = name, displayInfo = info, displayIcon = icon, displayCount = count
+        });
+        return true;
     }
 
     /// <summary>

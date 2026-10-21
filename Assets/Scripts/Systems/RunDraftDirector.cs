@@ -581,7 +581,9 @@ public class RunDraftDirector : MonoBehaviour
         // 【2026-10-11 主人拍板】星级伤害步长可 per-skill 覆盖（表列 starDamageStep）：
         // 天雷裁决削弱后单独定成每星 +10%，其余技能不填 → 回退全局 +18%。
         float dmgMul = SkillDraftMeta.StarDamageMul(star, active.starDamageStep) * RunLoadout.ThemeDamageMul(tag);
-        float cdMul = SkillDraftMeta.StarCooldownMul(star);
+        // 【2026-10-21 主人拍板】升星不再减 CD —— 星级只强在伤害/增益/持续，冷却恒为 1 星值；
+        // 职业亲和 ×0.85 保留（亲和是职业匹配奖励，不是升星成长）。
+        float cdMul = 1f;
         if (SkillDraftMeta.IsAffinity(skillId, job))
         {
             dmgMul *= SkillDraftMeta.AffinityDamageMul;

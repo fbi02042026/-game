@@ -31,10 +31,69 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         public bool IsItem => item != null;
     }
 
-    /// <summary>撤离/死亡回城：清空局内背包与已装备（裂缝装备不带出）。</summary>
+    /// <summary>撤离/死亡回城：清空局内背包与已装备（裂缝装备不带出）。
+    /// 2026-10-21 主人需求：清空前先把局内获得的<b>道具</b>转入城镇背包（角色页可见）。</summary>
     public void ClearRunEquipment()
     {
+        MoveItemsToTownBag();
         InitNewRun();
+    }
+
+    /// <summary>
+    /// 回城转移：把局内背包里的道具合并进 <c>SaveData.townBagItems</c>（角色页背包数据源）。
+    /// 装备本就不带出（替换分解口径不变），这里只搬道具。转移成功即存档。
+    /// </summary>
+    void MoveItemsToTownBag()
+    {
+        if (_items == null || _items.Count == 0) return;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null)
+        {
+            Debug.LogError("[GridBackpack] 回城转移失败：存档未就绪，本局道具丢失无法入账");
+            return;
+        }
+        data.townBagItems ??= new Dictionary<string, int>();
+        int moved = 0;
+        for (int i = 0; i < _items.Count; i++)
+        {
+            var bip = _items[i];
+            if (bip?.item == null || bip.item.count <= 0) continue;
+            data.townBagItems.TryGetValue(bip.item.defId, out int cur);
+            data.townBagItems[bip.item.defId] = cur + bip.item.count;
+            moved += bip.item.count;
+        }
+        if (moved > 0)
+        {
+            SaveSystem.Instance?.Save();
+            Debug.Log($"[GridBackpack] 回城转移：本局道具 {moved} 个 → 城镇背包（角色页可见）");
+        }
+    }
+
+    // ===== 本局获得口径（2026-10-21 主人需求：战斗背包只显示当前战斗里获得的东西）=====
+
+    /// <summary>开局时的天赋石快照；RunGainedTalents = 现值 - 快照。</summary>
+    long _runTalentBase;
+    /// <summary>开局时的金币快照；RunGainedGold = 现值 - 快照。</summary>
+    long _runGoldBase;
+
+    /// <summary>本局获得的天赋石（精英/Boss 掉落、记录点首通等都算）。</summary>
+    public long RunGainedTalents
+    {
+        get
+        {
+            long cur = ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.TalentPoint);
+            return cur > _runTalentBase ? cur - _runTalentBase : 0;
+        }
+    }
+
+    /// <summary>本局获得的金币（掉落/首通奖励/宝箱等都算）。</summary>
+    public long RunGainedGold
+    {
+        get
+        {
+            long cur = ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.Gold);
+            return cur > _runGoldBase ? cur - _runGoldBase : 0;
+        }
     }
 
     public void InitNewRun()
@@ -42,6 +101,10 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         _grid = new bool[GameConfig.BACKPACK_WIDTH, GameConfig.BACKPACK_HEIGHT_MAX];
         _equippedBySlot.Clear();
         _items.Clear();
+        // 开新局 = 「本局获得」清零口径的唯一出口（StartNewRun / 引导重置都走这里）
+        _runTalentBase = ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.TalentPoint);
+        _runGoldBase = ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.Gold);
+        AdventureLogFragments.ResetRunGains();
         OnBackpackChanged?.Invoke();
     }
 

@@ -267,11 +267,14 @@ public partial class BattleUI : MonoBehaviour
         if (_bagGridRoot.gameObject.activeSelf != want) _bagGridRoot.gameObject.SetActive(want);
     }
 
-    /// <summary>「背包」按钮：切换网格背包的出现/收起（2026-10-09 主人拍板）。</summary>
+    /// <summary>「背包」按钮：切换网格背包的出现/收起（2026-10-09 主人拍板）。
+    /// 2026-10-21 起打开时顺带刷新一次格子 —— 掉落碎片直接写存档不走背包系统，
+    /// 不刷新就会显示上一次的旧内容（碎片数量对不上）。</summary>
     public void ToggleBagDrawer()
     {
         _bagDrawerOpen = !_bagDrawerOpen;
         ApplyBagDrawerVisible();
+        if (_bagDrawerOpen) UpdateBackpackGrid();
     }
 
     /// <summary>收起网格背包 —— 开打那一刻由 BattleEntryDraftPanel 调（2026-10-09 主人拍板「战斗的时候自动关闭背包弹窗」）。</summary>
@@ -333,6 +336,22 @@ public partial class BattleUI : MonoBehaviour
             // 道具：2026-09-15 起背包 12 格只装道具，永远 1×1
             if (bip.item != null)
             {
+                var def = bip.item.Def;
+                // 【2026-10-21 主人需求「卷轴/材料也不可用」→ 追加「去掉治疗药水吧 会把技能和佣兵弱化」】
+                // 战斗背包里**所有道具**一律降级为纯展示位：图标 + 数量，点开只看说明，
+                // 不弹「使用/丢弃」浮层（与天赋石/碎片/金币同口径）——战斗内没有任何可用道具。
+                if (def != null)
+                {
+                    placements.Add(new BackpackGridVisual.ItemPlacement
+                    {
+                        x = bip.x, y = bip.y, w = 1, h = 1,
+                        displayName = bip.item.Name,
+                        displayInfo = BuildBattleItemDisplayInfo(def),
+                        displayIcon = ItemDefs.LoadIcon(bip.item.defId),
+                        displayCount = bip.item.count
+                    });
+                    continue;
+                }
                 placements.Add(new BackpackGridVisual.ItemPlacement
                 {
                     x = bip.x, y = bip.y, w = 1, h = 1, item = bip.item
@@ -349,11 +368,109 @@ public partial class BattleUI : MonoBehaviour
             });
         }
         // 传入真实格子：没有 GridLayoutGroup（格子是美术手摆的）时也能算对位置
+        // 【2026-10-21 主人需求】真道具/装备摆完后，把「本局获得」的天赋石、日志碎片塞进剩余空格展示
+        AppendRunGainDisplays(placements, unlockedRows);
         BackpackGridVisual.ClearAndPlace(gridRt, gridLayout, placements, FindGridCellRect, BattleLootMode.Active);
         RestoreBackpackCellVisuals();
         // 换装后同步底部 5 个装备快捷槽
         UpdateEquipQuickSlots();
         Debug.Log($"[BattleUI] 背包刷新 items={placements.Count} cells={gridCells.Count} layout={(gridLayout != null)}");
+    }
+
+    /// <summary>把「本局获得」的天赋石 / 日志碎片塞进背包剩余空格做<b>纯展示</b>（可查看，不可使用）。
+    ///
+    /// <para>【2026-10-21 主人需求「战斗背包只显示当前战斗里获得的东西」】这里只展示<b>本局获得</b>的量：
+    /// 天赋石用 <see cref="GridBackpackSystem.RunGainedTalents"/>（开局对钱包快照的差值），
+    /// 日志碎片用 <see cref="AdventureLogFragments.GetRunGained"/>；二者都为 0 时不占格。
+    /// 点击弹通用告知框看说明/配方进度（见 <see cref="BackpackGridVisual"/> 展示位分支）。</para>
+    ///
+    /// <para>摆格顺序：真道具/装备已占的格先算，展示位从第 0 行起逐行找第一个空格；
+    /// 解锁行全满时 LogWarning（不静默吞）。</para>
+    /// </summary>
+    void AppendRunGainDisplays(List<BackpackGridVisual.ItemPlacement> placements, int unlockedRows)
+    {
+        // 真道具/装备已占的格先记下（按多格占位算）
+        var occupied = new HashSet<long>();
+        foreach (var pl in placements)
+        {
+            for (int dy = 0; dy < pl.h; dy++)
+                for (int dx = 0; dx < pl.w; dx++)
+                    occupied.Add(((long)(pl.x + dx) << 32) | (uint)(pl.y + dy));
+        }
+
+        int width = GameConfig.BACKPACK_WIDTH;
+
+        // 1) 日志碎片（本局获得）
+        var recipes = AdventureLogFragments.Recipes;
+        if (recipes != null)
+        {
+            for (int i = 0; i < recipes.Length; i++)
+            {
+                var r = recipes[i];
+                int gained = AdventureLogFragments.GetRunGained(r.FragmentId);
+                if (gained <= 0) continue;
+                TryPlaceDisplay(occupied, width, unlockedRows, placements,
+                    AdventureLogFragments.DisplayName(r.FragmentId),
+                    "材料类碎片，不能直接使用。\n" + AdventureLogFragments.FormatRecipeLine(i) + "\n通关关卡有概率掉落。",
+                    BackpackGridVisual.LogFragmentIcon(), gained);
+            }
+        }
+
+        // 2) 金币（本局获得）
+        long gold = 0;
+        var bag = GridBackpackSystem.Instance;
+        if (bag != null) gold = bag.RunGainedGold;
+        if (gold > 0)
+        {
+            TryPlaceDisplay(occupied, width, unlockedRows, placements,
+                "金币",
+                "本局获得的金币（掉落 / 首通奖励 / 宝箱等）。\n回城后在商店、天赋页等消费。",
+                CommonIconSprites.Load("icon_gold"), (int)gold);
+        }
+
+        // 3) 天赋石（本局获得）
+        long stones = 0;
+        if (bag != null) stones = bag.RunGainedTalents;
+        if (stones > 0)
+        {
+            TryPlaceDisplay(occupied, width, unlockedRows, placements,
+                "天赋石",
+                "本局击杀精英 / Boss 掉落的天赋石。\n回城后在天赋页点亮、升级节点。",
+                CommonIconSprites.Load("icon_talent_stone"), (int)stones);
+        }
+    }
+
+    /// <summary>在已占用集合中找第一个空格塞一个 1×1 展示位；放不下就 LogWarning（不静默吞）。</summary>
+    void TryPlaceDisplay(HashSet<long> occupied, int width, int unlockedRows,
+        List<BackpackGridVisual.ItemPlacement> placements,
+        string name, string info, Sprite icon, int count)
+    {
+        for (int y = 0; y < unlockedRows; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                long key = ((long)x << 32) | (uint)y;
+                if (occupied.Contains(key)) continue;
+                occupied.Add(key);
+                placements.Add(new BackpackGridVisual.ItemPlacement
+                {
+                    x = x, y = y, w = 1, h = 1,
+                    displayName = name, displayInfo = info, displayIcon = icon, displayCount = count
+                });
+                return;
+            }
+        }
+        Debug.LogWarning("[BattleUI] 背包解锁行已满，「" + name + "」没有空格可展示");
+    }
+
+    /// <summary>战斗背包里「不可用道具」展示位的告知正文：道具说明 + 不可用原因。</summary>
+    static string BuildBattleItemDisplayInfo(ItemDef def)
+    {
+        string why = def.type == ItemType.Material
+            ? "材料类道具，不能直接使用。"
+            : "战斗中不可使用。";
+        string desc = string.IsNullOrEmpty(def.desc) ? "" : def.desc + "\n";
+        return desc + why;
     }
 
     public bool TryScreenToBackpackCell(Vector2 screenPos, Camera eventCam, out int cellX, out int cellY)

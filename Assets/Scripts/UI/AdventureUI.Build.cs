@@ -252,7 +252,7 @@ public partial class AdventureUI
         tRt.anchorMax = new Vector2(0.9f, 1);
         tRt.offsetMin = tRt.offsetMax = Vector2.zero;
         chapterTitle = titleGo.GetComponent<Text>();
-        chapterTitle.text      = "第一章  边境小镇";
+        chapterTitle.text      = "";
         chapterTitle.fontSize  = 26;
         chapterTitle.alignment = TextAnchor.MiddleCenter;
         chapterTitle.color     = new Color(1f, 0.92f, 0.7f);

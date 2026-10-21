@@ -354,7 +354,7 @@ public class QuestPanelUI : MonoBehaviour
             if (views[i].done) done++;
 
         if (_headerText != null)
-            _headerText.text = "第" + chapter + "章 " + GameConfig.GetChapterMapName(chapter)
+            _headerText.text = GameConfig.GetChapterMapName(chapter)
                                + "　" + done + "/" + total;
 
         if (total == 0)

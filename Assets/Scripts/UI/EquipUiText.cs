@@ -88,6 +88,7 @@ public static class EquipUiText
             case AttrType.MoveSpeed: return "移速";
             case AttrType.AttackRange: return "射程";
             case AttrType.Defense: return "防御";
+            case AttrType.DamageReduce: return "减伤";
             // 2026-09-29：物攻/魔攻、物防/魔防拆开后必须给中文名，
             // 否则装备面板会直接把枚举名 "MagicAttack" / "MagicDefense" 显示给玩家。
             case AttrType.MagicAttack: return "魔攻";
@@ -130,6 +131,7 @@ public static class EquipUiText
             case AttrType.LifeSteal:
             case AttrType.EliteDamage:
             case AttrType.Poison:
+            case AttrType.DamageReduce:
             // 2026-10-10：PhyPower / MagicPower 的 isPercent 已统一改成 false（加算，小数值 0.12 = 12%）。
             // 不进这个集合的话，装备面板会把「+12% 物理强度」显示成「+0.1」。
             case AttrType.PhyPower:

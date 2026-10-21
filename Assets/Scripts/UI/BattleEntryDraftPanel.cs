@@ -282,12 +282,8 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     /// <summary>【2026-10-13 #9】「已连抽 ×N」提示（≥2 显示），挂在抽奖容器上方。</summary>
     Text _comboText;
     Coroutine _comboFlashCo;
-    /// <summary>
-    /// 【2026-10-18 主人拍板「在抽奖旁边加个抽奖币和数量」】抽奖币池计数（icon_draft_coin + 数字）。
-    /// 顶栏改显「本局获得金币」后，抽奖能花的那本账（BattleManager.currentGold）在这里显示。
-    /// 运行时建，挂 DraftRoot 下（跟抽完收起/展开一起走），见 BuildPoolChip。
-    /// </summary>
-    Text _poolChipText;
+    // 【2026-10-21 主人拍板「抽奖数都在顶部」】原 _poolChipText（按钮上方抽奖币计数）已随
+    // BuildPoolChip 整段拆除，余额只走顶栏 DraftDisplay 抽奖币条（BattleUI.UpdateDraftCoin）。
 
     // ===== 抽完后「等玩家点继续」的两件套（2026-10-06 主人拍板）=====
 

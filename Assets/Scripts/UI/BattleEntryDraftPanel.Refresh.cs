@@ -31,8 +31,8 @@ public partial class BattleEntryDraftPanel
         _lastCoins = coins;
         _lastCats = cats;
 
-        // 【2026-10-18 主人拍板】抽奖币池计数跟着同一组余额走（顶栏那本账是「本局获得金币」，不在这显示）
-        if (_poolChipText != null) _poolChipText.text = coins.ToString();
+        // 【2026-10-21 主人拍板「抽奖数都在顶部」】原按钮上方 _poolChipText 刷新已拆，
+        // 余额显示只在顶栏 DraftDisplay（NotifyPoolGoldChanged → BattleUI.UpdateDraftCoin）。
 
         // 2026-10-05：金币本开局送的免费抽 —— 还有额度时「普通」按钮上写「免费」，不看余额也能点。
         // 【2026-10-19 主人拍板】免费次数只惠及普通随机抽；三个定向（佣兵/装备/技能）永远按价扣币。
