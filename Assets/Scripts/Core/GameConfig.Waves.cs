@@ -32,11 +32,13 @@ public static partial class GameConfig
     /// <summary>无刷怪点时，波与波之间的世界距离（兼容旧逻辑）</summary>
     public const float VIRTUAL_WAVE_SPACING = 4.2f;
 
-    // —— 波次近远编成随机化（2026-10-20 主人拍板：有时全近战，有时远近配合，有时全远程）——
-    /// <summary>单波摇成「全近战」的概率（正式轨普通小怪波）。</summary>
+    // —— 波次近远编成（2026-10-20 主人拍板随机化；【2026-10-22 主人拍板】收紧：
+    //    取消「全远程」档（主人报「第一波全是远程的 而且攻击还很高」，没法打），
+    //    远程占比改按「近战:远程 ≈ 3:1~4:1」——全近战档保留，混合波每槽 1/4 抽远程）——
+    /// <summary>单波摇成「全近战」的概率（正式轨普通小怪波）；其余全为混合波。</summary>
     public const float WAVE_COMP_ALL_MELEE_P = 0.3f;
-    /// <summary>单波摇成「全远程」的概率；剩余概率 = 混合（每槽独立掷近/远）。</summary>
-    public const float WAVE_COMP_ALL_RANGED_P = 0.3f;
+    /// <summary>混合波每槽独立抽成远程的概率（0.25 = 近战:远程 ≈ 3:1；嫌远程还多就再降这个数）。</summary>
+    public const float WAVE_COMP_MIXED_RANGED_P = 0.25f;
 
     // —— 进关血量（2026-10-20 主人拍板·方案C）——
     /// <summary>

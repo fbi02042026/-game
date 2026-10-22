@@ -70,6 +70,18 @@ public class RunLoadoutData
     /// 随构筑一起落 PlayerPrefs、局末一起清空 —— 所以「本局第几次抽」跨关累计。
     /// </summary>
     public int drawCount;
+    /// <summary>
+    /// 局内金币池（BattleManager.currentGold）。【2026-10-22 主人拍板「打一关回一次」新增】：
+    /// 普通关打完直接回冒险页但不结束本局（ReturnToTownKeepRun），池子写在这里跨场景携带，
+    /// 续局进本时还原 —— 局没结束，钱就不能「带不出本局」。
+    /// </summary>
+    public long runGold;
+    /// <summary>
+    /// 中断标记。【2026-10-22 主人原话「上次战斗中途意外退出没有结束 可以让玩家选择是否继续上一局重新开始」】：
+    /// 进战斗置 true（RunLoadout.MarkBattleBegun），干净回城归 false（MarkReturnedClean）；
+    /// 玩家下次进本时它还是 true = 上一场战斗是中途断掉的 → 冒险页弹「继续上一局 / 重新开始」双选。
+    /// </summary>
+    public bool midBattle;
 }
 
 /// <summary>
@@ -194,6 +206,43 @@ public static class RunLoadout
         // 同 ResumeOrBegin：2026-09-30 起不再要求 skills 非空
         var saved = LoadFromPrefs();
         return saved != null && saved.active;
+    }
+
+    /// <summary>
+    /// 读 PlayerPrefs 里的可续局快照（不动内存、不恢复）。【2026-10-22「打一关回一次」新增】：
+    /// BattleManager.StartNewRunInternal 开局前用它判定「续局跳关 / 换章弃局」，
+    /// 此时 RunDraftDirector 还没跑 ResumeOrBegin，内存 _data 不可靠（进程重启后为 null）。
+    /// </summary>
+    public static RunLoadoutData PeekResumable()
+    {
+        var saved = LoadFromPrefs();
+        return saved != null && saved.active ? saved : null;
+    }
+
+    // —— 中断局标记（2026-10-22 主人原话：中途意外退出没打完 → 进本前让玩家选「继续上一局 / 重新开始」）——
+    // 状态只有一个出口：进战斗置位、干净回城清位；读侧只许走 HasInterruptedRun / PeekResumable。
+
+    /// <summary>进战斗时打标记：从这一刻起到干净收尾前，中途退出都算「意外中断」。</summary>
+    public static void MarkBattleBegun()
+    {
+        if (_data == null || MemoryMode) return;
+        _data.midBattle = true;
+        Save();
+    }
+
+    /// <summary>干净收尾（打一关回一次的 ReturnToTownKeepRun）时清标记：下次进本照旧静默续局。</summary>
+    public static void MarkReturnedClean()
+    {
+        if (_data == null || MemoryMode) return;
+        _data.midBattle = false;
+        Save();
+    }
+
+    /// <summary>上一场战斗是否中途断掉（有可续局 && 中断标记还在）。只读盘，不动内存。</summary>
+    public static bool HasInterruptedRun()
+    {
+        var saved = PeekResumable();
+        return saved != null && saved.midBattle;
     }
 
     /// <summary>写 PlayerPrefs（离线，不联网）。</summary>

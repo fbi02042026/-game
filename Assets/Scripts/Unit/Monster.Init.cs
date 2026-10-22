@@ -256,7 +256,11 @@ public partial class Monster
             ttkMul = GameConfig.GetStatScale(chapter, stageIdx0);
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * GameConfig.MONSTER_HP_GLOBAL_MUL);
+        // 【2026-10-22 主人拍板「无限裂隙先排除了 分成两条线」】血量分两条线：
+        // 主线/引导吃全局砍半（MONSTER_HP_GLOBAL_MUL=0.5）；无尽裂隙不吃全局砍半，
+        // 强度只随层数走（EndlessDifficultyMul）。攻击侧同样裂隙不参与（ChapterAtkMul）。
+        float hpGlobalMul = endlessRift ? 1f : GameConfig.MONSTER_HP_GLOBAL_MUL;
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul);
         // ⚠【2026-10-12 整段删除·主人「把关卡的怪物数量回复正常」】
         // 这里原本是流程测试开关 `GameConfig.TEST_BOSS_HP`（Boss 压成 1 滴血，一击通关好验证流程）。
         // 它和 stage_spawn.csv 的「TEST 每关 1 只怪 1 波」是同一批 2026-09-23 测试数据，
@@ -280,17 +284,19 @@ public partial class Monster
                 monsterChapter, Mathf.Max(1, effectiveSpriteIndex), gChapter, gStageType)
             : MonsterAttackTypeResolver.IsMagicMonster(monsterChapter, Mathf.Max(1, effectiveSpriteIndex));
         _isMagicType = isMagicType;
-        // 【2026-10-20 主人拍板「前期敌人的攻击再降30%」】第 1~2 章（新手期，口径同 WavePlanner 的
-        // CurrentChapter<=2）全体敌人攻击/魔攻再 ×0.7；只压攻击，血防不动；无尽裂隙强度只随层数走，不参与。
-        float earlyAtkMul = (!endlessRift && gChapter >= 1 && gChapter <= GameConfig.EARLY_GAME_ATK_CHAPTER_MAX)
-            ? GameConfig.EARLY_GAME_ATK_MUL : 1f;
+        // 【2026-10-22 主人拍板】按章攻击减免：第1~2章 ×0.35（新手期，主人「近战也砍，
+        // 前期要让玩家稍微抽点奖就能过」）；第3章 ×0.6（砍40%）；第4章起 ×0.8（砍20%）。
+        // 全章覆盖，真源 = GameConfig.ChapterAtkMul(chapter)；只压攻击/魔攻，血防不动；
+        // 无尽裂隙不参与（强度只随层数走）。
+        float earlyAtkMul = !endlessRift ? GameConfig.ChapterAtkMul(gChapter) : 1f;
         // 魔法型强制改法球弹道(Ranged)→视觉与伤害类型(魔法)一致；物理型保持表内 style。
         // 普通小怪的魔法型本就等于「表里是法师」，这里赋值与表内原值一致；
         // 只有精英/Boss 掷骰命中魔法时，这里才会真的把 Melee/Bow 改成法球。
         if (isMagicType)
             _attackStyle = MonsterAttackStyle.Ranged;
-        // 2026-09-28 主人要求「远程敌人的攻击要比近战高」：远程（弓/法球）攻击力上浮一档。
-        // 放在 style 定稿之后、写 attr 之前，魔法型（已强制 Ranged）也一起吃到。Boss 不吃。
+        // 远程（弓/法球）攻击力倍率（真源 = GameConfig.MONSTER_RANGED_ATK_MUL，唯一出口）。
+        // 【2026-10-22 主人拍板「攻击再减50%」后该值 0.675：远程不再上浮、比近战低一截。Boss 不吃。】
+        // 放在 style 定稿之后、写 attr 之前，魔法型（已强制 Ranged）也一起吃到。
         if (!_isBossUnit && MonsterAttackStyleTable.IsRanged(_attackStyle))
             baseAtk *= GameConfig.MONSTER_RANGED_ATK_MUL;
         // 【2026-10-14】style 已定稿（含魔法型强制 Ranged），此处抽索敌策略：近战按距离、

@@ -33,7 +33,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     public static bool PendingGoldDungeon;
     /// <summary>
     /// 无限裂隙进本标记（2026-10-17）。TryEnterBattle 每次按所选模式**重设**（非裂隙恒 false，防上一次残留污染）；
-    /// BattleManager.StartNewRunInternal 读完即清。体力确认弹窗也读它区分消耗 10/20。
+    /// BattleManager.StartNewRunInternal 读完即清。体力确认弹窗也读它区分消耗 5/10（2026-10-22 主人拍板）。
     /// </summary>
     public static bool PendingEndlessRift;
 
@@ -138,6 +138,11 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     const int DetailDescFontSize = 21;
     const int DetailSubTitleFontSize = 25;
 
+    // ──【2026-10-22 主人拍板】左侧模式标签（主线冒险 / 无限裂隙）字号 ──
+    // 预制体现值 25 偏小 → 30。只改字号，按钮宽高/位置以预制体为准（铁律 32）；
+    // Build（代码建树）与 AutoBind（预制体绑定）两条路径共用（见 ApplyModeLabelStyle）。
+    const int ModeLabelFontSize = 30;
+
     bool _built;
     bool _preloaded;
 
@@ -207,10 +212,35 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
             _selectedChapter = ChapterRouteTable.CurrentChapterToAdvance(SaveSystem.Instance?.Data);
         HideUnfinishedEntries();
         RefreshAll();
+        ConsumeAdventureRewardNotices();   // 打完关回来看宝箱：自动弹「获得奖励」（见 AdventureUI.ChestNodes.cs）
 
         // 竖屏专用适配：更瘦屏时把 RightContent 居右、MapRoot 右溢出归零、DetailPanel 宽对齐下沉到底。
         // 已迁移到本界面自身（ApplyAdventureFit），标准 9:16 屏或开关关闭时该方法内部直接回退、不改任何东西。
         ApplyAdventureFit();
+
+        // 【2026-10-22 主人原话「进了冒险界面就弹出上一局意外退出 是否继续 然后两个按钮确定和取消」】
+        // 上一场战斗中途断掉的局：进冒险页就问一次。确定 = 继续上一局；取消 = 重新开始（丢局）。
+        TryPromptInterruptedRun();
+    }
+
+    /// <summary>
+    /// 「上一局意外退出」询问（弹窗本体在 <see cref="RunResumeChoiceUI"/>）。
+    /// 只在「有可续局 && 上一场战斗是中途断的（midBattle 标记还在）」时弹；答过一次标记即消，不再重复弹。
+    /// </summary>
+    void TryPromptInterruptedRun()
+    {
+        if (!RunLoadout.HasInterruptedRun()) return;
+        RunResumeChoiceUI.Show(RunLoadout.PeekResumable()?.chapter ?? 1,
+            onConfirm: () =>
+            {
+                // 确定 = 继续上一局：中断已确认，清掉标记，之后进本照旧静默续局（构筑/金币池还原不变）
+                RunLoadout.MarkReturnedClean();
+            },
+            onCancel: () =>
+            {
+                // 取消 = 重新开始：丢掉上一局，下次进本发启动金、从本章第 1 关打起
+                RunLoadout.Clear();
+            });
     }
 
 

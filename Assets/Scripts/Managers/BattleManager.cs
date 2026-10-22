@@ -179,6 +179,25 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         BattleDifficulty = Mathf.Clamp(AdventureUI.PendingBattleDifficulty, 0, 2);
         // IsGoldDungeon 不再在这里写入：它由 Mode 派生（见属性定义）。
         // PendingGoldDungeon 只保留「读完即清」，避免下一局被上一局的静态标志污染。
+        // 【2026-10-22 主人拍板「打一关回一次」】parked 局续/弃判定（必须在清 Pending* 标志之前）：
+        // · 同章再进 → 续局：起始关 = RunLoadout.stageIndex（最后通关的小关）+ 1（见下方 BuildChapter 后跳关）
+        // · 换章 / 进无限裂隙 / 进金币本 → parked 局作废（裂隙与金币本是独立进本，现状口径的延伸）
+        var savedRun = RunLoadout.PeekResumable();
+        bool resumeRun = false;
+        if (savedRun != null && !StoryProgress.ShouldStartTutorialBattle())
+        {
+            if (AdventureUI.PendingEndlessRift
+                || AdventureUI.PendingGoldDungeon
+                || AdventureUI.PendingBattleChapter <= 0
+                || AdventureUI.PendingBattleChapter != savedRun.chapter)
+            {
+                RunLoadout.Clear();
+                savedRun = null;
+                Debug.Log("[BattleManager] parked 局与本次进本不一致，已作废（打一关回一次口径）");
+            }
+            else
+                resumeRun = true;
+        }
         AdventureUI.PendingBattleChapter = 0;
         AdventureUI.PendingBattleDifficulty = 0;
         AdventureUI.PendingGoldDungeon = false;
@@ -200,6 +219,24 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
 
         // 建关交给模式自己：核心不需要知道一共有几种玩法。
         Mode.BuildChapter(ChapterManager.Instance, targetChapter);
+
+        // 【2026-10-22 主人拍板「打一关回一次」】续局跳关：从「最后通关的小关 +1」继续，
+        // 不再每次从 1-1 重跑。RunLoadout.stageIndex 由 NoteStageProgress 在通关时落档。
+        if (resumeRun && savedRun != null
+            && ChapterManager.Instance.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
+        {
+            int nextIdx = Mathf.Clamp(savedRun.stageIndex + 1, 0, ChapterManager.Instance.stageMap.Count - 1);
+            var next = ChapterManager.Instance.stageMap[nextIdx];
+            if (next != null)
+            {
+                // 类型走唯一出口（v4 按位置定死：0-based 4/9 → Boss、2/6 → 50% 精英），与正常推进同口径
+                next.type = StageRoller.RollByPosition(next.stageIndex);
+                ChapterManager.Instance.currentStageIndex = next.stageIndex;
+                ChapterManager.Instance.availableNextStages.Clear();
+                ChapterManager.Instance.availableNextStages.Add(next);
+                Debug.Log($"[BattleManager] 打一关回一次续局：从第 {nextIdx + 1} 关继续（第 {targetChapter} 章，类型 {next.type}）");
+            }
+        }
 
         StageData first = null;
         if (ChapterManager.Instance.availableNextStages != null && ChapterManager.Instance.availableNextStages.Count > 0)

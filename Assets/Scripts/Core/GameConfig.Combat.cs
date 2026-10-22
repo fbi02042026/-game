@@ -303,11 +303,14 @@ public static partial class GameConfig
     [Header("怪物基础（对齐数值表·未缩放）")]
     public const float MONSTER_NORMAL_HP = 60f;
     /// <summary>
-    /// 全局怪物 HP 倍率。1.0 = 直接用 monster_stats 表的 baseHp（与冒险图鉴显示的数值一致）。
-    /// 曾设为 0.6（减 40%），导致图鉴写「生命 78」而实战只有 46，教学关再叠一层只剩 5~7 被一刀秒。
+    /// 全局怪物 HP 倍率（主线/引导线；【2026-10-22 主人拍板「无限裂隙先排除了 分成两条线」】
+    /// 无尽裂隙不吃这条，裂隙强度只随层数走）。1.0 = 直接用 monster_stats 表的 baseHp。
+    /// 曾设为 0.6（减 40%），导致图鉴写「生命 78」而实战只有 46（当时图鉴没跟着乘，现已乘回）。
+    /// 【2026-10-22 主人拍板「把敌人血量也砍50%」】1.0 × 0.5 = 0.5：主线全体敌人
+    /// （普通/精英/Boss/引导）血量整体砍半；冒险图鉴血量预览走同一常量，显示与实战一致。
     /// 要整体调难/调易只改这里即可。
     /// </summary>
-    public const float MONSTER_HP_GLOBAL_MUL = 1.0f;
+    public const float MONSTER_HP_GLOBAL_MUL = 0.5f;
 
     /// <summary>
     /// 怪物重叠时头顶是否显示 ×N 角标。
@@ -339,11 +342,12 @@ public static partial class GameConfig
     /// 只动这一个数；下面远程怪那档 ÷0.6 会一起跟着降，远近都比原来慢 40%。
     public const float MONSTER_ATK_SPEED_MUL = 0.39f;
     /// <summary>
-    /// 2026-09-28 主人要求「远程敌人的攻击要比近战高」：远程（弓/法球）怪物攻击力倍率。
-    /// 只作用于敌方远程，Boss 不吃（Boss 有自己的 BOSS_TTK_ATK_MUL）。
+    /// 2026-09-28 旧口径「远程敌人的攻击要比近战高」。
+    /// 【2026-10-22 主人拍板「攻击再减50%」】主人报首波全远程且攻击还很高 → 1.35 × 0.5 = 0.675，
+    /// 覆盖旧口径（远程不再上浮，反而比近战低一截）。只作用于敌方远程，Boss 不吃（Boss 有自己的 BOSS_TTK_ATK_MUL）。
     /// 嫌远程太痛/不够痛只改这一个数。
     /// </summary>
-    public const float MONSTER_RANGED_ATK_MUL = 1.35f;
+    public const float MONSTER_RANGED_ATK_MUL = 0.675f;
     /// <summary>
     /// 仅敌方弓/法球普攻频率倍率（1=表值；0.5=再降一半）。
     /// 我方（玩家职业表 AttackInterval、佣兵花名册 AtkSpeed）不再叠这个，否则 0.5 秒间隔会变成 1 秒。
@@ -787,14 +791,20 @@ public static partial class GameConfig
     /// </summary>
     public const float MONSTER_DAMAGE_MULTIPLIER = 1.8f;
     /// <summary>
-    /// 【2026-10-20 主人拍板「前期敌人的攻击再降30%」】前期章节敌人的攻击/魔攻额外倍率。
-    /// 0.7 = 在 MONSTER_DAMAGE_MULTIPLIER 之上再降 30%；只压攻击，血量/防御不动。
-    /// 覆盖到第几章见 <see cref="EARLY_GAME_ATK_CHAPTER_MAX"/>；无尽裂隙强度只随层数走，不参与。
-    /// 前期还嫌痛往下调，后期嫌软往 1 调（唯一入口 Monster.Init.cs 攻击赋值处）。
+    /// 按章的敌人攻击/魔攻减免倍率（唯一真源，唯一入口 Monster.Init.cs 攻击赋值处）。
+    /// 演进：2026-10-20「前期敌人的攻击再降30%」0.7 → 2026-10-22「近战也砍，前期要让玩家稍微
+    /// 抽点奖就能过」第1~2章 0.35 → 同日主人拍板「第三章砍40% 后面的砍20%」全章覆盖：
+    /// 第 1~2 章 ×0.35；第 3 章 ×0.6（砍40%）；第 4 章起 ×0.8（砍20%）。
+    /// 远程共用这条倍率（远程另有 MONSTER_RANGED_ATK_MUL 一档）。只压攻击/魔攻，血防不动；
+    /// 无尽裂隙强度只随层数走，不参与。还嫌痛/嫌软只改下面对应档的数值。
     /// </summary>
-    public const float EARLY_GAME_ATK_MUL = 0.7f;
-    /// <summary>前期攻击减免覆盖的最后一章（含）。第 1~2 章 = 新手期，口径同 WavePlanner 的 CurrentChapter&lt;=2。</summary>
-    public const int EARLY_GAME_ATK_CHAPTER_MAX = 2;
+    public static float ChapterAtkMul(int chapter)
+    {
+        int ch = Mathf.Max(1, chapter);
+        if (ch <= 2) return 0.35f;  // 新手期（含 10-22「抽点奖就能过」砍半）
+        if (ch == 3) return 0.6f;   // 2026-10-22 主人拍板：第三章砍40%
+        return 0.8f;                // 2026-10-22 主人拍板：第4章起砍20%
+    }
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备
     public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手（已改为包内同部位唯一，无穿戴槽）

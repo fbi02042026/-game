@@ -1667,6 +1667,10 @@ public partial class BattleManager
         // 每关通关只写回「本局获得金币」，抽奖币池按现值结转下一关（不重置回基线）——
         // 否则本关抽奖花销被退回，下一关的钱凭空变多（2026-10-20 主人反馈修复）
         PersistBattleGold(resetPool: false);
+        // 冒险页「获得奖励」弹窗：主线小关首次通关记一条本关实际掉落。
+        // 必须夹在 PersistBattleGold（关卡金先进 GoldEarned）与 OnStageComplete（写 clearedStages）之间，
+        // 否则首通判定/金币差值都会少一笔（见 RecordStageRewardNoticeIfFirstClear）。
+        RecordStageRewardNoticeIfFirstClear();
         ChapterManager.Instance?.OnStageComplete();
 
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : CurrentChapter;
@@ -1685,11 +1689,8 @@ public partial class BattleManager
     }
 
     /// <summary>
-    /// 主线冒险的通关结算：boss 弹胜利结算，确认后直接回城（2026-10-17 主人拍板：
-    /// 不再弹「回城 / 进下一章」二选一，ShowChapterClearChoice 弃用；
-    /// 下一章改由主城世界地图第二地块 / 冒险页左右滑动进入）。普通关进下一关。
-    /// 内容原样从 <see cref="FinishStageAfterPortalReached"/> 搬过来，由 <see cref="NormalBattleMode"/> 调用。
-    /// 金币本这类模式有自己的结算，不进这里。
+    /// 主线冒险的通关结算：【2026-10-22 主人拍板「打一关回一次」】普通关清完直接回冒险页（不结束本局）；
+    /// 章末 Boss 仍弹胜利结算 → 回城 / 直进下一章。金币本这类模式有自己的结算，不进这里。
     /// </summary>
     public void SettleNormalStageClear()
     {
@@ -1732,17 +1733,42 @@ public partial class BattleManager
         // 主人原话：「怎么打完一关就结算了，我跟你说的打完一关进传送门，然后弹老虎机怎么没有了」。
         // （历史归因注释保留如上）
         //
-        // 【2026-10-22 主人拍板 · v4】上面 10-11 的口径作废：普通关清完 → 传送门 →（无宝箱）→
-        // 直接弹结算界面（双钮）。【下一关】回调 = 原 GoChapterGate 直进那套（过场 + SelectStage 下一关，
-        // 0 点击直进逻辑原样保留，只是改由按钮触发）；【返回】= 回城 EndRunAndReturnToTown。
-        // availableNextStages 为空 →【下一关】隐藏，只留【返回】。
-        var stages = cm != null ? cm.availableNextStages : null;
-        int gateChapter = cm != null ? cm.currentChapter : 1;
-        bool hasNext = stages != null && stages.Count > 0;
-        ShowVictorySettlementThen(
-            EndRunAndReturnToTown,
-            hasNext ? (System.Action)(() => GoChapterGate(gateChapter, stages)) : null,
-            "下一关");
+        // 【2026-10-22 主人拍板「打一关回一次」】上面 10-22 双钮结算（下一关/返回）口径作废：
+        // 普通关清完不再弹战斗内结算，直接回冒险页 —— 构筑/局内金币池随 RunLoadout 保留
+        // （ReturnToTownKeepRun，不结束本局），下次进本从下一关续打；
+        // 本关掉落由冒险页自动弹「获得奖励」（AdventureRewardNotice，与结算同账）。
+        // 历史归因注释保留：10-11 主人拍板「打完一关进传送门弹老虎机」→ 10-22 早间「普通关双钮结算」→ 本次「直接回」。
+        ReturnToTownKeepRun();
+    }
+
+    /// <summary>
+    /// 【2026-10-22 新增】主线小关**首次**通关 → 往 AdventureRewardNotice 记一条本关实际掉落
+    /// （玩家回到城镇打开冒险页时自动弹「获得奖励」，AdventureUI.ShowPage 消费）。
+    /// 金币本 / 无限裂隙 / 引导局不进队列（各有自己的结算链）。
+    /// </summary>
+    void RecordStageRewardNoticeIfFirstClear()
+    {
+        if (Mode == null || Mode.Id != BattleModeId.Normal) return;
+        if (currentStage == null || ChapterManager.Instance == null) return;
+        var data = SaveSystem.Instance?.Data;
+        string key = ChapterManager.Instance.currentChapter + "_" + currentStage.stageIndex;
+        bool firstClear = data?.clearedStages == null || !data.clearedStages.Contains(key);
+        if (!firstClear) return;
+
+        var notice = new AdventureRewardNotice.StageClear
+        {
+            chapter = ChapterManager.Instance.currentChapter,
+            stageIndex = currentStage.stageIndex,
+            gold = (RunStats != null ? RunStats.GoldEarned : 0) - _stageGoldEarnedAtStart,
+            talent = (RunStats != null ? RunStats.TalentGained : 0) - _stageTalentAtStart,
+            enchant = (RunStats != null ? RunStats.EnchantStoneDelta : 0) - _stageEnchantAtStart,
+            mats = (RunStats != null ? RunStats.DecomposeMatDelta : 0) - _stageMatsAtStart,
+        };
+        if (RunStats != null && RunStats.EquipGains != null)
+            for (int i = _stageEquipCountAtStart; i < RunStats.EquipGains.Count; i++)
+                if (RunStats.EquipGains[i] != null)
+                    notice.equips.Add(RunStats.EquipGains[i]);
+        AdventureRewardNotice.Push(notice);
     }
 
     /// <summary>
@@ -1918,6 +1944,27 @@ public partial class BattleManager
     }
 
     /// <summary>
+    /// 【2026-10-22 主人拍板「打一关回一次」新增】普通关通关直接回冒险页，但**不结束本局**：
+    /// · 不清构筑 / 不 EndRunLoadout —— 下次进本 ResumeOrBegin 续上，从下一关继续（StartNewRunInternal 跳关）；
+    /// · 局内金币池写进 RunLoadoutData.runGold 跨场景携带（局没结束，钱不算「带出本局」）；
+    /// · 金币已逐关 PersistBattleGold 落盘，中断快照照常清（防重复入账）。
+    /// 章末 Boss 不走这里：仍弹结算 → EndRunAndReturnToTown（整章完成才算出局）。
+    /// </summary>
+    public void ReturnToTownKeepRun()
+    {
+        if (RunLoadout.IsActive && RunLoadout.Data != null)
+        {
+            RunLoadout.Data.runGold = currentGold;
+            RunLoadout.Save();
+            // 【2026-10-22 主人原话「中途意外退出没打完 → 让玩家选继续/重新开始」】
+            // 这一关是打完才回城的 = 干净收尾，清掉中断标记：下次进本不弹选择、照旧静默续局。
+            RunLoadout.MarkReturnedClean();
+        }
+        BattleStateSaver.Instance?.ClearBattleState();
+        GameSceneManager.Instance?.ReturnToTown();
+    }
+
+    /// <summary>
     /// 通关后「结束本局并回城」：清本局装备 → 清佣兵 → 清雇佣会话 → 结束构筑 → 回城。
     /// 这段原本在通关结算里被复制了 3 份，收成一处；以后改收尾流程只改这里。
     /// 注意：死亡（<see cref="OnHeroDead"/>）与主动撤离（<see cref="TriggerEvacuation"/>）
@@ -1950,6 +1997,18 @@ public partial class BattleManager
         _runStageGoldPending = 0;
         GrantRunGold(gold);   // 2026-10-18：走进账唯一出口（本局获得金币），结算「金币」栏同账
         Debug.Log($"[BattleManager] 结算发放通关奖励 金币 +{gold}（本局通过关卡累计）");
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板「打一关回一次」】续局还原局内金币池（RunDraftDirector.OnRunStart 续局分支调）。
+    /// _goldAtRunStart 一并抬到还原水位：局末清账（resetPool）回到「续局时的池子」，不会把玩家抽剩的钱清成 0。
+    /// </summary>
+    public void RestoreRunGoldPool(long gold)
+    {
+        if (gold <= 0) return;
+        currentGold = gold;
+        _goldAtRunStart = gold;
+        Debug.Log($"[BattleManager] 续局还原局内金币池 {gold}");
     }
 
     /// <summary>

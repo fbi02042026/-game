@@ -101,13 +101,14 @@ public partial class WavePlanner
             return PickSpriteByStyle(availableSprites, chapter, archRanged, usedThisWave, slotIndex, stageIdx);
         }
 
-        // —— 【2026-10-20 主人拍板】波次近远编成随机化：铺波时每波摇定（全近战/混合/全远程），
-        // 覆盖 wave_slot 的奇偶近远表；混合波每槽独立掷近/远。
+        // —— 【2026-10-20 主人拍板】波次近远编成随机化：铺波时每波摇定（全近战/混合），
+        // 覆盖 wave_slot 的奇偶近远表。【2026-10-22 主人拍板】全远程档已取消，
+        // 混合波每槽按 WAVE_COMP_MIXED_RANGED_P（1/4）抽远程 → 近战:远程 ≈ 3:1~4:1。
         // 池内没有对应风格怪时 PickSpriteByStyle 自带回落原池，不会空刷。
-        if (_activeWaveComposition == 1 || _activeWaveComposition == 2 || _activeWaveComposition == 3)
+        if (_activeWaveComposition > 0)
         {
-            bool slotWantRanged = _activeWaveComposition == 3
-                || (_activeWaveComposition == 2 && Random.value < 0.5f);
+            bool slotWantRanged = _activeWaveComposition == 2
+                && Random.value < GameConfig.WAVE_COMP_MIXED_RANGED_P;
             return PickSpriteByStyle(availableSprites, chapter, slotWantRanged, usedThisWave, slotIndex, stageIdx);
         }
 

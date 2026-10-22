@@ -61,6 +61,9 @@ public partial class AdventureUI
     /// </summary>
     bool IsActivityMode(int mode) => BattleModes.FromSlot(mode).Id == BattleModeId.GoldDungeon;
 
+    /// <summary>是否主线冒险。模式身份问模式表，不写魔数。</summary>
+    bool IsMainMode(int mode) => BattleModes.FromSlot(mode).Id == BattleModeId.Normal;
+
     /// <summary>是否无限裂隙（下标 2，2026-10-17 开放）</summary>
     bool IsEndlessMode(int mode) => BattleModes.FromSlot(mode).Id == BattleModeId.Endless;
 
@@ -227,6 +230,9 @@ public partial class AdventureUI
                 var iconImg = btnT.Find("Icon")?.GetComponent<Image>();
                 if (modeButtonIcons.Length > i && iconImg != null) modeButtonIcons[i] = iconImg;
             }
+
+            // 模式标签字号统一出口（2026-10-22 主人拍板，见 ApplyModeLabelStyle）
+            ApplyModeLabelStyle();
         }
 
         var right = transform.Find("RightContent");
@@ -294,6 +300,23 @@ public partial class AdventureUI
         {
             dropTitleLabel.fontSize = DetailSubTitleFontSize;
             dropTitleLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+        }
+    }
+
+    /// <summary>
+    /// 左侧模式按钮标签字号（2026-10-22 主人拍板：主线/无限标签有点小 → 30）。
+    /// 只动字号；按钮宽高/位置以预制体为准（铁律 32）。
+    /// 30 号下「主线冒险」4 字基本贴满标签框，关掉折行防止溢出时断成两行。
+    /// </summary>
+    void ApplyModeLabelStyle()
+    {
+        if (modeButtonLabels == null) return;
+        for (int i = 0; i < modeButtonLabels.Length; i++)
+        {
+            var lbl = modeButtonLabels[i];
+            if (lbl == null) continue;
+            lbl.fontSize = ModeLabelFontSize;
+            lbl.horizontalOverflow = HorizontalWrapMode.Overflow;
         }
     }
 

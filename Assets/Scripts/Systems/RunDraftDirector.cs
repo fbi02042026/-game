@@ -83,6 +83,9 @@ public class RunDraftDirector : MonoBehaviour
         }
 
         if (resumed) RestoreHeroProgress();
+        // 【2026-10-22 主人拍板「打一关回一次」】续局还原局内金币池（ReturnToTownKeepRun 存进 runGold），
+        // 启动金只在开新局补（上面 !resumed 分支），续局靠这里把池子接回来。
+        if (resumed) RestoreRunGoldPool();
         SyncHeroLevel();
 
         RebuildPlayerSkills();
@@ -93,6 +96,11 @@ public class RunDraftDirector : MonoBehaviour
         RunSkillBarUI.Refresh();
 
         if (tutorial) return;
+
+        // 【2026-10-22 主人原话「中途意外退出没打完 → 让玩家选继续/重新开始」】
+        // 从这一刻起本局标记为「战斗中」：现在退出游戏 = 中断，下次进本会弹「继续上一局 / 重新开始」。
+        // 干净收尾（打一关回一次回城 / 局结束清档）会把标记清掉或连局一起丢，见 RunLoadout 三个出口。
+        RunLoadout.MarkBattleBegun();
 
         if (resumed && RunLoadout.Data != null)
         {
@@ -112,6 +120,16 @@ public class RunDraftDirector : MonoBehaviour
     {
         var hero = Hero.Instance;
         if (hero != null) hero.pendingLevelUps = 0;
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板「打一关回一次」】续局还原局内金币池。
+    /// 池子在 ReturnToTownKeepRun 时写进 RunLoadoutData.runGold，这里还原进 BattleManager。
+    /// </summary>
+    void RestoreRunGoldPool()
+    {
+        if (RunLoadout.Data == null) return;
+        BattleManager.Instance?.RestoreRunGoldPool(RunLoadout.Data.runGold);
     }
 
     void SyncHeroLevel()

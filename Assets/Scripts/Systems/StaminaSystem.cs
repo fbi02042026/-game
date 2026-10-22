@@ -9,9 +9,10 @@ public static class StaminaSystem
     /// <summary>回复 1 点所需秒数（可调）。
     /// 2026-10-17 主人拍板：60 → 300（5 分钟 1 点），全局生效，主线同步变慢（主人已知情）。</summary>
     public const int REGEN_SECONDS_PER_POINT = 300;
-    public const int ADVENTURE_COST = 10;
-    /// <summary>无限裂隙单次进入消耗（2026-10-17 主人拍板：每天 2 次 × 20 体力）</summary>
-    public const int ENDLESS_RIFT_COST = 20;
+    /// <summary>主线冒险进本消耗。【2026-10-22 主人拍板「打一关回一次」】10 → 5：现在打一个**小关**就回城再进，进本次数变多，单次降价对冲。</summary>
+    public const int ADVENTURE_COST = 5;
+    /// <summary>无限裂隙单次进入消耗（2026-10-17 主人拍板：每天 2 次 × 20 体力；【2026-10-22 主人拍板】20 → 10）</summary>
+    public const int ENDLESS_RIFT_COST = 10;
 
     public static int Current
     {

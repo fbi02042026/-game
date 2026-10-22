@@ -21,6 +21,12 @@ public class SpeechBubbleTalker : MonoBehaviour
     public float gapBetweenLines = 1.2f;
     [Range(1, 4)] public int maxLines = 3;
 
+    [Header("轮播闲置间隔（2026-10-22 主人报「对话框一个接一个没停过」）")]
+    /// <summary>说完一句后闲置多久再说下一句（秒，区间内随机）。
+    /// 原口径只隔 gapBetweenLines(1.2s) 就接下一句 = 14 句无限连播；现改为看板娘偶尔说一句。</summary>
+    public float idleMinSeconds = 25f;
+    public float idleMaxSeconds = 45f;
+
     Vector2 _baseBubbleSize = new Vector2(180f, 107f);
     bool _baseSizeCaptured;
 
@@ -407,6 +413,9 @@ public class SpeechBubbleTalker : MonoBehaviour
             string line = _lines[Random.Range(0, _lines.Count)];
             yield return SpeakLine(line);
             yield return new WaitForSeconds(gapBetweenLines);
+            // 【2026-10-22 主人报「一个接一个没停过」】真闲置：说完歇 25~45 秒（随机）再轮下一句，
+            // 不再 1.2 秒连播。点击插播（SpeakOnceThenResume）不受影响。
+            yield return new WaitForSeconds(Random.Range(idleMinSeconds, idleMaxSeconds));
         }
     }
 

@@ -29,7 +29,6 @@ public class MercGainCinematicUI : MonoBehaviour
     float _bgTargetAlpha;
     Coroutine _co;
     System.Action _onClosed;
-    bool _closing;
 
     /// <summary>播一场获得佣兵演出；关闭（点击 / 超时）后回调 onClosed。预制体缺失时直接回调不阻塞流程。
     /// subtitle 非空时在名字下方显示副标题（引导入队用「已加入小队」；领取场景不传）。
@@ -213,14 +212,14 @@ public class MercGainCinematicUI : MonoBehaviour
         yield return new WaitForSecondsRealtime(NameDelay);
         yield return StartCoroutine(CoNameIn());
 
-        // ④ 等点击 / 超时
+        // ④ 等点击 / 超时（点击即 Close 直接销毁，协程随之结束，无需 _closing 标记）
         float wait = 0f;
-        while (!_closing && wait < AutoCloseAfter)
+        while (wait < AutoCloseAfter)
         {
             wait += Time.unscaledDeltaTime;
             yield return null;
         }
-        if (!_closing) Close();
+        Close();
     }
 
     IEnumerator CoNameIn()
@@ -240,29 +239,10 @@ public class MercGainCinematicUI : MonoBehaviour
         _name.transform.GetComponent<RectTransform>().anchoredPosition = _nameBasePos;
     }
 
-    /// <summary>点击任意处 / 超时 → 全体快速淡出 → 回调。</summary>
+    /// <summary>点击任意处 / 超时 → 直接关闭。
+    /// 【2026-10-22 主人拍板】原实现是 0.2 秒全体淡出，主人看「背景像被缩放了一下」；改为不要任何动画，点击立即关。</summary>
     public void Close()
     {
-        if (_closing) return;
-        _closing = true;
-        if (_co != null) { StopCoroutine(_co); _co = null; }
-        StartCoroutine(CoClose());
-    }
-
-    IEnumerator CoClose()
-    {
-        float t = 0f;
-        const float dur = 0.2f;
-        float bg0 = _bgCg != null ? _bgCg.alpha : 0f;
-        while (t < dur)
-        {
-            t += Time.unscaledDeltaTime;
-            float u = 1f - Mathf.Clamp01(t / dur);
-            if (_bgCg != null) _bgCg.alpha = bg0 * u;
-            if (_standCg != null) _standCg.alpha = u;
-            if (_nameCg != null) _nameCg.alpha = u;
-            yield return null;
-        }
         Done();
     }
 

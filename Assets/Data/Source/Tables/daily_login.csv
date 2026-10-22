@@ -7,14 +7,14 @@
 # 【2026-10-20 主人拍板】佣兵本体挪到 D1（starter_1），D4 改塔克碎片×10；塔克默认已解锁，D1 实际自动折算碎片×10。
 # 第 0 行为表头，# 开头行忽略。
 id,table,day,name,grant,param,amount,name2,grant2,param2,amount2,note
-starter_1,starter,1,塔克·重盾,merc,H003,,,,,新手第1天 ★送稀有佣兵本体（塔克默认已解锁→自动折算碎片×10）
-starter_2,starter,2,体力 ×50,resource,stamina,50,,,,,,
+starter_1,starter,1,体力 ×50,resource,stamina,50,,,,,★2026-10-22 主人拍板：碎片只放第2/4/6/8天，其余天数给资源（体力/金币/天赋石/钻石）
+starter_2,starter,2,塔克碎片 ×10,mercfrag,H003,10,,,,,★2026-10-22 主人拍板：第2天给1星碎片×10
 starter_3,starter,3,金币 ×120,resource,gold,120,,,,,★2026-10-20 钻石停发：原钻石×30按商店汇率(1钻=4金)折金币×120
-starter_4,starter,4,塔克碎片 ×20,mercfrag,H003,20,,,,,★2026-10-22 拍板：塔克碎片按领取次序 10/20/20/20（合计70=稀有满星消耗），本格 10→20
+starter_4,starter,4,塔克碎片 ×20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第4天给2星碎片×20
 starter_5,starter,5,金币 ×800,resource,gold,800,,,,,,
-starter_6,starter,6,塔克碎片 ×20,mercfrag,H003,20,,,,,★2026-10-22 拍板：本格 10→20 且碎片不再吃双倍（IsStarterDouble 只留第3格），删旧「双倍」口径
+starter_6,starter,6,塔克碎片 ×20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第6天给3星碎片×20（与D8合计40=第3星），累计到D8正好70满星、无溢出；碎片不再吃双倍
 starter_7,starter,7,金币 ×200,resource,gold,200,,,,,★2026-10-20 钻石停发：原钻石×50折金币×200
-starter_8,starter,8,塔克碎片 ×20,mercfrag,H003,20,,,,,★2026-10-22 拍板：15→20；佣兵本体已在第1天给过，这里起每轮补碎片
+starter_8,starter,8,塔克碎片 ×20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第8天给3星碎片×20（与D6合计40=第3星），累计D2+D4+D6+D8=70正好满星、零溢出
 cycle_1,cycle,1,体力 ×15,resource,stamina,15,,,,,
 cycle_2,cycle,2,金币 ×250,resource,gold,250,,,,,,
 cycle_3,cycle,3,金币 ×240,resource,gold,240,,,,,★2026-10-22 拍板：塔克碎片×3取消（碎片只走统一发碎片入口），改金币×240

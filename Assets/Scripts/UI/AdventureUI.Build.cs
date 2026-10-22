@@ -91,7 +91,6 @@ public partial class AdventureUI
             var label = btn.GetComponentInChildren<Text>();
             if (modeButtonLabels.Length > i) modeButtonLabels[i] = label;
 
-            // 可选：如果你在 Inspector 填了 modeButtonSpriteIcons，则替换 icon 字符为图片
             if (modeButtonSpriteIcons != null && modeButtonSpriteIcons.Length > i && modeButtonSpriteIcons[i] != null)
             {
                 var iconImg = btn.transform.Find("Icon")?.GetComponent<Image>();
@@ -104,6 +103,9 @@ public partial class AdventureUI
                 }
             }
         }
+
+        // 字号与预制体绑定路径同一出口（2026-10-22 主人拍板，见 ApplyModeLabelStyle）
+        ApplyModeLabelStyle();
     }
 
     Button CreateSidebarButton(Transform parent, string name, string label,

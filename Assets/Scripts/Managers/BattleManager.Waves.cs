@@ -47,6 +47,24 @@ public partial class BattleManager
     /// </summary>
     #endregion
     #region 关卡加载与波次执行
+
+    // —— 本关掉落快照基线（冒险页获得奖励弹窗用，见 AdventureRewardNotice）——
+    long _stageGoldEarnedAtStart;
+    int _stageTalentAtStart;
+    int _stageEnchantAtStart;
+    int _stageMatsAtStart;
+    int _stageEquipCountAtStart;
+
+    /// <summary>进关时记一次 RunStats 基线；关末差值 = 本关实际掉落（唯一口径，别处不要再算一遍）。</summary>
+    void SnapshotStageRewardBaseline()
+    {
+        _stageGoldEarnedAtStart = RunStats != null ? RunStats.GoldEarned : 0;
+        _stageTalentAtStart = RunStats != null ? RunStats.TalentGained : 0;
+        _stageEnchantAtStart = RunStats != null ? RunStats.EnchantStoneDelta : 0;
+        _stageMatsAtStart = RunStats != null ? RunStats.DecomposeMatDelta : 0;
+        _stageEquipCountAtStart = RunStats != null && RunStats.EquipGains != null ? RunStats.EquipGains.Count : 0;
+    }
+
     public void LoadStage(StageData stage)
     {
         MonsterStatsTable.Reload();
@@ -63,6 +81,9 @@ public partial class BattleManager
         BossStageVariantTable.Reload(); // Boss 关变体 V1.0：每关重载（缺表/关闭时回退「只有 Boss 本体」）
 
         currentStage = stage;
+        // 【2026-10-22 新增】本关掉落快照基线：关末用「现值 − 基线」算本关实际掉落，
+        // 供冒险页「获得奖励」弹窗（AdventureRewardNotice，与结算同账不新造数值）。
+        SnapshotStageRewardBaseline();
         ClearAllMonsters();
         _waves.Clear();
         _totalWaves = 0;

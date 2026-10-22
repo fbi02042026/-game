@@ -27,6 +27,7 @@ public partial class AdventureUI
         RefreshChapterChrome();
         RefreshDetailPanel();
         RefreshContentLock();
+        RefreshChestNodes();   // 章内 10 小关宝箱节点（2026-10-22 新增，见 AdventureUI.ChestNodes.cs）
     }
 
     /// <summary>按路线表重算可选章节，并把 _selectedChapter 修正到集合内。</summary>
@@ -149,7 +150,10 @@ public partial class AdventureUI
     /// </summary>
     void EnsureWorldMapEntry()
     {
-        bool show = SaveSystem.Instance != null && SaveSystem.Instance.Data != null
+        // 【2026-10-22 主人拍板】世界地图入口只在主线冒险模式显示（裂隙等其它模式一概隐藏），
+        // 原解锁条件（已通关第 1 章）保留。
+        bool show = IsMainMode(_selectedMode)
+                    && SaveSystem.Instance != null && SaveSystem.Instance.Data != null
                     && SaveSystem.Instance.Data.HasClearedChapter(1);
         var pre = transform.Find("RightContent/WorldMapBtn");
         if (pre != null) pre.gameObject.SetActive(show);
@@ -270,15 +274,31 @@ public partial class AdventureUI
             fitter.aspectRatio = GameConfig.DESIGN_WIDTH / GameConfig.DESIGN_HEIGHT;
     }
 
+    /// <summary>StageNodes 下预制体自带的整图节点名（主人摆的，别动名字）。</summary>
+    const string RiftMapNodeName = "无限裂隙";
+
     void RefreshMapLayers()
     {
         if (stageNodeContainer == null) return;
+        // 【2026-10-22 主人拍板】无限裂隙模式下地图整体换成 StageNodes/无限裂隙 节点（预制体自带整图），
+        // 章节地图 Node_1..8 隐藏；主线模式反之，整图节点一律隐藏。
+        bool riftMode = IsEndlessMode(_selectedMode);
+        Transform riftNode = null;
         for (int i = 0; i < stageNodeContainer.childCount; i++)
         {
             var child = stageNodeContainer.GetChild(i);
+            if (child.name == RiftMapNodeName)
+            {
+                riftNode = child;
+                continue;
+            }
             int ch = ParseNodeChapter(child.name, i + 1);
-            child.gameObject.SetActive(ch == _selectedChapter);
+            child.gameObject.SetActive(!riftMode && ch == _selectedChapter);
         }
+        if (riftNode != null)
+            riftNode.gameObject.SetActive(riftMode);
+        else if (riftMode)
+            Debug.LogError($"[AdventureUI] StageNodes 下找不到「{RiftMapNodeName}」节点（预制体缺失），裂隙地图无从显示");
     }
 
     static int ParseNodeChapter(string name, int fallback)

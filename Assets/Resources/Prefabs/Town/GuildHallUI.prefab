@@ -110,9 +110,9 @@ RectTransform:
   - {fileID: 1969495927194848820}
   m_Father: {fileID: 9213339651216701932}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0.5}
-  m_AnchorMax: {x: 0, y: 0.5}
-  m_AnchoredPosition: {x: 175, y: 0}
+  m_AnchorMin: {x: 0, y: 1}
+  m_AnchorMax: {x: 0, y: 1}
+  m_AnchoredPosition: {x: 175, y: -64}
   m_SizeDelta: {x: 220, y: 70}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &387488829003363667
@@ -3652,6 +3652,7 @@ MonoBehaviour:
   goldPlusButton: {fileID: 2715382678137805538}
   staminaText: {fileID: 0}
   staminaPlusButton: {fileID: 0}
+  diamondText: {fileID: 0}
   staminaRegenText: {fileID: 0}
   mailButton: {fileID: 74503473685801970}
   dailyLoginButton: {fileID: 0}
@@ -6916,7 +6917,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &7751906329682441893
 RectTransform:
   m_ObjectHideFlags: 0

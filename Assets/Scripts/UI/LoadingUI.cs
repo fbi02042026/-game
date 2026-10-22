@@ -39,6 +39,23 @@ public class LoadingUI : MonoBehaviour
             percentText.font = GameFonts.GetNumber();
         if (tipText != null)
             tipText.font = GameFonts.GetChinese();
+
+        // 【2026-10-22 诊断】真机 loading「整体放大」排查（编辑器 1240x2772 正常、真机放大）。
+        // 只打日志不改任何行为，定位后删除。对照四个嫌疑点：
+        // ① Screen 尺寸瞬态（真机冷启动宽高颠倒）→ match 判定错；
+        // ② matchWidthOrHeight 判定（瘦屏应=0，逻辑宽恒 720）；
+        // ③ canvas.scaleFactor / canvas 实际 rect（ScreenSpaceCamera 下由相机 frustum 决定）；
+        // ④ 所绑相机是否 null / rect 是否被 letterbox 裁过。
+        var fitScaler = canvas.GetComponent<CanvasScaler>();
+        var fitCam = canvas.worldCamera;
+        var fitRt = transform as RectTransform;
+        Debug.Log($"[LoadingFit] screen={Screen.width}x{Screen.height} " +
+                  $"match={(fitScaler != null ? fitScaler.matchWidthOrHeight.ToString("0.00") : "noScaler")} " +
+                  $"scaleFactor={canvas.scaleFactor.ToString("0.00")} " +
+                  $"canvasRect={fitRt.rect} " +
+                  $"cam={(fitCam != null ? fitCam.name : "null")} " +
+                  $"camRect={(fitCam != null ? fitCam.rect.ToString() : "-")} " +
+                  $"camAspect={(fitCam != null ? fitCam.aspect.ToString("0.000") : "-")}");
     }
 
     /// <summary>兼容旧调用。</summary>

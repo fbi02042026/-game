@@ -382,7 +382,8 @@ public partial class DailyLoginUI
     /// <summary>
     /// B10: 底部「第N天可领取」跟着累计天数走（主人反馈：一天没领，最下面却写着"第4天"）。
     /// 只改 ResolveInfoProgressText 认出来的那一行，其余 MercText（含「限定角色」行）一律保持预制体原文。
-    ///   未达 AccumTargetDays → "还差 N 天可领取" / 已达未领 → "可领取" / 已领 → "已领取"
+    ///   未达 AccumTargetDays → "8天获得满星" / 已达未领 → "可领取" / 已领 → "已领取"
+    ///   【2026-10-22 主人拍板】倒计时文案「还差 6 天可领取」改成「8天获得满星」——进度看上面的 N/8，这里讲目标。
     /// </summary>
     void ApplyInfoProgressText(int days)
     {
@@ -394,7 +395,7 @@ public partial class DailyLoginUI
         string txt;
         if (DailyLoginSystem.IsAccumClaimed()) txt = "已领取";
         else if (days >= DailyLoginDefs.AccumTargetDays) txt = "可领取";
-        else txt = "还差 " + (DailyLoginDefs.AccumTargetDays - days) + " 天可领取";
+        else txt = DailyLoginDefs.AccumTargetDays + "天获得满星";
 
         if (t.text != txt) t.text = txt;
     }

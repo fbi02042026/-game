@@ -185,15 +185,15 @@ public partial class WavePlanner
     }
 
     /// <summary>
-    /// 【2026-10-20 主人拍板】摇本波近远编成：全近战 / 混合 / 全远程。
-    /// 概率真源 = GameConfig.WAVE_COMP_ALL_MELEE_P / WAVE_COMP_ALL_RANGED_P，其余为混合。
-    /// 返回值直接写入 WaveData.compositionStyle（1=全近战 2=混合 3=全远程）。
+    /// 【2026-10-20 主人拍板】摇本波近远编成：全近战 / 混合。
+    /// 【2026-10-22 主人拍板】取消「全远程」档（主人报首波摇成全远程没法打）；
+    /// 混合波每槽按 GameConfig.WAVE_COMP_MIXED_RANGED_P 抽远程，整体近战:远程 ≈ 3:1~4:1。
+    /// 返回值直接写入 WaveData.compositionStyle（1=全近战 2=混合）。
     /// </summary>
     static int RollWaveComposition()
     {
         float r = UnityEngine.Random.value;
         if (r < GameConfig.WAVE_COMP_ALL_MELEE_P) return 1;
-        if (r < GameConfig.WAVE_COMP_ALL_MELEE_P + GameConfig.WAVE_COMP_ALL_RANGED_P) return 3;
         return 2;
     }
 
@@ -204,7 +204,6 @@ public partial class WavePlanner
         {
             case 1: return " 全近战";
             case 2: return " 混合";
-            case 3: return " 全远程";
             default: return "";
         }
     }

@@ -249,15 +249,18 @@ public class RewardPopupUI : MonoBehaviour
 
         var panelT = FindChild(transform, "Panel");
         _panel = panelT != null ? panelT.gameObject : null;
+        // 2026-10-22 主人拍板：一律用主人的预制体，不许再出现「临时界面」。
+        // 格子本来就挂在 Panel 下（见 Layout 里 B3 的说明），Grid 只是历史结构、预制体里可以没有，
+        // 所以不再把 Grid 当必需节点——之前缺 Grid 就整块回退纯色兜底，表现为预制体上面又压一个深蓝临时弹窗。
         var gridT = panelT != null ? FindChild(panelT, "Grid") : null;
         _grid = gridT as RectTransform;
         var tplT = FindChild(transform, "CellTemplate");
         _cellTemplate = tplT as RectTransform;
         var btnT = panelT != null ? FindChild(panelT, "ConfirmBtn") : null;
 
-        if (_panel == null || _grid == null || _cellTemplate == null || btnT == null)
+        if (_panel == null || _cellTemplate == null || btnT == null)
         {
-            Debug.LogError("[RewardPopup] 预制体缺 Panel/Grid/CellTemplate/ConfirmBtn，回退纯色兜底");
+            Debug.LogError("[RewardPopup] 预制体缺 Panel/CellTemplate/ConfirmBtn，回退纯色兜底");
             BuildFallback();
             return;
         }
