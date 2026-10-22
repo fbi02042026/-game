@@ -49,6 +49,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     Text _activeDesc;
     Text _activeObj;
     Text _activeProg;
+    // 2026-10-22 主人拍板：Paper 顶部的「进行中」小标头改为显示当前页签名（主线/支线/成就…）
+    Text _ongoingHeader;
+    // 标题/描述改挂 mask（字随图走）只做一次
+    bool _captionFollowsArt;
     Transform _listContent;
     GameObject _claim;
     // 领取按钮置灰（2026-10-20 主人要求）：无可领成就时按钮变灰不可点。
@@ -71,7 +75,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     bool _logChromeOpen;
 
     const float FrameTopReserveWithBar = 120f;
-    const float FrameTopReserveLogOpen = 8f;
+    // 2026-10-22 主人拍板：日志全屏打开也按状态栏/刘海预留 100px（原 8px 会把标题横幅怼进状态栏）
+    const float FrameTopReserveLogOpen = 100f;
     const float FrameBottomReserve = 150f;
     const float FrameSidePad = 16f;
     // 列表首行章节头向上溢出约 52px，Content 顶部至少留这么多，否则被 Viewport 裁
@@ -185,6 +190,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             _listContent = _scroll.content;
 
         _paper = transform.Find("Root/Frame/Paper")?.gameObject;
+        _ongoingHeader = _paper != null
+            ? _paper.transform.Find("OngoingHeader")?.GetComponent<Text>()
+            : null;
+        EnsureCaptionFollowsArt();
         BindAchievementClaimButton();
         _activeCard = FindTransform("ActiveCard")?.gameObject;
         var frame = transform.Find("Root/Frame");
@@ -260,6 +269,45 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     }
 
     bool IsCodexTab(LogTab tab) => tab == LogTab.Monster || tab == LogTab.Merc;
+
+    /// <summary>
+    /// 2026-10-22 主人拍板「字随图走」：ActiveTitle/ActiveDesc 原本挂在 ActiveCard 的
+    /// 比例锚点上，而 ActiveCard/mask 是定尺寸 440.6×274.7、插图 SetNativeSize 后也不随
+    /// 屏幕伸缩 —— 瘦长屏上比例锚点的字整体上漂，与图错位。这里把两条字幕改挂到 mask 下、
+    /// 按 mask 比例锚定（标题占上带 0.64~0.96，描述占中带 0.26~0.62），图走字跟着走。
+    /// 仅运行时改挂，不动预制体文件；只处理正式 Paper，Paper1 模板整页隐藏不碰。
+    /// </summary>
+    void EnsureCaptionFollowsArt()
+    {
+        if (_captionFollowsArt) return;
+        var card = transform.Find("Root/Frame/Paper/ActiveCard");
+        var mask = card != null ? card.Find("mask") : null;
+        if (mask == null)
+        {
+            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/Paper/ActiveCard/mask，标题/描述无法跟图走");
+            return;
+        }
+        if (ReparentCaptionUnderMask(card.Find("ActiveTitle"), mask, 0.64f, 0.96f) |
+            ReparentCaptionUnderMask(card.Find("ActiveDesc"), mask, 0.26f, 0.62f))
+            _captionFollowsArt = true;
+    }
+
+    static bool ReparentCaptionUnderMask(Transform node, Transform mask, float yMin, float yMax)
+    {
+        if (node == null)
+        {
+            Debug.LogError("[AdventureLogUI] ActiveCard 下缺少 ActiveTitle/ActiveDesc，字幕跟图走失败");
+            return false;
+        }
+        node.SetParent(mask, false);
+        var rt = (RectTransform)node;
+        rt.anchorMin = new Vector2(0.05f, yMin);
+        rt.anchorMax = new Vector2(0.97f, yMax);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        return true;
+    }
 
     void ApplyModeVisibility()
     {
@@ -349,7 +397,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     }
 
     /// <summary>
-    /// 关闭钮在预制体里按顶栏留 120px 定位；日志全屏打开时顶距改为 8px，需把钮拉回外框右上角。
+    /// 关闭钮在预制体里按顶栏留 120px 定位；日志全屏打开时顶距改为 100px（2026-10-22 安全区
+    /// 预留，原 8px 会与状态栏/微信胶囊重叠），需把钮拉回外框右上角并避开胶囊。
     /// </summary>
     void EnsureCloseButtonPosition()
     {
@@ -719,6 +768,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (_activeDesc != null) _activeDesc.text = desc;
         if (_activeObj != null) _activeObj.text = objective;
         if (_activeProg != null) _activeProg.text = progress;
+
+        // 2026-10-22 主人拍板：Paper 顶部小标头（预制体写死「进行中」）改为显示当前页签名；
+        // 图鉴页(怪物/佣兵)此节点已被 ApplyModeVisibility 隐藏，不受影响。
+        if (_ongoingHeader != null) _ongoingHeader.text = CurrentTabName;
 
         RebuildRows(rows);
 

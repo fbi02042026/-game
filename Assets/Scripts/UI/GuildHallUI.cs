@@ -17,6 +17,8 @@ public class GuildHallUI : MonoBehaviour
     public Button goldPlusButton;
     public Text staminaText;
     public Button staminaPlusButton;
+    // 2026-10-22 主人拍板（T14）：顶条钻石余额只绑显示，加号不绑任何点击、不写扣钻石逻辑
+    public Text diamondText;
     [Tooltip("体力未满时显示回满倒计时，可空（自动在体力Panel下创建）")]
     public Text staminaRegenText;
 
@@ -278,6 +280,16 @@ public class GuildHallUI : MonoBehaviour
     {
         RefreshGold();
         RefreshStamina();
+        RefreshDiamond();   // 2026-10-22 主人拍板（T14）：钻石余额并入现有 HUD 刷新链（ResourceWallet.Add/TrySpend 会自动调 RefreshAllHudStatic）
+    }
+
+    /// <summary>顶条钻石余额显示（T14）：只读 ResourceWallet 的 Diamond，不做任何扣费/加号点击逻辑。</summary>
+    void RefreshDiamond()
+    {
+        if (diamondText == null) return;
+        var data = SaveSystem.Instance?.Data;
+        long diamond = data != null ? ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond) : 0;
+        diamondText.text = FormatResource(diamond);
     }
 
     /// <summary>确保底部导航组件存在并初始化为公会选中。</summary>
@@ -372,6 +384,19 @@ public class GuildHallUI : MonoBehaviour
                 Transform plus = FindDeepChild(goldPanel, "PlusButton");
                 if (plus != null) goldPlusButton = plus.GetComponent<Button>();
             }
+        }
+
+        // 2026-10-22 主人拍板（T14）：顶条钻石余额按名绑定钻石Panel/钻石Text；只绑显示，加号不接任何点击
+        if (diamondText == null)
+        {
+            Transform diamondPanel = FindDeepChild(transform, "钻石Panel");
+            if (diamondPanel != null)
+            {
+                Transform t = FindDeepChild(diamondPanel, "钻石Text");
+                if (t != null) diamondText = t.GetComponent<Text>();
+            }
+            if (diamondText == null)
+                Debug.LogError("[GuildHall] 未找到顶条钻石余额节点 钻石Panel/钻石Text（应在主界面预制体顶条），钻石余额将无法显示");
         }
     }
 

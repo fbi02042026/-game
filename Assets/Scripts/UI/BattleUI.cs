@@ -159,9 +159,12 @@ public partial class BattleUI : MonoBehaviour
         else
             UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
 
-        // 刘海 / 挖孔：战斗顶栏（TopBar / TopStatus / ProgressBar 那条）整体下移 safeArea 顶部高度。
-        // 只挪 anchoredPosition、不动锚点与尺寸；只会挑最外层那个节点，父子不会双倍下推。
-        SafeAreaFitter.ApplyTopOffset(transform, "TopBar", "TopStatus", "ProgressBar");
+        // 刘海 / 挖孔：战斗顶栏（TopBar / TopStatus / ProgressBar 那条）+ 屏幕血条 BossBar
+        // 整体下移 safeArea 顶部高度。只挪 anchoredPosition、不动锚点与尺寸；
+        // 只会挑最外层那个节点，父子不会双倍下推。
+        // 【2026-10-22 血条偏下修复】BossBar 预制体已改贴顶锚（y=-163），在此加入名单后
+        // 与顶栏同步避让：瘦屏不再随画布中心下漂，挖孔屏也不再压住状态行（设计间距 38 保持）。
+        SafeAreaFitter.ApplyTopOffset(transform, "TopBar", "TopStatus", "ProgressBar", "BossBar");
 
         BindAutoBattleUnavailable();
         if (characterButton != null) characterButton.onClick.AddListener(OnOpenCharacter);
@@ -381,7 +384,16 @@ public partial class BattleUI : MonoBehaviour
         UpdateSkillAvatars();
         UpdateMercSkillSlots();
         UpdateBackpackGrid();
-        UpdateStageProgress(stageIdx);
+        // 【2026-10-21 主人拍板】顶部进度条改按当前关波次推进：实时读 BattleManager 的波次状态
+        //（同 Assembly，_waves/_activeWaveIndex 均 internal 可读）。已清波数 = 当前进行中波下标
+        //（第 i 波进行中 → 已清 i 波；-1 尚未开刷 → 0），总波数 = _waves.Count。
+        var bmProgress = BattleManager.Instance;
+        if (bmProgress != null)
+        {
+            int totalW = bmProgress._waves != null ? bmProgress._waves.Count : 0;
+            int clearedW = Mathf.Clamp(bmProgress._activeWaveIndex, 0, totalW);
+            UpdateWaveProgress(clearedW, totalW);
+        }
         // 底部 4 技槽 / 5 装备槽以前只在 Start 后 0.1s 刷一次，
         // 战斗中换装备、波次刷新都不会更新 —— 这里补上，保证每次全量刷新都同步。
         UpdateRunSkillSlots();

@@ -54,7 +54,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
     const float SwapSwaySpeed = 6f;   // 晃动角速度（弧度/秒，周期约 1 秒）
 
     // 列表卡模板（预制体 Panel/Slot；2026-10-18 主人拍板：点卡一次直接弹详情弹窗，
-    // 卡上自带的「查看/替换」双钮不再接线、仅保持隐藏，见 Cards.cs FillTemplateCard）
+    // 卡上「查看/替换」双钮不再接线、仅保持隐藏；【2026-10-22 主人拍板】卡上新增「升阶」钮
+    // 由代码在克隆路径绑定（见 Cards.cs FillTemplateCard））
     GameObject _listTemplate;
 
     /// <summary>本地编辑态（每次操作后从存档重读，改动即时写盘）。
@@ -249,6 +250,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
             closeBtn.onClick.RemoveAllListeners();
             closeBtn.onClick.AddListener(Close);
         }
+
+        // 【2026-10-22 主人拍板】窗口级「Btn进阶」入口作废：升阶按钮已由主人挪进佣兵卡片 Slot 里
+        // （查看/替换/升阶三钮），绑定改到每张克隆卡上，见 Cards.cs FillTemplateCard。
 
         int qxCount = 0;
         for (int i = 0; i < _poolSlots.Count; i++)

@@ -147,17 +147,15 @@ public static class MercSkillMapping
         return MercRosterDefs.MercRarity.Common;
     }
 
-    public static int RarityToStar(MercRosterDefs.MercRarity rarity)
-    {
-        switch (rarity)
-        {
-            case MercRosterDefs.MercRarity.Legendary: return 5;
-            case MercRosterDefs.MercRarity.Rare: return Random.Range(3, 5);
-            default: return Random.Range(1, 3);
-        }
-    }
+    // 【2026-10-22 主人拍板 T13】RarityToStar 掷点已删除：佣兵获得时零星（招募实例 star=0），
+    // 局外升星走 MercStarDefs/MercStarSystem；StarToRarity 保留（稀有度兜底解析还在用）。
 
-    /// <summary>按稀有度从花名册抽一个 hireId。</summary>
+    /// <summary>
+    /// 按稀有度从花名册抽一个 hireId。
+    /// 【2026-10-22 主人拍板 T9】满星降权：背包碎片攒够满星总消耗（普通90/稀有70/传奇10，
+    /// MercStarDefs.FullStarFragTotal）的佣兵在本稀有度池内权重 ×0.2（5→1）—— 不退池、重掷照旧；
+    /// 稀有度概率口径（酒馆 66.5/33/0.5）在调用方 RollRarityByBattleWeight，这里不碰。
+    /// </summary>
     public static bool TryPickHireId(MercRosterDefs.MercRarity rarity, out MapRow row)
     {
         EnsureLoaded();
@@ -172,7 +170,28 @@ public static class MercSkillMapping
             row = default;
             return false;
         }
-        row = pool[Random.Range(0, pool.Count)];
+
+        // 权重 = 5，满星碎片攒够 → ×0.2 = 1（整数权重，等价主人建议的 ×0.2）
+        int baseWeight = 5;
+        int downWeight = Mathf.Max(1, Mathf.RoundToInt(baseWeight * MercStarDefs.FullStarRecruitDownWeight));
+        int total = 0;
+        var weights = new int[pool.Count];
+        for (int i = 0; i < pool.Count; i++)
+        {
+            weights[i] = MercStarSystem.IsFullStarFragReady(pool[i].HireId) ? downWeight : baseWeight;
+            total += weights[i];
+        }
+        int roll = Random.Range(0, total);
+        for (int i = 0; i < pool.Count; i++)
+        {
+            if (roll < weights[i])
+            {
+                row = pool[i];
+                return true;
+            }
+            roll -= weights[i];
+        }
+        row = pool[pool.Count - 1];
         return true;
     }
 

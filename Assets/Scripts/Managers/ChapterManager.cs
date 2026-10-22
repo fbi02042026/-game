@@ -380,8 +380,12 @@ public class ChapterManager : Singleton<ChapterManager>
     {
         StageData next = target ?? GetNextStage();
         if (next == null) return null;
-        next.type = StageRoller.Roll(RollState, next.stageIndex, GameConfig.STAGES_PER_CHAPTER);
-        Debug.Log($"[ChapterManager] 抽到下一关 第{next.stageIndex + 1}关 = {next.type}"
+        // 【2026-10-22 主人拍板】正式关类型按位置定死（v4 回合制）：0-based 4/9 → Boss、2/6 → 50% 精英、其余普通。
+        // 原权重抽签保留退役不删（恢复关闸已在）；引导局/金币本/裂隙不走本方法（金币本 StartGoldDungeon、
+        // 裂隙 StartEndlessRift 各自建关，类型来源未波及）。
+        // next.type = StageRoller.Roll(RollState, next.stageIndex, GameConfig.STAGES_PER_CHAPTER);
+        next.type = StageRoller.RollByPosition(next.stageIndex);
+        Debug.Log($"[ChapterManager] 定死下一关类型 第{next.stageIndex + 1}关 = {next.type}（v4 按位置，2026-10-22 主人拍板）"
                   + $"（恢复{RollState.restCount}/{StageRoller.MaxRestPerChapter} 战斗{RollState.combatStagesDone}）");
         return next;
     }

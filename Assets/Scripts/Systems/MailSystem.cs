@@ -62,6 +62,15 @@ public static class MailSystem
         }
         if (mail == null || mail.claimed) return false;
 
+        // 【2026-10-22 施工单 T12】碎片邮件预检：mercfrag 附件在背包仍装不下 → 整封不领、不标已领
+        //（碎片不许像资源那样「装不下作废」），提示玩家腾格子。放在最前面，避免其它资源先入账。
+        if (mail.attachments != null && !MercFragAttachmentsFit(mail))
+        {
+            UIManager.Instance?.ShowToast("背包已满，请先腾出格子再领取碎片", true);
+            Debug.Log($"[Mail] 碎片邮件「{mail.title}」背包放不下，保持未领");
+            return false;
+        }
+
         // 【2026-10-18 修·主人报「体力溢出领取不了也关不掉」】领取口径改为：装得下的入账，装不下的随领取作废，
         // 整封邮件标已领。旧口径「装不下的留在邮件」在满体力时一笔都进不来 → 邮件永远领不完、红点消不掉；
         // 邮件文案口径本就是「领取后仍受上限限制」，与领取即清空的预期一致。
@@ -83,6 +92,15 @@ public static class MailSystem
                 if (att.type == "merc")   // 🆕 佣兵奖励：解锁（并尽量进抽奖池），不占资源上限
                 {
                     GrantMerc(att.hireId);
+                    att.amount = 0;
+                    continue;
+                }
+                // 🆕 佣兵本命碎片（2026-10-22 施工单 T12）：走统一发碎片入口入包。
+                // 进到这里前 MercFragAttachmentsFit 已预检过容量，正常必然全进背包；
+                // 万一仍溢出（预检后被并发占用），GrantFragments 会把余量转回邮件 —— 不作废。
+                if (att.type == "mercfrag")
+                {
+                    MercGrowInventory.GrantFragments(att.hireId, (int)att.amount, "mail-claim");
                     att.amount = 0;
                     continue;
                 }
@@ -182,6 +200,75 @@ public static class MailSystem
         d.UnlockMerc(hireId);
         d.EnsurePoolFilled();   // 解锁后自动补全抽奖池（主人拍板「池子最少要补全」），让礼物立刻可招募
         Debug.Log($"[Mail] 邮件发放佣兵 {hireId}");
+    }
+
+    // ── 佣兵本命碎片邮件（2026-10-22 施工单 T5/T12）──────────────────────────
+
+    /// <summary>
+    /// 碎片邮件（统一发碎片入口的溢出兜底）：标题/正文「XXX抽奖碎片」（XXX=佣兵名），
+    /// 附件类型 mercfrag + 头像 iconOverride。只由 MercGrowInventory.GrantFragments 调用，别处禁止直接入邮。
+    /// </summary>
+    public static void EnqueueMercFragments(string hireId, int amount)
+    {
+        if (string.IsNullOrEmpty(hireId) || amount <= 0) return;
+        string mercName = MercRosterDefs.TryGetByHireId(hireId, out var def) && !string.IsNullOrEmpty(def.Name)
+            ? def.Name : hireId;
+        Ensure();
+        var mail = new MailEntry
+        {
+            id = Guid.NewGuid().ToString("N"),
+            title = $"{mercName}抽奖碎片",
+            body = $"冒险者的包裹里放不下「{mercName}的本命碎片」×{amount}，先寄存在这里。\n去角色界面腾出背包格子后再来领取。",
+            createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            claimed = false,
+            type = MailType.Reward,
+            sender = "系统",
+            attachments = new List<MailAttachment>
+            {
+                new MailAttachment
+                {
+                    type = "mercfrag",
+                    amount = amount,
+                    hireId = hireId,
+                    iconOverride = ContentPaths.Icons.MercHead + "/" + hireId,
+                },
+            },
+        };
+        SaveSystem.Instance.Data.mailInbox.Add(mail);
+        SaveSystem.Instance.Save();
+        Debug.Log($"[Mail] 碎片入邮 {mercName}({hireId}) ×{amount}，未领={UnclaimedCount()}");
+        RedDot.RefreshCommon();
+        NewMailToast.Notify();
+        MailListUI.NotifyInboxChanged();
+    }
+
+    /// <summary>
+    /// 该邮件里的 mercfrag 附件现在能否全部装进背包（领取前预检，不真正入账）。
+    /// 没有 mercfrag 附件 → 恒 true（不影响普通邮件领取）。
+    /// </summary>
+    static bool MercFragAttachmentsFit(MailEntry mail)
+    {
+        var bag = GridBackpackSystem.Instance;
+        if (mail.attachments == null) return true;
+        for (int i = 0; i < mail.attachments.Count; i++)
+        {
+            var att = mail.attachments[i];
+            if (att == null || att.amount <= 0 || att.type != "mercfrag") continue;
+            string itemId = MercStarDefs.FragmentItemId(att.hireId);
+            if (string.IsNullOrEmpty(itemId))
+            {
+                Debug.LogError($"[Mail] 碎片附件缺 hireId，无法预检（mail={mail.title}）——按装不下处理");
+                return false;
+            }
+            if (bag == null)
+            {
+                // fail closed：背包系统未就绪时不放行（碎片不许作废），等就绪后再领
+                Debug.LogError("[Mail] GridBackpackSystem 未就绪，碎片邮件暂不可领取");
+                return false;
+            }
+            if (!bag.CanFitItemStack(itemId, (int)att.amount)) return false;
+        }
+        return true;
     }
 
     // ── 2026-10-16 邮件 UI 改造新增（T2）─────────────────────────────────

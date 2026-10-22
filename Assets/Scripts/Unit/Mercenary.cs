@@ -196,6 +196,10 @@ public class Mercenary : UnitBase
     public void SetHireId(string id)
     {
         hireId = id;
+        // 【2026-10-22 施工单 T8】局外星加成的装配时机：所有出场链路（RunDraftDirector.SpawnRunMerc /
+        // RefreshMercUnit / PromoteMerc、BattleManager 出战队伍、引导替身）都是 Init → SetHireId 顺序，
+        // 在这里统一补挂加成最稳 —— 幂等（_outStarApplied 挡重复），0 星是无操作。
+        ApplyOutStarBonus();
     }
 
     /// <summary>
@@ -457,6 +461,7 @@ public class Mercenary : UnitBase
     void SetupAttributes(string id, int level)
     {
         attr.ResetToBase();
+        _outStarApplied = false;   // 【2026-10-22 T8】基底重建后加成要重挂（SetHireId/下方出口会再调）
         level = Mathf.Max(1, level);
 
         if (MercRosterDefs.TryGetByAssetId(id, out _))
@@ -475,6 +480,10 @@ public class Mercenary : UnitBase
             attr.SetBaseAndCurrent(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
             currentHp = attr.GetAttr(AttrType.MaxHp);
             ApplyMeleeRangeVsPlayer();
+            // 【2026-10-22 主人拍板 v4.1】石像赐福等局内 buff（tempBuffs）佣兵也要吃到：
+            // 装配时机 = 属性基底写完后统一叠加，与主角 Hero.RecalcAttr 的 extraBonus 同款口径。
+            ApplyRunTempBuffs();
+            ApplyOutStarBonus();   // 【2026-10-22 施工单 T8】局外星攻防加成（hireId 已设时在此生效，未设等 SetHireId）
             return;
         }
 
@@ -528,6 +537,76 @@ public class Mercenary : UnitBase
 
         currentHp = attr.GetAttr(AttrType.MaxHp);
         ApplyMeleeRangeVsPlayer();
+        // 【2026-10-22 主人拍板 v4.1】石像赐福等局内 buff（tempBuffs）佣兵也要吃到（与上面花名册分支同口径）。
+        ApplyRunTempBuffs();
+        ApplyOutStarBonus();
+    }
+
+    // ============================================================
+    // 【2026-10-22 施工单 T8】局外升星加成进战斗
+    // ============================================================
+
+    /// <summary>本次属性基底是否已挂过局外星加成（SetupAttributes 置 false，ApplyOutStarBonus 置 true，防重复乘区）。</summary>
+    bool _outStarApplied;
+
+    /// <summary>
+    /// 局外星（outStar）加成：每星 物攻(Attack)/物防(Defense) +8%、魔攻(MagicAttack)/魔防(MagicDefense) +7%
+    /// （2026-10-22 三次拍板「先按8%加吧 魔按7%」）。外层乘区（attr.AddAttr isPercent，与局内 tempBuffs
+    /// 同一条乘法链），血/移速等不动；不改 MercRosterDefs.ApplyCombatStats 内部。
+    /// hireId 未设（Init 时序）或非花名册佣兵 → 跳过且<b>不置位</b>，等 SetHireId 再来；
+    /// 0 星佣兵数值与现在完全一致。数值唯一真源 = MercStarDefs。
+    /// </summary>
+    public void ApplyOutStarBonus()
+    {
+        if (attr == null || _outStarApplied) return;
+        string hid = !string.IsNullOrEmpty(hireId) ? hireId : mercId;
+        int outStar = MercStarSystem.OutStarOf(hid);
+        if (outStar < 0) return;   // 解析不到（hireId 未设 / 非花名册）：不置位，等 SetHireId 再补
+        _outStarApplied = true;
+        if (outStar <= 0) return;
+
+        attr.AddAttr(AttrType.Attack,      MercStarDefs.AtkPctPerStar * outStar, true);
+        attr.AddAttr(AttrType.Defense,     MercStarDefs.AtkPctPerStar * outStar, true);
+        attr.AddAttr(AttrType.MagicAttack, MercStarDefs.MagicPctPerStar * outStar, true);
+        attr.AddAttr(AttrType.MagicDefense, MercStarDefs.MagicPctPerStar * outStar, true);
+        Debug.Log($"[Mercenary] 局外星加成生效：{hid} ★{outStar} → 攻/防 +{MercStarDefs.AtkPctPerStar * outStar:0%}，魔攻/魔防 +{MercStarDefs.MagicPctPerStar * outStar:0%}");
+    }
+
+    // ============================================================
+    // 【2026-10-22 主人拍板 v4.1】石像赐福：佣兵也吃 BattleManager.tempBuffs
+    // ============================================================
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.1】把 BattleManager.tempBuffs（石像赐福 / 局内强化卡，与主角同款口径：
+    /// 读同一份 tempBuffs 列表，逐条 AttrBonusData 叠加）叠进佣兵属性。
+    /// 装配时机 = SetupAttributes 基底写完后，所以中途抽奖入队 / 阵亡复活（SpawnMercenary → Init）
+    /// 的新佣兵生成时自然带上，无需额外接线。
+    /// </summary>
+    void ApplyRunTempBuffs()
+    {
+        var bm = BattleManager.Instance;
+        if (bm == null || bm.tempBuffs == null || bm.tempBuffs.Count == 0 || attr == null) return;
+        for (int i = 0; i < bm.tempBuffs.Count; i++)
+        {
+            var b = bm.tempBuffs[i];
+            if (b == null) continue;
+            attr.AddAttr(b.attrType, b.value, b.isPercent);
+        }
+        currentHp = Mathf.Min(currentHp, attr.GetAttr(AttrType.MaxHp));
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.1】赐福瞬间对在场佣兵触发的重算入口：
+    /// 全量重建基底（SetupAttributes）后由 ApplyRunTempBuffs 统一叠加 tempBuffs —— 幂等，
+    /// 不会与既有加成算重；当前血量保持绝对值（与 Hero.RecalcAttr 同口径，只钳上限不回满）。
+    /// 死亡/复活不回退：复活链 SpawnMercenary → Init → SetupAttributes 会重新带上全部 tempBuffs。
+    /// </summary>
+    public void RecalcAttr()
+    {
+        if (attr == null || string.IsNullOrEmpty(mercId)) return;
+        float hpBefore = currentHp;
+        SetupAttributes(mercId, Mathf.Max(1, mercLevel));
+        currentHp = Mathf.Min(hpBefore, attr.GetAttr(AttrType.MaxHp));
     }
 
     protected override WeaponAttackType GetAttackType()

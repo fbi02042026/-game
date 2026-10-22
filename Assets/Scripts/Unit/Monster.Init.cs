@@ -230,6 +230,17 @@ public partial class Monster
             }
         }
 
+        // 【2026-10-22 主人拍板 v4.1】小 Boss 降配：正式关第 5 关（currentStageIndex 0-based==4）
+        // Boss 波的 Boss 模板血/攻 ×0.6（新常量 GameConfig.MINI_BOSS_STAT_MUL）。
+        // 只影响这一处 Boss 血攻装配；第 10 关大 Boss（==9）不乘（stageIdx0 条件排除）；
+        // 无限裂隙（IsFormalMainRun=false）与引导局/金币本不乘；精英/普通怪（bossUnit=false）不乘。
+        bool miniBossStage = bossUnit && !endlessRift
+            && BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun
+            && stageIdx0 == 4;
+        float miniBossMul = miniBossStage ? GameConfig.MINI_BOSS_STAT_MUL : 1f;
+        baseHp *= miniBossMul;
+        baseAtk *= miniBossMul;
+
         float waveMul = 1f + waveNum * 0.05f;
         float ttkMul;
         if (endlessRift)

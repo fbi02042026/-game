@@ -34,6 +34,17 @@ using UnityEngine.UI;
 ///   根 Canvas（自己就是最外层画笔）的 RectTransform 由 Canvas 组件每帧驱动，
 ///   手动改 anchoredPosition 会被覆盖 → 在根 Canvas 上 Offset 也是无效动作。
 ///   所以刘海避让一律作用在「顶栏那个子节点」上（Town 顶栏 / 战斗顶栏），不要挂到画布根。
+///
+/// 微信小游戏胶囊（小程序操作框 ●●● | ◉）避让（2026-10-22 主人需求：资源条统一位置、
+/// 不被刘海或胶囊遮挡）：
+///   胶囊悬浮在状态栏下方右侧，Screen.safeArea 不包含它；本工程未引 WX C# SDK，
+///   拿不到 wx.getMenuButtonBoundingClientRect，按微信官方几何常量预留：
+///     胶囊 top = 状态栏高 + 4(css px)、高 32(css px) → 胶囊底 ≈ 安全区顶 + 36(css px)，
+///     再留 8(css px) 呼吸 → 总预留 44(css px)。
+///   css px → 设计单位换算按窗口 css 宽 ≈390 估（主流机型 360~430，取中值误差 ≤15%，
+///   方向上宁可多留，不会压住胶囊）。只在 Offset 模式的 Top 边生效 —— 全项目所有
+///   资源条 / 顶栏都走 EnsureTopOffset（Offset 模式），一处改动全界面统一。
+///   Android APK（TapTap 渠道）/ 编辑器没有胶囊 → 预留 0，行为与之前完全一致。
 /// </summary>
 public class SafeAreaFitter : MonoBehaviour
 {
@@ -177,7 +188,7 @@ public class SafeAreaFitter : MonoBehaviour
         float dy = 0f;
         if (enabledFit && (fitTop || fitBottom) && Screen.width > 0 && Screen.height > 0)
         {
-            if (fitTop) dy -= TopInsetUnits(rt);     // 避上边 = 整体往下挪
+            if (fitTop) dy -= TotalTopInsetUnits(rt);  // 避上边 = 安全区顶部 + 微信小游戏胶囊预留，整体往下挪
             if (fitBottom) dy += BottomInsetUnits(rt); // 避下边 = 整体往上挪
         }
 
@@ -239,6 +250,61 @@ public class SafeAreaFitter : MonoBehaviour
         if (rt == null || Screen.width <= 0 || Screen.height <= 0) return 0f;
         float px = Mathf.Max(0f, Screen.safeArea.y);
         return px <= 0f ? 0f : px / Mathf.Max(0.01f, ScaleFactorOf(rt));
+    }
+
+    // ────────────────────────────────────────────────
+    // 微信小游戏胶囊（小程序操作框）预留 —— 见类注释。
+    // ────────────────────────────────────────────────
+
+    /// <summary>胶囊底 ≈ 安全区顶 + 36(css px)（状态栏下 4 + 胶囊高 32，微信官方几何）。</summary>
+    const float CapsuleBottomCssPx = 36f;
+    /// <summary>胶囊底再留的呼吸空隙（css px），吸收估算误差，方向宁可多留。</summary>
+    const float CapsuleGapCssPx = 8f;
+    /// <summary>估算的窗口 css 宽（主流机型 360~430，取中值；误差 ≤15% 且方向安全）。</summary>
+    const float AssumedWindowCssWidth = 390f;
+
+    static int _wxMiniGame = -1;   // -1 未判定，0 否，1 是（缓存，别每帧 ToString 分配）
+
+    /// <summary>当前是否跑在微信小游戏端（团结引擎 UnityWeixinMiniGame 播放器）。</summary>
+    public static bool IsWeixinMiniGame
+    {
+        get
+        {
+            if (_wxMiniGame < 0)
+            {
+#if UNITY_WEIXINMINIGAME
+                _wxMiniGame = 1;
+#else
+                // 团结引擎新增 RuntimePlatform.WeixinMiniGamePlayer（标准 Unity 枚举里没有，
+                // 直接引用成员会编不过，用平台名字符串判定，编辑器 / Android 包恒 false）
+                _wxMiniGame = Application.platform.ToString().IndexOf(
+                    "WeixinMiniGame", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0;
+#endif
+            }
+            return _wxMiniGame == 1;
+        }
+    }
+
+    /// <summary>
+    /// 胶囊避让预留（设计单位）：胶囊底比安全区顶低约 44(css px)，按窗口宽换算成设计单位。
+    /// 非微信小游戏端恒 0（编辑器 / Android APK 行为不变）。
+    /// </summary>
+    public static float CapsuleReserveUnits(RectTransform rt)
+    {
+        if (!IsWeixinMiniGame || rt == null || Screen.width <= 0) return 0f;
+        float sf = ScaleFactorOf(rt);
+        if (sf <= 0.01f) return 0f;
+        float unitsPerCss = Screen.width / AssumedWindowCssWidth / sf;
+        return (CapsuleBottomCssPx + CapsuleGapCssPx) * unitsPerCss;
+    }
+
+    /// <summary>
+    /// 顶栏总避让量 = 安全区顶部内缩 + 微信胶囊预留（设计单位）。
+    /// 全项目顶栏统一走这里取值（Offset 模式内部也用它），保证所有界面资源条同一个位置。
+    /// </summary>
+    public static float TotalTopInsetUnits(RectTransform rt)
+    {
+        return TopInsetUnits(rt) + CapsuleReserveUnits(rt);
     }
 
     /// <summary>纯工具：把节点矩形四边换算成父级本地坐标（原点=父级左下角）。</summary>

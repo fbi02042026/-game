@@ -79,6 +79,27 @@ public static class StageRoller
     static float W(string key, float fallback) =>
         StageRollerWeightsTable.GetFloat(key, fallback);
 
+    // ——【2026-10-22 主人拍板】正式关类型按位置定死（v4 回合制）——
+    /// <summary>
+    /// 第 3/7 关（0-based 2/6）精英概率。
+    /// 【2026-10-22 主人拍板 v4.1】0.5 → 1.0：第 3/7 关必精英。
+    /// </summary>
+    public const float PinnedEliteChance = 1.0f;
+
+    /// <summary>
+    /// 正式关类型按位置定死：currentStageIndex（0-based）4、9 → Boss 关；2、6 → <see cref="PinnedEliteChance"/> 概率精英；其余普通。
+    /// 只服务主线正式关（ChapterManager.RollNextStageType 唯一调用方）；引导局走 TutorialDirector、
+    /// 金币本（StartGoldDungeon）/无限裂隙（StartEndlessRift）建关不经这里，类型来源未波及。
+    /// 原权重抽签 <see cref="Roll"/> 保留退役不删（恢复关闸已在）。
+    /// </summary>
+    public static StageType RollByPosition(int stageIndex0Based)
+    {
+        if (stageIndex0Based == 4 || stageIndex0Based == 9) return StageType.Boss;
+        if (stageIndex0Based == 2 || stageIndex0Based == 6)
+            return Random.value < PinnedEliteChance ? StageType.Elite : StageType.Normal;
+        return StageType.Normal;
+    }
+
     public static StageType Roll(ChapterRollState state, int stageIndex, int totalStages)
     {
         if (state == null) return StageType.Normal;
@@ -103,7 +124,9 @@ public static class StageRoller
         if (state.restCount < maxRest)
         {
             bool mustRest = state.restCount == 0 && remainingAfter <= bossWindow;
-            if (mustRest) return StageType.Rest;
+            // 【2026-10-21 主人拍板：恢复关下线，恢复类型不再掷出；原抽签/恢复关代码保留不删】
+            // 原：mustRest 强制返回恢复关；现改返回普通关（下方权重命中恢复关也会在收口处改判普通）。
+            if (mustRest) return StageType.Normal;
             float restBase = W("restweightbase", 0.10f);
             float restPerIdx = W("restweightperstageindex", 0.035f);
             float restFirstMul = W("restfirstchaptermultiplier", 1.6f);
@@ -120,7 +143,10 @@ public static class StageRoller
         weights.Add(new KeyValuePair<StageType, float>(StageType.Elite, eliteW));
         weights.Add(new KeyValuePair<StageType, float>(StageType.Normal, Mathf.Max(normalFloor, normalComplement - eliteW)));
 
-        return WeightedPick(weights);
+        // 【2026-10-21 主人拍板：恢复关下线，恢复类型不再掷出；原抽签/恢复关代码保留不删】
+        // 收口闸：掷出结果为恢复关时改返回普通关（权重候选保持原样未剔除，改动最小）。
+        var rolled = WeightedPick(weights);
+        return rolled == StageType.Rest ? StageType.Normal : rolled;
     }
 
     static StageType WeightedPick(List<KeyValuePair<StageType, float>> weights)

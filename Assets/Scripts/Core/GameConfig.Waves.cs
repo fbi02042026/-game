@@ -71,6 +71,69 @@ public static partial class GameConfig
     /// <summary>击杀 1 个 Boss 发的佣兵币。</summary>
     public const int MERC_GOLD_PER_BOSS = 2;
 
+    // —— 击杀发局内抽奖币（2026-10-21 主人拍板：击杀怪物给抽奖币，局内币池带不出本局）——
+    // 三档固定值直发（不走 StageGoldDefs.MONSTER_KILL_GOLD_MUL 模板公式，那条继续保持 0 死着）。
+    // 发放唯一出口 = BattleManager.OnMonsterDead → AddRunGold(countsAsEarned:false) → currentGold（局内抽奖币池）。
+    // 金币副本（IsGoldDungeon）有自己的击杀掉金经济，不重复发。
+    /// <summary>击杀普通怪发的局内抽奖币（可调）。</summary>
+    public const int KILL_GOLD_NORMAL = 10;
+    /// <summary>击杀精英发的局内抽奖币（可调；Boss 优先、不与精英叠加）。</summary>
+    public const int KILL_GOLD_ELITE = 25;
+    /// <summary>击杀 Boss 发的局内抽奖币（可调）。</summary>
+    public const int KILL_GOLD_BOSS = 50;
+
+    // ——【2026-10-22 主人拍板】正式关 v4 回合制（只对主线正式关生效；引导/金币本/裂隙不读）——
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.2】正式关回合数：普通/精英/Boss 关均 3 回合；
+    /// Boss 关 = 3 回合小怪波 + 末位 1 Boss 波（Boss 波不算回合，走通关链）。
+    /// </summary>
+    public const int FORMAL_STAGE_ROUND_COUNT = 3;
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.2】正式关每回合波数下限（按章成长；每回合**独立随机摇**）：
+    /// 第 1 章 1 波；第 2 章 1 波；第 3 章 2 波；第 4 章起 3 波（封顶）。
+    /// 配套 <see cref="FormalWavesPerRoundMax"/>：ch1→1/1、ch2→1/2、ch3→2/3、ch4+→3/3。
+    /// </summary>
+    public static int FormalWavesPerRoundMin(int chapter)
+    {
+        int ch = Mathf.Max(1, chapter);
+        if (ch <= 1) return 1;
+        if (ch == 2) return 1;
+        if (ch == 3) return 2;
+        return 3; // ch4+ 封顶
+    }
+
+    /// <summary>【2026-10-22 主人拍板 v4.2】正式关每回合波数上限（含）：ch1→1、ch2→2、ch3→3、ch4+→3。</summary>
+    public static int FormalWavesPerRoundMax(int chapter)
+    {
+        int ch = Mathf.Max(1, chapter);
+        if (ch <= 1) return 1;
+        if (ch == 2) return 2;
+        return 3; // ch3 起 2~3，ch4+ 固定 3
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.2 退役】v4.0「正式关定死 9 波」口径作废：总波数改按
+    /// 「FORMAL_STAGE_ROUND_COUNT 回合 × 每回合按章区间独立摇」累加（见 WavePlanner.Plan.RollFormalRoundWaveCounts）。
+    /// 常量保留不删（下线≠删除），当前无引用。
+    /// </summary>
+    public const int FORMAL_STAGE_WAVE_COUNT = 9;
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.2 退役】v4.0「回合末 = 下一未刷波下标 % 3 == 0」判定作废：
+    /// 波数按章可变后回合长不再固定 3，改读铺波时落在 WaveData.isRoundEnd 上的标记（见 BattleManager.Waves 波清链）。
+    /// 常量保留不删（下线≠删除），当前无引用。
+    /// </summary>
+    public const int FORMAL_STAGE_ROUND_WAVES = 3;
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.1】正式关每个普通波怪数下限：每波独立摇，不再把关卡总怪数均摊到波。
+    /// </summary>
+    public const int FORMAL_WAVE_MONSTERS_MIN = 10;
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.1】正式关每个普通波怪数上限（含）：Random.Range(MIN, MAX+1)。
+    /// 总怪量由此 ~90-135/关；精英末波同口径（编成为精英）。同屏峰值仍 ~15（分波刷，性能口径不变）。
+    /// </summary>
+    public const int FORMAL_WAVE_MONSTERS_MAX = 15;
+
     // —— 精英/Boss 概率掉天赋石（2026-10-20 主人拍板：天赋石不再每关首通发放，
     // 改为精英/Boss 击杀有几率掉落：精英 30%×1、Boss 60%×2）——
     /// <summary>击杀精英掉天赋石的几率（0~1）。引导里的宿敌精英同样带精英标记，走同一条判定。</summary>

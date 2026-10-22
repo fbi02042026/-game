@@ -225,6 +225,9 @@ public partial class BattleUI : MonoBehaviour
         EnsureTopBarGoldIcon();
         // 【2026-10-18 主人摆的 DraftDisplay 抽奖币条】绑数字 + 换抽奖币图
         EnsureDraftDisplayBindings();
+        // 【2026-10-22 主人拍板】石像事件（圣者/祭司）：绑现成 buff 节点（恢复/诅咒子节点），
+        // 平时 buff 整体隐藏；FindDeepChildIgnoreCase 模式同源（BattleStatueEventUI 内自带深搜，含未激活节点）
+        BattleStatueEventUI.EnsureOn(transform);
         ReportBindingStatus();
     }
 
@@ -392,9 +395,15 @@ public partial class BattleUI : MonoBehaviour
         UpdateRunSkillSlots();
         UpdateMercSkillSlots();
         UpdateEquipQuickSlots();
-        int stageIdx = BattleManager.Instance != null && BattleManager.Instance.currentStage != null
-            ? BattleManager.Instance.currentStage.stageIndex : 0;
-        UpdateStageProgress(stageIdx);
+        // 【2026-10-21 主人拍板】进度条改按当前关波次推进（与 RefreshBattleHud 同口径）：
+        // 已清波数 = 当前进行中波下标（-1 尚未开刷 → 0），总波数 = _waves.Count（同 Assembly，internal 可读）。
+        var bmProgress = BattleManager.Instance;
+        if (bmProgress != null)
+        {
+            int totalW = bmProgress._waves != null ? bmProgress._waves.Count : 0;
+            int clearedW = Mathf.Clamp(bmProgress._activeWaveIndex, 0, totalW);
+            UpdateWaveProgress(clearedW, totalW);
+        }
         // 系统一就绪立刻校正摇杆/遮罩开关状态（bm 此时已装配，能正确打开摇杆，避免进战斗无摇杆）
         RefreshLootModeChrome();
     }

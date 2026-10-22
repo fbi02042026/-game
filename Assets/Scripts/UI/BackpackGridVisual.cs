@@ -158,6 +158,10 @@ public static class BackpackGridVisual
             img.enabled = true;
             PlaceIconInHost(rt, iconRt, img, sprite, p.h, isItem ? null : p.equip);
 
+            // 2026-10-22 主人拍板（施工单 T2）：本命碎片格（item_frag_ 前缀）在框体图标上叠佣兵头像，
+            // 只加子节点不改任何几何；头图取不到按纪律 LogError 不兜底
+            if (isItem) AddMercFragHeadOverlay(iconGo.transform, p.item.defId);
+
             if (isItem || p.IsDisplay)
             {
                 img.color = Color.white;
@@ -239,6 +243,37 @@ public static class BackpackGridVisual
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// 本命碎片格叠佣兵头像（2026-10-22 主人拍板，施工单 T2）：
+    /// 道具图标仍是 ItemDefs 配的稀有度框体图，在其图标子节点内铺一层
+    /// MercPortraitSprites.GetHead 头像 Image（铺满图标区、preserveAspect、不接射线，
+    /// 点击仍落在宿主上走使用/丢弃浮层）。非碎片道具直接返回。
+    /// </summary>
+    static void AddMercFragHeadOverlay(Transform iconParent, string defId)
+    {
+        string hireId = MercStarDefs.HireIdOfFragmentItem(defId);
+        if (string.IsNullOrEmpty(hireId)) return;
+
+        var head = MercPortraitSprites.GetHead(hireId);
+        if (head == null)
+        {
+            Debug.LogError("[BackpackGridVisual] 佣兵头像加载失败，碎片格只显示框体图：Resources/Icons/MercHead/" + hireId);
+            return;
+        }
+
+        var go = new GameObject("MercHead", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(iconParent, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var img = go.GetComponent<Image>();
+        img.sprite = head;
+        img.preserveAspect = true;
+        img.raycastTarget = false;
     }
 
     /// <summary>

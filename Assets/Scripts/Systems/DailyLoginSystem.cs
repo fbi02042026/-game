@@ -292,43 +292,17 @@ public static class DailyLoginSystem
             }
 
             case DailyLoginDefs.Grant.MercFragment:
-                MercGrowInventory.Add(MercGrowInventory.FragmentId(hireId), amount);
+                // 【2026-10-22 施工单 T5/T6】碎片改走统一发碎片入口（背包优先→邮件），不再进 mercGrowItems
+                MercGrowInventory.GrantFragments(hireId, amount, "daily-login");
                 break;
 
             case DailyLoginDefs.Grant.LegendaryFragment:
-            {
-                string id = PickRandomLegendaryMerc();
-                if (!string.IsNullOrEmpty(id))
-                    MercGrowInventory.Add(MercGrowInventory.FragmentId(id), amount);
+                // 【2026-10-22 主人拍板】「通用传说碎片 legendfrag」取消 —— 没有这个道具。
+                // 表里若仍配 legendfrag（不该发生，CSV 已改钻石）fail closed 报出来，不发不吞。
+                Debug.LogError($"[DailyLogin] 登录奖励配了已取消的 legendfrag（amount={amount}）——请改 daily_login.csv，本格未发放任何碎片");
                 break;
-            }
         }
         return null;
-    }
-
-    /// <summary>
-    /// 挑一个传说佣兵发本命碎片。**优先给已解锁的**——碎片是升星用的，
-    /// 给没解锁的佣兵等于存着不能用；全没解锁就随机挑一个，玩家以后解锁了就能用。
-    /// </summary>
-    static string PickRandomLegendaryMerc()
-    {
-        var data = Data;
-        var all = MercRosterDefs.All;
-        if (data == null || all == null) return null;
-
-        var pool = new List<string>();
-        var fallback = new List<string>();
-        for (int i = 0; i < all.Count; i++)
-        {
-            var def = all[i];
-            if (def.Rarity != MercRosterDefs.MercRarity.Legendary) continue;
-            if (string.IsNullOrEmpty(def.HireId)) continue;
-            fallback.Add(def.HireId);
-            if (data.IsMercUnlocked(def.HireId)) pool.Add(def.HireId);
-        }
-        var src = pool.Count > 0 ? pool : fallback;
-        if (src.Count == 0) return null;
-        return src[Random.Range(0, src.Count)];
     }
 
     /// <summary>挑一个还没解锁的技能发碎片；全解锁了就随便挑一个（碎片仍有价值——攒着换下一轮）。

@@ -176,7 +176,7 @@ public class LoginUI : MonoBehaviour
         _rightMenuRt.anchorMin = new Vector2(1f, 1f);
         _rightMenuRt.anchorMax = new Vector2(1f, 1f);
         _rightMenuRt.pivot = new Vector2(1f, 1f);
-        var want = new Vector2(_rightMenuBase.x, _rightMenuBase.y - SafeAreaFitter.TopInsetUnits(_rightMenuRt));
+        var want = new Vector2(_rightMenuBase.x, _rightMenuBase.y - SafeAreaFitter.TotalTopInsetUnits(_rightMenuRt));   // 安全区 + 微信胶囊预留
         if (_rightMenuRt.anchoredPosition != want)
             _rightMenuRt.anchoredPosition = want;
     }

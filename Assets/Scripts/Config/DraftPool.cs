@@ -828,8 +828,10 @@ public static class DraftPool
             // 永久拦在池外；再叠加「已在本局」过滤把已招募的逐个剔除，池子中期就只剩一两个，
             // 看起来就像「永远抽中队列第一个」。（城镇出战队伍的 IsMercAvailable 门槛不受影响，那是另一条规则。）
 
-            int star = def.Rarity == MercRosterDefs.MercRarity.Legendary ? 3
-                : def.Rarity == MercRosterDefs.MercRarity.Rare ? 2 : 1;
+            // 【2026-10-22 主人拍板 T13】战斗内抽到已拥有佣兵 → 局内星级 = 该佣兵 outStar（0 星/未拥有
+            // 直接用现 ★1 档，MpProfile/PowerCalc 均 max(1,star) 天然对齐）；旧「按稀有度定 3/2/1 星」作废。
+            // 局内 star（1~5）与 RunLoadout.MaxMercStar 体系不动，只改入场初值；攻防加成由 T8 按 outStar 另乘。
+            int star = MercStarSystem.InRunStarOf(def.HireId);
             int level = Mathf.Max(1, 1 + heroLv / 2);
             // 【2026-10-19 主人拍板】只能从上架队列出 → 每名上架佣兵单独等概率（权重全 1），
             // 旧的「空池全池按稀有度加权（普通62/稀有33/传奇5）」随空池回落一起作废。

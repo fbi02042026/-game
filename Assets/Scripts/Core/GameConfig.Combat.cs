@@ -123,6 +123,12 @@ public static partial class GameConfig
     // 【2026-10-10 主人拍板】精英 1.3 → 2.0（「精英的大小应该放大几倍」）；Boss 等比 1.6 → 2.6 保持 Boss > 精英。
     public static float ELITE_SCALE_MULTIPLIER => CombatTuningTable.Get("ELITE_SCALE_MULTIPLIER", 2.0f);
     public static float BOSS_SCALE_MULTIPLIER => CombatTuningTable.Get("BOSS_SCALE_MULTIPLIER", 2.6f);
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.1】第 5 关小 Boss 降配：正式关 currentStageIndex（0-based）==4 的
+    /// Boss 波，Boss 模板血/攻 ×0.6；第 10 关大 Boss（==9）不乘，精英/普通怪不乘。
+    /// 消费点唯一：Monster.Init 的 Boss 血攻装配处。
+    /// </summary>
+    public const float MINI_BOSS_STAT_MUL = 0.6f;
     /// <summary>引导关精英固定精灵编号（1 Forest 第 7 号 = 树精）。主人 2026-10-10 反馈精英不许是蘑菇，表可调。</summary>
     public static int TUTORIAL_ELITE_SPRITE_ID => Mathf.RoundToInt(CombatTuningTable.Get("TUTORIAL_ELITE_SPRITE_ID", 7f));
     public const float MONSTER_BASE_SCALE = 4.125f;
@@ -217,11 +223,13 @@ public static partial class GameConfig
     /// <summary>
     /// 【2026-10-20 主人拍板「多出生点随机抽」】进场深度三档：近 / 中 / 远（世界单位，累加在
     /// `SpawnMonsterOffscreenEnter` 的屏外余量之上）。
-    /// 故意比原 `MONSTER_ENTER_DEPTH_STEP`(0.18) × 8 = 1.44 更近：最远只到 0.9，是<b>刻意保守</b>，
+    /// 故意比原 `MONSTER_ENTER_DEPTH_STEP`(0.18) × 8 = 1.44 更近：最远只到 0.6，是<b>刻意保守</b>，
     /// 保证最远那只也不会明显晚到，不破坏「一波压过来」的观感。
+    /// 【2026-10-22 主人拍板「出怪有点慢，把出生点提前点」】{0,0.45,0.9} → {0,0.3,0.6}，
+    /// 与 `SpawnMonsterOffscreenEnter` 的屏外余量(1.35→0.8)一起收紧，出生点整体前移。
     /// <b>调远近只改这一个出口。</b>
     /// </summary>
-    public static readonly float[] MONSTER_SPAWN_DEPTH_TIERS = { 0f, 0.45f, 0.9f };
+    public static readonly float[] MONSTER_SPAWN_DEPTH_TIERS = { 0f, 0.3f, 0.6f };
     /// <summary>玩家出生相对 SpawnPoint 再往左偏（世界单位）</summary>
     public const float SPAWN_X_LEFT_BIAS = -0.5f;
     /// <summary>SPUM 移动动画播放速率（再 +20%）</summary>
@@ -718,8 +726,9 @@ public static partial class GameConfig
     // ---- 远程专属反应技「瞬移遁走」（2026-10-20 主人拍板：被贴脸→竖向压扁消失→远处原地复原）----
     /// <summary>触发线：最近威胁者（玩家/佣兵）战斗距离 ≤ 该值触发瞬移（世界单位）。</summary>
     public static float MONSTER_BLINK_TRIGGER_DIST => CombatTuningTable.Get("MONSTER_BLINK_TRIGGER_DIST", 1.8f);
-    /// <summary>瞬移冷却（秒）。冷却内被贴脸就硬扛着继续射（Boss「贴脸也射」不受影响）。</summary>
-    public static float MONSTER_BLINK_COOLDOWN => CombatTuningTable.Get("MONSTER_BLINK_COOLDOWN", 7f);
+    /// <summary>瞬移冷却（秒）。冷却内被贴脸就硬扛着继续射（Boss「贴脸也射」不受影响）。
+    /// 【2026-10-22 主人拍板】7→15：原 7s 在贴脸追打里像「连着放两次」，拉长冷却杜绝连发观感。</summary>
+    public static float MONSTER_BLINK_COOLDOWN => CombatTuningTable.Get("MONSTER_BLINK_COOLDOWN", 15f);
     /// <summary>遁走位移下限（世界单位）。</summary>
     public static float MONSTER_BLINK_MIN_DIST => CombatTuningTable.Get("MONSTER_BLINK_MIN_DIST", 3.0f);
     /// <summary>遁走位移上限（世界单位）。实际取 [MIN, MAX] 随机，落点再钳回战场可视范围。</summary>
@@ -736,8 +745,11 @@ public static partial class GameConfig
     // ==================== 【2026-10-20 主人拍板】远程精英/Boss 双弹幕技 ====================
     /// <summary>扇形弹幕冷却（秒）。</summary>
     public static float MONSTER_FAN_VOLLEY_COOLDOWN => CombatTuningTable.Get("MONSTER_FAN_VOLLEY_COOLDOWN", 20f);
-    /// <summary>扇形弹幕一次齐射的弹道数。</summary>
+    /// <summary>扇形弹幕一次齐射的弹道数（Boss 用）。
+    /// 【2026-10-22 主人拍板】数量减负：精英 3 发、Boss 5 发，拆成两条配置。</summary>
     public static int MONSTER_FAN_VOLLEY_COUNT => Mathf.Max(2, Mathf.RoundToInt(CombatTuningTable.Get("MONSTER_FAN_VOLLEY_COUNT", 5f)));
+    /// <summary>扇形弹幕一次齐射的弹道数（精英用，主人定 3）。</summary>
+    public static int MONSTER_FAN_VOLLEY_COUNT_ELITE => Mathf.Max(2, Mathf.RoundToInt(CombatTuningTable.Get("MONSTER_FAN_VOLLEY_COUNT_ELITE", 3f)));
     /// <summary>扇形弹幕相邻弹道夹角（度）。5 发 × 9° → 总扇面 ±18°。</summary>
     public static float MONSTER_FAN_VOLLEY_ANGLE_STEP => CombatTuningTable.Get("MONSTER_FAN_VOLLEY_ANGLE_STEP", 9f);
     /// <summary>扇形弹幕弹道飞行距离（世界单位），飞满即在终点爆开结算。</summary>

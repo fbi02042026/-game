@@ -132,6 +132,9 @@ public class TownSceneBootstrap : MonoBehaviour
         // 2026-09-22 起中断结算改为静默（不弹面板），所以这里恒为 false，
         // 登录奖励等本轮弹窗照常走（保留返回值的判断，将来恢复弹窗时不用改调用方）。
         bool settled = SettleInterruptedRunOnce();
+        // 【2026-10-22 施工单 T6】旧存档 mercGrowItems 的 frag:{hireId} 存量一次性迁进背包
+        //（溢出走邮件；badge: 不动；标记 mercFragMigrated 防重复执行）。进城镇后跑，此时背包系统已就绪。
+        MercGrowInventory.MigrateLegacyFragmentsToBag();
         // 【2026-10-20 补偿】「Lv2 已领但没拿到暮火之杖」的存量玩家进镇自动补发
         //（幂等：GrantKey 已写就跳过；失败不写标记，下次进镇重试）。
         SpecialWeapons.RepairMissingLv2Staff();

@@ -83,17 +83,17 @@ public static class MercenaryOfferGenerator
     {
         // 【2026-10-17 主人拍板】酒馆三选一改用稀有度概率掷点（初版沿用战斗内权重，现独立调参），不再按星级 1-5 均匀掷。
         // 【2026-10-19 主人拍板】传奇压到 0.5%，省下的加回普通：普通 66.5% / 稀有 33% / 传奇 0.5%。
+        // 【2026-10-22 主人拍板 T13】招募零星：删 RarityToStar 掷点与 star>=4 的 level 补偿——
+        // 佣兵获得时零星（MercStarDefs.MaxOutStar 体系管升星），招募实例 star 一律 0；
+        // 稀有度概率口径（66.5/33/0.5）不动，卡面稀有度由 def.Rarity / MercHireSession.OfferRarity 解析。
         var rarity = RollRarityByBattleWeight();
-        int star = MercSkillMapping.RarityToStar(rarity);
         if (!MercSkillMapping.TryPickHireId(rarity, out var mapRow))
-            return RollFallback(star);
+            return RollFallback();
 
         if (!MercRosterDefs.TryGetByHireId(mapRow.HireId, out var def))
-            return RollFallback(star);
+            return RollFallback();
 
-        if (star >= 4) star = Mathf.Max(star, rarity == MercRosterDefs.MercRarity.Legendary ? 5 : 4);
         int level = Random.Range(1, 11);
-        if (star >= 4) level = Mathf.Max(level, Random.Range(5, 11));
 
         string name = def.Name;
         if (CountAssetUsers(def.AssetId) > 1)
@@ -108,7 +108,7 @@ public static class MercenaryOfferGenerator
             uid = System.Guid.NewGuid().ToString("N"),
             favorLevel = 1,
             level = level,
-            star = star,
+            star = 0,   // 【2026-10-22 主人拍板 T13】获得时零星
             skillId = mapRow.ActiveSkillId,
             passiveSkillId = mapRow.PassiveSkillId
         };
@@ -141,7 +141,7 @@ public static class MercenaryOfferGenerator
         return hits;
     }
 
-    static MercenaryData RollFallback(int star)
+    static MercenaryData RollFallback()
     {
         var pool = GetVisualPool();
         string mercId = pool[Random.Range(0, pool.Count)];
@@ -155,7 +155,7 @@ public static class MercenaryOfferGenerator
             uid = System.Guid.NewGuid().ToString("N"),
             favorLevel = 1,
             level = Random.Range(1, 11),
-            star = star,
+            star = 0,   // 【2026-10-22 主人拍板 T13】获得时零星
             skillId = active,
             passiveSkillId = passive
         };

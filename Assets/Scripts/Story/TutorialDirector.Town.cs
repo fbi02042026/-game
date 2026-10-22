@@ -405,8 +405,21 @@ public partial class TutorialDirector
         // 【2026-10-16 主人拍板】流程串行：先等首次引导真正收完（玩家点完「关闭引导」收尾气泡、
         // 游标到 Done）再弹登录；玩家关掉登录后才提示「您有新的邮件」（DailyLoginUI.Hide 冲刷）。
         // 收尾气泡自带 60s 超时放行，这里不会死等。
+        // 【2026-10-22 修】加 600s 护栏：引导各步超时本就会放行（全流程合法上限约 370s），
+        // 唯一可能永远不到 Done 的情形是 Drive 协程中途异常死亡——撞护栏报错放行，
+        // 别让每日登录/收尾链跟着永等（当时口径：点哪都没反应类卡死的兜底防线）。
+        float guideGuard = 0f;
         while (FirstRunGuide.Instance != null && !FirstRunGuide.Instance.IsFinished)
+        {
+            guideGuard += 0.25f;
+            if (guideGuard > 600f)
+            {
+                Debug.LogError("[TownFlow] 等首次引导收尾超过 600s（引导协程疑似已死），放行走每日登录。"
+                               + $" guideStep={SaveSystem.Instance?.Data?.guideStep}");
+                break;
+            }
             yield return new WaitForSeconds(0.25f);
+        }
 
         // 【2026-10-20 主人拍板】引导收完直接弹每日登录；装备小提示挪到整个收尾链最后（见下）。
         TownSceneBootstrap.TryDailyLoginOnce();

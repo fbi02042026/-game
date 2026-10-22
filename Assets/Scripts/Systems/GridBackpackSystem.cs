@@ -155,7 +155,18 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
     /// </summary>
     public bool TryAddItemStack(string defId, int count, out BackpackItem placed, bool notify = true)
     {
+        return TryAddItemStackLeftover(defId, count, out placed, out _, notify);
+    }
+
+    /// <summary>
+    /// 2026-10-22 新增（佣兵碎片入包 T5）：与 <see cref="TryAddItemStack"/> 同一套堆叠算法，
+    /// 但把「没放下的余量」带出去 —— 碎片不许作废，余量由调用方（统一发碎片入口）转邮件。
+    /// placed = 第一份被塞进去的条目（纯堆叠进旧堆时也指向那堆）；一个都没放下时为 null。
+    /// </summary>
+    public bool TryAddItemStackLeftover(string defId, int count, out BackpackItem placed, out int leftover, bool notify = true)
+    {
         placed = null;
+        leftover = 0;
         if (string.IsNullOrEmpty(defId) || count <= 0) return false;
 
         var def = ItemDefs.Get(defId);
@@ -198,7 +209,12 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
             if (placed == null) placed = bi;
         }
 
-        if (placed == null) return false;
+        if (placed == null)
+        {
+            leftover = left;   // 一个都没放下：余量 = 全部（碎片不许作废，调用方走邮件）
+            return false;
+        }
+        leftover = left;
         NotifyBackpackChanged();
         if (notify)
         {
@@ -206,6 +222,89 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
             if (got > 0)
                 UIManager.Instance?.ShowToast($"获得 {def.name} ×{got}", true);   // 2026-10-06 主人拍板：物品获得 force 弹
         }
+        return true;
+    }
+
+    /// <summary>
+    /// 预检：defId 的 count 个能否全部装进背包（不真正入账）。
+    /// 碎片邮件领取前的容量预检用（2026-10-22 新增）——碎片不许作废，装不下就不发。
+    /// 容量 = 已有同 id 堆的剩余空间 + 空格数 × stackMax（行解锁口径与 FindEmptyPosition 一致）。
+    /// </summary>
+    public bool CanFitItemStack(string defId, int count)
+    {
+        if (string.IsNullOrEmpty(defId) || count <= 0) return true;
+        var def = ItemDefs.Get(defId);
+        if (def == null) return false;
+
+        long capacity = 0;
+        if (def.stackMax > 1)
+        {
+            for (int i = 0; i < _items.Count; i++)
+            {
+                var it = _items[i];
+                if (it?.item == null || it.item.defId != defId) continue;
+                capacity += def.stackMax - it.item.count;
+            }
+        }
+        capacity += (long)CountFreeCells() * Mathf.Max(1, def.stackMax);
+        return capacity >= count;
+    }
+
+    /// <summary>当前解锁行数内的空格数（战斗内只开放战斗行，与 FindEmptyPosition 同口径）。</summary>
+    int CountFreeCells()
+    {
+        int unlockedRows = GameSceneGate.IsBattle
+            ? GameConfig.GetBattleBackpackRows(SaveSystem.Instance?.Data)
+            : GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
+        int maxY = Mathf.Min(GameConfig.BACKPACK_HEIGHT_MAX, unlockedRows);
+        int free = 0;
+        for (int y = 0; y < maxY; y++)
+            for (int x = 0; x < GameConfig.BACKPACK_WIDTH; x++)
+                if (!_grid[x, y]) free++;
+        return free;
+    }
+
+    /// <summary>按 defId 统计背包里该道具的总持有数（跨堆叠；升星扣碎片 / 满星降权判定用）。2026-10-22 新增。</summary>
+    public int CountItemStack(string defId)
+    {
+        if (string.IsNullOrEmpty(defId)) return 0;
+        int total = 0;
+        for (int i = 0; i < _items.Count; i++)
+        {
+            var it = _items[i];
+            if (it?.item == null || it.item.defId != defId) continue;
+            total += it.item.count;
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// 按 defId 跨堆扣数量（佣兵升星扣本命碎片用，2026-10-22 新增）。
+    /// 数量不足返回 false 且不动任何数据（fail closed）；扣完清空的堆会释放格子。
+    /// </summary>
+    public bool ConsumeItemStack(string defId, int count)
+    {
+        if (string.IsNullOrEmpty(defId) || count <= 0) return false;
+        if (CountItemStack(defId) < count) return false;
+
+        int left = count;
+        for (int i = _items.Count - 1; i >= 0 && left > 0; i--)
+        {
+            var bi = _items[i];
+            if (bi?.item == null || bi.item.defId != defId) continue;
+            int take = Mathf.Min(bi.item.count, left);
+            bi.item.count -= take;
+            left -= take;
+            if (bi.item.count <= 0)
+                RemoveItemCell(bi);   // 释放格子
+        }
+        if (left > 0)
+        {
+            // 理论不可达（上面查过总量）；真发生说明状态被并发改坏 —— 报出来，不静默
+            Debug.LogError($"[GridBackpack] ConsumeItemStack({defId}) 扣除后仍剩 {left} 未扣 —— 数据异常");
+            return false;
+        }
+        NotifyBackpackChanged();
         return true;
     }
 

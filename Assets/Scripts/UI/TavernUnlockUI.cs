@@ -511,16 +511,28 @@ public class TavernUnlockUI : MonoBehaviour
         // 2026-09-18 用户拍板：买到**已解锁**的佣兵 = 重复，直接转本命碎片（不再重复进池）
         if (data.IsMercUnlocked(def.HireId))
         {
+            // 【2026-10-22 主人拍板 T10】满星（3星）后重复获得不再给碎片 —— 直接拦下，不扣金币
+            if (MercStarSystem.OutStarOf(def.HireId) >= MercStarDefs.MaxOutStar)
+            {
+                GlobalToastUI.Show($"{def.Name} 已满星，无需再招募");
+                Debug.Log($"[TavernUnlock] 重复佣兵 {def.HireId} {def.Name} 已满星，未扣费未转碎片");
+                return false;
+            }
+
             int dupCost = MercRosterDefs.UnlockCost(def);
             if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, dupCost, save: false, notify: false))
             {
                 GlobalToastUI.Show("金币不足");
                 return false;
             }
-            int got = MercGrowInventory.ConvertDuplicateMerc(def);
+            // 【2026-10-22 施工单 T4/T5】碎片改走统一发碎片入口（背包优先→邮件），数量 10/5/1（MercStarDefs）
+            var frag = MercGrowInventory.ConvertDuplicateMerc(def);
             SaveSystem.Instance.Save();
-            GlobalToastUI.Show($"「{def.Name}」已在名册中 → 转为本命碎片 ×{got}");
-            Debug.Log($"[TavernUnlock] 重复佣兵 {def.HireId} {def.Name} → 本命碎片 ×{got}，花费 {dupCost} 金币");
+            // 【2026-10-22 主人拍板 T10 文案】走邮件时补一句「已放入邮箱」
+            GlobalToastUI.Show(frag.mailCount > 0
+                ? "获得相同的佣兵，已转化成碎片放入角色界面的背包里，放不下的已放入邮箱"
+                : "获得相同的佣兵，已转化成碎片放入角色界面的背包里");
+            Debug.Log($"[TavernUnlock] 重复佣兵 {def.HireId} {def.Name} → 本命碎片 入包{frag.bagCount}/邮件{frag.mailCount}，花费 {dupCost} 金币");
             return true;
         }
 

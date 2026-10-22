@@ -243,6 +243,16 @@ public partial class BattleUI : MonoBehaviour
         markerRT.anchoredPosition = pos;
     }
 
+    /// <summary>
+    /// 【2026-10-21 主人拍板】顶部进度条改按「当前关波次」推进：clearedWaves = 已清完波数，totalWaves = 本关总波数。
+    /// 内部走 UpdateStageProgress 的 0~1 插值兜底分支（stageIndex 传 -1，progressNodes 挂点分支不触发），
+    /// 复用同一条进度条和 playerMarker，不新增 UI 节点。
+    /// </summary>
+    public void UpdateWaveProgress(int clearedWaves, int totalWaves)
+    {
+        UpdateStageProgress(-1, totalWaves > 0 ? Mathf.Clamp01((float)clearedWaves / totalWaves) : 0f, false);
+    }
+
     void AttachMarkerUnder(Transform parent)
     {
         if (playerMarker == null || parent == null) return;

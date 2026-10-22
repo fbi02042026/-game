@@ -431,7 +431,9 @@ public sealed class SkillCastService
     }
 
 
-    void ApplyHealToUnit(UnitBase unit, float heal, UnitBase healer = null)
+    // 【2026-10-21 主人拍板】private → public：波清全队回血（BattleManager.HealPartyOnWaveCleared）
+    // 复用佣兵治疗技同款回血原语（钳制上限 / 治疗飘字 / 治疗量统计），不另写第二份回血。
+    public void ApplyHealToUnit(UnitBase unit, float heal, UnitBase healer = null)
     {
         if (unit == null || unit.isDead || unit.attr == null) return;
         float before = unit.currentHp;

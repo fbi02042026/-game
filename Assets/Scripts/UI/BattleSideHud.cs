@@ -28,8 +28,10 @@ public class BattleSideHud : MonoBehaviour
     // 击败计数横向位置：【2026-10-19 主人定位置】靠右缘、右缩 48（逻辑宽恒 720，横向不随屏漂）。
     const float KillCounterRightInset = 48f;
     // 【2026-10-20 主人报「有的手机上击败跑到别处了」】纵向改为跟随 BossBar/血条 的实际位置。
-    // 根因：BossBar 在预制体里是画布中心锚点（y=477），屏比越瘦逻辑画布越高、血条离屏顶越远；
+    // 根因：BossBar 原是画布中心锚点（y=477），屏比越瘦逻辑画布越高、血条离屏顶越远；
     // 原写死「距顶 114」只在 720×1280 设计屏成立，瘦屏上计数飘到血条上方、9:16 矮屏上压到血条上。
+    // 【2026-10-22 血条偏下修复】BossBar 预制体改贴顶锚（y=-163）并加入刘海避让，不再随屏漂；
+    // 折算公式同步改为锚点无关（见 RelayoutKillCounter），720×1280 上结果与旧公式分毫不差（-114）。
     // 现口径：HUD 根顶 = 血条底边上方 54.4（在 720×1280 上与原「距顶 114」分毫不差，其它屏比贴着血条走）。
     const float KillCounterRootGapAboveBarBottom = 54.4f;
     // BossBar/血条 绑定失败时的落点（= 设计屏 720×1280 摆位；会 LogError，不静默换值）。
@@ -54,7 +56,7 @@ public class BattleSideHud : MonoBehaviour
     float _rollTimer;       // 数字滚动：距下一次跳格
 
     // —— 纵向跟随 BossBar（2026-10-20 修正「有的手机上击败跑到别处了」）——
-    RectTransform _bossBarNode;    // BossBar（预制体里锚在画布中心）
+    RectTransform _bossBarNode;    // BossBar（2026-10-22 起预制体里贴顶锚 y=-163，并加入刘海避让）
     RectTransform _bossBarFill;    // BossBar/血条（红条；与 BattleBossHpBar 绑的是同一个节点名）
     int _layoutHDone = -1;         // 上次完成纵向布局时的画布逻辑高（四舍五入，变了才重算）
     bool _bossBarMissingLogged;    // 绑定失败只报一次错
@@ -332,10 +334,13 @@ public class BattleSideHud : MonoBehaviour
         // 含自身缩放（预制体里血条 localScale=0.7），算法与 BattleBossHpBar.EnsureLeftAligned 同款。
         float barBottomLocal = _bossBarFill.anchoredPosition.y
                              - _bossBarFill.sizeDelta.y * Mathf.Abs(_bossBarFill.localScale.y) * _bossBarFill.pivot.y;
-        // BossBar 锚在画布中心 → 血条底边折算成「画布中心上方高度」
-        float barBottomAboveCenter = _bossBarNode.anchoredPosition.y + barBottomLocal;
-        // HUD 根（锚画布右上、pivot 右上）的 y：根顶在血条底边上方 54.4
-        float y = barBottomAboveCenter + KillCounterRootGapAboveBarBottom - canvasH * 0.5f;
+        // 【2026-10-22 血条改贴顶锚】锚点无关折算：锚点参考线 + anchoredPosition = BossBar pivot 点
+        // 在画布本地坐标的 y。中心锚 (0.5,0.5)+477 与贴顶锚 (0.5,1)−163 在 720×1280 上算出同一点，
+        // 瘦屏上贴顶锚不再随画布中心下漂（血条跟顶栏走，计数跟血条走）。
+        float bossPivotY = Mathf.Lerp(parent.rect.min.y, parent.rect.max.y, _bossBarNode.anchorMin.y)
+                         + _bossBarNode.anchoredPosition.y;
+        // 血条底边（画布本地 y，自底向上）→ HUD 根（锚画布右上、pivot 右上）的 y：根顶在血条底边上方 54.4
+        float y = bossPivotY + barBottomLocal + KillCounterRootGapAboveBarBottom - canvasH;
         ((RectTransform)transform).anchoredPosition = new Vector2(-KillCounterRightInset, y);
     }
 

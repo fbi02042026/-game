@@ -229,6 +229,60 @@ public partial class MercDrawPoolUI : MonoBehaviour
         if (viewNode != null) viewNode.gameObject.SetActive(false);
         var swapNode = card.transform.Find("替换");
         if (swapNode != null) swapNode.gameObject.SetActive(false);
+
+        // ---- 卡内「升阶」钮（2026-10-22 主人拍板：进阶入口从窗口级挪进单卡）----
+        // 主人已把「升阶」节点放进 Slot 模板（查看/替换/升阶三钮，克隆体天然带上）；本处只在
+        // 克隆路径绑定（模板本体每次建卡前已强制隐藏，不会误亮）。点击 → 打开该卡的佣兵进阶界面。
+        var ascendNode = card.transform.Find("升阶");
+        if (ascendNode != null)
+        {
+            bool canShow = CanShowAscendButton(hireId, owned);
+            ascendNode.gameObject.SetActive(canShow);   // 「当能升阶的会出现 队列里的和未拥有的佣兵不显示」
+            if (canShow)
+            {
+                var aImg = ascendNode.GetComponent<Image>();
+                if (aImg != null) aImg.raycastTarget = true;
+                var aBtn = ascendNode.GetComponent<Button>();
+                if (aBtn == null) aBtn = ascendNode.gameObject.AddComponent<Button>();   // 无 Button 运行时补（先例同 quxiao）
+                if (aBtn.targetGraphic == null && aImg != null) aBtn.targetGraphic = aImg;
+                aBtn.onClick.RemoveAllListeners();
+                string ascHid = hireId;   // 与上方查看钮的 hid 同名会撞 CS0136，故单名
+                aBtn.onClick.AddListener(() => MercAscendUI.Show(ascHid));
+            }
+        }
+        else
+        {
+            Debug.LogError("[MercDrawPoolUI] 列表卡缺「升阶」节点（主人预制体 Slot 内应有三钮）");
+        }
+    }
+
+    /// <summary>
+    /// 卡内「升阶」钮的显示条件（2026-10-22 主人拍板，fail closed——任何一环查不到都隐藏）：
+    /// 已拥有（SaveData.IsMercUnlocked）+ 未满星（outStar &lt; 3）+ 材料全够
+    /// （本命碎片够下一星消耗 + 金币/钻石够）。判定全部复用 MercStarSystem/MercStarDefs
+    /// 现有函数，不另写消耗逻辑。队列里的卡不走本判定（队列格是另一套节点，无「升阶」钮）。
+    /// </summary>
+    bool CanShowAscendButton(string hireId, bool owned)
+    {
+        if (!owned || string.IsNullOrEmpty(hireId)) return false;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || !data.IsMercUnlocked(hireId)) return false;
+
+        int cur = MercStarSystem.OutStarOf(hireId);
+        if (cur < 0 || cur >= MercStarDefs.MaxOutStar) return false;   // -1=非花名册 → 隐藏
+
+        // 碎片：下一星消耗（GetNextStarCost 满星/查不到返回 0 → 按不够处理）
+        int need = MercStarSystem.GetNextStarCost(hireId);
+        if (need <= 0 || MercStarSystem.GetBagFragCount(hireId) < need) return false;
+
+        // 金币/钻石门槛（读表算消耗，余额与 MercAscendUI.OnStarUpClick 同口径）
+        if (!MercRosterDefs.TryGetByHireId(hireId, out var def)) return false;
+        int targetStar = cur + 1;
+        long goldCost = MercStarDefs.GoldCost(def.Rarity, targetStar);
+        long diaCost = MercStarDefs.DiamondCost(def.Rarity, targetStar);
+        if (goldCost > 0 && ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold) < goldCost) return false;
+        if (diaCost > 0 && ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond) < diaCost) return false;
+        return true;
     }
 
     /// <summary>隐藏 Role 节点（空格/锁格用，不留上一张的图）。</summary>

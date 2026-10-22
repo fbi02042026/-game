@@ -89,6 +89,12 @@ public class SpeechBubbleTalker : MonoBehaviour
     const float FaceHoldSeconds = 1.2f;
     const int PokeAngryClicks = 5;          // 5 秒内连点 5 次 → 生气脸 + 专属台词
     const float PokeWindowSeconds = 5f;
+    // 【2026-10-22 主人拍板】表情要有过程：连戳前两下只给台词不动脸，第 3 下起才害羞脸
+    const int ShyFromClicks = 3;
+    // 【2026-10-22 主人拍板】点太快有冷却：距上次有效点击不足 RapidClickSeconds 判为连点，
+    // 锁 BurstLockSeconds=5 秒，期间点击一律不算（不加怒气、不说话、不动脸）；怒气不清零
+    const float RapidClickSeconds = 0.8f;
+    const float BurstLockSeconds = 5f;
     Sprite _faceShy;
     Sprite _faceAngry;
     Sprite _faceRestore;    // 表情恢复目标（切换瞬间的看板图）
@@ -96,6 +102,8 @@ public class SpeechBubbleTalker : MonoBehaviour
     bool _facesReady;
     int _pokeClicks;
     float _lastPokeTime;
+    float _lastCountedClickTime;   // 上次有效点击时刻（unscaled），配合 RapidClickSeconds 判连点
+    float _burstUntil;             // 连点锁定截止时刻（unscaled），锁定期内点击全忽略
     string _lastPokeLine;   // 上一句戳一戳台词，用于尽量不重复
 
     void EnsureFaces()
@@ -208,6 +216,16 @@ public class SpeechBubbleTalker : MonoBehaviour
     {
         EnsureFaces();
 
+        // 【2026-10-22 主人拍板】点击冷却：点太快触发 5 秒锁定，期间点击全不算
+        // （不加怒气、不说话、不动脸）；锁完从正常节奏继续
+        if (Time.unscaledTime < _burstUntil) return;
+        if (Time.unscaledTime - _lastCountedClickTime < RapidClickSeconds)
+        {
+            _burstUntil = Time.unscaledTime + BurstLockSeconds;
+            return;
+        }
+        _lastCountedClickTime = Time.unscaledTime;
+
         // 连戳计数要在 _busy 拦截之前统计：打字期间狂点若全被吞，永远凑不齐 5 次
         if (Time.unscaledTime - _lastPokeTime <= PokeWindowSeconds) _pokeClicks++;
         else _pokeClicks = 1;
@@ -229,8 +247,10 @@ public class SpeechBubbleTalker : MonoBehaviour
         else
         {
             line = PickReceptionistLine();
-            ShowBoardFace(_faceShy);   // 单次招呼＝害羞脸
-            PokeMotion(false);         // 常规＝上下轻浮
+            // 【2026-10-22 主人拍板】表情要有过程：连戳前两下不动脸（台词即提示），攒到第 3 下起才害羞
+            if (_pokeClicks >= ShyFromClicks)
+                ShowBoardFace(_faceShy);   // 戳了几下＝害羞脸
+            PokeMotion(false);             // 常规＝上下轻浮
         }
 
         // 只停说话链路（TalkLoop/SpeakOnceThenResume 内联执行，停外层即全停）；
@@ -248,10 +268,12 @@ public class SpeechBubbleTalker : MonoBehaviour
             return "这么晚还不休息？……嗯，本小姐也还没困。";
         if (TavernEggState.DefeatStreak >= TavernEggState.ComfortStreakThreshold)
             return "又输了？……过来坐下，缓口气再走，谁让你难过了。";
-        // 【2026-10-20 主人拍板】点击回退池从 Tips 换成「戳一戳」专属 PokeLines（Tips 留给轮播）
+        // 【2026-10-20 主人拍板】点击回退池从 Tips 换成「戳一戳」专属池（Tips 留给轮播）
         if (Random.value < 0.03f)
             return PickPokeLine(PokeRareLines);
-        return PickPokeLine(PokeLines);
+        // 【2026-10-22 主人拍板】台词按隐藏怒气值分档从轻到重：1-2 轻 / 3-4 中 / 5+ 已走生气分支
+        string[] pool = _pokeClicks >= ShyFromClicks ? PokeLinesMid : PokeLinesLight;
+        return PickPokeLine(pool);
     }
 
     /// <summary>从池里取一句，尽量不与上一句重复（最多重试 4 次）；顺手记进 _lastPokeLine。</summary>
@@ -307,20 +329,26 @@ public class SpeechBubbleTalker : MonoBehaviour
     // 【2026-10-20 主人拍板】「戳一戳」专属台词池：只供玩家点击前台小姐时用，
     // 与上面的 Tips / RareLines 分开 —— 那两个是 TalkLoop 自动轮播的功能提示池，不许混用、不许删。
     // 人设沿用 :61 口径：前台小姐姐＝御姐、傲娇（从容慵懒、口嫌体正直、偶尔毒舌）。
-    static readonly string[] PokeLines =
+    // 【2026-10-22 主人拍板】隐藏怒气值（不显示、不存档）：连戳计数即怒气（5 秒窗口累加、
+    // 生气后清零、超窗重新计），台词按怒气分档从轻到重：1-2 轻 / 3-4 中 / 5+ 生气档；
+    // 同档内随机取、尽量不与上一句重复。原 12 句混合池拆档保留原句。
+    static readonly string[] PokeLinesLight =
     {
         "……手拿开。本小姐可不是摆设。",
         "有事说事，动手动脚的，扣你委托金哦。",
-        "哼，胆子不小。看在你还算顺眼的份上。",
-        "再戳，今天的推荐委托就没你的份了。",
         "本小姐很忙的——……不过，也不是不能理你。",
         "啧，黏人的猫。算了，让你戳一下。",
         "这么闲？裂隙那边可不等人哦。",
+        "想引起我注意？直说就好，本小姐又不是不通人情。",
+    };
+    static readonly string[] PokeLinesMid =
+    {
+        "哼，胆子不小。看在你还算顺眼的份上。",
+        "再戳，今天的推荐委托就没你的份了。",
         "手，收回去。……三秒，我数着呢。",
         "你倒是熟得快。才认识几天？",
         "别闹。被人看见，本小姐的威严还要不要了。",
         "……行了行了，戳够了没？再戳我可要记仇了。",
-        "想引起我注意？直说就好，本小姐又不是不通人情。",
     };
 
     // 连点 PokeAngryClicks 次的生气句（第 1 条为原有那句，保留）

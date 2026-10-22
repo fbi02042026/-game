@@ -67,6 +67,13 @@ public class WaveData
     /// 只对正式轨普通小怪波生效；原型接管编成（箭雨全远程等）优先级更高。
     /// </summary>
     public int compositionStyle;
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.2】本波是否为所属回合的最后一波（正式关回合制用）：
+    /// 铺波时由 WavePlanner 标记，每回合的末波置 true；波清链（BattleManager.Waves）据此判定
+    /// 「回合末 → 弹抽奖窗 + 掷石像」。Boss 波本身不算回合末（走通关链，恒 false）；
+    /// 引导局/金币本/裂隙不走标记路径，保持默认 false。
+    /// </summary>
+    public bool isRoundEnd;
     public bool HasEngageAnchor => engageAnchorX > -900f;
 
     /// <summary>本波原型；未接管时为 null。</summary>

@@ -16,10 +16,44 @@ public partial class WavePlanner
 
     /// <summary>
     /// 精英关：同随机总量；属性倍率在 SpawnWave 里乘 ELITE_SCALE。
+    /// 【2026-10-22 主人拍板 v4.1】正式关精英关在 <see cref="BuildCombatWaves"/> 里按波分流：
+    /// 除末波外用普通关编成，只有末波（随 v4.2 按章总波数自然后移）用精英编成。
     /// </summary>
     internal void SetupEliteWaves(int stageIdx)
     {
         BuildCombatWaves(stageIdx, elite: true);
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.2】正式关每回合波数：按章区间独立随机摇（每回合各摇各的）。
+    /// ch1→1/1、ch2→1/2、ch3→2/3、ch4+→3/3（GameConfig.FormalWavesPerRoundMin/Max）。
+    /// 返回每回合波数（下标=回合），Σ 即该关小怪总波数；v4.0「FORMAL_STAGE_WAVE_COUNT 定死 9」口径作废（常量保留退役）。
+    /// </summary>
+    static int[] RollFormalRoundWaveCounts(int chapter)
+    {
+        int rounds = GameConfig.FORMAL_STAGE_ROUND_COUNT;
+        int lo = GameConfig.FormalWavesPerRoundMin(chapter);
+        int hi = Mathf.Max(lo, GameConfig.FormalWavesPerRoundMax(chapter));
+        var counts = new int[rounds];
+        for (int r = 0; r < rounds; r++)
+            counts[r] = UnityEngine.Random.Range(lo, hi + 1);
+        return counts;
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板 v4.2】按每回合波数表铺出回合末标记数组：
+    /// 每回合的最后一波（累计下标压线处）置 true，供 WaveData.isRoundEnd 落位；总长 = Σ 波数。
+    /// </summary>
+    static bool[] FormalRoundEndFlags(int[] roundWaveCounts)
+    {
+        var flags = new bool[roundWaveCounts.Sum()];
+        int acc = 0;
+        for (int r = 0; r < roundWaveCounts.Length; r++)
+        {
+            acc += roundWaveCounts[r];
+            flags[acc - 1] = true;
+        }
+        return flags;
     }
 
     void BuildCombatWaves(int stageIdx, bool elite)
@@ -40,6 +74,26 @@ public partial class WavePlanner
 
         StageType spawnType = elite ? StageType.Elite : StageType.Normal;
 
+        bool formalMain = bm != null && bm.IsFormalMainRun;
+        // 【2026-10-22 主人拍板】正式关（主线 Normal 模式）波数口径：
+        // v4.0「定死 9 波」已作废（v4.2）——改按「3 回合 × 每回合按章区间独立摇」累加
+        // （ch1=3、ch2=3~6、ch3=6~9、ch4+=9；Boss 关另加末位 1 Boss 波，见 SetupBossWave）。
+        // 引导局（TutorialDirector 直刷）/金币本/无限裂隙不摇（IsFormalMainRun 过滤），口径一行不动。
+        // 刷怪点 hardMax 钳制对正式关**不生效**（v4.0 同口径延续）：anchor 取 usable[Mathf.Min(i, count-1)]、
+        // 无刷怪点走虚拟 X（VIRTUAL_WAVE_SPACING），波数与刷怪点数量解耦，不会出 0 波；
+        // ch4+ 封顶 9 波 ≤ STAGE_WAVE_MAX，与 v4.0 定死 9 时同一钳制面，无需新钳制。
+        int[] formalRoundWaves = null;
+        bool[] formalRoundEnd = null;
+        if (formalMain)
+        {
+            formalRoundWaves = RollFormalRoundWaveCounts(CurrentChapter);
+            formalRoundEnd = FormalRoundEndFlags(formalRoundWaves);
+        }
+        int formalTotalWaves = formalRoundEnd != null ? formalRoundEnd.Length : 0;
+        // 【2026-10-22 主人拍板 v4.1】正式关精英关按波分流：只有末波（总波数第末波）用精英编成，
+        // 其余波走普通关编成。原整关全精英编成路径（elite 对全部波生效：模式池 + 每波精英追加）保留退役不删 —— 非正式关精英关（金币本等）仍走原路径。
+        bool formalEliteSplit = formalMain && elite;
+
         // —— V3.0：模式只给「原型池 / 波数范围 / 人数倍率」，每一波在池里现抽 ——
         // 关卡可以重复出现，但同一模式的两次进关，波次组成与波次种类都不一样。
         // 抽不到（没配表 / 该章没候选）就整段跳过，行为与 V3.0 之前完全一致。
@@ -54,7 +108,11 @@ public partial class WavePlanner
         {
             // 波数上限 = 刷怪点数量（多出来的波会共用一个 anchor，触发 X 撞车）
             int hardMax = usable.Count > 0 ? Mathf.Clamp(usable.Count, 1, GameConfig.STAGE_WAVE_MAX) : 0;
-            waveCount = StageModeTable.RollWaveCount(mode, ComputeWaveBonus(mode), hardMax);
+            // 【2026-10-22 主人拍板 v4.2】正式关波数 = 3 回合 × 每回合按章区间独立摇的累加（见上方 formalRoundWaves）；
+            // v4.0「定死 9 波」口径作废。hardMax 钳制只作用于非正式关抽签（RollWaveCount），正式关与 v4.0 同样不钳。
+            waveCount = formalMain
+                ? formalTotalWaves
+                : StageModeTable.RollWaveCount(mode, ComputeWaveBonus(mode), hardMax);
 
             // 逐波摇原型（受 maxRun 软约束），同一个模式也摇不出一模一样的序列
             archIds = new List<string>(waveCount);
@@ -88,14 +146,43 @@ public partial class WavePlanner
             }
             waveCount = GameConfig.GetSuggestedWaveCount(total, usable.Count);
             waveCount = Mathf.Clamp(waveCount, waveCountMin, waveCountMax);
-            perWave = GameConfig.DistributeMonstersToWaves(total, waveCount);
+            // 【2026-10-22 主人拍板 v4.2】正式关波数 = 3 回合 × 每回合按章区间独立摇（模式池缺失时的兜底路径与主路径同口径）。
+            // v4.0 原注释：不走 DistributeMonstersToWaves：它有「每波下限 2」的钳制，会把 10-15 抬到 ≥18 = 私自改总量。
+            if (formalMain)
+                waveCount = formalTotalWaves;
+            // 【2026-10-22 主人拍板 v4.1】DistributeMonstersKeepTotal（v4.0 均摊口径）对正式关停用、函数保留不删：
+            // 正式关每波怪数改为「每波独立摇 10-15」，见下方统一覆盖段。
+            if (formalMain)
+                perWave = DistributeMonstersKeepTotal(total, waveCount);
+            else
+                perWave = GameConfig.DistributeMonstersToWaves(total, waveCount);
+        }
+
+        // 【2026-10-22 主人拍板 v4.1】正式关每波怪数独立摇 10-15，不分摊：
+        // 无论模式池路径还是公式兜底路径，正式关统一每波 Random.Range(10,16)（新常量
+        // GameConfig.FORMAL_WAVE_MONSTERS_MIN/MAX），不再把关卡总怪数均摊到波（上午的 DistributeMonstersKeepTotal 停用保留）。
+        // 【2026-10-22 主人拍板 v4.2】波数改按章摇（formalTotalWaves），覆盖段照新波数循环即可，怪数口径不变。
+        // 总怪量随总波数浮动（ch1 ~30-45 / ch4+ ~90-135）；精英末波同口径（编成为精英）。
+        // ⚠ 性能口径不变：怪是分波刷的、前波不死光不刷后波，同屏峰值仍 ~15 只，与此前性能测试口径一致。
+        // 引导局 / 金币本 / 无限裂隙不走本段，怪数口径一行不动。
+        if (formalMain)
+        {
+            total = 0;
+            for (int i = 0; i < waveCount; i++)
+            {
+                perWave[i] = UnityEngine.Random.Range(GameConfig.FORMAL_WAVE_MONSTERS_MIN, GameConfig.FORMAL_WAVE_MONSTERS_MAX + 1);
+                total += perWave[i];
+            }
         }
 
         // 精英关本波精英追加额（2026-10-14 主人拍板口径，见下方 elite 段）
         int eliteWaveBonus = 0;
         for (int i = 0; i < waveCount; i++)
         {
-            if (elite)
+            // 【2026-10-22 主人拍板 v4.1】正式关精英关按波分流：只有末波（总波数末波）是精英波，
+            // 其余波走普通关编成；非正式关保持原口径（整关精英）。
+            bool waveIsElite = formalEliteSplit ? (i == waveCount - 1) : elite;
+            if (waveIsElite)
             {
                 // 【2026-10-14 主人拍板】精英关每波 = 普通怪 + 2~4 只精英，不再是整波全精英：
                 //   ① 每波下限抬到 3 只，保证「2 精英 + 1 普通」成立；
@@ -125,16 +212,23 @@ public partial class WavePlanner
                 spawnAnchor = anchor,
                 monsterCount = perWave[i],
                 isBossWave = false,
+                // 【2026-10-22 主人拍板 v4.2】每回合的最后一波标记回合末（波清链据此弹抽奖窗）；
+                // 仅正式关铺波路径填写，其余路径默认 false
+                isRoundEnd = formalRoundEnd != null && i < formalRoundEnd.Length && formalRoundEnd[i],
                 spawned = false,
                 aliveCount = 0
             };
             // 原型接管进场方向 / 出怪间隔 / 人数上限 / 近远编成 / 精英额度
-            ApplyArchetypeToWave(wave, archIds != null ? archIds[i] : "");
+            // 【2026-10-22 主人拍板 v4.1】正式精英关的第 1-8 波不挂精英模式原型（普通关编成同款：无原型）；
+            // 末波照常挂精英池原型。原「全波挂精英池原型」路径保留退役。
+            bool splitOffArch = formalEliteSplit && i < waveCount - 1;
+            ApplyArchetypeToWave(wave, splitOffArch ? "" : (archIds != null ? archIds[i] : ""));
             // 【2026-10-20 主人拍板】普通小怪波近远编成随机摇定（全近战/混合/全远程）；
             // 精英波不摇 —— 精英关编成由模式原型接管（箭雨全远程等），保持既有拍板。
-            if (!elite) wave.compositionStyle = RollWaveComposition();
+            // v4.1：正式精英关的普通波（1-8 波）按普通关口径摇编成。
+            if (!waveIsElite) wave.compositionStyle = RollWaveComposition();
             // 【2026-10-14 主人拍板】精英关每波 2~4 只精英（旧值固定 +1，且 SpawnWave 曾整波乘精英缩放）
-            if (elite) wave.eliteBonus = eliteWaveBonus;
+            if (waveIsElite) wave.eliteBonus = eliteWaveBonus;
             _waves.Add(wave);
         }
 
@@ -166,6 +260,25 @@ public partial class WavePlanner
             string compTag = CompositionTag(w.compositionStyle);
             GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}{archTag}{eliteTag}{compTag}");
         }
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板】正式关固定波数摊总怪数：每波保底 1 只、余数给前几波，总量严格不变。
+    /// （GameConfig.DistributeMonstersToWaves 有每波下限 2 的钳制，9 波会把 10-15 只抬到 ≥18。）
+    /// 【2026-10-22 主人拍板 v4.1】对正式关**停用**（每波改独立摇 10-15，见 BuildCombatWaves 统一覆盖段）；
+    /// 函数保留不删（下线≠删除），调用点仍留（其结果会被 v4.1 覆盖段整体替换）。
+    /// </summary>
+    static int[] DistributeMonstersKeepTotal(int total, int waveCount)
+    {
+        waveCount = Mathf.Max(1, waveCount);
+        // 真怪量 < 波数时每波保底 1（最少补到波数，极边界，正常 10-15 ≥ 9 不触发）
+        int remaining = Mathf.Max(total, waveCount);
+        int baseCount = remaining / waveCount;
+        int rem = remaining % waveCount;
+        var counts = new int[waveCount];
+        for (int i = 0; i < waveCount; i++)
+            counts[i] = baseCount + (i < rem ? 1 : 0);
+        return counts;
     }
 
     /// <summary>把模式的原型序列铺成 waveCount 长；序列比波数短则循环，长则截断。</summary>
@@ -375,7 +488,25 @@ public partial class WavePlanner
         // Boss 关小怪波：按总数抬高波次上限，最多 7 波小怪 + 1 Boss
         int minionWaves = GameConfig.GetSuggestedWaveCount(minions, 0);
         minionWaves = Mathf.Clamp(minionWaves, 3, 7);
-        int[] perWave = GameConfig.DistributeMonstersToWaves(minions, minionWaves);
+        int[] perWave;
+        // 【2026-10-22 主人拍板 v4.2】正式关 Boss 关 = 3 回合小怪波（每回合按章区间独立摇，ch1=3…ch4+=9 波）
+        // + 末位 1 Boss 波；v4.0「小怪波定死 9（FORMAL_STAGE_WAVE_COUNT）」口径作废（常量保留退役）。
+        // Boss 波放末位（原「小怪波 + 末尾 isBossWave」结构不动），且 Boss 波本身不算回合末（isRoundEnd 恒 false，走通关链）。
+        // 【2026-10-22 主人拍板 v4.1】小怪波每波怪数独立摇 10-15（不再用 DistributeMonstersKeepTotal 均摊，
+        // 函数保留退役）；Boss 波（末位）维持现有 Boss+杂兵编成与怪数口径不变。
+        // 引导局/金币本/裂隙（EndlessBossStage 也走这里）口径不动。
+        bool[] formalBossRoundEnd = null;
+        if (bm != null && bm.IsFormalMainRun)
+        {
+            var formalRoundWaves = RollFormalRoundWaveCounts(CurrentChapter);
+            formalBossRoundEnd = FormalRoundEndFlags(formalRoundWaves);
+            minionWaves = formalBossRoundEnd.Length;
+            perWave = new int[minionWaves];
+            for (int i = 0; i < minionWaves; i++)
+                perWave[i] = UnityEngine.Random.Range(GameConfig.FORMAL_WAVE_MONSTERS_MIN, GameConfig.FORMAL_WAVE_MONSTERS_MAX + 1);
+        }
+        else
+            perWave = GameConfig.DistributeMonstersToWaves(minions, minionWaves);
 
         // —— 2026-09-18：Boss 关的小怪波原来固定「右侧进场 + 均分」，每波长得一模一样。
         // 这里让小怪波也进模式池逐波摇原型（Boss 本体那波不动）。
@@ -399,6 +530,8 @@ public partial class WavePlanner
                 spawnAnchor = null,
                 monsterCount = perWave[i],
                 isBossWave = false,
+                // 【2026-10-22 主人拍板 v4.2】每回合末波标记（仅正式关 Boss 关小怪波；非正式关为 null → 全 false）
+                isRoundEnd = formalBossRoundEnd != null && i < formalBossRoundEnd.Length && formalBossRoundEnd[i],
                 spawned = false,
                 aliveCount = 0
             };
@@ -438,6 +571,8 @@ public partial class WavePlanner
             triggerX = bossX - 1f,
             monsterCount = bossCount + guardCount,
             isBossWave = true,
+            // 【2026-10-22 主人拍板 v4.2】Boss 波不算回合末（走通关链，清完直接结算，不弹回合抽奖窗）
+            isRoundEnd = false,
             spawned = false,
             aliveCount = 0,
             bossVariantId = variantId,

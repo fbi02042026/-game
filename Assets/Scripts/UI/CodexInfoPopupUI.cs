@@ -269,6 +269,10 @@ public class CodexInfoPopupUI : MonoBehaviour
 
             // 点头像放大查看大图：有大图才可点（怪物弹窗不传大图，保持不可点）
             _zoomSprite = (zoomSprite != null && portraitSprite != null) ? zoomSprite : null;
+            // 【2026-10-22 修】预制体 Portrait 的 Image 是 m_RaycastTarget: 0（CodexInfoPopup.prefab:383），
+            // 射线收不到 → 挂上去的 Button 永远不响应，黑底立绘层弹不出来。只有可放大时才打开，
+            // 怪物弹窗（无大图）保持预制体原样关闭。
+            portrait.raycastTarget = _zoomSprite != null;
             var zoomBtn = portrait.GetComponent<Button>();
             if (zoomBtn == null && _zoomSprite != null)
             {

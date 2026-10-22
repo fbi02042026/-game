@@ -1398,7 +1398,13 @@ public partial class BattleManager
         if (Mode == null)
             Debug.LogError("[BattleManager] BeginRewardSequence：Mode 为空，无法判断本模式发不发抽奖币（本次未发）");
         else if (Mode.GrantsRunCoins)
-            SlotMachineSystem.GrantStageCoins(currentStage.type);
+            // 【2026-10-22 主人拍板：通关补贴停发，抽奖币只来自击杀（10/25/50）+ 启动金】
+            // 主线正式关不再发通关补贴；GrantStageCoins 函数体保留不删（下线≠删除）。
+            // 启动金（RunDraftDirector.OnRunStart）不动。
+            // 误伤检查：金币本 GrantsRunCoins=false 本就不发；无限裂隙 GrantsRunCoins=true、
+            // IsFormalMainRun=false → 照发，不受影响。
+            if (!IsFormalMainRun)
+                SlotMachineSystem.GrantStageCoins(currentStage.type);
 
         // 2026-10-05 主人拍板「局外在结算界面才发」：这里**不再**即时加金币、不再飘字。
         // 只把本关额度记进待发池，等结算（PersistBattleGold → GrantPendingStageGold）一次性发。
@@ -1412,7 +1418,9 @@ public partial class BattleManager
         if (isBoss)
             BattleUI.Instance?.UpdateStageProgress(currentStage.stageIndex, atEndFlag: true);
         else
-            BattleUI.Instance?.UpdateStageProgress(currentStage.stageIndex);
+            // 【2026-10-21 主人拍板】进度条改按当前关波次推进：本关已清完全部波 → 满进度
+            //（Boss 关保留原 atEndFlag:true，marker 停最右旗子，语义兼容）
+            BattleUI.Instance?.UpdateWaveProgress(_waves != null ? _waves.Count : 0, _waves != null ? _waves.Count : 0);
 
         int bonusStar = 0;
         int equipCount = GameConfig.EQUIP_CHOOSE_COUNT;
@@ -1453,8 +1461,51 @@ public partial class BattleManager
         }
 
         EnsureRewardDirector();
+        // 【2026-10-22 主人拍板】正式关（主线）去宝箱：宝箱演出链（StageClearRewardDirector.Begin →
+        // 开箱/飞金币/折金 → 开门）对主线正式关停用，代码保留不删（下线≠删除）。
+        // 直接开传送门 → 保留「传送门 → FinishStageAfterPortalReached」全链：PersistBattleGold（金币写回）、
+        // ChapterManager.OnStageComplete（章节推进/首通记录）都挂在链上，进传送门后由
+        // SettleNormalStageClear 弹结算（双钮：下一关/返回）。
+        // 金币本 / 无限裂隙自己的结算链不动：照旧走宝箱 → 传送门 → 各自 SettleStageClear。
+        //
+        // 【2026-10-22 主人拍板 v4.1】再进一步：去传送门。末波清完**不开传送门**，直接调
+        // FinishStageAfterPortalReached()。该函数的账务链完整可复用（已逐行确认，无门直调安全）：
+        //   ResetPortalGateState（无门时 _portalGate=null、_portalParty 空 → 循环/Close 全空转，安全）
+        //   → TickFallenMercsStagePassed（阵亡佣兵养血）→ Planner.NotifyStageResult（压力阀）
+        //   → PersistBattleGold（金币写回）→ ChapterManager.OnStageComplete（章节推进）
+        //   → Analytics.StageEnd / AdventureLogFragments 掉落 → Mode.SettleStageClear
+        //   → SettleNormalStageClear 弹双钮结算（下一关/返回）。
+        //   _tutorialPortalPending 分支不适用正式关：该标志只在引导局 BeginTutorialPortalExit
+        //   （BattleManager.Death.cs 引导链）置位，正式关恒 false，不会误入引导撤离分支。
+        //   无「走入门」演出前置可卡：进门行走检测 TickPortalWalkIn 只在 _portalActive=true 时跑，
+        //   不开门 → _portalActive=false → 不触发、不卡、不空指针。
+        // OpenClearPortalDirect / 宝箱链 / 传送门行走链全部保留退役不删（下线≠删除）。
+        if (IsFormalMainRun)
+        {
+            Debug.Log("[BattleManager] 正式关去宝箱去传送门（v4.1）：直接进通关结算");
+            FinishStageAfterPortalReached();
+            return;
+        }
         StageClearRewardDirector.Instance.Begin(rewards, bonusGold, currentStage.type);
         Debug.Log($"[BattleManager] 开始宝箱结算 type={currentStage.type} bonusGold={bonusGold} equips={rewards?.Count ?? 0}");
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板】正式关去宝箱后直接开门：与 StageClearRewardDirector 的开门段同款
+    ///（PortalGate.Open + NotifyChuanSongMenOpened），门开不出来也不锁死玩家 —— 报错后直接走通关结算。
+    /// 【2026-10-22 主人拍板 v4.1】退役：正式关不再开传送门（BeginRewardSequence 直调
+    /// FinishStageAfterPortalReached）。本函数与宝箱链/传送门行走链保留不删（下线≠删除）。
+    /// </summary>
+    void OpenClearPortalDirect()
+    {
+        var gate = PortalGate.Open(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
+        if (gate != null)
+        {
+            NotifyChuanSongMenOpened(gate);
+            return;
+        }
+        Debug.LogError("[BattleManager] 传送门没开出来（PortalGate.Open 返回空，详见其上一条报错），直接走通关结算");
+        FinishStageAfterPortalReached();
     }
 
     /// <summary>
@@ -1643,27 +1694,68 @@ public partial class BattleManager
     public void SettleNormalStageClear()
     {
         bool isBoss = currentStage != null && currentStage.type == StageType.Boss;
+        var cm = ChapterManager.Instance;
         if (isBoss)
         {
             // 章节解锁（MarkChapterCleared）已在 ChapterManager 关卡落账时完成，
             // 回城后世界地图传送门 / 冒险页第二章即开放。
-            ShowVictorySettlementThen(EndRunAndReturnToTown);
+            // 【2026-10-22 主人拍板】章末 Boss 也弹双钮结算：【下一关】= 下一章第 1 关
+            //（StartChapter(nextCh) 重建关卡图后走原 GoChapterGate 过场+直进）；
+            // 跨章候选口径：OnStageComplete 章末分支不生成下一章关卡图（availableNextStages 仍是旧候选），
+            // 下一章可用性以存档解锁章数（ChapterRouteTable.AvailableChapters）为准；
+            // 不可用（最后一章/未解锁）→【下一关】隐藏，只留【返回】（onNextStage=null 单确认钮口径）。
+            int nextChapter = (cm != null ? cm.currentChapter : 1) + 1;
+            if (HasNextChapter(nextChapter))
+            {
+                ShowVictorySettlementThen(
+                    EndRunAndReturnToTown,
+                    () =>
+                    {
+                        var cmNext = ChapterManager.Instance;
+                        if (cmNext == null)
+                        {
+                            Debug.LogError("[BattleManager] 进下一章失败：ChapterManager 为空，回城收尾");
+                            EndRunAndReturnToTown();
+                            return;
+                        }
+                        cmNext.StartChapter(nextChapter);
+                        GoChapterGate(nextChapter, cmNext.availableNextStages);
+                    },
+                    "下一关");
+            }
+            else
+                ShowVictorySettlementThen(EndRunAndReturnToTown);
+            return;
         }
-        else
-        {
-            // 【2026-10-11 主人拍板 · 三】普通关通关**不再弹「本局结算面板」**。
-            // 主人原话：「怎么打完一关就结算了，我跟你说的打完一关进传送门，然后弹老虎机怎么没有了」。
-            // BattleSettlementUI 的语义是「**一局结束**」：MVP / 总伤害 / 本局累计金币 / 本局装备数，
-            // 每通一关都弹一次 = 玩家看到它就以为本局打完了，后面的关卡图 + 老虎机根本没人走到
-            // （Editor.log 实锤：结算面板弹出后玩家停了 130 秒直接退出，关卡图一次没起来）。
-            // 现在关间流程严格照主人给的那一条：
-            //   宝箱 → 传送门 → 走进去 → 过场 → 关卡图（石墩）→ 老虎机演下一关类型 → 落旗 → 点石墩进关。
-            // 结算面板只在**整局收尾**弹：章末 Boss（下面 isBoss 分支）/ 死亡 / 撤离 / 回城。
-            var cm = ChapterManager.Instance;
-            var stages = cm != null ? cm.availableNextStages : null;
-            int gateChapter = cm != null ? cm.currentChapter : 1;
-            GoChapterGate(gateChapter, stages);
-        }
+
+        // 【2026-10-11 主人拍板 · 三】普通关通关**不再弹「本局结算面板」**。
+        // 主人原话：「怎么打完一关就结算了，我跟你说的打完一关进传送门，然后弹老虎机怎么没有了」。
+        // （历史归因注释保留如上）
+        //
+        // 【2026-10-22 主人拍板 · v4】上面 10-11 的口径作废：普通关清完 → 传送门 →（无宝箱）→
+        // 直接弹结算界面（双钮）。【下一关】回调 = 原 GoChapterGate 直进那套（过场 + SelectStage 下一关，
+        // 0 点击直进逻辑原样保留，只是改由按钮触发）；【返回】= 回城 EndRunAndReturnToTown。
+        // availableNextStages 为空 →【下一关】隐藏，只留【返回】。
+        var stages = cm != null ? cm.availableNextStages : null;
+        int gateChapter = cm != null ? cm.currentChapter : 1;
+        bool hasNext = stages != null && stages.Count > 0;
+        ShowVictorySettlementThen(
+            EndRunAndReturnToTown,
+            hasNext ? (System.Action)(() => GoChapterGate(gateChapter, stages)) : null,
+            "下一关");
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板】下一章是否可进（章末结算【下一关】钮的显示条件）。
+    /// 以 ChapterRouteTable.AvailableChapters（存档解锁区域）为准；打完 Boss 时
+    /// OnStageComplete 已先 MarkChapterCleared/解锁，时序有保证。
+    /// </summary>
+    static bool HasNextChapter(int nextChapter)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        var avail = ChapterRouteTable.AvailableChapters(data);
+        return avail != null && avail.Contains(nextChapter);
     }
 
     /// <summary>
@@ -1744,25 +1836,39 @@ public partial class BattleManager
     }
 
     /// <summary>
-    /// 关间：过场（黑屏 + 本章背景图）→ 关卡选择界面（石墩图）。老虎机在关卡图里演，不在这里。
-    /// 普通关与「只有一条路」的关走的是同一条路，不存在跳过关卡图的分支。
+    /// 关间：过场（黑屏 + 本章背景图，换景演出，保留）→ 直接进下一关。
+    /// 【2026-10-21 主人拍板】关间流程极简化：打完一关 → 开宝箱 → 直接进下一关，全程 0 点击；
+    /// 石墩关卡图（BattleStageMapUI）+ 老虎机（NextStageRouletteUI）+ 恢复关（RestStagePopupUI 流程）
+    /// 三件套全部停用（停用不删除）：ShowStageSelectUI 本体、BattleManager.Stats.cs 四个死方法调用点、
+    /// BattleStageMapUI / NextStageRouletteUI 代码一律原样保留，旧「关卡图 → 老虎机 → 点石墩」流程 dormant。
+    /// 推进口径：availableNextStages 为单路线性恒单候选（FinishStageAfterPortalReached 里
+    /// OnStageComplete 已先更新为下一关候选，时序有保证）→ 取第一个 SelectStage 进关
+    /// （内部调 BattleManager.LoadStage，见 ChapterManager.SelectStage）；传参 stages 为空时也用它兜底。
+    /// 候选空/null → 沿用 UIManager.ShowStageSelectUI 的既有守卫口径（UIManager.cs）：
+    /// LogWarning + ClearAllMercs + ReturnToTown。
     /// </summary>
     void GoChapterGate(int chapter, System.Collections.Generic.List<StageData> stages)
     {
-        // 【2026-10-11 主人拍板 · 一】**无论几条路都走完整关卡图流程**
-        // （石墩图 → 老虎机演这一关的类型 → 落旗 → 点石墩进关）。
-        // 旧实现在「只有一条路」时直接 `cm.SelectStage(next[0])` 跳过整条 ——
-        // 于是玩家看不到老虎机，也就不知道下一关是普通/精英/恢复/Boss，
-        // 主人反馈「也没有弹出抽奖界面」指的就是这个。
-        // 而章节分支表里 **只有分支点才有 2 条路**，第 1 关及绝大多数关都是单路 →
-        // 旧逻辑等于「几乎每关都跳过」，老虎机基本播不出来。
-        //
-        // 【2026-10-11 主人拍板 · 二】进关卡选择界面（石墩图）**之前**先来一次
-        // 「黑屏 + 本章背景图」的 loading 过场。主人原话：
-        // 「走进传送门后黑屏然后出现 loading 图」「进入关卡选择界面时不用加载 loading 界面吗」。
-        // 关卡与关卡之间**不切场景**（LoadStage 只重置状态），本来不会有 loading，
-        // 所以这一层是专门为过场显式插的 —— 主人给的每章背景图就显示在这里。
-        StartCoroutine(CoChapterGateLoading(chapter, () => UIManager.Instance?.ShowStageSelectUI(stages)));
+        StartCoroutine(CoChapterGateLoading(chapter, () =>
+        {
+            var cm = ChapterManager.Instance;
+            var candidates = cm != null ? cm.availableNextStages : null;
+            var next = (stages != null && stages.Count > 0) ? stages[0]
+                     : (candidates != null && candidates.Count > 0) ? candidates[0]
+                     : null;
+            if (next != null)
+            {
+                // 【2026-10-21 主人拍板】直接进下一关（0 点击）：SelectStage 内部调 BattleManager.LoadStage
+                cm.SelectStage(next);
+            }
+            else
+            {
+                // 沿用 UIManager.ShowStageSelectUI 的既有守卫口径
+                Debug.LogWarning("[BattleManager] 没有下一关可选，回城");
+                MercenaryManager.Instance?.ClearAllMercs();
+                GameSceneManager.Instance?.ReturnToTown();
+            }
+        }));
     }
 
     /// <summary>进关卡选择界面前那次 loading 过场停留多久（秒）。要调快慢只改这一个数。</summary>

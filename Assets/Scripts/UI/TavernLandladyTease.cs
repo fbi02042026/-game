@@ -21,6 +21,11 @@ public class TavernLandladyTease : MonoBehaviour,
     public const float HeadZoneYNorm = 0.68f;
     public const float LongPressSeconds = 1.5f;
     public const float IdleLineSeconds = 60f;
+    // 【2026-10-22 主人拍板】点太快有冷却：距上次有效点击不足 RapidClickSeconds 判为连点，
+    // 锁 BurstLockSeconds=5 秒，期间点击一律不算（不加怒气、不说话、不动脸、不加好感）；
+    // 已累计的怒气不清零，锁定结束后正常点击继续攒
+    public const float RapidClickSeconds = 0.8f;
+    public const float BurstLockSeconds = 5f;
     const string BanUntilUtcKey = "tavern_landlady_ban_until_utc";
 
     // —— 表情立绘（2026-10-18 主人补图，Resources 路径加载，同 MercPortraitSprites 通道）——
@@ -29,19 +34,39 @@ public class TavernLandladyTease : MonoBehaviour,
     const float FaceHoldSeconds = 1.2f;
 
     // 【2026-10-18 主人拍板】老板娘人设＝豪放爽朗、开放自来熟：警告不娇羞，大大咧咧怼回去
-    static readonly string[] WarnLines =
+    // 【2026-10-22 主人拍板】隐藏怒气值（不显示、不存档）：乱摸点击累加（OnEnable 清零、摸头不加），
+    // 台词按怒气分三档从轻到重，同档内随机取、尽量不与上一句重复；原 10 句线性链拆档保留原句
+    static readonly string[] WarnLinesLight =
     {
         "哎哎，摸什么摸！酒钱还想不想结了？",
         "胆子挺肥啊，敢占老娘便宜。",
         "再来我可要加酒钱了啊！",
+    };
+    static readonly string[] WarnLinesMid =
+    {
         "说吧，是想喝酒还是想挨揍？",
         "行，有点意思，我记住你了。",
         "真当我不敢动手？",
+    };
+    static readonly string[] WarnLinesHeavy =
+    {
         "最后一遍——手，拿开。",
         "你是不是嫌命太长？",
         "好，胆量我认了，人你也得出去。",
         "滚出去醒醒酒！",
     };
+    string _lastWarnLine;   // 上一句警告台词，同档内尽量不重复
+
+    /// <summary>按隐藏怒气值（＝本轮乱摸累计次数）取警告台词：1-3 轻 / 4-6 中 / 7+ 重。</summary>
+    string PickWarnLine()
+    {
+        string[] pool = _clicks <= 3 ? WarnLinesLight : _clicks <= 6 ? WarnLinesMid : WarnLinesHeavy;
+        string line = pool[UnityEngine.Random.Range(0, pool.Length)];
+        for (int i = 0; i < 4 && pool.Length > 1 && line == _lastWarnLine; i++)
+            line = pool[UnityEngine.Random.Range(0, pool.Length)];
+        _lastWarnLine = line;
+        return line;
+    }
 
     RectTransform _rt;
     Image _img;
@@ -53,6 +78,8 @@ public class TavernLandladyTease : MonoBehaviour,
     float _idleTimer;
     int _clicks;
     bool _kicking;
+    float _lastClickTime;   // 上次有效点击时刻（unscaled），配合 RapidClickSeconds 判连点
+    float _burstUntil;      // 连点锁定截止时刻（unscaled），锁定期内点击全忽略
     // 表情切换
     Sprite _baseSprite;
     Sprite _shyFace;
@@ -229,6 +256,15 @@ public class TavernLandladyTease : MonoBehaviour,
         if (_suppressClick) { _suppressClick = false; return; }   // 长按触发后吞掉松手的 click
         if (_kicking) return;
         if (IsBanned) { ShowBannedToast(); return; }
+        // 【2026-10-22 主人拍板】点击冷却：点太快触发 5 秒锁定，期间点击全不算
+        // （怒气/台词/摸头好感都不结算）；锁完从正常节奏继续
+        if (Time.unscaledTime < _burstUntil) return;
+        if (Time.unscaledTime - _lastClickTime < RapidClickSeconds)
+        {
+            _burstUntil = Time.unscaledTime + BurstLockSeconds;
+            return;
+        }
+        _lastClickTime = Time.unscaledTime;
         if (IsHeadZone(ev)) { OnHeadPat(); return; }
         OnClicked();
     }
@@ -274,12 +310,15 @@ public class TavernLandladyTease : MonoBehaviour,
 
         _clicks++;
         _portraitMotion?.RequestShake();
-        ShowFace(_angryFace);
+        // 【2026-10-22 主人拍板】表情要有过程：前几下只给提示台词不动脸，
+        // 从开始变暗（第 DimFromClick 下）起才沉下生气脸，第 KickClicks 下踢出时保持
+        if (_clicks >= DimFromClick)
+            ShowFace(_angryFace);
 
         // 【2026-10-18 修·主人报「点老板娘不弹对话了」】警示语是玩家主动交互的直接反馈，
         // 改走 force=true：不再被酒馆/看板娘气泡压制吞掉（现象就是「点了没反应」）。
-        int lineIdx = Mathf.Clamp(_clicks - 1, 0, WarnLines.Length - 1);
-        UIManager.Instance?.ShowToast(WarnLines[lineIdx], force: true);
+        // 【2026-10-22 主人拍板】台词按隐藏怒气值分档从轻到重（PickWarnLine）。
+        UIManager.Instance?.ShowToast(PickWarnLine(), force: true);
 
         if (_clicks >= DimFromClick)
         {

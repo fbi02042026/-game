@@ -6,8 +6,8 @@ using UnityEngine;
 /// </summary>
 public class MercBattleBanter : MonoBehaviour
 {
-    const float MinInterval = 12f;
-    const float MaxInterval = 20f;
+    const float MinInterval = 25f;
+    const float MaxInterval = 40f;
 
     float _nextAt = -1f;
     BattleManager _bm;

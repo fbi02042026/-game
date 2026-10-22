@@ -247,5 +247,19 @@ public partial class BattleManager
         BattleSettlementUI.Show(RunStats, afterConfirm);
     }
 
+    /// <summary>
+    /// 【2026-10-22 主人拍板】v4 通关结算双钮变体：确认钮 =【下一关】（onNextStage，如 GoChapterGate 直进），
+    /// 返回钮（运行时克隆）= afterConfirm（回城 EndRunAndReturnToTown 原行为）。
+    /// onNextStage 传 null（跨章候选空）→ 不克隆返回钮、确认钮文案回「确定」，等同单确认钮口径。
+    /// 死亡/撤离路径仍走上面单参重载，行为完全不变。
+    /// </summary>
+    public void ShowVictorySettlementThen(System.Action afterConfirm, System.Action onNextStage, string confirmLabel = "下一关")
+    {
+        int talentGain = 0;
+        FillSettlementSnapshot(isDeath: false, talentGain, isVictory: true);
+        AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);
+        BattleSettlementUI.Show(RunStats, afterConfirm, onNextStage, confirmLabel);
+    }
+
     #endregion
 }

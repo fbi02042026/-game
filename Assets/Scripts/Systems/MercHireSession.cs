@@ -122,7 +122,8 @@ public static class MercHireSession
         if (offer == null) return 500;
         if (MercRosterDefs.TryGetByAssetId(offer.mercId, out var def) && def.RecruitGold > 0)
             return def.RecruitGold;
-        var rarity = MercSkillMapping.StarToRarity(offer.star);
+        // 【2026-10-22 主人拍板 T13】招募零星后 offer.star 恒 0，稀有度改走 OfferRarity（花名册优先）
+        var rarity = OfferRarity(offer);
         if (rarity == MercRosterDefs.MercRarity.Legendary) return 5000;
         if (rarity == MercRosterDefs.MercRarity.Rare) return 1500;
         return 500;
@@ -131,6 +132,12 @@ public static class MercHireSession
     public static MercRosterDefs.MercRarity OfferRarity(MercenaryData offer)
     {
         if (offer == null) return MercRosterDefs.MercRarity.Common;
+        // 【2026-10-22 主人拍板 T13】招募零星：offer.star 恒 0，StarToRarity(star) 会把稀有/传奇全判成普通
+        //（卡面稀有度与卷轴/金币支付口径全错）—— 改从花名册解析（ hireId → AssetId），StarToRarity 只作兜底。
+        if (!string.IsNullOrEmpty(offer.hireId) && MercRosterDefs.TryGetByHireId(offer.hireId, out var byHire))
+            return byHire.Rarity;
+        if (!string.IsNullOrEmpty(offer.mercId) && MercRosterDefs.TryGetByAssetId(offer.mercId, out var byAsset))
+            return byAsset.Rarity;
         return MercSkillMapping.StarToRarity(offer.star);
     }
 

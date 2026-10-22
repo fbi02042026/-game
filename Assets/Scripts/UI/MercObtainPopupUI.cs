@@ -53,6 +53,11 @@ public class MercObtainPopupUI : MonoBehaviour
     Vector2 _keepBasePos;
     /// <summary>右下「替换」按钮（预制体自带节点 Panel/tihaunButton，主人摆的；仅佣兵池未入队详情入口显示）。</summary>
     Button _replaceBtn;
+    /// <summary>「进阶」按钮（2026-10-22 主人拍板：预制体自带节点 Panel/进阶，主人摆的；
+    /// 已拥有的佣兵才显示，点击开 MercAscendUI）。节点没 Button 组件时运行时补，几何不动。</summary>
+    Button _ascendBtn;
+    /// <summary>当前弹窗填充的佣兵 hireId（Fill 每次更新；「进阶」钮点击与显隐都认它）。</summary>
+    string _curHireId;
     Image _icon;
     /// <summary>四分类类型图标位（Panel/Role，预制体已有节点）。</summary>
     Image _role;
@@ -269,6 +274,18 @@ public class MercObtainPopupUI : MonoBehaviour
         if (_replaceBtn == null)
             Debug.LogError("[MercObtainPopup] 缺少节点 Panel/tihaunButton（酒馆招募的「替换」钮不显示也不可点）");
 
+        // 【2026-10-22 主人拍板】「进阶」钮 = 预制体自带节点（主人摆的 Panel/进阶）：
+        // 节点没有 Button 组件就运行时 AddComponent 补上（先例允许，几何不动）；
+        // 节点整个缺失只 LogError 不兜底建（同 tihaunButton 口径）。显隐在 Fill 里按已拥有刷。
+        var ascendTf = _root.transform.Find("Panel/进阶");
+        if (ascendTf == null)
+            Debug.LogError("[MercObtainPopup] 缺少节点 Panel/进阶（进阶入口不可用）");
+        else
+        {
+            _ascendBtn = ascendTf.GetComponent<Button>();
+            if (_ascendBtn == null) _ascendBtn = ascendTf.gameObject.AddComponent<Button>();
+        }
+
         // 招募购买模式要改文案的三个节点（2026-10-19 主人拍板：按钮换成 购买/取消、标题改佣兵信息）
         _keepLabel = _root.transform.Find("Panel/KeepButton/Label")?.GetComponent<Text>();
         _replaceLabel = _root.transform.Find("Panel/tihaunButton/Label")?.GetComponent<Text>();
@@ -349,6 +366,12 @@ public class MercObtainPopupUI : MonoBehaviour
             _replaceBtn.onClick.RemoveAllListeners();
             _replaceBtn.onClick.AddListener(OnReplaceClicked);
         }
+        // 【2026-10-22 主人拍板】「进阶」钮：点击开 MercAscendUI，佣兵取弹窗当前填充的 hireId
+        if (_ascendBtn != null)
+        {
+            _ascendBtn.onClick.RemoveAllListeners();
+            _ascendBtn.onClick.AddListener(OnAscendClicked);
+        }
     }
 
     /// <summary>确认钮：招募模式下是「购买」，阵亡复活模式下是「复活」，其余模式是「确认=关」。</summary>
@@ -412,6 +435,33 @@ public class MercObtainPopupUI : MonoBehaviour
             pos.x = on ? _keepBasePos.x : 0f;
             _keepRt.anchoredPosition = pos;
         }
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板】点「进阶」：开 MercAscendUI.Show(当前佣兵 hireId)。
+    /// 只在已拥有时可见（Fill 里刷），理论点不到空 hireId，兜底 LogError 防静默。
+    /// </summary>
+    void OnAscendClicked()
+    {
+        if (string.IsNullOrEmpty(_curHireId))
+        {
+            Debug.LogError("[MercObtainPopup] 进阶钮点击但当前佣兵 hireId 为空（Fill 未正常填充？）");
+            return;
+        }
+        MercAscendUI.Show(_curHireId);
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板】「进阶」钮显隐：仅该佣兵已拥有（SaveData.IsMercUnlocked）才显示；
+    /// 未拥有的预览态（酒馆招募候选卡）隐藏 —— 与主人「未拥有的佣兵不显示」口径一致。
+    /// Fill 每次填充佣兵数据时调用（四个入口都经 Fill）。
+    /// </summary>
+    void ApplyAscendButton()
+    {
+        if (_ascendBtn == null) return;
+        var data = SaveSystem.Instance?.Data;
+        bool owned = data != null && data.IsMercUnlocked(_curHireId);
+        _ascendBtn.gameObject.SetActive(owned);
     }
 
     /// <summary>
@@ -630,6 +680,9 @@ public class MercObtainPopupUI : MonoBehaviour
 
         // 2) 立绘（LoadPortrait 内部已 LogError，不重复刷屏）
         string hireId = string.IsNullOrEmpty(card.HireId) ? def.HireId : card.HireId;
+        // 【2026-10-22 主人拍板】记下当前佣兵 hireId 并刷「进阶」钮显隐（已拥有才显示，见 ApplyAscendButton）
+        _curHireId = hireId;
+        ApplyAscendButton();
         var sp = MercJoinBannerUI.LoadPortrait(hireId);
         if (_icon == null)
             Debug.LogError("[MercObtainPopup] 缺少节点 Panel/zuo/Iconmask/Icon（立绘不显示）");

@@ -171,6 +171,13 @@ public partial class BattleManager
     /// <summary>当前局是否无限裂隙（2026-10-17 新玩法，见 EndlessBattleMode）</summary>
     public bool IsEndlessRift => Mode != null && Mode.Id == BattleModeId.Endless;
 
+    /// <summary>
+    /// 【2026-10-22 主人拍板】主线正式关（v4 回合制新流程的作用域）= Mode 是 NormalBattleMode。
+    /// 引导局（TutorialBattleMode）/金币本（GoldDungeonBattleMode）/无限裂隙（EndlessBattleMode）一律 false。
+    /// v4 新逻辑（类型定死 / 波数 9/10 / 回合末抽奖 / 停通关补贴 / 去宝箱直结算 / 石像事件）都必须过这道过滤。
+    /// </summary>
+    public bool IsFormalMainRun => Mode != null && Mode.Id == BattleModeId.Normal;
+
     /// <summary>无限裂隙当前层数（绝对层，1 起；进本 = 记录点+1，续层 ++）</summary>
     public int EndlessRiftStage { get; private set; }
 

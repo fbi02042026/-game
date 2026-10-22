@@ -49,6 +49,20 @@ public partial class BattleManager
         {
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, GameConfig.ELITE_TALENT_DROP_AMOUNT, save: false, notify: true);
         }
+        // 【2026-10-21 主人拍板】击杀发局内抽奖币：普通 10 / 精英 25 / Boss 50（Boss 优先、不与精英叠加，
+        // 与上面佣兵币同款判定结构）。发放唯一出口 = AddRunGold(countsAsEarned:false) → 局内抽奖币池
+        // currentGold（带不出本局，与 SlotMachineSystem 同口径）；HUD 抽奖币数字由
+        // AddRunGold → NotifyPoolGoldChanged 自动刷新，这里不手动刷。
+        // 金币副本有自己的击杀掉金经济（killGoldMul=1 旧路径原样），不发防双发；引导局照发保持一致。
+        // 表现复用 DamageTextSystem.SpawnGoldText 现成入口，怪头顶飘「+N金」。
+        if (!IsGoldDungeon)
+        {
+            int killGold = m.IsBossUnit ? GameConfig.KILL_GOLD_BOSS
+                         : m.IsEliteWave ? GameConfig.KILL_GOLD_ELITE
+                         : GameConfig.KILL_GOLD_NORMAL;
+            AddRunGold(killGold, countsAsEarned: false);
+            DamageTextSystem.Instance?.SpawnGoldText(m.transform.position, killGold);
+        }
         // 2026-09-26 主人拍板：累计本关物理/魔法击杀数，用于掉落按类型分池（主导类型 = 数量多者）。
         if (m.IsMagicType) _magicKills++;
         else _physicalKills++;

@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
@@ -425,8 +427,11 @@ public class FirstRunGuide : MonoBehaviour
         {
             TryFallbackNav(MainNavTab.Character);
             // ① 底栏「角色」
+            // 【2026-10-22 修复】点完引导洞立刻判成，不等 CharacterPageOpen 的 0.5s 防抖：
+            // 防抖只防「进镇预热闪现一帧」的假阳性，玩家亲手点中洞时不存在该场景，
+            // 原样等防抖会让「点天赋」的下一条引导框晚半秒才弹（主人报「有延迟」）。
             yield return CoPoint("这么快就结束了？哼，还算凑合。来变强：点「角色」，用金币点亮一个天赋节点。",
-                () => NavRect(MainNavTab.Character), CharacterPageOpen, false, NavTimeout);
+                () => NavRect(MainNavTab.Character), () => _holeTriggered || CharacterPageOpen(), false, NavTimeout);
         }
 
         if (TalentUI.Instance == null || !TalentUI.Instance.IsOpen)
@@ -624,6 +629,14 @@ public class FirstRunGuide : MonoBehaviour
 
             // 切页会把整页内容重建，旧引用会失效：每帧重新定位，丢的那几帧沿用上一次量到的矩形
             RectTransform liveTarget = needTarget ? Safe(target) : null;
+            // 【2026-10-22 修】目标按钮中途置灰（interactable=false）时洞还盖在上面吞点击＝死区：
+            // 按丢失处理 → 2s 后收遮罩放行点击，按钮恢复可点后走既有重弹逻辑自动回来。
+            if (liveTarget != null)
+            {
+                var lb = liveTarget.GetComponent<Button>();
+                if (lb == null) lb = liveTarget.GetComponentInParent<Button>();
+                if (lb != null && !lb.interactable) liveTarget = null;
+            }
             if (needTarget) SetTarget(liveTarget);
 
             // 【2026-10-19 修复】目标丢失自愈：目标连续 2s 拿不到（藏页/切页/重建失败），
@@ -921,6 +934,7 @@ public class FirstRunGuide : MonoBehaviour
         _tapDone = false;
         _tapAdv = tapToAdvance;
         _visible = true;
+        _shownAt = Time.unscaledTime;   // 【2026-10-22 加】挂屏看门狗计时起点
 
         // 2026-09-22：文字改为打字机逐字显示；「继续」按钮去掉，推进走 Update 里的全屏点击
         StartTyping(text);
@@ -978,6 +992,11 @@ public class FirstRunGuide : MonoBehaviour
     }
 
     bool _outroPlayed;
+    // 【2026-10-22 加】收尾气泡防卡死：弹出时刻 + 剧情占屏闸取证的节流时间戳
+    float _outroShownAt = -1f;
+    float _gateLogAt;
+    /// <summary>本次 Show 的时刻（挂屏看门狗用，2026-10-22 加）。</summary>
+    float _shownAt;
 
     /// <summary>
     /// 收尾单发气泡（2026-10-20 主人拍板）：每日登录弹窗关掉之后才弹「教完了」夸奖，
@@ -992,7 +1011,54 @@ public class FirstRunGuide : MonoBehaviour
         if (_drive != null) return;        // 引导还没收完别抢屏（正常时序不会发生）
         if (!FinishedThisSession) return;  // 老玩家/异常态：收尾话跟着引导一起消失，不单独弹
         _outroPlayed = true;
+        _outroShownAt = Time.unscaledTime; // 【2026-10-22 加】防卡死看门狗计时起点（Update 里 20s 强制收场）
+        Debug.Log("[Guide] 收尾气泡弹出（点任意处关闭，20s 不点自动收场）");
+        StartCoroutine(CoClickPeek(300f)); // 【2026-10-22 加】收尾后 5 分钟点击透视取证（见方法注释）
         Show(null, text, true);
+    }
+
+    /// <summary>
+    /// 【2026-10-22 加】冻结取证器：收尾链跑完后的一段时间里，每次点屏都把
+    /// 「这次点击的射线最顶层打到了哪个节点 / 哪层 Canvas / sort 多少」打进日志。
+    /// 用途：真机「界面看着正常但点哪都没反应」时——
+    ///   · 日志里 top=某个节点 → 隐形遮挡当场报名字，精准修它；
+    ///   · 一条 [ClickPeek] 都没有 → Input/主线程层问题（ANR），换方向查；
+    ///   · top=正常按钮但界面没反应 → EventSystem 派发层问题。
+    /// 只在收尾气泡弹出后 300 秒内工作，平时零开销零日志。
+    /// </summary>
+    IEnumerator CoClickPeek(float seconds)
+    {
+        float end = Time.unscaledTime + seconds;
+        while (Time.unscaledTime < end)
+        {
+            if (ScreenTapped() && EventSystem.current != null)
+            {
+                var ped = new PointerEventData(EventSystem.current) { position = Input.mousePosition };
+                var results = new List<RaycastResult>();
+                EventSystem.current.RaycastAll(ped, results);
+                if (results.Count == 0)
+                {
+                    var selected0 = EventSystem.current.currentSelectedGameObject;
+                    Debug.Log("[ClickPeek] 本击无任何射线目标（点击没打中任何 UI）"
+                              + $" selected={(selected0 != null ? selected0.name : "null")}"
+                              + $" touchCount={Input.touchCount}");
+                }
+                else
+                {
+                    var r = results[0];
+                    var canvas = r.gameObject.GetComponentInParent<Canvas>();
+                    // currentSelected：辅助判断 EventSystem 状态是否异常（按压/选中卡在已消失节点上）
+                    var selected = EventSystem.current.currentSelectedGameObject;
+                    Debug.Log($"[ClickPeek] top={r.gameObject.name}"
+                              + $" canvas={(canvas != null ? canvas.name : "null")}"
+                              + $" sort={(canvas != null ? canvas.sortingOrder : -1)}"
+                              + $" depth={r.depth}（后续命中 {results.Count - 1} 层）"
+                              + $" selected={(selected != null ? selected.name : "null")}"
+                              + $" touchCount={Input.touchCount}");
+                }
+            }
+            yield return null;
+        }
     }
 
     void OnHoleClicked()
@@ -1195,12 +1261,75 @@ public class FirstRunGuide : MonoBehaviour
         return false;
     }
 
+    /// <summary>
+    /// 【2026-10-22 加】遮罩泄漏检测：引导已隐藏（_visible=false）时，遮罩条/选中圈/洞
+    /// 任何一个还活着、或 CanvasGroup 还在挡射线，都算泄漏（吃点击但看不见）。
+    /// </summary>
+    bool IsAnyBlockerActive()
+    {
+        if (_group != null && _group.blocksRaycasts) return true;
+        if (_holeRt != null && _holeRt.gameObject.activeSelf) return true;
+        for (int i = 0; i < _maskRt.Length; i++)
+            if (_maskRt[i] != null && _maskRt[i].gameObject.activeSelf) return true;
+        for (int i = 0; i < _ringRt.Length; i++)
+            if (_ringRt[i] != null && _ringRt[i].gameObject.activeSelf) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// 【2026-10-22 加】遮罩泄漏强制收场：全部收掉 + 报错快照（泄漏路径实锤，回传 logcat 定位）。
+    /// 收完本帧起 IsAnyBlockerActive 变 false，不会重复报。
+    /// </summary>
+    void ForceClearAllBlockers()
+    {
+        Debug.LogError(
+            "[Guide] 遮罩泄漏：引导已隐藏但 MaskTop 等遮挡物还在吃点击（真机「界面正常点哪都没反应」的直接原因），已强制收场。快照："
+            + $"stepIndex={_stepIndex} driveNull={_drive == null} tapAdv={_tapAdv}"
+            + $" outShownAt={_outroShownAt:F1} now={Time.unscaledTime:F1}"
+            + "（此日志＝泄漏路径实锤，请回传完整 logcat 定位是哪条路径漏收）");
+        if (_group != null)
+        {
+            _group.alpha = 0f;
+            _group.blocksRaycasts = false;
+            _group.interactable = false;
+        }
+        SetAllActive(_maskRt, false);
+        SetAllActive(_ringRt, false);
+        if (_holeRt != null) _holeRt.gameObject.SetActive(false);
+        if (_bubbleRt != null) _bubbleRt.gameObject.SetActive(false);
+        StopTyping();
+    }
+
     void Update()
     {
-        if (!_visible) return;
+        if (!_visible)
+        {
+            // 【2026-10-22 加】遮罩泄漏自愈：Hide 之后任何遮罩条/洞/选中圈还活着＝有路径漏收。
+            // 真机「界面正常点哪都没反应」实锤＝MaskTop（FirstRunGuideRoot 620）全屏吃射线
+            // （2026-10-22 logcat 34 连击全部命中 MaskTop）。这里强制收干净并报错留证，
+            // 玩家立刻解冻；泄漏路径凭这条 Error 的快照再做精准修。
+            if (IsAnyBlockerActive()) ForceClearAllBlockers();
+            return;
+        }
         // 场景已经切走（点了开始冒险等）：立刻收掉遮罩，别把战斗 Loading 盖住
         if (!GameSceneGate.IsTown)
         {
+            Hide();
+            return;
+        }
+
+        // 【2026-10-22 加】挂屏看门狗：任何一次 Show 的合法最长寿命是 60s（CoPoint 超时上限），
+        // 超过 90s 还挂着＝状态机已经卡死（真机复现：引导收尾后 MaskTop 挂屏、点哪都没反应）。
+        // 强制收场放行 + 全量状态快照，绝不永久锁屏。
+        if (Time.unscaledTime - _shownAt > 90f)
+        {
+            Debug.LogError(
+                "[Guide] 气泡挂屏超过 90 秒未完成，强制收场。快照："
+                + $"stepIndex={_stepIndex} driveNull={_drive == null} tapAdv={_tapAdv} typing={_typing}"
+                + $" target={(_target != null ? _target.name : "null")}"
+                + $" StoryDirector.IsPlaying={(StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)}"
+                + $" DialogueUI.IsVisible={(DialogueUI.Instance != null && DialogueUI.Instance.IsVisible)}"
+                + "（此日志＝卡死根因实锤，请回传完整 logcat）");
             Hide();
             return;
         }
@@ -1209,11 +1338,52 @@ public class FirstRunGuide : MonoBehaviour
         // 【2026-10-20 主人拍板】打字机没播完时点一下＝全文立刻出完（不推进），
         // 再点一下才推进/关闭——与剧情对话框同款手感，不再「点了没反应」。
         // 【2026-10-14】剧情/对话在播时不吃点击：玩家点的是剧情推进，不该顺带推掉引导步骤。
-        if (_tapAdv && !StoryBusy() && ScreenTapped())
+        if (_tapAdv && ScreenTapped())
         {
-            if (_typing) CompleteGuideTyping();         // 第一击：全文出完，不推进
-            else if (_drive != null) _tapDone = true;   // 第二击：才推进/关闭（步骤内由 CoPoint 消费）
-            else Hide();                                // 收尾单发气泡（PlayOutro）：点任意处直接关闭
+            if (StoryBusy())
+            {
+                // 【2026-10-22 加】手机端「收尾气泡点不掉、全屏卡死」实锤取证：
+                // 气泡在屏、玩家点了、但被剧情占屏闸吞掉——是谁卡成 StoryBusy，一击即中。
+                if (Time.unscaledTime - _gateLogAt > 1f)
+                {
+                    _gateLogAt = Time.unscaledTime;
+                    Debug.LogError(
+                        "[Guide] 气泡在屏但点击被剧情占屏闸吞掉："
+                        + $"StoryDirector.IsPlaying={(StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)} "
+                        + $"DialogueUI.IsVisible={(DialogueUI.Instance != null && DialogueUI.Instance.IsVisible)} "
+                        + $"driveNull={_drive == null}（此日志＝卡死根因实锤，请把整段 logcat 交回）");
+                }
+            }
+            else if (DailyLoginUI.PopupVisible)
+            {
+                // 【2026-10-22 修】脏档边缘态：引导游标<Done 但 TutorialDone=true 的存量档，
+                // 每日登录弹窗(900) 盖着引导(620)——这里的点击检测是裸输入，会把玩家点弹窗的
+                // 手误判成「推进引导」。弹窗开着＝点击归弹窗，引导不推进不收场（超时/看门狗仍兜底）。
+            }
+            else if (_typing) CompleteGuideTyping();         // 第一击：全文出完，不推进
+            else if (_drive != null) _tapDone = true;        // 第二击：才推进/关闭（步骤内由 CoPoint 消费）
+            else { Hide(); return; }                         // 收尾单发气泡（PlayOutro）：点任意处直接关闭
+            // 【2026-10-22 修·点快了卡引导根因】上面 Hide 后必须 return：
+            // 原先 fall-through 到 RefreshLayout，无目标分支 :1413 会用残留的 _tapAdv=true
+            // 把 blocksRaycasts 重新打开 → alpha=0 的隐形全屏吃点击＝「点哪都没反应」卡死态
+            // （2026-10-22 10:06 logcat 泄漏 Error 实锤：outShownAt 后 0.9s 触发自愈）。
+        }
+
+        // 【2026-10-22 加】收尾气泡防卡死底线：它是纯展示层（点任意处关闭），正常一击即收；
+        // 真机上出现过「气泡挂屏、点哪都不消」的冻结（2026-10-22 主人截图实锤）。
+        // 挂超过 20s 就强制收场放行玩家，同时留下取证据日志定位根因——只对收尾单发气泡生效
+        // （_drive==null），正常步骤气泡仍由 CoPoint 自己的超时与点击链路管理，行为不变。
+        if (_tapAdv && _drive == null && _outroShownAt > 0f
+            && Time.unscaledTime - _outroShownAt > 20f)
+        {
+            Debug.LogWarning(
+                "[Guide] 收尾气泡 20 秒没被点掉，强制收场放行（防卡死底线）。"
+                + $"快照：StoryDirector.IsPlaying={(StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)} "
+                + $"DialogueUI.IsVisible={(DialogueUI.Instance != null && DialogueUI.Instance.IsVisible)}");
+            Hide();
+            // 【2026-10-22 补】必须 return：Hide 后 fall-through 到 RefreshLayout 会把 MaskTop
+            // 重新激活（同「点快了卡引导根因」，:1366 那处已修），下一帧误触发泄漏自愈打 Error。
+            return;
         }
 
         RefreshLayout();
@@ -1261,12 +1431,14 @@ public class FirstRunGuide : MonoBehaviour
             // 【2026-10-19 修复】需要点目标的步骤落到无目标分支时，遮罩不再挡点击：
             // 原先「全屏遮罩+无洞+blocksRaycasts」= 全屏锁点，玩家连底栏都点不了 → 卡死态。
             // tapToAdvance 步骤（欢迎/收尾）保持原样，靠全屏点击推进。
-            if (_group != null) _group.blocksRaycasts = _tapAdv;
+            // 【2026-10-22 修】隐藏态不允许借 RefreshLayout 复活吃点击（保险 1/2）
+            if (_group != null) _group.blocksRaycasts = _visible && _tapAdv;
             PlaceBubbleCenter(root);
             return;
         }
         // 有目标（或沿用上次量到的矩形）：恢复遮罩挡点击（Show 里设过 true，这里兜底还原）
-        if (_group != null) _group.blocksRaycasts = true;
+        // 【2026-10-22 修】隐藏态不允许借 RefreshLayout 复活吃点击（保险 2/2）
+        if (_group != null) _group.blocksRaycasts = _visible;
 
         float pad = TargetPad;
         float x0 = minX - pad;

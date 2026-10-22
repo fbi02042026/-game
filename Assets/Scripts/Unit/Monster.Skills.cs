@@ -548,7 +548,7 @@ public partial class Monster
         return true;
     }
 
-    /// <summary>① 扇形弹幕：以目标方向为基准，一次齐射 MONSTER_FAN_VOLLEY_COUNT 条弹道，等角扇形展开。</summary>
+    /// <summary>① 扇形弹幕：以目标方向为基准，一次齐射多条弹道（Boss 5 发/精英 3 发），等角扇形展开。</summary>
     IEnumerator CoFanVolley(UnitBase target)
     {
         FaceToward(target);
@@ -569,16 +569,26 @@ public partial class Monster
         if (baseDir.sqrMagnitude < 1e-6f) baseDir = new Vector2(facing, 0f);
         float baseAngle = Mathf.Atan2(baseDir.y, baseDir.x) * Mathf.Rad2Deg;
 
-        int count = GameConfig.MONSTER_FAN_VOLLEY_COUNT;
+        // 【2026-10-22 主人拍板】弹道数分流：Boss 5 发、精英 3 发
+        int count = _isBossUnit
+            ? GameConfig.MONSTER_FAN_VOLLEY_COUNT
+            : GameConfig.MONSTER_FAN_VOLLEY_COUNT_ELITE;
         float step = GameConfig.MONSTER_FAN_VOLLEY_ANGLE_STEP;
         float damage = VolleyBasicDamage();
         float hitRadius = GameConfig.MONSTER_FAN_VOLLEY_HIT_RADIUS;
+        // 【2026-10-22 修「弹幕爆点必然出屏」】竖屏战场可视宽仅 ~6.7 单位，旧版飞满 RANGE(11) 才爆，
+        // 爆点/命中圈永远在屏幕外、技能永远打不中人。改为：每条弹道沿各自扇形角度飞到
+        // 「发射瞬间目标所在距离」（上限仍钳 RANGE），爆点必在屏内贴着目标站位，走位可躲成立。
+        float flyDist = target != null && !target.isDead
+            ? Mathf.Min(
+                new Vector2(aim.x - firePos.x, aim.y - firePos.y).magnitude,
+                GameConfig.MONSTER_FAN_VOLLEY_RANGE)
+            : GameConfig.MONSTER_FAN_VOLLEY_RANGE;
         for (int i = 0; i < count; i++)
         {
             float ang = (baseAngle + (i - (count - 1) * 0.5f) * step) * Mathf.Deg2Rad;
             Vector2 dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
-            // 弹道飞满 MONSTER_FAN_VOLLEY_RANGE 距离后原地爆；命中按爆点小圆判定（走位可躲）
-            Vector3 end = firePos + (Vector3)(dir * GameConfig.MONSTER_FAN_VOLLEY_RANGE);
+            Vector3 end = firePos + (Vector3)(dir * flyDist);
             float impactX = end.x;
             if (BattleVFXSystem.Instance != null)
             {

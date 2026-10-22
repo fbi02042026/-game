@@ -90,7 +90,10 @@ public partial class WavePlanner
         GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
         // 相对镜头左右交替进场（可覆盖）
         bool fromLeft = fromLeftOverride ?? false; // 默认右侧进场；仅显式 override 才从左
-        const float offscreenMargin = 1.35f;
+        // 【2026-10-22 主人拍板「出怪有点慢，把出生点提前点」】1.35 → 0.8：
+        // GetBattleVisibleX(0.35) 已向屏内收了 0.35，实际出生点距真屏幕边约 1.15（原 1.7），
+        // 不会穿帮；配合 MONSTER_SPAWN_DEPTH_TIERS 一起收紧，最近/最远都提前约 0.8~1.2 秒到场。
+        const float offscreenMargin = 0.8f;
         float depth = offscreenMargin + Mathf.Max(0f, enterDepthOffset);
         float enterX = fromLeft ? visMin - depth : visMax + depth;
         // 交战点落在进场同侧，避免左侧怪跑到玩家右边再回头

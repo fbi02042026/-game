@@ -159,9 +159,9 @@ public partial class BattleManager
         BattleUI.Instance?.UpdateCharacterSlots();
         BattleUI.Instance?.UpdateSkillEnergy(0, 0f);
         BattleUI.Instance?.RefreshBattleHud();
-        // 进关立刻把进度条 Marker 挂到当前 Node
+        // 进关把进度条归零：【2026-10-21 主人拍板】顶部进度条改按当前关波次推进，进关 = 0 进度
         if (currentStage != null)
-            BattleUI.Instance?.UpdateStageProgress(currentStage.stageIndex);
+            BattleUI.Instance?.UpdateWaveProgress(0, _waves?.Count ?? 0);
         int monsterGoal = GetStageMonsterGoal();
         var stageQuest = BattleQuestConfig.GetStageQuest(CurrentChapter, stage.type, IsGoldDungeon, BattleDifficulty);
         StageQuestClearGold = stageQuest.clearGold;
@@ -670,8 +670,100 @@ public partial class BattleManager
         if (CountAliveMonsters() > 0) return;
         if (_waveAnnounceCo != null) return;
 
+        // 【2026-10-21 主人拍板】恢复关下线后血线口子消失 → 普通战斗波清完时全队回血（WaveClearHealRatio）。
+        // 本方法是权威波清点：MonsterDeath.CoCheckWaveClearNextFrame 与 Update 清波检测两路都汇聚到这里，
+        // _waveAnnounceCo 闸门保证每波只回一次；末波/Boss 波清完走 StartStageClearRewardSequence 通关链，
+        // 不进本方法，不与通关链上的 TickFallenMercsStagePassed 回血叠加。死亡单位不复活、满血无操作。
+        // 引导局波次由 TutorialDirector 直刷、不走本方法（按拍板不做特判）。
+        // 【2026-10-22 主人拍板 v4.1】波清不回血：治疗出口只剩石像恢复事件（BattleStatueEventUI）、
+        // 佣兵复活（护符/石像/下一关 fallen 养血）、通关链原有恢复（进关基础回复 STAGE_ENTRY_HEAL_PCT 等）。
+        // HealPartyOnWaveCleared() 调用停用（注释保留）；函数与 WaveClearHealRatio 常量保留不删（下线≠删除）。
+        // HealPartyOnWaveCleared();
+
+        // 【2026-10-21 主人拍板】顶部进度条改按当前关波次推进：已清波数 = 下一个未刷波索引
+        //（FindNextUnspawnedWaveIndex 返回第一个未刷波的下标 = 已刷完的波数，见 WavePlanner.Advance.cs:216）
+        BattleUI.Instance?.UpdateWaveProgress(Mathf.Max(0, FindNextUnspawnedWaveIndex()), _waves != null ? _waves.Count : 0);
+
         GamePerf.Log("[BattleManager] 下一波来袭 Banner");
-        _waveAnnounceCo = StartCoroutine(CoAnnounceThenSpawnNextWave());
+        // 【2026-10-21 主人拍板】每清完一波停下弹一次抽奖窗（一抽），点「继续」或倒计时走完
+        // 再播「下一波来袭」进下一波。整段（波间抽奖 + 预告 + 出兵）都在 _waveAnnounceCo 里，
+        // :671 `if (_waveAnnounceCo != null) return;` 的防重入语义不变。
+        _waveAnnounceCo = StartCoroutine(CoWaveIntermissionDraftThenNextWave());
+    }
+
+    /// <summary>
+    /// 【2026-10-21 主人拍板】波间单拍抽奖窗 → 原预告+出兵链。
+    /// 复用 CoMidBattleDraft：自带 UnitsCanAct 冻结/finally 还原、面板 3 秒没弹出的防卡死跳过、
+    /// 正式关 30s 倒计时自动继续、一抽即收。其等待循环不查 _runClosed（进关抽奖既有口径，不动），
+    /// 下面的 guard 就是波间这条链的防线：撤离/死亡/通关后旧协程当场退场，不串台。
+    /// 末波/Boss 波清完走 StartStageClearRewardSequence 通关链，不进本方法 → 末波后无波间抽；
+    /// 进关抽奖（CoStageEntryDraft）承担下一关第一抽，正好「每波之间恰好一抽」。
+    /// </summary>
+    IEnumerator CoWaveIntermissionDraftThenNextWave()
+    {
+        // 【2026-10-22 主人拍板】抽奖节拍收窄到回合末（只对主线正式关生效）：
+        // 【2026-10-22 主人拍板 v4.2】回合末判定作废旧口径「下一未刷波下标 % 3 == 0」（波数按章可变后回合长不再固定 3），
+        // 改读铺波时落在 WaveData 上的回合末标记：刚清完的那波（next-1）isRoundEnd == true 才算回合末。
+        // Boss 波不算回合末（isRoundEnd 恒 false），末回合清完走通关链不进本方法。
+        // CoMidBattleDraft / CoStageEntryDraft 本体不改；进关第一次抽奖不掷石像（CoStageEntryDraft 未动）。
+        // 引导局整条早已 SkipWaveAnnounce 跳过，保持；金币本/裂隙保持 2026-10-21 口径：每波照旧弹（行为不变）。
+        int next = FindNextUnspawnedWaveIndex();
+        bool formalRoundEnd = IsFormalMainRun
+            && next > 0
+            && _waves != null && next - 1 < _waves.Count
+            && _waves[next - 1] != null
+            && _waves[next - 1].isRoundEnd;
+        if (IsFormalMainRun && !formalRoundEnd)
+        {
+            // 正式关非回合末：不弹抽奖，直接预告 + 出兵
+            yield return CoAnnounceThenSpawnNextWave();
+            yield break;
+        }
+
+        if (formalRoundEnd)
+        {
+            // 【2026-10-22 主人拍板】石像事件：回合末抽奖窗弹出前掷 10%（每关最多 1 次，恢复/诅咒互斥）
+            BattleStatueEventUI.TryShowOnDraft();
+        }
+
+        yield return CoMidBattleDraft();
+
+        // 【2026-10-22 主人拍板】抽奖窗关闭（点继续/超时）未点石像 → 石像一并收起，不结转
+        BattleStatueEventUI.ForceCollapse();
+
+        // 防撤离/死亡/通关后旧协程串台：当场退场（协程被外部 StopWaveAnnounce 停时同样安全）
+        if (_runClosed || !isInBattle || _stageCleared)
+            yield break;
+
+        yield return CoAnnounceThenSpawnNextWave();
+    }
+
+    /// <summary>
+    /// 【2026-10-21 主人拍板】每个战斗波清完时的全队回血比例（占各自最大生命，可调）。
+    /// 恢复关（RestStagePopupUI 流程）下线后补上的血线口子（P1-3 方案②）。
+    /// </summary>
+    internal const float WaveClearHealRatio = 0.10f;
+
+    /// <summary>
+    /// 【2026-10-21 主人拍板】波清回血：主角 + 全体存活佣兵各回 最大生命 × WaveClearHealRatio。
+    /// 复用佣兵治疗技同款回血原语 SkillCastService.ApplyHealToUnit（钳上限 + 治疗飘字 + 治疗量统计），
+    /// 不新建第二份回血、不额外加 UI。
+    /// 【2026-10-22 主人拍板 v4.1】停用：唯一调用点（BeginNextWaveCountdown）已注释；函数与常量保留不删（下线≠删除）。
+    /// </summary>
+    void HealPartyOnWaveCleared()
+    {
+        HealUnitOnWaveCleared(hero);
+        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
+        if (mercs == null) return;
+        for (int i = 0; i < mercs.Count; i++)
+            HealUnitOnWaveCleared(mercs[i]);
+    }
+
+    void HealUnitOnWaveCleared(UnitBase unit)
+    {
+        // 死亡单位不复活；满血时 ApplyHealToUnit 内 gained≤0 自然无操作、无飘字
+        if (unit == null || unit.isDead || unit.attr == null) return;
+        SkillCast.ApplyHealToUnit(unit, unit.attr.GetAttr(AttrType.MaxHp) * WaveClearHealRatio);
     }
 
     void StopWaveAnnounce()

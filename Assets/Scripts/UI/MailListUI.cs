@@ -47,8 +47,9 @@ public class MailListUI : MonoBehaviour
     Sprite _spWindow, _spClose, _spClaimAll, _spDeleteRead, _spIconGift, _spIconLetter;
     bool _spritesResolved;
 
-    RectTransform _tplUnclaimed;   // 主人在预制体里摆的「未领取」行模板（Window 直子节点，运行时隐藏只作克隆源）
+    RectTransform _tplUnclaimed;   // 未领取行模板（2026-10-22 起优先用主人新加的「未领取按钮」模板，带 lingqu 领取按钮）
     RectTransform _tplClaimed;     // 「已领取」行模板（含印章节点）
+    RectTransform _tplLegacyUnclaimed;   // 旧「未领取」模板（没有领取按钮）：不参与克隆，但要在 RebuildRows 里一并隐藏防串场
 
     class MailRow
     {
@@ -118,9 +119,9 @@ public class MailListUI : MonoBehaviour
     public void Open()
     {
         gameObject.SetActive(true);
-        SeedDemoMailIfEmpty();   // 2026-10-16 临时测试数据（T10 验收用），验收后删除本调用与 SeedDemoMailIfEmpty
-        // 🆕 欢迎信触发已改挂：① 玩完新手引导（StoryProgress.MarkTutorialDone）；② 已通关老玩家回主界面补发（TownSceneBootstrap）。
-        //    不再在 Open() 里发——避免没通关就提前看到信。这里只做列表刷新。
+        // 【2026-10-22 主人拍板】SeedDemoMailIfEmpty 演示信已删——主人从没见过演示信（被欢迎信占位挡住），无兼容顾虑。
+        // 欢迎信触发已改挂：① 玩完新手引导（StoryProgress.MarkTutorialDone）；② 已通关老玩家回主界面补发（TownSceneBootstrap）。
+        // 这里只做列表刷新。
         Refresh();
     }
 
@@ -188,14 +189,33 @@ public class MailListUI : MonoBehaviour
             Debug.LogError("[MailList] 预制体缺 Window/EmptyText，空态提示不显示");
 
         // 行模板（主人 2026-10-16 在预制体里摆好的「未领取」/「已领取」两条横条）：运行时隐藏，只作克隆源
-        _tplUnclaimed = window.Find("未领取") as RectTransform;
+        // 【2026-10-22 施工单 T12】主人在「未领取」行里加了领取按钮节点 —— 实际落在新节点「未领取按钮」
+        //（完整行模板副本 + 子节点 lingqu，Image+Button 齐全）。克隆源优先用它，旧「未领取」只藏不用；
+        // 缺模板/缺 lingqu 按钮 LogError 不兜底（与下方 BindPrefabButton 同口径）。
+        _tplUnclaimed = window.Find("未领取按钮") as RectTransform;
+        if (_tplUnclaimed != null)
+        {
+            var lingquBtn = FindDeep(_tplUnclaimed, "lingqu") != null
+                ? FindDeep(_tplUnclaimed, "lingqu").GetComponent<Button>() : null;
+            if (lingquBtn == null)
+                Debug.LogError("[MailList] 预制体 未领取按钮 模板缺 lingqu 领取按钮（或无 Button），行内领取不可用");
+        }
+        else
+        {
+            _tplUnclaimed = window.Find("未领取") as RectTransform;
+            Debug.LogError("[MailList] 预制体缺 Window/未领取按钮 行模板（含 lingqu 领取按钮），回退旧「未领取」模板——行内领取不可用");
+        }
         _tplClaimed = window.Find("已领取") as RectTransform;
         if (_tplUnclaimed == null)
             Debug.LogError("[MailList] 预制体缺 Window/未领取 行模板，列表行无法生成");
         if (_tplClaimed == null)
             Debug.LogError("[MailList] 预制体缺 Window/已领取 行模板，已领行无法生成");
+        // 旧「未领取」模板记住引用：RebuildRows 里与现行模板一起强制隐藏（防运行时叠在窗体中央）
+        if (_tplUnclaimed != null && _tplLegacyUnclaimed == null && window.Find("未领取") is RectTransform legacy && legacy != _tplUnclaimed)
+            _tplLegacyUnclaimed = legacy;
         if (_tplUnclaimed != null) _tplUnclaimed.gameObject.SetActive(false);
         if (_tplClaimed != null) _tplClaimed.gameObject.SetActive(false);
+        if (_tplLegacyUnclaimed != null) _tplLegacyUnclaimed.gameObject.SetActive(false);
 
         // 【2026-10-17 修·主人报「删除已读/一键领取/关闭点击无反应」】根因：预制体分支只摆了节点没挂监听，
         // 监听只存在于代码兜底分支 BuildWindow 里。现按名补绑（节点由 MailPrefabBuilder 生成、自带 Button）。
@@ -393,6 +413,9 @@ public class MailListUI : MonoBehaviour
             _tplUnclaimed.gameObject.SetActive(false);
         if (_tplClaimed != null && _tplClaimed.gameObject.activeSelf)
             _tplClaimed.gameObject.SetActive(false);
+        // 【2026-10-22 T12】旧「未领取」模板（无领取按钮）一并压住，防串场
+        if (_tplLegacyUnclaimed != null && _tplLegacyUnclaimed.gameObject.activeSelf)
+            _tplLegacyUnclaimed.gameObject.SetActive(false);
 
         for (int i = 0; i < _rows.Count; i++)
         {
@@ -491,7 +514,50 @@ public class MailListUI : MonoBehaviour
         string mailId = mail.id;
         btn.onClick.AddListener(() => OnRowClicked(mailId));
 
+        // 【2026-10-22 施工单 T12】行内「领取」按钮（模板子节点 lingqu，监听代码绑、几何一个像素不动）：
+        // 点击 = 直接领取该封（含体力超限确认，与详情窗 OnClaimClicked 同口径）；缺节点已在 BindFromPrefab 报过错。
+        if (!mail.claimed)
+        {
+            var claimT = FindDeep(go.transform, "lingqu");
+            var claimBtn = claimT != null ? claimT.GetComponent<Button>() : null;
+            if (claimBtn != null)
+                claimBtn.onClick.AddListener(() => OnRowClaimClicked(mailId));
+        }
+
         return row;
+    }
+
+    /// <summary>
+    /// 【2026-10-22 施工单 T12】行内领取：先过体力超限确认（与详情窗同口径），再 TryClaim。
+    /// TryClaim 返回 false（如碎片邮件背包放不下）时 MailSystem 内部已 toast 原因、邮件保持未领，这里不重复报。
+    /// </summary>
+    void OnRowClaimClicked(string mailId)
+    {
+        MailEntry mail = null;
+        var inbox = MailSystem.GetInbox();
+        for (int i = 0; i < inbox.Count; i++)
+        {
+            if (inbox[i] != null && inbox[i].id == mailId) { mail = inbox[i]; break; }
+        }
+        if (mail == null || mail.claimed) return;
+
+        int waste = MailSystem.GetStaminaWasteOnClaim(mail);
+        if (waste > 0)
+        {
+            StaminaConfirmPopup.Show(
+                $"体力将超出上限，多余的 {waste} 点会浪费。\n是否仍要领取？",
+                "仍要领取",
+                () => DoRowClaim(mailId));
+            return;
+        }
+        DoRowClaim(mailId);
+    }
+
+    void DoRowClaim(string mailId)
+    {
+        if (!MailSystem.TryClaim(mailId)) return;
+        GuildHallUI.RefreshAllHudStatic();
+        Refresh();   // 全量重建：领完的行走「已领取」模板（灰态+印章），红点/图标同步
     }
 
     void ApplyRowVisual()
@@ -594,52 +660,7 @@ public class MailListUI : MonoBehaviour
         Refresh();
     }
 
-    // ── 2026-10-16 临时测试数据（T10 验收用）：空箱时种入 3 封演示邮件，覆盖 奖励flat+贴纸 / 公告 / 结构化附件。
-    //    只在收件箱为空时种入；验收后删除本方法与 Open() 里的调用。──────────────────────────────
-    static void SeedDemoMailIfEmpty()
-    {
-        var inbox = MailSystem.GetInbox();
-        if (inbox != null && inbox.Count > 0) return;
-
-        long now = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-        MailSystem.Enqueue(new MailEntry
-        {
-            title = "冒险者的慰问包",
-            sender = "塔克",
-            body = "辛苦了！这是公会给你的补给，收好。\n[sticker:高兴] 下次冒险带点运气回来！",
-            createTime = now,
-            type = MailType.Reward,
-            gold = 500,
-            stamina = 20
-        });
-
-        MailSystem.Enqueue(new MailEntry
-        {
-            title = "关于深渊裂隙的公告",
-            sender = "公会执事",
-            body = "近期深渊裂隙活动异常，外出冒险的伙伴请注意安全。\n[sticker:疑问] 有新情报记得来告诉我。",
-            createTime = now - 3600,
-            type = MailType.Announcement
-        });
-
-        MailSystem.Enqueue(new MailEntry
-        {
-            // 【2026-10-17 主人拍板】强化石/附魔石暂无用途 → 演示邮件的附魔石附件改成天赋石
-            title = "天赋石到货通知",
-            sender = "铁匠铺老板",
-            body = "你订的天赋石到货了，[sticker:调皮] 记得来拿。",
-            createTime = now - 7200,
-            type = MailType.Reward,
-            attachments = new List<MailAttachment>
-            {
-                new MailAttachment { type = "talent", amount = 5 },
-                new MailAttachment { type = "diamond", amount = 10 }
-            }
-        });
-
-        Debug.Log("[MailList] 已种入 3 封演示邮件（临时测试数据）");
-    }
+    // 【2026-10-22 主人拍板】SeedDemoMailIfEmpty 演示信已整段删除（主人从没见过演示信，无兼容顾虑）。
 
     /// <summary>
     /// 相对时间（模板样张口径「1天前」）：刚刚 / N分钟前 / N小时前 / N天前。

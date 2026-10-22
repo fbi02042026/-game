@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
@@ -33,11 +34,20 @@ public class LowHpScreenEdgeFlash : MonoBehaviour
     {
         Instance = this;
         if (_group == null) Build();
+        // 2026-10-22 修：残血退出战斗后 Hero 随场景销毁，没人再调 Tick(false)，
+        // 本物体是 DontDestroyOnLoad，红边会一直闪到下次进战斗。切场景时强制熄灭。
+        SceneManager.activeSceneChanged += OnActiveSceneChanged;
     }
 
     void OnDestroy()
     {
+        SceneManager.activeSceneChanged -= OnActiveSceneChanged;
         if (Instance == this) Instance = null;
+    }
+
+    void OnActiveSceneChanged(Scene from, Scene to)
+    {
+        Tick(false);
     }
 
     void Build()

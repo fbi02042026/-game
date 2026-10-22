@@ -354,8 +354,38 @@ public class SaveData
 
     // === 佣兵养成道具（2026-09-18 新增：徽记 + 本命碎片）===
     // id 口径：徽记 "badge:{职业key}:{档位}"（如 badge:剑盾:传奇）；本命碎片 "frag:{hireId}"（如 frag:H001）
+    // 【2026-10-22】本命碎片已改道背包道具（item_frag_{hireId}）；frag: 只剩旧存档存量，进城镇一次性迁移
+    //（见 MercGrowInventory.MigrateLegacyFragmentsToBag，标记 = mercFragMigrated），徽记 badge: 照旧存这里。
     public List<StringIntEntry> mercGrowItemEntries = new List<StringIntEntry>();
     [NonSerialized] public Dictionary<string, int> mercGrowItems = new Dictionary<string, int>();
+
+    /// <summary>
+    /// 【2026-10-22 施工单 T6】旧存档 frag:{hireId} 存量迁移标记：false = 还没迁过（首次进城镇执行一次），
+    /// true = 已迁（防重复执行）。新档默认 false，首次进城镇跑一遍（无存量也置位）。
+    /// </summary>
+    public bool mercFragMigrated = false;
+
+    // === 佣兵局外升星（2026-10-22 施工单 T7）===
+    // key = 花名册 HireId（H001…），value = 局外星 outStar（0~MaxOutStar=3，默认 0）。
+    // 为什么按 hireId 存：已拥有的真源是 unlockedMercIds（hireId 集合），多数佣兵没有 MercenaryData
+    // 实例可挂 outStar —— 键控字典才兜得住。局内 star（1~5）与 RunLoadout.MaxMercStar 一概不动。
+    public List<StringIntEntry> mercOutStarEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> mercOutStars = new Dictionary<string, int>();
+
+    /// <summary>查佣兵局外星（hireId；没有记录 = 0 星，旧存档兼容）。</summary>
+    public int GetMercOutStar(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return 0;
+        return mercOutStars != null && mercOutStars.TryGetValue(hireId, out int v) ? v : 0;
+    }
+
+    /// <summary>写佣兵局外星（只落运行时字典；entries 由 SyncListsFromRuntime 在存档时镜像）。</summary>
+    public void SetMercOutStar(string hireId, int star)
+    {
+        if (string.IsNullOrEmpty(hireId)) return;
+        mercOutStars ??= new Dictionary<string, int>();
+        mercOutStars[hireId] = Math.Max(0, star);
+    }
 
     // === 城镇背包道具（2026-10-21 新增：战斗局内获得的道具，出战斗结算时从局内背包转入这里，角色页可见）===
     // key = item_defs.csv 的道具 id（如 item_potion_hp），value = 持有数量
@@ -440,6 +470,7 @@ public class SaveData
         craftedFragmentRecipeEntries ??= new List<StringIdEntry>();
         mileageShopBuyEntries ??= new List<StringIntEntry>();
         mercGrowItemEntries ??= new List<StringIntEntry>();
+        mercOutStarEntries ??= new List<StringIntEntry>();
         clearedStageEntries ??= new List<StringIdEntry>();
         mainQuestDoneEntries ??= new List<StringIdEntry>();
         mainQuestCntEntries ??= new List<StringIntEntry>();
@@ -602,6 +633,18 @@ public class SaveData
                 var e = mercGrowItemEntries[i];
                 if (e == null || string.IsNullOrEmpty(e.id)) continue;
                 mercGrowItems[e.id] = e.value;
+            }
+        }
+
+        // 【2026-10-22 施工单 T7】局外星重建：旧存档没有 mercOutStarEntries → 空字典 = 全员 0 星，兼容
+        mercOutStars = new Dictionary<string, int>();
+        if (mercOutStarEntries != null)
+        {
+            for (int i = 0; i < mercOutStarEntries.Count; i++)
+            {
+                var e = mercOutStarEntries[i];
+                if (e == null || string.IsNullOrEmpty(e.id)) continue;
+                mercOutStars[e.id] = Math.Max(0, e.value);
             }
         }
 
@@ -1105,6 +1148,12 @@ public class SaveData
         foreach (var kv in mercGrowItems)
             mercGrowItemEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
 
+        // 【2026-10-22 施工单 T7】局外星镜像落盘
+        mercOutStars ??= new Dictionary<string, int>();
+        mercOutStarEntries = new List<StringIntEntry>(mercOutStars.Count);
+        foreach (var kv in mercOutStars)
+            mercOutStarEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
         townBagItemEntries = new List<StringIntEntry>(townBagItems.Count);
         foreach (var kv in townBagItems)
             townBagItemEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
@@ -1183,6 +1232,12 @@ public class MercenaryData
     public int level;
     /// <summary>星级 1～5</summary>
     public int star = 1;
+    /// <summary>
+    /// 局外升星（2026-10-22 施工单 T7）：0~MercStarDefs.MaxOutStar，默认 0（获得时零星，旧存档兼容）。
+    /// ⚠ 与局内 star（1~5，局内升星卡体系）是两套，绝不混用；权威存储 = SaveData.mercOutStars（hireId 键），
+    /// 本字段供已有 MercenaryData 实例（hiredMercs 等）随单携带。
+    /// </summary>
+    public int outStar = 0;
     /// <summary>佩戴主动技能（SK 系列；普通佣兵可为空）</summary>
     public string skillId;
     /// <summary>佩戴被动技能（SK 系列；稀有佣兵可为空）</summary>

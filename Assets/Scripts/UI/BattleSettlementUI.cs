@@ -36,6 +36,10 @@ public class BattleSettlementUI : MonoBehaviour
 
     readonly List<GameObject> _spawnedCells = new List<GameObject>();
     Action _onConfirm;
+    /// <summary>【2026-10-22 主人拍板】双钮：确认钮回调（下一关）；null = 单确认钮（死亡/撤离，行为不变）。</summary>
+    Action _onNextStage;
+    /// <summary>【2026-10-22 主人拍板】返回钮：运行时克隆 confirmButton（prefab 零改动），每次 Show 先清旧克隆防叠加。</summary>
+    GameObject _backButtonClone;
     BattleRunStats _stats;
     // 【2026-10-10 主人拍板】MVP 台词不再走全屏 Toast：在立绘右侧放战斗里那个对话框（气泡同款图）。
     RectTransform mvpSpeechRt;
@@ -50,6 +54,18 @@ public class BattleSettlementUI : MonoBehaviour
         BattleEntryDraftPanel.Hide();
         TutorialHintUI.Instance?.Hide();
         Ensure().Open(stats, onConfirm);
+    }
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板】双钮重载（v4 通关收尾）：confirmButton =【下一关】（onNextStage），
+    /// 返回钮 = 运行时克隆 confirmButton、文案「返回」、放确认钮左侧，点击 = onConfirm（回城原行为）。
+    /// onNextStage 传 null → 不克隆返回钮、确认钮文案回「确定」，单确认钮路径（死亡/撤离）行为完全不变。
+    /// </summary>
+    public static void Show(BattleRunStats stats, Action onConfirm, Action onNextStage, string nextLabel = "下一关")
+    {
+        BattleEntryDraftPanel.Hide();
+        TutorialHintUI.Instance?.Hide();
+        Ensure().Open(stats, onConfirm, onNextStage, nextLabel);
     }
 
     public static BattleSettlementUI Ensure()
@@ -142,10 +158,16 @@ public class BattleSettlementUI : MonoBehaviour
 
     void Open(BattleRunStats stats, Action onConfirm)
     {
+        Open(stats, onConfirm, null, null);
+    }
+
+    void Open(BattleRunStats stats, Action onConfirm, Action onNextStage, string nextLabel)
+    {
         BindRefs();
         Wire();
         _stats = stats ?? new BattleRunStats();
         _onConfirm = onConfirm;
+        _onNextStage = onNextStage;
         Time.timeScale = 0f;
 
         if (titleText != null)
@@ -166,8 +188,12 @@ public class BattleSettlementUI : MonoBehaviour
         ApplyStatValues();
         PopulateRewards();
 
-        if (confirmLabel != null)
-            confirmLabel.text = "确定";
+        // 【2026-10-22 主人拍板】双钮：下一关模式确认钮文案 = nextLabel（默认「下一关」）；
+        // 死亡/撤离（onNextStage=null）文案回原「确定」，且不克隆返回钮。
+        if (this.confirmLabel != null)
+            this.confirmLabel.text = _onNextStage != null ? (string.IsNullOrEmpty(nextLabel) ? "下一关" : nextLabel) : "确定";
+
+        SetupBackButton();
 
         var canvas = GetComponent<Canvas>();
         if (canvas != null)
@@ -544,12 +570,76 @@ public class BattleSettlementUI : MonoBehaviour
 
     void OnConfirm()
     {
+        // 【2026-10-22 主人拍板】双钮模式：确认钮 =【下一关】（_onNextStage）；
+        // 单确认钮（死亡/撤离，_onNextStage=null）= 原 _onConfirm，行为不变。
+        var cb = _onNextStage != null ? _onNextStage : _onConfirm;
+        ClosePanel(cb);
+    }
+
+    /// <summary>【2026-10-22 主人拍板】返回钮点击 = onConfirm 原行为（回城 EndRunAndReturnToTown，带本局收益）。</summary>
+    void OnBackClicked()
+    {
+        var cb = _onConfirm;
+        ClosePanel(cb);
+    }
+
+    void ClosePanel(Action cb)
+    {
         ClearSpawnedCells();
+        if (_backButtonClone != null)
+        {
+            Destroy(_backButtonClone);
+            _backButtonClone = null;
+        }
         if (root != null) root.SetActive(false);
         Time.timeScale = 1f;
-        var cb = _onConfirm;
         _onConfirm = null;
+        _onNextStage = null;
         cb?.Invoke();
+    }
+
+    /// <summary>返回钮与确认钮的间距（本地单位，可调）。</summary>
+    const float BackButtonGap = 16f;
+
+    /// <summary>
+    /// 【2026-10-22 主人拍板】返回钮：运行时克隆 confirmButton 的 GameObject（prefab 零改动），
+    /// 文案改「返回」，放确认钮左侧（anchoredPosition 向左偏移按钮宽度 + 间距）。
+    /// 每次 Show 先清旧克隆（防叠加）；onNextStage=null（死亡/撤离）不克隆。
+    /// </summary>
+    void SetupBackButton()
+    {
+        if (_backButtonClone != null)
+        {
+            Destroy(_backButtonClone);
+            _backButtonClone = null;
+        }
+        if (_onNextStage == null || confirmButton == null) return;
+
+        var srcRt = confirmButton.transform as RectTransform;
+        var clone = Instantiate(confirmButton.gameObject, confirmButton.transform.parent);
+        clone.name = "BackButton";
+        var btn = clone.GetComponent<Button>();
+        if (btn != null)
+        {
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(OnBackClicked);
+        }
+        var cloneLabel = clone.GetComponentInChildren<Text>(true);
+        if (cloneLabel != null) cloneLabel.text = "返回";
+        var rt = clone.transform as RectTransform;
+        if (rt != null && srcRt != null)
+        {
+            // 锚点/轴心/尺寸照抄确认钮，只平移位置
+            rt.anchorMin = srcRt.anchorMin;
+            rt.anchorMax = srcRt.anchorMax;
+            rt.pivot = srcRt.pivot;
+            rt.sizeDelta = srcRt.sizeDelta;
+            float w = srcRt.rect.width > 0.01f ? srcRt.rect.width : srcRt.sizeDelta.x;
+            rt.anchoredPosition = srcRt.anchoredPosition + new Vector2(-(w + BackButtonGap), 0f);
+        }
+        clone.SetActive(true);
+        _backButtonClone = clone;
+        GameFonts.ApplyToHierarchy(clone.transform);
     }
 
     public static void BuildHierarchy(GameObject host)

@@ -618,7 +618,9 @@ public class MailDetailUI : MonoBehaviour
             if (att == null || att.amount <= 0) continue;
             string attName = att.type == "merc" && !string.IsNullOrEmpty(att.hireId)
                 ? MercDisplayName(att.hireId)
-                : RewardTypeName(att.type);
+                : att.type == "mercfrag" && !string.IsNullOrEmpty(att.hireId)
+                    ? MercDisplayName(att.hireId) + "的本命碎片"   // 【2026-10-22 施工单 T12】碎片附件名
+                    : RewardTypeName(att.type);
             items.Add(new RewardItem
             {
                 icon = Resources.Load<Sprite>(att.iconOverride),

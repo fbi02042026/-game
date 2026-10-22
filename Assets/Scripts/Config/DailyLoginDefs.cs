@@ -47,10 +47,12 @@ public static class DailyLoginDefs
     /// <summary>
     /// 累计登录（默认第 8 天）底部那一格的奖励。表有 accum 行时取该行翻译结果。
     ///
-    /// <para>【2026-10-07 主人拍板】佣兵本体挪到**第 4 天**（<see cref="Starter"/> 的第 4 格），
-    /// 所以这里**不能再送第二个塔克** —— 兜底改成碎片 ×15，与 daily_login.csv 的 accum_8 同一口径。</para>
+    /// <para>【2026-10-22 主人拍板 T6】accum_8 的塔克碎片×15 取消（碎片只走统一发碎片入口、
+    /// 且改按新手塔克节奏发），改「金币 ×500 + 天赋石 ×3」（与 daily_login.csv 同步）。</para>
     /// </summary>
-    public static Reward AccumReward = Frag("塔克碎片 ×15", STARTER_MERC_ID, 15);
+    public static Reward AccumReward = Pack(
+        Res("金币 ×500", ResourceWallet.ResourceType.Gold, 500),
+        Res("天赋石 ×3", ResourceWallet.ResourceType.TalentPoint, 3));
 
     public enum Grant
     {
@@ -82,17 +84,14 @@ public static class DailyLoginDefs
         public string DisplayName => HasSecond ? name + "\n" + name2 : name;
     }
 
-    static Reward Res(string name, ResourceWallet.ResourceType type, int amount) =>
-        new Reward { name = name, grant = Grant.Resource, type = type, amount = amount };
-
     static Reward MercGrant(string name, string hireId) =>
         new Reward { name = name, grant = Grant.Merc, hireId = hireId };
 
     static Reward Frag(string name, string hireId, int amount) =>
         new Reward { name = name, grant = Grant.MercFragment, hireId = hireId, amount = amount };
 
-    static Reward LegendFrag(string name, int amount) =>
-        new Reward { name = name, grant = Grant.LegendaryFragment, amount = amount };
+    static Reward Res(string name, ResourceWallet.ResourceType type, int amount) =>
+        new Reward { name = name, grant = Grant.Resource, type = type, amount = amount };
 
     /// <summary>把两份奖励合成一格（峰值日专用）。</summary>
     static Reward Pack(Reward a, Reward b) => new Reward
@@ -100,6 +99,9 @@ public static class DailyLoginDefs
         name = a.name, grant = a.grant, type = a.type, amount = a.amount, hireId = a.hireId,
         name2 = b.name, grant2 = b.grant, type2 = b.type, amount2 = b.amount, hireId2 = b.hireId
     };
+
+    // 【2026-10-22 主人拍板】「通用传说碎片 legendfrag」取消——没有这个道具，LegendFrag 构造器删除；
+    // cycle_7 / streak_14 / streak_30 的 grant2 改钻石（见下方数组与 daily_login.csv）。
 
     /// <summary>
     /// 新手 8 日【硬编码兜底】：表 daily_login.csv（starter 段）有数据时被整段覆盖。
@@ -119,11 +121,12 @@ public static class DailyLoginDefs
         Res("体力 ×50",          ResourceWallet.ResourceType.Stamina,       50), // D2（体力上限一半）
         // 【2026-10-20 主人拍板】钻石停发：原钻石×30 按商店汇率（1钻=4金）折金币×120
         Res("金币 ×120",         ResourceWallet.ResourceType.Gold,         120), // D3（原钻石×30）
-        Frag("塔克碎片 ×10",     STARTER_MERC_ID,                           10), // D4（2026-10-20 改：本体挪 D1 后本格改碎片×10）
+        // 【2026-10-22 主人拍板 T6】塔克碎片改按领取次序 10/20/20/20（合计 70 = 稀有满星消耗），D4/D6/D8 各 20
+        Frag("塔克碎片 ×20",     STARTER_MERC_ID,                           20), // D4（2026-10-22：10→20）
         Res("金币 ×800",         ResourceWallet.ResourceType.Gold,          800), // D5
-        Frag("塔克碎片 ×10",     STARTER_MERC_ID,                           10), // D6（第 6 格是双倍格，实发 20 片）
+        Frag("塔克碎片 ×20",     STARTER_MERC_ID,                           20), // D6（2026-10-22：原双倍格×10（实发20）改平发20，碎片不再吃双倍）
         Res("金币 ×200",         ResourceWallet.ResourceType.Gold,          200), // D7（2026-10-20 钻石停发：原钻石×50 折金币×200）
-        Frag("塔克碎片 ×15",     STARTER_MERC_ID,                           15), // D8 起每轮补碎片
+        Frag("塔克碎片 ×20",     STARTER_MERC_ID,                           20), // D8（2026-10-22：15→20）
     };
 
     /// <summary>
@@ -159,14 +162,17 @@ public static class DailyLoginDefs
     ///   改为**按轮次取模**：每轮 8 格里固定第 3 格、第 6 格双倍，每 8 天固定 2 天，
     ///   永远落在界面第 3 格和第 6 格（X2 角标玩家一眼能对上），可预期、会惦记。
     ///   改规则就改 IsStarterDouble 这一个方法（UI 角标与实际发放都走它）。
+    ///
+    /// 【2026-10-22 主人拍板 T6】只保留第 3 格双倍：塔克碎片数值定稿 10/20/20/20（合计 70 =
+    /// 稀有满星消耗），第 6 格若仍双倍会变 40、合计 90 对不上 —— 故第 6 格去掉双倍（角标随本方法一起消失）。
     /// </summary>
-    public static readonly int[] StarterDoubleDays = { 3, 6 };  // 仅作文档用：每轮第 3、6 格双倍（与 IsStarterDouble 同步）
+    public static readonly int[] StarterDoubleDays = { 3 };  // 仅作文档用：每轮第 3 格双倍（与 IsStarterDouble 同步）
 
     public static bool IsStarterDouble(int day)
     {
-        // 按轮次取模：每 8 格一轮，固定第 3、第 6 格双倍（永远落在界面第 3、6 格，对应 X2 角标）。
+        // 按轮次取模：每 8 格一轮，固定第 3 格双倍（2026-10-22 起，第 6 格碎片不再双倍）。
         int slot = ((day - 1) % 8) + 1;
-        return slot == 3 || slot == 6;
+        return slot == 3;
     }
 
     /// <summary>把一份奖励的数量翻倍（佣兵类不动，资源/碎片类数量 ×2）。</summary>
@@ -187,14 +193,16 @@ public static class DailyLoginDefs
     {
         Res("体力 ×15",           ResourceWallet.ResourceType.Stamina,       15), // D1
         Res("金币 ×250",          ResourceWallet.ResourceType.Gold,         250), // D2
-        Frag("塔克碎片 ×3",       STARTER_MERC_ID,                            3), // D3
+        // 【2026-10-22 主人拍板 T6】塔克碎片×3 取消（碎片只走统一发碎片入口），改金币×240
+        Res("金币 ×240",          ResourceWallet.ResourceType.Gold,         240), // D3（2026-10-22：原塔克碎片×3）
         Res("天赋石 ×3",          ResourceWallet.ResourceType.TalentPoint,    3), // D4 每日登录保底 3 石
         // 【2026-10-17 主人拍板】强化石暂无用途 → D5 原「强化石×2」按商店汇率（1石=120金）折成金币×240（表 daily_login 同步改）
         Res("金币 ×240",          ResourceWallet.ResourceType.Gold,          240), // D5
         // 【2026-10-18 主人拍板：材料产出全部改发抽奖币】D6 原「分解材料×8」按商店汇率（1材料=30金）折成金币×240（表 daily_login 同步改）
         Res("金币 ×240",          ResourceWallet.ResourceType.Gold,          240), // D6
+        // 【2026-10-22 主人拍板 T6】D7 周峰值第二份：传说碎片×2 取消 → 钻石×15（钻石资源正式启用）
         Pack(Res("金币 ×240",     ResourceWallet.ResourceType.Gold,         240),  // D7 周峰值（2026-10-20 钻石停发：原钻石×60 折金币×240）
-             LegendFrag("传说碎片 ×2", 2)),
+             Res("钻石 ×15",      ResourceWallet.ResourceType.Diamond,       15)),
     };
 
     public struct StreakReward
@@ -212,12 +220,13 @@ public static class DailyLoginDefs
     public static StreakReward[] Streak = new StreakReward[]
     {
         new StreakReward { days = 3,  reward = Res("体力 ×10", ResourceWallet.ResourceType.Stamina, 10) },
-        new StreakReward { days = 7,  reward = Frag("塔克碎片 ×5", STARTER_MERC_ID, 5) },
-        // 2026-10-20 钻石停发：14/30 天档原「钻石+传说碎片」→「金币+传说碎片」（1钻=4金折算）
+        // 【2026-10-22 主人拍板 T6】塔克碎片×5 取消 → 天赋石×5
+        new StreakReward { days = 7,  reward = Res("天赋石 ×5", ResourceWallet.ResourceType.TalentPoint, 5) },
+        // 【2026-10-22 主人拍板 T6】传说碎片取消 → 钻石（14 天 ×8 / 30 天 ×25）
         new StreakReward { days = 14, reward = Pack(Res("金币 ×120", ResourceWallet.ResourceType.Gold, 120),
-                                                    LegendFrag("传说碎片 ×3", 3)) },
+                                                    Res("钻石 ×8",  ResourceWallet.ResourceType.Diamond, 8)) },
         new StreakReward { days = 30, reward = Pack(Res("金币 ×400", ResourceWallet.ResourceType.Gold, 400),
-                                                    LegendFrag("传说碎片 ×15", 15)) },
+                                                    Res("钻石 ×25", ResourceWallet.ResourceType.Diamond, 25)) },
     };
 
     public static int CycleLength => Cycle.Length;
