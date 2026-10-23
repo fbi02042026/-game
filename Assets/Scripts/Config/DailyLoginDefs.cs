@@ -61,6 +61,7 @@ public static class DailyLoginDefs
         Merc = 2,              // 直接解锁佣兵（hireId）
         MercFragment = 3,      // 指定佣兵的本命碎片（hireId + amount）
         LegendaryFragment = 4, // 随机传说佣兵本命碎片（amount）
+        Badge = 5,             // 【2026-10-23 主人拍板 D3】升星职业徽记（hireId 反查职业+档位 + amount）
     }
 
     public struct Reward
@@ -90,6 +91,10 @@ public static class DailyLoginDefs
     static Reward Frag(string name, string hireId, int amount) =>
         new Reward { name = name, grant = Grant.MercFragment, hireId = hireId, amount = amount };
 
+    /// <summary>升星职业徽记（2026-10-23 D3）：param/hireId 填佣兵，发放时反查职业+档位组 badge id。</summary>
+    static Reward Badge(string name, string hireId, int amount) =>
+        new Reward { name = name, grant = Grant.Badge, hireId = hireId, amount = amount };
+
     static Reward Res(string name, ResourceWallet.ResourceType type, int amount) =>
         new Reward { name = name, grant = Grant.Resource, type = type, amount = amount };
 
@@ -106,8 +111,10 @@ public static class DailyLoginDefs
     /// <summary>
     /// 新手 8 日【硬编码兜底】：表 daily_login.csv（starter 段）有数据时被整段覆盖。
     /// 【2026-10-22 主人拍板】碎片只放在第 2/4/6/8 天（1星×10 / 2星×20 / 3星×20+20，合计正好70、零溢出），
-    /// 其余天数（1/3/5/7）给资源（体力 / 金币 / 天赋石 / 钻石）。
-    /// 塔克（H003）默认已在解锁名单，不再由登录弹窗发本体；碎片直接按天给。
+    /// 【2026-10-23 主人拍板】D1=塔克本体、D3=中级徽记×30（升2星10+升3星20 全包；双倍日已取消）、D5=金币、D7=钻石×200；登录奖励不再发体力。
+    /// 塔克（H003）已移出默认解锁名单（SaveData.DefaultUnlockedMercIds，2026-10-20 二次拍板），
+    /// D1 真发佣兵本体+报喜；碎片按 10/20/20/20 放第 2/4/6/8 天（对齐升星消耗 10/20/40：
+    /// D2 后可升1星、D4 后升2星、D6+D8 后升3星——2026-10-23 主人重申口径）。
     /// —— 表优先、缺表 / 空表 / 该行缺失回退本数组（"缺表回退，不让登录奖励开不起来"）。
     /// 节奏目标：塔克（稀有）满星要 **70 本命碎片**，D2/D4 发 10/20（1星/2星），D6/D8 各发 20 凑齐 3星40，合计正好 70、零溢出。
     /// 体力给上限一半（50）；强化石已停用。
@@ -115,14 +122,15 @@ public static class DailyLoginDefs
     /// </summary>
     public static Reward[] Starter = new Reward[]
     {
-        Res("体力 ×50",          ResourceWallet.ResourceType.Stamina,       50), // D1（2026-10-22 主人拍板：碎片只放第2/4/6/8天，其余天数给资源）
+        MercGrant("塔克·重盾",   STARTER_MERC_ID),                                // D1 稀有佣兵本体（2026-10-23 主人重申：D1=塔克；塔克移出默认名单真发本体+报喜，领过才折碎片）
         Frag("塔克碎片 ×10",     STARTER_MERC_ID,                           10), // D2（2026-10-22 主人拍板：第2天给1星碎片×10）
-        // 【2026-10-20 主人拍板】钻石停发：原钻石×30 按商店汇率（1钻=4金）折金币×120
-        Res("金币 ×120",         ResourceWallet.ResourceType.Gold,         120), // D3（原钻石×30，双倍日）
+        // 【2026-10-23 主人拍板】D3 发塔克升星徽记：塔克=剑盾·稀有 →「中级徽记」；双倍日已取消，直发 30 =
+        // 升2星10 + 升3星20 全包（消耗见 MercStarDefs.BadgeCost）。
+        Badge("中级徽记 ×30",    STARTER_MERC_ID,                           30), // D3（双倍日取消后直发30；原金币×120）
         Frag("塔克碎片 ×20",     STARTER_MERC_ID,                           20), // D4（2026-10-22 主人拍板：第4天给2星碎片×20）
-        Res("金币 ×800",         ResourceWallet.ResourceType.Gold,          800), // D5
+        Res("金币 ×500",         ResourceWallet.ResourceType.Gold,          500), // D5（2026-10-23 主人拍板：800→500）
         Frag("塔克碎片 ×20",     STARTER_MERC_ID,                           20), // D6（2026-10-22 主人拍板：第6天给3星碎片×20，与D8合计40=第3星；累计D8满星70零溢出）
-        Res("金币 ×200",         ResourceWallet.ResourceType.Gold,          200), // D7（2026-10-20 钻石停发：原钻石×50 折金币×200）
+        Res("钻石 ×200",         ResourceWallet.ResourceType.Diamond,      200), // D7（2026-10-23 主人拍板：改钻石×200，原金币×200）
         Frag("塔克碎片 ×20",     STARTER_MERC_ID,                           20), // D8（2026-10-22 主人拍板：第8天给3星碎片×20，与D6合计40=第3星；累计70零溢出）
     };
 
@@ -150,26 +158,18 @@ public static class DailyLoginDefs
 
     /// <summary>
     /// X2 双倍日（累计登录第 N 天）：UI 显示「X2」角标，领取时奖励**实发翻倍**。
-    /// 佣兵类（Grant.Merc）不参与翻倍，所以佣兵日天然不在其中。
     ///
-    /// ⚠ 2026-09-25 规则修正：原「个位 3/6/9」是十进制尾数口径——
-    ///   界面是预制体固定 **8 格**（Cell_1~8），而 8 与 10 的最小公倍数是 40，
-    ///   即双倍日与格子的对应关系要 40 天才循环一次，玩家根本记不住哪天双倍。
-    ///   改为**按轮次取模**：每轮 8 格里固定第 3 格双倍（第 6 格不再是碎片日，无需双倍），
-    ///   每 8 天固定 1 天，永远落在界面第 3 格（X2 角标玩家一眼能对上），可预期、会惦记。
-    ///   改规则就改 IsStarterDouble 这一个方法（UI 角标与实际发放都走它）。
-    ///
-    /// 【2026-10-22 主人拍板】碎片只放第 2/4/6/8 天（10/20/20/20），第 3 格（D3，金币双倍日）保留双倍；
-    /// 第 6 格(D6)与第 8 格(D8)是碎片日、不再双倍。1星10/2星20 在 D2/D4 累计(30)，3星40 由 D6+D8 各20 凑齐，
-    /// 累计 D2+D4+D6+D8=70 正好满星、零溢出。
+    /// 【2026-10-23 主人拍板】**双倍日机制取消**——IsStarterDouble 一律返回 false：
+    /// X2 角标（Refresh）与实发翻倍（TryClaimStarter）都走本方法，改这一处全局失效；
+    /// D3 徽记改为直发 30（升2星10+升3星20 全包，不再靠翻倍凑数）。
+    /// 历史口径（按轮次取模每轮第 3 格双倍，2026-09-25 定、2026-10-22 保留）作废。
     /// </summary>
-    public static readonly int[] StarterDoubleDays = { 3 };  // 仅作文档用：每轮第 3 格双倍（与 IsStarterDouble 同步）
+    public static readonly int[] StarterDoubleDays = { };   // 【2026-10-23】双倍日取消，清空（仅作文档用）
 
     public static bool IsStarterDouble(int day)
     {
-        // 按轮次取模：每 8 格一轮，固定第 3 格双倍（2026-10-22 起，第 6 格碎片不再双倍）。
-        int slot = ((day - 1) % 8) + 1;
-        return slot == 3;
+        // 【2026-10-23 主人拍板】登录奖励不再有双倍日，恒 false（day 参数保留为兼容签名）。
+        return false;
     }
 
     /// <summary>把一份奖励的数量翻倍（佣兵类不动，资源/碎片类数量 ×2）。</summary>
@@ -188,7 +188,7 @@ public static class DailyLoginDefs
     /// </summary>
     public static Reward[] Cycle = new Reward[]
     {
-        Res("体力 ×15",           ResourceWallet.ResourceType.Stamina,       15), // D1
+        Res("金币 ×200",          ResourceWallet.ResourceType.Gold,         200), // D1（2026-10-23 主人拍板：不再发体力，原体力×15 按商店汇率折金币×200）
         Res("金币 ×250",          ResourceWallet.ResourceType.Gold,         250), // D2
         // 【2026-10-22 主人拍板 T6】塔克碎片×3 取消（碎片只走统一发碎片入口），改金币×240
         Res("金币 ×240",          ResourceWallet.ResourceType.Gold,         240), // D3（2026-10-22：原塔克碎片×3）
@@ -216,7 +216,7 @@ public static class DailyLoginDefs
     /// </summary>
     public static StreakReward[] Streak = new StreakReward[]
     {
-        new StreakReward { days = 3,  reward = Res("体力 ×10", ResourceWallet.ResourceType.Stamina, 10) },
+        new StreakReward { days = 3,  reward = Res("金币 ×130", ResourceWallet.ResourceType.Gold, 130) }, // 2026-10-23 主人拍板：不再发体力，原体力×10 按商店汇率折金币×130
         // 【2026-10-22 主人拍板 T6】塔克碎片×5 取消 → 天赋石×5
         new StreakReward { days = 7,  reward = Res("天赋石 ×5", ResourceWallet.ResourceType.TalentPoint, 5) },
         // 【2026-10-22 主人拍板 T6】传说碎片取消 → 钻石（14 天 ×8 / 30 天 ×25）
@@ -317,7 +317,7 @@ public static class DailyLoginDefs
             amount = row.amount,
         };
         if (r.grant == Grant.Resource) { r.type = ParseResourceType(row.param); r.hireId = ""; }
-        else if (r.grant == Grant.Merc || r.grant == Grant.MercFragment) { r.hireId = row.param; }
+        else if (r.grant == Grant.Merc || r.grant == Grant.MercFragment || r.grant == Grant.Badge) { r.hireId = row.param; }
         else { r.hireId = ""; }
 
         // 第二份奖励（组合峰值，如「钻石 + 传说碎片」）
@@ -325,7 +325,7 @@ public static class DailyLoginDefs
         r.amount2 = row.amount2;
         r.name2 = row.name2;
         if (r.grant2 == Grant.Resource) { r.type2 = ParseResourceType(row.param2); r.hireId2 = ""; }
-        else if (r.grant2 == Grant.Merc || r.grant2 == Grant.MercFragment) { r.hireId2 = row.param2; }
+        else if (r.grant2 == Grant.Merc || r.grant2 == Grant.MercFragment || r.grant2 == Grant.Badge) { r.hireId2 = row.param2; }
         else { r.hireId2 = ""; }
 
         return r;
@@ -340,6 +340,7 @@ public static class DailyLoginDefs
             case "merc": return Grant.Merc;
             case "mercfrag": return Grant.MercFragment;
             case "legendfrag": return Grant.LegendaryFragment;
+            case "badge": return Grant.Badge;   // 2026-10-23 D3 升星徽记
             case "none":
             case "":
             default: return Grant.None;

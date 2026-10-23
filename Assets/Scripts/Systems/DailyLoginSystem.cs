@@ -296,6 +296,28 @@ public static class DailyLoginSystem
                 MercGrowInventory.GrantFragments(hireId, amount, "daily-login");
                 break;
 
+            case DailyLoginDefs.Grant.Badge:
+            {
+                // 【2026-10-23 主人拍板 D3】升星职业徽记：由 hireId 反查职业+档位（塔克=剑盾·稀有→中级徽记），
+                // 走 MercGrowInventory.Add（badge: 口径，进 mercGrowItems，与关卡掉落同仓同读）。
+                if (string.IsNullOrEmpty(hireId)) break;
+                if (!MercRosterDefs.TryGetByHireId(hireId, out var bdef))
+                {
+                    Debug.LogError($"[DailyLogin] 发徽记失败：花名册查不到 {hireId}，本次徽记未发放");
+                    break;
+                }
+                string bJob = MercGrowSprites.JobKey(bdef.JobName);
+                if (string.IsNullOrEmpty(bJob))
+                {
+                    Debug.LogError($"[DailyLogin] 发徽记失败：{bdef.Name} 职业名「{bdef.JobName}」识别不出徽记大类，本次徽记未发放");
+                    break;
+                }
+                string badgeId = MercGrowInventory.BadgeId(bJob, MercStarDefs.BadgeTierOf(bdef.Rarity));
+                MercGrowInventory.Add(badgeId, amount);
+                Debug.Log($"[DailyLogin] 发徽记 {badgeId} ×{amount}（{bdef.Name}）");
+                break;
+            }
+
             case DailyLoginDefs.Grant.LegendaryFragment:
                 // 【2026-10-22 主人拍板】「通用传说碎片 legendfrag」取消 —— 没有这个道具。
                 // 表里若仍配 legendfrag（不该发生，CSV 已改钻石）fail closed 报出来，不发不吞。

@@ -147,6 +147,10 @@ public partial class DailyLoginUI
                 // 塔克·重盾是稀有档，碎片底版取稀有；不叠佣兵头像（不改预制体 / 不新增节点，SetIcon 已支持范围足够）。
                 sp = MercGrowSprites.LoadFragmentBase(MercRosterDefs.MercRarity.Rare);
                 break;
+            case DailyLoginDefs.Grant.Badge:
+                // 【2026-10-23 D3】升星徽记图标：按 hireId 反查该职业+档位的徽记图（塔克=剑盾·稀有）。
+                sp = MercGrowSprites.LoadBadgeForMerc(r.hireId, LookupRarity(r.hireId));
+                break;
             case DailyLoginDefs.Grant.LegendaryFragment:
                 sp = MercGrowSprites.LoadFragmentBase(MercRosterDefs.MercRarity.Legendary);
                 break;
@@ -192,6 +196,9 @@ public partial class DailyLoginUI
             case DailyLoginDefs.Grant.MercFragment:
                 // B7: 碎片卡现已带头像，不同佣兵不能共用缓存，key 必须含 hireId 与档位
                 return "Frag_" + r.hireId + "_" + LookupRarity(r.hireId).ToString();
+            case DailyLoginDefs.Grant.Badge:
+                // 2026-10-23 D3 徽记：不同职业/档位的徽记图不同，key 含 hireId 与档位
+                return "Badge_" + r.hireId + "_" + LookupRarity(r.hireId).ToString();
             case DailyLoginDefs.Grant.LegendaryFragment:
                 return "Frag_" + r.hireId + "_" + MercRosterDefs.MercRarity.Legendary.ToString();
             case DailyLoginDefs.Grant.Resource:
