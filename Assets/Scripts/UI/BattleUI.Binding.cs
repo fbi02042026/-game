@@ -430,9 +430,10 @@ public partial class BattleUI : MonoBehaviour
             if (endFlag == null) endFlag = flagT.GetComponentInChildren<Image>(true);
         }
 
-        // 每次按 Node_0..Node_9 重建，丢掉预制体里多余的空 fileID
-        progressNodes = new List<Image>(GameConfig.STAGES_PER_CHAPTER);
-        for (int i = 0; i < GameConfig.STAGES_PER_CHAPTER; i++)
+        // 每次按 Node_0..Node_4 重建，丢掉预制体里多余的空 fileID
+        // 【2026-10-23 批 B1】大关 5 小关制：只认前 5 个节点（预制体里多的 Node_5..9 自然忽略）
+        progressNodes = new List<Image>(GameConfig.STAGES_PER_GRAND);
+        for (int i = 0; i < GameConfig.STAGES_PER_GRAND; i++)
         {
             Transform n = FindDeepChildIgnoreCase(progressContainer, $"Node_{i}");
             if (n == null) continue;

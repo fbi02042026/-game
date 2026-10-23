@@ -54,8 +54,11 @@ public partial class BattleManager
         // currentGold（带不出本局，与 SlotMachineSystem 同口径）；HUD 抽奖币数字由
         // AddRunGold → NotifyPoolGoldChanged 自动刷新，这里不手动刷。
         // 金币副本有自己的击杀掉金经济（killGoldMul=1 旧路径原样），不发防双发；引导局照发保持一致。
+        // 徽记副本（2026-10-23 主人拍板「徽记副本不给金币」）：局内抽奖币同样不发，只发徽记。
+        // 无限裂隙（2026-10-23 主人拍板「活动副本和无限…这里不掉抽奖币」）：击杀同样不发，
+        // 只有开局免费抽 5 次 + 层通关补贴（既有拍板 GrantsRunCoins）。
         // 表现复用 DamageTextSystem.SpawnGoldText 现成入口，怪头顶飘「+N金」。
-        if (!IsGoldDungeon)
+        if (!IsGoldDungeon && !IsBadgeDungeon && !IsEndlessRift)
         {
             int killGold = m.IsBossUnit ? GameConfig.KILL_GOLD_BOSS
                          : m.IsEliteWave ? GameConfig.KILL_GOLD_ELITE

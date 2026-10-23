@@ -244,30 +244,11 @@ public static class MailSystem
 
     /// <summary>
     /// 该邮件里的 mercfrag 附件现在能否全部装进背包（领取前预检，不真正入账）。
-    /// 没有 mercfrag 附件 → 恒 true（不影响普通邮件领取）。
+    /// 【2026-10-23 主人拍板】碎片一律进战斗外背包（townBagItems，无容量上限），
+    /// 不再依赖局内背包格子 —— 预检恒过，领取必然全部入账、不作废。
     /// </summary>
     static bool MercFragAttachmentsFit(MailEntry mail)
     {
-        var bag = GridBackpackSystem.Instance;
-        if (mail.attachments == null) return true;
-        for (int i = 0; i < mail.attachments.Count; i++)
-        {
-            var att = mail.attachments[i];
-            if (att == null || att.amount <= 0 || att.type != "mercfrag") continue;
-            string itemId = MercStarDefs.FragmentItemId(att.hireId);
-            if (string.IsNullOrEmpty(itemId))
-            {
-                Debug.LogError($"[Mail] 碎片附件缺 hireId，无法预检（mail={mail.title}）——按装不下处理");
-                return false;
-            }
-            if (bag == null)
-            {
-                // fail closed：背包系统未就绪时不放行（碎片不许作废），等就绪后再领
-                Debug.LogError("[Mail] GridBackpackSystem 未就绪，碎片邮件暂不可领取");
-                return false;
-            }
-            if (!bag.CanFitItemStack(itemId, (int)att.amount)) return false;
-        }
         return true;
     }
 

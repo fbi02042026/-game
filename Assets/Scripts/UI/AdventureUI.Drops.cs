@@ -72,6 +72,7 @@ public partial class AdventureUI
             case PreviewDropKind.ScrollCommon:    return "普卷";
             case PreviewDropKind.ScrollRare:      return "稀卷";
             case PreviewDropKind.ScrollLegendary: return "传卷";
+            case PreviewDropKind.Badge:           return "徽记";
             default:                              return "";
         }
     }
@@ -149,7 +150,9 @@ public partial class AdventureUI
         if (!IsModePlayable(_selectedMode)) return;
         if (IsActivityMode(_selectedMode))
         {
-            outList.Add(PreviewDropKind.Gold);
+            // 【2026-10-23 主人拍板「活动副本一拆二」】金币横条→金币；徽记横条→随机职业徽记（预览用普通档代表图）
+            if (_selectedActivityBadge) outList.Add(PreviewDropKind.Badge);
+            else outList.Add(PreviewDropKind.Gold);
             return;
         }
         // 无限裂隙：宝箱金/首通金都是战斗内抽奖币（2026-10-18 货币口径），首通发天赋石，每 10 层固定宝箱发普通卷轴
@@ -184,6 +187,8 @@ public partial class AdventureUI
                 return LoadScrollDropSprite(MercRosterDefs.MercRarity.Rare);
             case PreviewDropKind.ScrollLegendary:
                 return LoadScrollDropSprite(MercRosterDefs.MercRarity.Legendary);
+            case PreviewDropKind.Badge:
+                return LoadBadgeDropSprite();
             default:
                 return null;
         }
@@ -267,6 +272,13 @@ public partial class AdventureUI
     {
         if (_goldDropSprite != null) return _goldDropSprite;
         return _goldDropSprite = LoadCommonDropIcon("icon_gold");
+    }
+
+    /// <summary>徽记副本掉落预览图（2026-10-23）：随机职业在结算才揭晓，预览固定用剑盾·普通档徽记代表图。</summary>
+    Sprite LoadBadgeDropSprite()
+    {
+        if (_badgeDropSprite != null) return _badgeDropSprite;
+        return _badgeDropSprite = MercGrowSprites.LoadJobBadge("剑盾", MercRosterDefs.MercRarity.Common);
     }
 
     Sprite LoadDraftCoinDropSprite()

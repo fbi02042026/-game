@@ -15,7 +15,10 @@ public static class SlotMachineSystem
     {
         var cm = ChapterManager.Instance;
         if (cm == null) return 1;
-        int n = (cm.currentChapter - 1) * GameConfig.STAGES_PER_CHAPTER + cm.currentStageIndex + 1;
+        // 【2026-10-23 批 E3】章内关数 10 → 5（大关小关制）。
+        // 行为等价：CoinsForStage 的增长系数 1.2^(n-1) 在 n≥5 就顶到 COIN_GROWTH_CAP，
+        // 所以 10 关制与 5 关制在「第 1 章前 5 关」上数值一字不差，只是更早进入封顶平台。
+        int n = (cm.currentChapter - 1) * GameConfig.STAGES_PER_GRAND + cm.currentStageIndex + 1;
         return Mathf.Max(1, n);
     }
 
@@ -595,7 +598,7 @@ public static class SlotMachineSystem
     /// <summary>
     /// 抽奖经济自检：改完 <see cref="SlotMachineDefs"/> 里**任何**一个数，跑一次看曲线对不对。
     /// 打印每关的随机价 / 定向价 / 通产产出、一章能抽几次、开局能连抽几次。
-    /// ⚠ 精英关位置由 StageRoller 每关现抽（不固定），这里按「第 4、8 关是精英」估。
+    /// ⚠ 精英关位置由 StageRoller 按位置定死：5 小关制下第 3 关精英、第 5 关 Boss（2026-10-23 批 B1）。
     /// </summary>
     public static void LogDiagnostics()
     {
@@ -607,7 +610,8 @@ public static class SlotMachineSystem
                       " / 精英 " + SlotMachineDefs.COIN_PER_ELITE + " / Boss " + SlotMachineDefs.COIN_PER_BOSS +
                       "　启动下限 " + SlotMachineDefs.STARTER_COINS);
 
-        int stages = GameConfig.STAGES_PER_CHAPTER;
+        // 【2026-10-23 批 B1】每大关 5 小关（STAGES_PER_CHAPTER 是章级旧常量，这里按局内关数走）
+        int stages = GameConfig.STAGES_PER_GRAND;
         int sumPrice = 0, sumFocus = 0, sumIncome = 0;
         // 【2026-10-10】价不再跟关卡走，而是跟**本局已抽数**走（每抽 ×1.1）。
         // 这里按「每关只抽一次」估：第 n 关那一抽 = 已抽 n-1 次。
@@ -618,7 +622,7 @@ public static class SlotMachineSystem
             sumPrice += p;
             sumFocus += f;
             int inc = n == stages ? CoinsForStage(StageType.Boss, n)
-                    : (n == 4 || n == 8) ? CoinsForStage(StageType.Elite, n)
+                    : (n == 3) ? CoinsForStage(StageType.Elite, n)
                     : CoinsForStage(StageType.Normal, n);
             sumIncome += inc;
             sb.AppendLine($"  第{n}关：随机 {p}　定向 {f}　通关 +{inc}");
@@ -635,7 +639,8 @@ public static class SlotMachineSystem
         sb.AppendLine("[抽奖经济] 启动币每局只补一次（EnableRunDraft 开新局那关）；每关产出已抬到 ≥ 下一关一抽：");
         for (int n = 1; n <= stages; n++)
         {
-            StageType st = n == stages ? StageType.Boss : (n == 4 || n == 8) ? StageType.Elite : StageType.Normal;
+            // 【2026-10-23 批 B1】精英位：10 关制的 4/8 → 5 小关制的第 3 关
+            StageType st = n == stages ? StageType.Boss : (n == 3) ? StageType.Elite : StageType.Normal;
             int inc = CoinsForStage(st, n);
             int nextPrice = PriceAfterDraws(n);   // 通关这一关时已抽 n 次 → 下一抽的价
             sb.AppendLine($"  第{n}关通关 +{inc}　第{n + 1}关价 {nextPrice}　→ 能抽 {inc / Mathf.Max(1, nextPrice)} 次");

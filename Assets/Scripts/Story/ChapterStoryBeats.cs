@@ -12,16 +12,16 @@ public static class ChapterStoryBeats
     /// <summary>
     /// 章节 Boss 后尝试播放节点脚本。
     /// 返回 true 表示有脚本在播（调用方应等回调）；false 表示无脚本，直接走奖励流程。
+    /// 【2026-10-23 主人拍板】删 N3/N4 的「首周平替版 / NG+ 完整版」分流，统一播完整版
+    /// （梅莉莎 / 风车刻名直接揭示，不再按 HasClearedChapter(8) 判周目）。
     /// </summary>
     public static bool TryPlayPostBoss(int chapter, Action onDone)
     {
         switch (chapter)
         {
             case 2: PlayN2(onDone); return true;
-            // 【2026-10-21 拍板】N3/N4 按周目分流：NG+（已通关第 8 章）放完整版；首周支线是随机派定的，
-            // 梅莉莎 / 风车刻名的完整揭示留到 NG+，首周走旁白平替版（不剧透）。
-            case 3: if (SaveSystem.Instance?.Data?.HasClearedChapter(8) == true) PlayN3(onDone); else PlayN3Alt(onDone); return true;
-            case 4: if (SaveSystem.Instance?.Data?.HasClearedChapter(8) == true) PlayN4(onDone); else PlayN4Alt(onDone); return true;
+            case 3: PlayN3(onDone); return true;
+            case 4: PlayN4(onDone); return true;
             case 5: PlayN5(onDone); return true;
             case 6: PlayN6(onDone); return true;
             case 7: PlayN7(onDone); return true;
@@ -189,7 +189,7 @@ public static class ChapterStoryBeats
         StoryDirector.Ensure().Play(beats, onDone);
     }
 
-    // ---------- N3｜第 3 章（分支 B · 生者之径）：遇到梅莉莎（NG+ 完整版；首周走 PlayN3Alt 平替） ----------
+    // ---------- N3｜第 3 章：遇到梅莉莎（2026-10-23 删周目分流，统一播完整版） ----------
 
     static void PlayN3(Action onDone)
     {
@@ -214,9 +214,9 @@ public static class ChapterStoryBeats
     }
 
     /// <summary>
-    /// 【2026-10-21 拍板】N3 首周平替版（旁白版）：翡翠秘境的战后只留氛围与悬念——
-    /// 不出现梅莉莎、不用 MelissaCamp 背景 / Melissa 立绘、不加 StoryProgress.AddBond、不挂 .Bg()。
-    /// 完整版（遇到梅莉莎、M 是装箱的人）留到 NG+（已通关第 8 章）才放，见 PlayN3。
+    /// 【2026-10-23 退役】N3 首周平替版（旁白版）：删周目分流后不再调用，函数保留不删（下线≠删除）。
+    /// 原口径：翡翠秘境的战后只留氛围与悬念，不出现梅莉莎、不用 MelissaCamp 背景 / Melissa 立绘、
+    /// 不加 StoryProgress.AddBond、不挂 .Bg()；完整版留到 NG+ 才放。
     /// </summary>
     static void PlayN3Alt(Action onDone)
     {
@@ -229,7 +229,7 @@ public static class ChapterStoryBeats
         StoryDirector.Ensure().Play(beats, onDone);
     }
 
-    // ---------- N4｜第 4 章（分支 C · 计时之径）：你的名字也在表上（NG+ 完整版；首周走 PlayN4Alt 平替） ----------
+    // ---------- N4｜第 4 章：你的名字也在表上（2026-10-23 删周目分流，统一播完整版） ----------
 
     static void PlayN4(Action onDone)
     {
@@ -246,9 +246,9 @@ public static class ChapterStoryBeats
     }
 
     /// <summary>
-    /// 【2026-10-21 拍板】N4 首周平替版：晨曦草原的战后不揭「你认得：你自己」，
-    /// 只留风车停住 / 刻度一圈三年 / 名字刻到一半的悬念，不挂 .Bg()；
-    /// 完整版留到 NG+（已通关第 8 章）才放，见 PlayN4。
+    /// 【2026-10-23 退役】N4 首周平替版：删周目分流后不再调用，函数保留不删（下线≠删除）。
+    /// 原口径：晨曦草原的战后不揭「你认得：你自己」，只留风车停住 / 刻度一圈三年 / 名字刻到一半的悬念，
+    /// 不挂 .Bg()；完整版留到 NG+ 才放。
     /// </summary>
     static void PlayN4Alt(Action onDone)
     {
@@ -401,7 +401,13 @@ public static class ChapterStoryBeats
         StoryDirector.Ensure().Play(beats, () =>
         {
             // 通关第 8 章：本周目支线派定归零；下一周目重通第 1 章后由 EnsureForkRoll 重新随机派定（2026-10-21 拍板）
-            if (data != null) data.chosenBranch = 0;
+            // 【2026-10-23 两条制】两次派定记录一并清（与 SaveData.MarkChapterCleared 同口径）
+            if (data != null)
+            {
+                data.chosenBranch = 0;
+                data.branchRoll1 = 0;
+                data.branchRoll2 = 0;
+            }
             SaveSystem.Instance?.Save();
             onDone?.Invoke();
         });

@@ -42,6 +42,12 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     Sprite _commonScrollIcon;
     Sprite _legendaryScrollIcon;
 
+    // —— 刷新按钮「钻石刷新」形态节点（2026-10-23 主人拍板：冷却中可花钻立即刷，每天 2 次 50/100）——
+    // 运行时动态创建：按钮内左侧钻石 icon + 右侧价格 + 底部「今日剩N次」小字；免费可刷时隐藏 icon/价格。
+    Image _diamondIcon;
+    Text _diamondCostText;
+    Text _diamondLeftText;
+
     // —— 货币钮外观快照（2026-10-19 主人报「按钮还不一样」）——
     // 金币钮(ConfirmButton)与卷钮(ConfirmButton1)是两套预制体节点：底图/颜色/Label颜色/尺寸都不同。
     // 绑定时各拍一份快照，填充时按货币套用对应外观 —— 三张卡的货币钮看起来完全一致。

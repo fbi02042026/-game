@@ -60,14 +60,16 @@ public partial class AdventureUI
     /// <summary>隐藏尚未实现的玩法入口，避免误点「即将开放」。</summary>
     void HideUnfinishedEntries()
     {
-        // 模式：主线(0) + 无限裂隙(2)（2026-10-18 主人报「没看到无限裂隙」——裂隙玩法 2026-10-17 已建好，放开入口）；
-        // 每日副本(1)/BOSS挑战(3)/活动副本(4) 仍隐藏
+        // 模式：主线(0) + 无限裂隙(2) + 活动副本(4)（2026-10-23 主人拍板「活动副本一拆二」：
+        // 点活动标签右侧出金币/徽记两横条列表）；每日副本(1)/BOSS挑战(3) 仍隐藏
         for (int i = 0; i < modeButtons.Length; i++)
         {
             if (modeButtons[i] == null) continue;
-            modeButtons[i].gameObject.SetActive(i == 0 || i == 2);
+            modeButtons[i].gameObject.SetActive(i == 0 || i == 2 || i == 4);
         }
-        _selectedMode = 0;
+        // 不再无条件重置主线：切页保留上次选择；只有停在了未开放入口（每日/BOSS）才回主线
+        if (_selectedMode == 1 || _selectedMode == 3 || !IsModePlayable(_selectedMode))
+            _selectedMode = 0;
         // 难度：2026-09-17「地狱」已删除，按钮只建 3 个，不再需要隐藏逻辑
         if (addChancesBtn != null)
             addChancesBtn.gameObject.SetActive(false);
@@ -145,12 +147,101 @@ public partial class AdventureUI
     void OnSelectMode(int idx)
     {
         _selectedMode = idx;
-        if (!IsDiffUnlocked(_selectedDiff))
+        if (!IsDiffUnlockedForSelectedMode(_selectedDiff))
             _selectedDiff = 0;
         HideTip();
+        if (IsActivityMode(idx))
+        {
+            EnsureActivityRowsWired();
+            // 默认选中今天开放的副本：当前选择已开放则保留，否则切到开放的（都关=周六日保持金币）
+            if (_selectedActivityBadge ? !ActivityDungeonRules.IsBadgeOpenToday()
+                                       : !ActivityDungeonRules.IsGoldOpenToday())
+            {
+                if (ActivityDungeonRules.IsBadgeOpenToday()) _selectedActivityBadge = true;
+                else if (ActivityDungeonRules.IsGoldOpenToday()) _selectedActivityBadge = false;
+            }
+        }
         if (!IsModePlayable(idx))
             Toast($"{ModeLabel(idx)}即将开放");
         RefreshAll();
+    }
+
+    // ────────────────────────────────────────────────────
+    // 活动副本列表（2026-10-23 主人拍板「活动副本一拆二」）
+    // prefab 已摆好 RightContent/活动副本 下金币/徽记两个横条（bg/icon/Name/Info），
+    // 但没挂 Button、没有选中态 → 运行时补按钮 + 用底图颜色做选中高亮（不改 prefab、不动排版）。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>给两个横条补 Button 并接线（只做一次；找不到横条 LogError 不兜底，不重试防刷屏）。</summary>
+    void EnsureActivityRowsWired()
+    {
+        if (_activityRowsWired) return;
+        _activityRowsWired = true;   // 无论成败只绑一次：失败的情形（预制体被改）每次刷新都重报只会刷屏
+        var list = transform.Find("RightContent/" + ActivityNodeName);
+        if (list == null)
+        {
+            Debug.LogError($"[AdventureUI] RightContent 下找不到「{ActivityNodeName}」节点，活动列表无法交互（缺真值不兜底）");
+            return;
+        }
+        WireActivityRow(list.Find(ActivityGoldRowName), badge: false);
+        WireActivityRow(list.Find(ActivityBadgeRowName), badge: true);
+    }
+
+    void WireActivityRow(Transform row, bool badge)
+    {
+        if (row == null)
+        {
+            Debug.LogError($"[AdventureUI] 活动列表缺横条节点（{(badge ? ActivityBadgeRowName : ActivityGoldRowName)}），该副本无法选择（缺真值不兜底）");
+            return;
+        }
+        var btn = row.GetComponent<Button>();
+        if (btn == null) btn = row.gameObject.AddComponent<Button>();
+        var bgImg = row.Find("bg")?.GetComponent<Image>();
+        if (bgImg != null)
+        {
+            btn.targetGraphic = bgImg;
+            if (!_activityRowBaseColors.ContainsKey(bgImg))
+                _activityRowBaseColors[bgImg] = bgImg.color;
+            // prefab 里若关了射线，点击会整个失效 → 接按钮时强制打开（只有 bg 这一个接收面）
+            bgImg.raycastTarget = true;
+        }
+        else
+        {
+            Debug.LogError($"[AdventureUI] 活动横条 {(badge ? ActivityBadgeRowName : ActivityGoldRowName)} 下找不到 bg 底图，选中高亮失效（缺真值不兜底）");
+        }
+        btn.transition = Selectable.Transition.ColorTint;
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(() => OnSelectActivityRow(badge));
+    }
+
+    void OnSelectActivityRow(bool badge)
+    {
+        if (_selectedActivityBadge == badge) return;
+        _selectedActivityBadge = badge;
+        RefreshActivityRowHighlight();
+        RefreshDetailPanel();
+    }
+
+    /// <summary>横条选中高亮：选中 = 底图淡金，未选 = 恢复 prefab 原色。</summary>
+    void RefreshActivityRowHighlight()
+    {
+        var list = transform.Find("RightContent/" + ActivityNodeName);
+        if (list == null) return;
+        SetActivityRowSelected(list.Find(ActivityGoldRowName), selected: !_selectedActivityBadge);
+        SetActivityRowSelected(list.Find(ActivityBadgeRowName), selected: _selectedActivityBadge);
+    }
+
+    void SetActivityRowSelected(Transform row, bool selected)
+    {
+        if (row == null) return;
+        var bgImg = row.Find("bg")?.GetComponent<Image>();
+        if (bgImg == null) return;
+        if (!_activityRowBaseColors.TryGetValue(bgImg, out var baseColor))
+        {
+            baseColor = bgImg.color;
+            _activityRowBaseColors[bgImg] = baseColor;
+        }
+        bgImg.color = selected ? ActivityRowSelectedColor : baseColor;
     }
 
     void OnSelectChapter(int chapter)
@@ -190,8 +281,14 @@ public partial class AdventureUI
             Toast($"{ModeLabel(_selectedMode)}即将开放");
             return;
         }
-        if (!IsDiffUnlocked(idx))
+        if (!IsDiffUnlockedForSelectedMode(idx))
         {
+            // 活动副本（2026-10-23 主人拍板「打通前一难度才开下一难度」）：提示口径与主线不同
+            if (IsActivityMode(_selectedMode))
+            {
+                Toast("先通关上一难度才开启下一难度");
+                return;
+            }
             // 噩梦门槛：困难难度下通关第 8 章（不再按通关地图数判定）
             if (idx >= 2) Toast("在困难难度下通关一次冒险后开启噩梦");
             else Toast($"通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图后开启{DiffLabel(idx)}");
@@ -297,14 +394,18 @@ public partial class AdventureUI
     bool _chapterSwipeActive;
     float _chapterSwipeDx;
 
-    /// <summary>拖拽起点是否落在地图区（RightContent/MapRoot 子树）内。</summary>
+    /// <summary>拖拽起点是否落在地图区（主线节点 / StageNodes 子树）内。
+    /// 【2026-10-23 主人新布局】翻章只对主线有意义：RightContent/主线 节点 + 根下 StageNodes；
+    /// 无限/活动模式拖拽不响应（裂隙无章、活动无章）。</summary>
     bool IsMapDragStart(PointerEventData eventData)
     {
+        if (_selectedMode != 0) return false;
         var hit = eventData.pointerPressRaycast.gameObject;
         if (hit == null) return false;
         var right = transform.Find("RightContent");
-        var mapRoot = right != null ? right.Find("MapRoot") : transform.Find("MapRoot");
-        return mapRoot != null && hit.transform.IsChildOf(mapRoot);
+        var mainNode = right != null ? right.Find(MainNodeName) : null;
+        if (mainNode != null && hit.transform.IsChildOf(mainNode)) return true;
+        return stageNodeContainer != null && hit.transform.IsChildOf(stageNodeContainer);
     }
 
     public void OnBeginDrag(PointerEventData eventData)
@@ -343,16 +444,23 @@ public partial class AdventureUI
             Toast($"{ModeLabel(_selectedMode)}即将开放");
             return;
         }
-        if (!IsDiffUnlocked(_selectedDiff))
+        if (!IsDiffUnlockedForSelectedMode(_selectedDiff))
         {
+            // 活动副本（2026-10-23 主人拍板）：逐级解锁，提示口径与主线不同
+            if (IsActivityMode(_selectedMode))
+            {
+                Toast("先通关上一难度才开启下一难度");
+                return;
+            }
             if (_selectedDiff >= 2) Toast("在困难难度下通关一次冒险后开启噩梦");
             else Toast($"通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图后开启{DiffLabel(_selectedDiff)}");
             return;
         }
 
         // 无限裂隙不播剧情（2026-10-18 主人拍板）：大厅开场剧情只挂在主线冒险入口
+        // 活动副本同样不播（2026-10-23 活动一拆二：金币/徽记都是单场战斗，不该被剧情拦一道）
         if (StoryProgress.TutorialDone && !StoryProgress.Chapter1IntroDone
-            && _selectedChapter <= 1 && !IsEndlessMode(_selectedMode))
+            && _selectedChapter <= 1 && !IsEndlessMode(_selectedMode) && !IsActivityMode(_selectedMode))
         {
             Chapter1Story.PlayHallIntro(TryEnterBattle);
             return;
@@ -381,6 +489,25 @@ public partial class AdventureUI
 
         // 引导期一律走引导局，不让裂隙跟引导抢流程
         bool endless = IsEndlessMode(_selectedMode) && !tutorialRun;
+        // 活动副本（2026-10-23 主人拍板「活动副本一拆二」）：金币/徽记按横条选中态分流
+        bool activity = IsActivityMode(_selectedMode) && !tutorialRun;
+        bool badgeEnter = activity && _selectedActivityBadge;
+
+        // 【2026-10-23 主人拍板】解锁门槛：打通第 1 章开启活动副本，打通第 2 章开启无限裂隙
+        // （活动门槛受 ActivityDungeonRules.TEST_OPEN_ALL 测试总闸旁路，打包前总闸改回 false 即恢复）
+        var gateData = SaveSystem.Instance?.Data;
+        if (activity && !ActivityDungeonRules.TEST_OPEN_ALL
+            && (gateData == null || !gateData.HasClearedChapter(1)))
+        {
+            Toast("通关第 1 章后开启活动副本");
+            return;
+        }
+        if (endless && (gateData == null || !gateData.HasClearedChapter(2)))
+        {
+            Toast("通关第 2 章后开启无限裂隙");
+            return;
+        }
+
         int enterCost = endless ? StaminaSystem.ENDLESS_RIFT_COST : StaminaSystem.ADVENTURE_COST;
         PendingEndlessRift = endless;
         if (endless && EndlessRiftRules.TriesLeft(SaveSystem.Instance?.Data) <= 0)
@@ -388,6 +515,26 @@ public partial class AdventureUI
             Toast($"今天的裂隙挑战次数已用完（{GameConfig.ENDLESS_DAILY_TRIES}/{GameConfig.ENDLESS_DAILY_TRIES}）");
             PendingEndlessRift = false;
             return;
+        }
+
+        // 活动副本：先查交替开放日（金币=周一三五 / 徽记=周二四），徽记再查每日 2 次
+        if (activity)
+        {
+            if (badgeEnter && !ActivityDungeonRules.IsBadgeOpenToday())
+            {
+                Toast("徽记副本只在每周二、四开放");
+                return;
+            }
+            if (!badgeEnter && !ActivityDungeonRules.IsGoldOpenToday())
+            {
+                Toast("金币副本只在每周一、三、五开放");
+                return;
+            }
+            if (badgeEnter && BadgeDungeonRules.TriesLeft(SaveSystem.Instance?.Data) <= 0)
+            {
+                Toast($"今天的徽记副本次数已用完（{BadgeDungeonRules.DAILY_TRIES}/{BadgeDungeonRules.DAILY_TRIES}）");
+                return;
+            }
         }
 
         if (StaminaSystem.Current < enterCost)
@@ -421,7 +568,19 @@ public partial class AdventureUI
                 PendingBattleChapter = 0;
                 PendingBattleDifficulty = 0;
                 PendingGoldDungeon = false;
+                PendingBadgeDungeon = false;
                 // 不调 SetChapter：裂隙章节状态由 StartEndlessRift 全权负责
+            }
+            else if (badgeEnter)
+            {
+                // 徽记副本：每日次数 + 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
+                if (!BadgeDungeonRules.TryConsumeEnter())
+                    return;
+                PendingBattleChapter = _selectedChapter;
+                PendingBattleDifficulty = _selectedDiff;
+                PendingGoldDungeon = false;
+                PendingBadgeDungeon = true;
+                ChapterManager.Instance?.SetChapter(_selectedChapter);
             }
             else if (!StaminaSystem.TrySpendForAdventure())
             {
@@ -436,13 +595,15 @@ public partial class AdventureUI
                 PendingBattleChapter = 1;
                 PendingBattleDifficulty = 0;
                 PendingGoldDungeon = false;
+                PendingBadgeDungeon = false;
                 ChapterManager.Instance?.SetChapter(1);
             }
-            else if (!endless)
+            else if (!endless && !badgeEnter)
             {
                 PendingBattleChapter = _selectedChapter;
                 PendingBattleDifficulty = _selectedDiff;
-                PendingGoldDungeon = IsActivityMode(_selectedMode);
+                PendingGoldDungeon = IsActivityMode(_selectedMode) && !_selectedActivityBadge;
+                PendingBadgeDungeon = IsActivityMode(_selectedMode) && _selectedActivityBadge;
                 ChapterManager.Instance?.SetChapter(_selectedChapter);
                 NoteChosenBranch(_selectedChapter);
             }
@@ -459,18 +620,12 @@ public partial class AdventureUI
     }
 
     /// <summary>
-    /// 【2026-10-21 拍板】支线已改为通关第 1 章后由 ChapterRouteTable.EnsureForkRoll 随机派定，
-    /// 本方法不再承担派定职责，仅留作保险丝：异常情况下（派定丢失）进 2/3/4 时兜底补写一次。
+    /// 【2026-10-23 合并方案退役】原「进 2/3/4 时兜底补写 chosenBranch」保险丝——
+    /// 主线改线性（ChapterRouteTable 合并方案）、派定改掷支线岛后不再需要，直接空转保留（下线≠删除）。
     /// </summary>
     void NoteChosenBranch(int chapter)
     {
-        if (chapter < 2 || chapter > 4) return;
-        var data = SaveSystem.Instance?.Data;
-        if (data == null || data.chosenBranch == chapter) return;
-        if (data.chosenBranch != 0) return;   // 已经派定过，不覆盖
-        data.chosenBranch = chapter;
-        SaveSystem.Instance.Save();
-        Debug.Log($"[AdventureUI] 保险丝兜底派定支线：{GameConfig.GetChapterMapName(chapter)}（内部第{chapter}章）");
+        // 退役空转：主线 1→8 线性化后进章无需派定；支线岛派定见 ChapterRouteTable.EnsureForkRoll。
     }
 
     void OnSweep() => Toast("扫荡（即将开放）");

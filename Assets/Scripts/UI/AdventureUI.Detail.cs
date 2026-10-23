@@ -23,7 +23,7 @@ public partial class AdventureUI
         string title = GameConfig.GetChapterMapName(_selectedChapter);
         if (stageNameLabel != null)
         {
-            if (activity) stageNameLabel.text = "金币副本";
+            if (activity) stageNameLabel.text = _selectedActivityBadge ? "徽记副本" : "金币副本";
             else if (endless) stageNameLabel.text = "无限裂隙";
             else if (main) stageNameLabel.text = title;
             else stageNameLabel.text = ModeLabel(_selectedMode);
@@ -32,8 +32,11 @@ public partial class AdventureUI
         {
             if (activity)
             {
+                // 【2026-10-23 主人拍板「活动副本一拆二」】金币=周一三五固定金；徽记=周二四每日 2 次
                 int gold = GameConfig.GetGoldDungeonClearGold(_selectedChapter, _selectedDiff);
-                stageDescLabel.text = $"怪物只掉金币。通关获得 {gold} 金币。困难需通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图，噩梦需在困难难度下通关第 8 章。";
+                stageDescLabel.text = _selectedActivityBadge
+                    ? "通关获得随机职业徽记。每周二、四开放，每日 2 次。"
+                    : $"怪物只掉金币。通关获得 {gold} 金币。每周一、三、五开放。";
             }
             else if (endless)
             {
@@ -80,15 +83,22 @@ public partial class AdventureUI
         RefreshDropIcons();
     }
 
-    static string FormatRemainChances(bool playable, bool main, bool activity)
+    /// <summary>
+    /// 「剩余次数」栏（DetailPanel/you/Chances）。
+    /// 主线不限；金币副本不限次数（2026-10-23 主人只拍了徽记每日 2 次）；徽记副本显示今日真值 x/2。
+    /// </summary>
+    string FormatRemainChances(bool playable, bool main, bool activity)
     {
         if (!playable) return "0";
         if (main) return "不限";
-        // 活动/金币副本每日次数：暂无存档字段与配置表，预制体 3/3 仅为示意
-        if (activity) return "3/3";
+        if (activity)
+        {
+            if (_selectedActivityBadge)
+                return $"{BadgeDungeonRules.TriesLeft(SaveSystem.Instance?.Data)}/{BadgeDungeonRules.DAILY_TRIES}";
+            return "不限";
+        }
         return "0";
     }
-
     void EnsureStaminaCostIcon()
     {
         if (_staminaCostIcon == null && staminaCostLabel != null)

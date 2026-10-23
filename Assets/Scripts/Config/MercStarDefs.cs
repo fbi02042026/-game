@@ -5,6 +5,8 @@
 ///   · 上限 MaxOutStar=3 星（获得时零星；以后再开更多星改这里留扩位）。
 ///   · 升星消耗（本命碎片，按稀有度）：
 ///       普通 10/30/50、稀有 10/20/40（2026-10-22 三次拍板，替代原 5/10/30）、传奇 2/3/5。
+///   · 升星徽记消耗（该职业徽记，2026-10-23 主人拍板）：
+///       普通 0/20/30（低级）、稀有 0/10/20（中级）、传奇 2/5/10（高级，传奇 1 星起就要）。
 ///   · 重复获得转化数：普通 ×10 / 稀有 ×5 / 传奇 ×1（替代 MercGrowInventory.DUP_FRAG_* 8/20/50）。
 ///   · 星级加成（外层乘区，只动攻防四条，血/移速不动）：
 ///       每星 物攻(Attack)/物防(Defense) +8%、魔攻(MagicAttack)/魔防(MagicDefense) +7%
@@ -40,6 +42,34 @@ public static class MercStarDefs
                 return targetStar == 1 ? 10 : targetStar == 2 ? 20 : targetStar == 3 ? 40 : 0;
             default:
                 return targetStar == 1 ? 10 : targetStar == 2 ? 30 : targetStar == 3 ? 50 : 0;
+        }
+    }
+
+    /// <summary>升星徽记档位：普通佣兵=低级("普通")、稀有=中级("稀有")、传奇=高级("传奇")。</summary>
+    public static string BadgeTierOf(MercRosterDefs.MercRarity rarity)
+    {
+        switch (rarity)
+        {
+            case MercRosterDefs.MercRarity.Legendary: return "传奇";
+            case MercRosterDefs.MercRarity.Rare: return "稀有";
+            default: return "普通";
+        }
+    }
+
+    /// <summary>
+    /// 升到 targetStar（1~3）所需的**该职业**徽记数量；越界返回 0。
+    /// 普通 0/20/30（低级）；稀有 0/10/20（中级）；传奇 2/5/10（高级）——2026-10-23 主人拍板。
+    /// </summary>
+    public static int BadgeCost(MercRosterDefs.MercRarity rarity, int targetStar)
+    {
+        switch (rarity)
+        {
+            case MercRosterDefs.MercRarity.Legendary:
+                return targetStar == 1 ? 2 : targetStar == 2 ? 5 : targetStar == 3 ? 10 : 0;
+            case MercRosterDefs.MercRarity.Rare:
+                return targetStar == 1 ? 0 : targetStar == 2 ? 10 : targetStar == 3 ? 20 : 0;
+            default:
+                return targetStar == 1 ? 0 : targetStar == 2 ? 20 : targetStar == 3 ? 30 : 0;
         }
     }
 

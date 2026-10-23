@@ -101,6 +101,20 @@ public partial class BattleManager
     void GrantStageGrowDrops()
     {
         if (currentStage == null) return;
+        // —— 徽记副本（2026-10-23 拍板「活动副本一拆二」）：通关只发随机职业徽记，走自己的发放链 ——
+        // 顺序口径：徽记副本发徽记 → 金币本禁掉落 → 正常主线掉落，三路各写一行不合并。
+        if (IsBadgeDungeon)
+        {
+            MercGrowInventory.GrantBadgeDungeonDrops(BattleDifficulty);   // 返回 0（存档未就绪）时函数内已不弹 Toast
+            return;
+        }
+        // —— 金币本禁掉落（2026-10-23 拍板「金币本只掉金币」）：stage_drop 徽记/碎片/道具/Boss 卷轴
+        //    全在同一方法里，一个 early return 全禁；金币走 GetGoldDungeonClearGold 固定金币，与此无关 ——
+        if (IsGoldDungeon) return;
+        // —— 支线岛（2026-10-23 合并方案）：不发 stage_drop 徽记/碎片/卷轴 ——
+        //    岛产出 = 固定金币 + 天赋石（岛结算链 SideIslandBattleMode.SettleIslandRewards）
+        //    + 装备（宝箱链 DropsEquipment=true），三路各走各的
+        if (IsSideIsland) return;
         string stageType = currentStage.type == StageType.Boss ? "Boss"
                          : currentStage.type == StageType.Elite ? "Elite" : "Normal";
         bool firstClear = currentStage.type == StageType.Boss
@@ -1410,7 +1424,7 @@ public partial class BattleManager
         // 只把本关额度记进待发池，等结算（PersistBattleGold → GrantPendingStageGold）一次性发。
         // 口径不变：打完一章拿满，中途撤离 / 阵亡只拿已通关那几关的部分（结算侧就是这个算法）。
         int stageGold = StageGoldDefs.CurrentStageGold();
-        if (stageGold > 0)
+        if (stageGold > 0 && !IsSideIsland)   // 支线岛（2026-10-23 合并方案）不发主线关卡金——岛金=goldReward，走岛结算链
             _runStageGoldPending += stageGold;
         _runStagesCleared++; // 撤离补偿计数：本局已通关关数（2026-10-17）
 
@@ -1427,7 +1441,8 @@ public partial class BattleManager
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         HiddenLevelSystem.AddStageClearExp(ch);
         int bonusGold = 0;
-        if (!_stageQuestGoldGranted)
+        // 支线岛（2026-10-23 合并方案）不发关卡任务金——岛产出走自己的结算链，宝箱演出只呈现装备与折金
+        if (!_stageQuestGoldGranted && !IsSideIsland)
         {
             bonusGold = StageQuestClearGold > 0
                 ? StageQuestClearGold

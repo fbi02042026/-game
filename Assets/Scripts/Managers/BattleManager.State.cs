@@ -168,8 +168,14 @@ public partial class BattleManager
     /// </summary>
     public bool IsGoldDungeon => Mode != null && Mode.Id == BattleModeId.GoldDungeon;
 
+    /// <summary>当前局是否徽记副本（2026-10-23 新玩法，见 BadgeDungeonBattleMode）。派生写法照抄 IsGoldDungeon。</summary>
+    public bool IsBadgeDungeon => Mode != null && Mode.Id == BattleModeId.BadgeDungeon;
+
     /// <summary>当前局是否无限裂隙（2026-10-17 新玩法，见 EndlessBattleMode）</summary>
     public bool IsEndlessRift => Mode != null && Mode.Id == BattleModeId.Endless;
+
+    /// <summary>当前局是否支线岛（2026-10-23 合并方案，见 SideIslandBattleMode）。派生写法照抄 IsGoldDungeon。</summary>
+    public bool IsSideIsland => Mode != null && Mode.Id == BattleModeId.SideIsland;
 
     /// <summary>
     /// 【2026-10-22 主人拍板】主线正式关（v4 回合制新流程的作用域）= Mode 是 NormalBattleMode。
@@ -182,11 +188,24 @@ public partial class BattleManager
     public int EndlessRiftStage { get; private set; }
 
     /// <summary>
+    /// 本局支线岛 id（2026-10-23 合并方案；1..8，非岛局恒 0）。
+    /// 进本时从 AdventureUI.PendingSideIsland 拷入（Pending 读后即清，岛 id 留这里给结算读，
+    /// 照 EndlessRiftStage 的「进本捕获」模式）。
+    /// </summary>
+    public int SideIslandId { get; private set; }
+
+    /// <summary>
     /// 本模式掉不掉装备。由 <see cref="Mode"/> 自己声明（金币本 false，主线/引导 true）。
     /// 结算只看这个，不再判「是不是金币本」—— 以后「武器副本」这类活动也能自然掉装。
     /// </summary>
     public bool DropsEquipment => Mode != null && Mode.DropsEquipment;
-    public float DifficultyStatScale => GameConfig.GetDifficultyStatScale(BattleDifficulty);
+    /// <summary>
+    /// 难度属性倍率（2026-10-23 主人拍板）：活动副本（金币/徽记）按难度 ×1.5 递增（1.0/1.5/2.25）；
+    /// 其余模式（主线/引导/无限裂隙）照旧走全局曲线（1.0/1.35/2.0）。无限裂隙不选难度，天然除外。
+    /// </summary>
+    public float DifficultyStatScale => (IsGoldDungeon || IsBadgeDungeon)
+        ? GameConfig.GetActivityDifficultyStatScale(BattleDifficulty)
+        : GameConfig.GetDifficultyStatScale(BattleDifficulty);
     public float DifficultyGoldMul => GameConfig.GetDifficultyGoldMul(BattleDifficulty);
 
     #endregion

@@ -138,7 +138,7 @@ public partial class Monster
         // ??????????????????????????????????offset??
         int effectiveSpriteIndex = spriteIndexOverride > 0 ? spriteIndexOverride : template.spriteIndex;
         _spriteIndex = effectiveSpriteIndex;
-        LoadSprite(template, chapter, effectiveSpriteIndex);
+        LoadSprite(template, chapter, effectiveSpriteIndex, eliteWave, bossUnit);
         NormalizeMonsterAnchorNodes();
 
         // ??????????????????????
@@ -462,7 +462,10 @@ public partial class Monster
     /// ??????????Monsters ??????sprite????????scale??
     /// </summary>
     /// <param name="effectiveSpriteIndex">????????-12??0????</param>
-    private void LoadSprite(MonsterConfig template, int chapter, int effectiveSpriteIndex = 0)
+    /// <param name="eliteWave">本怪是否精英槽位（金币副本专用图分流用）</param>
+    /// <param name="bossUnit">本怪是否 Boss（金币副本专用图分流用）</param>
+    private void LoadSprite(MonsterConfig template, int chapter, int effectiveSpriteIndex = 0,
+        bool eliteWave = false, bool bossUnit = false)
     {
         if (sr == null)
         {
@@ -481,18 +484,41 @@ public partial class Monster
         int monsterChapter = GameConfig.GetMonsterChapter(chapter);
         Sprite monsterSprite = null;
 
-        var loader = MonsterSpriteLoader.Instance;
-        if (loader != null)
+        // 【2026-10-23 主人拍板】金币副本三种怪统一用「金币」文件夹专属图：小怪/精英/Boss。
+        // 按路径 Resources.Load（不走 guid 引用，meta 的 56 字符标识不影响加载）；
+        // 加载失败打 Error 回落章节图 —— 不静默吞，主人能在 Console 看见。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
         {
-            if (effectiveSpriteIndex > 0)
-                monsterSprite = loader.LoadMonsterSprite(monsterChapter, effectiveSpriteIndex - 1);
-            else
-                monsterSprite = loader.GetRandomMonsterSprite(monsterChapter);
+            string goldName = bossUnit ? "金币boss" : eliteWave ? "金币精英" : "金币小怪";
+            monsterSprite = Resources.Load<Sprite>($"Config/MonsterSpriteRegistry/金币/{goldName}");
+            if (monsterSprite == null)
+                Debug.LogError($"[Monster] 金币副本精灵加载失败：{goldName}（已回落章节图，请检查 Resources/Config/MonsterSpriteRegistry/金币/）");
+        }
+        // 【2026-10-23 主人拍板】徽记副本同款专属图（徽记小怪/徽记精英/徽记boss），波次布局与金币副本一致
+        else if (BattleManager.Instance != null && BattleManager.Instance.IsBadgeDungeon)
+        {
+            string badgeName = bossUnit ? "徽记boss" : eliteWave ? "徽记精英" : "徽记小怪";
+            monsterSprite = Resources.Load<Sprite>($"Config/MonsterSpriteRegistry/徽记/{badgeName}");
+            if (monsterSprite == null)
+                Debug.LogError($"[Monster] 徽记副本精灵加载失败：{badgeName}（已回落章节图，请检查 Resources/Config/MonsterSpriteRegistry/徽记/）");
         }
 
-        // ??????????? Resources ???? PNG
+        // 金币图已拿到就不再走章节图加载链（防止覆盖）
         if (monsterSprite == null)
-            monsterSprite = LoadSpriteFromResources(monsterChapter, effectiveSpriteIndex);
+        {
+            var loader = MonsterSpriteLoader.Instance;
+            if (loader != null)
+            {
+                if (effectiveSpriteIndex > 0)
+                    monsterSprite = loader.LoadMonsterSprite(monsterChapter, effectiveSpriteIndex - 1);
+                else
+                    monsterSprite = loader.GetRandomMonsterSprite(monsterChapter);
+            }
+
+            // ??????????? Resources ???? PNG
+            if (monsterSprite == null)
+                monsterSprite = LoadSpriteFromResources(monsterChapter, effectiveSpriteIndex);
+        }
 
         if (monsterSprite != null)
         {

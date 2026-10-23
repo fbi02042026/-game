@@ -23,6 +23,27 @@ public class IntIdEntry
     public int id;
 }
 
+/// <summary>
+/// 佣兵升阶（局外养成等级）存档条目（2026-10-23 施工单 T3）。
+/// 按 hireId 键控（与 mercOutStars 同口径：已拥有真源是 unlockedMercIds，多数佣兵没有 MercenaryData 实例）。
+/// 没有记录 = 该佣兵 Lv1 无加成（旧存档兼容，零报错）。
+/// </summary>
+[Serializable]
+public class MercGrowEntry
+{
+    public string hireId;
+    /// <summary>局外养成等级（默认 1；与局内属性基底 MercenaryData.level 完全无关）。</summary>
+    public int level = 1;
+    /// <summary>上一轮额外掷骰命中的属性项（0=攻 1=防 2=血；-1 = 还没掷过），保底轨道防 SL 刷。</summary>
+    public int lastRolled = -1;
+    /// <summary>已累计的资质加成（0.06f = +6%，掷定即存，升级时累加）。</summary>
+    public float aptAtk = 0f;
+    public float aptDef = 0f;
+    public float aptHp = 0f;
+    /// <summary>已过的升阶节点数（Lv10/20/30/40/50 各 +1，防重复领节点加码）。</summary>
+    public int ascended = 0;
+}
+
 [Serializable]
 public class SaveData
 {
@@ -68,6 +89,17 @@ public class SaveData
     public int endlessRiftTriesToday = 0;
     /// <summary>已首通的最高层（首通奖励一次性真源；记录点 = 本值 / 5 * 5，只进不退）</summary>
     public int endlessRiftClearedStage = 0;
+
+    // === 徽记副本（2026-10-23 主人拍板「活动副本一拆二」：每日两次，每周二/四开放）===
+    /// <summary>徽记副本每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday（照 endlessRift 口径）</summary>
+    public string badgeDungeonDayKey = "";
+    /// <summary>今日已用进入次数（每天 2 次，见 BadgeDungeonRules.DAILY_TRIES）</summary>
+    public int badgeDungeonTriesToday = 0;
+    /// <summary>
+    /// 活动副本已通关最高难度（2026-10-23 主人拍板「打通前一难度才开下一难度」）：
+    /// -1 = 尚未通关任何难度（初级恒开放）；金币/徽记两本共用同一活动标签进度。
+    /// </summary>
+    public int activityDungeonClearedDiff = -1;
 
     /// <summary>邮件箱（资源溢出等）</summary>
     public List<MailEntry> mailInbox = new List<MailEntry>();
@@ -144,6 +176,14 @@ public class SaveData
     /// 首掷/重掷后写回，冷启动弹窗先读这里恢复同一批。
     /// </summary>
     public List<MercenaryData> mercOffers = new List<MercenaryData>();
+    // === 酒馆三选一「钻石刷新」（2026-10-23 主人拍板：冷却中可花钻立即刷，每天 2 次，第 1 次 50 钻、第 2 次 100 钻）===
+    /// <summary>当日钻石刷新次数（跨天清零，日键见 mercDiamondRefreshDayKey）</summary>
+    public int mercDiamondRefreshUsed = 0;
+    /// <summary>钻石刷新日键（本地日历日，0 点清零）</summary>
+    public string mercDiamondRefreshDayKey = "";
+    // === 佣兵抽奖池第 5 格付费解锁（2026-10-23 主人拍板：第 4 格仍通关第 2 章开、第 5 格改 100 钻开）===
+    /// <summary>第 5 格是否已花 100 钻解锁（老档已通关第 3 章的视为已解锁，见 DrawPoolSlots）</summary>
+    public bool drawPoolPaidUnlock = false;
 
     // === 玩家基础属性 ===
     /// <summary>玩家冒险者显示名（引导签名后设定）</summary>
@@ -219,11 +259,20 @@ public class SaveData
     /// </summary>
     public bool hardCleared = false;
     /// <summary>
-    /// 本周目支线：0 = 未派定。通关第 1 章后由 ChapterRouteTable.EnsureForkRoll 随机派定
-    /// （洗牌袋，只掷未通关过的；三条都通关后重置回全量）。
+    /// 本周目支线：0 = 未派定。【2026-10-23 主人拍板「支线 2 岛依次解锁」】通关第 1 章后随机派定第一条，
+    /// 通关该支线后自动派第二条（洗牌袋，只掷未通关过的；见 ChapterRouteTable.EnsureForkRoll）。
     /// 通关第 8 章后归零，下一周目重通第 1 章后再派。
     /// </summary>
     public int chosenBranch = 0;
+    /// <summary>本周目第一次派定的支线岛 id（1..8，0=未派；冒险页支线岛1 显示它）。
+    /// 【2026-10-23 合并方案】语义从「支线章号 2/3/4」改为「支线岛 id」，掷点见 ChapterRouteTable.EnsureForkRoll。</summary>
+    public int branchRoll1 = 0;
+    /// <summary>本周目第二次派定的支线岛 id（0=未派；非 0 = 岛1 已通关、岛2 亮起）。</summary>
+    public int branchRoll2 = 0;
+    /// <summary>已通关支线岛集合（权威，跨周目持久 = 「一次性打完锁」；岛 id 见 SideIslandDefs）。
+    /// 【2026-10-23 合并方案】8 岛全通后由 EnsureForkRoll 洗牌袋重置，开启新一轮。</summary>
+    public List<IntIdEntry> clearedSideIslandEntries = new List<IntIdEntry>();
+    [NonSerialized] public HashSet<int> clearedSideIslandIds = new HashSet<int>();
 
     // === 冒险日志图鉴 ===
     public List<StringIdEntry> seenMonsterEntries = new List<StringIdEntry>();
@@ -387,6 +436,19 @@ public class SaveData
         mercOutStars[hireId] = Math.Max(0, star);
     }
 
+    // === 佣兵升阶 / 局外养成等级（2026-10-23 施工单 T3，与升星 mercOutStars 两套并行系统互不干扰）===
+    // key = 花名册 HireId（H001…）。没有记录 = Lv1 无加成（旧存档兼容）。
+    // 养成消耗只有金币 + 职业徽记【2026-10-23 主人拍板 C1=A】，本条目不含任何碎片字段。
+    public List<MercGrowEntry> mercGrowEntries = new List<MercGrowEntry>();
+    [NonSerialized] public Dictionary<string, MercGrowEntry> mercGrow = new Dictionary<string, MercGrowEntry>();
+
+    /// <summary>查佣兵养成记录（hireId；没有记录返回 null，调用方按 Lv1 无加成处理，旧存档兼容）。</summary>
+    public MercGrowEntry GetMercGrow(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return null;
+        return mercGrow != null && mercGrow.TryGetValue(hireId, out var e) ? e : null;
+    }
+
     // === 城镇背包道具（2026-10-21 新增：战斗局内获得的道具，出战斗结算时从局内背包转入这里，角色页可见）===
     // key = item_defs.csv 的道具 id（如 item_potion_hp），value = 持有数量
     public List<StringIntEntry> townBagItemEntries = new List<StringIntEntry>();
@@ -445,6 +507,11 @@ public class SaveData
         storyChoices ??= new List<StoryChoiceEntry>();
         chapterClearCounts ??= new List<ChapterClearCountEntry>();
         clearedChapterEntries ??= new List<IntIdEntry>();
+        clearedSideIslandEntries ??= new List<IntIdEntry>();   // 【2026-10-23 合并方案】旧存档没有 → 空，全岛未通关，兼容
+        // 老语义迁移：branchRoll1/2 曾记支线章号(2/3/4)，现改记支线岛 id(1..8)。
+        // 2/3/4 与岛 id 域重叠、语义无法区分 → 一律归零，让补掷入口（冒险页/世界地图）重新掷岛（幂等）。
+        if (branchRoll1 >= 2 && branchRoll1 <= 4) branchRoll1 = 0;
+        if (branchRoll2 >= 2 && branchRoll2 <= 4) branchRoll2 = 0;
         seenMonsterEntries ??= new List<StringIdEntry>();
         viewedMonsterEntries ??= new List<StringIdEntry>();
         seenMercEntries ??= new List<StringIdEntry>();
@@ -471,6 +538,7 @@ public class SaveData
         mileageShopBuyEntries ??= new List<StringIntEntry>();
         mercGrowItemEntries ??= new List<StringIntEntry>();
         mercOutStarEntries ??= new List<StringIntEntry>();
+        mercGrowEntries ??= new List<MercGrowEntry>();   // 【2026-10-23 施工单 T3】旧存档没有该列表 → 空，全员 Lv1 无加成
         clearedStageEntries ??= new List<StringIdEntry>();
         mainQuestDoneEntries ??= new List<StringIdEntry>();
         mainQuestCntEntries ??= new List<StringIntEntry>();
@@ -645,6 +713,31 @@ public class SaveData
                 var e = mercOutStarEntries[i];
                 if (e == null || string.IsNullOrEmpty(e.id)) continue;
                 mercOutStars[e.id] = Math.Max(0, e.value);
+            }
+        }
+
+        // 【2026-10-23 施工单 T3】局外养成等级重建：从 entries 灌回字典（旧存档无列表 → 空字典 = 全员 Lv1，兼容）
+        mercGrow = new Dictionary<string, MercGrowEntry>();
+        if (mercGrowEntries != null)
+        {
+            for (int i = 0; i < mercGrowEntries.Count; i++)
+            {
+                var e = mercGrowEntries[i];
+                if (e == null || string.IsNullOrEmpty(e.hireId)) continue;
+                if (e.level < 1) e.level = 1;               // 脏数据兜底：等级至少 1
+                if (e.lastRolled < -1 || e.lastRolled > 2) e.lastRolled = -1;
+                mercGrow[e.hireId] = e;
+            }
+        }
+
+        // 【2026-10-23 合并方案】支线岛通关集合重建：从 entries 灌回 HashSet（旧存档无列表 → 空集合，兼容）
+        clearedSideIslandIds = new HashSet<int>();
+        if (clearedSideIslandEntries != null)
+        {
+            for (int i = 0; i < clearedSideIslandEntries.Count; i++)
+            {
+                var e = clearedSideIslandEntries[i];
+                if (e != null && e.id > 0) clearedSideIslandIds.Add(e.id);
             }
         }
 
@@ -929,7 +1022,13 @@ public class SaveData
         if (clearedChapterIds == null) clearedChapterIds = new HashSet<int>();
         if (clearedChapterIds.Add(chapter))
             clearedChapterEntries = FromIntIdSet(clearedChapterIds);
-        if (chapter >= 8) chosenBranch = 0;
+        if (chapter >= 8)
+        {
+            chosenBranch = 0;
+            // 【2026-10-23 主人拍板「支线 2 岛依次解锁」】NG+ 归零时两次派定记录一并清，重通第 1 章后重新派
+            branchRoll1 = 0;
+            branchRoll2 = 0;
+        }
         // 噩梦门槛：在困难及以上难度通关第 8 章
         if (chapter >= 8 && difficulty >= 1) hardCleared = true;
     }
@@ -937,6 +1036,33 @@ public class SaveData
     public bool HasClearedChapter(int chapter)
     {
         return clearedChapterIds != null && chapter > 0 && clearedChapterIds.Contains(chapter);
+    }
+
+    // ── 支线岛存档（2026-10-23 合并方案，批 S1）──
+
+    /// <summary>标记支线岛通关（岛 id 见 SideIslandDefs；幂等，重复标记无副作用）。双写 List + HashSet。</summary>
+    public void MarkSideIslandCleared(int islandId)
+    {
+        if (islandId < 1 || islandId > SideIslandDefs.Count) return;
+        if (clearedSideIslandIds == null) clearedSideIslandIds = new HashSet<int>();
+        if (clearedSideIslandIds.Add(islandId))
+            clearedSideIslandEntries = FromIntIdSet(clearedSideIslandIds);
+    }
+
+    /// <summary>该支线岛是否已通关（一次性打完锁；跨周目持久）。</summary>
+    public bool HasClearedSideIsland(int islandId)
+    {
+        return clearedSideIslandIds != null && islandId > 0 && clearedSideIslandIds.Contains(islandId);
+    }
+
+    /// <summary>
+    /// 洗牌袋重置（8 岛全通后由 ChapterRouteTable.EnsureForkRoll 调用）：
+    /// 清空岛通关记录，开启新一轮——所有岛回到「未通关」，可再次被派定挑战。
+    /// </summary>
+    public void ResetSideIslandClears()
+    {
+        clearedSideIslandIds = new HashSet<int>();
+        clearedSideIslandEntries = new List<IntIdEntry>();
     }
 
     /// <summary>已通关章节数（困难/噩梦难度解锁门槛用；分叉后不能用 maxUnlockedChapter-1 推算）。</summary>
@@ -1102,6 +1228,7 @@ public class SaveData
         unlockedMercEntries = FromIdSet(unlockedMercIds);
         mercDrawPoolEntries = FromIdList(mercDrawPool);
         clearedChapterEntries = FromIntIdSet(clearedChapterIds);
+        clearedSideIslandEntries = FromIntIdSet(clearedSideIslandIds);   // 【2026-10-23 合并方案】岛存档双写
         claimedCodexRewardEntries = FromIdSet(claimedCodexRewardIds);
         defeatedMonsterEntries = FromIdSet(defeatedMonsterIds);
         unlockedWorldEntries = FromIdSet(unlockedWorldIds);
@@ -1153,6 +1280,15 @@ public class SaveData
         mercOutStarEntries = new List<StringIntEntry>(mercOutStars.Count);
         foreach (var kv in mercOutStars)
             mercOutStarEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        // 【2026-10-23 施工单 T3】局外养成等级镜像落盘（字典 → entries）
+        mercGrow ??= new Dictionary<string, MercGrowEntry>();
+        mercGrowEntries = new List<MercGrowEntry>(mercGrow.Count);
+        foreach (var kv in mercGrow)
+        {
+            if (kv.Value == null) continue;
+            mercGrowEntries.Add(kv.Value);
+        }
 
         townBagItemEntries = new List<StringIntEntry>(townBagItems.Count);
         foreach (var kv in townBagItems)

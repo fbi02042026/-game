@@ -222,9 +222,10 @@ public partial class WavePlanner
 
         // 【2026-10-19 修A】无限裂隙每层 stageIndex 恒为 0（ChapterManager.StartEndlessRift），
         // 按 stageIdx 过滤会把 minWave=9 的真 Boss 行全滤掉，Boss 波只能拿普通怪模板走 800/55 兜底。
-        // Boss 波取池按本章末关（STAGES_PER_CHAPTER-1）取，真 Boss 行必入池；
+        // Boss 波取池按大关末关（STAGES_PER_GRAND-1）取，真 Boss 行必入池；
         // 主线 Boss 关 stageIdx 本来就是末关，行为不变。小怪波（wantBoss=false）仍按原 stageIdx。
-        int poolIdx = wantBoss ? GameConfig.STAGES_PER_CHAPTER - 1 : stageIdx;
+        // 【2026-10-23 批 B1】STAGES_PER_CHAPTER-1(=9) → STAGES_PER_GRAND-1(=4)
+        int poolIdx = wantBoss ? GameConfig.STAGES_PER_GRAND - 1 : stageIdx;
         var pool = ConfigManager.Instance.GetWaveMonsterPool(CurrentChapter, poolIdx);
         if (pool == null || pool.Count == 0) return false;
 

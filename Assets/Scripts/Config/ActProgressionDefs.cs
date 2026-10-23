@@ -5,7 +5,7 @@ using UnityEngine;
 /// 【2026-10-22 主人拍板】关卡结构重构 · 进度数学层：篇 → 大关（固定 5 小关）→ 小关。
 ///
 /// 口径（施工真源 <c>Docs/关卡结构重构_篇大关小关_待办任务清单.md</c>）：
-/// · 第一篇 10 大关 = 50 关；第二篇同样 50 关；第三篇 80 关；之后每篇 ×1.2、取 5 的倍数；
+/// · 篇的关卡数由主人直接定表（2026-10-23）：50,50,70,80,90,90,100,100；第 9 篇及以后越界按 ×1.2 取 5 的倍数续算；
 /// · 大关**跨篇连续编号**：第一篇 1-1…10-5，第二篇 11-1…20-5（没有「每篇重新从 1 开始」的口径）；
 /// · 每大关 5 小关：第 5 小关 = Boss，第 3 小关 = 精英（概率见 <see cref="StageRoller.PinnedEliteChance"/>）。
 ///
@@ -18,12 +18,13 @@ public static class ActProgressionDefs
     public const int SUBS_PER_GRAND = 5;
 
     /// <summary>
-    /// 篇的关卡数（<b>真源，唯一出处</b>）。前两篇固定 50；第三篇 80；第四篇起 = 上一篇 ×1.2 取 5 的倍数。
+    /// 篇的关卡数（<b>真源，唯一出处</b>）。全 8 篇由主人定表（2026-10-23），均为 5 的倍数。
     /// 大关数 = 本篇关卡数 / <see cref="SUBS_PER_GRAND"/>。
     /// </summary>
-    static readonly int[] ActStageCounts = { 50, 50, 80, 95, 115, 140, 170, 205 };
+    static readonly int[] ActStageCounts = { 50, 50, 70, 80, 90, 90, 100, 100 };
 
-    /// <summary>取 5 的倍数（四舍五入）：96→95、114→115、138→140、168→170、204→205。</summary>
+    /// <summary>取 5 的倍数（四舍五入）：96→95、114→115、138→140、168→170、204→205。
+    /// ⚠️ 只用于<b>第 9 篇及以后</b>的越界续算；表内 8 篇的关卡数是主人手定的，不是这个公式算出来的。</summary>
     static int SnapToSubMultiple(float raw)
         => Mathf.RoundToInt(raw / (float)SUBS_PER_GRAND) * SUBS_PER_GRAND;
 

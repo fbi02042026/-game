@@ -32,6 +32,28 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     public static int PendingBattleDifficulty;
     public static bool PendingGoldDungeon;
     /// <summary>
+    /// 徽记副本进本标记（2026-10-23 主人拍板「活动副本一拆二」）。
+    /// 由 TryEnterBattle 按活动列表选中态重设（徽记横条选中 = true）；BattleManager.StartNewRunInternal 读完即清（照 PendingGoldDungeon 口径）。
+    /// </summary>
+    public static bool PendingBadgeDungeon;
+
+    /// <summary>
+    /// 支线岛进本标记（2026-10-23 合并方案）：值 = 岛 id（1..8，0=非岛局）。
+    /// 由支线岛点击（BranchIslands）设置；BattleManager.StartNewRunInternal 捕获进 SideIslandId 后清零（照金币本口径）。
+    /// </summary>
+    public static int PendingSideIsland;
+
+    /// <summary>
+    /// 徽记副本公开入口：冒险页切到「活动副本」并选中徽记横条后进本
+    /// （2026-10-23 拍板「活动副本一拆二」，开放日/每日次数检查在 <see cref="TryEnterBattle"/>）。
+    /// </summary>
+    public void EnterBadgeDungeon()
+    {
+        _selectedMode = 4;
+        _selectedActivityBadge = true;
+        TryEnterBattle();
+    }
+    /// <summary>
     /// 无限裂隙进本标记（2026-10-17）。TryEnterBattle 每次按所选模式**重设**（非裂隙恒 false，防上一次残留污染）；
     /// BattleManager.StartNewRunInternal 读完即清。体力确认弹窗也读它区分消耗 5/10（2026-10-22 主人拍板）。
     /// </summary>
@@ -87,9 +109,33 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     static readonly Color    ColHard    = new Color(0.28f, 0.42f, 0.65f, 1f);
     static readonly Color    ColNight   = new Color(0.45f, 0.22f, 0.62f, 1f);
 
+    // ──【2026-10-23 主人新布局】节点名（prefab 实测，别动名字）──
+    // RightContent 下三个页面节点：点左侧标签 → 显示对应节点；背景从根下 StageNodes 找。
+    //   主线   → StageNodes/Node_1..8（每章一张整图）
+    //   无限   → StageNodes/无限裂隙
+    //   活动副本 → StageNodes/金币副本（金币/徽记两横条共用此背景，prefab 未摆徽记背景节点）
+    const string MainNodeName      = "主线";
+    const string EndlessNodeName   = "无限";
+    const string ActivityNodeName  = "活动副本";
+    const string ActivityBgNodeName = "金币副本";   // StageNodes 下的背景节点名（RiftMapNodeName 同口径）
+    /// <summary>活动列表横条：金币副本（RightContent/活动副本/金币）。</summary>
+    const string ActivityGoldRowName = "金币";
+    /// <summary>活动列表横条：徽记副本（RightContent/活动副本/徽记）。</summary>
+    const string ActivityBadgeRowName = "徽记";
+    /// <summary>选中横条的底图高亮色（淡金；未选中恢复 prefab 原色）。</summary>
+    static readonly Color ActivityRowSelectedColor = new Color(1f, 0.85f, 0.35f, 1f);
+
     int _selectedMode = 0;
     int _selectedDiff = 0;
     int _selectedChapter = 1;
+    /// <summary>活动副本选中态（2026-10-23 主人拍板「活动副本一拆二」）：false = 金币副本，true = 徽记副本。</summary>
+    bool _selectedActivityBadge;
+    /// <summary>活动横条按钮是否已接线（金币/徽记两横条，prefab 只摆了外观没挂 Button）。</summary>
+    bool _activityRowsWired;
+    /// <summary>横条底图原色缓存（选中高亮 = 改 bg 颜色，恢复要回原色；key = bg Image）。</summary>
+    readonly Dictionary<Image, Color> _activityRowBaseColors = new Dictionary<Image, Color>();
+    /// <summary>StageNodes 下「金币副本」背景节点的 Image（活动模式背景，prefab 自带）。</summary>
+    Image _activityBgImg;
     /// <summary>当前可进的章节集合（升序）——箭头在它里面循环，取代旧的 1..maxUnlocked 连续段</summary>
     readonly List<int> _availableChapters = new List<int>();
     List<Button> _stageNodeBtns = new List<Button>();
@@ -107,6 +153,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     Sprite _scrollCommonSprite;
     Sprite _scrollRareSprite;
     Sprite _scrollLegendarySprite;
+    Sprite _badgeDropSprite;
     Sprite _staminaIconSprite;
     Image _staminaCostIcon;
 
@@ -117,7 +164,8 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         TalentStone,
         ScrollCommon,
         ScrollRare,
-        ScrollLegendary
+        ScrollLegendary,
+        Badge   // 徽记副本掉落预览（2026-10-23 活动副本一拆二）
     }
 
     readonly List<PreviewDropKind> _previewDrops = new List<PreviewDropKind>(4);

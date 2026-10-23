@@ -319,6 +319,16 @@ public partial class MercDrawPoolUI : MonoBehaviour
     // 刷新
     // ============================================================
 
+    /// <summary>
+    /// 升星弹窗（MercAscendUI）关闭后的回调入口：酒馆队列界面正开着才重刷，
+    /// 让卡内「升阶」钮显隐（材料/资金/满星）与最新星级同步；未开界面时零开销。
+    /// </summary>
+    public static void RefreshForAscendClosed()
+    {
+        if (_instance != null && _instance.gameObject.activeInHierarchy)
+            _instance.Refresh();
+    }
+
     void Refresh()
     {
         // 大滚动收编已移到 Open()：先激活 Root，再收编，再首次 Refresh（见 Open 注释）。

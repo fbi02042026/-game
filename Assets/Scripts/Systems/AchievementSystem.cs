@@ -306,12 +306,17 @@ public class AchievementSystem : Singleton<AchievementSystem>
     }
 
     /// <summary>
-    /// 到达某关时调用
+    /// 到达某关时调用。
+    /// ⚠️ 调用点 `ChapterManager.OnStageComplete` 在「章通关」分支**提前 return**，
+    /// 所以本方法只在非末关触发：5 小关制下 stageIndex ∈ 0..3（Boss 小关不进这里）。
+    /// 【2026-10-23 批 E6】10 关制旧阈值在 5 小关制下**双双恒假**（原 idx 域 0..8，现 0..3）：
+    /// `>=4`（survive_stage5）与 `>=7`（survive_stage8）都永远拿不到 → 按章内相对位置折算：
+    /// 4/9×4≈1.78 → 2（第 3 小关）、7/9×4≈3.11 → 3（第 4 小关）。
     /// </summary>
     public void OnReachStage(int stageIndex)
     {
-        if (stageIndex >= 4) AddProgress("survive_stage5"); // 第5关index=4
-        if (stageIndex >= 7) AddProgress("survive_stage8"); // 第8关index=7
+        if (stageIndex >= 2) AddProgress("survive_stage5"); // 原 >=4（第5关）折算到第3小关
+        if (stageIndex >= 3) AddProgress("survive_stage8"); // 原 >=7（第8关）折算到第4小关
     }
 
     /// <summary>

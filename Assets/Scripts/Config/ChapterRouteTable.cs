@@ -2,13 +2,13 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 章节路线表（2026-09-14 新增）
+/// 章节路线表（2026-09-14 新增 / 2026-10-23 合并方案改线性主线）
 /// ------------------------------------------------------------------
-/// 玩家看到的不是一条线性 1→2→3→4→5→6→7→8，而是：
-///     第1章 →（第2章 / 第3章 / 第4章 三选一）→ 第5章 → 第6章 → 第7章 → 第8章
-/// · 【2026-10-21 拍板】通关第 1 章后系统随机派定 2/3/4 中的一条（洗牌袋：只从「从未通关过的
-///   支线」里掷，三条都通关后重置回全量）；派定即放行，本周目锁定，不再由玩家手选。
-/// · 通关第 8 章后 chosenBranch 归零；下一周目重通一次第 1 章后再重新派定。
+/// 【2026-10-23 合并方案】主线改为**线性 1→2→3→4→5→6→7→8**（原「1 →(2/3/4 三选一)→ 5…8」分叉退役）：
+///     支线内容整体迁到「支线岛」—— 通关第 1 章后随机派定 2 个支线岛（岛壳依次解锁，岛内容
+///     = SideIslandDefs 的单 Boss 特殊关，见 EnsureForkRoll），与主线完全旁挂。
+/// · 旧支线章 2/3/4 并入主线按序解锁；chosenBranch/分支选择 UI 随之退役（字段保留不动）。
+/// · 通关第 8 章后 branchRoll1/branchRoll2 归零；下一周目重新派岛。
 ///
 /// 注意：内部 chapterId 语义完全不变——怪物素材 / 战斗背景 / 数值 / 成就
 /// 仍按 chapterId 取值。本表只决定「下一章是谁」和「哪些章能进」。
@@ -94,39 +94,51 @@ public static class ChapterRouteTable
     // 硬编码兜底（表缺失时）
     // ============================================================
 
-    /// <summary>主线默认序列</summary>
-    static readonly int[] FallbackMain = { 1, 2, 5, 6, 7, 8 };
-    /// <summary>支线章节（第 3/4 章）：通关第 1 章后随机派定一条，见 EnsureForkRoll</summary>
+    /// <summary>主线默认序列（2026-10-23 合并方案：线性 1→8）</summary>
+    static readonly int[] FallbackMain = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    /// <summary>【2026-10-23 退役】旧支线章（3/4 章）序列——分叉退役后无引用，保留不删（下线≠删除）。</summary>
     static readonly int[] FallbackBranch = { 3, 4 };
 
     // ============================================================
-    // 支线随机派定（2026-10-21 拍板）—— 掷点唯一出口
+    // 支线岛随机派定（2026-10-23 合并方案：岛壳用「2 岛依次解锁」+ 岛内容用 SideIslandDefs 单 Boss 关）
     // ============================================================
 
     /// <summary>
-    /// 【2026-10-21 拍板】三条支线（第 2/3/4 章）改为「通关第 1 章后系统随机派定一条」：
-    /// 洗牌袋 —— 只从「从未通关过的支线」里掷；三条都通关后重置回全量 {2,3,4}。
-    /// 幂等：chosenBranch != 0 或未通关第 1 章时直接返回，绝不重复掷。
-    /// 调用点仅限：通关第 1 章（ChapterManager.OnStageComplete）与老存档补掷入口
+    /// 【2026-10-23 合并方案】通关第 1 章后随机派定**支线岛**（洗牌袋，只掷没通关过的岛；
+    /// 岛定义见 SideIslandDefs，branchRoll1/branchRoll2 记岛 id 1..8）。
+    /// 通关该岛后**再次调用本方法自动派第二个岛**（岛通关结算处触发，见 BattleManager 岛结算）。
+    /// 本周目最多 2 个岛（两条制）；8 岛全通后洗牌袋重置（清岛通关记录，开启新一轮）。
+    /// 幂等：当前派定岛没打完、或两条已派满时直接返回，绝不重复掷。
+    /// 调用点：通关第 1 章（ChapterManager.OnStageComplete）与补掷入口
     /// （AdventureUI.RefreshAvailableChapters / WorldMapPopup.RefreshAvailability）。
-    /// 🔴 掷点逻辑严禁出现在 CanEnter / NextChapter / AvailableChapters / BranchChoices
-    /// 等查询函数里（它们被循环调用，会重复掷）。
+    /// 🔴 掷点逻辑严禁出现在 CanEnter / NextChapter / AvailableChapters 等查询函数里
+    /// （它们被循环调用，会重复掷）。
     /// </summary>
     public static void EnsureForkRoll(SaveData data)
     {
-        if (data == null || data.chosenBranch != 0) return;
+        if (data == null) return;
         if (!data.HasClearedChapter(1)) return;
+        if (data.branchRoll2 != 0) return;                       // 两条已派满（两条制）
+        // 当前派定的岛还没打完 → 保留不动（正在打/没打完）
+        if (data.branchRoll1 != 0 && !data.HasClearedSideIsland(data.branchRoll1)) return;
 
         var cands = new List<int>();
-        var cleared = data.clearedChapterIds; // 可能为 null，按空集合处理
-        for (int ch = 2; ch <= 4; ch++)
-            if (cleared == null || !cleared.Contains(ch)) cands.Add(ch);
-        if (cands.Count == 0) cands.AddRange(new[] { 2, 3, 4 }); // 三条都通关过 → 重置回全量
+        var cleared = data.clearedSideIslandIds; // 跨周目持久（一次性打完锁）；可能为 null，按空集合处理
+        for (int id = 1; id <= SideIslandDefs.Count; id++)
+            if (cleared == null || !cleared.Contains(id)) cands.Add(id);
+        if (cands.Count == 0)
+        {
+            // 8 岛全通 → 洗牌袋重置：清岛通关记录，开启新一轮（所有岛重新可掷可打）
+            data.ResetSideIslandClears();
+            for (int id = 1; id <= SideIslandDefs.Count; id++) cands.Add(id);
+            Debug.Log("[ChapterRoute] 支线岛 8 岛全通，洗牌袋重置，开启新一轮");
+        }
 
         int pick = cands[UnityEngine.Random.Range(0, cands.Count)];
-        data.chosenBranch = pick;
+        if (data.branchRoll1 == 0) data.branchRoll1 = pick;
+        else data.branchRoll2 = pick;
         SaveSystem.Instance.Save();
-        Debug.Log($"[ChapterRoute] 通关第 1 章后随机派定支线：{GameConfig.GetChapterMapName(pick)}（内部第{pick}章）");
+        Debug.Log($"[ChapterRoute] 随机派定支线岛（第 {(data.branchRoll2 != 0 ? 2 : 1)} 个）：{SideIslandDefs.Get(pick)?.name ?? "?"}（岛{pick}）");
     }
 
     // ============================================================
@@ -146,29 +158,11 @@ public static class ChapterRouteTable
             return result;
         }
 
-        // 兜底
-        if (chapter == 1)
+        // 兜底（2026-10-23 合并方案：线性 1→8，与表口径一致）
+        if (chapter >= 1 && chapter <= 7)
         {
-            result.Add(2);
-            result.AddRange(FallbackBranch);
+            result.Add(chapter + 1);
             return result;
-        }
-        for (int i = 0; i < FallbackMain.Length - 1; i++)
-        {
-            if (FallbackMain[i] == chapter)
-            {
-                result.Add(FallbackMain[i + 1]);
-                return result;
-            }
-        }
-        // 支线章节同样汇合到第 5 章
-        for (int i = 0; i < FallbackBranch.Length; i++)
-        {
-            if (FallbackBranch[i] == chapter)
-            {
-                result.Add(5);
-                return result;
-            }
         }
         return result;
     }
@@ -183,24 +177,12 @@ public static class ChapterRouteTable
         if (chapter == 1) return 2;
         for (int i = 0; i < FallbackMain.Length - 1; i++)
             if (FallbackMain[i] == chapter) return FallbackMain[i + 1];
-        for (int i = 0; i < FallbackBranch.Length; i++)
-            if (FallbackBranch[i] == chapter) return 5;
         return -1;
     }
 
-    /// <summary>考虑了玩家已选支线的下一章（第 1 章通关后用）。</summary>
+    /// <summary>考虑了玩家进度的下一章（2026-10-23 合并方案：主线线性，等价 DefaultNext；保留 data 参数兼容旧调用）。</summary>
     public static int NextChapter(int chapter, SaveData data)
     {
-        if (chapter == 1)
-        {
-            int chosen = data != null ? data.chosenBranch : 0;
-            var cands = NextChapters(1);
-            if (chosen > 0 && cands.Contains(chosen) && CanEnter(chosen, data))
-                return chosen;
-            foreach (int c in cands)
-                if (CanEnter(c, data)) return c;
-            return DefaultNext(1);
-        }
         return DefaultNext(chapter);
     }
 
@@ -223,27 +205,14 @@ public static class ChapterRouteTable
                     if (cleared(row.reqCleared[i])) { any = true; break; }
                 if (!any) return false;
             }
-            // 【2026-10-21 拍板】第 2/3/4 章改为「通关第 1 章后随机派定一条」（洗牌袋，见 EnsureForkRoll）：
-            // 派定即放行 —— chosenBranch 只可能在 Ch1 通关后写入，隐含 reqCleared=1。
-            // 原 needCh8Clear 门 + 支线互斥随之移除（chapter_route.csv 已将 2/3/4 行改为 needCh8Clear=0，
-            // 代码不再依赖该标志；其余章的判定不变）。
-            if (chapter >= 2 && chapter <= 4)
-            {
-                if (data == null || data.chosenBranch != chapter) return false;
-                return true;
-            }
+            // 【2026-10-23 合并方案】2/3/4 章并入主线按序解锁（reqCleared 由表给：2→1、3→2、4→3），
+            // 原「chosenBranch 派定门 + needCh8Clear 门 + 支线互斥」全部退役；支线内容迁支线岛（SideIslandDefs）。
             return true;
         }
 
         // 兜底（与表路径同口径）
-        // 【2026-10-21 拍板】2/3/4 章：通关第 1 章后随机派定一条（见 EnsureForkRoll），派定即放行；
-        // 不再要求通关第 8 章，也不再手选互斥。FallbackMain 主线序列不动。
-        if (chapter == 2 || chapter == 3 || chapter == 4)
-            return data != null && data.chosenBranch == chapter;
-        if (chapter == 5) return cleared(2) || cleared(3) || cleared(4);
-        if (chapter == 6) return cleared(5);
-        if (chapter == 7) return cleared(6);
-        if (chapter == 8) return cleared(7);
+        // 【2026-10-23 合并方案】线性 1→8：每章解锁 = 通关前一章。
+        if (chapter >= 2 && chapter <= 8) return cleared(chapter - 1);
         return false;
     }
 
@@ -258,7 +227,8 @@ public static class ChapterRouteTable
         return list;
     }
 
-    /// <summary>分叉点可选的多条支线（当前能进的 2/3/4）。</summary>
+    /// <summary>【2026-10-23 退役】分叉点可选支线（原 2/3/4 三选一）——主线线性后最多返回 1 条，
+    /// 分叉提示 UI（BuildBranchHint 的 choices.Count &lt; 2 判断）自然不再显示。保留不删（下线≠删除）。</summary>
     public static List<int> BranchChoices(SaveData data)
     {
         var list = new List<int>();

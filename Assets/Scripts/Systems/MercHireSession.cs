@@ -209,6 +209,56 @@ public static class MercHireSession
     }
 
     // ==========================================================================
+    // 酒馆三选一「钻石刷新」（2026-10-23 主人拍板）
+    // 冷却中也能刷：每天限 2 次，第 1 次 50 钻、第 2 次 100 钻；用完当天只能等免费冷却。
+    // ==========================================================================
+
+    /// <summary>每天钻石刷新次数上限。</summary>
+    public const int DiamondRefreshPerDay = 2;
+    /// <summary>第 1 次钻石刷新价格。</summary>
+    public const int DiamondRefreshCost1 = 50;
+    /// <summary>第 2 次钻石刷新价格。</summary>
+    public const int DiamondRefreshCost2 = 100;
+
+    /// <summary>第 N 次（0 起）钻石刷新的价格：第 1 次 50、第 2 次 100。</summary>
+    public static int DiamondRefreshCost(int usedToday)
+        => usedToday <= 0 ? DiamondRefreshCost1 : DiamondRefreshCost2;
+
+    /// <summary>
+    /// 跨天清零并返回今天是否还能钻石刷新。<paramref name="usedToday"/> = 已用次数，
+    /// <paramref name="cost"/> = 下一次的价格。
+    /// </summary>
+    public static bool CanDiamondRefresh(out int usedToday, out int cost)
+    {
+        usedToday = 0;
+        cost = 0;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        string today = DateTime.Now.ToString("yyyyMMdd");
+        if (data.mercDiamondRefreshDayKey != today)
+        {
+            data.mercDiamondRefreshDayKey = today;
+            data.mercDiamondRefreshUsed = 0;
+        }
+        usedToday = Mathf.Clamp(data.mercDiamondRefreshUsed, 0, DiamondRefreshPerDay);
+        cost = DiamondRefreshCost(usedToday);
+        return usedToday < DiamondRefreshPerDay;
+    }
+
+    /// <summary>
+    /// 花钻石立即刷新酒馆三选一（冷却中可用）。成功 = 已扣钻 + 已重置冷却（内部落盘），返回 true；
+    /// 次数用完或钻石不足返回 false（不足时 TrySpend 已弹「钻石不足」提示，调用方不必重复弹）。
+    /// </summary>
+    public static bool TryDiamondRefresh()
+    {
+        if (!CanDiamondRefresh(out int usedToday, out int cost)) return false;
+        if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Diamond, cost, save: false, notify: true))
+            return false;
+        MarkRefreshed();   // 内部 Save，扣钻一并落盘
+        return true;
+    }
+
+    // ==========================================================================
     // ★★★ 三套「职业图标」的口径，别再互相搞混（2026-09-26 主人反馈「总和玩家职业icon搞混」）★★★
     //
     // 1) 佣兵职业分类徽标（四分类）—— Assets/Art/UI/Icons/职业icon/{物攻,法术,防御,恢复}.png

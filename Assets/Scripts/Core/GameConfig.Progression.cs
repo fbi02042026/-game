@@ -47,7 +47,14 @@ public static partial class GameConfig
     /// <summary>背包行数上限（2026-09-29：默认 3 行 + 天赋 R_BAG 三级各 1 行 = **6 行 = 24 格**）。
     /// 底层网格按此上限分配；实际可用行数受 SaveData.backpackRows / 天赋 R_BAG 钳制到该上限。</summary>
     public const int BACKPACK_HEIGHT_MAX = 6;
-    public const int STAGES_PER_CHAPTER = 10; // 每章10关，最后一关是BOSS
+    /// <summary>每章10关，最后一关是BOSS。
+    /// ⚠️ 2026-10-23 关卡结构重构（批 B1）后，「一局打几关」的口径已改走
+    /// <see cref="STAGES_PER_GRAND"/>（每大关 5 小关）；本常量只保留给仍按「章」计数的存量引用
+    /// （如 MainQuestSystem.ChapterStageTotal 章级任务分母）。新增代码一律用 STAGES_PER_GRAND。</summary>
+    public const int STAGES_PER_CHAPTER = 10;
+    /// <summary>每大关（= 每局）小关数：1-1…1-5，第 5 小关 = Boss，第 3 小关 = 50% 精英。
+    /// 关卡结构重构批 B1（2026-10-23）真源，与 ActProgressionDefs.SUBS_PER_GRAND 同值（=5）。</summary>
+    public const int STAGES_PER_GRAND = 5;
     public const int SPECIAL_STAGES_PER_CHAPTER = 2; // 每章最多2个特殊关卡（商人/附魔/诅咒/休息）
     public const int MAX_OFFLINE_HOURS = 8; // 最多8小时离线收益
     public const int GOLD_PER_TALENT_POINT = 100; // 每100金币给1天赋点

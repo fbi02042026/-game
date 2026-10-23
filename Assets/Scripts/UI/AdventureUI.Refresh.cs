@@ -28,12 +28,19 @@ public partial class AdventureUI
         RefreshDetailPanel();
         RefreshContentLock();
         RefreshChestNodes();   // 章内 10 小关宝箱节点（2026-10-22 新增，见 AdventureUI.ChestNodes.cs）
+        RefreshBranchIslands();   // 主线窗口旁的支线岛屿宝箱（2026-10-23 主人拍板，见 AdventureUI.BranchIslands.cs）
+        // 活动副本横条选中高亮（2026-10-23 活动一拆二；非活动模式时列表节点隐藏，刷了也无副作用）
+        if (IsActivityMode(_selectedMode))
+        {
+            EnsureActivityRowsWired();
+            RefreshActivityRowHighlight();
+        }
     }
 
     /// <summary>按路线表重算可选章节，并把 _selectedChapter 修正到集合内。</summary>
     void RefreshAvailableChapters()
     {
-        // 【2026-10-21 拍板】老存档补掷入口：chosenBranch==0 且已通关第 1 章 → 首次进冒险页补掷一次
+        // 【2026-10-23 合并方案】补掷入口：branchRoll 未派满且当前派定岛已通关 → 首次进冒险页补掷一次
         // （EnsureForkRoll 内部幂等，绝不重复掷；data 取不到传 null 由函数内部兜底）。
         var data = SaveSystem.Instance?.Data;
         ChapterRouteTable.EnsureForkRoll(data);
@@ -88,7 +95,7 @@ public partial class AdventureUI
         for (int i = 0; i < difficultyButtons.Length; i++)
         {
             if (difficultyButtons[i] == null) continue;
-            bool unlocked = playable && IsDiffUnlocked(i);
+            bool unlocked = playable && IsDiffUnlockedForSelectedMode(i);
             SetChildSelected(difficultyButtons[i].transform, playable && i == _selectedDiff && unlocked);
             SetGraphicDim(difficultyButtons[i].transform, !unlocked);
         }
@@ -152,10 +159,12 @@ public partial class AdventureUI
     {
         // 【2026-10-22 主人拍板】世界地图入口只在主线冒险模式显示（裂隙等其它模式一概隐藏），
         // 原解锁条件（已通关第 1 章）保留。
+        // 【2026-10-23 主人新布局】入口节点搬到 RightContent/主线 下。
         bool show = IsMainMode(_selectedMode)
                     && SaveSystem.Instance != null && SaveSystem.Instance.Data != null
                     && SaveSystem.Instance.Data.HasClearedChapter(1);
-        var pre = transform.Find("RightContent/WorldMapBtn");
+        var pre = transform.Find("RightContent/" + MainNodeName + "/WorldMapBtn");
+        if (pre == null) pre = transform.Find("RightContent/WorldMapBtn");   // 旧布局残留路径
         if (pre != null) pre.gameObject.SetActive(show);
 
         if (_worldMapBtn != null) _worldMapBtn.gameObject.SetActive(show);
@@ -187,11 +196,12 @@ public partial class AdventureUI
 
     RectTransform BuildSwipeGuideNode()
     {
+        // 【2026-10-23 主人新布局】地图内容在 RightContent/主线 下（旧 MapRoot 已无），引导挂主线节点里
         var right = transform.Find("RightContent");
-        var mapRoot = right != null ? right.Find("MapRoot") : transform.Find("MapRoot");
-        if (mapRoot == null) return null;
+        var mainNode = right != null ? right.Find(MainNodeName) : null;
+        if (mainNode == null) return null;
         var go = new GameObject("ChapterSwipeGuide", typeof(RectTransform), typeof(Text));
-        go.transform.SetParent(mapRoot, false);
+        go.transform.SetParent(mainNode, false);
         var rt = go.GetComponent<RectTransform>();
         rt.anchorMin = new Vector2(0.5f, 0f);
         rt.anchorMax = new Vector2(0.5f, 0f);
@@ -277,13 +287,38 @@ public partial class AdventureUI
     /// <summary>StageNodes 下预制体自带的整图节点名（主人摆的，别动名字）。</summary>
     const string RiftMapNodeName = "无限裂隙";
 
+    /// <summary>RightContent 下页面节点显隐（2026-10-23 主人新布局：主线/无限/活动副本 三节点）。</summary>
+    void SetRightNodeVisible(string nodeName, bool on)
+    {
+        var right = transform.Find("RightContent");
+        var node = right != null ? right.Find(nodeName) : null;
+        if (node == null)
+        {
+            if (on)
+                Debug.LogError($"[AdventureUI] RightContent 下找不到「{nodeName}」节点（预制体缺失），该模式页面无从显示");
+            return;
+        }
+        if (node.gameObject.activeSelf != on)
+            node.gameObject.SetActive(on);
+    }
+
     void RefreshMapLayers()
     {
         if (stageNodeContainer == null) return;
-        // 【2026-10-22 主人拍板】无限裂隙模式下地图整体换成 StageNodes/无限裂隙 节点（预制体自带整图），
-        // 章节地图 Node_1..8 隐藏；主线模式反之，整图节点一律隐藏。
+        // 【2026-10-23 主人新布局】点左侧标签 → 右侧出对应节点 + 根下 StageNodes 出对应背景：
+        //   主线   → RightContent/主线   + StageNodes/Node_{ch}
+        //   无限   → RightContent/无限   + StageNodes/无限裂隙
+        //   活动副本 → RightContent/活动副本 + StageNodes/金币副本（金币/徽记横条共用此背景）
+        bool mainMode = IsMainMode(_selectedMode);
         bool riftMode = IsEndlessMode(_selectedMode);
+        bool activityMode = IsActivityMode(_selectedMode);
+
+        SetRightNodeVisible(MainNodeName, mainMode);
+        SetRightNodeVisible(EndlessNodeName, riftMode);
+        SetRightNodeVisible(ActivityNodeName, activityMode);
+
         Transform riftNode = null;
+        Transform activityBgNode = null;
         for (int i = 0; i < stageNodeContainer.childCount; i++)
         {
             var child = stageNodeContainer.GetChild(i);
@@ -292,13 +327,23 @@ public partial class AdventureUI
                 riftNode = child;
                 continue;
             }
+            if (child.name == ActivityBgNodeName)
+            {
+                activityBgNode = child;
+                if (_activityBgImg == null) _activityBgImg = child.GetComponent<Image>();
+                continue;
+            }
             int ch = ParseNodeChapter(child.name, i + 1);
-            child.gameObject.SetActive(!riftMode && ch == _selectedChapter);
+            child.gameObject.SetActive(mainMode && ch == _selectedChapter);
         }
         if (riftNode != null)
             riftNode.gameObject.SetActive(riftMode);
         else if (riftMode)
             Debug.LogError($"[AdventureUI] StageNodes 下找不到「{RiftMapNodeName}」节点（预制体缺失），裂隙地图无从显示");
+        if (activityBgNode != null)
+            activityBgNode.gameObject.SetActive(activityMode);
+        else if (activityMode)
+            Debug.LogError($"[AdventureUI] StageNodes 下找不到「{ActivityBgNodeName}」节点（预制体缺失），活动背景无从显示");
     }
 
     static int ParseNodeChapter(string name, int fallback)

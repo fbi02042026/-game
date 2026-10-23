@@ -108,9 +108,10 @@ public static class TavernLore
         var d = SaveSystem.Instance?.Data;
         int far = d == null ? 0 : HighestClearedChapter(d);
 
+        // 【2026-10-23 合并方案】支线章退役、并入主线（1→8 线性）：判断改为「是否打过 3/4 章」。
+        // 原 chosenBranch==3/4 派定判断随分叉一起退役。
         bool branchOpen = d != null
-            && (d.chosenBranch == 3 || d.chosenBranch == 4
-                || StoryEnding.HasCleared(d, 3) || StoryEnding.HasCleared(d, 4));
+            && (StoryEnding.HasCleared(d, 3) || StoryEnding.HasCleared(d, 4));
 
         if (branchOpen)
             return "裂隙第二层有两条岔路，以前没人活着回来讲过。\n你要么是第一个，要么是死得最慢的那个。";

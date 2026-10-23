@@ -93,8 +93,15 @@ public partial class AdventureUI
                 if (mapRoot != null) RestoreAdventureBase(mapRoot);
                 if (detail != null) RestoreAdventureBase(detail);
                 if (mapBg != null) RestoreAdventureBase(mapBg.rectTransform);
-                var wmBtnRestore = right != null ? right.Find("WorldMapBtn") as RectTransform : null;
+                // TitleBar/WorldMapBtn 在 2026-10-23 预制体重构后挂 主线 下，right.Find 直接找不到 → 经 MainNodeName 查
+                var mainNodeRestore = right != null ? right.Find(MainNodeName) : null;
+                var tbRestore = mainNodeRestore != null ? mainNodeRestore.Find("TitleBar") as RectTransform : null;
+                if (tbRestore != null) RestoreAdventureBase(tbRestore);
+                var wmBtnRestore = mainNodeRestore != null ? mainNodeRestore.Find("WorldMapBtn") as RectTransform : null;
                 if (wmBtnRestore != null) RestoreAdventureBase(wmBtnRestore);
+                // 主线列表瘦屏重排的还原（槽位浮动基准 / 支线岛基准；列表未绑定时内部自动 no-op）
+                RestoreSlotColumnBaseY();
+                RestoreBranchIslandBaseY();
                 RestoreAdventureSidebarOrder(right);
                 return;
             }
@@ -137,6 +144,11 @@ public partial class AdventureUI
             // 必须在 DetailPanel 定位之后跑（要拿它的最终顶边）。
             if (mapRoot != null && right != null && detail != null)
                 FitAdventureMapRootCentered(mapRoot, right, detail);
+            // 2026-10-23 主人「右边列表瘦屏要跟着拉长，别跟下面关卡信息有大空隙」：
+            // 主线列表（TitleBar / 槽位 / 支线岛 / 世界地图按钮）在带内重排。
+            // 必须在 FitAdventureDetailPanel 之后（要拿它的最终顶边）。
+            if (right != null && detail != null)
+                FitMainColumnStretch(right, detail);
             // 世界地图按钮是 RightContent 居中锚点，屏越高越往上漂（相对地图的位置随屏高变化）；
             // 钉回设计屏（1280 高）时与地图底边的相对几何，x 不动。
             var worldMapBtn = right != null ? right.Find("WorldMapBtn") as RectTransform : null;
@@ -558,5 +570,175 @@ public partial class AdventureUI
 
         btnBase.applied = true;
         _adventureUiBase[btn.GetInstanceID()] = btnBase;
+    }
+
+    // ────────────────────────────────────────────────────
+    // 主线列表瘦屏拉伸（2026-10-23 主人「右边这个是个列表，手机高度拉长时右边也要相应拉长，
+    // 不要跟下面的关卡信息有太大空隙」）
+    //
+    // 病根（prefab 实测）：主线 / 关卡 / 槽位全是 center 单点锚，槽位中心 root y = H/2 + 本地 y，
+    //   瘦屏时整列随屏幕中心往下漂；而 DetailPanel 底端锚定沉底不动，
+    //   列底与详情面板之间、列顶与标题栏之间的空隙随屏高越拉越大。
+    // 治法（只重排不缩放，保持预制体排版节奏）：
+    //   · TitleBar 上移 (H-设计高)/2 —— 钉住「距 RightContent 顶」的设计间距；
+    //   · WorldMapBtn 下移 (H-设计高)/2 —— 钉回设计屏的绝对位置（与沉底 DetailPanel 间距不变）；
+    //   · 槽位列 + 支线岛在「DetailPanel 顶 + 设计底间距 ~ TitleBar 底 - 设计顶间距」带内，
+    //     按预制体 y 节奏等比插值重排（底槽贴面板、顶槽贴标题栏，中间保持原比例）；
+    //   · 支线岛容器与关卡容器同锚同位 → 同一参考系，frac 沿主列跨度插值。
+    // 幂等：全部从 CaptureAdventureBase 的预制体 base 解析，重复调用不累积；
+    //       标准屏 / 关开关由 ApplyAdventureFit 的 restore 分支还原（含槽位/岛浮动基准）。
+    // 注意：WorldMapBtn 的旧跟随逻辑 FitWorldMapBtnToMap 因 MapRoot 已不在预制体而长期 no-op，
+    //       本方法接手它的纵向钉位；将来若 MapRoot 回归需二选一，别双写。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>主线列表重排的缺失/异常只报一次（不影响幂等——重排本身始终从 base 重算）。</summary>
+    bool _mainColumnStretchWarned;
+
+    void WarnMainColumnOnce(string reason)
+    {
+        if (_mainColumnStretchWarned) return;
+        _mainColumnStretchWarned = true;
+        Debug.LogError($"[AdventureFit] 主线列表瘦屏拉伸不生效：{reason}（缺真值不兜底）");
+    }
+
+    /// <summary>RightContent 顶边在 root 帧 y（bottom-origin；RC 垂直方向从无 fit 改动，base 即当前）。</summary>
+    float ResolveRightTopY(RectTransform right, float H)
+    {
+        var rb = CaptureAdventureBase(right);
+        return Mathf.Lerp(0f, H, rb.anchorMax.y) + rb.offsetMax.y;
+    }
+
+    /// <summary>
+    /// 主线子节点的两个参考点在 root 帧 y（bottom-origin）：
+    ///   anchorY = 节点锚点位置（其子节点 anchoredPosition 的参考点）；
+    ///   pivotY  = 节点 pivot 参考点位置（= anchorY + anchoredPosition.y，即美术摆的「节点位置」）。
+    /// 链：RightContent(base) → 主线(base) → 节点(base)；base 均为预制体原始值（主线子树无其它 fit 改动）。
+    /// H 传当前逻辑高 / 设计高，分别得现在值 / 设计值。
+    /// 节点须为垂直单点锚（anchorMin.y == anchorMax.y），否则返回 false（调用方 no-op，不静默错排）。
+    /// </summary>
+    bool TryResolveMainChildFrames(RectTransform right, RectTransform mainNode, RectTransform node,
+                                   float H, out float anchorY, out float pivotY)
+    {
+        anchorY = 0f; pivotY = 0f;
+        if (right == null || mainNode == null || node == null) return false;
+        var rb = CaptureAdventureBase(right);
+        var mb = CaptureAdventureBase(mainNode);
+        var nb = CaptureAdventureBase(node);
+        if (Mathf.Abs(nb.anchorMin.y - nb.anchorMax.y) > 1e-4f) return false;
+
+        float rcMin = Mathf.Lerp(0f, H, rb.anchorMin.y) + rb.offsetMin.y;
+        float rcMax = Mathf.Lerp(0f, H, rb.anchorMax.y) + rb.offsetMax.y;
+        float mMin = Mathf.Lerp(rcMin, rcMax, mb.anchorMin.y) + mb.offsetMin.y;
+        float mMax = Mathf.Lerp(rcMin, rcMax, mb.anchorMax.y) + mb.offsetMax.y;
+        anchorY = Mathf.Lerp(mMin, mMax, nb.anchorMin.y);
+        // 单点锚：offsetMin = anchoredPosition - pivot * sizeDelta → 反推 anchoredPosition.y
+        float h = nb.offsetMax.y - nb.offsetMin.y;
+        pivotY = anchorY + nb.offsetMin.y + nb.pivot.y * h;
+        return true;
+    }
+
+    /// <summary>主线列表瘦屏重排总入口（ApplyAdventureFit 调，须在 FitAdventureDetailPanel 之后）。</summary>
+    void FitMainColumnStretch(RectTransform right, RectTransform detail)
+    {
+        // Transform.Find 返回 Transform（不是 RectTransform）→ as 转一次给帮手传参用
+        var mainNode = right.Find(MainNodeName) as RectTransform;
+        if (mainNode == null || detail == null) return;   // 缺主线时 EnsureChestNodes/EnsureBranchIslands 已报过
+
+        // 绑定（幂等）：槽位 / 支线岛列表就绪（RefreshAll 已跑过，这里兜一次）
+        EnsureChestNodes();
+        EnsureBranchIslands();
+
+        var guanka = mainNode.Find("关卡") as RectTransform;
+        var titleBar = mainNode.Find("TitleBar") as RectTransform;
+        var wmBtn = mainNode.Find("WorldMapBtn") as RectTransform;
+        var rootRt = right.parent as RectTransform;
+        float H = rootRt != null && rootRt.rect.height > 0f ? rootRt.rect.height : GameConfig.DESIGN_HEIGHT;
+        float designH = GameConfig.DESIGN_HEIGHT;
+
+        // ── 1) TitleBar：钉「距 RC 顶」的设计间距（= 上移 (H-设计高)/2）──
+        float rcTopNow = ResolveRightTopY(right, H);
+        float rcTopDesign = ResolveRightTopY(right, designH);
+        if (!TryResolveMainChildFrames(right, mainNode, titleBar, H, out _, out float tbPivotNow)
+            || !TryResolveMainChildFrames(right, mainNode, titleBar, designH, out _, out float tbPivotDesign))
+        {
+            WarnMainColumnOnce("找不到 主线/TitleBar 或其锚型不是垂直单点锚");
+            return;
+        }
+        float tbPivotTarget = rcTopNow - (rcTopDesign - tbPivotDesign);
+        float tbShift = tbPivotTarget - tbPivotNow;
+        var tbBase = CaptureAdventureBase(titleBar);
+        titleBar.offsetMin = new Vector2(tbBase.offsetMin.x, tbBase.offsetMin.y + tbShift);
+        titleBar.offsetMax = new Vector2(tbBase.offsetMax.x, tbBase.offsetMax.y + tbShift);
+        tbBase.applied = true;
+        _adventureUiBase[titleBar.GetInstanceID()] = tbBase;
+
+        // ── 2) WorldMapBtn：钉回设计屏绝对位置（= 下移 (H-设计高)/2；与沉底 DetailPanel 间距不变）──
+        if (wmBtn != null
+            && TryResolveMainChildFrames(right, mainNode, wmBtn, H, out _, out float wmPivotNow)
+            && TryResolveMainChildFrames(right, mainNode, wmBtn, designH, out _, out float wmPivotDesign))
+        {
+            float wmShift = wmPivotDesign - wmPivotNow;   // 瘦屏为负 = 下移
+            var wmBase = CaptureAdventureBase(wmBtn);
+            wmBtn.offsetMin = new Vector2(wmBase.offsetMin.x, wmBase.offsetMin.y + wmShift);
+            wmBtn.offsetMax = new Vector2(wmBase.offsetMax.x, wmBase.offsetMax.y + wmShift);
+            wmBase.applied = true;
+            _adventureUiBase[wmBtn.GetInstanceID()] = wmBase;
+        }
+
+        // ── 3) 槽位列 + 支线岛：带内按预制体节奏插值重排 ──
+        var prefabPos = SlotPrefabBasePos;
+        if (prefabPos == null || prefabPos.Count < 2)
+        {
+            WarnMainColumnOnce("主线槽位节点不足 2 个，无法定插值节奏");
+            return;
+        }
+        if (!TryResolveMainChildFrames(right, mainNode, guanka, H, out _, out float gPivotNow)
+            || !TryResolveMainChildFrames(right, mainNode, guanka, designH, out _, out float gPivotDesign))
+        {
+            WarnMainColumnOnce("找不到 主线/关卡 或其锚型不是垂直单点锚");
+            return;
+        }
+
+        // DetailPanel 顶（fit 后，root 帧）——照 FitAdventureMapRootCentered 的现成口径
+        var detailBase = CaptureAdventureBase(detail);
+        float origDetailH = detailBase.offsetMax.y - detailBase.offsetMin.y;
+        float detailTopNow = detail.offsetMin.y + origDetailH;
+        // 设计屏的 DetailPanel 顶（base 解析；底端锚与屏高无关）
+        float detailTopDesign = Mathf.Lerp(0f, designH, detailBase.anchorMax.y) + detailBase.offsetMax.y;
+
+        // 设计口径间距（解析自 base，不硬编码）：底槽中心在面板顶上方多少、TitleBar 顶在顶槽中心上方多少。
+        // 槽位 anchoredPosition 的参考点 = 关卡容器的 pivot 点（center 锚 → rect 中心），用它换算。
+        float colBottomDesign = gPivotDesign + prefabPos[0].y;
+        float colTopDesign = gPivotDesign + prefabPos[prefabPos.Count - 1].y;
+        float bottomGap = colBottomDesign - detailTopDesign;
+        float topGap = tbPivotDesign - colTopDesign;
+
+        // 瘦屏目标带：底 = 面板顶(fit后) + 设计底间距；顶 = TitleBar(钉顶后)顶 - 设计顶间距
+        float bandBottom = detailTopNow + bottomGap;
+        float bandTop = (tbPivotNow + tbShift) - topGap;
+        if (bandTop - bandBottom < 1f)
+        {
+            WarnMainColumnOnce($"重排带异常（bandBottom={bandBottom:F0} bandTop={bandTop:F0}）");
+            return;
+        }
+
+        // 预制体节奏插值：frac = 预制体 y 在主列跨度里的位置（0=底槽 1=顶槽）
+        float spanPrefab = prefabPos[prefabPos.Count - 1].y - prefabPos[0].y;
+        var ys = new List<float>(prefabPos.Count);
+        for (int i = 0; i < prefabPos.Count; i++)
+        {
+            float frac = spanPrefab > 1e-3f ? (prefabPos[i].y - prefabPos[0].y) / spanPrefab : 0f;
+            ys.Add(Mathf.Lerp(bandBottom, bandTop, frac) - gPivotNow);   // root y → 关卡容器帧本地 y
+        }
+        ApplySlotColumnStretchY(ys);
+
+        // 支线岛：同参考系（容器与关卡容器同锚同位 → pivot 点重合），frac 沿主列跨度插值
+        var islandYs = new List<float>(BranchIslandY.Length);
+        for (int i = 0; i < BranchIslandY.Length; i++)
+        {
+            float frac = spanPrefab > 1e-3f ? (BranchIslandY[i] - prefabPos[0].y) / spanPrefab : 0f;
+            islandYs.Add(Mathf.Lerp(bandBottom, bandTop, frac) - gPivotNow);
+        }
+        ApplyBranchIslandStretchY(islandYs);
     }
 }

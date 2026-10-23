@@ -73,10 +73,10 @@ public sealed class GoldDungeonBattleMode : BattleMode
     public override string DisplayName => "金币副本";
 
     /// <summary>
-    /// 当前仍是「未开放」：冒险界面里只有主线可玩，金币本入口被锁着。
-    /// 这里照抄现状，保持行为不变；要开放时把这里改 true 即可，其他代码不用动。
+    /// 当前已开放（2026-10-23 主人拍板「活动副本一拆二」：冒险界面「活动副本」标签放开，
+    /// 右侧活动列表金币/徽记两横条可选）。要再锁回去把这里改 false 即可，其他代码不用动。
     /// </summary>
-    public override bool IsPlayable => false;
+    public override bool IsPlayable => true;
 
     public override bool DropsEquipment => false;
 
@@ -111,7 +111,243 @@ public sealed class GoldDungeonBattleMode : BattleMode
             Debug.LogError("[BattleMode] 金币本 SettleStageClear 失败：BattleManager 为空");
             return;
         }
+        // 【2026-10-23 主人拍板「打通前一难度才开下一难度」】通关即记录最高难度（死亡不通关不标记）
+        ActivityDungeonRules.MarkCleared(bm.BattleDifficulty);
         bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+    }
+}
+
+/// <summary>
+/// 徽记副本（2026-10-23 主人拍板「活动副本一拆二」）：单场战斗，通关只掉随机职业徽记
+/// （发放走 <c>MercGrowInventory.GrantBadgeDungeonDrops</c>），不推进主线、不发金币/碎片/道具。
+/// 结构照抄 <see cref="GoldDungeonBattleMode"/>；不占冒险界面按钮位（SlotTable 不加位），
+/// 入口 = <c>AdventureUI.EnterBadgeDungeon()</c>（本期不接按钮，留给以后的 UI）。
+/// </summary>
+public sealed class BadgeDungeonBattleMode : BattleMode
+{
+    public override BattleModeId Id => BattleModeId.BadgeDungeon;
+    public override string DisplayName => "徽记副本";
+
+    /// <summary>
+    /// 徽记本不经 SlotTable 按钮（SlotTable[4] = 金币本），进本由 AdventureUI 活动列表置
+    /// PendingBadgeDungeon 决定，本属性无消费点；保持 false 不代表入口被锁。
+    /// </summary>
+    public override bool IsPlayable => false;
+
+    public override bool DropsEquipment => false;
+
+    /// <summary>开局免费抽 5 次（2026-10-23 主人拍板「活动副本和无限都是一开始抽五次」，与金币本同框架，进局清零）。</summary>
+    public override int FreeEntryDraws => SlotMachineDefs.BADGE_DUNGEON_FREE_DRAWS;
+
+    /// <summary>照抄金币本：打完就结算回城、币随局清零，不发局内抽奖币（🔴 徽记副本不给金币）。</summary>
+    public override bool GrantsRunCoins => false;
+
+    public override void BuildChapter(ChapterManager cm, int chapter)
+    {
+        if (cm == null)
+        {
+            Debug.LogError("[BattleMode] 徽记副本 BuildChapter 失败：ChapterManager 为空");
+            return;
+        }
+        cm.StartBadgeDungeon(chapter);
+    }
+
+    /// <summary>照抄金币本结算：弹胜利结算面板，确认后回城（不推进主线）。</summary>
+    public override void SettleStageClear(BattleManager bm)
+    {
+        if (bm == null)
+        {
+            Debug.LogError("[BattleMode] 徽记副本 SettleStageClear 失败：BattleManager 为空");
+            return;
+        }
+        // 【2026-10-23 主人拍板】与金币本同款：通关记录最高难度（金币/徽记共用活动标签进度）
+        ActivityDungeonRules.MarkCleared(bm.BattleDifficulty);
+        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+    }
+}
+
+/// <summary>
+/// 支线岛（2026-10-23 合并方案「岛壳用 2 岛依次解锁 + 岛内容用单 Boss 特殊关」）：
+/// 单场 Boss 战，10 体力/次，产出 = 固定局外金币 + 天赋石（SideIslandDefs 按岛定）
+/// + 装备掉落（DropsEquipment=true 走既有宝箱三选一链，Boss 关 bonusStar=2）。
+/// 不推进主线、不发关卡任务金/关卡金（各自 gate 见 Settlement/Waves 的 IsSideIsland 分支）。
+/// 通关 → MarkSideIslandCleared + EnsureForkRoll 派第二岛（洗牌袋）。
+/// 结构照抄 <see cref="BadgeDungeonBattleMode"/>；不占 SlotTable 位，入口 = 冒险页支线岛点击。
+/// </summary>
+public sealed class SideIslandBattleMode : BattleMode
+{
+    public override BattleModeId Id => BattleModeId.SideIsland;
+    public override string DisplayName => "支线岛";
+
+    /// <summary>不经 SlotTable 按钮（无按钮位），进本由支线岛点击置 PendingSideIsland 决定；本属性无消费点。</summary>
+    public override bool IsPlayable => false;
+
+    /// <summary>岛掉装备（与主线同链：Boss 关 +1 件、bonusStar=2，三选一展示）。</summary>
+    public override bool DropsEquipment => true;
+
+    /// <summary>单场结算回城、币随局清零 → 不发局内抽奖币（照金币/徽记本口径）；击杀掉币照常（局内构筑用）。</summary>
+    public override bool GrantsRunCoins => false;
+
+    public override void BuildChapter(ChapterManager cm, int chapter)
+    {
+        if (cm == null)
+        {
+            Debug.LogError("[BattleMode] 支线岛 BuildChapter 失败：ChapterManager 为空");
+            return;
+        }
+        cm.StartSideIsland(AdventureUI.PendingSideIsland);
+    }
+
+    /// <summary>岛结算：发岛奖励（金币/天赋石/标记通关/派第二岛）→ 胜利结算面板 → 回城。</summary>
+    public override void SettleStageClear(BattleManager bm)
+    {
+        if (bm == null)
+        {
+            Debug.LogError("[BattleMode] 支线岛 SettleStageClear 失败：BattleManager 为空");
+            return;
+        }
+        SettleIslandRewards(bm);
+        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+    }
+
+    /// <summary>
+    /// 岛通关奖励（2026-10-23 主人拍板「10 体力 + 金币/石/装备」）：装备走宝箱链已发，
+    /// 这里发固定局外金币 + 天赋石 + 标记通关 + 派第二岛。缺真值（岛定义/存档）→ LogError 不发（铁律 14）。
+    /// </summary>
+    static void SettleIslandRewards(BattleManager bm)
+    {
+        var isl = SideIslandDefs.Get(bm.SideIslandId);
+        var data = SaveSystem.Instance?.Data;
+        if (isl == null || data == null)
+        {
+            Debug.LogError($"[支线岛] 结算失败：岛定义或存档缺失（islandId={bm.SideIslandId}）——只回城不发奖（缺真值不兜底）");
+            return;
+        }
+
+        // 固定局外金币：走局内金币落账链（EndRunAndReturnToTown 的 PersistBattleGold 一次性写回城镇钱包，
+        // 与金币本通关金/裂隙首通金同一条链，会计口径已验证）
+        if (isl.goldReward > 0)
+        {
+            bm.GrantRunGold(isl.goldReward);
+            GlobalToastUI.Show($"攻克{isl.name}！金币 +{isl.goldReward}", true);
+        }
+        // 天赋石（照裂隙首通石同款入口）
+        if (isl.talentReward > 0)
+        {
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, isl.talentReward, save: false, notify: true);
+        }
+        // 标记通关（一次性打完锁，跨周目持久）+ 派第二岛（洗牌袋；已派满时内部幂等直接返回）
+        data.MarkSideIslandCleared(isl.id);
+        ChapterRouteTable.EnsureForkRoll(data);
+        SaveSystem.Instance?.Save();
+        Debug.Log($"[支线岛] 「{isl.name}」通关结算：金币 +{isl.goldReward} 天赋石 +{isl.talentReward}（装备走宝箱链）");
+    }
+}
+
+/// <summary>
+/// 徽记副本规则（2026-10-23 主人拍板）：每日 2 次、每周二/四开放（开放日口径 = 主人预制体横条
+/// Info 文案「进阶材料 每周二四开启」）。日键/次数照 <see cref="EndlessRiftRules"/> 模式；
+/// 进本 = 次数 + 体力一起扣（TryConsumeEnter 内含提示）。
+/// </summary>
+public static class BadgeDungeonRules
+{
+    /// <summary>每日进入次数（主人拍板 2 次）。</summary>
+    public const int DAILY_TRIES = 2;
+
+    /// <summary>跨天清零每日次数（照 ResourceAdRewards.EnsureDay 的 dayKey 模式）</summary>
+    public static void EnsureDay(SaveData data)
+    {
+        if (data == null) return;
+        string today = DateTime.UtcNow.ToString("yyyyMMdd");
+        if (data.badgeDungeonDayKey != today)
+        {
+            data.badgeDungeonDayKey = today;
+            data.badgeDungeonTriesToday = 0;
+        }
+    }
+
+    /// <summary>今日剩余进入次数</summary>
+    public static int TriesLeft(SaveData data)
+    {
+        EnsureDay(data);
+        return Mathf.Max(0, DAILY_TRIES - (data?.badgeDungeonTriesToday ?? 0));
+    }
+
+    /// <summary>
+    /// 进本：次数 + 体力一起扣，成功计数落盘。任何一步不满足都返回 false 并弹对应提示。
+    /// </summary>
+    public static bool TryConsumeEnter()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        EnsureDay(data);
+        if (data.badgeDungeonTriesToday >= DAILY_TRIES)
+        {
+            GlobalToastUI.Show($"今天的徽记副本次数已用完（{DAILY_TRIES}/{DAILY_TRIES}）", true);
+            return false;
+        }
+        if (!StaminaSystem.TrySpendForAdventure())
+            return false;   // 体力不足：ResourceWallet.TrySpend 内已弹「体力不足」
+        data.badgeDungeonTriesToday++;
+        SaveSystem.Instance?.Save();
+        return true;
+    }
+}
+
+/// <summary>
+/// 活动副本开放日（2026-10-23 主人拍板「金币和徽记副本交替开放」，
+/// 口径 = 主人预制体横条 Info 文案）：金币副本 每周一/三/五开启；徽记副本 每周二/四开启
+/// （周六日两者都关闭）。开放日按<b>本地时间</b>判定（玩家感知的「今天」）；
+/// 次数日键仍走 UTC（与 <see cref="EndlessRiftRules.EnsureDay"/> 同口径）。
+/// </summary>
+public static class ActivityDungeonRules
+{
+    /// <summary>
+    /// 【2026-10-23 主人拍板「现在把活动副本都开启让我测试 等打包的时候再区分」】测试期总闸：
+    /// true = 金币/徽记不区分开放日、不看通关第 1 章门槛、三难度全开（难度逐级解锁旁路），
+    /// 方便随时进任意副本/难度测试；**正式打包前改回 false** 即恢复全部区分口径（一处改回，全链生效）。
+    /// </summary>
+    public const bool TEST_OPEN_ALL = true;
+
+    /// <summary>金币副本今天是否开放（周一/三/五）。</summary>
+    public static bool IsGoldOpenToday()
+    {
+        if (TEST_OPEN_ALL) return true;   // 测试期总闸：随时可进
+        var d = DateTime.Now.DayOfWeek;
+        return d == DayOfWeek.Monday || d == DayOfWeek.Wednesday || d == DayOfWeek.Friday;
+    }
+
+    /// <summary>徽记副本今天是否开放（周二/四）。</summary>
+    public static bool IsBadgeOpenToday()
+    {
+        if (TEST_OPEN_ALL) return true;   // 测试期总闸：随时可进
+        var d = DateTime.Now.DayOfWeek;
+        return d == DayOfWeek.Tuesday || d == DayOfWeek.Thursday;
+    }
+
+    // —— 难度逐级解锁（2026-10-23 主人拍板「打通前一难度才开下一难度」）——
+    // 进度真源 = SaveData.activityDungeonClearedDiff（-1=未通任何难度）；金币/徽记共用同一活动标签进度。
+
+    /// <summary>活动副本难度是否已解锁：初级恒开放，中级需通初级，高级需通中级。</summary>
+    public static bool IsDiffUnlocked(SaveData data, int diff)
+    {
+        if (TEST_OPEN_ALL) return true;   // 测试期总闸：三难度全开
+        if (diff <= 0) return true;
+        int cleared = data?.activityDungeonClearedDiff ?? -1;
+        return cleared >= diff - 1;
+    }
+
+    /// <summary>通关时记录最高已通难度（只进不退）并落盘。死亡/撤离不通关，不会走到这里。</summary>
+    public static void MarkCleared(int difficulty)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+        if (difficulty > data.activityDungeonClearedDiff)
+        {
+            data.activityDungeonClearedDiff = difficulty;
+            SaveSystem.Instance?.Save();
+            Debug.Log($"[ActivityDungeon] 通关记录：活动副本最高难度 → {difficulty}");
+        }
     }
 }
 
@@ -270,6 +506,8 @@ public static class BattleModes
 {
     public static readonly NormalBattleMode Normal = new NormalBattleMode();
     public static readonly GoldDungeonBattleMode GoldDungeon = new GoldDungeonBattleMode();
+    public static readonly BadgeDungeonBattleMode BadgeDungeon = new BadgeDungeonBattleMode();   // 2026-10-23 徽记副本（不占 SlotTable 位）
+    public static readonly SideIslandBattleMode SideIsland = new SideIslandBattleMode();         // 2026-10-23 支线岛（不占 SlotTable 位）
     public static readonly TutorialBattleMode Tutorial = new TutorialBattleMode();
     public static readonly EndlessBattleMode Endless = new EndlessBattleMode();
     public static readonly WorldBossBattleMode WorldBoss = new WorldBossBattleMode();
@@ -299,6 +537,8 @@ public static class BattleModes
         {
             case BattleModeId.Normal: return Normal;
             case BattleModeId.GoldDungeon: return GoldDungeon;
+            case BattleModeId.BadgeDungeon: return BadgeDungeon;   // 2026-10-23 徽记副本
+            case BattleModeId.SideIsland: return SideIsland;       // 2026-10-23 支线岛
             case BattleModeId.Tutorial: return Tutorial;
             case BattleModeId.Endless: return Endless;
             case BattleModeId.WorldBoss: return WorldBoss;

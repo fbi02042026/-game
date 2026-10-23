@@ -173,7 +173,7 @@ public sealed class SkillCastService
             return false;
         }
 
-        var skill = ResolveSkill(skillId);
+        var skill = ResolveSkill(skillId, merc);   // 【2026-10-23 施工单 T5】把 merc 传进去，按强化档乘效果数值
         if (skill == null) return false;
 
         UnitBase healTarget = null;
@@ -355,13 +355,48 @@ public sealed class SkillCastService
     //     SkillRegistry.Instance != null ? SkillRegistry.Instance.GetMercDefaultSkillId(mercId)
     //     : SkillRegistry.DefaultMercMeleeSkillId);
 
-    public SkillSystem.ActiveSkill ResolveSkill(string skillId)
+    public SkillSystem.ActiveSkill ResolveSkill(string skillId, Mercenary merc = null)
     {
         var fromReg = SkillRegistry.Instance?.GetActiveSkill(skillId);
-        if (fromReg != null) return fromReg;
+        // 【2026-10-23 施工单 T5】佣兵升阶技能强化：拿到 ActiveSkill 副本后按该佣兵强化档乘效果数值。
+        // GetActiveSkill → SkillConfig.ToActiveSkill() 每次 new 一份副本，改副本不污染缓存；
+        // 🔴 不能插在 MercSkillTable.BuildRuntimeConfig（结果被 SkillRegistry._runtimeMerc[id] 按 skillId
+        //    全局缓存，不同佣兵不同档位会互相串值）。
+        // merc == null（主角旧回退路径 :339 / BattleManager.MonsterDeath.cs:179 转发壳）→ 原样返回不乘；
+        // 主角技能走 ResolvePlayerSkillAt（RunDraftDirector.BuildRunSkill 预灌入），完全不经过这里，不受影响。
+        if (fromReg != null) return ApplyMercGrowStrengthen(fromReg, merc);
         Debug.LogError("[BattleManager] 技能配置缺失，拒绝释放: "
             + (string.IsNullOrEmpty(skillId) ? "(empty)" : skillId));
         return null;
+    }
+
+    /// <summary>
+    /// 【2026-10-23 施工单 T5】佣兵升阶（局外养成等级）技能强化：
+    /// 按该佣兵强化档（MercGrowSystem.SkillTierOf，0~3）把技能<b>效果数值</b> × MercGrowDefs.StrengthenMul[tier]。
+    /// 只乘六个效果字段：baseDamage / damageMultiplier / healBase / healPercentOfMax / healAtkMul / buffValue；
+    /// 🔴 <b>绝不动</b> cooldown / duration / aoeRadius / aoeMaxTargets（冷却与范围规格不变；
+    ///    cooldown 会被 SkillSystem.UseSkill:91 注册进 CD 字典，改了会破坏冷却）。
+    /// merc == null 或 tier &lt;= 0 → 原样返回不乘；tier 越界钳到数组范围内。
+    /// buffValue 为负（减益）时乘正系数 = 幅度等比放大，口径正确。
+    /// </summary>
+    static SkillSystem.ActiveSkill ApplyMercGrowStrengthen(SkillSystem.ActiveSkill skill, Mercenary merc)
+    {
+        if (skill == null || merc == null) return skill;
+        string hid = !string.IsNullOrEmpty(merc.hireId) ? merc.hireId : merc.mercId;
+        int tier = MercGrowSystem.SkillTierOf(hid);
+        if (tier <= 0) return skill;
+        var mulTable = MercGrowDefs.StrengthenMul;
+        if (mulTable == null || mulTable.Length == 0) return skill;
+        if (tier >= mulTable.Length) tier = mulTable.Length - 1;   // 越界钳到数组范围内
+        float mul = mulTable[tier];
+        skill.baseDamage *= mul;
+        skill.damageMultiplier *= mul;
+        skill.healBase *= mul;
+        skill.healPercentOfMax *= mul;
+        skill.healAtkMul *= mul;
+        skill.buffValue *= mul;
+        Debug.Log($"[SkillCast] 佣兵技能强化生效：{hid} 技能 {skill.skillId} 档位 {tier}，效果数值 ×{mul:0.00}");
+        return skill;
     }
 
 

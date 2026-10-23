@@ -848,6 +848,22 @@ public static partial class GameConfig
     public const int GOLD_DUNGEON_CLEAR_BASE = 30;
 
     /// <summary>
+    /// 金币副本通关固定金（2026-10-23 主人拍板「金币副本三个级别掉落的金币数为 300 500 800」）：
+    /// 三档固定值，不再随章节 / 难度倍率浮动。diff：0 普通 300 / 1 困难 500 / 2 噩梦 800。
+    /// chapter 参数保留（调用点：BattleQuestConfig / 冒险页掉落预览），数值不再依赖它。
+    /// </summary>
+    public static int GetGoldDungeonClearGold(int chapter, int diff)
+    {
+        _ = chapter;
+        switch (Mathf.Clamp(diff, 0, 2))
+        {
+            case 1: return 500;
+            case 2: return 800;
+            default: return 300;
+        }
+    }
+
+    /// <summary>
     /// 难度属性倍率（怪物血/攻/防）。2026-09-17：噩梦 1.8 → **2.0**（地狱删除后噩梦就是顶档）。
     /// 防"无限难"的红线：只调这一个数，不新增乘区；怪物抗性封顶 50%。
     /// </summary>
@@ -858,18 +874,23 @@ public static partial class GameConfig
         return 1f;
     }
 
+    /// <summary>
+    /// 活动副本（金币/徽记）难度属性倍率（2026-10-23 主人拍板）：每档 ×1.5 → 1.0 / 1.5 / 2.25。
+    /// 无限裂隙不选难度（层数曲线 +7%/层），天然不适用本表；主线仍走 <see cref="GetDifficultyStatScale"/>。
+    /// </summary>
+    public static float GetActivityDifficultyStatScale(int diff)
+    {
+        if (diff >= 2) return 2.25f;   // 1.5 × 1.5
+        if (diff == 1) return 1.5f;
+        return 1f;
+    }
+
     /// <summary>难度掉金倍率。2026-09-17：噩梦 3.0 → **3.5**。</summary>
     public static float GetDifficultyGoldMul(int diff)
     {
         if (diff >= 2) return 3.5f;
         if (diff == 1) return 1.8f;
         return 1f;
-    }
-
-    public static int GetGoldDungeonClearGold(int chapter, int diff)
-    {
-        int ch = Mathf.Clamp(chapter, 1, 8);
-        return Mathf.RoundToInt(GOLD_DUNGEON_CLEAR_BASE * ch * GetDifficultyGoldMul(diff));
     }
 
     /// <summary>

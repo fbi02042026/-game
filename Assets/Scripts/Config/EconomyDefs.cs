@@ -36,8 +36,12 @@ public static class EconomyDefs
     // 一、单次尝试（一局）的收入
     // ============================================================
 
-    /// <summary>每章 10 关，第 10 关是 Boss。</summary>
-    public const int STAGES_PER_RUN = GameConfig.STAGES_PER_CHAPTER;
+    /// <summary>
+    /// 一次尝试（一局）能打几个小关。
+    /// 【2026-10-23 批 E5】10 → 5（大关小关制；普通关不结束本局，仅第 5 小关 Boss 关结束）。
+    /// 用途：StageGold 判 Boss 通关金、RunGold 的 clamp 上界。
+    /// </summary>
+    public const int STAGES_PER_RUN = GameConfig.STAGES_PER_GRAND;
 
     /// <summary>
     /// 各关期望怪数（读 GameConfig.GetStageMonsterTotal 的随机区间算的期望值）。

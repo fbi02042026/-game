@@ -131,6 +131,54 @@ public static class MercGrowInventory
         return total;
     }
 
+    // ── 徽记副本发放（2026-10-23 主人拍板「活动副本一拆二」，施工单 T6/T8）──────────
+    //
+    // 🔴 概率/数量真源只在这一个函数内（T8 选「硬编码在 T6 函数内」，未提 GameConfig 常量）。
+    // 🔴 只发徽记：不给金币、不给碎片、不给道具（金币本专属金币，徽记本专属徽记）。
+    // 档位概率表（difficulty：0=普通 / 1=困难 / 2=噩梦，越界按 0 处理；BattleDifficulty 已在
+    // BattleManager.StartNewRunInternal 被 Clamp 到 0~2）：
+    //   普通 → 90% 普通档 / 10% 稀有档
+    //   困难 → 55% / 40% / 5%（普通/稀有/传奇）
+    //   噩梦 → 25% / 60% / 15%
+    // 数量区间（含端点）：普通档 3~5、稀有档 2~4、传奇档 1~2。
+    // 职业 key 与 MercGrowSprites.JobKey 同套字符串（badge:{职业key}:{档位}，档位 = 普通/稀有/传奇）。
+
+    /// <summary>
+    /// 徽记副本通关发放：随机一个职业（6 职业等权）→ 按难度掷档位 → 按档位区间随机数量，
+    /// Add 进养成仓库 + 落盘 + Toast。返回本次发放个数（0 = 异常，调用方可以不弹）。
+    /// </summary>
+    public static int GrantBadgeDungeonDrops(int difficulty)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return 0;
+        if (difficulty < 0 || difficulty > 2) difficulty = 0;   // 2026-10-23 拍板：越界按普通难度处理
+
+        // 6 职业等权随机（key 与 MercGrowSprites.JobKey 返回值同套字符串）
+        string[] jobKeys = { "剑盾", "狂战", "游侠", "法师", "牧师", "重武" };
+        string jobKey = jobKeys[Random.Range(0, jobKeys.Length)];
+
+        // 档位概率（§〇-2 表，真源仅此一处）
+        string tier;
+        float roll = Random.value;
+        if (difficulty == 2)        // 噩梦 25/60/15
+            tier = roll < 0.25f ? "普通" : roll < 0.85f ? "稀有" : "传奇";
+        else if (difficulty == 1)   // 困难 55/40/5
+            tier = roll < 0.55f ? "普通" : roll < 0.95f ? "稀有" : "传奇";
+        else                        // 普通 90/10
+            tier = roll < 0.90f ? "普通" : "稀有";
+
+        // 数量区间随机（UnityEngine.Random.Range 整数版含下不含上，故 max +1 取到含端点）
+        int n = tier == "传奇" ? Random.Range(1, 3)
+              : tier == "稀有" ? Random.Range(2, 5)
+              : Random.Range(3, 6);
+
+        Add(BadgeId(jobKey, tier), n);
+        SaveSystem.Instance?.Save();
+        GlobalToastUI.Show("获得 " + jobKey + "徽记 ×" + n, true);   // 2026-10-23 拍板：掉落获得 force 弹（照 GrantStageDrops 风格）
+        Debug.Log($"[MercGrow] 徽记副本掉落 难度{difficulty} → {jobKey}徽记({tier}) ×{n}");
+        return n;
+    }
+
     /// <summary>该佣兵买重复能转多少本命碎片（UI 卡面显示用）。数值真源 = MercStarDefs（2026-10-22 拍板 10/5/1）。</summary>
     public static int DupFragCountOf(MercRosterDefs.Def def)
     {
@@ -142,11 +190,13 @@ public static class MercGrowInventory
     // ── 统一发碎片入口（2026-10-22 施工单 T5）──────────────────────────────
     //
     // 🔴 红线：所有碎片来源（酒馆重复转化 / 每日登录 / 关卡掉落 / 旧存档迁移）只准走这一个
-    //    入口，禁止各写各的。口径 = 背包优先 → 装不下的整份余量发邮件（MailSystem 碎片邮件，
-    //    领取时背包仍满则不标已领 —— 碎片不许作废）。
+    //    入口，禁止各写各的。【2026-10-23 主人拍板】口径 = 一律进战斗外背包（townBagItems，
+    //    无容量上限），碎片不许作废；旧存档 frag:{hireId} 迁移也走这里。
 
     /// <summary>
-    /// 发佣兵本命碎片（唯一入口）：背包优先，装不下的余量发邮件。
+    /// 发佣兵本命碎片（唯一入口）。【2026-10-23 主人拍板】碎片一律进<b>战斗外背包</b>
+    /// （SaveData.townBagItems，角色页可见）——不再进局内战斗背包、不再走邮件溢出
+    /// （城镇背包是字典无容量上限，不存在装不下）。升星（MercStarSystem）读写同仓，不再断链。
     /// hireId 非法或 item_defs.csv 缺对应碎片行时 fail closed（LogError 带路径，不发不吞）。
     /// </summary>
     public static FragGrantResult GrantFragments(string hireId, int amount, string reason)
@@ -165,24 +215,17 @@ public static class MercGrowInventory
             return r;
         }
 
-        var bag = GridBackpackSystem.Instance;
-        if (bag != null && bag.TryAddItemStackLeftover(itemId, amount, out _, out int leftover, notify: false))
+        var data = SaveSystem.Instance?.Data;
+        if (data == null)
         {
-            r.bagCount = amount - leftover;
-            if (r.bagCount > 0)
-                UIManager.Instance?.ShowToast($"获得 {def.Name}的本命碎片 ×{r.bagCount}", true);   // 2026-10-06 主人拍板：物品获得 force 弹
+            Debug.LogError($"[MercGrow] 发碎片失败：存档未就绪（reason={reason}），本次碎片未发放");
+            return r;
         }
-        else
-        {
-            r.bagCount = 0;
-            r.mailCount = amount;
-        }
-        if (r.mailCount > 0)
-        {
-            MailSystem.EnqueueMercFragments(hireId, r.mailCount);
-            Debug.Log($"[MercGrow] 碎片溢出转邮件：{def.Name}({hireId}) ×{r.mailCount}（reason={reason}）");
-        }
-        Debug.Log($"[MercGrow] 发碎片 {def.Name}({hireId}) ×{amount}：入包 {r.bagCount} / 邮件 {r.mailCount}（reason={reason}）");
+        data.TownBagAdd(itemId, amount);
+        r.bagCount = amount;
+        SaveSystem.Instance?.Save();
+        UIManager.Instance?.ShowToast($"获得 {def.Name}的本命碎片 ×{amount}", true);   // 2026-10-06 主人拍板：物品获得 force 弹
+        Debug.Log($"[MercGrow] 发碎片 {def.Name}({hireId}) ×{amount} → 城镇背包（reason={reason}）");
         return r;
     }
 

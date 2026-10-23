@@ -69,7 +69,10 @@ public static class DraftPool
     public static bool HasMercContent()
     {
         if (!RunLoadout.IsMercFull && CollectRecruitMercs().Count > 0) return true;
-        if (CollectMercLevelCards().Count > 0) return true;
+        // 【2026-10-23 主人拍板】战斗佣兵升级暂时注释：升级卡已不进池，这里也不能再把它算作有效内容，
+        // 否则会出现「判定佣兵类有货、实际池子没有升级卡」的口径不一致（与 2026-10-20 升星下架同款）。
+        // 恢复时把这行注释放开即可。
+        //if (CollectMercLevelCards().Count > 0) return true;
         // 【2026-10-20 主人拍板】战斗佣兵升星暂时注释：升星卡已不进池，这里也不能再把它算作有效内容，
         // 否则会出现「判定佣兵类有货、实际池子为空」的空转。恢复时把这行注释放开、删掉 return false。
         //return CollectMercStarCards().Count > 0;
@@ -147,7 +150,9 @@ public static class DraftPool
         {
             case DraftCategory.Merc:
                 pool.AddRange(CollectRecruitMercs());
-                pool.AddRange(CollectMercLevelCards());
+                // 【2026-10-23 主人拍板】战斗佣兵升级暂时注释：升级卡不再进池（佣兵升级改走局外养成线）。
+                // 恢复时把下面这行注释放开即可；CollectMercLevelCards 方法本体保留未动。
+                //pool.AddRange(CollectMercLevelCards());
                 // 【2026-10-20 主人拍板】战斗佣兵升星暂时注释：不会抽取一样的佣兵（已在本局的招募卡直接跳过），
                 // 升星卡没有来源口径，先下架不再进池。恢复时把下面这行注释放开即可。
                 //pool.AddRange(CollectMercStarCards());

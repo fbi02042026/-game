@@ -136,6 +136,50 @@ public static class CharacterBagSystem
                 "佣兵阵亡时，点击其变灰的头像消耗 1 枚原地满血复活。\n战斗内关卡商店有售（50% 概率上架）。",
                 ItemDefs.LoadIcon("item_revive_charm"), data.reviveCharms);
         }
+
+        // ⑤ 职业徽记（佣兵升星材料；【2026-10-23 主人拍板】进背包显示。
+        //    数据真源 = SaveData.mercGrowItems 的 badge:{职业key}:{档位} 条目（MercGrowInventory.BadgeId 口径），
+        //    升星扣费读写同仓；此处只做展示，键解析不出就 LogWarning 跳过（不静默吞）。
+        if (data.mercGrowItems != null)
+        {
+            foreach (var kv in data.mercGrowItems)
+            {
+                if (string.IsNullOrEmpty(kv.Key) || kv.Value <= 0) continue;
+                if (!kv.Key.StartsWith("badge:")) continue;
+                var parts = kv.Key.Substring(6).Split(':');
+                if (parts.Length < 2 || string.IsNullOrEmpty(parts[0]))
+                {
+                    Debug.LogWarning("[CharacterBagSystem] 徽记键口径异常，跳过：" + kv.Key);
+                    continue;
+                }
+                string jobKey = parts[0], tier = parts[1];
+                string tierName = tier == "传奇" ? "高级" : tier == "稀有" ? "中级" : tier == "普通" ? "低级" : tier;
+                // 图标路径与 MercGrowSprites.LoadBadge 同源：Icons/JobBadge/{jobKey}{档位}
+                if (!TryAddDisplay(result, occupied, rows, jobKey + "·" + tierName + "徽记",
+                        "佣兵升星消耗的职业徽记。\n徽记副本可获得。持有 ×" + kv.Value,
+                        Resources.Load<Sprite>(ContentPaths.Icons.JobBadge + "/" + jobKey + tier), kv.Value))
+                    return;
+            }
+        }
+
+        // ⑥ 招募卷轴（存档独立字段 mercScrollCommon / mercScrollLegendary；【2026-10-23 主人拍板】进背包显示。
+        //    酒馆三选一招募时金币/卷轴双支付可抵扣；邮件补偿、里程商店、Boss 掉落可获得）
+        if (data.mercScrollCommon > 0)
+        {
+            if (!TryAddDisplay(result, occupied, rows, "普通招募卷轴",
+                    "酒馆招募佣兵时可抵扣金币。\n持有 ×" + data.mercScrollCommon,
+                    ItemDefs.LoadIcon("item_scroll_merc_common"), data.mercScrollCommon))
+                return;
+        }
+        if (data.mercScrollLegendary > 0)
+        {
+            var advIcon = Resources.Load<Sprite>("Art/UI/Icons/Common/高级招募卷轴");
+            if (!TryAddDisplay(result, occupied, rows, "高级招募卷轴",
+                    "酒馆招募传奇佣兵专用，可抵扣金币。\n持有 ×" + data.mercScrollLegendary,
+                    advIcon != null ? advIcon : ItemDefs.LoadIcon("item_scroll_merc_common"),
+                    data.mercScrollLegendary))
+                return;
+        }
     }
 
     /// <summary>在已占用网格里找第一个空格塞 1×1 展示位；满则 LogWarning 并返回 false。</summary>

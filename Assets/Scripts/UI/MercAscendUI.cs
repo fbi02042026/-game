@@ -55,6 +55,10 @@ public class MercAscendUI : MonoBehaviour
     Sprite _goldIconBase;      // 预制体原金币图标（传奇切钻石后，切回金币时还原）
     MercFragmentCardUI _fragCard;
 
+    GameObject _badgeRow;      // 徽记行（2026-10-23 新增：克隆金币行同构，预制体无现成节点）
+    Image _badgeIconImage;
+    Text _badgeCountText;
+
     Button _starUpBtn;
     Button _cancelBtn;
     Button _dimBtn;
@@ -154,6 +158,9 @@ public class MercAscendUI : MonoBehaviour
         if (fragGo == null) Debug.LogError("[MercAscend] 缺节点 碎片/yongbingsuipian（主人碎片预制体实例）");
         else _fragCard = MercFragmentCardUI.Bind(fragGo);
 
+        // ---- 徽记行（2026-10-23 主人拍板：升星加职业徽记消耗）----
+        BuildBadgeRow(p);
+
         // ---- 按钮 ----
         _starUpBtn = BindButton(p, "shengjieButton", OnStarUpClick, "升阶");
         _cancelBtn = BindButton(p, "tihaunButton", Close, "取消");
@@ -197,6 +204,40 @@ public class MercAscendUI : MonoBehaviour
             stars[i] = rating.Find("满星" + (i + 1))?.gameObject;
             if (stars[i] == null) Debug.LogError("[MercAscend] 缺节点 " + sideName + "/Rating/满星" + (i + 1));
         }
+    }
+
+    /// <summary>
+    /// 建徽记行（2026-10-23 主人拍板升星加徽记消耗）。预制体没有徽记节点，本方法克隆
+    /// 「金币图标(+金币数量)」整行同构摆放（主动玩法需求建树，非断链兜底；AGENTS.md §4 分界线）：
+    /// 挂在 碎片/yongbingsuipian 下，y 再低一行（行距 73.6 = 碎片数量行(-76)↔金币行(-149.6) 的现排间距），
+    /// 排版零改动 —— 文本框尺寸/字体随克隆继承。缺参照节点只报错、不建行（fail closed）。
+    /// </summary>
+    void BuildBadgeRow(Transform panel)
+    {
+        var suipian = FindDeep(panel, "yongbingsuipian");
+        var goldIcon = FindDeep(panel, "金币图标");
+        if (suipian == null || goldIcon == null)
+        {
+            Debug.LogError("[MercAscend] 建徽记行失败：缺节点 yongbingsuipian 或 金币图标（排版参照物），徽记行不建");
+            return;
+        }
+
+        var rowGo = Object.Instantiate(goldIcon.gameObject, suipian);
+        rowGo.name = "徽记图标";
+        var rowRt = rowGo.GetComponent<RectTransform>();
+        var goldRt = goldIcon.GetComponent<RectTransform>();
+        rowRt.anchoredPosition = goldRt.anchoredPosition + new Vector2(0f, -73.6f);
+
+        _badgeRow = rowGo;
+        _badgeIconImage = rowGo.GetComponent<Image>();
+        var cnt = rowGo.transform.Find("金币数量");
+        if (cnt != null)
+        {
+            cnt.name = "徽记数量";
+            _badgeCountText = cnt.GetComponent<Text>();
+        }
+        if (_badgeIconImage == null || _badgeCountText == null)
+            Debug.LogError("[MercAscend] 徽记行克隆后缺 Image/Text（金币行结构异常），徽记显示不可用");
     }
 
     /// <summary>绑按钮：无 Button 运行时补（预制体只有 Image 也接得上，MercDrawPoolUI 同口径）。</summary>
@@ -244,6 +285,8 @@ public class MercAscendUI : MonoBehaviour
         if (_scaleCo != null) { StopCoroutine(_scaleCo); _scaleCo = null; }
         if (_panel != null) _panel.localScale = Vector3.one;   // 动画只动 Panel 缩放，关窗还原
         if (_root != null) _root.SetActive(false);
+        // 升星可能改了星级/材料/资金：酒馆队列界面若开着，重刷卡内「升阶」钮与相关显示（2026-10-23）
+        MercDrawPoolUI.RefreshForAscendClosed();
     }
 
     // ============================================================
@@ -370,6 +413,31 @@ public class MercAscendUI : MonoBehaviour
                 else Debug.LogError("[MercAscend] 钻石图标缺失：Resources/" + DiamondIconPath + "（不兜底）");
             }
             else _goldIconImage.sprite = _goldIconBase;   // 切回金币（防上次展示传奇留下的钻石图）
+        }
+
+        // ---- 徽记行（2026-10-23 主人拍板）：显示「该职业徽记 需要/拥有」；
+        // 普通/稀有 1 星 0 消耗或满星 → 整行隐藏。图标 = MercGrowSprites 按职业+档位取图，缺图报错不兜底。
+        if (_badgeRow != null)
+        {
+            int badgeNeed = maxed ? 0 : MercStarDefs.BadgeCost(def.Rarity, cur + 1);
+            if (badgeNeed <= 0)
+            {
+                _badgeRow.SetActive(false);
+            }
+            else
+            {
+                _badgeRow.SetActive(true);
+                int badgeHave = MercStarSystem.GetBadgeCount(_hireId);
+                if (_badgeCountText != null)
+                    _badgeCountText.text = badgeNeed + "/" + badgeHave;
+                if (_badgeIconImage != null)
+                {
+                    var badgeSprite = MercGrowSprites.LoadJobBadge(def.JobName, def.Rarity);
+                    if (badgeSprite != null) _badgeIconImage.sprite = badgeSprite;
+                    else Debug.LogError("[MercAscend] 徽记图缺失：" + def.JobName + "/" + MercStarDefs.BadgeTierOf(def.Rarity)
+                        + "（MercGrowSprites.LoadJobBadge 返回空，不兜底）");
+                }
+            }
         }
 
         // ---- 升阶按钮：满星置灰 ----

@@ -234,17 +234,20 @@ public static class StoryClue
         Save();
     }
 
-    /// <summary>普通关推进。stageIndex 从 0 起算。</summary>
+    /// <summary>普通关推进。stageIndex 从 0 起算。
+    /// 【2026-10-23 批 E6】大关从 10 小关缩到 5 小关，触发阈值按章内相对位置折算（/9×4）：
+    /// ch2 3→1、ch3 2→1、ch4 4→2、ch5 2→1、ch6 1→1、ch7 3→1。
+    /// 原值在 5 小关制下虽仍可达，但触发点会从「章中」推到「章末」，故按比例归位。</summary>
     public static void OnStageCleared(int chapter, int stageIndex)
     {
         switch (chapter)
         {
-            case 2: if (stageIndex >= 3) Grant("C05", false); break;
-            case 3: if (stageIndex >= 2) Grant("C06", false); break;
-            case 4: if (stageIndex >= 4) Grant("C10", false); break;
-            case 5: if (stageIndex >= 2) Grant("C12", false); break;
+            case 2: if (stageIndex >= 1) Grant("C05", false); break;
+            case 3: if (stageIndex >= 1) Grant("C06", false); break;
+            case 4: if (stageIndex >= 2) Grant("C10", false); break;
+            case 5: if (stageIndex >= 1) Grant("C12", false); break;
             case 6: if (stageIndex >= 1) Grant("C16", false); break;
-            case 7: if (stageIndex >= 3) Grant("C20", false); break;
+            case 7: if (stageIndex >= 1) Grant("C20", false); break;
         }
         Save();
     }

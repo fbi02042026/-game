@@ -16,6 +16,12 @@ public class ShopUI : MonoBehaviour
 {
     public static ShopUI Instance { get; private set; }
 
+    /// <summary>
+    /// 【2026-10-23 主人拍板】商店整体先关掉（入口总闸）：大厅 ShopButton 虽已隐藏（GuildHallUI.HideUnfinishedHallButtons），
+    /// 这里再兜一道——任何路径调 Show() 都进不去。要恢复商店：改回 false 即可，代码与货架不用动。
+    /// </summary>
+    public const bool ShopClosed = true;
+
     GameObject _root;
     Text _walletText;
     Text _resultText;
@@ -44,6 +50,12 @@ public class ShopUI : MonoBehaviour
 
     public static void Show()
     {
+        // 【2026-10-23 主人拍板】商店先关掉：总闸拦在 Show 入口，提示玩家而不是静默
+        if (ShopClosed)
+        {
+            UIManager.Instance?.ShowToast("商店暂未开放");
+            return;
+        }
         Ensure().Open();
     }
 

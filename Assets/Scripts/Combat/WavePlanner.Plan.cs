@@ -72,6 +72,16 @@ public partial class WavePlanner
                 usable.Add(points[i]);
         }
 
+        // 【2026-10-23 主人拍板】活动副本（金币/徽记）定死波次骨架：3 波 × 每波 10 只，按难度分层：
+        // 初级(0) 精英 [0,1,2] 无 Boss；中级(1) 每波数量不变、精英每波 +1~2；
+        // 高级(2) 每波数量不变、精英每波 80~90%，最后 2 波各带 1 个 Boss。
+        // 徽记副本波次布局与金币副本完全一致（主人 2026-10-23 拍板）。中级/高级不再走下方随机路径。
+        if (bm != null && (bm.IsGoldDungeon || bm.IsBadgeDungeon))
+        {
+            BuildActivityDungeonWaves(startX, usable);
+            return;
+        }
+
         StageType spawnType = elite ? StageType.Elite : StageType.Normal;
 
         bool formalMain = bm != null && bm.IsFormalMainRun;
@@ -259,6 +269,74 @@ public partial class WavePlanner
             string eliteTag = w.eliteBonus > 0 ? $" 精英追加={w.eliteBonus}" : "";
             string compTag = CompositionTag(w.compositionStyle);
             GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}{archTag}{eliteTag}{compTag}");
+        }
+    }
+
+    /// <summary>
+    /// 【2026-10-23 主人拍板】活动副本（金币/徽记共用）定死波次：3 波 × 每波 10 只，按难度分层：
+    /// 初级(0)：精英 [0,1,2]、无 Boss（原「金币副本·初级」口径原样保留）；
+    /// 中级(1)：每波数量不变，精英在初级基础上每波 +1~2（[1~2, 2~3, 3~4]）；
+    /// 高级(2)：每波数量不变，精英每波 80~90%（8~9 只），最后 2 波各带 1 个 Boss（Boss 占波内最后名额，
+    ///          精英/Boss 都算在 10 只里）。无限裂隙不选难度，不进本方法。
+    /// 精英占波内最后名额（eliteBonus → CoSpawnWaveMonsters 的 eliteQuota 一处真源，精英体型/数值照常生效），
+    /// Boss 槽走 bossCountInWave 尾槽口径（不吃精英额度）。
+    /// 带精英/Boss 的波不摇近远编成（照既有精英波口径 compositionStyle=0）；纯小怪波按普通波口径摇。
+    /// </summary>
+    void BuildActivityDungeonWaves(float startX, List<Transform> usable)
+    {
+        const int perWaveCount = 10;
+        int diff = bm != null ? bm.BattleDifficulty : 0;
+        int[] baseElite = { 0, 1, 2 };
+        int[] elitePerWave = new int[3];
+        int[] bossPerWave = { 0, 0, 0 };
+        for (int i = 0; i < elitePerWave.Length; i++)
+        {
+            if (diff >= 2)
+            {
+                // 80~90% 精英：10 × (0.8~0.9) → 每波 8~9 只；最后 2 波各再带 1 Boss
+                elitePerWave[i] = UnityEngine.Random.Range(8, 10);
+                if (i >= 1) bossPerWave[i] = 1;
+            }
+            else if (diff == 1)
+            {
+                elitePerWave[i] = baseElite[i] + UnityEngine.Random.Range(1, 3);   // 每波精英 +1~2
+            }
+            else
+            {
+                elitePerWave[i] = baseElite[i];
+            }
+        }
+        for (int i = 0; i < elitePerWave.Length; i++)
+        {
+            Transform anchor = (usable.Count > 0) ? usable[Mathf.Min(i, usable.Count - 1)] : null;
+            float triggerX = anchor != null
+                ? anchor.position.x
+                : startX + 3.5f + i * GameConfig.VIRTUAL_WAVE_SPACING;
+            var wave = new WaveData
+            {
+                triggerX = triggerX,
+                spawnAnchor = anchor,
+                monsterCount = perWaveCount,
+                isBossWave = false,
+                isRoundEnd = false,
+                spawned = false,
+                aliveCount = 0,
+                eliteBonus = elitePerWave[i],
+                bossCountInWave = bossPerWave[i]
+            };
+            if (elitePerWave[i] <= 0 && bossPerWave[i] <= 0) wave.compositionStyle = RollWaveComposition();
+            _waves.Add(wave);
+        }
+        PlanStageEvents();
+        _totalWaves = _waves.Count;
+        GamePerf.Log($"[BattleManager] 活动副本（{(bm != null && bm.IsBadgeDungeon ? "徽记" : "金币")}）难度{diff} 定死波次：" +
+                     $"{elitePerWave.Length}波×{perWaveCount}只 精英=[{string.Join(",", elitePerWave)}] Boss=[{string.Join(",", bossPerWave)}]");
+        for (int i = 0; i < _waves.Count; i++)
+        {
+            var w = _waves[i];
+            string an = w.spawnAnchor != null ? w.spawnAnchor.name : "virtual";
+            float ax = w.spawnAnchor != null ? w.spawnAnchor.position.x : w.triggerX;
+            GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount} 精英={w.eliteBonus} Boss={w.bossCountInWave}{CompositionTag(w.compositionStyle)}");
         }
     }
 

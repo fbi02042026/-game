@@ -200,6 +200,8 @@ public class Mercenary : UnitBase
         // RefreshMercUnit / PromoteMerc、BattleManager 出战队伍、引导替身）都是 Init → SetHireId 顺序，
         // 在这里统一补挂加成最稳 —— 幂等（_outStarApplied 挡重复），0 星是无操作。
         ApplyOutStarBonus();
+        // 【2026-10-23 施工单 T4】养成资质加成同款补挂时机（幂等：_growApplied 挡重复，无养成记录是无操作）。
+        ApplyGrowBonus();
     }
 
     /// <summary>
@@ -462,6 +464,7 @@ public class Mercenary : UnitBase
     {
         attr.ResetToBase();
         _outStarApplied = false;   // 【2026-10-22 T8】基底重建后加成要重挂（SetHireId/下方出口会再调）
+        _growApplied = false;      // 【2026-10-23 施工单 T4】养成资质加成同款幂等闸，与升星并联互不干扰
         level = Mathf.Max(1, level);
 
         if (MercRosterDefs.TryGetByAssetId(id, out _))
@@ -484,6 +487,7 @@ public class Mercenary : UnitBase
             // 装配时机 = 属性基底写完后统一叠加，与主角 Hero.RecalcAttr 的 extraBonus 同款口径。
             ApplyRunTempBuffs();
             ApplyOutStarBonus();   // 【2026-10-22 施工单 T8】局外星攻防加成（hireId 已设时在此生效，未设等 SetHireId）
+            ApplyGrowBonus();      // 【2026-10-23 施工单 T4】养成资质加成（外层乘区，与升星并联）
             return;
         }
 
@@ -540,6 +544,7 @@ public class Mercenary : UnitBase
         // 【2026-10-22 主人拍板 v4.1】石像赐福等局内 buff（tempBuffs）佣兵也要吃到（与上面花名册分支同口径）。
         ApplyRunTempBuffs();
         ApplyOutStarBonus();
+        ApplyGrowBonus();      // 【2026-10-23 施工单 T4】养成资质加成（外层乘区，与升星并联）
     }
 
     // ============================================================
@@ -570,6 +575,49 @@ public class Mercenary : UnitBase
         attr.AddAttr(AttrType.MagicAttack, MercStarDefs.MagicPctPerStar * outStar, true);
         attr.AddAttr(AttrType.MagicDefense, MercStarDefs.MagicPctPerStar * outStar, true);
         Debug.Log($"[Mercenary] 局外星加成生效：{hid} ★{outStar} → 攻/防 +{MercStarDefs.AtkPctPerStar * outStar:0%}，魔攻/魔防 +{MercStarDefs.MagicPctPerStar * outStar:0%}");
+    }
+
+    // ============================================================
+    // 【2026-10-23 主人拍板 C2=A / 施工单 T4】佣兵升阶（局外养成等级）资质加成进战斗
+    // ============================================================
+
+    /// <summary>本次属性基底是否已挂过养成资质加成（与 _outStarApplied 同款幂等闸，互不干扰）。</summary>
+    bool _growApplied;
+
+    /// <summary>
+    /// 【2026-10-23 主人拍板 C2=A / 施工单 T4】佣兵升阶（局外养成等级）资质加成：
+    /// 按 MercGrowSystem 累计资质（升级时掷定即存，本函数只读乘一次）做<b>外层乘区</b>
+    /// （attr.AddAttr isPercent，与升星加成并联叠乘、互不干扰）；
+    /// 🔴 不改 MercRosterDefs.ApplyCombatStats 内部公式（施工红线）。
+    /// 口径：物攻/魔攻 ← aptAtk（魔攻与物攻同口径，Q7 拍板）；物防/魔防 ← aptDef；血 ← aptHp。
+    /// 数值为 0 的项不调 AddAttr（省日志噪音）；无养成记录（Lv1）→ 数值与改动前完全一致。
+    /// hireId 未设 / 非花名册（Get 返回 null）→ 跳过且<b>不置位</b>，等 SetHireId 再补。
+    /// 数值唯一真源 = MercGrowSystem（存档累计值）。
+    /// </summary>
+    public void ApplyGrowBonus()
+    {
+        if (attr == null || _growApplied) return;
+        string hid = !string.IsNullOrEmpty(hireId) ? hireId : mercId;
+        var entry = MercGrowSystem.Get(hid);
+        if (entry == null) return;   // 解析不到 hireId（Init 时序）或无养成记录：不置位，等 SetHireId 再补
+        _growApplied = true;
+
+        float atkPct = MercGrowSystem.AptitudePct(hid, 0);
+        float defPct = MercGrowSystem.AptitudePct(hid, 1);
+        float hpPct  = MercGrowSystem.AptitudePct(hid, 2);
+        if (atkPct != 0f)
+        {
+            attr.AddAttr(AttrType.Attack,      atkPct, true);
+            attr.AddAttr(AttrType.MagicAttack, atkPct, true);   // 魔攻与物攻同口径（Q7 拍板）
+        }
+        if (defPct != 0f)
+        {
+            attr.AddAttr(AttrType.Defense,      defPct, true);
+            attr.AddAttr(AttrType.MagicDefense, defPct, true);
+        }
+        if (hpPct != 0f)
+            attr.AddAttr(AttrType.MaxHp, hpPct, true);
+        Debug.Log($"[Mercenary] 养成资质加成生效：{hid} Lv{MercGrowSystem.LevelOf(hid)} → 攻/魔攻 +{atkPct:0%}，防/魔防 +{defPct:0%}，血 +{hpPct:0%}");
     }
 
     // ============================================================

@@ -753,10 +753,13 @@ public static class AdventureLogCatalog
         if (e.Id == "C1A")
             return StoryProgress.TutorialBattleCleared || StoryProgress.TutorialDone || ChapterCleared(1);
         if (e.Id == "C1B")
+            // 【2026-10-23 复核】此前误判「5 关制下 >=2 恒真」而删过该分支 —— 错：currentStageIndex 域 0..4，
+            // >=2 在第 2/3/4 小关均可达，并非恒真。已回退原逻辑（保留章通关兜底不变）。
             return ChapterCleared(1) || (ChapterManager.Instance != null && ChapterManager.Instance.currentStageIndex >= 2);
         if (e.Id == "C1C")
             return AdventureLogAchievements.GetProgress("elite_kill") > 0 || ChapterCleared(1);
         if (e.Id == "C1D")
+            // 【2026-10-23 复核】同 C1B：>=4 在 Boss 小关（idx=4）可达，非恒真 → 回退原逻辑
             return ChapterCleared(1) || (ChapterManager.Instance != null && ChapterManager.Instance.currentStageIndex >= 4);
         if (e.Id == "C1E")
             return AdventureLogAchievements.GetProgress("elite_kill") > 0 || ChapterCleared(1);

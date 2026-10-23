@@ -40,5 +40,18 @@ public enum BattleModeId
     /// 世界 BOSS（冒险界面按钮「BOSS挑战」，下标 3）。
     /// 2026-09-27 主人定位：这条路就是世界 boss。玩法还没做，先立位置、锁住入口。
     /// </summary>
-    WorldBoss
+    WorldBoss,
+
+    /// <summary>
+    /// 徽记副本（2026-10-23 主人拍板「活动副本一拆二」）：
+    /// 通关只掉随机职业徽记，不占冒险界面按钮位（SlotTable 不加位），
+    /// 入口走 <c>AdventureUI.EnterBadgeDungeon()</c>（本期 UI 不开放）。
+    /// </summary>
+    BadgeDungeon,
+
+    /// <summary>
+    /// 支线岛（2026-10-23 合并方案）：单 Boss 特殊关，10 体力/次，产出 = 固定局外金币 + 天赋石 + 装备。
+    /// 不占冒险界面按钮位，入口 = 冒险页支线岛点击（AdventureUI.BranchIslands）。
+    /// </summary>
+    SideIsland
 }

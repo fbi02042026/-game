@@ -151,9 +151,16 @@ public partial class WavePlanner
             // 原型精英额度：占本波最后一个/几个名额（不是额外追加），与引导关同一套口径
             var arch = GetWaveArchetype(waveIndex);
             int eliteQuota = (arch != null ? arch.elite : 0) + (wave != null ? wave.eliteBonus : 0);
-            bool archEliteSlot = eliteQuota > 0 && i >= wave.monsterCount - eliteQuota;
+            // 【2026-10-23 主人拍板】活动副本（金币/徽记）高级难度：波内 Boss 占最后 N 个名额，
+            // Boss 槽不吃精英额度（精英窗口整体前移）；体型给 Boss 档 → Monster.Init 走 bossUnit
+            // 分支（金币/徽记 Boss 专属图 + Boss 数值口径），普通波清关链路不受影响。
+            int bossTail = wave != null ? Mathf.Max(0, wave.bossCountInWave) : 0;
+            bool bossSlot = bossTail > 0 && i >= wave.monsterCount - bossTail;
+            bool archEliteSlot = !bossSlot && eliteQuota > 0 && i >= wave.monsterCount - bossTail - eliteQuota;
             if (archEliteSlot)
                 monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;
+            if (bossSlot)
+                monsterScale = GameConfig.BOSS_SCALE_MULTIPLIER;
             // 亲卫：强制精英体型（同章普通怪模板 + 精英缩放），Boss 本体仍走 Boss 体型
             if (guardSlot)
                 monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;

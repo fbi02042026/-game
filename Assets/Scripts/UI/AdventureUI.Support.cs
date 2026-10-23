@@ -85,6 +85,15 @@ public partial class AdventureUI
         return false;
     }
 
+    /// <summary>
+    /// 难度解锁按模式分流（2026-10-23 主人拍板）：活动副本（金币/徽记）按「本标签已通难度」
+    /// 逐级解锁（<see cref="ActivityDungeonRules.IsDiffUnlocked"/>）；其余模式走全局章节数口径。
+    /// </summary>
+    bool IsDiffUnlockedForSelectedMode(int diff)
+        => IsActivityMode(_selectedMode)
+            ? ActivityDungeonRules.IsDiffUnlocked(SaveSystem.Instance?.Data, diff)
+            : IsDiffUnlocked(diff);
+
     void RefreshContentLock()
     {
         bool locked = !IsModePlayable(_selectedMode);
@@ -236,18 +245,29 @@ public partial class AdventureUI
         }
 
         var right = transform.Find("RightContent");
-        var mapRoot = right != null ? right.Find("MapRoot") : transform.Find("MapRoot");
+        // 【2026-10-23 主人新布局】StageNodes 直接挂在界面根下（不再在 RightContent/MapRoot 下），
+        // 背景/整图节点 = StageNodes/Node_1..8 + 无限裂隙 + 金币副本；RightContent 下是 主线/无限/活动副本 三个页面节点。
+        if (stageNodeContainer == null)
+            stageNodeContainer = transform.Find("StageNodes");
+        var mapRoot = right != null ? right.Find("MapRoot") : null;   // 旧布局残留路径，prefab 已无 MapRoot，留作向后兼容
+        if (mapRoot != null && stageNodeContainer == null)
+            stageNodeContainer = mapRoot.Find("StageNodes");
         if (mapRoot != null)
         {
             if (mapBg == null) mapBg = mapRoot.Find("MapBg")?.GetComponent<Image>();
-            if (stageNodeContainer == null) stageNodeContainer = mapRoot.Find("StageNodes");
-            var titleBar = mapRoot.Find("TitleBar");
-            if (titleBar != null)
-            {
-                if (chapterTitle == null) chapterTitle = titleBar.Find("ChapterTitle")?.GetComponent<Text>();
-                if (prevChapterBtn == null) prevChapterBtn = titleBar.Find("PrevBtn")?.GetComponent<Button>();
-                if (nextChapterBtn == null) nextChapterBtn = titleBar.Find("NextBtn")?.GetComponent<Button>();
-            }
+        }
+        // 新布局没有 MapBg（背景 = StageNodes 各节点的 Image），mapBg 保持 null，相关刷新全部 null-safe 跳过。
+        // 标题栏在「主线」节点下（2026-10-23 新布局）；活动/无限节点也有各自 TitleBar，绑定取主线那份。
+        var titleBar = right != null ? right.Find(MainNodeName + "/TitleBar") : null;
+        if (titleBar == null && mapRoot != null)
+        {
+            titleBar = mapRoot.Find("TitleBar");
+        }
+        if (titleBar != null)
+        {
+            if (chapterTitle == null) chapterTitle = titleBar.Find("ChapterTitle")?.GetComponent<Text>();
+            if (prevChapterBtn == null) prevChapterBtn = titleBar.Find("PrevBtn")?.GetComponent<Button>();
+            if (nextChapterBtn == null) nextChapterBtn = titleBar.Find("NextBtn")?.GetComponent<Button>();
         }
 
         var detail = transform.Find("DetailPanel");

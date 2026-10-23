@@ -13,6 +13,8 @@ public static class StaminaSystem
     public const int ADVENTURE_COST = 5;
     /// <summary>无限裂隙单次进入消耗（2026-10-17 主人拍板：每天 2 次 × 20 体力；【2026-10-22 主人拍板】20 → 10）</summary>
     public const int ENDLESS_RIFT_COST = 10;
+    /// <summary>支线岛单次进入消耗（2026-10-23 主人拍板：10；与裂隙同价）。真源定义在 SideIslandDefs.SIDE_ISLAND_STAMINA_COST，此处别名转发。</summary>
+    public const int SIDE_ISLAND_COST = SideIslandDefs.SIDE_ISLAND_STAMINA_COST;
 
     public static int Current
     {
@@ -117,6 +119,12 @@ public static class StaminaSystem
     public static bool TrySpendForAdventure()
     {
         return TrySpend(ADVENTURE_COST);
+    }
+
+    /// <summary>进支线岛扣体力（2026-10-23 主人拍板：10/次）。批 S1 新增，批 S3 战斗接入时调用。</summary>
+    public static bool TrySpendForSideIsland()
+    {
+        return TrySpend(SideIslandDefs.SIDE_ISLAND_STAMINA_COST);
     }
 
     // ── 体力药水（2026-10-18 主人拍板：药水改道具入背包，使用时才恢复；超出上限先确认、多余作废）──

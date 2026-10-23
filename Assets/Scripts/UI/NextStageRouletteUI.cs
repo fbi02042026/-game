@@ -359,7 +359,7 @@ public class NextStageRouletteUI : MonoBehaviour
 
         var state = ChapterManager.Instance?.RollState;
         List<StageType> pool = StageRoller.BuildReel(state, _stage.stageIndex,
-            GameConfig.STAGES_PER_CHAPTER, _stage.type, LoopCardCount);
+            GameConfig.STAGES_PER_GRAND, _stage.type, LoopCardCount);
 
         // 保证环里至少有一张赢家，并记下下标
         _winnerSlot = -1;

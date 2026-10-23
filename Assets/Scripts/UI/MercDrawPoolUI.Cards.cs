@@ -259,24 +259,22 @@ public partial class MercDrawPoolUI : MonoBehaviour
     /// <summary>
     /// 卡内「升阶」钮的显示条件（2026-10-22 主人拍板，fail closed——任何一环查不到都隐藏）：
     /// 已拥有（SaveData.IsMercUnlocked）+ 未满星（outStar &lt; 3）+ 材料全够
-    /// （本命碎片够下一星消耗 + 金币/钻石够）。判定全部复用 MercStarSystem/MercStarDefs
-    /// 现有函数，不另写消耗逻辑。队列里的卡不走本判定（队列格是另一套节点，无「升阶」钮）。
+    /// （本命碎片够 + **职业徽记够**（2026-10-23 起，统一并入 CanStarUp 预检）+ 金币/钻石够）。
+    /// 拥有/星级/碎片/徽记判定全部复用 MercStarSystem.CanStarUp，规则不抄第二遍；
+    /// 资金门槛仍在本处读表算（与 MercAscendUI.OnStarUpClick 同口径）。队列里的卡不走本判定。
     /// </summary>
     bool CanShowAscendButton(string hireId, bool owned)
     {
         if (!owned || string.IsNullOrEmpty(hireId)) return false;
         var data = SaveSystem.Instance?.Data;
-        if (data == null || !data.IsMercUnlocked(hireId)) return false;
+        if (data == null) return false;
 
-        int cur = MercStarSystem.OutStarOf(hireId);
-        if (cur < 0 || cur >= MercStarDefs.MaxOutStar) return false;   // -1=非花名册 → 隐藏
-
-        // 碎片：下一星消耗（GetNextStarCost 满星/查不到返回 0 → 按不够处理）
-        int need = MercStarSystem.GetNextStarCost(hireId);
-        if (need <= 0 || MercStarSystem.GetBagFragCount(hireId) < need) return false;
+        // 碎片 + 徽记预检（含拥有/满星判定；msg 不展示，仅用于隐藏钮）
+        if (!MercStarSystem.CanStarUp(hireId, out _)) return false;
 
         // 金币/钻石门槛（读表算消耗，余额与 MercAscendUI.OnStarUpClick 同口径）
         if (!MercRosterDefs.TryGetByHireId(hireId, out var def)) return false;
+        int cur = MercStarSystem.OutStarOf(hireId);
         int targetStar = cur + 1;
         long goldCost = MercStarDefs.GoldCost(def.Rarity, targetStar);
         long diaCost = MercStarDefs.DiamondCost(def.Rarity, targetStar);

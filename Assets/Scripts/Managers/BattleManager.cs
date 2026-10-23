@@ -43,6 +43,13 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 注意要在 StoryProgress.ConsumeTutorialBattleFlag() 之前判。
         if (StoryProgress.ShouldStartTutorialBattle()) return BattleModes.Tutorial;
 
+        // 支线岛（2026-10-23 合并方案）：冒险页支线岛点击进本，判在徽记/金币本之前（意图明确优先）。
+        if (AdventureUI.PendingSideIsland > 0) return BattleModes.SideIsland;
+
+        // 徽记副本（2026-10-23 拍板「活动副本一拆二」）：入口 = AdventureUI.EnterBadgeDungeon()（本期无按钮）。
+        // 判在金币本之前：两标志理论上同真时，后置的徽记副本意图优先。
+        if (AdventureUI.PendingBadgeDungeon) return BattleModes.BadgeDungeon;
+
         // 活动副本（冒险界面下标 4）。这是一个「类」，不是一种玩法：
         // 现在只开了金币本；以后佣兵副本 / 武器副本 / 技能副本上了，
         // 在这里按「当前开放的是哪一个活动」返回对应模式即可。
@@ -188,6 +195,8 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         {
             if (AdventureUI.PendingEndlessRift
                 || AdventureUI.PendingGoldDungeon
+                || AdventureUI.PendingBadgeDungeon   // 徽记副本（2026-10-23）：独立进本，同金币本作废 parked 局
+                || AdventureUI.PendingSideIsland > 0 // 支线岛（2026-10-23 合并方案）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingBattleChapter <= 0
                 || AdventureUI.PendingBattleChapter != savedRun.chapter)
             {
@@ -201,6 +210,10 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         AdventureUI.PendingBattleChapter = 0;
         AdventureUI.PendingBattleDifficulty = 0;
         AdventureUI.PendingGoldDungeon = false;
+        AdventureUI.PendingBadgeDungeon = false;   // 徽记副本（2026-10-23）：读完即清，照金币本口径
+        // 支线岛（2026-10-23 合并方案）：捕获岛 id 供结算读（SideIslandId），Pending 读后即清（照金币本口径）
+        SideIslandId = Mathf.Max(0, AdventureUI.PendingSideIsland);
+        AdventureUI.PendingSideIsland = 0;
 
         // 无限裂隙：起始层 = 记录点 + 1（读完即清，防污染）；普通章号参数对它无意义
         if (AdventureUI.PendingEndlessRift)

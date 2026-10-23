@@ -4,13 +4,15 @@ using System;
 using System.Linq;
 
 /// <summary>
-/// 章节关卡管理器：每章最多 10 关，分支地图。
+/// 章节关卡管理器：每章一个大关，每大关 <see cref="GameConfig.STAGES_PER_GRAND"/> 小关（2026-10-23 批 B1 起）。
 ///
 /// 现行规则（对齐 StageRoller，勿按旧注释排商人/诅咒）：
-/// - 第 1 关是起点，第 10 关占位 Boss
-/// - 中间关类型由 StageRoller 现抽：普通 / 精英 / 休息 / Boss（四类）
-/// - 分支：有的关分 2 支，可跳到下一或下下个；分支后 2–3 关内汇合主路
+/// - 第 1 小关是起点，第 5 小关占位 Boss
+/// - 中间关类型由 StageRoller 按位置定死：普通 / 精英 / Boss
+/// - 关卡图按顺序一关一关解锁，一次只开一把锁（2026-10-19 拍板），不做分支/跳关选路
 /// - 商人 / 附魔 / 诅咒未开放，不要在此复活预排逻辑
+/// ⚠️ 「章」身份（currentChapter 1–8）批 B1 未动，仍走 ChapterRouteTable / SaveData 章级存档；
+///    大关全局编号（1–126）属批 B2，见 Docs/关卡结构重构_篇大关小关_待办任务清单.md。
 /// </summary>
 public class ChapterManager : Singleton<ChapterManager>
 {
@@ -58,7 +60,7 @@ public class ChapterManager : Singleton<ChapterManager>
         ChapterBranchTable.Reload();
         StageRollerWeightsTable.Reload();
 
-        for (int i = 0; i < GameConfig.STAGES_PER_CHAPTER; i++)
+        for (int i = 0; i < GameConfig.STAGES_PER_GRAND; i++)
         {
             stageMap.Add(new StageData { stageIndex = i, nextStages = new List<int>() });
         }
@@ -91,6 +93,57 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
+    /// 徽记副本（2026-10-23 主人拍板「活动副本一拆二」）：单场 Elite 战斗，通关只掉随机职业徽记
+    /// （见 BattleManager.Settlement → MercGrowInventory.GrantBadgeDungeonDrops），不推进主线章节。
+    /// 结构照抄 StartGoldDungeon。
+    /// </summary>
+    public void StartBadgeDungeon(int chapterNum)
+    {
+        currentChapter = Mathf.Clamp(chapterNum, 1, 8);
+        currentStageIndex = 0;
+        stageMap.Clear();
+        availableNextStages.Clear();
+        var stage = new StageData
+        {
+            stageIndex = 0,
+            type = StageType.Elite,
+            nextStages = new List<int>()
+        };
+        stageMap.Add(stage);
+        availableNextStages.Add(stage);
+        Debug.Log($"[ChapterManager] 徽记副本 第{currentChapter}章 单场");
+    }
+
+    /// <summary>
+    /// 支线岛（2026-10-23 合并方案）：单场 Boss 战。currentChapter = 岛的背景篇（怪池/背景资产同源复用），
+    /// stageIndex=0 的 Boss 关（WavePlanner 的 Boss 取池按 STAGES_PER_GRAND-1，与 stageIndex 无关，真 Boss 行必入池）。
+    /// 结构照抄 StartBadgeDungeon；通关结算走 SideIslandBattleMode.SettleStageClear（不进 OnStageComplete 主线链）。
+    /// </summary>
+    public void StartSideIsland(int islandId)
+    {
+        var isl = SideIslandDefs.Get(islandId);
+        if (isl == null)
+        {
+            int fixedId = Mathf.Clamp(islandId, 1, SideIslandDefs.Count);
+            Debug.LogError($"[ChapterManager] StartSideIsland：islandId={islandId} 非法，钳到岛{fixedId}（定义域 1..{SideIslandDefs.Count}）");
+            isl = SideIslandDefs.Get(fixedId);
+        }
+        currentChapter = Mathf.Clamp(isl.act, 1, 8);
+        currentStageIndex = 0;
+        stageMap.Clear();
+        availableNextStages.Clear();
+        var stage = new StageData
+        {
+            stageIndex = 0,
+            type = StageType.Boss,
+            nextStages = new List<int>()
+        };
+        stageMap.Add(stage);
+        availableNextStages.Add(stage);
+        Debug.Log($"[ChapterManager] 支线岛「{isl.name}」（岛{isl.id}）背景第{isl.act}篇 单 Boss 关");
+    }
+
+    /// <summary>
     /// 无限裂隙（2026-10-17 主人拍板）：按绝对层数建**单层**关。
     /// 背景章 = 每 5 层轮换现有 8 章资源（怪物文件夹同源，自动跟切）；
     /// 层类型（2026-10-19 主人拍板）：5 的倍数 = BOSS 层（10 的倍数是大 BOSS），
@@ -118,7 +171,8 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
-    /// 分配关卡类型占位：第1关普通、末关 Boss；中间类型由 StageRoller 每关现抽覆盖。
+    /// 分配关卡类型占位：第1关普通、末关（第5小关）Boss；中间类型由 StageRoller 按位置定死。
+    /// 【2026-10-23 批 B1】每局从「每章 10 关」改为「每大关 5 小关」（STAGES_PER_GRAND）。
     /// （旧版预排商人/诅咒等已被轮盘规则取代，避免双轨不一致。）
     /// </summary>
     void AssignStageTypes()
@@ -127,7 +181,7 @@ public class ChapterManager : Singleton<ChapterManager>
             stageMap[i].type = StageType.Normal;
 
         stageMap[0].type = StageType.Normal;
-        stageMap[GameConfig.STAGES_PER_CHAPTER - 1].type = StageType.Boss;
+        stageMap[GameConfig.STAGES_PER_GRAND - 1].type = StageType.Boss;
 
         string log = "[ChapterManager] 关卡占位: ";
         for (int i = 0; i < stageMap.Count; i++)
@@ -149,7 +203,7 @@ public class ChapterManager : Singleton<ChapterManager>
             stageMap[i].nextStages.Clear();
 
         // 每关的下一关固定为 i+1（线性顺序）
-        for (int i = 0; i < GameConfig.STAGES_PER_CHAPTER - 1; i++)
+        for (int i = 0; i < GameConfig.STAGES_PER_GRAND - 1; i++)
             stageMap[i].nextStages.Add(i + 1);
 
         LogBranchInfo();
@@ -188,7 +242,7 @@ public class ChapterManager : Singleton<ChapterManager>
         {
             int nodeIdx = branchPool[i];
             int skipTarget = nodeIdx + skipDistance;
-            if (skipTarget <= GameConfig.STAGES_PER_CHAPTER - 2
+            if (skipTarget <= GameConfig.STAGES_PER_GRAND - 2
                 && nodeIdx >= 0 && nodeIdx < stageMap.Count
                 && !stageMap[nodeIdx].nextStages.Contains(skipTarget))
                 stageMap[nodeIdx].nextStages.Add(skipTarget);
@@ -246,6 +300,13 @@ public class ChapterManager : Singleton<ChapterManager>
     {
         if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
             return;
+        // 徽记副本（2026-10-23 拍板）：同金币本，通关不走主线首通/章节奖励（掉落全走自己的发放链）
+        if (BattleManager.Instance != null && BattleManager.Instance.IsBadgeDungeon)
+            return;
+        // 支线岛（2026-10-23 合并方案）：同金币本，岛通关不走主线首通/章推进/派定——
+        // 全在 SideIslandBattleMode.SettleStageClear 自己的链里（发奖 + MarkSideIslandCleared + 派第二岛）
+        if (BattleManager.Instance != null && BattleManager.Instance.IsSideIsland)
+            return;
         // 无限裂隙：不发主线首通石/章通关奖励，进度与奖励全走自己的结算链（SettleEndlessStageClear）
         if (BattleManager.Instance != null && BattleManager.Instance.IsEndlessRift)
             return;
@@ -288,7 +349,7 @@ public class ChapterManager : Singleton<ChapterManager>
 
         // 首领关可能提前出现在倒数三关里：打完首领这一章就结束
         bool bossCleared = cleared != null && cleared.type == StageType.Boss;
-        if (bossCleared || currentStageIndex >= GameConfig.STAGES_PER_CHAPTER - 1)
+        if (bossCleared || currentStageIndex >= GameConfig.STAGES_PER_GRAND - 1)
         {
             // === 章节通关逻辑 ===
 
@@ -305,8 +366,8 @@ public class ChapterManager : Singleton<ChapterManager>
                 int clearDiff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : -1;
                 data.MarkChapterCleared(currentChapter, clearDiff);
 
-                // 【2026-10-21 拍板】通关第 1 章后随机派定本周目支线（洗牌袋，见 ChapterRouteTable.EnsureForkRoll）。
-                // 只判 currentChapter == 1：第 8 章通关时 chosenBranch 刚归零，无条件调会把下周目支线提前掷掉。
+                // 【2026-10-23 合并方案】通关第 1 章派第一个支线岛；通关该岛后由岛结算（BattleManager）再次掷派第二个。
+                // 只判 currentChapter == 1：第 8 章通关时 branchRoll 刚归零，无条件调会把下周目支线提前掷掉。
                 if (currentChapter == 1) ChapterRouteTable.EnsureForkRoll(data);
 
                 // 【2026-10-20 主人拍板】整章首通额外天赋石停发（天赋石改为精英/Boss 击杀概率掉落）。
@@ -381,11 +442,12 @@ public class ChapterManager : Singleton<ChapterManager>
         StageData next = target ?? GetNextStage();
         if (next == null) return null;
         // 【2026-10-22 主人拍板】正式关类型按位置定死（v4 回合制）：0-based 4/9 → Boss、2/6 → 50% 精英、其余普通。
+        // 【2026-10-23 批 B1】每局 10 关 → 每大关 5 小关：0-based 4 → Boss、2 → 50% 精英、其余普通。
         // 原权重抽签保留退役不删（恢复关闸已在）；引导局/金币本/裂隙不走本方法（金币本 StartGoldDungeon、
         // 裂隙 StartEndlessRift 各自建关，类型来源未波及）。
-        // next.type = StageRoller.Roll(RollState, next.stageIndex, GameConfig.STAGES_PER_CHAPTER);
+        // next.type = StageRoller.Roll(RollState, next.stageIndex, GameConfig.STAGES_PER_GRAND);
         next.type = StageRoller.RollByPosition(next.stageIndex);
-        Debug.Log($"[ChapterManager] 定死下一关类型 第{next.stageIndex + 1}关 = {next.type}（v4 按位置，2026-10-22 主人拍板）"
+        Debug.Log($"[ChapterManager] 定死下一关类型 第{next.stageIndex + 1}关 = {next.type}（v4 按位置，2026-10-23 批 B1 改 5 关制）"
                   + $"（恢复{RollState.restCount}/{StageRoller.MaxRestPerChapter} 战斗{RollState.combatStagesDone}）");
         return next;
     }
@@ -462,7 +524,7 @@ public class ChapterManager : Singleton<ChapterManager>
     /// </summary>
     public bool IsChapterCleared()
     {
-        return currentStageIndex >= GameConfig.STAGES_PER_CHAPTER - 1;
+        return currentStageIndex >= GameConfig.STAGES_PER_GRAND - 1;
     }
 
     /// <summary>

@@ -25,8 +25,13 @@ public static partial class GameConfig
     // 商店 / 天赋那套已调好的节奏不会被推倒重来。
     /// <summary>第 1 关的总怪数（全章最少）。</summary>
     public const int MONSTER_TOTAL_BASE = 10;
-    /// <summary>每推进一关多几只怪。</summary>
-    public const int MONSTER_TOTAL_STEP = 2;
+    /// <summary>
+    /// 每推进一关多几只怪。
+    /// 【2026-10-23 批 E1】大关从 10 小关缩到 5 小关，2 → 4.5f（float）保持曲线端点 10 → 28 不变
+    /// （10 / 14.5 / 19 / 23.5 / 28）。⚠️ 只影响非正式关：主线正式关怪量已被 v4.1
+    /// 「每波独立摇 10-15」整体覆盖，不走本公式。
+    /// </summary>
+    public const float MONSTER_TOTAL_STEP = 4.5f;
     /// <summary>总怪数在基准值上下浮动的幅度（0.1 = ±10%）。</summary>
     public const float MONSTER_TOTAL_JITTER = 0.1f;
     /// <summary>无刷怪点时，波与波之间的世界距离（兼容旧逻辑）</summary>
@@ -310,8 +315,9 @@ public static partial class GameConfig
     /// </summary>
     public static int GetStageMonsterTotal(int stageIndex0Based)
     {
-        int stageNo = Mathf.Clamp(stageIndex0Based + 1, 1, STAGES_PER_CHAPTER);
-        int baseTotal = MONSTER_TOTAL_BASE + (stageNo - 1) * MONSTER_TOTAL_STEP;
+        // 【2026-10-23 批 E1】输入域从 0..9 收到 0..4（大关 5 小关）
+        int stageNo = Mathf.Clamp(stageIndex0Based + 1, 1, STAGES_PER_GRAND);
+        float baseTotal = MONSTER_TOTAL_BASE + (stageNo - 1) * MONSTER_TOTAL_STEP;
 
         int lo = Mathf.RoundToInt(baseTotal * (1f - MONSTER_TOTAL_JITTER));
         int hi = Mathf.RoundToInt(baseTotal * (1f + MONSTER_TOTAL_JITTER));
@@ -413,11 +419,13 @@ public static partial class GameConfig
     }
 
     /// <summary>
-    /// 无限裂隙怪量映射：绝对层数 → 主线怪量公式的输入域（0..STAGES_PER_CHAPTER-1）。
-    /// 每 4 层走满一档，40 层走满整条 10→28 曲线后封顶，怪量只涨不跌。
+    /// 无限裂隙怪量映射：绝对层数 → 主线怪量公式的输入域（0..STAGES_PER_GRAND-1）。
+    /// 每 9 层走满一档，37 层走满整条 10→28 曲线后封顶，怪量只涨不跌。
+    /// 【2026-10-23 批 E2】输入域从 0..9 收到 0..4，除数同步 4 → 9，
+    /// 保证 37 层封顶时仍是 28 只 —— 与重构前裂隙曲线完全一致。
     /// </summary>
     public static int EndlessMonsterCountStageIdx(int riftStage)
-        => Mathf.Min(STAGES_PER_CHAPTER - 1, Mathf.Max(0, (Mathf.Max(1, riftStage) - 1) / 4));
+        => Mathf.Min(STAGES_PER_GRAND - 1, Mathf.Max(0, (Mathf.Max(1, riftStage) - 1) / 9));
 
     /// <summary>层 → 背景章映射（每 5 层换一套：第 1-5 层森林 → 6-10 墓园 → … → 40 层后循环）</summary>
     public static int EndlessChapterForStage(int riftStage)

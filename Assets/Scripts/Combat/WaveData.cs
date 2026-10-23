@@ -29,6 +29,12 @@ public class WaveData
     /// </summary>
     public int eliteBonus;
     /// <summary>
+    /// 【2026-10-23 主人拍板】波内 Boss 只数：占本波**最后** N 个名额（在精英窗口之后），
+    /// Boss 槽不吃精英额度（精英窗口整体前移）。仅活动副本（金币/徽记）高级难度使用；
+    /// isBossWave 保持 false（Boss 只是波内一个单位，不改变普通波的清关/抽奖链路）。
+    /// </summary>
+    public int bossCountInWave;
+    /// <summary>
     /// 波次原型 id（wave_archetype.csv）。空 = 不接管，走旧的「奇偶近远 + 均分人数」逻辑。
     /// 由 <see cref="StageModeTable"/> 抽到的模式铺进正式关；引导步进不填。
     /// </summary>
