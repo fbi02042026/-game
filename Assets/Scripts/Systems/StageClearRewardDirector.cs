@@ -18,6 +18,10 @@ public class StageClearRewardDirector : MonoBehaviour
     const float YinScaleMul = 1.2f;
     const float JinScaleMul = 1.2f * 1.2f; // 相对木箱
 
+    /// <summary>Boss 宝箱额外钻石（2026-10-23 主人拍板：每个 Boss 宝箱 +10 钻）。
+    /// 主线正式关已去宝箱（2026-10-22 拍板），本奖励只作用于仍走宝箱演出的 Boss 关（金币本/无限裂隙/活动副本）。</summary>
+    const int BossChestDiamond = 10;
+
     Transform _boxRoot;
     Transform _boxAnimHost;
     Transform _effectRoot;
@@ -974,6 +978,12 @@ public class StageClearRewardDirector : MonoBehaviour
         spawn.y = UnitBase.GROUND_Y;
         ScrapRewardEquips(rewards);
 
+        // —— Boss 宝箱 +10 钻（2026-10-23 主人拍板）：蓝色钻石从箱口弹出向上飘，直接入钱包 ——
+        if (stageType == StageType.Boss && BossChestDiamond > 0)
+        {
+            yield return StartCoroutine(CoFlyDiamond(spawn, BossChestDiamond));
+        }
+
         yield return new WaitForSecondsRealtime(0.35f);
 
         // —— 2026-09-29：关卡结算的免费三选一已停掉 ——
@@ -1240,6 +1250,58 @@ public class StageClearRewardDirector : MonoBehaviour
         {
             BattleManager.Instance.GrantRunGold(goldAdd);
         }
+    }
+
+    /// <summary>
+    /// Boss 宝箱钻石飞行（2026-10-23 主人拍板）：蓝钻从箱口弹出向上飘散后入钱包。
+    /// 战斗场景顶栏没有钻石文本（只有金币），飞行终点退化为向上飘（与金币无目标时同款），
+    /// 入账走 ResourceWallet（钻石是跨局货币，不走局内 GrantRunGold）。
+    /// </summary>
+    IEnumerator CoFlyDiamond(Vector3 from, int diamondAdd)
+    {
+        const int gemCount = 3;   // 3 颗小钻依次弹出，视觉上比一颗大钻更有「宝箱出货」感
+        int per = Mathf.Max(1, diamondAdd / gemCount);
+        int remain = diamondAdd;
+        for (int i = 0; i < gemCount; i++)
+        {
+            int add = (i == gemCount - 1) ? remain : per;
+            remain -= add;
+            if (add <= 0) continue;
+
+            var gem = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            gem.name = "DropDiamond";
+            gem.transform.position = from + new Vector3(0f, 0.6f, 0f);
+            gem.transform.localScale = Vector3.one * 0.14f;
+            var col = gem.GetComponent<Collider>();
+            if (col != null) Destroy(col);
+            var rend = gem.GetComponent<Renderer>();
+            if (rend != null)
+            {
+                rend.material = new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit") ?? rend.material.shader);
+                rend.material.color = new Color(0.45f, 0.8f, 1f, 1f);   // 亮蓝 = 钻石配色（icon_diamond_blue 同调）
+            }
+
+            Vector3 start = gem.transform.position;
+            Vector3 to = start + new Vector3(Random.Range(-0.4f, 0.4f), 2.2f, 0f);
+            float t = 0f;
+            float dur = 0.5f;
+            while (t < dur)
+            {
+                t += Time.unscaledDeltaTime;
+                float u = Mathf.Clamp01(t / dur);
+                float ease = u * u * (3f - 2f * u);
+                Vector3 p = Vector3.Lerp(start, to, ease);
+                p.y += Mathf.Sin(u * Mathf.PI) * 0.35f;
+                gem.transform.position = p;
+                yield return null;
+            }
+            Destroy(gem);
+            ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, add, save: false, notify: false);
+            if (i < gemCount - 1)
+                yield return new WaitForSecondsRealtime(0.12f);
+        }
+        SaveSystem.Instance?.Save();
+        UIManager.Instance?.ShowToast($"Boss宝箱 钻石 +{diamondAdd}", true);
     }
 
     GameObject CreateGroundDrop(Vector3 pos, EquipInstance eq)
