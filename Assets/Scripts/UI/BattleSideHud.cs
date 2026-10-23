@@ -60,6 +60,7 @@ public class BattleSideHud : MonoBehaviour
     RectTransform _bossBarFill;    // BossBar/血条（红条；与 BattleBossHpBar 绑的是同一个节点名）
     int _layoutHDone = -1;         // 上次完成纵向布局时的画布逻辑高（四舍五入，变了才重算）
     bool _bossBarMissingLogged;    // 绑定失败只报一次错
+    bool _counterDiagLogged;       // 击败计数位置诊断只打一次（2026-10-23 主人报「跑到战斗背包下」排查用）
 
     public static BattleSideHud EnsureOn(Transform battleUiRoot)
     {
@@ -342,6 +343,17 @@ public class BattleSideHud : MonoBehaviour
         // 血条底边（画布本地 y，自底向上）→ HUD 根（锚画布右上、pivot 右上）的 y：根顶在血条底边上方 54.4
         float y = bossPivotY + barBottomLocal + KillCounterRootGapAboveBarBottom - canvasH;
         ((RectTransform)transform).anchoredPosition = new Vector2(-KillCounterRightInset, y);
+        if (!_counterDiagLogged)
+        {
+            _counterDiagLogged = true;
+            var bag = FindChildRecursive(parent, "BtnBackpack") as RectTransform;
+            float safeTop = SafeAreaFitter.TotalTopInsetUnits(_bossBarNode as RectTransform);
+            Debug.Log($"[BattleSideHud] 击败计数诊断 canvasH={canvasH:F0} " +
+                      $"bossBar aMin={_bossBarNode.anchorMin} pos={_bossBarNode.anchoredPosition} " +
+                      $"fill pos={_bossBarFill.anchoredPosition} size={_bossBarFill.sizeDelta} scale={_bossBarFill.localScale.y:F2} " +
+                      $"safeTop={safeTop:F0} counterY={y:F0} " +
+                      $"bag aMin={(bag != null ? bag.anchorMin.ToString() : "无")} bagPos={(bag != null ? bag.anchoredPosition.ToString() : "-")}");
+        }
     }
 
     bool TryBindBossBar(RectTransform parent)

@@ -350,6 +350,11 @@ public class SaveData
     [NonSerialized] public HashSet<string> clearedStages = new HashSet<string>();
     public List<StringIdEntry> clearedStageEntries = new List<StringIdEntry>();
 
+    // === 主线宝箱领取记录（2026-10-23 主人拍板：首通钻改到宝箱点击领取，结算不再自动发）===
+    // 已领取宝箱奖励的关卡 key（格式同 clearedStages：chapter_stageIndex）。JsonUtility 镜像同款。
+    [NonSerialized] public HashSet<string> chestClaimedStages = new HashSet<string>();
+    public List<StringIdEntry> chestClaimedStageEntries = new List<StringIdEntry>();
+
     // === 主线任务进度（2026-09-20 迁移：从 PlayerPrefs mq_v1_* 迁入云存档）===
     // 已完成集合：id = questId（如 C1_Q2）
     public List<StringIdEntry> mainQuestDoneEntries = new List<StringIdEntry>();
@@ -674,6 +679,7 @@ public class SaveData
             logFragments[e.id] = e.value;
         }
         clearedStages = ToIdSet(clearedStageEntries);
+        chestClaimedStages = ToIdSet(chestClaimedStageEntries);
 
         mainQuestDone = ToIdSet(mainQuestDoneEntries);
 
@@ -1169,6 +1175,19 @@ public class SaveData
         return TalentDefs.TalentStoneRewards.FirstClearStone(ch);
     }
 
+    /// <summary>该关宝箱奖励是否已领取（主线宝箱点击领奖用，2026-10-23）。</summary>
+    public bool IsChestClaimed(int chapter, int stageIndex)
+        => chestClaimedStages != null && chestClaimedStages.Contains(chapter + "_" + stageIndex);
+
+    /// <summary>标记该关宝箱奖励已领取。返回 false = 之前已领过（防重复发奖）。</summary>
+    public bool MarkChestClaimed(int chapter, int stageIndex)
+    {
+        chestClaimedStages ??= new HashSet<string>();
+        if (!chestClaimedStages.Add(chapter + "_" + stageIndex)) return false;
+        chestClaimedStageEntries = FromIdSet(chestClaimedStages);
+        return true;
+    }
+
     /// <summary>某章已首次通关的关卡数（冒险日志里程碑进度用）。</summary>
     public int ClearedStageCountInChapter(int chapter)
     {
@@ -1335,6 +1354,7 @@ public class SaveData
             logFragmentEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
 
         clearedStageEntries = FromIdSet(clearedStages);
+        chestClaimedStageEntries = FromIdSet(chestClaimedStages);
 
         mainQuestDoneEntries = FromIdSet(mainQuestDone);
 

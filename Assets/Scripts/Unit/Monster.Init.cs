@@ -257,9 +257,12 @@ public partial class Monster
         // ?????? chapterScale????Boss ??TTK ????????
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
         // 【2026-10-22 主人拍板「无限裂隙先排除了 分成两条线」】血量分两条线：
-        // 主线/引导吃全局砍半（MONSTER_HP_GLOBAL_MUL=0.5）；无尽裂隙不吃全局砍半，
+        // 主线吃全局砍半（MONSTER_HP_GLOBAL_MUL=0.5）；无尽裂隙不吃全局砍半，
         // 强度只随层数走（EndlessDifficultyMul）。攻击侧同样裂隙不参与（ChapterAtkMul）。
-        float hpGlobalMul = endlessRift ? 1f : GameConfig.MONSTER_HP_GLOBAL_MUL;
+        // 【2026-10-23 主人拍板「引导的不要动」】新手引导战两条线都不吃——
+        // 引导局怪物（血/攻）保持 10-22 削弱批次之前的原始数值。
+        bool isTutorialRun = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
+        float hpGlobalMul = endlessRift || isTutorialRun ? 1f : GameConfig.MONSTER_HP_GLOBAL_MUL;
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul);
         // ⚠【2026-10-12 整段删除·主人「把关卡的怪物数量回复正常」】
         // 这里原本是流程测试开关 `GameConfig.TEST_BOSS_HP`（Boss 压成 1 滴血，一击通关好验证流程）。
@@ -288,7 +291,9 @@ public partial class Monster
         // 前期要让玩家稍微抽点奖就能过」）；第3章 ×0.6（砍40%）；第4章起 ×0.8（砍20%）。
         // 全章覆盖，真源 = GameConfig.ChapterAtkMul(chapter)；只压攻击/魔攻，血防不动；
         // 无尽裂隙不参与（强度只随层数走）。
-        float earlyAtkMul = !endlessRift ? GameConfig.ChapterAtkMul(gChapter) : 1f;
+        // 【2026-10-23 主人拍板「引导的不要动」】新手引导战不吃章级减免——引导局怪物保持原始攻击
+        //（isTutorialRun 在上面血量段已取）。
+        float earlyAtkMul = !endlessRift && !isTutorialRun ? GameConfig.ChapterAtkMul(gChapter) : 1f;
         // 魔法型强制改法球弹道(Ranged)→视觉与伤害类型(魔法)一致；物理型保持表内 style。
         // 普通小怪的魔法型本就等于「表里是法师」，这里赋值与表内原值一致；
         // 只有精英/Boss 掷骰命中魔法时，这里才会真的把 Melee/Bow 改成法球。
@@ -297,7 +302,8 @@ public partial class Monster
         // 远程（弓/法球）攻击力倍率（真源 = GameConfig.MONSTER_RANGED_ATK_MUL，唯一出口）。
         // 【2026-10-22 主人拍板「攻击再减50%」后该值 0.675：远程不再上浮、比近战低一截。Boss 不吃。】
         // 放在 style 定稿之后、写 attr 之前，魔法型（已强制 Ranged）也一起吃到。
-        if (!_isBossUnit && MonsterAttackStyleTable.IsRanged(_attackStyle))
+        // 【2026-10-23 主人拍板「引导的不要动」】引导局不吃远程削减（10-22 批次的一部分）。
+        if (!_isBossUnit && !isTutorialRun && MonsterAttackStyleTable.IsRanged(_attackStyle))
             baseAtk *= GameConfig.MONSTER_RANGED_ATK_MUL;
         // 【2026-10-14】style 已定稿（含魔法型强制 Ranged），此处抽索敌策略：近战按距离、
         // 远程先打脆皮职业、按 MONSTER_LOW_HP_TARGET_RATIO 比例抽出「挑血少的打」。

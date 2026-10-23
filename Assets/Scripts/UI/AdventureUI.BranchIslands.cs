@@ -23,28 +23,62 @@ using UnityEditor;
 //   8 岛全通后洗牌袋重置开新一轮）
 // · 旧支线章 2/3/4 并入主线按序解锁（主线 1→8 线性，ChapterRouteTable 合并方案）
 //
-// 【实现】运行时克隆主线槽位（关卡/1-1：岛+宝箱+名牌结构）生成两个岛，
+// 【实现】运行时克隆主人手摆的「支线」示例节点（关卡/支线：岛+剧情+可接徽章+名牌结构）生成两个岛，
 //   挂 RightContent/主线/支线岛屿 容器下 —— 不在「关卡」容器内，
 //   因此不参与窗口滑动定位，EnsureChestNodes 的槽位扫描也不会误认。
-//   宝箱用银箱三态（未解锁/待打/已通关）区分主线木箱；岛图轮换 岛1/岛2（专属岛图等 P0 素材）；未解锁显示「？？？」。
+//   摆位以示例节点为准（岛1=示例原位，岛2=示例位上方一个槽位节奏），间距不随屏幕拉伸。
+//   剧情图/可接徽章运行时按路径加载（2026-10-23 主人拍板「56字符一律不管，全部路径加载」）；
+//   岛图运行时轮换 岛1/岛2（专属岛图等 P0 素材）。
 public partial class AdventureUI
 {
     /// <summary>支线岛槽数量（岛壳沿用 2 个：依次解锁）。</summary>
     const int BranchIslandCount = 2;
     /// <summary>支线岛容器名（挂在 RightContent/主线 下，别动名字）。</summary>
     const string BranchIslandContainerName = "支线岛屿";
-    /// <summary>支线岛相对主线槽位列的横向偏移（摆在窗口右侧；嫌远嫌近只改这一个数）。</summary>
-    const float BranchIslandOffsetX = 160f;
-    /// <summary>支线岛的槽位 y（照主线槽位 1-1/1-2 的预制体 y，纵向对齐）。</summary>
-    static readonly float[] BranchIslandY = { -64f, 82f };
-    /// <summary>未解锁支线岛的名字占位。</summary>
-    const string BranchIslandLockedName = "？？？";
+    /// <summary>主人手摆的支线示例节点名（关卡/支线，克隆源 + 摆位真源；运行时隐藏原件只留克隆）。</summary>
+    const string BranchIslandSampleNodeName = "支线";
+    /// <summary>两个支线岛之间的纵向间距（照主线槽位节奏 146；嫌大嫌小只改这一个数）。</summary>
+    const float BranchIslandSpacing = 146f;
+
+    // ── 主线宝箱 lifecycle 动画节奏（2026-10-23 主人拍板：通关未领=开启图可点领奖，领取完变灰→下移消失、
+    //    上面槽位补位、新当前关从小到大开启+感叹号蹦出颤一下；实现与常量在 ChestNodes，嫌快嫌慢改这组数）──
+    /// <summary>打完变灰停留时长（秒）：灰状态停一拍让人看清「已领取」，再开始下移。</summary>
+    const float BranchGrayHoldDur = 0.55f;
+    /// <summary>打完退场时长（秒）：往下滑出 + 淡出。</summary>
+    const float BranchExitDur = 0.45f;
+    /// <summary>打完退场下滑距离（像素）。</summary>
+    const float BranchExitSlide = 230f;
+    /// <summary>新岛开启时长（秒）：从小到大 + 透明到出现。</summary>
+    const float BranchGrowDur = 0.4f;
+    /// <summary>新岛开启起始缩放（相对基准的倍数）。</summary>
+    const float BranchGrowFromScale = 0.15f;
+    /// <summary>徽章蹦出总时长（秒）。</summary>
+    const float BranchBadgePopDur = 0.4f;
+
+    /// <summary>支线岛剧情节点图（2026-10-23 主人拍板：56字符 guid 一律不管，图全部路径加载，不依赖 prefab guid 引用）。</summary>
+    static readonly string BranchStorySpritePath = ChestResDir + "剧情";
+    /// <summary>「可接」徽章图（感叹号；可接时显示，打完隐藏，路径加载）。</summary>
+    const string BranchBadgeSpritePath = ChestResDir + "感叹号徽章_128";
+
+    // ── 剧情节点浮动摆动（仅可接时动，打完灰掉静止；幅度都调小，嫌大嫌小只改这四个数）──
+    /// <summary>上下浮动幅度（像素）。</summary>
+    const float BranchNodeBobAmp = 4f;
+    /// <summary>上下浮动速度（弧度/秒）。</summary>
+    const float BranchNodeBobSpeed = 1.6f;
+    /// <summary>左右微摆角度（度）。</summary>
+    const float BranchNodeRotAmp = 4f;
+    /// <summary>左右微摆速度（弧度/秒）。</summary>
+    const float BranchNodeRotSpeed = 1.1f;
 
     Transform _branchIslandRoot;
     /// <summary>支线岛浮动组件缓存（EnsureBranchIslands 建好后记下；瘦屏重排/还原写它的 basePos）。</summary>
     BranchIslandFloater _branchFloater;
+    /// <summary>示例节点在关卡容器里的预制位（岛1基准 = 它；还原/重建用）。</summary>
+    Vector2 _branchSampleBasePos;
     readonly List<Transform> _branchIslands = new List<Transform>(BranchIslandCount);
     readonly List<Image> _branchIslandChests = new List<Image>(BranchIslandCount);
+    /// <summary>「可接」徽章（prefab 里主人摆的 剧情/可接 节点，随浮动一起动；下标与岛槽对齐）。</summary>
+    readonly List<Image> _branchIslandBadges = new List<Image>(BranchIslandCount);
     readonly List<Image> _branchIslandIslandImgs = new List<Image>(BranchIslandCount);
     readonly List<Text> _branchIslandLabels = new List<Text>(BranchIslandCount);
     bool _branchIslandsMissingReported;
@@ -55,8 +89,9 @@ public partial class AdventureUI
                     : (SaveSystem.Instance?.Data?.branchRoll2 ?? 0);
 
     /// <summary>
-    /// 建支线岛容器与两个岛（只建一次）。克隆主线槽位 1-1 保结构（岛/宝箱/名牌 + scale 0.7），
-    /// 位置摆到主线槽位列右侧固定处（BranchIslandOffsetX / BranchIslandY）。
+    /// 建支线岛容器与两个岛（只建一次）。克隆主人手摆的「支线」示例保结构
+    /// （岛/剧情/可接徽章/名牌 + scale 0.7），岛1 = 示例原位，岛2 = 上方一个槽位节奏；
+    /// 示例本体克隆完即隐藏（模板只留克隆件，游戏里不双份显示）。
     /// </summary>
     void EnsureBranchIslands()
     {
@@ -73,7 +108,7 @@ public partial class AdventureUI
             return;
         }
 
-        // 克隆源：主线槽位（关卡 容器下第一个「数字-数字」命名节点）
+        // 克隆源：主人手摆的「支线」示例节点（关卡 容器下）
         Transform srcSlot = null;
         Transform guanka = null;
         for (int i = 0; i < mainNode.childCount; i++)
@@ -85,7 +120,7 @@ public partial class AdventureUI
             for (int k = 0; k < guanka.childCount; k++)
             {
                 var s = guanka.GetChild(k);
-                if (Regex.IsMatch(s.name, @"^\d+-\d+$")) { srcSlot = s; break; }
+                if (s.name == BranchIslandSampleNodeName) { srcSlot = s; break; }
             }
         }
         if (srcSlot == null)
@@ -93,10 +128,12 @@ public partial class AdventureUI
             if (!_branchIslandsMissingReported)
             {
                 _branchIslandsMissingReported = true;
-                Debug.LogError("[AdventureUI] 主线/关卡 下找不到槽位节点（数字-数字），支线岛没有克隆源（缺真值不兜底）");
+                Debug.LogError($"[AdventureUI] 主线/关卡 下找不到示例节点「{BranchIslandSampleNodeName}」，支线岛没有克隆源（缺真值不兜底）");
             }
             return;
         }
+        if (srcSlot is RectTransform sampleRt)
+            _branchSampleBasePos = sampleRt.anchoredPosition;   // 岛1基准 = 示例原位
 
         // 容器：与关卡容器同锚同位（内部坐标和槽位同系，摆位常量直接可用）
         var srcRt = srcSlot.parent as RectTransform;
@@ -128,7 +165,8 @@ public partial class AdventureUI
             var clone = Instantiate(srcSlot, rt);
             clone.name = "支线岛_" + (i + 1);
             var crt = clone as RectTransform;
-            crt.anchoredPosition = new Vector2(BranchIslandOffsetX, BranchIslandY[i]);
+            // 岛1 = 示例原位，岛2 = 上方一个槽位节奏（间距不随屏幕拉伸）
+            crt.anchoredPosition = _branchSampleBasePos + new Vector2(0f, i * BranchIslandSpacing);
 
             // 克隆自带槽位的 CanvasGroup（边缘槽位 alpha 0.7）→ 重置成不透明可交互
             var cg = clone.GetComponent<CanvasGroup>();
@@ -138,14 +176,18 @@ public partial class AdventureUI
             cg.blocksRaycasts = true;
 
             var islandImg = clone.Find("岛")?.GetComponent<Image>();
-            var chestImg = clone.Find("宝箱")?.GetComponent<Image>();
+            var chestImg = clone.Find("剧情")?.GetComponent<Image>();
             var label = clone.Find("bg/Text (Legacy)")?.GetComponent<Text>();
             var slotBg = clone.Find("bg")?.GetComponent<Image>();
+            // 「可接」徽章：prefab 里主人摆好的（剧情/可接），直接引用
+            var badgeImg = clone.Find("剧情/可接")?.GetComponent<Image>();
 
-            // 槽位克隆前射线全关（防挡滑动翻章）；支线岛要可点 → 岛/宝箱/名牌的射线打开
+            // 槽位克隆前射线全关（防挡滑动翻章）；支线岛要可点 → 岛/剧情/名牌的射线打开
             if (islandImg != null) islandImg.raycastTarget = true;
             if (chestImg != null) chestImg.raycastTarget = true;
             if (slotBg != null) slotBg.raycastTarget = true;
+            if (badgeImg != null) badgeImg.raycastTarget = false;   // 徽章纯装饰，不挡点击
+            _branchIslandBadges.Add(badgeImg);
 
             var btn = clone.GetComponent<Button>();
             if (btn == null) btn = clone.gameObject.AddComponent<Button>();
@@ -155,6 +197,9 @@ public partial class AdventureUI
             int idx = i;
             btn.onClick.AddListener(() => OnClickBranchIsland(idx));
 
+            // 剧情节点摆动注册（可接时浮动+微摆；打完复位静止；下标与岛槽对齐）
+            floater.RegisterWobble(chestImg != null ? (RectTransform)chestImg.transform : null);
+
             floater.slots.Add(crt);
             floater.basePos.Add(crt.anchoredPosition);
             _branchIslands.Add(clone);
@@ -162,23 +207,33 @@ public partial class AdventureUI
             _branchIslandIslandImgs.Add(islandImg);
             _branchIslandLabels.Add(label);
         }
+        // 示例本体隐藏（模板只留克隆件，游戏里不双份显示）
+        srcSlot.gameObject.SetActive(false);
         GameFonts.ApplyToHierarchy(rt);
     }
 
     /// <summary>
     /// 支线岛状态刷新（RefreshAll 调，仅主线模式显示）：
-    /// 名字（未解锁「？？？」/ 支线地图名）+ 银箱三态（未解锁/待打/已通关）+ 岛图 + 灰暗度。
+    /// 名字（支线地图名）+ 剧情节点图（可接原色/打完灰）+ 可接徽章（打完隐藏）+ 岛图 + 灰暗度。
+    /// 2026-10-23 主人拍板回退：lifecycle 动画（下移消失/补位/开启）只属于主线宝箱，支线岛不做。
     /// </summary>
     void RefreshBranchIslands()
     {
         EnsureBranchIslands();
         if (_branchIslandRoot == null) return;
-        bool show = _selectedMode == 0;
+        // 2026-10-23 主人「右边那几个岛在前期不会出现支线」：还没派定的岛不出现（不再摆「？？？」空岛），
+        // 两个岛槽全未派定（第 1 章未通关的前期）整组隐藏。
+        var data = SaveSystem.Instance?.Data;
+        bool anyAssignedEarly = false;
+        for (int i = 0; i < BranchIslandCount; i++)
+        {
+            if (BranchIslandIdOf(i) > 0) { anyAssignedEarly = true; break; }
+        }
+        bool show = _selectedMode == 0 && anyAssignedEarly;
         if (_branchIslandRoot.gameObject.activeSelf != show)
             _branchIslandRoot.gameObject.SetActive(show);
         if (!show) return;
 
-        var data = SaveSystem.Instance?.Data;
         for (int i = 0; i < _branchIslands.Count && i < BranchIslandCount; i++)
         {
             int islandId = BranchIslandIdOf(i);
@@ -186,29 +241,39 @@ public partial class AdventureUI
             var isl = unlocked ? SideIslandDefs.Get(islandId) : null;
             bool cleared = unlocked && data != null && data.HasClearedSideIsland(islandId);
 
+            // 未派定的岛槽直接隐藏（不显示「？？？」占位）
+            var slotGo = _branchIslands[i].gameObject;
+            if (slotGo.activeSelf != unlocked)
+                slotGo.SetActive(unlocked);
+            if (!unlocked) continue;
+
             var lbl = _branchIslandLabels[i];
             if (lbl != null)
-                lbl.text = isl != null ? isl.name : BranchIslandLockedName;
+                lbl.text = isl != null ? isl.name : "？？？";
 
-            // 宝箱三态（银箱，区分主线木箱）
+            // 剧情节点图：路径加载（2026-10-23 主人拍板「56字符一律不管，全部路径加载」）
+            // 可接原色；打完灰掉（ChestClearedTint，与主线宝箱同色）
             var chestImg = _branchIslandChests[i];
             if (chestImg != null)
             {
-                int state = !unlocked ? ChestStateLocked
-                          : cleared ? ChestStateOpen
-                          : ChestStateClosed;
-                var sp = LoadChestSprite(ChestSilverPaths[state]);
-                if (sp != null)
-                {
-                    chestImg.sprite = sp;
-                    chestImg.color = Color.white;
-                }
-                else
-                {
-                    chestImg.color = new Color(1f, 1f, 1f, 0.15f);
-                    Debug.LogError($"[AdventureUI] 支线宝箱图缺失：{ChestSilverPaths[state]}");
-                }
+                var sp = LoadChestSprite(BranchStorySpritePath);
+                if (sp != null) chestImg.sprite = sp;
+                chestImg.color = cleared ? ChestClearedTint : Color.white;
             }
+
+            // 「可接」徽章：可接显示，打完隐藏；图同样路径加载
+            bool wantBadge = !cleared;
+            var badge = _branchIslandBadges[i];
+            if (badge != null)
+            {
+                var bsp = LoadChestSprite(BranchBadgeSpritePath);
+                if (bsp != null) badge.sprite = bsp;
+                if (badge.gameObject.activeSelf != wantBadge)
+                    badge.gameObject.SetActive(wantBadge);
+            }
+
+            // 浮动+微摆只在可接时跑；打完（灰）静止复位
+            _branchFloater?.SetWobble(i, wantBadge);
 
             // 岛图轮换（岛1/岛2 各一张，跟主线槽位同素材目录）
             var islandImg = _branchIslandIslandImgs[i];
@@ -218,12 +283,10 @@ public partial class AdventureUI
                 if (islandSp != null) islandImg.sprite = islandSp;
             }
 
-            // 灰暗度：待打全亮；已通关微暗；未解锁压暗
+            // 灰暗度：待打全亮；已通关微暗
             var cg = _branchIslands[i].GetComponent<CanvasGroup>();
             if (cg != null)
-                cg.alpha = !unlocked ? 0.45f
-                         : cleared ? 0.85f
-                         : 1f;
+                cg.alpha = cleared ? 0.85f : 1f;
         }
     }
 
@@ -278,39 +341,58 @@ public partial class AdventureUI
     }
 
     // ────────────────────────────────────────────────────
-    // 瘦屏支线岛重排（AdventureUI.Fit.FitMainColumnStretch 调用）：
-    // 支线岛容器与关卡容器同锚同位（克隆时复制）→ 岛槽与主线槽位同一参考系，
-    // Fit 用主列跨度算出带内节奏 y 后写进 floater.basePos（浮动基准）——
-    // 不绕过浮动动画，浮动照常围绕新基准做正弦。标准屏 / 关开关走 RestoreBranchIslandBaseY。
+    // 支线岛摆位（2026-10-23 主人拍板「按我摆放的位置，岛之间的距离不变」）：
+    // 岛1 = 示例节点原位，岛2 = 上方一个槽位节奏；瘦屏不拉伸支线岛（Fit 不再调 Apply）。
+    // 标准屏 / 关开关走 RestoreBranchIslandBaseY 复位。
     // ────────────────────────────────────────────────────
 
-    /// <summary>瘦屏重排：按 ysLocal（关卡容器帧 y）改写支线岛浮动基准；x 保持横向偏移不动。</summary>
-    public void ApplyBranchIslandStretchY(IReadOnlyList<float> ysLocal)
-    {
-        if (_branchFloater == null || ysLocal == null) return;
-        for (int i = 0; i < _branchFloater.basePos.Count && i < ysLocal.Count; i++)
-            _branchFloater.basePos[i] = new Vector2(_branchFloater.basePos[i].x, ysLocal[i]);
-    }
-
-    /// <summary>还原支线岛浮动基准到预制体口径（BranchIslandOffsetX / BranchIslandY）。</summary>
+    /// <summary>还原支线岛浮动基准到示例口径（岛1 = 示例原位，岛2 = 上方一个槽位节奏）。</summary>
     public void RestoreBranchIslandBaseY()
     {
         if (_branchFloater == null) return;
-        for (int i = 0; i < _branchFloater.basePos.Count && i < BranchIslandY.Length; i++)
-            _branchFloater.basePos[i] = new Vector2(BranchIslandOffsetX, BranchIslandY[i]);
+        for (int i = 0; i < _branchFloater.basePos.Count; i++)
+            _branchFloater.basePos[i] = _branchSampleBasePos + new Vector2(0f, i * BranchIslandSpacing);
     }
 
     /// <summary>
     /// 支线岛浮动（照主线槽位同款正弦：SlotFloatAmp/SlotFloatSpeed 复用，相位错开不同步起落）。
     /// 独立组件挂在支线岛容器上，不混进 ChestNodes 的槽位列表（那边有自己的浮动管理）。
+    /// 2026-10-23 增补：剧情节点（宝箱位）自身的浮动+微摆（BranchNode* 常量，幅度小），
+    /// 仅「可接」时跑；打完灰掉后复位静止。
     /// </summary>
     sealed class BranchIslandFloater : MonoBehaviour
     {
         public readonly List<RectTransform> slots = new List<RectTransform>();
         public readonly List<Vector2> basePos = new List<Vector2>();
+
+        // 剧情节点摆动（下标与岛槽对齐；允许 null 占位）
+        readonly List<RectTransform> wobbleNodes = new List<RectTransform>();
+        readonly List<Vector3> wobbleBasePos = new List<Vector3>();
+        readonly List<bool> wobbleActive = new List<bool>();
         float _phase;
 
         void Awake() => _phase = UnityEngine.Random.Range(0f, 6.28f);
+
+        /// <summary>注册剧情节点（建岛时一次；基准取注册时的预制体 localPose）。</summary>
+        public void RegisterWobble(RectTransform node)
+        {
+            wobbleNodes.Add(node);
+            wobbleBasePos.Add(node != null ? node.localPosition : Vector3.zero);
+            wobbleActive.Add(false);
+        }
+
+        /// <summary>切换摆动开关；关时把节点复位回预制体姿势（只复位一次，不逐帧写）。</summary>
+        public void SetWobble(int idx, bool active)
+        {
+            if (idx < 0 || idx >= wobbleNodes.Count) return;
+            if (wobbleNodes[idx] == null || wobbleActive[idx] == active) return;
+            wobbleActive[idx] = active;
+            if (!active)
+            {
+                wobbleNodes[idx].localPosition = wobbleBasePos[idx];
+                wobbleNodes[idx].localRotation = Quaternion.identity;
+            }
+        }
 
         void Update()
         {
@@ -321,6 +403,16 @@ public partial class AdventureUI
                 var p = slots[i].anchoredPosition;
                 p.y = basePos[i].y + Mathf.Sin(t * SlotFloatSpeed + i * 1.57f) * SlotFloatAmp;
                 slots[i].anchoredPosition = p;
+            }
+            for (int i = 0; i < wobbleNodes.Count; i++)
+            {
+                if (!wobbleActive[i] || wobbleNodes[i] == null) continue;
+                var n = wobbleNodes[i];
+                var lp = wobbleBasePos[i];
+                lp.y += Mathf.Sin(t * BranchNodeBobSpeed + i * 1.9f) * BranchNodeBobAmp;
+                n.localPosition = lp;
+                n.localRotation = Quaternion.Euler(0f, 0f,
+                    Mathf.Sin(t * BranchNodeRotSpeed + i * 1.3f) * BranchNodeRotAmp);
             }
         }
     }

@@ -100,8 +100,10 @@ public partial class AdventureUI
                 var wmBtnRestore = mainNodeRestore != null ? mainNodeRestore.Find("WorldMapBtn") as RectTransform : null;
                 if (wmBtnRestore != null) RestoreAdventureBase(wmBtnRestore);
                 // 主线列表瘦屏重排的还原（槽位浮动基准 / 支线岛基准；列表未绑定时内部自动 no-op）
+                ShrinkSlotCount(4);   // 克隆增补的槽位撤掉，窗口回到预制体 4 槽
                 RestoreSlotColumnBaseY();
                 RestoreBranchIslandBaseY();
+                RestoreAdventureSidebarEven();
                 RestoreAdventureSidebarOrder(right);
                 return;
             }
@@ -129,6 +131,8 @@ public partial class AdventureUI
             // 改动 5 配套：预制体里 LeftSidebar 排在 RightContent 前面（下层），
             // 地图图左扩后会盖住「主线冒险」按钮 → 把左侧栏抬到 RightContent 之上、DetailPanel 之下。
             FitAdventureSidebarAboveMap(right);
+            // 2026-10-23 主人「左列的标签没有统一位置」：ModeBtn 预制体 y 乱序，瘦屏下等分间距。
+            FitSidebarEvenSpacing();
 
             if (right != null)
             {
@@ -594,6 +598,9 @@ public partial class AdventureUI
     /// <summary>主线列表重排的缺失/异常只报一次（不影响幂等——重排本身始终从 base 重算）。</summary>
     bool _mainColumnStretchWarned;
 
+    /// <summary>主列重排诊断只打一次（瘦屏槽位容量排查）。</summary>
+    bool _mainColDiagLogged;
+
     void WarnMainColumnOnce(string reason)
     {
         if (_mainColumnStretchWarned) return;
@@ -722,23 +729,102 @@ public partial class AdventureUI
             return;
         }
 
-        // 预制体节奏插值：frac = 预制体 y 在主列跨度里的位置（0=底槽 1=顶槽）
+        // 预制体节奏（平均槽间距）：任何屏幕都按它排，间距永不拉伸
         float spanPrefab = prefabPos[prefabPos.Count - 1].y - prefabPos[0].y;
-        var ys = new List<float>(prefabPos.Count);
-        for (int i = 0; i < prefabPos.Count; i++)
+
+        // 2026-10-23 主人「按我摆放的位置 岛之间的距离不变，拉长的屏幕中岛应该变多」：
+        // 任何屏幕都按预制体节奏排（间距永不拉伸），带内装得下几个就摆几个（上限=每大关小关数），
+        // 列底贴「面板顶+设计底间距」，多余高度留给顶部标题栏下方。
+        float rhythmPrefab = spanPrefab / (prefabPos.Count - 1);
+        int wantRaw = Mathf.FloorToInt((bandTop - bandBottom) / Mathf.Max(1f, rhythmPrefab)) + 1;
+        int slotCount = EnsureSlotCount(wantRaw);
+        // 一次性诊断（2026-10-23 主人报「改后没变化」：真机把这条发回来即可定位是带算小了还是没跑到）
+        if (!_mainColDiagLogged)
         {
-            float frac = spanPrefab > 1e-3f ? (prefabPos[i].y - prefabPos[0].y) / spanPrefab : 0f;
-            ys.Add(Mathf.Lerp(bandBottom, bandTop, frac) - gPivotNow);   // root y → 关卡容器帧本地 y
+            _mainColDiagLogged = true;
+            Debug.Log($"[AdventureFit] 主列重排诊断 H={H:F0} bandBottom={bandBottom:F0} bandTop={bandTop:F0} " +
+                      $"rhythm={rhythmPrefab:F0} want={wantRaw} slotCount={slotCount} prefab={prefabPos.Count}");
         }
+
+        var ys = new List<float>(slotCount);
+        for (int i = 0; i < slotCount; i++)
+            ys.Add(bandBottom + i * rhythmPrefab - gPivotNow);   // root y → 关卡容器帧本地 y
+        if (slotCount != prefabPos.Count)
+            RefreshChestNodes();   // 补/撤槽后内容窗口变了，立刻刷新把各关三态铺上，不等下次 ShowPage
         ApplySlotColumnStretchY(ys);
 
-        // 支线岛：同参考系（容器与关卡容器同锚同位 → pivot 点重合），frac 沿主列跨度插值
-        var islandYs = new List<float>(BranchIslandY.Length);
-        for (int i = 0; i < BranchIslandY.Length; i++)
+        // 支线岛不参与瘦屏重排（2026-10-23 主人拍板：按示例摆位，间距不变），
+        // 若此前被拉伸过（旧版本改动）这里复位一次。
+        RestoreBranchIslandBaseY();
+    }
+
+    // ────────────────────────────────────────────────────
+    // 左列模式按钮等间距（2026-10-23 主人「左列的标签没有统一位置」）
+    // 病根（prefab 实测）：ModeBtn_0..4 的 y = -87/-276/-185/-393/-503，间距 189/-91/208/110 乱序不均。
+    // 治法：保持视觉顺序（按 y 高→低）与首尾两端不动，中间等分间距 —— 按钮点击绑定按节点走，
+    // 挪位置不影响 _selectedMode 语义。只在瘦屏适配路径调用；标准屏/关开关走 RestoreAdventureSidebarEven。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>等间距处理过的模式按钮（还原用；按 instanceID 存在 _adventureUiBase 里）。</summary>
+    readonly List<RectTransform> _sidebarEvenBtns = new List<RectTransform>();
+    /// <summary>左列等间距诊断只打一次的开关。</summary>
+    static bool _sidebarDiagLogged;
+
+    void FitSidebarEvenSpacing()
+    {
+        var left = transform.Find("LeftSidebar");
+        if (left == null) return;
+        _sidebarEvenBtns.Clear();
+
+        // 收集 ModeBtn_*（RectTransform + base pos.y），按 y 降序（屏幕高→低）
+        var btns = new List<(RectTransform rt, float y)>();
+        for (int i = 0; i < left.childCount; i++)
         {
-            float frac = spanPrefab > 1e-3f ? (BranchIslandY[i] - prefabPos[0].y) / spanPrefab : 0f;
-            islandYs.Add(Mathf.Lerp(bandBottom, bandTop, frac) - gPivotNow);
+            var c = left.GetChild(i) as RectTransform;
+            if (c == null || !c.name.StartsWith("ModeBtn_", StringComparison.Ordinal)) continue;
+            var b = CaptureAdventureBase(c);
+            // 单点锚：pos.y = (offsetMin.y + offsetMax.y) / 2
+            btns.Add((c, (b.offsetMin.y + b.offsetMax.y) * 0.5f));
         }
-        ApplyBranchIslandStretchY(islandYs);
+        if (btns.Count < 3) return;   // 少于 3 个没有「中间」可等分
+        btns.Sort((a, b) => b.y.CompareTo(a.y));
+
+        // 一次性诊断（2026-10-23 主人报「间距不均匀」还在：真机/编辑器把这条发回来即可定位）
+        if (!_sidebarDiagLogged)
+        {
+            _sidebarDiagLogged = true;
+            var sb = new System.Text.StringBuilder("[AdventureFit] 左列等间距诊断 btns=");
+            sb.Append(btns.Count);
+            for (int i = 0; i < btns.Count; i++)
+                sb.Append($"  {btns[i].rt.name}:y={btns[i].y:F0}");
+            Debug.Log(sb.ToString());
+        }
+
+        // 首尾不动，中间等分
+        float top = btns[0].y, bot = btns[btns.Count - 1].y;
+        float step = (top - bot) / (btns.Count - 1);
+        for (int k = 0; k < btns.Count; k++)
+        {
+            var rt = btns[k].rt;
+            _sidebarEvenBtns.Add(rt);
+            var b = CaptureAdventureBase(rt);
+            float target = top - k * step;
+            float delta = target - btns[k].y;
+            if (Mathf.Abs(delta) < 0.5f) continue;
+            rt.offsetMin = new Vector2(b.offsetMin.x, b.offsetMin.y + delta);
+            rt.offsetMax = new Vector2(b.offsetMax.x, b.offsetMax.y + delta);
+            b.applied = true;
+            _adventureUiBase[rt.GetInstanceID()] = b;
+        }
+    }
+
+    /// <summary>左列等间距回退：把等分处理过的按钮还原到预制体 y（没处理过则 no-op）。</summary>
+    void RestoreAdventureSidebarEven()
+    {
+        for (int i = 0; i < _sidebarEvenBtns.Count; i++)
+        {
+            if (_sidebarEvenBtns[i] != null) RestoreAdventureBase(_sidebarEvenBtns[i]);
+        }
+        _sidebarEvenBtns.Clear();
     }
 }

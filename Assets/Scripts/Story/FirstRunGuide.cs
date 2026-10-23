@@ -1483,6 +1483,9 @@ public class FirstRunGuide : MonoBehaviour
         return false;
     }
 
+    /// <summary>测量诊断只打一次（瘦屏引导圈偏位排查用：把真机上的画布/相机口径发回来定位）。</summary>
+    static bool _measureDiagLogged;
+
     bool Measure(out float minX, out float maxX, out float minY, out float maxY)
     {
         minX = maxX = minY = maxY = 0f;
@@ -1490,11 +1493,31 @@ public class FirstRunGuide : MonoBehaviour
         if (root == null || _target == null) return false;
         if (!IsVisibleHierarchy(_target.gameObject)) return false;
 
+        // 2026-10-23 主人报「引导让点击的位置也偏了」：
+        // 反变换（屏幕→引导根本地）必须用「真正渲染引导根的那个画布」的相机 ——
+        // 引导根自带画布用其 worldCamera；嵌在宿主页里没有自己的画布时用宿主画布的 worldCamera；
+        // Overlay 画布传 null（API 走覆盖分支）。旧逻辑兜底 ResolveUiCamera()（=Camera.main），
+        // 它和引导/目标画布实际渲染相机不同时，两次坐标换算走不同投影，瘦屏/异形屏上引导圈会错位。
         var followCanvas = _target.GetComponentInParent<Canvas>();
-        Camera hintCam = _canvas != null ? _canvas.worldCamera : UICanvasSetup.ResolveUiCamera();
-        Camera followCam = followCanvas != null ? followCanvas.worldCamera : hintCam;
-        if (followCam == null) followCam = hintCam;
-        if (hintCam == null) return false;
+        Camera followCam = followCanvas != null
+            ? (followCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : followCanvas.worldCamera)
+            : null;
+        Canvas hostCanvas = _canvas != null ? _canvas : GetComponentInParent<Canvas>();
+        Camera hintCam;
+        if (hostCanvas == null)
+            hintCam = UICanvasSetup.ResolveUiCamera();
+        else if (hostCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
+            hintCam = null;   // 覆盖画布：null 才是它真实的屏幕映射
+        else
+            hintCam = hostCanvas.worldCamera != null && hostCanvas.worldCamera.isActiveAndEnabled
+                ? hostCanvas.worldCamera
+                : UICanvasSetup.ResolveUiCamera();
+        if (followCam == null && followCanvas != null
+            && followCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            followCam = hintCam;   // 目标画布是 SSC 但没绑相机：退回引导侧相机，总比 null 强
+        if (followCam == null && hintCam == null && followCanvas != null
+            && followCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            return false;
 
         var corners = new Vector3[4];
         _target.GetWorldCorners(corners);
@@ -1510,6 +1533,15 @@ public class FirstRunGuide : MonoBehaviour
             maxX = Mathf.Max(maxX, local.x);
             minY = Mathf.Min(minY, local.y);
             maxY = Mathf.Max(maxY, local.y);
+        }
+        if (!_measureDiagLogged)
+        {
+            _measureDiagLogged = true;
+            Debug.Log($"[FirstRunGuide] 测量诊断 target={_target.name} " +
+                      $"follow=({followCanvas?.name},{followCanvas?.renderMode},{(followCam != null ? followCam.name : "null")}) " +
+                      $"host=({hostCanvas?.name},{hostCanvas?.renderMode},{(hintCam != null ? hintCam.name : "null")}) " +
+                      $"rootRect={root.rect} hole=({minX:F0},{minY:F0})-({maxX:F0},{maxY:F0}) " +
+                      $"screen={Screen.width}x{Screen.height}");
         }
         return maxX > minX && maxY > minY;
     }

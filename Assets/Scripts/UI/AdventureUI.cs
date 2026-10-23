@@ -249,6 +249,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         if (!_preloaded) PreloadOnce();
         EnsureVisibleTransform();
         gameObject.SetActive(true);
+        ClearStaleClaimAnim();   // 页面隐藏会杀领取退场协程：进页清标志，刷新自己收尾
         transform.SetAsLastSibling();
         TavernUI.SetGuildHallOverlayMode(true);
         TownPageDim.Ensure(transform);
