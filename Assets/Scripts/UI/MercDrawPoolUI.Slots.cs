@@ -18,7 +18,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
         // 预制体格（有卡组模板结构）走填充，不销毁子节点；非预制体格不该出现，直接报错
         if (slot.transform.Find("Iconmask") != null)
         {
-            RefreshPrefabPoolSlot(slot, open, hireId);
+            RefreshPrefabPoolSlot(slot, index, open, hireId);
             return;
         }
 
@@ -32,7 +32,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     /// 卡框 <see cref="MercHireSession.LoadTavernCardFrame"/> / 名字底牌 <see cref="MercHireSession.LoadTavernNamePlate"/>，
     /// 只换图不代码改色）。
     /// </summary>
-    void RefreshPrefabPoolSlot(GameObject slot, bool open, string hireId)
+    void RefreshPrefabPoolSlot(GameObject slot, int index, bool open, string hireId)
     {
         // 替换点选标记（SwapSel）不残留：每次重刷先清，点选态由 Refresh 末尾统一重打
         var staleMark = slot.transform.Find("SwapSel");
@@ -83,7 +83,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
             }
             if (nameT != null)
             {
-                nameT.text = open ? "空格" : "暂未开启";
+                // 锁格名字直接显示解锁条件（2026-10-23：第 4 格通关第 2 章、第 5 格 100 钻）
+                nameT.text = open ? "空格" : LockHintOf(index);
                 if (_slotDefaultNameColors.TryGetValue(slot, out var defColor))
                     nameT.color = defColor;
             }
@@ -163,10 +164,12 @@ public partial class MercDrawPoolUI : MonoBehaviour
         }
     }
 
-    /// <summary>锁格提示（第 4 格 = 通关第 2 章、第 5 格 = 通关第 3 章，条件在 SaveData.DrawPoolSlots）。</summary>
+    /// <summary>
+    /// 锁格提示（第 4 格 = 通关第 2 章；第 5 格 = 2026-10-23 主人拍板改 100 钻解锁，条件在 SaveData.DrawPoolSlots）。
+    /// </summary>
     static string LockHintOf(int index)
     {
-        return index == 3 ? "通关第 2 章" : index == 4 ? "通关第 3 章" : "";
+        return index == 3 ? "通关第 2 章" : index == 4 ? $"花费{SaveData.DrawPoolPaidUnlockCost}钻石解锁" : "";
     }
 
     // ============================================================

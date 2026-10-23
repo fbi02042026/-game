@@ -278,22 +278,39 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 刷新按钮顶上的冷却提示（2026-10-17 主人拍板）：可刷新时不显示文字；
-    /// 冷却中按钮灰显、按钮顶上显示倒计时（2026-10-18 主人要求改 HH:MM:SS 时分秒格式），
-    /// 由 CoRefreshCountdown 每秒驱动，冷却走完这一秒顺带把按钮点亮（不必等下次 RefreshAll）。
+    /// 刷新按钮两态（2026-10-23 主人拍板）：
+    /// 免费可刷 → Label「刷新佣兵」，icon/价格隐藏，今天剩余次数常显在按钮底部；
+    /// 冷却中且还有钻刷次数 → Label「钻石刷新」+ icon + 价格，按钮保持可点（点了花钻立即刷）；
+    /// 冷却中且次数用完 → 回「刷新佣兵」灰显，按钮顶上照旧倒计时。
     /// </summary>
     void UpdateRefreshCostText()
     {
-        bool canRefresh = MercHireSession.CanManualRefresh(out int remainSec);
+        bool canFree = MercHireSession.CanManualRefresh(out int remainSec);
+        bool canDiamond = MercHireSession.CanDiamondRefresh(out int usedToday, out int diamondCost);
+        int leftToday = MercHireSession.DiamondRefreshPerDay - usedToday;
+        bool diamondMode = !canFree && canDiamond;
+
         if (refreshCostText != null)
-            refreshCostText.text = canRefresh ? "" : $"{remainSec / 3600:D2}:{remainSec / 60 % 60:D2}:{remainSec % 60:D2}";
+            refreshCostText.text = canFree ? "" : $"{remainSec / 3600:D2}:{remainSec / 60 % 60:D2}:{remainSec % 60:D2}";
         if (refreshButton != null)
         {
-            refreshButton.interactable = canRefresh;
+            refreshButton.interactable = canFree || canDiamond;
             var img = refreshButton.targetGraphic as Image;
             if (img != null)
-                img.color = canRefresh ? Color.white : new Color(0.45f, 0.45f, 0.45f, 1f);
+                img.color = (canFree || canDiamond) ? Color.white : new Color(0.45f, 0.45f, 0.45f, 1f);
+            var label = refreshButton.GetComponentInChildren<Text>();
+            if (label != null && label != _diamondCostText && label != _diamondLeftText)
+                label.text = diamondMode ? "钻石刷新" : "刷新佣兵";
         }
+        if (_diamondIcon != null)
+            _diamondIcon.gameObject.SetActive(diamondMode);
+        if (_diamondCostText != null)
+        {
+            _diamondCostText.gameObject.SetActive(diamondMode);
+            if (diamondMode) _diamondCostText.text = diamondCost.ToString();
+        }
+        if (_diamondLeftText != null)
+            _diamondLeftText.text = leftToday > 0 ? $"今日剩{leftToday}次" : "今日已用完";
     }
 
     /// <summary>把 RefreshCost 文字挪到刷新按钮顶边上方（按钮内原位会跟按钮文字打架）。幂等。</summary>
@@ -890,17 +907,30 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
 
     void OnRefresh()
     {
-        if (!MercHireSession.CanManualRefresh(out int remain))
+        // 【2026-10-23 主人拍板】免费冷却好了 → 原免费刷新；冷却中 → 走钻石刷新（每天 2 次，50/100 钻）。
+        if (MercHireSession.CanManualRefresh(out int remain))
         {
-            // 冷却提示与按钮顶上倒计时统一时分秒口径（2026-10-18 主人拍板）
-            UIManager.Instance?.ShowToast($"刷新冷却中（{remain / 3600}:{remain / 60 % 60:D2}:{remain % 60:D2}）", force: true);
+            RerollOffers();
+            MercHireSession.MarkRefreshed();
+            RefreshAll();
+            if (!MaybeToastAppearBanter(force: false, avoidLast: true))
+                UIManager.Instance?.ShowToast("已刷新候选佣兵");
+            ScheduleNextIdleBanter();
             return;
         }
+
+        if (!MercHireSession.CanDiamondRefresh(out _, out int cost))
+        {
+            UIManager.Instance?.ShowToast("今日钻石刷新次数已用完", force: true);
+            return;
+        }
+        if (!MercHireSession.TryDiamondRefresh())
+            return;   // 钻不足时 TrySpend 已弹「钻石不足」，这里不再重复提示
+
         RerollOffers();
-        MercHireSession.MarkRefreshed();
         RefreshAll();
         if (!MaybeToastAppearBanter(force: false, avoidLast: true))
-            UIManager.Instance?.ShowToast("已刷新候选佣兵");
+            UIManager.Instance?.ShowToast($"已花 {cost} 钻石刷新候选佣兵");
         ScheduleNextIdleBanter();
     }
 
@@ -1187,6 +1217,70 @@ public class MercenaryRecruitPopupUI : MonoBehaviour
                 c.goldIconDefault = c.goldIcon.sprite;
         }
         CaptureButtonLooks();
+        EnsureDiamondRefreshNodes();
+    }
+
+    /// <summary>
+    /// 确保刷新按钮上有「钻石刷新」形态节点（2026-10-23 主人拍板，幂等）：
+    /// 左侧钻石 icon（按钮宽 16% 处）+ 右侧价格文字（84% 处）+ 底部「今日剩N次」小字。
+    /// 预制体和代码兜底壳两条路径都从这里补节点，不改预制体文件本身。
+    /// </summary>
+    void EnsureDiamondRefreshNodes()
+    {
+        if (refreshButton == null) return;
+        var btnTf = refreshButton.transform;
+
+        if (_diamondIcon == null)
+        {
+            var t = btnTf.Find("DiamondIcon");
+            _diamondIcon = t != null ? t.GetComponent<Image>() : null;
+        }
+        if (_diamondIcon == null)
+        {
+            _diamondIcon = CreateImg(btnTf, "DiamondIcon", Color.white);
+            var rt = _diamondIcon.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.16f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(28f, 28f);
+            _diamondIcon.sprite = CommonIconSprites.Load("icon_diamond_blue");
+            _diamondIcon.preserveAspect = true;
+            _diamondIcon.raycastTarget = false;
+        }
+
+        if (_diamondCostText == null)
+        {
+            var t = btnTf.Find("DiamondCost");
+            _diamondCostText = t != null ? t.GetComponent<Text>() : null;
+        }
+        if (_diamondCostText == null)
+        {
+            _diamondCostText = CreateTxt(btnTf, "DiamondCost", "50", 18, TextAnchor.MiddleCenter);
+            var rt = _diamondCostText.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.84f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(48f, 24f);
+        }
+
+        if (_diamondLeftText == null)
+        {
+            var t = btnTf.Find("DiamondLeft");
+            _diamondLeftText = t != null ? t.GetComponent<Text>() : null;
+        }
+        if (_diamondLeftText == null)
+        {
+            _diamondLeftText = CreateTxt(btnTf, "DiamondLeft", "今日剩2次", 11, TextAnchor.MiddleCenter);
+            var rt = _diamondLeftText.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(0f, 5f);
+            rt.sizeDelta = new Vector2(160f, 16f);
+            _diamondLeftText.color = new Color(1f, 0.92f, 0.6f, 1f);
+        }
+
+        // 节点刚建好是全显示状态，立即按当前冷却/次数刷一次形态，避免 icon 常显
+        UpdateRefreshCostText();
     }
 
     /// <summary>

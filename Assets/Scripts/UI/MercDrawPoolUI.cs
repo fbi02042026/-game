@@ -427,6 +427,21 @@ public partial class MercDrawPoolUI : MonoBehaviour
         if (index >= slots)
         {
             // 【2026-10-20 主人拍板】点锁格必须弹提示 —— force 弹，防被酒馆气泡/对话压制吞掉
+            // 【2026-10-23 主人拍板】第 5 格（最后一格）在通第 2 章后可花钻解锁：弹确认窗，确认扣钻开格；
+            // 没通第 2 章时按顺序提示先通关（花钻开的一定是最后一格，不乱序）。
+            if (index == SaveData.DrawPoolMaxSlots - 1)
+            {
+                if (data != null && data.CanPaidUnlockDrawPoolSlot)
+                {
+                    TryPaidUnlockLastSlot(data);
+                    return;
+                }
+                if (data == null || !data.HasClearedChapter(2))
+                {
+                    UIManager.Instance?.ShowToast("通关第 2 章后开启", true);
+                    return;
+                }
+            }
             UIManager.Instance?.ShowToast(LockHintOf(index) + "后开启", true);
             return;
         }
@@ -434,6 +449,29 @@ public partial class MercDrawPoolUI : MonoBehaviour
         if (index >= ordered.Count) return;
         if (MercRosterDefs.TryGetByHireId(ordered[index], out var def))
             ShowMercDetail(ordered[index], def);
+    }
+
+    /// <summary>
+    /// 第 5 格（最后一格）花钻解锁（2026-10-23 主人拍板：100 钻）：
+    /// 通用确认弹窗（StaminaConfirmPopup，硬规则：双按钮确认框一律走它）→ 确认后扣钻 + 置位存档 + 刷新。
+    /// </summary>
+    void TryPaidUnlockLastSlot(SaveData data)
+    {
+        int cost = SaveData.DrawPoolPaidUnlockCost;
+        StaminaConfirmPopup.Show("解锁佣兵队列",
+            $"花费 {cost} 钻石解锁最后一个佣兵队列格子？",
+            $"确定解锁（{cost}钻）",
+            () =>
+            {
+                // 弹窗期间存档可能变化，确认时重查条件，防重复解锁/重复扣钻
+                if (!data.CanPaidUnlockDrawPoolSlot) return;
+                if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Diamond, cost, save: false, notify: true))
+                    return;   // 钻不足时 TrySpend 已弹「钻石不足」
+                data.MarkDrawPoolPaidUnlock();
+                SaveSystem.Instance.Save();
+                UIManager.Instance?.ShowToast($"已解锁第 {SaveData.DrawPoolMaxSlots} 格佣兵队列", true);
+                Refresh();
+            });
     }
 
     /// <summary>红「−」= 下架 → 系统立即自动补位（主人拍板「池子最少要补全 会自动补全」）。</summary>
