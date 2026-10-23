@@ -353,6 +353,14 @@ public partial class AdventureUI
         if (_canvasConfigured) return;
         EnsureVisibleTransform();
         TownPageCanvas.Configure(gameObject, 5, stripCanvasWhenNested: true);
+        // 页根自铺（与 CharacterUI.Stage.ConfigureHostCanvasOnce 同一修法）：
+        // AdventureUI.prefab 根节点 RectTransform 序列化为 anchor(0,0)/(0,0)、sizeDelta(0,0)、scale(0,0,0)，
+        // 过去靠本页自带 Canvas 走 UICanvasSetup.Apply 时被 EnsureRootStretch 拉满全屏；
+        // 嵌在大厅下时 TownPageCanvas.Configure 的 nested 分支会把这个 Canvas 销毁（改由大厅 Canvas 驱动），
+        // 之后没人铺页根 ⇒ 整页缩成 0×0、子节点全挤到画布原点
+        //（表现：章节地图缩在屏幕左下角、右侧/上方露出大厅、「开始冒险」按钮被屏幕左缘切掉一半）。
+        // 这里自己补一次拉伸：只定页根的边框，不碰任何子节点坐标，删掉本行即可一键回退。
+        UICanvasSetup.EnsureRootStretch(transform as RectTransform);
         _canvasConfigured = true;
     }
 
