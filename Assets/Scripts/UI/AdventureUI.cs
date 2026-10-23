@@ -44,6 +44,12 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     public static int PendingSideIsland;
 
     /// <summary>
+    /// 终章追查关进本标记（2026-10-23 主人拍板「最后一关后剧情二选一」）：值 = 追查关号（1..2，0=非追查局）。
+    /// 由冒险页追查入口设置；BattleManager.StartNewRunInternal 捕获进 FinaleStageId 后清零（照支线岛口径）。
+    /// </summary>
+    public static int PendingFinaleStage;
+
+    /// <summary>
     /// 徽记副本公开入口：冒险页切到「活动副本」并选中徽记横条后进本
     /// （2026-10-23 拍板「活动副本一拆二」，开放日/每日次数检查在 <see cref="TryEnterBattle"/>）。
     /// </summary>

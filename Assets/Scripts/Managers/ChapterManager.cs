@@ -144,6 +144,36 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
+    /// 终章追查关（2026-10-23 主人拍板「最后一关后剧情二选一，选完再出几关进完整剧情」）：
+    /// 单场 Boss 战（关号 1..2 见 FinaleDefs）。currentChapter = 关的背景篇（act=8 占位，怪池/背景同源复用），
+    /// stageIndex=0 的 Boss 关——结构照抄 StartSideIsland；结算走 FinaleBattleMode.SettleStageClear
+    /// （不进 OnStageComplete 主线链，标记+关后剧情都在自己的链里）。
+    /// </summary>
+    public void StartFinaleStage(int stageId)
+    {
+        var st = FinaleDefs.Get(stageId);
+        if (st == null)
+        {
+            int fixedId = Mathf.Clamp(stageId, 1, FinaleDefs.Count);
+            Debug.LogError($"[ChapterManager] StartFinaleStage：stageId={stageId} 非法，钳到关{fixedId}（定义域 1..{FinaleDefs.Count}）");
+            st = FinaleDefs.Get(fixedId);
+        }
+        currentChapter = Mathf.Clamp(st.act, 1, 8);
+        currentStageIndex = 0;
+        stageMap.Clear();
+        availableNextStages.Clear();
+        var stage = new StageData
+        {
+            stageIndex = 0,
+            type = StageType.Boss,
+            nextStages = new List<int>()
+        };
+        stageMap.Add(stage);
+        availableNextStages.Add(stage);
+        Debug.Log($"[ChapterManager] 终章追查「{st.name}」（关{st.id}）背景第{st.act}篇 单 Boss 关");
+    }
+
+    /// <summary>
     /// 无限裂隙（2026-10-17 主人拍板）：按绝对层数建**单层**关。
     /// 背景章 = 每 5 层轮换现有 8 章资源（怪物文件夹同源，自动跟切）；
     /// 层类型（2026-10-19 主人拍板）：5 的倍数 = BOSS 层（10 的倍数是大 BOSS），
@@ -306,6 +336,10 @@ public class ChapterManager : Singleton<ChapterManager>
         // 支线岛（2026-10-23 合并方案）：同金币本，岛通关不走主线首通/章推进/派定——
         // 全在 SideIslandBattleMode.SettleStageClear 自己的链里（发奖 + MarkSideIslandCleared + 派第二岛）
         if (BattleManager.Instance != null && BattleManager.Instance.IsSideIsland)
+            return;
+        // 终章追查关（2026-10-23 主人拍板「最后一关后剧情二选一」）：同支线岛，通关不走主线
+        // 首通/章推进/派定——标记与关后剧情全在 FinaleBattleMode.SettleStageClear 自己的链里
+        if (BattleManager.Instance != null && BattleManager.Instance.IsFinale)
             return;
         // 无限裂隙：不发主线首通石/章通关奖励，进度与奖励全走自己的结算链（SettleEndlessStageClear）
         if (BattleManager.Instance != null && BattleManager.Instance.IsEndlessRift)

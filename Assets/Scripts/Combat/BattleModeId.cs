@@ -53,5 +53,12 @@ public enum BattleModeId
     /// 支线岛（2026-10-23 合并方案）：单 Boss 特殊关，10 体力/次，产出 = 固定局外金币 + 天赋石 + 装备。
     /// 不占冒险界面按钮位，入口 = 冒险页支线岛点击（AdventureUI.BranchIslands）。
     /// </summary>
-    SideIsland
+    SideIsland,
+
+    /// <summary>
+    /// 终章追查关（2026-10-23 主人拍板「最后一关后剧情二选一，选完再出几关进完整剧情」）：
+    /// 选「追查真相」后解锁的 2 个旁挂剧情关（FinaleDefs），打完接完整揭底演出。
+    /// 不占冒险界面按钮位，入口 = 冒险页追查入口（解锁后出现）。
+    /// </summary>
+    Finale
 }

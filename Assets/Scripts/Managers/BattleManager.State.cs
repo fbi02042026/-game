@@ -194,6 +194,15 @@ public partial class BattleManager
     /// </summary>
     public int SideIslandId { get; private set; }
 
+    /// <summary>当前局是否终章追查关（2026-10-23 主人拍板「最后一关后剧情二选一」，见 FinaleBattleMode）。派生写法照抄 IsSideIsland。</summary>
+    public bool IsFinale => Mode != null && Mode.Id == BattleModeId.Finale;
+
+    /// <summary>
+    /// 本局追查关号（2026-10-23；1..2，非追查局恒 0）。
+    /// 进本时从 AdventureUI.PendingFinaleStage 拷入（照 SideIslandId 的「进本捕获」模式）。
+    /// </summary>
+    public int FinaleStageId { get; private set; }
+
     /// <summary>
     /// 本模式掉不掉装备。由 <see cref="Mode"/> 自己声明（金币本 false，主线/引导 true）。
     /// 结算只看这个，不再判「是不是金币本」—— 以后「武器副本」这类活动也能自然掉装。

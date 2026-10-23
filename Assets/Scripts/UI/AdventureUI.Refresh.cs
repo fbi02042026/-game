@@ -29,6 +29,7 @@ public partial class AdventureUI
         RefreshContentLock();
         RefreshChestNodes();   // 章内 10 小关宝箱节点（2026-10-22 新增，见 AdventureUI.ChestNodes.cs）
         RefreshBranchIslands();   // 主线窗口旁的支线岛屿宝箱（2026-10-23 主人拍板，见 AdventureUI.BranchIslands.cs）
+        RefreshFinaleRow();       // 活动副本区「追查真相」横条（2026-10-23 终章追查线，见 AdventureUI.Finale.cs）
         // 活动副本横条选中高亮（2026-10-23 活动一拆二；非活动模式时列表节点隐藏，刷了也无副作用）
         if (IsActivityMode(_selectedMode))
         {

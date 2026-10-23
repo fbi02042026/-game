@@ -12,16 +12,16 @@ public static class ChapterStoryBeats
     /// <summary>
     /// 章节 Boss 后尝试播放节点脚本。
     /// 返回 true 表示有脚本在播（调用方应等回调）；false 表示无脚本，直接走奖励流程。
-    /// 【2026-10-23 主人拍板】删 N3/N4 的「首周平替版 / NG+ 完整版」分流，统一播完整版
-    /// （梅莉莎 / 风车刻名直接揭示，不再按 HasClearedChapter(8) 判周目）。
+    /// 【2026-10-23 主人二次拍板「8岛全通」】N3/N4 恢复周目分流，判据改 8 岛全通
+    /// （SaveData.HasClearedAllSideIslands，跨洗牌轮持久）：未全通播平替版 Alt，全通后（NG+ 重打）播完整版。
     /// </summary>
     public static bool TryPlayPostBoss(int chapter, Action onDone)
     {
         switch (chapter)
         {
             case 2: PlayN2(onDone); return true;
-            case 3: PlayN3(onDone); return true;
-            case 4: PlayN4(onDone); return true;
+            case 3: if (SaveSystem.Instance?.Data?.HasClearedAllSideIslands() == true) PlayN3(onDone); else PlayN3Alt(onDone); return true;
+            case 4: if (SaveSystem.Instance?.Data?.HasClearedAllSideIslands() == true) PlayN4(onDone); else PlayN4Alt(onDone); return true;
             case 5: PlayN5(onDone); return true;
             case 6: PlayN6(onDone); return true;
             case 7: PlayN7(onDone); return true;
@@ -189,7 +189,7 @@ public static class ChapterStoryBeats
         StoryDirector.Ensure().Play(beats, onDone);
     }
 
-    // ---------- N3｜第 3 章：遇到梅莉莎（2026-10-23 删周目分流，统一播完整版） ----------
+    // ---------- N3｜第 3 章：遇到梅莉莎（2026-10-23 二次拍板「8岛全通」：恢复周目分流，全通播完整版/未全通播平替版） ----------
 
     static void PlayN3(Action onDone)
     {
@@ -214,9 +214,9 @@ public static class ChapterStoryBeats
     }
 
     /// <summary>
-    /// 【2026-10-23 退役】N3 首周平替版（旁白版）：删周目分流后不再调用，函数保留不删（下线≠删除）。
-    /// 原口径：翡翠秘境的战后只留氛围与悬念，不出现梅莉莎、不用 MelissaCamp 背景 / Melissa 立绘、
-    /// 不加 StoryProgress.AddBond、不挂 .Bg()；完整版留到 NG+ 才放。
+    /// N3 首周平替版（旁白版）：未 8 岛全通时播（【2026-10-23 二次拍板】恢复分流，本函数回现役）。
+    /// 口径：翡翠秘境的战后只留氛围与悬念，不出现梅莉莎、不用 MelissaCamp 背景 / Melissa 立绘、
+    /// 不加 StoryProgress.AddBond、不挂 .Bg()；完整版等 8 岛全通后（NG+ 重打第 3 章）才放。
     /// </summary>
     static void PlayN3Alt(Action onDone)
     {
@@ -229,7 +229,7 @@ public static class ChapterStoryBeats
         StoryDirector.Ensure().Play(beats, onDone);
     }
 
-    // ---------- N4｜第 4 章：你的名字也在表上（2026-10-23 删周目分流，统一播完整版） ----------
+    // ---------- N4｜第 4 章：你的名字也在表上（2026-10-23 二次拍板「8岛全通」：恢复周目分流，全通播完整版/未全通播平替版） ----------
 
     static void PlayN4(Action onDone)
     {
@@ -246,9 +246,9 @@ public static class ChapterStoryBeats
     }
 
     /// <summary>
-    /// 【2026-10-23 退役】N4 首周平替版：删周目分流后不再调用，函数保留不删（下线≠删除）。
-    /// 原口径：晨曦草原的战后不揭「你认得：你自己」，只留风车停住 / 刻度一圈三年 / 名字刻到一半的悬念，
-    /// 不挂 .Bg()；完整版留到 NG+ 才放。
+    /// N4 首周平替版：未 8 岛全通时播（【2026-10-23 二次拍板】恢复分流，本函数回现役）。
+    /// 口径：晨曦草原的战后不揭「你认得：你自己」，只留风车停住 / 刻度一圈三年 / 名字刻到一半的悬念，
+    /// 不挂 .Bg()；完整版等 8 岛全通后（NG+ 重打第 4 章）才放。
     /// </summary>
     static void PlayN4Alt(Action onDone)
     {
@@ -409,6 +409,117 @@ public static class ChapterStoryBeats
                 data.branchRoll2 = 0;
             }
             SaveSystem.Instance?.Save();
+            // 【2026-10-23 主人拍板「最后一关后剧情二选一」】结局演出之后接终章余音：
+            // 第一次打完主线 → 出「回家 / 追查真相」二选一（选过就不再播，幂等）
+            TryPlayFinaleChoice(onDone);
+        });
+    }
+
+    // ---------- 终章追查线（2026-10-23 主人拍板「最后一关后剧情二选一，选完再出几关进完整剧情」） ----------
+    // 流程：N8 结局演完 → PlayFinaleChoice（二选一，只播一次）→ 选「追查」→ 冒险页出现 2 个追查关
+    //       （FinaleBattleMode）→ 第 1 关打完播 PlayFinaleMid（揭底中段）→ 第 2 关打完播 PlayFinaleFinale（完整揭底）。
+    // 文案为草拟稿（调性：有趣 / 结果先于隐喻），主人可全改；名字 ≤7 汉字。
+
+    /// <summary>终章余音二选一：只在第一次打完主线时播（postFinalChoice==0），选过永不重播。</summary>
+    static void TryPlayFinaleChoice(Action onDone)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || data.postFinalChoice != 0)
+        {
+            onDone?.Invoke();
+            return;
+        }
+
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("庆功宴摆了三天。第三天夜里，你在公会大厅的长桌底下，捡到一张没写完的领用单。").Bg(StoryBackgrounds.EndHappy),
+            StoryDirector.Narration("装填人一栏，签着一个花体的 M。日期从十四年前排到三个月前——中间没断过。"),
+            StoryDirector.Solo("你", "……十一年。每一支进裂隙的队伍，箱子都是同一个人装的？", StoryPortraits.Player),
+            StoryDirector.Solo("你", "这账要是真的，公会大门上那块『英魂长存』的匾，怕是要换个挂法。", StoryPortraits.Player),
+            new StoryBeat
+            {
+                leftName = "你",
+                leftPortraitId = StoryPortraits.Player,
+                text = "这张单子，怎么处理？",
+                speaker = -1,
+                choices = new[]
+                {
+                    "算了，先回家补觉。明天的事交给明天的我。",   // 回家：本周目到此收束
+                    "不行。这事我现在就去装备科问个明白。"         // 追查：解锁 2 个追查关
+                }
+            }
+        };
+
+        StoryDirector.Ensure().Play(beats, null, choice => ApplyFinaleChoice(choice, onDone));
+    }
+
+    /// <summary>分支选择落账 + 即时回响（必须有回响，否则选择感会消失——照第 7 章口径）。</summary>
+    static void ApplyFinaleChoice(int index, Action onDone)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data != null) data.MarkFinaleChoice(index + 1);   // 1=回家 2=追查
+
+        StoryBeat echo;
+        if (index == 0)
+        {
+            echo = StoryDirector.Narration("你把领用单原样压回桌底。有些账，还是别算得太清楚。");
+        }
+        else
+        {
+            echo = StoryDirector.Narration("装备科的门没锁，里面亮着一盏灯。冒险页上，那盏灯也为你亮了起来。");
+        }
+
+        StoryDirector.Ensure().Play(new List<StoryBeat> { echo }, () =>
+        {
+            SaveSystem.Instance?.Save();
+            onDone?.Invoke();
+        });
+    }
+
+    /// <summary>追查第 1 关打完：揭底中段（FinaleBattleMode 结算链调，战斗场景内播）。</summary>
+    public static void PlayFinaleMid(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("装备科的库房比想象里深。最里面的柜子上了三把锁，锁上贴着同一张封条：内部流转，勿问。"),
+            StoryDirector.Narration("柜子里没有钱，也没有装备——只有一摞码得整整齐齐的空纸箱。每个箱面写着一支队伍的编号。"),
+            StoryDirector.Solo("你", "第九支……领用单上写的就是他们。进裂隙前一天，箱子被人单独领走了。", StoryPortraits.Player),
+            StoryDirector.Narration("箱底压着一张字条，墨迹很新：「想知道答案，就去它们回来的地方。」"),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    /// <summary>
+    /// 追查第 2 关打完：完整揭底演出（本设计线的终点）。播完置 finaleStoryPlayed 防重播（幂等：已播过直接放行）。
+    /// </summary>
+    public static void PlayFinaleFinale(Action onDone)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data != null && data.finaleStoryPlayed)
+        {
+            onDone?.Invoke();
+            return;
+        }
+
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("箱子堆的最深处，一个头发花白的女人正就着灯装箱。手法快得完全不像这个年纪。"),
+            StoryDirector.Solo("梅莉莎", "手别伸过来。箱子很沉，你抱不动。", StoryPortraits.Melissa),
+            StoryDirector.Solo("你", "M。装备科记录员。十一年，两百多支队伍的箱子，全是你装的。", StoryPortraits.Player),
+            StoryDirector.Solo("梅莉莎", "装了十一年，就赌一件事——总有一支队伍，能把我预感的那些事，一件不差全应验。", StoryPortraits.Melissa),
+            StoryDirector.Solo("梅莉莎", "今天，应验了。", StoryPortraits.Melissa),
+            StoryDirector.Narration("她把最后一个箱子推到你面前。箱面写着：给追到这儿的人。"),
+            StoryDirector.Solo("梅莉莎", "回去吧。以后进裂隙的箱子，换你来装。", StoryPortraits.Melissa),
+            StoryDirector.Narration("——《像素冒险：裂隙之刃》 装了十一年箱子的人，今天把钥匙交了出来。"),
+        };
+
+        StoryDirector.Ensure().Play(beats, () =>
+        {
+            if (data != null)
+            {
+                data.finaleStoryPlayed = true;
+                SaveSystem.Instance?.Save();
+            }
             onDone?.Invoke();
         });
     }

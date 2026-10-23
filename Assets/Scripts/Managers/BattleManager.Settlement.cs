@@ -211,6 +211,7 @@ public partial class BattleManager
     bool ShouldPlayChapterStory()
     {
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：记录点层只弹「撤离/继续」双选
+        if (IsFinale) return false;        // 终章追查关不播战后章节剧情（2026-10-23）：act=8+Boss 型会误触 N8 重播，关后剧情走 FinaleBattleMode 自己的链
         if (Rules.SkipChapter1Ending) return false;
         if (CurrentChapter < 2) return false;
         if (!StoryProgress.TutorialDone || !StoryProgress.Chapter1ChoiceDone) return false;
@@ -272,6 +273,7 @@ public partial class BattleManager
     bool ShouldPlayPreBattleStory()
     {
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：进层直接开抽奖
+        if (IsFinale) return false;        // 终章追查关不播战前章节剧情（2026-10-23）：act=8+首关会误触第 8 章战前剧情重播
         if (Rules.SkipChapter1Ending) return false;
         if (Rules.UseTutorialSplash) return false;   // 新手教学关有自己的引导节奏
         if (Rules.SkipFirstWaveAuto) return false;   // 教程关刷怪归 TutorialDirector

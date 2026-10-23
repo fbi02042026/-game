@@ -46,6 +46,9 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 支线岛（2026-10-23 合并方案）：冒险页支线岛点击进本，判在徽记/金币本之前（意图明确优先）。
         if (AdventureUI.PendingSideIsland > 0) return BattleModes.SideIsland;
 
+        // 终章追查关（2026-10-23 主人拍板「最后一关后剧情二选一」）：冒险页追查入口进本，判在活动副本之前。
+        if (AdventureUI.PendingFinaleStage > 0) return BattleModes.Finale;
+
         // 徽记副本（2026-10-23 拍板「活动副本一拆二」）：入口 = AdventureUI.EnterBadgeDungeon()（本期无按钮）。
         // 判在金币本之前：两标志理论上同真时，后置的徽记副本意图优先。
         if (AdventureUI.PendingBadgeDungeon) return BattleModes.BadgeDungeon;
@@ -197,6 +200,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                 || AdventureUI.PendingGoldDungeon
                 || AdventureUI.PendingBadgeDungeon   // 徽记副本（2026-10-23）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingSideIsland > 0 // 支线岛（2026-10-23 合并方案）：独立进本，同金币本作废 parked 局
+                || AdventureUI.PendingFinaleStage > 0 // 终章追查关（2026-10-23）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingBattleChapter <= 0
                 || AdventureUI.PendingBattleChapter != savedRun.chapter)
             {
@@ -214,6 +218,9 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 支线岛（2026-10-23 合并方案）：捕获岛 id 供结算读（SideIslandId），Pending 读后即清（照金币本口径）
         SideIslandId = Mathf.Max(0, AdventureUI.PendingSideIsland);
         AdventureUI.PendingSideIsland = 0;
+        // 终章追查关（2026-10-23）：捕获关号供结算读（FinaleStageId），Pending 读后即清（照支线岛口径）
+        FinaleStageId = Mathf.Max(0, AdventureUI.PendingFinaleStage);
+        AdventureUI.PendingFinaleStage = 0;
 
         // 无限裂隙：起始层 = 记录点 + 1（读完即清，防污染）；普通章号参数对它无意义
         if (AdventureUI.PendingEndlessRift)

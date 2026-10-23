@@ -245,6 +245,69 @@ public sealed class SideIslandBattleMode : BattleMode
 }
 
 /// <summary>
+/// 终章追查关（2026-10-23 主人拍板「最后一关后剧情二选一，选完再出几关进完整剧情」）：
+/// 选「追查真相」后解锁的 2 个旁挂剧情关（FinaleDefs），打完接完整揭底演出。
+/// 产出照主线普通关（材料/关卡金，act=8 曲线）；不掉装备（DropsEquipment=false）、
+/// 不发局内抽奖币（单场结算回城）。不推进主线（ChapterManager.OnStageComplete 有 IsFinale 门）。
+/// 结构照抄 <see cref="SideIslandBattleMode"/>；不占 SlotTable 位，
+/// 入口 = 冒险页追查入口（AdventureUI 终章分支解锁后出现）。
+/// </summary>
+public sealed class FinaleBattleMode : BattleMode
+{
+    public override BattleModeId Id => BattleModeId.Finale;
+    public override string DisplayName => "终章追查";
+
+    /// <summary>不经 SlotTable 按钮（无按钮位），进本由追查入口置 PendingFinaleStage 决定；本属性无消费点。</summary>
+    public override bool IsPlayable => false;
+
+    /// <summary>剧情关不掉装备（2026-10-23 主人未定掉落 → 先关；要开改这一行）。</summary>
+    public override bool DropsEquipment => false;
+
+    /// <summary>单场结算回城、币随局清零 → 不发局内抽奖币（照金币/徽记/支线岛口径）。</summary>
+    public override bool GrantsRunCoins => false;
+
+    public override void BuildChapter(ChapterManager cm, int chapter)
+    {
+        if (cm == null)
+        {
+            Debug.LogError("[BattleMode] 追查关 BuildChapter 失败：ChapterManager 为空");
+            return;
+        }
+        cm.StartFinaleStage(AdventureUI.PendingFinaleStage);
+    }
+
+    /// <summary>
+    /// 追查关结算：标记通关 → 播关后剧情（第 1 关=揭底中段 / 第 2 关=完整揭底，战斗场景内播）
+    /// → 胜利结算面板 → 回城。缺真值（关定义/存档）→ LogError 只回城（铁律 14）。
+    /// </summary>
+    public override void SettleStageClear(BattleManager bm)
+    {
+        if (bm == null)
+        {
+            Debug.LogError("[BattleMode] 追查关 SettleStageClear 失败：BattleManager 为空");
+            return;
+        }
+        var st = FinaleDefs.Get(bm.FinaleStageId);
+        var data = SaveSystem.Instance?.Data;
+        if (st == null || data == null)
+        {
+            Debug.LogError($"[终章追查] 结算失败：关定义或存档缺失（stageId={bm.FinaleStageId}）——只回城不标记（缺真值不兜底）");
+            bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+            return;
+        }
+
+        data.MarkFinaleStageCleared(st.id);
+        SaveSystem.Instance?.Save();
+        Debug.Log($"[终章追查] 「{st.name}」通关（{data.finaleClearedIds.Count}/{FinaleDefs.Count}）");
+
+        // 关后剧情：战斗场景内播（照主线战后剧情的位置），播完走胜利结算 → 回城
+        Action after = () => bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+        if (st.id == 1) ChapterStoryBeats.PlayFinaleMid(after);
+        else ChapterStoryBeats.PlayFinaleFinale(after);
+    }
+}
+
+/// <summary>
 /// 徽记副本规则（2026-10-23 主人拍板）：每日 2 次、每周二/四开放（开放日口径 = 主人预制体横条
 /// Info 文案「进阶材料 每周二四开启」）。日键/次数照 <see cref="EndlessRiftRules"/> 模式；
 /// 进本 = 次数 + 体力一起扣（TryConsumeEnter 内含提示）。
@@ -508,6 +571,7 @@ public static class BattleModes
     public static readonly GoldDungeonBattleMode GoldDungeon = new GoldDungeonBattleMode();
     public static readonly BadgeDungeonBattleMode BadgeDungeon = new BadgeDungeonBattleMode();   // 2026-10-23 徽记副本（不占 SlotTable 位）
     public static readonly SideIslandBattleMode SideIsland = new SideIslandBattleMode();         // 2026-10-23 支线岛（不占 SlotTable 位）
+    public static readonly FinaleBattleMode Finale = new FinaleBattleMode();                     // 2026-10-23 终章追查关（不占 SlotTable 位）
     public static readonly TutorialBattleMode Tutorial = new TutorialBattleMode();
     public static readonly EndlessBattleMode Endless = new EndlessBattleMode();
     public static readonly WorldBossBattleMode WorldBoss = new WorldBossBattleMode();
@@ -539,6 +603,7 @@ public static class BattleModes
             case BattleModeId.GoldDungeon: return GoldDungeon;
             case BattleModeId.BadgeDungeon: return BadgeDungeon;   // 2026-10-23 徽记副本
             case BattleModeId.SideIsland: return SideIsland;       // 2026-10-23 支线岛
+            case BattleModeId.Finale: return Finale;               // 2026-10-23 终章追查关
             case BattleModeId.Tutorial: return Tutorial;
             case BattleModeId.Endless: return Endless;
             case BattleModeId.WorldBoss: return WorldBoss;

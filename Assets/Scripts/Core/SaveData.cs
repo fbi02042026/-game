@@ -233,6 +233,16 @@ public class SaveData
     // —— 叙事 V2.0 ——
     /// <summary>第 7 章转折点：0=未选，1=A，2=B，3=C。同一周目不可更改。</summary>
     public int endingChoice = 0;
+
+    // —— 终章追查线（2026-10-23 主人拍板「最后一关后剧情二选一，选完再出几关进完整剧情」）——
+    /// <summary>主线最后一关通关后的分支选择：0=未选，1=回家（本周目收束，不出追查关），2=追查真相（冒险页解锁 2 个追查关）。
+    /// 记一次就不改（幂等只记首次），NG+ 重打终关不重播选择。</summary>
+    public int postFinalChoice = 0;
+    /// <summary>追查关通关集合（关号 1..2，见 FinaleDefs；一次性打完锁，照支线岛口径）。</summary>
+    public List<IntIdEntry> finaleClearedEntries = new List<IntIdEntry>();
+    [NonSerialized] public HashSet<int> finaleClearedIds = new HashSet<int>();
+    /// <summary>完整揭底剧情已播（追查第 2 关打完播一次，防重播）。</summary>
+    public bool finaleStoryPlayed = false;
     /// <summary>
     /// 战前剧情「看过即不重播」位标记（2026-10-19 主人拍板）：bit0=第1章 … bit7=第8章。
     /// 每章战前剧情开播过一次就置位，之后进关不再重播（治「每次进都卡剧情」）。
@@ -273,6 +283,9 @@ public class SaveData
     /// 【2026-10-23 合并方案】8 岛全通后由 EnsureForkRoll 洗牌袋重置，开启新一轮。</summary>
     public List<IntIdEntry> clearedSideIslandEntries = new List<IntIdEntry>();
     [NonSerialized] public HashSet<int> clearedSideIslandIds = new HashSet<int>();
+    /// <summary>是否曾经 8 岛全通过（N3/N4 叙事周目分流判据，2026-10-23 主人拍板「8岛全通」）。
+    /// 跨洗牌轮持久：ResetSideIslandClears 清通关记录但**不清**这个标志——「曾经全通」是事实，不随新一轮消失。</summary>
+    public bool hasClearedAllSideIslands = false;
 
     // === 冒险日志图鉴 ===
     public List<StringIdEntry> seenMonsterEntries = new List<StringIdEntry>();
@@ -740,6 +753,20 @@ public class SaveData
                 if (e != null && e.id > 0) clearedSideIslandIds.Add(e.id);
             }
         }
+        // 【2026-10-23 主人拍板「8岛全通」】旧存档在 hasClearedAllSideIslands 字段出现前就已 8 岛全通 → 灌回时补判
+        if (!hasClearedAllSideIslands && clearedSideIslandIds.Count >= SideIslandDefs.Count)
+            hasClearedAllSideIslands = true;
+
+        // 【2026-10-23 终章追查线】追查关通关集合重建（旧存档无列表 → 空集合，兼容）
+        finaleClearedIds = new HashSet<int>();
+        if (finaleClearedEntries != null)
+        {
+            for (int i = 0; i < finaleClearedEntries.Count; i++)
+            {
+                var e = finaleClearedEntries[i];
+                if (e != null && e.id > 0) finaleClearedIds.Add(e.id);
+            }
+        }
 
         townBagItems = new Dictionary<string, int>();
         if (townBagItemEntries != null)
@@ -995,23 +1022,41 @@ public class SaveData
     }
 
     /// <summary>
-    /// 抽奖池当前开放格数（2026-10-13 主人拍板「剩下的格子当玩家通关第一章后面的章节开放」）：
-    /// 初期 4 格；**通关第 2 章开第 5 格、通关第 3 章开第 6 格**（条件要改就动这里，一行一处）。
+    /// 抽奖池当前开放格数（2026-10-13 主人拍板「剩下的格子当玩家通关第一章后面的章节开放」；
+    /// 2026-10-23 改版：第 4 格仍通关第 2 章开，第 5 格改花 <see cref="DrawPoolPaidUnlockCost"/> 钻石开）。
+    /// 老档已通关第 3 章的视为已付费解锁（格子不回缩），新玩家一律花钻。
     /// </summary>
     public int DrawPoolSlots
     {
         get
         {
             int s = DrawPoolDefaultSlots;
-            if (clearedChapterIds != null)
-            {
-                if (clearedChapterIds.Contains(2)) s++;
-                if (clearedChapterIds.Contains(3)) s++;
-            }
+            if (clearedChapterIds != null && clearedChapterIds.Contains(2)) s++;
+            if (drawPoolPaidUnlock || (clearedChapterIds != null && clearedChapterIds.Contains(3))) s++;
             // 本文件是纯数据层，不依赖 UnityEngine，故用 System.Math.Min 而非 Mathf.Min
             s = System.Math.Min(s, DrawPoolMaxSlots);
             return s;
         }
+    }
+
+    /// <summary>第 5 格（最后一格）钻石解锁价格（2026-10-23 主人拍板）。</summary>
+    public const int DrawPoolPaidUnlockCost = 100;
+
+    /// <summary>
+    /// 第 5 格是否还可花钻解锁：须先通关第 2 章（第 4 格已开，保证花钻开的一定是最后一格，不乱序），
+    /// 且未解锁、老档未通第 3 章。
+    /// </summary>
+    public bool CanPaidUnlockDrawPoolSlot
+        => DrawPoolSlots == DrawPoolMaxSlots - 1 && !drawPoolPaidUnlock
+           && (clearedChapterIds == null || !clearedChapterIds.Contains(3))
+           && clearedChapterIds != null && clearedChapterIds.Contains(2);
+
+    /// <summary>置位第 5 格付费解锁（扣钻由 UI 层负责，这里只管存档位）。幂等，返回是否发生了变化。</summary>
+    public bool MarkDrawPoolPaidUnlock()
+    {
+        if (drawPoolPaidUnlock) return false;
+        drawPoolPaidUnlock = true;
+        return true;
     }
 
     /// <summary>标记章节通关；通关第 8 章时把 chosenBranch 归零，允许下一周目换支线。</summary>
@@ -1040,13 +1085,18 @@ public class SaveData
 
     // ── 支线岛存档（2026-10-23 合并方案，批 S1）──
 
-    /// <summary>标记支线岛通关（岛 id 见 SideIslandDefs；幂等，重复标记无副作用）。双写 List + HashSet。</summary>
+    /// <summary>标记支线岛通关（岛 id 见 SideIslandDefs；幂等，重复标记无副作用）。双写 List + HashSet；
+    /// 8 岛全通时置位 hasClearedAllSideIslands（跨洗牌轮持久，N3/N4 叙事分流判据）。</summary>
     public void MarkSideIslandCleared(int islandId)
     {
         if (islandId < 1 || islandId > SideIslandDefs.Count) return;
         if (clearedSideIslandIds == null) clearedSideIslandIds = new HashSet<int>();
         if (clearedSideIslandIds.Add(islandId))
+        {
             clearedSideIslandEntries = FromIntIdSet(clearedSideIslandIds);
+            if (clearedSideIslandIds.Count >= SideIslandDefs.Count)
+                hasClearedAllSideIslands = true;
+        }
     }
 
     /// <summary>该支线岛是否已通关（一次性打完锁；跨周目持久）。</summary>
@@ -1055,9 +1105,46 @@ public class SaveData
         return clearedSideIslandIds != null && islandId > 0 && clearedSideIslandIds.Contains(islandId);
     }
 
+    /// <summary>是否曾经 8 岛全通过（跨洗牌轮持久；N3/N4 叙事周目分流判据，2026-10-23 主人拍板「8岛全通」）。</summary>
+    public bool HasClearedAllSideIslands()
+    {
+        return hasClearedAllSideIslands;
+    }
+
+    // ── 终章追查线（2026-10-23 主人拍板「最后一关后剧情二选一，选完再出几关进完整剧情」）──
+
+    /// <summary>记录终关后分支选择（1=回家 2=追查真相）。幂等：只记第一次，之后不可改（同 endingChoice 口径）。</summary>
+    public void MarkFinaleChoice(int choice)
+    {
+        if (choice < 1 || choice > 2) return;
+        if (postFinalChoice == 0) postFinalChoice = choice;
+    }
+
+    /// <summary>标记追查关通关（关号 1..2 见 FinaleDefs；一次性打完锁，幂等双写）。</summary>
+    public void MarkFinaleStageCleared(int stageId)
+    {
+        if (stageId < 1 || stageId > FinaleDefs.Count) return;
+        if (finaleClearedIds == null) finaleClearedIds = new HashSet<int>();
+        if (finaleClearedIds.Add(stageId))
+            finaleClearedEntries = FromIntIdSet(finaleClearedIds);
+    }
+
+    /// <summary>该追查关是否已通关（一次性打完锁）。</summary>
+    public bool HasClearedFinaleStage(int stageId)
+    {
+        return finaleClearedIds != null && stageId > 0 && finaleClearedIds.Contains(stageId);
+    }
+
+    /// <summary>追查关是否全部通关（2/2；完整揭底剧情的触发条件）。</summary>
+    public bool HasClearedAllFinaleStages()
+    {
+        return finaleClearedIds != null && finaleClearedIds.Count >= FinaleDefs.Count;
+    }
+
     /// <summary>
     /// 洗牌袋重置（8 岛全通后由 ChapterRouteTable.EnsureForkRoll 调用）：
     /// 清空岛通关记录，开启新一轮——所有岛回到「未通关」，可再次被派定挑战。
+    /// 注意：hasClearedAllSideIslands **不清**（「曾经全通」是事实，N3/N4 叙事分流判据依赖它）。
     /// </summary>
     public void ResetSideIslandClears()
     {
@@ -1229,6 +1316,7 @@ public class SaveData
         mercDrawPoolEntries = FromIdList(mercDrawPool);
         clearedChapterEntries = FromIntIdSet(clearedChapterIds);
         clearedSideIslandEntries = FromIntIdSet(clearedSideIslandIds);   // 【2026-10-23 合并方案】岛存档双写
+        finaleClearedEntries = FromIntIdSet(finaleClearedIds);           // 【2026-10-23 终章追查线】双写
         claimedCodexRewardEntries = FromIdSet(claimedCodexRewardIds);
         defeatedMonsterEntries = FromIdSet(defeatedMonsterIds);
         unlockedWorldEntries = FromIdSet(unlockedWorldIds);
