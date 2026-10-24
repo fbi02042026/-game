@@ -89,10 +89,19 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
                 break;
             case AttackVfxKit.Bow:
                 {
-                    GameObject fly = LoadSharedKit(kit, faction, "fly");
+                    // 2026-10-24 主人拍板：敌人远程物理（弓）飞行体按档位 fly1/2（普通怪=1，精英/Boss=2）；Ally 未换素材固定 Base
+                    int flyVariant = (faction == VfxFaction.Enemy && attacker != null)
+                        ? WeaponVfxVariant.Resolve(attacker) : WeaponVfxVariant.Base;
+                    GameObject fly = LoadSharedKit(kit, faction, "fly", flyVariant);
                     GameObject hit = LoadSharedKit(kit, faction, "hit");
                     if (fly == null)
                     {
+                        // 高档位缺文件：不闪回 fly1，LogError 露白（铁律 15：不兜底）
+                        if (flyVariant > WeaponVfxVariant.Base)
+                        {
+                            Debug.LogError($"[BattleVFXSystem] 缺少敌人远程飞行体: Resources/VFX/Shared/Enemy/Bow/vfx_enemy_bow_fly{flyVariant}");
+                            return;
+                        }
                         // 禁止回退我方箭；无飞行体则只播命中（近距）或告警
                         Debug.LogWarning($"[VFX] 缺少飞行体: {faction}/{kit}/fly，不回退 Ally");
                         if (hit != null)
@@ -106,10 +115,18 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
                 break;
             case AttackVfxKit.Orb:
                 {
-                    GameObject fly = LoadSharedKit(kit, faction, "fly");
+                    // 2026-10-24 主人拍板：敌人远程魔法（法球）飞行体按档位 fly1/2（普通怪=1，精英/Boss=2）；Ally 未换素材固定 Base
+                    int flyVariant = (faction == VfxFaction.Enemy && attacker != null)
+                        ? WeaponVfxVariant.Resolve(attacker) : WeaponVfxVariant.Base;
+                    GameObject fly = LoadSharedKit(kit, faction, "fly", flyVariant);
                     GameObject hit = LoadSharedKit(kit, faction, "hit");
                     if (fly == null)
                     {
+                        if (flyVariant > WeaponVfxVariant.Base)
+                        {
+                            Debug.LogError($"[BattleVFXSystem] 缺少敌人远程飞行体: Resources/VFX/Shared/Enemy/Orb/vfx_enemy_orb_fly{flyVariant}");
+                            return;
+                        }
                         Debug.LogWarning($"[VFX] 缺少飞行体: {faction}/{kit}/fly，不回退 Ally");
                         if (hit != null)
                             ApplyFactionLook(SpawnVFX(hit, toPos, defaultDuration, null), faction);
@@ -970,6 +987,9 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         GameObject enemyBowHit = LoadSharedKit(AttackVfxKit.Bow, VfxFaction.Enemy, "hit");
         LoadSharedKit(AttackVfxKit.Orb, VfxFaction.Enemy, "fly");
         LoadSharedKit(AttackVfxKit.Orb, VfxFaction.Enemy, "hit");
+        // 2026-10-24 主人拍板：敌人远程高档飞行体开战前预载进缓存，避免精英/Boss 首次出手同步 Load
+        LoadSharedKit(AttackVfxKit.Bow, VfxFaction.Enemy, "fly", 2);
+        LoadSharedKit(AttackVfxKit.Orb, VfxFaction.Enemy, "fly", 2);
 
         // 刀光必须用 Ally Shared；禁止留下旧 Pixel Craft / 敌方资源
         if (allyMelee != null) vfxSlash = allyMelee;
@@ -1024,11 +1044,17 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
             Debug.LogError("[BattleVFXSystem] 缺共用特效: Resources/VFX/Shared/Ally/MeleeSlash/刀光2 (hit)");
         if (LoadSharedKit(AttackVfxKit.MeleeSlash, VfxFaction.Ally, "hit", 3) == null)
             Debug.LogError("[BattleVFXSystem] 缺共用特效: Resources/VFX/Shared/Ally/MeleeSlash/刀光3 (hit)");
+        // 2026-10-24 主人拍板：敌人远程高档飞行体启动自检，缺 fly2 立刻报错，精英/Boss 不闪回 fly1
+        if (LoadSharedKit(AttackVfxKit.Bow, VfxFaction.Enemy, "fly", 2) == null)
+            Debug.LogError("[BattleVFXSystem] 缺共用特效: Resources/VFX/Shared/Enemy/Bow/vfx_enemy_bow_fly2 (fly)");
+        if (LoadSharedKit(AttackVfxKit.Orb, VfxFaction.Enemy, "fly", 2) == null)
+            Debug.LogError("[BattleVFXSystem] 缺共用特效: Resources/VFX/Shared/Enemy/Orb/vfx_enemy_orb_fly2 (fly)");
     }
 
     /// <summary>
     /// 加载共用普攻套：Resources/VFX/Shared/{Ally|Enemy}/{Kit}/vfx_*
-    /// 2026-10-24 主人拍板：variant=档位，Ally 近战刀光按档位加载 刀光1/2/3（远程预留接口，暂未启用分支）。
+    /// 2026-10-24 主人拍板：variant=档位，Ally 近战刀光按档位加载 刀光1/2/3；
+    /// Enemy 远程物理（Bow）/魔法（Orb）飞行体按档位加载 fly1/2（普通怪=1，精英/Boss=2）。
     /// </summary>
     public GameObject LoadSharedKit(AttackVfxKit kit, VfxFaction faction, string stage, int variant = 1)
     {
@@ -1044,7 +1070,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         GameObject prefab = null;
         for (int i = 0; i < fileNames.Length; i++)
         {
-            // 敌方弓箭写死：VFX/Shared/Enemy/Bow/vfx_enemy_bow_fly|hit
+            // 敌方弓箭写死：VFX/Shared/Enemy/Bow/vfx_enemy_bow_fly{variant}|hit
             string path = $"VFX/Shared/{factionFolder}/{kitFolder}/{fileNames[i]}";
             prefab = Resources.Load<GameObject>(path);
             if (prefab != null)
@@ -1086,9 +1112,19 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         if (stage == "fly")
         {
             if (kit == AttackVfxKit.Bow)
-                return new[] { prefix + "bow_fly", "vfx_bow_fly" };
+            {
+                // 2026-10-24 主人拍板：敌人远程物理飞行体按档位加载 vfx_enemy_bow_fly{variant}（旧名文件已删，不再候选）
+                if (enemy)
+                    return new[] { $"vfx_enemy_bow_fly{variant}" };
+                return new[] { "vfx_ally_bow_fly", "vfx_bow_fly" };
+            }
             if (kit == AttackVfxKit.Orb)
-                return new[] { prefix + "orb_fly", "vfx_orb_fly" };
+            {
+                // 2026-10-24 主人拍板：敌人远程魔法飞行体按档位加载 vfx_enemy_orb_fly{variant}（旧名文件已删，不再候选）
+                if (enemy)
+                    return new[] { $"vfx_enemy_orb_fly{variant}" };
+                return new[] { "vfx_ally_orb_fly", "vfx_orb_fly" };
+            }
         }
         if (stage == "hit")
         {

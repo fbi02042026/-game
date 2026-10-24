@@ -188,8 +188,12 @@ public static class SkillNaming
                 if (side == "Ally") return "VFX/Shared/Ally/MeleeSlash/刀光1";
                 return $"VFX/Shared/{side}/MeleeSlash/vfx_{pfx}melee_hit";
             case AttackVfxKit.Bow:
+                // 2026-10-24 主人拍板：Enemy 远程飞行体改走档位文件 fly1/2，提示指到 fly1；Ally 保持原样
+                if (faction == VfxFaction.Enemy) return "VFX/Shared/Enemy/Bow/vfx_enemy_bow_fly1 + vfx_enemy_bow_hit";
                 return $"VFX/Shared/{side}/Bow/vfx_{pfx}bow_fly + vfx_{pfx}bow_hit";
             case AttackVfxKit.Orb:
+                // 2026-10-24 主人拍板：Enemy 远程飞行体改走档位文件 fly1/2，提示指到 fly1；Ally 保持原样
+                if (faction == VfxFaction.Enemy) return "VFX/Shared/Enemy/Orb/vfx_enemy_orb_fly1 + vfx_enemy_orb_hit";
                 return $"VFX/Shared/{side}/Orb/vfx_{pfx}orb_fly + vfx_{pfx}orb_hit";
             case AttackVfxKit.Heal:
                 return $"VFX/Shared/{side}/Heal/vfx_{pfx}heal";

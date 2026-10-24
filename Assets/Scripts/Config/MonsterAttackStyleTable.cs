@@ -116,7 +116,8 @@ public static class MonsterAttackStyleTable
 
     /// <summary>
     /// 按表里的 style 分弹道：Bow=箭矢，Ranged/Orb/Magic=法球，其余近战刀光。
-    /// → Enemy/Bow/vfx_enemy_bow_fly|hit 或 Enemy/Orb/vfx_enemy_orb_fly|hit
+    /// → Enemy/Bow/vfx_enemy_bow_fly{1|2} 或 Enemy/Orb/vfx_enemy_orb_fly{1|2}
+    /// （2026-10-24 主人拍板：敌人远程飞行体分档，普通怪 fly1、精英/Boss fly2，档位出口 WeaponVfxVariant.Resolve）
     /// </summary>
     public static AttackVfxKit GetVfxKit(MonsterAttackStyle style)
     {
