@@ -4,10 +4,14 @@ using UnityEngine;
 /// <summary>
 /// SK019 破甲侵蚀：攻击命中降低目标防御，固定每层 -X%，持续 N 秒，叠加上限 M 层。
 /// 私有状态 = _shreds（只属于本模块）。
-/// ⚠️ 2026-09-26 主人拍板：AppliedAmount 累计真实施加量，到期对称还原（修「到期不还原」/「永久 -10%」bug）。
-/// 该对称还原逻辑原样保留，不得改动。
+/// ⚠️ 2026-10-24 主人拍板（覆盖 2026-09-26「AppliedAmount 对称还原原样保留」口径——
+/// 该实现在乘法语义下并不对称，实测每轮净 -5%~-83% 物防，属 P0 bug）：
+/// ① 层数上限真正限制施加次数：仅「层数真增加」时 AddAttr 一次，满层只刷计时；
+/// ② 还原按层数求逆：施加 N 层 = ×(1-perLayer)^N，到期还原 = ×(1-perLayer)^(-N)，精确回 1；
+/// ③ 按目标 IsMagicDamageDealer 分流减 Defense / MagicDefense（魔法型精英/Boss 物防=0，
+///    旧码破甲对它们完全无效）；施加与还原锁定同一条（State.DefType）。
 /// 2026-09-26 主人拍板：数值走表，模块只管模式——每层减防比例(p1)/最大层数(p2)/持续时间(Duration列)
-/// 从 merc_skills 表读；表缺失回退默认常量。add 仍 = -每层减防比例，保证对称还原。
+/// 从 merc_skills 表读；表缺失回退默认常量。此口径不变。
 /// </summary>
 public class SK019_ArmorShred : MercPassiveModule
 {
@@ -15,8 +19,9 @@ public class SK019_ArmorShred : MercPassiveModule
     {
         public int Stacks;
         public float Timer;
-        // 累计本次实际施加的减防总量，到期对称还原
-        public float AppliedAmount;
+        // 【2026-10-24】本次破甲减的是哪条防御（按目标物/魔类型分流，首次命中锁定），
+        // 到期按同一条还原，保证施加/还原同一属性键
+        public AttrType DefType;
     }
 
     // —— 默认硬编码值（兜底）——
@@ -47,16 +52,19 @@ public class SK019_ArmorShred : MercPassiveModule
 
     void ApplyArmorShred(UnitBase target)
     {
+        // 【2026-10-24 主人拍板】见类头注释 ①②③：层数真增加才施加、还原按层数求逆、
+        // 按目标类型分流 Defense / MagicDefense。
+        if (target.attr == null) return;
+        var defType = target.IsMagicDamageDealer() ? AttrType.MagicDefense : AttrType.Defense;
         if (!_shreds.TryGetValue(target, out var st))
-            st = new ArmorShredState();
-        // 2026-09-26 主人拍板：每次破甲固定 -每层比例（维持 Mathf.Min(最大层, Stacks+1) 语义），并累计到 AppliedAmount
-        float add = -_perLayer;
-        st.Stacks = Mathf.Min(_maxStacks, st.Stacks + 1);
+            st = new ArmorShredState { DefType = defType };
+        if (st.Stacks < _maxStacks)
+        {
+            st.Stacks++;
+            target.attr.AddAttr(st.DefType, -_perLayer, true);
+        }
         st.Timer = _duration;
-        st.AppliedAmount += add; // 累计真实施加量，保证「加多少还原多少」（含超过上限的溢出）
         _shreds[target] = st;
-        if (target.attr != null)
-            target.attr.AddAttr(AttrType.Defense, add, true);
     }
 
     public override void OnUpdate(float dt)
@@ -75,9 +83,14 @@ public class SK019_ArmorShred : MercPassiveModule
             st.Timer -= dt;
             if (st.Timer <= 0f)
             {
-                // 2026-09-26 主人拍板：到期对称还原累计减防，再移除（修「永久 -10%」bug）
-                if (target.attr != null && st.AppliedAmount != 0f)
-                    target.attr.AddAttr(AttrType.Defense, -st.AppliedAmount, true);
+                // 【2026-10-24 主人拍板】还原按层数求逆，与施加严格对称：
+                // 施加了 N 次 ×(1-perLayer)，这里一次性 ×(1-perLayer)^(-N)，净效果精确回 1。
+                // 旧码还原 -(AppliedAmount) 是加法口径，乘法下 3 层后 0.729×1.3=0.948D（永久 -5%）。
+                if (target.attr != null && st.Stacks > 0)
+                {
+                    float inverse = Mathf.Pow(1f - _perLayer, -st.Stacks) - 1f;
+                    target.attr.AddAttr(st.DefType, inverse, true);
+                }
                 _shreds.Remove(target);
             }
             else _shreds[target] = st;

@@ -140,6 +140,16 @@ public static partial class GameConfig
     /// 总怪量由此 ~90-135/关；精英末波同口径（编成为精英）。同屏峰值仍 ~15（分波刷，性能口径不变）。
     /// </summary>
     public const int FORMAL_WAVE_MONSTERS_MAX = 15;
+    /// <summary>
+    /// 【2026-10-23 主人拍板】正式关第 1 波怪数折扣：减半（×0.5，向上取整，钳 ≥1）。
+    /// 只作用于正式主线关（formalMain 覆盖段），引导局 / 金币本 / 裂隙不走。
+    /// </summary>
+    public const float FORMAL_WAVE1_DISCOUNT = 0.5f;
+    /// <summary>
+    /// 【2026-10-23 主人拍板】正式关第 2 波怪数折扣：减 1/4（×0.75，向上取整，钳 ≥1）。
+    /// 作用域同 <see cref="FORMAL_WAVE1_DISCOUNT"/>。
+    /// </summary>
+    public const float FORMAL_WAVE2_DISCOUNT = 0.75f;
 
     // —— 精英/Boss 概率掉天赋石（2026-10-20 主人拍板：天赋石不再每关首通发放，
     // 改为精英/Boss 击杀有几率掉落：精英 30%×1、Boss 60%×2）——

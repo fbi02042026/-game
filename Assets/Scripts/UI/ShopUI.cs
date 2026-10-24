@@ -360,6 +360,21 @@ public class ShopUI : MonoBehaviour
         var item = ShopDefs.Get(row.itemId);
         if (item == null) return;
 
+        // 【2026-10-24 主人拍板】所有花费钻石的地方都要二次确认：
+        // 钻石商品先弹 DiamondSpendGate 确认门，点「确认购买」才走 ShopSystem.Buy 扣费；
+        // 金币等其他货币保持原样直接买（金币本来就不在本次口径内）。
+        if (item.currency == ResourceWallet.ResourceType.Diamond)
+        {
+            string body = item.name + (string.IsNullOrEmpty(item.desc) ? "" : "\n" + item.desc);
+            DiamondSpendGate.Request("确认购买", body, item.price, () => DoBuy(item), "确认购买");
+            return;
+        }
+
+        DoBuy(item);
+    }
+
+    void DoBuy(ShopDefs.Item item)
+    {
         var result = ShopSystem.Buy(item);
         if (!result.ok)
         {

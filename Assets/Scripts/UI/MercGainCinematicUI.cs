@@ -36,7 +36,7 @@ public class MercGainCinematicUI : MonoBehaviour
     /// 没有"获得"仪式；此闸加在入口，任何接线点都不会误弹。</summary>
     public static void Show(string hireId, System.Action onClosed, string subtitle = null)
     {
-        string resolved = MercPortraitSprites.ResolveHireId(hireId) ?? hireId;
+        string resolved = MercRosterDefs.ResolveHireId(hireId) ?? hireId;
         if (System.Array.IndexOf(SaveData.DefaultUnlockedMercIds, resolved) >= 0)
         {
             onClosed?.Invoke();

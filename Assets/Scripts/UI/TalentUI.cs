@@ -210,6 +210,7 @@ public partial class TalentUI : MonoBehaviour
         // Instantiate 后物体 active：先跑重活（active 态下布局重建才正确），再隐藏常驻。
         Instance.EnsureLists();
         Instance.RefreshAll();
+        Instance.ApplyFit(); // 2026-10-24 主人拍板：预热时也套瘦屏适配（见 TalentUI.Fit.cs）
         go.SetActive(false);
     }
 
@@ -234,6 +235,7 @@ public partial class TalentUI : MonoBehaviour
         if (transform.Find("Dim") == null)
             TownPageDim.Ensure(transform);
         TavernUI.SetGuildHallOverlayMode(true);
+        ApplyFit(); // 2026-10-24 主人拍板：每次打开现算瘦屏适配（9:16 零变化，见 TalentUI.Fit.cs）
         EnsureLists();
         RefreshAll();
         // 2026-09-29 主人纠正：**打开天赋页不清红点** —— 玩家点左列时本来就在天赋页里，

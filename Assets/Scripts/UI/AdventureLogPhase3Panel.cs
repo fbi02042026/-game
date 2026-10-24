@@ -14,6 +14,9 @@ using UnityEngine.UI;
 /// 改版直接改 Assets/Resources/Prefabs/Town/AdventureLogPhase3Panel.prefab。
 /// 2026-10-21 主人拍板：里程商店上架遗忘药水后条目超预制体 6 行 → 行池化（超出克隆 Row_0 模板，
 /// 行池 _rowPool + 平行 List 下标对齐）；打开商店/合成滚回顶部，ScrollRect 开惯性滚动（Clamped 不变）。
+/// 2026-10-24 主人拍板：三期面板竖屏适配（ApplyPanelFit）——更瘦屏窗体整体等比放大并夹在屏内不触边，
+/// renwu 随屏幕拉伸左移/右移；Inner 内节点随窗体整体缩放，行滑动列表除外（RowScroll 反缩放，
+/// 行/文字保持设计尺寸，视口高度随面板比例向下撑满多露几行）；商品名按稀有度变色（ShopItemLabelColor）。
 /// </summary>
 public class AdventureLogPhase3Panel : MonoBehaviour
 {
@@ -73,6 +76,18 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     const float ListViewportTopY = -7.5f;
     const float ListViewportBottomY = -460f;
     const float ListViewportW = 424f;
+
+    // ===== 竖屏整体放大（2026-10-24 主人拍板；预制体设计几何实测值，勿改） =====
+    // Phase3Panel 500×932.6 @(103,0)；renwu 496×1024 @(-182,0)（设计稿 720×1280 坐标）
+    const float PanelDesignW = 500f;
+    const float PanelDesignH = 932.6f;
+    const float PanelDesignX = 103f;
+    const float RenwuDesignX = -182f;
+    const float FitEdgeMargin = 8f;   // 放大后面板距屏幕边缘最小间距（不触屏；标准屏保持设计原距 7px 不动）
+    const float MaxFitScale = 1.25f;  // 缩放上限 = 逻辑高上限 1600 ÷ 设计高 1280（竖屏适配口径）
+
+    float _fitScale = 1f;            // 当前窗体整体缩放系数（ApplyPanelFit 算，ApplyRowScrollFit 用）
+    RectTransform _rowScrollRect;    // RowScroll 根（视口矩形，列表适配只动这一个运行时节点）
 
     public static AdventureLogPhase3Panel Ensure(AdventureLogUI host)
     {
@@ -187,6 +202,7 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         BuildRowScroll(inner);
         GameFonts.ApplyToHierarchy(root);
         ForcePanelOpaque();   // 2026-10-20 主人拍板：打开必须全不透明，实例化时先拉一遍
+        ApplyPanelFit();      // 2026-10-24 主人拍板：实例化即套竖屏放大适配
     }
 
     /// <summary>
@@ -359,10 +375,79 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         }
         _listContent = crt;
         _rowScroll = sr;
+        _rowScrollRect = srt;   // 2026-10-24 竖屏适配：列表视口矩形引用（ApplyRowScrollFit 用）
 
         // RowScroll 成为 Inner 最后一个子节点后，行渲染在 CloseX 之上会盖住重叠角 → 关闭钮置顶
         var closeX = inner.Find(CloseXName);
         if (closeX != null) closeX.SetAsLastSibling();
+    }
+
+    // =====================================================================
+    // 竖屏整体放大适配（2026-10-24 主人拍板，口径同 DailyLoginUI.ApplyFit：只放大不缩小）
+    // =====================================================================
+
+    /// <summary>屏幕逻辑高（宽恒 720；瘦屏 = 720 ÷ 宽高比，与 DailyLoginUI / UiLayoutStretch 同口径）。</summary>
+    static float ResolveLogicalScreenHeight()
+    {
+        if (DesignAspectLetterbox.ResolveUiMatch() < 0.5f)
+            return GameConfig.DESIGN_WIDTH / Mathf.Max(1e-3f, Screen.width / (float)Screen.height);
+        return GameConfig.DESIGN_HEIGHT;
+    }
+
+    /// <summary>
+    /// 三期面板竖屏适配（每次打开重算，幂等；标准 9:16 屏 s=1 与预制体分毫不差）：
+    ///   - 窗体 Phase3Panel 整体等比放大 s = 逻辑高/1280（上限 1.25），放大后右沿夹进屏内
+    ///     EdgeMargin（不触屏，向左让位），纵向居中并夹进上下边距；
+    ///   - renwu 跟随缩放，x 按设计位×s 随屏幕拉伸左移/右移（装饰人物，左沿出血属设计）；
+    ///   - Inner 内节点随 Panel 缩放整体改变（localScale 自动带全部子节点）；
+    ///   - 行滑动列表除外：见 ApplyRowScrollFit。
+    /// </summary>
+    void ApplyPanelFit()
+    {
+        if (_panel == null) return;
+        float screenH = ResolveLogicalScreenHeight();
+        float s = Mathf.Clamp(screenH / GameConfig.DESIGN_HEIGHT, 1f, MaxFitScale);
+        _fitScale = s;
+
+        // 窗体：整体缩放 + 夹屏（标准屏 s=1 保持设计位 (103,0)；放大后右沿夹到 EdgeMargin）
+        float halfW = PanelDesignW * 0.5f * s;
+        float halfH = PanelDesignH * 0.5f * s;
+        float halfScreenW = GameConfig.DESIGN_WIDTH * 0.5f;
+        float x = PanelDesignX * s;
+        if (s > 1.001f)
+        {
+            float maxX = halfScreenW - FitEdgeMargin - halfW;
+            if (x > maxX) x = maxX;
+            float minX = -halfScreenW + FitEdgeMargin + halfW;
+            if (x < minX) x = minX;
+        }
+        float y = Mathf.Clamp(0f, -screenH * 0.5f + FitEdgeMargin + halfH, screenH * 0.5f - FitEdgeMargin - halfH);
+        var prt = (RectTransform)_panel.transform;
+        prt.localScale = Vector3.one * s;
+        prt.anchoredPosition = new Vector2(x, y);
+
+        // renwu：跟随整体缩放，x 随屏幕拉伸左移/右移（y 保持预制体值不动）
+        if (_renwu != null)
+        {
+            var rt = (RectTransform)_renwu.transform;
+            rt.localScale = Vector3.one * s;
+            rt.anchoredPosition = new Vector2(RenwuDesignX * s, rt.anchoredPosition.y);
+        }
+        ApplyRowScrollFit();
+    }
+
+    /// <summary>
+    /// 行滑动列表适配（2026-10-24 主人拍板：列表不随窗体整体缩放）：
+    /// RowScroll 反缩放 1/s → 行高/步距/列宽/文字全部保持设计尺寸（Content 与行几何零改动）；
+    /// 视口高度乘 s 随面板比例向下撑满（渲染顶 -7.5s / 底 -460s 正好贴住 Inner 底），瘦屏上多露几行；
+    /// 宽度保持设计 424 不拉伸。s=1 时与原实现完全一致。ScrollRect 滚动限位按 rect 计算，
+    /// Content(设计值) 对视口(452.5s) 同一坐标空间，滚动范围与视觉一致。
+    /// </summary>
+    void ApplyRowScrollFit()
+    {
+        if (_rowScrollRect == null) return;
+        _rowScrollRect.sizeDelta = new Vector2(ListViewportW, (ListViewportTopY - ListViewportBottomY) * _fitScale);
+        _rowScrollRect.localScale = Vector3.one / _fitScale;
     }
 
     /// <summary>
@@ -476,6 +561,7 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     {
         EnsureUi();
         if (_panel == null) return;
+        ApplyPanelFit();   // 2026-10-24 主人拍板：每次打开重算适配（分辨率可能变过），幂等
         if (_mode == Mode.None)
         {
             _panel.SetActive(false);
@@ -606,8 +692,10 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             bool can = AdventureLogMileage.CanClaimLevel(2);
             string priceTag = $"<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>Lv2里程奖励</color>";
 
+            // 2026-10-24 主人拍板：暮火之杖 = 稀有（既有口径「获得稀有·暮火之杖」），名字走稀有蓝
+            string staffHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Rare);
             if (_actionLabels[rowIdx] != null)
-                _actionLabels[rowIdx].text = $"{SpecialWeapons.InstanceName}　{priceTag}";
+                _actionLabels[rowIdx].text = $"<color=#{staffHex}>{SpecialWeapons.InstanceName}</color>　{priceTag}";
 
             if (_countTexts[rowIdx] != null)
             {
@@ -653,9 +741,12 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         bool canBuy = AdventureLogMileageShop.CanBuy(idx, out _);
         int remain = AdventureLogMileageShop.RemainThisWeek(item);
 
-        // Label：只写名称 + 消耗点数，不含限购次数
+        // Label：只写名称 + 消耗点数，不含限购次数；名称按稀有度变色（2026-10-24 主人拍板），价格仍走价格亮金
         if (_actionLabels[rowIdx] != null)
-            _actionLabels[rowIdx].text = $"{item.Name}　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{item.CostPoints}点</color>";
+        {
+            string nameHex = ColorUtility.ToHtmlStringRGB(ShopItemLabelColor(item.Id));
+            _actionLabels[rowIdx].text = $"<color=#{nameHex}>{item.Name}</color>　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{item.CostPoints}点</color>";
+        }
 
         // 次数：本周可领/总次数；每周领完或点数不足 → 置灰
         if (_countTexts[rowIdx] != null)
@@ -680,6 +771,24 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                     UIManager.Instance?.ShowToast(msg ?? "无法兑换");
                 RefreshPanel();
             });
+        }
+    }
+
+    /// <summary>
+    /// 里程商店商品名的稀有度文字色（2026-10-24 主人拍板：列表里的字按稀有度变）。
+    /// 高级招募卷轴 / 天赋石（主人点名算稀有）与遗忘药水（同档周限 1 高稀有消耗品）= 稀有蓝；
+    /// 其余商品保持预制体奶油原色（普通档不改观感）。色值只问 RarityPalette 唯一口径，不在这里抄 hex。
+    /// </summary>
+    static Color ShopItemLabelColor(string itemId)
+    {
+        switch (itemId)
+        {
+            case "scroll_l":       // 高级招募卷轴（招募传奇佣兵）
+            case "mats_3":         // 天赋石×3
+            case "forget_potion":  // 遗忘药水（洗天赋，500 点/周限 1）
+                return RarityPalette.Rare;
+            default:
+                return CreamColor;
         }
     }
 

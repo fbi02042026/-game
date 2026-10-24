@@ -27,7 +27,7 @@ public static class MercStarSystem
     /// </summary>
     public static int OutStarOf(string hireIdOrAssetId)
     {
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId);
         if (string.IsNullOrEmpty(hireId)) return -1;
         var data = SaveSystem.Instance?.Data;
         return data != null ? data.GetMercOutStar(hireId) : 0;
@@ -40,7 +40,7 @@ public static class MercStarSystem
     /// </summary>
     public static int InRunStarOf(string hireIdOrAssetId)
     {
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId);
         if (string.IsNullOrEmpty(hireId)) return 1;
         var data = SaveSystem.Instance?.Data;
         if (data == null) return 1;
@@ -55,7 +55,7 @@ public static class MercStarSystem
     /// </summary>
     public static int GetBagFragCount(string hireIdOrAssetId)
     {
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId);
         if (string.IsNullOrEmpty(hireId)) return 0;
         string itemId = MercStarDefs.FragmentItemId(hireId);
         if (string.IsNullOrEmpty(itemId)) return 0;
@@ -66,7 +66,7 @@ public static class MercStarSystem
     /// <summary>下一星碎片消耗；已满星（含超界）或非花名册返回 0。</summary>
     public static int GetNextStarCost(string hireIdOrAssetId)
     {
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId);
         if (string.IsNullOrEmpty(hireId)) return 0;
         if (!MercRosterDefs.TryGetByHireId(hireId, out var def)) return 0;
         int cur = OutStarOf(hireId);
@@ -80,7 +80,7 @@ public static class MercStarSystem
     /// </summary>
     public static int GetBadgeCount(string hireIdOrAssetId)
     {
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId);
         if (string.IsNullOrEmpty(hireId) || !MercRosterDefs.TryGetByHireId(hireId, out var def)) return 0;
         string jobKey = MercGrowSprites.JobKey(def.JobName);
         if (string.IsNullOrEmpty(jobKey))
@@ -93,10 +93,11 @@ public static class MercStarSystem
     }
 
     /// <summary>
-    /// 徽记档位显示名（"普通"→低级、"稀有"→中级、"传奇"→高级；2026-10-23 文案口径，
-    /// 与 MercGrowSystem.TierDisplayName 同口径但独立实现、不引用其私有方法）。
+    /// 徽记档位显示名（"普通"→低级、"稀有"→中级、"传奇"→高级；2026-10-23 文案口径）。
+    /// 【2026-10-23 主人拍板】全项目唯一出口：MercAscendUI 徽记行、MercGrowSystem 升级提示都走这里，
+    /// MercGrowSystem 原先那份私有副本已删除，映射规则不许再抄第二遍。
     /// </summary>
-    static string BadgeTierDisplayName(string tier)
+    public static string BadgeTierDisplayName(string tier)
     {
         switch (tier)
         {
@@ -111,7 +112,7 @@ public static class MercStarSystem
     public static bool CanStarUp(string hireIdOrAssetId, out string msg)
     {
         msg = "";
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId);
         if (string.IsNullOrEmpty(hireId) || !MercRosterDefs.TryGetByHireId(hireId, out var def))
         {
             msg = "花名册里查不到这名佣兵";
@@ -146,20 +147,61 @@ public static class MercStarSystem
                 return false;
             }
         }
+
+        // 资金预检（2026-10-23 主人拍板：金币/钻石并入权威校验，与 TryStarUp 的扣费同事务前置）。
+        // 规则只有 FundEnough 这一处 —— MercAscendUI.Fill 的消耗数字变色也转调它，不抄第二遍。
+        if (!FundEnough(def.Rarity, cur + 1, out string fundMsg))
+        {
+            msg = fundMsg;
+            return false;
+        }
         return true;
     }
 
     /// <summary>
-    /// 执行升星：查表校验 → ①扣职业徽记 → ②扣背包碎片（失败退回已扣徽记）→ ③outStar+1 → 存档。
+    /// 升星资金预检 —— 【2026-10-23 主人拍板】全项目唯一出口（原先只在 MercAscendUI 里，
+    /// 与 TryStarUp 的扣费脱节 → 出现过「预检过了、升完星却扣不动钱」的窗口）。
+    /// 够 → true；不够 → false + msg（缺哪种、还差多少）。
+    /// </summary>
+    public static bool FundEnough(MercRosterDefs.MercRarity rarity, int targetStar, out string msg)
+    {
+        long goldCost = MercStarDefs.GoldCost(rarity, targetStar);
+        long diaCost = MercStarDefs.DiamondCost(rarity, targetStar);
+        var data = SaveSystem.Instance?.Data;
+        if (goldCost > 0)
+        {
+            long have = ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold);
+            if (have < goldCost)
+            {
+                msg = "金币不足：还需 " + (goldCost - have) + "（持有 " + have + "/" + goldCost + "）";
+                return false;
+            }
+        }
+        if (diaCost > 0)
+        {
+            long have = ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond);
+            if (have < diaCost)
+            {
+                msg = "钻石不足：还需 " + (diaCost - have) + "（持有 " + have + "/" + diaCost + "）";
+                return false;
+            }
+        }
+        msg = null;
+        return true;
+    }
+
+    /// <summary>
+    /// 执行升星：查表校验 → ①扣职业徽记 → ②扣背包碎片 → ③扣金币/钻石 → ④outStar+1 → 存档。
+    /// 【2026-10-23 主人拍板】四步同一事务：任一步扣不动就整笔回滚，星级不动（旧实现由 MercAscendUI
+    /// 在「已升星已存档」之后才扣钱，扣不动只剩 LogError，留下「星升了、钱没扣」的脏数据）。
     /// 成功返回 true；失败原因见 msg（材料不足要能说出缺什么）。
-    /// 金币/钻石扣除不在这里（MercAscendUI 做，2026-10-23 现状保留）。
     /// </summary>
     public static bool TryStarUp(string hireIdOrAssetId, out string msg)
     {
         msg = "";
         if (!CanStarUp(hireIdOrAssetId, out msg)) return false;
 
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId);
         var data = SaveSystem.Instance?.Data;
         if (data == null || string.IsNullOrEmpty(hireId) || !MercRosterDefs.TryGetByHireId(hireId, out var def))
         {
@@ -201,13 +243,50 @@ public static class MercStarSystem
             return false;
         }
 
-        // ③ outStar+1 → 存档
+        // ③ 扣资金（金币 → 钻石）。【2026-10-23 主人拍板】挪进 TryStarUp 与徽记/碎片同事务：
+        //    原先由 MercAscendUI 在「已升星已存档」之后才扣，扣不动就只剩一句 LogError，
+        //    留下「星升了、钱没扣」的脏数据；现在扣不动就整笔回滚，星级不会变。
+        long goldCost = MercStarDefs.GoldCost(def.Rarity, target);
+        long diaCost = MercStarDefs.DiamondCost(def.Rarity, target);
+        bool spentGold = false;
+        if (goldCost > 0)
+        {
+            if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, goldCost, true, false))
+            {
+                RollbackMaterials(data, hireId, need, badgeId, badgeNeed);
+                Debug.LogError($"[MercStar] {hireId} 升星扣金币失败（预检通过但扣除失败，cost={goldCost}），已退还徽记/碎片 —— 数据异常，未升星");
+                msg = "金币扣除失败，请重试";
+                return false;
+            }
+            spentGold = true;
+        }
+        if (diaCost > 0)
+        {
+            if (!ResourceWallet.TrySpendDiamond(diaCost, "佣兵升星", true, false))
+            {
+                if (spentGold) ResourceWallet.Add(ResourceWallet.ResourceType.Gold, goldCost, true, false, false);
+                RollbackMaterials(data, hireId, need, badgeId, badgeNeed);
+                Debug.LogError($"[MercStar] {hireId} 升星扣钻石失败（预检通过但扣除失败，cost={diaCost}），已退还金币/徽记/碎片 —— 数据异常，未升星");
+                msg = "钻石扣除失败，请重试";
+                return false;
+            }
+        }
+
+        // ④ outStar+1 → 存档（走到这里说明徽记/碎片/资金全部扣成功）
         data.SetMercOutStar(hireId, target);
         SaveSystem.Instance.Save();
         string name = def.Name ?? hireId;
-        Debug.Log($"[MercStar] {name}({hireId}) 升星：{cur} → {target} 星，消耗徽记 ×{badgeNeed}、本命碎片 ×{need}");
+        Debug.Log($"[MercStar] {name}({hireId}) 升星：{cur} → {target} 星，消耗徽记 ×{badgeNeed}、本命碎片 ×{need}、金币 {goldCost}、钻石 {diaCost}");
         msg = $"{name} 升星成功（{target} 星）";
         return true;
+    }
+
+    /// <summary>升星事务回滚：把已扣的碎片与徽记退回（资金由调用方各自退回）。</summary>
+    static void RollbackMaterials(SaveData data, string hireId, int fragNeed, string badgeId, int badgeNeed)
+    {
+        if (data == null) return;
+        if (fragNeed > 0) data.TownBagAdd(MercStarDefs.FragmentItemId(hireId), fragNeed);
+        if (badgeNeed > 0) MercGrowInventory.Add(badgeId, badgeNeed);
     }
 
     /// <summary>
@@ -216,18 +295,8 @@ public static class MercStarSystem
     /// </summary>
     public static bool IsFullStarFragReady(string hireIdOrAssetId)
     {
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId);
         if (string.IsNullOrEmpty(hireId) || !MercRosterDefs.TryGetByHireId(hireId, out var def)) return false;
         return GetBagFragCount(hireId) >= MercStarDefs.FullStarFragTotal(def.Rarity);
-    }
-
-    static string ResolveHireId(string hireIdOrAssetId)
-    {
-        if (string.IsNullOrEmpty(hireIdOrAssetId)) return null;
-        if (MercRosterDefs.TryGetByHireId(hireIdOrAssetId, out var byHire))
-            return byHire.HireId;
-        if (MercRosterDefs.TryGetByAssetId(hireIdOrAssetId, out var byAsset))
-            return byAsset.HireId;
-        return null;
     }
 }

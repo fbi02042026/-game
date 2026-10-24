@@ -34,6 +34,20 @@ public static class StoryBackgrounds
     /// <summary>N7 · 裂隙最深处无底深渊边缘的悬空石台（三选一前）。</summary>
     public const string AbyssChoice = "abyss_choice";
 
+    // —— 支线岛剧情背景（2026-10-24 主人供图接入）——
+    // 岛 id 对齐 SideIslandDefs（1=迷雾屿 2=沉船湾 3=翡翠秘境 …8=黑曜祭坛，岛名草稿主人可全改）。
+    // 岛 1-3 图已到位（island_01/02/03.jpg，主人 2026-10-24 供图）；岛 4-8 等图——
+    // 缺图走 PlaceholderArt 占位 + LogWarning，不拦流程（主人 2026-10-24「你先占位」）。
+    // 命名口径：路径加载（Resources.Load），不进 prefab 引用，56 字符 guid 规矩不受影响（铁律 30）。
+    public const string Island01 = "island_01";
+    public const string Island02 = "island_02";
+    public const string Island03 = "island_03";
+    public const string Island04 = "island_04";
+    public const string Island05 = "island_05";
+    public const string Island06 = "island_06";
+    public const string Island07 = "island_07";
+    public const string Island08 = "island_08";
+
     /// <summary>快节奏场景：地名大字显示时间 ×此系数（2026-10-14 主人拍板：会长办公室/公会大厅的地名大字时间减 30%）。</summary>
     public const float FastTextTimeScale = 0.7f;
 
@@ -58,6 +72,15 @@ public static class StoryBackgrounds
         if (id == WreckShip) return "搁浅的补给船";
         if (id == GraveSeven) return "无名碑";
         if (id == AbyssChoice) return "深渊边缘";
+        // —— 支线岛（岛名真源 SideIslandDefs 草稿；黑幕大字显示这里，四字为主）——
+        if (id == Island01) return "迷雾屿";
+        if (id == Island02) return "沉船湾";
+        if (id == Island03) return "翡翠秘境";
+        if (id == Island04) return "晨曦草原";
+        if (id == Island05) return "搁浅地";
+        if (id == Island06) return "王座间";
+        if (id == Island07) return "深渊口";
+        if (id == Island08) return "黑曜祭坛";
         return "";
     }
 

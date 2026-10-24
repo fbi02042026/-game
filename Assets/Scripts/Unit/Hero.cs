@@ -345,7 +345,8 @@ public class Hero : UnitBase
     static EquipTemplate TryGetEquippedWeaponTemplate(GridBackpackSystem bag)
         => TryGetEquippedWeaponInstance(bag)?.template;
 
-    static EquipInstance TryGetEquippedWeaponInstance(GridBackpackSystem bag)
+    // 2026-10-24 主人拍板：供 WeaponVfxVariant 复用（只提可见性，语义不变；铁律 15 不多入口，不另写取主手武器的逻辑）
+    internal static EquipInstance TryGetEquippedWeaponInstance(GridBackpackSystem bag)
     {
         if (bag == null) return null;
         var main = bag.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
@@ -617,10 +618,13 @@ public class Hero : UnitBase
     }
 
     /// <summary>
-    /// Hero不回对象池，死亡动画播完后直接隐藏
+    /// Hero不回对象池，死亡动画播完后直接隐藏。
+    /// 【2026-10-24】复活守卫：等待复活选择期间死亡回收定时器到期，若玩家已复活（血量>0）
+    /// 则不隐藏 —— 否则复活后本体被延迟回收藏掉。
     /// </summary>
     protected override void OnDeathRelease()
     {
-        gameObject.SetActive(false);
+        if (currentHp <= 0f)
+            gameObject.SetActive(false);
     }
 }

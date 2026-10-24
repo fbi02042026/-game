@@ -369,7 +369,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                     merc.SetHireId(md.hireId);
                 else
                 {
-                    string resolved = MercPortraitSprites.ResolveHireId(md.mercId);
+                    string resolved = MercRosterDefs.ResolveHireId(md.mercId);
                     if (!string.IsNullOrEmpty(resolved))
                         merc.SetHireId(resolved);
                 }
@@ -384,6 +384,10 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                     AdventureLogAchievements.OnLaodunBattled();
                     countedLaodun = true;
                 }
+                // 【2026-10-24 主人拍板「钩子肯定需要」】N-1 佣兵参战计数：城镇酒馆旧路径的入场点
+                //（常规肉鸽局走 RunDraftDirector.RecruitMerc，另有同款调用）。出口唯一见 OnMercBattled。
+                AdventureLogAchievements.OnMercBattled(
+                    !string.IsNullOrEmpty(md.hireId) ? md.hireId : MercRosterDefs.ResolveHireId(md.mercId));
             }
         }
         Debug.Log($"[BattleManager] 已生成佣兵 {spawned} 个 (tavern槽={max})");

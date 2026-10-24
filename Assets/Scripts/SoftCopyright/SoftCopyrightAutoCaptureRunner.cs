@@ -158,6 +158,7 @@ public class SoftCopyrightAutoCaptureRunner : MonoBehaviour
 
         Add(38, "38_酒馆_佣兵招募", "酒馆三选一", () =>
         {
+            // 【2026-10-24 主人拍板】TavernRecruit 探针已改指 MercenaryRecruitPopupUI（旧 TavernRosterPanel 无人打开）。
             var t = SoftCopyrightUiProbe.TavernRecruit;
             return t != null && t.IsOpen;
         }, 0.7f);

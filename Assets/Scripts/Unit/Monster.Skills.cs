@@ -641,7 +641,10 @@ public partial class Monster
                     {
                         if (this == null || isDead || tgt == null || tgt.isDead) return;
                         bool crit = Random.value < attr.GetAttr(AttrType.CritRate);
-                        tgt.TakeDamage(crit ? damage * 1.5f : damage, crit, false, true, facing, this);
+                        // 【2026-10-24 主人拍板】暴击倍率统一走 DamageFormula.CritMultiplier(attr)：
+                        // 原硬编码 ×1.5 与普攻/弹幕（BuildAttackRaw→CritDamage=2.0）同怪不同倍率；
+                        // 统一后怪物技能暴击伤害 ×2.0（较旧 +33%，Boss 技能更痛，真机验收关注）。
+                        tgt.TakeDamage(crit ? damage * DamageFormula.CritMultiplier(attr) : damage, crit, false, true, facing, this);
                     });
             }
             else if (tgt != null && !tgt.isDead)
@@ -831,7 +834,8 @@ public partial class Monster
                 float dist = Mathf.Abs(u.transform.position.x - centerX);
                 if (dist > radius) continue;
                 bool crit = Random.value < attr.GetAttr(AttrType.CritRate);
-                u.TakeDamage(crit ? damage * 1.5f : damage, crit, false, true, vfxDir);
+                // 【2026-10-24 主人拍板】与普攻统一暴击倍率（原硬编码 ×1.5 → attr.CritDamage=2.0）
+                u.TakeDamage(crit ? damage * DamageFormula.CritMultiplier(attr) : damage, crit, false, true, vfxDir);
             }
             return;
         }

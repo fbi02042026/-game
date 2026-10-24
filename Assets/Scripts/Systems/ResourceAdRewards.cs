@@ -46,7 +46,7 @@ public static class ResourceAdRewards
     /// <summary>扣钻石；不足时提示「需多少 / 当前多少」并返回 false，绝不静默失败。</summary>
     static bool TryPayDiamond(int price, string slotTag)
     {
-        if (ResourceWallet.TrySpend(ResourceWallet.ResourceType.Diamond, price, save: true, notify: false))
+        if (ResourceWallet.TrySpendDiamond(price, "广告位钻石补给", save: true, notify: false))
             return true;
 
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;

@@ -36,7 +36,9 @@ public partial class UnitBase
         if (magicHit && source is Mercenary hitMerc && hitMerc.PassiveRunner != null)
             hitMerc.PassiveRunner.OnDealMagicDamage(ref damage);
 
-        float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense, magicHit);
+        // 2026-10-24 主人拍板「类型克制·双向」：补传目标类型（本单位的伤害类型），
+        // 攻击方与目标类型不同 → FinalHit 内伤害 ×1.1
+        float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense, magicHit, IsMagicDamageDealer());
 
         // 【临时打点 2026-10-18】排查「普攻608/暴击120」矛盾：主角打出的每一击落地实况，定位后删除
         if (source is Hero)
@@ -156,6 +158,27 @@ public partial class UnitBase
     {
         if (unitAnim != null)
             unitAnim.PlayDamaged(playHitAnim: true);
+    }
+
+    /// <summary>
+    /// 原地复活（2026-10-24 主人拍板「战斗内复活，扣钻石」）：回血、清死亡态、复位动画、
+    /// 若死亡回收已把本体隐藏则重新显示。当前只有主角会走（BattleManager.DoReviveHero），
+    /// 怪物/佣兵不许调（怪物回池复用走 ResetForReuse，佣兵阵亡走各自清场）。
+    /// </summary>
+    /// <returns>true = 复活成功；false = 本来就没死，不重复处理。</returns>
+    public bool Revive(float hpRatio)
+    {
+        if (!_isDying && currentHp > 0f) return false;
+        _isDying = false;
+        float maxHp = attr != null ? Mathf.Max(1f, attr.GetAttr(AttrType.MaxHp)) : 1f;
+        currentHp = Mathf.Max(1f, maxHp * Mathf.Clamp01(hpRatio));
+        if (unitAnim != null)
+            unitAnim.ResetToIdle();
+        if (rb != null)
+            rb.velocity = Vector2.zero;
+        if (!gameObject.activeSelf)
+            gameObject.SetActive(true);   // 死亡动画播完已隐藏（Hero.OnDeathRelease）→ 重新上屏
+        return true;
     }
 
     protected virtual void Die(bool isCritKill = false)

@@ -78,7 +78,12 @@ public static class SoftCopyrightUiProbe
 
     public static NextStageRouletteUI Roulette => NextStageRouletteUI.Instance;
 
-    public static TavernRosterPanel TavernRecruit => TavernRosterPanel.Instance;
+    /// <summary>
+    /// 酒馆佣兵招募弹窗。【2026-10-24 主人拍板】原先指向 TavernRosterPanel（代码搭建的旧三选一面板），
+    /// 但那个面板没有任何入口打开它（酒馆「招募佣兵」按钮走的是 MercenaryRecruitPopupUI），
+    /// 探针恒为 null → 软著自动截图的「38_酒馆_佣兵招募」规则永远不触发。改指唯一在用的弹窗。
+    /// </summary>
+    public static MercenaryRecruitPopupUI TavernRecruit => MercenaryRecruitPopupUI.Instance;
 
     public static bool IsTalentVisible =>
         TalentUI.Instance != null && TalentUI.Instance.gameObject.activeSelf;

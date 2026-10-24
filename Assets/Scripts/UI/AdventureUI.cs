@@ -124,6 +124,12 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     const string EndlessNodeName   = "无限";
     const string ActivityNodeName  = "活动副本";
     const string ActivityBgNodeName = "金币副本";   // StageNodes 下的背景节点名（RiftMapNodeName 同口径）
+    /// <summary>
+    /// 活动副本背景图（2026-10-23 主人：「活动副本标签没有适配，背景应该用活动这个图片」）。
+    /// prefab 里「金币副本」背景节点沿用了 Node_8 的雪山图（未适配）；且「活动.jpg」的 .meta
+    /// 是 56 字符 guid（§2.3 口径：不修 guid，运行时用的图一律路径加载）→ 按路径设图，不动 prefab 排版。
+    /// </summary>
+    const string ActivityBgSpritePath = "Art/UI/Adventure/StageIcons/Big/活动";
     /// <summary>活动列表横条：金币副本（RightContent/活动副本/金币）。</summary>
     const string ActivityGoldRowName = "金币";
     /// <summary>活动列表横条：徽记副本（RightContent/活动副本/徽记）。</summary>
@@ -142,6 +148,8 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     readonly Dictionary<Image, Color> _activityRowBaseColors = new Dictionary<Image, Color>();
     /// <summary>StageNodes 下「金币副本」背景节点的 Image（活动模式背景，prefab 自带）。</summary>
     Image _activityBgImg;
+    /// <summary>活动副本背景图缓存（按路径加载，只 Load 一次）。</summary>
+    Sprite _activityBgSprite;
     /// <summary>当前可进的章节集合（升序）——箭头在它里面循环，取代旧的 1..maxUnlocked 连续段</summary>
     readonly List<int> _availableChapters = new List<int>();
     List<Button> _stageNodeBtns = new List<Button>();
@@ -267,11 +275,15 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
             _selectedChapter = ChapterRouteTable.CurrentChapterToAdvance(SaveSystem.Instance?.Data);
         HideUnfinishedEntries();
         RefreshAll();
-        ConsumeAdventureRewardNotices();   // 打完关回来看宝箱：自动弹「获得奖励」（见 AdventureUI.ChestNodes.cs）
+        // 【2026-10-24 主人拍板】进页不再自动弹「获得奖励」：改为玩家点击宝箱时按关取用
+        // AdventureRewardNotice.Take 弹窗（见 AdventureUI.ChestNodes.cs OnClickChestClaim）。
 
         // 竖屏专用适配：更瘦屏时把 RightContent 居右、MapRoot 右溢出归零、DetailPanel 宽对齐下沉到底。
         // 已迁移到本界面自身（ApplyAdventureFit），标准 9:16 屏或开关关闭时该方法内部直接回退、不改任何东西。
         ApplyAdventureFit();
+
+        // 【2026-10-23 主人要求】进页左侧标签逐颗弹入（见 AdventureUI.Anim.cs）
+        PlayLeftTabsPopIn();
 
         // 【2026-10-22 主人原话「进了冒险界面就弹出上一局意外退出 是否继续 然后两个按钮确定和取消」】
         // 上一场战斗中途断掉的局：进冒险页就问一次。确定 = 继续上一局；取消 = 重新开始（丢局）。
@@ -299,7 +311,11 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     }
 
 
-    /// <summary>世界地图选完区域后的回调（传送门 WorldMapPortal 走这里开战）。</summary>
+    /// <summary>
+    /// 世界地图选完区域后的回调（2026-10-24 主人拍板改选章制）：
+    /// 点「进入」后世界地图关闭，冒险页切到该章——背景换该章图、关卡列变 X-1（从第 1 关打起），
+    /// **不再直接开战**，玩家自己点「开始冒险」。世界地图从此就是选章入口。
+    /// </summary>
     public void OnWorldMapEnter(int chapter)
     {
         if (chapter < 1 || chapter > 8) return;
@@ -308,16 +324,19 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
             Toast("该区域尚未解锁");
             return;
         }
-        if (SaveSystem.Instance != null && SaveSystem.Instance.Data != null
-            && SaveSystem.Instance.Data.HasClearedChapter(chapter))
+        // 难度逐章把关（2026-10-24 主人拍板）：该章在当前难度未开启 → 提示，不切章
+        if (!ChapterRouteTable.CanEnterAtDiff(chapter, _selectedDiff, SaveSystem.Instance?.Data))
         {
-            Toast("该区域已通关");
+            Toast(ChapterRouteTable.DiffChapterLockHint);
             return;
         }
         _selectedChapter = chapter;
         _selectedMode = 0;
-        _selectedDiff = 0;
-        OnStartBattle();
+        RefreshAll();
+        PlayChapterFadeIn();
+        // 提示落点：该章下一关（没通过 = 从 1 关打起；整章通关重打 = 第 1 关）
+        int nextStage = Mathf.Clamp(GetMaxClearedStage(chapter) + 1, 1, GameConfig.STAGES_PER_GRAND);
+        Toast($"已前往 {GameConfig.GetChapterMapName(chapter)} {chapter}-{nextStage}");
     }
 
     public void HidePage()

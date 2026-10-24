@@ -38,8 +38,11 @@ public partial class DailyLoginUI
             // 所以：不可领的天直接把该组件摘掉（摘掉时 OnDisable→Restore 会写一次旧色，必须放在本格写色之前）。
             SyncPressFeedback(cell, canPress);
 
-            cell.dayText.text = "第 " + day + " 天";   // 已领/未解锁状态用底色与文字颜色区分
+            // 【2026-10-23 主人要求】天数里的数字比「第/天」大 1 号（rich text，字号基准 = 预制体本格字号）
+            cell.dayText.text = DayNumberStyled(day,
+                cell.dayText != null ? cell.dayText.fontSize : 0);
             // B6: 奖励名去掉稀有度前缀（"稀有佣兵·" 等），并把 \n 换成 ·
+            // 【2026-10-23 主人要求】奖励名「名字数量」直写无 ×、无空格（来自表 daily_login.csv），此处不再加字号
             cell.rewardText.text = StripRarity(r.DisplayName);
             if (cell.x2Badge != null) cell.x2Badge.SetActive(dbl);
             // B8: 「限定」标识位置以预制体为准，代码只控 active；判定改为该格奖励是 Merc 才显示（佣兵日后自动换碎片则不显示）
@@ -48,9 +51,12 @@ public partial class DailyLoginUI
             // B7: 碎片格带佣兵头像（复用 MercGrowUI.FragmentCard），其余类型走原 SetIcon
             bool isFrag = r.grant == DailyLoginDefs.Grant.MercFragment
                        || r.grant == DailyLoginDefs.Grant.LegendaryFragment;
+            // 【2026-10-23 主人要求】徽记格奖励名也按稀有度染色（与碎片格 C1 同款；
+            // 塔克=剑盾·稀有→中级徽记，取色走 RarityOfGrant 同一出口，绝不另写一份）
+            bool isBadge = r.grant == DailyLoginDefs.Grant.Badge;
             // C1: 碎片格奖励名按稀有度染色（主人要求）。只给本格记一个「原色覆盖值」，
             //     不碰 baseRewardColor（预制体原色），所以关开关 / 非碎片格 / 换轮回后都能干净还原。
-            if (isFrag && EnableFragmentNameRarityColor)
+            if ((isFrag || isBadge) && EnableFragmentNameRarityColor)
             {
                 var rc = RarityPalette.Get(RarityOfGrant(r.grant, r.hireId));
                 // 只换 RGB、保留预制体文字的 alpha —— 以主人预制体为准，代码只兜底

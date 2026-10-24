@@ -11,6 +11,9 @@ public class MercSkillCaster : MonoBehaviour
     Mercenary _merc;
     string _activeSkillId;
     float _cooldownRemain;
+    /// <summary>CD 好但放不出去（无目标/蓝不足）时的重试节流（2026-10-23 主人拍板：0.25s）。</summary>
+    float _retryTimer;
+    const float RETRY_INTERVAL = 0.25f;
 
     /// <summary>本技能的蓝条定位（无蓝 = 纯 CD，不参与 MP）。</summary>
     MpArchetype _mpType = MpArchetype.None;
@@ -40,6 +43,7 @@ public class MercSkillCaster : MonoBehaviour
         CooldownTotal = (cfg != null && cfg.cooldown > 0f ? cfg.cooldown : 8f) * GameConfig.MERC_SKILL_COOLDOWN_MUL;
         // 开局按满冷却进场：先普攻，冷却走完才轮到第一发主动技（原为 0，进战瞬间就甩技能）
         _cooldownRemain = CooldownTotal;
+        _retryTimer = 0f;
 
         // 2026-10-06：定位与耗蓝只在绑定时取一次，运行时不再查表
         _mpType = MpProfile.OfMercSkill(activeSkillId);
@@ -76,7 +80,16 @@ public class MercSkillCaster : MonoBehaviour
         if (_merc.IsStunned || _merc.TutorialStunned) return;
         if (_cooldownRemain > 0f) return;
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct) return;
-        TryCast();
+        // 【2026-10-23 主人拍板】CD 好但放不出去（场上无怪/蓝不足）时按 0.25s 节流重试，
+        // 不再每帧跑 MercSkillNeedsTarget 查表 + FindNearestEnemy 空转。
+        // 只影响「放不出去」的局面；能放时 _retryTimer 恒为 0，首发时机与原来完全一致。
+        if (_retryTimer > 0f)
+        {
+            _retryTimer -= Time.deltaTime;
+            return;
+        }
+        if (!TryCast())
+            _retryTimer = RETRY_INTERVAL;
     }
 
     public bool TryCast(bool manual = false)
@@ -97,11 +110,7 @@ public class MercSkillCaster : MonoBehaviour
         return ok;
     }
 
-    [Obsolete("语义陷阱：清零冷却 = 立刻可放技能，与 Bind() 的『满冷却进场，先普攻』语义相反；留着易被误调用破坏进战手感。2026-09-26 已确认零调用，若真需要请新建显式方法。")]
-    public void ResetCooldown()
-    {
-        _cooldownRemain = 0f;
-    }
+    // 【2026-10-23 主人拍板】[Obsolete] ResetCooldown 已删除：语义陷阱（清零冷却 = 立刻可放），确认零调用。
 
     /// <summary>
     /// 攻击类主动技（作用对象是敌人）才要求场上先有目标；治疗/增益/护盾类目标是自己人，不受此限。

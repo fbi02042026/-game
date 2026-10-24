@@ -220,6 +220,23 @@ public static partial class GameConfig
     public static int GetBattleBackpackRows(SaveData data) =>
         Mathf.Clamp(Mathf.Min(GetUnlockedBackpackRows(data), BATTLE_BACKPACK_ROWS), 1, BACKPACK_HEIGHT_MAX);
 
+    /// <summary>
+    /// 【2026-10-23 主人拍板】背包单格是否已解锁的**唯一判定出口**：
+    /// 格子解锁 = 行解锁（gridY &lt; unlockedRows）OR 单格钻石解锁（SaveData.backpackUnlockedCells 含索引）。
+    /// index = gridY * logicalColumns + gridX —— 列数与行基线都由调用网格传入：
+    /// 角色页是 8 列 × 显示解锁 2 行（CharacterBagGrid），四列弹窗网格才是 GetUnlockedBackpackRows + BACKPACK_WIDTH；
+    /// 不写死 BACKPACK_WIDTH 是因为 8 列网格的 gridX 可到 7，按 4 列折算索引会撞车。
+    /// data 为 null → 只按行判定且视为未解锁（false）。钻石解过的格独立存列表，洗点不回收。
+    /// </summary>
+    public static bool IsBackpackCellUnlocked(SaveData data, int gridX, int gridY, int unlockedRows, int logicalColumns)
+    {
+        if (data == null) return false;
+        if (gridY >= 0 && gridY < Mathf.Max(0, unlockedRows)) return true;
+        if (gridX < 0 || gridY < 0 || logicalColumns <= 0) return false;
+        var unlockedCells = data.backpackUnlockedCells;
+        return unlockedCells != null && unlockedCells.Contains(gridY * logicalColumns + gridX);
+    }
+
     /// <summary>调试/UI 容量显示用：直接读当前存档解锁的背包行数（无需传参）。</summary>
     public static int UnlockedBackpackRows() => GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
 

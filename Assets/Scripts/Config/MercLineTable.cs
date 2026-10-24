@@ -47,7 +47,7 @@ public static class MercLineTable
             if (string.IsNullOrEmpty(line) || line.StartsWith("#")) continue;
             if (line.StartsWith("佣兵ID") || line.StartsWith("hireId")) continue;
 
-            string[] cols = SplitCsvLine(line);
+            string[] cols = GameTableCsv.SplitCsvLine(line);
             if (cols.Length < 8) continue;
             string hireId = cols[0].Trim();
             if (string.IsNullOrEmpty(hireId) || !hireId.StartsWith("H")) continue;
@@ -89,22 +89,14 @@ public static class MercLineTable
     public static string Pick(string hireIdOrAssetId, Scene scene)
     {
         EnsureLoaded();
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        // 2026-10-23 主人拍板：唯一出口 MercRosterDefs.ResolveHireId；
+        // 查不到时退回原串（保持本表历史口径：Fallback 要拿原 id 拼提示，不能传 null）。
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId) ?? hireIdOrAssetId;
         if (!string.IsNullOrEmpty(hireId) && _lines != null
             && _lines.TryGetValue(MakeKey(hireId, scene), out var list) && list != null && list.Count > 0)
             return list[Random.Range(0, list.Count)];
 
         return Fallback(hireId, scene);
-    }
-
-    static string ResolveHireId(string id)
-    {
-        if (string.IsNullOrEmpty(id)) return id;
-        if (MercRosterDefs.TryGetByHireId(id, out _)) return id;
-        if (MercRosterDefs.TryGetByAssetId(id, out var byAsset) && !string.IsNullOrEmpty(byAsset.HireId))
-            return byAsset.HireId;
-        string resolved = MercPortraitSprites.ResolveHireId(id);
-        return !string.IsNullOrEmpty(resolved) ? resolved : id;
     }
 
     static string Fallback(string hireId, Scene scene)
@@ -145,31 +137,5 @@ public static class MercLineTable
             Debug.LogError($"[MercLineTable] 佣兵 {key} 在花名册里没有真名 Name，台词前缀退回 {key} —— "
                 + "去 merc_roster.csv 补真名，别拿昵称顶替");
         return string.IsNullOrEmpty(hireId) ? "佣兵" : hireId;
-    }
-
-    static string[] SplitCsvLine(string line)
-    {
-        var cols = new List<string>();
-        if (string.IsNullOrEmpty(line)) return cols.ToArray();
-        var sb = new System.Text.StringBuilder();
-        bool inQuotes = false;
-        for (int i = 0; i < line.Length; i++)
-        {
-            char c = line[i];
-            if (c == '"')
-            {
-                inQuotes = !inQuotes;
-                continue;
-            }
-            if (c == ',' && !inQuotes)
-            {
-                cols.Add(sb.ToString());
-                sb.Length = 0;
-                continue;
-            }
-            sb.Append(c);
-        }
-        cols.Add(sb.ToString());
-        return cols.ToArray();
     }
 }

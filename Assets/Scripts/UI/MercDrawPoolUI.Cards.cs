@@ -92,8 +92,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
             int col = i % cols;
             int row = i / cols;
             bool hasDef = MercRosterDefs.TryGetByHireId(orderedIds[i], out var def);
-            var card = Object.Instantiate(tmplGo);
-            card.SetActive(true);   // 模板是隐藏的，克隆体默认也是灰的，必须手动点亮
+            // 【2026-10-23 主人拍板】优先复用池里的卡，池空才 Instantiate（刷新不再全量重建）
+            var card = TakeCard(owned ? _ownedCardPool : _lockedCardPool, tmplGo);
+            card.SetActive(true);   // 模板是隐藏的，克隆体/复用体都要点亮
             card.name = owned ? "OwnedCard" : "LockedCard";
             card.transform.SetParent(content, false);
             var crt = card.GetComponent<RectTransform>();
@@ -111,6 +112,21 @@ public partial class MercDrawPoolUI : MonoBehaviour
             if (owned) _ownedCards.Add(card);
             else _lockedCards.Add(card);
         }
+    /// <summary>取一张列表卡：复用池里有就拿出来（内容随后由 FillTemplateCard 全量重填），没有才克隆模板。</summary>
+    static GameObject TakeCard(List<GameObject> pool, GameObject tmplGo)
+    {
+        if (pool != null)
+        {
+            for (int i = pool.Count - 1; i >= 0; i--)
+            {
+                var reuse = pool[i];
+                pool.RemoveAt(i);
+                if (reuse != null) return reuse;
+            }
+        }
+        return Object.Instantiate(tmplGo);
+    }
+
         int rows = (orderedIds.Count + cols - 1) / cols;
         return startY + (rows - 1) * rowPitch + visual.y + nameDrop;
     }
@@ -230,14 +246,14 @@ public partial class MercDrawPoolUI : MonoBehaviour
         var swapNode = card.transform.Find("替换");
         if (swapNode != null) swapNode.gameObject.SetActive(false);
 
-        // ---- 卡内「升阶」钮（2026-10-22 主人拍板：进阶入口从窗口级挪进单卡）----
-        // 主人已把「升阶」节点放进 Slot 模板（查看/替换/升阶三钮，克隆体天然带上）；本处只在
-        // 克隆路径绑定（模板本体每次建卡前已强制隐藏，不会误亮）。点击 → 打开该卡的佣兵进阶界面。
+        // ---- 卡内「升阶」钮（2026-10-23 主人拍板二改：没碎片也能打开看，够了才在卡片上有提示）----
+        // 已拥有且未满星就显示「升阶」钮（不看材料）；材料+资金全够时钮正常亮（= 主人要的卡片提示），
+        // 不够时压灰但仍可点 → 照常开 MercAscendUI 看预览，窗内点升阶才逐项 Toast 缺什么。
         var ascendNode = card.transform.Find("升阶");
         if (ascendNode != null)
         {
             bool canShow = CanShowAscendButton(hireId, owned);
-            ascendNode.gameObject.SetActive(canShow);   // 「当能升阶的会出现 队列里的和未拥有的佣兵不显示」
+            ascendNode.gameObject.SetActive(canShow);
             if (canShow)
             {
                 var aImg = ascendNode.GetComponent<Image>();
@@ -246,6 +262,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 if (aBtn == null) aBtn = ascendNode.gameObject.AddComponent<Button>();   // 无 Button 运行时补（先例同 quxiao）
                 if (aBtn.targetGraphic == null && aImg != null) aBtn.targetGraphic = aImg;
                 aBtn.onClick.RemoveAllListeners();
+                if (aImg != null) aImg.color = CanActuallyAscend(hireId) ? Color.white : AscendDimColor;
                 string ascHid = hireId;   // 与上方查看钮的 hid 同名会撞 CS0136，故单名
                 aBtn.onClick.AddListener(() => MercAscendUI.Show(ascHid));
             }
@@ -256,26 +273,38 @@ public partial class MercDrawPoolUI : MonoBehaviour
         }
     }
 
+    /// <summary>卡内「升阶」钮材料不够时的压灰色（只调色不动图，同 inQueue 灰显口径）。</summary>
+    static readonly Color AscendDimColor = new Color(0.5f, 0.5f, 0.5f, 1f);
+
     /// <summary>
-    /// 卡内「升阶」钮的显示条件（2026-10-22 主人拍板，fail closed——任何一环查不到都隐藏）：
-    /// 已拥有（SaveData.IsMercUnlocked）+ 未满星（outStar &lt; 3）+ 材料全够
-    /// （本命碎片够 + **职业徽记够**（2026-10-23 起，统一并入 CanStarUp 预检）+ 金币/钻石够）。
-    /// 拥有/星级/碎片/徽记判定全部复用 MercStarSystem.CanStarUp，规则不抄第二遍；
-    /// 资金门槛仍在本处读表算（与 MercAscendUI.OnStarUpClick 同口径）。队列里的卡不走本判定。
+    /// 卡内「升阶」钮的显示条件（2026-10-23 主人拍板二改：没碎片也能打开看）：
+    /// 只剩两关 —— 已拥有（SaveData.IsMercUnlocked 由 owned 传入）+ 未满星（outStar &lt; 3）。
+    /// 材料/资金够不够不再决定显隐，改用钮的亮/灰表达（CanActuallyAscend），点了照常开窗。
     /// </summary>
     bool CanShowAscendButton(string hireId, bool owned)
     {
         if (!owned || string.IsNullOrEmpty(hireId)) return false;
-        var data = SaveSystem.Instance?.Data;
-        if (data == null) return false;
+        int cur = MercStarSystem.OutStarOf(hireId);
+        if (cur < 0) cur = 0;
+        return cur < MercStarDefs.MaxOutStar;
+    }
 
-        // 碎片 + 徽记预检（含拥有/满星判定；msg 不展示，仅用于隐藏钮）
+    /// <summary>
+    /// 升阶材料 + 资金是否全够（真源唯一：碎片/徽记/拥有/满星走 MercStarSystem.CanStarUp 权威，
+    /// 金币/钻石读表算，与 MercAscendUI.OnStarUpClick 同口径，规则不抄第二遍）。
+    /// 全够 → 卡内「升阶」钮正常亮（2026-10-23 主人原话「碎片够了会在卡片有提示」）；
+    /// 缺 → 钮压灰（AscendDimColor）但仍可点开窗。
+    /// </summary>
+    bool CanActuallyAscend(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return false;
         if (!MercStarSystem.CanStarUp(hireId, out _)) return false;
 
-        // 金币/钻石门槛（读表算消耗，余额与 MercAscendUI.OnStarUpClick 同口径）
         if (!MercRosterDefs.TryGetByHireId(hireId, out var def)) return false;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
         int cur = MercStarSystem.OutStarOf(hireId);
-        int targetStar = cur + 1;
+        int targetStar = (cur < 0 ? 0 : cur) + 1;
         long goldCost = MercStarDefs.GoldCost(def.Rarity, targetStar);
         long diaCost = MercStarDefs.DiamondCost(def.Rarity, targetStar);
         if (goldCost > 0 && ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold) < goldCost) return false;
@@ -297,10 +326,23 @@ public partial class MercDrawPoolUI : MonoBehaviour
         roleTr.gameObject.SetActive(false);
     }
 
-    void ClearCards(List<GameObject> list)
+    /// <summary>
+    /// 【2026-10-23 主人拍板】列表卡回收：隐藏后进复用池（不 Destroy），下次刷新直接复用。
+    /// pool = null 时才真销毁（要彻底清场用这个口）。
+    /// </summary>
+    void RecycleCards(List<GameObject> list, List<GameObject> pool)
     {
         for (int i = 0; i < list.Count; i++)
-            if (list[i] != null) Destroy(list[i]);
+        {
+            var card = list[i];
+            if (card == null) continue;
+            if (pool != null)
+            {
+                card.SetActive(false);
+                pool.Add(card);
+            }
+            else Destroy(card);
+        }
         list.Clear();
     }
 }

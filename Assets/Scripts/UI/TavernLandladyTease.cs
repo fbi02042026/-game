@@ -285,7 +285,10 @@ public class TavernLandladyTease : MonoBehaviour,
     void OnHeadPat()
     {
         _portraitMotion?.RequestPat();
-        ShowFace(_shyFace);
+        // 【2026-10-23 主人拍板】害羞脸按好感度门槛：好感到「熟络」（阶段 ≥1，即累计摸头 10 点）
+        // 摸头才换害羞脸；初识阶段只播动画和台词，不动脸。真源沿用 TavernEggState.FavorStageIndex
+        if (TavernEggState.FavorStageIndex >= 1)
+            ShowFace(_shyFace);
         bool granted = TavernEggState.AddFavor(1, out bool leveledUp);
         string line = granted
             ? TavernEggState.HeadPatLine(TavernEggState.FavorStageIndex)
@@ -389,6 +392,13 @@ public class TavernLandladyTease : MonoBehaviour,
 
     void Update()
     {
+        // 【2026-10-23 主人拍板】佣兵队列（MercDrawPoolUI）盖在酒馆页上时，老板娘的话不许透出来：
+        // Toast 带 force 会顶到队列界面上；队列开着期间挂机计时清零暂停，关掉队列重新数 60 秒
+        if (MercDrawPoolUI.Instance != null && MercDrawPoolUI.Instance.IsOpen)
+        {
+            _idleTimer = 0f;
+            return;
+        }
         if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.touchCount > 0)
         {
             _idleTimer = 0f;

@@ -486,7 +486,8 @@ public static class ChapterStoryBeats
             StoryDirector.Solo("你", "第九支……领用单上写的就是他们。进裂隙前一天，箱子被人单独领走了。", StoryPortraits.Player),
             StoryDirector.Narration("箱底压着一张字条，墨迹很新：「想知道答案，就去它们回来的地方。」"),
         };
-        StoryDirector.Ensure().Play(beats, onDone);
+        // 【2026-10-24 主人拍板「黑幕可以加地点或需要玩家知道的字幕」】本段没有背景图，黑幕字幕直接点名地点
+        StoryDirector.Ensure().Play(beats, onDone, null, false, "装备科·库房");
     }
 
     /// <summary>
@@ -513,6 +514,7 @@ public static class ChapterStoryBeats
             StoryDirector.Narration("——《像素冒险：裂隙之刃》 装了十一年箱子的人，今天把钥匙交了出来。"),
         };
 
+        // 【2026-10-24 主人拍板】同 PlayFinaleMid：无背景图，黑幕字幕点名地点
         StoryDirector.Ensure().Play(beats, () =>
         {
             if (data != null)
@@ -521,7 +523,7 @@ public static class ChapterStoryBeats
                 SaveSystem.Instance?.Save();
             }
             onDone?.Invoke();
-        });
+        }, null, false, "装备科·库房");
     }
 
     static void BuildHappy(List<StoryBeat> b)

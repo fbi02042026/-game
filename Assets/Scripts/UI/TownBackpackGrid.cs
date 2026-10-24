@@ -194,6 +194,36 @@ public class TownBackpackGrid : MonoBehaviour
         return DisplayColumns() != LogicalColumns() || DisplayPageIndex() != 0;
     }
 
+    /// <summary>
+    /// 本网格是否开放「锁格点击 → 钻石解锁」入口（2026-10-23 主人拍板：**只开放给角色页
+    /// CharacterBagGrid**）。四列弹窗网格与战斗背包不开，避免两套列数的索引混进同一份存档列表。
+    /// </summary>
+    protected virtual bool SupportsCellDiamondUnlock() => false;
+
+    /// <summary>
+    /// 【2026-10-23 主人拍板】只给「当前显示为锁」的格子绑点击 → 弹钻石解锁确认框。
+    /// Button 运行时 AddComponent（预制体一个字节不动）；解锁后 Refresh 以 locked=false
+    /// 重跑这里，监听被清掉，格子不再响应点击。回调闭包捕获格子坐标与本网格逻辑列数，
+    /// 保证存档索引 gridY * LogicalColumns() + gridX 与 IsBackpackCellUnlocked 的口径一致。
+    /// </summary>
+    void BindCellUnlockClick(GridCellUI cell, bool locked)
+    {
+        if (cell?.root == null) return;
+        var btn = cell.root.GetComponent<Button>();
+        if (locked)
+        {
+            if (btn == null) btn = cell.root.AddComponent<Button>();
+            btn.onClick.RemoveAllListeners();
+            int gx = cell.gridX, gy = cell.gridY;
+            btn.onClick.AddListener(() =>
+                BackpackCellUnlockPopup.Show(gx, gy, LogicalColumns(), Refresh));
+        }
+        else if (btn != null)
+        {
+            btn.onClick.RemoveAllListeners();
+        }
+    }
+
     /// <summary>命名顺序自检只报一次，避免每次 Refresh 刷屏。</summary>
     static bool _cellNameOrderChecked;
 
@@ -508,14 +538,25 @@ public class TownBackpackGrid : MonoBehaviour
         // 的兄弟顺序建的，与 GridLayoutGroup 的实际排布一一对应，是**唯一权威**的行号来源；
         // 不再用 gridY（那要经过名字解析 + 列折叠 + 分页偏移三道换算，任一处列数对不上
         // 就会把一行劈成「前 4 格解锁、后 4 格锁」）。
+        var saveData = SaveSystem.Instance?.Data;
         for (int i = 0; i < cells.Count; i++)
         {
             var cell = cells[i];
             if (cell == null) continue;
             int row = cols > 0 ? i / cols : 0;
             bool rowLocked = row >= unlockedRowsDisplay;
-            cell.SetRowLocked(rowLocked);
-            if (!rowLocked) cell.Clear();
+            // 2026-10-23 主人拍板：背包锁格钻石解锁 —— 最终锁判定 = 行锁 AND 未钻石单格解。
+            // 判定唯一出口 GameConfig.IsBackpackCellUnlocked（行基线/列数用本网格自己的）；
+            // 钻石解过的格不再显示锁、也不再绑点击。越界空位（页偏移/折叠余位）不开放钻石解锁。
+            bool diamondUnlocked = SupportsCellDiamondUnlock()
+                && cell.gridX >= 0 && cell.gridX < LogicalColumns()
+                && cell.gridY >= 0 && cell.gridY < LogicalRowsMax()
+                && GameConfig.IsBackpackCellUnlocked(saveData, cell.gridX, cell.gridY,
+                    unlockedRowsDisplay, LogicalColumns());
+            bool locked = rowLocked && !diamondUnlocked;
+            cell.SetRowLocked(locked);
+            BindCellUnlockClick(cell, locked && SupportsCellDiamondUnlock());
+            if (!locked) cell.Clear();
         }
         if (LogRowLockDecision)
             Debug.Log($"[BagLock] name={name} cols={cols} cells={cells.Count} unlockedRows={unlockedRowsDisplay} " +

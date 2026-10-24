@@ -328,6 +328,8 @@ public partial class WavePlanner
 
         float waveSpacing = GetMonsterWaveSpacing();
 
+        bool fallbackLogged = false; // 【2026-10-24 主人拍板】兜底红块怪 = 严重异常，必须 LogError（铁律：出错要让我看见）；一波只报一次防刷屏
+
         for (int i = 0; i < wave.monsterCount; i++)
         {
             float lane = BattleLaneBounds.LaneSlot(i, wave.monsterCount);
@@ -353,6 +355,11 @@ public partial class WavePlanner
 
             if (go == null)
             {
+                if (!fallbackLogged)
+                {
+                    Debug.LogError($"[WavePlanner] 怪物池与 _monsterPrefab 均不可用，第{waveIndex + 1}波将生成 {wave.monsterCount} 只红色方块占位怪 —— 请检查 PoolManager 初始化与 _monsterPrefab 配置！");
+                    fallbackLogged = true;
+                }
                 go = new GameObject("FallbackMonster");
                 go.transform.position = pos;
                 SpriteRenderer sr = go.AddComponent<SpriteRenderer>();

@@ -143,7 +143,8 @@ public static class DraftPool
     /// ⚠【2026-10-19 主人拍板】金币不再混池 —— 三类池子里只有真货；
     /// 抽奖币是独立方向（<see cref="DraftCategory.Gold"/>），只在 <see cref="PickOne"/> 的 Gold 分支出卡。
     /// </summary>
-    static List<WeightedCard> BuildWeightedPool(DraftCategory c, bool consolation)
+    /// <param name="forceAtLeastRare">【2026-10-24 主人拍板】保底稀有：true 时装备生成 roll 出普通（白）强制升档稀有。默认 false，概率公示等既有调用点零改动。</param>
+    static List<WeightedCard> BuildWeightedPool(DraftCategory c, bool consolation, bool forceAtLeastRare = false)
     {
         var pool = new List<WeightedCard>();
         switch (c)
@@ -158,7 +159,7 @@ public static class DraftPool
                 //pool.AddRange(CollectMercStarCards());
                 break;
             case DraftCategory.Equip:
-                pool.AddRange(CollectEquipCards());
+                pool.AddRange(CollectEquipCards(forceAtLeastRare));
                 break;
             case DraftCategory.Gold:
                 pool.Add(CollectGoldCard());   // 防御：公示 / 三选一真问到 Gold 也不崩（正常抽取不走这）
@@ -184,7 +185,11 @@ public static class DraftPool
     public static DraftCard PickOne(DraftCategory c, bool consolation)
     {
         if (c == DraftCategory.Gold) return CollectGoldCard().Card;
-        var pool = BuildWeightedPool(c, consolation);
+        // 【2026-10-24 主人拍板】保底稀有：装备方向且连续白卡到阈值 → 本次候选全部强制稀有及以上
+        //（触发条件唯一出口 = SlotMachineSystem.EquipRareGuaranteeActive）。
+        // BuildCards（三选一/免费路径）不走这里 —— 不保底、不计数（防白送路径刷爆 streak）。
+        bool guarantee = c == DraftCategory.Equip && SlotMachineSystem.EquipRareGuaranteeActive();
+        var pool = BuildWeightedPool(c, consolation, guarantee);
         var picked = new HashSet<string>();
         var one = new List<DraftCard>(1);
         if (pool.Count > 0 && TryPickWeighted(pool, 1, picked, one) && one.Count > 0)
@@ -466,8 +471,10 @@ public static class DraftPool
         _drawnEquipTemplateIds.Add(eq.templateId);
     }
 
-    /// <summary>装备类的加权候选。生成逻辑只此一处（BuildWeightedPool 与概率公示都走它）。</summary>
-    static List<WeightedCard> CollectEquipCards()
+    /// <summary>装备类的加权候选。生成逻辑只此一处（BuildWeightedPool 与概率公示都走它）。
+    /// <param name="forceAtLeastRare">【2026-10-24 主人拍板】保底稀有透传：true 时生成的装备 roll 出普通（白）强制升档稀有（引导局不受影响，互斥判定在 RiftEquipGenerator.GenerateOne 内）。</param>
+    /// </summary>
+    static List<WeightedCard> CollectEquipCards(bool forceAtLeastRare = false)
     {
         var pool = new List<WeightedCard>();
         int blacksmith = TownSystem.Instance != null
@@ -501,7 +508,7 @@ public static class DraftPool
                 for (int attempt = 0; attempt < 5; attempt++)
                 {
                     var one = ConfigManager.Instance.GetRandomEquipInstances(
-                        1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS, false, chapter, tutorialFixed);
+                        1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS, false, chapter, tutorialFixed, forceAtLeastRare);
                     if (one == null || one.Count == 0 || one[0] == null) { eq = null; break; }
                     eq = one[0];
                     bool fresh = batchSeen.Add(eq.templateId);

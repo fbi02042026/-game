@@ -21,6 +21,12 @@ public abstract class BattleMode : IBattleMode
     /// <summary>默认不送免费抽 —— 主线靠「每关产出」走正常取舍，不该有无偿次数。</summary>
     public virtual int FreeEntryDraws => 0;
 
+    /// <summary>
+    /// 本模式通关/阵亡是否先播「战斗结果」界面（2026-10-24 主人拍板，口径详见
+    /// <see cref="IBattleMode.UsesBattleResultScreen"/>）。默认播；不需要的模式在自己的类里覆写 false。
+    /// </summary>
+    public virtual bool UsesBattleResultScreen => true;
+
     /// <summary>默认通关发局内抽奖币（主线：每关 +<c>COIN_PER_*</c>）。</summary>
     public virtual bool GrantsRunCoins => true;
 
@@ -266,6 +272,10 @@ public sealed class FinaleBattleMode : BattleMode
     /// <summary>单场结算回城、币随局清零 → 不发局内抽奖币（照金币/徽记/支线岛口径）。</summary>
     public override bool GrantsRunCoins => false;
 
+    /// <summary>终章追查关不播战斗结果界面（2026-10-24 架构决策）：通关后紧接着播揭底剧情
+    /// （<c>ChapterStoryBeats.PlayFinaleMid / PlayFinaleFinale</c>），插结果界面会打断剧情节奏；主人可点名开启。</summary>
+    public override bool UsesBattleResultScreen => false;
+
     public override void BuildChapter(ChapterManager cm, int chapter)
     {
         if (cm == null)
@@ -426,7 +436,8 @@ public sealed class TutorialBattleMode : BattleMode
     public override TutorialRules Rules => TutorialRules.Tutorial;
 
     // 【2026-10-14 主人拍板】不覆写 FreeEntryDraws（保持基类 0）：引导三拍照常**扣钱**，
-    // 钱由引导启动金 270 兜住（80+88+97=265，见 SlotMachineDefs.TUTORIAL_STARTER_COINS）。
+    // 钱由引导启动金兜住（旧价 80：80+88+97=265；2026-10-23 改价 40 起、每抽 +10 后三拍 40+50+60=150，
+    // 引导启动金同日 270 → 200，200 ≥ 150 仍兜得住，见 SlotMachineDefs.TUTORIAL_STARTER_COINS）。
     // 10-13 那版「引导三拍免费抽」已删，不留开关。
 }
 
@@ -449,6 +460,10 @@ public sealed class EndlessBattleMode : BattleMode
 
     /// <summary>局内金币照发：免费抽完后玩家用局内金币继续抽构筑</summary>
     public override bool GrantsRunCoins => true;
+
+    /// <summary>无限裂隙不播战斗结果界面（2026-10-24 主人拍板）：每层通关即有累计奖励，
+    /// 过层直接走 <see cref="BattleManager.SettleEndlessStageClear"/> 的宝箱/首通/续层链；阵亡也直接进遗产结算。</summary>
+    public override bool UsesBattleResultScreen => false;
 
     public override void BuildChapter(ChapterManager cm, int chapter)
     {

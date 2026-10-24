@@ -59,7 +59,8 @@ public partial class TutorialDirector
         WaitingEvacuate = false;
 
         // —— 0) 进关先明示启动金（2026-10-18 主人拍板；同日二次拍板：并入引导步骤播）——
-        // 玩家对账懵的根因：城镇金币不带入战斗，进关发启动金（引导局 270），HUD 从 500 跳 270
+        // 玩家对账懵的根因：城镇金币不带入战斗，进关发启动金（引导局 270，2026-10-23 起改 200），
+        // HUD 从 500 跳启动金
         // 像「被扣了 230」；三拍扣的 80/88/97 花的又全是启动金——其实城镇存款一分没动。
         // 原来走 GlobalToastUI 飘过即逝，现在改成引导第 0 步气泡：先把第一波刷出来站好，
         // 启动金说明压 3 秒让玩家读完，再接「先打一波」——读字时不打架；怪的进场走位
@@ -69,7 +70,7 @@ public partial class TutorialDirector
         HaltUnit(Hero.Instance);
         yield return EnsureTutorialStep(bm, 1);
         hint.Show(
-            "本局启动金 " + SlotMachineSystem.RunStarterGold(true) + " 抽奖币（自带金币不带入战斗）· 抽价每抽涨 10%，花完为止",
+            "本局启动金 " + SlotMachineSystem.RunStarterGold(true) + " 抽奖币（自带金币不带入战斗）· 抽价每抽 +10，花完为止",
             null, 3f);
         yield return new WaitForSecondsRealtime(3f);
 

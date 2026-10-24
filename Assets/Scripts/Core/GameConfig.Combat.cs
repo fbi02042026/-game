@@ -83,6 +83,13 @@ public static partial class GameConfig
         public const int BattleLegacyChoose = 960;
         public const int BattleMilestone = 970;
         public const int BattleEvacuate = 980;
+        /// <summary>
+        /// 【2026-10-24 主人拍板】战斗结果界面（预制体 Resources/Prefabs/Battle/战斗结果，BattleResultScreen 驱动）：
+        /// 胜利/失败大图 + 特效，战斗结束先播它再进各自结算。高于 BattleHud(950)/BattleEvacuate(980)，
+        /// 低于 BattleSettlement(990)（播完即毁，不与结算面板叠）。
+        /// ⚠ 与预制体粒子 Sorting Order 耦合：画布=985 →「界面下」粒子 984、「界面上」粒子 986（主人已在预制体调好）。
+        /// </summary>
+        public const int BattleResult = 985;
         public const int BattleSettlement = 990;
         /// <summary>
         /// 「佣兵入队」横幅（MercJoinBannerUI，2026-10-12 新增）：抽中佣兵瞬间播一次，
@@ -128,7 +135,13 @@ public static partial class GameConfig
     /// Boss 波，Boss 模板血/攻 ×0.6；第 10 关大 Boss（==9）不乘，精英/普通怪不乘。
     /// 消费点唯一：Monster.Init 的 Boss 血攻装配处。
     /// </summary>
-    public const float MINI_BOSS_STAT_MUL = 0.6f;
+    /// <summary>
+    /// 【2026-10-24 主人拍板「章末大Boss 独立档」】正式关章末 Boss（B1 后 stageIdx0==4 就是章末大 Boss）
+    /// 的血/攻倍率。旧 MINI_BOSS_STAT_MUL=0.6 是给「第 5 关小 Boss」配的，B1 后小 Boss 位不存在、
+    /// 大 Boss 一直被误吃 ×0.6 —— 本档恢复满配 1.0（想再压/抬只改这一个数，如 1.2 = 大 Boss 再厚两成）。
+    /// 无限裂隙不吃（走 EndlessDifficultyMul / ENDLESS_BIGBOSS_HP_MUL 自己的两条线）。
+    /// </summary>
+    public const float BOSS_FINAL_STAT_MUL = 1.0f;
     /// <summary>引导关精英固定精灵编号（1 Forest 第 7 号 = 树精）。主人 2026-10-10 反馈精英不许是蘑菇，表可调。</summary>
     public static int TUTORIAL_ELITE_SPRITE_ID => Mathf.RoundToInt(CombatTuningTable.Get("TUTORIAL_ELITE_SPRITE_ID", 7f));
     public const float MONSTER_BASE_SCALE = 4.125f;
@@ -623,14 +636,26 @@ public static partial class GameConfig
         return ChapterStatScaleTable.Get(gameChapter);
     }
 
+    /// <summary>5 小关 → 10 档的等距映射（单一出口，别处不许再写第二份映射）。</summary>
+    static readonly int[] StageSubToRampRow = { 0, 2, 4, 7, 9 };
+
     /// <summary>
     /// 按「章内第几关」取章内爬坡倍率（读 stage_stat_scale；缺表回退 Fallback）。
     /// 2026-10-05 新增：主人要求「每章里面的关卡也是如此」递增。
+    /// <para>【2026-10-24 主人拍板「后期爬坡按报告方案」】B1 重构后<b>一章 = 一座大关 = 5 小关</b>
+    /// （ChapterManager 批 B1），调用方传来的域只有 0~4 —— 直查 10 档表只吃到 1.00~1.18，
+    /// 表里第 9/10 关两个卡点台阶（1.41/1.50）永不触发、Boss 关只有 1.18。这里把 5 小关
+    /// 等距摊到 10 档：小关 1/2/3/4/5(Boss) → 档 0/2/4/7/9 = 1.00/1.06/1.11/1.33/1.50，
+    /// 恢复「章内 1.00→1.50、Boss 前两个台阶」的原始设计（含 10-09 拍板的阶梯式卡点）。
+    /// ⚠ 超出 0~4 的序号（B2 多座大关/篇落地前的历史调用）按尾档 1.50 结算。</para>
     /// </summary>
-    /// <param name="stageIndex0Based">章内第几关（0 起，0~9）；负数当作第 1 关。</param>
+    /// <param name="stageIndex0Based">章内第几小关（0 起，0~4）。</param>
     public static float GetStageStatScale(int stageIndex0Based)
     {
-        return StageStatScaleTable.Get0Based(stageIndex0Based);
+        if (stageIndex0Based < 0) stageIndex0Based = 0;
+        if (stageIndex0Based < StageSubToRampRow.Length)
+            return StageStatScaleTable.Get0Based(StageSubToRampRow[stageIndex0Based]);
+        return StageStatScaleTable.Get0Based(StageSubToRampRow.Length - 1);
     }
 
     /// <summary>
@@ -640,7 +665,7 @@ public static partial class GameConfig
     /// 谁要算最终倍率就调这里，绝不许在别处自己把两个数乘一遍（那才是「多入口」）。</para>
     /// </summary>
     /// <param name="gameChapter">第几章（1 起）</param>
-    /// <param name="stageIndex0Based">章内第几关（0 起，0~9）</param>
+    /// <param name="stageIndex0Based">章内第几小关（0 起，0~4；B1 后一章=一座大关）</param>
     public static float GetStatScale(int gameChapter, int stageIndex0Based)
     {
         return GetChapterStatScale(gameChapter) * GetStageStatScale(stageIndex0Based);
@@ -810,8 +835,11 @@ public static partial class GameConfig
     public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手（已改为包内同部位唯一，无穿戴槽）
 
     [Header("难度 / 金币副本")]
-    /// <summary>通关满 N 章后开启困难</summary>
-    public const int DIFF_HARD_NEED_CLEARS = 3;
+    /// <summary>通关满 N 章后开启困难（2026-10-23 主人拍板「困难的应该提示通关第一章开启」：3 → 1）</summary>
+    public const int DIFF_HARD_NEED_CLEARS = 1;
+    /// <summary>通关满 N 章后开启噩梦（2026-10-23 主人拍板「噩梦应该提示通关第三章开启」；
+    /// 覆盖 2026-09-17「困难通关第 8 章开噩梦」旧规——SaveData.hardCleared 从此只写不读）。</summary>
+    public const int DIFF_NIGHTMARE_NEED_CLEARS = 3;
     /// <summary>
     /// 难度档位数量：普通 / 困难 / 噩梦 = 3。
     /// 2026-09-17 改动：

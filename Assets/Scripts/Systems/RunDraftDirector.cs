@@ -61,7 +61,8 @@ public class RunDraftDirector : MonoBehaviour
         //   局内金币（走 BattleManager.AddRunGold(n, false)，抬高本局起点 → 结算差额不含它们）。
         //   局外金币 Gold **只有**结算界面按通过关卡数发（StageGoldDefs）＋ 局内真正赚到的那部分。
         //   局内金币的全部来源（**就这三条，别处不再有第二个给币口径**）：
-        //     ① 每局启动金：**正式关 200 / 引导局 270**（GrantRunStarterGold，2026-10-14 主人拍板）+ 初始资金天赋每级 80
+        //     ① 每局启动金：**正式关 200 / 引导局 270**（GrantRunStarterGold，2026-10-14 主人拍板；
+        //       2026-10-23 拍板引导局也归 200）+ 初始资金天赋每级 80
         //     ② 每关通关：50 起，**每关 ×1.4 递增**，单关封顶 200（GrantStageCoins，
         //        金币本不发 —— Mode.GrantsRunCoins=false）
         //     ③ 抽中「金币」安慰奖（一抽价 × 0.5 = 40）
@@ -70,6 +71,7 @@ public class RunDraftDirector : MonoBehaviour
         //   ⚠【2026-10-13 主人拍板】启动金 270 → 200（「正式关的金币改成200 / 抽的太容易了」），
         //     开局只够 2 抽、第 2 关进关差一抽 —— 前期更紧是主人要的口径。
         //   ⚠【2026-10-14 主人拍板】引导局启动金保持 270，三拍照常**扣钱**、不送免费抽（旧免费额度已删）。
+        //     【2026-10-23 主人拍板】抽价改 40 起、每抽 +10 后引导金也归 200（三拍 150，仍兜得住）。
         if (!resumed)
         {
             // 金币本免费抽额度每局重算（ResetStageFreeDraws，金币本 FreeEntryDraws=5）：
@@ -79,6 +81,8 @@ public class RunDraftDirector : MonoBehaviour
             SlotMachineSystem.ResetRunGoldPrizeCount();
             // 【2026-10-20 主人拍板】本局已抽中装备指纹清零（抽奖不再重复出同一把武器；续关不清）。
             DraftPool.ResetDrawnEquipTemplates();
+            // 【2026-10-24 主人拍板】保底稀有计数每局清零（续关不清，同抽奖币计数口径）。
+            SlotMachineSystem.ResetRunEquipWhiteStreak();
             SlotMachineSystem.GrantRunStarterGold(tutorial);
         }
 
@@ -491,6 +495,9 @@ public class RunDraftDirector : MonoBehaviour
         };
         if (!RunLoadout.TryAddMerc(entry)) { msg = "佣兵位已满"; return false; }
         SpawnRunMerc(entry);
+        // 【2026-10-24 主人拍板「钩子肯定需要」】N-1 佣兵参战计数：常规肉鸽局的佣兵都从这里入队，
+        // 每次入队算一次参战（S006/S007/S008「参战 10 次」喂食口）。唯一出口见 OnMercBattled。
+        AdventureLogAchievements.OnMercBattled(entry.hireId);
         // 【2026-10-07 主人拍板】抽中佣兵要**报喜**，不要干巴巴一句「佣兵加入：XXX」。
         // 主人原话：「显示恭喜抽中史诗佣兵 实力大增什么的」—— 引导第 2 抽开出来的就是这位。
         // 稀有度名字只有 SkillRarityUtil 一个真源（与 SlotMachineSystem.BuildGuaranteedMercCard 同款写法），

@@ -252,7 +252,7 @@ public static class MercHireSession
     public static bool TryDiamondRefresh()
     {
         if (!CanDiamondRefresh(out int usedToday, out int cost)) return false;
-        if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Diamond, cost, save: false, notify: true))
+        if (!ResourceWallet.TrySpendDiamond(cost, "佣兵招募刷新", save: false, notify: true))
             return false;
         MarkRefreshed();   // 内部 Save，扣钻一并落盘
         return true;
@@ -287,24 +287,40 @@ public static class MercHireSession
     /// </summary>
     public static Sprite LoadMercJobBadge(string jobName) => JobIconResolver.CombatBadge(jobName);
 
-    /// <summary>旧名，已废弃。请用 <see cref="JobIconResolver.CombatBadge"/>。</summary>
-    [System.Obsolete("职业图标已收口到单一入口，请用 JobIconResolver.CombatBadge")]
-    public static Sprite LoadJobIcon(string jobName) => JobIconResolver.CombatBadge(jobName);
-
+    // 【2026-10-23 主人拍板】[Obsolete] LoadJobIcon / JobIconFile 已删除，职业图标唯一入口 = JobIconResolver。
     /// <summary>佣兵职业名 → 四分类文件名。实现在 <see cref="JobIconResolver.BadgeFile"/>（唯一入口）。</summary>
     public static string MercJobBadgeFile(string jobName) => JobIconResolver.BadgeFile(jobName);
 
-    /// <summary>旧名，已废弃。请用 <see cref="JobIconResolver.BadgeFile"/>。</summary>
-    [System.Obsolete("职业图标已收口到单一入口，请用 JobIconResolver.BadgeFile")]
-    public static string JobIconFile(string jobName) => JobIconResolver.BadgeFile(jobName);
-
     public static Material LoadScrollButtonMaterial(MercRosterDefs.MercRarity rarity)
     {
-        if (rarity == MercRosterDefs.MercRarity.Legendary)
-            return Resources.Load<Material>("Materials/btn10_chuanqi");
-        if (rarity == MercRosterDefs.MercRarity.Rare)
-            return Resources.Load<Material>("Materials/btn09_xiyou");
-        return null;
+        // 【2026-10-23 主人拍板】与边框图同款：按路径缓存（材质只读，各卡共用同一份即可）。
+        string path = rarity == MercRosterDefs.MercRarity.Legendary ? "Materials/btn10_chuanqi"
+            : rarity == MercRosterDefs.MercRarity.Rare ? "Materials/btn09_xiyou" : null;
+        if (string.IsNullOrEmpty(path)) return null;
+        if (_materialCache.TryGetValue(path, out var hit)) return hit;
+        var mat = Resources.Load<Material>(path);
+        if (mat != null) _materialCache[path] = mat;
+        return mat;
+    }
+
+    // 【2026-10-23 主人拍板】Resources 加载结果缓存：招募/抽奖界面每次刷新都重建几十张卡，
+    // 每张卡重复 Load 同一批边框图 + LoadAll（后者最贵）。图是只读资源，按路径缓存一次即可。
+    // ⚠️ 只缓存「加载成功」的结果：缺图不写进缓存，补上图之后下次刷新就能生效（不掩盖问题）。
+    static readonly Dictionary<string, Sprite> _spriteCache = new Dictionary<string, Sprite>();
+    static readonly Dictionary<string, Material> _materialCache = new Dictionary<string, Material>();
+
+    static Sprite CachedSprite(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return null;
+        if (_spriteCache.TryGetValue(path, out var hit)) return hit;
+        var sp = Resources.Load<Sprite>(path);
+        if (sp == null)
+        {
+            var all = Resources.LoadAll<Sprite>(path);
+            sp = all != null && all.Length > 0 ? all[0] : null;
+        }
+        if (sp != null) _spriteCache[path] = sp;
+        return sp;
     }
 
     // ⚠️ 这是「三选一招募卡」自己的边框，美术已调好，不要再改成头像框那套。
@@ -312,10 +328,7 @@ public static class MercHireSession
     {
         string name = rarity == MercRosterDefs.MercRarity.Legendary ? "frame_legendary"
             : rarity == MercRosterDefs.MercRarity.Rare ? "frame_rare" : "frame_common";
-        var sp = Resources.Load<Sprite>("UI/Recruit/" + name);
-        if (sp != null) return sp;
-        var all = Resources.LoadAll<Sprite>("UI/Recruit/" + name);
-        return all != null && all.Length > 0 ? all[0] : null;
+        return CachedSprite("UI/Recruit/" + name);
     }
 
     /// <summary>
@@ -329,10 +342,7 @@ public static class MercHireSession
     {
         string name = rarity == MercRosterDefs.MercRarity.Legendary ? "传奇头像框"
             : rarity == MercRosterDefs.MercRarity.Rare ? "稀有头像框" : "普通头像框";
-        var sp = Resources.Load<Sprite>(TavernCardFrameDir + "/" + name);
-        if (sp != null) return sp;
-        var all = Resources.LoadAll<Sprite>(TavernCardFrameDir + "/" + name);
-        return all != null && all.Length > 0 ? all[0] : null;
+        return CachedSprite(TavernCardFrameDir + "/" + name);
     }
 
     /// <summary>
@@ -343,10 +353,7 @@ public static class MercHireSession
     {
         string name = rarity == MercRosterDefs.MercRarity.Legendary ? "传奇名字框"
             : rarity == MercRosterDefs.MercRarity.Rare ? "稀有名字框" : "普通名字框";
-        var sp = Resources.Load<Sprite>(TavernCardFrameDir + "/" + name);
-        if (sp != null) return sp;
-        var all = Resources.LoadAll<Sprite>(TavernCardFrameDir + "/" + name);
-        return all != null && all.Length > 0 ? all[0] : null;
+        return CachedSprite(TavernCardFrameDir + "/" + name);
     }
 
     /// <summary>
@@ -362,7 +369,7 @@ public static class MercHireSession
         // 史诗头像框 = 最高档，对应枚举 Legendary
         string name = rarity == MercRosterDefs.MercRarity.Legendary ? "史诗头像框"
             : rarity == MercRosterDefs.MercRarity.Rare ? "稀有头像框" : "普通头像框";
-        var sp = LoadFrameSprite(PortraitFrameDir + "/" + name);
+        var sp = CachedSprite(PortraitFrameDir + "/" + name);
         if (sp != null) return sp;
         // 副本缺失时退回三选一那套，避免开天窗
         return LoadRarityFrame(rarity);
@@ -374,12 +381,6 @@ public static class MercHireSession
     /// <summary>玩家头像框（当前一律普通，等大厅考证系统接入后按存档取值）。</summary>
     public static Sprite LoadPlayerPortraitFrame() => LoadPortraitFrame(PlayerFrameRarity);
 
-    static Sprite LoadFrameSprite(string path)
-    {
-        if (string.IsNullOrEmpty(path)) return null;
-        var sp = Resources.Load<Sprite>(path);
-        if (sp != null) return sp;
-        var all = Resources.LoadAll<Sprite>(path);
-        return all != null && all.Length > 0 ? all[0] : null;
-    }
+    // 【2026-10-23 主人拍板】本体改走 CachedSprite（带缓存），旧名保留为转调，调用点不用改。
+    static Sprite LoadFrameSprite(string path) => CachedSprite(path);
 }

@@ -53,7 +53,7 @@ public static class MercSkillMigrate
             MercSkillMapping.GetDefaultSkills(m.mercId, out active, out passive);
             if (string.IsNullOrEmpty(m.hireId))
             {
-                string resolved = MercPortraitSprites.ResolveHireId(m.mercId);
+                string resolved = MercRosterDefs.ResolveHireId(m.mercId);
                 if (!string.IsNullOrEmpty(resolved))
                     m.hireId = resolved;
             }

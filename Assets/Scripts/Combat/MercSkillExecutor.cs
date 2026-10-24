@@ -68,7 +68,7 @@ public static class MercSkillExecutor
         ratio = 0.10f;
         duration = 6f;
         if (!MercSkillTable.TryGet(skillId, out var row)) return;
-        float parsed = ParsePercent(row.Formula);
+        float parsed = FormulaParser.ParseUnsignedPercent(row.Formula);
         if (parsed > 0f) ratio = parsed;
         if (row.Duration > 0f) duration = row.Duration;
     }
@@ -78,7 +78,7 @@ public static class MercSkillExecutor
     {
         if (MercSkillTable.TryGet(skillId, out var row))
         {
-            float parsed = ParseAttackMul(row.Formula);
+            float parsed = FormulaParser.ParseAttackMultiplier(row.Formula);
             if (parsed > 0f) return parsed;
         }
         return 0.5f;
@@ -116,21 +116,4 @@ public static class MercSkillExecutor
         return !string.IsNullOrEmpty(s) && s.IndexOf(token, System.StringComparison.Ordinal) >= 0;
     }
 
-    static float ParsePercent(string formula)
-    {
-        if (string.IsNullOrEmpty(formula)) return 0f;
-        var m = Regex.Match(formula, @"(\d+(?:\.\d+)?)\s*%");
-        if (!m.Success) return 0f;
-        return float.Parse(m.Groups[1].Value) / 100f;
-    }
-
-    static float ParseAttackMul(string formula)
-    {
-        if (string.IsNullOrEmpty(formula) || formula.IndexOf("攻击", System.StringComparison.Ordinal) < 0)
-            return 0f;
-        var m = Regex.Match(formula, @"攻击\s*[×xX*]\s*(\d+(?:\.\d+)?)\s*%");
-        if (m.Success) return float.Parse(m.Groups[1].Value) / 100f;
-        m = Regex.Match(formula, @"(\d+(?:\.\d+)?)\s*%");
-        return m.Success ? float.Parse(m.Groups[1].Value) / 100f : 0f;
-    }
 }

@@ -134,7 +134,7 @@ public partial class AdventureUI
 
         RefreshMapLayers();
         EnsureWorldMapEntry();
-        RefreshChapterSwipeGuide();
+        RefreshWorldMapGuide();
     }
 
     // ────────────────────────────────────────────────────
@@ -143,10 +143,10 @@ public partial class AdventureUI
     // ────────────────────────────────────────────────────
 
     Button _worldMapBtn;
-    RectTransform _swipeGuide;
-    Coroutine _swipeGuideAnim;
-    /// <summary>「左滑前往下一章」引导只提示一次，成功滑到后续章节即永久关闭。</summary>
-    const string SwipeGuideDoneKey = "adventure.guide.ch2swipe.done";
+    RectTransform _wmGuide;
+    Coroutine _wmGuideAnim;
+    /// <summary>「点击世界地图选章节」引导只提示一次，点开世界地图即永久关闭（2026-10-24 主人拍板）。</summary>
+    const string WorldMapGuideDoneKey = "adventure.guide.worldmap.done";
 
     // 顶部体力面板已删（2026-10-18 主人拍板：与大厅共享顶栏的「回满」倒计时重叠，
     // 冒险页不再自建一份，统一走 GuildHallUI 刷新的大厅 TopBar 那份）
@@ -173,55 +173,71 @@ public partial class AdventureUI
 
     void OnOpenWorldMap()
     {
-        WorldMapPopup.Show(OnWorldMapEnter);
+        // 【2026-10-24 主人拍板】把当前难度与「该难度下应推进的章」带进世界地图：
+        // 地块按难度过滤灰锁、当前章地块挂头像+箭头标识；进入后回冒险页选章（不再直接开战）。
+        var data = SaveSystem.Instance?.Data;
+        WorldMapPopup.Show(OnWorldMapEnter, _selectedDiff,
+            ChapterRouteTable.CurrentChapterToAdvanceAtDiff(_selectedDiff, data));
+        MarkWorldMapGuideDone();
     }
 
-    /// <summary>通关第 1 章后，在地图区底部提示左滑翻章；引导完成后永久隐藏。</summary>
-    void RefreshChapterSwipeGuide()
+    /// <summary>通关第 1 章后，在世界地图入口按钮下挂「点击世界地图」脉冲引导；点开一次永久关闭。</summary>
+    void RefreshWorldMapGuide()
     {
-        bool need = _selectedChapter <= 1
+        bool need = IsMainMode(_selectedMode)
             && SaveSystem.Instance != null && SaveSystem.Instance.Data != null
             && SaveSystem.Instance.Data.HasClearedChapter(1)
-            && !PlayerPrefs.HasKey(SwipeGuideDoneKey);
+            && !PlayerPrefs.HasKey(WorldMapGuideDoneKey);
         if (!need)
         {
-            if (_swipeGuide != null) _swipeGuide.gameObject.SetActive(false);
+            if (_wmGuide != null) _wmGuide.gameObject.SetActive(false);
             return;
         }
-        if (_swipeGuide == null) _swipeGuide = BuildSwipeGuideNode();
-        if (_swipeGuide == null) return;
-        _swipeGuide.gameObject.SetActive(true);
-        if (_swipeGuideAnim != null) StopCoroutine(_swipeGuideAnim);
-        _swipeGuideAnim = StartCoroutine(CoSwipeGuidePulse());
+        var btnRt = FindWorldMapBtnRt();
+        if (btnRt == null) return;
+        if (_wmGuide == null) _wmGuide = BuildWorldMapGuideNode();
+        if (_wmGuide == null) return;
+        if (_wmGuide.parent != btnRt) _wmGuide.SetParent(btnRt, false);
+        _wmGuide.gameObject.SetActive(true);
+        if (_wmGuideAnim != null) StopCoroutine(_wmGuideAnim);
+        _wmGuideAnim = StartCoroutine(CoWmGuidePulse());
     }
 
-    RectTransform BuildSwipeGuideNode()
+    /// <summary>世界地图按钮节点唯一出口（预制体新布局 → 旧布局残留 → 代码生成那颗）。</summary>
+    RectTransform FindWorldMapBtnRt()
     {
-        // 【2026-10-23 主人新布局】地图内容在 RightContent/主线 下（旧 MapRoot 已无），引导挂主线节点里
-        var right = transform.Find("RightContent");
-        var mainNode = right != null ? right.Find(MainNodeName) : null;
-        if (mainNode == null) return null;
-        var go = new GameObject("ChapterSwipeGuide", typeof(RectTransform), typeof(Text));
-        go.transform.SetParent(mainNode, false);
+        var pre = transform.Find("RightContent/" + MainNodeName + "/WorldMapBtn") as RectTransform;
+        if (pre == null) pre = transform.Find("RightContent/WorldMapBtn") as RectTransform;
+        if (pre == null && _worldMapBtn != null) pre = _worldMapBtn.transform as RectTransform;
+        return pre;
+    }
+
+    /// <summary>引导节点挂在按钮下（跟随按钮摆位，不猜绝对坐标），文字摆按钮正下方。</summary>
+    RectTransform BuildWorldMapGuideNode()
+    {
+        var go = new GameObject("WorldMapGuide", typeof(RectTransform), typeof(Text));
         var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0f);
-        rt.anchorMax = new Vector2(0.5f, 0f);
-        rt.pivot = new Vector2(0.5f, 0f);
-        rt.anchoredPosition = new Vector2(0f, 40f);
-        rt.sizeDelta = new Vector2(420f, 48f);
+        rt.anchorMin = new Vector2(0.5f, 1f);
+        rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, -6f);
+        rt.sizeDelta = new Vector2(360f, 72f);
         var t = go.GetComponent<Text>();
-        t.text = "←  左滑前往下一章";
-        t.fontSize = 30;
+        t.text = "↓ 点击世界地图\n选择要挑战的章节";
+        t.fontSize = 26;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = new Color(1f, 0.92f, 0.6f, 1f);
+        t.raycastTarget = false;   // 不吃射线：点引导文字照样点到下面的按钮
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.font = GameFonts.GetChinese();
         return rt;
     }
 
-    IEnumerator CoSwipeGuidePulse()
+    IEnumerator CoWmGuidePulse()
     {
-        while (_swipeGuide != null && _swipeGuide.gameObject.activeSelf)
+        while (_wmGuide != null && _wmGuide.gameObject.activeSelf)
         {
-            var t = _swipeGuide.GetComponent<Text>();
+            var t = _wmGuide.GetComponent<Text>();
             if (t != null)
             {
                 float a = 0.55f + 0.45f * Mathf.Sin(Time.unscaledTime * 4f);
@@ -229,18 +245,18 @@ public partial class AdventureUI
             }
             yield return null;
         }
-        _swipeGuideAnim = null;
+        _wmGuideAnim = null;
     }
 
-    void MarkSwipeGuideDone()
+    void MarkWorldMapGuideDone()
     {
-        if (!PlayerPrefs.HasKey(SwipeGuideDoneKey))
+        if (!PlayerPrefs.HasKey(WorldMapGuideDoneKey))
         {
-            PlayerPrefs.SetInt(SwipeGuideDoneKey, 1);
+            PlayerPrefs.SetInt(WorldMapGuideDoneKey, 1);
             PlayerPrefs.Save();
         }
-        if (_swipeGuide != null && _swipeGuide.gameObject.activeSelf)
-            _swipeGuide.gameObject.SetActive(false);
+        if (_wmGuide != null && _wmGuide.gameObject.activeSelf)
+            _wmGuide.gameObject.SetActive(false);
     }
 
     /// <summary>大厅当底时：MapBg 不做全屏偏左 Envelope；仅内容区等比居中。</summary>
@@ -342,7 +358,25 @@ public partial class AdventureUI
         else if (riftMode)
             Debug.LogError($"[AdventureUI] StageNodes 下找不到「{RiftMapNodeName}」节点（预制体缺失），裂隙地图无从显示");
         if (activityBgNode != null)
+        {
             activityBgNode.gameObject.SetActive(activityMode);
+            // 活动副本背景换「活动」图（2026-10-23 主人拍板）：prefab 该节点沿用 Node_8 雪山图未适配，
+            // 活动图 meta 是 56 字符 guid 不进 prefab 引用 → 按路径加载设图（只改 sprite，不动排版）。
+            if (activityMode && _activityBgImg != null)
+            {
+                if (_activityBgSprite == null)
+                    _activityBgSprite = Resources.Load<Sprite>(ActivityBgSpritePath);
+                if (_activityBgSprite != null)
+                {
+                    if (_activityBgImg.sprite != _activityBgSprite)
+                        _activityBgImg.sprite = _activityBgSprite;
+                }
+                else
+                {
+                    Debug.LogError($"[AdventureUI] 活动副本背景图加载失败：Resources/{ActivityBgSpritePath}（缺真值不兜底）");
+                }
+            }
+        }
         else if (activityMode)
             Debug.LogError($"[AdventureUI] StageNodes 下找不到「{ActivityBgNodeName}」节点（预制体缺失），活动背景无从显示");
     }

@@ -4,26 +4,28 @@
 # grant：resource / merc / mercfrag / legendfrag / none
 # param：grant=resource 时填资源名(gold/diamond/stamina/talent/enchant/decompose)；merc/mercfrag 时填 hireId；其它留空
 # 本表数据先把旧硬编码 1:1 抄入，再按主人口径改 D4（佣兵）与 D8（碎片）；其余数值保持原样。
-# 【2026-10-20 主人拍板】佣兵本体挪到 D1（starter_1），D4 改塔克碎片×10；塔克默认已解锁，D1 实际自动折算碎片×10。
+# 【2026-10-20 首拍】佣兵本体挪到 D1（starter_1），D4 改塔克碎片×10。
+# 【2026-10-23 主人重申】D1=塔克本体，不是碎片：塔克已移出默认名单（SaveData.DefaultUnlockedMercIds），
+#   新档 D1 真发本体+报喜；仅当存档里塔克已解锁（旧档遗留/酒馆/招募所得）或后续轮回才自动折算碎片×10。
 # 第 0 行为表头，# 开头行忽略。
 id,table,day,name,grant,param,amount,name2,grant2,param2,amount2,note
 starter_1,starter,1,塔克·重盾,merc,H003,,,,,★2026-10-23 主人拍板重申：D1 发塔克本体（塔克已移出默认名单，真发本体+报喜；已领过的轮回自动折算碎片×10）
-starter_2,starter,2,塔克碎片 ×10,mercfrag,H003,10,,,,,★2026-10-22 主人拍板：第2天给1星碎片×10
-starter_3,starter,3,中级徽记 ×30,badge,H003,30,,,,,★2026-10-23 主人拍板：D3 发塔克升星徽记（塔克=剑盾·稀有→中级徽记，按H003反查）；双倍日取消，直发30=升2星10+升3星20全包
-starter_4,starter,4,塔克碎片 ×20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第4天给2星碎片×20
-starter_5,starter,5,金币 ×500,resource,gold,500,,,,,★2026-10-23 主人拍板：D5 金币 800→500
-starter_6,starter,6,塔克碎片 ×20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第6天给3星碎片×20（与D8合计40=第3星），累计到D8正好70满星、无溢出；碎片不再吃双倍
-starter_7,starter,7,钻石 ×200,resource,diamond,200,,,,,★2026-10-23 主人拍板：D7 改钻石×200（原金币×200）
-starter_8,starter,8,塔克碎片 ×20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第8天给3星碎片×20（与D6合计40=第3星），累计D2+D4+D6+D8=70正好满星、零溢出
-cycle_1,cycle,1,金币 ×200,resource,gold,200,,,,,★2026-10-23 主人拍板：登录奖励不再发体力；原体力×15 按商店汇率(400金/30体力)折金币×200
-cycle_2,cycle,2,金币 ×250,resource,gold,250,,,,,,
-cycle_3,cycle,3,金币 ×240,resource,gold,240,,,,,★2026-10-22 拍板：塔克碎片×3取消（碎片只走统一发碎片入口），改金币×240
-cycle_4,cycle,4,天赋石 ×3,resource,talent,3,,,,,每日登录保底3石
-cycle_5,cycle,5,金币 ×240,resource,gold,240,,,,,
-cycle_6,cycle,6,金币 ×240,resource,gold,240,,,,,
-cycle_7,cycle,7,金币 ×240,resource,gold,240,钻石 ×15,resource,diamond,15,周峰值★2026-10-22 拍板：传说碎片×2取消→钻石×15（legendfrag取消）
-streak_3,streak,3,金币 ×130,resource,gold,130,,,,,★2026-10-23 主人拍板：登录奖励不再发体力；原体力×10 按商店汇率(400金/30体力)折金币×130
-streak_7,streak,7,天赋石 ×5,resource,talent,5,,,,,★2026-10-22 拍板：塔克碎片×5取消→天赋石×5
-streak_14,streak,14,金币 ×120,resource,gold,120,钻石 ×8,resource,diamond,8,★2026-10-22 拍板：传说碎片×3取消→钻石×8
-streak_30,streak,30,金币 ×400,resource,gold,400,钻石 ×25,resource,diamond,25,★2026-10-22 拍板：传说碎片×15取消→钻石×25
-accum_8,accum,8,金币 ×500,resource,gold,500,天赋石 ×3,resource,talent,3,★2026-10-22 拍板：塔克碎片×15取消→金币×500+天赋石×3
+starter_2,starter,2,塔克碎片10,mercfrag,H003,10,,,,,★2026-10-22 主人拍板：第2天给1星碎片×10
+starter_3,starter,3,中级徽记30,badge,H003,30,,,,,★2026-10-23 主人拍板：D3 发塔克升星徽记（塔克=剑盾·稀有→中级徽记，按H003反查）；双倍日取消，直发30=升2星10+升3星20全包
+starter_4,starter,4,塔克碎片20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第4天给2星碎片×20
+starter_5,starter,5,金币500,resource,gold,500,,,,,★2026-10-23 主人拍板：D5 金币 800→500
+starter_6,starter,6,塔克碎片20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第6天给3星碎片×20（与D8合计40=第3星），累计到D8正好70满星、无溢出；碎片不再吃双倍
+starter_7,starter,7,钻石200,resource,diamond,200,,,,,★2026-10-23 主人拍板：D7 改钻石×200（原金币×200）
+starter_8,starter,8,塔克碎片20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第8天给3星碎片×20（与D6合计40=第3星），累计D2+D4+D6+D8=70正好满星、零溢出
+cycle_1,cycle,1,金币200,resource,gold,200,,,,,★2026-10-23 主人拍板：登录奖励不再发体力；原体力×15 按商店汇率(400金/30体力)折金币×200
+cycle_2,cycle,2,金币250,resource,gold,250,,,,,,
+cycle_3,cycle,3,金币240,resource,gold,240,,,,,★2026-10-22 拍板：塔克碎片×3取消（碎片只走统一发碎片入口），改金币×240
+cycle_4,cycle,4,天赋石3,resource,talent,3,,,,,每日登录保底3石
+cycle_5,cycle,5,金币240,resource,gold,240,,,,,
+cycle_6,cycle,6,金币240,resource,gold,240,,,,,
+cycle_7,cycle,7,金币240,resource,gold,240,钻石15,resource,diamond,15,周峰值★2026-10-22 拍板：传说碎片×2取消→钻石×15（legendfrag取消）
+streak_3,streak,3,金币130,resource,gold,130,,,,,★2026-10-23 主人拍板：登录奖励不再发体力；原体力×10 按商店汇率(400金/30体力)折金币×130
+streak_7,streak,7,天赋石5,resource,talent,5,,,,,★2026-10-22 拍板：塔克碎片×5取消→天赋石×5
+streak_14,streak,14,金币120,resource,gold,120,钻石8,resource,diamond,8,★2026-10-22 拍板：传说碎片×3取消→钻石×8
+streak_30,streak,30,金币400,resource,gold,400,钻石25,resource,diamond,25,★2026-10-22 拍板：传说碎片×15取消→钻石×25
+accum_8,accum,8,金币500,resource,gold,500,天赋石3,resource,talent,3,★2026-10-22 拍板：塔克碎片×15取消→金币×500+天赋石×3

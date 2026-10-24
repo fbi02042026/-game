@@ -168,10 +168,21 @@ public static class ResourceWallet
         return result;
     }
 
-    /// <summary>消耗资源，不足返回 false。</summary>
+    /// <summary>消耗资源，不足返回 false。
+    /// 【2026-10-24 主人拍板】钻石（Diamond）不再允许从这里扣：必须走 <see cref="TrySpendDiamond"/>（fail closed）。</summary>
     public static bool TrySpend(ResourceType type, long amount, bool save = true, bool notify = true)
     {
         if (amount <= 0) return true;
+
+        // 【2026-10-24 主人拍板】所有花费钻石的地方都要二次确认：钻石扣费收口到 TrySpendDiamond 唯一出口
+        //（UI 层先经 DiamondSpendGate.Request 弹确认）。fail closed：以后新代码直接 TrySpend(Diamond)
+        // 会立刻报错并拒绝扣费，不会静默绕过二次确认。
+        if (type == ResourceType.Diamond)
+        {
+            Debug.LogError($"[ResourceWallet] 钻石扣费必须走 TrySpendDiamond(...)（配 DiamondSpendGate 二次确认），已拒绝本次扣费 amount={amount}");
+            return false;
+        }
+
         var saveSys = SaveSystem.Instance;
         SaveData data = saveSys != null ? saveSys.Data : null;
         if (data == null) return false;
@@ -189,6 +200,35 @@ public static class ResourceWallet
             Analytics.DiamondChange("spend", amount, Get(data, type)); // 埋点：钻石支出（不影响返回值）
         if (save) saveSys.Save();
         GuildHallUI.RefreshAllHudStatic();
+        return true;
+    }
+
+    /// <summary>
+    /// 【2026-10-24 主人拍板】钻石扣费唯一出口：所有花钻石的地方必须走这里
+    /// （UI 层先经 <see cref="DiamondSpendGate.Request"/> 二次确认，玩家点确认后才进本方法）。
+    /// reason 用于日志区分消费场景（如「商店购买」「佣兵升星」）；
+    /// 其余行为与 TrySpend 一致：不足时 Toast「钻石不足」并返回 false，扣除成功则埋点 + 存档 + 刷新 HUD。
+    /// </summary>
+    public static bool TrySpendDiamond(long amount, string reason, bool save = true, bool notify = true)
+    {
+        if (amount <= 0) return true;
+        var saveSys = SaveSystem.Instance;
+        SaveData data = saveSys != null ? saveSys.Data : null;
+        if (data == null) return false;
+
+        long cur = Get(data, ResourceType.Diamond);
+        if (cur < amount)
+        {
+            if (notify)
+                UIManager.Instance?.ShowToast($"钻石不足（持有 {cur} / 需要 {amount}）");
+            return false;
+        }
+
+        Set(data, ResourceType.Diamond, cur - amount);
+        Analytics.DiamondChange("spend", amount, Get(data, ResourceType.Diamond)); // 埋点：钻石支出
+        if (save && saveSys != null) saveSys.Save();
+        GuildHallUI.RefreshAllHudStatic();
+        Debug.Log($"[ResourceWallet] 花钻石 {amount}（{reason ?? ""}），余额 {Get(data, ResourceType.Diamond)}");
         return true;
     }
 }

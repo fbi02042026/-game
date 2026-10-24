@@ -4,24 +4,29 @@ using UnityEngine.UI;
 /// <summary>
 /// 佣兵进阶（局外升星）弹窗（2026-10-22 施工单《佣兵进阶界面》）。
 ///
-/// 预制体 Assets/Resources/Prefabs/Town/yongbing升阶.prefab 主人已摆好 —— 本类只按名绑定，
+/// 预制体 Assets/Resources/Prefabs/Battle/yongbing升阶.prefab 主人已摆好（实际放在 Battle 目录，
 /// 几何一个像素不动；缺节点 LogError 不兜底建（AGENTS.md §4）。节点口径（主人 dump 实测）：
 ///   Root/Panel(800×1050)
 ///     top/namebg/Name 佣兵名、top/Role 职业徽记位、top/Iconmask/Icon 大立绘
 ///     zuo / you 结构相同：AttrPanel 七行（AttrXxxRoot/AttrXxx）+ Rating 三星（满星1/2/3）+ Skill 行（只读，不归本类管）
-///     碎片/{碎片数量、金币图标、金币数量、yongbingsuipian(主人碎片预制体嵌套实例)}
-///     shengjieButton(升阶) / tihaunButton(取消)；Root/Dim 点击关闭
+///     碎片/{碎片数量、yongbingsuipian(主人碎片预制体嵌套实例)}
+///     徽记/{碎片数量、Icon、iconbg}（2026-10-23 主人手摆，替代旧「金币行克隆」方案）
+///     进阶成功/{成功(大图)、effect(粒子+音效)}（2026-10-24 主人手摆：升星成功时猛的弹出 + 特效齐播）
+///     shengjieButton(升阶：Label=×N 消耗数字、icon=金币/钻石图) / tihaunButton(取消)；Root/Dim 点击关闭
 ///
 /// 数据口径（2026-10-22 主人拍板）：
 ///   左侧 = 当前值（含当前 outStar 加成）；右侧 = 升到下一星预览 —— 攻/防 ×(1+8%)、
 ///   魔攻/魔防 ×(1+7%)（相对左侧显示值再乘一档）；生命/速度/暴击两侧同值（不吃加成）。
 ///   满星后右侧 = 当前值、升阶按钮置灰。
-/// 打开动画：Panel 缩放 0.2 → 1.0（主人原话「缩放效果速度慢点 0.2的倍数吧」），
-/// 只动 Panel 的 localScale，其它 transform 一律不碰。
+/// 升阶消耗（2026-10-23 主人拍板二改）：数字挪到升阶按钮 Label（×N，传奇=钻石），icon 随之换钻石图；
+///   钱够 Label 白色、不够红色、满星禁用压灰。徽记行 = {档位}徽记\n{需}/{有}（唯一出口 MercStarSystem）。
+/// 竖屏适配（2026-10-23）：Panel 800 宽 &gt; 720 逻辑宽 → 整体等比缩放 k=720/800（只动 Panel localScale，
+///   与开窗缩放动画复合，绝不 stretch、不动子节点）。
+/// 打开动画：Panel 缩放 0.2 → 1.0（主人原话「缩放效果速度慢点 0.2的倍数吧」）。
 /// </summary>
 public class MercAscendUI : MonoBehaviour
 {
-    const string PrefabPath = "Prefabs/Town/yongbing升阶";
+    const string PrefabPath = "Prefabs/Battle/yongbing升阶";   // 2026-10-23 主人实际摆在 Prefabs/Battle/，原写 Town 找不到报「预制体缺失」
 
     /// <summary>935：2026-10-22 获得佣兵弹窗（925）可叠开本进阶弹窗，需压在其上；仍压过雇佣队列界面（TownPopup=900）。</summary>
     const int SortOrder = 935;
@@ -29,6 +34,20 @@ public class MercAscendUI : MonoBehaviour
     /// <summary>打开缩放动画：起点 0.2（主人拍板）、时长 0.28 秒（主人要求 0.25~0.3 慢速）、ease-out。</summary>
     const float OpenScaleFrom = 0.2f;
     const float OpenDuration = 0.28f;
+
+    /// <summary>升阶成功弹出动画（2026-10-24 主人拍板「成功节点从无到有、从小到大猛的弹出」）：
+    /// 0 → PopOvershoot（先快，「猛」）→ 1.0（收住），两段式 ease-out，只动「进阶成功」节点自身 localScale。</summary>
+    const float PopOvershoot = 1.3f;
+    const float PopUpDur = 0.16f;
+    const float PopSettleDur = 0.24f;
+
+    /// <summary>竖屏适配（2026-10-23）：Panel 宽超 720 逻辑宽时整体等比缩放系数，Open 时按预制体 sizeDelta 现算。</summary>
+    float _fitK = 1f;
+
+    /// <summary>升阶按钮消耗数字颜色（2026-10-24 主人拍板：钱够=暖金、不够=红；满星禁用压灰）。暖金与 GuildHallUI 体力飘字同款。</summary>
+    static readonly Color CostOkColor = new Color(1f, 0.78f, 0.30f, 1f);
+    static readonly Color CostShortColor = new Color(1f, 0.4f, 0.4f, 1f);
+    static readonly Color CostDimColor = new Color(0.5f, 0.5f, 0.5f, 1f);
 
     /// <summary>钻石图标（传奇佣兵升阶扣钻石时替换金币图标；Resources 路径已核实存在）。</summary>
     const string DiamondIconPath = "Art/UI/Icons/Common/icon_diamond_blue";
@@ -49,22 +68,36 @@ public class MercAscendUI : MonoBehaviour
     GameObject[] _leftStars;   // 满星1→满星2→满星3 顺序
     GameObject[] _rightStars;
 
-    Text _fragCountText;
-    Text _goldCountText;
-    Image _goldIconImage;
-    Sprite _goldIconBase;      // 预制体原金币图标（传奇切钻石后，切回金币时还原）
+    Text _fragCountText;       // 碎片/碎片数量（两行：佣兵名+碎片 / 需{}/{有}）
     MercFragmentCardUI _fragCard;
 
-    GameObject _badgeRow;      // 徽记行（2026-10-23 新增：克隆金币行同构，预制体无现成节点）
+    // 徽记行（2026-10-23 主人已手摆预制体 Panel/徽记/{碎片数量,Icon,iconbg}，代码只绑节点填数据，几何不动）
+    GameObject _badgeRow;
+    Text _badgeCountText;      // 两行：{档位}徽记 / 需{}/{有}
     Image _badgeIconImage;
-    Text _badgeCountText;
+
+    // 升阶按钮消耗（2026-10-23 主人拍板：数字挪到 shengjieButton 上 Label=×N，icon=金币/钻石图）
+    Text _costLabel;
+    Image _costIcon;
+    Sprite _costIconBase;      // 预制体原金币图标（传奇切钻石后，切回金币时还原）
 
     Button _starUpBtn;
     Button _cancelBtn;
     Button _dimBtn;
 
+    // 顶条资源条克隆（2026-10-24 主人拍板「把顶条的金币和钻石资源条复制一份过来」）：
+    // 克隆主界面 TopBar（ResourceBar.prefab 没有钻石Panel，不能用），只留金币+钻石两列，数字自刷。
+    Transform _resBar;         // 克隆出来的资源条（Root 下，随开窗显隐）
+    Text _resGoldText;         // 克隆条 GoldPanel/GoldText
+    Text _resDiaText;          // 克隆条 钻石Panel/钻石Text
+
     string _hireId;            // 当前展示佣兵（hireId）
     Coroutine _scaleCo;
+
+    // 升阶成功动效（2026-10-24 主人预制体 Panel/进阶成功 下手摆：成功大图 + effect 特效；代码只绑节点播动画，几何不动）
+    RectTransform _successRt;      // 进阶成功（弹出动画只动它的 localScale）
+    ParticleSystem[] _successFx;   // effect 子树下粒子（Build 时统一关 playOnAwake，播放只走 Clear+Play）
+    Coroutine _popCo;              // 成功弹出协程（Close/Fill 停）
 
     /// <summary>七行行名（左/右两侧同名）：顺序按主人 dump：Hp/Spd/MagicDef/Crit/Def/Atk/MagicAtk。</summary>
     static readonly string[] RowRootNames =
@@ -146,23 +179,56 @@ public class MercAscendUI : MonoBehaviour
         BindSide(zuo, out _leftVals, out _leftRowRoots, out _leftStars, "zuo");
         BindSide(you, out _rightVals, out _rightRowRoots, out _rightStars, "you");
 
-        // ---- 碎片区 ----
-        _fragCountText = FindDeep(p, "碎片数量")?.GetComponent<Text>();
+        // ---- 碎片区（2026-10-23 改局部查找：徽记行也有同名「碎片数量」，全局深搜会串绑到徽记行）----
+        var suipianNode = FindDeep(p, "碎片");
+        _fragCountText = suipianNode != null ? FindDeep(suipianNode, "碎片数量")?.GetComponent<Text>() : null;
         if (_fragCountText == null) Debug.LogError("[MercAscend] 缺节点 碎片/碎片数量（Text）");
-        _goldCountText = FindDeep(p, "金币数量")?.GetComponent<Text>();
-        if (_goldCountText == null) Debug.LogError("[MercAscend] 缺节点 碎片/金币数量（Text）");
-        _goldIconImage = FindDeep(p, "金币图标")?.GetComponent<Image>();
-        if (_goldIconImage == null) Debug.LogError("[MercAscend] 缺节点 碎片/金币图标（Image）");
-        else _goldIconBase = _goldIconImage.sprite;
         var fragGo = FindDeep(p, "yongbingsuipian")?.gameObject;
         if (fragGo == null) Debug.LogError("[MercAscend] 缺节点 碎片/yongbingsuipian（主人碎片预制体实例）");
         else _fragCard = MercFragmentCardUI.Bind(fragGo);
 
-        // ---- 徽记行（2026-10-23 主人拍板：升星加职业徽记消耗）----
-        BuildBadgeRow(p);
+        // ---- 徽记行（2026-10-23 主人已手摆 Panel/徽记/{碎片数量,Icon,iconbg}，直接绑，不再克隆建行）----
+        _badgeRow = FindDeep(p, "徽记")?.gameObject;
+        if (_badgeRow == null) Debug.LogError("[MercAscend] 缺节点 Panel/徽记（主人手摆的徽记行）");
+        else
+        {
+            _badgeCountText = FindDeep(_badgeRow.transform, "碎片数量")?.GetComponent<Text>();
+            _badgeIconImage = FindDeep(_badgeRow.transform, "Icon")?.GetComponent<Image>();
+            if (_badgeCountText == null) Debug.LogError("[MercAscend] 缺节点 徽记/碎片数量（Text）");
+            if (_badgeIconImage == null) Debug.LogError("[MercAscend] 缺节点 徽记/Icon（Image）");
+        }
+
+        // ---- 升阶成功动效节点（2026-10-24 主人预制体 Panel/进阶成功 下手摆，缺节点 LogError 不兜底建）----
+        _successRt = FindDeep(p, "进阶成功") as RectTransform;
+        if (_successRt == null) Debug.LogError("[MercAscend] 缺节点 Panel/进阶成功（升阶成功动效节点）");
+        var fxNode = _successRt != null ? FindDeep(_successRt, "effect") : null;
+        if (_successRt != null && fxNode == null)
+            Debug.LogError("[MercAscend] 缺节点 进阶成功/effect（升阶成功特效节点）");
+        _successFx = fxNode != null ? fxNode.GetComponentsInChildren<ParticleSystem>(true) : null;
+        if (_successFx != null)
+        {
+            // 关 Play On Awake + 清残留，播放只走 PlaySuccessFx 一个入口（MercGainCinematicUI.cs:89-96 同口径）；
+            // AudioSource 保留 authored playOnAwake=1 —— 节点激活即播音，与粒子同帧，不另起播放入口。
+            for (int i = 0; i < _successFx.Length; i++)
+            {
+                var ps = _successFx[i];
+                if (ps == null) continue;
+                var pm = ps.main;
+                pm.playOnAwake = false;
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+        }
 
         // ---- 按钮 ----
         _starUpBtn = BindButton(p, "shengjieButton", OnStarUpClick, "升阶");
+        if (_starUpBtn != null)
+        {
+            _costLabel = _starUpBtn.transform.Find("Label")?.GetComponent<Text>();
+            if (_costLabel == null) Debug.LogError("[MercAscend] 缺节点 shengjieButton/Label（消耗数字 Text）");
+            _costIcon = _starUpBtn.transform.Find("icon")?.GetComponent<Image>();
+            if (_costIcon == null) Debug.LogError("[MercAscend] 缺节点 shengjieButton/icon（金币/钻石图标 Image）");
+            else _costIconBase = _costIcon.sprite;
+        }
         _cancelBtn = BindButton(p, "tihaunButton", Close, "取消");
         _dimBtn = _root != null ? BindButton(_root.transform, "Dim", Close, "Dim") : null;
 
@@ -206,40 +272,6 @@ public class MercAscendUI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 建徽记行（2026-10-23 主人拍板升星加徽记消耗）。预制体没有徽记节点，本方法克隆
-    /// 「金币图标(+金币数量)」整行同构摆放（主动玩法需求建树，非断链兜底；AGENTS.md §4 分界线）：
-    /// 挂在 碎片/yongbingsuipian 下，y 再低一行（行距 73.6 = 碎片数量行(-76)↔金币行(-149.6) 的现排间距），
-    /// 排版零改动 —— 文本框尺寸/字体随克隆继承。缺参照节点只报错、不建行（fail closed）。
-    /// </summary>
-    void BuildBadgeRow(Transform panel)
-    {
-        var suipian = FindDeep(panel, "yongbingsuipian");
-        var goldIcon = FindDeep(panel, "金币图标");
-        if (suipian == null || goldIcon == null)
-        {
-            Debug.LogError("[MercAscend] 建徽记行失败：缺节点 yongbingsuipian 或 金币图标（排版参照物），徽记行不建");
-            return;
-        }
-
-        var rowGo = Object.Instantiate(goldIcon.gameObject, suipian);
-        rowGo.name = "徽记图标";
-        var rowRt = rowGo.GetComponent<RectTransform>();
-        var goldRt = goldIcon.GetComponent<RectTransform>();
-        rowRt.anchoredPosition = goldRt.anchoredPosition + new Vector2(0f, -73.6f);
-
-        _badgeRow = rowGo;
-        _badgeIconImage = rowGo.GetComponent<Image>();
-        var cnt = rowGo.transform.Find("金币数量");
-        if (cnt != null)
-        {
-            cnt.name = "徽记数量";
-            _badgeCountText = cnt.GetComponent<Text>();
-        }
-        if (_badgeIconImage == null || _badgeCountText == null)
-            Debug.LogError("[MercAscend] 徽记行克隆后缺 Image/Text（金币行结构异常），徽记显示不可用");
-    }
-
     /// <summary>绑按钮：无 Button 运行时补（预制体只有 Image 也接得上，MercDrawPoolUI 同口径）。</summary>
     Button BindButton(Transform from, string name, UnityEngine.Events.UnityAction onClick, string tag)
     {
@@ -272,21 +304,102 @@ public class MercAscendUI : MonoBehaviour
         // fail closed：数据不合法不开窗（窗口保持上一次状态）
         if (!Fill(hireIdOrUid)) return;
 
+        EnsureResBar();   // 顶条金币+钻石克隆条（2026-10-24 主人拍板）；数字在 Fill 末尾统一刷
+
         if (_root != null)
         {
             _root.SetActive(true);
             _root.transform.SetAsLastSibling();
         }
+        ApplyFit();   // 竖屏适配先算好缩放系数，动画目标值跟着它走
         PlayOpenScale();
+    }
+
+    /// <summary>
+    /// 竖屏适配（2026-10-23）：Panel 预制体宽 800 &gt; 720 逻辑宽 → 整体等比缩放 k=720/800。
+    /// 只动 Panel 的 localScale（先例 DailyLoginUI.ApplyFit 整体缩放口径），绝不 stretch、不动子节点；
+    /// 每次 Open 现算幂等，不累积。逻辑高更瘦屏变大不受影响（Panel 高 1050×0.9=945 仍居中放得下）。
+    /// </summary>
+    void ApplyFit()
+    {
+        if (_panel == null) return;
+        float w = Mathf.Abs(_panel.sizeDelta.x);
+        _fitK = w > GameConfig.DESIGN_WIDTH ? GameConfig.DESIGN_WIDTH / w : 1f;
     }
 
     void Close()
     {
         if (_scaleCo != null) { StopCoroutine(_scaleCo); _scaleCo = null; }
-        if (_panel != null) _panel.localScale = Vector3.one;   // 动画只动 Panel 缩放，关窗还原
+        if (_popCo != null) { StopCoroutine(_popCo); _popCo = null; }   // 成功弹出进行中关窗：停协程防关窗后还在跑
+        if (_panel != null) _panel.localScale = Vector3.one * _fitK;   // 动画只动 Panel 缩放，关窗还原到适配系数
+        if (_successRt != null) _successRt.localScale = Vector3.one;   // 防关窗瞬间停在过冲值（2026-10-24）
         if (_root != null) _root.SetActive(false);
         // 升星可能改了星级/材料/资金：酒馆队列界面若开着，重刷卡内「升阶」钮与相关显示（2026-10-23）
         MercDrawPoolUI.RefreshForAscendClosed();
+    }
+
+    // ============================================================
+    // 顶条资源条克隆（2026-10-24 主人拍板「把顶条的金币和钻石资源条复制一份过来」）
+    // ============================================================
+
+    /// <summary>
+    /// 确保 Root 下有一份「主界面 TopBar」克隆，只留金币+钻石两列：
+    /// 背景外的直子节点，凡 subtree 里既无 GoldPanel 也无 钻石Panel 的一律 SetActive(false)
+    /// （体力/邮件/设置/公会名等装饰全藏），只切 active 不动任何几何（铁律 32）。
+    /// 克隆只做一次（DDOL 复用，forceCloneTopBar 走 TownSharedChrome 强制克隆口）；
+    /// 数字由 <see cref="RefreshResBarNumbers"/> 刷新。缺列 LogError 不兜底。
+    /// </summary>
+    void EnsureResBar()
+    {
+        if (_root == null) return;
+        if (_resBar != null) { RefreshResBarNumbers(); return; }
+
+        _resBar = TownSharedChrome.EnsureResourceBar(
+            _root.transform,
+            GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : null,
+            forceCloneTopBar: true);
+        if (_resBar == null)
+        {
+            Debug.LogError("[MercAscend] 顶条资源条克隆失败（找不到主界面 TopBar）——本窗不显示金币/钻石条");
+            return;
+        }
+
+        for (int i = 0; i < _resBar.childCount; i++)
+        {
+            var c = _resBar.GetChild(i);
+            bool keep = c.name == "TopBarBg"
+                || FindDeep(c, "GoldPanel") != null
+                || FindDeep(c, "钻石Panel") != null;
+            if (!keep) c.gameObject.SetActive(false);
+        }
+        if (FindDeep(_resBar, "GoldPanel") == null)
+            Debug.LogError("[MercAscend] 克隆顶条里没有 GoldPanel —— 金币数字将不显示（不兜底）");
+        if (FindDeep(_resBar, "钻石Panel") == null)
+            Debug.LogError("[MercAscend] 克隆顶条里没有 钻石Panel/钻石Text —— 钻石数字将不显示（不兜底）");
+
+        // 数字 Text 各自收进 Panel 里找 —— 主界面顶条「体力Panel」里的数字 Text 也叫 GoldText，
+        // 全局深搜会串绑到被藏的体力格上（GuildHallUI.AutoBindMissingRefs 同样按 Panel 局部找）
+        var goldPanel = FindDeep(_resBar, "GoldPanel");
+        var goldT = goldPanel != null ? FindDeep(goldPanel, "GoldText") : null;
+        if (goldT != null) _resGoldText = goldT.GetComponent<Text>();
+        else Debug.LogError("[MercAscend] 克隆顶条 GoldPanel 里没有 GoldText —— 金币数字将不显示（不兜底）");
+        var diaPanel = FindDeep(_resBar, "钻石Panel");
+        var diaT = diaPanel != null ? FindDeep(diaPanel, "钻石Text") : null;
+        if (diaT != null) _resDiaText = diaT.GetComponent<Text>();
+        else Debug.LogError("[MercAscend] 克隆顶条 钻石Panel 里没有 钻石Text —— 钻石数字将不显示（不兜底）");
+
+        RefreshResBarNumbers();
+    }
+
+    /// <summary>克隆条数字刷新：真源唯一 = ResourceWallet，格式唯一出口 = GuildHallUI.FormatResource（不许抄第二份）。加号不绑任何点击（T14 口径）。</summary>
+    void RefreshResBarNumbers()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+        if (_resGoldText != null)
+            _resGoldText.text = GuildHallUI.FormatResource(ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold));
+        if (_resDiaText != null)
+            _resDiaText.text = GuildHallUI.FormatResource(ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond));
     }
 
     // ============================================================
@@ -316,8 +429,19 @@ public class MercAscendUI : MonoBehaviour
 
         // ---- 头部 ----
         if (_nameText != null) _nameText.text = def.Name;
+        // 【2026-10-24 主人拍板】Role 位 = 佣兵类型（物攻/法术/防御/恢复 四分类徽标），
+        // 不是养成徽记那套图（MercGrowSprites.LoadJobBadge 是升星消耗用图，别混进来）。
+        // 唯一出口 = JobIconResolver.CombatBadge；取不到隐藏节点，不换图兜底（JobIconResolver R2 口径）。
         if (_roleImage != null)
-            _roleImage.sprite = MercGrowSprites.LoadBadgeForMerc(_hireId, def.Rarity);
+        {
+            var typeIcon = JobIconResolver.CombatBadge(def.JobName);
+            if (typeIcon != null)
+            {
+                _roleImage.sprite = typeIcon;
+                _roleImage.enabled = true;   // DDOL 复用：防上一次取不到图留下的隐藏残留
+            }
+            else _roleImage.enabled = false;
+        }
         if (_iconImage != null)
         {
             _iconImage.sprite = MercPortraitSprites.GetStand(_hireId);
@@ -392,31 +516,35 @@ public class MercAscendUI : MonoBehaviour
                 : def.Name + "碎片\n" + need + "/" + have;
         if (_fragCard != null) _fragCard.Apply(def.Rarity, _hireId);
 
-        // ---- 金币/钻石：显示本次升阶消耗额（主人原话「按钮上方是进阶需要的金钱数」）----
-        // 普通/稀有=金币（图标不动）；传奇=钻石（图标换钻石图）。满星显示 0。
+        // ---- 升阶消耗（2026-10-23 主人拍板二改：数字挪到升阶按钮 Label=×N，icon 随之换金币/钻石）----
+        // 普通/稀有=金币（预制体原 icon 不动）；传奇=钻石（icon 换钻石图）。满星显示 ×0。
+        // Label 颜色（2026-10-24 主人拍板）：钱够暖金、不够红色、满星禁用压灰；资金判断走 FundEnough 唯一出口。
         bool legend = def.Rarity == MercRosterDefs.MercRarity.Legendary;
-        if (_goldCountText != null)
+        long cost = maxed
+            ? 0
+            : (legend
+                ? MercStarDefs.DiamondCost(def.Rarity, cur + 1)
+                : MercStarDefs.GoldCost(def.Rarity, cur + 1));
+        if (_costLabel != null)
         {
-            long cost = maxed
-                ? 0
-                : (legend
-                    ? MercStarDefs.DiamondCost(def.Rarity, cur + 1)
-                    : MercStarDefs.GoldCost(def.Rarity, cur + 1));
-            _goldCountText.text = cost.ToString();
+            _costLabel.text = "×" + cost;
+            _costLabel.color = maxed ? CostDimColor
+                : MercStarSystem.FundEnough(def.Rarity, cur + 1, out _) ? CostOkColor : CostShortColor;
         }
-        if (_goldIconImage != null)
+        if (_costIcon != null)
         {
-            if (legend)
+            if (legend && !maxed)
             {
                 var dia = Resources.Load<Sprite>(DiamondIconPath);
-                if (dia != null) _goldIconImage.sprite = dia;
+                if (dia != null) _costIcon.sprite = dia;
                 else Debug.LogError("[MercAscend] 钻石图标缺失：Resources/" + DiamondIconPath + "（不兜底）");
             }
-            else _goldIconImage.sprite = _goldIconBase;   // 切回金币（防上次展示传奇留下的钻石图）
+            else _costIcon.sprite = _costIconBase;   // 切回金币（防上次展示传奇留下的钻石图）
         }
 
-        // ---- 徽记行（2026-10-23 主人拍板）：显示「该职业徽记 需要/拥有」；
-        // 普通/稀有 1 星 0 消耗或满星 → 整行隐藏。图标 = MercGrowSprites 按职业+档位取图，缺图报错不兜底。
+        // ---- 徽记行（2026-10-23 主人拍板）：两行「{低级/中级/高级}徽记\n{需}/{有}」；
+        // 0 消耗或满星 → 整行隐藏。图标 = MercGrowSprites 按职业+档位取图，缺图报错不兜底。
+        // 档位名唯一出口 = MercStarSystem.BadgeTierDisplayName（不许在 UI 抄映射）。
         if (_badgeRow != null)
         {
             int badgeNeed = maxed ? 0 : MercStarDefs.BadgeCost(def.Rarity, cur + 1);
@@ -428,8 +556,9 @@ public class MercAscendUI : MonoBehaviour
             {
                 _badgeRow.SetActive(true);
                 int badgeHave = MercStarSystem.GetBadgeCount(_hireId);
+                string badgeName = MercStarSystem.BadgeTierDisplayName(MercStarDefs.BadgeTierOf(def.Rarity)) + "徽记";
                 if (_badgeCountText != null)
-                    _badgeCountText.text = badgeNeed + "/" + badgeHave;
+                    _badgeCountText.text = badgeName + "\n" + badgeNeed + "/" + badgeHave;
                 if (_badgeIconImage != null)
                 {
                     var badgeSprite = MercGrowSprites.LoadJobBadge(def.JobName, def.Rarity);
@@ -442,6 +571,17 @@ public class MercAscendUI : MonoBehaviour
 
         // ---- 升阶按钮：满星置灰 ----
         if (_starUpBtn != null) _starUpBtn.interactable = !maxed;
+
+        // ---- 升阶成功节点收起态（2026-10-24）：每次填充都重置，防 DDOL 复用残留；播放只由 PlaySuccessFx 触发 ----
+        if (_popCo != null) { StopCoroutine(_popCo); _popCo = null; }
+        if (_successRt != null)
+        {
+            _successRt.gameObject.SetActive(false);
+            _successRt.localScale = Vector3.one;   // 回 authored 值（弹出动画只是临时借它）
+        }
+
+        // ---- 顶条克隆条数字（2026-10-24）：开窗与升星扣钱后 Fill 都会跑到这里，金币/钻石跟着存档走 ----
+        RefreshResBarNumbers();
         return true;
     }
 
@@ -496,44 +636,40 @@ public class MercAscendUI : MonoBehaviour
         // 碎片校验（MercStarSystem 权威；msg 说明缺什么）
         if (!MercStarSystem.CanStarUp(_hireId, out string msg)) { Toast(msg); return; }
 
-        // 金币/钻石门槛（2026-10-22 主人拍板：升阶消耗玩家资金，传奇扣钻石；建议值待主人调）
-        int targetStar = cur + 1;
-        long goldCost = MercStarDefs.GoldCost(def.Rarity, targetStar);
-        long diaCost = MercStarDefs.DiamondCost(def.Rarity, targetStar);
-        var data = SaveSystem.Instance?.Data;
-        if (goldCost > 0)
-        {
-            long have = ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold);
-            if (have < goldCost)
-            {
-                Toast("金币不足：还需 " + (goldCost - have) + "（持有 " + have + "/" + goldCost + "）");
-                return;
-            }
-        }
+        // 【2026-10-24 主人拍板】所有花费钻石的地方都要二次确认：
+        // 本次升星要花钻石（传奇）才弹 DiamondSpendGate 确认门；只花金币/徽记/碎片的升星保持原样不打扰。
+        // 资金数字直接读 MercStarDefs（与 TryStarUp 同一张表，规则不抄第二遍）。
+        int target = cur + 1;
+        long diaCost = MercStarDefs.DiamondCost(def.Rarity, target);
         if (diaCost > 0)
         {
-            long have = ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond);
-            if (have < diaCost)
-            {
-                Toast("钻石不足：还需 " + (diaCost - have) + "（持有 " + have + "/" + diaCost + "）");
-                return;
-            }
+            long goldCost = MercStarDefs.GoldCost(def.Rarity, target);
+            string body = $"{def.Name} 升至 {target} 星";
+            if (goldCost > 0) body += $"\n消耗金币 ×{goldCost}";
+            body += "\n另消耗升星徽记与本命碎片（数量见面板预览）";
+            DiamondSpendGate.Request("确认升星", body, diaCost, DoStarUp, "确定升星");
+            return;
         }
 
-        // 执行升星（扣背包碎片 + outStar+1 + 存档，MercStarSystem 权威）
+        DoStarUp();
+    }
+
+    void DoStarUp()
+    {
+        if (string.IsNullOrEmpty(_hireId)) return;
+        // 执行升星（【2026-10-23 主人拍板】一次事务做完：徽记 → 碎片 → 金币/钻石 → outStar+1 → 存档；
+        // 任一步扣不动就整笔回滚，星级不变。UI 不再在升星之后单独扣钱 —— 那样会留下「星升了钱没扣」。）
         if (!MercStarSystem.TryStarUp(_hireId, out string upMsg)) { Toast(upMsg); return; }
 
-        // 扣资金：预检已过还扣不动 = 数据异常，报错不吞（fail closed）
-        if (goldCost > 0 && !ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, goldCost, true, false))
-            Debug.LogError("[MercAscend] " + def.Name + " 升星后扣金币失败 cost=" + goldCost + " —— 数据异常");
-        if (diaCost > 0 && !ResourceWallet.TrySpend(ResourceWallet.ResourceType.Diamond, diaCost, true, false))
-            Debug.LogError("[MercAscend] " + def.Name + " 升星后扣钻石失败 cost=" + diaCost + " —— 数据异常");
-
         Toast(upMsg);       // 「XX 升星成功（N 星）」
-        Fill(_hireId);      // 左=新当前，右=再下一星预览；满星自动置灰
+        Fill(_hireId);      // 左=新当前，右=再下一星预览；满星自动置灰（末尾会把成功节点收起）
+        PlaySuccessFx();    // 2026-10-24 主人拍板：成功节点猛的弹出 + effect 特效齐播（必须在 Fill 收起之后）
     }
 
     void Toast(string s) => UIManager.Instance?.ShowToast(s, true);
+
+    // 【2026-10-23 主人拍板】资金预检本体已挪到 MercStarSystem.FundEnough（与扣费同事务的唯一出口），
+    // 本类不再有自己的实现，Fill 的消耗数字变色直接调 MercStarSystem.FundEnough，规则不抄第二遍。
 
     // ============================================================
     // 打开缩放动画（Panel 0.2 → 1.0，ease-out；只动 Panel 的 localScale）
@@ -546,7 +682,8 @@ public class MercAscendUI : MonoBehaviour
         _scaleCo = StartCoroutine(CoOpenScale());
     }
 
-    /// <summary>unscaled 时间（防 timescale=0 卡死，项目弹窗动画既有口径）；ease-out 二次曲线。</summary>
+    /// <summary>unscaled 时间（防 timescale=0 卡死，项目弹窗动画既有口径）；ease-out 二次曲线。
+    /// 目标缩放 = 适配系数 _fitK（Panel 800 宽整体缩到 720 逻辑宽内）。</summary>
     System.Collections.IEnumerator CoOpenScale()
     {
         float t = 0f;
@@ -555,11 +692,63 @@ public class MercAscendUI : MonoBehaviour
             t += Time.unscaledDeltaTime / OpenDuration;
             float k = Mathf.Clamp01(t);
             k = 1f - (1f - k) * (1f - k);   // ease-out quad
-            _panel.localScale = Vector3.one * (OpenScaleFrom + (1f - OpenScaleFrom) * k);
+            _panel.localScale = Vector3.one * _fitK * (OpenScaleFrom + (1f - OpenScaleFrom) * k);
             yield return null;
         }
-        _panel.localScale = Vector3.one;
+        _panel.localScale = Vector3.one * _fitK;
         _scaleCo = null;
+    }
+
+    // ============================================================
+    // 升阶成功动效（2026-10-24 主人拍板：进阶成功节点从无到有猛的弹出，effect 特效一起播）
+    // ============================================================
+
+    /// <summary>播成功动效：节点显形 + 猛的弹出 + effect 粒子/音效齐播。
+    /// 缺节点绑定期已 LogError，这里 fail closed 直接返回（不兜底建、不静默）。</summary>
+    void PlaySuccessFx()
+    {
+        if (_successRt == null) return;
+        _successRt.localScale = Vector3.zero;               // 先归零再显形：防激活后第一帧满尺寸闪一下
+        _successRt.gameObject.SetActive(true);
+        if (_successFx != null)
+        {
+            for (int i = 0; i < _successFx.Length; i++)
+            {
+                var ps = _successFx[i];
+                if (ps == null || !ps.gameObject.activeInHierarchy) continue;
+                ps.Clear(true);
+                ps.Play(true);   // StageClearRewardDirector.cs:665-666 同口径；AudioSource 靠 authored playOnAwake 同帧播音
+            }
+        }
+        if (_popCo != null) { StopCoroutine(_popCo); _popCo = null; }
+        _popCo = StartCoroutine(CoSuccessPop());
+    }
+
+    /// <summary>unscaled 时间（弹窗动画既有口径，防 timescale=0 卡死）；两段式 ease-out：
+    /// 0→过冲（先快，「猛」）→1.0 落定。只动 _successRt 自身 localScale，
+    /// 不写子节点 sizeDelta/anchoredPosition（铁律 32）；与 Panel 开窗 _fitK 缩放复合互不干扰。</summary>
+    System.Collections.IEnumerator CoSuccessPop()
+    {
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.unscaledDeltaTime / PopUpDur;
+            float k = Mathf.Clamp01(t);
+            k = 1f - (1f - k) * (1f - k);   // ease-out quad
+            _successRt.localScale = Vector3.one * (PopOvershoot * k);
+            yield return null;
+        }
+        t = 0f;
+        while (t < 1f)
+        {
+            t += Time.unscaledDeltaTime / PopSettleDur;
+            float k = Mathf.Clamp01(t);
+            k = 1f - (1f - k) * (1f - k);   // ease-out quad
+            _successRt.localScale = Vector3.one * (PopOvershoot + (1f - PopOvershoot) * k);
+            yield return null;
+        }
+        _successRt.localScale = Vector3.one;
+        _popCo = null;
     }
 
     // ============================================================

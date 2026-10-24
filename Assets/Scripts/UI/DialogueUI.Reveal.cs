@@ -168,6 +168,67 @@ public partial class DialogueUI
         }
     }
 
+    // 【2026-10-24 主人拍板「剧情弹出加黑幕过渡 + 字幕」】开播短黑幕节奏（比地点揭示快一档）
+    const float IntroBlackInDur = 0.25f;
+    const float IntroHoldDur = 1.0f;
+    const float IntroTextFadeDur = 0.5f;
+    const float IntroBgFadeDur = 0.6f;
+
+    /// <summary>
+    /// 剧情开播黑幕过渡（整段开头补一道；背景没换、走不到 <see cref="PlayLocationReveal"/> 时用）：
+    /// 黑幕快速压上 → 字幕短留（地点名或调用方传入的提示语）→ 揭开并压暗到 0.42（与地点揭示同收口）。
+    /// 点击跳过与地点揭示同一出口（_skipReveal，见 DialogueUI.Wire）。
+    /// </summary>
+    public IEnumerator PlayIntroVeil(string caption)
+    {
+        _revealing = true;
+        _skipReveal = false;
+        SetDialogueChromeVisible(false);
+        EnsureLocationCaption();
+        EnsureBgDim();
+        EnsureRevealBlack();
+        SetBgDim(0f);
+        SetRevealBlack(0f);
+        SetSceneBackgroundAlpha(1f);
+        // 黑幕压上
+        float inT = 0f;
+        while (inT < IntroBlackInDur && !_skipReveal)
+        {
+            inT += Time.unscaledDeltaTime;
+            SetRevealBlack(Mathf.Clamp01(inT / IntroBlackInDur));
+            yield return null;
+        }
+        SetRevealBlack(1f);
+        // 字幕短留
+        if (!string.IsNullOrEmpty(caption))
+        {
+            RaiseLocationCaption();
+            SetLocationCaption(caption, 1f);
+            yield return WaitUnscaled(IntroHoldDur);
+            float fadeT = 0f;
+            while (fadeT < IntroTextFadeDur && !_skipReveal)
+            {
+                fadeT += Time.unscaledDeltaTime;
+                SetLocationCaption(caption, 1f - Mathf.Clamp01(fadeT / IntroTextFadeDur));
+                yield return null;
+            }
+        }
+        SetLocationCaption("", 0f);
+        // 揭开
+        yield return null;
+        float bgFadeT = 0f;
+        while (bgFadeT < IntroBgFadeDur && !_skipReveal)
+        {
+            bgFadeT += Time.unscaledDeltaTime;
+            SetRevealBlack(1f - Mathf.Clamp01(bgFadeT / IntroBgFadeDur));
+            yield return null;
+        }
+        SetRevealBlack(0f);
+        SetBgDim(0.42f);
+        _revealing = false;
+        _skipReveal = false;
+    }
+
     public void SetDialogueChromeVisible(bool on)
     {
         if (dialogueBoxImage != null) dialogueBoxImage.gameObject.SetActive(on);

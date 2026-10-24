@@ -49,6 +49,8 @@ public class DraftOddsPopupUI : MonoBehaviour
     Button _dimBtn;
     RectTransform _panel;
     RectTransform _foot;
+    /// <summary>根节点上的 Canvas（适配入口用；DDOL 跨场景后由 RefreshPopup 重绑相机 + 重套缩放）。</summary>
+    Canvas _canvas;
 
     /// <summary>本次打开克隆出来的行，关掉时统一销毁（不销毁模板本身）。</summary>
     readonly List<GameObject> _spawned = new List<GameObject>();
@@ -98,9 +100,15 @@ public class DraftOddsPopupUI : MonoBehaviour
 
         var go = Instantiate(prefab);
         go.name = "DraftOddsPopup";
-        // 与 EvacuateConfirmPopup 同一套口径：自带 Overlay Canvas，不挂 BattleUI 下、不随场景销毁
+        // 与 EvacuateConfirmPopup 同一套口径：自带 ScreenSpaceCamera Canvas，不挂 BattleUI 下、不随场景销毁
         DontDestroyOnLoad(go);
-        return go.GetComponent<DraftOddsPopupUI>() ?? go.AddComponent<DraftOddsPopupUI>();
+        var ui = go.GetComponent<DraftOddsPopupUI>() ?? go.AddComponent<DraftOddsPopupUI>();
+        // 【2026-10-24 主人拍板】补统一适配入口（此前漏调）：预制体 CanvasScaler 写死「高对齐 720×1280」，
+        // 瘦长屏（1080×2400）逻辑宽只剩 576 < Panel 620 → 面板左右被切、关闭按钮被切；
+        // 且 worldCamera 为空、sortOrder 因 OverrideSorting=0 不生效。
+        // ApplyPopup 会按 DesignAspectLetterbox.ResolveUiMatch() 重设宽对齐 + 绑相机 + override 层级。
+        UICanvasSetup.ApplyPopup(go.GetComponent<Canvas>(), GameConfig.UiSort.DraftOddsPopup);
+        return ui;
     }
 
     void Awake()
@@ -119,6 +127,7 @@ public class DraftOddsPopupUI : MonoBehaviour
     void BindRefs()
     {
         if (_root == null) _root = transform.Find("Root")?.gameObject ?? gameObject;
+        _canvas = GetComponent<Canvas>();
         _listRoot = FindDeep(_root.transform, "List");
         // ⚠ FindDeep 返回的是 Transform，RectTransform 字段必须显式取组件（CS0266）
         _rowTemplate = FindDeep(_root.transform, "RowTemplate")?.GetComponent<RectTransform>();
@@ -159,6 +168,10 @@ public class DraftOddsPopupUI : MonoBehaviour
         FitPanelHeight(FillRows(DraftPool.BuildOddsRows()));
 
         _root.SetActive(true);
+        // 【2026-10-24 主人拍板】每次打开重绑相机 + 重套缩放（与 EvacuateConfirmPopupUI.Open 同构）：
+        // 场景来回切换后 RefreshDdolCanvases 只换 worldCamera 不重套缩放，不补这一手瘦长屏会退回预制体的高对齐。
+        if (_canvas != null)
+            UICanvasSetup.RefreshPopup(_canvas, GameConfig.UiSort.DraftOddsPopup);
     }
 
     /// <summary>外部口径打开（酒馆招募公示）：同一预制体，行数据由调用方传入。</summary>
@@ -172,6 +185,9 @@ public class DraftOddsPopupUI : MonoBehaviour
         FitPanelHeight(FillRows(rows));
 
         _root.SetActive(true);
+        // 【2026-10-24 主人拍板】同 Open()：DDOL 弹窗每次打开重绑相机 + 重套缩放。
+        if (_canvas != null)
+            UICanvasSetup.RefreshPopup(_canvas, GameConfig.UiSort.DraftOddsPopup);
     }
 
     /// <summary>克隆模板行并填概率数字（Open / OpenWith 共用；段标题文案写死「抽到什么/什么品质」两段）。

@@ -225,6 +225,13 @@ public partial class TutorialDirector
                 "新人，森林层那帮怪物最近闹得凶。下去走一趟，能不能留下，看你自己的本事。",
                 StoryPortraits.GuildMaster)
                 .Bg(StoryBackgrounds.GuildOffice),
+            // 【2026-10-24 主人拍板「开工」】T1 动机第一句（V1.0 报告 R1：教学段 0 次提及失踪小队，
+            // 前 5 分钟玩家只知道打工打怪，第 5 章反转没有情感本金就打不到人）。
+            // 会长性格口径：官僚冷漠、把人当出勤表上的数字。
+            StoryDirector.Solo("会长",
+                "三个月前也下去过一支小队。别打听——\n名单归档案科，你的名字只归出勤表。",
+                StoryPortraits.GuildMaster)
+                .Bg(StoryBackgrounds.GuildOffice),
             StoryDirector.Solo("会长",
                 "你把这个签了后就可以出去了。",
                 StoryPortraits.GuildMaster)
@@ -264,6 +271,12 @@ public partial class TutorialDirector
             // 【2026-10-12 主人拍板】第一句带玩家名字（与会长送别句同一口径，起名后才播这段）
             StoryDirector.Solo("赛琳",
                 $"{StoryProgress.GetPlayerName()}，第一次下裂隙？三件事：\n1. 你只管走路，打架会自动打。\n2. 裂隙很危险，尽量组队进入。\n3. 见好就收，活着才有收益。",
+                StoryPortraits.Receptionist)
+                .Bg(StoryBackgrounds.GuildHall),
+            // 【2026-10-24 主人拍板「开工」】T1 动机第二句：赛琳是慢燃线唯一的 Tier-1 投放口（V2.0 口径），
+            // 性格口径：公事公办里漏半句不该说的，说到「她」立刻收住。
+            StoryDirector.Solo("赛琳",
+                "对了……你是艾丽娅介绍来的吧？\n她——算了。去吧，祝你别用上第三条。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)
         };
@@ -363,7 +376,10 @@ public partial class TutorialDirector
         StoryDirector.Ensure().Play(new List<StoryBeat>
         {
             StoryDirector.Solo("赛琳",
-                "回来了？人物界面可以查看属性，酒馆能招募佣兵。\n先熟悉下公会大厅，之后再慢慢变强。",
+                // 【2026-10-24 主人拍板「开工」】T1 动机第三句（句尾追加，不加新拍控制时长）：
+                // 教学收尾就钉下「第七支小队」——战前剧情 PlayPre1 的艾丽娅台词有了前情承接。
+                // 性格口径：赛琳打听小队下不咋明说，「就说赛琳问的」= 她自己有牵挂。
+                "回来了？人物界面可以查看属性，酒馆能招募佣兵。\n先熟悉下公会大厅，之后再慢慢变强。\n还有——听见有人聊起『第七支小队』，回来跟我说一声。就说……赛琳问的。",
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall)
                 .SkipReveal()

@@ -571,13 +571,21 @@ public static class UiLayoutStretch
         return false;
     }
 
+    /// <summary>
+    /// 当前逻辑 UI 高（唯一出口，2026-10-24 抽出：此前该公式在 DailyLoginUI.Fit / IsThinnerScreen 各抄一份）。
+    /// 瘦屏（按宽匹配）= 720÷屏幕宽高比（更高）；其余 = 设计高 1280。
+    /// </summary>
+    public static float ResolveUiLogicalHeight()
+    {
+        return DesignAspectLetterbox.ResolveUiMatch() < 0.5f
+            ? GameConfig.DESIGN_WIDTH / Mathf.Max(1e-3f, Screen.width / (float)Screen.height)
+            : GameConfig.DESIGN_HEIGHT;
+    }
+
     /// <summary>是否更瘦屏：逻辑 UI 高 > 设计高 + 1 时为真（9:16 标准屏逻辑高恒 1280，必须保持原样）。纯工具，两个界面共用，不算通用适配逻辑。</summary>
     public static bool IsThinnerScreen()
     {
-        float uiLogicalH = DesignAspectLetterbox.ResolveUiMatch() < 0.5f
-            ? GameConfig.DESIGN_WIDTH / Mathf.Max(1e-3f, Screen.width / (float)Screen.height)
-            : GameConfig.DESIGN_HEIGHT;
-        return uiLogicalH > GameConfig.DESIGN_HEIGHT + 1f;
+        return ResolveUiLogicalHeight() > GameConfig.DESIGN_HEIGHT + 1f;
     }
 
     // （AdventureUI 竖屏适配已迁移至 AdventureUI.ApplyAdventureFit，见 AdventureUI.cs；本文件不再保留专用实现）

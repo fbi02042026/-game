@@ -237,10 +237,13 @@ public static class StoryPortraitPresenter
         // 否则立绘顶贴着 24px 安全线，上移量会被下方 maxY 钳制原封吃掉。
         // 放宽量封顶 TallScreenTopMaxLiftPx（防独眼等头顶留白小的图裁发梢）。
         // 标准屏 k=1 时 lift 恒 0，封顶线照旧，效果与现在完全一致。
+        // 【2026-10-23 主人拍板：瘦屏立绘再上抬】封顶从一刀切 48 改为按各图头顶留白个体化：
+        // 留白大的图（玩家 213px）吃满 lift，留白小的图（独眼 25px）维持 48 防裁发梢，
+        // 表外立绘返回 48 照旧。scale 与 ApplySlot 定尺寸同源（ResolvePortraitScale）。
         float kLift = canvasH / Mathf.Max(1f, GameConfig.DESIGN_HEIGHT);
         float lift = kLift > 1f ? (kLift - 1f) * StoryPortraitLayout.TallScreenLiftPx : 0f;
         desired += lift;
-        top += Mathf.Min(lift, StoryPortraitLayout.TallScreenTopMaxLiftPx);
+        top += Mathf.Min(lift, StoryPortraitLayout.GetTopMaxLiftPx(portraitId, ResolvePortraitScale(ctx)));
         float maxY = top - hostRt.sizeDelta.y;
         // 只封顶（顶边不入屏顶 24px 安全区），放开 0 下限：整图高度可超画布，
         // 底部允许垂到画布外/对话框后面；保留 0 下限会把超高立绘整体压到 y=0、顶边反被屏幕裁掉。

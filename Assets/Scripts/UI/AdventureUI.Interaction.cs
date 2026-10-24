@@ -164,6 +164,8 @@ public partial class AdventureUI
         if (!IsModePlayable(idx))
             Toast($"{ModeLabel(idx)}即将开放");
         RefreshAll();
+        // 【2026-10-23 主人要求】切模式后新页面弹出（见 AdventureUI.Anim.cs）
+        PlayRightModePopIn();
     }
 
     // ────────────────────────────────────────────────────
@@ -289,14 +291,23 @@ public partial class AdventureUI
                 Toast("先通关上一难度才开启下一难度");
                 return;
             }
-            // 噩梦门槛：困难难度下通关第 8 章（不再按通关地图数判定）
-            if (idx >= 2) Toast("在困难难度下通关一次冒险后开启噩梦");
-            else Toast($"通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图后开启{DiffLabel(idx)}");
+            // 主线难度锁定提示统一出口（2026-10-23 主人拍板：困难=通关第一章、噩梦=通关第三章）
+            Toast(DiffLockHint(idx));
             return;
         }
         _selectedDiff = idx;
+        // 【2026-10-24 主人拍板「难度逐章解锁」】切难度后当前章在该难度可能未开启
+        // （上一章该难度没通）→ 选择回退到该难度下应推进的章，标识跟着走。
+        // 只对主线生效：活动副本难度走 ActivityDungeonRules 自己的逐级解锁，不牵动章节。
+        if (IsMainMode(_selectedMode)
+            && !ChapterRouteTable.CanEnterAtDiff(_selectedChapter, _selectedDiff, SaveSystem.Instance?.Data))
+        {
+            _selectedChapter = ChapterRouteTable.CurrentChapterToAdvanceAtDiff(_selectedDiff, SaveSystem.Instance?.Data);
+            PlayChapterFadeIn();
+        }
         RefreshDiffHighlight();
         RefreshDetailPanel();
+        RefreshChestNodes();   // 【2026-10-24 难度逐章解锁】难度变了：关卡列灰锁/当前关标识按新难度重算
     }
 
     void OnPrevChapter()
@@ -308,7 +319,15 @@ public partial class AdventureUI
         }
         int idx = AvailableIndex();
         idx = (idx - 1 + _availableChapters.Count) % _availableChapters.Count;
-        _selectedChapter = _availableChapters[idx];
+        int target = _availableChapters[idx];
+        // 【2026-10-24 主人拍板「难度逐章解锁」】该章在当前难度未开启 → 提示后留在原地
+        if (IsMainMode(_selectedMode)
+            && !ChapterRouteTable.CanEnterAtDiff(target, _selectedDiff, SaveSystem.Instance?.Data))
+        {
+            Toast(ChapterRouteTable.DiffChapterLockHint);
+            return;
+        }
+        _selectedChapter = target;
         PlayChapterFadeIn();
         RefreshAll();
     }
@@ -328,10 +347,18 @@ public partial class AdventureUI
             return;
         }
         _selectedChapter = _availableChapters[idx + 1];
+        // 【2026-10-24 主人拍板「难度逐章解锁」】该章在当前难度未开启 → 提示后留在原地
+        if (IsMainMode(_selectedMode)
+            && !ChapterRouteTable.CanEnterAtDiff(_selectedChapter, _selectedDiff, SaveSystem.Instance?.Data))
+        {
+            _selectedChapter = _availableChapters[idx];
+            Toast(ChapterRouteTable.DiffChapterLockHint);
+            return;
+        }
         PlayChapterFadeIn();
         RefreshAll();
-        // 成功滑到后续章节 → 「左滑引导」永久关闭
-        if (_selectedChapter > 1) MarkSwipeGuideDone();
+        // 成功滑到后续章节 → 「世界地图引导」永久关闭（滑动到后续章也算完成了引导目标）
+        if (_selectedChapter > 1) MarkWorldMapGuideDone();
     }
 
     // ────────────────────────────────────────────────────
@@ -381,6 +408,9 @@ public partial class AdventureUI
             var cg = stageNodeContainer.GetComponent<CanvasGroup>();
             if (cg != null) cg.alpha = 1f;
         }
+        // 【2026-10-23 主人要求】弹出动效收尾：停协程 + 还原缩放/透明度，别停在半程
+        // 【2026-10-24 主人拍板】左侧标签滑入动效半途隐藏页面时归位，防止标签永久停在屏幕外
+        RestorePopAnims();
     }
 
     // ────────────────────────────────────────────────────
@@ -408,9 +438,23 @@ public partial class AdventureUI
         return stageNodeContainer != null && hit.transform.IsChildOf(stageNodeContainer);
     }
 
+    /// <summary>
+    /// 按下点是否落在关卡滑动列表（关卡Viewport，2026-10-24 主人拍板「关卡列改滑动列表」）子树内。
+    /// 滑动列表自己吃竖向拖拽，翻章手势要在这里让路，否则竖着滑关卡会误触发横向翻章。
+    /// </summary>
+    bool IsInsideChestViewport(GameObject hit)
+    {
+        if (hit == null) return false;
+        var right = transform.Find("RightContent");
+        var mainNode = right != null ? right.Find(MainNodeName) : null;
+        var viewport = mainNode != null ? mainNode.Find(ChestViewportName) : null;
+        return viewport != null && hit.transform.IsChildOf(viewport);
+    }
+
     public void OnBeginDrag(PointerEventData eventData)
     {
-        _chapterSwipeActive = IsMapDragStart(eventData);
+        // 关卡滑动列表子树内的拖拽归 ScrollRect（竖滑关卡），不触发翻章
+        _chapterSwipeActive = IsMapDragStart(eventData) && !IsInsideChestViewport(eventData.pointerPressRaycast.gameObject);
         _chapterSwipeDx = 0f;
     }
 
@@ -452,8 +496,14 @@ public partial class AdventureUI
                 Toast("先通关上一难度才开启下一难度");
                 return;
             }
-            if (_selectedDiff >= 2) Toast("在困难难度下通关一次冒险后开启噩梦");
-            else Toast($"通关 {GameConfig.DIFF_HARD_NEED_CLEARS} 张地图后开启{DiffLabel(_selectedDiff)}");
+            Toast(DiffLockHint(_selectedDiff));
+            return;
+        }
+        // 【2026-10-24 主人拍板「难度逐章解锁」】该章在当前难度未开启（上一章该难度没通）→ 提示不进
+        if (IsMainMode(_selectedMode)
+            && !ChapterRouteTable.CanEnterAtDiff(_selectedChapter, _selectedDiff, SaveSystem.Instance?.Data))
+        {
+            Toast(ChapterRouteTable.DiffChapterLockHint);
             return;
         }
 

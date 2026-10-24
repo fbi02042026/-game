@@ -317,14 +317,14 @@ public class TavernUI : MonoBehaviour, ITownPage
         }
         if (trustButton != null)
         {
-            // 【2026-10-15 主人拍板】下排「信任交流」卡锁住：点击只提示功能即将开放
-            // （原「请他喝一杯/TavernLore」入口撤掉）；force 出口同上。
-            // 【2026-10-18 彩蛋批次】顺手把摸头攒的好感度展示出来，给玩家一个看数值的入口。
+            // 【2026-10-24 主人拍板「开工」】信任交流卡复用为「酒馆闲话」入口（TavernLore 三入口 +
+            // 老队员记忆，见 TavernChatPopupUI）——原 2026-10-15「未开放」口径由本批接线取代；
+            // 信赖度展示保留（挪到弹窗页脚），信任系统本体仍未开放。
+            // 不加第五张卡：四卡 2×2 已占满，改布局会碰预制体排版（铁律 32）。
             trustButton.gameObject.SetActive(true);
             trustButton.onClick.RemoveAllListeners();
-            trustButton.onClick.AddListener(() =>
-                UIManager.Instance?.ShowToast(
-                    $"信赖：{TavernEggState.FavorStageName}（{TavernEggState.Favor}）　功能即将开放", true));
+            trustButton.onClick.AddListener(() => TavernChatPopupUI.Toggle());
+            RetitleCard(trustButton.transform, "酒馆闲话", "空座位·独眼·老板娘·旧日同伴");
         }
         if (questButton != null)
         {

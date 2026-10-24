@@ -40,20 +40,8 @@ public partial class AdventureUI
     /// <summary>两个支线岛之间的纵向间距（照主线槽位节奏 146；嫌大嫌小只改这一个数）。</summary>
     const float BranchIslandSpacing = 146f;
 
-    // ── 主线宝箱 lifecycle 动画节奏（2026-10-23 主人拍板：通关未领=开启图可点领奖，领取完变灰→下移消失、
-    //    上面槽位补位、新当前关从小到大开启+感叹号蹦出颤一下；实现与常量在 ChestNodes，嫌快嫌慢改这组数）──
-    /// <summary>打完变灰停留时长（秒）：灰状态停一拍让人看清「已领取」，再开始下移。</summary>
-    const float BranchGrayHoldDur = 0.55f;
-    /// <summary>打完退场时长（秒）：往下滑出 + 淡出。</summary>
-    const float BranchExitDur = 0.45f;
-    /// <summary>打完退场下滑距离（像素）。</summary>
-    const float BranchExitSlide = 230f;
-    /// <summary>新岛开启时长（秒）：从小到大 + 透明到出现。</summary>
-    const float BranchGrowDur = 0.4f;
-    /// <summary>新岛开启起始缩放（相对基准的倍数）。</summary>
-    const float BranchGrowFromScale = 0.15f;
-    /// <summary>徽章蹦出总时长（秒）。</summary>
-    const float BranchBadgePopDur = 0.4f;
+    // ── 主线宝箱 lifecycle 动画节奏常量已搬去 ChestNodes.cs（2026-10-23 常量跟使用者走：
+    //    BranchGrayHoldDur/BranchExitDur/BranchExitSlide/BranchGrowDur/BranchGrowFromScale 全在宝箱动画里用）──
 
     /// <summary>支线岛剧情节点图（2026-10-23 主人拍板：56字符 guid 一律不管，图全部路径加载，不依赖 prefab guid 引用）。</summary>
     static readonly string BranchStorySpritePath = ChestResDir + "剧情";
@@ -109,11 +97,17 @@ public partial class AdventureUI
         }
 
         // 克隆源：主人手摆的「支线」示例节点（关卡 容器下）
+        // 【2026-10-24】关卡容器被滑动列表包裹后搬到 主线/关卡Viewport/关卡，两条路径都找
         Transform srcSlot = null;
         Transform guanka = null;
         for (int i = 0; i < mainNode.childCount; i++)
         {
             if (mainNode.GetChild(i).name == "关卡") { guanka = mainNode.GetChild(i); break; }
+        }
+        if (guanka == null)
+        {
+            var vp = mainNode.Find(ChestViewportName);
+            guanka = vp != null ? vp.Find("关卡") : null;
         }
         if (guanka != null)
         {
@@ -133,10 +127,16 @@ public partial class AdventureUI
             return;
         }
         if (srcSlot is RectTransform sampleRt)
-            _branchSampleBasePos = sampleRt.anchoredPosition;   // 岛1基准 = 示例原位
+        {
+            // 岛1基准 = 示例原位。【2026-10-24】关卡容器被滑动列表包裹后，示例锚点参考中心
+            // 比视口（原关卡帧）中心低 ChestScrollRefShift —— 岛容器按视口帧摆，基准补回该偏移。
+            _branchSampleBasePos = sampleRt.anchoredPosition - new Vector2(0f, ChestScrollRefShift);
+        }
 
         // 容器：与关卡容器同锚同位（内部坐标和槽位同系，摆位常量直接可用）
-        var srcRt = srcSlot.parent as RectTransform;
+        // 【2026-10-24】关卡容器已变成滑动列表的滚动内容（帧被改写）→ 帧改抄视口（= 原关卡容器预制体帧）
+        var viewportRt = mainNode.Find(ChestViewportName) as RectTransform;
+        var srcRt = viewportRt != null ? viewportRt : srcSlot.parent as RectTransform;
         var rootGo = new GameObject(BranchIslandContainerName, typeof(RectTransform));
         rootGo.transform.SetParent(mainNode, false);
         var rt = (RectTransform)rootGo.transform;

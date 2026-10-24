@@ -45,6 +45,15 @@ public interface IBattleMode
     bool GrantsRunCoins { get; }
 
     /// <summary>
+    /// 本模式通关 / 阵亡是否先播「战斗结果」界面（预制体胜利/失败图 + 特效，<see cref="BattleResultScreen"/>）。
+    /// <para>2026-10-24 主人拍板：正式关卡 / 支线岛 / 活动副本（金币/徽记）都播；
+    /// 无限裂隙不播 —— 每层通关即有累计奖励，直接走自己的结算续层链；
+    /// 终章追查关不播 —— 通关后紧接着播揭底剧情，插结果界面会打断剧情节奏（主人可点名开启）。
+    /// 引导局两条路都提前分流（阵亡重进战斗 / 通关走传送门撤离结算），永远问不到本属性。</para>
+    /// </summary>
+    bool UsesBattleResultScreen { get; }
+
+    /// <summary>
     /// 建关：决定这一局打哪些关卡。
     /// 核心只调这一个方法，不再写 <c>if (IsGoldDungeon) ... else ...</c>。
     /// </summary>

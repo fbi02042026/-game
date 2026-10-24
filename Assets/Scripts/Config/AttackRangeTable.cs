@@ -119,23 +119,13 @@ public static class AttackRangeTable
     public static float GetWeaponWorld(WeaponCombatTable.WeaponKind kind)
         => GameConfig.NormalizeAttackRange(GetWeaponPx(kind));
 
-    /// <summary>佣兵：按 AssetId 前缀对齐职业/武器档。</summary>
-    public static float GetMercWorld(string assetId)
-    {
-        if (string.IsNullOrEmpty(assetId))
-            return GetWeaponWorld(WeaponCombatTable.WeaponKind.Sword);
-        if (assetId.StartsWith("gongshou"))
-            return GetWeaponWorld(WeaponCombatTable.WeaponKind.Bow);
-        if (assetId.StartsWith("fashi"))
-            return GetJobWorld(PlayerJobId.Mage);
-        if (assetId.StartsWith("naima") || assetId.StartsWith("mushi"))
-            return GetJobWorld(PlayerJobId.Priest);
-        if (assetId.StartsWith("zhongzhan") || assetId.StartsWith("qita"))
-            return GetWeaponWorld(WeaponCombatTable.WeaponKind.Polearm);
-        if (assetId.StartsWith("kuangzhan"))
-            return GetWeaponWorld(WeaponCombatTable.WeaponKind.Greatsword);
-        return GetWeaponWorld(WeaponCombatTable.WeaponKind.Sword);
-    }
+    // 【2026-10-24 主人拍板】GetMercWorld（按 AssetId 前缀判职业/武器档）已删除：
+    // 与 MercRosterDefs.ResolveRange 是同一语义的两个出口（违反铁律13），且数值不一致
+    // （旧实现：fashi→job_mage 200、naima/mushi→job_priest 160、kuangzhan→greatsword 120；
+    //  收口后：法系→weapon_staff 120、狂战→weapon_sword 96）。
+    // 佣兵射程唯一出口 = MercRosterDefs.ResolveRange（内部经 JobKindOf 判档，再回本表取武器档）。
+    // 该旧方法唯一调用点在 Mercenary.Attributes.cs 的「非花名册兜底分支」——所有实际出战的
+    // 佣兵 id 都来自花名册（抽奖池/教程/图鉴均读 MercRosterDefs），该分支不可达，故零玩法变化。
 
     public static float GetMonsterWorld(MonsterAttackStyle style)
     {

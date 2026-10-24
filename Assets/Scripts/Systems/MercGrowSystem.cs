@@ -28,7 +28,7 @@ public static class MercGrowSystem
     //    不是 SaveData 的嵌套类 —— 写成 SaveData.MercGrowEntry 会 CS0234，这里只能写裸类名。
     public static MercGrowEntry Get(string hireIdOrAssetId)
     {
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId);
         if (string.IsNullOrEmpty(hireId)) return null;
         return SaveSystem.Instance?.Data?.GetMercGrow(hireId);
     }
@@ -60,7 +60,7 @@ public static class MercGrowSystem
     /// <summary>查技能强化档（0~3，给战斗侧乘 MercGrowDefs.StrengthenMul 用；无记录 = 0 档）。</summary>
     public static int SkillTierOf(string hireIdOrAssetId)
     {
-        string hireId = ResolveHireId(hireIdOrAssetId);
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId);
         if (string.IsNullOrEmpty(hireId) || !MercRosterDefs.TryGetByHireId(hireId, out var def)) return 0;
         return MercGrowDefs.SkillTier(LevelOf(hireId), def.Rarity);
     }
@@ -74,7 +74,7 @@ public static class MercGrowSystem
     {
         msg = ""; gold = 0; badge = 0; badgeTier = null; jobKey = null;
 
-        string hireId = ResolveHireId(id);
+        string hireId = MercRosterDefs.ResolveHireId(id);
         if (string.IsNullOrEmpty(hireId) || !MercRosterDefs.TryGetByHireId(hireId, out var def))
         {
             msg = "花名册里查不到这名佣兵";
@@ -138,7 +138,7 @@ public static class MercGrowSystem
             int haveBadge = MercGrowInventory.Get(badgeId);
             if (haveBadge < badge)
             {
-                string tierName = TierDisplayName(badgeTier);
+                string tierName = MercStarSystem.BadgeTierDisplayName(badgeTier);
                 msg = $"{tierName}徽记不足：还需 {badge - haveBadge}（持有 {haveBadge}/{badge}）";
                 return false;
             }
@@ -156,7 +156,7 @@ public static class MercGrowSystem
         msg = "";
         if (!CanLevelUp(id, out msg, out int gold, out int badge, out string badgeTier, out string jobKey)) return false;
 
-        string hireId = ResolveHireId(id);
+        string hireId = MercRosterDefs.ResolveHireId(id);
         var data = SaveSystem.Instance?.Data;
         if (data == null || string.IsNullOrEmpty(hireId)) { msg = "存档未就绪"; return false; }
         MercRosterDefs.TryGetByHireId(hireId, out var def);
@@ -192,7 +192,7 @@ public static class MercGrowSystem
         {
             if (!MercGrowInventory.TrySpend(MercGrowInventory.BadgeId(jobKey, perLevelTier), perLevelBadge))
             {
-                msg = RollbackAndFail(hireId, def.Name, gold, perLevelBadge, perLevelTier, jobKey, $"扣{TierDisplayName(perLevelTier)}徽记失败");
+                msg = RollbackAndFail(hireId, def.Name, gold, perLevelBadge, perLevelTier, jobKey, $"扣{MercStarSystem.BadgeTierDisplayName(perLevelTier)}徽记失败");
                 return false;
             }
         }
@@ -202,7 +202,7 @@ public static class MercGrowSystem
         {
             if (!MercGrowInventory.TrySpend(MercGrowInventory.BadgeId(jobKey, nodeTier), nodeBadge))
             {
-                msg = RollbackAndFail(hireId, def.Name, gold, perLevelBadge, perLevelTier, jobKey, $"升阶节点扣{TierDisplayName(nodeTier)}徽记失败");
+                msg = RollbackAndFail(hireId, def.Name, gold, perLevelBadge, perLevelTier, jobKey, $"升阶节点扣{MercStarSystem.BadgeTierDisplayName(nodeTier)}徽记失败");
                 return false;
             }
         }
@@ -214,8 +214,8 @@ public static class MercGrowSystem
 
         SaveSystem.Instance.Save();
         string name = def.Name ?? hireId;
-        string nodeNote = isNode ? $"，升阶节点：{TierDisplayName(nodeTier)}徽记 ×{nodeBadge}（第 {e.ascended} 阶）" : "";
-        Debug.Log($"[MercGrow] {name}({hireId}) 升级：Lv{cur} → Lv{newLevel}，消耗金币 {gold}{(perLevelBadge > 0 ? $" + {TierDisplayName(perLevelTier)}徽记 ×{perLevelBadge}" : "")}{nodeNote}");
+        string nodeNote = isNode ? $"，升阶节点：{MercStarSystem.BadgeTierDisplayName(nodeTier)}徽记 ×{nodeBadge}（第 {e.ascended} 阶）" : "";
+        Debug.Log($"[MercGrow] {name}({hireId}) 升级：Lv{cur} → Lv{newLevel}，消耗金币 {gold}{(perLevelBadge > 0 ? $" + {MercStarSystem.BadgeTierDisplayName(perLevelTier)}徽记 ×{perLevelBadge}" : "")}{nodeNote}");
         msg = isNode ? $"{name} 升级成功（Lv{newLevel}，升阶！第 {e.ascended} 阶）" : $"{name} 升级成功（Lv{newLevel}）";
         return true;
     }
@@ -227,7 +227,7 @@ public static class MercGrowSystem
     public static bool TryReset(string id, out string msg)
     {
         msg = "";
-        string hireId = ResolveHireId(id);
+        string hireId = MercRosterDefs.ResolveHireId(id);
         if (string.IsNullOrEmpty(hireId) || !MercRosterDefs.TryGetByHireId(hireId, out var def))
         {
             msg = "花名册里查不到这名佣兵";
@@ -349,28 +349,5 @@ public static class MercGrowSystem
         SaveSystem.Instance?.Save();
         Debug.LogError($"[MercGrow] {name}({hireId}) 升级失败已整笔回滚：{reason}（金币 {gold} 已退还，徽记已退还）——数据异常，请人工核查");
         return "升级失败，材料已退还，请重试";
-    }
-
-    /// <summary>徽记档位显示名（"普通"→低级徽记 等，文案用）。</summary>
-    static string TierDisplayName(string tier)
-    {
-        switch (tier)
-        {
-            case "普通": return "低级";
-            case "稀有": return "中级";
-            case "传奇": return "高级";
-            default: return tier ?? "";
-        }
-    }
-
-    /// <summary>hireId / AssetId 都吃，查不到返回 null（照抄 MercStarSystem.ResolveHireId 口径）。</summary>
-    static string ResolveHireId(string hireIdOrAssetId)
-    {
-        if (string.IsNullOrEmpty(hireIdOrAssetId)) return null;
-        if (MercRosterDefs.TryGetByHireId(hireIdOrAssetId, out var byHire))
-            return byHire.HireId;
-        if (MercRosterDefs.TryGetByAssetId(hireIdOrAssetId, out var byAsset))
-            return byAsset.HireId;
-        return null;
     }
 }

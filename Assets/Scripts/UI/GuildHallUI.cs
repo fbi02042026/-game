@@ -763,7 +763,8 @@ public class GuildHallUI : MonoBehaviour
         }
     }
 
-    static string FormatResource(long v)
+    /// <summary>资源数字格式化【2026-10-24 提为公共静态唯一出口】：MercAscendUI 克隆顶条的金币/钻石数字同源走这里，不许抄第二份。</summary>
+    public static string FormatResource(long v)
     {
         if (v >= ResourceWallet.DEFAULT_MAX)
             return ResourceWallet.DEFAULT_MAX.ToString();

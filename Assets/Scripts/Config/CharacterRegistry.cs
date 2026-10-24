@@ -83,4 +83,18 @@ public class CharacterRegistry : ScriptableObject
         var e = GetEntry(characterId);
         return e != null ? e.jobName : characterId;
     }
+
+    /// <summary>
+    /// 玩家本体头像（icon_wanjia，Art/UI/Icons/Heads）统一加载出口
+    /// （2026-10-24 主人拍板：冒险页当前关 / 世界地图当前章的「头像+箭头」标识都用这一份）。
+    /// 缺真值 LogError 不兜底（铁律 15）。
+    /// </summary>
+    public static Sprite LoadPlayerIcon()
+    {
+        var registry = Resources.Load<CharacterRegistry>(ContentPaths.Config.CharacterRegistry);
+        var sp = registry != null ? registry.GetIcon(MercenaryManager.PLAYER_ID) : null;
+        if (sp == null)
+            Debug.LogError("[CharacterRegistry] 玩家头像加载失败：Resources/Config/CharacterRegistry 缺失或没有 icon_wanjia（缺真值不兜底）");
+        return sp;
+    }
 }

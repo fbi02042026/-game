@@ -184,6 +184,8 @@ public static class SkillNaming
         switch (kit)
         {
             case AttackVfxKit.MeleeSlash:
+                // 2026-10-24 主人拍板：Ally 近战刀光改走档位文件 刀光1/2/3，提示文案指到刀光1；Enemy 保持原样
+                if (side == "Ally") return "VFX/Shared/Ally/MeleeSlash/刀光1";
                 return $"VFX/Shared/{side}/MeleeSlash/vfx_{pfx}melee_hit";
             case AttackVfxKit.Bow:
                 return $"VFX/Shared/{side}/Bow/vfx_{pfx}bow_fly + vfx_{pfx}bow_hit";

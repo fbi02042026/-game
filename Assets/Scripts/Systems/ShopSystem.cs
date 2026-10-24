@@ -186,6 +186,12 @@ public static class ShopSystem
             data.shopPurchases[item.id] = used + 1;
         }
         data.shopPurchaseDay = ShopDefs.TodayKey();
+        // 【2026-10-24 主人拍板「钩子肯定需要」】N-2 金币消费累计（S005/S010 喂食口）：
+        // 出口唯一 = AdventureLogAchievements.OnShopGoldSpent（口径含酒馆招募，见其注释）。
+        // 碎片类的扣款在 TryBuyFragments 内部，但 item.price 即本次标价，照记不重复。
+        // 局内 StageShopPopup 花的是抽奖币池，不走本方法、不累计。
+        if (item.currency == ResourceWallet.ResourceType.Gold && item.price > 0)
+            AdventureLogAchievements.OnShopGoldSpent(item.price);
         saveSys.Save();
         result.ok = true;
         return result;

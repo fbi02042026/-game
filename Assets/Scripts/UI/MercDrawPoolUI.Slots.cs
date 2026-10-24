@@ -132,7 +132,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
             nameBgImg.color = Color.white;
         }
         // 【2026-10-16 主人拍板】尺寸/节点一律保持预制体原样，只换框图/名字底牌/立绘。
-        if (qxTr != null) qxTr.gameObject.SetActive(true);
+        // 【2026-10-23 主人拍板】quxiao 红「−」下架钮作废：队列中的佣兵不许取消（防抽奖池变小），
+        // 换人走已拥有列表卡详情弹窗的「替换」；节点在预制体保留，代码只负责压掉不点亮。
+        if (qxTr != null) qxTr.gameObject.SetActive(false);
         if (suoTr != null) suoTr.gameObject.SetActive(false);
     }
 
@@ -176,62 +178,5 @@ public partial class MercDrawPoolUI : MonoBehaviour
     // 卡片构建（统一头像，主人拍板）
     // ============================================================
 
-    /// <summary>
-    /// 头像脸：稀有度头像框（跟头像同区，不铺全卡防拉变形）+ 头像 + 名字 + 职业徽记（左上）。
-    /// usedForPool = 池格（更高瘦）。
-    /// </summary>
-    void BuildMercFace(Transform parent, string hireId, MercRosterDefs.Def def, string nameLabel, bool usedForPool)
-    {
-        var frame = NewImage(parent, "Frame", Color.white);
-        var frt = frame.rectTransform;
-        frt.anchorMin = new Vector2(0.5f, 1f);
-        frt.anchorMax = new Vector2(0.5f, 1f);
-        frt.pivot = new Vector2(0.5f, 1f);
-        var frameSp = MercHireSession.LoadPortraitFrame(def.Rarity);
-        frame.sprite = frameSp;
-        frame.enabled = frameSp != null;
-        var head = NewImage(parent, "Head", Color.white);
-        var hrt = head.rectTransform;
-        hrt.anchorMin = new Vector2(0.5f, 1f);
-        hrt.anchorMax = new Vector2(0.5f, 1f);
-        hrt.pivot = new Vector2(0.5f, 1f);
-        if (usedForPool)
-        {
-            frt.anchoredPosition = new Vector2(0f, -22f);
-            frt.sizeDelta = new Vector2(88f, 88f);
-            hrt.anchoredPosition = new Vector2(0f, -26f);
-            hrt.sizeDelta = new Vector2(72f, 72f);
-        }
-        else
-        {
-            frt.anchoredPosition = new Vector2(0f, -6f);
-            frt.sizeDelta = new Vector2(136f, 116f);
-            hrt.anchoredPosition = new Vector2(0f, -10f);
-            hrt.sizeDelta = new Vector2(120f, 100f);
-        }
-        var sp = MercPortraitSprites.GetHead(hireId);
-        if (sp == null && !string.IsNullOrEmpty(def.AssetId)) sp = MercPortraitSprites.GetHead(def.AssetId);
-        head.sprite = sp;
-        head.preserveAspect = true;
-        head.enabled = sp != null;
-
-        var nameT = MakeText(parent, "Name", nameLabel, usedForPool ? 13 : 17);
-        var nrt = nameT.rectTransform;
-        nrt.anchorMin = new Vector2(0f, 0f);
-        nrt.anchorMax = new Vector2(1f, 0f);
-        nrt.pivot = new Vector2(0.5f, 0f);
-        nrt.offsetMin = new Vector2(2f, 4f);
-        nrt.offsetMax = new Vector2(-2f, usedForPool ? 26f : 30f);
-
-        var badge = NewImage(parent, "Badge", Color.white);
-        var brt = badge.rectTransform;
-        brt.anchorMin = new Vector2(0f, 1f);
-        brt.anchorMax = new Vector2(0f, 1f);
-        brt.pivot = new Vector2(0f, 1f);
-        brt.anchoredPosition = new Vector2(5f, -5f);
-        brt.sizeDelta = new Vector2(30f, 30f);
-        var badgeSp = MercGrowSprites.LoadJobBadge(def.JobName, def.Rarity);
-        badge.sprite = badgeSp;
-        badge.enabled = badgeSp != null;
-    }
+    // 【2026-10-23 主人拍板】BuildMercFace 已删除：唯一调用点在被废弃的 RefreshReplacePanel 里。
 }

@@ -189,6 +189,30 @@ public static class TavernLore
         return string.IsNullOrEmpty(e.Name) ? e.Lore : e.Name + "：" + e.Lore;
     }
 
+    // ---------- 老队员的记忆（2026-10-24 T4：阿尔托/格雷最小台词包） ----------
+
+    // 【2026-10-24 主人拍板「开工·性格尽量鲜明」】两人全工程此前 0 台词，BadHome 结局提「阿尔托的全名」
+    // 却没人听过他说话——这里补「出发前」的记忆台词。全部以回忆口吻呈现（人已随队深入，不出现场）。
+    // 性格口径：阿尔托=正直热血骑士（凹痕=护住过谁 / 请酒赊账都是flag）；格雷=嘴硬心软老猎人（不写好话，箭备双份）。
+    static readonly string[] SquadQuotes =
+    {
+        "阿尔托（出发前夜）：\n「徽章擦得再亮，不如盾上多一道新凹痕——凹痕说明你把谁护住了。」",
+        "阿尔托（出发前夜）：\n「等这趟回来，我请在座所有人的酒。要是没回来……那就算我赖账，账房会记着的。」",
+        "格雷（擦着箭头，头也不抬）：\n「委托单上把『普通』写得越起劲的，越不普通。字越少，事越大。」",
+        "格雷（把箭壶推过来）：\n「……我这人不会说好话。箭备了双份，有一份是给你们的。别弄断了，箭杆不好配。」",
+    };
+
+    static int _squadIdx;
+
+    /// <summary>轮换一条老队员的记忆台词（会话内轮换，避免连出同一条）。</summary>
+    public static string SquadQuote()
+    {
+        if (SquadQuotes == null || SquadQuotes.Length == 0) return "";
+        string s = SquadQuotes[_squadIdx % SquadQuotes.Length];
+        _squadIdx++;
+        return s;
+    }
+
     // ---------- 工具 ----------
 
     public static int HighestClearedChapter(SaveData d)

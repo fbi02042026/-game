@@ -610,7 +610,7 @@ public partial class BattleManager
 
         // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
         // BattleJoystick.Instance?.SetVisible(false);   // 抽奖期间收起摇杆
-        // 【2026-10-10 主人拍板】价跟**本局已抽数**走（每抽 +10%），不再跟关卡走 ——
+        // 【2026-10-10 主人拍板】价跟**本局已抽数**走（2026-10-23 起 40 起、每抽 +10），不再跟关卡走 ——
         // 与 CoMidBattleDraft 同一出口（SlotMachineSystem.DrawPrice），别再写第二套算法。
         // ⚠ 价必须**每轮重算**，见循环内（2026-10-11 修「连抽价格不涨」）。
 
@@ -639,8 +639,8 @@ public partial class BattleManager
         {
             DraftCategory? picked = null;
             int choice = 0;
-            // 【2026-10-11 修】价必须**每轮重算**：每抽一次本局抽数 +1，下一抽贵 10%
-            // （主人原话「每抽一次奖增加下一次抽奖花费的金币 每次+10%」）。
+            // 【2026-10-11 修】价必须**每轮重算**：每抽一次本局抽数 +1，下一抽贵 10（2026-10-23 拍板；
+            // 原 10-10 口径是 +10% 复利，主人原话「每抽一次奖增加下一次抽奖花费的金币 每次+10%」）。
             // 旧写法把 price / focusPrice 算在 while 外面，面板连抽 N 次都还是同一个价 ——
             // 主人反馈「抽了一次奖后 花费没有增长」就是这个。
             int price = SlotMachineSystem.DrawPrice();
@@ -957,7 +957,7 @@ public partial class BattleManager
         // 免费抽（金币本开局送的那几次 / 「再来一次」送的那次）：不扣币，只消耗免费额度。
         // ⚠ 抽数序号照常推进 —— 引导局靠它一格一格走「装备→佣兵→技能」，
         //   不推进的话引导三拍会全落在同一类上，等于白教（正式关是纯随机，序号只作统计）。
-        // 【2026-10-10 主人拍板】付费抽统一扣战斗内金币（价格已按抽数 +10% 递增）。
+        // 【2026-10-10 主人拍板】付费抽统一扣战斗内金币（价格按抽数递增：2026-10-23 起 40 起、每抽 +10）。
         // 【2026-10-11 主人拍板】例外：「再来一次」那一抽**不推进抽数** ——
         //   主人原话「这次抽不用涨费用」，否则奖励反而把下一抽的价格顶上去，玩家点不动。
         bool bonusFree = false;
@@ -970,6 +970,9 @@ public partial class BattleManager
 
         if (!bonusFree)
             SlotMachineSystem.NoteDraw();      // 本局抽数 +1（跨关不清零）
+        // 【2026-10-24 主人拍板】保底稀有记账：生效才算（含金币本免费额度抽），取消替换（ok=false 分支）绝不计数 —— 防刷。
+        if (cat == DraftCategory.Equip)
+            SlotMachineSystem.NoteEquipDrawResult(card);
         RunLoadout.Save();
         RunDraftDirector.RefreshSkillPower();
         // 【2026-10-11 主人拍板】战力涨了 → 头顶飘「战力 +N」+ 三档称赞；没涨就只刷数字。
@@ -1702,7 +1705,13 @@ public partial class BattleManager
             Debug.LogError("[BattleManager] 通关结算失败：Mode 为空（本局不是从 StartNewRun 开始的？）");
             return;
         }
-        Mode.SettleStageClear(this);
+        // 【2026-10-24 主人拍板】正式关卡/支线岛/活动副本（金币/徽记）先播「战斗结果」界面再进各自结算；
+        // 无限裂隙不播（每层通关即有累计奖励，直接走 SettleEndlessStageClear 续层链）。
+        // 界面播完（或点击跳过）才走模式结算；引导局在进本函数前已分流，永远到不了这里。
+        if (Mode.UsesBattleResultScreen)
+            BattleResultScreen.Show(true, () => Mode.SettleStageClear(this));
+        else
+            Mode.SettleStageClear(this);
     }
 
     /// <summary>
@@ -1755,6 +1764,8 @@ public partial class BattleManager
         // （ReturnToTownKeepRun，不结束本局），下次进本从下一关续打；
         // 本关掉落由冒险页自动弹「获得奖励」（AdventureRewardNotice，与结算同账）。
         // 历史归因注释保留：10-11 主人拍板「打完一关进传送门弹老虎机」→ 10-22 早间「普通关双钮结算」→ 本次「直接回」。
+        // 【2026-10-24 主人拍板】胜利结果界面已上移到 FinishStageAfterPortalReached 统一门
+        // （所有适用模式一次到位：正式关含 Boss / 支线岛 / 活动副本；无限裂隙不播），这里直接回冒险页。
         ReturnToTownKeepRun();
     }
 

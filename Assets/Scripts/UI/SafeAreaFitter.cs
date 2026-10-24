@@ -299,12 +299,19 @@ public class SafeAreaFitter : MonoBehaviour
     }
 
     /// <summary>
-    /// 顶栏总避让量 = 安全区顶部内缩 + 微信胶囊预留（设计单位）。
+    /// 顶栏统一额外下移量（设计单位，2026-10-23 主人「顶部的资源条往下点避免顶部的刘海」；
+    /// 同日晚主人「有点太往下了 回一半的距离」→ 40 减半为 20）：
+    /// 安全区避让之外再给整条顶栏固定呼吸量；全项目顶栏统一走 TotalTopInsetUnits，一处改全界面一致。
+    /// </summary>
+    public const float TopBarExtraDropUnits = 20f;
+
+    /// <summary>
+    /// 顶栏总避让量 = 安全区顶部内缩 + 微信胶囊预留 + 固定额外下移（设计单位）。
     /// 全项目顶栏统一走这里取值（Offset 模式内部也用它），保证所有界面资源条同一个位置。
     /// </summary>
     public static float TotalTopInsetUnits(RectTransform rt)
     {
-        return TopInsetUnits(rt) + CapsuleReserveUnits(rt);
+        return TopInsetUnits(rt) + CapsuleReserveUnits(rt) + TopBarExtraDropUnits;
     }
 
     /// <summary>纯工具：把节点矩形四边换算成父级本地坐标（原点=父级左下角）。</summary>

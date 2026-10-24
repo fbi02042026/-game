@@ -29,27 +29,51 @@ public static class MercenaryOfferGenerator
     {
         // 【2026-10-19 主人拍板】三名候选全部随机（战斗内三选一同款稀有度权重），
         // 卡面稀有度由招募界面按佣兵稀有度实时换卡，与卡位顺序无关。
+        //
+        // 【2026-10-23 主人拍板】去重口径修正（玩家反馈「三选一出现一样的佣兵」）：
+        // 旧签名 = mercId(其实存的是 AssetId)+随机名+等级，**不含 hireId** ——
+        //   ① 同一个人只要随机等级不同就能出现两次；
+        //   ② 共用立绘的两人（如 H009/H016 同 kuangzhan201）名字还被换成随机假名 → 签名必不相同 → 必定同时刷出。
+        // 现改两道闸：同一 hireId 只出一次 + 同一张立绘(AssetId)只出一次。
         var offers = new List<MercenaryData>(OfferCount);
-        var usedSignatures = new HashSet<string>();
+        var usedIdentities = new HashSet<string>();
+        var usedAssets = new HashSet<string>();
 
         for (int i = 0; i < OfferCount; i++)
         {
             MercenaryData offer = null;
             for (int attempt = 0; attempt < 24; attempt++)
             {
-                offer = RollOne();
-                string sig = Signature(offer);
-                if (!usedSignatures.Contains(sig))
+                var cand = RollOne();
+                string id = IdentityOf(cand);
+                string asset = cand != null ? cand.mercId : "";
+                if (!usedIdentities.Contains(id) && !usedAssets.Contains(asset))
                 {
-                    usedSignatures.Add(sig);
+                    usedIdentities.Add(id);
+                    usedAssets.Add(asset);
+                    offer = cand;
                     break;
                 }
             }
-            if (offer == null) offer = RollOne();
+            // 撞满 24 次（池子太小）才放行，此时照旧登记，避免后续再撞同一个
+            if (offer == null)
+            {
+                offer = RollOne();
+                usedIdentities.Add(IdentityOf(offer));
+                usedAssets.Add(offer != null ? offer.mercId : "");
+            }
             EnsureUniqueName(offer, offers);
             offers.Add(offer);
         }
         return offers;
+    }
+
+    /// <summary>候选的唯一身份：优先 hireId（H 编号），兜底路径没有 hireId 时退回 mercId。</summary>
+    static string IdentityOf(MercenaryData m)
+    {
+        if (m == null) return "";
+        if (!string.IsNullOrEmpty(m.hireId)) return m.hireId;
+        return m.mercId ?? "";
     }
 
     static void EnsureUniqueName(MercenaryData offer, List<MercenaryData> existing)
@@ -71,12 +95,6 @@ public static class MercenaryOfferGenerator
             }
             guard++;
         } while (clash && guard < 20);
-    }
-
-    static string Signature(MercenaryData m)
-    {
-        if (m == null) return "";
-        return $"{m.mercId}|{m.displayName}|{m.level}|{m.star}|{m.skillId}|{m.passiveSkillId}";
     }
 
     static MercenaryData RollOne()
@@ -146,7 +164,7 @@ public static class MercenaryOfferGenerator
         var pool = GetVisualPool();
         string mercId = pool[Random.Range(0, pool.Count)];
         MercSkillMapping.GetDefaultSkills(mercId, out string active, out string passive);
-        string hireId = MercPortraitSprites.ResolveHireId(mercId);
+        string hireId = MercRosterDefs.ResolveHireId(mercId);
         return new MercenaryData
         {
             mercId = mercId,

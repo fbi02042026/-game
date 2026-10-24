@@ -82,6 +82,13 @@ public static class DamageFormula
                 Debug.LogError($"[{Err.NoMagicAttack}] 魔法单位起手但没有 MagicAttack（Attack={damage}）。" +
                                "已暂时用物理攻击力继续结算，**这不是正常状态**：请把该单位的魔法攻击力配进属性/配表。");
         }
+        // 【2026-10-24 主人拍板】《魔法强度普攻化》T1 落地（2026-10-21 拍板，之前一直未落地）：
+        // 魔法伤害单位的普攻也吃 (1 + MagicPower) 乘区，与 BuildSkillBase 的 mag 项同口径——
+        // 暮火杖「魔法强度 +25%」词条从此放大普攻（玩家攻略已按此承诺）。
+        // 仅 magicAttack 分支生效：物理普攻、技能、怪物伤害均不变（怪物不登记 MagicPower，
+        // GetAttr 返回 0，乘区恒 1）；智力派生魔强（1 智力=+0.01）按文档默认一起进乘区。
+        if (magicAttack)
+            damage *= 1f + attacker.GetAttr(AttrType.MagicPower);
         isCrit = RollCrit(attacker, critRateBonus);
         if (isCrit)
             damage *= CritMultiplier(attacker);
@@ -112,6 +119,15 @@ public static class DamageFormula
     }
 
     /// <summary>
+    /// 类型克制加成（2026-10-24 主人拍板「类型克制·双向」）：攻击方与目标的伤害类型**不同**
+    /// （物攻单位打魔法型目标 / 魔攻单位打物理型目标）→ 最终伤害 ×(1+本值)；同型对轰无加成。
+    /// ⚠️ 平衡已知项（拍板时已知情）：多数怪是物理型 → 魔攻玩家普遍吃到 +10%（法系整体加强约一成）；
+    /// 怪打玩家的方向同型对轰是常态（物怪打战士、魔怪打法师），基本不触发。
+    /// 想调平衡只改这一个数。
+    /// </summary>
+    public const float CrossTypeDamageBonus = 0.1f;
+
+    /// <summary>
     /// 最终扣血量：raw 已含暴击；再减防御。
     /// <para>2026-09-27 主人拍板 —— **物理与魔法彻底两条，不走一套、不兜底**：</para>
     /// <list type="bullet">
@@ -121,17 +137,23 @@ public static class DamageFormula
     /// </list>
     /// 属性压根没登记（不是"登记了但值为 0"）→ 打 DF-002 / DF-003 错误码，按 0 结算，绝不静默套用另一套防御。
     /// ignoreDefense：引导等特殊命中，直接免减防。
+    /// <para>2026-10-24 主人拍板「类型克制·双向」：isMagic（攻击方类型）与 targetIsMagic（目标类型）
+    /// 不同 → 伤害 ×(1+CrossTypeDamageBonus)，同型无加成。targetIsMagic 由调用方传
+    /// 目标单位的 IsMagicDamageDealer()；缺省 false 保持旧调用行为（旧调用点会陆续补传）。</para>
     /// </summary>
-    public static float FinalHit(float rawDamage, AttrSystem defender, bool ignoreDefense = false, bool isMagic = false)
+    public static float FinalHit(float rawDamage, AttrSystem defender, bool ignoreDefense = false, bool isMagic = false, bool targetIsMagic = false)
     {
+        // 类型克制乘区提前算好：三条返回路径统一吃（含 ignoreDefense 引导命中——
+        // 克制是「命中性质」，与扣不走防无关；defender 为空的错误路径同样吃）
+        float crossMul = isMagic != targetIsMagic ? 1f + CrossTypeDamageBonus : 1f;
         float dmg = Mathf.Max(0f, rawDamage);
-        if (ignoreDefense) return Mathf.Max(MinDamage, dmg);
+        if (ignoreDefense) return Mathf.Max(MinDamage, dmg * crossMul);
 
         if (defender == null)
         {
             Debug.LogError($"[{Err.NoDefender}] 结算伤害时目标属性系统为空（raw={dmg}, isMagic={isMagic}），" +
                            "无法取防御。已按不减防处理 —— 请检查调用方是不是漏传了目标。");
-            return Mathf.Max(MinDamage, dmg);
+            return Mathf.Max(MinDamage, dmg * crossMul);
         }
 
         float def;
@@ -160,7 +182,8 @@ public static class DamageFormula
         // 旧口径把 DMG_RED 错接成 Defense 百分比（物防×1.08），名义 8% 在 80 防时实际只减 3.4%、对魔伤零效果，已废弃。
         float gearRed = Mathf.Clamp01(defender.GetAttr(AttrType.DamageReduce));
         float totalRed = Mathf.Min(MaxTotalReductionRatio, 1f - (1f - defRed) * (1f - gearRed));
-        return Mathf.Max(MinDamage, dmg * (1f - totalRed));
+        // 2026-10-24 主人拍板「类型克制·双向」：跨类型命中在全部减伤结算完后再乘克制加成
+        return Mathf.Max(MinDamage, dmg * (1f - totalRed) * crossMul);
     }
 
     /// <summary>主角特殊武器对目标的倍率（暮火之杖等）。</summary>

@@ -99,6 +99,18 @@ public partial class DailyLoginUI
     }
 
     /// <summary>
+    /// 【2026-10-23 主人要求】「第 N 天」里的**天数数字**比「第/天」两个字大 1 号（rich text）。
+    /// baseFontSize 取本格天数字段的预制体字号，绝不写死；字号拿不到时退回纯文本。
+    /// </summary>
+    const int NumberSizeBump = 4;   // 数字大 1 号的增量（主人 2026-10-23）；要微调只改这一个值
+
+    static string DayNumberStyled(int day, int baseFontSize)
+    {
+        if (baseFontSize <= 0) return "第 " + day + " 天";
+        return $"第 <size={baseFontSize + NumberSizeBump}>{day}</size> 天";
+    }
+
+    /// <summary>
     /// B7: 按 hireId 查佣兵档位；查不到（如配置缺失）回退 Rare，避免碎片卡用错底色或空引用。
     /// </summary>
     static MercRosterDefs.MercRarity LookupRarity(string hireId)

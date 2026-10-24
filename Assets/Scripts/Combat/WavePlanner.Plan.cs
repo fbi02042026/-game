@@ -175,12 +175,18 @@ public partial class WavePlanner
         // 总怪量随总波数浮动（ch1 ~30-45 / ch4+ ~90-135）；精英末波同口径（编成为精英）。
         // ⚠ 性能口径不变：怪是分波刷的、前波不死光不刷后波，同屏峰值仍 ~15 只，与此前性能测试口径一致。
         // 引导局 / 金币本 / 无限裂隙不走本段，怪数口径一行不动。
+        // 【2026-10-23 主人拍板】第 1 波减半、第 2 波减 1/4（折扣真源 = GameConfig.FORMAL_WAVE1/2_DISCOUNT），
+        // 在摇号处直接落地（唯一入口），不影响精英追加额 / Boss 波编成。
         if (formalMain)
         {
             total = 0;
             for (int i = 0; i < waveCount; i++)
             {
                 perWave[i] = UnityEngine.Random.Range(GameConfig.FORMAL_WAVE_MONSTERS_MIN, GameConfig.FORMAL_WAVE_MONSTERS_MAX + 1);
+                if (i == 0)
+                    perWave[i] = Mathf.Max(1, Mathf.CeilToInt(perWave[i] * GameConfig.FORMAL_WAVE1_DISCOUNT));
+                else if (i == 1)
+                    perWave[i] = Mathf.Max(1, Mathf.CeilToInt(perWave[i] * GameConfig.FORMAL_WAVE2_DISCOUNT));
                 total += perWave[i];
             }
         }

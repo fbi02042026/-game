@@ -52,18 +52,22 @@ public static class MercRosterDefs
     //   稀有 = 血 ×1.30 / 攻 ×1.45 / 防 ×1.35   → 最终约 攻 1.67×、血 1.50×、防 1.55×
     //   传说 = 血 ×1.70 / 攻 ×2.00 / 防 ×1.85   → 最终约 攻 2.60×、血 2.21×、防 2.41×
     // 改数值必须 CSV（Assets/Data/Source/Tables/merc_roster.csv）+ .bytes + 本数组 三处同值，不许只改一处。
+    // 三处是否一致用菜单「Tools → 佣兵 → 花名册三处同值校验」（Assets/Editor/MercRosterConsistencyCheck.cs）跑一次，
+    // 不一致会逐行报错。数值真源 = CSV，发现不同一律以 CSV 为准改另外两处。
+    // 【2026-10-23 主人拍板】InInitialPool 口径：只有「普通档 + 商店售卖」的 H001/H007/H011/H019 为 true，
+    // 其余 18 人一律 false。校验器首跑查出本数组有 6 行（H002/H005/H008/H015/H018/H021）写成 true 与 CSV 不符，已对齐。
     static Def[] Table =
     {
         D("H001", "马库斯", "老盾", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 335.5f,34.6f,39.1f, 0.90f, 3.15f, null, "SK006", 0, true, true),
-        D("H002", "洛恩", "铁皮", "dunbing102", "剑盾卫士", MercRarity.Rare, 1.15f, 424.3f,50.1f,56.7f, 0.95f, 3.15f, "SK007", null, 1500, true),
+        D("H002", "洛恩", "铁皮", "dunbing102", "剑盾卫士", MercRarity.Rare, 1.15f, 424.3f,50.1f,56.7f, 0.95f, 3.15f, "SK007", null, 1500, false),
         D("H003", "塔克", "重盾", "dunbing201", "剑盾卫士", MercRarity.Rare, 1.15f, 424.3f,50.1f,56.7f, 0.80f, 3.15f, "SK008", null, 1800, false),
         D("H004", "维克", "钢盾", "dunbing202", "剑盾卫士", MercRarity.Legendary, 1.30f, 563.1f,59.1f,66.9f, 1.00f, 3.15f, "SK010", "SK009", 5000, false, false),
         // 【2026-10-18 主人拍板】「小红/小蓝」这类占位昵称改成知名角色名；真名与其余昵称一律不动，
         // 显示处均带真名前缀（米娅·小樱）。CSV + .bytes + 本数组三处同值。
-        D("H005", "米娅", "小樱", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.50f, 4.2f, null, "SK002", 500, true, true),
+        D("H005", "米娅", "小樱", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.50f, 4.2f, null, "SK002", 500, false, true),
         D("H006", "希尔", "鹰眼", "gongshou201", "游侠", MercRarity.Rare, 1.15f, 309.6f,49.8f,34.6f, 1.40f, 4.2f, "SK001", null, 2000, false, false),
         D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 269.5f,34f,24.7f, 1.00f, 4.03f, null, "SK002", 600, true, true),
-        D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 0.95f, 4.03f, "SK003", null, 1600, true),
+        D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 0.95f, 4.03f, "SK003", null, 1600, false),
         D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 1.00f, 4.03f, "SK001", null, 1900, false, false),
         D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 452.3f,58.2f,42.2f, 1.10f, 4.03f, "SK005", "SK012", 6000, false, false),
         // 【2026-10-08 主人纠正】他是**男的**（见立绘 Assets/Art/UI/Icons/佣兵立绘/佣兵立绘_H011.png：
@@ -76,13 +80,13 @@ public static class MercRosterDefs
         D("H012", "塞拉", "蓝之泪", "naima102", "水系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK004", null, 1700, false),
         D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK013", null, 2000, false, false),
         D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 355.4f,62.8f,38.5f, 1.20f, 3.5f, "SK020", "SK019", 8000, false, false),
-        D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.60f, 4.2f, null, "SK002", 500, true, true),
+        D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.60f, 4.2f, null, "SK002", 500, false, true),
         D("H016", "杜娅", "怒角", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 0.95f, 4.03f, "SK003", null, 1600, false),
         D("H017", "莉娜", "圣光", "naima102", "牧师", MercRarity.Rare, 1.15f, 382.6f,49.8f,37.3f, 1.20f, 3.5f, "SK004", null, 1700, false),
-        D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 335.5f,34.6f,39.1f, 0.85f, 3.15f, null, "SK006", 700, true, true),
+        D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 335.5f,34.6f,39.1f, 0.85f, 3.15f, null, "SK006", 700, false, true),
         D("H019", "艾琳", "星火", "fashi101", "法师", MercRarity.Common, 1.00f, 211.8f,36.7f,22.5f, 1.35f, 3.5f, null, "SK017", 600, true, true),
         D("H020", "凯尔", "谜面", "fashi102", "法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.30f, 3.5f, "SK018", null, 1800, false),
-        D("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", MercRarity.Common, 1.00f, 368.5f,37.8f,27.9f, 0.80f, 2.8f, null, "SK002", 800, true, true),
+        D("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", MercRarity.Common, 1.00f, 368.5f,37.8f,27.9f, 0.80f, 2.8f, null, "SK002", 800, false, true),
         D("H022", "索尔", "铁面", "zhongzhan201", "重武者", MercRarity.Rare, 1.15f, 466.1f,54.8f,40.4f, 0.85f, 2.8f, "SK003", null, 2200, false, false),
     };
 
@@ -249,6 +253,126 @@ public static class MercRosterDefs
         return _byAsset.TryGetValue(assetId ?? "", out def);
     }
 
+    // =====================================================================
+    // ID 解析 · 唯一出口（2026-10-23 主人拍板）
+    // 旧实现散在 5 处：MercPortraitSprites / MercStarSystem / MercGrowSystem /
+    // MercLineTable / Mercenary，口径已分叉（查不到时有的返回 null、有的返回原串）。
+    // 现在全部走下面 ResolveHireId / ResolveAssetId，别处不许再写第二份。
+    // =====================================================================
+
+    /// <summary>剧情 NPC / 昵称 → 佣兵立绘目录里的稳定 ID（原在 MercPortraitSprites，随解析一起收口）。</summary>
+    static readonly Dictionary<string, string> AliasToHireId = new Dictionary<string, string>
+    {
+        { "player", "player" },
+        { "wanjia", "player" },
+        { "laodun", "H001" },
+        { "xiaomei", "C001" },
+        { "npc_xiaomei", "C001" },
+        { "altor", "C002" },
+        { "npc_shengdian", "C002" },
+        { "grey", "C003" },
+        { "npc_grey", "C003" },
+        { "xiaobai", "H011" },
+        { "naima101", "H011" },
+        // 剧情 NPC → 佣兵立绘目录中的稳定英文 ID（见 Sync / LoadEditorStand）
+        { "receptionist", "receptionist" },
+        { "guildmaster", "guildmaster" },
+        { "guildmaster_hidden", "guildmaster_hidden" },
+        { "hunter", "C004" },
+        { "duyan", "C004" },
+        { "npc_duyan", "C004" },
+        // 老板娘专属立绘（2026-10-15 接上，不再复用前台小姐）：Resources/Art/UI/Tavern/酒吧老板娘.png
+        { "landlady", "landlady" },
+        { "boss_niang", "landlady" },
+        { "innkeeper", "landlady" },
+    };
+
+    /// <summary>别名 / H 编号 / C 编号 / player → 标准 hireId；认不出返回 null。</summary>
+    public static string NormalizeHireId(string hireIdOrAlias)
+    {
+        if (string.IsNullOrEmpty(hireIdOrAlias)) return null;
+        string key = hireIdOrAlias.Trim();
+        if (AliasToHireId.TryGetValue(key, out var mapped))
+            return mapped;
+        if (key.StartsWith("H", System.StringComparison.OrdinalIgnoreCase)
+            || key.StartsWith("C", System.StringComparison.OrdinalIgnoreCase)
+            || key == "player")
+            return key;
+        return null;
+    }
+
+    /// <summary>hireId / assetId / 别名 → hireId（多 H 共用 asset 时取首条）；查不到返回 null。</summary>
+    public static string ResolveHireId(string hireIdOrAssetId)
+    {
+        string normalized = NormalizeHireId(hireIdOrAssetId);
+        if (!string.IsNullOrEmpty(normalized)) return normalized;
+        if (string.IsNullOrEmpty(hireIdOrAssetId)) return null;
+
+        if (MercSkillMapping.TryGetByAssetId(hireIdOrAssetId, out var row)
+            && !string.IsNullOrEmpty(row.HireId))
+            return row.HireId;
+
+        if (TryGetByAssetId(hireIdOrAssetId, out var def)
+            && !string.IsNullOrEmpty(def.HireId))
+            return def.HireId;
+
+        return null;
+    }
+
+    /// <summary>hireId / assetId → assetId；查不到原样返回输入（不做兜底，空串/空值交给调用方判）。</summary>
+    public static string ResolveAssetId(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return "";
+        if (TryGetByHireId(id, out var byHire)) return byHire.AssetId ?? id;
+        if (TryGetByAssetId(id, out var byAsset)) return byAsset.AssetId ?? id;
+        return id;
+    }
+
+    // =====================================================================
+    // 职业形态 · 唯一出口（2026-10-23 主人拍板）
+    // 前缀判定（gongshou / naima / fashi / mushi / zhongzhan / qita）原先散在
+    // Mercenary.IsMeleeRoleId、Mercenary.GetAttackVfxKit、MercRosterDefs.ResolveRange 三处，
+    // 现在只写一份；加职业改前缀只动这里。
+    // =====================================================================
+    public enum MercJobKind
+    {
+        /// <summary>近战（剑盾等，短射程、物攻、挥砍特效）。</summary>
+        Melee,
+        /// <summary>弓手（长射程、物攻、弓箭特效）。</summary>
+        Bow,
+        /// <summary>法系（牧师/法师/术士，长射程、魔攻、法球特效）。</summary>
+        Magic,
+        /// <summary>长柄（重战/其它，中射程、物攻、挥砍特效）。</summary>
+        Polearm,
+        /// <summary>
+        /// 狂战（大剑/双手武器，中射程、物攻、挥砍特效）。
+        /// 【2026-10-24 主人拍板】从 Melee 拆出独立档位：原先狂战与盾兵同吃 weapon_sword 96px，
+        /// 而玩家狂战士走 weapon_greatsword 120px（2026-10-11 拍板「狂战和重武改成120」）——
+        /// 同一职业佣兵比玩家近一档，不合理。特效仍与 Melee 同款（GetAttackVfxKit 的 default）。
+        /// </summary>
+        Berserker
+    }
+
+    public static MercJobKind JobKindOf(string idOrAssetId)
+    {
+        string asset = ResolveAssetId(idOrAssetId);
+        if (string.IsNullOrEmpty(asset)) return MercJobKind.Melee;
+        if (asset.StartsWith("gongshou")) return MercJobKind.Bow;
+        if (asset.StartsWith("naima") || asset.StartsWith("fashi") || asset.StartsWith("mushi")) return MercJobKind.Magic;
+        if (asset.StartsWith("zhongzhan") || asset.StartsWith("qita")) return MercJobKind.Polearm;
+        // 【2026-10-24 主人拍板】狂战单独一档（射程对齐玩家狂战士 weapon_greatsword 120px）。
+        if (asset.StartsWith("kuangzhan")) return MercJobKind.Berserker;
+        // 前缀认不出时看职业名（原 IsMeleeRoleId 的兜底口径，行为不变）
+        string job = GetJobName(asset) ?? GetJobName(idOrAssetId);
+        if (!string.IsNullOrEmpty(job))
+        {
+            if (job.Contains("游侠")) return MercJobKind.Bow;
+            if (job.Contains("狂战士")) return MercJobKind.Berserker;
+            if (job.Contains("法师") || job.Contains("牧师")) return MercJobKind.Magic;
+        }
+        return MercJobKind.Melee;
+    }
+
     /// <summary>
     /// 解锁价格（酒馆名册与商店货架共用同一口径）：用花名册的 RecruitGold，为 0 时按稀有度兜底。
     /// </summary>
@@ -294,14 +418,11 @@ public static class MercRosterDefs
         }
     }
 
-    public static string GetRecruitLine(string hireId) => GetAppearLine(hireId);
-
     public static string GetAppearLine(string hireId)
         => MercLineTable.Pick(hireId, MercLineTable.Scene.TavernRefresh);
 
-    /// <summary>已无「上局互动」列；保留 API，始终走酒馆刷新。</summary>
-    public static string GetLastRunLine(string hireId) => null;
-
+    // 【2026-10-23 主人拍板】GetRecruitLine（零调用别名）与 GetLastRunLine（恒返 null）已删除；
+    // 酒馆台词一律走 GetAppearLine / PickTavernAppearLine。
     /// <summary>酒馆刷出/闲置：读表「酒馆刷新」（不再优先 LastRunLine）。</summary>
     public static string PickTavernAppearLine(string hireId, bool wasInLastRun = false)
         => MercLineTable.Pick(hireId, MercLineTable.Scene.TavernRefresh);
@@ -358,15 +479,16 @@ public static class MercRosterDefs
 
     public static float ResolveRange(string assetId)
     {
-        if (string.IsNullOrEmpty(assetId))
-            return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Sword);
-        if (assetId.StartsWith("gongshou"))
-            return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Bow);
-        if (assetId.StartsWith("naima") || assetId.StartsWith("fashi") || assetId.StartsWith("mushi"))
-            return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Staff);
-        if (assetId.StartsWith("zhongzhan") || assetId.StartsWith("qita"))
-            return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Polearm);
-        return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Sword);
+        // 2026-10-23 主人拍板：前缀判定统一走 JobKindOf，射程档位只在这一处映射。
+        // 【2026-10-24 主人拍板】Berserker 单独映射 weapon_greatsword（120px），与玩家狂战士同档。
+        switch (JobKindOf(assetId))
+        {
+            case MercJobKind.Bow: return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Bow);
+            case MercJobKind.Magic: return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Staff);
+            case MercJobKind.Polearm: return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Polearm);
+            case MercJobKind.Berserker: return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Greatsword);
+            default: return AttackRangeTable.GetWeaponWorld(WeaponCombatTable.WeaponKind.Sword);
+        }
     }
 }
 

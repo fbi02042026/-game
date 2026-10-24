@@ -68,6 +68,13 @@ public partial class AdventureUI
     const float MAP_EXTRA_TOP_SHARE = 0.5f;
 
     /// <summary>
+    /// 主线槽位间隔放大倍数（2026-10-23 主人「岛屿之间的间隔再大 50%」）。
+    /// 实际节奏 = min(带高 ÷ (槽位上限 - 1), 预制体节奏 × 此倍数)：
+    /// 带里装得下整章时恰好排满、底部空隙消失；带特别高时间隔封顶在 ×1.5。
+    /// </summary>
+    const float MainSlotSpacingBoost = 1.5f;
+
+    /// <summary>
     /// AdventureUI 专用竖屏适配（主人点名要求的三条改动统一入口）。
     /// 触发：ShowPage() 末尾 RefreshAll 之后调用一次。
     /// 铁律：仅在「更瘦屏」（逻辑高 > 设计高 1280）生效；标准 9:16 必须保持美术预制体原样，直接 return 不改任何东西。
@@ -103,6 +110,7 @@ public partial class AdventureUI
                 ShrinkSlotCount(4);   // 克隆增补的槽位撤掉，窗口回到预制体 4 槽
                 RestoreSlotColumnBaseY();
                 RestoreBranchIslandBaseY();
+                RestoreActivityRowsScale();
                 RestoreAdventureSidebarEven();
                 RestoreAdventureSidebarOrder(right);
                 return;
@@ -131,9 +139,7 @@ public partial class AdventureUI
             // 改动 5 配套：预制体里 LeftSidebar 排在 RightContent 前面（下层），
             // 地图图左扩后会盖住「主线冒险」按钮 → 把左侧栏抬到 RightContent 之上、DetailPanel 之下。
             FitAdventureSidebarAboveMap(right);
-            // 2026-10-23 主人「左列的标签没有统一位置」：ModeBtn 预制体 y 乱序，瘦屏下等分间距。
-            FitSidebarEvenSpacing();
-
+            // 左列模式按钮：2026-10-23 晚主人已手动调好预制体位置 → 运行时不再重排（预制体为准）。
             if (right != null)
             {
                 FitAdventureRightContent(right);
@@ -153,6 +159,12 @@ public partial class AdventureUI
             // 必须在 FitAdventureDetailPanel 之后（要拿它的最终顶边）。
             if (right != null && detail != null)
                 FitMainColumnStretch(right, detail);
+            // 活动副本横条等比放大（2026-10-23 主人「活动副本右侧这个标签应该随着宽度等比放大」）。
+            FitActivityRowsScale(rootRt);
+            // 左列模式按钮紧凑化（2026-10-23 晚主人「直接用我的预制体的数值」）：
+            // 主人把 5 钮调成 95 等距，但隐藏的每日/BOSS 占住 1/3 号位 → 可见的 0/2/4 视觉间距 190。
+            // 这里按主人节奏把可见钮向下紧凑排（首钮不动），标准屏/关开关走 RestoreAdventureSidebarEven 还原。
+            FitSidebarEvenSpacing();
             // 世界地图按钮是 RightContent 居中锚点，屏越高越往上漂（相对地图的位置随屏高变化）；
             // 钉回设计屏（1280 高）时与地图底边的相对几何，x 不动。
             var worldMapBtn = right != null ? right.Find("WorldMapBtn") as RectTransform : null;
@@ -655,7 +667,11 @@ public partial class AdventureUI
         EnsureChestNodes();
         EnsureBranchIslands();
 
-        var guanka = mainNode.Find("关卡") as RectTransform;
+        // 【2026-10-24】关卡容器被滑动列表包裹后搬到 主线/关卡Viewport/关卡：
+        // 帧解析改用视口（= 原关卡容器预制体帧，同锚同位同尺寸），槽位换算走 ChestScrollRefShift 补偿。
+        var guankaFrame = mainNode.Find(ChestViewportName) as RectTransform;
+        if (guankaFrame == null)
+            guankaFrame = mainNode.Find("关卡") as RectTransform;   // 未包裹（异常路径）兜查
         var titleBar = mainNode.Find("TitleBar") as RectTransform;
         var wmBtn = mainNode.Find("WorldMapBtn") as RectTransform;
         var rootRt = right.parent as RectTransform;
@@ -699,10 +715,10 @@ public partial class AdventureUI
             WarnMainColumnOnce("主线槽位节点不足 2 个，无法定插值节奏");
             return;
         }
-        if (!TryResolveMainChildFrames(right, mainNode, guanka, H, out _, out float gPivotNow)
-            || !TryResolveMainChildFrames(right, mainNode, guanka, designH, out _, out float gPivotDesign))
+        if (!TryResolveMainChildFrames(right, mainNode, guankaFrame, H, out _, out float gPivotNow)
+            || !TryResolveMainChildFrames(right, mainNode, guankaFrame, designH, out _, out float gPivotDesign))
         {
-            WarnMainColumnOnce("找不到 主线/关卡 或其锚型不是垂直单点锚");
+            WarnMainColumnOnce("找不到 主线/关卡Viewport（原关卡容器帧）或其锚型不是垂直单点锚");
             return;
         }
 
@@ -714,9 +730,11 @@ public partial class AdventureUI
         float detailTopDesign = Mathf.Lerp(0f, designH, detailBase.anchorMax.y) + detailBase.offsetMax.y;
 
         // 设计口径间距（解析自 base，不硬编码）：底槽中心在面板顶上方多少、TitleBar 顶在顶槽中心上方多少。
-        // 槽位 anchoredPosition 的参考点 = 关卡容器的 pivot 点（center 锚 → rect 中心），用它换算。
-        float colBottomDesign = gPivotDesign + prefabPos[0].y;
-        float colTopDesign = gPivotDesign + prefabPos[prefabPos.Count - 1].y;
+        // 槽位 anchoredPosition 的参考点：包裹滑动列表后 = 内容矩形中心（比原容器 pivot 点低 ChestScrollRefShift），
+        // 设计间距按原容器口径算 → prefabPos 减掉 ChestScrollRefShift 还原成「相对原 pivot」的值。
+        float refShift = ChestScrollRefShift;
+        float colBottomDesign = gPivotDesign + prefabPos[0].y - refShift;
+        float colTopDesign = gPivotDesign + prefabPos[prefabPos.Count - 1].y - refShift;
         float bottomGap = colBottomDesign - detailTopDesign;
         float topGap = tbPivotDesign - colTopDesign;
 
@@ -729,88 +747,97 @@ public partial class AdventureUI
             return;
         }
 
-        // 预制体节奏（平均槽间距）：任何屏幕都按它排，间距永不拉伸
+        // 预制体节奏（平均槽间距）
         float spanPrefab = prefabPos[prefabPos.Count - 1].y - prefabPos[0].y;
-
-        // 2026-10-23 主人「按我摆放的位置 岛之间的距离不变，拉长的屏幕中岛应该变多」：
-        // 任何屏幕都按预制体节奏排（间距永不拉伸），带内装得下几个就摆几个（上限=每大关小关数），
-        // 列底贴「面板顶+设计底间距」，多余高度留给顶部标题栏下方。
         float rhythmPrefab = spanPrefab / (prefabPos.Count - 1);
-        int wantRaw = Mathf.FloorToInt((bandTop - bandBottom) / Mathf.Max(1f, rhythmPrefab)) + 1;
-        int slotCount = EnsureSlotCount(wantRaw);
-        // 一次性诊断（2026-10-23 主人报「改后没变化」：真机把这条发回来即可定位是带算小了还是没跑到）
+
+        // 2026-10-23 主人「岛屿之间的间隔再大 50%」：节奏 ×1.5（见 MainSlotSpacingBoost）。
+        // 上限压点：带高 ÷ (槽位上限 - 1) —— 带里装得下整章 5 关时无需更大间隔，
+        // 间隔最多压回「5 关正好排满带」的值，1-1…1-5 全部可见、底部空隙消失；
+        // 带特别矮时最多压回预制体节奏，再矮的部分被详情面板挡住（窗口语义）。
+        float rhythm = Mathf.Clamp((bandTop - bandBottom) / Mathf.Max(1, MaxSlotCount - 1),
+                                   rhythmPrefab, rhythmPrefab * MainSlotSpacingBoost);
+
+        // 窗口槽位固定拉满整章（间隔已按带高自适应，装得下就全摆）
+        int slotCount = EnsureSlotCount(MaxSlotCount);
+        // 一次性诊断（真机把这条发回来即可核对节奏与带高）
         if (!_mainColDiagLogged)
         {
             _mainColDiagLogged = true;
             Debug.Log($"[AdventureFit] 主列重排诊断 H={H:F0} bandBottom={bandBottom:F0} bandTop={bandTop:F0} " +
-                      $"rhythm={rhythmPrefab:F0} want={wantRaw} slotCount={slotCount} prefab={prefabPos.Count}");
+                      $"rhythmPrefab={rhythmPrefab:F0} rhythm={rhythm:F0} slotCount={slotCount} prefab={prefabPos.Count}");
         }
 
         var ys = new List<float>(slotCount);
+        // 顶槽（最晚关）贴 bandTop，往下铺（root y → 内容帧本地 y）：参考中心比原容器 pivot 点低 refShift，加回
         for (int i = 0; i < slotCount; i++)
-            ys.Add(bandBottom + i * rhythmPrefab - gPivotNow);   // root y → 关卡容器帧本地 y
+            ys.Add(bandTop - (slotCount - 1 - i) * rhythm - gPivotNow + refShift);
         if (slotCount != prefabPos.Count)
             RefreshChestNodes();   // 补/撤槽后内容窗口变了，立刻刷新把各关三态铺上，不等下次 ShowPage
         ApplySlotColumnStretchY(ys);
 
+        // 岛屿 x 一律用预制体数值（2026-10-23 晚主人「直接用我的预制体的数值吧」：
+        // ×3 错位放大已删——放大后左右不均且首尾槽没动，主人不要）。
+
         // 支线岛不参与瘦屏重排（2026-10-23 主人拍板：按示例摆位，间距不变），
         // 若此前被拉伸过（旧版本改动）这里复位一次。
         RestoreBranchIslandBaseY();
+
+        // 槽位挪完位重铺岛屿连接点（2026-10-23 主人「岛屿之间加上点连接起来」）
+        RebuildSlotConnectors();
     }
 
     // ────────────────────────────────────────────────────
-    // 左列模式按钮等间距（2026-10-23 主人「左列的标签没有统一位置」）
-    // 病根（prefab 实测）：ModeBtn_0..4 的 y = -87/-276/-185/-393/-503，间距 189/-91/208/110 乱序不均。
-    // 治法：保持视觉顺序（按 y 高→低）与首尾两端不动，中间等分间距 —— 按钮点击绑定按节点走，
-    // 挪位置不影响 _selectedMode 语义。只在瘦屏适配路径调用；标准屏/关开关走 RestoreAdventureSidebarEven。
+    // 左列模式按钮紧凑化（2026-10-23 晚主人「直接用我的预制体的数值」）：
+    // 病根不是适配代码（被冤枉半天）——主人把 5 钮调成 95 等距（0/-95/-190/-285/-380），
+    // 但隐藏的每日副本/BOSS挑战占住 1/3 号位，可见的 0/2/4 号中心距 = 190，视觉上「还是分的开」。
+    // 治法：瘦屏下把可见钮按主人节奏（全钮平均间距）自顶钮往下紧凑排——首钮钉预制体位，
+    // 第 2/3 颗填进隐藏钮的槽位（= 0 / -95 / -190）。标准屏 / 关开关走 RestoreAdventureSidebarEven 还原。
     // ────────────────────────────────────────────────────
 
-    /// <summary>等间距处理过的模式按钮（还原用；按 instanceID 存在 _adventureUiBase 里）。</summary>
+    /// <summary>紧凑化处理过的模式按钮（还原用）。</summary>
     readonly List<RectTransform> _sidebarEvenBtns = new List<RectTransform>();
-    /// <summary>左列等间距诊断只打一次的开关。</summary>
-    static bool _sidebarDiagLogged;
 
     void FitSidebarEvenSpacing()
     {
         var left = transform.Find("LeftSidebar");
-        if (left == null) return;
+        var rootRt = transform as RectTransform;
+        if (left == null || rootRt == null || rootRt.rect.height <= 0f) return;
+        float H = rootRt.rect.height;
         _sidebarEvenBtns.Clear();
 
-        // 收集 ModeBtn_*（RectTransform + base pos.y），按 y 降序（屏幕高→低）
-        var btns = new List<(RectTransform rt, float y)>();
+        // 全部 ModeBtn（含隐藏的）预制体中心 y（bottom-origin root 帧）→ 全钮平均间距 = 主人节奏
+        var lb = CaptureAdventureBase(left as RectTransform);
+        float lsMin = Mathf.Lerp(0f, H, lb.anchorMin.y) + lb.offsetMin.y;
+        float lsMax = Mathf.Lerp(0f, H, lb.anchorMax.y) + lb.offsetMax.y;
+        var allY = new List<float>();
+        var visible = new List<(RectTransform rt, float y)>();
         for (int i = 0; i < left.childCount; i++)
         {
             var c = left.GetChild(i) as RectTransform;
             if (c == null || !c.name.StartsWith("ModeBtn_", StringComparison.Ordinal)) continue;
             var b = CaptureAdventureBase(c);
-            // 单点锚：pos.y = (offsetMin.y + offsetMax.y) / 2
-            btns.Add((c, (b.offsetMin.y + b.offsetMax.y) * 0.5f));
+            if (Mathf.Abs(b.anchorMin.y - b.anchorMax.y) > 1e-4f) continue;   // 非垂直单点锚不动，防错排
+            float anchorY = Mathf.Lerp(lsMin, lsMax, b.anchorMin.y);
+            float h = b.offsetMax.y - b.offsetMin.y;
+            float centerY = anchorY + b.offsetMin.y + b.pivot.y * h;
+            allY.Add(centerY);
+            if (c.gameObject.activeInHierarchy) visible.Add((c, centerY));
         }
-        if (btns.Count < 3) return;   // 少于 3 个没有「中间」可等分
-        btns.Sort((a, b) => b.y.CompareTo(a.y));
+        if (visible.Count < 2 || allY.Count < 2) return;
+        allY.Sort();
+        float step = (allY[allY.Count - 1] - allY[0]) / (allY.Count - 1);
+        visible.Sort((a, b) => b.y.CompareTo(a.y));   // 屏幕高 → 低
 
-        // 一次性诊断（2026-10-23 主人报「间距不均匀」还在：真机/编辑器把这条发回来即可定位）
-        if (!_sidebarDiagLogged)
+        // 首钮（主线冒险）钉在预制体位，其余往下按主人节奏填隐藏钮的空位
+        for (int k = 0; k < visible.Count; k++)
         {
-            _sidebarDiagLogged = true;
-            var sb = new System.Text.StringBuilder("[AdventureFit] 左列等间距诊断 btns=");
-            sb.Append(btns.Count);
-            for (int i = 0; i < btns.Count; i++)
-                sb.Append($"  {btns[i].rt.name}:y={btns[i].y:F0}");
-            Debug.Log(sb.ToString());
-        }
-
-        // 首尾不动，中间等分
-        float top = btns[0].y, bot = btns[btns.Count - 1].y;
-        float step = (top - bot) / (btns.Count - 1);
-        for (int k = 0; k < btns.Count; k++)
-        {
-            var rt = btns[k].rt;
+            var rt = visible[k].rt;
             _sidebarEvenBtns.Add(rt);
-            var b = CaptureAdventureBase(rt);
-            float target = top - k * step;
-            float delta = target - btns[k].y;
+            float target = visible[0].y - k * step;
+            float delta = target - visible[k].y;
             if (Mathf.Abs(delta) < 0.5f) continue;
+            var b = CaptureAdventureBase(rt);
             rt.offsetMin = new Vector2(b.offsetMin.x, b.offsetMin.y + delta);
             rt.offsetMax = new Vector2(b.offsetMax.x, b.offsetMax.y + delta);
             b.applied = true;
@@ -818,7 +845,7 @@ public partial class AdventureUI
         }
     }
 
-    /// <summary>左列等间距回退：把等分处理过的按钮还原到预制体 y（没处理过则 no-op）。</summary>
+    /// <summary>左列紧凑化回退：把处理过的按钮还原到预制体位（没处理过则 no-op）。</summary>
     void RestoreAdventureSidebarEven()
     {
         for (int i = 0; i < _sidebarEvenBtns.Count; i++)

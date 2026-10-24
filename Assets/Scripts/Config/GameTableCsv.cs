@@ -18,7 +18,8 @@ public static class GameTableCsv
         return rows;
     }
 
-    static string[] SplitCsvLine(string line)
+    /// <summary>单行 CSV → 列数组（引号内的逗号不切分）。全项目唯一实现，各表不许再自己 split。</summary>
+    public static string[] SplitCsvLine(string line)
     {
         var cols = new List<string>();
         int start = 0;

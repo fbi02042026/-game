@@ -94,8 +94,11 @@ public static class TownSharedChrome
 
     /// <summary>
     /// 在独立界面根下确保有资源条：优先实例化 ResourceBar 预制体，否则从 sourceRoot 克隆 TopBar。
+    /// <para>【2026-10-24 主人拍板】forceCloneTopBar=true 时跳过 ResourceBar 预制体、强制克隆主界面 TopBar ——
+    /// ResourceBar.prefab 里没有钻石Panel（钻石列只在主界面顶条），升阶弹窗要金币+钻石两列就得克隆主界面那条。
+    /// 默认 false，既有调用方行为不变。</para>
     /// </summary>
-    public static Transform EnsureResourceBar(Transform host, Transform sourceRoot)
+    public static Transform EnsureResourceBar(Transform host, Transform sourceRoot, bool forceCloneTopBar = false)
     {
         if (host == null) return null;
 
@@ -107,15 +110,18 @@ public static class TownSharedChrome
             return existing;
         }
 
-        GameObject prefab = Resources.Load<GameObject>(ResourceBarPrefabPath);
-        if (prefab != null)
+        if (!forceCloneTopBar)
         {
-            GameObject go = Object.Instantiate(prefab, host, false);
-            go.name = "TopBar";
-            StretchTop(go.GetComponent<RectTransform>());
-            SafeAreaFitter.EnsureTopOffset(go.GetComponent<RectTransform>());   // 刘海避让
-            GameFonts.ApplyToHierarchy(go.transform);
-            return go.transform;
+            GameObject prefab = Resources.Load<GameObject>(ResourceBarPrefabPath);
+            if (prefab != null)
+            {
+                GameObject go = Object.Instantiate(prefab, host, false);
+                go.name = "TopBar";
+                StretchTop(go.GetComponent<RectTransform>());
+                SafeAreaFitter.EnsureTopOffset(go.GetComponent<RectTransform>());   // 刘海避让
+                GameFonts.ApplyToHierarchy(go.transform);
+                return go.transform;
+            }
         }
 
         Transform src = sourceRoot != null ? (FindDeep(sourceRoot, "TopBar")) : null;

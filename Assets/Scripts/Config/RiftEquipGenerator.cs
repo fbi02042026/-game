@@ -16,24 +16,39 @@ public static class RiftEquipGenerator
     /// 把所有随机点钉死 —— 稀有度恒普通、必为主手武器、部位/主属性/模板取序一定、
     /// 属性值取区间中值。正式关不传（默认 false），概率曲线零影响。
     /// </param>
-    public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false)
+    /// <param name="forceAtLeastRare">
+    /// 【2026-10-24 主人拍板】保底稀有：true 时 roll 出「普通（白）」升档为「稀有（RARE）」，
+    /// 引导局（fixedForTutorial）不生效。签名末尾默认参数，既有调用点零改动。
+    /// </param>
+    public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false)
     {
         RiftEquipTables.EnsureLoaded();
         var list = new List<EquipInstance>();
         PlayerJobId job = PlayerJobDefs.GetSelected();
         for (int i = 0; i < count; i++)
         {
-            var inst = GenerateOne(stageType, job, blacksmithLevel, attrBonus, forceWeapon, chapter, fixedForTutorial);
+            var inst = GenerateOne(stageType, job, blacksmithLevel, attrBonus, forceWeapon, chapter, fixedForTutorial, forceAtLeastRare);
             if (inst != null) list.Add(inst);
         }
         return list;
     }
 
-    public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false)
+    public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false)
     {
         RiftEquipTables.EnsureLoaded();
         // 引导确定性化：稀有度恒 NORMAL（Ch1 20% 稀有曲线只影响正式关/非引导抽卡）。
         var rarity = fixedForTutorial ? FindRarityRule("NORMAL") : RollRarity(chapter);
+        // 【2026-10-24 主人拍板】保底稀有：保底抽出的装备不许再是普通（白）。
+        // FindRarityRule 失败时返回 FallbackRarity()（Id=NORMAL）而非 null，必须用 Id 判失败 —— fail closed：LogError + 保持原品质，不静默升档。
+        // !fixedForTutorial 双保险：引导局恒普通（10-12 拍板「每次引导战力一样」），绝不被保底污染。
+        if (forceAtLeastRare && !fixedForTutorial && rarity != null && rarity.Id == "NORMAL")
+        {
+            var rareRule = FindRarityRule("RARE");
+            if (rareRule == null || rareRule.Id != "RARE")
+                Debug.LogError("[RiftEquipGenerator] 保底稀有取不到 RARE 品质规则（rarity 表缺行？），本次保持 roll 出的品质，不静默升档");
+            else
+                rarity = rareRule;
+        }
         // forceWeapon 由引导宝箱传入：宝箱只掉武器，避免误给防具；否则保留默认 45% 武器概率。
         // 引导确定性化：必为主手武器（引导第一拍定稿就是「一抽(武器)」）。
         bool wantWeapon = forceWeapon || (fixedForTutorial ? true : Random.value < 0.45f);
@@ -195,21 +210,22 @@ public static class RiftEquipGenerator
     /// 【2026-10-12 稀有度梯度】主人原话「1，20% 2,25% 3,30% 4,35% 按这个概率走」，
     ///   且「可以多一点少一点，不用非得是整 5 的倍数，35.5 / 46.3 这都可以」：
     ///   Ch1 稀有 20% / Ch2 25% / Ch3 30% / Ch4 35%；Ch5 起沿曲线继续上浮（小数允许）。
-    ///   **传奇列不动**（0/1/2/3/3/6/8/10，Ch1 恒 0）。
+    ///   **传奇列**（当时 0/1/2/3/3/6/8/10，Ch1 恒 0；2026-10-24 起见下行上调）。
     /// 想调几率只改这一处（权重值，同章内三档自动归一）。
+    /// 【2026-10-24 主人拍板】传奇列上调（0/3/5/7/7.5/10.5/12.5/14.5），RARE 列不动（10-12 拍板梯度 20/25/30/35 保持），Ch1 恒 0 不动。
     /// </summary>
     static void ChapterRarityWeights(int chapter, out float wNormal, out float wRare, out float wLegend)
     {
         switch (Mathf.Clamp(chapter, 1, 8))
         {
-            case 2: wNormal = 74f;   wRare = 25f;   wLegend = 1f;  break;
-            case 3: wNormal = 68f;   wRare = 30f;   wLegend = 2f;  break;
-            case 4: wNormal = 62f;   wRare = 35f;   wLegend = 3f;  break;
-            case 5: wNormal = 56.5f; wRare = 40.5f; wLegend = 3f;  break;
-            case 6: wNormal = 48.5f; wRare = 45.5f; wLegend = 6f;  break;
-            case 7: wNormal = 41.5f; wRare = 50.5f; wLegend = 8f;  break;
-            case 8: wNormal = 34.5f; wRare = 55.5f; wLegend = 10f; break;
-            default: wNormal = 80f; wRare = 20f; wLegend = 0f; break; // 第 1 章：稀有 20%，无传奇
+            case 2: wNormal = 72f;   wRare = 25f;   wLegend = 3f;   break;
+            case 3: wNormal = 65f;   wRare = 30f;   wLegend = 5f;   break;
+            case 4: wNormal = 58f;   wRare = 35f;   wLegend = 7f;   break;
+            case 5: wNormal = 52f;   wRare = 40.5f; wLegend = 7.5f; break;
+            case 6: wNormal = 44f;   wRare = 45.5f; wLegend = 10.5f; break;
+            case 7: wNormal = 37f;   wRare = 50.5f; wLegend = 12.5f; break;
+            case 8: wNormal = 30f;   wRare = 55.5f; wLegend = 14.5f; break;
+            default: wNormal = 80f; wRare = 20f; wLegend = 0f; break; // 第 1 章：稀有 20%，无传奇（Ch1 恒 0 不动，2026-10-24 主人拍板）
         }
     }
 

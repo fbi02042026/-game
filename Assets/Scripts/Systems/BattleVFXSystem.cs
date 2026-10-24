@@ -68,12 +68,20 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         {
             case AttackVfxKit.MeleeSlash:
                 {
-                    GameObject hit = LoadSharedKit(kit, faction, "hit");
+                    // 2026-10-24 主人拍板：近战刀光按武器档位分级（刀光1/2/3），档位解析唯一出口 WeaponVfxVariant.Resolve
+                    int slashVariant = attacker != null ? WeaponVfxVariant.Resolve(attacker) : WeaponVfxVariant.Base;
+                    GameObject hit = LoadSharedKit(kit, faction, "hit", slashVariant);
+                    // 高档位（刀光2/3）缺文件：不闪回低档，LogError 露白（铁律 15：不兜底）
+                    if (hit == null && slashVariant > WeaponVfxVariant.Base)
+                    {
+                        Debug.LogError($"[BattleVFXSystem] 缺少刀光{slashVariant}: Resources/VFX/Shared/Ally/MeleeSlash/刀光{slashVariant}");
+                        return;
+                    }
                     if (hit == null && faction == VfxFaction.Ally)
                         hit = vfxSlash;
                     if (hit == null)
                     {
-                        Debug.LogWarning($"[VFX] 缺少刀光: {faction}/{kit}/hit → 请放 Resources/VFX/Shared/Ally/MeleeSlash/vfx_ally_melee_hit（或旧名 vfx_melee_hit）");
+                        Debug.LogWarning($"[VFX] 缺少刀光: {faction}/{kit}/hit → 请放 Resources/VFX/Shared/Ally/MeleeSlash/刀光1");
                         return;
                     }
                     PlaySlash(toPos, facingDir, faction, hit, attacker);
@@ -162,7 +170,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
             prefab = vfxSlash;
         if (prefab == null)
         {
-            Debug.LogWarning($"[VFX] PlaySlash 无预制体 faction={faction}，期望 Resources/VFX/Shared/Ally/MeleeSlash/vfx_ally_melee_hit");
+            // 2026-10-24 主人拍板：缺失提示指到档位文件名 刀光1
+            Debug.LogWarning($"[VFX] PlaySlash 无预制体 faction={faction}，期望 Resources/VFX/Shared/Ally/MeleeSlash/刀光1");
             return;
         }
 
@@ -964,7 +973,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
 
         // 刀光必须用 Ally Shared；禁止留下旧 Pixel Craft / 敌方资源
         if (allyMelee != null) vfxSlash = allyMelee;
-        else Debug.LogError("[BattleVFXSystem] Ally MeleeSlash 缺失: Resources/VFX/Shared/Ally/MeleeSlash/vfx_ally_melee_hit（或旧名 vfx_melee_hit）");
+        // 2026-10-24 主人拍板：Ally 近战刀光最低档文件名改为 刀光1
+        else Debug.LogError("[BattleVFXSystem] Ally MeleeSlash 缺失: Resources/VFX/Shared/Ally/MeleeSlash/刀光1");
         if (allyOrbHit != null) vfxMagicImpact = allyOrbHit;
         if (allyHeal != null) vfxHeal = allyHeal;
         if (allyOrbFly != null) vfxFireball = allyOrbFly;
@@ -974,7 +984,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         {
             vfxSlash = LoadVFX("Sword Slash");
             if (vfxSlash != null)
-                Debug.LogError("[BattleVFXSystem] 刀光回退到 Pixel Craft「Sword Slash」——请补 Shared/Ally/MeleeSlash/vfx_ally_melee_hit");
+                // 2026-10-24 主人拍板：缺失提示指到档位文件名 刀光1
+                Debug.LogError("[BattleVFXSystem] 刀光回退到 Pixel Craft「Sword Slash」——请补 Shared/Ally/MeleeSlash/刀光1");
         }
         if (vfxMagicImpact == null) vfxMagicImpact = LoadVFX("Magic Impact");
         if (vfxHeal == null) vfxHeal = LoadVFX("Heal");
@@ -1008,20 +1019,28 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         Need(AttackVfxKit.Orb, VfxFaction.Enemy, "fly");
         Need(AttackVfxKit.Orb, VfxFaction.Enemy, "hit");
         Need(AttackVfxKit.MeleeSlash, VfxFaction.Enemy, "hit");
+        // 2026-10-24 主人拍板：高档刀光启动自检，缺 刀光2/3 立刻报错，战斗中不闪回低档
+        if (LoadSharedKit(AttackVfxKit.MeleeSlash, VfxFaction.Ally, "hit", 2) == null)
+            Debug.LogError("[BattleVFXSystem] 缺共用特效: Resources/VFX/Shared/Ally/MeleeSlash/刀光2 (hit)");
+        if (LoadSharedKit(AttackVfxKit.MeleeSlash, VfxFaction.Ally, "hit", 3) == null)
+            Debug.LogError("[BattleVFXSystem] 缺共用特效: Resources/VFX/Shared/Ally/MeleeSlash/刀光3 (hit)");
     }
 
-    /// <summary>加载共用普攻套：Resources/VFX/Shared/{Ally|Enemy}/{Kit}/vfx_*</summary>
-    public GameObject LoadSharedKit(AttackVfxKit kit, VfxFaction faction, string stage)
+    /// <summary>
+    /// 加载共用普攻套：Resources/VFX/Shared/{Ally|Enemy}/{Kit}/vfx_*
+    /// 2026-10-24 主人拍板：variant=档位，Ally 近战刀光按档位加载 刀光1/2/3（远程预留接口，暂未启用分支）。
+    /// </summary>
+    public GameObject LoadSharedKit(AttackVfxKit kit, VfxFaction faction, string stage, int variant = 1)
     {
         string kitFolder = GetKitFolderName(kit);
         if (string.IsNullOrEmpty(kitFolder)) return null;
 
         string factionFolder = faction == VfxFaction.Enemy ? "Enemy" : "Ally";
-        string cacheKey = $"{factionFolder}/{kitFolder}/{stage}";
+        string cacheKey = $"{factionFolder}/{kitFolder}/{stage}/v{variant}";
         if (_sharedKitCache.TryGetValue(cacheKey, out GameObject cached) && cached != null)
             return cached;
 
-        string[] fileNames = GetSharedKitFileNames(kit, faction, stage);
+        string[] fileNames = GetSharedKitFileNames(kit, faction, stage, variant);
         GameObject prefab = null;
         for (int i = 0; i < fileNames.Length; i++)
         {
@@ -1055,11 +1074,15 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
     /// <summary>
     /// 文件名按阵营区分：Ally=vfx_ally_*，Enemy=vfx_enemy_*。
     /// 旧名（无阵营前缀）作迁移兜底，两者皆失败再打一条警告。
+    /// 2026-10-24 主人拍板：variant=档位，Ally 近战刀光按档位返回 刀光{variant}（远程预留接口，暂未启用分支）。
     /// </summary>
-    static string[] GetSharedKitFileNames(AttackVfxKit kit, VfxFaction faction, string stage)
+    static string[] GetSharedKitFileNames(AttackVfxKit kit, VfxFaction faction, string stage, int variant = 1)
     {
         bool enemy = faction == VfxFaction.Enemy;
         string prefix = enemy ? "vfx_enemy_" : "vfx_ally_";
+        // 2026-10-24 主人拍板：Ally 近战刀光按档位加载 刀光1/2/3（路径加载；56 字符 meta guid 按铁律 29/30 不碰）
+        if (stage == "hit" && kit == AttackVfxKit.MeleeSlash && !enemy)
+            return new[] { $"刀光{variant}" };
         if (stage == "fly")
         {
             if (kit == AttackVfxKit.Bow)

@@ -137,19 +137,7 @@ public class TavernRosterPanel : MonoBehaviour
         if (_root != null) _root.SetActive(false);
     }
 
-    static MercenaryData CloneOffer(MercenaryData src)
-    {
-        return new MercenaryData
-        {
-            mercId = src.mercId,
-            displayName = src.displayName,
-            uid = src.uid,
-            favorLevel = src.favorLevel,
-            level = src.level,
-            star = src.star,
-            skillId = src.skillId
-        };
-    }
+    // 【2026-10-23 主人拍板】CloneOffer 已删除：零调用（招募走 MercenaryOfferGenerator 现造实例，不需要克隆）。
 
     void BuildIfNeeded()
     {

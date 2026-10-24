@@ -258,4 +258,53 @@ public static class ChapterRouteTable
                 return avail[i];
         return avail[avail.Count - 1]; // 全通关 → 最后一章（第 8 章，NG+ 重打入口）
     }
+
+    // ============================================================
+    // 难度逐章解锁（2026-10-24 主人拍板「上一章该难度没通，下一章该难度灰锁」）
+    // ============================================================
+
+    /// <summary>
+    /// 难度锁定提示统一文案（主人原话口径）。冒险页 / 世界地图两处共用这一个出口，不许各写一份。
+    /// </summary>
+    public const string DiffChapterLockHint = "请把前面的关卡通关后开启";
+
+    /// <summary>
+    /// 该章在指定难度下能否进入：
+    /// · 普通(0)：沿用路线表 CanEnter（线性 1→8，与旧口径完全一致）。
+    /// · 困难/噩梦：先过全局难度门槛（通关章数，GameConfig.DIFF_*_NEED_CLEARS），
+    ///   再逐章把关——上一章在该难度下通关过才开下一章；第 1 章只要全局门槛过了就开。
+    /// 纯查询，不写存档。
+    /// </summary>
+    public static bool CanEnterAtDiff(int chapter, int diff, SaveData data)
+    {
+        if (chapter < 1 || chapter > 8) return false;
+        if (diff <= 0) return CanEnter(chapter, data);
+
+        int clearedCount = data != null ? data.ClearedChapterCount() : 0;
+        if (diff == 1 && clearedCount < GameConfig.DIFF_HARD_NEED_CLEARS) return false;
+        if (diff == 2 && clearedCount < GameConfig.DIFF_NIGHTMARE_NEED_CLEARS) return false;
+        if (chapter == 1) return true;
+        // 逐章把关：上一章在该难度下通关过才开这一章。路线表的 reqCleared（线性=前一章）
+        // 天然被它覆盖，不再重复查 CanEnter，避免两套口径。
+        return data != null && data.HasClearedChapterAtDiff(chapter - 1, diff);
+    }
+
+    /// <summary>
+    /// 指定难度下当前应推进的章：CanEnterAtDiff 通过的集合里第一个「该难度未通关」的；
+    /// 全通关回集合最后一章。纯查询。
+    /// </summary>
+    public static int CurrentChapterToAdvanceAtDiff(int diff, SaveData data)
+    {
+        var avail = new List<int>();
+        for (int ch = 1; ch <= 8; ch++)
+            if (CanEnterAtDiff(ch, diff, data)) avail.Add(ch);
+        if (avail.Count == 0) return 1;
+        bool cleared(int ch) => diff <= 0
+            ? (data != null && data.HasClearedChapter(ch))
+            : (data != null && data.HasClearedChapterAtDiff(ch, diff));
+        for (int i = 0; i < avail.Count; i++)
+            if (!cleared(avail[i]))
+                return avail[i];
+        return avail[avail.Count - 1];
+    }
 }

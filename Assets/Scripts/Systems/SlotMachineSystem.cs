@@ -23,26 +23,25 @@ public static class SlotMachineSystem
     }
 
     // ⚠【2026-10-10 已删除】Price(int runStageIndex) —— 旧「按关卡进度涨价」口径。
-    //   抽奖价现在只跟**本局已抽数**走（每抽 ×1.1，主人拍板不封顶），唯一算式 =
+    //   抽奖价现在只跟**本局已抽数**走（首抽 40、每抽 +10，2026-10-23 主人拍板），唯一算式 =
     //   `PriceAfterDraws(draws)`，对外出口 = `DrawPrice()` / `DrawFocusPrice()`。
     //   留着就会变成第二套价格口径（面板一个价、扣费又一个价），所以删掉不留开关。
 
     // ============================================================
-    // 【2026-10-10 主人拍板】抽奖价格真源（新）：按**本局已抽数**递增 ——
-    // 每抽一次，下一抽贵 10%（主人原话「每抽一次奖增加下一次抽奖花费的金币 每次+10%」）。
-    // 扣的币 = **战斗内金币**（currentGold，= 局外金币的战斗镜像，经 PersistBattleGold 差额写回）。
+    // 【2026-10-10 主人拍板】抽奖价格跟**本局已抽数**递增；
+    // 【2026-10-23 主人拍板】递增方式改**线性 +10**（原 ×1.1 复利作废）：
+    // 每抽一次，下一抽贵 10 币。扣的币 = **战斗内金币**（currentGold，= 局外金币的战斗镜像，经 PersistBattleGold 差额写回）。
     // 旧「按关卡进度涨价」口径（Price(int)）已删除；FocusPrice(DraftCategory) 保留，
     // 但它现在直接返回 DrawFocusPrice()（同一种币、同一套价），不会再出现两套价格。
     // ============================================================
 
-    /// <summary>每次抽奖后下一抽的涨价系数（+10%）。想调幅度改这一个常量。</summary>
-    public const float DRAW_PRICE_GROWTH = 1.1f;
+    /// <summary>每次抽奖后下一抽涨多少（+10）。想调幅度改这一个常量。</summary>
+    public const int DRAW_PRICE_STEP = 10;
 
     /// <summary>已抽 draws 次之后，下一抽的价格（<b>价格曲线的唯一算式</b>，诊断 / 预估也走它）。</summary>
     public static int PriceAfterDraws(int draws)
     {
-        float p = SlotMachineDefs.BASE_PRICE * Mathf.Pow(DRAW_PRICE_GROWTH, Mathf.Max(0, draws));
-        return Mathf.Max(1, Mathf.RoundToInt(p));
+        return Mathf.Max(1, SlotMachineDefs.BASE_PRICE + Mathf.Max(0, draws) * DRAW_PRICE_STEP);
     }
 
     /// <summary>已抽 draws 次之后，下一抽的定向价 = 随机价 × 精度税（同上，唯一算式）。</summary>
@@ -117,7 +116,7 @@ public static class SlotMachineSystem
     /// 封顶 <see cref="SlotMachineDefs.COIN_GROWTH_CAP"/>。
     /// 2026-09-29 主人拍板：抽奖币「前期少、后期逐渐增加」；
     /// 【2026-10-10 主人拍板】改成**复利**（每关比上一关多 40%，主人区间 40%~50%），
-    /// 因为抽奖价本身是每抽 ×1.1 的复利 —— 线性产出追不上指数价格，越往后反而越紧。
+    /// 因为当年抽奖价是每抽 ×1.1 的复利 —— 线性产出追不上指数价格（历史口径；2026-10-23 抽价已改线性 +10，本段口径未重拍）。
     /// </summary>
     public static int CoinsForStage(StageType stageType, int runStageIndex)
     {
@@ -132,7 +131,8 @@ public static class SlotMachineSystem
         //   max(..., Price(n+1) × GuaranteeDraws(stageType))。
         //   主人拍板「删掉安全网」→ 连同 SlotMachineDefs.GUARANTEE_DRAWS_* 一起删了。
         //   那条下限恒不生效（价 80、产出 100），却跟 COIN_PER_* 抢同一件事（第二套产出口径）。
-        //   「保证每关能抽」现在只由 COIN_PER_*（100 > 一抽 80）一处保证。
+        //   「保证每关能抽」语义历史沿革：删网时产出 100 > 一抽 80；2026-10-21 拍板改击杀直发
+        //   （KILL_GOLD_* = 10/25/50）；2026-10-23 首抽价改 45 —— 三条拍板各自独立，互不联动。
     }
 
     // ⚠【2026-10-05 已删除】GuaranteeDraws(StageType) —— 随 GUARANTEE_DRAWS_* 一起删。
@@ -229,7 +229,7 @@ public static class SlotMachineSystem
     //   而且是第二套给币口径（跟 COIN_PER_* / GrantRunStarterGold 抢同一件事）。
     //   主人拍板「清零 + 不要总打补丁」→ 整条链路删掉，不是留个开关设 0。
     //   引导三拍的币现在**只有一个来源**：开局启动金（GrantRunStarterGold，进局内钱包 currentGold；
-    //   2026-10-14 主人拍板引导局 270、三拍照常扣钱，见 SlotMachineDefs.TUTORIAL_STARTER_COINS）。
+    //   2026-10-14 拍板引导局 270、三拍照常扣钱；2026-10-23 拍板引导金也归 200，见 SlotMachineDefs.TUTORIAL_STARTER_COINS）。
 
     // ============================================================
     // 免费抽（2026-10-05 主人拍板：金币本开局免费抽 N 次，不耗金币）
@@ -245,7 +245,7 @@ public static class SlotMachineSystem
     /// 【2026-10-11 主人拍板】「再来一次」送的免费抽次数。
     /// 主人原话：「再来一次不是技能，是不用花费再抽一次，注意这次抽不用涨费用」。
     /// 与模式给的免费额度（<c>_freeDrawsUsed</c> / <see cref="TotalFreeDraws"/>）分开记：
-    /// 奖励抽消耗的是这里，且**不推进 <see cref="DrawIndex"/>** —— 下一抽的价格不因此 +10%。
+    /// 奖励抽消耗的是这里，且**不推进 <see cref="DrawIndex"/>** —— 下一抽的价格不因此 +10。
     /// 同样是进关清零（见 <see cref="ResetStageFreeDraws"/>）。
     /// </summary>
     static int _bonusFreeDraws = 0;
@@ -430,6 +430,41 @@ public static class SlotMachineSystem
             && RunLoadout.Mercs().Count == 0;
     }
 
+    // ============================================================
+    // 【2026-10-24 主人拍板】保底稀有（不保底传奇）：本局装备方向连续白卡计数三件套。
+    // 同构既有先例：_goldPrizesThisRun 计数三件套（407-416 行）+ MercGuaranteeActive 触发条件模式。
+    // 语义：streak = 本局**已生效**的装备抽奖里连续几张白（取消替换不计数、免费老虎机/升级三选一不计数）。
+    // 阈值真源 = <see cref="SlotMachineDefs.EQUIP_RARE_GUARANTEE_EVERY"/>。
+    // ============================================================
+
+    /// <summary>本局装备方向连续白卡数（跨关不清、每局归零，见 ResetRunEquipWhiteStreak）。</summary>
+    static int _equipWhiteStreak = 0;
+
+    /// <summary>
+    /// 【2026-10-24 主人拍板】保底稀有的**触发条件**（唯一出口，同 <see cref="MercGuaranteeActive"/> 模式）：
+    /// 非引导局、且本局装备方向已连续（EQUIP_RARE_GUARANTEE_EVERY - 1）张白卡 ——
+    /// 即「连续第 5 张白卡」这一抽强制稀有及以上。引导局恒白不保底（10-12 拍板「每次引导战力一样」）。
+    /// 唯一调用点 = DraftPool.PickOne（付费直抽出口）。
+    /// </summary>
+    public static bool EquipRareGuaranteeActive() =>
+        !IsTutorialRun && _equipWhiteStreak >= SlotMachineDefs.EQUIP_RARE_GUARANTEE_EVERY - 1;
+
+    /// <summary>【2026-10-24 主人拍板】每局开始清零（唯一调用点 = RunDraftDirector.OnRunStart 新局分支；续关不清）。</summary>
+    public static void ResetRunEquipWhiteStreak() => _equipWhiteStreak = 0;
+
+    /// <summary>
+    /// 【2026-10-24 主人拍板】记一次装备抽奖结果（生效出口，唯一调用点 = BattleManager 扣钱后）。
+    /// 判定口径：装备卡且品质非普通（SkillRarity.Common）→ 清零（出稀有+ 了）；
+    /// 否则 +1 —— 非装备卡（池空回落 PowerUp 等）= 这次装备抽奖没出稀有 = +1。
+    /// </summary>
+    public static void NoteEquipDrawResult(DraftCard card)
+    {
+        if (card.Kind == DraftCardKind.Equip && card.Rarity != SkillRarity.Common)
+            _equipWhiteStreak = 0;
+        else
+            _equipWhiteStreak++;
+    }
+
     // 【2026-10-11 主人拍板】「职业白送初始技能」整条作废 ——
     //   原 BuildGuaranteedSkillCard()：本局第一次抽到技能时**必给**该职业的 DefaultSkillId，
     //   等于每个职业开局都白送一个（法师送的还是传说天雷裁决，主人反馈「这么容易抽到吗」）。
@@ -540,7 +575,8 @@ public static class SlotMachineSystem
     /// 进**局内金币钱包**（<c>BattleManager.currentGold</c>），不再是另一套抽奖币。
     /// 每局进关时调一次（续关不调），这样「初始资金」天赋每一局都有效，而不只是新档那一次。
     /// <para>【2026-10-14 主人拍板】基础值分两档：**正式关 200**（<see cref="SlotMachineDefs.STARTER_COINS"/>）、
-    /// **引导局 270**（<see cref="SlotMachineDefs.TUTORIAL_STARTER_COINS"/>，兜住引导三拍扣费 265）。</para>
+    /// **引导局 270**（<see cref="SlotMachineDefs.TUTORIAL_STARTER_COINS"/>，兜住引导三拍扣费 265）。
+    /// 【2026-10-23 主人拍板】引导局也归 **200**（三拍改价后 150，200 仍兜得住），两档同值。</para>
     /// ⚠ 这笔<b>不算本局收益</b>（countsAsEarned=false）→ 结算差额不把它当赚的钱写回存档，不能白刷。
     /// </summary>
     public static int RunStarterGold(bool tutorial)
@@ -551,7 +587,7 @@ public static class SlotMachineSystem
 
     /// <summary>
     /// 把启动金发进局内钱包。<b>唯一调用点 = <c>RunDraftDirector.OnRunStart</c>（非续关那一局）。</b>
-    /// <paramref name="tutorial"/> = 本局是否引导局（决定启动金 270 / 200 档位）。
+    /// <paramref name="tutorial"/> = 本局是否引导局（决定启动金档位；2026-10-23 起两档同为 200）。
     /// 不在战斗中 → LogError（铁律 14：fail closed，绝不静默跳过让开局没钱抽）。
     /// </summary>
     public static void GrantRunStarterGold(bool tutorial)
@@ -613,7 +649,7 @@ public static class SlotMachineSystem
         // 【2026-10-23 批 B1】每大关 5 小关（STAGES_PER_CHAPTER 是章级旧常量，这里按局内关数走）
         int stages = GameConfig.STAGES_PER_GRAND;
         int sumPrice = 0, sumFocus = 0, sumIncome = 0;
-        // 【2026-10-10】价不再跟关卡走，而是跟**本局已抽数**走（每抽 ×1.1）。
+        // 【2026-10-10】价不再跟关卡走，而是跟**本局已抽数**走（2026-10-23 起 40 起、每抽 +10）。
         // 这里按「每关只抽一次」估：第 n 关那一抽 = 已抽 n-1 次。
         for (int n = 1; n <= stages; n++)
         {

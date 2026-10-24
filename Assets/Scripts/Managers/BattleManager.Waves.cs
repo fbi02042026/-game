@@ -203,6 +203,7 @@ public partial class BattleManager
             UnitsCanAct = false;
             _battleIntroFinished = false;
             _battleStartTime = Time.unscaledTime;
+            _reviveUsedThisStage = false;   // 【2026-10-24】复活每关一次，关卡开始重置
             EnsureMonsterPrefabReady();
             Analytics.StageStart(CurrentChapter, stage.stageIndex); // 埋点：关卡开始
 
@@ -269,6 +270,7 @@ public partial class BattleManager
         _firstWaveSpawned = false;
         _battleIntroFinished = false;
         _battleStartTime = Time.unscaledTime;
+        _reviveUsedThisStage = false;   // 【2026-10-24】复活每关一次，关卡开始重置
         // 【2026-10-19 主人拍板】「击败」累计计数跨关卡不重置（原 ResetCombo 已删），新一局才在 StartNewRun 归零
         BattleSideHud.Instance?.SetWaveCountdown(false, 0f, false);
     }

@@ -85,7 +85,6 @@ public class LoginUI : MonoBehaviour
         EnsureBottomFooterLayout();
         EnsureLogoMotion();
         WireClicks();
-        EnsureDebugClearSaveButton();
         EnsureVersionLabel();
         EnsureSafeArea();
         EnsureTapLoginRow();
@@ -98,7 +97,6 @@ public class LoginUI : MonoBehaviour
         EnsureBottomFooterLayout();
         EnsureLogoMotion();
         WireClicks();
-        EnsureDebugClearSaveButton();
         EnsureVersionLabel();
         EnsureSafeArea();
         EnsureTapLoginRow();
@@ -127,8 +125,7 @@ public class LoginUI : MonoBehaviour
 
     /// <summary>
     /// 刘海 / 挖孔 / 底部手势条避让（2026-10-13 主人拍板「要1」：登录页接 SafeArea）。
-    /// 顶侧：RightMenu（公告/设置竖列）走 ApplyRightMenuLayout 统一排版（见该方法注释）；
-    ///   「清除存档」按钮在 EnsureDebugClearSaveButton 里同样挂 Offset。
+    ///   顶侧：RightMenu（公告/设置竖列）走 ApplyRightMenuLayout 统一排版（见该方法注释）。
     ///   NoticeButton / SettingsButton 作为 RightMenu 子节点整体跟随，
     ///   公告按钮与设置按钮拿到的是同一份避让，**不要在 NoticeButton 上再挂 fitter**（会双重下推）。
     /// Logo：LoginLogoMotion 每帧写 anchoredPosition，挂 fitter 会互相覆盖，
@@ -545,62 +542,11 @@ public class LoginUI : MonoBehaviour
         EnterTown();
     }
 
-    void EnsureDebugClearSaveButton()
-    {
-        // 【2026-10-17 主人拍板】真机包不放「清除存档」调试按钮，只留 TapTap 登录；编辑器保留。
-        if (!Application.isEditor) return;
-
-        var existing = transform.Find("DebugClearSaveButton");
-        if (existing != null)
-        {
-            existing.SetAsLastSibling();
-            // 2026-10-13 主人拍板：刘海避让（Offset 只挪位置，幂等）
-            SafeAreaFitter.EnsureTopOffset(existing as RectTransform);
-            return;
-        }
-
-        var go = new GameObject("DebugClearSaveButton", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
-        go.transform.SetParent(transform, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0f, 1f);
-        rt.anchorMax = new Vector2(0f, 1f);
-        rt.pivot = new Vector2(0f, 1f);
-        rt.anchoredPosition = new Vector2(24f, -24f);
-        rt.sizeDelta = new Vector2(220f, 56f);
-
-        var img = go.GetComponent<Image>();
-        img.color = new Color(0.55f, 0.18f, 0.16f, 0.92f);
-        img.raycastTarget = true;
-
-        var labelGo = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        labelGo.transform.SetParent(go.transform, false);
-        var lrt = labelGo.GetComponent<RectTransform>();
-        lrt.anchorMin = Vector2.zero;
-        lrt.anchorMax = Vector2.one;
-        lrt.offsetMin = Vector2.zero;
-        lrt.offsetMax = Vector2.zero;
-        var txt = labelGo.GetComponent<Text>();
-        txt.text = "清除存档";
-        txt.font = GameFonts.GetChinese();
-        txt.fontSize = 26;
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.color = new Color(1f, 0.95f, 0.85f);
-        txt.raycastTarget = false;
-
-        var btn = go.GetComponent<Button>();
-        btn.targetGraphic = img;
-        btn.onClick.AddListener(OnClickClearSave);
-        go.transform.SetAsLastSibling();
-        GameFonts.ApplyToHierarchy(go.transform);
-        // 2026-10-13 主人拍板：刘海避让（Offset 只挪位置，幂等）
-        SafeAreaFitter.EnsureTopOffset(rt);
-    }
-
     /// <summary>
     /// 【2026-10-20 主人要求：登录页左上角显示版本号】
     /// 运行时补节点（项目口径「UI 用运行时补节点，别改预制体」）。
     /// 版本号真源 = Application.version（ProjectSettings.bundleVersion，出包改号自动跟随），不写死字符串。
-    /// 位置：左上角贴角；编辑器里 DebugClearSaveButton 也占左上角，版本号排到它下方避让（真机无此按钮，不受影响）。
+    /// 位置：左上角贴角（2026-10-23 主人拍板删掉「清除存档」调试按钮，版本号独占左上角）。
     /// 刘海避让走 SafeAreaFitter.EnsureTopOffset（Offset 模式只挪 anchoredPosition，与全页口径一致）。
     /// 幂等：可重复调。
     /// </summary>
@@ -625,15 +571,7 @@ public class LoginUI : MonoBehaviour
             // Overflow 模式下宽度随内容自动延伸、不被裁剪；整体大小随 Canvas Scaler 按屏幕等比缩放。
             rt.sizeDelta = new Vector2(320f, 44f);
 
-            // 编辑器：排在「清除存档」调试按钮下方避让（该方法已先跑，位置含刘海内缩后的现值）
-            float topY = -8f;
-            if (Application.isEditor)
-            {
-                var dbg = transform.Find("DebugClearSaveButton") as RectTransform;
-                if (dbg != null)
-                    topY = dbg.anchoredPosition.y - dbg.sizeDelta.y - 6f;
-            }
-            rt.anchoredPosition = new Vector2(16f, topY);
+            rt.anchoredPosition = new Vector2(16f, -8f);
 
             _versionLabel.font = GameFonts.GetChinese();
             _versionLabel.fontSize = 30; // 原 24，2026-10-21 调大
@@ -648,33 +586,6 @@ public class LoginUI : MonoBehaviour
             // 2026-10-20：左上角属于刘海高发区，接 Offset 避让（只挪位置，幂等）
             SafeAreaFitter.EnsureTopOffset(rt);
         }
-    }
-
-    void OnClickClearSave()
-    {
-        if (SaveSystem.Instance != null)
-            SaveSystem.Instance.DeleteLocalSaveAndReset();
-        else
-        {
-            string dir = Application.persistentDataPath;
-            try
-            {
-                string a = System.IO.Path.Combine(dir, "player.dat");
-                string b = System.IO.Path.Combine(dir, "player.bak");
-                string c = System.IO.Path.Combine(dir, "save.json");
-                string d = System.IO.Path.Combine(dir, "save_backup.json");
-                if (System.IO.File.Exists(a)) System.IO.File.Delete(a);
-                if (System.IO.File.Exists(b)) System.IO.File.Delete(b);
-                if (System.IO.File.Exists(c)) System.IO.File.Delete(c);
-                if (System.IO.File.Exists(d)) System.IO.File.Delete(d);
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError("[LoginUI] 清除存档失败：" + e.Message);
-            }
-        }
-        ShowTip("存档已清除，点开始游戏会走新手剧情");
-        Debug.Log("[LoginUI] 已清除存档");
     }
 
     void EnterTown()

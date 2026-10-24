@@ -79,6 +79,10 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
     RegionSlot[] _slots;
     int _selectedChapter;
     bool _entering;
+    /// <summary>打开地图时带进来的难度（2026-10-24 主人拍板「难度逐章解锁」：地块按该难度过滤灰锁）。</summary>
+    int _difficulty;
+    /// <summary>打开地图时带进来的「该难度下应推进的章」（挂头像+箭头标识；0 = 不显示）。</summary>
+    int _currentChapter;
 
     // ============================================================
     // 地图拖拽 / 缩放（单指拖动、双指捏合、鼠标滚轮）
@@ -114,13 +118,17 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
 
     /// <summary>
     /// 强制弹出世界地图。onEnterChapter(chapterId) 在玩家点击「进入」后调用。
+    /// 【2026-10-24 主人拍板】difficulty = 冒险页当前选的难度（地块按它过滤灰锁）；
+    /// currentChapter = 该难度下应推进的章（挂玩家头像+箭头标识，0 = 不挂）。
     /// </summary>
-    public static WorldMapPopup Show(Action<int> onEnterChapter)
+    public static WorldMapPopup Show(Action<int> onEnterChapter, int difficulty = 0, int currentChapter = 0)
     {
         if (Current != null)
         {
             Current.gameObject.SetActive(true);
             Current._onEnterChapter = onEnterChapter;
+            Current._difficulty = Mathf.Clamp(difficulty, 0, 2);
+            Current._currentChapter = currentChapter;
             Current.RefreshAvailability();
             Current.ShowInternal();
             return Current;
@@ -150,6 +158,8 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
         var instance = root.GetComponent<WorldMapPopup>();
         if (instance == null) instance = root.AddComponent<WorldMapPopup>();
         instance._onEnterChapter = onEnterChapter;
+        instance._difficulty = Mathf.Clamp(difficulty, 0, 2);
+        instance._currentChapter = currentChapter;
         Current = instance;
         instance.RefreshAvailability();
         instance.ShowInternal();
@@ -212,6 +222,17 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
         _pressValid = false;
         if (enterButton != null)
             enterButton.gameObject.SetActive(false);
+        // 渐显协程可能被上次关闭杀在半程：重开先把地块透明度复原，新解锁的由动效协程重新接管
+        if (_slots != null)
+        {
+            for (int i = 0; i < _slots.Length; i++)
+            {
+                var s = _slots[i];
+                if (s == null || s.root == null) continue;
+                var cg = s.root.GetComponent<CanvasGroup>();
+                if (cg != null) cg.alpha = 1f;
+            }
+        }
         RefreshRegions();
         PlayNewUnlockFxIfNeeded();
     }
@@ -394,12 +415,33 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
         if (_availableChapters.Count == 0) _availableChapters.Add(1);
     }
 
-    bool IsUnlocked(int chapterId)
+    /// <summary>路线表口径可进（不看难度）。</summary>
+    bool IsRouteUnlocked(int chapterId)
     {
         return _availableChapters.Contains(chapterId);
     }
 
-    /// <summary>该章是否已通关（通关的地块要暗掉）。</summary>
+    /// <summary>
+    /// 该章在当前难度下可进（2026-10-24 主人拍板「难度逐章解锁」：上一章该难度没通 → 该章地块灰锁）。
+    /// </summary>
+    bool IsUnlocked(int chapterId)
+    {
+        return IsRouteUnlocked(chapterId)
+            && ChapterRouteTable.CanEnterAtDiff(chapterId, _difficulty, SaveSystem.Instance?.Data);
+    }
+
+    /// <summary>该章是否已通关（通关的地块要暗掉）。普通难度沿用旧口径，困难/噩梦按难度记录查。</summary>
+    bool IsClearedAtDiff(int chapterId)
+    {
+        if (_difficulty > 0)
+        {
+            var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+            return data != null && data.HasClearedChapterAtDiff(chapterId, _difficulty);
+        }
+        return IsCleared(chapterId);
+    }
+
+    /// <summary>该章是否已通关（任意难度口径，普通难度地块暗显用）。</summary>
     static bool IsCleared(int chapterId)
     {
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
@@ -422,8 +464,8 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
     const string SeenUnlockKey = "worldmap.seen.maxchapter";
 
     /// <summary>
-    /// 打开世界地图时，若有比"已播过"更新的解锁地块：对其脉冲放大一下 + 飘字提示，
-    /// 然后记档，下次打开不再播。典型场景：通关第一章后第一次开图，幽冥墓园亮起。
+    /// 打开世界地图时，若有比"已播过"更新的解锁地块：渐显 + 脉冲放大一下 + 飘字提示，
+    /// 然后记档，下次打开不再播。典型场景：通关第一章后第一次开图，幽冥墓园渐显亮起并浮现地名。
     /// </summary>
     void PlayNewUnlockFxIfNeeded()
     {
@@ -438,7 +480,7 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
             if (slot.chapterId <= seen) continue;
             if (slot.chapterId > maxSeen) maxSeen = slot.chapterId;
             var rt = slot.root.transform as RectTransform;
-            if (rt != null) StartCoroutine(CoUnlockPulse(rt));
+            if (rt != null) StartCoroutine(CoUnlockReveal(rt));
             newNames.Add(slot.def != null && !string.IsNullOrEmpty(slot.def.displayName)
                 ? slot.def.displayName
                 : GameConfig.GetChapterMapName(slot.chapterId));
@@ -452,20 +494,102 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
         }
     }
 
-    System.Collections.IEnumerator CoUnlockPulse(Transform t)
+    /// <summary>
+    /// 新解锁地块渐显（2026-10-24 主人要求「第二章渐变到开始并出现地名」）：
+    /// 透明→实 0.6s，脉冲放大节奏并入其中；地名（地块名牌/标题）随地块一起浮现。
+    /// </summary>
+    IEnumerator CoUnlockReveal(Transform t)
     {
         if (t == null) yield break;
+        var cg = t.GetComponent<CanvasGroup>();
+        if (cg == null) cg = t.gameObject.AddComponent<CanvasGroup>();
         Vector3 baseScale = t.localScale;
-        float dur = 0.45f;
+        float dur = 0.6f;
         float elapsed = 0f;
         while (elapsed < dur)
         {
             elapsed += Time.unscaledDeltaTime;
-            float k = 1f + Mathf.Sin((elapsed / dur) * Mathf.PI) * 0.25f;
-            t.localScale = baseScale * k;
+            float k = Mathf.Clamp01(elapsed / dur);
+            cg.alpha = k;
+            t.localScale = baseScale * (1f + Mathf.Sin(k * Mathf.PI) * 0.25f);
             yield return null;
         }
+        cg.alpha = 1f;
         t.localScale = baseScale;
+    }
+
+    // ============================================================
+    // 当前章标识（2026-10-24 主人拍板）：玩家头像 + 箭头，钉在该难度下应推进章的地块上方；
+    // 切难度后重开地图按新难度的当前章落点。
+    // ============================================================
+
+    RectTransform _curMarker;
+
+    void EnsureCurrentChapterMarker()
+    {
+        Transform target = null;
+        if (_currentChapter >= 1 && _slots != null)
+        {
+            for (int i = 0; i < _slots.Length; i++)
+            {
+                if (_slots[i] != null && _slots[i].chapterId == _currentChapter)
+                {
+                    target = _slots[i].root.transform;
+                    break;
+                }
+            }
+        }
+        if (target == null)
+        {
+            if (_curMarker != null && _curMarker.gameObject.activeSelf)
+                _curMarker.gameObject.SetActive(false);
+            return;
+        }
+        if (_curMarker == null)
+        {
+            var avatar = CharacterRegistry.LoadPlayerIcon();
+            if (avatar == null) return;   // 缺真值不兜底，LogError 已在加载出口打过
+            var go = new GameObject("当前章标识", typeof(RectTransform));
+            var rt = (RectTransform)go.transform;
+            // 头像
+            var avatarGo = new GameObject("头像", typeof(RectTransform), typeof(Image));
+            var art = (RectTransform)avatarGo.transform;
+            art.SetParent(rt, false);
+            art.anchorMin = art.anchorMax = new Vector2(0.5f, 1f);
+            art.pivot = new Vector2(0.5f, 1f);
+            art.anchoredPosition = Vector2.zero;
+            art.sizeDelta = new Vector2(56f, 56f);
+            var aImg = avatarGo.GetComponent<Image>();
+            aImg.sprite = avatar;
+            aImg.raycastTarget = false;
+            aImg.preserveAspect = true;
+            // 箭头（指向下方地块）
+            var arrowGo = new GameObject("箭头", typeof(RectTransform), typeof(Text));
+            var arrRt = (RectTransform)arrowGo.transform;
+            arrRt.SetParent(rt, false);
+            arrRt.anchorMin = arrRt.anchorMax = new Vector2(0.5f, 1f);
+            arrRt.pivot = new Vector2(0.5f, 1f);
+            arrRt.anchoredPosition = new Vector2(0f, -52f);
+            arrRt.sizeDelta = new Vector2(40f, 30f);
+            var aTxt = arrowGo.GetComponent<Text>();
+            aTxt.text = "▼";
+            aTxt.fontSize = 26;
+            aTxt.alignment = TextAnchor.MiddleCenter;
+            aTxt.color = new Color(1f, 0.92f, 0.5f, 1f);
+            aTxt.raycastTarget = false;
+            aTxt.font = GameFonts.GetChinese();
+            _curMarker = rt;
+            GameFonts.ApplyToHierarchy(rt);
+        }
+        if (_curMarker.parent != target)
+            _curMarker.SetParent(target, false);
+        _curMarker.anchorMin = _curMarker.anchorMax = new Vector2(0.5f, 1f);
+        _curMarker.pivot = new Vector2(0.5f, 0f);
+        _curMarker.anchoredPosition = new Vector2(0f, 4f);
+        _curMarker.localScale = Vector3.one;
+        if (!_curMarker.gameObject.activeSelf)
+            _curMarker.gameObject.SetActive(true);
+        _curMarker.SetAsLastSibling();
     }
 
     // ============================================================
@@ -485,15 +609,27 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
         {
             var slot = _slots[i];
             if (slot == null || slot.root == null) continue;
-            bool unlocked = IsUnlocked(slot.chapterId);
+            bool routeOk = IsRouteUnlocked(slot.chapterId);
+            // 难度灰锁：路线通了但该难度上一章没通（2026-10-24 主人拍板）
+            bool diffLocked = routeOk && !ChapterRouteTable.CanEnterAtDiff(slot.chapterId, _difficulty, SaveSystem.Instance?.Data);
+            bool unlocked = routeOk && !diffLocked;
             bool selected = slot.chapterId == _selectedChapter;
-            bool cleared = IsCleared(slot.chapterId);
-            // 已通关的地块不可再进（暗掉 + 不可点）
-            var btn = (slot.visual != null ? slot.visual : slot.root).GetComponent<Button>();
-            if (btn != null) btn.interactable = unlocked && !cleared;
+
+            var visualT = slot.visual != null ? slot.visual : slot.root;
+            var btn = visualT.GetComponent<Button>();
+            // 【2026-10-24 主人拍板】已通关章仍可点（选章回冒险页重打该难度）；只有未解锁/难度灰锁不可进
+            if (btn != null) btn.interactable = unlocked;
+
+            // 难度灰锁地块压灰（路线锁的「未解锁暗显」仍归美术底图管，代码不染）
+            var img = visualT.GetComponent<Image>();
+            if (img != null)
+            {
+                if (!slot.baseColorCached) { slot.baseColor = img.color; slot.baseColorCached = true; }
+                img.color = diffLocked && slot.def != null ? slot.def.lockedColor : slot.baseColor;
+            }
 
             // 地块本体（visual）与名字底框由美术在预制体做好表面，代码不再染色/隐藏：未解锁=暗显。
-            // 仅状态指示器由代码驱动：锁图标（未解锁显示）、选中高亮、进入按钮（选中且未通关）。
+            // 仅状态指示器由代码驱动：锁图标（未解锁显示）、选中高亮、进入按钮（选中且可进）。
             if (slot.nameRoot != null)
                 slot.nameRoot.SetActive(true);
             if (slot.lockRoot != null)
@@ -504,9 +640,9 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
             // 「进入」按钮：优先用地块自带的那颗，没有才把共享的那颗挪过来
             if (slot.enterButton != null)
             {
-                slot.enterButton.gameObject.SetActive(selected && !cleared);
+                slot.enterButton.gameObject.SetActive(selected && unlocked);
             }
-            else if (selected && !cleared)
+            else if (selected && unlocked)
             {
                 MoveEnterButtonTo(slot.root.transform as RectTransform);
                 sharedEnterUsed = true;
@@ -532,6 +668,9 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
                 ? "点击地图上的区域，选择你要前往的地方。"
                 : intro;
         }
+
+        // 当前章标识（玩家头像+箭头，2026-10-24 主人拍板）
+        EnsureCurrentChapterMarker();
     }
 
     // ============================================================
@@ -544,8 +683,17 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
         if (IsRecentPan()) return; // 刚拖完地图，吞掉这次误触
         if (_slots == null || index < 0 || index >= _slots.Length) return;
         var slot = _slots[index];
-        if (!IsUnlocked(slot.chapterId)) return;
-        if (IsCleared(slot.chapterId)) return; // 已通关的地块不可再进
+        // 【2026-10-24 主人拍板】路线未开 → 原提示；难度灰锁 → 统一提示；已通关章不再拦（回冒险页重打）
+        if (!IsRouteUnlocked(slot.chapterId))
+        {
+            UIManager.Instance?.ShowToast("通关当前区域后开启");
+            return;
+        }
+        if (!ChapterRouteTable.CanEnterAtDiff(slot.chapterId, _difficulty, SaveSystem.Instance?.Data))
+        {
+            UIManager.Instance?.ShowToast(ChapterRouteTable.DiffChapterLockHint);
+            return;
+        }
 
         _selectedChapter = slot.chapterId;
         RefreshRegions();
@@ -1108,5 +1256,8 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
         public GameObject nameRoot;
         /// <summary>该地块自己的「进入」按钮（美术在每个 Region_X 下各放了一个）。为空则回退到共享按钮。</summary>
         public Button enterButton;
+        /// <summary>地块本体底色缓存（难度灰锁压灰用，恢复要回原色；2026-10-24）。</summary>
+        public Color baseColor = Color.white;
+        public bool baseColorCached;
     }
 }

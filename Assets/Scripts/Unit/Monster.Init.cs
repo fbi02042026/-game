@@ -230,16 +230,17 @@ public partial class Monster
             }
         }
 
-        // 【2026-10-22 主人拍板 v4.1】小 Boss 降配：正式关第 5 关（currentStageIndex 0-based==4）
-        // Boss 波的 Boss 模板血/攻 ×0.6（新常量 GameConfig.MINI_BOSS_STAT_MUL）。
-        // 只影响这一处 Boss 血攻装配；第 10 关大 Boss（==9）不乘（stageIdx0 条件排除）；
-        // 无限裂隙（IsFormalMainRun=false）与引导局/金币本不乘；精英/普通怪（bossUnit=false）不乘。
-        bool miniBossStage = bossUnit && !endlessRift
+        // 【2026-10-24 主人拍板「章末大Boss 独立档」】B1 后一章 = 一座大关 = 5 小关，
+        // stageIdx0==4 就是章末大 Boss —— v4.1 的「第 5 关小 Boss ×0.6、第 10 关大 Boss（==9）不乘」
+        // 里「不乘」分支已死（域里没有 ==9），大 Boss 一直被误吃 ×0.6。现改：正式关章末 Boss 走
+        // 独立档 GameConfig.BOSS_FINAL_STAT_MUL（默认 1.0 = 恢复满配）；无限裂隙不吃（自己两条线），
+        // 金币本/徽记/支线岛/终章 stageIdx0 恒 0 不命中，行为不变。旧 MINI_BOSS_STAT_MUL 已随小 Boss 位退役删除。
+        bool finalBossStage = bossUnit && !endlessRift
             && BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun
-            && stageIdx0 == 4;
-        float miniBossMul = miniBossStage ? GameConfig.MINI_BOSS_STAT_MUL : 1f;
-        baseHp *= miniBossMul;
-        baseAtk *= miniBossMul;
+            && stageIdx0 == GameConfig.STAGES_PER_GRAND - 1;
+        float bossStatMul = finalBossStage ? GameConfig.BOSS_FINAL_STAT_MUL : 1f;
+        baseHp *= bossStatMul;
+        baseAtk *= bossStatMul;
 
         float waveMul = 1f + waveNum * 0.05f;
         float ttkMul;

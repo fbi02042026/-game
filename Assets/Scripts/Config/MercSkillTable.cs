@@ -95,7 +95,8 @@ public static class MercSkillTable
             if (string.IsNullOrEmpty(line) || line.StartsWith("#")) continue;
             if (line.StartsWith("技能ID")) continue;
 
-            string[] cols = SplitCsvLine(line);
+            // 2026-10-23 主人拍板：走通用带引号解析器，技能描述里的英文逗号不再把整行切错位。
+            string[] cols = GameTableCsv.SplitCsvLine(line);
             if (cols.Length < 12) continue;
             string id = cols[0].Trim();
             if (string.IsNullOrEmpty(id) || !id.StartsWith("SK")) continue;
@@ -131,11 +132,6 @@ public static class MercSkillTable
             Debug.LogError("[MercSkillTable] 战斗表加载失败: Resources/" + ContentPaths.Data.MercSkills + " （解析 0 条），using defaults。");
         else
             Debug.Log($"[MercSkillTable] 已加载 {ok} 条技能");
-    }
-
-    static string[] SplitCsvLine(string line)
-    {
-        return line.Split(',');
     }
 
     static SkillCategory ParseCategory(string s)
@@ -254,7 +250,7 @@ public static class MercSkillTable
     static void ApplyFormula(SkillConfig cfg, Row row)
     {
         string f = row.Formula ?? "";
-        float atkMul = ParseAttackMultiplier(f);
+        float atkMul = FormulaParser.ParseAttackMultiplier(f);
         if (atkMul > 0f)
             cfg.damageMultiplier = atkMul;
 
@@ -278,20 +274,20 @@ public static class MercSkillTable
         if (Regex.IsMatch(f, @"防御\s*\+"))
         {
             cfg.buffAttr = AttrType.Defense;
-            cfg.buffValue = ParseSignedPercent(f, 0.35f);
+            cfg.buffValue = FormulaParser.ParseSignedPercent(f, 0.35f);
             cfg.buffIsPercent = true;
             cfg.duration = row.Duration > 0f ? row.Duration : 5f;
         }
         else if (!healish && f.Contains("生命上限"))
         {
             cfg.buffAttr = AttrType.MaxHp;
-            cfg.buffValue = ParseSignedPercent(f, 0.10f);
+            cfg.buffValue = FormulaParser.ParseSignedPercent(f, 0.10f);
             cfg.buffIsPercent = true;
             cfg.duration = row.Duration > 0f ? row.Duration : 6f;
         }
         else if (f.Contains("目标攻击"))
         {
-            float v = ParseSignedPercent(f, -0.20f);
+            float v = FormulaParser.ParseSignedPercent(f, -0.20f);
             cfg.buffAttr = AttrType.Attack;
             cfg.buffValue = v > 0f ? -v : v;
             cfg.buffIsPercent = true;
@@ -299,25 +295,7 @@ public static class MercSkillTable
         }
     }
 
-    static float ParseSignedPercent(string formula, float fallback)
-    {
-        if (string.IsNullOrEmpty(formula)) return fallback;
-        var m = Regex.Match(formula, @"([+-]?\d+(?:\.\d+)?)\s*%");
-        if (!m.Success) return fallback;
-        return float.Parse(m.Groups[1].Value) / 100f;
-    }
-
-    static float ParseAttackMultiplier(string formula)
-    {
-        if (string.IsNullOrEmpty(formula)) return 0f;
-        var m = Regex.Match(formula, @"攻击\s*[×xX*]\s*(\d+(?:\.\d+)?)\s*%");
-        if (m.Success)
-            return float.Parse(m.Groups[1].Value) / 100f;
-        m = Regex.Match(formula, @"(\d+(?:\.\d+)?)\s*%");
-        if (m.Success && formula.Contains("攻击"))
-            return float.Parse(m.Groups[1].Value) / 100f;
-        return 0f;
-    }
+    // 2026-10-23 主人拍板：公式解析唯一出口 = Config/FormulaParser.cs，本表不再自己维护正则。
 
     static float ResolveAoeRadius(Row row)
     {

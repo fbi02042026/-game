@@ -7,8 +7,90 @@ using UnityEngine;
 public partial class BattleManager
 {
     #region 死亡与撤离
+
+    /// <summary>
+    /// 【2026-10-24 主人拍板「复活先接上，用钻石复活」】本关是否已用过复活（每关一次，
+    /// 关卡开始时随 _battleStartTime 一起重置）。等待复活选择期间本局处于「冻场待抉择」状态。
+    /// </summary>
+    bool _reviveUsedThisStage;
+
+    /// <summary>是否提供复活选择：正式关/支线/活动副本（UsesBattleResultScreen 同门）、
+    /// 非引导局、本关没用过、主角在场。引导局照旧「阵亡重进」，无限裂隙照旧直接结算。</summary>
+    bool CanOfferRevive => Mode != null && Mode.UsesBattleResultScreen
+        && !Rules.Active && !SkipLegacyOnEvacuate
+        && hero != null && !_reviveUsedThisStage;
+
     public void OnHeroDead()
     {
+        // 【2026-10-24 主人拍板】正式关阵亡先弹「失败 + 复活/返回」选择界面：冻场待抉择，
+        // 点【复活】扣钻原地半血复活继续打，点【返回】才走原收尾（遗产结算）。
+        // 引导局/无限裂隙不吃这道门（CanOfferRevive 已分流）。
+        if (CanOfferRevive)
+        {
+            OfferHeroRevive();
+            return;
+        }
+        FinalizeHeroDeath();
+    }
+
+    /// <summary>
+    /// 复活选择窗：停出兵 + 冻场（与天雷演出/冻场同机制），弹带双钮的失败界面。
+    /// 此时<b>不收局</b>（不清佣兵、不 EndRunLoadout、不记死亡埋点）—— 玩家复活后战斗原样继续。
+    /// </summary>
+    void OfferHeroRevive()
+    {
+        _reviveUsedThisStage = true;
+        isInBattle = false;      // 停出兵/推进（与原死亡口径一致）
+        UnitsCanAct = false;     // 冻场：怪/佣兵/协程全停，复活后还原
+        BattleResultScreen.ShowFailureChoice(
+            revivePrice: GameConfig.AD_SLOT_REVIVE_DIAMOND,
+            onRevive: TryReviveHeroByDiamond,
+            onGiveUp: FinalizeHeroDeath);
+    }
+
+    /// <summary>
+    /// 复活扣费唯一出口。返回 false = 钻石不足（toast 已提示，选择界面停留）。
+    /// 【为后期替换激励视频做准备】2026-10-24 主人拍板先按扣钻石上线；接广告时在本方法外层套
+    /// RewardedAdBridge.ShowRewarded("revive", ok => { if (ok) { DoReviveHero(); 收界面; } })，
+    /// 扣费行删除、AD_SLOT_REVIVE_DIAMOND 转作价值锚点 —— UI 与复活本体（DoReviveHero）不用再动，
+    /// 模式与 ResourceAdRewards 两个注释位口径一致。
+    /// </summary>
+    bool TryReviveHeroByDiamond()
+    {
+        if (!ResourceWallet.TrySpendDiamond(GameConfig.AD_SLOT_REVIVE_DIAMOND, "战斗复活", save: true, notify: false))
+        {
+            var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+            long own = ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond);
+            UIManager.Instance?.ShowToast($"钻石不足：复活需 {GameConfig.AD_SLOT_REVIVE_DIAMOND} 钻（当前 {own} 钻）");
+            return false;
+        }
+        DoReviveHero();
+        return true;
+    }
+
+    /// <summary>复活本体：半血原地起立 + 解冻 + 恢复战斗。血量比例走 GameConfig.REVIVE_HP_RATIO。</summary>
+    void DoReviveHero()
+    {
+        if (hero == null)
+        {
+            Debug.LogError("[BattleManager] 复活失败：hero 为空，按放弃处理走死亡收尾");
+            FinalizeHeroDeath();
+            return;
+        }
+        if (!hero.Revive(GameConfig.REVIVE_HP_RATIO))
+            Debug.LogWarning("[BattleManager] 主角未处于死亡态却收到复活指令（重复点击？），已忽略扣费后状态");
+        UnitsCanAct = true;
+        isInBattle = true;
+        BattleUI.Instance?.ForceRefreshLiveBars();
+    }
+
+    /// <summary>
+    /// 死亡收尾（原 OnHeroDead 主体，玩家点【返回】或不提供复活时走这里）。
+    /// 从「进门即收局」拆出来：复活窗口期间这些一律不执行。
+    /// </summary>
+    void FinalizeHeroDeath()
+    {
+        UnitsCanAct = true;  // 还原冻场，后续结算/协程照旧
         Planner?.NotifyStageResult(true, 0f); // V3.0 压力阀：死过 → 下一关减一波
         isInBattle = false;
         _runClosed = true;   // 局已收尾：挂起的抽奖等待协程当场退场（见字段注释）
@@ -23,7 +105,13 @@ public partial class BattleManager
             RestartTutorialBattle();
             return;
         }
-        TriggerLegacyFlow(isDeath: true);
+        // 【2026-10-24 主人拍板】正式关卡/支线岛/活动副本阵亡先播「失败」结果界面，
+        // 淡出（或点击跳过）后再进遗产/撤离结算；无限裂隙不播（每层累计奖励走自己的结算链），直接进遗产结算。
+        // 引导局在上面 Rules.Active 分支已重进战斗，永远到不了这里。
+        if (Mode != null && Mode.UsesBattleResultScreen)
+            BattleResultScreen.Show(false, () => TriggerLegacyFlow(isDeath: true));
+        else
+            TriggerLegacyFlow(isDeath: true);
     }
 
     public void TriggerEvacuation()

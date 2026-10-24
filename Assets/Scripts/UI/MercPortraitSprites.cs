@@ -14,66 +14,12 @@ public static class MercPortraitSprites
     static readonly Dictionary<string, Sprite> HeadCache = new Dictionary<string, Sprite>();
     static readonly Dictionary<string, Sprite> StandCache = new Dictionary<string, Sprite>();
 
-    static readonly Dictionary<string, string> AliasToHireId = new Dictionary<string, string>
-    {
-        { "player", "player" },
-        { "wanjia", "player" },
-        { "laodun", "H001" },
-        { "xiaomei", "C001" },
-        { "npc_xiaomei", "C001" },
-        { "altor", "C002" },
-        { "npc_shengdian", "C002" },
-        { "grey", "C003" },
-        { "npc_grey", "C003" },
-        { "xiaobai", "H011" },
-        { "naima101", "H011" },
-        // 剧情 NPC → 佣兵立绘目录中的稳定英文 ID（见 Sync / LoadEditorStand）
-        { "receptionist", "receptionist" },
-        { "guildmaster", "guildmaster" },
-        { "guildmaster_hidden", "guildmaster_hidden" },
-        { "hunter", "C004" },
-        { "duyan", "C004" },
-        { "npc_duyan", "C004" },
-        // 老板娘专属立绘（2026-10-15 接上，不再复用前台小姐）：Resources/Art/UI/Tavern/酒吧老板娘.png
-        { "landlady", "landlady" },
-        { "boss_niang", "landlady" },
-        { "innkeeper", "landlady" },
-    };
-
-    public static string NormalizeHireId(string hireIdOrAlias)
-    {
-        if (string.IsNullOrEmpty(hireIdOrAlias)) return null;
-        string key = hireIdOrAlias.Trim();
-        if (AliasToHireId.TryGetValue(key, out var mapped))
-            return mapped;
-        if (key.StartsWith("H", System.StringComparison.OrdinalIgnoreCase)
-            || key.StartsWith("C", System.StringComparison.OrdinalIgnoreCase)
-            || key == "player")
-            return key;
-        return null;
-    }
-
-    /// <summary>H/C 编号或 assetId → hireId（多 H 共用 asset 时取首条）。</summary>
-    public static string ResolveHireId(string hireIdOrAssetId)
-    {
-        string normalized = NormalizeHireId(hireIdOrAssetId);
-        if (!string.IsNullOrEmpty(normalized)) return normalized;
-        if (string.IsNullOrEmpty(hireIdOrAssetId)) return null;
-
-        if (MercSkillMapping.TryGetByAssetId(hireIdOrAssetId, out var row)
-            && !string.IsNullOrEmpty(row.HireId))
-            return row.HireId;
-
-        if (MercRosterDefs.TryGetByAssetId(hireIdOrAssetId, out var def)
-            && !string.IsNullOrEmpty(def.HireId))
-            return def.HireId;
-
-        return null;
-    }
+    // 【2026-10-23 主人拍板】ID 解析（NormalizeHireId / ResolveHireId / 别名表）已收口到
+    // MercRosterDefs，本类只负责按 hireId 取图，不再自己解析 —— 别在这里补第二份。
 
     public static Sprite GetHead(string hireIdOrAssetId)
     {
-        string hireId = ResolveHireId(hireIdOrAssetId) ?? hireIdOrAssetId;
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId) ?? hireIdOrAssetId;
         if (string.IsNullOrEmpty(hireId)) return null;
         if (HeadCache.TryGetValue(hireId, out var cached) && cached != null)
             return cached;
@@ -99,7 +45,7 @@ public static class MercPortraitSprites
 
     public static Sprite GetStand(string hireIdOrAssetId)
     {
-        string hireId = ResolveHireId(hireIdOrAssetId) ?? NormalizeHireId(hireIdOrAssetId) ?? hireIdOrAssetId;
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId) ?? MercRosterDefs.NormalizeHireId(hireIdOrAssetId) ?? hireIdOrAssetId;
         if (string.IsNullOrEmpty(hireId)) return null;
         if (StandCache.TryGetValue(hireId, out var cached) && cached != null)
             return cached;

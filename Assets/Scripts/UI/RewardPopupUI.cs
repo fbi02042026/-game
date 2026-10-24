@@ -111,6 +111,26 @@ public class RewardPopupUI : MonoBehaviour
     /// <summary>一键回退开关：置 false 完全还原预制体尺寸。</summary>
     public static bool EnableOverallScale = true;
 
+    /// <summary>
+    /// 【2026-10-23 主人报「弹窗太小，是不是没适配」】瘦屏适配：
+    /// 逻辑高超过设计高 1280 时（更瘦屏，逻辑高 = 720÷宽高比，铁律 19 上限 1600），
+    /// 面板整体系数按「逻辑高 ÷ 1280」等比放大，封顶 1600/1280 = 1.25。
+    /// 720×1280 设计屏 k=1，预制体效果一个像素不动（0.7 的拍板不受影响）；
+    /// 1240×2772 这类超瘦屏 k=1.25，面板 350→437 逻辑宽，高度占比恢复设计值。
+    /// 口径与 DailyLoginUI.Fit.IsThinnerScreen 同源（ResolveUiMatch &lt; 0.5 = 瘦屏按宽匹配）。
+    /// </summary>
+    const float FitMaxK = 1600f / GameConfig.DESIGN_HEIGHT;
+
+    static float FitScale()
+    {
+        float match = DesignAspectLetterbox.ResolveUiMatch();
+        float logicalH = match < 0.5f
+            ? GameConfig.DESIGN_WIDTH / Mathf.Max(1e-3f, Screen.width / (float)Screen.height)
+            : GameConfig.DESIGN_HEIGHT;
+        if (logicalH <= GameConfig.DESIGN_HEIGHT + 1f) return 1f;
+        return Mathf.Min(logicalH / GameConfig.DESIGN_HEIGHT, FitMaxK);
+    }
+
     // B12 入场动画参数（只动 scale 与 alpha，**不改面板尺寸 / 位置 / 九宫格**，主人铁律）
     const float IMPACT_TIME = 0.24f;    // 总时长（秒）
     const float IMPACT_FROM = 0.72f;    // 起始缩放（小 → 弹出来）
@@ -451,9 +471,12 @@ public class RewardPopupUI : MonoBehaviour
         if (_panelGroup != null) _panelGroup.alpha = 1f;
     }
 
-    /// <summary>面板的目标缩放 = 预制体原始缩放 × 整体系数（未捕获原始值时用 Vector3.one 代替）。只此一处产出缩放，避免与 B12 动画互相覆盖。</summary>
+    /// <summary>面板的目标缩放 = 预制体原始缩放 × 整体系数 × 瘦屏适配系数（未捕获原始值时用 Vector3.one 代替）。
+    /// 只此一处产出缩放，避免与 B12 动画互相覆盖。</summary>
     Vector3 PanelTargetScale()
-        => (_panelScaleCaptured ? _panelBaseScale : Vector3.one) * (EnableOverallScale ? OverallScale : 1f);
+        => (_panelScaleCaptured ? _panelBaseScale : Vector3.one)
+         * (EnableOverallScale ? OverallScale : 1f)
+         * FitScale();
 
     /// <summary>把目标缩放写到 Panel 上（Panel 为空直接什么都不做）。只动 localScale，不碰任何尺寸 / 位置。</summary>
     void ApplyPanelScale()

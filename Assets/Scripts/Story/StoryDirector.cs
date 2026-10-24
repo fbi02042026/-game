@@ -53,6 +53,8 @@ public class StoryDirector : Singleton<StoryDirector>
     bool _pausedTime;
     string _introducedBg;
     bool _keepSceneArt;
+    /// <summary>【2026-10-24】开播黑幕字幕（Play 可选传入；空则自动用当前背景地名）。</summary>
+    string _introCaption;
     // 【2026-10-20 主人报】剧情播放时战斗底部 4 个技能框挤在对话窗下面 —— 开播藏掉、收窗还原。
     GameObject _battleSkillBar;
     bool _battleSkillBarWasActive;
@@ -148,9 +150,16 @@ public class StoryDirector : Singleton<StoryDirector>
         Debug.Log($"[StoryDirector] DialogueUI 已就绪 camera sort={canvas.sortingOrder} scale={go.transform.localScale}");
     }
 
-    public void Play(IList<StoryBeat> beats, Action onDone, Action<int> onChoice = null, bool keepSceneArt = false)
+    /// <summary>
+    /// 播一串节拍。
+    /// 【2026-10-24 主人拍板「剧情弹出加黑幕过渡 + 字幕」】新增可选 <paramref name="introCaption"/>：
+    /// 整段开播且首拍不换背景时，先过一道短黑幕（DialogueUI.PlayIntroVeil），黑幕上显示这行字幕；
+    /// 不传则自动用当前背景的地名（StoryBackgrounds.DisplayName）。首拍换背景 / 首拍 SkipReveal 的不加（前者自带地点黑场，后者调用方明确不要）。
+    /// </summary>
+    public void Play(IList<StoryBeat> beats, Action onDone, Action<int> onChoice = null, bool keepSceneArt = false, string introCaption = null)
     {
         _keepSceneArt = keepSceneArt;
+        _introCaption = introCaption;
         if (_play != null) StopCoroutine(_play);
         _play = StartCoroutine(PlayRoutine(beats, onDone, onChoice));
     }
@@ -200,6 +209,28 @@ public class StoryDirector : Singleton<StoryDirector>
             ui.SetRevealBlack(0f);
             ui.SetBgDim(0.42f);
             ui.SetSceneBackgroundAlpha(1f);
+        }
+
+        // 【2026-10-24 主人拍板「剧情弹出加黑幕过渡 + 字幕」】
+        // 原状：只有「换背景」才有地点名黑场；背景没换（同景续播、选项回响等）时对话框直接糊上来。
+        // 现在整段开播统一补一道短黑幕：字幕优先调用方传的 _introCaption，没传就用当前背景地名。
+        // 首拍换背景的交给下面既有 PlayLocationReveal（自带地名黑场，不重复）；首拍 SkipReveal 的尊重调用方（开场已有黑幕）。
+        bool firstBeatIntroducesBg = false;
+        bool firstBeatSkipsReveal = false;
+        for (int k = 0; k < beats.Count; k++)
+        {
+            if (beats[k] == null) continue;
+            firstBeatIntroducesBg = !string.IsNullOrEmpty(beats[k].backgroundId)
+                                    && beats[k].backgroundId != _introducedBg;
+            firstBeatSkipsReveal = beats[k].skipLocationReveal;
+            break;
+        }
+        if (!firstBeatIntroducesBg && !firstBeatSkipsReveal)
+        {
+            string cap = _introCaption;
+            if (string.IsNullOrEmpty(cap) && !string.IsNullOrEmpty(_introducedBg))
+                cap = StoryBackgrounds.DisplayName(_introducedBg);
+            yield return ui.PlayIntroVeil(cap);
         }
 
         for (int i = 0; i < beats.Count; i++)

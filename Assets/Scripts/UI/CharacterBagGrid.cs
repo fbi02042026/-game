@@ -42,6 +42,12 @@ public class CharacterBagGrid : TownBackpackGrid
     protected override int LogicalRowsMax() => CharacterBagSystem.RowsMax;
 
     /// <summary>
+    /// 【2026-10-23 主人拍板】角色页开放「锁格点击 → 钻石解锁」入口（5 钻/格）；
+    /// 只有本网格开，四列弹窗网格 / 战斗背包不开。
+    /// </summary>
+    protected override bool SupportsCellDiamondUnlock() => true;
+
+    /// <summary>
     /// 角色页走自己的 <see cref="CharacterBagSystem"/>（数据源 = 存档全量装备池，8 列排布），
     /// 不再走基类那条 GridBackpackSystem（4 列）的默认分支。
     /// <para>CharacterBagSystem 返回的坐标就是本网格的逻辑坐标（格子 Cell_{行}_{列} 的 (列,行) 直接 = (x,y)，没有折叠），

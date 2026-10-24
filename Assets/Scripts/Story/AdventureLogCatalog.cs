@@ -521,7 +521,9 @@ public static class AdventureLogCatalog
         },
         new StoryEntry
         {
-            Id = "S005", Title = "商人的第一笔生意", Unlock = "累计在商店消费 1000 金币",
+            // 【2026-10-24 主人拍板「商店未开启」】口径改「消费金币」（商店+酒馆招募），不再写死「在商店」——
+            // 商城按钮隐藏期间 S005/S010 才够得着；商店重开后两处喂食点都算，文案无需再改。
+            Id = "S005", Title = "商人的第一笔生意", Unlock = "累计消费 1000 金币",
             Summary = "酒馆商人记住你的名字，送你一瓶中级生命药水，并暗示“好酒才配好客户”。",
             Extra = "奖励：中级生命药水 ×1"
         },
@@ -551,7 +553,7 @@ public static class AdventureLogCatalog
         },
         new StoryEntry
         {
-            Id = "S010", Title = "商人的老客户", Unlock = "累计在商店消费 3000 金币",
+            Id = "S010", Title = "商人的老客户", Unlock = "累计消费 3000 金币",
             Summary = "商人开始跟你聊进货渠道，暗示酒馆地下可能有“另一份价目表”。",
             Extra = "奖励：高级生命药水 ×2，金币 ×300"
         },

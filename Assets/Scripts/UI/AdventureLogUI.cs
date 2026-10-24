@@ -470,12 +470,11 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     }
 
     /// <summary>
-    /// 冒险日志可点性/标题自适应兜底（不改预制体）：
-    /// 1) Paper / Paper1 是全屏拉伸容器，自身 Image 参与射线且渲染序压在 Sidebar 之上，
-    ///    点击命中后沿父链找不到 Button 就被吞掉 —— 左侧标签永远点不到。关掉容器自身
-    ///    的 raycast（子级滚动区/按钮/格子都是后代，不受影响）。
-    /// 2) 标题「冒险日志」的文本框(约 150 宽)没跟随横幅 bg(291×103)，字号大时溢出错位。
-    ///    文本框改为居中铺满横幅内缩区域，并开 BestFit 自适应字号。
+    /// 冒险日志可点性修复（不改预制体）：
+    /// Paper / Paper1 是全屏拉伸容器，自身 Image 参与射线且渲染序压在 Sidebar 之上，
+    /// 点击命中后沿父链找不到 Button 就被吞掉 —— 左侧标签永远点不到。关掉容器自身
+    /// 的 raycast（子级滚动区/按钮/格子都是后代，不受影响）；横幅 bg 与标题 Text 同理。
+    /// // 2026-10-23 主人拍板：标题字号/框以预制体为准，删除运行时 BestFit 与定框改写
     /// </summary>
     void EnsureLogChromeUsable()
     {
@@ -483,12 +482,28 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         DisableOwnRaycast(transform.Find("Root/Frame/Paper1")?.gameObject);
 
         var biaotou = transform.Find("Root/Frame/biaotou");
-        if (biaotou == null) return;
+        if (biaotou == null)
+        {
+            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/biaotou，横幅射线修复跳过");
+            return;
+        }
 
         var bgTr = biaotou.Find("bg");
         var bgImg = bgTr != null ? bgTr.GetComponent<Image>() : null;
         if (bgImg != null) bgImg.raycastTarget = false;
 
+        var t = FindBannerTitle(biaotou);
+        if (t == null)
+        {
+            Debug.LogError("[AdventureLogUI] Root/Frame/biaotou 下找不到 Title (1) 或任何 Text，标题射线修复跳过");
+            return;
+        }
+        t.raycastTarget = false;
+    }
+
+    // 2026-10-23 主人拍板：横幅标题查找统一出口（优先 Title (1)，退化取 biaotou 下第一个 Text），射线修复与文案切换共用
+    static Text FindBannerTitle(Transform biaotou)
+    {
         var titleTr = biaotou.Find("Title (1)");
         if (titleTr == null)
         {
@@ -499,30 +514,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 if (c.GetComponent<Text>() != null) titleTr = c;
             }
         }
-        if (titleTr == null) return;
-
-        var t = titleTr.GetComponent<Text>();
-        if (t != null) t.raycastTarget = false;
-
-        var rt = (RectTransform)titleTr;
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = Vector2.zero;
-        rt.sizeDelta = new Vector2(260f, 78f); // 横幅 291×103 内缩留边
-
-        if (t != null)
-        {
-            t.alignment = TextAnchor.MiddleCenter;
-            t.horizontalOverflow = HorizontalWrapMode.Wrap;
-            t.verticalOverflow = VerticalWrapMode.Truncate;
-            t.resizeTextForBestFit = true;
-            int baseSize = Mathf.RoundToInt(t.fontSize);
-            t.resizeTextMaxSize = Mathf.Clamp(baseSize, 20, 64);
-            t.resizeTextMinSize = 18;
-            if (t.resizeTextMinSize >= t.resizeTextMaxSize)
-                t.resizeTextMinSize = Mathf.Max(10, t.resizeTextMaxSize / 2);
-        }
+        return titleTr != null ? titleTr.GetComponent<Text>() : null;
     }
 
     static void DisableOwnRaycast(GameObject go)
@@ -543,29 +535,56 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var frame = transform.Find("Root/Frame") as RectTransform;
         if (frame == null) return;
 
-        // 标题横幅：钉在 Frame 左上（bg 291×103，biaotou 中心对 bg 中心）
-        float headerH = 103f, headerTopPad = 10f;
+        // 标题横幅：钉在 Frame 左上（biaotou 中心对 bg 中心）
+        // 2026-10-23 主人拍板：横幅高度以预制体 bg 实测为准，不再写死 103
+        float headerTopPad = 10f;
         var biaotou = frame.Find("biaotou") as RectTransform;
-        if (biaotou != null)
+        if (biaotou == null)
         {
-            biaotou.anchorMin = biaotou.anchorMax = new Vector2(0f, 1f);
-            biaotou.pivot = new Vector2(0.5f, 0.5f);
-            biaotou.anchoredPosition = new Vector2(12f + 145.5f, -(headerTopPad + headerH * 0.5f));
-            biaotou.SetAsLastSibling(); // 横幅最上，但已不与标签重叠
+            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/biaotou，横幅钉位跳过");
+            return;
         }
+        var bgTr = biaotou.Find("bg") as RectTransform;
+        if (bgTr == null)
+        {
+            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/biaotou/bg，横幅高度无法实测，钉位跳过");
+            return;
+        }
+        float headerH = bgTr.rect.height;
+        biaotou.anchorMin = biaotou.anchorMax = new Vector2(0f, 1f);
+        biaotou.pivot = new Vector2(0.5f, 0.5f);
+        biaotou.anchoredPosition = new Vector2(12f + bgTr.rect.width * 0.5f, -(headerTopPad + headerH * 0.5f));
+        biaotou.SetAsLastSibling(); // 横幅最上，但已不与标签重叠
     }
 
     /// <summary>
-    /// 方案A（2026-10-16 主人拍板）：标题横幅 bg 291 宽、侧栏只占 Frame 26%（约 179px），
-    /// 横幅右端会压进右侧 Paper1 图鉴纸面左上角、盖住图鉴首行章节头(晨影森林)左半截。
-    /// 切到图鉴页(怪物/佣兵)时隐藏横幅，其余页照常显示。
+    /// 2026-10-23 主人拍板：标头常显、文案随页切换（替代 2026-10-16 图鉴页隐藏横幅的旧案）。
+    /// 怪物/佣兵图鉴页顶部也要有横幅标头，所以 biaotou 不再因页隐藏；
+    /// 只改标题 Text.text（怪物图鉴/佣兵图鉴/冒险日志），字号/颜色/RectTransform 一律不碰。
     /// </summary>
     void ApplyBannerVisibility()
     {
         var frame = transform.Find("Root/Frame");
         var biaotou = frame != null ? frame.Find("biaotou") : null;
-        if (biaotou != null)
-            biaotou.gameObject.SetActive(!IsCodexTab(_tab));
+        if (biaotou == null)
+        {
+            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/biaotou，横幅文案切换跳过");
+            return;
+        }
+        biaotou.gameObject.SetActive(true); // 常显：所有页（含怪物/佣兵图鉴）都保留标头
+
+        var t = FindBannerTitle(biaotou);
+        if (t == null)
+        {
+            Debug.LogError("[AdventureLogUI] Root/Frame/biaotou 下找不到 Title (1) 或任何 Text，横幅文案无法切换");
+            return;
+        }
+        switch (_tab)
+        {
+            case LogTab.Monster: t.text = "怪物图鉴"; break;
+            case LogTab.Merc: t.text = "佣兵图鉴"; break;
+            default: t.text = "冒险日志"; break;
+        }
     }
 
     void WireTabs()

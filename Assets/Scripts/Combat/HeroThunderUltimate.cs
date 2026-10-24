@@ -187,8 +187,12 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundS
 
             Vector3 hitPos = target.GetHitPosition();
             BattleVFXSystem.Instance?.PlayLeiji(hitPos);
-            float dmg = DamageFormula.FinalHit(raw, target.attr, false);
-            target.TakeDamage(dmg, false, false, true, hero.GetVfxFacingDir(), hero);
+            // 【2026-10-24 修双重扣防】原码先 FinalHit 一次再 TakeDamage，而 TakeDamage 内部
+            // （UnitBase.Damage.cs:39）会再 FinalHit 一次 —— 防御被扣两遍（法师的雷霆更是
+            // 物防/魔防各扣一遍），2026-10-24 新加的类型克制加成也会算两次。属本次核查新发现，
+            // 已顺手修：直接传 raw，由 TakeDamage 统一结算（扣防/类型克制只走一处）。
+            // ⚠ 行为变化：雷霆单发伤害会明显变高（原被多扣一遍防），过强再调 GetThunderUltDamageMul。
+            target.TakeDamage(raw, false, false, true, hero.GetVfxFacingDir(), hero);
 
             yield return new WaitForSecondsRealtime(strikeGap);
         }

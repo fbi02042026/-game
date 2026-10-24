@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 /// <summary>
 /// 剧情对话立绘：原尺寸 × 屏幕系数（720×1280 基准，只放大不缩小）+ 上方高度比例裁切；单/双仅水平槽位不同。
@@ -148,6 +149,30 @@ public static class StoryPortraitLayout
     /// 48 → 顶边最多到 canvasH - 24 + 48，即出屏 24px &lt; 独眼放大后留白约 35px，头发不裁伤。
     /// </summary>
     public const float TallScreenTopMaxLiftPx = 48f;
+
+    /// <summary>
+    /// 各立绘「头顶透明留白」实测像素（PNG 原图像素，数据来源同 PortraitContentFits 注释的实测值）。
+    /// 2026-10-23 主人拍板：瘦屏立绘再上抬 —— 顶部封顶按各图头顶留白个体化：
+    /// 留白大的图（玩家 213px）可以吃满上移量，留白小的图（独眼 25px）维持原封顶防裁发梢。
+    /// 不在表内的立绘一律按 <see cref="TallScreenTopMaxLiftPx"/> 兜底；标准屏（k=1）行为不变。
+    /// </summary>
+    public static readonly Dictionary<string, float> PortraitHeadWhitespacePx = new Dictionary<string, float>
+    {
+        { "npc_duyan", 25f },
+        { "player", 213f },
+        { "landlady", 0f },
+    };
+
+    /// <summary>
+    /// 瘦屏顶部封顶个体化查询：头顶留白 × 屏幕系数 − 8px 安全边，与 <see cref="TallScreenTopMaxLiftPx"/> 取大者。
+    /// scale 必须与 ApplySlot 定尺寸用的 <see cref="StoryPortraitPresenter.ResolvePortraitScale"/> 同源同值。
+    /// </summary>
+    public static float GetTopMaxLiftPx(string portraitId, float scale)
+    {
+        if (string.IsNullOrEmpty(portraitId)) return TallScreenTopMaxLiftPx;
+        if (!PortraitHeadWhitespacePx.TryGetValue(portraitId, out var headPx)) return TallScreenTopMaxLiftPx;
+        return Mathf.Max(TallScreenTopMaxLiftPx, headPx * Mathf.Max(1f, scale) - 8f);
+    }
 
     public static readonly Dictionary<string, PortraitContentFit> PortraitContentFits = new Dictionary<string, PortraitContentFit>
     {

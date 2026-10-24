@@ -66,10 +66,23 @@ public class MercenaryManager : Singleton<MercenaryManager>
         return null;
     }
 
+    // 【2026-10-23 主人拍板】头像加载结果缓存：兜底分支会 Sprite.Create 现造 Sprite，
+    // 每次调用都新建一个、既不缓存也不销毁 → 反复刷新界面就是持续泄漏。按文件名缓存一次。
+    // ⚠️ 只缓存「取到图」的结果：缺图不进缓存，补上图后下次刷新即可生效（不掩盖问题）。
+    static readonly Dictionary<string, Sprite> _headSpriteCache = new Dictionary<string, Sprite>();
+
     static Sprite LoadHeadSprite(string fileNameWithoutExt)
     {
         if (string.IsNullOrEmpty(fileNameWithoutExt)) return null;
+        if (_headSpriteCache.TryGetValue(fileNameWithoutExt, out var cached)) return cached;
 
+        Sprite result = LoadHeadSpriteUncached(fileNameWithoutExt);
+        if (result != null) _headSpriteCache[fileNameWithoutExt] = result;
+        return result;
+    }
+
+    static Sprite LoadHeadSpriteUncached(string fileNameWithoutExt)
+    {
         var sp = Resources.Load<Sprite>("UI/Heads/" + fileNameWithoutExt);
         if (sp != null) return sp;
 
@@ -264,7 +277,17 @@ public class MercenaryManager : Singleton<MercenaryManager>
 
     public List<Mercenary> GetActiveMercs()
     {
-        _activeMercs.RemoveAll(m => m == null);
+        // 【2026-10-23 主人拍板】原 List.RemoveAll(m => m == null) 内部每次调用都 new List，
+        // 而牧师 AI（AllyNeedsHeal）在 CD 好但蓝不足时每帧走到这里，持续产生 GC。
+        // 改为原地压缩（零分配），对外语义不变（仍是同一份列表、死亡单位被剔除）。
+        int w = 0;
+        for (int i = 0; i < _activeMercs.Count; i++)
+        {
+            if (_activeMercs[i] != null)
+                _activeMercs[w++] = _activeMercs[i];
+        }
+        if (w < _activeMercs.Count)
+            _activeMercs.RemoveRange(w, _activeMercs.Count - w);
         return _activeMercs;
     }
 

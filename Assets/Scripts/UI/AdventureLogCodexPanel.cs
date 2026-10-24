@@ -13,10 +13,21 @@ public class AdventureLogCodexPanel
     const int Cols = 4;
     const float CellGapX = 10f;
     const float CellGapY = 14f;
-    const float HeaderH = 36f;
+    // 2026-10-23 主人拍板：图鉴运行时元素放大一档，预制体节点不碰（以下均为代码 new 出来的元素）
+    const float HeaderH = 64f;              // 章节头横条高（原 36）
+    const int SectionHeaderFontSize = 32;   // 章节头字号（原 20）
+    static readonly Vector2 PageLabelSize = new Vector2(130f, 44f); // 页码标签框（原 90×32）
+    const int PageLabelFontSize = 28;       // 页码标签字号（原 20）
+    static readonly Vector2 TinyBtnSize = new Vector2(56f, 44f);    // 翻页小按钮（原 40×32）
+    const int TinyBtnFontSize = 28;         // 翻页小按钮字号（原 20）
+    const float PageBtnOffsetX = 100f;      // 翻页按钮距中心（原 90，给加宽的页码标签让位）
+    const float RedDotSize = 36f;           // 未读红点角标（原 28，同比例放大）
     const float PagePad = 8f;
     const float SectionGap = 16f;      // 章与章（区与区）之间的间距
     const float BottomBarReserve = 64f; // 底部翻页条留白，避免最后一行被箭头挡住
+    // 2026-10-23 主人拍板：标头(biaotou)常显后，图鉴内容顶部要向下让出横幅高度；
+    // 顶距与 AdventureLogUI.EnsureSidebarLayout 的 headerTopPad 同值（10），两文件各自读、不引公共依赖
+    const float BannerTopPad = 10f;
 
     readonly Transform _frame;
     GameObject _root;
@@ -169,9 +180,9 @@ public class AdventureLogCodexPanel
         }
         bar.SetAsLastSibling();
 
-        if (prev == null) prev = CreateTinyBtn(bar, "PrevPage", "<", new Vector2(-90f, 0f));
+        if (prev == null) prev = CreateTinyBtn(bar, "PrevPage", "<", new Vector2(-PageBtnOffsetX, 0f));
         else if (prev.parent != bar) prev.SetParent(bar, false);
-        if (next == null) next = CreateTinyBtn(bar, "NextPage", ">", new Vector2(90f, 0f));
+        if (next == null) next = CreateTinyBtn(bar, "NextPage", ">", new Vector2(PageBtnOffsetX, 0f));
         else if (next.parent != bar) next.SetParent(bar, false);
 
         // 中间页码
@@ -184,10 +195,10 @@ public class AdventureLogCodexPanel
             lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f);
             lrt.pivot = new Vector2(0.5f, 0.5f);
             lrt.anchoredPosition = Vector2.zero;
-            lrt.sizeDelta = new Vector2(90f, 32f);
+            lrt.sizeDelta = PageLabelSize; // 2026-10-23 主人拍板：90×32 → 130×44
             var lt = lgo.AddComponent<Text>();
             lt.font = GameFonts.GetChinese();
-            lt.fontSize = 20;
+            lt.fontSize = PageLabelFontSize;
             lt.alignment = TextAnchor.MiddleCenter;
             lt.color = new Color(0.28f, 0.18f, 0.1f, 1f);
             _pageLabel = lt;
@@ -225,8 +236,8 @@ public class AdventureLogCodexPanel
 
         var prev = bar.Find("PrevPage") as RectTransform;
         var next = bar.Find("NextPage") as RectTransform;
-        if (prev != null) prev.anchoredPosition = new Vector2(-90f, 0f);
-        if (next != null) next.anchoredPosition = new Vector2(90f, 0f);
+        if (prev != null) prev.anchoredPosition = new Vector2(-PageBtnOffsetX, 0f);
+        if (next != null) next.anchoredPosition = new Vector2(PageBtnOffsetX, 0f);
     }
 
     void BindDetail(Transform paper1)
@@ -295,6 +306,20 @@ public class AdventureLogCodexPanel
         return _frame != null ? _frame.Find("Paper1") : null;
     }
 
+    // 2026-10-23 主人拍板：横幅常显后图鉴内容顶部让位 —— 高度从 Frame/biaotou/bg 实测（与
+    // AdventureLogUI.EnsureSidebarLayout 同源读法，各自读不引公共依赖）；读不到 LogError 返回 0 跳过让位
+    float BannerTopOffset()
+    {
+        var biaotou = _frame != null ? _frame.Find("biaotou") : null;
+        var bgTr = biaotou != null ? biaotou.Find("bg") as RectTransform : null;
+        if (bgTr == null)
+        {
+            Debug.LogError("[AdventureLogCodex] 找不到 Frame/biaotou/bg，无法实测横幅高度，图鉴内容顶部未让位");
+            return 0f;
+        }
+        return bgTr.rect.height + BannerTopPad;
+    }
+
     // 一页放两章 → 页数 = ceil(章数 / 2)
     static int MonsterSpreadCount()
     {
@@ -338,7 +363,8 @@ public class AdventureLogCodexPanel
         SetPageTitle("怪物图鉴");
         SetPageLabel($"{spread}/{spreads}");
 
-        float y = -PagePad;
+        // 2026-10-23 主人拍板：横幅常显后，首行章节头向下让出横幅高度，避免被横幅右端压住
+        float y = -PagePad - BannerTopOffset();
         y = SpawnChapterSection(c1, y);
         if (c2 <= totalCh) y = SpawnChapterSection(c2, y);
         y -= BottomBarReserve;
@@ -380,7 +406,8 @@ public class AdventureLogCodexPanel
         SetPageTitle("佣兵图鉴");
         SetPageLabel("");
 
-        float y = -PagePad;
+        // 2026-10-23 主人拍板：横幅常显后，首行章节头向下让出横幅高度，避免被横幅右端压住
+        float y = -PagePad - BannerTopOffset();
         for (int r = 0; r < MercPageNames.Length; r++)
             y = SpawnMercSection((MercRosterDefs.MercRarity)r, MercPageNames[r], y);
         y -= BottomBarReserve;
@@ -485,7 +512,7 @@ public class AdventureLogCodexPanel
         tr.offsetMax = Vector2.zero;
         var tx = tGo.AddComponent<Text>();
         tx.font = GameFonts.GetChinese();
-        tx.fontSize = 20;
+        tx.fontSize = SectionHeaderFontSize; // 2026-10-23 主人拍板：20 → 32
         tx.alignment = TextAnchor.MiddleCenter;
         tx.color = Color.white;
         tx.text = text ?? "";
@@ -675,8 +702,9 @@ public class AdventureLogCodexPanel
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
             // 2026-09-18 用户反馈：16px 红点太小不明显，加大到 28 并压进角内
+            // 2026-10-23 主人拍板：角标随运行时元素同比例放大 28 → 36
             rt.anchoredPosition = new Vector2(-4f, -4f);
-            rt.sizeDelta = new Vector2(28f, 28f);
+            rt.sizeDelta = new Vector2(RedDotSize, RedDotSize);
             var img = go.GetComponent<Image>();
             img.sprite = RedDot.Sprite;
             img.color = Color.white;
@@ -757,7 +785,7 @@ public class AdventureLogCodexPanel
         var rt = (RectTransform)go.transform;
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.anchoredPosition = pos;
-        rt.sizeDelta = new Vector2(40f, 32f);
+        rt.sizeDelta = TinyBtnSize; // 2026-10-23 主人拍板：40×32 → 56×44
         go.GetComponent<Image>().color = new Color(0.4f, 0.28f, 0.18f, 0.95f);
         var tGo = new GameObject("T", typeof(RectTransform));
         tGo.transform.SetParent(go.transform, false);
@@ -767,7 +795,7 @@ public class AdventureLogCodexPanel
         tr.offsetMin = tr.offsetMax = Vector2.zero;
         var tx = tGo.AddComponent<Text>();
         tx.font = GameFonts.GetChinese();
-        tx.fontSize = 20;
+        tx.fontSize = TinyBtnFontSize; // 2026-10-23 主人拍板：20 → 28
         tx.alignment = TextAnchor.MiddleCenter;
         tx.color = Color.white;
         tx.text = label;

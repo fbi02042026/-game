@@ -263,6 +263,14 @@ public class SaveData
     public List<IntIdEntry> clearedChapterEntries = new List<IntIdEntry>();
     [NonSerialized] public HashSet<int> clearedChapterIds = new HashSet<int>();
     /// <summary>
+    /// 【2026-10-24 主人拍板「上一章该难度没通，下一章该难度灰锁」】按难度记章节通关。
+    /// key 格式 "章_难度"（如 "3_1" = 第 3 章在困难难度下通关）；读写只走
+    /// <see cref="MarkChapterClearedAtDiff"/> / <see cref="HasClearedChapterAtDiff"/>，不裸碰集合。
+    /// 普通(0)难度不记——普通推进沿用 clearedChapterIds / ChapterRouteTable 旧口径。
+    /// </summary>
+    public List<StringIdEntry> clearedChapterDiffEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> clearedChapterDiffKeys = new HashSet<string>();
+    /// <summary>
     /// 是否在困难（或更高）难度下通关过第 8 章。2026-09-17：**噩梦难度的唯一解锁条件**。
     /// 由 <see cref="MarkChapterCleared(int, int)"/> 在通关第 8 章且难度 &gt;= 1 时置 true。
     /// 旧存档默认 false —— 已通关的玩家重打一次困难第 8 章即可开启噩梦。
@@ -370,6 +378,15 @@ public class SaveData
     public int respecCount = 0;
     /// <summary>背包已解锁行数，默认 3（与 GameConfig 默认值保持一致）。</summary>
     public int backpackRows = 3;
+
+    /// <summary>
+    /// 【2026-10-23 主人拍板】背包锁格钻石解锁：已用钻石单独解锁的格子索引集合。
+    /// index = gridY * 该网格逻辑列数 + gridX（角色页 8 列网格 = gridY*8 + gridX），
+    /// 判定唯一出口见 GameConfig.IsBackpackCellUnlocked。
+    /// List&lt;int&gt; 是 JsonUtility 原生支持类型，不需要 entry 桥接；旧档为 null 视为空集。
+    /// 独立于天赋：洗点不回收（格子解锁 = 行解锁 R_BAG OR 单格钻石解锁）。
+    /// </summary>
+    public List<int> backpackUnlockedCells;
 
     // === 新手引导进度（2026-09-21 从 PlayerPrefs 迁入云存档）===
     /// <summary>首次软引导游标：下一个要跑的步骤下标（= 已完成步骤数）；7 = FirstRunGuide.GuideStep.Done，已走完。</summary>
@@ -680,6 +697,7 @@ public class SaveData
         }
         clearedStages = ToIdSet(clearedStageEntries);
         chestClaimedStages = ToIdSet(chestClaimedStageEntries);
+        clearedChapterDiffKeys = ToIdSet(clearedChapterDiffEntries);
 
         mainQuestDone = ToIdSet(mainQuestDoneEntries);
 
@@ -1089,6 +1107,25 @@ public class SaveData
         return clearedChapterIds != null && chapter > 0 && clearedChapterIds.Contains(chapter);
     }
 
+    /// <summary>
+    /// 按难度记章节通关（2026-10-24 主人拍板「难度逐章解锁」）。difficulty 传 0（普通）直接忽略——
+    /// 普通推进沿用 clearedChapterIds 旧口径，不双记账。
+    /// </summary>
+    public void MarkChapterClearedAtDiff(int chapter, int difficulty)
+    {
+        if (chapter <= 0 || difficulty <= 0) return;
+        clearedChapterDiffKeys ??= new HashSet<string>();
+        if (clearedChapterDiffKeys.Add(chapter + "_" + difficulty))
+            clearedChapterDiffEntries = FromIdSet(clearedChapterDiffKeys);
+    }
+
+    /// <summary>该章是否在该难度下通关过（2026-10-24 难度逐章解锁用）。</summary>
+    public bool HasClearedChapterAtDiff(int chapter, int difficulty)
+    {
+        if (chapter <= 0 || difficulty <= 0) return false;
+        return clearedChapterDiffKeys != null && clearedChapterDiffKeys.Contains(chapter + "_" + difficulty);
+    }
+
     // ── 支线岛存档（2026-10-23 合并方案，批 S1）──
 
     /// <summary>标记支线岛通关（岛 id 见 SideIslandDefs；幂等，重复标记无副作用）。双写 List + HashSet；
@@ -1355,6 +1392,7 @@ public class SaveData
 
         clearedStageEntries = FromIdSet(clearedStages);
         chestClaimedStageEntries = FromIdSet(chestClaimedStages);
+        clearedChapterDiffEntries = FromIdSet(clearedChapterDiffKeys);
 
         mainQuestDoneEntries = FromIdSet(mainQuestDone);
 

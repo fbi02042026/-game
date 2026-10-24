@@ -308,9 +308,40 @@ public static class AdventureLogAchievements
         SetProgressAtLeast("merc_recruited", 1);
     }
 
+    /// <summary>
+    /// 【2026-10-24 主人拍板「商店未开启」】金币消费累计唯一出口（S005 ≥1000 / S010 ≥3000 喂食口）。
+    /// 口径：**金币消费**（商店 + 酒馆招募普通佣兵）——商城按钮 2026-10-15 起隐藏（GuildHallUI.HideUnfinishedHallButtons），
+    /// 只算商店这两条永远够不着，故把当前唯一活跃的金币出口（酒馆招募）一并计入。
+    /// 喂食点：Systems/ShopSystem.Buy（商店扣费结算）与 UI/MercenaryRecruitPopupUI.Actions.TryHireOffer（招募金币扣费）。
+    /// 局内抽奖币池（战斗内金币镜像，出局清零）不算——那是另一套账（铁律 33）。
+    /// </summary>
+    public static void OnShopGoldSpent(long amount)
+    {
+        if (amount <= 0) return;
+        AddProgress(AdventureLogCatalog.ProgressShopSpend,
+            (int)System.Math.Min(amount, int.MaxValue), evaluate: false);
+    }
+
+    /// <summary>
+    /// 【2026-10-24 主人拍板「钩子肯定需要」】佣兵参战计数喂食口（V2.0 落地清单 N-1 欠账）：
+    /// S006 米娅(H005) / S007 布罗克(H007) / S008 路加(H011) 的「累计参战 10 次」条件。
+    /// 唯一出口：两条入场路径（常规肉鸽局 Systems/RunDraftDirector.RecruitMerc 入队、
+    /// 城镇酒馆旧路径 Managers/BattleManager.SpawnMercenaries）都调这里，别处不许直接写进度键。
+    /// </summary>
+    public static void OnMercBattled(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return;
+        string resolved = MercRosterDefs.ResolveHireId(hireId) ?? hireId;
+        AddProgress(AdventureLogCatalog.MercBattleKey(resolved), 1, evaluate: false);
+    }
+
     public static void OnLaodunBattled()
     {
         AddProgress(ProgressLaodunBattles, 1);
+        // 【2026-10-24 主人拍板「钩子肯定需要」】S015「老盾的盾纹（好感度达到 20）」喂食口：
+        // NpcLaoDun 羁绊此前 0 来源、S015 永锁。口径：与老盾并肩每打一场好感 +1（与参战计数同源同拍，
+        // 20 场解锁），语义 = 「一起打出来的交情」。若主人要改来源（如酒馆互动）只改这里。
+        StoryProgress.AddBond(StoryProgress.NpcLaoDun, 1);
     }
 
     public static void OnRunGoldPeak(long gold)

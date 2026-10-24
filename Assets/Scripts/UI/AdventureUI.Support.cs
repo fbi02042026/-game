@@ -79,11 +79,19 @@ public partial class AdventureUI
         if (diff <= 0) return true;
         var data = SaveSystem.Instance?.Data;
         if (data == null) return false;
+        // 2026-10-23 主人拍板：困难=通关第一章、噩梦=通关第三章（统一按通关章节数，
+        // 覆盖 2026-09-17「困难通关第 8 章开噩梦」旧规；SaveData.hardCleared 从此只写不读）
         if (diff == 1) return GetClearedChapterCount() >= GameConfig.DIFF_HARD_NEED_CLEARS;
-        // 噩梦：在困难（及以上）难度下通关过第 8 章
-        if (diff == 2) return data.hardCleared;
+        if (diff == 2) return GetClearedChapterCount() >= GameConfig.DIFF_NIGHTMARE_NEED_CLEARS;
         return false;
     }
+
+    /// <summary>
+    /// 主线难度锁定提示（2026-10-23 主人拍板：困难=通关第一章开启、噩梦=通关第三章开启）。
+    /// OnSelectDiff / OnStartBattle 两处共用这一个出口，不许各写一份文案。
+    /// </summary>
+    string DiffLockHint(int idx)
+        => idx >= 2 ? "通关第三章后开启噩梦" : $"通关第一章后开启{DiffLabel(idx)}";
 
     /// <summary>
     /// 难度解锁按模式分流（2026-10-23 主人拍板）：活动副本（金币/徽记）按「本标签已通难度」

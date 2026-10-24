@@ -32,7 +32,7 @@ public static class SoftCopyrightAutoCapture
     {
         IsEnabled = true;
         EditorUtility.DisplayDialog("软著自动截图",
-            "已开启。本期只自动截文档「必需」项（18 张，含开机健康忠告）。\n\n进入 Play 后正常玩游戏；\n识别到界面会保存到 Docs/软著附图/。\n\n开机健康忠告约 3 秒，请不要立刻点掉。\n登录页先点「清除存档」。Boss 关、冒险日志、角色、酒馆各停一下。",
+            "已开启。本期只自动截文档「必需」项（18 张，含开机健康忠告）。\n\n进入 Play 后正常玩游戏；\n识别到界面会保存到 Docs/软著附图/。\n\n开机健康忠告约 3 秒，请不要立刻点掉。\nBoss 关、冒险日志、角色、酒馆各停一下。",
             "知道了");
     }
 

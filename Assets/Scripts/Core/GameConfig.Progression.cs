@@ -47,6 +47,9 @@ public static partial class GameConfig
     /// <summary>背包行数上限（2026-09-29：默认 3 行 + 天赋 R_BAG 三级各 1 行 = **6 行 = 24 格**）。
     /// 底层网格按此上限分配；实际可用行数受 SaveData.backpackRows / 天赋 R_BAG 钳制到该上限。</summary>
     public const int BACKPACK_HEIGHT_MAX = 6;
+    /// <summary>【2026-10-23 主人拍板】单格钻石解锁价格（**唯一出处**）：角色页点击锁格弹确认框，
+    /// 确认后扣此数钻石解锁该格；钻石不足 toast「钻石不足」、格子保持锁定（fail closed）。</summary>
+    public const int BACKPACK_CELL_UNLOCK_DIAMOND = 5;
     /// <summary>每章10关，最后一关是BOSS。
     /// ⚠️ 2026-10-23 关卡结构重构（批 B1）后，「一局打几关」的口径已改走
     /// <see cref="STAGES_PER_GRAND"/>（每大关 5 小关）；本常量只保留给仍按「章」计数的存量引用
@@ -90,5 +93,17 @@ public static partial class GameConfig
     public const int AD_SLOT_STAMINA_DIAMOND = 15;
     /// <summary>钻石定价：顶栏金币补给一次（金币 +ResourceAdRewards.GoldPerAd）。2026-09-20 钻石经济调整：20→10。</summary>
     public const int AD_SLOT_GOLD_DIAMOND = 10;
+
+    /// <summary>
+    /// 钻石定价：战斗内复活一次。【2026-10-24 主人拍板「复活先接上，用钻石复活」】
+    /// 先按扣钻石上线，后期替换为激励视频：定价族与 ResourceAdRewards 两个广告位同列，
+    /// 换广告时只动 BattleManager.TryReviveHeroByDiamond 的扣费入口（见其注释），本常量转作广告版价值锚点。
+    /// </summary>
+    public const int AD_SLOT_REVIVE_DIAMOND = 10;
+
+    /// <summary>
+    /// 复活时恢复的生命比例（0.5 = 半血原地复活）。【2026-10-24 主人拍板】想调手感只改这一个数。
+    /// </summary>
+    public const float REVIVE_HP_RATIO = 0.5f;
 
 }
