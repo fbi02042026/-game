@@ -238,13 +238,16 @@ public partial class MercObtainPopupUI : MonoBehaviour
         if (crit <= 1.5f) crit *= 100f;
         SetText(_attrCrit, "Panel/you/AttrPanel/AttrCritRoot/AttrCrit", crit.ToString("0.#") + "%");
 
-        // 5) 星星（按佣兵星级；预制体只摆了 3 个满星节点）
-        int star = Mathf.Clamp(Mathf.Max(1, card.Star), 1, MaxStarNodes);
-        if (card.Star > MaxStarNodes)
-            Debug.LogError("[MercObtainPopup] 星级 " + card.Star + " 超出预制体满星节点数 3——需主人补 满星4/满星5（结构变更待批准）");
+        // 5) 星星（预制体只摆了 3 个满星节点，正好对上局外星上限 MaxOutStar=3）。
+        //    【2026-10-24 主人拍板】星级显示统一 = 已拥有的局外星级（MercStarSystem.OutStarOf，
+        //    唯一出口）：没升过星的一律 0 星（整排不亮）；招募候选 / 战斗头像详情 / 复活框同口径。
+        //    局内 star（1~5）体系不动 —— card.Star 是局内战力口径，不再用于显示。
+        int outStar = MercStarSystem.OutStarOf(hireId);
+        if (outStar < 0) outStar = 0;   // 非花名册（Fill 上方已保证能查到 def，理论到不了）按 0 星显示
+        int star = Mathf.Clamp(outStar, 0, MaxStarNodes);
         for (int i = 0; i < _stars.Length; i++)
             if (_stars[i] != null) _stars[i].SetActive(i < star);
-        CenterActiveStars(star);
+        if (star > 0) CenterActiveStars(star);   // 0 星全灭，无需居中
 
         // 6) 技能：没有主动技就空着（主人拍板）；有则填名字/简介/图标
         FillSkill(def.ActiveSkillId);

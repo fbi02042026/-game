@@ -19,7 +19,10 @@ using UnityEngine.UI;
 ///   魔攻/魔防 ×(1+7%)（相对左侧显示值再乘一档）；生命/速度/暴击两侧同值（不吃加成）。
 ///   满星后右侧 = 当前值、升阶按钮置灰。
 /// 升阶消耗（2026-10-23 主人拍板二改）：数字挪到升阶按钮 Label（×N，传奇=钻石），icon 随之换钻石图；
-///   钱够 Label 白色、不够红色、满星禁用压灰。徽记行 = {档位}徽记\n{需}/{有}（唯一出口 MercStarSystem）。
+///   【2026-10-24 主人拍板三改】Label 能升阶=白、不能升阶=红（CanStarUp 唯一出口）、满星禁用压灰，另加阴影；
+///   icon 按币种主动设图（传奇=钻石、普通/稀有=金币，都走路径加载）—— 预制体 icon 挂图已断链，不再依赖。
+/// 徽记行 = {档位}徽记\n{需}/{有}（唯一出口 MercStarSystem）；【2026-10-24 主人拍板】徽记是升阶必备道具，
+/// 未满星常显（普通/稀有升 1 星消耗 0 也显示 0/{有}），满星才隐藏。
 /// 竖屏适配（2026-10-23）：Panel 800 宽 &gt; 720 逻辑宽 → 整体等比缩放 k=720/800（只动 Panel localScale，
 ///   与开窗缩放动画复合，绝不 stretch、不动子节点）。
 /// 打开动画：Panel 缩放 0.2 → 1.0（主人原话「缩放效果速度慢点 0.2的倍数吧」）。
@@ -44,10 +47,14 @@ public class MercAscendUI : MonoBehaviour
     /// <summary>竖屏适配（2026-10-23）：Panel 宽超 720 逻辑宽时整体等比缩放系数，Open 时按预制体 sizeDelta 现算。</summary>
     float _fitK = 1f;
 
-    /// <summary>升阶按钮消耗数字颜色（2026-10-24 主人拍板：钱够=暖金、不够=红；满星禁用压灰）。暖金与 GuildHallUI 体力飘字同款。</summary>
-    static readonly Color CostOkColor = new Color(1f, 0.78f, 0.30f, 1f);
+    /// <summary>升阶按钮消耗数字颜色（2026-10-24 主人拍板二改：能升阶=白、不能升阶=红；满星禁用压灰）。
+    /// 「能不能升阶」唯一出口 = MercStarSystem.CanStarUp（碎片/徽记/资金一体预检），不另写第二份判断。</summary>
+    static readonly Color CostOkColor = Color.white;
     static readonly Color CostShortColor = new Color(1f, 0.4f, 0.4f, 1f);
     static readonly Color CostDimColor = new Color(0.5f, 0.5f, 0.5f, 1f);
+
+    /// <summary>满星时升阶按钮底图灰显色（与卡内升阶钮 MercDrawPoolUI.AscendDimColor 同灰值，2026-10-24 主人拍板）。</summary>
+    static readonly Color StarUpDimColor = new Color(0.5f, 0.5f, 0.5f, 1f);
 
     /// <summary>钻石图标（传奇佣兵升阶扣钻石时替换金币图标；Resources 路径已核实存在）。</summary>
     const string DiamondIconPath = "Art/UI/Icons/Common/icon_diamond_blue";
@@ -79,9 +86,10 @@ public class MercAscendUI : MonoBehaviour
     // 升阶按钮消耗（2026-10-23 主人拍板：数字挪到 shengjieButton 上 Label=×N，icon=金币/钻石图）
     Text _costLabel;
     Image _costIcon;
-    Sprite _costIconBase;      // 预制体原金币图标（传奇切钻石后，切回金币时还原）
 
     Button _starUpBtn;
+    Image _starUpImg;          // 升阶按钮底图（满星灰显只调它的颜色，2026-10-24 主人拍板）
+    Color _starUpImgBase;      // 预制体 authored 底色（非满星还原用，不写死白色）
     Button _cancelBtn;
     Button _dimBtn;
 
@@ -223,11 +231,13 @@ public class MercAscendUI : MonoBehaviour
         _starUpBtn = BindButton(p, "shengjieButton", OnStarUpClick, "升阶");
         if (_starUpBtn != null)
         {
+            _starUpImg = _starUpBtn.GetComponent<Image>();
+            if (_starUpImg != null) _starUpImgBase = _starUpImg.color;   // 记 authored 底色，灰显还原用
             _costLabel = _starUpBtn.transform.Find("Label")?.GetComponent<Text>();
             if (_costLabel == null) Debug.LogError("[MercAscend] 缺节点 shengjieButton/Label（消耗数字 Text）");
+            else EnsureCostLabelShadow(_costLabel);   // 2026-10-24 主人拍板：消耗数字加阴影（字号/排版一个值不动）
             _costIcon = _starUpBtn.transform.Find("icon")?.GetComponent<Image>();
             if (_costIcon == null) Debug.LogError("[MercAscend] 缺节点 shengjieButton/icon（金币/钻石图标 Image）");
-            else _costIconBase = _costIcon.sprite;
         }
         _cancelBtn = BindButton(p, "tihaunButton", Close, "取消");
         _dimBtn = _root != null ? BindButton(_root.transform, "Dim", Close, "Dim") : null;
@@ -528,27 +538,39 @@ public class MercAscendUI : MonoBehaviour
         if (_costLabel != null)
         {
             _costLabel.text = "×" + cost;
+            // 【2026-10-24 主人拍板二改】能升阶=白、不能升阶=红（碎片/徽记/资金一体预检走 CanStarUp 唯一出口）；
+            // 满星禁用压灰不变。只换颜色，字号一个值不动（铁律 32）。
             _costLabel.color = maxed ? CostDimColor
-                : MercStarSystem.FundEnough(def.Rarity, cur + 1, out _) ? CostOkColor : CostShortColor;
+                : MercStarSystem.CanStarUp(_hireId, out _) ? CostOkColor : CostShortColor;
         }
         if (_costIcon != null)
         {
+            // 【2026-10-24】icon 按消耗币种主动设图：传奇=钻石、普通/稀有=金币。
+            // 根因：预制体 authored 的 icon 挂图 guid 已断链（团结重导 56 字符），金币档不能再依赖预制体残留引用
+            // —— 这正是「传奇有图标、普通佣兵进阶没图标」的原因；金币/钻石两条路统一走路径加载（铁律 30 口径）。
             if (legend && !maxed)
             {
                 var dia = Resources.Load<Sprite>(DiamondIconPath);
                 if (dia != null) _costIcon.sprite = dia;
                 else Debug.LogError("[MercAscend] 钻石图标缺失：Resources/" + DiamondIconPath + "（不兜底）");
             }
-            else _costIcon.sprite = _costIconBase;   // 切回金币（防上次展示传奇留下的钻石图）
+            else
+            {
+                var gold = CommonIconSprites.Load("icon_gold");
+                if (gold != null) _costIcon.sprite = gold;
+                else Debug.LogError("[MercAscend] 金币图标缺失：CommonIconSprites icon_gold（不兜底）");
+            }
         }
 
-        // ---- 徽记行（2026-10-23 主人拍板）：两行「{低级/中级/高级}徽记\n{需}/{有}」；
-        // 0 消耗或满星 → 整行隐藏。图标 = MercGrowSprites 按职业+档位取图，缺图报错不兜底。
-        // 档位名唯一出口 = MercStarSystem.BadgeTierDisplayName（不许在 UI 抄映射）。
+        // ---- 徽记行（2026-10-23 主人拍板）：两行「{低级/中级/高级}徽记\n{需}/{有}」。
+        // 【2026-10-24 主人拍板】徽记 = 升阶必备道具，未满星就常显（废除旧「0 消耗整行隐藏」——
+        // 普通/稀有升 1 星徽记消耗为 0，整行藏掉导致普通佣兵进阶看不到徽记）；
+        // need=0 照常显示「低级徽记 0/{有}」。满星仍隐藏（升阶已不存在）。
+        // 图标 = MercGrowSprites 按职业+档位取图，缺图报错不兜底；档位名唯一出口 = MercStarSystem.BadgeTierDisplayName。
         if (_badgeRow != null)
         {
             int badgeNeed = maxed ? 0 : MercStarDefs.BadgeCost(def.Rarity, cur + 1);
-            if (badgeNeed <= 0)
+            if (maxed)
             {
                 _badgeRow.SetActive(false);
             }
@@ -569,8 +591,11 @@ public class MercAscendUI : MonoBehaviour
             }
         }
 
-        // ---- 升阶按钮：满星置灰 ----
-        if (_starUpBtn != null) _starUpBtn.interactable = !maxed;
+        // ---- 升阶按钮：满星灰显 + 点击提示已满星（2026-10-24 主人拍板）----
+        // 灰显只调底图颜色（与卡内升阶钮 MercDrawPoolUI.AscendDimColor 同灰值 0.5）；
+        // interactable 保持 true —— 设 false 会吞掉点击，OnStarUpClick 里的满星 Toast 就弹不出来了。
+        if (_starUpBtn != null && _starUpImg != null)
+            _starUpImg.color = maxed ? StarUpDimColor : _starUpImgBase;
 
         // ---- 升阶成功节点收起态（2026-10-24）：每次填充都重置，防 DDOL 复用残留；播放只由 PlaySuccessFx 触发 ----
         if (_popCo != null) { StopCoroutine(_popCo); _popCo = null; }
@@ -668,8 +693,23 @@ public class MercAscendUI : MonoBehaviour
 
     void Toast(string s) => UIManager.Instance?.ShowToast(s, true);
 
+    /// <summary>
+    /// 消耗数字加阴影（2026-10-24 主人拍板）：只补 Shadow 组件，字号/排版/rect 一个值不动（铁律 32）。
+    /// 预制体里已有 Shadow 的只有 tihaunButton/Label；shengjieButton/Label 没有 → 缺才补、有就不碰 authored 值。
+    /// </summary>
+    static void EnsureCostLabelShadow(Text label)
+    {
+        var sh = label.GetComponent<Shadow>();
+        if (sh != null) return;
+        sh = label.gameObject.AddComponent<Shadow>();
+        sh.effectColor = new Color(0f, 0f, 0f, 0.55f);
+        sh.effectDistance = new Vector2(1.5f, -1.5f);
+        sh.useGraphicAlpha = true;
+    }
+
     // 【2026-10-23 主人拍板】资金预检本体已挪到 MercStarSystem.FundEnough（与扣费同事务的唯一出口），
-    // 本类不再有自己的实现，Fill 的消耗数字变色直接调 MercStarSystem.FundEnough，规则不抄第二遍。
+    // 本类不再有自己的实现；Fill 的消耗数字变色（2026-10-24 二改）转调 MercStarSystem.CanStarUp
+    //（碎片/徽记/资金一体预检，内部同走 FundEnough），「能不能升阶」判断不抄第二遍。
 
     // ============================================================
     // 打开缩放动画（Panel 0.2 → 1.0，ease-out；只动 Panel 的 localScale）

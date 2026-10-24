@@ -228,7 +228,38 @@ public partial class BattleUI : MonoBehaviour
         // 【2026-10-22 主人拍板】石像事件（圣者/祭司）：绑现成 buff 节点（恢复/诅咒子节点），
         // 平时 buff 整体隐藏；FindDeepChildIgnoreCase 模式同源（BattleStatueEventUI 内自带深搜，含未激活节点）
         BattleStatueEventUI.EnsureOn(transform);
+        // 2026-10-24 主人拍板：战斗内网格背包改名「作战背包」，与角色页「随身仓库」区分，避免两个背包混为一谈。
+        // 真源 = 预制体 BackpackPanel 下的 Text 节点 BackpackTitle / BackpackTitle (1)；运行时覆盖文案，不改预制体文件。
+        EnsureBattleBackpackTitleLabel();
         ReportBindingStatus();
+    }
+
+    /// <summary>
+    /// 【2026-10-24 主人拍板】战斗内网格背包标题改名「作战背包」：与角色页「随身仓库」区分，避免两个背包混为一谈。
+    /// 节点名可能是 BackpackTitle 或 BackpackTitle (1)（两种都认）；只改<b>激活</b>节点，跳过隐藏副本。
+    /// 缺节点不报错（fail soft，标题缺了只是少个名字，不影响玩法）。
+    /// </summary>
+    void EnsureBattleBackpackTitleLabel()
+    {
+        Transform backpack = FindDeepChildIgnoreCase(transform, "BackpackPanel")
+            ?? FindDeepChildIgnoreCase(transform, "Backpack");
+        if (backpack == null) return;
+        SetBackpackTitleRecursive(backpack);
+    }
+
+    static void SetBackpackTitleRecursive(Transform root)
+    {
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var c = root.GetChild(i);
+            if (c.name.IndexOf("BackpackTitle", System.StringComparison.OrdinalIgnoreCase) >= 0
+                && c.gameObject.activeInHierarchy)
+            {
+                var t = c.GetComponent<Text>();
+                if (t != null) t.text = "作战背包";
+            }
+            SetBackpackTitleRecursive(c);
+        }
     }
 
     /// <summary>

@@ -929,7 +929,7 @@ public class AutoGameInitializer : MonoBehaviour
 
         AddIfMissing<PoolManager>(root);
         AddIfMissing<ChapterManager>(root);
-        AddIfMissing<GridBackpackSystem>(root);
+        AddIfMissing<BattleBagSystem>(root);
         AddIfMissing<UIManager>(root);
         AddIfMissing<DamageTextSystem>(root);
         AddIfMissing<BattleVFXSystem>(root);

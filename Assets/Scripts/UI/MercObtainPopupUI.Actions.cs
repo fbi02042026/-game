@@ -89,6 +89,9 @@ public partial class MercObtainPopupUI : MonoBehaviour
     /// 【2026-10-22 主人拍板】「进阶」钮显隐：仅该佣兵已拥有（SaveData.IsMercUnlocked）才显示；
     /// 未拥有的预览态（酒馆招募候选卡）隐藏 —— 与主人「未拥有的佣兵不显示」口径一致。
     /// Fill 每次填充佣兵数据时调用（四个入口都经 Fill）。
+    /// <para>【2026-10-24 主人拍板】可升星 = 能真正升（未满星且碎片/徽记/资金够，唯一出口
+    /// MercStarSystem.CanStarUp，内部自含已拥有校验）：进阶节点挂发光材质球 + 缓慢缩放呼吸动效；
+    /// 不可升星两者全无（材质摘掉、动效停、缩放还原 authored）。</para>
     /// </summary>
     void ApplyAscendButton()
     {
@@ -96,6 +99,50 @@ public partial class MercObtainPopupUI : MonoBehaviour
         var data = SaveSystem.Instance?.Data;
         bool owned = data != null && data.IsMercUnlocked(_curHireId);
         _ascendBtn.gameObject.SetActive(owned);
+        bool canStar = MercStarSystem.CanStarUp(_curHireId, out _);
+        ApplyAscendGlow(canStar);
+    }
+
+    /// <summary>
+    /// 进阶节点材质球 + 呼吸动效开关（2026-10-24 主人拍板）。
+    /// 材质球 = Resources/Materials/btn18进阶（与底牌 btn09/btn10 同族、同加载方式；
+    /// 预制体 authored 的材质引用已断链，靠不住）；动效只动进阶节点自身 localScale
+    /// （在 authored 值基础上呼吸，不碰 sizeDelta/anchoredPosition，铁律 32），
+    /// unscaled 时间防 timescale=0 卡死（弹窗动画既有口径）。
+    /// </summary>
+    void ApplyAscendGlow(bool on)
+    {
+        if (_ascendImg == null || _ascendBtn == null) return;
+        if (!(_ascendBtn.transform is RectTransform rt)) return;
+        if (on)
+        {
+            if (_ascendGlowMat == null)
+            {
+                _ascendGlowMat = Resources.Load<Material>(AscendGlowMatPath);
+                if (_ascendGlowMat == null)
+                    Debug.LogError("[MercObtainPopup] 进阶流光材质缺失：Resources/" + AscendGlowMatPath + "（不兜底）");
+            }
+            if (_ascendGlowMat != null) _ascendImg.material = _ascendGlowMat;
+            if (_ascendPulseCo == null) _ascendPulseCo = StartCoroutine(CoAscendPulse(rt));
+        }
+        else
+        {
+            _ascendImg.material = null;
+            if (_ascendPulseCo != null) { StopCoroutine(_ascendPulseCo); _ascendPulseCo = null; }
+            rt.localScale = _ascendBaseScale;
+        }
+    }
+
+    /// <summary>缓慢呼吸：authored 缩放 ×（1.0 → 1.06 → 1.0）正弦往复，unscaled 时间。</summary>
+    IEnumerator CoAscendPulse(RectTransform rt)
+    {
+        while (true)
+        {
+            float t = (Time.unscaledTime % AscendPulsePeriod) / AscendPulsePeriod;
+            float k = 1f + AscendPulseAmplitude * (0.5f - 0.5f * Mathf.Cos(t * Mathf.PI * 2f));
+            rt.localScale = _ascendBaseScale * k;
+            yield return null;
+        }
     }
 
     /// <summary>
@@ -151,6 +198,7 @@ public partial class MercObtainPopupUI : MonoBehaviour
         _closeReq = true;
         if (_recruitMode) ExitRecruitMode();   // 还原按钮/标题文案（确认/替换/获得佣兵），下次普通入口不串味
         if (_fallenMode) ExitFallenMode();     // 同上：还原「复活/取消」双钮，下次普通入口不串味
+        ApplyAscendGlow(false);                // 【2026-10-24】关窗摘发光材质、停呼吸动效、缩放还原（下次 Fill 重评）
         if (_root != null) _root.SetActive(false);
         var cb = _onClosed;
         _onClosed = null;
@@ -195,7 +243,8 @@ public partial class MercObtainPopupUI : MonoBehaviour
             Id = offer.mercId,
             HireId = offer.hireId,
             MercLevel = Mathf.Max(1, offer.level),
-            // 预制体只摆了 3 个满星节点，超出按 3 显示（结构变更待主人批准，不静默加节点）
+            // 【2026-10-24 主人拍板】星级显示统一由 Fill 按 MercStarSystem.OutStarOf 取（0 星默认），
+            // 这里的 Star 不再参与显示；沿用 offer.star 只是把卡数据填完整。
             Star = Mathf.Clamp(offer.star < 1 ? 1 : offer.star, 1, MaxStarNodes)
         };
         if (!ui.Fill(card)) { ui.Close(); return; }

@@ -5,7 +5,7 @@ using System.Linq;
 /// <summary>
 /// 格子背包系统：支持装备占多格，按槽位穿戴，同部位不重复
 /// </summary>
-public class GridBackpackSystem : Singleton<GridBackpackSystem>
+public class BattleBagSystem : Singleton<BattleBagSystem>
 {
     private bool[,] _grid = new bool[GameConfig.BACKPACK_WIDTH, GameConfig.BACKPACK_HEIGHT_MAX];
     // 按槽位索引的装备字典，key为EquipSlotType
@@ -719,7 +719,7 @@ public class GridBackpackSystem : Singleton<GridBackpackSystem>
         // #region agent log
         if (WeaponLoadoutRules.IsLoadoutItem(item.equip))
         {
-            DebugAgentLog.Log("H8", "GridBackpackSystem.EquipItem", "weapon_equip",
+            DebugAgentLog.Log("H8", "BattleBagSystem.EquipItem", "weapon_equip",
                 $"{{\"wearSlot\":\"{slot}\",\"weaponHand\":\"{item.equip.weaponHand}\",\"rigAttack\":\"{(rig.IsValid ? rig.AttackSlot.ToString() : "invalid")}\",\"rigSecondary\":\"{(rig.IsValid ? rig.SecondarySlot.ToString() : "invalid")}\",\"tpl\":\"{item.equip.templateId}\"}}");
         }
         // #endregion

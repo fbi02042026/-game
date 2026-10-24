@@ -32,11 +32,12 @@ public partial class AdventureUI
         {
             if (activity)
             {
-                // 【2026-10-23 主人拍板「活动副本一拆二」】金币=周一三五固定金；徽记=周二四每日 2 次
+                // 【2026-10-23 拍板「活动副本一拆二」+ 2026-10-24 主人拍板】
+                // 金币=周一/三/六；徽记=周二/四/日；每日各 2 次、每次 10 体力
                 int gold = GameConfig.GetGoldDungeonClearGold(_selectedChapter, _selectedDiff);
                 stageDescLabel.text = _selectedActivityBadge
-                    ? "通关获得随机职业徽记。每周二、四开放，每日 2 次。"
-                    : $"怪物只掉金币。通关获得 {gold} 金币。每周一、三、五开放。";
+                    ? "通关获得随机职业徽记。每周二、四、日开放，每日 2 次。"
+                    : $"怪物只掉金币。通关获得 {gold} 金币。每周一、三、六开放，每日 2 次。";
             }
             else if (endless)
             {
@@ -54,7 +55,9 @@ public partial class AdventureUI
 
         if (staminaCostLabel != null)
         {
-            string cost = (endless ? StaminaSystem.ENDLESS_RIFT_COST : StaminaSystem.ADVENTURE_COST).ToString();
+            string cost = (endless ? StaminaSystem.ENDLESS_RIFT_COST
+                         : activity ? ActivityDungeonRules.ENTRY_STAMINA_COST
+                         : StaminaSystem.ADVENTURE_COST).ToString();
             string t = staminaCostLabel.text;
             if (!string.IsNullOrEmpty(t) && t.IndexOf("体力", System.StringComparison.Ordinal) >= 0)
             {
@@ -85,18 +88,14 @@ public partial class AdventureUI
 
     /// <summary>
     /// 「剩余次数」栏（DetailPanel/you/Chances）。
-    /// 主线不限；金币副本不限次数（2026-10-23 主人只拍了徽记每日 2 次）；徽记副本显示今日真值 x/2。
+    /// 主线不限；金币/徽记副本每日各 2 次（2026-10-24 主人拍板「都是2次」），显示今日真值 x/2。
     /// </summary>
     string FormatRemainChances(bool playable, bool main, bool activity)
     {
         if (!playable) return "0";
         if (main) return "不限";
         if (activity)
-        {
-            if (_selectedActivityBadge)
-                return $"{BadgeDungeonRules.TriesLeft(SaveSystem.Instance?.Data)}/{BadgeDungeonRules.DAILY_TRIES}";
-            return "不限";
-        }
+            return $"{ActivityDungeonRules.TriesLeft(SaveSystem.Instance?.Data, _selectedActivityBadge)}/{ActivityDungeonRules.DAILY_TRIES}";
         return "0";
     }
     void EnsureStaminaCostIcon()

@@ -66,7 +66,7 @@ public static class WeaponVfxVariant
 
         if (attacker is Hero)
         {
-            var inst = Hero.TryGetEquippedWeaponInstance(GridBackpackSystem.Instance);
+            var inst = Hero.TryGetEquippedWeaponInstance(BattleBagSystem.Instance);
             if (inst == null) return Base;
             if (!string.IsNullOrEmpty(inst.templateId)
                 && TemplateOverride.TryGetValue(inst.templateId, out int pinned))

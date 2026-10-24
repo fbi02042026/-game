@@ -318,60 +318,12 @@ public sealed class FinaleBattleMode : BattleMode
 }
 
 /// <summary>
-/// 徽记副本规则（2026-10-23 主人拍板）：每日 2 次、每周二/四开放（开放日口径 = 主人预制体横条
-/// Info 文案「进阶材料 每周二四开启」）。日键/次数照 <see cref="EndlessRiftRules"/> 模式；
-/// 进本 = 次数 + 体力一起扣（TryConsumeEnter 内含提示）。
-/// </summary>
-public static class BadgeDungeonRules
-{
-    /// <summary>每日进入次数（主人拍板 2 次）。</summary>
-    public const int DAILY_TRIES = 2;
-
-    /// <summary>跨天清零每日次数（照 ResourceAdRewards.EnsureDay 的 dayKey 模式）</summary>
-    public static void EnsureDay(SaveData data)
-    {
-        if (data == null) return;
-        string today = DateTime.UtcNow.ToString("yyyyMMdd");
-        if (data.badgeDungeonDayKey != today)
-        {
-            data.badgeDungeonDayKey = today;
-            data.badgeDungeonTriesToday = 0;
-        }
-    }
-
-    /// <summary>今日剩余进入次数</summary>
-    public static int TriesLeft(SaveData data)
-    {
-        EnsureDay(data);
-        return Mathf.Max(0, DAILY_TRIES - (data?.badgeDungeonTriesToday ?? 0));
-    }
-
-    /// <summary>
-    /// 进本：次数 + 体力一起扣，成功计数落盘。任何一步不满足都返回 false 并弹对应提示。
-    /// </summary>
-    public static bool TryConsumeEnter()
-    {
-        var data = SaveSystem.Instance?.Data;
-        if (data == null) return false;
-        EnsureDay(data);
-        if (data.badgeDungeonTriesToday >= DAILY_TRIES)
-        {
-            GlobalToastUI.Show($"今天的徽记副本次数已用完（{DAILY_TRIES}/{DAILY_TRIES}）", true);
-            return false;
-        }
-        if (!StaminaSystem.TrySpendForAdventure())
-            return false;   // 体力不足：ResourceWallet.TrySpend 内已弹「体力不足」
-        data.badgeDungeonTriesToday++;
-        SaveSystem.Instance?.Save();
-        return true;
-    }
-}
-
-/// <summary>
-/// 活动副本开放日（2026-10-23 主人拍板「金币和徽记副本交替开放」，
-/// 口径 = 主人预制体横条 Info 文案）：金币副本 每周一/三/五开启；徽记副本 每周二/四开启
-/// （周六日两者都关闭）。开放日按<b>本地时间</b>判定（玩家感知的「今天」）；
-/// 次数日键仍走 UTC（与 <see cref="EndlessRiftRules.EnsureDay"/> 同口径）。
+/// 活动副本规则（2026-10-23 主人拍板「活动副本一拆二」+ 2026-10-24 主人拍板
+/// 「金币是1 3 6 徽记是2 4 7 都是2次 每次10体力」）：
+/// 开放日 = 金币副本 每周一/三/六；徽记副本 每周二/四/日（开放日口径 = 主人预制体横条 Info 文案）。
+/// 开放日按<b>本地时间</b>判定（玩家感知的「今天」）；
+/// 次数日键仍走 UTC（照 <see cref="EndlessRiftRules.EnsureDay"/> 口径）。
+/// 金币/徽记每日各 2 次（各自独立计数），进本 = 次数 + 体力一起扣（TryConsumeEnter 内含提示）。
 /// </summary>
 public static class ActivityDungeonRules
 {
@@ -379,23 +331,30 @@ public static class ActivityDungeonRules
     /// 【2026-10-23 主人拍板「现在把活动副本都开启让我测试 等打包的时候再区分」】测试期总闸：
     /// true = 金币/徽记不区分开放日、不看通关第 1 章门槛、三难度全开（难度逐级解锁旁路），
     /// 方便随时进任意副本/难度测试；**正式打包前改回 false** 即恢复全部区分口径（一处改回，全链生效）。
+    /// 注意：每日次数与体力消耗<b>不受</b>总闸影响（照常计）。
     /// </summary>
     public const bool TEST_OPEN_ALL = true;
 
-    /// <summary>金币副本今天是否开放（周一/三/五）。</summary>
+    /// <summary>每日进入次数（2026-10-24 主人拍板「都是2次」，金币/徽记各自独立计数）。</summary>
+    public const int DAILY_TRIES = 2;
+
+    /// <summary>进本体力（2026-10-24 主人拍板「每次10体力」，金币/徽记同价）。</summary>
+    public const int ENTRY_STAMINA_COST = 10;
+
+    /// <summary>金币副本今天是否开放（周一/三/六）。</summary>
     public static bool IsGoldOpenToday()
     {
         if (TEST_OPEN_ALL) return true;   // 测试期总闸：随时可进
         var d = DateTime.Now.DayOfWeek;
-        return d == DayOfWeek.Monday || d == DayOfWeek.Wednesday || d == DayOfWeek.Friday;
+        return d == DayOfWeek.Monday || d == DayOfWeek.Wednesday || d == DayOfWeek.Saturday;
     }
 
-    /// <summary>徽记副本今天是否开放（周二/四）。</summary>
+    /// <summary>徽记副本今天是否开放（周二/四/日）。</summary>
     public static bool IsBadgeOpenToday()
     {
         if (TEST_OPEN_ALL) return true;   // 测试期总闸：随时可进
         var d = DateTime.Now.DayOfWeek;
-        return d == DayOfWeek.Tuesday || d == DayOfWeek.Thursday;
+        return d == DayOfWeek.Tuesday || d == DayOfWeek.Thursday || d == DayOfWeek.Sunday;
     }
 
     // —— 难度逐级解锁（2026-10-23 主人拍板「打通前一难度才开下一难度」）——
@@ -421,6 +380,54 @@ public static class ActivityDungeonRules
             SaveSystem.Instance?.Save();
             Debug.Log($"[ActivityDungeon] 通关记录：活动副本最高难度 → {difficulty}");
         }
+    }
+
+    // —— 每日次数（2026-10-24 主人拍板「都是2次」：金币/徽记各自独立计数，同一套出口）——
+
+    /// <summary>跨天清零每日次数（照 EndlessRiftRules.EnsureDay 的 dayKey 模式）</summary>
+    static void EnsureDay(SaveData data, ref string dayKey, ref int tries)
+    {
+        if (data == null) return;
+        string today = DateTime.UtcNow.ToString("yyyyMMdd");
+        if (dayKey != today)
+        {
+            dayKey = today;
+            tries = 0;
+        }
+    }
+
+    /// <summary>今日剩余进入次数（badge=false 金币 / true 徽记）</summary>
+    public static int TriesLeft(SaveData data, bool badge)
+    {
+        if (data == null) return DAILY_TRIES;
+        if (badge)
+        {
+            EnsureDay(data, ref data.badgeDungeonDayKey, ref data.badgeDungeonTriesToday);
+            return Mathf.Max(0, DAILY_TRIES - data.badgeDungeonTriesToday);
+        }
+        EnsureDay(data, ref data.goldDungeonDayKey, ref data.goldDungeonTriesToday);
+        return Mathf.Max(0, DAILY_TRIES - data.goldDungeonTriesToday);
+    }
+
+    /// <summary>
+    /// 进本：次数 + 体力一起扣（体力 = <see cref="ENTRY_STAMINA_COST"/>），成功计数落盘。
+    /// 任何一步不满足都返回 false 并弹对应提示。
+    /// </summary>
+    public static bool TryConsumeEnter(bool badge)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        if (TriesLeft(data, badge) <= 0)
+        {
+            GlobalToastUI.Show($"今天的{(badge ? "徽记" : "金币")}副本次数已用完（{DAILY_TRIES}/{DAILY_TRIES}）", true);
+            return false;
+        }
+        if (!StaminaSystem.TrySpendForActivityDungeon())
+            return false;   // 体力不足：ResourceWallet.TrySpend 内已弹「体力不足」
+        if (badge) data.badgeDungeonTriesToday++;
+        else data.goldDungeonTriesToday++;
+        SaveSystem.Instance?.Save();
+        return true;
     }
 }
 

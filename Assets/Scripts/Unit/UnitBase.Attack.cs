@@ -319,7 +319,8 @@ public partial class UnitBase
                             return;
                     }
                     ResolveBasicAttackHit(pendingTarget, pendingDamage, pendingCrit, pendingOpening);
-                });
+                },
+                caster: this);
         }
         else
             ResolveBasicAttackHit(target, damage, isCrit, openingHit);

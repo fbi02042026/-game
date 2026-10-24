@@ -35,7 +35,7 @@ public static class SpecialWeapons
 
     public static bool IsTwilightStaffEquipped()
     {
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag == null) return false;
         foreach (var item in bag.GetEquippedItems())
         {
@@ -160,7 +160,7 @@ public static class SpecialWeapons
         data.logMileageGrantedKeys ??= new HashSet<string>();
         if (data.logMileageGrantedKeys.Contains(GrantKey)) return false;
 
-        if (GridBackpackSystem.Instance == null)
+        if (BattleBagSystem.Instance == null)
         {
             Debug.LogWarning("[SpecialWeapons] 背包未就绪，暂缓发放暮火之杖");
             return false;
@@ -169,7 +169,7 @@ public static class SpecialWeapons
         int lv = Hero.Instance != null ? Hero.Instance.level : 1;
         var inst = CreateTwilightStaff(lv);   // requireLevel 已在 CreateTwilightStaff 内钳制，领取必能穿上
         // 2026-09-15：装备不再进背包，直接穿上（换下来的自动分解）
-        if (!GridBackpackSystem.Instance.TryEquipDirect(inst))
+        if (!BattleBagSystem.Instance.TryEquipDirect(inst))
         {
             // 2026-10-11：Toast 里的名字跟装备实际显示名保持一致（带「稀有·」前缀），
             // 写死「暮火之杖」会出现「背包里叫稀有·暮火之杖、Toast 里叫暮火之杖」的错位。

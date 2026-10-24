@@ -156,7 +156,8 @@ public static class AdventureLogMileage
             // 武器名埋在第一行、和后面的说明挤成六行、底边几乎贴确认键。改成分层富文本：
             // ① 武器名单独一行、放大 + 品质蓝（稀有度色唯一出口 RarityPalette，现算 hex，不手抄色值）；
             // ② 随机特性独立一行；③ 空一行；④ 两行补充说明降为灰白，弱化。
-            // 弹窗皮本身的居中 / 行距 1.2 / 标题金色由 StaminaConfirmPopup.ApplyNoticeStyle 统一切（关窗还原）。
+            // 弹窗皮本身的居中 / 行距 1.2 / 标题金色由 StaminaConfirmPopup.ApplyUnifiedTextStyle 统一设
+            // （2026-10-24 全弹窗统一排版，开窗直设、无需关窗还原）。
             string rareHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Get(Rarity.Rare));
             string noticeBody =
                 $"<size=30><color=#{rareHex}>「{SpecialWeapons.InstanceName}」</color></size>\n"

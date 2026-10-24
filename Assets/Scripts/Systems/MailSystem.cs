@@ -114,6 +114,35 @@ public static class MailSystem
                     att.amount = 0;
                     continue;
                 }
+                // 🆕 职业徽记（2026-10-24 主人拍板）：defId 存完整 badge id（badge:{职业}:{档位}），
+                // 走 MercGrowInventory.Add（与徽记副本掉落/每日登录同仓同读 mercGrowItems）。
+                // 缺 defId = 配置错，LogError 不发不吞（铁律 fail closed）。
+                if (att.type == "badge")
+                {
+                    if (string.IsNullOrEmpty(att.defId))
+                        Debug.LogError("[Mail] 徽记附件缺 defId（应为 badge:{职业}:{档位}），本附件未发放");
+                    else
+                    {
+                        MercGrowInventory.Add(att.defId, (int)att.amount);
+                        Debug.Log($"[Mail] 邮件发放徽记 {att.defId} ×{att.amount}");
+                    }
+                    att.amount = 0;
+                    continue;
+                }
+                // 🆕 通用道具（2026-10-24 主人拍板）：进随身仓库 townBagItems（无容量上限），出战斗可见。
+                if (att.type == "item")
+                {
+                    ItemGrantSystem.GrantItem(att.defId ?? att.hireId, (int)att.amount);
+                    att.amount = 0;
+                    continue;
+                }
+                // 🆕 装备（2026-10-24 主人拍板）：进仓库 legacyEquipPool，角色页可见。
+                if (att.type == "equip")
+                {
+                    ItemGrantSystem.GrantEquip(att.defId ?? att.hireId, att.rarity, 0);
+                    att.amount = 0;
+                    continue;
+                }
                 var rt = AttachmentResourceType(att.type);
                 if (rt == null) continue;   // 未知类型不吞不报，留给 UI 展示
                 ClaimOne(rt.Value, att.amount);
@@ -484,8 +513,10 @@ public class MailEntry
 [Serializable]
 public class MailAttachment
 {
-    public string type;         // 内部 key：gold/diamond/stamina/enchant/mat/talent/merc
+    public string type;         // 内部 key：gold/diamond/stamina/enchant/mat/talent/merc/mercfrag/scrollCommon/scrollLegendary/badge/item/equip
     public long amount;
     public string iconOverride; // 图标 Resources 路径覆盖（可空）
     public string hireId;       // 🆕 type=="merc" 时的花名册 HireId（如 H017）
+    public string defId;        // 🆕 type=="item"/"equip" 时的道具/装备模板 id（item_defs / EquipTemplate）；type=="badge" 时存完整徽记 id（badge:{职业}:{档位}）
+    public int rarity;          // 🆕 type=="equip" 时的稀有度 0~4
 }

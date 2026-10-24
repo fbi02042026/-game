@@ -6,7 +6,7 @@ using UnityEngine;
 /// 数据真源：SaveData.mercGrow（hireId → MercGrowEntry，默认无记录 = Lv1 无加成）。
 /// 按 hireId 存的理由与 mercOutStars 相同：已拥有真源是 unlockedMercIds，多数佣兵没有 MercenaryData 实例。
 ///
-/// 与升星（MercStarSystem）是两套并行的局外系统：🔴 全程不碰本命碎片（GridBackpackSystem 一行不调），
+/// 与升星（MercStarSystem）是两套并行的局外系统：🔴 全程不碰本命碎片（BattleBagSystem 一行不调），
 /// 碎片归升星专供【2026-10-23 主人拍板 C1=A】；养成消耗 = 金币 + 职业徽记 两样。
 ///
 /// 对外接口（下游按此签名调用，签名不能改）：

@@ -138,6 +138,10 @@ public class TownSceneBootstrap : MonoBehaviour
         // 【2026-10-20 补偿】「Lv2 已领但没拿到暮火之杖」的存量玩家进镇自动补发
         //（幂等：GrantKey 已写就跳过；失败不写标记，下次进镇重试）。
         SpecialWeapons.RepairMissingLv2Staff();
+        // 【2026-10-24 主人拍板】开发期福利邮件（默认3佣兵+塔克碎片×80、两种卷轴×10、钻石/天赋石×1000、金币×9999）：
+        // 每次启动进主界面发一轮；正式包（Build Settings 不勾 Development Build）自动关闭，打包不用改代码。
+        // 唯一调用点，开关与数量都在 DevGiftMail 内。
+        DevGiftMail.TrySendOncePerLaunch();
         if (!settled)
         {
             // 2026-10-15 主人拍板：登录检查改成「每次进主界面都查」——_loginCheckedThisTownVisit 以前

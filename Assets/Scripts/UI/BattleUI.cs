@@ -231,10 +231,10 @@ public partial class BattleUI : MonoBehaviour
 
     void DelayedUpdateSlots()
     {
-        if (GridBackpackSystem.Instance != null)
+        if (BattleBagSystem.Instance != null)
         {
-            GridBackpackSystem.Instance.OnBackpackChanged -= UpdateBackpackGrid;
-            GridBackpackSystem.Instance.OnBackpackChanged += UpdateBackpackGrid;
+            BattleBagSystem.Instance.OnBackpackChanged -= UpdateBackpackGrid;
+            BattleBagSystem.Instance.OnBackpackChanged += UpdateBackpackGrid;
         }
         RebindAfterSystemsReady();
         RefreshBattleHud();
@@ -351,8 +351,8 @@ public partial class BattleUI : MonoBehaviour
 
     void OnDestroy()
     {
-        if (GridBackpackSystem.Instance != null)
-            GridBackpackSystem.Instance.OnBackpackChanged -= UpdateBackpackGrid;
+        if (BattleBagSystem.Instance != null)
+            BattleBagSystem.Instance.OnBackpackChanged -= UpdateBackpackGrid;
         if (Instance == this)
             Instance = null;
     }

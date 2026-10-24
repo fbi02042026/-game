@@ -35,6 +35,12 @@ public static class MercGrowInventory
         return BadgePrefix + jobKey + ":" + (string.IsNullOrEmpty(tier) ? "普通" : tier);
     }
 
+    /// <summary>
+    /// 徽记职业 key 全集（6 职业等权，key 与 MercGrowSprites.JobKey 返回值同套字符串）。
+    /// 【2026-10-24 主人拍板】原 GrantBadgeDungeonDrops 内联数组提为公共真源，福利邮件（DevGiftMail）共用。
+    /// </summary>
+    public static readonly string[] BadgeJobKeys = { "剑盾", "狂战", "游侠", "法师", "牧师", "重武" };
+
     public static string FragmentId(string hireId)
     {
         if (string.IsNullOrEmpty(hireId)) return null;
@@ -109,8 +115,8 @@ public static class MercGrowInventory
             if (d.type == StageDropTable.DropType.Item)
             {
                 // 道具进背包（jobKey 列复用为 itemId）
-                var gb = GridBackpackSystem.Instance;
-                if (gb != null && gb.TryAddItemStack(d.id, d.count, out GridBackpackSystem.BackpackItem placed, notify: false))
+                var gb = BattleBagSystem.Instance;
+                if (gb != null && gb.TryAddItemStack(d.id, d.count, out BattleBagSystem.BackpackItem placed, notify: false))
                     total += d.count;
             }
             else if (d.id != null && d.id.StartsWith(FragPrefix))
@@ -153,9 +159,8 @@ public static class MercGrowInventory
         if (data == null) return 0;
         if (difficulty < 0 || difficulty > 2) difficulty = 0;   // 2026-10-23 拍板：越界按普通难度处理
 
-        // 6 职业等权随机（key 与 MercGrowSprites.JobKey 返回值同套字符串）
-        string[] jobKeys = { "剑盾", "狂战", "游侠", "法师", "牧师", "重武" };
-        string jobKey = jobKeys[Random.Range(0, jobKeys.Length)];
+        // 6 职业等权随机（真源 = BadgeJobKeys，2026-10-24 提为公共字段供 DevGiftMail 共用）
+        string jobKey = BadgeJobKeys[Random.Range(0, BadgeJobKeys.Length)];
 
         // 档位概率（§〇-2 表，真源仅此一处）
         string tier;

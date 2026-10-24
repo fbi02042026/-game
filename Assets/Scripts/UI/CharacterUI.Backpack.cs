@@ -68,7 +68,7 @@ public partial class CharacterUI
 
     /// <summary>
     /// B：角色页背包网格的显示规格覆盖 —— 每行 8 格、共 4 行、下 2 行上锁。
-    /// 只写本组件上的角色页专属网格（CharacterBagGrid）的字段，
+    /// 只写本组件上的角色页专属网格（HeroVaultGrid）的字段，
     /// 不碰 GameConfig、物品放置逻辑与存档格式，也不碰共用组件 TownBackpackGrid。
     /// 2026-09-25：主人已经在预制体 Content/BackpackPanel/GridContainer 里手摆好 32 格
     /// （Cell_{显示行}_{显示列}，行 0..3、列 0..7）并调好了 GridLayoutGroup（82×82 / 8 列），
@@ -78,7 +78,7 @@ public partial class CharacterUI
     {
         if (backpackGrid == null) return;
 
-        var bag = backpackGrid as CharacterBagGrid;
+        var bag = backpackGrid as HeroVaultGrid;
         if (bag != null)
         {
             if (useWideBackpackGrid)
@@ -214,21 +214,21 @@ public partial class CharacterUI
     }
 
     /// <summary>
-    /// 拿角色页专属网格实例。预制体上可能同时挂着通用 TownBackpackGrid 与 CharacterBagGrid，
+    /// 拿角色页专属网格实例。预制体上可能同时挂着通用 TownBackpackGrid 与 HeroVaultGrid，
     /// GetComponent&lt;TownBackpackGrid&gt;() 的返回顺序不确定，所以遍历全部：
-    /// 只认 CharacterBagGrid，其余通用组件运行时停用（enabled = false，不写盘、不改预制体），
+    /// 只认 HeroVaultGrid，其余通用组件运行时停用（enabled = false，不写盘、不改预制体），
     /// 避免两个组件抢同一个 GridContainer。
     /// </summary>
-    CharacterBagGrid ResolveBagGrid()
+    HeroVaultGrid ResolveBagGrid()
     {
-        CharacterBagGrid bag = null;
+        HeroVaultGrid bag = null;
         var all = GetComponents<TownBackpackGrid>();
         for (int i = 0; i < all.Length; i++)
         {
-            if (all[i] is CharacterBagGrid b) bag = b;
+            if (all[i] is HeroVaultGrid b) bag = b;
             else all[i].enabled = false;        // 停用预制体上自带的通用组件
         }
-        if (bag == null) bag = gameObject.AddComponent<CharacterBagGrid>();
+        if (bag == null) bag = gameObject.AddComponent<HeroVaultGrid>();
         backpackGrid = bag;                     // 字段类型保持 TownBackpackGrid 不变
         return bag;
     }
@@ -338,12 +338,25 @@ public partial class CharacterUI
     /// <summary>背包网格的显示列数（角色页 8 列；基类 / 弹窗为 GameConfig.BACKPACK_WIDTH）。</summary>
     int BagDisplayColumns()
     {
-        if (backpackGrid is CharacterBagGrid bag && bag.columns > 0) return bag.columns;
+        if (backpackGrid is HeroVaultGrid bag && bag.columns > 0) return bag.columns;
         return GameConfig.BACKPACK_WIDTH;
     }
 
     public void PrevBagPage() => StepBagPage(-1);
     public void NextBagPage() => StepBagPage(1);
+
+    /// <summary>
+    /// 2026-10-24 主人拍板：右上角「整理」按钮 = 排序开关（纯显示层重排，不动画、不动存档）。
+    /// 开：同类型聚拢成片、组内稀有度高的在前（装备也按稀有度降序）；
+    /// 关：恢复默认获得顺序（同类物品先沾满前面的格子到 99，再按获得顺序往后占格）。
+    /// </summary>
+    void ToggleBagSort()
+    {
+        _bagSortedByRarity = !_bagSortedByRarity;
+        HeroVaultSystem.SortByRarity = _bagSortedByRarity;
+        UIManager.Instance?.ShowToast(_bagSortedByRarity ? "已整理：同类聚拢，稀有度高的在前" : "已恢复获得顺序");
+        RefreshBag();
+    }
 
     /// <summary>翻页：只改显示用的页索引并刷新，绝不移动/删除任何存档道具。</summary>
     void StepBagPage(int delta)
@@ -363,7 +376,7 @@ public partial class CharacterUI
         }
 
         _bagPage = next;
-        if (backpackGrid is CharacterBagGrid bag) bag.page = next;
+        if (backpackGrid is HeroVaultGrid bag) bag.page = next;
         RefreshBag();
     }
 }

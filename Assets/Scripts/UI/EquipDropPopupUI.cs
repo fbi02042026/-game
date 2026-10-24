@@ -99,8 +99,8 @@ public class EquipDropPopupUI : MonoBehaviour
             onDone?.Invoke(null, false);
             return;
         }
-        bool hasWorn = GridBackpackSystem.Instance != null
-            && GridBackpackSystem.Instance.GetEquippedInLogicalSlot(
+        bool hasWorn = BattleBagSystem.Instance != null
+            && BattleBagSystem.Instance.GetEquippedInLogicalSlot(
                 WeaponLoadoutRules.IsLoadoutItem(equip)
                     ? WeaponLoadoutRules.ResolveLogicalSlot(equip)
                     : equip.slotType) != null;
@@ -482,8 +482,8 @@ public class EquipDropPopupUI : MonoBehaviour
         }
 
         EquipInstance worn = null;
-        if (GridBackpackSystem.Instance != null)
-            worn = GridBackpackSystem.Instance.GetEquippedInLogicalSlot(ResolveWornSlot(sel));
+        if (BattleBagSystem.Instance != null)
+            worn = BattleBagSystem.Instance.GetEquippedInLogicalSlot(ResolveWornSlot(sel));
 
         // 下部对比区始终显示：有则属性，无则「当前部位无装备」
         if (comparePanel != null) comparePanel.SetActive(true);
@@ -577,8 +577,8 @@ public class EquipDropPopupUI : MonoBehaviour
     void RefreshButtons()
     {
         var sel = GetSelected();
-        bool hasWorn = sel != null && GridBackpackSystem.Instance != null
-            && GridBackpackSystem.Instance.GetEquippedInLogicalSlot(
+        bool hasWorn = sel != null && BattleBagSystem.Instance != null
+            && BattleBagSystem.Instance.GetEquippedInLogicalSlot(
                 WeaponLoadoutRules.IsLoadoutItem(sel)
                     ? WeaponLoadoutRules.ResolveLogicalSlot(sel)
                     : sel.slotType) != null;
@@ -639,8 +639,8 @@ public class EquipDropPopupUI : MonoBehaviour
     /// <summary>取与给定装备同穿戴槽位上「已装备」的那件，作为推荐对比基线。</summary>
     EquipInstance GetWorn(EquipInstance eq)
     {
-        if (eq == null || GridBackpackSystem.Instance == null) return null;
-        return GridBackpackSystem.Instance.GetEquippedInLogicalSlot(ResolveWornSlot(eq));
+        if (eq == null || BattleBagSystem.Instance == null) return null;
+        return BattleBagSystem.Instance.GetEquippedInLogicalSlot(ResolveWornSlot(eq));
     }
 
     void SelectCard(int idx)
@@ -663,7 +663,7 @@ public class EquipDropPopupUI : MonoBehaviour
             UIManager.Instance?.ShowToast("请先选一件装备");
             return;
         }
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag == null)
         {
             Finish(sel, true);
@@ -684,7 +684,7 @@ public class EquipDropPopupUI : MonoBehaviour
     void OnSecondary()
     {
         var sel = GetSelected();
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
 
         // 装备不进背包（2026-09-15）：不穿 = 直接分解折局内币（2026-10-18 拆分改币），不做二次确认
         if (sel != null && bag != null)
@@ -701,7 +701,7 @@ public class EquipDropPopupUI : MonoBehaviour
         var sel = GetSelected();
         if (sel != null)
         {
-            GridBackpackSystem.Instance?.ScrapEquip(sel);
+            BattleBagSystem.Instance?.ScrapEquip(sel);
             BattleUI.Instance?.UpdateBackpackGrid();
         }
         Finish(sel, false);
@@ -718,7 +718,7 @@ public class EquipDropPopupUI : MonoBehaviour
             BattleLootMode.Confirm();
     }
 
-    static GridBackpackSystem.BackpackItem FindBackpackItem(GridBackpackSystem bag, EquipInstance equip)
+    static BattleBagSystem.BackpackItem FindBackpackItem(BattleBagSystem bag, EquipInstance equip)
     {
         var all = bag.GetAllBackpackItems();
         if (all == null) return null;

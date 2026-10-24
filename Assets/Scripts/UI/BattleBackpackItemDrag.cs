@@ -78,7 +78,7 @@ public class BattleBackpackItemDrag : MonoBehaviour, IBeginDragHandler, IDragHan
         if (!_dragging) return;
         _dragging = false;
 
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         var ui = BattleUI.Instance;
         if (bag == null || ui == null || (Equip == null && Item == null))
         {
@@ -93,7 +93,7 @@ public class BattleBackpackItemDrag : MonoBehaviour, IBeginDragHandler, IDragHan
         }
 
         // 用「实例」回查条目，避免 overlay 重建后引用失效
-        GridBackpackSystem.BackpackItem item = Equip != null
+        BattleBagSystem.BackpackItem item = Equip != null
             ? bag.FindItem(Equip)
             : bag.FindItemByItem(Item);
         if (item == null)
@@ -116,7 +116,7 @@ public class BattleBackpackItemDrag : MonoBehaviour, IBeginDragHandler, IDragHan
         if (_moved) return;   // 刚拖完不要顺带弹面板
         if (Item == null) return;
 
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         var ui = BattleUI.Instance;
         if (bag == null || ui == null) return;
 

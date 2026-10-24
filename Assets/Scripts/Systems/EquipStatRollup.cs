@@ -9,7 +9,7 @@ public static class EquipStatRollup
 {
     public const float OffHandAttackCapRatio = 0.85f;
 
-    public static List<AttrBonusData> BuildBonusList(GridBackpackSystem bag)
+    public static List<AttrBonusData> BuildBonusList(BattleBagSystem bag)
     {
         var list = new List<AttrBonusData>();
         if (bag == null) return list;
@@ -33,7 +33,7 @@ public static class EquipStatRollup
     /// <summary>
     /// 换装模拟专用（<see cref="PowerCalc.EquipSwapPowerDelta"/>）：按给定穿戴集构建加成表，
     /// 条目逻辑（globalBonus / 强化倍率 / 副手封顶 / 技能被动）与 <see cref="BuildBonusList"/> 完全同一套，
-    /// 主/副手判定用 <see cref="WeaponLoadoutRules"/>（与 GridBackpackSystem.MatchesLogicalWeaponSlot 同口径）。
+    /// 主/副手判定用 <see cref="WeaponLoadoutRules"/>（与 BattleBagSystem.MatchesLogicalWeaponSlot 同口径）。
     /// 传入集合的顺序即产出条目顺序 —— 调用方用 SnapshotEquippedAfterSwap 保证与真实重算顺序一致。
     /// </summary>
     public static List<AttrBonusData> BuildBonusListForSet(List<EquipInstance> equipped)
@@ -70,7 +70,7 @@ public static class EquipStatRollup
         }
     }
 
-    /// <summary>与 GridBackpackSystem.MatchesLogicalWeaponSlot 同口径的逻辑主/副手判定（模拟侧只读副本）。</summary>
+    /// <summary>与 BattleBagSystem.MatchesLogicalWeaponSlot 同口径的逻辑主/副手判定（模拟侧只读副本）。</summary>
     static bool MatchesLogicalWeaponSlot(EquipInstance eq, EquipSlotType logicalSlot)
     {
         if (eq == null || !WeaponLoadoutRules.IsLoadoutItem(eq)) return false;
@@ -192,7 +192,7 @@ public static class EquipStatRollup
     }
 
     /// <summary>主手装备授予的技能 id（主手优先，其次副手）。</summary>
-    public static string GetEquippedGrantSkillId(GridBackpackSystem bag)
+    public static string GetEquippedGrantSkillId(BattleBagSystem bag)
     {
         if (bag == null) return null;
         var main = bag.GetEquippedInLogicalSlot(EquipSlotType.MainHand);

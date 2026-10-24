@@ -66,7 +66,7 @@ public static class AdventureLogFragments
     }
 
     // ===== 本局获得追踪（2026-10-21 主人需求：战斗背包只显示当前战斗里获得的东西）=====
-    // 每次开新局由 GridBackpackSystem.InitNewRun 清零；TryDropOnStageClear 掉落时累计。
+    // 每次开新局由 BattleBagSystem.InitNewRun 清零；TryDropOnStageClear 掉落时累计。
     static Dictionary<string, int> _runGained;
 
     /// <summary>开新局：清空「本局获得碎片」计数（战斗背包口径）。</summary>

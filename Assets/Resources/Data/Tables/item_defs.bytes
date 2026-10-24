@@ -30,7 +30,7 @@ item_enchant_stone,附魔石,Icons/Item/icon_enchant_stone,Material,999,0,1,,Sel
 item_scroll_merc_common,佣兵招募卷·普通,Icons/Item/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募普通佣兵时抵扣。,1
 item_scroll_merc_rare,佣兵招募卷·稀有,Icons/Item/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募稀有佣兵时抵扣。,2
 item_scroll_merc_legendary,佣兵招募卷·传奇,Icons/Item/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募传奇佣兵时抵扣。,3
-item_fragment_birth,本命碎片,,Material,10,0,1,,Self,佣兵本命碎片（通用占位行，2026-10-22 起实际发放用 item_frag_H0xx 按佣兵分行）。,2
+item_fragment_birth,本命碎片,,Material,99,0,1,,Self,佣兵本命碎片（通用占位行，2026-10-22 起实际发放用 item_frag_H0xx 按佣兵分行）。,2
 item_fragment_skill,技能残卷,Icons/Item/icon_skill_scroll,Material,999,0,1,,Self,用于技能升星。,1
 item_fragment_log,日志碎片,Icons/Item/icon_log_fragment,Material,999,0,1,,Self,冒险日志碎片，可合成完整条目。,0
 item_merc_grow,佣兵养成道具,Icons/Item/icon_merc_grow,Material,999,0,1,,Self,用于佣兵养成。,1
@@ -41,29 +41,29 @@ item_forget_potion,遗忘药水,Art/UI/Icons/Common/yiwangyaoshui,Consumable,99,
 # 同日新增重生护符：佣兵阵亡时点其变灰头像消耗 1 枚原地复活；唯一获取来源 = 战斗内关卡商店（50% 概率上架）。
 # 图标 = 主人供图 Resources/Art/UI/Icons/Common/chongshenghufu.png（2026-10-21 晚换入，此前暂借 icon_diamond_blue）。
 item_revive_charm,重生护符,Art/UI/Icons/Common/chongshenghufu,Material,99,0,0,,Self,佣兵阵亡时点击其变灰头像，消耗 1 枚原地复活（80% 血）。战斗内关卡商店有售。,2
-# 2026-10-22 主人拍板：本命碎片改为**按佣兵分行**的背包道具（10 个一组，满了走邮件兜底）。
+# 2026-10-22 主人拍板：本命碎片改为**按佣兵分行**的背包道具（一格最多 99、超了分格，2026-10-24 主人拍板与随身仓库统一）。
 # icon 先用稀有度碎片底版占位（Icons/MercFragmentBase/普通|稀有|传奇碎片）；背包格渲染会按佣兵换头像（复用 MercFragmentCardUI 口径，T2）。
 # 稀有度对齐 merc_roster.csv：传奇=H004/H010/H014，稀有=H002/H003/H006/H008/H009/H012/H013/H016/H017/H020/H022，其余普通。
-# 🔴 升星消耗/重复转化数在 MercStarDefs 按稀有度算，本表只管道具本体；stackMax=10=主人定的「10 个一组」。
-item_frag_H001,马库斯碎片,Icons/MercFragmentBase/普通碎片,Material,10,0,0,,Self,「马库斯」的本命碎片。攒够可在升星界面为其升星。,0
-item_frag_H002,洛恩碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「洛恩」的本命碎片。攒够可在升星界面为其升星。,1
-item_frag_H003,塔克碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「塔克」的本命碎片。攒够可在升星界面为其升星。,1
-item_frag_H004,维克碎片,Icons/MercFragmentBase/传奇碎片,Material,10,0,0,,Self,「维克」的本命碎片。攒够可在升星界面为其升星。,2
-item_frag_H005,米娅碎片,Icons/MercFragmentBase/普通碎片,Material,10,0,0,,Self,「米娅」的本命碎片。攒够可在升星界面为其升星。,0
-item_frag_H006,希尔碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「希尔」的本命碎片。攒够可在升星界面为其升星。,1
-item_frag_H007,布罗克碎片,Icons/MercFragmentBase/普通碎片,Material,10,0,0,,Self,「布罗克」的本命碎片。攒够可在升星界面为其升星。,0
-item_frag_H008,古恩碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「古恩」的本命碎片。攒够可在升星界面为其升星。,1
-item_frag_H009,莫丁碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「莫丁」的本命碎片。攒够可在升星界面为其升星。,1
-item_frag_H010,凯恩碎片,Icons/MercFragmentBase/传奇碎片,Material,10,0,0,,Self,「凯恩」的本命碎片。攒够可在升星界面为其升星。,2
-item_frag_H011,路加碎片,Icons/MercFragmentBase/普通碎片,Material,10,0,0,,Self,「路加」的本命碎片。攒够可在升星界面为其升星。,0
-item_frag_H012,塞拉碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「塞拉」的本命碎片。攒够可在升星界面为其升星。,1
-item_frag_H013,莫娜碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「莫娜」的本命碎片。攒够可在升星界面为其升星。,1
-item_frag_H014,伊芙碎片,Icons/MercFragmentBase/传奇碎片,Material,10,0,0,,Self,「伊芙」的本命碎片。攒够可在升星界面为其升星。,2
-item_frag_H015,艾拉碎片,Icons/MercFragmentBase/普通碎片,Material,10,0,0,,Self,「艾拉」的本命碎片。攒够可在升星界面为其升星。,0
-item_frag_H016,杜娅碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「杜娅」的本命碎片。攒够可在升星界面为其升星。,1
-item_frag_H017,莉娜碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「莉娜」的本命碎片。攒够可在升星界面为其升星。,1
-item_frag_H018,布朗碎片,Icons/MercFragmentBase/普通碎片,Material,10,0,0,,Self,「布朗」的本命碎片。攒够可在升星界面为其升星。,0
-item_frag_H019,艾琳碎片,Icons/MercFragmentBase/普通碎片,Material,10,0,0,,Self,「艾琳」的本命碎片。攒够可在升星界面为其升星。,0
-item_frag_H020,凯尔碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「凯尔」的本命碎片。攒够可在升星界面为其升星。,1
-item_frag_H021,格拉克斯碎片,Icons/MercFragmentBase/普通碎片,Material,10,0,0,,Self,「格拉克斯」的本命碎片。攒够可在升星界面为其升星。,0
-item_frag_H022,索尔碎片,Icons/MercFragmentBase/稀有碎片,Material,10,0,0,,Self,「索尔」的本命碎片。攒够可在升星界面为其升星。,1
+# 🔴 升星消耗/重复转化数在 MercStarDefs 按稀有度算，本表只管道具本体；stackMax=99（2026-10-24 主人拍板：与随身仓库统一，一格最多 99、超了分格；原「10 个一组」作废）。
+item_frag_H001,马库斯碎片,Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「马库斯」的本命碎片。攒够可在升星界面为其升星。,0
+item_frag_H002,洛恩碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「洛恩」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H003,塔克碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「塔克」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H004,维克碎片,Icons/MercFragmentBase/传奇碎片,Material,99,0,0,,Self,「维克」的本命碎片。攒够可在升星界面为其升星。,2
+item_frag_H005,米娅碎片,Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「米娅」的本命碎片。攒够可在升星界面为其升星。,0
+item_frag_H006,希尔碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「希尔」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H007,布罗克碎片,Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「布罗克」的本命碎片。攒够可在升星界面为其升星。,0
+item_frag_H008,古恩碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「古恩」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H009,莫丁碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「莫丁」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H010,凯恩碎片,Icons/MercFragmentBase/传奇碎片,Material,99,0,0,,Self,「凯恩」的本命碎片。攒够可在升星界面为其升星。,2
+item_frag_H011,路加碎片,Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「路加」的本命碎片。攒够可在升星界面为其升星。,0
+item_frag_H012,塞拉碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「塞拉」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H013,莫娜碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「莫娜」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H014,伊芙碎片,Icons/MercFragmentBase/传奇碎片,Material,99,0,0,,Self,「伊芙」的本命碎片。攒够可在升星界面为其升星。,2
+item_frag_H015,艾拉碎片,Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「艾拉」的本命碎片。攒够可在升星界面为其升星。,0
+item_frag_H016,杜娅碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「杜娅」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H017,莉娜碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「莉娜」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H018,布朗碎片,Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「布朗」的本命碎片。攒够可在升星界面为其升星。,0
+item_frag_H019,艾琳碎片,Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「艾琳」的本命碎片。攒够可在升星界面为其升星。,0
+item_frag_H020,凯尔碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「凯尔」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H021,格拉克斯碎片,Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「格拉克斯」的本命碎片。攒够可在升星界面为其升星。,0
+item_frag_H022,索尔碎片,Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「索尔」的本命碎片。攒够可在升星界面为其升星。,1

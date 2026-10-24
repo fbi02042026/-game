@@ -122,6 +122,17 @@ public class EvacuateConfirmPopupUI : MonoBehaviour
             transform.SetAsLastSibling();
         }
         GameFonts.ApplyToHierarchy(transform);
+        // 2026-10-24 主人拍板「默认弹窗文字统一优化排版」：标题报喜金、正文居中 + 行距 1.2，
+        // 与体力确认/告知窗同一出口（StaminaConfirmPopup.ApplyUnifiedTextStyle）。
+        // 2026-10-24 主人拍板「默认弹窗排版空隙太多，底框可以缩放拉伸」：
+        // 撤离弹窗与体力确认弹窗共用默认弹窗预制体，底框同步走唯一出口自适应收紧。
+        // 两者都必须排在 GameFonts 之后（换字体会改正文实高，行距/颜色先设好再算底框）；
+        // 节点缺了就在出口里原样不动。
+        StaminaConfirmPopup.ApplyUnifiedTextStyle(titleText, bodyText);
+        StaminaConfirmPopup.FitPanelToBody(
+            root != null ? root.transform.Find("Panel") as RectTransform : null,
+            bodyText,
+            evacuateButton != null ? evacuateButton.transform as RectTransform : null);
     }
 
     void OnClickEvacuate()

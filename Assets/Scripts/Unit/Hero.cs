@@ -68,10 +68,10 @@ public class Hero : UnitBase
 
     public void InitNewRun()
     {
-        if (GridBackpackSystem.Instance != null)
-            GridBackpackSystem.Instance.InitNewRun();
+        if (BattleBagSystem.Instance != null)
+            BattleBagSystem.Instance.InitNewRun();
         else
-            Debug.LogWarning("[Hero] InitNewRun: GridBackpackSystem 为空，跳过背包重置");
+            Debug.LogWarning("[Hero] InitNewRun: BattleBagSystem 为空，跳过背包重置");
 
         attr.ResetToBase();
         attr.RecalcAllAttr(); // 现在可以安全调用（Awake已完成）
@@ -222,10 +222,10 @@ public class Hero : UnitBase
 
     public void RecalcAttr()
     {
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag == null)
         {
-            Debug.LogWarning("[Hero] RecalcAttr: GridBackpackSystem 为空，仅重算基础属性");
+            Debug.LogWarning("[Hero] RecalcAttr: BattleBagSystem 为空，仅重算基础属性");
             attr.RecalcAllAttr(null);
             currentHp = Mathf.Min(currentHp, attr.GetAttr(AttrType.MaxHp));
             return;
@@ -296,11 +296,11 @@ public class Hero : UnitBase
     /// </summary>
     protected override WeaponAttackType GetAttackType()
     {
-        if (GridBackpackSystem.Instance == null) return WeaponAttackType.Physical;
-        var tpl = TryGetEquippedWeaponTemplate(GridBackpackSystem.Instance);
+        if (BattleBagSystem.Instance == null) return WeaponAttackType.Physical;
+        var tpl = TryGetEquippedWeaponTemplate(BattleBagSystem.Instance);
         if (tpl != null)
         {
-            foreach (var item in GridBackpackSystem.Instance.GetEquippedItems())
+            foreach (var item in BattleBagSystem.Instance.GetEquippedItems())
             {
                 if (item.template == tpl) return item.weaponAttackType;
             }
@@ -326,7 +326,7 @@ public class Hero : UnitBase
         AttackVfxKit jobKit = SkillNaming.KitFromWeaponKind(
             PlayerJobDefs.Get(PlayerJobDefs.GetSelected()).PrimaryWeapon);
 
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         EquipInstance inst = TryGetEquippedWeaponInstance(bag);
         if (inst == null)
             return jobKit;
@@ -342,11 +342,11 @@ public class Hero : UnitBase
     }
 
     /// <summary>攻击特效以逻辑主手武器为准；无主手则不看副手剑。</summary>
-    static EquipTemplate TryGetEquippedWeaponTemplate(GridBackpackSystem bag)
+    static EquipTemplate TryGetEquippedWeaponTemplate(BattleBagSystem bag)
         => TryGetEquippedWeaponInstance(bag)?.template;
 
     // 2026-10-24 主人拍板：供 WeaponVfxVariant 复用（只提可见性，语义不变；铁律 15 不多入口，不另写取主手武器的逻辑）
-    internal static EquipInstance TryGetEquippedWeaponInstance(GridBackpackSystem bag)
+    internal static EquipInstance TryGetEquippedWeaponInstance(BattleBagSystem bag)
     {
         if (bag == null) return null;
         var main = bag.GetEquippedInLogicalSlot(EquipSlotType.MainHand);

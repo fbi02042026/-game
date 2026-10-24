@@ -68,6 +68,25 @@ public partial class CharacterUI
         // 拿到网格后立刻套「8 列 / 下 2 行锁」的显示规格（只作用于本组件实例）
         ApplyWideBackpackGrid();
 
+        // 2026-10-24 主人拍板：角色页背包改名「随身仓库」，与战斗内「作战背包」区分，避免两个背包混为一谈。
+        // 真源 = 预制体 Content/BackpackPanel 下的 Text 节点 BackpackTitle；运行时覆盖文案，不改预制体文件。
+        bagTitleText = FindDeep(transform, "BackpackTitle")?.GetComponent<Text>();
+        if (bagTitleText != null) bagTitleText.text = "随身仓库";
+
+        // 2026-10-24 主人拍板：背包右上角「整理」按钮（预制体 SortButton，此前从未绑过是死按钮）
+        // = 排序开关：点一下进入整理态（同类聚拢 + 稀有度高的在前），再点一下恢复获得顺序。
+        bagSortButton = (bagPanelRoot != null ? bagPanelRoot.Find("SortButton") : null)?.GetComponent<Button>()
+                        ?? FindDeep(transform, "SortButton")?.GetComponent<Button>();
+        if (bagSortButton != null)
+        {
+            bagSortButton.onClick.RemoveAllListeners();
+            bagSortButton.onClick.AddListener(ToggleBagSort);
+        }
+        else
+        {
+            Debug.LogError("[CharacterUI] 找不到背包「整理」按钮（SortButton），排序开关不可用");
+        }
+
         if (skillSelect == null)
             skillSelect = GetComponentInChildren<SkillSelectUI>(true);
         if (skillSelect != null)

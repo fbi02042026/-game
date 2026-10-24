@@ -144,7 +144,7 @@ public partial class CharacterUI
             else
             {
                 src = new AttrSystem(AttrOwnerKind.Player);
-                var bonuses = EquipStatRollup.BuildBonusList(GridBackpackSystem.Instance);
+                var bonuses = EquipStatRollup.BuildBonusList(BattleBagSystem.Instance);
                 src.RecalcAllAttr(bonuses);
             }
 
@@ -255,6 +255,8 @@ public partial class CharacterUI
         }
         if (bagCapacityText != null)
             bagCapacityText.text = used + "/" + unlocked;
+        // 2026-10-24 主人拍板：角色页背包标题「随身仓库」每刷一次都兜底重写，防止被别处重置。
+        if (bagTitleText != null) bagTitleText.text = "随身仓库";
         RefreshStaminaPotionRow();
     }
 }

@@ -113,7 +113,8 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
 
         if (!MercHireSession.CanDiamondRefresh(out _, out int cost))
         {
-            UIManager.Instance?.ShowToast("今日钻石刷新次数已用完", force: true);
+            // 【2026-10-24 主人拍板】钻石/广告次数用光：按钮保持可点，点击弹这句
+            UIManager.Instance?.ShowToast("已无刷新次数 请明天再试", force: true);
             return;
         }
 

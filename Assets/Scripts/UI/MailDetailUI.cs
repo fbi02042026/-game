@@ -620,7 +620,9 @@ public class MailDetailUI : MonoBehaviour
                 ? MercDisplayName(att.hireId)
                 : att.type == "mercfrag" && !string.IsNullOrEmpty(att.hireId)
                     ? MercDisplayName(att.hireId) + "的本命碎片"   // 【2026-10-22 施工单 T12】碎片附件名
-                    : RewardTypeName(att.type);
+                    : att.type == "badge"
+                        ? BadgeDisplayName(att.defId)              // 【2026-10-24】徽记附件名：badge:{职业}:{档位} → 剑盾徽记·稀有
+                        : RewardTypeName(att.type);
             items.Add(new RewardItem
             {
                 icon = Resources.Load<Sprite>(att.iconOverride),
@@ -706,6 +708,17 @@ public class MailDetailUI : MonoBehaviour
         if (MercRosterDefs.TryGetByHireId(hireId, out var def) && !string.IsNullOrEmpty(def.Name))
             return def.Name;
         return hireId;
+    }
+
+    /// <summary>🆕 徽记附件名（2026-10-24）：defId = badge:{职业}:{档位} → 「剑盾徽记·稀有」；解析不出退「职业徽记」。</summary>
+    static string BadgeDisplayName(string defId)
+    {
+        if (string.IsNullOrEmpty(defId)) return "职业徽记";
+        const string prefix = "badge:";
+        if (!defId.StartsWith(prefix)) return "职业徽记";
+        var parts = defId.Substring(prefix.Length).Split(':');
+        if (parts.Length != 2 || string.IsNullOrEmpty(parts[0])) return "职业徽记";
+        return parts[0] + "徽记·" + parts[1];
     }
 
     // ────────────────────────────────────────────────────────────────────────

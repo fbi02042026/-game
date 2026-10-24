@@ -9,7 +9,7 @@ public static class CraftStageApply
     public static bool TryForgeUpgrade(out string msg)
     {
         msg = null;
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag == null)
         {
             msg = "背包未就绪";
@@ -68,7 +68,7 @@ public static class CraftStageApply
         return true;
     }
 
-    static EquipInstance PickEnhanceTarget(GridBackpackSystem bag)
+    static EquipInstance PickEnhanceTarget(BattleBagSystem bag)
     {
         EquipInstance best = null;
         var all = bag.GetAllItemsForLegacy();
@@ -88,7 +88,7 @@ public static class CraftStageApply
     public static bool TryEnchantRandom(out string msg)
     {
         msg = null;
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag == null)
         {
             msg = "背包未就绪";

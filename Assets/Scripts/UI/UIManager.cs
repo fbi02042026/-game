@@ -219,7 +219,7 @@ public class UIManager : Singleton<UIManager>
         onClose?.Invoke();
     }
 
-    public void ShowEnchantUI(Action<GridBackpackSystem.BackpackItem, EnchantData> onSelect)
+    public void ShowEnchantUI(Action<BattleBagSystem.BackpackItem, EnchantData> onSelect)
     {
         // 附魔关由 CraftStagePopupUI + CraftStageApply 处理；兼容旧回调
         if (CraftStageApply.TryEnchantRandom(out string msg))
@@ -241,7 +241,7 @@ public class UIManager : Singleton<UIManager>
         RestStagePopupUI.Show(() => onHeal?.Invoke());
     }
 
-    public void ShowDecomposeUI(Action<GridBackpackSystem.BackpackItem> onSelect)
+    public void ShowDecomposeUI(Action<BattleBagSystem.BackpackItem> onSelect)
     {
         onSelect?.Invoke(null);
     }

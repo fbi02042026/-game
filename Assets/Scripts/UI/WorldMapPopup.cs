@@ -464,6 +464,12 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
     const string SeenUnlockKey = "worldmap.seen.maxchapter";
 
     /// <summary>
+    /// 已在世界地图上看到过开启的最大章节号（开图时 PlayNewUnlockFxIfNeeded 记档，没开过图 = 只有第 1 章）。
+    /// 【2026-10-24 主人拍板】冒险页手动翻章（滑屏/箭头）只能滑到看过的章，查询唯一出口用这个。
+    /// </summary>
+    public static int MaxSeenChapterId() => PlayerPrefs.GetInt(SeenUnlockKey, 1);
+
+    /// <summary>
     /// 打开世界地图时，若有比"已播过"更新的解锁地块：渐显 + 脉冲放大一下 + 飘字提示，
     /// 然后记档，下次打开不再播。典型场景：通关第一章后第一次开图，幽冥墓园渐显亮起并浮现地名。
     /// </summary>
@@ -628,10 +634,15 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
                 img.color = diffLocked && slot.def != null ? slot.def.lockedColor : slot.baseColor;
             }
 
-            // 地块本体（visual）与名字底框由美术在预制体做好表面，代码不再染色/隐藏：未解锁=暗显。
-            // 仅状态指示器由代码驱动：锁图标（未解锁显示）、选中高亮、进入按钮（选中且可进）。
+            // 地块本体显隐必须由代码接管（2026-10-24 修复「岛屿只剩一个」）：预制体里 Region_2~8 的
+            // 内层地块本体就是按「未解锁态」存的（inactive），代码不管的话永远只有第 1 章可见。
+            // 口径：路线已开（含难度灰锁）→ 显示本体与名牌（灰锁压灰由上面 lockedColor 负责）；
+            //       路线未开 → 隐藏（点不到，与美术存的未解锁态一致）。
+            var visualGo = slot.visual != null ? slot.visual : (slot.root != null ? slot.root : null);
+            if (visualGo != null && visualGo.activeSelf != routeOk)
+                visualGo.SetActive(routeOk);
             if (slot.nameRoot != null)
-                slot.nameRoot.SetActive(true);
+                slot.nameRoot.SetActive(routeOk);
             if (slot.lockRoot != null)
                 slot.lockRoot.SetActive(!unlocked);
             if (slot.highlight != null)

@@ -518,7 +518,7 @@ public partial class BattleManager
                 rarity = captured.rarity,
                 onBuy = () =>
                 {
-                    var bag = GridBackpackSystem.Instance;
+                    var bag = BattleBagSystem.Instance;
                     if (bag == null) return false;
                     if (!SpendBattleGold(StageShopEquipPrice)) return false;
                     if (!bag.TryEquipDirect(captured))
@@ -546,7 +546,7 @@ public partial class BattleManager
         if (count <= 0) return result;
 
         Rarity bestWorn = Rarity.Common;
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag != null)
         {
             for (int i = 0; i < AllEquipSlots.Length; i++)
@@ -2001,7 +2001,7 @@ public partial class BattleManager
     public void EndRunAndReturnToTown()
     {
         _runClosed = true;   // 记录点「撤离结算」也收尾（与 TriggerEvacuation 同口径）
-        GridBackpackSystem.Instance?.ClearRunEquipment();
+        BattleBagSystem.Instance?.ClearRunEquipment();
         MercenaryManager.Instance?.ClearAllMercs();
         MercHireSession.ClearHired();
         EndRunLoadout();

@@ -595,7 +595,8 @@ public partial class Monster
                 BattleVFXSystem.Instance.PlaySkillProjectile(
                     VfxFaction.Enemy, firePos, end, facing, null, kit, null,
                     FanProjectileScale, SkillProjectileSpeedMul,
-                    () => ApplySkillDamage(damage, hitRadius, null, impactX));
+                    () => ApplySkillDamage(damage, hitRadius, null, impactX),
+                    caster: this);
             }
             else
                 ApplySkillDamage(damage, hitRadius, null, impactX);
@@ -645,7 +646,7 @@ public partial class Monster
                         // 原硬编码 ×1.5 与普攻/弹幕（BuildAttackRaw→CritDamage=2.0）同怪不同倍率；
                         // 统一后怪物技能暴击伤害 ×2.0（较旧 +33%，Boss 技能更痛，真机验收关注）。
                         tgt.TakeDamage(crit ? damage * DamageFormula.CritMultiplier(attr) : damage, crit, false, true, facing, this);
-                    });
+                    }, caster: this);
             }
             else if (tgt != null && !tgt.isDead)
                 tgt.TakeDamage(damage, false, false, true, facing, this);
@@ -809,7 +810,8 @@ public partial class Monster
             BattleVFXSystem.Instance.PlaySkillProjectile(
                 VfxFaction.Enemy, firePos, hitPos, GetVfxFacingDir(), targetTf, kit,
                 impact, SkillProjectileScale, SkillProjectileSpeedMul,
-                () => ApplySkillDamage(damage, radius, primaryTarget, impactX));
+                () => ApplySkillDamage(damage, radius, primaryTarget, impactX),
+                caster: this);
         }
         else
             ApplySkillDamage(damage, radius, primaryTarget, impactX);

@@ -46,6 +46,9 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
     public Text bagCapacityText;
     public TownBackpackGrid backpackGrid;
     public Button bagExpandButton;
+    /// <summary>2026-10-24 主人拍板：角色页背包改名「随身仓库」，与战斗内「作战背包」区分，避免两个背包混为一谈。
+    /// 真源 = 预制体 Content/BackpackPanel 下的 Text 节点 BackpackTitle；运行时覆盖其文案，不改预制体文件。</summary>
+    public Text bagTitleText;
     /// <summary>
     /// 界面内的背包面板 Content/BackpackPanel（主人在预制体里摆好的，不是弹窗）。
     /// 「背包」按钮切换它的显隐；AutoBind 里赋值。
@@ -65,6 +68,9 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
     public Button bagPrevPageButton;
     /// <summary>背包翻页按钮（预制体优先：BackpackPanel/NextPageButton）。</summary>
     public Button bagNextPageButton;
+    /// <summary>背包右上角「整理」按钮（预制体 BackpackPanel 下的 SortButton，此前从未绑过）。
+    /// 2026-10-24 主人拍板：点它切换排序——整理态 = 同类聚拢 + 稀有度高的在前。</summary>
+    public Button bagSortButton;
 
     // ── 体力药水条目（2026-10-18 主人拍板：药水入背包可使用；运行时建在 BackpackPanel 底部空档，不碰预制体）──
     GameObject _potionRow;
@@ -79,6 +85,8 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
     bool _portraitFlipped;
     bool _bagEventsWired;
     int _bagPage;
+    /// <summary>2026-10-24 主人拍板：随身仓库排序开关。false=默认获得顺序；true=整理态（同类聚拢+稀有度高的在前）。</summary>
+    bool _bagSortedByRarity;
     GameObject _bagTapLayer;
     /// <summary>背包窗体自适应（瘦屏下只做防溢出 / 防裁切）。关掉则完整还原主人手摆的原始值。</summary>
     public bool enableBackpackFit = true;
@@ -110,10 +118,10 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
-        if (_bagEventsWired && GridBackpackSystem.Instance != null)
+        if (_bagEventsWired && BattleBagSystem.Instance != null)
         {
-            GridBackpackSystem.Instance.OnBackpackChanged -= OnBagOrCostumeChanged;
-            GridBackpackSystem.Instance.OnCostumeChanged -= OnBagOrCostumeChanged;
+            BattleBagSystem.Instance.OnBackpackChanged -= OnBagOrCostumeChanged;
+            BattleBagSystem.Instance.OnCostumeChanged -= OnBagOrCostumeChanged;
             _bagEventsWired = false;
         }
     }
@@ -193,6 +201,10 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
         // ⚠ 只切显隐、不销毁；HidePage 还原，别的页 ShowPage 里的 RaiseSharedChrome 也会重新点亮。
         TownSharedChrome.SetTopBarVisible(hall, false);
 
+        // 2026-10-24 主人拍板：本页顶部显示 金币/钻石/天赋石 资源条（克隆主界面 TopBar 的页私有条，
+        // 见 CharacterUI.ResBar.cs；与上面隐藏「主界面那条顶栏」不冲突 —— 那条整宽带邮件/设置，本条只有三列货币）。
+        EnsureResBar();
+
         // 页可能比背包系统更早预载，Show 时再补订一次
         WireBagEvents();
         RefreshAll();
@@ -226,6 +238,7 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
         // 携带技能展示按主人 2026-09-19 要求移除（技能改随机，已装备技能入口失效），不再刷新
         RefreshAttrs();
         RefreshBag();
+        RefreshResNumbers();   // 2026-10-24 主人拍板：页顶金币/钻石/天赋石资源条（CharacterUI.ResBar.cs）
         TownHeroCostumePreview.EnsureOn(this)?.EnsureOffscreenCostume();
     }
 }

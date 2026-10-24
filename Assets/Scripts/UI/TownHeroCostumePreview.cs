@@ -88,18 +88,18 @@ public class TownHeroCostumePreview : MonoBehaviour
 
     void OnEnable()
     {
-        if (GridBackpackSystem.Instance != null)
-            GridBackpackSystem.Instance.OnCostumeChanged += RefreshCostume;
-        if (GridBackpackSystem.Instance != null)
-            GridBackpackSystem.Instance.OnBackpackChanged += RefreshCostume;
+        if (BattleBagSystem.Instance != null)
+            BattleBagSystem.Instance.OnCostumeChanged += RefreshCostume;
+        if (BattleBagSystem.Instance != null)
+            BattleBagSystem.Instance.OnBackpackChanged += RefreshCostume;
     }
 
     void OnDisable()
     {
-        if (GridBackpackSystem.Instance != null)
+        if (BattleBagSystem.Instance != null)
         {
-            GridBackpackSystem.Instance.OnCostumeChanged -= RefreshCostume;
-            GridBackpackSystem.Instance.OnBackpackChanged -= RefreshCostume;
+            BattleBagSystem.Instance.OnCostumeChanged -= RefreshCostume;
+            BattleBagSystem.Instance.OnBackpackChanged -= RefreshCostume;
         }
     }
 

@@ -100,9 +100,9 @@ public partial class CharacterUI
     void WireBagEvents()
     {
         if (_bagEventsWired) return;
-        if (GridBackpackSystem.Instance == null) return;
-        GridBackpackSystem.Instance.OnBackpackChanged += OnBagOrCostumeChanged;
-        GridBackpackSystem.Instance.OnCostumeChanged += OnBagOrCostumeChanged;
+        if (BattleBagSystem.Instance == null) return;
+        BattleBagSystem.Instance.OnBackpackChanged += OnBagOrCostumeChanged;
+        BattleBagSystem.Instance.OnCostumeChanged += OnBagOrCostumeChanged;
         _bagEventsWired = true;
     }
 

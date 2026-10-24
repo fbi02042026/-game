@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -34,12 +35,11 @@ public static class StaminaConfirmPopup
     static Vector2 _okPos;
     static bool _singleButton;
 
-    // 告知模式排版样式的预制体真值快照（2026-10-21 主人拍板：暮火之杖告知窗重排）
-    // 与几何快照同一套口径：预制体永远是真值，代码只在运行时改，关窗原样还原。
-    static TextAnchor _bodyAlignPrefab;
-    static float _bodyLineSpacingPrefab;
-    static Color _titleColorPrefab;
-    static bool _noticeStyle;
+    // 底框自适应：面板 → 首次收紧前捕获的预制体原始尺寸（2026-10-24 主人拍板）。
+    // 换实例/重建后是新引用自动重捕；旧实例的残留条目随域重载清掉，量级个位数无害。
+    // 【2026-10-24】原 2026-10-21 的告知模式排版快照（_bodyAlignPrefab 等四件套）已随
+    // 「全弹窗统一排版」拍板删除：两套排版合成一套，无需再快照还原。
+    static readonly Dictionary<Transform, Vector2> _panelPrefabSizes = new Dictionary<Transform, Vector2>();
 
     /// <summary>弹确认框：body 提示文案（含会浪费多少点），okLabel 确认键文字，onConfirm 点确认后回调。
     /// 标题沿用「体力提示」。</summary>
@@ -53,13 +53,14 @@ public static class StaminaConfirmPopup
         Ensure();
         if (_rootPanel == null) return;
         ApplySingleButton(false);   // 双按钮确认框（体力/清除数据）：取消键必须在
-        ApplyNoticeStyle(false);    // 双按钮走预制体原始排版（左上对齐 / 行距 1.0 / 标题原色）
         if (_title != null) _title.text = title ?? "体力提示";
         if (_body != null) _body.text = body ?? "";
         if (_okLabel != null) _okLabel.text = okLabel ?? "确认";
         if (_cancelLabel != null) _cancelLabel.text = "取消";
+        ApplyUnifiedTextStyle(_title, _body);   // 2026-10-24 统一排版（先设行距再算底框自适应）
         _onOk = onConfirm;
         _rootPanel.SetActive(true);
+        ApplyPanelFit();
         _host.transform.SetAsLastSibling();
         var canvas = _host.GetComponent<Canvas>();
         if (canvas != null)
@@ -76,19 +77,21 @@ public static class StaminaConfirmPopup
     /// 【2026-10-21 主人拍板】告知型排版也走同一套快照：正文改居中 + 行距 1.2、标题改报喜金。
     /// 原因：长文案左对齐 + 行距 1.0 在 460 宽里挤成六行、正文底几乎贴确认键；
     /// 报喜型弹窗的武器名也要单独拎出来（品质色 + 放大），所以正文本身改成居中排。
-    /// 同样只在运行时改，切回双按钮/关窗即还原预制体值。
+    /// 【2026-10-24 主人拍板】这套排版已升级为全弹窗统一排版（见 <see cref="ApplyUnifiedTextStyle"/>），
+    /// 双按钮/告知不再两套来回切，快照还原机制删除。
     /// </summary>
     public static void ShowNotice(string title, string body, string okLabel, Action onClose)
     {
         Ensure();
         if (_rootPanel == null) return;
         ApplySingleButton(true);
-        ApplyNoticeStyle(true);
         if (_title != null) _title.text = title ?? "";
         if (_body != null) _body.text = body ?? "";
         if (_okLabel != null) _okLabel.text = okLabel ?? "确认";
+        ApplyUnifiedTextStyle(_title, _body);   // 2026-10-24 统一排版（先设行距再算底框自适应）
         _onOk = onClose;
         _rootPanel.SetActive(true);
+        ApplyPanelFit();
         _host.transform.SetAsLastSibling();
         var canvas = _host.GetComponent<Canvas>();
         if (canvas != null)
@@ -129,30 +132,58 @@ public static class StaminaConfirmPopup
     }
 
     /// <summary>
-    /// 告知型排版的唯一出口（2026-10-21 主人拍板）：
-    /// 切告知模式 → 正文居中 + 行距 1.2、标题用 <see cref="RarityPalette.Gold"/>（报喜金）；
-    /// 切回双按钮 → 按 <see cref="Bind"/> 捕获的预制体值原样还原（左对齐 / 1.0 / 标题原色）。
-    /// 重复调用同一状态直接返回（幂等），与 <see cref="ApplySingleButton"/> 同一套快照口径。
+    /// 默认弹窗文字排版的唯一出口（2026-10-24 主人拍板「调用默认弹窗的里面文字都要用
+    /// 统一的优化后的排版」）：标题报喜金 <see cref="RarityPalette.Gold"/>、正文居中 + 行距 1.2
+    /// —— 即 2026-10-21 暮火之杖告知窗那套优化排版，如今全弹窗统一。
+    /// 原双按钮/告知两套排版与配套快照还原机制（ApplyNoticeStyle）随之删除，不再来回切。
+    /// 排版每次开窗直接设，无需关窗还原；体力/清除数据/解锁格子/告知窗/撤离弹窗共用。
     /// </summary>
-    static void ApplyNoticeStyle(bool on)
+    public static void ApplyUnifiedTextStyle(Text title, Text body)
     {
-        if (_noticeStyle == on) return;
-        _noticeStyle = on;
-
-        if (_body != null)
+        if (title != null) title.color = RarityPalette.Gold;
+        if (body != null)
         {
-            _body.alignment = on ? TextAnchor.UpperCenter : _bodyAlignPrefab;
-            _body.lineSpacing = on ? 1.2f : _bodyLineSpacingPrefab;
+            body.alignment = TextAnchor.UpperCenter;
+            body.lineSpacing = 1.2f;
         }
-        if (_title != null)
-            _title.color = on ? RarityPalette.Gold : _titleColorPrefab;
+    }
+
+    /// <summary>
+    /// 【2026-10-24 主人拍板「默认弹窗排版空隙太多，底框可以缩放拉伸」】
+    /// 预制体 Panel 高 440 是按告知窗长文案留的，一行确认语底下空一大块（截图实例：解锁背包格子）。
+    /// 底框九宫格切片本就可拉伸 → 按正文实际高度收紧中间空档：标题/正文锚顶不动、按钮锚底随底边上移。
+    /// 几何真值全部取自预制体节点本身（正文起点 y、按钮底缘 y + 实高），不写死尺寸；
+    /// 只缩不涨 —— 长文案算出来比预制体高时钳回预制体值，告知窗六行排版不受影响。
+    /// 默认弹窗底框自适应的唯一出口：本类全家（体力/清除数据/解锁格子/告知窗）与
+    /// EvacuateConfirmPopupUI（撤离弹窗共用同一预制体）都走这里。
+    /// 节点缺了就不动（保持预制体原样 440，弹窗功能不受影响）。
+    /// </summary>
+    public static void FitPanelToBody(RectTransform panel, Text body, RectTransform bottomButton)
+    {
+        if (panel == null || body == null || bottomButton == null) return;
+        float topOffset = -body.rectTransform.anchoredPosition.y;      // 面板顶沿 → 正文起点（预制体 -100）
+        float buttonZone = bottomButton.anchoredPosition.y
+                         + bottomButton.rect.height;                   // 面板底沿 → 按钮顶缘（预制体 28 + 33×1.7 ≈ 84，rect 已含缩放）
+        if (!_panelPrefabSizes.TryGetValue(panel, out var prefabSize))
+        {
+            prefabSize = panel.sizeDelta;                              // 首次见到这块面板 → 记预制体原始尺寸
+            _panelPrefabSizes[panel] = prefabSize;
+        }
+        float fit = topOffset + body.preferredHeight + 36f + buttonZone;   // 正文与按钮顶缘之间留 36 设计像素呼吸
+        panel.sizeDelta = new Vector2(prefabSize.x, Mathf.Min(prefabSize.y, fit));
+    }
+
+    /// <summary>本类入口的薄适配：用已绑定的 Panel/Body/确认键做底框自适应。</summary>
+    static void ApplyPanelFit()
+    {
+        var panel = _rootPanel != null ? _rootPanel.transform.Find("Panel") as RectTransform : null;
+        FitPanelToBody(panel, _body, _okRt);
     }
 
     public static void Close()
     {
         if (_rootPanel != null) _rootPanel.SetActive(false);
         ApplySingleButton(false);   // 收窗即还原，下次撤离/体力确认仍是双按钮
-        ApplyNoticeStyle(false);
         _onOk = null;
     }
 
@@ -196,14 +227,6 @@ public static class StaminaConfirmPopup
         _okRt = _okBtn != null ? _okBtn.transform as RectTransform : null;
         _okGeoSaved = false;   // 重建后几何要重新捕获（预制体永远是真值）
         _singleButton = false;
-        // 排版样式同理：以预制体当前值为真值，重建后重捕（2026-10-21）
-        if (_body != null)
-        {
-            _bodyAlignPrefab = _body.alignment;
-            _bodyLineSpacingPrefab = _body.lineSpacing;
-        }
-        if (_title != null) _titleColorPrefab = _title.color;
-        _noticeStyle = false;
     }
 
     static void Wire()

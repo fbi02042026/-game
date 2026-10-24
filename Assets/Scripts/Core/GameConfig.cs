@@ -224,7 +224,7 @@ public static partial class GameConfig
     /// 【2026-10-23 主人拍板】背包单格是否已解锁的**唯一判定出口**：
     /// 格子解锁 = 行解锁（gridY &lt; unlockedRows）OR 单格钻石解锁（SaveData.backpackUnlockedCells 含索引）。
     /// index = gridY * logicalColumns + gridX —— 列数与行基线都由调用网格传入：
-    /// 角色页是 8 列 × 显示解锁 2 行（CharacterBagGrid），四列弹窗网格才是 GetUnlockedBackpackRows + BACKPACK_WIDTH；
+    /// 角色页是 8 列 × 显示解锁 2 行（HeroVaultGrid），四列弹窗网格才是 GetUnlockedBackpackRows + BACKPACK_WIDTH；
     /// 不写死 BACKPACK_WIDTH 是因为 8 列网格的 gridX 可到 7，按 4 列折算索引会撞车。
     /// data 为 null → 只按行判定且视为未解锁（false）。钻石解过的格独立存列表，洗点不回收。
     /// </summary>

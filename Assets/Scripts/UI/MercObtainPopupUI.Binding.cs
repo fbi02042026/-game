@@ -42,6 +42,9 @@ public partial class MercObtainPopupUI : MonoBehaviour
         {
             _ascendBtn = ascendTf.GetComponent<Button>();
             if (_ascendBtn == null) _ascendBtn = ascendTf.gameObject.AddComponent<Button>();
+            // 【2026-10-24 主人拍板】底图（挂发光材质球用）+ authored 缩放（呼吸动效的基准，还原也回它）
+            _ascendImg = ascendTf.GetComponent<Image>();
+            if (ascendTf is RectTransform ascendRt) _ascendBaseScale = ascendRt.localScale;
         }
 
         // 招募购买模式要改文案的三个节点（2026-10-19 主人拍板：按钮换成 购买/取消、标题改佣兵信息）

@@ -526,7 +526,8 @@ public static class SlotMachineSystem
             //（主人反馈「抽奖提示米娅 / 场景小红 / 头像游侠」）。
             // 职业名（剑盾卫士 / 游侠…）是**职业**不是名字，别再拿来当名字用。
             Title = def.Name,
-            Desc = $"[{rarName}]　Lv{level}　★{star}",
+            // 【2026-10-24 主人拍板】局内佣兵没有升星体系，卡面只显示等级数字，不写 ★N
+            Desc = $"[{rarName}]　Lv{level}",
             Rarity = rar,
             Tag = SynergyTag.Summon,
             Star = star,

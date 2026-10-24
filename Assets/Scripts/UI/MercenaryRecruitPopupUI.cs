@@ -47,9 +47,10 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     Sprite _legendaryScrollIcon;
 
     // —— 刷新按钮「钻石刷新」形态节点（2026-10-23 主人拍板：冷却中可花钻立即刷，每天 2 次 50/100）——
-    // 运行时动态创建：按钮内左侧钻石 icon + 右侧价格 + 底部「今日剩N次」小字；免费可刷时隐藏 icon/价格。
+    // 【2026-10-24 主人拍板】按钮文字直接写「50刷新」（价格并入 Label），独立价格浮标不再显示；
+    // 钻石 icon = 主人手建预制体节点，钻石刷新形态显示、免费形态隐藏；
+    // 「剩余次数」小字 = 主人手建预制体节点，字号改 20；代码只绑引用、只改文案/字号，不写大小/颜色/坐标。
     Image _diamondIcon;
-    Text _diamondCostText;
     Text _diamondLeftText;
 
     // —— 货币钮外观快照（2026-10-19 主人报「按钮还不一样」）——
@@ -282,10 +283,10 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 刷新按钮两态（2026-10-23 主人拍板）：
-    /// 免费可刷 → Label「刷新佣兵」，icon/价格隐藏，今天剩余次数常显在按钮底部；
-    /// 冷却中且还有钻刷次数 → Label「钻石刷新」+ icon + 价格，按钮保持可点（点了花钻立即刷）；
-    /// 冷却中且次数用完 → 回「刷新佣兵」灰显，按钮顶上照旧倒计时。
+    /// 刷新按钮两态（2026-10-23 主人拍板；2026-10-24 主人改口径）：
+    /// 免费可刷 → Label「刷新佣兵」，按钮下方常显今日剩余次数；
+    /// 冷却中且还有钻刷次数 → Label 直接写「50刷新」（价格并入文字，钻石图标随形态显示，不挂独立价格浮标），按钮保持可点；
+    /// 冷却中且次数用完 → 回「刷新佣兵」灰显但保持可点：顶上照旧倒计时、点击弹「已无刷新次数 请明天再试」。
     /// </summary>
     void UpdateRefreshCostText()
     {
@@ -298,21 +299,17 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             refreshCostText.text = canFree ? "" : $"{remainSec / 3600:D2}:{remainSec / 60 % 60:D2}:{remainSec % 60:D2}";
         if (refreshButton != null)
         {
-            refreshButton.interactable = canFree || canDiamond;
+            // 【2026-10-24 主人拍板】次数用光也保持可点（仅灰显）：点了走 OnRefresh 弹「已无刷新次数 请明天再试」
+            refreshButton.interactable = true;
             var img = refreshButton.targetGraphic as Image;
             if (img != null)
                 img.color = (canFree || canDiamond) ? Color.white : new Color(0.45f, 0.45f, 0.45f, 1f);
             var label = refreshButton.GetComponentInChildren<Text>();
-            if (label != null && label != _diamondCostText && label != _diamondLeftText)
-                label.text = diamondMode ? "钻石刷新" : "刷新佣兵";
+            if (label != null && label != _diamondLeftText && label != refreshCostText)
+                label.text = diamondMode ? $"{diamondCost}刷新" : "刷新佣兵";
         }
         if (_diamondIcon != null)
-            _diamondIcon.gameObject.SetActive(diamondMode);
-        if (_diamondCostText != null)
-        {
-            _diamondCostText.gameObject.SetActive(diamondMode);
-            if (diamondMode) _diamondCostText.text = diamondCost.ToString();
-        }
+            _diamondIcon.gameObject.SetActive(diamondMode);   // 2026-10-24 主人拍板：钻石刷新形态显示钻石图标（免费形态无价格不显图）
         if (_diamondLeftText != null)
             _diamondLeftText.text = leftToday > 0 ? $"今日剩{leftToday}次" : "今日已用完";
     }

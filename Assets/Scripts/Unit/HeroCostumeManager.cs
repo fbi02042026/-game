@@ -207,15 +207,15 @@ public class HeroCostumeManager : MonoBehaviour
         CacheEmbeddedWeaponRenderers();
         StripPrefabDefaultWeaponVisuals();
         _rigReady = true;
-        GridBackpackSystem.Instance?.RemapWeaponWearSlots(_handRig);
+        BattleBagSystem.Instance?.RemapWeaponWearSlots(_handRig);
         Debug.Log($"[HeroCostumeManager] Rig就绪 attack={_handRig.AttackDir}/{_handRig.AttackSlot} secondary={_handRig.SecondaryDir}/{_handRig.SecondarySlot} matchingLists={_matchingLists?.Length ?? 0}");
     }
 
     void EnsureSubscribed()
     {
         if (_subscribed) return;
-        if (GridBackpackSystem.Instance == null) return;
-        GridBackpackSystem.Instance.OnCostumeChanged += RefreshCostume;
+        if (BattleBagSystem.Instance == null) return;
+        BattleBagSystem.Instance.OnCostumeChanged += RefreshCostume;
         _subscribed = true;
     }
 
@@ -233,8 +233,8 @@ public class HeroCostumeManager : MonoBehaviour
     void Unsubscribe()
     {
         if (!_subscribed) return;
-        if (GridBackpackSystem.Instance != null)
-            GridBackpackSystem.Instance.OnCostumeChanged -= RefreshCostume;
+        if (BattleBagSystem.Instance != null)
+            BattleBagSystem.Instance.OnCostumeChanged -= RefreshCostume;
         _subscribed = false;
     }
 
@@ -332,7 +332,7 @@ public class HeroCostumeManager : MonoBehaviour
     public void RefreshCostume()
     {
         EnsureRig();
-        if (GridBackpackSystem.Instance == null) return;
+        if (BattleBagSystem.Instance == null) return;
         if (!_cacheInitialized) BuildPathCache();
 
         bool useMatching = _matchingLists != null && _matchingLists.Length > 0;
@@ -342,7 +342,7 @@ public class HeroCostumeManager : MonoBehaviour
             return;
         }
 
-        GridBackpackSystem.Instance.RemapWeaponWearSlots(_handRig);
+        BattleBagSystem.Instance.RemapWeaponWearSlots(_handRig);
 
         EquipSlotType[] order =
         {
@@ -353,7 +353,7 @@ public class HeroCostumeManager : MonoBehaviour
         for (int i = 0; i < order.Length; i++)
         {
             EquipSlotType slot = order[i];
-            EquipInstance equip = GridBackpackSystem.Instance.GetEquippedInSlot(slot);
+            EquipInstance equip = BattleBagSystem.Instance.GetEquippedInSlot(slot);
             string spumName = equip != null ? equip.ResolveSpumName() : null;
 
             if (string.IsNullOrEmpty(spumName))
@@ -567,14 +567,14 @@ public class HeroCostumeManager : MonoBehaviour
 
     void RefreshWeaponLoadout(bool useMatching)
     {
-        GridBackpackSystem.Instance.RemapWeaponWearSlots(_handRig);
+        BattleBagSystem.Instance.RemapWeaponWearSlots(_handRig);
 
         EquipInstance attackEquip = _handRig.IsValid
-            ? GridBackpackSystem.Instance.GetEquippedInSlot(_handRig.AttackSlot)
-            : GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
+            ? BattleBagSystem.Instance.GetEquippedInSlot(_handRig.AttackSlot)
+            : BattleBagSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
         EquipInstance secondaryEquip = _handRig.IsValid
-            ? GridBackpackSystem.Instance.GetEquippedInSlot(_handRig.SecondarySlot)
-            : GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.OffHand);
+            ? BattleBagSystem.Instance.GetEquippedInSlot(_handRig.SecondarySlot)
+            : BattleBagSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.OffHand);
         bool twoHandEquipped = attackEquip != null && attackEquip.weaponType == WeaponType.TwoHand;
         if (twoHandEquipped)
             secondaryEquip = null;
@@ -587,7 +587,7 @@ public class HeroCostumeManager : MonoBehaviour
         _equippedSecondarySpum = secondarySpum;
 
         // 【2026-10-06 主人报「我的主武器怎么没了」→ 诊断日志②】
-        // 手上空掉只可能是两种：①穿戴槽里查不到武器（看 GridBackpackSystem 那条日志①）；
+        // 手上空掉只可能是两种：①穿戴槽里查不到武器（看 BattleBagSystem 那条日志①）；
         // ②查到了但 spumName 解析不到贴图路径 —— 下面会先 ClearAllWeaponVisuals 再 return，表现就是「空手」。
         // 这一行把槽位 + 两件 spumName + 贴图路径是否命中一次打全，跑一次就能分清楚是哪种。
         bool attackPathOk = !string.IsNullOrEmpty(attackSpum) && TryResolveSpumPath(attackSpum, out _);

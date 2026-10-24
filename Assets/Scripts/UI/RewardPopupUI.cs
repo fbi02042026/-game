@@ -106,8 +106,8 @@ public class RewardPopupUI : MonoBehaviour
     /// </summary>
     public static bool EnableImpactAnim = true;
 
-    /// <summary>整体缩放系数（主人 2026-09-26 要求：获得奖励弹窗整体缩小 30%）。关掉开关即回到预制体原始大小。</summary>
-    public const float OverallScale = 0.7f;
+    /// <summary>整体缩放系数（2026-09-26 主人拍板缩小 30% → 0.7；2026-10-24 主人拍板放大到 0.85 并保留瘦屏 FitScale 适配）。关掉开关即回到预制体原始大小。</summary>
+    public const float OverallScale = 0.85f;
     /// <summary>一键回退开关：置 false 完全还原预制体尺寸。</summary>
     public static bool EnableOverallScale = true;
 

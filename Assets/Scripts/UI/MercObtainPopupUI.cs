@@ -21,6 +21,14 @@ public partial class MercObtainPopupUI : MonoBehaviour
     /// <summary>预制体只摆了 3 个满星节点（满星1/满星2/满星3）。</summary>
     const int MaxStarNodes = 3;
 
+    /// <summary>进阶流光材质球路径（2026-10-24 主人拍板；源 = Assets/Art/Effects/Material/btn18进阶.mat，
+    /// 复制进 Resources/Materials 供运行时按路径加载——进阶预制体里 authored 的材质引用已断链，靠不住）。</summary>
+    const string AscendGlowMatPath = "Materials/btn18进阶";
+
+    /// <summary>可升星脉冲动效：缓慢呼吸，幅度 6%、周期 1.6 秒（unscaled 时间，弹窗动画既有口径）。</summary>
+    const float AscendPulseAmplitude = 0.06f;
+    const float AscendPulsePeriod = 1.6f;
+
     static MercObtainPopupUI _instance;
 
     GameObject _root;
@@ -35,6 +43,13 @@ public partial class MercObtainPopupUI : MonoBehaviour
     /// <summary>「进阶」按钮（2026-10-22 主人拍板：预制体自带节点 Panel/进阶，主人摆的；
     /// 已拥有的佣兵才显示，点击开 MercAscendUI）。节点没 Button 组件时运行时补，几何不动。</summary>
     Button _ascendBtn;
+    /// <summary>「进阶」节点底图（2026-10-24 主人拍板：可升星时挂发光材质球用）。</summary>
+    Image _ascendImg;
+    /// <summary>进阶节点 authored 缩放（Bind 时记；脉冲动效在它基础上呼吸，还原也回它）。</summary>
+    Vector3 _ascendBaseScale = Vector3.one;
+    /// <summary>进阶流光材质球（Resources/Materials/btn18进阶，懒加载缓存；与底牌 btn09/btn10 同族同加载方式）。</summary>
+    Material _ascendGlowMat;
+    Coroutine _ascendPulseCo;
     /// <summary>当前弹窗填充的佣兵 hireId（Fill 每次更新；「进阶」钮点击与显隐都认它）。</summary>
     string _curHireId;
     Image _icon;

@@ -432,21 +432,29 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
     /// 技能子弹：从施法者飞到目标，飞到了才结算（onImpact）。
     /// 远程怪放技能必须走这里，否则伤害瞬发、玩家看不到子弹。
     /// 飞行体缺失时不能把伤害吞掉，直接立刻回调。
+    /// <para>【2026-10-24 主人拍板】Enemy 阵营且传了 caster：飞行体按档位 fly1/2（精英/Boss=fly2）；
+    /// 高档缺失 LogError 且伤害照常结算（不闪回 fly1）；Ally 恒 Base。</para>
     /// </summary>
     public void PlaySkillProjectile(VfxFaction faction, Vector3 fromPos, Vector3 toPos,
         int facingDir, Transform target, AttackVfxKit kit = AttackVfxKit.Orb,
         GameObject impactOverride = null, float scaleMul = 1f, float speedMul = 1f,
-        System.Action onImpact = null)
+        System.Action onImpact = null, UnitBase caster = null)
     {
         if (kit != AttackVfxKit.Bow && kit != AttackVfxKit.Orb)
             kit = AttackVfxKit.Orb;
 
-        GameObject fly = LoadSharedKit(kit, faction, "fly");
+        // 2026-10-24 主人拍板：敌人远程飞行体分档（普攻/技能弹同口径），Ally 固定 Base
+        int flyVariant = (faction == VfxFaction.Enemy && caster != null)
+            ? WeaponVfxVariant.Resolve(caster) : WeaponVfxVariant.Base;
+        GameObject fly = LoadSharedKit(kit, faction, "fly", flyVariant);
         GameObject impact = impactOverride != null ? impactOverride : LoadSharedKit(kit, faction, "hit");
 
         if (fly == null)
         {
-            Debug.LogError($"[VFX] 技能子弹缺少飞行体: {faction}/{kit}/fly，伤害直接结算");
+            if (flyVariant > WeaponVfxVariant.Base)
+                Debug.LogError($"[BattleVFXSystem] 缺少敌人远程飞行体: Resources/VFX/Shared/Enemy/{(kit == AttackVfxKit.Bow ? "Bow" : "Orb")}/vfx_enemy_{(kit == AttackVfxKit.Bow ? "bow" : "orb")}_fly{flyVariant}");
+            else
+                Debug.LogError($"[VFX] 技能子弹缺少飞行体: {faction}/{kit}/fly，伤害直接结算");
             onImpact?.Invoke();
             return;
         }
@@ -461,18 +469,26 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
     /// 追踪弹：每帧朝目标当前受击点飞（实时跟人），飞到即结算（onImpact）。
     /// 目标中途死亡则飞向其最后已知位置落地消散（onImpact 内部自行判目标存亡）。
     /// 【2026-10-20 主人拍板】远程精英/Boss「追踪弹幕」专用飞行链路。
+    /// 【2026-10-24 主人拍板】Enemy 阵营且传了 caster：飞行体按档位 fly1/2（精英/Boss=fly2）；
+    /// 高档缺失 LogError 且伤害照常结算（不闪回 fly1）；Ally 恒 Base。
     /// </summary>
     public void PlayHomingProjectile(VfxFaction faction, Vector3 fromPos, UnitBase target, AttackVfxKit kit,
-        float scaleMul = 1f, float speedMul = 1f, System.Action onImpact = null)
+        float scaleMul = 1f, float speedMul = 1f, System.Action onImpact = null, UnitBase caster = null)
     {
         if (kit != AttackVfxKit.Bow && kit != AttackVfxKit.Orb)
             kit = AttackVfxKit.Orb;
 
-        GameObject fly = LoadSharedKit(kit, faction, "fly");
+        // 2026-10-24 主人拍板：敌人远程飞行体分档（普攻/技能弹同口径），Ally 固定 Base
+        int flyVariant = (faction == VfxFaction.Enemy && caster != null)
+            ? WeaponVfxVariant.Resolve(caster) : WeaponVfxVariant.Base;
+        GameObject fly = LoadSharedKit(kit, faction, "fly", flyVariant);
         GameObject impact = LoadSharedKit(kit, faction, "hit");
         if (fly == null)
         {
-            Debug.LogError($"[VFX] 追踪弹缺少飞行体: {faction}/{kit}/fly，伤害直接结算");
+            if (flyVariant > WeaponVfxVariant.Base)
+                Debug.LogError($"[BattleVFXSystem] 缺少敌人远程飞行体: Resources/VFX/Shared/Enemy/{(kit == AttackVfxKit.Bow ? "Bow" : "Orb")}/vfx_enemy_{(kit == AttackVfxKit.Bow ? "bow" : "orb")}_fly{flyVariant}");
+            else
+                Debug.LogError($"[VFX] 追踪弹缺少飞行体: {faction}/{kit}/fly，伤害直接结算");
             onImpact?.Invoke();
             return;
         }

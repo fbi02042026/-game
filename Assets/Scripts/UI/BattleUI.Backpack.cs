@@ -319,7 +319,7 @@ public partial class BattleUI : MonoBehaviour
                 cell.Clear();
         }
 
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag == null) return;
 
         var items = bag.GetAllBackpackItems();
@@ -380,7 +380,7 @@ public partial class BattleUI : MonoBehaviour
     /// <summary>把「本局获得」的天赋石 / 日志碎片塞进背包剩余空格做<b>纯展示</b>（可查看，不可使用）。
     ///
     /// <para>【2026-10-21 主人需求「战斗背包只显示当前战斗里获得的东西」】这里只展示<b>本局获得</b>的量：
-    /// 天赋石用 <see cref="GridBackpackSystem.RunGainedTalents"/>（开局对钱包快照的差值），
+    /// 天赋石用 <see cref="BattleBagSystem.RunGainedTalents"/>（开局对钱包快照的差值），
     /// 日志碎片用 <see cref="AdventureLogFragments.GetRunGained"/>；二者都为 0 时不占格。
     /// 点击弹通用告知框看说明/配方进度（见 <see cref="BackpackGridVisual"/> 展示位分支）。</para>
     ///
@@ -418,7 +418,7 @@ public partial class BattleUI : MonoBehaviour
 
         // 2) 金币（本局获得）
         long gold = 0;
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag != null) gold = bag.RunGainedGold;
         if (gold > 0)
         {

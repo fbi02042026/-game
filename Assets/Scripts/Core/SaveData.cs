@@ -90,10 +90,15 @@ public class SaveData
     /// <summary>已首通的最高层（首通奖励一次性真源；记录点 = 本值 / 5 * 5，只进不退）</summary>
     public int endlessRiftClearedStage = 0;
 
-    // === 徽记副本（2026-10-23 主人拍板「活动副本一拆二」：每日两次，每周二/四开放）===
+    // === 活动副本（2026-10-23 拍板「活动副本一拆二」+ 2026-10-24 主人拍板：
+    //     金币周一/三/六、徽记周二/四/日开放，每日各 2 次，每次 10 体力；规则见 ActivityDungeonRules）===
+    /// <summary>金币副本每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday（照 endlessRift 口径）</summary>
+    public string goldDungeonDayKey = "";
+    /// <summary>金币副本今日已用进入次数（每天 2 次，见 ActivityDungeonRules.DAILY_TRIES）</summary>
+    public int goldDungeonTriesToday = 0;
     /// <summary>徽记副本每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday（照 endlessRift 口径）</summary>
     public string badgeDungeonDayKey = "";
-    /// <summary>今日已用进入次数（每天 2 次，见 BadgeDungeonRules.DAILY_TRIES）</summary>
+    /// <summary>徽记副本今日已用进入次数（每天 2 次，见 ActivityDungeonRules.DAILY_TRIES）</summary>
     public int badgeDungeonTriesToday = 0;
     /// <summary>
     /// 活动副本已通关最高难度（2026-10-23 主人拍板「打通前一难度才开下一难度」）：

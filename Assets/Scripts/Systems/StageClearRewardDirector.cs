@@ -1155,11 +1155,11 @@ public class StageClearRewardDirector : MonoBehaviour
 
         if (picked != null && doEquip)
         {
-            if (GridBackpackSystem.Instance != null && GridBackpackSystem.Instance.TryEquipDirect(picked))
+            if (BattleBagSystem.Instance != null && BattleBagSystem.Instance.TryEquipDirect(picked))
             {
                 // 【2026-10-06 主人拍板】统计<b>不在这里调</b>：TryEquipDirect 内部已统一调
                 // AchievementSystem.OnObtainEquip + AdventureLogAchievements.OnEquipPicked
-                // （见 GridBackpackSystem.cs:617-618）。外面再调一次会让成就 / 冒险日志翻倍 ——
+                // （见 BattleBagSystem.cs:617-618）。外面再调一次会让成就 / 冒险日志翻倍 ——
                 // 铁律 15「同一语义只留一个出口」，这条统计的出口就是 TryEquipDirect 那两行。
                 UIManager.Instance?.ShowToast($"已装备：{picked.equipName ?? picked.templateId}", true);   // 2026-10-06 主人拍板：装备获得 force 弹；改走 TryEquipDirect 后「已装备」才名副其实（真的穿进槽里了）
             }

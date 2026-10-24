@@ -310,6 +310,19 @@ public partial class AdventureUI
         RefreshChestNodes();   // 【2026-10-24 难度逐章解锁】难度变了：关卡列灰锁/当前关标识按新难度重算
     }
 
+    /// <summary>
+    /// 手动翻章（滑屏/箭头共用）能不能去该章。
+    /// 【2026-10-24 主人拍板「手动滑屏只能滑到已在世界地图开启的章」】：没在世界地图看到开启的章
+    /// 不能滑跨章——进世界地图开图即记档（WorldMapPopup.MaxSeenChapterId），看过才能滑过去。
+    /// 不通过时已 Toast，调用方留在原地即可。
+    /// </summary>
+    bool CanManualSwipeTo(int chapter)
+    {
+        if (chapter <= WorldMapPopup.MaxSeenChapterId()) return true;
+        Toast("先在世界地图开启新的区域");
+        return false;
+    }
+
     void OnPrevChapter()
     {
         if (_availableChapters.Count <= 1)
@@ -320,6 +333,8 @@ public partial class AdventureUI
         int idx = AvailableIndex();
         idx = (idx - 1 + _availableChapters.Count) % _availableChapters.Count;
         int target = _availableChapters[idx];
+        // 【2026-10-24 主人拍板】没在世界地图看到开启的章不许滑跨章（含循环回绕的那一下）
+        if (!CanManualSwipeTo(target)) return;
         // 【2026-10-24 主人拍板「难度逐章解锁」】该章在当前难度未开启 → 提示后留在原地
         if (IsMainMode(_selectedMode)
             && !ChapterRouteTable.CanEnterAtDiff(target, _selectedDiff, SaveSystem.Instance?.Data))
@@ -346,7 +361,10 @@ public partial class AdventureUI
             Toast("已经是最后一章");
             return;
         }
-        _selectedChapter = _availableChapters[idx + 1];
+        int target = _availableChapters[idx + 1];
+        // 【2026-10-24 主人拍板】手动翻章只能去世界地图里看到开启过的章；没看过 → 提示后留在原地
+        if (!CanManualSwipeTo(target)) return;
+        _selectedChapter = target;
         // 【2026-10-24 主人拍板「难度逐章解锁」】该章在当前难度未开启 → 提示后留在原地
         if (IsMainMode(_selectedMode)
             && !ChapterRouteTable.CanEnterAtDiff(_selectedChapter, _selectedDiff, SaveSystem.Instance?.Data))
@@ -558,7 +576,9 @@ public partial class AdventureUI
             return;
         }
 
-        int enterCost = endless ? StaminaSystem.ENDLESS_RIFT_COST : StaminaSystem.ADVENTURE_COST;
+        int enterCost = endless ? StaminaSystem.ENDLESS_RIFT_COST
+                      : activity ? ActivityDungeonRules.ENTRY_STAMINA_COST   // 2026-10-24 主人拍板：活动副本每次 10 体力
+                      : StaminaSystem.ADVENTURE_COST;
         PendingEndlessRift = endless;
         if (endless && EndlessRiftRules.TriesLeft(SaveSystem.Instance?.Data) <= 0)
         {
@@ -567,22 +587,22 @@ public partial class AdventureUI
             return;
         }
 
-        // 活动副本：先查交替开放日（金币=周一三五 / 徽记=周二四），徽记再查每日 2 次
+        // 活动副本：先查交替开放日（金币=周一三六 / 徽记=周二四日），再查每日各 2 次（2026-10-24 主人拍板）
         if (activity)
         {
             if (badgeEnter && !ActivityDungeonRules.IsBadgeOpenToday())
             {
-                Toast("徽记副本只在每周二、四开放");
+                Toast("徽记副本只在每周二、四、日开放");
                 return;
             }
             if (!badgeEnter && !ActivityDungeonRules.IsGoldOpenToday())
             {
-                Toast("金币副本只在每周一、三、五开放");
+                Toast("金币副本只在每周一、三、六开放");
                 return;
             }
-            if (badgeEnter && BadgeDungeonRules.TriesLeft(SaveSystem.Instance?.Data) <= 0)
+            if (ActivityDungeonRules.TriesLeft(gateData, badgeEnter) <= 0)
             {
-                Toast($"今天的徽记副本次数已用完（{BadgeDungeonRules.DAILY_TRIES}/{BadgeDungeonRules.DAILY_TRIES}）");
+                Toast($"今天的{(badgeEnter ? "徽记" : "金币")}副本次数已用完（{ActivityDungeonRules.DAILY_TRIES}/{ActivityDungeonRules.DAILY_TRIES}）");
                 return;
             }
         }
@@ -621,15 +641,16 @@ public partial class AdventureUI
                 PendingBadgeDungeon = false;
                 // 不调 SetChapter：裂隙章节状态由 StartEndlessRift 全权负责
             }
-            else if (badgeEnter)
+            else if (activity)
             {
-                // 徽记副本：每日次数 + 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
-                if (!BadgeDungeonRules.TryConsumeEnter())
+                // 活动副本（金币/徽记，2026-10-24 主人拍板「都是2次 每次10体力」）：
+                // 每日次数 + 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
+                if (!ActivityDungeonRules.TryConsumeEnter(badgeEnter))
                     return;
                 PendingBattleChapter = _selectedChapter;
                 PendingBattleDifficulty = _selectedDiff;
-                PendingGoldDungeon = false;
-                PendingBadgeDungeon = true;
+                PendingGoldDungeon = !badgeEnter;
+                PendingBadgeDungeon = badgeEnter;
                 ChapterManager.Instance?.SetChapter(_selectedChapter);
             }
             else if (!StaminaSystem.TrySpendForAdventure())

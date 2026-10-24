@@ -19,7 +19,7 @@ public class BackpackItemActionUI : MonoBehaviour
     Button _useBtn;
     Button _dropBtn;
 
-    GridBackpackSystem.BackpackItem _cur;
+    BattleBagSystem.BackpackItem _cur;
 
     /// <summary>挂在 BattleUI 下（保证在 Canvas 内）。重复调用返回同一个实例。</summary>
     public static BackpackItemActionUI Ensure(Transform parent)
@@ -86,7 +86,7 @@ public class BackpackItemActionUI : MonoBehaviour
     }
 
     /// <summary>在屏幕坐标处弹出某个道具的操作面板。</summary>
-    public void Show(GridBackpackSystem.BackpackItem item, Vector2 screenPos)
+    public void Show(BattleBagSystem.BackpackItem item, Vector2 screenPos)
     {
         if (item == null || item.item == null) return;
         _cur = item;
@@ -127,7 +127,7 @@ public class BackpackItemActionUI : MonoBehaviour
 
     void OnUse()
     {
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag == null || _cur == null) { Hide(); return; }
         bag.UseItem(_cur);
         Hide();
@@ -135,7 +135,7 @@ public class BackpackItemActionUI : MonoBehaviour
 
     void OnDrop()
     {
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag == null || _cur == null) { Hide(); return; }
         bag.DropItemStack(_cur);
         Hide();

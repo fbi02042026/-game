@@ -263,12 +263,12 @@ Material:
     - _PoisonShiftSpeed: 0.2
     - _QueueOffset: 0
     - _RainbowBrightness: 1
-    - _RainbowContrast: 1
-    - _RainbowDensity: 0.1
-    - _RainbowFade: 0.25
+    - _RainbowContrast: 2
+    - _RainbowDensity: 0.2
+    - _RainbowFade: 0.502
     - _RainbowNoiseFactor: 0.2
-    - _RainbowSaturation: 1
-    - _RainbowSpeed: 0.3
+    - _RainbowSaturation: 0.513
+    - _RainbowSpeed: 0.5
     - _ReceiveShadows: 1
     - _RecolorFade: 1
     - _RectHeight: 100

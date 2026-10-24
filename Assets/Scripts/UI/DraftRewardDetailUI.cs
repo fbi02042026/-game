@@ -526,8 +526,9 @@ public class DraftRewardDetailUI : MonoBehaviour
     {
         if (!ResolveMercDef(card, out var def))
             return "佣兵";
-        return def.JobName + " · " + SkillRarityUtil.DisplayName(SkillRarityUtil.FromMerc(def.Rarity))
-            + " · ★" + Mathf.Max(1, card.Star);
+        // 【2026-10-24 主人拍板】局内佣兵没有升星体系（后面再开放）：meta 只写 职业 · 品质，
+        // 不再拼 ★N（card.Star 是局内战力口径，不在玩家面前露出）。
+        return def.JobName + " · " + SkillRarityUtil.DisplayName(SkillRarityUtil.FromMerc(def.Rarity));
     }
 
     /// <summary>hireId / AssetId 都能解析到花名册定义（旧档兜底）。</summary>

@@ -30,6 +30,12 @@ public static class BackpackGridVisual
         public int displayCount;
         /// <summary>展示位图标（由收集方加载好塞进来）；null 时走名字兜底。</summary>
         public Sprite displayIcon;
+        /// <summary>
+        /// 2026-10-24 主人拍板：展示位是「佣兵本命碎片」时填 hireId（item_frag_ 前缀反解），
+        /// 铺格时直接实例化主人的碎片预制体（yongbingsuipian：稀有度框体 + Mask 裁剪佣兵头像），
+        /// 谁的碎片用谁的头像；为空走普通展示位图标。
+        /// </summary>
+        public string displayFragHireId;
 
         public bool IsItem => item != null;
         public bool IsDisplay => !string.IsNullOrEmpty(displayName);
@@ -141,45 +147,59 @@ public static class BackpackGridVisual
                 rt.sizeDelta = new Vector2(Mathf.Max(0f, totalW - IconPad * 2f), Mathf.Max(0f, totalH - IconPad * 2f));
             }
 
-            Sprite sprite;
-            if (p.IsDisplay) sprite = p.displayIcon;
-            else if (isItem) sprite = ItemDefs.LoadIcon(p.item.defId);
-            else { EquipIcons.Resolve(p.equip); sprite = p.equip.icon; }
+            // 2026-10-24 主人拍板：展示位里的佣兵本命碎片直接实例化主人的碎片预制体
+            //（yongbingsuipian：稀有度框体 + Mask 裁剪佣兵头像，谁的碎片用谁的头像）。
+            // 预制体加载不到时返回 false，回退走原框体图路径 —— 绝不手搭节点替身。
+            bool hasIcon = false;
+            // 【2026-10-24 编译修复】iconImg 提到 if 块外声明：走碎片预制体路径（ownerFragCard）时没有图标 Image，interactive 段只对图标路径生效
+            Image iconImg = null;
+            bool ownerFragCard = p.IsDisplay && !string.IsNullOrEmpty(p.displayFragHireId)
+                && TryAddOwnerFragmentCard(go.transform, rt, p.displayFragHireId);
 
-            bool hasIcon = sprite != null;
-            // 图标画在子节点上，宿主只负责跨格占位；多格时子节点按宽等比后垂直居中
-            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            iconGo.transform.SetParent(go.transform, false);
-            var iconRt = iconGo.GetComponent<RectTransform>();
-            var img = iconGo.GetComponent<Image>();
-            img.sprite = sprite;
-            img.raycastTarget = false;
-            img.type = Image.Type.Simple;
-            img.enabled = true;
-            PlaceIconInHost(rt, iconRt, img, sprite, p.h, isItem ? null : p.equip);
-
-            // 2026-10-22 主人拍板（施工单 T2）：本命碎片格（item_frag_ 前缀）在框体图标上叠佣兵头像，
-            // 只加子节点不改任何几何；头图取不到按纪律 LogError 不兜底
-            if (isItem) AddMercFragHeadOverlay(iconGo.transform, p.item.defId);
-
-            if (isItem || p.IsDisplay)
+            if (!ownerFragCard)
             {
-                img.color = Color.white;
-            }
-            else
-            {
-                // 【2026-10-06 主人拍板】装备图片上**不挂任何稀有度效果**（UI 图标一律走内置默认材质，
-                // 透明通道才正常）；稀有度改在格子外沿画一圈描边（见下面 EquipRarityRim.Apply）。
-                EquipRarityMaterials.Apply(img);
-                img.color = !hasIcon
-                    ? (p.equipped ? new Color(0.35f, 0.35f, 0.4f, 0.95f) : new Color(0.45f, 0.5f, 0.62f, 0.95f))
-                    : (p.equipped ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white);
+                Sprite sprite;
+                if (p.IsDisplay) sprite = p.displayIcon;
+                else if (isItem) sprite = ItemDefs.LoadIcon(p.item.defId);
+                else { EquipIcons.Resolve(p.equip); sprite = p.equip.icon; }
+
+                hasIcon = sprite != null;
+                // 图标画在子节点上，宿主只负责跨格占位；多格时子节点按宽等比后垂直居中
+                var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                iconGo.transform.SetParent(go.transform, false);
+                var iconRt = iconGo.GetComponent<RectTransform>();
+                var img = iconGo.GetComponent<Image>();
+                iconImg = img;
+                img.sprite = sprite;
+                img.raycastTarget = false;
+                img.type = Image.Type.Simple;
+                img.enabled = true;
+                PlaceIconInHost(rt, iconRt, img, sprite, p.h, isItem ? null : p.equip);
+
+                // 2026-10-22 主人拍板（施工单 T2）：本命碎片格（item_frag_ 前缀）在框体图标上叠佣兵头像，
+                // 只加子节点不改任何几何；头图取不到按纪律 LogError 不兜底
+                if (isItem) AddMercFragHeadOverlay(iconGo.transform, p.item.defId);
+
+                if (isItem || p.IsDisplay)
+                {
+                    img.color = Color.white;
+                }
+                else
+                {
+                    // 【2026-10-06 主人拍板】装备图片上**不挂任何稀有度效果**（UI 图标一律走内置默认材质，
+                    // 透明通道才正常）；稀有度改在格子外沿画一圈描边（见下面 EquipRarityRim.Apply）。
+                    EquipRarityMaterials.Apply(img);
+                    img.color = !hasIcon
+                        ? (p.equipped ? new Color(0.35f, 0.35f, 0.4f, 0.95f) : new Color(0.45f, 0.5f, 0.62f, 0.95f))
+                        : (p.equipped ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white);
+                }
             }
 
             // 稀有度描边：只有装备有稀有度，道具/展示位不画。压在图标之上、角标之下（所以放在角标之前）。
             EquipRarityRim.Apply(go.transform, (isItem || p.IsDisplay) ? (Rarity?)null : p.equip.rarity);
 
-            if (!hasIcon)
+            // ownerFragCard 路径整卡就是视觉本体，不走名字兜底
+            if (!ownerFragCard && !hasIcon)
                 AddNameFallback(go.transform,
                     p.IsDisplay ? p.displayName
                         : isItem ? (p.item.Name ?? "道具") : (EquipUiText.EquipTitleWithHand(p.equip) ?? "装备"),
@@ -209,7 +229,7 @@ public static class BackpackGridVisual
             bool interactive = enableDrag || isItem || p.IsDisplay;
             if (interactive)
             {
-                img.raycastTarget = true;
+                if (iconImg != null) iconImg.raycastTarget = true;
                 var hostImg = go.GetComponent<Image>();
                 if (hostImg == null)
                 {
@@ -274,6 +294,31 @@ public static class BackpackGridVisual
         img.sprite = head;
         img.preserveAspect = true;
         img.raycastTarget = false;
+    }
+
+    /// <summary>
+    /// 展示位铺主人的碎片预制体（2026-10-24 主人拍板）：谁的碎片用谁的头像。
+    /// 走 <see cref="MercFragmentCardUI.Create"/>（只换 sprite，预制体内部 suipianicon/mask/HeadIcon
+    /// 的尺寸、位置、锚点一个值不动）；唯一例外是对根节点做**等比**缩放适配格子
+    /// （主人定版 100×100，随身仓库格子 82×82，不缩会压到邻格）。
+    /// 同时关掉卡内三张图的 raycast —— 点击要落在宿主上走告知框。
+    /// 预制体加载失败返回 false，由调用方回退原框体图路径（不手搭节点）。
+    /// </summary>
+    static bool TryAddOwnerFragmentCard(Transform host, RectTransform hostRt, string hireId)
+    {
+        var rarity = MercRosterDefs.TryGetByHireId(hireId, out var md)
+            ? md.Rarity : MercRosterDefs.MercRarity.Common;
+        var card = MercFragmentCardUI.Create(host, "OwnerFragCard", rarity, hireId);
+        if (card == null || card.Rect == null) return false;
+
+        if (card.Frame != null) card.Frame.raycastTarget = false;
+        if (card.MaskGraphic != null) card.MaskGraphic.raycastTarget = false;
+        if (card.Head != null) card.Head.raycastTarget = false;
+
+        float side = Mathf.Min(hostRt.rect.width, hostRt.rect.height);
+        if (side > 1f)
+            card.Rect.localScale = Vector3.one * Mathf.Min(1f, side / 100f);
+        return true;
     }
 
     /// <summary>
@@ -440,7 +485,10 @@ public static class BackpackGridVisual
         tr.offsetMax = Vector2.zero;
     }
 
-    /// <summary>堆叠道具右下角的数量，如「×12」。</summary>
+    /// <summary>
+    /// 堆叠道具/展示位右下角的数量，如「×12」。2026-10-24 主人拍板：字号 15 → 22（原来看不清）。
+    /// 上限规则归收集方管（一格最多 99，超了分格），这里只照实画数。
+    /// </summary>
     static void AddCountBadge(Transform parent, int count)
     {
         var go = new GameObject("CountBadge", typeof(RectTransform));
@@ -448,7 +496,7 @@ public static class BackpackGridVisual
         var t = go.AddComponent<Text>();
         t.text = "×" + count;
         t.alignment = TextAnchor.LowerRight;
-        t.fontSize = 15;
+        t.fontSize = 22;
         t.color = Color.white;
         t.raycastTarget = false;
         t.font = GameFonts.GetChinese();

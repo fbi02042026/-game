@@ -36,10 +36,14 @@ public partial class AdventureUI
 
     /// <summary>关卡滑动列表视口名（2026-10-24 主人拍板「关卡列改滑动列表」；运行时生成挂主线节点下，翻章手势让路要按名字找，别改）。</summary>
     const string ChestViewportName = "关卡Viewport";
-    /// <summary>当前关标识节点名（玩家头像+箭头，运行时生成挂当前关槽位下）。</summary>
-    const string StageMarkerNodeName = "当前关标识";
-    /// <summary>玩家头像加载出口：CharacterRegistry.LoadPlayerIcon（icon_wanjia，Art/UI/Icons/Heads）。</summary>
-    static Sprite LoadPlayerAvatarSprite() => CharacterRegistry.LoadPlayerIcon();
+    /// <summary>当前关标识节点名（2026-10-24 主人在 AdventureUI 根下摆好的「头像指示」，代码只挪位置不改样式）。</summary>
+    const string StageMarkerNodeName = "头像指示";
+    /// <summary>标识里箭头节点名（灰锁章只隐它、头像保留）。</summary>
+    const string StageMarkerArrowNodeName = "箭头";
+    /// <summary>标识里头像节点名（点击回位挂在它上面）。</summary>
+    const string StageMarkerAvatarNodeName = "头像";
+    /// <summary>标识与槽顶的间隙（箭头尖到当前关槽顶；嫌贴太紧只改这一个数）。</summary>
+    const float StageMarkerGap = 6f;
 
     /// <summary>三种材质的 sprite 路径（注意：木箱锁图叫「未解锁」，银/金叫「未开启」，素材名如此）。</summary>
     static readonly string[] ChestWoodPaths   = { ChestResDir + "木箱开启",   ChestResDir + "木箱关闭",   ChestResDir + "木箱未解锁" };
@@ -322,70 +326,156 @@ public partial class AdventureUI
         _chestScroll.verticalNormalizedPosition = 1f - t;
     }
 
+    /// <summary>按关号（1 起）找槽位下标；找不到（整章通关 current=total+1）返回 -1。</summary>
+    int FindSlotIndexOfStage(int stage)
+    {
+        for (int i = 0; i < _slotStage.Count; i++)
+            if (_slotStage[i] == stage) return i;
+        return -1;
+    }
+
     // ────────────────────────────────────────────────────
-    // 当前关标识（2026-10-24 主人拍板）：玩家头像 + 箭头，挂在当前关槽位上（随槽位浮动/放大一起动）；
-    // 切难度不换进度真源（clearedStages 不分难度），标识照常显示；该章该难度灰锁时隐藏。
+    // 当前关标识（2026-10-24 主人拍板 + 主人预制体节点「头像指示」）：
+    // 真源 = 主人在 AdventureUI 根下摆的节点（头像/箭头图、尺寸、缩放全以预制体为准，代码不碰样式）。
+    // 行为（主人原话「跟着滑动界面一起滑动并且一直指向当前关卡」「手动上滑时在最上或最下指向当前该打的关卡」）：
+    // ① 节点挪进滑动列表视口（不进内容，不被裁掉），每帧贴着当前关槽位上方走；
+    // ② 当前关滚出视口 → 钳在视口顶边/底边，箭头（主人的「旋转」容器）翻转指向当前关方向；
+    // ③ 跨章后该难度没有可打的关（灰锁章）→ 只有头像没有箭头；
+    // ④ 点头像 = 一键滚回该打的关。
     // ────────────────────────────────────────────────────
 
     RectTransform _stageMarker;
-    Sprite _playerAvatar;
+    RectTransform _stageMarkerArrow;
+    RectTransform _stageMarkerArrowRot;   // 主人的「旋转」容器（箭头方向翻转用）
+    int _markerCurrentSlot = -1;
 
-    void UpdateStageMarker(int slotIdx, bool chapterDiffLocked)
+    /// <summary>绑定主人摆的「头像指示」节点（只绑一次；缺真值 LogError 不兜底）。</summary>
+    void EnsureStageMarkerNode()
     {
-        if (slotIdx < 0 || chapterDiffLocked || slotIdx >= _slotNodes.Count)
+        if (_stageMarker != null) return;
+        var root = transform.Find(StageMarkerNodeName);
+        if (root == null)
         {
-            if (_stageMarker != null && _stageMarker.gameObject.activeSelf)
-                _stageMarker.gameObject.SetActive(false);
+            Debug.LogError($"[AdventureUI] 根下找不到「{StageMarkerNodeName}」节点（主人预制体缺失），当前关标识无从显示（缺真值不兜底）");
             return;
         }
-        var slotRt = _slotNodes[slotIdx];
-        if (slotRt == null) return;
-        if (_stageMarker == null)
+        _stageMarker = (RectTransform)root;
+        _stageMarkerArrow = FindChildRecursive(_stageMarker, StageMarkerArrowNodeName);
+        _stageMarkerArrowRot = _stageMarkerArrow != null ? _stageMarkerArrow.parent as RectTransform : null;
+        // 挪进滑动列表视口（视口先于本方法建好，见 EnsureChestNodes → EnsureChestScrollWrap）；
+        // 不进内容节点 → 不被 RectMask2D 沿内容裁掉，钳边时仍可见
+        if (_chestScroll != null && _chestScroll.viewport != null && _stageMarker.parent != _chestScroll.viewport)
+            _stageMarker.SetParent(_chestScroll.viewport, false);
+        var avatar = FindChildRecursive(_stageMarker, StageMarkerAvatarNodeName);
+        if (avatar != null)
         {
-            if (_playerAvatar == null) _playerAvatar = LoadPlayerAvatarSprite();
-            if (_playerAvatar == null) return;   // 缺真值不兜底：LogError 已在加载出口打过
-            var go = new GameObject(StageMarkerNodeName, typeof(RectTransform));
-            var rt = (RectTransform)go.transform;
-            // 头像
-            var avatarGo = new GameObject("头像", typeof(RectTransform), typeof(Image));
-            var art = (RectTransform)avatarGo.transform;
-            art.SetParent(rt, false);
-            art.anchorMin = art.anchorMax = new Vector2(0.5f, 1f);
-            art.pivot = new Vector2(0.5f, 1f);
-            art.anchoredPosition = new Vector2(0f, 0f);
-            art.sizeDelta = new Vector2(64f, 64f);
-            var aImg = avatarGo.GetComponent<Image>();
-            aImg.sprite = _playerAvatar;
-            aImg.raycastTarget = false;
-            aImg.preserveAspect = true;
-            // 箭头（指向下方当前关槽位）
-            var arrowGo = new GameObject("箭头", typeof(RectTransform), typeof(Text));
-            var arrRt = (RectTransform)arrowGo.transform;
-            arrRt.SetParent(rt, false);
-            arrRt.anchorMin = arrRt.anchorMax = new Vector2(0.5f, 1f);
-            arrRt.pivot = new Vector2(0.5f, 1f);
-            arrRt.anchoredPosition = new Vector2(0f, -60f);
-            arrRt.sizeDelta = new Vector2(48f, 36f);
-            var aTxt = arrowGo.GetComponent<Text>();
-            aTxt.text = "▼";
-            aTxt.fontSize = 30;
-            aTxt.alignment = TextAnchor.MiddleCenter;
-            aTxt.color = new Color(1f, 0.92f, 0.5f, 1f);
-            aTxt.raycastTarget = false;
-            aTxt.font = GameFonts.GetChinese();
-            _stageMarker = rt;
-            GameFonts.ApplyToHierarchy(rt);
+            var btn = avatar.GetComponent<Button>();
+            if (btn == null) btn = avatar.gameObject.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(OnClickStageMarker);
         }
-        if (_stageMarker.parent != slotRt)
-            _stageMarker.SetParent(slotRt, false);
-        // 钉在槽位正上方（跟随槽位缩放/浮动）
-        _stageMarker.anchorMin = _stageMarker.anchorMax = new Vector2(0.5f, 1f);
-        _stageMarker.pivot = new Vector2(0.5f, 0f);
-        _stageMarker.anchoredPosition = new Vector2(0f, 6f);
-        _stageMarker.localScale = Vector3.one;
-        if (!_stageMarker.gameObject.activeSelf)
-            _stageMarker.gameObject.SetActive(true);
-        _stageMarker.SetAsLastSibling();
+        else
+        {
+            Debug.LogError($"[AdventureUI] 「{StageMarkerNodeName}」下找不到「{StageMarkerAvatarNodeName}」子节点，点击回位无效（缺真值不兜底）");
+        }
+    }
+
+    /// <summary>点击头像 = 一键回到该打的关卡（滑动列表滚回当前关；灰锁章同样生效）。</summary>
+    void OnClickStageMarker()
+    {
+        ScrollChestToCurrent(_markerCurrentSlot);
+    }
+
+    /// <summary>
+    /// 刷新标识状态（RefreshChestNodes 调）：记录当前关槽位、灰锁章只隐箭头；
+    /// 位置由 <see cref="UpdateStageMarkerFollow"/> 每帧贴。
+    /// </summary>
+    void UpdateStageMarker(int slotIdx, bool chapterDiffLocked)
+    {
+        EnsureStageMarkerNode();
+        if (_stageMarker == null) return;
+        _markerCurrentSlot = slotIdx;
+        bool hasSlot = slotIdx >= 0 && slotIdx < _slotNodes.Count && _slotNodes[slotIdx] != null;
+        // 灰锁章（跨章后该难度没有可打的关）：只有头像没有箭头
+        if (_stageMarkerArrow != null && _stageMarkerArrow.gameObject.activeSelf == chapterDiffLocked)
+            _stageMarkerArrow.gameObject.SetActive(!chapterDiffLocked);
+        if (_stageMarker.gameObject.activeSelf != hasSlot)
+            _stageMarker.gameObject.SetActive(hasSlot);
+        if (hasSlot)
+            _stageMarker.SetAsLastSibling();
+    }
+
+    /// <summary>
+    /// 标识每帧贴位（Update 调，槽位位置写入之后）：
+    /// 当前关在视口内 → 贴其正上方；滚出视口 → 钳在顶/底边缘，箭头翻转指向当前关方向。
+    /// </summary>
+    void UpdateStageMarkerFollow()
+    {
+        if (_stageMarker == null || !_stageMarker.gameObject.activeSelf || _chestScroll == null) return;
+        var viewport = _chestScroll.viewport;
+        var slotRt = _markerCurrentSlot >= 0 && _markerCurrentSlot < _slotNodes.Count
+            ? _slotNodes[_markerCurrentSlot] : null;
+        if (viewport == null || slotRt == null || !slotRt.gameObject.activeInHierarchy)
+        {
+            if (_stageMarker.gameObject.activeSelf) _stageMarker.gameObject.SetActive(false);
+            return;
+        }
+        var canvas = _stageMarker.GetComponentInParent<Canvas>();
+        Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport, slotRt.position, cam, out var slotLocal))
+            return;
+        // localPoint 以 viewport.pivot 为原点 → 换到中心系（钳边/贴位都按中心±halfH 算）
+        slotLocal += new Vector2((0.5f - viewport.pivot.x) * viewport.rect.width,
+                                 (0.5f - viewport.pivot.y) * viewport.rect.height);
+        float tip = MarkerTipOffset();
+        float halfH = viewport.rect.height * 0.5f;
+        float centerY;
+        bool flip;   // true = 箭头朝上（当前关在视口上方）
+        if (slotLocal.y > halfH)
+        {
+            centerY = -halfH + tip;   // 钳底边，箭头朝上
+            flip = true;
+        }
+        else if (slotLocal.y < -halfH)
+        {
+            centerY = halfH - tip;    // 钳顶边，箭头朝下
+            flip = false;
+        }
+        else
+        {
+            centerY = Mathf.Clamp(slotLocal.y + tip, -halfH + tip, halfH - tip);
+            flip = false;
+        }
+        _stageMarker.anchoredPosition = new Vector2(slotLocal.x, centerY);
+        if (_stageMarkerArrowRot != null)
+        {
+            var e = _stageMarkerArrowRot.localEulerAngles;
+            float z = flip ? 180f : 0f;
+            if (Mathf.Abs(Mathf.DeltaAngle(e.z, z)) > 0.5f)
+                _stageMarkerArrowRot.localEulerAngles = new Vector3(0f, 0f, z);
+        }
+    }
+
+    /// <summary>箭头尖相对标识中心的渲染偏移（按主人预制体箭头摆位换算，主人改箭头 y 自动跟随）。</summary>
+    float MarkerTipOffset()
+    {
+        if (_stageMarkerArrow == null) return 90f;
+        return (Mathf.Abs(_stageMarkerArrow.anchoredPosition.y) + _stageMarkerArrow.rect.height * 0.5f)
+               * Mathf.Max(0.01f, Mathf.Abs(_stageMarker.localScale.y));
+    }
+
+    /// <summary>递归找子节点（按名字，主人层级顺序不依赖）。</summary>
+    static RectTransform FindChildRecursive(Transform root, string name)
+    {
+        for (int i = 0; i < root.childCount; i++)
+        {
+            var c = root.GetChild(i);
+            if (c.name == name) return (RectTransform)c;
+            var r = FindChildRecursive(c, name);
+            if (r != null) return r;
+        }
+        return null;
     }
 
     /// <summary>
@@ -511,8 +601,10 @@ public partial class AdventureUI
         rootCg.alpha = diffLocked ? 0.55f : 1f;
         rootCg.interactable = !diffLocked;
 
-        // 当前关标识（玩家头像+箭头）与滑动列表定位：灰锁章没有「当前关」，标识隐藏、不滚动
-        UpdateStageMarker(diffLocked ? -1 : _currentFloatSlot, diffLocked);
+        // 当前关标识（主人预制体「头像指示」）与滑动列表定位：
+        // 灰锁章标识仍显示（只有头像没有箭头，指向该打的关）；内容比视口矮时不滚
+        int markerSlot = FindSlotIndexOfStage(current);
+        UpdateStageMarker(markerSlot, diffLocked);
         ScrollChestToCurrent(diffLocked ? -1 : _currentFloatSlot);
 
         // 首尾淡出：只淡最顶可见槽（列底=最早的未领关，可领宝箱不淡出；中段全亮）
@@ -727,6 +819,8 @@ public partial class AdventureUI
                 rt.anchoredPosition = p;
             }
         }
+        // 当前关标识钳边跟随（槽位位置写入之后算，含浮动/补位滑动；随滚动实时贴/钳边）
+        UpdateStageMarkerFollow();
     }
 
     // ────────────────────────────────────────────────────

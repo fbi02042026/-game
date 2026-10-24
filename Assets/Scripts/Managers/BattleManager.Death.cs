@@ -150,7 +150,7 @@ public partial class BattleManager
             TryGrantStageQuestGold();
 
         // 结算前先快照；局内装备仍清（裂缝口径）
-        GridBackpackSystem.Instance?.ClearRunEquipment();
+        BattleBagSystem.Instance?.ClearRunEquipment();
         // 【2026-10-18 主人反馈「结算金币和局内获得的不一致」】引导通关金币（SlotMachineDefs.TUTORIAL_SETTLEMENT_GOLD
         // = 150）原来绕过账本直接塞城镇钱包，结算却把显示值硬抬到 150 —— 局内顶栏 / 结算 / 城镇实收三个数对不上。
         // 现改为：进账唯一出口 GrantRunGold 并入「本局获得金币」，再随 PersistBattleGold 一起写回，
@@ -207,7 +207,7 @@ public partial class BattleManager
     {
         if (TutorialDirector.Instance != null)
             TutorialDirector.Instance.WaitingEvacuate = false;
-        GridBackpackSystem.Instance?.ClearRunEquipment();
+        BattleBagSystem.Instance?.ClearRunEquipment();
         // 【2026-10-18 双钱包拆分】currentGold 只是抽奖币池（带不出）；写回走 PersistBattleGold
         // 的「获得金币 − 已付水位」增量，不存在整额 Add 路径
         PersistBattleGold();
@@ -236,7 +236,7 @@ public partial class BattleManager
         else TavernEggState.RegisterEvacuate();
 
         // 裂缝口径：局内装备/武器退出清空，不带出城镇
-        GridBackpackSystem.Instance?.ClearRunEquipment();
+        BattleBagSystem.Instance?.ClearRunEquipment();
 
         PersistBattleGold();
         // 金币保留 → 天赋石照发（死亡与撤离同规则）
@@ -275,8 +275,8 @@ public partial class BattleManager
         // 死亡也照常显示本局赚到的钱。
         RunStats.GoldGained = RunStats.GoldEarned;
         RunStats.TalentGained = talentGain;
-        RunStats.EquipCount = GridBackpackSystem.Instance != null
-            ? GridBackpackSystem.Instance.GetAllItemsForLegacy().Count
+        RunStats.EquipCount = BattleBagSystem.Instance != null
+            ? BattleBagSystem.Instance.GetAllItemsForLegacy().Count
             : 0;
         var data = SaveSystem.Instance?.Data;
         if (data != null)

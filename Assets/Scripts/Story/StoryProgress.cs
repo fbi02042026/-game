@@ -129,8 +129,8 @@ public static class StoryProgress
     public static void ResetTutorialRunInventoryIfNeeded()
     {
         if (TutorialDone || TutorialBattleCleared) return;
-        if (GridBackpackSystem.Instance != null)
-            GridBackpackSystem.Instance.InitNewRun();
+        if (BattleBagSystem.Instance != null)
+            BattleBagSystem.Instance.InitNewRun();
     }
 
     public static void MarkTutorialIntroDone()

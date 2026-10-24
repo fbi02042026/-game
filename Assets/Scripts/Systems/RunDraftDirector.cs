@@ -357,7 +357,7 @@ public class RunDraftDirector : MonoBehaviour
     ///
     /// 两条路都算「生效了」（玩家拿到了东西，就该扣钱）：
     /// <list type="bullet">
-    /// <item>换上新的 → 新件入包，旧件由 <see cref="GridBackpackSystem.TryEquipFromReward"/> 折成强化石；</item>
+    /// <item>换上新的 → 新件入包，旧件由 <see cref="BattleBagSystem.TryEquipFromReward"/> 折成强化石；</item>
     /// <item>留着旧的 → 新件同样折成强化石（不占背包，也不白抽）。</item>
     /// </list>
     /// 【2026-10-14 主人拍板】同部位没有旧件时**也弹窗**（右侧栏显示「无」），不再直接入包。
@@ -376,14 +376,14 @@ public class RunDraftDirector : MonoBehaviour
         // 不再出现「两次抽出同一个武器、数值还一模一样」（见 DraftPool.NoteDrawnEquip）。
         DraftPool.NoteDrawnEquip(eq);
 
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag == null)
         {
             done?.Invoke(false, "背包系统未就绪");
             yield break;
         }
 
-        // 谁会被顶掉 —— 判据只有 GridBackpackSystem.FindSameSlotEquip 一处
+        // 谁会被顶掉 —— 判据只有 BattleBagSystem.FindSameSlotEquip 一处
         var old = bag.FindSameSlotEquip(eq);
         bool replace = true;
         // 【2026-10-14 主人拍板】抽中装备**一律弹替换确认**（原「同部位没有旧件时不弹窗、直接入包」作废）：

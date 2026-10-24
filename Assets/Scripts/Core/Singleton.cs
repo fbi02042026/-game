@@ -44,7 +44,7 @@ public class Singleton<T> : MonoBehaviour where T : MonoBehaviour
                         if (_instance == null)
                         {
                             _instance = FindObjectOfType<T>();
-                            // 场景卸载/退出 Play 时禁止在 getter 里新建，避免 OnDestroy 链上刷 GridBackpackSystem 等
+                            // 场景卸载/退出 Play 时禁止在 getter 里新建，避免 OnDestroy 链上刷 BattleBagSystem 等
                             if (_instance == null && Application.isPlaying && !_applicationIsQuitting)
                             {
                                 if (typeof(ICombatBoundSingleton).IsAssignableFrom(typeof(T)))

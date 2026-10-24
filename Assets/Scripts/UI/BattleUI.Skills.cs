@@ -388,7 +388,7 @@ public partial class BattleUI : MonoBehaviour
     public void UpdateEquipQuickSlots()
     {
         if (equipQuickSlots == null || equipQuickSlots.Count == 0) return;
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         for (int i = 0; i < equipQuickSlots.Count; i++)
         {
             var slot = equipQuickSlots[i];

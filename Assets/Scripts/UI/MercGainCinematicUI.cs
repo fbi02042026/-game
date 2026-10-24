@@ -109,6 +109,9 @@ public class MercGainCinematicUI : MonoBehaviour
         btn.transition = Selectable.Transition.None;
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(Close);
+        // 【2026-10-24 主人拍板】点背景只关闭，不要缩放：UICanvasSetup.RefreshPopup 已给全屏
+        // BG 按钮自动挂了 UiButtonPressFeedback（按下整屏缩到 0.94 + 变暗一闪），这里压掉。
+        UiButtonPressFeedback.Suppress(bg.gameObject);
 
         _co = StartCoroutine(CoPlay());
     }

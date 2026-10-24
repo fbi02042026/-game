@@ -104,9 +104,10 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 确保刷新按钮上有「钻石刷新」形态节点（2026-10-23 主人拍板，幂等）：
-    /// 左侧钻石 icon（按钮宽 16% 处）+ 右侧价格文字（84% 处）+ 底部「今日剩N次」小字。
-    /// 预制体和代码兜底壳两条路径都从这里补节点，不改预制体文件本身。
+    /// 绑定刷新按钮「钻石刷新」形态节点（2026-10-23 主人拍板，幂等；2026-10-24 主人改口径）：
+    /// 按钮文字直接写「50刷新」（价格并入 Label）→ 宝石 icon 绑引用，钻石刷新形态显示、免费形态隐藏；
+    /// 独立价格浮标 DiamondCost 已删除（不再运行时创建）；
+    /// 「剩余次数」小字 = 主人手建预制体节点，代码只绑引用 + 设字号 20（2026-10-24 主人拍板），不写尺寸/坐标。
     /// </summary>
     void EnsureDiamondRefreshNodes()
     {
@@ -115,54 +116,29 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
 
         if (_diamondIcon == null)
         {
-            var t = btnTf.Find("DiamondIcon");
+            // 主人手建的预制体节点「icon」（RefreshButton 下）。2026-10-24 主人拍板：
+            // 价格写进按钮文字，图标仍随钻石刷新形态显示 —— 代码只绑引用控制显隐，不动它的图/大小/颜色；
+            // 找不到就 LogError，不自建（铁律 15 不兜底）。
+            var t = btnTf.Find("icon");
             _diamondIcon = t != null ? t.GetComponent<Image>() : null;
         }
         if (_diamondIcon == null)
-        {
-            _diamondIcon = CreateImg(btnTf, "DiamondIcon", Color.white);
-            var rt = _diamondIcon.rectTransform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0.16f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta = new Vector2(28f, 28f);
-            _diamondIcon.sprite = CommonIconSprites.Load("icon_diamond_blue");
-            _diamondIcon.preserveAspect = true;
-            _diamondIcon.raycastTarget = false;
-        }
-
-        if (_diamondCostText == null)
-        {
-            var t = btnTf.Find("DiamondCost");
-            _diamondCostText = t != null ? t.GetComponent<Text>() : null;
-        }
-        if (_diamondCostText == null)
-        {
-            _diamondCostText = CreateTxt(btnTf, "DiamondCost", "50", 18, TextAnchor.MiddleCenter);
-            var rt = _diamondCostText.rectTransform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0.84f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta = new Vector2(48f, 24f);
-        }
+            Debug.LogError("[MercenaryRecruitPopup] RefreshButton 下找不到「icon」钻石图标节点");
 
         if (_diamondLeftText == null)
         {
-            var t = btnTf.Find("DiamondLeft");
+            // 【2026-10-24 主人拍板】剩余次数文字 = 主人在 RefreshButton 下手建的「剩余次数」节点：
+            // 代码只绑引用、只改文案与字号 20（UpdateRefreshCostText 里 _diamondLeftText.text = ...），
+            // 绝不写它的 sizeDelta/color/anchoredPosition；找不到就 LogError，不再自建（铁律 15 不兜底）。
+            var t = btnTf.Find("剩余次数");
             _diamondLeftText = t != null ? t.GetComponent<Text>() : null;
         }
         if (_diamondLeftText == null)
-        {
-            _diamondLeftText = CreateTxt(btnTf, "DiamondLeft", "今日剩2次", 11, TextAnchor.MiddleCenter);
-            var rt = _diamondLeftText.rectTransform;
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = new Vector2(0f, 5f);
-            rt.sizeDelta = new Vector2(160f, 16f);
-            _diamondLeftText.color = new Color(1f, 0.92f, 0.6f, 1f);
-        }
+            Debug.LogError("[MercenaryRecruitPopup] RefreshButton 下找不到「剩余次数」文字节点，今日剩余次数不会显示");
+        else if (_diamondLeftText.fontSize != 20)
+            _diamondLeftText.fontSize = 20;   // 2026-10-24 主人拍板：预制体 18 → 20（只改字号，不动布局）
 
-        // 节点刚建好是全显示状态，立即按当前冷却/次数刷一次形态，避免 icon 常显
+        // 绑完立即按当前冷却/次数刷一次显隐与文案（icon 随形态显隐、剩余次数该显就显）
         UpdateRefreshCostText();
     }
 

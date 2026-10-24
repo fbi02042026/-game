@@ -152,13 +152,13 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             StoryProgress.ConsumeTutorialBattleFlag();
         }
         // 选职后一律发职业武器（含教程）；木剑兜底仅非教程
-        if (GridBackpackSystem.Instance != null)
+        if (BattleBagSystem.Instance != null)
         {
             PlayerJobDefs.ApplyForBattle();
             if (!Rules.SkipStarterWeaponFallback
-                && GridBackpackSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand) == null)
+                && BattleBagSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand) == null)
             {
-                if (GridBackpackSystem.Instance.EnsureStarterWeapon())
+                if (BattleBagSystem.Instance.EnsureStarterWeapon())
                     hero.RecalcAttr();
             }
         }

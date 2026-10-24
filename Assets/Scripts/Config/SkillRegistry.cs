@@ -108,7 +108,7 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
     /// <summary>玩家当前携带技能。返回 allyConfigId 供 VFX；战斗数由表合成。</summary>
     public string GetPlayerSkillId()
     {
-        string fromEquip = EquipStatRollup.GetEquippedGrantSkillId(GridBackpackSystem.Instance);
+        string fromEquip = EquipStatRollup.GetEquippedGrantSkillId(BattleBagSystem.Instance);
         if (!string.IsNullOrEmpty(fromEquip) && Get(fromEquip) != null)
             return fromEquip;
 

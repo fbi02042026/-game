@@ -36,7 +36,7 @@ public class TownBackpackGrid : MonoBehaviour
     protected virtual int LogicalRowsMax() => GameConfig.BACKPACK_HEIGHT_MAX;
 
     /// <summary>
-    /// 子类专属数据源钩子（**基类默认返回 null，走原本的 GridBackpackSystem 逻辑，行为一个字节都不变**）。
+    /// 子类专属数据源钩子（**基类默认返回 null，走原本的 BattleBagSystem 逻辑，行为一个字节都不变**）。
     /// <para>返回非 null = 由子类全权决定铺什么：Refresh() 拿它直接 ClearAndPlace + RestoreCellVisuals 后 return，
     /// **不再走下面那条 4 列网格 + `bip.y >= unlockedRows` 的过滤分支**。</para>
     /// <para>坐标语义：子类自己的网格坐标；由子类负责与格子实际使用的逻辑坐标对齐。</para>
@@ -67,6 +67,10 @@ public class TownBackpackGrid : MonoBehaviour
                 if (rowLockOverlay == null) rowLockOverlay = cell.gameObject;
                 continue;
             }
+            // 【2026-10-24 修】网格底板 bg（图层8）不是格子：不跳过会被绑成第 33 个「格子」，
+            // 32 个真格子坐标整体错位一格（日志 [BagLock] cells=33 实锤），物品落格全部偏移。
+            if (cell.name.Equals("bg", System.StringComparison.OrdinalIgnoreCase))
+                continue;
 
             // 格子命名约定（与主人预制体一致）：Cell_{显示行}_{显示列} —— 行在前、列在后。
             int cols = DisplayColumns();
@@ -196,7 +200,7 @@ public class TownBackpackGrid : MonoBehaviour
 
     /// <summary>
     /// 本网格是否开放「锁格点击 → 钻石解锁」入口（2026-10-23 主人拍板：**只开放给角色页
-    /// CharacterBagGrid**）。四列弹窗网格与战斗背包不开，避免两套列数的索引混进同一份存档列表。
+    /// HeroVaultGrid**）。四列弹窗网格与战斗背包不开，避免两套列数的索引混进同一份存档列表。
     /// </summary>
     protected virtual bool SupportsCellDiamondUnlock() => false;
 
@@ -562,8 +566,8 @@ public class TownBackpackGrid : MonoBehaviour
             Debug.Log($"[BagLock] name={name} cols={cols} cells={cells.Count} unlockedRows={unlockedRowsDisplay} " +
                       $"lockedRows={Mathf.Max(0, DisplayRowCount(cols) - unlockedRowsDisplay)}");
 
-        // 子类专属数据源（角色页 8 列网格 → CharacterBagSystem）：
-        // 子类给了自己的整套排布就直接铺，绝不掺用下面那条 4 列 GridBackpackSystem / bip.y >= unlockedRows 的过滤逻辑。
+        // 子类专属数据源（角色页 8 列网格 → HeroVaultSystem）：
+        // 子类给了自己的整套排布就直接铺，绝不掺用下面那条 4 列 BattleBagSystem / bip.y >= unlockedRows 的过滤逻辑。
         var custom = CollectPlacements(unlockedRowsDisplay);
         if (custom != null)
         {
@@ -575,7 +579,7 @@ public class TownBackpackGrid : MonoBehaviour
         var placements = new List<BackpackGridVisual.ItemPlacement>();
 
         // 优先战斗背包；城镇无战斗背包时展示遗产池（顺序铺格）
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag != null)
         {
             var items = bag.GetAllBackpackItems();
@@ -649,7 +653,7 @@ public class TownBackpackGrid : MonoBehaviour
         return null;
     }
 
-    // internal：角色页专属系统 CharacterBagSystem 也要复用这份转换（EquipmentData → 仅 UI 用的 EquipInstance），
+    // internal：角色页专属系统 HeroVaultSystem 也要复用这份转换（EquipmentData → 仅 UI 用的 EquipInstance），
     // 不在别处重复实现。访问级别放开不改变任何行为。
     internal static EquipInstance ToEquipInstance(EquipmentData d)
     {

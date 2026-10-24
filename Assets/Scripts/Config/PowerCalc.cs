@@ -144,7 +144,7 @@ public static class PowerCalc
     public static int EquipSwapPowerDelta(EquipInstance newEq)
     {
         if (newEq == null) return 0;
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         var hero = Hero.Instance;
         if (bag == null || hero == null || hero.attr == null)
             return EquipPowerDelta(newEq);   // 城镇等非战斗场景：卡面预估分支（正常设计，不是异常）
@@ -159,7 +159,7 @@ public static class PowerCalc
     /// 链路必须与 Hero.RecalcAttr 逐项对齐：BuildBonusListForSet（装备表）→ tempBuffs →
     /// RecalcAllAttr → 武器类型攻速乘区。两侧都用副本，天然剔除定时 buff 层的随机干扰。
     /// </summary>
-    static int SimPlayerSegment(GridBackpackSystem bag, EquipInstance newEq)
+    static int SimPlayerSegment(BattleBagSystem bag, EquipInstance newEq)
     {
         var set = bag.SnapshotEquippedAfterSwap(newEq, out _);
         var bonus = EquipStatRollup.BuildBonusListForSet(set);

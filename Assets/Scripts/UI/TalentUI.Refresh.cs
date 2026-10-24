@@ -340,8 +340,9 @@ public partial class TalentUI
 
     static string FormatCompact(long v)
     {
-        // 直接显示真实数量，不再压成 999999+
-        return v.ToString();
+        // 2026-10-24 主人拍板：资源数字格式统一出口 = GuildHallUI.FormatResource（铁律 15 同一语义只留一个出口），
+        // 不再在此另写一套。
+        return GuildHallUI.FormatResource(v);
     }
 
     static void ApplySprite(Image img, Sprite sp, bool preserveAspect)

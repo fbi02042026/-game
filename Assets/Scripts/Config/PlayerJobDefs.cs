@@ -472,10 +472,10 @@ public static class PlayerJobDefs
             SaveSystem.Instance?.Save();
         }
 
-        var bag = GridBackpackSystem.Instance;
+        var bag = BattleBagSystem.Instance;
         if (bag == null)
         {
-            Debug.LogWarning("[PlayerJobDefs] ApplyForBattle: GridBackpackSystem 为空");
+            Debug.LogWarning("[PlayerJobDefs] ApplyForBattle: BattleBagSystem 为空");
             return;
         }
 
@@ -571,7 +571,7 @@ public static class PlayerJobDefs
     }
 
     static bool GrantAndEquipWeapon(
-        GridBackpackSystem bag,
+        BattleBagSystem bag,
         EquipTemplate tpl,
         bool forceOneHand,
         bool forceTwoHand,
@@ -589,7 +589,7 @@ public static class PlayerJobDefs
         }
 
         // 2026-09-29：职业起步武器白送，EquipInstance 的 requireLevel 是随机的（heroLevel-3 ~ heroLevel+1），
-        // 1 级开局可能抽到 2，被 GridBackpackSystem.EquipItem 的等级校验挡下 → 主手槽空、武器模型不显示。
+        // 1 级开局可能抽到 2，被 BattleBagSystem.EquipItem 的等级校验挡下 → 主手槽空、武器模型不显示。
         inst.requireLevel = Mathf.Min(inst.requireLevel, Mathf.Max(1, lv));
 
         if (forceTwoHand)

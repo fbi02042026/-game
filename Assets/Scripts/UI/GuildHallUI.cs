@@ -763,11 +763,16 @@ public class GuildHallUI : MonoBehaviour
         }
     }
 
-    /// <summary>资源数字格式化【2026-10-24 提为公共静态唯一出口】：MercAscendUI 克隆顶条的金币/钻石数字同源走这里，不许抄第二份。</summary>
+    /// <summary>资源数字格式化【2026-10-24 提为公共静态唯一出口】：MercAscendUI 克隆顶条的金币/钻石数字同源走这里，不许抄第二份。
+    /// 紧凑格式（数字+单位，省字符避免超框）：&lt;1万原样千分位；≥1万带「万」；≥1亿带「亿」。</summary>
     public static string FormatResource(long v)
     {
         if (v >= ResourceWallet.DEFAULT_MAX)
             return ResourceWallet.DEFAULT_MAX.ToString();
+        if (v >= 100000000L)
+            return (v / 100000000f).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "亿";
+        if (v >= 10000L)
+            return (v / 10000f).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "万";
         return v.ToString("N0");
     }
 

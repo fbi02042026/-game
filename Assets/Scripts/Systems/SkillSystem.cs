@@ -172,7 +172,7 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
                         {
                             if (locked == null || locked.isDead) return;
                             locked.TakeDamage(dmg, crit, false, true, vfxDir, src);
-                        });
+                        }, caster: caster);
                 }
             }
             else
@@ -206,7 +206,7 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
             {
                 if (locked == null || locked.isDead) return;
                 locked.TakeDamage(dmg, crit, false, true, vfxDir, src);
-            });
+            }, caster: caster);
     }
 
     private void ExecuteAOE(ActiveSkill skill, UnitBase caster)
