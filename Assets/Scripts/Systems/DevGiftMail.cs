@@ -3,29 +3,25 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 【2026-10-24 主人拍板】开发期福利邮件：默认每次启动都发，正式打包自动关闭。
+/// 【2026-10-24 主人拍板·本版口径】开发期福利邮件收敛为一封「测试用」邮件。
 ///
-/// · 发什么（每样一封分开入邮，共 9 封）：
-///   默认 3 佣兵（真源 <see cref="SaveData.DefaultUnlockedMercIds"/>：路加 H011/马库斯 H001/米娅 H005）
-///   碎片×80 + 塔克（真源 <see cref="DailyLoginDefs.STARTER_MERC_ID"/> H003）碎片×80
-///   + 普通招募卷轴×10 + 高级招募卷轴×10 + 钻石×1000 + 天赋石×1000 + 金币×9999。
-/// · 什么时候发：每次进程启动进主界面发一轮（_sentThisLaunch 进程级只发一次，
-///   下次启动再发一轮，存档里会持续累积——这就是主人要的「每次都发」）。
+/// · 发什么（一封）：默认 3 佣兵（真源 <see cref="SaveData.DefaultUnlockedMercIds"/>：路加 H011/马库斯 H001/米娅 H005）
+///   本命碎片各×10 + 钻石×200（钻石同为附件，不写 flat 字段），标题「测试用」。
+/// · 先清后发：每次发送前把收件箱里旧的「开发组」测试邮件全部删掉
+///   （欢迎信 / 补偿礼包是 MailSystem 正式链路发的，不在清理范围），
+///   保证收件箱 = 原来两封正式邮件 + 至多一封未领「测试用」。
+/// · 什么时候发：每次进程启动进主界面发一轮（_sentThisLaunch 进程级只发一次）。
 /// · 正式包怎么关：Enabled = Debug.isDebugBuild —— 编辑器 / 勾了 Development Build
-///   的测试包恒 true；Build Settings 不勾 Development Build 出的正式包恒 false，
-///   打正式包不用改任何代码。唯一开关出口，不开第二个。
+///   的测试包恒 true；不勾 Development Build 的正式包恒 false，不用改任何代码。唯一开关出口。
 /// </summary>
 public static class DevGiftMail
 {
     // —— 数量（主人 2026-10-24 拍板，就这一处）——
-    const int FragAmount = 80;
-    const int ScrollAmount = 10;
-    const int DiamondAmount = 1000;
-    const int TalentStoneAmount = 1000;
-    const int GoldAmount = 9999;
-    const int BadgeAmount = 90;
-    /// <summary>主人 2026-10-24 拍板：一封邮件最多 4 种附件（徽记 18 种按此拆 5 封）。</summary>
-    const int MaxBadgeKindsPerMail = 4;
+    const int FragAmount = 10;
+    const int DiamondAmount = 200;
+
+    /// <summary>测试邮件发件人标识，同时也是清理旧测试邮件的判据（旧【开发福利】邮件同为此发件人）。</summary>
+    const string SenderId = "开发组";
 
     /// <summary>唯一开关出口：编辑器 / Development Build = 发；正式包（不勾 Development Build）= 不发。</summary>
     static bool Enabled => Debug.isDebugBuild;
@@ -40,152 +36,68 @@ public static class DevGiftMail
         _sentThisLaunch = true;
         if (!Enabled) return;
 
-        int sent = 0;
-        // 默认 3 佣兵碎片（直接引用真源名单，不复制 ID）
-        var ids = SaveData.DefaultUnlockedMercIds;
-        for (int i = 0; i < ids.Length; i++)
-            if (SendFragmentsMail(ids[i])) sent++;
-        // 塔克碎片（真源 DailyLoginDefs.STARTER_MERC_ID）
-        if (SendFragmentsMail(DailyLoginDefs.STARTER_MERC_ID)) sent++;
-        // 两种卷轴
-        if (SendScrollMail("scrollCommon", "普通招募卷轴")) sent++;
-        if (SendScrollMail("scrollLegendary", "高级招募卷轴")) sent++;
-        // 三样资源（flat 字段：领取走 MailSystem.TryClaim 的 ClaimOne，图标走 MailDetailUI.AppendFlatRewardItems）
-        if (SendResourceMail($"【开发福利】钻石×{DiamondAmount}", "开发测试福利：钻石×1000。", m => m.diamond = DiamondAmount)) sent++;
-        if (SendResourceMail($"【开发福利】天赋石×{TalentStoneAmount}", "开发测试福利：天赋石×1000。", m => m.talentPoints = TalentStoneAmount)) sent++;
-        if (SendResourceMail($"【开发福利】金币×{GoldAmount}", "开发测试福利：金币×9999。", m => m.gold = GoldAmount)) sent++;
-        // 全职业全档位徽记（6 职业 × 普通/稀有/传奇 = 18 种 ×90，每封最多 4 种 → 5 封）
-        sent += SendBadgeMails();
+        PurgeDevMails();
+        SendTestMail();
 
-        // 9 封只弹一次「您有新的邮件」（Toast 显示中再调会被忽略，见 NewMailToast.Notify）
-        if (sent > 0) NewMailToast.Notify();
-        Debug.Log($"[DevGift] 开发福利邮件已发送 {sent} 封（isDebugBuild={Enabled}）");
-    }
-
-    /// <summary>佣兵本命碎片福利邮件（附件 mercfrag，领取走 MercGrowInventory.GrantFragments 统一入口）。</summary>
-    static bool SendFragmentsMail(string hireId)
-    {
-        if (string.IsNullOrEmpty(hireId)) return false;
-        string mercName = MercRosterDefs.TryGetByHireId(hireId, out var def) && !string.IsNullOrEmpty(def.Name)
-            ? def.Name : hireId;
-        var mail = NewDevMail(
-            $"【开发福利】{mercName}碎片×{FragAmount}",
-            $"开发测试福利：{mercName}的本命碎片×{FragAmount}。\n此邮件仅开发/测试版本发放。");
-        mail.attachments = new List<MailAttachment>
-        {
-            new MailAttachment
-            {
-                type = "mercfrag",
-                amount = FragAmount,
-                hireId = hireId,
-                iconOverride = ContentPaths.Icons.MercHead + "/" + hireId,   // 口径同 MailSystem.EnqueueMercFragments
-            },
-        };
-        MailSystem.Enqueue(mail, notifyToast: false);
-        return true;
-    }
-
-    /// <summary>招募卷轴福利邮件（scrollCommon / scrollLegendary，领取直接加存档计数，无上限概念）。</summary>
-    static bool SendScrollMail(string attType, string displayName)
-    {
-        if (string.IsNullOrEmpty(attType)) return false;
-        var mail = NewDevMail(
-            $"【开发福利】{displayName}×{ScrollAmount}",
-            $"开发测试福利：{displayName}×{ScrollAmount}。\n此邮件仅开发/测试版本发放。");
-        mail.attachments = new List<MailAttachment>
-        {
-            new MailAttachment
-            {
-                type = attType,
-                amount = ScrollAmount,
-                iconOverride = "Art/UI/Icons/Common/icon_hire_scroll",   // 口径同 MailSystem.EnsureCompensationMail
-            },
-        };
-        MailSystem.Enqueue(mail, notifyToast: false);
-        return true;
+        NewMailToast.Notify();
+        Debug.Log($"[DevGift] 测试邮件已发送 1 封（isDebugBuild={Enabled}）");
     }
 
     /// <summary>
-    /// 职业徽记福利邮件（2026-10-24 主人拍板）：6 职业（真源 MercGrowInventory.BadgeJobKeys）
-    /// × 3 档位（普通/稀有/传奇，真源 MercStarDefs.BadgeTierOf）= 18 种各 ×90，
-    /// 每封最多 MaxBadgeKindsPerMail 种附件拆开发。领取走 MailSystem 的 badge 分支 → MercGrowInventory.Add。
-    /// 返回发出的封数。
+    /// 清掉收件箱里所有旧测试邮件（发件人 == <see cref="SenderId"/>，即历史【开发福利】各封），
+    /// 只保留欢迎信 / 补偿礼包等正式邮件。逐封倒序移除后统一落盘 + 刷新红点/列表。
     /// </summary>
-    static int SendBadgeMails()
+    static void PurgeDevMails()
     {
-        var rarities = new[]
+        var list = SaveSystem.Instance.Data.mailInbox;
+        int removed = 0;
+        for (int i = list.Count - 1; i >= 0; i--)
         {
-            MercRosterDefs.MercRarity.Common,
-            MercRosterDefs.MercRarity.Rare,
-            MercRosterDefs.MercRarity.Legendary,
-        };
-        var all = new List<MailAttachment>();
-        for (int j = 0; j < MercGrowInventory.BadgeJobKeys.Length; j++)
-        {
-            string job = MercGrowInventory.BadgeJobKeys[j];
-            for (int r = 0; r < rarities.Length; r++)
-            {
-                string tier = MercStarDefs.BadgeTierOf(rarities[r]);
-                all.Add(new MailAttachment
-                {
-                    type = "badge",
-                    amount = BadgeAmount,
-                    defId = MercGrowInventory.BadgeId(job, tier),
-                    iconOverride = ContentPaths.Icons.JobBadge + "/" + job + tier,   // 口径同 MercGrowSprites.LoadBadge 的 Resources 路径
-                });
-            }
+            var m = list[i];
+            if (m == null || m.sender != SenderId) continue;
+            list.RemoveAt(i);
+            removed++;
         }
-
-        int mails = 0;
-        for (int i = 0; i < all.Count; i += MaxBadgeKindsPerMail)
+        if (removed > 0)
         {
-            int n = Mathf.Min(MaxBadgeKindsPerMail, all.Count - i);
-            var chunk = all.GetRange(i, n);
-            // 正文按本封实际内容列清单（名×数量）
-            var names = new List<string>();
-            for (int k = 0; k < chunk.Count; k++)
-                names.Add(BadgeAttName(chunk[k].defId) + "×" + BadgeAmount);
-            var mail = NewDevMail(
-                $"【开发福利】职业徽记礼包（{mails + 1}）",
-                "开发测试福利：" + string.Join("、", names) + "。\n此邮件仅开发/测试版本发放。");
-            mail.attachments = chunk;
-            MailSystem.Enqueue(mail, notifyToast: false);
-            mails++;
+            SaveSystem.Instance.Save();
+            RedDot.RefreshCommon();
+            MailListUI.NotifyInboxChanged();   // 邮箱开着也能实时看到旧测试邮件被清掉
         }
-        return mails;
+        if (removed > 0) Debug.Log($"[DevGift] 已清理旧测试邮件 {removed} 封");
     }
 
-    /// <summary>badge:{职业}:{档位} → 「剑盾徽记·普通」（口径同 MailDetailUI.BadgeDisplayName）。</summary>
-    static string BadgeAttName(string badgeId)
+    /// <summary>「测试用」福利邮件：默认 3 佣兵本命碎片各×10（mercfrag 附件，领取走 MercGrowInventory.GrantFragments）+ 钻石×200（diamond 附件，领取走 ClaimOne）。</summary>
+    static void SendTestMail()
     {
-        if (string.IsNullOrEmpty(badgeId)) return "职业徽记";
-        const string prefix = "badge:";
-        if (!badgeId.StartsWith(prefix)) return "职业徽记";
-        var parts = badgeId.Substring(prefix.Length).Split(':');
-        if (parts.Length != 2 || string.IsNullOrEmpty(parts[0])) return "职业徽记";
-        return parts[0] + "徽记·" + parts[1];
-    }
-
-    /// <summary>资源福利邮件（flat 字段：gold / diamond / talentPoints）。</summary>
-    static bool SendResourceMail(string title, string body, Action<MailEntry> fill)
-    {
-        if (fill == null) return false;
-        var mail = NewDevMail(title, body + "\n此邮件仅开发/测试版本发放。");
-        fill(mail);
-        MailSystem.Enqueue(mail, notifyToast: false);
-        return true;
-    }
-
-    static MailEntry NewDevMail(string title, string body)
-    {
-        return new MailEntry
+        var mail = new MailEntry
         {
             id = Guid.NewGuid().ToString("N"),
-            title = title,
-            sender = "开发组",
-            body = body,
+            title = "测试用",
+            sender = SenderId,
+            body = $"测试用邮件：默认三佣兵本命碎片各×{FragAmount}、钻石×{DiamondAmount}。\n此邮件仅开发/测试版本发放。",
             createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             type = MailType.Reward,
         };
+        var ids = SaveData.DefaultUnlockedMercIds;
+        mail.attachments = new List<MailAttachment>(ids.Length + 1);
+        for (int i = 0; i < ids.Length; i++)
+        {
+            mail.attachments.Add(new MailAttachment
+            {
+                type = "mercfrag",
+                amount = FragAmount,
+                hireId = ids[i],
+                iconOverride = ContentPaths.Icons.MercHead + "/" + ids[i],   // 口径同 MailSystem.EnqueueMercFragments
+            });
+        }
+        // 钻石也走附件（主人 2026-10-24 拍板）：类型 key 同 MailSystem.AttachmentResourceType，图标口径同 MailDetailUI.AppendFlatRewardItems
+        mail.attachments.Add(new MailAttachment
+        {
+            type = "diamond",
+            amount = DiamondAmount,
+            iconOverride = "UI/Icons/Common/icon_diamond_blue",
+        });
+        MailSystem.Enqueue(mail, notifyToast: false);
     }
 }

@@ -50,6 +50,13 @@ public enum BattleModeId
     BadgeDungeon,
 
     /// <summary>
+    /// 卷轴副本（2026-10-24 主人拍板「第三章通关开启 · 每周五 · 每次15体力 · 每日2次」）：
+    /// 单场 Elite 战斗，通关只掉招募卷轴（发放走 <c>MercGrowInventory.GrantScrollDungeonDrops</c>），
+    /// 不推进主线。不占 SlotTable 位，入口 = 冒险页活动列表「卷轴」横条（prefab 已摆，文案「招募卷轴每周五开启」）。
+    /// </summary>
+    ScrollDungeon,
+
+    /// <summary>
     /// 支线岛（2026-10-23 合并方案）：单 Boss 特殊关，10 体力/次，产出 = 固定局外金币 + 天赋石 + 装备。
     /// 不占冒险界面按钮位，入口 = 冒险页支线岛点击（AdventureUI.BranchIslands）。
     /// </summary>

@@ -181,7 +181,8 @@ public partial class AdventureUI
         _floatToastRt.anchorMax = new Vector2(0.5f, 0.5f);
         _floatToastRt.pivot = new Vector2(0.5f, 0.5f);
         _floatToastRt.sizeDelta = new Vector2(560f, 80f);
-        _floatToastRt.anchoredPosition = Vector2.zero;
+        // 【2026-10-24 主人拍板】浮字出生点从屏幕正中抬到中上方（anchors 0.5/0.5，y 正值=向上）
+        _floatToastRt.anchoredPosition = new Vector2(0f, 180f);
         _floatToast = go.GetComponent<Text>();
         _floatToast.font = GameFonts.GetChinese();
         _floatToast.fontSize = 32;
@@ -204,14 +205,14 @@ public partial class AdventureUI
         Color c = _floatToast.color;
         c.a = 1f;
         _floatToast.color = c;
-        _floatToastRt.anchoredPosition = Vector2.zero;
+        _floatToastRt.anchoredPosition = new Vector2(0f, 180f); // 出生点=中上方，与 EnsureFloatToast 一致
 
         yield return new WaitForSeconds(2f);
 
         const float dur = 0.65f;
         float t = 0f;
-        Vector2 start = Vector2.zero;
-        Vector2 end = new Vector2(0f, 120f);
+        Vector2 start = new Vector2(0f, 180f);
+        Vector2 end = new Vector2(0f, 300f);
         while (t < dur)
         {
             t += Time.unscaledDeltaTime;
@@ -281,14 +282,17 @@ public partial class AdventureUI
         var detail = transform.Find("DetailPanel");
         if (detail == null && right != null) detail = right.Find("DetailPanel");
         if (detail == null) return;
-        stageNameLabel = detail.Find("StageName")?.GetComponent<Text>();
+        // 【2026-10-24 主人新布局】StageName/DropTitle/DropIcons 在 DetailPanel/zuo 下，
+        // 直接子节点找不到会落空（曾致标题停在预制体默认「第一章」）；保留旧路径兼容 Build 自建 UI
+        stageNameLabel = (detail.Find("zuo/StageName") ?? detail.Find("StageName"))?.GetComponent<Text>();
         stageDescLabel = detail.Find("StageDesc")?.GetComponent<Text>();
-        dropTitleLabel = detail.Find("DropTitle")?.GetComponent<Text>();
+        // 同批新布局挪位：DropTitle/DropIcons 在 zuo 下、StaminaCost/Chances 在 you 下，直接子节点找不到
+        dropTitleLabel = (detail.Find("zuo/DropTitle") ?? detail.Find("DropTitle"))?.GetComponent<Text>();
         ApplyDetailTextStyle();
         enemyIconContainer = detail.Find("EnemyIcons");
-        dropIconContainer = detail.Find("DropIcons");
-        staminaCostLabel = detail.Find("StaminaCost")?.GetComponent<Text>();
-        remainChancesLabel = detail.Find("Chances")?.GetComponent<Text>();
+        dropIconContainer = detail.Find("zuo/DropIcons") ?? detail.Find("DropIcons");
+        staminaCostLabel = (detail.Find("you/StaminaCost") ?? detail.Find("StaminaCost"))?.GetComponent<Text>();
+        remainChancesLabel = (detail.Find("you/Chances") ?? detail.Find("Chances"))?.GetComponent<Text>();
         addChancesBtn = detail.Find("AddChances")?.GetComponent<Button>();
         startBtn = detail.Find("StartBtn")?.GetComponent<Button>();
         sweepBtn = detail.Find("SweepBtn")?.GetComponent<Button>();

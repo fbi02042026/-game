@@ -36,8 +36,7 @@ public static class StoryBackgrounds
 
     // —— 支线岛剧情背景（2026-10-24 主人供图接入）——
     // 岛 id 对齐 SideIslandDefs（1=迷雾屿 2=沉船湾 3=翡翠秘境 …8=黑曜祭坛，岛名草稿主人可全改）。
-    // 岛 1-3 图已到位（island_01/02/03.jpg，主人 2026-10-24 供图）；岛 4-8 等图——
-    // 缺图走 PlaceholderArt 占位 + LogWarning，不拦流程（主人 2026-10-24「你先占位」）。
+    // 八张图 2026-10-24 已全部到位（island_01..08.jpg，主人分两批供图）。
     // 命名口径：路径加载（Resources.Load），不进 prefab 引用，56 字符 guid 规矩不受影响（铁律 30）。
     public const string Island01 = "island_01";
     public const string Island02 = "island_02";

@@ -67,8 +67,8 @@ public partial class AdventureUI
             if (modeButtons[i] == null) continue;
             modeButtons[i].gameObject.SetActive(i == 0 || i == 2 || i == 4);
         }
-        // 不再无条件重置主线：切页保留上次选择；只有停在了未开放入口（每日/BOSS）才回主线
-        if (_selectedMode == 1 || _selectedMode == 3 || !IsModePlayable(_selectedMode))
+        // 不再无条件重置主线：切页保留上次选择；只有停在了未开放入口（每日/BOSS）或还没解锁的标签（裂隙/活动，2026-10-24 拍板）才回主线
+        if (_selectedMode == 1 || _selectedMode == 3 || !IsModePlayable(_selectedMode) || IsModeTabLocked(_selectedMode))
             _selectedMode = 0;
         // 难度：2026-09-17「地狱」已删除，按钮只建 3 个，不再需要隐藏逻辑
         if (addChancesBtn != null)
@@ -146,6 +146,13 @@ public partial class AdventureUI
 
     void OnSelectMode(int idx)
     {
+        // 【2026-10-24 主人拍板】标签锁：无限裂隙/活动副本 通关第 1 章后才可切入；
+        // 没通就停在当前页 + 提示（标签常显示灰显锁态，方案=主人「或者把无限和活动也常显示」那条）
+        if (IsModeTabLocked(idx))
+        {
+            Toast($"通关第 1 章后开启{ModeLabel(idx)}");
+            return;
+        }
         _selectedMode = idx;
         if (!IsDiffUnlockedForSelectedMode(_selectedDiff))
             _selectedDiff = 0;
@@ -153,12 +160,14 @@ public partial class AdventureUI
         if (IsActivityMode(idx))
         {
             EnsureActivityRowsWired();
-            // 默认选中今天开放的副本：当前选择已开放则保留，否则切到开放的（都关=周六日保持金币）
-            if (_selectedActivityBadge ? !ActivityDungeonRules.IsBadgeOpenToday()
-                                       : !ActivityDungeonRules.IsGoldOpenToday())
+            // 默认选中今天开放且门槛已到的副本：当前选择仍有效则保留（切标签来回不丢选中，2026-10-24 主人拍板），
+            // 失效才切到别的开放本（三本周一至周日每天恰有一本开：金=一三六 / 徽=二四日 / 卷=五）。
+            // 显隐/灰显/选中节点统一由 ApplyActivityRowStates 处理（RefreshAll 里会刷）。
+            if (!IsActivityRowSelectable(_selectedActivityKind))
             {
-                if (ActivityDungeonRules.IsBadgeOpenToday()) _selectedActivityBadge = true;
-                else if (ActivityDungeonRules.IsGoldOpenToday()) _selectedActivityBadge = false;
+                if (IsActivityRowSelectable(ActivityDungeonKind.Gold)) _selectedActivityKind = ActivityDungeonKind.Gold;
+                else if (IsActivityRowSelectable(ActivityDungeonKind.Badge)) _selectedActivityKind = ActivityDungeonKind.Badge;
+                else if (IsActivityRowSelectable(ActivityDungeonKind.Scroll)) _selectedActivityKind = ActivityDungeonKind.Scroll;
             }
         }
         if (!IsModePlayable(idx))
@@ -166,6 +175,31 @@ public partial class AdventureUI
         RefreshAll();
         // 【2026-10-23 主人要求】切模式后新页面弹出（见 AdventureUI.Anim.cs）
         PlayRightModePopIn();
+    }
+
+    // ────────────────────────────────────────────────────
+    // 左侧模式标签锁（2026-10-24 主人拍板）：无限裂隙(2)/活动副本(4) 通关第 1 章后才能切入。
+    // 标签常显示、锁态灰显（alpha 0.5）、点击拦截弹提示（主人「或者把无限和活动也常显示
+    // 只是点击切不过去 提示通关第一章后开启」那条方案）；主线(0) 恒开，每日(1)/BOSS(3) 本就隐藏。
+    // 门槛不看 TEST_OPEN_ALL 总闸（总闸只旁路开放日/进本，方便进本测试；锁不旁路才能看到锁态）。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>该模式标签当前是否锁定（未通关第 1 章）。</summary>
+    bool IsModeTabLocked(int idx)
+    {
+        if (idx == 0 || idx == 1 || idx == 3) return false;   // 主线恒开；每日/BOSS 隐藏位无锁概念
+        var data = SaveSystem.Instance?.Data;
+        return data == null || !data.HasClearedChapter(1);
+    }
+
+    /// <summary>标签锁态视觉：灰显 alpha 0.5（保持可点——点了要弹提示），解锁即回 1。RefreshAll 每次刷。</summary>
+    void ApplyModeTabLock(Button btn, int idx)
+    {
+        var cg = btn.GetComponent<CanvasGroup>();
+        if (cg == null) cg = btn.gameObject.AddComponent<CanvasGroup>();
+        float target = IsModeTabLocked(idx) ? 0.5f : 1f;
+        if (!Mathf.Approximately(cg.alpha, target)) cg.alpha = target;
+        cg.blocksRaycasts = true;   // 锁态也要接点击（弹提示），只降透明度不关射线
     }
 
     // ────────────────────────────────────────────────────
@@ -185,15 +219,16 @@ public partial class AdventureUI
             Debug.LogError($"[AdventureUI] RightContent 下找不到「{ActivityNodeName}」节点，活动列表无法交互（缺真值不兜底）");
             return;
         }
-        WireActivityRow(list.Find(ActivityGoldRowName), badge: false);
-        WireActivityRow(list.Find(ActivityBadgeRowName), badge: true);
+        WireActivityRow(list.Find(ActivityGoldRowName), ActivityDungeonKind.Gold);
+        WireActivityRow(list.Find(ActivityBadgeRowName), ActivityDungeonKind.Badge);
+        WireActivityRow(list.Find(ActivityScrollRowName), ActivityDungeonKind.Scroll);
     }
 
-    void WireActivityRow(Transform row, bool badge)
+    void WireActivityRow(Transform row, ActivityDungeonKind kind)
     {
         if (row == null)
         {
-            Debug.LogError($"[AdventureUI] 活动列表缺横条节点（{(badge ? ActivityBadgeRowName : ActivityGoldRowName)}），该副本无法选择（缺真值不兜底）");
+            Debug.LogError($"[AdventureUI] 活动列表缺横条节点（{ActivityDungeonRules.DungeonName(kind)}），该副本无法选择（缺真值不兜底）");
             return;
         }
         var btn = row.GetComponent<Button>();
@@ -209,41 +244,81 @@ public partial class AdventureUI
         }
         else
         {
-            Debug.LogError($"[AdventureUI] 活动横条 {(badge ? ActivityBadgeRowName : ActivityGoldRowName)} 下找不到 bg 底图，选中高亮失效（缺真值不兜底）");
+            Debug.LogError($"[AdventureUI] 活动横条 {ActivityDungeonRules.DungeonName(kind)} 下找不到 bg 底图，选中高亮失效（缺真值不兜底）");
         }
         btn.transition = Selectable.Transition.ColorTint;
         btn.onClick.RemoveAllListeners();
-        btn.onClick.AddListener(() => OnSelectActivityRow(badge));
+        btn.onClick.AddListener(() => OnSelectActivityRow(kind));
     }
 
-    void OnSelectActivityRow(bool badge)
+    void OnSelectActivityRow(ActivityDungeonKind kind)
     {
-        if (_selectedActivityBadge == badge) return;
-        _selectedActivityBadge = badge;
-        RefreshActivityRowHighlight();
+        // 没轮到（今天不开放）：不选中，只提示开启日期（2026-10-24 主人拍板「点击提示开启日期」）
+        if (!ActivityDungeonRules.IsOpenToday(kind))
+        {
+            Toast(ActivityDungeonRules.OpenDayHint(kind));
+            return;
+        }
+        _selectedActivityKind = kind;
+        ApplyActivityRowStates();
         RefreshDetailPanel();
     }
 
-    /// <summary>横条选中高亮：选中 = 底图淡金，未选 = 恢复 prefab 原色。</summary>
-    void RefreshActivityRowHighlight()
+    /// <summary>
+    /// 该横条当前能不能作为选中项：门槛已到 + 今天开放。显隐/灰显/选中判断同源（2026-10-24 主人拍板）。
+    /// 【2026-10-24 晚拍板】章节门槛<b>不再被</b> TEST_OPEN_ALL 总闸旁路（主人「没达到开放条件的不要显示」）
+    /// ——总闸只旁路开放日/进本，显示层永远按真实存档门槛走。
+    /// </summary>
+    bool IsActivityRowSelectable(ActivityDungeonKind kind)
+    {
+        if (!ActivityDungeonRules.IsOpenToday(kind)) return false;
+        var data = SaveSystem.Instance?.Data;
+        return data != null && data.HasClearedChapter(ActivityDungeonRules.GateChapter(kind));
+    }
+
+    /// <summary>
+    /// 活动横条状态统一出口（2026-10-24 主人拍板）：
+    /// ① 未达到开启条件（章节门槛没到）→ 整条隐藏；
+    /// ② 没轮到（今天不开放）→ 灰显（bg 压灰，点击由 OnSelectActivityRow 弹开启日期）；
+    /// ③ 选中效果 = 主人在 prefab 摆好的「选中」子节点，开启即亮（不改排版、不改颜色）。
+    /// 切战斗标签来回时 RefreshAll 会重刷本方法 → 选中状态不丢。
+    /// </summary>
+    void ApplyActivityRowStates()
     {
         var list = transform.Find("RightContent/" + ActivityNodeName);
         if (list == null) return;
-        SetActivityRowSelected(list.Find(ActivityGoldRowName), selected: !_selectedActivityBadge);
-        SetActivityRowSelected(list.Find(ActivityBadgeRowName), selected: _selectedActivityBadge);
-    }
-
-    void SetActivityRowSelected(Transform row, bool selected)
-    {
-        if (row == null) return;
-        var bgImg = row.Find("bg")?.GetComponent<Image>();
-        if (bgImg == null) return;
-        if (!_activityRowBaseColors.TryGetValue(bgImg, out var baseColor))
+        var kinds = new[] { ActivityDungeonKind.Gold, ActivityDungeonKind.Badge, ActivityDungeonKind.Scroll };
+        var names = new[] { ActivityGoldRowName, ActivityBadgeRowName, ActivityScrollRowName };
+        for (int i = 0; i < kinds.Length; i++)
         {
-            baseColor = bgImg.color;
-            _activityRowBaseColors[bgImg] = baseColor;
+            var row = list.Find(names[i]);
+            if (row == null) continue;
+            // ① 门槛没到 → 整条隐藏【2026-10-24 晚主人拍板：显示层不被 TEST_OPEN_ALL 总闸旁路，
+            //    总闸只旁路开放日/进本（测试便利），显示永远按真实存档门槛】
+            bool gateOk = false;
+            {
+                var data = SaveSystem.Instance?.Data;
+                gateOk = data != null && data.HasClearedChapter(ActivityDungeonRules.GateChapter(kinds[i]));
+            }
+            row.gameObject.SetActive(gateOk);
+            if (!gateOk) continue;
+            bool openToday = ActivityDungeonRules.IsOpenToday(kinds[i]);
+            // ② 灰显：bg 压灰（原色缓存 × 灰度系数），正常日恢复原色
+            var bgImg = row.Find("bg")?.GetComponent<Image>();
+            if (bgImg != null)
+            {
+                if (!_activityRowBaseColors.TryGetValue(bgImg, out var baseColor))
+                {
+                    baseColor = bgImg.color;
+                    _activityRowBaseColors[bgImg] = baseColor;
+                }
+                bgImg.color = openToday ? baseColor : baseColor * ActivityRowGrayFactor;
+            }
+            // ③ 选中节点：主人 prefab 已摆（bg/选中/Name/Info），开启即亮
+            var sel = row.Find("选中");
+            if (sel != null)
+                sel.gameObject.SetActive(openToday && _selectedActivityKind == kinds[i]);
         }
-        bgImg.color = selected ? ActivityRowSelectedColor : baseColor;
     }
 
     void OnSelectChapter(int chapter)
@@ -530,7 +605,18 @@ public partial class AdventureUI
         if (StoryProgress.TutorialDone && !StoryProgress.Chapter1IntroDone
             && _selectedChapter <= 1 && !IsEndlessMode(_selectedMode) && !IsActivityMode(_selectedMode))
         {
-            Chapter1Story.PlayHallIntro(TryEnterBattle);
+            // 【2026-10-24 主人报「点开始冒险弹剧情，主界面 BGM 还在响」】
+            // 根因：StoryDirector.PlayRoutine 只在战斗场景（IsBattleScene）才切剧情曲，
+            // 大厅开场剧情在城镇场景播 → bgm_town 整段照播。
+            // 修法：本入口先切剧情曲（BeginBattleStory=切 bgm_story 并记住恢复曲），
+            // 播完在 onDone 里恢复；若被 StopPlaying 强停，其内部也会调 EndBattleStory 归位，
+            // 计数不漏。随后 TryEnterBattle 进加载时 MuteForLoading 接管，恢复协程会让位。
+            GameBgm.BeginBattleStory();
+            Chapter1Story.PlayHallIntro(() =>
+            {
+                GameBgm.EndBattleStory();
+                TryEnterBattle();
+            });
             return;
         }
 
@@ -557,17 +643,18 @@ public partial class AdventureUI
 
         // 引导期一律走引导局，不让裂隙跟引导抢流程
         bool endless = IsEndlessMode(_selectedMode) && !tutorialRun;
-        // 活动副本（2026-10-23 主人拍板「活动副本一拆二」）：金币/徽记按横条选中态分流
+        // 活动副本（2026-10-23 主人拍板「活动副本一拆二」+ 2026-10-24 加卷轴）：金币/徽记/卷轴按横条选中态分流
         bool activity = IsActivityMode(_selectedMode) && !tutorialRun;
-        bool badgeEnter = activity && _selectedActivityBadge;
+        ActivityDungeonKind actKind = _selectedActivityKind;
 
-        // 【2026-10-23 主人拍板】解锁门槛：打通第 1 章开启活动副本，打通第 2 章开启无限裂隙
-        // （活动门槛受 ActivityDungeonRules.TEST_OPEN_ALL 测试总闸旁路，打包前总闸改回 false 即恢复）
+        // 【2026-10-23 主人拍板】解锁门槛：金币/徽记=通关第 1 章；卷轴=通关第 3 章（2026-10-24 拍板），
+        // 打通第 2 章开启无限裂隙（活动门槛受 ActivityDungeonRules.TEST_OPEN_ALL 测试总闸旁路，
+        // 打包前总闸改回 false 即恢复）
         var gateData = SaveSystem.Instance?.Data;
         if (activity && !ActivityDungeonRules.TEST_OPEN_ALL
-            && (gateData == null || !gateData.HasClearedChapter(1)))
+            && (gateData == null || !gateData.HasClearedChapter(ActivityDungeonRules.GateChapter(actKind))))
         {
-            Toast("通关第 1 章后开启活动副本");
+            Toast($"通关第 {ActivityDungeonRules.GateChapter(actKind)} 章后开启{ActivityDungeonRules.DungeonName(actKind)}");
             return;
         }
         if (endless && (gateData == null || !gateData.HasClearedChapter(2)))
@@ -577,7 +664,7 @@ public partial class AdventureUI
         }
 
         int enterCost = endless ? StaminaSystem.ENDLESS_RIFT_COST
-                      : activity ? ActivityDungeonRules.ENTRY_STAMINA_COST   // 2026-10-24 主人拍板：活动副本每次 10 体力
+                      : activity ? ActivityDungeonRules.EntryStaminaCost(actKind)   // 2026-10-24 拍板：金币/徽记 10、卷轴 15
                       : StaminaSystem.ADVENTURE_COST;
         PendingEndlessRift = endless;
         if (endless && EndlessRiftRules.TriesLeft(SaveSystem.Instance?.Data) <= 0)
@@ -587,22 +674,17 @@ public partial class AdventureUI
             return;
         }
 
-        // 活动副本：先查交替开放日（金币=周一三六 / 徽记=周二四日），再查每日各 2 次（2026-10-24 主人拍板）
+        // 活动副本：先查交替开放日（金=一三六 / 徽=二四日 / 卷=五），再查每日各 2 次（2026-10-24 主人拍板）
         if (activity)
         {
-            if (badgeEnter && !ActivityDungeonRules.IsBadgeOpenToday())
+            if (!ActivityDungeonRules.IsOpenToday(actKind))
             {
-                Toast("徽记副本只在每周二、四、日开放");
+                Toast(ActivityDungeonRules.OpenDayHint(actKind));
                 return;
             }
-            if (!badgeEnter && !ActivityDungeonRules.IsGoldOpenToday())
+            if (ActivityDungeonRules.TriesLeft(gateData, actKind) <= 0)
             {
-                Toast("金币副本只在每周一、三、六开放");
-                return;
-            }
-            if (ActivityDungeonRules.TriesLeft(gateData, badgeEnter) <= 0)
-            {
-                Toast($"今天的{(badgeEnter ? "徽记" : "金币")}副本次数已用完（{ActivityDungeonRules.DAILY_TRIES}/{ActivityDungeonRules.DAILY_TRIES}）");
+                Toast($"今天的{ActivityDungeonRules.DungeonName(actKind)}次数已用完（{ActivityDungeonRules.DAILY_TRIES}/{ActivityDungeonRules.DAILY_TRIES}）");
                 return;
             }
         }
@@ -639,18 +721,20 @@ public partial class AdventureUI
                 PendingBattleDifficulty = 0;
                 PendingGoldDungeon = false;
                 PendingBadgeDungeon = false;
+                PendingScrollDungeon = false;
                 // 不调 SetChapter：裂隙章节状态由 StartEndlessRift 全权负责
             }
             else if (activity)
             {
-                // 活动副本（金币/徽记，2026-10-24 主人拍板「都是2次 每次10体力」）：
+                // 活动副本（金币/徽记/卷轴，2026-10-24 主人拍板「都是2次」+ 卷轴 15 体力）：
                 // 每日次数 + 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
-                if (!ActivityDungeonRules.TryConsumeEnter(badgeEnter))
+                if (!ActivityDungeonRules.TryConsumeEnter(actKind))
                     return;
                 PendingBattleChapter = _selectedChapter;
                 PendingBattleDifficulty = _selectedDiff;
-                PendingGoldDungeon = !badgeEnter;
-                PendingBadgeDungeon = badgeEnter;
+                PendingGoldDungeon = actKind == ActivityDungeonKind.Gold;
+                PendingBadgeDungeon = actKind == ActivityDungeonKind.Badge;
+                PendingScrollDungeon = actKind == ActivityDungeonKind.Scroll;
                 ChapterManager.Instance?.SetChapter(_selectedChapter);
             }
             else if (!StaminaSystem.TrySpendForAdventure())
@@ -667,14 +751,17 @@ public partial class AdventureUI
                 PendingBattleDifficulty = 0;
                 PendingGoldDungeon = false;
                 PendingBadgeDungeon = false;
+                PendingScrollDungeon = false;
                 ChapterManager.Instance?.SetChapter(1);
             }
-            else if (!endless && !badgeEnter)
+            else if (!endless && !activity)
             {
+                // 主线（活动副本已在上面 activity 分支处理完进本标记）
                 PendingBattleChapter = _selectedChapter;
                 PendingBattleDifficulty = _selectedDiff;
-                PendingGoldDungeon = IsActivityMode(_selectedMode) && !_selectedActivityBadge;
-                PendingBadgeDungeon = IsActivityMode(_selectedMode) && _selectedActivityBadge;
+                PendingGoldDungeon = false;
+                PendingBadgeDungeon = false;
+                PendingScrollDungeon = false;
                 ChapterManager.Instance?.SetChapter(_selectedChapter);
                 NoteChosenBranch(_selectedChapter);
             }

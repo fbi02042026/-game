@@ -146,6 +146,7 @@ public partial class AdventureUI
             AdventureUI.PendingBattleDifficulty = 0;
             AdventureUI.PendingGoldDungeon = false;
             AdventureUI.PendingBadgeDungeon = false;
+            AdventureUI.PendingScrollDungeon = false;
             AdventureUI.PendingEndlessRift = false;
             AdventureUI.PendingSideIsland = 0;
             ChapterManager.Instance?.SetChapter(st.act);

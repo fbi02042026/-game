@@ -142,6 +142,11 @@ public partial class MercDrawPoolUI : MonoBehaviour
         // 每次打开回到顶部（收编当帧收编流程里也设了一次；这里兜重开场景）
         if (_masterScroll != null) _masterScroll.verticalNormalizedPosition = 1f;
         GameFonts.ApplyToHierarchy(transform);
+
+        // 【2026-10-24 主人拍板「提取顶条资源条，哪个界面要显示就显示」】招募队列弹窗也显示
+        // 金币/钻石两列（全局唯一 ResourceStrip，开窗借来、关窗归还主界面；升阶嵌套见 RefreshForAscendClosed）。
+        if (_root != null)
+            ResourceStrip.Show(_root.transform, ResourceStrip.Mode.GoldDia);
     }
 
     void ReloadPicked()
@@ -165,6 +170,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     {
         if (_replacePanel != null) _replacePanel.SetActive(false);
         ExitSwapSelecting();   // 替换点选态跟窗口一起收
+        ResourceStrip.Release();   // 【2026-10-24】资源条归还主界面顶条（与 Open 的 Show 成对）
         if (_root != null) _root.SetActive(false);
     }
 
@@ -296,7 +302,13 @@ public partial class MercDrawPoolUI : MonoBehaviour
     public static void RefreshForAscendClosed()
     {
         if (_instance != null && _instance.gameObject.activeInHierarchy)
+        {
             _instance.Refresh();
+            // 【2026-10-24】升阶关窗把资源条 Release 回了主界面顶条；队列弹窗还开着就把条借回来
+            //（嵌套链：队列 Show → 升阶 Show 迁走 → 升阶 Release 归主界面 → 这里再 Show 回队列）。
+            if (_instance._root != null && _instance._root.activeSelf)
+                ResourceStrip.Show(_instance._root.transform, ResourceStrip.Mode.GoldDia);
+        }
     }
 
     void Refresh()

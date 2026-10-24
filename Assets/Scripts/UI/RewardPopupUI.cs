@@ -68,6 +68,12 @@ public class RewardPopupUI : MonoBehaviour
     const float CellContentScale = 1.3f;
 
     /// <summary>
+    /// 【2026-10-24 主人拍板】图标/头像在放大 30% 的基础上再缩小 10%（1.3 × 0.9 = 1.17），
+    /// 只动 Icon 本体 —— 文字、格子、面板一律不动。
+    /// </summary>
+    const float IconScale = 1.17f;
+
+    /// <summary>
     /// 兜底（无预制体）时用的几何值 —— 与主人预制体一一对应，保证兜底和预制体走同一套排版，
     /// 不出现「两套互相打架的常量」。
     /// </summary>
@@ -649,8 +655,9 @@ public class RewardPopupUI : MonoBehaviour
         // 2026-10-15 主人拍板：获得弹窗「物品图标和字放大 30%」——只放 Icon 的 sizeDelta 与 Label 的 fontSize，
         // 位置/锚点/格子/面板几何一律不动（从预制体 base 重算，不累积偏移）。
         var iconRt = iconT as RectTransform;
+        // 2026-10-24 主人拍板：图标/头像缩小 10%（IconScale），Label 字号仍走 CellContentScale
         if (iconRt != null && _base.Icon.Has)
-            iconRt.sizeDelta = _base.Icon.SizeDelta * CellContentScale;
+            iconRt.sizeDelta = _base.Icon.SizeDelta * IconScale;
 
         var lblT = FindChild(cell, "Label");
         if (lblT != null)

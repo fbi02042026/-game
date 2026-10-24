@@ -1013,7 +1013,7 @@ public class FirstRunGuide : MonoBehaviour
         _outroPlayed = true;
         _outroShownAt = Time.unscaledTime; // 【2026-10-22 加】防卡死看门狗计时起点（Update 里 20s 强制收场）
         Debug.Log("[Guide] 收尾气泡弹出（点任意处关闭，20s 不点自动收场）");
-        StartCoroutine(CoClickPeek(300f)); // 【2026-10-22 加】收尾后 5 分钟点击透视取证（见方法注释）
+        BeginClickPeek(300f); // 【2026-10-22 加】收尾后 5 分钟点击透视取证（见方法注释）；2026-10-24 起走统一入口
         Show(null, text, true);
     }
 
@@ -1024,12 +1024,31 @@ public class FirstRunGuide : MonoBehaviour
     ///   · 日志里 top=某个节点 → 隐形遮挡当场报名字，精准修它；
     ///   · 一条 [ClickPeek] 都没有 → Input/主线程层问题（ANR），换方向查；
     ///   · top=正常按钮但界面没反应 → EventSystem 派发层问题。
-    /// 只在收尾气泡弹出后 300 秒内工作，平时零开销零日志。
+    /// 平时零开销零日志，只在取证窗口开着时工作。
     /// </summary>
-    IEnumerator CoClickPeek(float seconds)
+
+    /// <summary>取证窗口截止时刻（unscaled；-1=未开）。BeginClickPeek 反复调用只顺延。</summary>
+    float _peekUntil = -1f;
+    bool _peekRunning;
+
+    /// <summary>
+    /// 【2026-10-24 加】点击透视取证统一入口：每日登录弹窗打开时也借用（主人报「弹窗点不动」，
+    /// 此前取证只罩收尾气泡之后的时段，弹窗在屏时是盲区）。窗口内每次点屏打一条 [ClickPeek]，
+    /// 隐形遮挡当场报名字。重复调用只顺延窗口，同一时刻最多一条协程在跑。
+    /// </summary>
+    public static void BeginClickPeek(float seconds)
     {
-        float end = Time.unscaledTime + seconds;
-        while (Time.unscaledTime < end)
+        var g = Ensure();
+        if (g == null) return;
+        g._peekUntil = Time.unscaledTime + seconds;
+        if (g._peekRunning) return;
+        g._peekRunning = true;
+        g.StartCoroutine(g.CoClickPeek());
+    }
+
+    IEnumerator CoClickPeek()
+    {
+        while (Time.unscaledTime < _peekUntil)
         {
             if (ScreenTapped() && EventSystem.current != null)
             {
@@ -1059,6 +1078,7 @@ public class FirstRunGuide : MonoBehaviour
             }
             yield return null;
         }
+        _peekRunning = false;
     }
 
     void OnHoleClicked()

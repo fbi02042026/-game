@@ -10,17 +10,17 @@ using UnityEditor;
 #endif
 
 // 冒险界面 partial —— 动效
-//   ① 左侧标签（LeftSidebar/ModeBtn_x）进页时从屏幕左外侧逐个滑入（相邻标签开始滑入的时刻相差 1 秒，并行错峰，非串行等待）；【2026-10-24 主人拍板】
+//   ① 左侧标签（LeftSidebar/ModeBtn_x）进页时从屏幕左外侧逐个滑入（相邻标签错峰并行，非串行等待）；【2026-10-24 主人拍板】
 //   ② 右侧切模式（点左侧标签换 主线/无限/活动副本 节点）时新页面弹出。
 // 铁律 32 合规：只做**临时**动效 —— 左侧标签只动 anchoredPosition 与 CanvasGroup.alpha（右侧仍只动 localScale），
 // 基准值先进 _popBaseAnchoredPos/_popBaseScales 缓存、动画结束/页面隐藏一律还原，不写任何布局尺寸/Image.type。
 public partial class AdventureUI
 {
     // ── 左侧标签滑入参数 ──
-    /// <summary>单颗标签滑入时长（秒）。【2026-10-24 主人拍板「快一倍」：0.38 → 0.19】</summary>
-    const float TabSlideDur = 0.19f;
-    /// <summary>相邻标签的出场错峰间隔（秒）。【2026-10-24 主人拍板「快一倍」：间隔 1 秒 → 0.5 秒】</summary>
-    const float TabPopStagger = 0.5f;
+    /// <summary>单颗标签滑入时长（秒）。【2026-10-24 主人拍板「快一倍」：0.38 → 0.19；同日再看还要再快一倍：0.19 → 0.095】</summary>
+    const float TabSlideDur = 0.095f;
+    /// <summary>相邻标签的出场错峰间隔（秒）。【2026-10-24 主人拍板：1 秒 → 0.5 → 0.25（两轮快一倍）；同日追加「也快50%」：0.25 ÷ 1.5 → 0.167】</summary>
+    const float TabPopStagger = 0.167f;
     /// <summary>滑入起始位置在屏幕左外侧的额外余量（像素），保证完全藏在屏外。</summary>
     const float TabSlideOutMargin = 80f;
     /// <summary>右侧页面弹出起始缩放（0.92 → 1 轻微放大，不夸张）。</summary>
@@ -44,7 +44,7 @@ public partial class AdventureUI
     // ────────────────────────────────────────────────────
 
     /// <summary>左侧标签逐颗从屏幕左外侧滑入（ShowPage 调用；隐藏的入口按钮跳过）。
-    /// 错峰语义：相邻标签开始滑入的时刻相差 1 秒（并行错峰），非串行等待——每颗标签独立协程自带延迟。</summary>
+    /// 错峰语义：相邻标签开始滑入的时刻相差 TabPopStagger（并行错峰），非串行等待——每颗标签独立协程自带延迟。</summary>
     void PlayLeftTabsPopIn()
     {
         if (!gameObject.activeInHierarchy || modeButtons == null) return;

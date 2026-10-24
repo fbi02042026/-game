@@ -26,6 +26,12 @@ public partial class DailyLoginUI
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
         EnsureLoginGuide();
+
+        // 【2026-10-24 诊断·主人报「弹窗点不动」】弹窗在屏期间开点击透视取证（600s 自过期，重复弹只顺延）：
+        // 复现时点一下格子或关闭按钮，Editor.log 的 [ClickPeek] 行当场报出射线最顶层打到了谁——
+        // top=Cell_N/CloseButton → 点击其实到了按钮（查 EventSystem 派发层）；
+        // top=别的节点 → 隐形遮挡当场报名字；一条 [ClickPeek] 都没有 → Input 层问题。
+        FirstRunGuide.BeginClickPeek(600f);
     }
 
     public void Hide()

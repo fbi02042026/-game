@@ -127,10 +127,10 @@ public static class StaminaSystem
         return TrySpend(SideIslandDefs.SIDE_ISLAND_STAMINA_COST);
     }
 
-    /// <summary>进活动副本（金币/徽记）扣体力（2026-10-24 主人拍板：每次10体力，两本同价）。</summary>
-    public static bool TrySpendForActivityDungeon()
+    /// <summary>进活动副本（金币/徽记/卷轴）扣体力（2026-10-24 主人拍板：金币/徽记 10/次、卷轴 15/次）。</summary>
+    public static bool TrySpendForActivityDungeon(ActivityDungeonKind kind)
     {
-        return TrySpend(ActivityDungeonRules.ENTRY_STAMINA_COST);
+        return TrySpend(ActivityDungeonRules.EntryStaminaCost(kind));
     }
 
     // ── 体力药水（2026-10-18 主人拍板：药水改道具入背包，使用时才恢复；超出上限先确认、多余作废）──

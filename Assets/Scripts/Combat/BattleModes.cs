@@ -173,6 +173,53 @@ public sealed class BadgeDungeonBattleMode : BattleMode
 }
 
 /// <summary>
+/// 卷轴副本（2026-10-24 主人拍板「第三章通关开启 · 每周五 · 每次15体力 · 每日2次」）：
+/// 单场战斗，通关只掉招募卷轴（发放走 <c>MercGrowInventory.GrantScrollDungeonDrops</c>），
+/// 不推进主线、不发金币/碎片/道具/装备。
+/// 结构照抄 <see cref="BadgeDungeonBattleMode"/>；不占 SlotTable 位，
+/// 入口 = 冒险页活动列表「卷轴」横条（prefab 已摆，Info 文案「招募卷轴每周五开启」）。
+/// </summary>
+public sealed class ScrollDungeonBattleMode : BattleMode
+{
+    public override BattleModeId Id => BattleModeId.ScrollDungeon;
+    public override string DisplayName => "卷轴副本";
+
+    /// <summary>不经 SlotTable 按钮（无按钮位），进本由 AdventureUI 活动列表选中态置 PendingScrollDungeon 决定；本属性无消费点。</summary>
+    public override bool IsPlayable => false;
+
+    public override bool DropsEquipment => false;
+
+    /// <summary>开局免费抽 5 次（与金币/徽记同框架「活动副本开局抽五次」，进局清零）。</summary>
+    public override int FreeEntryDraws => SlotMachineDefs.SCROLL_DUNGEON_FREE_DRAWS;
+
+    /// <summary>照抄金币/徽记本：打完就结算回城、币随局清零，不发局内抽奖币（🔴 卷轴副本不给金币）。</summary>
+    public override bool GrantsRunCoins => false;
+
+    public override void BuildChapter(ChapterManager cm, int chapter)
+    {
+        if (cm == null)
+        {
+            Debug.LogError("[BattleMode] 卷轴副本 BuildChapter 失败：ChapterManager 为空");
+            return;
+        }
+        cm.StartScrollDungeon(chapter);
+    }
+
+    /// <summary>照抄金币/徽记本结算：弹胜利结算面板，确认后回城（不推进主线）。</summary>
+    public override void SettleStageClear(BattleManager bm)
+    {
+        if (bm == null)
+        {
+            Debug.LogError("[BattleMode] 卷轴副本 SettleStageClear 失败：BattleManager 为空");
+            return;
+        }
+        // 与金币/徽记本同款：通关记录最高难度（三本共用活动标签进度）
+        ActivityDungeonRules.MarkCleared(bm.BattleDifficulty);
+        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+    }
+}
+
+/// <summary>
 /// 支线岛（2026-10-23 合并方案「岛壳用 2 岛依次解锁 + 岛内容用单 Boss 特殊关」）：
 /// 单场 Boss 战，10 体力/次，产出 = 固定局外金币 + 天赋石（SideIslandDefs 按岛定）
 /// + 装备掉落（DropsEquipment=true 走既有宝箱三选一链，Boss 关 bonusStar=2）。
@@ -317,48 +364,114 @@ public sealed class FinaleBattleMode : BattleMode
     }
 }
 
+/// <summary>活动副本种类（2026-10-23 拆二：金币/徽记 + 2026-10-24 加卷轴）。三本共用难度进度，各算各的开放日/每日次数。</summary>
+public enum ActivityDungeonKind
+{
+    /// <summary>金币副本：周一/三/六，每次 10 体力，只掉金币。</summary>
+    Gold,
+    /// <summary>徽记副本：周二/四/日，每次 10 体力，只掉随机职业徽记。</summary>
+    Badge,
+    /// <summary>卷轴副本：周五，每次 15 体力，只掉招募卷轴（2026-10-24 主人拍板）。</summary>
+    Scroll
+}
+
 /// <summary>
 /// 活动副本规则（2026-10-23 主人拍板「活动副本一拆二」+ 2026-10-24 主人拍板
-/// 「金币是1 3 6 徽记是2 4 7 都是2次 每次10体力」）：
-/// 开放日 = 金币副本 每周一/三/六；徽记副本 每周二/四/日（开放日口径 = 主人预制体横条 Info 文案）。
+/// 「金币是1 3 6 徽记是2 4 7 都是2次 每次10体力」+「卷轴：第三章通关开启 · 每周五 · 每次15体力 · 2次」）：
+/// 开放日 = 金币副本 每周一/三/六；徽记副本 每周二/四/日；卷轴副本 每周五
+/// （开放日口径 = 主人预制体横条 Info 文案，三本周一至周日每天恰有一本开放）。
 /// 开放日按<b>本地时间</b>判定（玩家感知的「今天」）；
 /// 次数日键仍走 UTC（照 <see cref="EndlessRiftRules.EnsureDay"/> 口径）。
-/// 金币/徽记每日各 2 次（各自独立计数），进本 = 次数 + 体力一起扣（TryConsumeEnter 内含提示）。
+/// 三本每日各 2 次（各自独立计数），进本 = 次数 + 体力一起扣（TryConsumeEnter 内含提示）。
 /// </summary>
 public static class ActivityDungeonRules
 {
     /// <summary>
     /// 【2026-10-23 主人拍板「现在把活动副本都开启让我测试 等打包的时候再区分」】测试期总闸：
-    /// true = 金币/徽记不区分开放日、不看通关第 1 章门槛、三难度全开（难度逐级解锁旁路），
+    /// true = 三本不区分开放日、进本不看章节通关门槛、三难度全开（难度逐级解锁旁路），
     /// 方便随时进任意副本/难度测试；**正式打包前改回 false** 即恢复全部区分口径（一处改回，全链生效）。
+    /// 【2026-10-24 晚收窄】总闸<b>不再旁路显示层</b>：活动横条显隐/左列标签锁永远按真实存档章节门槛
+    /// （主人「没达到开放条件的不要显示」）——未达门槛的横条/标签直接看不到、点不进。
     /// 注意：每日次数与体力消耗<b>不受</b>总闸影响（照常计）。
     /// </summary>
     public const bool TEST_OPEN_ALL = true;
 
-    /// <summary>每日进入次数（2026-10-24 主人拍板「都是2次」，金币/徽记各自独立计数）。</summary>
+    /// <summary>每日进入次数（2026-10-24 主人拍板「都是2次」，三本各自独立计数）。</summary>
     public const int DAILY_TRIES = 2;
 
-    /// <summary>进本体力（2026-10-24 主人拍板「每次10体力」，金币/徽记同价）。</summary>
+    /// <summary>金币/徽记进本体力（2026-10-24 主人拍板「每次10体力」，两本同价）。</summary>
     public const int ENTRY_STAMINA_COST = 10;
 
-    /// <summary>金币副本今天是否开放（周一/三/六）。</summary>
-    public static bool IsGoldOpenToday()
+    /// <summary>卷轴副本进本体力（2026-10-24 主人拍板「15体力」）。</summary>
+    public const int SCROLL_ENTRY_STAMINA_COST = 15;
+
+    /// <summary>进本体力和开放日按种类分流（体力单一出口，Interaction/Detail/StaminaSystem 都问这里）。</summary>
+    public static int EntryStaminaCost(ActivityDungeonKind kind)
+        => kind == ActivityDungeonKind.Scroll ? SCROLL_ENTRY_STAMINA_COST : ENTRY_STAMINA_COST;
+
+    /// <summary>该种类副本今天是否开放（本地时间判定；测试总闸打开时恒开放）。</summary>
+    public static bool IsOpenToday(ActivityDungeonKind kind)
     {
         if (TEST_OPEN_ALL) return true;   // 测试期总闸：随时可进
         var d = DateTime.Now.DayOfWeek;
-        return d == DayOfWeek.Monday || d == DayOfWeek.Wednesday || d == DayOfWeek.Saturday;
+        switch (kind)
+        {
+            case ActivityDungeonKind.Gold:
+                return d == DayOfWeek.Monday || d == DayOfWeek.Wednesday || d == DayOfWeek.Saturday;
+            case ActivityDungeonKind.Badge:
+                return d == DayOfWeek.Tuesday || d == DayOfWeek.Thursday || d == DayOfWeek.Sunday;
+            case ActivityDungeonKind.Scroll:
+                return d == DayOfWeek.Friday;
+            default:
+                return false;
+        }
     }
 
-    /// <summary>徽记副本今天是否开放（周二/四/日）。</summary>
-    public static bool IsBadgeOpenToday()
+    /// <summary>开放日不对的提示文案（Interaction 预检单一出口，不许各写一份）。</summary>
+    public static string OpenDayHint(ActivityDungeonKind kind)
     {
-        if (TEST_OPEN_ALL) return true;   // 测试期总闸：随时可进
-        var d = DateTime.Now.DayOfWeek;
-        return d == DayOfWeek.Tuesday || d == DayOfWeek.Thursday || d == DayOfWeek.Sunday;
+        switch (kind)
+        {
+            case ActivityDungeonKind.Gold:  return "金币副本只在每周一、三、六开放";
+            case ActivityDungeonKind.Badge: return "徽记副本只在每周二、四、日开放";
+            case ActivityDungeonKind.Scroll: return "卷轴副本只在每周五开放";
+            default: return "该副本暂未开放";
+        }
+    }
+
+    /// <summary>活动副本入口的章节解锁门槛（2026-10-24 主人拍板：卷轴=通关第 3 章开启；金币/徽记=通关第 1 章）。</summary>
+    public static int GateChapter(ActivityDungeonKind kind)
+        => kind == ActivityDungeonKind.Scroll ? 3 : 1;
+
+    /// <summary>副本展示名（toast/详情单一出口，不许各写一份）。</summary>
+    public static string DungeonName(ActivityDungeonKind kind)
+    {
+        switch (kind)
+        {
+            case ActivityDungeonKind.Gold:   return "金币副本";
+            case ActivityDungeonKind.Badge:  return "徽记副本";
+            case ActivityDungeonKind.Scroll: return "卷轴副本";
+            default: return "活动副本";
+        }
+    }
+
+    /// <summary>
+    /// 战斗场景章（2026-10-24 主人拍板「金币用第一章森林的战斗场景 徽记用亡灵的 卷轴用洞穴的」）：
+    /// 建关 currentChapter 与详情怪预览都取这里，对应 chapter_theme_map 题材（1 暮影森林 / 2 幽冥墓园 / 6 巨岩深窟）。
+    /// </summary>
+    public static int SceneChapter(ActivityDungeonKind kind)
+    {
+        switch (kind)
+        {
+            case ActivityDungeonKind.Gold:   return 1;
+            case ActivityDungeonKind.Badge:  return 2;
+            case ActivityDungeonKind.Scroll: return 6;
+            default: return 1;
+        }
     }
 
     // —— 难度逐级解锁（2026-10-23 主人拍板「打通前一难度才开下一难度」）——
-    // 进度真源 = SaveData.activityDungeonClearedDiff（-1=未通任何难度）；金币/徽记共用同一活动标签进度。
+    // 进度真源 = SaveData.activityDungeonClearedDiff（-1=未通任何难度）；金币/徽记/卷轴三本共用同一活动标签进度。
 
     /// <summary>活动副本难度是否已解锁：初级恒开放，中级需通初级，高级需通中级。</summary>
     public static bool IsDiffUnlocked(SaveData data, int diff)
@@ -382,7 +495,7 @@ public static class ActivityDungeonRules
         }
     }
 
-    // —— 每日次数（2026-10-24 主人拍板「都是2次」：金币/徽记各自独立计数，同一套出口）——
+    // —— 每日次数（2026-10-24 主人拍板「都是2次」：三本各自独立计数，同一套出口）——
 
     /// <summary>跨天清零每日次数（照 EndlessRiftRules.EnsureDay 的 dayKey 模式）</summary>
     static void EnsureDay(SaveData data, ref string dayKey, ref int tries)
@@ -396,36 +509,47 @@ public static class ActivityDungeonRules
         }
     }
 
-    /// <summary>今日剩余进入次数（badge=false 金币 / true 徽记）</summary>
-    public static int TriesLeft(SaveData data, bool badge)
+    /// <summary>今日剩余进入次数（三本各自独立计数）</summary>
+    public static int TriesLeft(SaveData data, ActivityDungeonKind kind)
     {
         if (data == null) return DAILY_TRIES;
-        if (badge)
+        switch (kind)
         {
-            EnsureDay(data, ref data.badgeDungeonDayKey, ref data.badgeDungeonTriesToday);
-            return Mathf.Max(0, DAILY_TRIES - data.badgeDungeonTriesToday);
+            case ActivityDungeonKind.Gold:
+                EnsureDay(data, ref data.goldDungeonDayKey, ref data.goldDungeonTriesToday);
+                return Mathf.Max(0, DAILY_TRIES - data.goldDungeonTriesToday);
+            case ActivityDungeonKind.Badge:
+                EnsureDay(data, ref data.badgeDungeonDayKey, ref data.badgeDungeonTriesToday);
+                return Mathf.Max(0, DAILY_TRIES - data.badgeDungeonTriesToday);
+            case ActivityDungeonKind.Scroll:
+                EnsureDay(data, ref data.scrollDungeonDayKey, ref data.scrollDungeonTriesToday);
+                return Mathf.Max(0, DAILY_TRIES - data.scrollDungeonTriesToday);
+            default:
+                return 0;
         }
-        EnsureDay(data, ref data.goldDungeonDayKey, ref data.goldDungeonTriesToday);
-        return Mathf.Max(0, DAILY_TRIES - data.goldDungeonTriesToday);
     }
 
     /// <summary>
-    /// 进本：次数 + 体力一起扣（体力 = <see cref="ENTRY_STAMINA_COST"/>），成功计数落盘。
+    /// 进本：次数 + 体力一起扣（体力 = <see cref="EntryStaminaCost"/>），成功计数落盘。
     /// 任何一步不满足都返回 false 并弹对应提示。
     /// </summary>
-    public static bool TryConsumeEnter(bool badge)
+    public static bool TryConsumeEnter(ActivityDungeonKind kind)
     {
         var data = SaveSystem.Instance?.Data;
         if (data == null) return false;
-        if (TriesLeft(data, badge) <= 0)
+        if (TriesLeft(data, kind) <= 0)
         {
-            GlobalToastUI.Show($"今天的{(badge ? "徽记" : "金币")}副本次数已用完（{DAILY_TRIES}/{DAILY_TRIES}）", true);
+            GlobalToastUI.Show($"今天的{DungeonName(kind)}次数已用完（{DAILY_TRIES}/{DAILY_TRIES}）", true);
             return false;
         }
-        if (!StaminaSystem.TrySpendForActivityDungeon())
+        if (!StaminaSystem.TrySpendForActivityDungeon(kind))
             return false;   // 体力不足：ResourceWallet.TrySpend 内已弹「体力不足」
-        if (badge) data.badgeDungeonTriesToday++;
-        else data.goldDungeonTriesToday++;
+        switch (kind)
+        {
+            case ActivityDungeonKind.Gold:   data.goldDungeonTriesToday++;  break;
+            case ActivityDungeonKind.Badge:  data.badgeDungeonTriesToday++; break;
+            case ActivityDungeonKind.Scroll: data.scrollDungeonTriesToday++; break;
+        }
         SaveSystem.Instance?.Save();
         return true;
     }
@@ -536,6 +660,8 @@ public static class EndlessRiftRules
         if (!StaminaSystem.TrySpendForEndlessRift())
             return false;   // 体力不足：ResourceWallet.TrySpend 内已弹「体力不足」
         data.endlessRiftTriesToday++;
+        // 虚拟排行榜的闲置衰减锚点（2026-10-24）：只有真实进本才写，隔了几天没玩排名会回落
+        data.endlessRiftLastPlayDayKey = DateTime.UtcNow.ToString("yyyyMMdd");
         SaveSystem.Instance?.Save();
         return true;
     }
@@ -559,6 +685,41 @@ public static class EndlessRiftRules
         data.endlessRiftClearedStage = riftStage;
         SaveSystem.Instance?.Save();
         return true;
+    }
+
+    // ── 虚拟排行榜（2026-10-24 主人拍板「简单点」，无真实服务器，纯本机公式）──
+    // 领先百分比 = 100 × (1 − e^(−有效层 / 8))；有效层 = 已首通最高层 − 2 × 闲置天数（下限 1）。
+    // 参考曲线（刚打完，闲置 0 天）：
+    //   1 层≈12%、5 层≈47%、10 层≈63%、15 层≈77%、20 层≈86%、30 层≈92%（越高越难涨，自然封手）
+    // 闲置衰减（−2 层/天）：15 层打完隔 4 天 ≈58%、隔 7 天 ≈12% —— 「隔了几天排名就靠后了」。
+    // 要调手感只动下面两个常量；参数 meanings 见常量注释。
+    /// <summary>每闲置一天，有效层数扣多少（主人口径「隔了几天排名就靠后了」的衰减速度）</summary>
+    const int RankIdleFloorLossPerDay = 2;
+    /// <summary>曲线尺度：有效层 = 8 时领先约 63%；越大 → 同层数百分比越低、涨得越慢</summary>
+    const float RankCurveScale = 8f;
+
+    /// <summary>距上次真实进入无限裂隙过了几个自然日（UTC；从没玩过=0 不衰减）</summary>
+    public static int IdleDaysOf(SaveData data)
+    {
+        string key = data?.endlessRiftLastPlayDayKey;
+        if (string.IsNullOrEmpty(key)) return 0;
+        if (!DateTime.TryParseExact(key, "yyyyMMdd", null,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out DateTime last))
+            return 0;   // 日键解析失败按没衰减算（不惩罚玩家）
+        return Mathf.Max(0, (DateTime.UtcNow.Date - last).Days);
+    }
+
+    /// <summary>
+    /// 虚拟排行榜：当前进度层数领先的玩家百分比（1~99 整数）。
+    /// 只显示「领先了多少」不给具体名次（主人拍板）；从没玩过的玩家由 UI 侧另行给引导文案。
+    /// </summary>
+    public static int RankPercentOf(SaveData data)
+    {
+        int best = Mathf.Max(0, data?.endlessRiftClearedStage ?? 0);
+        int eff = Mathf.Max(1, best - RankIdleFloorLossPerDay * IdleDaysOf(data));
+        int pct = Mathf.RoundToInt((1f - Mathf.Exp(-eff / RankCurveScale)) * 100f);
+        return Mathf.Clamp(pct, 1, 99);
     }
 }
 
@@ -592,6 +753,7 @@ public static class BattleModes
     public static readonly NormalBattleMode Normal = new NormalBattleMode();
     public static readonly GoldDungeonBattleMode GoldDungeon = new GoldDungeonBattleMode();
     public static readonly BadgeDungeonBattleMode BadgeDungeon = new BadgeDungeonBattleMode();   // 2026-10-23 徽记副本（不占 SlotTable 位）
+    public static readonly ScrollDungeonBattleMode ScrollDungeon = new ScrollDungeonBattleMode(); // 2026-10-24 卷轴副本（不占 SlotTable 位）
     public static readonly SideIslandBattleMode SideIsland = new SideIslandBattleMode();         // 2026-10-23 支线岛（不占 SlotTable 位）
     public static readonly FinaleBattleMode Finale = new FinaleBattleMode();                     // 2026-10-23 终章追查关（不占 SlotTable 位）
     public static readonly TutorialBattleMode Tutorial = new TutorialBattleMode();

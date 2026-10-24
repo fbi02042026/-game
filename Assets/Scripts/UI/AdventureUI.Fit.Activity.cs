@@ -27,7 +27,12 @@ public partial class AdventureUI
         var list = right != null ? right.Find(ActivityNodeName) : null;
         if (list == null || pageRoot == null || pageRoot.rect.width <= 0f) return;
         float pageW = pageRoot.rect.width;
-        float targetW = pageW - LEFT_W - ActivityRowSidePad * 2f;
+        // 左边界 = 左列实际占宽（2026-10-24 左列标签随手机宽度等比缩放后，localScale>1 时占宽跟着涨）
+        var sidebarRt = transform.Find("LeftSidebar") as RectTransform;
+        float leftW = sidebarRt != null && sidebarRt.rect.width > 0f
+            ? sidebarRt.rect.width * Mathf.Abs(sidebarRt.localScale.x)
+            : LEFT_W;
+        float targetW = pageW - leftW - ActivityRowSidePad * 2f;
         if (targetW < 100f) return;
 
         // 1) 补快照（首次触碰记预制体基准）+ 量各横条 bg 本地宽 + 找顶行基准 y
@@ -52,8 +57,8 @@ public partial class AdventureUI
 
         // 2) 等比缩放 + 行距同倍率放大 + 右列居中。
         //    活动副本 容器原点 = RightContent 右上角 = 页面右上（页 x = pageW），
-        //    右列可视区 [LEFT_W, pageW] → 中线的容器本地 x = (LEFT_W + pageW)/2 - pageW。
-        float centerX = (LEFT_W + pageW) * 0.5f - pageW;
+        //    右列可视区 [leftW, pageW] → 中线的容器本地 x = (leftW + pageW)/2 - pageW。
+        float centerX = (leftW + pageW) * 0.5f - pageW;
         foreach (var kv in bgW)
         {
             var row = (RectTransform)kv.Key;

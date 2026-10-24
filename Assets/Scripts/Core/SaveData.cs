@@ -89,6 +89,12 @@ public class SaveData
     public int endlessRiftTriesToday = 0;
     /// <summary>已首通的最高层（首通奖励一次性真源；记录点 = 本值 / 5 * 5，只进不退）</summary>
     public int endlessRiftClearedStage = 0;
+    /// <summary>
+    /// 最近一次**真实进入**无限裂隙的日键 yyyyMMdd（UTC；只在 TryConsumeEnter 成功时写）。
+    /// 虚拟排行榜的闲置衰减用它——不能拿 endlessRiftDayKey 顶替：那个每次存档都会被 EnsureDay
+    /// 刷成今天，永远表现成「今天刚玩过」，排名就永远不会因几天没玩而回落。
+    /// </summary>
+    public string endlessRiftLastPlayDayKey = "";
 
     // === 活动副本（2026-10-23 拍板「活动副本一拆二」+ 2026-10-24 主人拍板：
     //     金币周一/三/六、徽记周二/四/日开放，每日各 2 次，每次 10 体力；规则见 ActivityDungeonRules）===
@@ -100,6 +106,10 @@ public class SaveData
     public string badgeDungeonDayKey = "";
     /// <summary>徽记副本今日已用进入次数（每天 2 次，见 ActivityDungeonRules.DAILY_TRIES）</summary>
     public int badgeDungeonTriesToday = 0;
+    /// <summary>卷轴副本每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday（2026-10-24 主人拍板：周五开放，照 endlessRift 口径）</summary>
+    public string scrollDungeonDayKey = "";
+    /// <summary>卷轴副本今日已用进入次数（每天 2 次，见 ActivityDungeonRules.DAILY_TRIES）</summary>
+    public int scrollDungeonTriesToday = 0;
     /// <summary>
     /// 活动副本已通关最高难度（2026-10-23 主人拍板「打通前一难度才开下一难度」）：
     /// -1 = 尚未通关任何难度（初级恒开放）；金币/徽记两本共用同一活动标签进度。

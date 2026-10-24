@@ -36,6 +36,13 @@ public partial class AdventureUI
 
     /// <summary>关卡滑动列表视口名（2026-10-24 主人拍板「关卡列改滑动列表」；运行时生成挂主线节点下，翻章手势让路要按名字找，别改）。</summary>
     const string ChestViewportName = "关卡Viewport";
+    /// <summary>滑动列表视口横向裁切外扩（左右各加的逻辑像素）。
+    /// 【2026-10-24 主人拍板「滑动列表左右两边裁切宽度改大点，以后还会有支线」】
+    /// 「主线」容器只是 100×100 占位框，视口若只撑满它，RectMask2D 可见带仅 ~100 宽，
+    /// 岛图/支线节点（示例支线 x≈105、岛半宽≈115 → 右缘 ~220）左右都被裁；
+    /// 左右各外扩 200 → 可见带约 [-250,+250]（rel 列中心），支线完整可见，
+    /// 且视口左缘（屏 x≈221）不越 LeftSidebar（右缘 182），透明拖拽面不挡侧栏按钮。</summary>
+    const float ChestClipExtraWidthX = 200f;
     /// <summary>当前关标识节点名（2026-10-24 主人在 AdventureUI 根下摆好的「头像指示」，代码只挪位置不改样式）。</summary>
     const string StageMarkerNodeName = "头像指示";
     /// <summary>标识里箭头节点名（灰锁章只隐它、头像保留）。</summary>
@@ -228,11 +235,16 @@ public partial class AdventureUI
     /// <summary>滑动列表包裹后，内容参考中心相对原「关卡」容器 pivot 点的下移量 d（Fit 换算 ys 用；未包裹 = 0）。</summary>
     public float ChestScrollRefShift => _chestRefShift;
     float _chestRefShift;
+    /// <summary>滑动内容 sizeDelta.y 的包裹基准值（标准屏/关适配还原用；瘦屏 Fit 按分辨率重写）。
+    /// 【2026-10-24 视口按列占高撑出后包裹时恒为 0，保留字段作还原真源】。</summary>
+    float _chestContentBaseDeltaY;
 
     /// <summary>
     /// 关卡容器 → 滑动列表（只包一次）：
-    /// 视口 = 关卡容器预制体原帧（同锚同位同尺寸，标准屏视觉零变化）；
-    /// 关卡容器变成滚动内容（顶部锚定，高度按槽位列占高撑出，比视口高才滑得动，Clamped 不滑过头）。
+    /// 视口纵向对准槽位列实际范围（列中心对列中心，见 2026-10-24 修「岛屿距离标题还有空隙」②）、
+    /// 宽随「主线」撑满（滑动拖拽面）；
+    /// 关卡容器变成滚动内容（纵向拉伸锚 (0,0)-(1,1)：高度 = 视口高 + sizeDelta.y，
+    /// 内容中心 = 视口中心（两者同步上移 colCenter，槽位/示例子节点统一下移 colCenter 抵消）。
     /// 槽位坐标不动：浮动/补位/拉伸全部继续在容器内坐标系里跑。
     /// </summary>
     void EnsureChestScrollWrap()
@@ -249,40 +261,65 @@ public partial class AdventureUI
         }
 
         var srcRt = (RectTransform)_guankaRoot;
-        // 视口帧 = 容器预制体原帧
         var viewportGo = new GameObject(ChestViewportName, typeof(RectTransform), typeof(Image), typeof(RectMask2D));
         var vp = (RectTransform)viewportGo.transform;
         vp.SetParent(parent, false);
-        vp.anchorMin = srcRt.anchorMin;
-        vp.anchorMax = srcRt.anchorMax;
+        viewportGo.transform.SetSiblingIndex(0);   // 压到「主线」最底层：TitleBar/世界地图钮/支线岛的绘制与点击都在它之上
+        // 视口：x 横向拉伸撑满「主线」再左右各外扩 ChestClipExtraWidthX（可见带覆盖岛图/支线，
+        // 拖拽面同宽但不越侧栏），y 单点锚（0.5）按列占高撑出（瘦屏 Fit 再按分辨率带重拉）。
+        // 【2026-10-24 修「岛屿距离标题还有空隙」②】视口纵向改为对准槽位列实际范围（列中心对列中心）：
+        // 旧写法把视口中心钉在容器 pivot 上，而槽位列相对 pivot 偏上（顶槽 349 vs 半高 296.5），
+        // 顶槽中心落在视口顶外 52.5 → 最上面的岛被 RectMask2D 裁掉、标题下先空一截。
+        Vector2 frameCenter = srcRt.anchoredPosition;
+        float spanH = Mathf.Max(srcRt.sizeDelta.y, SlotColumnSpan());
+        float colMin = float.MaxValue, colMax = float.MinValue;
+        var colSpanSrc = _slotFloatBasePos.Count > 0 ? _slotFloatBasePos : _slotPrefabBasePos;
+        for (int i = 0; i < colSpanSrc.Count; i++)
+        {
+            colMin = Mathf.Min(colMin, colSpanSrc[i].y);
+            colMax = Mathf.Max(colMax, colSpanSrc[i].y);
+        }
+        float colCenter = colSpanSrc.Count > 0 ? (colMin + colMax) * 0.5f : 0f;
+        vp.anchorMin = new Vector2(0f, 0.5f);
+        vp.anchorMax = new Vector2(1f, 0.5f);
+        vp.offsetMin = new Vector2(frameCenter.x - ChestClipExtraWidthX, frameCenter.y + colCenter - spanH * 0.5f);
+        vp.offsetMax = new Vector2(frameCenter.x + ChestClipExtraWidthX, frameCenter.y + colCenter + spanH * 0.5f);
         vp.pivot = srcRt.pivot;
-        vp.anchoredPosition = srcRt.anchoredPosition;
-        vp.sizeDelta = srcRt.sizeDelta;
         vp.localScale = Vector3.one;
         // 透明接收面：槽位图射线全关（防挡翻章），竖滑拖拽得落在这一层 ScrollRect 才收得到
         var vpImg = viewportGo.GetComponent<Image>();
         vpImg.color = new Color(0f, 0f, 0f, 0f);
         vpImg.raycastTarget = true;
 
-        // 容器变内容：顶部拉伸锚定（顶边与视口顶边重合 = 原位置），向下按内容高度撑出滚动余量
+        // 容器变内容：纵向拉伸锚定（顶边与视口顶边重合 = 原位置），向下按内容高度撑出滚动余量
         srcRt.SetParent(vp, false);
-        srcRt.anchorMin = new Vector2(0f, 1f);
+        srcRt.anchorMin = new Vector2(0f, 0f);
         srcRt.anchorMax = new Vector2(1f, 1f);
         srcRt.pivot = new Vector2(0.5f, 1f);
         srcRt.anchoredPosition = Vector2.zero;
-        float viewH = Mathf.Max(1f, vp.rect.height);
+        float viewH = Mathf.Max(1f, spanH);   // 视口刚按 spanH 撑出，直接用计算值（不依赖 rect 时序）
         float span = SlotColumnSpan();
         float contentH = Mathf.Max(viewH, span);
         srcRt.sizeDelta = new Vector2(0f, contentH - viewH);   // 拉伸锚下 sizeDelta.y = 高度 - 视口高
+        _chestContentBaseDeltaY = contentH - viewH;
 
-        // 内容向下长高 d 后，槽位的锚点参考中心（内容矩形中心）跟着下移 d ——
-        // 把槽位基准 y 补回 d，滚动到顶时槽位仍钉在原来的屏幕位置（视觉零变化）
+        // 内容矩形中心比容器 pivot 高 colCenter（视口已按列中心对齐）→ 容器内全部子节点
+        //（槽位 + 主人手摆的「支线」示例等）统一下移 colCenter，根帧位置与预制体分毫不差；
+        // 再补回向下长高的 d，滚动到顶时仍钉在原屏幕位置（视觉零变化）
         float d = (contentH - viewH) * 0.5f;
         _chestRefShift = d;
+        for (int i = 0; i < srcRt.childCount; i++)
+        {
+            var child = srcRt.GetChild(i) as RectTransform;
+            if (child == null) continue;
+            if (Mathf.Abs(child.anchorMin.y - child.anchorMax.y) > 1e-4f) continue;   // 非单点锚不动，防错排
+            var p = child.anchoredPosition;
+            child.anchoredPosition = new Vector2(p.x, p.y - colCenter);
+        }
         for (int i = 0; i < _slotFloatBasePos.Count; i++)
-            _slotFloatBasePos[i] = new Vector2(_slotFloatBasePos[i].x, _slotFloatBasePos[i].y + d);
+            _slotFloatBasePos[i] = new Vector2(_slotFloatBasePos[i].x, _slotFloatBasePos[i].y + d - colCenter);
         for (int i = 0; i < _slotPrefabBasePos.Count; i++)
-            _slotPrefabBasePos[i] = new Vector2(_slotPrefabBasePos[i].x, _slotPrefabBasePos[i].y + d);
+            _slotPrefabBasePos[i] = new Vector2(_slotPrefabBasePos[i].x, _slotPrefabBasePos[i].y + d - colCenter);
 
         var scroll = viewportGo.AddComponent<ScrollRect>();
         scroll.content = srcRt;
@@ -310,7 +347,10 @@ public partial class AdventureUI
         return (max - min) + halfSlot * 2f;
     }
 
-    /// <summary>把当前关滚到视口中部（刷新后调；内容不比视口高时不滚）。</summary>
+    /// <summary>把当前关滚进视口（刷新后调；内容不比视口高时不滚）。
+    /// 【2026-10-24 修「岛屿距离标题还有空隙」①】弃「当前关滚到视口正中」——
+    /// 顶格（滚到顶）看得见当前关就回顶部，岛屿列钉在标题下方不留空隙；
+    /// 确实装不下才滚「刚好露出当前关」的最小量，不再把顶部关卡整格滚出视口。</summary>
     void ScrollChestToCurrent(int slotIdx)
     {
         if (_chestScroll == null || slotIdx < 0 || slotIdx >= _slotNodes.Count) return;
@@ -320,9 +360,17 @@ public partial class AdventureUI
         float viewH = viewport.rect.height;
         float contentH = content.rect.height;
         if (contentH <= viewH + 1f) return;
-        // 槽位锚点基准在内容中心（单点锚）：中心以下为 contentH/2
+        // 槽位锚点基准在内容中心（单点锚）：槽中心距内容顶
         float slotBelowTop = contentH * 0.5f - _slotFloatBasePos[slotIdx].y;
-        float t = Mathf.Clamp01((slotBelowTop - viewH * 0.5f) / Mathf.Max(1f, contentH - viewH));
+        const float halfSlot = 90f;   // 单格视觉半径（SlotColumnSpan 同口径）
+        // 顶格时槽位底缘超出视口底的量；≤0 = 顶格就完整可见 → 回顶部
+        float overflowAtTop = slotBelowTop + halfSlot - viewH;
+        if (overflowAtTop <= 0f)
+        {
+            _chestScroll.verticalNormalizedPosition = 1f;
+            return;
+        }
+        float t = Mathf.Clamp01(overflowAtTop / Mathf.Max(1f, contentH - viewH));
         _chestScroll.verticalNormalizedPosition = 1f - t;
     }
 
@@ -579,6 +627,10 @@ public partial class AdventureUI
         if (_guankaRoot == null) return;
         if (_guankaRoot.gameObject.activeSelf != show)
             _guankaRoot.gameObject.SetActive(show);
+        // 视口随内容一起显隐【2026-10-24 视口扩到大显示区后，别的模式下不能再留一块吃点击的透明面】
+        if (_chestScroll != null && _chestScroll.viewport != null
+            && _chestScroll.viewport.gameObject.activeSelf != show)
+            _chestScroll.viewport.gameObject.SetActive(show);
         if (!show) return;
         // 领取退场/开启揭示动画拥有画面时早退（揭示动画跨章切换时放行刷新，协程自己还原退出）
         if (_claimRoutine != null || (_openRevealRoutine != null && _revealChapter == _selectedChapter)) return;

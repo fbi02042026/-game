@@ -87,8 +87,9 @@ public class RunDraftDirector : MonoBehaviour
         }
 
         if (resumed) RestoreHeroProgress();
-        // 【2026-10-22 主人拍板「打一关回一次」】续局还原局内金币池（ReturnToTownKeepRun 存进 runGold），
-        // 启动金只在开新局补（上面 !resumed 分支），续局靠这里把池子接回来。
+        // 【2026-10-24 主人拍板「只要打完就清」】resumed 现在只剩一种来源：中断局弹窗点了「继续」。
+        // 局内金币池从中断快照接回（确认时 ConfirmResumeInterruptedRun 写进 runGold），
+        // 启动金不重发（防杀进程反复刷启动金），靠这里把池子接回来；开新局走上面 !resumed 分支照发。
         if (resumed) RestoreRunGoldPool();
         SyncHeroLevel();
 
@@ -127,8 +128,9 @@ public class RunDraftDirector : MonoBehaviour
     }
 
     /// <summary>
-    /// 【2026-10-22 主人拍板「打一关回一次」】续局还原局内金币池。
-    /// 池子在 ReturnToTownKeepRun 时写进 RunLoadoutData.runGold，这里还原进 BattleManager。
+    /// 【2026-10-24 主人拍板「只要打完就清」】续局（= 中断局弹窗点了继续）还原局内金币池。
+    /// 池子在中断局弹窗确认时从中断快照接回（RunLoadout.ConfirmResumeInterruptedRun 写进 runGold），
+    /// 这里还原进 BattleManager。
     /// </summary>
     void RestoreRunGoldPool()
     {

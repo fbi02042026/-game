@@ -30,12 +30,17 @@ public partial class AdventureUI
         RefreshChestNodes();   // 章内 10 小关宝箱节点（2026-10-22 新增，见 AdventureUI.ChestNodes.cs）
         RefreshBranchIslands();   // 主线窗口旁的支线岛屿宝箱（2026-10-23 主人拍板，见 AdventureUI.BranchIslands.cs）
         RefreshFinaleRow();       // 活动副本区「追查真相」横条（2026-10-23 终章追查线，见 AdventureUI.Finale.cs）
-        // 活动副本横条选中高亮（2026-10-23 活动一拆二；非活动模式时列表节点隐藏，刷了也无副作用）
+        // 活动副本横条状态（2026-10-24 主人拍板：门槛没到隐藏/没轮到灰显/选中节点点亮）；
+        // 切战斗标签来回也会刷到 → 选中状态不丢。非活动模式时列表节点隐藏，刷了也无副作用。
         if (IsActivityMode(_selectedMode))
         {
             EnsureActivityRowsWired();
-            RefreshActivityRowHighlight();
+            ApplyActivityRowStates();
         }
+        // 无限页层数牌 + 虚拟排行榜（2026-10-24 主人拍板，见文末 RiftPage 区）；
+        // 只在无限模式刷，别的模式零副作用。
+        if (IsEndlessMode(_selectedMode))
+            RefreshRiftPage();
     }
 
     /// <summary>按路线表重算可选章节，并把 _selectedChapter 修正到集合内。</summary>
@@ -87,6 +92,7 @@ public partial class AdventureUI
         {
             if (modeButtons[i] == null) continue;
             SetChildSelected(modeButtons[i].transform, i == _selectedMode);
+            ApplyModeTabLock(modeButtons[i], i);   // 锁态灰显（2026-10-24 主人拍板：裂隙/活动 通1章后解锁）
         }
     }
 
@@ -401,4 +407,88 @@ public partial class AdventureUI
             return UiKeyedBackgrounds.Load(UiKeyedBackgrounds.AdventurePages, "chapter_" + chapter)
                    ?? UiKeyedBackgrounds.Load(UiKeyedBackgrounds.AdventurePages, GameConfig.GetChapterMapName(chapter));
         }
+
+    // ────────────────────────────────────────────────────
+    // 无限页：层数牌 + 虚拟排行榜（2026-10-24 主人拍板）
+    // ① 「无限关卡不要设关卡号 只按层数来 第一层 第二层这种 没有上限」——
+    //    无限/关卡 下 4 张槽位牌（与主线同构，prefab 烤死文案「1-1」）改写「第N层」：
+    //    底槽 = 下次起始层（记录点+1，EndlessRiftRules.StartStage 唯一出口），往上逐层 +1；
+    //    层数跟着存档进度走，永远没有「最后一关」。
+    // ② 虚拟排行榜（无真实服务器，公式在 EndlessRiftRules.RankPercentOf）：
+    //    一行字挂在「关卡」容器里跟无限页一起显示，「您当前层数已领先 X% 的玩家」；
+    //    打得越多百分比越高，隔几天不玩就回落（闲置衰减，锚点=真实进本日键）。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>排行榜文字节点名（挂在 无限/关卡 容器下；不是「数字-数字」不会混进槽位识别）。</summary>
+    const string RiftRankLabelName = "虚拟排行";
+    /// <summary>排行榜文字与顶槽位的间距（纵向 y 排版属必要介入：y 跟顶槽位现算，不写死坐标）。</summary>
+    const float RiftRankLabelGapY = 92f;
+
+    /// <summary>刷新无限页：4 张层数牌写「第N层」+ 虚拟排行榜一行字（RefreshAll 调，仅无限模式）。</summary>
+    void RefreshRiftPage()
+    {
+        var right = transform.Find("RightContent");
+        var endless = right != null ? right.Find(EndlessNodeName) : null;
+        var guanka = endless != null ? endless.Find("关卡") as RectTransform : null;
+        if (guanka == null)
+        {
+            Debug.LogError("[AdventureUI] RightContent/无限/关卡 节点缺失，层数牌与虚拟排行榜无从显示（缺真值不兜底）");
+            return;
+        }
+
+        var slots = CollectNumberedSlots(guanka);
+        int start = EndlessRiftRules.StartStage();   // 下次起始层 = 记录点 + 1（唯一出口）
+        for (int i = 0; i < slots.Count; i++)
+        {
+            // prefab 实测：编号牌 = 槽位/bg/Text (Legacy)（fontSize 30、烤死「1-1」；
+            // 取法与主线槽位 ChestNodes.cs:202 同款路径）。只改文案，牌的图/位置不动
+            var plate = slots[i].Find("bg/Text (Legacy)")?.GetComponent<Text>();
+            if (plate == null) continue;
+            plate.text = $"第{start + i}层";   // 底槽=起始层，往上 +1；无限层永不封顶
+            // 层数无上限（三位数层号比烤死的「1-1」宽，牌面 125px 装不下会折行）→ 溢出展开防折行。
+            // 只改文字展示属性，不动排版（铁律 20 例外口径：文案/字体类）。
+            plate.horizontalOverflow = HorizontalWrapMode.Overflow;
+        }
+
+        // 虚拟排行榜：y 跟顶槽位走（瘦屏重排后 RefreshRiftPage 会重算，不脱节）
+        var data = SaveSystem.Instance?.Data;
+        var label = EnsureRiftRankLabel(guanka);
+        if (label == null) return;
+        int best = Mathf.Max(0, data?.endlessRiftClearedStage ?? 0);
+        label.text = best > 0
+            ? $"您当前层数已领先 {EndlessRiftRules.RankPercentOf(data)}% 的玩家"
+            : "挑战无限裂隙后生成您的排名";
+        if (slots.Count > 0)
+        {
+            var top = slots[slots.Count - 1];
+            var lrt = label.rectTransform;
+            lrt.anchoredPosition = new Vector2(top.anchoredPosition.x, top.anchoredPosition.y + RiftRankLabelGapY);
+        }
+    }
+
+    /// <summary>排行榜文字（运行时建一次；纯 Text 无新图，颜色对齐页内暖金奶油口径）。</summary>
+    Text EnsureRiftRankLabel(RectTransform guanka)
+    {
+        var found = guanka.Find(RiftRankLabelName);
+        if (found != null) return found.GetComponent<Text>();
+        if (guanka.GetComponentInParent<Canvas>() == null)
+        {
+            Debug.LogError("[AdventureUI] 无限/关卡 容器不在 Canvas 下，虚拟排行榜建不出来（缺真值不兜底）");
+            return null;
+        }
+        var go = new GameObject(RiftRankLabelName, typeof(RectTransform), typeof(Text));
+        go.transform.SetParent(guanka, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);   // 与槽位同一坐标参照（关卡容器中心）
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(460f, 44f);
+        var txt = go.GetComponent<Text>();
+        txt.font = GameFonts.GetChinese();
+        txt.fontSize = 26;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.color = new Color(1f, 0.92f, 0.7f, 1f);   // 与怪物信息弹窗标题同款暖金奶油色
+        txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+        txt.raycastTarget = false;
+        return txt;
+    }
 }

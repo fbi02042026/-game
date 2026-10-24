@@ -265,6 +265,9 @@ public class TavernUI : MonoBehaviour, ITownPage
             Transform c = top.GetChild(i);
             if (c == null) continue;
             if (c.name == "GoldPanel" || c.name == "体力Panel") continue;
+            // 【2026-10-24 主人拍板「提取顶条资源条」】金币/钻石列已迁入 ResourceStrip 全局唯一条
+            // （原生节点迁移非复制，主界面顶条显示的就是它），功能页照旧保留资源列显隐。
+            if (c.name == "ResourceStrip") continue;
             if (c.name.IndexOf("Stamina", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
             if (c.name == "TopBarBg") continue;
             bool on = !resourceOnly;

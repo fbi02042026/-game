@@ -259,7 +259,10 @@ public partial class TutorialDirector
                 StoryDirector.Solo("会长",
                     $"{playerName}，你可以出去了。往后的路，自己当心。",
                     StoryPortraits.GuildMaster)
-                    .Bg(StoryBackgrounds.GuildOffice),
+                    .Bg(StoryBackgrounds.GuildOffice)
+                    // 【2026-10-24 主人拍板「起完名不用再显示会长办公室」】背景没换，
+                    // 不再走开播黑幕字幕（否则「会长办公室」大字会再弹一次）。
+                    .SkipReveal(),
             };
             done = false;
             StoryDirector.Ensure().Play(sendOff, () => done = true, keepSceneArt: true);

@@ -37,6 +37,11 @@ public partial class AdventureUI
     // 防递归守卫（与 _verticalSplitApplying 同思路），避免改锚点触发的重入。
     bool _adventureUiApplying;
 
+    /// <summary>根矩形未就绪的补跑协程在跑（防重复起协程；ApplyAdventureFit 顶部会清标志，页面隐藏杀协程后也不会卡死后续重试）。</summary>
+    bool _adventureFitWaitingRoot;
+    /// <summary>「根矩形未就绪挂起重试」诊断只打一次（每次 Play 会话一条，帮助定位进页太早问题）。</summary>
+    bool _adventureFitWaitLogged;
+
     // 记录被重锚定节点的原始锚点/偏移/轴心，用于幂等重算与一键回退还原（按 instanceID）。
     struct AdventureUiBase
     {
@@ -85,10 +90,17 @@ public partial class AdventureUI
     {
         Transform root = transform;
         if (root == null) return;
+        _adventureFitWaitingRoot = false;   // 重跑即视为补跑流程结束：页面隐藏杀协程后标志不残留，后续还能再挂
         if (_adventureUiApplying) return;
         _adventureUiApplying = true;
         try
         {
+            // 左列标签随手机宽度等比缩放（2026-10-24 主人拍板「左侧标签可以根据手机宽度等比缩放，
+            // 否则在宽的手机上看的就太小了」）：宽屏逻辑宽>720，按可见逻辑宽/720 放大保持占屏宽比例；
+            // 瘦屏/标准屏逻辑宽恒 720 → s=1 与现状零差别。挂在瘦屏闸门之前——宽屏也要生效；
+            // s 每次现算，s=1 即自然回预制体缩放，无需单独还原口。
+            FitSidebarWidthScale();
+
             var right = root.Find("RightContent") as RectTransform;
             var detail = root.Find("DetailPanel") as RectTransform;
             var mapRoot = right != null ? right.Find("MapRoot") as RectTransform : null;
@@ -106,6 +118,19 @@ public partial class AdventureUI
                 if (tbRestore != null) RestoreAdventureBase(tbRestore);
                 var wmBtnRestore = mainNodeRestore != null ? mainNodeRestore.Find("WorldMapBtn") as RectTransform : null;
                 if (wmBtnRestore != null) RestoreAdventureBase(wmBtnRestore);
+                // 关卡Viewport 拉伸还原 + 滑动内容高度还原（2026-10-24 瘦屏拉伸的配套回退；未拉伸过 = no-op）
+                var vpRestore = mainNodeRestore != null ? mainNodeRestore.Find(ChestViewportName) as RectTransform : null;
+                if (vpRestore != null) RestoreAdventureBase(vpRestore);
+                if (_chestScroll != null && _chestScroll.content != null)
+                {
+                    var contentRestore = _chestScroll.content;
+                    contentRestore.sizeDelta = new Vector2(contentRestore.sizeDelta.x, _chestContentBaseDeltaY);
+                }
+                // 无限页关卡列还原（2026-10-24 主人「无限节点要和主线一样」的配套回退；未处理过 = no-op）
+                var endlessRestore = mainNodeRestore != null ? mainNodeRestore.Find(EndlessNodeName) : null;
+                var riftTitleRestore = endlessRestore != null ? endlessRestore.Find("TitleBar") as RectTransform : null;
+                if (riftTitleRestore != null) RestoreAdventureBase(riftTitleRestore);
+                RestoreRiftColumnFit();
                 // 主线列表瘦屏重排的还原（槽位浮动基准 / 支线岛基准；列表未绑定时内部自动 no-op）
                 ShrinkSlotCount(4);   // 克隆增补的槽位撤掉，窗口回到预制体 4 槽
                 RestoreSlotColumnBaseY();
@@ -116,12 +141,16 @@ public partial class AdventureUI
                 return;
             }
 
-            // 首帧 Canvas 可能尚未 rebuild，rect 仍为 0 → 直接 return 会永久失效。
-            // 先强制刷新一次画布再取尺寸（保持同步调用，不改用协程）；仍为 0 才放弃本次。
+            // 首帧 Canvas 可能尚未 rebuild，rect 仍为 0 → 旧代码直接 return 会永久失效。
+            // 先强制刷新一次画布再取尺寸（保持同步调用，不改用协程）；仍为 0 则挂起逐帧重试（见 BeginFitWhenRootReady）。
             var canvas = root.GetComponentInParent<Canvas>();
             if (canvas != null) Canvas.ForceUpdateCanvases();
             var rootRt = root as RectTransform;
-            if (rootRt == null || rootRt.rect.width <= 0f || rootRt.rect.height <= 0f) return;
+            if (rootRt == null || rootRt.rect.width <= 0f || rootRt.rect.height <= 0f)
+            {
+                BeginFitWhenRootReady();
+                return;
+            }
 
             // 底部五入口（公会/角色/冒险/酒馆/冒险日志）占住屏幕底部，详情面板必须给它让位，
             // 否则面板底部（进入关卡按钮那一排）会被压在导航栏下面看不见。
@@ -192,6 +221,35 @@ public partial class AdventureUI
         {
             _adventureUiApplying = false;
         }
+    }
+
+    /// <summary>
+    /// 根矩形未就绪时的补跑（2026-10-24 修「退出战斗回冒险页标题下移」）。
+    /// 病根：战斗回城 LoadScene(Town) 后 TownHubController.Start() 同帧调 OpenAdventure → ShowPage →
+    /// ApplyAdventureFit，此刻页面刚实例化、宿主 Canvas 还没跑过一帧布局，rootRt.rect=0 →
+    /// 旧代码直接 return 放弃；而页面已在前台，底部导航点「冒险」不会重跑 ShowPage
+    /// → 适配永远没补跑，整页停在预制体位：瘦屏上 TitleBar 比适配位低 (H−1280)/2 ≈ 165，
+    /// 即主人截图里的「标题下移」（同帧可见佐证：槽位仍是预制体 4 槽，适配后应为 5 槽）。
+    /// 修法：rect=0 时起协程逐帧等根矩形有效，再补跑一次 ApplyAdventureFit（幂等，等价于晚一帧进页）。
+    /// </summary>
+    void BeginFitWhenRootReady()
+    {
+        if (_adventureFitWaitingRoot) return;
+        _adventureFitWaitingRoot = true;
+        if (!_adventureFitWaitLogged)
+        {
+            _adventureFitWaitLogged = true;
+            Debug.Log("[AdventureFit] 进页时根矩形未量出（rect=0），挂起重试待布局就绪后补跑适配");
+        }
+        StartCoroutine(CoFitWhenRootReady());
+    }
+
+    IEnumerator CoFitWhenRootReady()
+    {
+        while (transform is RectTransform rt && (rt.rect.width <= 0f || rt.rect.height <= 0f))
+            yield return null;
+        _adventureFitWaitingRoot = false;
+        ApplyAdventureFit();
     }
 
     /// <summary>首次遇到节点记录预制体原始锚点/偏移/轴心（用于幂等重算与一键回退）。返回 base（值类型，改完需写回字典）。</summary>
@@ -668,7 +726,7 @@ public partial class AdventureUI
         EnsureBranchIslands();
 
         // 【2026-10-24】关卡容器被滑动列表包裹后搬到 主线/关卡Viewport/关卡：
-        // 帧解析改用视口（= 原关卡容器预制体帧，同锚同位同尺寸），槽位换算走 ChestScrollRefShift 补偿。
+        // 帧解析改用视口（中心=原关卡容器预制体帧中心，纵向按列占高/分辨率带撑出），槽位换算走内容实际中心（见 3.5）。
         var guankaFrame = mainNode.Find(ChestViewportName) as RectTransform;
         if (guankaFrame == null)
             guankaFrame = mainNode.Find("关卡") as RectTransform;   // 未包裹（异常路径）兜查
@@ -715,7 +773,7 @@ public partial class AdventureUI
             WarnMainColumnOnce("主线槽位节点不足 2 个，无法定插值节奏");
             return;
         }
-        if (!TryResolveMainChildFrames(right, mainNode, guankaFrame, H, out _, out float gPivotNow)
+        if (!TryResolveMainChildFrames(right, mainNode, guankaFrame, H, out float gAnchorNow, out float gPivotNow)
             || !TryResolveMainChildFrames(right, mainNode, guankaFrame, designH, out _, out float gPivotDesign))
         {
             WarnMainColumnOnce("找不到 主线/关卡Viewport（原关卡容器帧）或其锚型不是垂直单点锚");
@@ -768,13 +826,98 @@ public partial class AdventureUI
                       $"rhythmPrefab={rhythmPrefab:F0} rhythm={rhythm:F0} slotCount={slotCount} prefab={prefabPos.Count}");
         }
 
-        var ys = new List<float>(slotCount);
-        // 顶槽（最晚关）贴 bandTop，往下铺（root y → 内容帧本地 y）：参考中心比原容器 pivot 点低 refShift，加回
+        // 根帧槽位目标 y（顶槽贴 bandTop 往下铺；先算根帧，再按内容实际中心换算本地 y）
+        var ysRoot = new List<float>(slotCount);
         for (int i = 0; i < slotCount; i++)
-            ys.Add(bandTop - (slotCount - 1 - i) * rhythm - gPivotNow + refShift);
+            ysRoot.Add(bandTop - (slotCount - 1 - i) * rhythm);
+
+        // ── 3.5) 关卡Viewport 按分辨率拉伸 + 滑动内容高度自适应
+        // 【2026-10-24 主人拍板「滑动列表显示区域太小，要根据分辨率进行拉伸」】
+        // 视口顶边钉 TitleBar（保持设计间距，随钉顶平移）、底边钉 DetailPanel 顶（保持设计间距）；
+        // 内容高度 = max(视口高, 列占高)（列超出视口的部分才滚得动）；
+        // 槽位换算直接用内容实际中心（视口顶 − 内容高/2，内容顶边恒钉视口顶），不依赖 refShift 恒等式。
+        // 幂等：base 恒为原值，rt 每次从 base + 本轮参考值重算；标准屏/关开关由 ApplyAdventureFit 顶部还原。
+        var vpBase = CaptureAdventureBase(guankaFrame);
+        float vpPivotY = vpBase.pivot.y;
+        float vpH0 = vpBase.offsetMax.y - vpBase.offsetMin.y;
+        float vpTopDesign = gPivotDesign + (1f - vpPivotY) * vpH0;
+        float vpBotDesign = gPivotDesign - vpPivotY * vpH0;
+        float vpTopTarget = (tbPivotNow + tbShift) - (tbPivotDesign - vpTopDesign);
+        float vpBotTarget = detailTopNow + (vpBotDesign - detailTopDesign);
+        float vpHNew = vpTopTarget - vpBotTarget;
+        float vpTopUsed, vpHUsed;
+        if (Mathf.Abs(vpPivotY - 0.5f) > 0.01f)
+        {
+            WarnMainColumnOnce($"关卡Viewport pivot.y={vpPivotY:F2} 非 0.5，放弃拉伸（槽位换算按中心锚推导）");
+            vpTopUsed = gPivotNow + (1f - vpPivotY) * vpH0;
+            vpHUsed = vpH0;
+        }
+        else if (vpHNew < 1f)
+        {
+            WarnMainColumnOnce($"视口拉伸异常（bottom={vpBotTarget:F0} top={vpTopTarget:F0}），保持原视口");
+            vpTopUsed = gPivotNow + (1f - vpPivotY) * vpH0;
+            vpHUsed = vpH0;
+        }
+        else
+        {
+            guankaFrame.offsetMin = new Vector2(vpBase.offsetMin.x, vpBotTarget - gAnchorNow);
+            guankaFrame.offsetMax = new Vector2(vpBase.offsetMax.x, vpTopTarget - gAnchorNow);
+            vpBase.applied = true;
+            _adventureUiBase[guankaFrame.GetInstanceID()] = vpBase;
+            vpTopUsed = vpTopTarget;
+            vpHUsed = vpHNew;
+        }
+
+        // 滑动内容高度自适应：max(视口高, 列占高+上下半格余量)，拉伸锚下 sizeDelta.y = 高度 − 视口高
+        float spanRoot = ysRoot[ysRoot.Count - 1] - ysRoot[0] + 180f;   // 90=单格视觉半径（SlotColumnSpan 同口径）
+        float contentH = Mathf.Max(vpHUsed, spanRoot);
+        var contentRt = _chestScroll != null ? _chestScroll.content : null;
+        if (contentRt != null)
+            contentRt.sizeDelta = new Vector2(contentRt.sizeDelta.x, contentH - vpHUsed);
+
+        // 内容实际中心（root 帧）= 视口顶 − 内容高/2（内容顶边恒钉视口顶）
+        float contentCenterY = vpTopUsed - contentH * 0.5f;
+        var ys = new List<float>(slotCount);
+        for (int i = 0; i < slotCount; i++)
+            ys.Add(ysRoot[i] - contentCenterY);
         if (slotCount != prefabPos.Count)
             RefreshChestNodes();   // 补/撤槽后内容窗口变了，立刻刷新把各关三态铺上，不等下次 ShowPage
         ApplySlotColumnStretchY(ys);
+
+        // ── 3.6) 无限页关卡列与主线同带重排【2026-10-24 主人「无限裂隙节点有点偏下了 要和主线一样的」】
+        // 无限/关卡 与 主线/关卡 同构（1-1..1-4 同名同基准），主线列瘦屏被拉进带内后无限列还在预制体位 → 显偏下。
+        // 修 = 无限/TitleBar 随主线同一 tbShift 钉顶；无限槽位按序号对齐主线根帧目标 y（ysRoot[0..3] 底对齐同节奏，
+        // 主线第 5 槽是增补槽，无限保持预制体 4 槽不增补）。x 不动。
+        // 幂等：槽位基准首触记录、目标每次从 ysRoot 现算；标准屏/关开关由 RestoreRiftColumnFit 还原。
+        var endlessNode = right.Find(EndlessNodeName) as RectTransform;
+        if (endlessNode != null)
+        {
+            var riftTitle = endlessNode.Find("TitleBar") as RectTransform;
+            if (riftTitle != null)
+            {
+                var rtb = CaptureAdventureBase(riftTitle);
+                riftTitle.offsetMin = new Vector2(rtb.offsetMin.x, rtb.offsetMin.y + tbShift);
+                riftTitle.offsetMax = new Vector2(rtb.offsetMax.x, rtb.offsetMax.y + tbShift);
+                rtb.applied = true;
+                _adventureUiBase[riftTitle.GetInstanceID()] = rtb;
+            }
+            var riftGuanKa = endlessNode.Find("关卡") as RectTransform;
+            if (riftGuanKa != null
+                && TryResolveMainChildFrames(right, endlessNode, riftGuanKa, H, out _, out float eCenterNow))
+            {
+                var riftSlots = CollectNumberedSlots(riftGuanKa);
+                EnsureRiftSlotBase(riftSlots);
+                int n = Mathf.Min(riftSlots.Count, ysRoot.Count);
+                for (int i = 0; i < n; i++)
+                {
+                    var srt = riftSlots[i];
+                    float targetY = ysRoot[i] - eCenterNow;   // 槽位中心锚：根帧目标 − 容器中心
+                    var p = srt.anchoredPosition;
+                    if (!Mathf.Approximately(p.y, targetY))
+                        srt.anchoredPosition = new Vector2(p.x, targetY);
+                }
+            }
+        }
 
         // 岛屿 x 一律用预制体数值（2026-10-23 晚主人「直接用我的预制体的数值吧」：
         // ×3 错位放大已删——放大后左右不均且首尾槽没动，主人不要）。
@@ -853,5 +996,86 @@ public partial class AdventureUI
             if (_sidebarEvenBtns[i] != null) RestoreAdventureBase(_sidebarEvenBtns[i]);
         }
         _sidebarEvenBtns.Clear();
+    }
+
+    // ────────────────────────────────────────────────────
+    // 左列标签随手机宽度等比缩放（2026-10-24 主人拍板）：
+    // 宽屏（比 9:16 更方）走高度匹配 → 逻辑宽 = 1280×宽高比 > 720，标签保持预制体尺寸
+    // 占屏宽比例就变小（主人「宽的手机上看的就太小了」）→ 按可见逻辑宽/720 等比放大，
+    // 标签占屏宽比例与 9:16 恒一致；瘦屏/标准屏/极端黑边机型逻辑宽恒 720 → s=1 零改动。
+    // 幂等：s 每次现算乘预制体基准缩放，s=1 即自然还原，不走 _adventureUiBase（那是锚点/偏移账本）。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>LeftSidebar 预制体基准缩放（首次触碰记录；0 向量 = 未记录）。</summary>
+    Vector3 _sidebarBaseScale;
+
+    void FitSidebarWidthScale()
+    {
+        var sidebar = transform.Find("LeftSidebar") as RectTransform;
+        if (sidebar == null) return;
+        float s = Mathf.Clamp(UiLayoutStretch.ResolveUiLogicalWidth() / GameConfig.DESIGN_WIDTH, 1f, 1.25f);
+        if (_sidebarBaseScale.x <= 0f && _sidebarBaseScale.y <= 0f && _sidebarBaseScale.z <= 0f)
+            _sidebarBaseScale = sidebar.localScale;   // 首次记预制体基准（含主人手摆的缩放，如果有）
+        var target = new Vector3(_sidebarBaseScale.x * s, _sidebarBaseScale.y * s, _sidebarBaseScale.z);
+        if (sidebar.localScale != target)
+            sidebar.localScale = target;
+    }
+
+    // ────────────────────────────────────────────────────
+    // 无限页关卡列重排（2026-10-24 主人「无限裂隙节点有点偏下了 要和主线一样的」）：
+    // 槽位（名字「数字-数字」，与主线槽位识别同款口径）基准首触记录；Fit 每次从主线 ysRoot 现算；
+    // 标准屏/关开关由 RestoreRiftColumnFit 还原。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>无限/关卡 已重排过的槽位（还原用）。</summary>
+    readonly List<RectTransform> _riftFitSlots = new List<RectTransform>();
+    /// <summary>对应槽位的预制体基准 anchoredPosition。</summary>
+    readonly List<Vector2> _riftSlotBasePos = new List<Vector2>();
+
+    /// <summary>收集容器下名字形如「数字-数字」的槽位，按当前 y 升序（底→顶）。</summary>
+    static List<RectTransform> CollectNumberedSlots(RectTransform container)
+    {
+        var list = new List<RectTransform>();
+        for (int i = 0; i < container.childCount; i++)
+        {
+            if (container.GetChild(i) is RectTransform rt
+                && System.Text.RegularExpressions.Regex.IsMatch(rt.name, @"^\d+-\d+$"))
+                list.Add(rt);
+        }
+        list.Sort((a, b) => a.anchoredPosition.y.CompareTo(b.anchoredPosition.y));
+        return list;
+    }
+
+    /// <summary>槽位基准首触记录（节点集变化才重记；正常一次记录后不再变）。</summary>
+    void EnsureRiftSlotBase(List<RectTransform> slots)
+    {
+        if (_riftFitSlots.Count == slots.Count)
+        {
+            bool same = true;
+            for (int i = 0; i < slots.Count; i++)
+            {
+                if (_riftFitSlots[i] != slots[i]) { same = false; break; }
+            }
+            if (same) return;
+        }
+        _riftFitSlots.Clear();
+        _riftSlotBasePos.Clear();
+        for (int i = 0; i < slots.Count; i++)
+        {
+            _riftFitSlots.Add(slots[i]);
+            _riftSlotBasePos.Add(slots[i].anchoredPosition);
+        }
+    }
+
+    /// <summary>无限页关卡列重排回退：槽位回预制体位（没处理过则 no-op）。</summary>
+    void RestoreRiftColumnFit()
+    {
+        for (int i = 0; i < _riftFitSlots.Count; i++)
+        {
+            var s = _riftFitSlots[i];
+            if (s != null) s.anchoredPosition = _riftSlotBasePos[i];
+        }
+        _riftFitSlots.Clear();
+        _riftSlotBasePos.Clear();
     }
 }

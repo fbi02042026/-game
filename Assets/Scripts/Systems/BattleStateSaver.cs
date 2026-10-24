@@ -211,6 +211,19 @@ public class BattleStateSaver : MonoBehaviour
         var d = PeekInterrupted();
         if (d == null) return false;
 
+        // 【2026-10-24 主人拍板「中断后再进要弹窗问是否继续，不是直接清数据」】
+        // 有可续的中断局（RunLoadout.midBattle 还在）→ 本方法让位给冒险页的
+        // 「继续上一局 / 重新开始」弹窗（AdventureUI.ShowPage → TryPromptInterruptedRun）。
+        // 旧流程在这里就 RunLoadout.Clear + 静默结算，弹窗永远弹不出来，
+        // 中断后构筑每次都被直接清空（2026-10-24 主人报）。
+        // · 确定 = 继续局：快照由弹窗确认路径清（防已逐关落盘的金币被重复入账）；
+        // · 取消 = 重新开始：RunLoadout.Clear + 快照一并清（弹窗文案已写明构筑与金币不保留）。
+        if (RunLoadout.HasInterruptedRun())
+        {
+            Debug.Log("[BattleStateSaver] 有可续中断局，跳过启动静默结算，留给冒险页弹窗处理");
+            return false;
+        }
+
         var data = SaveSystem.Instance?.Data;
         if (data == null)
         {

@@ -150,9 +150,24 @@ public partial class AdventureUI
         if (!IsModePlayable(_selectedMode)) return;
         if (IsActivityMode(_selectedMode))
         {
-            // 【2026-10-23 主人拍板「活动副本一拆二」】金币横条→金币；徽记横条→随机职业徽记（预览用普通档代表图）
-            if (_selectedActivityBadge) outList.Add(PreviewDropKind.Badge);
-            else outList.Add(PreviewDropKind.Gold);
+            // 【2026-10-23 拍板「活动副本一拆二」+ 2026-10-24 加卷轴】
+            // 金币横条→金币；徽记横条→随机职业徽记（预览用普通档代表图）；
+            // 卷轴横条→按所选难度预览（2026-10-24 主人拍板：普通=普通卷3-5 / 困难=普通3-5+高级0-1 / 噩梦=高级1-3 只掉高级）
+            if (_selectedActivityKind == ActivityDungeonKind.Badge)
+                outList.Add(PreviewDropKind.Badge);
+            else if (_selectedActivityKind == ActivityDungeonKind.Scroll)
+            {
+                if (_selectedDiff >= 2)
+                    outList.Add(PreviewDropKind.ScrollLegendary);   // 噩梦：只掉高级
+                else
+                {
+                    outList.Add(PreviewDropKind.ScrollCommon);      // 普通/困难：都掉普通 3~5
+                    if (_selectedDiff >= 1)
+                        outList.Add(PreviewDropKind.ScrollLegendary);   // 困难：追加高级 0~1
+                }
+            }
+            else
+                outList.Add(PreviewDropKind.Gold);
             return;
         }
         // 无限裂隙：宝箱金/首通金都是战斗内抽奖币（2026-10-18 货币口径），首通发天赋石，每 10 层固定宝箱发普通卷轴

@@ -171,6 +171,12 @@ public partial class BattleManager
     /// <summary>当前局是否徽记副本（2026-10-23 新玩法，见 BadgeDungeonBattleMode）。派生写法照抄 IsGoldDungeon。</summary>
     public bool IsBadgeDungeon => Mode != null && Mode.Id == BattleModeId.BadgeDungeon;
 
+    /// <summary>当前局是否卷轴副本（2026-10-24 新玩法，见 ScrollDungeonBattleMode）。派生写法照抄 IsBadgeDungeon。</summary>
+    public bool IsScrollDungeon => Mode != null && Mode.Id == BattleModeId.ScrollDungeon;
+
+    /// <summary>当前局是否活动副本（金币/徽记/卷轴三本统称，开放日/次数/波次/倍率共用口径的地方用）。</summary>
+    public bool IsActivityDungeon => IsGoldDungeon || IsBadgeDungeon || IsScrollDungeon;
+
     /// <summary>当前局是否无限裂隙（2026-10-17 新玩法，见 EndlessBattleMode）</summary>
     public bool IsEndlessRift => Mode != null && Mode.Id == BattleModeId.Endless;
 
@@ -209,10 +215,10 @@ public partial class BattleManager
     /// </summary>
     public bool DropsEquipment => Mode != null && Mode.DropsEquipment;
     /// <summary>
-    /// 难度属性倍率（2026-10-23 主人拍板）：活动副本（金币/徽记）按难度 ×1.5 递增（1.0/1.5/2.25）；
+    /// 难度属性倍率（2026-10-23 主人拍板）：活动副本（金币/徽记/卷轴）按难度 ×1.5 递增（1.0/1.5/2.25）；
     /// 其余模式（主线/引导/无限裂隙）照旧走全局曲线（1.0/1.35/2.0）。无限裂隙不选难度，天然除外。
     /// </summary>
-    public float DifficultyStatScale => (IsGoldDungeon || IsBadgeDungeon)
+    public float DifficultyStatScale => IsActivityDungeon
         ? GameConfig.GetActivityDifficultyStatScale(BattleDifficulty)
         : GameConfig.GetDifficultyStatScale(BattleDifficulty);
     public float DifficultyGoldMul => GameConfig.GetDifficultyGoldMul(BattleDifficulty);

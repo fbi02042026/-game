@@ -53,6 +53,10 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 判在金币本之前：两标志理论上同真时，后置的徽记副本意图优先。
         if (AdventureUI.PendingBadgeDungeon) return BattleModes.BadgeDungeon;
 
+        // 卷轴副本（2026-10-24 主人拍板「第三章通关开启 · 每周五 · 15体力 · 2次」）：
+        // 入口 = 冒险页活动列表「卷轴」横条，判在金币本之前（同徽记口径）。
+        if (AdventureUI.PendingScrollDungeon) return BattleModes.ScrollDungeon;
+
         // 活动副本（冒险界面下标 4）。这是一个「类」，不是一种玩法：
         // 现在只开了金币本；以后佣兵副本 / 武器副本 / 技能副本上了，
         // 在这里按「当前开放的是哪一个活动」返回对应模式即可。
@@ -199,6 +203,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             if (AdventureUI.PendingEndlessRift
                 || AdventureUI.PendingGoldDungeon
                 || AdventureUI.PendingBadgeDungeon   // 徽记副本（2026-10-23）：独立进本，同金币本作废 parked 局
+                || AdventureUI.PendingScrollDungeon  // 卷轴副本（2026-10-24）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingSideIsland > 0 // 支线岛（2026-10-23 合并方案）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingFinaleStage > 0 // 终章追查关（2026-10-23）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingBattleChapter <= 0
@@ -215,6 +220,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         AdventureUI.PendingBattleDifficulty = 0;
         AdventureUI.PendingGoldDungeon = false;
         AdventureUI.PendingBadgeDungeon = false;   // 徽记副本（2026-10-23）：读完即清，照金币本口径
+        AdventureUI.PendingScrollDungeon = false;  // 卷轴副本（2026-10-24）：读完即清，照徽记本口径
         // 支线岛（2026-10-23 合并方案）：捕获岛 id 供结算读（SideIslandId），Pending 读后即清（照金币本口径）
         SideIslandId = Mathf.Max(0, AdventureUI.PendingSideIsland);
         AdventureUI.PendingSideIsland = 0;
@@ -240,8 +246,9 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 建关交给模式自己：核心不需要知道一共有几种玩法。
         Mode.BuildChapter(ChapterManager.Instance, targetChapter);
 
-        // 【2026-10-22 主人拍板「打一关回一次」】续局跳关：从「最后通关的小关 +1」继续，
-        // 不再每次从 1-1 重跑。RunLoadout.stageIndex 由 NoteStageProgress 在通关时落档。
+        // 【2026-10-24 主人拍板「只要打完就清」】续局跳关现在只剩一种来源：中断局弹窗点了「继续」
+        // （被打断那关的关号由弹窗确认时从中断快照接回 stageIndex，见 RunLoadout.ConfirmResumeInterruptedRun）。
+        // 普通关打完整局清档，不再存在 parked 局。
         if (resumeRun && savedRun != null
             && ChapterManager.Instance.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
         {
@@ -254,7 +261,27 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                 ChapterManager.Instance.currentStageIndex = next.stageIndex;
                 ChapterManager.Instance.availableNextStages.Clear();
                 ChapterManager.Instance.availableNextStages.Add(next);
-                Debug.Log($"[BattleManager] 打一关回一次续局：从第 {nextIdx + 1} 关继续（第 {targetChapter} 章，类型 {next.type}）");
+                Debug.Log($"[BattleManager] 中断局续打：从第 {nextIdx + 1} 关继续（第 {targetChapter} 章，类型 {next.type}）");
+            }
+        }
+        // 【2026-10-24 主人拍板「只要打完就清」】无可续局的主线章：起始关改由存档通关进度决定 ——
+        // 从「本章已通关最大关 + 1」打起（1-1 通了进本直接开 1-2）；整章已通关重打 → 从第 1 关。
+        // 与冒险页「已前往 X-N」提示同口径，真源都是 clearedStages。只挂主线 Normal 章，
+        // 支线岛 / 终章 / 活动副本 / 裂隙各有自己的建图与起始层，不掺和。
+        else if (Mode != null && Mode.Id == BattleModeId.Normal
+                 && ChapterManager.Instance.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
+        {
+            int stageCount = ChapterManager.Instance.stageMap.Count;
+            int maxCleared = MaxClearedStageOneBased(targetChapter);   // 1 起；一关没通 = 0
+            int startIdx = (maxCleared == 0 || maxCleared >= stageCount) ? 0 : maxCleared;
+            var next = ChapterManager.Instance.stageMap[startIdx];
+            if (next != null)
+            {
+                next.type = StageRoller.RollByPosition(next.stageIndex);
+                ChapterManager.Instance.currentStageIndex = next.stageIndex;
+                ChapterManager.Instance.availableNextStages.Clear();
+                ChapterManager.Instance.availableNextStages.Add(next);
+                Debug.Log($"[BattleManager] 打完即清：第 {targetChapter} 章从第 {startIdx + 1} 关开打（已通关到第 {maxCleared} 关）");
             }
         }
 
@@ -274,6 +301,26 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         if (!Rules.SkipRiftEnteredAchievement)
             AdventureLogAchievements.OnRiftEntered();
         LoadStage(first);
+    }
+
+    /// <summary>
+    /// 本章已通关的最大小关号（1 起；一关没通返回 0）。真源 clearedStages（"章_关0基"）。
+    /// 与 AdventureUI.GetMaxClearedStage 同一口径（那边是 UI 私有，战斗侧自取一份，别为此动 UI）。
+    /// </summary>
+    static int MaxClearedStageOneBased(int chapter)
+    {
+        var cleared = SaveSystem.Instance?.Data?.clearedStages;
+        if (cleared == null || cleared.Count == 0) return 0;
+        int max = 0;
+        string prefix = chapter + "_";
+        foreach (var key in cleared)
+        {
+            if (string.IsNullOrEmpty(key) || !key.StartsWith(prefix, System.StringComparison.Ordinal)) continue;
+            if (int.TryParse(key.Substring(prefix.Length), out int stage0)
+                && stage0 >= 0 && stage0 < GameConfig.STAGES_PER_GRAND)
+                max = Mathf.Max(max, stage0 + 1);
+        }
+        return max;
     }
 
     IEnumerator CoPreLevelThenLoad(StageData first)

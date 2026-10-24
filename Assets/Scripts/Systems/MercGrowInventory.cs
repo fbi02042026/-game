@@ -184,6 +184,58 @@ public static class MercGrowInventory
         return n;
     }
 
+    // ── 卷轴副本发放（2026-10-24 主人拍板「第三章通关开启 · 每周五 · 每次15体力 · 每日2次」）──────────
+    //
+    // 🔴 只发招募卷轴：不给金币、不给碎片、不给道具、不给装备（金币本专属金币、徽记本专属徽记、卷轴本专属卷轴）。
+    // 档位口径（2026-10-24 主人拍板「普通只掉普通的3-5个 困难掉3-5普通 0-1高级 噩梦1-3高级」）：
+    //   普通(0) → 普通招募卷轴 ×3~5
+    //   困难(1) → 普通招募卷轴 ×3~5 + 高级招募卷轴 ×0~1
+    //   噩梦(2) → 高级招募卷轴 ×1~3（只掉高级，不给普通）
+    // （difficulty 越界按 0 处理，照 GrantBadgeDungeonDrops 口径。）
+
+    /// <summary>
+    /// 卷轴副本通关发放：按难度掉普通/高级招募卷轴（档位表见上，真源仅此一处）。
+    /// 加存档计数 + 落盘 + Toast。
+    /// </summary>
+    public static void GrantScrollDungeonDrops(int difficulty)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null)
+        {
+            Debug.LogError("[MercGrow] 卷轴副本掉落失败：存档未就绪（缺真值不发，铁律 14）");
+            return;
+        }
+        if (difficulty < 0 || difficulty > 2) difficulty = 0;   // 越界按普通难度处理（照徽记本口径）
+
+        // UnityEngine.Random.Range 整数版含下不含上，故 max +1 取到含端点
+        int common = 0, legendary = 0;
+        string msg;
+        if (difficulty == 2)          // 噩梦：高级 ×1~3
+        {
+            legendary = Random.Range(1, 4);
+            msg = "获得 高级招募卷轴 ×" + legendary;
+        }
+        else if (difficulty == 1)     // 困难：普通 ×3~5 + 高级 ×0~1
+        {
+            common = Random.Range(3, 6);
+            legendary = Random.Range(0, 2);
+            msg = legendary > 0
+                ? "获得 普通招募卷轴 ×" + common + "、高级招募卷轴 ×" + legendary
+                : "获得 普通招募卷轴 ×" + common;
+        }
+        else                          // 普通：普通 ×3~5
+        {
+            common = Random.Range(3, 6);
+            msg = "获得 普通招募卷轴 ×" + common;
+        }
+
+        if (common > 0) data.mercScrollCommon += common;
+        if (legendary > 0) data.mercScrollLegendary += legendary;
+        SaveSystem.Instance?.Save();
+        GlobalToastUI.Show(msg, true);
+        Debug.Log($"[MercGrow] 卷轴副本掉落 难度{difficulty} → 普通×{common} 高级×{legendary}");
+    }
+
     /// <summary>该佣兵买重复能转多少本命碎片（UI 卡面显示用）。数值真源 = MercStarDefs（2026-10-22 拍板 10/5/1）。</summary>
     public static int DupFragCountOf(MercRosterDefs.Def def)
     {

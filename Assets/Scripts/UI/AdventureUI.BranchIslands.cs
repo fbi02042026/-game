@@ -129,7 +129,7 @@ public partial class AdventureUI
         if (srcSlot is RectTransform sampleRt)
         {
             // 岛1基准 = 示例原位。【2026-10-24】关卡容器被滑动列表包裹后，示例锚点参考中心
-            // 比视口（原关卡帧）中心低 ChestScrollRefShift —— 岛容器按视口帧摆，基准补回该偏移。
+            // = 视口中心（视口与原容器同中心）低 ChestScrollRefShift —— 岛容器按视口帧摆，基准补回该偏移。
             _branchSampleBasePos = sampleRt.anchoredPosition - new Vector2(0f, ChestScrollRefShift);
         }
 
@@ -331,6 +331,7 @@ public partial class AdventureUI
             AdventureUI.PendingBattleDifficulty = 0;
             AdventureUI.PendingGoldDungeon = false;
             AdventureUI.PendingBadgeDungeon = false;
+            AdventureUI.PendingScrollDungeon = false;
             AdventureUI.PendingEndlessRift = false;
             ChapterManager.Instance?.SetChapter(isl.act);
 

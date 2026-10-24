@@ -588,6 +588,20 @@ public static class UiLayoutStretch
         return ResolveUiLogicalHeight() > GameConfig.DESIGN_HEIGHT + 1f;
     }
 
+    /// <summary>
+    /// 当前逻辑 UI 宽（ResolveUiLogicalHeight 的横向版，2026-10-24 左列标签随宽度缩放抽出）：
+    /// 瘦屏（按宽匹配）= 恒 720；宽屏（按高匹配）= 1280×屏幕宽高比（&gt;720，这就是宽屏上元素「显小」的根源）；
+    /// 极端比例黑边机型可见区已被相机裁回设计比例 → 恒 720。
+    /// </summary>
+    public static float ResolveUiLogicalWidth()
+    {
+        if (DesignAspectLetterbox.IsExtremeAspect())
+            return GameConfig.DESIGN_WIDTH;
+        return DesignAspectLetterbox.ResolveUiMatch() < 0.5f
+            ? GameConfig.DESIGN_WIDTH
+            : GameConfig.DESIGN_HEIGHT * (Screen.width / (float)Mathf.Max(1, Screen.height));
+    }
+
     // （AdventureUI 竖屏适配已迁移至 AdventureUI.ApplyAdventureFit，见 AdventureUI.cs；本文件不再保留专用实现）
     // （每日登录弹窗竖屏适配已迁移至 DailyLoginUI.ApplyFit，见 DailyLoginUI.cs；本文件不再保留通用实现）
 

@@ -201,8 +201,8 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
         // ⚠ 只切显隐、不销毁；HidePage 还原，别的页 ShowPage 里的 RaiseSharedChrome 也会重新点亮。
         TownSharedChrome.SetTopBarVisible(hall, false);
 
-        // 2026-10-24 主人拍板：本页顶部显示 金币/钻石/天赋石 资源条（克隆主界面 TopBar 的页私有条，
-        // 见 CharacterUI.ResBar.cs；与上面隐藏「主界面那条顶栏」不冲突 —— 那条整宽带邮件/设置，本条只有三列货币）。
+        // 2026-10-24 主人拍板（二次）：本页顶部显示 金币/钻石/天赋石 = 全局唯一资源条 ResourceStrip
+        // （提取自主界面顶条的原生列，非克隆；本页关窗归还主界面，见 CharacterUI.ResBar.cs / ResourceStrip.cs）。
         EnsureResBar();
 
         // 页可能比背包系统更早预载，Show 时再补订一次
@@ -225,6 +225,7 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
         // 这里还原是防「离开角色页后顶栏一直不见」的兜底路径。
         Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : transform.root;
         TownSharedChrome.SetTopBarVisible(hall, true);
+        ResourceStrip.Release();   // 2026-10-24 主人拍板（二次）：页顶资源条归还主界面顶条（与 ShowPage 的 Show 成对）
         SetGuildOverlay(false);
     }
 
@@ -238,7 +239,6 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
         // 携带技能展示按主人 2026-09-19 要求移除（技能改随机，已装备技能入口失效），不再刷新
         RefreshAttrs();
         RefreshBag();
-        RefreshResNumbers();   // 2026-10-24 主人拍板：页顶金币/钻石/天赋石资源条（CharacterUI.ResBar.cs）
         TownHeroCostumePreview.EnsureOn(this)?.EnsureOffscreenCostume();
     }
 }

@@ -8,6 +8,18 @@ using UnityEngine.UI;
 // 职责：单句展示（ShowLine、对话框放大与抬升、打字机、正文裁剪与滑动回看）
 public partial class DialogueUI
 {
+    /// <summary>
+    /// 【2026-10-24 修「长台词点击无反应」】正文溢出启用滚动回看后 dialogueText.raycastTarget=true，
+    /// 点击落在正文上被 ScrollRect 的 OnPointerDown 接走 —— Unity 的 PointerClick 只派发给
+    /// 「按下对象父链」上的 IPointerClickHandler，TextClip 链上没有 → 全屏推进层永远收不到点击
+    /// （Editor.log 三次「单行 30 秒无进展」全是长台词：起名后「三件事」句、回城赛琳长句）。
+    /// 挂在 TextClip 上：轻点（未拖动）→ 转发 OnClickAdvance 推进；拖动 → 仍走 ScrollRect 回看，互不干扰。
+    /// </summary>
+    public class TapAdvanceRelay : MonoBehaviour, UnityEngine.EventSystems.IPointerClickHandler
+    {
+        public System.Action OnTap;
+        public void OnPointerClick(UnityEngine.EventSystems.PointerEventData eventData) => OnTap?.Invoke();
+    }
 
     /// <summary>
     /// 开一场对话：发起方在左（面朝右），对方在右（面朝左）。
@@ -308,10 +320,24 @@ public partial class DialogueUI
         _dialogueScrollRect = sr;
     }
 
+    /// <summary>
+    /// 【2026-10-24 修「长台词点击无反应」】TextClip 上挂轻点转发：溢出回看开启期间
+    /// （dialogueText.raycastTarget=true），轻点正文 = 推进对话，拖动 = 滚动回看。
+    /// 挂一次即可；未溢出时 raycast 关着，点击照旧穿透到全屏推进层，不会双触发。
+    /// </summary>
+    void EnsureTapAdvance()
+    {
+        if (_textClip == null) return;
+        var tap = _textClip.GetComponent<TapAdvanceRelay>();
+        if (tap == null) tap = _textClip.gameObject.AddComponent<TapAdvanceRelay>();
+        tap.OnTap = OnClickAdvance;
+    }
+
     void RefreshDialogueScrollable()
     {
         EnsureTextClip();
         EnsureDialogueScrollRect();
+        EnsureTapAdvance();
         if (_dialogueScrollRect == null || dialogueText == null || _textClip == null) return;
         bool overflow = dialogueText.preferredHeight > _textClip.rect.height + 1f;
         bool on = _typeComplete && !_typing && overflow;

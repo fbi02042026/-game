@@ -93,11 +93,8 @@ public class MercAscendUI : MonoBehaviour
     Button _cancelBtn;
     Button _dimBtn;
 
-    // 顶条资源条克隆（2026-10-24 主人拍板「把顶条的金币和钻石资源条复制一份过来」）：
-    // 克隆主界面 TopBar（ResourceBar.prefab 没有钻石Panel，不能用），只留金币+钻石两列，数字自刷。
-    Transform _resBar;         // 克隆出来的资源条（Root 下，随开窗显隐）
-    Text _resGoldText;         // 克隆条 GoldPanel/GoldText
-    Text _resDiaText;          // 克隆条 钻石Panel/钻石Text
+    // 顶条资源条（2026-10-24 主人拍板二次）：不再克隆，直接显示全局唯一 ResourceStrip
+    // （提取自主界面顶条的金币/钻石原生列），开窗 Show、关窗 Release 归还；数字由其内部轮询统一刷。
 
     string _hireId;            // 当前展示佣兵（hireId）
     Coroutine _scaleCo;
@@ -344,72 +341,23 @@ public class MercAscendUI : MonoBehaviour
         if (_panel != null) _panel.localScale = Vector3.one * _fitK;   // 动画只动 Panel 缩放，关窗还原到适配系数
         if (_successRt != null) _successRt.localScale = Vector3.one;   // 防关窗瞬间停在过冲值（2026-10-24）
         if (_root != null) _root.SetActive(false);
+        ResourceStrip.Release();   // 2026-10-24 二次：资源条归还主界面顶条（与 EnsureResBar 的 Show 成对）
         // 升星可能改了星级/材料/资金：酒馆队列界面若开着，重刷卡内「升阶」钮与相关显示（2026-10-23）
         MercDrawPoolUI.RefreshForAscendClosed();
     }
 
     // ============================================================
-    // 顶条资源条克隆（2026-10-24 主人拍板「把顶条的金币和钻石资源条复制一份过来」）
+    // 顶条资源条（2026-10-24 主人拍板二次）：全局唯一 ResourceStrip，开窗 Show / 关窗 Release
     // ============================================================
 
     /// <summary>
-    /// 确保 Root 下有一份「主界面 TopBar」克隆，只留金币+钻石两列：
-    /// 背景外的直子节点，凡 subtree 里既无 GoldPanel 也无 钻石Panel 的一律 SetActive(false)
-    /// （体力/邮件/设置/公会名等装饰全藏），只切 active 不动任何几何（铁律 32）。
-    /// 克隆只做一次（DDOL 复用，forceCloneTopBar 走 TownSharedChrome 强制克隆口）；
-    /// 数字由 <see cref="RefreshResBarNumbers"/> 刷新。缺列 LogError 不兜底。
+    /// 开窗显示资源条（金币+钻石两列，加号不接点击 T14 口径由 ResourceStrip 统一处理）。
+    /// 主界面未注册（GuildHallUI 未初始化）时 Show 返回 false，本窗不显示资源条（不兜底）。
     /// </summary>
     void EnsureResBar()
     {
         if (_root == null) return;
-        if (_resBar != null) { RefreshResBarNumbers(); return; }
-
-        _resBar = TownSharedChrome.EnsureResourceBar(
-            _root.transform,
-            GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : null,
-            forceCloneTopBar: true);
-        if (_resBar == null)
-        {
-            Debug.LogError("[MercAscend] 顶条资源条克隆失败（找不到主界面 TopBar）——本窗不显示金币/钻石条");
-            return;
-        }
-
-        for (int i = 0; i < _resBar.childCount; i++)
-        {
-            var c = _resBar.GetChild(i);
-            bool keep = c.name == "TopBarBg"
-                || FindDeep(c, "GoldPanel") != null
-                || FindDeep(c, "钻石Panel") != null;
-            if (!keep) c.gameObject.SetActive(false);
-        }
-        if (FindDeep(_resBar, "GoldPanel") == null)
-            Debug.LogError("[MercAscend] 克隆顶条里没有 GoldPanel —— 金币数字将不显示（不兜底）");
-        if (FindDeep(_resBar, "钻石Panel") == null)
-            Debug.LogError("[MercAscend] 克隆顶条里没有 钻石Panel/钻石Text —— 钻石数字将不显示（不兜底）");
-
-        // 数字 Text 各自收进 Panel 里找 —— 主界面顶条「体力Panel」里的数字 Text 也叫 GoldText，
-        // 全局深搜会串绑到被藏的体力格上（GuildHallUI.AutoBindMissingRefs 同样按 Panel 局部找）
-        var goldPanel = FindDeep(_resBar, "GoldPanel");
-        var goldT = goldPanel != null ? FindDeep(goldPanel, "GoldText") : null;
-        if (goldT != null) _resGoldText = goldT.GetComponent<Text>();
-        else Debug.LogError("[MercAscend] 克隆顶条 GoldPanel 里没有 GoldText —— 金币数字将不显示（不兜底）");
-        var diaPanel = FindDeep(_resBar, "钻石Panel");
-        var diaT = diaPanel != null ? FindDeep(diaPanel, "钻石Text") : null;
-        if (diaT != null) _resDiaText = diaT.GetComponent<Text>();
-        else Debug.LogError("[MercAscend] 克隆顶条 钻石Panel 里没有 钻石Text —— 钻石数字将不显示（不兜底）");
-
-        RefreshResBarNumbers();
-    }
-
-    /// <summary>克隆条数字刷新：真源唯一 = ResourceWallet，格式唯一出口 = GuildHallUI.FormatResource（不许抄第二份）。加号不绑任何点击（T14 口径）。</summary>
-    void RefreshResBarNumbers()
-    {
-        var data = SaveSystem.Instance?.Data;
-        if (data == null) return;
-        if (_resGoldText != null)
-            _resGoldText.text = GuildHallUI.FormatResource(ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold));
-        if (_resDiaText != null)
-            _resDiaText.text = GuildHallUI.FormatResource(ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond));
+        ResourceStrip.Show(_root.transform, ResourceStrip.Mode.GoldDia);
     }
 
     // ============================================================
@@ -490,7 +438,8 @@ public class MercAscendUI : MonoBehaviour
         string[] leftStrs =
         {
             Mathf.RoundToInt(hp).ToString(),
-            move.ToString("0.##"),
+            // 【2026-10-24 主人拍板】速度显示 ×100 取整不用小数（0.85 → 85），与获得佣兵弹窗同口径
+            Mathf.RoundToInt(move * 100f).ToString(),
             Mathf.RoundToInt(mdefCur).ToString(),
             critStr,
             Mathf.RoundToInt(defCur).ToString(),
@@ -605,8 +554,7 @@ public class MercAscendUI : MonoBehaviour
             _successRt.localScale = Vector3.one;   // 回 authored 值（弹出动画只是临时借它）
         }
 
-        // ---- 顶条克隆条数字（2026-10-24）：开窗与升星扣钱后 Fill 都会跑到这里，金币/钻石跟着存档走 ----
-        RefreshResBarNumbers();
+        // ---- 顶条资源条数字（2026-10-24 二次）：全局 ResourceStrip 内部轮询统一刷，这里不再自管 ----
         return true;
     }
 

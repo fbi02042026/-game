@@ -429,7 +429,8 @@ public partial class DialogueUI
         var canvasRt = transform as RectTransform;
         float h = canvasRt != null ? canvasRt.rect.height : 0f;
         if (h < 64f) h = GameConfig.DESIGN_HEIGHT;
-        return h * 0.08f;
+        // 【2026-10-24 主人「对话框往上点」】抬升系数 0.08→0.11（720×1600 下约多抬 48px）。要再调改这一个系数。
+        return h * 0.11f;
     }
 
     void ApplyDialogueBoxLift()

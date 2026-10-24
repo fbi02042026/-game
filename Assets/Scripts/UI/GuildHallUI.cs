@@ -398,6 +398,10 @@ public class GuildHallUI : MonoBehaviour
             if (diamondText == null)
                 Debug.LogError("[GuildHall] 未找到顶条钻石余额节点 钻石Panel/钻石Text（应在主界面预制体顶条），钻石余额将无法显示");
         }
+
+        // 【2026-10-24 主人拍板「提取顶条资源条」】金/钻引用绑完后再提取（迁移保留引用，主界面刷新照常生效）；
+        // 幂等：场景重载后旧列随场景销毁，这里自动从新 TopBar 重新提取。见 ResourceStrip.cs。
+        ResourceStrip.RegisterHall(transform);
     }
 
     void EnsureStaminaRegenLabel(Transform staminaPanel)

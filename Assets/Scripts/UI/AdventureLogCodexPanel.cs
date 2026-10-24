@@ -25,9 +25,8 @@ public class AdventureLogCodexPanel
     const float PagePad = 8f;
     const float SectionGap = 16f;      // 章与章（区与区）之间的间距
     const float BottomBarReserve = 64f; // 底部翻页条留白，避免最后一行被箭头挡住
-    // 2026-10-23 主人拍板：标头(biaotou)常显后，图鉴内容顶部要向下让出横幅高度；
-    // 顶距与 AdventureLogUI.EnsureSidebarLayout 的 headerTopPad 同值（10），两文件各自读、不引公共依赖
-    const float BannerTopPad = 10f;
+    // 2026-10-24 主人报「每个标签的页面上面都空了一截」：页签已改挂纸顶（见 PrepareCodexScrollArea），
+    // 滚动区顶收到 0.92、章节头只让 PagePad，不再对横幅做二次让位（旧 BannerTopOffset 已删）
 
     readonly Transform _frame;
     GameObject _root;
@@ -80,6 +79,20 @@ public class AdventureLogCodexPanel
         }
         _root = paper1.gameObject;
 
+        // 2026-10-24 主人报「页面上方空一截」：页签 bg（内含 OngoingHeader 页签名）在预制体里
+        // 按 1280 设计稿的绝对偏移(+420)中心锚定，纸拉高后从纸顶下坠约 160px 且被内容盖住。
+        // 改挂纸顶（距顶 58，与任务页 AdventureLogUI.EnsurePaperTopLayout 同节奏），只动 y 不动尺寸。
+        var labelBg = paper1.Find("bg") as RectTransform;
+        if (labelBg != null)
+        {
+            labelBg.anchorMin = new Vector2(0.5f, 1f);
+            labelBg.anchorMax = new Vector2(0.5f, 1f);
+            labelBg.pivot = new Vector2(0.5f, 1f);
+            labelBg.anchoredPosition = new Vector2(labelBg.anchoredPosition.x, -58f);
+        }
+        else
+            Debug.LogError("[AdventureLogCodex] 找不到 Paper1/bg，页签贴顶修复跳过");
+
         // 模板：怪物
         var cell = FindChildByNames(paper1, "怪物", "MonsterCell");
         if (cell != null)
@@ -130,10 +143,11 @@ public class AdventureLogCodexPanel
         var scrollRt = _scroll.transform as RectTransform;
         if (scrollRt != null)
         {
-            // 【2026-10-18 修「小标题被章节横幅遮挡一半」】页标题 OngoingHeader 占纸顶部 0.90~0.98，
-            // 顶边 0.94 会把第一个章节横幅顶进标题下半截 → 收到 0.88，标题完整露出（比 0.86 只多一点点空白）。
+            // 【2026-10-24 修「页面上方空一截」】页签 bg 已改挂纸顶（距顶 58），滚动区顶从
+            // 0.88 收到 0.92（顶边留白 155→约 104），首行章节头只让 PagePad，紧贴页签下方；
+            // 横幅(biaotou)底沿在纸顶下约 86，与章节头顶(约 112)不相交，无需再让位。
             scrollRt.anchorMin = new Vector2(0.04f, 0.10f);
-            scrollRt.anchorMax = new Vector2(0.96f, 0.88f);
+            scrollRt.anchorMax = new Vector2(0.96f, 0.92f);
             scrollRt.offsetMin = Vector2.zero;
             scrollRt.offsetMax = Vector2.zero;
             scrollRt.anchoredPosition = Vector2.zero;
@@ -306,20 +320,6 @@ public class AdventureLogCodexPanel
         return _frame != null ? _frame.Find("Paper1") : null;
     }
 
-    // 2026-10-23 主人拍板：横幅常显后图鉴内容顶部让位 —— 高度从 Frame/biaotou/bg 实测（与
-    // AdventureLogUI.EnsureSidebarLayout 同源读法，各自读不引公共依赖）；读不到 LogError 返回 0 跳过让位
-    float BannerTopOffset()
-    {
-        var biaotou = _frame != null ? _frame.Find("biaotou") : null;
-        var bgTr = biaotou != null ? biaotou.Find("bg") as RectTransform : null;
-        if (bgTr == null)
-        {
-            Debug.LogError("[AdventureLogCodex] 找不到 Frame/biaotou/bg，无法实测横幅高度，图鉴内容顶部未让位");
-            return 0f;
-        }
-        return bgTr.rect.height + BannerTopPad;
-    }
-
     // 一页放两章 → 页数 = ceil(章数 / 2)
     static int MonsterSpreadCount()
     {
@@ -363,8 +363,8 @@ public class AdventureLogCodexPanel
         SetPageTitle("怪物图鉴");
         SetPageLabel($"{spread}/{spreads}");
 
-        // 2026-10-23 主人拍板：横幅常显后，首行章节头向下让出横幅高度，避免被横幅右端压住
-        float y = -PagePad - BannerTopOffset();
+        // 2026-10-24 主人拍板：页签贴顶后章节头直接跟在页签下方，不再对横幅二次让位
+        float y = -PagePad;
         y = SpawnChapterSection(c1, y);
         if (c2 <= totalCh) y = SpawnChapterSection(c2, y);
         y -= BottomBarReserve;
@@ -406,8 +406,8 @@ public class AdventureLogCodexPanel
         SetPageTitle("佣兵图鉴");
         SetPageLabel("");
 
-        // 2026-10-23 主人拍板：横幅常显后，首行章节头向下让出横幅高度，避免被横幅右端压住
-        float y = -PagePad - BannerTopOffset();
+        // 2026-10-24 主人拍板：页签贴顶后章节头直接跟在页签下方，不再对横幅二次让位
+        float y = -PagePad;
         for (int r = 0; r < MercPageNames.Length; r++)
             y = SpawnMercSection((MercRosterDefs.MercRarity)r, MercPageNames[r], y);
         y -= BottomBarReserve;

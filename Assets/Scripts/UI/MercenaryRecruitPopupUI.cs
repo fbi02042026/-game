@@ -53,6 +53,13 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     Image _diamondIcon;
     Text _diamondLeftText;
 
+    // —— 顶条金币+钻石资源条克隆（2026-10-24 主人拍板「这个界面加钻石和金币的资源条」）——
+    // 口径与 MercAscendUI / CharacterUI.ResBar 完全一致：TownSharedChrome 唯一克隆口（禁各窗自建），
+    // 只留金币/钻石两列；数字真源唯一 = ResourceWallet、格式唯一出口 = GuildHallUI.FormatResource。
+    Transform _resBar;
+    Text _resGoldText;
+    Text _resDiaText;
+
     // —— 货币钮外观快照（2026-10-19 主人报「按钮还不一样」）——
     // 金币钮(ConfirmButton)与卷钮(ConfirmButton1)是两套预制体节点：底图/颜色/Label颜色/尺寸都不同。
     // 绑定时各拍一份快照，填充时按货币套用对应外观 —— 三张卡的货币钮看起来完全一致。
@@ -159,6 +166,7 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         HideMercBubble();
         FitPanelScale();
         TownSaveAlign.AlignAll();
+        EnsureResBar();   // 顶条金币+钻石资源条（2026-10-24 主人拍板二次）：全局唯一 ResourceStrip，数字由其内部轮询刷
         MercHireSession.EnsureDailyOfferRefresh();
         var data = SaveSystem.Instance?.Data;
         bool dayRefresh = data != null && data.mercOfferDirty;
@@ -277,6 +285,7 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             _scrollLegendaryCountText.text = "X" + (data != null ? data.mercScrollLegendary : 0);
 
         UpdateRefreshCostText();   // 含按钮灰显/点亮与顶上倒计时文字
+        // 资源条数字不在这里刷：ResourceStrip 内部轮询统一刷（2026-10-24 二次口径，与 MercAscendUI 一致）
 
         for (int i = 0; i < cards.Length; i++)
             RefreshCard(i);
@@ -356,6 +365,21 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         HideMercBubble();
         StopRefreshCountdown();
         if (root != null) root.SetActive(false);
+        ResourceStrip.Release();   // 资源条归还主界面顶条（与 EnsureResBar 的 Show 成对，2026-10-24 二次口径）
+    }
+
+    // ============================================================
+    // 顶条资源条（2026-10-24 主人拍板二次）：全局唯一 ResourceStrip，开窗 Show / 关窗 Release
+    // ============================================================
+
+    /// <summary>
+    /// 开窗显示资源条（金币+钻石两列，口径与 MercAscendUI 完全一致）。
+    /// 主界面未注册（GuildHallUI 未初始化）时 Show 返回 false，本窗不显示资源条（不兜底）。
+    /// 数字由 ResourceStrip 内部轮询统一刷，本窗不自管。
+    /// </summary>
+    void EnsureResBar()
+    {
+        ResourceStrip.Show(transform, ResourceStrip.Mode.GoldDia);
     }
 
     void EnsureCanvas()

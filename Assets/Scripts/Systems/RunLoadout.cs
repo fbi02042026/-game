@@ -71,15 +71,17 @@ public class RunLoadoutData
     /// </summary>
     public int drawCount;
     /// <summary>
-    /// 局内金币池（BattleManager.currentGold）。【2026-10-22 主人拍板「打一关回一次」新增】：
-    /// 普通关打完直接回冒险页但不结束本局（ReturnToTownKeepRun），池子写在这里跨场景携带，
-    /// 续局进本时还原 —— 局没结束，钱就不能「带不出本局」。
+    /// 局内金币池（BattleManager.currentGold）。【2026-10-24 主人拍板「只要打完就清」】：
+    /// 普通关打完整局清档，不再有「打一关回一次」的跨关携带；这个字段现在唯一的写入点
+    /// 是中断局弹窗「确定」（ConfirmResumeInterruptedRun 从中断快照接回池子），
+    /// 供续局进本时 RestoreRunGoldPool 还原 —— 续局不重发启动金，全靠它把本钱带回来。
     /// </summary>
     public long runGold;
     /// <summary>
     /// 中断标记。【2026-10-22 主人原话「上次战斗中途意外退出没有结束 可以让玩家选择是否继续上一局重新开始」】：
-    /// 进战斗置 true（RunLoadout.MarkBattleBegun），干净回城归 false（MarkReturnedClean）；
-    /// 玩家下次进本时它还是 true = 上一场战斗是中途断掉的 → 冒险页弹「继续上一局 / 重新开始」双选。
+    /// 进战斗置 true（RunLoadout.MarkBattleBegun）；【2026-10-24 主人拍板「只要打完就清」】
+    /// 打完的局整档作废（RunLoadout.Clear），标记随档消失 —— 所以盘上还能看到 true 的
+    /// 必然是「没打完就被杀进程」的中断局 → 冒险页弹「继续上一局 / 重新开始」双选。
     /// </summary>
     public bool midBattle;
 }
@@ -220,9 +222,10 @@ public static class RunLoadout
     }
 
     // —— 中断局标记（2026-10-22 主人原话：中途意外退出没打完 → 进本前让玩家选「继续上一局 / 重新开始」）——
-    // 状态只有一个出口：进战斗置位、干净回城清位；读侧只许走 HasInterruptedRun / PeekResumable。
+    // 状态只有一个出口：进战斗置位；打完收局整档作废（Clear），标记随档消失；确认继续走 ConfirmResumeInterruptedRun。
+    // 读侧只许走 HasInterruptedRun / PeekResumable。
 
-    /// <summary>进战斗时打标记：从这一刻起到干净收尾前，中途退出都算「意外中断」。</summary>
+    /// <summary>进战斗时打标记：从这一刻起到收局前，中途退出都算「意外中断」。</summary>
     public static void MarkBattleBegun()
     {
         if (_data == null || MemoryMode) return;
@@ -230,12 +233,45 @@ public static class RunLoadout
         Save();
     }
 
-    /// <summary>干净收尾（打一关回一次的 ReturnToTownKeepRun）时清标记：下次进本照旧静默续局。</summary>
-    public static void MarkReturnedClean()
+    /// <summary>
+    /// 【2026-10-24 主人拍板「只要打完就清」】冒险页中断局弹窗点「确定 = 继续上一局」的唯一出口。
+    /// 走到这里的盘上档必然是没打完就被杀进程的中断局（打完的局在结算时已整体 Clear）。
+    /// </summary>
+    public static void ConfirmResumeInterruptedRun(BattleStateSaver.BattleStateData snapshot)
     {
-        if (_data == null || MemoryMode) return;
-        _data.midBattle = false;
-        Save();
+        if (MemoryMode) return;
+        var saved = _data != null ? _data : LoadFromPrefs();
+        if (saved == null || !saved.active) return;
+        saved.midBattle = false;
+        // 打断关号与局内金币池的真源在中断快照里（BattleManager.Waves 进关时 + 每 10s 心跳落盘）：
+        // · stageIndex 落成「打断关的前一关」—— 续局跳关 = stageIndex+1，正好落在被打断那关重打；
+        //   打断在第 1 关时落 -1，跳关 Clamp(…, 0, …) 兜住，同样从第 1 关重打；
+        // · runGold 接回快照的局内金币池（续局不重发启动金防杀进程刷钱，全靠这里把本钱带回来）。
+        if (snapshot != null)
+        {
+            saved.stageIndex = snapshot.stageId > 0 ? snapshot.stageId - 1 : -1;
+            if (snapshot.chapterId >= 1) saved.chapter = snapshot.chapterId;
+            if (snapshot.currentGold > 0) saved.runGold = snapshot.currentGold;
+        }
+        if (saved == _data)
+        {
+            Save();
+            return;
+        }
+        // 内存还没加载（典型：进程刚重启，玩家在冒险页答弹窗，尚未进过战斗）→ 直改盘上快照。
+        // 清中断标记仍然只有这一个出口，不开第二入口。
+        try
+        {
+            saved.savedUtc = DateTimeOffset.UtcNow.ToString("o");
+            PlayerPrefs.SetString(PrefsKey, JsonUtility.ToJson(saved));
+            PlayerPrefs.Save();
+            Debug.Log("[RunLoadout] 确认继续中断局（内存未加载，盘上直改）："
+                      + $"chapter={saved.chapter} stageIndex={saved.stageIndex} runGold={saved.runGold}");
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[RunLoadout] 确认继续中断局（盘上）失败: " + e.Message);
+        }
     }
 
     /// <summary>上一场战斗是否中途断掉（有可续局 && 中断标记还在）。只读盘，不动内存。</summary>

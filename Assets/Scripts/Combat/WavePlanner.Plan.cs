@@ -72,11 +72,11 @@ public partial class WavePlanner
                 usable.Add(points[i]);
         }
 
-        // 【2026-10-23 主人拍板】活动副本（金币/徽记）定死波次骨架：3 波 × 每波 10 只，按难度分层：
+        // 【2026-10-23 主人拍板】活动副本（金币/徽记/卷轴三本共用）定死波次骨架：3 波 × 每波 10 只，按难度分层：
         // 初级(0) 精英 [0,1,2] 无 Boss；中级(1) 每波数量不变、精英每波 +1~2；
         // 高级(2) 每波数量不变、精英每波 80~90%，最后 2 波各带 1 个 Boss。
-        // 徽记副本波次布局与金币副本完全一致（主人 2026-10-23 拍板）。中级/高级不再走下方随机路径。
-        if (bm != null && (bm.IsGoldDungeon || bm.IsBadgeDungeon))
+        // 徽记/卷轴副本波次布局与金币副本完全一致（主人 2026-10-23/10-24 拍板）。中级/高级不再走下方随机路径。
+        if (bm != null && bm.IsActivityDungeon)
         {
             BuildActivityDungeonWaves(startX, usable);
             return;
@@ -335,7 +335,7 @@ public partial class WavePlanner
         }
         PlanStageEvents();
         _totalWaves = _waves.Count;
-        GamePerf.Log($"[BattleManager] 活动副本（{(bm != null && bm.IsBadgeDungeon ? "徽记" : "金币")}）难度{diff} 定死波次：" +
+        GamePerf.Log($"[BattleManager] 活动副本（{(bm != null && bm.IsBadgeDungeon ? "徽记" : bm.IsScrollDungeon ? "卷轴" : "金币")}）难度{diff} 定死波次：" +
                      $"{elitePerWave.Length}波×{perWaveCount}只 精英=[{string.Join(",", elitePerWave)}] Boss=[{string.Join(",", bossPerWave)}]");
         for (int i = 0; i < _waves.Count; i++)
         {

@@ -284,11 +284,12 @@ public static class HeroVaultSystem
             entries = sorted;
         }
 
+        // 【2026-10-24 主人拍板·修「徽记/别的道具不显示」】单个展示位放不下**只跳过它自己**，
+        // 绝不 return 挡后面的条目 —— 原来洛恩碎片要 11 格装不下就整条 return，
+        // 排在后面的徽记/天赋石/卷轴全被掐死（仓库还有空格也铺不上去）。
+        // 放不下的仍由 TryAddDisplay 内部 LogWarning（不静默吞），继续铺下一条。
         foreach (var e in entries)
-        {
-            if (!TryAddDisplay(result, occupied, rows, e.name, e.info, e.icon, e.count, e.fragHireId))
-                return; // 满了，后面的不用再试
-        }
+            TryAddDisplay(result, occupied, rows, e.name, e.info, e.icon, e.count, e.fragHireId);
     }
 
     /// <summary>本命碎片稀有度排序档（高 = 更稀有）：传奇 2 / 稀有 1 / 普通 0；识别不出按普通。</summary>

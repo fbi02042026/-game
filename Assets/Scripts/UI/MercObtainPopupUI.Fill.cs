@@ -230,8 +230,9 @@ public partial class MercObtainPopupUI : MonoBehaviour
         SetActive(_attrMagicDefRoot, "Panel/you/AttrPanel/AttrMagicDefRoot", magic);
         SetText(_attrMagicDef, "Panel/you/AttrPanel/AttrMagicDefRoot/AttrMagicDef", Mathf.RoundToInt(defVal).ToString());
         // 速度 = 移动速度（主人 2026-10-14 口径）
+        // 【2026-10-24 主人拍板】速度显示不用小数：原值 ×100 取整（0.85 → 85），只改显示口径，战斗数值不动。
         SetActive(_attrSpdRoot, "Panel/you/AttrPanel/AttrSpdRoot", true);
-        SetText(_attrSpd, "Panel/you/AttrPanel/AttrSpdRoot/AttrSpd", move.ToString("0.##"));
+        SetText(_attrSpd, "Panel/you/AttrPanel/AttrSpdRoot/AttrSpd", Mathf.RoundToInt(move * 100f).ToString());
         // 暴击 = 本项目基础值（未计入星级/装备成长）；0.05 这类小数按百分比显示
         SetActive(_attrCritRoot, "Panel/you/AttrPanel/AttrCritRoot", true);
         float crit = GameConfig.BASE_CRIT_RATE;

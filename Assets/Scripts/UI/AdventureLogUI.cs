@@ -194,6 +194,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             ? _paper.transform.Find("OngoingHeader")?.GetComponent<Text>()
             : null;
         EnsureCaptionFollowsArt();
+        EnsurePaperTopLayout();
         BindAchievementClaimButton();
         _activeCard = FindTransform("ActiveCard")?.gameObject;
         var frame = transform.Find("Root/Frame");
@@ -307,6 +308,42 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         rt.offsetMin = Vector2.zero;
         rt.offsetMax = Vector2.zero;
         return true;
+    }
+
+    /// <summary>
+    /// 2026-10-24 主人报「每个标签的页面上面都空了一截」：Paper 顶部的灰页签(Paper/bg，
+    /// 内含 OngoingHeader 页签名)与插图(Paper/ActiveCard/mask)在预制体里按 1280 设计稿的
+    /// 绝对偏移 + 中心锚点摆位（bg +408 / mask +72）。运行时 Frame 拉高后（逻辑高 1600、
+    /// Paper 高约 1296）纸顶到纸中心距离变大，这两块整体从纸顶下坠 100~160px：插图顶距
+    /// 纸顶约 210（设计稿约 120），页签坠进插图背后被盖住。这里把两块改挂纸顶锚点，恢复
+    /// 设计稿的贴顶节奏：页签 bg 距纸顶 58，插图 mask 顶高出卡片顶 20（与设计稿一致）。
+    /// 只动 y 锚点与偏移，不动尺寸/字号/图；字幕(ActiveTitle/ActiveDesc)已挂 mask 下按比例
+    /// 锚定，图走字跟着走，不受影响。
+    /// </summary>
+    void EnsurePaperTopLayout()
+    {
+        var labelBg = transform.Find("Root/Frame/Paper/bg") as RectTransform;
+        if (labelBg != null)
+        {
+            labelBg.anchorMin = new Vector2(0.5f, 1f);
+            labelBg.anchorMax = new Vector2(0.5f, 1f);
+            labelBg.pivot = new Vector2(0.5f, 1f);
+            labelBg.anchoredPosition = new Vector2(labelBg.anchoredPosition.x, -58f);
+        }
+        else
+            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/Paper/bg，页签贴顶修复跳过");
+
+        var card = transform.Find("Root/Frame/Paper/ActiveCard") as RectTransform;
+        var mask = card != null ? card.Find("mask") as RectTransform : null;
+        if (mask == null)
+        {
+            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/Paper/ActiveCard/mask，插图贴顶修复跳过");
+            return;
+        }
+        mask.anchorMin = new Vector2(0.5f, 1f);
+        mask.anchorMax = new Vector2(0.5f, 1f);
+        mask.pivot = new Vector2(0.5f, 1f);
+        mask.anchoredPosition = new Vector2(mask.anchoredPosition.x, 20f);
     }
 
     void ApplyModeVisibility()

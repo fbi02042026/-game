@@ -455,6 +455,12 @@ public static class SlotMachineDefs
     public const int BADGE_DUNGEON_FREE_DRAWS = 5;
 
     /// <summary>
+    /// 卷轴本开局送几次**免费**抽奖（不扣抽奖币）。2026-10-24 与金币/徽记同口径：5（「活动副本开局抽五次」）。
+    /// 与金币本同一套免费额度框架（IBattleMode.FreeEntryDraws），每次进局清零。
+    /// </summary>
+    public const int SCROLL_DUNGEON_FREE_DRAWS = 5;
+
+    /// <summary>
     /// 无限裂隙进场送几次**免费**抽奖（不扣抽奖币）。2026-10-17 主人拍板：5。
     /// 与金币本同一套免费额度框架（IBattleMode.FreeEntryDraws），每次进局清零。
     /// </summary>

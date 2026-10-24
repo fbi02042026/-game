@@ -102,10 +102,18 @@ public partial class BattleManager
     {
         if (currentStage == null) return;
         // —— 徽记副本（2026-10-23 拍板「活动副本一拆二」）：通关只发随机职业徽记，走自己的发放链 ——
-        // 顺序口径：徽记副本发徽记 → 金币本禁掉落 → 正常主线掉落，三路各写一行不合并。
+        // 顺序口径：徽记副本发徽记 → 卷轴副本发卷轴 → 金币本禁掉落 → 正常主线掉落，各写一行不合并。
         if (IsBadgeDungeon)
         {
             MercGrowInventory.GrantBadgeDungeonDrops(BattleDifficulty);   // 返回 0（存档未就绪）时函数内已不弹 Toast
+            return;
+        }
+        // —— 卷轴副本（2026-10-24 主人拍板「第三章通关开启 · 每周五 · 15体力 · 2次」）：
+        //    通关只发招募卷轴（按难度：普通3-5普通/困难3-5普通+0-1高级/噩梦1-3高级），走自己的发放链；
+        //    不给金币/碎片/道具/装备 ——
+        if (IsScrollDungeon)
+        {
+            MercGrowInventory.GrantScrollDungeonDrops(BattleDifficulty);
             return;
         }
         // —— 金币本禁掉落（2026-10-23 拍板「金币本只掉金币」）：stage_drop 徽记/碎片/道具/Boss 卷轴
@@ -1726,10 +1734,11 @@ public partial class BattleManager
         {
             // 章节解锁（MarkChapterCleared）已在 ChapterManager 关卡落账时完成，
             // 回城后世界地图传送门 / 冒险页第二章即开放。
-            // 【2026-10-22 主人拍板】章末 Boss 也弹双钮结算：【下一关】= 下一章第 1 关
-            //（StartChapter(nextCh) 重建关卡图后走原 GoChapterGate 过场+直进）；
-            // 跨章候选口径：OnStageComplete 章末分支不生成下一章关卡图（availableNextStages 仍是旧候选），
-            // 下一章可用性以存档解锁章数（ChapterRouteTable.AvailableChapters）为准；
+            // 【2026-10-24 主人拍板「只要打完就清」】章末【下一关】也 = 本局到此为止（覆盖 10-22 双钮口径）：
+            // 构筑/局内金币/局内装备/佣兵全清（EndRunAndReturnToTown）+ 回城后冒险页自动打开，
+            // 下一章由玩家再点「开始冒险」—— 走完整开局链（重发启动金 + 重新抽构筑）。
+            // 不能再像旧口径那样带着构筑 StartChapter + GoChapterGate 直进：那条路走 LoadStage 不重跑
+            // 开局链，清了构筑这边抽奖/技能就全废了。下一章可用性以存档解锁章数为准；
             // 不可用（最后一章/未解锁）→【下一关】隐藏，只留【返回】（onNextStage=null 单确认钮口径）。
             int nextChapter = (cm != null ? cm.currentChapter : 1) + 1;
             if (HasNextChapter(nextChapter))
@@ -1738,15 +1747,8 @@ public partial class BattleManager
                     EndRunAndReturnToTown,
                     () =>
                     {
-                        var cmNext = ChapterManager.Instance;
-                        if (cmNext == null)
-                        {
-                            Debug.LogError("[BattleManager] 进下一章失败：ChapterManager 为空，回城收尾");
-                            EndRunAndReturnToTown();
-                            return;
-                        }
-                        cmNext.StartChapter(nextChapter);
-                        GoChapterGate(nextChapter, cmNext.availableNextStages);
+                        TownHubController.PendingOpenAdventure = true;
+                        EndRunAndReturnToTown();
                     },
                     "下一关");
             }
@@ -1759,14 +1761,15 @@ public partial class BattleManager
         // 主人原话：「怎么打完一关就结算了，我跟你说的打完一关进传送门，然后弹老虎机怎么没有了」。
         // （历史归因注释保留如上）
         //
-        // 【2026-10-22 主人拍板「打一关回一次」】上面 10-22 双钮结算（下一关/返回）口径作废：
-        // 普通关清完不再弹战斗内结算，直接回冒险页 —— 构筑/局内金币池随 RunLoadout 保留
-        // （ReturnToTownKeepRun，不结束本局），下次进本从下一关续打；
-        // 本关掉落由冒险页自动弹「获得奖励」（AdventureRewardNotice，与结算同账）。
-        // 历史归因注释保留：10-11 主人拍板「打完一关进传送门弹老虎机」→ 10-22 早间「普通关双钮结算」→ 本次「直接回」。
+        // 【2026-10-24 主人拍板「只要打完就清」】（覆盖 10-22「打一关回一次续局」口径）：
+        // 普通关打完 = **本局到此为止**，构筑/局内金币池/局内装备/雇佣佣兵全部清掉，
+        // 回城后下次进本重新发启动金、重新抽构筑（主人原话「1-1 打完把 1-1 里构筑的都清出，
+        // 1-2 进去重新抽奖打」）；关卡进度不丢 —— 进本起始关由存档通关进度决定
+        // （下一关接着打，见 BattleManager.StartNewRunInternal 的进度起始关逻辑）。
+        // 收尾唯一出口 = EndRunAndReturnToTown（ReturnToTownKeepRun 已删，不再留第二出口）。
         // 【2026-10-24 主人拍板】胜利结果界面已上移到 FinishStageAfterPortalReached 统一门
         // （所有适用模式一次到位：正式关含 Boss / 支线岛 / 活动副本；无限裂隙不播），这里直接回冒险页。
-        ReturnToTownKeepRun();
+        EndRunAndReturnToTown();
     }
 
     /// <summary>
@@ -1972,31 +1975,8 @@ public partial class BattleManager
     }
 
     /// <summary>
-    /// 【2026-10-22 主人拍板「打一关回一次」新增】普通关通关直接回冒险页，但**不结束本局**：
-    /// · 不清构筑 / 不 EndRunLoadout —— 下次进本 ResumeOrBegin 续上，从下一关继续（StartNewRunInternal 跳关）；
-    /// · 局内金币池写进 RunLoadoutData.runGold 跨场景携带（局没结束，钱不算「带出本局」）；
-    /// · 金币已逐关 PersistBattleGold 落盘，中断快照照常清（防重复入账）。
-    /// 章末 Boss 不走这里：仍弹结算 → EndRunAndReturnToTown（整章完成才算出局）。
-    /// </summary>
-    public void ReturnToTownKeepRun()
-    {
-        if (RunLoadout.IsActive && RunLoadout.Data != null)
-        {
-            RunLoadout.Data.runGold = currentGold;
-            RunLoadout.Save();
-            // 【2026-10-22 主人原话「中途意外退出没打完 → 让玩家选继续/重新开始」】
-            // 这一关是打完才回城的 = 干净收尾，清掉中断标记：下次进本不弹选择、照旧静默续局。
-            RunLoadout.MarkReturnedClean();
-        }
-        BattleStateSaver.Instance?.ClearBattleState();
-        GameSceneManager.Instance?.ReturnToTown();
-    }
-
-    /// <summary>
-    /// 通关后「结束本局并回城」：清本局装备 → 清佣兵 → 清雇佣会话 → 结束构筑 → 回城。
-    /// 这段原本在通关结算里被复制了 3 份，收成一处；以后改收尾流程只改这里。
-    /// 注意：死亡（<see cref="OnHeroDead"/>）与主动撤离（<see cref="TriggerEvacuation"/>）
-    /// 走的是另一套收尾（遗产 / 教程流程，且不回城），不共用本方法。
+    /// 【2026-10-24 主人拍板「只要打完就清」】旧 ReturnToTownKeepRun（打一关回一次保留构筑）已删：
+    /// 普通关打完一律走 <see cref="EndRunAndReturnToTown"/> 整局清档，打完就清、不跨关保留。
     /// </summary>
     public void EndRunAndReturnToTown()
     {
@@ -2028,7 +2008,8 @@ public partial class BattleManager
     }
 
     /// <summary>
-    /// 【2026-10-22 主人拍板「打一关回一次」】续局还原局内金币池（RunDraftDirector.OnRunStart 续局分支调）。
+    /// 【2026-10-24 主人拍板「只要打完就清」】续局（= 中断局弹窗点了继续）还原局内金币池
+    /// （来源见 RunDraftDirector.RestoreRunGoldPool / RunLoadout.ConfirmResumeInterruptedRun）。
     /// _goldAtRunStart 一并抬到还原水位：局末清账（resetPool）回到「续局时的池子」，不会把玩家抽剩的钱清成 0。
     /// </summary>
     public void RestoreRunGoldPool(long gold)

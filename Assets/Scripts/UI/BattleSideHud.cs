@@ -110,8 +110,13 @@ public class BattleSideHud : MonoBehaviour
         // —— 击败累计计数（常驻；图源 Resources/Icons/击败，位置样式按主人 2026-10-19 截图）——
         LoadKillSprites();
         // 【2026-10-20 主人拍板】「击败」字+数字整体下移 50 像素（10+10+10+20，只动这块，下一波倒计时不动）
+        // 【2026-10-24 主人拍板「击败字太靠下，应在 Boss 血条右下角」】下挂偏移 -50 → -12；
+        // 【2026-10-24 二次拍板「还是太往下了，还得往上几十」】-12 → +28（再上移 40）：
+        // 根顶在血条底边上方 54.4、panel 高 70（pivot=顶沿），标签中心≈血条底边上方 47，整块贴住血条右端。
+        // 要再微调只动这一个数（每 +1 上移 1）。
+        const float ComboPanelTopOffset = 28f;
         var comboGo = CreatePanel("ComboPanel", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f), new Vector2(0f, -50f), new Vector2(250f, 70f), transparent: true);
+            new Vector2(0.5f, 1f), new Vector2(0f, ComboPanelTopOffset), new Vector2(250f, 70f), transparent: true);
         _comboGroup = comboGo.AddComponent<CanvasGroup>();
         _comboGroup.alpha = 0f;
         _comboScaleRoot = comboGo.GetComponent<RectTransform>();

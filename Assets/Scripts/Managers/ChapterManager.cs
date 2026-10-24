@@ -77,7 +77,9 @@ public class ChapterManager : Singleton<ChapterManager>
     /// <summary>金币副本：单场战斗，通关拿固定金，不推进主线章节。</summary>
     public void StartGoldDungeon(int chapterNum)
     {
-        currentChapter = Mathf.Clamp(chapterNum, 1, 8);
+        // 【2026-10-24 主人拍板「金币用第一章森林的战斗场景」】场景/怪池章 = 固定题材章（SceneChapter 单一出口），
+        // 入参章号不再决定场景；金币奖励按难度固定 300/500/800（GetGoldDungeonClearGold 不依赖章节，三本产出同理）。
+        currentChapter = ActivityDungeonRules.SceneChapter(ActivityDungeonKind.Gold);
         currentStageIndex = 0;
         stageMap.Clear();
         availableNextStages.Clear();
@@ -89,7 +91,7 @@ public class ChapterManager : Singleton<ChapterManager>
         };
         stageMap.Add(stage);
         availableNextStages.Add(stage);
-        Debug.Log($"[ChapterManager] 金币副本 第{currentChapter}章 单场");
+        Debug.Log($"[ChapterManager] 金币副本 场景=第{currentChapter}章(森林) 单场（入参章号 {chapterNum} 不再决定场景）");
     }
 
     /// <summary>
@@ -99,7 +101,8 @@ public class ChapterManager : Singleton<ChapterManager>
     /// </summary>
     public void StartBadgeDungeon(int chapterNum)
     {
-        currentChapter = Mathf.Clamp(chapterNum, 1, 8);
+        // 【2026-10-24 主人拍板「徽记用亡灵的战斗场景」】场景/怪池章 = 固定题材章（第 2 章 幽冥墓园）。
+        currentChapter = ActivityDungeonRules.SceneChapter(ActivityDungeonKind.Badge);
         currentStageIndex = 0;
         stageMap.Clear();
         availableNextStages.Clear();
@@ -111,7 +114,30 @@ public class ChapterManager : Singleton<ChapterManager>
         };
         stageMap.Add(stage);
         availableNextStages.Add(stage);
-        Debug.Log($"[ChapterManager] 徽记副本 第{currentChapter}章 单场");
+        Debug.Log($"[ChapterManager] 徽记副本 场景=第{currentChapter}章(亡灵) 单场（入参章号 {chapterNum} 不再决定场景）");
+    }
+
+    /// <summary>
+    /// 卷轴副本（2026-10-24 主人拍板「第三章通关开启 · 每周五 · 每次15体力 · 每日2次」）：
+    /// 单场 Elite 战斗，通关只掉招募卷轴（见 BattleManager.Settlement → MercGrowInventory.GrantScrollDungeonDrops），
+    /// 不推进主线章节。结构照抄 StartBadgeDungeon。
+    /// </summary>
+    public void StartScrollDungeon(int chapterNum)
+    {
+        // 【2026-10-24 主人拍板「卷轴用洞穴的战斗场景」】场景/怪池章 = 固定题材章（第 6 章 巨岩深窟）。
+        currentChapter = ActivityDungeonRules.SceneChapter(ActivityDungeonKind.Scroll);
+        currentStageIndex = 0;
+        stageMap.Clear();
+        availableNextStages.Clear();
+        var stage = new StageData
+        {
+            stageIndex = 0,
+            type = StageType.Elite,
+            nextStages = new List<int>()
+        };
+        stageMap.Add(stage);
+        availableNextStages.Add(stage);
+        Debug.Log($"[ChapterManager] 卷轴副本 场景=第{currentChapter}章(洞穴) 单场（入参章号 {chapterNum} 不再决定场景）");
     }
 
     /// <summary>
@@ -332,6 +358,9 @@ public class ChapterManager : Singleton<ChapterManager>
             return;
         // 徽记副本（2026-10-23 拍板）：同金币本，通关不走主线首通/章节奖励（掉落全走自己的发放链）
         if (BattleManager.Instance != null && BattleManager.Instance.IsBadgeDungeon)
+            return;
+        // 卷轴副本（2026-10-24 拍板）：同徽记本，通关不走主线首通/章推进/派定（掉落全走自己的发放链）
+        if (BattleManager.Instance != null && BattleManager.Instance.IsScrollDungeon)
             return;
         // 支线岛（2026-10-23 合并方案）：同金币本，岛通关不走主线首通/章推进/派定——
         // 全在 SideIslandBattleMode.SettleStageClear 自己的链里（发奖 + MarkSideIslandCleared + 派第二岛）

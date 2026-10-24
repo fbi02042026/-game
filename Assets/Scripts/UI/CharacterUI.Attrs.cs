@@ -175,7 +175,8 @@ public partial class CharacterUI
         // 魔攻 / 魔防：需要面板新增节点。找不到就不显示（不会报错），等排版定好后接上。
         if (attrMagicAtkText != null) attrMagicAtkText.text = FormatAttrWithTalent(mag, talMag, roundInt: true);
         if (attrMagicDefText != null) attrMagicDefText.text = FormatAttrWithTalent(magicDef, talDef, roundInt: true);
-        if (attrSpdText != null) attrSpdText.text = FormatAttrWithTalent(spd, talSpd, roundInt: false, decimals: "0.##");
+        // 【2026-10-24 主人拍板】速度显示不用小数：原值 ×100 取整（0.85 → 85），只改显示口径，战斗数值不动。
+        if (attrSpdText != null) attrSpdText.text = Mathf.RoundToInt(spd * 100f).ToString();
         if (attrCritText != null)
         {
             string core = FormatAttrWithTalent(critDisplay, talCrit, roundInt: false, decimals: "0.#");

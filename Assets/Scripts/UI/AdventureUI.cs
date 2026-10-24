@@ -36,6 +36,11 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     /// 由 TryEnterBattle 按活动列表选中态重设（徽记横条选中 = true）；BattleManager.StartNewRunInternal 读完即清（照 PendingGoldDungeon 口径）。
     /// </summary>
     public static bool PendingBadgeDungeon;
+    /// <summary>
+    /// 卷轴副本进本标记（2026-10-24 主人拍板「第三章通关开启 · 每周五 · 15体力 · 2次」）。
+    /// 由 TryEnterBattle 按活动列表选中态重设（卷轴横条选中 = true）；BattleManager.StartNewRunInternal 读完即清（照徽记本口径）。
+    /// </summary>
+    public static bool PendingScrollDungeon;
 
     /// <summary>
     /// 支线岛进本标记（2026-10-23 合并方案）：值 = 岛 id（1..8，0=非岛局）。
@@ -56,7 +61,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     public void EnterBadgeDungeon()
     {
         _selectedMode = 4;
-        _selectedActivityBadge = true;
+        _selectedActivityKind = ActivityDungeonKind.Badge;
         TryEnterBattle();
     }
     /// <summary>
@@ -134,15 +139,17 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     const string ActivityGoldRowName = "金币";
     /// <summary>活动列表横条：徽记副本（RightContent/活动副本/徽记）。</summary>
     const string ActivityBadgeRowName = "徽记";
-    /// <summary>选中横条的底图高亮色（淡金；未选中恢复 prefab 原色）。</summary>
-    static readonly Color ActivityRowSelectedColor = new Color(1f, 0.85f, 0.35f, 1f);
+    /// <summary>活动列表横条：卷轴副本（RightContent/活动副本/卷轴；2026-10-24 主人拍板接入）。</summary>
+    const string ActivityScrollRowName = "卷轴";
+    /// <summary>没轮到（今天不开放）横条 bg 的压灰系数（2026-10-24 主人拍板「灰显」；选中效果改走 prefab「选中」节点）。</summary>
+    const float ActivityRowGrayFactor = 0.45f;
 
     int _selectedMode = 0;
     int _selectedDiff = 0;
     int _selectedChapter = 1;
-    /// <summary>活动副本选中态（2026-10-23 主人拍板「活动副本一拆二」）：false = 金币副本，true = 徽记副本。</summary>
-    bool _selectedActivityBadge;
-    /// <summary>活动横条按钮是否已接线（金币/徽记两横条，prefab 只摆了外观没挂 Button）。</summary>
+    /// <summary>活动副本选中态（2026-10-23 拆二 + 2026-10-24 加卷轴）：金币/徽记/卷轴三选一，与 ActivityDungeonKind 同源。</summary>
+    ActivityDungeonKind _selectedActivityKind = ActivityDungeonKind.Gold;
+    /// <summary>活动横条按钮是否已接线（金币/徽记/卷轴三横条，prefab 只摆了外观没挂 Button）。</summary>
     bool _activityRowsWired;
     /// <summary>横条底图原色缓存（选中高亮 = 改 bg 颜色，恢复要回原色；key = bg Image）。</summary>
     readonly Dictionary<Image, Color> _activityRowBaseColors = new Dictionary<Image, Color>();
@@ -170,6 +177,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     Sprite _badgeDropSprite;
     Sprite _staminaIconSprite;
     Image _staminaCostIcon;
+    Text _staminaCostText;   // 【2026-10-24 主人新布局】消耗值独立在 StaminaCost/Cost 子节点（预制体默认 "X10"）
 
     enum PreviewDropKind
     {
@@ -300,13 +308,19 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         RunResumeChoiceUI.Show(RunLoadout.PeekResumable()?.chapter ?? 1,
             onConfirm: () =>
             {
-                // 确定 = 继续上一局：中断已确认，清掉标记，之后进本照旧静默续局（构筑/金币池还原不变）
-                RunLoadout.MarkReturnedClean();
+                // 确定 = 继续上一局：清掉中断标记，并把「被打断那关」的关号 + 局内金币池
+                // 从中断快照接回构筑（见 RunLoadout.ConfirmResumeInterruptedRun），
+                // 之后进本照旧静默续局，从被打断的那一关重打、不重发启动金。
+                // 快照消费完毕一并清：金币已接回构筑，留着会被下次启动结算重复入账。
+                RunLoadout.ConfirmResumeInterruptedRun(BattleStateSaver.PeekInterrupted());
+                BattleStateSaver.ClearInterruptedSave();
             },
             onCancel: () =>
             {
-                // 取消 = 重新开始：丢掉上一局，下次进本发启动金、从本章第 1 关打起
+                // 取消 = 重新开始：丢掉上一局（弹窗文案已写明构筑与金币不保留），快照一并清，
+                // 否则下次启动会被 SettleInterruptedRun 按「撤离失败」再结算一遍。
                 RunLoadout.Clear();
+                BattleStateSaver.ClearInterruptedSave();
             });
     }
 

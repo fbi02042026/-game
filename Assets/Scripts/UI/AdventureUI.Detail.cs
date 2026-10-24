@@ -20,12 +20,21 @@ public partial class AdventureUI
         bool activity = IsActivityMode(_selectedMode);
         bool endless = IsEndlessMode(_selectedMode);
         bool playable = main || activity || endless;
-        string title = GameConfig.GetChapterMapName(_selectedChapter);
         if (stageNameLabel != null)
         {
-            if (activity) stageNameLabel.text = _selectedActivityBadge ? "徽记副本" : "金币副本";
+            if (activity)
+                stageNameLabel.text = _selectedActivityKind == ActivityDungeonKind.Badge ? "徽记副本"
+                                    : _selectedActivityKind == ActivityDungeonKind.Scroll ? "卷轴副本"
+                                    : "金币副本";
             else if (endless) stageNameLabel.text = "无限裂隙";
-            else if (main) stageNameLabel.text = title;
+            else if (main)
+            {
+                // 【2026-10-24 主人拍板「冒险界面信息应该写1-1 不应该是第一章」】
+                // 主线详情标题 = 当前关号（章-关，与岛上关卡编号同口径：下一关 = 已通关最大关 + 1）
+                int maxCleared = GetMaxClearedStage(_selectedChapter);
+                int cur = Mathf.Clamp(maxCleared + 1, 1, GameConfig.STAGES_PER_GRAND);
+                stageNameLabel.text = $"{_selectedChapter}-{cur}";
+            }
             else stageNameLabel.text = ModeLabel(_selectedMode);
         }
         if (stageDescLabel != null)
@@ -33,10 +42,15 @@ public partial class AdventureUI
             if (activity)
             {
                 // 【2026-10-23 拍板「活动副本一拆二」+ 2026-10-24 主人拍板】
-                // 金币=周一/三/六；徽记=周二/四/日；每日各 2 次、每次 10 体力
+                // 金币=周一/三/六；徽记=周二/四/日；卷轴=周五（通关第 3 章开启）；
+                // 三本每日各 2 次，金币/徽记每次 10 体力、卷轴 15 体力；
+                // 产出只按难度定死不跟章节：金 500/800/1200、徽记按难度掷档、
+                // 卷轴 普通3-5普通/困难+0-1高级/噩梦1-3高级（2026-10-24 主人拍板）
                 int gold = GameConfig.GetGoldDungeonClearGold(_selectedChapter, _selectedDiff);
-                stageDescLabel.text = _selectedActivityBadge
+                stageDescLabel.text = _selectedActivityKind == ActivityDungeonKind.Badge
                     ? "通关获得随机职业徽记。每周二、四、日开放，每日 2 次。"
+                    : _selectedActivityKind == ActivityDungeonKind.Scroll
+                    ? "通关获得招募卷轴，难度越高出高级卷轴。每周五开放，每日 2 次。"
                     : $"怪物只掉金币。通关获得 {gold} 金币。每周一、三、六开放，每日 2 次。";
             }
             else if (endless)
@@ -56,11 +70,15 @@ public partial class AdventureUI
         if (staminaCostLabel != null)
         {
             string cost = (endless ? StaminaSystem.ENDLESS_RIFT_COST
-                         : activity ? ActivityDungeonRules.ENTRY_STAMINA_COST
+                         : activity ? ActivityDungeonRules.EntryStaminaCost(_selectedActivityKind)
                          : StaminaSystem.ADVENTURE_COST).ToString();
-            string t = staminaCostLabel.text;
-            if (!string.IsNullOrEmpty(t) && t.IndexOf("体力", System.StringComparison.Ordinal) >= 0)
+            if (_staminaCostText == null)
+                _staminaCostText = staminaCostLabel.transform.Find("Cost")?.GetComponent<Text>();
+            if (_staminaCostText != null)
             {
+                // 【2026-10-24 主人新布局】消耗值独立在子节点 Cost（预制体默认 "X10"）：
+                // 有数字原位替换（保留主人 "X" 前缀样式），没数字整写消耗值；父节点「消耗体力」标签不动
+                string t = _staminaCostText.text;
                 var sb = new System.Text.StringBuilder();
                 bool replaced = false;
                 for (int i = 0; i < t.Length; i++)
@@ -72,10 +90,10 @@ public partial class AdventureUI
                     }
                     else sb.Append(t[i]);
                 }
-                staminaCostLabel.text = replaced ? sb.ToString() : ("消耗体力  " + cost);
+                _staminaCostText.text = replaced ? sb.ToString() : cost;
             }
             else
-                staminaCostLabel.text = "消耗体力  " + cost;
+                staminaCostLabel.text = "消耗体力  " + cost;   // 无 Cost 子节点（Build 自建 UI）走旧整写
         }
 
         if (remainChancesLabel != null)
@@ -88,14 +106,14 @@ public partial class AdventureUI
 
     /// <summary>
     /// 「剩余次数」栏（DetailPanel/you/Chances）。
-    /// 主线不限；金币/徽记副本每日各 2 次（2026-10-24 主人拍板「都是2次」），显示今日真值 x/2。
+    /// 主线不限；金币/徽记/卷轴副本每日各 2 次（2026-10-24 主人拍板「都是2次」），显示今日真值 x/2。
     /// </summary>
     string FormatRemainChances(bool playable, bool main, bool activity)
     {
         if (!playable) return "0";
         if (main) return "不限";
         if (activity)
-            return $"{ActivityDungeonRules.TriesLeft(SaveSystem.Instance?.Data, _selectedActivityBadge)}/{ActivityDungeonRules.DAILY_TRIES}";
+            return $"{ActivityDungeonRules.TriesLeft(SaveSystem.Instance?.Data, _selectedActivityKind)}/{ActivityDungeonRules.DAILY_TRIES}";
         return "0";
     }
     void EnsureStaminaCostIcon()
@@ -136,7 +154,13 @@ public partial class AdventureUI
 
         List<MonsterConfig> all = null;
         if (IsModePlayable(_selectedMode) && ConfigManager.Instance != null)
-            all = ConfigManager.Instance.GetChapterPreviewMonsters(_selectedChapter);
+        {
+            // 活动副本（2026-10-24 主人拍板）：战斗场景固定题材章（金=森林/徽=亡灵/卷=洞穴），预览怪跟场景走
+            int previewChapter = IsActivityMode(_selectedMode)
+                ? ActivityDungeonRules.SceneChapter(_selectedActivityKind)
+                : _selectedChapter;
+            all = ConfigManager.Instance.GetChapterPreviewMonsters(previewChapter);
+        }
         if (all == null) all = new List<MonsterConfig>();
 
         int showCount = Mathf.Min(slots.Count, all.Count);

@@ -876,8 +876,8 @@ public static partial class GameConfig
     public const int GOLD_DUNGEON_CLEAR_BASE = 30;
 
     /// <summary>
-    /// 金币副本通关固定金（2026-10-23 主人拍板「金币副本三个级别掉落的金币数为 300 500 800」）：
-    /// 三档固定值，不再随章节 / 难度倍率浮动。diff：0 普通 300 / 1 困难 500 / 2 噩梦 800。
+    /// 金币副本通关固定金（2026-10-24 主人拍板「金币副本给的金币是500 800 1200」）：
+    /// 三档固定值，只按难度、不随章节 / 难度倍率浮动。diff：0 普通 500 / 1 困难 800 / 2 噩梦 1200。
     /// chapter 参数保留（调用点：BattleQuestConfig / 冒险页掉落预览），数值不再依赖它。
     /// </summary>
     public static int GetGoldDungeonClearGold(int chapter, int diff)
@@ -885,9 +885,9 @@ public static partial class GameConfig
         _ = chapter;
         switch (Mathf.Clamp(diff, 0, 2))
         {
-            case 1: return 500;
-            case 2: return 800;
-            default: return 300;
+            case 1: return 800;
+            case 2: return 1200;
+            default: return 500;
         }
     }
 

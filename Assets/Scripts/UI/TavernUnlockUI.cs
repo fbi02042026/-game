@@ -312,9 +312,13 @@ public class TavernUnlockUI : MonoBehaviour
         if (!MercRosterDefs.TryGetByHireId(c.hireId, out var def)) return;
         AdventureLogCatalog.TryFindMerc(def.HireId, out var entry);
 
+        // 【2026-10-24 主人拍板】攻速/移速与其他面板统一口径：走 ApplyCombatStats 换算成世界速度
+        // 再 ×100 取整（0.85 → 85），不用表里的设计单位小数；只改显示，战斗数值不动。
+        MercRosterDefs.ApplyCombatStats(def.AssetId, 1,
+            out _, out _, out _, out float atkSpdWorld, out float moveWorld, out _);
         string meta = $"{def.JobName} · {RarityName(def.Rarity)}　"
                     + $"HP {def.BaseHp}　攻 {def.BaseAtk}　防 {def.BaseDef}　"
-                    + $"攻速 {def.AtkSpeed:0.00}　移速 {def.MoveSpeed:0.00}";
+                    + $"攻速 {Mathf.RoundToInt(atkSpdWorld * 100f)}　移速 {Mathf.RoundToInt(moveWorld * 100f)}";
 
         string desc = BuildSkillBlock(def);
         if (!string.IsNullOrEmpty(entry.Desc))
