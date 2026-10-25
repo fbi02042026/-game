@@ -90,6 +90,11 @@ public static partial class GameConfig
         /// ⚠ 与预制体粒子 Sorting Order 耦合：画布=985 →「界面下」粒子 984、「界面上」粒子 986（主人已在预制体调好）。
         /// </summary>
         public const int BattleResult = 985;
+        /// <summary>
+        /// 通用分享界面（SharePanelUI，2026-10-25 主人拍板）：盖过战斗结果(985)（从胜利界面点「分享」弹出）、
+        /// 低于结算面板(990)。预制体 meta 写的 985 由 ApplyPopup 覆盖到此值。
+        /// </summary>
+        public const int SharePanel = 987;
         public const int BattleSettlement = 990;
         /// <summary>
         /// 「佣兵入队」横幅（MercJoinBannerUI，2026-10-12 新增）：抽中佣兵瞬间播一次，
@@ -97,6 +102,11 @@ public static partial class GameConfig
         /// 【2026-10-18】原写死 995 魔数，收敛为常量（铁律：不许魔数）。
         /// </summary>
         public const int MercJoinBanner = 995;
+        /// <summary>
+        /// 「恭喜升级」弹窗（LevelUpPopup，2026-10-25 主人拍板「接玩家升级」）：
+        /// 战斗结算挂起、回到冒险界面（Town 就绪）才弹出，须盖住主界面各功能页，低于 Toast(11000)。
+        /// </summary>
+        public const int LevelUpPopup = 996;
         public const int Loading = 10000;
         public const int Toast = 11000;
         /// <summary>「获得佣兵」全屏演出（2026-10-20 主人拍板）：盖过 Toast 与奖励弹窗，低于剧情(Effects 层 13000)。</summary>
@@ -818,17 +828,24 @@ public static partial class GameConfig
     /// <summary>
     /// 按章的敌人攻击/魔攻减免倍率（唯一真源，唯一入口 Monster.Init.cs 攻击赋值处）。
     /// 演进：2026-10-20「前期敌人的攻击再降30%」0.7 → 2026-10-22「近战也砍，前期要让玩家稍微
-    /// 抽点奖就能过」第1~2章 0.35 → 同日主人拍板「第三章砍40% 后面的砍20%」全章覆盖：
-    /// 第 1~2 章 ×0.35；第 3 章 ×0.6（砍40%）；第 4 章起 ×0.8（砍20%）。
+    /// 抽点奖就能过」第1~2章 0.35 → 同日主人拍板「第三章砍40% 后面的砍20%」→
+    /// 【2026-10-25 主人拍板「断崖调缓 不要让玩家察觉 只是觉得运气不好」】三档阶梯废除，
+    /// 改 8 章缓坡表（下表）：原第2→第5章（主线大关20→21）入口跳档 ×1.71 是全曲线唯一断崖
+    /// （叠上章倍率 ×1.13 与 ch5 怪表 baseAtk ×1.35，实测玩家承受次数 48→21 下腰斩）；
+    /// 现拆成每站 ×1.05~1.15 的连续爬坡，配合玩家天赋/装备同步成长，体感只剩「这关运气不好」。
+    /// 验算（玩家 HP 含天赋进度 360→850）：ch1→ch8 承受次数 84 → 70 → 51 → 45 → 39 → 32，无单点跳变。
     /// 远程共用这条倍率（远程另有 MONSTER_RANGED_ATK_MUL 一档）。只压攻击/魔攻，血防不动；
-    /// 无尽裂隙强度只随层数走，不参与。还嫌痛/嫌软只改下面对应档的数值。
+    /// 无尽裂隙不参与（强度只随层数走，Monster.Init 已排除）、引导局不参与。
+    /// ⚠ 外溢提示：活动副本场景章跟随本表（金币=1 不变 / 徽记=2 +3% 无感 / 卷轴=6 怪 ATK ×0.65 变弱，
+    /// 2026-10-25 已报主人，若嫌简单后续给副本难度分层补独立乘区，未动）。
     /// </summary>
+    static readonly float[] ChapterAtkMulTable = { 0.35f, 0.36f, 0.40f, 0.42f, 0.45f, 0.52f, 0.62f, 0.75f };
+
     public static float ChapterAtkMul(int chapter)
     {
         int ch = Mathf.Max(1, chapter);
-        if (ch <= 2) return 0.35f;  // 新手期（含 10-22「抽点奖就能过」砍半）
-        if (ch == 3) return 0.6f;   // 2026-10-22 主人拍板：第三章砍40%
-        return 0.8f;                // 2026-10-22 主人拍板：第4章起砍20%
+        // 表内 8 章直查；第 9 章及以后（越界续算篇）按尾档 0.75（与 chapter_stat_scale 越界同口径：不抛错续算）
+        return ch <= ChapterAtkMulTable.Length ? ChapterAtkMulTable[ch - 1] : ChapterAtkMulTable[ChapterAtkMulTable.Length - 1];
     }
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备

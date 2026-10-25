@@ -101,6 +101,15 @@ public class SpeechBubbleTalker : MonoBehaviour
     // 锁 BurstLockSeconds=5 秒，期间点击一律不算（不加怒气、不说话、不动脸）；怒气不清零
     const float RapidClickSeconds = 0.8f;
     const float BurstLockSeconds = 5f;
+    // 【2026-10-25 主人拍板「要加跟老板娘一样的冷却」】戳一戳冷却（同老板娘 TavernLandladyTease
+    // 的 BanSeconds=60f 踢出口径）：第 5 次连戳生气即进入冷却，冷却期内点击一律无效
+    // （不累计怒气、不说话、不动脸、不动作），防止玩家一直点一直累计；
+    // 冷却中每轮只回一句拒绝台词（对齐老板娘「等酒醒了再来！」的拒绝反馈，防误报「点了没反应」）。
+    // 冷却只存内存（跟 burst lock 一致），重启清零；老板娘跨进程是因为踢出涉及进店门槛，前台不需要。
+    const float PokeCooldownSeconds = 60f;
+    const string CooldownLine = "哼，气还没消。等本小姐消气了再说。";
+    float _pokeCooldownUntil;   // 冷却截止时刻（unscaled；0=未在冷却）
+    bool _cooldownLineSaid;     // 本轮冷却是否已回过拒绝句（每轮只说一次）
     Sprite _faceShy;
     Sprite _faceAngry;
     Sprite _faceRestore;    // 表情恢复目标（切换瞬间的看板图）
@@ -158,6 +167,39 @@ public class SpeechBubbleTalker : MonoBehaviour
         if (bubbleRoot != null) bubbleRoot.SetActive(false);
         if (receptionistButton != null)
             receptionistButton.onClick.AddListener(OnReceptionistClicked);
+        EnsureBoardPokeButton();
+    }
+
+    /// <summary>
+    /// 【2026-10-25 主人报「主界面点击人物无反应」】看板立绘本体直接可点。
+    /// 根因：戳一戳点击原本绑在 Receptionist 热点上，但看板「show」立绘
+    /// （1171×1345，raycastTarget=1）兄弟序在其后、把热区整块盖住 —— 射线永远命中
+    /// show，热点 Button 收不到事件（Editor.log [ClickPeek] 证实：点人物 top=show
+    /// selected=null，全程无一次命中热点）。
+    /// 修法：给 show 运行时补 Button（不改预制体，照抄 Turn 节点的做法），
+    /// 走同一条 OnReceptionistClicked 单一出口；佣兵态在 OnReceptionistClicked
+    /// 入口守卫拦截（2026-10-20 主人拍板：佣兵态点击保持无响应）。
+    /// 调用时机：GuildHallUI.Awake 里 WireHallClicks（106 行，已绑 boardCharacterImage）
+    /// 先于 EnsureSpeechBubbleTalker（107 行），本方法在 AddComponent 触发的 Awake 里
+    /// 即可拿到引用。
+    /// </summary>
+    void EnsureBoardPokeButton()
+    {
+        var hall = GuildHallUI.Instance;
+        var img = hall != null ? hall.boardCharacterImage : null;
+        if (img == null)
+        {
+            Debug.LogError("[SpeechBubble] 看板 show 的 Image 未绑定，人物点击接不上（不兜底）");
+            return;
+        }
+        var btn = img.GetComponent<Button>();
+        if (btn == null)
+        {
+            btn = img.gameObject.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;   // 不改美术颜色反馈（同 Turn 做法）
+        }
+        btn.onClick.RemoveListener(OnReceptionistClicked);
+        btn.onClick.AddListener(OnReceptionistClicked);
     }
 
     void OnEnable()
@@ -220,6 +262,20 @@ public class SpeechBubbleTalker : MonoBehaviour
     /// <summary>咨询台：优先说「今日可做 / 功能介绍」；【2026-10-18 彩蛋批次】加情境分支与稀有台词。</summary>
     void OnReceptionistClicked()
     {
+        // 【2026-10-25】看板被 Turn 换成佣兵立绘时点击无响应
+        // （2026-10-20 主人拍板「佣兵态点击保持现状无响应」）。
+        // 此守卫同时覆盖热点按钮与看板立绘本体（EnsureBoardPokeButton）两条入口。
+        var hallGuard = GuildHallUI.Instance;
+        if (hallGuard != null && !hallGuard.BoardIsDefaultReceptionist) return;
+
+        // 【2026-10-25 主人拍板】戳一戳冷却（同老板娘踢出口径）：生气后 60 秒内点击一律无效，
+        // 不累计怒气、不动脸、不动作；每轮冷却只在第一次点击时回一句拒绝台词
+        if (Time.unscaledTime < _pokeCooldownUntil)
+        {
+            SayCooldownLineOnce();
+            return;
+        }
+
         EnsureFaces();
 
         // 【2026-10-22 主人拍板】点击冷却：点太快触发 5 秒锁定，期间点击全不算
@@ -249,6 +305,9 @@ public class SpeechBubbleTalker : MonoBehaviour
             line = AngryPokeLines[Random.Range(0, AngryPokeLines.Length)];
             ShowBoardFace(_faceAngry, 1.5f);
             PokeMotion(true);          // 生气＝左右躲闪
+            // 【2026-10-25 主人拍板】生气即进入冷却：60 秒内点击无效（同老板娘踢出 60s）
+            _pokeCooldownUntil = Time.unscaledTime + PokeCooldownSeconds;
+            _cooldownLineSaid = false;
         }
         else
         {
@@ -264,6 +323,20 @@ public class SpeechBubbleTalker : MonoBehaviour
         if (_loop != null) StopCoroutine(_loop);
         _busy = false;
         _loop = StartCoroutine(SpeakOnceThenResume(line));
+    }
+
+    /// <summary>
+    /// 冷却期拒绝反馈（每轮冷却只说一次）：对齐老板娘「等酒醒了再来！」的口径——
+    /// 点击虽然无效，但要给一句拒绝台词让玩家知道是在生气不理人，不是点了没反应。
+    /// 只动说话链路：不累计怒气、不动脸、不动作；剧情压制（_suppressed）期间连话也不说。
+    /// </summary>
+    void SayCooldownLineOnce()
+    {
+        if (_cooldownLineSaid || _suppressed) return;
+        _cooldownLineSaid = true;
+        if (_loop != null) StopCoroutine(_loop);
+        _busy = false;
+        _loop = StartCoroutine(SpeakOnceThenResume(CooldownLine));
     }
 
     /// <summary>点击咨询台的台词：深夜 / 连败安慰 / 稀有（3%）/ 常规池。

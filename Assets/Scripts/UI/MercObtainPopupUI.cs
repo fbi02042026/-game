@@ -29,6 +29,17 @@ public partial class MercObtainPopupUI : MonoBehaviour
     const float AscendPulseAmplitude = 0.06f;
     const float AscendPulsePeriod = 1.6f;
 
+    /// <summary>进阶指引节点（Panel/进阶/指引，2026-10-25 主人手工摆进预制体）：可升星时随进阶钮显示，
+    /// 显示期间缓慢上下浮动（提示玩家点进阶去升星）。</summary>
+    GameObject _guideNode;
+    RectTransform _guideRt;
+    /// <summary>指引节点 authored 位置（Bind 时记；浮动只在其基础上加 y 偏移，还原也回它，不碰布局）。</summary>
+    Vector3 _guideBasePos;
+    Coroutine _guideBobCo;
+    /// <summary>指引浮动：幅度 9 逻辑像素、周期 2.2 秒（「缓慢」口径，unscaled 时间与脉冲同源）。</summary>
+    const float GuideBobAmplitude = 9f;
+    const float GuideBobPeriod = 2.2f;
+
     static MercObtainPopupUI _instance;
 
     GameObject _root;

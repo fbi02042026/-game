@@ -664,6 +664,33 @@ public static class DraftPool
     // 候选收集：技能
     // ============================================================
 
+    // —— 前期生存向技能权重（2026-10-25 主人拍板：「前期天雷出现的几率再小点 前期恢复和护盾的几率最大 保证玩家存活几率」）——
+    // 前期 = 未通关第 EarlySurvivalGateChapter 章（要调口径只改这一个常量）。
+    // 新技能与升星卡同用一份权重（唯一出口 EarlySurvivalSkillWeight）：
+    //   恢复 heal_spring / 护盾 holy_barrier ×4 拉到全池最大档（10→40 / 6→24），
+    //   其余技能 ×2，天雷 thunder_verdict 保持基础权重 1 不放大 —— 池子整体变大后相对份额自然减半
+    //   （新号池 1/39≈2.6% → ≈1/109≈0.9%），前期恢复+护盾合计 ≈59%。
+    // 权重是 int 且消费端 Mathf.Max(1,·) 兜底，天雷无法直接低于 1，故用「放大别人」实现「压低它」。
+    // 概率公示弹窗（BuildOddsRows）与抽取同源现算，自动同步。
+    const int EarlySurvivalGateChapter = 3;
+    const int EarlySurvivalBoostSurvival = 4; // heal_spring / holy_barrier
+    const int EarlySurvivalBoostOther = 2;    // 其余技能
+
+    static bool IsEarlySurvivalPhase()
+    {
+        var data = SaveSystem.Instance?.Data;
+        return data == null || !data.HasClearedChapter(EarlySurvivalGateChapter);
+    }
+
+    /// <summary>前期生存向技能权重唯一出口：新技能（CollectNewSkills）与升星卡（CollectUpgradableSkills）同源。</summary>
+    static int EarlySurvivalSkillWeight(string skillId, int baseWeight)
+    {
+        if (!IsEarlySurvivalPhase()) return baseWeight;
+        if (skillId == "heal_spring" || skillId == "holy_barrier") return baseWeight * EarlySurvivalBoostSurvival;
+        if (skillId == "thunder_verdict") return baseWeight; // 天雷不放大 = 前期相对份额减半
+        return baseWeight * EarlySurvivalBoostOther;
+    }
+
     struct WeightedCard
     {
         public DraftCard Card;
@@ -702,7 +729,8 @@ public static class DraftPool
                     IsAffinity = SkillDraftMeta.IsAffinity(s.id, PlayerJobDefs.GetSelected()),
                     PowerDelta = 140
                 },
-                Weight = SkillRarityUtil.Weight(rar) * 2,
+                // 【2026-10-25 主人拍板】前期生存向：恢复/护盾最大、天雷相对减半，见 EarlySurvivalSkillWeight。
+                Weight = EarlySurvivalSkillWeight(s.id, SkillRarityUtil.Weight(rar) * 2),
                 Key = "skill_" + s.id
             });
         }
@@ -786,7 +814,8 @@ public static class DraftPool
                     IsAffinity = SkillDraftMeta.IsAffinity(def.id, PlayerJobDefs.GetSelected()),
                     PowerDelta = PowerCalc.SkillPowerDelta(rar, 1)
                 },
-                Weight = SkillRarityUtil.Weight(rar),
+                // 【2026-10-25 主人拍板】前期生存向：恢复/护盾最大、天雷相对减半，见 EarlySurvivalSkillWeight。
+                Weight = EarlySurvivalSkillWeight(def.id, SkillRarityUtil.Weight(rar)),
                 Key = "skill_" + def.id
             });
         }
@@ -812,7 +841,7 @@ public static class DraftPool
             return list;
 
         int guild = data.guildLevel;
-        int heroLv = RunLoadout.HeroLevel;
+        int heroLv = LevelSystem.CurrentLevel;   // 2026-10-25 矫正：等级真源迁存档（原 RunLoadout.HeroLevel 每关清零）
         // 【2026-10-17 主人拍板 + 2026-10-19 只从队列出】队列内每个上架佣兵单独等概率（权重全 1），
         // 旧的「空池回落全池按稀有度加权」已随空池回落一起作废（见上方「队列空 = 没有招募卡」注释）。
 

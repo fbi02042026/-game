@@ -631,6 +631,41 @@ public partial class AdventureUI
         RefreshAll();
     }
 
+    /// <summary>
+    /// 【2026-10-25 主人需求「冒险界面显示体力和钻石；体力不足点购买与顶条加号效果一致」】
+    /// 进本体力不足弹窗：双按钮确认框一律走 StaminaConfirmPopup（硬规则）。
+    /// 弹窗里显示主人要的两项——当前体力（含上限）与持有钻石；
+    /// 确认键 = ResourceAdRewards.TryClaimStamina()，与顶条体力加号同一条链、同一阶梯
+    /// （每日 2 免费 → 2 广告 → 50 钻 → 100 钻 → 封顶，含飘字/埋点，效果天然一致，不另写一份）。
+    /// 档位文案现算现显（ResolveClaimKind 唯一出口，这里不抄阶梯逻辑）；领取后不自动进本，玩家再点一次进入。
+    /// </summary>
+    void ShowStaminaLackPopup(int enterCost)
+    {
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null)
+        {
+            Toast("体力不足");
+            return;
+        }
+        ResourceAdRewards.EnsureDay(data);
+        var kind = ResourceAdRewards.ResolveClaimKind(
+            data.adStaminaClaimCount, ResourceAdRewards.StaminaFreePerDay, out int price);
+        string tier;
+        if (kind == ResourceAdRewards.ClaimKind.Free)
+            tier = "本次免费领 " + ResourceAdRewards.StaminaPerAd + " 体力";
+        else if (kind == ResourceAdRewards.ClaimKind.Ad)
+            tier = "看广告领 " + ResourceAdRewards.StaminaPerAd + " 体力";
+        else if (kind == ResourceAdRewards.ClaimKind.Diamond)
+            tier = "花 " + price + " 钻领 " + ResourceAdRewards.StaminaPerAd + " 体力";
+        else
+            tier = "今日补给已达上限（可等体力自然回复）";
+
+        string body = "进本需 " + enterCost + " 体力，当前 " + StaminaSystem.Current + "/" + StaminaSystem.Max
+                    + "\n持有钻石 " + ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond)
+                    + "\n体力补给：" + tier;
+        StaminaConfirmPopup.Show("体力不足", body, "购买体力", () => ResourceAdRewards.TryClaimStamina());
+    }
+
     void TryEnterBattle()
     {
         // 兜底清掉中断存档（正常情况下启动阶段就已结算完毕）
@@ -691,8 +726,8 @@ public partial class AdventureUI
 
         if (StaminaSystem.Current < enterCost)
         {
-            Toast("体力不足");
             PendingEndlessRift = false;
+            ShowStaminaLackPopup(enterCost);   // 【2026-10-25 主人需求】显示体力/钻石 + 购买走顶条加号同链
             return;
         }
 
@@ -739,7 +774,7 @@ public partial class AdventureUI
             }
             else if (!StaminaSystem.TrySpendForAdventure())
             {
-                Toast("体力不足");
+                ShowStaminaLackPopup(StaminaSystem.ADVENTURE_COST);   // 同上：显示体力/钻石 + 顶条同链购买
                 return;
             }
 

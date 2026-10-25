@@ -128,6 +128,9 @@ public class TownSceneBootstrap : MonoBehaviour
         yield return null;
         yield return null;
         TownHubController.ConsumePendingAdventure();
+        // 【2026-10-25 主人拍板「战斗结束回到冒险界面才触发」】战斗结算挂起的恭喜升级弹窗，
+        // 回到冒险界面（Town 就绪、Loading 已收）才弹；无挂起 no-op（见 LevelUpPopup.FlushPending）。
+        LevelUpPopup.FlushPending();
         // 上次战斗被强杀 → 判撤离失败并结算。
         // 2026-09-22 起中断结算改为静默（不弹面板），所以这里恒为 false，
         // 登录奖励等本轮弹窗照常走（保留返回值的判断，将来恢复弹窗时不用改调用方）。

@@ -17,10 +17,10 @@ using UnityEditor;
 public partial class AdventureUI
 {
     // ── 左侧标签滑入参数 ──
-    /// <summary>单颗标签滑入时长（秒）。【2026-10-24 主人拍板「快一倍」：0.38 → 0.19；同日再看还要再快一倍：0.19 → 0.095】</summary>
-    const float TabSlideDur = 0.095f;
-    /// <summary>相邻标签的出场错峰间隔（秒）。【2026-10-24 主人拍板：1 秒 → 0.5 → 0.25（两轮快一倍）；同日追加「也快50%」：0.25 ÷ 1.5 → 0.167】</summary>
-    const float TabPopStagger = 0.167f;
+    /// <summary>单颗标签滑入时长（秒）。【2026-10-24 主人拍板「快一倍」：0.38 → 0.19；同日再看还要再快一倍：0.19 → 0.095；2026-10-25 主人拍板「单个弹出延长20%」：0.095 × 1.2 → 0.114】</summary>
+    const float TabSlideDur = 0.114f;
+    /// <summary>相邻标签的出场错峰间隔（秒）。【2026-10-24 主人拍板：1 秒 → 0.5 → 0.25（两轮快一倍）；同日追加「也快50%」：0.25 ÷ 1.5 → 0.167；2026-10-25 主人拍板「间隔再短点」：0.167 → 0.10】</summary>
+    const float TabPopStagger = 0.10f;
     /// <summary>滑入起始位置在屏幕左外侧的额外余量（像素），保证完全藏在屏外。</summary>
     const float TabSlideOutMargin = 80f;
     /// <summary>右侧页面弹出起始缩放（0.92 → 1 轻微放大，不夸张）。</summary>

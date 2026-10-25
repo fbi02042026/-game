@@ -73,6 +73,7 @@ public class TownHubController : MonoBehaviour
         if (!_pagesPreloaded)
             PreloadAllPages();
         ConsumePendingAdventure();
+        TapTapRatePopup.ConsumePendingPrompt();   // 章末通关回城后弹好评引导（2026-10-25 主人拍板，每日最多一次）
         StartCoroutine(CoWarmupPages());
         StartCoroutine(CoDefeatComfort());
     }

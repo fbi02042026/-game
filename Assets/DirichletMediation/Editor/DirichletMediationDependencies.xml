@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DirichletMediation Android/iOS Dependencies
+  
+  This file declares Maven dependencies for EDM4U (External Dependency Manager for Unity).
+  Local AAR files are handled separately by DirichletGradlePostProcessor.
+  
+  Note: This file coexists with other SDK dependencies (e.g., TapSDK).
+  EDM4U will merge all *Dependencies.xml files when resolving.
+-->
+<dependencies>
+  
+  <!-- Android dependencies -->
+  <androidPackages>
+    
+    <!-- Unity Android mediation is AndroidX-only. -->
+    <androidPackage spec="androidx.recyclerview:recyclerview:1.2.1">
+      <repositories>
+        <repository>https://maven.google.com</repository>
+      </repositories>
+    </androidPackage>
+    
+    <androidPackage spec="androidx.core:core:1.9.0">
+      <repositories>
+        <repository>https://maven.google.com</repository>
+      </repositories>
+    </androidPackage>
+
+    <androidPackage spec="androidx.fragment:fragment:1.5.5">
+      <repositories>
+        <repository>https://maven.google.com</repository>
+      </repositories>
+    </androidPackage>
+    
+    <androidPackage spec="com.squareup.okhttp3:okhttp:3.12.1">
+      <repositories>
+        <repository>https://repo.maven.apache.org/maven2</repository>
+      </repositories>
+    </androidPackage>
+
+    <androidPackage spec="androidx.constraintlayout:constraintlayout:2.1.4">
+      <repositories>
+        <repository>https://maven.google.com</repository>
+      </repositories>
+    </androidPackage>
+
+  </androidPackages>
+  
+  <!-- iOS dependencies (if any) -->
+  <iosPods>
+    <!-- Add CocoaPods dependencies here if needed -->
+  </iosPods>
+  
+</dependencies>

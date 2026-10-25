@@ -753,7 +753,10 @@ public partial class BattleManager
         if (formalRoundEnd)
         {
             // 【2026-10-22 主人拍板】石像事件：回合末抽奖窗弹出前掷 10%（每关最多 1 次，恢复/诅咒互斥）
-            BattleStatueEventUI.TryShowOnDraft();
+            // 【2026-10-24 主人拍板】石像事件先下线：主人截图反馈「石像跑出来了」——时机不对 + 位置压底部战斗栏。
+            // 只停这一处触发口；TryShowOnDraft / ForceCollapse 与 BattleStatueEventUI 实现保留不删（下线≠删除，
+            // 复用 HealPartyOnWaveCleared 先例）。buff 节点仍由 BattleUI.Awake → EnsureOn 常隐，抽奖时不再出现石像。
+            // BattleStatueEventUI.TryShowOnDraft();
         }
 
         yield return CoMidBattleDraft();

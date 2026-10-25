@@ -50,6 +50,14 @@ public static partial class GameConfig
     /// <summary>【2026-10-23 主人拍板】单格钻石解锁价格（**唯一出处**）：角色页点击锁格弹确认框，
     /// 确认后扣此数钻石解锁该格；钻石不足 toast「钻石不足」、格子保持锁定（fail closed）。</summary>
     public const int BACKPACK_CELL_UNLOCK_DIAMOND = 5;
+    /// <summary>【2026-10-25 主人拍板】每日首次分享奖励钻石数（走局外账，ResourceWallet.Add 唯一出口）。</summary>
+    public const int SHARE_REWARD_DIAMOND = 100;
+    /// <summary>【待主人提供】TapTap 商店详情页链接（好评引导跳转用，唯一出处）。
+    /// 为空 = 好评引导不弹并 LogError 提醒补链接（不静默、不造 URL）。</summary>
+    public const string TAPTAP_STORE_URL = "";
+    /// <summary>【2026-10-25 主人拍板】好评引导总开关（false = 章末通关不再弹，链路整体停用）。
+    /// 恢复时改 true 即可，代码零改动。</summary>
+    public const bool TAPTAP_RATE_ENABLED = false;
     /// <summary>每章10关，最后一关是BOSS。
     /// ⚠️ 2026-10-23 关卡结构重构（批 B1）后，「一局打几关」的口径已改走
     /// <see cref="STAGES_PER_GRAND"/>（每大关 5 小关）；本常量只保留给仍按「章」计数的存量引用
@@ -74,20 +82,15 @@ public static partial class GameConfig
     /// <summary>回复 1 点体力所需秒数</summary>
     public const int STAMINA_REGEN_SECONDS = StaminaSystem.REGEN_SECONDS_PER_POINT;
 
-    // ===== 广告位 → 钻石消耗位（2026-09-19 主人拍板）=====
-    // 2026-09-21 主人要求：**广告相关全部停用**（聚光灯计划参赛包不得出现任何广告）。
-    // 原「广告总开关」ADS_ENABLED_BEFORE_SPOTLIGHT 已注释停用，广告路径（RewardedAdBridge）
-    // 的两处调用点同步注释，见 ResourceAdRewards.TryClaimStamina / TryClaimGold。
-    // 现在顶栏的体力 / 金币补给是**纯钻石消耗位**（每日前 2 次免费），不再有任何「看广告」分支。
-    // 将来真要恢复广告：把下面这段常量与 ResourceAdRewards 里注释掉的广告分支一起解注释即可。
-    //
-    // /// <summary>
-    // /// 广告总开关。**聚光灯功能正式上线前必须保持 false。**
-    // /// false = 所有原本「看广告」获得奖励 / 开启的入口一律走钻石
-    // ///        （ResourceAdRewards 的体力/金币补给）；
-    // /// true  = 恢复「看广告」路径。
-    // /// </summary>
-    // public const bool ADS_ENABLED_BEFORE_SPOTLIGHT = false;
+    // ===== 广告位经济（2026-10-25 14:47 主人拍板：聚光灯已结束，转商业广告版）=====
+    // 旧口径（2026-09-21「聚光灯参赛包不得出现广告」）随聚光灯计划结束作废；
+    // 广告总开关恢复，但【SDK 接入并真机验收前必须保持 false】——false 时广告档折叠，
+    // 金币/体力 = 2 免费 + 50/100 钻（每日 4 次）、复活 = 10 钻（现状），与线上包行为一致。
+    // true = 每日档位切换为广告版（见 ResourceAdRewards.ResolveClaimKind / ReviveQuota），
+    //        所有广告调用走 RewardedAdBridge 单一出口，TapADN 接入见 Docs/《TapADN激励视频接入》_待办任务清单.md。
+    /// <summary>广告总开关。【2026-10-25 19:2x 主人拍板「翻」】true = 广告版阶梯生效（金币/体力每日 2免费+2广告+50/100钻；复活每日 2广告+50钻+100钻后只能返回）。
+    /// 当前媒体/推广位为「测试」态，只出测试广告、无收益；转正式+出计费包走 T6（Docs/《TapADN激励视频接入》_待办任务清单.md）。</summary>
+    public const bool ADS_ENABLED = true;
 
     /// <summary>钻石定价：顶栏体力补给一次（体力 +ResourceAdRewards.StaminaPerAd）。2026-09-20 钻石经济调整：20→15。</summary>
     public const int AD_SLOT_STAMINA_DIAMOND = 15;
@@ -95,9 +98,9 @@ public static partial class GameConfig
     public const int AD_SLOT_GOLD_DIAMOND = 10;
 
     /// <summary>
-    /// 钻石定价：战斗内复活一次。【2026-10-24 主人拍板「复活先接上，用钻石复活」】
-    /// 先按扣钻石上线，后期替换为激励视频：定价族与 ResourceAdRewards 两个广告位同列，
-    /// 换广告时只动 BattleManager.TryReviveHeroByDiamond 的扣费入口（见其注释），本常量转作广告版价值锚点。
+    /// 钻石定价：战斗内复活一次（**仅 ADS_ENABLED=false 期间的现行价**）。
+    /// 【2026-10-25 14:47 主人拍板】广告版阶梯 = 每日前 2 次看广告、第 3 次 50 钻、第 4 次 100 钻，
+    /// 之后死亡只能返回 —— 档位真源在 ReviveQuota，本常量只服务开关未打开的过渡期。
     /// </summary>
     public const int AD_SLOT_REVIVE_DIAMOND = 10;
 

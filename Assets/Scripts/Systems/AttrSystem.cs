@@ -229,6 +229,16 @@ public class AttrSystem
 
             // 智力→魔法强度（+85 智力 → MagicPower = 0.85 → 魔法技能伤害 ×1.85）
             AddAttr(AttrType.MagicPower, intel * 0.01f, false);
+
+            // 【2026-10-25 主人拍板「智力可以改成加成魔攻 物攻有加成 魔攻应该也有」】
+            // 智力成长段 → 魔攻（本方法头注释既有口径「智力→魔法攻击 每点+2」，此前对玩家一直没实现，
+            // 智力只走 MagicPower 乘区 → 法师等级成长不进战力 DPS 段）。
+            // 只折「基底 BASE_INTELLIGENCE 以外的成长段」（等级/装备/天赋加的智力）：
+            // 魔攻基准已在职业表 MagicAttack 里（与 10-10 拍板「职业表已含 ATK 不再叠力量×2」同因，
+            // 全量叠会把基底 5 又算一遍、开局虚高）。折进 MagicAttack → 进 TotalPower DPS 段，
+            // 法师升级后伤害与头顶战力直接涨。非玩家单位不吃这段（怪物魔攻基底不受扰动）。
+            float intelGrowth = Mathf.Max(0f, intel - GameConfig.BASE_INTELLIGENCE);
+            AddAttr(AttrType.MagicAttack, intelGrowth * 2f, false);
         }
 
         // 敏捷→攻速+暴击

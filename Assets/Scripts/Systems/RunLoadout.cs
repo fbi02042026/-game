@@ -58,8 +58,8 @@ public class RunLoadoutData
     public int jobId;
     public int chapter = 1;
     public int stageIndex;
-    public int heroLevel = 1;
-    public int heroExp;
+    // heroLevel/heroExp 已删（2026-10-25 矫正）：等级账本迁存档永久账（SaveData.playerLevel/playerExp），
+    // 10-24 拍板「只要打完就清」后每关都是新局，局内账本会导致等级每关归 1 永远升不了级。
     public string savedUtc = "";
     public List<RunSkillEntry> skills = new List<RunSkillEntry>();
     public List<RunMercEntry> mercs = new List<RunMercEntry>();
@@ -156,8 +156,7 @@ public static class RunLoadout
             // 章节分叉后 maxUnlockedChapter 是「最远可达章」，玩家实际打的不一定是它；
             // 优先用冒险页真正选中的章（PendingBattleChapter）
             chapter = ResolveRunChapter(),
-            stageIndex = 0,
-            heroLevel = 1
+            stageIndex = 0
         };
         // 2026-09-30 主人拍板：**开局不带初始技能** —— 技能全部靠局内构筑拿（进关抽奖 / 升级三选一）。
         // 旧逻辑会把「角色界面选的技能 / 职业默认技能」直接塞进开局构筑，
@@ -345,7 +344,6 @@ public static class RunLoadout
         d.mercs ??= new List<RunMercEntry>();
         d.themeEntries ??= new List<StringIntEntry>();
         if (d.chapter < 1) d.chapter = 1;
-        if (d.heroLevel < 1) d.heroLevel = 1;
         if (d.jobId < 0 || d.jobId >= PlayerJobDefs.All.Length) d.jobId = (int)PlayerJobId.SwordShield;
         for (int i = d.skills.Count - 1; i >= 0; i--)
         {
@@ -632,16 +630,8 @@ public static class RunLoadout
     /// <summary>本局佣兵星级上限。</summary>
     public const int MaxMercStar = 5;
 
-    /// <summary>本局等级与战斗英雄等级对齐（战力显示与「续关」都用它）。</summary>
-    public static void SyncHeroLevel(int level)
-    {
-        if (_data == null) return;
-        _data.heroLevel = Mathf.Max(1, level);
-        if (Hero.Instance != null)
-        {
-            _data.heroExp = Hero.Instance.currentExp;
-        }
-    }
+    // SyncHeroLevel / HeroLevel 已删（2026-10-25 矫正）：等级真源迁存档（LevelSystem.CurrentLevel），
+    // 消费点（抽卡池 DraftPool / 蓝量池 MpProfile / 主界面名牌）已全部改读 LevelSystem.CurrentLevel。
 
     // ============================================================
     // 流派势能（Phase 2）：只累积，不换不退
@@ -705,12 +695,6 @@ public static class RunLoadout
     // ============================================================
     // 本局战力（给玩家看的「数字在长大」）
     // ============================================================
-
-    public static int HeroLevel
-    {
-        get => _data != null ? _data.heroLevel : 1;
-        set { if (_data != null) _data.heroLevel = Mathf.Max(1, value); }
-    }
 
     /// <summary>本局战力：玩家自身属性（输出段 + 血量/防御生存段） + 技能星级/稀有度 + 佣兵等级/星级 + 主题协同。</summary>
     public static int TotalPower()

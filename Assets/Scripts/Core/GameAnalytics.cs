@@ -33,6 +33,15 @@ public static class GameAnalytics
     public const string EvGuideStep = "#guide_step";
     public const string EvAppLaunch = "#app_launch";
 
+    // —— 分享 / 推广（2026-10-25 主人拍板：做分享+好评导流，不做邀请码）——
+    public const string EvShareEntryShow = "#share_entry_show";
+    public const string EvShareClick = "#share_click";
+    public const string EvShareLaunch = "#share_launch";
+    public const string EvShareReward = "#share_reward";
+    public const string EvTapTapRateShow = "#taptap_rate_show";
+    public const string EvTapTapRateClick = "#taptap_rate_click";
+    public const string EvTapTapOpen = "#taptap_open";
+
     // ==================== 通用属性（每条事件自动携带） ====================
 
     static bool _commonRegistered;
@@ -258,6 +267,78 @@ public static class GameAnalytics
         Log(EvGuideStep, new Dictionary<string, object>
         {
             { "#step", step },
+        });
+    }
+
+    // ==================== 分享 / 推广（2026-10-25 主人拍板） ====================
+    // ⚠ 新属性 #scene / #share_type / #reward_type / #from_scene / #target 必须先在
+    //    TapTap 后台「事件属性管理」预登记，否则会被静默丢弃（本类铁律 2）。
+
+    /// <summary>分享入口曝光（scene：victory=胜利结果界面）。</summary>
+    public static void ReportShareEntryShow(string scene)
+    {
+        Log(EvShareEntryShow, new Dictionary<string, object>
+        {
+            { "#scene", scene ?? "unknown" },
+        });
+    }
+
+    /// <summary>点分享按钮（shareType：battle_report）。</summary>
+    public static void ReportShareClick(string shareType, string scene)
+    {
+        Log(EvShareClick, new Dictionary<string, object>
+        {
+            { "#share_type", shareType ?? "unknown" },
+            { "#scene", scene ?? "unknown" },
+        });
+    }
+
+    /// <summary>
+    /// 系统分享面板成功唤起。口径=唤起成功，**不是**「用户真的发出去了」——
+    /// Android Intent 拿不到该回调，主人拍板不加验证（2026-10-25）。
+    /// </summary>
+    public static void ReportShareLaunch(string shareType)
+    {
+        Log(EvShareLaunch, new Dictionary<string, object>
+        {
+            { "#share_type", shareType ?? "unknown" },
+        });
+    }
+
+    /// <summary>每日首次分享发奖（重复分享当天不发奖、不重复上报）。</summary>
+    public static void ReportShareReward(string rewardType, int amount)
+    {
+        Log(EvShareReward, new Dictionary<string, object>
+        {
+            { "#reward_type", rewardType ?? "unknown" },
+            { "#reward_amount", amount },
+        });
+    }
+
+    /// <summary>好评引导弹窗曝光（fromScene：chapter_boss_clear=章末通关回城后）。</summary>
+    public static void ReportTapTapRateShow(string fromScene)
+    {
+        Log(EvTapTapRateShow, new Dictionary<string, object>
+        {
+            { "#from_scene", fromScene ?? "unknown" },
+        });
+    }
+
+    /// <summary>点「去好评」。</summary>
+    public static void ReportTapTapRateClick(string fromScene)
+    {
+        Log(EvTapTapRateClick, new Dictionary<string, object>
+        {
+            { "#from_scene", fromScene ?? "unknown" },
+        });
+    }
+
+    /// <summary>跳转 TapTap（target：store）。Application.OpenURL 无回调，口径=已发起跳转。</summary>
+    public static void ReportTapTapOpen(string target)
+    {
+        Log(EvTapTapOpen, new Dictionary<string, object>
+        {
+            { "#target", target ?? "unknown" },
         });
     }
 

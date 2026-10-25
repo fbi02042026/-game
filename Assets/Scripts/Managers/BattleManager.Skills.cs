@@ -273,7 +273,7 @@ public partial class BattleManager
     public static float PlayerMpPool()
     {
         if (!PlayerHasMp()) return 0f;
-        return MpProfile.Pool(MpArchetype.Player, RunLoadout.HeroLevel, PlayerMpStar())
+        return MpProfile.Pool(MpArchetype.Player, LevelSystem.CurrentLevel, PlayerMpStar())
              + PlayerAttackPower() * GameConfig.MP_POOL_PER_ATTACK
              + PlayerIntelligence() * GameConfig.MP_POOL_PER_INTELLIGENCE;
     }

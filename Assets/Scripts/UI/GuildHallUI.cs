@@ -22,6 +22,15 @@ public class GuildHallUI : MonoBehaviour
     [Tooltip("体力未满时显示回满倒计时，可空（自动在体力Panel下创建）")]
     public Text staminaRegenText;
 
+    [Header("玩家名牌（topleft 下，2026-10-25 主人加的）")]
+    public Text playerNameText;   // 玩家名牌/Name：玩家起的名字
+    public Text playerLevelText;  // 玩家名牌/Level：玩家等级
+    public Image playerAvatarIcon; // 玩家名牌/Icon：当前头像（点击打开头像选择框，确认后这里同步换图）
+    // 【2026-10-25 主人反馈「左上角的头像有点小」】名牌 Icon 本体放大倍率：
+    // 只乘在 Icon 的 localScale 上（预制体作者刻度 0.9 之上 ×1.3），名牌底板/文字一律不动；
+    // 绑定时做一次，幂等；要再调大小只改这一个常量。
+    const float NameplateIconScale = 1.3f;
+
     [Header("左侧")]
     public Button mailButton;
     public Button dailyLoginButton;   // 主界面右列的 DailyLoginButton 节点（预制体引用），点击打开每日登录面板
@@ -92,6 +101,7 @@ public class GuildHallUI : MonoBehaviour
     void Awake()
     {
         Instance = this;
+        EnsureTopBarFromPrefab();
         UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
         // 城镇大厅底图（Background）运行时 envelope 铺满：覆盖更瘦屏（match width）
         // canvas 逻辑高变高后的上下空区。原 UiPrefabRectGuard 会把底图还原为 prefab
@@ -115,6 +125,9 @@ public class GuildHallUI : MonoBehaviour
         }
         StartBlink();
         StartCoroutine(StaminaHudLoop());
+        // 【2026-10-25 主人需求】主界面各布局入场动效（左侧从左/右上从右/底部从下滑入）；
+        // 片头期间自动转 pending，等 SetTownChromeVisible(true) 揭开大厅时才播。
+        TownEntranceMotion.Schedule(this);
     }
 
     void Start()
@@ -144,6 +157,8 @@ public class GuildHallUI : MonoBehaviour
         Instance._introCover.alpha = visible ? 1f : 0f;
         Instance._introCover.interactable = visible;
         Instance._introCover.blocksRaycasts = visible;
+        // 【2026-10-25 主人需求】片头揭开大厅时补播入场动效（Schedule 在片头期间转了 pending）
+        if (visible) TownEntranceMotion.PlayPending();
     }
 
     /// <summary>看板娘 SpeechBubble：打字机 + 多台词 + 闲时隐藏</summary>
@@ -281,7 +296,31 @@ public class GuildHallUI : MonoBehaviour
         RefreshGold();
         RefreshStamina();
         RefreshDiamond();   // 2026-10-22 主人拍板（T14）：钻石余额并入现有 HUD 刷新链（ResourceWallet.Add/TrySpend 会自动调 RefreshAllHudStatic）
+        RefreshNameplate(); // 2026-10-25 主人加的 topleft 玩家名牌：名字/等级并入同一刷新链
     }
+
+    /// <summary>
+    /// 玩家名牌刷新：名字 = StoryProgress.GetPlayerName()（唯一出口，未起名回落默认名），
+    /// 等级 = LevelSystem.CurrentLevel（存档永久账，2026-10-25 矫正后跨关/跨章累计）。
+    /// 只写文本，不动尺寸/位置。
+    /// </summary>
+    void RefreshNameplate()
+    {
+        if (playerNameText != null)
+            playerNameText.text = StoryProgress.GetPlayerName();
+        if (playerLevelText != null)
+            playerLevelText.text = Mathf.Max(1, LevelSystem.CurrentLevel).ToString();
+        // 名牌头像：按存档槽位设图（真源 AvatarDefs；头像选择框确认后走 RefreshAllHud 到这里换图）
+        if (playerAvatarIcon != null)
+        {
+            var avatarSp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());
+            if (avatarSp != null) playerAvatarIcon.sprite = avatarSp;
+            else Debug.LogError("[GuildHall] 名牌头像图取不到：槽位 " + AvatarDefs.CurrentSlot() + "（不兜底）");
+        }
+    }
+
+    /// <summary>名牌头像点击入口：打开头像选择弹窗（2026-10-25 主人需求）。</summary>
+    void OpenAvatarSelect() => AvatarSelectPopup.Open();
 
     /// <summary>顶条钻石余额显示（T14）：只读 ResourceWallet 的 Diamond，不做任何扣费/加号点击逻辑。</summary>
     void RefreshDiamond()
@@ -346,6 +385,30 @@ public class GuildHallUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 【2026-10-25 主人拍板「顶条拆出来变成预制体，我去调位置」】
+    /// 顶条真源 = <c>Resources/Prefabs/Town/TopBar.prefab</c>（体力/金币/钻石三列、标题徽章、
+    /// 邮件/设置按钮、顶条底图都在里面）；GuildHallUI.prefab 已不再内嵌 TopBar —— 主人在
+    /// TopBar.prefab 里调位置，所有共用顶条的界面（大厅/冒险/角色/酒馆…）同步生效。
+    /// Awake 最先按路径实例化挂回大厅根下原位（原内嵌 TopBar 是根下第 3 个子节点，序号保留），
+    /// 之后的按名绑定链路（AutoBindMissingRefs / WireHallClicks→ResolveHallButtonRefs /
+    /// ResourceStrip.RegisterHall / TownSharedChrome）全部照常工作。
+    /// 缺预制体 LogError 不兜底（AGENTS.md §4）。
+    /// </summary>
+    void EnsureTopBarFromPrefab()
+    {
+        if (transform.Find("TopBar") != null) return;   // 幂等：重入不重复建
+        var prefab = Resources.Load<GameObject>("Prefabs/Town/TopBar");
+        if (prefab == null)
+        {
+            Debug.LogError("[GuildHall] 顶条预制体取不到：Resources/Prefabs/Town/TopBar —— 顶条不显示（不兜底）");
+            return;
+        }
+        var go = Instantiate(prefab, transform, false);
+        go.name = "TopBar";
+        go.transform.SetSiblingIndex(2);   // 原内嵌 TopBar 在大厅根下的兄弟序号（渲染顺序保持）
+    }
+
     void AutoBindMissingRefs()
     {
         if (mascotEyes == null)
@@ -361,7 +424,10 @@ public class GuildHallUI : MonoBehaviour
             Transform staminaPanel = FindDeepChild(transform, "体力Panel");
             if (staminaPanel != null)
             {
-                Transform t = FindDeepChild(staminaPanel, "GoldText");
+                // 【2026-10-25 修复「体力一直显示 999」】顶条拆成独立预制体后主人把数字节点
+                // 改名为「体力Text」（TopBar.prefab 真源），还按老内嵌顶条的「GoldText」找
+                // 永远绑不上 → staminaText 恒 null → 预制体默认值 99999 一直挂在屏上。
+                Transform t = FindDeepChild(staminaPanel, "体力Text");
                 if (t != null) staminaText = t.GetComponent<Text>();
                 Transform plus = FindDeepChild(staminaPanel, "PlusButton");
                 if (plus != null) staminaPlusButton = plus.GetComponent<Button>();
@@ -397,6 +463,54 @@ public class GuildHallUI : MonoBehaviour
             }
             if (diamondText == null)
                 Debug.LogError("[GuildHall] 未找到顶条钻石余额节点 钻石Panel/钻石Text（应在主界面预制体顶条），钻石余额将无法显示");
+        }
+
+        // 【2026-10-25 主人加的 topleft 玩家名牌】名字 = StoryProgress.GetPlayerName()，等级 = LevelSystem.CurrentLevel；
+        // 节点缺失 LogError 不兜底（AGENTS.md §4）。
+        if (playerNameText == null || playerLevelText == null)
+        {
+            Transform plate = FindDeepChild(transform, "玩家名牌");
+            if (plate == null)
+            {
+                Debug.LogError("[GuildHall] 未找到玩家名牌节点 玩家名牌（应在主界面预制体 topleft 下），玩家名字/等级不显示");
+            }
+            else
+            {
+                if (playerNameText == null)
+                {
+                    Transform t = FindDeepChild(plate, "Name");
+                    if (t != null) playerNameText = t.GetComponent<Text>();
+                }
+                if (playerLevelText == null)
+                {
+                    Transform t = FindDeepChild(plate, "Level");
+                    if (t != null) playerLevelText = t.GetComponent<Text>();
+                }
+                if (playerNameText == null || playerLevelText == null)
+                    Debug.LogError("[GuildHall] 玩家名牌下缺 Name/Level 文本节点，玩家名字/等级显示不完整");
+            }
+        }
+
+        // 【2026-10-25 主人加的 玩家名牌/Icon】当前头像：sprite 按存档槽位主动设图
+        // （名牌 Icon 的 prefab sprite 引用是悬空旧 hex32，走路径加载，AGENTS.md §2.3）；
+        // 运行时补 Button 接线（预制体只有 Image），点击打开头像选择框。缺节点 LogError 不兜底。
+        if (playerAvatarIcon == null)
+        {
+            Transform plateForIcon = FindDeepChild(transform, "玩家名牌");
+            Transform iconT = plateForIcon != null ? FindDeepChild(plateForIcon, "Icon") : null;
+            if (iconT != null)
+            {
+                playerAvatarIcon = iconT.GetComponent<Image>();
+                // 【2026-10-25 主人反馈「左上角的头像有点小」】Icon 本体放大（Awake 只跑一次，幂等）
+                iconT.localScale *= NameplateIconScale;
+                var openBtn = iconT.GetComponent<Button>();
+                if (openBtn == null) openBtn = iconT.gameObject.AddComponent<Button>();
+                openBtn.transition = Selectable.Transition.None;
+                openBtn.onClick.RemoveAllListeners();
+                openBtn.onClick.AddListener(OpenAvatarSelect);
+            }
+            else
+                Debug.LogError("[GuildHall] 玩家名牌下缺 Icon 节点，头像不显示也无法点开头像选择框");
         }
 
         // 【2026-10-24 主人拍板「提取顶条资源条」】金/钻引用绑完后再提取（迁移保留引用，主界面刷新照常生效）；

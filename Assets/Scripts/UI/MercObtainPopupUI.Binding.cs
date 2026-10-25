@@ -45,6 +45,18 @@ public partial class MercObtainPopupUI : MonoBehaviour
             // 【2026-10-24 主人拍板】底图（挂发光材质球用）+ authored 缩放（呼吸动效的基准，还原也回它）
             _ascendImg = ascendTf.GetComponent<Image>();
             if (ascendTf is RectTransform ascendRt) _ascendBaseScale = ascendRt.localScale;
+
+            // 【2026-10-25 主人需求】「指引」节点 = 主人手工摆进预制体的 Panel/进阶/指引：
+            // 可升星时随进阶钮显示 + 缓慢上下浮动（见 ApplyGuideNode）。缺失只报错不兜底建。
+            var guideTf = ascendTf.Find("指引");
+            if (guideTf == null)
+                Debug.LogError("[MercObtainPopup] 缺少节点 Panel/进阶/指引（进阶指引不显示，不影响其它功能）");
+            else
+            {
+                _guideNode = guideTf.gameObject;
+                _guideRt = guideTf as RectTransform;
+                if (_guideRt != null) _guideBasePos = _guideRt.localPosition;   // authored 原位 = 浮动基准
+            }
         }
 
         // 招募购买模式要改文案的三个节点（2026-10-19 主人拍板：按钮换成 购买/取消、标题改佣兵信息）

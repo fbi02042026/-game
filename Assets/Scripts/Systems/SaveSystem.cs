@@ -179,6 +179,7 @@ public class SaveSystem : Singleton<SaveSystem>
         if (data.lastStaminaUtc <= 0)
             data.lastStaminaUtc = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         ResourceAdRewards.EnsureDay(data);
+        ReviveQuota.EnsureDay(data);        // 复活每日档位跨天清零（2026-10-25 主人拍板）
         EndlessRiftRules.EnsureDay(data);   // 无限裂隙每日次数跨天重置兜底
         StaminaSystem.Tick(save: false);
         MercSkillMigrate.SyncAutoCastPrefsFromSave();

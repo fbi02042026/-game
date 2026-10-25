@@ -1,35 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  自定义主 Manifest（Privacy-First 两段式启动）。
-  用途：把原生隐私弹窗 Activity 作为真正入口，用户同意后才启动 UnityPlayerActivity，
-        从而消除「Unity 引擎在用户同意前读取 AndroidID」的违规（隐私检测条目 164014）。
-  注意：package 必须与 PlayerSettings.applicationIdentifier 一致（com.PixelAdventure.RiftBlade）。
-        Unity 构建时会把本文件与引擎默认 manifest 合并，请勿删除 unityplayer.UnityActivity 这条 meta。
--->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.PixelAdventure.RiftBlade">
+    xmlns:tools="http://schemas.android.com/tools"
+    package="**APPLICATIONID**">
 
-  <application>
-    <!-- 隐私合规启动 Activity：在 Unity 引擎启动前展示隐私政策，同意后才进入游戏。
-         targetSdk=34 要求带 LAUNCHER 的 Activity 显式声明 android:exported="true"。 -->
-    <activity
-        android:name="com.PixelAdventure.RiftBlade.PrivacySplashActivity"
-        android:exported="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar"
-        android:screenOrientation="portrait">
-      <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-      </intent-filter>
-    </activity>
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_CONNECT"
+        tools:targetApi="s" />
 
-    <!-- Unity 主 Activity：降级为普通 Activity，由 PrivacySplashActivity 在同意后显式启动。
-         移除 MAIN/LAUNCHER，保留 unityplayer.UnityActivity meta（引擎靠它识别主 Activity）。 -->
-    <activity
-        android:name="com.unity3d.player.UnityPlayerActivity"
-        android:exported="false"
-        android:screenOrientation="portrait">
-      <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
-    </activity>
-  </application>
+    <application
+        android:allowBackup="false"
+        android:hardwareAccelerated="true"
+        tools:replace="android:allowBackup">
+        <activity
+            android:name="com.unity3d.player.UnityPlayerActivity"
+            android:exported="true"
+            android:hardwareAccelerated="true"
+            android:theme="@style/UnityThemeSelector">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <meta-data
+            android:name="unityplayer.UnityActivity"
+            android:value="true" />
+    </application>
 </manifest>

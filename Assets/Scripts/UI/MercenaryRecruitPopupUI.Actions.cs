@@ -47,8 +47,8 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     /// <summary>
     /// 卡上购买钮点击（2026-10-19 主人拍板）：先按货币口径查够不够 ——
     /// 普通=金币（不够弹「金币不足」）；稀有=普通卷、传奇=稀有卷（不够弹「道具不足」）；
-    /// 够才弹「佣兵信息」确认弹窗（是否购买）。购买 = 永久解锁进「已拥有」；
-    /// 已拥有的候选不可重复购买（点击只提示）。
+    /// 够才弹「佣兵信息」确认弹窗（是否购买）。购买 = 首次获得永久解锁进「已拥有」；
+    /// 【2026-10-25 主人拍板】已拥有的候选也可购买 = 重复获得转本命碎片（获取碎片途径）。
     /// </summary>
     void OnBuyButtonClicked(int index)
     {
@@ -58,11 +58,6 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             return;
         }
         var offer = _offers[index];
-        if (MercHireSession.IsMercOwned(offer))
-        {
-            UIManager.Instance?.ShowToast("该佣兵已拥有");
-            return;
-        }
         var rarity = MercHireSession.OfferRarity(offer);
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
         if (isCommon)
@@ -135,8 +130,9 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
 
     /// <summary>
     /// 购买一名招募候选（2026-10-19 起由「佣兵信息」弹窗的购买钮触发，返回是否成交）。
-    /// 【2026-10-19 主人拍板】购买 = 永久解锁进「已拥有」——与雇佣队列、战斗内抽奖队列、
+    /// 【2026-10-19 主人拍板】首次购买 = 永久解锁进「已拥有」——与雇佣队列、战斗内抽奖队列、
     /// 临时出战名单都无关，不再走 MercHireSession.AddHired。
+    /// 【2026-10-25 主人拍板】已拥有的候选也可购买 = 重复获得转本命碎片（见 TryBuyDuplicateOffer）。
     /// 支付口径：普通=金币；稀有=普通卷；传奇=稀有卷（高级卷）。
     /// 失败时 Toast 提示并返回 false（弹窗不关，玩家可改点取消）。
     /// </summary>
@@ -147,11 +143,9 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             UIManager.Instance?.ShowToast("无效的佣兵");
             return false;
         }
+        // 【2026-10-25 主人拍板】已拥有佣兵可重复购买：不再解锁，扣费后转本命碎片
         if (MercHireSession.IsMercOwned(offer))
-        {
-            UIManager.Instance?.ShowToast("该佣兵已拥有");
-            return false;
-        }
+            return TryBuyDuplicateOffer(offer, index);
 
         var rarity = MercHireSession.OfferRarity(offer);
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
@@ -199,6 +193,77 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         // 【2026-10-19 主人拍板】购买报喜文案 = 恭喜获得XXX实力大增；佣兵台词仍走该卡上方气泡框。
         // force:true —— 购买结果不允许被闲聊气泡压制（主人报「购买后没有提示获得信息」的根因）
         UIManager.Instance?.ShowToast($"恭喜获得{name}实力大增", force: true);
+        ShowMercBubble(index, MercLineTable.Pick(OfferBanterKey(offer), MercLineTable.Scene.HireSuccess));
+        RefreshAll();
+        ScheduleNextIdleBanter();
+        return true;
+    }
+
+    /// <summary>
+    /// 【2026-10-25 主人拍板】重复购买已拥有佣兵 = 扣费后转本命碎片（获取碎片途径）。
+    /// 口径与名册解锁 TavernUnlockUI.TryUnlock 的重复分支同源：
+    /// ① 满星（OutStarOf ≥ MaxOutStar=3）拦截不扣费；② 支付同首次招募（普通=金币、稀有=普通卷、传奇=稀有卷）；
+    /// ③ 转化走统一发碎片入口 MercGrowInventory.ConvertDuplicateMerc（数量 10/5/1，背包优先→溢出邮件，
+    ///    其内部已 Save + force Toast）；④ 不解锁、不弹「获得佣兵」演出。
+    /// </summary>
+    bool TryBuyDuplicateOffer(MercenaryData offer, int index)
+    {
+        // 先解析花名册 Def（碎片数量/名字都要用），解析不出按 fail-closed 报错不扣费
+        string hid = offer.hireId;
+        if (string.IsNullOrEmpty(hid) && MercRosterDefs.TryGetByAssetId(offer.mercId, out var def0))
+            hid = def0.HireId;
+        if (string.IsNullOrEmpty(hid) || !MercRosterDefs.TryGetByHireId(hid, out var def))
+        {
+            Debug.LogError("[MercRecruit] 重复购买转碎片失败：hireId 解析不出（mercId=" + offer.mercId + "），未扣费");
+            UIManager.Instance?.ShowToast("购买失败");
+            return false;
+        }
+
+        // 【2026-10-22 主人拍板 T10】满星（3星）后重复获得不再给碎片 —— 直接拦下，不扣费
+        if (MercStarSystem.OutStarOf(hid) >= MercStarDefs.MaxOutStar)
+        {
+            UIManager.Instance?.ShowToast($"{def.Name} 已满星，无需再招募");
+            return false;
+        }
+
+        // 扣费（与首次招募同口径）
+        var rarity = MercHireSession.OfferRarity(offer);
+        bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
+        if (isCommon)
+        {
+            int gold = MercHireSession.GoldCost(offer);
+            if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, gold, save: false, notify: true))
+            {
+                UIManager.Instance?.ShowToast("金币不足");
+                return false;
+            }
+            // 金币消费累计喂食点之一（S005/S010），与首次购买口径一致
+            AdventureLogAchievements.OnShopGoldSpent(gold);
+        }
+        else if (!MercHireSession.TrySpendScroll(rarity))
+        {
+            UIManager.Instance?.ShowToast("道具不足");
+            return false;
+        }
+
+        // 转本命碎片（统一发碎片入口：入背包优先、放不下转邮件；内部已落盘并 force Toast「获得 XX 的本命碎片 ×N」）
+        var frag = MercGrowInventory.ConvertDuplicateMerc(def);
+        if (frag.bagCount <= 0 && frag.mailCount <= 0)
+        {
+            Debug.LogError("[MercRecruit] 重复购买转碎片失败：ConvertDuplicateMerc 零发放（hireId=" + hid + "，钱已扣，需主人确认是否补发）");
+            UIManager.Instance?.ShowToast("购买失败");
+            return false;
+        }
+        Debug.Log($"[MercRecruit] 重复购买 {hid} {def.Name} → 本命碎片 入包{frag.bagCount}/邮件{frag.mailCount}");
+
+        // 【2026-10-25 主人拍板】重复购买要明确提示「该佣兵已拥有，已转换成碎片+X进到背包里」——
+        // 文案口径对齐名册解锁 TavernUnlockUI.TryUnlock 的 2026-10-22 拍板（走邮件补「已放入邮箱」）。
+        // force:true 替换 GrantFragments 内部的通用碎片 toast（GlobalToastUI 单例后弹覆盖前弹）。
+        int fragTotal = frag.bagCount + frag.mailCount;
+        UIManager.Instance?.ShowToast(frag.mailCount > 0
+            ? $"该佣兵已拥有，已转换成碎片+{fragTotal}进到背包里，放不下的已放入邮箱"
+            : $"该佣兵已拥有，已转换成碎片+{fragTotal}进到背包里", force: true);
+
         ShowMercBubble(index, MercLineTable.Pick(OfferBanterKey(offer), MercLineTable.Scene.HireSuccess));
         RefreshAll();
         ScheduleNextIdleBanter();

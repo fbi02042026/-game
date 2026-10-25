@@ -78,10 +78,12 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     const float ListViewportW = 424f;
 
     // ===== 竖屏整体放大（2026-10-24 主人拍板；预制体设计几何实测值，勿改） =====
-    // Phase3Panel 500×932.6 @(103,0)；renwu 496×1024 @(-182,0)（设计稿 720×1280 坐标）
-    const float PanelDesignW = 500f;
+    // Phase3Panel 464×932.6 @(121,0)；renwu 496×1024 @(-182,0)（设计稿 720×1280 坐标）。
+    // 2026-10-24 晚主人拍板：面板整体缩窄 500→464（只比商品行区宽一点，多露出左侧装饰人物），
+    // 右缘保持设计 353 不动（x=353-464/2=121），hengtiao/Title/CloseX/6 行兑换钮随边框同步内收。
+    const float PanelDesignW = 464f;
     const float PanelDesignH = 932.6f;
-    const float PanelDesignX = 103f;
+    const float PanelDesignX = 121f;
     const float RenwuDesignX = -182f;
     const float FitEdgeMargin = 8f;   // 放大后面板距屏幕边缘最小间距（不触屏；标准屏保持设计原距 7px 不动）
     const float MaxFitScale = 1.25f;  // 缩放上限 = 逻辑高上限 1600 ÷ 设计高 1280（竖屏适配口径）

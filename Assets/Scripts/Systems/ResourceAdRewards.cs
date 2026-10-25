@@ -2,36 +2,88 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// 顶栏金币/体力加号：原为激励视频广告入口，现改为**纯钻石消耗位**。
-/// 2026-09-19 主人拍板：聚光灯上线前不接任何广告，所有「看广告」位改成钻石消耗位。
-/// 2026-09-21 主人要求：广告相关**全部停用**（聚光灯参赛包不得出现广告），
-/// 广告分支（RewardedAdBridge）与 GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT 一起注释掉。
-/// 现在这里只有一条路径：每日前 N 次免费，超出扣钻石。恢复广告时把注释解开即可。
+/// 顶栏金币/体力加号：每日补给位。
+/// 【2026-10-25 14:47 主人拍板：商业广告版阶梯】ADS_ENABLED=true 时每日 6 档 =
+/// 前 2 次免费 → 第 3、4 次看广告（RewardedAdBridge，placement gold_plus / stamina_plus）
+/// → 第 5 次 50 钻、第 6 次 100 钻；之后封顶。
+/// 【过渡期】GameConfig.ADS_ENABLED=false（TapADN SDK 真机验收前）广告档折叠，
+/// 维持 2026-10-25 13:5x 口径 = 前 2 次免费 + 50/100 钻、每日 4 次封顶，与线上包行为一致。
+/// 聚光灯（2026-09-21 广告停用铁律）已随计划结束作废（2026-10-25 主人拍板），广告路径恢复。
 /// </summary>
 public static class ResourceAdRewards
 {
     /// <summary>体力补给一次的数量（2026-10-17 主人拍板：30→20）。</summary>
     public const int StaminaPerAd = 20;
-    public const int StaminaAdsPerDay = 5;
-    /// <summary>每日免费体力补给次数（2026-09-20 钻石经济调整：前 N 次不扣钻，日总上限 StaminaAdsPerDay 不变）。</summary>
+    /// <summary>每日免费体力补给次数。</summary>
     public const int StaminaFreePerDay = 2;
     /// <summary>金币补给一次的数量（2026-10-17 主人拍板：40→60）。</summary>
     public const int GoldPerAd = 60;
-    public const int GoldAdsPerDay = 10;
-    /// <summary>每日免费金币补给次数（2026-09-20 钻石经济调整：前 N 次不扣钻，日总上限 GoldAdsPerDay 不变）。</summary>
+    /// <summary>每日免费金币补给次数。</summary>
     public const int GoldFreePerDay = 2;
 
-    /// <summary>体力补给一次的钻石定价。</summary>
-    public static int StaminaDiamondPrice => GameConfig.AD_SLOT_STAMINA_DIAMOND;
-    /// <summary>金币补给一次的钻石定价。</summary>
-    public static int GoldDiamondPrice => GameConfig.AD_SLOT_GOLD_DIAMOND;
+    /// <summary>广告版每日广告档次数（金币/体力同规则，2026-10-25 主人拍板）。</summary>
+    public const int AdTiersPerDay = 2;
+    /// <summary>广告版第 5 次补给的钻石价（原第 3 次价沿用，2026-10-25 主人拍板「一次50 一个100」）。</summary>
+    public const int Tier3DiamondPrice = 50;
+    /// <summary>广告版第 6 次及以后补给的钻石价（原第 4 次价沿用）。</summary>
+    public const int Tier4DiamondPrice = 100;
+
+    /// <summary>补给档位（唯一出口 ResolveClaimKind 返回）。</summary>
+    public enum ClaimKind { Free, Ad, Diamond, Capped }
+
+    /// <summary>
+    /// 按当日已领次数解析下一档（唯一出口，金币/体力共用）。
+    /// ADS_ENABLED=true：2 免费 → 2 广告 → 50 钻 → 100 钻 → 封顶（每日 6 次）；
+    /// ADS_ENABLED=false：2 免费 → 50 钻 → 100 钻 → 封顶（每日 4 次，过渡期口径）。
+    /// </summary>
+    public static ClaimKind ResolveClaimKind(int claimedToday, int freePerDay, out int diamondPrice)
+    {
+        diamondPrice = 0;
+        if (GameConfig.ADS_ENABLED)
+        {
+            switch (claimedToday)
+            {
+                case 0:
+                case 1:
+                    return ClaimKind.Free;
+                case 2:
+                case 3:
+                    return ClaimKind.Ad;
+                case 4:
+                    diamondPrice = Tier3DiamondPrice;
+                    return ClaimKind.Diamond;
+                case 5:
+                    diamondPrice = Tier4DiamondPrice;
+                    return ClaimKind.Diamond;
+                default:
+                    return ClaimKind.Capped;
+            }
+        }
+        // 过渡期（广告未接入）：现状 4 档
+        if (claimedToday < freePerDay)
+            return ClaimKind.Free;
+        if (claimedToday == freePerDay)
+        {
+            diamondPrice = Tier3DiamondPrice;
+            return ClaimKind.Diamond;
+        }
+        if (claimedToday == freePerDay + 1)
+        {
+            diamondPrice = Tier4DiamondPrice;
+            return ClaimKind.Diamond;
+        }
+        return ClaimKind.Capped;
+    }
+
+    /// <summary>每日封顶次数（toast 文案用，随总开关切口径）。</summary>
+    public static int DailyClaimCap(int freePerDay)
+        => GameConfig.ADS_ENABLED ? freePerDay + AdTiersPerDay * 2 : freePerDay + 2;
 
     static string TodayKey() => DateTime.UtcNow.ToString("yyyyMMdd");
 
     /// <summary>
-    /// 跨天清零。<c>adStaminaClaimCount</c> / <c>adGoldClaimCount</c> 原本统计「当日看广告次数」，
-    /// 在 GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT=false 期间改作「当日钻石开启次数」；
-    /// 字段沿用不改名，避免旧存档失效。
+    /// 跨天清零。<c>adStaminaClaimCount</c> / <c>adGoldClaimCount</c> 统计「当日补给已领次数」
+    /// （免费/广告/钻石三档共用计数，字段名沿用不改，避免旧存档失效）。
     /// </summary>
     public static void EnsureDay(SaveData data)
     {
@@ -64,77 +116,60 @@ public static class ResourceAdRewards
             return;
         }
         EnsureDay(data);
-        if (data.adStaminaClaimCount >= StaminaAdsPerDay)
-        {
-            UIManager.Instance?.ShowToast($"今日体力补给已达上限（{StaminaAdsPerDay}次）");
-            return;
-        }
         if (StaminaSystem.IsFull)
         {
             UIManager.Instance?.ShowToast("体力已满");
             return;
         }
-
-        // 2026-09-21：广告路径整体停用（聚光灯参赛包不得含广告），下面不再有「看广告」分支。
-        // 需要恢复时：解注释下面 5 行 + GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT + 文件末尾的 ClaimStaminaByAd。
-        // if (GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT)
-        // {
-        //     ClaimStaminaByAd(data);
-        //     return;
-        // }
-
-        // 【2026-10-17 主人拍板】钻石购买先注释掉，只保留每日免费 StaminaFreePerDay 次（=2）。
-        // 恢复钻石购买时：解开下面被注释的扣钻行，删掉免费用尽的提示分支即可。
-        // 2026-09-20 钻石经济调整：每日前 StaminaFreePerDay 次免费，超出才扣钻（日总上限 StaminaAdsPerDay 不变）
-        bool freeStamina = data.adStaminaClaimCount < StaminaFreePerDay;
-        //if (!freeStamina && !TryPayDiamond(StaminaDiamondPrice, "体力补给")) return;
-        if (!freeStamina)
+        int cap = DailyClaimCap(StaminaFreePerDay);
+        var kind = ResolveClaimKind(data.adStaminaClaimCount, StaminaFreePerDay, out int price);
+        switch (kind)
         {
-            UIManager.Instance?.ShowToast($"今日免费体力补给已用完（{StaminaFreePerDay}/{StaminaFreePerDay}），明天再来");
-            return;
-        }
+            case ClaimKind.Capped:
+                UIManager.Instance?.ShowToast($"今日体力补给已达上限（{cap}次）");
+                return;
 
-        data.adStaminaClaimCount++;
+            case ClaimKind.Ad:
+                // 广告档（2026-10-25 主人拍板）：看广告领体力，走 RewardedAdBridge 单一出口；
+                // 异步回调 —— 窗口期可能跨天/达上限，回调内重新 EnsureDay + 上限校验，绝不超发。
+                RewardedAdBridge.ShowRewarded("stamina_plus", ok =>
+                {
+                    if (!ok)
+                    {
+                        UIManager.Instance?.ShowToast("激励未完成，体力未发放");
+                        return;
+                    }
+                    EnsureDay(data);
+                    if (data.adStaminaClaimCount >= DailyClaimCap(StaminaFreePerDay)) return;
+                    data.adStaminaClaimCount++;
+                    GrantStamina(data, $"体力 +{StaminaPerAd}（激励 · 今日 {data.adStaminaClaimCount}/{cap}）");
+                });
+                return;
+
+            case ClaimKind.Free:
+                data.adStaminaClaimCount++;
+                GrantStamina(data, $"今日免费体力补给 {data.adStaminaClaimCount}/{StaminaFreePerDay}（体力 +{{added}}）");
+                break;
+
+            case ClaimKind.Diamond:
+                if (!TryPayDiamond(price, "体力补给")) return;
+                data.adStaminaClaimCount++;
+                GrantStamina(data, $"钻石开启：体力 +{{added}}（今日 {data.adStaminaClaimCount}/{cap}）");
+                break;
+        }
+        Analytics.AdSlotClick("stamina", true); // 埋点：体力补给位点击（成功发奖）
+    }
+
+    /// <summary>体力入账唯一出口（added>0 弹飘字；文案里 {added} 占位替换实际数量）。</summary>
+    static void GrantStamina(SaveData data, string toastTemplate)
+    {
         var r = ResourceWallet.Add(ResourceWallet.ResourceType.Stamina, StaminaPerAd, save: true, notify: false);
         if (r.added > 0)
             GuildHallUI.FloatStaminaGain((int)r.added);   // 体力加号上方弹「体力+XX」飘字（2026-10-20 主人要求）
         UIManager.Instance?.ShowToast(r.added > 0
-            ? (freeStamina
-                ? $"今日免费体力补给 {data.adStaminaClaimCount}/{StaminaFreePerDay}（体力 +{r.added}）"
-                : $"钻石开启：体力 +{r.added}（今日 {data.adStaminaClaimCount}/{StaminaAdsPerDay}）")
+            ? toastTemplate.Replace("{added}", r.added.ToString())
             : "体力已满，溢出已进邮件");
-        Analytics.AdSlotClick("stamina", true); // 埋点：体力补给位点击（成功发奖）
     }
-
-    /* ===== 2026-09-21 广告路径整体停用（聚光灯参赛包不得含广告）=====
-       恢复步骤：解注释本段 + GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT + TryClaimStamina 里的广告分支。
-       注意 RewardedAdBridge.cs 文件本身仍保留（未删），只是不再被任何业务代码调用。
-
-    /// <summary>广告路径（保留备用）：仅在 GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT=true 时调用。</summary>
-    static void ClaimStaminaByAd(SaveData data)
-    {
-        if (SpotlightBuild.Enabled)
-        {
-            UIManager.Instance?.ShowToast(SpotlightBuild.AdDisabledToast);
-            return;
-        }
-        RewardedAdBridge.ShowRewarded("stamina_plus", ok =>
-        {
-            if (!ok)
-            {
-                UIManager.Instance?.ShowToast("激励未完成");
-                return;
-            }
-            EnsureDay(data);
-            if (data.adStaminaClaimCount >= StaminaAdsPerDay) return;
-            data.adStaminaClaimCount++;
-            var r = ResourceWallet.Add(ResourceWallet.ResourceType.Stamina, StaminaPerAd, save: true, notify: false);
-            UIManager.Instance?.ShowToast(r.added > 0
-                ? $"体力 +{r.added}（激励 · 今日 {data.adStaminaClaimCount}/{StaminaAdsPerDay}）"
-                : "体力已满，溢出已进邮件");
-        });
-    }
-    ===== 广告路径停用结束 ===== */
 
     public static void TryClaimGold()
     {
@@ -145,69 +180,49 @@ public static class ResourceAdRewards
             return;
         }
         EnsureDay(data);
-        if (data.adGoldClaimCount >= GoldAdsPerDay)
+        int cap = DailyClaimCap(GoldFreePerDay);
+        var kind = ResolveClaimKind(data.adGoldClaimCount, GoldFreePerDay, out int price);
+        switch (kind)
         {
-            UIManager.Instance?.ShowToast($"今日金币补给已达上限（{GoldAdsPerDay}次）");
-            return;
+            case ClaimKind.Capped:
+                UIManager.Instance?.ShowToast($"今日金币补给已达上限（{cap}次）");
+                return;
+
+            case ClaimKind.Ad:
+                RewardedAdBridge.ShowRewarded("gold_plus", ok =>
+                {
+                    if (!ok)
+                    {
+                        UIManager.Instance?.ShowToast("激励未完成，金币未发放");
+                        return;
+                    }
+                    EnsureDay(data);
+                    if (data.adGoldClaimCount >= DailyClaimCap(GoldFreePerDay)) return;
+                    data.adGoldClaimCount++;
+                    GrantGold(data, $"金币 +{GoldPerAd}（激励 · 今日 {data.adGoldClaimCount}/{cap}）");
+                });
+                return;
+
+            case ClaimKind.Free:
+                data.adGoldClaimCount++;
+                GrantGold(data, $"今日免费金币补给 {data.adGoldClaimCount}/{GoldFreePerDay}（金币 +{{added}}）");
+                break;
+
+            case ClaimKind.Diamond:
+                if (!TryPayDiamond(price, "金币补给")) return;
+                data.adGoldClaimCount++;
+                GrantGold(data, $"钻石开启：金币 +{{added}}（今日 {data.adGoldClaimCount}/{cap}）");
+                break;
         }
-
-        // 2026-09-21：广告路径整体停用（聚光灯参赛包不得含广告），下面不再有「看广告」分支。
-        // 需要恢复时：解注释下面 5 行 + GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT + 文件末尾的 ClaimGoldByAd。
-        // if (GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT)
-        // {
-        //     ClaimGoldByAd(data);
-        //     return;
-        // }
-
-        // 【2026-10-17 主人拍板】钻石购买先注释掉，只保留每日免费 GoldFreePerDay 次（=2）。
-        // 恢复钻石购买时：解开下面被注释的扣钻行，删掉免费用尽的提示分支即可。
-        // 2026-09-20 钻石经济调整：每日前 GoldFreePerDay 次免费，超出才扣钻（日总上限 GoldAdsPerDay 不变）
-        bool freeGold = data.adGoldClaimCount < GoldFreePerDay;
-        //if (!freeGold && !TryPayDiamond(GoldDiamondPrice, "金币补给")) return;
-        if (!freeGold)
-        {
-            UIManager.Instance?.ShowToast($"今日免费金币补给已用完（{GoldFreePerDay}/{GoldFreePerDay}），明天再来");
-            return;
-        }
-
-        data.adGoldClaimCount++;
-        var r = ResourceWallet.Add(ResourceWallet.ResourceType.Gold, GoldPerAd, save: true, notify: false);
-        UIManager.Instance?.ShowToast(r.added > 0
-            ? (freeGold
-                ? $"今日免费金币补给 {data.adGoldClaimCount}/{GoldFreePerDay}（金币 +{r.added}）"
-                : $"钻石开启：金币 +{r.added}（今日 {data.adGoldClaimCount}/{GoldAdsPerDay}）")
-            : "金币已达上限，溢出已进邮件");
         Analytics.AdSlotClick("gold", true); // 埋点：金币补给位点击（成功发奖）
     }
 
-    /* ===== 2026-09-21 广告路径整体停用 =====
-       恢复步骤：解注释本段 + GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT + TryClaimGold 里的广告分支。
-
-    /// <summary>广告路径（保留备用）：仅在 GameConfig.ADS_ENABLED_BEFORE_SPOTLIGHT=true 时调用。</summary>
-    static void ClaimGoldByAd(SaveData data)
+    /// <summary>金币入账唯一出口（added>0 弹 toast；文案里 {added} 占位替换实际数量）。</summary>
+    static void GrantGold(SaveData data, string toastTemplate)
     {
-        if (SpotlightBuild.Enabled)
-        {
-            UIManager.Instance?.ShowToast(SpotlightBuild.AdDisabledToast);
-            return;
-        }
-        RewardedAdBridge.ShowRewarded("gold_plus", ok =>
-        {
-            if (!ok)
-            {
-                UIManager.Instance?.ShowToast("激励未完成");
-                return;
-            }
-            EnsureDay(data);
-            if (data.adGoldClaimCount >= GoldAdsPerDay) return;
-            data.adGoldClaimCount++;
-            var r = ResourceWallet.Add(ResourceWallet.ResourceType.Gold, GoldPerAd, save: true, notify: false);
-            UIManager.Instance?.ShowToast(r.added > 0
-                ? $"金币 +{r.added}（激励 · 今日 {data.adGoldClaimCount}/{GoldAdsPerDay}）"
-                : "金币已达上限，溢出已进邮件");
-        });
+        var r = ResourceWallet.Add(ResourceWallet.ResourceType.Gold, GoldPerAd, save: true, notify: false);
+        UIManager.Instance?.ShowToast(r.added > 0
+            ? toastTemplate.Replace("{added}", r.added.ToString())
+            : "金币已达上限，溢出已进邮件");
     }
-    ===== 广告路径停用结束 ===== */
-
 }
-

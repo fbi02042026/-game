@@ -86,12 +86,13 @@ public class RunDraftDirector : MonoBehaviour
             SlotMachineSystem.GrantRunStarterGold(tutorial);
         }
 
-        if (resumed) RestoreHeroProgress();
+        // 【2026-10-25 主人拍板】局内等级复活：每次进战斗都从存档永久账本回填等级/经验
+        // （新档 playerLevel=1、引导局自然 =1，均无操作）。
+        RestoreHeroProgress();
         // 【2026-10-24 主人拍板「只要打完就清」】resumed 现在只剩一种来源：中断局弹窗点了「继续」。
         // 局内金币池从中断快照接回（确认时 ConfirmResumeInterruptedRun 写进 runGold），
         // 启动金不重发（防杀进程反复刷启动金），靠这里把池子接回来；开新局走上面 !resumed 分支照发。
         if (resumed) RestoreRunGoldPool();
-        SyncHeroLevel();
 
         RebuildPlayerSkills();
         RestoreRunMercs();
@@ -119,12 +120,20 @@ public class RunDraftDirector : MonoBehaviour
     }
 
     /// <summary>
-    /// 续关等级恢复 —— 等级系统已停用（属性成长只走城镇天赋），保留空实现供续关流程调用。
+    /// 进战斗回填局内等级（2026-10-25 主人拍板「升级提示 + 每职业倾向加成」复活局内等级；
+    /// 2026-10-25 矫正：真源 = 存档永久账本 SaveData.playerLevel/playerExp，跨关/跨章累计）：
+    /// Hero.InitNewRun 会把 level 归 1，这里从 LevelSystem（存档真源）回填 level/exp，
+    /// 并把「倾向属性 × (level-1)」重放到 attr（InitNewRun 已 ResetToBase，不重放会丢成长）。
+    /// 引导局新档自然 =1 → no-op。
     /// </summary>
     void RestoreHeroProgress()
     {
         var hero = Hero.Instance;
-        if (hero != null) hero.pendingLevelUps = 0;
+        if (hero == null) return;
+        hero.pendingLevelUps = 0;
+        if (!RunLoadout.IsActive || RunLoadout.Data == null) return;
+        if (BattleLootMode.Active) return;
+        LevelSystem.RestoreHeroLevel(hero);
     }
 
     /// <summary>
@@ -136,12 +145,6 @@ public class RunDraftDirector : MonoBehaviour
     {
         if (RunLoadout.Data == null) return;
         BattleManager.Instance?.RestoreRunGoldPool(RunLoadout.Data.runGold);
-    }
-
-    void SyncHeroLevel()
-    {
-        var hero = Hero.Instance;
-        if (hero != null) RunLoadout.SyncHeroLevel(hero.level);
     }
 
     /// <summary>每帧检查升级队列（由 BattleManager.Update 调用）。</summary>
@@ -166,15 +169,13 @@ public class RunDraftDirector : MonoBehaviour
         var hero = Hero.Instance;
         if (hero == null || hero.isDead) return;
 
-        SyncHeroLevel();
-        // 等级系统已停用：不再有升级抽卡，队列直接清零（属性成长只走城镇天赋）
+        // 等级系统已停用：不再有升级抽卡，队列直接清零（属性成长只走城镇天赋 + 存档等级回填）
         if (hero.pendingLevelUps > 0) hero.pendingLevelUps = 0;
         return;
     }
 
     /// <summary>
-    /// 引导局：清掉自然升级队列。等级与属性在 <c>LevelSystem.OnLevelUp</c> 里已经加过了，
-    /// 这里丢的只是"要不要弹抽卡"的计数，不会让玩家少拿属性。
+    /// 引导局：清掉自然升级队列。这里丢的只是"要不要弹抽卡"的计数，不会让玩家少拿属性。
     /// </summary>
     static void ClearTutorialLevelUpQueue()
     {
@@ -199,7 +200,6 @@ public class RunDraftDirector : MonoBehaviour
         if (bm != null && bm.currentStage != null)
             RunLoadout.Data.stageIndex = bm.currentStage.stageIndex;
 
-        SyncHeroLevel();
         RunLoadout.Save();
         RestoreRunMercs();
         RefreshSkillPower();

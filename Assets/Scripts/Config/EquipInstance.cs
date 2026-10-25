@@ -141,6 +141,10 @@ public class EquipInstance
     static void ApplyTableDrivenWeaponAttack(EquipInstance inst, EquipTemplate template, float starMultiplier, float rarityMul)
     {
         if (inst?.attrBonus == null || template == null) return;
+        // 【2026-10-25 主人拍板「把副手的随机攻击属性去掉」】副手（抽奖池里只有盾，2026-10-18 拍板）
+        // 不再掷攻击条目：盾牌只保留模板自带属性（防御）与副手词条池（防御/血量/闪避/吸血，本就无攻击）。
+        // 运行时封顶 EquipStatRollup.CapOffHandAttack 保留 —— 兼容旧存档里已生成的副手攻击词条。
+        if (inst.slotType == EquipSlotType.OffHand) return;
         // 仅训练剑用普通档 70%；其它按稀有度掷 equip_attr_ranges
         bool isStarter = !string.IsNullOrEmpty(template.templateId)
             && template.templateId.IndexOf("training", System.StringComparison.OrdinalIgnoreCase) >= 0;
@@ -153,10 +157,8 @@ public class EquipInstance
             ? RiftEquipTables.CommonMid("ATK", 0.7f)
             : RiftEquipTables.RollAttrFlat(PlayerJobBaseStats.CurrentAttackAttr() == AttrType.MagicAttack ? "MAGIC_ATK" : "ATK", inst.rarity, 1f);
         if (tableAtk <= 0.01f) return;
-        if (inst.slotType == EquipSlotType.OffHand)
-            tableAtk *= EquipStatRollup.OffHandAttackCapRatio;
         float finalAtk = tableAtk * starMultiplier * rarityMul;
-        // [BALANCE-TEMP] 打印每件主手/副手实际贡献的平攻，用于「基础攻击 vs 武器攻击」归因
+        // [BALANCE-TEMP] 打印每件主手实际贡献的平攻（2026-10-25 起副手不掷攻击、不走此日志）
         Debug.Log($"[BALANCE] equip={template?.templateId} slot={inst.slotType} rarity={inst.rarity} " +
                   $"isStarter={isStarter} tableAtk={tableAtk:F2} star={starMultiplier:F2} " +
                   $"rarityMul={rarityMul:F2} finalAtk={finalAtk:F2}");

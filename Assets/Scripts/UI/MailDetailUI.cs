@@ -532,7 +532,10 @@ public class MailDetailUI : MonoBehaviour
         // 改为取预制体 RewardText 的 y（附件区以主人预制体摆位为准），绑定缺失才退回 -330。
         int cellY = _rewardText != null ? Mathf.RoundToInt(_rewardText.rectTransform.anchoredPosition.y) : -330;
 
-        int startX = -((cellW * items.Count) - 8) / 2;   // 居中横排
+        // 【2026-10-24 修·主人报「附件图标不居中」】旧式 -((cellW*count)-8)/2 多减 8、又按 count 而非 count-1 算，
+        // 4 格整排左偏 44px、单格也偏 44px。改为格心对称分布：startX = -cellW*(n-1)/2。
+        //（主人拍板 2026-10-24：只居中图标排；「附件：」表头留在预制体原位不动。）
+        int startX = -cellW * (items.Count - 1) / 2;   // 居中横排：格心间距 cellW，左右对称
         for (int i = 0; i < items.Count; i++)
         {
             var item = items[i];

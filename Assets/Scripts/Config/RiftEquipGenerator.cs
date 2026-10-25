@@ -210,21 +210,25 @@ public static class RiftEquipGenerator
     /// 【2026-10-12 稀有度梯度】主人原话「1，20% 2,25% 3,30% 4,35% 按这个概率走」，
     ///   且「可以多一点少一点，不用非得是整 5 的倍数，35.5 / 46.3 这都可以」：
     ///   Ch1 稀有 20% / Ch2 25% / Ch3 30% / Ch4 35%；Ch5 起沿曲线继续上浮（小数允许）。
-    ///   **传奇列**（当时 0/1/2/3/3/6/8/10，Ch1 恒 0；2026-10-24 起见下行上调）。
+    ///   **传奇列**（当时 0/1/2/3/3/6/8/10，Ch1 恒 0；2026-10-24 见下行上调）。
     /// 想调几率只改这一处（权重值，同章内三档自动归一）。
     /// 【2026-10-24 主人拍板】传奇列上调（0/3/5/7/7.5/10.5/12.5/14.5），RARE 列不动（10-12 拍板梯度 20/25/30/35 保持），Ch1 恒 0 不动。
+    /// 【2026-10-24 晚 主人拍板·方案A】三选一界面「一打开就见传奇」—— 根因是界面一次展示 3 件
+    ///   独立掷品质的装备，开界面见传奇概率 = 1-(1-p)³，比单件率高近 3 倍。主人选方案A：
+    ///   传奇列在当日上调基础上**砍半**（1.5/2.5/3.5/3.75/5.25/6.25/7.25），
+    ///   NORMAL / RARE 两列零变动。单开界面见传奇概率：Ch2 ≈4.4% / Ch4 ≈10.2% / Ch8 ≈20%。
     /// </summary>
     static void ChapterRarityWeights(int chapter, out float wNormal, out float wRare, out float wLegend)
     {
         switch (Mathf.Clamp(chapter, 1, 8))
         {
-            case 2: wNormal = 72f;   wRare = 25f;   wLegend = 3f;   break;
-            case 3: wNormal = 65f;   wRare = 30f;   wLegend = 5f;   break;
-            case 4: wNormal = 58f;   wRare = 35f;   wLegend = 7f;   break;
-            case 5: wNormal = 52f;   wRare = 40.5f; wLegend = 7.5f; break;
-            case 6: wNormal = 44f;   wRare = 45.5f; wLegend = 10.5f; break;
-            case 7: wNormal = 37f;   wRare = 50.5f; wLegend = 12.5f; break;
-            case 8: wNormal = 30f;   wRare = 55.5f; wLegend = 14.5f; break;
+            case 2: wNormal = 73.5f; wRare = 25f;   wLegend = 1.5f;  break;
+            case 3: wNormal = 67.5f; wRare = 30f;   wLegend = 2.5f;  break;
+            case 4: wNormal = 61.5f; wRare = 35f;   wLegend = 3.5f;  break;
+            case 5: wNormal = 55.75f; wRare = 40.5f; wLegend = 3.75f; break;
+            case 6: wNormal = 49.25f; wRare = 45.5f; wLegend = 5.25f; break;
+            case 7: wNormal = 43.25f; wRare = 50.5f; wLegend = 6.25f; break;
+            case 8: wNormal = 37.25f; wRare = 55.5f; wLegend = 7.25f; break;
             default: wNormal = 80f; wRare = 20f; wLegend = 0f; break; // 第 1 章：稀有 20%，无传奇（Ch1 恒 0 不动，2026-10-24 主人拍板）
         }
     }

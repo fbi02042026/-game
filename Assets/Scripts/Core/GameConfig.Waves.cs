@@ -97,31 +97,28 @@ public static partial class GameConfig
     public const int FORMAL_STAGE_ROUND_COUNT = 3;
 
     /// <summary>
-    /// 【2026-10-22 主人拍板 v4.2】正式关每回合波数下限（按章成长；每回合**独立随机摇**）：
-    /// 第 1 章 1 波；第 2 章 1 波；第 3 章 2 波；第 4 章起 3 波（封顶）。
-    /// 配套 <see cref="FormalWavesPerRoundMax"/>：ch1→1/1、ch2→1/2、ch3→2/3、ch4+→3/3。
+    /// 【2026-10-25 主人拍板】正式关每回合波数**按章 × 回合位置定死**（不随机摇）：
+    /// ch1 = 1/2/3；ch2 = 每回合 +1 = 2/3/4；ch3 = 再 +1 = 3/4/5；ch4 及以后固定 = 3/4/5。
+    /// 主人原话：「第一回合1波 第二回合2波 第三回合3波」→「第二章每回合加一波
+    /// 第三章在第二章基础上也加一波 然后以后的章节就固定成第三章的」。
+    /// 旧「Min/Max 区间随机摇」整条退役已删（2026-10-25，此前唯一消费点就是定表覆盖处）。
+    /// 唯一消费方 <see cref="WavePlanner.RollFormalRoundWaveCounts"/>（普通/精英/Boss 关共用，单一出口）。
     /// </summary>
-    public static int FormalWavesPerRoundMin(int chapter)
+    public static int[] FormalRoundWaveFixedCounts(int chapter)
     {
-        int ch = Mathf.Max(1, chapter);
-        if (ch <= 1) return 1;
-        if (ch == 2) return 1;
-        if (ch == 3) return 2;
-        return 3; // ch4+ 封顶
-    }
-
-    /// <summary>【2026-10-22 主人拍板 v4.2】正式关每回合波数上限（含）：ch1→1、ch2→2、ch3→3、ch4+→3。</summary>
-    public static int FormalWavesPerRoundMax(int chapter)
-    {
-        int ch = Mathf.Max(1, chapter);
-        if (ch <= 1) return 1;
-        if (ch == 2) return 2;
-        return 3; // ch3 起 2~3，ch4+ 固定 3
+        // 每回合波数 = 基数 + 回合下标：基数 ch1=1、ch2=2、ch3 及以后=3
+        int first = Mathf.Clamp(Mathf.Max(1, chapter), 1, 3);
+        var counts = new int[FORMAL_STAGE_ROUND_COUNT];
+        for (int r = 0; r < counts.Length; r++)
+            counts[r] = first + r;
+        return counts;
     }
 
     /// <summary>
     /// 【2026-10-22 主人拍板 v4.2 退役】v4.0「正式关定死 9 波」口径作废：总波数改按
-    /// 「FORMAL_STAGE_ROUND_COUNT 回合 × 每回合按章区间独立摇」累加（见 WavePlanner.Plan.RollFormalRoundWaveCounts）。
+    /// 「FORMAL_STAGE_ROUND_COUNT 回合 × 每回合按章定表」累加
+    /// （ch1=1/2/3=6、ch2=2/3/4=9、ch3 起=3/4/5=12，见 GameConfig.FormalRoundWaveFixedCounts /
+    /// WavePlanner.Plan.RollFormalRoundWaveCounts）。
     /// 常量保留不删（下线≠删除），当前无引用。
     /// </summary>
     public const int FORMAL_STAGE_WAVE_COUNT = 9;

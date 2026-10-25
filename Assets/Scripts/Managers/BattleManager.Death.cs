@@ -14,16 +14,25 @@ public partial class BattleManager
     /// </summary>
     bool _reviveUsedThisStage;
 
+    /// <summary>复活选择窗是否开着（2026-10-25 广告版守卫）：广告是异步回调，
+    /// 玩家可能先点【返回】收窗、之后回调才回来 —— 回调凭本标志判定战斗还在待抉择，防诈尸复活。</summary>
+    bool _reviveChoiceOpen;
+
+    /// <summary>复活广告拉起中（防连点重复拉起两次广告）。</summary>
+    bool _reviveAdPending;
+
     /// <summary>是否提供复活选择：正式关/支线/活动副本（UsesBattleResultScreen 同门）、
-    /// 非引导局、本关没用过、主角在场。引导局照旧「阵亡重进」，无限裂隙照旧直接结算。</summary>
+    /// 非引导局、本关没用过、主角在场、今日复活额度未用完（ReviveQuota，ADS_ENABLED=false 期间恒有）。
+    /// 引导局照旧「阵亡重进」，无限裂隙照旧直接结算。</summary>
     bool CanOfferRevive => Mode != null && Mode.UsesBattleResultScreen
         && !Rules.Active && !SkipLegacyOnEvacuate
-        && hero != null && !_reviveUsedThisStage;
+        && hero != null && !_reviveUsedThisStage
+        && ReviveQuota.CanOfferToday();
 
     public void OnHeroDead()
     {
         // 【2026-10-24 主人拍板】正式关阵亡先弹「失败 + 复活/返回」选择界面：冻场待抉择，
-        // 点【复活】扣钻原地半血复活继续打，点【返回】才走原收尾（遗产结算）。
+        // 点【复活】按当日档位（广告/50钻/100钻）原地半血复活继续打，点【返回】才走原收尾（遗产结算）。
         // 引导局/无限裂隙不吃这道门（CanOfferRevive 已分流）。
         if (CanOfferRevive)
         {
@@ -36,36 +45,74 @@ public partial class BattleManager
     /// <summary>
     /// 复活选择窗：停出兵 + 冻场（与天雷演出/冻场同机制），弹带双钮的失败界面。
     /// 此时<b>不收局</b>（不清佣兵、不 EndRunLoadout、不记死亡埋点）—— 玩家复活后战斗原样继续。
+    /// 【2026-10-25 14:47 主人拍板】复活档位 = 每日 2 广告 + 50 钻 + 100 钻，之后只能返回
+    /// （CanOfferRevive 已挡 Capped，不会走到这里）；ADS_ENABLED=false 期间维持 10 钻现状。
     /// </summary>
     void OfferHeroRevive()
     {
         _reviveUsedThisStage = true;
         isInBattle = false;      // 停出兵/推进（与原死亡口径一致）
         UnitsCanAct = false;     // 冻场：怪/佣兵/协程全停，复活后还原
+        _reviveChoiceOpen = true;
+        var kind = ReviveQuota.ResolveKind(out int price);
+        // 广告档按钮文案换「看广告复活」（钻石 icon 为主人摆的不动，观感差异已报主人）；
+        // 钻石档沿用「{价格}复活」格式。
+        string label = kind == ReviveClaimKind.Ad ? "看广告复活" : null;
         BattleResultScreen.ShowFailureChoice(
-            revivePrice: GameConfig.AD_SLOT_REVIVE_DIAMOND,
-            onRevive: TryReviveHeroByDiamond,
-            onGiveUp: FinalizeHeroDeath);
+            revivePrice: price,
+            onRevive: TryReviveHero,
+            onGiveUp: FinalizeHeroDeath,
+            reviveLabel: label);
     }
 
     /// <summary>
-    /// 复活扣费唯一出口。返回 false = 钻石不足（toast 已提示，选择界面停留）。
-    /// 【为后期替换激励视频做准备】2026-10-24 主人拍板先按扣钻石上线；接广告时在本方法外层套
-    /// RewardedAdBridge.ShowRewarded("revive", ok => { if (ok) { DoReviveHero(); 收界面; } })，
-    /// 扣费行删除、AD_SLOT_REVIVE_DIAMOND 转作价值锚点 —— UI 与复活本体（DoReviveHero）不用再动，
-    /// 模式与 ResourceAdRewards 两个注释位口径一致。
+    /// 复活扣费唯一入口（2026-10-25 14:47 主人拍板）：按 ReviveQuota 档位分流。
+    /// 返回 false = 本次点击未立即复活（钻石不足 / 广告拉起中 / 广告档异步等待），界面停留。
+    /// 广告档：RewardedAdBridge.ShowRewarded("revive") 异步回调，核验通过（IsVerified）才
+    /// ForceCloseChoice + DoReviveHero；回调竞态由 _reviveChoiceOpen / _reviveAdPending 双守卫挡住。
     /// </summary>
-    bool TryReviveHeroByDiamond()
+    bool TryReviveHero()
     {
-        if (!ResourceWallet.TrySpendDiamond(GameConfig.AD_SLOT_REVIVE_DIAMOND, "战斗复活", save: true, notify: false))
+        var kind = ReviveQuota.ResolveKind(out int price);
+        switch (kind)
         {
-            var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-            long own = ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond);
-            UIManager.Instance?.ShowToast($"钻石不足：复活需 {GameConfig.AD_SLOT_REVIVE_DIAMOND} 钻（当前 {own} 钻）");
-            return false;
+            case ReviveClaimKind.Ad:
+                if (_reviveAdPending) return false;   // 广告已在拉起，忽略重复点击
+                _reviveAdPending = true;
+                RewardedAdBridge.ShowRewarded("revive", ok =>
+                {
+                    _reviveAdPending = false;
+                    if (!ok)
+                    {
+                        UIManager.Instance?.ShowToast("激励未完成，复活未生效");
+                        return;
+                    }
+                    if (!_reviveChoiceOpen) return;   // 玩家已点【返回】/界面已收，不许诈尸复活
+                    _reviveChoiceOpen = false;
+                    ReviveQuota.RegisterClaimed();
+                    BattleResultScreen.ForceCloseChoice();
+                    DoReviveHero();
+                });
+                return false;   // 异步：窗暂不收（模拟桥同步回调时上面已收，走到这里也无害）
+
+            case ReviveClaimKind.Diamond:
+                if (!ResourceWallet.TrySpendDiamond(price, "战斗复活", save: true, notify: false))
+                {
+                    var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+                    long own = ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond);
+                    UIManager.Instance?.ShowToast($"钻石不足：复活需 {price} 钻（当前 {own} 钻）");
+                    return false;
+                }
+                _reviveChoiceOpen = false;
+                ReviveQuota.RegisterClaimed();
+                DoReviveHero();
+                return true;
+
+            default:   // Capped：CanOfferRevive 已挡，理论上到不了；fail-closed 当放弃处理
+                Debug.LogError("[BattleManager] 复活档位异常（Capped 却弹了选择窗），按放弃处理");
+                _reviveChoiceOpen = false;
+                return false;
         }
-        DoReviveHero();
-        return true;
     }
 
     /// <summary>复活本体：半血原地起立 + 解冻 + 恢复战斗。血量比例走 GameConfig.REVIVE_HP_RATIO。</summary>
@@ -90,6 +137,7 @@ public partial class BattleManager
     /// </summary>
     void FinalizeHeroDeath()
     {
+        _reviveChoiceOpen = false;  // 选择窗已收（放弃复活）——广告异步回调凭本标志不再生效
         UnitsCanAct = true;  // 还原冻场，后续结算/协程照旧
         Planner?.NotifyStageResult(true, 0f); // V3.0 压力阀：死过 → 下一关减一波
         isInBattle = false;
@@ -109,7 +157,7 @@ public partial class BattleManager
         // 淡出（或点击跳过）后再进遗产/撤离结算；无限裂隙不播（每层累计奖励走自己的结算链），直接进遗产结算。
         // 引导局在上面 Rules.Active 分支已重进战斗，永远到不了这里。
         if (Mode != null && Mode.UsesBattleResultScreen)
-            BattleResultScreen.Show(false, () => TriggerLegacyFlow(isDeath: true));
+            BattleResultScreen.Show(false, null, () => TriggerLegacyFlow(isDeath: true));   // 失败无奖励格，stats 传 null
         else
             TriggerLegacyFlow(isDeath: true);
     }

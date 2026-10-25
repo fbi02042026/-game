@@ -346,7 +346,14 @@ public class BattleSideHud : MonoBehaviour
         float bossPivotY = Mathf.Lerp(parent.rect.min.y, parent.rect.max.y, _bossBarNode.anchorMin.y)
                          + _bossBarNode.anchoredPosition.y;
         // 血条底边（画布本地 y，自底向上）→ HUD 根（锚画布右上、pivot 右上）的 y：根顶在血条底边上方 54.4
-        float y = bossPivotY + barBottomLocal + KillCounterRootGapAboveBarBottom - canvasH;
+        // 【2026-10-24 根因修复】末项减数必须是根节点锚点参考线（rect.max.y，中心原点坐标里画布上边缘=+h/2），
+        // 不能减 canvasH —— 原代码把「中心原点坐标」混配「底边原点换算」，整体多下移 h/2
+        //（720×1280 差 640、1610 高屏差 805，这就是计数器一直钉在右下角的根因；
+        //  团结日志实锤：counterY=-939，正确值应为 -134）。
+        // 修复后：720×1280 无刘海 = -114（与最初拍板位分毫不差），其它屏比贴着血条走。
+        float anchorLineY = Mathf.Lerp(parent.rect.min.y, parent.rect.max.y,
+            ((RectTransform)transform).anchorMin.y);
+        float y = bossPivotY + barBottomLocal + KillCounterRootGapAboveBarBottom - anchorLineY;
         ((RectTransform)transform).anchoredPosition = new Vector2(-KillCounterRightInset, y);
         if (!_counterDiagLogged)
         {

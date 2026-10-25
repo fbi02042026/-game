@@ -101,6 +101,41 @@ public partial class MercObtainPopupUI : MonoBehaviour
         _ascendBtn.gameObject.SetActive(owned);
         bool canStar = MercStarSystem.CanStarUp(_curHireId, out _);
         ApplyAscendGlow(canStar);
+        ApplyGuideNode(canStar);   // 【2026-10-25 主人需求】可升星时显示进阶指引并上下浮动
+    }
+
+    /// <summary>
+    /// 【2026-10-25 主人需求】进阶「指引」节点显隐 + 缓慢上下浮动：
+    /// 可升星（同 ApplyAscendGlow 的 canStar 条件）打开弹窗时显示并浮动；不可升星 / 关窗时
+    /// 隐藏、停浮动、位置还原 authored。浮动只加 localPosition.y 偏移（unscaled 时间，
+    /// 与缩放脉冲同口径），不碰锚点/尺寸（铁律 20 口径同 TownEntranceMotion：动效临时偏移+还原）。
+    /// </summary>
+    void ApplyGuideNode(bool on)
+    {
+        if (_guideNode == null || _guideRt == null) return;
+        if (on)
+        {
+            _guideNode.SetActive(true);
+            if (_guideBobCo == null) _guideBobCo = StartCoroutine(CoGuideBob());
+        }
+        else
+        {
+            if (_guideBobCo != null) { StopCoroutine(_guideBobCo); _guideBobCo = null; }
+            _guideRt.localPosition = _guideBasePos;
+            _guideNode.SetActive(false);
+        }
+    }
+
+    /// <summary>缓慢上下浮动：authored 位置 + y 正弦（0 → +9 → 0）往复，unscaled 时间。</summary>
+    IEnumerator CoGuideBob()
+    {
+        while (true)
+        {
+            float t = (Time.unscaledTime % GuideBobPeriod) / GuideBobPeriod;
+            float k = GuideBobAmplitude * (0.5f - 0.5f * Mathf.Cos(t * Mathf.PI * 2f));
+            _guideRt.localPosition = _guideBasePos + new Vector3(0f, k, 0f);
+            yield return null;
+        }
     }
 
     /// <summary>
@@ -199,6 +234,7 @@ public partial class MercObtainPopupUI : MonoBehaviour
         if (_recruitMode) ExitRecruitMode();   // 还原按钮/标题文案（确认/替换/获得佣兵），下次普通入口不串味
         if (_fallenMode) ExitFallenMode();     // 同上：还原「复活/取消」双钮，下次普通入口不串味
         ApplyAscendGlow(false);                // 【2026-10-24】关窗摘发光材质、停呼吸动效、缩放还原（下次 Fill 重评）
+        ApplyGuideNode(false);                 // 【2026-10-25】关窗藏指引、停浮动、位置还原（下次 Fill 重评）
         if (_root != null) _root.SetActive(false);
         var cb = _onClosed;
         _onClosed = null;
@@ -279,12 +315,11 @@ public partial class MercObtainPopupUI : MonoBehaviour
     }
 
     /// <summary>购买钮文案（【2026-10-19 主人拍板】货币跟稀有度走）：
-    /// 普通佣兵=「600金币」；稀有佣兵=「普通卷×1」；传奇佣兵=「稀有卷×1」；
-    /// 已拥有的候选=「已拥有」，不可重复购买。</summary>
+    /// 普通佣兵=「600金币」；稀有佣兵=「普通卷×1」；传奇佣兵=「稀有卷×1」。
+    /// 【2026-10-25 主人拍板】已拥有的候选也可购买（重复转本命碎片），同样显示真实价格。</summary>
     string BuildBuyLabel(MercenaryData offer)
     {
         var rarity = MercHireSession.OfferRarity(offer);
-        if (MercHireSession.IsMercOwned(offer)) return "已拥有";
         if (rarity == MercRosterDefs.MercRarity.Common)
             return MercHireSession.GoldCost(offer) + "金币";
         return rarity == MercRosterDefs.MercRarity.Legendary ? "稀有卷×1" : "普通卷×1";

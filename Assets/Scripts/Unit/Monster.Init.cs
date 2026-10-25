@@ -288,10 +288,10 @@ public partial class Monster
                 monsterChapter, Mathf.Max(1, effectiveSpriteIndex), gChapter, gStageType)
             : MonsterAttackTypeResolver.IsMagicMonster(monsterChapter, Mathf.Max(1, effectiveSpriteIndex));
         _isMagicType = isMagicType;
-        // 【2026-10-22 主人拍板】按章攻击减免：第1~2章 ×0.35（新手期，主人「近战也砍，
-        // 前期要让玩家稍微抽点奖就能过」）；第3章 ×0.6（砍40%）；第4章起 ×0.8（砍20%）。
-        // 全章覆盖，真源 = GameConfig.ChapterAtkMul(chapter)；只压攻击/魔攻，血防不动；
-        // 无尽裂隙不参与（强度只随层数走）。
+        // 【2026-10-25 主人拍板「断崖调缓 不要让玩家察觉」】按章攻击减免改 8 章缓坡表
+        //（0.35/0.36/0.40/0.42/0.45/0.52/0.62/0.75，旧三档阶梯 0.35/0.6/0.8 废除——
+        // 原第2→第5章入口跳档是全曲线唯一断崖）。真源 = GameConfig.ChapterAtkMul(chapter)；
+        // 只压攻击/魔攻，血防不动；无尽裂隙不参与（强度只随层数走）。
         // 【2026-10-23 主人拍板「引导的不要动」】新手引导战不吃章级减免——引导局怪物保持原始攻击
         //（isTutorialRun 在上面血量段已取）。
         float earlyAtkMul = !endlessRift && !isTutorialRun ? GameConfig.ChapterAtkMul(gChapter) : 1f;

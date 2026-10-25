@@ -87,20 +87,13 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
 
         BindSkillTexts(c, offer);
 
-        // 【2026-10-19 主人拍板】已拥有的候选灰显 + 黄字「已拥有」标（不可重复购买）
+        // 【2026-10-25 主人拍板】已拥有的候选可重复购买 = 转本命碎片（获取碎片的途径，
+        // 与名册解锁 TavernUnlockUI.TryUnlock 的重复口径同源）：卡面不灰显、货币钮照常显示价格，
+        // 保留黄字「已拥有·转碎片」标提示这是重复购买。
         bool owned = MercHireSession.IsMercOwned(offer);
         ApplyHiredVisual(c, owned);
 
         RefreshGrowBadge(c, offer, rarity);
-
-        // 【2026-10-19 主人拍板】已拥有的候选：灰显 + 「已拥有」标，货币钮整个不显示
-        // （图标/价格数字都不显示），只保留灰卡本体。
-        if (MercHireSession.IsMercOwned(offer))
-        {
-            if (c.goldButton != null) c.goldButton.gameObject.SetActive(false);
-            if (c.scrollButton != null) c.scrollButton.gameObject.SetActive(false);
-            return;
-        }
 
         int gold = MercHireSession.GoldCost(offer);
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
@@ -237,7 +230,8 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         if (c == null || c.root == null) return;
         var cg = c.root.GetComponent<CanvasGroup>();
         if (cg == null) cg = c.root.AddComponent<CanvasGroup>();
-        cg.alpha = hired ? 0.45f : 1f;
+        // 【2026-10-25 主人拍板】已拥有卡可重复购买（转碎片），不再压暗灰显，只留角标提示
+        cg.alpha = 1f;
         cg.blocksRaycasts = true;
         cg.interactable = true;
 
@@ -245,7 +239,11 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         if (badge != null)
         {
             // 【2026-10-19 主人拍板】显示时压到卡内最上层，防被后创建的构件（MG_Badge 等）盖住
-            if (hired) badge.transform.SetAsLastSibling();
+            if (hired)
+            {
+                badge.transform.SetAsLastSibling();
+                badge.text = "已拥有·转碎片";
+            }
             badge.gameObject.SetActive(hired);
         }
     }
@@ -258,8 +256,8 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         if (t != null) return t;
 
         // 【2026-10-19 主人拍板】「已拥有」加大加粗、摆在卡面正中（原来是 22 号细字缩在中心偏下，
-        // 被下方技能区/按钮区压住看不清）
-        t = CreateTxt(cardRoot, "HiredBadge", "已拥有", 34, TextAnchor.MiddleCenter);
+        // 被下方技能区/按钮区压住看不清）；【2026-10-25】文案改「已拥有·转碎片」（可重复购买转碎片）
+        t = CreateTxt(cardRoot, "HiredBadge", "已拥有·转碎片", 34, TextAnchor.MiddleCenter);
         t.color = new Color(1f, 0.86f, 0.42f, 1f);
         t.fontStyle = FontStyle.Bold;
         var rt = t.rectTransform;

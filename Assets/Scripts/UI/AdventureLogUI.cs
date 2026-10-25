@@ -563,7 +563,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
     /// <summary>
     /// 仅纠正标题横幅(biaotou)：Frame 被运行时拉满后，预制体按旧 Frame 尺寸摆的横幅
-    /// 会跟着 Frame 中心上漂，这里钉回 Frame 左上角。
+    /// 会跟着 Frame 中心上漂，这里按 2026-10-25 主人拍板钉成预制体观感——骑跨 Frame 左上角。
     /// 2026-10-16 主人拍板：左侧标签按预制体排版走 —— Tabs 容器与 Tab0~5 的
     /// 锚点/位置/尺寸一律不再被代码改写（9-19 引入、10-15 调整的运行时重排已整段移除）。
     /// </summary>
@@ -572,9 +572,13 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var frame = transform.Find("Root/Frame") as RectTransform;
         if (frame == null) return;
 
-        // 标题横幅：钉在 Frame 左上（biaotou 中心对 bg 中心）
-        // 2026-10-23 主人拍板：横幅高度以预制体 bg 实测为准，不再写死 103
-        float headerTopPad = 10f;
+        // 标题横幅：恢复预制体观感——骑跨 Frame 左上角（2026-10-25 主人拍板）。
+        // 10-16 旧钉位取「框内左上内缩 10px」，运行时横幅整个挪进框内挂在边框下沿，
+        // 与预制体骑跨框角（上探约 49 / 垂下约 54）不符，且该差异与分辨率无关。
+        // 几何从预制体实测值反推：bg 中心 y = headerH/2 − 54（垂下 54，其余上探框顶）。
+        // 2026-10-25 二次拍板：左侧绶带贴齐屏幕左边缘——Frame 左缘被 FrameSidePad 内缩，
+        // x 取 bg半宽 − FrameSidePad，任何分辨率下绶带左端都顶到画布 x=0（原框左内缩 30 已废）。
+        const float HeaderInsideDrop = 54f; // 横幅垂进框顶以内的部分
         var biaotou = frame.Find("biaotou") as RectTransform;
         if (biaotou == null)
         {
@@ -590,7 +594,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         float headerH = bgTr.rect.height;
         biaotou.anchorMin = biaotou.anchorMax = new Vector2(0f, 1f);
         biaotou.pivot = new Vector2(0.5f, 0.5f);
-        biaotou.anchoredPosition = new Vector2(12f + bgTr.rect.width * 0.5f, -(headerTopPad + headerH * 0.5f));
+        biaotou.anchoredPosition = new Vector2(bgTr.rect.width * 0.5f - FrameSidePad, headerH * 0.5f - HeaderInsideDrop);
         biaotou.SetAsLastSibling(); // 横幅最上，但已不与标签重叠
     }
 

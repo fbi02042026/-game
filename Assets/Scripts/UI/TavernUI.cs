@@ -79,7 +79,9 @@ public class TavernUI : MonoBehaviour, ITownPage
         EnsureVisibleTransform();
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
-        SetGuildHallOverlayMode(true);
+        // 【2026-10-25 主人拍板】酒馆主窗口不显示资源条：整条顶栏（含资源列与背景）收起；
+        // 冒险/角色/天赋/日志页不受影响（它们仍走「只留资源列」），见 SetTopBarResourceOnly。
+        SetGuildHallOverlayMode(true, fromTavernPage: true);
         TownPageDim.Ensure(transform);
         SoftenOpaqueHallCover();
 
@@ -192,7 +194,7 @@ public class TavernUI : MonoBehaviour, ITownPage
             EnsureGuildHideCache(GuildHallUI.Instance);
     }
 
-    public static void SetGuildHallOverlayMode(bool tavernOpen)
+    public static void SetGuildHallOverlayMode(bool tavernOpen, bool fromTavernPage = false)
     {
         var hall = GuildHallUI.Instance;
         if (hall == null) return;
@@ -211,7 +213,7 @@ public class TavernUI : MonoBehaviour, ITownPage
             }
         }
 
-        SetTopBarResourceOnly(!show);
+        SetTopBarResourceOnly(!show, fromTavernPage);
 
         if (_guildHotspotCache != null)
         {
@@ -253,13 +255,23 @@ public class TavernUI : MonoBehaviour, ITownPage
         };
     }
 
-    /// <summary>功能页只留金币/体力资源条，隐藏公会名等主界面顶栏装饰。</summary>
-    static void SetTopBarResourceOnly(bool resourceOnly)
+    /// <summary>功能页只留金币/体力资源条，隐藏公会名等主界面顶栏装饰。
+    /// 【2026-10-25 主人拍板】fromTavernPage 且 resourceOnly 时（酒馆主窗口）：资源条也不显示，
+    /// 整条 TopBar 收起（含 ResourceStrip / 体力Panel / TopBarBg）。收整条而非只藏资源列，
+    /// 是因为酒馆里开招募弹窗借走 ResourceStrip、关窗 Release 归还主界面时会重新 SetActive(true)，
+    /// 只藏列会被它点亮复发；TopBar 整体inactive 时归还也看不见，切走时统一在这里还原。</summary>
+    static void SetTopBarResourceOnly(bool resourceOnly, bool fromTavernPage = false)
     {
         var hall = GuildHallUI.Instance;
         if (hall == null) return;
         Transform top = TownSharedChrome.FindDeep(hall.transform, "TopBar");
         if (top == null) return;
+
+        bool barOn = !resourceOnly || !fromTavernPage;
+        if (top.gameObject.activeSelf != barOn)
+            top.gameObject.SetActive(barOn);
+        if (!barOn) return;
+
         for (int i = 0; i < top.childCount; i++)
         {
             Transform c = top.GetChild(i);

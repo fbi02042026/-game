@@ -27,7 +27,9 @@ using UnityEngine.UI;
 /// <c>.workbuddy/backup/20261012-equipreplace-prefab/</c>）。
 /// 属性采用「一条一行」竖排：文本由 <c>DraftPool.FormatEquipDescLines</c> 逐条给出，这里用 <c>\n</c> 拼接。</para>
 ///
-/// <para>强弱判据只有 <see cref="EquipCompare"/> 一处，这里只负责显示。</para>
+/// <para>【2026-10-25 主人拍板「战力只要有提升就是新的装备好」】强弱判据 = 战力净差
+/// <see cref="PowerCalc.EquipSwapPowerDelta"/> 一处（判定行文案 / 着色 / 战力行 / 超时自动选全同源）；
+/// 旧判据 <see cref="EquipCompare"/>（品质&gt;星级&gt;强化）不再服务本弹窗。</para>
 /// <para>【2026-10-16 主人原话「如果玩家没点按钮 自动替换成战力高的」】玩家一直不点（超时）时
 /// 改按战力自动选强的一件（<see cref="AutoPickByPower"/>）。
 /// 【2026-10-20 主人原话「不要给玩家关闭」】点空白处不再关闭弹窗，玩家必须二选一。</para>
@@ -199,21 +201,26 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         if (_title != null) _title.text = "换上新装备吗？";
         Debug.Log($"[EquipReplaceConfirm] 弹窗打开：新={newEq?.equipName}({newEq?.templateId})｜旧={oldEq?.equipName}({oldEq?.templateId})");
 
-        // 2026-10-11 主人拍板：着色判据与 Verdict 文案**同一出口**（EquipCompare.NewBetter）——
-        // 旧写法 newBetter 只看 Compare（品质/星级/强化分），会出现「文案说新的更强、颜色却是橙」的分裂。
-        bool newBetter = EquipCompare.NewBetter(newEq, oldEq);
+        // 【2026-10-25 主人拍板「战力只要有提升就是新的装备好」】判定行文案 / 着色 / 战力行
+        // 三者同源：唯一判据 = EquipSwapPowerDelta 换装净差（>0 新强 / <0 旧强 / =0 差不多），
+        // 与超时自动选 AutoPickByPower、头顶飘字 / TotalPower 同一真值。
+        // 旧判据 EquipCompare（品质>星级>强化）不看属性数值，曾出现「战力 -6 却说新的更强」的
+        // 自相矛盾（2026-10-25 主人截图报障），弹窗不再用它；背包排序等场景仍可调用 EquipCompare。
+        // 2026-10-11 的「着色与文案同一出口」拍板不变，只是出口从 EquipCompare 换成战力净差。
+        int d = PowerCalc.EquipSwapPowerDelta(newEq);
+        bool newBetter = d > 0;
         if (_verdict != null)
         {
             // 【2026-10-13 改版】底部判定行不再塞「战力 ±N」（主人原话「不要在下面」「有点挤」）。
-            // 战力差改放进「新装备」栏内（见 FillColumn 的 ColumnNew 分支）。这里只留强弱结论 + 颜色。
-            _verdict.text = EquipCompare.Verdict(newEq, oldEq);
+            // 战力差放进「新装备」栏内（见 FillColumn 的 ColumnNew 分支）。这里只留强弱结论 + 颜色。
+            _verdict.text = d > 0 ? "新的更强" : d < 0 ? "现在这件更好" : "两件差不多";
             _verdict.color = newBetter ? new Color(0.55f, 0.95f, 0.60f) : new Color(0.95f, 0.72f, 0.45f);
         }
 
         // 战力 ±N，准备塞进「新装备」栏（主人拍板：不要在底部判定行）
         // 【2026-10-16 主人拍板】涨改成亮黄（RarityPalette.Gold #FFD959，原绿 PowerGain）；减仍红。
         // 【2026-10-20 方案 B】换成换装真值 EquipSwapPowerDelta（含顶掉旧件的净差），与头顶飘字/TotalPower 同源。
-        int d = PowerCalc.EquipSwapPowerDelta(newEq);
+        // 2026-10-25 起 d 在上方已算好（判定行同源），这里直接复用，不重复模拟。
         string powerLine = d >= 0
             ? "<color=#" + ColorUtility.ToHtmlStringRGB(RarityPalette.Gold) + ">战力 +" + d + "</color>"
             : "<color=#" + ColorUtility.ToHtmlStringRGB(RarityPalette.PowerLoss) + ">战力 -" + (-d) + "</color>";

@@ -22,8 +22,7 @@ public class NewMailToast : MonoBehaviour
     const float PadY = 10f;             // 上下内边距
     const int FontSize = 24;            // 主人要求：30 → 24（减 20%）
     const float MarginRight = 0f;       // 主人要求：右缘贴住屏幕右缘（原 24 缝去掉）；框小了，进屏自然不多
-    const float YPos = 300f;            // 右上区域（canvas 高 1280，中心 0，故 +300 在偏上）
-    const float OffX = 720f;            // 屏幕外右侧（设计宽 720，half=360，+720 必在屏外）
+    const float YPos = 300f;            // 【基线】参考画布(720×1280)上原中心锚的 y（换算「距顶边」距离用，见 BuildPanel）
     const int SortOrder = 950;
 
     enum Phase { In, Hold, Out, Done }
@@ -36,8 +35,9 @@ public class NewMailToast : MonoBehaviour
     Text _label;
     Phase _phase = Phase.Done;
     float _timer;
-    float _xFinal;
-    /// <summary>实际停留高度：YPos 基础上上移 2 个自身框高（2026-10-17 主人要求）。</summary>
+    float _xFinal;   // 停留位 x（锚画布右上：−MarginRight，右缘贴屏幕右缘）
+    float _xOff;     // 屏外右侧（pivot 右缘对齐：+自身宽 = 完全出屏右）
+    /// <summary>停留位 y（锚画布右上：负值 = 面板顶边距屏幕顶边的距离，分辨率变化恒贴右上角）。</summary>
     float _yFinal;
 
     public static void Notify()
@@ -117,9 +117,11 @@ public class NewMailToast : MonoBehaviour
         var panel = new GameObject("Panel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         panel.transform.SetParent(transform, false);
         _panel = panel.transform as RectTransform;
-        _panel.anchorMin = _panel.anchorMax = new Vector2(0.5f, 0.5f);
-        _panel.pivot = new Vector2(0.5f, 0.5f);
-        _panel.anchoredPosition = new Vector2(OffX, YPos);
+        // 【2026-10-25 主人拍板「邮件提示也要根据分辨率改变位置」】改锚画布右上角（pivot 右上）：
+        // 停留位 = 右缘贴屏幕右缘 + 「距顶边」恒定距离（由参考画布 720×1280 上的原中心锚位换算），
+        // 任意分辨率都贴住右上角，与顶条右上角自适应同一观感；不再受 match 模式/逻辑宽高漂移影响。
+        _panel.anchorMin = _panel.anchorMax = new Vector2(1f, 1f);
+        _panel.pivot = new Vector2(1f, 1f);
         var img = panel.GetComponent<Image>();
         img.color = new Color(0f, 0f, 0f, 0.85f);
         img.raycastTarget = false;
@@ -148,9 +150,11 @@ public class NewMailToast : MonoBehaviour
         float w = _label.preferredWidth + PadX * 2f;
         float h = _label.preferredHeight + PadY * 2f;
         _panel.sizeDelta = new Vector2(w, h);
-        _xFinal = (GameConfig.DESIGN_WIDTH * 0.5f) - (w * 0.5f) - MarginRight;
-        // 【2026-10-17 主人要求】提示往上移 2 个自身框高
-        _yFinal = YPos + h * 2f;
+        _xFinal = -MarginRight;
+        _xOff = w;   // pivot 右缘对齐：向右挪自身宽 = 完全出屏
+        // 【2026-10-17 主人要求】提示往上移 2 个自身框高 —— 换算成参考画布(720×1280)上的「距顶边」
+        // 距离：top = H/2 − (YPos + 2h + h/2)，恒定不随分辨率漂移。
+        _yFinal = -(GameConfig.DESIGN_HEIGHT * 0.5f - YPos - h * 2f - h * 0.5f);
     }
 
     void Begin()
@@ -162,7 +166,7 @@ public class NewMailToast : MonoBehaviour
         _phase = Phase.In;
         _timer = 0f;
         gameObject.SetActive(true);
-        _panel.anchoredPosition = new Vector2(OffX, _yFinal);
+        _panel.anchoredPosition = new Vector2(_xOff, _yFinal);
     }
 
     void Update()
@@ -175,7 +179,7 @@ public class NewMailToast : MonoBehaviour
         {
             float k = Mathf.Clamp01(_timer / SlideInTime);
             float e = 1f - (1f - k) * (1f - k);   // EaseOutQuad：快进慢出
-            _panel.anchoredPosition = new Vector2(Mathf.Lerp(OffX, _xFinal, e), _yFinal);
+            _panel.anchoredPosition = new Vector2(Mathf.Lerp(_xOff, _xFinal, e), _yFinal);
             if (_timer >= SlideInTime)
             {
                 _phase = Phase.Hold;
@@ -195,7 +199,7 @@ public class NewMailToast : MonoBehaviour
         {
             float k = Mathf.Clamp01(_timer / SlideOutTime);
             float e = k * k;                       // EaseInQuad：慢起快出，向右滑走
-            _panel.anchoredPosition = new Vector2(Mathf.Lerp(_xFinal, OffX, e), _yFinal);
+            _panel.anchoredPosition = new Vector2(Mathf.Lerp(_xFinal, _xOff, e), _yFinal);
             if (_timer >= SlideOutTime)
             {
                 _phase = Phase.Done;

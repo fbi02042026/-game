@@ -435,7 +435,11 @@ public class BattleSettlementUI : MonoBehaviour
             });
     }
 
-    static List<SettlementRewardCell> BuildRewardCells(BattleRunStats s)
+    /// <summary>
+    /// 结算奖励格数据口径（唯一出口）：金币/天赋石/附魔石/强化材料/装备。
+    /// 【2026-10-25 主人拍板】战斗结果界面胜利奖励区复用同一口径（private→public），禁再开第二条数据链。
+    /// </summary>
+    public static List<SettlementRewardCell> BuildRewardCells(BattleRunStats s)
     {
         var list = new List<SettlementRewardCell>();
         if (s == null) return list;

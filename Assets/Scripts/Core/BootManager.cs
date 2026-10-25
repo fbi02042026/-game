@@ -120,6 +120,9 @@ public class BootManager : MonoBehaviour
         if (_enteringTown) return;
         _enteringTown = true;
         GamePerf.Log("[Boot] 登录完成 → 进入主界面 Town");
+        // 【2026-10-25 主人拍板「动效每次登录出现一次」】登录重置主界面入场动效标记：
+        // 本次登录进主界面播一轮；之后战斗回城等再进 Town 场景不重播。唯一重置出口在这。
+        TownEntranceMotion.ResetForLogin();
         TutorialDirector.PrewarmOpeningIntro(); // 黑屏优化：进城镇 Loading 期间后台 Prepare 首次片头
 
         if (_login != null)

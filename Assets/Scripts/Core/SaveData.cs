@@ -81,6 +81,14 @@ public class SaveData
     public int adStaminaClaimCount = 0;
     /// <summary>当日已领金币广告次数</summary>
     public int adGoldClaimCount = 0;
+    /// <summary>复活档位日键 yyyyMMdd（UTC），跨天清零 reviveClaimCount（2026-10-25 主人拍板：每日复活阶梯）</summary>
+    public string reviveDayKey = "";
+    /// <summary>当日已用复活次数（每日 2 广告 + 50 钻 + 100 钻，之后只能返回；ADS_ENABLED=false 期间不参与判定）</summary>
+    public int reviveClaimCount = 0;
+    /// <summary>分享奖励日键 yyyyMMdd（UTC），跨天可再领（2026-10-25 主人拍板：每日一次分享得 100 钻）</summary>
+    public string shareRewardDayKey = "";
+    /// <summary>好评引导已弹日键 yyyyMMdd（UTC），跨天可再弹（2026-10-25 主人拍板：每日最多弹一次）</summary>
+    public string taptapRateDayKey = "";
 
     // === 无限裂隙（2026-10-17 主人拍板）===
     /// <summary>无限裂隙每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday</summary>
@@ -204,6 +212,18 @@ public class SaveData
     /// <summary>玩家冒险者显示名（引导签名后设定）</summary>
     public string playerDisplayName = "";
     public bool playerNameChosen;
+    /// <summary>玩家选择的头像槽位（1=默认玩家头像，2..8=佣兵头像；6 号位无图）。
+    /// 真源唯一出口 = <see cref="AvatarDefs.CurrentSlot"/>，解锁规则见 <see cref="AvatarDefs"/>。</summary>
+    public int playerAvatar = 1;
+
+    // === 玩家永久等级账本（2026-10-25 矫正：等级跨关卡/跨章累计，真源在存档）===
+    // 【矫正原因】账本原挂 RunLoadout（局内），但 10-24 拍板「只要打完就清」后每关都是新局，
+    // 等级每关归 1 → 永远升不了级。现迁存档；经验仍按主人拍板「完成一次关卡给一次」结算。
+    /// <summary>玩家冒险者等级（1 起）。经验来源 = 完成关卡（LevelSystem.AddStageClearExp，主线/支线才给）</summary>
+    public int playerLevel = 1;
+    /// <summary>当前级已攒经验（攒满升级后扣掉本级门槛、余量结转）</summary>
+    public int playerExp = 0;
+
     public int playerStrength = 0;     // 额外力量（天赋/遗产加成）
     public int playerIntelligence = 0; // 额外智力
     public int playerAgility = 0;      // 额外敏捷

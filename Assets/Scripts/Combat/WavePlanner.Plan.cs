@@ -25,18 +25,17 @@ public partial class WavePlanner
     }
 
     /// <summary>
-    /// 【2026-10-22 主人拍板 v4.2】正式关每回合波数：按章区间独立随机摇（每回合各摇各的）。
-    /// ch1→1/1、ch2→1/2、ch3→2/3、ch4+→3/3（GameConfig.FormalWavesPerRoundMin/Max）。
-    /// 返回每回合波数（下标=回合），Σ 即该关小怪总波数；v4.0「FORMAL_STAGE_WAVE_COUNT 定死 9」口径作废（常量保留退役）。
+    /// 【2026-10-25 主人拍板】正式关每回合波数：全章**定表**（不随机摇）——
+    /// ch1=1/2/3、ch2=2/3/4、ch3 起=3/4/5（GameConfig.FormalRoundWaveFixedCounts，公式 = 基数 + 回合下标）。
+    /// 返回每回合波数（下标=回合），Σ 即该关小怪总波数；v4.2「按章区间随机摇」口径作废（Min/Max 已删）；
+    /// v4.0「FORMAL_STAGE_WAVE_COUNT 定死 9」更早作废（常量保留退役）。
     /// </summary>
     static int[] RollFormalRoundWaveCounts(int chapter)
     {
         int rounds = GameConfig.FORMAL_STAGE_ROUND_COUNT;
-        int lo = GameConfig.FormalWavesPerRoundMin(chapter);
-        int hi = Mathf.Max(lo, GameConfig.FormalWavesPerRoundMax(chapter));
-        var counts = new int[rounds];
-        for (int r = 0; r < rounds; r++)
-            counts[r] = UnityEngine.Random.Range(lo, hi + 1);
+        int[] counts = GameConfig.FormalRoundWaveFixedCounts(chapter);
+        if (counts.Length != rounds)
+            Debug.LogError($"[WavePlanner] 回合波数定表长度 {counts.Length} ≠ 回合数 {rounds}（ch{chapter}），请核对 FormalRoundWaveFixedCounts");
         return counts;
     }
 
@@ -86,8 +85,9 @@ public partial class WavePlanner
 
         bool formalMain = bm != null && bm.IsFormalMainRun;
         // 【2026-10-22 主人拍板】正式关（主线 Normal 模式）波数口径：
-        // v4.0「定死 9 波」已作废（v4.2）——改按「3 回合 × 每回合按章区间独立摇」累加
-        // （ch1=3、ch2=3~6、ch3=6~9、ch4+=9；Boss 关另加末位 1 Boss 波，见 SetupBossWave）。
+        // v4.0「定死 9 波」已作废（v4.2）——改按「3 回合 × 每回合按章取数」累加
+        // （2026-10-25 主人拍板：全章定表 ch1=1/2/3=6 波、ch2=2/3/4=9 波、ch3 起=3/4/5=12 波；
+        // Boss 关另加末位 1 Boss 波，见 SetupBossWave）。
         // 引导局（TutorialDirector 直刷）/金币本/无限裂隙不摇（IsFormalMainRun 过滤），口径一行不动。
         // 刷怪点 hardMax 钳制对正式关**不生效**（v4.0 同口径延续）：anchor 取 usable[Mathf.Min(i, count-1)]、
         // 无刷怪点走虚拟 X（VIRTUAL_WAVE_SPACING），波数与刷怪点数量解耦，不会出 0 波；
@@ -118,8 +118,8 @@ public partial class WavePlanner
         {
             // 波数上限 = 刷怪点数量（多出来的波会共用一个 anchor，触发 X 撞车）
             int hardMax = usable.Count > 0 ? Mathf.Clamp(usable.Count, 1, GameConfig.STAGE_WAVE_MAX) : 0;
-            // 【2026-10-22 主人拍板 v4.2】正式关波数 = 3 回合 × 每回合按章区间独立摇的累加（见上方 formalRoundWaves）；
-            // v4.0「定死 9 波」口径作废。hardMax 钳制只作用于非正式关抽签（RollWaveCount），正式关与 v4.0 同样不钳。
+            // 【2026-10-25 主人拍板】正式关波数 = 3 回合 × 每回合按章定表（见上方 formalRoundWaves）；
+            // v4.2「按章区间随机摇」口径作废。hardMax 钳制只作用于非正式关抽签（RollWaveCount），正式关与 v4.0 同样不钳。
             waveCount = formalMain
                 ? formalTotalWaves
                 : StageModeTable.RollWaveCount(mode, ComputeWaveBonus(mode), hardMax);
@@ -156,7 +156,7 @@ public partial class WavePlanner
             }
             waveCount = GameConfig.GetSuggestedWaveCount(total, usable.Count);
             waveCount = Mathf.Clamp(waveCount, waveCountMin, waveCountMax);
-            // 【2026-10-22 主人拍板 v4.2】正式关波数 = 3 回合 × 每回合按章区间独立摇（模式池缺失时的兜底路径与主路径同口径）。
+            // 【2026-10-25 主人拍板】正式关波数 = 3 回合 × 每回合按章定表（模式池缺失时的兜底路径与主路径同口径）。
             // v4.0 原注释：不走 DistributeMonstersToWaves：它有「每波下限 2」的钳制，会把 10-15 抬到 ≥18 = 私自改总量。
             if (formalMain)
                 waveCount = formalTotalWaves;
@@ -171,8 +171,8 @@ public partial class WavePlanner
         // 【2026-10-22 主人拍板 v4.1】正式关每波怪数独立摇 10-15，不分摊：
         // 无论模式池路径还是公式兜底路径，正式关统一每波 Random.Range(10,16)（新常量
         // GameConfig.FORMAL_WAVE_MONSTERS_MIN/MAX），不再把关卡总怪数均摊到波（上午的 DistributeMonstersKeepTotal 停用保留）。
-        // 【2026-10-22 主人拍板 v4.2】波数改按章摇（formalTotalWaves），覆盖段照新波数循环即可，怪数口径不变。
-        // 总怪量随总波数浮动（ch1 ~30-45 / ch4+ ~90-135）；精英末波同口径（编成为精英）。
+        // 【2026-10-25 主人拍板】波数改按章定表（formalTotalWaves），覆盖段照新波数循环即可，怪数口径不变。
+        // 总怪量随总波数浮动（ch1 6 波 ~60-90 / ch2 9 波 ~90-135 / ch3+ 12 波 ~120-180）；精英末波同口径（编成为精英）。
         // ⚠ 性能口径不变：怪是分波刷的、前波不死光不刷后波，同屏峰值仍 ~15 只，与此前性能测试口径一致。
         // 引导局 / 金币本 / 无限裂隙不走本段，怪数口径一行不动。
         // 【2026-10-23 主人拍板】第 1 波减半、第 2 波减 1/4（折扣真源 = GameConfig.FORMAL_WAVE1/2_DISCOUNT），
@@ -573,8 +573,8 @@ public partial class WavePlanner
         int minionWaves = GameConfig.GetSuggestedWaveCount(minions, 0);
         minionWaves = Mathf.Clamp(minionWaves, 3, 7);
         int[] perWave;
-        // 【2026-10-22 主人拍板 v4.2】正式关 Boss 关 = 3 回合小怪波（每回合按章区间独立摇，ch1=3…ch4+=9 波）
-        // + 末位 1 Boss 波；v4.0「小怪波定死 9（FORMAL_STAGE_WAVE_COUNT）」口径作废（常量保留退役）。
+        // 【2026-10-25 主人拍板】正式关 Boss 关 = 3 回合小怪波（每回合按章定表：ch1=6…ch3+ =12 波）
+        // + 末位 1 Boss 波；v4.2「按章区间随机摇」口径作废；v4.0「小怪波定死 9（FORMAL_STAGE_WAVE_COUNT）」更早作废（常量保留退役）。
         // Boss 波放末位（原「小怪波 + 末尾 isBossWave」结构不动），且 Boss 波本身不算回合末（isRoundEnd 恒 false，走通关链）。
         // 【2026-10-22 主人拍板 v4.1】小怪波每波怪数独立摇 10-15（不再用 DistributeMonstersKeepTotal 均摊，
         // 函数保留退役）；Boss 波（末位）维持现有 Boss+杂兵编成与怪数口径不变。

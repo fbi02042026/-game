@@ -73,7 +73,8 @@ public partial class BattleManager
         if (m.LastDamageSource != null && m.LastDamageSource.isAlly)
             RecordAllyKill(m.LastDamageSource);
         AdventureLogAchievements.OnMonsterKilled(m, CurrentChapter);
-        // 英雄可见等级已停用（属性成长只走城镇天赋），只保留隐藏经验用于裂缝掉落稀有度
+        // 隐藏经验照旧只管裂缝掉落稀有度；【2026-10-25 主人拍板「玩家升级按完成的一次关卡给一次经验」】
+        // 击杀不再喂玩家可见等级（经验唯一入口 = LevelSystem.AddStageClearExp，主线/支线完成关卡才给）
         HiddenLevelSystem.AddKillExp(m);
 
         // 连杀：累计击杀连击数（≥3 起会在下方兑现额外金币，见 COMBO_BONUS_GOLD）

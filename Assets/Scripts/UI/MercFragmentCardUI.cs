@@ -119,7 +119,9 @@ public class MercFragmentCardUI
         SetSprite(Frame, sp);
         SetSprite(MaskGraphic, sp);
 
-        if (Head != null)
+        // 占位建卡（如 DailyLoginUI.Build 建卡时传空串、Refresh 再按奖励 Apply）：
+        // id 为空不是缺资源，不算缺真值，跳过头像加载不报错；头像 Image 保持预制体原样（此时卡是隐藏的）。
+        if (Head != null && !string.IsNullOrEmpty(hireIdOrAssetId))
         {
             var head = MercPortraitSprites.GetHead(hireIdOrAssetId);
             if (head == null) head = MercPortraitSprites.GetStand(hireIdOrAssetId);

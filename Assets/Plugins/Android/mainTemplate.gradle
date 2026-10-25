@@ -4,6 +4,11 @@ apply plugin: 'com.android.library'
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
 // Android Resolver Dependencies Start
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4' // Assets/DirichletMediation/Editor/DirichletMediationDependencies.xml:45
+    implementation 'androidx.core:core:1.9.0' // Assets/DirichletMediation/Editor/DirichletMediationDependencies.xml:27
+    implementation 'androidx.fragment:fragment:1.5.5' // Assets/DirichletMediation/Editor/DirichletMediationDependencies.xml:33
+    implementation 'androidx.recyclerview:recyclerview:1.2.1' // Assets/DirichletMediation/Editor/DirichletMediationDependencies.xml:21
+    implementation 'com.squareup.okhttp3:okhttp:3.12.1' // Assets/DirichletMediation/Editor/DirichletMediationDependencies.xml:39
     implementation 'com.taptap.sdk:tap-core:4.10.9' // Packages/com.taptap.sdk.core/Mobile/Editor/NativeDependencies.xml:7
     implementation 'com.taptap.sdk:tap-login:4.10.9' // Packages/com.taptap.sdk.login/Mobile/Editor/NativeDependencies.xml:7
 // Android Resolver Dependencies End

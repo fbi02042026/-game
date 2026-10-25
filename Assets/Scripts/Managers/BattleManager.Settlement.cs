@@ -1453,6 +1453,10 @@ public partial class BattleManager
         int equipCount = GameConfig.EQUIP_CHOOSE_COUNT;
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         HiddenLevelSystem.AddStageClearExp(ch);
+        // 【2026-10-25 矫正后口径】玩家等级 = 存档永久账（SaveData.playerLevel/playerExp），
+        // 经验 = 完成关卡才给一次，白名单（主线 Normal/支线 SideIsland/终章 Finale）在 LevelSystem.StageFeedsExp 内部把关；
+        // 升级反馈走 LevelUpPopup（挂起到回冒险界面才弹）。
+        LevelSystem.AddStageClearExp(ch);
         int bonusGold = 0;
         // 支线岛（2026-10-23 合并方案）不发关卡任务金——岛产出走自己的结算链，宝箱演出只呈现装备与折金
         if (!_stageQuestGoldGranted && !IsSideIsland)
@@ -1716,8 +1720,10 @@ public partial class BattleManager
         // 【2026-10-24 主人拍板】正式关卡/支线岛/活动副本（金币/徽记）先播「战斗结果」界面再进各自结算；
         // 无限裂隙不播（每层通关即有累计奖励，直接走 SettleEndlessStageClear 续层链）。
         // 界面播完（或点击跳过）才走模式结算；引导局在进本函数前已分流，永远到不了这里。
+        // 【2026-10-25 主人拍板】胜利结果界面改版：奖励区展示本局自动领取的宝箱奖励（RunStats 数据源），
+        // 点【确定】/点任意处 → 走 Mode.SettleStageClear → 回冒险界面链照旧。
         if (Mode.UsesBattleResultScreen)
-            BattleResultScreen.Show(true, () => Mode.SettleStageClear(this));
+            BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this));
         else
             Mode.SettleStageClear(this);
     }
@@ -1732,6 +1738,9 @@ public partial class BattleManager
         var cm = ChapterManager.Instance;
         if (isBoss)
         {
+            // 【2026-10-25 主人拍板「做分享和推广（好评引导）」】章末通关 → 回城后弹一次好评引导
+            // （每日最多一次，判重/判链接在 TapTapRatePopup 内部；消费点 = TownHubController.Start）。
+            TapTapRatePopup.PendingPrompt = true;
             // 章节解锁（MarkChapterCleared）已在 ChapterManager 关卡落账时完成，
             // 回城后世界地图传送门 / 冒险页第二章即开放。
             // 【2026-10-24 主人拍板「只要打完就清」】章末【下一关】也 = 本局到此为止（覆盖 10-22 双钮口径）：
