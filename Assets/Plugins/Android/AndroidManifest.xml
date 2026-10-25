@@ -17,18 +17,29 @@
         android:allowBackup="false"
         android:hardwareAccelerated="true"
         tools:replace="android:allowBackup">
+        <!-- 隐私合规启动 Activity：在 Unity 引擎启动前展示隐私政策，同意后才进入游戏。
+             避免引擎在用户同意前读取 AndroidID（TapTap 隐私检测条目 164014）。 -->
         <activity
-            android:name="com.unity3d.player.UnityPlayerActivity"
+            android:name="com.PixelAdventure.RiftBlade.PrivacySplashActivity"
             android:exported="true"
-            android:hardwareAccelerated="true"
-            android:theme="@style/UnityThemeSelector">
+            android:theme="@android:style/Theme.Material.Light.NoActionBar"
+            android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <meta-data
-            android:name="unityplayer.UnityActivity"
-            android:value="true" />
+
+        <!-- Unity 主 Activity：降级为普通 Activity，由 PrivacySplashActivity 在同意后显式启动。
+             保留 unityplayer.UnityActivity meta（引擎靠它识别主 Activity）。 -->
+        <activity
+            android:name="com.unity3d.player.UnityPlayerActivity"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:screenOrientation="portrait">
+            <meta-data
+                android:name="unityplayer.UnityActivity"
+                android:value="true" />
+        </activity>
     </application>
 </manifest>

@@ -273,23 +273,22 @@ namespace Dirichlet.Mediation.Editor
             }
 
             var content = File.ReadAllText(settingsPath);
-            
-            // Check if already injected
-            if (content.Contains(DIRICHLET_REPOS_START))
-            {
-                Debug.Log($"{TAG} settings.gradle already has Dirichlet repos");
-                return;
-            }
-            
-            // Remove any previously injected content
+
+            // Always strip our previously injected block, then re-inject with the
+            // correct library module name. The Bee-generated Gradle project persists
+            // between builds, so an early return on the marker would let a stale
+            // block with a wrong module reference survive across builds.
             content = RemoveInjectedContent(content, DIRICHLET_REPOS_START, DIRICHLET_REPOS_END);
             
             var reposBlock = new StringBuilder();
+            // Tuanjie engine names the library module ':tuanjieLibrary' (not ':unityLibrary');
+            // resolve it from the generated settings.gradle so project(':...') never fails.
+            var libModule = content.Contains("':tuanjieLibrary'") ? "tuanjieLibrary" : "unityLibrary";
             reposBlock.AppendLine(DIRICHLET_REPOS_START);
             reposBlock.AppendLine("        google()");
             reposBlock.AppendLine("        mavenCentral()");
             reposBlock.AppendLine("        flatDir {");
-            reposBlock.AppendLine("            dirs \"${project(':unityLibrary').projectDir}/libs\", \"${project(':unityLibrary').projectDir}/DirichletMediation/libs\"");
+            reposBlock.AppendLine($"            dirs \"${{project(':{libModule}').projectDir}}/libs\", \"${{project(':{libModule}').projectDir}}/DirichletMediation/libs\"");
             reposBlock.AppendLine("        }");
             
             if (enableCsj)
