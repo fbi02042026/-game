@@ -141,6 +141,29 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
+    /// 礼物副本（2026-10-26 主人拍板「新加一个掉落礼物的活动副本周六开启」）：
+    /// 单场 Elite 战斗，通关只掉好感礼物（见 BattleManager.Settlement → MercGrowInventory.GrantGiftDungeonDrops），
+    /// 不推进主线章节。结构照抄 StartScrollDungeon。
+    /// </summary>
+    public void StartGiftDungeon(int chapterNum)
+    {
+        // 场景/怪池章 = 固定题材章（暂用第 6 章 巨岩深窟，与卷轴同款；要换改 ActivityDungeonRules.SceneChapter 的 Gift 行）
+        currentChapter = ActivityDungeonRules.SceneChapter(ActivityDungeonKind.Gift);
+        currentStageIndex = 0;
+        stageMap.Clear();
+        availableNextStages.Clear();
+        var stage = new StageData
+        {
+            stageIndex = 0,
+            type = StageType.Elite,
+            nextStages = new List<int>()
+        };
+        stageMap.Add(stage);
+        availableNextStages.Add(stage);
+        Debug.Log($"[ChapterManager] 礼物副本 场景=第{currentChapter}章 单场（入参章号 {chapterNum} 不再决定场景）");
+    }
+
+    /// <summary>
     /// 支线岛（2026-10-23 合并方案）：单场 Boss 战。currentChapter = 岛的背景篇（怪池/背景资产同源复用），
     /// stageIndex=0 的 Boss 关（WavePlanner 的 Boss 取池按 STAGES_PER_GRAND-1，与 stageIndex 无关，真 Boss 行必入池）。
     /// 结构照抄 StartBadgeDungeon；通关结算走 SideIslandBattleMode.SettleStageClear（不进 OnStageComplete 主线链）。
@@ -361,6 +384,9 @@ public class ChapterManager : Singleton<ChapterManager>
             return;
         // 卷轴副本（2026-10-24 拍板）：同徽记本，通关不走主线首通/章推进/派定（掉落全走自己的发放链）
         if (BattleManager.Instance != null && BattleManager.Instance.IsScrollDungeon)
+            return;
+        // 礼物副本（2026-10-26 拍板）：同卷轴本，通关不走主线首通/章推进/派定（掉落全走自己的发放链）
+        if (BattleManager.Instance != null && BattleManager.Instance.IsGiftDungeon)
             return;
         // 支线岛（2026-10-23 合并方案）：同金币本，岛通关不走主线首通/章推进/派定——
         // 全在 SideIslandBattleMode.SettleStageClear 自己的链里（发奖 + MarkSideIslandCleared + 派第二岛）

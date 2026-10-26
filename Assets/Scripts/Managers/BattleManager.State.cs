@@ -174,8 +174,11 @@ public partial class BattleManager
     /// <summary>当前局是否卷轴副本（2026-10-24 新玩法，见 ScrollDungeonBattleMode）。派生写法照抄 IsBadgeDungeon。</summary>
     public bool IsScrollDungeon => Mode != null && Mode.Id == BattleModeId.ScrollDungeon;
 
-    /// <summary>当前局是否活动副本（金币/徽记/卷轴三本统称，开放日/次数/波次/倍率共用口径的地方用）。</summary>
-    public bool IsActivityDungeon => IsGoldDungeon || IsBadgeDungeon || IsScrollDungeon;
+    /// <summary>当前局是否礼物副本（2026-10-26 新玩法，见 GiftDungeonBattleMode）。派生写法照抄 IsScrollDungeon。</summary>
+    public bool IsGiftDungeon => Mode != null && Mode.Id == BattleModeId.GiftDungeon;
+
+    /// <summary>当前局是否活动副本（金币/徽记/卷轴/礼物四本统称，开放日/次数/波次/倍率共用口径的地方用）。</summary>
+    public bool IsActivityDungeon => IsGoldDungeon || IsBadgeDungeon || IsScrollDungeon || IsGiftDungeon;
 
     /// <summary>当前局是否无限裂隙（2026-10-17 新玩法，见 EndlessBattleMode）</summary>
     public bool IsEndlessRift => Mode != null && Mode.Id == BattleModeId.Endless;

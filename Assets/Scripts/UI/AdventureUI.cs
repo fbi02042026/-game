@@ -41,6 +41,11 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     /// 由 TryEnterBattle 按活动列表选中态重设（卷轴横条选中 = true）；BattleManager.StartNewRunInternal 读完即清（照徽记本口径）。
     /// </summary>
     public static bool PendingScrollDungeon;
+    /// <summary>
+    /// 礼物副本进本标记（2026-10-26 主人拍板「掉落礼物的活动副本周六开启」）。
+    /// 由 TryEnterBattle 按活动列表选中态重设（礼物横条选中 = true）；BattleManager.StartNewRunInternal 读完即清（照卷轴本口径）。
+    /// </summary>
+    public static bool PendingGiftDungeon;
 
     /// <summary>
     /// 支线岛进本标记（2026-10-23 合并方案）：值 = 岛 id（1..8，0=非岛局）。
@@ -141,6 +146,9 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     const string ActivityBadgeRowName = "徽记";
     /// <summary>活动列表横条：卷轴副本（RightContent/活动副本/卷轴；2026-10-24 主人拍板接入）。</summary>
     const string ActivityScrollRowName = "卷轴";
+    /// <summary>活动列表横条：礼物副本（RightContent/活动副本/礼物；2026-10-26 主人拍板「掉落礼物的活动副本周六开启」）。
+    /// prefab 没摆第四条 → 运行时克隆卷轴条生成（照 AdventureUI.Finale 追查条的克隆先例），不改 prefab。</summary>
+    const string ActivityGiftRowName = "礼物";
     /// <summary>没轮到（今天不开放）横条 bg 的压灰系数（2026-10-24 主人拍板「灰显」；选中效果改走 prefab「选中」节点）。</summary>
     const float ActivityRowGrayFactor = 0.45f;
 
@@ -187,7 +195,8 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         ScrollCommon,
         ScrollRare,
         ScrollLegendary,
-        Badge   // 徽记副本掉落预览（2026-10-23 活动副本一拆二）
+        Badge,   // 徽记副本掉落预览（2026-10-23 活动副本一拆二）
+        Gift     // 礼物副本掉落预览（2026-10-26 主人拍板「掉落礼物的活动副本周六开启」）
     }
 
     readonly List<PreviewDropKind> _previewDrops = new List<PreviewDropKind>(4);

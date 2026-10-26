@@ -73,6 +73,7 @@ public partial class AdventureUI
             case PreviewDropKind.ScrollRare:      return "稀卷";
             case PreviewDropKind.ScrollLegendary: return "传卷";
             case PreviewDropKind.Badge:           return "徽记";
+            case PreviewDropKind.Gift:            return "礼物";
             default:                              return "";
         }
     }
@@ -155,6 +156,8 @@ public partial class AdventureUI
             // 卷轴横条→按所选难度预览（2026-10-24 主人拍板：普通=普通卷3-5 / 困难=普通3-5+高级0-1 / 噩梦=高级1-3 只掉高级）
             if (_selectedActivityKind == ActivityDungeonKind.Badge)
                 outList.Add(PreviewDropKind.Badge);
+            else if (_selectedActivityKind == ActivityDungeonKind.Gift)
+                outList.Add(PreviewDropKind.Gift);   // 礼物副本：随机好感礼物，难度越高数量越多（2/3/4）
             else if (_selectedActivityKind == ActivityDungeonKind.Scroll)
             {
                 if (_selectedDiff >= 2)
@@ -204,6 +207,9 @@ public partial class AdventureUI
                 return LoadScrollDropSprite(MercRosterDefs.MercRarity.Legendary);
             case PreviewDropKind.Badge:
                 return LoadBadgeDropSprite();
+            case PreviewDropKind.Gift:
+                // 礼物副本掉落预览：拿礼物图组里的面包当代表图（随机礼物池见 MercFavorDefs.Gifts）
+                return Resources.Load<Sprite>("Art/UI/礼物/32px-item301");
             default:
                 return null;
         }

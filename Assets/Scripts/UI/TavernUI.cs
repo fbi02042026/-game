@@ -337,14 +337,14 @@ public class TavernUI : MonoBehaviour, ITownPage
         }
         if (trustButton != null)
         {
-            // 【2026-10-24 主人拍板「开工」】信任交流卡复用为「酒馆闲话」入口（TavernLore 三入口 +
-            // 老队员记忆，见 TavernChatPopupUI）——原 2026-10-15「未开放」口径由本批接线取代；
-            // 信赖度展示保留（挪到弹窗页脚），信任系统本体仍未开放。
-            // 不加第五张卡：四卡 2×2 已占满，改布局会碰预制体排版（铁律 32）。
+            // 【2026-10-26 主人拍板】右下卡改「佣兵羁绊」＝佣兵好感界面入口（MercFavorUI，
+            // 预制体 Resources/Prefabs/Town/佣兵好感：对话/送礼攒好感，满值解锁羁绊地图）。
+            // 原「信任交流卡复用为酒馆闲话」口径作废——闲话已单独挪到场景「对话」按钮
+            // （本文件下方 gossipBtn 接线，TavernChatPopupUI），本卡只开好感界面。
             trustButton.gameObject.SetActive(true);
             trustButton.onClick.RemoveAllListeners();
-            trustButton.onClick.AddListener(() => TavernChatPopupUI.Toggle());
-            RetitleCard(trustButton.transform, "酒馆闲话", "空座位·独眼·老板娘·旧日同伴");
+            trustButton.onClick.AddListener(() => MercFavorUI.Open());
+            RetitleCard(trustButton.transform, "佣兵羁绊", "对话送礼攒好感，解锁羁绊地图");
         }
         if (questButton != null)
         {

@@ -57,6 +57,13 @@ public enum BattleModeId
     ScrollDungeon,
 
     /// <summary>
+    /// 礼物副本（2026-10-26 主人拍板「新加一个掉落礼物的活动副本周六开启」）：
+    /// 单场 Elite 战斗，通关只掉好感礼物（发放走 <c>MercGrowInventory.GrantGiftDungeonDrops</c>），
+    /// 不推进主线。不占 SlotTable 位，入口 = 冒险页活动列表「礼物」横条（代码克隆卷轴条生成，文案「好感礼物每周六开启」）。
+    /// </summary>
+    GiftDungeon,
+
+    /// <summary>
     /// 支线岛（2026-10-23 合并方案）：单 Boss 特殊关，10 体力/次，产出 = 固定局外金币 + 天赋石 + 装备。
     /// 不占冒险界面按钮位，入口 = 冒险页支线岛点击（AdventureUI.BranchIslands）。
     /// </summary>

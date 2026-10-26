@@ -25,6 +25,7 @@ public partial class AdventureUI
             if (activity)
                 stageNameLabel.text = _selectedActivityKind == ActivityDungeonKind.Badge ? "徽记副本"
                                     : _selectedActivityKind == ActivityDungeonKind.Scroll ? "卷轴副本"
+                                    : _selectedActivityKind == ActivityDungeonKind.Gift ? "礼物副本"
                                     : "金币副本";
             else if (endless) stageNameLabel.text = "无限裂隙";
             else if (main)
@@ -51,6 +52,8 @@ public partial class AdventureUI
                     ? "通关获得随机职业徽记。每周二、四、日开放，每日 2 次。"
                     : _selectedActivityKind == ActivityDungeonKind.Scroll
                     ? "通关获得招募卷轴，难度越高出高级卷轴。每周五开放，每日 2 次。"
+                    : _selectedActivityKind == ActivityDungeonKind.Gift
+                    ? "通关获得好感礼物，难度越高掉得越多。每周六开放，每日 2 次。"
                     : $"怪物只掉金币。通关获得 {gold} 金币。每周一、三、六开放，每日 2 次。";
             }
             else if (endless)

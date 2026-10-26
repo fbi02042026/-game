@@ -403,7 +403,7 @@ public partial class WavePlanner
         }
         PlanStageEvents();
         _totalWaves = _waves.Count;
-        GamePerf.Log($"[BattleManager] 活动副本（{(bm != null && bm.IsBadgeDungeon ? "徽记" : bm.IsScrollDungeon ? "卷轴" : "金币")}）难度{diff} 定死波次：" +
+        GamePerf.Log($"[BattleManager] 活动副本（{(bm != null && bm.IsBadgeDungeon ? "徽记" : bm.IsScrollDungeon ? "卷轴" : bm.IsGiftDungeon ? "礼物" : "金币")}）难度{diff} 定死波次：" +
                      $"{elitePerWave.Length}波×{perWaveCount}只 精英=[{string.Join(",", elitePerWave)}] Boss=[{string.Join(",", bossPerWave)}]");
         for (int i = 0; i < _waves.Count; i++)
         {

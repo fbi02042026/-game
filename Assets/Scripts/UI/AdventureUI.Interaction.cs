@@ -165,9 +165,10 @@ public partial class AdventureUI
             // 显隐/灰显/选中节点统一由 ApplyActivityRowStates 处理（RefreshAll 里会刷）。
             if (!IsActivityRowSelectable(_selectedActivityKind))
             {
-                if (IsActivityRowSelectable(ActivityDungeonKind.Gold)) _selectedActivityKind = ActivityDungeonKind.Gold;
-                else if (IsActivityRowSelectable(ActivityDungeonKind.Badge)) _selectedActivityKind = ActivityDungeonKind.Badge;
-                else if (IsActivityRowSelectable(ActivityDungeonKind.Scroll)) _selectedActivityKind = ActivityDungeonKind.Scroll;
+            if (IsActivityRowSelectable(ActivityDungeonKind.Gold)) _selectedActivityKind = ActivityDungeonKind.Gold;
+            else if (IsActivityRowSelectable(ActivityDungeonKind.Badge)) _selectedActivityKind = ActivityDungeonKind.Badge;
+            else if (IsActivityRowSelectable(ActivityDungeonKind.Scroll)) _selectedActivityKind = ActivityDungeonKind.Scroll;
+            else if (IsActivityRowSelectable(ActivityDungeonKind.Gift)) _selectedActivityKind = ActivityDungeonKind.Gift;
             }
         }
         if (!IsModePlayable(idx))
@@ -222,6 +223,46 @@ public partial class AdventureUI
         WireActivityRow(list.Find(ActivityGoldRowName), ActivityDungeonKind.Gold);
         WireActivityRow(list.Find(ActivityBadgeRowName), ActivityDungeonKind.Badge);
         WireActivityRow(list.Find(ActivityScrollRowName), ActivityDungeonKind.Scroll);
+        WireActivityRow(EnsureGiftRow(list), ActivityDungeonKind.Gift);
+    }
+
+    /// <summary>
+    /// 礼物横条（2026-10-26 主人拍板「新加一个掉落礼物的活动副本周六开启」）：
+    /// prefab 只摆了金币/徽记/卷轴三条 → 克隆卷轴条生成「礼物」条（照 AdventureUI.Finale 追查条克隆先例，
+    /// 只做一次；找不到卷轴条 LogError 不重试防刷屏）。摆位 = 卷轴条下方一行（行距 = 金币行 y − 徽记行 y 实测），
+    /// 文案「礼物副本 / 好感礼物每周六开启」，选中高亮子节点照用。
+    /// </summary>
+    Transform EnsureGiftRow(Transform list)
+    {
+        var exist = list.Find(ActivityGiftRowName);
+        if (exist != null) return exist;
+
+        var src = list.Find(ActivityScrollRowName);
+        if (src == null)
+        {
+            Debug.LogError($"[AdventureUI] 活动列表缺「{ActivityScrollRowName}」横条，礼物横条无从克隆（缺真值不兜底）");
+            return null;
+        }
+        var clone = Instantiate(src, list);
+        clone.name = ActivityGiftRowName;
+
+        // 摆位：贴在卷轴条下方一行（纵向 y 排版 = 列表填充必要介入，行距照追查条口径运行时实测）
+        var gold = list.Find(ActivityGoldRowName) as RectTransform;
+        var badge = list.Find(ActivityBadgeRowName) as RectTransform;
+        var scroll = src as RectTransform;
+        var crt = clone as RectTransform;
+        if (gold != null && badge != null && scroll != null)
+        {
+            float rowDist = (gold as RectTransform).anchoredPosition.y - badge.anchoredPosition.y;
+            crt.anchoredPosition = new Vector2(scroll.anchoredPosition.x, scroll.anchoredPosition.y - rowDist);
+        }
+
+        var nameTxt = clone.Find("Name")?.GetComponent<Text>();
+        if (nameTxt != null) nameTxt.text = "礼物副本";
+        else Debug.LogError("[AdventureUI] 礼物横条缺 Name 文本节点（缺真值不兜底）");
+        var infoTxt = clone.Find("Info")?.GetComponent<Text>();
+        if (infoTxt != null) infoTxt.text = "好感礼物每周六开启";
+        return clone;
     }
 
     void WireActivityRow(Transform row, ActivityDungeonKind kind)
@@ -287,8 +328,8 @@ public partial class AdventureUI
     {
         var list = transform.Find("RightContent/" + ActivityNodeName);
         if (list == null) return;
-        var kinds = new[] { ActivityDungeonKind.Gold, ActivityDungeonKind.Badge, ActivityDungeonKind.Scroll };
-        var names = new[] { ActivityGoldRowName, ActivityBadgeRowName, ActivityScrollRowName };
+        var kinds = new[] { ActivityDungeonKind.Gold, ActivityDungeonKind.Badge, ActivityDungeonKind.Scroll, ActivityDungeonKind.Gift };
+        var names = new[] { ActivityGoldRowName, ActivityBadgeRowName, ActivityScrollRowName, ActivityGiftRowName };
         for (int i = 0; i < kinds.Length; i++)
         {
             var row = list.Find(names[i]);
@@ -762,6 +803,7 @@ public partial class AdventureUI
                 PendingGoldDungeon = false;
                 PendingBadgeDungeon = false;
                 PendingScrollDungeon = false;
+                PendingGiftDungeon = false;
                 // 不调 SetChapter：裂隙章节状态由 StartEndlessRift 全权负责
             }
             else if (activity)
@@ -775,6 +817,7 @@ public partial class AdventureUI
                 PendingGoldDungeon = actKind == ActivityDungeonKind.Gold;
                 PendingBadgeDungeon = actKind == ActivityDungeonKind.Badge;
                 PendingScrollDungeon = actKind == ActivityDungeonKind.Scroll;
+                PendingGiftDungeon = actKind == ActivityDungeonKind.Gift;
                 ChapterManager.Instance?.SetChapter(_selectedChapter);
             }
             else if (!StaminaSystem.TrySpendForAdventure())
@@ -792,6 +835,7 @@ public partial class AdventureUI
                 PendingGoldDungeon = false;
                 PendingBadgeDungeon = false;
                 PendingScrollDungeon = false;
+                PendingGiftDungeon = false;
                 ChapterManager.Instance?.SetChapter(1);
             }
             else if (!endless && !activity)
@@ -802,6 +846,7 @@ public partial class AdventureUI
                 PendingGoldDungeon = false;
                 PendingBadgeDungeon = false;
                 PendingScrollDungeon = false;
+                PendingGiftDungeon = false;
                 ChapterManager.Instance?.SetChapter(_selectedChapter);
                 NoteChosenBranch(_selectedChapter);
             }

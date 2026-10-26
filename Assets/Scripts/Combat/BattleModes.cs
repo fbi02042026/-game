@@ -220,6 +220,53 @@ public sealed class ScrollDungeonBattleMode : BattleMode
 }
 
 /// <summary>
+/// 礼物副本（2026-10-26 主人拍板「新加一个掉落礼物的活动副本周六开启」）：
+/// 单场战斗，通关只掉好感礼物（发放走 <c>MercGrowInventory.GrantGiftDungeonDrops</c>，难度越高掉越多），
+/// 不推进主线、不发金币/碎片/道具/装备。
+/// 结构照抄 <see cref="ScrollDungeonBattleMode"/>；不占 SlotTable 位，
+/// 入口 = 冒险页活动列表「礼物」横条（代码克隆卷轴条生成，AdventureUI.EnsureGiftRow）。
+/// </summary>
+public sealed class GiftDungeonBattleMode : BattleMode
+{
+    public override BattleModeId Id => BattleModeId.GiftDungeon;
+    public override string DisplayName => "礼物副本";
+
+    /// <summary>不经 SlotTable 按钮（无按钮位），进本由 AdventureUI 活动列表选中态置 PendingGiftDungeon 决定；本属性无消费点。</summary>
+    public override bool IsPlayable => false;
+
+    public override bool DropsEquipment => false;
+
+    /// <summary>开局免费抽 5 次（与金币/徽记/卷轴同框架「活动副本开局抽五次」，进局清零）。</summary>
+    public override int FreeEntryDraws => SlotMachineDefs.GIFT_DUNGEON_FREE_DRAWS;
+
+    /// <summary>照抄前三本：打完就结算回城、币随局清零，不发局内抽奖币（🔴 礼物副本不给金币）。</summary>
+    public override bool GrantsRunCoins => false;
+
+    public override void BuildChapter(ChapterManager cm, int chapter)
+    {
+        if (cm == null)
+        {
+            Debug.LogError("[BattleMode] 礼物副本 BuildChapter 失败：ChapterManager 为空");
+            return;
+        }
+        cm.StartGiftDungeon(chapter);
+    }
+
+    /// <summary>照抄前三本结算：弹胜利结算面板，确认后回城（不推进主线）。</summary>
+    public override void SettleStageClear(BattleManager bm)
+    {
+        if (bm == null)
+        {
+            Debug.LogError("[BattleMode] 礼物副本 SettleStageClear 失败：BattleManager 为空");
+            return;
+        }
+        // 与前三本同款：通关记录最高难度（四本共用活动标签进度）
+        ActivityDungeonRules.MarkCleared(bm.BattleDifficulty);
+        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+    }
+}
+
+/// <summary>
 /// 支线岛（2026-10-23 合并方案「岛壳用 2 岛依次解锁 + 岛内容用单 Boss 特殊关」）：
 /// 单场 Boss 战，10 体力/次，产出 = 固定局外金币 + 天赋石（SideIslandDefs 按岛定）
 /// + 装备掉落（DropsEquipment=true 走既有宝箱三选一链，Boss 关 bonusStar=2）。
@@ -364,7 +411,7 @@ public sealed class FinaleBattleMode : BattleMode
     }
 }
 
-/// <summary>活动副本种类（2026-10-23 拆二：金币/徽记 + 2026-10-24 加卷轴）。三本共用难度进度，各算各的开放日/每日次数。</summary>
+/// <summary>活动副本种类（2026-10-23 拆二：金币/徽记 + 2026-10-24 加卷轴 + 2026-10-26 加礼物）。四本共用难度进度，各算各的开放日/每日次数。</summary>
 public enum ActivityDungeonKind
 {
     /// <summary>金币副本：周一/三/六，每次 10 体力，只掉金币。</summary>
@@ -372,7 +419,9 @@ public enum ActivityDungeonKind
     /// <summary>徽记副本：周二/四/日，每次 10 体力，只掉随机职业徽记。</summary>
     Badge,
     /// <summary>卷轴副本：周五，每次 15 体力，只掉招募卷轴（2026-10-24 主人拍板）。</summary>
-    Scroll
+    Scroll,
+    /// <summary>礼物副本：周六，每次 10 体力，只掉好感礼物（2026-10-26 主人拍板）。</summary>
+    Gift
 }
 
 /// <summary>
@@ -405,7 +454,10 @@ public static class ActivityDungeonRules
     /// <summary>卷轴副本进本体力（2026-10-24 主人拍板「15体力」）。</summary>
     public const int SCROLL_ENTRY_STAMINA_COST = 15;
 
-    /// <summary>进本体力和开放日按种类分流（体力单一出口，Interaction/Detail/StaminaSystem 都问这里）。</summary>
+    /// <summary>
+    /// 进本体力和开放日按种类分流（体力单一出口，Interaction/Detail/StaminaSystem 都问这里）。
+    /// 礼物副本照金币/徽记同价 10 体力（2026-10-26 拍板未单独给价，先按同价口径，要改改这里）。
+    /// </summary>
     public static int EntryStaminaCost(ActivityDungeonKind kind)
         => kind == ActivityDungeonKind.Scroll ? SCROLL_ENTRY_STAMINA_COST : ENTRY_STAMINA_COST;
 
@@ -422,6 +474,8 @@ public static class ActivityDungeonRules
                 return d == DayOfWeek.Tuesday || d == DayOfWeek.Thursday || d == DayOfWeek.Sunday;
             case ActivityDungeonKind.Scroll:
                 return d == DayOfWeek.Friday;
+            case ActivityDungeonKind.Gift:
+                return d == DayOfWeek.Saturday;   // 2026-10-26 主人拍板：礼物副本周六开启
             default:
                 return false;
         }
@@ -435,6 +489,7 @@ public static class ActivityDungeonRules
             case ActivityDungeonKind.Gold:  return "金币副本只在每周一、三、六开放";
             case ActivityDungeonKind.Badge: return "徽记副本只在每周二、四、日开放";
             case ActivityDungeonKind.Scroll: return "卷轴副本只在每周五开放";
+            case ActivityDungeonKind.Gift:   return "礼物副本只在每周六开放";
             default: return "该副本暂未开放";
         }
     }
@@ -443,7 +498,7 @@ public static class ActivityDungeonRules
     public static int GateChapter(ActivityDungeonKind kind)
         => kind == ActivityDungeonKind.Scroll ? 3 : 1;
 
-    /// <summary>副本展示名（toast/详情单一出口，不许各写一份）。</summary>
+    /// <summary>活动副本展示名（toast/详情单一出口，不许各写一份）。</summary>
     public static string DungeonName(ActivityDungeonKind kind)
     {
         switch (kind)
@@ -451,6 +506,7 @@ public static class ActivityDungeonRules
             case ActivityDungeonKind.Gold:   return "金币副本";
             case ActivityDungeonKind.Badge:  return "徽记副本";
             case ActivityDungeonKind.Scroll: return "卷轴副本";
+            case ActivityDungeonKind.Gift:   return "礼物副本";
             default: return "活动副本";
         }
     }
@@ -466,6 +522,8 @@ public static class ActivityDungeonRules
             case ActivityDungeonKind.Gold:   return 1;
             case ActivityDungeonKind.Badge:  return 2;
             case ActivityDungeonKind.Scroll: return 6;
+            // 礼物本暂用洞穴同卷轴（无专属怪图回落题材章口径，2026-10-24 卷轴先例）；主人要换场景改这一行
+            case ActivityDungeonKind.Gift:   return 6;
             default: return 1;
         }
     }
@@ -524,6 +582,9 @@ public static class ActivityDungeonRules
             case ActivityDungeonKind.Scroll:
                 EnsureDay(data, ref data.scrollDungeonDayKey, ref data.scrollDungeonTriesToday);
                 return Mathf.Max(0, DAILY_TRIES - data.scrollDungeonTriesToday);
+            case ActivityDungeonKind.Gift:
+                EnsureDay(data, ref data.giftDungeonDayKey, ref data.giftDungeonTriesToday);
+                return Mathf.Max(0, DAILY_TRIES - data.giftDungeonTriesToday);
             default:
                 return 0;
         }
@@ -549,6 +610,7 @@ public static class ActivityDungeonRules
             case ActivityDungeonKind.Gold:   data.goldDungeonTriesToday++;  break;
             case ActivityDungeonKind.Badge:  data.badgeDungeonTriesToday++; break;
             case ActivityDungeonKind.Scroll: data.scrollDungeonTriesToday++; break;
+            case ActivityDungeonKind.Gift:   data.giftDungeonTriesToday++;  break;
         }
         SaveSystem.Instance?.Save();
         return true;
@@ -754,6 +816,7 @@ public static class BattleModes
     public static readonly GoldDungeonBattleMode GoldDungeon = new GoldDungeonBattleMode();
     public static readonly BadgeDungeonBattleMode BadgeDungeon = new BadgeDungeonBattleMode();   // 2026-10-23 徽记副本（不占 SlotTable 位）
     public static readonly ScrollDungeonBattleMode ScrollDungeon = new ScrollDungeonBattleMode(); // 2026-10-24 卷轴副本（不占 SlotTable 位）
+    public static readonly GiftDungeonBattleMode GiftDungeon = new GiftDungeonBattleMode();       // 2026-10-26 礼物副本（不占 SlotTable 位）
     public static readonly SideIslandBattleMode SideIsland = new SideIslandBattleMode();         // 2026-10-23 支线岛（不占 SlotTable 位）
     public static readonly FinaleBattleMode Finale = new FinaleBattleMode();                     // 2026-10-23 终章追查关（不占 SlotTable 位）
     public static readonly TutorialBattleMode Tutorial = new TutorialBattleMode();

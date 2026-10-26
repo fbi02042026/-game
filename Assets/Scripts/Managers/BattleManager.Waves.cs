@@ -190,7 +190,7 @@ public partial class BattleManager
         // （BattleManager.Settlement → MercGrowInventory.GrantBadgeDungeonDrops）。
         // 不清会走普通 Elite 分支拿几十块通关金，HUD 也会显示 +N 金。
         // 卷轴副本（2026-10-24）：照徽记口径，通关金清零，产出只有招募卷轴。
-        if (IsBadgeDungeon || IsScrollDungeon) StageQuestClearGold = 0;
+        if (IsBadgeDungeon || IsScrollDungeon || IsGiftDungeon) StageQuestClearGold = 0;
         // 支线岛（2026-10-23 合并方案）：不发关卡任务金，HUD 不显示 +N 金（岛金=goldReward，走岛结算链）
         if (IsSideIsland) StageQuestClearGold = 0;
         _stageQuestObjective = stageQuest.objective;

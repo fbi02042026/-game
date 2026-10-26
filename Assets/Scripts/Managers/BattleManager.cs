@@ -57,6 +57,10 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 入口 = 冒险页活动列表「卷轴」横条，判在金币本之前（同徽记口径）。
         if (AdventureUI.PendingScrollDungeon) return BattleModes.ScrollDungeon;
 
+        // 礼物副本（2026-10-26 主人拍板「掉落礼物的活动副本周六开启」）：
+        // 入口 = 冒险页活动列表「礼物」横条，判在金币本之前（同徽记/卷轴口径）。
+        if (AdventureUI.PendingGiftDungeon) return BattleModes.GiftDungeon;
+
         // 活动副本（冒险界面下标 4）。这是一个「类」，不是一种玩法：
         // 现在只开了金币本；以后佣兵副本 / 武器副本 / 技能副本上了，
         // 在这里按「当前开放的是哪一个活动」返回对应模式即可。

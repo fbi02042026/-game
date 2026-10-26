@@ -236,6 +236,25 @@ public static class MercGrowInventory
         Debug.Log($"[MercGrow] 卷轴副本掉落 难度{difficulty} → 普通×{common} 高级×{legendary}");
     }
 
+    // ── 礼物副本发放（2026-10-26 主人拍板「新加一个掉落礼物的活动副本周六开启」）──────────
+    //
+    // 🔴 只发好感礼物：不给金币、不给碎片、不给道具、不给装备（金币本专属金币、礼物本专属礼物）。
+    // 数量口径（未单独拍板，先照卷轴本「难度越高越多」的阶梯给，主人要调改这里一处）：
+    //   普通(0) → 随机礼物 ×2 / 困难(1) → ×3 / 噩梦(2) → ×4
+    // （difficulty 越界按 0 处理，照 GrantBadgeDungeonDrops 口径。）
+
+    /// <summary>
+    /// 礼物副本通关发放：按难度随机掉好感礼物（数量表见上，真源仅此一处）。
+    /// 发放/Toast/落盘全走 <c>MercFavorSystem.GrantRandomGifts</c> 唯一出口（一次结算一条 Toast）。
+    /// </summary>
+    public static void GrantGiftDungeonDrops(int difficulty)
+    {
+        if (difficulty < 0 || difficulty > 2) difficulty = 0;   // 越界按普通难度处理（照徽记/卷轴口径）
+        int n = difficulty == 2 ? 4 : difficulty == 1 ? 3 : 2;
+        var granted = MercFavorSystem.GrantRandomGifts(n);
+        Debug.Log($"[MercGrow] 礼物副本掉落 难度{difficulty} → 礼物×{(granted != null ? n : 0)}");
+    }
+
     /// <summary>该佣兵买重复能转多少本命碎片（UI 卡面显示用）。数值真源 = MercStarDefs（2026-10-22 拍板 10/5/1）。</summary>
     public static int DupFragCountOf(MercRosterDefs.Def def)
     {

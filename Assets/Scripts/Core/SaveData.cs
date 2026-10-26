@@ -118,6 +118,10 @@ public class SaveData
     public string scrollDungeonDayKey = "";
     /// <summary>卷轴副本今日已用进入次数（每天 2 次，见 ActivityDungeonRules.DAILY_TRIES）</summary>
     public int scrollDungeonTriesToday = 0;
+    /// <summary>礼物副本每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday（2026-10-26 主人拍板：周六开放，掉好感礼物）</summary>
+    public string giftDungeonDayKey = "";
+    /// <summary>礼物副本今日已用进入次数（每天 2 次，见 ActivityDungeonRules.DAILY_TRIES）</summary>
+    public int giftDungeonTriesToday = 0;
     /// <summary>
     /// 活动副本已通关最高难度（2026-10-23 主人拍板「打通前一难度才开下一难度」）：
     /// -1 = 尚未通关任何难度（初级恒开放）；金币/徽记两本共用同一活动标签进度。
@@ -368,6 +372,22 @@ public class SaveData
     [NonSerialized] public List<string> mercDrawPool = new List<string>();
     /// <summary>【2026-10-26 主人拍板「信任交流」】信任运行时字典（mercTrustEntries 的内存态，旧档无记录 = 全员 0）。</summary>
     [NonSerialized] public Dictionary<string, int> mercTrust = new Dictionary<string, int>();
+
+    // === 佣兵好感（2026-10-26 主人拍板「佣兵好感界面」，预制体 Resources/Prefabs/Town/佣兵好感.prefab）===
+    // 好感值本体复用 mercTrust（与酒馆闲话 +1 同一套好感成长，单一出口 AddMercTrust）；
+    // 本节只存好感界面自己的三样状态：每日对话槽、好感礼物仓、羁绊地图通关名单。
+    /// <summary>对话槽位日键 yyyyMMdd，跨天清空 favorTalkedToday（本地日历日，0 点刷新）。</summary>
+    public string favorTalkDayKey = "";
+    /// <summary>今日已用对话槽，id = "H001:0"（hireId:槽位下标 0..2；每佣兵每槽每天 1 次，跨天清空）。</summary>
+    public List<StringIdEntry> favorTalkedEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> favorTalkedToday = new HashSet<string>();
+    /// <summary>好感礼物仓：gift_id → 持有数（礼物表见 MercFavorDefs.Gifts；获取来源待拍板，发放走 AddFavorGift）。</summary>
+    public List<StringIntEntry> favorGiftEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> favorGifts = new Dictionary<string, int>();
+    /// <summary>已通关羁绊地图的佣兵（hireId 集合，一次性；二期接专属双人关后写入）。</summary>
+    public List<StringIdEntry> favorBondClearedEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> favorBondClearedIds = new HashSet<string>();
+
     public List<StringIdEntry> claimedCodexRewardEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> claimedCodexRewardIds = new HashSet<string>();
 
@@ -817,6 +837,21 @@ public class SaveData
             }
         }
 
+        // 【2026-10-26 佣兵好感】旧存档无列表 → 空集合/空字典 = 没聊过/没礼物/没通关，兼容
+        favorTalkedEntries ??= new List<StringIdEntry>();
+        favorGiftEntries ??= new List<StringIntEntry>();
+        favorBondClearedEntries ??= new List<StringIdEntry>();
+        favorTalkedToday = ToIdSet(favorTalkedEntries);
+        if (favorTalkDayKey != TrustTodayKey().ToString()) favorTalkedToday.Clear();   // 跨天：已聊槽位清零（日键为 yyyyMMdd 字符串）
+        favorGifts = new Dictionary<string, int>();
+        for (int i = 0; i < favorGiftEntries.Count; i++)
+        {
+            var e = favorGiftEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            favorGifts[e.id] = Math.Max(0, e.value);
+        }
+        favorBondClearedIds = ToIdSet(favorBondClearedEntries);
+
         // 【2026-10-23 施工单 T3】局外养成等级重建：从 entries 灌回字典（旧存档无列表 → 空字典 = 全员 Lv1，兼容）
         mercGrow = new Dictionary<string, MercGrowEntry>();
         if (mercGrowEntries != null)
@@ -1128,6 +1163,49 @@ public class SaveData
     }
 
     static int TrustTodayKey() => int.Parse(DateTime.Now.ToString("yyyyMMdd"));
+
+    // === 佣兵好感：礼物仓 / 羁绊通关名单（2026-10-26 佣兵好感界面；对话槽判定在 MercFavorSystem）===
+
+    /// <summary>礼物持有数（无记录 = 0）。</summary>
+    public int GetFavorGiftCount(string giftId)
+    {
+        if (string.IsNullOrEmpty(giftId)) return 0;
+        favorGifts ??= new Dictionary<string, int>();
+        return favorGifts.TryGetValue(giftId, out int n) ? n : 0;
+    }
+
+    /// <summary>加礼物（发放口唯一出口；不存档不弹提示，由调用方决定）。n ≤ 0 忽略。</summary>
+    public void AddFavorGift(string giftId, int n)
+    {
+        if (string.IsNullOrEmpty(giftId) || n <= 0) return;
+        favorGifts ??= new Dictionary<string, int>();
+        favorGifts.TryGetValue(giftId, out int cur);
+        favorGifts[giftId] = cur + n;
+    }
+
+    /// <summary>扣 1 个礼物（送礼用）；没有或不足返回 false 且不动数据。</summary>
+    public bool ConsumeFavorGift(string giftId)
+    {
+        if (string.IsNullOrEmpty(giftId)) return false;
+        favorGifts ??= new Dictionary<string, int>();
+        if (!favorGifts.TryGetValue(giftId, out int cur) || cur <= 0) return false;
+        favorGifts[giftId] = cur - 1;
+        return true;
+    }
+
+    /// <summary>该佣兵的羁绊地图是否已通关（一次性）。</summary>
+    public bool IsMercBondCleared(string hireId)
+        => !string.IsNullOrEmpty(hireId) && favorBondClearedIds != null && favorBondClearedIds.Contains(hireId);
+
+    /// <summary>标记羁绊地图通关（幂等双写）。返回 false = 之前已通。</summary>
+    public bool MarkMercBondCleared(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return false;
+        favorBondClearedIds ??= new HashSet<string>();
+        if (!favorBondClearedIds.Add(hireId)) return false;
+        favorBondClearedEntries = FromIdSet(favorBondClearedIds);
+        return true;
+    }
 
     /// <summary>
     /// 【2026-10-13 主人拍板】该佣兵是否在抽奖池里。池子是**格子制**（酒馆 6 格、初期开放 4 格）：
@@ -1581,6 +1659,16 @@ public class SaveData
         mercTrustEntries = new List<StringIntEntry>(mercTrust.Count);
         foreach (var kv in mercTrust)
             mercTrustEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        // 【2026-10-26 佣兵好感】镜像落盘（HashSet/字典 → entries）
+        favorTalkedToday ??= new HashSet<string>();
+        favorTalkedEntries = FromIdSet(favorTalkedToday);
+        favorGifts ??= new Dictionary<string, int>();
+        favorGiftEntries = new List<StringIntEntry>(favorGifts.Count);
+        foreach (var kv in favorGifts)
+            favorGiftEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+        favorBondClearedIds ??= new HashSet<string>();
+        favorBondClearedEntries = FromIdSet(favorBondClearedIds);
 
         // 【2026-10-23 施工单 T3】局外养成等级镜像落盘（字典 → entries）
         mercGrow ??= new Dictionary<string, MercGrowEntry>();

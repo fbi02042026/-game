@@ -116,6 +116,14 @@ public partial class BattleManager
             MercGrowInventory.GrantScrollDungeonDrops(BattleDifficulty);
             return;
         }
+        // —— 礼物副本（2026-10-26 主人拍板「掉落礼物的活动副本周六开启」）：
+        //    通关只发好感礼物（难度越高掉越多），走自己的发放链；
+        //    不给金币/碎片/道具/装备 ——
+        if (IsGiftDungeon)
+        {
+            MercGrowInventory.GrantGiftDungeonDrops(BattleDifficulty);
+            return;
+        }
         // —— 金币本禁掉落（2026-10-23 拍板「金币本只掉金币」）：stage_drop 徽记/碎片/道具/Boss 卷轴
         //    全在同一方法里，一个 early return 全禁；金币走 GetGoldDungeonClearGold 固定金币，与此无关 ——
         if (IsGoldDungeon) return;
