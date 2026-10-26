@@ -82,6 +82,9 @@ public class GuildHallUI : MonoBehaviour
     CanvasGroup _introCover;
     Button _turnButton;
     string _turnBoardId;   // 主界面看板当前显示的人物 id（"player" 或佣兵 HireId）；null = 预制体默认图
+    /// <summary>【2026-10-26 主人拍板】看板当前人物 id（含进主界面恢复的上次选择）。
+    /// 气泡台词池 / 专属台词 / 点击说话都按它取，SpeechBubbleTalker 只读。</summary>
+    public string CurrentBoardId => _turnBoardId;
 
     /// <summary>看板当前是否默认图（=前台小姐）。false = 玩家点 Turn 换成了佣兵立绘，前台表情彩蛋此时不生效。</summary>
     public bool BoardIsDefaultReceptionist => string.IsNullOrEmpty(_turnBoardId);
@@ -113,6 +116,9 @@ public class GuildHallUI : MonoBehaviour
         EnsureBottomNav();
         TownHubController.EnsureOn(gameObject);
         WireHallClicks();
+        // 【2026-10-26 主人拍板「记忆上次替换的人物」】先恢复上次看板人物，再建气泡 ——
+        // SpeechBubbleTalker.Awake 建台词池时按恢复后的 CurrentBoardId 取池，顺序不能反。
+        RestoreBoardCharacter();
         EnsureSpeechBubbleTalker();
         BindRedDots();
         RedDot.RefreshCommon();
@@ -584,7 +590,11 @@ public class GuildHallUI : MonoBehaviour
 
     void ResolveHallButtonRefs()
     {
+        // 【2026-10-26 修「主界面邮件/设置打不开」】主人把按钮重新摆在 topright 下，节点名是中文
+        // 「邮件」「设置」（GuildHallUI.prefab），且序列化引用为空——只按旧英文名找会全落空、
+        // 点击事件接不上。英文名找不到时按中文名兜底（找得到就不动，最小增量）。
         if (mailButton == null) mailButton = FindBtn("MailButton");
+        if (mailButton == null) mailButton = FindBtn("邮件");
         if (dailyLoginButton == null) dailyLoginButton = FindBtn("DailyLoginButton");
         // 看板人物：预留替换接口——绑「看板/show」的 Image（无则按节点名兜底；大小不动）
         if (boardCharacterImage == null)
@@ -602,6 +612,7 @@ public class GuildHallUI : MonoBehaviour
         if (rankButton == null) rankButton = FindBtn("RankButton");
         if (shopButton == null) shopButton = FindBtn("ShopButton");
         if (settingsButton == null) settingsButton = FindBtn("SettingsButton");
+        if (settingsButton == null) settingsButton = FindBtn("设置");
         if (noticeBoardButton == null) noticeBoardButton = FindBtn("NoticeBoard");
         if (licenseHallButton == null) licenseHallButton = FindBtn("LicenseHall");
         if (armoryButton == null) armoryButton = FindBtn("Armory");
@@ -716,7 +727,52 @@ public class GuildHallUI : MonoBehaviour
         _turnButton.onClick.AddListener(OnTurnClicked);
     }
 
-    /// <summary>点 Turn：随机选一个「玩家自己 + 已拥有佣兵」的看板形象（保证与当前不同），走「旧退新进」过场。</summary>
+    /// <summary>
+    /// 【2026-10-26 主人拍板「记忆上次替换的人物」】进主界面恢复上次看板人物。
+    /// 真源 = SaveData.lastBoardCharacterId（"player"/佣兵 HireId；空 = 默认前台小姐，老档天然为空）。
+    /// 立绘取不到不兜底：LogError 后保持默认图（铁律 14）；恢复成功后 CurrentBoardId 即生效，
+    /// 气泡台词池由 SpeechBubbleTalker.Awake 按它建（Awake 时序：本方法先于 EnsureSpeechBubbleTalker）。
+    /// </summary>
+    void RestoreBoardCharacter()
+    {
+        string id = SaveSystem.Instance?.Data?.lastBoardCharacterId;
+        if (string.IsNullOrEmpty(id)) return;
+        if (boardCharacterImage == null)
+        {
+            Debug.LogError("[GuildHall] 看板记忆恢复中止：boardCharacterImage 未绑定（看板/show 节点缺失）");
+            return;
+        }
+        Sprite sp = MercPortraitSprites.GetStand(id) ?? MercPortraitSprites.GetHead(id);
+        if (sp == null)
+        {
+            Debug.LogError($"[GuildHall] 看板记忆恢复失败：{id} 的立绘与头像都取不到（Resources/Icons/MercStand|MercHead/{id}），保持默认前台");
+            return;
+        }
+        SetBoardCharacter(sp);
+        _turnBoardId = id;
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+    // 看板随机池的女性名单（2026-10-26 主人拍板「优先只有女性职业出来 不要男性的」）
+    // 性别判定 = 22 张立绘（Resources/Icons/MercStand/H0XX.png）逐一目检，遵守
+    // MercRosterDefs.cs:76 教训「定性别必须先看立绘，不许凭名字凭空猜」——
+    // 图鉴文案不可靠（AdventureLogCatalog 里路加写"她"，立绘是光头男僧）。
+    // ⚠ 图鉴姓名与立绘存在错位（H013 图鉴叫"紫发法师莫娜"、立绘是金发女骑士；H019 同理），
+    //   一律以立绘外观为准；以后换立绘要重核这份名单。
+    // 边缘（未入池，主人可一句话调整）：H012 塞拉（设定女扮男装、立绘少年样）、
+    //   H014 伊芙（兜帽长袍看不出女）；player（红发少年）按「不要男性的」一并出池。
+    // ────────────────────────────────────────────────────────────────────────
+    static readonly HashSet<string> BoardFemaleIds = new HashSet<string>
+    {
+        "H005",   // 米娅位：粉发少女弓手
+        "H013",   // 金发女骑士（角盔+高跟鞋）
+        "H015",   // 艾拉位：白发马尾女弓手
+        "H016",   // 杜娅位：黑长发女战士
+        "H017",   // 光头女僧侣
+        "H019",   // 艾琳位：紫发女法师
+    };
+
+    /// <summary>点 Turn：随机选一个看板形象（保证与当前不同），走「旧退新进」过场。</summary>
     void OnTurnClicked()
     {
         if (_turnSwapCo != null) return;   // 上一次过场没播完，忽略连点
@@ -726,11 +782,13 @@ public class GuildHallUI : MonoBehaviour
             return;
         }
 
-        var pool = new List<string> { "player" };
+        // 【2026-10-26 主人拍板「优先只有女性职业出来 不要男性的」】看板随机池只收外观为女性的佣兵；
+        // player 立绘是红发少年（男），也不再进池。池空时按钮无操作（开局默认佣兵里有米娅，不会空）。
+        var pool = new List<string>();
         var unlocked = SaveSystem.Instance?.Data?.unlockedMercIds;
         if (unlocked != null)
             foreach (string id in unlocked)
-                if (!string.IsNullOrEmpty(id)) pool.Add(id);
+                if (!string.IsNullOrEmpty(id) && BoardFemaleIds.Contains(id)) pool.Add(id);
 
         // 排除当前显示的，保证点一次必换人（首点 _turnBoardId 为空 = 预制体默认图，不排除）
         if (!string.IsNullOrEmpty(_turnBoardId) && pool.Count > 1)
@@ -745,6 +803,15 @@ public class GuildHallUI : MonoBehaviour
             return;
         }
         _turnBoardId = pick;
+        // 【2026-10-26 主人拍板「记忆上次替换的人物」】看板选择落存档（立即落盘，中途杀进程不丢），
+        // 并让气泡轮播池换成本人物的中性引导 + 专属台词混播。
+        var save = SaveSystem.Instance;
+        if (save?.Data != null)
+        {
+            save.Data.lastBoardCharacterId = pick;
+            save.Save();
+        }
+        GetComponent<SpeechBubbleTalker>()?.RefreshLinePool(pick);
         _turnSwapCo = StartCoroutine(TurnSwapRoutine(sp));
     }
 
@@ -802,6 +869,8 @@ public class GuildHallUI : MonoBehaviour
 
         if (motion != null) motion.enabled = true;   // 恢复呼吸（OnEnable 会重采基准、相位归零，无跳变）
         _turnSwapCo = null;
+        // 【2026-10-26 主人拍板「只有换了才知道」】新人物上台开腔说专属台词（没有专属的人物保持安静）
+        SpeechBubbleTalker.RevealBoardLine(_turnBoardId);
     }
 
     /// <summary>看板淡入淡出用的 CanvasGroup，挂 show 节点上，首次切换时补建（不改预制体）。</summary>
@@ -963,8 +1032,9 @@ public class GuildHallUI : MonoBehaviour
     /// 需要跟随背景底图一起等比放大的热点节点名；以后加热点直接往这个数组里加即可。
     /// 这些节点在预制体里是「锚点居中 + 固定绝对偏移」，底图被 EnvelopeParent 放大后它们不会跟着走，
     /// 于是美术里的咨询台 / 气泡和热区框就错开了。
+    /// Turn（切换看板人物按钮，主人 2026-10-16 加的）同为「锚点居中 + 固定绝对偏移」，2026-10-26 补进名单。
     /// </summary>
-    static readonly string[] HotspotFollowNames = { "Receptionist", "SpeechBubble" };
+    static readonly string[] HotspotFollowNames = { "Receptionist", "SpeechBubble", "Turn" };
 
     /// <summary>热点基准：首次执行时捕获，之后每次都「从 base 重算」，绝不基于当前值累加。</summary>
     struct HotspotFollowBase
@@ -1113,6 +1183,10 @@ public class GuildHallUI : MonoBehaviour
             rt.pivot = item.pivot;
             rt.anchoredPosition = item.anchoredPosition * k;
             rt.localScale = new Vector3(item.localScale.x * k, item.localScale.y * k, item.localScale.z * k);
+            // 挂了呼吸（PortraitIdleMotion）的热点（如 Turn）每帧按「自己的基准」改写 scale/pos；
+            // 不重采基准的话，这里刚写入的 k 缩放下一帧就被呼吸组件按旧基准拉回去，两者打架。
+            // RefreshBase 内部会立即用新基准重放一次呼吸，无跳变。
+            rt.GetComponent<PortraitIdleMotion>()?.RefreshBase();
         }
     }
 

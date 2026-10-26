@@ -117,7 +117,11 @@ public partial class Monster : UnitBase
         {
             float back = inDamage * affix.ThornsRatio;
             if (back >= 1f)
+            {
                 source.TakeDamage(back, false, true, true, 0, null);
+                // 【2026-10-26 词缀怪】玩家侧挨了反伤 → 吐槽「为啥打他一下我疼一下」（每关一次）
+                MonsterAffixBanter.OnThornsReflected(source);
+            }
         }
 
         if (isDead)
@@ -260,6 +264,12 @@ public partial class Monster : UnitBase
     {
         CollapseBodyRootForPool();
         base.ResetForReuse();
+        // 【2026-10-26 词缀怪】回池重置词缀：池化怪复用，旧词缀（表定/掷骰）与染色
+        // 不清会把「铁壁+40% 染色」带到下一只毫不相干的怪身上。
+        // 只 ResetState 不 Destroy —— Destroy 延迟到帧末，同帧 Init 的挂词缀路径会误判「已挂」。
+        var oldAffix = GetComponent<MonsterAffix>();
+        if (oldAffix != null)
+            oldAffix.ResetState();
         _lastAppliedDir = 0;
         _isEnteringMap = false;
         _enterAtPauseStop = false;
@@ -269,6 +279,26 @@ public partial class Monster : UnitBase
         HideStackLabel();
         // 【2026-10-16】回池关掉精英光环：下一只从池里复用的可能是普通怪（显隐唯一出口见 ApplyEliteRingVisible）
         ApplyEliteRingVisible(false);
+    }
+
+    /// <summary>
+    /// 【2026-10-26 词缀怪】词缀染色：本体精灵着色 + 同步程序化闪白的还原基准。
+    /// 不做的话第一下受击闪白结束后会还原成白色，染色当场被洗掉（基准色机制见 UnitAnimation.EnsureProcBase）。
+    /// </summary>
+    public void ApplyAffixTint(Color tint)
+    {
+        if (sr == null) return;
+        Color c = Color.Lerp(Color.white, tint, 0.4f);
+        sr.color = c;
+        if (unitAnim != null) unitAnim.SetProcBaseColor(c);
+    }
+
+    /// <summary>【2026-10-26 词缀怪】回池清染色（与 ResetForReuse 的拆词缀配套）。</summary>
+    public void ClearAffixTint()
+    {
+        if (sr == null) return;
+        sr.color = Color.white;
+        if (unitAnim != null) unitAnim.SetProcBaseColor(Color.white);
     }
 
     /// <summary>??MonsterBody ??????RB ??Body???? Visual ?????????/summary>

@@ -4,7 +4,7 @@ using UnityEngine;
 
 /// <summary>
 /// 天赋 V4 静态表（右列重制）。
-/// 左列 L1-L40（金币，线性必点）；右列 13 个「天赋石」节点（花石、可升级、分批开放、互斥）。
+/// 左列 L1-L80（金币，线性必点；2026-10-21 拍板 40→80，L1~40 老档兼容）；右列 13 个「天赋石」节点（花石、可升级、分批开放、互斥）。
 /// 右列数据来源：Assets/Data/Source/Tables/talent_right.csv → Resources/Data/Tables/talent_right.bytes。
 /// 缺表/解析失败时回退到下方 HardcodedRightNodes()，保证天赋界面一定开得起来。
 /// </summary>
@@ -72,7 +72,13 @@ public static class TalentDefs
         public string id;
         public string name;
         public int goldCost;
-        public int recommendLevel;
+        /// <summary>
+        /// 【2026-10-21 拍板《天赋左列2小时加满》§2.2】章节门槛：需通关该章数才能解锁。
+        /// 0 = 不设门槛（L1~20，保新手引导正常点击）；L21~40=2 / L41~60=3 / L61~80=4。
+        /// 原字段 recommendLevel 是全库只写不读的死字段，改语义为 unlockChapter
+        /// （LeftNode 纯代码构建不进存档，改语义安全，已按死字段规矩报备）。
+        /// </summary>
+        public int unlockChapter;
         public Effect effect;
     }
 
@@ -537,18 +543,37 @@ public static class TalentDefs
     {
         // 2026-09-29 主人定序；2026-10-10 改序：**体质 → 攻击 → 防御 → 攻击**
         // （第 4 槽原「智力 = 魔攻」，主人拍板「所有职业统一加攻击」，改成第二个攻击槽）
+        // 【2026-10-21 拍板《天赋左列2小时加满》§2】左列 40 → 80：L1~40 的 id/顺序/效果逐项不变，
+        // 只在数组尾部追加第二个十年（L41~80）；章节门槛见 unlockChapter（§2.2，L1~20 不设门槛）。
         string[] names = { "体质", "力量", "防御", "攻击" };
-        string[] romans = { "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X" };
+        string[] romans =
+        {
+            "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
+            "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"
+        };
         // 【2026-10-18 主人拍板】左列攻击槽**前固定后百分比交叉**：
         // 旧每节点 +3~16 固定、点满 +85 —— 新武器数值（普通 3.6~4.8）下等于白送 20 把武器。
         // 纯百分比前期又没感（基础攻击 6 × 5% ≈ 0.3）。定案：前 5 节点固定 +3（前期立竿见影），
-        // 后 5 节点最终攻击 +4~8%（后期跟装备一起放大）。AttrSystem 两条 case 都已存在，直接按 group 切。
-        const float AtkFlat = 3f;                       // 前 5 节点（I~V）：固定攻击 +3
-        float[] atkPct = { 4f, 5f, 6f, 7f, 8f };        // 后 5 节点（VI~X）：最终攻击 +4%~8%
-        float[] hp = { 15, 20, 25, 32, 40, 50, 60, 72, 85, 100 };  // 体质：生命，点满 +499
-        float[] def = { 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };          // 防御：物防+魔防各 +65
-        var list = new LeftNode[40];
-        for (int i = 0; i < 40; i++)
+        // 后 5 节点最终攻击 +4~8%（后期跟装备一起放大）。
+        // 【2026-10-21 §2.3】第二个十年（XI~XX，组 10~19）攻击每档 +4%（标准档）。
+        const float AtkFlat = 3f;                       // 前 5 组（I~V）：固定攻击 +3
+        float[] atkPct =
+        {
+            4f, 5f, 6f, 7f, 8f,                         // VI~X（组 5~9，老档不变）
+            4f, 4f, 4f, 4f, 4f, 4f, 4f, 4f, 4f, 4f      // XI~XX（组 10~19，每档 +4%）
+        };
+        float[] hp =                                    // 体质：生命（前 10 个老档不变，后 10 个 §2.3 标准档）
+        {
+            15, 20, 25, 32, 40, 50, 60, 72, 85, 100,
+            105, 115, 125, 140, 155, 175, 195, 220, 245, 275
+        };
+        float[] def =                                   // 防御：物防+魔防各加（前 10 老档，后 10 §2.3）
+        {
+            2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+            12, 13, 14, 15, 16, 17, 18, 19, 20, 21
+        };
+        var list = new LeftNode[80];
+        for (int i = 0; i < 80; i++)
         {
             int group = i / 4;
             int slot = i % 4;
@@ -575,16 +600,36 @@ public static class TalentDefs
                         : Fx(AttrKind.AttackPercent, atkPct[group - 5], $"攻击 +{atkPct[group - 5]:0}%");
                     break;
             }
+            // 【2026-10-26 主人拍板涨价·温和档】原曲线太便宜——ch1 一小关 ≈132 金（满章 ≈1,056÷8），
+            // 旧 L1=50 起步一小关能连开 2~3 个。新曲线：L1~20 = 100+25i（L1=100，一小关开 1 个，
+            // 中后期约 2~3 关 1 个）；L21~80 = round(600 × 1.02^(i-20))（L21=600 与 L20=575 平滑衔接，
+            // L80≈1,969，全树 ≈75,180）。老档已买节点不回价，只影响未点节点。
+            int cost = i < 20
+                ? 100 + i * 25
+                : Mathf.RoundToInt(600f * Mathf.Pow(1.02f, i - 20));
             list[i] = new LeftNode
             {
                 index = i + 1,
                 id = "L" + (i + 1),
                 name = nm,
-                goldCost = 50 + i * 15,
-                recommendLevel = i + 1,
+                goldCost = cost,
+                // 【§2.2 章节门槛】0 = 不设门槛（L1~20，保新手引导正常点击）；
+                // L21~40 需通 ch2、L41~60 需通 ch3、L61~80 需通 ch4（判定在 TalentSystem.CanUnlockLeft）。
+                unlockChapter = i < 20 ? 0 : 1 + i / 20,
                 effect = fx
             };
         }
+
+#if UNITY_EDITOR
+        // 【§8 红线断言】左列 id 逐项连续无漂移；价格锁当前曲线（2026-10-26 涨价·温和档）：
+        // L1~20 = 100+25i、L21~80 = round(600×1.02^(i-20))，后续改档时两处同步改。
+        for (int i = 0; i < 40; i++)
+            if (list[i].id != "L" + (i + 1))
+                Debug.LogError($"[TalentDefs] 老档左列 id 漂移 L{i + 1}");
+        for (int i = 0; i < 20; i++)
+            if (list[i].goldCost != 100 + i * 25)
+                Debug.LogError($"[TalentDefs] 左列价格漂移 L{i + 1}: {list[i].goldCost} ≠ {100 + i * 25}");
+#endif
         return list;
     }
 

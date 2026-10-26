@@ -17,6 +17,10 @@ public class ParallaxBackground : MonoBehaviour
     [Header("背景注册表")]
     public BattleBackgroundRegistry backgroundRegistry;
 
+    [Header("2026-10-26 主人拍板：中景2/远景3先隐藏，战斗背景只用近景1（拼接单元）")]
+    /// <summary>true=整层不建、源节点直接关掉；要恢复中远景改回 false 即可。</summary>
+    public bool hideMidBackLayers = true;
+
     const int TileCount = 6;
     /// <summary>相邻片交叠像素，避免浮点误差露出竖缝。</summary>
     const float SeamOverlap = 2f;
@@ -104,7 +108,9 @@ public class ParallaxBackground : MonoBehaviour
     void RefreshLayerWidth(ref ParallaxLayer layer)
     {
         if (layer.tiles == null || layer.tiles.Length == 0 || layer.tiles[0] == null) return;
-        layer.width = MeasureTileWidth(layer.tiles[0], layer.images != null ? layer.images[0] : null);
+        // 2026-10-26：map「1」节点是「本体图+镜像子图」拼接单元（子图挂在 rect 外侧），
+        // 宽度必须量整个拼接单元，否则步长减半、每片叠掉半张图
+        layer.width = MeasureCompositeWidth(layer.tiles[0]);
         // 只在测量彻底失败时兜底；之前 <720 就强塞 2020，窄图会被撑出一大段空白
         if (layer.width < 8f) layer.width = 2020f;
         PlaceLayerTiles(ref layer, 0f);
@@ -125,6 +131,35 @@ public class ParallaxBackground : MonoBehaviour
         return w > 1f ? w : 2020f;
     }
 
+    /// <summary>
+    /// 拼接单元总宽：取自身 + 全部子孙 RectTransform 四角在本节点本地空间下的 X 范围并集。
+    /// 2026-10-26 主人把 map 的「1」拼成「本体图 + 镜像子图」（子图锚在本体 rect 右外侧、
+    /// scale.x=-1），整单元才是完整重复片；只量本体 rect.width 会把步长算成一半。
+    /// 测不出来（<1）时回退旧的单片量法。
+    /// </summary>
+    static float MeasureCompositeWidth(RectTransform root)
+    {
+        if (root == null) return 2020f;
+        float minX = float.MaxValue, maxX = float.MinValue;
+        var all = root.GetComponentsInChildren<RectTransform>(true);
+        Vector3[] corners = new Vector3[4];
+        for (int i = 0; i < all.Length; i++)
+        {
+            var t = all[i];
+            if (t == null) continue;
+            t.GetWorldCorners(corners);
+            for (int k = 0; k < 4; k++)
+            {
+                float lx = root.InverseTransformPoint(corners[k]).x;
+                if (lx < minX) minX = lx;
+                if (lx > maxX) maxX = lx;
+            }
+        }
+        float w = maxX - minX;
+        if (w > 1f) return w;
+        return MeasureTileWidth(root, root.GetComponent<UnityEngine.UI.Image>());
+    }
+
     void ClearOldTiles()
     {
         Transform root = LayerSearchRoot;
@@ -140,6 +175,15 @@ public class ParallaxBackground : MonoBehaviour
 
     void InitLayer(ref ParallaxLayer layer)
     {
+        // 2026-10-26 主人拍板：中景2/远景3先隐藏只用近景1——整层不克隆，源节点直接关掉。
+        // tiles 保持 null，后面的 MoveLayer/PlaceLayerTiles/SwitchBackground 对该层全部自动跳过。
+        if (hideMidBackLayers && !ReferenceEquals(layer, frontLayer))
+        {
+            Transform hide = FindDirectOrNested(LayerSearchRoot, layer.autoFindByName);
+            if (hide != null) hide.gameObject.SetActive(false);
+            return;
+        }
+
         Transform t = FindDirectOrNested(LayerSearchRoot, layer.autoFindByName);
         if (t == null)
         {
@@ -174,7 +218,8 @@ public class ParallaxBackground : MonoBehaviour
         src.position = worldBefore;
 
         layer.initialX = src.anchoredPosition.x;
-        layer.width = MeasureTileWidth(src, src.GetComponent<UnityEngine.UI.Image>());
+        // 拼接单元（本体+镜像子图）整宽；子图挂在 rect 外侧，只量 rect.width 会步长减半
+        layer.width = MeasureCompositeWidth(src);
 
         layer.tiles = new RectTransform[TileCount];
         layer.images = new UnityEngine.UI.Image[TileCount];
@@ -328,12 +373,23 @@ public class ParallaxBackground : MonoBehaviour
         for (int i = 0; i < layer.tiles.Length; i++)
         {
             if (layer.tiles[i] == null) continue;
-            if (layer.images == null || layer.images[i] == null)
+            string tag = layerName + (i == 0 ? "" : "_tile" + i);
+            // 2026-10-26：瓦片可能是拼接单元（「1」= 本体图 + 镜像子图），
+            // 换章节图必须覆盖瓦片内全部 Image（含子孙），否则子图留旧章节的图
+            var imgs = layer.tiles[i].GetComponentsInChildren<UnityEngine.UI.Image>(true);
+            if (imgs != null && imgs.Length > 0)
+            {
+                for (int k = 0; k < imgs.Length; k++)
+                    ApplySprite(imgs[k], imgs[k].gameObject, sprite, tag);
+            }
+            else if (layer.images == null || layer.images[i] == null)
             {
                 if (layer.images == null) layer.images = new UnityEngine.UI.Image[layer.tiles.Length];
                 layer.images[i] = layer.tiles[i].GetComponent<UnityEngine.UI.Image>();
+                ApplySprite(layer.images[i], layer.tiles[i].gameObject, sprite, tag);
             }
-            ApplySprite(layer.images[i], layer.tiles[i].gameObject, sprite, layerName + (i == 0 ? "" : "_tile" + i));
+            else
+                ApplySprite(layer.images[i], layer.tiles[i].gameObject, sprite, tag);
         }
     }
 

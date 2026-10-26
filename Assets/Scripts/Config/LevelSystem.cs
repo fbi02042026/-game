@@ -77,6 +77,20 @@ public static class LevelSystem
         }
     }
 
+    /// <summary>
+    /// 把「倾向属性 = 基底 + (level-1)」写到任意 AttrSystem 上（2026-10-26 新增公开出口）。
+    /// 给 <see cref="PowerCalc.SimPlayerSegment"/> 的换装模拟副本用 —— 之前副本只写 BASE_* 基底，
+    /// 高等级玩家的倾向属性（狂战力量/法师智力/游侠敏捷/剑盾体质）模拟侧吃不到，
+    /// 暴击/攻速这类随属性放大的词条净差会偏低。level=1 时为 no-op（与 RestoreHeroLevel 同口径）。
+    /// 写完由调用方自行 RecalcAllAttr。
+    /// </summary>
+    public static void ApplyTendencyToAttr(AttrSystem attr, int level)
+    {
+        if (attr == null || level <= 1) return;
+        AttrType tendency = JobTendencyAttr(PlayerJobDefs.GetSelected());
+        SetTendencyPoint(attr, tendency, BaseOf(tendency) + level - 1);
+    }
+
     static int BaseOf(AttrType tendency)
     {
         switch (tendency)

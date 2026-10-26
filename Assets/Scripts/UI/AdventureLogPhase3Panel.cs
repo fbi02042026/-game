@@ -17,6 +17,10 @@ using UnityEngine.UI;
 /// 2026-10-24 主人拍板：三期面板竖屏适配（ApplyPanelFit）——更瘦屏窗体整体等比放大并夹在屏内不触边，
 /// renwu 随屏幕拉伸左移/右移；Inner 内节点随窗体整体缩放，行滑动列表除外（RowScroll 反缩放，
 /// 行/文字保持设计尺寸，视口高度随面板比例向下撑满多露几行）；商品名按稀有度变色（ShopItemLabelColor）。
+/// 2026-10-26 主人拍板：物品行随边框一起放大缩小（删 RowScroll 反缩放）；左侧人物改锚面板左沿适配
+/// （面板夹屏左移时人物同步跟移，不再被弹窗盖住）；放大上限锁 ~10%；暮火之杖行保留、只去掉
+/// 「Lv2里程奖励」那句字；商店列表新增盾/弓武器里程奖励（AdventureLogMileage.WeaponMilestones，
+/// 攒够累计点数领一次、直接穿上，名字带稀有前缀）。
 /// </summary>
 public class AdventureLogPhase3Panel : MonoBehaviour
 {
@@ -85,11 +89,12 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     const float PanelDesignH = 932.6f;
     const float PanelDesignX = 121f;
     const float RenwuDesignX = -182f;
+    /// <summary>设计稿里人物中心相对面板左沿的距离（-182-(121-232)=-71，负=在左沿左侧）。
+    /// 2026-10-26 主人拍板：人物锚定弹窗左沿适配，面板夹屏左移时人物同步跟移。</summary>
+    const float RenwuOffsetFromPanelLeft = RenwuDesignX - (PanelDesignX - PanelDesignW * 0.5f);
     const float FitEdgeMargin = 8f;   // 放大后面板距屏幕边缘最小间距（不触屏；标准屏保持设计原距 7px 不动）
-    const float MaxFitScale = 1.25f;  // 缩放上限 = 逻辑高上限 1600 ÷ 设计高 1280（竖屏适配口径）
-
-    float _fitScale = 1f;            // 当前窗体整体缩放系数（ApplyPanelFit 算，ApplyRowScrollFit 用）
-    RectTransform _rowScrollRect;    // RowScroll 根（视口矩形，列表适配只动这一个运行时节点）
+    // 2026-10-26 主人拍板：放大上限锁 ~10%（原 1.25 太大，弹窗过大把左侧人物挤出屏幕太多）
+    const float MaxFitScale = 1.10f;
 
     public static AdventureLogPhase3Panel Ensure(AdventureLogUI host)
     {
@@ -377,7 +382,6 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         }
         _listContent = crt;
         _rowScroll = sr;
-        _rowScrollRect = srt;   // 2026-10-24 竖屏适配：列表视口矩形引用（ApplyRowScrollFit 用）
 
         // RowScroll 成为 Inner 最后一个子节点后，行渲染在 CloseX 之上会盖住重叠角 → 关闭钮置顶
         var closeX = inner.Find(CloseXName);
@@ -400,18 +404,18 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     /// 三期面板竖屏适配（每次打开重算，幂等；标准 9:16 屏 s=1 与预制体分毫不差）：
     ///   - 窗体 Phase3Panel 整体等比放大 s = 逻辑高/1280（上限 1.25），放大后右沿夹进屏内
     ///     EdgeMargin（不触屏，向左让位），纵向居中并夹进上下边距；
-    ///   - renwu 跟随缩放，x 按设计位×s 随屏幕拉伸左移/右移（装饰人物，左沿出血属设计）；
-    ///   - Inner 内节点随 Panel 缩放整体改变（localScale 自动带全部子节点）；
-    ///   - 行滑动列表除外：见 ApplyRowScrollFit。
+    ///   - renwu 跟随缩放，且锚定面板左沿：x = 面板实际左沿 + 设计相对距离×s
+    ///     （2026-10-26 主人拍板：面板夹屏左移时人物同步跟移，窄屏不再被弹窗盖住；左沿出血属设计）；
+    ///   - Inner 内节点（含商品行）随 Panel 缩放整体改变（localScale 自动带全部子节点），
+    ///     2026-10-26 主人拍板：物品行随边框一起放大缩小（原 RowScroll 反缩放已删）。
     /// </summary>
     void ApplyPanelFit()
     {
         if (_panel == null) return;
         float screenH = ResolveLogicalScreenHeight();
         float s = Mathf.Clamp(screenH / GameConfig.DESIGN_HEIGHT, 1f, MaxFitScale);
-        _fitScale = s;
 
-        // 窗体：整体缩放 + 夹屏（标准屏 s=1 保持设计位 (103,0)；放大后右沿夹到 EdgeMargin）
+        // 窗体：整体缩放 + 夹屏（标准屏 s=1 保持设计位 (121,0)；放大后右沿夹到 EdgeMargin）
         float halfW = PanelDesignW * 0.5f * s;
         float halfH = PanelDesignH * 0.5f * s;
         float halfScreenW = GameConfig.DESIGN_WIDTH * 0.5f;
@@ -428,28 +432,13 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         prt.localScale = Vector3.one * s;
         prt.anchoredPosition = new Vector2(x, y);
 
-        // renwu：跟随整体缩放，x 随屏幕拉伸左移/右移（y 保持预制体值不动）
+        // renwu：跟随缩放，x 锚定面板实际左沿（设计相对距离×s），随夹屏一起左移/右移（y 保持预制体值不动）
         if (_renwu != null)
         {
             var rt = (RectTransform)_renwu.transform;
             rt.localScale = Vector3.one * s;
-            rt.anchoredPosition = new Vector2(RenwuDesignX * s, rt.anchoredPosition.y);
+            rt.anchoredPosition = new Vector2(x - halfW + RenwuOffsetFromPanelLeft * s, rt.anchoredPosition.y);
         }
-        ApplyRowScrollFit();
-    }
-
-    /// <summary>
-    /// 行滑动列表适配（2026-10-24 主人拍板：列表不随窗体整体缩放）：
-    /// RowScroll 反缩放 1/s → 行高/步距/列宽/文字全部保持设计尺寸（Content 与行几何零改动）；
-    /// 视口高度乘 s 随面板比例向下撑满（渲染顶 -7.5s / 底 -460s 正好贴住 Inner 底），瘦屏上多露几行；
-    /// 宽度保持设计 424 不拉伸。s=1 时与原实现完全一致。ScrollRect 滚动限位按 rect 计算，
-    /// Content(设计值) 对视口(452.5s) 同一坐标空间，滚动范围与视觉一致。
-    /// </summary>
-    void ApplyRowScrollFit()
-    {
-        if (_rowScrollRect == null) return;
-        _rowScrollRect.sizeDelta = new Vector2(ListViewportW, (ListViewportTopY - ListViewportBottomY) * _fitScale);
-        _rowScrollRect.localScale = Vector3.one / _fitScale;
     }
 
     /// <summary>
@@ -652,15 +641,21 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                              + $"\n遗忘药水 <color=#{gold}>{potionHave}</color>";
             }
 
-            // 2026-10-20 主人拍板：稀有·暮火之杖（里程 Lv2 等级奖励）放第一；
-            // 已领取的杖 / 本周兑完的商品沉到列表底部，未领完的保持原序在上。
+            // 2026-10-26 主人拍板：暮火之杖行保留，只去掉「Lv2里程奖励」那句字（先前理解岔了整行删掉，已恢复）；
+            // 加上盾/弓武器里程奖励；未领取的奖励 / 未兑完的商品在前，已领/兑完的沉底。
             var normal = new List<ShopEntry>();
             var sunk = new List<ShopEntry>();
             var staff = new ShopEntry { IsStaff = true };
             (AdventureLogMileage.IsLevelClaimed(2) ? sunk : normal).Add(staff);
+            for (int m = 0; m < AdventureLogMileage.WeaponMilestones.Length; m++)
+            {
+                var e = new ShopEntry { IsWeapon = true, WeaponIndex = m };
+                bool claimed = AdventureLogMileage.IsWeaponMilestoneClaimed(AdventureLogMileage.WeaponMilestones[m].GrantKey);
+                (claimed ? sunk : normal).Add(e);
+            }
             for (int i = 0; i < AdventureLogMileageShop.Items.Length; i++)
             {
-                var e = new ShopEntry { IsStaff = false, ItemIndex = i };
+                var e = new ShopEntry { ItemIndex = i };
                 bool done = AdventureLogMileageShop.RemainThisWeek(AdventureLogMileageShop.Items[i]) <= 0;
                 (done ? sunk : normal).Add(e);
             }
@@ -675,14 +670,16 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         }
     }
 
-    /// <summary>商店条目：IsStaff=里程 Lv2 等级奖励（暮火之杖），否则为商店商品（ItemIndex）。</summary>
+    /// <summary>商店条目：IsStaff=里程 Lv2 等级奖励（暮火之杖）、IsWeapon=武器里程奖励（盾/弓），否则为商店商品（ItemIndex）。</summary>
     struct ShopEntry
     {
         public bool IsStaff;
+        public bool IsWeapon;
+        public int WeaponIndex;
         public int ItemIndex;
     }
 
-    /// <summary>填充第 rowIdx 行（杖条目或商品条目），行必激活。</summary>
+    /// <summary>填充第 rowIdx 行（杖 / 武器里程奖励 / 商品条目），行必激活。</summary>
     void FillShopRow(int rowIdx, ShopEntry e)
     {
         if (rowIdx < 0 || rowIdx >= _rowPool.Count || _rowPool[rowIdx] == null) return;
@@ -692,12 +689,10 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         {
             bool claimed = AdventureLogMileage.IsLevelClaimed(2);
             bool can = AdventureLogMileage.CanClaimLevel(2);
-            string priceTag = $"<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>Lv2里程奖励</color>";
-
-            // 2026-10-24 主人拍板：暮火之杖 = 稀有（既有口径「获得稀有·暮火之杖」），名字走稀有蓝
+            // 2026-10-26 主人拍板：杖行只留武器名（稀有蓝），「Lv2里程奖励」那句字去掉
             string staffHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Rare);
             if (_actionLabels[rowIdx] != null)
-                _actionLabels[rowIdx].text = $"<color=#{staffHex}>{SpecialWeapons.InstanceName}</color>　{priceTag}";
+                _actionLabels[rowIdx].text = $"<color=#{staffHex}>{SpecialWeapons.InstanceName}</color>";
 
             if (_countTexts[rowIdx] != null)
             {
@@ -721,9 +716,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                 _exchangeBtns[rowIdx].onClick.RemoveAllListeners();
                 _exchangeBtns[rowIdx].onClick.AddListener(() =>
                 {
-                    // ClaimLevel 内部：先发杖 → 发放成功才记账入存档 → 弹「获得稀有·暮火之杖」确认窗
-                    //（2026-10-20 修「法杖领取不了」：发放失败时 ClaimLevel 内已弹失败 Toast 并可重试，
-                    // 这里只在「真的不可领」时补「暂不可领取」，避免失败场景双重弹字）
+                    // ClaimLevel 内部：先发杖 → 发放成功才记账入存档；发放失败内部已 Toast 并可重试，
+                    // 这里只在「真的不可领」时补「暂不可领取」，避免失败场景双重弹字
                     if (!AdventureLogMileage.ClaimLevel(2))
                     {
                         if (!AdventureLogMileage.CanClaimLevel(2))
@@ -731,6 +725,57 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                         return;
                     }
                     UIManager.Instance?.ShowToast($"已领取 Lv2 里程奖励");
+                    RefreshPanel();
+                    _host?.RefreshAfterPhase3();
+                });
+            }
+            return;
+        }
+
+        if (e.IsWeapon)
+        {
+            // 2026-10-26 主人拍板：盾/弓武器里程奖励。与法师同款机制：攒够累计点数领一次、直接穿上；
+            // 门槛微微不一样（盾 100 / 弓 120）；名字带稀有前缀（2026-10-26 主人点名），不再挂「里程奖励」价签
+            var m = AdventureLogMileage.WeaponMilestones[e.WeaponIndex];
+            bool claimed = AdventureLogMileage.IsWeaponMilestoneClaimed(m.GrantKey);
+            bool can = AdventureLogMileage.CanClaimWeaponMilestone(m);
+
+            string rareHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Rare);
+            if (_actionLabels[rowIdx] != null)
+                _actionLabels[rowIdx].text = $"<color=#{rareHex}>{WeaponAffixSystem.RarityPrefix(Rarity.Rare)}{m.Label}</color>";
+
+            if (_countTexts[rowIdx] != null)
+            {
+                _countTexts[rowIdx].text = claimed ? "已领取"
+                    : can ? "可领取"
+                    : $"需{m.NeedPoints}点";
+                _countTexts[rowIdx].color = can ? _countBaseColors[rowIdx] : DisabledColor;
+            }
+
+            if (_icons[rowIdx] != null)
+            {
+                var tpl = ConfigManager.Instance != null ? ConfigManager.Instance.GetEquipTemplate(m.TemplateId) : null;
+                if (tpl == null)
+                    Debug.LogError($"[Phase3Panel] 武器里程奖励模板缺失：{m.TemplateId}");
+                _icons[rowIdx].sprite = tpl != null ? tpl.icon : null;
+            }
+
+            if (_exchangeBtns[rowIdx] != null)
+            {
+                SetExchangeState(rowIdx, can);
+                _exchangeBtns[rowIdx].onClick.RemoveAllListeners();
+                int weaponIdx = e.WeaponIndex;
+                _exchangeBtns[rowIdx].onClick.AddListener(() =>
+                {
+                    // ClaimWeaponMilestone 内部：先发货（直接穿上）→ 成功才记账入存档；
+                    // 发放失败内部已 Toast 并可重试，这里只在「真的不可领」时补「暂不可领取」
+                    if (!AdventureLogMileage.ClaimWeaponMilestone(weaponIdx, out string granted))
+                    {
+                        if (!AdventureLogMileage.CanClaimWeaponMilestone(AdventureLogMileage.WeaponMilestones[weaponIdx]))
+                            UIManager.Instance?.ShowToast("暂不可领取");
+                        return;
+                    }
+                    UIManager.Instance?.ShowToast($"已领取里程奖励：{granted}");
                     RefreshPanel();
                     _host?.RefreshAfterPhase3();
                 });

@@ -114,6 +114,62 @@ public static partial class GameConfig
         return counts;
     }
 
+    // ——【2026-10-26 前期优化·机枢】三档难度曲线：Ch1 简单 / Ch2 普通有变化 / Ch3 起靠运气 ——
+    /// <summary>难度档位：0=简单(Ch1) 1=普通有变化(Ch2) 2=靠运气(Ch3+)。单调升，便于一处调参。</summary>
+    public const int SPICE_SIMPLE = 0;
+    public const int SPICE_VARIATION = 1;
+    public const int SPICE_LUCK = 2;
+    /// <summary>双段爆发 / 事件层起始章（含）：Ch3 起才进「靠运气」档（收敛回 3，贴合三档曲线）。</summary>
+    public const int CLIMAX_CHAPTER_MIN = 3;
+    /// <summary>签名怪（替换/新加一只带词缀的怪）起始章（含）：Ch2 起给「变化」。</summary>
+    public const int SIGNATURE_CHAPTER_MIN = 2;
+    /// <summary>在第 3 波（下标=2）之后插入双段爆发段。</summary>
+    public const int CLIMAX_WAVE_INDEX = 2;
+    /// <summary>爆发第二段相对第3波的 triggerX 间距（正常 VIRTUAL_WAVE_SPACING=4.2，缩短=连着来更压迫）。</summary>
+    public const float CLIMAX_GAP = 2.5f;
+    /// <summary>爆发第二段怪数倍率（×1.4 = 更猛）。</summary>
+    public const float CLIMAX_W2_MUL = 1.4f;
+    /// <summary>跳过纯教学第1关（stageIdx=0），护新手手感。</summary>
+    public const int CLIMAX_MIN_STAGE = 1;
+    /// <summary>事件层起始章（=3）：事件只在 Ch3+「靠运气」档触发（StageEventTable.Draw 也按 startChapter 过滤）。</summary>
+    public const int CLIMAX_EVENT_MIN_CHAPTER = 3;
+
+    /// <summary>每章难度档位：Ch1=简单(0) / Ch2=普通有变化(1) / Ch3+=靠运气(2)。</summary>
+    public static int GetChapterSpiceTier(int chapter)
+    {
+        if (chapter <= 1) return SPICE_SIMPLE;
+        if (chapter <= 2) return SPICE_VARIATION;
+        return SPICE_LUCK;
+    }
+
+    /// <summary>
+    /// 【2026-10-26 前期优化】每关「签名怪」：强制一只特定精灵 + 带 1 个词缀（做成迷你精英，复用现成 MonsterAffix）。
+    /// 按(章,关)轮换，保证每关长得不同、还带词缀，解决「总是一样的怪」。
+    /// 精灵锁 1-10（不碰 11/12 Boss，否则会被当成 Boss 单位）；词缀从现有 6 种挑，
+    /// Ch2「变化」档用温和 4 种（铁壁/荆棘/狂暴/迅捷），Ch3+「运气」档再加吸血/分裂。
+    /// </summary>
+    public static void GetSignatureMonster(int chapter, int stageIdx, out int spriteIndex, out string affixBias)
+    {
+        int[] spritesCh2 = { 2, 3, 4, 5 };
+        int[] spritesCh3 = { 2, 3, 4, 5, 6, 7, 8 };
+        string[] affixCh2 = { "Bulwark", "Thorns", "Frenzy", "Swift" };
+        string[] affixCh3 = { "Bulwark", "Thorns", "Frenzy", "Swift", "Leech", "Split" };
+        if (chapter <= 2)
+        {
+            int s = ((stageIdx % spritesCh2.Length) + spritesCh2.Length) % spritesCh2.Length;
+            int a = ((stageIdx % affixCh2.Length) + affixCh2.Length) % affixCh2.Length;
+            spriteIndex = spritesCh2[s];
+            affixBias = affixCh2[a];
+        }
+        else
+        {
+            int s = ((stageIdx % spritesCh3.Length) + spritesCh3.Length) % spritesCh3.Length;
+            int a = ((stageIdx % affixCh3.Length) + affixCh3.Length) % affixCh3.Length;
+            spriteIndex = spritesCh3[s];
+            affixBias = affixCh3[a];
+        }
+    }
+
     /// <summary>
     /// 【2026-10-22 主人拍板 v4.2 退役】v4.0「正式关定死 9 波」口径作废：总波数改按
     /// 「FORMAL_STAGE_ROUND_COUNT 回合 × 每回合按章定表」累加

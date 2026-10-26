@@ -76,6 +76,7 @@ public partial class TalentUI : MonoBehaviour
     public Text sumMagicText;
     public Text sumHpText;
     public Text sumDefText;
+    public Text sumMagicDefText;   // 【2026-10-26】魔防（主人全文字版新增节点 SumDef1，运行时按名补绑）
     public Text sumCritText;
     public Text sumAtkSpdText;
     public Button resetButton;
@@ -94,7 +95,7 @@ public partial class TalentUI : MonoBehaviour
 
     [Header("事件（对接用）")]
     public UnityEvent onClosed;
-    public UnityEvent<int> onLeftUnlockRequested;   // L index 1..40
+    public UnityEvent<int> onLeftUnlockRequested;   // L index 1..80
     public UnityEvent<int, int> onRightChoiceRequested; // R index, option index
     public UnityEvent onResetRequested;
 
@@ -181,6 +182,7 @@ public partial class TalentUI : MonoBehaviour
         LoadArtSprites();
         if (panelImage == null)
             AutoBindFromHierarchy();
+        EnsureFooterBindings();
         EnsureCurrencyBindings();
         EnsureChoicePopupBindings();
         CloseChoicePopup();

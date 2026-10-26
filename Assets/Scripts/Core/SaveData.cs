@@ -312,9 +312,9 @@ public class SaveData
     /// </summary>
     public bool hardCleared = false;
     /// <summary>
-    /// 本周目支线：0 = 未派定。【2026-10-23 主人拍板「支线 2 岛依次解锁」】通关第 1 章后随机派定第一条，
-    /// 通关该支线后自动派第二条（洗牌袋，只掷未通关过的；见 ChapterRouteTable.EnsureForkRoll）。
-    /// 通关第 8 章后归零，下一周目重通第 1 章后再派。
+    /// 本周目支线：0 = 未派定。【2026-10-26 主人拍板「第一章可以出现支线」】引导完成后随机派定第一条
+    /// （旧口径「通关第 1 章后派」作废；洗牌袋只掷未通关过的；见 ChapterRouteTable.EnsureForkRoll）。
+    /// 通关第 8 章后归零，下一周目引导完成后再派。
     /// </summary>
     public int chosenBranch = 0;
     /// <summary>本周目第一次派定的支线岛 id（1..8，0=未派；冒险页支线岛1 显示它）。
@@ -329,6 +329,10 @@ public class SaveData
     /// <summary>是否曾经 8 岛全通过（N3/N4 叙事周目分流判据，2026-10-23 主人拍板「8岛全通」）。
     /// 跨洗牌轮持久：ResetSideIslandClears 清通关记录但**不清**这个标志——「曾经全通」是事实，不随新一轮消失。</summary>
     public bool hasClearedAllSideIslands = false;
+    /// <summary>已播过「支线岛情报指引」对话的岛集合（2026-10-26 主人拍板「第一章可以出现支线并弹佣兵信息指引」）。
+    /// 每岛每次洗牌轮只播一次：ResetSideIslandClears 清空，新一轮重新播。</summary>
+    public List<IntIdEntry> sideIslandGuideEntries = new List<IntIdEntry>();
+    [NonSerialized] public HashSet<int> sideIslandGuideIds = new HashSet<int>();
 
     // === 冒险日志图鉴 ===
     public List<StringIdEntry> seenMonsterEntries = new List<StringIdEntry>();
@@ -375,6 +379,10 @@ public class SaveData
     [NonSerialized] public HashSet<string> logMileageGrantedKeys = new HashSet<string>();
     /// <summary>里程称号等占位（Lv6）</summary>
     public string logMileageTitleId = "";
+
+    /// <summary>【2026-10-26 主人拍板「记忆上次替换的人物」】主界面看板当前人物：
+    /// "player" 或佣兵 HireId；空 = 默认前台小姐。进主界面时按它恢复看板与气泡台词池。</summary>
+    public string lastBoardCharacterId = "";
 
     public List<StringIdEntry> unlockedWorldEntries = new List<StringIdEntry>();
     public List<StringIdEntry> completedMainEntries = new List<StringIdEntry>();
@@ -816,6 +824,17 @@ public class SaveData
         if (!hasClearedAllSideIslands && clearedSideIslandIds.Count >= SideIslandDefs.Count)
             hasClearedAllSideIslands = true;
 
+        // 【2026-10-26】支线岛指引已播集合重建：从 entries 灌回 HashSet（旧存档无列表 → 空集合，兼容）
+        sideIslandGuideIds = new HashSet<int>();
+        if (sideIslandGuideEntries != null)
+        {
+            for (int i = 0; i < sideIslandGuideEntries.Count; i++)
+            {
+                var ge = sideIslandGuideEntries[i];
+                if (ge != null && ge.id > 0) sideIslandGuideIds.Add(ge.id);
+            }
+        }
+
         // 【2026-10-23 终章追查线】追查关通关集合重建（旧存档无列表 → 空集合，兼容）
         finaleClearedIds = new HashSet<int>();
         if (finaleClearedEntries != null)
@@ -1189,6 +1208,21 @@ public class SaveData
         return hasClearedAllSideIslands;
     }
 
+    /// <summary>标记支线岛情报指引已播（2026-10-26；幂等，双写 List + HashSet）。</summary>
+    public void MarkSideIslandGuideShown(int islandId)
+    {
+        if (islandId < 1 || islandId > SideIslandDefs.Count) return;
+        if (sideIslandGuideIds == null) sideIslandGuideIds = new HashSet<int>();
+        if (sideIslandGuideIds.Add(islandId))
+            sideIslandGuideEntries = FromIntIdSet(sideIslandGuideIds);
+    }
+
+    /// <summary>该岛的情报指引是否已播过（每岛每次洗牌轮一次；ResetSideIslandClears 会清）。</summary>
+    public bool HasShownSideIslandGuide(int islandId)
+    {
+        return sideIslandGuideIds != null && islandId > 0 && sideIslandGuideIds.Contains(islandId);
+    }
+
     // ── 终章追查线（2026-10-23 主人拍板「最后一关后剧情二选一，选完再出几关进完整剧情」）──
 
     /// <summary>记录终关后分支选择（1=回家 2=追查真相）。幂等：只记第一次，之后不可改（同 endingChoice 口径）。</summary>
@@ -1228,6 +1262,9 @@ public class SaveData
     {
         clearedSideIslandIds = new HashSet<int>();
         clearedSideIslandEntries = new List<IntIdEntry>();
+        // 【2026-10-26】指引已播记录一并清：新一轮的岛重新弹一次「佣兵信息」指引
+        sideIslandGuideIds = new HashSet<int>();
+        sideIslandGuideEntries = new List<IntIdEntry>();
     }
 
     /// <summary>已通关章节数（困难/噩梦难度解锁门槛用；分叉后不能用 maxUnlockedChapter-1 推算）。</summary>
@@ -1407,6 +1444,7 @@ public class SaveData
         mercDrawPoolEntries = FromIdList(mercDrawPool);
         clearedChapterEntries = FromIntIdSet(clearedChapterIds);
         clearedSideIslandEntries = FromIntIdSet(clearedSideIslandIds);   // 【2026-10-23 合并方案】岛存档双写
+        sideIslandGuideEntries = FromIntIdSet(sideIslandGuideIds);       // 【2026-10-26】支线岛指引已播双写
         finaleClearedEntries = FromIntIdSet(finaleClearedIds);           // 【2026-10-23 终章追查线】双写
         claimedCodexRewardEntries = FromIdSet(claimedCodexRewardIds);
         defeatedMonsterEntries = FromIdSet(defeatedMonsterIds);

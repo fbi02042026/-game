@@ -187,6 +187,101 @@ public static class AdventureLogMileage
         return n;
     }
 
+    // =====================================================================
+    // 武器里程奖励（2026-10-26 主人拍板：盾/弓进里程奖励，与法师暮火之杖同款
+    // 「攒够累计点数领一次、直接穿上」；门槛跟法师 Lv2 的 100 点类似、微微不一样：
+    // 盾 100 / 弓 120）。与等级奖励并行：不走 claimedLogMileageLevels，
+    // 防重发走 logMileageGrantedKeys（同暮火之杖 GrantKey 口径）。
+    // =====================================================================
+
+    public struct WeaponMilestone
+    {
+        public string GrantKey;    // 防重发 key（logMileageGrantedKeys）
+        public string TemplateId;  // Config/Equips 模板 id（复用现有掉落模板，发稀有版实例）
+        public string Label;       // 列表显示名（不含稀有度前缀；前缀按稀有统一加）
+        public int NeedPoints;     // 领取门槛：累计获得点数（TotalEarned，消费不掉）
+        // 2026-10-26 主人拍板：占格子机制已移除，里程奖励属性再给高一点——
+        // 在模板基础值之上固定叠一条加成（固定值不随星级/稀有度再乘，数值一眼可查；只影响里程发放，不掉落池）
+        public AttrType BonusAttr;
+        public float BonusAttrValue;
+    }
+
+    public static readonly WeaponMilestone[] WeaponMilestones =
+    {
+        // 盾：模板防御+7（稀有版 ×1.15×星级 ≈ 8~9）+ 固定防御 5 → 总防御约 13~14
+        //（2026-10-26 主人拍板：+10 太高压到 5，减 50%）
+        new WeaponMilestone { GrantKey = "special:rare_shield", TemplateId = "equip_new_shield_01", Label = "钢骨盾", NeedPoints = 100,
+            BonusAttr = AttrType.Defense, BonusAttrValue = 5f },
+        // 弓：模板攻击+12（稀有版 ≈ 14~15）+ 固定攻击 5 → 总攻击约 19~20
+        new WeaponMilestone { GrantKey = "special:rare_bow", TemplateId = "equip_bow_1", Label = "猎手长弓", NeedPoints = 120,
+            BonusAttr = AttrType.Attack, BonusAttrValue = 5f },
+    };
+
+    public static bool IsWeaponMilestoneClaimed(string grantKey)
+    {
+        var keys = SaveSystem.Instance?.Data?.logMileageGrantedKeys;
+        return keys != null && keys.Contains(grantKey);
+    }
+
+    public static bool CanClaimWeaponMilestone(WeaponMilestone m)
+    {
+        if (string.IsNullOrEmpty(m.GrantKey) || IsWeaponMilestoneClaimed(m.GrantKey)) return false;
+        return TotalEarned >= m.NeedPoints;
+    }
+
+    /// <summary>
+    /// 领武器里程奖励（先发货后记账，同 Lv2 暮火之杖修好的顺序：发放失败不入账、可重试）。
+    /// 发稀有版实例并直接穿上（换下的旧件自动分解）；grantedName 供 Toast 展示。
+    /// </summary>
+    public static bool ClaimWeaponMilestone(int index, out string grantedName)
+    {
+        grantedName = null;
+        if (index < 0 || index >= WeaponMilestones.Length) return false;
+        var m = WeaponMilestones[index];
+        if (!CanClaimWeaponMilestone(m)) return false;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+
+        var tpl = ConfigManager.Instance != null ? ConfigManager.Instance.GetEquipTemplate(m.TemplateId) : null;
+        if (tpl == null)
+        {
+            Debug.LogError($"[Mileage] 武器里程奖励模板缺失：{m.TemplateId}");
+            UIManager.Instance?.ShowToast("奖励发放失败，请稍后重试");
+            return false;
+        }
+        if (BattleBagSystem.Instance == null)
+        {
+            UIManager.Instance?.ShowToast("奖励发放失败，请稍后重试");
+            return false;
+        }
+
+        int lv = Hero.Instance != null ? Hero.Instance.level : 1;
+        // 稀有版必须走 forcedRarity 生成：模板底稀有度是 Uncommon，先生成后翻 rarity 的话
+        // 属性仍按 Uncommon（×1.08）算、词条也按 Uncommon（0 条）滚 —— 稀有名不符实。
+        // forcedRarity=Rare：属性 ×1.15、按稀有滚 1 条武器词条（与掉落稀有装同一套生成链）。
+        var inst = EquipInstance.GenerateFromTemplate(tpl, 0, Mathf.Max(1, lv), overrideRarity: true, forcedRarity: Rarity.Rare);
+        inst.equipName = WeaponAffixSystem.RarityPrefix(Rarity.Rare) + tpl.equipName;
+        inst.templateId = tpl.templateId;
+        // requireLevel 钳到生成等级，确保领取必能穿上（同暮火之杖口径，防随机到 +1 穿不上）
+        inst.requireLevel = Mathf.Min(inst.requireLevel, Mathf.Max(1, lv));
+
+        // 固定加成条（2026-10-26 主人拍板：占格子移除后属性上调；叠加在模板基础值与随机词条之上）
+        inst.attrBonus.Add(new AttrBonusData { attrType = m.BonusAttr, value = m.BonusAttrValue, isPercent = false });
+
+        if (!BattleBagSystem.Instance.TryEquipDirect(inst))
+        {
+            UIManager.Instance?.ShowToast($"无法装备「{inst.equipName}」");
+            return false;
+        }
+
+        data.logMileageGrantedKeys ??= new HashSet<string>();
+        data.logMileageGrantedKeys.Add(m.GrantKey);
+        grantedName = inst.equipName;
+        SaveSystem.Instance.Save();
+        RedDot.RefreshCommon();
+        return true;
+    }
+
     /// <summary>防重复发点。返回实际增加点数（0=已发过）。</summary>
     public static int TryGrantOnce(string sourceKey, int points, bool save = true)
     {

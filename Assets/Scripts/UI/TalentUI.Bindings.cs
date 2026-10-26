@@ -39,10 +39,14 @@ public partial class TalentUI
         rightRowTemplate = transform.Find("RightRowTemplate")?.gameObject;
         rightExtraRowTemplate = transform.Find("RightRowTemplate (1)")?.gameObject;
 
+        // 【2026-10-26 主人全文字版】底栏属性格以节点名为准：
+        // 物攻=SumAttack 魔攻=SumAttack1 血量=SumHp 物防=SumDef 魔防=SumDef1 暴击=SumCrit 攻速=SumAtkSpd
         sumAttackText = FindTxt("Panel/Footer/SumAttack");
-        sumMagicText = FindTxt("Panel/Footer/SumMagic");
+        sumMagicText = FindTxt("Panel/Footer/SumAttack1")
+                       ?? FindTxt("Panel/Footer/SumMagic");   // 旧版节点名兜底
         sumHpText = FindTxt("Panel/Footer/SumHp");
         sumDefText = FindTxt("Panel/Footer/SumDef");
+        sumMagicDefText = FindTxt("Panel/Footer/SumDef1");
         sumCritText = FindTxt("Panel/Footer/SumCrit");
         sumAtkSpdText = FindTxt("Panel/Footer/SumAtkSpd");
         resetButton = transform.Find("Panel/Footer/ResetButton")?.GetComponent<Button>();
@@ -79,6 +83,24 @@ public partial class TalentUI
     {
         BindCurrencyTexts();
         WireGoldPlusIfNeeded();
+    }
+
+    /// <summary>
+    /// 【2026-10-26 主人全文字版补绑】底栏属性格按预制体节点名纠偏。
+    /// 主人手工改版后的现状：sumDefText 槽位被拖到了新加的魔防 SumDef1 上（原物防 SumDef 断绑）、
+    /// sumMagicText 为空，而 panelImage 已序列化导致 AutoBindFromHierarchy 不跑——
+    /// 即使跑也只认旧节点名 SumMagic，不认识 SumAttack1/SumDef1。这里统一纠偏：
+    /// 只修「为空」和「指错节点」的字段，Inspector 里已拖对的不动。
+    /// </summary>
+    void EnsureFooterBindings()
+    {
+        if (sumMagicText == null)
+            sumMagicText = FindTxt("Panel/Footer/SumAttack1");
+        if (sumMagicDefText == null)
+            sumMagicDefText = FindTxt("Panel/Footer/SumDef1");
+        // sumDefText 历史上被拖到魔防节点上：指向的节点名不是 SumDef 时按名重绑物防
+        if (sumDefText == null || !sumDefText.transform.name.Equals("SumDef"))
+            sumDefText = FindTxt("Panel/Footer/SumDef");
     }
 
     void BindCurrencyTexts()

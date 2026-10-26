@@ -48,6 +48,9 @@ public class TownSceneManager : MonoBehaviour
             UICanvasSetup.ApplyOn(hall, UICanvasSetup.ResolveUiCamera());
             if (hall.GetComponent<TownSceneBootstrap>() == null)
                 hall.AddComponent<TownSceneBootstrap>();
+            // 【2026-10-26 主人拍板】主界面任务栏绑定：把美术搭的「任务栏」接到 QuestBarData
+            //（找不到节点会在 Binder 里 LogError dump 层级，不建树不兜底）
+            QuestBarBinder.Attach(hall);
             StartCoroutine(CoNotifyStoryReady());
             Debug.Log("[TownScene] 已加载 GuildHallUI 预制体（统一 Canvas 720×1280 Match Height）");
         }

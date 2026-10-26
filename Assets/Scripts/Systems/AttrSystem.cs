@@ -197,7 +197,9 @@ public class AttrSystem
         if (_attr.ContainsKey(AttrType.CritDamage))
             _attr[AttrType.CritDamage] = Mathf.Max(1f, _attr[AttrType.CritDamage]);
         _attr[AttrType.AttackSpeed] = Mathf.Max(0.2f, _attr[AttrType.AttackSpeed]);
-        _attr[AttrType.Dodge] = Mathf.Clamp01(_attr.ContainsKey(AttrType.Dodge) ? _attr[AttrType.Dodge] : 0);
+        // 2026-10-26 主人拍板：闪避软顶 60%（打5次最多闪3次）——闪避只吃普攻、技能必中，
+        // 但堆满 100% 敌人普攻会永远 miss，故封顶不设 100%
+        _attr[AttrType.Dodge] = Mathf.Clamp(_attr.ContainsKey(AttrType.Dodge) ? _attr[AttrType.Dodge] : 0, 0f, 0.6f);
     }
 
     /// <summary>
@@ -239,6 +241,17 @@ public class AttrSystem
             // 法师升级后伤害与头顶战力直接涨。非玩家单位不吃这段（怪物魔攻基底不受扰动）。
             float intelGrowth = Mathf.Max(0f, intel - GameConfig.BASE_INTELLIGENCE);
             AddAttr(AttrType.MagicAttack, intelGrowth * 2f, false);
+
+            // 【2026-10-26 主人拍板「加了属性肯定得加战力 属性的问题肯定得加伤害防御什么的属性」】
+            // 力量对称补齐（与上面智力同写法）：成长段 ×2 → 物理攻击。此前玩家侧整条被 216 行的
+            // !UsesPlayerJobTable 拦掉 → 装备/等级/天赋加的力量对物系玩家零收益（狂战升级白升、
+            // 手套「力量+5」战力恒 +0，2026-10-26 主人截图报障）。
+            // 同口径只折「基底 BASE_STRENGTH 以外的成长段」：物攻基准已在职业表 ATK 里，
+            // 全量叠会把基底 5 又算一遍、开局虚高（与 10-10 拍板一致，只是把装备/等级那部分放行）。
+            // 只对玩家生效（ShouldApplyPowerDerived 即 Player-only），怪物/佣兵既有的全量派生（216 行）不动；
+            // 法系玩家力量成长段恒 0（装备池按职业过滤、等级倾向加智力），此段对法系是空转，无副作用。
+            float strGrowth = Mathf.Max(0f, str - GameConfig.BASE_STRENGTH);
+            AddAttr(AttrType.Attack, strGrowth * 2f, false);
         }
 
         // 敏捷→攻速+暴击

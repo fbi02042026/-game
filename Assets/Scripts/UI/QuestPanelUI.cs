@@ -191,7 +191,7 @@ public class QuestPanelUI : MonoBehaviour
 
         // TabMain / TabDaily
         BuildTab(panel.transform, "TabMain", "主线", new Vector2(-120f, 400f));
-        BuildTab(panel.transform, "TabDaily", "每日", new Vector2(120f, 400f));
+        BuildTab(panel.transform, "TabDaily", "日常", new Vector2(120f, 400f));   // 2026-10-26 主人拍板：统一叫「日常」
 
         // Header
         _headerText = CreateTxt(panel.transform, "Header", "", 22, GOLD, TextAnchor.MiddleLeft);

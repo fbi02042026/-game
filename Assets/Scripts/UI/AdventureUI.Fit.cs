@@ -131,9 +131,17 @@ public partial class AdventureUI
                 var riftTitleRestore = endlessRestore != null ? endlessRestore.Find("TitleBar") as RectTransform : null;
                 if (riftTitleRestore != null) RestoreAdventureBase(riftTitleRestore);
                 RestoreRiftColumnFit();
+                // 顶部两块（横幅/左列）让位资源条的还原（2026-10-26；未处理过 = no-op）
+                var topBannerRestore = transform.Find("Top") as RectTransform;
+                if (topBannerRestore != null) RestoreAdventureBase(topBannerRestore);
+                var sidebarRestore = transform.Find("LeftSidebar") as RectTransform;
+                if (sidebarRestore != null) RestoreAdventureBase(sidebarRestore);
                 // 主线列表瘦屏重排的还原（槽位浮动基准 / 支线岛基准；列表未绑定时内部自动 no-op）
-                ShrinkSlotCount(4);   // 克隆增补的槽位撤掉，窗口回到预制体 4 槽
+                // 【2026-10-26 跨章连续列】不再撤克隆槽：列表常态 15 槽，还原只需把基准收回归位
+                //（克隆槽由 RestoreSlotColumnBaseY 按预制体节奏向上堆恢复）。
+                ShrinkSlotCount(MaxSlotCount);
                 RestoreSlotColumnBaseY();
+                RefreshChestContentSize();   // 【2026-10-26 跨章连续列】还原收回内容高后按 15 槽重新撑出滚动余量（含基准补偿）
                 RestoreBranchIslandBaseY();
                 RestoreActivityRowsScale();
                 RestoreAdventureSidebarEven();
@@ -194,6 +202,10 @@ public partial class AdventureUI
             // 主人把 5 钮调成 95 等距，但隐藏的每日/BOSS 占住 1/3 号位 → 可见的 0/2/4 视觉间距 190。
             // 这里按主人节奏把可见钮向下紧凑排（首钮不动），标准屏/关开关走 RestoreAdventureSidebarEven 还原。
             FitSidebarEvenSpacing();
+            // 顶部两块（主线冒险横幅 Top + 左列 LeftSidebar）整体下移到资源条之下
+            // （2026-10-26 主人「冒险界面的资源条没有适配」：资源条挂 SafeAreaFitter 下移了，
+            //   页面顶部还停在预制体贴顶位 → 真机上资源条压住模式按钮、横幅吊在最顶）。
+            FitAdventureTopBelowResourceStrip(rootRt);
             // 世界地图按钮是 RightContent 居中锚点，屏越高越往上漂（相对地图的位置随屏高变化）；
             // 钉回设计屏（1280 高）时与地图底边的相对几何，x 不动。
             var worldMapBtn = right != null ? right.Find("WorldMapBtn") as RectTransform : null;
@@ -250,6 +262,8 @@ public partial class AdventureUI
             yield return null;
         _adventureFitWaitingRoot = false;
         ApplyAdventureFit();
+        // 【2026-10-26 修「打完关卡出来左侧标签拉开间隔」】适配真正落位后，补放 ShowPage 时因 rect=0 挂起的左侧标签滑入
+        FlushLeftTabsPopPending();
     }
 
     /// <summary>首次遇到节点记录预制体原始锚点/偏移/轴心（用于幂等重算与一键回退）。返回 base（值类型，改完需写回字典）。</summary>
@@ -810,13 +824,15 @@ public partial class AdventureUI
         float rhythmPrefab = spanPrefab / (prefabPos.Count - 1);
 
         // 2026-10-23 主人「岛屿之间的间隔再大 50%」：节奏 ×1.5（见 MainSlotSpacingBoost）。
-        // 上限压点：带高 ÷ (槽位上限 - 1) —— 带里装得下整章 5 关时无需更大间隔，
-        // 间隔最多压回「5 关正好排满带」的值，1-1…1-5 全部可见、底部空隙消失；
+        // 上限压点按「可见带 5 关」算（2026-10-26 跨章连续列：列里常态 15 槽，只把可见 5 关排进带，
+        // 多出的槽位向下溢出视口成滚动余量——若按 15 槽算节奏会把可见 5 关挤成密不透风）：
+        // 带里装得下整章 5 关时无需更大间隔，间隔最多压回「5 关正好排满带」的值；
         // 带特别矮时最多压回预制体节奏，再矮的部分被详情面板挡住（窗口语义）。
-        float rhythm = Mathf.Clamp((bandTop - bandBottom) / Mathf.Max(1, MaxSlotCount - 1),
+        float rhythm = Mathf.Clamp((bandTop - bandBottom) / Mathf.Max(1, GameConfig.STAGES_PER_GRAND - 1),
                                    rhythmPrefab, rhythmPrefab * MainSlotSpacingBoost);
 
-        // 窗口槽位固定拉满整章（间隔已按带高自适应，装得下就全摆）
+        // 窗口槽位拉满跨章数（2026-10-26 跨章连续列：15 槽铺 3 章，可见 5 关按带排，其余滚出来）
+        int slotsBefore = _slotNodes.Count;
         int slotCount = EnsureSlotCount(MaxSlotCount);
         // 一次性诊断（真机把这条发回来即可核对节奏与带高）
         if (!_mainColDiagLogged)
@@ -880,9 +896,13 @@ public partial class AdventureUI
         var ys = new List<float>(slotCount);
         for (int i = 0; i < slotCount; i++)
             ys.Add(ysRoot[i] - contentCenterY);
-        if (slotCount != prefabPos.Count)
-            RefreshChestNodes();   // 补/撤槽后内容窗口变了，立刻刷新把各关三态铺上，不等下次 ShowPage
         ApplySlotColumnStretchY(ys);
+        // 槽位增补后内容窗口变了（2026-10-26 跨章列常态一次增补 11 槽）：立刻刷新把各关三态铺上。
+        // 放在 ApplySlotColumnStretchY 之后——此时基准/内容高已定稿，刷新里算的滚动余量与定位不会被再覆盖。
+        if (slotCount != slotsBefore)
+            RefreshChestNodes();
+        // 基准/内容高重写后滚动余量变了：把当前关重新滚进视口（无标识或内容不比视口高时内部 no-op）
+        ScrollChestToCurrent(_markerCurrentSlot);
 
         // ── 3.6) 无限页关卡列与主线同带重排【2026-10-24 主人「无限裂隙节点有点偏下了 要和主线一样的」】
         // 无限/关卡 与 主线/关卡 同构（1-1..1-4 同名同基准），主线列瘦屏被拉进带内后无限列还在预制体位 → 显偏下。
@@ -907,11 +927,14 @@ public partial class AdventureUI
             {
                 var riftSlots = CollectNumberedSlots(riftGuanKa);
                 EnsureRiftSlotBase(riftSlots);
-                int n = Mathf.Min(riftSlots.Count, ysRoot.Count);
+                // 【2026-10-26 跨章连续列】ysRoot 已是全列 15 槽；无限列只有 4 槽，
+                // 对齐「可见带 5 关」的根帧位（bandTop 顶格往下按 rhythm 铺），与主线视觉带一致。
+                int n = Mathf.Min(riftSlots.Count, GameConfig.STAGES_PER_GRAND);
                 for (int i = 0; i < n; i++)
                 {
                     var srt = riftSlots[i];
-                    float targetY = ysRoot[i] - eCenterNow;   // 槽位中心锚：根帧目标 − 容器中心
+                    float bandYRoot = bandTop - (GameConfig.STAGES_PER_GRAND - 1 - i) * rhythm;
+                    float targetY = bandYRoot - eCenterNow;   // 槽位中心锚：根帧目标 − 容器中心
                     var p = srt.anchoredPosition;
                     if (!Mathf.Approximately(p.y, targetY))
                         srt.anchoredPosition = new Vector2(p.x, targetY);
@@ -996,6 +1019,68 @@ public partial class AdventureUI
             if (_sidebarEvenBtns[i] != null) RestoreAdventureBase(_sidebarEvenBtns[i]);
         }
         _sidebarEvenBtns.Clear();
+    }
+
+    // ────────────────────────────────────────────────────
+    // 顶部两块让位资源条（2026-10-26 主人「冒险界面的资源条没有适配」）：
+    // 病根：共享资源条（GuildHall 的 TopBar）挂 SafeAreaFitter.Offset，整条下移
+    // TotalTopInsetUnits（安全区顶 + 微信胶囊预留 + 固定 20）；而冒险页顶部的
+    // 「主线冒险」横幅（Top）与左列模式按钮容器（LeftSidebar）还是预制体贴顶位
+    // （横幅顶边距顶 19、首颗模式按钮 142）——瘦屏真机上资源条（≈safeTop+20 起）
+    // 正好压在模式按钮上，横幅孤零零吊在最顶（主人截图实锤）。
+    // 治法：量出资源条底边（世界四角 → 页根本地，与 ResolveBottomNavReserved 同口径），
+    // 把 Top + LeftSidebar 两块用【同一个位移量】下移到「资源条底 + 间距」之下——
+    // 两块共用一个 delta，预制体里横幅→按钮的相对节奏保持不变。
+    // 幂等：全部从 CaptureAdventureBase 的预制体 base 重算，不累积；
+    // 标准屏 / 关开关由 ApplyAdventureFit 的 restore 分支还原（本方法只在瘦屏路径调用）。
+    // 缺真值不兜底：资源条节点找不到 / 还没量出有效位置时不动页面，等补跑协程。
+    // ────────────────────────────────────────────────────
+
+    /// <summary>资源条底边与页面顶部内容（横幅顶边）之间的视觉间距（含药丸列悬出条底 ~5 的余量）。</summary>
+    const float TopStripGapUnits = 16f;
+
+    void FitAdventureTopBelowResourceStrip(RectTransform rootRt)
+    {
+        if (rootRt == null || rootRt.rect.height <= 0f) return;
+
+        // 资源条真源：主界面 TopBar；独立打开（无大厅）时是本页挂的 TopBar / SharedResourceBar。
+        Transform strip = null;
+        if (GuildHallUI.Instance != null)
+            strip = FindDeepChild(GuildHallUI.Instance.transform, "TopBar");
+        if (strip == null)
+            strip = FindDeepChild(transform, "TopBar") ?? FindDeepChild(transform, "SharedResourceBar");
+        var stripRt = strip as RectTransform;
+        if (stripRt == null) return;
+
+        // 资源条底边（世界四角 [0]=左下）→ 页根本地 →「距页根顶边多少」
+        var corners = new Vector3[4];
+        stripRt.GetWorldCorners(corners);
+        float rootBottomY = rootRt.rect.min.y;
+        float aboveBottom = rootRt.InverseTransformPoint(corners[0]).y - rootBottomY;
+        float stripBottomFromTop = rootRt.rect.height - aboveBottom;
+        if (stripBottomFromTop <= 1f) return;   // 量不到有效位置（刚实例化/未布局）→ 等下一轮补跑
+
+        // 位移量以横幅 base 顶边为基准：横幅顶边 → 资源条底 + 间距。
+        var topBanner = transform.Find("Top") as RectTransform;
+        if (topBanner == null) return;
+        var bb = CaptureAdventureBase(topBanner);
+        float topEdgeY = Mathf.Lerp(rootRt.rect.min.y, rootRt.rect.max.y, bb.anchorMax.y) + bb.offsetMax.y;
+        float bannerTopFromTop = rootRt.rect.height - topEdgeY;
+        float shift = bannerTopFromTop - (stripBottomFromTop + TopStripGapUnits);   // 负 = 下移
+
+        ApplyTopNodeShift(topBanner, shift);
+        ApplyTopNodeShift(transform.Find("LeftSidebar") as RectTransform, shift);
+    }
+
+    /// <summary>顶部块整体平移 shift（负 = 下移），offset 从 base 重算保证幂等。null 安全。</summary>
+    void ApplyTopNodeShift(RectTransform rt, float shift)
+    {
+        if (rt == null) return;
+        var b = CaptureAdventureBase(rt);
+        rt.offsetMin = new Vector2(b.offsetMin.x, b.offsetMin.y + shift);
+        rt.offsetMax = new Vector2(b.offsetMax.x, b.offsetMax.y + shift);
+        b.applied = true;
+        _adventureUiBase[rt.GetInstanceID()] = b;
     }
 
     // ────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 佣兵台词表（读 Cook 后的 merc_lines.bytes）。
-/// 场景：战斗中 / 酒馆刷新 / 招募成功 / MVP / 战死。
+/// 场景：战斗中 / 酒馆刷新 / 招募成功 / MVP / 战死 / 主界面（2026-10-26 加：看板换人后的专属台词）。
 /// </summary>
 public static class MercLineTable
 {
@@ -13,7 +13,8 @@ public static class MercLineTable
         TavernRefresh,
         HireSuccess,
         Mvp,
-        Death
+        Death,
+        Board   // 【2026-10-26 主人拍板「某些人会有特定的话 只有换了才知道」】主界面看板专属台词
     }
 
     static Dictionary<string, List<string>> _lines;
@@ -79,6 +80,7 @@ public static class MercLineTable
             case "招募成功": scene = Scene.HireSuccess; return true;
             case "MVP": scene = Scene.Mvp; return true;
             case "战死": scene = Scene.Death; return true;
+            case "主界面": scene = Scene.Board; return true;
             default:
                 scene = Scene.Combat;
                 return false;
@@ -97,6 +99,20 @@ public static class MercLineTable
             return list[Random.Range(0, list.Count)];
 
         return Fallback(hireId, scene);
+    }
+
+    /// <summary>
+    /// 取某佣兵某场景的<b>全部</b>台词（不随机、不兜底）；没有就返回 null。
+    /// 【2026-10-26】给主界面看板用：要看「有没有专属台词」来决定说不说，Pick 的兜底句不适用。
+    /// </summary>
+    public static List<string> GetAll(string hireIdOrAssetId, Scene scene)
+    {
+        EnsureLoaded();
+        string hireId = MercRosterDefs.ResolveHireId(hireIdOrAssetId) ?? hireIdOrAssetId;
+        if (string.IsNullOrEmpty(hireId) || _lines == null) return null;
+        return _lines.TryGetValue(MakeKey(hireId, scene), out var list) && list != null && list.Count > 0
+            ? list
+            : null;
     }
 
     static string Fallback(string hireId, Scene scene)

@@ -136,6 +136,9 @@ public partial class WavePlanner
                 continue;
             }
 
+            // 【2026-10-26 前期优化】签名怪：本波最后一个名额强制成「迷你精英+词缀」，给「每关一只特殊怪」的变化感
+            bool signatureSlot = wave != null && wave.signatureSpriteIndex > 0 && i == wave.monsterCount - 1;
+
             float monsterScale = waveScaleMultiplier;
             if (template.isBoss && !wave.isBossWave)
                 monsterScale = GameConfig.BOSS_SCALE_MULTIPLIER;
@@ -146,6 +149,12 @@ public partial class WavePlanner
                 monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;
                 // 【2026-10-10 主人拍板】引导精英不许是蘑菇：强制用本章精英专属精灵（Forest-07 树精）。
                 spriteIndexOverride = GameConfig.TUTORIAL_ELITE_SPRITE_ID;
+            }
+            // 【2026-10-26 前期优化】签名怪：迷你精英体型 + 指定精灵（Ch1 简单档不挂，见 WavePlanner 三档曲线）
+            if (signatureSlot)
+            {
+                monsterScale = GameConfig.ELITE_SCALE_MULTIPLIER;
+                spriteIndexOverride = wave.signatureSpriteIndex;
             }
 
             // 原型精英额度：占本波最后一个/几个名额（不是额外追加），与引导关同一套口径
@@ -218,8 +227,19 @@ public partial class WavePlanner
             // 词缀偏好：只在本次实例化期间挂上（Monster.Init 内同步 Roll 词缀），出完立刻清，
             // 避免把「分裂」之类的偏好泄漏给下一只普通精英。
             bool eliteUnit = monsterScale >= GameConfig.ELITE_SCALE_MULTIPLIER - 0.05f;
-            bool hasBias = arch != null && !string.IsNullOrEmpty(arch.affixBias) && eliteUnit;
-            if (hasBias) MonsterAffixDefs.SetPendingBias(arch.affixBias);
+            bool hasBias = false;
+            string biasToApply = null;
+            if (signatureSlot && wave != null && !string.IsNullOrEmpty(wave.signatureAffixBias))
+            {
+                hasBias = true;
+                biasToApply = wave.signatureAffixBias;
+            }
+            else if (arch != null && !string.IsNullOrEmpty(arch.affixBias) && eliteUnit)
+            {
+                hasBias = true;
+                biasToApply = arch.affixBias;
+            }
+            if (hasBias) MonsterAffixDefs.SetPendingBias(biasToApply);
             // 【2026-10-05 主人拍板「多点出生点」】一整波从远近不同的位置一起涌进来，
             // 观感是「成群压过来」，不再需要靠长 stagger 排队。
             // 【2026-10-20 主人拍板】普通波的深度档不再按序号累加，改由出生点池随机抽取
@@ -235,6 +255,8 @@ public partial class WavePlanner
             {
                 ForceEnableMonsterRenderers(m.transform);
                 wave.aliveCount++;
+                // 【2026-10-26 词缀怪】词缀怪出场 → 玩家吐槽介绍一句（每种词缀每关一次）
+                MonsterAffixBanter.OnAffixMonsterSpawned(m);
             }
         }
 

@@ -25,6 +25,10 @@ public static class QuestJumpRouter
                 // 打关：切到冒险页并定位到任务所在章节
                 return GoAdventure(def.chapter);
 
+            case MainQuestType.ClearStages:
+                // 密度行（2026-10-26）：任意主线关都算进度，同样送冒险页定位当前章
+                return GoAdventure(def.chapter);
+
             case MainQuestType.TalkNpc:
                 // 找老板娘：人就在酒馆，切过去再开口
                 if (!GoTavern()) return false;
@@ -50,7 +54,7 @@ public static class QuestJumpRouter
         return false;
     }
 
-    /// <summary>每日任务 → 对应功能界面。</summary>
+    /// <summary>每日任务 → 对应功能界面（2026-10-26 主人拍板「按任务类型前往」：战斗→冒险、升级天赋→角色界面、升一级→冒险）。</summary>
     public static bool GoDaily(DailyQuestView d)
     {
         if (d.id == "daily_login")
@@ -58,7 +62,9 @@ public static class QuestJumpRouter
             DailyLoginUI.Show();
             return true;
         }
-        // 其余每日（通关 N 关等）都是打关，送进冒险页
+        // 类型路由：读表里这行日常的 target_type（表缺失/行缺失按战斗类兜进冒险页——日常本质都是打关，不会白点）
+        if (QuestTable.TryDaily(d.id, out var row) && row.targetType == "upgrade_talent")
+            return GoTalent();   // 点天赋/升级类 → 角色界面+天赋
         return GoAdventure(MainQuestSystem.CurrentChapter());
     }
 
@@ -72,7 +78,7 @@ public static class QuestJumpRouter
     // 具体落点
     // ============================================================
 
-    /// <summary>冒险页 + 定位章节。</summary>
+    /// <summary>冒险页 + 定位章节。【2026-10-26 主人拍板】任务前往即使章没开也定位过去（看锁态），ignoreLock=true。</summary>
     static bool GoAdventure(int chapter)
     {
         var hub = TownHubController.Instance;
@@ -83,7 +89,7 @@ public static class QuestJumpRouter
         // 页面已在 OpenAdventure 里预加载好，这里只把选中章拨过去
         var adv = AdventureUI.Instance;
         if (adv != null)
-            adv.FocusChapter(chapter > 0 ? chapter : MainQuestSystem.CurrentChapter());
+            adv.FocusChapter(chapter > 0 ? chapter : MainQuestSystem.CurrentChapter(), ignoreLock: true);
         return true;
     }
 

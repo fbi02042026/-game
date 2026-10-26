@@ -338,10 +338,15 @@ public partial class AdventureUI
     /// 只改选中章 + 刷新，不做其他事；章节现在进不去就静默保留当前选择，
     /// 免得从任务条点进来被一句「未解锁」打断。
     /// </summary>
-    public void FocusChapter(int chapter)
+    /// <summary>
+    /// 定位到指定章（切选中章并刷新）。
+    /// 【2026-10-26 主人拍板「任务栏前往即使没开启也可以定位到」】任务点击走 ignoreLock=true：
+    /// 锁着的章也照样切过去看（关卡列表自带锁态展示），普通点击（玩家手点页签）仍受 CanEnter 把关。
+    /// </summary>
+    public void FocusChapter(int chapter, bool ignoreLock = false)
     {
         if (chapter < 1 || chapter > 8) return;
-        if (!ChapterRouteTable.CanEnter(chapter, SaveSystem.Instance?.Data)) return;
+        if (!ignoreLock && !ChapterRouteTable.CanEnter(chapter, SaveSystem.Instance?.Data)) return;
 
         _selectedChapter = chapter;
         if (_built && gameObject.activeInHierarchy)

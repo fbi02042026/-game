@@ -254,19 +254,79 @@ public class SpeechBubbleTalker : MonoBehaviour
 
     void BuildLinePool()
     {
+        RefreshLinePool(GuildHallUI.Instance != null ? GuildHallUI.Instance.CurrentBoardId : null);
+    }
+
+    // 【2026-10-26 主人拍板「让引导的话也可以让替换的人说」】中性口吻引导池：
+    // 看板被换成玩家/佣兵后，轮播的功能提示由台上的人说 —— 前台御姐人设句（DefaultLines）不能塞进佣兵嘴里，
+    // 所以功能性信息重写成谁说都不违和的中性版；前台在台时仍用 DefaultLines，原口径不动。
+    static readonly string[] BoardGuideLines =
+    {
+        "欢迎回来，今天做点什么？",
+        "体力是有限的，省着点用。",
+        "「冒险」就在下面，随时出发。",
+        "邮件记得领，别堆着。",
+        "酒馆好像有新面孔，去看看？",
+        "打完一波还有一波，别急。",
+        "过了关就走传送门，别发呆。",
+        "装备穿上了就直接显示在身上。",
+        "会暴击的冒险者，活得比较久。",
+        "体力没了？等着，会自己回来的。",
+        "商城以后会有更多好东西。",
+        "咨询台的前台小姐，随时在。",
+    };
+
+    // 【2026-10-26 主人拍板「某些人会有特定的话 只有换了才知道」】玩家自己的看板专属台词。
+    // 玩家不走 merc_lines.csv（加载器只认 H 开头的佣兵 id），走 C# 常量。
+    static readonly string[] PlayerBoardLines =
+    {
+        "我的队伍，我站C位。",
+        "今天也元气满满，出发！",
+        "看我表演就行。",
+    };
+
+    /// <summary>看板人物的专属台词（只有把 TA 换上看板才说得到）：玩家走 C# 常量，佣兵走 merc_lines.csv「主界面」场景。</summary>
+    static string[] BoardSpecialLines(string boardId)
+    {
+        if (string.IsNullOrEmpty(boardId)) return null;
+        if (boardId == "player") return PlayerBoardLines;
+        var all = MercLineTable.GetAll(boardId, MercLineTable.Scene.Board);
+        return all != null && all.Count > 0 ? all.ToArray() : null;
+    }
+
+    /// <summary>
+    /// 【2026-10-26 主人拍板】看板换人后重刷轮播池（进主界面恢复 + 每次 Turn 换人后都会调）：
+    /// 前台在台 = DefaultLines（御姐功能池，原口径）；玩家/佣兵在台 = 中性引导池 + 该人物专属台词混播。
+    /// </summary>
+    public void RefreshLinePool(string boardId)
+    {
         _lines.Clear();
-        for (int i = 0; i < DefaultLines.Length; i++)
-            _lines.Add(DefaultLines[i]);
+        if (string.IsNullOrEmpty(boardId))
+        {
+            for (int i = 0; i < DefaultLines.Length; i++)
+                _lines.Add(DefaultLines[i]);
+            return;
+        }
+        for (int i = 0; i < BoardGuideLines.Length; i++)
+            _lines.Add(BoardGuideLines[i]);
+        string[] special = BoardSpecialLines(boardId);
+        if (special != null)
+            for (int i = 0; i < special.Length; i++)
+                _lines.Add(special[i]);
     }
 
     /// <summary>咨询台：优先说「今日可做 / 功能介绍」；【2026-10-18 彩蛋批次】加情境分支与稀有台词。</summary>
     void OnReceptionistClicked()
     {
-        // 【2026-10-25】看板被 Turn 换成佣兵立绘时点击无响应
-        // （2026-10-20 主人拍板「佣兵态点击保持现状无响应」）。
-        // 此守卫同时覆盖热点按钮与看板立绘本体（EnsureBoardPokeButton）两条入口。
+        // 【2026-10-26 主人拍板】看板被换成玩家/佣兵后，点 TA 会说话（专属台词优先）——
+        // 「特定的话只有换了才知道」的发现入口。原 2026-10-20「佣兵态无响应」口径由本条替代。
+        // 此分支同时覆盖热点按钮与看板立绘本体（EnsureBoardPokeButton）两条入口。
         var hallGuard = GuildHallUI.Instance;
-        if (hallGuard != null && !hallGuard.BoardIsDefaultReceptionist) return;
+        if (hallGuard != null && !hallGuard.BoardIsDefaultReceptionist)
+        {
+            OnBoardCharacterClicked();
+            return;
+        }
 
         // 【2026-10-25 主人拍板】戳一戳冷却（同老板娘踢出口径）：生气后 60 秒内点击一律无效，
         // 不累计怒气、不动脸、不动作；每轮冷却只在第一次点击时回一句拒绝台词
@@ -444,6 +504,46 @@ public class SpeechBubbleTalker : MonoBehaviour
         "……其实，也不讨厌啦。别告诉别人。",
         "戳够了吗？……那，轮到我戳回去了。",
     };
+
+    /// <summary>
+    /// 【2026-10-26 主人拍板】点看板上的人物（非前台）：说 TA 的专属台词（没有专属就走中性引导池）。
+    /// 前台那套戳一戳机制（怒气分档 / 害羞生气表情 / 动作 / 冷却）不适用 —— 佣兵没有那张表情图，
+    /// 动作表情张冠李戴比不响应更糟；保留 _busy / 剧情压制两个守卫防连点刷屏。
+    /// </summary>
+    void OnBoardCharacterClicked()
+    {
+        if (_suppressed || _busy) return;
+        string boardId = GuildHallUI.Instance != null ? GuildHallUI.Instance.CurrentBoardId : null;
+        string[] special = BoardSpecialLines(boardId);
+        string line = special != null && special.Length > 0
+            ? PickPokeLine(special)
+            : (_lines.Count > 0 ? _lines[Random.Range(0, _lines.Count)] : null);
+        if (string.IsNullOrEmpty(line)) return;
+        if (_loop != null) StopCoroutine(_loop);
+        _busy = false;
+        _loop = StartCoroutine(SpeakOnceThenResume(line));
+    }
+
+    /// <summary>
+    /// 【2026-10-26 主人拍板「只有换了才知道」】Turn 换人过场播完，新上台的人物开腔说一句专属台词，
+    /// 这是专属台词的发现时刻。没有专属台词的人物保持安静（不硬凑中性句凑数）。
+    /// </summary>
+    public static void RevealBoardLine(string boardId)
+    {
+        if (string.IsNullOrEmpty(boardId) || _suppressed) return;
+        string[] special = BoardSpecialLines(boardId);
+        if (special == null || special.Length == 0) return;
+        string line = special[Random.Range(0, special.Length)];
+        for (int i = _alive.Count - 1; i >= 0; i--)
+        {
+            var t = _alive[i];
+            if (t == null) { _alive.RemoveAt(i); continue; }
+            if (t._loop != null) t.StopCoroutine(t._loop);
+            t._busy = false;
+            t._loop = t.StartCoroutine(t.SpeakOnceThenResume(line));
+            return;
+        }
+    }
 
     /// <summary>
     /// 【2026-10-18 彩蛋批次】外部触发前台小姐姐说一句话（连败回城安慰等）。

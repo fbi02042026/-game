@@ -11,6 +11,7 @@ public enum MonsterAffixId
     Swift,    // 迅捷：移速 +40%
     Leech,    // 吸血：造成伤害回血
     Split,    // 分裂：死亡时分裂出小怪
+    Crit,     // 暴击：攻击概率暴击（2026-10-26 词缀怪新增）
 }
 
 /// <summary>
@@ -37,6 +38,10 @@ public static class MonsterAffixDefs
         public float LeechRatio;
         /// <summary>死亡时分裂出的小怪数量</summary>
         public int SplitCount;
+        /// <summary>攻击暴击概率（0~1，2026-10-26 词缀怪「暴击」用）</summary>
+        public float CritChance;
+        /// <summary>暴击伤害倍率（暴击词缀生效时实际伤害 × 此值）；运行时组件 MonsterAffix 默认 1f，非 Crit 词缀不进入乘算分支，故此处不写初始化器以兼容 C# 9.0</summary>
+        public float CritDamageMul;
     }
 
     public static readonly Def[] All =
@@ -53,6 +58,10 @@ public static class MonsterAffixDefs
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, LeechRatio = 0.12f },
         new Def { Id = MonsterAffixId.Split,   Name = "分裂", Tint = new Color(0.75f, 0.75f, 0.80f),
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, SplitCount = 2 },
+        // 2026-10-26 词缀怪「暴击」：20% 概率 ×1.6，玩家侧看得见暴击飘字
+        new Def { Id = MonsterAffixId.Crit,    Name = "暴击", Tint = new Color(1.00f, 0.55f, 0.10f),
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f,
+                  CritChance = 0.20f,  CritDamageMul = 1.6f },
     };
 
     static readonly Dictionary<MonsterAffixId, Def> _map = BuildMap();
@@ -72,6 +81,25 @@ public static class MonsterAffixDefs
     public static string Name(MonsterAffixId id)
     {
         return _map.TryGetValue(id, out var v) ? v.Name : "";
+    }
+
+    /// <summary>
+    /// 解析「| 分隔的词缀枚举名」为列表（monster_stats.affix 列 / WaveData 偏好共用此口径）。
+    /// 空串 / null / 全部解析失败 → 返回空列表（调用方按「无词缀」处理，不兜底造词缀）。
+    /// </summary>
+    public static List<MonsterAffixId> ParseAffixList(string raw)
+    {
+        var list = new List<MonsterAffixId>();
+        if (string.IsNullOrWhiteSpace(raw)) return list;
+        var parts = raw.Split('|');
+        for (int i = 0; i < parts.Length; i++)
+        {
+            string p = parts[i].Trim();
+            if (string.IsNullOrEmpty(p)) continue;
+            if (System.Enum.TryParse(p, true, out MonsterAffixId id) && id != MonsterAffixId.None)
+                list.Add(id);
+        }
+        return list;
     }
 
     /// <summary>本次要出的词缀数量：第 4 章起有概率出 2 个。</summary>

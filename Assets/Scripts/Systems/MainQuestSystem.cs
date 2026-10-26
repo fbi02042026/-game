@@ -254,6 +254,14 @@ public static class MainQuestSystem
                 return (d.clearedStages != null && d.clearedStages.Contains(def.chapter + "_" + idx)) ? 1 : 0;
             }
 
+            case MainQuestType.ClearStages:
+            {
+                // 密度行（2026-10-26）：基线 = 首次评估时本章已通关数，之后每多通一关 +1。
+                // 不新增存档字段，复用 mainQuestBase 基线机制（Tick 轮询达标即结算）。
+                int cur = d.ClearedStageCountInChapter(def.chapter);
+                return Math.Max(0, cur - Baseline(def.id, cur));
+            }
+
             case MainQuestType.TalkNpc:
             case MainQuestType.WatchStory:
                 return GetCnt(def.id);
@@ -370,41 +378,57 @@ public static class MainQuestSystem
         var list = new List<DailyQuestView>();
         var d = Data;
 
-        // ① 每日登录：走现成的 DailyLoginSystem（手动领，不是自动发放）
-        bool loginClaimed = DailyLoginSystem.CycleClaimedToday;
-        string loginReward = "";
-        int idx = DailyLoginSystem.CycleIndex;
-        if (idx >= 0 && idx < DailyLoginDefs.Cycle.Length)
-            loginReward = DailyLoginDefs.Cycle[idx].DisplayName.Replace("\n", "\u3001");
-
-        list.Add(new DailyQuestView
+        // 文案/参数来自 quest.csv（2026-10-26 任务体系单独成模块）；缺行 LogError 不兜底。
+        // ① 每日登录：进度走现成的 DailyLoginSystem（手动领，不是自动发放）
+        if (QuestTable.TryDaily("daily_login", out var login))
         {
-            id = "daily_login",
-            title = "\u6bcf\u65e5\u767b\u5f55",
-            desc = "\u9886\u53d6\u4eca\u65e5\u767b\u5f55\u5956\u52b1",
-            progress = loginClaimed ? 1 : 0,
-            need = 1,
-            rewardText = loginReward,
-            done = loginClaimed,
-            claimable = !loginClaimed
-        });
+            bool loginClaimed = DailyLoginSystem.CycleClaimedToday;
+            string loginReward = login.rewardText;
+            int idx = DailyLoginSystem.CycleIndex;
+            if (idx >= 0 && idx < DailyLoginDefs.Cycle.Length)
+                loginReward = DailyLoginDefs.Cycle[idx].DisplayName.Replace("\n", "\u3001");
 
-        // ② 通关 3 关：ChapterManager.OnStageComplete 里达标自动发 5 石，这里只显示进度
-        int need = SaveData.DAILY_CLEAR_TASK_NEED;
-        int cur = Math.Min(need, TodayClearCount());
-        bool clearClaimed = d != null && d.dailyClearTaskClaimDayKey == ShopDefs.TodayKey();
-
-        list.Add(new DailyQuestView
+            list.Add(new DailyQuestView
+            {
+                id = login.id,
+                title = login.title,
+                desc = login.desc,
+                progress = loginClaimed ? 1 : 0,
+                need = 1,
+                rewardText = loginReward,
+                done = loginClaimed,
+                claimable = !loginClaimed
+            });
+        }
+        else
         {
-            id = "daily_clear",
-            title = "\u4eca\u65e5\u901a\u5173",
-            desc = "\u4eca\u65e5\u901a\u5173 " + cur + "/" + need + " \u5173",
-            progress = cur,
-            need = need,
-            rewardText = "\u5929\u8d4b\u77f3 \u00d7" + SaveData.DAILY_CLEAR_TASK_STONES + "\u3000\u94bb\u77f3 \u00d75",
-            done = clearClaimed || cur >= need,
-            claimable = false
-        });
+            Debug.LogError("[MainQuest] quest.csv 缺 daily_login 行（日常列表少一条）");
+        }
+
+        // ② 通关 3 关：ChapterManager.OnStageComplete 里达标自动发 5 石，这里只显示进度。
+        //    need 真源 = SaveData.DAILY_CLEAR_TASK_NEED（发奖同一处）；表里 target_count 仅为参照。
+        if (QuestTable.TryDaily("daily_clear", out var clear))
+        {
+            int need = SaveData.DAILY_CLEAR_TASK_NEED;
+            int cur = Math.Min(need, TodayClearCount());
+            bool clearClaimed = d != null && d.dailyClearTaskClaimDayKey == ShopDefs.TodayKey();
+
+            list.Add(new DailyQuestView
+            {
+                id = clear.id,
+                title = clear.title,
+                desc = string.Format(clear.desc, cur, need),
+                progress = cur,
+                need = need,
+                rewardText = clear.rewardText,
+                done = clearClaimed || cur >= need,
+                claimable = false
+            });
+        }
+        else
+        {
+            Debug.LogError("[MainQuest] quest.csv 缺 daily_clear 行（日常列表少一条）");
+        }
 
         return list;
     }

@@ -35,4 +35,8 @@ public class MonsterConfig : ScriptableObject
     public int spriteIndex = 0;
     [Tooltip("精灵缩放比例")]
     public float spriteScale = 1f;
+
+    [Header("词缀怪（2026-10-26）")]
+    [Tooltip("表定词缀：monster_stats.affix 列（| 分隔的 MonsterAffixId 名，如 Bulwark|Thorns）。空 = 普通怪。仅正式主线关对非精英小怪生效；精英/Boss/签名怪仍走掷骰词缀。")]
+    public string tableAffix = "";
 }

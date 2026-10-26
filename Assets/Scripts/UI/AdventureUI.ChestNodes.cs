@@ -19,6 +19,10 @@ using UnityEngine.EventSystems;
 //   一屏 4~5 个槽位（瘦屏自动补），按 y 从低到高 = 关卡从早到晚，窗口随进度自动定位（不许手动滑动）；
 //   【2026-10-23 主人「最下面的层级在最上面，现在被上面那个岛挡住了」】槽位兄弟序反转：
 //   下面的岛画在上面（当前关 ×1.35 放大后压住上方岛，而不是被压）—— ApplySlotZOrder，只调层级不动位置。
+// · 【2026-10-26 主人「1-5 后面就不显示了，后面应该接上 2-1 并能滑动」】关卡列改跨章连续：
+//   从选中章起向上连续铺 ChestSpanChapters 个大关（1-5 上面接 2-1…2-5、3-1…），各章按各自的
+//   通关/领取进度让位、未解锁章按难度整章灰锁；铺出的槽位向上堆（瘦屏 Fit 重排基准），
+//   超出视口的部分成为滚动余量，窗口定位 ScrollChestToCurrent 真正生效（点头像回位同理）。
 public partial class AdventureUI
 {
     /// <summary>预制体节点容器 RightContent/关卡。</summary>
@@ -52,16 +56,18 @@ public partial class AdventureUI
     /// <summary>标识与槽顶的间隙（箭头尖到当前关槽顶；嫌贴太紧只改这一个数）。</summary>
     const float StageMarkerGap = 6f;
 
-    /// <summary>三种材质的 sprite 路径（注意：木箱锁图叫「未解锁」，银/金叫「未开启」，素材名如此）。</summary>
-    static readonly string[] ChestWoodPaths   = { ChestResDir + "木箱开启",   ChestResDir + "木箱关闭",   ChestResDir + "木箱未解锁" };
-    static readonly string[] ChestSilverPaths = { ChestResDir + "银箱开启",   ChestResDir + "银箱关闭",   ChestResDir + "银箱未开启" };
-    static readonly string[] ChestGoldPaths   = { ChestResDir + "金箱开启",   ChestResDir + "金箱关闭",   ChestResDir + "金箱未开启" };
+    /// <summary>三种材质的 sprite 路径（注意：木箱锁图叫「未解锁」，银/金叫「未开启」，素材名如此）。
+    /// 【2026-10-26】加第 4 态「领取后」：胜利奖励已在战斗结果界面直接发放，已通关的宝箱直接显示领取后图。</summary>
+    static readonly string[] ChestWoodPaths   = { ChestResDir + "木箱开启",   ChestResDir + "木箱关闭",   ChestResDir + "木箱未解锁", ChestResDir + "木箱领取后" };
+    static readonly string[] ChestSilverPaths = { ChestResDir + "银箱开启",   ChestResDir + "银箱关闭",   ChestResDir + "银箱未开启", ChestResDir + "银箱领取后" };
+    static readonly string[] ChestGoldPaths   = { ChestResDir + "金箱开启",   ChestResDir + "金箱关闭",   ChestResDir + "金箱未开启", ChestResDir + "金箱领取后" };
     static readonly string[] IslandPaths      = { ChestResDir + "岛1",       ChestResDir + "岛2",       ChestResDir + "岛3" };
 
-    /// <summary>状态下标：0=开启（已通关）1=关闭（当前进度）2=未解锁。</summary>
+    /// <summary>状态下标：0=开启（已通关）1=关闭（当前进度）2=未解锁 3=领取后（已通关，奖励战斗里已发）。</summary>
     const int ChestStateOpen = 0;
     const int ChestStateClosed = 1;
     const int ChestStateLocked = 2;
+    const int ChestStateClaimed = 3;
 
     /// <summary>银箱小关号（2026-10-23 批 B1：5 关制下金箱占第 5 关，银箱移到第 3 关）。</summary>
     const int ChestSilverStage = 3;
@@ -85,9 +91,15 @@ public partial class AdventureUI
     /// <summary>新岛开启起始缩放（相对基准的倍数）。</summary>
     const float BranchGrowFromScale = 0.15f;
 
-    /// <summary>窗口槽位上限（2026-10-23 主人「分辨率拉长了宝箱要多点」：瘦屏窗口装得下时克隆补槽，
-    /// 上限 = 每大关小关数——窗口最多铺满整章，不出现重复关）。</summary>
-    static int MaxSlotCount => Mathf.Max(4, GameConfig.STAGES_PER_GRAND);
+    /// <summary>关卡列跨章连续数（2026-10-26 主人「1-5 后面就不显示了，后面应该接上 2-1 并能滑动」）：
+    /// 从选中章起向上连续铺几章；超过章上限（ChestRouteMaxChapter）自然截断。</summary>
+    const int ChestSpanChapters = 3;
+    /// <summary>章号上限（与 ChapterRouteTable 的 1~8 口径一致；跨章铺列钳住，不铺 8 之上的假章）。</summary>
+    const int ChestRouteMaxChapter = 8;
+
+    /// <summary>窗口槽位上限 = 跨章数 × 每大关小关数（2026-10-26 跨章连续列：15 槽铺满 3 章；
+    /// 瘦屏 Fit 只把「可见 5 关」排进带，多出的槽位向视口下方溢出成滚动余量）。</summary>
+    static int MaxSlotCount => Mathf.Max(4, GameConfig.STAGES_PER_GRAND * ChestSpanChapters);
 
     /// <summary>当前浮动槽位下标（2026-10-23 主人「只有当前开放的宝箱关卡有浮动」：仅关闭态槽位浮动，
     /// 其余钉回基准；-1 = 无（整章通关后无「关闭」位，全列静止））。RefreshChestNodes 每次刷新重算。</summary>
@@ -123,12 +135,22 @@ public partial class AdventureUI
     const int ChestClaimDiamond = 3;
     /// <summary>每个槽位当前显示的关号（1 起；-1=隐藏）——点击领奖反查用，刷新时写。</summary>
     readonly List<int> _slotStage = new List<int>();
+    /// <summary>每个槽位当前显示的章号（1 起；-1=隐藏）——领奖/反查按「槽位自己的章」算，不再全列当 _selectedChapter（2026-10-26 跨章连续列）。</summary>
+    readonly List<int> _slotChapter = new List<int>();
     /// <summary>补位滑动偏移（>0 = 节点在基准上方这么多像素，Update 逐帧衰减到 0）。</summary>
     readonly List<float> _slotSlideOffset = new List<float>();
     /// <summary>领取退场协程（非空 = 动画拥有画面，刷新早退；ShowPage 进页清一次防页面隐藏杀协程后卡死）。</summary>
     Coroutine _claimRoutine;
     /// <summary>各章上次刷新的当前关（当前关前进了才播开启动画；切章/回城不播）。</summary>
     readonly Dictionary<int, int> _lastCurrentByChapter = new Dictionary<int, int>();
+
+    // 【2026-10-26 修「点宝箱无反应」】动效协程若被异常/隐藏等路径杀掉，句柄会残留非空 →
+    // 刷新早退(636) + 点击早退(OnClickChestClaim) 双双被挡，本页内永不自愈。
+    // 除进页 ClearStaleClaimAnim 外，再加看门狗：超过动效总时长仍未收尾就强制放行并刷新。
+    /// <summary>揭示动效起跳时刻（unscaled；看门狗超时判定用，-1=未在播）。</summary>
+    float _revealStartedAt = -1f;
+    /// <summary>领取退场起跳时刻（unscaled；看门狗超时判定用，-1=未在播）。</summary>
+    float _claimStartedAt = -1f;
 
     // ── 刚通关宝箱「关闭→开启」动效（2026-10-24 主人拍板：回冒险页 → 刚打完那格
     //    左右快速晃 + 慢慢缩小 → 约 2 秒后猛地放大切成开启图回复原大小 → 才可点领奖）──
@@ -186,7 +208,7 @@ public partial class AdventureUI
 
         _slotNodes.Clear(); _slotChestImgs.Clear(); _slotIslandImgs.Clear(); _slotLabels.Clear();
         _slotFloatBasePos.Clear(); _slotBaseScales.Clear(); _slotPrefabBasePos.Clear();
-        _slotStage.Clear(); _slotSlideOffset.Clear();
+        _slotStage.Clear(); _slotChapter.Clear(); _slotSlideOffset.Clear();
 
         var slots = new List<RectTransform>();
         for (int i = 0; i < _guankaRoot.childCount; i++)
@@ -208,6 +230,7 @@ public partial class AdventureUI
             _slotIslandImgs.Add(islandImg);
             _slotLabels.Add(slot.Find("bg/Text (Legacy)")?.GetComponent<Text>());
             _slotStage.Add(-1);
+            _slotChapter.Add(-1);
             _slotSlideOffset.Add(0f);
 
             // 槽位根的基准坐标/缩放记预制体值：浮动围绕基准做正弦，当前关放大做倍乘
@@ -374,14 +397,6 @@ public partial class AdventureUI
         _chestScroll.verticalNormalizedPosition = 1f - t;
     }
 
-    /// <summary>按关号（1 起）找槽位下标；找不到（整章通关 current=total+1）返回 -1。</summary>
-    int FindSlotIndexOfStage(int stage)
-    {
-        for (int i = 0; i < _slotStage.Count; i++)
-            if (_slotStage[i] == stage) return i;
-        return -1;
-    }
-
     // ────────────────────────────────────────────────────
     // 当前关标识（2026-10-24 主人拍板 + 主人预制体节点「头像指示」）：
     // 真源 = 主人在 AdventureUI 根下摆的节点（头像/箭头图、尺寸、缩放全以预制体为准，代码不碰样式）。
@@ -396,6 +411,13 @@ public partial class AdventureUI
     RectTransform _stageMarkerArrow;
     RectTransform _stageMarkerArrowRot;   // 主人的「旋转」容器（箭头方向翻转用）
     int _markerCurrentSlot = -1;
+
+    // 【2026-10-26 修「进度头像不显示」】prefab 里头像/箭头两个 Image 的 sprite guid 已断
+    //（整库 meta 无 c497a5ea… / cca90b8e… 两串），图真身在 Resources/Art/UI/头像指示/ 下
+    //（且是 56 字符 guid）。按 2026-10-23 拍板走路径加载（同 LoadChestSprite 模式），代码不依赖 prefab guid；
+    // prefab 里 sprite 还活着（主人重拖过）则以 prefab 为准，只在空时补路径图。
+    const string MarkerAvatarSpritePath = "Art/UI/头像指示/所在头像";
+    const string MarkerArrowSpritePath = "Art/UI/头像指示/箭头";
 
     /// <summary>绑定主人摆的「头像指示」节点（只绑一次；缺真值 LogError 不兜底）。</summary>
     void EnsureStageMarkerNode()
@@ -414,6 +436,16 @@ public partial class AdventureUI
         // 不进内容节点 → 不被 RectMask2D 沿内容裁掉，钳边时仍可见
         if (_chestScroll != null && _chestScroll.viewport != null && _stageMarker.parent != _chestScroll.viewport)
             _stageMarker.SetParent(_chestScroll.viewport, false);
+        // 【2026-10-26 修「头像钉在 1-1 位置」】SetParent(false) 保留主人预制体里的锚点，
+        // 但贴位数学（UpdateStageMarkerFollow）按「视口中心锚点 (0.5,0.5)」写 anchoredPosition；
+        // 锚点不是中心时写入值整体偏半屏（视口 ~730px 高 → 钉死在视口底边 ≈ 1-1 位置且不随槽位动）。
+        // 节点位置本就每帧由贴位全量接管，这里只统一锚点坐标系，不动尺寸/透明度/子节点。
+        if (_stageMarker.anchorMin != new Vector2(0.5f, 0.5f) || _stageMarker.anchorMax != new Vector2(0.5f, 0.5f))
+        {
+            Debug.LogWarning($"[AdventureUI] 「{StageMarkerNodeName}」预制体锚点({_stageMarker.anchorMin.x:0.##},{_stageMarker.anchorMin.y:0.##})非中心，已统一为(0.5,0.5)（贴位坐标系需要，不改视觉）");
+            _stageMarker.anchorMin = new Vector2(0.5f, 0.5f);
+            _stageMarker.anchorMax = new Vector2(0.5f, 0.5f);
+        }
         var avatar = FindChildRecursive(_stageMarker, StageMarkerAvatarNodeName);
         if (avatar != null)
         {
@@ -427,6 +459,26 @@ public partial class AdventureUI
         {
             Debug.LogError($"[AdventureUI] 「{StageMarkerNodeName}」下找不到「{StageMarkerAvatarNodeName}」子节点，点击回位无效（缺真值不兜底）");
         }
+        // 【2026-10-26 修「进度头像不显示」】头像/箭头 sprite 断引用补路径加载
+        //（只在空时补：prefab 里主人重拖过活引用则以 prefab 为准）
+        var avatarImg = avatar != null ? avatar.GetComponent<Image>() : null;
+        if (avatarImg != null && avatarImg.sprite == null)
+            avatarImg.sprite = LoadMarkerSprite(MarkerAvatarSpritePath, "头像");
+        if (_stageMarkerArrow != null)
+        {
+            var arrowImg = _stageMarkerArrow.GetComponent<Image>();
+            if (arrowImg != null && arrowImg.sprite == null)
+                arrowImg.sprite = LoadMarkerSprite(MarkerArrowSpritePath, "箭头");
+        }
+    }
+
+    /// <summary>标记图路径加载（复用 LoadChestSprite 缓存）；失败 Warning 不静默。</summary>
+    Sprite LoadMarkerSprite(string path, string label)
+    {
+        var sp = LoadChestSprite(path);
+        if (sp == null)
+            Debug.LogWarning($"[AdventureUI] 路径加载「{label}」图失败：Resources/{path}（查文件是否存在且导入类型为 Sprite）");
+        return sp;
     }
 
     /// <summary>点击头像 = 一键回到该打的关卡（滑动列表滚回当前关；灰锁章同样生效）。</summary>
@@ -443,6 +495,9 @@ public partial class AdventureUI
     {
         EnsureStageMarkerNode();
         if (_stageMarker == null) return;
+        // 绑定时视口可能尚未建好（EnsureStageMarkerNode 只绑一次），每次刷新补挂一次
+        if (_chestScroll != null && _chestScroll.viewport != null && _stageMarker.parent != _chestScroll.viewport)
+            _stageMarker.SetParent(_chestScroll.viewport, false);
         _markerCurrentSlot = slotIdx;
         bool hasSlot = slotIdx >= 0 && slotIdx < _slotNodes.Count && _slotNodes[slotIdx] != null;
         // 灰锁章（跨章后该难度没有可打的关）：只有头像没有箭头
@@ -544,9 +599,10 @@ public partial class AdventureUI
     }
 
     /// <summary>
-    /// 瘦屏窗口装得下时增补槽位（2026-10-23 主人「摆放是 720×1280 摆 4 个，分辨率拉长了宝箱要多点」）：
-    /// 克隆顶部槽位（岛/宝箱/编号牌结构同源）追加到窗口，返回当前槽位数。
-    /// want 钳到 [4, MaxSlotCount]；克隆槽位Prefab基准记顶槽基准（还原/标准屏由 ShrinkSlotCount 撤掉）。
+    /// 槽位增补（2026-10-26 跨章连续列：刷新即拉满 MaxSlotCount=15，不再依赖瘦屏窗口装得下）：
+    /// 克隆顶部槽位（岛/宝箱/编号牌结构同源）追加到窗口，返回当前槽位数。want 钳到 [4, MaxSlotCount]。
+    /// 克隆槽位基准 = 上一槽基准 + 预制体节奏向上堆（不与源槽重叠）；瘦屏 Fit 会整体重写基准；
+    /// 标准屏/还原路径靠这份往上排 + RestoreSlotColumnBaseY 复位。
     /// </summary>
     public int EnsureSlotCount(int want)
     {
@@ -564,26 +620,34 @@ public partial class AdventureUI
             _slotIslandImgs.Add(clone.Find("岛")?.GetComponent<Image>());
             _slotLabels.Add(clone.Find("bg/Text (Legacy)")?.GetComponent<Text>());
             _slotStage.Add(-1);
+            _slotChapter.Add(-1);
             _slotSlideOffset.Add(0f);
             // 克隆源是已处理槽位：子图射线已关、CanvasGroup 已带（透明度每次刷新重算，无需再调）
-            // 克隆槽位的浮动基准 = 源槽位当前基准（瘦屏下与 Fit 算出的列位对齐，下一帧 Update 生效）
-            int srcIdx = _slotNodes.Count - 2;   // 源槽位在克隆加入前的下标
-            var cloneFloatBase = (srcIdx >= 0 && srcIdx < _slotFloatBasePos.Count)
-                ? _slotFloatBasePos[srcIdx]
-                : src.anchoredPosition;
-            var basePos = _slotPrefabBasePos[_slotPrefabBasePos.Count - 1];
-            _slotPrefabBasePos.Add(basePos);
+            // 克隆槽位的浮动基准 = 上一槽基准 + 预制体节奏（向上堆，不再与源槽重叠）
+            int prevIdx = _slotNodes.Count - 2;
+            var prevBase = (prevIdx >= 0 && prevIdx < _slotFloatBasePos.Count)
+                ? _slotFloatBasePos[prevIdx]
+                : (Vector2)src.anchoredPosition;
+            var cloneFloatBase = new Vector2(prevBase.x, prevBase.y + PrefabSlotRhythm());
             _slotFloatBasePos.Add(cloneFloatBase);
             // 基准缩放继承源槽位的「基准」而非克隆体现值 —— 源若正处于「当前关 ×1.35」放大态，
             // 克隆会把放大值当基准，之后永远偏大（RefreshChestNodes 按这里记录的基准做倍乘）。
             var srcBaseScale = _slotBaseScales.TryGetValue(src, out var sb) ? sb : src.localScale;
             clone.localScale = srcBaseScale;
             _slotBaseScales[clone] = srcBaseScale;
-            // 立即摆到浮动基准位（不等下一帧 Update，避免与源槽位重叠闪一帧）
+            // 立即摆到浮动基准位（不等下一帧 Update）
             clone.anchoredPosition = cloneFloatBase;
         }
         ApplySlotZOrder();   // 增补后重排渲染层级（底槽画在最上）
         return _slotNodes.Count;
+    }
+
+    /// <summary>预制体槽位节奏（相邻两槽基准 y 间距）；列表异常退化时用 SlotRhythm 的兜底值。</summary>
+    float PrefabSlotRhythm()
+    {
+        if (_slotPrefabBasePos.Count >= 2)
+            return Mathf.Abs(_slotPrefabBasePos[1].y - _slotPrefabBasePos[0].y);
+        return 146f;
     }
 
     /// <summary>还原/标准屏：把克隆增补的槽位撤掉（销毁节点并从各列表剔除），窗口回到预制体 4 槽。</summary>
@@ -601,11 +665,13 @@ public partial class AdventureUI
             if (last < _slotFloatBasePos.Count) _slotFloatBasePos.RemoveAt(last);
             if (last < _slotPrefabBasePos.Count) _slotPrefabBasePos.RemoveAt(last);
             if (last < _slotStage.Count) _slotStage.RemoveAt(last);
+            if (last < _slotChapter.Count) _slotChapter.RemoveAt(last);
             if (last < _slotSlideOffset.Count) _slotSlideOffset.RemoveAt(last);
             if (rt != null) _slotBaseScales.Remove(rt);
             if (rt != null) Destroy(rt.gameObject);
         }
         if (_currentFloatSlot >= _slotNodes.Count) _currentFloatSlot = -1;
+        if (_markerCurrentSlot >= _slotNodes.Count) _markerCurrentSlot = -1;
         ApplySlotZOrder();   // 缩减后重排渲染层级（底槽画在最上）
         return _slotNodes.Count;
     }
@@ -633,7 +699,12 @@ public partial class AdventureUI
             _chestScroll.viewport.gameObject.SetActive(show);
         if (!show) return;
         // 领取退场/开启揭示动画拥有画面时早退（揭示动画跨章切换时放行刷新，协程自己还原退出）
-        if (_claimRoutine != null || (_openRevealRoutine != null && _revealChapter == _selectedChapter)) return;
+        if (_claimRoutine != null || (_openRevealRoutine != null && _revealChapter == _selectedChapter))
+        {
+            // 【2026-10-26 修「点宝箱无反应」】留一行原因日志：若这里反复出现而动效早已结束，即句柄残留被看门狗兜底
+            Debug.Log($"[AdventureUI][宝箱] 刷新跳过：动效占用中（领取退场={_claimRoutine != null}，开启揭示={_openRevealRoutine != null}）");
+            return;
+        }
 
         var data = SaveSystem.Instance?.Data;
         int total = GameConfig.STAGES_PER_GRAND;
@@ -645,7 +716,11 @@ public partial class AdventureUI
         // → 关卡列全部按「未解锁」灰锁 + 整列压暗，点开始冒险在 Interaction 端统一提示。
         bool diffLocked = !ChapterRouteTable.CanEnterAtDiff(_selectedChapter, _selectedDiff, data);
 
-        RebuildSlotContents(-1, data, total, maxCleared, current, diffLocked);
+        // 【2026-10-26 跨章连续列】槽位先拉满（标准屏也增补；瘦屏 Fit 再按带重排基准）
+        EnsureSlotCount(MaxSlotCount);
+        RebuildSlotContents(-1, data);
+        // 槽位铺满 3 章后内容远高于视口：就地补滚动余量（标准屏没有 Fit 重排，全靠这里）
+        RefreshChestContentSize();
 
         // 整列灰锁压暗（锁定时交互全关：宝箱按钮跟着 CanvasGroup.interactable 失效）
         var rootCg = _guankaRoot.GetComponent<CanvasGroup>();
@@ -654,10 +729,16 @@ public partial class AdventureUI
         rootCg.interactable = !diffLocked;
 
         // 当前关标识（主人预制体「头像指示」）与滑动列表定位：
-        // 灰锁章标识仍显示（只有头像没有箭头，指向该打的关）；内容比视口矮时不滚
-        int markerSlot = FindSlotIndexOfStage(current);
+        // 【2026-10-26 跨章连续列】当前关可能是下一章的「2-1」（本章通关让位后列顶让给后章），
+        // 标识优先指进行中的当前关槽（_currentFloatSlot）；指不到（本章通关/灰锁章）时
+        // 回退到「本章应打的关」的槽（通关=maxCleared 槽、灰锁=clamp 进度槽）。
+        // 灰锁章标识仍显示（只有头像没有箭头）；内容比视口矮时不滚。
+        int markerSlot = _currentFloatSlot;
+        if (markerSlot < 0)
+            markerSlot = FindSlotIndexOfChapterStage(_selectedChapter, Mathf.Clamp(maxCleared + 1, 1, total));
+        Debug.Log($"[AdventureUI][标识] 章{_selectedChapter} 当前关{current} → 槽{markerSlot}（槽位[{string.Join(",", _slotChapter)}|{string.Join(",", _slotStage)}]）");
         UpdateStageMarker(markerSlot, diffLocked);
-        ScrollChestToCurrent(diffLocked ? -1 : _currentFloatSlot);
+        ScrollChestToCurrent(markerSlot);
 
         // 首尾淡出：只淡最顶可见槽（列底=最早的未领关，可领宝箱不淡出；中段全亮）
         int lastVisible = -1;
@@ -671,72 +752,72 @@ public partial class AdventureUI
             cg.alpha = slot == lastVisible ? ChestEdgeAlpha : 1f;
         }
 
-        // 「轮到剧情关卡」开启动画：该章当前关前进了才播（切章/回城不播；灰锁章不播）
+        // 「轮到剧情关卡」开启动画：该章当前关前进了才播（切章/回城不播；灰锁章不播）。
+        // 【2026-10-26 跨章连续列】按（章，关）找槽——列表里有后章同号关（1-3 与 2-3），
+        // 只比关号会播错槽位。
         if (!diffLocked && _lastCurrentByChapter.TryGetValue(_selectedChapter, out var lastCur)
             && current > lastCur && current <= total)
         {
-            for (int slot = 0; slot < _slotNodes.Count && slot < _slotStage.Count; slot++)
-            {
-                if (_slotStage[slot] != current) continue;
-                StartCoroutine(ChestCurrentGrowAnim(slot));
-                break;
-            }
+            int growSlot = FindSlotIndexOfChapterStage(_selectedChapter, current);
+            if (growSlot >= 0) StartCoroutine(ChestCurrentGrowAnim(growSlot));
         }
         _lastCurrentByChapter[_selectedChapter] = current;
 
-        // 【2026-10-24 主人拍板】刚通关那格宝箱播「关闭→开启」动效：
-        // 有待领掉落（AdventureRewardNotice 队尾=刚打完的关）才播，同一次进页只播一次；
-        // 切到别的章不播（等切回来那一章再播，记录不消费）。
-        if (!_revealPlayedThisVisit && !diffLocked)
-        {
-            int pendingStage0 = AdventureRewardNotice.LatestPendingStageInChapter(_selectedChapter);
-            if (pendingStage0 >= 0)
-            {
-                int pendingStage1 = pendingStage0 + 1;
-                for (int slot = 0; slot < _slotNodes.Count && slot < _slotStage.Count; slot++)
-                {
-                    if (_slotStage[slot] != pendingStage1) continue;
-                    _revealPlayedThisVisit = true;
-                    _openRevealRoutine = StartCoroutine(ChestOpenRevealAnim(slot));
-                    break;
-                }
-            }
-        }
+        // 【2026-10-26 主人拍板】进页「关闭→开启」揭示动效已随点宝箱领取一并废除：
+        // 胜利奖励战斗里直接发，已通关的宝箱进页就是领取后图（WriteSlotContent 四态）。
 
         // 岛屿连接点（可见槽位两两相连；2026-10-23 主人「岛屿之间加上点连接起来」）
         RebuildSlotConnectors();
     }
 
     /// <summary>
-    /// 重排槽位内容（窗口映射：未领关依次入槽，已领的关消失；skipSlot=领取退场中的槽位不写内容）。
+    /// 重排槽位内容（【2026-10-26 跨章连续列】关卡依次入槽，本章铺完接下一章，直至铺满槽位上限；
+    /// 各章按各自的通关/领取进度让位、按难度锁章；skipSlot=退场中的槽位不写内容）。
     /// 内容下移一档的槽位给 +rhythm 滑动偏移，由 Update 逐帧衰减实现补位滑动。
+    /// 进度真源 = 存档 clearedStages（键 "章_关卡"，0 起关号）；领取真源 = chestClaimedStages。
     /// </summary>
-    void RebuildSlotContents(int skipSlot, SaveData data, int total, int maxCleared, int current, bool diffLocked)
+    void RebuildSlotContents(int skipSlot, SaveData data)
     {
         var oldStage = new int[_slotNodes.Count];
+        var oldChapter = new int[_slotNodes.Count];
         for (int i = 0; i < _slotNodes.Count; i++)
+        {
             oldStage[i] = i < _slotStage.Count ? _slotStage[i] : -1;
+            oldChapter[i] = i < _slotChapter.Count ? _slotChapter[i] : -1;
+        }
 
         float rhythm = SlotRhythm();
-        int cursor = 1;
+        int total = GameConfig.STAGES_PER_GRAND;
+        // 跨章铺列的最后一章（选中章起连续 ChestSpanChapters 章，钳到章上限）
+        int lastChapter = Mathf.Min(_selectedChapter + ChestSpanChapters - 1, ChestRouteMaxChapter);
+        int curCh = _selectedChapter;
+        int curStage = 0;
         int currentSlot = -1;
         for (int slot = 0; slot < _slotNodes.Count; slot++)
         {
-            // 找下一个未领关（已领的跳过）
-            int stage = -1;
-            while (cursor <= total)
+            // 找下一个入槽的关（本章铺完接下一章；章超出范围 → 槽位隐藏）
+            int sCh = -1, sStage = -1, sMax = 0, sCur = 0;
+            bool sLocked = true;
+            while (curCh <= lastChapter)
             {
-                bool cl = cursor <= maxCleared;
-                bool claimed = cl && data != null && data.IsChestClaimed(_selectedChapter, cursor - 1);
-                if (claimed) { cursor++; continue; }
-                stage = cursor;
-                cursor++;
+                curStage++;
+                if (curStage > total) { curCh++; curStage = 0; continue; }
+                int chMax = GetMaxClearedStage(curCh);
+                int chCur = Mathf.Clamp(chMax + 1, 1, total + 1);
+                bool chLocked = !ChapterRouteTable.CanEnterAtDiff(curCh, _selectedDiff, data);
+                bool cl = curStage <= chMax;
+                bool claimed = cl && data != null && data.IsChestClaimed(curCh, curStage - 1);
+                // 通关的关除「刚打完的关」（显示领取后图）外一律让位；灰锁章不让位（整章按未解锁显示全列）
+                bool skip = claimed || (!chLocked && cl && curStage != chMax);
+                if (skip) continue;
+                sCh = curCh; sStage = curStage; sMax = chMax; sCur = chCur; sLocked = chLocked;
                 break;
             }
-            if (slot < _slotStage.Count) _slotStage[slot] = stage;
+            if (slot < _slotStage.Count) _slotStage[slot] = sStage;
+            if (slot < _slotChapter.Count) _slotChapter[slot] = sCh;
             if (slot == skipSlot) continue;   // 退场中的槽位不动（收尾刷新再写新内容）
 
-            if (stage < 0)
+            if (sStage < 0)
             {
                 var go0 = _slotNodes[slot].gameObject;
                 if (go0.activeSelf) go0.SetActive(false);
@@ -745,32 +826,35 @@ public partial class AdventureUI
             }
             if (!_slotNodes[slot].gameObject.activeSelf)
                 _slotNodes[slot].gameObject.SetActive(true);
-            WriteSlotContent(slot, stage, maxCleared, current, diffLocked);
-            if (stage == current) currentSlot = slot;
-            // 内容下移一档（新 stage 来自更上面的旧槽）→ +rhythm 偏移；内容上移/新出现直接就位
+            WriteSlotContent(slot, sCh, sStage, sMax, sCur, sLocked);
+            // 「进行中的当前关」（下一关）：列里最早的命中槽 = 进度前沿（多章内只会有一个）
+            if (!sLocked && sStage == sCur && sStage <= total && currentSlot < 0)
+                currentSlot = slot;
+            // 内容下移一档（新关来自更上面的旧槽，跨章按章号比）→ +rhythm 偏移；内容上移/新出现直接就位
             if (slot < _slotSlideOffset.Count)
-                _slotSlideOffset[slot] = (oldStage[slot] >= 0 && stage > oldStage[slot]) ? rhythm : 0f;
+            {
+                bool movedDown = oldStage[slot] >= 0 && oldChapter[slot] >= 0
+                    && (sCh > oldChapter[slot] || (sCh == oldChapter[slot] && sStage > oldStage[slot]));
+                _slotSlideOffset[slot] = movedDown ? rhythm : 0f;
+            }
         }
         _currentFloatSlot = currentSlot;
     }
 
-    /// <summary>写单个槽位的显示内容（三态图/缩放/岛/编号/可点领奖；边沿淡出与滑动偏移不在此）。
-    /// 【2026-10-24 主人拍板「难度逐章解锁」】diffLocked=true 时一律按「未解锁」图显示且不可领。</summary>
-    void WriteSlotContent(int slot, int stage, int maxCleared, int current, bool diffLocked)
+    /// <summary>写单个槽位的显示内容（四态图/缩放/岛/编号；边沿淡出与滑动偏移不在此）。
+    /// 【2026-10-26 跨章连续列】章/关/进度全部按槽位自己的章算（chMax/chCur/chLocked 由游标逐章取）。
+    /// 【2026-10-24 主人拍板「难度逐章解锁」】chLocked=true 时一律按「未解锁」图显示。</summary>
+    void WriteSlotContent(int slot, int chapter, int stage, int chMaxCleared, int chCurrent, bool chLocked)
     {
-        var data = SaveSystem.Instance?.Data;
-        bool isCleared = !diffLocked && stage <= maxCleared;
-        bool isCurrent = !diffLocked && stage == current;
-        bool isClaimable = isCleared && (data == null || !data.IsChestClaimed(_selectedChapter, stage - 1));
+        bool isCleared = !chLocked && stage <= chMaxCleared;
+        bool isCurrent = !chLocked && stage == chCurrent;
 
-        // 三态换图 + 领取态（2026-10-24 主人拍板收紧口径）：
-        // · 最新通关且未领（stage == maxCleared）→ 开启图（刚打完那格，等播「关闭→开启」动效后可点领奖）；
-        // · 更早通关未领（stage < maxCleared）→ 关闭图，仍可点（奖励不丢）；
+        // 四态换图（【2026-10-26 主人拍板】覆盖 10-24「开启图可点领取」口径）：
+        // 胜利奖励已在战斗结果界面直接发放，冒险页不再走「点宝箱领取」——
+        // · 已通关 → 领取后图（不可点，主人已补三材质「领取后」素材）；
         // · 当前关（未打）→ 关闭图不可点；没打到 → 未解锁图。
-        // 修「打了一关后两关都是开启」：旧口径凡通关未领一律开图，多关未领时全开。
         string[] paths = ChestPathsForStage(stage);
-        int state = (isCleared || isCurrent) ? ChestStateClosed : ChestStateLocked;
-        if (isClaimable && stage == maxCleared) state = ChestStateOpen;
+        int state = isCleared ? ChestStateClaimed : (isCurrent ? ChestStateClosed : ChestStateLocked);
         var sp = LoadChestSprite(paths[state]);
         var chestImg = _slotChestImgs[slot];
         if (chestImg != null)
@@ -786,8 +870,8 @@ public partial class AdventureUI
                 chestImg.color = new Color(1f, 1f, 1f, 0.15f);
                 Debug.LogError($"[AdventureUI] 宝箱图缺失：{paths[state]}");
             }
-            // 点击领奖：只有「可领」的宝箱开射线挂按钮；其余关掉（不挡翻章手势）
-            SetChestClaimable(slot, isClaimable);
+            // 点击领奖已废除（奖励战斗里直接发）：射线一律关掉（不挡翻章手势）
+            SetChestClaimable(slot, false);
         }
 
         // 当前关整槽放大（基准 ×1.35），非当前关恢复基准
@@ -799,17 +883,49 @@ public partial class AdventureUI
         }
         slotRt.localScale = isCurrent ? baseScale * SlotCurrentScale : baseScale;
 
-        // 岛：岛1/2/3 按关号轮换
+        // 岛：岛1/2/3 按「章」轮换（2026-10-26 主人拍板：1 章全用岛1、2 章全用岛2、3 章全用岛3，
+        // 4 章起回到岛1 循环；不再按关号轮换）
         var islandImg = _slotIslandImgs[slot];
         if (islandImg != null)
         {
-            var islandSp = LoadChestSprite(IslandPaths[(stage - 1) % IslandPaths.Length]);
+            var islandSp = LoadChestSprite(IslandPaths[(chapter - 1) % IslandPaths.Length]);
             if (islandSp != null) islandImg.sprite = islandSp;
         }
 
         // 编号（章-关，如 1-5 / 2-1）
         var lbl = _slotLabels[slot];
-        if (lbl != null) lbl.text = $"{_selectedChapter}-{stage}";
+        if (lbl != null) lbl.text = $"{chapter}-{stage}";
+    }
+
+    /// <summary>按（章,关）找槽位下标；找不到返回 -1。</summary>
+    int FindSlotIndexOfChapterStage(int chapter, int stage)
+    {
+        for (int i = 0; i < _slotStage.Count && i < _slotChapter.Count; i++)
+            if (_slotChapter[i] == chapter && _slotStage[i] == stage) return i;
+        return -1;
+    }
+
+    /// <summary>
+    /// 滑动内容高度就地补齐（2026-10-26 跨章连续列）：槽位铺满 3 章后列高远超视口，
+    /// 内容不拉高 ScrollRect 没有滚动余量（1-5 之上滚不到 2-1）。只在内容需要变高时补；
+    /// 内容向下长高 → 内容中心下移一半增量，槽位是内容子节点（Update 按基准摆位），浮动基准同步补偿画面不动。
+    /// 瘦屏 Fit 重排后 span 与已设内容高一致 → 本方法空跑不干扰；标准屏没有 Fit，全靠这里撑出。
+    /// </summary>
+    void RefreshChestContentSize()
+    {
+        if (_chestScroll == null) return;
+        var content = _chestScroll.content;
+        var viewport = _chestScroll.viewport;
+        if (content == null || viewport == null) return;
+        float viewH = viewport.rect.height;
+        if (viewH <= 1f) return;
+        float contentH = Mathf.Max(viewH, SlotColumnSpan());
+        float oldH = content.rect.height;
+        if (contentH <= oldH + 0.5f) return;
+        content.sizeDelta = new Vector2(content.sizeDelta.x, contentH - viewH);
+        float half = (contentH - oldH) * 0.5f;
+        for (int i = 0; i < _slotFloatBasePos.Count; i++)
+            _slotFloatBasePos[i] = new Vector2(_slotFloatBasePos[i].x, _slotFloatBasePos[i].y + half);
     }
 
     /// <summary>按小关号取三态图路径（2026-10-24 从 WriteSlotContent 抽出：动效切图与刷新共用一个出口）。
@@ -847,6 +963,7 @@ public partial class AdventureUI
     void Update()
     {
         if (_guankaRoot == null || !_guankaRoot.gameObject.activeInHierarchy) return;
+        WatchdogChestAnims();   // 【2026-10-26】动效句柄超时自愈，防「点宝箱无反应」死锁
         float t = Time.unscaledTime;
         float dt = Time.unscaledDeltaTime;
         for (int i = 0; i < _slotNodes.Count && i < _slotFloatBasePos.Count; i++)
@@ -873,6 +990,33 @@ public partial class AdventureUI
         }
         // 当前关标识钳边跟随（槽位位置写入之后算，含浮动/补位滑动；随滚动实时贴/钳边）
         UpdateStageMarkerFollow();
+    }
+
+    /// <summary>
+    /// 【2026-10-26 修「点宝箱无反应」】动效看门狗：揭示/领取退场协程若被异常、页面隐藏等路径
+    /// 半途杀死，句柄残留非空会同时挡死刷新(636)与点击(OnClickChestClaim)且本页内永不自愈。
+    /// 这里按「动效总时长 + 余量」判定超时，强制清标志并全量刷新（可点射线由 WriteSlotContent 重写）。
+    /// </summary>
+    void WatchdogChestAnims()
+    {
+        float now = Time.unscaledTime;
+        if (_openRevealRoutine != null
+            && now - _revealStartedAt > RevealShakeDur + RevealPopDur + 0.5f)
+        {
+            Debug.LogWarning("[AdventureUI][宝箱] 开启揭示超时未收尾（协程被杀？），看门狗强制放行并刷新");
+            _openRevealRoutine = null;
+            _revealStartedAt = -1f;
+            RefreshChestNodes();
+            return;
+        }
+        if (_claimRoutine != null
+            && now - _claimStartedAt > BranchGrayHoldDur + BranchExitDur + 1.5f)
+        {
+            Debug.LogWarning("[AdventureUI][宝箱] 领取退场超时未收尾（协程被杀？），看门狗强制刷新");
+            _claimRoutine = null;
+            _claimStartedAt = -1f;
+            RefreshChestNodes();
+        }
     }
 
     // ────────────────────────────────────────────────────
@@ -902,11 +1046,19 @@ public partial class AdventureUI
         }
     }
 
-    /// <summary>还原槽位浮动基准到预制体原始值（标准屏 / 关掉瘦屏适配时调；下一帧 Update 生效）。</summary>
+    /// <summary>还原槽位浮动基准（标准屏 / 关掉瘦屏适配时调；下一帧 Update 生效）。
+    /// 【2026-10-26 跨章连续列】预制体底账只有 4 槽（克隆不再追加底账），多出的克隆槽
+    /// 按预制体节奏向上堆恢复，否则克隆槽基准残留在 Fit 帧上、与还原后的 4 槽错位重叠。</summary>
     public void RestoreSlotColumnBaseY()
     {
-        for (int i = 0; i < _slotFloatBasePos.Count && i < _slotPrefabBasePos.Count; i++)
-            _slotFloatBasePos[i] = _slotPrefabBasePos[i];
+        int prefabCount = _slotPrefabBasePos.Count;
+        if (prefabCount == 0) return;
+        var top = _slotPrefabBasePos[prefabCount - 1];
+        float rhythm = PrefabSlotRhythm();
+        for (int i = 0; i < _slotFloatBasePos.Count; i++)
+            _slotFloatBasePos[i] = i < prefabCount
+                ? _slotPrefabBasePos[i]
+                : new Vector2(top.x, top.y + (i - prefabCount + 1) * rhythm);
     }
 
     // ────────────────────────────────────────────────────
@@ -959,6 +1111,8 @@ public partial class AdventureUI
         _claimRoutine = null;
         _openRevealRoutine = null;
         _revealPlayedThisVisit = false;
+        _claimStartedAt = -1f;    // 【2026-10-26】看门狗时间戳一并复位
+        _revealStartedAt = -1f;
     }
 
     /// <summary>槽位节奏（相邻基准间距）：Fit 拉伸后取当前基准间距，否则取预制体间距。</summary>
@@ -970,15 +1124,17 @@ public partial class AdventureUI
     }
 
     /// <summary>
-    /// 开/关某槽宝箱的点击领奖（射线+Button；只有可领的宝箱可点，其余关掉不挡翻章手势）。
-    /// 槽位本就射线全关（防挡滑动翻章），这里只对宝箱子图操作。
+    /// 开/关某槽宝箱的点击领奖（Button；on 只管挂/摘点击，射线恒开）。
+    /// 【2026-10-26 修「列表手动滑不了」】点领奖废除后宝箱图是列表里唯一的射线面，
+    /// 射线一关 ScrollRect 就收不到拖动事件 → 列表滑不动。故射线常开：
+    /// 拖动事件向上冒泡给 ScrollRect 正常滚列表；点击无 Button 监听无效果，也不挡翻章（翻章手势不在本列表内）。
     /// </summary>
     void SetChestClaimable(int slot, bool on)
     {
         if (slot < 0 || slot >= _slotChestImgs.Count) return;
         var chestImg = _slotChestImgs[slot];
         if (chestImg == null) return;
-        chestImg.raycastTarget = on;
+        chestImg.raycastTarget = true;   // 恒开：列表拖动滚动的唯一射线面（见上注释）
         var btn = chestImg.GetComponent<Button>();
         if (on)
         {
@@ -1005,17 +1161,43 @@ public partial class AdventureUI
     /// </summary>
     void OnClickChestClaim(int slot)
     {
-        if (_claimRoutine != null || _openRevealRoutine != null) return;
-        if (slot < 0 || slot >= _slotStage.Count || _slotStage[slot] <= 0) return;
+        // 【2026-10-26 修「点宝箱无反应」】每个早退分支都落一行原因日志，报问题时一眼定位卡在哪
+        if (_claimRoutine != null || _openRevealRoutine != null)
+        {
+            Debug.Log($"[AdventureUI][宝箱] 点击忽略：动效占用中（领取退场={_claimRoutine != null}，开启揭示={_openRevealRoutine != null}，槽{slot}）");
+            return;
+        }
+        if (slot < 0 || slot >= _slotStage.Count || _slotStage[slot] <= 0)
+        {
+            Debug.LogWarning($"[AdventureUI][宝箱] 点击忽略：槽位上没有关卡（槽{slot}，stage={(slot >= 0 && slot < _slotStage.Count ? _slotStage[slot] : -1)}）");
+            return;
+        }
         var data = SaveSystem.Instance?.Data;
-        if (data == null) return;
+        if (data == null)
+        {
+            Debug.LogWarning("[AdventureUI][宝箱] 点击忽略：存档未就绪");
+            return;
+        }
+        // 【2026-10-26 跨章连续列】按「槽位自己的章」取关，不再全列当 _selectedChapter
+        int slotCh = slot < _slotChapter.Count ? _slotChapter[slot] : -1;
+        if (slotCh <= 0)
+        {
+            Debug.LogWarning($"[AdventureUI][宝箱] 点击忽略：槽位章号异常（槽{slot}，chapter={slotCh}）");
+            return;
+        }
         int stage1 = _slotStage[slot];   // 1 起关号
-        bool cleared = stage1 <= GetMaxClearedStage(_selectedChapter);
-        if (!cleared || data.IsChestClaimed(_selectedChapter, stage1 - 1)) return;
+        int maxCleared = GetMaxClearedStage(slotCh);
+        bool cleared = stage1 <= maxCleared;
+        if (!cleared || data.IsChestClaimed(slotCh, stage1 - 1))
+        {
+            Debug.LogWarning($"[AdventureUI][宝箱] 点击忽略：章{slotCh} 关{stage1} 未通关或已领（maxCleared={maxCleared}，已领={data.IsChestClaimed(slotCh, stage1 - 1)}）");
+            return;
+        }
+        Debug.Log($"[AdventureUI][宝箱] 领取：章{slotCh} 关{stage1}（槽{slot}）");
 
-        if (!data.MarkChestClaimed(_selectedChapter, stage1 - 1)) return;   // 防重复发奖
+        if (!data.MarkChestClaimed(slotCh, stage1 - 1)) return;   // 防重复发奖
         // 先标记再取/发：保证只发一次；Take 返回 null = 该关没有记录（重复通关补领），不弹窗直接退场
-        var notice = AdventureRewardNotice.Take(_selectedChapter, stage1 - 1);
+        var notice = AdventureRewardNotice.Take(slotCh, stage1 - 1);
         bool isBossChest = stage1 == GameConfig.STAGES_PER_GRAND;
         var entries = BuildChestRewardEntries(notice, bossDiamond: isBossChest);
         if (isBossChest)
@@ -1027,6 +1209,7 @@ public partial class AdventureUI
         SaveSystem.Instance?.Save();
 
         _claimRoutine = StartCoroutine(ChestClaimExitAnim(slot));
+        _claimStartedAt = Time.unscaledTime;
     }
 
     /// <summary>
@@ -1048,11 +1231,7 @@ public partial class AdventureUI
         // 段二：自己下滑淡出（改浮动基准走 Update，不硬写 anchoredPosition 不打架）；
         // 同时上面槽位重排（内容下移一档 + 滑动偏移）
         var data = SaveSystem.Instance?.Data;
-        int total = GameConfig.STAGES_PER_GRAND;
-        int maxCleared = GetMaxClearedStage(_selectedChapter);
-        int current = Mathf.Clamp(maxCleared + 1, 1, total + 1);
-        bool diffLocked = !ChapterRouteTable.CanEnterAtDiff(_selectedChapter, _selectedDiff, data);
-        RebuildSlotContents(slot, data, total, maxCleared, current, diffLocked);
+        RebuildSlotContents(slot, data);
         float exitFrom = slot < _slotFloatBasePos.Count ? _slotFloatBasePos[slot].y : 0f;
         float t = 0f;
         while (t < BranchExitDur && rt != null)
@@ -1079,6 +1258,7 @@ public partial class AdventureUI
         }
 
         _claimRoutine = null;
+        _claimStartedAt = -1f;
         RefreshChestNodes();
     }
 
@@ -1165,6 +1345,8 @@ public partial class AdventureUI
         // 收尾：最新通关未领 = 开启图可点（与 WriteSlotContent 口径一致）
         SetChestClaimable(slot, true);
         _openRevealRoutine = null;
+        _revealStartedAt = -1f;
+        Debug.Log($"[AdventureUI][宝箱] 开启揭示完成：槽{slot} 已可点领取");
     }
 
     /// <summary>

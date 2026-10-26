@@ -19,6 +19,12 @@ public class MonsterAffix : MonoBehaviour
     public float ThornsRatio { get; private set; }
     /// <summary>造成伤害时回血的比例。</summary>
     public float LeechRatio { get; private set; }
+    /// <summary>攻击暴击概率（0 = 无暴击词缀，2026-10-26 词缀怪）。</summary>
+    public float CritChance { get; private set; }
+    /// <summary>暴击伤害倍率。</summary>
+    public float CritDamageMul { get; private set; } = 1f;
+    /// <summary>是否按词缀色着色（表定词缀怪「看着加点不同」，2026-10-26）。</summary>
+    public bool VisualTinted { get; private set; }
 
     public static MonsterAffix Get(Monster m)
     {
@@ -27,21 +33,62 @@ public class MonsterAffix : MonoBehaviour
 
     /// <summary>
     /// 给精英/Boss 掷词缀并挂上。普通小怪传 eliteOrBoss=false 直接跳过（避免视觉噪音）。
-    /// 幂等：已经挂过就直接返回，不重复叠加。
+    /// 复用语义：池化怪 Init 开头必先 ResetForReuse → ResetState，组件状态保证是干净的，
+    /// 这里直接重置后重挂（旧版「已挂过直接返回」会把上一只怪的词缀带进这一只，2026-10-26 改掉）。
     /// </summary>
     public static MonsterAffix RollAndAttach(Monster m, int chapter, bool eliteOrBoss)
     {
         if (m == null || !eliteOrBoss) return null;
-        var existing = m.GetComponent<MonsterAffix>();
-        if (existing != null) return existing;
-
-        var comp = m.gameObject.AddComponent<MonsterAffix>();
-        comp._owner = m;
+        var comp = m.GetComponent<MonsterAffix>();
+        if (comp == null)
+        {
+            comp = m.gameObject.AddComponent<MonsterAffix>();
+            comp._owner = m;
+        }
+        comp.ResetState();
         comp.Apply(MonsterAffixDefs.Roll(chapter), m);
         return comp;
     }
 
-    void Apply(List<MonsterAffixId> ids, Monster m)
+    /// <summary>
+    /// 【2026-10-26 词缀怪】按 monster_stats.affix 列给普通小怪挂<b>固定</b>词缀（不掷骰）。
+    /// 与 <see cref="RollAndAttach"/> 互斥：精英/Boss/签名怪仍走掷骰（调用方在 Monster.Init 里分流）。
+    /// 复用语义同 RollAndAttach：Init 前置 ResetState，这里重置后重挂。ids 为空返回 null（不挂组件）。
+    /// </summary>
+    public static MonsterAffix AttachFixed(Monster m, List<MonsterAffixId> ids)
+    {
+        if (m == null || ids == null || ids.Count == 0) return null;
+        var comp = m.GetComponent<MonsterAffix>();
+        if (comp == null)
+        {
+            comp = m.gameObject.AddComponent<MonsterAffix>();
+            comp._owner = m;
+        }
+        comp.ResetState();
+        comp.VisualTinted = true; // 表定词缀怪上色，让玩家一眼看出「这只不一样」
+        comp.Apply(ids, m);
+        comp.ApplyTint();
+        return comp;
+    }
+
+    /// <summary>
+    /// 【2026-10-26 词缀怪】回池/复用前清空全部词缀状态（池化怪复用，旧词缀与染色不能带到下一只）。
+    /// 不 Destroy 组件：Destroy 延迟到帧末，同帧 Init 的挂词缀路径会拿到「将死组件」误判已挂。
+    /// </summary>
+    public void ResetState()
+    {
+        bool hadTint = VisualTinted;
+        _ids.Clear();
+        DamageTakenMul = 1f;
+        ThornsRatio = 0f;
+        LeechRatio = 0f;
+        CritChance = 0f;
+        CritDamageMul = 1f;
+        _splitDone = false;
+        VisualTinted = false;
+        if (hadTint && _owner != null)
+            _owner.ClearAffixTint();
+    }    void Apply(List<MonsterAffixId> ids, Monster m)
     {
         _ids.Clear();
         if (ids == null || ids.Count == 0) return;
@@ -57,6 +104,8 @@ public class MonsterAffix : MonoBehaviour
             if (d.DamageTakenMul > 0f) taken *= d.DamageTakenMul;
             if (d.ThornsRatio > ThornsRatio) ThornsRatio = d.ThornsRatio;
             if (d.LeechRatio > LeechRatio) LeechRatio = d.LeechRatio;
+            if (d.CritChance > CritChance) CritChance = d.CritChance;
+            CritDamageMul = Mathf.Max(CritDamageMul, d.CritDamageMul);
         }
         DamageTakenMul = taken;
 
@@ -127,5 +176,16 @@ public class MonsterAffix : MonoBehaviour
         for (int i = 0; i < _ids.Count; i++)
             if (_ids[i] == id) return true;
         return false;
+    }
+
+    /// <summary>
+    /// 【2026-10-26 词缀怪】按词缀色给本体精灵上色（白 → 词缀色 40% 混合，浅色不糊美术原画）。
+    /// 走 Monster.ApplyAffixTint：同步程序化闪白基准，防止受击闪白把染色洗掉。
+    /// 只动 SpriteRenderer.color，不碰贴图/scale/位置（铁律 2）。
+    /// </summary>
+    public void ApplyTint()
+    {
+        if (!VisualTinted || _owner == null || _ids.Count == 0) return;
+        _owner.ApplyAffixTint(MonsterAffixDefs.Get(_ids[0]).Tint);
     }
 }

@@ -366,6 +366,13 @@ public partial class Monster
             atkRange = AttackRangeTable.GetMonsterWorld(_attackStyle);
         }
         attr.SetAttr(AttrType.MoveSpeed, moveSpd);
+        // 2026-10-26 主人拍板：Boss 自带 10% 闪避、精英 5%（普攻十次约闪半次到一次，添堵不致命）；
+        // 普通小怪不加（「不要全家」）。闪避只吃玩家普攻、技能必中；
+        // AttrSystem 侧软顶 60% 不影响这两个值。
+        if (_isBossUnit)
+            attr.SetAttr(AttrType.Dodge, 0.10f);
+        else if (eliteWave)
+            attr.SetAttr(AttrType.Dodge, 0.05f);
         // 非 Boss：移速小幅岔开，减轻同相位叠走
         if (!_isBossUnit)
         {
@@ -414,8 +421,15 @@ public partial class Monster
         _bossPhase2Started = false;
 
         // V6 词缀：属性全部按表算完之后再叠乘子，避免被后续赋值覆盖。
-        // 只给精英/Boss；普通小怪不 roll，否则满屏后缀变成视觉噪音。
-        MonsterAffix.RollAndAttach(this, _chapter, _isBossUnit || _eliteWave);
+        // 【2026-10-26 词缀怪】monster_stats.affix 列：普通小怪挂表定词缀（仅正式主线关；
+        // 引导局/金币本/徽记本/裂隙不动，护住演出与 farming 体验）。
+        // 精英/Boss/签名怪仍走掷骰（签名怪偏好经 pendingBias 进 Roll，优先级高于表定词缀，不能截胡）。
+        var tableAffixes = MonsterAffixDefs.ParseAffixList(template != null ? template.tableAffix : null);
+        bool formalMainRun = BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun;
+        if (!(_isBossUnit || _eliteWave) && tableAffixes.Count > 0 && formalMainRun)
+            MonsterAffix.AttachFixed(this, tableAffixes);
+        else
+            MonsterAffix.RollAndAttach(this, _chapter, _isBossUnit || _eliteWave);
         _bossPhaseShiftBusy = false;
         _skillId = SkillRegistry.Instance != null
             ? SkillRegistry.Instance.GetMonsterSkillId(template, eliteWave, _isBossUnit, _attackStyle)

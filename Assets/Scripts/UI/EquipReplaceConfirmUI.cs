@@ -114,14 +114,23 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
     /// <summary>
     /// 【2026-10-16 主人原话「如果玩家没点按钮 自动替换成战力高的」】超时/未选择时的兜底方向：
-    /// 不再一刀切「留着旧的」，改按战力自动选强的一件 —— 新件战力更高才换，打平或更低仍留旧的（保守不变）。
+    /// 不再一刀切「留着旧的」，改按战力自动选强的一件。
     /// 【2026-10-20 方案 B】判据与弹窗「战力 ±N」、头顶飘字同一真值 <see cref="PowerCalc.EquipSwapPowerDelta"/>
     /// （换装净差，含顶掉旧件）；旧件为空 → 新件直接穿。
+    /// 【2026-10-26 主人拍板「加了属性肯定得加战力」配套】d=0 打平时不再保守留旧，
+    /// 退回 <see cref="EquipCompare"/> 品质&gt;星级&gt;强化&gt;词条数分高下（同分才留旧）——
+    /// 否则「旧件 0 战力垃圾 vs 新件高品质减伤/吸血装」永远换不上，卡死装备成长。
     /// </summary>
     static bool AutoPickByPower(EquipInstance newEq, EquipInstance oldEq)
     {
         if (oldEq == null) return true;
-        return PowerCalc.EquipSwapPowerDelta(newEq) > 0;
+        int d = PowerCalc.EquipSwapPowerDelta(newEq);
+        if (d > 0) return true;
+        if (d < 0) return false;
+        // 【2026-10-26 主人拍板「加了属性肯定得加战力」配套】战力打平时（两件都没进口径的词条，
+        // 或增量互相抵消）不再一刀切留旧的 —— 旧件可能是同品质垃圾、新件是高品质减伤/吸血装，
+        // 永远换不上会卡装备成长。退回 EquipCompare 的品质>星级>强化>词条数口径分高下（同分留旧）。
+        return EquipCompare.Compare(newEq, oldEq) > 0;
     }
 
     static EquipReplaceConfirmUI Ensure()

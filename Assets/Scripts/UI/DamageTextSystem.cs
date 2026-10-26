@@ -124,6 +124,8 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
         public float totalDuration;
         public float timer;
         public TextMesh outlineMesh;
+        public SpriteRenderer goldIcon;   // Gold 专用：+N 右侧的抽奖币小图标（懒创建，池化复用）
+        public Sprite goldIconSprite;     // 图标加载缓存（实例各存一份，防止回收后引用丢失）
     }
 
     public void SpawnDamageText(Vector3 pos, int damage, bool isCrit, bool victimIsAlly, int hitVfxFacing = 0)
@@ -180,9 +182,15 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
         SpawnDirectional(pos, prefix + "闪避", TextKind.Dodge, victimIsAlly);
     }
 
+    /// <summary>
+    /// 击杀发局内抽奖币的飘字（BattleManager.OnMonsterDead 调）。
+    /// 【2026-10-26 主人需求】「+10金」容易误读成局外金币 → 改成「+N」纯数字，
+    /// 右侧跟一个缩小的抽奖币图标（icon_draft_coin，见 <see cref="EnsureGoldIcon"/>），
+    /// 与顶栏 DraftDisplay 同图，看一眼就知道涨的是抽奖币。
+    /// </summary>
     public void SpawnGoldText(Vector3 pos, int amount)
     {
-        SpawnDirectional(pos, $"+{amount}金", TextKind.Gold, victimIsAlly: false, forceUp: true);
+        SpawnDirectional(pos, $"+{amount}", TextKind.Gold, victimIsAlly: false, forceUp: true);
     }
 
     static bool IsCritDamage(TextKind kind) => kind == TextKind.OutCrit || kind == TextKind.InCrit;
@@ -257,6 +265,9 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
         inst.textMesh.fontStyle = FontStyle.Bold;
         inst.textMesh.color = color;
         EnsureDamageChrome(inst, text, fontSize);
+        // 抽奖币飘字带小图标；其他类型复用同实例时必须收掉，防止伤害/治疗飘字残留币图
+        if (kind == TextKind.Gold) EnsureGoldIcon(inst);
+        else if (inst.goldIcon != null) inst.goldIcon.enabled = false;
         inst.baseColor = color;
         inst.flashColor = kind == TextKind.InNormal || kind == TextKind.InCrit
             ? Color.Lerp(color, Color.white, ResolvePopFlashStrength())
@@ -324,6 +335,66 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
         if (inst.outlineMesh.font != null && inst.outlineMesh.GetComponent<MeshRenderer>() != null
             && inst.outlineMesh.font.material != null)
             inst.outlineMesh.GetComponent<MeshRenderer>().sharedMaterial = inst.outlineMesh.font.material;
+    }
+
+    /// <summary>
+    /// 抽奖币飘字的右侧小图标（2026-10-26 主人需求「+10 后面带一个缩小的抽奖币图标」）。
+    /// <para>· 挂在飘字节点下 → 自动跟随 Pop/Slide/Rise 动画与整体缩放；</para>
+    /// <para>· 尺寸 ≈ 文字渲染高 × 0.85（主人要的「缩小」），按 TextMesh 的 mesh 局部包围盒
+    ///   （与节点缩放无关、设 text 后同步可得）贴着文字右缘摆，字符数变化也不会叠字；</para>
+    /// <para>· 量不到包围盒（异常）就不显示图标——绝不乱摆一个错位图标。</para>
+    /// </summary>
+    void EnsureGoldIcon(DamageTextInstance inst)
+    {
+        if (inst == null || inst.go == null || inst.textMesh == null) return;
+        if (inst.goldIconSprite == null)
+        {
+            // 与 BattleUI.Binding 顶栏 DraftDisplay 同一条加载路径（Resources 直连，真机可用）；
+            // 不走 CommonIconSprites（它的 Resources 根目录没有 Art 前缀副本，真机会落空）
+            inst.goldIconSprite = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_draft_coin");
+            if (inst.goldIconSprite == null)
+                Debug.LogError("[DamageTextSystem] 抽奖币图标取不到：Art/UI/Icons/Common/icon_draft_coin —— 飘字只出数字");
+        }
+        if (inst.goldIconSprite == null)
+            return;   // 图取不到就不带图，文字本身仍然可读
+
+        if (inst.goldIcon == null)
+        {
+            var iconGo = new GameObject("GoldIcon");
+            iconGo.transform.SetParent(inst.go.transform, false);
+            var sr = iconGo.AddComponent<SpriteRenderer>();
+            sr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            sr.sortingOrder = GameConfig.SORT_VFX + 6;   // 文字 +5、描边 +4，币图盖在最上
+            inst.goldIcon = sr;
+        }
+
+        var mf = inst.textMesh.GetComponent<MeshFilter>();
+        var mb = mf != null && mf.sharedMesh != null ? mf.sharedMesh.bounds : new Bounds();
+        if (mb.extents.x <= 0.0001f || mb.extents.y <= 0.0001f)
+        {
+            inst.goldIcon.enabled = false;
+            return;
+        }
+
+        float textHeight = mb.extents.y * 2f;
+        float iconHeight = textHeight * 0.85f;
+        float spriteHeight = inst.goldIconSprite.bounds.size.y;
+        if (spriteHeight <= 0.0001f)
+        {
+            inst.goldIcon.enabled = false;
+            return;
+        }
+
+        float s = iconHeight / spriteHeight;
+        float iconHalfWidth = inst.goldIconSprite.bounds.size.x * s * 0.5f;
+        float gap = textHeight * 0.18f;
+
+        inst.goldIcon.sprite = inst.goldIconSprite;
+        inst.goldIcon.transform.localScale = Vector3.one * s;
+        // mesh.bounds 是局部空间：max.x = 文字右缘、center.y = 文字视觉中线（与 TextMesh anchor 无关）
+        inst.goldIcon.transform.localPosition =
+            new Vector3(mb.max.x + gap + iconHalfWidth, mb.center.y, 0f);
+        inst.goldIcon.enabled = true;
     }
 
     void GetStyle(TextKind kind, out Color color, out int fontSize, out float scale)
@@ -478,6 +549,12 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
                 var oc = inst.outlineMesh.color;
                 oc.a = c.a;
                 inst.outlineMesh.color = oc;
+            }
+            if (inst.goldIcon != null)
+            {
+                var ic = inst.goldIcon.color;
+                ic.a = c.a;   // 淡出节奏与文字完全一致（c.a 已含 baseColor.a）
+                inst.goldIcon.color = ic;
             }
 
             if (inst.timer <= 0f)

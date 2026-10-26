@@ -40,6 +40,17 @@ public partial class UnitBase
         // 攻击方与目标类型不同 → FinalHit 内伤害 ×1.1
         float finalDamage = DamageFormula.FinalHit(damage, attr, ignoreDefense, magicHit, IsMagicDamageDealer());
 
+        // 【2026-10-26 词缀怪】「暴击」词缀：怪物攻击概率暴击（×1.6）。翻转 isCrit 让飘字/受击表现/暴击击杀全链路一致。
+        if (!isCrit && source is Monster critSrc)
+        {
+            var critAffix = MonsterAffix.Get(critSrc);
+            if (critAffix != null && critAffix.CritChance > 0f && Random.value < critAffix.CritChance)
+            {
+                finalDamage *= critAffix.CritDamageMul;
+                isCrit = true;
+            }
+        }
+
         // 【临时打点 2026-10-18】排查「普攻608/暴击120」矛盾：主角打出的每一击落地实况，定位后删除
         if (source is Hero)
             Debug.Log($"[DamageDebug] 主角命中 final={finalDamage:F1} crit={isCrit} " +

@@ -702,16 +702,12 @@ public static class RunLoadout
         if (_data == null) return 0;
         int power = 0;
 
-        // 口径：DPS 段（主人 2026-10-12 拍板）+ 血量/防御生存段（2026-10-17 拍板：涨的少也要涨）
-        //   DPS   = 当前攻击力 × (1 + 暴击率) × 每秒攻击次数
-        //   Power = POWER_BASE + POWER_PER_DPS × DPS + POWER_PER_HP × 血量 + POWER_PER_DEF × (物防+魔防)
-        // 🔴 没有等级，底盘是纯常数；🔴 暴击伤害/移速等其余属性不计权重
-        // 常量引自 PowerCalc（战力换算唯一真源，与抽卡卡面同一套字面量，不许两处各写）
-        const float POWER_BASE = PowerCalc.POWER_BASE;
-        const float POWER_PER_DPS = PowerCalc.POWER_PER_DPS;
-        const float POWER_PER_HP = PowerCalc.POWER_PER_HP;
-        const float POWER_PER_DEF = PowerCalc.POWER_PER_DEF;
-
+        // 口径（2026-10-26 主人拍板「加了属性肯定得加战力」起升级为全乘区版）：
+        //   DPS   = 攻击 × (1 + 暴击率×(暴伤-1)) × 攻速 × (1 + max(火,冰)×0.01)
+        //   Power = POWER_BASE + POWER_PER_DPS × DPS + POWER_PER_HP × (血量+吸血等效血) + POWER_PER_DEF × (双防+减伤/闪避等效防)
+        // 🔴 公式真源 = PowerCalc.PlayerPowerSegment（暴伤/元素/减伤/闪避/吸血的折算全在里面，含向后兼容说明）。
+        // 这里只保留「取不到 Hero 按 0 + LogError」的纪律分支，公式一行不再本地抄 —— 之前两处各写，
+        // 这次升级乘区时正是靠收敛到一处才没漏（2026-10-12 立的「不许两处各写」规矩兑现）。
         var hero = Hero.Instance;
         if (hero == null)
         {
@@ -723,15 +719,9 @@ public static class RunLoadout
         }
         else
         {
-            float attack = hero.attr.GetAttr(PlayerJobBaseStats.CurrentAttackAttr());
-            float critRate = hero.attr.GetAttr(AttrType.CritRate);
-            float attackSpeed = hero.attr.GetAttr(AttrType.AttackSpeed);
-            float dps = attack * (1f + critRate) * attackSpeed;
-            float defTotal = hero.attr.GetAttr(AttrType.Defense) + hero.attr.GetAttr(AttrType.MagicDefense);
-            // 必须用四舍五入：底盘是 130.50 这类 .5 结尾的浮点，直接 (int) 截断会因浮点误差
-            // 把 299.99996… 截成 299（重武实测踩到），且会让狂战/剑盾挤成同一个数。
-            power += Mathf.RoundToInt(POWER_BASE + POWER_PER_DPS * dps
-                + POWER_PER_HP * hero.attr.GetAttr(AttrType.MaxHp) + POWER_PER_DEF * defTotal);
+            // 四舍五入在 PlayerPowerSegment 内（RoundToInt）：底盘 130.50 这类 .5 结尾浮点，
+            // (int) 截断会因浮点误差把 299.99996… 截成 299（重武实测踩到），不能改回截断。
+            power += PowerCalc.PlayerPowerSegment(hero.attr);
         }
 
         if (_data.skills != null)

@@ -458,10 +458,9 @@ public class BattleBossHpBar : MonoBehaviour
         // 【2026-10-16 主人口令】引导战进度条整场要藏——BossHpBar 收起时不得把进度条重新打开。
         // 【2026-10-17 主人口径】TopBar（副本名字/难度/右侧资源条）不用藏，只有飘在 map 前面的
         // QuestPanel / ProgressBar 随血条联动。
+        // 【2026-10-26 主人拍板】顶部进度条已整体去掉，血条收起不再点亮它。
         CacheChrome(BattleUI.Instance != null ? BattleUI.Instance.transform : null);
-        bool hideChrome = _wantVisible; // 只要在打 Boss/精英目标就藏，KillCam 期间也保持藏
-        bool hideForTutorial = TutorialDirector.IsTutorialBattle;
-        SetChromeActive(_progressBar, !hideChrome && !hideForTutorial);
+        SetChromeActive(_progressBar, false);
         // 【2026-10-18 主人拍板】任务面板与结算「击杀敌人」口径不一致已整体隐藏，血条联动不再把它点亮
         SetChromeActive(_questMap, false);
     }

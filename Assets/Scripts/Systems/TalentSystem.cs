@@ -35,6 +35,14 @@ public static class TalentSystem
         if (index1Based != unlocked + 1) { reason = "请按顺序解锁"; return false; }
 
         var node = TalentDefs.Left[index1Based - 1];
+        // 【2026-10-21 拍板 T2 章节门槛】按通关章节数把关（权威源 clearedChapterIds）：
+        // L1~20 不设门槛（unlockChapter=0，保新手引导正常点击）；L21~40 需通 ch2 / L41~60 ch3 / L61~80 ch4。
+        // 文案说人话，参照右列「左列开到第 N 个后开启」先例。
+        if (node.unlockChapter > data.ClearedChapterCount())
+        {
+            reason = $"通关第{node.unlockChapter}章后解锁";
+            return false;
+        }
         int cost = GetLeftGoldCost(node, data.talents);
         if (data.totalGold < cost) { reason = "金币不足"; return false; }
         return true;
@@ -346,6 +354,9 @@ public static class TalentSystem
         if (index0 != unlocked) return false;
         var data = SaveSystem.Instance?.Data;
         if (data == null) return false;
+        // 【2026-10-21 T2】章节门槛并入可升级判定：未过章的节点不出红点、整行置灰；
+        // 点击走 CanUnlockLeft 弹「通关第 N 章后解锁」，两处共用同一判定，不许各写一份。
+        if (TalentDefs.Left[index0].unlockChapter > data.ClearedChapterCount()) return false;
         return data.totalGold >= GetLeftGoldCost(TalentDefs.Left[index0], talents);
     }
 }

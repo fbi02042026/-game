@@ -286,12 +286,16 @@ public partial class TalentUI
             }
         }
 
-        if (sumAttackText != null) sumAttackText.text = "物攻 +" + atk.ToString("0");
-        if (sumMagicText != null) sumMagicText.text = "魔攻 +" + mag.ToString("0");
-        if (sumHpText != null) sumHpText.text = "+" + hp.ToString("0");
-        if (sumDefText != null) sumDefText.text = "+" + def.ToString("0");
-        if (sumCritText != null) sumCritText.text = "+" + crit.ToString("0.##") + "%";
-        if (sumAtkSpdText != null) sumAtkSpdText.text = "+" + spd.ToString("0.##") + "%";
+        // 【2026-10-26 主人全文字版】底栏改纯文字后每格自带属性名，输出统一带前缀，
+        // 覆盖格式与预制体占位（物攻+9999 / 血量+9999 …）一致；魔防与物防同源——
+        // 天赋「防御」按双防同加口径生效（AttrSystem.ApplyTalentEffect Defense 分支）。
+        if (sumAttackText != null) sumAttackText.text = "物攻+" + atk.ToString("0");
+        if (sumMagicText != null) sumMagicText.text = "魔攻+" + mag.ToString("0");
+        if (sumHpText != null) sumHpText.text = "血量+" + hp.ToString("0");
+        if (sumDefText != null) sumDefText.text = "物防+" + def.ToString("0");
+        if (sumMagicDefText != null) sumMagicDefText.text = "魔防+" + def.ToString("0");
+        if (sumCritText != null) sumCritText.text = "暴击+" + crit.ToString("0.##") + "%";
+        if (sumAtkSpdText != null) sumAtkSpdText.text = "攻速+" + spd.ToString("0.##") + "%";
     }
 
     static Dictionary<string, int> GetTalents()

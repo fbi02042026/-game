@@ -22,6 +22,8 @@ public class MonsterStatsEntry
     public float baseMagicAttack;
     /// <summary>魔法防御（monster_stats 表 baseMagDef 列）。0 = 沿用物理防御（Monster.Init 里按 baseDef 推）。</summary>
     public float baseMagicDefense;
+    /// <summary>表定词缀（monster_stats 表 affix 列，| 分隔的 MonsterAffixId 名）。空 = 普通怪（2026-10-26 词缀怪）。</summary>
+    public string tableAffix = "";
 
     public MonsterConfig ToRuntimeConfig()
     {
@@ -42,6 +44,7 @@ public class MonsterStatsEntry
         m.spriteScale = spriteScale > 0.01f ? spriteScale : 1f;
         m.baseMagicAttack = baseMagicAttack;
         m.baseMagicDefense = baseMagicDefense;
+        m.tableAffix = tableAffix ?? "";
         return m;
     }
 }

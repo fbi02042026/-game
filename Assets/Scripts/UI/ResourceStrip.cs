@@ -59,11 +59,11 @@ public static class ResourceStrip
             long t = ResourceWallet.Get(data, ResourceWallet.ResourceType.TalentPoint);
             if (t != _talent && talentText != null) { talentText.text = GuildHallUI.FormatResource(t); _talent = t; }
 
-            // 【2026-10-25 主人要求「每个界面的位置都统一」】借用期间 TopBar 的 y 仍由
-            // SafeAreaFitter 实时管辖（旋转/分屏/刘海变化会动），条根的 y 是 Show 时刻的快照，
-            // 不跟着走就会和主界面顶条错位 → 借用期间每帧同 y（与 TopBar 同源，Home 态不需要：
-            // 条撑满 TopBar，y 天然跟它一致）。
-            if (_borrowed) SyncTopY();
+            // 【2026-10-25 主人要求「每个界面的位置都统一」；2026-10-26 改为整条世界对齐】
+            // 借用期间 TopBar 的几何仍由 SafeAreaFitter 实时管辖（旋转/分屏/刘海变化会动），
+            // 条根若停在 Show 时刻的快照就会和主界面顶条错位 → 借用期间每帧按 TopBar 世界矩形重对齐
+            // （与 TopBar 同源；Home 态不需要：条撑满 TopBar，天然一致）。
+            if (_borrowed) SyncToHomeWorld();
         }
     }
 
@@ -188,9 +188,10 @@ public static class ResourceStrip
         _root.SetParent(host, false);
         _root.SetAsLastSibling();
         _root.gameObject.SetActive(true);
-        _borrowed = true;        // Host.Update 借用期间每帧同 y（位置与主界面顶条恒统一）
-        ApplyTopBarGeometry();   // 宿主页与 TopBar 同处画布空间：恢复「拷 TopBar 几何」形态（Home 是撑满形态，来回切必须重施）
-        SyncTopY();
+        _borrowed = true;        // Host.Update 借用期间每帧世界对齐（位置与主界面顶条恒统一）
+        SyncToHomeWorld();       // 【2026-10-26 主人反馈「角色页资源条没贴右上角」】按 TopBar 世界矩形落位，
+                                 // 不再拷局部几何 —— 宿主页根层级/锚点与大厅不同构时拷数字必错位，
+                                 // 世界对齐后借条与主界面顶条像素级重合（任意页面/任意屏比都成立）
         SetMode(mode);
         SetStaminaVisible(false);   // 【2026-10-25 主人拍板】消耗金币/钻石的界面不显示体力列（归还时恢复）
         return true;
@@ -230,16 +231,42 @@ public static class ResourceStrip
         rt.localScale = Vector3.one;
     }
 
-    /// <summary>宿主页形态几何：按 TopBar 当前画布空间值拷锚/pivot/尺寸（y 由 SyncTopY 现同步）。</summary>
-    static void ApplyTopBarGeometry() => CopyTopBarGeometry(_home as RectTransform);
-
-    /// <summary>只同步条根的 y 与主界面 TopBar 当前值一致（TopBar 自身挂 SafeAreaFitter，效果经此传导，条根自己不挂，防双倍偏移）。x 恒 0、锚 stretch-top，与 TopBar 同构。</summary>
-    static void SyncTopY()
+    /// <summary>
+    /// 【2026-10-26 主人反馈「角色页资源条没贴右上角」】借出形态落位：按 TopBar 的**世界矩形**对齐，
+    /// 替代旧的「拷 TopBar 局部几何」（锚/pivot/sizeDelta/y 逐项抄）——宿主页根（角色页/弹窗）与
+    /// 大厅根不同构时，局部数字相同 ≠ 屏上位置相同，必错位；世界对齐后借条与主界面顶条像素级重合。
+    /// 条根锚定到宿主父级中心 (0.5,0.5)、pivot (0.5,0.5)，sizeDelta = TopBar 世界尺寸 ÷ 宿父级 lossyScale，
+    /// anchoredPosition = TopBar 世界中心换算到宿父级局部 − 锚点原点。列的右缘锚（ApplyRightAlign）
+    /// 相对条根右缘计算，条根右缘 = TopBar 右缘 ⇒ 各界面与主界面右上角观感恒一致。
+    /// SafeAreaFitter 对 TopBar 的实时调整经 Host.Update 每帧重对齐传导（条根自己不挂，防双倍偏移）。
+    /// </summary>
+    static readonly Vector3[] _worldCorners = new Vector3[4];
+    static void SyncToHomeWorld()
     {
         var rt = _root as RectTransform;
         var home = _home as RectTransform;
         if (rt == null || home == null) return;
-        rt.anchoredPosition = new Vector2(0f, home.anchoredPosition.y);
+        var parent = rt.parent as RectTransform;
+        if (parent == null) return;
+
+        home.GetWorldCorners(_worldCorners);
+        Vector3 worldCenter = (_worldCorners[0] + _worldCorners[2]) * 0.5f;
+        float worldW = Vector3.Distance(_worldCorners[0], _worldCorners[3]);   // 底边（左→右）
+        float worldH = Vector3.Distance(_worldCorners[0], _worldCorners[1]);   // 左边（下→上）
+        float sx = Mathf.Abs(parent.lossyScale.x); if (sx < 1e-4f) sx = 1e-4f;
+        float sy = Mathf.Abs(parent.lossyScale.y); if (sy < 1e-4f) sy = 1e-4f;
+
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.localScale = Vector3.one;
+        rt.sizeDelta = new Vector2(worldW / sx, worldH / sy);
+
+        // anchoredPosition 原点 = 锚点 (0.5,0.5) 在父级局部的位置（父 rect 是 pivot 相对系，做差校正）
+        Vector3 local = parent.InverseTransformPoint(worldCenter);
+        var pr = parent.rect;
+        Vector2 anchorOrigin = new Vector2(pr.width * (0.5f - parent.pivot.x), pr.height * (0.5f - parent.pivot.y));
+        rt.anchoredPosition = (Vector2)local - anchorOrigin;
     }
 
     static void SetMode(Mode mode)
@@ -323,7 +350,8 @@ public static class ResourceStrip
         phase3.OpenShopPanel();
     }
 
-    /// <summary>建根时按 TopBar 当前几何拷贝锚/pivot/尺寸（原值沿用，不写死；y 每次 Home/Show 现同步）。</summary>
+    /// <summary>建根时按 TopBar 当前几何拷贝锚/pivot/尺寸（仅初始占位；借出形态实际由 SyncToHomeWorld 世界对齐，
+    /// Home 形态由 FillHomeBar 撑满，原值沿用不写死）。</summary>
     static void CopyTopBarGeometry(RectTransform topBar)
     {
         var rt = _root as RectTransform;

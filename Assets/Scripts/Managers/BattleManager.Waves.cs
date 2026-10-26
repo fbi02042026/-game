@@ -715,8 +715,9 @@ public partial class BattleManager
         BattleUI.Instance?.UpdateWaveProgress(Mathf.Max(0, FindNextUnspawnedWaveIndex()), _waves != null ? _waves.Count : 0);
 
         GamePerf.Log("[BattleManager] 下一波来袭 Banner");
-        // 【2026-10-21 主人拍板】每清完一波停下弹一次抽奖窗（一抽），点「继续」或倒计时走完
-        // 再播「下一波来袭」进下一波。整段（波间抽奖 + 预告 + 出兵）都在 _waveAnnounceCo 里，
+        // 【2026-10-21 主人拍板】每清完一波停下弹一次抽奖窗，点「继续」或倒计时走完
+        // 再播「下一波来袭」进下一波。【2026-10-26 主人反馈】窗内改连抽（multiDraw:true），
+        // 不再一抽即收。整段（波间抽奖 + 预告 + 出兵）都在 _waveAnnounceCo 里，
         // :671 `if (_waveAnnounceCo != null) return;` 的防重入语义不变。
         _waveAnnounceCo = StartCoroutine(CoWaveIntermissionDraftThenNextWave());
     }
@@ -724,10 +725,13 @@ public partial class BattleManager
     /// <summary>
     /// 【2026-10-21 主人拍板】波间单拍抽奖窗 → 原预告+出兵链。
     /// 复用 CoMidBattleDraft：自带 UnitsCanAct 冻结/finally 还原、面板 3 秒没弹出的防卡死跳过、
-    /// 正式关 30s 倒计时自动继续、一抽即收。其等待循环不查 _runClosed（进关抽奖既有口径，不动），
+    /// 正式关 30s 倒计时自动继续。【2026-10-26 主人反馈「第二波抽奖只能抽一次」】改传 multiDraw:true
+    /// 连抽 —— 抽完回面板可再抽（价格每轮重算），点「继续」/倒计时走完才收面板开打，
+    /// 与进关抽奖（CoStageEntryDraft）同款体验；引导局不进本方法，一拍一抽口径不受影响。
+    /// 其等待循环不查 _runClosed（进关抽奖既有口径，不动），
     /// 下面的 guard 就是波间这条链的防线：撤离/死亡/通关后旧协程当场退场，不串台。
     /// 末波/Boss 波清完走 StartStageClearRewardSequence 通关链，不进本方法 → 末波后无波间抽；
-    /// 进关抽奖（CoStageEntryDraft）承担下一关第一抽，正好「每波之间恰好一抽」。
+    /// 进关抽奖（CoStageEntryDraft）承担下一关第一抽。
     /// </summary>
     IEnumerator CoWaveIntermissionDraftThenNextWave()
     {
@@ -759,7 +763,7 @@ public partial class BattleManager
             // BattleStatueEventUI.TryShowOnDraft();
         }
 
-        yield return CoMidBattleDraft();
+        yield return CoMidBattleDraft(multiDraw: true);
 
         // 【2026-10-22 主人拍板】抽奖窗关闭（点继续/超时）未点石像 → 石像一并收起，不结转
         BattleStatueEventUI.ForceCollapse();

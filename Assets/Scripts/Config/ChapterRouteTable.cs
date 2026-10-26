@@ -104,20 +104,21 @@ public static class ChapterRouteTable
     // ============================================================
 
     /// <summary>
-    /// 【2026-10-23 合并方案】通关第 1 章后随机派定**支线岛**（洗牌袋，只掷没通关过的岛；
-    /// 岛定义见 SideIslandDefs，branchRoll1/branchRoll2 记岛 id 1..8）。
+    /// 【2026-10-26 主人拍板「第一章可以出现支线」】引导完成（StoryProgress.TutorialDone）即随机派定
+    /// **支线岛**（洗牌袋，只掷没通关过的岛；岛定义见 SideIslandDefs，branchRoll1/branchRoll2 记岛 id 1..8）。
+    /// 旧口径「通关第 1 章后才派」作废（2026-10-23 版），不要再改回去。
     /// 通关该岛后**再次调用本方法自动派第二个岛**（岛通关结算处触发，见 BattleManager 岛结算）。
     /// 本周目最多 2 个岛（两条制）；8 岛全通后洗牌袋重置（清岛通关记录，开启新一轮）。
     /// 幂等：当前派定岛没打完、或两条已派满时直接返回，绝不重复掷。
-    /// 调用点：通关第 1 章（ChapterManager.OnStageComplete）与补掷入口
-    /// （AdventureUI.RefreshAvailableChapters / WorldMapPopup.RefreshAvailability）。
+    /// 调用点：通关第 1 章关卡（ChapterManager.OnStageComplete，外层有 currentChapter==1 护栏）
+    /// 与补掷入口（AdventureUI.RefreshAvailableChapters / WorldMapPopup.RefreshAvailability）。
     /// 🔴 掷点逻辑严禁出现在 CanEnter / NextChapter / AvailableChapters 等查询函数里
     /// （它们被循环调用，会重复掷）。
     /// </summary>
     public static void EnsureForkRoll(SaveData data)
     {
         if (data == null) return;
-        if (!data.HasClearedChapter(1)) return;
+        if (!StoryProgress.TutorialDone) return;                 // 【2026-10-26】引导完成即开放支线（第一章内可出现）
         if (data.branchRoll2 != 0) return;                       // 两条已派满（两条制）
         // 当前派定的岛还没打完 → 保留不动（正在打/没打完）
         if (data.branchRoll1 != 0 && !data.HasClearedSideIsland(data.branchRoll1)) return;

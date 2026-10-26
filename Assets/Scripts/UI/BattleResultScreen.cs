@@ -22,6 +22,11 @@ using UnityEngine.UI;
 /// → 等玩家点【确定】或点任意处跳过 → onDone（既有链：结算 → 回冒险界面）。
 /// 宝箱奖励已在结算链自动入账，界面只负责展示（「打完自动领取宝箱后的奖励」，无宝箱点击步）。</para>
 ///
+/// <para>【2026-10-26 主人拍板 · 分享钮改版】奖励区分享钮整体居中收紧在面板内（旧版 x=-373
+/// 在面板外整只出屏）；钮图换主人给的 <c>Art/UI/分享/分享按钮</c>（路径加载）；钮下加一行
+/// 「分享获得100钻 每日一次」（钻数直引 SHARE_REWARD_DIAMOND）；奖励面板加宽 500→620。
+/// 动效检查：unscaled 帧步长封顶（切后台/分享面板返回首帧跳变）。</para>
+///
 /// <para>接入（统一门，2026-10-24 主人拍板「正式关卡/支线/活动副本都走，无限裂隙不走」）：<br/>
 /// · 胜利：<see cref="BattleManager.FinishStageAfterPortalReached"/> 里 <c>Mode.UsesBattleResultScreen</c> 门；<br/>
 /// · 失败：<see cref="BattleManager.OnHeroDead"/> 同一道门。<br/>
@@ -132,6 +137,23 @@ public class BattleResultScreenUI : MonoBehaviour
     /// <summary>奖励格横向间距（运行时克隆格用，先例 = BattleSettlementUI 网格 spacing 10）。</summary>
     const float RewardCellGap = 10f;
 
+    // —— 以下为 2026-10-26 主人拍板「分享钮居中收紧 panel 内 + 界面再宽点」新增布局常量 ——
+    // （主人明确要求改版奖励区排版，此处按拍板写尺寸；除这几项外仍不碰布局，铁律 32 其余口径不变）
+    /// <summary>奖励面板加宽后的宽（预制体 500 → 620，与外层 Panel 同宽；只放宽高度不动）。</summary>
+    const float RewardPanelWidth = 620f;
+    /// <summary>奖励格行基线整体上抬量（模板 y=9 + 46 = 55，给居中分享钮腾位）。</summary>
+    const float RewardRowLiftY = 46f;
+    /// <summary>分享钮在奖励面板内的纵向位（奖励行与装饰条之间空档，居中 x=0）。</summary>
+    const float ShareBtnLocalY = -45f;
+    /// <summary>分享钮 sizeDelta（克隆体自带 0.6 缩放 → 可见 ≈150×76，匹配分享钮图 200:102 比例）。</summary>
+    static readonly Vector2 ShareBtnSize = new Vector2(250f, 127f);
+    /// <summary>分享提示行（分享钮下方）纵向位（装饰条与面板底边之间）。</summary>
+    const float ShareTipLocalY = -130f;
+    /// <summary>分享提示行 sizeDelta（单行字，fontSize 24）。</summary>
+    static readonly Vector2 ShareTipSize = new Vector2(420f, 28f);
+    /// <summary>分享钮图路径（Resources/Art/UI/分享/分享按钮.png；meta 是团结 56 字符标识 → 走路径加载）。</summary>
+    const string ShareBtnArt = "Art/UI/分享/分享按钮";
+
     RectTransform _panel;
     CanvasGroup _cg;
     Action _onDone;
@@ -226,6 +248,11 @@ public class BattleResultScreenUI : MonoBehaviour
             _rewardCg = rewardPanel.gameObject.AddComponent<CanvasGroup>();
         _rewardCg.alpha = 0f;   // 【2026-10-25 主人拍板】默认 0，上移到位后淡到 1
 
+        // 【2026-10-26 主人拍板「界面做下适配可以再宽点」】奖励面板加宽 500→620（与外层 Panel 同宽，
+        // 只放宽高度不动）：装得下 5 格奖励行（5×109+4×10=585），也给居中分享钮 + 提示行留内宽
+        var rewardRt = (RectTransform)rewardPanel;
+        rewardRt.sizeDelta = new Vector2(RewardPanelWidth, rewardRt.sizeDelta.y);
+
         BuildRewardCells(rewardPanel, stats);
 
         var confirmT = rewardPanel.Find("ConfirmBtn");
@@ -240,16 +267,20 @@ public class BattleResultScreenUI : MonoBehaviour
         var lbl = confirmBtn.GetComponentInChildren<Text>(true);
         if (lbl != null) lbl.text = "确定";
 
-        // 【2026-10-25 主人拍板「先做分享」】克隆 ConfirmBtn 当【分享】钮：预制体零改动
-        //（先例 = BuildRewardCells 克隆 CellTemplate），摆位读 ConfirmBtn 值只横向左移让位
-        //（间距同 RewardCellGap，尺寸随模板，铁律 32 不写布局尺寸）。缺 ConfirmBtn 时上面已 LogError。
+        // 【2026-10-26 主人拍板】分享钮改版：居中收紧在奖励面板内 + 换主人给的分享钮图；
+        // 下方一行「分享获得100钻 每日一次」提示。两件都挂奖励 Panel 下随 CanvasGroup 一起淡入。
         BuildShareButton(rewardPanel, confirmT);
+        BuildShareTip(rewardPanel);
     }
 
     /// <summary>
-    /// 【2026-10-25 主人拍板】胜利奖励区加【分享】钮（克隆 ConfirmBtn，预制体零改动）：
-    /// 点击 → ShareService.TryShareAndReward（系统分享面板 + 每日首次 100 钻），结果界面不关
-    /// （分享面板浮在上面，回来继续点【确定】/跳过，流程不受影响）。
+    /// 【2026-10-26 主人拍板】胜利奖励区【分享】钮改版（克隆 ConfirmBtn 保 Button，预制体零改动）：
+    /// ① 整体居中收紧在奖励面板内（x=0）——旧版横向左移摆 x=-373，在面板（半宽 250）之外、
+    ///    720 宽画布上整只出屏，玩家根本看不见点不着，这就是本次要修的排版问题；
+    /// ② 钮图换主人给的 <c>Art/UI/分享/分享按钮</c>（蓝底分享图标图；meta 是团结 56 字符标识
+    ///    → 铁律 29/30 走路径加载，不碰 guid）；图自带图标不带字 → 删克隆来的文本子节点；
+    /// ③ 尺寸按图比例 200:102 × 克隆自带 0.6 缩放 → sizeDelta 250×127 ≈ 可见 150×76。
+    /// 点击 → SharePanelUI.Show()（发钻/日键/埋点在分享界面内完成），结果界面不关。
     /// 克隆成功即报 #share_entry_show（scene=victory）。
     /// </summary>
     void BuildShareButton(Transform rewardPanel, Transform confirmT)
@@ -258,11 +289,28 @@ public class BattleResultScreenUI : MonoBehaviour
         var shareGo = Instantiate(confirmT.gameObject, rewardPanel);
         shareGo.name = "ShareBtn";
 
-        // 摆位：以 ConfirmBtn 为基准横向左移一个钮宽 + 间距（读模板值，先例 = BuildRewardCells 行内定位）
-        var src = (RectTransform)confirmT;
+        // 摆位：居中收紧在面板内（奖励行已上抬，此位在行与装饰条之间空档，常量见文件头）
         var dst = (RectTransform)shareGo.transform;
-        dst.anchoredPosition = new Vector2(src.anchoredPosition.x - (src.sizeDelta.x + RewardCellGap),
-                                           src.anchoredPosition.y);
+        dst.anchoredPosition = new Vector2(0f, ShareBtnLocalY);
+        dst.sizeDelta = ShareBtnSize;
+
+        // 换主人给的分享钮图（路径加载）；图自带分享图标 → 克隆来的「分享」文本子节点删掉
+        var img = shareGo.GetComponent<Image>();
+        if (img == null)
+            Debug.LogError("[BattleResultScreen] 分享钮克隆体上没有 Image（ConfirmBtn 结构被改过？），分享钮缺图");
+        else
+        {
+            var sp = Resources.Load<Sprite>(ShareBtnArt);
+            if (sp == null)
+                Debug.LogError($"[BattleResultScreen] 找不到分享钮图 Resources/{ShareBtnArt}，分享钮缺图（不静默）");
+            else
+            {
+                img.sprite = sp;
+                img.preserveAspect = true;
+            }
+        }
+        var oldLbl = shareGo.GetComponentInChildren<Text>(true);
+        if (oldLbl != null) Destroy(oldLbl.gameObject);
 
         var btn = shareGo.GetComponent<Button>();
         if (btn == null)
@@ -273,11 +321,32 @@ public class BattleResultScreenUI : MonoBehaviour
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(OnShareClicked);
 
-        var lbl = btn.GetComponentInChildren<Text>(true);
-        if (lbl != null) lbl.text = "分享";
-        GameFonts.ApplyToHierarchy(shareGo.transform);
-
         GameAnalytics.ReportShareEntryShow("victory");   // 埋点：分享入口曝光
+    }
+
+    /// <summary>
+    /// 【2026-10-26 主人拍板】分享钮下方一行提示「分享获得100钻 每日一次」：
+    /// 钻数直引 <see cref="GameConfig.SHARE_REWARD_DIAMOND"/>（先例 = 佣兵概率公示直引权重常量，
+    /// 改常量文案自动跟）。运行时建 Text（预制体零改动），挂奖励 Panel 下随 CanvasGroup 一起淡入；
+    /// raycastTarget=false 不挡「点任意处跳过」的射线。
+    /// </summary>
+    void BuildShareTip(Transform rewardPanel)
+    {
+        var tipGo = new GameObject("ShareTip", typeof(RectTransform), typeof(Text));
+        var rt = (RectTransform)tipGo.transform;
+        rt.SetParent(rewardPanel, false);
+        rt.anchorMin = new Vector2(0.5f, 0.5f);   // 与面板内其它子节点同口径：中心锚点（面板子节点全是 0.5,0.5）
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.localScale = Vector3.one;
+        rt.anchoredPosition = new Vector2(0f, ShareTipLocalY);
+        rt.sizeDelta = ShareTipSize;
+        var t = tipGo.GetComponent<Text>();
+        t.text = $"分享获得{GameConfig.SHARE_REWARD_DIAMOND}钻 每日一次";
+        t.fontSize = 24;
+        t.color = Color.white;
+        t.alignment = TextAnchor.MiddleCenter;
+        t.raycastTarget = false;
+        GameFonts.ApplyToHierarchy(tipGo.transform);
     }
 
     /// <summary>【分享】钮点击：【2026-10-25 主人拍板 v2】改为打开通用分享界面（SharePanelUI），
@@ -311,8 +380,9 @@ public class BattleResultScreenUI : MonoBehaviour
         var tmplRt = (RectTransform)tmplT;
         float cellW = tmplRt.sizeDelta.x;
         float total = cells.Count * cellW + (cells.Count - 1) * RewardCellGap;
+        // 行基线整体上抬（2026-10-26 主人拍板：给居中的分享钮腾位，模板 y=9 → 55）；间距/尺寸仍读模板值
         Vector2 rowCenter = new Vector2(tmplRt.anchoredPosition.x - total * 0.5f + cellW * 0.5f,
-                                        tmplRt.anchoredPosition.y);
+                                        tmplRt.anchoredPosition.y + RewardRowLiftY);
 
         for (int i = 0; i < cells.Count; i++)
         {
@@ -377,7 +447,7 @@ public class BattleResultScreenUI : MonoBehaviour
         float t = 0f;
         while (t < InDur && !_skipped)
         {
-            t += Time.unscaledDeltaTime;
+            t += Dt();
             float k = Mathf.Clamp01(t / InDur);
             _cg.alpha = k;
             _victoryNode.localScale = baseScale * Mathf.Lerp(0.5f, 1f, BackOut(k));
@@ -392,7 +462,7 @@ public class BattleResultScreenUI : MonoBehaviour
             t = 0f;
             while (t < MoveUpDur && !_skipped)
             {
-                t += Time.unscaledDeltaTime;
+                t += Dt();
                 float k = Mathf.Clamp01(t / MoveUpDur);
                 _victoryRt.anchoredPosition = new Vector2(targetPos.x, Mathf.Lerp(0f, targetPos.y, k));
                 yield return null;
@@ -406,7 +476,7 @@ public class BattleResultScreenUI : MonoBehaviour
             t = 0f;
             while (t < RewardInDur && !_skipped)
             {
-                t += Time.unscaledDeltaTime;
+                t += Dt();
                 _rewardCg.alpha = Mathf.Clamp01(t / RewardInDur);
                 yield return null;
             }
@@ -425,7 +495,7 @@ public class BattleResultScreenUI : MonoBehaviour
         t = 0f;
         while (t < outDur)
         {
-            t += Time.unscaledDeltaTime;
+            t += Dt();
             float k = Mathf.Clamp01(t / outDur);
             _cg.alpha = Mathf.Lerp(startAlpha, 0f, k);
             yield return null;
@@ -555,7 +625,7 @@ public class BattleResultScreenUI : MonoBehaviour
         float t = 0f;
         while (t < InDur)
         {
-            t += Time.unscaledDeltaTime;
+            t += Dt();
             float k = Mathf.Clamp01(t / InDur);
             _cg.alpha = k;
             _panel.localScale = baseScale * Mathf.Lerp(0.5f, 1f, BackOut(k));
@@ -572,7 +642,7 @@ public class BattleResultScreenUI : MonoBehaviour
         t = 0f;
         while (t < OutDur)
         {
-            t += Time.unscaledDeltaTime;
+            t += Dt();
             _cg.alpha = 1f - Mathf.Clamp01(t / OutDur);
             yield return null;
         }
@@ -629,7 +699,7 @@ public class BattleResultScreenUI : MonoBehaviour
         float t = 0f;
         while (t < InDur && !_skipped)
         {
-            t += Time.unscaledDeltaTime;
+            t += Dt();
             float k = Mathf.Clamp01(t / InDur);
             _cg.alpha = k;
             _panel.localScale = baseScale * Mathf.Lerp(0.5f, 1f, BackOut(k));
@@ -640,7 +710,7 @@ public class BattleResultScreenUI : MonoBehaviour
         t = 0f;
         while (t < HoldDur && !_skipped)
         {
-            t += Time.unscaledDeltaTime;
+            t += Dt();
             yield return null;
         }
 
@@ -651,7 +721,7 @@ public class BattleResultScreenUI : MonoBehaviour
         t = 0f;
         while (t < outDur)
         {
-            t += Time.unscaledDeltaTime;
+            t += Dt();
             _cg.alpha = 1f - Mathf.Clamp01(t / outDur);
             yield return null;
         }
@@ -661,6 +731,14 @@ public class BattleResultScreenUI : MonoBehaviour
         Destroy(gameObject);   // 粒子随对象销毁消失（CanvasGroup 淡出管不了世界空间粒子，见任务文档验收 7）
         _onDone?.Invoke();
     }
+
+    /// <summary>
+    /// unscaled 帧步长封顶（动效检查发现项，2026-10-26）：本界面全程用 unscaled 时间，
+    /// 而分享钮会拉起 Android 系统分享面板/玩家可能切后台——切回时的首帧 unscaledDeltaTime
+    /// 可能是数秒级，不封顶会把正在播的淡入/弹出/淡出一步打到终点（动效跳变）。
+    /// 0.05s = 正常帧步长上限，正常帧无感；等待段（段四等确认）不累计 t，不受影响。
+    /// </summary>
+    static float Dt() => Mathf.Min(Time.unscaledDeltaTime, 0.05f);
 
     /// <summary>回弹缓动（ease-out-back）：中段越过 1 再回来，「砸出来」的手感。</summary>
     static float BackOut(float u)

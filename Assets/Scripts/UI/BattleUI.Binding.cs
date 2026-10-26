@@ -231,6 +231,8 @@ public partial class BattleUI : MonoBehaviour
         // 2026-10-24 主人拍板：战斗内网格背包改名「作战背包」，与角色页「随身仓库」区分，避免两个背包混为一谈。
         // 真源 = 预制体 BackpackPanel 下的 Text 节点 BackpackTitle / BackpackTitle (1)；运行时覆盖文案，不改预制体文件。
         EnsureBattleBackpackTitleLabel();
+        // 【2026-10-26 主人拍板「只留一个抽奖券」】进场即隐藏金币/天赋石条，不等 0.1s 后的首次全量刷新
+        ApplyTopBarResourceVisibility();
         ReportBindingStatus();
     }
 
@@ -446,6 +448,10 @@ public partial class BattleUI : MonoBehaviour
             ?? FindDeepChildIgnoreCase(transform, "StageProgress");
         if (t != null) progressContainer = t;
         if (progressContainer == null) return;
+
+        // 【2026-10-26 主人拍板】顶部进度条整条去掉：绑定时先藏一次（后续显隐由 Hud.UpdateStageProgress 关死）
+        if (progressContainer.gameObject.activeSelf)
+            progressContainer.gameObject.SetActive(false);
 
         Transform markerT = FindDeepChildIgnoreCase(progressContainer, "PlayerMarker");
         if (markerT != null)

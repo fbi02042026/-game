@@ -62,6 +62,8 @@ public partial class WavePlanner
             stageIdx = GameConfig.EndlessMonsterCountStageIdx(BattleManager.Instance.EndlessRiftStage);
 
         _lastWaveSprites.Clear();
+        // 【2026-10-26 词缀怪】每关重置吐槽去重：每关每种词缀介绍一次、荆棘吐槽一次
+        MonsterAffixBanter.ResetForStage();
         float startX = GetStageStartX();
         var points = GetSpawnPointsSortedByX();
         var usable = new List<Transform>();
@@ -248,6 +250,52 @@ public partial class WavePlanner
             _waves.Add(wave);
         }
 
+        // 【2026-10-26 前期优化·机枢】三档难度曲线（仅正式主线关 formalMain 生效）：
+        //  Ch1 简单 → 无特殊处理；
+        //  Ch2 普通有变化 → 本关某波(非首波)塞 1 只「签名怪」(指定精灵+词缀的迷你精英)，给每关不同的长相；
+        //  Ch3+ 靠运气 → 在 Ch2 基础上再加「第3波双段爆发」(紧接加重段，段上挂签名怪) + 事件层(见 PlanStageEvents)。
+        // 全部不动 stage_spawn 公式、不加 Normal 模式行；插入爆发段后重算 isRoundEnd，保证抽奖窗链路不错位。
+        if (formalMain && stageIdx >= GameConfig.CLIMAX_MIN_STAGE)
+        {
+            int tier = GameConfig.GetChapterSpiceTier(CurrentChapter);
+            if (tier >= GameConfig.SPICE_LUCK && _waves.Count > GameConfig.CLIMAX_WAVE_INDEX)
+            {
+                // Ch3+「靠运气」：第3波后插一段紧接加重波，签名怪挂在这段上 = 本关那只特殊怪
+                var w3 = _waves[GameConfig.CLIMAX_WAVE_INDEX];
+                int burstCount = Mathf.Max(1, Mathf.CeilToInt(w3.monsterCount * GameConfig.CLIMAX_W2_MUL));
+                var burst = new WaveData
+                {
+                    triggerX = w3.triggerX + GameConfig.CLIMAX_GAP,
+                    spawnAnchor = w3.spawnAnchor,
+                    monsterCount = burstCount,
+                    isBossWave = false,
+                    isRoundEnd = false,
+                    spawned = false,
+                    aliveCount = 0,
+                    compositionStyle = w3.compositionStyle,
+                };
+                GameConfig.GetSignatureMonster(CurrentChapter, stageIdx, out int sigSprite, out string sigBias);
+                burst.signatureSpriteIndex = sigSprite;
+                burst.signatureAffixBias = sigBias;
+                _waves.Insert(GameConfig.CLIMAX_WAVE_INDEX + 1, burst);
+                RecomputeClimaxRoundEnd(formalRoundWaves, GameConfig.CLIMAX_WAVE_INDEX);
+                _totalWaves = _waves.Count;
+                GamePerf.Log($"[WavePlanner] Ch{CurrentChapter} 双段爆发：插入爆发段 count={burstCount} sprite={sigSprite} affix={sigBias} @x={burst.triggerX:F1}");
+            }
+            else if (tier >= GameConfig.SIGNATURE_CHAPTER_MIN)
+            {
+                // Ch2「普通有变化」：本关某波(非首波)塞 1 只签名怪，给每关不同的长相+词缀
+                int idx = Mathf.Min(_waves.Count - 1, GameConfig.CLIMAX_WAVE_INDEX);
+                if (idx > 0)
+                {
+                    GameConfig.GetSignatureMonster(CurrentChapter, stageIdx, out int sigSprite, out string sigBias);
+                    _waves[idx].signatureSpriteIndex = sigSprite;
+                    _waves[idx].signatureAffixBias = sigBias;
+                    GamePerf.Log($"[WavePlanner] Ch{CurrentChapter} 签名怪：挂第{idx + 1}波 sprite={sigSprite} affix={sigBias}");
+                }
+            }
+        }
+
         PlanStageEvents();
         _totalWaves = _waves.Count;
         string tag = elite ? "精英关" : "普通关";
@@ -276,6 +324,26 @@ public partial class WavePlanner
             string compTag = CompositionTag(w.compositionStyle);
             GamePerf.Log($"[BattleManager]   第{i + 1}波 anchor={an} worldX={ax:F2} count={w.monsterCount}{archTag}{eliteTag}{compTag}");
         }
+    }
+
+    /// <summary>
+    /// 【2026-10-26 前期优化】双段爆发插入后重算回合末标记：找到插入位置所属回合、该回合数 +1，
+    /// 再按新回合波数表重铺 isRoundEnd，保证抽奖窗链路（BattleManager 波清链）不错位。
+    /// roundCounts 即本方法执行时的 formalRoundWaves（每回合波数表），原地 +1 后长度 = 插入后总波数。
+    /// </summary>
+    void RecomputeClimaxRoundEnd(int[] roundCounts, int insertIndex)
+    {
+        if (roundCounts == null || _waves == null) return;
+        int acc = 0, r = 0;
+        for (; r < roundCounts.Length; r++)
+        {
+            if (insertIndex < acc + roundCounts[r]) break;
+            acc += roundCounts[r];
+        }
+        if (r < roundCounts.Length) roundCounts[r] += 1;
+        bool[] flags = FormalRoundEndFlags(roundCounts);
+        for (int i = 0; i < _waves.Count && i < flags.Length; i++)
+            _waves[i].isRoundEnd = flags[i];
     }
 
     /// <summary>
@@ -400,7 +468,7 @@ public partial class WavePlanner
 
     /// <summary>
     /// 本关波次铺好后调用：按章概率抽 0~2 个事件挂到「非首波、非 Boss 波」上。
-    /// 第 1~2 章直接拦截（硬约束）。关掉事件层 / 缺表 时整段跳过。
+    /// 第 1~2 章拦截（硬约束：事件只在 Ch3+「靠运气」档触发）。关掉事件层 / 缺表 时整段跳过。
     /// </summary>
     internal void PlanStageEvents()
     {
@@ -410,7 +478,7 @@ public partial class WavePlanner
         if (bm != null) bm.stageEventGoldMul = 1f;
 
         if (!StageEventTable.EventsEnabled) return;
-        if (CurrentChapter <= 2) return;            // 硬约束：保护新手期手感
+        if (CurrentChapter < GameConfig.CLIMAX_EVENT_MIN_CHAPTER) return;   // 硬约束：事件只在 Ch3+「靠运气」档触发（StageEventTable.Draw 也按 startChapter 过滤）
         if (_waves == null || _waves.Count == 0) return;
 
         // 候选波：非 Boss、且不是第一波（事件插在波与波之间）
@@ -446,15 +514,15 @@ public partial class WavePlanner
             GamePerf.Log($"[StageEvent] 本关插入 {applied} 个事件（章{CurrentChapter} 目标{want}）");
     }
 
-    /// <summary>单关事件数：第 3 章起概率渐增，最多 2 个；1~2 章恒 0。</summary>
+    /// <summary>单关事件数：仅 Ch3+「靠运气」档触发（硬约束见 PlanStageEvents），概率随章上升，最多 2 个。</summary>
     int RollEventCount(int chapter)
     {
-        if (chapter <= 2) return 0;
+        if (chapter < GameConfig.CLIMAX_EVENT_MIN_CHAPTER) return 0;
         // 至少一个事件的概率随章上升：ch3≈20% → ch7+≈60%
         float p1 = Mathf.Clamp(0.20f + (chapter - 3) * 0.10f, 0.20f, 0.60f);
-        if (UnityEngine.Random.value > p1) return 0;
         // 第二个事件概率较低：ch3≈5% → ch7+≈35%
         float p2 = Mathf.Clamp(0.05f + (chapter - 3) * 0.075f, 0.05f, 0.35f);
+        if (UnityEngine.Random.value > p1) return 0;
         return UnityEngine.Random.value < p2 ? 2 : 1;
     }
 

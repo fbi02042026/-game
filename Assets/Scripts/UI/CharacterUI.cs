@@ -51,7 +51,8 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
     public Text bagTitleText;
     /// <summary>
     /// 界面内的背包面板 Content/BackpackPanel（主人在预制体里摆好的，不是弹窗）。
-    /// 「背包」按钮切换它的显隐；AutoBind 里赋值。
+    /// 【2026-10-26 主人拍板「背包要常显」】进页由 EnsureBagAlwaysOpen 直接摊开，不再靠按钮切换显隐。
+    /// AutoBind 里赋值。
     /// </summary>
     public Transform bagPanelRoot;
     /// <summary>
@@ -62,7 +63,8 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
     public bool collapsePanelsOnStart = true;
     /// <summary>角色页背包网格显示规格覆盖：`每行 8 格 × 4 行，下 2 行上锁`。关掉则回退 4 列默认规格。</summary>
     public bool useWideBackpackGrid = true;
-    /// <summary>点击 BackpackPanel 外任意处收起背包面板。</summary>
+    /// <summary>【2026-10-26 起失效】随身仓库常显后「点面板外收起」永久停用（EnsureBagAlwaysOpen 不再点亮点击层）；
+    /// 字段保留只为预制体序列化兼容，不再起作用。</summary>
     public bool tapOutsideToCloseBag = true;
     /// <summary>背包翻页按钮（预制体优先：BackpackPanel/PrevPageButton、NextPageButton）。</summary>
     public Button bagPrevPageButton;
@@ -208,6 +210,8 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
         // 页可能比背包系统更早预载，Show 时再补订一次
         WireBagEvents();
         RefreshAll();
+        // 【2026-10-26 主人拍板「背包要常显」】随身仓库进页直接摊开（不再是点「背包」按钮才开的弹层）
+        EnsureBagAlwaysOpen();
         EnsureStageShadow();
         // SPUM 仅离屏换装；Portrait 用玩家立绘
         TownHeroCostumePreview.EnsureOn(this)?.EnsureOffscreenCostume();

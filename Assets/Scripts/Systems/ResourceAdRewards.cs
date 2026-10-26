@@ -142,6 +142,7 @@ public static class ResourceAdRewards
                     EnsureDay(data);
                     if (data.adStaminaClaimCount >= DailyClaimCap(StaminaFreePerDay)) return;
                     data.adStaminaClaimCount++;
+                    Analytics.AdSlotClick("stamina", true); // 埋点：广告档发奖成功（原先被 case 提前 return 挡住，从未上报）
                     GrantStamina(data, $"体力 +{StaminaPerAd}（激励 · 今日 {data.adStaminaClaimCount}/{cap}）");
                 });
                 return;
@@ -199,6 +200,7 @@ public static class ResourceAdRewards
                     EnsureDay(data);
                     if (data.adGoldClaimCount >= DailyClaimCap(GoldFreePerDay)) return;
                     data.adGoldClaimCount++;
+                    Analytics.AdSlotClick("gold", true); // 埋点：广告档发奖成功（原先被 case 提前 return 挡住，从未上报）
                     GrantGold(data, $"金币 +{GoldPerAd}（激励 · 今日 {data.adGoldClaimCount}/{cap}）");
                 });
                 return;

@@ -43,20 +43,48 @@ public partial class AdventureUI
     // 入口
     // ────────────────────────────────────────────────────
 
+    /// <summary>滑入因适配延后补跑而挂起（CoFitWhenRootReady 补跑完适配后由 FlushLeftTabsPopPending 补放）。</summary>
+    bool _leftTabsPopPending;
+
     /// <summary>左侧标签逐颗从屏幕左外侧滑入（ShowPage 调用；隐藏的入口按钮跳过）。
     /// 错峰语义：相邻标签开始滑入的时刻相差 TabPopStagger（并行错峰），非串行等待——每颗标签独立协程自带延迟。</summary>
     void PlayLeftTabsPopIn()
     {
         if (!gameObject.activeInHierarchy || modeButtons == null) return;
+        // 【2026-10-26 修「打完关卡出来左侧标签拉开间隔」】战斗回城那帧 rect=0，适配走 CoFitWhenRootReady 延后补跑；
+        // 此刻标签还在预制体位（隐藏钮占槽、可见钮间距 190），若现在起滑会把这个错位钉死整个动画期，
+        // 且错基准存进 _popBaseAnchoredPos 后本实例每次进页都被 RestorePopAnims 拽回去 → 一直散开。
+        // → 挂起，等适配真正落位后补放。
+        if (_adventureFitWaitingRoot)
+        {
+            _leftTabsPopPending = true;
+            return;
+        }
+        _leftTabsPopPending = false;
         RestorePopAnims();   // 先把上次可能停在半程的缩放/透明度复位，再从头弹
         int slot = 0;
         for (int i = 0; i < modeButtons.Length; i++)
         {
             var btn = modeButtons[i];
             if (btn == null || !btn.gameObject.activeSelf) continue;
+            RefreshPopBasePos(btn.transform);   // 基准每次播放现抓当前落位，防缓存钉死旧值
             _tabSubCos.Add(StartCoroutine(CoPopOnce(btn.transform, slot * TabPopStagger)));
             slot++;
         }
+    }
+
+    /// <summary>适配补跑完成后补放挂起的滑入（仅 CoFitWhenRootReady 调用；页面已隐藏则协程已死，不会进来）。</summary>
+    void FlushLeftTabsPopPending()
+    {
+        if (!_leftTabsPopPending) return;
+        _leftTabsPopPending = false;
+        PlayLeftTabsPopIn();
+    }
+
+    /// <summary>滑入基准缓存刷新为当前 anchoredPosition（须在 RestorePopAnims 之后、起协程之前调）。</summary>
+    void RefreshPopBasePos(Transform t)
+    {
+        if (t is RectTransform rt) _popBaseAnchoredPos[t] = rt.anchoredPosition;
     }
 
     /// <summary>右侧当前模式页面弹出（OnSelectMode 调用，RefreshAll 把节点显出来之后）。</summary>

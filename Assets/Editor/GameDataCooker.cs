@@ -76,6 +76,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookTalentRight();
         CookMercRoster();
         CookBossStageVariant();
+        CookQuest();
         if (ContentProtection.Enabled)
             CookFingerprint();
         else
@@ -293,6 +294,12 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookBossStageVariant()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/boss_stage_variant.csv", null, "boss_stage_variant");
+    }
+    /// <summary>任务表（主线 + 日常，支线走支线岛运行时不进表）：quest.csv → .bytes。
+    /// 加载器 Scripts/Config/QuestTable.cs；缺表 LogError 不兜底（2026-10-26 任务体系单独成模块）。</summary>
+    static void CookQuest()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/quest.csv", null, "quest");
     }
     static void CookTableFromSource(string sourceCsv, string legacyResourcesPath, string outName)
     {

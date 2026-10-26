@@ -7,7 +7,9 @@ public partial class CharacterUI
 {
 
     /// <summary>
-    /// D：点面板外任意处收起。运行时建一层全屏透明点击层（Image alpha 0、raycastTarget=1），
+    /// D：点面板外任意处收起。【2026-10-26 起退役】随身仓库常显（主人拍板）后不再有调用方，
+    /// 点击层永不创建/点亮；方法与层保留，开关要还原把 EnsureBagAlwaysOpen 里的出口接回来即可。
+    /// 运行时建一层全屏透明点击层（Image alpha 0、raycastTarget=1），
     /// 插在 BackpackPanel <b>之前</b>（即之下），所以绝不会挡住面板自己的按钮与格子。
     /// 写法参考 RewardPopupUI.SetupTapAnywhereToClose。
     /// </summary>

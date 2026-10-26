@@ -11,6 +11,25 @@ public partial class CharacterUI
             titleText.text = PlayerIdentity.DisplayName;
         if (titleSubText != null)
             titleSubText.text = PlayerIdentity.Title;
+
+        // 【2026-10-26 主人反馈「这个界面头像名称没有替换成主界面的」】头像与主界面名牌同源：
+        // 每次刷新按存档头像槽位（AvatarDefs.CurrentSlot）主动设图（换头像后进本页即跟随）。
+        // 图的真源 = Resources/Art/UI/Main/头像/（与 AvatarSelectPopup 同一口径），取不到报错不兜底。
+        if (headerAvatar == null)
+            headerAvatar = transform.Find("Content/Header/icon")?.GetComponent<Image>();
+        if (headerAvatar != null)
+        {
+            var sp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());
+            if (sp != null)
+            {
+                headerAvatar.sprite = sp;
+                headerAvatar.preserveAspect = true;
+                headerAvatar.color = Color.white;
+            }
+            else
+                Debug.LogError("[CharacterUI] 主界面同款头像图取不到：槽位 " + AvatarDefs.CurrentSlot() +
+                               "（应在 Resources/Art/UI/Main/头像/ 下），角色页头像显示不了（不兜底）");
+        }
     }
 
     /// <summary>
@@ -19,19 +38,9 @@ public partial class CharacterUI
     /// </summary>
     void FixWrongArtBindings()
     {
-        // Header/icon：切换箭头 → 玩家头像
-        if (headerAvatar == null)
-            headerAvatar = transform.Find("Content/Header/icon")?.GetComponent<Image>();
-        if (headerAvatar != null)
-        {
-            var avatar = LoadNavArt("角色_0000s_0000_玩家头像");
-            if (avatar != null)
-            {
-                headerAvatar.sprite = avatar;
-                headerAvatar.preserveAspect = true;
-                headerAvatar.color = Color.white;
-            }
-        }
+        // 🔴 2026-10-26：Header/icon 的旧静态设图（角色_0000s_0000_玩家头像）已删 ——
+        // 头像改由 RefreshIdentity() 按存档槽位设图（与主界面名牌同源，2026-10-26 主人拍板）。
+        // 同一件事只留一条路，避免两处设图互相覆盖。
 
         // 背包底框：战斗「大边框」→ 角色页面板
         var bagPanel = (transform.Find("Content/BackpackPanel") ?? FindDeep(transform, "BackpackPanel"))

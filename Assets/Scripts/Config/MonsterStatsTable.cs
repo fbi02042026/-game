@@ -62,7 +62,9 @@ public static class MonsterStatsTable
                 // 2026-09-26 新增：魔法攻击 / 魔法防御（旧 .bytes 只有 15 列 → 缺列时留 0，
                 // 由 Monster.Init 等比沿用 baseAttack / baseDef，不发明数值）
                 baseMagicAttack = (c.Length > 15 && GameTableCsv.TryFloat(c[15], out float matk)) ? matk : 0f,
-                baseMagicDefense = (c.Length > 16 && GameTableCsv.TryFloat(c[16], out float mdef)) ? mdef : 0f
+                baseMagicDefense = (c.Length > 16 && GameTableCsv.TryFloat(c[16], out float mdef)) ? mdef : 0f,
+                // 2026-10-26 词缀怪：affix 列（c[18]，note 是 c[17]）；旧表缺列留空 = 普通怪
+                tableAffix = (c.Length > 18 && !string.IsNullOrWhiteSpace(c[18])) ? c[18].Trim() : ""
             };
             if (string.IsNullOrEmpty(e.id))
                 e.id = BuildDefaultId(monsterChapter, spriteIndex);

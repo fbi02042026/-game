@@ -118,20 +118,44 @@ public partial class BattleUI : MonoBehaviour
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
 
-        // 【2026-10-07 主人拍板】顶栏**恢复显示天赋石，且没有时要写「0」**：
-        // 主人原话「获得天赋石没有在顶条资源那显示；如果一开始没有的话应该写 0，不应该什么都不显示」。
-        // （此前 2026-10-06 这里曾被整段停用、文本清空并隐藏节点 —— 与主人今天的口径冲突，按今天的来。
-        //   注：那条旧注释里的「主人原话」未经二次确认，已按归因纪律改成事实陈述，不再挂在主人名下。）
-        // 数值真源只有一个：ResourceWallet.TalentPoint，别再从别处另取一份。
-        var talentTarget = talentStoneText != null ? talentStoneText : enchantStoneText;
-        if (talentTarget != null)
-        {
-            talentTarget.gameObject.SetActive(true);
-            talentTarget.text = ResourceWallet.Get(data, ResourceWallet.ResourceType.TalentPoint).ToString();
-        }
+        // 【2026-10-26 主人拍板「只留一个抽奖券，把金币和天赋石隐藏」】
+        // 金币条 / 天赋石条整条隐藏，顶栏资源区只留 DraftDisplay 抽奖券条。
+        // （覆盖 2026-10-07「天赋石顶栏显示且没有写 0」的旧口径，以主人最新指令为准。）
+        // 放在刷新开头重申一遍：AutoGameInitializer / TutorialDirector 也会单独调本方法，防被点亮复活。
+        ApplyTopBarResourceVisibility();
 
         if (decomposeMatText != null)
             decomposeMatText.text = data.decomposeMats.ToString();
+    }
+
+    /// <summary>
+    /// 【2026-10-26 主人拍板「顶栏只留一个抽奖券」】金币条与天赋石条整条隐藏。
+    /// 从资源数字文本（goldText / talentStoneText / enchantStoneText）往上找第一个带 Image 的祖先
+    ///（= 图标+数字共用的胶囊底框，即整条资源条节点，如 GoldDisplay / EnchantDisplay），
+    /// SetActive(false)；上溯最多 3 层、撞到 TopBar 本体就停，绝不误伤整条顶栏。幂等，可反复调用。
+    /// UpdateGold / UpdateDraftCoin 只写文本、不点亮节点，隐藏一次即长期生效。
+    /// </summary>
+    public void ApplyTopBarResourceVisibility()
+    {
+        HideTopBarEntryByLabel(goldText);          // 金币条（GoldDisplay）
+        HideTopBarEntryByLabel(talentStoneText);   // 天赋石（新布局直绑的 TalentText 等）
+        HideTopBarEntryByLabel(enchantStoneText);  // 天赋石（旧布局第三资源位 EnchantText，新顶栏借它显示天赋石）
+    }
+
+    /// <summary>按资源数字文本隐藏其所在资源条（见 <see cref="ApplyTopBarResourceVisibility"/>）。</summary>
+    static void HideTopBarEntryByLabel(Text label)
+    {
+        if (label == null) return;
+        Transform cur = label.transform.parent;
+        Transform entry = null;
+        for (int i = 0; i < 3 && cur != null; i++)
+        {
+            if (cur.name == "TopBar") break;
+            if (cur.GetComponent<UnityEngine.UI.Image>() != null) { entry = cur; break; }
+            cur = cur.parent;
+        }
+        if (entry != null && entry.gameObject.activeSelf)
+            entry.gameObject.SetActive(false);
     }
 
     /// <summary>
@@ -210,11 +234,11 @@ public partial class BattleUI : MonoBehaviour
         if (progressContainer == null) BindProgressBar();
         if (playerMarker == null) return;
 
-        // 【2026-10-16 主人口令】引导战整条藏掉顶部进度条，正式关再开。
-        // 每次更新进度都校正一次显隐，避免被 BossHpBar 让顶逻辑误开。
-        bool showBar = !TutorialDirector.IsTutorialBattle;
-        if (progressContainer.gameObject.activeSelf != showBar)
-            progressContainer.gameObject.SetActive(showBar);
+        // 【2026-10-26 主人拍板】顶部进度条整条去掉：所有战斗都不再显示
+        //（覆盖 2026-10-16「引导战才藏、正式关再开」口径）。绑定/推进逻辑保留不动，
+        // 只在显隐处统一关死，BossHpBar 让顶逻辑也不会再点亮它。
+        if (progressContainer.gameObject.activeSelf)
+            progressContainer.gameObject.SetActive(false);
 
         RectTransform markerRT = playerMarker.rectTransform;
         if (atEndFlag && endFlag != null)

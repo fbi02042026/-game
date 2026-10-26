@@ -25,7 +25,10 @@ public static class RewardedAdBridge
             return;
         }
 
-        if (HasRealSdk)
+        // 【2026-10-26 修】只在安卓真机走真广告；编辑器/其它平台回落本地模拟。
+        // 原先 HasRealSdk=true 直接进 TapAdBridge，其 #else 分支当帧回调 false，
+        // 导致编辑器广告档 100% 失败，本类注释里的「回落模拟」实为死路。
+        if (HasRealSdk && TapAdBridge.IsRealAdPlatform)
         {
             TapAdBridge.ShowRewarded(placement, onComplete);
             return;

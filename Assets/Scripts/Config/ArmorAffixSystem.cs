@@ -140,12 +140,14 @@ public static class ArmorAffixSystem
             case AttrType.CooldownReduce: return (0.03f + Random.Range(0.01f, 0.04f)) * mul;
             case AttrType.FireDamage:
             case AttrType.IceDamage: return (2f + Random.Range(1f, 4f)) * mul;
-            // 2026-10-10 主人拍板：智力 / 力量 走副属性档（equip_attr_ranges 的 INTELLIGENCE / STRENGTH 普通档 2.5~6），
+            // 2026-10-10 主人拍板：智力 / 力量 走副属性档（equip_attr_ranges 的 INTELLIGENCE / STRENGTH 普通档），
             // 与 DEF(3~6) 同量级，再乘稀有度 mul。🔴 不写 case 会走 default 只给 1 点。
+            // 【2026-10-26 主人拍板「加了属性肯定得加战力」】力/智在 AttrSystem 按「成长段×2」折攻/魔攻，
+            // 本档同步 ÷2（1.25 + rand0~1.75），折算后与 ATK 同档不超模；表侧 equip_attr_ranges 已同步改。
             // ⚠️ 本函数只拿到 mul、拿不到 rarity，所以只能拿「普通档」当基线（与 MaxHp / Defense 同一写法），
-            //    传奇件这里 ≈ 3.4~8.1，低于掉落路径的 28~44 —— 两条路径的绝对量级本就不是一套。
+            //    传奇件这里 ≈ 1.7~5.1，低于掉落路径的 14~22 —— 两条路径的绝对量级本就不是一套。
             case AttrType.Intelligence:
-            case AttrType.Strength: return (2.5f + Random.Range(0f, 3.5f)) * mul;
+            case AttrType.Strength: return (1.25f + Random.Range(0f, 1.75f)) * mul;
             // 2026-10-10 警告：**不要把 PhyPower / MagicPower 加进防具词条池**（GetRollableAttrs）。
             // 本函数没有这两条 case，一旦进池就会落 default 的 1f * mul —— 那是 +100% 起跳的数值炸弹。
             // 真要加，必须先在这里写 case（与 WeaponAffixSystem.RollAttrValue 的 0.05f~0.13f 同档），再加进池子。

@@ -113,8 +113,9 @@ public class BattleSideHud : MonoBehaviour
         // 【2026-10-24 主人拍板「击败字太靠下，应在 Boss 血条右下角」】下挂偏移 -50 → -12；
         // 【2026-10-24 二次拍板「还是太往下了，还得往上几十」】-12 → +28（再上移 40）：
         // 根顶在血条底边上方 54.4、panel 高 70（pivot=顶沿），标签中心≈血条底边上方 47，整块贴住血条右端。
+        // 【2026-10-26 主人拍板「血条挡住了击败的字，让字往下 30」】+28 → -2（下移 30）。
         // 要再微调只动这一个数（每 +1 上移 1）。
-        const float ComboPanelTopOffset = 28f;
+        const float ComboPanelTopOffset = -2f;
         var comboGo = CreatePanel("ComboPanel", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(0.5f, 1f), new Vector2(0f, ComboPanelTopOffset), new Vector2(250f, 70f), transparent: true);
         _comboGroup = comboGo.AddComponent<CanvasGroup>();

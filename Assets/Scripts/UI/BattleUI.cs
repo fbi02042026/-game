@@ -134,6 +134,16 @@ public partial class BattleUI : MonoBehaviour
     {
         Instance = this;
 
+        // 刘海避让最先挂（2026-10-26 主人「战斗中顶部没有适配，要和主界面适配一样避免刘海」）：
+        // 主界面（TownSharedChrome）与战斗用同一套 EnsureTopOffset，真机主界面正常、战斗贴刘海，
+        // 差别只在时序 —— 下面 AutoBindMissingRefs / BattleSideHud / BattleViewportFit 等任何一步
+        // 在真机抛异常，原 167 行的挂载就整段静默跳过。这里提前挂顶栏三件套（幂等，重复调用不叠加），
+        // 167 行的调用保留，负责晚一步才建出来的 BossBar。
+        // 此刻画布尚未布局、父级 rect=0，Shift 误跑路径天然不触发，提前挂零风险。
+        int topFitCount = SafeAreaFitter.ApplyTopOffset(transform, "TopBar", "TopStatus", "ProgressBar");
+        Debug.Log($"[BattleUI] 顶栏刘海避让已挂载 {topFitCount} 个，safeArea={Screen.safeArea} " +
+                  $"screen={Screen.width}x{Screen.height}（safeArea 顶部若为 0 = 机型未上报刘海，另查）");
+
         // 运行时补绑预制体里漏接的引用
         AutoBindMissingRefs();
 

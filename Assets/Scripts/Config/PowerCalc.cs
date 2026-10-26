@@ -27,12 +27,25 @@ public static class PowerCalc
     /// <summary>战力底盘（纯常数，无等级）。与 RunLoadout.TotalPower 共用同一份字面量。</summary>
     public const float POWER_BASE = 130.50f;
 
-    // 统计的属性：四类输出属性 + 血量/防御生存属性（2026-10-17 起血防计入）；其余（移速/元素伤害等）不计。
+    /// <summary>
+    /// 吸血折等效生命用的「一场战斗秒数」假设（2026-10-26 加进战力口径时定）。
+    /// 依据：主线单场战斗 30~60 秒，取中位 45。吸血每秒回 DPS×ratio，T 秒累计 = 等效生命。
+    /// 只影响吸血词条的战力读数，不影响战斗本身。
+    /// </summary>
+    public const float POWER_LIFESTEAL_BATTLE_SEC = 45f;
+
+    // 统计的属性：四类输出属性 + 血量/防御生存属性（2026-10-17 起血防计入）。
+    // 2026-10-26 主人拍板「加了属性肯定得加战力」两批放行：
+    //   力量/智力 → Accumulate 只累计平量，折算段按职业 ×2 折进攻击/魔攻（与 AttrSystem 派生同口径）；
+    //   减伤/闪避/吸血/暴伤/火冰 → 折算段按真实结算折等效防御/等效血量/期望乘区（与 PlayerPowerSegment 同式）。
     static bool IsCountedAttr(AttrType t)
         => t == AttrType.Attack || t == AttrType.MagicAttack
         || t == AttrType.CritRate || t == AttrType.AttackSpeed
         || t == AttrType.MaxHp || t == AttrType.Defense || t == AttrType.MagicDefense
-        || t == AttrType.Vitality; // 体质派生 +10 血 +1 防（AttrSystem.ApplyDerivedAttributes），按增量折算计入
+        || t == AttrType.Vitality // 体质派生 +10 血 +1 防（AttrSystem.ApplyDerivedAttributes），按增量折算计入
+        || t == AttrType.Strength || t == AttrType.Intelligence // 2026-10-26 起成长段 ×2 折攻/魔攻
+        || t == AttrType.DamageReduce || t == AttrType.Dodge || t == AttrType.LifeSteal
+        || t == AttrType.CritDamage || t == AttrType.FireDamage || t == AttrType.IceDamage; // 2026-10-26 生存/输出乘区批
 
     /// <summary>
     /// 一件装备带来的战力增量（不含底盘 POWER_BASE，底盘是固定的，涨跌只算 ΔDPS 部分）。
@@ -41,7 +54,8 @@ public static class PowerCalc
     /// ① 优先用 <see cref="Hero.Instance"/>.attr 实时取（与 RunLoadout.TotalPower 同口径，法系自动走 MagicAttack）；
     /// ② 取不到时（城镇抽卡等非战斗场景——这是<b>正常设计分支，不是异常</b>）改用职业表静态值，
     ///    攻击再叠上本装备自身攻击增量作为 A 的估算。此分支<b>不 LogError</b>，注释已标明是卡面预估、非运行时兜底。</para>
-    /// <para>ΔA / ΔCr / ΔS 从 eq.attrBonus（含 globalBonus）累加；比例条目按「对基础值加成」折算成等效平量（卡面预估）。</para>
+    /// <para>ΔA / ΔCr / ΔS 从 eq.attrBonus（含 globalBonus）累加；比例条目按「对基础值加成」折算成等效平量（卡面预估）。
+    /// 力量/智力 2026-10-26 起按职业 ×2 折进攻击（与 AttrSystem 成长段派生同口径），城镇预估与战斗真值一致。</para>
     /// </summary>
     public static int EquipPowerDelta(EquipInstance eq)
     {
@@ -59,14 +73,19 @@ public static class PowerCalc
         float flatHp = 0f, pctHp = 0f;
         float flatDef = 0f, pctDef = 0f;
         float flatVit = 0f;
+        float flatStr = 0f, flatInt = 0f;
+        // 2026-10-26 生存/输出乘区批（全部加算小数/点值，掉落与模板两条路径口径已统一）
+        float flatRed = 0f, flatDodge = 0f, flatLifeSteal = 0f, flatCritDmg = 0f, flatFire = 0f, flatIce = 0f;
 
         Accumulate(eq.globalBonus, isOffHand, ref flatA, ref pctA, ref flatCr, ref pctCr, ref flatS, ref pctS,
-            ref flatHp, ref pctHp, ref flatDef, ref pctDef, ref flatVit);
+            ref flatHp, ref pctHp, ref flatDef, ref pctDef, ref flatVit, ref flatStr, ref flatInt,
+            ref flatRed, ref flatDodge, ref flatLifeSteal, ref flatCritDmg, ref flatFire, ref flatIce);
         if (eq.attrBonus != null)
         {
             for (int i = 0; i < eq.attrBonus.Count; i++)
                 Accumulate(eq.attrBonus[i], isOffHand, ref flatA, ref pctA, ref flatCr, ref pctCr, ref flatS, ref pctS,
-                    ref flatHp, ref pctHp, ref flatDef, ref pctDef, ref flatVit);
+                    ref flatHp, ref pctHp, ref flatDef, ref pctDef, ref flatVit, ref flatStr, ref flatInt,
+                    ref flatRed, ref flatDodge, ref flatLifeSteal, ref flatCritDmg, ref flatFire, ref flatIce);
         }
 
         float A, Cr, S, HP, DF;
@@ -100,17 +119,35 @@ public static class PowerCalc
         }
 
         // 比例增量折算到基础值（近似真实属性系统的折算，卡面预估）
-        float dA = flatA + pctA * A;
+        // 【2026-10-26 主人拍板「加了属性肯定得加战力」】力量/智力按 AttrSystem.ApplyDerivedAttributes 同口径
+        // 折进攻击：成长段 ×2（装备词条全是成长段，不存在基底部分）。物理系折力量、法系折智力 ——
+        // 装备池已按职业过滤（equip_attr_ranges 第 12 列）两侧互斥，但模板件路径仍做个分流保险。
+        // ⚠ 必须与 AttrSystem 派生系数同步改：那边 ×2 这边才 ×2，否则城镇预估与战斗真值两套数字。
+        bool magicJob = PlayerJobBaseStats.IsMagicJob(PlayerJobDefs.GetSelected());
+        float dA = flatA + pctA * A + (magicJob ? flatInt : flatStr) * 2f;
         float dCr = flatCr + pctCr * Cr;
         float dS = flatS + pctS * S;
         // 血量/防御增量（2026-10-17 起计入战力）；体质平量按派生口径折算（+10 血 +1 防）
         float dHp = flatHp + pctHp * HP + flatVit * 10f;
         float dDef = flatDef + pctDef * DF + flatVit * 1f;
 
-        float dpsBefore = A * (1f + Cr) * S;
-        float dpsAfter = (A + dA) * (1f + Cr + dCr) * (S + dS);
+        // 【2026-10-26 乘区批】与 PlayerPowerSegment 四个乘区同式（城镇无 Hero → 本装备增量≈全量，近似成立）：
+        // 暴击期望（暴伤词条加算在默认倍率上）；元素（火/冰取大）；减伤/闪避折等效防御；吸血折等效生命。
+        float critMulBase = GameConfig.DefaultCritMultiplier;
+        float dpsMulBefore = 1f + Cr * (critMulBase - 1f);
+        float dpsMulAfter = 1f + (Cr + dCr) * (critMulBase + flatCritDmg - 1f);
+        float eleAfter = Mathf.Max(flatFire, flatIce) * GameConfig.FIRE_BONUS_PER_POINT;
+        float dpsBefore = A * dpsMulBefore * S;
+        float dpsAfter = (A + dA) * dpsMulAfter * (S + dS) * (1f + eleAfter);
         float dDps = dpsAfter - dpsBefore;
-        return Mathf.RoundToInt(POWER_PER_DPS * dDps + POWER_PER_HP * dHp + POWER_PER_DEF * dDef);
+
+        float rd = Mathf.Min(0.5f, Mathf.Clamp01(flatRed) + Mathf.Clamp01(flatDodge));
+        float defBaseEq = DF + DamageFormula.DefenseK;
+        float defEq = defBaseEq * defBaseEq / 100f * rd;
+        float hpEq = dpsAfter * Mathf.Max(0f, flatLifeSteal) * POWER_LIFESTEAL_BATTLE_SEC;
+
+        return Mathf.RoundToInt(POWER_PER_DPS * dDps
+            + POWER_PER_HP * (dHp + hpEq) + POWER_PER_DEF * (dDef + defEq));
     }
 
     /// <summary>
@@ -168,21 +205,56 @@ public static class PowerCalc
             bonus.AddRange(bm.tempBuffs);               // 与 Hero.RecalcAttr 同链路（强化卡参与重算）
 
         var replica = new AttrSystem(AttrOwnerKind.Player);
+        // 【2026-10-26】补等级倾向（基底 + level-1）：之前副本只写 BASE_*，高等级玩家（狂战力量/
+        // 法师智力/游侠敏捷/剑盾体质）模拟侧吃不到 → 随属性放大的词条净差偏低。
+        // 与 LevelSystem.RestoreHeroLevel 对 hero.attr 的回填同源同口径。
+        LevelSystem.ApplyTendencyToAttr(replica, LevelSystem.CurrentLevel);
         replica.RecalcAllAttr(bonus);
         ApplyWeaponAttackSpeedMul(replica, set);
         return PlayerPowerSegment(replica);
     }
 
-    /// <summary>玩家属性段战力：与 RunLoadout.TotalPower 玩家段同式同取整（底盘 + DPS + 血 + 双防）。</summary>
-    static int PlayerPowerSegment(AttrSystem a)
+    /// <summary>
+    /// 玩家属性段战力：与 <see cref="RunLoadout.TotalPower"/> 玩家段同一函数（TotalPower 直接调这里，不许再抄一份）。
+    /// <para>2026-10-26 主人拍板「加了属性肯定得加战力」升级，四个乘区全部对齐真实结算（DamageFormula / UnitBase.Combat）：
+    /// ① 暴击期望 = 1 + Cr×(暴伤倍率-1) —— 暴伤=默认 2.0 时退化为旧式 (1+Cr)，装备「暴击伤害」词条从此计入；
+    /// ② 元素 = ×(1 + max(火,冰)×0.01) —— UnitBase.Combat.ResolveElementalBonus 只取较大一系，这里同样 max 不相加；
+    /// ③ 减伤/闪避折等效防御 —— 二者都是受击期望乘区，EHP ×1/(1-r)，一阶等效防御点数 = (def+100)²/100 × r，
+    ///    加进防御段（def=DamageFormula.DefenseK=100 的减伤公式基准，def 取当前双防合计，r 上限闸 0.5 防极端堆叠）；
+    /// ④ 吸血折等效生命 = DPS×ratio×一场战斗秒数（POWER_LIFESTEAL_BATTLE_SEC），加进血量段。</para>
+    /// <para>🔴 向后兼容：不穿减伤/闪避/吸血/暴伤/元素装备时，①③④ 全部退化为旧式，数字与旧口径完全一致。</para>
+    /// </summary>
+    public static int PlayerPowerSegment(AttrSystem a)
     {
         float attack = a.GetAttr(PlayerJobBaseStats.CurrentAttackAttr());
         float critRate = a.GetAttr(AttrType.CritRate);
         float attackSpeed = a.GetAttr(AttrType.AttackSpeed);
-        float dps = attack * (1f + critRate) * attackSpeed;
+
+        // ① 暴击期望乘区（CritMultiplier 的战力侧复刻：基底默认 2.0，装备暴伤加算在其上）
+        float critMul = a.GetAttr(AttrType.CritDamage);
+        if (critMul <= 1.01f) critMul = GameConfig.DefaultCritMultiplier;
+
+        // ② 元素乘区（火/冰取大，与 ResolveElementalBonus 同口径）
+        float ele = Mathf.Max(a.GetAttr(AttrType.FireDamage), a.GetAttr(AttrType.IceDamage))
+                    * GameConfig.FIRE_BONUS_PER_POINT;
+
+        float dps = attack * (1f + critRate * (critMul - 1f)) * attackSpeed * (1f + ele);
+
         float defTotal = a.GetAttr(AttrType.Defense) + a.GetAttr(AttrType.MagicDefense);
+
+        // ③ 减伤/闪避 → 等效防御（一阶：r+d ≤ 0.5 内误差可忽略；闸住防极端堆叠把战力顶飞）
+        float rd = Mathf.Min(0.5f,
+            Mathf.Clamp01(a.GetAttr(AttrType.DamageReduce)) + Mathf.Clamp01(a.GetAttr(AttrType.Dodge)));
+        float defBase = defTotal + DamageFormula.DefenseK;
+        float defEq = defBase * defBase / 100f * rd;
+
+        // ④ 吸血 → 等效生命
+        float lifeSteal = Mathf.Max(0f, a.GetAttr(AttrType.LifeSteal));
+        float hpEq = dps * lifeSteal * POWER_LIFESTEAL_BATTLE_SEC;
+
+        float hp = a.GetAttr(AttrType.MaxHp);
         return Mathf.RoundToInt(POWER_BASE + POWER_PER_DPS * dps
-            + POWER_PER_HP * a.GetAttr(AttrType.MaxHp) + POWER_PER_DEF * defTotal);
+            + POWER_PER_HP * (hp + hpEq) + POWER_PER_DEF * (defTotal + defEq));
     }
 
     /// <summary>复刻 Hero.RecalcAttr 的武器类型攻速乘区（SetAttr 覆盖，Hero.cs L259-265），模拟侧必须同样打上。</summary>
@@ -208,7 +280,10 @@ public static class PowerCalc
 
     static void Accumulate(AttrBonusData b, bool isOffHand,
         ref float flatA, ref float pctA, ref float flatCr, ref float pctCr, ref float flatS, ref float pctS,
-        ref float flatHp, ref float pctHp, ref float flatDef, ref float pctDef, ref float flatVit)
+        ref float flatHp, ref float pctHp, ref float flatDef, ref float pctDef, ref float flatVit,
+        ref float flatStr, ref float flatInt,
+        ref float flatRed, ref float flatDodge, ref float flatLifeSteal, ref float flatCritDmg,
+        ref float flatFire, ref float flatIce)
     {
         if (b == null || !IsCountedAttr(b.attrType)) return;
         bool isAttack = b.attrType == AttrType.Attack || b.attrType == AttrType.MagicAttack;
@@ -219,6 +294,8 @@ public static class PowerCalc
             else if (b.attrType == AttrType.AttackSpeed) pctS += b.value;
             else if (b.attrType == AttrType.MaxHp) pctHp += b.value;
             else if (b.attrType == AttrType.Defense || b.attrType == AttrType.MagicDefense) pctDef += b.value;
+            // 减伤/闪避/吸血/暴伤/火冰/力/智装备池不出百分比档（掉落 TryMapAttr 与 ArmorAffixSystem.IsPercent
+            // 都强制这些加算），万一配出会被静默丢进这里不计 —— 要放行先去 AttrSystem 补派生/结算口径。
         }
         else
         {
@@ -228,6 +305,14 @@ public static class PowerCalc
             else if (b.attrType == AttrType.MaxHp) flatHp += b.value;
             else if (b.attrType == AttrType.Defense || b.attrType == AttrType.MagicDefense) flatDef += b.value;
             else if (b.attrType == AttrType.Vitality) flatVit += b.value;
+            else if (b.attrType == AttrType.Strength) flatStr += b.value;
+            else if (b.attrType == AttrType.Intelligence) flatInt += b.value;
+            else if (b.attrType == AttrType.DamageReduce) flatRed += b.value;
+            else if (b.attrType == AttrType.Dodge) flatDodge += b.value;
+            else if (b.attrType == AttrType.LifeSteal) flatLifeSteal += b.value;
+            else if (b.attrType == AttrType.CritDamage) flatCritDmg += b.value;
+            else if (b.attrType == AttrType.FireDamage) flatFire += b.value;
+            else if (b.attrType == AttrType.IceDamage) flatIce += b.value;
         }
     }
 }

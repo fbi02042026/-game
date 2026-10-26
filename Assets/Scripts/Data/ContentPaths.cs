@@ -37,6 +37,9 @@ public static class ContentPaths
         public const string StageDrop = "Data/Tables/stage_drop";
         public const string TutorialBattle = "Data/Tables/tutorial_battle";
         public const string BattleQuest = "Data/Tables/battle_quest";
+        /// <summary>任务表（主线 + 日常，2026-10-26 新增）：CSV → .bytes，见 quest.csv。
+        /// 支线不进表（走支线岛运行时）。加载器 QuestTable.cs；缺表 LogError 不兜底。</summary>
+        public const string Quest = "Data/Tables/quest";
         public const string StageRollerWeights = "Data/Tables/stage_roller_weights";
         public const string SpritePickWeight = "Data/Tables/sprite_pick_weight";
         /// <summary>波次槽：奇偶近战/远程（spriteIndex=0 走加权）。未匹配 slot 仍回退奇偶。</summary>

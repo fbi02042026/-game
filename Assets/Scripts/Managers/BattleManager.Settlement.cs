@@ -1155,13 +1155,19 @@ public partial class BattleManager
     /// 战斗中再开一次进关抽奖 —— **正式入口，不是引导特例**。
     /// <para>2026-10-05 主人拍板：抽奖是主玩法（正式关也抽），所以「打完两波抽一次」这种节拍
     /// 走这里，不要在 TutorialDirector 里另写一套弹面板的代码。</para>
-    /// 行为：冻住单位 + 收摇杆 → 弹进关抽奖面板 → 抽一次 → 收面板 → 恢复原来能不能动。
+    /// 行为：冻住单位 + 收摇杆 → 弹进关抽奖面板 → 抽奖 → 收面板 → 恢复原来能不能动。
     ///
-    /// <para><b>本方法天然「一次一抽」</b>（没有连抽循环）—— 引导的第 ②③ 拍走它，
-    /// 正好对上主人「引导每次只能抽一次」的要求，不需要再另加限制开关。</para>
+    /// <para><b>一次一抽（multiDraw=false）</b>：抽一次 → 锁抽等「继续」→ 收面板。
+    /// 引导的第 ②③ 拍走它，正好对上主人「引导每次只能抽一次」的要求，不需要再另加限制开关。</para>
+    ///
+    /// <para><b>连抽（multiDraw=true，2026-10-26 主人反馈「第二波抽奖只能抽一次」）</b>：
+    /// 波清后的抽奖窗改成与进关抽奖（CoStageEntryDraft）同款 —— 抽完回面板可再抽
+    ///（价格/免费额度/可抽类别每轮重算），点「继续」或倒计时走完才收面板开打。
+    /// 倒计时只解冻接着走剩余秒数，绝不补满（2026-10-12 主人口径）。</para>
     /// </summary>
     /// <param name="guideText">给 null = 不强引导；给了就用硬遮罩圈住「随机抽奖」按钮。</param>
-    public IEnumerator CoMidBattleDraft(string guideText = null)
+    /// <param name="multiDraw">true = 连抽循环（波间抽奖用）；false = 一次一抽（引导局，行为不变）。</param>
+    public IEnumerator CoMidBattleDraft(string guideText = null, bool multiDraw = false)
     {
         var cats = SlotMachineSystem.AvailableCategories();
         if (cats.Count == 0)
@@ -1182,102 +1188,137 @@ public partial class BattleManager
             // 【2026-10-05 主人拍板「不要摇杆了」→ 整条链路停用，先注释不删】
             // BattleJoystick.Instance?.SetVisible(false);
 
-            int price = SlotMachineSystem.DrawPrice();
-            int focusPrice = SlotMachineSystem.DrawFocusPrice();
-
-            DraftCategory? picked = null;
-            int choice = 0;
-            int freeLeft = SlotMachineSystem.FreeDrawsLeft();
-            // 【2026-10-10 主人拍板】面板余额显示战斗内金币（抽奖真扣的就是它，不再是另一套抽奖币）
-            // 【2026-10-19 主人拍板】定向不吃免费：第二个参数永远传原价
-            BattleEntryDraftPanel.Show(freeLeft > 0 ? 0 : price, focusPrice,
-                cats, currentGold,
-                c => { picked = c; choice = 1; },
-                () => choice = 2, freeLeft);
-
-            // 【防卡死兜底】面板构建失败（缺节点 / 缺图）时不会展开 —— 玩家看到的就是
-            // 「画面冻住、卡牌没加载出来」，只能退游戏白扣体力（2026-10-18 玩家反馈）。
-            // 3 秒还没开就不再冻场干等 300 秒：报错 + 提示，跳过这一拍
-            //（yield break 走 finally：收面板 + 还原 UnitsCanAct，战斗恢复）。
-            float openGuard = 0f;
-            while (!BattleEntryDraftPanel.IsLotteryOpen && openGuard < 3f)
+            // 【2026-10-26 multiDraw】波间连抽循环：每轮重弹面板；multiDraw=false（引导局）只跑一轮就出。
+            while (true)
             {
-                openGuard += Time.unscaledDeltaTime;
-                yield return null;
-            }
-            if (!BattleEntryDraftPanel.IsLotteryOpen)
-            {
-                Debug.LogError("[BattleManager] 中途抽奖面板 3 秒内没弹出来（构建失败），跳过本拍抽奖，不再冻场");
-                UIManager.Instance?.ShowToast("抽奖面板没加载出来，已跳过这次抽奖");
-                yield break;
-            }
+                // 价格 / 免费额度 / 可抽类别**每轮重算**（与 CoStageEntryDraft 2026-10-11 修同款）：
+                // 每抽一次本局抽数 +1、下一抽更贵；上一抽也可能占满技能槽 / 佣兵位，
+                // 用旧 cats 会随机到一个已经发不出去的类型（2026-10-05）。
+                int price = SlotMachineSystem.DrawPrice();
+                int focusPrice = SlotMachineSystem.DrawFocusPrice();
 
-            // 【2026-10-08 主人拍板】引导局**不催**：面板一弹出就把倒计时冻住（引导三拍都走这里），
-            // 玩家看清楚自己抽到了什么再点「继续」。正式关照常跑那 30s 总预算。
-            // 后面 WaitForContinue 里也有同一道判定，保证整段引导都不解冻。
-            if (IsTutorialRun)
-                BattleEntryDraftPanel.Instance?.SetCountdownPaused(true);
+                DraftCategory? picked = null;
+                int choice = 0;
+                int freeLeft = SlotMachineSystem.FreeDrawsLeft();
+                // 【2026-10-10 主人拍板】面板余额显示战斗内金币（抽奖真扣的就是它，不再是另一套抽奖币）
+                // 【2026-10-19 主人拍板】定向不吃免费：第二个参数永远传原价
+                BattleEntryDraftPanel.Show(freeLeft > 0 ? 0 : price, focusPrice,
+                    cats, currentGold,
+                    c => { picked = c; choice = 1; },
+                    () => choice = 2, freeLeft);
 
-            if (!string.IsNullOrEmpty(guideText) && BattleEntryDraftPanel.Instance != null)
-                TutorialHintUI.Ensure().ShowHard(guideText, BattleEntryDraftPanel.Instance.NormalButtonRect);
-
-            float guard = 0f;
-            while (choice == 0 && guard < 300f)
-            {
-                guard += Time.unscaledDeltaTime;
-                yield return null;
-            }
-            TutorialHintUI.Instance?.Hide();
-
-            // 【2026-10-06 主人拍板】引导三拍（装备→佣兵→技能）靠「本局累计抽数」定位序，
-            // 玩家这一拍直接点「继续」（或倒计时走完）不抽 → 定序**不走格**，下一拍就重复出同一类
-            //（主人报的正是「第二次没抽，第三次抽就抽出佣兵了」）。
-            // → 引导局这一拍替他补抽一次，把定序推回正轨；**正式关一律不帮忙**
-            //（主人原话「正式关就不要帮忙抽了」——正式关等权随机，本就没有定序可错）。
-            if (choice == 2 && OneDrawPerBeat)
-            {
-                var autoTarget = SlotMachineSystem.ResolveCategory(cats);
-                int autoCost = freeLeft > 0 ? 0 : price;
-                if (currentGold < autoCost)
+                // 【防卡死兜底】面板构建失败（缺节点 / 缺图）时不会展开 —— 玩家看到的就是
+                // 「画面冻住、卡牌没加载出来」，只能退游戏白扣体力（2026-10-18 玩家反馈）。
+                // 3 秒还没开就不再冻场干等 300 秒：报错 + 提示，跳过这一拍
+                //（yield break 走 finally：收面板 + 还原 UnitsCanAct，战斗恢复）。
+                float openGuard = 0f;
+                while (!BattleEntryDraftPanel.IsLotteryOpen && openGuard < 3f)
                 {
-                    // fail closed：不静默跳过，报出来让主人看见「引导三拍的钱不够了」
-                    Debug.LogError($"[BattleManager] 引导补抽失败：局内金币不足" +
-                                   $"（需 {autoCost}，现有 {currentGold}），本拍定序不会推进");
+                    openGuard += Time.unscaledDeltaTime;
+                    yield return null;
                 }
-                else
+                if (!BattleEntryDraftPanel.IsLotteryOpen)
                 {
-                    int autoBefore = SlotMachineSystem.DrawIndex;
-                    yield return CoInstantPick(autoTarget, autoCost);
-                    Debug.Log($"[BattleManager] 引导补抽：玩家这一拍没抽，已自动抽一次（{autoTarget}）" +
-                              $"　抽数 {autoBefore} → {SlotMachineSystem.DrawIndex}");
+                    Debug.LogError("[BattleManager] 中途抽奖面板 3 秒内没弹出来（构建失败），跳过本拍抽奖，不再冻场");
+                    UIManager.Instance?.ShowToast("抽奖面板没加载出来，已跳过这次抽奖");
+                    yield break;
                 }
-            }
 
-            if (choice == 1)
-            {
-                // null = 点的是随机；有值 = 点的是定向
-                var target = picked.HasValue ? picked.Value : SlotMachineSystem.ResolveCategory(cats);
-                // 【2026-10-19 主人拍板】免费次数只惠及随机抽（null）；定向永远按价扣币、不消耗免费额度
-                int cost = !picked.HasValue && freeLeft > 0 ? 0
-                         : (picked.HasValue ? SlotMachineSystem.FocusPrice(picked.Value) : price);
-                // 与开局抽奖同口径：这里只查余额（按各自币种），真扣款等 CoInstantPick 确认结果能生效了再做
-                if (!CanAffordDraw(picked, cost, out string shortBy))
-                    UIManager.Instance?.ShowToast(shortBy + "不足");
-                else
+                // 【2026-10-08 主人拍板】引导局**不催**：面板一弹出就把倒计时冻住（引导三拍都走这里），
+                // 玩家看清楚自己抽到了什么再点「继续」。正式关照常跑那 30s 总预算。
+                // 后面 WaitForContinue 里也有同一道判定，保证整段引导都不解冻。
+                if (IsTutorialRun)
+                    BattleEntryDraftPanel.Instance?.SetCountdownPaused(true);
+
+                if (!string.IsNullOrEmpty(guideText) && BattleEntryDraftPanel.Instance != null)
+                    TutorialHintUI.Ensure().ShowHard(guideText, BattleEntryDraftPanel.Instance.NormalButtonRect);
+
+                float guard = 0f;
+                while (choice == 0 && guard < 300f)
                 {
-                    yield return CoInstantPick(target, cost);
-                    // 【2026-10-06 主人拍板】抽完奖励不许自动继续（引导 ②③ 拍 + 正式关中途抽都算）：
-                    // 锁抽 + 面板倒计时，等玩家点「继续」才收面板、恢复战斗。
-                    choice = 0;
-                    yield return WaitForContinue(true,
-                        !string.IsNullOrEmpty(guideText) ? $"{RewardTip()}　点「继续」继续战斗。" : null,
-                        () => choice == 2);
-                    // 【2026-10-08 主人拍板】点完「继续」立刻弹一句「继续前进」——
-                    // 面板收起、战斗恢复的那一刻，给玩家一个明确的「接着往前走」的信号。
-                    // 只走引导（guideText 非空）；正式关不打扰。想改停留秒数就改这个 2.2f。
-                    if (!string.IsNullOrEmpty(guideText))
-                        TutorialHintUI.Ensure().Show("继续前进", null, 2.2f);
+                    guard += Time.unscaledDeltaTime;
+                    yield return null;
                 }
+                TutorialHintUI.Instance?.Hide();
+
+                // 【2026-10-06 主人拍板】引导三拍（装备→佣兵→技能）靠「本局累计抽数」定位序，
+                // 玩家这一拍直接点「继续」（或倒计时走完）不抽 → 定序**不走格**，下一拍就重复出同一类
+                //（主人报的正是「第二次没抽，第三次抽就抽出佣兵了」）。
+                // → 引导局这一拍替他补抽一次，把定序推回正轨；**正式关一律不帮忙**
+                //（主人原话「正式关就不要帮忙抽了」——正式关等权随机，本就没有定序可错）。
+                if (choice == 2 && OneDrawPerBeat)
+                {
+                    var autoTarget = SlotMachineSystem.ResolveCategory(cats);
+                    int autoCost = freeLeft > 0 ? 0 : price;
+                    if (currentGold < autoCost)
+                    {
+                        // fail closed：不静默跳过，报出来让主人看见「引导三拍的钱不够了」
+                        Debug.LogError($"[BattleManager] 引导补抽失败：局内金币不足" +
+                                       $"（需 {autoCost}，现有 {currentGold}），本拍定序不会推进");
+                    }
+                    else
+                    {
+                        int autoBefore = SlotMachineSystem.DrawIndex;
+                        yield return CoInstantPick(autoTarget, autoCost);
+                        Debug.Log($"[BattleManager] 引导补抽：玩家这一拍没抽，已自动抽一次（{autoTarget}）" +
+                                  $"　抽数 {autoBefore} → {SlotMachineSystem.DrawIndex}");
+                    }
+                }
+
+                if (choice == 1)
+                {
+                    // 每轮重算可抽类型：上一抽可能把技能槽 / 佣兵位占满（与 CoStageEntryDraft 同款）
+                    cats = SlotMachineSystem.AvailableCategories();
+                    if (cats.Count == 0)
+                    {
+                        Debug.LogError("[BattleManager] 抽奖池被上一抽抽空，中途抽奖收面板开打");
+                        break;
+                    }
+
+                    // null = 点的是随机；有值 = 点的是定向
+                    var target = picked.HasValue ? picked.Value : SlotMachineSystem.ResolveCategory(cats);
+                    // 【2026-10-19 主人拍板】免费次数只惠及随机抽（null）；定向永远按价扣币、不消耗免费额度
+                    int cost = !picked.HasValue && freeLeft > 0 ? 0
+                             : (picked.HasValue ? SlotMachineSystem.FocusPrice(picked.Value) : price);
+                    // 与开局抽奖同口径：这里只查余额（按各自币种），真扣款等 CoInstantPick 确认结果能生效了再做
+                    if (!CanAffordDraw(picked, cost, out string shortBy))
+                    {
+                        UIManager.Instance?.ShowToast(shortBy + "不足");
+                        // 【2026-10-26 multiDraw】连抽口径与进关抽奖一致（CoStageEntryDraft 2026-10-20 修同分支）：
+                        // 余额不够回面板重试 —— 按钮按真实余额置灰 + 红字「还差 N」，玩家点「继续」才开打；
+                        // 一次一抽（引导局）维持旧路径：toast 后收面板、本拍结束。
+                        if (multiDraw) continue;
+                    }
+                    else
+                    {
+                        yield return CoInstantPick(target, cost);
+
+                        if (multiDraw)
+                        {
+                            // 【2026-10-26 主人反馈「第二波抽奖只能抽一次」】连抽：抽完回面板，
+                            // 想再抽就再抽（价格已按新抽数重算）；点「继续」/倒计时归零才收面板开打。
+                            // 倒计时只解冻（接着走剩余秒数），绝不补满 —— 与进关抽奖同一份口径。
+                            var contPanel = BattleEntryDraftPanel.Instance;
+                            if (contPanel != null) contPanel.SetCountdownPaused(false);
+                            continue;
+                        }
+
+                        // 【2026-10-06 主人拍板】抽完奖励不许自动继续（引导 ②③ 拍 + 正式关中途抽都算）：
+                        // 锁抽 + 面板倒计时，等玩家点「继续」才收面板、恢复战斗。
+                        choice = 0;
+                        yield return WaitForContinue(true,
+                            !string.IsNullOrEmpty(guideText) ? $"{RewardTip()}　点「继续」继续战斗。" : null,
+                            () => choice == 2);
+                        // 【2026-10-08 主人拍板】点完「继续」立刻弹一句「继续前进」——
+                        // 面板收起、战斗恢复的那一刻，给玩家一个明确的「接着往前走」的信号。
+                        // 只走引导（guideText 非空）；正式关不打扰。想改停留秒数就改这个 2.2f。
+                        if (!string.IsNullOrEmpty(guideText))
+                            TutorialHintUI.Ensure().Show("继续前进", null, 2.2f);
+                    }
+                }
+
+                // 一次一抽（引导局 / 既有调用）到这里 = 本拍结束；连抽走 continue 回面板，不会落到这
+                break;
             }
         }
         finally

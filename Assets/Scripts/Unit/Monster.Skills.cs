@@ -837,7 +837,9 @@ public partial class Monster
                 if (dist > radius) continue;
                 bool crit = Random.value < attr.GetAttr(AttrType.CritRate);
                 // 【2026-10-24 主人拍板】与普攻统一暴击倍率（原硬编码 ×1.5 → attr.CritDamage=2.0）
-                u.TakeDamage(crit ? damage * DamageFormula.CritMultiplier(attr) : damage, crit, false, true, vfxDir);
+                // 【2026-10-26 词缀怪】补传 source：词缀「暴击/吸血」靠 source 回溯怪物本体，
+                // 漏传会让这两个词条在技能伤害上失效（与 :648 技能路径传 this 的既有约定对齐）。
+                u.TakeDamage(crit ? damage * DamageFormula.CritMultiplier(attr) : damage, crit, false, true, vfxDir, this);
             }
             return;
         }
@@ -845,7 +847,7 @@ public partial class Monster
         {
             if (Mathf.Abs(primaryTarget.transform.position.x - centerX) > radius)
                 return;
-            primaryTarget.TakeDamage(damage, false, false, true, vfxDir);
+            primaryTarget.TakeDamage(damage, false, false, true, vfxDir, this);
         }
     }
 }

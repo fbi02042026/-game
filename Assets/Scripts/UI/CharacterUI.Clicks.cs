@@ -80,37 +80,48 @@ public partial class CharacterUI
     }
 
     /// <summary>
-    /// 「背包」入口：预制体优先。
-    /// 2026-09-25 起主人在 Content/Stage/LeftButton/背包 里摆好了按钮（AutoBind 里绑到 backpackEntryButton），
-    /// 此时直接复用，不再运行时生成，避免出现第二个背包按钮；
-    /// 只有预制体里真的没有时才在天赋按钮同父节点（右侧按钮列）下用 BuildSideBtn 兜底。
-    /// 点击统一在这里绑一次（RemoveAllListeners 保证不会重复监听），打开独立背包弹窗。
+    /// 「背包」入口：AutoBind 已按预制体路径绑好（RightButtons/BackpackButton → 左列回退），
+    /// 这里只兜一层「AutoBind 没绑到」的再查找。
+    /// 【2026-10-26 主人拍板「背包要常显」】按钮定位后整体隐藏（入口退役），不再绑点击、不再运行时生成。
     /// </summary>
     void EnsureBackpackEntry()
     {
-        if (backpackEntryButton == null && talentButton != null)
+        // 【2026-10-26 主人拍板「背包要常显」】入口已退役：预制体里没有就不再运行时生成
+        // （生成了也是马上隐藏）；预制体里有的只做定位+隐藏。
+        if (backpackEntryButton == null)
         {
-            Transform parent = talentButton.transform.parent;
-            if (parent != null)
-            {
-                // 技能按钮（SkillButton）在 BuildSideBtn 约定里 y = -90，背包入口排在其下方 y = -180
-                BuildSideBtn(parent, "BackpackButton", "背包", -180f, new Color(0.45f, 0.4f, 0.25f, 1f));
-                backpackEntryButton = parent.Find("BackpackButton")?.GetComponent<Button>();
-            }
+            backpackEntryButton = transform.Find("Content/Stage/RightButtons/BackpackButton")?.GetComponent<Button>()
+                                  ?? transform.Find("Content/Stage/RightButtons/背包")?.GetComponent<Button>()
+                                  ?? (leftButtonRoot != null
+                                      ? leftButtonRoot.Find("BackpackButton")?.GetComponent<Button>()
+                                        ?? leftButtonRoot.Find("背包")?.GetComponent<Button>()
+                                      : null)
+                                  ?? transform.Find("Content/Stage/LeftButton/BackpackButton")?.GetComponent<Button>();
         }
         if (backpackEntryButton != null)
         {
+            // 随身仓库进页直接摊开，入口按钮不再需要 ——
+            // 预制体里主人手摆的按钮整体隐藏不删（同 EnsureBoardEntry 的看板按钮口径）；开关要还原删掉这行即可。
             backpackEntryButton.onClick.RemoveAllListeners();
-            backpackEntryButton.onClick.AddListener(OpenBackpack);
+            backpackEntryButton.gameObject.SetActive(false);
         }
     }
 
     /// <summary>
-    /// 「背包」按钮：切换界面内的 Content/BackpackPanel（展开/收起）。
-    /// 展开时把 SkillSelectUI 收掉，两个面板互斥，避免叠在一起。
-    /// 【2026-10-17 主人拍板】独立背包弹窗 BackpackPopupUI 已删，背包只用预制体里的面板。
+    /// 【2026-10-26 主人拍板「这个界面的背包要常显」】随身仓库 = 角色页固定面板：
+    /// 进页直接摊开（ShowPage 调 EnsureBagAlwaysOpen），不再有「点背包按钮开关」的交互。
+    /// 原开关入口 OpenBackpack 保留为「只开不关」（外部若还有调用也安全），收起分支删除。
     /// </summary>
     public void OpenBackpack()
+    {
+        EnsureBagAlwaysOpen();
+    }
+
+    /// <summary>
+    /// 随身仓库常显的唯一开口：面板不在就摊开 + 互斥收起技能面板 + 刷新 + 瘦屏防溢出。
+    /// 面板常显后「点面板外收起」的点击层不再启用（见 EnsureBagTapLayer）。
+    /// </summary>
+    void EnsureBagAlwaysOpen()
     {
         if (bagPanelRoot == null)
             bagPanelRoot = transform.Find("Content/BackpackPanel") ?? FindDeep(transform, "BackpackPanel");
@@ -118,31 +129,23 @@ public partial class CharacterUI
         if (bagPanelRoot == null)
         {
             // 预制体里连面板都没有 = 预制体被改坏了，报错可见（不兜底）
-            Debug.LogError("[CharacterUI] 预制体里找不到 Content/BackpackPanel，背包无法打开");
+            Debug.LogError("[CharacterUI] 预制体里找不到 Content/BackpackPanel，随身仓库无法显示");
             return;
         }
 
-        {
-            bool open = !bagPanelRoot.gameObject.activeSelf;
-            if (!open)
-            {
-                CloseBackpackPanel();
-                return;
-            }
-
+        if (!bagPanelRoot.gameObject.activeSelf)
             bagPanelRoot.gameObject.SetActive(true);
-            EnsureBagTapLayer();          // 面板下面垫一层全屏透明点击层
-            SetBagTapLayerActive(true);
-            // 互斥：展开背包时收起技能面板
-            HideSkillSelect();
-            RefreshBag();
-            ApplyBackpackPanelFit();     // 面板打开后做一次瘦屏防溢出 / 防裁切
-        }
+        if (_bagTapLayer != null)
+            SetBagTapLayerActive(false);   // 常显口径下点击层永远不亮（残留即关）
+        // 互斥：仓库摊开时不留技能面板
+        HideSkillSelect();
+        RefreshBag();
+        ApplyBackpackPanelFit();     // 瘦屏防溢出 / 防裁切
     }
 
     /// <summary>
-    /// 收起背包面板的唯一入口：`OpenBackpack()` 的收起分支与「点击面板外」层都调它，
-    /// 避免两处各写一份导致逻辑不一致。同时收起 SkillSelectUI（与展开时的互斥逻辑对称）。
+    /// 收起背包面板（2026-10-26 起仅「点面板外」层这一条路会用；随身仓库常显后该层不再启用，
+    /// 本方法保留为对称出口，程序性收包时仍可用）。同时收起 SkillSelectUI（与展开时的互斥逻辑对称）。
     /// </summary>
     void CloseBackpackPanel()
     {

@@ -1321,6 +1321,16 @@ public class UnitAnimation : MonoBehaviour
     }
 
     /// <summary>
+    /// 【2026-10-26 词缀怪】显式设置程序化闪白的还原基准色。
+    /// 词缀怪染色后调这一口，防止受击闪白结束后按旧基准（白）还原、把染色洗掉。
+    /// </summary>
+    public void SetProcBaseColor(Color c)
+    {
+        _procBaseColor = c;
+        _procBaseValid = true;
+    }
+
+    /// <summary>
     /// 强制清掉低血红 / 受击闪的残留染色。
     /// 剧情结算（牧师入队疗伤）等场合用：血量已回满，但染色可能因协程中断卡住。
     /// </summary>
