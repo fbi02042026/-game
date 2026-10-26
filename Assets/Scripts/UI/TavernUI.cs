@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -28,6 +29,9 @@ public class TavernUI : MonoBehaviour, ITownPage
     bool _built;
     bool _preloaded;
     bool _playWelcomeBack;
+
+    /// <summary>酒馆闲话图标（主人手摆的「对话」按钮，TavernUI.prefab 右上角）。</summary>
+    Button _gossipButton;
 
     /// <summary>
     /// 【2026-10-19 修复】进镇预热会「点亮一遍」本页（CoWarmupPages 逐页 ShowPage 再藏回），
@@ -89,6 +93,7 @@ public class TavernUI : MonoBehaviour, ITownPage
         TownSharedChrome.RaiseSharedChrome(hall);
 
         EnsurePortraitMotion();
+        RefreshGossipButton();   // 【2026-10-26 信任交流】跨天进酒馆恢复闲话次数（置灰→可点）
         if (SuppressEggOnce)
         {
             // 预热点亮：只建 UI，问候/欢迎彩蛋全部跳过且不消耗（真实进店才发）
@@ -357,6 +362,17 @@ public class TavernUI : MonoBehaviour, ITownPage
             intelButton.onClick.RemoveAllListeners();
             intelButton.onClick.AddListener(() => InformantIntelDirector.StartDaily());
         }
+
+        // 【2026-10-26 主人拍板「信任交流」】主人手摆的「对话」按钮（TavernUI.prefab 右上角）＝酒馆闲话图标
+        // （设计文档 §2.9）：每日 3 次，点击 = 随机已拥有佣兵 +1 信任 + TavernLore 剧情补充；用完置灰。
+        var gossipBtn = FindButton("对话");
+        if (gossipBtn != null)
+        {
+            _gossipButton = gossipBtn;
+            gossipBtn.onClick.RemoveAllListeners();
+            gossipBtn.onClick.AddListener(OnGossipClicked);
+            RefreshGossipButton();
+        }
     }
 
     /// <summary>
@@ -419,6 +435,121 @@ public class TavernUI : MonoBehaviour, ITownPage
         if (btn == null) return;
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(() => UIManager.Instance?.ShowToast(toast));
+    }
+
+    // ———— 酒馆闲话（2026-10-26 主人拍板「信任交流」）————
+    // 点「对话」按钮 → 播一段酒馆闲话剧情（复用 StoryDirector，与主线/战后同一套弹窗表现），
+    // 末拍三选一话题（选项原生支持，见 StoryBeat.choices），选完 = 随机已拥有佣兵 +1 信任 + 剧情补充。每日 3 次。
+
+    /// <summary>点「对话」按钮：起闲话剧情。</summary>
+    void OnGossipClicked()
+    {
+        // 剧情正在播不重入（与 TavernChatPopupUI 同款拦截，防叠窗）
+        if (StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying) return;
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null) return;
+
+        if (string.IsNullOrEmpty(PickRandomOwnedMerc(data)))
+        {
+            UIManager.Instance?.ShowToast("酒馆里还没有能聊天的佣兵，先去招募一位吧。");
+            return;
+        }
+        if (data.TavernGossipLeft() <= 0)
+        {
+            UIManager.Instance?.ShowToast("今天的闲话聊完了，明天再来！");
+            RefreshGossipButton();
+            return;
+        }
+
+        var beats = new List<StoryBeat>
+        {
+            new StoryBeat
+            {
+                rightName = "老板娘", rightPortraitId = StoryPortraits.Innkeeper, speaker = 1,
+                text = "哟，坐下聊！今天想听点什么？",
+            },
+            new StoryBeat
+            {
+                rightName = "老板娘", rightPortraitId = StoryPortraits.Innkeeper, speaker = 1,
+                text = TavernLore.InnkeeperLine(),
+            },
+            new StoryBeat
+            {
+                speaker = 0,
+                text = "聊点什么？",
+                choices = new[] { "问问佣兵们的近况", "听听裂隙里的传闻", "安静地喝一杯" },
+            },
+        };
+        StoryDirector.Ensure().Play(beats, null, picked => OnGossipPicked(data, picked));
+    }
+
+    /// <summary>
+    /// 选项回调：扣当日次数 + 随机已拥有佣兵 +1 信任 + 按话题给剧情补充。
+    /// 玩家中途跳过（没走到选项拍）不扣次数、不给好感——次数是好感额度，看白片不耗。
+    /// </summary>
+    void OnGossipPicked(SaveData data, int picked)
+    {
+        if (!data.ConsumeTavernGossip())
+        {
+            UIManager.Instance?.ShowToast("今天的闲话聊完了，明天再来！");
+            RefreshGossipButton();
+            return;
+        }
+
+        string hireId = PickRandomOwnedMerc(data);
+        int after = data.AddMercTrust(hireId, 1);
+        string name = hireId;
+        if (MercRosterDefs.TryGetByHireId(hireId, out var def) && !string.IsNullOrEmpty(def.Name))
+            name = def.Name;
+
+        string extra;
+        switch (picked)
+        {
+            case 0: // 佣兵近况 → 老队员的记忆
+            {
+                string q = TavernLore.SquadQuote();
+                extra = string.IsNullOrEmpty(q) ? TavernLore.InnkeeperLine() : q;
+                break;
+            }
+            case 1: // 裂隙传闻 → 已解锁佣兵侧写
+            {
+                string lore = TavernLore.MercLoreLine();
+                extra = string.IsNullOrEmpty(lore) ? TavernLore.InnkeeperLine() : lore;
+                break;
+            }
+            default: // 安静喝一杯 → 空座位（照走 NoteSeatViewed，C26 链路保留：第 5 次查看发奖励）
+            {
+                var stage = TavernLore.ResolveSeatStage();
+                string prop = TavernLore.SeatProp(stage);
+                string text = TavernLore.SeatText(stage);
+                TavernLore.NoteSeatViewed();
+                extra = string.IsNullOrEmpty(prop) ? text : prop + "\n" + text;
+                break;
+            }
+        }
+
+        UIManager.Instance?.ShowToast(extra + $"\n（{name} 的好感 +1，当前 {after}）", true);
+        RefreshGossipButton();
+        SaveSystem.Instance?.Save();   // 选完就落盘，中途杀进程别白嫖
+    }
+
+    /// <summary>随机一名已拥有佣兵（CopyTo 拷贝再抽，避免遍历中改集合）。</summary>
+    static string PickRandomOwnedMerc(SaveData data)
+    {
+        if (data.unlockedMercIds == null || data.unlockedMercIds.Count == 0) return null;
+        string[] pool = new string[data.unlockedMercIds.Count];
+        data.unlockedMercIds.CopyTo(pool);
+        return pool[Random.Range(0, pool.Length)];
+    }
+
+    /// <summary>今日次数用完置灰（只动 interactable，不改颜色不动视觉）；跨天 ShowPage 时恢复。</summary>
+    void RefreshGossipButton()
+    {
+        if (_gossipButton == null) return;
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        bool hasLeft = data != null && data.TavernGossipLeft() > 0;
+        if (_gossipButton.interactable != hasLeft)
+            _gossipButton.interactable = hasLeft;
     }
 
     void AutoBind()

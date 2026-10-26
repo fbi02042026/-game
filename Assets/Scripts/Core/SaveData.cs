@@ -349,6 +349,12 @@ public class SaveData
     public List<StringIdEntry> mercUnlockOrder = new List<StringIdEntry>();
     /// <summary>【2026-10-13 主人拍板】佣兵抽奖池（HireId）：战斗内招募只从池子里的出。格子制，见 <see cref="DrawPoolMaxSlots"/>。</summary>
     public List<StringIdEntry> mercDrawPoolEntries = new List<StringIdEntry>();
+    // === 佣兵信任（2026-10-26 主人拍板「信任交流」，设计文档见 Docs/信任交流系统_玩法设计与工作量评估_2026-10-26.md）===
+    /// <summary>佣兵信任（hireId → 值）：每日对话/酒馆闲话图标积累；满级解锁专属双人关（二期施工）。</summary>
+    public List<StringIntEntry> mercTrustEntries = new List<StringIntEntry>();
+    /// <summary>酒馆闲话图标：上次使用日期（yyyyMMdd）与今日已用次数（每日 3 次，跨天重置）。</summary>
+    public int tavernGossipDay = 0;
+    public int tavernGossipUsed = 0;
     /// <summary>初期开放的抽奖池格数（总容量 5，见 <see cref="DrawPoolMaxSlots"/>；开放进度见 <see cref="DrawPoolSlots"/>）。</summary>
     public const int DrawPoolDefaultSlots = 3;
     /// <summary>抽奖池总容量（UI 画 5 格，后期逐格开放）。</summary>
@@ -360,6 +366,8 @@ public class SaveData
     [NonSerialized] public HashSet<string> unlockedMercIds = new HashSet<string>();
     /// <summary>【2026-10-20 主人拍板】雇佣队列改为保序 List：玩家上架顺序即存储顺序，不再按稀有度重排。</summary>
     [NonSerialized] public List<string> mercDrawPool = new List<string>();
+    /// <summary>【2026-10-26 主人拍板「信任交流」】信任运行时字典（mercTrustEntries 的内存态，旧档无记录 = 全员 0）。</summary>
+    [NonSerialized] public Dictionary<string, int> mercTrust = new Dictionary<string, int>();
     public List<StringIdEntry> claimedCodexRewardEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> claimedCodexRewardIds = new HashSet<string>();
 
@@ -616,6 +624,7 @@ public class SaveData
         mileageShopBuyEntries ??= new List<StringIntEntry>();
         mercGrowItemEntries ??= new List<StringIntEntry>();
         mercOutStarEntries ??= new List<StringIntEntry>();
+        mercTrustEntries ??= new List<StringIntEntry>();   // 【2026-10-26 信任交流】旧存档无列表 → 空，全员 0 信任，兼容
         mercGrowEntries ??= new List<MercGrowEntry>();   // 【2026-10-23 施工单 T3】旧存档没有该列表 → 空，全员 Lv1 无加成
         clearedStageEntries ??= new List<StringIdEntry>();
         mainQuestDoneEntries ??= new List<StringIdEntry>();
@@ -793,6 +802,18 @@ public class SaveData
                 var e = mercOutStarEntries[i];
                 if (e == null || string.IsNullOrEmpty(e.id)) continue;
                 mercOutStars[e.id] = Math.Max(0, e.value);
+            }
+        }
+
+        // 【2026-10-26 信任交流】信任重建：从 entries 灌回字典（旧存档无列表 → 空字典 = 全员 0，兼容）
+        mercTrust = new Dictionary<string, int>();
+        if (mercTrustEntries != null)
+        {
+            for (int i = 0; i < mercTrustEntries.Count; i++)
+            {
+                var e = mercTrustEntries[i];
+                if (e == null || string.IsNullOrEmpty(e.id)) continue;
+                mercTrust[e.id] = Math.Max(0, e.value);
             }
         }
 
@@ -1052,6 +1073,61 @@ public class SaveData
             if (mercUnlockOrder[i] != null && mercUnlockOrder[i].id == hireId) return;
         mercUnlockOrder.Add(new StringIdEntry { id = hireId });
     }
+
+    // === 佣兵信任（2026-10-26 主人拍板「信任交流」）===
+
+    /// <summary>酒馆闲话图标每日点击上限（「对话」按钮，见 TavernUI.OnGossipClicked）。</summary>
+    public const int TavernGossipDailyLimit = 3;
+
+    /// <summary>该佣兵当前信任值（无记录 = 0）。</summary>
+    public int GetMercTrust(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return 0;
+        mercTrust ??= new Dictionary<string, int>();
+        return mercTrust.TryGetValue(hireId, out int v) ? v : 0;
+    }
+
+    /// <summary>加信任并同步 entries；返回加完后的值（delta 可为负，但不会低于 0）。</summary>
+    public int AddMercTrust(string hireId, int delta)
+    {
+        if (string.IsNullOrEmpty(hireId)) return 0;
+        mercTrust ??= new Dictionary<string, int>();
+        mercTrust.TryGetValue(hireId, out int cur);
+        int next = Math.Max(0, cur + delta);
+        mercTrust[hireId] = next;
+        SyncMercTrustEntries();
+        return next;
+    }
+
+    void SyncMercTrustEntries()
+    {
+        mercTrustEntries = new List<StringIntEntry>(mercTrust.Count);
+        foreach (var kv in mercTrust)
+            mercTrustEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+    }
+
+    /// <summary>闲话图标：今日剩余次数（跨天自动重置为满额）。</summary>
+    public int TavernGossipLeft()
+    {
+        if (tavernGossipDay != TrustTodayKey()) return TavernGossipDailyLimit;
+        return Math.Max(0, TavernGossipDailyLimit - tavernGossipUsed);
+    }
+
+    /// <summary>闲话图标：消耗一次；false = 今日已用完。</summary>
+    public bool ConsumeTavernGossip()
+    {
+        int today = TrustTodayKey();
+        if (tavernGossipDay != today)
+        {
+            tavernGossipDay = today;
+            tavernGossipUsed = 0;
+        }
+        if (tavernGossipUsed >= TavernGossipDailyLimit) return false;
+        tavernGossipUsed++;
+        return true;
+    }
+
+    static int TrustTodayKey() => int.Parse(DateTime.Now.ToString("yyyyMMdd"));
 
     /// <summary>
     /// 【2026-10-13 主人拍板】该佣兵是否在抽奖池里。池子是**格子制**（酒馆 6 格、初期开放 4 格）：
@@ -1499,6 +1575,12 @@ public class SaveData
         mercOutStarEntries = new List<StringIntEntry>(mercOutStars.Count);
         foreach (var kv in mercOutStars)
             mercOutStarEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        // 【2026-10-26 信任交流】信任镜像落盘（字典 → entries）
+        mercTrust ??= new Dictionary<string, int>();
+        mercTrustEntries = new List<StringIntEntry>(mercTrust.Count);
+        foreach (var kv in mercTrust)
+            mercTrustEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
 
         // 【2026-10-23 施工单 T3】局外养成等级镜像落盘（字典 → entries）
         mercGrow ??= new Dictionary<string, MercGrowEntry>();
