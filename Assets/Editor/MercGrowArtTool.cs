@@ -11,14 +11,14 @@ using UnityEngine.UI;
 ///   Assets/Art/UI/Icons/徽章/    剑盾|狂战|游侠|法师|牧师|重武 + 普通|稀有|传奇 .png
 ///   Assets/Art/UI/Icons/人物碎片/ 普通碎片.png / 稀有碎片.png / 传奇碎片.png
 /// 打包能 Load 到的位置：
-///   Assets/Resources/Icons/JobBadge、Assets/Resources/Icons/MercFragmentBase
+///   Assets/Resources/UI/Icons/JobBadge、Assets/Resources/UI/Icons/MercFragmentBase
 /// </summary>
 public static class MercGrowArtTool
 {
     const string ArtBadgeDir = "Assets/Art/UI/Icons/徽章";
     const string ArtFragmentDir = "Assets/Art/UI/Icons/人物碎片";
-    const string ResBadgeDir = "Assets/Resources/Icons/JobBadge";
-    const string ResFragmentDir = "Assets/Resources/Icons/MercFragmentBase";
+    const string ResBadgeDir = "Assets/Resources/UI/Icons/JobBadge";
+    const string ResFragmentDir = "Assets/Resources/UI/Icons/MercFragmentBase";
 
     const string PreviewRootName = "MercGrowArtPreview";
 
@@ -27,7 +27,7 @@ public static class MercGrowArtTool
     [MenuItem("Tools/UI/同步佣兵养成素材到 Resources")]
     public static void SyncAll()
     {
-        EnsureFolder("Assets/Resources/Icons");
+        EnsureFolder("Assets/Resources/UI/Icons");
         int badge = SyncDir(ArtBadgeDir, ResBadgeDir);
         int frag = SyncDir(ArtFragmentDir, ResFragmentDir);
         AssetDatabase.Refresh();

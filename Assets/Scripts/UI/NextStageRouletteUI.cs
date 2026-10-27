@@ -688,14 +688,14 @@ public class NextStageRouletteUI : MonoBehaviour
     /// 旧的三条 StageSelect 路径全库都没有对应资源，只会一路取到 null → 老虎机是纯色底，删掉不留第二入口。
     /// </summary>
     static Sprite LoadBackground()
-        => Resources.Load<Sprite>("Art/UI/关卡/层级调整组件_0007_背景");
+        => Resources.Load<Sprite>("UI/Art/关卡/层级调整组件_0007_背景");
 
     /// <summary>
     /// 【2026-10-11 主人「老虎机没有关卡类型图标」】
     /// 类型图标真源 = Resources/Art/UI/关卡/stage_*.png，与关卡图同一套、同一个出口。
     /// </summary>
     static Sprite LoadStageIcon(StageType type)
-        => Resources.Load<Sprite>($"Art/UI/关卡/{StageRoller.IconName(type)}");
+        => Resources.Load<Sprite>($"UI/Art/关卡/{StageRoller.IconName(type)}");
 
     static void EnsureEventSystem()
     {

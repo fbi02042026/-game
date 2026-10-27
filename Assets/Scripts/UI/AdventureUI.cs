@@ -150,7 +150,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     /// prefab 里「金币副本」背景节点沿用了 Node_8 的雪山图（未适配）；且「活动.jpg」的 .meta
     /// 是 56 字符 guid（§2.3 口径：不修 guid，运行时用的图一律路径加载）→ 按路径设图，不动 prefab 排版。
     /// </summary>
-    const string ActivityBgSpritePath = "Art/UI/Adventure/StageIcons/Big/活动";
+    const string ActivityBgSpritePath = "UI/Art/Adventure/StageIcons/Big/活动";
     /// <summary>活动列表横条：金币副本（RightContent/活动副本/金币）。</summary>
     const string ActivityGoldRowName = "金币";
     /// <summary>活动列表横条：徽记副本（RightContent/活动副本/徽记）。</summary>

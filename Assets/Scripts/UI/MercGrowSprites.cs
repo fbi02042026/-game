@@ -14,7 +14,7 @@ using UnityEditor;
 ///
 /// 两处放图（缺 Resources 那份打包后 Load 不到）：
 ///   Art 源      Assets/Art/UI/Icons/徽章、Assets/Art/UI/Icons/人物碎片
-///   运行时副本  Assets/Resources/Icons/JobBadge、MercFragmentBase
+///   运行时副本  Assets/Resources/UI/Icons/JobBadge、MercFragmentBase
 ///   同步入口    Tools/UI/同步佣兵养成素材到 Resources（MercGrowArtTool）
 ///
 /// 编辑器优先读 Art，所以**没同步也能立刻看到效果**。

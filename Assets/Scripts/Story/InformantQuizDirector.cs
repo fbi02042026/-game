@@ -18,7 +18,7 @@ public class InformantQuizDirector : MonoBehaviour
     /// 酒馆底图（2026-10-15 主人：佣兵情报的背景用酒馆背景、变暗，跟引导/剧情一个模式）。
     /// 800×1424 满屏高的那张，走 Resources 路径加载。
     /// </summary>
-    const string TavernBackgroundPath = "Art/UI/Tavern/酒馆_0007_图层-4";
+    const string TavernBackgroundPath = "UI/Art/Tavern/酒馆_0007_图层-4";
     /// <summary>暗化值与 StoryDirector 换背景时一致（0.42）。</summary>
     const float TavernBgDim = 0.42f;
 

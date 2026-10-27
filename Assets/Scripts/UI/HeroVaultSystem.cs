@@ -253,7 +253,7 @@ public static class HeroVaultSystem
         }
         if (data.mercScrollLegendary > 0)
         {
-            var advIcon = Resources.Load<Sprite>("Art/UI/Icons/Common/高级招募卷轴");
+            var advIcon = Resources.Load<Sprite>("UI/Art/Icons/Common/高级招募卷轴");
             entries.Add(new DisplayEntry
             {
                 category = 2,

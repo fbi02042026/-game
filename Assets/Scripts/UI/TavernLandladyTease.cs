@@ -29,8 +29,8 @@ public class TavernLandladyTease : MonoBehaviour,
     const string BanUntilUtcKey = "tavern_landlady_ban_until_utc";
 
     // —— 表情立绘（2026-10-18 主人补图，Resources 路径加载，同 MercPortraitSprites 通道）——
-    const string ShyFacePath = "Art/UI/Tavern/酒吧老板娘害羞";
-    const string AngryFacePath = "Art/UI/Tavern/酒吧老板娘生气";
+    const string ShyFacePath = "UI/Art/Tavern/酒吧老板娘害羞";
+    const string AngryFacePath = "UI/Art/Tavern/酒吧老板娘生气";
     const float FaceHoldSeconds = 1.2f;
 
     // 【2026-10-18 主人拍板】老板娘人设＝豪放爽朗、开放自来熟：警告不娇羞，大大咧咧怼回去

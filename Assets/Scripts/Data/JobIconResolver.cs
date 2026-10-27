@@ -21,10 +21,10 @@ using UnityEngine;
 public static class JobIconResolver
 {
     /// <summary>四分类徽标 Resources 主目录（主人指定的美术源：Assets/Art/UI/Icons/职业icon）。</summary>
-    public const string BadgeRes = "Icons/职业icon";
+    public const string BadgeRes = "UI/Icons/职业icon";
 
     /// <summary>四分类图的现有 Resources 副本目录（与 Art 源同名同图），主目录缺资源时回退这里。</summary>
-    const string BadgeResFallback = "Icons/Job";
+    const string BadgeResFallback = "UI/Icons/Job";
 
     static readonly HashSet<string> _warnedPaths = new HashSet<string>();
 

@@ -37,7 +37,8 @@ public static class BattleViewportFit
             orthoSize = cam.orthographicSize;
         }
 
-        // 任务4：屏幕更瘦时相机视野变高，按 orthoSize/基础尺寸等比放大视差层铺满
+        // 【2026-10-27 主人拍板：map 按预制体大小显示，不改缩放】视口缩放已停用（ParallaxBackground 内 no-op），
+        // 调用保留只为不破坏接口；屏幕更瘦时不再放大视差层。
         var parallax = Object.FindObjectOfType<ParallaxBackground>(true);
         if (parallax != null)
             parallax.ApplyViewportZoom(orthoSize / GameConfig.CAMERA_ORTHO_SIZE);
@@ -105,15 +106,13 @@ public static class BattleViewportFit
         // 以「地图 map」为界：地图上方的直接子节点贴顶、下方的贴底（仅运行时改锚点，不动 .prefab）。
         // 必须在 FitBattleMapWidth 之后调用，才能拿到 map 撑满后的最终中心 y。
         UiLayoutStretch.ApplyVerticalSplitByMap(rootCanvas.transform);
-        // 【2026-10-17 主人报「长比例手机 map 和下面的 UI 有空隙」】条带定型后量一次高度，
-        // 视差层 Y 向补齐盖满条带（顺序必须在 FitBattleMapWidth 之后，条带高才准）。
+        // 【2026-10-27 主人拍板：map 按预制体大小，不改缩放】长屏 Y 补缝已停用（no-op），调用保留只为不破坏接口。
         FitParallaxVerticalCover(rootCanvas.transform);
     }
 
     /// <summary>
-    /// 长屏补缝：顶栏/背包是固定高贴顶贴底，屏幕越长 map 条带（画布高 − 两个 inset）涨得越快，
-    /// 视差图只按相机视口比（design/screen）放大、追不上条带 → 条带上下各露一条底色缝。
-    /// 量「条带高」交给视差层根节点 Y 向补齐（见 ParallaxBackground.ApplyVerticalCoverToBand）。
+    /// 长屏补缝（已停用，2026-10-27 主人拍板 map 按预制体大小显示不改缩放）：
+    /// 量「条带高」交给视差层的逻辑不再生效，ParallaxBackground.ApplyVerticalCoverToBand 为 no-op。
     /// </summary>
     static void FitParallaxVerticalCover(Transform battleUIRoot)
     {

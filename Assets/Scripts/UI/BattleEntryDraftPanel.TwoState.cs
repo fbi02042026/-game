@@ -163,7 +163,7 @@ public partial class BattleEntryDraftPanel
         float draftPosY = Mathf.Lerp(DraftCollapsedPosY, DraftExpandedPosY, k);
         SetPivotLocalY(_draftRt, panelH * DraftAnchorY + draftPosY, panelH);
 
-        // map：中心 Y 250 → 350（主人给的绝对值），缩放 1.13 → 1。
+        // map：中心 Y 250 → 350（主人给的绝对值），缩放两态恒 1.4（2026-10-27 主人拍板）。
         // 写的是「Pos Y / 中心 Y」这把尺子，不是「离父级底边多少」—— 换算错尺子会把 map 顶飞。
         ApplyMapState(k);
 

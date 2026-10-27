@@ -35,7 +35,7 @@ public partial class CharacterUI
             var iconImg = iconGo.GetComponent<Image>();
             iconImg.raycastTarget = false;
             iconImg.preserveAspect = true;
-            var sp = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina_potion");
+            var sp = Resources.Load<Sprite>("UI/Art/Icons/Common/icon_stamina_potion");
             if (sp != null) iconImg.sprite = sp;
             else Debug.LogError("[CharacterUI] 缺少体力药水图标: Art/UI/Icons/Common/icon_stamina_potion");
 

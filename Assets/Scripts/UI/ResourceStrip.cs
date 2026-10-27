@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -16,11 +17,11 @@ using UnityEngine.UI;
 ///   · 任意界面要显示：Show(hostTransform, mode) —— 整条迁过去，同图标同样式，只按模式切显隐；
 ///   · 用完 Release() 归还主界面（成对调用；宿主直接销毁时条随场景走，下次 RegisterHall 重建）。
 ///
-/// 模式（只切显隐，不动几何；位置全按主人在 prefab 里摆的 2×2 格：上排金币+钻石、下排天赋石+体力，
-/// 两列就只占第一行、三列补第二行天赋石位——2026-10-25 主人口径「该隐藏隐藏，哪个该补位置就补位置」）：
+/// 模式（只切显隐；几何按 2026-10-27 主人换行新规：可见列 2 列网格——两个并排上排、
+/// 三个第一排 2 个+第二排 1 个对齐第二个的 x、四个按 prefab 原生 2×2——见 ApplyRightAlign）：
 ///   Main          挂回 TopBar：金币/钻石/天赋石/体力四格全显（主界面与冒险页共用观感）；
 ///   GoldDiaTalent 宿主界面三列：金币/钻石/天赋石（角色页），体力隐藏；
-///   GoldDia       宿主界面两列：金币/钻石（只占第一行），天赋石/体力隐藏（升阶/招募/抽卡弹窗）。
+///   GoldDia       宿主界面两列：金币/钻石（并排上排），天赋石/体力隐藏（升阶/招募/抽卡弹窗）。
 ///
 /// 加号分工（2026-10-25 主人拍板）：
 ///   金币/体力加号 = 每日补给位（前2次免费 → 第3次50钻 → 第4次100钻、每日4次封顶，逻辑在 ResourceAdRewards），
@@ -192,8 +193,10 @@ public static class ResourceStrip
         SyncToHomeWorld();       // 【2026-10-26 主人反馈「角色页资源条没贴右上角」】按 TopBar 世界矩形落位，
                                  // 不再拷局部几何 —— 宿主页根层级/锚点与大厅不同构时拷数字必错位，
                                  // 世界对齐后借条与主界面顶条像素级重合（任意页面/任意屏比都成立）
-        SetMode(mode);
+        // 【2026-10-27 换行新规配套】先切体力显隐再 SetMode：ApplyRightAlign 按可见列数分配槽位，
+        // 顺序反了会把体力列的旧显隐态算进可见数（角色页三列会误判成 4 个走 prefab 原位）
         SetStaminaVisible(false);   // 【2026-10-25 主人拍板】消耗金币/钻石的界面不显示体力列（归还时恢复）
+        SetMode(mode);
         return true;
     }
 
@@ -213,8 +216,8 @@ public static class ResourceStrip
         _root.gameObject.SetActive(true);
         _borrowed = false;       // 回家：条撑满 TopBar，y 天然一致，不再需要每帧同 y
         FillHomeBar();           // 条在 TopBar 内部：撑满 TopBar（TopBar 局部空间 ≠ 画布空间，照搬它的 y 会整体下沉半条高）
+        SetStaminaVisible(true);   // 归还主界面：体力列恢复（主界面/冒险页显示）——先恢复再 SetMode，保证四列可见数算对
         SetMode(Mode.Main);
-        SetStaminaVisible(true);   // 归还主界面：体力列恢复（主界面/冒险页显示）
     }
 
     /// <summary>条挂在 TopBar 下时的几何 = 撑满父级（锚拉伸 + offset 全 0，不写死像素）；
@@ -300,19 +303,42 @@ public static class ResourceStrip
             _stamina.gameObject.SetActive(visible);
     }
 
-    /// <summary>【2026-10-25 主人拍板「这个自适应到屏幕右上角」】把各列整体贴到顶条右缘：
-    /// 三列（金币/钻石/天赋石，条根子级）与体力列（TopBar 原生子级）的锚点改挂右缘（anchor x=1），
-    /// 横坐标 = 主人在 TopBar.prefab 里摆的原坐标 − 设计宽一半（720/2，GameConfig.DESIGN_WIDTH）。
-    /// 主人是按 720 设计宽摆的，减去设计宽一半后「距右缘的边距」在任意屏宽下恒定：
-    /// 瘦屏（Match Width，逻辑宽恒 720）观感不变；宽屏（逻辑宽 > 720）整组自动贴住右上角跟着右缘走。
+    /// <summary>【2026-10-25 主人拍板「这个自适应到屏幕右上角」+ 2026-10-27 换行新规】把各列整体贴到顶条右缘：
+    /// 列的锚点改挂右缘（anchor x=1），横坐标 = 目标槽位原坐标 − 设计宽一半（720/2，GameConfig.DESIGN_WIDTH）。
+    /// 右缘锚后「距右缘的边距」在任意屏宽下恒定：瘦屏（Match Width，逻辑宽恒 720）观感不变；
+    /// 宽屏（逻辑宽 > 720）整组自动贴住右上角跟着右缘走。
     /// 纵坐标/锚 y/尺寸一律不动（基线全来自 prefab，不写死像素）。锚 x=1 后跟随右缘是锚点天性，无需轮询。</summary>
     static void ApplyRightAlign()
     {
         float halfDesignW = GameConfig.DESIGN_WIDTH * 0.5f;
-        AlignColumn(_gold, _goldHomePos, halfDesignW);
-        AlignColumn(_dia, _diaHomePos, halfDesignW);
-        AlignColumn(_talent, _talentHomePos, halfDesignW);
-        AlignColumn(_stamina, _staminaHomePos, halfDesignW);
+
+        // —— 换行槽位（2026-10-27 主人「有两个的改成并排的…有三个就第一排2个 第二排一个 排在第二个下面」）——
+        // 可见列按显示序（金币→钻石→天赋石→体力，即 Main 模式阅读顺序）收集，按可见数分配槽位：
+        //   N=4（Main）：prefab 原生 2×2 原样（各回各家：金币+钻石上排、天赋石+体力下排）；
+        //   N=3：第 1/2 个占上排左/右（金币/钻石槽），第 3 个下排、x 对齐第二个（钻石）；
+        //   N=2：并排占上排左/右两槽（冒险页 钻石+体力 从上下叠改为并排，即主人本次要的）；
+        //   N<=1：各回各家。
+        // 槽坐标全部取自主人在 TopBar.prefab 里摆的列位（上排=金币/钻石 home，下排 y=天赋石 home.y），不写死像素。
+        var visible = new List<(Transform col, Vector2 home)>();
+        if (_gold != null && _gold.gameObject.activeSelf) visible.Add((_gold, _goldHomePos));
+        if (_dia != null && _dia.gameObject.activeSelf) visible.Add((_dia, _diaHomePos));
+        if (_talent != null && _talent.gameObject.activeSelf) visible.Add((_talent, _talentHomePos));
+        if (_stamina != null && _stamina.gameObject.activeSelf) visible.Add((_stamina, _staminaHomePos));
+
+        for (int i = 0; i < visible.Count; i++)
+        {
+            Vector2 slot = visible[i].home;
+            if (visible.Count == 2)
+            {
+                slot = i == 0 ? _goldHomePos : _diaHomePos;
+            }
+            else if (visible.Count == 3)
+            {
+                if (i == 2) slot = new Vector2(_diaHomePos.x, _talentHomePos.y);   // 下排，对齐第二个的 x
+                // i=0/1 即金币/钻石 home（上排左/右），home 本身就是槽位
+            }
+            AlignColumn(visible[i].col, slot, halfDesignW);
+        }
     }
 
     static void AlignColumn(Transform col, Vector2 homePos, float halfDesignW)

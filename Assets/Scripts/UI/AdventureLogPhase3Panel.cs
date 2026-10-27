@@ -597,7 +597,7 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                     _countTexts[i].text = "";
                     _countTexts[i].color = _countBaseColors[i];
                 }
-                if (_icons[i] != null) _icons[i].sprite = LoadResIcon("Icons/Item/icon_log_fragment");
+                if (_icons[i] != null) _icons[i].sprite = LoadResIcon("UI/Icons/Item/icon_log_fragment");
                 if (_exchangeBtns[i] != null)
                 {
                     SetExchangeState(i, can);
@@ -889,14 +889,14 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         {
             case "gold_bag": return CommonIconSprites.Load("icon_gold");
             case "mats_3": return CommonIconSprites.Load("icon_talent_stone");
-            case "stamina_1": return LoadResIcon("Art/UI/Icons/Common/icon_stamina_potion");
+            case "stamina_1": return LoadResIcon("UI/Art/Icons/Common/icon_stamina_potion");
             case "scroll_c": return CommonIconSprites.Load("icon_hire_scroll");
             // 高级招募卷轴：主人 2026-10-17 新图（与战斗掉落同图），缺了回退普通雇佣卷轴
             case "scroll_l":
-                var adv = Resources.Load<Sprite>("Art/UI/Icons/Common/高级招募卷轴");
+                var adv = Resources.Load<Sprite>("UI/Art/Icons/Common/高级招募卷轴");
                 return adv != null ? adv : CommonIconSprites.Load("icon_hire_scroll");
             // 遗忘药水（2026-10-21 主人拍板：洗天赋消耗道具，里程商店 500 点/周限 1）
-            case "forget_potion": return LoadResIcon("Art/UI/Icons/Common/yiwangyaoshui");
+            case "forget_potion": return LoadResIcon("UI/Art/Icons/Common/yiwangyaoshui");
             default:
                 Debug.LogError($"[Phase3Panel] 里程商店商品 {id} 缺图标配置（ShopIconFor 未收录）");
                 return null;

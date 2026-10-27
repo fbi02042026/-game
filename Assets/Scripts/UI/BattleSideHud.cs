@@ -190,7 +190,9 @@ public class BattleSideHud : MonoBehaviour
         if (c == null) c = gameObject.AddComponent<Canvas>();
         c.overrideSorting = true;
         c.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        c.sortingOrder = 105;
+        // 【2026-10-27 主人报「血条把击败字挡住了」】旧值 105 低于 BossBar 血条抬层 BattleHud(950)，
+        // 血条一出场连杀「击败」就被盖住。抬到 955：高于血条(950)与全部 HUD(100/110)，低于各弹窗(960+)。
+        c.sortingOrder = 955;
         if (GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
     }
@@ -389,7 +391,7 @@ public class BattleSideHud : MonoBehaviour
         return null;
     }
 
-    const string KillIconPath = "Icons/击败";
+    const string KillIconPath = "UI/Icons/击败";
     // 【2026-10-20 主人拍板】「击败」标签和数字整体放大 30%（38→49.4、124/42→161.2/54.6），间距不动
     const float KillDigitW = 49.4f;  // 数字图显示宽（原图 48x50，等比略缩）
     const float KillDigitH = 49.4f;

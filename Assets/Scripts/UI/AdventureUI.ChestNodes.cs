@@ -36,7 +36,7 @@ public partial class AdventureUI
     bool _guankaMissingReported;
 
     /// <summary>宝箱/岛图 Resources 目录。</summary>
-    const string ChestResDir = "Art/UI/Adventure/宝箱/";
+    const string ChestResDir = "UI/Art/Adventure/宝箱/";
 
     /// <summary>关卡滑动列表视口名（2026-10-24 主人拍板「关卡列改滑动列表」；运行时生成挂主线节点下，翻章手势让路要按名字找，别改）。</summary>
     const string ChestViewportName = "关卡Viewport";
@@ -416,8 +416,8 @@ public partial class AdventureUI
     //（整库 meta 无 c497a5ea… / cca90b8e… 两串），图真身在 Resources/Art/UI/头像指示/ 下
     //（且是 56 字符 guid）。按 2026-10-23 拍板走路径加载（同 LoadChestSprite 模式），代码不依赖 prefab guid；
     // prefab 里 sprite 还活着（主人重拖过）则以 prefab 为准，只在空时补路径图。
-    const string MarkerAvatarSpritePath = "Art/UI/头像指示/所在头像";
-    const string MarkerArrowSpritePath = "Art/UI/头像指示/箭头";
+    const string MarkerAvatarSpritePath = "UI/Art/头像指示/所在头像";
+    const string MarkerArrowSpritePath = "UI/Art/头像指示/箭头";
 
     /// <summary>绑定主人摆的「头像指示」节点（只绑一次；缺真值 LogError 不兜底）。</summary>
     void EnsureStageMarkerNode()

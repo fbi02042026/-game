@@ -277,7 +277,7 @@ public partial class BattleUI : MonoBehaviour
         if (t == null) return;
         var img = t.GetComponent<Image>();
         if (img == null) return;
-        var sp = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_gold");
+        var sp = Resources.Load<Sprite>("UI/Art/Icons/Common/icon_gold");
         if (sp == null)
         {
             Debug.LogError("[BattleUI] 金币图标取不到：Art/UI/Icons/Common/icon_gold —— 顶栏维持原图");
@@ -310,7 +310,7 @@ public partial class BattleUI : MonoBehaviour
             var img = iconT.GetComponent<Image>();
             if (img != null)
             {
-                var sp = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_draft_coin");
+                var sp = Resources.Load<Sprite>("UI/Art/Icons/Common/icon_draft_coin");
                 if (sp != null) { img.sprite = sp; img.preserveAspect = true; }
                 else Debug.LogError("[BattleUI] 抽奖币图标取不到：Art/UI/Icons/Common/icon_draft_coin —— DraftDisplay 维持原图");
             }

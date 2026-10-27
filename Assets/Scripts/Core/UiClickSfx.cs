@@ -9,7 +9,7 @@ using System.Collections.Generic;
 /// 设计要点（铁律约束）：
 /// - 单一音效出口 = <see cref="GameAudio.PlaySfx"/>（sfx 开关、Loading 静音自动生效），**不新建第二套播放器**。
 /// - 不碰任何 prefab / 不逐按钮挂组件；靠 EventSystem 射线判定落点是否指向 <see cref="Selectable"/>（Button 等）。
-/// - 同帧多个抬起事件只播一次（_firedThisFrame 去重）。
+/// - Update 轮询天然每帧最多播一次（触摸/鼠标分支互斥），无需额外去重。
 /// - 缺素材只 LogError（铁律 15/24：不兜底、不静默）。
 ///
 /// 素材（路径，走 Resources 加载，不依赖 prefab guid）：
@@ -22,7 +22,6 @@ public sealed class UiClickSfx : MonoBehaviour
 
     static UiClickSfx _inst;
     static AudioClip _clip;
-    bool _firedThisFrame;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -45,7 +44,6 @@ public sealed class UiClickSfx : MonoBehaviour
 
     void Update()
     {
-        _firedThisFrame = false;
         if (_clip == null || EventSystem.current == null) return;
 
         bool up = false;
@@ -79,7 +77,6 @@ public sealed class UiClickSfx : MonoBehaviour
             if (g.GetComponent<Selectable>() != null)
             {
                 GameAudio.PlaySfx(_clip, Volume);
-                _firedThisFrame = true;
                 break;
             }
         }

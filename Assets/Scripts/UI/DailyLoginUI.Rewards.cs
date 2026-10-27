@@ -182,7 +182,7 @@ public partial class DailyLoginUI
         {
             case ResourceWallet.ResourceType.Stamina:
                 // 主人 2026-10-17 放入的体力药水新图（Resources/Art/ 下，路径与 Art 源不同）
-                return Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina_potion");
+                return Resources.Load<Sprite>("UI/Art/Icons/Common/icon_stamina_potion");
             case ResourceWallet.ResourceType.Gold:
                 return CommonIconSprites.Load("icon_gold");
             case ResourceWallet.ResourceType.Diamond:

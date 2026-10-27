@@ -430,7 +430,7 @@ public class MercFavorUI : MonoBehaviour
     // —— 运行时建图（2026-10-26 晚主人点名要的两件：进度条 + 问题对话框；锚点比例摆位，不碰 prefab 节点）——
 
     /// <summary>进度条素材路径：主人好感度图组里的金边条框（436×105，左端原有心形位）。</summary>
-    const string FavorBarSpritePath = "Art/UI/Tavern/好感度/_0001_图层-2";
+    const string FavorBarSpritePath = "UI/Art/Tavern/好感度/_0001_图层-2";
     static readonly Color FavorFillColor = new Color(0.96f, 0.42f, 0.55f, 1f);   // mockup 同款粉
 
     /// <summary>

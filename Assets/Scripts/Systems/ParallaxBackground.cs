@@ -23,10 +23,10 @@ public class ParallaxBackground : MonoBehaviour
     static readonly string[] ChapterBackgroundPaths = new string[]
     {
         "",                                                    // 0 占位
-        "Art/UI/background/新战斗背景/1森林",                   // 第1章
-        "Art/UI/background/新战斗背景/2墓园",                   // 第2章
+        "UI/Art/background/新战斗背景/1森林",                   // 第1章
+        "UI/Art/background/新战斗背景/2墓园",                   // 第2章
         "",                                                    // 第3章 暂无新图
-        "Art/UI/background/新战斗背景/4草原",                   // 第4章
+        "UI/Art/background/新战斗背景/4草原",                   // 第4章
         "", "", "", "", "",                                    // 第5-8章 暂无新图
     };
 
@@ -49,6 +49,8 @@ public class ParallaxBackground : MonoBehaviour
         [System.NonSerialized] public float initialX;
         [System.NonSerialized] public float baseScaleX = 1f;
         [System.NonSerialized] public UnityEngine.UI.Image[] images;
+        /// <summary>拼接单元（本体+镜像子图）＝自带镜像，整片不许再按奇偶翻转（翻转会产生空洞）。</summary>
+        [System.NonSerialized] public bool compositeUnit;
     }
 
     private Transform _layerRoot;
@@ -60,10 +62,10 @@ public class ParallaxBackground : MonoBehaviour
     private bool _layersInited;
     Vector3 _layerRootBaseScale = Vector3.one;
     bool _baseScaleCaptured;
+    // 【2026-10-27 主人拍板：map 按预制体大小显示（map 节点 scale 1.13、图 2020×768），运行时不改缩放】
+    // 原视口缩放 _viewportZoomMul 与长屏 Y 补缝 _verticalCoverMul 已停用（ApplyViewportZoom /
+    // ApplyVerticalCoverToBand 均改为 no-op），层根只保留击杀镜头的临时缩放。
     float _killCamZoomMul = 1f;
-    float _viewportZoomMul = 1f;
-    // 【2026-10-17 主人报「长比例手机 map 和下面的 UI 有空隙」】条带比视差图高时 Y 向补齐的系数（只动 Y）。
-    float _verticalCoverMul = 1f;
 
     public void SetLayerRoot(Transform root)
     {
@@ -111,7 +113,7 @@ public class ParallaxBackground : MonoBehaviour
         RefreshLayerWidth(ref midLayer);
         RefreshLayerWidth(ref frontLayer);
 
-        // 层就绪后应用视口/KillCam 缩放（若 ApplyViewportZoom 先调用，这里兜底生效）
+        // 层就绪后应用击杀镜头缩放（视口缩放已于 2026-10-27 停用，见 ApplyCombinedScale）
         ApplyCombinedScale();
 
         Debug.Log($"[Parallax v18] root={LayerSearchRoot.name} ppu={_ppu:F1} tiles={TileCount} " +
@@ -171,6 +173,21 @@ public class ParallaxBackground : MonoBehaviour
         float w = maxX - minX;
         if (w > 1f) return w;
         return MeasureTileWidth(root, root.GetComponent<UnityEngine.UI.Image>());
+    }
+
+    /// <summary>
+    /// 拼接单元判定：自身之外还有挂 Image 的子节点（本体+镜像子图结构，2026-10-26 主人改版）。
+    /// 拼接单元自带镜像，PlaceLayerTiles 不再做旧版奇偶整片翻转。
+    /// </summary>
+    static bool HasNestedImage(RectTransform root)
+    {
+        if (root == null) return false;
+        var imgs = root.GetComponentsInChildren<UnityEngine.UI.Image>(true);
+        for (int i = 0; i < imgs.Length; i++)
+        {
+            if (imgs[i] != null && imgs[i].transform != root) return true;
+        }
+        return false;
     }
 
     void ClearOldTiles()
@@ -233,6 +250,8 @@ public class ParallaxBackground : MonoBehaviour
         layer.initialX = src.anchoredPosition.x;
         // 拼接单元（本体+镜像子图）整宽；子图挂在 rect 外侧，只量 rect.width 会步长减半
         layer.width = MeasureCompositeWidth(src);
+        // 是否拼接单元：决定 PlaceLayerTiles 还要不要做旧版奇偶整片翻转
+        layer.compositeUnit = HasNestedImage(src);
 
         layer.tiles = new RectTransform[TileCount];
         layer.images = new UnityEngine.UI.Image[TileCount];
@@ -292,9 +311,13 @@ public class ParallaxBackground : MonoBehaviour
             ap.x = x;
             rt.anchoredPosition = ap;
 
-            // 镜像按世界槽位奇偶；用 Floor 避免 Round 在接缝处抖动成同向
-            int slot = Mathf.FloorToInt((x - origin) / step + 0.0001f);
-            bool mirror = (slot & 1) == 1;
+            // 镜像按世界槽位奇偶；用 Floor 避免 Round 在接缝处抖动成同向。
+            // 【2026-10-27 主人报「战斗地图还是丢失」】拼接单元（本体+镜像子图）绕 pivot 不对称：
+            // 本体占 -1024..+1024、镜像占 +1024..+3072。旧逻辑按槽位奇偶整片翻转（单图条带时代的手法），
+            // 奇数片翻完占位变 -3072..+1024，片与片之间留下 2048 宽空洞 → 屏幕上「左半有图右半全白」。
+            // 拼接单元自带镜像（本体|镜像 已是完整重复片），整片不许再翻；仅无子图的单图条带保留旧翻转。
+            bool mirror = !layer.compositeUnit &&
+                          (Mathf.FloorToInt((x - origin) / step + 0.0001f) & 1) == 1;
 
             Vector3 s = rt.localScale;
             float sx = Mathf.Abs(layer.baseScaleX) < 0.01f ? 1f : Mathf.Abs(layer.baseScaleX);
@@ -491,27 +514,27 @@ public class ParallaxBackground : MonoBehaviour
     }
 
     /// <summary>
-    /// 视口缩放：屏幕比设计更瘦时相机正交尺寸变大、视野更高，
-    /// 按 orthoSize/基础尺寸等比放大视差层铺满（与 KillCam 缩放乘算叠加）。
+    /// 【2026-10-27 主人拍板：map 按预制体大小，不改缩放】视口缩放停用。
+    /// 保留接口避免调用方（BattleViewportFit.Apply）报错，实现置空。
     /// </summary>
     public void ApplyViewportZoom(float mul)
     {
-        if (_layerRoot == null)
-            EnsureLayers();
-        if (_layerRoot == null) return;
-        _viewportZoomMul = mul > 0f ? mul : 1f;
-        ApplyCombinedScale();
     }
 
-    /// <summary>合并 KillCam 与视口两个乘算缩放，统一作用到层根节点（uniform 等比）。</summary>
+    /// <summary>
+    /// 【2026-10-27 主人拍板】map 按预制体大小显示（map 节点 scale 1.13、图 2020×768），
+    /// 运行时不再整体缩放：视口缩放 / 长屏 Y 补缝已停用（ApplyViewportZoom、
+    /// ApplyVerticalCoverToBand 均为 no-op）。本方法只保留击杀镜头的临时缩放
+    /// （ResetKillCamZoom 后层根回到预制体基准，map 日常恒为预制体大小）。
+    /// </summary>
     void ApplyCombinedScale()
     {
         if (_layerRoot == null) return;
         EnsureBaseScaleCaptured();
         float inv = 1f / Mathf.Max(0.0001f, _killCamZoomMul);
         _layerRoot.localScale = new Vector3(
-            _layerRootBaseScale.x * inv * _viewportZoomMul,
-            _layerRootBaseScale.y * inv * _viewportZoomMul * _verticalCoverMul,
+            _layerRootBaseScale.x * inv,
+            _layerRootBaseScale.y * inv,
             _layerRootBaseScale.z);
     }
 
@@ -522,31 +545,14 @@ public class ParallaxBackground : MonoBehaviour
         _baseScaleCaptured = true;
     }
 
-    // ===== 长屏补缝（2026-10-17）=====
+    // ===== 长屏补缝（2026-10-17）→【2026-10-27 主人拍板停用】=====
 
     /// <summary>
-    /// 长比例屏幕上 map 条带（顶栏底 ~ 背包顶）比视差图高 → Y 向再放大一档，让图正好盖满条带。
-    /// 只乘在 Y 上：图与 walk 同在层根下一起缩放，地面线相对关系不变；X 向仍走视口缩放。
-    /// 分母用「不含 cover 的基础渲染高」（设计高 × KillCam/视口基础缩放），所以重复调用幂等，
-    /// 条带变矮时系数自动回落；&lt;=1 视为不需要补（宽屏时图本来就比条带高）。
+    /// 【2026-10-27 主人拍板：map 按预制体大小（map 节点 scale 1.13、图 2020×768），不改缩放】
+    /// 长屏 Y 向补缝停用——条带再高也不再放大视差层。保留接口避免调用方
+    /// （BattleViewportFit.FitParallaxVerticalCover）报错，实现置空。
     /// </summary>
     public void ApplyVerticalCoverToBand(float bandHeight)
     {
-        if (bandHeight <= 1f) return;
-        // 无条件幂等建层：首次适配（AutoInit 里 Apply 跑在本组件 Start 之前）也要有图高可量，
-        // 否则第一场战斗就漏补，得等分辨率变化才会再算。
-        EnsureLayers();
-        if (_layerRoot == null) return;
-        var tile = frontLayer.tiles != null && frontLayer.tiles.Length > 0 ? frontLayer.tiles[0] : null;
-        if (tile == null) return;
-        float artH = tile.rect.height;   // 前景层单片设计高（本地值，未含任何缩放）
-        if (artH <= 1f) return;
-
-        EnsureBaseScaleCaptured();
-        float inv = 1f / Mathf.Max(0.0001f, _killCamZoomMul);
-        float baseScaleY = _layerRootBaseScale.y * inv * _viewportZoomMul;
-        float renderedNoCover = artH * Mathf.Max(0.0001f, baseScaleY);
-        _verticalCoverMul = Mathf.Max(1f, bandHeight / renderedNoCover);
-        ApplyCombinedScale();
     }
 }

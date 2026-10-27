@@ -18,11 +18,11 @@ public class MailDetailUI : MonoBehaviour
     const string PrefabPath = "Prefabs/UI/MailDetailWindow";   // MailPrefabBuilder 生成（T4），几何以预制体为准
 
     // ---- 美术资源（Resources 路径，不带扩展名）----
-    const string ArtDir = "Art/UI/邮件";
+    const string ArtDir = "UI/Art/邮件";
     const string SpritePaper = ArtDir + "/_0000s_0002_信件";
     const string SpriteClose = ArtDir + "/_0005_关闭";
     const string SpriteStampClaimed = ArtDir + "/信件已领取2";
-    const string StickerDir = "Art/UI/Stickers";
+    const string StickerDir = "UI/Art/Stickers";
     const int MaxStickers = 5;
 
     /// <summary>正文贴纸标签：[sticker:生气] → 贴纸名「生气」。</summary>
@@ -605,7 +605,7 @@ public class MailDetailUI : MonoBehaviour
     {
         if (m.gold > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_gold"), name = "金币", amount = m.gold });
         if (m.diamond > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_diamond_blue"), name = "钻石", amount = m.diamond });
-        if (m.stamina > 0) items.Add(new RewardItem { icon = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina_potion"), name = "体力", amount = m.stamina });
+        if (m.stamina > 0) items.Add(new RewardItem { icon = Resources.Load<Sprite>("UI/Art/Icons/Common/icon_stamina_potion"), name = "体力", amount = m.stamina });
         if (m.enchantStones > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_enchant_stone"), name = "附魔石", amount = m.enchantStones });
         if (m.decomposeMats > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_decompose_mat"), name = "分解材料", amount = m.decomposeMats });
         if (m.talentPoints > 0) items.Add(new RewardItem { icon = CommonIconSprites.Load("icon_talent_stone"), name = "天赋石", amount = m.talentPoints });

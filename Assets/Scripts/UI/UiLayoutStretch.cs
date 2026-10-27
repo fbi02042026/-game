@@ -77,6 +77,9 @@ public static class UiLayoutStretch
     public static void ApplyFillScreen(RectTransform rt)
     {
         if (rt == null) return;
+        // 【临时打点·查顶条消失】顶条三件套进这里 = 抓到写入者
+        if (IsTopWatchName(rt.gameObject.name))
+            Debug.LogError($"[顶条抓现行-写入者] ApplyFillScreen 要改 {rt.gameObject.name}", rt);
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
         rt.offsetMin = Vector2.zero;
@@ -189,6 +192,10 @@ public static class UiLayoutStretch
     {
         if (rt == null) return;
 
+        // 【临时打点·查顶条消失】顶条三件套进这里 = 抓到写入者
+        if (IsTopWatchName(rt.gameObject.name))
+            Debug.LogError($"[顶条抓现行-写入者] ApplyStretchHorizontal 要改 {rt.gameObject.name}", rt);
+
         float yMin = rt.anchorMin.y;
         float yMax = rt.anchorMax.y;
         float oMinY = rt.offsetMin.y;
@@ -233,6 +240,12 @@ public static class UiLayoutStretch
                 ApplyStretchHorizontal(rt);
                 break;
         }
+    }
+
+    /// <summary>【临时打点·查顶条消失】这三个节点被运行时改锚点就是顶条消失元凶，定位后随打点一起删。</summary>
+    internal static bool IsTopWatchName(string n)
+    {
+        return n == "TopBar" || n == "ProgressBar" || n == "QuestPanel";
     }
 
     /// <summary>在 battleUIRoot 下查找 map，横向拉满并尽量纵向撑满顶栏与背包之间。</summary>
@@ -442,6 +455,11 @@ public static class UiLayoutStretch
                     _verticalSplitBase[id] = b;
                     haveBase = true;
                 }
+
+                // 【临时打点·查顶条消失】顶条三件套进这里 = 抓到写入者（LogError 自带调用栈）
+                if (IsTopWatchName(rt.gameObject.name))
+                    Debug.LogError($"[顶条抓现行-写入者] ApplyVerticalSplitCore 要改 {rt.gameObject.name}：" +
+                                   $"elemCenterY={elemCenterY:F1} splitY={splitY:F1} curMin={curMin} curMax={curMax}", rt);
 
                 bool toTop = elemCenterY > splitY;
                 float A = toTop ? 1f : 0f;

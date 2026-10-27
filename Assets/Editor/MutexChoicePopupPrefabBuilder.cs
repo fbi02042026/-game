@@ -43,9 +43,9 @@ public class MutexChoicePopupPrefabBuilder
 
     // ---- 美术（全部 hex32 guid，可直接被预制体按 guid 引用；56 字符资产一律不用）----
     const string ART_PANEL    = "Assets/Resources/UI/NavCharacter/角色_0002s_0010_图层-7.png"; // 默认弹窗 Panel 同款
-    const string ART_CARD     = "Assets/Resources/Art/UI/Common/通用窗体2.png";
-    const string ART_OK       = "Assets/Resources/Art/UI/Common/确定按钮.png";
-    const string ART_CANCEL   = "Assets/Resources/Art/UI/Common/取消按钮.png";
+    const string ART_CARD     = "Assets/Resources/UI/Art/Common/通用窗体2.png";
+    const string ART_OK       = "Assets/Resources/UI/Art/Common/确定按钮.png";
+    const string ART_CANCEL   = "Assets/Resources/UI/Art/Common/取消按钮.png";
     const string ART_STONE    = "Assets/Art/UI/Talent/天赋石.png";
     const string ART_OPT_PHYS = "Assets/Resources/UI/TalentIcons/物理专精.png";
     const string ART_OPT_MAGIC = "Assets/Resources/UI/TalentIcons/魔法专精.png";

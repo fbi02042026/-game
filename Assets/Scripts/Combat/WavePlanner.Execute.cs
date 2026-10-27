@@ -184,7 +184,10 @@ public partial class WavePlanner
             {
                 float ox = AroundEngageOffsets[i % AroundEngageOffsets.Length] + Random.Range(-0.45f, 0.45f);
                 preferEngageX = anchorX + ox;
-                fromLeft = preferEngageX < heroCombatX;
+                // 【2026-10-27 主人拍板】引导精英固定从右侧进场：around 波的精英槽不再随交战点
+                // 随机选边（原来落点在英雄左边就从左进）。fromLeft=false → SpawnMonsterOffscreenEnter
+                // 从右屏外进场，ResolveEngageXForEnterSide 会把落点钳到英雄右侧，不穿帮。
+                fromLeft = tutorialEliteSlot ? false : preferEngageX < heroCombatX;
             }
             else if (wave.bilateralEnter)
             {

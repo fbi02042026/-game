@@ -421,7 +421,7 @@ public class RestStagePopupUI : MonoBehaviour
         Stretch(inner.rectTransform);
         inner.rectTransform.offsetMin = new Vector2(18f, 18f);
         inner.rectTransform.offsetMax = new Vector2(-18f, -18f);
-        var innerSp = Resources.Load<Sprite>("Art/UI/关卡/恢复/背景");
+        var innerSp = Resources.Load<Sprite>("UI/Art/关卡/恢复/背景");
         if (innerSp != null)
         {
             inner.sprite = innerSp;
@@ -479,7 +479,7 @@ public class RestStagePopupUI : MonoBehaviour
         illu.preserveAspect = true;
         // 【2026-10-11 主人「配图早就有了，在关卡文件夹里」】
         // 恢复关插画真源 = Resources/Art/UI/关卡/恢复/恢复体力.png（旧的 RestStage/illustration 全库没有这张图）。
-        var sp = Resources.Load<Sprite>("Art/UI/关卡/恢复/恢复体力");
+        var sp = Resources.Load<Sprite>("UI/Art/关卡/恢复/恢复体力");
         if (sp != null)
         {
             illu.sprite = sp;

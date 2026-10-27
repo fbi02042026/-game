@@ -9,7 +9,7 @@ using UnityEngine.UI;
 public class LoginNoticePopupUI : MonoBehaviour
 {
     /// <summary>公告板图。走 Resources 路径加载：该资源 .meta 是 56 字符 guid，禁止拖进预制体。</summary>
-    public const string BoardResourcePath = "Art/UI/公告/公告板";
+    public const string BoardResourcePath = "UI/Art/公告/公告板";
 
     /// <summary>
     /// 本期公告期号。改这里 = 全员重新弹一次（2026-10-20 主人测试时点过 X 关闭已写已读，

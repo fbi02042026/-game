@@ -248,8 +248,8 @@ public class CodexInfoPopupUI : MonoBehaviour
                 topTitleText.text = codexKind.Value ? "佣兵图鉴" : "怪物图鉴";
             if (topIcon != null)
                 topIcon.sprite = Resources.Load<Sprite>(codexKind.Value
-                    ? "Art/UI/冒险日志/yongbingicon"
-                    : "Art/UI/冒险日志/guaiwuicon");
+                    ? "UI/Art/冒险日志/yongbingicon"
+                    : "UI/Art/冒险日志/guaiwuicon");
         }
         if (metaText != null) metaText.text = meta ?? "";
         if (descText != null) descText.text = desc ?? "";

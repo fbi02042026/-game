@@ -8,10 +8,11 @@ using UnityEngine.UI;
 /// <para>节点：主人已在 BattleUI 预制体里摆好「佣兵入队」（根 Image 提示框 +
 /// mask/icon 佣兵立绘 + name 佣兵名称 + Text1「— 加入小队 —」），代码只驱动不改预制体。</para>
 ///
-/// <para>动画：抽中瞬间从左侧屏外**瞬间划入**到中间（0.30s）→ 停在中间不动（1.2s）
-/// → 原地渐隐消失（0.8s，不向右滑走）。
-/// 【2026-10-18 主人改口】横幅到中间后要「变慢然后消失，不要一下直接过去了」，
-/// 故弃用旧 SlotMachineAgainBanner 的滑行离场，改为停顿+淡出。</para>
+/// <para>动画：抽中瞬间从左侧屏外划入到中间（0.30s，起步快末端收住）→ **不停步**，
+/// 继续向右极慢缓行（1.60s 才挪 50px，越走越慢=在中间稍作停留），后半段才渐隐消失。
+/// 【2026-10-27 主人拍板】条是一直往右滑的、滑到中间后变慢然后消失，不是停在中间不动；
+/// 同日二改：中间要「稍作停留、要慢点」，不是一下就滑过去——故缓行段拉长到 1.60s、
+/// 距离缩到 50px、渐隐挪到后半段（前半段完全不透明，看得见它赖着不走）。</para>
 ///
 /// <para>全程 unscaled 时间（抽奖阶段战斗冻住，timeScale 可能为 0）。</para>
 ///
@@ -23,11 +24,11 @@ using UnityEngine.UI;
 public class MercJoinBannerUI : MonoBehaviour
 {
     // ============================================================
-    // 动画时长（2026-10-18 主人改口：到中间后停住+淡出，别一下滑过去）
+    // 动画时长（2026-10-27 主人拍板：一直往右滑，到中间后明显放慢=稍作停留，后半段才淡出）
     // ============================================================
     const float SlideInSec = 0.30f;    // 左侧屏外 → 中间
-    const float HoldSec = 1.20f;       // 停在中间不动
-    const float FadeOutSec = 0.80f;    // 原地渐隐消失
+    const float FadeOutSec = 1.60f;    // 过中间后：向右极慢缓行，总时长（前半段不透明=稍作停留）
+    const float CreepDistance = 50f;   // 过中间后继续向右缓行的总距离（px，慢到肉眼近似停留）
 
     /// <summary>立绘资源目录：按路径加载，不依赖 guid。</summary>
     const string PortraitFolder = "UI/Icons/佣兵立绘/";
@@ -219,20 +220,17 @@ public class MercJoinBannerUI : MonoBehaviour
             yield return null;
         }
 
-        // ② 停在中间不动（2026-10-18 主人：在中间变慢，别一下直接滑过去）
-        t = 0f;
-        while (t < 1f)
-        {
-            t += Time.unscaledDeltaTime / HoldSec;
-            yield return null;
-        }
-
-        // ③ 原地渐隐消失（不再向右滑走）
+        // ② 不停步但明显放慢：过中间后向右极慢缓行（二次缓出，越走越慢），
+        // 前半段保持完全不透明=「稍作停留」，后半段才渐隐
+        // 【2026-10-27 主人拍板】要慢点、稍作停留，不是一下就滑过去
         t = 0f;
         while (t < 1f)
         {
             t += Time.unscaledDeltaTime / FadeOutSec;
-            cg.alpha = 1f - Mathf.Clamp01(t);
+            float k = Mathf.Clamp01(t);
+            float e = 1f - (1f - k) * (1f - k);   // 二次缓出：越走越慢
+            cg.alpha = k <= 0.5f ? 1f : 1f - (k - 0.5f) / 0.5f;   // 后半段才渐隐
+            _rt.anchoredPosition = new Vector2(basePos.x + CreepDistance * e, basePos.y);
             yield return null;
         }
         cg.alpha = 1f;   // 复位，避免下次播放半透明

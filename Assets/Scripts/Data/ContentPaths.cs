@@ -79,14 +79,14 @@ public static class ContentPaths
 
     public static class Icons
     {
-        public const string MercSkill = "Icons/MercSkill";
-        public const string MercHead = "Icons/MercHead";
-        public const string MercStand = "Icons/MercStand";
-        public const string PlayerSkill = "Icons/SkillIcon";
+        public const string MercSkill = "UI/Icons/MercSkill";
+        public const string MercHead = "UI/Icons/MercHead";
+        public const string MercStand = "UI/Icons/MercStand";
+        public const string PlayerSkill = "UI/Icons/SkillIcon";
         /// <summary>职业徽记：6 职业 × 普通/稀有/传奇。Art 源 Assets/Art/UI/Icons/徽章。</summary>
-        public const string JobBadge = "Icons/JobBadge";
+        public const string JobBadge = "UI/Icons/JobBadge";
         /// <summary>佣兵本命碎片底版：普通/稀有/传奇。Art 源 Assets/Art/UI/Icons/人物碎片。</summary>
-        public const string MercFragmentBase = "Icons/MercFragmentBase";
+        public const string MercFragmentBase = "UI/Icons/MercFragmentBase";
     }
 
     public static class Config

@@ -43,7 +43,7 @@ public partial class BattleUI : MonoBehaviour
         // 抽奖币池（icon_draft_coin）另有显示位（抽奖面板旁），两本账不混图。
         // 缺图时返回 null（保持预制体原图并报错，不静默拿别的图顶）。
         if (Instance == null) return null;
-        var sp = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_gold");
+        var sp = Resources.Load<Sprite>("UI/Art/Icons/Common/icon_gold");
         if (sp == null)
             Debug.LogError("[BattleUI] 金币图标取不到：Art/UI/Icons/Common/icon_gold —— 任务奖励维持原图");
         _questGoldSprite = sp;

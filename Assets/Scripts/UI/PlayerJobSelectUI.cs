@@ -168,7 +168,8 @@ public class PlayerJobSelectUI : MonoBehaviour
         transform.SetAsLastSibling();
         if (!_fromPrefab)
             GameFonts.ApplyToHierarchy(transform);
-        TownPageDim.Ensure(transform);
+        // 【2026-10-27】不再挂 TownPageDim：预制体/运行时白模两条路径各自都有 Dim（黑 0.72），
+        // 再叠一层 TownPageDim(0.5) 会变成 0.86 有效黑度，屏底黑成一坨（主人报「底太黑了」）。
 
         // 【2026-10-17 主人拍板】引导局强制选剑盾的硬提示必须弹出——
         // 先把 FirstRunGuide 还盖着的「开始冒险」气泡暂收（FirstBattle 步骤未完成，
@@ -905,7 +906,7 @@ public class PlayerJobSelectUI : MonoBehaviour
         irt.anchoredPosition = new Vector2(-40f, 0f);
         var img = icon.GetComponent<Image>();
         // 主人 2026-10-17 放入的体力新图（与资源条同一图标；邮件/每日登录体力格用的是药水图）
-        img.sprite = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina");
+        img.sprite = Resources.Load<Sprite>("UI/Art/Icons/Common/icon_stamina");
         img.raycastTarget = false;
         bool hasIcon = img.sprite != null;
         icon.SetActive(hasIcon);

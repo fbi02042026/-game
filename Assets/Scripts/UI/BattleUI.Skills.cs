@@ -254,9 +254,9 @@ public partial class BattleUI : MonoBehaviour
     public static Sprite LoadRunSkillIcon(string skillId)
     {
         if (string.IsNullOrEmpty(skillId)) return null;
-        var sp = Resources.Load<Sprite>("Icons/SkillIcon/" + skillId);
+        var sp = Resources.Load<Sprite>("UI/Icons/SkillIcon/" + skillId);
         if (sp != null) return sp;
-        var all = Resources.LoadAll<Sprite>("Icons/SkillIcon/" + skillId);
+        var all = Resources.LoadAll<Sprite>("UI/Icons/SkillIcon/" + skillId);
         if (all != null && all.Length > 0) return all[0];
 #if UNITY_EDITOR
         // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。

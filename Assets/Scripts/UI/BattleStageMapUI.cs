@@ -162,7 +162,7 @@ public class BattleStageMapUI : MonoBehaviour
         rt.sizeDelta = new Vector2(110f, 110f);
 
         var img = go.GetComponent<Image>();
-        var sp = Resources.Load<Sprite>("Art/UI/battle/设置");
+        var sp = Resources.Load<Sprite>("UI/Art/battle/设置");
         if (sp != null)
         {
             img.sprite = sp;
@@ -1130,7 +1130,7 @@ public class BattleStageMapUI : MonoBehaviour
         // 关卡类型图标真源 = Resources/Art/UI/关卡/stage_*.png（stage_normal / elite / rest / boss / forge / enchant）。
         // 旧的两条 StageIcons 路径全库根本没有对应资源，只会取到 null → 界面上一片空，删掉不留第二入口。
         string n = StageRoller.IconName(type);
-        return Resources.Load<Sprite>($"Art/UI/关卡/{n}");
+        return Resources.Load<Sprite>($"UI/Art/关卡/{n}");
     }
 
     // ===== 预制体结构（从下往上：0 在最底）=====
@@ -1152,7 +1152,7 @@ public class BattleStageMapUI : MonoBehaviour
         Stretch(bg.rectTransform);
         // 【2026-10-11 主人「老虎机没有背景，背景应该是关卡界面」】
         // 关卡界面背景真源 = Resources/Art/UI/关卡/层级调整组件_0007_背景.png（主人美术目录里的那张）。
-        var mapSp = Resources.Load<Sprite>("Art/UI/关卡/层级调整组件_0007_背景");
+        var mapSp = Resources.Load<Sprite>("UI/Art/关卡/层级调整组件_0007_背景");
         if (mapSp != null)
         {
             bg.sprite = mapSp;

@@ -293,6 +293,18 @@ public partial class AdventureUI
                 }
                 Debug.Log($"[AdventureFit诊断] Top[{EdgeInfo(transform.Find("Top") as RectTransform)}] " +
                           $"TitleBar[{EdgeInfo(titleLog)}] LeftSidebar[{sbLog}] {scrollLog} {slotLog}");
+                // 页根/父链/画布体检（2026-10-27 追加：定位「整页顶部悬出屏幕 688」的元凶）：
+                var pr = transform.parent as RectTransform;
+                var canvasRt = rootRt.GetComponentInParent<Canvas>() != null
+                    ? rootRt.GetComponentInParent<Canvas>().transform as RectTransform : null;
+                var scaler = rootRt.GetComponentInParent<CanvasScaler>();
+                Debug.Log($"[AdventureFit诊断-根] root rect={rootRt.rect.width:F0}x{rootRt.rect.height:F0} " +
+                          $"aMin={rootRt.anchorMin} aMax={rootRt.anchorMax} oMin={rootRt.offsetMin} oMax={rootRt.offsetMax} " +
+                          $"pivot={rootRt.pivot} pos={rootRt.anchoredPosition} scale={rootRt.lossyScale} " +
+                          $"parent[{(pr != null ? pr.name : "null")}] rect={(pr != null ? $"{pr.rect.width:F0}x{pr.rect.height:F0}" : "-")} " +
+                          $"pScale={(pr != null ? pr.lossyScale.ToString() : "-")} " +
+                          $"canvas[{(canvasRt != null ? canvasRt.name : "null")}] rect={(canvasRt != null ? $"{canvasRt.rect.width:F0}x{canvasRt.rect.height:F0}" : "-")} " +
+                          $"scaler={(scaler != null ? $"{scaler.referenceResolution} match={scaler.matchWidthOrHeight} mode={scaler.uiScaleMode}" : "无")}");
             }
         }
         finally
@@ -1031,14 +1043,56 @@ public partial class AdventureUI
     readonly List<RectTransform> _sidebarEvenBtns = new List<RectTransform>();
 
     /// <summary>
-    /// 左列模式按钮紧凑化——【2026-10-27 主人拍板「左侧标签不见了，是上次改的间隔的事」】已禁用。
-    /// 运行时按隐藏钮空位重排会在真机上导致左列标签错位/丢失；主人已在预制体手动调好 95 等距，
-    /// 以预制体为准，运行时不再重排（2026-10-23「直接用我的预制体的数值」口径）。
-    /// 改回旧行为：删此注释段、还原下方方法体即可（还原分支 RestoreAdventureSidebarEven 已就位、no-op 安全）。
+    /// 左列模式按钮紧凑化——【2026-10-27 晚重新启用（主人「左边的间隔大了」）】。
+    /// 之前禁用的原因（标签消失）事后查明真凶是 FitAdventureTopBelowResourceStrip 的 +688 位移，
+    /// 不是本方法；TopShift 已关（EnableTopShiftBelowStrip=false）后间隔问题重新露出
+    /// （隐藏的每日/BOSS 占住 1/3 号位，可见 0/2/4 号中心距 190）→ 恢复紧凑排，实现与 cd6809b7^ 一致。
     /// </summary>
     void FitSidebarEvenSpacing()
     {
-        // 故意空实现：左列标签位置完全交给预制体，运行时零改动。
+        var left = transform.Find("LeftSidebar");
+        var rootRt = transform as RectTransform;
+        if (left == null || rootRt == null || rootRt.rect.height <= 0f) return;
+        float H = rootRt.rect.height;
+        _sidebarEvenBtns.Clear();
+
+        // 全部 ModeBtn（含隐藏的）预制体中心 y（bottom-origin root 帧）→ 全钮平均间距 = 主人节奏
+        var lb = CaptureAdventureBase(left as RectTransform);
+        float lsMin = Mathf.Lerp(0f, H, lb.anchorMin.y) + lb.offsetMin.y;
+        float lsMax = Mathf.Lerp(0f, H, lb.anchorMax.y) + lb.offsetMax.y;
+        var allY = new List<float>();
+        var visible = new List<(RectTransform rt, float y)>();
+        for (int i = 0; i < left.childCount; i++)
+        {
+            var c = left.GetChild(i) as RectTransform;
+            if (c == null || !c.name.StartsWith("ModeBtn_", StringComparison.Ordinal)) continue;
+            var b = CaptureAdventureBase(c);
+            if (Mathf.Abs(b.anchorMin.y - b.anchorMax.y) > 1e-4f) continue;   // 非垂直单点锚不动，防错排
+            float anchorY = Mathf.Lerp(lsMin, lsMax, b.anchorMin.y);
+            float h = b.offsetMax.y - b.offsetMin.y;
+            float centerY = anchorY + b.offsetMin.y + b.pivot.y * h;
+            allY.Add(centerY);
+            if (c.gameObject.activeInHierarchy) visible.Add((c, centerY));
+        }
+        if (visible.Count < 2 || allY.Count < 2) return;
+        allY.Sort();
+        float step = (allY[allY.Count - 1] - allY[0]) / (allY.Count - 1);
+        visible.Sort((a, b) => b.y.CompareTo(a.y));   // 屏幕高 → 低
+
+        // 首钮（主线冒险）钉在预制体位，其余往下按主人节奏填隐藏钮的空位
+        for (int k = 0; k < visible.Count; k++)
+        {
+            var rt = visible[k].rt;
+            _sidebarEvenBtns.Add(rt);
+            float target = visible[0].y - k * step;
+            float delta = target - visible[k].y;
+            if (Mathf.Abs(delta) < 0.5f) continue;
+            var b = CaptureAdventureBase(rt);
+            rt.offsetMin = new Vector2(b.offsetMin.x, b.offsetMin.y + delta);
+            rt.offsetMax = new Vector2(b.offsetMax.x, b.offsetMax.y + delta);
+            b.applied = true;
+            _adventureUiBase[rt.GetInstanceID()] = b;
+        }
     }
 
     /// <summary>左列紧凑化回退：把处理过的按钮还原到预制体位（没处理过则 no-op）。</summary>
@@ -1069,9 +1123,38 @@ public partial class AdventureUI
     /// <summary>资源条底边与页面顶部内容（横幅顶边）之间的视觉间距（含药丸列悬出条底 ~5 的余量）。</summary>
     const float TopStripGapUnits = 16f;
 
+    /// <summary>
+    /// 顶部让位位移总开关（2026-10-27 紧急回退，主人拍板口径「以前没事」）：
+    /// 本段位移（d926ba32 10-26 引入）在真机/编辑器实测把 Top 横幅、LeftSidebar 左列、
+    /// 主线/无限/活动副本整列齐刷刷抬高 +688 推出屏顶（[AdventureFit诊断] 横幅顶 2277 = 预制体 1589+688），
+    /// 病根是它按名字深找的 "TopBar" 量出的位置不在页顶（换算进页根局部落在顶边上方 685）。
+    /// 默认 false = 停用位移、还原预制体位（10-26 之前的行为）；要恢复让位改 true（同时修对 TopBar 查找后再开）。
+    /// </summary>
+    public static bool EnableTopShiftBelowStrip = false;
+
     void FitAdventureTopBelowResourceStrip(RectTransform rootRt)
     {
         if (rootRt == null || rootRt.rect.height <= 0f) return;
+
+        // 一键回退：停用位移并还原本段写过的偏移（未处理过 = no-op），整页回预制体位。
+        if (!EnableTopShiftBelowStrip)
+        {
+            var topRestore = transform.Find("Top") as RectTransform;
+            if (topRestore != null) RestoreAdventureBase(topRestore);
+            var sidebarRestore = transform.Find("LeftSidebar") as RectTransform;
+            if (sidebarRestore != null) RestoreAdventureBase(sidebarRestore);
+            var rcRestore = transform.Find("RightContent") as RectTransform;
+            if (rcRestore != null)
+            {
+                var mainRestore = rcRestore.Find(MainNodeName) as RectTransform;
+                if (mainRestore != null) RestoreAdventureBase(mainRestore);
+                var endlessRestore = rcRestore.Find(EndlessNodeName) as RectTransform;
+                if (endlessRestore != null) RestoreAdventureBase(endlessRestore);
+                var activityRestore = rcRestore.Find(ActivityNodeName) as RectTransform;
+                if (activityRestore != null) RestoreAdventureBase(activityRestore);
+            }
+            return;
+        }
 
         // 资源条真源：主界面 TopBar；独立打开（无大厅）时是本页挂的 TopBar / SharedResourceBar。
         Transform strip = null;
@@ -1081,6 +1164,17 @@ public partial class AdventureUI
             strip = FindDeepChild(transform, "TopBar") ?? FindDeepChild(transform, "SharedResourceBar");
         var stripRt = strip as RectTransform;
         if (stripRt == null) return;
+
+        // 【2026-10-27 诊断】打出实际找到的 TopBar 全路径与落点，核对是不是真顶条（定位 +688 元凶用，查完删）。
+        {
+            var path = strip.name;
+            var t = strip.parent;
+            while (t != null) { path = t.name + "/" + path; t = t.parent; }
+            var c = new Vector3[4];
+            stripRt.GetWorldCorners(c);
+            Debug.Log($"[AdventureFit][让位] strip路径={path} aboveBottom={rootRt.InverseTransformPoint(c[0]).y - rootRt.rect.min.y:F0} " +
+                      $"active={strip.gameObject.activeInHierarchy} sib={strip.GetSiblingIndex()}");
+        }
 
         // 资源条底边（世界四角 [0]=左下）→ 页根本地 →「距页根顶边多少」
         var corners = new Vector3[4];

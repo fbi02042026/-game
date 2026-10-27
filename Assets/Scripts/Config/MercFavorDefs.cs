@@ -176,7 +176,7 @@ public static class MercFavorDefs
     static GiftDef G(string id, int fileNo, string name, int favor)
     {
         var q = favor >= 8 ? GiftQuality.Legendary : favor >= 4 ? GiftQuality.Rare : GiftQuality.Common;
-        return new GiftDef { Id = id, IconPath = "Art/UI/礼物/32px-item" + fileNo, Name = name, Favor = favor, Quality = q };
+        return new GiftDef { Id = id, IconPath = "UI/Art/礼物/32px-item" + fileNo, Name = name, Favor = favor, Quality = q };
     }
 
     /// <summary>查礼物定义（唯一出口；查不到 = 表里没有这个 id，返回 false）。</summary>

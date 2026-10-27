@@ -40,7 +40,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     // ============================================================
 
     /// <summary>复用美术资源目录（Resources 相对路径前缀）。2026-10-15 主人拍板：优先用项目能复用的资源。</summary>
-    const string ArtCommon = "Art/UI/Common/";
+    const string ArtCommon = "UI/Art/Common/";
 
     static readonly Dictionary<string, Sprite> _artCache = new Dictionary<string, Sprite>();
 

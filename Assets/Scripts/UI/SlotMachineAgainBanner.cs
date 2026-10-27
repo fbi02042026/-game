@@ -16,7 +16,7 @@ using UnityEngine.UI;
 /// </summary>
 public class SlotMachineAgainBanner : MonoBehaviour
 {
-    public const string SpritePath = "Art/UI/SlotMachine/again_banner";
+    public const string SpritePath = "UI/Art/SlotMachine/again_banner";
 
     /// <summary>压在所有战斗 UI 之上（BattleStageMap 那一档远低于此）。</summary>
     const int SortOrder = 32000;
@@ -174,7 +174,7 @@ public class SlotMachineAgainBanner : MonoBehaviour
         {
             _warnedMissingSprite = true;
             Debug.LogError("[SlotMachineAgainBanner] 取不到横幅图 " + SpritePath +
-                           " —— 请确认 Assets/Resources/Art/UI/SlotMachine/again_banner.png 存在且已导入。");
+                           " —— 请确认 Assets/Resources/UI/Art/SlotMachine/again_banner.png 存在且已导入。");
         }
         return null;
     }

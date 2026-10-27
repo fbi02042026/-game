@@ -133,6 +133,7 @@ public partial class BattleUI : MonoBehaviour
     void Awake()
     {
         Instance = this;
+        ArmTopBarWatch();   // 【临时打点·查顶条消失】先记预制体基线
 
         // 刘海避让最先挂（2026-10-26 主人「战斗中顶部没有适配，要和主界面适配一样避免刘海」）：
         // 主界面（TownSharedChrome）与战斗用同一套 EnsureTopOffset，真机主界面正常、战斗贴刘海，
@@ -146,17 +147,22 @@ public partial class BattleUI : MonoBehaviour
 
         // 运行时补绑预制体里漏接的引用
         AutoBindMissingRefs();
+        TopBarWatchMark("Awake:AutoBindMissingRefs后");
 
         // 中文 → fusion-pixel；数字 → PixelFont
         GameFonts.ApplyToHierarchy(transform);
+        TopBarWatchMark("Awake:GameFonts后");
 
         // 右侧：连杀 + 下一波倒计时
         BattleSideHud.EnsureOn(transform);
+        TopBarWatchMark("Awake:BattleSideHud后");
 
         // Boss 屏幕血条（场景节点 BossBar）
         BattleBossHpBar.Ensure(transform);
+        TopBarWatchMark("Awake:BattleBossHpBar后");
 
         EnsureBattleControls();
+        TopBarWatchMark("Awake:EnsureBattleControls后");
 
         // 开战只走 AutoGameInitializer（场景组件 Awake）。UI 不再后备 Initialize，避免双入口叠开战。
 
@@ -168,6 +174,7 @@ public partial class BattleUI : MonoBehaviour
         }
         else
             UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
+        TopBarWatchMark("Awake:BattleViewportFit/UICanvasSetup后");
 
         // 刘海 / 挖孔：战斗顶栏（TopBar / TopStatus / ProgressBar 那条）+ 屏幕血条 BossBar
         // 整体下移 safeArea 顶部高度。只挪 anchoredPosition、不动锚点与尺寸；
@@ -175,6 +182,10 @@ public partial class BattleUI : MonoBehaviour
         // 【2026-10-22 血条偏下修复】BossBar 预制体已改贴顶锚（y=-163），在此加入名单后
         // 与顶栏同步避让：瘦屏不再随画布中心下漂，挖孔屏也不再压住状态行（设计间距 38 保持）。
         SafeAreaFitter.ApplyTopOffset(transform, "TopBar", "TopStatus", "ProgressBar", "BossBar");
+        TopBarWatchMark("Awake:第二次挂顶栏刘海避让后");
+
+        // 【临时打点·查顶条消失】逐帧盯运行期改动（Update 前半 / LateUpdate 各查一次）
+        TopBarWatchMark("Awake末尾");
 
         BindAutoBattleUnavailable();
         if (characterButton != null) characterButton.onClick.AddListener(OnOpenCharacter);
@@ -232,8 +243,84 @@ public partial class BattleUI : MonoBehaviour
     }
     // ==================== 临时打点结束 ====================
 
+    // ==================== 【临时打点·查顶条消失】定位后整段删除 ====================
+    // 逐帧盯 TopBar / ProgressBar / QuestPanel 的 RectTransform 快照：
+    // 锚点/轴心/位置/尺寸/偏移/显隐 一旦偏离上一份快照，立刻 LogError 报「哪一步改的 + 旧值→新值」。
+    // Awake 内的分步 mark 把改动钉死到具体初始化步骤；Update/LateUpdate 双相位轮询抓运行期改动。
+    struct RtSnap
+    {
+        public Vector2 anchorMin, anchorMax, pivot, anchoredPosition, sizeDelta, offsetMin, offsetMax;
+        public float rectW, rectH;
+        public bool active;
+
+        public static RtSnap Of(RectTransform rt)
+        {
+            return new RtSnap
+            {
+                anchorMin = rt.anchorMin,
+                anchorMax = rt.anchorMax,
+                pivot = rt.pivot,
+                anchoredPosition = rt.anchoredPosition,
+                sizeDelta = rt.sizeDelta,
+                offsetMin = rt.offsetMin,
+                offsetMax = rt.offsetMax,
+                rectW = rt.rect.width,
+                rectH = rt.rect.height,
+                active = rt.gameObject.activeSelf
+            };
+        }
+
+        public bool SameAs(RtSnap o)
+        {
+            return anchorMin == o.anchorMin && anchorMax == o.anchorMax && pivot == o.pivot
+                   && anchoredPosition == o.anchoredPosition && sizeDelta == o.sizeDelta
+                   && offsetMin == o.offsetMin && offsetMax == o.offsetMax
+                   && active == o.active;
+        }
+
+        public override string ToString()
+        {
+            return $"anch=({anchorMin.x:F2},{anchorMin.y:F2})~({anchorMax.x:F2},{anchorMax.y:F2}) " +
+                   $"pivot=({pivot.x:F2},{pivot.y:F2}) pos={anchoredPosition} sizeDelta={sizeDelta} " +
+                   $"offMin={offsetMin} offMax={offsetMax} rect=({rectW:F0}x{rectH:F0}) activeSelf={active}";
+        }
+    }
+
+    readonly System.Collections.Generic.Dictionary<string, RtSnap> _topWatch =
+        new System.Collections.Generic.Dictionary<string, RtSnap>();
+
+    void ArmTopBarWatch()
+    {
+        _topWatch.Clear();
+        WatchTopBarNode("TopBar");
+        WatchTopBarNode("ProgressBar");
+        WatchTopBarNode("QuestPanel");
+        TopBarWatchMark("Awake起点(预制体基线)");
+    }
+
+    void WatchTopBarNode(string name)
+    {
+        var t = FindChildIgnoreCase(transform, name) as RectTransform;
+        if (t != null) _topWatch[name] = RtSnap.Of(t);
+    }
+
+    void TopBarWatchMark(string when)
+    {
+        foreach (var kv in _topWatch)
+        {
+            var t = FindChildIgnoreCase(transform, kv.Key) as RectTransform;
+            if (t == null) continue;
+            var now = RtSnap.Of(t);
+            if (!now.SameAs(kv.Value))
+                Debug.LogError($"[顶条抓现行] 第{Time.frameCount}帧 · {when} · {kv.Key} 被改！\n  旧 {kv.Value}\n  新 {now}");
+            _topWatch[kv.Key] = now;
+        }
+    }
+    // ==================== 临时打点结束（顶条） ====================
+
     void Start()
     {
+        TopBarWatchMark("Start");
         if (GameSceneGate.IsBattle && BattleManager.Instance == null)
             Debug.LogError("[BattleUI] BattleManager 未装配：开战只走 AutoGameInitializer，UI 不再后备初始化。");
         Invoke(nameof(DelayedUpdateSlots), 0.1f);
@@ -241,6 +328,7 @@ public partial class BattleUI : MonoBehaviour
 
     void DelayedUpdateSlots()
     {
+        TopBarWatchMark("DelayedUpdateSlots(0.1s)");   // 【临时打点·查顶条消失】
         if (BattleBagSystem.Instance != null)
         {
             BattleBagSystem.Instance.OnBackpackChanged -= UpdateBackpackGrid;
@@ -260,6 +348,12 @@ public partial class BattleUI : MonoBehaviour
     }
 
     float _liveBarTimer;
+
+    void LateUpdate()
+    {
+        TopBarWatchMark("LateUpdate");   // 【临时打点·查顶条消失】
+    }
+
     float _lastPlayerHp = -1f, _lastPlayerMaxHp = -1f, _lastPlayerEnergy = -1f, _lastPlayerExp = -1f;
     float _lastMerc1Hp = -1f, _lastMerc1Energy = -1f;
     float _lastMerc2Hp = -1f, _lastMerc2Energy = -1f;
@@ -267,6 +361,8 @@ public partial class BattleUI : MonoBehaviour
 
     void Update()
     {
+        TopBarWatchMark("Update");   // 【临时打点·查顶条消失】
+
         // 每帧都要跟：开战/撤离/进入整理阶段都要立刻切换遮罩，不能等 0.1s 节流
         TickBattleMask();
 

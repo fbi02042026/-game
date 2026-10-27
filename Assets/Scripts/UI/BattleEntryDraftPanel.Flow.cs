@@ -158,7 +158,7 @@ public partial class BattleEntryDraftPanel
     }
 
     /// <summary>
-    /// map 的两态：<b>中心 Y = 250 → 350</b>（主人给的绝对值），<b>缩放 = 1.13 → 1</b>。
+    /// map 的两态：<b>中心 Y = 250 → 350</b>（主人给的绝对值），缩放两态恒 <b>1.4</b>（2026-10-27 主人拍板）。
     ///
     /// <para>读位置恒用 <c>anchoredPosition.y</c> —— 点锚点与拉伸锚点下它都是「中心相对父级中心的偏移」，
     /// 是同一把尺子（见 <c>MapCollapsedPosY</c> 处注释）。</para>

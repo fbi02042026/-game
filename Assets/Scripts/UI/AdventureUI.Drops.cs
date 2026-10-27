@@ -209,7 +209,7 @@ public partial class AdventureUI
                 return LoadBadgeDropSprite();
             case PreviewDropKind.Gift:
                 // 礼物副本掉落预览：拿礼物图组里的面包当代表图（随机礼物池见 MercFavorDefs.Gifts）
-                return Resources.Load<Sprite>("Art/UI/礼物/32px-item301");
+                return Resources.Load<Sprite>("UI/Art/礼物/32px-item301");
             default:
                 return null;
         }
@@ -321,7 +321,7 @@ public partial class AdventureUI
         {
             if (_scrollLegendarySprite != null) return _scrollLegendarySprite;
             // 主人 2026-10-17 放入的高级招募卷轴新图（在 Resources/Art/ 下，路径不同，直接加载）
-            var adv = Resources.Load<Sprite>("Art/UI/Icons/Common/高级招募卷轴");
+            var adv = Resources.Load<Sprite>("UI/Art/Icons/Common/高级招募卷轴");
             return _scrollLegendarySprite = adv != null ? adv : LoadCommonDropIcon("icon_hire_scroll");
         }
         if (rarity == MercRosterDefs.MercRarity.Rare)
@@ -352,7 +352,7 @@ public partial class AdventureUI
             }
         }
         // 主人 2026-10-17 放入的体力新图（Resources/Art/ 下，路径与 Art 源不同）
-        _staminaIconSprite = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina");
+        _staminaIconSprite = Resources.Load<Sprite>("UI/Art/Icons/Common/icon_stamina");
         return _staminaIconSprite;
     }
 }

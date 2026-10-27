@@ -75,8 +75,10 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     const float DraftExpandedPosY = -250f;
 
     /// <summary>
-    /// 场景 map 的两态参数 —— <b>2026-10-05 主人给的确定数值</b>：
-    /// 默认（面板收起）在 <b>250</b>、scale <b>1.13</b>；面板展开后在 <b>350</b>、scale <b>1</b>。
+    /// 场景 map 的两态参数：
+    /// 默认（面板收起）在 <b>250</b>；面板展开后在 <b>350</b>。
+    /// 缩放两态恒为 <b>1.4</b>（2026-10-27 主人拍板「改成放大到1.4倍」：
+    /// map 不再按 1.13→1 两态缩放，收起/展开都按 1.4 倍显示，只动位置不动缩放）。
     ///
     /// <remarks>
     /// <b>250 / 350 是「中心 Y」这一把尺子</b>（父级本地坐标，原点在父级中心），也就是
@@ -102,8 +104,8 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     /// </summary>
     const float MapCollapsedPosY = 250f;
     const float MapExpandedPosY = 350f;
-    const float MapCollapsedScale = 1.13f;
-    const float MapExpandedScale = 1f;
+    const float MapCollapsedScale = 1.4f;
+    const float MapExpandedScale = 1.4f;
 
     const float AnimSec = 0.25f;
 
@@ -185,7 +187,7 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
         {
             case ResourceWallet.ResourceType.MercGold: return "UI/Icons/Common/icon_yongbinggold";
             // 主人 2026-10-17 放入的抽奖货币新图（Resources/Art/ 下，路径与 Art 源不同）
-            case ResourceWallet.ResourceType.Gold: return "Art/UI/Icons/Common/icon_draft_coin";
+            case ResourceWallet.ResourceType.Gold: return "UI/Art/Icons/Common/icon_draft_coin";
             default: return null;
         }
     }

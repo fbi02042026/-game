@@ -57,7 +57,7 @@ public class MercAscendUI : MonoBehaviour
     static readonly Color StarUpDimColor = new Color(0.5f, 0.5f, 0.5f, 1f);
 
     /// <summary>钻石图标（传奇佣兵升阶扣钻石时替换金币图标；Resources 路径已核实存在）。</summary>
-    const string DiamondIconPath = "Art/UI/Icons/Common/icon_diamond_blue";
+    const string DiamondIconPath = "UI/Art/Icons/Common/icon_diamond_blue";
 
     static MercAscendUI _instance;
 

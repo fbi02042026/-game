@@ -274,7 +274,7 @@ public class GuildHallUI : MonoBehaviour
         irt.anchoredPosition = new Vector2(-56f, 0f);
         var img = icon.GetComponent<Image>();
         // 与资源条同一体力图标（邮件/每日登录体力格用的是药水图，不混用）
-        img.sprite = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_stamina");
+        img.sprite = Resources.Load<Sprite>("UI/Art/Icons/Common/icon_stamina");
         img.raycastTarget = false;
         bool hasIcon = img.sprite != null;
         icon.SetActive(hasIcon);
@@ -617,16 +617,6 @@ public class GuildHallUI : MonoBehaviour
         if (licenseHallButton == null) licenseHallButton = FindBtn("LicenseHall");
         if (armoryButton == null) armoryButton = FindBtn("Armory");
         if (receptionistButton == null) receptionistButton = FindBtn("Receptionist");
-
-        // 【2026-10-27 修「左侧任务栏/右侧邮件设置每日登录都低」】右列 RightBar 预制体已改贴顶锚
-        // （anchor y 0.5→1，pos y 250→-240，与左列 LeftBar 同批），这里补刘海/胶囊避让——
-        // 与左列（QuestBarBinder → LeftBar）、顶栏（TownSharedChrome）同一套 SafeAreaFitter.Offset，
-        // 幂等可重复调；找不到节点按「不兜底」口径 LogError 让人看见。
-        var rightBarRt = FindDeepChild(transform, "RightBar") as RectTransform;
-        if (rightBarRt != null)
-            SafeAreaFitter.EnsureTopOffset(rightBarRt);
-        else
-            Debug.LogError("[GuildHall] 未找到右列节点 RightBar（邮件/设置/每日登录的父级），刘海避让没挂上");
     }
 
     Button FindBtn(string name)

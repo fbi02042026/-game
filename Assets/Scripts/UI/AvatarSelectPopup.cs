@@ -129,7 +129,7 @@ public class AvatarSelectPopup : MonoBehaviour
             var sp = AvatarDefs.LoadSprite(slot);
             if (sp != null) img.sprite = sp;
             else Debug.LogError(LogTag + "头像图取不到：槽位 " + slot +
-                                "（应在 Resources/" + "Art/UI/Main/头像/ 下），保持预制体原样");
+                                "（应在 Resources/" + "UI/Art/Main/头像/ 下），保持预制体原样");
 
             // 未解锁：置灰 + 点了只提示；已解锁：加金框（选中时开）
             bool unlocked = AvatarDefs.IsUnlocked(slot);

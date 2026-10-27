@@ -351,7 +351,7 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
         {
             // 与 BattleUI.Binding 顶栏 DraftDisplay 同一条加载路径（Resources 直连，真机可用）；
             // 不走 CommonIconSprites（它的 Resources 根目录没有 Art 前缀副本，真机会落空）
-            inst.goldIconSprite = Resources.Load<Sprite>("Art/UI/Icons/Common/icon_draft_coin");
+            inst.goldIconSprite = Resources.Load<Sprite>("UI/Art/Icons/Common/icon_draft_coin");
             if (inst.goldIconSprite == null)
                 Debug.LogError("[DamageTextSystem] 抽奖币图标取不到：Art/UI/Icons/Common/icon_draft_coin —— 飘字只出数字");
         }

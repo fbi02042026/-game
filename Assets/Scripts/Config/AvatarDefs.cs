@@ -13,7 +13,7 @@ public static class AvatarDefs
     /// <summary>默认（未选择时）头像槽位 = 玩家头像。</summary>
     public const int DefaultSlot = 1;
 
-    const string Dir = "Art/UI/Main/头像/";
+    const string Dir = "UI/Art/Main/头像/";
 
     /// <summary>槽位 → 头像图 Resources 相对路径。null = 该槽位无图（6 号位设计缺口）。</summary>
     static readonly string[] SpritePath =

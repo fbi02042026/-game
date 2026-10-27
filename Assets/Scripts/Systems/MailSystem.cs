@@ -331,7 +331,7 @@ public static class MailSystem
                    "—— 像素冒险制作组",
             createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             type = MailType.Reward,
-            detailImagePath = "Art/UI/Stickers/高兴",   // 详情页表情：表情包「高兴」（2026-10-16 主人拍板，路径同 MailDetailUI.StickerDir 口径）
+            detailImagePath = "UI/Art/Stickers/高兴",   // 详情页表情：表情包「高兴」（2026-10-16 主人拍板，路径同 MailDetailUI.StickerDir 口径）
             gold = 200,
             attachments = new List<MailAttachment>
             {
@@ -372,7 +372,7 @@ public static class MailSystem
                    "—— 像素冒险制作组",
             createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             type = MailType.Reward,
-            detailImagePath = "Art/UI/Icons/表情包/爱心",   // 详情页表情：表情包「爱心」（2026-10-17 主人拍板，图在 Icons/表情包/ 目录）
+            detailImagePath = "UI/Art/Icons/表情包/爱心",   // 详情页表情：表情包「爱心」（2026-10-17 主人拍板，图在 Icons/表情包/ 目录）
             gold = 500,
             attachments = new List<MailAttachment>
             {
@@ -380,7 +380,7 @@ public static class MailSystem
                 {
                     type = "scrollCommon",
                     amount = 2,
-                    iconOverride = "Art/UI/Icons/Common/icon_hire_scroll",
+                    iconOverride = "UI/Art/Icons/Common/icon_hire_scroll",
                 },
             },
         }, notifyToast);

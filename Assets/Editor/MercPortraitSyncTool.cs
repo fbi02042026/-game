@@ -11,13 +11,13 @@ public static class MercPortraitSyncTool
 {
     const string ArtHeadDir = "Assets/Art/UI/Icons/佣兵头像";
     const string ArtStandDir = "Assets/Art/UI/Icons/佣兵立绘";
-    const string ResHeadDir = "Assets/Resources/Icons/MercHead";
-    const string ResStandDir = "Assets/Resources/Icons/MercStand";
+    const string ResHeadDir = "Assets/Resources/UI/Icons/MercHead";
+    const string ResStandDir = "Assets/Resources/UI/Icons/MercStand";
 
     [MenuItem("Tools/UI/同步佣兵头像立绘到 Resources")]
     public static void SyncAll()
     {
-        EnsureFolder("Assets/Resources/Icons");
+        EnsureFolder("Assets/Resources/UI/Icons");
         EnsureFolder(ResHeadDir);
         EnsureFolder(ResStandDir);
 

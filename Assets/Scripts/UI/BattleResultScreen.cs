@@ -121,7 +121,7 @@ public class BattleResultScreenUI : MonoBehaviour
     // 【2026-10-24 编译修复】以下常量原写在 BattleResultScreen（私有），唯一使用方是本类
     // → CS0103（InDur/HoldDur/OutDur/SkipOutDur/ArtDir 找不到）。按「同一语义只留一个出口」
     // 搬到唯一消费方，不改任何数值。    /// <summary>胜利/失败大图资源目录（按路径设图）。</summary>
-    const string ArtDir = "Art/UI/battle/战斗结果/";
+    const string ArtDir = "UI/Art/battle/战斗结果/";
     /// <summary>淡入/弹出时长（秒）。</summary>
     const float InDur = 0.28f;
     /// <summary>停留时长（秒）。</summary>
@@ -152,7 +152,7 @@ public class BattleResultScreenUI : MonoBehaviour
     /// <summary>分享提示行 sizeDelta（单行字，fontSize 24）。</summary>
     static readonly Vector2 ShareTipSize = new Vector2(420f, 28f);
     /// <summary>分享钮图路径（Resources/Art/UI/分享/分享按钮.png；meta 是团结 56 字符标识 → 走路径加载）。</summary>
-    const string ShareBtnArt = "Art/UI/分享/分享按钮";
+    const string ShareBtnArt = "UI/Art/分享/分享按钮";
 
     RectTransform _panel;
     CanvasGroup _cg;

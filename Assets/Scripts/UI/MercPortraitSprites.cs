@@ -58,12 +58,12 @@ public static class MercPortraitSprites
 #endif
         // 老板娘专属立绘在 Resources/Art/UI/Tavern/，不在 MercStand 目录（2026-10-15 接上）
         if (sp == null && hireId == "landlady")
-            sp = LoadFromResources("Art/UI/Tavern", "酒吧老板娘");
+            sp = LoadFromResources("UI/Art/Tavern", "酒吧老板娘");
         if (sp == null)
             sp = LoadFromResources(ContentPaths.Icons.MercStand, hireId);
         if (sp == null)
             DeviceParity.ReportMissing(
-                hireId == "landlady" ? "Art/UI/Tavern/酒吧老板娘" : ContentPaths.Icons.MercStand + "/" + hireId,
+                hireId == "landlady" ? "UI/Art/Tavern/酒吧老板娘" : ContentPaths.Icons.MercStand + "/" + hireId,
                 "佣兵立绘");
         if (sp != null)
             StandCache[hireId] = sp;
@@ -113,7 +113,7 @@ public static class MercPortraitSprites
             return LoadEditorSprite(ArtStandDir + "/佣兵立绘_玩家.png");
         // 老板娘专属立绘（2026-10-15）：只在 Resources/Art/UI/Tavern/，不复制进美术源目录
         if (hireId == "landlady")
-            return LoadEditorSprite("Assets/Resources/Art/UI/Tavern/酒吧老板娘.png");
+            return LoadEditorSprite("Assets/Resources/UI/Art/Tavern/酒吧老板娘.png");
         if (hireId == "receptionist")
             return LoadEditorSprite(ArtStandDir + "/前台小姐.png");
         if (hireId == "guildmaster")

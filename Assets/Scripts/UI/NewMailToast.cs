@@ -24,6 +24,8 @@ public class NewMailToast : MonoBehaviour
     const float MarginRight = 0f;       // 主人要求：右缘贴住屏幕右缘（原 24 缝去掉）；框小了，进屏自然不多
     const float YPos = 300f;            // 【基线】参考画布(720×1280)上原中心锚的 y（换算「距顶边」距离用，见 BuildPanel）
     const int SortOrder = 950;
+    /// <summary>底框颜色：深褐色 + 半透明（2026-10-27 主人拍板：替换原纯黑 0.85）。R&gt;G&gt;B 偏暖，alpha 0.6 带点半透，去掉糊屏的厚重黑块。</summary>
+    static readonly Color PanelBgColor = new Color(0.20f, 0.13f, 0.07f, 0.6f);
 
     enum Phase { In, Hold, Out, Done }
 
@@ -42,6 +44,10 @@ public class NewMailToast : MonoBehaviour
 
     public static void Notify()
     {
+        // 引导阶段（首次强制软引导尚未走完）不弹新邮件提示：避免打断新手流程。
+        // 引导收尾的欢迎信走 NotifyLater→FlushPending→Notify，那时 FirstRunGuide 已 IsFinished，正常弹出。
+        if (FirstRunGuide.Instance != null && !FirstRunGuide.Instance.IsFinished)
+            return;
         if (_inst == null) EnsureInstance();
         if (_inst == null) return;                 // 相机未就绪等场景下静默跳过，不崩
         if (_inst._phase != Phase.Done) return;   // 已有提示在显示，忽略新请求（邮件本就低频）
@@ -123,7 +129,8 @@ public class NewMailToast : MonoBehaviour
         _panel.anchorMin = _panel.anchorMax = new Vector2(1f, 1f);
         _panel.pivot = new Vector2(1f, 1f);
         var img = panel.GetComponent<Image>();
-        img.color = new Color(0f, 0f, 0f, 0.85f);
+        // 2026-10-27 主人拍板：底框不再用纯黑，改深褐色 + 半透明，去掉糊屏的厚重黑块
+        img.color = PanelBgColor;
         img.raycastTarget = false;
 
         var labelGo = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));

@@ -17,7 +17,7 @@ public class MailListUI : MonoBehaviour
     const string PrefabPath = "Prefabs/UI/MailListWindow";   // MailPrefabBuilder 生成（T4），几何以预制体为准
 
     // ---- 美术资源（Resources 路径，不带扩展名）----
-    const string ArtDir = "Art/UI/邮件";
+    const string ArtDir = "UI/Art/邮件";
     const string SpriteWindow = ArtDir + "/_0010_底框";
     const string SpriteClose = ArtDir + "/_0005_关闭";
     const string SpriteBtnClaimAll = ArtDir + "/_0006_一键领取";

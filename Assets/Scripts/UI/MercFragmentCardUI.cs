@@ -127,7 +127,7 @@ public class MercFragmentCardUI
             if (head == null) head = MercPortraitSprites.GetStand(hireIdOrAssetId);
             if (head == null)
                 Debug.LogError("[MercFragmentCardUI] 佣兵头像/立绘都取不到，碎片格头像空："
-                    + "Icons/MercHead|" + ContentPaths.Icons.MercStand + " / " + hireIdOrAssetId);
+                    + "UI/Icons/MercHead|" + ContentPaths.Icons.MercStand + " / " + hireIdOrAssetId);
             SetSprite(Head, head);
         }
     }

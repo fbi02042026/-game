@@ -207,7 +207,7 @@ public partial class BattleEntryDraftPanel
         var img = go.GetComponent<Image>();
         // 2026-10-15 主人拍板：概率按钮换成美术图 Art/UI/Common/提示（金币问号），
         // 不再用「深色圆底 + ! 文本」；取不到图 LogError，不兜底造图。
-        var iconSp = Resources.Load<Sprite>("Art/UI/Common/提示");
+        var iconSp = Resources.Load<Sprite>("UI/Art/Common/提示");
         if (iconSp == null)
             Debug.LogError("[BattleEntryDraftPanel] 缺少美术图 Art/UI/Common/提示（概率按钮图标不显示）");
         img.sprite = iconSp;

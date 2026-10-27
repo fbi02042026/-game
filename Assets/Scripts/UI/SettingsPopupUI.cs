@@ -530,7 +530,7 @@ public class SettingsPopupUI : MonoBehaviour
     {
         // 2026-10-17 A1 修复：图一直在 Resources/Art/UI/设置/（父节点 Toggle 引用「开」，子节点 Knob 引用「关」），
         // 原路径 UI/Settings/ 目录不存在导致永远加载失败、旋钮贴图不切换。
-        var fromRes = Resources.Load<Sprite>("Art/UI/设置/" + fileName);
+        var fromRes = Resources.Load<Sprite>("UI/Art/设置/" + fileName);
         if (fromRes != null) return fromRes;
 #if UNITY_EDITOR
         // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。

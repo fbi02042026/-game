@@ -336,7 +336,7 @@ public static class MercHireSession
     /// 真源 Resources/Art/UI/Tavern/酒馆头像/（204×248，池格预制体序列化的就是这套，走路径加载）。
     /// ⚠️ 别混用 <see cref="LoadRarityFrame"/>——那是三选一高卡（219×789 插画卡底），压到 200×300 卡上会变形。
     /// </summary>
-    public const string TavernCardFrameDir = "Art/UI/Tavern/酒馆头像";
+    public const string TavernCardFrameDir = "UI/Art/Tavern/酒馆头像";
 
     public static Sprite LoadTavernCardFrame(MercRosterDefs.MercRarity rarity)
     {
