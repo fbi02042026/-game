@@ -147,11 +147,6 @@ public class SafeAreaFitter : MonoBehaviour
             float topU = topN * ph;
             float botU = bottomN * ph;
 
-            // 【临时打点·查顶条消失】Shift/Inset 会改锚点结构，顶条三件套进来 = 抓到写入者
-            if (mode != FitMode.Offset && UiLayoutStretch.IsTopWatchName(rt.gameObject.name))
-                Debug.LogError($"[顶条抓现行-写入者] SafeAreaFitter.Apply mode={mode} edge={edge} " +
-                               $"on {rt.gameObject.name} topU={topU:F1} botU={botU:F1}", rt);
-
             Vector2 omin = _baseOffsetMin;
             Vector2 omax = _baseOffsetMax;
 

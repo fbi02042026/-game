@@ -444,10 +444,12 @@ public class FirstRunGuide : MonoBehaviour
         if (TalentUI.Instance != null && TalentUI.Instance.IsOpen)
         {
             // ③ 具体的天赋节点
-            yield return CoPoint("戳这个节点。金币够的话立刻生效……我看着你点。",
+            // 【2026-10-27 主人拍板】①话术改「激活这个天赋」口径；②本步不设超时（timeout=0=一直等玩家亲手点）：
+            // 原先 45s 超时放行会让引导整体跳完，「教完了」气泡盖在还开着的天赋界面上（主人截图实锤）。
+            yield return CoPoint("点这个节点，激活这个天赋，属性立刻生效。",
                 () => TalentNodeRect(before),
                 () => TalentUI.LeftUnlockedCount() > before,
-                false, NodeTimeout);
+                false, 0f);
         }
 
         Hide();
@@ -543,6 +545,7 @@ public class FirstRunGuide : MonoBehaviour
     /// 显示「遮罩 + 高亮圈 + 气泡」→ 等待完成条件（或点「继续」）→ 收起。
     /// 不碰步骤游标，结果写在 <see cref="_pointOk"/> 里，由上一步／外层决定推进还是跳过。
     /// 目标控件拿不到、或超时未达成，一律返回 false 并打日志，**不会卡死**。
+    /// 【2026-10-27 主人拍板】timeout &lt;= 0 = 不设超时，一直等完成条件/玩家亲手点（配合挂屏看门狗喂狗）。
     /// </summary>
     IEnumerator CoPoint(string text, Func<RectTransform> target, Func<bool> isDone,
         bool tapToAdvance, float timeout, float bindTimeoutOverride = BindTimeout)
@@ -681,7 +684,10 @@ public class FirstRunGuide : MonoBehaviour
 
             // 【2026-10-19 修复】同绑定窗：切后台一帧会烧穿 45s 超时 → 回前台步骤被瞬间跳过
             t += Mathf.Min(Time.unscaledDeltaTime, 0.1f);
-            if (t >= timeout)
+            // 【2026-10-27 主人拍板】timeout<=0 = 本步不设超时，一直等玩家自己点（如「激活天赋」步）；
+            // 顺带喂挂屏看门狗（_shownAt）：协程活着就不强制收场；协程若死了没人喂，看门狗照常兜底防锁屏。
+            if (timeout <= 0f) _shownAt = Time.unscaledTime;
+            if (timeout > 0f && t >= timeout)
             {
                 Hide();
                 Debug.LogWarning("[Guide] 引导步骤等待超时，放行不卡流程");

@@ -13,11 +13,13 @@ using UnityEngine;
 /// </summary>
 public static class SideIslandGuide
 {
-    // —— 台词常量（调性按 2026-10-16 主人拍板：有趣、流行、别端着）——
+    // —— 台词常量 ——
+    // 【2026-10-27 主人拍板】会长不玩梗（原「我勒个豆」调撤掉），情报口吻正常说话；
+    // 补会长办公室背景图（原没给 backgroundId，只铺暗底被主人报「没有背景图」）。
     const string Speaker = "会长";
-    const string Line1Fmt = "我勒个豆，差点忘了——第七小队又在「{0}」那边失联了，就发回来一条消息：";
-    const string Line2 = "「岛上似乎藏着不少好东西……滋滋……」得，信号又断了，老毛病。";
-    const string Line3 = "算个支线，不打也不耽误你主线。想去的话，点开冒险页就能看到那个岛，左上角任务栏里也挂着。";
+    const string Line1Fmt = "差点忘了说正事——第七小队在「{0}」那边失联了，只发回来一条消息：";
+    const string Line2 = "「岛上似乎藏着不少好东西……滋滋……」信号到这里就断了，老毛病了。";
+    const string Line3 = "这条我先记成支线，不打也不耽误你主线。想去的话，点开冒险页就能看到那个岛，左上角任务栏里也挂着。";
 
     /// <summary>
     /// 轮询入口：当前有待打的支线岛且该岛没播过指引 → 播（播前先写标记，防中途切场景重复弹）。
@@ -48,11 +50,15 @@ public static class SideIslandGuide
 
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Solo(Speaker, Line1Fmt.Replace("{0}", isl.name), StoryPortraits.GuildMaster),
+            // 首句带会长办公室背景（换背景自带地点揭示黑场，快节奏场景名单里已有 guild_office）；
+            // 【2026-10-27】keepSceneArt 改 false：这是主界面上的插播指引，播完必须整体收窗——
+            // 原 true 只藏对话框，IntroVeil 留下的 42% 黑幕和常驻 DialogueUI 全留在主界面上（主人报「剧情框消失后屏幕是脏的」）。
+            StoryDirector.Solo(Speaker, Line1Fmt.Replace("{0}", isl.name), StoryPortraits.GuildMaster)
+                .Bg(StoryBackgrounds.GuildOffice),
             StoryDirector.Solo(Speaker, Line2, StoryPortraits.GuildMaster),
             StoryDirector.Solo(Speaker, Line3, StoryPortraits.GuildMaster),
         };
-        dir.Play(beats, null, null, keepSceneArt: true);
+        dir.Play(beats, null, null);
         Debug.Log($"[SideIslandGuide] 播放支线岛情报指引：岛{view.islandId}「{isl.name}」");
     }
 }

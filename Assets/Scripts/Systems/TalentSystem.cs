@@ -20,8 +20,21 @@ public static class TalentSystem
     /// </summary>
     public const string ReasonNoStones = "天赋石不足";
 
-    /// <summary>遗忘药水道具 id（item_defs.csv；2026-10-21 主人拍板：洗天赋改为消耗 1 个）。</summary>
+    /// <summary>遗忘药水道具 id（item_defs.csv；2026-10-21 主人拍板：洗点消耗遗忘药水）。</summary>
     public const string ItemForgetPotion = "item_forget_potion";
+
+    /// <summary>
+    /// 下一次洗点消耗的遗忘药水数（2026-10-27 主人拍板阶梯计费）：
+    /// 第 1-3 次各 1 个、第 4-6 次各 2 个、第 7 次起各 3 个（不再继续涨）。
+    /// 次数真源 = <see cref="SaveData.respecCount"/>（已完成洗点次数，本类 TryRespecRight 是唯一写入口）。
+    /// </summary>
+    public static int NextRespecPotionCost(int respecDoneCount)
+    {
+        int nth = Mathf.Max(0, respecDoneCount) + 1;   // 下一次 = 第 nth 次
+        if (nth <= 3) return 1;
+        if (nth <= 6) return 2;
+        return 3;
+    }
 
     // ===== 左列（金币，保持不变）=====
     public static bool CanUnlockLeft(int index1Based, out string reason)
@@ -294,32 +307,41 @@ public static class TalentSystem
         return false;
     }
 
-    /// <summary>有没有遗忘药水（2026-10-21 主人拍板：洗点消耗 1 个）。</summary>
+    /// <summary>
+    /// 遗忘药水够不够下一次洗点（2026-10-27 主人拍板：按阶梯消耗判定，见 <see cref="NextRespecPotionCost"/>）。
+    /// 旧口径（10-21 固定 ×1）作废。
+    /// </summary>
     public static bool HasForgetPotion(out string reason)
     {
         reason = null;
         var data = SaveSystem.Instance?.Data;
         if (data == null) { reason = "无存档"; return false; }
-        if (data.TownBagCount(ItemForgetPotion) > 0) return true;
-        reason = "需要遗忘药水（里程商店 500 点兑换，每周限购 1）";
+        int cost = NextRespecPotionCost(data.respecCount);
+        int have = data.TownBagCount(ItemForgetPotion);
+        if (have >= cost) return true;
+        reason = "需要遗忘药水×" + cost + "（当前持有 " + have + "；里程商店 500 点兑换，每周限购 1）";
         return false;
     }
 
     /// <summary>
     /// 洗右列：清除所有右列节点的等级（含 JobChoice 的已选职业），退还已投入天赋石的 80%（向下取整）。
-    /// 左列不可洗。respecCount 由另一子代理负责写入，这里不引用该字段。
+    /// 左列不可洗。
+    /// 【2026-10-27 主人拍板】消耗走阶梯（1/1/1 → 2/2/2 → 3…），每成功洗点一次 respecCount +1 ——
+    /// 本方法即 respecCount 唯一写入口（原「respecCount 由另一子代理写入」口径作废：全库并无写入者）。
     /// </summary>
     public static bool TryRespecRight(out string reason)
     {
         if (!CanRespecRight(out reason)) return false;
         var data = SaveSystem.Instance.Data;
 
+        int potionCost = NextRespecPotionCost(data.respecCount);   // 先取价再计数，同一次调用内口径一致
         if (!HasForgetPotion(out reason)) return false;
-        if (!data.TownBagTryConsume(ItemForgetPotion, 1))
+        if (!data.TownBagTryConsume(ItemForgetPotion, potionCost))
         {
             reason = "遗忘药水扣除失败";
             return false;
         }
+        data.respecCount++;
 
         int totalSpent = 0;
         for (int i = 0; i < TalentDefs.RightNodes.Length; i++)

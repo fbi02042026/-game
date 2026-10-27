@@ -119,7 +119,8 @@ public sealed class GoldDungeonBattleMode : BattleMode
         }
         // 【2026-10-23 主人拍板「打通前一难度才开下一难度」】通关即记录最高难度（死亡不通关不标记）
         ActivityDungeonRules.MarkCleared(bm.BattleDifficulty);
-        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+        // 【2026-10-27 主人拍板】战斗结果已在统一门播过，不再二次弹「战斗结算」——直接回城
+        bm.EndRunAndReturnToTown();
     }
 }
 
@@ -168,7 +169,8 @@ public sealed class BadgeDungeonBattleMode : BattleMode
         }
         // 【2026-10-23 主人拍板】与金币本同款：通关记录最高难度（金币/徽记共用活动标签进度）
         ActivityDungeonRules.MarkCleared(bm.BattleDifficulty);
-        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+        // 【2026-10-27 主人拍板】战斗结果已在统一门播过，不再二次弹「战斗结算」——直接回城
+        bm.EndRunAndReturnToTown();
     }
 }
 
@@ -215,7 +217,8 @@ public sealed class ScrollDungeonBattleMode : BattleMode
         }
         // 与金币/徽记本同款：通关记录最高难度（三本共用活动标签进度）
         ActivityDungeonRules.MarkCleared(bm.BattleDifficulty);
-        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+        // 【2026-10-27 主人拍板】战斗结果已在统一门播过，不再二次弹「战斗结算」——直接回城
+        bm.EndRunAndReturnToTown();
     }
 }
 
@@ -262,7 +265,8 @@ public sealed class GiftDungeonBattleMode : BattleMode
         }
         // 与前三本同款：通关记录最高难度（四本共用活动标签进度）
         ActivityDungeonRules.MarkCleared(bm.BattleDifficulty);
-        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+        // 【2026-10-27 主人拍板】战斗结果已在统一门播过，不再二次弹「战斗结算」——直接回城
+        bm.EndRunAndReturnToTown();
     }
 }
 
@@ -319,7 +323,8 @@ public sealed class BondDungeonBattleMode : BattleMode
             ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, MercFavorDefs.BondClearDiamond, save: true, notify: true);
             Debug.Log($"[BondDungeon] 羁绊通关：{hid} 已标记 + 钻石{MercFavorDefs.BondClearDiamond}");
         }
-        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+        // 【2026-10-27 主人拍板】战斗结果已在统一门播过，不再二次弹「战斗结算」——直接回城
+        bm.EndRunAndReturnToTown();
     }
 }
 
@@ -364,7 +369,8 @@ public sealed class SideIslandBattleMode : BattleMode
             return;
         }
         SettleIslandRewards(bm);
-        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+        // 【2026-10-27 主人拍板】战斗结果已在统一门播过，不再二次弹「战斗结算」——直接回城
+        bm.EndRunAndReturnToTown();
     }
 
     /// <summary>

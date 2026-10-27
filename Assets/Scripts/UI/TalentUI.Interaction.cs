@@ -126,7 +126,8 @@ public partial class TalentUI
             GlobalToastUI.Show(reason, true);
             return;
         }
-        // 2026-10-21 主人拍板：洗点消耗遗忘药水。有得洗但没药水 → 说清楚去哪买，不堵死按钮
+        // 【2026-10-27 主人拍板】洗点消耗遗忘药水走阶梯（1/1/1 → 2/2/2 → 3…），HasForgetPotion 已按
+        // 下一次真实价判定、reason 里带价与持有数。正常路径按钮灰态已挡住，这里只在状态竞态时兜住说清楚。
         if (!TalentSystem.HasForgetPotion(out string potionReason))
         {
             Debug.Log("[TalentUI] " + potionReason);

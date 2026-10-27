@@ -81,6 +81,8 @@ public partial class TalentUI : MonoBehaviour
     public Text sumAtkSpdText;
     public Button resetButton;
     public Button resetButtonGray;
+    /// <summary>【2026-10-27 主人新增节点】Footer/Icon/数量：遗忘药水持有数显示（×N），RefreshResetButton 写值。</summary>
+    public Text resetPotionCountText;
 
     [Header("选择弹层")]
     public GameObject choicePopup;

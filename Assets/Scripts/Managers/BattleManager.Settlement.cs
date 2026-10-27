@@ -1780,13 +1780,13 @@ public partial class BattleManager
     }
 
     /// <summary>
-    /// 主线冒险的通关结算：【2026-10-22 主人拍板「打一关回一次」】普通关清完直接回冒险页（不结束本局）；
-    /// 章末 Boss 仍弹胜利结算 → 回城 / 直进下一章。金币本这类模式有自己的结算，不进这里。
+    /// 主线冒险的通关结算：普通关/章末 Boss 都不再二次弹「战斗结算」
+    ///（【2026-10-27 主人拍板】战斗结束 = 「战斗结果」界面，已在统一门播过；战斗结算只留给
+    /// 不播战斗结果的模式：无限裂隙/终章/引导）。金币本这类模式有自己的结算，不进这里。
     /// </summary>
     public void SettleNormalStageClear()
     {
         bool isBoss = currentStage != null && currentStage.type == StageType.Boss;
-        var cm = ChapterManager.Instance;
         if (isBoss)
         {
             // 【2026-10-25 主人拍板「做分享和推广（好评引导）」】章末通关 → 回城后弹一次好评引导
@@ -1798,22 +1798,13 @@ public partial class BattleManager
             // 构筑/局内金币/局内装备/佣兵全清（EndRunAndReturnToTown）+ 回城后冒险页自动打开，
             // 下一章由玩家再点「开始冒险」—— 走完整开局链（重发启动金 + 重新抽构筑）。
             // 不能再像旧口径那样带着构筑 StartChapter + GoChapterGate 直进：那条路走 LoadStage 不重跑
-            // 开局链，清了构筑这边抽奖/技能就全废了。下一章可用性以存档解锁章数为准；
-            // 不可用（最后一章/未解锁）→【下一关】隐藏，只留【返回】（onNextStage=null 单确认钮口径）。
-            int nextChapter = (cm != null ? cm.currentChapter : 1) + 1;
-            if (HasNextChapter(nextChapter))
-            {
-                ShowVictorySettlementThen(
-                    EndRunAndReturnToTown,
-                    () =>
-                    {
-                        TownHubController.PendingOpenAdventure = true;
-                        EndRunAndReturnToTown();
-                    },
-                    "下一关");
-            }
-            else
-                ShowVictorySettlementThen(EndRunAndReturnToTown);
+            // 开局链，清了构筑这边抽奖/技能就全废了。下一章可用性以存档解锁章数为准。
+            // 【2026-10-27 主人拍板「战斗结束应该出现战斗结果那个界面，只有无限裂隙才出现战斗结算」】
+            // 战斗结果已在 FinishStageAfterPortalReached 统一门播过（UsesBattleResultScreen=true 的模式一次到位），
+            // 这里不再二次弹「战斗结算」——直接收尾回城。原双钮（下一关/返回）行为本就都 = 回城，
+            // 差别只在开不开冒险页，统一保留开冒险页（10-24「只要打完就清」口径不变，下一章由冒险页进）。
+            TownHubController.PendingOpenAdventure = true;
+            EndRunAndReturnToTown();
             return;
         }
 
@@ -1860,19 +1851,6 @@ public partial class BattleManager
                 if (RunStats.EquipGains[i] != null)
                     notice.equips.Add(RunStats.EquipGains[i]);
         AdventureRewardNotice.Push(notice);
-    }
-
-    /// <summary>
-    /// 【2026-10-22 主人拍板】下一章是否可进（章末结算【下一关】钮的显示条件）。
-    /// 以 ChapterRouteTable.AvailableChapters（存档解锁区域）为准；打完 Boss 时
-    /// OnStageComplete 已先 MarkChapterCleared/解锁，时序有保证。
-    /// </summary>
-    static bool HasNextChapter(int nextChapter)
-    {
-        var data = SaveSystem.Instance?.Data;
-        if (data == null) return false;
-        var avail = ChapterRouteTable.AvailableChapters(data);
-        return avail != null && avail.Contains(nextChapter);
     }
 
     /// <summary>

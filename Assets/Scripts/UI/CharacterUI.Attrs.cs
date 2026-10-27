@@ -9,8 +9,10 @@ public partial class CharacterUI
     {
         if (titleText != null)
             titleText.text = PlayerIdentity.DisplayName;
+        // 【2026-10-27 主人拍板】名字下那行由称号「见习」改为玩家等级 = 主界面名牌 Level 同款：
+        // 纯数字、同一出口 LevelSystem.CurrentLevel（存档永久账），与 GuildHallUI.RefreshNameplate 完全同值。
         if (titleSubText != null)
-            titleSubText.text = PlayerIdentity.Title;
+            titleSubText.text = Mathf.Max(1, LevelSystem.CurrentLevel).ToString();
 
         // 【2026-10-26 主人反馈「这个界面头像名称没有替换成主界面的」】头像与主界面名牌同源：
         // 每次刷新按存档头像槽位（AvatarDefs.CurrentSlot）主动设图（换头像后进本页即跟随）。

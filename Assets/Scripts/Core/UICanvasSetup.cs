@@ -92,9 +92,6 @@ public static class UICanvasSetup
     public static void EnsureRootStretch(RectTransform rt)
     {
         if (rt == null) return;
-        // 【临时打点·查顶条消失】顶条三件套进这里 = 抓到写入者
-        if (rt.gameObject.name == "TopBar" || rt.gameObject.name == "ProgressBar" || rt.gameObject.name == "QuestPanel")
-            Debug.LogError($"[顶条抓现行-写入者] EnsureRootStretch 要改 {rt.gameObject.name}", rt);
         if (rt.localScale == Vector3.zero)
             rt.localScale = Vector3.one;
         rt.localPosition = Vector3.zero;

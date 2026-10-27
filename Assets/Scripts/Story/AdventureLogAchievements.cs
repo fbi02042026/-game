@@ -169,7 +169,11 @@ public static class AdventureLogAchievements
             data.completedLogAchIds.Add(id);
             AdventureLogMileage.GrantAchievement(id, MileageTier(id));
             any = true;
-            UIManager.Instance?.ShowToast($"成就达成：{list[i].Name}（打开冒险日志领取）");
+            // 【2026-10-27 主人拍板】「见习冒险者」（完成新手引导）不再弹达成提示：
+            // 它必然在引导收尾瞬间自动达成，toast 会跟「教完了」气泡/每日登录弹窗抢屏（主人截图实锤）。
+            // 只静默入账，冒险日志成就页照常可领。
+            if (id != "A001")
+                UIManager.Instance?.ShowToast($"成就达成：{list[i].Name}（打开冒险日志领取）");
         }
         if (any)
         {

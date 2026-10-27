@@ -269,8 +269,13 @@ public class BattleResultScreenUI : MonoBehaviour
 
         // 【2026-10-26 主人拍板】分享钮改版：居中收紧在奖励面板内 + 换主人给的分享钮图；
         // 下方一行「分享获得100钻 每日一次」提示。两件都挂奖励 Panel 下随 CanvasGroup 一起淡入。
-        BuildShareButton(rewardPanel, confirmT);
-        BuildShareTip(rewardPanel);
+        // 【2026-10-27 主人口径「引导没有分享按钮」】引导局两件都不建（提示行是分享钮的附属）。
+        bool isTutorial = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
+        if (!isTutorial)
+        {
+            BuildShareButton(rewardPanel, confirmT);
+            BuildShareTip(rewardPanel);
+        }
     }
 
     /// <summary>

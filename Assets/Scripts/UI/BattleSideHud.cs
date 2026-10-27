@@ -114,8 +114,11 @@ public class BattleSideHud : MonoBehaviour
         // 【2026-10-24 二次拍板「还是太往下了，还得往上几十」】-12 → +28（再上移 40）：
         // 根顶在血条底边上方 54.4、panel 高 70（pivot=顶沿），标签中心≈血条底边上方 47，整块贴住血条右端。
         // 【2026-10-26 主人拍板「血条挡住了击败的字，让字往下 30」】+28 → -2（下移 30）。
+        // 【2026-10-27 主人报「字和血条重叠了」】-2 → -50（再下移 48）：
+        //   标签高 54.6，-2 时标签中心≈血条底边上方 17、上缘探进血条 44px（截图实锤重叠）；
+        //   -50 时标签中心=血条底边下方 30.6、上缘在底边下方 3.3 → 完全移出血条。
         // 要再微调只动这一个数（每 +1 上移 1）。
-        const float ComboPanelTopOffset = -2f;
+        const float ComboPanelTopOffset = -50f;
         var comboGo = CreatePanel("ComboPanel", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(0.5f, 1f), new Vector2(0f, ComboPanelTopOffset), new Vector2(250f, 70f), transparent: true);
         _comboGroup = comboGo.AddComponent<CanvasGroup>();

@@ -228,7 +228,20 @@ public partial class TalentUI
 
     void RefreshResetButton()
     {
-        bool canReset = TalentSystem.CanReset(out _);
+        // 【2026-10-27 主人拍板】重置按钮亮/灰 = 药水够不够**下一次**消耗（阶梯：第1-3次×1、4-6次×2、第7次起×3）：
+        // 够 → 亮图「ResetButton」可点；不够 → 显示预制体「ResetButton灰」（灰图路径加载补真图）。
+        // 原口径（10-21「没药水不堵死按钮，点了告诉你去哪买」）作废；「去哪买」说明在里程商店条目里。
+        var data = SaveSystem.Instance?.Data;
+        int potionHave = data != null ? data.TownBagCount(TalentSystem.ItemForgetPotion) : 0;
+
+        // 药水计数（主人手摆节点 Footer/Icon/数量）：×N。
+        // 新字段在旧序列化 prefab 上为空（panelImage 已序列化时 Awake 跳过 AutoBind）→ 刷新时按名补绑一次。
+        if (resetPotionCountText == null)
+            resetPotionCountText = FindTxt("Panel/Footer/Icon/数量");
+        if (resetPotionCountText != null)
+            resetPotionCountText.text = "×" + potionHave;
+
+        bool canReset = TalentSystem.CanReset(out _) && TalentSystem.HasForgetPotion(out _);
         if (resetButton != null)
         {
             resetButton.gameObject.SetActive(canReset);
@@ -238,6 +251,20 @@ public partial class TalentUI
         {
             resetButtonGray.gameObject.SetActive(!canReset);
             resetButtonGray.interactable = false;
+            // 预制体 ResetButton灰 的 sprite 引用悬空（guid 全库无 meta，AGENTS.md §2.3）：
+            // 按路径加载补真图（与主界面名牌 Icon 同一口径，不是复制资源兜底）；缺图报错不静默。
+            if (!canReset)
+            {
+                var img = resetButtonGray.GetComponent<Image>();
+                var graySp = Resources.Load<Sprite>("UI/Art/Talent/重置天赋灰");
+                if (img != null && graySp != null)
+                {
+                    img.sprite = graySp;
+                    img.color = Color.white;
+                }
+                else
+                    Debug.LogError("[TalentUI] 重置天赋灰.png 取不到（应在 Resources/UI/Art/Talent/），灰态按钮没图（不兜底）");
+            }
         }
     }
 

@@ -468,13 +468,16 @@ public partial class TalentUI
         int refund = (int)(totalSpent * 0.8f); // 向下取整，与洗点逻辑一致
 
         // 2026-10-21 主人拍板：洗点消耗遗忘药水，确认框里让玩家看到当前持有数
+        // 【2026-10-27】消耗改阶梯（1/1/1 → 2/2/2 → 3…），按下一次的真实价显示
         int potionHave = SaveSystem.Instance?.Data != null
             ? SaveSystem.Instance.Data.TownBagCount(TalentSystem.ItemForgetPotion) : 0;
+        int potionCost = SaveSystem.Instance?.Data != null
+            ? TalentSystem.NextRespecPotionCost(SaveSystem.Instance.Data.respecCount) : 1;
 
         string body =
             "确认要洗点吗？\n" +
             "· 将清空全部右侧天赋（含已选职业）；\n" +
-            "· 消耗遗忘药水×1（当前持有 " + potionHave + "）；\n" +
+            "· 消耗遗忘药水×" + potionCost + "（当前持有 " + potionHave + "）；\n" +
             "· 返还已投入天赋石的 80%：本次预计返还 " + refund + "（已投入 " + totalSpent + "）；\n" +
             "· 左侧金币天赋不参与洗点，金币不返还。";
 
