@@ -521,6 +521,14 @@ public static class RunLoadout
 
     public static bool IsMercFull => _data?.mercs != null && _data.mercs.Count >= MaxRunMercs;
 
+    /// <summary>把指定下标的佣兵替换为新条目（羁绊副本满员时保证该佣兵进队用；下标越界 = 无操作）。</summary>
+    public static void ReplaceMercAt(int index, RunMercEntry entry)
+    {
+        if (_data?.mercs == null || entry == null) return;
+        if (index < 0 || index >= _data.mercs.Count) return;
+        _data.mercs[index] = entry;
+    }
+
     public static bool TryAddMerc(RunMercEntry entry)
     {
         if (_data == null || entry == null || string.IsNullOrEmpty(entry.mercId)) return false;

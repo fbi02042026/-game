@@ -251,7 +251,8 @@ public static class MercGrowInventory
     {
         if (difficulty < 0 || difficulty > 2) difficulty = 0;   // 越界按普通难度处理（照徽记/卷轴口径）
         int n = difficulty == 2 ? 4 : difficulty == 1 ? 3 : 2;
-        var granted = MercFavorSystem.GrantRandomGifts(n);
+        // 礼物副本是「副本」来源：允许掉传奇（includeLegendary=true）；传奇只在副本 / 里程商店获得
+        var granted = MercFavorSystem.GrantRandomGifts(n, true);
         Debug.Log($"[MercGrow] 礼物副本掉落 难度{difficulty} → 礼物×{(granted != null ? n : 0)}");
     }
 

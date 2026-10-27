@@ -227,10 +227,9 @@ public partial class AdventureUI
     }
 
     /// <summary>
-    /// 礼物横条（2026-10-26 主人拍板「新加一个掉落礼物的活动副本周六开启」）：
-    /// prefab 只摆了金币/徽记/卷轴三条 → 克隆卷轴条生成「礼物」条（照 AdventureUI.Finale 追查条克隆先例，
-    /// 只做一次；找不到卷轴条 LogError 不重试防刷屏）。摆位 = 卷轴条下方一行（行距 = 金币行 y − 徽记行 y 实测），
-    /// 文案「礼物副本 / 好感礼物每周六开启」，选中高亮子节点照用。
+    /// 礼物横条（2026-10-26 主人拍板「新加一个掉落礼物的活动副本周六开启」，2026-10-27 已落盘为 prefab 实体条）：
+    /// prefab 已摆好「礼物」实体条，本方法 exist != null 直接返回；克隆卷轴条仅作兜底（prefab 被改缺实体条才触发）。
+    /// 文案「礼物副本 / 好感礼物每周六开启」，选中高亮子节点照用；bg/选中 复用原背景图（prefab 引用，不做单独图片）。
     /// </summary>
     Transform EnsureGiftRow(Transform list)
     {
@@ -804,6 +803,8 @@ public partial class AdventureUI
                 PendingBadgeDungeon = false;
                 PendingScrollDungeon = false;
                 PendingGiftDungeon = false;
+                PendingBondDungeon = false;
+                PendingBondHireId = null;
                 // 不调 SetChapter：裂隙章节状态由 StartEndlessRift 全权负责
             }
             else if (activity)

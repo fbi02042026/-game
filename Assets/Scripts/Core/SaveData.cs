@@ -381,7 +381,12 @@ public class SaveData
     /// <summary>今日已用对话槽，id = "H001:0"（hireId:槽位下标 0..2；每佣兵每槽每天 1 次，跨天清空）。</summary>
     public List<StringIdEntry> favorTalkedEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> favorTalkedToday = new HashSet<string>();
-    /// <summary>好感礼物仓：gift_id → 持有数（礼物表见 MercFavorDefs.Gifts；获取来源待拍板，发放走 AddFavorGift）。</summary>
+    /// <summary>
+    /// 好感礼物仓：gift_id → 持有数（礼物表见 MercFavorDefs.Gifts）。
+    /// 获取来源（2026-10-26 主人拍板，两处，发放都走 AddFavorGift）：
+    /// ① 每日对话聊完回礼（MercFavorSystem.GrantRandomGift，每名佣兵 3 次聊完随机 1 个）；
+    /// ② 礼物副本通关掉落（MercGrowInventory.GrantGiftDungeonDrops，普通 ×2 / 困难 ×3 / 噩梦 ×4）。
+    /// </summary>
     public List<StringIntEntry> favorGiftEntries = new List<StringIntEntry>();
     [NonSerialized] public Dictionary<string, int> favorGifts = new Dictionary<string, int>();
     /// <summary>已通关羁绊地图的佣兵（hireId 集合，一次性；二期接专属双人关后写入）。</summary>
@@ -500,6 +505,10 @@ public class SaveData
     public string mileageShopWeekKey = "";
     public List<StringIntEntry> mileageShopBuyEntries = new List<StringIntEntry>();
     [NonSerialized] public Dictionary<string, int> mileageShopBought = new Dictionary<string, int>();
+    /// <summary>每日传奇礼物（里程商店）：本地日键（yyyyMMdd）。跨天由 AdventureLogMileageShop.EnsureDayDaily 重置 bought。</summary>
+    public string mileageDailyGiftDayKey = "";
+    /// <summary>每日传奇礼物（里程商店）：今日是否已兑换（0/1，每日限量 1）。跨天清零。</summary>
+    public int mileageDailyGiftBought = 0;
     public int mercScrollCommon = 0;
     public int mercScrollRare = 0;
     public int mercScrollLegendary = 0;

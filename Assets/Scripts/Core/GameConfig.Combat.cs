@@ -586,6 +586,22 @@ public static partial class GameConfig
     public static readonly float[] PLAYER_SKILL_OPENING_CD_MUL = { 0f, 0.33f, 0.66f, 1f };
 
     // ============================================================
+    // 疾风架势「手动窗口」（2026-10-27 主人拍板）：CD 好且身边有敌人 → 弹倒计时窗口，
+    // 窗口内点屏幕 = 英雄多打一次普攻（×0.8）；窗口结束自动上基础攻速 buff（保留，不点不亏），
+    // CD 逐次递增封顶。疾风已从自动释放池摘出（BattleManager.FindReadySkillSlot 跳过真 id gale_stance）。
+    // ============================================================
+    /// <summary>疾风窗口时长（秒）：窗口内可反复点击多打，超时自动结算。</summary>
+    public const float GALE_WINDOW_DURATION = 4f;
+    /// <summary>疾风第 1 轮 CD（秒）。表里的 cooldown(15s) 对疾风不再使用。</summary>
+    public const float GALE_BASE_CD = 30f;
+    /// <summary>每完成一次窗口，下次 CD 增加量（秒）。</summary>
+    public const float GALE_CD_STEP = 6f;
+    /// <summary>疾风 CD 封顶（秒）。</summary>
+    public const float GALE_MAX_CD = 60f;
+    /// <summary>窗口内「多打一次」的伤害系数（×0.8 = 减 20%，主人拍板）。</summary>
+    public const float GALE_EXTRA_DMG_MULT = 0.8f;
+
+    // ============================================================
     // 敌人集中调参区：public static 便于实机热改与单点回退。
     // 敌人数值只能靠手感，出问题改这里的值即可，不要散落到各处硬编码。
     // ============================================================

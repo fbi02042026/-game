@@ -207,6 +207,8 @@ public partial class Mercenary : UnitBase
         ApplyOutStarBonus();
         // 【2026-10-23 施工单 T4】养成资质加成同款补挂时机（幂等：_growApplied 挡重复，无养成记录是无操作）。
         ApplyGrowBonus();
+        // 【2026-10-27 羁绊】通关羁绊后全属性 ×1.5 同款补挂时机（幂等：_bondApplied 挡重复，未通关是无操作）。
+        ApplyBondClearBonus();
     }
 
     /// <summary>

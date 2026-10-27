@@ -49,6 +49,7 @@ public partial class Mercenary : UnitBase
         attr.ResetToBase();
         _outStarApplied = false;   // 【2026-10-22 T8】基底重建后加成要重挂（SetHireId/下方出口会再调）
         _growApplied = false;      // 【2026-10-23 施工单 T4】养成资质加成同款幂等闸，与升星并联互不干扰
+        _bondApplied = false;      // 【2026-10-27 羁绊】基底重建后羁绊乘区要重挂
         level = Mathf.Max(1, level);
 
         if (MercRosterDefs.TryGetByAssetId(id, out _))
@@ -72,6 +73,7 @@ public partial class Mercenary : UnitBase
             ApplyRunTempBuffs();
             ApplyOutStarBonus();   // 【2026-10-22 施工单 T8】局外星攻防加成（hireId 已设时在此生效，未设等 SetHireId）
             ApplyGrowBonus();      // 【2026-10-23 施工单 T4】养成资质加成（外层乘区，与升星并联）
+            ApplyBondClearBonus(); // 【2026-10-27 羁绊】通关羁绊后全属性 ×1.5（与升星/养成并联）
             return;
         }
 
@@ -131,6 +133,7 @@ public partial class Mercenary : UnitBase
         ApplyRunTempBuffs();
         ApplyOutStarBonus();
         ApplyGrowBonus();      // 【2026-10-23 施工单 T4】养成资质加成（外层乘区，与升星并联）
+        ApplyBondClearBonus(); // 【2026-10-27 羁绊】通关羁绊后全属性 ×1.5（与升星/养成并联）
     }
 
     // ============================================================
@@ -170,6 +173,9 @@ public partial class Mercenary : UnitBase
     /// <summary>本次属性基底是否已挂过养成资质加成（与 _outStarApplied 同款幂等闸，互不干扰）。</summary>
     bool _growApplied;
 
+    /// <summary>本次属性基底是否已挂过羁绊通关乘区（与上面同款幂等闸）。</summary>
+    bool _bondApplied;
+
     /// <summary>
     /// 【2026-10-23 主人拍板 C2=A / 施工单 T4】佣兵升阶（局外养成等级）资质加成：
     /// 按 MercGrowSystem 累计资质（升级时掷定即存，本函数只读乘一次）做<b>外层乘区</b>
@@ -204,6 +210,36 @@ public partial class Mercenary : UnitBase
         if (hpPct != 0f)
             attr.AddAttr(AttrType.MaxHp, hpPct, true);
         Debug.Log($"[Mercenary] 养成资质加成生效：{hid} Lv{MercGrowSystem.LevelOf(hid)} → 攻/魔攻 +{atkPct:0%}，防/魔防 +{defPct:0%}，血 +{hpPct:0%}");
+    }
+
+    // ============================================================
+    // 【2026-10-27 主人拍板】羁绊地图通关：该佣兵全属性永久 ×1.5（BondClearStatMul）
+    // ============================================================
+
+    /// <summary>
+    /// 【2026-10-27 主人拍板】羁绊地图通关后，该佣兵全属性（血/攻/防/魔攻/魔防/攻速/移速）永久 ×1.5。
+    /// 外层乘区（attr.AddAttr isPercent，与升星 / 养成并联叠乘），不改 MercRosterDefs 内部公式（红线）。
+    /// 判据唯一出口 = SaveData.IsMercBondCleared（存档 favorBondClearedIds）。
+    /// hireId 未设（Init 时序）→ 不置位、不报错，等 SetHireId 再补；未通关羁绊 → 不置位（轻量重查，无副作用）。
+    /// 数值唯一真源 = MercFavorDefs.BondClearStatMul。
+    /// </summary>
+    public void ApplyBondClearBonus()
+    {
+        if (attr == null || _bondApplied) return;
+        string hid = !string.IsNullOrEmpty(hireId) ? hireId : mercId;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || string.IsNullOrEmpty(hid)) return;   // hireId 未设（Init 时序）→ 等 SetHireId 再补
+        if (!data.IsMercBondCleared(hid)) return;                 // 未通关羁绊：不置位，下次 SetupAttributes/SetHireId 再查
+        _bondApplied = true;
+        float mul = MercFavorDefs.BondClearStatMul - 1f;          // 1.5 → +50%
+        attr.AddAttr(AttrType.MaxHp,        mul, true);
+        attr.AddAttr(AttrType.Attack,       mul, true);
+        attr.AddAttr(AttrType.Defense,      mul, true);
+        attr.AddAttr(AttrType.MagicAttack,  mul, true);
+        attr.AddAttr(AttrType.MagicDefense, mul, true);
+        attr.AddAttr(AttrType.AttackSpeed,  mul, true);
+        attr.AddAttr(AttrType.MoveSpeed,    mul, true);
+        Debug.Log($"[Mercenary] 羁绊属性加成生效：{hid} 全属性 ×{MercFavorDefs.BondClearStatMul}");
     }
 
     // ============================================================

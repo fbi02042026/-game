@@ -74,5 +74,12 @@ public enum BattleModeId
     /// 选「追查真相」后解锁的 2 个旁挂剧情关（FinaleDefs），打完接完整揭底演出。
     /// 不占冒险界面按钮位，入口 = 冒险页追查入口（解锁后出现）。
     /// </summary>
-    Finale
+    Finale,
+
+    /// <summary>
+    /// 羁绊副本（2026-10-20 主人拍板「照礼物副本框架」）：好感满的佣兵专属单场 Elite 关；
+    /// 该佣兵强制进玩家队伍，难度固定（不开放选择，≈5~7 章强度），一次性通关后该佣兵全属性永久 ×1.5 + 奖励钻石。
+    /// 不推进主线、不掉落。入口 = 好感界面「羁绊地图」按钮（MercFavorUI.OnBondClicked 置 PendingBondDungeon）。
+    /// </summary>
+    BondDungeon
 }

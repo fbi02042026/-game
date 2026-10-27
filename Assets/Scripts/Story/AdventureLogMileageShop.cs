@@ -18,10 +18,12 @@ public static class AdventureLogMileageShop
         ScrollCommon,
         ScrollRare,
         ScrollLegendary,
-        Item
+        Item,
+        /// <summary>好感礼物（2026-10-27 主人拍板：里程商店每日随机刷 1 件传奇礼物，限量 1，调 SaveData.AddFavorGift 发放）。</summary>
+        Gift
     }
 
-    public struct ShopItem
+    public class ShopItem
     {
         public string Id;
         public string Name;
@@ -196,5 +198,88 @@ public static class AdventureLogMileageShop
         var item = Items[index];
         int left = RemainThisWeek(item);
         return $"{item.Name}  {item.CostPoints}点  本周余{left}/{item.WeeklyLimit}";
+    }
+
+    // ============================================================
+    // 每日随机传奇礼物（2026-10-27 主人拍板「传奇礼物只在副本获得，也可以在里程商店里加上，每天随机出现 只有1个」）
+    // 来源二：里程商店每日（本地日）随机刷 1 件传奇礼物，限量 1，用里程点数兑换（调 SaveData.AddFavorGift 发放）。
+    // 与周限购商品（Items）完全独立：这里是「每日」计数（mileageDailyGiftBought + 日键），不走 WeeklyLimit / 周键。
+    // ============================================================
+
+    /// <summary>每日传奇礼物的里程点数价格（可调）。</summary>
+    public const int DailyLegendaryCost = 800;
+
+    /// <summary>今日随机传奇礼物（确定性：同一本地日恒定；跨天换一件）。无传奇礼物表项时返回 null。</summary>
+    public static ShopItem GetDailyLegendaryGift()
+    {
+        var legendaries = System.Array.FindAll(MercFavorDefs.Gifts, g => MercFavorDefs.IsLegendary(g));
+        if (legendaries.Length == 0) return null;
+        string dayKey = DateTime.Now.ToString("yyyyMMdd");
+        int hash = 0;
+        foreach (char c in dayKey) hash = hash * 31 + c;
+        int idx = System.Math.Abs(hash) % legendaries.Length;
+        var g = legendaries[idx];
+        return new ShopItem
+        {
+            Id = "mileage_daily_gift",
+            Name = "每日传奇·" + g.Name,
+            CostPoints = DailyLegendaryCost,
+            WeeklyLimit = 1,
+            Kind = RewardKind.Gift,
+            Amount = 1,
+            DefId = g.Id
+        };
+    }
+
+    /// <summary>日键跨天清零每日兑换计数（照 EndlessRiftRules.EnsureDay 日键模式，本地日判定）。</summary>
+    static void EnsureDayDaily(SaveData data)
+    {
+        if (data == null) return;
+        string today = DateTime.Now.ToString("yyyyMMdd");
+        if (data.mileageDailyGiftDayKey != today)
+        {
+            data.mileageDailyGiftDayKey = today;
+            data.mileageDailyGiftBought = 0;
+            SaveSystem.Instance?.Save();
+        }
+    }
+
+    /// <summary>今日是否已兑换过每日传奇礼物。</summary>
+    public static bool IsDailyLegendaryBoughtToday()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        EnsureDayDaily(data);
+        return data.mileageDailyGiftBought > 0;
+    }
+
+    /// <summary>每日传奇礼物当前能否兑换（判据：有货 / 今日未兑 / 里程点数够）。</summary>
+    public static bool CanBuyDailyLegendaryGift(out string reason)
+    {
+        reason = null;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) { reason = "存档未就绪"; return false; }
+        if (GetDailyLegendaryGift() == null) { reason = "今日无传奇礼物"; return false; }
+        EnsureDayDaily(data);
+        if (data.mileageDailyGiftBought > 0) { reason = "今日已兑换"; return false; }
+        if (AdventureLogMileage.Points < DailyLegendaryCost) { reason = $"里程点数不足（需{DailyLegendaryCost}）"; return false; }
+        return true;
+    }
+
+    /// <summary>兑换每日传奇礼物：扣里程点数 → 发好感礼物（SaveData.AddFavorGift）→ 记今日已兑。成功返回 true + 文案。</summary>
+    public static bool TryBuyDailyLegendaryGift(out string msg)
+    {
+        msg = null;
+        if (!CanBuyDailyLegendaryGift(out string reason)) { msg = reason; return false; }
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) { msg = "存档未就绪"; return false; }
+        var gift = GetDailyLegendaryGift();
+        if (!AdventureLogMileage.TrySpendPoints(DailyLegendaryCost)) { msg = "里程点数不足"; return false; }
+        data.mileageDailyGiftBought = 1;
+        data.AddFavorGift(gift.DefId, gift.Amount);
+        SaveSystem.Instance?.Save();
+        RedDot.RefreshCommon();
+        msg = $"兑换成功：{gift.Name}";
+        return true;
     }
 }

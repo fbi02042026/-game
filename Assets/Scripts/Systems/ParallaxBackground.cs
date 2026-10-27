@@ -14,8 +14,21 @@ public class ParallaxBackground : MonoBehaviour
     public ParallaxLayer midLayer = new ParallaxLayer { name = "Mid", parallaxFactor = 0.3f, autoFindByName = "2" };
     public ParallaxLayer frontLayer = new ParallaxLayer { name = "Front", parallaxFactor = 0.6f, autoFindByName = "1" };
 
-    [Header("背景注册表")]
+    [Header("背景注册表（2026-10-27 起仅留档，换图走路径加载，见 ChapterBackgroundPaths）")]
     public BattleBackgroundRegistry backgroundRegistry;
+
+    // 【2026-10-27 主人拍板「改」】战斗背景改路径加载新图（56字符guid拖不进prefab/registry，按10-23口径全走Resources.Load）。
+    // 路径相对任意 Resources/ 目录，不带扩展名；下标=章节号（0空占位）。
+    // 目前新图只有 1森林/2墓园/4草原 三张；3/5-8 缺图 → LogError 可见，不兜底不静默。
+    static readonly string[] ChapterBackgroundPaths = new string[]
+    {
+        "",                                                    // 0 占位
+        "Art/UI/background/新战斗背景/1森林",                   // 第1章
+        "Art/UI/background/新战斗背景/2墓园",                   // 第2章
+        "",                                                    // 第3章 暂无新图
+        "Art/UI/background/新战斗背景/4草原",                   // 第4章
+        "", "", "", "", "",                                    // 第5-8章 暂无新图
+    };
 
     [Header("2026-10-26 主人拍板：中景2/远景3先隐藏，战斗背景只用近景1（拼接单元）")]
     /// <summary>true=整层不建、源节点直接关掉；要恢复中远景改回 false 即可。</summary>
@@ -344,27 +357,36 @@ public class ParallaxBackground : MonoBehaviour
             return;
         }
 
-        if (backgroundRegistry == null)
-            backgroundRegistry = Resources.Load<BattleBackgroundRegistry>(ContentPaths.Config.BattleBackgrounds);
-        if (backgroundRegistry == null)
+        // 【2026-10-27 主人拍板「改」】按路径加载新战斗背景；旧 registry 引用全部悬空（56字符guid），
+        // 不再走注册表（backgroundRegistry 仅留档）。缺图 = LogError 可见，保留旧图不静默兜底。
+        Sprite chapterSprite = LoadChapterBackgroundSprite(chapter);
+        if (chapterSprite == null)
         {
-            Debug.LogWarning("[Parallax] BattleBackgroundRegistry未找到");
+            Debug.LogError($"[Parallax] 章节{chapter}新战斗背景缺失（ChapterBackgroundPaths 未配置或图不在 Resources 下），保留旧图");
             return;
         }
 
-        var bg = backgroundRegistry.GetBackground(chapter);
-        if (bg == null)
-        {
-            Debug.LogWarning($"[Parallax] 章节{chapter}无背景配置");
-            return;
-        }
-
-        SetLayerSprite(ref frontLayer, bg.frontSprite, "Front");
-        SetLayerSprite(ref midLayer, bg.midSprite, "Mid");
-        SetLayerSprite(ref backLayer, bg.backSprite, "Back");
+        SetLayerSprite(ref frontLayer, chapterSprite, "Front");
+        SetLayerSprite(ref midLayer, null, "Mid");
+        SetLayerSprite(ref backLayer, null, "Back");
         RefreshLayerWidth(ref frontLayer);
         RefreshLayerWidth(ref midLayer);
         RefreshLayerWidth(ref backLayer);
+    }
+
+    /// <summary>
+    /// 按章节号从 Resources 路径加载新战斗背景精灵（2026-10-27 起）。
+    /// 取不到返回 null（调用方 LogError 可见），不做任何兜底。
+    /// </summary>
+    static Sprite LoadChapterBackgroundSprite(int chapter)
+    {
+        if (chapter < 1 || chapter >= ChapterBackgroundPaths.Length) return null;
+        string path = ChapterBackgroundPaths[chapter];
+        if (string.IsNullOrEmpty(path)) return null;
+        var sprite = Resources.Load<Sprite>(path);
+        if (sprite == null)
+            Debug.LogError($"[Parallax] Resources.Load<Sprite> 失败: {path}（检查图是否在 Resources 下且 textureType=Sprite）");
+        return sprite;
     }
 
     void SetLayerSprite(ref ParallaxLayer layer, Sprite sprite, string layerName)

@@ -333,18 +333,47 @@ public class QuestBarBinder : MonoBehaviour
         var btn = row.GetComponent<Button>() ?? row.GetComponentInParent<Button>() ?? row.GetComponentInChildren<Button>(true);
         if (btn == null)
         {
-            // 行本身没有 Button：加一个（要求行自身有可点 Graphic；没有的话点击不生效，报出来让美术补底图）
-            var graphic = row.GetComponent<Graphic>();
-            if (graphic == null)
+            // 行内没有 Button：优先用行根自身 Graphic；没有再找行内最大的背景图（美术没放「前往」按钮时兜底，
+            // 保证「绝不让点击没反应」）。两者都没有才是真缺件 → LogError 让美术补。
+            var host = row.GetComponent<Graphic>() ?? FindBestClickGraphic(row);
+            if (host == null)
             {
                 DumpChildren(row, 0);
                 Debug.LogError($"[QuestBarBinder] 「{row.name}」行没有「前往」按钮、没有 Button 也没有可点击 Graphic，点击不了（子节点见上）");
                 return;
             }
-            btn = row.gameObject.AddComponent<Button>();
+            host.raycastTarget = true;   // 兜底点击载体必须可点
+            btn = host.gameObject.AddComponent<Button>();
+            Debug.LogWarning($"[QuestBarBinder] 「{row.name}」行没有「前往」按钮，已用行内背景图兜底点击（美术可在该行补「前往」按钮，点击更精准）");
         }
         btn.onClick.RemoveListener(onClick.Invoke);
         btn.onClick.AddListener(onClick.Invoke);
+    }
+
+    /// <summary>行内兜底点击载体：取面积最大的非文本 Graphic（背景图优先），没有再退任意 Graphic。</summary>
+    static Graphic FindBestClickGraphic(Transform row)
+    {
+        var candidates = row.GetComponentsInChildren<Graphic>(true);
+        Graphic best = null;
+        float bestArea = -1f;
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            var g = candidates[i];
+            if (g is Text) continue;   // 优先背景 Image，Text 只作兜底
+            var rt = g.rectTransform;
+            float area = rt != null ? rt.rect.width * rt.rect.height : 0f;
+            if (area > bestArea) { bestArea = area; best = g; }
+        }
+        if (best != null) return best;
+        bestArea = -1f;
+        for (int i = 0; i < candidates.Length; i++)
+        {
+            var g = candidates[i];
+            var rt = g.rectTransform;
+            float area = rt != null ? rt.rect.width * rt.rect.height : 0f;
+            if (area > bestArea) { bestArea = area; best = g; }
+        }
+        return best;
     }
 
     // ============================================================

@@ -137,7 +137,12 @@ public static class PlayerSkillPassive
     public static string TriggerText(string skillId)
     {
         if (string.IsNullOrEmpty(skillId)) return null;
-        if (!Triggers.TryGetValue(skillId, out var t)) return null;
+        // 2026-10-27 主人拍板：疾风架势改「手动窗口技」，弹窗文案单独走窗口语义（不再套「自动释放」句式）。
+        // 传入可能是运行时别名（ally_atk_speed），先解析真 id 再比对。
+        string resolvedId = PlayerSkillDefs.ResolveRealSkillId(skillId);
+        if (resolvedId == "gale_stance")
+            return $"就绪后弹 {GameConfig.GALE_WINDOW_DURATION:0} 秒点击窗口：点屏幕多打一次（威力 {Mathf.RoundToInt(GameConfig.GALE_EXTRA_DMG_MULT * 100f)}%）；不点则只上攻速";
+        if (!Triggers.TryGetValue(resolvedId, out var t)) return null;
         switch (t.kind)
         {
             case TriggerKind.HpBelow:

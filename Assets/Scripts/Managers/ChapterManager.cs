@@ -164,6 +164,28 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
+    /// 羁绊副本（2026-10-27 主人拍板「照礼物副本框架」）：好感满佣兵专属单场 Elite 战斗，
+    /// 难度固定（≈5~7 章强度，见 MercFavorDefs.BondDungeonChapter / BondDungeonDifficulty），不通关掉落、不推进主线。
+    /// 结构照抄 StartGiftDungeon；场景章 = 固定高章（难度来源之一），入参章号同样不再决定场景。
+    /// </summary>
+    public void StartBondDungeon(int chapterNum)
+    {
+        currentChapter = MercFavorDefs.BondDungeonChapter;
+        currentStageIndex = 0;
+        stageMap.Clear();
+        availableNextStages.Clear();
+        var stage = new StageData
+        {
+            stageIndex = 0,
+            type = StageType.Elite,
+            nextStages = new List<int>()
+        };
+        stageMap.Add(stage);
+        availableNextStages.Add(stage);
+        Debug.Log($"[ChapterManager] 羁绊副本 场景=第{currentChapter}章 单场（入参章号 {chapterNum} 不再决定场景）");
+    }
+
+    /// <summary>
     /// 支线岛（2026-10-23 合并方案）：单场 Boss 战。currentChapter = 岛的背景篇（怪池/背景资产同源复用），
     /// stageIndex=0 的 Boss 关（WavePlanner 的 Boss 取池按 STAGES_PER_GRAND-1，与 stageIndex 无关，真 Boss 行必入池）。
     /// 结构照抄 StartBadgeDungeon；通关结算走 SideIslandBattleMode.SettleStageClear（不进 OnStageComplete 主线链）。

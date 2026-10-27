@@ -96,6 +96,7 @@ public class RunDraftDirector : MonoBehaviour
 
         RebuildPlayerSkills();
         RestoreRunMercs();
+        EnsureBondMercInLoadout();   // 【2026-10-27 主人拍板】羁绊副本：该佣兵强制进玩家队伍
         RunLoadout.Save();
 
         RunSkillBarUI.Ensure();
@@ -674,6 +675,47 @@ public class RunDraftDirector : MonoBehaviour
             if (m.mercId == e.mercId) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// 【2026-10-27 主人拍板】羁绊副本：把该佣兵强制塞进本局队伍（"该佣兵已经上阵了"）。
+    /// 已在队 → 跳过；有空位 → 加入并上场；满员 → 顶掉最后一位，保证羁绊佣兵必在场上。
+    /// hireId 取自 BattleManager.BondMercHireId（进本时由好感界面 PendingBondHireId 捕获）。
+    /// </summary>
+    void EnsureBondMercInLoadout()
+    {
+        var bm = BattleManager.Instance;
+        if (bm == null || !bm.IsBondDungeon) return;
+        string hid = bm.BondMercHireId;
+        if (string.IsNullOrEmpty(hid) || !MercRosterDefs.TryGetByHireId(hid, out var def)) return;
+        if (RunLoadout.HasMerc(hid)) return;   // 玩家本就带着 → 不动
+
+        int level = Mathf.Max(1, MercGrowSystem.LevelOf(hid));
+        int outStar = MercStarSystem.OutStarOf(hid);
+        int star = outStar < 0 ? 1 : Mathf.Clamp(outStar, 1, 5);
+        var md = BuildMercData(def.AssetId, hid, level, star);
+        if (md == null) return;
+        var entry = new RunMercEntry
+        {
+            hireId = md.hireId, mercId = md.mercId, displayName = md.displayName,
+            nickname = md.nickname, level = md.level, star = md.star,
+            skillId = md.skillId, passiveSkillId = md.passiveSkillId
+        };
+
+        if (RunLoadout.TryAddMerc(entry))
+        {
+            SpawnRunMerc(entry);
+        }
+        else if (RunLoadout.IsMercFull)
+        {
+            // 满员：顶掉最后一位，保证羁绊佣兵必在场上（一次性专属关，可接受）
+            var mercs = RunLoadout.Mercs();
+            if (mercs.Count > 0)
+            {
+                RunLoadout.ReplaceMercAt(mercs.Count - 1, entry);
+                SpawnRunMerc(entry);
+            }
+        }
     }
 
     static Mercenary FindOutMerc(string hireIdOrMercId)

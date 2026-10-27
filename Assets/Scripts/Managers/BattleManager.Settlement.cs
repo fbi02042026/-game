@@ -131,6 +131,8 @@ public partial class BattleManager
         //    岛产出 = 固定金币 + 天赋石（岛结算链 SideIslandBattleMode.SettleIslandRewards）
         //    + 装备（宝箱链 DropsEquipment=true），三路各走各的
         if (IsSideIsland) return;
+        // —— 羁绊副本（2026-10-27）：专属单人关，不发任何掉落（钻石 + 永久属性乘区在 SettleStageClear 内发）——
+        if (IsBondDungeon) return;
         string stageType = currentStage.type == StageType.Boss ? "Boss"
                          : currentStage.type == StageType.Elite ? "Elite" : "Normal";
         bool firstClear = currentStage.type == StageType.Boss

@@ -26,6 +26,7 @@ public class TutorialHintUI : MonoBehaviour
     /// <summary>true=手在按钮上方朝下指（默认），false=按钮上方放不下，退回下方朝上指。</summary>
     bool _pointerAbove = true;
     float _hideAt = -1f;
+    float _bgLostAt = -1f;   // 切后台/失焦时刻（unscaledTime）；>0 表示自动隐藏计时已冻结
     bool _hard;
     /// <summary>上一次成功量到的目标矩形（引导条自身本地坐标）。</summary>
     bool _hasLastFollowRect;
@@ -362,6 +363,7 @@ public class TutorialHintUI : MonoBehaviour
         if (_raycaster == null) _raycaster = GetComponent<GraphicRaycaster>();
         if (_raycaster != null) _raycaster.enabled = hard;
         _hideAt = autoHideSeconds < 0f ? -1f : Time.unscaledTime + autoHideSeconds;
+        _bgLostAt = -1f;   // 重新展示：解冻计时（2026-10-27 切后台冻结用）
         SetDimsActive(hard);
         if (_holeRt != null)
             _holeRt.gameObject.SetActive(hard && highlight != null);
@@ -422,6 +424,7 @@ public class TutorialHintUI : MonoBehaviour
             _group.interactable = false;
         }
         _hideAt = -1f;
+        _bgLostAt = -1f;
         _follow = null;
         _hasLastFollowRect = false;
         _openT = 1f;
@@ -429,6 +432,35 @@ public class TutorialHintUI : MonoBehaviour
         ForceClearBlockers();
         HidePointer();
         RestoreDefaultSort();
+    }
+
+    // ── 切后台/失焦冻结自动隐藏计时（2026-10-27 主人「切出去打字一会回来引导消失了」）──
+    // 根因：_hideAt 用 Time.unscaledTime 定值，回前台时 unscaledTime 已累加后台时长 → Update 判定到点即 Hide。
+    // 修法：失焦/暂停记录时刻并冻结，回前台把后台时长补回 _hideAt（计时从离开处继续，不吞进度）。幂等：重复失焦不重复记。
+    void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus) FreezeHideTimer();
+        else ResumeHideTimer();
+    }
+
+    void OnApplicationPause(bool pauseStatus)
+    {
+        if (pauseStatus) FreezeHideTimer();
+        else ResumeHideTimer();
+    }
+
+    void FreezeHideTimer()
+    {
+        if (_hideAt > 0f && _bgLostAt < 0f) _bgLostAt = Time.unscaledTime;
+    }
+
+    void ResumeHideTimer()
+    {
+        if (_bgLostAt > 0f)
+        {
+            if (_hideAt > 0f) _hideAt += (Time.unscaledTime - _bgLostAt);
+            _bgLostAt = -1f;
+        }
     }
 
     /// <summary>设置弹窗等更高层 UI 打开时，暂时关掉硬遮罩挡点击。</summary>

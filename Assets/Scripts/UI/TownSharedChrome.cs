@@ -64,6 +64,11 @@ public static class TownSharedChrome
             if (!_cachedBottom.gameObject.activeSelf)
                 _cachedBottom.gameObject.SetActive(true);
             _cachedBottom.SetAsLastSibling();
+            // 底部五入口避让安全区底（挖孔/手势条）：贴在 MainBottomNav 组件所在节点挂 Offset，
+            // 与该组件 Awake 里挂的是同一节点 → GetComponent 复用已有 SafeAreaFitter，幂等不双倍。
+            var navSafe = _cachedBottom.GetComponent<MainBottomNav>()
+                      ?? _cachedBottom.GetComponentInChildren<MainBottomNav>(true);
+            if (navSafe != null) SafeAreaFitter.EnsureBottomOffset(navSafe.transform as RectTransform);
             if (!_bottomFontsDone)
             {
                 GameFonts.ApplyToHierarchy(_cachedBottom);

@@ -267,6 +267,63 @@ public sealed class GiftDungeonBattleMode : BattleMode
 }
 
 /// <summary>
+/// 羁绊副本（2026-10-27 主人拍板「照礼物副本框架」）：好感满的佣兵专属单场 Elite 关。
+/// 该佣兵强制进玩家队伍（RunDraftDirector.EnsureBondMercInLoadout），难度固定（不开放选择，≈5~7 章强度），
+/// 一次性通关后该佣兵全属性永久 ×1.5（Mercenary.ApplyBondClearBonus 自动生效）+ 奖励钻石（见 SettleStageClear）。
+/// 结构照抄 <see cref="GiftDungeonBattleMode"/>；不占 SlotTable 位，入口 = 好感界面「羁绊地图」按钮
+/// （MercFavorUI.OnBondClicked 置 PendingBondDungeon / PendingBondHireId）。
+/// </summary>
+public sealed class BondDungeonBattleMode : BattleMode
+{
+    public override BattleModeId Id => BattleModeId.BondDungeon;
+    public override string DisplayName => "羁绊副本";
+
+    /// <summary>不经 SlotTable 按钮（无按钮位），进本由好感界面按钮置 PendingBondDungeon 决定；本属性无消费点。</summary>
+    public override bool IsPlayable => false;
+
+    public override bool DropsEquipment => false;
+
+    /// <summary>羁绊副本是专属剧情关，不送局内抽奖币（照礼物本口径）。</summary>
+    public override int FreeEntryDraws => 0;
+
+    /// <summary>打完就结算回城、币随局清零，不发局内抽奖币。</summary>
+    public override bool GrantsRunCoins => false;
+
+    public override void BuildChapter(ChapterManager cm, int chapter)
+    {
+        if (cm == null)
+        {
+            Debug.LogError("[BattleMode] 羁绊副本 BuildChapter 失败：ChapterManager 为空");
+            return;
+        }
+        cm.StartBondDungeon(chapter);
+    }
+
+    /// <summary>
+    /// 通关结算：首次通关 → 标记羁绊已建立 + 发钻石；随后弹胜利结算回城。
+    /// 属性 ×1.5 是永久存档乘区，由 Mercenary.ApplyBondClearBonus 在战斗内自动生效，这里只负责"一次性标记 + 钻石"。
+    /// 二次进入（已通关）不应再发奖——但入口按钮已置灰，正常走不到这里。
+    /// </summary>
+    public override void SettleStageClear(BattleManager bm)
+    {
+        if (bm == null)
+        {
+            Debug.LogError("[BattleMode] 羁绊副本 SettleStageClear 失败：BattleManager 为空");
+            return;
+        }
+        string hid = bm.BondMercHireId;
+        var data = SaveSystem.Instance?.Data;
+        if (!string.IsNullOrEmpty(hid) && data != null && !data.IsMercBondCleared(hid))
+        {
+            data.MarkMercBondCleared(hid);
+            ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, MercFavorDefs.BondClearDiamond, save: true, notify: true);
+            Debug.Log($"[BondDungeon] 羁绊通关：{hid} 已标记 + 钻石{MercFavorDefs.BondClearDiamond}");
+        }
+        bm.ShowVictorySettlementThen(bm.EndRunAndReturnToTown);
+    }
+}
+
+/// <summary>
 /// 支线岛（2026-10-23 合并方案「岛壳用 2 岛依次解锁 + 岛内容用单 Boss 特殊关」）：
 /// 单场 Boss 战，10 体力/次，产出 = 固定局外金币 + 天赋石（SideIslandDefs 按岛定）
 /// + 装备掉落（DropsEquipment=true 走既有宝箱三选一链，Boss 关 bonusStar=2）。
@@ -817,6 +874,7 @@ public static class BattleModes
     public static readonly BadgeDungeonBattleMode BadgeDungeon = new BadgeDungeonBattleMode();   // 2026-10-23 徽记副本（不占 SlotTable 位）
     public static readonly ScrollDungeonBattleMode ScrollDungeon = new ScrollDungeonBattleMode(); // 2026-10-24 卷轴副本（不占 SlotTable 位）
     public static readonly GiftDungeonBattleMode GiftDungeon = new GiftDungeonBattleMode();       // 2026-10-26 礼物副本（不占 SlotTable 位）
+    public static readonly BondDungeonBattleMode BondDungeon = new BondDungeonBattleMode();       // 2026-10-27 羁绊副本（好感满佣兵专属，不占 SlotTable 位）
     public static readonly SideIslandBattleMode SideIsland = new SideIslandBattleMode();         // 2026-10-23 支线岛（不占 SlotTable 位）
     public static readonly FinaleBattleMode Finale = new FinaleBattleMode();                     // 2026-10-23 终章追查关（不占 SlotTable 位）
     public static readonly TutorialBattleMode Tutorial = new TutorialBattleMode();

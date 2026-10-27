@@ -116,6 +116,12 @@ public partial class AdventureUI
                 var mainNodeRestore = right != null ? right.Find(MainNodeName) : null;
                 var tbRestore = mainNodeRestore != null ? mainNodeRestore.Find("TitleBar") as RectTransform : null;
                 if (tbRestore != null) RestoreAdventureBase(tbRestore);
+                // 整列容器（主线/无限/活动副本）随资源条下移的还原（2026-10-27；未处理过 = no-op）
+                if (mainNodeRestore != null) RestoreAdventureBase(mainNodeRestore as RectTransform);
+                var endlessNodeRestore = right != null ? right.Find(EndlessNodeName) : null;
+                if (endlessNodeRestore != null) RestoreAdventureBase(endlessNodeRestore as RectTransform);
+                var activityNodeRestore = right != null ? right.Find(ActivityNodeName) : null;
+                if (activityNodeRestore != null) RestoreAdventureBase(activityNodeRestore as RectTransform);
                 var wmBtnRestore = mainNodeRestore != null ? mainNodeRestore.Find("WorldMapBtn") as RectTransform : null;
                 if (wmBtnRestore != null) RestoreAdventureBase(wmBtnRestore);
                 // 关卡Viewport 拉伸还原 + 滑动内容高度还原（2026-10-24 瘦屏拉伸的配套回退；未拉伸过 = no-op）
@@ -166,9 +172,13 @@ public partial class AdventureUI
             float detailBottomGap = DETAIL_PANEL_BOTTOM_GAP;
             if (EnableNavGapReserve)
             {
-                float gap = navReserved + NAV_GAP_PAD;
-                // 量不到导航节点（独立打开 / 组件未就绪）时用兜底常量，不能退回 0 让面板贴到屏幕最下
-                detailBottomGap = gap > 0f ? gap : DETAIL_PANEL_BOTTOM_GAP_FALLBACK;
+                // 【2026-10-27 修】量不到导航高度（导航未就绪，navReserved=0）必须走兜底常量。
+                // 旧写法 gap = 0 + NAV_GAP_PAD(8) = 8 恒 > 0，兜底永远不触发 →
+                // 详情面板贴到屏幕最底（编辑器实测 detailBottom=8、detailTop=398，与正常帧 148/538 来回跳），
+                // 主列重排带 bandBottom 也跟着在 611/471 之间翻转，瘦屏重排与滚动位置两帧不一致。
+                detailBottomGap = navReserved > 0f
+                    ? navReserved + NAV_GAP_PAD
+                    : DETAIL_PANEL_BOTTOM_GAP_FALLBACK;
             }
 
             // 改动 5 必须最先：要在 RightContent / MapRoot 动锚点之前量世界坐标（见方法注释）。
@@ -227,6 +237,62 @@ public partial class AdventureUI
                           $"detailBottomGap={detailBottomGap:F0} detailBottom={detail.offsetMin.y:F0} " +
                           $"detailTop={detail.offsetMax.y:F0} mapTop={mapTopLog:F0} mapBottom={mapBotLog:F0} " +
                           $"screenW={Screen.width} screenH={Screen.height}");
+            }
+
+            // ── 2026-10-27 追加诊断（主人反馈「左列标签不见 / 岛屿跑出屏」）──
+            // 每次瘦屏适配落位后打一帧实测全家福：左列按钮/横幅/标题条的真实落点 + 滚动位置 + 槽位基准。
+            // 用真实数字定位根因；定位完这一段可整段删除。
+            if (rootRt != null)
+            {
+                float rootMinY = rootRt.rect.min.y;
+                string EdgeInfo(RectTransform r)
+                {
+                    if (r == null) return "null";
+                    var cc = new Vector3[4];
+                    r.GetWorldCorners(cc);
+                    float y0 = rootRt.InverseTransformPoint(cc[0]).y - rootMinY;
+                    float y1 = rootRt.InverseTransformPoint(cc[1]).y - rootMinY;
+                    float x0 = rootRt.InverseTransformPoint(cc[0]).x - rootRt.rect.min.x;
+                    return $"{r.name} act={r.gameObject.activeInHierarchy} sib={r.GetSiblingIndex()} x0={x0:F0} yAboveBottom[{y0:F0}~{y1:F0}]";
+                }
+                var sbLog = new System.Text.StringBuilder();
+                var sidebarLog = transform.Find("LeftSidebar") as RectTransform;
+                if (sidebarLog != null)
+                {
+                    sbLog.Append(EdgeInfo(sidebarLog));
+                    if (modeButtons != null)
+                        for (int i = 0; i < modeButtons.Length; i++)
+                        {
+                            var b = modeButtons[i];
+                            if (b == null) { sbLog.Append($" btn{i}=null"); continue; }
+                            var brt = b.transform as RectTransform;
+                            var cgLog = b.GetComponent<CanvasGroup>();
+                            sbLog.Append($" btn{i}(act={b.gameObject.activeInHierarchy},ap={brt.anchoredPosition.x:F0}/{brt.anchoredPosition.y:F0},alpha={cgLog?.alpha.ToString("0.##") ?? "-"})");
+                        }
+                }
+                else sbLog.Append("LeftSidebar=null");
+                var titleLog = right != null ? right.Find(MainNodeName + "/TitleBar") as RectTransform : null;
+                string scrollLog = "noScroll";
+                if (_chestScroll != null && _chestScroll.content != null && _chestScroll.viewport != null)
+                    scrollLog = $"norm={_chestScroll.verticalNormalizedPosition:F3} contentH={_chestScroll.content.rect.height:F0} viewH={_chestScroll.viewport.rect.height:F0}";
+                var slotLog = new System.Text.StringBuilder();
+                if (_slotNodes != null && _slotFloatBasePos != null)
+                {
+                    int nLog = Mathf.Min(3, _slotNodes.Count);
+                    for (int i = 0; i < nLog; i++)
+                    {
+                        var sLog = _slotNodes[i];
+                        if (sLog == null) continue;
+                        var cc = new Vector3[4];
+                        ((RectTransform)sLog).GetWorldCorners(cc);
+                        float midY = rootRt.InverseTransformPoint((cc[0] + cc[1]) * 0.5f).y - rootMinY;
+                        float baseY = i < _slotFloatBasePos.Count ? _slotFloatBasePos[i].y : -1f;
+                        slotLog.Append($" slot{i}(base={baseY:F0},aboveBot={midY:F0},ap={((RectTransform)sLog).anchoredPosition.y:F0},act={sLog.gameObject.activeInHierarchy})");
+                    }
+                    slotLog.Append($" markerSlot={_markerCurrentSlot}");
+                }
+                Debug.Log($"[AdventureFit诊断] Top[{EdgeInfo(transform.Find("Top") as RectTransform)}] " +
+                          $"TitleBar[{EdgeInfo(titleLog)}] LeftSidebar[{sbLog}] {scrollLog} {slotLog}");
             }
         }
         finally
@@ -964,51 +1030,15 @@ public partial class AdventureUI
     /// <summary>紧凑化处理过的模式按钮（还原用）。</summary>
     readonly List<RectTransform> _sidebarEvenBtns = new List<RectTransform>();
 
+    /// <summary>
+    /// 左列模式按钮紧凑化——【2026-10-27 主人拍板「左侧标签不见了，是上次改的间隔的事」】已禁用。
+    /// 运行时按隐藏钮空位重排会在真机上导致左列标签错位/丢失；主人已在预制体手动调好 95 等距，
+    /// 以预制体为准，运行时不再重排（2026-10-23「直接用我的预制体的数值」口径）。
+    /// 改回旧行为：删此注释段、还原下方方法体即可（还原分支 RestoreAdventureSidebarEven 已就位、no-op 安全）。
+    /// </summary>
     void FitSidebarEvenSpacing()
     {
-        var left = transform.Find("LeftSidebar");
-        var rootRt = transform as RectTransform;
-        if (left == null || rootRt == null || rootRt.rect.height <= 0f) return;
-        float H = rootRt.rect.height;
-        _sidebarEvenBtns.Clear();
-
-        // 全部 ModeBtn（含隐藏的）预制体中心 y（bottom-origin root 帧）→ 全钮平均间距 = 主人节奏
-        var lb = CaptureAdventureBase(left as RectTransform);
-        float lsMin = Mathf.Lerp(0f, H, lb.anchorMin.y) + lb.offsetMin.y;
-        float lsMax = Mathf.Lerp(0f, H, lb.anchorMax.y) + lb.offsetMax.y;
-        var allY = new List<float>();
-        var visible = new List<(RectTransform rt, float y)>();
-        for (int i = 0; i < left.childCount; i++)
-        {
-            var c = left.GetChild(i) as RectTransform;
-            if (c == null || !c.name.StartsWith("ModeBtn_", StringComparison.Ordinal)) continue;
-            var b = CaptureAdventureBase(c);
-            if (Mathf.Abs(b.anchorMin.y - b.anchorMax.y) > 1e-4f) continue;   // 非垂直单点锚不动，防错排
-            float anchorY = Mathf.Lerp(lsMin, lsMax, b.anchorMin.y);
-            float h = b.offsetMax.y - b.offsetMin.y;
-            float centerY = anchorY + b.offsetMin.y + b.pivot.y * h;
-            allY.Add(centerY);
-            if (c.gameObject.activeInHierarchy) visible.Add((c, centerY));
-        }
-        if (visible.Count < 2 || allY.Count < 2) return;
-        allY.Sort();
-        float step = (allY[allY.Count - 1] - allY[0]) / (allY.Count - 1);
-        visible.Sort((a, b) => b.y.CompareTo(a.y));   // 屏幕高 → 低
-
-        // 首钮（主线冒险）钉在预制体位，其余往下按主人节奏填隐藏钮的空位
-        for (int k = 0; k < visible.Count; k++)
-        {
-            var rt = visible[k].rt;
-            _sidebarEvenBtns.Add(rt);
-            float target = visible[0].y - k * step;
-            float delta = target - visible[k].y;
-            if (Mathf.Abs(delta) < 0.5f) continue;
-            var b = CaptureAdventureBase(rt);
-            rt.offsetMin = new Vector2(b.offsetMin.x, b.offsetMin.y + delta);
-            rt.offsetMax = new Vector2(b.offsetMax.x, b.offsetMax.y + delta);
-            b.applied = true;
-            _adventureUiBase[rt.GetInstanceID()] = b;
-        }
+        // 故意空实现：左列标签位置完全交给预制体，运行时零改动。
     }
 
     /// <summary>左列紧凑化回退：把处理过的按钮还原到预制体位（没处理过则 no-op）。</summary>
@@ -1070,6 +1100,16 @@ public partial class AdventureUI
 
         ApplyTopNodeShift(topBanner, shift);
         ApplyTopNodeShift(transform.Find("LeftSidebar") as RectTransform, shift);
+        // 【2026-10-27 主人「章节标题和资源条重叠」】主线/无限/活动副本整列内容随同一 shift 下移，避资源条。
+        // 整列容器下移后，FitMainColumnStretch 已算好的「标题↔槽位↔支线岛」内部节奏整体跟着走，相对不变；
+        // 这些容器不被其它 fit 改动自身 offset（FitMainColumnStretch 只动其子节点），套同一 shift 安全幂等。
+        var rcShift = transform.Find("RightContent") as RectTransform;
+        if (rcShift != null)
+        {
+            ApplyTopNodeShift(rcShift.Find(MainNodeName) as RectTransform, shift);
+            ApplyTopNodeShift(rcShift.Find(EndlessNodeName) as RectTransform, shift);
+            ApplyTopNodeShift(rcShift.Find(ActivityNodeName) as RectTransform, shift);
+        }
     }
 
     /// <summary>顶部块整体平移 shift（负 = 下移），offset 从 base 重算保证幂等。null 安全。</summary>

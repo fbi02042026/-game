@@ -177,8 +177,11 @@ public partial class BattleManager
     /// <summary>当前局是否礼物副本（2026-10-26 新玩法，见 GiftDungeonBattleMode）。派生写法照抄 IsScrollDungeon。</summary>
     public bool IsGiftDungeon => Mode != null && Mode.Id == BattleModeId.GiftDungeon;
 
-    /// <summary>当前局是否活动副本（金币/徽记/卷轴/礼物四本统称，开放日/次数/波次/倍率共用口径的地方用）。</summary>
-    public bool IsActivityDungeon => IsGoldDungeon || IsBadgeDungeon || IsScrollDungeon || IsGiftDungeon;
+    /// <summary>当前局是否羁绊副本（2026-10-27 新玩法，见 BondDungeonBattleMode）。派生写法照抄 IsGiftDungeon。</summary>
+    public bool IsBondDungeon => Mode != null && Mode.Id == BattleModeId.BondDungeon;
+
+    /// <summary>当前局是否活动副本（金币/徽记/卷轴/礼物/羁绊统称，开放日/次数/波次/倍率共用口径的地方用）。</summary>
+    public bool IsActivityDungeon => IsGoldDungeon || IsBadgeDungeon || IsScrollDungeon || IsGiftDungeon || IsBondDungeon;
 
     /// <summary>当前局是否无限裂隙（2026-10-17 新玩法，见 EndlessBattleMode）</summary>
     public bool IsEndlessRift => Mode != null && Mode.Id == BattleModeId.Endless;
@@ -211,6 +214,12 @@ public partial class BattleManager
     /// 进本时从 AdventureUI.PendingFinaleStage 拷入（照 SideIslandId 的「进本捕获」模式）。
     /// </summary>
     public int FinaleStageId { get; private set; }
+
+    /// <summary>
+    /// 本局羁绊副本对应的佣兵 hireId（好感满、专属关；非羁绊局恒空）。
+    /// 进本时从 AdventureUI.PendingBondHireId 拷入（照 SideIslandId 的「进本捕获」模式），供结算标记羁绊 + 组队强制进队读。
+    /// </summary>
+    public string BondMercHireId { get; private set; } = "";
 
     /// <summary>
     /// 本模式掉不掉装备。由 <see cref="Mode"/> 自己声明（金币本 false，主线/引导 true）。

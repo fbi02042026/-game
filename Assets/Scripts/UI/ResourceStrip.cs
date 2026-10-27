@@ -38,7 +38,7 @@ using UnityEngine.UI;
 /// </summary>
 public static class ResourceStrip
 {
-    public enum Mode { Main, GoldDiaTalent, GoldDia }
+    public enum Mode { Main, GoldDiaTalent, GoldDia, DiamondStamina }
 
     const string StripName = "ResourceStrip";
 
@@ -269,19 +269,23 @@ public static class ResourceStrip
         rt.anchoredPosition = (Vector2)local - anchorOrigin;
     }
 
-    static void SetMode(Mode mode)
+    /// <summary>切资源条列显隐。钻石恒显；金币/天赋石按模式：GoldDia（两列弹窗）隐天赋石，
+    /// DiamondStamina（冒险页）只显钻石+体力，隐金币+天赋石；Main/GoldDiaTalent 四格全显。</summary>
+    public static void SetMode(Mode mode)
     {
-        if (_gold != null) _gold.gameObject.SetActive(true);
+        // 钻石列：所有模式都显示（主界面/冒险页/各类弹窗都看钻石）
         if (_dia != null) _dia.gameObject.SetActive(true);
-        // 天赋石列：Main（主界面四格全显）与 GoldDiaTalent（角色页三列）显示；GoldDia（两列弹窗）只占第一行 → 隐藏
-        if (_talent != null) _talent.gameObject.SetActive(mode != Mode.GoldDia);
+        // 金币列：仅 DiamondStamina（冒险页只显钻石+体力）隐藏，其余模式显示
+        bool goldOn = mode != Mode.DiamondStamina;
+        // 天赋石列：GoldDia（两列弹窗）/ DiamondStamina（冒险页）隐藏，Main/GoldDiaTalent 显示
+        bool talentOn = mode != Mode.GoldDia && mode != Mode.DiamondStamina;
+        if (_gold != null) _gold.gameObject.SetActive(goldOn);
+        if (_talent != null) _talent.gameObject.SetActive(talentOn);
 
-        // 加号显隐（2026-10-25 主人拍板）：金币加号 = 每日补给位（前2次免费→50钻→100钻，逻辑在
-        // ResourceAdRewards），主界面与借条界面（招募/升阶/抽卡弹窗）都显示——弹窗里也可以购买
-        // （2026-10-25 13:5x 主人拍板「可以购买」，T14「借条藏加号」口径作废）；
-        // 钻石加号已在迁入时压掉（后期接广告），这里不再放开；天赋石加号随预制体显示（已接历程商店）。
+        // 金币加号（每日补给入口）：随金币列显隐（2026-10-25 主人拍板，弹窗内也可购买）
         var gp = _gold != null ? FindDeep(_gold, "PlusButton") : null;
-        if (gp != null && !gp.gameObject.activeSelf) gp.gameObject.SetActive(true);
+        if (gp != null && gp.gameObject.activeSelf != goldOn)
+            gp.gameObject.SetActive(goldOn);
 
         ApplyRightAlign();
     }

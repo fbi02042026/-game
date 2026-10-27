@@ -339,6 +339,18 @@ public class SafeAreaFitter : MonoBehaviour
         return f;
     }
 
+    /// <summary>给一个「底部横条」节点挂上 Offset 适配（幂等：已挂就复用，只校正参数）。</summary>
+    public static SafeAreaFitter EnsureBottomOffset(RectTransform rt)
+    {
+        if (rt == null) return null;
+        var f = rt.GetComponent<SafeAreaFitter>();
+        if (f == null) f = rt.gameObject.AddComponent<SafeAreaFitter>();
+        f.edge = Edge.Bottom;
+        f.mode = FitMode.Offset;
+        f.enabledFit = true;
+        return f;
+    }
+
     /// <summary>
     /// 在 root 子树里按名字找「顶部横条」并挂 Offset 适配。规则：
     ///   - 候选里只处理**最外层**那个（父级链上已有别的命中节点就跳过），避免父子同时下推变成双倍；

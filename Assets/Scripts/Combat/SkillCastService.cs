@@ -507,6 +507,21 @@ public sealed class SkillCastService
     /// <summary>攻速增益倍率，过期返回 1（无增益）。</summary>
     public static float GetTeamAttackSpeedMul() => IsTeamAttackSpeedBuffActive ? _teamAtkSpdMul : 1f;
 
+    /// <summary>
+    /// 疾风架势「手动窗口」结算时由 BattleManager 调用：按本局构筑值激活团队攻速增益。
+    /// 与 <see cref="ApplyTeamBuff"/> 的攻速分支同口径（计时倍率 + 到期自动失效），不走扣蓝 / GCD。
+    /// 2026-10-27 主人拍板：基础攻速 buff 保留自动给（不点不亏），窗口内点击只追加「多打一次」。
+    /// </summary>
+    public static void TriggerTeamAttackSpeedBuffFromLoadout(SkillSystem.ActiveSkill skill)
+    {
+        if (skill == null) return;
+        if (skill.buffAttr != AttrType.AttackSpeed || !skill.buffIsPercent) return;
+        float duration = skill.duration > 0f ? skill.duration : 6f;
+        _teamAtkSpdMul = 1f + Mathf.Max(0f, skill.buffValue);
+        _teamAtkSpdBuffUntil = Time.time + duration;
+        GamePerf.Log($"[SkillCast] 疾风窗口结算：团队攻速增益 {_teamAtkSpdMul:0.##}x，持续 {duration}s");
+    }
+
     void ApplyTeamBuff(SkillSystem.ActiveSkill skill, SkillConfig cfg)
     {
         // 数值以本局构筑为准（含星级/流派/亲和），SkillConfig 只作缺省兜底。

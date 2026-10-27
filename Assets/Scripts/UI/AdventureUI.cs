@@ -48,6 +48,17 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     public static bool PendingGiftDungeon;
 
     /// <summary>
+    /// 羁绊副本进本标记（2026-10-27 主人拍板「照礼物副本框架」）：好感满佣兵专属关。
+    /// 由好感界面「羁绊地图」按钮（MercFavorUI.OnBondClicked）置 true；BattleManager.StartNewRunInternal 捕获进 BondMercHireId 后清零（照礼物本口径）。
+    /// </summary>
+    public static bool PendingBondDungeon;
+
+    /// <summary>
+    /// 羁绊副本对应的佣兵 hireId（与 PendingBondDungeon 同时由好感界面按钮设置；读后即清，照 SideIslandId 口径）。
+    /// </summary>
+    public static string PendingBondHireId;
+
+    /// <summary>
     /// 支线岛进本标记（2026-10-23 合并方案）：值 = 岛 id（1..8，0=非岛局）。
     /// 由支线岛点击（BranchIslands）设置；BattleManager.StartNewRunInternal 捕获进 SideIslandId 后清零（照金币本口径）。
     /// </summary>
@@ -284,6 +295,8 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
             ? GuildHallUI.Instance.transform
             : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
+        // 【2026-10-27 主人拍板】冒险页顶条只显示钻石+体力，金币/天赋石隐藏
+        ResourceStrip.SetMode(ResourceStrip.Mode.DiamondStamina);
         EnsureStandaloneChrome(hall);
 
         // 越界（<1 或 >8）时落到「应推进的章节」：可选里第一个未通关，全通关回最后一章。
@@ -364,6 +377,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
 
     public void HidePage()
     {
+        ResourceStrip.SetMode(ResourceStrip.Mode.Main);   // 【2026-10-27】还原顶条四列（金币/天赋石恢复）
         HideTip();
         HideFloatToast();
         if (!gameObject.activeSelf) return;

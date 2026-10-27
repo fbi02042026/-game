@@ -193,6 +193,8 @@ public partial class UnitBase
 
         // 2026-09-26：魔法伤害单位（法师/牧师、法球怪）用魔法攻击力起手
         float damage = DamageFormula.BuildAttackRaw(attr, out bool isCrit, GetLowHpCritRateBonus(), IsMagicDamageDealer());
+        // 疾风窗口「多打一次」伤害系数（默认 1；由 TryGaleExtraAttack 同步设置，调用后立即清除）
+        damage *= _nextAttackDamageMul;
         // 友方「降低目标攻击」类减益（如 SK018 威慑凝视 -20%）：数值已在 MercPassiveRunner 里按表实现，
         // 之前没有任何调用点，等于白放。这里在普攻出伤害前消费一次。
         damage = ApplyAllyAttackDebuffs(damage);
@@ -338,6 +340,49 @@ public partial class UnitBase
             damage = m.PassiveRunner.ModifyTargetAttack(this, damage);
         }
         return damage;
+    }
+
+    // ===== 疾风架势「手动窗口 · 多打一次」（2026-10-27 主人拍板，详见 Docs/《疾风架势窗口点击机制》_待办任务清单.md）=====
+    /// <summary>下一次 Attack 的伤害系数（默认 1）。同步「设置 → Attack → 清除」三连内生效。</summary>
+    float _nextAttackDamageMul = 1f;
+
+    void SetNextAttackDamageMul(float mul) => _nextAttackDamageMul = Mathf.Max(0.05f, mul);
+
+    void ClearNextAttackDamageMul() => _nextAttackDamageMul = 1f;
+
+    /// <summary>
+    /// 疾风窗口点击：对屏幕内最近的存活怪立即多打一次普攻（伤害 ×dmgMul）。
+    /// 目标无效 / 不在普攻射程 → 不出手并返回 false（调用方不计数）。
+    /// </summary>
+    public bool TryGaleExtraAttack(float dmgMul)
+    {
+        if (isDead || attr == null || dmgMul <= 0f) return false;
+        var target = FindGaleExtraTarget();
+        if (target == null) return false;
+        if (!IsInBasicAttackRange(target)) return false;
+        SetNextAttackDamageMul(dmgMul);
+        Attack(target);
+        ClearNextAttackDamageMul();
+        return true;
+    }
+
+    /// <summary>多打目标：屏幕内最近存活怪（与 Attack 内的视口过滤同口径，不打屏外）。</summary>
+    UnitBase FindGaleExtraTarget()
+    {
+        var bm = BattleManager.Instance;
+        if (bm == null || bm.monsters == null) return null;
+        UnitBase best = null;
+        float bestSqr = float.MaxValue;
+        Vector2 self = transform.position;
+        for (int i = 0; i < bm.monsters.Count; i++)
+        {
+            var m = bm.monsters[i];
+            if (m == null || m.isDead || m.attr == null) continue;
+            if (!GameConfig.IsInCombatViewport(m)) continue;
+            float d = ((Vector2)m.transform.position - self).sqrMagnitude;
+            if (d < bestSqr) { bestSqr = d; best = m; }
+        }
+        return best;
     }
 
     IEnumerator CoAllyMeleeAttack(

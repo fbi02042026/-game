@@ -61,6 +61,9 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 入口 = 冒险页活动列表「礼物」横条，判在金币本之前（同徽记/卷轴口径）。
         if (AdventureUI.PendingGiftDungeon) return BattleModes.GiftDungeon;
 
+        // 羁绊副本（2026-10-27 主人拍板「照礼物副本框架」）：入口 = 好感界面「羁绊地图」按钮，判在金币本之前。
+        if (AdventureUI.PendingBondDungeon) return BattleModes.BondDungeon;
+
         // 活动副本（冒险界面下标 4）。这是一个「类」，不是一种玩法：
         // 现在只开了金币本；以后佣兵副本 / 武器副本 / 技能副本上了，
         // 在这里按「当前开放的是哪一个活动」返回对应模式即可。
@@ -210,6 +213,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                 || AdventureUI.PendingScrollDungeon  // 卷轴副本（2026-10-24）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingSideIsland > 0 // 支线岛（2026-10-23 合并方案）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingFinaleStage > 0 // 终章追查关（2026-10-23）：独立进本，同金币本作废 parked 局
+                || AdventureUI.PendingBondDungeon    // 羁绊副本（2026-10-27）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingBattleChapter <= 0
                 || AdventureUI.PendingBattleChapter != savedRun.chapter)
             {
@@ -231,6 +235,10 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 终章追查关（2026-10-23）：捕获关号供结算读（FinaleStageId），Pending 读后即清（照支线岛口径）
         FinaleStageId = Mathf.Max(0, AdventureUI.PendingFinaleStage);
         AdventureUI.PendingFinaleStage = 0;
+        // 羁绊副本（2026-10-27）：捕获佣兵 hireId 供结算标记 + 组队强制进队读（照支线岛「进本捕获」口径）
+        BondMercHireId = AdventureUI.PendingBondHireId ?? "";
+        AdventureUI.PendingBondDungeon = false;
+        AdventureUI.PendingBondHireId = null;
 
         // 无限裂隙：起始层 = 记录点 + 1（读完即清，防污染）；普通章号参数对它无意义
         if (AdventureUI.PendingEndlessRift)

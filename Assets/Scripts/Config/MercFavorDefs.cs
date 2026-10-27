@@ -39,8 +39,17 @@ public static class MercFavorDefs
     /// <summary>普通答案好感分（另外两个，分值不展示）。</summary>
     public const int NormalFavor = 2;
 
-    /// <summary>通关羁绊地图后该佣兵全属性乘区（2026-10-26 信任交流文档拍板 ×1.5；二期挂乘区用）。</summary>
+    /// <summary>通关羁绊地图后该佣兵全属性乘区（2026-10-26 信任交流文档拍板 ×1.5；挂乘区见 Mercenary.Attributes.ApplyBondClearBonus）。</summary>
     public const float BondClearStatMul = 1.5f;
+
+    /// <summary>羁绊副本场景章（≈5~7 章强度；单难度不开放选择，固定噩梦档。两个常量都可单独调）。</summary>
+    public const int BondDungeonChapter = 7;
+
+    /// <summary>羁绊副本固定难度：0=普通 / 1=困难 / 2=噩梦（BattleManager 会把 PendingBattleDifficulty 钳到 0~2）。</summary>
+    public const int BondDungeonDifficulty = 2;
+
+    /// <summary>羁绊副本一次性通关奖励钻石数（可调）。</summary>
+    public const int BondClearDiamond = 200;
 
     // —— 对话文案（占位，主人终审）——
 
@@ -120,12 +129,23 @@ public static class MercFavorDefs
 
     // —— 礼物表（图标 = Resources/Art/UI/礼物/32px-itemXXX，主人 2026-10-26 供图）——
 
+    /// <summary>礼物品质（2026-10-27 主人拍板「礼物分三个品质」）：与 Favor 档一一对应——
+    /// 普通(2) / 稀有(4) / 传奇(8)。传奇礼物只在<b>副本</b>（礼物本 / 羁绊本）与<b>里程商店每日随机</b>获得，
+    /// 每日对话回礼不掉传奇（MercFavorSystem.GrantRandomGifts 的 includeLegendary=false 拦）。</summary>
+    public enum GiftQuality
+    {
+        Common = 1,    // 吃食档 Favor=2
+        Rare = 2,      // 稀罕物档 Favor=4
+        Legendary = 3, // 珍品档 Favor=8
+    }
+
     public struct GiftDef
     {
         public string Id;        // 业务 id（gift_207 口径，与图标文件号对应）
         public string IconPath;  // Resources 路径（不带扩展名，铁律 16：按路径加载）
         public string Name;      // 展示名（AI 按图标识图起名，主人可改）
         public int Favor;        // 送出加的好感值
+        public GiftQuality Quality; // 品质（由 Favor 推导，见 G）
     }
 
     /// <summary>礼物 20 种，分值三档：吃食 2 / 稀罕物 4 / 珍品 8（数值主人可整批调）。</summary>
@@ -154,7 +174,10 @@ public static class MercFavorDefs
     };
 
     static GiftDef G(string id, int fileNo, string name, int favor)
-        => new GiftDef { Id = id, IconPath = "Art/UI/礼物/32px-item" + fileNo, Name = name, Favor = favor };
+    {
+        var q = favor >= 8 ? GiftQuality.Legendary : favor >= 4 ? GiftQuality.Rare : GiftQuality.Common;
+        return new GiftDef { Id = id, IconPath = "Art/UI/礼物/32px-item" + fileNo, Name = name, Favor = favor, Quality = q };
+    }
 
     /// <summary>查礼物定义（唯一出口；查不到 = 表里没有这个 id，返回 false）。</summary>
     public static bool TryGetGift(string giftId, out GiftDef def)
@@ -166,6 +189,19 @@ public static class MercFavorDefs
         def = default;
         return false;
     }
+
+    /// <summary>是否传奇礼物（唯一判据，别在别处抄 Favor>=8）。</summary>
+    public static bool IsLegendary(GiftDef def) => def.Quality == GiftQuality.Legendary;
+
+    /// <summary>品质展示名（送礼界面标签 / 里程商店用，单一出口）。</summary>
+    public static string QualityName(GiftQuality q)
+        => q == GiftQuality.Legendary ? "传奇" : q == GiftQuality.Rare ? "稀有" : "普通";
+
+    /// <summary>品质配色（16 进制 RGB，送礼界面标签着色用，单一出口；不在此抄第二份）。</summary>
+    public static string QualityColorHex(GiftQuality q)
+        => q == GiftQuality.Legendary ? "FFB547"   // 金橙
+         : q == GiftQuality.Rare ? "6FA8FF"        // 蓝
+         : "C8C8C8";                               // 灰
 
     // —— 羁绊地图 ——
 

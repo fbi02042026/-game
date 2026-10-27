@@ -660,6 +660,11 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                 (done ? sunk : normal).Add(e);
             }
 
+            // 2026-10-27 主人拍板：里程商店每日随机 1 件传奇礼物，限量 1（与周限购商品完全独立）
+            var dailyGift = AdventureLogMileageShop.GetDailyLegendaryGift();
+            if (dailyGift != null)
+                (AdventureLogMileageShop.IsDailyLegendaryBoughtToday() ? sunk : normal).Add(new ShopEntry { IsDailyGift = true });
+
             // 2026-10-21 行池化：先按实际条目数扩容/缩池（多余行由 EnsureRowCount 隐藏），再逐行填
             int shopRows = normal.Count + sunk.Count;
             EnsureRowCount(shopRows);
@@ -677,6 +682,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         public bool IsWeapon;
         public int WeaponIndex;
         public int ItemIndex;
+        /// <summary>里程商店每日随机传奇礼物（2026-10-27 主人拍板：每日 1 件、限量 1）。</summary>
+        public bool IsDailyGift;
     }
 
     /// <summary>填充第 rowIdx 行（杖 / 武器里程奖励 / 商品条目），行必激活。</summary>
@@ -785,6 +792,42 @@ public class AdventureLogPhase3Panel : MonoBehaviour
 
         int idx = e.ItemIndex;
         var item = AdventureLogMileageShop.Items[idx];
+
+        if (e.IsDailyGift)
+        {
+            // 2026-10-27 主人拍板：每日随机传奇礼物行（限量 1，里程点数兑换，发好感礼物仓）
+            var gift = AdventureLogMileageShop.GetDailyLegendaryGift();
+            bool bought = AdventureLogMileageShop.IsDailyLegendaryBoughtToday();
+            bool canBuyDaily = AdventureLogMileageShop.CanBuyDailyLegendaryGift(out _);
+            string legHex = MercFavorDefs.QualityColorHex(MercFavorDefs.GiftQuality.Legendary);
+            if (_actionLabels[rowIdx] != null && gift != null)
+                _actionLabels[rowIdx].text = $"<color=#{legHex}>{gift.Name}</color>　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{AdventureLogMileageShop.DailyLegendaryCost}点</color>";
+
+            if (_countTexts[rowIdx] != null)
+            {
+                _countTexts[rowIdx].text = bought ? "已兑" : "每日限1";
+                _countTexts[rowIdx].color = canBuyDaily ? _countBaseColors[rowIdx] : DisabledColor;
+            }
+
+            if (_icons[rowIdx] != null && gift != null && MercFavorDefs.TryGetGift(gift.DefId, out var gdef))
+                _icons[rowIdx].sprite = LoadResIcon(gdef.IconPath);
+
+            if (_exchangeBtns[rowIdx] != null)
+            {
+                SetExchangeState(rowIdx, canBuyDaily);
+                _exchangeBtns[rowIdx].onClick.RemoveAllListeners();
+                _exchangeBtns[rowIdx].onClick.AddListener(() =>
+                {
+                    if (AdventureLogMileageShop.TryBuyDailyLegendaryGift(out string msg))
+                        UIManager.Instance?.ShowToast(msg);
+                    else
+                        UIManager.Instance?.ShowToast(msg ?? "无法兑换");
+                    RefreshPanel();
+                });
+            }
+            return;
+        }
+
         bool canBuy = AdventureLogMileageShop.CanBuy(idx, out _);
         int remain = AdventureLogMileageShop.RemainThisWeek(item);
 

@@ -100,11 +100,12 @@ public static class MercFavorSystem
 
     /// <summary>
     /// 随机发 1 个礼物（唯一发放口；【2026-10-26 主人拍板】来源 = 每日对话聊完回礼 + 礼物副本掉落）。
+    /// 每日回礼默认 <c>includeLegendary=false</c>：传奇礼物只在副本 / 里程商店获得，不走对话回礼。
     /// 发放 + 落盘 + force Toast。返回礼物 id；null = 存档未就绪（不发不吞，照副本掉落口径）。
     /// </summary>
     public static string GrantRandomGift()
     {
-        var granted = GrantRandomGifts(1);
+        var granted = GrantRandomGifts(1, false);
         if (granted == null || granted.Count == 0) return null;
         foreach (var kv in granted) return kv.Key;   // count=1 只有一个
         return null;
@@ -112,18 +113,32 @@ public static class MercFavorSystem
 
     /// <summary>
     /// 随机发 n 个礼物（批量发放唯一出口；礼物副本结算用，一次结算只弹一条 Toast）。
+    /// <paramref name="includeLegendary"/> = false 时跳过传奇礼物（每日对话回礼用）；
+    /// = true 时全品质都可掉（礼物副本 / 羁绊副本等「副本」来源用，传奇只在副本获得）。
     /// 发放 + 落盘 + force Toast「获得礼物 面包×2、苹果×1」。返回 各礼物发放数（id→数量）；null = 存档未就绪。
     /// </summary>
-    public static Dictionary<string, int> GrantRandomGifts(int count)
+    public static Dictionary<string, int> GrantRandomGifts(int count, bool includeLegendary)
     {
         if (count <= 0) return null;
         var d = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         if (d == null) return null;
         var gifts = MercFavorDefs.Gifts;
+        // 【2026-10-27 主人拍板】传奇礼物只在副本获得：回礼时只从非传奇池抽
+        int[] pool = null;
+        if (!includeLegendary)
+        {
+            var tmp = new System.Collections.Generic.List<int>();
+            for (int i = 0; i < gifts.Length; i++)
+                if (!MercFavorDefs.IsLegendary(gifts[i])) tmp.Add(i);
+            pool = tmp.Count > 0 ? tmp.ToArray() : null;   // 极端情况（表里全传奇）兜底退全池
+        }
         var granted = new Dictionary<string, int>();
         for (int i = 0; i < count; i++)
         {
-            var def = gifts[UnityEngine.Random.Range(0, gifts.Length)];
+            int idx = pool != null
+                ? pool[UnityEngine.Random.Range(0, pool.Length)]
+                : UnityEngine.Random.Range(0, gifts.Length);
+            var def = gifts[idx];
             d.AddFavorGift(def.Id, 1);
             granted.TryGetValue(def.Id, out int cur);
             granted[def.Id] = cur + 1;
