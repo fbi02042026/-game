@@ -346,7 +346,7 @@ public partial class BattleUI : MonoBehaviour
                     {
                         x = bip.x, y = bip.y, w = 1, h = 1,
                         displayName = bip.item.Name,
-                        displayInfo = BuildBattleItemDisplayInfo(def),
+                        displayInfo = BuildBattleItemDisplayInfo(def, bip.item.count),
                         displayIcon = ItemDefs.LoadIcon(bip.item.defId),
                         displayCount = bip.item.count
                     });
@@ -422,10 +422,11 @@ public partial class BattleUI : MonoBehaviour
         if (bag != null) gold = bag.RunGainedGold;
         if (gold > 0)
         {
-            TryPlaceDisplay(occupied, width, unlockedRows, placements,
-                "金币",
-                "本局获得的金币（掉落 / 首通奖励 / 宝箱等）。\n回城后在商店、天赋页等消费。",
-                CommonIconSprites.Load("icon_gold"), (int)gold);
+                // 本局获得的金币（掉落 / 首通奖励 / 宝箱等），回城后在商店、天赋页等消费
+                TryPlaceDisplay(occupied, width, unlockedRows, placements,
+                    "金币",
+                    ItemNoticeText.Build("本局获得的金币。\n回城后在商店、天赋页消费。", "本局", gold),
+                    CommonIconSprites.Load("icon_gold"), (int)gold);
         }
 
         // 3) 天赋石（本局获得）
@@ -435,7 +436,7 @@ public partial class BattleUI : MonoBehaviour
         {
             TryPlaceDisplay(occupied, width, unlockedRows, placements,
                 "天赋石",
-                "本局击杀精英 / Boss 掉落的天赋石。\n回城后在天赋页点亮、升级节点。",
+                ItemNoticeText.Build("本局击杀精英 / Boss 掉落。\n回城后在天赋页点亮、升级。", "本局", stones),
                 CommonIconSprites.Load("icon_talent_stone"), (int)stones);
         }
 
@@ -446,7 +447,7 @@ public partial class BattleUI : MonoBehaviour
         {
             TryPlaceDisplay(occupied, width, unlockedRows, placements,
                 "重生护符",
-                "佣兵阵亡时，点击其变灰的头像消耗 1 枚原地满血复活。\n战斗内关卡商店有售（50% 概率上架）。",
+                ItemNoticeText.Build(ItemNoticeText.ReviveCharmDesc, "持有", charms),
                 ItemDefs.LoadIcon("item_revive_charm"), charms);
         }
     }
@@ -474,14 +475,14 @@ public partial class BattleUI : MonoBehaviour
         Debug.LogWarning("[BattleUI] 背包解锁行已满，「" + name + "」没有空格可展示");
     }
 
-    /// <summary>战斗背包里「不可用道具」展示位的告知正文：道具说明 + 不可用原因。</summary>
-    static string BuildBattleItemDisplayInfo(ItemDef def)
+    /// <summary>战斗背包里「不可用道具」展示位的告知正文：道具说明 + 不可用原因 + 数量行（统一模板）。</summary>
+    static string BuildBattleItemDisplayInfo(ItemDef def, int count)
     {
         string why = def.type == ItemType.Material
             ? "材料类道具，不能直接使用。"
             : "战斗中不可使用。";
         string desc = string.IsNullOrEmpty(def.desc) ? "" : def.desc + "\n";
-        return desc + why;
+        return ItemNoticeText.Build(desc + why, "持有", count);
     }
 
     public bool TryScreenToBackpackCell(Vector2 screenPos, Camera eventCam, out int cellX, out int cellY)

@@ -4,7 +4,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 「获得佣兵」全屏演出（2026-10-20 主人拍板）：
-/// 背景淡入 → 立绘冲击登场（大→过冲→落定）→ 立绘呼吸浮动 → 脚下名字淡入上移 → 点击任意处关闭。
+/// 背景淡入 → 立绘三段式动态登场（2026-10-27 晚主人二次拍板：全程慢 3 倍，3 倍大上半身从右侧屏幕外
+/// 扫到左侧屏幕外 → 下半身从左扫回右出画 → 从正上方猛砸落位）→ 脚下名字淡入上移 → 点击任意处关闭。
 ///
 /// 预制体：Assets/Resources/Prefabs/Town/MercGainCinematic（Tools → 生成获得佣兵演出预制体 生成/重建）。
 /// 节点：BG（全屏底）/ Stand（立绘，pivot 底部中心）/ NamePlate（脚下名字）。
@@ -16,6 +17,12 @@ public class MercGainCinematicUI : MonoBehaviour
     const string PrefabPath = "Prefabs/Town/MercGainCinematic";
 
     const float BgFadeIn = 0.25f;      // 背景淡入
+    const float HeadIn = 0.22f;        // 【登场①基准时长】淡入（实际 = ×SlowMo，之后进入上半身横扫）
+    const float BodySlide = 0.5f;      // 【登场②基准时长】下半身横扫（①上半身横扫时长 = (HeadIn+BodySlide*0.5)×SlowMo）
+    const float SlamIn = 0.16f;        // 【登场③基准时长】正上方加速猛砸回落（×SlowMo）
+    const float SlamSettle = 0.12f;    // 【登场③基准时长】落地一压一弹回正（×SlowMo）
+    const float ZoomScale = 3f;        // 起手放大倍数（2026-10-27 主人拍板：放大 3 倍）
+    const float SlowMo = 6f;           // 【2026-10-27 晚主人拍板】登场动效整体慢 3 倍后又加长一倍（各段时长 ×此值）
     const float NameDelay = 0.15f;     // 立绘落定后名字延迟
     const float NameRise = 0.3f;       // 名字上移淡入时长
     const float AutoCloseAfter = 8f;   // 无点击兜底自动关（防卡流程）
@@ -208,8 +215,10 @@ public class MercGainCinematicUI : MonoBehaviour
         while (t < BgFadeIn) { t += Time.unscaledDeltaTime; _bgCg.alpha = _bgTargetAlpha * Mathf.Clamp01(t / BgFadeIn); yield return null; }
         _bgCg.alpha = _bgTargetAlpha;
 
-        // ② 立绘直接静止显示（2026-10-20 主人拍板：立绘不要动态，不再播冲击登场/呼吸浮动）
-        _standCg.alpha = 1f;
+        // ② 立绘三段式登场（2026-10-27 主人拍板：3 倍大上半身右→左扫 → 左→右扫回看下半身 → 猛砸落位；
+        //    覆盖 2026-10-20「立绘不要动态」旧拍板）。只改 alpha / scale / 相对偏移，
+        //    落定值 = 预制体里摆的值，主人挪完节点不受影响。
+        yield return StartCoroutine(CoPortraitEntrance());
 
         // ③ 名字从脚下淡入上移
         yield return new WaitForSecondsRealtime(NameDelay);
@@ -223,6 +232,100 @@ public class MercGainCinematicUI : MonoBehaviour
             yield return null;
         }
         Close();
+    }
+
+    /// <summary>
+    /// 立绘三段式登场（2026-10-27 晚主人二次拍板·全程慢 3 倍 + 完整出画横移版）：
+    /// ① 3 倍大淡入，上半身取景从右侧屏幕外一路移到左侧屏幕外；
+    /// ② 下半身取景从左侧屏幕外移回右侧屏幕外（换 y 的瞬间在画外，看不见跳变）；
+    /// ③ 跳到落点的正上方（完全出上边界）→ 加速猛砸落位，落地一压（0.92）一弹回正，落定值严格还原。
+    /// 出画幅度按父容器实际宽高 + 立绘 3 倍视觉尺寸推导，不写死布局尺寸；
+    /// 动画只改 alpha / scale / anchoredPosition 相对偏移，结束严格还原预制体值。
+    /// </summary>
+    IEnumerator CoPortraitEntrance()
+    {
+        var srt = (RectTransform)_stand;
+        Canvas.ForceUpdateCanvases();
+        Vector2 basePos = srt.anchoredPosition;             // 预制体摆的落定位置
+        float baseScale = srt.localScale.x;                 // 预制体摆的落定缩放（应为 1）
+        float w = srt.rect.width;
+        float h = srt.rect.height;
+        if (w <= 0f || h <= 0f)                             // rect 未就绪的极端兜底，量级对齐设计分辨率
+        {
+            w = GameConfig.DESIGN_WIDTH;
+            h = GameConfig.DESIGN_HEIGHT;
+        }
+        var prt = _stand.parent as RectTransform;           // 出画边界按父容器实际宽高算
+        float halfW = prt != null ? prt.rect.width * 0.5f : GameConfig.DESIGN_WIDTH * 0.5f;
+        float halfH = prt != null ? prt.rect.height * 0.5f : GameConfig.DESIGN_HEIGHT * 0.5f;
+        const float ExitMargin = 40f;                       // 完全出画后再多挪的余量
+        float visualHalfW = w * ZoomScale * 0.5f;           // 3 倍时立绘半宽
+        // pivot=底部中心：底边即 anchored y；完全出画 = 视觉边缘越过父容器边界再多挪余量
+        float exitRight = (halfW - basePos.x) + visualHalfW + ExitMargin;   // ①起点：完全出右边界
+        float exitLeft  = -(halfW + basePos.x) - visualHalfW - ExitMargin;  // ①终点/②起点：完全出左边界
+        float dropY = (halfH - basePos.y) + ExitMargin;     // ③起点：正上方完全出上边界
+        float upperY = -(ZoomScale - 0.9f) * h;             // ①上半身取景：立绘顶部落到脚底上方 0.9h 处
+        float lowerY = -(ZoomScale - 2.2f) * h;             // ②下半身取景：露出腿脚
+        // 全程慢 3 倍后再长一倍（2026-10-27 晚主人拍板：SlowMo=6）
+        float durSweep1 = (HeadIn + BodySlide * 0.5f) * SlowMo;
+        float durSweep2 = BodySlide * SlowMo;
+        float durSlam = SlamIn * SlowMo;
+        float durSettle = SlamSettle * SlowMo;
+        float t;
+
+        // ① 3 倍大·上半身从右侧屏幕外 → 左侧屏幕外（起点已在画外，淡入只是保险）
+        srt.localScale = Vector3.one * baseScale * ZoomScale;
+        srt.anchoredPosition = basePos + new Vector2(exitRight, upperY);
+        t = 0f;
+        while (t < durSweep1)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / durSweep1);
+            _standCg.alpha = Mathf.Clamp01(t / (HeadIn * SlowMo));
+            float ease = u * u * (3f - 2f * u);             // smoothstep：两端缓、中间匀速扫过
+            srt.anchoredPosition = basePos + new Vector2(Mathf.Lerp(exitRight, exitLeft, ease), upperY);
+            yield return null;
+        }
+        _standCg.alpha = 1f;
+
+        // ② 下半身从左侧屏幕外 → 右侧屏幕外（y 换档发生在画外）
+        t = 0f;
+        while (t < durSweep2)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / durSweep2);
+            float ease = u * u * (3f - 2f * u);
+            srt.anchoredPosition = basePos + new Vector2(Mathf.Lerp(exitLeft, exitRight, ease), lowerY);
+            yield return null;
+        }
+        srt.anchoredPosition = basePos + new Vector2(exitRight, lowerY);
+
+        // ③ 跳到落点正上方（完全出画）→ 加速猛砸回落 + 落地一压一弹
+        srt.anchoredPosition = basePos + new Vector2(0f, dropY);
+        t = 0f;
+        while (t < durSlam)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / durSlam);
+            float ease = u * u;                              // easeIn：越落越快，砸感
+            srt.localScale = Vector3.one * baseScale * Mathf.Lerp(ZoomScale, 0.92f, ease);
+            srt.anchoredPosition = basePos + new Vector2(0f, Mathf.Lerp(dropY, 0f, ease));
+            yield return null;
+        }
+        srt.localScale = Vector3.one * baseScale * 0.92f;    // 落地瞬间压扁
+        srt.anchoredPosition = basePos;                      // 落定 = 预制体位置
+        t = 0f;
+        while (t < durSettle)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / durSettle);
+            // 0.92 → 过冲 1.04 → 回正 1，正弦半波 + 线性抬升模拟弹回（u=1 时恰好回到 baseScale）
+            float s = baseScale * (0.92f + (1.04f - 0.92f) * Mathf.Sin(u * Mathf.PI) + (u * 0.08f));
+            srt.localScale = Vector3.one * s;
+            yield return null;
+        }
+        srt.localScale = Vector3.one * baseScale;            // 回正 = 预制体缩放
+        _standCg.alpha = 1f;
     }
 
     IEnumerator CoNameIn()

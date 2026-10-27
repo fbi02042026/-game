@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -28,12 +29,15 @@ public class QuestBarBinder : MonoBehaviour
     /// <summary>折叠按钮的候选节点名（美术叫哪个都能接上；全对不上会 LogError dump 让人看见）。</summary>
     static readonly string[] FoldNodeNames = { "折叠", "收起", "Fold", "Collapse", "箭头", "Arrow" };
 
-    Transform _bar;
-    RectTransform _barRt;
     Transform _rowMain, _rowSide, _rowDaily;
     Text _mainText, _sideText, _dailyText;
-    float _barBaseHeight = -1f;      // 全行展开时的栏高（首次收起前量得）
-    float _rowMainH, _rowSideH, _rowDailyH;   // 绑定时量好的行高（折叠/藏行的黑底缩减都用它）
+    RectTransform _dimRt;            // 黑底真身 = panl/Dim（2026-10-27 修复折叠不收缩：原改「任务栏」节点无效）
+    Vector2 _dimBaseSize, _dimBasePos;   // Dim 的预制体基准（从 base 重算，不累加）
+    bool _dimBaseCaptured;
+    RectTransform _foldRt;           // 折叠按钮（黑底收缩后的依附目标）
+    float _foldH = -1f, _foldY;      // 折叠按钮高/纵向位置（panl 空间，与 Dim 同一坐标系）
+    /// <summary>黑底上下留边总和：基准 300 高 vs 三行实跨 260，上下各 20（折叠后 = 按钮高 + 2×20）。</summary>
+    const float DimEdgePadding = 20f;
     int _dailyBaseSibling = -1;      // 日常行原始次序（支线行回来时还原）
     bool _collapsed;                 // 折叠态（会话内，不写存档）
     bool _appliedCollapsed, _appliedSideVisible = true;   // 上次实际套到 UI 的状态（变了才动 UI）
@@ -61,9 +65,6 @@ public class QuestBarBinder : MonoBehaviour
 
     void Bind(Transform bar)
     {
-        _bar = bar;
-        _barRt = bar as RectTransform;
-
         // 【2026-10-26 主人问「任务栏窗口做了适配没有」→ 之前没做，这里补上】
         // 挂在整条 LeftBar（任务栏的父级，公告/活动/任务栏同列）上：Offset 模式只挪 anchoredPosition，
         // 与顶部资源条（TownSharedChrome）同一套 EnsureTopOffset——安全区 + 微信胶囊预留 + 固定下移 20，
@@ -90,14 +91,17 @@ public class QuestBarBinder : MonoBehaviour
         if (_rowSide != null) _sideText = ContentText(_rowSide, RowSide);
         _dailyText = ContentText(_rowDaily, RowDaily);
 
+        // 【2026-10-27 主人反馈「任务栏正文字太小、第一行字看不清」】
+        // prefab 三行 Info 都是 fontSize 15，小到难辨认。这里抬高基础字号并统一框高
+        //（铁律 20：字体可改；纵向高度属必要介入）：Info 框纵向 40→52，x 与位置一律不动。
+        // 字号具体大小走 FitInfoFont 动态档位（字少大、字多小、超长截断），见 Refresh。
+        ApplyInfoStyle(_mainText);
+        ApplyInfoStyle(_sideText);
+        ApplyInfoStyle(_dailyText);
+
         BindClick(_rowMain, OnClickMain);
         if (_rowSide != null) BindClick(_rowSide, OnClickSide);
         BindClick(_rowDaily, OnClickDaily);
-
-        // 行高缓存（黑底缩减用；绑定时行多半是激活态，rect.height 对未激活节点也有效）
-        _rowMainH = RowHeight(_rowMain);
-        if (_rowSide != null) _rowSideH = RowHeight(_rowSide);
-        if (_rowDaily != null) _rowDailyH = RowHeight(_rowDaily);
 
         // 折叠按钮：候选名挨个找，找到就接切换；找不到报错 dump（主人说栏上有这个按钮，对不上就是名字不匹配）
         var fold = FindFoldButton(bar);
@@ -107,6 +111,21 @@ public class QuestBarBinder : MonoBehaviour
             Debug.LogError($"[QuestBarBinder] 任务栏下没找到折叠按钮（候选名：{string.Join("/", FoldNodeNames)}，子节点见上），折叠功能不生效");
         }
 
+        // 黑底真身：panl/Dim（折叠收缩的目标节点）。缺失报错不静默（铁律 10）。
+        var dimT = FindDeep(bar, "Dim");
+        _dimRt = dimT as RectTransform;
+        if (_dimRt != null)
+        {
+            _dimBaseSize = _dimRt.sizeDelta;
+            _dimBasePos = _dimRt.anchoredPosition;
+            _dimBaseCaptured = true;
+        }
+        else
+            Debug.LogError("[QuestBarBinder] 任务栏下没找到黑底节点 panl/Dim，折叠时黑底不会收缩");
+
+        // 【2026-10-27 主人拍板「修」】任务栏 8 张悬空 sprite 按路径接回（AGENTS.md §2.3 口径），见 EnsureBarArt
+        EnsureBarArt(_rowMain, _rowSide, _rowDaily, fold, dimT);
+
         // 显隐联动基线：以预制体当前实际状态为准（支线行若预制体里就是隐藏的，首刷数据来了会正确展开）
         _appliedSideVisible = _rowSide == null || _rowSide.gameObject.activeSelf;
         _lastSideVisible = _appliedSideVisible;
@@ -115,10 +134,30 @@ public class QuestBarBinder : MonoBehaviour
         Debug.Log($"[QuestBarBinder] 任务栏绑定完成（正文 Text：主线={(_mainText != null)} 支线={(_sideText != null)} 日常={(_dailyText != null)}；折叠按钮={fold != null}）");
     }
 
-    static float RowHeight(Transform row)
+    /// <summary>任务栏正文基础样式：只定框高（x/位置不碰），字号由 FitInfoFont 按文案长度动态定。</summary>
+    static void ApplyInfoStyle(Text t)
     {
-        var rt = row as RectTransform;
-        return rt != null ? rt.rect.height : 0f;
+        if (t == null) return;
+        var rt = t.rectTransform;
+        if (rt != null)
+            rt.sizeDelta = new Vector2(rt.sizeDelta.x, 52f);
+    }
+
+    /// <summary>
+    /// 任务栏正文动态字号（2026-10-27 主人拍板「字少的时候大点、多的时候小点，限定最多字数」）：
+    /// 框宽 160 / 高 52 / 行距 1.3（GameFonts 下限），按全角字宽≈字号估算容量，档位——
+    ///   ≤7 字 → 20 号（单行大字）；≤14 字 → 18 号（两行）；≤20 字 → 16 号（两行）；
+    ///   超过 → 15 号并截断到 19 字 + 「…」（最多展示 20 字），最小 15 号保证看得清。
+    /// </summary>
+    const int InfoMaxChars = 20;   // 每条任务最多展示字数（含省略号），超出截断
+    static void FitInfoFont(Text t)
+    {
+        if (t == null) return;
+        string s = t.text ?? "";
+        int len = s.Length;
+        t.fontSize = len <= 7 ? 20 : len <= 14 ? 18 : len <= InfoMaxChars ? 16 : 15;
+        if (len > InfoMaxChars)
+            t.text = s.Substring(0, InfoMaxChars - 1) + "…";
     }
 
     /// <summary>按候选名找折叠按钮；顺带检查它别挂在三行里面（挂行里 = 折叠时连按钮一起藏，展开不了）。</summary>
@@ -140,6 +179,12 @@ public class QuestBarBinder : MonoBehaviour
                 continue;
             }
             BindClick(t, ToggleCollapse);
+            _foldRt = t as RectTransform;   // 黑底收缩用：按钮的高与纵位（panl 空间，与 Dim 同坐标系）
+            if (_foldRt != null)
+            {
+                _foldH = _foldRt.rect.height;
+                _foldY = _foldRt.anchoredPosition.y;
+            }
             return t;
         }
         return null;
@@ -178,6 +223,7 @@ public class QuestBarBinder : MonoBehaviour
             _mainText.text = m != null
                 ? m.Desc + (string.IsNullOrEmpty(m.ProgressText) ? "" : "（" + m.ProgressText + "）")
                 : "本章主线已完成";
+            FitInfoFont(_mainText);   // 按最终文案长度定字号/截断
         }
 
         bool sideVisible = snap.side != null;
@@ -185,7 +231,10 @@ public class QuestBarBinder : MonoBehaviour
         if (_rowSide != null)
         {
             if (_sideText != null)
+            {
                 _sideText.text = sideVisible ? snap.side.Value.desc : "";
+                if (sideVisible) FitInfoFont(_sideText);
+            }
         }
         else if (sideVisible)
         {
@@ -200,14 +249,15 @@ public class QuestBarBinder : MonoBehaviour
             _dailyText.text = d.HasValue
                 ? d.Value.desc + (d.Value.need > 1 ? $"（{d.Value.progress}/{d.Value.need}）" : "")
                 : "今日已完成";
+            FitInfoFont(_dailyText);   // 按最终文案长度定字号/截断
         }
     }
 
     /// <summary>
     /// 把「折叠态 × 支线可见性」统一套到 UI 上（状态没变直接返回，绝不一拍一动）。
-    ///   · 折叠 = 三行全收，黑底缩掉三行总高（只剩折叠按钮那截）；展开 = 按支线可见性正常摆；
-    ///   · 支线隐藏（未派定/已通）= 藏支线行 + 日常上移 + 黑底缩掉支线行那截；
-    ///   · 有 LayoutGroup/ContentSizeFitter 代管高度 → 只动显隐，高度交给自动布局。
+    ///   · 折叠 = 三行全收，黑底（panl/Dim）缩到只剩折叠按钮那截；展开 = 还原预制体基准；
+    ///   · 支线隐藏（未派定/已通）= 藏支线行（行序 SetSiblingIndex 对无布局组的 panl 不挪位，
+    ///     「日常上移 + 黑底缩一截」目前实际未生效——要做真位移等主人拍板）。
     /// </summary>
     void ApplyLayout(bool sideVisible)
     {
@@ -234,28 +284,24 @@ public class QuestBarBinder : MonoBehaviour
             }
         }
 
-        // 黑底高度（无自动布局才手动算；基高只量一次 = 全展开态）
-        if (_barRt == null || HasAutoLayout()) return;
-        if (_barBaseHeight < 0f) _barBaseHeight = _barRt.rect.height;
-        float h = _barBaseHeight;
-        if (_collapsed) h -= _rowMainH + _rowSideH + _rowDailyH;
-        else if (!sideVisible) h -= _rowSideH;
-        _barRt.sizeDelta = new Vector2(_barRt.sizeDelta.x, Mathf.Max(0f, h));
-    }
-
-    bool HasAutoLayout()
-    {
-        var t = _bar;
-        while (t != null)
+        // 黑底（panl/Dim）纵向收缩【2026-10-27 修复「点折叠黑底没收」】：
+        // 原实现改的是「任务栏」节点的 sizeDelta——该节点 0×0、没有任何子节点拉伸跟随它，
+        // 写了视觉永远不动。黑底真身是 panl/Dim：折叠 = 缩到只剩折叠按钮那一截
+        // （按钮/箭头必须留着，不然没法再展开）；展开 = 还原预制体基准。
+        // 只写纵向（sizeDelta.y / anchoredPosition.y），x 一律不动（铁律 20 纵向必要介入）；
+        // 全部从 Bind 时量得的 base 重算，不累加。
+        if (_dimRt == null || !_dimBaseCaptured) return;
+        if (_collapsed)
         {
-            if (t.GetComponent<VerticalLayoutGroup>() != null ||
-                t.GetComponent<HorizontalLayoutGroup>() != null ||
-                t.GetComponent<GridLayoutGroup>() != null ||
-                t.GetComponent<ContentSizeFitter>() != null)
-                return true;
-            t = t.parent;
+            float fh = _foldH > 0f ? _foldH : 0f;
+            _dimRt.sizeDelta = new Vector2(_dimBaseSize.x, fh + DimEdgePadding * 2f);
+            _dimRt.anchoredPosition = new Vector2(_dimBasePos.x, _foldY);
         }
-        return false;
+        else
+        {
+            _dimRt.sizeDelta = _dimBaseSize;
+            _dimRt.anchoredPosition = _dimBasePos;
+        }
     }
 
     // ============================================================
@@ -314,8 +360,11 @@ public class QuestBarBinder : MonoBehaviour
     }
 
     /// <summary>
-    /// 行点击绑定：优先绑行内「前往」按钮（层级图定稿，玩家点的是它）；行根/行内其它 Button 次之；
-    /// 都没有再考虑给行根补 Button（需要行根有 Graphic）。保证「绝不让点击没反应」。
+    /// 行点击绑定【2026-10-27 主人拍板「整个任务横条都可点击前往」】：
+    ///   · 行内「前往」按钮照旧绑（点按钮本尊走它，它是最高层命中、只触发一次）；
+    ///   · 行根补挂 Button：点在行内任何子件（正文/图标/底图）上的点击会沿层级冒泡到行根，
+    ///     同样触发前往 —— 整条横条任意位置可点。Button 不需要 Graphic 也能收到冒泡上来的点击。
+    /// 「前往」缺失时行为不变（全靠行根 Button 接住），「绝不让点击没反应」。
     /// </summary>
     static void BindClick(Transform row, System.Action onClick)
     {
@@ -323,31 +372,31 @@ public class QuestBarBinder : MonoBehaviour
         if (go != null)
         {
             var goBtn = go.GetComponent<Button>();
+            if (goBtn == null && go.GetComponent<Graphic>() != null)
+            {
+                // 【2026-10-27】预制体三行都摆了「前往」节点（有 Image 但漏挂 Button），
+                // 按铁律 2「预制体空→代码兜底」给「前往」补挂 Button；美术之后在 prefab 补了
+                // Button 的话这里 GetComponent 直接命中，不冲突。
+                goBtn = go.gameObject.AddComponent<Button>();
+            }
             if (goBtn != null)
             {
                 goBtn.onClick.RemoveListener(onClick.Invoke);
                 goBtn.onClick.AddListener(onClick.Invoke);
-                return;
             }
         }
-        var btn = row.GetComponent<Button>() ?? row.GetComponentInParent<Button>() ?? row.GetComponentInChildren<Button>(true);
-        if (btn == null)
-        {
-            // 行内没有 Button：优先用行根自身 Graphic；没有再找行内最大的背景图（美术没放「前往」按钮时兜底，
-            // 保证「绝不让点击没反应」）。两者都没有才是真缺件 → LogError 让美术补。
-            var host = row.GetComponent<Graphic>() ?? FindBestClickGraphic(row);
-            if (host == null)
-            {
-                DumpChildren(row, 0);
-                Debug.LogError($"[QuestBarBinder] 「{row.name}」行没有「前往」按钮、没有 Button 也没有可点击 Graphic，点击不了（子节点见上）");
-                return;
-            }
-            host.raycastTarget = true;   // 兜底点击载体必须可点
-            btn = host.gameObject.AddComponent<Button>();
-            Debug.LogWarning($"[QuestBarBinder] 「{row.name}」行没有「前往」按钮，已用行内背景图兜底点击（美术可在该行补「前往」按钮，点击更精准）");
-        }
-        btn.onClick.RemoveListener(onClick.Invoke);
-        btn.onClick.AddListener(onClick.Invoke);
+
+        // 行根 Button：整条横条的点击落点（点在子件上的点击沿层级冒泡上来触发）
+        var rowBtn = row.GetComponent<Button>() ?? row.gameObject.AddComponent<Button>();
+        rowBtn.onClick.RemoveListener(onClick.Invoke);
+        rowBtn.onClick.AddListener(onClick.Invoke);
+
+        // 行根没图就用行内最大背景图兜命中载体：底图若关了 raycast，空白区点击会穿过去没反应
+        var host = row.GetComponent<Graphic>() ?? FindBestClickGraphic(row);
+        if (host != null)
+            host.raycastTarget = true;
+        else
+            Debug.LogWarning($"[QuestBarBinder] 「{row.name}」行内没有任何 Graphic，行根 Button 只能靠子件冒泡接点击");
     }
 
     /// <summary>行内兜底点击载体：取面积最大的非文本 Graphic（背景图优先），没有再退任意 Graphic。</summary>
@@ -374,6 +423,75 @@ public class QuestBarBinder : MonoBehaviour
             if (area > bestArea) { bestArea = area; best = g; }
         }
         return best;
+    }
+
+    // ============================================================
+    // 悬空美术补链（2026-10-27 主人拍板「修」）
+    // ============================================================
+    // 团结引擎 56 字符 guid 重签后，任务栏 prefab 里 8 张 sprite 的 hex32 引用全部悬空
+    // （prefab 引用的 guid 在库里已不存在；图本体一直在 Assets/Resources/UI/Art/ 下没丢过）。
+    // 按 AGENTS.md §2.3 口径（2026-10-23 主人拍板「56 字符 guid 一律不管，全部走路径加载，
+    // 代码不得依赖 prefab 里的 sprite guid 引用」），这里按节点 + 路径主动设图——
+    // 与 LoadChestSprite / 名牌 Icon 同款口径，不是「图丢了才补」的运行时兜底。
+    // 加载失败 LogError 不静默（铁律 10）；只换 sprite，颜色/尺寸/raycast 一律不碰（铁律 20）。
+
+    const string ArtTaskDir = "UI/Art/Main/任务栏/";
+    const string ArtFoldPath = "UI/Battle/折叠箭头";     // 88×49 与折叠节点同尺寸
+    const string ArtDimPath = "UI/Art/Battle/任务底框";  // 234×99 半透明深色面板，Dim 原图
+
+    /// <summary>悬空节点 → 补图路径对照（guid 已废，路径是唯一真源）。</summary>
+    static readonly Dictionary<string, Sprite> _artCache = new Dictionary<string, Sprite>();
+
+    static Sprite LoadArt(string path, string label)
+    {
+        if (_artCache.TryGetValue(path, out var s) && s != null) return s;
+        s = Resources.Load<Sprite>(path);
+        if (s == null)
+            Debug.LogError($"[QuestBarBinder] 路径加载失败：Resources/{path}（{label}）——图不在 Resources 下或未按 Sprite 导入，任务栏该图会空");
+        else
+            _artCache[path] = s;
+        return s;
+    }
+
+    static void SetArt(Transform node, string path, string label)
+    {
+        if (node == null) return;   // 节点缺失 Bind 里已各自 LogError，这里不重复报
+        var img = node.GetComponent<Image>();
+        if (img == null)
+        {
+            Debug.LogError($"[QuestBarBinder] 节点「{node.name}」上没有 Image（{label}），路径图挂不上");
+            return;
+        }
+        var s = LoadArt(path, label);
+        if (s != null) img.sprite = s;
+    }
+
+    static Transform ChildOrWarn(Transform row, string child, string label)
+    {
+        var t = row.Find(child);
+        if (t == null)
+            Debug.LogError($"[QuestBarBinder] 「{row.name}」行下没找到「{child}」子节点（{label}），该图挂不上");
+        return t;
+    }
+
+    /// <summary>
+    /// 把 8 张悬空图按路径接回（节点/映射均为 2026-10-27 对 prefab 与素材逐张核对的结果）：
+    ///   三行行底（美术放在各行 Icon 节点上）：主线←素材表1（金）、支线←素材表2（蓝）、日常←素材表3（金，与1同图）；
+    ///   三行「前往」箭头：主线前往 / 支线前往 / 日常前往（120×171 三色）；
+    ///   折叠按钮箭头：UI/Battle/折叠箭头；黑底：panl/Dim ← UI/Art/Battle/任务底框。
+    /// </summary>
+    static void EnsureBarArt(Transform rowMain, Transform rowSide, Transform rowDaily, Transform fold, Transform dim)
+    {
+        SetArt(ChildOrWarn(rowMain, "Icon", "主线行底"), ArtTaskDir + "奇幻游戏三色任务界面素材表1", "主线行底");
+        if (rowSide != null) SetArt(ChildOrWarn(rowSide, "Icon", "支线行底"), ArtTaskDir + "奇幻游戏三色任务界面素材表2", "支线行底");
+        SetArt(ChildOrWarn(rowDaily, "Icon", "日常行底"), ArtTaskDir + "奇幻游戏三色任务界面素材表3", "日常行底");
+
+        SetArt(ChildOrWarn(rowMain, "前往", "主线前往"), ArtTaskDir + "主线前往", "主线前往");
+        if (rowSide != null) SetArt(ChildOrWarn(rowSide, "前往", "支线前往"), ArtTaskDir + "支线前往", "支线前往");
+        SetArt(ChildOrWarn(rowDaily, "前往", "日常前往"), ArtTaskDir + "日常前往", "日常前往");
+
+        SetArt(fold, ArtFoldPath, "折叠箭头");
+        SetArt(dim, ArtDimPath, "黑底 Dim");
     }
 
     // ============================================================

@@ -83,14 +83,19 @@ public class TavernUI : MonoBehaviour, ITownPage
         EnsureVisibleTransform();
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
-        // 【2026-10-25 主人拍板】酒馆主窗口不显示资源条：整条顶栏（含资源列与背景）收起；
-        // 冒险/角色/天赋/日志页不受影响（它们仍走「只留资源列」），见 SetTopBarResourceOnly。
+        // 【2026-10-27 主人拍板】酒馆页资源条只留金币/钻石（天赋石/体力不显示）：
+        // 原 10-25「整条顶栏收起」实际会被下面 RaiseSharedChrome 重新点亮盖掉，
+        // 现口径 = 顶栏在，但列显隐收拢为 GoldDia（见 RaiseSharedChrome 之后的 SetMode）。
         SetGuildHallOverlayMode(true, fromTavernPage: true);
         TownPageDim.Ensure(transform);
         SoftenOpaqueHallCover();
 
         Transform hall = GuildHallUI.Instance != null ? GuildHallUI.Instance.transform : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
+        // 【2026-10-27 主人拍板「酒馆的不用天赋石和体力资源条」】RaiseSharedChrome 会把整条 TopBar
+        // 重新点亮（上面 10-25「整条收起」实际被它盖掉，资源条以 Main 四列裸露），这里收拢列显隐：
+        // 酒馆只留金币/钻石，天赋石/体力隐藏（显隐收口在 ResourceStrip.SetMode）。
+        ResourceStrip.SetMode(ResourceStrip.Mode.GoldDia);
 
         EnsurePortraitMotion();
         RefreshGossipButton();   // 【2026-10-26 信任交流】跨天进酒馆恢复闲话次数（置灰→可点）
@@ -126,6 +131,8 @@ public class TavernUI : MonoBehaviour, ITownPage
         if (!gameObject.activeSelf) return;
         gameObject.SetActive(false);
         SetGuildHallOverlayMode(false);
+        // 【2026-10-27 主人拍板】离开酒馆还原主界面四格（进酒馆时被收成只留金币/钻石）
+        ResourceStrip.SetMode(ResourceStrip.Mode.Main);
     }
 
     public void Show()

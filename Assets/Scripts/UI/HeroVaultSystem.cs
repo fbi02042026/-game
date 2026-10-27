@@ -144,7 +144,8 @@ public static class HeroVaultSystem
                     continue;
                 }
                 bool isFrag = kv.Key.StartsWith(MercStarDefs.FragmentIdPrefix);
-                string info = (string.IsNullOrEmpty(def.desc) ? "" : def.desc + "\n") + "持有 ×" + kv.Value;
+                // 2026-10-27 统一模板：说明 + 数量行（ItemNoticeText 唯一出口）
+                string info = ItemNoticeText.Build(def.desc, "持有", kv.Value);
                 entries.Add(new DisplayEntry
                 {
                     category = isFrag ? 0 : 4,
@@ -172,7 +173,8 @@ public static class HeroVaultSystem
                     category = 3,
                     rarityRank = 0,
                     name = AdventureLogFragments.DisplayName(r.FragmentId),
-                    info = "材料类碎片，不能直接使用。\n" + AdventureLogFragments.FormatRecipeLine(i),
+                    info = ItemNoticeText.Build("材料类碎片，不能直接使用。\n"
+                        + AdventureLogFragments.FormatRecipeLine(i), "持有", have),
                     icon = BackpackGridVisual.LogFragmentIcon(),
                     count = have
                 });
@@ -188,7 +190,9 @@ public static class HeroVaultSystem
                 category = 4,
                 rarityRank = 0,
                 name = "天赋石",
-                info = "用于城镇天赋页点亮、升级节点。\n击杀精英 / Boss、通关里程碑都会掉落。\n持有 ×" + stones,
+                // 「击杀精英 / Boss、通关里程碑都会掉落」21 字引擎会随机折行，按模板缩行保语义
+                info = ItemNoticeText.Build("用于城镇天赋页点亮、升级节点。\n击杀精英 / Boss、里程碑会掉落。",
+                    "持有", stones),
                 icon = CommonIconSprites.Load("icon_talent_stone"),
                 count = (int)stones
             });
@@ -202,7 +206,7 @@ public static class HeroVaultSystem
                 category = 4,
                 rarityRank = 0,
                 name = "重生护符",
-                info = "佣兵阵亡时，点击其变灰的头像消耗 1 枚原地满血复活。\n战斗内关卡商店有售（50% 概率上架）。\n持有 ×" + data.reviveCharms,
+                info = ItemNoticeText.Build(ItemNoticeText.ReviveCharmDesc, "持有", data.reviveCharms),
                 icon = ItemDefs.LoadIcon("item_revive_charm"),
                 count = data.reviveCharms
             });
@@ -229,7 +233,7 @@ public static class HeroVaultSystem
                     category = 1,
                     rarityRank = tier == "传奇" ? 2 : tier == "稀有" ? 1 : 0,
                     name = jobKey + "·" + tierName + "徽记",
-                    info = "佣兵升星消耗的职业徽记。\n徽记副本可获得。持有 ×" + kv.Value,
+                    info = ItemNoticeText.Build("佣兵升星消耗的职业徽记。\n徽记副本可获得。", "持有", kv.Value),
                     // 图标路径与 MercGrowSprites.LoadBadge 同源：Icons/JobBadge/{jobKey}{档位}
                     icon = Resources.Load<Sprite>(ContentPaths.Icons.JobBadge + "/" + jobKey + tier),
                     count = kv.Value
@@ -246,7 +250,7 @@ public static class HeroVaultSystem
                 category = 2,
                 rarityRank = 0,
                 name = "普通招募卷轴",
-                info = "酒馆招募佣兵时可抵扣金币。\n持有 ×" + data.mercScrollCommon,
+                info = ItemNoticeText.Build("酒馆招募佣兵时可抵扣金币。", "持有", data.mercScrollCommon),
                 icon = ItemDefs.LoadIcon("item_scroll_merc_common"),
                 count = data.mercScrollCommon
             });
@@ -259,7 +263,7 @@ public static class HeroVaultSystem
                 category = 2,
                 rarityRank = 1,
                 name = "高级招募卷轴",
-                info = "酒馆招募传奇佣兵专用，可抵扣金币。\n持有 ×" + data.mercScrollLegendary,
+                info = ItemNoticeText.Build("酒馆招募传奇佣兵专用，可抵扣金币。", "持有", data.mercScrollLegendary),
                 icon = advIcon != null ? advIcon : ItemDefs.LoadIcon("item_scroll_merc_common"),
                 count = data.mercScrollLegendary
             });

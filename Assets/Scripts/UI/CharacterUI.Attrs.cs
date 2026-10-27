@@ -7,6 +7,17 @@ public partial class CharacterUI
 {
     void RefreshIdentity()
     {
+        // 【2026-10-27 主人拍板】角色页左上角名牌整块去掉：头像+名字+等级数字一起藏
+        // （主界面名牌当时只藏了头像、留名字+等级；角色页是主人点名「整块全藏」）。
+        // 恢复法 = 删掉这段隐藏逻辑，下面的写入代码原样还在。
+        var identityHeader = transform.Find("Content/Header");
+        if (identityHeader != null)
+        {
+            if (identityHeader.gameObject.activeSelf)
+                identityHeader.gameObject.SetActive(false);
+            return; // 整块已藏，头像/名字/等级的写入全部跳过（含缺图 LogError）
+        }
+
         if (titleText != null)
             titleText.text = PlayerIdentity.DisplayName;
         // 【2026-10-27 主人拍板】名字下那行由称号「见习」改为玩家等级 = 主界面名牌 Level 同款：

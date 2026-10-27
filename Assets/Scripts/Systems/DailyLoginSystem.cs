@@ -110,7 +110,22 @@ public static class DailyLoginSystem
         if (d == null) return;
 
         string today = ShopDefs.TodayKey();
-        if (d.loginLastDay == today) return;
+        if (d.loginLastDay == today)
+        {
+            // 【2026-10-27 修·主人报「每日登录不能领取」】自愈死锁：
+            // 实测存档出现「loginLastDay=今天 但 loginFlagEntries 全空」的脏状态
+            //（清档+引导重测后出现，成因未定案）——OnEnterGame 在这里永远早退，
+            // LoginDays 恒 0 → 8 日格连第 1 天都不可领，玩家永远领不了。
+            // 天数标记比 loginLastDay 更真：标记空了就补回当天基数并留痕，绝不吞已有累计。
+            if (LoginDays < 1)
+            {
+                SetFlag(KEY_DAYS, 1);
+                if (StreakDays < 1) SetFlag(KEY_STREAK, 1);
+                SaveSystem.Instance.Save();
+                Debug.LogWarning("[DailyLogin] 检测到登录天数标记丢失（loginLastDay=今天但 loginFlags 为空），已自愈为第 1 天");
+            }
+            return;
+        }
 
         // 连击：昨天登录过就 +1，否则重新计数。**只清"连续天数"，不动已领记录**。
         SetFlag(KEY_STREAK, IsYesterday(d.loginLastDay) ? StreakDays + 1 : 1);

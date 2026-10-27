@@ -295,8 +295,9 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
             ? GuildHallUI.Instance.transform
             : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
-        // 【2026-10-27 主人拍板】冒险页顶条只显示钻石+体力，金币/天赋石隐藏
-        ResourceStrip.SetMode(ResourceStrip.Mode.DiamondStamina);
+        // 【2026-10-27 主人拍板「冒险界面参考主界面的数据统一」】资源条不再切 DiamondStamina
+        // （原「只显钻石+体力」口径作废），保持 Main 四格 2×2，与主界面完全一致；
+        // 原 ShowPage/HidePage 的两处 SetMode 随之删除（DiamondStamina 模式已从 ResourceStrip 移除）。
         EnsureStandaloneChrome(hall);
 
         // 越界（<1 或 >8）时落到「应推进的章节」：可选里第一个未通关，全通关回最后一章。
@@ -377,7 +378,6 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
 
     public void HidePage()
     {
-        ResourceStrip.SetMode(ResourceStrip.Mode.Main);   // 【2026-10-27】还原顶条四列（金币/天赋石恢复）
         HideTip();
         HideFloatToast();
         if (!gameObject.activeSelf) return;

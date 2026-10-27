@@ -72,7 +72,8 @@ public static class QuestBarData
         {
             islandId = id,
             name = isl.name,
-            desc = "支线岛·" + isl.name + "：单场 Boss 战"
+            // 【2026-10-27 主人拍板】支线文案只要「通关XXX」，不要前缀与玩法说明
+            desc = "通关" + isl.name
         };
     }
 }

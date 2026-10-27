@@ -58,6 +58,13 @@ public partial class AdventureUI
     /// <summary>左右微摆速度（弧度/秒）。</summary>
     const float BranchNodeRotSpeed = 1.1f;
 
+    // ── 出现动效（2026-10-27 主人拍板恢复：岛「出现的时候要有动效」= 渐入 + 从下浮入；
+    //    2026-10-23 回退的是消失/补位/开启那套 lifecycle，出现动效另算，不冲突）──
+    /// <summary>出现动效时长（秒）。</summary>
+    const float BranchEntryDur = 0.45f;
+    /// <summary>浮入起点：从基准位下方多少像素浮上来。</summary>
+    const float BranchEntryFromY = 60f;
+
     Transform _branchIslandRoot;
     /// <summary>支线岛浮动组件缓存（EnsureBranchIslands 建好后记下；瘦屏重排/还原写它的 basePos）。</summary>
     BranchIslandFloater _branchFloater;
@@ -216,9 +223,12 @@ public partial class AdventureUI
     /// 支线岛状态刷新（RefreshAll 调，仅主线模式显示）：
     /// 名字（支线地图名）+ 剧情节点图（可接原色/打完灰）+ 可接徽章（打完隐藏）+ 岛图 + 灰暗度。
     /// 2026-10-23 主人拍板回退：lifecycle 动画（下移消失/补位/开启）只属于主线宝箱，支线岛不做。
+    /// 2026-10-27 主人拍板恢复「出现动效」：岛从隐藏→出现的那一次播 渐入+从下浮入（BranchEntry* 常量）；
+    /// 消失/补位/开启依旧不做。
     /// </summary>
     void RefreshBranchIslands()
     {
+        bool firstBuild = _branchIslandRoot == null;
         EnsureBranchIslands();
         if (_branchIslandRoot == null) return;
         // 2026-10-23 主人「右边那几个岛在前期不会出现支线」：还没派定的岛不出现（不再摆「？？？」空岛），
@@ -230,6 +240,8 @@ public partial class AdventureUI
             if (BranchIslandIdOf(i) > 0) { anyAssignedEarly = true; break; }
         }
         bool show = _selectedMode == 0 && anyAssignedEarly;
+        // 容器由隐藏转显示（或首次建出来）的这一帧 = 岛「出现」，解锁的岛槽要播出现动效
+        bool rootBecameShown = show && (firstBuild || !_branchIslandRoot.gameObject.activeSelf);
         if (_branchIslandRoot.gameObject.activeSelf != show)
             _branchIslandRoot.gameObject.SetActive(show);
         if (!show) return;
@@ -243,9 +255,13 @@ public partial class AdventureUI
 
             // 未派定的岛槽直接隐藏（不显示「？？？」占位）
             var slotGo = _branchIslands[i].gameObject;
+            // 出现时机：槽位自身由隐藏转显示，或容器这次整体刚出现 → 播出现动效
+            bool slotBecameShown = unlocked && (!slotGo.activeSelf || rootBecameShown);
             if (slotGo.activeSelf != unlocked)
                 slotGo.SetActive(unlocked);
             if (!unlocked) continue;
+            if (slotBecameShown)
+                _branchFloater?.PlayEntry(i);
 
             var lbl = _branchIslandLabels[i];
             if (lbl != null)
@@ -283,9 +299,9 @@ public partial class AdventureUI
                 if (islandSp != null) islandImg.sprite = islandSp;
             }
 
-            // 灰暗度：待打全亮；已通关微暗
+            // 灰暗度：待打全亮；已通关微暗（出现动效播放期间别抢 alpha，等动效走完）
             var cg = _branchIslands[i].GetComponent<CanvasGroup>();
-            if (cg != null)
+            if (cg != null && (_branchFloater == null || !_branchFloater.IsEntryActive(i)))
                 cg.alpha = cleared ? 0.85f : 1f;
         }
     }
@@ -370,9 +386,31 @@ public partial class AdventureUI
         readonly List<RectTransform> wobbleNodes = new List<RectTransform>();
         readonly List<Vector3> wobbleBasePos = new List<Vector3>();
         readonly List<bool> wobbleActive = new List<bool>();
+        // 出现动效状态（下标与 slots 对齐；PlayEntry 懒扩容，建岛时不必预置）
+        readonly List<bool> entryActive = new List<bool>();
+        readonly List<float> entryT = new List<float>();
+        readonly List<CanvasGroup> entryCg = new List<CanvasGroup>();
         float _phase;
 
         void Awake() => _phase = UnityEngine.Random.Range(0f, 6.28f);
+
+        /// <summary>该槽是否正在播出现动效（刷新灰暗度时别写它的 alpha）。</summary>
+        public bool IsEntryActive(int idx)
+            => idx >= 0 && idx < entryActive.Count && entryActive[idx];
+
+        /// <summary>
+        /// 播出现动效（2026-10-27 主人拍板：出现要有动效）：alpha 归 0，
+        /// 从基准位下方 BranchEntryFromY 处渐入+浮入到位（Update 里推进，easeOutCubic）。
+        /// </summary>
+        public void PlayEntry(int idx)
+        {
+            if (idx < 0 || idx >= slots.Count || slots[idx] == null) return;
+            while (entryActive.Count <= idx) { entryActive.Add(false); entryT.Add(0f); entryCg.Add(null); }
+            entryActive[idx] = true;
+            entryT[idx] = 0f;
+            entryCg[idx] = slots[idx].GetComponent<CanvasGroup>();
+            if (entryCg[idx] != null) entryCg[idx].alpha = 0f;
+        }
 
         /// <summary>注册剧情节点（建岛时一次；基准取注册时的预制体 localPose）。</summary>
         public void RegisterWobble(RectTransform node)
@@ -401,8 +439,19 @@ public partial class AdventureUI
             for (int i = 0; i < slots.Count && i < basePos.Count; i++)
             {
                 if (slots[i] == null) continue;
+                // 出现动效推进：alpha 渐入 + y 从下方浮上来（与常驻浮动叠加，走完即停在基准位）
+                float entryOff = 0f;
+                if (i < entryActive.Count && entryActive[i])
+                {
+                    entryT[i] += Time.unscaledDeltaTime;
+                    float k = Mathf.Clamp01(entryT[i] / BranchEntryDur);
+                    float eased = 1f - (1f - k) * (1f - k) * (1f - k);   // easeOutCubic
+                    entryOff = (1f - eased) * -BranchEntryFromY;
+                    if (entryCg[i] != null) entryCg[i].alpha = eased;
+                    if (k >= 1f) entryActive[i] = false;
+                }
                 var p = slots[i].anchoredPosition;
-                p.y = basePos[i].y + Mathf.Sin(t * SlotFloatSpeed + i * 1.57f) * SlotFloatAmp;
+                p.y = basePos[i].y + entryOff + Mathf.Sin(t * SlotFloatSpeed + i * 1.57f) * SlotFloatAmp;
                 slots[i].anchoredPosition = p;
             }
             for (int i = 0; i < wobbleNodes.Count; i++)
