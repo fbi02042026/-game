@@ -2,196 +2,78 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 疾风架势「手动窗口」倒计时条（2026-10-27 主人拍板机制）：
-/// 战斗 HUD 上方居中一块「疾风架势！点击屏幕多打」+ 倒计时进度条 + 剩余秒数。
-/// 运行时挂到 BattleUI 下（照 BattleSideHud 先例），不依赖预制体；
-/// 自身 raycastTarget 全关，不拦截战场点击（点击判定在 BattleManager.IsBattlefieldTap）。
-/// </summary>
-public class GaleWindowHud : MonoBehaviour
-{
-    public static GaleWindowHud Instance { get; private set; }
-
-    /// <summary>进度条轨道宽（填充条 = 轨道 − 左右各 2px 内边）。</summary>
-    const float TrackWidth = 300f;
-
-    RectTransform _fill;
-    Text _countText;
-
-    public static GaleWindowHud EnsureOn(Transform battleUiRoot)
-    {
-        if (battleUiRoot == null) return null;
-        var existing = Instance != null ? Instance : battleUiRoot.GetComponentInChildren<GaleWindowHud>(true);
-        if (existing != null)
-        {
-            Instance = existing;
-            existing.Build();
-            return existing;
-        }
-
-        var go = new GameObject("GaleWindowHud", typeof(RectTransform));
-        go.transform.SetParent(battleUiRoot, false);
-        go.transform.SetAsLastSibling();
-        var hud = go.AddComponent<GaleWindowHud>();
-        hud.Build();
-        return hud;
-    }
-
-    void Awake()
-    {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-        Instance = this;
-    }
-
-    void OnDestroy()
-    {
-        if (Instance == this) Instance = null;
-    }
-
-    void Build()
-    {
-        if (_fill != null) return; // 幂等：已建不再重建（EnsureOn 重复调用安全）
-
-        var rootRt = GetComponent<RectTransform>();
-        rootRt.anchorMin = new Vector2(0.5f, 1f);
-        rootRt.anchorMax = new Vector2(0.5f, 1f);
-        rootRt.pivot = new Vector2(0.5f, 1f);
-        // 血条（贴顶锚 y≈-163）下方、战场怪带上缘，居中；避开右上 BattleSideHud（右缩 48 宽 210）
-        rootRt.anchoredPosition = new Vector2(0f, -290f);
-        rootRt.sizeDelta = new Vector2(420f, 96f);
-
-        // 背板（半透明，不挡视线；raycast 关）
-        var bgGo = new GameObject("Bg", typeof(RectTransform), typeof(Image));
-        bgGo.transform.SetParent(rootRt, false);
-        var bgRt = (RectTransform)bgGo.transform;
-        bgRt.anchorMin = Vector2.zero;
-        bgRt.anchorMax = Vector2.one;
-        bgRt.offsetMin = Vector2.zero;
-        bgRt.offsetMax = Vector2.zero;
-        var bgImg = bgGo.GetComponent<Image>();
-        bgImg.color = new Color(0.08f, 0.1f, 0.16f, 0.55f);
-        bgImg.raycastTarget = false;
-
-        // 标题行
-        var title = CreateText(bgGo.transform, "GaleTitle", "疾风架势！点击屏幕多打", 26,
-            new Vector2(0f, -32f), new Vector2(410f, 40f));
-        title.color = new Color(0.55f, 0.9f, 1f, 1f);
-        title.fontStyle = FontStyle.Bold;
-
-        // 进度条：底 + 填充（sizeDelta 方案，与 BattleBossHpBar 同口径，不依赖 Filled sprite）
-        var trackGo = new GameObject("Track", typeof(RectTransform), typeof(Image));
-        trackGo.transform.SetParent(bgGo.transform, false);
-        var trackRt = (RectTransform)trackGo.transform;
-        trackRt.anchorMin = new Vector2(0.5f, 0.5f);
-        trackRt.anchorMax = new Vector2(0.5f, 0.5f);
-        trackRt.pivot = new Vector2(0.5f, 0.5f);
-        trackRt.anchoredPosition = new Vector2(0f, -70f);
-        trackRt.sizeDelta = new Vector2(TrackWidth, 16f);
-        var trackImg = trackGo.GetComponent<Image>();
-        trackImg.color = new Color(0f, 0f, 0f, 0.6f);
-        trackImg.raycastTarget = false;
-
-        var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
-        fillGo.transform.SetParent(trackRt, false);
-        _fill = (RectTransform)fillGo.transform;
-        _fill.anchorMin = new Vector2(0f, 0.5f);
-        _fill.anchorMax = new Vector2(0f, 0.5f);
-        _fill.pivot = new Vector2(0f, 0.5f);
-        _fill.anchoredPosition = new Vector2(2f, 0f);
-        _fill.sizeDelta = new Vector2(TrackWidth - 4f, 12f);
-        var fillImg = fillGo.GetComponent<Image>();
-        fillImg.color = new Color(0.35f, 0.95f, 0.65f, 0.95f);
-        fillImg.raycastTarget = false;
-
-        // 剩余秒数（条右端外；420/2=210 半宽内）
-        _countText = CreateText(bgGo.transform, "GaleCount", "4.0", 20,
-            new Vector2(TrackWidth * 0.5f + 22f, -70f), new Vector2(50f, 24f));
-        _countText.color = new Color(0.9f, 0.95f, 1f, 0.95f);
-
-        EnsureSortCanvas();
-        // 运行时建树默认隐藏（与「Build() 末尾 SetActive(false)」同一口径），Show 时才亮
-        gameObject.SetActive(false);
-    }
-
-    void EnsureSortCanvas()
-    {
-        var c = GetComponent<Canvas>();
-        if (c == null) c = gameObject.AddComponent<Canvas>();
-        c.overrideSorting = true;
-        c.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        // 比 BattleSideHud(105) 高一档，仍远低于弹窗(920)
-        c.sortingOrder = 106;
-        if (GetComponent<GraphicRaycaster>() == null)
-            gameObject.AddComponent<GraphicRaycaster>();
-    }
-
-    public void Show()
-    {
-        if (_fill == null) Build();
-        gameObject.SetActive(true);
-        UpdateFill(1f, GameConfig.GALE_WINDOW_DURATION);
-    }
-
-    public void Hide()
-    {
-        if (this == null) return;
-        gameObject.SetActive(false);
-    }
-
-    /// <summary>每帧由 BattleManager 推：remainRatio 0~1，remainSec 剩余秒。</summary>
-    public void UpdateFill(float remainRatio, float remainSec)
-    {
-        if (_fill == null) return;
-        _fill.sizeDelta = new Vector2((TrackWidth - 4f) * Mathf.Clamp01(remainRatio), 12f);
-        if (_countText != null) _countText.text = remainSec.ToString("0.0");
-    }
-
-    static Text CreateText(Transform parent, string name, string content, int size,
-        Vector2 pos, Vector2 sizeDelta)
-    {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.transform.SetParent(parent, false);
-        var rt = (RectTransform)go.transform;
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = pos;
-        rt.sizeDelta = sizeDelta;
-        var t = go.AddComponent<Text>();
-        t.text = content;
-        t.fontSize = size;
-        t.alignment = TextAnchor.MiddleCenter;
-        t.color = Color.white;
-        t.horizontalOverflow = HorizontalWrapMode.Overflow;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        t.raycastTarget = false;
-        t.font = GameFonts.GetChinese();
-        return t;
-    }
-}
-
-/// <summary>
-/// BattleUI 薄封装：疾风窗口条的显示 / 隐藏 / 刷新。
-/// 窗口条节点由 GaleWindowHud 运行时建（不碰预制体），挂在本 UI 的 transform 下。
+/// 疾风架势「手动窗口」UI（2026-10-28 主人拍板：改用预制体节点，运行时自建横幅整条删除 ——
+/// 同一语义只留一个出口）。BattleUI 根下主人手工摆的「能量槽」节点组：
+/// 内层「能量槽」（镜像）含「能量」= Filled Image 水平填充；旁边是「抬手」动画节点（带 Animator）。
+/// 行为：开窗 = 整组显示 + 「能量」从满条按剩余时间收缩（时间走完条到底，方向由 prefab 的
+/// fillOrigin 决定，代码只写 fillAmount 不碰布局）+「抬手」动画持续播放；关窗整组隐藏。
+/// 引用一律按名字运行时绑（不依赖 prefab 里的 sprite/controller guid 引用）；
+/// 缺节点 LogError 让主人看见（不兜底）。
+/// 每帧推进入口：BattleManager.TickGaleWindow → ShowGaleWindow / UpdateGaleWindow / HideGaleWindow。
 /// </summary>
 public partial class BattleUI
 {
-    public void ShowGaleWindow()
+    GameObject _galeEnergyRoot;     // 外层「能量槽」：整组显隐开关
+    Image _galeEnergyFill;          // 「能量」填充条
+    Animator _galeHandAnim;         // 「抬手」动画
+    bool _galeNodesSearched;
+
+    /// <summary>按名字绑「能量槽」节点组（幂等；找不到时每次开窗重找并报错，保持可见）。</summary>
+    void EnsureGaleEnergyNodes()
     {
-        var hud = GaleWindowHud.EnsureOn(transform);
-        if (hud != null) hud.Show();
+        if (_galeNodesSearched && _galeEnergyRoot != null) return;
+        _galeNodesSearched = true;
+        _galeEnergyRoot = null;
+        _galeEnergyFill = null;
+        _galeHandAnim = null;
+
+        // 外层「能量槽」是根的直接子节点，内层同名节点只能经它到达 → DFS 必先命中外层
+        Transform root = FindDeepChildIgnoreCase(transform, "能量槽");
+        if (root == null)
+        {
+            Debug.LogError("[BattleUI] 疾风窗口「能量槽」节点缺失：BattleUI 下没找到 能量槽（应含 能量/抬手）→ 倒计时条不显示");
+            return;
+        }
+        _galeEnergyRoot = root.gameObject;
+
+        Transform fillT = FindDeepChildIgnoreCase(root, "能量");
+        if (fillT != null) _galeEnergyFill = fillT.GetComponent<Image>();
+        if (_galeEnergyFill == null)
+            Debug.LogError("[BattleUI] 疾风窗口「能量」填充图缺失：能量槽 下没找到名为 能量 的 Image → 倒计时条画不出来");
+
+        Transform handT = FindDeepChildIgnoreCase(root, "抬手");
+        if (handT != null) _galeHandAnim = handT.GetComponent<Animator>();
+        // 抬手没挂 Animator 不在此报错；控制器引用断链（56 字符 guid 旧问题）由主人按报告处理
+
+        _galeEnergyRoot.SetActive(false);   // 平时整组隐藏，开窗才亮
     }
 
-    public void HideGaleWindow()
+    public void ShowGaleWindow()
     {
-        if (GaleWindowHud.Instance != null) GaleWindowHud.Instance.Hide();
+        EnsureGaleEnergyNodes();
+        if (_galeEnergyRoot == null) return;
+        _galeEnergyRoot.SetActive(true);
+        if (_galeEnergyFill != null) _galeEnergyFill.fillAmount = 1f;
+        // 抬手动画：节点重新激活后 Animator 自动从默认状态起播（KeepAnimatorStateOnDisable=0）；
+        // 片段没勾 Loop 时由 UpdateGaleWindow 播完续播，保证窗口期间一直播
     }
 
     public void UpdateGaleWindow(float remainRatio, float remainSec)
     {
-        if (GaleWindowHud.Instance != null) GaleWindowHud.Instance.UpdateFill(remainRatio, remainSec);
+        if (_galeEnergyRoot == null || !_galeEnergyRoot.activeSelf) return;
+        if (_galeEnergyFill != null) _galeEnergyFill.fillAmount = Mathf.Clamp01(remainRatio);
+
+        // 抬手一直播：片段未勾 Loop（m_LoopTime=0）时播完从头续；勾了 Loop 这段是低开销空转
+        if (_galeHandAnim != null && _galeHandAnim.runtimeAnimatorController != null)
+        {
+            var st = _galeHandAnim.GetCurrentAnimatorStateInfo(0);
+            if (!st.loop && st.normalizedTime >= 1f)
+                _galeHandAnim.Play(st.shortNameHash, 0, 0f);
+        }
+    }
+
+    public void HideGaleWindow()
+    {
+        if (_galeEnergyRoot != null) _galeEnergyRoot.SetActive(false);
     }
 }

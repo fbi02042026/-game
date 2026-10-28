@@ -360,7 +360,8 @@ public partial class BattleManager
     // CD 好 + 身边有敌人 → 弹 4 秒倒计时窗口；窗口内点战场空白区 = 英雄多打一次普攻（×0.8）。
     // 窗口结束自动上基础攻速 buff（保留，不点不亏）+ 进 CD（30s 起、每轮 +6s、封顶 60s）。
     // 疾风已从自动释放池摘出（见 FindReadySkillSlot / PrimePlayerSkillOpeningCooldowns），
-    // 本状态机是它唯一的释放通道。UI 见 GaleWindowHud（挂 BattleUI 下，运行时建节点）。
+    // 本状态机是它唯一的释放通道。UI = 主人 2026-10-28 摆的预制体「能量槽」节点组
+    //（BattleUI.ShowGaleWindow / UpdateGaleWindow / HideGaleWindow 按名字绑定驱动）。
     // ============================================================
     #region 疾风架势手动窗口
 

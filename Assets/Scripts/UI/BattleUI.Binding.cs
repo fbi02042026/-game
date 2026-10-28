@@ -233,6 +233,8 @@ public partial class BattleUI : MonoBehaviour
         EnsureBattleBackpackTitleLabel();
         // 【2026-10-26 主人拍板「只留一个抽奖券」】进场即隐藏金币/天赋石条，不等 0.1s 后的首次全量刷新
         ApplyTopBarResourceVisibility();
+        // 【2026-10-28 主人摆的「能量槽」节点组】疾风窗口倒计时条 + 抬手动画，按名字绑齐并整组预隐藏
+        EnsureGaleEnergyNodes();
         ReportBindingStatus();
     }
 

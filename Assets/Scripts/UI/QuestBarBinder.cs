@@ -36,6 +36,10 @@ public class QuestBarBinder : MonoBehaviour
     bool _dimBaseCaptured;
     RectTransform _foldRt;           // 折叠按钮（黑底收缩后的依附目标）
     float _foldH = -1f, _foldY;      // 折叠按钮高/纵向位置（panl 空间，与 Dim 同一坐标系）
+    float _foldX = -1f;              // 折叠按钮展开态基准 x（panl 空间）；<0 = 未捕获
+    float _foldEdgeX;               // 收起态贴边 x：按钮左缘留 FoldEdgeLeftInset，整体挪到屏幕左缘
+    /// <summary>折叠按钮收起后贴屏幕左边的留白（按钮左缘离 panl 左=屏幕左的距离，单位逻辑像素）。</summary>
+    const float FoldEdgeLeftInset = 8f;
     /// <summary>黑底上下留边总和：基准 300 高 vs 三行实跨 260，上下各 20（折叠后 = 按钮高 + 2×20）。</summary>
     const float DimEdgePadding = 20f;
     int _dailyBaseSibling = -1;      // 日常行原始次序（支线行回来时还原）
@@ -203,6 +207,14 @@ public class QuestBarBinder : MonoBehaviour
             {
                 _foldH = _foldRt.rect.height;
                 _foldY = _foldRt.anchoredPosition.y;
+                _foldX = _foldRt.anchoredPosition.x;   // 展开态基准 x（panl 空间），收起时改、展开时还原
+                // 收起后贴屏幕左边：按钮左缘离 panl 左缘（=屏幕左缘）留 FoldEdgeLeftInset。
+                // 用「旋转后的实际包围盒宽」推算（折叠箭头旋了 -90°，视觉宽=rect.height 而非 rect.width），
+                // 再乘 |localScale|——scale 改了也能自动贴边（2026-10-28 主人需求）。
+                float ang = _foldRt.localEulerAngles.z * Mathf.Deg2Rad;
+                float effW = (Mathf.Abs(Mathf.Cos(ang)) * _foldRt.rect.width
+                            + Mathf.Abs(Mathf.Sin(ang)) * _foldRt.rect.height) * Mathf.Abs(_foldRt.localScale.x);
+                _foldEdgeX = FoldEdgeLeftInset + effW * 0.5f;
             }
             return t;
         }
@@ -307,7 +319,8 @@ public class QuestBarBinder : MonoBehaviour
         // 原实现改的是「任务栏」节点的 sizeDelta——该节点 0×0、没有任何子节点拉伸跟随它，
         // 写了视觉永远不动。黑底真身是 panl/Dim：折叠 = 缩到只剩折叠按钮那一截
         // （按钮/箭头必须留着，不然没法再展开）；展开 = 还原预制体基准。
-        // 只写纵向（sizeDelta.y / anchoredPosition.y），x 一律不动（铁律 20 纵向必要介入）；
+        // 黑底只动纵向（sizeDelta.y / anchoredPosition.y），x 保持基准宽（铁律 20 纵向必要介入）；
+        // 折叠按钮的横向（anchoredPosition.x）由 2026-10-28 主人需求单独处理（贴屏幕左边，见下方）。
         // 全部从 Bind 时量得的 base 重算，不累加。
         if (_dimRt == null || !_dimBaseCaptured) return;
         if (_collapsed)
@@ -315,11 +328,18 @@ public class QuestBarBinder : MonoBehaviour
             float fh = _foldH > 0f ? _foldH : 0f;
             _dimRt.sizeDelta = new Vector2(_dimBaseSize.x, fh + DimEdgePadding * 2f);
             _dimRt.anchoredPosition = new Vector2(_dimBasePos.x, _foldY);
+            // 【2026-10-28 主人需求】收起后折叠按钮移到屏幕左边（贴边），不要停在条中间原位：
+            // 横向挪到 _foldEdgeX（按钮左缘留 FoldEdgeLeftInset），纵向保持 _foldY；展开态再还原到 _foldX。
+            // 注：此举需改按钮 anchoredPosition.x，属铁律20「布局尺寸代码禁写」的显式必要介入例外（主人拍板）。
+            if (_foldRt != null && _foldX >= 0f)
+                _foldRt.anchoredPosition = new Vector2(_foldEdgeX, _foldY);
         }
         else
         {
             _dimRt.sizeDelta = _dimBaseSize;
             _dimRt.anchoredPosition = _dimBasePos;
+            if (_foldRt != null && _foldX >= 0f)
+                _foldRt.anchoredPosition = new Vector2(_foldX, _foldY);
         }
     }
 

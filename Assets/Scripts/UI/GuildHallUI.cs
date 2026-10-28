@@ -82,7 +82,8 @@ public class GuildHallUI : MonoBehaviour
     Vector3 _eyesBaseScale = Vector3.one;
     CanvasGroup _introCover;
     Button _turnButton;
-    string _turnBoardId;   // 主界面看板当前显示的人物 id（"player" 或佣兵 HireId）；null = 预制体默认图
+    string _turnBoardId;   // 主界面看板当前显示的人物 id（佣兵 HireId；空串/null = 预制体默认图 = 前台小姐）
+    Sprite _defaultBoardSprite;   // 捕获的预制体默认看板图（=前台小姐），轮换"回到前台"时复用，避免依赖运行时资源路径
     /// <summary>【2026-10-26 主人拍板】看板当前人物 id（含进主界面恢复的上次选择）。
     /// 气泡台词池 / 专属台词 / 点击说话都按它取，SpeechBubbleTalker 只读。</summary>
     public string CurrentBoardId => _turnBoardId;
@@ -713,7 +714,7 @@ public class GuildHallUI : MonoBehaviour
     /// <summary>
     /// 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的，只摆了 Image+Shadow）。
     /// 运行时补 Button（不改预制体）+ 呼吸挂 PortraitIdleMotion（剧情同款，底部为轴，幅度 0.1）；
-    /// 点击在「玩家 + 已拥有佣兵」里随机换看板人物。
+    /// 点击在「前台小姐 + 玩家已拥有的女性佣兵」里顺次轮换看板人物。
     /// </summary>
     void EnsureTurnButton()
     {
@@ -746,6 +747,9 @@ public class GuildHallUI : MonoBehaviour
     /// </summary>
     void RestoreBoardCharacter()
     {
+        // 捕获预制体默认看板图（=前台小姐），轮换"回到前台"时复用；必须在任何 SetBoardCharacter 之前捕获。
+        if (boardCharacterImage != null && _defaultBoardSprite == null)
+            _defaultBoardSprite = boardCharacterImage.sprite;
         string id = SaveSystem.Instance?.Data?.lastBoardCharacterId;
         if (string.IsNullOrEmpty(id)) return;
         if (boardCharacterImage == null)
@@ -764,7 +768,7 @@ public class GuildHallUI : MonoBehaviour
     }
 
     // ────────────────────────────────────────────────────────────────────────
-    // 看板随机池的女性名单（2026-10-26 主人拍板「优先只有女性职业出来 不要男性的」）
+    // 看板轮换池的女性名单（2026-10-26 主人拍板「优先只有女性职业出来 不要男性的」）
     // 性别判定 = 22 张立绘（Resources/Icons/MercStand/H0XX.png）逐一目检，遵守
     // MercRosterDefs.cs:76 教训「定性别必须先看立绘，不许凭名字凭空猜」——
     // 图鉴文案不可靠（AdventureLogCatalog 里路加写"她"，立绘是光头男僧）。
@@ -773,7 +777,8 @@ public class GuildHallUI : MonoBehaviour
     // 边缘（未入池，主人可一句话调整）：H012 塞拉（设定女扮男装、立绘少年样）、
     //   H014 伊芙（兜帽长袍看不出女）；player（红发少年）按「不要男性的」一并出池。
     // ────────────────────────────────────────────────────────────────────────
-    static readonly HashSet<string> BoardFemaleIds = new HashSet<string>
+    // 用 List 而非 HashSet：看板轮换需固定顺序（"轮流"可预期），List 书写顺序即轮换顺序。
+    static readonly List<string> BoardFemaleIds = new List<string>
     {
         "H005",   // 米娅位：粉发少女弓手
         "H013",   // 金发女骑士（角盔+高跟鞋）
@@ -783,7 +788,11 @@ public class GuildHallUI : MonoBehaviour
         "H019",   // 艾琳位：紫发女法师
     };
 
-    /// <summary>点 Turn：随机选一个看板形象（保证与当前不同），走「旧退新进」过场。</summary>
+    /// <summary>
+    /// 点 Turn：在「前台小姐 + 玩家拥有的女性佣兵」名单里顺次轮换（保证能切回前台），走「旧退新进」过场。
+    /// 名单首位固定为前台小姐（空串哨兵），其后按 BoardFemaleIds 书写顺序接玩家已拥有的女性佣兵；
+    /// 每次点击取当前人物的下一位（到末尾回到首位），形成闭环，不会再出现"切到佣兵回不了前台"。
+    /// </summary>
     void OnTurnClicked()
     {
         if (_turnSwapCo != null) return;   // 上一次过场没播完，忽略连点
@@ -793,33 +802,62 @@ public class GuildHallUI : MonoBehaviour
             return;
         }
 
-        // 【2026-10-26 主人拍板「优先只有女性职业出来 不要男性的」】看板随机池只收外观为女性的佣兵；
-        // player 立绘是红发少年（男），也不再进池。池空时按钮无操作（开局默认佣兵里有米娅，不会空）。
-        var pool = new List<string>();
+        // 【2026-10-26 主人拍板「优先只有女性职业出来 不要男性的」】轮换名单只收外观为女性的佣兵；
+        // player 立绘是红发少年（男），不进池。前台小姐（空串）永远在首位，保证可切回。
+        var roster = new List<string> { "" };   // 空串 = 前台小姐（预制体默认图）
         var unlocked = SaveSystem.Instance?.Data?.unlockedMercIds;
         if (unlocked != null)
-            foreach (string id in unlocked)
-                if (!string.IsNullOrEmpty(id) && BoardFemaleIds.Contains(id)) pool.Add(id);
+        {
+            var set = new HashSet<string>(unlocked);
+            // 按 BoardFemaleIds 固定顺序收已拥有的女性佣兵，顺序可预期（"轮流"而非随机）
+            foreach (string id in BoardFemaleIds)
+                if (set.Contains(id)) roster.Add(id);
+        }
+        if (roster.Count <= 1) return;   // 只有前台（玩家无女性佣兵）时无需切换
 
-        // 排除当前显示的，保证点一次必换人（首点 _turnBoardId 为空 = 预制体默认图，不排除）
-        if (!string.IsNullOrEmpty(_turnBoardId) && pool.Count > 1)
-            pool.Remove(_turnBoardId);
-        if (pool.Count == 0) return;
+        // 当前人物在名单中的位置：前台（_turnBoardId 为 null 或 ""）映射到索引 0，点击后前进到首位佣兵；
+        // 当前是名单里的佣兵则取其索引；不在名单里（如老档残留）当作 -1，下一点回到前台重新同步。
+        int cur;
+        if (string.IsNullOrEmpty(_turnBoardId))
+            cur = 0;
+        else
+        {
+            cur = roster.IndexOf(_turnBoardId);
+            if (cur < 0) cur = -1;
+        }
+        int next = (cur + 1) % roster.Count;
+        string pick = roster[next];
 
-        string pick = pool[Random.Range(0, pool.Count)];
-        Sprite sp = MercPortraitSprites.GetStand(pick) ?? MercPortraitSprites.GetHead(pick);
+        Sprite sp;
+        string saveId;
+        if (string.IsNullOrEmpty(pick))
+        {
+            // 回到前台小姐：复用捕获的预制体默认图（运行时不依赖资源路径）
+            sp = _defaultBoardSprite;
+            saveId = "";
+        }
+        else
+        {
+            sp = MercPortraitSprites.GetStand(pick) ?? MercPortraitSprites.GetHead(pick);
+            if (sp == null)
+            {
+                Debug.LogError($"[GuildHall] 看板切换失败：{pick} 的立绘与头像都取不到（Resources/Icons/MercStand|MercHead/{pick}），保持当前人物");
+                return;
+            }
+            saveId = pick;
+        }
         if (sp == null)
         {
-            Debug.LogError($"[GuildHall] 看板切换失败：{pick} 的立绘与头像都取不到（Resources/Icons/MercStand|MercHead/{pick}），保持当前人物");
+            Debug.LogError("[GuildHall] 看板切换失败：前台小姐默认图未捕获（_defaultBoardSprite 为空），保持当前人物");
             return;
         }
         _turnBoardId = pick;
         // 【2026-10-26 主人拍板「记忆上次替换的人物」】看板选择落存档（立即落盘，中途杀进程不丢），
-        // 并让气泡轮播池换成本人物的中性引导 + 专属台词混播。
+        // 并让气泡轮播池切成本人物的台词（空串 = 前台御姐池）。
         var save = SaveSystem.Instance;
         if (save?.Data != null)
         {
-            save.Data.lastBoardCharacterId = pick;
+            save.Data.lastBoardCharacterId = saveId;
             save.Save();
         }
         GetComponent<SpeechBubbleTalker>()?.RefreshLinePool(pick);
