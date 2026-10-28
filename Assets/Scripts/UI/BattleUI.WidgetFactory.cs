@@ -290,7 +290,11 @@ public partial class BattleUI : MonoBehaviour
             int orderBefore = skillCanvas.sortingOrder;
             RaiseSlotCanvasAboveParent(skillSlotRoot);
             if (addedCanvas || skillCanvas.sortingOrder != orderBefore)
-                Debug.LogWarning($"[BattleUI-保险丝] SkillBar 嵌套 Canvas 已抬到 {skillCanvas.sortingOrder}（基准 BackpackPanel +1）");
+                Debug.LogWarning($"[BattleUI-保险丝] SkillBar 嵌套 Canvas 已抬到 {skillCanvas.sortingOrder}" +
+                                 $"（基准 = max(父链最高+1, BattlePopup{GameConfig.UiSort.BattlePopup}+1) = " +
+                                 $"{GameConfig.UiSort.BattlePopup + 1}；抽奖面板开着不收会把技槽整片压住）。" +
+                                 "注意：这是每场战斗都会发生的正常抬层，不是故障 —— " +
+                                 "AutoGameInitializer 先把 SkillBar 置 100，这里再抬到最终值。");
 
             // 4) 任一槽未激活 → 置 active；并确保 SkillBar 的 sibling 顺序在 zhezhao 遮罩之后
             bool needActive = false;

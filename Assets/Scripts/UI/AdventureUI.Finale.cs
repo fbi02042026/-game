@@ -140,15 +140,11 @@ public partial class AdventureUI
         string body = $"不消耗体力 · 不掉装备\n打完接{(stageId == 1 ? "揭底中段" : "完整揭底")}剧情";
         StaminaConfirmPopup.Show($"终章追查·{st.name}", body, "进入", () =>
         {
-            // 进本标记（照支线岛口径：Pending 全量重设，BattleManager 读后即清）
+            // 进本标记（2026-10-28 起统一走 ResetPendingFlags 全清，再立本追查关标记；BattleManager 读后即清）
+            AdventureUI.ResetPendingFlags();
             AdventureUI.PendingFinaleStage = st.id;
             AdventureUI.PendingBattleChapter = st.act;
             AdventureUI.PendingBattleDifficulty = 0;
-            AdventureUI.PendingGoldDungeon = false;
-            AdventureUI.PendingBadgeDungeon = false;
-            AdventureUI.PendingScrollDungeon = false;
-            AdventureUI.PendingEndlessRift = false;
-            AdventureUI.PendingSideIsland = 0;
             ChapterManager.Instance?.SetChapter(st.act);
 
             // 不弹职业选择（照支线岛/裂隙口径：刷图玩法用当前职业直接进本）

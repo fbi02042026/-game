@@ -241,6 +241,11 @@ public partial class MercObtainPopupUI : MonoBehaviour
 
     void Awake()
     {
+        if (_instance != null && _instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         _instance = this;
         Bind();
         Wire();

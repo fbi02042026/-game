@@ -27,11 +27,14 @@ using UnityEngine.UI;
 /// 「分享获得100钻 每日一次」（钻数直引 SHARE_REWARD_DIAMOND）；奖励面板加宽 500→620。
 /// 动效检查：unscaled 帧步长封顶（切后台/分享面板返回首帧跳变）。</para>
 ///
-/// <para>接入（统一门，2026-10-24 主人拍板「正式关卡/支线/活动副本都走，无限裂隙不走」）：<br/>
+/// <para>接入（统一门，2026-10-24 主人拍板「正式关卡/支线/活动副本都走」；引导撤离
+/// 2026-10-28 主人拍板也走）：<br/>
 /// · 胜利：<see cref="BattleManager.FinishStageAfterPortalReached"/> 里 <c>Mode.UsesBattleResultScreen</c> 门；<br/>
 /// · 失败：<see cref="BattleManager.OnHeroDead"/> 同一道门。<br/>
-/// 无限裂隙（每层通关即有累计奖励）直接走自己的结算续层链；引导局阵亡重进战斗、
-/// 通关走传送门撤离结算，均不播；终章追查关不播（通关接揭底剧情，保持节奏）。</para>
+/// · 引导撤离/引导通关收尾：<see cref="BattleManager.TriggerTutorialEvacuateWithSettlement"/>
+///   直呼 Show(victory)（引导局分享钮不建，见 SetupRewardPanel 分流）。<br/>
+/// 无限裂隙（每层通关即有累计奖励）直接走自己的结算续层链；引导局阵亡重进战斗不播；
+/// 终章追查关不播（通关接揭底剧情，保持节奏）。</para>
 ///
 /// <para>铁律合规：29/30 + AGENTS §2.3 —— 预制体与图都走路径加载，零 guid 依赖
 /// （预制体 meta 与图的 meta 都是团结 56 字符标识，不扫不修）；大图按路径<b>主动设图</b>

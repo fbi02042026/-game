@@ -60,6 +60,11 @@ public class SoftCopyrightAutoCaptureRunner : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         BuildRules();
         Debug.Log($"[软著自动截图] 已启动，共 {_rules.Count} 项。正常玩游戏即可，识别到界面会自动保存到 {OutputDir}/");

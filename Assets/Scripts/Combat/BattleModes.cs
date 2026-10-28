@@ -618,16 +618,23 @@ public static class ActivityDungeonRules
 
     // —— 每日次数（2026-10-24 主人拍板「都是2次」：三本各自独立计数，同一套出口）——
 
-    /// <summary>跨天清零每日次数（照 EndlessRiftRules.EnsureDay 的 dayKey 模式）</summary>
+    /// <summary>跨天清零每日次数（照 EndlessRiftRules.EnsureDay 的 dayKey 模式）。
+    /// 【2026-10-28 改】UTC→本地日（0 点刷新，与每日登录/商店同口径）；
+    /// 升级兼容：旧 UTC 键在本地 0~8 点 == 本地今天 → 平移保留次数，不清零加次数（主人拍板）。
+    /// 平移立即落盘（Load 正常路径不写盘，防平移丢失后清零多领，理由同 ResourceAdRewards.EnsureDay）。</summary>
     static void EnsureDay(SaveData data, ref string dayKey, ref int tries)
     {
         if (data == null) return;
-        string today = DateTime.UtcNow.ToString("yyyyMMdd");
-        if (dayKey != today)
+        string today = ShopDefs.TodayKey();
+        if (dayKey == today) return;
+        if (ShopDefs.LegacyUtcDayKeyStillToday(dayKey))
         {
             dayKey = today;
-            tries = 0;
+            SaveSystem.Instance?.Save();
+            return;
         }
+        dayKey = today;
+        tries = 0;
     }
 
     /// <summary>今日剩余进入次数（三本各自独立计数）</summary>
@@ -750,16 +757,23 @@ public sealed class EndlessBattleMode : BattleMode
 /// </summary>
 public static class EndlessRiftRules
 {
-    /// <summary>跨天清零每日次数（照 ResourceAdRewards.EnsureDay 的 dayKey 模式）</summary>
+    /// <summary>跨天清零每日次数（照 ResourceAdRewards.EnsureDay 的 dayKey 模式）。
+    /// 【2026-10-28 改】UTC→本地日（0 点刷新，与每日登录/商店同口径）；
+    /// 升级兼容：旧 UTC 键在本地 0~8 点 == 本地今天 → 平移保留次数，不清零加次数（主人拍板）。
+    /// 平移立即落盘（Load 正常路径不写盘，防平移丢失后清零多领，理由同 ResourceAdRewards.EnsureDay）。</summary>
     public static void EnsureDay(SaveData data)
     {
         if (data == null) return;
-        string today = DateTime.UtcNow.ToString("yyyyMMdd");
-        if (data.endlessRiftDayKey != today)
+        string today = ShopDefs.TodayKey();
+        if (data.endlessRiftDayKey == today) return;
+        if (ShopDefs.LegacyUtcDayKeyStillToday(data.endlessRiftDayKey))
         {
             data.endlessRiftDayKey = today;
-            data.endlessRiftTriesToday = 0;
+            SaveSystem.Instance?.Save();
+            return;
         }
+        data.endlessRiftDayKey = today;
+        data.endlessRiftTriesToday = 0;
     }
 
     /// <summary>今日剩余进入次数</summary>

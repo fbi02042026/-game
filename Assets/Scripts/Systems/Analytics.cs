@@ -111,6 +111,23 @@ public static class Analytics
     public static void AdSlotClick(string slot, bool success)
         => Track("ad_slot_click", ("slot", slot), ("success", success));
 
+    // —— 广告漏斗四事件（2026-10-28 T5 补齐，placement 维度，供开广告后看渗透率/流失点）——
+    /// <summary>广告请求已发出（可展示尝试，漏斗第 1 格）。真桥 RequestRewarded 时上报。</summary>
+    public static void AdAvailable(string placement)
+        => Track("ad_available", ("placement", placement));
+
+    /// <summary>广告展示成功（漏斗第 2 格）。OnAdShow 时上报。</summary>
+    public static void AdShow(string placement)
+        => Track("ad_show", ("placement", placement));
+
+    /// <summary>激励完成且核验通过（漏斗第 3 格 = 转化终点，之后才是发奖）。OnRewardVerify(IsVerified) 时上报。</summary>
+    public static void AdReward(string placement)
+        => Track("ad_reward", ("placement", placement));
+
+    /// <summary>广告失败/未完成（含原因：SDK 错误码、核验未通过、未核验先关闭）。</summary>
+    public static void AdFail(string placement, string reason)
+        => Track("ad_fail", ("placement", placement), ("reason", reason));
+
     public static void TutorialStep(string stepName, int stepIndex)
         => Track("tutorial_step", ("step", stepName), ("index", stepIndex));
 

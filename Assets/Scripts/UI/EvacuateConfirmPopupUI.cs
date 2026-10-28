@@ -53,6 +53,11 @@ public class EvacuateConfirmPopupUI : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         BindRefs();
         Wire();
@@ -246,13 +251,7 @@ public class EvacuateConfirmPopupUI : MonoBehaviour
 
     static Transform FindDeep(Transform root, string name)
     {
-        if (root == null) return null;
-        if (root.name == name) return root;
-        for (int i = 0; i < root.childCount; i++)
-        {
-            var f = FindDeep(root.GetChild(i), name);
-            if (f != null) return f;
-        }
-        return null;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFind.Deep(root, name);
     }
 }

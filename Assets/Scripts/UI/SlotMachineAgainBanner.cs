@@ -63,6 +63,11 @@ public class SlotMachineAgainBanner : MonoBehaviour
 
     void Awake()
     {
+        if (_instance != null && _instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         _instance = this;
         Build();
         if (_rt != null) _rt.gameObject.SetActive(false);

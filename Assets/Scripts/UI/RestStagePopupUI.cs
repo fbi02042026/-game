@@ -82,6 +82,11 @@ public class RestStagePopupUI : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         BindRefs();
         if (root != null) root.SetActive(false);
@@ -557,14 +562,8 @@ public class RestStagePopupUI : MonoBehaviour
 
     static Transform FindDeep(Transform root, string name)
     {
-        if (root == null) return null;
-        if (root.name == name) return root;
-        for (int i = 0; i < root.childCount; i++)
-        {
-            var f = FindDeep(root.GetChild(i), name);
-            if (f != null) return f;
-        }
-        return null;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFind.Deep(root, name);
     }
 
     static void Stretch(RectTransform rt)
@@ -577,27 +576,13 @@ public class RestStagePopupUI : MonoBehaviour
 
     static Image NewImage(Transform parent, string name, Color color)
     {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        go.transform.SetParent(parent, false);
-        var img = go.GetComponent<Image>();
-        img.color = color;
-        img.raycastTarget = false;
-        return img;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFactory.NewImage(parent, name, color);
     }
 
     static Text NewText(Transform parent, string name, string content, int size, TextAnchor align)
     {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        go.transform.SetParent(parent, false);
-        var t = go.GetComponent<Text>();
-        t.font = GameFonts.GetChinese();
-        t.text = content;
-        t.fontSize = size;
-        t.alignment = align;
-        t.color = Color.white;
-        t.raycastTarget = false;
-        t.horizontalOverflow = HorizontalWrapMode.Overflow;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        return t;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFactory.NewText(parent, name, content, size, align);
     }
 }

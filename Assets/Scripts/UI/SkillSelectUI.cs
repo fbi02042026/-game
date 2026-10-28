@@ -58,6 +58,11 @@ public class SkillSelectUI : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         EnsureArrays();
         if (closeButton == null || skillButtons[0] == null) AutoBind();

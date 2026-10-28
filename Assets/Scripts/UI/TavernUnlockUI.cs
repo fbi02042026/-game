@@ -551,6 +551,9 @@ public class TavernUnlockUI : MonoBehaviour
         AdventureCodex.MarkMercSeen(def.HireId);
         SaveSystem.Instance.Save();
         GlobalToastUI.Show($"{def.Name} 已加入三选一池");
+        // 【2026-10-28 主人拍板】每次「新获得」佣兵都播「获得佣兵」全屏演出——名册解锁也是获取路径，
+        // 与战斗三选一 / 酒馆招募弹窗同口径；重复获得走上面的转碎片分支，不弹。
+        MercGainCinematicUI.Show(def.HireId, null);
         Debug.Log($"[TavernUnlock] 解锁佣兵 {def.HireId} {def.Name}，花费 {cost} 金币");
         return true;
     }

@@ -87,7 +87,15 @@ public class PlayerJobSelectUI : MonoBehaviour
         return FindDeep(root, "Panel") != null && FindDeep(root, "JobCard0") != null;
     }
 
-    void Awake() => Instance = this;
+    void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+    }
 
     void OnDestroy()
     {
@@ -931,14 +939,8 @@ public class PlayerJobSelectUI : MonoBehaviour
 
     static Transform FindDeep(Transform root, string name)
     {
-        if (root == null) return null;
-        if (root.name == name) return root;
-        for (int i = 0; i < root.childCount; i++)
-        {
-            var f = FindDeep(root.GetChild(i), name);
-            if (f != null) return f;
-        }
-        return null;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFind.Deep(root, name);
     }
 
     static Text FindText(Transform root, string name)

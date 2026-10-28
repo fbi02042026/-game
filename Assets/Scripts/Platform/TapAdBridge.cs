@@ -90,6 +90,7 @@ public static class TapAdBridge
             .WithRewardAmount(1)
             .Build();
         Debug.Log($"[TapAd] 请求激励视频 placement={placement} spaceId={TapAdConfig.RewardVideoSpaceId}");
+        Analytics.AdAvailable(placement);   // 埋点 T5：广告请求已发出（可展示尝试，漏斗第 1 格）
         _adNative.ShowRewardVideoAutoAd(request, new RewardListener(placement, onComplete));
     }
 
@@ -181,10 +182,15 @@ public static class TapAdBridge
         public void OnError(Dirichlet.Mediation.DirichletError error)
         {
             Debug.LogError($"[TapAd] 激励视频失败 placement={_placement}: {error.Code} {error.Message}");
+            Analytics.AdFail(_placement, $"{error.Code} {error.Message}");   // 埋点 T5：失败原因
             Complete(false);
         }
 
-        public void OnAdShow() => Debug.Log($"[TapAd] 激励视频展示 placement={_placement}");
+        public void OnAdShow()
+        {
+            Debug.Log($"[TapAd] 激励视频展示 placement={_placement}");
+            Analytics.AdShow(_placement);   // 埋点 T5：展示成功（漏斗第 2 格）
+        }
 
         public void OnAdClick() { }
 
@@ -193,11 +199,13 @@ public static class TapAdBridge
             if (args.IsVerified)
             {
                 Debug.Log($"[TapAd] 激励核验通过 placement={_placement}（发奖）");
+                Analytics.AdReward(_placement);   // 埋点 T5：激励完成核验通过（漏斗第 3 格，转化终点）
                 Complete(true);
             }
             else
             {
                 Debug.LogWarning($"[TapAd] 激励核验未通过 placement={_placement}（不发奖）");
+                Analytics.AdFail(_placement, "verify_not_passed");   // 埋点 T5：核验未通过
                 Complete(false);
             }
         }
@@ -206,6 +214,8 @@ public static class TapAdBridge
         {
             // 关闭时还没走到核验（跳过/异常路径）= 未完成；核验先到则这里只是收尾
             Debug.Log($"[TapAd] 激励视频关闭 placement={_placement}");
+            if (!_done)
+                Analytics.AdFail(_placement, "closed_before_verify");   // 埋点 T5：未核验先关闭（跳过/中途退出）
             Complete(false);
         }
 

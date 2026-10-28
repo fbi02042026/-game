@@ -79,7 +79,9 @@ public static class ResourceAdRewards
     public static int DailyClaimCap(int freePerDay)
         => GameConfig.ADS_ENABLED ? freePerDay + AdTiersPerDay * 2 : freePerDay + 2;
 
-    static string TodayKey() => DateTime.UtcNow.ToString("yyyyMMdd");
+    /// <summary>日键（本地日历日 yyyyMMdd，0 点刷新）。【2026-10-28 改】原 UTC 键在国内=早 8 点才刷新，
+    /// 与每日登录/商店（ShopDefs.TodayKey 本地日）口径不一致 → 统一本地日。</summary>
+    static string TodayKey() => DateTime.Now.ToString("yyyyMMdd");
 
     /// <summary>
     /// 跨天清零。<c>adStaminaClaimCount</c> / <c>adGoldClaimCount</c> 统计「当日补给已领次数」
@@ -90,22 +92,25 @@ public static class ResourceAdRewards
         if (data == null) return;
         string today = TodayKey();
         if (data.adRewardDayKey == today) return;
+        // 【2026-10-28 升级兼容】旧 UTC 日键在本地 0~8 点 == 本地今天：平移保留计数，不清零加次数。
+        // 平移必须立即落盘：Load() 正常路径不写盘，若玩家平移后不触发任何存档动作就退出、
+        // 下次打开已过 8 点（迁移条件失效）→ 平移丢失 → 计数被清零多领一轮（主人拍板不留隐患）。
+        if (ShopDefs.LegacyUtcDayKeyStillToday(data.adRewardDayKey))
+        {
+            data.adRewardDayKey = today;
+            SaveSystem.Instance?.Save();
+            return;
+        }
         data.adRewardDayKey = today;
         data.adStaminaClaimCount = 0;
         data.adGoldClaimCount = 0;
     }
 
-    /// <summary>扣钻石；不足时提示「需多少 / 当前多少」并返回 false，绝不静默失败。</summary>
-    static bool TryPayDiamond(int price, string slotTag)
-    {
-        if (ResourceWallet.TrySpendDiamond(price, "广告位钻石补给", save: true, notify: false))
-            return true;
-
-        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-        long own = ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond);
-        UIManager.Instance?.ShowToast($"钻石不足：{slotTag}需 {price} 钻（当前 {own} 钻）");
-        return false;
-    }
+    // 【2026-10-28 主人规则重申「只要扣钻石的地方都要有二次确认」】
+    // 原 TryPayDiamond（静默扣钻、无确认弹窗）已整条删除：金币/体力加号的钻石档
+    // 一律先过 DiamondSpendGate.Request 通用确认门（余额不足 Toast 缺口不弹窗；
+    // 充足弹双按钮确认框，正文自动带「花费钻石 ×N（持有 X → 剩余 Y）」），
+    // 玩家点「确认」后才扣钻发奖。以后新加扣钻路径同样必须走确认门，别再写静默扣。
 
     public static void TryClaimStamina()
     {
@@ -132,6 +137,15 @@ public static class ResourceAdRewards
             case ClaimKind.Ad:
                 // 广告档（2026-10-25 主人拍板）：看广告领体力，走 RewardedAdBridge 单一出口；
                 // 异步回调 —— 窗口期可能跨天/达上限，回调内重新 EnsureDay + 上限校验，绝不超发。
+                // 【2026-10-28】先给「加载中」反馈（拉起到展示最长可达数十秒，无提示会被当成没反应而狂点；
+                // 重复点击由 RewardedAdBridge busy 守卫静默忽略）。
+                // 【2026-10-28 远程急停】维护中直接提示，不弹加载中、不消耗档位。
+                if (AdKillSwitch.AdsOff)
+                {
+                    UIManager.Instance?.ShowToast("广告维护中，请稍后再试");
+                    return;
+                }
+                UIManager.Instance?.ShowToast("广告加载中…");
                 RewardedAdBridge.ShowRewarded("stamina_plus", ok =>
                 {
                     if (!ok)
@@ -153,10 +167,21 @@ public static class ResourceAdRewards
                 break;
 
             case ClaimKind.Diamond:
-                if (!TryPayDiamond(price, "体力补给")) return;
-                data.adStaminaClaimCount++;
-                GrantStamina(data, $"钻石开启：体力 +{{added}}（今日 {data.adStaminaClaimCount}/{cap}）");
-                break;
+                // 【2026-10-28 主人规则重申】同金币：钻石档先过 DiamondSpendGate 二次确认
+                DiamondSpendGate.Request("体力补给", $"钻石开启体力补给（体力 +{StaminaPerAd}）。", price, () =>
+                {
+                    EnsureDay(data);
+                    if (data.adStaminaClaimCount >= DailyClaimCap(StaminaFreePerDay)) return;
+                    if (!ResourceWallet.TrySpendDiamond(price, "体力补给", save: true, notify: false))
+                    {
+                        UIManager.Instance?.ShowToast("钻石不足，体力补给未发放");
+                        return;
+                    }
+                    data.adStaminaClaimCount++;
+                    GrantStamina(data, $"钻石开启：体力 +{{added}}（今日 {data.adStaminaClaimCount}/{cap}）");
+                    Analytics.AdSlotClick("stamina", true); // 埋点：钻石档发奖成功
+                });
+                return;
         }
         Analytics.AdSlotClick("stamina", true); // 埋点：体力补给位点击（成功发奖）
     }
@@ -190,6 +215,13 @@ public static class ResourceAdRewards
                 return;
 
             case ClaimKind.Ad:
+                // 【2026-10-28】同体力：先给「加载中」反馈，防狂点；远程急停时直接提示维护中
+                if (AdKillSwitch.AdsOff)
+                {
+                    UIManager.Instance?.ShowToast("广告维护中，请稍后再试");
+                    return;
+                }
+                UIManager.Instance?.ShowToast("广告加载中…");
                 RewardedAdBridge.ShowRewarded("gold_plus", ok =>
                 {
                     if (!ok)
@@ -211,10 +243,22 @@ public static class ResourceAdRewards
                 break;
 
             case ClaimKind.Diamond:
-                if (!TryPayDiamond(price, "金币补给")) return;
-                data.adGoldClaimCount++;
-                GrantGold(data, $"钻石开启：金币 +{{added}}（今日 {data.adGoldClaimCount}/{cap}）");
-                break;
+                // 【2026-10-28 主人规则重申】扣钻石必须二次确认：先过 DiamondSpendGate 确认门，
+                // 点「确认」才扣钻发奖；确认期间可能跨天/已领满，回调内重对当日计数，绝不超发。
+                DiamondSpendGate.Request("金币补给", $"钻石开启金币补给（金币 +{GoldPerAd}）。", price, () =>
+                {
+                    EnsureDay(data);
+                    if (data.adGoldClaimCount >= DailyClaimCap(GoldFreePerDay)) return;
+                    if (!ResourceWallet.TrySpendDiamond(price, "金币补给", save: true, notify: false))
+                    {
+                        UIManager.Instance?.ShowToast("钻石不足，金币补给未发放");
+                        return;
+                    }
+                    data.adGoldClaimCount++;
+                    GrantGold(data, $"钻石开启：金币 +{{added}}（今日 {data.adGoldClaimCount}/{cap}）");
+                    Analytics.AdSlotClick("gold", true); // 埋点：钻石档发奖成功
+                });
+                return;
         }
         Analytics.AdSlotClick("gold", true); // 埋点：金币补给位点击（成功发奖）
     }

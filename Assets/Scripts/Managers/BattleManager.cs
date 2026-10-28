@@ -211,6 +211,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                 || AdventureUI.PendingGoldDungeon
                 || AdventureUI.PendingBadgeDungeon   // 徽记副本（2026-10-23）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingScrollDungeon  // 卷轴副本（2026-10-24）：独立进本，同金币本作废 parked 局
+                || AdventureUI.PendingGiftDungeon    // 礼物副本（2026-10-22 活动副本第 4 种）：独立进本，同卷轴本作废 parked 局
                 || AdventureUI.PendingSideIsland > 0 // 支线岛（2026-10-23 合并方案）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingFinaleStage > 0 // 终章追查关（2026-10-23）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingBondDungeon    // 羁绊副本（2026-10-27）：独立进本，同金币本作废 parked 局
@@ -229,6 +230,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         AdventureUI.PendingGoldDungeon = false;
         AdventureUI.PendingBadgeDungeon = false;   // 徽记副本（2026-10-23）：读完即清，照金币本口径
         AdventureUI.PendingScrollDungeon = false;  // 卷轴副本（2026-10-24）：读完即清，照徽记本口径
+        AdventureUI.PendingGiftDungeon = false;    // 礼物副本（活动副本第 4 种）：读完即清，照卷轴本口径——漏清会让旧标记污染后续进本（如羁绊本被误判为礼物本）
         // 支线岛（2026-10-23 合并方案）：捕获岛 id 供结算读（SideIslandId），Pending 读后即清（照金币本口径）
         SideIslandId = Mathf.Max(0, AdventureUI.PendingSideIsland);
         AdventureUI.PendingSideIsland = 0;

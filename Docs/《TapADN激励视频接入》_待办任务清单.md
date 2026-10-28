@@ -79,10 +79,20 @@
 - 待确认 ④：项目当前**有无**首次启动隐私同意弹窗？若无需先补（涉及 UI，另立小任务）。
 - 验收：真机首启未同意协议时抓包/日志确认无 TapADN 网络请求；同意后初始化正常。
 
-### T5【埋点】补齐广告漏斗数据
+### T5【埋点】补齐广告漏斗数据 ✅ 已施工（2026-10-28，待真机验证上报）
 
-- 做法：`Analytics.AdSlotClick` 已有点击埋点；补「广告可展示 / 展示成功 / 激励完成 / 失败原因」四类事件（placement 维度），供开广告后看渗透率与留存影响。
-- 验收：后台能按点位区分四类数据。
+- 已补四类事件（`Analytics.cs` 新增 AdAvailable / AdShow / AdReward / AdFail，placement 维度）：
+  - `ad_available` = 请求已发出（`TapAdBridge.RequestRewarded`，漏斗第 1 格）
+  - `ad_show` = 展示成功（OnAdShow，第 2 格）
+  - `ad_reward` = 激励核验通过（OnRewardVerify IsVerified，第 3 格转化终点）
+  - `ad_fail` = 失败含原因（OnError 带 SDK code/message / verify_not_passed / closed_before_verify）
+- 同批商业化加固（2026-10-28 主人拍板「影响商业化的都改，不留隐患」）：
+  1. `RewardedAdBridge` 加 **busy 并发守卫 + 180s 超时兜底 + 一次性回调包装**（修连点并发拉多广告、SDK 丢回调卡死复活钮）；
+  2. 模拟路径收紧：正式包非 Android 回调 false 不发奖（原微信包等非安卓正式包广告档白给）；
+  3. 日键统一本地日（广告/复活/分享三处 UTC→本地 0 点刷新，SaveData 注释同步）；
+  4. 金币/体力/复活三点位加「广告加载中…」toast（防无反馈狂点）。
+- 验收：后台能按点位区分四类数据；真机连点加号只拉一个广告；看完广告正常发奖。
+- 遗留小项（待主人定夺，未改）：`TapTapRatePopup`/`BattleModes`（裂隙/副本）日键仍是 UTC 口径，非广告链路未动。
 
 ### T6【上线·主人拍板时机】转正式 + 出计费包
 

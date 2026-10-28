@@ -4,13 +4,16 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 「获得佣兵」全屏演出（2026-10-20 主人拍板）：
-/// 背景淡入 → 立绘三段式动态登场（2026-10-27 晚主人二次拍板：全程慢 3 倍，3 倍大上半身从右侧屏幕外
-/// 扫到左侧屏幕外 → 下半身从左扫回右出画 → 从正上方猛砸落位）→ 脚下名字淡入上移 → 点击任意处关闭。
+/// 背景淡入 → 立绘登场 → 脚下名字淡入上移 → 点击任意处关闭。
 ///
-/// 预制体：Assets/Resources/Prefabs/Town/MercGainCinematic（Tools → 生成获得佣兵演出预制体 生成/重建）。
-/// 节点：BG（全屏底）/ Stand（立绘，pivot 底部中心）/ NamePlate（脚下名字）。
-/// 【位置以预制体为准】动画只改 alpha / scale / 相对偏移，落定值 = 预制体里摆的值，
-/// 主人挪完节点代码不会掰回去；名字颜色由代码按稀有度刷（RarityPalette 真源），预制体里改色无效。
+/// 【2026-10-28 主人重做预制体】层级重构：root/panl（挂 Animator 出场动画，lihui 控制器 +
+/// chuchang 片段 4.85s）/panl/BG、panl/佣兵（嵌套 Canvas 11502，下含 Stand、bg、quan 特效）/panl/NamePlate。
+/// 节点绑定改走 UiFind.Deep 全深查找（不再假设 BG/Stand/NamePlate 挂根下）。
+/// 出场动画以预制体为准：代码不再程序化驱动立绘，只等 Animator 播完；取不到 Animator 时
+/// LogError 并退回旧三段式程序化登场（CoPortraitEntrance 保留）。
+///
+/// 预制体：Assets/Resources/Prefabs/Town/MercGainCinematic。
+/// 【位置以预制体为准】名字颜色由代码按稀有度刷（RarityPalette 真源），预制体里改色无效。
 /// </summary>
 public class MercGainCinematicUI : MonoBehaviour
 {
@@ -68,9 +71,9 @@ public class MercGainCinematicUI : MonoBehaviour
         if (canvas != null)
             UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.MercGainCinematic);
 
-        var bg = transform.Find("BG");
-        _stand = transform.Find("Stand");
-        var nameTr = transform.Find("NamePlate");
+        var bg = UiFind.Deep(transform, "BG");
+        _stand = UiFind.Deep(transform, "Stand");
+        var nameTr = UiFind.Deep(transform, "NamePlate");
         if (bg == null || _stand == null || nameTr == null)
         {
             Debug.LogError("[MercGainCinematic] 预制体缺 BG/Stand/NamePlate 节点，演出跳过");
@@ -90,7 +93,10 @@ public class MercGainCinematicUI : MonoBehaviour
         }
 
         _bgCg = EnsureGroup(bg.gameObject, out _bgTargetAlpha);
-        _standCg = EnsureGroup(_stand.gameObject, out _);
+        // 【2026-10-28 主人重做预制体】Stand 不再压 alpha：出场动画由 panl 上的 Animator 负责
+        // （chuchang 片段只动 Stand 位置/缩放和 bg 图淡入，**没有 Stand 的 alpha 轨道**），
+        // 这里若再把 CanvasGroup 压 0，立绘会全程隐形。只取/补组件不动 alpha（程序化退路仍要用）。
+        _standCg = _stand.GetComponent<CanvasGroup>() ?? _stand.gameObject.AddComponent<CanvasGroup>();
         _nameCg = EnsureGroup(nameTr.gameObject, out _);
 
         // BG 下特效：关掉 Play On Awake、清空残留，等 CoPlay 开场统一播（2026-10-20 主人拍板）
@@ -215,10 +221,18 @@ public class MercGainCinematicUI : MonoBehaviour
         while (t < BgFadeIn) { t += Time.unscaledDeltaTime; _bgCg.alpha = _bgTargetAlpha * Mathf.Clamp01(t / BgFadeIn); yield return null; }
         _bgCg.alpha = _bgTargetAlpha;
 
-        // ② 立绘三段式登场（2026-10-27 主人拍板：3 倍大上半身右→左扫 → 左→右扫回看下半身 → 猛砸落位；
-        //    覆盖 2026-10-20「立绘不要动态」旧拍板）。只改 alpha / scale / 相对偏移，
-        //    落定值 = 预制体里摆的值，主人挪完节点不受影响。
-        yield return StartCoroutine(CoPortraitEntrance());
+        // ② 立绘登场（2026-10-28 主人重做预制体）：出场动画已由 panl 上的 Animator 制作
+        //    （lihui 控制器 + chuchang 片段，4.85s 非循环），Instantiate 后自动播；
+        //    代码只负责等它播完再出名字。取不到 Animator/控制器时 LogError 并退回
+        //    旧的三段式程序化登场（CoPortraitEntrance），不让演出整段报废。
+        var anim = GetComponentInChildren<Animator>();
+        if (anim != null && anim.runtimeAnimatorController != null)
+            yield return CoWaitEntranceDone(anim);
+        else
+        {
+            Debug.LogError("[MercGainCinematic] 预制体上没有可用的 Animator/控制器（出场动画不播），退回程序化登场");
+            yield return StartCoroutine(CoPortraitEntrance());
+        }
 
         // ③ 名字从脚下淡入上移
         yield return new WaitForSecondsRealtime(NameDelay);
@@ -232,6 +246,23 @@ public class MercGainCinematicUI : MonoBehaviour
             yield return null;
         }
         Close();
+    }
+
+    /// <summary>
+    /// 等 panl 上的出场动画播完（chuchang 非循环片段，normalizedTime ≥ 1 即结束）。
+    /// 12s 真实时间保护： Animator 被异常关掉/状态机卡死时不至于把整个演出卡死。
+    /// </summary>
+    IEnumerator CoWaitEntranceDone(Animator anim)
+    {
+        float guard = 0f;
+        while (guard < 12f)
+        {
+            guard += Time.unscaledDeltaTime;
+            if (!anim.isActiveAndEnabled) yield break;
+            var st = anim.GetCurrentAnimatorStateInfo(0);
+            if (st.length > 0f && st.normalizedTime >= 1f) yield break;
+            yield return null;
+        }
     }
 
     /// <summary>

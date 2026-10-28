@@ -69,14 +69,16 @@ public class DraftOddsPopupUI : MonoBehaviour
     /// （口径必须与实际随机逻辑一致，公示假数违反合规初衷），弹同一预制体。
     /// 行结构同 <see cref="DraftPool.BuildOddsRows"/>：先 Section=<see cref="DraftPool.SEC_TYPE"/>
     /// 段（抽到什么），再 Section=<see cref="DraftPool.SEC_QUALITY"/> 段（什么品质）。
+    /// 【2026-10-28 主人拍板】note 非空时在概率行末尾追加一行说明文字（无百分比，
+    /// 酒馆招募公示用来说明「已拥有的佣兵将转换成碎片」这类规则）。
     /// </summary>
-    public static void ToggleWith(List<DraftPool.OddsRow> rows)
+    public static void ToggleWith(List<DraftPool.OddsRow> rows, string note = null)
     {
         if (rows == null || rows.Count == 0) return;
         var ui = Ensure();
         if (ui == null) return;
         if (ui._root != null && ui._root.activeSelf) ui.Close();
-        ui.OpenWith(rows);
+        ui.OpenWith(rows, note);
     }
 
     public static void Hide()
@@ -113,6 +115,11 @@ public class DraftOddsPopupUI : MonoBehaviour
 
     void Awake()
     {
+        if (_inst != null && _inst != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         _inst = this;
         BindRefs();
         Wire();
@@ -174,15 +181,15 @@ public class DraftOddsPopupUI : MonoBehaviour
             UICanvasSetup.RefreshPopup(_canvas, GameConfig.UiSort.DraftOddsPopup);
     }
 
-    /// <summary>外部口径打开（酒馆招募公示）：同一预制体，行数据由调用方传入。</summary>
-    void OpenWith(List<DraftPool.OddsRow> rows)
+    /// <summary>外部口径打开（酒馆招募公示）：同一预制体，行数据由调用方传入；note 追加尾注行。</summary>
+    void OpenWith(List<DraftPool.OddsRow> rows, string note = null)
     {
         ClearSpawned();
         BindRefs();
         Wire();
         if (_root == null) return;
 
-        FitPanelHeight(FillRows(rows));
+        FitPanelHeight(FillRows(rows, note));
 
         _root.SetActive(true);
         // 【2026-10-24 主人拍板】同 Open()：DDOL 弹窗每次打开重绑相机 + 重套缩放。
@@ -191,8 +198,9 @@ public class DraftOddsPopupUI : MonoBehaviour
     }
 
     /// <summary>克隆模板行并填概率数字（Open / OpenWith 共用；段标题文案写死「抽到什么/什么品质」两段）。
+    /// note 非空时在行尾追加一行说明（复用行模板，只填 Name、Pct 留空）。
     /// 返回克隆出来的内容总高，供 <see cref="FitPanelHeight"/> 收面板高度用。</summary>
-    float FillRows(List<DraftPool.OddsRow> rows)
+    float FillRows(List<DraftPool.OddsRow> rows, string note = null)
     {
         if (rows == null) return 0f;
         if (_listRoot != null && (_rowTemplate == null || _headTemplate == null))
@@ -226,6 +234,26 @@ public class DraftOddsPopupUI : MonoBehaviour
             {
                 FillRow(row, r);
                 y -= row.sizeDelta.y;
+            }
+        }
+
+        // 【2026-10-28 主人拍板】尾注行（酒馆招募公示）：「已拥有的佣兵将转换成碎片」这类规则说明。
+        // 复用行模板、只填 Name、Pct 留空；颜色用高亮黄，与卡面「已拥有」角标同色系。
+        if (!string.IsNullOrEmpty(note) && _rowTemplate != null)
+        {
+            if (y < 0f) y -= SectionGap;
+            var noteRow = Clone(_rowTemplate, y);
+            if (noteRow != null)
+            {
+                var nt = FindDeep(noteRow, "Name")?.GetComponent<Text>();
+                if (nt != null)
+                {
+                    nt.text = note;
+                    nt.color = new Color(1f, 0.86f, 0.42f, 1f);
+                }
+                var pt = FindDeep(noteRow, "Pct")?.GetComponent<Text>();
+                if (pt != null) pt.text = "";
+                y -= noteRow.sizeDelta.y;
             }
         }
         return -y;

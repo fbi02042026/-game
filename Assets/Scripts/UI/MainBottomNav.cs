@@ -72,6 +72,11 @@ public class MainBottomNav : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         AutoBind();
         WireClicks();
@@ -82,13 +87,14 @@ public class MainBottomNav : MonoBehaviour
 
         // P2-5 SafeArea：底部五入口根节点（本组件所在 GameObject）贴底，
         // 内缩底部安全区（挖孔/手势条），避免按钮被遮挡。左右不缩。
-        // 运行时补组件，不碰预制体；GetComponent 守卫避免重复挂。
-        if (GetComponent<SafeAreaFitter>() == null)
-        {
-            var navSafe = gameObject.AddComponent<SafeAreaFitter>();
-            navSafe.edge = SafeAreaFitter.Edge.Bottom;
-            navSafe.enabledFit = true;
-        }
+        // 运行时补组件，不碰预制体；AddConfigured 内部幂等（已挂就复用校正）。
+        // 【2026-10-28】改走统一入口挂 Offset：原写法 AddComponent 之后才设参数，组件 Awake
+        // 抢跑以默认 Shift+Both 跑了一帧 —— 锚点被改成全拉伸、base 按「当时父级尺寸」捕获，
+        // CanvasScaler 生效后底栏会变形甚至变负（战斗顶条 200×-1041 同源事故）。
+        // 且切页时 TownSharedChrome.RaiseSharedChrome 本来就会 EnsureBottomOffset 把它校正成
+        // Offset —— 稳态早已是 Offset，这里把 Awake 口径对齐，消掉 Shift 模式的最后一个用户。
+        SafeAreaFitter.AddConfigured(transform as RectTransform,
+            SafeAreaFitter.Edge.Bottom, SafeAreaFitter.FitMode.Offset, true);
     }
 
     void OnDestroy()
@@ -616,13 +622,7 @@ public class MainBottomNav : MonoBehaviour
 
     static Transform FindDeepChild(Transform parent, string name)
     {
-        if (parent == null) return null;
-        if (parent.name == name) return parent;
-        for (int i = 0; i < parent.childCount; i++)
-        {
-            var r = FindDeepChild(parent.GetChild(i), name);
-            if (r != null) return r;
-        }
-        return null;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFind.Deep(parent, name);
     }
 }

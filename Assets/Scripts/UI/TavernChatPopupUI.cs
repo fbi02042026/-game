@@ -46,6 +46,11 @@ public class TavernChatPopupUI : MonoBehaviour
 
     void Awake()
     {
+        if (_inst != null && _inst != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         _inst = this;
     }
 

@@ -102,7 +102,15 @@ public partial class MercDrawPoolUI : MonoBehaviour
         return _instance;
     }
 
-    void Awake() => _instance = this;
+    void Awake()
+    {
+        if (_instance != null && _instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        _instance = this;
+    }
 
     void OnDestroy()
     {

@@ -110,6 +110,11 @@ public class OpeningIntroOverlay : MonoBehaviour
 
     void Build(string videoPath, VideoPlayer adopted)
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
+            return;
+        }
         Instance = this;
         BoostFramePaceForVideo();
 

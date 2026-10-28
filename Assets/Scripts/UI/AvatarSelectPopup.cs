@@ -53,6 +53,11 @@ public class AvatarSelectPopup : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         // 预制体根 scale=(0,0)（主人保存原样），不扶正永远不可见；顺带套全项目 Canvas 规范
         UICanvasSetup.ApplyPopup(GetComponent<Canvas>(), GameConfig.UiSort.TownPopup);

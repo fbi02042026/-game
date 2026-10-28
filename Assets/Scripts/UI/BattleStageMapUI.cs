@@ -117,6 +117,11 @@ public class BattleStageMapUI : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         BindRefs();
         if (root != null) root.SetActive(false);
@@ -331,26 +336,6 @@ public class BattleStageMapUI : MonoBehaviour
         // 从大到小「砸地」落下（下坠 + 落地压扁回弹），演出转到哪关就落在哪。
         yield return CoFlagSlamAnim(nextIdx);
         _flow = null;
-
-        // 【2026-10-18 临时诊断·B7】流程跑完进入「等点击」态时拍一张环境快照，定位后整段删
-        var esNow = UnityEngine.EventSystems.EventSystem.current;
-        var mapCanvas = GetComponent<Canvas>();
-        var sb = new System.Text.StringBuilder();
-        sb.Append($"[BattleStageMap][诊断] 进入待点击态：next={(_next != null ? _next.stageIndex.ToString() : "null")}");
-        sb.Append($", EventSystem={(esNow != null ? esNow.name : "null!")}");
-        sb.Append($", canvasSort={(mapCanvas != null ? mapCanvas.sortingOrder : -1)}");
-        sb.Append($", camera={(mapCanvas != null && mapCanvas.worldCamera != null ? mapCanvas.worldCamera.name : "null")}");
-        if (_next != null && _next.stageIndex >= 0 && _next.stageIndex < pedestals.Count)
-        {
-            var np = pedestals[_next.stageIndex];
-            FlagButtons(np, _reusedBtnList);
-            for (int bi = 0; bi < _reusedBtnList.Count; bi++)
-            {
-                var b = _reusedBtnList[bi];
-                sb.Append($"\n  按钮[{bi}]={b.name} active={b.isActiveAndEnabled} interactable={b.interactable}");
-            }
-        }
-        Debug.Log(sb.ToString());
     }
 
     /// <summary>
@@ -692,16 +677,12 @@ public class BattleStageMapUI : MonoBehaviour
         if (_reusedBtnList.Count == 0) return;
 
         int capture = index;
-        int count = 0;
-        _btnNames.Clear();
         for (int i = 0; i < _reusedBtnList.Count; i++)
         {
             var b = _reusedBtnList[i];
             b.onClick.RemoveAllListeners();
             b.interactable = on;
             if (!on) continue;
-            count++;
-            _btnNames.Add(b.name);
 
             // 【2026-10-11 主人拍板】石墩**不要跟着放大/缩放**（主人原话「点击石墩的时候旗子放大就行
             // 石墩不要跟着放大」）→ 屏蔽通用按压反馈（UiButtonPressFeedback 会把按钮压到 0.94 再弹回）。
@@ -711,14 +692,10 @@ public class BattleStageMapUI : MonoBehaviour
 
             b.onClick.AddListener(() => OnPedestalClicked(capture));
         }
-        // 【2026-10-18 临时诊断·B7】绑定清单，定位后删
-        if (on)
-            Debug.Log($"[BattleStageMap][诊断] SetClickable idx={index} 绑定按钮 {count} 个：{string.Join("/", _btnNames)}");
     }
 
-    /// <summary>【2026-10-18 临时诊断·B7】复用列表，避免每次刷新都 new（SetClickable 每拍都跑）。</summary>
+    /// <summary>石墩按钮收集复用列表，避免每次刷新都 new（SetClickable 每拍都跑）。</summary>
     readonly List<Button> _reusedBtnList = new List<Button>();
-    static readonly List<string> _btnNames = new List<string>();
 
     /// <summary>收集这个石墩上**所有**能点的按钮：根 + 两面旗（转到的看 ClearedMark，打败后看 Banner）。</summary>
     static void FlagButtons(PedestalRefs p, List<Button> dst)
@@ -828,10 +805,6 @@ public class BattleStageMapUI : MonoBehaviour
 
     void OnPedestalClicked(int index)
     {
-        // 【2026-10-18 临时诊断·B7】有这条日志＝点击到达了按钮；没有＝射线/事件层就没到。定位后删
-        Debug.Log($"[BattleStageMap][诊断] OnPedestalClicked idx={index} flow={(_flow != null)}"
-            + $" next={(_next != null ? _next.stageIndex.ToString() : "null")}"
-            + $" branch={_branchSelectMode} candidates=[{string.Join(",", _candidateIndices)}]");
         if (_flow != null) return;
 
         if (_branchSelectMode && _next == null)
@@ -1108,10 +1081,6 @@ public class BattleStageMapUI : MonoBehaviour
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleStageMap);
         if (GetComponent<GraphicRaycaster>() == null)
             gameObject.AddComponent<GraphicRaycaster>();
-        // 【2026-10-18 临时诊断·B7】画布级探针：记录到达本画布、但没被任何按钮吃掉的点击。
-        // 点石墩既没有 OnPedestalClicked 日志也没有 Probe 日志 = 点击根本没进本画布（被上层挡/无事件系统）。定位后删
-        if (GetComponent<StageMapClickProbe>() == null)
-            gameObject.AddComponent<StageMapClickProbe>();
         EnsureEventSystem();
     }
 
@@ -1272,23 +1241,9 @@ public class BattleStageMapUI : MonoBehaviour
 
     static Transform FindDeep(Transform root, string name)
     {
-        if (root == null) return null;
-        if (root.name == name) return root;
-        for (int i = 0; i < root.childCount; i++)
-        {
-            var f = FindDeep(root.GetChild(i), name);
-            if (f != null) return f;
-        }
-        return null;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFind.Deep(root, name);
     }
-
-    /// <summary>
-    /// 【2026-10-18 临时诊断·B7】挂在关卡图根节点：凡到达本画布、但没被更近的按钮消费的点击都会落到这里。
-    /// 用途：区分「点击没进画布」（Probe 与 OnPedestalClicked 都无日志）和「进了画布但没命中按钮」
-    /// （Probe 有日志、无 OnPedestalClicked）。定位后随其它打点一起删除。
-    /// 类本体在文件末尾（顶层类，避免嵌套 MonoBehaviour 的 AddComponent 兼容问题）。
-    /// </summary>
-
 
     static void Stretch(RectTransform rt)
     {
@@ -1300,52 +1255,13 @@ public class BattleStageMapUI : MonoBehaviour
 
     static Image NewImage(Transform parent, string name, Color color)
     {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        go.transform.SetParent(parent, false);
-        var img = go.GetComponent<Image>();
-        img.color = color;
-        img.raycastTarget = false;
-        return img;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFactory.NewImage(parent, name, color);
     }
 
     static Text NewText(Transform parent, string name, string content, int size, TextAnchor align)
     {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        go.transform.SetParent(parent, false);
-        var t = go.GetComponent<Text>();
-        t.font = GameFonts.GetChinese();
-        t.text = content;
-        t.fontSize = size;
-        t.alignment = align;
-        t.color = Color.white;
-        t.raycastTarget = false;
-        t.horizontalOverflow = HorizontalWrapMode.Overflow;
-        t.verticalOverflow = VerticalWrapMode.Overflow;
-        return t;
-    }
-}
-
-/// <summary>
-/// 【2026-10-18 临时诊断·B7】挂在关卡图根节点：凡到达本画布、但没被更近的按钮消费的点击都会落到这里。
-/// 用途：区分「点击没进画布」（Probe 与 OnPedestalClicked 都无日志）和「进了画布但没命中按钮」
-/// （Probe 有日志、无 OnPedestalClicked）。定位后随其它打点一起删除。
-/// </summary>
-public class StageMapClickProbe : MonoBehaviour, UnityEngine.EventSystems.IPointerClickHandler
-{
-    public void OnPointerClick(UnityEngine.EventSystems.PointerEventData e)
-    {
-        var hit = e.pointerCurrentRaycast.gameObject;
-        Debug.Log($"[BattleStageMap][诊断/Probe] 点击落到本画布：hit={(hit != null ? HitPath(hit.transform) : "null")}");
-    }
-
-    static string HitPath(Transform t)
-    {
-        var sb = new System.Text.StringBuilder(t.name);
-        while (t.parent != null)
-        {
-            t = t.parent;
-            sb.Insert(0, t.name + "/");
-        }
-        return sb.ToString();
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFactory.NewText(parent, name, content, size, align);
     }
 }

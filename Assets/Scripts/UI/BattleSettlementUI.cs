@@ -90,6 +90,11 @@ public class BattleSettlementUI : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         BindRefs();
         Wire();
@@ -211,7 +216,13 @@ public class BattleSettlementUI : MonoBehaviour
         GameFonts.ApplyToHierarchy(transform);
     }
 
-    const float PanelFitPadding = 40f;
+    // 【2026-10-28 16:00 主人拍板（覆盖当天中午「全屏拉伸」口径）】
+    // 「弹窗要整体缩放、等比例缩放、不要拉伸；立绘要跟着弹窗一起缩」：
+    // Panel 回预制体设计尺寸（中心锚 680×1100，备份 .workbuddy/backup/20261028-settlement-fullscreen/），
+    // 再用 localScale 整体等比放大到设计分辨率内最大（720/680 ≈ 1.059 → 宽铺满、上下各留 ~58px）。
+    // 只动 Panel 一层的 localScale —— 立绘/统计/气泡/按钮全是它的子节点，跟着一起缩，零拉伸。
+    const float PanelDesignW = 680f;
+    const float PanelDesignH = 1100f;
 
     /// <summary>
     /// 按设计分辨率整体等比缩放 Panel，只改 localScale，不改预制体布局坐标。
@@ -225,11 +236,18 @@ public class BattleSettlementUI : MonoBehaviour
         var rt = panel.rectTransform;
         if (rt == null) return;
 
+        // 中午误改的全屏拉伸 Panel（锚 (0,0)~(1,1)）在此归一回设计尺寸（运行时补节点口径，
+        // 编辑器开着不能动 prefab 文件；预制体以后改回定尺寸后本分支自然休眠）。
+        if (rt.anchorMin == Vector2.zero && rt.anchorMax == Vector2.one)
+        {
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = Vector2.zero;
+            rt.sizeDelta = new Vector2(PanelDesignW, PanelDesignH);
+        }
+
         float designW = Mathf.Max(1f, GameConfig.DESIGN_WIDTH);
         float designH = Mathf.Max(1f, GameConfig.DESIGN_HEIGHT);
-        float pad = PanelFitPadding * 2f;
-        float maxW = Mathf.Max(1f, designW - pad);
-        float maxH = Mathf.Max(1f, designH - pad);
 
         // 以预制体设计尺寸为准（scale=1 时的 sizeDelta / rect）
         Vector2 designSize = rt.sizeDelta;
@@ -240,9 +258,10 @@ public class BattleSettlementUI : MonoBehaviour
         }
         if (designSize.x < 1f || designSize.y < 1f) return;
 
-        float sx = maxW / designSize.x;
-        float sy = maxH / designSize.y;
-        float s = Mathf.Min(1f, Mathf.Min(sx, sy));
+        // 放到最大：取宽高比的小者整体等比缩（不再按旧口径四周留 40 收缩，也允许 >1 放大）
+        float sx = designW / designSize.x;
+        float sy = designH / designSize.y;
+        float s = Mathf.Min(sx, sy);
         if (s < 0.05f) s = 0.05f;
         rt.localScale = new Vector3(s, s, 1f);
     }
@@ -886,13 +905,7 @@ public class BattleSettlementUI : MonoBehaviour
 
     static Transform FindDeep(Transform root, string name)
     {
-        if (root == null) return null;
-        if (root.name == name) return root;
-        for (int i = 0; i < root.childCount; i++)
-        {
-            var f = FindDeep(root.GetChild(i), name);
-            if (f != null) return f;
-        }
-        return null;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFind.Deep(root, name);
     }
 }

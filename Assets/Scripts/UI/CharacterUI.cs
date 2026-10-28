@@ -114,6 +114,11 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
     }
 

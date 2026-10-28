@@ -45,6 +45,25 @@ public class QuestBarBinder : MonoBehaviour
     bool _warnedNoSideRow;
     float _timer;
 
+    // ── 左侧任务逐行弹入（2026-10-28 主人需求「像冒险界面的标签动效一样 一个一个出来」）──
+    //   参照物 = 冒险页左侧章节标签的逐颗滑入（AdventureUI.Anim.cs：滑入 + 前 40% 淡入 + 行间错峰）。
+    //   只动临时量：行节点的 anchoredPosition + CanvasGroup.alpha，播完精确写回基准值；
+    //   不动 anchor / pivot / sizeDelta，不写预制体（铁律 20）。
+    /// <summary>单行滑入时长（秒）：与冒险页左侧标签同值（AdventureUI.Anim.TabSlideDur）。</summary>
+    const float RowPopDur = 0.114f;
+    /// <summary>行间错峰间隔（秒）：与冒险页左侧标签同值（TabPopStagger）。</summary>
+    const float RowPopStagger = 0.10f;
+    /// <summary>起始位在屏幕左外侧的位移（行宽 100 + 余量 40）。任务栏贴在屏幕左缘，整行左移即滑出屏外。</summary>
+    const float RowSlideOut = 140f;
+    /// <summary>等主界面入场动效的上限（秒）：超过就不再等（防静态标志卡死）。</summary>
+    const float RowWaitEntranceMax = 3f;
+    /// <summary>等主界面可见的上限（秒）：片头/开场剧情可能盖很久，最多等这么久（超时照弹，不卡流程）。</summary>
+    const float RowWaitVisibleMax = 60f;
+
+    readonly List<Coroutine> _rowPopCos = new List<Coroutine>();
+    readonly Dictionary<Transform, Vector2> _rowPopBasePos = new Dictionary<Transform, Vector2>();
+    readonly Dictionary<Transform, CanvasGroup> _rowPopGroups = new Dictionary<Transform, CanvasGroup>();
+
     /// <summary>
     /// 进镇挂载入口（TownSceneManager 实例化 GuildHallUI 后调）。
     /// 找不到「任务栏」节点只报错不建树 —— 排版以美术预制体为准（铁律 9），缺了让美术补。
@@ -301,6 +320,146 @@ public class QuestBarBinder : MonoBehaviour
         {
             _dimRt.sizeDelta = _dimBaseSize;
             _dimRt.anchoredPosition = _dimBasePos;
+        }
+    }
+
+    // ============================================================
+    // 左侧任务逐行弹入（2026-10-28 主人需求）
+    // ============================================================
+
+    void Start()
+    {
+        if (_rowMain == null) return;
+        StartCoroutine(CoPlayRowsPopInWhenVisible());
+    }
+
+    void OnDisable()
+    {
+        // 场景切换/撤离时把行归位，别把半程位移留在预制体实例上
+        RestoreRowPopAnims();
+    }
+
+    /// <summary>
+    /// 等主界面真的露出来再逐行弹（顺序即「看得见」的三道闸）：
+    ///   ① 片头遮罩揭开（GuildHallUI.IsChromeVisible）——遮罩期间弹了玩家看不见；
+    ///   ② Loading 全屏收掉（BattleLoadingOverlay.IsShowing）——盖着时弹等于没弹；
+    ///   ③ 主界面入场动效播完（TownEntranceMotion.IsRunning）——整列从左滑入与逐行弹入同时跑会打架。
+    /// 任一闸最多等 RowWaitEntranceMax 秒，超时照弹（不卡流程）。
+    /// </summary>
+    System.Collections.IEnumerator CoPlayRowsPopInWhenVisible()
+    {
+        float waited = 0f;
+        while (!GuildHallUI.IsChromeVisible && waited < RowWaitVisibleMax)
+        {
+            waited += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        waited = 0f;
+        while (BattleLoadingOverlay.IsShowing && waited < RowWaitEntranceMax)
+        {
+            waited += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        waited = 0f;
+        while (TownEntranceMotion.IsRunning && waited < RowWaitEntranceMax)
+        {
+            waited += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (_rowMain == null) yield break;
+        // 弹之前先刷一次：正文/支线显隐按当前存档算准，别让支线行先弹后消失
+        // （引导未完成时与 Update 同一口径不刷——那时任务数据还没起）
+        if (StoryProgress.TutorialDone) Refresh();
+        PlayRowsPopIn();
+    }
+
+    /// <summary>三行任务逐个弹入（主线 → 支线 → 日常；支线行隐藏时跳过，不占错峰位）。</summary>
+    void PlayRowsPopIn()
+    {
+        if (!gameObject.activeInHierarchy) return;
+        RestoreRowPopAnims();
+        int slot = 0;
+        var rows = new[] { _rowMain, _rowSide, _rowDaily };
+        for (int i = 0; i < rows.Length; i++)
+        {
+            var row = rows[i];
+            if (row == null) continue;
+            if (!row.gameObject.activeSelf) continue;
+            var rt = row as RectTransform;
+            if (rt == null) continue;
+            _rowPopCos.Add(StartCoroutine(CoRowPopIn(rt, slot * RowPopStagger)));
+            slot++;
+        }
+        Debug.Log($"[QuestBarBinder] 任务栏逐行弹入：{slot} 行");
+    }
+
+    /// <summary>
+    /// 单行滑入：起始摆在屏幕左外侧（透明），滑到基准位（ease-out-cubic），前 40% 进度淡入。
+    /// 与冒险页左侧标签同一套手感（AdventureUI.Anim.CoPopOnce）。
+    /// </summary>
+    System.Collections.IEnumerator CoRowPopIn(RectTransform rt, float delay)
+    {
+        Vector2 basePos = GetRowPopBasePos(rt);
+        CanvasGroup cg = GetRowPopGroup(rt);
+        Vector2 fromPos = new Vector2(basePos.x - RowSlideOut, basePos.y);
+        rt.anchoredPosition = fromPos;
+        cg.alpha = 0f;
+        if (delay > 0f) yield return new WaitForSecondsRealtime(delay);
+        float time = 0f;
+        while (time < RowPopDur)
+        {
+            time += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(time / RowPopDur);
+            float ease = 1f - (1f - u) * (1f - u) * (1f - u);   // ease-out-cubic
+            rt.anchoredPosition = new Vector2(Mathf.Lerp(fromPos.x, basePos.x, ease), basePos.y);
+            cg.alpha = Mathf.Clamp01(u / 0.4f);
+            yield return null;
+        }
+        rt.anchoredPosition = basePos;
+        cg.alpha = 1f;
+    }
+
+    /// <summary>行滑入的基准位置（每次播现抓，防缓存钉死旧值）。</summary>
+    Vector2 GetRowPopBasePos(Transform t)
+    {
+        if (!_rowPopBasePos.TryGetValue(t, out var basePos))
+        {
+            basePos = ((RectTransform)t).anchoredPosition;
+            _rowPopBasePos[t] = basePos;
+        }
+        return basePos;
+    }
+
+    CanvasGroup GetRowPopGroup(Transform t)
+    {
+        if (!_rowPopGroups.TryGetValue(t, out var cg) || cg == null)
+        {
+            cg = t.GetComponent<CanvasGroup>();
+            if (cg == null) cg = t.gameObject.AddComponent<CanvasGroup>();
+            cg.interactable = true;      // 只借 alpha，不动交互（行根有 Button，点击照常）
+            cg.blocksRaycasts = true;
+            _rowPopGroups[t] = cg;
+        }
+        return cg;
+    }
+
+    /// <summary>停协程并把行归位（动画开头与 OnDisable 都走这里）。</summary>
+    void RestoreRowPopAnims()
+    {
+        for (int i = 0; i < _rowPopCos.Count; i++)
+        {
+            if (_rowPopCos[i] != null) StopCoroutine(_rowPopCos[i]);
+        }
+        _rowPopCos.Clear();
+        foreach (var kv in _rowPopBasePos)
+        {
+            if (kv.Key == null) continue;
+            if (kv.Key is RectTransform rt) rt.anchoredPosition = kv.Value;
+        }
+        foreach (var kv in _rowPopGroups)
+        {
+            if (kv.Value == null) continue;
+            kv.Value.alpha = 1f;
         }
     }
 

@@ -220,13 +220,15 @@ public static class MailSystem
         return waste > 0 ? (int)waste : 0;
     }
 
-    /// <summary>🆕 发放佣兵奖励（type=="merc"）：解锁到花名册并尽量补进战斗抽奖池，保证玩家可招募；不占资源上限。</summary>
+    /// <summary>🆕 发放佣兵奖励（type=="merc"）：解锁到花名册并尽量补进战斗抽奖池，保证玩家可招募；不占资源上限。
+    /// 【2026-10-28 主人拍板】新获得（UnlockMerc 返回 true）时播「获得佣兵」全屏演出；已拥有空发不弹。</summary>
     static void GrantMerc(string hireId)
     {
         if (string.IsNullOrEmpty(hireId)) return;
         var d = SaveSystem.Instance?.Data;
         if (d == null) return;
-        d.UnlockMerc(hireId);
+        if (d.UnlockMerc(hireId))
+            MercGainCinematicUI.Show(hireId, null);
         d.EnsurePoolFilled();   // 解锁后自动补全抽奖池（主人拍板「池子最少要补全」），让礼物立刻可招募
         Debug.Log($"[Mail] 邮件发放佣兵 {hireId}");
     }

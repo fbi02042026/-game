@@ -242,7 +242,8 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             if (hired)
             {
                 badge.transform.SetAsLastSibling();
-                badge.text = "已拥有·转碎片";
+                // 【2026-10-28 主人拍板】角标只写「已拥有」；「转碎片」说明挪进 info 概率公示弹窗
+                badge.text = "已拥有";
             }
             badge.gameObject.SetActive(hired);
         }
@@ -255,17 +256,20 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         Text t = existing != null ? existing.GetComponent<Text>() : null;
         if (t != null) return t;
 
-        // 【2026-10-19 主人拍板】「已拥有」加大加粗、摆在卡面正中（原来是 22 号细字缩在中心偏下，
-        // 被下方技能区/按钮区压住看不清）；【2026-10-25】文案改「已拥有·转碎片」（可重复购买转碎片）
-        t = CreateTxt(cardRoot, "HiredBadge", "已拥有·转碎片", 34, TextAnchor.MiddleCenter);
+        // 【2026-10-19 主人拍板】「已拥有」加大加粗（原来是 22 号细字缩在中心偏下，
+        // 被下方技能区/按钮区压住看不清）；【2026-10-25】文案「已拥有·转碎片」；
+        // 【2026-10-28 主人拍板】文案改回「已拥有」、位置挪到立绘下面（mask 底边之下、
+        // 稀有度横幅之下、技能区之上：三张卡 mask pos.y=95/半高220 → 底边 -125，
+        // RarityBanner 中心 -128/半高15 → 底边 -143，技能区顶约 -180，取 -160 正好居中空档）。
+        t = CreateTxt(cardRoot, "HiredBadge", "已拥有", 34, TextAnchor.MiddleCenter);
         t.color = new Color(1f, 0.86f, 0.42f, 1f);
         t.fontStyle = FontStyle.Bold;
         var rt = t.rectTransform;
         rt.anchorMin = new Vector2(0.5f, 0.5f);
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(0f, 0f);
-        rt.sizeDelta = new Vector2(320f, 60f);
+        rt.anchoredPosition = new Vector2(0f, -160f);
+        rt.sizeDelta = new Vector2(200f, 44f);
         t.gameObject.SetActive(false);
         return t;
     }

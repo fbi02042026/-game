@@ -75,6 +75,11 @@ public sealed class TapTapBootstrap : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
+    void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
     // ==================== 初始化 ====================
 
     /// <summary>确保存在并初始化。可重复调用，内部只初始化一次。</summary>

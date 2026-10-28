@@ -219,12 +219,9 @@ public class QuestHudBar : MonoBehaviour
         // 没有父级 RectTransform 可换算内缩，SafeAreaFitter 实际是惰性 no-op；
         // 顶部已由 _bar 自身逻辑兜住。为绝对零回归，默认 enabledFit=false。
         // 待真机验证 SafeAreaFitter 在 Canvas 根上无副作用后，可改 enabledFit=true。
-        if (GetComponent<SafeAreaFitter>() == null)
-        {
-            var qhbSafe = gameObject.AddComponent<SafeAreaFitter>();
-            qhbSafe.edge = SafeAreaFitter.Edge.Top;
-            qhbSafe.enabledFit = false;
-        }
+        // 【2026-10-28】改走统一入口（禁止裸 AddComponent 抢跑）；参数与原写法等价，行为零变化。
+        SafeAreaFitter.AddConfigured(transform as RectTransform,
+            SafeAreaFitter.Edge.Top, SafeAreaFitter.FitMode.Shift, false);
     }
 
     /// <summary>

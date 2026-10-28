@@ -184,7 +184,11 @@ public partial class CharacterUI
                 resist = 0f;
             }
         }
-        catch { }
+        catch (System.Exception ex)
+        {
+            // 属性面板取不到真实数值时会静默回退 BASE 值展示——玩家看到的就是错数，必须留痕
+            Debug.LogWarning("[CharacterUI] RefreshAttrs 计算属性失败，回退 BASE 值展示: " + ex.Message);
+        }
 
         float critDisplay = crit;
         if (critDisplay <= 1.5f)

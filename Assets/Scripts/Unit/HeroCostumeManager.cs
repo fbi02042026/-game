@@ -136,6 +136,11 @@ public class HeroCostumeManager : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
+            return;
+        }
         Instance = this;
 
         if (spumPrefabs == null)

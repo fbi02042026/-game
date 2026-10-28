@@ -871,6 +871,8 @@ public class MercFavorUI : MonoBehaviour
         if (!MercFavorSystem.IsBondOpen(d, _currentHireId) || MercFavorSystem.IsBondCleared(d, _currentHireId)) return;
         // 【2026-10-27 主人拍板】羁绊副本 = 照礼物副本框架：好感满佣兵专属单场关，该佣兵强制进队，
         // 难度固定 ≈5~7 章、一次性通关发钻石 + 永久 ×1.5 属性（详见 BondDungeonBattleMode）。
+        // 进本标记（2026-10-28 起统一走 ResetPendingFlags 全清，再立羁绊本标记；BattleManager 读后即清）
+        AdventureUI.ResetPendingFlags();
         AdventureUI.PendingBondDungeon = true;
         AdventureUI.PendingBondHireId = _currentHireId;
         AdventureUI.PendingBattleDifficulty = MercFavorDefs.BondDungeonDifficulty;

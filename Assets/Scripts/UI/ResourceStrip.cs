@@ -19,10 +19,12 @@ using UnityEngine.UI;
 ///
 /// 模式（只切显隐；几何按 2026-10-27 主人晚間新规：两个并排上排、三个横排一排（天赋石接排在金币
 /// 左侧）、四个按 prefab 原生 2×2——见 ApplyRightAlign）：
-///   Main          挂回 TopBar：金币/钻石/天赋石/体力四格全显（主界面与冒险页统一观感）；
+///   Main          挂回 TopBar：金币/钻石/天赋石/体力四格全显（公会页 / 主界面观感）；
+///   DiamondStamina 冒险页两格：只显钻石+体力（主人 2026-10-28 重申「冒险界面只有两个资源：
+///                  一个钻石一个体力」；此前 10-27 晚的「四格统一」口径作废），金币/天赋石隐藏；
+///                  两格并排上排（钻石左 / 体力右，见 ApplyRightAlign 的 N=2 分支）；
 ///   GoldDiaTalent 宿主界面三列一排：金币/钻石/天赋石（角色页），体力隐藏；天赋石可视框对齐金币左侧等距槽位；
 ///   GoldDia       宿主界面两列：金币/钻石（招募/升阶/抽卡弹窗、酒馆页），天赋石/体力隐藏。
-/// 【2026-10-27 主人拍板】原 DiamondStamina（冒险页只显钻石+体力）删除——冒险页参考主界面统一四格。
 ///
 /// 加号分工（2026-10-25 主人拍板）：
 ///   金币/体力加号 = 每日补给位（前2次免费 → 第3次50钻 → 第4次100钻、每日4次封顶，逻辑在 ResourceAdRewards），
@@ -32,7 +34,7 @@ using UnityEngine.UI;
 ///
 /// 右上角自适应（2026-10-25 主人拍板「这个自适应到屏幕右上角」）：各列锚点运行时改挂顶条右缘，
 /// 横坐标 = 主人 prefab 摆的原坐标 − 设计宽一半，右边距在任意屏宽下恒定，宽屏自动贴右。
-/// 体力列显隐（2026-10-27 起收口在 SetMode 单一出口）：仅 Main（主界面/冒险页）显示；
+/// 体力列显隐（2026-10-27 起收口在 SetMode 单一出口）：Main（主界面）与 DiamondStamina（冒险页）显示；
 /// 借走资源条的界面（角色页/招募/升阶/抽卡）与酒馆页一律隐藏。
 ///
 /// 数值唯一真源 = ResourceWallet（Host 轮询、变了才写）；格式唯一出口 = GuildHallUI.FormatResource。
@@ -41,7 +43,7 @@ using UnityEngine.UI;
 /// </summary>
 public static class ResourceStrip
 {
-    public enum Mode { Main, GoldDiaTalent, GoldDia }
+    public enum Mode { Main, GoldDiaTalent, GoldDia, DiamondStamina }
 
     const string StripName = "ResourceStrip";
 
@@ -78,10 +80,11 @@ public static class ResourceStrip
     static Transform _stamina;   // 体力列（不迁，仍归 TopBar；主界面/冒险页显示，消耗界面隐藏）
     static Vector2 _goldHomePos, _diaHomePos, _talentHomePos, _staminaHomePos;
     //                         ^ 各列「主人在 TopBar.prefab 里摆的原位」= 右上角对齐基线（迁出/对齐前捕获，绝不二次覆盖）
-    // 各列可视底框（Bg）相对面板中心的 x 偏移（prefab 真值：金币 -10.9 / 钻石 -15.4 / 天赋石 -2）。
+    // 各列可视底框（Bg）相对面板中心的 x 偏移（prefab 真值：金币 -10.9 / 钻石 -15.4 / 天赋石 -2 / 体力 -2）。
     // 主人的摆位是按可视框对齐的，跨列重排槽位时必须按可视框中心算，直接抄面板 x 会错开十几像素
-    // （2026-10-27 主人截图「角色页天赋石没有和钻石对齐」）。体力不参与跨槽位重排，无需捕获。
-    static float _goldBgOffsetX, _diaBgOffsetX, _talentBgOffsetX;
+    // （2026-10-27 主人截图「角色页天赋石没有和钻石对齐」）。
+    // 【2026-10-28】体力列也参与跨槽位重排了（冒险页两格并排：钻石左槽 + 体力右槽），故一并捕获偏移。
+    static float _goldBgOffsetX, _diaBgOffsetX, _talentBgOffsetX, _staminaBgOffsetX;
 
     // —— 对外：主界面注册（GuildHallUI.AutoBindMissingRefs 末尾调）——
     public static void RegisterHall(Transform hallRoot)
@@ -113,7 +116,10 @@ public static class ResourceStrip
         {
             _stamina = FindDirectChild(topBar, "体力Panel");
             if (_stamina != null)
+            {
                 _staminaHomePos = ((RectTransform)_stamina).anchoredPosition;   // 对齐基线（迁出前捕获，体力列不迁）
+                _staminaBgOffsetX = BgOffsetX(_stamina, "体力Bg");              // 跨槽位重排要用可视框中心（2026-10-28）
+            }
             // 体力列被主人从 prefab 删掉时不报错：显隐与对齐都静默跳过（摆件归主人管）
         }
 
@@ -227,6 +233,10 @@ public static class ResourceStrip
         // 酒馆页开着（如招募弹窗关闭归还主界面）：资源条别以四列裸露在酒馆，回到「只留金币/钻石」
         if (TavernUI.Instance != null && TavernUI.Instance.gameObject.activeSelf)
             SetMode(Mode.GoldDia);
+        // 【2026-10-28】冒险页开着（冒险页上叠加的借条弹窗关闭归还主界面）：回到「只留钻石/体力」两格，
+        // 别以四格裸露在冒险页（与上面的酒馆特判同一口径）。
+        else if (AdventureUI.Instance != null && AdventureUI.Instance.gameObject.activeSelf)
+            SetMode(Mode.DiamondStamina);
     }
 
     /// <summary>条挂在 TopBar 下时的几何 = 撑满父级（锚拉伸 + offset 全 0，不写死像素）；
@@ -282,24 +292,26 @@ public static class ResourceStrip
     }
 
     /// <summary>切资源条列显隐（体力列显隐一并收口在此，2026-10-27 主人拍板）：
-    /// 金币/钻石恒显；天赋石除 GoldDia（两列）外都显；体力仅 Main（主界面/冒险页）显示。</summary>
+    /// 金币/钻石恒显；天赋石除 GoldDia（两列）外都显；体力仅 Main（主界面）与 DiamondStamina（冒险页）显示。</summary>
     public static void SetMode(Mode mode)
     {
         // 钻石列：所有模式都显示（主界面/冒险页/酒馆/各类弹窗都看钻石）
         if (_dia != null) _dia.gameObject.SetActive(true);
-        // 金币列：所有模式都显示（冒险页 2026-10-27 起参考主界面统一，四格全显）
-        if (_gold != null) _gold.gameObject.SetActive(true);
-        // 天赋石列：仅 GoldDia（两列弹窗/酒馆页）隐藏
-        bool talentOn = mode != Mode.GoldDia;
+        // 金币列：仅 DiamondStamina（冒险页只显钻石+体力）隐藏，其余模式显示
+        bool goldOn = mode != Mode.DiamondStamina;
+        // 天赋石列：GoldDia（两列弹窗/酒馆页）/ DiamondStamina（冒险页）隐藏，Main/GoldDiaTalent 显示
+        bool talentOn = mode != Mode.GoldDia && mode != Mode.DiamondStamina;
+        if (_gold != null) _gold.gameObject.SetActive(goldOn);
         if (_talent != null) _talent.gameObject.SetActive(talentOn);
 
-        // 体力列：仅 Main 显示（原 Show/Home 两处的显隐收口到这一处）
-        SetStaminaVisible(mode == Mode.Main);
+        // 体力列：Main（主界面）/ DiamondStamina（冒险页）显示；借走资源条的界面与酒馆页隐藏
+        // （显隐唯一调用点 = SetMode，2026-10-27 主人拍板）
+        SetStaminaVisible(mode == Mode.Main || mode == Mode.DiamondStamina);
 
-        // 金币加号（每日补给入口）：随金币列恒显（2026-10-25 主人拍板，弹窗内也可购买）
+        // 金币加号（每日补给入口）：随金币列显隐（2026-10-25 主人拍板，弹窗内也可购买）
         var gp = _gold != null ? FindDeep(_gold, "PlusButton") : null;
-        if (gp != null && !gp.gameObject.activeSelf)
-            gp.gameObject.SetActive(true);
+        if (gp != null && gp.gameObject.activeSelf != goldOn)
+            gp.gameObject.SetActive(goldOn);
 
         ApplyRightAlign();
     }
@@ -328,21 +340,32 @@ public static class ResourceStrip
         //   N=4（Main）：prefab 原生 2×2 原样（各回各家：金币+钻石上排、天赋石+体力下排）；
         //   N=3（角色页）：三列横排一排——第 1/2 个占上排左/右（金币/钻石槽），第 3 个接排在金币左侧、
         //        列距=金币→钻石可视框间距、y 同上排（按可视框中心算，见分支内注释）；
-        //   N=2：并排占上排左/右两槽（金币/钻石各自 home，即主人要的并排）；
+        //   N=2（冒险页钻石+体力 / 酒馆页金币+钻石）：并排占上排左/右两槽——按「可视框中心」对齐，
+        //        跨列搬位时直接抄面板 x 会错开十几像素（各列 Bg 偏移不同）；
         //   N<=1：各回各家。
         // 槽坐标全部取自主人在 TopBar.prefab 里摆的列位（上排=金币/钻石 home），不写死像素。
-        var visible = new List<(Transform col, Vector2 home)>();
-        if (_gold != null && _gold.gameObject.activeSelf) visible.Add((_gold, _goldHomePos));
-        if (_dia != null && _dia.gameObject.activeSelf) visible.Add((_dia, _diaHomePos));
-        if (_talent != null && _talent.gameObject.activeSelf) visible.Add((_talent, _talentHomePos));
-        if (_stamina != null && _stamina.gameObject.activeSelf) visible.Add((_stamina, _staminaHomePos));
+        var visible = new List<(Transform col, Vector2 home, float bgOffset)>();
+        if (_gold != null && _gold.gameObject.activeSelf) visible.Add((_gold, _goldHomePos, _goldBgOffsetX));
+        if (_dia != null && _dia.gameObject.activeSelf) visible.Add((_dia, _diaHomePos, _diaBgOffsetX));
+        if (_talent != null && _talent.gameObject.activeSelf) visible.Add((_talent, _talentHomePos, _talentBgOffsetX));
+        if (_stamina != null && _stamina.gameObject.activeSelf) visible.Add((_stamina, _staminaHomePos, _staminaBgOffsetX));
 
         for (int i = 0; i < visible.Count; i++)
         {
             Vector2 slot = visible[i].home;
             if (visible.Count == 2)
             {
-                slot = i == 0 ? _goldHomePos : _diaHomePos;
+                // 【2026-10-27 主人拍板「资源条 2 并排」】两列并排占上排左右两槽：
+                // 左槽=金币原位、右槽=钻石原位（prefab 真值，不写死像素）。
+                // 跨列搬位按「可视框中心」对齐——各列 Bg 偏移不同（金币 -10.9 / 钻石 -15.4 / 体力 -2），
+                // 直接抄面板 x 会让两格错开十几像素。
+                // 自洽校验：酒馆页 GoldDia（金币+钻石）走此分支时算回各自的 home，与 prefab 原位完全一致。
+                float leftVisual = _goldHomePos.x + _goldBgOffsetX;
+                float rightVisual = _diaHomePos.x + _diaBgOffsetX;
+                bool isLeft = i == 0;
+                slot = new Vector2(
+                    (isLeft ? leftVisual : rightVisual) - visible[i].bgOffset,
+                    isLeft ? _goldHomePos.y : _diaHomePos.y);
             }
             else if (visible.Count == 3)
             {

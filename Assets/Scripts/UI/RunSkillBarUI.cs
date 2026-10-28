@@ -74,6 +74,11 @@ public class RunSkillBarUI : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         Build();
     }

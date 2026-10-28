@@ -77,8 +77,15 @@ public partial class BattleManager
         switch (kind)
         {
             case ReviveClaimKind.Ad:
+                // 【2026-10-28 远程急停】维护中直接提示，界面停留（可点【返回】走死亡收尾），不消耗档位
+                if (AdKillSwitch.AdsOff)
+                {
+                    UIManager.Instance?.ShowToast("广告维护中，请稍后再试");
+                    return false;
+                }
                 if (_reviveAdPending) return false;   // 广告已在拉起，忽略重复点击
                 _reviveAdPending = true;
+                UIManager.Instance?.ShowToast("广告加载中…");   // 【2026-10-28】拉起到展示有等待期，先给反馈防狂点
                 RewardedAdBridge.ShowRewarded("revive", ok =>
                 {
                     _reviveAdPending = false;
@@ -96,17 +103,25 @@ public partial class BattleManager
                 return false;   // 异步：窗暂不收（模拟桥同步回调时上面已收，走到这里也无害）
 
             case ReviveClaimKind.Diamond:
-                if (!ResourceWallet.TrySpendDiamond(price, "战斗复活", save: true, notify: false))
+                // 【2026-10-28 主人规则重申「只要扣钻石的地方都要有二次确认」】
+                // 钻石复活不再「点复活钮直接扣」：先弹 DiamondSpendGate 通用确认门
+                // （余额不足 Toast 缺口不弹窗；充足弹双按钮确认框，正文带花费行），
+                // 玩家点「确认」才扣钻复活。本分支恒 return false = 选择窗停留（与广告档异步同型），
+                // 确认回调里走 ForceCloseChoice 收窗。
+                DiamondSpendGate.Request("战斗复活", "用钻石原地复活，继续本关。", price, () =>
                 {
-                    var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-                    long own = ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond);
-                    UIManager.Instance?.ShowToast($"钻石不足：复活需 {price} 钻（当前 {own} 钻）");
-                    return false;
-                }
-                _reviveChoiceOpen = false;
-                ReviveQuota.RegisterClaimed();
-                DoReviveHero();
-                return true;
+                    if (!_reviveChoiceOpen) return;   // 确认期间玩家已点【返回】/界面已收，不许诈尸复活
+                    if (!ResourceWallet.TrySpendDiamond(price, "战斗复活", save: true, notify: false))
+                    {
+                        UIManager.Instance?.ShowToast("钻石不足，复活未生效");
+                        return;
+                    }
+                    _reviveChoiceOpen = false;
+                    ReviveQuota.RegisterClaimed();
+                    BattleResultScreen.ForceCloseChoice();
+                    DoReviveHero();
+                });
+                return false;
 
             default:   // Capped：CanOfferRevive 已挡，理论上到不了；fail-closed 当放弃处理
                 Debug.LogError("[BattleManager] 复活档位异常（Capped 却弹了选择窗），按放弃处理");
@@ -180,7 +195,7 @@ public partial class BattleManager
         // 撤离回城后打开冒险页（引导局另有收尾，不抢页签）
         if (!Rules.SkipPendingAdventureOnEvacuate)
             TownHubController.PendingOpenAdventure = true;
-        // 教程也走结算界面，关闭后再回城接剧情
+        // 教程收尾也走「战斗结果」界面（2026-10-28 主人拍板），关闭后再回城接剧情
         if (SkipLegacyOnEvacuate || Rules.Active)
         {
             TriggerTutorialEvacuateWithSettlement();
@@ -217,7 +232,10 @@ public partial class BattleManager
 
         FillSettlementSnapshot(isDeath: false, talentGain);
         AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
-        BattleSettlementUI.Show(RunStats, () =>
+        // 【2026-10-28 16:10 主人拍板「引导关结束也要战斗结果界面，不要战斗-结算」】
+        // 引导撤离/引导通关收尾改播「战斗结果」界面（胜利大图 + 奖励格，奖励数据源 = RunStats 快照），
+        // 点【确定】/点任意处 → 回城接剧情（链路原样）。结果界面引导局不建分享钮（BattleResultScreen 内已分流）。
+        BattleResultScreen.Show(true, RunStats, () =>
         {
             GameSceneManager.Instance?.LoadTownScene();
         });

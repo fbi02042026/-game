@@ -30,6 +30,11 @@ public class Hero : UnitBase
 
     protected override void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
+            return;
+        }
         // 【关键】必须在base.Awake()之前设置，因为base.Awake()中会调用EnsureHitPoint/EnsureFirePoint
         firePointOffset = new Vector3(0.3f, 0.32f, 0f);
         hitPointOffset = new Vector3(0f, 0.55f, 0f);
@@ -232,23 +237,9 @@ public class Hero : UnitBase
         }
 
         List<AttrBonusData> allBonus = EquipStatRollup.BuildBonusList(bag);
-        int equipCount = allBonus.Count;
         if (BattleManager.Instance != null && BattleManager.Instance.tempBuffs != null)
             allBonus.AddRange(BattleManager.Instance.tempBuffs);
         attr.RecalcAllAttr(allBonus);
-
-        // 【临时打点 2026-10-18】排查攻击虚高：打印 tempBuffs 明细（谁在往攻击上叠），定位后删除
-        var bmDbg = BattleManager.Instance;
-        if (bmDbg != null && bmDbg.tempBuffs != null && bmDbg.tempBuffs.Count > 0)
-        {
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < bmDbg.tempBuffs.Count; i++)
-            {
-                var b = bmDbg.tempBuffs[i];
-                sb.Append($"{b.attrType}={b.value:0.##}{(b.isPercent ? "%" : "+")} ");
-            }
-            Debug.Log($"[BuffDebug] RecalcAttr 装备条目={equipCount} tempBuffs x{bmDbg.tempBuffs.Count}: {sb}");
-        }
 
         // 主手优先，无主手则读副手（教程默认左手剑）
         float weaponRange = AttackRangeTable.GetJobWorld(PlayerJobDefs.GetSelected());
@@ -367,7 +358,6 @@ public class Hero : UnitBase
     UnitBase _acquireLock;
     float _acquireUntil;
     float _manualReleaseUntil;
-    UnitBase _dbgLastTarget; // 【临时打点 2026-10-18】目标切换探针，定位后随打点一起删
 
     // 2026-10-09 主人拍板：单帧最大步长钳制。抽奖励阶段 timeScale=0（战斗冻结），
     // 玩家等待「继续」期间若窗口失焦/编辑器暂停，恢复瞬间首帧 Time.deltaTime 会异常暴涨，
@@ -596,15 +586,6 @@ public class Hero : UnitBase
             unitAnim.SetMove(isMoving, facingDir);
         if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
             ClampToScreen();
-        // 【临时打点 2026-10-18】排查「打死怪换下一个目标时闪现到对方车道」：打印目标切换瞬间双方车道实况，定位后删除
-        if (target != _dbgLastTarget)
-        {
-            string oldInfo = _dbgLastTarget != null ? $"{_dbgLastTarget.name}@y={_dbgLastTarget.transform.position.y:F2}" : "null";
-            string newInfo = target != null ? $"{target.name}@y={target.transform.position.y:F2}" : "null";
-            Debug.Log($"[TargetSwitchDebug] {name} 目标切换 {oldInfo} → {newInfo} | " +
-                      $"自身 worldY={transform.position.y:F2} LaneY={LaneY:F3} FootY={FootY:F3} dt={Time.deltaTime:F3}");
-            _dbgLastTarget = target;
-        }
         ApplyLaneY(dt);
     }
 

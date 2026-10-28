@@ -47,6 +47,11 @@ public class TownIntroVeil : MonoBehaviour
 
     void Build()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         var canvas = gameObject.AddComponent<Canvas>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownVeil);

@@ -330,9 +330,18 @@ public partial class TutorialDirector
         // 这里补上围杀目标（英雄），让这波真正刷出、含 1 只放大精英（eliteCount=1）。
         // 【2026-10-17 主人拍板】forcedTarget 只当 around 波的定位锚点用，刷出后立即解锁 ——
         // 精英和小怪都按距离打玩家/塔克，不再全程锁英雄。
+        // 【2026-10-28 主人拍板「精英出现后先说话，再开始准备放技能」】精英波入场走「剧情前置暂停」窗：
+        // 冻场（UnitsCanAct=false）但放行进场（AllowMonsterMapEnter=true）—— 怪只走到屏幕边缘站定，
+        // 不提前贴脸开打/放技能（原来 UnitsCanAct=true 放开进场，远程精英攻击距离远，
+        // 进场途中就提前结束进场开打，宿敌对白弹在它还飘在天上的时候）。
+        // 精英进镜头站定后先说宿敌对白（下方 TalkBlock），说完才放开动手 + 充技能。
+        if (bm != null)
+        {
+            bm.UnitsCanAct = false;
+            bm.AllowMonsterMapEnter = true;
+        }
         yield return EnsureTutorialStep(bm, 4, forcedTarget: Hero.Instance);
         bm.ClearMonsterForcedTargets();
-        if (bm != null) bm.UnitsCanAct = true;
         // 【2026-10-16】「组队后佣兵会自动战斗」已提前到塔克入队后（本方法上方二抽头像步收尾处），
         // 这里不再重复 Show —— 原位置压在精英波预告之后，主人报「有点靠后了」。
 
@@ -352,11 +361,23 @@ public partial class TutorialDirector
             yield return TalkBlock(bm, headTalk, restoreAct: false,
                 new TalkLine(rival, "老大交代过：小心那个扛盾的。说的就是你吧？", 2.4f),
                 new TalkLine(rival, "我看也没什么了不起——让我试试你的实力。", 2.4f));
-            if (bm != null) bm.UnitsCanAct = true;
+            // 【2026-10-28 主人拍板】对白说完才放开：关掉进场暂停窗，怪从屏幕边缘推进到交战位开打；
+            // 技能 Energy 由下一步 CoWatchPlayerSkill 充满 →「先说话，再开始准备放技能」。
+            if (bm != null)
+            {
+                bm.UnitsCanAct = true;
+                bm.AllowMonsterMapEnter = false;
+            }
         }
         else
         {
             Debug.LogError("[Tutorial] 精英波没找到精英单位（order=4 的 eliteCount 是不是写 0 了？），宿敌对白跳过");
+            // 【2026-10-28】精英没刷出来也要解冻关窗，否则全场永久冻结、引导卡死
+            if (bm != null)
+            {
+                bm.UnitsCanAct = true;
+                bm.AllowMonsterMapEnter = false;
+            }
         }
 
         // —— V6 P3：这一波充满能量，让玩家看见技能自动放出去 ——

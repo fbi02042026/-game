@@ -25,7 +25,12 @@ public class GuildHallUI : MonoBehaviour
     [Header("玩家名牌（topleft 下，2026-10-25 主人加的）")]
     public Text playerNameText;   // 玩家名牌/Name：玩家起的名字
     public Text playerLevelText;  // 玩家名牌/Level：玩家等级
-    public Image playerAvatarIcon; // 玩家名牌/Icon：当前头像【2026-10-27 主人拍板去掉：节点运行时隐藏，字段保留只为绑定判重】
+    public Image playerAvatarIcon; // 玩家名牌/Icon：当前头像（点击打开头像选择框，确认后这里同步换图）
+    // 【2026-10-28 更正】10-27 的需求是「角色页」头像去掉，本文件（主界面名牌）头像被那次提交误伤隐藏，当日恢复——主界面头像保留。
+    // 【2026-10-25 主人反馈「左上角的头像有点小」】名牌 Icon 本体放大倍率：
+    // 只乘在 Icon 的 localScale 上（预制体作者刻度 0.9 之上 ×1.3），名牌底板/文字一律不动；
+    // 绑定时做一次，幂等；要再调大小只改这一个常量。
+    const float NameplateIconScale = 1.3f;
 
     [Header("左侧")]
     public Button mailButton;
@@ -99,6 +104,11 @@ public class GuildHallUI : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         EnsureTopBarFromPrefab();
         UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
@@ -313,14 +323,16 @@ public class GuildHallUI : MonoBehaviour
         if (playerLevelText != null)
             playerLevelText.text = Mathf.Max(1, LevelSystem.CurrentLevel).ToString();
         // 名牌头像：按存档槽位设图（真源 AvatarDefs；头像选择框确认后走 RefreshAllHud 到这里换图）
-        // 【2026-10-27】头像已按主人需求隐藏：节点不激活就不再设图，也不报缺图错。
-        if (playerAvatarIcon != null && playerAvatarIcon.gameObject.activeSelf)
+        if (playerAvatarIcon != null)
         {
             var avatarSp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());
             if (avatarSp != null) playerAvatarIcon.sprite = avatarSp;
             else Debug.LogError("[GuildHall] 名牌头像图取不到：槽位 " + AvatarDefs.CurrentSlot() + "（不兜底）");
         }
     }
+
+    /// <summary>名牌头像点击入口：打开头像选择弹窗（2026-10-25 主人需求；2026-10-28 随主界面头像一并恢复）。</summary>
+    void OpenAvatarSelect() => AvatarSelectPopup.Open();
 
     /// <summary>顶条钻石余额显示（T14）：只读 ResourceWallet 的 Diamond，不做任何扣费/加号点击逻辑。</summary>
     void RefreshDiamond()
@@ -494,8 +506,8 @@ public class GuildHallUI : MonoBehaviour
         // 【2026-10-25 主人加的 玩家名牌/Icon】当前头像：sprite 按存档槽位主动设图
         // （名牌 Icon 的 prefab sprite 引用是悬空旧 hex32，走路径加载，AGENTS.md §2.3）；
         // 运行时补 Button 接线（预制体只有 Image），点击打开头像选择框。缺节点 LogError 不兜底。
-        // 【2026-10-27 主人需求「把主界面名牌的头像去掉」】Icon 整节点隐藏（图与点击入口一并下线），
-        // 不删节点、不动预制体；以后要恢复头像，删掉下面那行 SetActive(false) 即可。
+        // 【2026-10-28 恢复】10-27 需求是「角色页」头像去掉，主界面名牌头像被 8c43649c 误伤隐藏，
+        // 当日按 8c43649c^ 原样还原（Icon 放大 1.3 + Button 接线）；名字/等级不受影响。
         if (playerAvatarIcon == null)
         {
             Transform plateForIcon = FindDeepChild(transform, "玩家名牌");
@@ -503,7 +515,13 @@ public class GuildHallUI : MonoBehaviour
             if (iconT != null)
             {
                 playerAvatarIcon = iconT.GetComponent<Image>();
-                iconT.gameObject.SetActive(false);   // 头像下线（名字/等级不受影响）
+                // 【2026-10-25 主人反馈「左上角的头像有点小」】Icon 本体放大（Awake 只跑一次，幂等）
+                iconT.localScale *= NameplateIconScale;
+                var openBtn = iconT.GetComponent<Button>();
+                if (openBtn == null) openBtn = iconT.gameObject.AddComponent<Button>();
+                openBtn.transition = Selectable.Transition.None;
+                openBtn.onClick.RemoveAllListeners();
+                openBtn.onClick.AddListener(OpenAvatarSelect);
             }
             else
                 Debug.LogError("[GuildHall] 玩家名牌下缺 Icon 节点，头像不显示也无法点开头像选择框");
@@ -639,6 +657,9 @@ public class GuildHallUI : MonoBehaviour
         }
         // 每日登录按钮：使用主界面预制体右列的 DailyLoginButton 节点（主人 2026-10-16 加的），点击打开每日登录面板
         EnsureDailyLoginButton();
+        // 竹篓纳福入口（2026-10-28 主人拍板）：每日登录下方一格，运行时克隆生成（不动预制体）；
+        // 玩法未上线前点击弹占位告知，接线只在 MiniGameEntryUI.OnClicked 一处。
+        MiniGameEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的），点击随机换看板人物
         EnsureTurnButton();
         // 商店：2026-09-15 接通，技能解锁 / 抽卡券 / 资源补给 / 材料 四个货架
@@ -1004,14 +1025,8 @@ public class GuildHallUI : MonoBehaviour
 
     static Transform FindDeepChild(Transform parent, string name)
     {
-        if (parent == null) return null;
-        if (parent.name == name) return parent;
-        for (int i = 0; i < parent.childCount; i++)
-        {
-            var r = FindDeepChild(parent.GetChild(i), name);
-            if (r != null) return r;
-        }
-        return null;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFind.Deep(parent, name);
     }
 
     // ────────────────────────────────────────────────────────────────────────

@@ -86,6 +86,27 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     /// </summary>
     public static bool PendingEndlessRift;
 
+    /// <summary>
+    /// 进本标记统一重设（2026-10-28）：所有「进本路径」在设置自己的标记前先调本方法全清，
+    /// 避免漏清导致旧标记污染下一局（如礼物本不打清 → 好感页点羁绊本被误判为礼物本）。
+    /// 新增副本类型时，只需在对应路径里设自己的标记，不必再记着补清 N 处。
+    /// 注意：本方法只负责清零，不含「进本优先级」读判定；PendingEndlessRift 由调用方按 endless 语义自行重立。
+    /// </summary>
+    public static void ResetPendingFlags()
+    {
+        PendingBattleChapter = 0;
+        PendingBattleDifficulty = 0;
+        PendingGoldDungeon = false;
+        PendingBadgeDungeon = false;
+        PendingScrollDungeon = false;
+        PendingGiftDungeon = false;
+        PendingBondDungeon = false;
+        PendingBondHireId = null;
+        PendingSideIsland = 0;
+        PendingFinaleStage = 0;
+        PendingEndlessRift = false;
+    }
+
     [Header("可替换资源")]
     public Sprite mapBackgroundSprite;
     public Sprite[] chapterBackgrounds = new Sprite[8]; // 可选覆盖 MapBg；空则只切换 StageNodes/Node_1..8
@@ -236,8 +257,24 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     bool _built;
     bool _preloaded;
 
+    /// <summary>
+    /// 【2026-10-28 主人报「一进还是出现会长说第七小队的剧情」】
+    /// 进镇预热（TownHubController.CoWarmupPages）会对本页「点亮一遍再藏回」，
+    /// 那一遍不算玩家进冒险页 → 本页所有玩家可见弹窗（支线岛情报指引 / 上一局意外退出询问）
+    /// 都不该在 Loading 后面开播。
+    /// 预热方置位本标志，ShowPage 消费一次并跳过（不写已播标记、不清中断快照，
+    /// 不消耗这一岛的播报机会），等玩家自己点进冒险页时照常弹。
+    /// 先例 = 酒馆 TavernUI.SuppressEggOnce（同一个坑：预热点亮被当成真实进店）。
+    /// </summary>
+    public bool SuppressGuideOnce;
+
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
     }
 
@@ -295,9 +332,10 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
             ? GuildHallUI.Instance.transform
             : transform.root;
         TownSharedChrome.RaiseSharedChrome(hall);
-        // 【2026-10-27 主人拍板「冒险界面参考主界面的数据统一」】资源条不再切 DiamondStamina
-        // （原「只显钻石+体力」口径作废），保持 Main 四格 2×2，与主界面完全一致；
-        // 原 ShowPage/HidePage 的两处 SetMode 随之删除（DiamondStamina 模式已从 ResourceStrip 移除）。
+        // 【2026-10-28 主人重申「冒险界面只有两个资源：一个钻石一个体力」】冒险页顶条只显示钻石+体力，
+        // 金币/天赋石隐藏（10-27 白天版曾实现、当晚被误删后一直四格，现按主人原口径恢复）。
+        // 并排占上排两槽的排布见 ResourceStrip.ApplyRightAlign 的 N=2 分支。
+        ResourceStrip.SetMode(ResourceStrip.Mode.DiamondStamina);
         EnsureStandaloneChrome(hall);
 
         // 越界（<1 或 >8）时落到「应推进的章节」：可选里第一个未通关，全通关回最后一章。
@@ -316,9 +354,29 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         // 【2026-10-23 主人要求】进页左侧标签逐颗弹入（见 AdventureUI.Anim.cs）
         PlayLeftTabsPopIn();
 
-        // 【2026-10-22 主人原话「进了冒险界面就弹出上一局意外退出 是否继续 然后两个按钮确定和取消」】
-        // 上一场战斗中途断掉的局：进冒险页就问一次。确定 = 继续上一局；取消 = 重新开始（丢局）。
-        TryPromptInterruptedRun();
+        // 【2026-10-28 主人报「怎么一进还是出现会长说第七小队的剧情」】进镇预热协程
+        // （TownHubController.CoWarmupPages）会对冒险页「点亮一遍再藏回」，那一遍也走本方法 →
+        // 剧情/询问在 Loading 后面就开播了，玩家进主界面第一眼撞上。
+        // 预热点亮 ≠ 玩家进冒险页 → 本次整块跳过，且**不写任何标记**
+        // （不消耗掉这一岛的播报机会、不清中断局快照），等玩家自己点进冒险页时照常播。
+        // 先例 = 酒馆 SuppressEggOnce（同一坑）。
+        bool warmupOnly = SuppressGuideOnce;
+        SuppressGuideOnce = false;
+
+        if (!warmupOnly)
+        {
+            // 【2026-10-28 主人拍板】会长支线岛情报指引：不在主界面主动弹（相关剧情以后一律不主动出来），
+            // 只在玩家进冒险界面时播（每岛每次洗牌轮一次，播过记档）。有待续局的局让路给续局询问，
+            // 本次不播、标记不写，下次进冒险页再播。
+            if (!RunLoadout.HasInterruptedRun())
+            {
+                SideIslandGuide.TryShowForCurrent(SaveSystem.Instance?.Data);
+            }
+
+            // 【2026-10-22 主人原话「进了冒险界面就弹出上一局意外退出 是否继续 然后两个按钮确定和取消」】
+            // 上一场战斗中途断掉的局：进冒险页就问一次。确定 = 继续上一局；取消 = 重新开始（丢局）。
+            TryPromptInterruptedRun();
+        }
     }
 
     /// <summary>
@@ -381,6 +439,9 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         HideTip();
         HideFloatToast();
         if (!gameObject.activeSelf) return;
+        // 【2026-10-28】离开冒险页还原主界面四格（金币/天赋石恢复）——进冒险页时收成钻石+体力两格。
+        // 放在 activeSelf 判断之后：本页已隐藏时不再回写模式，避免盖掉别的页当前的资源条模式。
+        ResourceStrip.SetMode(ResourceStrip.Mode.Main);
         gameObject.SetActive(false);
         TavernUI.SetGuildHallOverlayMode(false);
     }

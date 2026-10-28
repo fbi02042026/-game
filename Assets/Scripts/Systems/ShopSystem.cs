@@ -121,7 +121,10 @@ public static class ShopSystem
                 string shown = MercRosterDefs.TryGetByHireId(item.mercId, out var mdef)
                     ? mdef.Name + "·" + mdef.Nickname
                     : item.mercId;
-                data.UnlockMerc(item.mercId);
+                // 【2026-10-28 主人拍板】新获得佣兵播「获得佣兵」全屏演出；UnlockMerc 返回 false
+                // （已拥有，理论不会在商店出现）不弹。
+                if (data.UnlockMerc(item.mercId))
+                    MercGainCinematicUI.Show(item.mercId, null);
                 AdventureCodex.MarkMercSeen(item.mercId);
                 result.message = $"已解锁「{shown}」，已加入三选一池";
                 break;

@@ -216,7 +216,7 @@ public partial class BattleManager
                 Debug.LogError($"[BattleManager] 宿主 {gameObject.name} 未激活，协程与 Update 不会执行");
 
             StopBattleSpawnCoroutines();
-            StartCoroutine("BattleStartSequenceCoroutine");
+            _battleStartCo = StartCoroutine(BattleStartSequenceCoroutine());
             MercBattleBanter.EnsureOn(this);
             // 教程关由 TutorialDirector 控刷怪，禁止硬性首波/紧急刷怪抢跑
             if (!Rules.SkipFirstWaveAuto)
@@ -230,6 +230,7 @@ public partial class BattleManager
     }
 
     Coroutine _firstWaveHardFallbackCo;
+    Coroutine _battleStartCo;   // 开战序列协程句柄（原为字符串版 StartCoroutine/StopCoroutine，难维护且走反射找方法）
     /// <summary>
     /// 战前剧情（TryPlayPreBattle）或进关抽奖进行中：硬刷兜底须等它结束，防止剧透/选卡时刷怪抢跑。
     /// 2026-09-29 起进关抽奖也复用这个标志，见 <see cref="CoStageEntryDraft"/>。
@@ -239,7 +240,11 @@ public partial class BattleManager
     /// <summary>停掉开战/硬刷协程，避免连续 LoadStage 叠多个兜底。</summary>
     public void StopBattleSpawnCoroutines()
     {
-        StopCoroutine("BattleStartSequenceCoroutine");
+        if (_battleStartCo != null)
+        {
+            StopCoroutine(_battleStartCo);
+            _battleStartCo = null;
+        }
         StopWaveAnnounce();
         // 战前剧情若在播放中被打断，标志位必须复位，否则 CoFirstWaveHardFallback 会永久卡在等待里
         _preBattleStoryPlaying = false;

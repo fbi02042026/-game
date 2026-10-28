@@ -736,7 +736,9 @@ public partial class AdventureUI
         int markerSlot = _currentFloatSlot;
         if (markerSlot < 0)
             markerSlot = FindSlotIndexOfChapterStage(_selectedChapter, Mathf.Clamp(maxCleared + 1, 1, total));
+#if UNITY_EDITOR
         Debug.Log($"[AdventureUI][标识] 章{_selectedChapter} 当前关{current} → 槽{markerSlot}（槽位[{string.Join(",", _slotChapter)}|{string.Join(",", _slotStage)}]）");
+#endif
         UpdateStageMarker(markerSlot, diffLocked);
         ScrollChestToCurrent(markerSlot);
 

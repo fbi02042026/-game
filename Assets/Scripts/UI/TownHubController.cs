@@ -37,6 +37,11 @@ public class TownHubController : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
+            return;
+        }
         Instance = this;
     }
 
@@ -142,6 +147,12 @@ public class TownHubController : MonoBehaviour
             // 【2026-10-19 修复】预热点亮不是真实进店：酒馆页跳过老板娘问候，
             // 否则新进游戏人在公会大厅就弹「又去裂隙了？」，且当天真进酒馆反而没问候。
             if (page is TavernUI warmTavern) warmTavern.SuppressEggOnce = true;
+            // 【2026-10-28 主人报「一进还是出现会长说第七小队的剧情」】同一坑，冒险页：
+            // 预热点亮会走 AdventureUI.ShowPage → 支线岛情报指引在 Loading 后面就开播
+            // （同页的「上一局意外退出」询问也一样会在预热帧里弹出来）。
+            // 预热不是玩家进冒险页 → 这一趟跳过玩家可见弹窗（不写已播标记、不清中断快照，
+            // 玩家真进冒险页时照常弹）。先例 = 酒馆 TavernUI.SuppressEggOnce。
+            if (page is AdventureUI warmAdventure) warmAdventure.SuppressGuideOnce = true;
             if (loading != null)
             {
                 loading.SetTip(LoadingFlavorText.Next());

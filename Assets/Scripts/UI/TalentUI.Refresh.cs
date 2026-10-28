@@ -332,7 +332,11 @@ public partial class TalentUI
             if (SaveSystem.Instance != null && SaveSystem.Instance.Data != null)
                 return SaveSystem.Instance.Data.talents;
         }
-        catch { }
+        catch (System.Exception ex)
+        {
+            // 读不到存档天赋 = 天赋面板全空（玩家点了像没点），必须留痕而不是静默吞
+            Debug.LogWarning("[TalentUI] GetTalents 读存档失败: " + ex.Message);
+        }
         return null;
     }
 

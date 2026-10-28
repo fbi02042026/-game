@@ -21,6 +21,15 @@ public partial class BattleEntryDraftPanel
     public static void Show(int randomPrice, int focusPrice, List<DraftCategory> cats, long coins,
                             Action<DraftCategory?> onPick, Action onFight, int freeLeft = 0)
     {
+        // 【2026-10-28 主人报「不是说过抽奖时把这个弹窗都关了吗」】抽奖面板弹出前，
+        // 把还开着的「获得」弹窗关掉（获得佣兵详情 MercObtainPopupUI / 获得技能 SkillObtainPopupUI）：
+        //   引导里「点新伙伴头像看底细」那一步（引导第 15 步）开的佣兵详情窗是带暗幕的模态，
+        //   玩家看完没关就进下一次抽奖 → 它会一直盖在抽奖面板上，还挡住抽奖按钮的点击。
+        //   主人原话「抽奖时把这个弹窗都关了」：抽奖这一屏上不允许有它。
+        //   CloseIfOpen 走的是正常关闭出口（照常回调 onClosed，等价于玩家点了确认），抽奖协程不会卡。
+        MercObtainPopupUI.CloseIfOpen();
+        SkillObtainPopupUI.CloseIfOpen();
+
         var ui = Ensure();
         if (ui == null)
         {
@@ -306,7 +315,15 @@ public partial class BattleEntryDraftPanel
         ApplyMapState(_animK);
     }
 
-    void Awake() { Instance = this; }
+    void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this);
+            return;
+        }
+        Instance = this;
+    }
 
     void OnDestroy()
     {

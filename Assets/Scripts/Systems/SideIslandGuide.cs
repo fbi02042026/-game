@@ -5,7 +5,8 @@ using UnityEngine;
 /// 支线岛情报指引（2026-10-26 主人拍板「第一章可以出现支线，并出现一个佣兵信息窗口那个对话指引框，
 /// 告诉玩家这个支线的名字、可进行探索——比如第七小队的信息什么的」）。
 ///
-/// · 触发：主界面 TownSceneBootstrap.Update 每 0.5s 轮询调 <see cref="TryShowForCurrent"/>；
+/// · 触发（2026-10-28 主人拍板改）：玩家进冒险界面时播（AdventureUI.ShowPage），
+///   不再在主界面轮询主动弹——「以后相关剧情不要主动出来」，只随玩家动作/进度触发。
 ///   当前有待打的支线岛（QuestBarData.CurrentSideIsland）且该岛本轮没播过 → 播一段会长单人对话。
 /// · 每岛每次洗牌轮只播一次：SaveData.sideIslandGuide* 双写记录，ResetSideIslandClears 时清空重播。
 /// · 待打岛真源复用 QuestBarData.CurrentSideIsland（任务栏支线行同一口径，别再各算一份）。
@@ -19,10 +20,11 @@ public static class SideIslandGuide
     const string Speaker = "会长";
     const string Line1Fmt = "差点忘了说正事——第七小队在「{0}」那边失联了，只发回来一条消息：";
     const string Line2 = "「岛上似乎藏着不少好东西……滋滋……」信号到这里就断了，老毛病了。";
-    const string Line3 = "这条我先记成支线，不打也不耽误你主线。想去的话，点开冒险页就能看到那个岛，左上角任务栏里也挂着。";
+    const string Line3 = "这条我先记成支线，不打也不耽误你主线。想去的话，就在这张地图上点那个岛，左上角任务栏里也挂着。";
 
     /// <summary>
-    /// 轮询入口：当前有待打的支线岛且该岛没播过指引 → 播（播前先写标记，防中途切场景重复弹）。
+    /// 播放入口（2026-10-28 起由 AdventureUI.ShowPage 调）：当前有待打的支线岛且该岛没播过指引 →
+    /// 播（播前先写标记，防中途切场景重复弹）。
     /// 引导未完成 / 剧情在播 / 没有待打岛 → 静默返回（这些都是正常状态，不是错误）。
     /// </summary>
     public static void TryShowForCurrent(SaveData data)

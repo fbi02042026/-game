@@ -199,13 +199,6 @@ public partial class UnitBase
         // 之前没有任何调用点，等于白放。这里在普攻出伤害前消费一次。
         damage = ApplyAllyAttackDebuffs(damage);
 
-        // 【临时打点 2026-10-18】排查「普攻608/暴击120」矛盾：只打主角每次普攻的攻防实况，定位后删除
-        if (this is Hero && attr != null)
-            Debug.Log($"[DamageDebug] 主角出手 raw={damage:F1} crit={isCrit} " +
-                      $"魔攻={attr.GetAttr(AttrType.MagicAttack):F1} 物攻={attr.GetAttr(AttrType.Attack):F1} " +
-                      $"暴伤={attr.GetAttr(AttrType.CritDamage):F2} 暴率={attr.GetAttr(AttrType.CritRate):F2} " +
-                      $"魔法单位={IsMagicDamageDealer()} 目标={(target != null ? target.name : "null")}");
-
         // 引导关/开局也走正式 ATK，不再使用 2~5 点假伤害压制。
         bool openingHit = false;
 

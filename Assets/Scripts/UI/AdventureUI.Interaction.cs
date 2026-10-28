@@ -699,7 +699,9 @@ public partial class AdventureUI
         if (kind == ResourceAdRewards.ClaimKind.Free)
             tier = "本次免费领 " + ResourceAdRewards.StaminaPerAd + " 体力";
         else if (kind == ResourceAdRewards.ClaimKind.Ad)
-            tier = "看广告领 " + ResourceAdRewards.StaminaPerAd + " 体力";
+            tier = AdKillSwitch.AdsOff
+                ? "广告维护中，请稍后再试"
+                : "看广告领 " + ResourceAdRewards.StaminaPerAd + " 体力";
         else if (kind == ResourceAdRewards.ClaimKind.Diamond)
             tier = "花 " + price + " 钻领 " + ResourceAdRewards.StaminaPerAd + " 体力";
         else
@@ -789,36 +791,32 @@ public partial class AdventureUI
         // 先选职业，确认「进入裂隙」再扣体力进场景（引导也只在此弹一次）
         void EnterAfterJobSelect()
         {
+            // 进本标记统一重设（2026-10-28）：先全清再各自立标记，防上一次残留污染（如礼物本残留误判羁绊本）
+            AdventureUI.ResetPendingFlags();
+            AdventureUI.PendingEndlessRift = endless;   // 裂隙标记在职业选择前已按 endless 立过（TryEnterBattle:749），这里重立防被 Reset 清掉
+
             // 无限裂隙：次数 + 20 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
             if (endless)
             {
                 if (!EndlessRiftRules.TryConsumeEnter())
                 {
-                    PendingEndlessRift = false;
+                    AdventureUI.PendingEndlessRift = false;
                     return;
                 }
-                PendingBattleChapter = 0;
-                PendingBattleDifficulty = 0;
-                PendingGoldDungeon = false;
-                PendingBadgeDungeon = false;
-                PendingScrollDungeon = false;
-                PendingGiftDungeon = false;
-                PendingBondDungeon = false;
-                PendingBondHireId = null;
                 // 不调 SetChapter：裂隙章节状态由 StartEndlessRift 全权负责
             }
             else if (activity)
             {
-                // 活动副本（金币/徽记/卷轴，2026-10-24 主人拍板「都是2次」+ 卷轴 15 体力）：
+                // 活动副本（金币/徽记/卷轴/礼物，2026-10-24 主人拍板「都是2次」+ 卷轴 15 体力）：
                 // 每日次数 + 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
                 if (!ActivityDungeonRules.TryConsumeEnter(actKind))
                     return;
-                PendingBattleChapter = _selectedChapter;
-                PendingBattleDifficulty = _selectedDiff;
-                PendingGoldDungeon = actKind == ActivityDungeonKind.Gold;
-                PendingBadgeDungeon = actKind == ActivityDungeonKind.Badge;
-                PendingScrollDungeon = actKind == ActivityDungeonKind.Scroll;
-                PendingGiftDungeon = actKind == ActivityDungeonKind.Gift;
+                AdventureUI.PendingBattleChapter = _selectedChapter;
+                AdventureUI.PendingBattleDifficulty = _selectedDiff;
+                AdventureUI.PendingGoldDungeon = actKind == ActivityDungeonKind.Gold;
+                AdventureUI.PendingBadgeDungeon = actKind == ActivityDungeonKind.Badge;
+                AdventureUI.PendingScrollDungeon = actKind == ActivityDungeonKind.Scroll;
+                AdventureUI.PendingGiftDungeon = actKind == ActivityDungeonKind.Gift;
                 ChapterManager.Instance?.SetChapter(_selectedChapter);
             }
             else if (!StaminaSystem.TrySpendForAdventure())
@@ -831,23 +829,15 @@ public partial class AdventureUI
             {
                 StoryProgress.QueueTutorialBattle();
                 StoryProgress.ResetTutorialRunInventoryIfNeeded();
-                PendingBattleChapter = 1;
-                PendingBattleDifficulty = 0;
-                PendingGoldDungeon = false;
-                PendingBadgeDungeon = false;
-                PendingScrollDungeon = false;
-                PendingGiftDungeon = false;
+                AdventureUI.PendingBattleChapter = 1;
+                AdventureUI.PendingBattleDifficulty = 0;
                 ChapterManager.Instance?.SetChapter(1);
             }
             else if (!endless && !activity)
             {
                 // 主线（活动副本已在上面 activity 分支处理完进本标记）
-                PendingBattleChapter = _selectedChapter;
-                PendingBattleDifficulty = _selectedDiff;
-                PendingGoldDungeon = false;
-                PendingBadgeDungeon = false;
-                PendingScrollDungeon = false;
-                PendingGiftDungeon = false;
+                AdventureUI.PendingBattleChapter = _selectedChapter;
+                AdventureUI.PendingBattleDifficulty = _selectedDiff;
                 ChapterManager.Instance?.SetChapter(_selectedChapter);
                 NoteChosenBranch(_selectedChapter);
             }

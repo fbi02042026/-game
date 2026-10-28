@@ -56,7 +56,15 @@ public class AchievementMilestoneUI : MonoBehaviour
         return fb.AddComponent<AchievementMilestoneUI>();
     }
 
-    void Awake() => Instance = this;
+    void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+    }
 
     void OnDestroy()
     {

@@ -75,23 +75,23 @@ public class SaveData
     public int stamina = 100;
     /// <summary>体力上次结算 Unix 秒（用于回复）</summary>
     public long lastStaminaUtc = 0;
-    /// <summary>广告奖励日键 yyyyMMdd（UTC）</summary>
+    /// <summary>广告奖励日键 yyyyMMdd（本地日，2026-10-28 由 UTC 改本地，0 点刷新与每日登录同口径）</summary>
     public string adRewardDayKey = "";
     /// <summary>当日已领体力广告次数</summary>
     public int adStaminaClaimCount = 0;
     /// <summary>当日已领金币广告次数</summary>
     public int adGoldClaimCount = 0;
-    /// <summary>复活档位日键 yyyyMMdd（UTC），跨天清零 reviveClaimCount（2026-10-25 主人拍板：每日复活阶梯）</summary>
+    /// <summary>复活档位日键 yyyyMMdd（本地日，0 点刷新；2026-10-28 由 UTC 改本地），跨天清零 reviveClaimCount（2026-10-25 主人拍板：每日复活阶梯）</summary>
     public string reviveDayKey = "";
     /// <summary>当日已用复活次数（每日 2 广告 + 50 钻 + 100 钻，之后只能返回；ADS_ENABLED=false 期间不参与判定）</summary>
     public int reviveClaimCount = 0;
-    /// <summary>分享奖励日键 yyyyMMdd（UTC），跨天可再领（2026-10-25 主人拍板：每日一次分享得 100 钻）</summary>
+    /// <summary>分享奖励日键 yyyyMMdd（本地日，2026-10-28 由 UTC 改本地，0 点刷新），跨天可再领（2026-10-25 主人拍板：每日一次分享得 100 钻）</summary>
     public string shareRewardDayKey = "";
-    /// <summary>好评引导已弹日键 yyyyMMdd（UTC），跨天可再弹（2026-10-25 主人拍板：每日最多弹一次）</summary>
+    /// <summary>好评引导已弹日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地），跨天可再弹（2026-10-25 主人拍板：每日最多弹一次）</summary>
     public string taptapRateDayKey = "";
 
     // === 无限裂隙（2026-10-17 主人拍板）===
-    /// <summary>无限裂隙每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday</summary>
+    /// <summary>无限裂隙每日次数日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地 0 点刷新；升级兼容见 ShopDefs.LegacyUtcDayKeyStillToday），跨天清零 triesToday</summary>
     public string endlessRiftDayKey = "";
     /// <summary>今日已用进入次数（每天 2 次）</summary>
     public int endlessRiftTriesToday = 0;
@@ -106,19 +106,19 @@ public class SaveData
 
     // === 活动副本（2026-10-23 拍板「活动副本一拆二」+ 2026-10-24 主人拍板：
     //     金币周一/三/六、徽记周二/四/日开放，每日各 2 次，每次 10 体力；规则见 ActivityDungeonRules）===
-    /// <summary>金币副本每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday（照 endlessRift 口径）</summary>
+    /// <summary>金币副本每日次数日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地），跨天清零 triesToday（照 endlessRift 口径）</summary>
     public string goldDungeonDayKey = "";
     /// <summary>金币副本今日已用进入次数（每天 2 次，见 ActivityDungeonRules.DAILY_TRIES）</summary>
     public int goldDungeonTriesToday = 0;
-    /// <summary>徽记副本每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday（照 endlessRift 口径）</summary>
+    /// <summary>徽记副本每日次数日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地），跨天清零 triesToday（照 endlessRift 口径）</summary>
     public string badgeDungeonDayKey = "";
     /// <summary>徽记副本今日已用进入次数（每天 2 次，见 ActivityDungeonRules.DAILY_TRIES）</summary>
     public int badgeDungeonTriesToday = 0;
-    /// <summary>卷轴副本每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday（2026-10-24 主人拍板：周五开放，照 endlessRift 口径）</summary>
+    /// <summary>卷轴副本每日次数日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地），跨天清零 triesToday（2026-10-24 主人拍板：周五开放，照 endlessRift 口径）</summary>
     public string scrollDungeonDayKey = "";
     /// <summary>卷轴副本今日已用进入次数（每天 2 次，见 ActivityDungeonRules.DAILY_TRIES）</summary>
     public int scrollDungeonTriesToday = 0;
-    /// <summary>礼物副本每日次数日键 yyyyMMdd（UTC），跨天清零 triesToday（2026-10-26 主人拍板：周六开放，掉好感礼物）</summary>
+    /// <summary>礼物副本每日次数日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地），跨天清零 triesToday（2026-10-26 主人拍板：周六开放，掉好感礼物）</summary>
     public string giftDungeonDayKey = "";
     /// <summary>礼物副本今日已用进入次数（每天 2 次，见 ActivityDungeonRules.DAILY_TRIES）</summary>
     public int giftDungeonTriesToday = 0;

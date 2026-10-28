@@ -32,6 +32,11 @@ public class LowHpScreenEdgeFlash : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         if (_group == null) Build();
         // 2026-10-22 修：残血退出战斗后 Hero 随场景销毁，没人再调 Tick(false)，

@@ -10,7 +10,8 @@ using UnityEngine.UI;
 /// 算法：
 ///   1. Screen.safeArea（像素）按 Screen.width/height 归一化成 0~1 的上/下不安全比例；
 ///   2. 乘以父级 RectTransform 的高度，得到逻辑单位的内缩量（父级即满屏 Canvas 根，故成立）；
-///   3. 自身锚点强制全拉伸（anchorMin=(0,0) / anchorMax=(1,1)），用 offsetMin/offsetMax 表达矩形。
+///   3. Shift / Offset（2026-10-28 起）：只挪 anchoredPosition，anchor / sizeDelta / pivot 一律不动；
+///      只有 Inset 才把自身锚点强制全拉伸（anchorMin=(0,0) / anchorMax=(1,1)），用 offsetMin/offsetMax 表达矩形。
 /// 左右永远不缩（竖屏设计宽度锁死），只处理上/下（由 edge 决定）。
 ///
 /// 为什么必须「记录 base + 每次从 base 重算」：
@@ -21,7 +22,10 @@ using UnityEngine.UI;
 ///      因此首次 Apply 先把「当前矩形」反推成「全拉伸语义下的四边内缩量」存为 base，之后一律从 base 重算。
 ///
 /// 两种模式（重要）：
-///   Shift（默认）：整体向安全区方向平移，尺寸不变 —— 适合固定高度的顶/底栏（默认用它，不会压扁按钮）。
+///   Shift（默认）：整体向安全区方向平移，尺寸不变 —— 适合固定高度的顶/底栏（不会压扁按钮）。
+///       【2026-10-28 重写】平移改为只挪 anchoredPosition，**不再把锚点改成全拉伸** ——
+///       旧实现按「当时父级尺寸」捕获全拉伸 base，CanvasScaler 生效后基准失配，
+///       矩形会随父级缩放变形甚至变负（战斗顶条 200×-1041 事故同源）。
 ///   Inset：从被遮挡的那一边裁掉，尺寸变小 —— 适合满屏面板（背景、弹窗遮罩）。
 ///   Offset（2026-09-28 新增）：只改 anchoredPosition，**完全不碰 anchor / sizeDelta / pivot**。
 ///       顶栏用这个：顶栏本来就是「贴顶锚定 + 固定高」，Shift 会把它的锚点强行改成全拉伸，
@@ -72,31 +76,77 @@ public class SafeAreaFitter : MonoBehaviour
     bool _basePosCaptured;
     float _appliedY;               // 本组件当前施加的 y 位移（用于「重锚点时反推基准」）
     float _sigMinY, _sigMaxY;      // 基准对应的锚点 y 签名（锚点变了就重新取基准）
-    int _lastW = -1, _lastH = -1;  // Offset：上一次的屏幕尺寸 / 安全区 / 画布缩放（用于变化检测，不变就不干活）
+    int _lastW = -1, _lastH = -1;  // Offset/Shift：上一次的屏幕尺寸 / 安全区 / 画布缩放 / 父级高（变化检测，不变就不干活）
     Rect _lastSafe = new Rect(0f, 0f, -1f, -1f);
     float _lastSf = -1f;
+    float _lastPh = -1f;
 
-    void Awake() => Apply();
+    /// <summary>是否已经报过「矩形退化」错误（同一个组件只报一次，避免刷屏）。</summary>
+    bool _degenerateReported;
+
+    // ================================================================
+    // 2026-10-28 战斗顶条消失根因修复（详见 EnsureConfigured 的注释）
+    //
+    // AddComponent<SafeAreaFitter>() 会【同步】触发 Awake → Apply()。
+    // 那一刻 mode 还是枚举默认值 Shift、edge 还是默认值 Both，
+    // Shift 分支会把节点锚点强制改成全拉伸 (0,0)~(1,1)（SetFullStretch），
+    // 并且按【当时父级的尺寸】捕获 base。
+    // 战斗里 CanvasScaler 生效前画布根 rect 还是屏幕像素（1240×2770），
+    // 缩放后变成参考单位（720×1608.75），
+    // 于是顶条尺寸 = 新父级尺寸 + 旧基准算出的 sizeDelta(720-1240, 120-2770)=(-520,-2650)
+    //            = (200, -1041)  → 高度为负，整条顶条不可见。
+    // （2026-10-27 实测到的「rect 200×-1042」就是这个数，一个字不差。）
+    //
+    // 修法：顶/底栏（Offset 语义）在 AddComponent 之前先把配置登记好，
+    // 让 Awake 里的第一次 Apply 就用正确模式，绝不允许默认 Shift 抢跑。
+    // ================================================================
+    struct PendingConfig
+    {
+        public Edge edge;
+        public FitMode mode;
+        public bool enabledFit;
+    }
+
+    static readonly System.Collections.Generic.Dictionary<int, PendingConfig> _pending =
+        new System.Collections.Generic.Dictionary<int, PendingConfig>();
+
+    void Awake()
+    {
+        // 运行时 AddComponent 进来的组件：Awake 早于调用方赋值，
+        // 必须用预登记的配置，否则会以默认 Shift 抢跑改坏锚点（见上方注释）。
+        // 键 = 宿主 GameObject 的 instanceID（Component 自己的 ID 与 GameObject 不同，别用错）。
+        int id = gameObject.GetInstanceID();
+        if (_pending.TryGetValue(id, out var cfg))
+        {
+            edge = cfg.edge;
+            mode = cfg.mode;
+            enabledFit = cfg.enabledFit;
+        }
+        Apply();
+    }
     void Start() => Apply();
 
     /// <summary>
-    /// Offset 模式专用兜底：画布 scaleFactor / 屏幕尺寸 / 安全区只要变了就重算一次。
+    /// Offset / Shift 共用兜底：画布 scaleFactor / 屏幕尺寸 / 安全区 / 父级高度只要变了就重算一次。
     /// （AddComponent 的瞬间 CanvasScaler 可能还没量准，只靠 Awake/Start 会算错一次然后一直错。）
     /// 什么都没变时每帧只做几次比较，不做任何写入。
     /// </summary>
     void LateUpdate()
     {
-        if (mode != FitMode.Offset) return;
+        if (mode != FitMode.Offset && mode != FitMode.Shift) return;
         var rt = transform as RectTransform;
         if (rt == null) return;
 
         int w = Screen.width, h = Screen.height;
         Rect safe = Screen.safeArea;
         float sf = ScaleFactorOf(rt);
-        if (w == _lastW && h == _lastH && safe == _lastSafe && Mathf.Approximately(sf, _lastSf))
+        var parent = rt.parent as RectTransform;
+        float ph = parent != null ? parent.rect.height : 0f;
+        if (w == _lastW && h == _lastH && safe == _lastSafe
+            && Mathf.Approximately(sf, _lastSf) && Mathf.Approximately(ph, _lastPh))
             return;
-        _lastW = w; _lastH = h; _lastSafe = safe; _lastSf = sf;
-        ApplyOffset(rt);
+        _lastW = w; _lastH = h; _lastSafe = safe; _lastSf = sf; _lastPh = ph;
+        ApplyByPosition(rt, mode == FitMode.Offset ? ComputeOffsetDy(rt) : ComputeShiftDy(parent));
     }
 
     void OnRectTransformDimensionsChange()
@@ -111,10 +161,13 @@ public class SafeAreaFitter : MonoBehaviour
         var rt = transform as RectTransform;
         if (rt == null) return;
 
-        // Offset 模式：只挪 anchoredPosition，不需要父级矩形做参照，也不看父级是否量好尺寸。
+        // Offset / Shift 统一走「只挪 anchoredPosition，绝不碰锚点」（2026-10-28）：
+        // 两者差别只在位移量的算法（Offset 按屏幕像素÷缩放，Shift 按父级高度比例）。
+        // 旧 Shift 实现会把锚点强制改成全拉伸并按【当时父级尺寸】捕获 base —— CanvasScaler
+        // 生效后基准失配，矩形尺寸会随父级缩放变形甚至变负（战斗顶条 200×-1041 同源事故）。
         if (mode == FitMode.Offset)
         {
-            ApplyOffset(rt);
+            ApplyByPosition(rt, ComputeOffsetDy(rt));
             return;
         }
 
@@ -123,6 +176,13 @@ public class SafeAreaFitter : MonoBehaviour
         // 挂在 Canvas 根节点上（parent 不是 RectTransform）时同样直接放弃 —— 惰性 no-op，不影响外观。
         if (parent == null || parent.rect.width <= 0f || parent.rect.height <= 0f) return;
 
+        if (mode == FitMode.Shift)
+        {
+            ApplyByPosition(rt, ComputeShiftDy(parent));
+            return;
+        }
+
+        // ── Inset（内缩裁边，全工程当前无调用方，保留原语义）──
         if (!_baseCaptured)
             CaptureBase(rt, parent);
 
@@ -153,18 +213,9 @@ public class SafeAreaFitter : MonoBehaviour
             bool fitTop = edge == Edge.Top || edge == Edge.Both;
             bool fitBottom = edge == Edge.Bottom || edge == Edge.Both;
 
-            if (mode == FitMode.Shift)
-            {
-                // 平移：上下边同向移动同样距离，尺寸保住（顶/底栏不会被压扁）
-                if (fitTop) { omin.y -= topU; omax.y -= topU; }
-                if (fitBottom) { omin.y += botU; omax.y += botU; }
-            }
-            else
-            {
-                // 内缩：只动被遮挡的那一侧，矩形变小（满屏面板不会溢出安全区）
-                if (fitTop) omax.y -= topU;
-                if (fitBottom) omin.y += botU;
-            }
+            // 内缩：只动被遮挡的那一侧，矩形变小（满屏面板不会溢出安全区）
+            if (fitTop) omax.y -= topU;
+            if (fitBottom) omin.y += botU;
 
             SetFullStretch(rt, omin, omax);
         }
@@ -174,24 +225,47 @@ public class SafeAreaFitter : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Offset 模式：只改 anchoredPosition，anchor / sizeDelta / pivot 一律不动。
-    /// 位移量 = Screen.safeArea 的不安全高度(像素) ÷ Canvas.scaleFactor（精确换算，不看父级尺寸）。
-    /// 幂等：base 只在「首次」或「锚点被别的布局逻辑（如 UiLayoutStretch）改过」时记录，
-    /// 且记录时先减掉本组件已施加的位移，所以重锚定不会导致二次叠加或位置跳变。
-    /// </summary>
-    void ApplyOffset(RectTransform rt)
+    /// <summary>Shift 模式的位移量：按父级高度比例换算（旧算法原样保留，只是不再动锚点）。</summary>
+    float ComputeShiftDy(RectTransform parent)
+    {
+        if (parent == null) return 0f;   // 挂在画布根上量不了父级高 → 惰性 no-op（QuestHudBar 语义）
+        bool fitTop = edge == Edge.Top || edge == Edge.Both;
+        bool fitBottom = edge == Edge.Bottom || edge == Edge.Both;
+        float dy = 0f;
+        if (enabledFit && (fitTop || fitBottom) && Screen.width > 0 && Screen.height > 0)
+        {
+            Rect safe = Screen.safeArea;
+            float topN = (Screen.height - (safe.y + safe.height)) / Screen.height;
+            float bottomN = safe.y / Screen.height;
+            float ph = parent.rect.height;
+            if (fitTop) dy -= topN * ph;      // 避上边 = 整体往下挪
+            if (fitBottom) dy += bottomN * ph; // 避下边 = 整体往上挪
+        }
+        return dy;
+    }
+
+    /// <summary>Offset 模式的位移量：屏幕像素 ÷ Canvas.scaleFactor（精确换算，不看父级尺寸）。</summary>
+    float ComputeOffsetDy(RectTransform rt)
     {
         bool fitTop = edge == Edge.Top || edge == Edge.Both;
         bool fitBottom = edge == Edge.Bottom || edge == Edge.Both;
-
         float dy = 0f;
         if (enabledFit && (fitTop || fitBottom) && Screen.width > 0 && Screen.height > 0)
         {
             if (fitTop) dy -= TotalTopInsetUnits(rt);  // 避上边 = 安全区顶部 + 微信小游戏胶囊预留，整体往下挪
             if (fitBottom) dy += BottomInsetUnits(rt); // 避下边 = 整体往上挪
         }
+        return dy;
+    }
 
+    /// <summary>
+    /// Offset / Shift 共用的写入段（2026-10-28）：只改 anchoredPosition，anchor / sizeDelta / pivot 一律不动。
+    /// 位移量 dy 由调用方按模式算好（Offset = 屏幕像素÷scaleFactor；Shift = 父级高度比例）。
+    /// 幂等：base 只在「首次」或「锚点被别的布局逻辑（如 UiLayoutStretch）改过」时记录，
+    /// 且记录时先减掉本组件已施加的位移，所以重锚定不会导致二次叠加或位置跳变。
+    /// </summary>
+    void ApplyByPosition(RectTransform rt, float dy)
+    {
         bool anchorsChanged = !Mathf.Approximately(rt.anchorMin.y, _sigMinY)
                               || !Mathf.Approximately(rt.anchorMax.y, _sigMaxY);
         if (!_basePosCaptured || anchorsChanged)
@@ -215,6 +289,31 @@ public class SafeAreaFitter : MonoBehaviour
         finally
         {
             _applying = false;
+        }
+
+        // 2026-10-28：矩形为负（宽/高 < 0）= 这条栏根本显示不出来。
+        // 战斗顶条 2026-10-27 就是这么消失的（rect 200×-1041，高度为负）。
+        // 这里直接报错，不静默 —— 免得下次又只能靠肉眼猜。
+        // ⚠ 只在「父级已量好尺寸」后才判：画布还没布局时（如 Instantiate 当帧），横向拉伸
+        //   子节点的宽 = 父宽0 + 负 sizeDelta（GuildHallUI 底栏跳板节点 sizeDelta.x=-670），
+        //   瞬时为负是正常的，不是退化 —— 别把真报错的额度烧在这种瞬时态上。
+        var layoutParent = rt.parent as RectTransform;
+        bool parentLaidOut = layoutParent == null
+                             || (layoutParent.rect.width > 0f && layoutParent.rect.height > 0f);
+        // 【2026-10-28 主人拍板（方案1）】横拉 + 负 sizeDelta.x 的「跳板节点」不做退化告警：
+        // 主界面底栏 BottomNav（sizeDelta.x=-670）宽度设计上就是 父宽-670，子节点再 +670 撑回满宽，
+        // 跳板自己宽度为负是设计使然——挂载首帧父级还没按参考宽 720 铺开（实测 573）时跳板必为负
+        //（573-670=-97），但可见栏体是子节点，显示不受影响。这类节点每次回主城都新建，
+        // 不跳过就会每次登录误报一条 LogError。其余节点照旧报错，真退化不让它悄悄烂掉。
+        bool isNegPadSpringboard =
+            Mathf.Approximately(rt.anchorMin.x, 0f) && Mathf.Approximately(rt.anchorMax.x, 1f)
+            && rt.sizeDelta.x < 0f;
+        if (!_degenerateReported && !isNegPadSpringboard && parentLaidOut && (rt.rect.width < 0f || rt.rect.height < 0f))
+        {
+            _degenerateReported = true;
+            Debug.LogError($"[SafeAreaFitter] {name} 的矩形退化为负（size={rt.rect.size}，" +
+                           $"anchor={rt.anchorMin}~{rt.anchorMax}），这条栏不会显示。" +
+                           "请检查锚点/尺寸是否被别的布局逻辑改过（本组件的 Offset 模式只挪位置，不改锚点）。");
         }
     }
 
@@ -330,24 +429,80 @@ public class SafeAreaFitter : MonoBehaviour
     /// <summary>给一个「顶部横条」节点挂上 Offset 适配（幂等：已挂就复用，只校正参数）。</summary>
     public static SafeAreaFitter EnsureTopOffset(RectTransform rt)
     {
-        if (rt == null) return null;
-        var f = rt.GetComponent<SafeAreaFitter>();
-        if (f == null) f = rt.gameObject.AddComponent<SafeAreaFitter>();
-        f.edge = Edge.Top;
-        f.mode = FitMode.Offset;
-        f.enabledFit = true;
-        return f;
+        return EnsureConfigured(rt, Edge.Top, FitMode.Offset, true);
     }
 
     /// <summary>给一个「底部横条」节点挂上 Offset 适配（幂等：已挂就复用，只校正参数）。</summary>
     public static SafeAreaFitter EnsureBottomOffset(RectTransform rt)
     {
+        return EnsureConfigured(rt, Edge.Bottom, FitMode.Offset, true);
+    }
+
+    /// <summary>
+    /// 带配置的挂载入口（2026-10-28 公开）：外部代码**一律走这里，禁止直接 AddComponent&lt;SafeAreaFitter&gt;()** ——
+    /// AddComponent 会同步触发 Awake，那一刻 mode/edge 还是枚举默认值（Shift + Both），会抢跑。
+    /// 已挂就复用并校正参数，幂等。
+    /// </summary>
+    public static SafeAreaFitter AddConfigured(RectTransform rt, Edge edge, FitMode mode, bool enabledFit = true)
+    {
+        return EnsureConfigured(rt, edge, mode, enabledFit);
+    }
+
+    /// <summary>
+    /// 统一挂载入口（2026-10-28）：AddComponent 之前先登记配置，让组件 Awake 里的第一次 Apply
+    /// 就用正确的 edge / mode，绝不允许枚举默认值（Shift + Both）抢跑。
+    ///
+    /// 为什么必须这样：AddComponent 同步触发 Awake → Apply()，默认 mode=Shift 会走
+    /// SetFullStretch 把节点锚点改成全拉伸，并按【当时的父级尺寸】捕获 base。
+    /// 战斗画布在 CanvasScaler 生效前父级 rect 还是屏幕像素（1240×2770），缩放后变参考单位
+    /// （720×1608.75），旧基准算出的 sizeDelta(-520,-2650) 会让顶条实际尺寸变成 (200,-1041)
+    /// ——高度为负，整条顶条直接不可见（2026-10-27「战斗顶条消失」的根因）。
+    /// 顶栏/底栏一律走 Offset（只挪 anchoredPosition，绝不碰锚点），此路不通。
+    ///
+    /// 另外挂完会核对锚点有没有被改过 —— 万一以后谁又改了挂载顺序，这里立刻报错，不让它悄悄烂掉。
+    /// </summary>
+    static SafeAreaFitter EnsureConfigured(RectTransform rt, Edge edge, FitMode mode, bool enabledFit)
+    {
         if (rt == null) return null;
+
         var f = rt.GetComponent<SafeAreaFitter>();
-        if (f == null) f = rt.gameObject.AddComponent<SafeAreaFitter>();
-        f.edge = Edge.Bottom;
-        f.mode = FitMode.Offset;
-        f.enabledFit = true;
+        if (f == null)
+        {
+            var aminBefore = rt.anchorMin;
+            var amaxBefore = rt.anchorMax;
+
+            int id = rt.gameObject.GetInstanceID();
+            _pending[id] = new PendingConfig { edge = edge, mode = mode, enabledFit = enabledFit };
+            try
+            {
+                f = rt.gameObject.AddComponent<SafeAreaFitter>();
+            }
+            finally
+            {
+                _pending.Remove(id);
+            }
+
+            // 兜底再校准一次（Awake 里已按登记配置跑过，这里保证最终参数就是调用方要的）
+            f.edge = edge;
+            f.mode = mode;
+            f.enabledFit = enabledFit;
+            f.Apply();
+
+            if (rt.anchorMin != aminBefore || rt.anchorMax != amaxBefore)
+            {
+                Debug.LogError($"[SafeAreaFitter] {rt.name} 的锚点在挂载时被改动 " +
+                               $"({aminBefore}~{amaxBefore} → {rt.anchorMin}~{rt.anchorMax})。" +
+                               "顶/底栏必须是 Offset 模式（只挪位置、不改锚点）；" +
+                               "请检查是否有别处在挂载前把它按 Shift 处理了。");
+            }
+        }
+        else
+        {
+            f.edge = edge;
+            f.mode = mode;
+            f.enabledFit = enabledFit;
+            f.Apply();
+        }
         return f;
     }
 

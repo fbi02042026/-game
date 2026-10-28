@@ -37,7 +37,15 @@ public class TavernRosterPanel : MonoBehaviour
         return _instance;
     }
 
-    void Awake() => _instance = this;
+    void Awake()
+    {
+        if (_instance != null && _instance != this)
+        {
+            Destroy(this);
+            return;
+        }
+        _instance = this;
+    }
 
     void OnDestroy()
     {

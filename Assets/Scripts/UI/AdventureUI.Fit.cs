@@ -444,14 +444,8 @@ public partial class AdventureUI
     /// <summary>按名字深找子孙节点（含自身）。</summary>
     static Transform FindDeepChild(Transform parent, string name)
     {
-        if (parent == null) return null;
-        if (parent.name == name) return parent;
-        for (int i = 0; i < parent.childCount; i++)
-        {
-            var r = FindDeepChild(parent.GetChild(i), name);
-            if (r != null) return r;
-        }
-        return null;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFind.Deep(parent, name);
     }
 
     /// <summary>

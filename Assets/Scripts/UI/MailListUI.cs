@@ -248,14 +248,8 @@ public class MailListUI : MonoBehaviour
 
     static Transform FindDeep(Transform parent, string name)
     {
-        if (parent == null) return null;
-        if (parent.name == name) return parent;
-        for (int i = 0; i < parent.childCount; i++)
-        {
-            var r = FindDeep(parent.GetChild(i), name);
-            if (r != null) return r;
-        }
-        return null;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFind.Deep(parent, name);
     }
 
     void BuildDim()
@@ -725,16 +719,7 @@ public class MailListUI : MonoBehaviour
 
     static Text NewText(Transform parent, string name, string content, int size, TextAnchor align, Color color)
     {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        go.transform.SetParent(parent, false);
-        var t = go.GetComponent<Text>();
-        t.font = GameFonts.GetChinese();
-        t.text = content;
-        t.fontSize = size;
-        t.alignment = align;
-        t.color = color;
-        t.supportRichText = false;
-        t.raycastTarget = false;
-        return t;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFactory.NewTextColored(parent, name, content, size, align, color);
     }
 }

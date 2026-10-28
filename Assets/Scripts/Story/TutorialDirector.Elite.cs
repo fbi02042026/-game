@@ -67,7 +67,12 @@ public partial class TutorialDirector
                 // Visual 与 MonsterBody 同 X（Init 里 localPosition 归零），直接读 transform 即可
                 float ex = elite.transform.position.x;
                 bool onScreen = ex >= vMin && ex <= vMax;
-                if (!elite.IsEnteringMap && onScreen) break;
+                // 【2026-10-28】宿敌拍现在走「剧情前置暂停」窗（UnitsCanAct=false + AllowMonsterMapEnter=true）：
+                // 怪只走到屏幕边缘站定（_isEnteringMap 仍为 true、_enterAtPauseStop=true），与
+                // WaitMonstersFinishedEnter（TutorialDirector.Wait.cs:38）同口径 —— EnterAtPauseStop 也算
+                // 入场完毕，否则这里会空转到 15s 超时才弹对白。
+                bool entered = !elite.IsEnteringMap || elite.EnterAtPauseStop;
+                if (entered && onScreen) break;
                 enterWait += Time.unscaledDeltaTime;
                 yield return null;
             }

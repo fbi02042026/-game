@@ -64,9 +64,8 @@ public class TownSceneBootstrap : MonoBehaviour
         if (_questTickTimer > 0f) return;
         _questTickTimer = QuestTickInterval;
         MainQuestSystem.Tick();
-        // 【2026-10-26 主人拍板「第一章可以出现支线并弹佣兵信息指引」】有待打支线岛且没播过 → 弹会长情报对话
-        //（每岛每次洗牌轮一次；引导未完成 / 剧情在播 / 无待打岛时内部静默返回，不弹不写档）
-        SideIslandGuide.TryShowForCurrent(SaveSystem.Instance.Data);
+        // 【2026-10-28 主人拍板】支线岛指引（SideIslandGuide）不再在主界面轮询主动弹——
+        // 「以后相关剧情不要主动出来」，触发点挪到玩家进冒险界面时（AdventureUI.ShowPage）。
     }
 
     void Start()

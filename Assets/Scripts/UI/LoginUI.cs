@@ -102,6 +102,7 @@ public class LoginUI : MonoBehaviour
         EnsureTapLoginRow();
         EnsureAutoNotice();
         GameBgm.Play(GameBgm.Track.Login);
+        AdKillSwitch.EnsureStarted();   // 【2026-10-28】登录界面出现即后台拉广告急停配置（幂等，不阻塞）
     }
 
     /// <summary>

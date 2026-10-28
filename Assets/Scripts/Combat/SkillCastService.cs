@@ -563,8 +563,6 @@ public sealed class SkillCastService
             return;
         }
 
-        // 【临时打点 2026-10-18】排查攻击虚高：落到永久 AddAttr 的团队增益（含 MagicAttack 分流），定位后删除
-        Debug.Log($"[BuffDebug] ApplyTeamBuff 永久分支 attr={buffAttr} value={buffValue:0.##} percent={isPercent} skill={skill?.skillId}");
         void Apply(UnitBase u)
         {
             if (u == null || u.isDead || u.attr == null) return;

@@ -17,8 +17,9 @@ using UnityEngine;
 ///   · 只临时偏移 localPosition + CanvasGroup.alpha 淡入，播完精确写回捕获的 base 值；
 ///     不动 anchor / pivot / sizeDelta，任何锚点类型（含被 SafeAreaFitter 改成全拉伸的）都安全。
 ///   · TopBar 从右滑入只动 x：顶条挂着 SafeAreaFitter(Offset) 每帧管辖 y（x 一律不动，见其
-///     ApplyOffset 注释），x 动画与它正交不打架；BottomNav 根是 SafeAreaFitter(Shift)，
-///     Shift 模式只在 Awake/Start/尺寸变化时施加、无每帧轮询，0.4s 动画期间不冲突。
+///     ApplyByPosition 注释），x 动画与它正交不打架；BottomNav 根也是 SafeAreaFitter(Offset)
+///     【2026-10-28 由 Shift 改 Offset，与 TownSharedChrome.EnsureBottomOffset 口径对齐】，
+///     只在 Awake/Start/尺寸变化时施加 y，x 动画与它正交不打架。
 ///   · 缓动 OutBack 轻微回弹（滑到位轻轻一弹），错峰进入：顶条 → 左右列 → 底栏。
 ///
 /// 时机（保证动效被看见）：
@@ -46,10 +47,21 @@ public static class TownEntranceMotion
 
     static GuildHallUI _pendingHost;   // 片头期间记下，等大厅揭开再播
     static bool _playedThisLogin;      // 【主人拍板「每次登录出现一次」】本次登录会话是否已播过
+    static bool _running;              // 入场动效是否正在播（任务栏逐行弹入要等它结束，见 QuestBarBinder）
+
+    /// <summary>
+    /// 入场动效是否正在播（2026-10-28：主界面左侧任务栏的逐行弹入要等它播完，
+    /// 否则「整列从左滑入」与「逐行弹入」两段位移同时跑会打架）。
+    /// </summary>
+    public static bool IsRunning => _running;
 
     /// <summary>域重载兜底：进程启动（或编辑器关域重载时）清标记。</summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatics() => _playedThisLogin = false;
+    static void ResetStatics()
+    {
+        _playedThisLogin = false;
+        _running = false;
+    }
 
     /// <summary>每次登录时重置（BootManager.EnterTown 唯一调用）：登录进主界面才允许播一轮。</summary>
     public static void ResetForLogin() => _playedThisLogin = false;
@@ -71,6 +83,7 @@ public static class TownEntranceMotion
         }
         _playedThisLogin = true;
         Debug.Log("[TownEntrance] Schedule → 直接排播");
+        _running = true;
         host.StartCoroutine(CoPlayWhenReady(host));
     }
 
@@ -82,6 +95,7 @@ public static class TownEntranceMotion
         if (host == null) return;
         _playedThisLogin = true;
         Debug.Log("[TownEntrance] PlayPending → 片头结束，开始排播");
+        _running = true;
         host.StartCoroutine(CoPlayWhenReady(host));
     }
 
@@ -97,7 +111,11 @@ public static class TownEntranceMotion
 
         List<Item> items = Prepare(host);
         Debug.Log($"[TownEntrance] 出场位已摆好 items={items.Count} overlay={BattleLoadingOverlay.IsShowing}");
-        if (items.Count == 0) yield break;
+        if (items.Count == 0)
+        {
+            _running = false;
+            yield break;
+        }
 
         // Loading 全程盖着主界面：等它收掉再开始（出场位已在 Prepare 摆好，不会闪原位）
         while (BattleLoadingOverlay.IsShowing) yield return null;
@@ -120,6 +138,7 @@ public static class TownEntranceMotion
         }
         // 终态兜底：逐项精确写回 base（与捕获值完全一致，布局零残留）
         for (int i = 0; i < items.Count; i++) items[i].Finish();
+        _running = false;
         Debug.Log($"[TownEntrance] 播放完成 frames={frames} 实际耗时={(Time.realtimeSinceStartup - startReal):F2}s " +
                   $"（frames≤2 说明被卡帧跳过动画）");
     }

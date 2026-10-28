@@ -132,6 +132,11 @@ public partial class BattleUI : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
 
         // 刘海避让最先挂（2026-10-26 主人「战斗中顶部没有适配，要和主界面适配一样避免刘海」）：
@@ -139,10 +144,23 @@ public partial class BattleUI : MonoBehaviour
         // 差别只在时序 —— 下面 AutoBindMissingRefs / BattleSideHud / BattleViewportFit 等任何一步
         // 在真机抛异常，原 167 行的挂载就整段静默跳过。这里提前挂顶栏三件套（幂等，重复调用不叠加），
         // 167 行的调用保留，负责晚一步才建出来的 BossBar。
-        // 此刻画布尚未布局、父级 rect=0，Shift 误跑路径天然不触发，提前挂零风险。
+        //
+        // 【2026-10-28 修正旧注释】原文写「此刻画布尚未布局、父级 rect=0，Shift 误跑路径天然不触发」——
+        // 这个假设是错的：画布根 rect 不是 0，而是**尚未缩放的屏幕像素尺寸**（实测 1240×2770）。
+        // 正因为它非 0，SafeAreaFitter 才会以默认 Shift 抢跑（AddComponent 同步触发 Awake→Apply），
+        // 把顶条锚点改成全拉伸并按像素尺寸捕获 base → CanvasScaler 生效后顶条高度变负 → 整条不可见。
+        // 现在顶/底栏统一走 SafeAreaFitter.EnsureConfigured（AddComponent 前先登记配置，
+        // Awake 首次 Apply 就是 Offset，绝不改锚点），这里提前挂零风险。
         int topFitCount = SafeAreaFitter.ApplyTopOffset(transform, "TopBar", "TopStatus", "ProgressBar");
         Debug.Log($"[BattleUI] 顶栏刘海避让已挂载 {topFitCount} 个，safeArea={Screen.safeArea} " +
                   $"screen={Screen.width}x{Screen.height}（safeArea 顶部若为 0 = 机型未上报刘海，另查）");
+        // 【2026-10-28 战斗顶条消失修复】把顶条锚点/尺寸打出来，便于一眼判断好坏。
+        // 正常值：anchor=(0.5,1)~(0.5,1)、size=720x120。
+        // 一旦变成 (0,0)~(1,1) 且高度为负（曾实测 200x-1042），就是锚点又被谁改了 → 顶条不可见。
+        var topBarRt = transform.Find("TopBar") as RectTransform;
+        if (topBarRt != null)
+            Debug.Log($"[BattleUI] TopBar 锚点={topBarRt.anchorMin}~{topBarRt.anchorMax} " +
+                      $"尺寸={topBarRt.rect.size} 位置={topBarRt.anchoredPosition}");
 
         // 【2026-10-27 修「血条一进就有、一会又消失」】顶部进度条已按 2026-10-26 拍板整体去掉，
         // 但 BattleUI.prefab 里 ProgressBar 根节点仍 active=1，开局到第一波怪出场之间无人藏它，

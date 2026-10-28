@@ -131,6 +131,11 @@ public class BattleJoystick : MonoBehaviour, IPointerDownHandler, IPointerUpHand
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         if (_group == null) _group = GetComponent<CanvasGroup>();
         if (_pad == null) _pad = GetComponent<RectTransform>();

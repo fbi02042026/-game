@@ -341,14 +341,11 @@ public partial class AdventureUI
             if (!StaminaSystem.TrySpendForSideIsland())
                 return;
 
-            // 进本标记（照徽记/金币本口径：Pending 全量重设，BattleManager 读后即清）
+            // 进本标记（2026-10-28 起统一走 ResetPendingFlags 全清，再立本岛标记；BattleManager 读后即清）
+            AdventureUI.ResetPendingFlags();
             AdventureUI.PendingSideIsland = isl.id;
             AdventureUI.PendingBattleChapter = isl.act;   // 背景篇（怪池/背景资产同源复用）
             AdventureUI.PendingBattleDifficulty = 0;
-            AdventureUI.PendingGoldDungeon = false;
-            AdventureUI.PendingBadgeDungeon = false;
-            AdventureUI.PendingScrollDungeon = false;
-            AdventureUI.PendingEndlessRift = false;
             ChapterManager.Instance?.SetChapter(isl.act);
 
             // 不弹职业选择（2026-10-18 裂隙同款口径：刷图玩法用当前职业直接进本）

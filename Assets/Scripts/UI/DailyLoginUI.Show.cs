@@ -25,7 +25,11 @@ public partial class DailyLoginUI
         ApplyFit();
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
-        EnsureLoginGuide();
+
+        // 【2026-10-28 主人拍板】弹窗内指路气泡（金框+气泡）作废：与弹窗排版叠在一起
+        // （气泡顶到标题横幅上）。现在引导收尾直接回主界面，登录弹窗照常自动打开，
+        // 玩家愿意点就点。EnsureLoginGuide 整套代码保留不再调用（死代码，见待办清单）。
+        // EnsureLoginGuide();
 
         // 【2026-10-24 诊断·主人报「弹窗点不动」】弹窗在屏期间开点击透视取证（600s 自过期，重复弹只顺延）：
         // 复现时点一下格子或关闭按钮，Editor.log 的 [ClickPeek] 行当场报出射线最顶层打到了谁——

@@ -180,6 +180,11 @@ public partial class TalentUI : MonoBehaviour
 
     void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
         LoadArtSprites();
         if (panelImage == null)

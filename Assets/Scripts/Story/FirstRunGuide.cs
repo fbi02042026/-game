@@ -1637,12 +1637,8 @@ public class FirstRunGuide : MonoBehaviour
 
     static Image NewImage(Transform parent, string name, Color color)
     {
-        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        go.transform.SetParent(parent, false);
-        var img = go.GetComponent<Image>();
-        img.color = color;
-        img.raycastTarget = false;
-        return img;
+        // 2026-10-28 收敛：实现已统一到 UiFind/UiFactory 唯一真源，此处保留私有签名以免动调用点
+        return UiFactory.NewImage(parent, name, color);
     }
 
     static Text NewText(Transform parent, string name, string content, int size, TextAnchor align)

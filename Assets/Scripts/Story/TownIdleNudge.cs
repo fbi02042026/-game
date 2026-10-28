@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -19,6 +20,11 @@ using UnityEngine.UI;
 /// <para>点击记录走 PlayerPrefs（<see cref="SkillOrderGuide"/> 同款口径：纯 UI 提示，不入云存档）。
 /// 强引导（FirstRunGuide）没走完时整条让位，杜绝「上面一个引导 下面一个引导」再打架。</para>
 ///
+/// <para>【2026-10-28 主人报「酒馆引导抽佣兵有点太频繁了」】同一条软引导原本**每 21 秒复读一次**
+/// （15s 闲置 + 6s 气泡），玩家不点就无限循环——最典型的是「点「酒馆」招募佣兵吧～」反复催。
+/// 现在加同条冷却（<see cref="RepeatCooldownSeconds"/>）：一条引导出过后，冷却期内不再出同一条，
+/// 于是四条引导自然轮着来，不会死盯一条刷屏。冷却只存在内存（本局有效），重开游戏重新计。</para>
+///
 /// <para>唯一启动点：<see cref="TutorialDirector.NotifyTownReady"/>（每次回城都走）→ <see cref="Ensure"/>，
 /// 驱动器 DontDestroyOnLoad 全局唯一，场景/条件不满足时自己安静。</para>
 /// </summary>
@@ -29,6 +35,11 @@ public static class TownIdleNudge
     public const float IdleSeconds = 15f;
     /// <summary>气泡展示时长（软引导自消失，不挡点击）。</summary>
     public const float HintSeconds = 6f;
+    /// <summary>
+    /// 同一条软引导两次出现之间的最短间隔（秒）。原实现没有这个限制 → 同一条每 21 秒复读，
+    /// 玩家不点就一直催（主人报「太频繁」）。现在一条出过后冷却期内不再出同一条。
+    /// </summary>
+    public const float RepeatCooldownSeconds = 300f;
     const string PrefsPrefix = "IdleNudge_Clicked_";
 
     /// <summary>
@@ -44,6 +55,21 @@ public static class TownIdleNudge
     };
 
     static TownIdleNudgeDriver _driver;
+
+    // —— 同条冷却（2026-10-28 主人报「酒馆引导太频繁」）——
+    // 出过一条引导后，冷却期内不再出**同一条**（四条自然轮着来）。
+    // 只存内存：本局有效，重开游戏重新计（引导本就是临时提示，不必入档）。
+    static readonly Dictionary<MainNavTab, float> _lastShownAt = new Dictionary<MainNavTab, float>();
+
+    /// <summary>该入口是否还在冷却期内（刚出过同一条）。</summary>
+    public static bool IsInCooldown(MainNavTab tab)
+    {
+        if (!_lastShownAt.TryGetValue(tab, out float at)) return false;
+        return Time.unscaledTime - at < RepeatCooldownSeconds;
+    }
+
+    /// <summary>记录「刚出过这条引导」，开始它的冷却。</summary>
+    public static void MarkShown(MainNavTab tab) => _lastShownAt[tab] = Time.unscaledTime;
 
     /// <summary>城镇就绪时调一次；驱动器全局唯一，重复调用安全。</summary>
     public static void Ensure()
@@ -114,9 +140,13 @@ public class TownIdleNudgeDriver : MonoBehaviour
         for (int i = 0; i < entries.Length; i++)
         {
             if (TownIdleNudge.IsClicked(entries[i].tab)) continue;
+            // 【2026-10-28 主人报「酒馆引导抽佣兵太频繁了」】同条冷却：
+            // 刚出过的这条（哪怕玩家没点）冷却期内不再出同一条 → 不会死盯一条刷屏。
+            if (TownIdleNudge.IsInCooldown(entries[i].tab)) continue;
             RectTransform rt = ButtonRect(nav, entries[i].tab);
             if (rt == null) continue;   // 按钮没绑上：换下一个，不硬等也不报错（底栏可能在别的界面被裁掉）
 
+            TownIdleNudge.MarkShown(entries[i].tab);
             TutorialHintUI.Ensure().Show(entries[i].text, rt, TownIdleNudge.HintSeconds);
             _showing = entries[i].tab;
             Debug.Log($"[TownIdleNudge] 闲置软引导：{entries[i].tab}（点过一次后永久不再出现）");

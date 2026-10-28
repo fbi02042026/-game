@@ -51,11 +51,6 @@ public partial class UnitBase
             }
         }
 
-        // 【临时打点 2026-10-18】排查「普攻608/暴击120」矛盾：主角打出的每一击落地实况，定位后删除
-        if (source is Hero)
-            Debug.Log($"[DamageDebug] 主角命中 final={finalDamage:F1} crit={isCrit} " +
-                      $"raw入参={damage:F1} 目标={name} " +
-                      $"目标防御={(magicHit ? attr.GetAttr(AttrType.MagicDefense) : attr.GetAttr(AttrType.Defense)):F1} magicHit={magicHit}");
         if (isAlly && PlayerPassiveCombat.Instance != null)
             finalDamage *= PlayerPassiveCombat.Instance.GetAllyIncomingDamageMul(this);
         // 佣兵「圣光庇护」类团队护盾落在玩家身上的那层：先吸收再扣血（数值取自 merc_skills 表）
