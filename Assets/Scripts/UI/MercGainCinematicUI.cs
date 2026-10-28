@@ -112,6 +112,16 @@ public class MercGainCinematicUI : MonoBehaviour
         // 再取 _nameBasePos（名字动画基准要取贴台后的位置）
         FitStageAlignment(nameTr);
 
+        // 【2026-10-28 主人拍板·最小增量】安全区适配：刘海/挖孔屏顶部避让、底部手势条避让。
+        // 必须挂在 FitStageAlignment 之后——SafeAreaFitter.Offset 模式把「当前 anchoredPosition」当基准，
+        // 这样贴台 ×k 的 y 与 safeArea 偏移叠加而非被覆盖；名字基准 _nameBasePos 也在本次挂载后取值，
+        // 使底部手势条偏移一并算进名字动画基准（CoNameIn 的每帧覆写不再把它抹掉）。
+        // 顶部挂 panl 根：BG/立绘/名字整体随 panl 下移，与 FitStageAlignment 的贴台关系一起平移，立绘仍踩在台上；
+        // 底部只挂 NamePlate：不动 panl → BG 底不被拉起露黑边。两者都不挂根 Canvas（由 Canvas 每帧驱动，无效）。
+        var panlRt = UiFind.Deep(transform, "panl") as RectTransform;
+        if (panlRt != null) SafeAreaFitter.EnsureTopOffset(panlRt);
+        SafeAreaFitter.EnsureBottomOffset(nameTr as RectTransform);
+
         _name = nameTr.GetComponent<Text>();
         _nameBasePos = nameTr.GetComponent<RectTransform>().anchoredPosition;
 
