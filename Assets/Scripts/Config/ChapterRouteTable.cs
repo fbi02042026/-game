@@ -104,9 +104,10 @@ public static class ChapterRouteTable
     // ============================================================
 
     /// <summary>
-    /// 【2026-10-26 主人拍板「第一章可以出现支线」】引导完成（StoryProgress.TutorialDone）即随机派定
+    /// 【2026-10-26 曾拍板「第一章可以出现支线」】当时口径：引导完成（StoryProgress.TutorialDone）即随机派定
     /// **支线岛**（洗牌袋，只掷没通关过的岛；岛定义见 SideIslandDefs，branchRoll1/branchRoll2 记岛 id 1..8）。
-    /// 旧口径「通关第 1 章后才派」作废（2026-10-23 版），不要再改回去。
+    /// 【2026-10-29 主人拍板改回】派岛门槛改回「通关第 1 章（第一大关）后才派」——覆盖 2026-10-26「引导即派」，
+    ///   原 2026-10-23「作废」口径一并撤销；引导完成只代表可玩，不代表支线开放（见下方 EnsureForkRoll 内判据）。
     /// 通关该岛后**再次调用本方法自动派第二个岛**（岛通关结算处触发，见 BattleManager 岛结算）。
     /// 本周目最多 2 个岛（两条制）；8 岛全通后洗牌袋重置（清岛通关记录，开启新一轮）。
     /// 幂等：当前派定岛没打完、或两条已派满时直接返回，绝不重复掷。
@@ -118,7 +119,7 @@ public static class ChapterRouteTable
     public static void EnsureForkRoll(SaveData data)
     {
         if (data == null) return;
-        if (!StoryProgress.TutorialDone) return;                 // 【2026-10-26】引导完成即开放支线（第一章内可出现）
+        if (!data.HasClearedChapter(1)) return;                  // 【2026-10-29】第一大关（第1章）通关后才开放支线岛（覆盖 2026-10-26「引导完成即派」口径）
         if (data.branchRoll2 != 0) return;                       // 两条已派满（两条制）
         // 当前派定的岛还没打完 → 保留不动（正在打/没打完）
         if (data.branchRoll1 != 0 && !data.HasClearedSideIsland(data.branchRoll1)) return;

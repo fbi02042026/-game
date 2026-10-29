@@ -230,12 +230,10 @@ public partial class DailyLoginUI
             var iconT = FindChildDeep(info, "MercIcon");
             _infoMercIcon = iconT != null ? iconT.GetComponent<Image>() : null;
 
-            // B4: 底部信息条 = 累计大奖领取入口（与 CloseButton 同风格：None 过渡，先 RemoveAllListeners 再挂监听；用预制体已有节点不新建）
+            // 【2026-10-29 主人拍板 B】底部信息条改纯进度展示（「只是累计天数提示」），累计大奖领取入口撤了：
+            // 不再挂 OnClickAccum；实例上若带 Button（历史挂过/美术后配）一律摘掉，保证这条永远点不了。
             var infoBtn = info.GetComponent<Button>();
-            if (infoBtn == null) infoBtn = info.gameObject.AddComponent<Button>();
-            infoBtn.transition = Selectable.Transition.None;
-            infoBtn.onClick.RemoveAllListeners();
-            infoBtn.onClick.AddListener(OnClickAccum);
+            if (infoBtn != null) UnityEngine.Object.Destroy(infoBtn);
         }
     }
 

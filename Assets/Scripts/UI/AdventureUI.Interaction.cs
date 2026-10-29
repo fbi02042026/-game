@@ -617,7 +617,20 @@ public partial class AdventureUI
         if (hub != null) hub.OpenAdventureLog();
         else Toast("请从底栏打开冒险日志");
     }
-    void OnAddChances()    => Toast("主线不限次数");
+    // 【2026-10-29 主人拍板「主线一关一次」】+ 号是占位按钮：主线报新口径；
+    // 活动/裂隙报当日真值（老文案「主线不限次数」与新口径打架，一并废）
+    void OnAddChances()
+    {
+        if (IsMainMode(_selectedMode))
+        {
+            Toast("主线一关一次，通关后不能重打");
+            return;
+        }
+        var data = SaveSystem.Instance?.Data;
+        Toast(IsActivityMode(_selectedMode)
+            ? $"今日剩余 {ActivityDungeonRules.TriesLeft(data, _selectedActivityKind)}/{ActivityDungeonRules.DAILY_TRIES} 次"
+            : $"今日剩余 {EndlessRiftRules.TriesLeft(data)}/{GameConfig.ENDLESS_DAILY_TRIES} 次");
+    }
 
     void OnStartBattle()
     {

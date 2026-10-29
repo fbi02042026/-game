@@ -25,6 +25,9 @@ public partial class BattleManager
         }
         if (m.IsBossUnit) RunStats.BossKillCount++;
 
+        // 【2026-10-29】每日任务击杀计数（除害/清剿 = 非 Boss，精英算小怪；弑君 = Boss）
+        SaveSystem.Instance?.Data?.CountKill(m.IsBossUnit);
+
         // 佣兵币产出（2026-10-07 主人拍板：「击杀精英1个 击杀Boss两个」）。
         // Boss 优先、不与精英叠加（Boss 波可能同时带精英标记，叠加会变成 3）。
         // 发放只走 ResourceWallet.GrantMercGold 这一个出口（铁律 15）。

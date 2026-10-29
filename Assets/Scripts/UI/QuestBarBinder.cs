@@ -7,11 +7,14 @@ using UnityEngine.UI;
 ///
 /// 把美术搭的「任务栏」（GuildHallUI → LeftBar → 任务栏）接到 QuestBarData 上：
 ///   · 三行按名字找：主线 / 支线 / 日常 —— 找不到正文 Text 或缺行就 LogError + dump 子节点，不静默；
-///   · 没有支线 → 隐藏支线行、日常行上移（SetSiblingIndex）、栏根黑底高度缩减；
-///     支线回来 → 还原高度与行序（嵌套 Canvas 的渲染层级问题与本绑定无关，行序用 SetSiblingIndex 足够）；
+///   · 【2026-10-29 主人拍板「等引导完了后再出现任务栏」】引导未完成整条任务栏隐藏（三行+黑底+折叠按钮），
+///     完成那一刻整栏点亮 + 补播逐行弹入；老号进场景时引导已完成，不受影响；
+///   · 没有支线 → 隐藏支线行、日常行【真位移】补位到支线原位 + 黑底缩一截（2026-10-29 主人需求
+///     「日常任务没有补位」；三行绝对定位，SetSiblingIndex 挪不动）；支线回来 → 还原位置与高度；
 ///   · 行点击走 QuestJumpRouter（绝不让点击没反应；跳转失败回退展开 QuestPanelUI）；
 ///   · 折叠按钮（2026-10-26 主人提醒）：点一下把整栏收起来（三行全收 + 黑底缩到只剩按钮那截），
 ///     再点展开还原；折叠态纯会话内，不写存档；支线显隐联动与折叠态互不干扰；
+///     【2026-10-29 主人需求】按钮运行时整体等比缩小 50%（FoldButtonScale，预制体不动）；
 ///   · 0.5s 轮询刷新文案（与 MainQuestSystem.Tick 同频，纯读不结算）。
 ///
 /// ⚠ 行结构（2026-10-26 主人发的层级图定稿）：任务栏 = pan / Dim / 折叠 / Tile / 主线 / 支线 / 日常，
@@ -35,11 +38,16 @@ public class QuestBarBinder : MonoBehaviour
     Vector2 _dimBaseSize, _dimBasePos;   // Dim 的预制体基准（从 base 重算，不累加）
     bool _dimBaseCaptured;
     RectTransform _foldRt;           // 折叠按钮（黑底收缩后的依附目标）
-    float _foldH = -1f, _foldY;      // 折叠按钮高/纵向位置（panl 空间，与 Dim 同一坐标系）
+    Transform _barRoot;              // 任务栏根节点（引导期整栏隐藏用，2026-10-29）
+    float _sideBaseY, _dailyBaseY;   // 支线/日常行预制体基准 y（日常补位真位移用，2026-10-29）
+    bool _popPlayed;                 // 逐行弹入是否已启动（引导完成后只补播一次）
+    float _foldH = -1f, _foldY;      // 折叠按钮【旋转后视觉】高/纵向位置（panl 空间，与 Dim 同一坐标系）
     float _foldX = -1f;              // 折叠按钮展开态基准 x（panl 空间）；<0 = 未捕获
     float _foldEdgeX;               // 收起态贴边 x：按钮左缘留 FoldEdgeLeftInset，整体挪到屏幕左缘
     /// <summary>折叠按钮收起后贴屏幕左边的留白（按钮左缘离 panl 左=屏幕左的距离，单位逻辑像素）。</summary>
     const float FoldEdgeLeftInset = 8f;
+    /// <summary>折叠按钮整体缩放（2026-10-29 主人需求「那个折叠按钮缩小50%」；预制体不动，运行时等比缩）。</summary>
+    const float FoldButtonScale = 0.5f;
     /// <summary>黑底上下留边总和：基准 300 高 vs 三行实跨 260，上下各 20（折叠后 = 按钮高 + 2×20）。</summary>
     const float DimEdgePadding = 20f;
     int _dailyBaseSibling = -1;      // 日常行原始次序（支线行回来时还原）
@@ -88,6 +96,8 @@ public class QuestBarBinder : MonoBehaviour
 
     void Bind(Transform bar)
     {
+        _barRoot = bar;   // 整栏显隐用（引导期隐藏，2026-10-29）
+
         // 【2026-10-26 主人问「任务栏窗口做了适配没有」→ 之前没做，这里补上】
         // 挂在整条 LeftBar（任务栏的父级，公告/活动/任务栏同列）上：Offset 模式只挪 anchoredPosition，
         // 与顶部资源条（TownSharedChrome）同一套 EnsureTopOffset——安全区 + 微信胶囊预留 + 固定下移 20，
@@ -121,6 +131,16 @@ public class QuestBarBinder : MonoBehaviour
         ApplyInfoStyle(_mainText);
         ApplyInfoStyle(_sideText);
         ApplyInfoStyle(_dailyText);
+
+        // 【2026-10-29 日常补位】三行在 panl 里是绝对定位，支线隐藏时日常要真位移到支线原位；
+        // 这里先记预制体基准 y（必须在任何 ApplyLayout 动位置之前量）。
+        if (_rowSide != null) _sideBaseY = ((RectTransform)_rowSide).anchoredPosition.y;
+        if (_rowDaily != null) _dailyBaseY = ((RectTransform)_rowDaily).anchoredPosition.y;
+
+        // 【2026-10-29 主人拍板「等引导完了后再出现任务栏」】引导未完成首帧就把整栏藏了，
+        // 别等 Update——不然进镇第一帧会闪一下 prefab 默认的三行占位。
+        if (!StoryProgress.TutorialDone)
+            _barRoot.gameObject.SetActive(false);
 
         BindClick(_rowMain, OnClickMain);
         if (_rowSide != null) BindClick(_rowSide, OnClickSide);
@@ -205,16 +225,23 @@ public class QuestBarBinder : MonoBehaviour
             _foldRt = t as RectTransform;   // 黑底收缩用：按钮的高与纵位（panl 空间，与 Dim 同坐标系）
             if (_foldRt != null)
             {
-                _foldH = _foldRt.rect.height;
+                // 【2026-10-29 主人需求「那个折叠按钮缩小50%」】运行时整体等比缩小（预制体不动，铁律 20）；
+                // 必须先缩再量，下面量出的视觉宽/高与贴边 x 才是缩完后的真实值。
+                var sc = _foldRt.localScale;
+                _foldRt.localScale = new Vector3(sc.x * FoldButtonScale, sc.y * FoldButtonScale, sc.z);
+
                 _foldY = _foldRt.anchoredPosition.y;
                 _foldX = _foldRt.anchoredPosition.x;   // 展开态基准 x（panl 空间），收起时改、展开时还原
                 // 收起后贴屏幕左边：按钮左缘离 panl 左缘（=屏幕左缘）留 FoldEdgeLeftInset。
-                // 用「旋转后的实际包围盒宽」推算（折叠箭头旋了 -90°，视觉宽=rect.height 而非 rect.width），
+                // 用「旋转后的实际包围盒」推算（折叠箭头旋了 -90°：视觉宽=rect.height、视觉高=rect.width），
                 // 再乘 |localScale|——scale 改了也能自动贴边（2026-10-28 主人需求）。
+                // 视觉高同样旋转换算后存进 _foldH，供折叠黑底按正确轴收缩用（2026-10-29 修正，见 ApplyLayout）。
                 float ang = _foldRt.localEulerAngles.z * Mathf.Deg2Rad;
-                float effW = (Mathf.Abs(Mathf.Cos(ang)) * _foldRt.rect.width
-                            + Mathf.Abs(Mathf.Sin(ang)) * _foldRt.rect.height) * Mathf.Abs(_foldRt.localScale.x);
+                float absCos = Mathf.Abs(Mathf.Cos(ang)), absSin = Mathf.Abs(Mathf.Sin(ang));
+                float effW = (absCos * _foldRt.rect.width + absSin * _foldRt.rect.height) * Mathf.Abs(_foldRt.localScale.x);
+                float effH = (absSin * _foldRt.rect.width + absCos * _foldRt.rect.height) * Mathf.Abs(_foldRt.localScale.y);
                 _foldEdgeX = FoldEdgeLeftInset + effW * 0.5f;
+                _foldH = effH;
             }
             return t;
         }
@@ -232,10 +259,25 @@ public class QuestBarBinder : MonoBehaviour
     void Update()
     {
         if (!GameSceneGate.IsTown) return;
-        if (!StoryProgress.TutorialDone) return;
+        // 【2026-10-29 主人拍板「等引导完了后再出现任务栏」】引导未完成整条任务栏藏着；
+        // 完成那一刻整栏点亮并补播逐行弹入。老号进场景时已是完成态，这段一个字都不动。
+        bool barOn = StoryProgress.TutorialDone;
+        if (_barRoot != null && _barRoot.gameObject.activeSelf != barOn)
+        {
+            _barRoot.gameObject.SetActive(barOn);
+            if (barOn && !_popPlayed)
+            {
+                _popPlayed = true;
+                StartCoroutine(CoPlayRowsPopInWhenVisible());
+            }
+        }
+        if (!barOn) return;
         _timer -= Time.unscaledDeltaTime;
         if (_timer > 0f) return;
         _timer = RefreshInterval;
+        // 【2026-10-29 扩编】每日/周常任务自动发奖结算（幂等）：先结算再刷新，
+        // 达标即发（Toast + 资源入账），任务栏/面板当拍就能看到 ✓
+        DailyTaskSystem.Settle();
         Refresh();
     }
 
@@ -287,8 +329,9 @@ public class QuestBarBinder : MonoBehaviour
     /// <summary>
     /// 把「折叠态 × 支线可见性」统一套到 UI 上（状态没变直接返回，绝不一拍一动）。
     ///   · 折叠 = 三行全收，黑底（panl/Dim）缩到只剩折叠按钮那截；展开 = 还原预制体基准；
-    ///   · 支线隐藏（未派定/已通）= 藏支线行（行序 SetSiblingIndex 对无布局组的 panl 不挪位，
-    ///     「日常上移 + 黑底缩一截」目前实际未生效——要做真位移等主人拍板）。
+    ///   · 支线隐藏（未派定/已通）= 藏支线行 + 日常行【真位移】补位到支线原位 + 黑底缩一截
+    ///     （2026-10-29 主人需求「日常任务没有补位」落地；三行绝对定位，SetSiblingIndex 挪不动）；
+    ///     支线回来还原位置与高度。
     /// </summary>
     void ApplyLayout(bool sideVisible)
     {
@@ -315,18 +358,19 @@ public class QuestBarBinder : MonoBehaviour
             }
         }
 
-        // 黑底（panl/Dim）纵向收缩【2026-10-27 修复「点折叠黑底没收」】：
-        // 原实现改的是「任务栏」节点的 sizeDelta——该节点 0×0、没有任何子节点拉伸跟随它，
-        // 写了视觉永远不动。黑底真身是 panl/Dim：折叠 = 缩到只剩折叠按钮那一截
-        // （按钮/箭头必须留着，不然没法再展开）；展开 = 还原预制体基准。
-        // 黑底只动纵向（sizeDelta.y / anchoredPosition.y），x 保持基准宽（铁律 20 纵向必要介入）；
-        // 折叠按钮的横向（anchoredPosition.x）由 2026-10-28 主人需求单独处理（贴屏幕左边，见下方）。
+        // 黑底（panl/Dim）收缩【2026-10-27 修复「点折叠黑底没收」→ 2026-10-29 修正收缩轴】：
+        // 原实现改「任务栏」节点无效 → 改 panl/Dim 对了，但 Dim 旋了 -90°：
+        // 视觉「高」= sizeDelta.x（基准 282.5）、视觉「宽」= sizeDelta.y（基准 300）。
+        // 旧折叠分支写 (基准.x, fh+2×pad) 改的是视觉宽——黑底会收成细竖条而不是矮一截；
+        // 现按正确轴收，且 _foldH 已是旋转换算 + 50% 缩放后的按钮视觉高（见 FindFoldButton）。
+        // 支线隐藏的日常补位同段处理（2026-10-29 主人需求）：日常行真位移 + 黑底同步缩一截。
+        // 折叠按钮的横向（anchoredPosition.x）由 2026-10-28 主人需求单独处理（贴屏幕左边）。
         // 全部从 Bind 时量得的 base 重算，不累加。
         if (_dimRt == null || !_dimBaseCaptured) return;
         if (_collapsed)
         {
             float fh = _foldH > 0f ? _foldH : 0f;
-            _dimRt.sizeDelta = new Vector2(_dimBaseSize.x, fh + DimEdgePadding * 2f);
+            _dimRt.sizeDelta = new Vector2(fh + DimEdgePadding * 2f, _dimBaseSize.y);
             _dimRt.anchoredPosition = new Vector2(_dimBasePos.x, _foldY);
             // 【2026-10-28 主人需求】收起后折叠按钮移到屏幕左边（贴边），不要停在条中间原位：
             // 横向挪到 _foldEdgeX（按钮左缘留 FoldEdgeLeftInset），纵向保持 _foldY；展开态再还原到 _foldX。
@@ -336,11 +380,40 @@ public class QuestBarBinder : MonoBehaviour
         }
         else
         {
-            _dimRt.sizeDelta = _dimBaseSize;
-            _dimRt.anchoredPosition = _dimBasePos;
+            // 【2026-10-29 主人需求「日常任务没有补位」】支线隐藏时日常行真位移到支线原位，
+            // 黑底同步矮一截、中心上移一半；支线回来（通关掷派空窗后）全还原。
+            bool fill = !sideVisible && _rowDaily != null && _rowSide != null;
+            if (fill)
+            {
+                SetDailyY(_sideBaseY);
+                float moveUp = _dailyBaseY - _sideBaseY;   // 负值=日常要上移的量（prefab 实测 -83→10 即 -93）
+                _dimRt.sizeDelta = new Vector2(_dimBaseSize.x + moveUp, _dimBaseSize.y);
+                _dimRt.anchoredPosition = new Vector2(_dimBasePos.x, _dimBasePos.y - moveUp * 0.5f);
+            }
+            else
+            {
+                SetDailyY(_dailyBaseY);
+                _dimRt.sizeDelta = _dimBaseSize;
+                _dimRt.anchoredPosition = _dimBasePos;
+            }
             if (_foldRt != null && _foldX >= 0f)
                 _foldRt.anchoredPosition = new Vector2(_foldX, _foldY);
         }
+    }
+
+    /// <summary>
+    /// 日常行纵位统一入口（2026-10-29 日常补位）：挪的同时同步逐行弹入动画的基准位，
+    /// 防止弹入协程按旧基准把行拽回去。
+    /// </summary>
+    void SetDailyY(float y)
+    {
+        var rt = _rowDaily as RectTransform;
+        if (rt == null) return;
+        Vector2 p = rt.anchoredPosition;
+        if (Mathf.Approximately(p.y, y)) return;
+        rt.anchoredPosition = new Vector2(p.x, y);
+        if (_rowPopBasePos.TryGetValue(_rowDaily, out var b) && !Mathf.Approximately(b.y, y))
+            _rowPopBasePos[_rowDaily] = new Vector2(b.x, y);
     }
 
     // ============================================================
@@ -350,6 +423,10 @@ public class QuestBarBinder : MonoBehaviour
     void Start()
     {
         if (_rowMain == null) return;
+        // 引导未完成：任务栏整条还藏着（Bind 里已 SetActive(false)），不在这里弹；
+        // 等 Update 里 TutorialDone 翻转后再整栏点亮 + 补播（2026-10-29）。
+        if (!StoryProgress.TutorialDone) return;
+        _popPlayed = true;
         StartCoroutine(CoPlayRowsPopInWhenVisible());
     }
 

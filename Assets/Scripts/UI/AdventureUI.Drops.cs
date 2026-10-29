@@ -10,7 +10,8 @@ using UnityEditor;
 #endif
 
 // 冒险界面 partial —— 2026-10-18 由 AdventureUI.cs 纯位移拆出（无逻辑改动）
-// 职责：掉落预览图标（刷新、显示名、缩小处理、图标加载与缓存）
+// 职责：掉落预览图标（刷新、缩放、图标加载与缓存；2026-10-29 主人拍板「不要下面那个名字」，
+//       图标下的小字名牌废除，图标回预制体原始尺寸）
 public partial class AdventureUI
 {
 
@@ -34,7 +35,7 @@ public partial class AdventureUI
         for (int i = 0; i < slots.Count; i++)
         {
             bool on = i < showCount;
-            // 【2026-10-11 主人拍板】掉落图标缩小 10%（框 + 图都缩，名字挂框下不受影响 —— 见 ApplyDropIconShrink）
+            // 掉落图标缩放（当前 =1 原始尺寸；2026-10-29 主人拍板改大回预制体原始值 —— 见 ApplyDropIconShrink）
             ApplyDropIconShrink(slots[i].kuang);
             ApplyDropIconShrink(slots[i].icon);
             if (slots[i].kuang != null) slots[i].kuang.gameObject.SetActive(on);
@@ -52,42 +53,16 @@ public partial class AdventureUI
             img.color = Color.white;
             img.preserveAspect = true;
 
-            // 【2026-10-11 主人拍板】图标下方写上名字（主人：「可能掉落的物品…或者在物品下方写上名字」）
-            var tag = EnsureDropNameTag(slots[i].kuang != null ? slots[i].kuang : slots[i].icon);
-            if (tag != null) tag.text = DropDisplayName(_previewDrops[i]);
+            // 【2026-10-29 主人拍板「可能掉落的图标…不要下面那个名字了」】名牌废除：
+            // 不再创建；本会话早前已建过的 DropName 一并清掉
+            var staleTag = (slots[i].kuang != null ? slots[i].kuang : slots[i].icon)?.Find("DropName");
+            if (staleTag != null) Destroy(staleTag.gameObject);
         }
     }
 
-    /// <summary>
-    /// 可能掉落物品的显示名（图标下方那行小字）。叫法只在这一个出口维护。
-    /// 【2026-10-11 主人拍板】尽量短、能认出来就行（槽宽约 70 逻辑像素，2~3 字最稳）。
-    /// </summary>
-    static string DropDisplayName(PreviewDropKind kind)
-    {
-        switch (kind)
-        {
-            case PreviewDropKind.Gold:            return "金币";
-            case PreviewDropKind.DraftCoin:       return "抽奖币";
-            case PreviewDropKind.TalentStone:     return "天赋石";
-            case PreviewDropKind.ScrollCommon:    return "普卷";
-            case PreviewDropKind.ScrollRare:      return "稀卷";
-            case PreviewDropKind.ScrollLegendary: return "传卷";
-            case PreviewDropKind.Badge:           return "徽记";
-            case PreviewDropKind.Gift:            return "礼物";
-            default:                              return "";
-        }
-    }
-
-    /// <summary>
-    /// 掉落名字字号（主人：「名字再大一号」→ 14 → 16）。
-    /// 颜色与详情面板其它文字一致（预制体「敌人信息 / 可能掉落」都是这个深棕）
-    /// —— 主人：「把掉落物品的名字的颜色改成和其他的字的颜色一致」。
-    /// </summary>
-    const int DropNameFontSize = 16;
-    static readonly Color DetailTextColor = new Color(0.151f, 0.109f, 0.032f);
-
-    /// <summary>掉落图标（框 + 图）整体缩放（主人：「可能掉落的图标缩小10%」）。</summary>
-    const float DropIconScale = 0.9f;
+    /// <summary>掉落图标（框 + 图）整体缩放。2026-10-11 主人拍板缩 10%；【2026-10-29 主人拍板
+    /// 「可能掉落的图标改大点」】回到预制体原始尺寸（=1）。槽位 pitch 60px，再大要动预制体间距。</summary>
+    const float DropIconScale = 1f;
 
     /// <summary>
     /// 掉落图标/框的原始尺寸（每个节点第一次读到就记下）。
@@ -109,37 +84,6 @@ public partial class AdventureUI
             _dropIconBaseSize[key] = baseSize;
         }
         rt.sizeDelta = baseSize * DropIconScale;
-    }
-
-    /// <summary>
-    /// 掉落图标下方那行名字：挂在图标框（IconkuangN）下，位置跟着框走，不必猜容器布局；
-    /// 节点运行时补建（预制体不动），重复调用复用同一个。
-    /// </summary>
-    static Text EnsureDropNameTag(Transform slot)
-    {
-        if (slot == null) return null;
-        var existing = slot.Find("DropName");
-        if (existing != null) return existing.GetComponent<Text>();
-
-        var go = new GameObject("DropName", typeof(RectTransform), typeof(Text));
-        go.transform.SetParent(slot, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0f);
-        rt.anchorMax = new Vector2(0.5f, 0f);
-        rt.pivot     = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, -1f);
-        rt.sizeDelta = new Vector2(80f, 18f);
-
-        var t = go.GetComponent<Text>();
-        t.font = GameFonts.GetChinese();
-        t.fontSize = DropNameFontSize;
-        t.alignment = TextAnchor.UpperCenter;
-        t.horizontalOverflow = HorizontalWrapMode.Overflow;
-        t.verticalOverflow   = VerticalWrapMode.Overflow;
-        t.raycastTarget = false;
-        t.color = DetailTextColor;   // 与面板其它文字同色（深棕）
-        t.text = "";
-        return t;
     }
 
     /// <summary>

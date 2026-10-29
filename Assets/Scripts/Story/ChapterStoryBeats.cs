@@ -19,6 +19,7 @@ public static class ChapterStoryBeats
     {
         switch (chapter)
         {
+            case 1: PlayN1(onDone); return true;
             case 2: PlayN2(onDone); return true;
             case 3: if (SaveSystem.Instance?.Data?.HasClearedAllSideIslands() == true) PlayN3(onDone); else PlayN3Alt(onDone); return true;
             case 4: if (SaveSystem.Instance?.Data?.HasClearedAllSideIslands() == true) PlayN4(onDone); else PlayN4Alt(onDone); return true;
@@ -168,9 +169,51 @@ public static class ChapterStoryBeats
         var beats = new List<StoryBeat>
         {
             StoryDirector.Narration("永霜雪境：裂隙最深处，雪一直下。这一趟的终点就在前面。"),
-            StoryDirector.Solo("你", "从三枚铜板到今天。艾丽娅，这笔账，马上就能结清了。", StoryPortraits.Player),
         };
+        // 【2026-10-29 叙事体检】第 7 章选 A（先带她回去）后艾丽娅已送回城，不再对她说话；
+        // B（一起砸了）/ C（让她坐上去）她仍同行，原台词保留。战前剧情每周目每章只播一次（看过即不重播）。
+        var data = SaveSystem.Instance?.Data;
+        if (data != null && data.endingChoice == 1)
+            beats.Add(StoryDirector.Solo("你", "从三枚铜板到今天。剩下的路，我一个人把它走完。", StoryPortraits.Player));
+        else
+            beats.Add(StoryDirector.Solo("你", "从三枚铜板到今天。艾丽娅，这笔账，马上就能结清了。", StoryPortraits.Player));
         StoryDirector.Ensure().Play(beats, onDone);
+    }
+
+    // ---------- N1｜第 1 章：箱子里的第一张纸条（2026-10-29 主人拍板「剧情是钩子」补最早上钩） ----------
+    // 钩子 = 「公会发的箱子，谁会提前写好这种话？」——装箱人（M）悬念的最早一针，
+    // 往后接 ch3 路标纸条（C07）、N3「箱子里的纸条，是你塞的」、N5 署名 M 的箱底纸条。
+    // 结尾带一个趣味选项（不写存档、不影响走向，只换一句回响）——选项机制的轻量首秀。
+
+    static void PlayN1(Action onDone)
+    {
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Narration("森林层的雾散了。艾丽娅把今天采的样本码进补给箱，忽然停了手。"),
+            StoryDirector.Solo("艾丽娅", "箱子底下压着张纸条，字很新，只有三个字：「别停下。」", StoryPortraits.Xiaomei),
+            StoryDirector.Solo("艾丽娅", "公会发的箱子，谁会提前写好这种话？", StoryPortraits.Xiaomei),
+            new StoryBeat
+            {
+                leftName = "你",
+                leftPortraitId = StoryPortraits.Player,
+                text = "这张纸条，怎么处理？",
+                speaker = -1,
+                choices = new[]
+                {
+                    "先收好。回去路上慢慢想。",
+                    "万一是催债的呢？那可不能丢。"
+                }
+            }
+        };
+        StoryDirector.Ensure().Play(beats, null, idx => ApplyN1Choice(idx, onDone));
+    }
+
+    static void ApplyN1Choice(int idx, Action onDone)
+    {
+        StoryBeat echo = idx == 0
+            ? StoryDirector.Solo("艾丽娅", "收好了就走吧。「别停下」——哼，说得倒轻巧。", StoryPortraits.Xiaomei)
+            : StoryDirector.Solo("你", "开玩笑的。……不过这张纸，我先收在剑鞘边上。", StoryPortraits.Player);
+        StoryDirector.Ensure().Play(new List<StoryBeat> { echo }, () => onDone?.Invoke());
     }
 
     // ---------- N2｜第 2 章（分支 A · 亡者之径）：这不是第一次 ----------
@@ -185,8 +228,30 @@ public static class ChapterStoryBeats
             StoryDirector.Narration("最老那块刻着「M. 灰鸦小队 记录员」。再往旁边挪一步，还有第八块——空的。"),
             StoryDirector.Narration("名字的位置留着。石头却是新的。有人提前把碑做好了。"),
             StoryDirector.Solo("你", "他们连名字都不打算写。", StoryPortraits.Player),
+            // 【2026-10-29 主人拍板「有些剧情可以加些选项，不主导剧情走向，只增加趣味」】
+            new StoryBeat
+            {
+                leftName = "你",
+                leftPortraitId = StoryPortraits.Player,
+                text = "这几块碑，怎么办？",
+                speaker = -1,
+                choices = new[]
+                {
+                    "记下来，回去写进小队日志。",
+                    "别碰。让它这么立着。"
+                }
+            }
         };
-        StoryDirector.Ensure().Play(beats, onDone);
+        StoryDirector.Ensure().Play(beats, null, idx => ApplyN2Choice(idx, onDone));
+    }
+
+    /// <summary>N2 趣味回响：不写存档、不影响任何走向，只换一句收尾。</summary>
+    static void ApplyN2Choice(int idx, Action onDone)
+    {
+        StoryBeat echo = idx == 0
+            ? StoryDirector.Narration("回去你真的写了。第七支小队的日志第一页：碑比人多一。")
+            : StoryDirector.Narration("你退开半步。立着的碑，比倒着的诚实。");
+        StoryDirector.Ensure().Play(new List<StoryBeat> { echo }, () => onDone?.Invoke());
     }
 
     // ---------- N3｜第 3 章：遇到梅莉莎（2026-10-23 二次拍板「8岛全通」：恢复周目分流，全通播完整版/未全通播平替版） ----------
@@ -276,12 +341,31 @@ public static class ChapterStoryBeats
             StoryDirector.Narration("「任务目标：将目标小队引导至最深处，确保其与『沉座』接触。」"),
             StoryDirector.Solo("你", "……这不是调查任务。", StoryPortraits.Player),
             StoryDirector.Narration("你的手抖了一下。你把手按在膝盖上，按了很久才松开。"),
+            // 【2026-10-29 主人拍板「选项只加趣味不主导」】会长扣好感照旧无条件结，回响二选一
+            new StoryBeat
+            {
+                leftName = "你",
+                leftPortraitId = StoryPortraits.Player,
+                text = "这份简报，怎么处理？",
+                speaker = -1,
+                choices = new[]
+                {
+                    "收好。这是证据。",
+                    "现在就烧了它。"
+                }
+            }
         };
-        StoryDirector.Ensure().Play(beats, () =>
-        {
-            StoryProgress.AddBond(StoryProgress.NpcMaster, -10);
-            onDone?.Invoke();
-        });
+        StoryDirector.Ensure().Play(beats, null, idx => ApplyN5Choice(idx, onDone));
+    }
+
+    /// <summary>N5 趣味回响：会长好感 -10 与选项无关照旧结；回响不影响走向。</summary>
+    static void ApplyN5Choice(int idx, Action onDone)
+    {
+        StoryProgress.AddBond(StoryProgress.NpcMaster, -10);
+        StoryBeat echo = idx == 0
+            ? StoryDirector.Solo("你", "纸会烂，账不会。这张我贴身收着。", StoryPortraits.Player)
+            : StoryDirector.Narration("火苗舔到「沉座」两个字的时候，你又把它按灭了。烧不掉的。");
+        StoryDirector.Ensure().Play(new List<StoryBeat> { echo }, () => onDone?.Invoke());
     }
 
     // ---------- N6｜第 6 章：沉座 + 不再救援 ----------
@@ -296,8 +380,30 @@ public static class ChapterStoryBeats
             StoryDirector.Narration("你在十一年的那堆残骸里翻到半张烧过的纸。只剩两行字："),
             StoryDirector.Narration("「若目标小队成功削弱核心，派遣第二梯队收尾。若失败，则封锁入口，不再派遣救援。」"),
             StoryDirector.Solo("你", "他们不是没派人救。他们压根就没打算派。", StoryPortraits.Player),
+            // 【2026-10-29 主人拍板「选项只加趣味不主导」】
+            new StoryBeat
+            {
+                leftName = "你",
+                leftPortraitId = StoryPortraits.Player,
+                text = "看完这半张纸，你——",
+                speaker = -1,
+                choices = new[]
+                {
+                    "冷笑一声。",
+                    "把纸叠好，收进胸口。"
+                }
+            }
         };
-        StoryDirector.Ensure().Play(beats, onDone);
+        StoryDirector.Ensure().Play(beats, null, idx => ApplyN6Choice(idx, onDone));
+    }
+
+    /// <summary>N6 趣味回响：不写存档、不影响走向。</summary>
+    static void ApplyN6Choice(int idx, Action onDone)
+    {
+        StoryBeat echo = idx == 0
+            ? StoryDirector.Narration("你笑了半声，剩下半声咽了回去——洞里回音太大，笑给谁听。")
+            : StoryDirector.Narration("纸条贴着心口。往下的每一步，它都比剑沉。");
+        StoryDirector.Ensure().Play(new List<StoryBeat> { echo }, () => onDone?.Invoke());
     }
 
     // ---------- N7｜第 7 章：关键转折点 · 三选一（唯一改变结局的选择） ----------
@@ -433,7 +539,7 @@ public static class ChapterStoryBeats
         var beats = new List<StoryBeat>
         {
             StoryDirector.Narration("庆功宴摆了三天。第三天夜里，你在公会大厅的长桌底下，捡到一张没写完的领用单。").Bg(StoryBackgrounds.EndHappy),
-            StoryDirector.Narration("装填人一栏，签着一个花体的 M。日期从十四年前排到三个月前——中间没断过。"),
+            StoryDirector.Narration("装填人一栏，签着一个花体的 M。日期从十一年前排到三个月前——中间没断过。"),
             StoryDirector.Solo("你", "……十一年。每一支进裂隙的队伍，箱子都是同一个人装的？", StoryPortraits.Player),
             StoryDirector.Solo("你", "这账要是真的，公会大门上那块『英魂长存』的匾，怕是要换个挂法。", StoryPortraits.Player),
             new StoryBeat
@@ -541,19 +647,19 @@ public static class ChapterStoryBeats
 
     static void BuildBadHome(List<StoryBeat> b)
     {
-        b.Add(StoryDirector.Narration("你没往下走。你把她背了回来。").Bg(StoryBackgrounds.EndBadHome));
+        b.Add(StoryDirector.Narration("你先把她背了回去。剩下的那段路，你一个人又走了一遍。").Bg(StoryBackgrounds.EndBadHome));
         b.Add(StoryDirector.Narration("她确实活下来了。医官说恢复得不错。"));
         b.Add(StoryDirector.Narration("只是从那以后，她每隔几天就会忘记一件事。先是裂隙里的名字，再是阿尔托的全名。"));
         b.Add(StoryDirector.Solo("艾丽娅", "……今天我是不是又问过你一遍，我欠你多少钱？", StoryPortraits.Xiaomei));
         b.Add(StoryDirector.Solo("你", "三枚铜板。你每天都问，我每天都答。", StoryPortraits.Player));
         b.Add(StoryDirector.Solo("艾丽娅", "那你别嫌烦。", StoryPortraits.Xiaomei));
-        b.Add(StoryDirector.Narration("她回来了一半。剩下那一半，留给了没下去的那个人。"));
+        b.Add(StoryDirector.Narration("她回来了一半。剩下那一半，留在了最深处的雪里。"));
         b.Add(StoryDirector.Narration("——《像素冒险：裂隙之刃》 你救回来了她，但没救回来全部。"));
     }
 
     static void BuildBadGate(List<StoryBeat> b)
     {
-        b.Add(StoryDirector.Narration("她坐了上去。黑曜合拢的时候，她回头看了你最后一眼。").Bg(StoryBackgrounds.EndBadGate));
+        b.Add(StoryDirector.Narration("折返到巨岩深窟的洞窟时，她坐了上去。黑曜合拢的时候，她回头看了你最后一眼。").Bg(StoryBackgrounds.EndBadGate));
         b.Add(StoryDirector.Narration("裂隙真的止住了。王国今年没有新的裂缝记录。公会照常发任务、照常清点人数、照常涨价。"));
         b.Add(StoryDirector.Solo("会长", "牺牲少数保全多数——这就是结算方式。", StoryPortraits.GuildMaster));
         b.Add(StoryDirector.Solo("你", "她的名字，写进去吗。", StoryPortraits.Player));

@@ -21,6 +21,11 @@ public static class DailyLoginSystem
     const string StarterKeyPrefix = "s";
     const string StreakKeyPrefix = "k";
     const string KEY_ACCUM = "acc";
+    // 【2026-10-29 修·主人报「日常任务领了每日登录后还在提示」】领取日期标记（int yyyyMMdd）：
+    // 只记「每天登录领的签到格」（TryClaimStarter）——主人口径「每日登录只有每天登录领的」：
+    // 循环/连击条 2026-09-23 起已从弹窗删除（死路径），累计大奖是满 8 天一次性奖（不是「今日登录奖励」），都不算。
+    // 复用 loginFlags（Dictionary<string,int> 双写 loginFlagEntries），不加存档字段。
+    const string KEY_CLAIM_DAY = "claim_day";
 
     static SaveData Data => SaveSystem.Instance?.Data;
 
@@ -60,6 +65,50 @@ public static class DailyLoginSystem
         return d != null && !string.IsNullOrEmpty(id) && d.IsMercUnlocked(id);
     }
     public static bool CycleClaimedToday => Data != null && Data.loginCycleDay == ShopDefs.TodayKey();
+
+    /// <summary>
+    /// 今天领过「每天登录领的签到格」吗（2026-10-29 新增；同日二次收窄 + 补自愈）。
+    /// 【为什么不用 CycleClaimedToday 判任务完成】2026-09-23 拍板后登录弹窗预制体没有 CycleBar/ClaimBtn
+    /// （领取入口就是 8 日格，见 DailyLoginUI.Show.cs），TryClaimCycle 实际永远不触发，
+    /// loginCycleDay 永远空 → 旧判定恒 false → 任务栏 daily_login 领了奖励也一直提示「每日登录」。
+    /// 【只认签到格】循环/连击条已删（prefab 无节点），累计大奖（底部 InfoBar）是一次性满星奖
+    /// 不属于「今日登录奖励」——按主人口径「每日登录只有每天登录领的」，只由 TryClaimStarter 记 claim_day。
+    /// 【自愈】claim_day 从 2026-10-29 这个口径上线才开始记：上线当天/老档「今天已经领过格子」的存档
+    /// 没有这条记录，格子又已「已领」点不动，会卡到第二天才恢复（主人实测踩到）。补一条兜底判定：
+    /// 「今天进过游戏（loginLastDay=今天）且已无可领格子」⟹ 当天格子必是今天领的——
+    /// OnEnterGame 每个自然日才 +1 天，今天的格子昨天还锁着（LoginDays &lt; day 领不了），只有今天领得到。
+    /// </summary>
+    public static bool ClaimedToday
+    {
+        get
+        {
+            int today = int.Parse(ShopDefs.TodayKey());
+            if (Flag(KEY_CLAIM_DAY) == today) return true;
+
+            // 自愈分支：只对「claim_day 没记上、但今天确实领过」的老存档生效（纯读，不写存档）
+            var d = Data;
+            if (d == null || d.loginLastDay != ShopDefs.TodayKey()) return false;
+            if (LoginDays < 1) return false;
+            return !HasUnclaimedStarterCell();
+        }
+    }
+
+    /// <summary>当前轮回里还有没有「今天领得到」的未领格子（day ≤ 累计天数；HasClaimable / ClaimedToday 共用）。</summary>
+    static bool HasUnclaimedStarterCell()
+    {
+        // 2026-09-23 轮回：按当前轮次里的累计天数判定（第 9 天起是 9~16，第 17 天起是 17~24…）
+        int len = DailyLoginDefs.Starter.Length;
+        int round = len > 0 ? (Mathf.Max(1, LoginDays) - 1) / len : 0;
+        for (int i = 0; i < len; i++)
+        {
+            int day = round * len + i + 1;
+            if (LoginDays >= day && !IsStarterClaimed(day)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>签到格领取成功后记当天日期（见 ClaimedToday；调用方随后自行 Save）。</summary>
+    static void MarkClaimedToday() => SetFlag(KEY_CLAIM_DAY, int.Parse(ShopDefs.TodayKey()));
 
     /// <summary>
     /// 连续登录天数（断签清零）。这是唯一制造"今天必须来"压力的机制——
@@ -147,24 +196,17 @@ public static class DailyLoginSystem
         return (System.DateTime.Now.Date - prev.Date).TotalDays == 1.0;
     }
 
-    /// <summary>还有没领的东西吗（只算界面实际能领的：新手 8 日格 + 累计大奖）。</summary>
+    /// <summary>还有没领的东西吗（只算界面实际能领的：新手 8 日格。2026-10-29 起累计大奖入口已撤，不再计入）。</summary>
     public static bool HasClaimable()
     {
         if (Data == null) return false;
-        // 2026-09-23 轮回：按当前轮次里的累计天数判定（第 9 天起是 9~16，第 17 天起是 17~24…）
-        int len = DailyLoginDefs.Starter.Length;
-        int round = len > 0 ? (Mathf.Max(1, LoginDays) - 1) / len : 0;
-        for (int i = 0; i < len; i++)
-        {
-            int day = round * len + i + 1;
-            if (LoginDays >= day && !IsStarterClaimed(day)) return true;
-        }
+        if (HasUnclaimedStarterCell()) return true;
         // 【2026-10-20 修·主人报「领完红点不灭」】
         // 2026-09-23 主人拍板：每日循环条 / 连击加成条已从弹窗 UI 移除（连击改双倍日），
         // 完整预制体 DailyLoginFull 没有 CycleBar/StreakBar 节点，循环奖与连击档实际无从领取；
         // 这两项不能再计入「有可领」，否则主界面每日登录红点永远不灭（HasClaimable 恒真）。
-        // 累计大奖走底部 InfoBar 点击领取，入口还在，保留判定。
-        if (IsAccumReached() && !IsAccumClaimed()) return true;
+        // 【2026-10-29 主人拍板 B】底部累计大奖条也改纯进度展示（领取入口撤了，见 DailyLoginUI.Build.BindBars），
+        // 同样不再计入——满了也没东西可领，再算进去红点又会永不灭。
         return false;
     }
 
@@ -195,6 +237,7 @@ public static class DailyLoginSystem
         if (dbl) r = DailyLoginDefs.Doubled(r);
         Grant(r);
         SetFlag(StarterKeyPrefix + day, 1);
+        MarkClaimedToday();
         SaveSystem.Instance.Save();
         // 2026-10-20 主人拍板：实发佣兵本体时统一报喜（与三选一抽中报喜同款）；佣兵类不参与 X2 翻倍
         msg = GrantedMercHireId != null

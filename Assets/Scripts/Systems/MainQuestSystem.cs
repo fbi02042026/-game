@@ -379,57 +379,96 @@ public static class MainQuestSystem
         var d = Data;
 
         // 文案/参数来自 quest.csv（2026-10-26 任务体系单独成模块）；缺行 LogError 不兜底。
-        // ① 每日登录：进度走现成的 DailyLoginSystem（手动领，不是自动发放）
-        if (QuestTable.TryDaily("daily_login", out var login))
-        {
-            bool loginClaimed = DailyLoginSystem.CycleClaimedToday;
-            string loginReward = login.rewardText;
-            int idx = DailyLoginSystem.CycleIndex;
-            if (idx >= 0 && idx < DailyLoginDefs.Cycle.Length)
-                loginReward = DailyLoginDefs.Cycle[idx].DisplayName.Replace("\n", "\u3001");
+        // 【2026-10-29 扩编】表驱动：全部日常行按 order 升序输出（简单→困难）。
+        // 今日通关保留专属链路（ChapterManager 发石）；其余全走通用计数视图（含每日登录：
+        // 2026-10-29 主人拍板「不要强制玩家点击每日登录领取 只要每天打开游戏就给奖励」→
+        // 进度=GetTaskCounter(daily_login)=loginLastDay==今天，DailyTaskSystem 自动发奖，
+        // 不再有手动领取入口、也不再判 DailyLoginSystem.ClaimedToday），
+        // 计数器真源 = SaveData.GetTaskCounter(targetType)，奖励由 DailyTaskSystem 达标自动发。
+        var rows = QuestTable.RowsOfCategory("日常");
+        bool sawLogin = false, sawClear = false;
 
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+
+            // ① 每日登录走通用计数视图（2026-10-29 主人拍板「不要强制玩家点击每日登录领取
+            //    只要每天打开游戏就给奖励」：进度=GetTaskCounter(daily_login)=loginLastDay==今天，
+            //    打开游戏 1 秒后 OnEnterGame 落 loginLastDay 即达标，DailyTaskSystem 自动发经验，
+            //    不再有手动领取入口、也不再判 ClaimedToday）。这里只记 sawLogin 供缺行断言。
+            if (row.id == "daily_login") sawLogin = true;
+
+            // ② 通关 3 关：ChapterManager.OnStageComplete 里达标自动发 5 石，这里只显示进度。
+            //    need 真源 = SaveData.DAILY_CLEAR_TASK_NEED（发奖同一处）；表里 target_count 仅为参照。
+            if (row.id == "daily_clear")
+            {
+                sawClear = true;
+                int need = SaveData.DAILY_CLEAR_TASK_NEED;
+                int cur = Math.Min(need, TodayClearCount());
+                bool clearClaimed = d != null && d.dailyClearTaskClaimDayKey == ShopDefs.TodayKey();
+                list.Add(new DailyQuestView
+                {
+                    id = row.id,
+                    title = row.title,
+                    desc = string.Format(row.desc, cur, need),
+                    progress = cur,
+                    need = need,
+                    rewardText = row.rewardText,
+                    done = clearClaimed || cur >= need,
+                    claimable = false
+                });
+                continue;
+            }
+
+            // ③ 其余日常（每日登录/财源广进/除害/招贤纳士/清剿/讨伐首领）：通用计数视图
+            int cntNeed = row.targetCount > 0 ? row.targetCount : 1;
+            int cnt = Math.Min(cntNeed, d != null ? d.GetTaskCounter(row.targetType) : 0);
+            bool cntClaimed = d != null && d.IsTaskRewardClaimed(row.id, int.Parse(ShopDefs.TodayKey()));
             list.Add(new DailyQuestView
             {
-                id = login.id,
-                title = login.title,
-                desc = login.desc,
-                progress = loginClaimed ? 1 : 0,
-                need = 1,
-                rewardText = loginReward,
-                done = loginClaimed,
-                claimable = !loginClaimed
-            });
-        }
-        else
-        {
-            Debug.LogError("[MainQuest] quest.csv 缺 daily_login 行（日常列表少一条）");
-        }
-
-        // ② 通关 3 关：ChapterManager.OnStageComplete 里达标自动发 5 石，这里只显示进度。
-        //    need 真源 = SaveData.DAILY_CLEAR_TASK_NEED（发奖同一处）；表里 target_count 仅为参照。
-        if (QuestTable.TryDaily("daily_clear", out var clear))
-        {
-            int need = SaveData.DAILY_CLEAR_TASK_NEED;
-            int cur = Math.Min(need, TodayClearCount());
-            bool clearClaimed = d != null && d.dailyClearTaskClaimDayKey == ShopDefs.TodayKey();
-
-            list.Add(new DailyQuestView
-            {
-                id = clear.id,
-                title = clear.title,
-                desc = string.Format(clear.desc, cur, need),
-                progress = cur,
-                need = need,
-                rewardText = clear.rewardText,
-                done = clearClaimed || cur >= need,
+                id = row.id,
+                title = row.title,
+                desc = string.Format(row.desc, cnt, cntNeed),
+                progress = cnt,
+                need = cntNeed,
+                rewardText = row.rewardText,
+                done = cntClaimed || cnt >= cntNeed,
                 claimable = false
             });
         }
-        else
-        {
-            Debug.LogError("[MainQuest] quest.csv 缺 daily_clear 行（日常列表少一条）");
-        }
 
+        if (!sawLogin) Debug.LogError("[MainQuest] quest.csv 缺 daily_login 行（日常列表少一条）");
+        if (!sawClear) Debug.LogError("[MainQuest] quest.csv 缺 daily_clear 行（日常列表少一条）");
+        return list;
+    }
+
+    /// <summary>
+    /// 周常任务视图（2026-10-29 扩编：周一刷新，进度读周计数器，奖励 DailyTaskSystem 达标自动发钻石）。
+    /// 与日常同结构；任务面板在日常页签尾部带小节头追加展示，任务栏（FirstOpenDaily）不含周常。
+    /// </summary>
+    public static List<DailyQuestView> WeeklyViews()
+    {
+        var list = new List<DailyQuestView>();
+        var d = Data;
+        var rows = QuestTable.RowsOfCategory("周常");
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            int need = row.targetCount > 0 ? row.targetCount : 1;
+            int cur = Math.Min(need, d != null ? d.GetTaskCounter(row.targetType) : 0);
+            bool claimed = d != null && d.IsTaskRewardClaimed(row.id, SaveData.WeekMondayKey());
+            list.Add(new DailyQuestView
+            {
+                id = row.id,
+                title = row.title,
+                desc = string.Format(row.desc, cur, need),
+                progress = cur,
+                need = need,
+                rewardText = row.rewardText,
+                done = claimed || cur >= need,
+                claimable = false
+            });
+        }
         return list;
     }
 

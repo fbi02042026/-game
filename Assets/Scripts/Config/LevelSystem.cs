@@ -103,7 +103,7 @@ public static class LevelSystem
     }
 
     // ============================================================
-    // 经验入口（唯一出口 = AddStageClearExp；调用点只有 BattleManager.BeginRewardSequence 一处）
+    // 经验入口（AddStageClearExp=关卡经验，白名单见 StageFeedsExp；AddDirectExp=任务奖励经验，2026-10-29）
     // ============================================================
 
     /// <summary>
@@ -162,6 +162,42 @@ public static class LevelSystem
         var hero = Hero.Instance;
         if (hero != null) BattleVFXSystem.Instance?.PlayLevelUp(hero.transform.position);
         LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
+    }
+
+    /// <summary>
+    /// 直接加经验（2026-10-29 新增：每日任务奖励经验出口，主人拍板「有些奖励可以给些经验」）。
+    /// 与 AddStageClearExp 同一本账（存档 playerExp/playerLevel），但不走关卡白名单、不放英雄 VFX；
+    /// 调用时机都在城镇内（DailyTaskSystem.Settle 由任务栏轮询驱动），升级弹窗立即 Flush，不挂到回城。
+    /// </summary>
+    public static void AddDirectExp(int exp)
+    {
+        if (exp <= 0) return;
+
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null)
+        {
+            Debug.LogError("[LevelSystem] AddDirectExp 失败：SaveData 为空，经验不发（不兜底）");
+            return;
+        }
+
+        int before = Mathf.Max(1, data.playerLevel);
+        data.playerExp += exp;
+        bool leveled = false;
+        int guard = 0;
+        while (data.playerExp >= GetExpForLevel(data.playerLevel) && guard++ < 64)
+        {
+            data.playerExp -= GetExpForLevel(data.playerLevel);   // 本级门槛扣掉，余量结转下一级
+            data.playerLevel++;
+            leveled = true;
+        }
+
+        if (!leveled) return;
+
+        // 立刻落盘：升级是关键进度，不靠下一笔存档兜
+        SaveSystem.Instance?.Save();
+
+        LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
+        LevelUpPopup.FlushPending();   // 城镇已就绪（任务栏轮询只在城镇跑），立即弹，不挂起到下次回城
     }
 
     // ============================================================

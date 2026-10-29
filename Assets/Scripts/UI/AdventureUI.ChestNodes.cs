@@ -23,6 +23,9 @@ using UnityEngine.EventSystems;
 //   从选中章起向上连续铺 ChestSpanChapters 个大关（1-5 上面接 2-1…2-5、3-1…），各章按各自的
 //   通关/领取进度让位、未解锁章按难度整章灰锁；铺出的槽位向上堆（瘦屏 Fit 重排基准），
 //   超出视口的部分成为滚动余量，窗口定位 ScrollChestToCurrent 真正生效（点头像回位同理）。
+// · 【2026-10-29 主人拍板「打过一次后关卡变灰然后往下移 上面的关卡从锁定变成关闭的状态」】
+//   通关的关不再让位消失：以「领取后」灰图留在列里（列序底→顶=早→晚，灰关天然在未打关下方）；
+//   还没打到的关一律改「关闭」图，「未解锁」图只留给难度未开启的灰锁章。
 public partial class AdventureUI
 {
     /// <summary>预制体节点容器 RightContent/关卡。</summary>
@@ -677,12 +680,12 @@ public partial class AdventureUI
     }
 
     /// <summary>
-        /// 按当前选中章刷新窗口内容。2026-10-23 主人拍板改「领取制」：
-        /// · 已领取的关从列里消失（未领关依次入槽），上面的槽位补位滑动；
-        /// · 最新通关且未领的宝箱 = 开启图（刚打完那格播「关闭→开启」揭示动效后可点领奖）；
-        /// · 更早通关未领 = 关闭图，仍可点（奖励不丢）【2026-10-24 主人拍板】；
+        /// 按当前选中章刷新窗口内容。2026-10-23 主人拍板「领取制」，2026-10-29 主人拍板改「留列制」：
+        /// · 【2026-10-29】已通关的关不再从列里消失：领取后灰图留在列里（列序底→顶=早→晚，
+        ///   灰关天然在未打关下方）；还没打到的关一律「关闭」图；
+        /// · 最新通关那格回页即灰（奖励战斗里已发，无需领取动效）；
         /// · 轮到新当前关（当前关前进了）播开启动画：从小到大+透明到出现；
-        /// · 可领宝箱所在的槽位 = 列底，不再做底槽淡出。
+        /// · 当前关 = 列里唯一浮动 + ×1.35 放大 + 头像指示的槽位。
     /// 进度真源 = 存档 clearedStages（键 "章_关卡"，0 起关号）；领取真源 = chestClaimedStages。
     /// </summary>
     void RefreshChestNodes()
@@ -774,7 +777,8 @@ public partial class AdventureUI
 
     /// <summary>
     /// 重排槽位内容（【2026-10-26 跨章连续列】关卡依次入槽，本章铺完接下一章，直至铺满槽位上限；
-    /// 各章按各自的通关/领取进度让位、按难度锁章；skipSlot=退场中的槽位不写内容）。
+    /// 【2026-10-29 主人拍板】通关的关不再让位——灰图（领取后）留在列里、天然位于未打关下方；
+    /// 各章按难度锁章；skipSlot=退场中的槽位不写内容）。
     /// 内容下移一档的槽位给 +rhythm 滑动偏移，由 Update 逐帧衰减实现补位滑动。
     /// 进度真源 = 存档 clearedStages（键 "章_关卡"，0 起关号）；领取真源 = chestClaimedStages。
     /// </summary>
@@ -807,11 +811,7 @@ public partial class AdventureUI
                 int chMax = GetMaxClearedStage(curCh);
                 int chCur = Mathf.Clamp(chMax + 1, 1, total + 1);
                 bool chLocked = !ChapterRouteTable.CanEnterAtDiff(curCh, _selectedDiff, data);
-                bool cl = curStage <= chMax;
-                bool claimed = cl && data != null && data.IsChestClaimed(curCh, curStage - 1);
-                // 通关的关除「刚打完的关」（显示领取后图）外一律让位；灰锁章不让位（整章按未解锁显示全列）
-                bool skip = claimed || (!chLocked && cl && curStage != chMax);
-                if (skip) continue;
+                // 【2026-10-29 主人拍板】已通关/已领取的关一律照常入槽（变灰留在列里），不再 skip 让位
                 sCh = curCh; sStage = curStage; sMax = chMax; sCur = chCur; sLocked = chLocked;
                 break;
             }
@@ -851,12 +851,13 @@ public partial class AdventureUI
         bool isCleared = !chLocked && stage <= chMaxCleared;
         bool isCurrent = !chLocked && stage == chCurrent;
 
-        // 四态换图（【2026-10-26 主人拍板】覆盖 10-24「开启图可点领取」口径）：
-        // 胜利奖励已在战斗结果界面直接发放，冒险页不再走「点宝箱领取」——
-        // · 已通关 → 领取后图（不可点，主人已补三材质「领取后」素材）；
-        // · 当前关（未打）→ 关闭图不可点；没打到 → 未解锁图。
+        // 换图（【2026-10-29 主人拍板「打过一次后关卡变灰往下移，上面的从锁定变关闭」】）：
+        // 胜利奖励已在战斗结果界面直接发放，冒险页不走「点宝箱领取」——
+        // · 已通关 → 领取后灰图（不可点，留在列里、位于未打关卡下方）；
+        // · 当前关与还没打到的关 → 一律「关闭」图；「未解锁」图只留给难度未开启的灰锁章。
+        //   当前关另有整槽 ×1.35 放大 + 浮动 + 头像指示，与上方关闭关区分。
         string[] paths = ChestPathsForStage(stage);
-        int state = isCleared ? ChestStateClaimed : (isCurrent ? ChestStateClosed : ChestStateLocked);
+        int state = chLocked ? ChestStateLocked : (isCleared ? ChestStateClaimed : ChestStateClosed);
         var sp = LoadChestSprite(paths[state]);
         var chestImg = _slotChestImgs[slot];
         if (chestImg != null)

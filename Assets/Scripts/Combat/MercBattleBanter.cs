@@ -48,8 +48,16 @@ public class MercBattleBanter : MonoBehaviour
         if (pool.Count == 0) return;
 
         var merc = pool[Random.Range(0, pool.Count)];
-        string key = !string.IsNullOrEmpty(merc.hireId) ? merc.hireId : merc.mercId;
-        string line = MercLineTable.Pick(key, MercLineTable.Scene.Combat);
+        // 【2026-10-29 主人拍板「战斗中的对话框也要有信息量，但不是重要的」】
+        // 四成概率说章节风味台词（剧情钩子的回声，纯氛围），其余照旧说个人台词。
+        string line = null;
+        if (Random.value < 0.4f)
+            line = ChapterBattleFlavor.PickForCurrentBattle(_bm);
+        if (string.IsNullOrEmpty(line))
+        {
+            string key = !string.IsNullOrEmpty(merc.hireId) ? merc.hireId : merc.mercId;
+            line = MercLineTable.Pick(key, MercLineTable.Scene.Combat);
+        }
         if (string.IsNullOrEmpty(line)) return;
 
         BattleHeadTalkUI.Ensure().PlayLine(merc, line);

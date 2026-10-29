@@ -394,6 +394,21 @@ public class QuestPanelUI : MonoBehaviour
             AddRow(d.title, d.desc + "　奖励：" + d.rewardText, status,
                 d.done ? null : (Action)delegate { OnDailyAction(d); });
         }
+
+        // 周常任务（2026-10-29 扩编）：同一页签尾部带小节头追加，走同一跳转路由；
+        // 头部计数只算今日任务（周任务是另一把进度尺，混进去「今日 3/7」会让人看不懂）。
+        var weekly = MainQuestSystem.WeeklyViews();
+        if (weekly.Count > 0)
+        {
+            AddRow("本周任务", "周一刷新", 1, null);
+            for (int i = 0; i < weekly.Count; i++)
+            {
+                var w = weekly[i];
+                int wstatus = w.done ? 2 : 0;
+                AddRow(w.title, w.desc + "　奖励：" + w.rewardText, wstatus,
+                    w.done ? null : (Action)delegate { OnDailyAction(w); });
+            }
+        }
     }
 
     /// <summary>

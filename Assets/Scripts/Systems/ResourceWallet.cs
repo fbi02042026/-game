@@ -147,6 +147,8 @@ public static class ResourceWallet
         result.hitCap = overflow > 0 || result.current >= max;
         if (type == ResourceType.Diamond)
             Analytics.DiamondChange("gain", amount, Get(data, type)); // 埋点：钻石收入（不影响返回值）
+        if (type == ResourceType.Gold)
+            data.CountGoldGain(add);   // 【2026-10-29】每日任务「财源广进」金币收入计数（实到账 add，溢出邮件不计）
 
         if (overflow > 0 && overflowToMail)
             MailSystem.EnqueueResourceOverflow(type, overflow);

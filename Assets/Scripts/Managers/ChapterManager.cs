@@ -480,7 +480,7 @@ public class ChapterManager : Singleton<ChapterManager>
                 // clearDiff=-1（存档未就绪等异常）不记，宁缺勿滥（fail closed 由查询端把关节制）。
                 if (clearDiff >= 0) data.MarkChapterClearedAtDiff(currentChapter, clearDiff);
 
-                // 【2026-10-26 主人拍板「第一章可以出现支线」】派岛门槛改在 EnsureForkRoll 内部判（引导完成即派）。
+                // 【2026-10-29 主人拍板改回】派岛门槛在 EnsureForkRoll 内部判「通关第 1 章后」（覆盖 2026-10-26「引导完成即派」）。
                 // 这里保留 currentChapter == 1 外层护栏：第 8 章通关时 branchRoll 刚归零，无条件调会把下周目支线提前掷掉。
                 if (currentChapter == 1) ChapterRouteTable.EnsureForkRoll(data);
 

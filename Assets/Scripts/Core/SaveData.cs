@@ -316,9 +316,9 @@ public class SaveData
     /// </summary>
     public bool hardCleared = false;
     /// <summary>
-    /// 本周目支线：0 = 未派定。【2026-10-26 主人拍板「第一章可以出现支线」】引导完成后随机派定第一条
-    /// （旧口径「通关第 1 章后派」作废；洗牌袋只掷未通关过的；见 ChapterRouteTable.EnsureForkRoll）。
-    /// 通关第 8 章后归零，下一周目引导完成后再派。
+    /// 本周目支线：0 = 未派定。【2026-10-26 曾拍板「第一章可以出现支线」】当时口径为引导完成后随机派定第一条；
+    /// 【2026-10-29 改回】派定门槛改回「通关第 1 章（第一大关）后」（见 ChapterRouteTable.EnsureForkRoll），洗牌袋只掷未通关过的。
+    /// 通关第 8 章后归零，下一周目第 1 章通关后再派。
     /// </summary>
     public int chosenBranch = 0;
     /// <summary>本周目第一次派定的支线岛 id（1..8，0=未派；冒险页支线岛1 显示它）。
@@ -481,6 +481,18 @@ public class SaveData
     /// <summary>每日任务奖励：5 天赋石。</summary>
     public const int DAILY_CLEAR_TASK_STONES = 5;
 
+    // === 每日/周常任务计数（2026-10-29 扩编，主人拍板：金币/击杀/Boss/佣兵/升星）===
+    public string dailyTaskDayKey = "";      // 日计数日期键（yyyyMMdd）
+    public int dailyGoldGained = 0;          // 今日获取金币（ResourceWallet 金币收入，实到账）
+    public int dailyKillNormal = 0;          // 今日击败小怪（非 Boss；精英也算小怪）
+    public int dailyKillBoss = 0;            // 今日击杀 Boss
+    public int dailyRecruitMerc = 0;         // 今日获取佣兵（新解锁，任何来源）
+    public int weeklyTaskWeekKey = 0;        // 周计数键（本周周一 yyyyMMdd，周一刷新）【2026-10-29 修】原 string 与 WeekMondayKey() 的 int 返回对不上（CS0019/CS0029）；字段新增、尚无存档写过它，改类型零兼容风险
+    public int weeklyMercStarUp = 0;         // 本周升星佣兵次数
+    /// <summary>任务奖励已发放记录（键 = 任务id，值 = 领取日/周键 int；DailyTaskSystem 自动发奖防重复）。</summary>
+    public List<StringIntEntry> taskRewardClaimEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> taskRewardClaimDay = new Dictionary<string, int>();
+
     // === 日志成就 A001–A015 ===
     public List<StringIdEntry> completedLogAchEntries = new List<StringIdEntry>();
     public List<StringIdEntry> claimedLogAchEntries = new List<StringIdEntry>();
@@ -610,6 +622,7 @@ public class SaveData
         shopPurchaseEntries ??= new List<StringIntEntry>();
         skillFragmentEntries ??= new List<StringIntEntry>();
         loginFlagEntries ??= new List<StringIntEntry>();
+        taskRewardClaimEntries ??= new List<StringIntEntry>();
         achievementProgressEntries ??= new List<StringIntEntry>();
         completedAchievementEntries ??= new List<StringIdEntry>();
         claimedMilestoneEntries ??= new List<IntIdEntry>();
@@ -720,6 +733,14 @@ public class SaveData
             var e = loginFlagEntries[i];
             if (e == null || string.IsNullOrEmpty(e.id)) continue;
             loginFlags[e.id] = e.value;
+        }
+
+        taskRewardClaimDay = new Dictionary<string, int>();
+        for (int i = 0; i < taskRewardClaimEntries.Count; i++)
+        {
+            var e = taskRewardClaimEntries[i];
+            if (e == null || string.IsNullOrEmpty(e.id)) continue;
+            taskRewardClaimDay[e.id] = e.value;
         }
 
         achievementProgress = new Dictionary<string, int>();
@@ -931,6 +952,10 @@ public class SaveData
         }
 
         MigrateClearedChapters();
+        // 【2026-10-29 主人拍板】支线岛改为「通关第 1 章后才开放」：若第 1 章尚未通关却已派定支线岛
+        // （旧档 / 2026-10-26「引导完成即派」口径遗留），清掉重派——避免一进游戏就显示支线；
+        // 等第 1 章通关后由 EnsureForkRoll 重新随机派定。HasClearedChapter(1) 在 MigrateClearedChapters 后已就绪。
+        if (!HasClearedChapter(1)) { branchRoll1 = 0; branchRoll2 = 0; }
         MigrateMercScrolls();
         if (unlockedMercIds.Count == 0)
             SeedDefaultUnlockedMercs();
@@ -1106,6 +1131,8 @@ public class SaveData
         unlockedMercEntries = FromIdSet(unlockedMercIds);
         // 【2026-10-20 主人拍板】记获得顺序（只追加不删，下标即获得先后），供队列/列表双重排序
         RecordMercUnlockOrder(hireId);
+        // 【2026-10-29】每日任务「招贤纳士」计数：任何来源的新解锁都算（酒馆/抽卡/登录/邮件）
+        CountRecruit();
         return true;
     }
 
@@ -1490,6 +1517,99 @@ public class SaveData
         return 0;
     }
 
+    // === 每日/周常任务计数（2026-10-29 扩编；写入侧挂钩见 DailyTaskSystem 头注释）===
+
+    /// <summary>本周周一的 yyyyMMdd（周任务刷新键；周一 0 点跨周）。</summary>
+    public static int WeekMondayKey()
+    {
+        System.DateTime d = System.DateTime.Now.Date;
+        int dow = (int)d.DayOfWeek;
+        if (dow == 0) dow = 7;   // DayOfWeek 周日=0，换算成周一开头
+        d = d.AddDays(-(dow - 1));
+        return int.Parse(d.ToString("yyyyMMdd"));
+    }
+
+    /// <summary>跨天/跨周归零（幂等；所有计数入口与读进度前都先调）。</summary>
+    public void EnsureDailyTaskKeys()
+    {
+        string today = ShopDefs.TodayKey();
+        if (dailyTaskDayKey != today)
+        {
+            dailyTaskDayKey = today;
+            dailyGoldGained = 0;
+            dailyKillNormal = 0;
+            dailyKillBoss = 0;
+            dailyRecruitMerc = 0;
+        }
+        int wk = WeekMondayKey();
+        if (weeklyTaskWeekKey != wk)
+        {
+            weeklyTaskWeekKey = wk;
+            weeklyMercStarUp = 0;
+        }
+    }
+
+    /// <summary>今日获取金币（实到账 add；溢出进邮件的部分不计入任务进度）。</summary>
+    public void CountGoldGain(long added)
+    {
+        if (added <= 0) return;
+        EnsureDailyTaskKeys();
+        dailyGoldGained += (int)System.Math.Min(added, (long)int.MaxValue);
+    }
+
+    /// <summary>今日击败小怪 / 击杀 Boss（精英按小怪算）。</summary>
+    public void CountKill(bool isBoss)
+    {
+        EnsureDailyTaskKeys();
+        if (isBoss) dailyKillBoss++;
+        else dailyKillNormal++;
+    }
+
+    /// <summary>今日获取佣兵（UnlockMerc 新解锁时内调）。</summary>
+    public void CountRecruit()
+    {
+        EnsureDailyTaskKeys();
+        dailyRecruitMerc++;
+    }
+
+    /// <summary>本周升星佣兵（TryStarUp 成功时调）。</summary>
+    public void CountMercStarUp()
+    {
+        EnsureDailyTaskKeys();
+        weeklyMercStarUp++;
+    }
+
+    /// <summary>按任务表 targetType 读当前进度（未知类型返回 0）。</summary>
+    public int GetTaskCounter(string targetType)
+    {
+        EnsureDailyTaskKeys();
+        switch (targetType)
+        {
+            case "daily_gain_gold": return dailyGoldGained;
+            case "daily_kill_normal": return dailyKillNormal;
+            case "daily_kill_boss": return dailyKillBoss;
+            case "daily_recruit_merc": return dailyRecruitMerc;
+            case "weekly_merc_starup": return weeklyMercStarUp;
+            case "daily_login": return loginLastDay == ShopDefs.TodayKey() ? 1 : 0;   // 打开游戏即完成（DailyLoginSystem.OnEnterGame 落 loginLastDay；2026-10-29 主人拍板「不要强制玩家点击领取」）
+            default: return 0;
+        }
+    }
+
+    /// <summary>任务奖励是否已按该日/周键发放过（防重复发放）。</summary>
+    public bool IsTaskRewardClaimed(string taskId, int keyInt)
+        => taskRewardClaimDay != null && taskRewardClaimDay.TryGetValue(taskId, out int v) && v == keyInt;
+
+    /// <summary>标记任务奖励已发放（Dictionary 双写 entries，随存档走）。</summary>
+    public void MarkTaskRewardClaimed(string taskId, int keyInt)
+    {
+        if (IsTaskRewardClaimed(taskId, keyInt)) return;
+        taskRewardClaimDay ??= new Dictionary<string, int>();
+        taskRewardClaimDay[taskId] = keyInt;
+        taskRewardClaimEntries = new List<StringIntEntry>(taskRewardClaimDay.Count);
+        foreach (var kv in taskRewardClaimDay)
+            taskRewardClaimEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+    }
+
     static List<IntIdEntry> FromIntIdSet(HashSet<int> set)
     {
         var list = new List<IntIdEntry>(set != null ? set.Count : 0);
@@ -1586,6 +1706,11 @@ public class SaveData
         loginFlagEntries = new List<StringIntEntry>(loginFlags.Count);
         foreach (var kv in loginFlags)
             loginFlagEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        taskRewardClaimEntries = new List<StringIntEntry>(taskRewardClaimDay != null ? taskRewardClaimDay.Count : 0);
+        if (taskRewardClaimDay != null)
+            foreach (var kv in taskRewardClaimDay)
+                taskRewardClaimEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
 
         achievementProgressEntries = new List<StringIntEntry>(achievementProgress.Count);
         foreach (var kv in achievementProgress)

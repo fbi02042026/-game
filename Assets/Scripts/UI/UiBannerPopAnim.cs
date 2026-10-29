@@ -82,8 +82,9 @@ public static class UiBannerPopAnim
         group.alpha = 0f;
     }
 
-    /// <summary>波次/Boss 来袭：大幅砸入 → 缩到 100% 时颤一下 → 停驻 → 渐隐。</summary>
-    public static IEnumerator CoPlayWaveIncoming(Image image, CanvasGroup group)
+    /// <summary>波次/Boss 来袭：大幅砸入 → 缩到 100% 时颤一下 → 停驻 → 渐隐。
+    /// <param name="targetWidth">目标宽（设计单位，如 GameConfig.DESIGN_WIDTH=720）。≤0 时维持原生尺寸。</param></summary>
+    public static IEnumerator CoPlayWaveIncoming(Image image, CanvasGroup group, float targetWidth = 0f)
     {
         if (image == null || group == null)
             yield break;
@@ -94,8 +95,17 @@ public static class UiBannerPopAnim
         rt.localScale = Vector3.one;
 
         Vector2 nativeSize = rt.sizeDelta;
+        // 等比放大到目标宽（默认 0 = 原生）；targetSize 与原生同比例，preserveAspect 不会变形/留黑边。
+        Vector2 targetSize = nativeSize;
+        if (targetWidth > 0.0001f && nativeSize.x > 0f)
+        {
+            float k = targetWidth / nativeSize.x;
+            targetSize = nativeSize * k;
+        }
+        rt.sizeDelta = targetSize;
+
         Vector2 basePos = rt.anchoredPosition;
-        Vector2 startSize = nativeSize * WaveStartSizeRatio;
+        Vector2 startSize = targetSize * WaveStartSizeRatio;
         rt.sizeDelta = startSize;
         group.alpha = 0.35f;
 
@@ -105,12 +115,12 @@ public static class UiBannerPopAnim
             t += Time.unscaledDeltaTime;
             float u = Mathf.Clamp01(t / WaveSlamDuration);
             float ease = EaseOutBack(u, 1.55f);
-            rt.sizeDelta = Vector2.LerpUnclamped(startSize, nativeSize, ease);
+            rt.sizeDelta = Vector2.LerpUnclamped(startSize, targetSize, ease);
             group.alpha = Mathf.Lerp(0.35f, 1f, Mathf.Clamp01(u * 1.15f));
             yield return null;
         }
 
-        rt.sizeDelta = nativeSize;
+        rt.sizeDelta = targetSize;
         rt.localScale = Vector3.one;
         group.alpha = 1f;
 

@@ -5,7 +5,8 @@ using UnityEngine;
 /// 任务表加载器（2026-10-26 新增，任务体系单独成模块的数据层）。
 ///
 /// 表：Assets/Data/Source/Tables/quest.csv → Resources/Data/Tables/quest.bytes（CookAll → CookQuest）。
-/// 内容：主线（category=主线，8 章 × 5~6 条，含 clear_stages 密度行）+ 日常（category=日常，2 条）。
+/// 内容：主线（category=主线，8 章 × 5~6 条，含 clear_stages 密度行）+ 日常（category=日常，7 条）
+///       + 周常（category=周常，1 条）。（2026-10-29 扩编：日常 2→7、新增周常，见 DailyTaskSystem）
 /// 支线不进表：支线 = 支线岛（2026-10-23 合并方案），运行时读 SaveData.branchRoll1/2，见 QuestBarData.cs。
 ///
 /// 消费方：MainQuestDefs（主线迁表，结构体字段 1:1 对应）与 MainQuestSystem.DailyViews（日常文案参数化）。
@@ -27,6 +28,7 @@ public static class QuestTable
         public int rewardStones;    // 主线完成发天赋石
         public int order;           // 同章内推进顺序
         public string rewardText;   // 日常展示用奖励文案
+        public int rewardExp;       // 任务奖励经验（2026-10-29 扩编末列；0=不发，DailyTaskSystem 随达标自动发）
     }
 
     static readonly List<Row> _rows = new List<Row>();
@@ -64,7 +66,8 @@ public static class QuestTable
                 targetCount = GameTableCsv.TryInt(c[7], out int tc) ? tc : 0,
                 rewardStones = GameTableCsv.TryInt(c[8], out int rs) ? rs : 0,
                 order = GameTableCsv.TryInt(c[9], out int od) ? od : 0,
-                rewardText = c.Length > 10 ? c[10] : ""
+                rewardText = c.Length > 10 ? c[10] : "",
+                rewardExp = c.Length > 12 && GameTableCsv.TryInt(c[12], out int rExp) ? rExp : 0   // 末列（2026-10-29 扩编）
             };
             _rows.Add(row);
         }
@@ -96,5 +99,14 @@ public static class QuestTable
         }
         row = default;
         return false;
+    }
+
+    /// <summary>某类别全部行，按 order 升序（2026-10-29 扩编：日常 7 条 + 周常，见 DailyTaskSystem）。</summary>
+    public static List<Row> RowsOfCategory(string category)
+    {
+        EnsureLoaded();
+        var list = _rows.FindAll(r => r.category == category);
+        list.Sort((a, b) => a.order.CompareTo(b.order));
+        return list;
     }
 }

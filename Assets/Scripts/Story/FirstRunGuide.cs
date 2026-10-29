@@ -1576,7 +1576,11 @@ public class FirstRunGuide : MonoBehaviour
     {
         if (_bubbleRt == null) return;
         SizeBubble(root);
-        _bubbleRt.anchoredPosition = new Vector2(0f, root.rect.height * 0.18f);
+        // 【2026-10-29 主人拍板】只调主界面（城镇大厅）的引导气泡：0.18→0.32。
+        // 本气泡只在主界面出现（CanRun 要求 IsTown+大厅可见；PlayOutro 也在主界面收尾链弹）。
+        // 0.32 = TutorialHintUI 无目标横幅的既有高度（对齐参照，TutorialHintUI 未改动）；
+        // 战斗/结算界面的横幅、贴目标的气泡（PlaceBubbleNearTarget）均不在本次范围，原样不动。
+        _bubbleRt.anchoredPosition = new Vector2(0f, root.rect.height * 0.32f);
     }
 
     /// <summary>气泡贴着目标放：优先下方，下方塞不下就翻到上方，最后夹在屏幕内。</summary>

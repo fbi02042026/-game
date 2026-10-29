@@ -71,6 +71,32 @@ public class MercGainCinematicUI : MonoBehaviour
         if (canvas != null)
             UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.MercGainCinematic);
 
+        // 【2026-10-29 适配根治·最小增量】佣兵节点原是 WorldSpace 嵌套 Canvas（renderMode 2、无相机绑定），
+        // 不参与根画布 CanvasScaler 的等比适配 → 真机竖屏比 9:16 瘦时立绘尺寸/位置脱节、被屏幕边缘切掉。
+        // 改成 ScreenSpace 并绑定 UI 相机、关掉它自带的 CanvasScaler（改继承根 720×1280 适配），立绘随界面一起缩放。
+        // BG/名字/安全区上一版已处理，本次只动这一处，不加多余缩放。
+        var mercGo = UiFind.Deep(transform, "\u4F63\u5175");
+        if (mercGo != null)
+        {
+            var mercCanvas = mercGo.GetComponent<Canvas>();
+            if (mercCanvas != null)
+            {
+                if (canvas != null && canvas.worldCamera != null)
+                {
+                    mercCanvas.renderMode = RenderMode.ScreenSpaceCamera;
+                    mercCanvas.worldCamera = canvas.worldCamera;
+                }
+                else
+                {
+                    mercCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                }
+                mercCanvas.overrideSorting = true;
+                mercCanvas.sortingOrder = 11502;
+                var mercScaler = mercCanvas.GetComponent<CanvasScaler>();
+                if (mercScaler != null) Destroy(mercScaler);
+            }
+        }
+
         var bg = UiFind.Deep(transform, "BG");
         _stand = UiFind.Deep(transform, "Stand");
         var nameTr = UiFind.Deep(transform, "NamePlate");

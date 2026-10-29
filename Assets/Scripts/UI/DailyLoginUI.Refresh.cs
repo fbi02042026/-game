@@ -156,17 +156,15 @@ public partial class DailyLoginUI
             }
         }
 
-        // ---- 底部信息条：累计大奖领取入口（B4）----
-        // 累计大奖三态：已领 / 可领 / 未达天数；只改颜色、不改文字、不改位置（文案以预制体为准）
-        bool accumGot = DailyLoginSystem.IsAccumClaimed();
-        bool accumRdy = DailyLoginSystem.IsAccumReached() && !accumGot;
+        // ---- 底部信息条：纯进度展示（2026-10-29 主人拍板 B：「只是累计天数提示」，领取入口已撤）----
         // B3: 左侧天数改回主人格式（预制体原文 "1 / 8"）
         if (_infoDays != null)
             _infoDays.text = days + " / " + DailyLoginDefs.AccumTargetDays;
         // B10: 底部进度行跟着累计天数走（只改那一行，其余 MercText 保持预制体原文）
         ApplyInfoProgressText(days);
-        // B4: 整条压暗（CaptureBase 模式）+ 特效挂点，绝不碰文字/位置
-        ApplyInfoDim(accumGot, accumRdy);
+        // 纯展示恒为「未达态」观感（×0.55 压暗、无发光材质、effect 关）——与旧版 1~7 天的常态完全一致；
+        // 传 (false, false) = 既非已领也非可领，压暗/特效机制原样保留，将来要恢复领奖改这一个调用就行
+        ApplyInfoDim(false, false);
     }
 
     /// <summary>
@@ -386,10 +384,11 @@ public partial class DailyLoginUI
     }
 
     /// <summary>
-    /// B10: 底部「第N天可领取」跟着累计天数走（主人反馈：一天没领，最下面却写着"第4天"）。
+    /// B10: 底部进度行跟着累计天数走（主人反馈：一天没领，最下面却写着"第4天"）。
     /// 只改 ResolveInfoProgressText 认出来的那一行，其余 MercText（含「限定角色」行）一律保持预制体原文。
-    ///   未达 AccumTargetDays → "8天获得满星" / 已达未领 → "可领取" / 已领 → "已领取"
     ///   【2026-10-22 主人拍板】倒计时文案「还差 6 天可领取」改成「8天获得满星」——进度看上面的 N/8，这里讲目标。
+    ///   【2026-10-29 主人拍板 B】底部条改纯进度展示：撤「可领取/已领取」两个领奖态（领取入口已删）——
+    ///   未达 AccumTargetDays → "8天获得满星"；达到 → "已满 N 天"。
     /// </summary>
     void ApplyInfoProgressText(int days)
     {
@@ -398,10 +397,8 @@ public partial class DailyLoginUI
         var t = _infoMercTexts[_infoProgressIdx];
         if (t == null) return;
 
-        string txt;
-        if (DailyLoginSystem.IsAccumClaimed()) txt = "已领取";
-        else if (days >= DailyLoginDefs.AccumTargetDays) txt = "可领取";
-        else txt = DailyLoginDefs.AccumTargetDays + "天获得满星";
+        int target = DailyLoginDefs.AccumTargetDays;
+        string txt = days >= target ? "已满 " + target + " 天" : target + "天获得满星";
 
         if (t.text != txt) t.text = txt;
     }

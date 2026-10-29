@@ -32,9 +32,14 @@ public partial class AdventureUI
             {
                 // 【2026-10-24 主人拍板「冒险界面信息应该写1-1 不应该是第一章」】
                 // 主线详情标题 = 当前关号（章-关，与岛上关卡编号同口径：下一关 = 已通关最大关 + 1）
+                // 【2026-10-29 主人拍板「给每个关卡加个名字」】编号后追加关名（StageNameDefs 唯一出口，
+                // 关卡槽位牌仍只显示编号——牌面 125px 放不下）
                 int maxCleared = GetMaxClearedStage(_selectedChapter);
                 int cur = Mathf.Clamp(maxCleared + 1, 1, GameConfig.STAGES_PER_GRAND);
-                stageNameLabel.text = $"{_selectedChapter}-{cur}";
+                string stageName = StageNameDefs.Get(_selectedChapter, cur);
+                stageNameLabel.text = string.IsNullOrEmpty(stageName)
+                    ? $"{_selectedChapter}-{cur}"
+                    : $"{_selectedChapter}-{cur}  {stageName}";
             }
             else stageNameLabel.text = ModeLabel(_selectedMode);
         }
@@ -109,12 +114,20 @@ public partial class AdventureUI
 
     /// <summary>
     /// 「剩余次数」栏（DetailPanel/you/Chances）。
-    /// 主线不限；金币/徽记/卷轴副本每日各 2 次（2026-10-24 主人拍板「都是2次」），显示今日真值 x/2。
+    /// 主线一关一次（2026-10-29 主人拍板「未通关和已通关」）：当前关没打过=未通关，
+    /// 选中的章整章通关（当前关号被钳到最后一个已通关）=已通关；
+    /// 金币/徽记/卷轴副本每日各 2 次（2026-10-24 主人拍板「都是2次」），显示今日真值 x/2。
     /// </summary>
     string FormatRemainChances(bool playable, bool main, bool activity)
     {
         if (!playable) return "0";
-        if (main) return "不限";
+        if (main)
+        {
+            // 面板标题永远指向「下一关」（= 已通关最大关 + 1，钳在 1..5）：
+            // 该关已通关 ⇔ 本章 maxCleared 已到顶（整章通完，标题显示 1-5 且 5 是通关关）
+            int maxCleared = GetMaxClearedStage(_selectedChapter);
+            return maxCleared >= GameConfig.STAGES_PER_GRAND ? "已通关" : "未通关";
+        }
         if (activity)
             return $"{ActivityDungeonRules.TriesLeft(SaveSystem.Instance?.Data, _selectedActivityKind)}/{ActivityDungeonRules.DAILY_TRIES}";
         return "0";

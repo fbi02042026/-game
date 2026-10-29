@@ -277,6 +277,7 @@ public static class MercStarSystem
         SaveSystem.Instance.Save();
         string name = def.Name ?? hireId;
         Debug.Log($"[MercStar] {name}({hireId}) 升星：{cur} → {target} 星，消耗徽记 ×{badgeNeed}、本命碎片 ×{need}、金币 {goldCost}、钻石 {diaCost}");
+        data.CountMercStarUp();   // 【2026-10-29】周任务「百战精锐」计数（升星成功才计，失败/回滚不计）
         msg = $"{name} 升星成功（{target} 星）";
         return true;
     }

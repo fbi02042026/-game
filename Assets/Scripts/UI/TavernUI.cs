@@ -475,14 +475,18 @@ public class TavernUI : MonoBehaviour, ITownPage
 
         var beats = new List<StoryBeat>
         {
+            // 【2026-10-29 主人报修】首拍挂酒馆背景（StoryBackgrounds.Tavern，走主线同款地点揭示黑场）；
+            // 老板娘单人句立绘居中（soloCentered，与主线 StoryDirector.Solo / 独眼情报商先例同口径）。
             new StoryBeat
             {
                 rightName = "老板娘", rightPortraitId = StoryPortraits.Innkeeper, speaker = 1,
+                soloCentered = true,
                 text = "哟，坐下聊！今天想听点什么？",
-            },
+            }.Bg(StoryBackgrounds.Tavern),
             new StoryBeat
             {
                 rightName = "老板娘", rightPortraitId = StoryPortraits.Innkeeper, speaker = 1,
+                soloCentered = true,
                 text = TavernLore.InnkeeperLine(),
             },
             new StoryBeat
@@ -498,6 +502,8 @@ public class TavernUI : MonoBehaviour, ITownPage
     /// <summary>
     /// 选项回调：扣当日次数 + 随机已拥有佣兵 +1 信任 + 按话题给剧情补充。
     /// 玩家中途跳过（没走到选项拍）不扣次数、不给好感——次数是好感额度，看白片不耗。
+    /// 【2026-10-29 主人报修】选完选项继续在剧情窗里播字（老板娘把话题内容说出来 + 旁白收好感变化），
+    /// 不再屏幕单独弹 Toast；落盘 / 刷按钮保持在开播前（防剧情中途杀进程白嫖，原口径不变）。
     /// </summary>
     void OnGossipPicked(SaveData data, int picked)
     {
@@ -540,9 +546,21 @@ public class TavernUI : MonoBehaviour, ITownPage
             }
         }
 
-        UIManager.Instance?.ShowToast(extra + $"\n（{name} 的好感 +1，当前 {after}）", true);
+        SaveSystem.Instance?.Save();   // 选完就落盘，中途杀进程别白嫖（原口径，保持在开播前）
         RefreshGossipButton();
-        SaveSystem.Instance?.Save();   // 选完就落盘，中途杀进程别白嫖
+
+        // 继续在剧情窗播：老板娘说话题内容（单人居中），旁白句收好感变化（系统信息不进角色嘴里）。
+        // 第二段首拍不设 Bg —— StoryDirector 会按已登记的酒馆背景补装画面 + 播开播短黑幕（与主线选项回响同款）。
+        StoryDirector.Ensure().Play(new List<StoryBeat>
+        {
+            new StoryBeat
+            {
+                rightName = "老板娘", rightPortraitId = StoryPortraits.Innkeeper, speaker = 1,
+                soloCentered = true,
+                text = extra,
+            },
+            StoryDirector.Narration($"（{name} 的好感 +1，当前 {after}）"),
+        }, null);   // onDone 必填（Play 无默认值），播完无收尾动作
     }
 
     /// <summary>随机一名已拥有佣兵（CopyTo 拷贝再抽，避免遍历中改集合）。</summary>

@@ -47,6 +47,16 @@ public static class StoryBackgrounds
     public const string Island07 = "island_07";
     public const string Island08 = "island_08";
 
+    /// <summary>
+    /// 酒馆内景（2026-10-29 酒馆闲话剧情接入）。复用 2026-10-15 主人拍板的酒馆底图
+    /// （与 <see cref="InformantQuizDirector"/>.TavernBackgroundPath 同一张，800×1424 满屏高）。
+    /// ⚠ 不把图复制进 Story/Backgrounds：同一张图存两份会触发团结对重复内容签发 56 字符
+    /// guid 覆盖 meta 的坑（AGENTS.md 前车之鉴），故 Get() 里按 Resources 路径直读。
+    /// </summary>
+    public const string Tavern = "tavern";
+    /// <summary>酒馆底图的 Resources 路径（真源与 InformantQuizDirector.TavernBackgroundPath 同值，改一边记得另一边）。</summary>
+    public const string TavernPath = "UI/Art/Tavern/酒馆_0007_图层-4";
+
     /// <summary>快节奏场景：地名大字显示时间 ×此系数（2026-10-14 主人拍板：会长办公室/公会大厅的地名大字时间减 30%）。</summary>
     public const float FastTextTimeScale = 0.7f;
 
@@ -80,11 +90,21 @@ public static class StoryBackgrounds
         if (id == Island06) return "王座间";
         if (id == Island07) return "深渊口";
         if (id == Island08) return "黑曜祭坛";
+        if (id == Tavern) return "酒馆";
         return "";
     }
 
     public static Sprite Get(string id)
     {
+        // 酒馆底图不在 Story/Backgrounds 目录：按路径直读（见 Tavern 字段注释，不复制资源）。
+        if (id == Tavern)
+        {
+            var tavernSp = Resources.Load<Sprite>(TavernPath);
+            if (tavernSp == null)
+                Debug.LogError("[StoryBackgrounds] 酒馆背景缺失：Resources/" + TavernPath);
+            return tavernSp;
+        }
+
         var sp = StoryAssetLoader.Load(StoryAssetLoader.Backgrounds, id);
         if (sp != null) return sp;
 

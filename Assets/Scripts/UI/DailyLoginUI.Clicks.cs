@@ -3,7 +3,9 @@ using UnityEngine;
 using UnityEngine.UI;
 
 // 每日登录弹窗 partial —— 2026-10-18 由 DailyLoginUI.cs 纯位移拆出（无逻辑改动）
-// 职责：领取点击（天数/循环/连击/累计大奖四类领取回调）
+// 职责：领取点击（天数/循环/连击三类领取回调）
+// 【2026-10-29 主人拍板 B】累计大奖领取入口已撤（底部 InfoBar 改纯进度展示）：原 OnClickAccum 删除；
+// 领取逻辑 TryClaimAccum 保留在 DailyLoginSystem（现无调用点，备用）。
 public partial class DailyLoginUI
 {
 
@@ -82,28 +84,6 @@ public partial class DailyLoginUI
         Refresh();
     }
 
-    /// <summary>
-    /// B4: 底部信息条「累计大奖」领取入口（与 OnClickStreak 写法一致）。
-    /// 走预制体已有 InfoBar 节点的 Button，不新建；领取结果弹 Toast 后刷新整页。
-    /// </summary>
-    void OnClickAccum()
-    {
-        string msg;
-        bool ok = DailyLoginSystem.TryClaimAccum(out msg);
-        GlobalToastUI.Show(msg);
-        if (ok)
-        {
-            // 2026-10-15 主人拍板「领取后就不用再弹了」：累计大奖领到手，本次进程关掉后不再自动弹
-            MarkClaimConsumed();
-            RedDot.RefreshCommon();   // 【2026-10-18 修】领取后立即同步红点
-            Debug.Log($"[DailyLogin] {msg}");
-            // B12: 累计大奖同样弹「获得奖励」弹窗（主人反馈：领了没弹窗）
-            // 实发佣兵本体 → 先播「获得佣兵」演出（同新手格口径）
-            if (DailyLoginSystem.LastGrantedMercHireId != null)
-                MercGainCinematicUI.Show(DailyLoginSystem.LastGrantedMercHireId, () => ShowRewardPopup(DailyLoginDefs.AccumReward, 1));
-            else
-                ShowRewardPopup(DailyLoginDefs.AccumReward, 1);
-        }
-        Refresh();
-    }
+    // 【2026-10-29 主人拍板 B】OnClickAccum（底部信息条累计大奖领取）已随入口一并删除，
+    // 见文件头注释；满 8 天底部条只当天数进度提示，不可点、不给奖。
 }

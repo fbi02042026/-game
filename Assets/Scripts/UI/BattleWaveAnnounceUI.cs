@@ -187,7 +187,7 @@ public class BattleWaveAnnounceUI : MonoBehaviour
         _image.sprite = sp;
         _image.enabled = true;
         SetSubtitle(subtitle);
-        yield return UiBannerPopAnim.CoPlayWaveIncoming(_image, _group);
+        yield return UiBannerPopAnim.CoPlayWaveIncoming(_image, _group, GameConfig.DESIGN_WIDTH);
 
         _image.enabled = false;
         SetSubtitle(null);
