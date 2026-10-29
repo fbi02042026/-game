@@ -73,10 +73,12 @@ public static class BattleResultScreen
     /// 【2026-10-25 主人拍板】胜利新流程见类头注释：奖励格数据源 = stats（本局 BattleRunStats），
     /// 调用方（FinishStageAfterPortalReached）传 RunStats；失败路（Death 遗产结算）传 null 不上格。
     /// 非战斗场景 / 预制体缺失 → 不弹，直接走 onDone（缺真值不卡流程，铁律 14）。
+    /// 【2026-10-29 竞技场】battleSceneOnly=false 允许城镇场景调用（竞技场结算没有战斗场景）；
+    /// 默认 true，原战斗流程调用方零改动。
     /// </summary>
-    public static void Show(bool victory, BattleRunStats stats, Action onDone)
+    public static void Show(bool victory, BattleRunStats stats, Action onDone, bool battleSceneOnly = true)
     {
-        if (!Application.isPlaying || !GameSceneGate.IsBattle)
+        if (!Application.isPlaying || (battleSceneOnly && !GameSceneGate.IsBattle))
         {
             onDone?.Invoke();
             return;

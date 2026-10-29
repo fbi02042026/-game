@@ -483,11 +483,26 @@ public static class PlayerJobDefs
         bool granted = false;   // 暂时只记不发（不再用于提示），留着备用
         var jobKind = def.PrimaryWeapon;
 
+        // 【2026-10-29 晚主人拍板】竞技场赛季冠军限定武器：仓库里拥有与本职业匹配的 →
+        // 开局直接发传奇品质实例替换初始主手（只有竞技场冠军拿得到，月轮换）。
+        // 装备失败只报错不回退旧初始武器（照暮火之杖口径：不兜底，出错要看得见）。
+        bool arenaStartReplaced = false;
+        var arenaTpl = ArenaSeasonWeapons.OwnedTemplateForJob(data, job);
+        if (arenaTpl != null)
+        {
+            int arenaLv = Hero.Instance != null ? Hero.Instance.level : 1;
+            var arenaInst = ArenaSeasonWeapons.CreateBattleInstance(arenaTpl, jobKind, arenaLv);
+            if (arenaInst != null && bag.TryEquipDirect(arenaInst))
+                arenaStartReplaced = true;
+            else
+                Debug.LogError("[PlayerJobDefs] 竞技场冠军武器开局装备失败，本局主手为空（不回退初始武器）");
+        }
+
         // 先发主手（会清对应槽）；再发副手。
         // 【2026-10-20 主人拍板】已获得稀有·暮火之杖 → 法师初始武器永久替换为稀有版：
         // 每局开局直接发「稀有·暮火之杖」（随机特性随局重掷），旧初始白杖不再出现；
         // 装备失败只报错不回退旧杖（不兜底，出错要看得见）。
-        bool twilightStartReplaced = job == PlayerJobId.Mage && SpecialWeapons.HasTwilightStaffOwned();
+        bool twilightStartReplaced = !arenaStartReplaced && job == PlayerJobId.Mage && SpecialWeapons.HasTwilightStaffOwned();
         if (twilightStartReplaced)
         {
             int lv = Hero.Instance != null ? Hero.Instance.level : 1;
@@ -496,7 +511,7 @@ public static class PlayerJobDefs
             else
                 Debug.LogError("[PlayerJobDefs] 稀有·暮火之杖开局装备失败，本局主手为空（不回退旧初始武器）");
         }
-        else if (!string.IsNullOrEmpty(kit.MainTemplateId) || !string.IsNullOrEmpty(kit.MainSpumOverride))
+        else if (!arenaStartReplaced && (!string.IsNullOrEmpty(kit.MainTemplateId) || !string.IsNullOrEmpty(kit.MainSpumOverride)))
         {
             var mainTpl = ResolveKitTemplate(kit.MainTemplateId, kit.MainSpumOverride);
             if (mainTpl != null)

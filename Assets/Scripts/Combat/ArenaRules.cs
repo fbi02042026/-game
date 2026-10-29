@@ -75,8 +75,19 @@ public static class ArenaRules
     /// <summary>积分分布/规则版本：调分布或积分规则时 +1，老档自动整榜重建（玩家按当前积分重新插位，进度不丢）。
     /// v4（2026-10-29 17:28）：机器人加战力+阵容种子，老档重生成（战力按新曲线、估计值重新起步）。</summary>
     public const int DistVersion = 4;
-    /// <summary>输了掉的积分（0 分保护：积分不足只扣到 0，垫底 0 分群不会被扣成负数）。</summary>
-    public const int LosePoints = 2;
+    /// <summary>输了掉的积分（0 分保护：积分不足只扣到 0，垫底 0 分群不会被扣成负数）。
+    /// 2026-10-29 晚主人拍板「积分可以扣的再多点」：2 → 5。</summary>
+    public const int LosePoints = 5;
+
+    // ── 情绪价值保底（2026-10-29 晚主人拍板：新手必赢 + 低积分止损必赢）──
+    /// <summary>新赛季/首进竞技场：开局前 N 场必赢（「刚进来的玩家可以赢几次增强情绪价值」）。
+    /// 每个赛季开始重置；老档升级到本版本时不动（只有新赛季才享）。</summary>
+    public const int NewbieWinsPerSeason = 3;
+    /// <summary>低积分保底线：积分 ≤ 此值时，接下来 N 场必赢（「当积分到多少的时候让玩家赢几次」）。
+    /// 每场结算前检查 armed；保底打完仍 ≤ 此值会再次触发（橡皮筋，直到爬出低分区）。</summary>
+    public const int LowScorePityAt = 30;
+    /// <summary>低积分保底连续必赢场数。</summary>
+    public const int LowScorePityWins = 3;
 
     // ── 保底 & 熔断（主人 2026-10-29 拍板：输了也掉分但别绝望；赢了别一路平推升太快）──
     /// <summary>连输保底下限：连输 N 次（N 在 PityMin~PityMax 随机）后下一把必赢。</summary>
@@ -89,6 +100,36 @@ public static class ArenaRules
     public const int WinCapMax = 5;
     /// <summary>赢一场的金币。</summary>
     public const int WinGold = 200;
+    /// <summary>对战记录条数上限（新→旧存，超出裁尾；弹窗展示用，2026-10-29 晚主人拍板新增）。</summary>
+    public const int BattleRecordMax = 30;
+
+    // ── 赛季结算奖励（2026-10-29 晚主人拍板「每月奖励给的有点少」+「第 1 名给月轮换限定传奇武器」）──
+    // 【2026-10-29 深夜主人再拍板】档位按主预制体里手摆的「排行奖励」面板来——5 档：1 / 2 / 3 / 4~10 / 11~50。
+    // 两处改动：① 原「第 2~3 名」合并档拆成第 2 名、第 3 名两档（第 3 名 1200 金 + 80 钻）；
+    //          ② 原「第 11 名及以后」收成「第 11~50 名」，<see cref="SeasonRewardTopRank"/> 名开外不发奖。
+    // 面板展示文案已烤在预制体里（档位两边必须同值，改档位要一起动）。
+    /// <summary>第 1 名金币。</summary>
+    public const int SeasonGoldRank1 = 3000;
+    /// <summary>第 1 名钻石。</summary>
+    public const int SeasonDiamondRank1 = 300;
+    /// <summary>第 2 名金币（只有金币+钻石，不给武器）。</summary>
+    public const int SeasonGoldRank2 = 1600;
+    /// <summary>第 2 名钻石。</summary>
+    public const int SeasonDiamondRank2 = 100;
+    /// <summary>第 3 名金币。</summary>
+    public const int SeasonGoldRank3 = 1200;
+    /// <summary>第 3 名钻石。</summary>
+    public const int SeasonDiamondRank3 = 80;
+    /// <summary>第 4~10 名金币。</summary>
+    public const int SeasonGoldRank4_10 = 1000;
+    /// <summary>第 4~10 名钻石。</summary>
+    public const int SeasonDiamondRank4_10 = 50;
+    /// <summary>第 11~50 名金币。</summary>
+    public const int SeasonGoldRank11_50 = 600;
+    /// <summary>第 11~50 名钻石。</summary>
+    public const int SeasonDiamondRank11_50 = 0;
+    /// <summary>发奖名次上限：第 11~50 名有奖，此名次开外不发（与预制体「11-50」档同值）。</summary>
+    public const int SeasonRewardTopRank = 50;
     /// <summary>机器人每日积分漂移下限（有涨有跌，纯数值味道，不影响换位链）。</summary>
     public const int BotDriftMin = -3;
     /// <summary>机器人每日积分漂移上限（涨多跌少）。</summary>
@@ -107,6 +148,7 @@ public static class ArenaRules
     /// <summary>每日 + 每月 + 换位链自检（读档收口 / 弹窗打开 / 入口点击都会调，幂等）。</summary>
     public static void EnsurePeriods(SaveData data)
     {
+        ArenaSeasonWeapons.EnsureRegistered();   // 冠军武器模板注册（幂等；邮件领取/出战选装都依赖查表）
         EnsureMonth(data);
         EnsureDay(data);
         EnsureLadder(data);
@@ -128,6 +170,9 @@ public static class ArenaRules
         {
             RegenerateBots(data);
             InitLadder(data);
+            // 首进竞技场 = 「刚进来的玩家」：开局送 N 场必赢（情绪价值，2026-10-29 晚主人拍板）
+            data.arenaFreshWinsLeft = NewbieWinsPerSeason;
+            data.arenaLowPityLeft = 0;
         }
         else
         {
@@ -152,37 +197,80 @@ public static class ArenaRules
             int finalRank = PlayerRank(data);
             var rw = RewardFor(finalRank);
             string lastMonth = DateTime.Now.AddMonths(-1).ToString("M月");
-            if (rw.gold > 0 || rw.diamond > 0)
+            var mail = new MailEntry
             {
-                var mail = new MailEntry
+                title = $"竞技场·{lastMonth}赛季结算",
+                body = $"上赛季最终排名：第 {finalRank} 名\n奖励已附上，新赛季再冲！",
+                sender = "竞技场组委会",
+                type = MailType.Reward,
+                gold = rw.gold,
+                diamond = rw.diamond,
+            };
+            // 【2026-10-29 晚主人拍板】冠军限定武器：第 1 名随邮件发当月轮换传奇武器（仅竞技场可获得）；
+            // equip 附件领取时进随身仓库，出战时若职业匹配自动替换初始主手（ArenaSeasonWeapons 口径）。
+            if (finalRank <= 1)
+            {
+                string weaponId = ArenaSeasonWeapons.CurrentSeasonWeaponId();
+                string wname = ArenaSeasonWeapons.WeaponName(weaponId);
+                mail.body = $"上赛季最终排名：第 {finalRank} 名——恭喜夺冠！\n" +
+                            $"冠军限定武器「{wname}」已随信附上（仅竞技场赛季冠军可获得，每月轮换），\n" +
+                            "出战该职业时将自动替换初始武器。新赛季再冲！";
+                mail.attachments = new List<MailAttachment>
                 {
-                    title = $"竞技场·{lastMonth}赛季结算",
-                    body = $"上赛季最终排名：第 {finalRank} 名\n奖励已附上，新赛季再冲！",
-                    sender = "竞技场组委会",
-                    type = MailType.Reward,
-                    gold = rw.gold,
-                    diamond = rw.diamond,
+                    new MailAttachment
+                    {
+                        type = "equip",
+                        amount = 1,
+                        defId = weaponId,
+                        rarity = 4,   // 邮件装备附件口径 0~4：4 = 最高档（传奇）
+                        iconOverride = ArenaSeasonWeapons.MailIconPath(weaponId),
+                    },
                 };
-                MailSystem.Enqueue(mail, notifyToast: false);   // 读档期不发提示，进竞技场时看结算横幅
             }
+            if (rw.gold > 0 || rw.diamond > 0 || mail.attachments != null)
+                MailSystem.Enqueue(mail, notifyToast: false);   // 读档期不发提示，进竞技场时看结算横幅
             data.arenaSeasonNotice = $"上月赛季结算：第 {finalRank} 名" +
                 (rw.gold > 0 || rw.diamond > 0 ? "，奖励已发到邮箱。" : "。");
         }
         data.arenaMonthKey = month;
         data.arenaPoints = 0;
+        // 新赛季开局：新手必赢重置（「刚进来的玩家可以赢几次」），低分保底清零
+        data.arenaFreshWinsLeft = NewbieWinsPerSeason;
+        data.arenaLowPityLeft = 0;
         RegenerateBots(data);
         InitLadder(data);
     }
 
     struct SeasonReward { public int from; public long gold; public int diamond; }
 
-    /// <summary>赛季结算奖励档（按最终排名）：第 1 / 2~3 / 4~10 / 11 名开外。</summary>
+    /// <summary>赛季结算奖励档（按最终排名）：第 1 / 2 / 3 / 4~10 / 11~50 名，50 名开外不发奖。
+    /// 数值 2026-10-29 晚上调（主人拍板「每月奖励给的有点少」）、深夜按预制体面板档位细分；
+    /// 第 1 名另有月轮换限定传奇武器（见 EnsureMonth）。</summary>
     static SeasonReward RewardFor(int rank)
     {
-        if (rank <= 1) return new SeasonReward { from = 1, gold = 2000, diamond = 200 };
-        if (rank <= 3) return new SeasonReward { from = 2, gold = 1200, diamond = 100 };
-        if (rank <= 10) return new SeasonReward { from = 4, gold = 800, diamond = 50 };
-        return new SeasonReward { from = 11, gold = 400, diamond = 0 };
+        if (rank <= 1) return new SeasonReward { from = 1, gold = SeasonGoldRank1, diamond = SeasonDiamondRank1 };
+        if (rank <= 2) return new SeasonReward { from = 2, gold = SeasonGoldRank2, diamond = SeasonDiamondRank2 };
+        if (rank <= 3) return new SeasonReward { from = 3, gold = SeasonGoldRank3, diamond = SeasonDiamondRank3 };
+        if (rank <= 10) return new SeasonReward { from = 4, gold = SeasonGoldRank4_10, diamond = SeasonDiamondRank4_10 };
+        if (rank <= SeasonRewardTopRank)
+            return new SeasonReward { from = 11, gold = SeasonGoldRank11_50, diamond = SeasonDiamondRank11_50 };
+        return new SeasonReward { from = SeasonRewardTopRank + 1, gold = 0, diamond = 0 };   // 50 名开外不发
+    }
+
+    /// <summary>排行榜奖励说明文案（数值侧唯一出口，与预制体「排行奖励」面板 5 档同值，改档位只动常量区）。
+    /// 2026-10-29 深夜主人拍板：面板展示改走预制体里手摆的档位行（文案已烤在预制体里），
+    /// 本函数保留作数值侧文案出口（发奖文案/两边同值校验用）。
+    /// 武器图标与基础属性由 <see cref="ArenaSeasonWeapons.CurrentWeaponInfoText"/>/
+    /// <see cref="ArenaSeasonWeapons.CurrentWeaponIcon"/> 提供。</summary>
+    public static string SeasonRewardInfoText()
+    {
+        var now = DateTime.Now;
+        return $"每月 1 日按最终排名发奖（当前 {now.Year}年{now.Month}月赛季）：\n" +
+               $"第 1 名　金币×{SeasonGoldRank1} + 钻石×{SeasonDiamondRank1} + 冠军限定武器\n" +
+               $"第 2 名　金币×{SeasonGoldRank2} + 钻石×{SeasonDiamondRank2}\n" +
+               $"第 3 名　金币×{SeasonGoldRank3} + 钻石×{SeasonDiamondRank3}\n" +
+               $"第 4~10 名　金币×{SeasonGoldRank4_10} + 钻石×{SeasonDiamondRank4_10}\n" +
+               $"第 11~50 名　金币×{SeasonGoldRank11_50}";
     }
 
     /// <summary>机器人每日积分漂移：涨多跌少（只动数值不动名次，名次由 ShuffleBots 动）。
@@ -549,6 +637,8 @@ public static class ArenaRules
     /// · 基础胜率 = 战力比驱动：我的战力<b>估计值</b> vs 对手战力——打赢强敌估计值上调（+5%），
     ///   输了下调（-4%），自动贴合玩家真实水平（「根据输赢情况进行调整」）；越远的对手战力越高，天然越难；
     /// · 保底：连输 PityMin~PityMax 次（随机）后下一把必赢，赢后重掷目标；
+    /// · 情绪保底（2026-10-29 晚主人拍板）：新赛季开局前 NewbieWinsPerSeason 场必赢；
+    ///   积分 ≤ LowScorePityAt 时接下来 LowScorePityWins 场必赢（止损回升，优先级高于熔断）；
     /// · 熔断：连赢 WinCapMin~WinCapMax 次（随机）后下一把必输，防一路平推升太快，输后重掷目标。
     /// 赢：与对手换位，积分 = 吃分差 + 距离奖励，金币入账（不弹钱包 toast，结果面板自己展示）。
     /// 输：不掉名但**掉积分**（0 分保护扣不到负数）。
@@ -582,10 +672,25 @@ public static class ArenaRules
 
         bool forceWin = data.arenaLossStreak >= data.arenaPityTarget;    // 连输够数 → 保底必赢
         bool forceLose = data.arenaWinStreak >= data.arenaWinCapTarget;  // 连赢够数 → 熔断必输
+        // 必赢优先级（2026-10-29 晚主人拍板加两层情绪保底）：
+        // 新赛季新手必赢 > 低积分止损必赢 > 连输保底 > 连赢熔断 > 战力掷骰。
+        // 前两层必赢期间覆盖熔断（保底窗口内不许再强制输）。
         bool won;
-        if (forceWin) won = true;
-        else if (forceLose) won = false;
-        else won = UnityEngine.Random.value < winRate;
+        if (data.arenaFreshWinsLeft > 0)
+        {
+            won = true;
+        }
+        else
+        {
+            if (data.arenaPoints <= LowScorePityAt && data.arenaLowPityLeft <= 0)
+                data.arenaLowPityLeft = LowScorePityWins;   // 掉到低分线 → 接下来 N 场必赢（止损回升）
+            if (data.arenaLowPityLeft > 0) won = true;
+            else if (forceWin) won = true;
+            else if (forceLose) won = false;
+            else won = UnityEngine.Random.value < winRate;
+        }
+
+        var opponent = data.arenaBots[ladderIdx];   // 对手引用（记录用；赢的换位分支里另有局部 bot，同一对象）
 
         if (won)
         {
@@ -608,7 +713,11 @@ public static class ArenaRules
             data.arenaPlayerPower = Mathf.Max(100, myPower + powerDelta);
             data.arenaWinStreak++;
             data.arenaLossStreak = 0;
-            if (forceWin)
+            if (data.arenaFreshWinsLeft > 0)
+                data.arenaFreshWinsLeft--;               // 新手必赢消耗一场
+            else if (data.arenaLowPityLeft > 0)
+                data.arenaLowPityLeft--;                 // 低分保底消耗一场
+            else if (forceWin)
                 data.arenaPityTarget = UnityEngine.Random.Range(PityMin, PityMax + 1);   // 保底到账 → 新一轮目标
         }
         else
@@ -622,9 +731,27 @@ public static class ArenaRules
                 data.arenaWinCapTarget = UnityEngine.Random.Range(WinCapMin, WinCapMax + 1);   // 熔断执行 → 新一轮目标
         }
         data.arenaPoints = Mathf.Max(0, data.arenaPoints + pointsGain);
+        AddBattleRecord(data, opponent, won, pointsGain);   // 对战记录（2026-10-29 晚主人拍板：对手/胜败/分值/时间）
         SaveSystem.Instance?.Save();
         FireChanged();
         return won;
+    }
+
+    /// <summary>记一条对战记录（新→旧，超出 BattleRecordMax 裁尾）。只记 对手头像/名字/胜败/分值/时间。</summary>
+    static void AddBattleRecord(SaveData data, ArenaBotEntry bot, bool won, int points)
+    {
+        if (bot == null) return;
+        data.arenaBattleRecords ??= new List<ArenaBattleRecord>();
+        data.arenaBattleRecords.Insert(0, new ArenaBattleRecord
+        {
+            name = bot.name,
+            avatar = bot.avatar,
+            won = won,
+            points = points,   // 输为负（掉积分），显示侧直接带符号
+            time = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        });
+        if (data.arenaBattleRecords.Count > BattleRecordMax)
+            data.arenaBattleRecords.RemoveRange(BattleRecordMax, data.arenaBattleRecords.Count - BattleRecordMax);
     }
 
     /// <summary>

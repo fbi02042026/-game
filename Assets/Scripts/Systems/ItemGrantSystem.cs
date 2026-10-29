@@ -47,6 +47,9 @@ public static class ItemGrantSystem
     public static bool GrantEquip(string equipId, int rarity, int star = 0)
     {
         if (string.IsNullOrEmpty(equipId)) return false;
+        // 运行时模板（竞技场冠军限定武器等）在此保证已注册 —— 邮件领取若查不到模板，
+        // 附件会被标已领导致武器永久丢失，所以在唯一发放入口先补注册（幂等）。
+        ArenaSeasonWeapons.EnsureRegistered();
         var tpl = ConfigManager.Instance != null ? ConfigManager.Instance.GetEquipTemplate(equipId) : null;
         if (tpl == null)
         {

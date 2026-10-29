@@ -53,6 +53,7 @@ public static class StaminaConfirmPopup
         Ensure();
         if (_rootPanel == null) return;
         ApplySingleButton(false);   // 双按钮确认框（体力/清除数据）：取消键必须在
+        ApplyNoticeIcon(null);      // 上一次图标告知若未收窗，这里还原正文位 + 收图标
         if (_title != null) _title.text = title ?? "体力提示";
         if (_body != null) _body.text = body ?? "";
         if (_okLabel != null) _okLabel.text = okLabel ?? "确认";
@@ -82,20 +83,74 @@ public static class StaminaConfirmPopup
     /// </summary>
     public static void ShowNotice(string title, string body, string okLabel, Action onClose)
     {
+        ShowNotice(title, body, okLabel, onClose, null);
+    }
+
+    // ── 告知窗图标扩展（2026-10-29 晚主人拍板：排行榜奖励弹窗放当月限定武器图标）──
+    // 图标运行时建树挂 Panel（不改预制体，铁律 3）；正文整体下移让出图标区，
+    // 关窗/下次开窗按预制体真值还原（快照只捕一次）。底盘自适应允许按图标占位涨高。
+    const float NoticeIconSize = 72f;
+    const float NoticeIconBlock = 88f;   // 图标区占位（图 72 + 呼吸）
+    static RectTransform _noticeIcon;
+    static float _bodyPrefabY = float.NaN;   // 预制体正文起点 y（首次捕获）
+
+    /// <summary>
+    /// 带图标告知（可选重载）：icon 传 null 时与四参版完全一致。
+    /// 图标挂在正文上方居中；正文下移 <see cref="NoticeIconBlock"/>，底框按占位允许涨高。
+    /// </summary>
+    public static void ShowNotice(string title, string body, string okLabel, Action onClose, Sprite icon)
+    {
         Ensure();
         if (_rootPanel == null) return;
         ApplySingleButton(true);
         if (_title != null) _title.text = title ?? "";
         if (_body != null) _body.text = body ?? "";
         if (_okLabel != null) _okLabel.text = okLabel ?? "确认";
+        ApplyNoticeIcon(icon);
         ApplyUnifiedTextStyle(_title, _body);   // 2026-10-24 统一排版（先设行距再算底框自适应）
         _onOk = onClose;
         _rootPanel.SetActive(true);
-        ApplyPanelFit();
+        ApplyPanelFit(icon != null ? NoticeIconBlock : 0f);
         _host.transform.SetAsLastSibling();
         var canvas = _host.GetComponent<Canvas>();
         if (canvas != null)
             UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.TownConfirm);
+    }
+
+    /// <summary>告知窗图标显隐 + 正文让位（唯一出口；icon=null 时还原预制体正文位）。</summary>
+    static void ApplyNoticeIcon(Sprite icon)
+    {
+        bool iconMode = icon != null;
+        if (_body != null)
+        {
+            if (float.IsNaN(_bodyPrefabY))
+                _bodyPrefabY = _body.rectTransform.anchoredPosition.y;   // 首次捕获预制体真值
+            var bodyRt = _body.rectTransform;
+            bodyRt.anchoredPosition = new Vector2(bodyRt.anchoredPosition.x,
+                iconMode ? _bodyPrefabY - NoticeIconBlock : _bodyPrefabY);
+        }
+        if (!iconMode)
+        {
+            if (_noticeIcon != null) _noticeIcon.gameObject.SetActive(false);
+            return;
+        }
+        if (_noticeIcon == null)
+        {
+            var go = new GameObject("NoticeIcon", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(_body != null ? _body.transform.parent : _rootPanel.transform, false);
+            _noticeIcon = go.GetComponent<RectTransform>();
+            // 与 Body 同框（顶锚）——FitPanelToBody 的 topOffset 口径即「面板顶沿 → 正文起点」，
+            // 图标也按面板顶沿定位，避免 Body 是顶锚、图标居中锚导致的坐标系错位。
+            _noticeIcon.anchorMin = _noticeIcon.anchorMax = new Vector2(0.5f, 1f);
+            _noticeIcon.pivot = new Vector2(0.5f, 1f);
+        }
+        _noticeIcon.gameObject.SetActive(true);
+        _noticeIcon.anchoredPosition = new Vector2(0f, _bodyPrefabY - 8f - NoticeIconSize);
+        _noticeIcon.sizeDelta = new Vector2(NoticeIconSize, NoticeIconSize);
+        var img = _noticeIcon.GetComponent<Image>();
+        img.sprite = icon;
+        img.preserveAspect = true;
+        img.raycastTarget = false;
     }
 
     /// <summary>
@@ -158,7 +213,7 @@ public static class StaminaConfirmPopup
     /// EvacuateConfirmPopupUI（撤离弹窗共用同一预制体）都走这里。
     /// 节点缺了就不动（保持预制体原样 440，弹窗功能不受影响）。
     /// </summary>
-    public static void FitPanelToBody(RectTransform panel, Text body, RectTransform bottomButton)
+    public static void FitPanelToBody(RectTransform panel, Text body, RectTransform bottomButton, float extraMaxHeight = 0f)
     {
         if (panel == null || body == null || bottomButton == null) return;
         float topOffset = -body.rectTransform.anchoredPosition.y;      // 面板顶沿 → 正文起点（预制体 -100）
@@ -170,19 +225,20 @@ public static class StaminaConfirmPopup
             _panelPrefabSizes[panel] = prefabSize;
         }
         float fit = topOffset + body.preferredHeight + 36f + buttonZone;   // 正文与按钮顶缘之间留 36 设计像素呼吸
-        panel.sizeDelta = new Vector2(prefabSize.x, Mathf.Min(prefabSize.y, fit));
+        panel.sizeDelta = new Vector2(prefabSize.x, Mathf.Min(prefabSize.y + extraMaxHeight, fit));
     }
 
-    /// <summary>本类入口的薄适配：用已绑定的 Panel/Body/确认键做底框自适应。</summary>
-    static void ApplyPanelFit()
+    /// <summary>本类入口的薄适配：用已绑定的 Panel/Body/确认键做底框自适应（extraMaxHeight：图标模式允许的额外高度）。</summary>
+    static void ApplyPanelFit(float extraMaxHeight = 0f)
     {
         var panel = _rootPanel != null ? _rootPanel.transform.Find("Panel") as RectTransform : null;
-        FitPanelToBody(panel, _body, _okRt);
+        FitPanelToBody(panel, _body, _okRt, extraMaxHeight);
     }
 
     public static void Close()
     {
         if (_rootPanel != null) _rootPanel.SetActive(false);
+        ApplyNoticeIcon(null);      // 收窗还原正文位 + 收图标（下次体力/清除数据等无图标告知不受污染）
         ApplySingleButton(false);   // 收窗即还原，下次撤离/体力确认仍是双按钮
         _onOk = null;
     }

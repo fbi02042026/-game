@@ -63,6 +63,25 @@ public class ArenaBotEntry
     public int seed;
 }
 
+/// <summary>
+/// 竞技场对战记录一条（2026-10-29 晚主人拍板：只记 对手头像/名字/胜败/分值/时间，不记职业等其它）。
+/// 新纪录插在最前（列表顺序 = 新→旧），写入见 ArenaRules.AddBattleRecord。
+/// </summary>
+[Serializable]
+public class ArenaBattleRecord
+{
+    /// <summary>对手机器人昵称。</summary>
+    public string name;
+    /// <summary>对手头像编号 1~22 → 佣兵头像 H001~H022。</summary>
+    public int avatar;
+    /// <summary>true=我赢（胜）/ false=我输（败）。</summary>
+    public bool won;
+    /// <summary>我的积分变化（赢 +N / 输 -N，直接用结算时的 pointsGain）。</summary>
+    public int points;
+    /// <summary>对战时间（Unix 秒，UTC；显示时转本地）。</summary>
+    public long time;
+}
+
 [Serializable]
 public class SaveData
 {
@@ -184,6 +203,12 @@ public class SaveData
     public int arenaDistVersion = 0;
     /// <summary>赛季结算横幅（跨月后第一次打开竞技场时展示一次后清空）</summary>
     public string arenaSeasonNotice = "";
+    /// <summary>新赛季新手必赢剩余场次（赛季开始/首进竞技场置为 NewbieWinsPerSeason，每打一场 -1；2026-10-29 晚主人拍板「刚进来的玩家可以赢几次」）</summary>
+    public int arenaFreshWinsLeft = 0;
+    /// <summary>低积分保底剩余必赢场次（积分掉到 LowScorePityAt 及以下时置为 LowScorePityWins，赢一场 -1；2026-10-29 晚主人拍板「积分到多少让玩家赢几次」）</summary>
+    public int arenaLowPityLeft = 0;
+    /// <summary>对战记录（新→旧，条数上限 ArenaRules.BattleRecordMax，超出裁尾；2026-10-29 晚主人拍板新增）</summary>
+    public List<ArenaBattleRecord> arenaBattleRecords = new List<ArenaBattleRecord>();
     /// <summary>排行榜机器人名单（BotCount 个，JsonUtility 直接序列化，无需 HashSet 双写）</summary>
     public List<ArenaBotEntry> arenaBots = new List<ArenaBotEntry>();
 
