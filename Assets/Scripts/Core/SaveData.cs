@@ -44,6 +44,25 @@ public class MercGrowEntry
     public int ascended = 0;
 }
 
+/// <summary>
+/// 竞技场机器人存档条目（2026-10-29）：排行榜上的机器人（纯本机假人，名字/头像/积分都持久化，
+/// 每天漂移一次积分，每月赛季重置时整批重新生成）。规则见 ArenaRules。
+/// </summary>
+[Serializable]
+public class ArenaBotEntry
+{
+    /// <summary>机器人昵称（PlayerNameGen 生成）。</summary>
+    public string name;
+    /// <summary>头像编号 1~22 → 佣兵头像 H001~H022（MercPortraitSprites.GetHead）。</summary>
+    public int avatar;
+    /// <summary>当前积分（赛季战绩；榜单行显示的是战力，积分在详情里看）。</summary>
+    public int points;
+    /// <summary>机器人战力（按榜位曲线 PowerForRank 生成；0 = 老档未迁移，读取时懒补）。</summary>
+    public int power;
+    /// <summary>阵容档案种子：详情弹窗用它确定性生成佣兵/技能/装备（同一机器人每次打开看到的阵容一致）。</summary>
+    public int seed;
+}
+
 [Serializable]
 public class SaveData
 {
@@ -81,6 +100,8 @@ public class SaveData
     public int adStaminaClaimCount = 0;
     /// <summary>当日已领金币广告次数</summary>
     public int adGoldClaimCount = 0;
+    /// <summary>当日已领钻石广告次数（2026-10-29 主人拍板：每日 2 次看广告领钻，第 1 次 50、第 2 次 100；日键复用 adRewardDayKey）</summary>
+    public int adDiamondClaimCount = 0;
     /// <summary>复活档位日键 yyyyMMdd（本地日，0 点刷新；2026-10-28 由 UTC 改本地），跨天清零 reviveClaimCount（2026-10-25 主人拍板：每日复活阶梯）</summary>
     public string reviveDayKey = "";
     /// <summary>当日已用复活次数（每日 2 广告 + 50 钻 + 100 钻，之后只能返回；ADS_ENABLED=false 期间不参与判定）</summary>
@@ -93,7 +114,7 @@ public class SaveData
     // === 无限裂隙（2026-10-17 主人拍板）===
     /// <summary>无限裂隙每日次数日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地 0 点刷新；升级兼容见 ShopDefs.LegacyUtcDayKeyStillToday），跨天清零 triesToday</summary>
     public string endlessRiftDayKey = "";
-    /// <summary>今日已用进入次数（每天 2 次）</summary>
+    /// <summary>今日已用进入次数（每天 3 次，2026-10-29 主人拍板）</summary>
     public int endlessRiftTriesToday = 0;
     /// <summary>已首通的最高层（首通奖励一次性真源；记录点 = 本值 / 5 * 5，只进不退）</summary>
     public int endlessRiftClearedStage = 0;
@@ -127,6 +148,44 @@ public class SaveData
     /// -1 = 尚未通关任何难度（初级恒开放）；金币/徽记两本共用同一活动标签进度。
     /// </summary>
     public int activityDungeonClearedDiff = -1;
+
+    // === 竞技场（2026-10-29）：机器人排行榜对战，规则见 ArenaRules ===
+    /// <summary>竞技场每日次数日键 yyyyMMdd（本地日，照 endlessRift 口径），跨天清零次数并掷机器人积分漂移</summary>
+    public string arenaDayKey = "";
+    /// <summary>竞技场赛季（自然月）键 yyyyMM，跨月按最终名次发奖→清零→重新生成机器人</summary>
+    public string arenaMonthKey = "";
+    /// <summary>今日已用挑战次数（每天 10 次 + 广告 2 次×每次 +2）</summary>
+    public int arenaTriesToday = 0;
+    /// <summary>今日已看广告次数（每天最多 2 次，每次 +2 挑战次数）</summary>
+    public int arenaAdViewsToday = 0;
+    /// <summary>我的竞技场积分（战绩数值；换位制下排名由换位链决定，积分是累计战绩；输了会掉，0 分保护）</summary>
+    public int arenaPoints = 0;
+    /// <summary>当前连输次数（连输到保底目标后下一把必赢，见 ArenaRules.PityMin/Max）</summary>
+    public int arenaLossStreak = 0;
+    /// <summary>本轮保底目标（连输几次必赢，每次触发后重掷；≤0 = 未初始化，首次挑战时随机）</summary>
+    public int arenaPityTarget = 0;
+    /// <summary>当前连赢次数（连赢到熔断目标后下一把必输，防升太快，见 ArenaRules.WinCapMin/Max）</summary>
+    public int arenaWinStreak = 0;
+    /// <summary>本轮熔断目标（连赢几次必输，每次触发后重掷；≤0 = 未初始化，首次挑战时随机）</summary>
+    public int arenaWinCapTarget = 0;
+    /// <summary>
+    /// 我的战力估计值（2026-10-29 主人拍板「玩家大概什么样的战力可以根据输赢情况进行调整」）：
+    /// 开局按榜位曲线领先 3 名起步，赢 +5% / 输 -4% 自适应——打赢比自己战力高的对手胜率就往上走。
+    /// ≤0 = 未初始化，首次挑战时按当前排名生成。
+    /// </summary>
+    public int arenaPlayerPower = 0;
+    /// <summary>
+    /// 换位链里玩家的位置（0=榜首 … 30=末位，2026-10-29 主人拍板改换位制）：
+    /// arenaBots 列表顺序 = 榜单顺序，下标 &lt; arenaPlayerPos 的机器人在玩家上方。
+    /// -1 = 尚未初始化（老档/新档第一次进竞技场时按积分插位，见 ArenaRules.EnsureLadder）。
+    /// </summary>
+    public int arenaPlayerPos = -1;
+    /// <summary>竞技场积分分布/规则版本（对照 ArenaRules.DistVersion）：低于当前值时整榜重建、按积分重新插位（v2=曲线分布+吃分差，2026-10-29）。</summary>
+    public int arenaDistVersion = 0;
+    /// <summary>赛季结算横幅（跨月后第一次打开竞技场时展示一次后清空）</summary>
+    public string arenaSeasonNotice = "";
+    /// <summary>排行榜机器人名单（BotCount 个，JsonUtility 直接序列化，无需 HashSet 双写）</summary>
+    public List<ArenaBotEntry> arenaBots = new List<ArenaBotEntry>();
 
     /// <summary>邮件箱（资源溢出等）</summary>
     public List<MailEntry> mailInbox = new List<MailEntry>();
@@ -1462,6 +1521,13 @@ public class SaveData
     {
         return clearedChapterIds != null ? clearedChapterIds.Count : 0;
     }
+
+    /// <summary>精确判单关是否已通关（键 "章_关0基"）。
+    /// 【2026-10-29 修「1-1 未通 1-2 已标领取后」】不用最大通关号推断——中断续局跳关会留下
+    /// 「后关已通、前关未通」的记录（clearedStages 只有 1_1 没有 1_0），max 口径会把没打的关误判已通。
+    /// 凡「这一关打过没有」的判定一律走本方法。</summary>
+    public bool HasStageCleared(int chapter, int stageIndex0)
+        => clearedStages != null && clearedStages.Contains(chapter + "_" + stageIndex0);
 
     /// <summary>标记某关首次通关；返回本次应发的天赋石（按章首次通关石）。重复通关返回 0。</summary>
     public int GrantTalentForStageFirstClear(int chapter, int stageIndex)

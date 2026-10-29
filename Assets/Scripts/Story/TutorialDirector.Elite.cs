@@ -51,28 +51,23 @@ public partial class TutorialDirector
         }
 
         // 【2026-10-14 主人报「精英还没出来就先出现对话框了」】波次是异步进场的，对象刷出 ≠ 人到了。
-        // 找到精英后必须等他**进场走完**（IsEnteringMap=false）再回调弹宿敌对白，
-        // 否则对白弹在半路上、精英还堵在屏外，观感就是「小怪先出、精英磨蹭、对话框抢跑」。
+        // 找到精英后必须等他进场走一段再回调弹宿敌对白，否则对白弹在半路上、精英还堵在屏外。
         // 上限 15s 防卡死（超时放行，不拖死流程）。
-        // 【2026-10-16 主人又报「精英还没出来又先出现对话了」】光等 IsEnteringMap 挡不住抢跑：
-        // Monster.Update 有「进场途中贴近英雄 → 提前结束进场并开打」的分支，会把 IsEnteringMap
-        // 提前翻 false —— 对白就在精英还堵在屏外时弹了。真值 = **精英整个人进到镜头里**：
-        // X 落在可视范围内才算「出来」，人没露面绝不弹对白（15s 超时放行防卡死）。
+        // 【2026-10-28 主人又报「精英还没出来又先出现对话了」】当时改为等「走到停步位站定」
+        //（EnterAtPauseStop），但停步位在真屏幕边内 1.3 个世界单位、入场速度只有移速×2（≈0.69/s），
+        // 从露面到站定要 2~3 秒 → 2026-10-29 主人报「精英出来几秒后才出现对话」。
+        // 【2026-10-29 主人拍板方案 A】人一进屏就开口，不等站定（边走边说，气泡跟头走）。
+        // 防穿帮边界：pad 取 0.55（中心点须进到真屏幕边以内 0.55 个世界单位）——放大精英
+        // 半宽 0.5~0.8，此时大半身子已可见，不会「屏外先闻声、不知谁在说」。
         if (elite != null)
         {
             float enterWait = 0f;
             while (enterWait < 15f && !elite.isDead)
             {
-                BattleManager.GetBattleVisibleX(out float vMin, out float vMax, 0.35f);
+                BattleManager.GetBattleVisibleX(out float vMin, out float vMax, 0.55f);
                 // Visual 与 MonsterBody 同 X（Init 里 localPosition 归零），直接读 transform 即可
                 float ex = elite.transform.position.x;
-                bool onScreen = ex >= vMin && ex <= vMax;
-                // 【2026-10-28】宿敌拍现在走「剧情前置暂停」窗（UnitsCanAct=false + AllowMonsterMapEnter=true）：
-                // 怪只走到屏幕边缘站定（_isEnteringMap 仍为 true、_enterAtPauseStop=true），与
-                // WaitMonstersFinishedEnter（TutorialDirector.Wait.cs:38）同口径 —— EnterAtPauseStop 也算
-                // 入场完毕，否则这里会空转到 15s 超时才弹对白。
-                bool entered = !elite.IsEnteringMap || elite.EnterAtPauseStop;
-                if (entered && onScreen) break;
+                if (ex >= vMin && ex <= vMax) break;
                 enterWait += Time.unscaledDeltaTime;
                 yield return null;
             }

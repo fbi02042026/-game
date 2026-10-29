@@ -391,6 +391,9 @@ public static class SlotMachineSystem
     /// </summary>
     public static bool GoldAllowed()
     {
+        // 【2026-10-29 主人拍板】无限裂隙不出金币方向：每层 3 抽全免费、抽满即收面板，
+        // 币在裂隙内没有消费出口，抽到金币卡等于白占一张名额。概率公示与实际同源（BuildOddsRows 也走这里）。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsEndlessRift) return false;
         if (InGuaranteeWindow()) return false;
         if (MercGuaranteeActive() && AvailableCategories().Contains(DraftCategory.Merc))
             return false;
@@ -577,7 +580,8 @@ public static class SlotMachineSystem
     /// 每局进关时调一次（续关不调），这样「初始资金」天赋每一局都有效，而不只是新档那一次。
     /// <para>【2026-10-14 主人拍板】基础值分两档：**正式关 200**（<see cref="SlotMachineDefs.STARTER_COINS"/>）、
     /// **引导局 270**（<see cref="SlotMachineDefs.TUTORIAL_STARTER_COINS"/>，兜住引导三拍扣费 265）。
-    /// 【2026-10-23 主人拍板】引导局也归 **200**（三拍改价后 150，200 仍兜得住），两档同值。</para>
+    /// 【2026-10-23 主人拍板】引导局也归 **200**（三拍改价后 150，200 仍兜得住），两档同值。
+    /// 【2026-10-29 主人拍板】正式关档 200 → **100**（「正式关卡每关给100抽奖币」）；引导局档不动（200 ≥ 150）。</para>
     /// ⚠ 这笔<b>不算本局收益</b>（countsAsEarned=false）→ 结算差额不把它当赚的钱写回存档，不能白刷。
     /// </summary>
     public static int RunStarterGold(bool tutorial)

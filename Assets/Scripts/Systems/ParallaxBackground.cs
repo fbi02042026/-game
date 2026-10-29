@@ -233,8 +233,11 @@ public class ParallaxBackground : MonoBehaviour
         layer.baseScaleX = Mathf.Abs(src.localScale.x) < 0.01f ? 1f : Mathf.Abs(src.localScale.x);
         src.localScale = new Vector3(layer.baseScaleX, src.localScale.y, src.localScale.z);
 
-        // 改 pivot / 锚点会让图跳位，先记下世界坐标改完再放回去
-        Vector3 worldBefore = src.position;
+        // 改 pivot / 锚点会让图跳位：必须保住「图的实际显示位置」，
+        // 否则 initialX 取到的不是预制体位置（这正是被「重新设定位置」的根因）。
+        // 旧写法 src.position = worldBefore 只把「旧 pivot 的世界坐标」当新 pivot 的世界坐标，
+        // 对点锚点（如 '1' 节点 pivot.x=0→0.5）会把图整体平移半宽。
+        Vector2 oldPivot = src.pivot;
         src.pivot = new Vector2(0.5f, src.pivot.y);
         // 拉伸锚点下 rect.width 由父级决定，测量会漂；锁成中心锚点
         if (Mathf.Abs(src.anchorMax.x - src.anchorMin.x) > 0.001f)
@@ -245,7 +248,15 @@ public class ParallaxBackground : MonoBehaviour
             src.anchorMax = new Vector2(mid, src.anchorMax.y);
             src.sizeDelta = new Vector2(w, src.sizeDelta.y);
         }
-        src.position = worldBefore;
+        // 仅点锚点（未走上面拉伸分支）时 pivot 变化才会平移图：
+        // 按 (新pivot-旧pivot)×本地尺寸×缩放 补偿 anchoredPosition，让图中心回到预制体显示位置。
+        // 拉伸分支已就地保形，无需补偿；固定从预制体 '1' 节点的位置开始前进。
+        if (Mathf.Abs(src.anchorMax.x - src.anchorMin.x) < 0.001f)
+        {
+            src.anchoredPosition += new Vector2(
+                (src.pivot.x - oldPivot.x) * src.rect.width * Mathf.Abs(src.localScale.x),
+                (src.pivot.y - oldPivot.y) * src.rect.height * Mathf.Abs(src.localScale.y));
+        }
 
         layer.initialX = src.anchoredPosition.x;
         // 拼接单元（本体+镜像子图）整宽；子图挂在 rect 外侧，只量 rect.width 会步长减半

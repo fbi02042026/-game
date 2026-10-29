@@ -33,6 +33,13 @@ public class OpeningIntroOverlay : MonoBehaviour
     static GameObject _prewarmRoot;
 
     /// <summary>
+    /// 预热已就绪或根本没在预热（老玩家不播片头 / 路径不合法没建播放器 / 已被 Show 接管）→ true。
+    /// 给 Town 进城 Loading 用：false 时按住 Loading 等后台 Prepare，别让 Loading 收了以后纯黑干等。
+    /// </summary>
+    public static bool PrewarmReadyOrIdle =>
+        _prewarmPlayer == null || _prewarmPlayer.isPrepared;
+
+    /// <summary>
     /// 提前建播放器后台 Prepare，把 Prepare 耗时藏进进城镇 Loading 的时间里，
     /// 消除首次进城镇片头前的纯黑秒数。路径不合法直接不动。
     /// </summary>

@@ -105,6 +105,23 @@ public class GameSceneManager : Singleton<GameSceneManager>
         {
             SceneLoadingCoordinator.ReportSceneLoaded();
             yield return WaitForTownBootstrapComplete();
+            // 【2026-10-29 黑屏优化·方案B 主人拍板】首次进城镇片头：预热 Prepare 若还没跑完，
+            // 用 KeepVisible 按住 Loading 多停一会（进度停在 100%），等就绪再收——
+            // 换掉原「Loading 收起后 TownIntroVeil 纯黑干等几秒」的体感。
+            // 超时 8s 兜底放行（超时后走原黑屏等待逻辑，最多到 Show 里的 10s 上限）。
+            // 回城/老玩家路径片头早播过、Prewarm 没跑 → PrewarmReadyOrIdle 恒 true，整段跳过零开销。
+            if (!OpeningIntroOverlay.PrewarmReadyOrIdle)
+            {
+                BattleLoadingOverlay.KeepVisible = true;
+                float introT = 0f;
+                while (!OpeningIntroOverlay.PrewarmReadyOrIdle && introT < 8f)
+                {
+                    introT += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+                BattleLoadingOverlay.KeepVisible = false;
+                BattleLoadingOverlay.Hide();
+            }
         }
 
         TutorialDirector.Instance?.NotifyTownReady();

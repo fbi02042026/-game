@@ -544,7 +544,11 @@ public static class UiLayoutStretch
         // GlobalToastUI（2026-10-14）：DDOL 常驻 Toast，根板锚 (0.5,0.55)（偏移恰好=居中保护阈值，
         // 保护判不进）→ ApplyVerticalSplit 把它重锚贴顶，而 CoPlay/CoFlythrough 每次弹都把
         // anchoredPosition 归零 → Toast 顶到屏幕上沿不居中。动画坐标自管理，通用规则整块跳过。
-        new System.Collections.Generic.HashSet<string> { "AdventureUI", "DailyLoginUI", "RewardPopup", "GlobalToastUI" };
+        // MercGainCinematic（2026-10-29）：获得佣兵演出整块跳过——演出树（panl/BG/佣兵/NamePlate）
+        // 的布局全在自己文件里做（全屏化 + FitStageAlignment 贴台 + SafeAreaFitter）。通用规则若在
+        // panl 还是 100×100 时把 NamePlate 贴底重锚，运行时 panl 拉全屏后，名字会被锁死的
+        // offset 带着掉出屏幕底。
+        new System.Collections.Generic.HashSet<string> { "AdventureUI", "DailyLoginUI", "RewardPopup", "GlobalToastUI", "MercGainCinematic" };
 
     /// <summary>
     /// 判断 root 是否属于「已单独适配」的界面：按 root 自身名字、或 root 上挂载的组件类型名，

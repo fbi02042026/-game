@@ -72,7 +72,7 @@ public class BattleWaveAnnounceUI : MonoBehaviour
         var rt = imgGo.GetComponent<RectTransform>();
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.59f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = Vector2.zero;
+        rt.anchoredPosition = new Vector2(0f, 40f); // 整体上移 40 设计像素（2026-10-29 主人要求）
         rt.localScale = Vector3.one;
 
         _image = imgGo.GetComponent<Image>();

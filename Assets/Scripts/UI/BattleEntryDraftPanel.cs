@@ -158,6 +158,10 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
         public TextAnchor? CostAlignDefault;
         /// <summary>【2026-10-13 #7】价格下方的「还差 N」红字（仅币不够时显示）。</summary>
         public Text ShortfallText;
+        /// <summary>【2026-10-29 实时抽 CD】按钮 CD 遮罩（Filled Vertical，从上往下消退）——主人拍板「转圈或从上到下的过渡」取后者。</summary>
+        public Image CdMask;
+        /// <summary>【2026-10-29 实时抽 CD】遮罩中央的剩余秒数。</summary>
+        public Text CdText;
     }
 
     /// <summary>币种图标缓存：别每次 Refresh 都 Resources.Load。</summary>
@@ -333,6 +337,16 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     /// <summary>抽奖阶段（此时抽奖按钮可用）；开战后为 false。</summary>
     bool _draftActive;
     /// <summary>
+    /// 【2026-10-29 主人拍板·实时抽改版】LiveMode（常显实时抽）：
+    /// 正式关/金币本战斗内抽奖的新形态 —— DraftRoot 用展开态布局**常驻**（无展开动画），
+    /// 四按钮直连 <c>BattleManager.TryLiveDraw</c>（点抽即抽、不冻结、立即生效，CD 5 秒防连点）。
+    /// 裂隙/引导局保持旧面板流程（Begin/Finish 那条），LiveMode 恒 false，两条路互斥。
+    /// </summary>
+    bool _liveMode;
+    /// <summary>【2026-10-29 实时抽 CD】CD 是否在进行中（真源 = BattleManager.LiveDrawCdRemaining，
+    /// 本地这份只做沿检测触发 Refresh，避免每帧整表重刷）。CD 中所有抽奖按钮强制置灰。</summary>
+    bool _cdActive;
+    /// <summary>
     /// 上一帧的 <c>BattleManager.UnitsCanAct</c> —— 开打自动收起背包做<b>边缘检测</b>要用，
     /// 只有 false→true 那一跳才触发，绝不每帧强制收起（2026-10-09 主人拍板）。
     /// </summary>
@@ -355,8 +369,10 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     /// 不许再出现第二个地方改它的显隐（2026-10-05 主人拍板）。
     /// <para>收回动画跑完前（<c>_animK</c> 还没归 0）也算「开着」，
     /// 否则遮罩会在面板还在往下收的时候提前压回来，末帧闪一下。</para>
+    /// <para>【2026-10-29 实时抽改版】LiveMode（常显实时抽）虽恒为展开态，但它是<b>常驻 HUD</b>
+    /// 不是模态面板 —— 排除在判据外，否则旧面板路径（裂隙/引导）与实时抽守卫会把它误判成「面板开着」。</para>
     /// </summary>
     public static bool IsLotteryOpen =>
-        Instance != null && (Instance._expanded || Instance._animK > 0.001f);
+        Instance != null && !Instance._liveMode && (Instance._expanded || Instance._animK > 0.001f);
 
 }

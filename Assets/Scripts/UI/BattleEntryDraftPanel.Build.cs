@@ -109,7 +109,10 @@ public partial class BattleEntryDraftPanel
         // 没过第一章只留「普通」（随机）抽奖。
         // 平时用「隐藏」而不是「置灰」：置灰还会占位、玩家点了才知道不能抽，隐藏更干净。
         // 只在这里动显隐（单一出口），SetDraftVisible 管的是整个容器，不会把它们再打开。
-        bool focusUnlocked = SaveSystem.Instance?.Data?.HasClearedChapter(1) == true;
+        // 【2026-10-29 主人拍板】无限裂隙**先不开启定向抽** —— 只留随机抽，表现复用
+        // 「没过第一章」这一套（隐藏三定向 + 随机按钮挪容器中间）。机制全保留，以后要开只删这个判定。
+        bool isEndless = BattleManager.InstanceQuiet != null && BattleManager.InstanceQuiet.IsEndlessRift;
+        bool focusUnlocked = SaveSystem.Instance?.Data?.HasClearedChapter(1) == true && !isEndless;
         if (cat.HasValue)
         {
             t.gameObject.SetActive(focusUnlocked);
@@ -159,6 +162,43 @@ public partial class BattleEntryDraftPanel
         // 按钮左侧的货币图标（2026-10-07 主人拍板）：建在 Cost 左外侧，不动主人调好的美术。
         if (costNode != null) BuildCoinIcon(slot, costNode);
         else Debug.LogError("[BattleEntryDraftPanel] 抽奖按钮 " + nodeName + " 找不到价格节点 " + NodeCost + "，货币图标没地方挂");
+
+        // 【2026-10-29 主人拍板·实时抽 CD】按钮 CD 遮罩：Filled Vertical（Origin=Top），
+        // CD 期间 fillAmount 1→0 = 遮罩从上往下消退（主人给的二选一「转圈 或 遮罩从上到下的过渡」取后者）。
+        // 挂在按钮占位节点最上层（AddChild 默认排最后），raycastTarget=false 绝不挡点击；
+        // 中央叠一个剩余秒数。LiveMode 才会亮出来（TickLiveCooldown 管显隐与数值）。
+        var cdGo = new GameObject("CdMask", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        cdGo.transform.SetParent(t, false);
+        var cdRt = cdGo.GetComponent<RectTransform>();
+        cdRt.anchorMin = Vector2.zero;
+        cdRt.anchorMax = Vector2.one;
+        cdRt.offsetMin = Vector2.zero;
+        cdRt.offsetMax = Vector2.zero;
+        var cdImg = cdGo.GetComponent<Image>();
+        cdImg.type = Image.Type.Filled;
+        cdImg.fillMethod = Image.FillMethod.Vertical;
+        cdImg.fillOrigin = (int)Image.OriginVertical.Top;
+        cdImg.fillAmount = 0f;
+        cdImg.color = new Color(0f, 0f, 0f, 0.55f);
+        cdImg.raycastTarget = false;
+        slot.CdMask = cdImg;
+
+        var cdTextGo = new GameObject("CdSec", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        cdTextGo.transform.SetParent(cdGo.transform, false);
+        var cdTextRt = cdTextGo.GetComponent<RectTransform>();
+        cdTextRt.anchorMin = new Vector2(0.5f, 0.5f);
+        cdTextRt.anchorMax = new Vector2(0.5f, 0.5f);
+        cdTextRt.pivot = new Vector2(0.5f, 0.5f);
+        cdTextRt.sizeDelta = new Vector2(80f, 40f);
+        var cdText = cdTextGo.GetComponent<Text>();
+        cdText.fontSize = 26;
+        cdText.color = Color.white;
+        cdText.alignment = TextAnchor.MiddleCenter;
+        cdText.raycastTarget = false;
+        var cdFont = GameFonts.GetChinese();
+        if (cdFont != null) cdText.font = cdFont;
+        slot.CdText = cdText;
+        cdGo.SetActive(false);
 
         if (slot.Btn != null)
         {
@@ -288,6 +328,12 @@ public partial class BattleEntryDraftPanel
     {
         // 顶栏 DraftDisplay 抽奖币条（2026-10-18 主人摆的节点）—— 余额唯一显示处
         BattleUI.Instance?.UpdateDraftCoin(coins);
+        // 【2026-10-29 修·主人报「战斗到第二波就不让抽奖，按钮一直显示币不够」】
+        // 余额一变必须重算按钮置灰：击杀直发抽奖币（AddRunGold）只涨顶栏数字，
+        // 按钮的「还差 N」/ interactable 却停在最后一抽时的旧余额上；置灰时点按钮
+        // 连 OnDraftClicked 都不触发 → RefreshLive 永远走不到 → 死锁。
+        // RefreshLive 开头有 !_liveMode 守卫，裂隙/引导旧面板路径不受影响。
+        Instance?.RefreshLive();
     }
 
     /// <summary>

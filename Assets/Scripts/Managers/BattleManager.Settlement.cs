@@ -64,6 +64,9 @@ public partial class BattleManager
     {
         if (_rewardSequenceStarted || _stageCleared) return;
         if (CountAliveMonsters() > 0) return;
+        // 🔴【2026-10-29 实时抽改版】通关链开始 → 收常显抽卡按钮（Hide 幂等；普通关无剧情路径
+        // 原来没有任何 Hide 调用，按钮会一直亮到宝箱/三选一阶段误导玩家；TryLiveDraw 侧守卫同帧拦截）。
+        BattleEntryDraftPanel.Hide();
         Planner?.GrantStageEventRewards(); // 事件层：发放精英小队累计的强化石
         TryGrantStageQuestGold();
         GrantStageClues();
@@ -340,9 +343,26 @@ public partial class BattleManager
             // 清场后由 TutorialDirector 弹第一抽（BattleRoutine 里 1c 那一拍）。
             // 这样「抽到装备换上 → 下一波明显变强」才看得出来；正式关照常进关抽奖。
             _preBattleStoryPlaying = true;
-            if (!IsTutorialRun) yield return CoStageEntryDraft();
-            _preBattleStoryPlaying = false;
-            ScheduleFirstWaveSpawn();
+            // 🔴【2026-10-29 主人拍板·实时抽改版】进关抽奖按模式分流：
+            // 引导局 = 开局不抽直接开打（拍板不变）；
+            // 无限裂隙 = 旧面板照旧（裂隙保持原设定）；
+            // 正式关/金币本 = 常显按钮 + 「开始战斗」手动开打（EnterLiveStartPhase 非阻塞，
+            // _preBattleStoryPlaying 保持 true 压住硬刷，首波由回调触发）。
+            if (IsTutorialRun)
+            {
+                _preBattleStoryPlaying = false;
+                ScheduleFirstWaveSpawn();
+            }
+            else if (IsEndlessRift)
+            {
+                yield return CoStageEntryDraft();
+                _preBattleStoryPlaying = false;
+                ScheduleFirstWaveSpawn();
+            }
+            else
+            {
+                EnterLiveStartPhase();
+            }
             yield break;
         }
 
@@ -359,11 +379,23 @@ public partial class BattleManager
             yield return null;
         }
         // 剧情结束（含跳过）后进抽奖，期间继续压住硬刷兜底
-        // 同上：引导局跳过进关抽奖，第一抽留给第一波清场之后。
-        if (!IsTutorialRun) yield return CoStageEntryDraft();
-        _preBattleStoryPlaying = false;
-        // 抽完才放首波
-        ScheduleFirstWaveSpawn();
+        // 🔴【2026-10-29 主人拍板·实时抽改版】分流口径与上方「无剧情」分支一致：
+        // 引导局直接开打；裂隙旧面板照旧；正式关/金币本常显按钮 +「开始战斗」（非阻塞，回调触发首波）。
+        if (IsTutorialRun)
+        {
+            _preBattleStoryPlaying = false;
+            ScheduleFirstWaveSpawn();
+            yield break;
+        }
+        if (IsEndlessRift)
+        {
+            yield return CoStageEntryDraft();
+            _preBattleStoryPlaying = false;
+            ScheduleFirstWaveSpawn();
+            yield break;
+        }
+        EnterLiveStartPhase();
+        yield break;
     }
 
     /// <summary>
@@ -391,12 +423,6 @@ public partial class BattleManager
     /// <para>为什么不能只靠 Toast：Toast 会被硬引导遮罩盖住 / 一闪而过，等于没提示。</para>
     /// </summary>
     string _lastDrawRewardMsg;
-
-    /// <summary>
-    /// 【2026-10-18 主人拍板】无限裂隙进场的「免费抽 N 次」提示，每局只弹一次。
-    /// 续层不走这段（免费额度是每局一次，续层不再送），StartNewRunInternal 里清零。
-    /// </summary>
-    bool _endlessEntryHintShown;
 
     /// <summary>
     /// 【2026-10-06 主人拍板】抽完奖励<b>不许自动继续</b> —— 引导局 / 正式关一律等玩家点「继续」。
@@ -618,6 +644,12 @@ public partial class BattleManager
         // ⚠ 启动抽奖币**不在这里补**（2026-10-05 主人拍板：「开始金币是每局的，不是每关的」）。
         // 原来挂在这里 = 每关进关都补一次，成了「每关地板」，通关产出的取舍就失效了。
         // 现在挪到 RunDraftDirector.OnRunStart，只有开新局（resumed=false）那一关才补。
+
+        // 【2026-10-29 主人拍板·裂隙每层三抽】免费额度**每层重置**（每层开始都抽 3 次），
+        // 真源仍 = RunDraftDirector.OnRunStart 那次整局清 + 这里每层清。抽奖**价格**不走层
+        // —— 按本局已抽数递增（DrawIndex 跨层累计，每抽 +10，见 SlotMachineSystem.DrawPrice）。
+        if (IsEndlessRift) SlotMachineSystem.ResetStageFreeDraws();
+
         var cats = SlotMachineSystem.AvailableCategories();
         if (cats.Count == 0)
         {
@@ -643,15 +675,20 @@ public partial class BattleManager
         // 引导硬提示只弹一次（重试那一圈不再重复弹遮罩）
         bool guideHintShown = false;
 
-        // 【2026-10-18 主人拍板】无限裂隙进场引导：告诉玩家本次进场免费抽几次（每局只提示一次）。
-        // 抽奖面板弹出时 Toast 一句，玩家低头就能对上面板上「免费 ×N」的按钮。
-        if (IsEndlessRift && !_endlessEntryHintShown)
+        // 【2026-10-29 主人拍板·裂隙每层三抽】提示每层都弹（每层都送 3 次免费抽）；
+        // 定向抽裂隙不开启（面板已隐藏三定向按钮，见 BattleEntryDraftPanel.AddSlot）。
+        // 旧字段 _endlessEntryHintShown（每局只提示一次）已随之删除。
+        if (IsEndlessRift)
         {
-            _endlessEntryHintShown = true;
             int freeTotal = SlotMachineSystem.TotalFreeDraws();
             if (freeTotal > 0)
-                GlobalToastUI.Show($"本次进场免费抽 {freeTotal} 次，抽完再开打！", true);
+                GlobalToastUI.Show($"本层免费抽 {freeTotal} 次，抽完开打！", true);
         }
+
+        // 【2026-10-29 主人拍板·裂隙每层三抽改版】本层已抽到手的卡数（**只数出货**）：
+        // 「再来一次」没出货、抽了但没生效（landed=false）都不占名额，回面板重抽 ——
+        // 名额 = 玩家实际拿到的卡数，不跟点击走。抽满 TotalFreeDraws()（=3）收面板开打。
+        int layerDraws = 0;
 
         while (true)
         {
@@ -785,6 +822,8 @@ public partial class BattleManager
             int drawsBefore = SlotMachineSystem.DrawIndex;
             yield return CoInstantPick(target, cost);
             bool landed = SlotMachineSystem.DrawIndex > drawsBefore;
+            // 【2026-10-29 主人拍板·裂隙每层三抽改版】只有真出货才占每层名额（reroll / 没生效不占）
+            if (landed) layerDraws++;
 
             // 引导局：这一拍**只抽一次**就开打 —— 不进「再来一次」、也不再回到面板。
             // 面板常驻连抽是正式关的玩法；引导这里若让玩家一口气把三次抽完，
@@ -820,6 +859,17 @@ public partial class BattleManager
             //   与 2026-10-06 那份口径一致，不存在「以 10-11 为准」这回事，别再改回 StartContinueCountdown。
             var entryPanel = BattleEntryDraftPanel.Instance;
             if (entryPanel != null) entryPanel.SetCountdownPaused(false);
+
+            // 【2026-10-29 主人拍板·裂隙每层三抽改版】无限裂隙抽满本层名额 → 收面板直接开打，
+            // 这一层中间不再有任何抽奖入口（战斗中实时抽本就被 TryLiveDraw 的裂隙守卫拦着）；
+            // 打通黑屏进下一层（AdvanceEndlessRiftStage）再弹新一层的三抽。
+            // 上限与免费额度同源（TotalFreeDraws() = ENDLESS_RIFT_FREE_DRAWS = 3），调节奏只改那一个数。
+            // 没抽满就想打：点「继续」照旧 break（choice != 1），不强求抽完。
+            if (IsEndlessRift && layerDraws >= SlotMachineSystem.TotalFreeDraws())
+            {
+                Debug.Log($"[BattleManager] 无限裂隙第 {EndlessRiftStage} 层三抽已用完（layerDraws={layerDraws}），收面板开打");
+                break;
+            }
 
             // ⚠【2026-10-12 已删】原来这里还有一段「抽完再掷 RollReroll → 额外再送一次免费抽」。
             //   主人报「抽中了技能还出现了再抽一次」→ 判定挪到这一抽**开始之前**（见本循环上方），
@@ -859,6 +909,129 @@ public partial class BattleManager
         currentGold -= cost;
         BattleEntryDraftPanel.NotifyPoolGoldChanged(currentGold);
         return true;
+    }
+
+    // ============================================================
+    // 🔴【2026-10-29 主人拍板·实时抽改版】战斗内实时抽奖（LiveMode）
+    // 正式关/金币本：抽奖按钮常显（展开态布局），点抽即抽、不冻结、立即生效；
+    // 裂隙与引导局保持旧面板流程，不进这里（TryLiveDraw 守卫拦截）。
+    // ============================================================
+
+    /// <summary>实时抽 CD 秒数（主人 2026-10-29 定 5 秒防连点；要调只改这一个数）。</summary>
+    public const float LIVE_DRAW_CD_SEC = 5f;
+
+    /// <summary>实时抽 CD 剩余秒数（面板遮罩每帧读；0 = 可抽）。</summary>
+    public float LiveDrawCdRemaining => Mathf.Max(0f, _liveDrawCdUntil - Time.unscaledTime);
+    /// <summary>CD 截止时刻（unscaledTime）。每次点击（含 reroll / 出卡失败）都重置，口径简单可预期。</summary>
+    float _liveDrawCdUntil;
+
+    /// <summary>
+    /// 实时抽入口（<c>BattleEntryDraftPanel</c> LiveMode 四按钮直连）。
+    /// <para>流程：守卫 → 现算价格（唯一出口，与常显按钮的显示判定自动同源）→ 查余额 →
+    /// 「再来一次」掷点（只对随机抽，与旧面板同一拍板）→ <see cref="CoInstantPick"/> 直抽。
+    /// 保底佣兵 / 保底稀有 / 金币方向限制 / 抽数计数全部走既有链路，零分叉。</para>
+    /// <para>CD 从<b>点击时刻</b>起算（主人原话「每次点完抽奖可以加个5-10秒的cd时间 防止连点」）——
+    /// reroll / 出卡失败（未扣币）也照起，简单可预期。</para>
+    /// <returns>true = 这一抽已受理（成功或 reroll）。</returns>
+    /// </summary>
+    public bool TryLiveDraw(DraftCategory? picked)
+    {
+        // —— 守卫（每个都报原因，不静默，铁律 12）——
+        if (IsTutorialRun || IsEndlessRift)
+        {
+            Debug.LogError($"[BattleManager] 实时抽在引导局/裂隙不应出现（按钮应隐藏），已拦截 picked={picked}");
+            return false;
+        }
+        if (_runClosed || _stageCleared || _rewardSequenceStarted)
+        {
+            Debug.Log($"[BattleManager] 实时抽拦截：局已收尾/通关链已启动" +
+                      $"（_runClosed={_runClosed} _stageCleared={_stageCleared} reward={_rewardSequenceStarted}）");
+            return false;
+        }
+        if (LiveDrawCdRemaining > 0f) return false;   // UI 已置灰，这里兜底静默拦
+        if (BattleEntryDraftPanel.IsLotteryOpen)
+        {
+            Debug.LogError("[BattleManager] 实时抽拦截：旧抽奖面板展开中（裂隙/引导路径），不应同时出现");
+            return false;
+        }
+
+        var cats = SlotMachineSystem.AvailableCategories();
+        if (cats.Count == 0)
+        {
+            Debug.LogError("[BattleManager] 实时抽：抽奖池全空（技能/佣兵/装备都取不到内容）");
+            UIManager.Instance?.ShowToast("这一抽没能出结果，未扣币");
+            return false;
+        }
+        if (picked.HasValue && !cats.Contains(picked.Value))
+        {
+            Debug.Log($"[BattleManager] 实时抽拦截：定向 {picked.Value} 暂无可给内容（上一抽可能占满槽位）");
+            UIManager.Instance?.ShowToast("该方向暂时抽不了，换个方向试试");
+            BattleEntryDraftPanel.Instance?.RefreshLive();
+            return false;
+        }
+
+        // 价格每点现算（唯一出口）；免费额度只惠及随机抽（2026-10-19 拍板口径不变）
+        int price = SlotMachineSystem.DrawPrice();
+        int freeLeft = SlotMachineSystem.FreeDrawsLeft();
+        int cost = !picked.HasValue && freeLeft > 0 ? 0
+                 : (picked.HasValue ? SlotMachineSystem.FocusPrice(picked.Value) : price);
+        if (!CanAffordDraw(picked, cost, out string shortBy))
+        {
+            UIManager.Instance?.ShowToast(shortBy + "不足");
+            BattleEntryDraftPanel.Instance?.RefreshLive();
+            return false;
+        }
+
+        // 「再来一次」：抽奖开始前掷（2026-10-12 拍板），只对随机抽（2026-10-19 拍板）；
+        // 命中 = 本次结果就是免费抽：不扣币、不推进抽数，只送额度 + 横幅。
+        if (!picked.HasValue && SlotMachineSystem.RollReroll())
+        {
+            SlotMachineSystem.GrantBonusFreeDraw();
+            UIManager.Instance?.ShowToast("再来一次！这一抽免费", true);
+            SlotMachineAgainBanner.Show();
+        }
+        else
+        {
+            StartCoroutine(CoLiveDraw(picked, cost, cats));
+        }
+
+        _liveDrawCdUntil = Time.unscaledTime + LIVE_DRAW_CD_SEC;
+        BattleEntryDraftPanel.Instance?.RefreshLive();   // 价格/免费额度可能已变
+        return true;
+    }
+
+    /// <summary>实时抽的出货协程：复用 <see cref="CoInstantPick"/> 全链路，结束后刷一次常显按钮（价格/余额/可抽类别）。</summary>
+    IEnumerator CoLiveDraw(DraftCategory? picked, int cost, List<DraftCategory> cats)
+    {
+        var target = picked.HasValue ? picked.Value : SlotMachineSystem.ResolveCategory(cats);
+        yield return CoInstantPick(target, cost);
+        BattleEntryDraftPanel.Instance?.RefreshLive();
+    }
+
+    /// <summary>
+    /// 🔴【2026-10-29 主人拍板·实时抽改版】正式关/金币本进关阶段：
+    /// 不再弹进关抽奖大面板 —— 常显按钮（展开态布局、无动画）+「开始战斗」，玩家抽够了手动开打；
+    /// 开打后按钮<b>保持常显</b>（战斗中实时抽），波清 5 秒倒计时自动出下一波（见 Waves 分流）。
+    /// <b>非阻塞</b>：首波由「开始战斗」回调（<see cref="OnLiveStartFight"/>）触发；
+    /// 本方法调用后 <c>_preBattleStoryPlaying</c> 保持 true，压住 CoFirstWaveHardFallback 直到玩家点继续。
+    /// </summary>
+    void EnterLiveStartPhase()
+    {
+        BattleEntryDraftPanel.EnterLiveStart(OnLiveStartFight);
+    }
+
+    /// <summary>玩家点了「开始战斗」：解除硬刷压制 → 刷首波 → 队伍出发（旧流程「抽完才出发」语义保住）。
+    /// 之后整关不再有任何等待节点。</summary>
+    void OnLiveStartFight()
+    {
+        _preBattleStoryPlaying = false;
+        ScheduleFirstWaveSpawn();
+        // 【2026-10-29 实时抽改版】与旧流程同序（先刷首波再出发，见 BattleStartSequenceCoroutine 分流注释）
+        if (_liveStartAdvancePending)
+        {
+            _liveStartAdvancePending = false;
+            StartPartyAdvance(_liveStartFollow);
+        }
     }
 
     /// <summary>
@@ -1041,11 +1214,22 @@ public partial class BattleManager
             if (card.Kind == DraftCardKind.MercRecruit)
                 UIManager.Instance?.ShowToast(toastMsg, true);
             else if (card.Kind == DraftCardKind.SkillNew || card.Kind == DraftCardKind.SkillUp)
-                StartCoroutine(SkillObtainPopupUI.CoShow(card, () =>
+            {
+                // 🔴【2026-10-29 主人拍板·实时抽改版】正式关技能获得**不再弹模态窗**，直接 force Toast——
+                //   实时抽不冻结战斗，模态窗会挡住进行中的战斗画面；引导局保留旧弹窗
+                //   （引导第三抽的「获得技能」仪式感是引导脚本一部分，不动）。
+                if (IsTutorialRun)
+                    StartCoroutine(SkillObtainPopupUI.CoShow(card, () =>
+                    {
+                        UIManager.Instance?.ShowToast(toastMsg, true);
+                        rewardPopupClosed = true;
+                    }));
+                else
                 {
                     UIManager.Instance?.ShowToast(toastMsg, true);
-                    rewardPopupClosed = true;
-                }));
+                    rewardPopupClosed = true;   // 无模态等待，等弹窗关闭的循环当场放行
+                }
+            }
             else if (card.Kind != DraftCardKind.Equip && DraftRewardDetailUI.NeedsDetail(card))
             {
                 // 佣兵升级/升星拍暂无新预制体：维持「开奖卡 → 详情弹窗」原样（主人没点名改）。
@@ -1773,6 +1957,13 @@ public partial class BattleManager
         // 界面播完（或点击跳过）才走模式结算；引导局在进本函数前已分流，永远到不了这里。
         // 【2026-10-25 主人拍板】胜利结果界面改版：奖励区展示本局自动领取的宝箱奖励（RunStats 数据源），
         // 点【确定】/点任意处 → 走 Mode.SettleStageClear → 回冒险界面链照旧。
+        // 【2026-10-29 主人报「没有获得奖励，应该有金币什么的」】结果界面奖励格数据源 = RunStats，
+        // 但展示字段 GoldGained 只在局末 FillSettlementSnapshot（BattleManager.Death.cs）才从
+        // GoldEarned 拷贝 —— 普通关通关走本链路（先播结果界面再 Mode.SettleStageClear），
+        // 那之前从不填它 → 结果界面奖励区永远空格。此刻关卡金已入 GoldEarned（上面
+        // PersistBattleGold → GrantPendingStageGold 先入账），这里提前拷一次给结果界面展示；
+        // 局末 FillSettlementSnapshot 会重算同值，幂等无副作用。装备格走 EquipGains 实时记录，不受影响。
+        RunStats.GoldGained = RunStats.GoldEarned;
         if (Mode.UsesBattleResultScreen)
             BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this));
         else
@@ -1922,12 +2113,13 @@ public partial class BattleManager
             return;
         }
         int nextStage = EndlessRiftStage;
+        // 【2026-10-29 主人拍板·裂隙每层三抽改版】黑屏过场字幕显示「第 N 层」（旧版显示章名）
         StartCoroutine(CoChapterGateLoading(GameConfig.EndlessChapterForStage(nextStage), () =>
         {
             cm.StartEndlessRift(nextStage);
             if (cm.stageMap != null && cm.stageMap.Count > 0)
                 cm.SelectStage(cm.stageMap[0]);
-        }));
+        }, $"第 {nextStage} 层"));
     }
 
     /// <summary>
@@ -1975,9 +2167,15 @@ public partial class BattleManager
     /// 复用的就是切场景那套 <see cref="LoadingUI"/>（同源同款，不另造一套过场），
     /// 背景图走 `Resources/UI/loading/beijing0N`。
     /// </summary>
-    IEnumerator CoChapterGateLoading(int chapter, System.Action after)
+    /// <param name="tipOverride">
+    /// 【2026-10-29 主人拍板·裂隙每层三抽改版】过场字幕覆盖文案：传了就用它（无限裂隙续层传「第 N 层」），
+    /// 不传保持旧口径显示章名。背景图仍按 chapter 走 <see cref="BattleLoadingOverlay.SetChapterBackdrop"/>。
+    /// </param>
+    IEnumerator CoChapterGateLoading(int chapter, System.Action after, string tipOverride = null)
     {
-        BattleLoadingOverlay.Show(GameConfig.GetChapterMapName(chapter));
+        BattleLoadingOverlay.Show(string.IsNullOrEmpty(tipOverride)
+            ? GameConfig.GetChapterMapName(chapter)
+            : tipOverride);
         BattleLoadingOverlay.SetChapterBackdrop(chapter);
         BattleLoadingOverlay.SetProgress(1f);
         yield return new WaitForSecondsRealtime(ChapterGateLoadingSeconds);

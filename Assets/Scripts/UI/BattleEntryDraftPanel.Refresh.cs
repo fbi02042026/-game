@@ -54,7 +54,8 @@ public partial class BattleEntryDraftPanel
             // 局外有钱 → 定向按钮没置灰，玩家一点 → BattleManager 查局内不够 → toast 后面板被收、直接开战。
             long wallet = coins;
             // 2026-10-06：本拍已抽完（引导局一次一抽）→ 全部置灰，玩家只剩「继续」可点。
-            bool on = !_drawLocked && has && (slotFree || wallet >= price);
+            // 【2026-10-29 实时抽 CD】LiveMode 的 CD 进行中同样全部置灰（防连点，主人拍板 5 秒）。
+            bool on = !_drawLocked && !_cdActive && has && (slotFree || wallet >= price);
             // 置灰交给 Button.interactable —— 它会按 disabledColor 作用在 icon 上；
             // 不去改 name/金额 的文字颜色，那是主人调好的美术。
             s.Btn.interactable = on;
@@ -93,6 +94,15 @@ public partial class BattleEntryDraftPanel
 
     void OnDraftClicked(int idx)
     {
+        // 🔴【2026-10-29 主人拍板·实时抽改版】LiveMode 下按钮直连 BattleManager.TryLiveDraw：
+        // 点抽即抽、不冻结、立即生效（防连点 CD / 扣币 / 保底全在 BattleManager 侧统一管）。
+        // 不走旧面板的 _onPick 回调链（那是 Begin/倒计时/继续那套，裂隙与引导局还在用）。
+        if (_liveMode)
+        {
+            if (idx < 0 || idx >= _slots.Count) return;
+            BattleManager.Instance?.TryLiveDraw(_slots[idx].Cat);
+            return;
+        }
         if (!_draftActive || idx < 0 || idx >= _slots.Count) return;
         _comboCount++;            // 【2026-10-13 #9】每点一次抽奖 +1
         RefreshCombo();
@@ -129,6 +139,18 @@ public partial class BattleEntryDraftPanel
     /// </summary>
     void DoContinue()
     {
+        // 🔴【2026-10-29 主人拍板·实时抽改版】LiveMode 的「继续」= 开始战斗（进关阶段手动开打）：
+        // 点一次即失效（_onFight 清空防重复触发首波），抽奖按钮**保持常显**（战斗中实时抽）。
+        if (_liveMode)
+        {
+            if (_onFight == null) return;
+            var liveCb = _onFight;
+            _onFight = null;
+            if (_continueBtn != null) _continueBtn.gameObject.SetActive(false);
+            ClearNewLootBadges();
+            liveCb?.Invoke();
+            return;
+        }
         if (!_draftActive) return;
         StopContinueCountdown();
         // 【2026-10-06 主人拍板】点「继续」→ 本拍抽奖打上的「新」标记一次性清掉，角标跟着消失。

@@ -237,6 +237,12 @@ public partial class BattleManager
     /// </summary>
     bool _preBattleStoryPlaying;
 
+    // 【2026-10-29 实时抽改版】正式关/金币本进关阶段「开始战斗」待办的队伍出发参数：
+    // BattleStartSequenceCoroutine 暂存（那时还不能出发，要等玩家点「开始战斗」），
+    // OnLiveStartFight 消费；撤离/重载经 StopBattleSpawnCoroutines 清掉，不残留。
+    bool _liveStartAdvancePending;
+    CameraFollow _liveStartFollow;
+
     /// <summary>停掉开战/硬刷协程，避免连续 LoadStage 叠多个兜底。</summary>
     public void StopBattleSpawnCoroutines()
     {
@@ -248,6 +254,8 @@ public partial class BattleManager
         StopWaveAnnounce();
         // 战前剧情若在播放中被打断，标志位必须复位，否则 CoFirstWaveHardFallback 会永久卡在等待里
         _preBattleStoryPlaying = false;
+        // 【2026-10-29 实时抽改版】待出发的「开始战斗」一并作废（撤离/重载不残留）
+        _liveStartAdvancePending = false;
         if (_firstWaveSpawnCo != null)
         {
             StopCoroutine(_firstWaveSpawnCo);
@@ -419,7 +427,16 @@ public partial class BattleManager
         if (_runClosed) yield break;
 
         // 2026-09-30：抽完奖才出发 —— 抽奖期间队伍在开战位原地静止（见 FinishBattleIntro）
-        StartPartyAdvance(follow);
+        // 🔴【2026-10-29 实时抽改版】正式关/金币本进关阶段非阻塞（CoPreBattleStoryThenFirstWave
+        // 在 EnterLiveStartPhase 后即返回，不等玩家点「开始战斗」）→ 队伍出发挪到 OnLiveStartFight，
+        // follow 暂存下面两个字段；无限裂隙（旧面板阻塞等玩家）与引导局照旧这里直接出发。
+        if (!IsEndlessRift && !IsTutorialRun)
+        {
+            _liveStartFollow = follow;
+            _liveStartAdvancePending = true;
+        }
+        else
+            StartPartyAdvance(follow);
 
         // 【2026-10-07 主人拍板】去掉「开始游戏」大字横幅。
         // 这里原本会在抽完奖点「继续」后先甩出大字、再正式开打（2026-09-30 加入）。
@@ -740,34 +757,20 @@ public partial class BattleManager
     /// </summary>
     IEnumerator CoWaveIntermissionDraftThenNextWave()
     {
-        // 【2026-10-22 主人拍板】抽奖节拍收窄到回合末（只对主线正式关生效）：
-        // 【2026-10-22 主人拍板 v4.2】回合末判定作废旧口径「下一未刷波下标 % 3 == 0」（波数按章可变后回合长不再固定 3），
-        // 改读铺波时落在 WaveData 上的回合末标记：刚清完的那波（next-1）isRoundEnd == true 才算回合末。
-        // Boss 波不算回合末（isRoundEnd 恒 false），末回合清完走通关链不进本方法。
-        // CoMidBattleDraft / CoStageEntryDraft 本体不改；进关第一次抽奖不掷石像（CoStageEntryDraft 未动）。
-        // 引导局整条早已 SkipWaveAnnounce 跳过，保持；金币本/裂隙保持 2026-10-21 口径：每波照旧弹（行为不变）。
-        int next = FindNextUnspawnedWaveIndex();
-        bool formalRoundEnd = IsFormalMainRun
-            && next > 0
-            && _waves != null && next - 1 < _waves.Count
-            && _waves[next - 1] != null
-            && _waves[next - 1].isRoundEnd;
-        if (IsFormalMainRun && !formalRoundEnd)
+        // 🔴【2026-10-29 主人拍板·实时抽改版】波清后**不再弹抽奖窗**（抽奖改常显按钮实时抽）：
+        // 正式关/金币本 → 5 秒倒计时（不冻结，玩家可趁机点常显按钮实时抽）→「下一波来袭」预告出兵。
+        // 旧「回合末（isRoundEnd）才弹」判定与金币本「每波弹」口径随实时抽改版**整体作废**；
+        // 无限裂隙保持原设定：每波清完弹连抽窗（2026-10-21/26 口径原样保留）。
+        if (!IsEndlessRift)
         {
-            // 正式关非回合末：不弹抽奖，直接预告 + 出兵
+            yield return CoWaveCountdown(5f);
+            // 防撤离/死亡/通关后旧协程串台：当场退场（协程被外部 StopWaveAnnounce 停时同样安全）
+            if (_runClosed || !isInBattle || _stageCleared) yield break;
             yield return CoAnnounceThenSpawnNextWave();
             yield break;
         }
 
-        if (formalRoundEnd)
-        {
-            // 【2026-10-22 主人拍板】石像事件：回合末抽奖窗弹出前掷 10%（每关最多 1 次，恢复/诅咒互斥）
-            // 【2026-10-24 主人拍板】石像事件先下线：主人截图反馈「石像跑出来了」——时机不对 + 位置压底部战斗栏。
-            // 只停这一处触发口；TryShowOnDraft / ForceCollapse 与 BattleStatueEventUI 实现保留不删（下线≠删除，
-            // 复用 HealPartyOnWaveCleared 先例）。buff 节点仍由 BattleUI.Awake → EnsureOn 常隐，抽奖时不再出现石像。
-            // BattleStatueEventUI.TryShowOnDraft();
-        }
-
+        // —— 无限裂隙：原设定不动（每波弹连抽窗）——
         yield return CoMidBattleDraft(multiDraw: true);
 
         // 【2026-10-22 主人拍板】抽奖窗关闭（点继续/超时）未点石像 → 石像一并收起，不结转
@@ -778,6 +781,30 @@ public partial class BattleManager
             yield break;
 
         yield return CoAnnounceThenSpawnNextWave();
+    }
+
+    /// <summary>
+    /// 【2026-10-29 主人拍板·实时抽改版】波清后的 5 秒倒计时：
+    /// 复用侧栏「下一波 N」倒计时 UI（<c>BattleSideHud.SetWaveCountdown</c>，原定时波专用、
+    /// 当前闲置，canSkip=false 不可点加速，显示「下一波 N / 即将出兵…」）。
+    /// 期间<b>不冻结</b>战斗 —— 玩家可趁机点常显按钮实时抽。走完由调用方播预告出兵。
+    /// 撤离/死亡/通关随时收显示退场。
+    /// </summary>
+    IEnumerator CoWaveCountdown(float sec)
+    {
+        float left = sec;
+        while (left > 0f)
+        {
+            if (_runClosed || !isInBattle || _stageCleared)
+            {
+                BattleSideHud.Instance?.SetWaveCountdown(false, 0f, false);
+                yield break;
+            }
+            BattleSideHud.Instance?.SetWaveCountdown(true, left, false);
+            left -= Time.unscaledDeltaTime;
+            yield return null;
+        }
+        BattleSideHud.Instance?.SetWaveCountdown(false, 0f, false);
     }
 
     /// <summary>

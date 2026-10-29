@@ -108,6 +108,28 @@ public class MercGainCinematicUI : MonoBehaviour
         }
         _bgRt = bg as RectTransform;
 
+        // 【2026-10-29 主人拍板「这个大小要全屏的」】演出整体铺满全屏：
+        // 重做后的预制体 panl 是 100×100 中心小节点，BG 靠 stretch+offset 只摆出 573×1280 的
+        // 中间一块。这里把 panl 拉伸铺满根画布（根由 UICanvasSetup.EnsureRootStretch 铺满），
+        // BG offset 清零铺满 panl → 背景全屏。立绘/名字/特效全是 panl 中心锚固定坐标，中心
+        // 不变位置不动；出场动画 chuchang 只绑 panl 的子节点轨道（BG/…、佣兵/…、NamePlate/…），
+        // 不覆盖 panl 自身，不受影响。BG Image 是 Simple 非保比例 → 自动全屏拉伸；
+        // FitStageAlignment 按新的背景高做贴台补偿（720×1280 时 k=1，预制体值一个像素不动）。
+        // 必须在 FitStageAlignment / SafeAreaFitter 之前执行：先定全屏基准，再算补偿与安全区。
+        var panlRt = UiFind.Deep(transform, "panl") as RectTransform;
+        if (panlRt != null)
+        {
+            panlRt.anchorMin = Vector2.zero;
+            panlRt.anchorMax = Vector2.one;
+            panlRt.offsetMin = Vector2.zero;
+            panlRt.offsetMax = Vector2.zero;
+            if (_bgRt != null)
+            {
+                _bgRt.offsetMin = Vector2.zero;
+                _bgRt.offsetMax = Vector2.zero;
+            }
+        }
+
         // 副标题（可选）：挂在 NamePlate 子节点，随名字一起淡入上移；null / 空 → 隐藏
         var subTr = nameTr.Find("SubTitle");
         if (subTr != null)
@@ -144,7 +166,7 @@ public class MercGainCinematicUI : MonoBehaviour
         // 使底部手势条偏移一并算进名字动画基准（CoNameIn 的每帧覆写不再把它抹掉）。
         // 顶部挂 panl 根：BG/立绘/名字整体随 panl 下移，与 FitStageAlignment 的贴台关系一起平移，立绘仍踩在台上；
         // 底部只挂 NamePlate：不动 panl → BG 底不被拉起露黑边。两者都不挂根 Canvas（由 Canvas 每帧驱动，无效）。
-        var panlRt = UiFind.Deep(transform, "panl") as RectTransform;
+        // （panlRt 已在上方全屏化处取得）
         if (panlRt != null) SafeAreaFitter.EnsureTopOffset(panlRt);
         SafeAreaFitter.EnsureBottomOffset(nameTr as RectTransform);
 

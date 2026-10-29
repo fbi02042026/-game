@@ -56,6 +56,90 @@ public partial class BattleEntryDraftPanel
         Instance.Finish();
     }
 
+    // ============================================================
+    // 🔴【2026-10-29 主人拍板·实时抽改版】LiveMode（常显实时抽）
+    // ============================================================
+
+    /// <summary>
+    /// 实时抽进关阶段：DraftRoot 用展开态布局<b>常驻</b>（无展开动画）+「开始战斗」按钮。
+    /// 正式关/金币本进关后调（裂隙与引导局走旧面板，不进这里）。
+    /// <paramref name="onFight"/> = 玩家点「开始战斗」（DoContinue 的 LiveMode 分支）→ 回调 BattleManager 刷首波。
+    /// 拿不到面板直接回调开打（与 Show 的防卡死口径一致，绝不把玩家卡在进关阶段）。
+    /// </summary>
+    public static void EnterLiveStart(Action onFight)
+    {
+        var ui = Ensure();
+        if (ui == null || !ui.gameObject.activeInHierarchy)
+        {
+            if (ui == null)
+                Debug.LogError("[BattleEntryDraftPanel] EnterLiveStart 拿不到面板，直接开打");
+            onFight?.Invoke();
+            return;
+        }
+        ui.BeginLive(onFight);
+    }
+
+    void BeginLive(Action onFight)
+    {
+        Build();
+        _liveMode = true;
+        _draftActive = false;
+        _drawLocked = false;
+        _cdActive = false;
+        _onPick = null;
+        _onFight = onFight;
+        // ⚠ 不走动画：主人原话「不会出现抽奖时那个界面动画了」—— 直接按展开态真值表一步落位
+        //（面板 750 / zhuangshi +80 / DraftRoot -250 / map 350），与旧面板 Begin 的 SetExpanded(true) 同一套数值，
+        // 只是跳过 CoAnimState 插值。世界层跟随抬升（ApplyWorldLift）也一并到位。
+        if (_animCo != null) { StopCoroutine(_animCo); _animCo = null; }
+        SetDraftVisible(true);
+        _expanded = true;
+        ApplyState(1f);
+        RefreshLive();
+        LogState("BeginLive");
+    }
+
+    /// <summary>
+    /// LiveMode 的按钮刷新：价格 / 余额 / 免费额度 / 可抽类别全部走 SlotMachineSystem 与
+    /// BattleManager 的唯一出口现算，与 TryLiveDraw 的扣费判定自动同源，不另设参数。
+    /// 每次抽完（含 reroll / 失败）与 CD 起止沿各调一次。
+    /// </summary>
+    public void RefreshLive()
+    {
+        var bm = BattleManager.Instance;
+        if (bm == null || !_liveMode) return;
+        var cats = SlotMachineSystem.AvailableCategories();
+        Refresh(SlotMachineSystem.DrawPrice(), SlotMachineSystem.DrawFocusPrice(),
+                cats, bm.currentGold, SlotMachineSystem.FreeDrawsLeft());
+    }
+
+    /// <summary>
+    /// LiveMode 的 CD 遮罩每帧同步（LateUpdate 调）。真源 = <c>BattleManager.LiveDrawCdRemaining</c>；
+    /// 本地 <c>_cdActive</c> 只做<b>沿检测</b> —— 起止各触发一次 RefreshLive（按钮含 CD 的置灰判定重算），
+    /// 进行中只写遮罩 fillAmount 与秒数，不整表重刷。
+    /// </summary>
+    void TickLiveCooldown()
+    {
+        var bm = BattleManager.Instance;
+        float cd = bm != null ? bm.LiveDrawCdRemaining : 0f;
+        bool active = cd > 0f;
+        if (active != _cdActive)
+        {
+            _cdActive = active;
+            RefreshLive();   // CD 起止沿：按钮置灰 / 恢复
+        }
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            var s = _slots[i];
+            if (s.CdMask == null) continue;
+            if (s.CdMask.gameObject.activeSelf != active)
+                s.CdMask.gameObject.SetActive(active);
+            if (!active) continue;
+            s.CdMask.fillAmount = Mathf.Clamp01(cd / BattleManager.LIVE_DRAW_CD_SEC);
+            if (s.CdText != null) s.CdText.text = Mathf.CeilToInt(cd).ToString();
+        }
+    }
+
     static BattleEntryDraftPanel Ensure()
     {
         if (Instance != null) return Instance;
@@ -296,6 +380,9 @@ public partial class BattleEntryDraftPanel
         // 倒计时每帧走：与本类两态动画、入场归位互不干涉，各自独立。
         TickContinueCountdown();
 
+        // 【2026-10-29 实时抽 CD】LiveMode 下每帧同步 CD 遮罩与秒数（含起止沿的按钮刷新）。
+        if (_liveMode) TickLiveCooldown();
+
         // 【2026-10-09 主人拍板】开打那一刻自动收起背包：只认 UnitsCanAct 的 false→true 跳变，
         // 且必须是玩家手动点开的（抽屉开着、不在抽奖阶段 _draftActive）。
         // ⚠ 绝不写成「战斗中每帧强制收起」——那会把主人 10-08 拍板保留的「战斗中点开背包查看」废掉。
@@ -337,6 +424,9 @@ public partial class BattleEntryDraftPanel
     void Begin(int randomPrice, int focusPrice, List<DraftCategory> cats, long coins,
                Action<DraftCategory?> onPick, Action onFight, int freeLeft = 0)
     {
+        // 【2026-10-29 实时抽改版】旧面板与 LiveMode 互斥：裂隙/引导弹旧面板时清掉常显态，
+        // Begin 内部的「先收背包再展开」逻辑按收起态起点正常走（有收→展动画，旧面板既有体验）。
+        if (_liveMode) { _liveMode = false; _cdActive = false; }
         Build();
         // 【2026-10-08 主人拍板】玩家手动点开的「看背包」态：抽奖一开始先收回去，
         // 再由下面 SetExpanded(true) 从收起态平滑展开显示抽奖 —— 不让背包和抽奖叠在一起。
@@ -376,6 +466,10 @@ public partial class BattleEntryDraftPanel
         _onPick = null;
         _onFight = null;
         _draftActive = false;
+        // 【2026-10-29 实时抽改版】常显态一并收：通关链/剧情入口的 Hide() 会走到这里，
+        // 抽奖按钮与「开始战斗」整组消失；CD 状态同步清。
+        _liveMode = false;
+        _cdActive = false;
         SetDraftVisible(false);
         SetExpanded(false);
         // 面板收了，概率弹窗也得跟着收 —— 不然战斗画面里会留一个孤儿弹窗

@@ -54,6 +54,14 @@ public interface IBattleMode
     bool UsesBattleResultScreen { get; }
 
     /// <summary>
+    /// 本模式阵亡要不要弹「复活/返回」选择窗（含看广告复活档，<see cref="ReviveQuota"/>）。
+    /// 【2026-10-29 主人拍板】与 <see cref="UsesBattleResultScreen"/> 解耦：裂隙通关不播结果屏
+    ///（自己走宝箱/续层链），但死亡**要**有复活机会 —— 默认跟随 UsesBattleResultScreen
+    ///（正式关/副本行为不变），裂隙在自己的类里覆写 true。
+    /// </summary>
+    bool OffersRevive { get; }
+
+    /// <summary>
     /// 建关：决定这一局打哪些关卡。
     /// 核心只调这一个方法，不再写 <c>if (IsGoldDungeon) ... else ...</c>。
     /// </summary>

@@ -104,6 +104,7 @@ public static class ResourceAdRewards
         data.adRewardDayKey = today;
         data.adStaminaClaimCount = 0;
         data.adGoldClaimCount = 0;
+        data.adDiamondClaimCount = 0;
     }
 
     // 【2026-10-28 主人规则重申「只要扣钻石的地方都要有二次确认」】
@@ -270,5 +271,74 @@ public static class ResourceAdRewards
         UIManager.Instance?.ShowToast(r.added > 0
             ? toastTemplate.Replace("{added}", r.added.ToString())
             : "金币已达上限，溢出已进邮件");
+    }
+
+    // ============================================================
+    // 【2026-10-29 主人拍板·纯广告扩位】钻石补给位（顶栏钻石加号）
+    // 每日 2 次**纯广告**档：第 1 次 +50、第 2 次 +100，之后封顶（无免费/钻石档）。
+    // 日键复用 adRewardDayKey（EnsureDay 已一并清 adDiamondClaimCount）。
+    // ============================================================
+
+    /// <summary>看广告领钻第 1 次的数量（2026-10-29 主人拍板：50）。</summary>
+    public const int DiamondAdTier1 = 50;
+    /// <summary>看广告领钻第 2 次的数量（2026-10-29 主人拍板：100）。</summary>
+    public const int DiamondAdTier2 = 100;
+    /// <summary>每日看广告领钻总次数。</summary>
+    public const int DiamondAdPerDay = 2;
+
+    /// <summary>当日剩余看广告领钻次数（UI 文案用；0 = 封顶）。</summary>
+    public static int DiamondAdsLeft(SaveData data)
+        => Mathf.Max(0, DiamondAdPerDay - (data?.adDiamondClaimCount ?? 0));
+
+    /// <summary>本次看广告领多少钻（唯一出口；0 = 已封顶不应弹出）。</summary>
+    public static int DiamondAdRewardOf(int claimedToday)
+        => claimedToday <= 0 ? DiamondAdTier1
+         : claimedToday == 1 ? DiamondAdTier2
+         : 0;
+
+    /// <summary>
+    /// 钻石加号点击（唯一入口 = ResourceStrip 钻石列 PlusButton）：每日 2 次看广告领钻，
+    /// 50 → 100 递进。远程急停时直接提示，不消耗档位。
+    /// </summary>
+    public static void TryClaimDiamond()
+    {
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null)
+        {
+            UIManager.Instance?.ShowToast("存档未就绪");
+            return;
+        }
+        EnsureDay(data);
+        if (data.adDiamondClaimCount >= DiamondAdPerDay)
+        {
+            UIManager.Instance?.ShowToast($"今日钻石补给已达上限（{DiamondAdPerDay}次）");
+            return;
+        }
+        if (AdKillSwitch.AdsOff)
+        {
+            UIManager.Instance?.ShowToast("广告维护中，请稍后再试");
+            return;
+        }
+        int reward = DiamondAdRewardOf(data.adDiamondClaimCount);
+        if (reward <= 0) return;   // fail-closed：不该到这
+        UIManager.Instance?.ShowToast("广告加载中…");
+        RewardedAdBridge.ShowRewarded("diamond_plus", ok =>
+        {
+            if (!ok)
+            {
+                UIManager.Instance?.ShowToast("激励未完成，钻石未发放");
+                return;
+            }
+            EnsureDay(data);   // 窗口期可能跨天，回调内重对当日计数，绝不超发
+            if (data.adDiamondClaimCount >= DiamondAdPerDay) return;
+            int r2 = DiamondAdRewardOf(data.adDiamondClaimCount);   // 跨天重算这一档
+            data.adDiamondClaimCount++;
+            // 【2026-10-29 自检修】原来这里先 Save() 再 Add(save:false) —— 钻石只进内存没落盘，
+            // 领完立刻杀进程 = 钻丢失但档位已吃。改 save:true 由 Add 内部统一落盘（计数+钻石一笔存）；
+            // notify:false 对齐体力/金币版（Grant* 同口径），防「获得钻石+50」+「看广告奖励」双 toast。
+            ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, r2, save: true, notify: false);
+            UIManager.Instance?.ShowToast($"看广告奖励：钻石 +{r2}（今日 {data.adDiamondClaimCount}/{DiamondAdPerDay}）", true);
+            Analytics.AdSlotClick("diamond", true);
+        });
     }
 }

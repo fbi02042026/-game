@@ -91,7 +91,6 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         _runStageGoldPending = 0;
         _runStagesCleared = 0;
         _earnedPaidGold = 0;   // 【2026-10-18 双钱包拆分】已付水位同步归零
-        _endlessEntryHintShown = false;   // 无限裂隙进场免费抽提示：每局重弹一次
         var data = SaveSystem.Instance?.Data;
         _enchantAtRunStart = data != null ? data.enchantStones : 0;
         _matsAtRunStart = data != null ? data.decomposeMats : 0;
@@ -286,8 +285,11 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                  && ChapterManager.Instance.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)
         {
             int stageCount = ChapterManager.Instance.stageMap.Count;
-            int maxCleared = MaxClearedStageOneBased(targetChapter);   // 1 起；一关没通 = 0
-            int startIdx = (maxCleared == 0 || maxCleared >= stageCount) ? 0 : maxCleared;
+            // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】起始关改精确判单关：第一个未通关的关（0 起），
+            // 整章已通关重打 → 从第 1 关（原口径不变）。不再用最大通关号推断——中断续局跳关会留下
+            // 「后关已通、前关未通」的记录（clearedStages 只有 1_1 没有 1_0），max 口径会跳到更后面的关、永久漏关。
+            int startIdx = FirstUnclearedStageIndex0(targetChapter, stageCount);
+            if (startIdx >= stageCount) startIdx = 0;   // 整章通关 → 重打从第 1 关
             var next = ChapterManager.Instance.stageMap[startIdx];
             if (next != null)
             {
@@ -295,7 +297,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                 ChapterManager.Instance.currentStageIndex = next.stageIndex;
                 ChapterManager.Instance.availableNextStages.Clear();
                 ChapterManager.Instance.availableNextStages.Add(next);
-                Debug.Log($"[BattleManager] 打完即清：第 {targetChapter} 章从第 {startIdx + 1} 关开打（已通关到第 {maxCleared} 关）");
+                Debug.Log($"[BattleManager] 打完即清：第 {targetChapter} 章从第 {startIdx + 1} 关开打（第一个未通关 = 第 {startIdx + 1} 关）");
             }
         }
 
@@ -318,8 +320,24 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
     }
 
     /// <summary>
+    /// 本章第一个未通关的 0 起关号（全通返回 stageCount，调用方决定钳回 0）。
+    /// 【2026-10-29 修「1-1 未通 1-2 已标领取后」】起始关不再用最大通关号推断
+    /// （<see cref="MaxClearedStageOneBased"/> 保留备用不再调用：跳关记录会把没打的关跳过去）。
+    /// 与 AdventureUI.FirstUnclearedStage 同口径（那边 1 起 UI 用，这边 0 起索引用）。
+    /// </summary>
+    static int FirstUnclearedStageIndex0(int chapter, int stageCount)
+    {
+        var cleared = SaveSystem.Instance?.Data?.clearedStages;
+        for (int s0 = 0; s0 < stageCount; s0++)
+            if (cleared == null || !cleared.Contains(chapter + "_" + s0)) return s0;
+        return stageCount;
+    }
+
+    /// <summary>
     /// 本章已通关的最大小关号（1 起；一关没通返回 0）。真源 clearedStages（"章_关0基"）。
     /// 与 AdventureUI.GetMaxClearedStage 同一口径（那边是 UI 私有，战斗侧自取一份，别为此动 UI）。
+    /// 【2026-10-29 起「起始关/是否已通」判定一律走 FirstUnclearedStageIndex0 / HasStageCleared 精确查单关，
+    /// 本方法仅保留用于日志/统计类场景，禁止再用于推断「前面的关都通了」】。
     /// </summary>
     static int MaxClearedStageOneBased(int chapter)
     {

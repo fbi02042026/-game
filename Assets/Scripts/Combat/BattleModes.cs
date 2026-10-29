@@ -27,6 +27,13 @@ public abstract class BattleMode : IBattleMode
     /// </summary>
     public virtual bool UsesBattleResultScreen => true;
 
+    /// <summary>
+    /// 阵亡要不要弹「复活/返回」选择窗（含看广告复活档）。
+    /// 【2026-10-29 主人拍板】与 UsesBattleResultScreen 解耦，默认跟随它（正式关/副本行为不变）；
+    /// 无限裂隙覆写 true —— 通关不播结果屏，但死亡要有复活机会。
+    /// </summary>
+    public virtual bool OffersRevive => UsesBattleResultScreen;
+
     /// <summary>默认通关发局内抽奖币（主线：每关 +<c>COIN_PER_*</c>）。</summary>
     public virtual bool GrantsRunCoins => true;
 
@@ -706,10 +713,12 @@ public sealed class TutorialBattleMode : BattleMode
 
 /// <summary>
 /// 无限裂隙（UI「无限裂隙」，冒险界面下标 2，原占位名「迷宫探索」）。
-/// 玩法（2026-10-17 主人拍板）：每天 2 次 × 20 体力；进场免费抽 5 次；
-/// 无限层推进，难度每层 +7%（缓冲关 9 折）；每 5 层一个 BOSS 记录点；
-/// 首通奖励（金币+天赋石）一次性、宝箱掉落每次都发；死亡/撤离当层不发、已通层保留；
-/// 下次从记录点 +1 层开打；每 5 层换一套场景背景（轮换现有 8 章资源）。
+/// 玩法（2026-10-29 主人拍板）：每天 3 次 × 15 体力（体力档 10-29 二改 20→15，见 StaminaSystem.ENDLESS_RIFT_COST）；
+/// **每层开始抽 3 次奖**（免费额度层间重置，定向抽不开启）；抽奖价格按本局已抽数递增；
+/// 难度走锯齿曲线（每节 +6%、节内每层 +4%、精英层 ×1.10，见 GameConfig.EndlessDifficultyMul；旧线性 +7%/缓冲 9 折已废）；
+/// 每 5 层一个 BOSS 记录点；首通奖励（金币+天赋石）一次性、宝箱掉落每次都发；
+/// 死亡/撤离当层不发、已通层保留；下次从记录点 +1 层开打；每 5 层换一套场景背景（轮换现有 8 章资源）；
+/// 层间黑屏过场字幕「第 N 层」。佣兵/技能跨层保留，直到死亡退出。
 /// 施工文档：Docs/无限裂隙副本_待办任务清单.md
 /// </summary>
 public sealed class EndlessBattleMode : BattleMode
@@ -718,7 +727,7 @@ public sealed class EndlessBattleMode : BattleMode
     public override string DisplayName => "无限裂隙";
     public override bool IsPlayable => true;
 
-    /// <summary>进场免费抽 5 次（走战斗内老虎机既有免费额度框架，价格≤0 时 UI 显示「本次免费」）</summary>
+    /// <summary>每层开始免费抽 3 次（走战斗内老虎机既有免费额度框架，层间重置，见 ENDLESS_RIFT_FREE_DRAWS）</summary>
     public override int FreeEntryDraws => SlotMachineDefs.ENDLESS_RIFT_FREE_DRAWS;
 
     /// <summary>局内金币照发：免费抽完后玩家用局内金币继续抽构筑</summary>
@@ -727,6 +736,10 @@ public sealed class EndlessBattleMode : BattleMode
     /// <summary>无限裂隙不播战斗结果界面（2026-10-24 主人拍板）：每层通关即有累计奖励，
     /// 过层直接走 <see cref="BattleManager.SettleEndlessStageClear"/> 的宝箱/首通/续层链；阵亡也直接进遗产结算。</summary>
     public override bool UsesBattleResultScreen => false;
+
+    /// <summary>【2026-10-29 主人拍板】裂隙死亡**要**弹复活选择窗（含看广告档，每日 2 广告+2 钻石总闸见
+    /// <see cref="ReviveQuota"/>）—— 与通关结算屏解耦；放弃复活才走裂隙遗产结算线。</summary>
+    public override bool OffersRevive => true;
 
     public override void BuildChapter(ChapterManager cm, int chapter)
     {
@@ -793,7 +806,7 @@ public static class EndlessRiftRules
         EnsureDay(data);
         if (data.endlessRiftTriesToday >= GameConfig.ENDLESS_DAILY_TRIES)
         {
-            GlobalToastUI.Show("今天的裂隙挑战次数已用完（2/2）", true);
+            GlobalToastUI.Show($"今天的裂隙挑战次数已用完（{GameConfig.ENDLESS_DAILY_TRIES}/{GameConfig.ENDLESS_DAILY_TRIES}）", true);
             return false;
         }
         if (!StaminaSystem.TrySpendForEndlessRift())

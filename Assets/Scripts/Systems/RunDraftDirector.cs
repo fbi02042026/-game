@@ -13,8 +13,11 @@ public class RunDraftDirector : MonoBehaviour
 {
     public static RunDraftDirector Instance { get; private set; }
 
-    /// <summary>局内佣兵相对玩家脚下的生成偏移。</summary>
+    /// <summary>局内佣兵相对玩家脚下的生成偏移（屏外走入不可用时回落的兜底偏移）。</summary>
     const float MercSpawnOffsetX = 1.6f;
+
+    /// <summary>抽到佣兵屏外走入：相机左缘再往外扩的世界单位（保证整只都在屏外，量级同开战入场 PARTY_ENTER_FROM=1.15）。</summary>
+    const float MercWalkInOffscreenPad = 1.1f;
 
     public static RunDraftDirector Ensure(BattleManager bm)
     {
@@ -66,8 +69,9 @@ public class RunDraftDirector : MonoBehaviour
         //   局内金币（走 BattleManager.AddRunGold(n, false)，抬高本局起点 → 结算差额不含它们）。
         //   局外金币 Gold **只有**结算界面按通过关卡数发（StageGoldDefs）＋ 局内真正赚到的那部分。
         //   局内金币的全部来源（**就这三条，别处不再有第二个给币口径**）：
-        //     ① 每局启动金：**正式关 200 / 引导局 270**（GrantRunStarterGold，2026-10-14 主人拍板；
-        //       2026-10-23 拍板引导局也归 200）+ 初始资金天赋每级 80
+    //     ① 每局启动金：**正式关 200 / 引导局 270**（GrantRunStarterGold，2026-10-14 主人拍板；
+    //       2026-10-23 拍板引导局也归 200）+ 初始资金天赋每级 80
+    //       【2026-10-29 主人拍板】正式关档 200 → **100**（「正式关卡每关给100抽奖币」；10-24 打完就清后每关=一局）。
         //     ② 每关通关：50 起，**每关 ×1.4 递增**，单关封顶 200（GrantStageCoins，
         //        金币本不发 —— Mode.GrantsRunCoins=false）
         //     ③ 抽中「金币」安慰奖（一抽价 × 0.5 = 40）
@@ -369,6 +373,9 @@ public class RunDraftDirector : MonoBehaviour
     /// <item>留着旧的 → 新件同样折成强化石（不占背包，也不白抽）。</item>
     /// </list>
     /// 【2026-10-14 主人拍板】同部位没有旧件时**也弹窗**（右侧栏显示「无」），不再直接入包。
+    /// 🔴【2026-10-29 主人拍板·实时抽改版，覆盖 10-14 口径】同部位**没有旧件 → 不再弹窗**，
+    /// 自动穿上 + Toast（Toast 由 CoInstantPick 统一弹，文案见下方 done 调用处）；
+    /// 有旧件 → 照旧弹替换确认。实时抽不冻结战斗，空槽再弹「无→换上」两步确认纯属打断。
     /// </summary>
     /// <param name="done">(是否生效, 给玩家看的文案)。</param>
     public IEnumerator CoApplyEquipCard(DraftCard card, System.Action<bool, string> done)
@@ -394,11 +401,9 @@ public class RunDraftDirector : MonoBehaviour
         // 谁会被顶掉 —— 判据只有 BattleBagSystem.FindSameSlotEquip 一处
         var old = bag.FindSameSlotEquip(eq);
         bool replace = true;
-        // 【2026-10-14 主人拍板】抽中装备**一律弹替换确认**（原「同部位没有旧件时不弹窗、直接入包」作废）：
-        // 没有旧件也要弹，右侧栏（ColumnOld）显示「无」，玩家点「换上新的」才穿；
-        // 点「留着旧的」→ 新件折强化石，与有旧件时的口径一致（玩家自选自担）。
-        // old == eq 防同实例重入的语义保留。
-        if (old != eq)
+        // 【2026-10-29 主人拍板·实时抽改版】空槽（old == null）→ 跳过弹窗直接穿（replace 保持 true）；
+        // 有旧件才弹确认（old != eq 防同实例重入的语义保留）。
+        if (old != null && old != eq)
         {
             bool chose = false;
             yield return EquipReplaceConfirmUI.CoShow(eq, old, r => chose = r);
@@ -430,7 +435,11 @@ public class RunDraftDirector : MonoBehaviour
             // 2026-10-10 主人拍板：装备到账文案统一「恭喜获得 XXX」（原「获得装备：XXX」）
             // 2026-10-12 主人拍板：装备名按稀有度上色（色值统一走 RarityPalette，别再抄）。
             // 这条 msg 同时喂三处出口：战斗内抽奖 Toast + 「等玩家点继续」硬引导文案 + 通关结算 Toast。
-            done?.Invoke(true, $"恭喜获得 {ColoredName(card, eq)}");
+            // 【2026-10-29 主人拍板·实时抽改版】空槽自动穿上时文案明说「已自动穿上」，
+            // 让玩家知道这件为什么没弹窗就直接装身了（有旧件走弹窗，文案不带这句）。
+            done?.Invoke(true, old == null
+                ? $"恭喜获得 {ColoredName(card, eq)}（已自动穿上）"
+                : $"恭喜获得 {ColoredName(card, eq)}");
             yield break;
         }
 
@@ -502,7 +511,8 @@ public class RunDraftDirector : MonoBehaviour
             passiveSkillId = data.passiveSkillId
         };
         if (!RunLoadout.TryAddMerc(entry)) { msg = "佣兵位已满"; return false; }
-        SpawnRunMerc(entry);
+        // 【2026-10-29 主人需求】战斗抽到佣兵：从左边屏外走到玩家身后的编队位，不再原地闪现。
+        SpawnRunMerc(entry, walkInFromLeft: true);
         // 【2026-10-24 主人拍板「钩子肯定需要」】N-1 佣兵参战计数：常规肉鸽局的佣兵都从这里入队，
         // 每次入队算一次参战（S006/S007/S008「参战 10 次」喂食口）。唯一出口见 OnMercBattled。
         AdventureLogAchievements.OnMercBattled(entry.hireId);
@@ -754,7 +764,15 @@ public class RunDraftDirector : MonoBehaviour
         Debug.Log($"[RunDraft] 佣兵刷新：{entry.displayName} Lv{entry.level} ★{entry.star}");
     }
 
-    void SpawnRunMerc(RunMercEntry e)
+    /// <summary>
+    /// 生成局内佣兵。
+    /// <paramref name="walkInFromLeft"/> = true（抽奖入队）时从相机左缘屏外生成，
+    /// 走入编队位交给佣兵 AI 自带的拴绳回队完成（屏外点距玩家必然超过 MERC_LEASH_RADIUS
+    /// → BeginRecallToHero → FollowHeroOrIdle 走到 GetMercDesiredCombatX 的编队位：
+    /// 远程站玩家身后、近战站身前；走路动画由 AI 的 SetMove 播放，无需新写移动代码）。
+    /// 还原 / 羁绊进本等其余路径保持原样：按编队位直接生成。
+    /// </summary>
+    void SpawnRunMerc(RunMercEntry e, bool walkInFromLeft = false)
     {
         var bm = BattleManager.Instance;
         var mm = MercenaryManager.Instance;
@@ -782,11 +800,15 @@ public class RunDraftDirector : MonoBehaviour
         }
 
         var hero = bm.hero != null ? bm.hero : Hero.Instance;
-        float baseX = hero != null ? UnitBase.GetCombatX(hero) + MercSpawnOffsetX : MercSpawnOffsetX;
         float z = bm.unitRoot != null ? bm.unitRoot.position.z : 0f;
         int slot = mm.GetActiveMercs().Count;
-        if (hero != null)
-            baseX = UnitCrowd.GetMercDesiredCombatX(hero, null, slot);
+        float baseX;
+        if (walkInFromLeft && hero != null && TryGetMercWalkInX(hero, out float enterX))
+            baseX = enterX;                                  // 屏外左走入（仅抽奖入队路径）
+        else if (hero != null)
+            baseX = UnitCrowd.GetMercDesiredCombatX(hero, null, slot);   // 原口径：编队位直接生成
+        else
+            baseX = MercSpawnOffsetX;                        // 无英雄参照时的兜底（同旧口径）
 
         var merc = mm.SpawnMercenary(e.mercId, new Vector3(baseX, UnitBase.GROUND_Y, z), Mathf.Max(1, e.level));
         if (merc == null) return;
@@ -817,6 +839,26 @@ public class RunDraftDirector : MonoBehaviour
         merc.Face(1);
 
         Debug.Log($"[RunDraft] 局内佣兵出场：{e.displayName}({e.mercId}) Lv{e.level} ★{e.star}");
+    }
+
+    /// <summary>
+    /// 抽到佣兵的屏外走入起点：取「镜头左缘再外扩」与「玩家左侧超出拴绳半径」两者更靠左者。
+    /// 两个条件都要满足：
+    /// ① 在画面外 —— 镜头左缘外扩（任何屏幕比例都成立，竖屏宽屏都照走）；
+    /// ② 距玩家 &gt; MERC_LEASH_RADIUS —— 生成瞬间拴绳即触发回队（BeginRecallToHero），
+    ///    回队途中不索敌开打，保证佣兵先走到玩家身后的编队位，不会半途被怪引走。
+    /// 相机缺失 / 非正交时返回 false，调用方回落到按编队位直接生成（不兜底强造坐标）。
+    /// </summary>
+    static bool TryGetMercWalkInX(Hero hero, out float walkInX)
+    {
+        walkInX = 0f;
+        var cam = Camera.main;
+        if (cam == null || !cam.orthographic) return false;
+        float halfW = cam.orthographicSize * cam.aspect;
+        float cameraLeftX = cam.transform.position.x - halfW - MercWalkInOffscreenPad;
+        float leashX = UnitBase.GetCombatX(hero) - (GameConfig.MERC_LEASH_RADIUS + 0.6f);
+        walkInX = Mathf.Min(cameraLeftX, leashX);
+        return true;
     }
 
     /// <summary>

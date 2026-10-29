@@ -41,5 +41,13 @@
                 android:name="unityplayer.UnityActivity"
                 android:value="true" />
         </activity>
+
+        <!-- 带图分享（2026-10-29）：content:// 授权接收方读分享图（Android 7+ 禁 file://，必须走 provider）。
+             authorities 与 ShareFileProvider.java 的 AUTHORITY、ShareService.cs 的 ShareAuthority 三处同值，改要一起改。 -->
+        <provider
+            android:name="com.PixelAdventure.RiftBlade.ShareFileProvider"
+            android:authorities="com.pixeladventure.riftblade.sharefile"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

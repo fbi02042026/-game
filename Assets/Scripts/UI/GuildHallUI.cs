@@ -661,6 +661,8 @@ public class GuildHallUI : MonoBehaviour
         // 竹篓纳福入口（2026-10-28 主人拍板）：每日登录下方一格，运行时克隆生成（不动预制体）；
         // 玩法未上线前点击弹占位告知，接线只在 MiniGameEntryUI.OnClicked 一处。
         MiniGameEntryUI.EnsureInGuildHall(dailyLoginButton);
+        // 竞技场入口（2026-10-29）：纳福入口下方一格，运行时克隆生成（不动预制体），接线只在 ArenaEntryUI.OnClicked 一处。
+        ArenaEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的），点击随机换看板人物
         EnsureTurnButton();
         // 商店：2026-09-15 接通，技能解锁 / 抽卡券 / 资源补给 / 材料 四个货架

@@ -31,11 +31,12 @@ public partial class AdventureUI
             else if (main)
             {
                 // 【2026-10-24 主人拍板「冒险界面信息应该写1-1 不应该是第一章」】
-                // 主线详情标题 = 当前关号（章-关，与岛上关卡编号同口径：下一关 = 已通关最大关 + 1）
+                // 主线详情标题 = 当前关号（章-关，与岛上关卡编号同口径）
                 // 【2026-10-29 主人拍板「给每个关卡加个名字」】编号后追加关名（StageNameDefs 唯一出口，
                 // 关卡槽位牌仍只显示编号——牌面 125px 放不下）
-                int maxCleared = GetMaxClearedStage(_selectedChapter);
-                int cur = Mathf.Clamp(maxCleared + 1, 1, GameConfig.STAGES_PER_GRAND);
+                // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】当前关 = 第一个未通关（精确查单关），
+                // 整章通关时钳到最后一关显示；不再用「最大通关号 + 1」推断（跳关记录会标错关）。
+                int cur = Mathf.Clamp(FirstUnclearedStage(_selectedChapter, GameConfig.STAGES_PER_GRAND, SaveSystem.Instance?.Data), 1, GameConfig.STAGES_PER_GRAND);
                 string stageName = StageNameDefs.Get(_selectedChapter, cur);
                 stageNameLabel.text = string.IsNullOrEmpty(stageName)
                     ? $"{_selectedChapter}-{cur}"
@@ -123,10 +124,10 @@ public partial class AdventureUI
         if (!playable) return "0";
         if (main)
         {
-            // 面板标题永远指向「下一关」（= 已通关最大关 + 1，钳在 1..5）：
-            // 该关已通关 ⇔ 本章 maxCleared 已到顶（整章通完，标题显示 1-5 且 5 是通关关）
-            int maxCleared = GetMaxClearedStage(_selectedChapter);
-            return maxCleared >= GameConfig.STAGES_PER_GRAND ? "已通关" : "未通关";
+            // 面板标题永远指向「当前关 = 第一个未通关」（2026-10-29 修：精确查单关，不再用最大通关号推断）：
+            // 标题那关已通关 ⇔ 该章全部通关（第一个未通关超出范围 = 整章通完，标题显示 1-5 且 5 是通关关）
+            int cur = FirstUnclearedStage(_selectedChapter, GameConfig.STAGES_PER_GRAND, SaveSystem.Instance?.Data);
+            return cur > GameConfig.STAGES_PER_GRAND ? "已通关" : "未通关";
         }
         if (activity)
             return $"{ActivityDungeonRules.TriesLeft(SaveSystem.Instance?.Data, _selectedActivityKind)}/{ActivityDungeonRules.DAILY_TRIES}";

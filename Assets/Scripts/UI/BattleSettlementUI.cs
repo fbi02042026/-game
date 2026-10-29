@@ -40,6 +40,12 @@ public class BattleSettlementUI : MonoBehaviour
     Action _onNextStage;
     /// <summary>【2026-10-22 主人拍板】返回钮：运行时克隆 confirmButton（prefab 零改动），每次 Show 先清旧克隆防叠加。</summary>
     GameObject _backButtonClone;
+    /// <summary>【2026-10-29 主人拍板·纯广告扩位】「看广告金币×2」钮：运行时克隆，每场限一次，ClosePanel 清。</summary>
+    GameObject _goldDoubleButtonClone;
+    /// <summary>本场结算金币是否已翻倍（防广告回调窗口内重复发放）。</summary>
+    bool _goldDoubled;
+    /// <summary>金币格的数字 Text（PopulateRewards 后抓引用，翻倍后改字）。</summary>
+    Text _goldCellCountText;
     BattleRunStats _stats;
     // 【2026-10-10 主人拍板】MVP 台词不再走全屏 Toast：在立绘右侧放战斗里那个对话框（气泡同款图）。
     RectTransform mvpSpeechRt;
@@ -199,6 +205,8 @@ public class BattleSettlementUI : MonoBehaviour
             this.confirmLabel.text = _onNextStage != null ? (string.IsNullOrEmpty(nextLabel) ? "下一关" : nextLabel) : "确定";
 
         SetupBackButton();
+        // 【2026-10-29 主人拍板·纯广告扩位】「看广告 金币×2」钮（在返回钮之后跑，拿到返回钮位置再往左排）
+        SetupGoldDoubleButton();
 
         var canvas = GetComponent<Canvas>();
         if (canvas != null)
@@ -599,6 +607,103 @@ public class BattleSettlementUI : MonoBehaviour
         ClosePanel(cb);
     }
 
+    // ============================================================
+    // 【2026-10-29 主人拍板·纯广告扩位】结算「看广告 金币×2」
+    // ============================================================
+
+    /// <summary>
+    /// 「看广告 金币×2」钮：运行时克隆 confirmButton（prefab 零改动，手法同返回钮），
+    /// 放在最左（双钮模式排在返回钮再左一格，死亡/撤离单钮模式排确认钮左侧）。
+    /// 显示条件 = ADS_ENABLED 且本局金币 >= 2（与金币格上格门槛一致，没钱可翻就不给看）。
+    /// 看完广告：把翻倍的那份金币补进城镇钱包（原额已由 PersistBattleGold 落账）+
+    /// 金币格数字翻倍 + 按钮收掉；每场结算限一次。
+    /// </summary>
+    void SetupGoldDoubleButton()
+    {
+        if (_goldDoubleButtonClone != null)
+        {
+            Destroy(_goldDoubleButtonClone);
+            _goldDoubleButtonClone = null;
+        }
+        _goldDoubled = false;
+        _goldCellCountText = null;
+        if (!GameConfig.ADS_ENABLED) return;
+        if (_stats == null || _stats.GoldGained < 2) return;
+        if (confirmButton == null) return;
+
+        // 金币格恒为奖励列表第一格（BuildRewardCells 金币首位；GoldGained>=2 才上格）
+        // —— PopulateRewards 已跑完，_spawnedCells[0] 就是金币格，抓 Count 文本备用。
+        if (_spawnedCells.Count > 0 && _spawnedCells[0] != null)
+        {
+            var countTf = FindDeep(_spawnedCells[0].transform, "Count");
+            _goldCellCountText = countTf != null ? countTf.GetComponent<Text>() : null;
+        }
+
+        var srcRt = confirmButton.transform as RectTransform;
+        var clone = Instantiate(confirmButton.gameObject, confirmButton.transform.parent);
+        clone.name = "GoldDoubleButton";
+        var btn = clone.GetComponent<Button>();
+        if (btn != null)
+        {
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(OnGoldDoubleClicked);
+        }
+        var cloneLabel = clone.GetComponentInChildren<Text>(true);
+        if (cloneLabel != null) cloneLabel.text = "看广告 金币×2";
+        var rt = clone.transform as RectTransform;
+        if (rt != null && srcRt != null)
+        {
+            rt.anchorMin = srcRt.anchorMin;
+            rt.anchorMax = srcRt.anchorMax;
+            rt.pivot = srcRt.pivot;
+            rt.sizeDelta = srcRt.sizeDelta;
+            float w = srcRt.rect.width > 0.01f ? srcRt.rect.width : srcRt.sizeDelta.x;
+            // 返回钮占左边第一格 → 本钮排第二格；单确认钮（死亡/撤离）→ 直接排第一格
+            float shift = (w + BackButtonGap) * (_backButtonClone != null ? 2f : 1f);
+            rt.anchoredPosition = srcRt.anchoredPosition + new Vector2(-shift, 0f);
+        }
+        clone.SetActive(true);
+        _goldDoubleButtonClone = clone;
+        GameFonts.ApplyToHierarchy(clone.transform);
+        // 【2026-10-29 主人拍板】钮上贴广告图（左端，文字整体右移避让不挡字）；
+        // 克隆体没有现成 icon 子图 → 走新建分支。贴不上报 Error 不静默（铁律 14）。
+        if (!AdIconUI.Apply(clone.transform))
+            Debug.LogError("[BattleSettlement] 「看广告 金币×2」钮广告图贴不上（见上一条 Error）");
+    }
+
+    void OnGoldDoubleClicked()
+    {
+        if (_goldDoubled) return;
+        if (AdKillSwitch.AdsOff)
+        {
+            UIManager.Instance?.ShowToast("广告维护中，请稍后再试");
+            return;
+        }
+        UIManager.Instance?.ShowToast("广告加载中…");
+        RewardedAdBridge.ShowRewarded("gold_double", ok =>
+        {
+            if (!ok)
+            {
+                UIManager.Instance?.ShowToast("激励未完成，奖励未翻倍");
+                return;
+            }
+            if (_goldDoubled) return;   // 回调窗口防重复（理论到不了，fail-closed）
+            long add = _stats != null ? _stats.GoldGained : 0;
+            if (add < 2) return;
+            _goldDoubled = true;
+            // 补发翻倍的那份：原额已在 PersistBattleGold 写回城镇，这里只补差额。
+            // 【2026-10-29 自检修】notify 改 false：下面手动弹的「看广告奖励：金币 +N（已翻倍）」信息更全
+            //（带进度语境），notify:true 会再弹一条「获得 金币 +N」双 toast（体力/金币广告档同口径 notify:false）。
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, add, save: true, notify: false);
+            if (_goldCellCountText != null)
+                _goldCellCountText.text = (add * 2).ToString();
+            if (_goldDoubleButtonClone != null)
+                _goldDoubleButtonClone.SetActive(false);
+            UIManager.Instance?.ShowToast($"看广告奖励：金币 +{add}（已翻倍）", true);
+            Analytics.AdSlotClick("gold_double", true);
+        });
+    }
+
     /// <summary>【2026-10-22 主人拍板】返回钮点击 = onConfirm 原行为（回城 EndRunAndReturnToTown，带本局收益）。</summary>
     void OnBackClicked()
     {
@@ -613,6 +718,11 @@ public class BattleSettlementUI : MonoBehaviour
         {
             Destroy(_backButtonClone);
             _backButtonClone = null;
+        }
+        if (_goldDoubleButtonClone != null)
+        {
+            Destroy(_goldDoubleButtonClone);
+            _goldDoubleButtonClone = null;
         }
         if (root != null) root.SetActive(false);
         Time.timeScale = 1f;

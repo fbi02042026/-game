@@ -103,8 +103,11 @@ public partial class DialogueUI : MonoBehaviour
     }
 
     /// <summary>剧情对白正文字号。2026-10-10 主人拍板：字太小看费劲，28→32；
-    /// 【2026-10-16 主人「剧情对话框里的字小1号」】32→31。要再调改这一个常量。</summary>
-    const int DialogueBodyFontSize = 31;
+    /// 【2026-10-16 主人「剧情对话框里的字小1号」】32→31。
+    /// 【2026-10-29 主人拍板「方案A·全对齐」】31→24：fusion-pixel 是 12px 点阵字体，
+    /// 字号取 12 的倍数才能整像素对齐（24 在 720p/1080p/2K/3K 屏全部锐利），31 等非整倍发虚。
+    /// 名牌/选项/跳过（预制体 m_FontSize）同日一并 26/32/28→24。要再调改这一个常量。</summary>
+    const int DialogueBodyFontSize = 24;
     const float LocBlackInDur = 0.55f;
     const float LocHoldDur = 2.0f;
     const float LocTextFadeDur = 1.1f;

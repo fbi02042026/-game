@@ -27,6 +27,23 @@ using UnityEngine.UI;
 /// 「分享获得100钻 每日一次」（钻数直引 SHARE_REWARD_DIAMOND）；奖励面板加宽 500→620。
 /// 动效检查：unscaled 帧步长封顶（切后台/分享面板返回首帧跳变）。</para>
 ///
+/// <para>【2026-10-29 主人拍板 · 分享钮 v4（预制体手摆版）】主人在预制体里手摆好分享区：
+/// 奖励 Panel 下「分享按钮」（Image+Button+子Text「分享」，图主人已拖好）与确定钮并排
+///（确定左 x=-118 / 分享右 x=129），胜利节点下另摆「分享」说明文字（「分享获得100钻石，每日一次」）。
+/// 代码改绑预制体节点，不再运行时克隆/建提示行（v3 克隆方案整段废弃）。
+/// 排版口径：可分享（非引导局 且 今日未领）＝主人摆的排版原样；分享过后（今日已领，含本次点分享
+/// 领奖回来，由 ShareService.ShareRewardGranted 事件驱动）＝隐藏分享按钮与说明、确定钮 x 归中。
+/// 引导局沿用「没有分享按钮」口径（2026-10-27 拍板）。</para>
+///
+/// <para>【2026-10-29 主人拍板 · 分享钮 v3 + 动效节奏】分享钮换主人指定的
+/// <c>Art/UI/分享/分享按钮1</c>（普通蓝底金边按钮图 247×68，无自带文字 → 克隆来的 Text 保留写
+/// 「分享」），尺寸照抄确定钮（同 sizeDelta × 0.6 缩放 = 差不多大）；与【确定】并排成居中双钮行
+/// （分享左、确定右，各移 SharePairOffsetX，y 不动）——不再占奖励行下方居中位，10-26 的奖励行
+/// +46 上抬随之作废、回模板基线。提示行改摆按钮行上方（装饰条与按钮行之间）。
+/// 胜利时间轴加停顿：弹出胜利图 → 停 0.7s → 上移 → 奖励 Panel 淡入（主人原话「先出来胜利图片
+/// 有个停顿在上移出现物品框」）。奖励为空的根因在 BattleManager：GoldGained 只在局末快照才填，
+/// 普通关通关链路在 Show 前提前拷一次（见 FinishStageAfterPortalReached）。</para>
+///
 /// <para>接入（统一门，2026-10-24 主人拍板「正式关卡/支线/活动副本都走」；引导撤离
 /// 2026-10-28 主人拍板也走）：<br/>
 /// · 胜利：<see cref="BattleManager.FinishStageAfterPortalReached"/> 里 <c>Mode.UsesBattleResultScreen</c> 门；<br/>
@@ -135,27 +152,19 @@ public class BattleResultScreenUI : MonoBehaviour
     const float SkipOutDur = 0.12f;
     /// <summary>【2026-10-25 主人拍板】胜利节点从弹出到上移到位的时长（秒）。</summary>
     const float MoveUpDur = 0.35f;
+    /// <summary>【2026-10-29 主人拍板「先出来胜利图片有个停顿再上移」】胜利图弹出后的停顿（秒）。</summary>
+    const float VictoryHoldDur = 0.7f;
     /// <summary>【2026-10-25 主人拍板】奖励 Panel 淡入时长（秒）。</summary>
     const float RewardInDur = 0.3f;
     /// <summary>奖励格横向间距（运行时克隆格用，先例 = BattleSettlementUI 网格 spacing 10）。</summary>
     const float RewardCellGap = 10f;
 
-    // —— 以下为 2026-10-26 主人拍板「分享钮居中收紧 panel 内 + 界面再宽点」新增布局常量 ——
-    // （主人明确要求改版奖励区排版，此处按拍板写尺寸；除这几项外仍不碰布局，铁律 32 其余口径不变）
-    /// <summary>奖励面板加宽后的宽（预制体 500 → 620，与外层 Panel 同宽；只放宽高度不动）。</summary>
+    // —— 2026-10-26 加宽常量保留；v3 分享钮布局常量（SharePairOffsetX / ShareTipLocalY /
+    //    ShareTipSize / ShareBtnArt）随 2026-10-29 v4「预制体手摆版」整段废弃删除 ——
+    //    分享区摆位全以预制体为准（铁律 9），代码只切显隐与确定钮 x（拍板内容）。
+    /// <summary>奖励面板加宽后的宽（预制体 500 → 620，与外层 Panel 同宽；只放宽高度不动）。
+    /// 面板子节点全是中心锚，加宽以中心对称、不改主人摆的双钮相对位（10-29 v4 分享钮版仍保留）。</summary>
     const float RewardPanelWidth = 620f;
-    /// <summary>奖励格行基线整体上抬量（模板 y=9 + 46 = 55，给居中分享钮腾位）。</summary>
-    const float RewardRowLiftY = 46f;
-    /// <summary>分享钮在奖励面板内的纵向位（奖励行与装饰条之间空档，居中 x=0）。</summary>
-    const float ShareBtnLocalY = -45f;
-    /// <summary>分享钮 sizeDelta（克隆体自带 0.6 缩放 → 可见 ≈150×76，匹配分享钮图 200:102 比例）。</summary>
-    static readonly Vector2 ShareBtnSize = new Vector2(250f, 127f);
-    /// <summary>分享提示行（分享钮下方）纵向位（装饰条与面板底边之间）。</summary>
-    const float ShareTipLocalY = -130f;
-    /// <summary>分享提示行 sizeDelta（单行字，fontSize 24）。</summary>
-    static readonly Vector2 ShareTipSize = new Vector2(420f, 28f);
-    /// <summary>分享钮图路径（Resources/Art/UI/分享/分享按钮.png；meta 是团结 56 字符标识 → 走路径加载）。</summary>
-    const string ShareBtnArt = "UI/Art/分享/分享按钮";
 
     RectTransform _panel;
     CanvasGroup _cg;
@@ -168,6 +177,13 @@ public class BattleResultScreenUI : MonoBehaviour
     RectTransform _victoryRt;
     CanvasGroup _rewardCg;
     bool _confirmed;
+
+    // —— 分享钮 v4（2026-10-29 主人拍板，预制体手摆版）专用状态 ——
+    Transform _shareBtnT;      // 奖励 Panel 下「分享按钮」（主人手摆：Image+Button+子Text，图已拖好）
+    Transform _shareTipT;      // 胜利节点下「分享」说明文字（主人手摆，跟随分享钮显隐）
+    RectTransform _confirmRt;  // 确定钮（分享过后切 x 居中用；y/scale/尺寸一律不动）
+    float _confirmBaseX;       // 确定钮预制体原 x（= 主人摆的可分享位；打开时读值，不写死）
+    bool _shareEntryReported;  // 分享入口曝光埋点只报一次（可分享态才算曝光）
 
     // —— 失败选择模式（复活/返回）专用状态 ——
     bool _choiceMode;
@@ -224,6 +240,8 @@ public class BattleResultScreenUI : MonoBehaviour
             _victoryNode = showNode;
             _victoryRt = showNode as RectTransform;
             SetupRewardPanel(showNode, stats);
+            // 【2026-10-29 v4】订阅分享发奖事件：本次点分享领完回来 → 切「分享过后」排版（OnDestroy 退订）
+            ShareService.ShareRewardGranted += OnShareRewardGranted;
             StartCoroutine(CoPlayVictory());
         }
         else
@@ -270,95 +288,94 @@ public class BattleResultScreenUI : MonoBehaviour
         var lbl = confirmBtn.GetComponentInChildren<Text>(true);
         if (lbl != null) lbl.text = "确定";
 
-        // 【2026-10-26 主人拍板】分享钮改版：居中收紧在奖励面板内 + 换主人给的分享钮图；
-        // 下方一行「分享获得100钻 每日一次」提示。两件都挂奖励 Panel 下随 CanvasGroup 一起淡入。
-        // 【2026-10-27 主人口径「引导没有分享按钮」】引导局两件都不建（提示行是分享钮的附属）。
+        // 【2026-10-29 主人拍板 v4（预制体手摆版）】分享钮/说明改绑主人手摆节点，不再运行时克隆：
+        // 「分享按钮」（奖励 Panel 下）接线 OnShareClicked；「分享」说明（胜利节点下）跟随显隐。
+        // 排版 = 可分享用主人摆的原样；分享过后（今日已领）隐藏分享钮+说明、确定钮 x 归中。
+        // 【2026-10-27 主人口径「引导没有分享按钮」】引导局两节点隐藏、确定钮居中。
+        _confirmRt = confirmT as RectTransform;
+        _confirmBaseX = _confirmRt != null ? _confirmRt.anchoredPosition.x : 0f;   // 读预制体值不写死
+        BindShareNodes(victoryNode, rewardPanel);
         bool isTutorial = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
-        if (!isTutorial)
-        {
-            BuildShareButton(rewardPanel, confirmT);
-            BuildShareTip(rewardPanel);
-        }
+        RefreshShareLayout(isTutorial);
     }
 
     /// <summary>
-    /// 【2026-10-26 主人拍板】胜利奖励区【分享】钮改版（克隆 ConfirmBtn 保 Button，预制体零改动）：
-    /// ① 整体居中收紧在奖励面板内（x=0）——旧版横向左移摆 x=-373，在面板（半宽 250）之外、
-    ///    720 宽画布上整只出屏，玩家根本看不见点不着，这就是本次要修的排版问题；
-    /// ② 钮图换主人给的 <c>Art/UI/分享/分享按钮</c>（蓝底分享图标图；meta 是团结 56 字符标识
-    ///    → 铁律 29/30 走路径加载，不碰 guid）；图自带图标不带字 → 删克隆来的文本子节点；
-    /// ③ 尺寸按图比例 200:102 × 克隆自带 0.6 缩放 → sizeDelta 250×127 ≈ 可见 150×76。
-    /// 点击 → SharePanelUI.Show()（发钻/日键/埋点在分享界面内完成），结果界面不关。
-    /// 克隆成功即报 #share_entry_show（scene=victory）。
+    /// 【2026-10-29 主人拍板 v4（预制体手摆版）】绑主人预制体手摆的分享节点（缺了 LogError 不静默，铁律 14）：
+    /// · 奖励 Panel 下「分享按钮」：主人已摆好 Image（图=分享按钮1，guid 引用已落盘）+ Button + 子Text「分享」，
+    ///   代码只接线 <see cref="OnShareClicked"/> → SharePanelUI.Show()，图/字/摆位一律不动（铁律 9/32）；
+    /// · 胜利节点下「分享」说明：主人预制体里的字只是示例（2026-10-29 14:18 主人拍板「那个说明文字你
+    ///   可以修改我只是示例」）→ 代码动态写文案，钻数直引 <see cref="GameConfig.SHARE_REWARD_DIAMOND"/>
+    ///   （先例 = 佣兵概率公示直引权重常量，改常量文案自动跟）；字号/颜色/摆位以预制体为准，代码只填字。
+    /// 两节点都不克隆、不设图 —— 预制体本有图，不再开第二条加载路径（AGENTS §4 分界线）。
     /// </summary>
-    void BuildShareButton(Transform rewardPanel, Transform confirmT)
+    void BindShareNodes(Transform victoryNode, Transform rewardPanel)
     {
-        if (confirmT == null) return;   // ConfirmBtn 缺失已在 SetupRewardPanel LogError
-        var shareGo = Instantiate(confirmT.gameObject, rewardPanel);
-        shareGo.name = "ShareBtn";
-
-        // 摆位：居中收紧在面板内（奖励行已上抬，此位在行与装饰条之间空档，常量见文件头）
-        var dst = (RectTransform)shareGo.transform;
-        dst.anchoredPosition = new Vector2(0f, ShareBtnLocalY);
-        dst.sizeDelta = ShareBtnSize;
-
-        // 换主人给的分享钮图（路径加载）；图自带分享图标 → 克隆来的「分享」文本子节点删掉
-        var img = shareGo.GetComponent<Image>();
-        if (img == null)
-            Debug.LogError("[BattleResultScreen] 分享钮克隆体上没有 Image（ConfirmBtn 结构被改过？），分享钮缺图");
+        _shareBtnT = rewardPanel.Find("分享按钮");
+        _shareTipT = victoryNode.Find("分享");
+        if (_shareBtnT == null)
+        {
+            Debug.LogError("[BattleResultScreen] 奖励 Panel 下缺「分享按钮」节点（预制体结构被改过？），分享入口不显示");
+        }
         else
         {
-            var sp = Resources.Load<Sprite>(ShareBtnArt);
-            if (sp == null)
-                Debug.LogError($"[BattleResultScreen] 找不到分享钮图 Resources/{ShareBtnArt}，分享钮缺图（不静默）");
+            var btn = _shareBtnT.GetComponent<Button>();
+            if (btn == null)
+                Debug.LogError("[BattleResultScreen] 「分享按钮」上没有 Button（预制体结构被改过？），分享钮不可点");
             else
             {
-                img.sprite = sp;
-                img.preserveAspect = true;
+                btn.onClick.RemoveAllListeners();
+                btn.onClick.AddListener(OnShareClicked);
             }
         }
-        var oldLbl = shareGo.GetComponentInChildren<Text>(true);
-        if (oldLbl != null) Destroy(oldLbl.gameObject);
-
-        var btn = shareGo.GetComponent<Button>();
-        if (btn == null)
+        if (_shareTipT == null)
         {
-            Debug.LogError("[BattleResultScreen] 分享钮克隆体上没有 Button（ConfirmBtn 结构被改过？），分享钮不可点");
-            return;
+            Debug.LogError("[BattleResultScreen] 胜利节点下缺「分享」说明节点（预制体结构被改过？），分享提示不显示");
         }
-        btn.onClick.RemoveAllListeners();
-        btn.onClick.AddListener(OnShareClicked);
-
-        GameAnalytics.ReportShareEntryShow("victory");   // 埋点：分享入口曝光
+        else
+        {
+            // 说明文案动态写（预制体里的字只是主人示例）：格式照主人示例「分享获得100钻石，每日一次」
+            var tipText = _shareTipT.GetComponent<Text>();
+            if (tipText != null)
+                tipText.text = $"分享获得{GameConfig.SHARE_REWARD_DIAMOND}钻石，每日一次";
+        }
     }
 
     /// <summary>
-    /// 【2026-10-26 主人拍板】分享钮下方一行提示「分享获得100钻 每日一次」：
-    /// 钻数直引 <see cref="GameConfig.SHARE_REWARD_DIAMOND"/>（先例 = 佣兵概率公示直引权重常量，
-    /// 改常量文案自动跟）。运行时建 Text（预制体零改动），挂奖励 Panel 下随 CanvasGroup 一起淡入；
-    /// raycastTarget=false 不挡「点任意处跳过」的射线。
+    /// 【2026-10-29 主人拍板 v4】按「可分享 / 分享过后」切排版：
+    /// · 可分享（非引导局 且 今日未领）＝主人摆的排版原样：分享按钮 + 说明显示，确定钮在预制体位（分享右）；
+    /// · 分享过后（今日已领）或引导局＝隐藏分享按钮与说明，确定钮 x 归 0 居中（y/scale/尺寸不动）。
+    /// 「今日已领」判定走 <see cref="ShareService.IsRewardClaimedToday"/> 唯一出口；本次点分享领奖回来由
+    /// <see cref="ShareService.ShareRewardGranted"/> 事件驱动再刷（实例订阅，OnDestroy 退订）。
+    /// 动 x 是拍板内容（「分享过后隐藏分享按钮 确定按钮居中」）；其余布局项照旧不碰（铁律 32）。
     /// </summary>
-    void BuildShareTip(Transform rewardPanel)
+    void RefreshShareLayout(bool isTutorial)
     {
-        var tipGo = new GameObject("ShareTip", typeof(RectTransform), typeof(Text));
-        var rt = (RectTransform)tipGo.transform;
-        rt.SetParent(rewardPanel, false);
-        rt.anchorMin = new Vector2(0.5f, 0.5f);   // 与面板内其它子节点同口径：中心锚点（面板子节点全是 0.5,0.5）
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.localScale = Vector3.one;
-        rt.anchoredPosition = new Vector2(0f, ShareTipLocalY);
-        rt.sizeDelta = ShareTipSize;
-        var t = tipGo.GetComponent<Text>();
-        t.text = $"分享获得{GameConfig.SHARE_REWARD_DIAMOND}钻 每日一次";
-        t.fontSize = 24;
-        t.color = Color.white;
-        t.alignment = TextAnchor.MiddleCenter;
-        t.raycastTarget = false;
-        GameFonts.ApplyToHierarchy(tipGo.transform);
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        bool shareable = !isTutorial && !ShareService.IsRewardClaimedToday(data);
+
+        if (_shareBtnT != null) _shareBtnT.gameObject.SetActive(shareable);
+        if (_shareTipT != null) _shareTipT.gameObject.SetActive(shareable);
+        if (_confirmRt != null)
+            _confirmRt.anchoredPosition = new Vector2(shareable ? _confirmBaseX : 0f, _confirmRt.anchoredPosition.y);
+
+        if (shareable && !_shareEntryReported)
+        {
+            _shareEntryReported = true;
+            GameAnalytics.ReportShareEntryShow("victory");   // 埋点：分享入口曝光（可分享态才算曝光）
+        }
     }
 
-    /// <summary>【分享】钮点击：【2026-10-25 主人拍板 v2】改为打开通用分享界面（SharePanelUI），
-    /// 不再直弹系统分享面板；发钻/埋点在分享界面内完成。结果界面不关。</summary>
+    /// <summary>ShareService 当日发奖成功回调（本次点分享领完回来）：切「分享过后」排版。界面已收尾则忽略。</summary>
+    void OnShareRewardGranted()
+    {
+        if (_finished) return;
+        bool isTutorial = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
+        RefreshShareLayout(isTutorial);
+    }
+
+    /// <summary>【分享】钮点击（v4 绑主人预制体手摆的「分享按钮」节点）：打开通用分享界面（SharePanelUI），
+    /// 发钻/日键/埋点在分享界面内完成；发奖成功由 ShareService.ShareRewardGranted 事件驱动本界面
+    /// 切「分享过后」排版（隐藏分享钮、确定居中）。结果界面不关。</summary>
     void OnShareClicked()
     {
         SharePanelUI.Show();
@@ -388,9 +405,9 @@ public class BattleResultScreenUI : MonoBehaviour
         var tmplRt = (RectTransform)tmplT;
         float cellW = tmplRt.sizeDelta.x;
         float total = cells.Count * cellW + (cells.Count - 1) * RewardCellGap;
-        // 行基线整体上抬（2026-10-26 主人拍板：给居中的分享钮腾位，模板 y=9 → 55）；间距/尺寸仍读模板值
+        // 行基线 = 模板拍板位（10-29 分享钮挪去与确定并排后，10-26 的 +46 上抬作废，回模板基线）
         Vector2 rowCenter = new Vector2(tmplRt.anchoredPosition.x - total * 0.5f + cellW * 0.5f,
-                                        tmplRt.anchoredPosition.y + RewardRowLiftY);
+                                        tmplRt.anchoredPosition.y);
 
         for (int i = 0; i < cells.Count; i++)
         {
@@ -463,6 +480,15 @@ public class BattleResultScreenUI : MonoBehaviour
         }
         _cg.alpha = 1f;
         _victoryNode.localScale = baseScale;
+
+        // 段一点五：停顿 —— 【2026-10-29 主人拍板「先出来胜利图片 有个停顿在上移出现物品框」】
+        // 胜利图独自停留一拍，再开始上移 + 奖励 Panel 淡入（点任意处跳过仍有效）
+        t = 0f;
+        while (t < VictoryHoldDur && !_skipped)
+        {
+            t += Dt();
+            yield return null;
+        }
 
         // 段二：上移到拍板位
         if (targetPos.y > 1f)
@@ -567,12 +593,15 @@ public class BattleResultScreenUI : MonoBehaviour
         WireChoiceButton(confirmT.gameObject, OnReviveClicked);
         WireChoiceButton(cancelT.gameObject, OnGiveUpClicked);
         // 价格文本同步真源（主人手摆格式「20复活」→ 用传入的 revivePrice，防预制体占位价过期）；
-        // 广告档（2026-10-25 主人拍板）传 reviveLabel=「看广告复活」直接替换整段文案
-        // （确认钮上的钻石 icon 是主人摆的，广告档下观感不匹配，已报主人定夺）；
-        // 钻石 icon 为主人摆的，不动。
+        // 广告档（2026-10-25 主人拍板）传 reviveLabel=「看广告复活」直接替换整段文案；
+        // 【2026-10-29 主人拍板】广告档把确认钮上主人摆的钻石 icon **换成广告图**（AdIconUI：
+        // 只换 sprite 不动位置/尺寸，preserveAspect 防变形，文字不挪 —— 不挡字），
+        // 结掉 10-25 报过的「广告档下钻石 icon 观感不匹配」遗留；钻石档保持钻石 icon 原样。
         var priceLbl = confirmT.GetComponentInChildren<Text>(true);
         if (priceLbl != null)
             priceLbl.text = reviveLabel ?? $"{revivePrice}复活";
+        if (reviveLabel != null && !AdIconUI.Apply(confirmT))
+            Debug.LogError("[BattleResultScreen] 复活钮广告图贴不上（见上一条 Error），广告档维持文字态");
 
         _cg = gameObject.AddComponent<CanvasGroup>();
         _cg.alpha = 0f;
@@ -621,6 +650,7 @@ public class BattleResultScreenUI : MonoBehaviour
 
     void OnDestroy()
     {
+        ShareService.ShareRewardGranted -= OnShareRewardGranted;   // 实例销毁必退订（防悬空事件）
         if (BattleResultScreen._activeChoice == this)
             BattleResultScreen._activeChoice = null;
     }

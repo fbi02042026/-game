@@ -7,12 +7,14 @@ using UnityEngine;
 public static class StaminaSystem
 {
     /// <summary>回复 1 点所需秒数（可调）。
-    /// 2026-10-17 主人拍板：60 → 300（5 分钟 1 点），全局生效，主线同步变慢（主人已知情）。</summary>
-    public const int REGEN_SECONDS_PER_POINT = 300;
+    /// 2026-10-17 主人拍板：60 → 300（5 分钟 1 点）；
+    /// 【2026-10-29 主人拍板】300 → 600（10 分钟 1 点，纯广告模式收紧自然恢复、抬补给位价值），
+    /// 全局生效，上限 100 攒满一管要约 16.7 小时。</summary>
+    public const int REGEN_SECONDS_PER_POINT = 600;
     /// <summary>主线冒险进本消耗。【2026-10-22 主人拍板「打一关回一次」】10 → 5：现在打一个**小关**就回城再进，进本次数变多，单次降价对冲。</summary>
     public const int ADVENTURE_COST = 5;
-    /// <summary>无限裂隙单次进入消耗（2026-10-17 主人拍板：每天 2 次 × 20 体力；【2026-10-22 主人拍板】20 → 10）</summary>
-    public const int ENDLESS_RIFT_COST = 10;
+    /// <summary>无限裂隙单次进入消耗（2026-10-17 拍 20 → 10-22 降 10 → 10-29 拍 20 → 同日再调 **15**，配套每日 3 次）</summary>
+    public const int ENDLESS_RIFT_COST = 15;
     /// <summary>支线岛单次进入消耗（2026-10-23 主人拍板：10；与裂隙同价）。真源定义在 SideIslandDefs.SIDE_ISLAND_STAMINA_COST，此处别名转发。</summary>
     public const int SIDE_ISLAND_COST = SideIslandDefs.SIDE_ISLAND_STAMINA_COST;
 
@@ -172,7 +174,7 @@ public static class StaminaSystem
         return true;
     }
 
-    /// <summary>无限裂隙进本扣体力（每天 2 次 × 20 体力，2026-10-17 主人拍板）</summary>
+    /// <summary>无限裂隙进本扣体力（每天 3 次 × 20 体力，2026-10-29 主人拍板）</summary>
     public static bool TrySpendForEndlessRift()
     {
         return TrySpend(ENDLESS_RIFT_COST);

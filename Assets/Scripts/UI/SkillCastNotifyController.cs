@@ -39,6 +39,9 @@ public class SkillCastNotifyController : MonoBehaviour
     /// <summary>多条堆叠时每往下一格的垂直间距。</summary>
     const float EntrySpacing = 80f;
 
+    /// <summary>整条在模板原位基础上统一上移的偏移【2026-10-29 主人拍板：我方/敌人条都再往上移 20】。</summary>
+    const float YLiftUp = 20f;
+
     /// <summary>我方侧 / 敌人侧各自最多同时显示的条目数。</summary>
     const int MaxEntries = 5;
 
@@ -230,7 +233,7 @@ public class SkillCastNotifyController : MonoBehaviour
                 Debug.LogError("[SkillCastNotify] " + root.name + "/skill/name 上找不到 Text");
         }
 
-        side.tplFinalPos = side.template.anchoredPosition;
+        side.tplFinalPos = side.template.anchoredPosition + new Vector2(0f, YLiftUp);
 
         // 模板只作克隆源，运行时隐藏（敌人模板在预制体里是激活态，同样收掉，防静态残影）
         side.template.gameObject.SetActive(false);

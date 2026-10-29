@@ -332,12 +332,14 @@ public static class SlotMachineDefs
     /// <summary>
     /// 开局启动金（进**局内钱包** <c>BattleManager.currentGold</c>，见 <c>SlotMachineSystem.GrantRunStarterGold</c>）。
     /// <b>正式关口径</b>：2026-10-13 主人拍板 270 → 200 —— 主人原话「正式关的金币改成200」「现在抽的太容易了」。
+    /// <para>【2026-10-29 主人拍板】200 → <b>100</b> —— 主人原话「正式关卡每关给100抽奖币」。
+    /// 2026-10-24「只要打完就清」后正式关每关 = 独立一局，本值即**每关进场的启动抽奖币**。</para>
     /// <para>【2026-10-14 主人拍板】<b>引导局不走这个值，用 <see cref="TUTORIAL_STARTER_COINS"/>（当时 270）</b>：
     /// 引导三拍照常扣钱（旧价 80+88+97=265）。【2026-10-23 主人拍板】引导金也归 200，两档同值。</para>
     /// ⚠ 正式关开局 40 起、每抽 +10（40 → 50 → 60 …），启动金只负责「开局紧一点」，
     ///   后面靠击杀产币 / 每关产出放宽（见 <see cref="COIN_GROWTH_PER_STAGE"/>）。
     /// </summary>
-    public const int STARTER_COINS = 200;
+    public const int STARTER_COINS = 100;
 
     /// <summary>
     /// 引导局开局启动金。【2026-10-14 主人拍板】引导启动金 270（当时正式关 200），
@@ -467,10 +469,15 @@ public static class SlotMachineDefs
     public const int GIFT_DUNGEON_FREE_DRAWS = 5;
 
     /// <summary>
-    /// 无限裂隙进场送几次**免费**抽奖（不扣抽奖币）。2026-10-17 主人拍板：5。
-    /// 与金币本同一套免费额度框架（IBattleMode.FreeEntryDraws），每次进局清零。
+    /// 无限裂隙每层开始送几次**免费**抽奖（不扣抽奖币）。
+    /// 【2026-10-29 主人拍板·裂隙每层三抽】由「每局进场 5 次」改为「**每层开始 3 次**」：
+    /// 每层进场 CoStageEntryDraft 重置额度（ResetStageFreeDraws），同时它就是**每层抽奖次数上限**
+    /// —— 抽满 3 张随机卡面板收掉直接开打，这一层中间不再有任何抽奖入口，
+    /// 打通黑屏进下一层（字幕「第 N 层」）再抽 3 次。要调节奏只改这一个数（额度与上限同源）。
+    /// ⚠ 抽奖**价格**不按层算：随本局已抽数递增（DrawIndex 跨层累计，每抽 +10）。
+    /// ⚠ 裂隙定向抽先不开启（面板隐藏三定向按钮，见 BattleEntryDraftPanel.AddSlot）。
     /// </summary>
-    public const int ENDLESS_RIFT_FREE_DRAWS = 5;
+    public const int ENDLESS_RIFT_FREE_DRAWS = 3;
 
     // 【2026-10-14 主人拍板】10-13 那版「引导三拍免费抽」（TUTORIAL_FREE_DRAWS = 3）已整条删除，
     // 不留开关 —— 引导三拍照常扣钱，由引导启动金兜住（2026-10-23 起 200 ≥ 150，见 TUTORIAL_STARTER_COINS）。

@@ -12,9 +12,11 @@ using UnityEngine.UI;
 ///   · 没有支线 → 隐藏支线行、日常行【真位移】补位到支线原位 + 黑底缩一截（2026-10-29 主人需求
 ///     「日常任务没有补位」；三行绝对定位，SetSiblingIndex 挪不动）；支线回来 → 还原位置与高度；
 ///   · 行点击走 QuestJumpRouter（绝不让点击没反应；跳转失败回退展开 QuestPanelUI）；
-///   · 折叠按钮（2026-10-26 主人提醒）：点一下把整栏收起来（三行全收 + 黑底缩到只剩按钮那截），
-///     再点展开还原；折叠态纯会话内，不写存档；支线显隐联动与折叠态互不干扰；
-///     【2026-10-29 主人需求】按钮运行时整体等比缩小 50%（FoldButtonScale，预制体不动）；
+///   · 折叠按钮（2026-10-26 主人提醒）：点一下把整栏收起来，再点展开还原；折叠态纯会话内，不写存档；
+///     支线显隐联动与折叠态互不干扰；
+///     【2026-10-29 二轮主人拍板】收起后整个任务栏视觉上只剩折叠按钮：三行全收 + 黑底整个藏掉 +
+///     按钮世界坐标实测贴屏左（旧静态公式没算按钮锚点在 panl 中心与 LeftBar 偏移，收起后离屏边有空隙）；
+///     按钮运行时整体等比缩小到 0.4（50% 再缩 20%，预制体不动）；纵向跟随可见行中心（2 行补位时上移半行距）。
 ///   · 0.5s 轮询刷新文案（与 MainQuestSystem.Tick 同频，纯读不结算）。
 ///
 /// ⚠ 行结构（2026-10-26 主人发的层级图定稿）：任务栏 = pan / Dim / 折叠 / Tile / 主线 / 支线 / 日常，
@@ -36,20 +38,17 @@ public class QuestBarBinder : MonoBehaviour
     Text _mainText, _sideText, _dailyText;
     RectTransform _dimRt;            // 黑底真身 = panl/Dim（2026-10-27 修复折叠不收缩：原改「任务栏」节点无效）
     Vector2 _dimBaseSize, _dimBasePos;   // Dim 的预制体基准（从 base 重算，不累加）
-    bool _dimBaseCaptured;
     RectTransform _foldRt;           // 折叠按钮（黑底收缩后的依附目标）
     Transform _barRoot;              // 任务栏根节点（引导期整栏隐藏用，2026-10-29）
     float _sideBaseY, _dailyBaseY;   // 支线/日常行预制体基准 y（日常补位真位移用，2026-10-29）
     bool _popPlayed;                 // 逐行弹入是否已启动（引导完成后只补播一次）
-    float _foldH = -1f, _foldY;      // 折叠按钮【旋转后视觉】高/纵向位置（panl 空间，与 Dim 同一坐标系）
+    float _foldY;                    // 折叠按钮纵向基准（panl 空间，prefab 原值）
     float _foldX = -1f;              // 折叠按钮展开态基准 x（panl 空间）；<0 = 未捕获
-    float _foldEdgeX;               // 收起态贴边 x：按钮左缘留 FoldEdgeLeftInset，整体挪到屏幕左缘
-    /// <summary>折叠按钮收起后贴屏幕左边的留白（按钮左缘离 panl 左=屏幕左的距离，单位逻辑像素）。</summary>
+    float _foldEdgeX;               // 收起态贴屏左 x（收起那一刻 SnapFoldEdgeX 用世界坐标实测反推）
+    /// <summary>折叠按钮收起后贴屏左的留白（按钮视觉左缘离屏幕左缘的设计像素）。</summary>
     const float FoldEdgeLeftInset = 8f;
-    /// <summary>折叠按钮整体缩放（2026-10-29 主人需求「那个折叠按钮缩小50%」；预制体不动，运行时等比缩）。</summary>
-    const float FoldButtonScale = 0.5f;
-    /// <summary>黑底上下留边总和：基准 300 高 vs 三行实跨 260，上下各 20（折叠后 = 按钮高 + 2×20）。</summary>
-    const float DimEdgePadding = 20f;
+    /// <summary>折叠按钮整体缩放（2026-10-29 主人需求「缩小50%」+ 二轮「再缩小20%」→ 0.5×0.8=0.4；预制体不动）。</summary>
+    const float FoldButtonScale = 0.4f;
     int _dailyBaseSibling = -1;      // 日常行原始次序（支线行回来时还原）
     bool _collapsed;                 // 折叠态（会话内，不写存档）
     bool _appliedCollapsed, _appliedSideVisible = true;   // 上次实际套到 UI 的状态（变了才动 UI）
@@ -154,17 +153,16 @@ public class QuestBarBinder : MonoBehaviour
             Debug.LogError($"[QuestBarBinder] 任务栏下没找到折叠按钮（候选名：{string.Join("/", FoldNodeNames)}，子节点见上），折叠功能不生效");
         }
 
-        // 黑底真身：panl/Dim（折叠收缩的目标节点）。缺失报错不静默（铁律 10）。
+        // 黑底真身：panl/Dim（记基准供展开还原；【2026-10-29 二轮】收起=整个藏掉，不再收缩尺寸）。
         var dimT = FindDeep(bar, "Dim");
         _dimRt = dimT as RectTransform;
         if (_dimRt != null)
         {
             _dimBaseSize = _dimRt.sizeDelta;
             _dimBasePos = _dimRt.anchoredPosition;
-            _dimBaseCaptured = true;
         }
         else
-            Debug.LogError("[QuestBarBinder] 任务栏下没找到黑底节点 panl/Dim，折叠时黑底不会收缩");
+            Debug.LogError("[QuestBarBinder] 任务栏下没找到黑底节点 panl/Dim，折叠时黑底藏不掉、展开也还原不了");
 
         // 【2026-10-27 主人拍板「修」】任务栏 8 张悬空 sprite 按路径接回（AGENTS.md §2.3 口径），见 EnsureBarArt
         EnsureBarArt(_rowMain, _rowSide, _rowDaily, fold, dimT);
@@ -222,26 +220,19 @@ public class QuestBarBinder : MonoBehaviour
                 continue;
             }
             BindClick(t, ToggleCollapse);
-            _foldRt = t as RectTransform;   // 黑底收缩用：按钮的高与纵位（panl 空间，与 Dim 同坐标系）
+            _foldRt = t as RectTransform;   // 收起贴边/展开还原用（panl 空间）
             if (_foldRt != null)
             {
-                // 【2026-10-29 主人需求「那个折叠按钮缩小50%」】运行时整体等比缩小（预制体不动，铁律 20）；
-                // 必须先缩再量，下面量出的视觉宽/高与贴边 x 才是缩完后的真实值。
+                // 【2026-10-29 主人需求「缩小50%」+ 二轮「再缩小20%」】运行时整体等比缩小（预制体不动，铁律 20）。
                 var sc = _foldRt.localScale;
                 _foldRt.localScale = new Vector3(sc.x * FoldButtonScale, sc.y * FoldButtonScale, sc.z);
 
                 _foldY = _foldRt.anchoredPosition.y;
                 _foldX = _foldRt.anchoredPosition.x;   // 展开态基准 x（panl 空间），收起时改、展开时还原
-                // 收起后贴屏幕左边：按钮左缘离 panl 左缘（=屏幕左缘）留 FoldEdgeLeftInset。
-                // 用「旋转后的实际包围盒」推算（折叠箭头旋了 -90°：视觉宽=rect.height、视觉高=rect.width），
-                // 再乘 |localScale|——scale 改了也能自动贴边（2026-10-28 主人需求）。
-                // 视觉高同样旋转换算后存进 _foldH，供折叠黑底按正确轴收缩用（2026-10-29 修正，见 ApplyLayout）。
-                float ang = _foldRt.localEulerAngles.z * Mathf.Deg2Rad;
-                float absCos = Mathf.Abs(Mathf.Cos(ang)), absSin = Mathf.Abs(Mathf.Sin(ang));
-                float effW = (absCos * _foldRt.rect.width + absSin * _foldRt.rect.height) * Mathf.Abs(_foldRt.localScale.x);
-                float effH = (absSin * _foldRt.rect.width + absCos * _foldRt.rect.height) * Mathf.Abs(_foldRt.localScale.y);
-                _foldEdgeX = FoldEdgeLeftInset + effW * 0.5f;
-                _foldH = effH;
+                // 收起贴屏左的目标 x 不在这里算：按钮锚点在 panl 中心（0.5,0.5），anchoredPosition 是
+                // 相对锚点的量，再叠 LeftBar 横向偏移/画布缩放/安全区，「屏左」没法用静态公式表——
+                // 旧公式按 panl 左缘起算，凭空差出半条栏宽，就是主人二轮报的「离屏边还有一段空隙」。
+                // 收起那一刻用世界坐标实测反推，见 SnapFoldEdgeX。
             }
             return t;
         }
@@ -328,7 +319,8 @@ public class QuestBarBinder : MonoBehaviour
 
     /// <summary>
     /// 把「折叠态 × 支线可见性」统一套到 UI 上（状态没变直接返回，绝不一拍一动）。
-    ///   · 折叠 = 三行全收，黑底（panl/Dim）缩到只剩折叠按钮那截；展开 = 还原预制体基准；
+    ///   · 折叠 = 三行全收 + 黑底整个藏掉 + 按钮实测贴屏左（视觉上只剩按钮，2026-10-29 二轮）；展开 = 全部还原；
+    ///   · 折叠按钮纵向跟随可见行中心（2 行补位时上移半行距，2026-10-29 二轮）；
     ///   · 支线隐藏（未派定/已通）= 藏支线行 + 日常行【真位移】补位到支线原位 + 黑底缩一截
     ///     （2026-10-29 主人需求「日常任务没有补位」落地；三行绝对定位，SetSiblingIndex 挪不动）；
     ///     支线回来还原位置与高度。
@@ -358,47 +350,68 @@ public class QuestBarBinder : MonoBehaviour
             }
         }
 
-        // 黑底（panl/Dim）收缩【2026-10-27 修复「点折叠黑底没收」→ 2026-10-29 修正收缩轴】：
-        // 原实现改「任务栏」节点无效 → 改 panl/Dim 对了，但 Dim 旋了 -90°：
-        // 视觉「高」= sizeDelta.x（基准 282.5）、视觉「宽」= sizeDelta.y（基准 300）。
-        // 旧折叠分支写 (基准.x, fh+2×pad) 改的是视觉宽——黑底会收成细竖条而不是矮一截；
-        // 现按正确轴收，且 _foldH 已是旋转换算 + 50% 缩放后的按钮视觉高（见 FindFoldButton）。
-        // 支线隐藏的日常补位同段处理（2026-10-29 主人需求）：日常行真位移 + 黑底同步缩一截。
-        // 折叠按钮的横向（anchoredPosition.x）由 2026-10-28 主人需求单独处理（贴屏幕左边）。
-        // 全部从 Bind 时量得的 base 重算，不累加。
-        if (_dimRt == null || !_dimBaseCaptured) return;
+        // 【2026-10-29 二轮主人拍板】折叠语义 = 整个任务栏视觉上移出屏幕，只剩折叠按钮：
+        //   三行全收（上面）+ 黑底整个藏掉（不再「缩到只剩按钮那截」，黑条残留就是主人报的问题）+
+        //   按钮世界坐标实测贴屏左；按钮纵向跟可见行中心（2 行补位时上移半行距）。
+        bool fill = !sideVisible && _rowDaily != null && _rowSide != null;
+        float moveUp = fill ? _dailyBaseY - _sideBaseY : 0f;   // 负值=上移量（prefab 实测 -83→10 即 -93）
+
+        // 日常行位置始终维护（折叠时行虽藏着，展开瞬间就要是对的）
+        if (fill) SetDailyY(_sideBaseY);
+        else SetDailyY(_dailyBaseY);
+
+        // 折叠按钮：纵向跟可见行中心；横向收起=贴屏左（实测反推）、展开=prefab 基准。
+        // 注：改按钮 anchoredPosition 属铁律20「布局尺寸代码禁写」的显式必要介入例外（主人拍板）。
+        if (_foldRt != null && _foldX >= 0f)
+        {
+            if (_collapsed) SnapFoldEdgeX();
+            _foldRt.anchoredPosition = new Vector2(_collapsed ? _foldEdgeX : _foldX, _foldY - moveUp * 0.5f);
+        }
+
+        // 黑底：收起=整个藏掉（只剩按钮）；展开=还原（补位时黑底同步矮一截、中心上移一半）
+        if (_dimRt == null) return;
         if (_collapsed)
         {
-            float fh = _foldH > 0f ? _foldH : 0f;
-            _dimRt.sizeDelta = new Vector2(fh + DimEdgePadding * 2f, _dimBaseSize.y);
-            _dimRt.anchoredPosition = new Vector2(_dimBasePos.x, _foldY);
-            // 【2026-10-28 主人需求】收起后折叠按钮移到屏幕左边（贴边），不要停在条中间原位：
-            // 横向挪到 _foldEdgeX（按钮左缘留 FoldEdgeLeftInset），纵向保持 _foldY；展开态再还原到 _foldX。
-            // 注：此举需改按钮 anchoredPosition.x，属铁律20「布局尺寸代码禁写」的显式必要介入例外（主人拍板）。
-            if (_foldRt != null && _foldX >= 0f)
-                _foldRt.anchoredPosition = new Vector2(_foldEdgeX, _foldY);
+            _dimRt.gameObject.SetActive(false);
+            return;
+        }
+        _dimRt.gameObject.SetActive(true);
+        if (fill)
+        {
+            _dimRt.sizeDelta = new Vector2(_dimBaseSize.x + moveUp, _dimBaseSize.y);
+            _dimRt.anchoredPosition = new Vector2(_dimBasePos.x, _dimBasePos.y - moveUp * 0.5f);
         }
         else
         {
-            // 【2026-10-29 主人需求「日常任务没有补位」】支线隐藏时日常行真位移到支线原位，
-            // 黑底同步矮一截、中心上移一半；支线回来（通关掷派空窗后）全还原。
-            bool fill = !sideVisible && _rowDaily != null && _rowSide != null;
-            if (fill)
-            {
-                SetDailyY(_sideBaseY);
-                float moveUp = _dailyBaseY - _sideBaseY;   // 负值=日常要上移的量（prefab 实测 -83→10 即 -93）
-                _dimRt.sizeDelta = new Vector2(_dimBaseSize.x + moveUp, _dimBaseSize.y);
-                _dimRt.anchoredPosition = new Vector2(_dimBasePos.x, _dimBasePos.y - moveUp * 0.5f);
-            }
-            else
-            {
-                SetDailyY(_dailyBaseY);
-                _dimRt.sizeDelta = _dimBaseSize;
-                _dimRt.anchoredPosition = _dimBasePos;
-            }
-            if (_foldRt != null && _foldX >= 0f)
-                _foldRt.anchoredPosition = new Vector2(_foldX, _foldY);
+            _dimRt.sizeDelta = _dimBaseSize;
+            _dimRt.anchoredPosition = _dimBasePos;
         }
+    }
+
+    /// <summary>
+    /// 收起态按钮贴屏左（2026-10-29 二轮主人需求「距离屏幕边还有一段空隙」）：
+    /// 用世界坐标实测「按钮视觉左缘 − 画布左缘」的距离，反推本地还要往左挪多少——
+    /// 自动吃掉 LeftBar 横向偏移、panl 偏移、按钮锚点在 panl 中心、画布缩放、安全区等全部链路差，
+    /// 换机型/换分辨率都成立。FoldEdgeLeftInset 是贴边后留的设计像素余量。
+    /// </summary>
+    void SnapFoldEdgeX()
+    {
+        var canvas = _foldRt != null ? _foldRt.GetComponentInParent<Canvas>() : null;
+        if (canvas == null) return;
+        canvas = canvas.rootCanvas;
+
+        var bc = new Vector3[4];
+        _foldRt.GetWorldCorners(bc);   // 按钮旋了 -90°，四角取最小 x = 旋转后视觉左缘（含 0.4 缩放）
+        float btnLeft = Mathf.Min(Mathf.Min(bc[0].x, bc[1].x), Mathf.Min(bc[2].x, bc[3].x));
+        var cc = new Vector3[4];
+        ((RectTransform)canvas.transform).GetWorldCorners(cc);
+        float cvsLeft = Mathf.Min(Mathf.Min(cc[0].x, cc[1].x), Mathf.Min(cc[2].x, cc[3].x));
+
+        float parScale = _foldRt.parent != null ? _foldRt.parent.lossyScale.x : 0f;   // panl 链综合缩放
+        if (parScale <= 0f) return;
+        float insetWorld = FoldEdgeLeftInset * canvas.scaleFactor;
+        float shiftLocal = ((btnLeft - cvsLeft) - insetWorld) / parScale;   // 还差的本地位移
+        _foldEdgeX = _foldRt.anchoredPosition.x - shiftLocal;
     }
 
     /// <summary>

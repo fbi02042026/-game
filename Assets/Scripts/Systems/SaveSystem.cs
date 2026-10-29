@@ -102,6 +102,7 @@ public class SaveSystem : Singleton<SaveSystem>
         if (string.IsNullOrEmpty(json))
         {
             _data = CreateFreshSave();
+            RunLoadout.Clear();   // 【2026-10-29 堵「清档后中断快照残留」】同 DeleteLocalSaveAndReset
             MercSkillMigrate.ApplyAutoCastPrefsToSave();
             Save();
             return;
@@ -119,6 +120,7 @@ public class SaveSystem : Singleton<SaveSystem>
         {
             Debug.LogWarning("[SaveSystem] 存档损坏：" + e.Message);
             _data = CreateFreshSave();
+            RunLoadout.Clear();   // 【2026-10-29 堵「清档后中断快照残留」】存档损坏重建 = 新档，旧局快照一并作废
             MercSkillMigrate.ApplyAutoCastPrefsToSave();
             Save();
         }
@@ -181,6 +183,7 @@ public class SaveSystem : Singleton<SaveSystem>
         ResourceAdRewards.EnsureDay(data);
         ReviveQuota.EnsureDay(data);        // 复活每日档位跨天清零（2026-10-25 主人拍板）
         EndlessRiftRules.EnsureDay(data);   // 无限裂隙每日次数跨天重置兜底
+        ArenaRules.EnsurePeriods(data);     // 竞技场：跨天清次数+机器人漂移，跨月赛季结算发奖（2026-10-29）
         StaminaSystem.Tick(save: false);
         MercSkillMigrate.SyncAutoCastPrefsFromSave();
     }
@@ -289,6 +292,8 @@ public class SaveSystem : Singleton<SaveSystem>
         }
 
         BattleStateSaver.Instance?.ClearSavedState();
+        RunLoadout.Clear();   // 【2026-10-29 堵「清档后中断快照残留」】快照存 PlayerPrefs 不随存档文件消失，
+                              // 残留会弹「上一局意外退出」→ 点继续按旧快照跳关重打（1-1/1-2 领取后事故源头之一）
         StoryProgress.ResetRuntimeFlags();
         _data = CreateFreshSave();
         Save();

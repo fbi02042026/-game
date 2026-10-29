@@ -401,23 +401,38 @@ public static partial class GameConfig
     // ============================================================
 
     /// <summary>
-    /// 无限裂隙强度倍率：每层固定 +7%，记录点后第一层（缓冲关）打 9 折。
-    /// 层数 1 → 1.00；层 6（缓冲）→ 1.275；层 40 → 3.43。只随层数单调涨，与循环映射章解耦。
+    /// 无限裂隙强度倍率 —— 【2026-10-29 主人拍板·锯齿曲线】旧「每层固定 +7% 单调涨」作废。
+    /// 新曲线 = 基线（每节缓涨）+ 节内爬升（锯齿）+ 精英层小鼓包：
+    ///   · 以 5 层一节（BOSS 记录点节奏）：节内每层 +4% 爬到 BOSS 峰；
+    ///   · BOSS 打完进下一节，难度**回落**（比 BOSS 峰低约 10%）——「到精英或 BOSS 关后
+    ///     下一关难度可降，然后再慢慢升高」，每个记录点后玩家都有喘息；
+    ///   · 精英层本层 ×1.10 上浮（更强），其下一层回到曲线值 = 相对回落，天然形成小缓冲；
+    ///   · 长线显著放缓：40 层旧 3.73 → 新 2.02。
+    /// 层数 1 → 1.00；5(BOSS) → 1.16；6 → 1.06；10 → 1.22；20 → 1.34；40 → 1.58（旧线性 3.73，放缓约六成）。
+    /// 只随层数走，与循环映射章解耦。消费点：Monster.Init 怪强度 / TTK。
     /// </summary>
     public static float EndlessDifficultyMul(int riftStage)
     {
         int stage = Mathf.Max(1, riftStage);
-        float mul = 1f + ENDLESS_DIFFICULTY_STEP_PER_STAGE * (stage - 1);
-        if (IsEndlessBufferStage(stage)) mul *= ENDLESS_BUFFER_DISCOUNT;
+        int section = (stage - 1) / ENDLESS_CHECKPOINT_INTERVAL;   // 节序（0 基）
+        int phase = (stage - 1) % ENDLESS_CHECKPOINT_INTERVAL;     // 节内相位 0..4（4 = BOSS）
+        float mul = 1f + ENDLESS_DIFF_BASE_PER_SECTION * section
+                  + ENDLESS_DIFF_INTRA_STEP * phase;
+        if (IsEndlessEliteStage(stage)) mul *= ENDLESS_DIFF_ELITE_BUMP;
         return mul;
     }
 
-    /// <summary>每层强度递增步长（占位基准，手感不对只改这里）</summary>
-    public const float ENDLESS_DIFFICULTY_STEP_PER_STAGE = 0.07f;
-    /// <summary>缓冲关（记录点后第一层）强度折扣</summary>
-    public const float ENDLESS_BUFFER_DISCOUNT = 0.9f;
-    /// <summary>每天进入次数</summary>
-    public const int ENDLESS_DAILY_TRIES = 2;
+    /// <summary>锯齿曲线：每节基线涨幅（跨节永久上涨的主斜坡，缓）</summary>
+    public const float ENDLESS_DIFF_BASE_PER_SECTION = 0.06f;
+    /// <summary>锯齿曲线：节内每层爬升（BOSS 峰比节首高 16%；进下一节回落 = 锯齿缓冲）</summary>
+    public const float ENDLESS_DIFF_INTRA_STEP = 0.04f;
+    /// <summary>锯齿曲线：精英层本层上浮（其下一层回到曲线值 = 相对回落的小缓冲）</summary>
+    public const float ENDLESS_DIFF_ELITE_BUMP = 1.10f;
+    // ⚠【2026-10-29 已删除】旧线性常量 ENDLESS_DIFFICULTY_STEP_PER_STAGE(0.07) 与
+    //   缓冲关折扣 ENDLESS_BUFFER_DISCOUNT(0.9) + IsEndlessBufferStage() —— 职责被锯齿曲线取代
+    //   （节内相位 0 本身就是缓冲位），按项目惯例删除不留开关，别再加回来。
+    /// <summary>无限裂隙每日进入次数（2026-10-29 主人拍板：2 → 3；一次 15 体力见 StaminaSystem.ENDLESS_RIFT_COST）。</summary>
+    public const int ENDLESS_DAILY_TRIES = 3;
 
     /// <summary>记录点间隔：每 5 层一个（第 5/10/15…层 = BOSS 记录点）</summary>
     public const int ENDLESS_CHECKPOINT_INTERVAL = 5;
@@ -472,13 +487,6 @@ public static partial class GameConfig
         for (int i = 0; i < count && i < candidates.Count; i++)
             if (candidates[i] == slot) return true;
         return false;
-    }
-
-    /// <summary>该层是否缓冲关（记录点后第一层，第 6/11/16…层；第 1 层不算）</summary>
-    public static bool IsEndlessBufferStage(int riftStage)
-    {
-        int stage = Mathf.Max(1, riftStage);
-        return stage > 1 && stage % ENDLESS_CHECKPOINT_INTERVAL == 1;
     }
 
     /// <summary>

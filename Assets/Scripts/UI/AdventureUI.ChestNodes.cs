@@ -711,8 +711,9 @@ public partial class AdventureUI
 
         var data = SaveSystem.Instance?.Data;
         int total = GameConfig.STAGES_PER_GRAND;
-        int maxCleared = GetMaxClearedStage(_selectedChapter);
-        int current = Mathf.Clamp(maxCleared + 1, 1, total + 1);   // 下一关（1 起）；整章通关 = total+1
+        // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】当前关 = 第一个未通关（精确查单关 key），
+        // 不再用「最大通关号 + 1」推断——中断续局跳关会留下「后关已通、前关未通」的记录。
+        int current = FirstUnclearedStage(_selectedChapter, total, data);   // 1 起；全通 = total+1
         _currentFloatSlot = -1;   // 浮动槽位每次刷新重算（只有当前关浮动）
 
         // 【2026-10-24 主人拍板「难度逐章解锁」】该章在当前难度未开启（上一章该难度没通）
@@ -734,11 +735,11 @@ public partial class AdventureUI
         // 当前关标识（主人预制体「头像指示」）与滑动列表定位：
         // 【2026-10-26 跨章连续列】当前关可能是下一章的「2-1」（本章通关让位后列顶让给后章），
         // 标识优先指进行中的当前关槽（_currentFloatSlot）；指不到（本章通关/灰锁章）时
-        // 回退到「本章应打的关」的槽（通关=maxCleared 槽、灰锁=clamp 进度槽）。
+        // 回退到「本章应打的关」的槽（当前关=current 第一个未通关、灰锁=clamp 进度槽）。
         // 灰锁章标识仍显示（只有头像没有箭头）；内容比视口矮时不滚。
         int markerSlot = _currentFloatSlot;
         if (markerSlot < 0)
-            markerSlot = FindSlotIndexOfChapterStage(_selectedChapter, Mathf.Clamp(maxCleared + 1, 1, total));
+            markerSlot = FindSlotIndexOfChapterStage(_selectedChapter, Mathf.Clamp(current, 1, total));
 #if UNITY_EDITOR
         Debug.Log($"[AdventureUI][标识] 章{_selectedChapter} 当前关{current} → 槽{markerSlot}（槽位[{string.Join(",", _slotChapter)}|{string.Join(",", _slotStage)}]）");
 #endif
@@ -802,17 +803,18 @@ public partial class AdventureUI
         for (int slot = 0; slot < _slotNodes.Count; slot++)
         {
             // 找下一个入槽的关（本章铺完接下一章；章超出范围 → 槽位隐藏）
-            int sCh = -1, sStage = -1, sMax = 0, sCur = 0;
+            int sCh = -1, sStage = -1, sCur = 0;
             bool sLocked = true;
             while (curCh <= lastChapter)
             {
                 curStage++;
                 if (curStage > total) { curCh++; curStage = 0; continue; }
-                int chMax = GetMaxClearedStage(curCh);
-                int chCur = Mathf.Clamp(chMax + 1, 1, total + 1);
+                // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】当前关 = 第一个未通关（精确查单关），
+                // 不再用 max+1 推断；「是否已通关」在 WriteSlotContent 内按单关 key 判定。
+                int chCur = FirstUnclearedStage(curCh, total, data);
                 bool chLocked = !ChapterRouteTable.CanEnterAtDiff(curCh, _selectedDiff, data);
                 // 【2026-10-29 主人拍板】已通关/已领取的关一律照常入槽（变灰留在列里），不再 skip 让位
-                sCh = curCh; sStage = curStage; sMax = chMax; sCur = chCur; sLocked = chLocked;
+                sCh = curCh; sStage = curStage; sCur = chCur; sLocked = chLocked;
                 break;
             }
             if (slot < _slotStage.Count) _slotStage[slot] = sStage;
@@ -828,7 +830,7 @@ public partial class AdventureUI
             }
             if (!_slotNodes[slot].gameObject.activeSelf)
                 _slotNodes[slot].gameObject.SetActive(true);
-            WriteSlotContent(slot, sCh, sStage, sMax, sCur, sLocked);
+            WriteSlotContent(slot, sCh, sStage, sCur, sLocked, data);
             // 「进行中的当前关」（下一关）：列里最早的命中槽 = 进度前沿（多章内只会有一个）
             if (!sLocked && sStage == sCur && sStage <= total && currentSlot < 0)
                 currentSlot = slot;
@@ -844,11 +846,16 @@ public partial class AdventureUI
     }
 
     /// <summary>写单个槽位的显示内容（四态图/缩放/岛/编号；边沿淡出与滑动偏移不在此）。
-    /// 【2026-10-26 跨章连续列】章/关/进度全部按槽位自己的章算（chMax/chCur/chLocked 由游标逐章取）。
-    /// 【2026-10-24 主人拍板「难度逐章解锁」】chLocked=true 时一律按「未解锁」图显示。</summary>
-    void WriteSlotContent(int slot, int chapter, int stage, int chMaxCleared, int chCurrent, bool chLocked)
+    /// 【2026-10-26 跨章连续列】章/关/进度全部按槽位自己的章算（chCur/chLocked 由游标逐章取）。
+    /// 【2026-10-24 主人拍板「难度逐章解锁」】chLocked=true 时一律按「未解锁」图显示。
+    /// 【2026-10-29 修「1-1 未通 1-2 已标领取后」】签名去掉 chMaxCleared、改传 data：
+    /// 「是否已通关」精确查单关 key（HasStageCleared），不再用最大通关号推断。</summary>
+    void WriteSlotContent(int slot, int chapter, int stage, int chCurrent, bool chLocked, SaveData data)
     {
-        bool isCleared = !chLocked && stage <= chMaxCleared;
+        // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】精确判单关：中断续局跳关会留下
+        // 「后关已通、前关未通」的记录（clearedStages 只有 1_1 没有 1_0），
+        // 旧写法 stage <= chMaxCleared 会把 1-1 误判已通 → 显示领取后灰图。
+        bool isCleared = !chLocked && data != null && data.HasStageCleared(chapter, stage - 1);
         bool isCurrent = !chLocked && stage == chCurrent;
 
         // 换图（【2026-10-29 主人拍板「打过一次后关卡变灰往下移，上面的从锁定变关闭」】）：
@@ -941,7 +948,10 @@ public partial class AdventureUI
              : ChestWoodPaths;
     }
 
-    /// <summary>该章已通关的最大小关号（1 起；一关没通返回 0）。真源 clearedStages，只读不写。</summary>
+    /// <summary>该章已通关的最大小关号（1 起；一关没通返回 0）。真源 clearedStages，只读不写。
+    /// 【2026-10-29 起「这一关打过没有 / 当前关是哪关」一律走 FirstUnclearedStage / SaveData.HasStageCleared
+    /// 精确查单关——中断续局跳关会留下「后关已通、前关未通」的记录，max 口径会把没打的关误判已通。
+    /// 本方法仅保留用于统计/日志类场景，禁止再用于推断「前面的关都通了」】。</summary>
     int GetMaxClearedStage(int chapter)
     {
         var cleared = SaveSystem.Instance?.Data?.clearedStages;
@@ -956,6 +966,18 @@ public partial class AdventureUI
                 max = Mathf.Max(max, stage0 + 1);
         }
         return max;
+    }
+
+    /// <summary>本章第一个未通关的小关号（1 起；全通返回 total+1）。
+    /// 【2026-10-29 修「1-1 未通 1-2 已标领取后」】当前关/下一关一律用本方法（精确查单关 key），
+    /// 不再用「最大通关号 + 1」推断——中断续局跳关会产生「后关已通、前关未通」的记录，
+    /// max 口径会跳过没打的关。与终章追查 FinaleDefs「第一个未通关」、BattleManager.FirstUnclearedStageIndex0 同口径。</summary>
+    int FirstUnclearedStage(int chapter, int total, SaveData data)
+    {
+        var cleared = data?.clearedStages;
+        for (int s0 = 0; s0 < total; s0++)
+            if (cleared == null || !cleared.Contains(chapter + "_" + s0)) return s0 + 1;
+        return total + 1;
     }
 
     // ────────────────────────────────────────────────────
@@ -1189,11 +1211,12 @@ public partial class AdventureUI
             return;
         }
         int stage1 = _slotStage[slot];   // 1 起关号
-        int maxCleared = GetMaxClearedStage(slotCh);
-        bool cleared = stage1 <= maxCleared;
+        // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】精确判单关，不再用最大通关号推断
+        //（该点击路径当前射线已关、属领取制退役代码，口径仍修一致防将来复用复发）。
+        bool cleared = data.HasStageCleared(slotCh, stage1 - 1);
         if (!cleared || data.IsChestClaimed(slotCh, stage1 - 1))
         {
-            Debug.LogWarning($"[AdventureUI][宝箱] 点击忽略：章{slotCh} 关{stage1} 未通关或已领（maxCleared={maxCleared}，已领={data.IsChestClaimed(slotCh, stage1 - 1)}）");
+            Debug.LogWarning($"[AdventureUI][宝箱] 点击忽略：章{slotCh} 关{stage1} 未通关或已领（已领={data.IsChestClaimed(slotCh, stage1 - 1)}）");
             return;
         }
         Debug.Log($"[AdventureUI][宝箱] 领取：章{slotCh} 关{stage1}（槽{slot}）");

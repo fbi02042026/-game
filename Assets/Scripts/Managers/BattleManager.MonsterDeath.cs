@@ -61,7 +61,7 @@ public partial class BattleManager
         // 卷轴副本（2026-10-24）：照徽记口径，局内抽奖币不发，只发招募卷轴。
         // 礼物副本（2026-10-26）：照徽记/卷轴口径，局内抽奖币不发，只发好感礼物。
         // 无限裂隙（2026-10-23 主人拍板「活动副本和无限…这里不掉抽奖币」）：击杀同样不发，
-        // 只有开局免费抽 5 次 + 层通关补贴（既有拍板 GrantsRunCoins）。
+        // 只有每层免费抽 3 次（2026-10-29 拍板）+ 层通关补贴（既有拍板 GrantsRunCoins）。
         // 表现复用 DamageTextSystem.SpawnGoldText 现成入口，怪头顶飘「+N金」。
         if (!IsGoldDungeon && !IsBadgeDungeon && !IsScrollDungeon && !IsGiftDungeon && !IsEndlessRift)
         {

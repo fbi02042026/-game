@@ -21,10 +21,11 @@ public partial class BattleManager
     /// <summary>复活广告拉起中（防连点重复拉起两次广告）。</summary>
     bool _reviveAdPending;
 
-    /// <summary>是否提供复活选择：正式关/支线/活动副本（UsesBattleResultScreen 同门）、
-    /// 非引导局、本关没用过、主角在场、今日复活额度未用完（ReviveQuota，ADS_ENABLED=false 期间恒有）。
-    /// 引导局照旧「阵亡重进」，无限裂隙照旧直接结算。</summary>
-    bool CanOfferRevive => Mode != null && Mode.UsesBattleResultScreen
+    /// <summary>是否提供复活选择：非引导局、本关没用过、主角在场、今日复活额度未用完（ReviveQuota，ADS_ENABLED=false 期间恒有）。
+    /// 【2026-10-29 主人拍板】改走 <see cref="IBattleMode.OffersRevive"/>（与 UsesBattleResultScreen 解耦）——
+    /// 无限裂隙通关不播结果屏，但死亡同样弹复活窗（含看广告档）；正式关/副本行为不变。
+    /// 引导局照旧「阵亡重进」。</summary>
+    bool CanOfferRevive => Mode != null && Mode.OffersRevive
         && !Rules.Active && !SkipLegacyOnEvacuate
         && hero != null && !_reviveUsedThisStage
         && ReviveQuota.CanOfferToday();
@@ -33,7 +34,7 @@ public partial class BattleManager
     {
         // 【2026-10-24 主人拍板】正式关阵亡先弹「失败 + 复活/返回」选择界面：冻场待抉择，
         // 点【复活】按当日档位（广告/50钻/100钻）原地半血复活继续打，点【返回】才走原收尾（遗产结算）。
-        // 引导局/无限裂隙不吃这道门（CanOfferRevive 已分流）。
+        // 【2026-10-29 改版】无限裂隙**也要**这道门（Mode.OffersRevive=true，与结算屏解耦）；引导局照旧跳过。
         if (CanOfferRevive)
         {
             OfferHeroRevive();
