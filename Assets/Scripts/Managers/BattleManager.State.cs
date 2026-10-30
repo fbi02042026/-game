@@ -222,6 +222,15 @@ public partial class BattleManager
     public string BondMercHireId { get; private set; } = "";
 
     /// <summary>
+    /// 本局竞技场挑战的榜单行号（2026-10-30 主人拍板「竞技场真战斗」；0 基 = 机器人列表下标，非竞技场局恒 -1）。
+    /// 进本时从 AdventureUI.PendingArenaRowIdx 拷入（照 SideIslandId 的「进本捕获」模式），供胜负结算（ApplyBattleOutcome）读。
+    /// </summary>
+    public int ArenaChallengeRowIdx { get; private set; } = -1;
+
+    /// <summary>当前局是否竞技场挑战（2026-10-30 新玩法，见 ArenaBattleMode）。派生写法照抄 IsGoldDungeon。</summary>
+    public bool IsArena => Mode != null && Mode.Id == BattleModeId.Arena;
+
+    /// <summary>
     /// 本模式掉不掉装备。由 <see cref="Mode"/> 自己声明（金币本 false，主线/引导 true）。
     /// 结算只看这个，不再判「是不是金币本」—— 以后「武器副本」这类活动也能自然掉装。
     /// </summary>

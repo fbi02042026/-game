@@ -511,7 +511,20 @@ public static class PlayerJobDefs
             else
                 Debug.LogError("[PlayerJobDefs] 稀有·暮火之杖开局装备失败，本局主手为空（不回退旧初始武器）");
         }
-        else if (!arenaStartReplaced && (!string.IsNullOrEmpty(kit.MainTemplateId) || !string.IsNullOrEmpty(kit.MainSpumOverride)))
+        // 【2026-10-30 竞技场商店】限定稀有弓「逐风长弓」：购买记录在档（arenaShopBowId）→
+        // 游侠开局发稀有品质实例替换初始主手（随机词条随局重掷，照暮火之杖口径）；
+        // 冠军武器优先（传奇档优先于商店稀有档）。装备失败只报错不回退初始武器（不兜底，出错要看得见）。
+        else if (!arenaStartReplaced && job == PlayerJobId.Ranger && ArenaShopGoods.HasBowOwned(data))
+        {
+            int bowLv = Hero.Instance != null ? Hero.Instance.level : 1;
+            var bowTpl = ArenaShopGoods.BowTemplate();
+            var bowInst = bowTpl != null ? ArenaShopGoods.CreateBowBattleInstance(bowTpl, jobKind, bowLv) : null;
+            if (bowInst != null && bag.TryEquipDirect(bowInst))
+                granted = true;
+            else
+                Debug.LogError("[PlayerJobDefs] 逐风长弓开局装备失败，本局主手为空（不回退初始武器）");
+        }
+        else if (!arenaStartReplaced && !twilightStartReplaced && !(job == PlayerJobId.Ranger && ArenaShopGoods.HasBowOwned(data)) && (!string.IsNullOrEmpty(kit.MainTemplateId) || !string.IsNullOrEmpty(kit.MainSpumOverride)))
         {
             var mainTpl = ResolveKitTemplate(kit.MainTemplateId, kit.MainSpumOverride);
             if (mainTpl != null)

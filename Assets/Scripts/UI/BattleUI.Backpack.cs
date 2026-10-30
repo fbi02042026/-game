@@ -581,6 +581,8 @@ public partial class BattleUI : MonoBehaviour
         _bagDrawerOpen = false;
         ApplyBagDrawerVisible();
         RefreshLootModeChrome();
+        // 竞技场一键跳过（2026-10-30 主人拍板）：仅 Arena 显示；幂等创建 + 按模式切显隐
+        ArenaBattleSkip.Ensure(transform);
     }
 
     /// <summary>

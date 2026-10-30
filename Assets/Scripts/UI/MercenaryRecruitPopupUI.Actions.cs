@@ -310,7 +310,8 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             },
         };
         // 【2026-10-28 主人拍板】卡面已拥有角标只写「已拥有」，「转碎片」规则说明挪进这个 info 公示弹窗（尾注行）
-        DraftOddsPopupUI.ToggleWith(rows, "已拥有的佣兵将转换成碎片");
+        // 【2026-10-30 竞技场商店】补限定说明：伊芙/莉娜/索尔 摘池改竞技场商店独占产出（§五.8）
+        DraftOddsPopupUI.ToggleWith(rows, "已拥有的佣兵将转换成碎片；伊芙 / 莉娜 / 索尔 仅竞技场产出");
     }
 
     // 【2026-10-23 主人拍板】ShowInfo 已删除：2026-10-17 info 钮改弹概率公示（ShowRecruitOdds）后此面板零调用。

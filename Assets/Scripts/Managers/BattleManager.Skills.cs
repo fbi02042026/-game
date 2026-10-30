@@ -183,6 +183,10 @@ public partial class BattleManager
     {
         var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
         if (mercs == null || merc == null) return false;
+        // 【2026-10-30 竞技场】敌方佣兵不在 _activeMercs 槽位表里（不进友军编队），无蓝条 UI——
+        // 耗蓝按免费放行，否则敌方牧师的治疗技会被蓝闸永远拦下（找不到槽 → slot<0 → false）。
+        if (!merc.isAlly)
+            return true;
         int slot = mercs.IndexOf(merc);
         if (slot < 0 || slot >= mercMp.Length) return false;
         if (cost <= 0f) return true;

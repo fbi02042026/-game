@@ -1024,6 +1024,8 @@ public partial class BattleManager
     /// 之后整关不再有任何等待节点。</summary>
     void OnLiveStartFight()
     {
+        // 【2026-10-30 竞技场开场动画】玩家点「开始战斗/继续」后播一次开场「对战」动画（0.5s 非阻塞，不挡首波刷怪）
+        if (Mode != null && Mode.Id == BattleModeId.Arena) BattleVsIntro.TryPlayForArena();
         _preBattleStoryPlaying = false;
         ScheduleFirstWaveSpawn();
         // 【2026-10-29 实时抽改版】与旧流程同序（先刷首波再出发，见 BattleStartSequenceCoroutine 分流注释）
@@ -1672,7 +1674,8 @@ public partial class BattleManager
         // 只把本关额度记进待发池，等结算（PersistBattleGold → GrantPendingStageGold）一次性发。
         // 口径不变：打完一章拿满，中途撤离 / 阵亡只拿已通关那几关的部分（结算侧就是这个算法）。
         int stageGold = StageGoldDefs.CurrentStageGold();
-        if (stageGold > 0 && !IsSideIsland)   // 支线岛（2026-10-23 合并方案）不发主线关卡金——岛金=goldReward，走岛结算链
+        if (stageGold > 0 && !IsSideIsland && !IsArena)   // 支线岛不发主线关卡金——岛金=goldReward，走岛结算链；
+                                                          // 竞技场（2026-10-30 拍板）打赢不发金币，按关结算金一并停发
             _runStageGoldPending += stageGold;
         _runStagesCleared++; // 撤离补偿计数：本局已通关关数（2026-10-17）
 
@@ -1964,10 +1967,43 @@ public partial class BattleManager
         // PersistBattleGold → GrantPendingStageGold 先入账），这里提前拷一次给结果界面展示；
         // 局末 FillSettlementSnapshot 会重算同值，幂等无副作用。装备格走 EquipGains 实时记录，不受影响。
         RunStats.GoldGained = RunStats.GoldEarned;
-        if (Mode.UsesBattleResultScreen)
+        // 竞技场挑战（2026-10-30 主人拍板「竞技场真战斗」）：先落「赢」结算（ArenaRules.ApplyBattleOutcome：
+        // 换位+积分+金币 WinGold 照发+200【2026-10-30 16:45 拍板恢复】+战力+5%），
+        // 积分格+金币格随胜利面板（原面板）一并展示；
+        // 结算必须先于播结果界面（积分格需要 pts），故从 ArenaBattleMode.SettleStageClear（只回城）前移到统一门。
+        if (Mode.Id == BattleModeId.Arena)
+        {
+            ArenaBattleSkip.Restore();   // 跳过加速跑到结算即恢复（timeScale=1，防带进结果演出/回城）
+            BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this), true, SettleArenaVictoryCells());
+        }
+        else if (Mode.UsesBattleResultScreen)
             BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this));
         else
             Mode.SettleStageClear(this);
+    }
+
+    /// <summary>
+    /// 竞技场胜利结算（2026-10-30「真战斗」）：ApplyBattleOutcome(won:true)（换位+积分+战力估计+5%；
+    /// 金币 WinGold +200 已在 ApplyBattleOutcome 走 ResourceWallet 入账【2026-10-30 16:45 拍板恢复】）
+    /// → 组装追加奖励格：积分格（icon=Resources/UI/Art/对战/积分，label=「+N」）+
+    /// 金币格（icon=CommonIconSprites/icon_gold，label=「+200」），与积分格并列。
+    /// 缺图 LogError 不静默（奖励格留灰块可见）。失败路不走这里（死亡链负责，toast 现状不动）。
+    /// </summary>
+    List<SettlementRewardCell> SettleArenaVictoryCells()
+    {
+        var data = SaveSystem.Instance?.Data;
+        ArenaRules.ApplyBattleOutcome(data, ArenaChallengeRowIdx, true, out int pts, out _);
+        var icon = Resources.Load<Sprite>("UI/Art/对战/积分");
+        if (icon == null)
+            Debug.LogError("[Arena] 积分图标缺失：Resources/UI/Art/对战/积分（积分格将留灰块，不静默不造图）");
+        var goldIcon = CommonIconSprites.Load("icon_gold");
+        if (goldIcon == null)
+            Debug.LogError("[Arena] 金币图标缺失：CommonIconSprites/icon_gold（金币格将留灰块，不静默不造图）");
+        return new List<SettlementRewardCell>
+        {
+            new SettlementRewardCell { label = "+" + pts, count = 1, icon = icon },
+            new SettlementRewardCell { label = "+" + ArenaRules.WinGold, count = 1, icon = goldIcon },
+        };
     }
 
     /// <summary>

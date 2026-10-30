@@ -355,6 +355,65 @@ public class MercenaryManager : Singleton<MercenaryManager>
         return merc;
     }
 
+    /// <summary>
+    /// 敌方佣兵生成入口（2026-10-30 主人拍板「竞技场真战斗」，照 <see cref="SpawnMercenary"/> 加载链）。
+    /// 与 SpawnMercenary 唯二差异 —— ① isAlly=false（敌方阵营，Init 内默认 true，生成后改判）；
+    /// ② 不进 _activeMercs（不参与友军编队/波清回血/复活链/OnMercenaryDead）；调用方（ArenaEnemySpawner）
+    /// 负责 Add 进 BattleManager.monsters。Init 走 (id, level, star) 三参重载——lv 与 ★ 两维都进属性
+    /// （PowerCalc lv×70+★×110 口径）。🔴 不调 SetHireId：防止吃到玩家局外升星/养成/羁绊加成。
+    /// </summary>
+    public Mercenary SpawnEnemyMercenary(string mercId, Vector3 position, int level, int star)
+    {
+        if (string.IsNullOrEmpty(mercId)) return null;
+
+        string prefabName = GetPrefabName(mercId);
+        GameObject prefab = LoadUnitPrefab(prefabName, mercId);
+        if (prefab == null)
+        {
+            Debug.LogError($"[MercenaryManager] 敌方佣兵预制体不存在: Units/{prefabName} (id={mercId})（不静默）");
+            return null;
+        }
+
+        position.y = UnitBase.GROUND_Y;
+        if (BattleManager.Instance != null && BattleManager.Instance.unitRoot != null)
+            position.z = BattleManager.Instance.unitRoot.position.z;
+
+        GameObject go = Instantiate(prefab);
+        go.name = "EnemyMerc_" + mercId;
+        go.SetActive(true);
+
+        // 与玩家一样：挂到 unit，保持世界坐标
+        GameConfig.AttachToUnitRoot(go.transform);
+        GameConfig.SetWorldPosition(go, position);
+        go.transform.rotation = Quaternion.identity;
+
+        // 大小跟玩家对齐（只抄绝对值，朝向交给 Face）
+        if (Hero.Instance != null)
+        {
+            Vector3 hs = Hero.Instance.transform.localScale;
+            float ax = Mathf.Abs(hs.x); if (ax < 0.0001f) ax = 1f;
+            float ay = Mathf.Abs(hs.y); if (ay < 0.0001f) ay = 1f;
+            float az = Mathf.Abs(hs.z); if (az < 0.0001f) az = 1f;
+            go.transform.localScale = new Vector3(ax, ay, az);
+        }
+
+        // 只补物理（SPUM 根常没有），不碰 Sorting
+        Rigidbody2D rb = go.GetComponent<Rigidbody2D>();
+        if (rb == null) rb = go.AddComponent<Rigidbody2D>();
+        rb.gravityScale = 0;
+        rb.freezeRotation = true;
+
+        Mercenary merc = go.GetComponent<Mercenary>();
+        if (merc == null) merc = go.AddComponent<Mercenary>();
+        merc.Init(mercId, level, star);   // 三参重载：lv+★ 两维进属性
+        merc.isAlly = false;              // 🔴 敌方阵营（索敌/AI/治疗全按 isAlly 分流）
+
+        GameConfig.SetWorldPosition(go, position);
+
+        Debug.Log($"[MercenaryManager] 敌方佣兵 {mercId} 已生成 Lv{level}★{star} isAlly=false pos={go.transform.position}");
+        return merc;
+    }
+
     public void ResetMercenaries(Vector3 basePosition)
     {
         var mercs = GetActiveMercs();

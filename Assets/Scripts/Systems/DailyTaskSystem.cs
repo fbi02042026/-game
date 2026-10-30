@@ -10,9 +10,10 @@ using UnityEngine;
 ///
 /// 计数挂钩（写入侧，散在各咽喉；计数器本体在 SaveData.Count*）：
 ///   金币收入 = ResourceWallet.Add(Gold)；击败小怪/击杀Boss = BattleManager.OnMonsterDead；
-///   获取佣兵 = SaveData.UnlockMerc（新解锁）；升星佣兵 = MercStarSystem.TryStarUp（成功）。
+///   获取佣兵 = SaveData.UnlockMerc（新解锁）；升星佣兵 = MercStarSystem.TryStarUp（成功）；
+///   竞技场对战场次 = ArenaRules.ResolveChallenge（一场一计，不论胜负，2026-10-30 新增）。
 /// 结算驱动 = QuestBarBinder 每 0.5s 轮询（城镇内），奖励与 Toast 统一在城镇落地，不在战斗里弹。
-/// daily_clear 不走本类（ChapterManager 独立发石链路）；daily_login 走通用路径
+/// daily_clear 不走本类（ChapterManager 独立发经验链路，2026-10-30 起改发经验不再发石）；daily_login 走通用路径
 /// （2026-10-29 主人拍板「打开游戏就给奖励」：进度=loginLastDay==今天，不再强制点开登录弹窗领取）。
 /// 奖励 = quest.csv 的 reward_stones（日常=天赋石、周常=钻石）+ reward_exp（经验，
 /// 走 LevelSystem.AddDirectExp，末列；改表即调）。
@@ -38,7 +39,7 @@ public static class DailyTaskSystem
         for (int i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
-            if (row.id == "daily_clear") continue;   // 独立链路（ChapterManager 达标发石），不在这里发
+            if (row.id == "daily_clear") continue;   // 独立链路（ChapterManager 达标发经验，2026-10-30 起不再发天赋石），不在这里发
             // daily_login 从 2026-10-29 起走通用路径：进度=loginLastDay==今天（GetTaskCounter），打开游戏即达标自动发。
             int progress = data.GetTaskCounter(row.targetType);
             if (progress < row.targetCount) continue;

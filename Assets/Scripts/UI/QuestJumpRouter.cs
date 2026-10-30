@@ -63,8 +63,18 @@ public static class QuestJumpRouter
             return true;
         }
         // 类型路由：读表里这行日常的 target_type（表缺失/行缺失按战斗类兜进冒险页——日常本质都是打关，不会白点）
-        if (QuestTable.TryDaily(d.id, out var row) && row.targetType == "upgrade_talent")
-            return GoTalent();   // 点天赋/升级类 → 角色界面+天赋
+        if (QuestTable.TryDaily(d.id, out var row))
+        {
+            // 竞技场对战（2026-10-30 新增 daily_arena_battle）：直接开竞技场弹窗——这类跳冒险页没有入口，等于白点
+            if (row.targetType == "daily_arena_battle")
+            {
+                ArenaRules.EnsurePeriods(SaveSystem.Instance?.Data);
+                ArenaPopupUI.Show();
+                return true;
+            }
+            if (row.targetType == "upgrade_talent")
+                return GoTalent();   // 点天赋/升级类 → 角色界面+天赋
+        }
         return GoAdventure(MainQuestSystem.CurrentChapter());
     }
 

@@ -180,16 +180,20 @@ public sealed class SkillCastService
         var kind = MercSkillExecutor.Resolve(skillId);
         if (kind == MercSkillExecutor.Kind.HealSingle || kind == MercSkillExecutor.Kind.HealTeam)
         {
-            healTarget = FindPreferredHealTarget();
+            // 【2026-10-30 竞技场】敌方佣兵牧师只奶敌方队友（bm.monsters 里的敌方佣兵），不许奶玩家；
+            // 满血空放闸同理只看敌方队伍。己方路径一行不动（isAlly 分支新增）。
+            bool enemyCaster = !merc.isAlly;
+            healTarget = enemyCaster ? FindLowestHpEnemyTeammate(merc) : FindPreferredHealTarget();
             // 全员接近满血且无人眩晕待救时，不空放治疗
             var stunMerc = healTarget as Mercenary;
-            if ((stunMerc == null || !stunMerc.TutorialStunned) && !AllyBelowHpRatio(0.92f))
+            bool teamHurt = enemyCaster ? EnemyTeammateBelowHpRatio(merc, 0.92f) : AllyBelowHpRatio(0.92f);
+            if ((stunMerc == null || !stunMerc.TutorialStunned) && !teamHurt)
                 return false;
             float atk = merc.attr != null ? merc.attr.GetAttr(AttrType.Attack) : 0f;
             var cfg = SkillRegistry.Instance?.Get(skillId);
             float mul = MercSkillExecutor.HealAtkMul(cfg);
             if (kind == MercSkillExecutor.Kind.HealTeam)
-                ApplyHealToTeam(atk * mul, merc);
+                ApplyHealToTeam(atk * mul, merc, enemyCaster);
             else
                 ApplyHealToUnit(healTarget ?? merc, atk * mul, merc);
             if (merc.PassiveRunner != null)
@@ -202,11 +206,15 @@ public sealed class SkillCastService
         }
         else if (kind == MercSkillExecutor.Kind.TeamShield)
         {
+            // 【2026-10-30 竞技场】护盾目标 = 玩家方全体，敌方佣兵不放（直接返回 false 不扣蓝不进冷却）
+            if (!merc.isAlly) return false;
             MercSkillExecutor.TeamShieldParams(skillId, out float ratio, out float duration);
             ApplyTeamShieldBuff(ratio, duration);
         }
         else if (kind == MercSkillExecutor.Kind.TeamHealAtk)
         {
+            // 【2026-10-30 竞技场】群体治疗/无敌目标 = 玩家方，敌方佣兵不放（同上，fail closed）
+            if (!merc.isAlly) return false;
             float atk = merc.attr != null ? merc.attr.GetAttr(AttrType.Attack) : 0f;
             ApplyHealToTeam(atk * MercSkillExecutor.TeamHealAtkMul(skillId), merc);
             // 【2026-10-19 主人拍板】SK010 神圣庇佑补齐表里的「全体无敌 1.5 秒」段：时长读表 duration
@@ -485,13 +493,62 @@ public sealed class SkillCastService
     }
 
 
-    void ApplyHealToTeam(float heal, UnitBase healer = null)
+    void ApplyHealToTeam(float heal, UnitBase healer = null, bool enemyTeam = false)
     {
+        // 【2026-10-30 竞技场】敌方佣兵的群体治疗只奶敌方队友（bm.monsters 里的敌方佣兵），不碰玩家方
+        if (enemyTeam)
+        {
+            for (int i = 0; i < monsters.Count; i++)
+            {
+                var m = monsters[i] as Mercenary;
+                if (m == null || m.isDead || m.isAlly) continue;
+                ApplyHealToUnit(m, m == healer ? heal : heal * 0.8f, healer);
+            }
+            return;
+        }
+
         ApplyHealToUnit(hero, heal, healer);
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
         if (mercs == null) return;
         foreach (var m in mercs)
             ApplyHealToUnit(m, heal * 0.8f, healer);
+    }
+
+    /// <summary>
+    /// 【2026-10-30 竞技场】敌方佣兵队伍里血量比例最低的队友（含施法者自己）；找不到回施法者。
+    /// 只扫 bm.monsters 里的敌方佣兵，绝不把玩家/己方佣兵算进来。
+    /// </summary>
+    UnitBase FindLowestHpEnemyTeammate(Mercenary caster)
+    {
+        UnitBase best = caster;
+        float worstRatio = 2f;
+        for (int i = 0; i < monsters.Count; i++)
+        {
+            var m = monsters[i] as Mercenary;
+            if (m == null || m.isDead || m.isAlly || m.attr == null) continue;
+            float maxHp = m.attr.GetAttr(AttrType.MaxHp);
+            if (maxHp <= 1f) continue;
+            float ratio = m.currentHp / maxHp;
+            if (ratio < worstRatio)
+            {
+                worstRatio = ratio;
+                best = m;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>【2026-10-30 竞技场】敌方佣兵队伍（含施法者）是否有人血量低于 ratio（治疗空放闸）。</summary>
+    bool EnemyTeammateBelowHpRatio(Mercenary caster, float ratio)
+    {
+        for (int i = 0; i < monsters.Count; i++)
+        {
+            var m = monsters[i] as Mercenary;
+            if (m == null || m.isDead || m.isAlly || m.attr == null) continue;
+            float maxHp = m.attr.GetAttr(AttrType.MaxHp);
+            if (maxHp > 1f && m.currentHp / maxHp < ratio) return true;
+        }
+        return false;
     }
 
 

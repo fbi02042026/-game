@@ -2,12 +2,12 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 竞技场主界面入口（2026-10-29）：挂在主界面右列，竹篓纳福入口（MiniGameButton）下方一格。
+/// 竞技场主界面入口（2026-10-29）：挂在主界面右列，每日登录按钮下方一格（2026-10-30 纳福入口隐藏后）。
 ///
 /// 【为什么不改预制体】照 <see cref="MiniGameEntryUI"/> 同款套路：运行时克隆 DailyLoginButton
 /// （铁律 3：UI 运行时补节点，别改预制体），排版/锚点/字号全部随每日登录按钮走。
-/// 【位置】竹篓纳福入口 y - 140（与其上方间距一致）；若竹篓纳福入口不存在（活动下线），
-/// 退回「每日登录 y - 280」，仍然单列往下排，不会叠到别的按钮。
+/// 【位置】竹篓纳福入口 y - 140（与其上方间距一致）；若竹篓纳福入口不存在（活动下线/已隐藏），
+/// 退回「每日登录 y - 140」，即每日签到正下方一格（2026-10-30 起纳福入口已隐藏，走的就是这一档）。
 /// </summary>
 public static class ArenaEntryUI
 {
@@ -16,7 +16,7 @@ public static class ArenaEntryUI
     /// <summary>与每日登录/纳福入口相同的行距（见 MiniGameEntryUI.OffsetY 注释）。</summary>
     const float OffsetY = -140f;
 
-    const string IconPath = "UI/JobSelect/剑盾";   // 剑盾卫士职业头像顶入口图标（对战味最正）
+    const string IconPath = "UI/Art/Main/对战";   // 主界面美术包里的对战图标（交叉双剑+蓝红火焰，2026-10-30 主人指定）
 
     /// <summary>在右列补「竞技场」入口。可重复调用（已有则只重新接线，不重建）。</summary>
     public static void EnsureInGuildHall(Button dailyLoginButton)
@@ -43,7 +43,7 @@ public static class ArenaEntryUI
         var go = Object.Instantiate(dailyLoginButton.gameObject, parent);
         go.name = NodeName;
 
-        // 几何：锚点随每日登录按钮，y 取纳福入口再下一格（没有纳福就取每日登录下两格）
+        // 几何：锚点随每日登录按钮，y 取纳福入口再下一格（纳福隐藏时取每日登录下一格）
         var src = dailyLoginButton.GetComponent<RectTransform>();
         var rt = go.GetComponent<RectTransform>();
         if (src != null && rt != null)

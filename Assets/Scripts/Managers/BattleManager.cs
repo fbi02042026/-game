@@ -39,6 +39,9 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
     /// </summary>
     IBattleMode ResolveMode()
     {
+        // 竞技场挑战（2026-10-30 主人拍板「竞技场真战斗」）：竞技场弹窗「对战」进本，判在最前（意图最明确）。
+        if (AdventureUI.PendingArenaRowIdx >= 0) return BattleModes.Arena;
+
         // 引导优先：它由剧情触发，跟玩家在冒险界面选哪个按钮无关。
         // 注意要在 StoryProgress.ConsumeTutorialBattleFlag() 之前判。
         if (StoryProgress.ShouldStartTutorialBattle()) return BattleModes.Tutorial;
@@ -214,6 +217,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                 || AdventureUI.PendingSideIsland > 0 // 支线岛（2026-10-23 合并方案）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingFinaleStage > 0 // 终章追查关（2026-10-23）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingBondDungeon    // 羁绊副本（2026-10-27）：独立进本，同金币本作废 parked 局
+                || AdventureUI.PendingArenaRowIdx >= 0 // 竞技场挑战（2026-10-30）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingBattleChapter <= 0
                 || AdventureUI.PendingBattleChapter != savedRun.chapter)
             {
@@ -240,6 +244,9 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         BondMercHireId = AdventureUI.PendingBondHireId ?? "";
         AdventureUI.PendingBondDungeon = false;
         AdventureUI.PendingBondHireId = null;
+        // 竞技场挑战（2026-10-30）：捕获榜单行号供胜负结算读（ArenaChallengeRowIdx），Pending 读后即清（照支线岛口径）
+        ArenaChallengeRowIdx = AdventureUI.PendingArenaRowIdx;
+        AdventureUI.PendingArenaRowIdx = -1;
 
         // 无限裂隙：起始层 = 记录点 + 1（读完即清，防污染）；普通章号参数对它无意义
         if (AdventureUI.PendingEndlessRift)

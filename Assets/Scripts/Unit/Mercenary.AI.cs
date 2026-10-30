@@ -168,6 +168,9 @@ public partial class Mercenary : UnitBase
     /// </summary>
     bool UpdateHeroLeash(float dt)
     {
+        // 【2026-10-30 竞技场】敌方佣兵不拴玩家绳：无「回队/收召」概念，自由交战（己方路径一行不动）
+        if (!isAlly) return false;
+
         var hero = Hero.Instance;
         if (hero == null || hero.isDead)
         {
@@ -259,9 +262,19 @@ public partial class Mercenary : UnitBase
             ClearAcquireLock();
     }
 
-    /// <summary>无锁定目标：贴玩家编队站位；玩家在推图则跟着走。</summary>
+    /// <summary>无锁定目标：贴玩家编队站位；玩家在推图则跟着走。
+    /// 【2026-10-30 竞技场】敌方佣兵不跟玩家推图：站住守半场、面向玩家（左），等敌人进索敌距再锁。</summary>
     void FollowHeroOrIdle(ref bool isMoving)
     {
+        if (!isAlly)
+        {
+            facingDir = -1;
+            ApplyFacing(facingDir);
+            if (rb != null) rb.velocity = Vector2.zero;
+            isMoving = false;
+            return;
+        }
+
         facingDir = 1;
         ApplyFacing(facingDir);
         // 2026-10-10 主人拍板：清场后不再换道归队（原 AdjustFormationLane 会把佣兵

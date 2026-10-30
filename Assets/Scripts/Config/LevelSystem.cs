@@ -17,6 +17,9 @@ public static class LevelSystem
 {
     public static int GetExpForLevel(int level) => 50 + level * 20;
 
+    public const int MaxLevel = 40;                 // 2026-10-30 主人拍板：满级封顶，避免属性溢出
+    public const int ExpOverflowGoldPerExp = 5;      // 满级后每点溢出经验转金币数（可调）
+
     /// <summary>玩家当前等级（存档真源；无存档回落 1）。名牌/抽卡/蓝量等只读消费统一走这里。</summary>
     public static int CurrentLevel
     {
@@ -144,11 +147,20 @@ public static class LevelSystem
         data.playerExp += exp;
         bool leveled = false;
         int guard = 0;
-        while (data.playerExp >= GetExpForLevel(data.playerLevel) && guard++ < 64)
+        while (data.playerLevel < MaxLevel && data.playerExp >= GetExpForLevel(data.playerLevel) && guard++ < 64)
         {
             data.playerExp -= GetExpForLevel(data.playerLevel);   // 本级门槛扣掉，余量结转下一级
             data.playerLevel++;
             leveled = true;
+        }
+
+        // 满级后溢出经验 → 金币（2026-10-30 主人拍板：满级后经验转金币，避免属性溢出）
+        if (data.playerLevel >= MaxLevel && data.playerExp > 0)
+        {
+            int overflowGold = data.playerExp * ExpOverflowGoldPerExp;
+            data.playerExp = 0;
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, overflowGold, save: false, notify: true);
+            SaveSystem.Instance?.Save();   // 溢出金币要落盘（即便未升级）
         }
 
         if (!leveled) return;
@@ -184,11 +196,20 @@ public static class LevelSystem
         data.playerExp += exp;
         bool leveled = false;
         int guard = 0;
-        while (data.playerExp >= GetExpForLevel(data.playerLevel) && guard++ < 64)
+        while (data.playerLevel < MaxLevel && data.playerExp >= GetExpForLevel(data.playerLevel) && guard++ < 64)
         {
             data.playerExp -= GetExpForLevel(data.playerLevel);   // 本级门槛扣掉，余量结转下一级
             data.playerLevel++;
             leveled = true;
+        }
+
+        // 满级后溢出经验 → 金币（2026-10-30 主人拍板：满级后经验转金币，避免属性溢出）
+        if (data.playerLevel >= MaxLevel && data.playerExp > 0)
+        {
+            int overflowGold = data.playerExp * ExpOverflowGoldPerExp;
+            data.playerExp = 0;
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, overflowGold, save: false, notify: true);
+            SaveSystem.Instance?.Save();   // 溢出金币要落盘（即便未升级）
         }
 
         if (!leveled) return;
@@ -198,6 +219,40 @@ public static class LevelSystem
 
         LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
         LevelUpPopup.FlushPending();   // 城镇已就绪（任务栏轮询只在城镇跑），立即弹，不挂起到下次回城
+    }
+
+    /// <summary>
+    /// 在战斗/结算上下文加经验（2026-10-30 新增）：不立即弹升级窗，挂起到回城由 Town 触发，
+    /// 避免结算期误弹。满级溢出同样转金币。供 ChapterManager 发「每日通关任务」经验等结算期调用。
+    /// </summary>
+    public static void AddExpForTown(int exp)
+    {
+        if (exp <= 0) return;
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null)
+        {
+            Debug.LogError("[LevelSystem] AddExpForTown 失败：SaveData 为空，经验不发（不兜底）");
+            return;
+        }
+        int before = Mathf.Max(1, data.playerLevel);
+        data.playerExp += exp;
+        bool leveled = false;
+        int guard = 0;
+        while (data.playerLevel < MaxLevel && data.playerExp >= GetExpForLevel(data.playerLevel) && guard++ < 64)
+        {
+            data.playerExp -= GetExpForLevel(data.playerLevel);
+            data.playerLevel++;
+            leveled = true;
+        }
+        if (data.playerLevel >= MaxLevel && data.playerExp > 0)
+        {
+            int overflowGold = data.playerExp * ExpOverflowGoldPerExp;
+            data.playerExp = 0;
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, overflowGold, save: false, notify: true);
+            SaveSystem.Instance?.Save();
+        }
+        SaveSystem.Instance?.Save();
+        if (leveled) LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
     }
 
     // ============================================================

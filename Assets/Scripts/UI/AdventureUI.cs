@@ -87,6 +87,13 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     public static bool PendingEndlessRift;
 
     /// <summary>
+    /// 竞技场挑战进本标记（2026-10-30 主人拍板「竞技场真战斗」）：值 = 榜单行号（0 基，= 机器人列表下标，-1=非竞技场局）。
+    /// 由竞技场弹窗「对战」选职业确认（ArenaPopupUI.OnJobPicked，照「先 ResetPendingFlags 全清再立标记」口径）设置；
+    /// BattleManager.StartNewRunInternal 捕获进 ArenaChallengeRowIdx 后清回 -1（照 SideIslandId「捕获+读后即清」口径）。
+    /// </summary>
+    public static int PendingArenaRowIdx = -1;
+
+    /// <summary>
     /// 进本标记统一重设（2026-10-28）：所有「进本路径」在设置自己的标记前先调本方法全清，
     /// 避免漏清导致旧标记污染下一局（如礼物本不打清 → 好感页点羁绊本被误判为礼物本）。
     /// 新增副本类型时，只需在对应路径里设自己的标记，不必再记着补清 N 处。
@@ -104,6 +111,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         PendingBondHireId = null;
         PendingSideIsland = 0;
         PendingFinaleStage = 0;
+        PendingArenaRowIdx = -1;
         PendingEndlessRift = false;
     }
 

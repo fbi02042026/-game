@@ -60,6 +60,8 @@ public static class StaminaConfirmPopup
         if (_cancelLabel != null) _cancelLabel.text = "取消";
         ApplyUnifiedTextStyle(_title, _body);   // 2026-10-24 统一排版（先设行距再算底框自适应）
         _onOk = onConfirm;
+        _okGray = false;            // 每次开窗还原置灰钩子（竞技场商店按当次余额重新决定）
+        ApplyOkGray();
         _rootPanel.SetActive(true);
         ApplyPanelFit();
         _host.transform.SetAsLastSibling();
@@ -109,6 +111,8 @@ public static class StaminaConfirmPopup
         ApplyNoticeIcon(icon);
         ApplyUnifiedTextStyle(_title, _body);   // 2026-10-24 统一排版（先设行距再算底框自适应）
         _onOk = onClose;
+        _okGray = false;            // 告知窗无置灰语义，开窗强制还原（防上次商店置灰残留）
+        ApplyOkGray();
         _rootPanel.SetActive(true);
         ApplyPanelFit(icon != null ? NoticeIconBlock : 0f);
         _host.transform.SetAsLastSibling();
@@ -283,6 +287,8 @@ public static class StaminaConfirmPopup
         _okRt = _okBtn != null ? _okBtn.transform as RectTransform : null;
         _okGeoSaved = false;   // 重建后几何要重新捕获（预制体永远是真值）
         _singleButton = false;
+        _okGray = false;       // 重建后置灰钩子一并复位（颜色快照随新实例重新捕获）
+        _okColorsSaved = false;
     }
 
     static void Wire()
@@ -310,6 +316,43 @@ public static class StaminaConfirmPopup
         var act = _onOk;
         Close();
         act?.Invoke();
+    }
+
+    // ── 确认键置灰小钩子（2026-10-30 竞技场商店）：按钮变灰但保持可点，
+    // 点击行为仍走 onOk（调用方自查条件，如积分不足 toast「积分不足」不入账）。
+    // 每次开窗自动还原（Show 里复位），预制体颜色首次使用时捕获、关窗还原，绝不改预制体（铁律 3）。
+    static bool _okGray;
+    static bool _okColorsSaved;
+    static Color _okImgColor = Color.white;
+    static Color _okLabelColor = Color.white;
+
+    /// <summary>确认键置灰（视觉变灰、不禁用）。开窗后调用；下次 Show 自动还原。</summary>
+    public static void SetOkGray(bool gray)
+    {
+        if (_okGray == gray) return;
+        _okGray = gray;
+        ApplyOkGray();
+    }
+
+    static void ApplyOkGray()
+    {
+        var img = _okBtn != null ? _okBtn.image : (_okBtn != null ? _okBtn.targetGraphic as Image : null);
+        if (img != null)
+        {
+            if (!_okColorsSaved)
+            {
+                _okImgColor = img.color;
+                _okLabelColor = _okLabel != null ? _okLabel.color : Color.white;
+                _okColorsSaved = true;
+            }
+            img.color = _okGray
+                ? new Color(0.55f, 0.55f, 0.55f, _okImgColor.a)
+                : _okImgColor;
+        }
+        if (_okLabel != null)
+            _okLabel.color = _okGray
+                ? new Color(0.78f, 0.78f, 0.78f, _okLabelColor.a)
+                : _okLabelColor;
     }
 
     static Transform FindDeep(Transform root, string name)

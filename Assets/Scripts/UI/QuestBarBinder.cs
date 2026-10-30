@@ -47,8 +47,8 @@ public class QuestBarBinder : MonoBehaviour
     float _foldEdgeX;               // 收起态贴屏左 x（收起那一刻 SnapFoldEdgeX 用世界坐标实测反推）
     /// <summary>折叠按钮收起后贴屏左的留白（按钮视觉左缘离屏幕左缘的设计像素）。</summary>
     const float FoldEdgeLeftInset = 8f;
-    /// <summary>折叠按钮整体缩放（2026-10-29 主人需求「缩小50%」+ 二轮「再缩小20%」→ 0.5×0.8=0.4；预制体不动）。</summary>
-    const float FoldButtonScale = 0.4f;
+    /// <summary>折叠按钮整体缩放（2026-10-30 主人拍板「现在的大减20%」→ 0.8，覆盖 10-29 的 0.4 口径；预制体不动）。</summary>
+    const float FoldButtonScale = 0.8f;
     int _dailyBaseSibling = -1;      // 日常行原始次序（支线行回来时还原）
     bool _collapsed;                 // 折叠态（会话内，不写存档）
     bool _appliedCollapsed, _appliedSideVisible = true;   // 上次实际套到 UI 的状态（变了才动 UI）
@@ -223,9 +223,14 @@ public class QuestBarBinder : MonoBehaviour
             _foldRt = t as RectTransform;   // 收起贴边/展开还原用（panl 空间）
             if (_foldRt != null)
             {
-                // 【2026-10-29 主人需求「缩小50%」+ 二轮「再缩小20%」】运行时整体等比缩小（预制体不动，铁律 20）。
+                // 【2026-10-30 主人拍板「现在的大减20%」→ 0.8，覆盖 10-29「缩小50%再缩20%=0.4」】运行时整体等比缩小（预制体不动，铁律 20）。
                 var sc = _foldRt.localScale;
                 _foldRt.localScale = new Vector3(sc.x * FoldButtonScale, sc.y * FoldButtonScale, sc.z);
+                // 【2026-10-30 修「点一次变大一直大」】按压反馈组件在 GuildHallUI.Awake 的 AttachUnder 时
+                // 已按 prefab 原值 1.0 捕获基准，晚于此处的缩放改不到它——首按跳 0.94、松手 Restore
+                // 冲回 1.0（＝主人报的变大）。缩放定稿后同步它的基准，按下/松手都回到 0.8。
+                var fb = _foldRt.gameObject.GetComponent<UiButtonPressFeedback>();
+                if (fb != null) fb.SyncBaseScale(_foldRt.localScale);
 
                 _foldY = _foldRt.anchoredPosition.y;
                 _foldX = _foldRt.anchoredPosition.x;   // 展开态基准 x（panl 空间），收起时改、展开时还原
@@ -409,7 +414,13 @@ public class QuestBarBinder : MonoBehaviour
 
         float parScale = _foldRt.parent != null ? _foldRt.parent.lossyScale.x : 0f;   // panl 链综合缩放
         if (parScale <= 0f) return;
-        float insetWorld = FoldEdgeLeftInset * canvas.scaleFactor;
+        // 【2026-10-30 修「收起后按钮消失」】insetWorld 的世界换算系数不能用 canvas.scaleFactor——
+        // 摄像机模式下它是「屏幕像素÷设计像素」（~0.84），不是「1 设计像素=多少世界单位」（~0.0084），
+        // 差约百倍 → shiftLocal 变成大负数 → 按钮被推出屏幕右缘（x≈910 > 720）→ 收起后“消失”。
+        // 改用画布实测（与上面 GetWorldCorners 同源）：世界宽 ÷ rect.width = 每设计像素的世界长。
+        float cvsRight = Mathf.Max(cc[0].x, Mathf.Max(cc[1].x, Mathf.Max(cc[2].x, cc[3].x)));
+        float pxWorld = (cvsRight - cvsLeft) / Mathf.Max(1f, ((RectTransform)canvas.transform).rect.width);
+        float insetWorld = FoldEdgeLeftInset * pxWorld;
         float shiftLocal = ((btnLeft - cvsLeft) - insetWorld) / parScale;   // 还差的本地位移
         _foldEdgeX = _foldRt.anchoredPosition.x - shiftLocal;
     }
@@ -438,9 +449,12 @@ public class QuestBarBinder : MonoBehaviour
         if (_rowMain == null) return;
         // 引导未完成：任务栏整条还藏着（Bind 里已 SetActive(false)），不在这里弹；
         // 等 Update 里 TutorialDone 翻转后再整栏点亮 + 补播（2026-10-29）。
-        if (!StoryProgress.TutorialDone) return;
-        _popPlayed = true;
-        StartCoroutine(CoPlayRowsPopInWhenVisible());
+        // 【2026-10-30 主人拍板方案 A】老号进场景不再自动逐行弹入：LeftBar 整列入场动效
+        // 已带着任务栏从左滑入一次，紧接着三行又弹一次 = 主人报的「任务栏播了两次动画」。
+        // 逐行弹入只保留引导完成那一刻的补播（Update 里 TutorialDone 翻转路径，一处入口）。
+        //   · 进场景时引导已完成 → 吃掉 _popPlayed 标志，绝不再弹（含后续可能的翻转）；
+        //   · 引导未完成 → _popPlayed 保持 false，等 Update 翻转补播（原逻辑不动）。
+        if (StoryProgress.TutorialDone) _popPlayed = true;
     }
 
     void OnDisable()

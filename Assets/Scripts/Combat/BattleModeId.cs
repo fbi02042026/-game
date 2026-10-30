@@ -81,5 +81,12 @@ public enum BattleModeId
     /// 该佣兵强制进玩家队伍，难度固定（不开放选择，≈5~7 章强度），一次性通关后该佣兵全属性永久 ×1.5 + 奖励钻石。
     /// 不推进主线、不掉落。入口 = 好感界面「羁绊地图」按钮（MercFavorUI.OnBondClicked 置 PendingBondDungeon）。
     /// </summary>
-    BondDungeon
+    BondDungeon,
+
+    /// <summary>
+    /// 竞技场挑战（2026-10-30 主人拍板「竞技场真战斗」）：单场战斗，胜负=真实战斗（掷骰/保底/熔断停用），
+    /// 敌方 = 机器人佣兵镜像小队（ArenaEnemySpawner 生成，替代常规怪波）；
+    /// 打赢换位+积分（无金币），打输掉分不掉名（无复活）。入口 = 竞技场弹窗「对战」（ArenaPopupUI 置 PendingArenaRowIdx）。
+    /// </summary>
+    Arena
 }

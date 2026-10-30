@@ -29,7 +29,8 @@ public class ArenaPopupUI : MonoBehaviour
     const int RowTotal = ArenaRules.BotCount + 1;   // 100 机器人 + 玩家 = 101 行
     const float RowStep = 64f;
     const float RowH = 56f;
-    const float ViewportH = 592f;
+    /// <summary>视口实际高（= 预制体 List 高，2026-10-30 框体 1000→1080 时 550→630；ScrollToPlayer 居中用）。</summary>
+    const float ViewportH = 630f;
     const float ContentH = RowTotal * RowStep + 8f;
 
     // ── 榜单行控件（行号 0=榜首 … 100=末位；玩家行下标=arenaPlayerPos）──
@@ -41,6 +42,7 @@ public class ArenaPopupUI : MonoBehaviour
     readonly GameObject[] _rowFight = new GameObject[RowTotal];   // 「对战」按钮（可挑战行显示）
     readonly GameObject[] _rowDash = new GameObject[RowTotal];    // 「—」（不可挑战行显示）
     readonly bool[] _rowIsMine = new bool[RowTotal];
+    readonly Outline[] _rowOutline = new Outline[RowTotal];   // 2026-10-30 主人拍板：滑动列表「我的那一条」加描边（运行时 Outline 组件，不用材质球）
 
     ScrollRect _scroll;
     RectTransform _content;
@@ -65,8 +67,8 @@ public class ArenaPopupUI : MonoBehaviour
 
     // 【2026-10-29 主人拍板】选职业/结果子面板节点已从预制体删除——
     // 选职业改调独立界面 PlayerJobSelectUI，结算改调战斗结果界面 BattleResultScreen（对齐现役三场景 UI）。
+    // （2026-10-30「竞技场真战斗」：结果界面由战斗结算链播，本类不再自己弹；_chosenJob 字段随掷骰链一并删除。）
 
-    PlayerJobId _chosenJob;
     int _pendingRowIdx = -1;
 
     // ── 机器人/我的档案详情（运行时建树，不进 prefab 契约；点榜单行打开）──
@@ -83,12 +85,26 @@ public class ArenaPopupUI : MonoBehaviour
     // ── 排行奖励面板（2026-10-29 深夜主人拍板：节点已搭进主预制体，自带 Dim 黑底；代码只管开关）──
     GameObject _rewardRoot;
 
+    // ── 竞技商店（2026-10-30 积分版：主人手摆 Top/竞技商店Btn 开关「竞技商店」页；
+    // 页内 RecordsBox（689×739）+ 底框/积分icon(余额)/RTitle/RCloseBtn/商品（示例单元）。
+    // 商品单元按需求收敛为「图标+积分价格」：克隆排格 4×2，横条/商品名(1)/购买 三件多余节点克隆里隐藏，
+    // 示例单元本体恒隐藏（同 RowTemplate 口径）。排版不改 prefab，全部运行时摆（铁律 3）。──
+    const string ShopBtnName = "竞技商店Btn";
+    const string ShopPageName = "竞技商店";
+    GameObject _shopRoot;
+    RectTransform _shopBox;          // 页内 RecordsBox（货架格子容器）
+    GameObject _shopUnitTemplate;    // 「商品」示例单元（克隆源，恒隐藏）
+    Text _shopBalanceText;           // 积分icon 下的余额数字
+    Text _shopBannerText;            // 赛季末清零横幅（运行时建，最后 3 天显示）
+    readonly List<GameObject> _shopUnits = new List<GameObject>();   // 8 个克隆单元（下标对齐 ArenaShopGoods.AllGoods）
+
     // 行底色（运行时在克隆与换位时写；预制体里摆的同款色只是初始观感）
     readonly Color _panelColor = new Color(0.13f, 0.12f, 0.18f, 0.97f);   // 详情弹窗盒子底
     readonly Color _btnSlate = new Color(0.35f, 0.36f, 0.45f, 1f);        // 详情弹窗关闭钮
     readonly Color _rowColorA = new Color(0.21f, 0.20f, 0.28f, 0.95f);
     readonly Color _rowColorB = new Color(0.25f, 0.24f, 0.33f, 0.95f);
     readonly Color _rowMine = new Color(0.42f, 0.32f, 0.13f, 0.97f);
+    readonly Color _rowOutlineGold = new Color(1f, 0.80f, 0.35f, 1f);   // 玩家行描边色（金色）
     readonly Color _txtSub = new Color(0.75f, 0.75f, 0.80f, 1f);
     readonly Color _txtGold = new Color(1f, 0.80f, 0.35f, 1f);
 
@@ -146,6 +162,7 @@ public class ArenaPopupUI : MonoBehaviour
         if (canvas != null) UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.TownPopup);
 
         gameObject.SetActive(true);
+        FitBackdrop();   // 背景等比铺满：父级实际矩形此刻才算得出（2026-10-30 主人拍板）
         Refresh();
         ScrollToPlayer();
         if (_noticeText != null)
@@ -160,8 +177,60 @@ public class ArenaPopupUI : MonoBehaviour
         if (_detailRoot != null) _detailRoot.SetActive(false);
         if (_recordsRoot != null) _recordsRoot.SetActive(false);
         if (_rewardRoot != null) _rewardRoot.SetActive(false);
+        if (_shopRoot != null) _shopRoot.SetActive(false);   // 商店页一并收起（关弹窗不留残页）
         _pendingRowIdx = -1;
         gameObject.SetActive(false);
+    }
+
+    // ── 顶部一排（2026-10-30 主人拍板「对战次数/对战记录/排行奖励移出弹窗放到顶部一排」）──
+    // 五个节点（TriesText 是 Panel 下的独立兄弟节点，必须跟胶囊一起挪）从 Panel reparent 到 Root
+    //（Root 全屏 stretch 且与 Panel 同中心 → x 保持原值即保持主人原横排），纵位统一 TopBarY：
+    // Panel 顶边 +570、标题横幅底 +516 → 一排按钮顶 +508，整排悬在金框外、标题之下，互不重叠。
+    // ⚠ 预制体不动（先例：BuildRewardPanel 的 ApplyFillScreen 运行时改锚）——主人改 prefab 里这几颗的
+    // 图/字号照常生效，位置与父级以这里的运行时摆位为准；要固进 prefab 等验收后再说。
+    // 已把 "ArenaPopupUI" 加进 UiLayoutStretch.IndividuallyFitted（2026-10-30 主人反馈小分辨率
+    // 金框挡住顶部一排）：ApplyVerticalSplit/EnsureFitBackdrop 整块跳过本弹窗，五节点恒为中心锚
+    // y=450，与居中的 Panel/标题相对位置任何分辨率恒定（逻辑高恒 >=1280，金框顶 570 永在按钮顶
+    // 508 之上 62px，挡不住）。
+    /// <summary>顶部一排纵位（Root 本地、中心锚；Panel 顶 570 / 标题底 516 → 450 不撞任何元素）。</summary>
+    const float TopBarY = 450f;
+
+    /// <summary>移到顶部一排的节点（x 顺序即主人原横排：次数胶囊、次数数字、广告+2、对战记录、排行奖励）。</summary>
+    static readonly string[] TopBarNodes = { "TriesCapsule", "TriesText", "AdBonusBtn", RecordBtnName, "RewardBtn" };
+
+    void MoveTopBar()
+    {
+        // 【2026-10-30 主人已在预制体手摆 Top 节点：五节点归入其下（Top 贴顶锚 0.5,1 / pivot 顶中、
+        // 位置主人自调），金框改高 1140→1000】代码完全让位——有 Top 就一个节点都不碰
+        //（位置/父级/层级全以预制体为准，铁律 9）。自适应已实测闭环：Top 距屏顶恒定，金框顶距顶
+        // 最矮情形（逻辑高 1280）=140 > 按钮底 133，任何分辨率都不遮挡。
+        // 下面的运行时挪只剩「预制体还没有 Top」的兜底职责（正常永远走不到）。
+        if (UiFind.Deep(transform, "Top") != null) return;   // 全 prefab 唯一（2026-10-30 实测），不会误命中
+        var root = UiFind.Deep(transform, "Root");
+        if (root == null)
+        {
+            Debug.LogError("[Arena] 预制体缺节点：Root（顶部一排挪不动，留在弹窗内）");
+            return;
+        }
+        var panel = UiFind.Deep(root, "Panel");   // 主面板（Root 子树内第一个 Panel；奖励面板的 Panel 在根下另一子树）
+        // 插入点 = Panel 之后，且不低于主 Dim（背景必须在顶部一排之下）；记录/奖励面板在更后，打开时照常盖住顶部
+        int insert = panel != null ? panel.GetSiblingIndex() + 1 : root.childCount;
+        var dimT = UiFind.Deep(root, "Dim");
+        if (dimT != null) insert = Mathf.Max(insert, dimT.GetSiblingIndex() + 1);
+        for (int i = 0; i < TopBarNodes.Length; i++)
+        {
+            var t = UiFind.Deep(root, TopBarNodes[i]);
+            if (t == null)
+            {
+                Debug.LogError($"[Arena] 预制体缺节点：{TopBarNodes[i]}（顶部一排少一件，留在原位）");
+                continue;
+            }
+            t.SetParent(root, false);   // 保持本地值（Panel 与 Root 同中心，x 语义不变）
+            var rt = (RectTransform)t;
+            var p = rt.anchoredPosition;
+            rt.anchoredPosition = new Vector2(p.x, TopBarY);   // 只改 y；x 保持主人原横排
+            t.SetSiblingIndex(insert++);
+        }
     }
 
     // ───────────────────────── 绑定（按节点名，契约见 ArenaPopupPrefabBuilder.cs） ─────────────────────────
@@ -239,6 +308,27 @@ public class ArenaPopupUI : MonoBehaviour
         }
         else { _bindFailed = true; Debug.LogError("[Arena] 预制体缺节点：" + RecordBtnName + "（对战记录按钮）"); }
 
+        // 竞技商店入口（2026-10-30 主人手摆 Top/竞技商店Btn）：开关「竞技商店」页
+        var shopBtnT = UiFind.Deep(transform, ShopBtnName);
+        if (shopBtnT != null)
+        {
+            var shopBtn = shopBtnT.GetComponent<Button>();
+            if (shopBtn == null) shopBtn = shopBtnT.gameObject.AddComponent<Button>();
+            shopBtn.onClick.AddListener(ShowShop);
+        }
+        else { _bindFailed = true; Debug.LogError("[Arena] 预制体缺节点：" + ShopBtnName + "（竞技商店按钮）"); }
+
+        // 主弹窗右上 ×（预制体 CloseBtn）→ Close()。2026-10-30 主人报「点击关闭弹窗无反应」：
+        // Close() 一直都在（收子面板 + 藏整弹窗），但这颗钮从来没绑过事件——补上（缺节点按铁律报错）。
+        var mainCloseT = UiFind.Deep(transform, "CloseBtn");
+        if (mainCloseT != null)
+        {
+            var mainCloseBtn = mainCloseT.GetComponent<Button>();
+            if (mainCloseBtn == null) mainCloseBtn = mainCloseT.gameObject.AddComponent<Button>();
+            mainCloseBtn.onClick.AddListener(Close);
+        }
+        else { _bindFailed = true; Debug.LogError("[Arena] 预制体缺节点：CloseBtn（主弹窗关闭钮）"); }
+
         // 前三领奖台（卡内同名子节点从各自卡根搜；点卡 → 详情）
         for (int r = 0; r < 3; r++)
         {
@@ -274,6 +364,8 @@ public class ArenaPopupUI : MonoBehaviour
         BuildBotDetail();   // 详情弹窗运行时建树（点榜单行打开；不进 prefab 契约，主人改预制体不受影响）
         BuildRecords();       // 对战记录弹窗：绑定主预制体里已有的 ArenaBattleRecords 节点
         BuildRewardPanel();   // 排行奖励面板：绑定主预制体里已有的 EvacuateConfirmPopup 节点（自带 Dim 黑底）
+        BuildShop();          // 竞技商店页：绑定主人手摆的「竞技商店」节点 + 克隆商品单元排格（不进 prefab）
+        MoveTopBar();         // 顶部一排：对战次数/对战记录/排行奖励移出弹窗（2026-10-30 主人拍板）
 
         ArenaRules.Changed += Refresh;
     }
@@ -362,6 +454,12 @@ public class ArenaPopupUI : MonoBehaviour
             if (rowBtn == null) rowBtn = row.AddComponent<Button>();
             rowBtn.targetGraphic = rowImg;
             rowBtn.onClick.AddListener(() => ShowDetailForRow(idx));
+            // 2026-10-30 主人拍板：玩家行描边（金色 Outline，随 Refresh 里玩家行开关启停）
+            var ol = row.AddComponent<Outline>();
+            ol.effectColor = _rowOutlineGold;
+            ol.effectDistance = new Vector2(3f, 3f);
+            ol.enabled = false;
+            _rowOutline[i] = ol;
         }
     }
 
@@ -380,6 +478,10 @@ public class ArenaPopupUI : MonoBehaviour
     // prefab 里只摆布局（TitleImg/TriesCapsule/RankBadge 节点的位置尺寸），图全部在这里给。
 
     const string ArtDir = "UI/Art/对战/";
+    /// <summary>弹窗背景图（Dim 层，2026-10-30 主人拍板用「梦幻浮空城堡像素舞台」）：等比缩放铺满 + 降亮度。</summary>
+    const string BackdropArtFile = "梦幻浮空城堡像素舞台";
+    /// <summary>背景亮度系数（1=原图；主人 2026-10-30「亮度可以降点」）。</summary>
+    const float BackdropBrightness = 0.72f;
     static readonly Dictionary<string, Sprite> ArtCache = new Dictionary<string, Sprite>();
 
     /// <summary>整图精灵（可选 9-slice 边框，单位像素）。缺图 LogError 不兜底。</summary>
@@ -448,6 +550,51 @@ public class ArenaPopupUI : MonoBehaviour
         }
         var myIcon = UiFind.Deep(transform, "MyPtsIcon")?.GetComponent<Image>();
         if (myIcon != null) myIcon.sprite = LoadIcon("积分");
+
+        // 弹窗背景（Dim，层级在 Panel 后面）：prefab 引用已死链（对战美术 56 字符重签）→ 按路径加载
+        var dimImg = UiFind.Deep(transform, "Dim")?.GetComponent<Image>();
+        if (dimImg != null)
+        {
+            var bgTex = Resources.Load<Texture2D>(ArtDir + BackdropArtFile);
+            if (bgTex == null)
+                Debug.LogError($"[Arena] 弹窗背景图缺失：Resources/{ArtDir}{BackdropArtFile}");
+            else
+            {
+                dimImg.sprite = Sprite.Create(bgTex, new Rect(0f, 0f, bgTex.width, bgTex.height), new Vector2(0.5f, 0.5f), 100f);
+                dimImg.color = new Color(BackdropBrightness, BackdropBrightness, BackdropBrightness, 1f);   // 亮度降点
+            }
+        }
+        else Debug.LogError("[Arena] 预制体缺节点：Dim（弹窗背景层）");
+
+        // 两颗入口按钮 prefab 引用同样死链，素材目录里有现成图 → 路径补上（预制体已 preserveAspect，不变形）
+        var recBtnImg = UiFind.Deep(transform, RecordBtnName)?.GetComponent<Image>();
+        if (recBtnImg != null) recBtnImg.sprite = LoadArt("_0004_对战记录");
+        var rewardBtnImg = UiFind.Deep(transform, "RewardBtn")?.GetComponent<Image>();
+        if (rewardBtnImg != null) rewardBtnImg.sprite = LoadArt("_0005_排行奖励");
+    }
+
+    /// <summary>
+    /// 背景等比缩放铺满（cover）：按父级实际矩形取 max 缩放系数——只等比、绝不拉伸变形，
+    /// 多出屏幕的部分溢出裁掉。每次打开时重算（画布实际尺寸此时才有效，也兼容不同机型长宽比）。
+    /// </summary>
+    void FitBackdrop()
+    {
+        var dim = UiFind.Deep(transform, "Dim");
+        var img = dim != null ? dim.GetComponent<Image>() : null;
+        if (img == null || img.sprite == null) return;
+        var parent = img.rectTransform.parent as RectTransform;
+        if (parent == null) return;
+        Canvas.ForceUpdateCanvases();   // 布局先算好，父级 rect 才是实际值
+        float pw = parent.rect.width, ph = parent.rect.height;
+        if (pw <= 0f || ph <= 0f) return;
+        float k = Mathf.Max(pw / img.sprite.rect.width, ph / img.sprite.rect.height);
+        var rt = img.rectTransform;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.localScale = Vector3.one;
+        rt.sizeDelta = new Vector2(img.sprite.rect.width * k, img.sprite.rect.height * k);
     }
 
     // ───────────────────────── 交互 / 刷新 ─────────────────────────
@@ -455,6 +602,8 @@ public class ArenaPopupUI : MonoBehaviour
     void OnChallengeClicked(int rowIdx)
     {
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        // 【2026-10-30 排查日志】主人报「挑战无反应」三次未定位 → 链路每一步都出声（铁律 12：错误要让我看见）
+        Debug.Log($"[Arena] 点「对战」row={rowIdx} 我方位次={data?.arenaPlayerPos} 可挑战={(data != null && ArenaRules.IsChallengeable(data, rowIdx))} 剩次数={(data != null ? ArenaRules.TriesLeft(data) : -1)}");
         if (data == null) return;
         if (!ArenaRules.IsChallengeable(data, rowIdx)) return;
         if (ArenaRules.TriesLeft(data) <= 0)
@@ -465,7 +614,13 @@ public class ArenaPopupUI : MonoBehaviour
         _pendingRowIdx = rowIdx;
         // 2026-10-29 主人拍板：选职业直接调独立界面（prefab 里的 JobSelect 节点已删）。
         // PlayerJobSelectUI 在回调前会 PlayerJobDefs.SetSelected(选中职业)，回调里凭 GetSelected() 取回。
-        PlayerJobSelectUI.Show(OnArenaJobPicked);
+        // 【2026-10-30 主人拍板】按钮文案=「挑战」；StaminaFree=对战不查体力（对战走次数）——
+        // 不传的话体力<5 时会被冒险体力闸门拦下，表现为「点击无反应」（主人实测踩坑）。
+        PlayerJobSelectUI.Show(OnArenaJobPicked, new PlayerJobSelectUI.Options
+        {
+            EnterLabel = "进入挑战",
+            StaminaFree = true,
+        });
     }
 
     /// <summary>PlayerJobSelectUI「进入」回调：取回刚选的职业走竞技场挑战流程。</summary>
@@ -479,37 +634,28 @@ public class ArenaPopupUI : MonoBehaviour
         int rowIdx = _pendingRowIdx;
         _pendingRowIdx = -1;
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-        if (data == null || rowIdx < 0) return;
-        if (!ArenaRules.IsChallengeable(data, rowIdx)) return;
-        if (!ArenaRules.TryConsumeChallenge()) return;
-
-        _chosenJob = job;
-        // 挑战目标都在玩家上方：榜单行号 == 机器人列表下标；先抓引用（换位后对象不变，名字/头像照用）
-        var bot = data.arenaBots[rowIdx];
-        int pts, gold, powerDelta;
-        bool won = ArenaRules.ResolveChallenge(data, rowIdx, out pts, out gold, out powerDelta);
-        if (bot == null) return;
-        ShowResult(won, pts, gold, powerDelta);
-        Refresh();
-        ScrollToPlayer();
-    }
-
-    /// <summary>
-    /// 竞技场结算：直接调战斗结果界面（2026-10-29 主人拍板「结果面板用以前的」——prefab 里的 Result 节点已删）。
-    /// stats 传 null（竞技场没有本局 BattleRunStats，奖励格不上）；battleSceneOnly=false 允许城镇场景弹。
-    /// 界面收掉后用 toast 补积分/金币/战力明细（旧 Result 面板的信息量不丢）。
-    /// </summary>
-    void ShowResult(bool won, int pts, int gold, int powerDelta)
-    {
-        BattleResultScreen.Show(won, null, () =>
+        if (data == null || rowIdx < 0)
         {
-            string ptsPart = won ? $"+{pts} 积分" : $"{pts} 积分";   // 输了 pts 为负（掉积分）
-            string goldPart = won ? $"　金币 +{gold}" : "";
-            string powerPart = powerDelta >= 0
-                ? $"<color=#{ColorUtility.ToHtmlStringRGB(RarityPalette.PowerGain)}>战力 +{powerDelta}</color>"
-                : $"<color=#{ColorUtility.ToHtmlStringRGB(RarityPalette.PowerLoss)}>战力 {powerDelta}</color>";
-            GlobalToastUI.Show(ptsPart + goldPart + "　" + powerPart, !won);
-        }, battleSceneOnly: false);
+            Debug.LogError($"[Arena] 挑战回调被拦：data={(data == null ? "空" : "有")} rowIdx={rowIdx} 职业={job}（异常，报主人）");
+            return;
+        }
+        if (!ArenaRules.IsChallengeable(data, rowIdx))
+        {
+            Debug.LogError($"[Arena] 挑战回调被拦：row={rowIdx} 不可挑战（我方位次 {data.arenaPlayerPos}）——点按钮时明明可挑战，异常，报主人");
+            return;
+        }
+        if (!ArenaRules.TryConsumeChallenge()) return;   // 次数不足自带 toast，可见
+
+        // 【2026-10-30 主人拍板「竞技场真战斗」】不再掷骰直出结果（原 ResolveChallenge/ShowResult 链已删）：
+        // 快照对手上下文 → 立进本旗标 → 关弹窗（DDOL 弹窗不许带进战斗场景）→ 进战斗场景。
+        // 胜负由真战斗决定，结算走战斗侧（胜利=FinishStageAfterPortalReached 统一门 / 失败=死亡链 →
+        // ArenaRules.ApplyBattleOutcome），原面板 + 积分格 / 失败只有图 + 扣分 toast。
+        ArenaRules.PrepareChallenge(data, rowIdx);
+        // 进本标记照 AdventureUI.EnterAfterJobSelect「先全清再立标记」口径（ResetPendingFlags 在前，防被清掉）
+        AdventureUI.ResetPendingFlags();
+        AdventureUI.PendingArenaRowIdx = rowIdx;
+        Close();
+        GameSceneManager.Instance?.LoadBattleScene();
     }
 
     void Refresh()
@@ -521,17 +667,17 @@ public class ArenaPopupUI : MonoBehaviour
 
         int pos = Mathf.Clamp(data.arenaPlayerPos, 0, RowTotal - 1);
         int left = ArenaRules.TriesLeft(data);
-        int total = ArenaRules.DailyTries + data.arenaAdViewsToday * ArenaRules.AdBonusTries;
-        int myPower = ArenaRules.GetPlayerPower(data);
+        // 2026-10-30 主人拍板：对战次数不要字，只显示剩余数字（「对战次数」已烤在胶囊图上）；看广告 +2 累加、跨天清零回 10（口径不变）
+        string myName = StoryProgress.GetPlayerName();   // 2026-10-30 主人拍板：榜单/领奖台一律用玩家起的名字（StoryProgress.GetPlayerName 唯一出口），不再写死「我」
 
-        if (_triesText != null) _triesText.text = $"对战次数 {left}/{total}";
+        if (_triesText != null) _triesText.text = left.ToString();   // 只显示剩余次数（2026-10-30 主人拍板）
         if (_adBtnText != null)
             _adBtnText.text = data.arenaAdViewsToday >= ArenaRules.AdViewCapPerDay ? "已满" : $"+{ArenaRules.AdBonusTries}";
 
         // 我的排名条
         if (_myRankText != null) _myRankText.text = $"我的排名 第{pos + 1}名";
-        if (_myName != null) _myName.text = "我";
-        if (_myPtsText != null) _myPtsText.text = myPower.ToString();
+        if (_myName != null) _myName.text = myName;
+        if (_myPtsText != null) _myPtsText.text = data.arenaPoints.ToString();   // 显示赛季积分（原误填战力估计，2026-10-30 主人拍板）
         if (_myHead != null)
         {
             var sp = MercPortraitSprites.GetHead("player");
@@ -539,12 +685,12 @@ public class ArenaPopupUI : MonoBehaviour
             if (sp == null) Debug.LogError("[Arena] 玩家头像加载失败：player");
         }
 
-        // 前三领奖台：排名 r 的实体 = r-1 < pos ? 机器人[listIdx=r-1] : 玩家
+        // 前三领奖台：排名 r 的实体 =（r-1 == pos ? 玩家 : 机器人[r-1]）；2026-10-30 修复：旧判断 idx<pos 把玩家刷满前三
         var cardColors = new[] { Color.white, Color.white, Color.white };   // 卡图自带金银铜（2026-10-29 换图后不再 tint）
         for (int r = 1; r <= 3; r++)
         {
             int idx = r - 1;
-            bool isMe = idx < pos;
+            bool isMe = idx == pos;   // 2026-10-30 修复：只有玩家自己那一名的卡显示玩家（旧判断 idx<pos 导致前三名全是「我」）
             var bot = !isMe && idx < data.arenaBots.Count ? data.arenaBots[idx] : null;
             int i = r - 1;
             if (_podRank[i] != null)
@@ -554,8 +700,8 @@ public class ArenaPopupUI : MonoBehaviour
             }
             if (isMe)
             {
-                if (_podName[i] != null) _podName[i].text = "我";
-                if (_podPts[i] != null) _podPts[i].text = myPower.ToString();
+                if (_podName[i] != null) _podName[i].text = myName;
+                if (_podPts[i] != null) _podPts[i].text = data.arenaPoints.ToString();
                 if (_podHead[i] != null)
                 {
                     var sp = MercPortraitSprites.GetHead("player");
@@ -566,7 +712,7 @@ public class ArenaPopupUI : MonoBehaviour
             else if (bot != null)
             {
                 if (_podName[i] != null) _podName[i].text = bot.name;
-                if (_podPts[i] != null) _podPts[i].text = ArenaRules.GetBotPower(data, idx).ToString();
+                if (_podPts[i] != null) _podPts[i].text = bot.points.ToString();   // 显示赛季积分（原误填战力，2026-10-30 主人拍板）
                 if (_podHead[i] != null)
                 {
                     var sp = MercPortraitSprites.GetHead("H" + bot.avatar.ToString("D3"));
@@ -594,14 +740,15 @@ public class ArenaPopupUI : MonoBehaviour
                 {
                     var img = _rowRoots[i].GetComponent<Image>();
                     if (img != null) img.color = isPlayer ? _rowMine : (i % 2 == 0 ? _rowColorA : _rowColorB);
+                    if (_rowOutline[i] != null) _rowOutline[i].enabled = isPlayer;   // 描边只挂在玩家那一条（2026-10-30 主人拍板）
                 }
             }
 
             if (_rowRank[i] != null) _rowRank[i].text = (i + 1).ToString();
             if (isPlayer)
             {
-                if (_rowName[i] != null) _rowName[i].text = "我";
-                if (_rowPts[i] != null) _rowPts[i].text = myPower.ToString();
+                if (_rowName[i] != null) _rowName[i].text = myName;
+                if (_rowPts[i] != null) _rowPts[i].text = data.arenaPoints.ToString();
                 if (_rowHead[i] != null)
                 {
                     var sp = MercPortraitSprites.GetHead("player");
@@ -612,7 +759,7 @@ public class ArenaPopupUI : MonoBehaviour
             else
             {
                 if (_rowName[i] != null) _rowName[i].text = bot.name;
-                if (_rowPts[i] != null) _rowPts[i].text = ArenaRules.GetBotPower(data, listIdx).ToString();
+                if (_rowPts[i] != null) _rowPts[i].text = bot.points.ToString();   // 显示赛季积分（原误填战力，2026-10-30 主人拍板）
                 if (_rowHead[i] != null)
                 {
                     var sp = MercPortraitSprites.GetHead("H" + bot.avatar.ToString("D3"));
@@ -626,6 +773,8 @@ public class ArenaPopupUI : MonoBehaviour
             if (_rowFight[i] != null) _rowFight[i].SetActive(canFight);
             if (_rowDash[i] != null) _rowDash[i].SetActive(!canFight);
         }
+
+        RefreshShop();   // 商店页余额/价格/清零横幅随 Changed 同步（积分变化/购买后即时刷新）
     }
 
     /// <summary>把玩家行滚到视口中间。</summary>
@@ -653,6 +802,267 @@ public class ArenaPopupUI : MonoBehaviour
     void CloseReward()
     {
         if (_rewardRoot != null) _rewardRoot.SetActive(false);
+    }
+
+    // ───────────────────────── 竞技商店（2026-10-30 积分版） ─────────────────────────
+    // 页面结构（主人手摆，名字/层级可改、美术排版保持原样）：
+    // 竞技商店(全屏页) > RecordsBox(689×739) > 底框 / RTitle / 积分icon>Text(余额) / RCloseBtn / 商品(示例单元)
+    // 商品单元收敛为「图标+积分价格」：克隆时隐藏 横条 / 商品名 (1) / 购买 三件多余节点（需求①）。
+    // 货架 8 件 = ArenaShopGoods.AllGoods（1 弓 + 3 佣兵 + 1 金币包 + 3 徽记包），4 列 × 2 行克隆排格。
+
+    /// <summary>格子布局：4 列 × 2 行（RecordsBox 689 宽内 165 步进不溢出，行位避开顶部标题区/余额行）。</summary>
+    const int ShopCols = 4;
+    const float ShopStepX = 165f;
+    const float ShopStepY = 140f;
+    const float ShopGridY0 = 40f;    // 首行中心 y（RecordsBox 中心锚；第二行 -100）
+
+    void BuildShop()
+    {
+        if (_shopRoot != null) return;
+        var pageT = UiFind.Deep(transform, ShopPageName);
+        if (pageT == null)
+        {
+            Debug.LogError("[Arena] 预制体缺节点：" + ShopPageName + "（竞技商店页）");
+            _bindFailed = true;
+            return;
+        }
+        _shopRoot = pageT.gameObject;
+
+        // 页根自带 Button（点空白关页，同对战记录面板 Dim 口径）——只在实例上接线，不改预制体
+        var pageBtn = pageT.GetComponent<Button>();
+        if (pageBtn != null) pageBtn.onClick.AddListener(CloseShop);
+
+        var boxT = UiFind.Deep(pageT, "RecordsBox");
+        if (boxT == null)
+        {
+            Debug.LogError("[Arena] 商店页缺节点：RecordsBox（货架容器）");
+            _bindFailed = true;
+            return;
+        }
+        _shopBox = (RectTransform)boxT;
+
+        // 关闭钮：页内搜索（对战记录面板也有同名 RCloseBtn，不能全树搜）
+        var closeT = UiFind.Deep(pageT, "RCloseBtn");
+        var closeBtn = closeT != null ? closeT.GetComponent<Button>() : null;
+        if (closeBtn != null) closeBtn.onClick.AddListener(CloseShop);
+        else { Debug.LogError("[Arena] 商店页缺节点：RCloseBtn（或无 Button）"); _bindFailed = true; }
+
+        // 余额：积分icon 下的数字文本（订阅 ArenaRules.Changed → Refresh → RefreshShop 即时刷新）
+        var balT = UiFind.Deep(pageT, "积分icon");
+        _shopBalanceText = balT != null ? balT.GetComponentInChildren<Text>(true) : null;
+        if (_shopBalanceText == null)
+        {
+            Debug.LogError("[Arena] 商店页缺节点：积分icon/Text（积分余额显示）");
+            _bindFailed = true;
+        }
+
+        BuildShopBanner();
+        BuildShopUnits();
+        _shopRoot.SetActive(false);   // 运行时接线建树完成即藏（红线：Build 末尾 SetActive(false)）
+    }
+
+    /// <summary>赛季末清零横幅（§四.5：最后 3 天挂一句文案；运行时建树，不动 prefab）。</summary>
+    void BuildShopBanner()
+    {
+        var t = UiFactory.NewTextColored(_shopBox, "SeasonClearBanner", "", 24, TextAnchor.MiddleCenter, _txtGold);
+        var rt = t.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, -196f);
+        rt.sizeDelta = new Vector2(560f, 34f);
+        t.gameObject.SetActive(false);
+        _shopBannerText = t;
+    }
+
+    void BuildShopUnits()
+    {
+        if (_shopUnitTemplate != null || _shopBox == null) return;
+        var unitT = UiFind.Deep(_shopBox, "商品");
+        if (unitT == null)
+        {
+            Debug.LogError("[Arena] 商店页缺节点：商品（示例单元，克隆源）");
+            _bindFailed = true;
+            return;
+        }
+        _shopUnitTemplate = unitT.gameObject;
+        _shopUnitTemplate.SetActive(false);   // 模板恒隐藏（防手滑；同 RowTemplate 口径）
+
+        for (int i = 0; i < ArenaShopGoods.AllGoods.Length; i++)
+        {
+            var good = ArenaShopGoods.AllGoods[i];
+            var row = Object.Instantiate(_shopUnitTemplate, _shopBox);
+            row.name = "ShopUnit_" + good.id;
+            row.SetActive(true);
+            var rt = (RectTransform)row.transform;
+            int col = i % ShopCols;
+            int r = i / ShopCols;
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(
+                ((col - (ShopCols - 1) * 0.5f) * ShopStepX),
+                ShopGridY0 - r * ShopStepY);
+            rt.localScale = Vector3.one;
+            _shopUnits.Add(row);
+
+            // 需求①：货架只放「图标 + 积分价格」——示例单元里多余的 横条/商品名 (1)/购买 隐藏
+            HideChild(row.transform, "横条");
+            HideChild(row.transform, "商品名 (1)");
+            HideChild(row.transform, "购买");
+
+            // 需求②（2026-10-30 16:55 主人拍板「已经有的就按有的效果来」）：prefab 已给图 → 原样用不覆盖；
+            // 现状未给（空 Image）→ 按说明来：佣兵用 MercHireSession.LoadRarityFrame（头像框档），
+            // 其余（弓/金币/徽记）按稀有度选同套底框。上一轮用的 LoadTavernCardFrame（204×248 卡框）弃用。
+            var frameImg = UiFind.Deep(row.transform, "商品图框")?.GetComponent<Image>();
+            if (frameImg != null && frameImg.sprite == null)   // 有图不覆盖（prefab 摆的优先）
+            {
+                var frameSp = MercHireSession.LoadRarityFrame(good.frameRarity);
+                if (frameSp == null)
+                    Debug.LogError($"[Arena] 稀有度底框缺失：UI/Recruit/frame_*（{good.frameRarity}，商品 {good.id}，底框留空可见）");
+                else
+                {
+                    frameImg.sprite = frameSp;
+                    frameImg.preserveAspect = true;
+                }
+            }
+
+            // 图标内容：弓=模板图标 / 佣兵=头像 / 金币=icon_gold / 徽记=职业徽记（缺图 LogError 不兜底）
+            var iconImg = UiFind.Deep(row.transform, "icon")?.GetComponent<Image>();
+            if (iconImg != null)
+            {
+                var sp = ShopIconFor(good);
+                if (sp == null)
+                    Debug.LogError($"[Arena] 商品图标缺失：{good.id}（不兜底，格内留灰块可见）");
+                else
+                {
+                    iconImg.sprite = sp;
+                    iconImg.preserveAspect = true;
+                }
+            }
+
+            // 点单元 → 购买/取消确认框（走 StaminaConfirmPopup 通用弹窗，禁手搓第二套）
+            var btn = row.GetComponent<Button>();
+            if (btn == null) btn = row.AddComponent<Button>();
+            var captured = good;
+            btn.onClick.AddListener(() => OnShopUnitClicked(captured));
+        }
+    }
+
+    static void HideChild(Transform root, string name)
+    {
+        var t = UiFind.Deep(root, name);
+        if (t != null) t.gameObject.SetActive(false);
+    }
+
+    /// <summary>商品图标按货架类型取图（缺图返回 null 由调用方 LogError）。</summary>
+    static Sprite ShopIconFor(ArenaShopGoods.Good good)
+    {
+        switch (good.kind)
+        {
+            case ArenaShopGoods.GoodKind.Bow:
+                return ArenaShopGoods.BowIcon();
+            case ArenaShopGoods.GoodKind.Merc:
+            {
+                var sp = MercPortraitSprites.GetHead(good.hireId);
+                if (sp == null) Debug.LogError("[Arena] 佣兵头像加载失败：" + good.hireId);
+                return sp;
+            }
+            case ArenaShopGoods.GoodKind.Gold:
+            {
+                var sp = CommonIconSprites.Load("icon_gold");
+                if (sp == null) Debug.LogError("[Arena] 金币图标缺失：CommonIconSprites/icon_gold");
+                return sp;
+            }
+            case ArenaShopGoods.GoodKind.Badge:
+            {
+                var sp = MercGrowSprites.LoadJobBadge(good.badgeJobKey, good.frameRarity);
+                if (sp == null) Debug.LogError($"[Arena] 职业徽记加载失败：{good.badgeJobKey}/{good.badgeTier}");
+                return sp;
+            }
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>点商品 → 确认弹窗（标题=商品名；正文=价格/效果/已拥有说明）。置灰两档（键仍可点，点击 toast 不入账）：
+    /// ① 积分不足 → toast「积分不足」；② 佣兵满星（2026-10-30 16:45 拍板「佣兵满星购买按钮变灰」）
+    /// → toast「已满星，先拿碎片去升星吧」（TryBuy 既有拦截，不扣分）。</summary>
+    void OnShopUnitClicked(ArenaShopGoods.Good good)
+    {
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null) return;
+        int price = ArenaShopGoods.PriceOf(data, good);
+        bool afford = data.arenaPoints >= price;
+        // 需求⑥：佣兵满星 → 购买键同积分不足样式置灰（判定口径与 TryBuy 拦截同源：OutStarOf ≥ MaxOutStar）
+        bool fullStar = good.kind == ArenaShopGoods.GoodKind.Merc
+            && ArenaShopGoods.IsOwned(data, good)
+            && MercStarSystem.OutStarOf(good.hireId) >= MercStarDefs.MaxOutStar;
+        // 弹窗正文追加周限进度（周限商品），让玩家知道还剩几次
+        string body = good.BuildConfirmBody(data);
+        if (good.weeklyLimit > 0)
+            body += $"\n本周已购 {ArenaShopGoods.WeekBuyCount(data, good.id)}/{good.weeklyLimit} 次";
+        StaminaConfirmPopup.Show(good.DisplayName, body, "购买", () =>
+        {
+            var d2 = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+            if (d2 == null) return;
+            if (d2.arenaPoints < ArenaShopGoods.PriceOf(d2, good))
+            {
+                GlobalToastUI.Show("积分不足");   // 置灰键被点：只提示不入账（余额没动）
+                return;
+            }
+            ArenaShopGoods.TryBuy(good.id, out string msg);   // 满星拦截在 TryBuy 内（toast 已有，不扣分）
+            if (!string.IsNullOrEmpty(msg)) GlobalToastUI.Show(msg, true);
+            RefreshShop();
+        });
+        if (!afford || fullStar) StaminaConfirmPopup.SetOkGray(true);
+    }
+
+    void ShowShop()
+    {
+        if (_shopRoot == null) return;
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        ArenaRules.EnsurePeriods(data);   // 幂等：跨天/跨月对齐（顺带注册逐风长弓模板）
+        _shopRoot.SetActive(true);
+        _shopRoot.transform.SetAsLastSibling();
+        RefreshShop();
+    }
+
+    void CloseShop()
+    {
+        if (_shopRoot != null) _shopRoot.SetActive(false);
+    }
+
+    /// <summary>商店页刷新：余额（订阅 Changed 即时刷新）+ 清零横幅 + 各格价格/买断变灰。</summary>
+    void RefreshShop()
+    {
+        if (_shopRoot == null) return;
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null) return;
+        ArenaShopGoods.EnsureWeek(data);
+
+        if (_shopBalanceText != null) _shopBalanceText.text = data.arenaPoints.ToString();
+
+        // 赛季末清零横幅：最后 3 天挂「本赛季积分 X 日后清零」（§四.5）
+        if (_shopBannerText != null)
+        {
+            int left = ArenaShopGoods.DaysBeforeSeasonClear();
+            bool show = left <= 3;
+            _shopBannerText.gameObject.SetActive(show);
+            if (show)
+                _shopBannerText.text = left <= 0
+                    ? "赛季最后一天！积分明天清零，速花！"
+                    : $"本赛季积分 {left} 日后清零，速花！";
+        }
+
+        for (int i = 0; i < _shopUnits.Count && i < ArenaShopGoods.AllGoods.Length; i++)
+        {
+            var good = ArenaShopGoods.AllGoods[i];
+            var unit = _shopUnits[i];
+            var priceT = UiFind.Deep(unit.transform, "商品名")?.GetComponent<Text>();
+            if (priceT == null) continue;
+            bool owned = ArenaShopGoods.IsOwned(data, good);
+            bool soldOut = owned && good.repurchasePrice <= 0;   // 买断（弓）→ 变灰「已拥有」
+            priceT.text = soldOut ? "已拥有" : ArenaShopGoods.PriceOf(data, good).ToString();
+            priceT.color = soldOut ? new Color(0.6f, 0.6f, 0.6f, 1f) : Color.white;
+        }
     }
 
     /// <summary>领奖台点卡 → 详情：排名 rank 的实体（rank-1 &lt; 玩家位 = 玩家自己，否则机器人）。</summary>
@@ -694,7 +1104,7 @@ public class ArenaPopupUI : MonoBehaviour
     void ShowMyDetail(SaveData data, int pos)
     {
         if (_detailRoot == null) return;
-        if (_dTitle != null) _dTitle.text = $"我 · 第{pos + 1}名";
+        if (_dTitle != null) _dTitle.text = $"{StoryProgress.GetPlayerName()} · 第{pos + 1}名";   // 2026-10-30 主人拍板：用玩家起的名字
         if (_dPower != null) _dPower.text = $"战力 {ArenaRules.GetPlayerPower(data)}";
         if (_dPoints != null) _dPoints.text = $"赛季积分 {data.arenaPoints}";
         // 玩家没有假阵容；给一条估计机制说明（主人口径「战力根据输赢情况调整」要让玩家看见）
@@ -809,7 +1219,7 @@ public class ArenaPopupUI : MonoBehaviour
         => section == 0 ? "佣兵阵容" : section == 1 ? "技能" : "装备";
 
     // ───────────────────────── 对战记录（2026-10-29 晚主人拍板新增） ─────────────────────────
-    // 只记 对手头像/名字/胜败/分值/时间（数据真源 SaveData.arenaBattleRecords，写入在 ArenaRules.ResolveChallenge）。
+    // 只记 对手头像/名字/胜败/分值/时间（数据真源 SaveData.arenaBattleRecords，写入在 ArenaRules.ApplyBattleOutcome）。
     // 2026-10-29 深夜主人拍板：入口按钮、记录弹窗、排行奖励面板三样都手摆进主预制体，代码只接线+填行。
 
     /// <summary>行间距步进（行高/行宽以预制体 RecRowTemplate 为准，代码只按步进摆行）。</summary>
@@ -896,6 +1306,20 @@ public class ArenaPopupUI : MonoBehaviour
         // → 整条链算出来 0 像素，Dim 的 (0,0,0,0.6) 配得再对也看不见——改颜色是治不好的。
         // 运行时四边贴父级即可（唯一出口 UiLayoutStretch.ApplyFillScreen，改锚点不动 .prefab）。
         UiLayoutStretch.ApplyFillScreen(root as RectTransform);
+
+        // 奖励面板皮与 5 行行条的 prefab 精灵引用已死链（对战美术 56 字符重签）→ 照 BuildRecords 口径路径补图
+        var rPanelImg = UiFind.Deep(root.transform, "Panel")?.GetComponent<Image>();
+        if (rPanelImg != null)
+        {
+            var panelSp = LoadArt("_0000_底框", 40f);
+            if (panelSp != null) { rPanelImg.sprite = panelSp; rPanelImg.type = Image.Type.Sliced; }
+        }
+        var rowStripSp = LoadArt("_0008_条2", 10f);
+        for (int ri = 1; ri <= 5; ri++)
+        {
+            var rowImg = UiFind.Deep(root.transform, "RowTemplate" + ri)?.GetComponent<Image>();
+            if (rowImg != null && rowStripSp != null) { rowImg.sprite = rowStripSp; rowImg.type = Image.Type.Sliced; }
+        }
 
         // 第 1 名行：数值走 ArenaRules（与预制体档位同值），末尾补当月冠军武器名——
         // 武器每月轮换，写死在预制体没意义（主人 2026-10-30 拍板「可以加个武器名」）。

@@ -75,8 +75,11 @@ public static class BattleResultScreen
     /// 非战斗场景 / 预制体缺失 → 不弹，直接走 onDone（缺真值不卡流程，铁律 14）。
     /// 【2026-10-29 竞技场】battleSceneOnly=false 允许城镇场景调用（竞技场结算没有战斗场景）；
     /// 默认 true，原战斗流程调用方零改动。
+    /// 【2026-10-30 竞技场真战斗】extraCells = 调用方组装好的追加奖励格（默认 null = 原行为零改动）：
+    /// 竞技场胜利传 [积分格]（图标 +「+N」），拼在 stats 格之后展示；失败路不传，界面零改动（失败只有图）。
     /// </summary>
-    public static void Show(bool victory, BattleRunStats stats, Action onDone, bool battleSceneOnly = true)
+    public static void Show(bool victory, BattleRunStats stats, Action onDone, bool battleSceneOnly = true,
+        List<SettlementRewardCell> extraCells = null)
     {
         if (!Application.isPlaying || (battleSceneOnly && !GameSceneGate.IsBattle))
         {
@@ -96,7 +99,7 @@ public static class BattleResultScreen
         // 显式限定 UnityEngine.Object；本类非 MonoBehaviour，不能裸调 Instantiate。
         var go = UnityEngine.Object.Instantiate(prefab);
         var ui = go.GetComponent<BattleResultScreenUI>() ?? go.AddComponent<BattleResultScreenUI>();
-        ui.Play(victory, stats, onDone);
+        ui.Play(victory, stats, onDone, extraCells);
     }
 
     /// <summary>
@@ -194,8 +197,9 @@ public class BattleResultScreenUI : MonoBehaviour
     Func<bool> _onRevive;
     Action _onGiveUp;
 
-    /// <summary>按胜负摆节点 + 自适应 + 接线 + 开播。</summary>
-    public void Play(bool victory, BattleRunStats stats, Action onDone)
+    /// <summary>按胜负摆节点 + 自适应 + 接线 + 开播。
+    /// 【2026-10-30 竞技场】extraCells = 调用方组装好的追加奖励格（默认 null，原调用方零改动），透传给奖励区。</summary>
+    public void Play(bool victory, BattleRunStats stats, Action onDone, List<SettlementRewardCell> extraCells = null)
     {
         _onDone = onDone;
 
@@ -241,7 +245,7 @@ public class BattleResultScreenUI : MonoBehaviour
             // 【2026-10-25 主人拍板】胜利新流程：弹出 → 上移 → 奖励 Panel 淡入 → 确认/点任意处 → 回冒险界面
             _victoryNode = showNode;
             _victoryRt = showNode as RectTransform;
-            SetupRewardPanel(showNode, stats);
+            SetupRewardPanel(showNode, stats, extraCells);
             // 【2026-10-29 v4】订阅分享发奖事件：本次点分享领完回来 → 切「分享过后」排版（OnDestroy 退订）
             ShareService.ShareRewardGranted += OnShareRewardGranted;
             StartCoroutine(CoPlayVictory());
@@ -258,7 +262,7 @@ public class BattleResultScreenUI : MonoBehaviour
     /// 克隆 CellTemplate 填本局奖励（奖励已在结算链自动入账，界面只展示 —— 「打完自动领取宝箱后的奖励」）；
     /// ConfirmBtn 接【确定】= 确认收下 → 走 onDone 回冒险界面。缺节点/缺图 LogError 不静默（铁律 14）。
     /// </summary>
-    void SetupRewardPanel(Transform victoryNode, BattleRunStats stats)
+    void SetupRewardPanel(Transform victoryNode, BattleRunStats stats, List<SettlementRewardCell> extraCells = null)
     {
         var rewardPanel = victoryNode.Find("Panel");
         if (rewardPanel == null)
@@ -276,7 +280,7 @@ public class BattleResultScreenUI : MonoBehaviour
         var rewardRt = (RectTransform)rewardPanel;
         rewardRt.sizeDelta = new Vector2(RewardPanelWidth, rewardRt.sizeDelta.y);
 
-        BuildRewardCells(rewardPanel, stats);
+        BuildRewardCells(rewardPanel, stats, extraCells);
 
         var confirmT = rewardPanel.Find("ConfirmBtn");
         var confirmBtn = confirmT != null ? confirmT.GetComponent<Button>() : null;
@@ -386,10 +390,11 @@ public class BattleResultScreenUI : MonoBehaviour
     /// <summary>
     /// 克隆 CellTemplate 填本局奖励格（数据口径同 BattleSettlementUI.BuildRewardCells：
     /// 金币/天赋石/附魔石/强化材料/装备，图标走 CommonIconSprites 唯一出口）。
-    /// 克隆格摆位：横向一排、以模板位置为基准居中，间距/尺寸全读模板值（铁律 32，不碰预制体 rect）；
-    /// 模板本身 SetActive(false) 只当母版。没奖励就不上格（奖励 Panel 照常淡入，留 装饰+确定）。
+    /// 【2026-10-30 竞技场】extraCells（调用方组装好的追加格，如积分格）拼在 stats 格之后；
+    /// 默认 null = 原行为零改动。克隆格摆位：横向一排、以模板位置为基准居中，间距/尺寸全读模板值
+    /// （铁律 32，不碰预制体 rect）；模板本身 SetActive(false) 只当母版。没奖励就不上格（奖励 Panel 照常淡入，留 装饰+确定）。
     /// </summary>
-    void BuildRewardCells(Transform rewardPanel, BattleRunStats stats)
+    void BuildRewardCells(Transform rewardPanel, BattleRunStats stats, List<SettlementRewardCell> extraCells = null)
     {
         var tmplT = rewardPanel.Find("CellTemplate");
         if (tmplT == null)
@@ -398,6 +403,8 @@ public class BattleResultScreenUI : MonoBehaviour
             return;
         }
         var cells = stats != null ? BattleSettlementUI.BuildRewardCells(stats) : new List<SettlementRewardCell>();
+        if (extraCells != null)
+            cells.AddRange(extraCells);   // 追加格（icon/label 调用方组装好，这里只负责克隆展示）
         if (cells.Count == 0)
         {
             tmplT.gameObject.SetActive(false);

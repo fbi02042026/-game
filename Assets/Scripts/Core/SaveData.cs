@@ -212,6 +212,15 @@ public class SaveData
     /// <summary>排行榜机器人名单（BotCount 个，JsonUtility 直接序列化，无需 HashSet 双写）</summary>
     public List<ArenaBotEntry> arenaBots = new List<ArenaBotEntry>();
 
+    // === 竞技场商店（2026-10-30 积分版：积分 = arenaPoints 直接消费，🔴 禁新增第二货币字段）===
+    /// <summary>弓购买记录：已购 = 模板 id（ArenaShopGoods.BowId，买断制一次性）；"" = 未购。
+    /// 发放本体进 legacyEquipPool（冠军武器邮件口径），这里只记「买过」供货架变灰与出战换装判定。</summary>
+    public string arenaShopBowId = "";
+    /// <summary>商店周限计数周键（ArenaShopGoods.CurrentWeekKey，ISO 周一为起点），跨周自动清零恢复次数。</summary>
+    public string arenaShopWeekKey = "";
+    /// <summary>商品 id → 本周已购次数（金币包/徽记包周限用；JsonUtility 序列化，运行时按表扫读）</summary>
+    public List<StringIntEntry> arenaShopWeekBuyEntries = new List<StringIntEntry>();
+
     /// <summary>邮件箱（资源溢出等）</summary>
     public List<MailEntry> mailInbox = new List<MailEntry>();
 
@@ -563,7 +572,7 @@ public class SaveData
     /// <summary>每日任务阈值：当日通关 3 关。</summary>
     public const int DAILY_CLEAR_TASK_NEED = 3;
     /// <summary>每日任务奖励：5 天赋石。</summary>
-    public const int DAILY_CLEAR_TASK_STONES = 5;
+    public const int DAILY_CLEAR_TASK_EXP = 50;  // 2026-10-30 主人拍板：每日通关任务改发经验（原 5 天赋石停发，天赋石只随关卡出）
 
     // === 每日/周常任务计数（2026-10-29 扩编，主人拍板：金币/击杀/Boss/佣兵/升星）===
     public string dailyTaskDayKey = "";      // 日计数日期键（yyyyMMdd）
@@ -571,6 +580,7 @@ public class SaveData
     public int dailyKillNormal = 0;          // 今日击败小怪（非 Boss；精英也算小怪）
     public int dailyKillBoss = 0;            // 今日击杀 Boss
     public int dailyRecruitMerc = 0;         // 今日获取佣兵（新解锁，任何来源）
+    public int dailyArenaBattle = 0;         // 今日竞技场对战场次（2026-10-30 新增；写入=ArenaRules.ResolveChallenge，打一场算一场不论胜负）
     public int weeklyTaskWeekKey = 0;        // 周计数键（本周周一 yyyyMMdd，周一刷新）【2026-10-29 修】原 string 与 WeekMondayKey() 的 int 返回对不上（CS0019/CS0029）；字段新增、尚无存档写过它，改类型零兼容风险
     public int weeklyMercStarUp = 0;         // 本周升星佣兵次数
     /// <summary>任务奖励已发放记录（键 = 任务id，值 = 领取日/周键 int；DailyTaskSystem 自动发奖防重复）。</summary>
@@ -1589,8 +1599,8 @@ public class SaveData
         return n;
     }
 
-    /// <summary>每日任务「通关 3 关」：当日累计通关达阈值且未领过则发 5 天赋石。返回发放数（0 或 5）。</summary>
-    public int TryDailyClearTaskStones()
+    /// <summary>每日任务「通关 3 关」：当日累计通关达阈值且未领过则发经验（不再发天赋石，天赋石只随关卡出）。返回发放经验数。</summary>
+    public int TryDailyClearTaskExp()
     {
         string today = ShopDefs.TodayKey();
         if (string.IsNullOrEmpty(today)) return 0;
@@ -1603,7 +1613,7 @@ public class SaveData
         if (dailyStageClearCount >= DAILY_CLEAR_TASK_NEED && dailyClearTaskClaimDayKey != today)
         {
             dailyClearTaskClaimDayKey = today;
-            return DAILY_CLEAR_TASK_STONES;
+            return DAILY_CLEAR_TASK_EXP;
         }
         return 0;
     }
@@ -1631,6 +1641,7 @@ public class SaveData
             dailyKillNormal = 0;
             dailyKillBoss = 0;
             dailyRecruitMerc = 0;
+            dailyArenaBattle = 0;
         }
         int wk = WeekMondayKey();
         if (weeklyTaskWeekKey != wk)
@@ -1663,6 +1674,13 @@ public class SaveData
         dailyRecruitMerc++;
     }
 
+    /// <summary>今日竞技场对战一场（ResolveChallenge 结算完调；不论胜负都算场次）。</summary>
+    public void CountArenaBattle()
+    {
+        EnsureDailyTaskKeys();
+        dailyArenaBattle++;
+    }
+
     /// <summary>本周升星佣兵（TryStarUp 成功时调）。</summary>
     public void CountMercStarUp()
     {
@@ -1680,6 +1698,7 @@ public class SaveData
             case "daily_kill_normal": return dailyKillNormal;
             case "daily_kill_boss": return dailyKillBoss;
             case "daily_recruit_merc": return dailyRecruitMerc;
+            case "daily_arena_battle": return dailyArenaBattle;
             case "weekly_merc_starup": return weeklyMercStarUp;
             case "daily_login": return loginLastDay == ShopDefs.TodayKey() ? 1 : 0;   // 打开游戏即完成（DailyLoginSystem.OnEnterGame 落 loginLastDay；2026-10-29 主人拍板「不要强制玩家点击领取」）
             default: return 0;

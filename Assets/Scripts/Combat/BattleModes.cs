@@ -338,7 +338,7 @@ public sealed class BondDungeonBattleMode : BattleMode
 /// <summary>
 /// 支线岛（2026-10-23 合并方案「岛壳用 2 岛依次解锁 + 岛内容用单 Boss 特殊关」）：
 /// 单场 Boss 战，10 体力/次，产出 = 固定局外金币 + 天赋石（SideIslandDefs 按岛定）
-/// + 装备掉落（DropsEquipment=true 走既有宝箱三选一链，Boss 关 bonusStar=2）。
+/// 装备不掉（2026-10-30 主人拍板 DropsEquipment=false，原宝箱三选一链停用）。
 /// 不推进主线、不发关卡任务金/关卡金（各自 gate 见 Settlement/Waves 的 IsSideIsland 分支）。
 /// 通关 → MarkSideIslandCleared + EnsureForkRoll 派第二岛（洗牌袋）。
 /// 结构照抄 <see cref="BadgeDungeonBattleMode"/>；不占 SlotTable 位，入口 = 冒险页支线岛点击。
@@ -351,8 +351,8 @@ public sealed class SideIslandBattleMode : BattleMode
     /// <summary>不经 SlotTable 按钮（无按钮位），进本由支线岛点击置 PendingSideIsland 决定；本属性无消费点。</summary>
     public override bool IsPlayable => false;
 
-    /// <summary>岛掉装备（与主线同链：Boss 关 +1 件、bonusStar=2，三选一展示）。</summary>
-    public override bool DropsEquipment => true;
+    /// <summary>岛不掉装备（2026-10-30 主人拍板：支线不给装备；金币/天赋石仍走 SettleIslandRewards）。</summary>
+    public override bool DropsEquipment => false;  // 2026-10-30 主人拍板：支线不给装备
 
     /// <summary>单场结算回城、币随局清零 → 不发局内抽奖币（照金币/徽记本口径）；击杀掉币照常（局内构筑用）。</summary>
     public override bool GrantsRunCoins => false;
@@ -381,7 +381,7 @@ public sealed class SideIslandBattleMode : BattleMode
     }
 
     /// <summary>
-    /// 岛通关奖励（2026-10-23 主人拍板「10 体力 + 金币/石/装备」）：装备走宝箱链已发，
+    /// 岛通关奖励（2026-10-23 主人拍板「10 体力 + 金币/石」；装备 2026-10-30 拍板不给，走 DropsEquipment=false）：
     /// 这里发固定局外金币 + 天赋石 + 标记通关 + 派第二岛。缺真值（岛定义/存档）→ LogError 不发（铁律 14）。
     /// </summary>
     static void SettleIslandRewards(BattleManager bm)
@@ -410,7 +410,7 @@ public sealed class SideIslandBattleMode : BattleMode
         data.MarkSideIslandCleared(isl.id);
         ChapterRouteTable.EnsureForkRoll(data);
         SaveSystem.Instance?.Save();
-        Debug.Log($"[支线岛] 「{isl.name}」通关结算：金币 +{isl.goldReward} 天赋石 +{isl.talentReward}（装备走宝箱链）");
+        Debug.Log($"[支线岛] 「{isl.name}」通关结算：金币 +{isl.goldReward} 天赋石 +{isl.talentReward}（支线不给装备）");
     }
 }
 
@@ -712,6 +712,64 @@ public sealed class TutorialBattleMode : BattleMode
 }
 
 /// <summary>
+/// 竞技场挑战（2026-10-30 主人拍板「竞技场真战斗」）：单场 Elite 战斗，胜负=真实战斗；
+/// 敌方 = 机器人佣兵镜像小队（ArenaEnemySpawner 生成，替代常规怪波）。
+/// 打赢换位+积分+金币 WinGold 照发+200（2026-10-30 16:45 拍板恢复，
+/// 结算见 BattleManager.FinishStageAfterPortalReached 统一门 → ArenaRules.ApplyBattleOutcome），
+/// 打输 +10 安慰奖不掉名（无复活，死亡链对 OffersRevive=false 直接走死亡收尾）。
+/// 进本照金币本构筑（开局免费抽 5 次）；掷骰制停用，保底/熔断/新手必赢改「对手战力压制/放水」
+///（ArenaRules.GetValvePowerMultiplier，只在组队路径生效）。
+/// 结构照抄 <see cref="GoldDungeonBattleMode"/>；不占 SlotTable 位，
+/// 入口 = 竞技场弹窗「对战」（ArenaPopupUI.OnJobPicked 置 PendingArenaRowIdx）。
+/// </summary>
+public sealed class ArenaBattleMode : BattleMode
+{
+    public override BattleModeId Id => BattleModeId.Arena;
+    public override string DisplayName => "竞技场挑战";
+
+    /// <summary>不经 SlotTable 按钮（无按钮位），进本由竞技场弹窗置 PendingArenaRowIdx 决定；本属性无消费点。</summary>
+    public override bool IsPlayable => false;
+
+    public override bool DropsEquipment => false;
+
+    /// <summary>开局免费抽 5 次（主人拍板「进本照金币本构筑」，引用现有常量不新造；进局清零）。</summary>
+    public override int FreeEntryDraws => SlotMachineDefs.GOLD_DUNGEON_FREE_DRAWS;
+
+    /// <summary>照金币本：打完就结算回城、币随局清零，不发局内抽奖币。</summary>
+    public override bool GrantsRunCoins => false;
+
+    /// <summary>UsesBattleResultScreen 用基类 true：胜负结果界面都播（胜利=原面板+积分格，失败=只有图零改动）。</summary>
+
+    /// <summary>🔴 竞技场不给复活（2026-10-30 主人拍板「输了不给复活直接判负」）；
+    /// 死亡链 <see cref="BattleManager.CanOfferRevive"/> 对 false 直接走死亡收尾。</summary>
+    public override bool OffersRevive => false;
+
+    public override void BuildChapter(ChapterManager cm, int chapter)
+    {
+        if (cm == null)
+        {
+            Debug.LogError("[BattleMode] 竞技场 BuildChapter 失败：ChapterManager 为空");
+            return;
+        }
+        cm.StartArena(chapter);
+    }
+
+    /// <summary>
+    /// 竞技场结算：胜负落账（ApplyBattleOutcome）与积分格组装已在统一门（胜利）/死亡链（失败）做完，
+    /// 这里只负责回城（照金币本口径，不推进主线）。
+    /// </summary>
+    public override void SettleStageClear(BattleManager bm)
+    {
+        if (bm == null)
+        {
+            Debug.LogError("[BattleMode] 竞技场 SettleStageClear 失败：BattleManager 为空");
+            return;
+        }
+        bm.EndRunAndReturnToTown();
+    }
+}
+
+/// <summary>
 /// 无限裂隙（UI「无限裂隙」，冒险界面下标 2，原占位名「迷宫探索」）。
 /// 玩法（2026-10-29 主人拍板）：每天 3 次 × 15 体力（体力档 10-29 二改 20→15，见 StaminaSystem.ENDLESS_RIFT_COST）；
 /// **每层开始抽 3 次奖**（免费额度层间重置，定向抽不开启）；抽奖价格按本局已抽数递增；
@@ -908,6 +966,7 @@ public static class BattleModes
     public static readonly ScrollDungeonBattleMode ScrollDungeon = new ScrollDungeonBattleMode(); // 2026-10-24 卷轴副本（不占 SlotTable 位）
     public static readonly GiftDungeonBattleMode GiftDungeon = new GiftDungeonBattleMode();       // 2026-10-26 礼物副本（不占 SlotTable 位）
     public static readonly BondDungeonBattleMode BondDungeon = new BondDungeonBattleMode();       // 2026-10-27 羁绊副本（好感满佣兵专属，不占 SlotTable 位）
+    public static readonly ArenaBattleMode Arena = new ArenaBattleMode();                           // 2026-10-30 竞技场挑战（真战斗，不占 SlotTable 位）
     public static readonly SideIslandBattleMode SideIsland = new SideIslandBattleMode();         // 2026-10-23 支线岛（不占 SlotTable 位）
     public static readonly FinaleBattleMode Finale = new FinaleBattleMode();                     // 2026-10-23 终章追查关（不占 SlotTable 位）
     public static readonly TutorialBattleMode Tutorial = new TutorialBattleMode();
@@ -940,6 +999,7 @@ public static class BattleModes
             case BattleModeId.Normal: return Normal;
             case BattleModeId.GoldDungeon: return GoldDungeon;
             case BattleModeId.BadgeDungeon: return BadgeDungeon;   // 2026-10-23 徽记副本
+            case BattleModeId.Arena: return Arena;                 // 2026-10-30 竞技场挑战
             case BattleModeId.SideIsland: return SideIsland;       // 2026-10-23 支线岛
             case BattleModeId.Finale: return Finale;               // 2026-10-23 终章追查关
             case BattleModeId.Tutorial: return Tutorial;

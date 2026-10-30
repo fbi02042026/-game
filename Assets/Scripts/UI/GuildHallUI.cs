@@ -660,9 +660,12 @@ public class GuildHallUI : MonoBehaviour
         EnsureDailyLoginButton();
         // 竹篓纳福入口（2026-10-28 主人拍板）：每日登录下方一格，运行时克隆生成（不动预制体）；
         // 玩法未上线前点击弹占位告知，接线只在 MiniGameEntryUI.OnClicked 一处。
+        // 2026-10-30 主人拍板：入口先隐藏（MiniGameEntryUI.EntryEnabled = false），玩法本体保留，置 true 即恢复。
         MiniGameEntryUI.EnsureInGuildHall(dailyLoginButton);
-        // 竞技场入口（2026-10-29）：纳福入口下方一格，运行时克隆生成（不动预制体），接线只在 ArenaEntryUI.OnClicked 一处。
+        // 竞技场入口（2026-10-29）：纳福入口隐藏后落在每日登录下方一格，运行时克隆生成（不动预制体），接线只在 ArenaEntryUI.OnClicked 一处。
         ArenaEntryUI.EnsureInGuildHall(dailyLoginButton);
+        // 右列黑底还原+按两按钮拉长（2026-10-30 主人指令，图 meta 56 字符断链走路径加载）
+        RestoreRightBarBg();
         // 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的），点击随机换看板人物
         EnsureTurnButton();
         // 商店：2026-09-15 接通，技能解锁 / 抽卡券 / 资源补给 / 材料 四个货架
@@ -711,6 +714,43 @@ public class GuildHallUI : MonoBehaviour
         }
         dailyLoginButton.onClick.RemoveAllListeners();
         dailyLoginButton.onClick.AddListener(() => DailyLoginUI.Show());
+    }
+
+    /// <summary>
+    /// 右列黑底还原（2026-10-30 主人指令：还原黑底并按两个按钮的长度拉长）。
+    /// 图「酒馆_0004_图层-3」的 meta guid 被团结重写为 56 字符标识，prefab 引用断链，
+    /// 按 2026-10-23 拍板口径走 Resources 路径加载（同 LoadChestSprite/IslandPaths 模式）。
+    /// sprite 引用有效时优先用预制体里的图；宽还原历史原值 120.9，高 270 罩住每日登录+对战两按钮（含标签）。
+    /// </summary>
+    void RestoreRightBarBg()
+    {
+        var rightBar = dailyLoginButton != null ? dailyLoginButton.transform.parent : null;
+        var bgT = rightBar != null ? rightBar.Find("bg") : null;
+        if (bgT == null)
+        {
+            Debug.LogError("[GuildHall] 未找到右列黑底节点 RightBar/bg，黑底还原跳过");
+            return;
+        }
+        var img = bgT.GetComponent<Image>();
+        if (img == null)
+        {
+            Debug.LogError("[GuildHall] RightBar/bg 缺少 Image 组件，黑底还原跳过");
+            return;
+        }
+        // prefab 的 sprite 引用有效就直接用 prefab 的（主人 2026-10-30 指令：以后预制体有了就用预制体里的）；
+        // 引用断链时运行时 sprite 为 null，才走路径加载补图
+        if (img.sprite == null)
+        {
+            var sp = Resources.Load<Sprite>("UI/Art/Tavern/酒馆_0004_图层-3");
+            if (sp == null)
+            {
+                Debug.LogError("[GuildHall] 未加载到黑底图 Resources/UI/Art/Tavern/酒馆_0004_图层-3");
+                return;
+            }
+            img.sprite = sp;
+        }
+        if (bgT is RectTransform rtBg)
+            rtBg.sizeDelta = new Vector2(120.9f, 270f);
     }
 
     /// <summary>

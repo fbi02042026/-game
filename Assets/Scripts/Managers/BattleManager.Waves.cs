@@ -153,7 +153,15 @@ public partial class BattleManager
         // 进关即写一次中断存档（后续由 BattleStateSaver 心跳续写退出时刻）
         BattleStateSaver.Instance?.SaveBattleState();
 
-        switch (stage.type)
+        if (Mode != null && Mode.Id == BattleModeId.Arena)
+        {
+            // 竞技场（2026-10-30 主人拍板「竞技场真战斗」）：不规划常规怪波——
+            // 敌方 = 机器人佣兵镜像小队，开战过场结束后由 TrySpawnFirstWaveOnce 的 Arena 分支
+            // 一次性生成（ArenaEnemySpawner.SpawnSquad），清场判定走 Update 的 Arena 分支。
+            ArenaEnemySpawner.ResetForStage();
+            Debug.Log($"[BattleManager] 竞技场建关：第{CurrentChapter}章地图（无常规怪波，敌=佣兵镜像小队）");
+        }
+        else switch (stage.type)
         {
             case StageType.Normal:
                 Planner.SetupNormalWaves(stage.stageIndex);
@@ -193,6 +201,8 @@ public partial class BattleManager
         if (IsBadgeDungeon || IsScrollDungeon || IsGiftDungeon) StageQuestClearGold = 0;
         // 支线岛（2026-10-23 合并方案）：不发关卡任务金，HUD 不显示 +N 金（岛金=goldReward，走岛结算链）
         if (IsSideIsland) StageQuestClearGold = 0;
+        // 竞技场挑战（2026-10-30 主人拍板「打赢不发金币，只获得积分和更高的排名」）：任务通关金一并清零
+        if (IsArena) StageQuestClearGold = 0;
         _stageQuestObjective = stageQuest.objective;
         BattleUI.Instance?.UpdateQuest(_stageQuestObjective, 0, monsterGoal, StageQuestClearGold);
 
@@ -315,6 +325,16 @@ public partial class BattleManager
         if (!Rules.SkipFirstWaveAuto && !_battleIntroFinished) return;
         // 教程关禁止自动首波/紧急刷怪（否则会从玩家身上穿出来）
         if (Rules.SkipFirstWaveAuto) return;
+
+        // 竞技场（2026-10-30「真战斗」）：首波刷怪口改生成敌方佣兵小队（替代常规怪波，一次性幂等）；
+        // 失败时返回 false 不置 _firstWaveSpawned，硬刷协程会按原节奏重试
+        if (Mode != null && Mode.Id == BattleModeId.Arena)
+        {
+            if (ArenaEnemySpawner.SpawnSquad(this))
+                _firstWaveSpawned = true;
+            return;
+        }
+
         if (CountAliveMonsters() > 0)
         {
             _firstWaveSpawned = true;
@@ -1143,16 +1163,23 @@ public partial class BattleManager
             _waveGateStuckSec = 0f;
         }
 
-        bool allSpawned = true;
-        if (_waves != null)
+        // 竞技场（2026-10-30「真战斗」）：不规划常规怪波，敌方 = 开战时一次性生成的佣兵小队——
+        // 直接视为「波次全部刷完」，清场判定走下面的存活数（_totalMonstersSpawnedThisStage 已由
+        // ArenaEnemySpawner 抬起，>0 条件自然满足）
+        bool arenaSquadStage = Mode != null && Mode.Id == BattleModeId.Arena;
+        bool allSpawned = arenaSquadStage;
+        if (!arenaSquadStage)
         {
-            for (int i = 0; i < _waves.Count; i++)
+            if (_waves != null)
             {
-                if (_waves[i] == null || !_waves[i].spawned) { allSpawned = false; break; }
+                for (int i = 0; i < _waves.Count; i++)
+                {
+                    if (_waves[i] == null || !_waves[i].spawned) { allSpawned = false; break; }
+                }
             }
+            else allSpawned = false;
         }
-        else allSpawned = false;
-        _allWavesSpawned = allSpawned && _waves != null && _waves.Count > 0;
+        _allWavesSpawned = allSpawned && (arenaSquadStage || (_waves != null && _waves.Count > 0));
 
         // 所有波次已刷完且场上无活怪 → 宝箱结算（用存活数，勿用 list.Count）
         if (_allWavesSpawned && CountAliveMonsters() == 0 && _totalMonstersSpawnedThisStage > 0

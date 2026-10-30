@@ -184,6 +184,9 @@ public partial class BattleUI : MonoBehaviour
         BattleBossHpBar.Ensure(transform);
 
         EnsureBattleControls();
+        // 【2026-10-30 竞技场开场动画】「对战」节点在预制体里默认是亮的 → 进战斗先整根藏掉；
+        // 只在竞技场战斗、玩家点「开始战斗/继续」后播一次（BattleManager.OnLiveStartFight → BattleVsIntro.TryPlayForArena）。
+        BattleVsIntro.HideForBattle();
 
         // 开战只走 AutoGameInitializer（场景组件 Awake）。UI 不再后备 Initialize，避免双入口叠开战。
 
@@ -361,6 +364,7 @@ public partial class BattleUI : MonoBehaviour
     {
         if (BattleBagSystem.Instance != null)
             BattleBagSystem.Instance.OnBackpackChanged -= UpdateBackpackGrid;
+        ArenaBattleSkip.OnBattleUiDestroyed();   // 竞技场跳过加速兜底恢复（切场景/异常必经）
         if (Instance == this)
             Instance = null;
     }

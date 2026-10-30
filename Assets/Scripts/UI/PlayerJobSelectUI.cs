@@ -19,6 +19,11 @@ public class PlayerJobSelectUI : MonoBehaviour
     {
         public bool TutorialForceSwordFirst;
         public bool RequireSwordShield;
+        /// <summary>进入按钮文案；空 = 默认「进入裂隙」（冒险）。对战入口传「挑战」。
+        /// 每次 Open 都重设按钮 Label 文本（DDOL 实例可能被不同调用方复用），只改 text 不动字体字号。</summary>
+        public string EnterLabel;
+        /// <summary>true = 免体力入口（对战走「对战次数」）：跳过体力检查与体力飘字，选完直接回调。</summary>
+        public bool StaminaFree;
     }
 
     struct CardBind
@@ -120,13 +125,24 @@ public class PlayerJobSelectUI : MonoBehaviour
         _refreshUsed = false;
         _entering = false;
         BuildIfNeeded();
+        // 【2026-10-30 主人拍板】进入按钮文案随调用方变：对战=「挑战」，冒险=「进入裂隙」（空=默认）。
+        // DDOL 实例两次 Open 可能来自不同调用方，每次都重设；只改 .text，不动字体/字号（预制体烤字当默认值）。
+        if (_enterBtn != null)
+        {
+            var enterLabel = FindText(_enterBtn.transform, "Label");
+            if (enterLabel != null)
+                enterLabel.text = string.IsNullOrEmpty(_opts.EnterLabel) ? "进入裂隙" : _opts.EnterLabel;
+        }
         // 【2026-10-17 主人报「弹窗有几率变大」】画布参数（绑定相机 + CanvasScaler）只在创建时套过一次，
         // 场景切换的 RefreshDdolCanvases 只换 worldCamera 不重套缩放，城镇/战斗相机来回切后
         // 弹窗会带着烙死的旧映射渲染整块变大。按 UICanvasSetup.RefreshPopup 的既有口径
         // （「DDOL 弹窗每次 Show/Open 时调用」）每次开界面重套一遍，与 BattleSettlementUI 等一致。
         var popupCanvas = GetComponent<Canvas>();
+        // 【2026-10-30】挂 TownConfirm(910) 不挂 TownPopup(900)：本界面会从对战排行榜弹窗（900）里打开，
+        // 同层排序不定 → 点击射线被弹窗全屏 Dim 吃掉（RewardPopup=905 / TownConfirm=910 同一口径的既有坑）。
+        // 引导提示 TutorialHintUI 会动态跟到目标画布 +10（其 :394-398），压得住本界面，引导不受影响。
         if (popupCanvas != null)
-            UICanvasSetup.RefreshPopup(popupCanvas, GameConfig.UiSort.TownPopup);
+            UICanvasSetup.RefreshPopup(popupCanvas, GameConfig.UiSort.TownConfirm);
         // 2026-10-15 主人拍板 每次开界面都补一次右上角关闭按钮 —— 机理：预制体路径和运行时白模路径都在 BuildIfNeeded 之后汇合到这一行，
         // 所以无论走哪条构建路线都一定有关闭按钮。
         EnsureCloseButton(FindDeep(transform, "Panel") ?? transform);
@@ -312,7 +328,8 @@ public class PlayerJobSelectUI : MonoBehaviour
         }
         if (gameObject.GetComponent<CanvasScaler>() == null)
             gameObject.AddComponent<CanvasScaler>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
+        // 【2026-10-30】同 Open()：TownConfirm(910)，避免与打开自己的 900 层弹窗同层竞价（射线被 Dim 吃掉）。
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownConfirm);
     }
 
     void BindFromHierarchy()
@@ -804,6 +821,8 @@ public class PlayerJobSelectUI : MonoBehaviour
 
     void OnEnterRift()
     {
+        // 【2026-10-30 排查日志】确认按钮点击确实到达（无这条=点击被吃，有这条=往下看 [Arena] 日志）
+        Debug.Log($"[JobSelect] 进入按钮点击：selected={(_selected.HasValue ? _selected.Value.ToString() : "无")} StaminaFree={_opts.StaminaFree} label={(string.IsNullOrEmpty(_opts.EnterLabel) ? "进入裂隙" : _opts.EnterLabel)}");
         if (!_selected.HasValue)
         {
             UIManager.Instance?.ShowToast("请先选择职业");
@@ -812,6 +831,18 @@ public class PlayerJobSelectUI : MonoBehaviour
         if (_opts.RequireSwordShield && _selected.Value != PlayerJobId.SwordShield)
         {
             UIManager.Instance?.ShowToast("请先选择剑盾卫士");
+            return;
+        }
+
+        // 【2026-10-30 主人拍板】对战入口（StaminaFree）不查体力、不飘体力字：
+        // 竞技场消耗的是「对战次数」，冒险的体力闸门会把对战误拦成「点按钮没反应」（体力不足只弹条 toast）。
+        if (_opts.StaminaFree)
+        {
+            PlayerJobDefs.SetSelected(_selected.Value);
+            var freeCb = _onEnterRift;
+            _onEnterRift = null;   // 先摘回调再收界面：Hide 的气泡回弹只服务取消路径
+            Hide();
+            freeCb?.Invoke();
             return;
         }
 

@@ -92,9 +92,31 @@ public partial class Mercenary : UnitBase
         WirePassiveOnAttack();
     }
 
-    /// <summary>队友（含自己）血量低于约 92% 时需要治疗。</summary>
+    /// <summary>队友（含自己）血量低于约 92% 时需要治疗。
+    /// 【2026-10-30 竞技场】敌方佣兵只看敌方队友（bm.monsters 里的敌方佣兵），不许把玩家方当治疗对象。</summary>
     bool AllyNeedsHeal()
     {
+        if (!isAlly)
+        {
+            var bmEnemy = BattleManager.Instance;
+            if (bmEnemy == null) return false;
+            if (attr != null)
+            {
+                float maxSelf = attr.GetAttr(AttrType.MaxHp);
+                if (maxSelf > 0.01f && currentHp / maxSelf < 0.92f)
+                    return true;
+            }
+            for (int i = 0; i < bmEnemy.monsters.Count; i++)
+            {
+                var m = bmEnemy.monsters[i] as Mercenary;
+                if (m == null || m.isDead || m.isAlly || m == this || m.attr == null) continue;
+                float max = m.attr.GetAttr(AttrType.MaxHp);
+                if (max > 0.01f && m.currentHp / max < 0.92f)
+                    return true;
+            }
+            return false;
+        }
+
         if (attr != null)
         {
             float max = attr.GetAttr(AttrType.MaxHp);
@@ -189,6 +211,19 @@ public partial class Mercenary : UnitBase
         WirePassiveOnAttack();
 
         Debug.Log($"[Mercenary:{id}] Init完成 | isAlly={isAlly} | facingDir={facingDir} | pos={transform.position}");
+    }
+
+    /// <summary>
+    /// 带星级的 Init 重载（2026-10-30 竞技场真战斗新增，唯一调用方 = ArenaEnemySpawner 敌方佣兵生成）：
+    /// lv 与 ★ 两维都真进属性计算——★1 为基准档（花名册最低档口径），每多一星按 PowerCalc.MercPowerDelta
+    /// 的权重（lv×70+★×110）折算等效等级 110/70 级，与等级走同一条 SetupAttributes 成长链（血/攻随等级抬）。
+    /// mercStar 同时是 MP 池/回复的真源（与局内抽到的佣兵同口径）。
+    /// </summary>
+    public void Init(string id, int level, int star)
+    {
+        mercStar = Mathf.Clamp(star, 1, 5);
+        int effectiveLevel = Mathf.Max(1, level) + Mathf.RoundToInt((mercStar - 1) * 110f / 70f);
+        Init(id, effectiveLevel);
     }
 
     public override void ResetForReuse()

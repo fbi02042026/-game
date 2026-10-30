@@ -173,13 +173,32 @@ public partial class BattleManager
         // 淡出（或点击跳过）后再进遗产/撤离结算；无限裂隙不播（每层累计奖励走自己的结算链），直接进遗产结算。
         // 引导局在上面 Rules.Active 分支已重进战斗，永远到不了这里。
         if (Mode != null && Mode.UsesBattleResultScreen)
+        {
+            // 竞技场挑战（2026-10-30 主人拍板「竞技场真战斗」）判负：无复活（OffersRevive=false 已在
+            // OnHeroDead 的 CanOfferRevive 门拦下，直接走到这里），结算 = 掉分不掉名（ApplyBattleOutcome won:false）；
+            // 失败界面只有图（stats/extraCells 均不传，零改动），onDone 后 toast 提示扣分再回城
+            // （EndRunAndReturnToTown，不走遗产/撤离结算链）。
+            if (Mode.Id == BattleModeId.Arena)
+            {
+                ArenaBattleSkip.Restore();   // 跳过加速跑到死亡收尾即恢复（timeScale=1）
+                var arenaData = SaveSystem.Instance?.Data;
+                ArenaRules.ApplyBattleOutcome(arenaData, ArenaChallengeRowIdx, false, out int arenaPts, out _);
+                BattleResultScreen.Show(false, null, () =>
+                {
+                    GlobalToastUI.Show($"积分 {arenaPts}");   // 新口径败局也 +10（安慰奖），照旧带符号
+                    EndRunAndReturnToTown();
+                });
+                return;
+            }
             BattleResultScreen.Show(false, null, () => TriggerLegacyFlow(isDeath: true));   // 失败无奖励格，stats 传 null
+        }
         else
             TriggerLegacyFlow(isDeath: true);
     }
 
     public void TriggerEvacuation()
     {
+        ArenaBattleSkip.Restore();   // 跳过加速随撤离收尾恢复（timeScale=1，防带进结算/回城）
         TryGrantStageQuestGoldIfQuestComplete();
         isInBattle = false;
         _runClosed = true;   // 【2026-10-18 主人报「撤离结算下面还能点抽奖」】局已收尾：

@@ -548,7 +548,11 @@ public static class UiLayoutStretch
         // 的布局全在自己文件里做（全屏化 + FitStageAlignment 贴台 + SafeAreaFitter）。通用规则若在
         // panl 还是 100×100 时把 NamePlate 贴底重锚，运行时 panl 拉全屏后，名字会被锁死的
         // offset 带着掉出屏幕底。
-        new System.Collections.Generic.HashSet<string> { "AdventureUI", "DailyLoginUI", "RewardPopup", "GlobalToastUI", "MercGainCinematic" };
+        // ArenaPopupUI（2026-10-30）：对战弹窗排版以主人预制体几何为准 + MoveTopBar 运行时自管顶部一排
+        //（中心锚 y=450）。通用重锚定会把它等价改写成贴顶锚——逻辑高一变（窄长屏 match=0 / 编辑器切
+        // 分辨率）就与居中金框错位，金框顶到顶部一排（主人实测反馈）。整块豁免后五节点与 Panel/标题
+        // 相对位置任何分辨率恒定（逻辑高恒 >=1280，金框顶 570 永在按钮顶 508 之上）。
+        new System.Collections.Generic.HashSet<string> { "AdventureUI", "DailyLoginUI", "RewardPopup", "GlobalToastUI", "MercGainCinematic", "ArenaPopupUI" };
 
     /// <summary>
     /// 判断 root 是否属于「已单独适配」的界面：按 root 自身名字、或 root 上挂载的组件类型名，

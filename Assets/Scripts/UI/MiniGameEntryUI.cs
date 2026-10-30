@@ -17,10 +17,10 @@ public static class MiniGameEntryUI
 {
     /// <summary>
     /// 活动期开关（2026-10-28 主人拍板：入口由活动开关控制）。
-    /// 当前为 true —— 玩法未上线也要先看得见、能点，方便验收与看点击；
-    /// 元旦档（12/30–1/2）结束后置 false，主界面即不再生成该入口。
+    /// 当前为 false —— 2026-10-30 主人拍板：主界面先隐藏小游戏入口（玩法本体保留，随时可开回来）。
+    /// 置 true 即恢复：入口回到每日登录下方一格，对战入口自动再往下顺延一格（见 ArenaEntryUI）。
     /// </summary>
-    public const bool EntryEnabled = true;
+    public const bool EntryEnabled = false;
 
     public const string NodeName = "MiniGameButton";
 

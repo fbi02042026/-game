@@ -186,6 +186,30 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
+    /// 竞技场挑战（2026-10-30 主人拍板「竞技场真战斗」）：单场 Elite 战斗，敌方 = 机器人佣兵镜像小队
+    /// （生成走 BattleManager 开战分流 → ArenaEnemySpawner），不推进主线。
+    /// 结构照抄 StartGoldDungeon；场景章 = 1~8 章随机（主人拍板「战斗地图随机章节，每场地图不同」；
+    /// 主线共 8 章，见 AdventureUI.chapterBackgrounds[8]），入参章号同样不决定场景。
+    /// </summary>
+    public void StartArena(int chapterNum)
+    {
+        // 【2026-10-30 主人拍板「战斗地图随机章节」】场景/怪池章 = 1~8 章随机（含 8，每场一掷）
+        currentChapter = UnityEngine.Random.Range(1, 9);
+        currentStageIndex = 0;
+        stageMap.Clear();
+        availableNextStages.Clear();
+        var stage = new StageData
+        {
+            stageIndex = 0,
+            type = StageType.Elite,
+            nextStages = new List<int>()
+        };
+        stageMap.Add(stage);
+        availableNextStages.Add(stage);
+        Debug.Log($"[ChapterManager] 竞技场挑战 场景=第{currentChapter}章(随机) 单场（入参章号 {chapterNum} 不决定场景）");
+    }
+
+    /// <summary>
     /// 支线岛（2026-10-23 合并方案）：单场 Boss 战。currentChapter = 岛的背景篇（怪池/背景资产同源复用），
     /// stageIndex=0 的 Boss 关（WavePlanner 的 Boss 取池按 STAGES_PER_GRAND-1，与 stageIndex 无关，真 Boss 行必入池）。
     /// 结构照抄 StartBadgeDungeon；通关结算走 SideIslandBattleMode.SettleStageClear（不进 OnStageComplete 主线链）。
@@ -446,10 +470,10 @@ public class ChapterManager : Singleton<ChapterManager>
             // if (isStageFirstClear)
             //     ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, 3, save: true, notify: true);
 
-            int dailyTalent = milestoneData.TryDailyClearTaskStones();
-            if (dailyTalent > 0)
+            int dailyExp = milestoneData.TryDailyClearTaskExp();
+            if (dailyExp > 0)
             {
-                ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, dailyTalent, save: false, notify: true);
+                LevelSystem.AddExpForTown(dailyExp);   // 2026-10-30 主人拍板：每日通关任务改发经验（原 5 天赋石停发，天赋石只随关卡出）
                 // C.3 每日通关任务 +5 钻：与天赋石同处发放，判重逻辑（dailyClearTaskClaimDayKey）不改
                 // ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, 5, save: true, notify: true);
             }
